@@ -395,6 +395,34 @@ describe("BatchRunner", () => {
     return { wrapped, chainBodies };
   }
 
+  /** 投入(POST)されたパスとbodyを記録し、500で弾いて行を即Failedにする
+   * ——`captureChainBridge`のチェーン/単発 両対応版。両モードを見る節が複数ある
+   * ので、`captureChainBridge`と同じくここに置いて共有する。 */
+  function captureSubmitBridge(base: NativeBridge): {
+    wrapped: NativeBridge;
+    submits: Array<{ path: string; body: Record<string, unknown> }>;
+  } {
+    const submits: Array<{ path: string; body: Record<string, unknown> }> = [];
+    const wrapped: NativeBridge = {
+      async request<M extends BridgeMethod>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
+        if (method === "backend.request") {
+          const p = params as { method?: string; path?: string; body?: Record<string, unknown> };
+          if (p.method === "POST" && (p.path === "/api/v1/generate" || p.path === "/api/v1/generate/chain")) {
+            submits.push({ path: p.path, body: p.body ?? {} });
+            return {
+              status: 500,
+              body: { error: { code: "MOCK_STOP", message: "captured by test" } },
+            } as unknown as ResultOf<M>;
+          }
+        }
+        return base.request(method, params);
+      },
+      requestWithFiles: (method, params, files) => base.requestWithFiles(method, params, files),
+      on: (event, handler) => base.on(event, handler),
+    };
+    return { wrapped, submits };
+  }
+
   // NAG (2026-07-28): `settings.nag` threads through `buildA2vChainPayload`
   // into every row's `/generate/chain` body.
   describe("settings.nag", () => {
@@ -631,33 +659,6 @@ describe("BatchRunner", () => {
       return makeRow(queue, image, "Waiting", { image, frames: 121, duration: 121 / 24, ...overrides });
     }
 
-    /** 投入(POST)されたパスとbodyを記録し、500で弾いて行を即Failedにする
-     * ——`captureChainBridge`のチェーン/単発 両対応版。 */
-    function captureSubmitBridge(base: NativeBridge): {
-      wrapped: NativeBridge;
-      submits: Array<{ path: string; body: Record<string, unknown> }>;
-    } {
-      const submits: Array<{ path: string; body: Record<string, unknown> }> = [];
-      const wrapped: NativeBridge = {
-        async request<M extends BridgeMethod>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
-          if (method === "backend.request") {
-            const p = params as { method?: string; path?: string; body?: Record<string, unknown> };
-            if (p.method === "POST" && (p.path === "/api/v1/generate" || p.path === "/api/v1/generate/chain")) {
-              submits.push({ path: p.path, body: p.body ?? {} });
-              return {
-                status: 500,
-                body: { error: { code: "MOCK_STOP", message: "captured by test" } },
-              } as unknown as ResultOf<M>;
-            }
-          }
-          return base.request(method, params);
-        },
-        requestWithFiles: (method, params, files) => base.requestWithFiles(method, params, files),
-        on: (event, handler) => base.on(event, handler),
-      };
-      return { wrapped, submits };
-    }
-
     it("音声アップロードを一度も行わず、/api/v1/generate へチェーン専用欄なしのbodyを投げる（クロップOFFならcrop_outputも無い）", async () => {
       const fs = createMockFs();
       const base = createMockBridge({ delayMs: 0, fs });
@@ -892,6 +893,88 @@ describe("BatchRunner", () => {
     it("Shared行はカードの値がそのまま載る（frame_idxもstrengthも加工しない）", async () => {
       expect(await conditioningFor("a2v", CARD, IMAGE_SHARED)).toEqual(CARD);
       expect(await conditioningFor("i2v", CARD, IMAGE_SHARED)).toEqual(CARD);
+    });
+  });
+
+  // 行ごとの`<lora:>`タグ（§3-1 の1箇条 → CLOSED §3-159）: 各行は Add/Replace で合成してから、Create と
+  // 同じ `parseLoraPrompt` に通す——行セルは生のまま、解析は送信時の1回だけ。
+  // `parseLoraPrompt` は同名を解消しないので `dedupeLoraSpecs`（位置＝先勝ち・
+  // 強度＝後勝ち）を重ねる。i2v行も同じ経路なので、両モードで同じ結論を見る。
+  describe("行ごとの<lora:>タグ", () => {
+    /** 1行だけ走らせて、投入されたbodyを返す（a2vはチェーン、i2vは単発）。 */
+    async function bodyFor(
+      mode: BatchMode,
+      promptCommon: string,
+      rowPrompt: string,
+      promptMode: BatchRunnerSettings["promptMode"] = "add",
+    ): Promise<Record<string, unknown>> {
+      const fs = createMockFs();
+      const base = createMockBridge({ delayMs: 0, fs });
+      const { wrapped, submits } = captureSubmitBridge(base);
+      const runner = new BatchRunner(wrapped);
+
+      await runner.start({
+        mode,
+        wavDir: mode === "a2v" ? "C:\\batch\\in" : null,
+        imgDir: "C:\\batch\\img",
+        outDir: "C:\\batch\\out",
+        settings: { ...BASE_SETTINGS, promptCommon, promptMode },
+        rows: [makeRow(1, mode === "a2v" ? "a.wav" : "cat01.png", "Waiting", { prompt: rowPrompt })],
+        sharedConditioningImages: [],
+      });
+
+      expect(submits).toHaveLength(1);
+      expect(submits[0]!.path).toBe(mode === "a2v" ? "/api/v1/generate/chain" : "/api/v1/generate");
+      return submits[0]!.body;
+    }
+
+    const BOTH_MODES = ["a2v", "i2v"] as const;
+
+    it("Add: カードのタグと行のタグが和集合で載り、本文からは両方とも消える", async () => {
+      for (const mode of BOTH_MODES) {
+        const body = await bodyFor(mode, "a cat <lora:A:0.6>", "<lora:B:0.8>");
+        expect(body.loras).toEqual([
+          { name: "A", strength: 0.6 },
+          { name: "B", strength: 0.8 },
+        ]);
+        // 空白の畳み込みは合成後の文字列全体に及ぶ——行のタグが末尾に残した
+        // 空白も消える（カード側だけを畳んでいた旧経路との違い）。
+        expect(body.prompt).toBe("a cat");
+      }
+    });
+
+    it("Add: 同名はカードと行で衝突し、行の強度が勝つ（位置は先に出たカード側）", async () => {
+      for (const mode of BOTH_MODES) {
+        const body = await bodyFor(mode, "a cat <lora:A:0.6> <lora:B:0.8>", "<lora:A:1.2>");
+        expect(body.loras).toEqual([
+          { name: "A", strength: 1.2 },
+          { name: "B", strength: 0.8 },
+        ]);
+      }
+    });
+
+    it("Replace: 行のタグだけが載る（カードのタグは本文ごと差し替わる）", async () => {
+      for (const mode of BOTH_MODES) {
+        const body = await bodyFor(mode, "a cat <lora:A:0.6>", "a dog <lora:B>", "replace");
+        expect(body.loras).toEqual([{ name: "B", strength: 1.0 }]);
+        expect(body.prompt).toBe("a dog");
+      }
+    });
+
+    it("Replace で行が空ならカードのタグが載る", async () => {
+      for (const mode of BOTH_MODES) {
+        const body = await bodyFor(mode, "a cat <lora:A:0.6>", "", "replace");
+        expect(body.loras).toEqual([{ name: "A", strength: 0.6 }]);
+        expect(body.prompt).toBe("a cat");
+      }
+    });
+
+    it("タグが1つも無ければ loras キーごと載らない", async () => {
+      for (const mode of BOTH_MODES) {
+        const body = await bodyFor(mode, "a cat", "on a skateboard");
+        expect(body).not.toHaveProperty("loras");
+        expect(body.prompt).toBe("a cat on a skateboard");
+      }
     });
   });
 });

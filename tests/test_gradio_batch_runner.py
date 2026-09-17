@@ -21,11 +21,15 @@ import pytest
 
 from gradio_ui.api_client import ApiClient
 from gradio_ui.batch import (
+    ROW_IMAGE_STRENGTH_DEFAULT,
     STATE_IDLE,
     BatchRunner,
     BatchSnapshot,
     compose_prompt,
     get_runner,
+    prepare_batch_rows,
+    row_image_strength,
+    rows_have_lora_tokens,
 )
 from gradio_ui.handlers import (
     make_chain_handler,
@@ -76,7 +80,6 @@ def _snapshot(wav_dir: Path, out_dir: Path, **overrides) -> BatchSnapshot:
         crop_output=None,
         frame_rate=24.0,
         seed=7,
-        loras=[],
         shared_images=[],
         use_adapter=False,
         ref_video_path=None,
@@ -87,6 +90,23 @@ def _snapshot(wav_dir: Path, out_dir: Path, **overrides) -> BatchSnapshot:
     )
     kw.update(overrides)
     return BatchSnapshot(**kw)
+
+
+def _start(runner: BatchRunner, snap: BatchSnapshot, rows, api, **kwargs):
+    """``BatchRunner.start`` preceded by the UI-thread freeze that ui.py's
+    ``dispatch()`` always performs first.
+
+    Since §3-1 the runner sends ``BatchRow.send_prompt`` / ``BatchRow.loras``
+    verbatim — composing the common + row prompt and parsing its
+    ``<lora:...>`` tokens happens on the UI thread, where the known-name list
+    and ``gr.Warning`` live. A test that called ``start()`` on raw rows would
+    therefore submit an empty prompt, which is not a state the app can reach;
+    this wrapper keeps every scenario below faithful to the real call order.
+    Tests that need real tokens call :func:`prepare_batch_rows` themselves with
+    a known-name list."""
+    err = prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode, ())
+    assert err is None, err
+    return runner.start(snap, rows, api, **kwargs)
 
 
 class _Server:
@@ -195,7 +215,7 @@ def test_three_rows_all_done(tmp_path):
                  ("c.wav", STAT_WAITING, IMAGE_SHARED, "waving"))
 
     runner = BatchRunner()
-    started, _ = runner.start(snap, rows, api, sync=True)
+    started, _ = _start(runner, snap, rows, api, sync=True)
     assert started is True
     assert runner.state == STATE_IDLE
 
@@ -243,7 +263,7 @@ def test_middle_row_failed_batch_continues(tmp_path):
     rows = _rows(("a.wav",), ("b.wav",), ("c.wav",))
 
     runner = BatchRunner()
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
 
     assert [r.stat for r in rows] == [STAT_DONE, STAT_FAILED, STAT_DONE]
     assert "boom" in rows[1].error
@@ -275,7 +295,7 @@ def test_resume_skips_done_and_skip_reruns_failed(tmp_path):
     rows[0].output = "a.mp4"
 
     runner = BatchRunner()
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
 
     # only the failed + generating remnants were submitted.
     assert server.chain_calls == 2
@@ -310,7 +330,7 @@ def test_stop_after_first_row_leaves_rest_unsubmitted(tmp_path):
 
     snap = _snapshot(wav_dir, out_dir)
     rows = _rows(("a.wav",), ("b.wav",), ("c.wav",))
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
 
     assert server.chain_calls == 1
     assert rows[0].stat == STAT_DONE
@@ -349,12 +369,12 @@ def test_double_start_guard(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, _ = runner.start(snap, rows, api, sync=False)  # background thread
+    started, _ = _start(runner, snap, rows, api, sync=False)  # background thread
     assert started is True
     assert _wait_until(lambda: runner.state == "running")
 
     # Second start while running -> rejected.
-    again, reason = runner.start(snap, _rows(("a.wav",)), api)
+    again, reason = _start(runner, snap, _rows(("a.wav",)), api)
     assert again is False
     assert "running" in reason
 
@@ -382,7 +402,7 @@ def test_shared_image_uploaded_once(tmp_path):
                  ("b.wav", STAT_WAITING, IMAGE_SHARED))
 
     runner = BatchRunner()
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
 
     assert server.image_uploads == 1        # cached across both rows
     assert server.audio_uploads == 2        # audio still uploaded per row
@@ -407,7 +427,7 @@ def test_output_gets_unique_suffix_when_name_exists(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
 
     assert (out_dir / "a.mp4").read_bytes() == b"OLD"   # original untouched
     assert (out_dir / "a_2.mp4").read_bytes() == b"MP4DATA"
@@ -429,7 +449,7 @@ def test_start_rejects_shared_row_without_shared_images(tmp_path):
     rows = _rows(("a.wav", STAT_WAITING, IMAGE_SHARED))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is False
     assert "shared" in reason.lower()
     assert server.chain_calls == 0
@@ -454,7 +474,7 @@ def test_start_rejects_shared_row_when_only_non_first_slot_set(tmp_path):
     rows = _rows(("a.wav", STAT_WAITING, IMAGE_SHARED))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is False
     assert "shared" in reason.lower()
     assert server.chain_calls == 0
@@ -480,7 +500,7 @@ def test_start_allows_shared_row_when_first_slot_set(tmp_path):
     rows = _rows(("a.wav", STAT_WAITING, IMAGE_SHARED))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True
     assert reason == "completed"
     assert server.chain_calls == 1
@@ -505,7 +525,7 @@ def test_start_allows_no_first_slot_when_all_targets_have_own_image(tmp_path):
                  ("b.wav", STAT_WAITING, "face_b.png"))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True
     assert reason == "completed"
     assert server.chain_calls == 2
@@ -519,7 +539,7 @@ def test_start_rejects_missing_wav_dir_and_no_targets(tmp_path):
 
     # missing wav_dir
     snap = _snapshot(tmp_path / "does_not_exist", out_dir)
-    ok, reason = BatchRunner().start(snap, _rows(("a.wav",)), api, sync=True)
+    ok, reason = _start(BatchRunner(), snap, _rows(("a.wav",)), api, sync=True)
     assert ok is False and "not found" in reason
 
     # wav_dir exists but zero unfinished rows
@@ -527,14 +547,58 @@ def test_start_rejects_missing_wav_dir_and_no_targets(tmp_path):
     wav_dir.mkdir()
     snap2 = _snapshot(wav_dir, out_dir)
     done = _rows(("a.wav", STAT_DONE), ("b.wav", STAT_SKIP))
-    ok2, reason2 = BatchRunner().start(snap2, done, api, sync=True)
+    ok2, reason2 = _start(BatchRunner(), snap2, done, api, sync=True)
     assert ok2 is False and "no rows" in reason2
 
 
 # --------------------------------------------------------------------------- #
 # Individual (non-Shared) image + summary + singleton.
+#
+# A row's own image is a keyframe like any other, so it is conditioned at the
+# LEADING shared keyframe's strength (lowest frame_idx — the Generate tab's
+# slots are not in frame order) and falls back to the app-wide keyframe default
+# when there is no shared keyframe at all. The old fixed 1.0 made a row image
+# the one keyframe in the app that ignored the slider.
 # --------------------------------------------------------------------------- #
-def test_individual_image_attaches_frame0_strength1(tmp_path):
+def test_row_image_strength_picks_lowest_frame_idx_else_default():
+    # The pure rule, in isolation: (path, frame_idx, strength) triples.
+    assert row_image_strength([]) == ROW_IMAGE_STRENGTH_DEFAULT
+    assert row_image_strength([("a.png", 24, 0.9), ("b.png", 0, 0.55),
+                               ("c.png", 8, 0.7)]) == 0.55
+    # Slot order is irrelevant — only frame_idx decides which one leads.
+    assert row_image_strength([("a.png", 5, 0.4)]) == 0.4
+
+
+def test_individual_image_attaches_frame0_at_the_shared_strength(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    (wav_dir / "face.png").write_bytes(b"\x89PNG\r\n")
+    kf_late = tmp_path / "kf_late.png"
+    kf_late.write_bytes(b"\x89PNG\r\n")
+    kf_first = tmp_path / "kf_first.png"
+    kf_first.write_bytes(b"\x89PNG\r\n")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    # The leading shared keyframe (frame 0, strength 0.55) is listed LAST, so
+    # a slot-order reading would pick 0.9.
+    snap = _snapshot(wav_dir, out_dir,
+                     shared_images=[(str(kf_late), 24, 0.9),
+                                    (str(kf_first), 0, 0.55)])
+    rows = _rows(("a.wav", STAT_WAITING, "face.png", "hi"))
+
+    runner = BatchRunner()
+    _start(runner, snap, rows, api, sync=True)
+
+    _jid, p = server.payloads[0]
+    assert p["clips"][0]["conditioning_images"] == [
+        {"image_id": "img-1", "frame_idx": 0, "strength": 0.55}
+    ]
+
+
+def test_individual_image_without_shared_keyframe_uses_the_default_strength(tmp_path):
     wav_dir = tmp_path / "wavs"
     wav_dir.mkdir()
     _write_wav(wav_dir / "a.wav")
@@ -543,15 +607,16 @@ def test_individual_image_attaches_frame0_strength1(tmp_path):
 
     server = _Server()
     api = _make_client(server.handler)
-    snap = _snapshot(wav_dir, out_dir)
+    snap = _snapshot(wav_dir, out_dir)          # no shared keyframes at all
     rows = _rows(("a.wav", STAT_WAITING, "face.png", "hi"))
 
     runner = BatchRunner()
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
 
     _jid, p = server.payloads[0]
     assert p["clips"][0]["conditioning_images"] == [
-        {"image_id": "img-1", "frame_idx": 0, "strength": 1.0}
+        {"image_id": "img-1", "frame_idx": 0,
+         "strength": ROW_IMAGE_STRENGTH_DEFAULT}
     ]
 
 
@@ -575,7 +640,7 @@ def test_individual_image_resolved_from_separate_img_dir(tmp_path):
     rows = _rows(("a.wav", STAT_WAITING, "face.png", "hi"))
 
     runner = BatchRunner()
-    started, _ = runner.start(snap, rows, api, sync=True)
+    started, _ = _start(runner, snap, rows, api, sync=True)
     assert started is True
 
     # Resolved from img_dir and uploaded (no FileNotFoundError -> no Failed row).
@@ -583,7 +648,8 @@ def test_individual_image_resolved_from_separate_img_dir(tmp_path):
     assert server.image_uploads == 1
     _jid, p = server.payloads[0]
     assert p["clips"][0]["conditioning_images"] == [
-        {"image_id": "img-1", "frame_idx": 0, "strength": 1.0}
+        {"image_id": "img-1", "frame_idx": 0,
+         "strength": ROW_IMAGE_STRENGTH_DEFAULT}
     ]
 
 
@@ -601,7 +667,7 @@ def test_individual_image_falls_back_to_wav_dir_when_img_dir_unset(tmp_path):
     rows = _rows(("a.wav", STAT_WAITING, "face.png", "hi"))
 
     runner = BatchRunner()
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
 
     assert rows[0].stat == STAT_DONE
     assert server.image_uploads == 1
@@ -634,7 +700,7 @@ def test_completed_temp_video_is_removed(tmp_path):
     api.fetch_video = _spy
 
     runner = BatchRunner()
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
 
     assert rows[0].stat == STAT_DONE
     assert (out_dir / "a.mp4").read_bytes() == b"MP4DATA"   # copied to output
@@ -655,7 +721,7 @@ def test_summary_counts(tmp_path):
     rows = _rows(("a.wav",), ("b.wav",))
 
     runner = BatchRunner()
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
     s = runner.summary()
     assert s["done"] == 1 and s["failed"] == 1
     assert s["state"] == STATE_IDLE
@@ -687,7 +753,7 @@ def test_start_remarks_over481_row_to_skip_and_excludes_it(tmp_path):
     ]
 
     runner = BatchRunner()
-    started, _ = runner.start(snap, rows, api, sync=True)
+    started, _ = _start(runner, snap, rows, api, sync=True)
     assert started is True
     assert rows[1].stat == STAT_SKIP and rows[1].skip_reason == "over-cap"
     assert rows[0].stat == STAT_DONE
@@ -723,7 +789,7 @@ def test_start_rejudges_against_the_snapshot_frame_cap(tmp_path):
     ]
 
     runner = BatchRunner()
-    started, _ = runner.start(snap, rows, api, sync=True)
+    started, _ = _start(runner, snap, rows, api, sync=True)
     assert started is True
     assert rows[1].stat == STAT_SKIP and rows[1].skip_reason == "over-cap"
     assert rows[0].stat == STAT_DONE
@@ -746,7 +812,7 @@ def test_start_recomputes_frames_at_snapshot_fps(tmp_path):
                      image="", frames=99)]              # deliberately stale
 
     runner = BatchRunner()
-    runner.start(snap, rows, api, sync=True)
+    _start(runner, snap, rows, api, sync=True)
 
     expected = suggest_frames_for_audio(3.0, new_fps)
     assert expected != 99
@@ -774,7 +840,7 @@ def test_start_blocks_add_mode_empty_common_prompt(tmp_path):
     before = (wav_dir / "batch_a2v_manifest.csv").read_bytes()
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is False
     assert reason == "prompt-empty-add"
     assert server.chain_calls == 0
@@ -798,7 +864,7 @@ def test_start_allows_replace_empty_common_when_all_rows_have_prompt(tmp_path):
                      image="", prompt="world", frames=25)]
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
     assert server.chain_calls == 2
     assert [r.stat for r in rows] == [STAT_DONE, STAT_DONE]
@@ -823,10 +889,91 @@ def test_start_blocks_replace_empty_common_with_some_empty_rows(tmp_path):
                      image="", prompt="   ", frames=25)]     # whitespace-only
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is False
     assert reason == "prompt-rows-empty:2"                   # two empty rows
     assert server.chain_calls == 0
+
+
+def test_start_blocks_a_tag_only_common_prompt_in_add_mode(tmp_path):
+    # A card prompt of nothing but <lora:...> tokens is EMPTY once the parser
+    # has had it: the freeze leaves send_prompt "", and every row would then
+    # 422 on GenerateChainRequest.prompt (min_length=1). The preflight has to
+    # judge the tag-stripped text, not the raw cell it is handed verbatim.
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, prompt_common="<lora:A:0.8>",
+                     prompt_mode="add")
+    rows = [BatchRow(queue=1, wav="a.wav", duration_s=1.0, stat=STAT_WAITING,
+                     image="", prompt="", frames=25)]
+    # The real dispatch freezes first, with the known-name list to hand.
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode,
+                              ("A",)) is None
+    assert rows[0].send_prompt == ""          # nothing left to send
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is False
+    assert reason == "prompt-empty-add"
+    assert server.chain_calls == 0
+
+
+def test_start_blocks_a_tag_only_row_prompt_in_replace_mode(tmp_path):
+    # Same rule one level down: in "replace" mode with a tag-only card prompt,
+    # a row whose own prompt is tags alone counts toward the empty-row tally.
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    for n in ("a.wav", "b.wav"):
+        _write_wav(wav_dir / n)
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, prompt_common="<lora:A:0.8>",
+                     prompt_mode="replace")
+    rows = [BatchRow(queue=1, wav="a.wav", duration_s=1.0, stat=STAT_WAITING,
+                     image="", prompt="a cat", frames=25),
+            BatchRow(queue=2, wav="b.wav", duration_s=1.0, stat=STAT_WAITING,
+                     image="", prompt="<lora:B:0.5>", frames=25)]  # tags only
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode,
+                              ("A", "B")) is None
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is False
+    assert reason == "prompt-rows-empty:1"
+    assert server.chain_calls == 0
+
+
+def test_start_allows_a_common_prompt_with_a_tag_beside_real_text(tmp_path):
+    # The other side of the same rule: a token NEXT TO real text still leaves a
+    # body, so the batch starts and the stripped text is what goes on the wire.
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, prompt_common="a cat <lora:A:0.8>",
+                     prompt_mode="add")
+    rows = [BatchRow(queue=1, wav="a.wav", duration_s=1.0, stat=STAT_WAITING,
+                     image="", prompt="", frames=25)]
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode,
+                              ("A",)) is None
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+    assert server.chain_calls == 1
+    _jid, p = server.payloads[0]
+    assert p["prompt"] == "a cat"
+    assert p["loras"] == [{"name": "A", "strength": 0.8}]
 
 
 def test_start_allows_no_shared_image_when_all_rows_have_own_image(tmp_path):
@@ -845,7 +992,7 @@ def test_start_allows_no_shared_image_when_all_rows_have_own_image(tmp_path):
                      image="face.png", prompt="", frames=25)]
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
     assert rows[0].stat == STAT_DONE
     assert server.image_uploads == 1
@@ -873,7 +1020,7 @@ def test_batch_nag_enabled_snapshot_adds_four_keys_to_payload(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -896,7 +1043,7 @@ def test_batch_vsf_enabled_snapshot_adds_two_keys_to_payload(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -916,7 +1063,7 @@ def test_batch_default_snapshot_omits_nag_keys_from_payload(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -943,7 +1090,7 @@ def test_batch_sage_snapshot_adds_attention_backend_to_payload(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -963,7 +1110,7 @@ def test_batch_default_snapshot_omits_attention_backend(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -991,7 +1138,7 @@ def test_batch_prefetch_off_snapshot_adds_block_swap_prefetch_to_payload(tmp_pat
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -1011,7 +1158,7 @@ def test_batch_default_snapshot_omits_block_swap_prefetch(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -1036,7 +1183,7 @@ def test_batch_keep_resident_snapshot_adds_key_to_payload(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -1056,7 +1203,7 @@ def test_batch_default_snapshot_omits_keep_resident(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -1081,7 +1228,7 @@ def test_batch_fused_dequant_off_snapshot_adds_key_to_payload(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
@@ -1101,11 +1248,263 @@ def test_batch_default_snapshot_omits_fused_dequant(tmp_path):
     rows = _rows(("a.wav",))
 
     runner = BatchRunner()
-    started, reason = runner.start(snap, rows, api, sync=True)
+    started, reason = _start(runner, snap, rows, api, sync=True)
     assert started is True, reason
 
     _jid, p = server.payloads[0]
     assert "fused_gguf_dequant_kernel" not in p
+
+
+# --------------------------------------------------------------------------- #
+# keep-resident embeddings (LTX 2.5): same snapshot-is-the-only-path reasoning
+# once more. Default OFF, so it is the CHECKED case that appends the key -- and
+# it is appended LAST, after vae_mode.
+# --------------------------------------------------------------------------- #
+def test_batch_keep_resident_embeddings_snapshot_adds_key_to_payload(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, keep_resident_embeddings=True)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = _start(runner, snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["keep_resident_embeddings"] is True
+    assert list(p.keys())[-1] == "keep_resident_embeddings"
+
+
+def test_batch_default_snapshot_omits_keep_resident_embeddings(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = _start(runner, snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert "keep_resident_embeddings" not in p
+
+
+# --------------------------------------------------------------------------- #
+# chunked_upsample: the batch accordion's own checkbox. Unlike every toggle
+# above it is sent EXPLICITLY either way (the plugin's batch does the same) --
+# omitting it would silently fall back to the slow one-pass upsample.
+# --------------------------------------------------------------------------- #
+def test_batch_default_snapshot_sends_chunked_upsample_true(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir)          # checkbox default
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = _start(runner, snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["chunked_upsample"] is True
+    keys = list(p.keys())
+    assert keys[keys.index("source_audio") + 1] == "chunked_upsample"
+
+
+def test_batch_unchecked_snapshot_sends_chunked_upsample_false(tmp_path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, chunked_upsample=False)
+    rows = _rows(("a.wav",))
+
+    runner = BatchRunner()
+    started, reason = _start(runner, snap, rows, api, sync=True)
+    assert started is True, reason
+
+    _jid, p = server.payloads[0]
+    assert p["chunked_upsample"] is False      # present, not merely falsy
+
+
+# --------------------------------------------------------------------------- #
+# Per-row <lora:...> tags (§3-1). ONE rule: the row sends the COMPOSED prompt,
+# and that composed string is what the parser sees -- so "add" is the union
+# with the row's strength winning, "replace" is the row's tags alone, and a
+# "replace" row with an empty prompt falls back to the card's. The reference-
+# video CONTROL adapter is prepended for every row, tags or not.
+# --------------------------------------------------------------------------- #
+_KNOWN_LORAS = ("A", "B")
+
+
+def _prepared_row(common, row_prompt, mode, **kwargs) -> BatchRow:
+    row = BatchRow(queue=1, wav="a.wav", prompt=row_prompt, image="", frames=49)
+    err = prepare_batch_rows([row], common, mode, _KNOWN_LORAS, **kwargs)
+    assert err is None, err
+    return row
+
+
+def test_row_tags_add_mode_unions_card_and_row_tags():
+    row = _prepared_row("card <lora:A:0.6>", "row <lora:B:0.8>", "add")
+    assert row.loras == [{"name": "A", "strength": 0.6},
+                         {"name": "B", "strength": 0.8}]
+    assert row.send_prompt == "card row"          # both tags stripped
+    assert row.prompt == "row <lora:B:0.8>"       # the user's cell is untouched
+
+
+def test_row_tags_add_mode_row_strength_wins_for_the_same_name():
+    row = _prepared_row("card <lora:A:0.6>", "row <lora:A:1.2>", "add")
+    assert row.loras == [{"name": "A", "strength": 1.2}]
+
+
+def test_row_tags_replace_mode_takes_only_the_row_tags():
+    row = _prepared_row("card <lora:A:0.6>", "row <lora:B:0.8>", "replace")
+    assert row.loras == [{"name": "B", "strength": 0.8}]
+    assert row.send_prompt == "row"
+
+
+def test_row_tags_replace_mode_empty_row_falls_back_to_the_card_tags():
+    row = _prepared_row("card <lora:A:0.6>", "", "replace")
+    assert row.loras == [{"name": "A", "strength": 0.6}]
+    assert row.send_prompt == "card"
+
+
+def test_row_without_any_tag_keeps_the_composed_prompt_and_no_loras():
+    row = _prepared_row("card", "row", "add")
+    assert row.send_prompt == "card row"
+    assert row.loras == []
+
+
+def test_row_with_a_reference_adapter_puts_the_control_lora_first():
+    # A row carrying a reference_video_id and an EMPTY loras list is a 422, so
+    # the control adapter has to be combined in for every row -- including the
+    # ones with no tags of their own.
+    row = _prepared_row("card <lora:A:0.6>", "row <lora:B:0.8>", "add",
+                        use_adapter=True, adapter="canny-control",
+                        adapter_strength=0.7)
+    assert row.loras[0] == {"name": "canny-control", "strength": 0.7}
+    assert [entry["name"] for entry in row.loras] == ["canny-control", "A", "B"]
+
+    plain = _prepared_row("card", "row", "add", use_adapter=True,
+                          adapter="canny-control", adapter_strength=1.0)
+    assert plain.loras == [{"name": "canny-control", "strength": 1.0}]
+
+
+def test_row_with_an_unknown_tag_aborts_the_whole_dispatch():
+    rows = [BatchRow(queue=1, wav="a.wav", prompt="", image="", frames=49),
+            BatchRow(queue=2, wav="b.wav", prompt="<lora:nope>", image="",
+                     frames=49)]
+    err = prepare_batch_rows(rows, "card", "add", _KNOWN_LORAS)
+    assert err is not None and "nope" in err
+
+
+def test_rows_have_lora_tokens_reads_the_composed_text():
+    card_only = [BatchRow(queue=1, wav="a.wav", prompt="row", image="")]
+    assert rows_have_lora_tokens(card_only, "card <lora:A>", "add") is True
+    # "replace" with a non-empty row prompt never shows the card's tags.
+    assert rows_have_lora_tokens(card_only, "card <lora:A>", "replace") is False
+    row_only = [BatchRow(queue=1, wav="a.wav", prompt="<lora:B>", image="")]
+    assert rows_have_lora_tokens(row_only, "card", "replace") is True
+    assert rows_have_lora_tokens(card_only, "card", "add") is False
+
+
+def test_a_finished_row_with_an_unknown_tag_does_not_block_the_dispatch():
+    # Resume case: a Done row is never submitted, so a stale (or since-deleted)
+    # LoRA name left in its cell must not abort the whole run -- and the row's
+    # own freeze fields stay exactly as they were.
+    rows = [BatchRow(queue=1, wav="a.wav", prompt="<lora:gone:1>", image="",
+                     stat=STAT_DONE, frames=49),
+            BatchRow(queue=2, wav="b.wav", prompt="row <lora:A:0.4>", image="",
+                     stat=STAT_WAITING, frames=49)]
+    assert prepare_batch_rows(rows, "card", "add", _KNOWN_LORAS) is None
+    assert rows[0].send_prompt == ""
+    assert rows[0].loras == []
+    assert rows[1].send_prompt == "card row"
+    assert rows[1].loras == [{"name": "A", "strength": 0.4}]
+
+
+def test_rows_have_lora_tokens_ignores_finished_rows():
+    # A token that only a Done / Skip row carries must not cost a GET /loras.
+    done = [BatchRow(queue=1, wav="a.wav", prompt="<lora:A>", image="",
+                     stat=STAT_DONE)]
+    assert rows_have_lora_tokens(done, "card", "add") is False
+    skipped = [BatchRow(queue=1, wav="a.wav", prompt="<lora:A>", image="",
+                        stat=STAT_SKIP)]
+    assert rows_have_lora_tokens(skipped, "card", "add") is False
+    # ...while a Waiting row alongside it still answers True.
+    waiting = BatchRow(queue=2, wav="b.wav", prompt="<lora:B>", image="",
+                       stat=STAT_WAITING)
+    assert rows_have_lora_tokens(done + [waiting], "card", "add") is True
+
+
+def test_row_loras_reach_the_payload(tmp_path):
+    # End to end through the runner: what prepare_batch_rows froze onto the row
+    # is what the submitted body carries, per row.
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    _write_wav(wav_dir / "b.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, prompt_common="card <lora:A:0.6>")
+    rows = _rows(("a.wav", STAT_WAITING, "", "row <lora:B:0.8>"),
+                 ("b.wav", STAT_WAITING, "", "plain"))
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode,
+                              _KNOWN_LORAS) is None
+
+    runner = BatchRunner()
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    payloads = [p for _jid, p in server.payloads]
+    assert payloads[0]["loras"] == [{"name": "A", "strength": 0.6},
+                                    {"name": "B", "strength": 0.8}]
+    assert payloads[0]["prompt"] == "card row"
+    assert payloads[1]["loras"] == [{"name": "A", "strength": 0.6}]
+    assert payloads[1]["prompt"] == "card plain"
+
+
+def test_row_prompt_column_survives_a_run(tmp_path):
+    # The composed/stripped text lives in send_prompt, NEVER in the CSV's own
+    # prompt column -- a rescan after a run must not feed the composed text
+    # back in and compose it a second time.
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "a.wav")
+    out_dir = tmp_path / "out"
+
+    server = _Server()
+    api = _make_client(server.handler)
+    snap = _snapshot(wav_dir, out_dir, prompt_common="card")
+    rows = _rows(("a.wav", STAT_WAITING, "", "row <lora:A>"))
+
+    runner = BatchRunner()
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode,
+                              _KNOWN_LORAS) is None
+    started, reason = runner.start(snap, rows, api, sync=True)
+    assert started is True, reason
+
+    assert rows[0].prompt == "row <lora:A>"
+    assert read_manifest(wav_dir)[0].prompt == "row <lora:A>"
 
 
 def test_fused_dequant_reaches_the_wire_on_all_three_backend_paths(tmp_path):
@@ -1171,7 +1570,7 @@ def test_fused_dequant_reaches_the_wire_on_all_three_backend_paths(tmp_path):
     wav_dir.mkdir()
     _write_wav(wav_dir / "a.wav")
     snap = _snapshot(wav_dir, tmp_path / "out", fused_gguf_dequant_kernel=False)
-    started, reason = BatchRunner().start(snap, _rows(("a.wav",)), api, sync=True)
+    started, reason = _start(BatchRunner(), snap, _rows(("a.wav",)), api, sync=True)
     assert started is True, reason
 
     assert len(bodies) == 3, f"expected 3 submissions, got {len(bodies)}"

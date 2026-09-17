@@ -1,0 +1,9 @@
+restore_state_output.txt -- verbatim tail of `calib.py restore-state --base-model LTX23 --transformer Sulphur-2-base-distil-Q4_K_M`
+run by the supervising session at 2026-09-17 20:37:16 (after Tier C2; the server was already on Sulphur-2-base-distil-Q4_K_M, so the load was a no-op). Captured from the session transcript; the command's stdout was not redirected at run time.
+
+[2026-09-17 20:37:16.188]   transformer check: load response='Sulphur-2-base-distil-Q4_K_M' GET /models active='Sulphur-2-base-distil-Q4_K_M' want='Sulphur-2-base-distil-Q4_K_M'
+[2026-09-17 20:37:16.193] state.json after restore: {"schema": 1, "active_base_model": "LTX23", "selections": {"LTX23": {"transformer": "Sulphur-2-base-distil-Q4_K_M", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-17 20:37:16.193] state.json verified: selections.LTX23.transformer = 'Sulphur-2-base-distil-Q4_K_M'
+
+Follow-up checks at the same time: GET /models active transformer = Sulphur-2-base-distil-Q4_K_M; GET /status state=ready, queue pending=0 running=0 completed=64 failed=0; nvidia-smi memory.used = 636 MiB (git_state_end.txt, recorded one second later, shows 638 MiB).
+The P0 dry-run of the same command (16:30:40, rc=0, "state.json verified: selections.LTX23.transformer = 'Sulphur-2-base-distil-Q4_K_M'") was reported by the P0 agent in its hand-back; it is not quoted in progress.md and its stdout was not saved as a file either.

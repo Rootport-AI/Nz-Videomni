@@ -15,6 +15,7 @@ from .adapters import (
     MODEL_CATEGORIES,
     MODEL_DEFAULT,
     active_base_model,
+    active_unsupported_features,
     build_base_model_choices,
     build_model_choices,
     build_style_gallery,
@@ -32,6 +33,7 @@ from .handlers import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
+    KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
     a2v_audio_change_handler,
     delete_finished_jobs,
     fetch_config_safe,
@@ -42,15 +44,19 @@ from .handlers import (
 )
 from .handlers import fetch_models_safe, load_selected_models
 from .handlers import (
-    _LORA_TOKEN_RE,
-    _combine_generate_loras,
     _resolve_fps,
     _resolve_poll,
-    parse_prompt_loras,
     suggest_frames_for_audio,
 )
 from . import manifest as batch_manifest
-from .batch import BatchSnapshot, STATE_IDLE, get_runner
+from .batch import (
+    BatchSnapshot,
+    STATE_IDLE,
+    get_runner,
+    prepare_batch_rows,
+    rows_have_lora_tokens,
+)
+from .feature_scope import GATED_CONTROLS, RESET_VALUES, hidden_controls
 from .manifest import (
     IMAGE_SHARED,
     MAX_FRAMES,
@@ -688,6 +694,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                          (L("batch_mode_replace"), "replace")],
                                 value="add", label=L("batch_add_replace"),
                             ), "batch_add_replace")
+                            # The batch's own chunked-upsample switch, default
+                            # ON like the plugin's. The Clip Chain tab has its
+                            # own checkbox for the same request field, so the
+                            # i18n key is REUSED here -- reg() is a list, so a
+                            # key may be registered more than once (lbl_qmode
+                            # is the precedent).
+                            batch_chunked_upsample = reg(gr.Checkbox(
+                                value=True, label=L("chk_chunked_upsample")),
+                                "chk_chunked_upsample")
                             batch_set_btn = reg(gr.Button(L("batch_set_audios")),
                                                 "batch_set_audios", "value")
                             # Info readouts sit between "Set audios" and the
@@ -1097,6 +1112,28 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     info=L("accel_info_keep_resident"),
                 ), "accel_lbl_keep_resident")
                 reg(accel_keep_resident, "accel_info_keep_resident", "info")
+                # keep-resident embeddings (LTX 2.5): an INDEPENDENT switch —
+                # it has no precondition on the keep-resident checkbox above or
+                # on the prefetch one, so nothing here greys it out. Created
+                # INVISIBLE on purpose: LTX 2.3 has no embeddings processor and
+                # names the field in its ``unsupported_features``, and the
+                # default base model is 2.3, so the row must not flash into
+                # view before the first /models pull — refresh_model_dropdowns
+                # below shows it once the ACTIVE base model says it is
+                # supported (and hides + resets it again when it is not, via
+                # gradio_ui/feature_scope.py). Screen position and wiring
+                # position are deliberately different: it sits here, under the
+                # skeleton-residency checkbox and above the VAE radio to match
+                # the AviUtl2 panel, while the Acceleration INPUT lists append
+                # it at their very end (see dispatch()/chain_dispatch()).
+                accel_keep_resident_embeddings = reg(gr.Checkbox(
+                    value=KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+                    label=L("accel_lbl_keep_resident_embeddings"),
+                    info=L("accel_info_keep_resident_embeddings"),
+                    visible=False,
+                ), "accel_lbl_keep_resident_embeddings")
+                reg(accel_keep_resident_embeddings,
+                    "accel_info_keep_resident_embeddings", "info")
                 # Display name: "PruneVAED" -> "PrunaVAED" (correct product name
                 # per PRUNAVAED_WORKORDER.md §6.1). The API literal value
                 # "prune_vaed" is an external contract and is unchanged.
@@ -1280,9 +1317,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # values, same 3 outputs). When ON it instead snapshots the whole
         # Generate tab into a BatchSnapshot and hands it to the in-process
         # BatchRunner, then returns immediately (the run proceeds on a daemon
-        # thread; the batch_timer below reflects its progress). The 6 batch
+        # thread; the batch_timer below reflects its progress). The batch
         # inputs are APPENDED after the pre-existing scalar positionals so every
-        # one of those maps to the exact same generate() argument as before.
+        # one of those maps to the exact same generate() argument as before,
+        # and a NEW batch input goes at the end of that batch run rather than
+        # after the Acceleration block (whose trailing order is pinned by
+        # tests/test_gradio_ui.py).
         # *kf_flat: the keyframe quads, wired as the TAIL of inputs (see generate_btn.click below).
         def dispatch(prompt_v, negative_v,
                      width_v, height_v, crop_en_v, crop_w_v, crop_h_v,
@@ -1292,10 +1332,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      lang_v, poll_interval_v, poll_timeout_v, gen_a2v_audio_v,
                      batch_enable_v, batch_rows_v, batch_wav_dir_v,
                      batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
-                     batch_img_dir_v,
+                     batch_img_dir_v, batch_chunked_upsample_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
                      accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v,
+                     accel_keep_resident_embeddings_v,
                      *kf_flat):
             kf_slot_values = [tuple(kf_flat[i:i + 4])
                               for i in range(0, len(kf_flat), 4)]
@@ -1319,7 +1360,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     block_swap_prefetch=accel_prefetch_v,
                     keep_resident=accel_keep_resident_v,
                     fused_gguf_dequant_kernel=accel_fused_dequant_v,
-                    vae_mode=accel_vae_v)
+                    vae_mode=accel_vae_v,
+                    keep_resident_embeddings=bool(
+                        accel_keep_resident_embeddings_v))
                 return
 
             rows = batch_rows_v or []
@@ -1335,13 +1378,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 yield L("nag_msg_negative_required", lang_v), "", None
                 return
 
-            # --- common prompt: strip <lora:...> tokens exactly as the frozen
-            # generate path does, so the runner's compose_prompt gets the clean
-            # base text and the extracted tokens flow into ``loras``. ---
+            # --- <lora:...> tokens: parsed PER ROW, here on the UI thread.
+            # The text a row sends is the card prompt and the row prompt
+            # composed per the add/replace mode, so that composed string is
+            # what goes through the same parser the Generate tab uses (see
+            # batch.prepare_batch_rows). Doing it here rather than in the
+            # runner is what keeps the known-name list, the UI language and
+            # gr.Warning reachable; the runner only forwards the result. ---
+            prompt_mode_v = batch_add_replace_v or "add"
             use_adapter_v = bool(adapter_v) and adapter_v != ADAPTER_NONE
-            send_prompt = prompt_v
-            prompt_loras: list[dict] = []
-            if _LORA_TOKEN_RE.search(prompt_v or ""):
+            known: list = []
+            if rows_have_lora_tokens(rows, prompt_v, prompt_mode_v):
                 try:
                     lora_list = api.list_loras()
                 except Exception as exc:
@@ -1349,13 +1396,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     return
                 known = [e.get("name") for e in (lora_list or [])
                          if isinstance(e, dict) and e.get("name")]
-                send_prompt, prompt_loras, lora_err = parse_prompt_loras(
-                    prompt_v, known, lang_v)
-                if lora_err is not None:
-                    yield lora_err, "", None
-                    return
-            combined_loras = _combine_generate_loras(
-                use_adapter_v, adapter_v, adapter_strength_v, prompt_loras)
+            lora_err = prepare_batch_rows(
+                rows, prompt_v, prompt_mode_v, known, lang_v,
+                use_adapter=use_adapter_v, adapter=adapter_v,
+                adapter_strength=adapter_strength_v)
+            if lora_err is not None:
+                yield lora_err, "", None
+                return
 
             # crop_output — identical arithmetic to the frozen generate path.
             crop_output = None
@@ -1391,15 +1438,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 wav_dir=batch_wav_dir_v,
                 out_dir=out_dir,
                 img_dir=batch_img_dir_v or "",
-                prompt_common=send_prompt,
+                prompt_common=prompt_v,
                 negative=negative_v or "",
-                prompt_mode=batch_add_replace_v or "add",
+                prompt_mode=prompt_mode_v,
                 width=width_i,
                 height=height_i,
                 crop_output=crop_output,
                 frame_rate=fps_f,
                 seed=seed_i,
-                loras=combined_loras,
                 shared_images=shared_images,
                 use_adapter=use_adapter_v,
                 ref_video_path=ref_video_v,
@@ -1420,7 +1466,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 block_swap_prefetch=bool(accel_prefetch_v),
                 keep_resident=bool(accel_keep_resident_v),
                 fused_gguf_dequant_kernel=bool(accel_fused_dequant_v),
+                # The batch's own checkbox, sent explicitly either way (the
+                # Generate tab's single a2v send is untouched by this).
+                chunked_upsample=bool(batch_chunked_upsample_v),
                 vae_mode=accel_vae_v or "default",
+                keep_resident_embeddings=bool(accel_keep_resident_embeddings_v),
                 # Skip ceiling for the start-time re-judgment — the SAME value
                 # the Set audios scan used, so a Start never re-judges against
                 # a different cap than the table the user is looking at.
@@ -1458,11 +1508,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # nag_enabled/nag_scale/nag_tau/nag_alpha, then nag_method/
             # vsf_scale, then the Acceleration attention selector, the
             # block-swap prefetch checkbox, the keep-resident checkbox, the
-            # fused-dequant checkbox AND the VAE radio (PrunaVAED,
-            # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time),
-            # are APPENDED after every pre-existing scalar positional (matching
-            # dispatch()'s signature order, which appends them after
-            # batch_img_dir_v).
+            # fused-dequant checkbox, the VAE radio (PrunaVAED,
+            # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time)
+            # AND the keep-resident-embeddings checkbox, are APPENDED after
+            # every pre-existing scalar positional (matching dispatch()'s
+            # signature order, which appends them after batch_img_dir_v).
             inputs=[prompt, negative, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
@@ -1470,10 +1520,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     lang_state, poll_interval, poll_timeout, gen_a2v_audio,
                     batch_enable, batch_rows_state, batch_wav_dir,
                     batch_out_mode, batch_out_dir, batch_add_replace,
-                    batch_img_dir,
+                    batch_img_dir, batch_chunked_upsample,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
+                    accel_keep_resident_embeddings,
                     # Nothing may be appended after this: dispatch()'s *kf_flat
                     # swallows everything from here to the end of the list.
                     *kf_inputs],
@@ -1916,15 +1967,16 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             chain_clip_inputs.extend(_slot)
 
         # Acceleration: the attention selector, the block-swap prefetch
-        # checkbox, the keep-resident checkbox, the fused-dequant checkbox AND
-        # the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed
-        # as §3-50 at the time) are APPENDED at the very end of the chain
-        # inputs list below, in that order (attention_backend,
-        # accel_prefetch, accel_keep_resident, accel_fused_dequant,
-        # accel_vae). generate_chain keeps
+        # checkbox, the keep-resident checkbox, the fused-dequant checkbox, the
+        # VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed
+        # as §3-50 at the time) AND the keep-resident-embeddings checkbox are
+        # APPENDED at the very end of the chain inputs list below, in that
+        # order (attention_backend, accel_prefetch, accel_keep_resident,
+        # accel_fused_dequant, accel_vae, accel_keep_resident_embeddings).
+        # generate_chain keeps
         # ``src_audio`` as its last POSITIONAL parameter (never wired from this
         # tab, and relied on positionally by tests/test_gradio_v2v_a2v.py's
-        # _chain_args), so the five trailing values cannot be delivered
+        # _chain_args), so these trailing values cannot be delivered
         # positionally -- this thin wrapper peels them off and forwards them as
         # KEYWORDS, the same discipline the Generate tab's dispatch() uses.
         # NOTE: every negative index below is tied to the LENGTH of that
@@ -1932,12 +1984,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # ALL of them (and the ``args[:-N]`` slice) by one -- a silent
         # mis-wiring otherwise. tests/test_gradio_ui.py locks the order.
         def chain_dispatch(*args):
-            yield from chain_generate(*args[:-5],
-                                      attention_backend=args[-5],
-                                      block_swap_prefetch=args[-4],
-                                      keep_resident=args[-3],
-                                      fused_gguf_dequant_kernel=args[-2],
-                                      vae_mode=args[-1])
+            yield from chain_generate(*args[:-6],
+                                      attention_backend=args[-6],
+                                      block_swap_prefetch=args[-5],
+                                      keep_resident=args[-4],
+                                      fused_gguf_dequant_kernel=args[-3],
+                                      vae_mode=args[-2],
+                                      keep_resident_embeddings=args[-1])
 
         chain_generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
@@ -1953,9 +2006,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # itself is never wired from this tab (A2V lives on Generate), so
             # it is intentionally left off the end and keeps its None default.
             # The Acceleration attention selector, the block-swap prefetch
-            # checkbox, the keep-resident checkbox, the fused-dequant checkbox
-            # AND the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md
-            # §3-66, filed as §3-50 at the time) are APPENDED last (in that
+            # checkbox, the keep-resident checkbox, the fused-dequant checkbox,
+            # the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md
+            # §3-66, filed as §3-50 at the time) AND the
+            # keep-resident-embeddings checkbox are APPENDED last (in that
             # order) and reach the handler as keywords via chain_dispatch
             # above.
             inputs=[prompt, negative, chain_width, chain_height,
@@ -1966,7 +2020,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     chain_mode, v2v_video, v2v_context, chain_chunked_upsample,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
-                    accel_keep_resident, accel_fused_dequant, accel_vae],
+                    accel_keep_resident, accel_fused_dequant, accel_vae,
+                    accel_keep_resident_embeddings],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),
@@ -2178,6 +2233,24 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # The base dropdown is the FIRST output of refresh_model_dropdowns; the
         # four category dropdowns follow in MODEL_CATEGORIES order.
         model_all_dds = [model_base_dd, *model_dds]
+        # ...and after them, the controls the active base model's
+        # ``unsupported_features`` can close. Gradio lists outputs component by
+        # component, so gating a control needs its component here as well as
+        # its row in gradio_ui/feature_scope.py -- hence a REGISTRY keyed by
+        # control id, with the output list derived from GATED_CONTROLS: a
+        # control named in the table with no component registered here raises
+        # a KeyError while the UI is being built, instead of quietly dropping
+        # out of the refresh. ONE constant then feeds all three wirings of
+        # refresh_model_dropdowns (the Refresh button, the page load and the
+        # post-Load re-pull) plus its own error path.
+        _gated_components = {
+            "accel_vae": accel_vae,
+            "accel_keep_resident_embeddings": accel_keep_resident_embeddings,
+        }
+        model_refresh_outputs = [
+            *model_all_dds,
+            *(_gated_components[control] for control in GATED_CONTROLS),
+        ]
 
         def _base_model_update(models_json):
             """gr.update for the base-model dropdown: its choices plus the
@@ -2198,22 +2271,33 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # /config path); the explicit Refresh button does warn.
                 if warn:
                     gr.Warning(err)
-                return tuple(gr.update() for _ in model_all_dds)
+                return tuple(gr.update() for _ in model_refresh_outputs)
             # The legacy top-level ``categories`` block always describes the
             # ACTIVE base model, so the four category dropdowns keep reading it
             # verbatim (no base_model argument) — a refresh always shows what
             # the pipeline is actually on.
+            #
+            # Feature scope: the LOADED base model's unsupported_features hide
+            # the controls that would 422 on it. Hiding alone is not enough —
+            # an invisible Gradio component still sends its value — so a hidden
+            # control is reset to the server default at the same time.
+            hidden = hidden_controls(active_unsupported_features(models_json))
             return (_base_model_update(models_json),) + tuple(
                 gr.update(choices=build_model_choices(models_json, cat, lang),
                           value=model_active_value(models_json, cat))
                 for cat in MODEL_CATEGORIES
+            ) + tuple(
+                gr.update(visible=False, value=RESET_VALUES[control])
+                if control in hidden else gr.update(visible=True)
+                for control in GATED_CONTROLS
             )
 
         model_refresh_btn.click(refresh_model_dropdowns, inputs=lang_state,
-                                outputs=model_all_dds)
+                                outputs=model_refresh_outputs)
         # show_progress="hidden": same rationale as on_page_load's show_progress.
         demo.load(lambda lang: refresh_model_dropdowns(lang, warn=False),
-                  inputs=lang_state, outputs=model_all_dds, show_progress="hidden")
+                  inputs=lang_state, outputs=model_refresh_outputs,
+                  show_progress="hidden")
 
         def on_base_model_change(base_id, lang):
             """Re-fill the four category dropdowns from the SELECTED base
@@ -2263,9 +2347,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         ).then(
             lambda: gr.update(interactive=True), outputs=model_load_btn,
         ).then(
-            # Re-pull /models so the dropdowns reflect the new active marks.
+            # Re-pull /models so the dropdowns reflect the new active marks —
+            # and so the newly loaded base model's feature scope reaches the
+            # gated controls (this is the event that actually changes it).
             lambda lang: refresh_model_dropdowns(lang, warn=False),
-            inputs=lang_state, outputs=model_all_dds,
+            inputs=lang_state, outputs=model_refresh_outputs,
         )
 
         # ---- Style LoRA tab events (INDEPENDENT listeners) ----

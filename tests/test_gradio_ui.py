@@ -150,16 +150,20 @@ def test_chain_preset_dropdown_present_with_valid_default():
     assert dd.value in [v for _l, v in dd.choices]
 
 
-def test_chain_chunked_upsample_checkbox_defaults_on():
+def test_chunked_upsample_checkboxes_default_on():
     # Owner decision 2026-07-14 (real-GPU 4-clip gate passed): the chunked-
     # upsample checkbox starts ON. UI default only — the API model default
     # stays False for flag-omitting clients.
+    #
+    # There are TWO of them: the Clip Chain tab's, and the batch accordion's
+    # (§4-15 — the Gradio batch sends the field the plugin's batch always
+    # sent). They share the i18n key, so this finds both, and BOTH start ON.
     demo = _demo()
     boxes = [c for c in demo.blocks.values()
              if isinstance(c, gr.Checkbox)
              and c.label == LABELS["en"]["chk_chunked_upsample"]]
-    assert len(boxes) == 1, "chunked-upsample checkbox not found"
-    assert boxes[0].value is True
+    assert len(boxes) == 2, "chunked-upsample checkboxes not found"
+    assert all(b.value is True for b in boxes)
 
 
 def test_generate_tab_a2v_audio_file_present():
@@ -795,15 +799,16 @@ def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     deps_with_radio = [d for d in demo.fns.values()
                        if radio in getattr(d, "inputs", [])]
     assert len(deps_with_radio) >= 2, "attention radio not wired into 2 flows"
-    # And it is the FIFTH-TO-LAST input of each: the APPENDED wiring discipline
+    # And it is the SIXTH-TO-LAST input of each: the APPENDED wiring discipline
     # put it last when it was the only Acceleration control, then the
     # block-swap prefetch checkbox went after it, the keep-resident checkbox
-    # after that, the fused-dequant checkbox after that, and the VAE radio
+    # after that, the fused-dequant checkbox after that, the VAE radio
     # (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
-    # time) after that. This index is the canary for a wiring list and a
-    # handler signature drifting apart.
+    # time) after that, and the keep-resident-embeddings checkbox after that.
+    # This index is the canary for a wiring list and a handler signature
+    # drifting apart.
     for dep in deps_with_radio:
-        assert _wiring_inputs(dep)[-5] is radio
+        assert _wiring_inputs(dep)[-6] is radio
 
 
 # --------------------------------------------------------------------------- #
@@ -869,11 +874,12 @@ def test_keep_resident_checkbox_is_wired_last_into_generate_and_chain():
                and c.label == en["accel_lbl_keep_resident"])
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "keep-resident checkbox not wired into 2 flows"
-    # THIRD-TO-LAST since §1-11 appended the fused-dequant checkbox after it,
-    # and PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
-    # time) appended the VAE radio after that.
+    # FOURTH-TO-LAST since §1-11 appended the fused-dequant checkbox after it,
+    # PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
+    # time) appended the VAE radio after that, and the
+    # keep-resident-embeddings checkbox went after that.
     for dep in deps:
-        assert _wiring_inputs(dep)[-3] is box
+        assert _wiring_inputs(dep)[-4] is box
 
 
 def test_keep_resident_labels_switch_language():
@@ -897,13 +903,13 @@ def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
     deps_with_box = [d for d in demo.fns.values()
                      if box in getattr(d, "inputs", [])]
     assert len(deps_with_box) >= 2, "prefetch checkbox not wired into 2 flows"
-    # And it is the FOURTH-TO-LAST input of each: APPENDED after
+    # And it is the FIFTH-TO-LAST input of each: APPENDED after
     # attention_backend, then the keep-resident checkbox (§48), the
-    # fused-dequant checkbox (§1-11) and the VAE radio (PrunaVAED,
-    # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time) were
-    # appended after IT.
+    # fused-dequant checkbox (§1-11), the VAE radio (PrunaVAED,
+    # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time) and the
+    # keep-resident-embeddings checkbox were appended after IT.
     for dep in deps_with_box:
-        assert _wiring_inputs(dep)[-4] is box
+        assert _wiring_inputs(dep)[-5] is box
 
 
 # --------------------------------------------------------------------------- #
@@ -951,16 +957,18 @@ def test_fused_dequant_checkbox_is_wired_into_generate_and_chain():
                and c.label == en["accel_lbl_fused_dequant"])
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "fused-dequant checkbox not wired into 2 flows"
-    # SECOND-TO-LAST since PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66,
-    # filed as §3-50 at the time) appended the VAE radio after it.
+    # THIRD-TO-LAST since PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66,
+    # filed as §3-50 at the time) appended the VAE radio after it, and the
+    # keep-resident-embeddings checkbox went after that.
     for dep in deps:
-        assert _wiring_inputs(dep)[-2] is box
+        assert _wiring_inputs(dep)[-3] is box
 
 
 def test_vae_radio_is_wired_into_generate_and_chain():
     # Same "displayed only" trap check as the other Acceleration controls: the
-    # radio must actually be an INPUT of both generate flows, and it is now
-    # the LAST Acceleration control (appended after fused-dequant).
+    # radio must actually be an INPUT of both generate flows, and it is
+    # SECOND-TO-LAST since the keep-resident-embeddings checkbox was appended
+    # after it.
     demo = _demo()
     en = LABELS["en"]
     radio = next(c for c in demo.blocks.values()
@@ -968,19 +976,70 @@ def test_vae_radio_is_wired_into_generate_and_chain():
     deps = [d for d in demo.fns.values() if radio in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "VAE radio not wired into 2 flows"
     for dep in deps:
-        assert _wiring_inputs(dep)[-1] is radio
+        assert _wiring_inputs(dep)[-2] is radio
+
+
+def test_keep_resident_embeddings_checkbox_is_wired_last_into_generate_and_chain():
+    # The newest Acceleration control, so it is the LAST input of both flows
+    # (screen position is a different matter: it renders under the
+    # keep-resident checkbox, while the wiring discipline is append-at-the-end).
+    # An invisible component is still an INPUT, so being hidden at build time
+    # changes nothing here.
+    demo = _demo()
+    en = LABELS["en"]
+    box = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Checkbox)
+               and c.label == en["accel_lbl_keep_resident_embeddings"])
+    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
+    assert len(deps) >= 2, "keep-resident-embeddings checkbox not wired into 2 flows"
+    for dep in deps:
+        assert _wiring_inputs(dep)[-1] is box
+
+
+def test_keep_resident_embeddings_checkbox_default_and_hidden_at_build():
+    from gradio_ui.handlers import KEEP_RESIDENT_EMBEDDINGS_DEFAULT
+
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox)
+             and c.label == en["accel_lbl_keep_resident_embeddings"]]
+    assert len(boxes) == 1, "keep-resident-embeddings checkbox not found"
+    box = boxes[0]
+    assert box.value is KEEP_RESIDENT_EMBEDDINGS_DEFAULT
+    assert box.value is False, "off by default (owner decision: ~5GB resident)"
+    # Built INVISIBLE: the default base model is the one that does not support
+    # the feature, so the row must not flash into view before the first /models
+    # pull decides (tests/test_gradio_models.py drives that decision).
+    assert box.visible is False
+    # Not gated/disabled -- whether the machine has the RAM is not something the
+    # server can answer, the same reasoning as the keep-resident checkbox.
+    assert box.interactive is not False
+    assert box.info == en["accel_info_keep_resident_embeddings"]
+
+
+def test_keep_resident_embeddings_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_lbl_keep_resident_embeddings", "label"),
+                      ("accel_info_keep_resident_embeddings", "info")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
 
 
 def test_generate_and_chain_trailing_inputs_order_is_locked():
-    """The last SIX inputs of both generate flows, in exact order.
+    """The whole trailing Acceleration block of both generate flows, in exact
+    order.
 
     ui.py's ``chain_dispatch`` peels the trailing Acceleration values off with
-    NEGATIVE indices (``args[:-5]`` + ``args[-5]``..``args[-1]``), so appending
+    NEGATIVE indices (``args[:-N]`` + ``args[-N]``..``args[-1]``), so appending
     one more input without shifting every index silently mis-wires the chain
     handler: the values still arrive, just under the wrong parameter names, and
     nothing raises. ``vsf_scale`` is included as the boundary element -- it is
-    the last POSITIONAL argument the handler receives, i.e. exactly where the
-    ``args[:-5]`` slice must stop.
+    the last POSITIONAL argument the handler receives, i.e. exactly where that
+    ``args[:-N]`` slice must stop.
 
     The keyframe components are the ONE exception to "everything new is
     appended at the end": Gradio passes ``inputs`` positionally, so the
@@ -1006,12 +1065,13 @@ def test_generate_and_chain_trailing_inputs_order_is_locked():
         _one(gr.Checkbox, "accel_lbl_keep_resident"),
         _one(gr.Checkbox, "accel_lbl_fused_dequant"),
         _one(gr.Radio, "accel_lbl_vae"),
+        _one(gr.Checkbox, "accel_lbl_keep_resident_embeddings"),
     ]
     deps = [d for d in demo.fns.values()
             if expected[-1] in getattr(d, "inputs", [])]
     assert len(deps) == 2, "expected exactly the generate + chain flows"
     for dep in deps:
-        assert _wiring_inputs(dep)[-6:] == expected
+        assert _wiring_inputs(dep)[-7:] == expected
 
 
 # --------------------------------------------------------------------------- #
@@ -1192,7 +1252,7 @@ def test_vae_mode_reaches_batch_payload_when_pruned(tmp_path):
     # wiring dispatch()'s BatchSnapshot(...) construction in ui.py relies on.
     import wave
 
-    from gradio_ui.batch import BatchRunner, BatchSnapshot
+    from gradio_ui.batch import BatchRunner, BatchSnapshot, prepare_batch_rows
     from gradio_ui.manifest import STAT_WAITING, BatchRow
 
     wav_dir = tmp_path / "wavs"
@@ -1223,7 +1283,7 @@ def test_vae_mode_reaches_batch_payload_when_pruned(tmp_path):
         wav_dir=str(wav_dir), out_dir=str(out_dir),
         prompt_common="base", negative="", prompt_mode="add",
         width=512, height=320, crop_output=None, frame_rate=24.0, seed=7,
-        loras=[], shared_images=[], use_adapter=False, ref_video_path=None,
+        shared_images=[], use_adapter=False, ref_video_path=None,
         control_adherence=1.0, reference_strength=1.0,
         poll_interval=0.0, poll_timeout_s=30.0,
         vae_mode="prune_vaed",
@@ -1231,6 +1291,8 @@ def test_vae_mode_reaches_batch_payload_when_pruned(tmp_path):
     rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
 
     runner = BatchRunner()
+    # The UI-thread freeze dispatch() performs before handing rows over (§3-1).
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode, ()) is None
     started, _ = runner.start(snap, rows, api, sync=True)
     assert started is True
     assert captured["vae_mode"] == "prune_vaed"
@@ -1239,7 +1301,7 @@ def test_vae_mode_reaches_batch_payload_when_pruned(tmp_path):
 def test_vae_mode_default_omitted_from_batch_payload(tmp_path):
     import wave
 
-    from gradio_ui.batch import BatchRunner, BatchSnapshot
+    from gradio_ui.batch import BatchRunner, BatchSnapshot, prepare_batch_rows
     from gradio_ui.manifest import STAT_WAITING, BatchRow
 
     wav_dir = tmp_path / "wavs"
@@ -1270,13 +1332,15 @@ def test_vae_mode_default_omitted_from_batch_payload(tmp_path):
         wav_dir=str(wav_dir), out_dir=str(out_dir),
         prompt_common="base", negative="", prompt_mode="add",
         width=512, height=320, crop_output=None, frame_rate=24.0, seed=7,
-        loras=[], shared_images=[], use_adapter=False, ref_video_path=None,
+        shared_images=[], use_adapter=False, ref_video_path=None,
         control_adherence=1.0, reference_strength=1.0,
         poll_interval=0.0, poll_timeout_s=30.0,
     )
     rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
 
     runner = BatchRunner()
+    # The UI-thread freeze dispatch() performs before handing rows over (§3-1).
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode, ()) is None
     started, _ = runner.start(snap, rows, api, sync=True)
     assert started is True
     assert "vae_mode" not in captured

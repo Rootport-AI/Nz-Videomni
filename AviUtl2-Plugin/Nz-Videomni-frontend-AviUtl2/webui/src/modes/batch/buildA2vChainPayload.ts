@@ -44,11 +44,10 @@ export type PromptMode = "add" | "replace";
  * - `mode === "add"` -> `` `${common} ${row}` `` with both ends trimmed (an
  *   empty common prompt yields just the row prompt).
  *
- * The row prompt is passed through completely unexamined: any `<lora:...>`
- * tag written into it is left as plain text, never parsed (spec §8 — a
- * batch row's LoRAs can only come from the common/shared prompt, which the
- * caller runs through the normal prompt-tag parser BEFORE it ever reaches
- * this function).
+ * Composition only: this function never looks at `<lora:...>` syntax. The
+ * caller (`batchRunner.ts`'s `processRow`) runs the COMPOSED string through
+ * the normal prompt-tag parser afterwards, so tags written into a row's own
+ * cell count exactly like the common prompt's.
  */
 export function composeRowPrompt(commonPrompt: string, rowPrompt: string, mode: PromptMode): string {
   const common = commonPrompt ?? "";

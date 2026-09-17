@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import type { AppConfig, CropOutput } from "../../api/types";
 import { bridge as defaultBridge, BridgeError } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
-import { parseLoraPrompt } from "../../lora/loraTags";
 import { isNagNegativeEmpty, NAG_OFF } from "../../shell/nagSettings";
 import {
   ACCELERATION_DEFAULTS,
@@ -722,19 +721,20 @@ export function useBatchForm(
 
   // N5 A1: raw in-place edit of a single row's `prompt` cell, called on EVERY
   // keystroke (the prompt `<input>`'s `onChange`, a controlled input).
-  // Deliberately NEVER routed through `parseLoraPrompt` — spec §8 excludes a
-  // row's own `prompt` column from `<lora:>` tag parsing, so the string is
-  // stored verbatim. Updates the in-memory `rows` (and so the on-screen value)
-  // immediately; there is nothing else to persist to (stateless batch, owner
-  // decision 2026-07-18). Uses a functional `setRows` update (rather than
-  // closing over `rows`) so rapid keystrokes can never race each other.
+  // Deliberately NEVER routed through `parseLoraPrompt` here: a cell stays
+  // verbatim, and `<lora:>` tags are parsed exactly once at send time out of
+  // the COMPOSED prompt (see `batchRunner.processRow`). Updates the in-memory
+  // `rows` (and so the on-screen value) immediately; there is nothing else to
+  // persist to (stateless batch, owner decision 2026-07-18). Uses a functional
+  // `setRows` update (rather than closing over `rows`) so rapid keystrokes can
+  // never race each other.
   const setRowPromptLocal = useCallback((index: number, value: string) => {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, prompt: value } : r)));
   }, []);
 
   // N5 A2: overwrites row `index`'s prompt with the Create screen's shared
-  // `commonPrompt` verbatim (also never `parseLoraPrompt`-parsed) — a discrete
-  // button press. In-memory only.
+  // `commonPrompt` verbatim (same rule as `setRowPromptLocal` above: cells are
+  // never parsed here) — a discrete button press. In-memory only.
   const copyCommonPromptToRow = useCallback(
     (index: number, commonPrompt: string) => {
       setRows((prev) => prev.map((r, i) => (i === index ? { ...r, prompt: commonPrompt } : r)));
@@ -824,9 +824,12 @@ export function useBatchForm(
     // reached with a stale closure or by a direct call — the run lock cannot
     // catch a job that no batch panel started (or one that outlived a reload).
     if (serverBusy) return;
-    const { strippedPrompt, loras } = parseLoraPrompt(prompt);
     const settings: BatchRunnerSettings = {
-      promptCommon: strippedPrompt,
+      // The RAW card prompt, tags and all — `<lora:>` parsing happens once at
+      // send time, on the string each row composes out of this and its own
+      // cell (`batchRunner.processRow`), so a row's tags and the card's meet
+      // in one parse instead of two.
+      promptCommon: prompt,
       promptMode: own.promptMode,
       width: generationValues.width,
       height: generationValues.height,
@@ -840,7 +843,6 @@ export function useBatchForm(
       frameRate: generationValues.frameRate,
       seed: generationValues.seed,
       chunkedUpsample: own.chunkedUpsample,
-      ...(loras.length > 0 ? { loras } : {}),
       // NAG (2026-07-28): silently inherits whatever the Create-owned
       // accordion currently holds — only threaded through while enabled, so
       // an OFF NAG state stays a no-op for every row's payload.

@@ -546,7 +546,7 @@ void RegisterTimelineMenu(HOST_APP_TABLE* host, const TimelineMenuItem* items,
                        std::to_wstring(count) + L" item(s)");
     } else {
         nzvideomni::LogWarn(std::wstring(L"register_") + kind + L"_menu[_param] unavailable "
-                       L"(beta52) - using WebView2 panel + timeline.getSelection fallback");
+                       L"on this host - using WebView2 panel + timeline.getSelection fallback");
     }
 }
 
@@ -718,9 +718,11 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     // names are ASCII keys run through Translate() (Language/*.aul2); the embedded
     // '\' makes the host render an "Nz-Videomni" submenu.
     // REALDEVICE-VERIFY: register_object_menu[_param] / register_layer_menu[_param] /
-    // register_project_load_handler are populated by AviUtl2 beta52 and fire as
-    // documented (right-click menus on object / empty layer; project load+init),
-    // and every alpha item below actually appears/fires under the "Nz-Videomni" submenu.
+    // register_project_load_handler are populated by AviUtl2 and fire as documented
+    // (confirmed on beta52 in 2026-07; register_project_load_handler re-confirmed on the
+    // current host on 2026-09-04: VERIFICATION_LOG §97) (right-click menus on object /
+    // empty layer; project load+init), and every alpha item below actually appears/fires
+    // under the "Nz-Videomni" submenu.
     RegisterTimelineMenu(host, kObjectMenuItems,
                          sizeof(kObjectMenuItems) / sizeof(kObjectMenuItems[0]),
                          /*is_object=*/true);
@@ -731,7 +733,7 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
         host->register_project_load_handler(&OnProjectLoad);
         nzvideomni::LogInfo(L"register_project_load_handler: registered");
     } else {
-        nzvideomni::LogWarn(L"register_project_load_handler unavailable (beta52) - orphan "
+        nzvideomni::LogWarn(L"register_project_load_handler unavailable on this host - orphan "
                        L"provisional scan must be user-triggered");
     }
 

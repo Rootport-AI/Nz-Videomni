@@ -434,6 +434,8 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 
 　ただし**開発機ではこの`.venv-engine\Scripts\hf.exe`自体が壊れている**——2026-08-19のモノレポ改名（`Nz-LTX23-backend`→`Nz-Videomni`）より前（実測タイムスタンプ2026-07-08）に作られたuvシムで、埋め込みパスが旧ディレクトリ名を指している。これは`Nz-HF-Rehost\README.md`冒頭の2026-08-23追記ブロックで報告されている「旧`Nz-LTX23-backend\.venv\Scripts\hf.exe`が改名で壊れたシムのため使えない」現象と同型の問題である。開発機で`setup.bat`／`install_ltx.ps1`のダウンロード検証を行う際、もし`.venv-engine`側を作り直さずLTX 2.5用の`.venv-engine-ltx25`（huggingface_hub **1.28.0**固定、`engine25\venv-engine-ltx25.freeze.txt`60行目実測）のhf.exeへ差し替えて検証するなら、1.20系以降の挙動（②の警告どおり複数パターンが無視される）に当たるため、単一`--include`複数パターンの記法から`--include`を繰り返す記法へ変更する必要がある——コード修正はDocs担当の本エージェントの権限外であり、次セッションでの判断事項として残す。
 
+> **2026-09-18追記（上の本文は当時のまま）**: **2026-09-17以降、導入スクリプトは`hf.exe`を一度も実行しない。** エンジン用の仮想環境の`huggingface_hub`をモジュールとして起動する形（作業ディレクトリを探索路へ載せない指定つき）に変わったので、薄皮が壊れているかどうかは導入の成否に関係しなくなった。**`.venv-engine`の0.36.2固定も、単一の`--include`に複数パターンを続ける記法も変えていない。** なお上の「開発機では壊れている」という記述は、書かれた時点より後の**2026-09-11に薄皮が再生成されて解消しており**、その時点で既に古くなっていた。記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-148と[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §112である。
+
 **この`20-ltx25.json`の編集と`install_ltx.ps1`（`setup.bat`経由）の動作検証は、次セッション（LTX 2.5推論エンジン担当）の作業とする。** 本節はJSONエントリ案と踏まえるべき制約を申し送るのみで、コード変更は一切行っていない。
 
 > **2026-08-30追記（上の本文は当時のまま）**: **上の2エントリは`scripts/manifests/20-ltx25.json`へ投入した。正本はその現物であり、上の案文はもう最新ではない。**
@@ -446,6 +448,8 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 > 2. **上の案文が「`10-ltx23.json`のUpscaler行も`key`を持たない」と書いているのは事実誤認である。** 現物の`10-ltx23.json`は該当行に`key`を持っている（裏取り済み）。したがって「先例に倣って付けない」という理由は成り立たない。
 >
 > **⑤（`--include`の記法）の申し送りも決着した。** ダウンロードは`.venv-engine`側の`hf.exe`（huggingface_hub 0.36.2）で走らせる設計のままとし、記法は変更していない——実ダウンロードを伴う検証はサブマシンで行い、5ファイルとも取得できている（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §82）。**開発機の`hf.exe`が改名で壊れている事実はいまも有効**で、開発機ではこれを「ダウンロードを必ず失敗させる故障注入器」として使い、失敗案内とステージング残存の確認に充てている（同 §82.7）。**なお`hf download`は固定回数まで再試行する**（回数と待ち時間の正本は[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §2.5。リマップは`.cache`を消さないので再開情報が残り、取得済みのファイルは取り直さない）。**`hf-xet`もfreezeで固定済み**（2026-08-30・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-128）。
+>
+> **2026-09-18追記（上の行は当時のまま）**: **「開発機の`hf.exe`が壊れている事実はいまも有効」は、2026-09-11までの話である**——同日に薄皮が再生成されて健全になった。さらに**2026-09-17以降、導入スクリプトは`hf.exe`を一度も実行しない**（エンジン用の仮想環境の`huggingface_hub`をモジュールとして起動する形へ変わった。0.36.2固定と単一`--include`の記法はどちらも不変である）。**したがって、壊れた薄皮を故障注入器に使う手法も使えない**——代替の手立ては[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §112.6にある。記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-148と同§112である。
 >
 > なお`_note`も書き換えてあり、**`downloads`は`install-LTX25.bat`専用であること**・`install_ltx.ps1`の`-BaseModel`既定値のおかげで`setup.bat`はここに到達しないこと・拡散デコーダ版VAEと`*.assets.safetensors`は配布対象外であることを、現物のコメントとして残してある。**この節に書いた5ファイルのサイズとSHA-256の表は、いまも正本のままである。**
 

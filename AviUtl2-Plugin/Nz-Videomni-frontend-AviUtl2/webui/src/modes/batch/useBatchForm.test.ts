@@ -655,9 +655,9 @@ describe("useBatchForm", () => {
   it("copyCommonPromptToRow overwrites a row's prompt with the common prompt verbatim, never through parseLoraPrompt", async () => {
     const fs = wavFolder([{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }]);
     const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: WAV_DIR });
-    // Deliberately includes a <lora:> tag: if this were routed through
-    // `parseLoraPrompt` (like `start()`'s own prompt does), the tag would be
-    // stripped out of the stored prompt — it must survive untouched here.
+    // Deliberately includes a <lora:> tag: a row cell stays verbatim, and the
+    // tag is parsed only at send time out of the composed prompt
+    // (`batchRunner.processRow`) — so it must survive untouched here.
     const commonPrompt = "<lora:my-style:0.8> a shared common prompt";
     const { result } = renderBatchForm(bridge, { prompt: commonPrompt });
 

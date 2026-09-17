@@ -21,6 +21,7 @@ import {
   sageAvailability,
 } from "./accelerationSettings";
 import type { AccelerationSettings, AttentionBackend, VaeMode } from "./accelerationSettings";
+import { comfortDisplayTableFor, resolveComfortCell } from "./comfortDisplayTable";
 import type { ServerStatusState } from "../modes/single/useServerStatus";
 import "./SettingsPanel.css";
 
@@ -87,6 +88,13 @@ export interface SettingsPanelProps {
    * OTHER WAY ROUND: the embeddings processor is LTX 2.5's own component, so it
    * is LTX 2.3 that publishes the name and hides this row. */
   keepResidentEmbeddingsUnsupported: boolean;
+  /** §3-163: the LOADED base model's engine family (`AppShell`'s
+   * `baseModels.activeEngineFamily`), which decides WHICH comfort-limit table
+   * the section at the bottom shows — or, for a family with no table (and for
+   * `""`, i.e. before `GET /models` lands or offline), that there is no section
+   * at all. Read off the loaded model rather than the dropdown's selection for
+   * the same reason the comfort MARKER is (`shell/useBaseModels.ts`). */
+  engineFamily: string;
   /** `AppShell`'s existing `useServerStatus` state (the same `/status` poll the
    * header badge reads) — the ONLY source of sage availability. No separate
    * capability hook/fetch exists on purpose; see
@@ -113,6 +121,7 @@ export function SettingsPanel({
   vaeUnsupported,
   onKeepResidentEmbeddingsChange,
   keepResidentEmbeddingsUnsupported,
+  engineFamily,
   serverStatus,
   nativeBridge,
 }: SettingsPanelProps) {
@@ -160,11 +169,16 @@ export function SettingsPanel({
   const keepResidentUsable = blockSwapPrefetchEffective(acceleration, prefetchAvailable);
   const keepResidentShown = keepResidentEffective(acceleration, prefetchAvailable);
   const settings = useSettings(nativeBridge);
-  // N11/N10: fetched once here and shared by both the spill-free table and
+  // N11/N10: fetched once here and shared by both the comfort-limit table and
   // the raw /config viewer below — `useConfig()` already caches within its
   // own effect, but calling it twice would still mean two separate `GET
   // /config` requests, so both new sections read from this single call.
   const configState = useConfig();
+  // §3-163: which comfort-limit table to draw, or `null` for "no section".
+  // A plain lookup, so no memo — and deliberately NOT folded into the JSX
+  // below, so the "is there a section at all?" question is answered in one
+  // place that the tests can reason about.
+  const comfortTable = comfortDisplayTableFor(engineFamily);
   // Models section (S1): only build a bespoke ApiClient when a test override
   // is supplied — production call sites pass no `nativeBridge`, so
   // `ModelsPanel`/`useModels` fall back to the app-wide `apiClient`
@@ -543,34 +557,49 @@ export function SettingsPanel({
           </button>
         </div>
 
-        {/* N11: spill-free frame-count table, and N10: raw /config JSON
-         * viewer. Both new sections share the single `configState` fetched
-         * above — mirrors `ModelsPanel`'s own "independent section" placement
-         * (task brief: settings has no config today, so this is the panel's
-         * first consumer of it). */}
+        {/* N11: comfort-limit table, and N10: raw /config JSON viewer. Both
+         * sections share the single `configState` fetched above — mirrors
+         * `ModelsPanel`'s own "independent section" placement (task brief:
+         * settings has no config today, so this is the panel's first consumer
+         * of it). */}
         {configState.status === "loading" && <p className="hint">{strings.settings.configLoading}</p>}
         {configState.status === "ready" && (
           <>
-            <div className="models-section">
-              <h3>{strings.settings.spillFreeSectionTitle}</h3>
-              <p className="field-hint">{strings.settings.spillFreeHint}</p>
-              <table className="spill-free-table">
-                <thead>
-                  <tr>
-                    <th>{strings.settings.spillFreeResolutionHeader}</th>
-                    <th>{strings.settings.spillFreeFramesHeader}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(configState.config.limits.spill_free_frames).map(([resolution, frames]) => (
-                    <tr key={resolution}>
-                      <td>{resolution}</td>
-                      <td>{frames}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {/* §3-163: the SHAPE comes from `shell/comfortDisplayTable.ts`, every
+             * number from the served `limits` — this panel writes neither, it
+             * only lays the cells out. A family with no table renders nothing
+             * here rather than an empty frame. */}
+            {comfortTable && (
+              <div className="models-section">
+                <h3>{strings.settings.comfortSectionTitle}</h3>
+                <p className="field-hint">{strings.settings.comfortHint}</p>
+                <div className="comfort-table-scroll">
+                  <table className="comfort-table">
+                    <thead>
+                      <tr>
+                        <th>{strings.settings.comfortResolutionHeader}</th>
+                        {comfortTable.columns.map((column) => (
+                          <th key={column.id}>{strings.settings[column.labelKey]}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comfortTable.rows.map((resolution) => (
+                        <tr key={resolution}>
+                          <td>{resolution}</td>
+                          {comfortTable.columns.map((column) => {
+                            const frames = resolveComfortCell(configState.config.limits, resolution, column);
+                            return (
+                              <td key={column.id}>{frames === null ? strings.settings.comfortDash : frames}</td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="models-section">
               <h3>{strings.settings.apiKeySectionTitle}</h3>

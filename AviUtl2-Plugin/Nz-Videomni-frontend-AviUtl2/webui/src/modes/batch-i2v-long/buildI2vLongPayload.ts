@@ -45,10 +45,11 @@ export type PromptMode = "add" | "replace";
  * expected to diverge); the shared behavior is pinned by both files' tests
  * asserting the same three-branch table.
  *
- * Like A2V's version, the row prompt is passed through unexamined: a
- * `<lora:...>` tag typed into it stays plain text and is never parsed — the
- * Chain form already stripped its own prompt's tags into `loras[]` before
- * `buildRequest()` ever produced `base`.
+ * Unlike Batch A2V (which now parses the COMPOSED prompt — see
+ * `modes/batch/batchRunner.ts`'s `processRow`), this panel's row prompt is
+ * passed through unexamined: a `<lora:...>` tag typed into it stays plain
+ * text and is never parsed — the Chain form already stripped its own
+ * prompt's tags into `loras[]` before `buildRequest()` ever produced `base`.
  *
  * 2026-07-30: the second argument used to be the panel's single batch-wide
  * prompt textarea. That control is gone (owner feedback: a prompt that applies

@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-16（§3-151・§4-14 をクローズし [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-151／§3-153 へ移し、台帳外のオーナー注文2件を同書 §3-154・§3-155 として記録。現在の構成は**§3 将来の研究課題／§4 スコープ外**の2節で、§1・§2 は該当項目が無いため見出しごと削除してある）
+- 作成: 2026-07-15／最終更新: 2026-09-18（§3-148 をクローズし [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-148 へ移送、§3-146 をクローズし同書 §3-146 へ移送、§3-1 の「行ごとの`<lora:>`タグ非対応」の1箇条をクローズし同書 §3-159 へ移送、§4-17 をクローズし同書 §3-157 へ移送、§4-15 をクローズし同書 §3-160 へ移送、§4-6 の⑤・⑥をクローズし同書 §3-161・§3-162 へ移送。現在の構成は**§3 将来の研究課題／§4 スコープ外**の2節で、§1・§2 は該当項目が無いため見出しごと削除してある）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
@@ -28,14 +28,6 @@
 - **候補一覧の正本**: バックエンド[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)。
 - **状態**: 将来の改修項目（着手はオーナー判断待ち）。
 
-#### 3-148. 導入スクリプトの`hf.exe`（uv製の実行ファイルの薄皮）が壊れたままになり、`setup.bat`の再実行では直らない（起票：2026-09-11）
-
-- **観測した症状（実測2026-09-11）**: `.venv-engine\Scripts\hf.exe`（2026-07-08生成）が「Failed to canonicalize script path」で失敗し、`install-UETrack.bat`の導入確認がそこで止まった。`setup.bat`を再実行しても`hf_xet`関連の9ファイルが更新されるだけで直らず、`uv pip install --reinstall --no-deps huggingface_hub==0.36.2`で薄皮が再生成されて復旧した。`.venv-engine-ltx25`の同じファイル（2026-08-21生成）は正常である。**壊れた原因は特定していない**（フォルダ名の変更が疑わしいが、裏取りしていない）。
-- **何が問題か**: `Test-SetupDone`が出す案内「`setup.bat`を再実行すれば直る」は、**依存が揃っていて再インストールが走らない場合には当たらない**。利用者は案内どおりに操作しても復旧できず、詰まったままになる。
-- **検討する対処**: (a) 導入スクリプトが`hf.exe`の代わりに`python -m huggingface_hub.cli.hf`を呼ぶ（薄皮を経由しないので壊れようがない）。(b) 案内文に再インストールの1行を足す。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §104.9（観測した事実の正本）。
-- **状態**: 将来の改修項目（着手はオーナー判断待ち）。
-
 #### 3-149. Toolbox（物体追尾）のマスク形状の変化を滑らかにする（起票：2026-09-14）
 
 - **概要**: 物体追尾は1フレームごとに枠の形状を決めるため、動画によってはマスクの縁が痙攣するようにちらつく。直前の形状から滑らかに変化させる方法を研究する。
@@ -46,11 +38,10 @@
 
 #### 3-1. バッチA2Vのα版で意図的に省略した機能
 
-バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能。2026-09-15からi2vモードも同じパネルに乗る。正本は`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md`）にα版として実装していない機能のうち、現在も残っているのは次の4点。出典: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
+バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能。2026-09-15からi2vモードも同じパネルに乗る。正本は`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md`）にα版として実装していない機能のうち、現在も残っているのは次の3点。出典: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
 
 - **バッチでの参照動画**: IC-LoRA用の参照動画系フィールド（Gradio原典`batch.py`の`use_adapter`／`ref_video_path`／`control_adherence`／`reference_strength`）に相当する設定がバッチ経路に無い（`webui/src/modes/batch/batchRunner.ts`の実装ノートに「No reference-video (control IC-LoRA) adapter support」と明記）。
 - **開始前の一括妥当性検証（preflight）**: Gradio原典の`_validate`相当にあたる、画像/プロンプトのfoolproof preflightは未実装。
-- **行ごとの`<lora:>`タグ非対応**: 各行の追加プロンプト欄に書いた`<lora:名:強度>`は、タグとして解釈されず**ただの文字列**として送られる。LoRAはプロンプト側からしか効かない仕様（`composeRowPrompt`と`setRowPromptLocal`のいずれも`parseLoraPrompt`を通していない）。着手条件は**ユーザーからの要望があったとき**。
 - **行ごとのAdd／Replace切替**: プロンプトと追加プロンプトの合成方式（Add＝連結／Replace＝行で置き換え）は、現状バッチ全体で1つの設定（`promptMode`）であり、行ごとには切り替えられない。
 
 なお本節の項目は、オーナー方針（Gradio同梱UIとのパリティは最終的に全項目を実装対象とする）のもとでは、いずれ実装側へ戻る前提である（[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)）。
@@ -174,11 +165,6 @@
 - **状態**: 未着手（将来の研究課題）。**急ぎではない**——スタイルLoRAの解禁で、撮り直しにLoRAが使えない状態そのものは解消している。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-62-02（スタイルLoRA側の解禁記録と、そこで置いた設計判断）、`api/models.py`・`engine/pipeline/chain_pipeline.py`・`engine25/chain25.py`・`chain_math.py`（上記の各行）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57（長尺IC-LoRAの窓機構）・§55.3（両側凍結の検証）。
 
-#### 3-146. webuiのキーフレーム「追加」規則の見直し（起票：2026-09-08）
-
-- **概要**: 「キーフレームを追加」は「最後のピンと最終フレームの中点に置き、既存のピンは動かさない」規則（フロントエンド`KEYFRAME_TIMELINE_DESIGN_NOTES.md` §3、2026-07-18オーナー決定）のため、既定の361フレームでは7枚（0, 177, 265, 313, 337, 345, 353）で「後ろに空きがありません」となり、上限10に「追加」ボタンだけでは届かない（ピンをドラッグして空ければ届く）。上限10化の実機で使い勝手を見てから、規則を変えるか（例: 後ろに空きが無いときだけ最も広い隙間の中点へ置く）据え置くかを判断する。**オーナー裁定（2026-09-08）: 上限10化のテーマでは規則を変えない。**
-- **出典**: フロントエンド`KEYFRAME_TIMELINE_DESIGN_NOTES.md` §3、`webui/src/modes/single/keyframeGrid.ts`の`nextAddPosition`。
-
 ---
 
 ## 4. スコープ外（さらに先の将来）
@@ -221,14 +207,12 @@
 - **何が塞いでいるか**: テキストエンコーダのGemmaを**text-only化してVRAMを22.7GB回収した**現行構成と正面から衝突する。巻き戻す判断が必要なため計画外で、要件化されたときに別途判断する。
 - **出典**: [`Nz-Videomni/Docs/PHASE3_NEXT_WORK_SURVEY.md`](PHASE3_NEXT_WORK_SURVEY.md)。
 
-### 4-6. バックエンド同梱Gradio UIの残6件
+### 4-6. バックエンド同梱Gradio UIの残4件
 
-- **概要（残る6件）**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）⑤Gradio側が`unsupported_features`をまったく読んでいないこと（次項）⑥Settingsタブに埋め込み処理器の常駐（`keep_resident_embeddings`）のトグルが無いこと（**意図的に見送っている**もので、実装漏れではない。Gradio側のSettingsタブは高速化5項目のままで、6項目目はAviUtl2の操作パネルにだけある——[`README.md`](../README.md)「生成の高速化（Acceleration）」の項も同じことを書いている）。
-- **⑤の詳細**: **Gradio側のSettingsタブにあるVAEのラジオ（Default／PrunaVAED）は、アクティブなベースモデルが何であっても無条件に表示される。** LTX 2.5 を選んだ状態でPrunaVAEDを選んで生成すると、サーバーは`prune_vaed`を非対応として**422**で断る。AviUtl2側の操作パネルは同じ罠を[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-139で塞いだ（`unsupported_features`に`prune_vaed`がある間は行ごと非表示にする）が、**Gradio側は`unsupported_features`を1箇所も参照していない**（`gradio_ui/`全体でこのキーの出現は0件）。
-- **本項の扱い**: **実装するかどうかはオーナー判断であり、着手は決まっていない。** 直すなら`GET /models`の`unsupported_features`をGradio側でも読み、含まれる機能のコントロールを隠す（またはグレーアウトする）形になる。**機能名→UIの宣言表はWebUI側（TypeScript）にあり、Python製のGradioからは読み込めない**——⑤を直すときの手本にはなるが、同じ表を再利用することはできない（表の中身と設計判断は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-135・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §99）。
-- **何が塞いでいるか**: いずれもバックエンド同梱GUIの利便性向上であり、製品の入口はフロントエンド側という位置づけのため優先度が低い。⑤だけは利便性ではなく**到達可能な罠**である点が他の5件と異なる。
+- **概要（残る4件）**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）。
+- **何が塞いでいるか**: いずれもバックエンド同梱GUIの利便性向上であり、製品の入口はフロントエンド側という位置づけのため優先度が低い。
 - **既知の差分**: in-outpaintingアダプタをIC-LoRA制御アダプタのドロップダウンから除外する挙動（フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73）はWebUIのみに効き、Gradioには効かない。`gradio_ui/adapters.py`が`/config`のキーを直接列挙して選択肢を作る実装のため。α版の割り切りとしてWebUI側のみで対応する方針である。
-- **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §23.5、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73。**⑤の出典**は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-137（ベース切替の新設）・同§3-139（AviUtl2側の対処と`unsupported_features`の使い方）、[`README.md`](../README.md)「枝刈り版の映像VAEデコーダ」節（利用者向けの説明の正本）、および2026-09-01の敵対的レビュー。
+- **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §23.5、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73。
 
 ### 4-7. V2V／チェーンの音声まわりの残件3点
 
@@ -276,24 +260,11 @@
 - **何が塞いでいるか**: 需要が未確認で、モデルの追加取得（ダウンロード容量の増加）とVRAM影響の実測が要る。
 - **出典**: [`Nz-Videomni/Docs/LTX23_REFERENCE.md`](LTX23_REFERENCE.md)（モデル変種一覧）、`Nz-Videomni`の`services/base_models.py`とベースモデル記述子の`assets`ブロック（空間アップサンプラはここにあり、時間側は無い。旧`config.yaml`の`spatial_upsampler_path`は`config.py`の`DEPRECATED_MODEL_KEYS`へ移行済み）。
 
-### 4-15. Gradio側バッチが`chunked_upsample`を送っていない（逆方向の差分）
-
-- **概要**: バックエンド同梱Gradioのバッチ実行経路は、チェーンリクエストに`chunked_upsample`（省メモリ経路）を明示送信していない。フロントエンドのバッチA2Vは常に明示送信しており、**この点だけはフロントのほうが進んでいる**（逆方向の差分）。
-- **何が塞いでいるか**: バックエンド側の凍結方針。製品の入口はフロントエンドなので実害が小さい。
-- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.9-1、[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.9。
-- **追記（2026-09-15）**: 行画像の生成強度についても同種の逆方向差分が生まれた——バッチa2vの行画像はCreate画面冒頭のキーフレームカードの値／既定0.8を使うようになったが、Gradioバッチは引き続き固定1.0のままである（詳細は[`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md) §2.5を参照）。
-
 ### 4-16. Join（V2V結合）の既知の縮退3ケース
 
 - **概要**: joined動画を🎞で挿入するとき、位置指定つき挿入と仮オブジェクトの自動削除が効かず、カーソル位置への素挿入へ穏当に縮退する場合が3つある——①Chain画面での手動v2v②WebUIリロード後（jobId→元動画位置の揮発マップが消える）③マウント時に`job.joined`から復元した連結済み表示（トリム済み秒数が不明で位置計算できない）。
 - **何が塞いでいるか**: 実装時に**でっち上げの位置を使うより素挿入のほうが安全**と判断して受容した設計。直すには位置マップの永続化が要る。
 - **出典**: [`JOIN_FEATURE_RESEARCH.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/JOIN_FEATURE_RESEARCH.md) 第4部、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §44.2・§44.4。
-
-### 4-17. ブリッジ契約v5の6メソッド＋イベントが契約書に未収録（文書債務）
-
-- **概要**: [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md)は契約v5のうち`timeline.getSelection`と`timeline.menuInvoked`しか収録しておらず、残る6メソッド（`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`）とイベント`timeline.projectLoaded`が未収録のまま。**実装はC++側・`types.ts`側とも揃っている**ので機能の欠落ではなく、文書だけの債務である。
-- **何が塞いでいるか**: 収録には各メソッドの引数・応答形式を実装から起こす手間がかかる一方、当面の正本は`webui/src/bridge/types.ts`と[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) §5で足りている。
-- **出典**: [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §0冒頭の2026-07-08注記および§4.14.1。
 
 ### 4-18. 図形オブジェクトのエイリアス実書式
 
@@ -439,7 +410,7 @@
   - `ReplaceObjectEditProc`のアンドゥ挙動（delete+createが1ステップにまとまるか）。
   - `UpdateObjectTextEditProc`のカーソル依存書込の実機挙動。
   - `ExtractAudioWorker`の残検証（音声抽出のsolo分離は本書§4-21を参照）。※`CutoutRangeWorker`（範囲選択切り抜き）は製品UIから呼ぶ配線が無いため実機検証の対象外（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-48。配線を再検討するときの入口は本書§3-34）。
-- **`register_project_load_handler`の発火は検証済みである**（手動での「ファイル→開く」でも発火する。実測の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §97、クローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-35-02、仕様書側の実機チェックリスト#9も確認済み＝フロントエンド[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第8節）。**この経路について本節に残るのは文言の修正1点だけで、その管理は本節へ一元化する**——`native/src/plugin.cpp`は登録前に関数ポインタのnull検査を行い、未提供なら警告を出して孤児スキャンをユーザー操作起点へ縮退させる作りだが、**この警告文言だけが`(beta52)`のまま古い。着手時に直すこと。** なお予約検出はテキスト本文の`[#id]`マーカーを第一手段とする二重化設計なので、縮退しても実害は小さい。
+- **`register_project_load_handler`の発火は検証済みである**（手動での「ファイル→開く」でも発火する。実測の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §97、クローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-35-02、仕様書側の実機チェックリスト#9も確認済み＝フロントエンド[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第8節）。なお予約検出はテキスト本文の`[#id]`マーカーを第一手段とする二重化設計なので、縮退しても実害は小さい。
 - **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §7.6、§7.7、§33.1、§33.3、35.2、`native/src/plugin.cpp`・`native/src/bridge.cpp`の`REALDEVICE-VERIFY`注記。
 
 ### 4-37. 操作パネルの状態復帰（起票：2026-07-20）

@@ -2139,11 +2139,23 @@ export const en = {
      * fed by a single `useConfig()` call (`GET /config`,
      * Docs/API_REFERENCE.md §3.2). */
     configLoading: "Loading configuration…",
-    spillFreeSectionTitle: "Spill-free frame limits",
-    spillFreeHint:
-      "The frame count per resolution that avoids VRAM overflow and keeps generation from slowing down 2-4x. (Provisional)",
-    spillFreeResolutionHeader: "Resolution",
-    spillFreeFramesHeader: "Frames",
+    /** The comfort-limit guide (§3-163). Column headers are model names, so
+     * they read the same in both dictionaries — this also covers the
+     * quantisation suffix on the 2.3 all-on header. The SHAPE of the table
+     * (which rows, which columns) is `shell/comfortDisplayTable.ts` — these
+     * are only its labels. */
+    comfortSectionTitle: "Comfort-limit guide",
+    comfortHint:
+      "A guide to the frame count per resolution that avoids VRAM overflow and keeps generation from slowing down 2-4x (single generation).",
+    comfortResolutionHeader: "Resolution",
+    comfortColumnLtxDefault: "2.3 default",
+    comfortColumnLtxAllOn: "2.3 all-on (Q4, Q6)",
+    comfortColumnLtx25: "2.5",
+    comfortColumnLtx25Q6: "2.5 Q6",
+    /** The empty cell. A dedicated key rather than a literal in the panel:
+     * the em dash is copy, and a font that renders it badly is a translation
+     * problem, not a code change. */
+    comfortDash: "—",
     rawConfigSectionTitle: "Raw /config",
     rawConfigFallbackNote: "Showing the built-in fallback configuration — the server could not be reached.",
     /** N13: API-key status badge — shows whether the server has one
@@ -3340,10 +3352,14 @@ export const ja: Strings = {
     invalidUrl: "接続先URLが無効です。http://127.0.0.1:18620 のような形式で入力してください。",
     close: "閉じる",
     configLoading: "設定を読み込み中…",
-    spillFreeSectionTitle: "快適フレーム上限",
-    spillFreeHint: "各解像度における、VRAM溢れが起きずに生成が2～4倍遅くならないフレーム数です。（暫定版）",
-    spillFreeResolutionHeader: "解像度",
-    spillFreeFramesHeader: "フレーム数",
+    comfortSectionTitle: "快適上限の目安",
+    comfortHint: "各解像度で、VRAM溢れが起きずに生成が2～4倍遅くならないフレーム数の目安です（単発生成）。",
+    comfortResolutionHeader: "解像度",
+    comfortColumnLtxDefault: "2.3 既定",
+    comfortColumnLtxAllOn: "2.3 全on(Q4, Q6)",
+    comfortColumnLtx25: "2.5",
+    comfortColumnLtx25Q6: "2.5 Q6",
+    comfortDash: "—",
     rawConfigSectionTitle: "生の /config",
     rawConfigFallbackNote: "サーバーに接続できなかったため、内蔵のフォールバック設定を表示しています。",
     apiKeySectionTitle: "APIキー",

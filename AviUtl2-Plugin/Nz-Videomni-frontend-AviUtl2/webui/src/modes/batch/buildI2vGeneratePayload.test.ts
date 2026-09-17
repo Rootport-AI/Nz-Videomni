@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { ConditioningImage, CropOutput, LoraSpec } from "../../api/types";
+import { dedupeLoraSpecs } from "../../lora/controlLoras";
 import { parseLoraPrompt } from "../../lora/loraTags";
 import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
@@ -214,14 +215,16 @@ describe("buildI2vGeneratePayload", () => {
       );
     }
 
-    /** `useBatchForm.start()`と同じ前処理: 共通プロンプトから`<lora:>`タグを
-     * 切り出してから、残りの本文だけをビルダーへ渡す。 */
+    /** `batchRunner.processRow`と同じ前処理: 行を合成した文字列から`<lora:>`
+     * タグを切り出し、残りの本文だけをビルダーへ渡す（ここでは行が空なので、
+     * 合成結果＝共通プロンプトそのもの）。 */
     function batchRequest(
       prompt: string,
       extra: Partial<BuildI2vGeneratePayloadParams> = {},
       conditioningImages: ConditioningImage[] = [],
     ): string {
-      const { strippedPrompt, loras } = parseLoraPrompt(prompt);
+      const { strippedPrompt, loras: parsedLoras } = parseLoraPrompt(prompt);
+      const loras = dedupeLoraSpecs(parsedLoras);
       return JSON.stringify(
         buildI2vGeneratePayload({
           ...BASE,

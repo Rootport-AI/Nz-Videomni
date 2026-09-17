@@ -1,0 +1,112 @@
+git_state_start.txt -- comfort-calib-2026-09-17 (P0), recorded 2026-09-17 16:29:47 +0900
+repository: S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni
+
+=== 1. working tree ===
+$ git rev-parse HEAD
+e3151fc117cba87e277a022a90a161e3a2e74320
+$ git rev-parse --abbrev-ref HEAD
+dev
+$ git status --porcelain
+(empty -- clean)
+
+=== 2. the commit the running server was started from ===
+$ git log -1 --format="%H %ci %s" 5c5ebe7
+5c5ebe7b84583d13b2bc799d120872971c510f94 2026-09-17 00:26:26 +0900 文書の最新化（2026-09-16の4件の失効記述を棚卸しして訂正）: README に Toolbox の「🎯 追尾を開始」からも始められる1文（凍結ゾーン外）・実機チェックリストの §4 総括を §4.21 までに更新し §6 表へ §4.19〜§4.21 の行を追加、§4.19 G4 に理由文統合の注記・SDK_REFERENCE §16 に (n)「WebView2 パネルをクリックしても作業中オブジェクトは外れない」を正本参照で追加・CLOSED §3-153 に理由文の後日統合を追記し §3-152〜§3-155 の状態を「main へ merge 済み（0d08bc0）」へ・DEVLOG §119.4 に §121.4 への失効参照・仕様書 §0.3 の設計文書一覧2行に節の追加を反映（版据え置き）・右クリック仕様書と追尾設計正本の「進み具合」を「進捗」へ、責務表に開始ボタンからの起動を追記
+
+$ git diff --stat 5c5ebe7..HEAD -- engine services api config.py chain_math.py
+(empty)
+-> the measuring surface (engine/, services/, api/, config.py, chain_math.py) is identical
+   between the server's startup commit and HEAD, so the running process measures HEAD's code.
+
+=== 3. mtime of the measuring surface (top level only) ===
+$ ls -l --time-style=long-iso engine/
+  total 141
+  -rw-r--r-- 1 phenotype nezu 197609  2793 2026-07-01 14:16 VENDOR_NOTICE.md
+  -rw-r--r-- 1 phenotype nezu 197609     0 2026-07-01 14:16 __init__.py
+  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-15 09:37 __pycache__
+  -rw-r--r-- 1 phenotype nezu 197609 17137 2026-08-15 18:14 api_types.py
+  -rw-r--r-- 1 phenotype nezu 197609  4274 2026-09-02 10:53 engine-venv-pyproject.toml
+  drwxr-xr-x 1 phenotype nezu 197609     0 2026-08-02 21:13 gemma
+  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-02 08:25 gguf
+  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-15 21:21 inpaint
+  -rw-r--r-- 1 phenotype nezu 197609   496 2026-07-01 14:16 lora_types.py
+  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-15 00:57 outpaint
+  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-15 21:21 pipeline
+  drwxr-xr-x 1 phenotype nezu 197609     0 2026-08-19 22:24 preprocess
+  -rw-r--r-- 1 phenotype nezu 197609  6557 2026-07-05 20:28 progress_shim.py
+  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-05 13:17 transformer
+  drwxr-xr-x 1 phenotype nezu 197609     0 2026-08-19 22:25 vae
+  -rw-r--r-- 1 phenotype nezu 197609  4922 2026-08-30 22:33 venv-engine.freeze.txt
+  -rw-r--r-- 1 phenotype nezu 197609 66703 2026-09-15 00:57 worker.py
+$ ls -l --time-style=long-iso services/engines/ltx/
+  total 133
+  -rw-r--r-- 1 phenotype nezu 197609     46 2026-08-20 13:45 __init__.py
+  drwxr-xr-x 1 phenotype nezu 197609      0 2026-09-15 01:10 __pycache__
+  -rw-r--r-- 1 phenotype nezu 197609 135111 2026-09-15 00:57 adapter.py
+
+=== 4. GPU (nvidia-smi) ===
+Thu Sep 17 16:29:47 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 581.57                 Driver Version: 581.57         CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4070 ...  WDDM  |   00000000:01:00.0  On |                  N/A |
+|  0%   42C    P8              8W /  285W |    1043MiB /  16376MiB |      3%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            3400    C+G   ...al\Programs\Notion\Notion.exe      N/A      |
+|    0   N/A  N/A            7028    C+G   ..._cw5n1h2txyewy\SearchHost.exe      N/A      |
+|    0   N/A  N/A            7052    C+G   ...y\StartMenuExperienceHost.exe      N/A      |
+|    0   N/A  N/A            7700    C+G   ...2txyewy\CrossDeviceResume.exe      N/A      |
+|    0   N/A  N/A           11848    C+G   ...indows\System32\ShellHost.exe      N/A      |
+|    0   N/A  N/A           13844    C+G   ...lus\logioptionsplus_agent.exe      N/A      |
+|    0   N/A  N/A           16604    C+G   ....0.4234.32\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           18456    C+G   ...App_cw5n1h2txyewy\LockApp.exe      N/A      |
+|    0   N/A  N/A           19764    C+G   ...IA app\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           20164    C+G   ...IA app\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           21236    C+G   ...xyewy\ShellExperienceHost.exe      N/A      |
+|    0   N/A  N/A           22752    C+G   ...5n1h2txyewy\TextInputHost.exe      N/A      |
+|    0   N/A  N/A           24304    C+G   ...cord\app-1.0.9257\Discord.exe      N/A      |
+|    0   N/A  N/A           26136    C+G   ...8bbwe\PhoneExperienceHost.exe      N/A      |
+|    0   N/A  N/A           26952    C+G   ...se 3 Host\Razer Synapse 3.exe      N/A      |
+|    0   N/A  N/A           27400    C+G   ...em32\ApplicationFrameHost.exe      N/A      |
+|    0   N/A  N/A           27876    C+G   ....0.4234.32\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           28904    C+G   ....0.4234.32\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           29184    C+G   ...\slack\app-4.51.180\slack.exe      N/A      |
+|    0   N/A  N/A           29260    C+G   ...4__8wekyb3d8bbwe\ms-teams.exe      N/A      |
+|    0   N/A  N/A           30300    C+G   ...\slack\app-4.51.180\slack.exe      N/A      |
+|    0   N/A  N/A           31284    C+G   ...__kzh8wxbdkxb8p\DCv2\DCv2.exe      N/A      |
+|    0   N/A  N/A           33188    C+G   ...8wekyb3d8bbwe\M365Copilot.exe      N/A      |
+|    0   N/A  N/A           39164      C   ...indows-x86_64-none\python.exe      N/A      |
+|    0   N/A  N/A           41520    C+G   ...ms\Microsoft VS Code\Code.exe      N/A      |
+|    0   N/A  N/A           43832    C+G   ...yb3d8bbwe\WindowsTerminal.exe      N/A      |
++-----------------------------------------------------------------------------------------+
+
+=== 5. the owner's server ===
+$ netstat -ano | findstr :18620
+  TCP         127.0.0.1:18620        0.0.0.0:0              LISTENING       27300
+
+  PID 27300  python  started 2026-09-17 00:47:04  parent 45144
+      "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.python\cpython-3.12.9-windows-x86_64-none\python.exe" S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\main.py 
+  PID 39164  python  started 2026-09-17 10:32:09  parent 30932
+      "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.python\cpython-3.12.9-windows-x86_64-none\python.exe" -u -m engine.worker
+  parent chain of the worker: 39164 -> 30932 -> 27300 (the listener) -- the only python
+  compute process on the GPU belongs to the owner's server.
+
+  logs/server.log:36308 (startup)
+    36308:2026-09-17 00:47:08,175 INFO ltx: Starting server on 127.0.0.1:18620  (UI: http://127.0.0.1:18620/ui)
+  logs/server.log (last job before this campaign):
+    2026-09-17 10:33:26,477 INFO ltx.pipeline: Job 58a474a7-379e-485f-b27c-94e7e7940369 done in 64.8s peak_vram=8442MB -> completed
+
+=== 6. free space ===
+  S: 173.9 GiB free of 931.5 GiB
+  RAM 38.3 GiB free of 63.8 GiB

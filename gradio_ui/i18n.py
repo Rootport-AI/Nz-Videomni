@@ -109,6 +109,20 @@ LABELS: dict[str, dict[str, str]] = {
                                      "model's CPU-side skeleton between jobs, greatly "
                                      "shortening the preprocessing of the second and "
                                      "later generations. The output does not change."),
+        # 文面は WebUI 側の `accelKeepResidentEmbeddingsLabel` /
+        # `accelKeepResidentEmbeddingsNote` と同内容に揃えてある（片方だけ
+        # 直すと同じ機能の説明が二通りになる）。ラベルがエンジン名を名乗って
+        # いるのは、この行が LTX 2.3 では丸ごと消えるため——見えている読み手は
+        # 2.5 に居ると分かり、見つからない読み手はラベルだけで理由が分かる。
+        "accel_lbl_keep_resident_embeddings": ("Keep embeddings processor resident "
+                                               "(LTX 2.5)"),
+        "accel_info_keep_resident_embeddings": ("For LTX 2.5 only. Keeps the part that "
+                                                "arranges the prompt's reading between "
+                                                "jobs, shortening the preprocessing of "
+                                                "the second and later generations. It "
+                                                "holds about 5GB of main memory, on top "
+                                                "of the model skeleton above. The output "
+                                                "does not change. Off by default."),
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -649,6 +663,15 @@ LABELS: dict[str, dict[str, str]] = {
                                      "モデルのCPU側骨格をジョブ間で保持し、"
                                      "2回目以降の生成の前処理を大幅に短縮します。"
                                      "生成結果は変わりません。"),
+        "accel_lbl_keep_resident_embeddings": "Embeddings processorの常駐（LTX 2.5）",
+        "accel_info_keep_resident_embeddings": ("LTX 2.5専用の項目です。"
+                                                "文章の読み取り結果を整える部品を"
+                                                "ジョブ間で保持し、2回目以降の生成の"
+                                                "前処理を短縮します。"
+                                                "メインメモリを約5GB常駐で使用します"
+                                                "（上のモデル骨格の常駐とは別枠で、"
+                                                "両方onにすると合算されます）。"
+                                                "生成結果は変わりません。既定はoffです。"),
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

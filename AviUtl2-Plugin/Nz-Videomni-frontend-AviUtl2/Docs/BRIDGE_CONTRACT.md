@@ -1,13 +1,13 @@
-# Nz-Videomni ブリッジ契約リファレンス(WebUI ⇔ ネイティブ JSON-RPC, v4.1 + v5抜粋 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13)
+# Nz-Videomni ブリッジ契約リファレンス(WebUI ⇔ ネイティブ JSON-RPC, v4.1 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13)
 
-最終更新: 2026-09-15(**文書のみの更新で、契約バージョンはv13のまま**——Inpaintingが実機ゲートG1〜G10に全合格してクローズしたことに伴い、§10の`alias_util`の行にあった「白化効果の行は実機未採取につき暫定値」という注記を、**2026-09-14のオーナー実機採取で確定**（書いていた`effect.name=反転`／`輝度反転=1`と採取物が一致）へ改めた。ワイヤ形式・メソッド・イベント・エラーコードは1つも変えていない。クローズ記録はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-55-02) / その前は 2026-09-14(**契約v13＝Inpainting**——`timeline.renderMaskVideo`〔非同期〕メソッドと、イベント`timeline.maskProgress`、エラーコード3つ〔`MASK_BUSY`／`MASK_SEED_INVALID`／`MASK_FAILED`〕を新設した。v12で新設した単一のタイムラインジョブ枠(それまでは物体追尾専用)を、マスク描画にも広げた初めての機能でもある。§3・§4.24・§5・§6・§7・§8・§10を更新。機能全体の正本はバックエンド[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)〔プラグイン側の処理手順は§5〕) / その前は 2026-09-11(**契約v12＝物体追尾**——`timeline.trackObject`〔非同期〕と`timeline.cancelTracking`〔同期〕の2メソッド、イベント`timeline.trackProgress`、エラーコード4つ〔`TRACK_BUSY`／`TRACK_SEED_INVALID`／`TRACK_WRITEBACK_FAILED`／`TRACK_FAILED`〕を新設し、`timeline.getSelection`の`effectName`にメディア4種・テキストのどれでもないオブジェクトの先頭効果名が入るようになった。§3・§4.13・§4.23・§5・§6・§8・§10を更新。機能全体の正本はバックエンド[`OBJECT_TRACKING_DESIGN.md`](../../../Docs/OBJECT_TRACKING_DESIGN.md)〔プラグイン側は§5〕) / その前は 2026-09-04(**文書のみの更新で、契約バージョンはv11のまま**——§4.13の`frameStart`/`frameEnd`の端点解釈を**未決から「包含」で解決**へ書き換えた〔同日いったん「排他」と書いた判断の撤回。webui側の`frameEnd - frameStart + 1`は元から正しく、直したのはネイティブの`frame=`ヘッダ1箇所だけである。§3-140追補〕) / その前は 2026-09-04(**文書のみの更新で、契約バージョンはv11のまま**——§3-140〔🎞挿入をエイリアス方式へ差し替え〕に伴う注記を§4.5・§4.7・§4.14.1・§5へ足し、あわせて§4.13へ`frameStart`/`frameEnd`の端点解釈が未決である旨を1箇所だけ記した。ワイヤ形式・RPCの引数・応答はいずれも1文字も変わっていない) / その前は 2026-09-01(contract v11＝素材fps——`timeline.getSelection`の`selected[]`へ`mediaFps`を追加した。素材そのもののフレームレートをMedia Foundationで読み、右クリックプリフィルのfps軸「素材に合わせる」へ流し込むためのもので、新規モジュール`native/src/media_fps_probe.{h,cpp}`が担う。§4.13・§8・§10を更新) / 出典: `webui/src/bridge/types.ts` と `native/src/bridge_core.h` / `bridge_core.cpp` / `bridge.h` / `bridge.cpp` / `native/src/webview_host.cpp` を突き合わせて作成(コード一次)。
+最終更新: 2026-09-17(**文書のみの更新で、契約バージョンはv13のまま**——§4.25を新設し、v5・v8の未収録宣言(§0冒頭注記・§0本文・§4.14.1・§5前文・§8)を解消した。ワイヤ形式・メソッド・イベント・エラーコードは1つも変えていない) / その前は 2026-09-15(**文書のみの更新で、契約バージョンはv13のまま**——Inpaintingが実機ゲートG1〜G10に全合格してクローズしたことに伴い、§10の`alias_util`の行にあった「白化効果の行は実機未採取につき暫定値」という注記を、**2026-09-14のオーナー実機採取で確定**（書いていた`effect.name=反転`／`輝度反転=1`と採取物が一致）へ改めた。ワイヤ形式・メソッド・イベント・エラーコードは1つも変えていない。クローズ記録はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-55-02) / その前は 2026-09-14(**契約v13＝Inpainting**——`timeline.renderMaskVideo`〔非同期〕メソッドと、イベント`timeline.maskProgress`、エラーコード3つ〔`MASK_BUSY`／`MASK_SEED_INVALID`／`MASK_FAILED`〕を新設した。v12で新設した単一のタイムラインジョブ枠(それまでは物体追尾専用)を、マスク描画にも広げた初めての機能でもある。§3・§4.24・§5・§6・§7・§8・§10を更新。機能全体の正本はバックエンド[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)〔プラグイン側の処理手順は§5〕) / その前は 2026-09-11(**契約v12＝物体追尾**——`timeline.trackObject`〔非同期〕と`timeline.cancelTracking`〔同期〕の2メソッド、イベント`timeline.trackProgress`、エラーコード4つ〔`TRACK_BUSY`／`TRACK_SEED_INVALID`／`TRACK_WRITEBACK_FAILED`／`TRACK_FAILED`〕を新設し、`timeline.getSelection`の`effectName`にメディア4種・テキストのどれでもないオブジェクトの先頭効果名が入るようになった。§3・§4.13・§4.23・§5・§6・§8・§10を更新。機能全体の正本はバックエンド[`OBJECT_TRACKING_DESIGN.md`](../../../Docs/OBJECT_TRACKING_DESIGN.md)〔プラグイン側は§5〕) / その前は 2026-09-04(**文書のみの更新で、契約バージョンはv11のまま**——§4.13の`frameStart`/`frameEnd`の端点解釈を**未決から「包含」で解決**へ書き換えた〔同日いったん「排他」と書いた判断の撤回。webui側の`frameEnd - frameStart + 1`は元から正しく、直したのはネイティブの`frame=`ヘッダ1箇所だけである。§3-140追補〕) / その前は 2026-09-04(**文書のみの更新で、契約バージョンはv11のまま**——§3-140〔🎞挿入をエイリアス方式へ差し替え〕に伴う注記を§4.5・§4.7・§4.14.1・§5へ足し、あわせて§4.13へ`frameStart`/`frameEnd`の端点解釈が未決である旨を1箇所だけ記した。ワイヤ形式・RPCの引数・応答はいずれも1文字も変わっていない) / その前は 2026-09-01(contract v11＝素材fps——`timeline.getSelection`の`selected[]`へ`mediaFps`を追加した。素材そのもののフレームレートをMedia Foundationで読み、右クリックプリフィルのfps軸「素材に合わせる」へ流し込むためのもので、新規モジュール`native/src/media_fps_probe.{h,cpp}`が担う。§4.13・§8・§10を更新) / 出典: `webui/src/bridge/types.ts` と `native/src/bridge_core.h` / `bridge_core.cpp` / `bridge.h` / `bridge.cpp` / `native/src/webview_host.cpp` を突き合わせて作成(コード一次)。
 
 > **注記(2026-07-17追記)**: ネイティブ側のJSON型を`nlohmann::json`から`nlohmann::ordered_json`(`bridge_core.h`)へ変更した。ワイヤ形式(送受信されるJSON文字列そのもの)には影響しない。変わったのはC++側でのオブジェクトのキー順が挿入順で保持されるようになった点のみ(従来はキーのアルファベット順)で、契約上の意味は無い。
 
-> **注記(2026-07-08追記)**: `webui/src/bridge/types.ts`は既に「contract v5」(タイムライン生成AI機能向けの`timeline.getSelection`／`timeline.cutoutRange`／`timeline.extractAudio`／`timeline.insertProvisional`／`timeline.resolveProvisional`／`timeline.updateProvisionalText`／`timeline.scanProvisionals`と、イベント`timeline.menuInvoked`／`timeline.projectLoaded`)まで拡張されている。本書は右クリック生成の配線セッションで**`timeline.getSelection`と`timeline.menuInvoked`のみ**を§4.13/§4.14として追補した。上記の他のv5メソッド(cutoutRange等)は本書に未収録のままであり、別途の同期作業が必要(既知のドキュメント債務。詳細は本書を参照した親エージェントへの報告を参照)。
+> **注記(2026-07-08追記)**: `webui/src/bridge/types.ts`は既に「contract v5」(タイムライン生成AI機能向けの`timeline.getSelection`／`timeline.cutoutRange`／`timeline.extractAudio`／`timeline.insertProvisional`／`timeline.resolveProvisional`／`timeline.updateProvisionalText`／`timeline.scanProvisionals`と、イベント`timeline.menuInvoked`／`timeline.projectLoaded`)まで拡張されている。本書は右クリック生成の配線セッションで**`timeline.getSelection`と`timeline.menuInvoked`のみ**を§4.13/§4.14として追補した。上記の他のv5メソッド(cutoutRange等)は本書に未収録のままであり、別途の同期作業が必要(既知のドキュメント債務。詳細は本書を参照した親エージェントへの報告を参照)。——**2026-09-17に§4.25で収録し、この債務は解消した。**
 >
 > **注記(2026-07-15追記、contract v6)**: バッチA2V(CSVマニフェスト駆動の一括生成)とwav長自動調整のため、`webui/src/bridge/types.ts`に「contract v6」として`ui.pickFolder`／`fs.listFiles`／`fs.readTextFile`／`fs.writeTextFileAtomic`／`fs.probeAudioDuration`の5メソッドと、`backend.downloadVideo`への`destDir`/`fileName`/`noClobber`params拡張(既存呼び出しとの後方互換を保った追加専用の拡張)が加わった。本書は§4.15〜§4.20としてこれを追補している。**(`fs.readTextFile`／`fs.writeTextFileAtomic`は2026-07-18撤去・ステートレス化。§4.17/§4.18・DEVLOG §26参照。以下の記述は起票時点の history として残す。)**
-5行目時点(起票直後)では`native/`側(C++)が未実装で、本書冒頭の「実装(C++側)を正とする」という原則がv6の6項目に限り逆転し`types.ts`を一次ソースとしていたが、**同じく2026-07-15のフロントエンド追随グループ2セッションでnative実装が完了した**(新規モジュール`native/src/wav_probe.h/.cpp`・`native/src/fs_util.h/.cpp`を追加し、`bridge_core.cpp`/`bridge.cpp`から配線。`native/tests/test_wav_probe.cpp`・`native/tests/test_fs_util.cpp`のdoctestで単体検証済み)。これにより、**「実装(C++側)を正とする」という本書冒頭の原則はv6についても回復した**。§4.15〜§4.20は実装コードと突き合わせ済みの内容に更新している。v5の残り6メソッド(cutoutRange等)の遡及補完は本セッションでは行っていない(上記2026-07-08注記のとおり、既知の債務のまま)。
+5行目時点(起票直後)では`native/`側(C++)が未実装で、本書冒頭の「実装(C++側)を正とする」という原則がv6の6項目に限り逆転し`types.ts`を一次ソースとしていたが、**同じく2026-07-15のフロントエンド追随グループ2セッションでnative実装が完了した**(新規モジュール`native/src/wav_probe.h/.cpp`・`native/src/fs_util.h/.cpp`を追加し、`bridge_core.cpp`/`bridge.cpp`から配線。`native/tests/test_wav_probe.cpp`・`native/tests/test_fs_util.cpp`のdoctestで単体検証済み)。これにより、**「実装(C++側)を正とする」という本書冒頭の原則はv6についても回復した**。§4.15〜§4.20は実装コードと突き合わせ済みの内容に更新している。v5の残り6メソッド(cutoutRange等)の遡及補完は本セッションでは行っていない(上記2026-07-08注記のとおり、当時は既知の債務のまま。2026-09-17に§4.25で収録し解消——同注記の追記を参照)。
 >
 > **注記(2026-07-17追記、contract v7)**: ドラッグ&ドロップ対応のため、`webui/src/bridge/types.ts`に「contract v7」として`ui.resolveDroppedFiles`メソッド(§4.21)が新設され、既存の`ui.pickFile`に第3波のセッションで実装済みだった`"imageOrVideo"` kind(Chainのソース入力欄一本化用、ネイティブ側は`bridge_core.cpp`にすでに実装されていたが本書に未収録だった)を§4.9へ追補した。`ui.resolveDroppedFiles`は`native/src/bridge_core.h/.cpp`が新規純関数`ParseResolveDroppedFiles`/`MakeResolveDroppedFilesResult`として実装し(`HandleRequestJson`から同期ディスパッチ、`native/tests/test_bridge_core.cpp`のdoctestで単体検証済み)、`native/src/webview_host.cpp`の`WebMessageReceived`ハンドラが`ICoreWebView2WebMessageReceivedEventArgs2::get_AdditionalObjects()`経由でドロップされたファイルの実パスを解決して`params.__droppedPaths`へ強制注入する(§4.21のセキュリティ規律参照)。この注入処理自体(WebView2依存)は実機でしか確認できないため、`webview_host.cpp`に`REALDEVICE-VERIFY`コメントを残置している。
 >
@@ -19,15 +19,15 @@
 
 関連ドキュメント: [API_REFERENCE.md](API_REFERENCE.md) ／ [SDK_REFERENCE.md](SDK_REFERENCE.md) ／ [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) ／ [DEVLOG.md](DEVLOG.md)
 
-対象: WebUI(React/TS, `webui/src/bridge/`)とネイティブ`.aux2`(`native/src/bridge.{h,cpp}` + `bridge_core.{h,cpp}`)の間のJSON-RPCメッセージ契約。**両ソースを実際に読んで突き合わせた結果、実装(C++側)を正とする**。TypeScript側の型定義(`types.ts`)は契約のミラーだが、意図的に narrow している箇所が1点ある(§9参照)。
+対象: WebUI(React/TS, `webui/src/bridge/`)とネイティブ`.aux2`(`native/src/bridge.{h,cpp}` + `bridge_core.{h,cpp}`)の間のJSON-RPCメッセージ契約。**両ソースを実際に読んで突き合わせた結果、実装(C++側)を正とする**。TypeScript側の型定義(`types.ts`)は契約のミラーだが、意図的に narrow している箇所が2点ある(§9参照)。
 
 ---
 
 ## 0. 全体像
 
-- バージョン: ネイティブ実装(`native/src/bridge_core.cpp`・`bridge.cpp`・`webview_host.cpp`)は**v5(タイムライン生成AI、7メソッド`timeline.getSelection`／`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`を全て実装済み)＋v6(バッチA2V + fsブリッジ、起票時6項目のうち現存4項目——`fs.readTextFile`／`fs.writeTextFileAtomic`は2026-07-18撤去・ステートレス化。§4.17/§4.18・DEVLOG §26参照——を実装済み)＋v7(ドラッグ&ドロップ、`ui.resolveDroppedFiles`実装済み)＋v8(右クリック再設計群、`timeline.insertMediaForJob`／`timeline.updateProvisionalReservation`／`timeline.deleteProvisionalByJob`実装済み)＋v9(IC-LoRA／A2Vカードの尺表示、`fs.probeMediaInfo`実装済み)まで到達している**。プラグインの配布バージョン文字列(`bridge_core.h`の`kPluginVersion = "1.0.0"`)はビルド識別用の文字列であり、本書がここで扱う契約バージョン番号(v1〜v13)とは別体系なので混同しないこと(旧版の本書はこの2つを混同し「ネイティブ実装はv4.1まで」と誤記していたため訂正した)。`types.ts`(WebUI側の契約定義)もv13まで到達しており、実装(C++側)との差は無い。ただし本書がドキュメントとして収録しているのはこのうち§4.13/§4.14(`timeline.getSelection`／`timeline.menuInvoked`のみ)と§4.14.1(v8: `insertMediaForJob`・`updateProvisionalReservation`・`deleteProvisionalByJob`、`insertProvisional`の`numFrames`／`genFps`／配置系統／`textPrefix`契約、`getSelection`の`textContent`／`mediaDurationSec`拡張、`projectLoaded`購読の要点のみ)と§4.15〜§4.21(v6全項目＋v7)と§4.22(v9: `fs.probeMediaInfo`)であり、v5の残り(`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`、イベント`timeline.projectLoaded`)は実装済みだが本書には未収録のまま(既知のドキュメント債務、§0冒頭の2026-07-08注記参照)。v1(M1)→v2(M2: backend proxy)→v3(M4: capture/upload/pickFile/thumbnail)→v4(M7a: settings)→v4.1(M7c: `backend.request`の`timeoutMs`)→v5(タイムライン生成AI)→v6(バッチA2V + fsブリッジ)→v7(ドラッグ&ドロップ)→v8(右クリック再設計群: `insertMediaForJob`・`updateProvisionalReservation`・`deleteProvisionalByJob`、`insertProvisional`の`numFrames`/`genFps`/配置系統/`textPrefix`契約、`getSelection`の`textContent`/`mediaDurationSec`拡張、`projectLoaded`購読)→v9(IC-LoRA／A2Vカードの尺表示: `fs.probeMediaInfo`)→v10(V2Vリボン範囲トリム: `backend.uploadFile`の`query`と応答`trimmed`)の順に追加専用で拡張されてきた。**v10は2026-07-30に到達済み**(native・`types.ts`とも実装済み)で、本書は§4.5と§8で収録している。v10として計画されていた**`timeline.getSelection`への再生位置系6フィールドの追加も2026-08-01に完了した**(実機調査で`再生位置`の単位が「素材時間軸の秒」と確定したため。§4.13の拡張注記を参照)。**さらに2026-09-01、`timeline.getSelection`の`selected[]`へ素材そのもののフレームレート`mediaFps`を足したv11へ到達した**(native・`types.ts`とも実装済み。§4.13の拡張注記と§8を参照)。**2026-09-11には物体追尾のためのv12へ到達した**——**この版で初めて、ネイティブ側がバックエンドのRESTを長時間にわたって往復し続けるメソッドが加わった**(`timeline.trackObject`。§4.23・§8を参照)。**2026-09-14にはInpainting(マスクによる部分再生成)のためのv13へ到達した**——`timeline.renderMaskVideo`(非同期)とイベント`timeline.maskProgress`が加わり、**v12が新設した単一のタイムラインジョブ枠が、物体追尾以外の用途(マスク描画)にも広がった初めての版でもある**(§4.24・§8を参照)。
+- バージョン: ネイティブ実装(`native/src/bridge_core.cpp`・`bridge.cpp`・`webview_host.cpp`)は**v5(タイムライン生成AI、7メソッド`timeline.getSelection`／`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`を全て実装済み)＋v6(バッチA2V + fsブリッジ、起票時6項目のうち現存4項目——`fs.readTextFile`／`fs.writeTextFileAtomic`は2026-07-18撤去・ステートレス化。§4.17/§4.18・DEVLOG §26参照——を実装済み)＋v7(ドラッグ&ドロップ、`ui.resolveDroppedFiles`実装済み)＋v8(右クリック再設計群、`timeline.insertMediaForJob`／`timeline.updateProvisionalReservation`／`timeline.deleteProvisionalByJob`実装済み)＋v9(IC-LoRA／A2Vカードの尺表示、`fs.probeMediaInfo`実装済み)まで到達している**。プラグインの配布バージョン文字列(`bridge_core.h`の`kPluginVersion = "1.0.0"`)はビルド識別用の文字列であり、本書がここで扱う契約バージョン番号(v1〜v13)とは別体系なので混同しないこと(旧版の本書はこの2つを混同し「ネイティブ実装はv4.1まで」と誤記していたため訂正した)。`types.ts`(WebUI側の契約定義)もv13まで到達しており、実装(C++側)との差は無い。ただし本書がドキュメントとして収録しているのはこのうち§4.13/§4.14(`timeline.getSelection`／`timeline.menuInvoked`のみ)と§4.14.1(v8: `insertMediaForJob`・`updateProvisionalReservation`・`deleteProvisionalByJob`、`insertProvisional`の`numFrames`／`genFps`／配置系統／`textPrefix`契約、`getSelection`の`textContent`／`mediaDurationSec`拡張、`projectLoaded`購読の要点のみ)と§4.15〜§4.21(v6全項目＋v7)と§4.22(v9: `fs.probeMediaInfo`)と§4.23(v12: `timeline.trackObject`／`timeline.cancelTracking`／イベント`timeline.trackProgress`)と§4.24(v13: `timeline.renderMaskVideo`／イベント`timeline.maskProgress`)と§4.25であり、v5の残り(`cutoutRange`／`extractAudio`／`insertProvisional`／`resolveProvisional`／`updateProvisionalText`／`scanProvisionals`、イベント`timeline.projectLoaded`)とv8の3メソッド(`insertMediaForJob`／`updateProvisionalReservation`／`deleteProvisionalByJob`)の引数・応答は**§4.25で収録した(2026-09-17)**。v1(M1)→v2(M2: backend proxy)→v3(M4: capture/upload/pickFile/thumbnail)→v4(M7a: settings)→v4.1(M7c: `backend.request`の`timeoutMs`)→v5(タイムライン生成AI)→v6(バッチA2V + fsブリッジ)→v7(ドラッグ&ドロップ)→v8(右クリック再設計群: `insertMediaForJob`・`updateProvisionalReservation`・`deleteProvisionalByJob`、`insertProvisional`の`numFrames`/`genFps`/配置系統/`textPrefix`契約、`getSelection`の`textContent`/`mediaDurationSec`拡張、`projectLoaded`購読)→v9(IC-LoRA／A2Vカードの尺表示: `fs.probeMediaInfo`)→v10(V2Vリボン範囲トリム: `backend.uploadFile`の`query`と応答`trimmed`)の順に追加専用で拡張されてきた。**v10は2026-07-30に到達済み**(native・`types.ts`とも実装済み)で、本書は§4.5と§8で収録している。v10として計画されていた**`timeline.getSelection`への再生位置系6フィールドの追加も2026-08-01に完了した**(実機調査で`再生位置`の単位が「素材時間軸の秒」と確定したため。§4.13の拡張注記を参照)。**さらに2026-09-01、`timeline.getSelection`の`selected[]`へ素材そのもののフレームレート`mediaFps`を足したv11へ到達した**(native・`types.ts`とも実装済み。§4.13の拡張注記と§8を参照)。**2026-09-11には物体追尾のためのv12へ到達した**——**この版で初めて、ネイティブ側がバックエンドのRESTを長時間にわたって往復し続けるメソッドが加わった**(`timeline.trackObject`。§4.23・§8を参照)。**2026-09-14にはInpainting(マスクによる部分再生成)のためのv13へ到達した**——`timeline.renderMaskVideo`(非同期)とイベント`timeline.maskProgress`が加わり、**v12が新設した単一のタイムラインジョブ枠が、物体追尾以外の用途(マスク描画)にも広がった初めての版でもある**(§4.24・§8を参照)。
 - トランスポート: WebView2の`postMessage`チャネル1本(**v7**の`ui.resolveDroppedFiles`だけは`postMessageWithAdditionalObjects`でファイルを追加添付する、§4.21参照)。JSON-RPC風だが**バッチ不可・双方向とも単一メッセージ**。
-- 全12メソッド(v4.1時点): `ping` / `getEditInfo` / `backend.request` / `backend.downloadVideo` / `backend.uploadFile` / `backend.getBaseUrl` / `timeline.insertMedia` / `timeline.captureFrame` / `ui.pickFile` / `ui.makeThumbnail` / `settings.get` / `settings.set`。(**contract v5**でさらに`timeline.getSelection`ほか7メソッドが追加されているが、本書がv1〜v4.1時点の初版のため未反映だった。§4.13/§4.14で`timeline.getSelection`と`timeline.menuInvoked`イベントのみ追補ずみ。**contract v6**でさらに`ui.pickFolder` / `fs.listFiles` / `fs.readTextFile` / `fs.writeTextFileAtomic` / `fs.probeAudioDuration`の5メソッドが追加され(このうち`fs.readTextFile`/`fs.writeTextFileAtomic`は2026-07-18撤去・ステートレス化、§4.17/§4.18・DEVLOG §26参照。現存するv6メソッドは`ui.pickFolder`/`fs.listFiles`/`fs.probeAudioDuration`の3つ)、`backend.downloadVideo`のparamsが拡張された(`destDir`/`fileName`/`noClobber`に加え、2026-07-18に`reuseIfPresent`も追加。§4.20参照)。こちらは§4.15〜§4.20に全て収録済み。**contract v7**でさらに`ui.resolveDroppedFiles`が追加され(§4.21)、`ui.pickFile`に`"imageOrVideo"` kindが追補された(§4.9)。)
+- 全12メソッド(v4.1時点): `ping` / `getEditInfo` / `backend.request` / `backend.downloadVideo` / `backend.uploadFile` / `backend.getBaseUrl` / `timeline.insertMedia` / `timeline.captureFrame` / `ui.pickFile` / `ui.makeThumbnail` / `settings.get` / `settings.set`。(**contract v5**でさらに`timeline.getSelection`ほか7メソッドが追加されているが、本書がv1〜v4.1時点の初版のため未反映だった。§4.13/§4.14で`timeline.getSelection`と`timeline.menuInvoked`イベントのみ追補ずみで、残り6メソッドとイベント`timeline.projectLoaded`は2026-09-17に§4.25で収録済み。**contract v6**でさらに`ui.pickFolder` / `fs.listFiles` / `fs.readTextFile` / `fs.writeTextFileAtomic` / `fs.probeAudioDuration`の5メソッドが追加され(このうち`fs.readTextFile`/`fs.writeTextFileAtomic`は2026-07-18撤去・ステートレス化、§4.17/§4.18・DEVLOG §26参照。現存するv6メソッドは`ui.pickFolder`/`fs.listFiles`/`fs.probeAudioDuration`の3つ)、`backend.downloadVideo`のparamsが拡張された(`destDir`/`fileName`/`noClobber`に加え、2026-07-18に`reuseIfPresent`も追加。§4.20参照)。こちらは§4.15〜§4.20に全て収録済み。**contract v7**でさらに`ui.resolveDroppedFiles`が追加され(§4.21)、`ui.pickFile`に`"imageOrVideo"` kindが追補された(§4.9)。)
 - 一次ソース: `webui/src/bridge/types.ts`(契約の型定義+ JSDoc)、`native/src/bridge_core.h/.cpp`(純粋なパース/ディスパッチ実装、WebView2非依存でdoctest可能)、`native/src/bridge.h/.cpp`(WebView2/WinHTTP/SDKへの実配線、非同期メソッドのワーカー投入)、`native/src/webview_host.cpp`(WebView2のホスティングと`WebMessageReceived`ハンドラ — v7の`__droppedPaths`注入はここで行われる)。
 
 ## 1. メッセージエンベロープ
@@ -101,12 +101,22 @@
 | `settings.set` | 同期 | UI | v4 |
 | `timeline.getSelection` | 同期(`call_edit_section_param`) | UI | v5(§4.13) |
 | `timeline.menuInvoked`(イベント、ネイティブ発) | — | UI | v5(§4.14) |
+| `timeline.cutoutRange` | 非同期 | HTTPワーカー | v5(§4.25.1) |
+| `timeline.extractAudio` | 非同期 | HTTPワーカー | v5(§4.25.2) |
+| `timeline.insertProvisional` | 同期(`call_edit_section_param`) | UI | v5(§4.25.3、契約はv8で変更) |
+| `timeline.resolveProvisional` | 同期(`call_edit_section_param`) | UI | v5(§4.25.4) |
+| `timeline.updateProvisionalText` | 同期(`call_edit_section_param`) | UI | v5(§4.25.5) |
+| `timeline.scanProvisionals` | 同期(`call_edit_section_param`) | UI | v5(§4.25.6) |
+| `timeline.projectLoaded`(イベント、ネイティブ発) | — | UI | v5(§4.25.10) |
 | `ui.pickFolder` | 同期(モーダルダイアログ、`IFileOpenDialog` + `FOS_PICKFOLDERS`) | UI | v6(§4.15) |
 | `fs.listFiles` | 非同期(ディスク列挙+wavヘッダ読取) | HTTPワーカー | v6(§4.16) |
 | `fs.probeAudioDuration` | 非同期 | HTTPワーカー | v6(§4.19) |
 | `backend.downloadVideo`の`destDir`/`fileName`/`noClobber`/`reuseIfPresent`拡張 | 非同期(既存と同じ) | HTTPワーカー | v6(§4.20、`reuseIfPresent`は2026-07-18追加) |
 | `ui.resolveDroppedFiles` | 同期(`HandleRequestJson`内の純粋な処理、I/O無し) | UI | v7(§4.21) |
 | `ui.pickFile`の`"imageOrVideo"` kind拡張 | 同期(既存と同じ) | UI | v7(§4.9) |
+| `timeline.insertMediaForJob` | 同期(`call_edit_section_param`) | UI | v8(§4.25.7) |
+| `timeline.updateProvisionalReservation` | 同期(`call_edit_section_param`) | UI | v8(§4.25.8) |
+| `timeline.deleteProvisionalByJob` | 同期(`call_edit_section_param`) | UI | v8(§4.25.9) |
 | `fs.probeMediaInfo` | 同期(UIスレッド上で`call_edit_section_param`同期呼び出し) | UI | v9(§4.22) |
 | `backend.uploadFile`の`query`拡張／応答`trimmed` | 非同期(既存と同じ) | HTTPワーカー | v10(§4.5) |
 | `timeline.trackObject` | 非同期(通信用ワーカースレッド。内部でレンダリング→REST往復をフレーム数だけ繰り返す) | UI起点→ワーカー→レンダリング | v12(§4.23) |
@@ -312,15 +322,15 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 - **注記(2026-09-11、物体追尾でのアクションID追加)**: trackObject（🎯 物体追尾（部分フィルタを使用））が加わり、data.action は全21種（オブジェクト16種＋レイヤー5種）。RPC形状は不変で契約バージョンはv12のまま（追尾本体の新設RPCは§4.23）。
 - **注記(2026-09-14、InpaintingでのアクションID追加)**: inpaintPartialFilter（🖌 Inpainting: この部分フィルタをマスクに使う）・inpaintVideo（🎬 Video: この動画をInpaintingする）の2件が加わり、data.action は全23種（オブジェクト18種＋レイヤー5種）。RPC形状は不変で契約バージョンはv13のまま（マスク描画の新設RPCは§4.24）。
 
-### 4.14.1 右クリック再設計(2026-07-19〜20、contract v8)で新設/拡張されたRPC群(注記・本書は詳細をSPECへ委譲)
+### 4.14.1 右クリック再設計(2026-07-19〜20、contract v8)で新設/拡張されたRPC群(注記・引数と応答は§4.25)
 
-タイムライン右クリック再設計の第1段階で、仮オブジェクトのライフサイクルを担う**新設ネイティブRPCと既存RPCの契約変更**が加わった。**いずれも`webui/src/bridge/types.ts`とnative(`bridge_core.*`／`bridge.cpp`)に実装済み**だが、本書は§0冒頭のv5ドキュメント債務の方針に倣い、詳細な引数・応答形式の収録は行わず、下記の要点と一次ソースへのポインタにとどめる（**現行の唯一の正は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §5、契約型は`types.ts`**）。
+タイムライン右クリック再設計の第1段階で、仮オブジェクトのライフサイクルを担う**新設ネイティブRPCと既存RPCの契約変更**が加わった。**いずれも`webui/src/bridge/types.ts`とnative(`bridge_core.*`／`bridge.cpp`)に実装済み**である。**引数・応答・エラーコードは§4.25で収録した（2026-09-17）。UXの流れ（画面の側から見た振る舞い）の正本は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §5、契約型は`types.ts`である。** 本節は当時の要点（何が・なぜ加わったか）の記録として残す。
 
 - **`timeline.updateProvisionalReservation`（新設・SPEC §5-3）**: 仮オブジェクトの「削除＋付け替え」を1編集セクション（アンドゥ1件）で原子的に行う。用途は(a)予約移動、(b)旧予約の削除、(c)自己修復（旧予約が見つからなければcreateのみ）。位置衝突時はnative側で`EDIT_INFO.layer_max`を参照し`layer_max+1`へフォールバックcreate。
 - **`timeline.insertMediaForJob`（新設・SPEC §5-10）**: 完成動画の🎞挿入を、仮オブジェクトのマーカー位置（レイヤー・フレーム）へ**位置連動で置換**する（現在選択レイヤー・カーソル位置は無視）。1編集セクションで delete＋create（明示尺）を行いアンドゥ1件にまとめる。ロールバック用の機能フラグ`REPLACE_INSERT_ENABLED`（webui側）で旧経路＝`timeline.insertMedia`＋`timeline.deleteProvisionalByJob`へ即時退避できる。**注記（2026-09-04、§3-140）**: このRPCが使う生成プリミティブは`timeline.insertMedia`と共通の`CreateMediaObject`ヘルパへ集約され、動画は`create_object_from_alias`（`音声付き`込み）経由になった（§4.7の実装欄が正本。RPCの引数・応答は不変で、契約バージョンも据え置き）。
 - **`timeline.deleteProvisionalByJob`**: jobID指定で仮オブジェクトを逆引き削除する（旧✅マーカー自動削除経路。上記ロールバック経路で使用）。
 - **`timeline.insertProvisional`の契約変更**: 長さ指定が旧`lengthFrames`から**`numFrames`（生成フレーム数）＋`genFps`（生成フレームレート）**へ変更された。尺換算はwebuiでは行わず、native側が`ProjectFramesForPixels()`（`timeline_math.h`）でプロジェクトfps基準へ換算する。あわせて配置系統パラメータ（(A)素材直後／(B)素材と同開始で`layer_max+1`／(C)右クリック位置）と`textPrefix`（状況表示テキストの接頭辞）が加わった。`updateProvisionalReservation`も同じ`numFrames`／`genFps`／配置系統を受ける。
-- **`timeline.projectLoaded`（イベント）**: §0冒頭2026-07-08注記のとおり本書は未収録のまま（既知の債務）。孤児（セッションまたぎ）仮オブジェクトの予約検出に使う。検出はテキスト本文の`[#id]`マーカーを第一手段、`object_name`の`NzVideomni#<id>`を名前フォールバックとする二重化設計（SPEC §5-7）。
+- **`timeline.projectLoaded`（イベント）**: **§4.25.10で収録した（2026-09-17）。**孤児（セッションまたぎ）仮オブジェクトの予約検出に使う。検出はテキスト本文の`[#id]`マーカーを第一手段、`object_name`の`NzVideomni#<id>`を名前フォールバックとする二重化設計（SPEC §5-7）。
 
 ### 4.15〜4.20: contract v6(バッチA2V + fsブリッジ、native実装完了)
 
@@ -492,24 +502,242 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 - **`score`/`lost`に相当するフィールドは無い**——マスク描画はフレームごとに描けるか描けないかのどちらかで、追尾のような評価値を持たない。
 - **1秒あたりのフレーム数はここに入れない**。操作パネルがイベントの到着時刻から自分で計算する(`timeline.trackProgress`と同じ規約)。
 
+### 4.25 v5・v8のタイムラインRPC群(2026-09-17収録)
+
+これらはv5(2026-07-07)・v8(2026-07-19〜20)で実装済みだったが、本書に引数・応答が無かったものである。契約は当時から不変で、本節は実装(`webui/src/bridge/types.ts`／`native/src/bridge_core.cpp`／`native/src/bridge.cpp`)から起こした記録である。**ワイヤ形式もメソッドもエラーコードも、本節の収録にあたって1つも変えていない。**
+
+共通の性質を先に書く。**`timeline.cutoutRange`と`timeline.extractAudio`だけが非同期**(`bridge.cpp`がHTTPワーカースレッドへ投入し、完了時に`ResponsePoster`で応答する。§2)で、残る7メソッドは`bridge_core.cpp`の`HandleRequestJson`で完結する同期メソッドである。ただし同期の7つも、タイムラインを実際にいじる部分は`bridge.cpp`が束ねたプロバイダ経由で**UIスレッド上の`call_edit_section_param`**として走る(`timeline.insertMedia`と同じ方式。§4.7)。仮オブジェクト系の機能そのもの(4段階の表示テキスト・予約席・孤児の扱い)の正本は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md)(以下、SPEC) §5であり、本節はブリッジ契約として交わす形だけを書く。
+
+#### 4.25.1 `timeline.cutoutRange`(contract v5、非同期)
+
+タイムラインの指定範囲をレンダリングしてmp4へ書き出し、そのまま`backend.uploadFile`へ渡せるローカルパスを返す。
+
+- params(**全項目必須**。1つでも欠けるか型が違えば`BAD_REQUEST`。検証は`bridge_core.cpp`の`ParseRangeCommon`＋`ParseCutoutRange`):
+
+  | 項目 | 型 | 必須/任意 | 意味 |
+  | --- | --- | --- | --- |
+  | `layer` | `number`(整数) | 必須 | 整数であることを要求するが、**書き出しワーカーはこの値を使わない**。映像は常にシーン全体が描画され、範囲は`frameStart`/`frameCount`で決まる。`audioMode`/`soloKeepLayers`による絞り込みは音声にだけ効く(本節末尾の備考を参照)。 |
+  | `frameStart` | `number`(整数) | 必須 | 書き出す先頭フレーム(AviUtl2の絶対フレーム番号)。 |
+  | `frameCount` | `number`(整数) | 必須 | 書き出す枚数。**1以上**でなければ`BAD_REQUEST`。 |
+  | `withAudio` | `boolean` | 必須 | 音声を多重化するかどうか。 |
+  | `audioMode` | `"mix"` \| `"solo"` | 必須 | `"mix"`は音声全体のミックス、`"solo"`は`soloKeepLayers`のレイヤーだけを残す。どちらでもない文字列は`BAD_REQUEST`。 |
+  | `soloKeepLayers` | `number[]` | 必須 | `"solo"`のときに残すレイヤー。**配列そのものは`"mix"`でも必須**(空配列でよい)。要素が整数でなければ`BAD_REQUEST`。 |
+
+- result:
+
+  | 項目 | 型 | 意味 |
+  | --- | --- | --- |
+  | `filePath` | `string` | 書き出したmp4のローカルパス(置き場所は§7)。 |
+  | `width` / `height` | `number` | **シーンの解像度**(`EDIT_INFO`の`width`/`height`)。要求した範囲によらない。 |
+  | `frameCount` | `number` | 要求された枚数をそのまま返す。 |
+  | `hasAudio` | `boolean` | 実際に音声トラックを載せたか。`withAudio`が真で、かつホストの`rendering_scene_audio`が使えるときだけ真。 |
+
+- エラー: `BAD_REQUEST` / `BACKEND_UNREACHABLE` / `NO_EDIT_HANDLE` / `CUTOUT_FAILED`(§5)。
+  - **`BACKEND_UNREACHABLE`は通信の失敗ではない**——このメソッドはバックエンドへ一切つながないが、HTTPワーカープールが初期化されていないときの入口ガードがこの符号を使う(`bridge.cpp`。非同期メソッド共通の書き方)。
+  - `NO_EDIT_HANDLE`: 編集ハンドル・`rendering_scene_video`・`get_edit_info`のいずれかが無い。
+  - `CUTOUT_FAILED`: シーンの解像度が0以下、mp4の初期化の失敗、1フレームの描画の失敗、フレーム書き込みの失敗、ファイナライズの失敗。
+- 保存先は§7。
+- 待機上限: §6の`timeline.cutoutRange`／`timeline.extractAudio`の行を参照。
+- **配線状況: 本番未配線(死蔵)。** webuiでこのメソッドを呼ぶのは`webui/src/timeline/cutoutAndUpload.ts`だけで、そのファイルを読み込む本番コードは無い(自テストのみが参照する)。配線するかどうかの判断の入口はバックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-34である。
+- 備考: 音声のソロ化が適用されるのは`withAudio`が真で`audioMode`が`"solo"`のときだけで、レイヤーの一時的な無効化は書き出しの出口で必ず元へ戻る。
+
+#### 4.25.2 `timeline.extractAudio`(contract v5、非同期)
+
+指定範囲の**音声だけ**をwavへ書き出す(映像は作らない)。音声を条件にした生成で使う。
+
+- params(**全項目必須**): `layer` / `frameStart` / `frameCount` / `audioMode` / `soloKeepLayers`。意味と検証は§4.25.1と同じ(共通の`ParseRangeCommon`)で、**`withAudio`は無い**。`layer`をワーカーが使わない点も同じである。
+- result:
+
+  | 項目 | 型 | 意味 |
+  | --- | --- | --- |
+  | `filePath` | `string` | 書き出したwavのローカルパス(置き場所は§7)。 |
+  | `durationSec` | `number` | 書き出したサンプル数÷サンプリング周波数。 |
+  | `sampleRate` | `number` | `EDIT_INFO.sample_rate`。0以下のときは48,000へ落とす。 |
+  | `hasAudioStream` | `boolean` | **成功応答では常に`true`**。無音は成功にならず`EXTRACT_FAILED`になるためである。 |
+
+- エラー: `BAD_REQUEST` / `BACKEND_UNREACHABLE`(§4.25.1と同じ入口ガード) / `NO_EDIT_HANDLE`(編集ハンドル・`rendering_scene_audio`・`get_edit_info`のいずれかが無い) / `EXTRACT_FAILED`(§5)。
+  - `EXTRACT_FAILED`の内訳: ワーカー側で`rendering_scene_audio`が使えない、1フレームの音声描画の失敗、**範囲が無音**(サンプルが無い、または振幅の最大が閾値未満)、wavの書き込みの失敗。
+- 保存先は§7(16bit PCM・2チャンネル)、待機上限は§6(`timeline.cutoutRange`／`timeline.extractAudio`の行)。
+- **配線状況: 本番配線済み。** `webui/src/modes/single/SingleScreen.tsx`と`webui/src/modes/chained/ChainedScreen.tsx`が`bridge.request("timeline.extractAudio", …)`を直接呼ぶ(`cutoutAndUpload.ts`の同名ヘルパは経由しない)。**`timeline.cutoutRange`との配線の非対称は意図的なもの**で、SingleScreen側のコメントに理由が残っている。
+
+#### 4.25.3 `timeline.insertProvisional`(contract v5、v8で契約変更、同期)
+
+まだ終わっていない生成ジョブが後で占める場所を、テキストの仮オブジェクトで予約する(SPEC §5-1)。
+
+- params(検証は`bridge_core.cpp`の`ParseInsertProvisional`＋`ParsePlacementFields`):
+
+  | 項目 | 型 | 必須/任意 | 意味 |
+  | --- | --- | --- | --- |
+  | `jobId` | `string` | 必須 | 空文字は`BAD_REQUEST`。仮オブジェクトへ埋め込まれ、後の逆引きの鍵になる。 |
+  | `displayText` | `string` | 必須 | 文字列であることだけを見るので、**空文字は正しい入力**である(段階1の予約挿入は実際に空文字を送る)。 |
+  | `textPrefix` | `string` | 任意 | 表示テキストの接頭辞(SPEC §5-5)。省略・`null`はネイティブ既定の接頭辞。文字列以外は`BAD_REQUEST`。 |
+  | `numFrames` | `number`(整数) | 必須 | 生成フレーム数。**1以上**でなければ`BAD_REQUEST`。 |
+  | `genFps` | `number` | 必須 | 生成フレームレート。整数でなくてよいが**0以下は`BAD_REQUEST`**。 |
+  | `placement` | `"A"` \| `"B"` \| `"C"` | 必須 | 配置系統(SPEC §5-9)。省略も他の文字列も`BAD_REQUEST`。 |
+  | `materialLayer` | `number`(整数) | 任意(`"A"`で必要) | 選択素材のレイヤー。 |
+  | `materialFrameStart` | `number`(整数) | 任意(`"B"`で必要) | 選択素材の開始フレーム。 |
+  | `materialFrameEnd` | `number`(整数) | 任意(`"A"`で必要) | 選択素材の終了フレーム(**包含**＝最後に占めるフレーム)。ネイティブは`+1`して次の空きフレームにする。 |
+  | `cursorLayer` | `number`(整数) | 任意(`"C"`で必要) | 右クリック位置のレイヤー。 |
+  | `cursorFrame` | `number`(整数) | 任意(`"C"`で必要) | 右クリック位置のフレーム。 |
+
+  後半5つは**パースの段階では任意**(あれば整数であることだけを見る)で、`placement`に応じて位置を決める段階で必要になる。`"A"`は`materialLayer`＋`materialFrameEnd`、`"B"`は`materialFrameStart`(と`EDIT_INFO.layer_max`)、`"C"`は`cursorLayer`＋`cursorFrame`を使い、いずれも**0以上**でなければならない。足りなければ`BAD_REQUEST`。
+
+- result:
+
+  | 項目 | 型 | 意味 |
+  | --- | --- | --- |
+  | `inserted` | `boolean` | 成功応答では常に`true`。 |
+  | `layer` / `frame` | `number` | 仮オブジェクトが実際に置かれた位置。 |
+  | `objectName` | `string` | ネイティブが付けたオブジェクト名(`NzVideomni#<jobId>`形式)。孤児検出の名前フォールバックに使う(SPEC §5-7)。 |
+  | `placedLayer` / `placedFrame` | `number` | 置かれた位置(`layer`/`frame`と同じ値)。 |
+  | `usedFallback` | `boolean` | 要求した席が埋まっていて`layer_max+1`へ退避したとき真(SPEC §5-4)。 |
+
+  **`types.ts`は後ろ3つを任意宣言しているが、ネイティブは常に載せる**(型のほうが実装より狭い向きの差で、契約上の不整合ではない。§9)。
+
+- エラー: `BAD_REQUEST` / `PROVISIONAL_FAILED`(§5)。
+  - **編集ハンドルが使えないときも`NO_EDIT_HANDLE`ではなく`BAD_REQUEST`を返す。** 長さの換算も位置の解決もどちらも`EDIT_INFO`を要るため、入口で「使える編集ハンドルと0でないrate/scaleが要る」という`BAD_REQUEST`にまとめてある(実装から採った事実。他のタイムライン系メソッドとは違う扱いなので注意)。長さが0以下へ丸まった場合と、配置の解決に失敗した場合も`BAD_REQUEST`である。
+  - `PROVISIONAL_FAILED`: 仮オブジェクトの作成そのものの失敗。
+- 長さの決め方は§4.14.1の要点のとおり——webuiは換算せず、ネイティブが`ProjectFramesForPixels(numFrames, genFps, projectFps)`でプロジェクトfps基準へ直す(`projectFps`は`EDIT_INFO`の`rate`/`scale`から)。
+- **配線状況: 本番配線済み**(`webui/src/timeline/provisionalReservation.ts`)。
+
+#### 4.25.4 `timeline.resolveProvisional`(contract v5、同期)
+
+仮オブジェクトを、完成した動画で置き換える。仮オブジェクトが見つからなければ、予約してあった位置へ動画を挿入する。
+
+- params(**全項目必須**):
+
+  | 項目 | 型 | 必須/任意 | 意味 |
+  | --- | --- | --- | --- |
+  | `jobId` | `string` | 必須 | 空文字は`BAD_REQUEST`。 |
+  | `videoFilePath` | `string` | 必須 | 完成した動画のローカルパス。空文字は`BAD_REQUEST`。 |
+  | `reservedLayer` | `number`(整数) | 必須 | 予約したレイヤー。仮オブジェクトが`[#id]`マーカーを失っていたときの位置フォールバックにも使う。 |
+  | `reservedFrame` | `number`(整数) | 必須 | 予約した開始フレーム(同上)。 |
+  | `lengthFrames` | `number`(整数) | 必須 | 置き換え後の尺(**プロジェクトfps基準のフレーム数**)。1以上でなければ`BAD_REQUEST`。 |
+
+  **`lengthFrames`はlegacyである。** 予約系のほかの2メソッド(`timeline.insertProvisional`＝§4.25.3、`timeline.updateProvisionalReservation`＝§4.25.8)は`numFrames`＋`genFps`へ移り、換算をネイティブが引き受ける形になったが、**このRPCだけは旧来の「換算済みのフレーム数」を受け取り続けている**(`types.ts`では隣の`timeline.updateProvisionalReservation`のJSDocがこれを"legacy"と呼ぶ。`resolveProvisional`自身の宣言には注記が無い)。契約上の非対称で、換算の責任は呼び出し側に残る。
+
+- result: `{ mode: "replaced" | "insertedReserved", layer: number, frame: number }`。`"replaced"`は仮オブジェクトがまだあってその場で入れ替えたとき、`"insertedReserved"`は仮オブジェクトが消えていた(利用者が消した等)ため予約位置へ挿入したとき。`layer`/`frame`は実際に置かれた位置。
+- エラー: `BAD_REQUEST` / `PROVISIONAL_FAILED` / `FILE_NOT_FOUND` / `NO_EDIT_HANDLE`(§5)。
+  - `PROVISIONAL_FAILED`: 置き換えの失敗、および`"insertedReserved"`側の挿入が「ファイルが無い」「編集ハンドルが無い」**以外**の理由で失敗したとき。
+  - `FILE_NOT_FOUND` / `NO_EDIT_HANDLE`: `"insertedReserved"`側の挿入経路が返す。この2つは`timeline.insertMedia`(§4.7)の失敗種別をそのまま外へ出したものである。
+- **配線状況: webuiに本番の呼び出し元は無い。** 呼ぶのは`webui/src/bridge/mockBridge.ts`とその自テストだけで、完成動画の差し替えは今日ではv8の`timeline.insertMediaForJob`(§4.25.7)が担っている。ネイティブ実装は現役のまま残っている。
+
+#### 4.25.5 `timeline.updateProvisionalText`(contract v5、同期)
+
+まだ生成中の仮オブジェクトの表示テキストを書き換える(進捗の%、失敗時のメッセージ)。
+
+- params(**全項目必須**):
+
+  | 項目 | 型 | 必須/任意 | 意味 |
+  | --- | --- | --- | --- |
+  | `jobId` | `string` | 必須 | 空文字は`BAD_REQUEST`。 |
+  | `layer` | `number`(整数) | 必須 | 予約位置のレイヤー。 |
+  | `frame` | `number`(整数) | 必須 | 予約位置の開始フレーム。 |
+  | `text` | `string` | 必須 | 新しい本文。文字列であればよく、空文字も通る。 |
+
+  `layer`/`frame`は**位置フォールバックを兼ねる**——利用者が本文を編集して`[#id]`マーカーを壊した場合、この位置で仮オブジェクトを突き止める。
+
+- result: `{ updated: boolean }`。仮オブジェクトが見つからず何もしなかったときは`false`。
+- エラー: **`BAD_REQUEST`だけ**。書き換えに失敗しても`{ updated: false }`の**成功応答**になる。**`PROVISIONAL_FAILED`は返さない**——`types.ts`のJSDocはこのメソッドを`PROVISIONAL_FAILED`の発生元に挙げているが、実装に発生箇所が無い(§9)。
+- **配線状況: 本番配線済み**(`webui/src/timeline/provisionalReservation.ts`)。
+
+#### 4.25.6 `timeline.scanProvisionals`(contract v5、同期)
+
+タイムラインに残っている仮オブジェクトを列挙する。セッションをまたいで取り残された孤児の掃除に使う(SPEC §5-7)。
+
+- params: **無し**(`{}`)。ネイティブは`params`を一切読まない。
+- result: `{ orphans: Array<{ jobId: string, layer: number, frame: number }> }`。
+- エラー: **無し**。このメソッドには失敗する経路が実装に1つも無い(パースも外部呼び出しの失敗判定も持たない)。走査そのものができなければ空配列が返る。
+- **返るのは孤児の「候補」である。** ネイティブは**空の稼働中ジョブ集合**で孤児判定を行うので、NzVideomniの仮オブジェクトが全件返る。まだ台帳が把握しているジョブの分を落とすのは**WebUIの責任**である——契約に稼働中ジョブを渡す引数を置かなかったことの帰結で、実装コメントに設計判断として明記されている。NzVideomni以外のオブジェクトは常に無視される。
+- **配線状況: 本番配線済み**(`webui/src/timeline/provisionalReservation.ts`)。`webui/src/shell/AppShell.tsx`がイベント`timeline.projectLoaded`(§4.25.10)を購読して呼ぶ。`webui/src/timeline/useProjectOrphans.ts`にも同じ購読と呼び出しがあるが、このフックは本番でマウントされていない(定義とテストのみ)。
+
+#### 4.25.7 `timeline.insertMediaForJob`(contract v8、同期)
+
+完成した動画を、そのジョブの仮オブジェクトの位置へ**置換挿入**する(🎞挿入の位置連動。SPEC §5-10)。
+
+- params(**全項目必須**): `jobId`(`string`、空文字は`BAD_REQUEST`) / `filePath`(`string`、空文字は`BAD_REQUEST`)。**位置は引数に取らない**——仮オブジェクトの位置が答えだからである。
+- result:
+
+  | 項目 | 型 | 意味 |
+  | --- | --- | --- |
+  | `ok` | `boolean` | 成功応答では常に`true`。 |
+  | `mode` | `"replaced"` \| `"inserted"` | 仮オブジェクトが見つかってその場を置き換えたか、見つからず`timeline.insertMedia`と同じ挙動で挿入したか。 |
+  | `layer` / `frame` | `number` | 動画が実際に置かれた位置。 |
+  | `usedFallback` | `boolean` | 置換の生成が席の衝突で失敗し`layer_max+1`へ退避したとき真。**挿入経路では常に偽**。 |
+
+- エラー: `BAD_REQUEST` / `INSERT_FAILED` / `FILE_NOT_FOUND` / `NO_EDIT_HANDLE`(§5)。
+  - `INSERT_FAILED`: 置換経路の生成失敗と、挿入経路の生成失敗の両方。
+  - `FILE_NOT_FOUND` / `NO_EDIT_HANDLE`: 挿入経路が返す(`timeline.insertMedia`の失敗種別そのまま)。
+- 備考: 仮オブジェクトの照合は**ジョブIDの完全一致のみ**で、位置フォールバックは使わない(このジョブの印を持たないオブジェクトを絶対に触らないため)。見つからなければ`timeline.insertMedia`とまったく同じ挙動——現在の選択レイヤー・カーソル位置・素材の実尺——へ落ちる。生成プリミティブは`timeline.insertMedia`と共通の`CreateMediaObject`で、§4.7の実装欄が正本である。
+- **配線状況: 本番配線済み**(`webui/src/jobs/downloadAndInsert.ts`)。
+
+#### 4.25.8 `timeline.updateProvisionalReservation`(contract v8、同期)
+
+予約の付け替え——古い仮オブジェクトの削除と新しい仮オブジェクトの作成——を1編集区間(アンドゥ1件)で行う(SPEC §5-3)。
+
+- params:
+
+  | 項目 | 型 | 必須/任意 | 意味 |
+  | --- | --- | --- | --- |
+  | `oldJobId` | `string` | **任意**(下記) | 削除する仮オブジェクトのジョブID。空文字は「探さずに作成だけ」。 |
+  | `newJobId` | `string` | 必須 | 新しく作る仮オブジェクトのジョブID。空文字は`BAD_REQUEST`。 |
+  | `displayText` | `string` | 必須 | §4.25.3と同じ(空文字可)。 |
+  | `textPrefix` | `string` | 任意 | §4.25.3と同じ。 |
+  | `numFrames` | `number`(整数) | 必須 | 1以上。 |
+  | `genFps` | `number` | 必須 | 0以下は`BAD_REQUEST`。 |
+  | `placement` | `"A"` \| `"B"` \| `"C"` | 必須 | §4.25.3と同じ。 |
+  | `materialLayer` / `materialFrameStart` / `materialFrameEnd` / `cursorLayer` / `cursorFrame` | `number`(整数) | 任意(`placement`に応じて必要) | §4.25.3と同じ。 |
+
+  **`oldJobId`は実装では任意である**(省略・`null`は空文字と同じ＝削除を探さない)。`types.ts`は必須と宣言しており、**型のほうが実装より狭い**(§9)。
+
+- result: `{ ok: boolean, deletedOld: boolean, placedLayer: number, placedFrame: number, usedFallback: boolean }`。`ok`は成功応答では常に`true`、`deletedOld`は古い仮オブジェクトが実際に見つかって消えたか、`usedFallback`は席の衝突で`layer_max+1`へ退避したとき真。
+- エラー: `BAD_REQUEST` / `PROVISIONAL_FAILED`(§5)。**編集ハンドルが使えないときに`BAD_REQUEST`を返す点も§4.25.3と同じ**である。
+- 備考: このRPCは`lengthFrames`を持たず、長さは常に`numFrames`＋`genFps`から解決する(§4.25.4の非対称の相手側)。
+- **配線状況: 本番配線済み**(`webui/src/timeline/provisionalReservation.ts`)。
+
+#### 4.25.9 `timeline.deleteProvisionalByJob`(contract v8、同期)
+
+ジョブIDで仮オブジェクトを逆引きして削除する(SPEC §5-10のロールバック経路、および送信失敗時の後片付け)。
+
+- params: `{ jobId: string }`(必須。空文字は`BAD_REQUEST`)。
+- result: `{ ok: boolean, deleted: boolean }`。`ok`は常に`true`で、`deleted`が実際に消したかどうかを表す。
+- エラー: **`BAD_REQUEST`だけ**。**見つからないのは失敗ではない**(冪等。`deleted: false`の成功応答)。
+- 備考: 照合は**ジョブIDの完全一致のみ**・**最初の1件だけ**。同じIDの重複があっても2件目以降は無害なテキストとして残す。
+- **配線状況: 本番配線済み**(`webui/src/jobs/JobCard.tsx`・`webui/src/timeline/provisionalReservation.ts`)。
+
+#### 4.25.10 `timeline.projectLoaded`(イベント、ネイティブ→WebUI、contract v5)
+
+```json
+{ "event": "timeline.projectLoaded", "data": {} }
+```
+
+- 送出はブリッジではなく**プラグイン本体**(`native/src/plugin.cpp`の`OnProjectLoad`)である。ホストの`register_project_load_handler`へ登録したコールバックの中から、上のJSON文字列を**そのまま**ページへ投稿する(例外はここで握り潰し、ホストへ投げ返さない)。
+- **payloadは意図的に空の`{}`**。ホストから渡される`PROJECT_FILE`の中身は一切載せない——このイベントは引き金でしかなく、WebUIは受け取ったら自分で`timeline.scanProvisionals`(§4.25.6)を呼んで孤児を探すからである。`types.ts`の`TimelineProjectLoadedData`も`Record<string, never>`、イベント名の定数は`TIMELINE_PROJECT_LOADED_EVENT`。
+- 発火は「プロジェクトを読み込んだ後」で、SDKによればプロジェクトの初期化時にも呼ばれる。ホストが`register_project_load_handler`を持たない場合は登録自体を行わず、**このイベントは一度も飛ばない**(孤児の検出は利用者の操作起点になる)。
+- **配線状況: 本番配線済み**——`webui/src/shell/AppShell.tsx`が購読し、§4.25.6の`timeline.scanProvisionals`を呼ぶ(`useProjectOrphans.ts`の購読は本番未マウント。§4.25.6)。
+- イベント機構そのものは§1.4のとおりである。
+
 ## 5. エラーコード一覧
 
-`KnownBridgeErrorCode`(`types.ts`)と`bridge_core.h`冒頭コメントは、**v4.1の範囲では**完全一致(§9参照、相違なし)。v6で追加された`WRITE_LOCKED`は`fs.writeTextFileAtomic`とともに2026-07-18に撤去された(§4.17/§4.18の撤去注記参照)。v5で追加されたコード(`CUTOUT_FAILED`/`EXTRACT_FAILED`/`PROVISIONAL_FAILED`等)は、v5の該当メソッド自体が本書に未収録のままのため(§0冒頭注記)、引き続きnative側との突き合わせが済んでいない。
+`KnownBridgeErrorCode`(`types.ts`)と`bridge_core.h`冒頭コメントは、**v4.1の範囲では**完全一致(§9参照、相違なし)。v6で追加された`WRITE_LOCKED`は`fs.writeTextFileAtomic`とともに2026-07-18に撤去された(§4.17/§4.18の撤去注記参照)。v5で追加されたコード(`CUTOUT_FAILED`/`EXTRACT_FAILED`/`PROVISIONAL_FAILED`)は、**§4.25でnative側(`bridge_core.cpp`／`bridge.cpp`)との突き合わせが済んでいる(2026-09-17)**——下表の「発生メソッド」欄はその突き合わせの結果である。
 
 | コード | 意味 | 発生メソッド |
 |---|---|---|
-| `BAD_REQUEST` | paramsの形式不正・バリデーション失敗 | 全メソッド共通(params検証があるもの全て) |
+| `BAD_REQUEST` | paramsの形式不正・バリデーション失敗 | 全メソッド共通(params検証があるもの全て。§4.25の8メソッド(`timeline.scanProvisionals`を除く)を含む)。**`timeline.insertProvisional`と`timeline.updateProvisionalReservation`は、編集ハンドルが使えない場合もこの符号を返す**(§4.25.3) |
 | `UNKNOWN_METHOD` | 未知の`method` | 全メソッド共通(ディスパッチのフォールバック) |
-| `NO_EDIT_HANDLE` | 編集ハンドル未取得/取得直後で使用不可 | `getEditInfo`, `timeline.insertMedia`, `timeline.captureFrame`, `timeline.getSelection`(v5) |
-| `BACKEND_UNREACHABLE` | 接続不可・切断等のトランスポート失敗(HTTPステータスを伴う応答はここに含まれない) | `backend.request`, `backend.downloadVideo`, `backend.uploadFile` |
+| `NO_EDIT_HANDLE` | 編集ハンドル未取得/取得直後で使用不可 | `getEditInfo`, `timeline.insertMedia`, `timeline.captureFrame`, `timeline.getSelection`(v5), `timeline.cutoutRange`(v5・§4.25.1), `timeline.extractAudio`(v5・§4.25.2), `timeline.resolveProvisional`(v5・§4.25.4), `timeline.insertMediaForJob`(v8・§4.25.7), `timeline.trackObject`(v12・§4.23), `timeline.renderMaskVideo`(v13・§4.24) |
+| `BACKEND_UNREACHABLE` | 接続不可・切断等のトランスポート失敗(HTTPステータスを伴う応答はここに含まれない)。**通信をしないメソッドがHTTPワーカープール未初期化の入口ガードとしてこの符号を使うこともある**(§4.25.1) | `backend.request`, `backend.downloadVideo`, `backend.uploadFile`, `timeline.cutoutRange`(v5・入口ガードのみ), `timeline.extractAudio`(v5・入口ガードのみ), `timeline.trackObject`(v12・入口ガードのみ), `timeline.renderMaskVideo`(v13・入口ガードのみ) |
 | `BACKEND_TIMEOUT` | WinHTTPタイムアウト | 同上 |
 | `DOWNLOAD_FAILED` | ダウンロードHTTPステータスが200以外 | `backend.downloadVideo` |
-| `FILE_NOT_FOUND` | 送信前のローカルファイル存在チェック失敗 | `timeline.insertMedia`, `backend.uploadFile`, `ui.makeThumbnail` |
+| `FILE_NOT_FOUND` | 送信前のローカルファイル存在チェック失敗 | `timeline.insertMedia`, `backend.uploadFile`, `ui.makeThumbnail`, `timeline.resolveProvisional`(v5・§4.25.4), `timeline.insertMediaForJob`(v8・§4.25.7)。**後ろ2つは挿入経路が`timeline.insertMedia`の失敗種別をそのまま外へ出したものである** |
 | `INSERT_FAILED` | メディアオブジェクトの生成に失敗(§3-140以降は**エイリアス経路と`create_object_from_media_file`の両方が`nullptr`**を返したとき。メッセージは経路中立な`media object creation failed …`) | `timeline.insertMedia`, `timeline.insertMediaForJob` |
 | `CAPTURE_FAILED` | レンダリング/PNGエンコードの失敗(`NO_EDIT_HANDLE`除外後) | `timeline.captureFrame` |
 | `CANCELLED` | ユーザーがファイル選択/フォルダ選択をキャンセル(UIではエラー非表示) | `ui.pickFile`, `ui.pickFolder`(v6・§4.15) |
 | `DIALOG_FAILED` | ネイティブOpen/フォルダ選択ダイアログ自体の失敗・再入 | `ui.pickFile`, `ui.pickFolder`(v6・§4.15) |
 | `THUMBNAIL_FAILED` | デコード/リサイズ/エンコード失敗 | `ui.makeThumbnail` |
+| `CUTOUT_FAILED` | 範囲の書き出しの失敗——シーンの解像度が不正、mp4の初期化・1フレームの描画・フレーム書き込み・ファイナライズのいずれかの失敗(v5・§4.25.1) | `timeline.cutoutRange` |
+| `EXTRACT_FAILED` | 範囲の音声の書き出しの失敗——音声レンダリングが使えない、1フレームの音声描画の失敗、**範囲が無音**、wavの書き込みの失敗(v5・§4.25.2) | `timeline.extractAudio` |
+| `PROVISIONAL_FAILED` | 仮オブジェクトの作成・置き換え・付け替えの失敗(v5／v8・§4.25.3・§4.25.4・§4.25.8) | `timeline.insertProvisional`, `timeline.resolveProvisional`, `timeline.updateProvisionalReservation`(**`timeline.updateProvisionalText`は返さない**——失敗しても`{updated:false}`の成功応答になる。`types.ts`のJSDocとの相違は§9) |
 | `TRACK_BUSY` | 追尾が既に1本走っている(v12・§4.23) | `timeline.trackObject` |
 | `TRACK_SEED_INVALID` | 種にする部分フィルタの枠が読めない・矩形として成立しない(v12・§4.23) | `timeline.trackObject` |
 | `TRACK_WRITEBACK_FAILED` | 追尾そのものは終わったが、エイリアスの書き戻しに失敗した(v12・§4.23。**元のエイリアスでの復元も失敗した場合にだけ出る**) | `timeline.trackObject` |
@@ -535,6 +763,7 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 | `POST /jobs/{id}/join`呼び出し時のWebUI側`timeoutMs`指定例 | **120,000ms**(`joinJob()`が`backend.request`へ明示的に渡す) | — | `webui/src/api/client.ts`(`bridge/types.ts`のJSDocに記載) |
 | `ui.resolveDroppedFiles`のWebUI側ローカル待機上限(**contract v7**) | **10,000ms**(既定の`DEFAULT_TIMEOUT_MS`のまま。`NO_LOCAL_TIMEOUT_METHODS`には含めない) | 無し | `webui/src/bridge/types.ts`, `requestDispatcher.ts` |
 | `fs.probeMediaInfo`のWebUI側ローカル待機上限(**contract v9**) | **10,000ms**(既定の`DEFAULT_TIMEOUT_MS`のまま。`NO_LOCAL_TIMEOUT_METHODS`には含めない) | 無し | `webui/src/bridge/types.ts`, `requestDispatcher.ts` |
+| `timeline.cutoutRange`／`timeline.extractAudio`のWebUI側ローカル待機上限(**contract v5**) | **10,000ms**(既定の`DEFAULT_TIMEOUT_MS`のまま。`NO_LOCAL_TIMEOUT_METHODS`には含めない) | 無し(**長い範囲では、ネイティブがまだ書き出していてもWebUI側が先に`TIMEOUT`を作りうる**——2026-09-17の収録時点の記録であって、挙動は変えていない。§4.25.1) | `webui/src/bridge/types.ts`, `requestDispatcher.ts` |
 | `timeline.trackObject`のWebUI側ローカル待機上限(**contract v12**) | **無し**(`NO_LOCAL_TIMEOUT_METHODS`に追加済み) | 数百フレームの追尾は数十秒〜数分かかるため。10,000msで諦めると、完走する追尾の前で「タイムアウト」の表示が残る | `webui/src/bridge/types.ts`(`NO_LOCAL_TIMEOUT_METHODS`), `requestDispatcher.ts` |
 | `timeline.renderMaskVideo`のWebUI側ローカル待機上限(**contract v13**) | **無し**(`NO_LOCAL_TIMEOUT_METHODS`に追加済み) | 描画は往復のやり取りではなく窓自身の長さ(最大4096フレーム)に束縛されるうえ、このバージョンには止める手段が無い。10,000msの上限は誤った失敗を作るだけで何も守らない | `webui/src/bridge/types.ts`(`NO_LOCAL_TIMEOUT_METHODS`), `requestDispatcher.ts` |
 
@@ -547,6 +776,8 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 | `logs\plugin.log` | UTF-8・タイムスタンプ付きファイルログ。AviUtl2はログをディスクに永続化しないため、自動検証が読める唯一のチャネルとして自前実装。ホストの`LOG_HANDLE`(1024文字/行制限)にも同時出力。 | `native/src/log.cpp` |
 | `downloads\<jobId>.mp4` / `<jobId>_joined.mp4` | `backend.downloadVideo`の保存先 | `bridge.cpp` |
 | `captures\frame_<frame>_<stamp>.png` | `timeline.captureFrame`の保存先。`<stamp>` = `yyyymmdd_HHMMSS_fff_nnn`(並列キャプチャでも一意) | `bridge.cpp` |
+| `cutouts\cutout_<開始>_<枚数>_<時刻印>.mp4` | `timeline.cutoutRange`(v5・§4.25.1)が書き出す範囲の切り抜き動画。`<開始>`は`frameStart`、`<枚数>`は`frameCount`、`<時刻印>`は`captures\`と同じ`yyyymmdd_HHMMSS_fff_nnn`。**誰も消さない** | `bridge.cpp`(フォルダは書き出し側の`mf_mp4_writer.cpp`が作る) |
+| `audio\audio_<開始>_<枚数>_<時刻印>.wav` | `timeline.extractAudio`(v5・§4.25.2)が書き出す範囲の音声(16bit PCM・2チャンネル)。命名規則は`cutouts\`と同じ。**誰も消さない** | `bridge.cpp` |
 | `masks\mask_<開始>_<枚数>_<時刻印>.mp4` | `timeline.renderMaskVideo`(v13・§4.24)が書き出すマスク動画。**誰も消さない**——切り抜き(cutouts)と同じ扱い(設計の正本は[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md) §5.5) | `bridge.cpp` |
 | `masks\black_<W>x<H>.png` | マスク描画の黒背景。シーンの解像度ごとに1枚だけ書き出し、以後の`timeline.renderMaskVideo`が使い回す(既に読めるファイルがあれば書き直さない) | `bridge.cpp` |
 | `settings.json` | `settings.get`/`settings.set`が読み書きする永続設定(現状`baseUrl`のみ)。ファイル欠落/JSON破損/値不正は既定値へ自己修復し、書き込みは行わない(次回`settings.set`成功まで) | `native/src/settings.cpp` |
@@ -564,10 +795,10 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 | v3 | M4 | `timeline.captureFrame`, `backend.uploadFile`, `ui.pickFile`, `ui.makeThumbnail` |
 | v4 | M7a | `settings.get`, `settings.set` |
 | v4.1 | M7c | `backend.request`の`timeoutMs`パラメータ |
-| v5 | タイムライン生成AI機能(α版) | `timeline.getSelection`／`timeline.cutoutRange`／`timeline.extractAudio`／`timeline.insertProvisional`／`timeline.resolveProvisional`／`timeline.updateProvisionalText`／`timeline.scanProvisionals`、イベント`timeline.menuInvoked`／`timeline.projectLoaded`。**本書は`timeline.getSelection`と`timeline.menuInvoked`のみ§4.13/§4.14で追補済み。残り6メソッド＋`timeline.projectLoaded`イベントは本書に未収録(既知のドキュメント債務)**。`timeline.getSelection`の`selected[].mediaWidth`/`mediaHeight`は2026-07-08の右クリック生成配線セッションで追加。 |
+| v5 | タイムライン生成AI機能(α版) | `timeline.getSelection`／`timeline.cutoutRange`／`timeline.extractAudio`／`timeline.insertProvisional`／`timeline.resolveProvisional`／`timeline.updateProvisionalText`／`timeline.scanProvisionals`、イベント`timeline.menuInvoked`／`timeline.projectLoaded`。**本書は`timeline.getSelection`と`timeline.menuInvoked`を§4.13/§4.14で、残り6メソッドと`timeline.projectLoaded`イベントを§4.25で収録済み(2026-09-17)**。`timeline.getSelection`の`selected[].mediaWidth`/`mediaHeight`は2026-07-08の右クリック生成配線セッションで追加。 |
 | v6 | バッチA2V(CSVマニフェスト駆動の一括生成) + wav長自動調整(フロントエンド追随グループ2) | `ui.pickFolder`／`fs.listFiles`／`fs.readTextFile`／`fs.writeTextFileAtomic`／`fs.probeAudioDuration`の5メソッド新設、および`backend.downloadVideo`への`destDir`/`fileName`/`noClobber`params拡張(後方互換)。エラーコード`WRITE_LOCKED`を新設。**本書は§4.15〜§4.20で全項目を収録済み。native実装は2026-07-15(グループ2セッション)に完了(新規`native/src/wav_probe.h/.cpp`・`native/src/fs_util.h/.cpp`、doctest`test_wav_probe.cpp`/`test_fs_util.cpp`)し、実装コードとの突き合わせも完了している**。(なお`fs.readTextFile`/`fs.writeTextFileAtomic`および`WRITE_LOCKED`は2026-07-18にバッチA2VのCSV状態管理廃止に伴い撤去した——§4.17/§4.18参照。同日、`backend.downloadVideo`に`reuseIfPresent`paramが追加された——§4.20参照。現存するv6メソッドは`ui.pickFolder`/`fs.listFiles`/`fs.probeAudioDuration`の3つ。) |
 | v7 | ドラッグ&ドロップ対応(第4波) | `ui.resolveDroppedFiles`メソッド新設(§4.21) — `postMessageWithAdditionalObjects`で同梱されたドロップファイルを実パスへ解決する。`params.__droppedPaths`はネイティブが常時強制上書きする予約キー(セキュリティ規律、§4.21参照)。合わせて、Chainのソース入力欄一本化セッションで先行実装済みだった`ui.pickFile`の`"imageOrVideo"` kindを§4.9へ追補。**本書は§4.9(追補分)/§4.21で全項目を収録済み。native実装(`bridge_core.h/.cpp`の`ParseResolveDroppedFiles`/`MakeResolveDroppedFilesResult`、`webview_host.cpp`の`__droppedPaths`注入)は同セッションで完了、doctest`test_bridge_core.cpp`で単体検証済み(AdditionalObjects解決自体はWebView2依存のためREALDEVICE-VERIFY対象)**。 |
-| v8 | 右クリック再設計群(2026-07-19〜20) | `timeline.insertMediaForJob`／`timeline.updateProvisionalReservation`／`timeline.deleteProvisionalByJob`の新設、`timeline.insertProvisional`の契約変更(`numFrames`／`genFps`／配置系統／`textPrefix`)、`timeline.getSelection`への`textContent`／`mediaDurationSec`拡張、レイヤーメニューへの`addCurrentFrameAsKeyframe`／`currentFrameToClipChain`アクション追加。**本書は§4.14.1(要点のみ、詳細は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md)へ委譲)と§4.13/§4.14の拡張注記で収録。native・`types.ts`とも実装済み**。 |
+| v8 | 右クリック再設計群(2026-07-19〜20) | `timeline.insertMediaForJob`／`timeline.updateProvisionalReservation`／`timeline.deleteProvisionalByJob`の新設、`timeline.insertProvisional`の契約変更(`numFrames`／`genFps`／配置系統／`textPrefix`)、`timeline.getSelection`への`textContent`／`mediaDurationSec`拡張、レイヤーメニューへの`addCurrentFrameAsKeyframe`／`currentFrameToClipChain`アクション追加。**本書は§4.14.1(当時の要点)と§4.13/§4.14の拡張注記で、3メソッドの引数・応答・エラーコードは§4.25で収録済み(2026-09-17)。UXの流れの正本は[`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §5。native・`types.ts`とも実装済み**。 |
 | v9 | IC-LoRA／A2Vカードの尺表示(2026-07-20) | `fs.probeMediaInfo`メソッド新設(§4.22) — 単一のローカルメディアファイルの再生時間・解像度を`EDIT_SECTION::get_media_info`経由でベストエフォート取得する同期メソッド。IC-LoRA／A2Vカードのリデザインで添付ファイルの尺を「12.3s」表示するために追加。取得不能時は`{durationSec:0, width:0, height:0}`の成功応答へ穏当に劣化し、rejectは`filePath`不正の`BAD_REQUEST`のみ(新規エラーコードは無し)。**本書は§4.22で全項目を収録済み。native実装(`bridge_core.h/.cpp`の`ParseProbeMediaInfo`/`MakeMediaInfoResult`、`bridge.cpp`の`ProbeMediaInfoEditProc`)は完了、doctest`test_bridge_core.cpp`に6ケース追加(252→258 pass/6 skip)。`get_media_info`の実呼び出しは実機でのみ確認可能**。 |
 | v10 | V2Vリボン範囲トリム(2026-07-30) | `backend.uploadFile`への任意`query`(`Record<string,string>`)加算と、応答`body`に加わる任意`trimmed`(bool)(§4.5)。タイムライン上のリボンが元動画の一部しか占めていないとき、`POST /upload/video?trim_start_sec=…&trim_duration_sec=…`でその範囲だけを切り出してアップロードするために追加。**省略時のURLはv10以前と完全に同一**(`AppendQueryToUrl`が空クエリでURLを変えないことで構造的に保証)。新規メソッド・新規エラーコードは無し。**本書は§4.5で収録済み。native実装(`bridge_core.h/.cpp`の共有純関数`BuildQueryString`/`AppendQueryToUrl`、`bridge.cpp`の`UploadFileWorker`でのURL連結)は完了、doctest`test_bridge_core.cpp`に9ケース追加(258→267 pass/6 skip)。もう半分の`timeline.getSelection`への再生位置系6フィールド(`playbackStartSec`/`playbackEndSec`/`hasPlaybackRange`/`playbackSpeed`/`loopPlay`/`sectionCount`)は2026-08-01の実機調査完了をもって実装・収録済み(§4.13、単位は素材時間軸の秒。doctestはさらに7ケース増えて274 pass/6 skip)**。 |
 | v11 | 素材fpsの取得と操作パネルへの流し込み(2026-09-01) | `timeline.getSelection`の`selected[]`への`mediaFps`(素材そのもののフレームレート、非nullable・`0`＝不明)追加(§4.13)。右クリックプリフィルのfps軸「素材に合わせる」を実際に機能させるために追加した。新規メソッド・新規エラーコードは無く、**追加は1フィールドだけ**である。**取得はMedia Foundation**(`MF_MT_FRAME_RATE`)で、native実装は新規モジュール`native/src/media_fps_probe.h/.cpp`(`FpsFromRatio`／`ProbeMediaFps`)と`bridge.cpp`の`GetSelectionEditProc`からの呼び出し、`bridge_core.h`の`SelectionItem::media_fps`と`MakeSelectionResult`のJSON化からなる。**nativeは生値を返し、整数へのスナップ(29.97→30)はwebuiの`prefillSeed.ts`が行う**。**mkv/webmでの取得失敗は正常系**(webuiがプロジェクトfpsへ落ちる)。doctestは新設`native/tests/test_media_fps_probe.cpp`ほかで**278→282ケース・アサーション1416→1452**(いずれも0失敗。実測値は`build.ps1 -Config Release -RunTests`で確認)。**MFのプローブが実ファイルを開く経路は実機でのみ確認可能**で、オーナーの実機ゲートG1〜G8待ちである(項目は台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md)「2. 実装済み・ユーザーのテスト待ち」)。 |
@@ -576,11 +807,12 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 
 ## 9. `types.ts` と `bridge_core.h`/`.cpp` の相違点
 
-両ソースを突き合わせた結果、以下**1点**の相違を確認した(実装を正とし、WebUI側は意図的にそれを無視する設計):
+両ソースを突き合わせた結果、以下の相違を確認した(いずれも実装を正とする。現存する相違は`PROVISIONAL_FAILED`のJSDocの1点で、`getEditInfo`の項は解消済みの記録):
 
 - **`getEditInfo`の`result`**: `bridge_core.cpp`(`HandleRequestJson`)は`width/height/rate/scale/sampleRate/frame`に加えて **`layer`、`frameMax`、`layerMax`** の3フィールドを常にJSONへ含める(`EDIT_INFO`の対応フィールドをそのまま転写)。かつては`webui/src/bridge/types.ts`の`BridgeResultMap["getEditInfo"]`がこの3つを宣言せず型を絞っていた（「将来これらを使う画面を追加する場合は`BridgeResultMap`側に追記するだけで済む・ネイティブ側の変更は不要」）が、**2026-07-21のJoin復活（I4）でその「将来」が到来し、TS型へ`layer` / `frameMax` / `layerMax`を宣言追記した**（Join UIのjoined挿入が最前面レイヤー算出に`layerMax`を使う）。予告どおりネイティブ側は無変更・契約バージョンのbumpも不要で、型のミラーを実装の現実へ寄せただけである。この項はもはや「相違点」ではなく、解消済みの記録として残す。
+- **`PROVISIONAL_FAILED`のJSDoc(2026-09-17、§4.25の収録で判明)**: `types.ts`の`KnownBridgeErrorCode`は、この符号を返すメソッドとして`timeline.insertProvisional`／`timeline.resolveProvisional`／`timeline.updateProvisionalText`の3つを挙げている。ところが実装(`bridge_core.cpp`)が実際にこの符号を返すのは`timeline.insertProvisional`・`timeline.resolveProvisional`・**`timeline.updateProvisionalReservation`**の3つで、**挙げられていない`updateProvisionalReservation`が返し、挙げられている`updateProvisionalText`は返さない**(後者は失敗しても`{updated:false}`の成功応答になる。§4.25.5)。**ずれているのはJSDocの文章だけで、`KnownBridgeErrorCode`が持つ符号の集合そのものは実装と一致している**(型としての不整合は無い)ため、コードは触らず本書に記録するにとどめる。発生メソッドの正は§5の表である。
 
-それ以外(エラーコード一覧、各メソッドのparams/result形状、`timeoutMs`のクランプ範囲、`settings.set`のno-op挙動等)はコード上完全に一致していた。
+それ以外(エラーコード一覧、各メソッドのparams/result形状、`timeoutMs`のクランプ範囲、`settings.set`のno-op挙動等)はコード上一致していた。なお§4.25で突き合わせた9メソッドには、**`types.ts`のほうが実装より狭い**宣言が2箇所ある——`timeline.updateProvisionalReservation`の`oldJobId`を必須と宣言するが実装では省略可(§4.25.8)、`timeline.insertProvisional`の応答の`placedLayer`/`placedFrame`/`usedFallback`を任意と宣言するが実装は常に載せる(§4.25.3)。どちらも型が実装を受け入れられる向きの差なので相違点には数えず、各項の備考に書いた。
 
 ## 10. 参照ファイル(モノレポルート基準の相対パス)
 

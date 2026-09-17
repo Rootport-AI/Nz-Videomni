@@ -20,11 +20,13 @@ from gradio_ui.adapters import (
     MODEL_CATEGORIES,
     MODEL_DEFAULT,
     active_base_model,
+    active_unsupported_features,
     build_base_model_choices,
     build_model_choices,
     model_active_value,
 )
 from gradio_ui.api_client import ApiClient
+from gradio_ui.feature_scope import GATED_CONTROLS, RESET_VALUES, hidden_controls
 from gradio_ui.handlers import fetch_models_safe, load_selected_models
 from gradio_ui.i18n import LABELS
 from gradio_ui.ui import build_ui
@@ -366,3 +368,138 @@ def test_build_ui_smoke_with_models_section():
     keys = {key for _c, key, _a in demo.label_registry}
     assert {"model_section_title", "model_btn_load", "model_btn_refresh",
             "model_cat_transformer", "model_cat_audio"} <= keys
+
+
+# --------------------------------------------------------------------------- #
+# Feature scope: the LOADED base model's ``unsupported_features`` closes the
+# controls that would 422 on it. The pure table first, then the /models reader,
+# then the refresh closure that joins them -- the same closure all three
+# /models-pulling events (Refresh button, page load, post-Load re-pull) are
+# wired to, so this covers every path into the gating.
+# --------------------------------------------------------------------------- #
+
+def test_hidden_controls_maps_known_names_and_ignores_the_rest():
+    assert hidden_controls(["prune_vaed"]) == {"accel_vae"}
+    assert hidden_controls(["keep_resident_embeddings"]) == {
+        "accel_keep_resident_embeddings"}
+    # A mixed list closes the names this build knows and skips the rest --
+    # two_stage_hq has no control of its own (the quality radio already falls
+    # back to distilled).
+    assert hidden_controls(["two_stage_hq", "keep_resident_embeddings",
+                            "something_new"]) == {"accel_keep_resident_embeddings"}
+    # A backend newer than this build names things it has never heard of; that
+    # is the ordinary case, not an error.
+    assert hidden_controls(["two_stage_hq", "something_new"]) == frozenset()
+    assert hidden_controls([]) == frozenset()
+    # Every gated control has a reset value, or hiding it would leave a
+    # rejected value riding along on every request.
+    assert set(GATED_CONTROLS) <= set(RESET_VALUES)
+
+
+def test_active_unsupported_features_reads_the_active_base_model():
+    models_json = {"base_models": [
+        {"id": "LTX23", "active": False,
+         "unsupported_features": ["keep_resident_embeddings"]},
+        {"id": "LTX25", "active": True,
+         "unsupported_features": ["two_stage_hq", "prune_vaed"]},
+    ]}
+    assert active_unsupported_features(models_json) == ["two_stage_hq", "prune_vaed"]
+    # No active entry / no multi-engine layer / nothing at all -> nothing closes.
+    assert active_unsupported_features(
+        {"base_models": [{"id": "LTX23", "active": False}]}) == []
+    assert active_unsupported_features(SAMPLE_MODELS) == []
+    assert active_unsupported_features(None) == []
+
+
+def _models_json_with(active_id: str, unsupported: list[str]) -> dict:
+    """SAMPLE_MODELS_MULTI with one base model active and declaring
+    ``unsupported``."""
+    base_models = []
+    for entry in SAMPLE_MODELS_MULTI["base_models"]:
+        is_active = entry["id"] == active_id
+        base_models.append(dict(entry, active=is_active,
+                                unsupported_features=unsupported if is_active else []))
+    return dict(SAMPLE_MODELS_MULTI, active_base_model=active_id,
+                base_models=base_models)
+
+
+def _refresh_with(models_json: dict):
+    """Drive ``refresh_model_dropdowns`` (the closure every /models event is
+    wired to) against a mock transport, the way the on_page_load tests in
+    tests/test_gradio_handlers.py drive theirs."""
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+    demo.api._client = httpx.Client(transport=httpx.MockTransport(
+        lambda _req: httpx.Response(200, json=models_json)))
+    return demo.refresh_model_dropdowns("en", warn=False)
+
+
+def _gated_update(updates, control: str):
+    """The one update in ``refresh_model_dropdowns``'s return that belongs to
+    ``control``.
+
+    The gated updates are the TAIL of that tuple, in GATED_CONTROLS order (the
+    same order ui.py appends the components to its output list), so the
+    position is derived from the table rather than written down here -- adding
+    a control to gradio_ui/feature_scope.py must not silently re-point these
+    assertions at a neighbour."""
+    tail = updates[-len(GATED_CONTROLS):]
+    return tail[GATED_CONTROLS.index(control)]
+
+
+def test_refresh_hides_and_resets_the_vae_radio_for_an_engine_without_it():
+    updates = _refresh_with(_models_json_with("LTX25",
+                                              ["two_stage_hq", "prune_vaed"]))
+    # base dropdown + one per category + one per gated control.
+    assert len(updates) == 1 + len(MODEL_CATEGORIES) + len(GATED_CONTROLS)
+    vae_update = _gated_update(updates, "accel_vae")
+    assert vae_update["visible"] is False
+    # Hiding alone is not enough: an invisible component still SENDS its value.
+    assert vae_update["value"] == RESET_VALUES["accel_vae"] == "default"
+    # The engine that lacks the VAE is the one that HAS the embeddings
+    # processor, so the other gated control goes the other way in the same pull.
+    kre_update = _gated_update(updates, "accel_keep_resident_embeddings")
+    assert kre_update["visible"] is True
+    assert "value" not in kre_update
+
+
+def test_refresh_shows_the_vae_radio_for_an_engine_that_supports_it():
+    updates = _refresh_with(_models_json_with("LTX23",
+                                              ["keep_resident_embeddings"]))
+    vae_update = _gated_update(updates, "accel_vae")
+    assert vae_update["visible"] is True
+    # A shown control keeps whatever the user picked -- no value is written.
+    assert "value" not in vae_update
+
+
+def test_refresh_hides_and_resets_keep_resident_embeddings_on_an_engine_without_it():
+    # The engine with no embeddings processor names the field in
+    # unsupported_features; sending true there is a 422, so the checkbox is
+    # hidden AND written back to the server default in the same update.
+    updates = _refresh_with(_models_json_with("LTX23",
+                                              ["keep_resident_embeddings"]))
+    update = _gated_update(updates, "accel_keep_resident_embeddings")
+    assert update["visible"] is False
+    assert update["value"] == RESET_VALUES["accel_keep_resident_embeddings"] is False
+
+
+def test_refresh_shows_keep_resident_embeddings_on_an_engine_that_supports_it():
+    updates = _refresh_with(_models_json_with("LTX25",
+                                              ["two_stage_hq", "prune_vaed"]))
+    update = _gated_update(updates, "accel_keep_resident_embeddings")
+    assert update["visible"] is True
+    # Shown, and the user's own choice is left alone.
+    assert "value" not in update
+
+
+def test_refresh_failure_leaves_every_output_untouched():
+    demo = build_ui("http://127.0.0.1:8000", api_key=None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    demo.api._client = httpx.Client(transport=httpx.MockTransport(handler))
+    updates = demo.refresh_model_dropdowns("en", warn=False)
+    # Same arity as the success path (Gradio matches outputs positionally), and
+    # every one of them a bare no-op update.
+    assert len(updates) == 1 + len(MODEL_CATEGORIES) + len(GATED_CONTROLS)
+    assert all("value" not in u and "visible" not in u for u in updates)

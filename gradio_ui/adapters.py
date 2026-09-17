@@ -112,6 +112,23 @@ def active_base_model(models_json: dict | None) -> str:
     return (models_json or {}).get("active_base_model") or ""
 
 
+def active_unsupported_features(models_json: dict | None) -> list[str]:
+    """The ``unsupported_features`` the LOADED base model declares.
+
+    Read off the ``base_models[]`` entry flagged ``active`` — the judgment is
+    about what the pipeline is actually on, not what the base dropdown happens
+    to show (the dropdown is a pending selection until the Load button sends
+    it). A response with no active entry, no ``base_models`` block at all (a
+    server predating the multi-engine layer), or no list on the active entry
+    yields ``[]``, which :func:`gradio_ui.feature_scope.hidden_controls` turns
+    into "nothing is closed"."""
+    for entry in (models_json or {}).get("base_models") or []:
+        if isinstance(entry, dict) and entry.get("active"):
+            return [name for name in (entry.get("unsupported_features") or [])
+                    if isinstance(name, str)]
+    return []
+
+
 def build_model_choices(
     models_json: dict | None, category: str, lang: str = _DEFAULT_LANG,
     base_model: str | None = None,

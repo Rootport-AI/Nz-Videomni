@@ -55,9 +55,14 @@ from .handlers import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
+    KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+    _LORA_TOKEN_RE,
+    _combine_generate_loras,
     build_a2v_chain_payload,
+    parse_prompt_loras,
     suggest_frames_for_audio,
 )
+from .i18n import _DEFAULT_LANG
 from .manifest import (
     IMAGE_SHARED,
     MAX_FRAMES,
@@ -117,7 +122,12 @@ class BatchSnapshot:
                      folder. Created on demand if missing.
 
     Prompt fields
-        prompt_common  The Generate-tab prompt, used as the shared/common base.
+        prompt_common  The Generate-tab prompt VERBATIM (``<lora:...>`` tokens
+                       included), used as the shared/common base. The parsing
+                       happens per ROW, on the composed text — see
+                       :func:`prepare_batch_rows` — so this field is only the
+                       start-time "is there anything to send at all" check's
+                       input; the text a row sends is ``BatchRow.send_prompt``.
         negative       Negative prompt (verbatim for every row).
         prompt_mode    "add"     -> per-row prompt is appended to the common one
                        "replace" -> per-row prompt replaces the common one
@@ -132,10 +142,10 @@ class BatchSnapshot:
         seed            int seed (applied verbatim to every row).
 
     LoRA / adapter
-        loras           The FINAL merged lora list — WP3 must have already run
-                        :func:`gradio_ui.handlers._combine_generate_loras`
-                        (adapter-first, prompt order, name last-wins). The
-                        runner does NOT merge; it forwards this list as-is.
+        There is no ``loras`` field here: the list is PER ROW
+        (``BatchRow.loras``), because a row's own prompt may carry its own
+        ``<lora:...>`` tokens. :func:`prepare_batch_rows` freezes it.
+
         use_adapter     Whether a reference-video CONTROL adapter is in play.
         ref_video_path  Local path to the reference video, or ``None``. Uploaded
                         once (first row) and the id reused for the rest.
@@ -182,11 +192,21 @@ class BatchSnapshot:
                      2026-08-04 (§51), so this one reaches the payload only
                      when False. The output is bit-identical either way — only
                      the speed changes.
+        chunked_upsample  Snapshotted from the batch accordion's own checkbox
+                     (default ON). Unlike every other field in this block it is
+                     sent EXPLICITLY, true or false, exactly as the plugin's
+                     batch does — omitting it would silently fall back to the
+                     slow one-pass upsample.
         vae_mode  Snapshotted from the Settings-tab VAE radio (PrunaVAED,
                      Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
                      time), same reasoning again. The default is "default"
                      and never flips (owner ruling 0-11), so this one reaches
                      the payload only when "prune_vaed" is selected.
+        keep_resident_embeddings  Snapshotted from the Settings-tab checkbox
+                     (LTX 2.5), same reasoning again. The API default is OFF,
+                     so this one reaches the payload only when True. On a base
+                     model that does not support it the checkbox is hidden and
+                     reset, so the snapshot can only ever carry False there.
 
     Skip cap
         num_frames  The Generate tab's own frame count, snapshotted so the
@@ -209,7 +229,6 @@ class BatchSnapshot:
     crop_output: Optional[dict] = None
     frame_rate: float = 24.0
     seed: int = -1
-    loras: List[dict] = field(default_factory=list)
     shared_images: List[Tuple[str, int, float]] = field(default_factory=list)
     use_adapter: bool = False
     ref_video_path: Optional[str] = None
@@ -227,12 +246,19 @@ class BatchSnapshot:
     block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+    chunked_upsample: bool = True
     vae_mode: str = "default"
+    keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT
     num_frames: int = MAX_FRAMES
 
 
 # --------------------------------------------------------------------------- #
-# Prompt composition (pure function).
+# Prompt composition + the send-time freeze.
+#
+# compose_prompt is pure. prepare_batch_rows is the UI-THREAD step: it runs in
+# ui.py's dispatch(), before the runner is handed the rows, because parsing a
+# row's <lora:...> tokens needs the known-name list, the UI language and
+# gr.Warning — none of which a daemon worker thread can reach.
 # --------------------------------------------------------------------------- #
 def compose_prompt(common: str, row_prompt: str, mode: str) -> str:
     """Combine the batch's common prompt with a per-row prompt.
@@ -250,6 +276,93 @@ def compose_prompt(common: str, row_prompt: str, mode: str) -> str:
     if mode == "replace":
         return row_prompt
     return f"{common} {row_prompt}".strip()
+
+
+def _prompt_body(text: str) -> str:
+    """What is left of a prompt once its ``<lora:...>`` tokens are taken out,
+    whitespace-trimmed — i.e. the text that actually reaches the wire, since
+    that is what the parser hands back (see :func:`prepare_batch_rows`).
+
+    A prompt made of nothing but tokens therefore reads as EMPTY here, which is
+    exactly how the server sees it: ``GenerateChainRequest.prompt`` carries
+    ``min_length=1``, so such a row is a 422."""
+    return _LORA_TOKEN_RE.sub("", text or "").strip()
+
+
+def rows_have_lora_tokens(rows: List[BatchRow], common: str, mode: str) -> bool:
+    """Whether any row the run would SEND carries a ``<lora:...>`` token in its
+    COMPOSED text.
+
+    The caller uses this to decide whether the batch needs a GET /loras at all,
+    so a batch without a single token still starts with zero extra API calls.
+    It asks about the composed text rather than the two sources separately
+    because that is what gets parsed: in "replace" mode a row with its own
+    prompt never sees the common one's tokens. Finished rows (Done / Skip) are
+    left out for the same reason the runner never submits them — a token in an
+    already-finished row must not cost a resume an extra API call."""
+    return any(_LORA_TOKEN_RE.search(compose_prompt(common, r.prompt, mode) or "")
+               for r in rows if r.stat in _UNFINISHED)
+
+
+def prepare_batch_rows(rows: List[BatchRow], common: str, mode: str,
+                       known_names, lang: str = _DEFAULT_LANG, *,
+                       use_adapter: bool = False, adapter=None,
+                       adapter_strength: float = 1.0) -> Optional[str]:
+    """Freeze each row's send prompt + lora list, in place. Returns an error
+    message (abort the whole dispatch, zero API calls) or ``None``.
+
+    One rule, shared with the plugin: **the text a row sends is the composed
+    prompt, and THAT is what goes through the same parser the Generate tab
+    uses.** So "add" yields the union of the common and the row's own tokens
+    with the row's strength winning (last-wins), "replace" yields the row's
+    tokens alone, and a "replace" row with an empty prompt falls back to the
+    common one's — all of it out of :func:`compose_prompt` plus
+    :func:`gradio_ui.handlers.parse_prompt_loras`, with no per-mode branch.
+
+    The reference-video CONTROL adapter is combined in FIRST for every row
+    (:func:`gradio_ui.handlers._combine_generate_loras`): a request carrying a
+    ``reference_video_id`` with an empty ``loras`` is a 422, so a row must
+    never lose it just because it has no tokens of its own.
+
+    Only the rows the run would actually SEND are frozen (``stat`` in
+    :data:`_UNFINISHED`): a Done / Skip row keeps its ``send_prompt`` /
+    ``loras`` exactly as they were, so a stale token left in an already
+    finished row can neither reach the parser nor abort a resume.
+
+    ``BatchRow.prompt`` is left untouched — it is the user's own CSV cell."""
+    for row in rows:
+        if row.stat not in _UNFINISHED:
+            continue  # Done / Skip -> never sent; leave the freeze alone
+        composed = compose_prompt(common, row.prompt, mode)
+        row_loras: list = []
+        if _LORA_TOKEN_RE.search(composed or ""):
+            composed, row_loras, err = parse_prompt_loras(composed, known_names, lang)
+            if err is not None:
+                return err
+        row.send_prompt = composed
+        row.loras = _combine_generate_loras(use_adapter, adapter,
+                                            adapter_strength, row_loras)
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# Row-image conditioning strength (pure). Same rule as the plugin's batch: a
+# row's own image is a keyframe like any other, so it is conditioned at the
+# LEADING shared keyframe's strength -- "leading" by frame_idx, since the
+# Generate tab's slots are not in frame order. No shared keyframe at all -> the
+# app-wide keyframe default. A fixed 1.0 here used to make a row image the one
+# keyframe in the app that ignored the slider.
+# --------------------------------------------------------------------------- #
+ROW_IMAGE_STRENGTH_DEFAULT = 0.8
+
+
+def row_image_strength(shared_images: List[Tuple[str, int, float]]) -> float:
+    """The ``strength`` a row's OWN image is conditioned at, given the
+    snapshot's ``(path, frame_idx, strength)`` shared keyframes."""
+    if not shared_images:
+        return ROW_IMAGE_STRENGTH_DEFAULT
+    _path, _frame_idx, strength = min(shared_images, key=lambda t: t[1])
+    return float(strength)
 
 
 # --------------------------------------------------------------------------- #
@@ -341,7 +454,11 @@ class BatchRunner:
 
         Start-time preflight (see :func:`_plan_rejudgement` / :func:`_validate`),
         run in this order so a rejected start leaves ``rows`` *and* the CSV
-        completely untouched (only a start that actually proceeds mutates them):
+        completely untouched (only a start that actually proceeds mutates them).
+        "Untouched" is about the CSV-facing fields: ``send_prompt`` / ``loras``
+        are the UI thread's send-time freeze, written by ui.py's ``dispatch()``
+        through :func:`prepare_batch_rows` BEFORE ``start()`` is ever called,
+        and they are not CSV columns. The order is:
           1. re-judge every unfinished row's frame count / 481-frame Skip at the
              snapshot's ``frame_rate`` (PROJECTED only — nothing mutated yet);
           2. validate against that projection: ``wav_dir`` must exist, at least
@@ -453,12 +570,13 @@ class BatchRunner:
             conditioning = self._build_conditioning(row)
             ref_id = self._ensure_ref_video()
 
-            # 5/6) build the byte-identical A2V chain payload + submit.
-            prompt = compose_prompt(snap.prompt_common, row.prompt, snap.prompt_mode)
+            # 5/6) build the byte-identical A2V chain payload + submit. The
+            # prompt and the lora list are taken VERBATIM from the row: both
+            # were frozen by prepare_batch_rows on the UI thread.
             payload = build_a2v_chain_payload(
                 audio_id=audio_id,
                 num_frames=row.frames,
-                prompt=prompt,
+                prompt=row.send_prompt,
                 negative_prompt=snap.negative,
                 width=snap.width,
                 height=snap.height,
@@ -466,7 +584,7 @@ class BatchRunner:
                 frame_rate=snap.frame_rate,
                 seed=snap.seed,
                 conditioning_images=conditioning,
-                loras=snap.loras,
+                loras=row.loras,
                 use_adapter=snap.use_adapter,
                 reference_video_id=ref_id,
                 control_adherence=snap.control_adherence,
@@ -482,6 +600,8 @@ class BatchRunner:
                 keep_resident=snap.keep_resident,
                 fused_gguf_dequant_kernel=snap.fused_gguf_dequant_kernel,
                 vae_mode=snap.vae_mode,
+                keep_resident_embeddings=snap.keep_resident_embeddings,
+                chunked_upsample=snap.chunked_upsample,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:
@@ -508,7 +628,7 @@ class BatchRunner:
         """Assemble the clip's ``conditioning_images`` (same shape as the frozen
         Generate-tab A2V path): a ``"Shared"`` row uses every snapshot shared
         image at its own frame/strength; an individually-named image attaches as
-        a single frame-0, strength-1.0 keyframe."""
+        a single frame-0 keyframe at :func:`row_image_strength`."""
         snap = self._snapshot
         conditioning: list = []
         if row.image == IMAGE_SHARED:
@@ -523,7 +643,8 @@ class BatchRunner:
             image_path = self._resolve_image_path(row.image)
             image_id = self._upload_image_cached(image_path)
             conditioning.append({
-                "image_id": image_id, "frame_idx": 0, "strength": 1.0,
+                "image_id": image_id, "frame_idx": 0,
+                "strength": row_image_strength(snap.shared_images),
             })
         return conditioning
 
@@ -755,15 +876,20 @@ def _validate(snapshot: BatchSnapshot, rows: List[BatchRow],
             )
 
     # --- Prompt foolproof (blanket -> branch) ---
-    # 1. common prompt is non-empty                                  -> OK
-    # 2. empty + mode="add"     -> nothing to send                   -> fail
-    # 3. empty + mode="replace" -> every target row prompt must be
-    #    non-empty; else fail (reason carries the empty-row count).
-    if not (snapshot.prompt_common or "").strip():
+    # Judged on the TAG-STRIPPED text (:func:`_prompt_body`), never the raw
+    # cell: since the prompts arrive here VERBATIM (the parsing happens per row
+    # in :func:`prepare_batch_rows`), a prompt of nothing but ``<lora:...>``
+    # tokens looks non-empty while leaving nothing to send — every row would
+    # then 422 on the server's ``min_length=1``.
+    # 1. common prompt has a body                                    -> OK
+    # 2. no body + mode="add"     -> nothing to send                 -> fail
+    # 3. no body + mode="replace" -> every target row prompt must
+    #    have a body; else fail (reason carries the empty-row count).
+    if not _prompt_body(snapshot.prompt_common):
         mode = snapshot.prompt_mode or "add"
         if mode == "add":
             return False, "prompt-empty-add"
-        empty = [r for r in targets if not (r.prompt or "").strip()]
+        empty = [r for r in targets if not _prompt_body(r.prompt)]
         if empty:
             return False, f"prompt-rows-empty:{len(empty)}"
 

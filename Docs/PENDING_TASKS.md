@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-18（§3-148 をクローズし [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-148 へ移送、§3-146 をクローズし同書 §3-146 へ移送、§3-1 の「行ごとの`<lora:>`タグ非対応」の1箇条をクローズし同書 §3-159 へ移送、§4-17 をクローズし同書 §3-157 へ移送、§4-15 をクローズし同書 §3-160 へ移送、§4-6 の⑤・⑥をクローズし同書 §3-161・§3-162 へ移送。現在の構成は**§3 将来の研究課題／§4 スコープ外**の2節で、§1・§2 は該当項目が無いため見出しごと削除してある）
+- 作成: 2026-07-15／最終更新: 2026-09-22（§4-1 に着手時の背景知識を追記——独自 GGUF を選んだ経緯・ローダ不具合の真因・Windows のコミット制約・dev モデルの扱い。正本は各 § 参照）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
@@ -182,6 +182,11 @@
 - **例外的な解禁**: **ネガティブプロンプトのみ、NAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）とVSF（Value Sign Flip）経由で解禁済みで、これはLTX 2.3・LTX 2.5の両エンジンに及ぶ**（`nag_*`に加えて`neg_method`／`vsf_scale`もCFGを迂回してworkerへ配線されている。`services/engines/ltx/adapter.py`・同`ltx25/adapter.py`）。**未配線のまま残っているのは`guidance_scale`と`pipeline`の2つで、`num_steps`は配線済み・API層の強制だけが塞いでいる**（上記のとおり）。
 - **相互参照**: 上記3点の復活条件は**§4-28**（`two_stage_hq`）と同じで、非蒸留モデルを動かせるハイスペックマシンを用意したとき。
 - **出典**: [`Nz-Videomni/Docs/A2V_DESIGN.md`](A2V_DESIGN.md) §2.5、[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §7（NAG）。
+- **背景知識（着手時の前提。独自 GGUF を選んだ経緯から）**:
+  - **なぜ transformer が GGUF なのか**: 当初は公式 `ltx_pipelines` で bf16 の safetensors をオフロードして動かす計画だった（[`note.md`](note.md)）。実機（VRAM 16GB・Windows）で公式ローダが safetensors の一括読み込み中に native crash し（VRAM 容量の問題ではなく、オフロードでも同じ）、低 VRAM フォーク由来の「GGUF transformer（圧縮のまま VRAM に置き、層ごとに逆量子化）＋ block swap」へ転換した。Q4_K_M はコミュニティの 16GB レシピと一致する実績優先の選択で、Q6 は実績が無いため後回しにした。正本: `engine/VENDOR_NOTICE.md`・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §1〜§2・§5・[`DESIGN_COMPARISON_and_direction.md`](DESIGN_COMPARISON_and_direction.md)・[`LTX23_REFERENCE.md`](LTX23_REFERENCE.md) §5〜§6・README の GGUF の段落。
+  - **クラッシュの真因は後日特定済み**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §2.9）: ローダが CUDA 初期化後に mmap で開いた safetensors へ `.to(non_blocking=True, copy=False)` を掛けていた実装ミスで、safetensors 形式そのものの問題ではない。ただし bf16 は 16GB に入らず、公式のオフロードはコミット量を悪化させ GGUF とも非互換なため退けた（同 §9.2）。
+  - **Windows のコミット（仮想メモリ）制約**（同 §9.1）: 巨大な safetensors をコピーオンライトの mmap で開くと、読む量に関係なくファイルサイズ分のコミットが予約され、巨大なページファイルなしでは落ちる。OS 側にこの予約を止める設定は無い。現行設計はモノリスを開かず、小さな部品ファイルと GGUF（共有読み取り専用の memmap）だけを読むので当たらない。大きな safetensors を直接読む必要が出たら、safetensors 0.8 以降の `backend="pread"`（`.venv-engine-ltx25` の 0.8.0 にはあり、`.venv-engine` の 0.7.0 には無い）か「テンソルを1本ずつ読んで即 GPU へ送る」で収める。
+  - **dev モデルの扱い**: dev も同じ 22B 構造なので `Nz-GGUF-Converter-LTX23` で GGUF にでき、読み込み自体は現行の 16GB 機で塞がっていない（前例＝非蒸留の 10Eros を Q4_K_M に変換し読み込みまで確認、Converter の VERIFICATION §6。蒸留 LoRA は `StyleLoRA` から実行時に当てられる。Q6_K への変換も同ツールで可能）。本項の本当のコストは時間で、CFG はステップごとに順伝播が2回になり、ステップ数も 8 ではなく数十になる。2回の順伝播をバッチにすると活性化が倍になり快適上限を割りやすく、逐次にすると時間が伸びる、という設計上の分かれ目がある。「CFG あり・多ステップ」の推論経路は未検証（10Eros は蒸留 LoRA 込みの 8 ステップで確認しただけ）。着手時は、dev チェックポイントのテンソル名・形状が参照 GGUF の型マップと過不足なく一致することの照合から始める。§4-28（`two_stage_hq`＝非量子化の第2段）は bf16 を VRAM に載せる前提なので、本項とは別に塞がったまま。
 
 ### 4-2. attention tilingの本番投入
 

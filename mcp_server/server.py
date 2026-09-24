@@ -121,9 +121,10 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   retake_window_start_sec（作り直す窓の開始秒）を指定すると、サーバーが
   その窓だけを切り出して作り直し、窓まるごとを返します。
   **窓の長さを決めるのは clips[0].num_frames ただ1つで、長さを表す第2の
-  引数は存在しません。** clips はちょうど1件・窓長は既定のstage-2窓で
-  [73, 169] フレーム（get_config の limits.retake_window_min_frames /
-  retake_window_max_frames）です。
+  引数は存在しません。** clips はちょうど1件・窓長は [73, 上限] フレーム
+  です。上限は stage2_window で変わります（8×潜在フレーム数−7。standard で
+  169、high_resolution で 145、w61 で 481）。get_config の
+  limits.retake_window_max_frames は既定窓（standard）の値です。
   **retake_window_start_sec には既定値がありません**——retake_video_id を
   指定して省略すると、submit_chain がPOST前にエラーにします。
   **窓の開始秒を決める下調べには upload_video(file_path, max_frames=...)

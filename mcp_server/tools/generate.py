@@ -599,6 +599,11 @@ async def submit_chain(
     retake_tail_px: int = _RETAKE_TAIL_PX_DEFAULT,
     retake_regenerate_audio: bool = _RETAKE_REGENERATE_AUDIO_DEFAULT,
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT,
+    stage2_window: Literal[
+        "standard", "high_resolution", "full_length",
+        "w25", "w28", "w31", "w34", "w37", "w40", "w43",
+        "w46", "w49", "w52", "w55", "w58", "w61",
+    ] = "standard",
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -713,6 +718,21 @@ async def submit_chain(
         Stage-2で改めて固定されるため最終フレームは常に素材どおりになり
         ます。
 
+    Stage-2 の窓（``stage2_window``、既定 ``"standard"``）:
+      * Stage-2（仕上げ）を時間方向に何潜在フレームずつの窓で処理するかの
+        名前です。``standard``＝潜在22、``high_resolution``＝潜在19、
+        ``w25``〜``w61``＝名前の数字がそのまま潜在フレーム数。
+        ``full_length`` はA2V 1クリップ専用（タイムライン全体を1窓で処理）
+        で、クリップ1本＋``source_audio_id`` が必須です（撮り直しとは排他）。
+      * 窓が広いほど継ぎ目が減りますが、1窓あたりのトークン数が増えてVRAMの
+        快適上限に近づきます。窓ごとの目安解像度はMCPからは取れません
+        （WebUIのラベルか ``Docs/COMFORT_LIMIT_TABLE.md`` §12 を参照）。
+      * 撮り直しの窓長上限は ``8×潜在フレーム数−7``（standard 169・
+        high_resolution 145・w61 481）で、``source_video_context_frames``
+        の上限も窓で変わります（high_resolution では137）。
+      * 48fpsでは奇数段（w25・w31・…・w61）の多タイル構成はほとんどが422で
+        断られます（条件は 200×送り÷fps が整数）。
+
     撮り直し（Retake、既存クリップの「まん中」だけ作り直す時間方向の
     inpainting）:
       * ``retake_video_id``（``upload_video`` で取得したID）を指定すると
@@ -721,10 +741,10 @@ async def submit_chain(
         フレーム単位で切り出し、その窓**だけ**をエンジンへ渡します。
       * **窓長を決めるのは ``clips[0].num_frames`` ただ1つです**——長さを表す
         第2の引数は意図的に存在しません（食い違いを作らないため）。
-        受理される範囲は既定のstage-2窓で **[73, 169] フレーム**であり、
-        ``get_config`` の ``limits.retake_window_min_frames`` /
-        ``retake_window_max_frames`` で確認できます。``clips`` はちょうど1件
-        にしてください。
+        受理される範囲は **[73, 上限] フレーム**で、上限は ``stage2_window``
+        で変わります（上の「Stage-2 の窓」の節を参照）。``get_config`` の
+        ``limits.retake_window_max_frames`` は既定窓（standard）の値です。
+        ``clips`` はちょうど1件にしてください。
       * ``retake_window_start_sec`` は**必須**です（0以上の秒数）。
         ``retake_video_id`` を指定して ``retake_window_start_sec`` を省略すると、
         このツールがPOST前にエラーにします。
@@ -851,6 +871,8 @@ async def submit_chain(
         embed_mp4_metadata: submit_generate と同じ意味（**既定True**。完成した
             連結動画の ``output.mp4`` に生成条件を書き込みます。既定のままなら
             送信しません）。
+        stage2_window: Stage-2 の窓の名前（上の「Stage-2 の窓」の節。既定
+            ``"standard"`` のときは送信しません）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -936,6 +958,11 @@ async def submit_chain(
     # embed_mp4_metadata: same rule as submit_generate.
     if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
         payload["embed_mp4_metadata"] = embed_mp4_metadata
+    # stage2_window: same rule as vae_mode (sent only when it differs from the
+    # server default "standard"). No pre-check here: the server's 422 is the
+    # single source of truth (full_length shape / V2V context / retake window).
+    if stage2_window != "standard":
+        payload["stage2_window"] = stage2_window
 
     payload["overlap_frames"] = overlap_frames
     payload["overlap_strength"] = overlap_strength

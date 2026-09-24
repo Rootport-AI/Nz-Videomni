@@ -34,10 +34,10 @@ LABELS: dict[str, dict[str, str]] = {
         "tab_settings": "Settings",
         # --- MP4 Info tab (§3-164) ---
         "mp4info_lbl_file": "mp4 file",
-        "mp4info_lbl_text": "Generation conditions",
+        "mp4info_lbl_text": "Metadata (Generation conditions)",
         "mp4info_not_found": "No generation conditions were found.",
         # --- Settings: Output (§3-164) ---
-        "output_section_title": "Output",
+        "output_section_title": "Metadata output",
         "output_lbl_embed_mp4_metadata": ("Write generation conditions into the "
                                           "generated mp4 as metadata"),
         "output_info_embed_mp4_metadata": ("Writes the same content as metadata.json "
@@ -616,10 +616,10 @@ LABELS: dict[str, dict[str, str]] = {
         "tab_settings": "設定",
         # --- mp4 情報タブ（§3-164） ---
         "mp4info_lbl_file": "mp4 ファイル",
-        "mp4info_lbl_text": "生成条件",
-        "mp4info_not_found": "生成条件が見つかりませんでした",
+        "mp4info_lbl_text": "メタデータ（生成条件）",
+        "mp4info_not_found": "生成条件のメタデータが見つかりませんでした",
         # --- 設定: 出力（§3-164） ---
-        "output_section_title": "出力",
+        "output_section_title": "メタデータ出力",
         "output_lbl_embed_mp4_metadata": "生成したmp4に生成条件をメタデータとして書き込む",
         "output_info_embed_mp4_metadata": ("metadata.json と同じ内容を output.mp4／"
                                            "joined.mp4 のコメント欄（comment タグ）に"

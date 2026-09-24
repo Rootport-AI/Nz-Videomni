@@ -4213,7 +4213,7 @@ def test_embed_mp4_metadata_i18n_keys_present_in_both_languages():
         for lang in ("en", "ja"):
             assert key in LABELS[lang], f"missing {lang} label for {key}"
             assert LABELS[lang][key].strip()
-    assert LABELS["ja"]["mp4info_not_found"] == "生成条件が見つかりませんでした"
+    assert LABELS["ja"]["mp4info_not_found"] == "生成条件のメタデータが見つかりませんでした"
 
 
 def test_embed_mp4_metadata_default_constant_is_true():
@@ -4398,7 +4398,7 @@ def test_mp4_info_null_comment_returns_not_found_message():
 
     mp4_info = _mp4_info_handler(httpx.Response(200, json={"comment": None}))
     assert mp4_info("/tmp/x.mp4") == LABELS["en"]["mp4info_not_found"]
-    assert mp4_info("/tmp/x.mp4", "ja") == "生成条件が見つかりませんでした"
+    assert mp4_info("/tmp/x.mp4", "ja") == "生成条件のメタデータが見つかりませんでした"
 
 
 def test_mp4_info_cleared_file_returns_empty_without_request():

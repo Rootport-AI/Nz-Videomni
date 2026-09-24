@@ -13022,6 +13022,7 @@ argvの写し（オフライン）: `install_ltx.ps1`と同じ形の`$argv = @("
 - **Gradio**: 連結タブに窓のドロップダウンを新設しました（`gradio_ui/ui.py:907`。選択肢は 15 名・既定 `standard`）。既定のときは要求に `stage2_window` を載せません。プリセットの適用（`presets.apply_chain_preset`）も窓を受け取り、窓に応じた警告を出します。A2V は従来どおり `full_length` 固定です。
 - **変えていないもの**: C++ 側（`native/`）の `kStage2VTile=22` はテスト専用の関数からしか使われず、製品の挙動に関係しないので変えていません。MCP の `submit_chain` には `stage2_window` 引数がありません（対象外。§116.8）。
 - **コミット**: dev に 4 件のコミットです。`74f0d19`（バックエンド: chain_math・api/models・config・tests）、`3cb5f89`（フロントエンド: webui/src の 14 ファイルと配布コピー `AviUtl2-Plugin/NzVideomni.aux2`（配布コピーを含めて 15 ファイル））、`e3493b5`（Gradio: gradio_ui・tests）、`75a9549`（較正記録: `Docs/Outputs-archive/comfort-calib-2026-09-25`）。文書のコミットは、これらの後に続きます。
+- **追補のコミット**（MCP の `stage2_window`。§116.9）: `3b45b4a`（`mcp_server/tools/generate.py`・`mcp_server/server.py`・`tests/test_mcp_tools_generate.py`）。文書はその次のコミット
 
 ### 116.3 機械ゲート
 
@@ -13148,7 +13149,75 @@ LTX 2.5・公式 `default`（線 44,880）:
 - **48fps の奇数段は、多タイルの構成では実質使えません**（§116.4）。裁定で許容済みです。
 - **w61 は 24fps で約 20 秒になり、RoPE（時間方向の位置埋め込み）の学習上限に届きます。24fps 未満では超えます。** エンジンに歯止めは無く、落ちることもありません。説明の正本は[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) の「現在地」の【2026-09-25 追記】です。
 - **素材（末尾）の品質警告（`endSourceQualityLimitFrames`）は、窓が広いと 481 フレーム以下のクリップでは出なくなります。** 同じ追記を参照してください。
-- **MCP の `submit_chain` に `stage2_window` 引数を足すかどうかは、オーナーの判断待ちです。**
+- **MCP の `submit_chain` の `stage2_window` 引数は、§116.9 で対応済みです（2026-09-25 朝）。**
 - **撮り直しで 169 フレームを超える窓（最大 481）の一括アップサンプルは、w61・481 フレームの 1 回だけ実機で完走を確かめました**（§116.7 の 5。`peak_vram_mb` 12,169）。出来の目視はまだです。
 - **LTX 2.3 の Sulphur-2 Q6_K では、w46 の目安解像度（1216×704）が 2 回とも退避しました**（§116.6）。途中で立てた仮説「Q6_K では潜在 46 のタイルが解像度に依らず退避する」は、1088×576 の w46 が快適だったことで棄却しました。同じ点は Q4_K_M では快適です。変換器ごとに別の線を配る仕組みは製品に無いので（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第10.4節）、反映するかどうかはオーナーの判断待ちです。
 - **線の近くでは、トークン数に対して単調ではありません**（§116.6 の解釈 3）。LTX 2.3 Q6_K では線の 96% の点が退避し、110% の点が規則上は快適でした。線の内側が一様に安全とは言えません。
+
+### 116.9 追補: MCP `submit_chain` の `stage2_window`
+
+**結論: MCP の `submit_chain` でも Stage-2 の窓を選べるようになりました。** 16 名から選べ、既定は `standard` です。機械ゲートは緑で、実機でも `w25` を指定した連結生成が完走し、`metadata.json` に `w25` が記録されました。
+
+**裁定（2026-09-25 朝・オーナー）**: §116.8 で判断待ちだった「MCP の `submit_chain` に `stage2_window` 引数を足すかどうか」について、足すと決まりました。
+
+**変更**:
+
+- `mcp_server/tools/generate.py`
+  - `submit_chain` の最後尾（:602-606）に `stage2_window: Literal[16 名] = "standard"` を足しました。
+  - 既定と違うときだけ `payload["stage2_window"]` を載せます（:961-965。コメントは :961-963。`vae_mode` と同じ形）。
+  - docstring に「Stage-2 の窓」の節を足しました（:721-734）。16 名の意味、窓が広いほど継ぎ目が減る代わりに 1 窓あたりの負荷が増えること、目安解像度は MCP からは取れないこと、48fps の奇数段の制約を書いています。
+  - 撮り直しの節にあった「既定の stage-2 窓で [73, 169]」を、上限が窓で変わる書き方に改めました（:744-747）。
+  - `Args:` に 1 行足しました（:874-875）。
+- `mcp_server/server.py`: `INSTRUCTIONS` の撮り直しの節（:124-127）を同じく現行化しました。
+- `tests/test_mcp_tools_generate.py`: テストを 3 本足しました（:1162-1195）。
+  1. `w46` を渡すとボディに載る。
+  2. 省略したときと `standard` を渡したときは載らず、ボディのキー集合が変わらない。
+  3. inputSchema の選択肢 16 件が `chain_math.STAGE2_WINDOW_PRESETS` のキーと一致し、既定が `standard` である（パリティテスト）。
+- 変えていないもの: `.mcp.json`・API・`chain_math.py`。MCP サーバーはクライアントが起動するたびに立ち上がるので、再起動の作業はありません。
+
+**設計判断**:
+
+- **既定のときは送りません。** 操作パネルと Gradio も既定のときは省くので、同じボディになります。
+- **事前検証は足していません。** 組み合わせの可否（`full_length` の条件・48fps の奇数段など）はサーバーの 422 に委ねます（[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D15・D19・D22 と同じ理由です）。16 名に無い名前は、`Literal` による引数検証の段階で弾かれ、サーバーへは届きません。
+- **型を `| None` にしませんでした。** `None` を許すと inputSchema の選択肢が `anyOf` の内側に埋もれ、エージェントから見えにくくなるからです。実物の inputSchema は `{"default": "standard", "enum": ["standard", "high_resolution", "full_length", "w25", …, "w61"], "title": "Stage2 Window", "type": "string"}` です。
+- **引数を最後尾に置きました。** 既存のテストに引数 23 個を位置で渡すものがあり、途中に挟むとずれるからです（撮り直しの 5 引数を足したときと同じ規律です）。
+- 設計の記録は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D25 にあります。D16 の「`stage2_window` を送らない」は D25 が解除しました。
+
+**テスト結果**:
+
+| 物差し | 結果 |
+|---|---|
+| MCP のテスト 3 ファイル | 117 件合格・失敗 1 |
+| バックエンド pytest 全件 | 2,704 合格・失敗 1・スキップ 49 |
+
+失敗の 1 件はどちらも同じ既知のもの（`test_mcp_registration.py::test_backend_status_structured_content_not_wrapped_and_reachable_false`）で、バックエンドが稼働中だと落ちるテストです。今回の変更とは関係ありません。
+
+**実機確認（2026-09-25 朝・GPU 1 ジョブ・オーナー承認済み）**:
+
+- 確立済みの経路（自前の stdio クライアント・リポジトリの外）で `python -m mcp_server` を起動し、`submit_chain` を次の条件で呼びました: `stage2_window="w25"`・512×320・クリップ [49, 49]・24fps・シード 12345。
+- 結果は completed で、所要は 80 秒でした。
+- `outputs/29ea7cb9-a0ab-4581-a589-afef0d56b6a6/metadata.json` の記録:
+
+| 項目 | 値 |
+|---|---|
+| `chain.stage2_window` | `w25` |
+| `chain.v_tile` | 25 |
+| `chain.kt_v` | 4 |
+| `vram_optimization.peak_vram_mb` | 8,445 |
+
+- `tools/list` の inputSchema に、選択肢 16 件と既定 `standard` が出ることも確かめました。
+
+**敵対的コードレビュー（Opus・読み取り専用）**: 重大 0・主要 1・軽微 3 で、すべて採用しました。
+
+- 主要: テストの補助関数 `_capture_chain_body` が既存の同名関数と重複しており、新しく足した側は呼ばれない死んだコードでした。既存の関数を使うようにして削除しました。
+- 軽微 1: コメントの「unknown name」（未知の名前はサーバーが断る、という趣旨）は事実と合いませんでした。未知の名前は FastMCP の引数検証で弾かれ、サーバーへは届きません。
+- 軽微 2: `retake_window_min_frames` の 73 は窓に依らないので、窓で変わるのは上限（max）だけだと書くようにしました。
+- 軽微 3: docstring の上限の式が 2 か所に重なっていたので、撮り直しの節から除きました。
+- レビュー担当は `stage2_window="bogus"` を実際に呼び、pydantic の `literal_error` で `ToolError` になり、POST が送られないことを確かめました。
+
+**文書の更新**:
+
+- `README.md` 第8節の MCP のツール表（`submit_chain` の行）に、Stage-2 の窓を追記しました。
+- [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) に D25 を足し、見出しを「D1〜D25」に改め、テストの表に新しいテスト 3 本を書き足しました（D16 の本文は変えていません）。
+- [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-165 の残りから MCP の項目を削り、状態の行に「MCP も対応済み」と書きました。
+- 本節（§116.9）を足し、§116.2 に追補のコミットの行を足しました。

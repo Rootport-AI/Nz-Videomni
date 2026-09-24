@@ -167,10 +167,9 @@
 
 #### 3-165. Chained エンジンの潜在クリップサイズの追加（起票：2026-09-24）
 
-- **状態**: **実装済み（dev にコミット済み `74f0d19`・`3cb5f89`・`e3493b5`・`75a9549`）・較正は完了（配信値は据え置き）・オーナーの実機目視待ち。** 残りは次の 3 つです。
+- **状態**: **実装済み（dev にコミット済み `74f0d19`・`3cb5f89`・`e3493b5`・`75a9549`）・較正は完了（配信値は据え置き）・オーナーの実機目視待ち。MCP の `submit_chain` も対応済み（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.9）。** 残りは次の 2 つです。
   1. **オーナーの実機目視**（8 項目。項目と結果の欄は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.7）。合格したらクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移します。
-  2. **MCP の `submit_chain` に `stage2_window` 引数を足すかどうか**（オーナー判断。今回の対象外）。
-  3. **較正結果（Sulphur-2 Q6_K の w46 が線の内側で退避）を配信値へ反映するかの判断**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.6・§116.8）。
+  2. **較正結果（Sulphur-2 Q6_K の w46 が線の内側で退避）を配信値へ反映するかの判断**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.6・§116.8）。
 - **概要**: 連結生成の第 2 段（Stage-2）で選べる窓（潜在クリップ）に、22 より広い 25〜61 潜在フレームの 13 段（`w25`〜`w61`）を足しました。同じ尺なら窓が広いほど窓の境目を跨ぐ回数が減り、境目で出やすいちらつき・モーフィング・ドリフトが減る、というオーナーの見立てが動機です。
 - **裁定**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.1 にあります（理由を含む正本）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116（実装・ゲート・較正・申し送り）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第12節（窓ごとの目安解像度）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 冒頭の【2026-09-25 追記】（広い窓の注意点）、`chain_math.py` の `STAGE2_WINDOW_PRESETS`。

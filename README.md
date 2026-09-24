@@ -894,7 +894,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
 | `upload_audio` | ローカルの音声ファイルをアップロードする（A2V用） |
 | `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`）。`attention_backend` ほか生成の高速化6項目に加え、**画角拡張（Outpainting）の6引数**も指定できる |
-| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。同じく生成の高速化6項目に加え、**撮り直し（Retake）の5引数**も指定できる |
+| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。同じく生成の高速化6項目に加え、**撮り直し（Retake）の5引数**と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |
 | `list_jobs` | 全ジョブの一覧を要約付きで取得する |
 | `wait_for_job` | ジョブが終端状態になるまで待つ（最大45秒でタイムアウト） |

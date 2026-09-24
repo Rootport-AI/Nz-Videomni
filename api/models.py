@@ -712,8 +712,9 @@ class SourceVideoSpec(BaseModel):
     v1 ceiling well inside the HARD invariant enforced by
     :func:`chain_math.compute_chain_layout`: the frozen video head
     (``n_ctx_v = (context_frames-1)//8+1``) must fit inside stage-2 TILE 0
-    (``chain_math.STAGE2_V_TILE`` = 22 latents, i.e. <= 169 pixel frames /
-    ``chain_math.px_from_v_latent(chain_math.STAGE2_V_TILE)``) because the
+    (``v_tile`` latents of the chosen ``stage2_window``, e.g. 22 latents, i.e.
+    <= 169 pixel frames, for "standard" /
+    ``chain_math.px_from_v_latent(v_tile)``) because the
     variant-B hard-freeze only covers tile 0 — ``compute_chain_layout`` raises
     ValueError if that invariant is ever violated. Do NOT raise this cap without
     re-checking multi-tile freeze behaviour first.
@@ -776,9 +777,11 @@ class RetakeSpec(BaseModel):
 
     ``clips[0].num_frames`` is the SINGLE source for the window length — there is
     deliberately no second length field here to disagree with it. Its legal range
-    ([73, 169] frames for the default stage-2 window) is published as
-    ``config.limits.retake_window_min_frames`` / ``retake_window_max_frames`` and
-    enforced by ``chain_math.compute_chain_layout``.
+    ([73, ``chain_math.retake_max_window_px(v_tile)``] = 8*v_tile-7 frames for
+    the chosen stage-2 window — e.g. [73, 169] for the default "standard", up to
+    481 for "w61") is enforced by ``chain_math.compute_chain_layout``;
+    ``config.limits.retake_window_min_frames`` / ``retake_window_max_frames``
+    publish the default-window numbers.
 
     ``head_px`` must be 8n+1 and ``tail_px`` a multiple of 8 — the two ends sit on
     DIFFERENT latent grids because the video VAE is causal
@@ -1173,12 +1176,13 @@ class GenerateChainRequest(BaseModel):
 
     # Stage-2 window preset (ADDITIVE/optional — a request omitting this field is
     # byte-identical to before). "standard" keeps the frozen 22/18 stage-2 tile
-    # layout; "high_resolution" switches to 19/12 (a shorter window with a wider
-    # 7-frame overlap), which costs ~14% fewer attention tokens per tile and so
-    # keeps high resolutions inside the comfortable budget
-    # (chain_math.CHAIN_COMFORT_TOKEN_BUDGET) instead of spilling. It advances
-    # less per tile, so the same timeline gets MORE seams — hence opt-in, never
-    # the default (owner decision 2026-08-09, §3-57 sweep + follow-up).
+    # layout and is the default. The other tiled windows trade seams against
+    # per-tile weight: "high_resolution" (19/12, a shorter window with a wider
+    # 7-frame overlap) costs fewer attention tokens per tile but gets MORE seams
+    # (owner decision 2026-08-09, §3-57 sweep + follow-up); the "w25".."w61"
+    # ladder (window 25..61 in steps of 3, advance window-4, overlap 4; §3-165)
+    # gets FEWER seams at the cost of a heavier tile against the comfortable
+    # budget (chain_math.CHAIN_COMFORT_TOKEN_BUDGET).
     #
     # Named for the geometry, NOT for a duration: the window's advance is a
     # LATENT-frame count, so its wall-clock length depends on frame_rate. The UI
@@ -1194,7 +1198,11 @@ class GenerateChainRequest(BaseModel):
     # Single/Batch a2v flow builds. It deliberately does NOT bound how long that
     # clip may comfortably be: that axis is config.limits.spill_free_frames (the
     # per-resolution comfortable frame cap the server publishes), not this one.
-    stage2_window: Literal["standard", "high_resolution", "full_length"] = "standard"
+    stage2_window: Literal[
+        "standard", "high_resolution", "full_length",
+        "w25", "w28", "w31", "w34", "w37", "w40", "w43",
+        "w46", "w49", "w52", "w55", "w58", "w61",
+    ] = "standard"
 
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
@@ -1383,8 +1391,9 @@ class GenerateChainRequest(BaseModel):
                 # stage-2.
                 raise ValueError(
                     'stage2_window="full_length" requires source_audio (it is '
-                    "the audio-to-video window; every other chain shape keeps "
-                    'the tiled "standard" window)'
+                    "the audio-to-video window; every other chain shape uses "
+                    "one of the tiled windows (standard / high_resolution / "
+                    "w25..w61))"
                 )
             # No source_video / retake exclusivity check here on purpose: both
             # are ALREADY mutually exclusive with source_audio further up (the
@@ -1394,8 +1403,9 @@ class GenerateChainRequest(BaseModel):
         # V2V x non-default window: the frozen source head must leave stage-2
         # TILE 0 something to generate. The public
         # config.limits.v2v_context_frames_max (145) is sized for the standard
-        # window (ceiling 161) and is deliberately NOT changed here — the
-        # narrower "high_resolution" window (ceiling 137) needs its own check,
+        # window (ceiling 161; every wider "w*" window is higher still) and is
+        # deliberately NOT changed here — a narrower window such as
+        # "high_resolution" (ceiling 137) needs its own check,
         # or a 145-frame context would freeze tile 0 completely (an untested
         # degenerate that compute_chain_layout's own `n_ctx_v > v_tile` guard
         # would still wave through, since 19 is not > 19).
@@ -1407,12 +1417,12 @@ class GenerateChainRequest(BaseModel):
                     f"must be <= {max_ctx} when stage2_window={self.stage2_window!r} "
                     "(a longer frozen head would fill the whole first stage-2 "
                     "window, leaving nothing to generate). Shorten context_frames "
-                    'or switch stage2_window back to "standard".'
+                    "or choose a wider stage2_window."
                 )
 
         # NO end-source x window cross-validation here (deleted with the v2
         # internal-band design). The v1 mirror of the V2V check above capped
-        # end_source.context_frames at 8*(v_adv-1) — 136 standard / 88
+        # end_source.context_frames at 8*(v_adv-1) — e.g. 136 standard / 88
         # "high_resolution" — because the band had to fit inside the LAST stage-2
         # tile alongside its carry-over. The band may now span as many tiles as it
         # needs (``chain_math`` publishes the per-tile plan in
@@ -1425,16 +1435,17 @@ class GenerateChainRequest(BaseModel):
         # only geometry the both-side freeze was validated under
         # (VERIFICATION_LOG §55.2/§55.3) — but it is now enforced by BOUNDING the
         # window instead of refusing the combination: compute_chain_layout below
-        # checks the window against chain_math.retake_max_window_px(v_tile), i.e.
-        # 169 for "standard" (v_tile=22) and 145 for "high_resolution"
-        # (v_tile=19). ``stage2_v_tile`` is resolved above and passed in, so that
-        # bound follows the request's own preset. A 169-frame window under
+        # checks the window against chain_math.retake_max_window_px(v_tile) =
+        # 8*v_tile-7, e.g. 169 for "standard" (v_tile=22), 145 for
+        # "high_resolution" (v_tile=19) and 481 for "w61". ``stage2_v_tile``
+        # is resolved above and passed in, so that bound follows the request's
+        # own preset. A 169-frame window under
         # "high_resolution" — the case the old blanket 422 existed to stop,
         # because it would split into 2 tiles and freeze only the last one — is
         # therefore still a 422, now with the concrete ceiling in the message.
         # config.limits.retake_window_{min,max}_frames keeps publishing the
-        # STANDARD-preset numbers; a client that offers the narrower window is
-        # responsible for mirroring the 145 ceiling (see config.py).
+        # STANDARD-preset numbers; a client that offers other windows is
+        # responsible for mirroring retake_max_window_px(v_tile) (see config.py).
 
         try:
             layout = chain_math.compute_chain_layout(
@@ -1446,8 +1457,8 @@ class GenerateChainRequest(BaseModel):
                     self.source_video.context_frames if self.source_video else None
                 ),
                 # Window length + glue-band geometry (8n+1 window in
-                # [73, retake_max_window_px(v_tile)] — 169 for "standard", 145
-                # for "high_resolution" — head/tail grids, a free middle in BOTH
+                # [73, retake_max_window_px(v_tile)] — e.g. 169 for "standard",
+                # 145 for "high_resolution" — head/tail grids, a free middle in BOTH
                 # latent domains) is validated THERE, so the validator, the
                 # engine and the mock cannot disagree. Its ValueError surfaces
                 # as 422.

@@ -22,19 +22,58 @@ from api.models import GenerateChainRequest
 
 # ── preset table ─────────────────────────────────────────────────────────────
 def test_preset_table_contents_and_derived_overlap():
-    """The three presets and their DERIVED overlap (kt_v = v_tile - v_adv)."""
+    """The sixteen presets and their DERIVED overlap (kt_v = v_tile - v_adv)."""
     assert chain_math.STAGE2_WINDOW_PRESETS == {
         "standard": (22, 18),
         "high_resolution": (19, 12),
         "full_length": (61, 61),
+        "w25": (25, 21),
+        "w28": (28, 24),
+        "w31": (31, 27),
+        "w34": (34, 30),
+        "w37": (37, 33),
+        "w40": (40, 36),
+        "w43": (43, 39),
+        "w46": (46, 42),
+        "w49": (49, 45),
+        "w52": (52, 48),
+        "w55": (55, 51),
+        "w58": (58, 54),
+        "w61": (61, 57),
     }
     assert chain_math.STAGE2_WINDOW_DEFAULT == "standard"
     kt = {name: v_tile - v_adv
           for name, (v_tile, v_adv) in chain_math.STAGE2_WINDOW_PRESETS.items()}
     # standard keeps the S2-spike 4-frame overlap; high_resolution is the
     # follow-up run's wider 7-frame overlap ("のり代7"); full_length has NO
-    # overlap because it has no seam to overlap across (§1-19).
-    assert kt == {"standard": 4, "high_resolution": 7, "full_length": 0}
+    # overlap because it has no seam to overlap across (§1-19); the w25..w61
+    # ladder keeps the standard 4-frame overlap (§3-165).
+    assert kt == {
+        "standard": 4, "high_resolution": 7, "full_length": 0,
+        "w25": 4, "w28": 4, "w31": 4, "w34": 4, "w37": 4, "w40": 4, "w43": 4,
+        "w46": 4, "w49": 4, "w52": 4, "w55": 4, "w58": 4, "w61": 4,
+    }
+
+
+_W_WINDOWS = sorted(
+    (name for name in chain_math.STAGE2_WINDOW_PRESETS if name.startswith("w")),
+    key=lambda name: chain_math.STAGE2_WINDOW_PRESETS[name][0],
+)
+
+
+def test_w_ladder_is_25_to_61_in_steps_of_3_with_overlap_4():
+    """§3-165 owner decision 2026-09-24: every "w*" preset is ``w{v_tile}``,
+    windows 25..61 in steps of 3, advance = window - 4 (overlap 4)."""
+    assert (
+        [chain_math.STAGE2_WINDOW_PRESETS[n][0] for n in _W_WINDOWS]
+        == list(range(25, 62, 3))
+    )
+    for name in _W_WINDOWS:
+        v_tile, v_adv = chain_math.STAGE2_WINDOW_PRESETS[name]
+        assert name == f"w{v_tile}"
+        assert v_adv == v_tile - 4
+        assert v_adv % 3 == 0
+        assert chain_math.resolve_stage2_window(name) == (v_tile, v_adv)
 
 
 def test_every_multi_tile_preset_advance_is_a_multiple_of_three():
@@ -333,6 +372,27 @@ def test_at_24fps_the_two_windows_never_diverge():
     assert KNOWN_WINDOW_DIVERGENCES.get(24.0, set()) == set()
 
 
+@pytest.mark.parametrize("name", _W_WINDOWS)
+def test_at_24fps_every_w_window_accepts_exactly_what_standard_accepts(name):
+    """§3-165: the "no divergence at 24fps" property holds for every ladder
+    window too (their advances are all multiples of 3). Other frame rates are
+    deliberately NOT pinned here — e.g. at 48fps the odd-numbered windows reject
+    most multi-tile configurations; the measured counts are recorded in
+    Docs/VERIFICATION_LOG.md instead."""
+    std_tile, std_adv = chain_math.STAGE2_WINDOW_PRESETS["standard"]
+    w_tile, w_adv = chain_math.STAGE2_WINDOW_PRESETS[name]
+    diverged: set[tuple[int, int, int]] = set()
+    for nf in _UI_CLIP_FRAMES:
+        for n in _UI_CLIP_COUNTS:
+            for kv in _UI_KV:
+                clip_frames = [nf] * n
+                std = _raises(clip_frames, 24.0, kv, std_tile, std_adv)
+                w = _raises(clip_frames, 24.0, kv, w_tile, w_adv)
+                if (std is None) != (w is None):
+                    diverged.add((nf, n, kv))
+    assert diverged == set()
+
+
 @pytest.mark.parametrize("fps", _UI_FPS)
 def test_single_clip_window_divergence_set_is_exactly_the_measured_one(fps):
     """Single-clip divergences, enumerated. At 24fps (and everywhere except
@@ -402,6 +462,38 @@ def test_stage2_window_defaults_to_standard():
 def test_stage2_window_accepts_high_resolution():
     req = GenerateChainRequest(**{**_BASE_CHAIN, "stage2_window": "high_resolution"})
     assert req.stage2_window == "high_resolution"
+
+
+@pytest.mark.parametrize("name", _W_WINDOWS)
+def test_stage2_window_accepts_every_w_window(name):
+    """Every ladder window is accepted on a plain 2-clip chain WITHOUT
+    source_audio — the full_length-only guard is keyed on the NAME and must not
+    catch "w61" even though it shares full_length's 61-frame window."""
+    req = GenerateChainRequest(**{**_BASE_CHAIN, "stage2_window": name})
+    assert req.stage2_window == name
+    assert req.source_audio is None
+    assert len(req.clips) == 2
+
+
+def test_w61_accepts_a_multi_tile_chain_without_audio():
+    """w61 is a normal multi-tile window: 2 x 481f (the per-clip maximum) needs
+    two stage-2 tiles and is accepted, where full_length would 422."""
+    req = GenerateChainRequest(**{
+        **_BASE_CHAIN,
+        "clips": [{"num_frames": 481}, {"num_frames": 481}],
+        "stage2_window": "w61",
+    })
+    assert req.stage2_window == "w61"
+    layout = chain_math.compute_chain_layout([481, 481], 24.0, kv=3, v_tile=61, v_adv=57)
+    assert layout.n_tiles >= 2
+
+
+def test_api_accepts_w61_two_clips_without_source_audio(client):
+    """Same contract at the endpoint (mock backend): accepted, not a 422."""
+    response = client.post("/api/v1/generate/chain", json={
+        **_BASE_CHAIN, "stage2_window": "w61",
+    })
+    assert response.status_code == 202, response.text
 
 
 def test_stage2_window_rejects_unknown_value():
@@ -484,7 +576,7 @@ def test_v2v_context_145_rejected_on_the_high_resolution_window():
     message = str(excinfo.value)
     assert "137" in message                 # the derived ceiling, not a literal
     assert "context_frames" in message
-    assert "standard" in message            # tells the user the way out
+    assert "wider stage2_window" in message  # tells the user the way out
 
 
 def test_v2v_context_137_allowed_on_the_high_resolution_window():

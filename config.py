@@ -16,7 +16,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field, computed_field
 
-from chain_math import CHAIN_COMFORT_TOKEN_BUDGET
+from chain_math import CHAIN_COMFORT_TOKEN_BUDGET, STAGE2_V_TILE, px_from_v_latent
 
 logger = logging.getLogger("ltx.config")
 
@@ -439,21 +439,21 @@ class LimitsConfig(BaseModel):
     # Retake window length (POST /generate/chain, clips[0].num_frames when a
     # ``retake`` block is present). Published via /config so a UI can bound its
     # window control. 8n+1 like every other frame count. THESE TWO PUBLISH THE
-    # "standard" STAGE-2 WINDOW'S NUMBERS: 169 ==
-    # chain_math.retake_max_window_px(STAGE2_V_TILE=22), the largest window that
-    # still refines as ONE stage-2 window.
+    # DEFAULT ("standard") STAGE-2 WINDOW'S NUMBERS: the max is
+    # px_from_v_latent(STAGE2_V_TILE) == chain_math.retake_max_window_px(22) ==
+    # 169, the largest window that still refines as ONE stage-2 window.
     #
-    # The ceiling is NOT a constant any more: retake is allowed with
-    # stage2_window="high_resolution" (v_tile=19), where the real ceiling drops
-    # to retake_max_window_px(19) = 145. The server enforces the per-preset
-    # bound in chain_math.compute_chain_layout (a longer window is a 422 naming
-    # the concrete ceiling); a CLIENT that offers the narrower window must
-    # mirror the same 8*v_tile-7 formula for its own slider bound rather than
+    # The ceiling is NOT a constant across windows: retake is allowed with every
+    # tiled stage2_window, and the real ceiling is retake_max_window_px(v_tile)
+    # = 8*v_tile-7 (e.g. 145 for "high_resolution", 481 for "w61"). The server
+    # enforces the per-preset bound in chain_math.compute_chain_layout (a longer
+    # window is a 422 naming the concrete ceiling); a CLIENT that offers other
+    # windows must mirror the same formula for its own slider bound rather than
     # trusting retake_window_max_frames unconditionally. The floor (73) is
     # preset-independent — it is a quality bound, not a geometric one. The
     # geometry truth stays in chain_math.
     retake_window_min_frames: int = 73
-    retake_window_max_frames: int = 169
+    retake_window_max_frames: int = px_from_v_latent(STAGE2_V_TILE)
     # Comfortable attention-token ceiling for ONE stage-2 window of a chain,
     # published so a client can draw its resolution guides from a served number
     # instead of hard-coding one. PURELY CLIENT ADVICE: the server never

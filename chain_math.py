@@ -46,10 +46,8 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 # always the derived ``kt_v = v_tile - v_adv``.
 #
 #   "standard"        (22, 18) -> kt_v 4.  The S2-spike default, unchanged since
-#       Phase 3 WP4. 22 latent frames per tile keeps BOTH video and audio
-#       temporal RoPE positions well under the trained 20s ceiling (each tile
-#       restarts local positions at 0); advance 18 -> 4-frame overlap between
-#       consecutive stage-2 tiles.
+#       Phase 3 WP4. Each tile restarts local temporal RoPE positions at 0;
+#       advance 18 -> 4-frame overlap between consecutive stage-2 tiles.
 #   "high_resolution" (19, 12) -> kt_v 7.  Opt-in only (§3-57 sweep + follow-up,
 #       owner decision 2026-08-09). A 19-frame window costs ~14% fewer attention
 #       tokens per tile, which keeps high resolutions (>= ~1216x1664) inside the
@@ -69,6 +67,16 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 #       window makes its stage-2 equivalent to the single-shot one (§1-19). It
 #       is for that flow only: api/models.py enforces exactly 1 clip plus a
 #       source_audio before it can be selected.
+#   "w25" .. "w61"    (v, v - 4) -> kt_v 4.  The wider-window ladder (§3-165,
+#       owner decision 2026-09-24): windows 25..61 in steps of 3, each keeping
+#       the standard 4-frame overlap, so the advance v - 4 is always a multiple
+#       of 3 (the rule below). A wider window crosses fewer tile seams for the
+#       same timeline at the cost of a heavier tile (the comfort budget below is
+#       per tile, so the comfortable resolution shrinks as v grows). Unlike
+#       "full_length", "w61" is a normal multi-tile window (no clip-count or
+#       source_audio restriction). RoPE: w61 is 481 px frames = ~20s at 24fps,
+#       i.e. it reaches the trained ceiling — see
+#       Docs/CHAIN_STAGE2_RESEARCH_NOTES.md for the details.
 #
 # The advance of a preset that can produce TWO OR MORE tiles (kt_v > 0) MUST be
 # a multiple of 3: that is what keeps the 24fps video/audio advance rounding
@@ -84,6 +92,19 @@ STAGE2_WINDOW_PRESETS: dict[str, tuple[int, int]] = {
     "standard": (22, 18),
     "high_resolution": (19, 12),
     "full_length": (61, 61),
+    "w25": (25, 21),
+    "w28": (28, 24),
+    "w31": (31, 27),
+    "w34": (34, 30),
+    "w37": (37, 33),
+    "w40": (40, 36),
+    "w43": (43, 39),
+    "w46": (46, 42),
+    "w49": (49, 45),
+    "w52": (52, 48),
+    "w55": (55, 51),
+    "w58": (58, 54),
+    "w61": (61, 57),
 }
 STAGE2_WINDOW_DEFAULT = "standard"
 # The zero-overlap, single-tile window above, by name. Callers that need to
@@ -251,10 +272,11 @@ def stage2_max_context_px(v_tile: int) -> int:
     The variant-B hard-freeze covers stage-2 TILE 0 only, so the frozen head
     must fit inside it — but a head that fills it EXACTLY (``n_ctx_v ==
     v_tile``) leaves tile 0 100% frozen, an untested degenerate. This is the
-    ceiling for ``n_ctx_v <= v_tile - 1``: 161 for the standard window (above
+    ceiling for ``n_ctx_v <= v_tile - 1``. E.g. 161 for "standard" (above
     ``config.limits.v2v_context_frames_max`` = 145, so it never binds there)
     and 137 for "high_resolution" (below 145, so it DOES bind — see
-    ``api/models.py``'s GenerateChainRequest cross-validation).
+    ``api/models.py``'s GenerateChainRequest cross-validation); every wider
+    "w*" window is above 145 too.
     """
     return px_from_v_latent(v_tile - 1)
 
@@ -282,8 +304,8 @@ def stage2_max_context_px(v_tile: int) -> int:
 # The whole window is refined as ONE stage-2 tile (the both-side freeze was only
 # ever validated in that degenerate geometry — VERIFICATION_LOG §55.2/§55.3), so
 # the window must fit a single tile: ``n_tiles == 1``. That is exactly
-# ``px_from_v_latent(v_tile)`` = 169 px frames for the standard (22, 18) window
-# (177 already splits into 2 tiles). Note this is the sibling of
+# ``px_from_v_latent(v_tile)`` px frames — e.g. 169 for the standard (22, 18)
+# window (177 already splits into 2 tiles), 481 for "w61". Note this is the sibling of
 # :func:`stage2_max_context_px` above but WITHOUT its ``- 1``: V2V needs tile 0
 # to have something left to generate after the frozen head, whereas retake
 # deliberately fills the whole tile — its free middle is carved out INSIDE the
@@ -299,9 +321,10 @@ RETAKE_WINDOW_MIN_PX = 73
 def retake_max_window_px(v_tile: int) -> int:
     """Largest retake window (8n+1 px frames) that stays ONE stage-2 tile.
 
-    169 for the standard (22, 18) preset. ``config.limits.retake_window_max_frames``
-    publishes the standard-preset number to clients; this function is the
-    geometry-truth an engine/validator uses for whatever ``v_tile`` is in play.
+    ``8 * v_tile - 7``, e.g. 169 for the standard (22, 18) preset and 481 for
+    "w61". ``config.limits.retake_window_max_frames`` publishes the
+    default-preset number to clients; this function is the geometry-truth an
+    engine/validator uses for whatever ``v_tile`` is in play.
     """
     return px_from_v_latent(v_tile)
 

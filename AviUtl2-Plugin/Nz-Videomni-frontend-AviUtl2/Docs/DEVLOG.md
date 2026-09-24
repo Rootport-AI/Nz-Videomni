@@ -4655,12 +4655,12 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
   > **追記（2026-09-18）**: **実機ゲートはオーナーが同日に実施し、全項目合格した**（手順は[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.22）——行のタグはAdd・Replaceのどちらも`request.loras`が規則どおりで、Settingsの表も形で合格である。**その場でオーナーの裁定が2つ出た**: ①**表の下の注記はすべて撤去する**（§123.3の追記）／②**バックエンド同梱のGradio検証UIにも埋め込み処理器の常駐の切替を足す**（バックエンド側の改修なので本書の範囲外。記録はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §114）。撤去したあとの再確認も同日に合格し、**台帳はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-159（行ごとのタグ）・§3-163（Settingsの表）としてクローズした**。機械ゲートと実機ゲートの実数の正本は、引き続き同[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §114である。**本文は追記専用の規律どおり不変**である。
 
-## 124. Toolboxを「Tracking」「mp4 info」の2サブタブに分け、Settingsに出力設定とベースモデル選択を足した — 状態は1箇所に置いてpropsで配り、作り直しは`key`で起こす・保存物は鍵が無ければ既定で読む（バックエンド台帳 §3-164／台帳外のオーナー依頼〔完了記録は`PENDING_TASKS_CLOSED.md` §3-166〕。2026-09-24）
+## 124. Toolboxを「Tracking」「mp4 info」の2サブタブに分け、Settingsに出力設定とベースモデル選択を足した — 状態は1箇所に置いてpropsで配り、作り直しは`key`で起こす・保存物は鍵が無ければ既定で読む（バックエンド台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-164／台帳外のオーナー依頼〔完了記録は同§3-166〕。2026-09-24）
 
 ### 124.1 結論
 
 - **Toolboxタブを2つのサブタブに分けた。** 「Tracking」は従来の物体追尾で、中身は1行も変えていない。「mp4 info」は新しい道具で、生成した mp4 をドロップする（またはボタンから選ぶ）と、その mp4 に書き込まれた生成条件（`metadata.json` と同じ JSON）を右側の読み取り専用の欄にそのまま表示する。Stable Diffusion web UI（A1111）の「PNG Info」の mp4 版である。
-- **Settingsに「Output／出力」の行を足した。** 「生成したmp4に生成条件をメタデータとして書き込む」の On／Off で、既定は On。Off のときだけ、すべての生成要求に`embed_mp4_metadata: false`が載る。
+- **Settingsに「Metadata output／メタデータ出力」の行を足した。** 「生成したmp4に生成条件をメタデータとして書き込む」の On／Off で、既定は On。Off のときだけ、すべての生成要求に`embed_mp4_metadata: false`が載る。
 - **Settingsの「モデル」区画のすぐ上に「Base model／ベースモデル」の選択を足した。** 画面左上の選択と同じ部品・同じ状態・同じ処理で、どちらで切り替えても両方が追随する。
 - 埋め込みそのもの（バックエンド側）の規則はバックエンド[`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.6、読み出しの入口は[`API_REFERENCE.md`](API_REFERENCE.md) §3.23が正本で、本書には書き写さない。
 
@@ -4695,4 +4695,6 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 124.6 状態
 
 - **機械ゲート（型検査・vitest）の実数と、配布aux2のハッシュの正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §115である。** 本書には書き写さない。
-- **オーナーの実機ゲートは未実施である。** 確認項目の一覧も同§115にあり、結果はそこへ追記する。台帳は、実機ゲートの合格後にバックエンド`PENDING_TASKS.md` §3-164を閉じ、ベースモデル選択は台帳外の依頼として`PENDING_TASKS_CLOSED.md` §3-166に記録する予定である。
+- **オーナーの実機ゲートはG1〜G7が全合格し、実機ゲート後の手直しを確かめるG9も合格した（2026-09-24）。** 項目ごとの結果の正本は同§115.7である。台帳はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-164としてクローズし、ベースモデル選択は台帳外の依頼として同§3-166に記録した。
+- **実機ゲート後の手直し**: 「mp4 info」とSettingsの文言を整えたうえで（文言の一覧は同§115.8）、読み出し欄のCSSを`white-space: pre`から`pre-wrap`に替えて`overflow-wrap: anywhere`を足した（`modes/toolbox/Mp4InfoSection.css`）。高さは固定のままで、はみ出す分は縦にスクロールする。
+- **教訓**: 読み取り専用で整形済みのJSONを出す欄でも、長いプロンプトは1行が横に伸びる。**字下げを保つ`pre`ではなく、字下げを保ったまま折り返す`pre-wrap`を最初から選ぶ**べきだった。

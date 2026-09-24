@@ -78,6 +78,9 @@ from .presets import (
     apply_chain_preset,
     apply_preset,
     build_preset_choices,
+    # Aliased: build_ui has a gr.Markdown named ``chain_preset_warning``
+    # (the warning's display), which would shadow the function.
+    chain_preset_warning as compute_chain_preset_warning,
     compute_chain_duration_label,
     compute_spill_warning,
     format_duration_label,
@@ -85,6 +88,13 @@ from .presets import (
     slot_step_state,
 )
 from .styles import CUSTOM_CSS
+from .comfort import (
+    STAGE2_WINDOW_DEFAULT,
+    build_stage2_window_choices,
+    engine_info_from_models,
+    stage2_window_choices_for,
+    status_availability,
+)
 
 
 def build_spill_rows(config: dict | None) -> list[list]:
@@ -883,6 +893,27 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             gr.Checkbox(value=True, label=L("chk_chunked_upsample")),
                             "chk_chunked_upsample",
                         )
+
+                        # Stage-2 window (§3-165): the choices are
+                        # gradio_ui.comfort.STAGE2_WINDOW_CHOICES (the
+                        # chain_math table minus "full_length"). Each label
+                        # quotes the loaded engine and its recommended 16:9
+                        # size at the comfort budget that applies to the
+                        # Settings-tab acceleration values; the labels are
+                        # rebuilt by relabel_stage2_window (see events) from
+                        # chain_engine_state, which refresh_model_dropdowns
+                        # fills from GET /models + GET /status. Built here with
+                        # the no-engine / 40,000 fallback.
+                        chain_stage2_window = reg(gr.Dropdown(
+                            choices=build_stage2_window_choices(),
+                            value=STAGE2_WINDOW_DEFAULT,
+                            label=L("lbl_stage2_window"),
+                            info=L("info_stage2_window"),
+                        ), "lbl_stage2_window")
+                        reg(chain_stage2_window, "info_stage2_window", "info")
+                        # {"engine_family", "engine_label", "sage_available",
+                        #  "prefetch_available"} of the ACTIVE base model.
+                        chain_engine_state = gr.State({})
 
                         # clip list: 24 fixed slots (slots 1-2 shown by default;
                         # the ± buttons grow/shrink the visible count). The open
@@ -1890,12 +1921,24 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         chain_frame_nums = [_slot[2] for _slot in chain_clip_slots]
 
         def on_chain_preset_change(name, config, *rest):
-            # rest = 24 enabled flags + fps + overlap + lang.
+            # rest = 24 enabled flags + fps + overlap + lang + stage-2 window.
             enabled_flags = list(rest[:CHAIN_MAX_CLIPS])
-            fps, overlap, lang = rest[CHAIN_MAX_CLIPS:CHAIN_MAX_CLIPS + 3]
+            fps, overlap, lang, window = rest[CHAIN_MAX_CLIPS:CHAIN_MAX_CLIPS + 4]
             return apply_chain_preset(
                 name, config, enabled_flags=enabled_flags,
                 fps=fps, overlap_frames=overlap, lang=lang,
+                stage2_window=window,
+            )
+
+        def on_chain_window_preset_warning(name, config, *rest):
+            # Same inputs as on_chain_preset_change, but only the warning is
+            # re-evaluated (the window changed; the fields are left alone).
+            enabled_flags = list(rest[:CHAIN_MAX_CLIPS])
+            fps, overlap, lang, window = rest[CHAIN_MAX_CLIPS:CHAIN_MAX_CLIPS + 4]
+            return compute_chain_preset_warning(
+                name, config, enabled_flags=enabled_flags,
+                fps=fps, overlap_frames=overlap, lang=lang,
+                stage2_window=window,
             )
 
         # ---- Chain clip-count estimate (live duration readout) ----
@@ -1904,10 +1947,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # slot (which the ± handler keeps off anyway) can never inflate the
         # estimate. Wired to every trigger below AND re-run on lang switch so the
         # readout never keeps a stale-language string.
+        # The stage-2 window sits BEFORE the variable-length run (the enabled
+        # flags + frames are sliced by fixed position after it).
         chain_est_inputs = [chain_open_count, lang_state, chain_fps, chain_overlap,
+                            chain_stage2_window,
                             *chain_enabled_boxes, *chain_frame_nums]
 
-        def on_chain_estimate(open_count, lang, fps, overlap, *enabled_and_frames):
+        def on_chain_estimate(open_count, lang, fps, overlap, window,
+                              *enabled_and_frames):
             enabled = list(enabled_and_frames[:CHAIN_MAX_CLIPS])
             frames = list(enabled_and_frames[CHAIN_MAX_CLIPS:2 * CHAIN_MAX_CLIPS])
             try:
@@ -1916,12 +1963,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 oc = CHAIN_MAX_CLIPS
             masked = [bool(e) and (i < oc) for i, e in enumerate(enabled)]
             return gr.update(value=compute_chain_duration_label(
-                masked, frames, fps, overlap, lang))
+                masked, frames, fps, overlap, lang, stage2_window=window))
 
+        chain_preset_inputs = [chain_preset, config_state, *chain_enabled_boxes,
+                               chain_fps, chain_overlap, lang_state,
+                               chain_stage2_window]
         chain_preset.change(
             on_chain_preset_change,
-            inputs=[chain_preset, config_state, *chain_enabled_boxes,
-                    chain_fps, chain_overlap, lang_state],
+            inputs=chain_preset_inputs,
             outputs=[chain_width, chain_height, chain_crop_enabled,
                      chain_crop_w, chain_crop_h, chain_crop_row,
                      *chain_frame_nums, chain_preset_warning],
@@ -1931,11 +1980,18 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             on_chain_estimate, inputs=chain_est_inputs, outputs=chain_duration_md,
         )
 
-        # Every enabled/frames/fps/overlap edit refreshes the estimate live.
+        # Every enabled/frames/fps/overlap/window edit refreshes the estimate
+        # live.
         for _ctrl in (*chain_enabled_boxes, *chain_frame_nums,
-                      chain_fps, chain_overlap):
+                      chain_fps, chain_overlap, chain_stage2_window):
             _ctrl.change(on_chain_estimate, inputs=chain_est_inputs,
                          outputs=chain_duration_md)
+        # A window change also re-evaluates the preset's chain-total warning
+        # (the layout geometry depends on the window).
+        chain_stage2_window.change(
+            on_chain_window_preset_warning, inputs=chain_preset_inputs,
+            outputs=chain_preset_warning,
+        )
 
         # ---- Clip Chain ± buttons (grow/shrink the visible clip count) ----
         # chain_extra_* cover slots 2..24 (slot 1 is always visible); the ±
@@ -1947,7 +2003,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         chain_extra_use = chain_enabled_boxes[1:]
 
         def _make_chain_step(delta):
-            def handler(count, lang, fps, overlap, *enabled_and_frames):
+            def handler(count, lang, fps, overlap, window, *enabled_and_frames):
                 enabled = list(enabled_and_frames[:CHAIN_MAX_CLIPS])
                 frames = list(enabled_and_frames[CHAIN_MAX_CLIPS:2 * CHAIN_MAX_CLIPS])
                 new_count, states, minus_on, plus_on, counter = slot_step_state(
@@ -1963,7 +2019,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     eff = enabled[idx + 1] if use is None else use
                     masked.append(bool(eff) and vis)
                 est = gr.update(value=compute_chain_duration_label(
-                    masked, frames, fps, overlap, lang))
+                    masked, frames, fps, overlap, lang, stage2_window=window))
                 return (new_count, *group_updates, *use_updates,
                         gr.update(interactive=minus_on),
                         gr.update(interactive=plus_on),
@@ -1971,6 +2027,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             return handler
 
         _chain_step_inputs = [chain_open_count, lang_state, chain_fps, chain_overlap,
+                              chain_stage2_window,
                               *chain_enabled_boxes, *chain_frame_nums]
         _chain_step_outputs = [chain_open_count, *chain_extra_groups,
                                *chain_extra_use, chain_minus_btn, chain_plus_btn,
@@ -2018,7 +2075,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # APPENDED at the very end of the chain inputs list below, in that
         # order (attention_backend, accel_prefetch, accel_keep_resident,
         # accel_fused_dequant, accel_vae, accel_keep_resident_embeddings),
-        # followed by the Output embed-mp4-metadata checkbox (§3-164).
+        # followed by the Output embed-mp4-metadata checkbox (§3-164) and,
+        # LAST, the chain-only stage-2 window dropdown (§3-165).
         # generate_chain keeps
         # ``src_audio`` as its last POSITIONAL parameter (never wired from this
         # tab, and relied on positionally by tests/test_gradio_v2v_a2v.py's
@@ -2030,14 +2088,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # ALL of them (and the ``args[:-N]`` slice) by one -- a silent
         # mis-wiring otherwise. tests/test_gradio_ui.py locks the order.
         def chain_dispatch(*args):
-            yield from chain_generate(*args[:-7],
-                                      attention_backend=args[-7],
-                                      block_swap_prefetch=args[-6],
-                                      keep_resident=args[-5],
-                                      fused_gguf_dequant_kernel=args[-4],
-                                      vae_mode=args[-3],
-                                      keep_resident_embeddings=args[-2],
-                                      embed_mp4_metadata=args[-1])
+            yield from chain_generate(*args[:-8],
+                                      attention_backend=args[-8],
+                                      block_swap_prefetch=args[-7],
+                                      keep_resident=args[-6],
+                                      fused_gguf_dequant_kernel=args[-5],
+                                      vae_mode=args[-4],
+                                      keep_resident_embeddings=args[-3],
+                                      embed_mp4_metadata=args[-2],
+                                      stage2_window=args[-1])
 
         chain_generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
@@ -2057,9 +2116,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md
             # §3-66, filed as §3-50 at the time) AND the
             # keep-resident-embeddings checkbox, then the Output
-            # embed-mp4-metadata checkbox (§3-164), are APPENDED last (in
-            # that order) and reach the handler as keywords via
-            # chain_dispatch above.
+            # embed-mp4-metadata checkbox (§3-164), then the stage-2 window
+            # dropdown (§3-165), are APPENDED last (in that order) and reach
+            # the handler as keywords via chain_dispatch above.
             inputs=[prompt, negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
@@ -2069,7 +2128,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
-                    accel_keep_resident_embeddings, output_embed_mp4_metadata],
+                    accel_keep_resident_embeddings, output_embed_mp4_metadata,
+                    chain_stage2_window],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),
@@ -2301,8 +2361,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             "accel_vae": accel_vae,
             "accel_keep_resident_embeddings": accel_keep_resident_embeddings,
         }
+        # chain_engine_state (§3-165) sits between the category dropdowns and
+        # the gated controls, so the gated updates stay the TAIL.
         model_refresh_outputs = [
             *model_all_dds,
+            chain_engine_state,
             *(_gated_components[control] for control in GATED_CONTROLS),
         ]
 
@@ -2317,6 +2380,21 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             active = active_base_model(models_json)
             return gr.update(choices=choices,
                              value=active if active in ids else ids[0])
+
+        def _chain_engine_state(models_json):
+            """The Clip Chain tab's engine State (§3-165): the ACTIVE base
+            model's engine family + display name from /models, plus sage /
+            prefetch availability from /status (``None`` = unknown, e.g. the
+            status fetch failed — counted as available, like the WebUI)."""
+            family, label = engine_info_from_models(models_json)
+            try:
+                status_json = api.get_status()
+            except Exception:
+                status_json = None
+            sage, prefetch = status_availability(
+                status_json if isinstance(status_json, dict) else None)
+            return {"engine_family": family, "engine_label": label,
+                    "sage_available": sage, "prefetch_available": prefetch}
 
         def refresh_model_dropdowns(lang, warn: bool = True):
             models_json, err = fetch_models_safe(api, lang)
@@ -2340,7 +2418,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 gr.update(choices=build_model_choices(models_json, cat, lang),
                           value=model_active_value(models_json, cat))
                 for cat in MODEL_CATEGORIES
-            ) + tuple(
+            ) + (_chain_engine_state(models_json),) + tuple(
                 gr.update(visible=False, value=RESET_VALUES[control])
                 if control in hidden else gr.update(visible=True)
                 for control in GATED_CONTROLS
@@ -2348,6 +2426,33 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         model_refresh_btn.click(refresh_model_dropdowns, inputs=lang_state,
                                 outputs=model_refresh_outputs)
+
+        # ---- Clip Chain stage-2 window labels (§3-165) ----
+        # The labels depend on the language, the served limits, the loaded
+        # engine (chain_engine_state, refilled by every refresh_model_dropdowns
+        # run — the Refresh button, page load and the post-Load re-pull) and
+        # the six acceleration values, so each of those re-runs this one pure
+        # rebuild (the values are window names and never change, so the
+        # selection is kept).
+        _accel_inputs = [attention_backend, accel_prefetch, accel_keep_resident,
+                         accel_fused_dequant, accel_vae,
+                         accel_keep_resident_embeddings]
+
+        def relabel_stage2_window(lang, config, engine_state, *accel_values):
+            return gr.update(choices=stage2_window_choices_for(
+                lang, config, engine_state, *accel_values))
+
+        # ONE listener for every trigger. The language is read from lang_dd
+        # itself (lang_state is only synced by lang_dd's own .change listener,
+        # which may not have run yet on a language switch; lang_dd always
+        # holds the current language).
+        gr.on(
+            triggers=[config_state.change, chain_engine_state.change,
+                      *(c.change for c in _accel_inputs), lang_dd.change],
+            fn=relabel_stage2_window,
+            inputs=[lang_dd, config_state, chain_engine_state, *_accel_inputs],
+            outputs=chain_stage2_window, show_progress="hidden",
+        )
         # show_progress="hidden": same rationale as on_page_load's show_progress.
         demo.load(lambda lang: refresh_model_dropdowns(lang, warn=False),
                   inputs=lang_state, outputs=model_refresh_outputs,
@@ -2501,6 +2606,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     # dropdowns, and the base-model .input handler.
     demo.refresh_model_dropdowns = refresh_model_dropdowns  # type: ignore[attr-defined]
     demo.on_base_model_change = on_base_model_change  # type: ignore[attr-defined]
+    # Clip Chain stage-2 window (§3-165): the label rebuild + the closures
+    # whose argument layout the window changed.
+    demo.relabel_stage2_window = relabel_stage2_window  # type: ignore[attr-defined]
+    demo.on_chain_estimate = on_chain_estimate  # type: ignore[attr-defined]
+    demo.make_chain_step = _make_chain_step  # type: ignore[attr-defined]
+    demo.chain_dispatch = chain_dispatch  # type: ignore[attr-defined]
+    demo.on_chain_window_preset_warning = on_chain_window_preset_warning  # type: ignore[attr-defined]
     # "Set audios" closure (Docs/PENDING_TASKS_CLOSED.md's old §4-29, closed
     # 2026-09-01): lets a test drive the scan/merge/write path with an
     # explicit frame cap without a live event round-trip.

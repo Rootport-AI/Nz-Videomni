@@ -237,7 +237,7 @@ def compute_chain_duration_label(enabled_flags, frames_list, fps,
     the stage-2 window preset NAME; ``None`` -> the default, i.e. the exact
     geometry this readout used before the knob existed. See
     ``gradio_ui/validation.check_chain_total`` for why this is plumbed through
-    even though this tab has no window selector yet."""
+    (the tab's window dropdown, §3-165, feeds it)."""
     import chain_math
 
     flags = list(enabled_flags or [])
@@ -325,7 +325,7 @@ def _chain_preset_total_warning(recommended_frames, n_enabled_clips, fps,
 def apply_chain_preset(name: str, config: dict | None,
                         enabled_flags: list | None = None,
                         fps=24.0, overlap_frames=None,
-                        lang: str = _DEFAULT_LANG):
+                        lang: str = _DEFAULT_LANG, stage2_window=None):
     """Resolve a preset name to the Clip Chain tab's field values.
 
     Mirrors :func:`apply_preset`'s server-config-first / ``PRESETS``-fallback
@@ -366,6 +366,10 @@ def apply_chain_preset(name: str, config: dict | None,
                                 falls back to ``chain_math.DEFAULT_OVERLAP_FRAMES``
                                 (3), the same default the Slider itself uses.
       6. ``lang``            -- current UI language for ``L()`` lookups.
+      7. ``stage2_window``   -- (ADDITIVE, §3-165, keyword after ``lang`` —
+                                see ``compute_chain_duration_label``) the
+                                chain tab's stage-2 window NAME; feeds only
+                                the warning's geometry. ``None`` -> default.
 
     Returns a 31-tuple of ``gr.update()``/plain values, in this exact order
     (CONTRACT for the ``chain_preset.change`` ``outputs=[...]`` wiring):
@@ -428,7 +432,21 @@ def apply_chain_preset(name: str, config: dict | None,
 
     warning_update = _chain_preset_total_warning(
         recommended, n_enabled, fps, overlap_frames, lang,
+        stage2_window=stage2_window,
     )
 
     return (width_v, height_v, crop_enabled_v, crop_w_v, crop_h_v, crop_row_update,
             *clip_updates, warning_update)
+
+
+def chain_preset_warning(name: str, config: dict | None,
+                         enabled_flags: list | None = None,
+                         fps=24.0, overlap_frames=None,
+                         lang: str = _DEFAULT_LANG, stage2_window=None):
+    """Only the chain-total warning update of :func:`apply_chain_preset` (its
+    last element), for re-evaluating the warning when the stage-2 window
+    changes WITHOUT re-applying the preset's resolution / clip lengths (which
+    would overwrite the user's edits)."""
+    return apply_chain_preset(name, config, enabled_flags=enabled_flags,
+                              fps=fps, overlap_frames=overlap_frames,
+                              lang=lang, stage2_window=stage2_window)[-1]

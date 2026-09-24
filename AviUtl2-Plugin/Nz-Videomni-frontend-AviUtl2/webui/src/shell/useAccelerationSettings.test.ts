@@ -6,6 +6,7 @@ import {
   BLOCK_SWAP_PREFETCH_SERVER_DEFAULT,
   KEEP_RESIDENT_SERVER_DEFAULT,
   KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+  EMBED_MP4_METADATA_SERVER_DEFAULT,
   FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
   VAE_MODE_DEFAULT,
 } from "./accelerationSettings";
@@ -29,6 +30,7 @@ describe("useAccelerationSettings", () => {
       fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
       vaeMode: VAE_MODE_DEFAULT,
       keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+      embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     });
   });
 
@@ -62,6 +64,7 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
 
@@ -75,6 +78,7 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
   });
@@ -95,6 +99,7 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
 
@@ -108,6 +113,7 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
   });
@@ -150,6 +156,7 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
 
@@ -163,6 +170,7 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
   });
@@ -252,6 +260,7 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: true,
         vaeMode: VAE_MODE_DEFAULT,
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
 
@@ -322,6 +331,7 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: "prune_vaed",
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
 
@@ -364,6 +374,7 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
         keepResidentEmbeddings: true,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
 
@@ -443,8 +454,43 @@ describe("useAccelerationSettings", () => {
         fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
         vaeMode: VAE_MODE_DEFAULT,
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+        embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
+  });
+
+  // §3-164: the Settings panel's Output row shares this store.
+  it("setEmbedMp4Metadata updates state, writes through, and survives a remount", async () => {
+    const { result, unmount } = renderHook(() => useAccelerationSettings());
+    expect(result.current.acceleration.embedMp4Metadata).toBe(true);
+
+    act(() => result.current.setEmbedMp4Metadata(false));
+
+    expect(result.current.acceleration.embedMp4Metadata).toBe(false);
+    expect(result.current.acceleration.attentionBackend).toBe(ATTENTION_BACKEND_DEFAULT);
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).embedMp4Metadata).toBe(false);
+    });
+    unmount();
+
+    const { result: result2 } = renderHook(() => useAccelerationSettings());
+    expect(result2.current.acceleration.embedMp4Metadata).toBe(false);
+  });
+
+  it("a stored JSON blob written before §3-164 (no embedMp4Metadata key) reads back as the default (on)", () => {
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({ attentionBackend: "sage", blockSwapPrefetch: true, keepResidentEmbeddings: true }),
+    );
+    const { result } = renderHook(() => useAccelerationSettings());
+    expect(result.current.acceleration.embedMp4Metadata).toBe(EMBED_MP4_METADATA_SERVER_DEFAULT);
+    expect(result.current.acceleration.attentionBackend).toBe("sage");
+  });
+
+  it("the pre-2026-08-01 bare backend string reads back with embedMp4Metadata at its default", () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, "sage");
+    const { result } = renderHook(() => useAccelerationSettings());
+    expect(result.current.acceleration.embedMp4Metadata).toBe(EMBED_MP4_METADATA_SERVER_DEFAULT);
   });
 
   it("resetToServerDefaults on a field already at its default keeps the SAME object (no re-render)", () => {

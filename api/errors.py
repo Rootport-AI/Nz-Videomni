@@ -657,3 +657,28 @@ def track_failed(detail: str | None = None) -> APIError:
     this is raised.
     """
     return APIError("TRACK_FAILED", "Object tracking failed", 503, detail=detail)
+
+
+# --- mp4 recipe read-out (台帳 §3-164, POST /utils/mp4-info) ---------------
+
+
+def local_only(detail: str | None = None) -> APIError:
+    """The endpoint reads a path on the SERVER's disk, so it answers only
+    requests from the same machine (loopback). 403 even when the server was
+    started with ``--listen``: a LAN client must not be able to probe the
+    server's files by path.
+    """
+    return APIError(
+        "LOCAL_ONLY", "This endpoint accepts requests from this machine only", 403, detail=detail
+    )
+
+
+def media_not_found(path: str) -> APIError:
+    """The given path does not exist or is not a regular file. 404."""
+    return APIError("MEDIA_NOT_FOUND", f"media file not found: {path}", 404)
+
+
+def media_unreadable(detail: str | None = None) -> APIError:
+    """ffprobe could not read the file, or the path is a UNC network path
+    (refused before any filesystem access). 422."""
+    return APIError("MEDIA_UNREADABLE", "The media file could not be read", 422, detail=detail)

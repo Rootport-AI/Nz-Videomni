@@ -112,12 +112,12 @@ def _demo():
     return build_ui(_BASE, api_key=None)
 
 
-def test_tab_order_is_generate_chain_style_jobs_settings():
+def test_tab_order_is_generate_chain_style_jobs_mp4info_settings():
     demo = _demo()
     tabs = [c.label for c in demo.blocks.values() if isinstance(c, gr.Tab)]
     en = LABELS["en"]
     assert tabs == [en["tab_gen"], en["tab_concat"], en["tab_style_lora"],
-                    en["tab_jobs"], en["tab_settings"]]
+                    en["tab_jobs"], en["tab_mp4info"], en["tab_settings"]]
 
 
 def test_top_bar_load_unload_buttons_removed():
@@ -799,16 +799,17 @@ def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     deps_with_radio = [d for d in demo.fns.values()
                        if radio in getattr(d, "inputs", [])]
     assert len(deps_with_radio) >= 2, "attention radio not wired into 2 flows"
-    # And it is the SIXTH-TO-LAST input of each: the APPENDED wiring discipline
-    # put it last when it was the only Acceleration control, then the
-    # block-swap prefetch checkbox went after it, the keep-resident checkbox
-    # after that, the fused-dequant checkbox after that, the VAE radio
+    # And it is the SEVENTH-TO-LAST input of each: the APPENDED wiring
+    # discipline put it last when it was the only Acceleration control, then
+    # the block-swap prefetch checkbox went after it, the keep-resident
+    # checkbox after that, the fused-dequant checkbox after that, the VAE radio
     # (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
-    # time) after that, and the keep-resident-embeddings checkbox after that.
+    # time) after that, the keep-resident-embeddings checkbox after that, and
+    # the Output embed-mp4-metadata checkbox (§3-164) after that.
     # This index is the canary for a wiring list and a handler signature
     # drifting apart.
     for dep in deps_with_radio:
-        assert _wiring_inputs(dep)[-6] is radio
+        assert _wiring_inputs(dep)[-7] is radio
 
 
 # --------------------------------------------------------------------------- #
@@ -874,12 +875,13 @@ def test_keep_resident_checkbox_is_wired_last_into_generate_and_chain():
                and c.label == en["accel_lbl_keep_resident"])
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "keep-resident checkbox not wired into 2 flows"
-    # FOURTH-TO-LAST since §1-11 appended the fused-dequant checkbox after it,
+    # FIFTH-TO-LAST since §1-11 appended the fused-dequant checkbox after it,
     # PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
-    # time) appended the VAE radio after that, and the
-    # keep-resident-embeddings checkbox went after that.
+    # time) appended the VAE radio after that, the keep-resident-embeddings
+    # checkbox went after that, and the Output embed-mp4-metadata checkbox
+    # (§3-164) after that.
     for dep in deps:
-        assert _wiring_inputs(dep)[-4] is box
+        assert _wiring_inputs(dep)[-5] is box
 
 
 def test_keep_resident_labels_switch_language():
@@ -903,13 +905,14 @@ def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
     deps_with_box = [d for d in demo.fns.values()
                      if box in getattr(d, "inputs", [])]
     assert len(deps_with_box) >= 2, "prefetch checkbox not wired into 2 flows"
-    # And it is the FIFTH-TO-LAST input of each: APPENDED after
+    # And it is the SIXTH-TO-LAST input of each: APPENDED after
     # attention_backend, then the keep-resident checkbox (§48), the
     # fused-dequant checkbox (§1-11), the VAE radio (PrunaVAED,
-    # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time) and the
-    # keep-resident-embeddings checkbox were appended after IT.
+    # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time), the
+    # keep-resident-embeddings checkbox and the Output embed-mp4-metadata
+    # checkbox (§3-164) were appended after IT.
     for dep in deps_with_box:
-        assert _wiring_inputs(dep)[-5] is box
+        assert _wiring_inputs(dep)[-6] is box
 
 
 # --------------------------------------------------------------------------- #
@@ -957,18 +960,19 @@ def test_fused_dequant_checkbox_is_wired_into_generate_and_chain():
                and c.label == en["accel_lbl_fused_dequant"])
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "fused-dequant checkbox not wired into 2 flows"
-    # THIRD-TO-LAST since PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66,
-    # filed as §3-50 at the time) appended the VAE radio after it, and the
-    # keep-resident-embeddings checkbox went after that.
+    # FOURTH-TO-LAST since PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66,
+    # filed as §3-50 at the time) appended the VAE radio after it, the
+    # keep-resident-embeddings checkbox went after that, and the Output
+    # embed-mp4-metadata checkbox (§3-164) after that.
     for dep in deps:
-        assert _wiring_inputs(dep)[-3] is box
+        assert _wiring_inputs(dep)[-4] is box
 
 
 def test_vae_radio_is_wired_into_generate_and_chain():
     # Same "displayed only" trap check as the other Acceleration controls: the
     # radio must actually be an INPUT of both generate flows, and it is
-    # SECOND-TO-LAST since the keep-resident-embeddings checkbox was appended
-    # after it.
+    # THIRD-TO-LAST since the keep-resident-embeddings checkbox and then the
+    # Output embed-mp4-metadata checkbox (§3-164) were appended after it.
     demo = _demo()
     en = LABELS["en"]
     radio = next(c for c in demo.blocks.values()
@@ -976,13 +980,15 @@ def test_vae_radio_is_wired_into_generate_and_chain():
     deps = [d for d in demo.fns.values() if radio in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "VAE radio not wired into 2 flows"
     for dep in deps:
-        assert _wiring_inputs(dep)[-2] is radio
+        assert _wiring_inputs(dep)[-3] is radio
 
 
-def test_keep_resident_embeddings_checkbox_is_wired_last_into_generate_and_chain():
-    # The newest Acceleration control, so it is the LAST input of both flows
-    # (screen position is a different matter: it renders under the
-    # keep-resident checkbox, while the wiring discipline is append-at-the-end).
+def test_keep_resident_embeddings_checkbox_is_wired_into_generate_and_chain():
+    # The newest Acceleration control, so it is the last Acceleration input of
+    # both flows -- SECOND-TO-LAST overall since the Output embed-mp4-metadata
+    # checkbox (§3-164) was appended after it (screen position is a different
+    # matter: it renders under the keep-resident checkbox, while the wiring
+    # discipline is append-at-the-end).
     # An invisible component is still an INPUT, so being hidden at build time
     # changes nothing here.
     demo = _demo()
@@ -993,7 +999,7 @@ def test_keep_resident_embeddings_checkbox_is_wired_last_into_generate_and_chain
     deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
     assert len(deps) >= 2, "keep-resident-embeddings checkbox not wired into 2 flows"
     for dep in deps:
-        assert _wiring_inputs(dep)[-1] is box
+        assert _wiring_inputs(dep)[-2] is box
 
 
 def test_keep_resident_embeddings_checkbox_default_and_hidden_at_build():
@@ -1030,8 +1036,8 @@ def test_keep_resident_embeddings_labels_switch_language():
 
 
 def test_generate_and_chain_trailing_inputs_order_is_locked():
-    """The whole trailing Acceleration block of both generate flows, in exact
-    order.
+    """The whole trailing Acceleration block (plus the Output checkbox that
+    follows it) of both generate flows, in exact order.
 
     ui.py's ``chain_dispatch`` peels the trailing Acceleration values off with
     NEGATIVE indices (``args[:-N]`` + ``args[-N]``..``args[-1]``), so appending
@@ -1066,12 +1072,97 @@ def test_generate_and_chain_trailing_inputs_order_is_locked():
         _one(gr.Checkbox, "accel_lbl_fused_dequant"),
         _one(gr.Radio, "accel_lbl_vae"),
         _one(gr.Checkbox, "accel_lbl_keep_resident_embeddings"),
+        _one(gr.Checkbox, "output_lbl_embed_mp4_metadata"),
     ]
     deps = [d for d in demo.fns.values()
             if expected[-1] in getattr(d, "inputs", [])]
     assert len(deps) == 2, "expected exactly the generate + chain flows"
     for dep in deps:
-        assert _wiring_inputs(dep)[-7:] == expected
+        assert _wiring_inputs(dep)[-8:] == expected
+
+
+# --------------------------------------------------------------------------- #
+# Output: "write generation conditions into the mp4" checkbox (Settings tab,
+# §3-164). Same reg/i18n/wiring pattern as the block-swap prefetch checkbox,
+# and the same direction (default ON -> the payload key rides only when off).
+# --------------------------------------------------------------------------- #
+def test_embed_mp4_metadata_checkbox_default_and_label():
+    from gradio_ui.handlers import EMBED_MP4_METADATA_DEFAULT
+
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox)
+             and c.label == en["output_lbl_embed_mp4_metadata"]]
+    assert len(boxes) == 1, "embed-mp4-metadata checkbox not found"
+    box = boxes[0]
+    assert box.value is EMBED_MP4_METADATA_DEFAULT
+    assert box.value is True, "on by default (server default is on)"
+    assert box.interactive is not False
+    assert box.info == en["output_info_embed_mp4_metadata"]
+    assert en["output_lbl_embed_mp4_metadata"] == (
+        "Write generation conditions into the generated mp4 as metadata")
+    assert LABELS["ja"]["output_lbl_embed_mp4_metadata"] == (
+        "生成したmp4に生成条件をメタデータとして書き込む")
+
+
+def test_embed_mp4_metadata_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("output_section_title", "value"),
+                      ("output_lbl_embed_mp4_metadata", "label"),
+                      ("output_info_embed_mp4_metadata", "info")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry)
+                   if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
+def test_embed_mp4_metadata_checkbox_is_wired_last_into_generate_and_chain():
+    # The newest per-job request control, so it is the LAST input of both
+    # flows (after the keyframe run is stripped from the Generate flow).
+    demo = _demo()
+    en = LABELS["en"]
+    box = next(c for c in demo.blocks.values()
+               if isinstance(c, gr.Checkbox)
+               and c.label == en["output_lbl_embed_mp4_metadata"])
+    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
+    assert len(deps) == 2, "embed-mp4-metadata checkbox not wired into 2 flows"
+    assert {getattr(d.fn, "__name__", "") for d in deps} == {
+        "dispatch", "chain_dispatch"}
+    for dep in deps:
+        assert _wiring_inputs(dep)[-1] is box
+
+
+# --------------------------------------------------------------------------- #
+# MP4 Info tab (§3-164): File -> make_mp4_info_handler -> read-only Textbox.
+# --------------------------------------------------------------------------- #
+def test_mp4_info_tab_file_is_wired_to_handler_and_textbox():
+    demo = _demo()
+    en = LABELS["en"]
+    files = [c for c in demo.blocks.values()
+             if isinstance(c, gr.File) and c.label == en["mp4info_lbl_file"]]
+    assert len(files) == 1, "MP4 Info file input not found"
+    file_in = files[0]
+    assert file_in.type == "filepath"
+    assert file_in.file_count == "single"
+    assert list(file_in.file_types) == ["video"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Textbox) and c.label == en["mp4info_lbl_text"]]
+    assert len(boxes) == 1, "MP4 Info textbox not found"
+    text_out = boxes[0]
+    assert text_out.lines == 24
+    assert text_out.interactive is False
+    # No copy button (owner ruling: select-and-copy only).
+    assert not getattr(text_out, "buttons", None)
+    assert not getattr(text_out, "show_copy_button", False)
+    deps = [d for d in demo.fns.values() if file_in in getattr(d, "inputs", [])]
+    assert len(deps) == 1
+    dep = deps[0]
+    assert getattr(dep.fn, "__name__", "") == "mp4_info"
+    assert list(dep.inputs)[0] is file_in
+    assert list(dep.outputs) == [text_out]
+    assert "change" in [t[1] for t in dep.targets]
 
 
 # --------------------------------------------------------------------------- #

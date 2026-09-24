@@ -71,6 +71,7 @@ import {
 } from "./featureScope";
 import { useAccelerationSettings } from "./useAccelerationSettings";
 import { baseModelInstaller, useBaseModels } from "./useBaseModels";
+import { BaseModelSelect } from "./BaseModelSelect";
 import { useControlLoraNames, useDepthLoraNames, useReferenceDownscaleFactors } from "./useControlLoraNames";
 import { useNagSettings } from "./useNagSettings";
 import { resolveTrackingStatus } from "./objectTrackingSettings";
@@ -1463,27 +1464,13 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
             whenever the server is occupied (`serverBusy`) — a second pick
             would only earn a 409, and pre-empting that here keeps the user out
             of an error they cannot act on. */}
-        <select
+        <BaseModelSelect
           className="app-title-select"
-          aria-label={strings.toolVersion.ariaLabel}
+          options={baseModels.options}
           value={baseModels.current}
           disabled={serverBusy}
-          onChange={(e) => handleBaseModelChange(e.target.value)}
-        >
-          {baseModels.options.length === 0 ? (
-            <option value="">{strings.toolVersion.unknown}</option>
-          ) : (
-            baseModels.options.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.installed
-                  ? option.displayName
-                  : option.present
-                    ? strings.toolVersion.optionPartial(option.displayName)
-                    : strings.toolVersion.optionNotInstalled(option.displayName)}
-              </option>
-            ))
-          )}
-        </select>
+          onChange={handleBaseModelChange}
+        />
         <StatusHeader state={serverStatus} onRetry={retry} />
         <ModeTabs mode={mode} onChange={handleModeChange} disabledModes={disabledModes} />
         <button
@@ -1665,6 +1652,14 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           vaeUnsupported={settingsRowsHidden.vae}
           onKeepResidentEmbeddingsChange={accelerationControls.setKeepResidentEmbeddings}
           keepResidentEmbeddingsUnsupported={settingsRowsHidden.keepResidentEmbeddings}
+          onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
+          // §3-166: the same base-model state and handler the header dropdown
+          // uses — one `useBaseModels()` call, two views of it.
+          baseModelOptions={baseModels.options}
+          baseModelValue={baseModels.current}
+          activeBaseModelId={baseModels.active}
+          onBaseModelChange={handleBaseModelChange}
+          serverBusy={serverBusy}
           // §3-163: the same `activeEngineFamily` the three screens already
           // take — the comfort-limit table in the panel is chosen by the
           // LOADED engine, exactly like the comfort marker is.

@@ -9,6 +9,7 @@ handler for asserting exactly which HTTP calls happen (or don't -- notably
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import anyio
@@ -253,3 +254,57 @@ def test_save_job_video_invalid_which_raises(tmp_path):
 
     with pytest.raises(ToolError):
         anyio.run(outputs.save_job_video, "j1", str(tmp_path / "dest"), None, True, "bogus")
+
+
+# ---------------------------------------------------- get_mp4_info (台帳 §3-164)
+
+
+def test_get_mp4_info_posts_the_path_and_returns_the_comment(tmp_path):
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"comment": "{\"job_id\": \"j1\"}"})
+
+    set_client(_client_for_handler(handler, tmp_path))
+
+    result = anyio.run(outputs.get_mp4_info, "C:/videos/a.mp4")
+
+    assert seen == {
+        "method": "POST",
+        "path": "/api/v1/utils/mp4-info",
+        "body": {"path": "C:/videos/a.mp4"},
+    }
+    assert result == {"path": "C:/videos/a.mp4", "comment": '{"job_id": "j1"}'}
+
+
+def test_get_mp4_info_404_becomes_tool_error(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            404,
+            json={"error": {"code": "MEDIA_NOT_FOUND", "message": "media file not found: x"}},
+        )
+
+    set_client(_client_for_handler(handler, tmp_path))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(outputs.get_mp4_info, "C:/videos/missing.mp4")
+
+    assert "MEDIA_NOT_FOUND" in str(exc_info.value)
+
+
+def test_get_mp4_info_reads_a_real_job_output_via_mcp_app(mcp_app):
+    """End to end on the mock backend: the generated output.mp4 carries the
+    metadata.json text, and the tool returns it."""
+    from services import video_io
+
+    app, output_dir = mcp_app
+    job_id = _run_completed_job(app, output_dir)
+    output = output_dir / job_id / "output.mp4"
+
+    result = anyio.run(outputs.get_mp4_info, str(output))
+
+    metadata = json.loads((output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
+    assert result["comment"] == video_io.recipe_text(metadata)

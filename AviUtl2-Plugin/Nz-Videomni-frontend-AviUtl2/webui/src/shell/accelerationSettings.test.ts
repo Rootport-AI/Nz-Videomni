@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   ACCELERATION_DEFAULTS,
+  ACCELERATION_STORAGE_KEY,
+  accelerationRequestFields,
+  readStoredAcceleration,
+  writeStoredAcceleration,
   effectiveAcceleration,
   effectiveAccelerationFields,
   withServerDefaults,
@@ -25,6 +29,8 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
     fusedGgufDequantKernel: true,
     vaeMode: "prune_vaed",
     keepResidentEmbeddings: true,
+    // §3-164: the Output row sharing this store, at its server default.
+    embedMp4Metadata: true,
     ...overrides,
   };
 }
@@ -164,5 +170,60 @@ describe("withServerDefaults", () => {
     expect(after).not.toBe(before);
     expect(after.vaeMode).toBe("default");
     expect(after.keepResidentEmbeddings).toBe(ACCELERATION_DEFAULTS.keepResidentEmbeddings);
+  });
+});
+
+/** §3-164 (2026-09-24): the Settings panel's Output row, stored alongside the
+ * acceleration choices but kept out of the comfort matcher's field bag. */
+describe("embedMp4Metadata (§3-164)", () => {
+  it("defaults to on, matching the server default", () => {
+    expect(ACCELERATION_DEFAULTS.embedMp4Metadata).toBe(true);
+  });
+
+  it("sends nothing while on — requests stay byte-identical to before the row existed", () => {
+    expect(accelerationRequestFields(ACCELERATION_DEFAULTS)).toEqual({});
+    expect(accelerationRequestFields(makeAllOn())).not.toHaveProperty("embed_mp4_metadata");
+  });
+
+  it("sends embed_mp4_metadata: false only while off", () => {
+    expect(accelerationRequestFields({ ...ACCELERATION_DEFAULTS, embedMp4Metadata: false })).toEqual({
+      embed_mp4_metadata: false,
+    });
+  });
+
+  it("is not part of effectiveAccelerationFields (the comfort matcher's key set)", () => {
+    const fields = effectiveAccelerationFields(makeAllOn({ embedMp4Metadata: false }), true);
+    expect(fields).not.toHaveProperty("embed_mp4_metadata");
+  });
+
+  it("withServerDefaults carries it over unchanged (no feature-scope row resets it)", () => {
+    const before = makeAllOn({ embedMp4Metadata: false });
+    expect(withServerDefaults(before, ["vaeMode"]).embedMp4Metadata).toBe(false);
+  });
+
+  describe("localStorage round trip", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("writes and reads back an off value", () => {
+      writeStoredAcceleration({ ...ACCELERATION_DEFAULTS, embedMp4Metadata: false });
+      expect(readStoredAcceleration().embedMp4Metadata).toBe(false);
+    });
+
+    it("reads a JSON blob without the key (written before §3-164) as on", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ attentionBackend: "sage" }));
+      expect(readStoredAcceleration().embedMp4Metadata).toBe(true);
+    });
+
+    it("reads the pre-2026-08-01 bare string form as on", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, "sdpa");
+      expect(readStoredAcceleration().embedMp4Metadata).toBe(true);
+    });
+
+    it("reads a malformed value as on", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ embedMp4Metadata: "no" }));
+      expect(readStoredAcceleration().embedMp4Metadata).toBe(true);
+    });
   });
 });

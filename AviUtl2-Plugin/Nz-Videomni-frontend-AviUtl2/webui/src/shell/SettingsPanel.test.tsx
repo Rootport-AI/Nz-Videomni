@@ -103,6 +103,15 @@ function Harness({
       // ordinary "supported" case, and the hiding itself is covered end-to-end
       // through the fixture server in `AppShell.featureScope.test.tsx`.
       keepResidentEmbeddingsUnsupported={false}
+      onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
+      // §3-166: the base-model dropdown is fed by `AppShell` in production;
+      // these direct-render tests hand it an empty list (its placeholder). The
+      // shared behaviour is covered in `AppShell.toolVersion.test.tsx`.
+      baseModelOptions={[]}
+      baseModelValue=""
+      onBaseModelChange={() => {}}
+      serverBusy={false}
+      activeBaseModelId=""
       engineFamily={engineFamily}
       serverStatus={serverStatus}
     />
@@ -354,6 +363,7 @@ describe("SettingsPanel", () => {
         fusedGgufDequantKernel: true,
         vaeMode: "prune_vaed",
         keepResidentEmbeddings: false,
+        embedMp4Metadata: true,
       });
     });
     expect(readStoredAcceleration().vaeMode).toBe("prune_vaed");
@@ -463,6 +473,7 @@ describe("SettingsPanel", () => {
         fusedGgufDequantKernel: true,
         vaeMode: "default",
         keepResidentEmbeddings: false,
+        embedMp4Metadata: true,
       });
     });
     expect(readStoredAcceleration().blockSwapPrefetch).toBe(false);
@@ -549,6 +560,7 @@ describe("SettingsPanel", () => {
         fusedGgufDequantKernel: true,
         vaeMode: "default",
         keepResidentEmbeddings: false,
+        embedMp4Metadata: true,
       });
     });
     expect(readStoredAcceleration().keepResident).toBe(true);
@@ -667,6 +679,7 @@ describe("SettingsPanel", () => {
         fusedGgufDequantKernel: false,
         vaeMode: "default",
         keepResidentEmbeddings: false,
+        embedMp4Metadata: true,
       });
     });
     expect(readStoredAcceleration().fusedGgufDequantKernel).toBe(false);
@@ -677,6 +690,30 @@ describe("SettingsPanel", () => {
       expect(fused.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
     });
     expect(screen.getByText(/how the model's compressed weights are unpacked/)).toBeInTheDocument();
+  });
+
+  // §3-164 (2026-09-24): the Output group's one row, between Acceleration and
+  // the backend URL field.
+  it("the Output row defaults to ON, and selecting OFF moves aria-pressed and persists", async () => {
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    const user = userEvent.setup();
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    expect(screen.getByText("Metadata output:")).toBeInTheDocument();
+    const embed = within(
+      screen.getByRole("group", { name: "Write generation conditions into the generated mp4 as metadata" }),
+    );
+    expect(embed.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(embed.getByRole("button", { name: "OFF" }));
+
+    await waitFor(() => {
+      expect(embed.getByRole("button", { name: "OFF" })).toHaveAttribute("aria-pressed", "true");
+    });
+    await waitFor(() => {
+      expect(readStoredAcceleration().embedMp4Metadata).toBe(false);
+    });
   });
 
   it("keeps the fused dequant kernel row usable while block-swap prefetch is off (no gate at all)", async () => {

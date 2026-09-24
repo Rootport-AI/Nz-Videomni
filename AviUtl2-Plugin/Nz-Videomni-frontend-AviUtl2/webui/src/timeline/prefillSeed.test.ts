@@ -582,6 +582,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
     fusedGgufDequantKernel: true,
     vaeMode: "prune_vaed",
     keepResidentEmbeddings: false,
+    embedMp4Metadata: true,
   } as const;
 
   function smartSeed(intent: string, selection: Selection, engineFamily = "ltx") {
@@ -614,6 +615,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
       fusedGgufDequantKernel: true,
       vaeMode: "default",
       keepResidentEmbeddings: false,
+      embedMp4Metadata: true,
     } as const;
     const withDefaults = (engineFamily: string) =>
       resolvePrefillSeed({

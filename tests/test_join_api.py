@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from PIL import Image
 
 import chain_math
@@ -41,10 +42,13 @@ def _make_source_mp4(path, n_frames, fps, size=(96, 64)):
 
 
 def _run_v2v_job(client, tmp_path, *, n_src=50, src_fps=24.0, context_frames=25,
-                 clip_frames=49) -> tuple[str, str]:
+                 clip_frames=49, source_comment=None, extra=None) -> tuple[str, str]:
     """Upload a synthetic source + run a 1-clip mock V2V chain to completion.
-    Returns (job_id, video_id)."""
+    Returns (job_id, video_id). ``source_comment`` tags the uploaded source's
+    container ``comment``; ``extra`` is merged into the chain request."""
     src = _make_source_mp4(tmp_path / "join_src.mp4", n_frames=n_src, fps=src_fps)
+    if source_comment is not None:
+        video_io.embed_comment_tag(src, source_comment)
     r = client.post("/api/v1/upload/video",
                     files={"file": ("src.mp4", src.read_bytes(), "video/mp4")})
     assert r.status_code == 200, r.text
@@ -54,6 +58,7 @@ def _run_v2v_job(client, tmp_path, *, n_src=50, src_fps=24.0, context_frames=25,
         **BASE,
         "clips": [{"num_frames": clip_frames}],
         "source_video": {"video_id": vid, "context_frames": context_frames},
+        **(extra or {}),
     }
     r = client.post("/api/v1/generate/chain", json=payload)
     assert r.status_code == 202, r.text
@@ -327,3 +332,58 @@ def test_job_response_non_v2v_is_v2v_false(client):
     job = client.get(f"/api/v1/jobs/{job_id}").json()
     assert job["is_v2v"] is False
     assert job["joined"] is False
+
+
+# ------------------------------------------------ recipe tag (台帳 §3-164)
+
+
+@pytest.mark.parametrize("audio_smoothing", [True, False])
+def test_join_embeds_the_job_recipe(client, tmp_path, audio_smoothing):
+    """joined.mp4 carries the source job's recipe (the metadata.json text) as its
+    ``comment`` tag, not the uploaded source's own tag, on both join paths."""
+    job_id, _vid = _run_v2v_job(client, tmp_path, source_comment="external source tag")
+    r = client.post(f"/api/v1/jobs/{job_id}/join", json={"audio_smoothing": audio_smoothing})
+    assert r.status_code == 200, r.text
+
+    job_dir = client.app_context.config.output_dir / job_id
+    metadata = json.loads((job_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert video_io.probe_comment_tag(job_dir / "joined.mp4") == video_io.recipe_text(metadata)
+    # No temporary file of the embed step is left behind.
+    assert sorted(p.name for p in job_dir.glob("*.tmp*")) == []
+
+
+@pytest.mark.parametrize("audio_smoothing", [True, False])
+def test_join_opted_out_carries_no_tag(client, tmp_path, audio_smoothing):
+    """embed_mp4_metadata=false: the joined file has no ``comment`` at all -- in
+    particular not the tag the uploaded source carried (``-map_metadata -1``)."""
+    job_id, vid = _run_v2v_job(
+        client, tmp_path,
+        source_comment="external source tag",
+        extra={"embed_mp4_metadata": False},
+    )
+    # Precondition: the stored upload really carries a tag the join could inherit.
+    stored = client.app_context.video_upload_store.path_for(vid)
+    assert video_io.probe_comment_tag(stored) == "external source tag"
+    r = client.post(f"/api/v1/jobs/{job_id}/join", json={"audio_smoothing": audio_smoothing})
+    assert r.status_code == 200, r.text
+
+    job_dir = client.app_context.config.output_dir / job_id
+    assert video_io.probe_comment_tag(job_dir / "output.mp4") is None
+    assert video_io.probe_comment_tag(job_dir / "joined.mp4") is None
+
+
+def test_join_embed_failure_keeps_the_untagged_join(client, tmp_path, monkeypatch):
+    """A failed embed is a warning, not join_failed: joined.mp4 is delivered
+    without the tag and no temporary file is left."""
+    job_id, _vid = _run_v2v_job(client, tmp_path)
+
+    def boom(path, comment):
+        raise video_io.FFmpegError("simulated")
+
+    monkeypatch.setattr(video_io, "embed_comment_tag", boom)
+    r = client.post(f"/api/v1/jobs/{job_id}/join", json={})
+    assert r.status_code == 200, r.text
+
+    job_dir = client.app_context.config.output_dir / job_id
+    assert video_io.probe_comment_tag(job_dir / "joined.mp4") is None
+    assert not (job_dir / "_join_output.tmp.mp4").exists()

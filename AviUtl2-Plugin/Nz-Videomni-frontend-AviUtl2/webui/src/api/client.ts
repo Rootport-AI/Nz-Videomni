@@ -32,6 +32,7 @@ import type {
   LorasReloadResponse,
   ModelCategory,
   ModelsResponse,
+  Mp4InfoResponse,
   PipelineLoadResponse,
   PipelineUnloadResponse,
   StatusResponse,
@@ -127,6 +128,10 @@ export interface ApiClient {
    * `loadPipeline` (409 `JOB_BUSY` while a generation job is running); no
    * body, no extended timeout (mirrors `reloadLoras`'s minimal shape). */
   unloadPipeline(): Promise<PipelineUnloadResponse>;
+  /** §3-164: `POST /utils/mp4-info` — reads a local video's `comment` tag
+   * (the generation conditions the backend wrote into it). `path` is an
+   * absolute path on the machine running the backend. */
+  getMp4Info(path: string): Promise<Mp4InfoResponse>;
 }
 
 /** Builds an `ApiClient` bound to the given bridge instance. The app uses the
@@ -182,6 +187,7 @@ export function createApiClient(nativeBridge: NativeBridge): ApiClient {
         timeoutMs: 600_000,
       }),
     unloadPipeline: () => call<PipelineUnloadResponse>("POST", "/pipeline/unload"),
+    getMp4Info: (path) => call<Mp4InfoResponse>("POST", "/utils/mp4-info", { body: { path } }),
   };
 }
 
@@ -214,3 +220,4 @@ export const getModels: ApiClient["getModels"] = () => apiClient.getModels();
 export const loadPipeline: ApiClient["loadPipeline"] = (models, baseModel) =>
   apiClient.loadPipeline(models, baseModel);
 export const unloadPipeline: ApiClient["unloadPipeline"] = () => apiClient.unloadPipeline();
+export const getMp4Info: ApiClient["getMp4Info"] = (path) => apiClient.getMp4Info(path);

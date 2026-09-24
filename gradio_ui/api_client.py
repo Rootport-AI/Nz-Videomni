@@ -194,3 +194,15 @@ class ApiClient:
         tmp.write(r.content)
         tmp.close()
         return tmp.name
+
+    # --- utils ---
+    def mp4_info(self, path: str) -> dict:
+        """POST /utils/mp4-info -> ``{"comment": str | None}`` for a
+        server-local mp4 path (the generation conditions written into the
+        ``comment`` tag). Errors (MEDIA_NOT_FOUND 404 / MEDIA_UNREADABLE 422 /
+        LOCAL_ONLY 403) raise ``httpx.HTTPStatusError`` like the other read
+        methods."""
+        r = self.client.post(self._url("/api/v1/utils/mp4-info"), json={"path": path},
+                             headers=self.headers, timeout=30)
+        r.raise_for_status()
+        return r.json()

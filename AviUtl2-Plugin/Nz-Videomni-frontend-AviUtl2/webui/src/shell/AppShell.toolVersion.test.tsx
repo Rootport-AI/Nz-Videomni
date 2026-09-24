@@ -146,4 +146,48 @@ describe("AppShell — header base-model dropdown", () => {
     await waitFor(() => expect(select).toBeEnabled());
     await waitFor(() => expect(screen.queryByText("Loading models…")).not.toBeInTheDocument());
   });
+
+  // §3-166 (2026-09-24): the Settings panel shows the SAME control, fed by the
+  // same `useBaseModels()` call. Its aria-label matches the header's, so every
+  // lookup inside the dialog is scoped with `within(dialog)`.
+  it("the Settings panel offers the same options, and picking there loads the base model and remounts the Models section", async () => {
+    const { select, requests } = await renderApp({
+      ltx25Install: "full",
+      supportedBaseModels: ["LTX23", "LTX25"],
+    });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const dialog = screen.getByRole("dialog", { name: "Settings" });
+    expect(within(dialog).getByRole("heading", { name: "Base model" })).toBeInTheDocument();
+    const settingsSelect = within(dialog).getByRole("combobox", { name: /base model/i }) as HTMLSelectElement;
+    expect(settingsSelect).not.toBe(select);
+
+    const headerOptions = (within(select).getAllByRole("option") as HTMLOptionElement[]).map((o) => [
+      o.value,
+      o.textContent,
+    ]);
+    const settingsOptions = (within(settingsSelect).getAllByRole("option") as HTMLOptionElement[]).map((o) => [
+      o.value,
+      o.textContent,
+    ]);
+    expect(settingsOptions).toEqual(headerOptions);
+    expect(settingsSelect.value).toBe("LTX23");
+
+    // The Models section below it, captured by node identity: a keyed remount
+    // replaces the DOM node, a re-render keeps it.
+    const modelsHeadingBefore = within(dialog).getByRole("heading", { name: "Models" });
+
+    await user.selectOptions(settingsSelect, "LTX25");
+
+    // One `POST /pipeline/load`, the same one the header dropdown sends.
+    await waitFor(() => expect(loadCalls(requests)).toHaveLength(1));
+    expect(loadCalls(requests)[0]?.[1]).toMatchObject({ body: { base_model: "LTX25", models: {} } });
+    // Both views follow the one state.
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    expect(settingsSelect.value).toBe("LTX25");
+    await waitFor(() =>
+      expect(within(dialog).getByRole("heading", { name: "Models" })).not.toBe(modelsHeadingBefore),
+    );
+  });
 });

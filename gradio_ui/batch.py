@@ -53,6 +53,7 @@ from typing import List, Optional, Tuple
 
 from .handlers import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
+    EMBED_MP4_METADATA_DEFAULT,
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
     KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
@@ -208,6 +209,12 @@ class BatchSnapshot:
                      model that does not support it the checkbox is hidden and
                      reset, so the snapshot can only ever carry False there.
 
+    Output
+        embed_mp4_metadata  Snapshotted from the Settings-tab Output checkbox
+                     (§3-164), same reasoning as the acceleration fields. The
+                     API default is ON, so this one reaches the payload only
+                     when False.
+
     Skip cap
         num_frames  The Generate tab's own frame count, snapshotted so the
                      start-time re-judgment uses the SAME effective cap
@@ -249,6 +256,7 @@ class BatchSnapshot:
     chunked_upsample: bool = True
     vae_mode: str = "default"
     keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT
+    embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT
     num_frames: int = MAX_FRAMES
 
 
@@ -602,6 +610,7 @@ class BatchRunner:
                 vae_mode=snap.vae_mode,
                 keep_resident_embeddings=snap.keep_resident_embeddings,
                 chunked_upsample=snap.chunked_upsample,
+                embed_mp4_metadata=snap.embed_mp4_metadata,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:

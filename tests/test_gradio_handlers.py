@@ -4197,3 +4197,244 @@ def test_chain_29_97_clears_the_geometry_precheck_and_sends_30():
 
     assert outs[-1][1] == "chain-fps"  # a job really started (no local reject)
     assert captured["frame_rate"] == 30.0
+
+
+# --------------------------------------------------------------------------- #
+# embed_mp4_metadata (§3-164): the Settings-tab Output checkbox. Same "only
+# when it differs from the mirrored server default" rule as block_swap_prefetch,
+# and the same direction (default ON -> the key rides only on an UNCHECKED box).
+# --------------------------------------------------------------------------- #
+def test_embed_mp4_metadata_i18n_keys_present_in_both_languages():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("tab_mp4info", "mp4info_lbl_file", "mp4info_lbl_text",
+                "mp4info_not_found", "output_section_title",
+                "output_lbl_embed_mp4_metadata", "output_info_embed_mp4_metadata"):
+        for lang in ("en", "ja"):
+            assert key in LABELS[lang], f"missing {lang} label for {key}"
+            assert LABELS[lang][key].strip()
+    assert LABELS["ja"]["mp4info_not_found"] == "生成条件のメタデータが見つかりませんでした"
+
+
+def test_embed_mp4_metadata_default_constant_is_true():
+    from gradio_ui.handlers import EMBED_MP4_METADATA_DEFAULT
+
+    assert EMBED_MP4_METADATA_DEFAULT is True
+
+
+def test_build_a2v_chain_payload_embed_off_appends_key_last():
+    payload = _a2v_payload(keep_resident_embeddings=True, embed_mp4_metadata=False)
+    assert payload["embed_mp4_metadata"] is False
+    assert list(payload.keys())[-2:] == ["keep_resident_embeddings",
+                                         "embed_mp4_metadata"]
+
+
+def test_build_a2v_chain_payload_default_omits_embed_mp4_metadata():
+    payload = _a2v_payload()
+    assert "embed_mp4_metadata" not in payload
+    assert payload == _a2v_payload(embed_mp4_metadata=True)
+
+
+def _capture_generate(**kwargs) -> dict:
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-embed"})
+
+    generate = make_generate_handler(_make_client(handler))
+    _run_until_job_started(generate(
+        "A calm river", "", _kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1, **kwargs))
+    return captured
+
+
+def test_generate_handler_embed_off_adds_embed_mp4_metadata():
+    captured = _capture_generate(embed_mp4_metadata=False)
+    assert captured["embed_mp4_metadata"] is False
+    assert list(captured.keys())[-1] == "embed_mp4_metadata"
+
+
+def test_generate_handler_default_omits_embed_mp4_metadata():
+    assert "embed_mp4_metadata" not in _capture_generate()
+    assert "embed_mp4_metadata" not in _capture_generate(embed_mp4_metadata=True)
+
+
+def test_generate_handler_a2v_forwards_embed_mp4_metadata(tmp_path):
+    aud = tmp_path / "voice.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-embed"})
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v-embed"})
+
+    generate = make_generate_handler(_make_client(handler))
+    gen = generate(
+        "a singer", "", _kf_args(),
+        512, 320, False, 0, 0, 49, 24.0, -1,
+        src_audio=str(aud), embed_mp4_metadata=False,
+    )
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured["embed_mp4_metadata"] is False
+
+
+def _capture_chain(**kwargs) -> dict:
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-embed"})
+
+    chain = make_chain_handler(_make_client(handler))
+    _run_chain_until_started(chain(*_chain_args(clips=[
+        {"enabled": True, "frames": 121},
+        {"enabled": True, "frames": 121},
+    ]), **kwargs))
+    return captured
+
+
+def test_chain_handler_embed_off_adds_embed_mp4_metadata():
+    captured = _capture_chain(embed_mp4_metadata=False)
+    assert captured["embed_mp4_metadata"] is False
+    assert list(captured.keys())[-1] == "embed_mp4_metadata"
+
+
+def test_chain_handler_default_omits_embed_mp4_metadata():
+    assert "embed_mp4_metadata" not in _capture_chain()
+    assert "embed_mp4_metadata" not in _capture_chain(embed_mp4_metadata=True)
+
+
+def _batch_payload(tmp_path, **snapshot_overrides) -> dict:
+    """Run a one-row A2V batch synchronously against a MockTransport and return
+    the captured POST /generate/chain body (the BatchSnapshot -> payload hop)."""
+    import json
+    import wave
+
+    from gradio_ui.batch import BatchRow, BatchRunner, BatchSnapshot, prepare_batch_rows
+    from gradio_ui.manifest import STAT_WAITING
+
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    with wave.open(str(wav_dir / "a.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(100)
+        w.writeframes(b"\x00\x00" * 100)
+    payloads = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-1"})
+        if path.endswith("/generate/chain"):
+            payloads.append(json.loads(request.content))
+            return httpx.Response(202, json={"job_id": "job-1"})
+        if path.endswith("/video"):
+            return httpx.Response(200, content=b"MP4DATA")
+        return httpx.Response(200, json={"status": "completed"})
+
+    snap = BatchSnapshot(wav_dir=str(wav_dir), out_dir=str(tmp_path / "out"),
+                         prompt_common="base", poll_interval=0.0,
+                         poll_timeout_s=30.0, **snapshot_overrides)
+    rows = [BatchRow(queue=1, wav="a.wav", image="", prompt="",
+                     stat=STAT_WAITING, frames=49)]
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode, ()) is None
+    started, reason = BatchRunner().start(snap, rows, _make_client(handler), sync=True)
+    assert started is True, reason
+    assert len(payloads) == 1
+    return payloads[0]
+
+
+def test_batch_embed_off_snapshot_adds_embed_mp4_metadata(tmp_path):
+    p = _batch_payload(tmp_path, embed_mp4_metadata=False)
+    assert p["embed_mp4_metadata"] is False
+    assert list(p.keys())[-1] == "embed_mp4_metadata"
+
+
+def test_batch_default_snapshot_omits_embed_mp4_metadata(tmp_path):
+    assert "embed_mp4_metadata" not in _batch_payload(tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# MP4 Info (§3-164): ApiClient.mp4_info + make_mp4_info_handler.
+# --------------------------------------------------------------------------- #
+def _mp4_info_handler(response: httpx.Response, seen: dict | None = None):
+    from gradio_ui.handlers import make_mp4_info_handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        if seen is not None:
+            seen["method"] = request.method
+            seen["url"] = str(request.url)
+            seen["auth"] = request.headers.get("authorization")
+            seen["body"] = json.loads(request.content)
+        return response
+
+    return make_mp4_info_handler(_make_client(handler))
+
+
+def test_mp4_info_found_returns_comment_as_is():
+    comment = '{\n  "job_id": "abc",\n  "prompt": "a cat"\n}'
+    seen = {}
+    mp4_info = _mp4_info_handler(httpx.Response(200, json={"comment": comment}), seen)
+    assert mp4_info("C:/tmp/output.mp4") == comment
+    assert seen["method"] == "POST"
+    assert seen["url"] == "http://test/api/v1/utils/mp4-info"
+    assert seen["auth"] == "Bearer secret"
+    assert seen["body"] == {"path": "C:/tmp/output.mp4"}
+
+
+def test_mp4_info_null_comment_returns_not_found_message():
+    from gradio_ui.i18n import LABELS
+
+    mp4_info = _mp4_info_handler(httpx.Response(200, json={"comment": None}))
+    assert mp4_info("/tmp/x.mp4") == LABELS["en"]["mp4info_not_found"]
+    assert mp4_info("/tmp/x.mp4", "ja") == "生成条件のメタデータが見つかりませんでした"
+
+
+def test_mp4_info_cleared_file_returns_empty_without_request():
+    seen = {}
+    mp4_info = _mp4_info_handler(httpx.Response(200, json={"comment": "x"}), seen)
+    assert mp4_info(None) == ""
+    assert seen == {}
+
+
+@pytest.mark.parametrize("status,code", [
+    (404, "MEDIA_NOT_FOUND"), (422, "MEDIA_UNREADABLE"), (403, "LOCAL_ONLY"),
+])
+def test_mp4_info_error_returns_localized_hint(status, code):
+    from gradio_ui.i18n import LABELS
+
+    body = {"error": {"code": code, "message": "server text"}}
+    mp4_info = _mp4_info_handler(httpx.Response(status, json=body))
+    assert mp4_info("/tmp/x.mp4") == LABELS["en"][f"apierr_{code}"]
+    assert mp4_info("/tmp/x.mp4", "ja") == LABELS["ja"][f"apierr_{code}"]
+
+
+def test_mp4_info_error_appends_detail_line():
+    from gradio_ui.i18n import LABELS
+
+    body = {"error": {"code": "MEDIA_UNREADABLE", "message": "server text",
+                      "detail": "moov atom not found"}}
+    mp4_info = _mp4_info_handler(httpx.Response(422, json=body))
+    assert mp4_info("/tmp/broken.mp4", "ja") == (
+        LABELS["ja"]["apierr_MEDIA_UNREADABLE"] + "\nmoov atom not found")
+
+
+def test_mp4_info_transport_error_returns_exception_text():
+    from gradio_ui.handlers import make_mp4_info_handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    mp4_info = make_mp4_info_handler(_make_client(handler))
+    assert mp4_info("/tmp/x.mp4") == "connection refused"

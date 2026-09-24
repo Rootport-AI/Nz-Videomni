@@ -28,6 +28,7 @@ function allOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSetti
     fusedGgufDequantKernel: true,
     vaeMode: "prune_vaed",
     keepResidentEmbeddings: false,
+    embedMp4Metadata: true,
     ...overrides,
   };
 }

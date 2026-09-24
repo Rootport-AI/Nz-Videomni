@@ -31,6 +31,7 @@ from .formatting import (
 )
 from .handlers import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
+    EMBED_MP4_METADATA_DEFAULT,
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
     KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
@@ -40,6 +41,7 @@ from .handlers import (
     make_chain_handler,
     make_generate_handler,
     make_join_handler,
+    make_mp4_info_handler,
     on_config_retry_tick,
 )
 from .handlers import fetch_models_safe, load_selected_models
@@ -245,6 +247,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     generate = make_generate_handler(api)
     chain_generate = make_chain_handler(api)
     chain_join = make_join_handler(api)
+    mp4_info = make_mp4_info_handler(api)
 
     # Component registry: (component, label_key, attr). S6 iterates this to
     # implement live language switching. attr is the gr.update field to set.
@@ -1027,6 +1030,25 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     job_action_msg = gr.Textbox(label="", show_label=False,
                                                 interactive=False, container=False)
 
+            # ============================ MP4 Info ===========================
+            # §3-164: drop an mp4 -> POST /utils/mp4-info with the server-local
+            # path Gradio's upload cache hands over -> the ``comment`` tag
+            # (the same JSON as metadata.json) shown as-is. Read-only textbox;
+            # no copy button (select-and-copy, owner ruling).
+            with gr.Tab(L("tab_mp4info")) as tab_mp4info:
+                reg(tab_mp4info, "tab_mp4info", "label")
+                with gr.Row():
+                    with gr.Column():
+                        mp4info_file = reg(gr.File(
+                            label=L("mp4info_lbl_file"), type="filepath",
+                            file_count="single", file_types=["video"]),
+                            "mp4info_lbl_file")
+                    with gr.Column():
+                        mp4info_text = reg(gr.Textbox(
+                            label=L("mp4info_lbl_text"), lines=24,
+                            interactive=False),
+                            "mp4info_lbl_text")
+
             # ============================ Settings ===========================
             with gr.Tab(L("tab_settings")) as tab_settings:
                 reg(tab_settings, "tab_settings", "label")
@@ -1151,6 +1173,21 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     info=L("accel_info_vae"),
                 ), "accel_lbl_vae")
                 reg(accel_vae, "accel_info_vae", "info")
+
+                # ---- Output (§3-164: generation conditions in the mp4) ----
+                # Not an acceleration option, but a per-job request field
+                # carried the same way (request field, sent only when it
+                # differs from the server default) -- see dispatch()/
+                # chain_dispatch() and BatchSnapshot for the wiring.
+                reg(gr.Markdown(f"### {L('output_section_title')}"),
+                    "output_section_title", "value")
+                output_embed_mp4_metadata = reg(gr.Checkbox(
+                    value=EMBED_MP4_METADATA_DEFAULT,
+                    label=L("output_lbl_embed_mp4_metadata"),
+                    info=L("output_info_embed_mp4_metadata"),
+                ), "output_lbl_embed_mp4_metadata")
+                reg(output_embed_mp4_metadata,
+                    "output_info_embed_mp4_metadata", "info")
 
                 # ---- Server config viewer (raw /config + spill-free table) ----
                 reg(gr.Markdown(f"### {L('h_server')}"), "h_server", "value")
@@ -1337,6 +1374,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
                      accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v,
                      accel_keep_resident_embeddings_v,
+                     output_embed_mp4_metadata_v,
                      *kf_flat):
             kf_slot_values = [tuple(kf_flat[i:i + 4])
                               for i in range(0, len(kf_flat), 4)]
@@ -1362,7 +1400,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     fused_gguf_dequant_kernel=accel_fused_dequant_v,
                     vae_mode=accel_vae_v,
                     keep_resident_embeddings=bool(
-                        accel_keep_resident_embeddings_v))
+                        accel_keep_resident_embeddings_v),
+                    embed_mp4_metadata=bool(output_embed_mp4_metadata_v))
                 return
 
             rows = batch_rows_v or []
@@ -1471,6 +1510,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 chunked_upsample=bool(batch_chunked_upsample_v),
                 vae_mode=accel_vae_v or "default",
                 keep_resident_embeddings=bool(accel_keep_resident_embeddings_v),
+                # Output (§3-164): same reason as the Acceleration fields --
+                # the runner reads the snapshot, so an unfilled field would
+                # silently stay at the default.
+                embed_mp4_metadata=bool(output_embed_mp4_metadata_v),
                 # Skip ceiling for the start-time re-judgment — the SAME value
                 # the Set audios scan used, so a Start never re-judges against
                 # a different cap than the table the user is looking at.
@@ -1510,7 +1553,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # block-swap prefetch checkbox, the keep-resident checkbox, the
             # fused-dequant checkbox, the VAE radio (PrunaVAED,
             # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time)
-            # AND the keep-resident-embeddings checkbox, are APPENDED after
+            # AND the keep-resident-embeddings checkbox, then the Output
+            # embed-mp4-metadata checkbox (§3-164), are APPENDED after
             # every pre-existing scalar positional (matching dispatch()'s
             # signature order, which appends them after batch_img_dir_v).
             inputs=[prompt, negative, width, height,
@@ -1525,6 +1569,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
                     accel_keep_resident_embeddings,
+                    output_embed_mp4_metadata,
                     # Nothing may be appended after this: dispatch()'s *kf_flat
                     # swallows everything from here to the end of the list.
                     *kf_inputs],
@@ -1972,7 +2017,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # as §3-50 at the time) AND the keep-resident-embeddings checkbox are
         # APPENDED at the very end of the chain inputs list below, in that
         # order (attention_backend, accel_prefetch, accel_keep_resident,
-        # accel_fused_dequant, accel_vae, accel_keep_resident_embeddings).
+        # accel_fused_dequant, accel_vae, accel_keep_resident_embeddings),
+        # followed by the Output embed-mp4-metadata checkbox (§3-164).
         # generate_chain keeps
         # ``src_audio`` as its last POSITIONAL parameter (never wired from this
         # tab, and relied on positionally by tests/test_gradio_v2v_a2v.py's
@@ -1984,13 +2030,14 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # ALL of them (and the ``args[:-N]`` slice) by one -- a silent
         # mis-wiring otherwise. tests/test_gradio_ui.py locks the order.
         def chain_dispatch(*args):
-            yield from chain_generate(*args[:-6],
-                                      attention_backend=args[-6],
-                                      block_swap_prefetch=args[-5],
-                                      keep_resident=args[-4],
-                                      fused_gguf_dequant_kernel=args[-3],
-                                      vae_mode=args[-2],
-                                      keep_resident_embeddings=args[-1])
+            yield from chain_generate(*args[:-7],
+                                      attention_backend=args[-7],
+                                      block_swap_prefetch=args[-6],
+                                      keep_resident=args[-5],
+                                      fused_gguf_dequant_kernel=args[-4],
+                                      vae_mode=args[-3],
+                                      keep_resident_embeddings=args[-2],
+                                      embed_mp4_metadata=args[-1])
 
         chain_generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
@@ -2009,9 +2056,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # checkbox, the keep-resident checkbox, the fused-dequant checkbox,
             # the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md
             # §3-66, filed as §3-50 at the time) AND the
-            # keep-resident-embeddings checkbox are APPENDED last (in that
-            # order) and reach the handler as keywords via chain_dispatch
-            # above.
+            # keep-resident-embeddings checkbox, then the Output
+            # embed-mp4-metadata checkbox (§3-164), are APPENDED last (in
+            # that order) and reach the handler as keywords via
+            # chain_dispatch above.
             inputs=[prompt, negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
@@ -2021,11 +2069,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
-                    accel_keep_resident_embeddings],
+                    accel_keep_resident_embeddings, output_embed_mp4_metadata],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),
             inputs=lang_state, outputs=chain_generate_btn,
+        )
+
+        # MP4 Info tab (§3-164): a new / cleared file re-reads the comment tag
+        # (a cleared File passes None, which the handler turns into "").
+        mp4info_file.change(
+            mp4_info, inputs=[mp4info_file, lang_state], outputs=mp4info_text,
         )
 
         # ---- V2V mode switching ----

@@ -1757,6 +1757,31 @@ export const en = {
       /** `/status.tracking.reason === "worker failed"`. */
       unavailableWorkerFailed: "The tracking worker could not start. Check logs/utils_worker.log.",
     },
+    /** §3-164 (2026-09-24): the Toolbox tab's sub-tabs. */
+    subTabs: {
+      ariaLabel: "Toolbox tools",
+      tracking: "Tracking",
+      mp4info: "mp4 info",
+    },
+    /** §3-164 (2026-09-24): the "mp4 info" sub-tab — reads the generation
+     * conditions a generated mp4 carries in its `comment` tag (the same JSON
+     * as metadata.json) through `POST /utils/mp4-info`. */
+    mp4info: {
+      heading: "mp4 info",
+      dropHint: "Drag and drop an mp4 here. Shows the generation conditions written into its metadata.",
+      pickButton: "📂Choose a video…",
+      fileLabel: "File",
+      resultLabel: "Metadata (Generation conditions)",
+      idle: "No file selected.",
+      loading: "Reading…",
+      notFound: "No generation conditions were found in this file.",
+      /** The server's own message follows verbatim. */
+      error: (message: string): string => `Could not read this file: ${message}`,
+      /** `MEDIA_NOT_FOUND` (404): shown instead of the server's English message. */
+      errorNotFound: "The file was not found on the server.",
+      /** `MEDIA_UNREADABLE` (422). */
+      errorUnreadable: "This video file could not be read.",
+    },
   },
   /** Shared note area (RIGHTCLICK_REDESIGN_SPEC.md §6): persistent, single-seat
    * right-click feedback shown above the operation panel. I5 seeds only the
@@ -2127,6 +2152,14 @@ export const en = {
      * moment, and it is not an output warning. */
     accelKeepResidentEmbeddingsNote:
       "For LTX 2.5 only. Keeps the part that arranges the prompt's reading between jobs, shortening the preprocessing of the second and later generations. It holds about 5GB of main memory, on top of the model skeleton above. The output does not change. Off by default.",
+    /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
+    outputHeading: "Metadata output:",
+    embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
+    embedMp4MetadataOn: "ON",
+    embedMp4MetadataOff: "OFF",
+    /** §3-166 (2026-09-24): the base-model dropdown above the Models section,
+     * the same control as the header's. */
+    baseModelHeading: "Base model",
     backendUrlLabel: "Backend URL",
     backendUrlPlaceholder: "http://127.0.0.1:18620",
     loadingCurrent: "Loading current settings…",
@@ -3192,6 +3225,24 @@ export const ja: Strings = {
       unavailableNotInstalled: "バックエンドのフォルダで install-UETrack.bat を実行し、サーバーを再起動してください。",
       unavailableWorkerFailed: "追尾のワーカーが起動できませんでした。logs/utils_worker.log を確認してください。",
     },
+    subTabs: {
+      ariaLabel: "Toolboxの道具",
+      tracking: "Tracking",
+      mp4info: "mp4 info",
+    },
+    mp4info: {
+      heading: "mp4 info",
+      dropHint: "mp4をここへドラッグ＆ドロップしてください。メタデータに書き込まれた生成条件を表示します。",
+      pickButton: "📂動画を選択…",
+      fileLabel: "ファイル",
+      resultLabel: "メタデータ（生成条件）",
+      idle: "ファイルが選ばれていません。",
+      loading: "読み取り中…",
+      notFound: "生成条件のメタデータが見つかりませんでした。",
+      error: (message: string): string => `このファイルを読めませんでした: ${message}`,
+      errorNotFound: "サーバー上にそのファイルが見つかりませんでした。",
+      errorUnreadable: "この動画ファイルを読めませんでした。",
+    },
   },
   notes: {
     insertedOnFrontmostLayer: (layerNumber: number): string =>
@@ -3343,6 +3394,11 @@ export const ja: Strings = {
     accelKeepResidentEmbeddingsOff: "OFF",
     accelKeepResidentEmbeddingsNote:
       "LTX 2.5専用の項目です。文章の読み取り結果を整える部品をジョブ間で保持し、2回目以降の生成の前処理を短縮します。メインメモリを約5GB常駐で使用します（上のモデル骨格の常駐とは別枠で、両方onにすると合算されます）。生成結果は変わりません。既定はoffです。",
+    outputHeading: "メタデータ出力:",
+    embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
+    embedMp4MetadataOn: "ON",
+    embedMp4MetadataOff: "OFF",
+    baseModelHeading: "ベースモデル",
     backendUrlLabel: "接続先URL",
     backendUrlPlaceholder: "http://127.0.0.1:18620",
     loadingCurrent: "現在の設定を読み込み中…",

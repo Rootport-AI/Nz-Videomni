@@ -30,7 +30,21 @@ LABELS: dict[str, dict[str, str]] = {
         "tab_gen": "Generate",
         "tab_concat": "Clip Chain",
         "tab_jobs": "Jobs",
+        "tab_mp4info": "MP4 Info",
         "tab_settings": "Settings",
+        # --- MP4 Info tab (§3-164) ---
+        "mp4info_lbl_file": "mp4 file",
+        "mp4info_lbl_text": "Metadata (Generation conditions)",
+        "mp4info_not_found": "No generation conditions were found.",
+        # --- Settings: Output (§3-164) ---
+        "output_section_title": "Metadata output",
+        "output_lbl_embed_mp4_metadata": ("Write generation conditions into the "
+                                          "generated mp4 as metadata"),
+        "output_info_embed_mp4_metadata": ("Writes the same content as metadata.json "
+                                           "into output.mp4 / joined.mp4 (the comment "
+                                           "tag). The prompt is included as-is. "
+                                           "Re-encoding the file removes it. On by "
+                                           "default."),
         # --- header ---
         "app_subtitle": "Verification UI — thin client over the frozen REST API (/api/v1/*).",
         "msg_coming": "Coming in a later slice.",
@@ -229,6 +243,10 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_uploading_ref": "Uploading reference video…",
         # --- shared API error-envelope hints (S4), one line each, actionable ---
         "apierr_JOB_BUSY": "Another job is already running. Wait for it to finish, then retry.",
+        # MP4 Info tab (§3-164, POST /utils/mp4-info)
+        "apierr_MEDIA_NOT_FOUND": "The file was not found on the server.",
+        "apierr_MEDIA_UNREADABLE": "This video file could not be read.",
+        "apierr_LOCAL_ONLY": "This operation is available only from the same PC as the server.",
         "apierr_UPLOAD_INVALID_TYPE": "Unsupported file type. Use an allowed image/video format.",
         "apierr_UPLOAD_TOO_LARGE": "The file is too large. Reduce the file size and retry.",
         "apierr_IMAGE_NOT_FOUND": "The uploaded image was not found. Re-upload the keyframe image.",
@@ -594,7 +612,19 @@ LABELS: dict[str, dict[str, str]] = {
         "tab_gen": "生成",
         "tab_concat": "クリップ連結",
         "tab_jobs": "ジョブ",
+        "tab_mp4info": "mp4 情報",
         "tab_settings": "設定",
+        # --- mp4 情報タブ（§3-164） ---
+        "mp4info_lbl_file": "mp4 ファイル",
+        "mp4info_lbl_text": "メタデータ（生成条件）",
+        "mp4info_not_found": "生成条件のメタデータが見つかりませんでした",
+        # --- 設定: 出力（§3-164） ---
+        "output_section_title": "メタデータ出力",
+        "output_lbl_embed_mp4_metadata": "生成したmp4に生成条件をメタデータとして書き込む",
+        "output_info_embed_mp4_metadata": ("metadata.json と同じ内容を output.mp4／"
+                                           "joined.mp4 のコメント欄（comment タグ）に"
+                                           "書き込みます。プロンプトもそのまま入ります。"
+                                           "再エンコードすると消えます。既定はオンです。"),
         # --- header ---
         "app_subtitle": "検証用UI — 凍結REST API (/api/v1/*) の薄いクライアント。",
         "msg_coming": "後のスライスで実装予定。",
@@ -773,6 +803,10 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_uploading_ref": "参照動画をアップロード中…",
         # --- shared API error-envelope hints (S4), one line each, actionable ---
         "apierr_JOB_BUSY": "別のジョブが実行中です。終了を待ってから再試行してください。",
+        # mp4 情報タブ（§3-164、POST /utils/mp4-info）
+        "apierr_MEDIA_NOT_FOUND": "サーバー上にそのファイルが見つかりませんでした",
+        "apierr_MEDIA_UNREADABLE": "この動画ファイルを読めませんでした",
+        "apierr_LOCAL_ONLY": "この操作はサーバーと同じ PC からだけ使えます",
         "apierr_UPLOAD_INVALID_TYPE": "対応していないファイル形式です。許可された画像/動画形式を使ってください。",
         "apierr_UPLOAD_TOO_LARGE": "ファイルが大きすぎます。サイズを小さくして再試行してください。",
         "apierr_IMAGE_NOT_FOUND": "アップロードした画像が見つかりません。キーフレーム画像を再アップロードしてください。",

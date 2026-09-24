@@ -135,6 +135,16 @@ KEEP_RESIDENT_EMBEDDINGS_DEFAULT = False
 # import 元の3点を同じ変更で動かすこと**。
 FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True
 
+# embed_mp4_metadata（完成した mp4 への生成条件の埋め込み、台帳 §3-164）の既定値。
+# **on**（A1111 の enable_pnginfo と同じく既定で書き込み、利用者が明示的に
+# 外す）。既定 True なので、クライアントは「明示 False のときだけ送る」
+# （block_swap_prefetch と同じ向き）。名前付き定数にしている理由は上の定数群と
+# 同じ：このファイルの2つの Field 既定と mcp_server/tools/generate.py の import
+# 元を1箇所に集約するため。gradio_ui/handlers.py は（HTTP越しのクライアント
+# なので）import せず自前のミラー定数を持つ——**変えるときは正本（ここ）＋
+# gradio_ui のミラー＋MCP の import 元の3点を同じ変更で動かすこと**。
+EMBED_MP4_METADATA_DEFAULT = True
+
 
 class CropOutput(BaseModel):
     width: int = Field(..., ge=32)
@@ -461,6 +471,14 @@ class GenerateRequest(BaseModel):
     # 名前が似ているだけで、こちらは VAE 実装そのものの差し替えを指す。
     # タイル設定はチャンネル幅に依存しないので枝刈り版でも一切変わらない。
     vae_mode: Literal["default", "prune_vaed"] = "default"
+
+    # embed_mp4_metadata: 完成した output.mp4（と、この動画を結合した joined.mp4）
+    # に、metadata.json と同じ JSON 文字列をコンテナの ``comment`` タグとして
+    # 刻む（台帳 §3-164）。再多重化（再エンコード無し）で後付けする。埋め込みに
+    # 失敗しても警告ログのみで、元の mp4 とジョブの完了は保たれる。mp4 を
+    # 再エンコードするとタグは消える。読み出しは POST /utils/mp4-info。
+    # false のときは何も刻まない（結合でも元動画のタグを引き継がない）。
+    embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT
 
     # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
@@ -1063,6 +1081,9 @@ class GenerateChainRequest(BaseModel):
     # 既定on（GenerateRequest と同じ）。チェーンでも1つの設定がチェーン全体に効く。
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
     vae_mode: Literal["default", "prune_vaed"] = "default"
+    # embed_mp4_metadata: 詳細は GenerateRequest の同名フィールドを参照。
+    # 既定on。チェーンでは完成した連結動画（output.mp4）に刻む。
+    embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1554,6 +1575,8 @@ class GenerateChainRequest(BaseModel):
         claim sdpa/default for a sage chain).
         The chain's OWN worker payload is built from the chain request, not from
         this per-clip copy — this transcription only feeds the stored record.
+        ``embed_mp4_metadata`` is transcribed for the same reason (the stored
+        record would otherwise claim the default).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
         as ``source_video`` / ``source_audio`` / ``reference_video_id``: it has no
@@ -1579,6 +1602,7 @@ class GenerateChainRequest(BaseModel):
             keep_resident_embeddings=self.keep_resident_embeddings,
             fused_gguf_dequant_kernel=self.fused_gguf_dequant_kernel,
             vae_mode=self.vae_mode,
+            embed_mp4_metadata=self.embed_mp4_metadata,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

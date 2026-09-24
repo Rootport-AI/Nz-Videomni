@@ -21,9 +21,12 @@ generation, no CSV manifest) and a job ledger (a table of all jobs shown
 next to the Generate button; there
 is no separate job lane or reservation queue — the backend runs one job at a
 time, so the Generate button just disables itself while one is running). The
-tab bar also has a live **Toolbox** tab (object tracking: it makes a timeline
-partial filter's box follow a moving subject — see
-`../../../Docs/OBJECT_TRACKING_DESIGN.md`). It
+tab bar also has a live **Toolbox** tab with its own sub-tab row — **Tracking**
+(object tracking: it makes a timeline partial filter's box follow a moving
+subject — see `../../../Docs/OBJECT_TRACKING_DESIGN.md`) and **mp4 info** (drop
+or pick a video and it shows the generation conditions the backend embedded in
+the mp4's `comment` tag, read through `POST /utils/mp4-info` — see
+`../Docs/API_REFERENCE.md` §3.23). It
 runs inside AviUtl2's WebView2 control and
 talks to the AviUtl2 host and the Nz-Videomni backend entirely through the
 native JSON-RPC bridge described below (no direct network calls from the page).
@@ -105,7 +108,10 @@ webui/
       batch/            # Batch A2V: folder scan, in-memory row list (stateless), batch runner
       inventory/        # Inventory screen: job history, LoRA browser
                         #   (model management lives in shell/ModelsPanel, not here)
-    shell/             # AppShell, mode tabs, prompt bar, settings, models panel
+      toolbox/          # Toolbox screen: ToolboxSubTabs + Tracking (ObjectTrackingSection)
+                        #   and mp4 info (Mp4InfoSection)
+    shell/             # AppShell, mode tabs, prompt bar, settings, models panel,
+                        #   BaseModelSelect (shared by the header and the settings panel)
     timeline/          # Right-click-from-timeline routing and prefill logic
     test/
       setupTests.ts    # vitest + @testing-library/jest-dom wiring
@@ -230,8 +236,9 @@ native through it:
   `src/modes/toolbox/` rather than being covered here) and
   right-click-menu prefill routing end to end. Note that these files scope
   ambiguous queries with a *singular* `getByRole("tabpanel")` — the one
-  visible mode screen — so Edit's own sub-panels deliberately carry no
-  `role="tabpanel"` (see `src/modes/edit/EditSubTabs.tsx`).
+  visible mode screen — so Edit's and Toolbox's own sub-panels deliberately
+  carry no `role="tabpanel"` (see `src/modes/edit/EditSubTabs.tsx` and
+  `src/modes/toolbox/ToolboxSubTabs.tsx`).
 - `src/i18n/strings.test.ts` — asserts the `en` and `ja` dictionaries expose
   exactly the same set of keys and agree on which leaves are plain strings
   vs. template functions.

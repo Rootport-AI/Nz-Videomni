@@ -869,7 +869,8 @@ def test_ltx25_runs_an_end_source_chain(two_family_client, tmp_path):
     assert es["generation_order"] == geo["generation_order"] == [0]
     # 実行時の側。
     assert es["kind"] == "video"
-    assert es["cut_path"] == str(cut)
+    # 保存領域からの相対(台帳 §3-164、services/recipe_paths.py)。
+    assert es["cut_path"] == f"outputs/{job_id}/_end_source.mp4"
     assert es["strength"] == 1.0
     assert es["decoded_frames_px"] == 121
     # mockは凍結の証明を捏造しない(潜在を持たないので出しようがない)。

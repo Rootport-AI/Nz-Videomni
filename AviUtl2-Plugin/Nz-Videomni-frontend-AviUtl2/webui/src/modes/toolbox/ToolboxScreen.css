@@ -17,8 +17,39 @@
   width: 100%;
 }
 
-/* 1 つの道具＝1 区画。2 つ目の道具が増えたときも、この区画をもう 1 枚
- * 並べるだけで済むようにしてある。 */
+/* サブタブ列（§3-164, 2026-09-24）。`modes/edit/EditScreen.css` の
+ * `.edit-subtabs` / `.edit-subtab` と同じ見た目を、他タブのクラス名に
+ * 依存しないよう自分の名前で持つ。道具は 1 つにつき 1 サブタブで、
+ * 見えていない側は `hidden` 属性で隠す（常時マウント）。 */
+.toolbox-subtabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.toolbox-subtab {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toolbox-subtab:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.toolbox-subtab--active {
+  color: var(--text);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* 1 つの道具の区画。サブパネルの中に 1 枚（mp4 info は 2 カラムで 2 枚）
+ * 置く。 */
 .toolbox-section {
   display: flex;
   flex-direction: column;

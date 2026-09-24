@@ -19,8 +19,9 @@ import mcp.shared.memory as mcp_memory
 from mcp_server.client import set_client
 from mcp_server.server import build_server
 
-# Final total (system 6 + uploads 3 + generate 2 + jobs 7 + outputs 3 +
-# batch 1 = 22). This is the one place the running total lives.
+# Final total (system 6 + uploads 3 + generate 2 + jobs 7 + outputs 4 +
+# batch 1 = 23; outputs gained get_mp4_info with 台帳 §3-164). This is the one
+# place the running total lives.
 EXPECTED_TOOLS = {
     "backend_status",
     "get_config",
@@ -43,6 +44,7 @@ EXPECTED_TOOLS = {
     "get_job_video_path",
     "get_joined_video_path",
     "save_job_video",
+    "get_mp4_info",
     "plan_a2v_batch",
 }
 

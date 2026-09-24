@@ -107,6 +107,12 @@ export interface UseBaseModelsResult {
    * `GET /models` lands (or on an older backend that declares none), which is
    * the caller's cue to show its placeholder. */
   current: string;
+  /** The LOADED base model's id — the server's `active_base_model`, moved only
+   * after a switch succeeds (never to the in-flight target, unlike
+   * {@link current}). `""` until the first `GET /models` lands. The Settings
+   * panel keys its models section on this (§3-166) so a completed switch
+   * remounts it and re-reads `GET /models` for the new base model. */
+  active: string;
   /** Feature names the LOADED base model's engine cannot run (§3-98 P5).
    *
    * Read off `active`, never off `current`: while a switch is in flight the
@@ -261,6 +267,7 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
   return {
     options,
     current: pending ?? active,
+    active,
     unsupportedFeatures,
     activeEngineFamily,
     disabledModes,

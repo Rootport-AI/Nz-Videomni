@@ -700,7 +700,7 @@ describe("SettingsPanel", () => {
     renderPanel(bridge);
 
     await screen.findByDisplayValue("http://127.0.0.1:18620");
-    expect(screen.getByText("Output:")).toBeInTheDocument();
+    expect(screen.getByText("Metadata output:")).toBeInTheDocument();
     const embed = within(
       screen.getByRole("group", { name: "Write generation conditions into the generated mp4 as metadata" }),
     );

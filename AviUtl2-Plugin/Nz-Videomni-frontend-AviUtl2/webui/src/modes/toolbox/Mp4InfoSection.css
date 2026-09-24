@@ -36,11 +36,14 @@
   overflow-wrap: anywhere;
 }
 
-/* 生成条件の JSON は整形済みの複数行なので、等幅で折り返さずに見せる。 */
+/* 生成条件の JSON は整形済みの複数行。等幅フォントで JSON のインデントと
+ * 改行を保ったまま、右端で折り返す（長い1本の文字列も折り返す）。高さは
+ * 固定で、縦スクロールで見せる。 */
 .mp4info-textarea {
   min-height: 360px;
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   font-size: 12px;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   overflow: auto;
 }

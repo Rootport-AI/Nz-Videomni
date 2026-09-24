@@ -1768,10 +1768,10 @@ export const en = {
      * as metadata.json) through `POST /utils/mp4-info`. */
     mp4info: {
       heading: "mp4 info",
-      dropHint: "Drop an mp4 here, or choose one with the button. Shows the generation conditions written into it.",
-      pickButton: "Choose a video…",
+      dropHint: "Drag and drop an mp4 here. Shows the generation conditions written into its metadata.",
+      pickButton: "📂Choose a video…",
       fileLabel: "File",
-      resultLabel: "Generation conditions",
+      resultLabel: "Metadata (Generation conditions)",
       idle: "No file selected.",
       loading: "Reading…",
       notFound: "No generation conditions were found in this file.",
@@ -2153,7 +2153,7 @@ export const en = {
     accelKeepResidentEmbeddingsNote:
       "For LTX 2.5 only. Keeps the part that arranges the prompt's reading between jobs, shortening the preprocessing of the second and later generations. It holds about 5GB of main memory, on top of the model skeleton above. The output does not change. Off by default.",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
-    outputHeading: "Output:",
+    outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
     embedMp4MetadataOn: "ON",
     embedMp4MetadataOff: "OFF",
@@ -3232,13 +3232,13 @@ export const ja: Strings = {
     },
     mp4info: {
       heading: "mp4 info",
-      dropHint: "mp4をここへドロップするか、ボタンから選んでください。書き込まれた生成条件を表示します。",
-      pickButton: "動画を選択…",
+      dropHint: "mp4をここへドラッグ＆ドロップしてください。メタデータに書き込まれた生成条件を表示します。",
+      pickButton: "📂動画を選択…",
       fileLabel: "ファイル",
-      resultLabel: "生成条件",
+      resultLabel: "メタデータ（生成条件）",
       idle: "ファイルが選ばれていません。",
       loading: "読み取り中…",
-      notFound: "このファイルに生成条件は見つかりませんでした。",
+      notFound: "生成条件のメタデータが見つかりませんでした。",
       error: (message: string): string => `このファイルを読めませんでした: ${message}`,
       errorNotFound: "サーバー上にそのファイルが見つかりませんでした。",
       errorUnreadable: "この動画ファイルを読めませんでした。",
@@ -3394,7 +3394,7 @@ export const ja: Strings = {
     accelKeepResidentEmbeddingsOff: "OFF",
     accelKeepResidentEmbeddingsNote:
       "LTX 2.5専用の項目です。文章の読み取り結果を整える部品をジョブ間で保持し、2回目以降の生成の前処理を短縮します。メインメモリを約5GB常駐で使用します（上のモデル骨格の常駐とは別枠で、両方onにすると合算されます）。生成結果は変わりません。既定はoffです。",
-    outputHeading: "出力:",
+    outputHeading: "メタデータ出力:",
     embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
     embedMp4MetadataOn: "ON",
     embedMp4MetadataOff: "OFF",

@@ -424,7 +424,7 @@ models/
 - **任意導入です。** 入れなくても動画生成には何の影響もありません。既存の3つの Python 環境には一切触れないので、動いているインストールを壊すこともありません。
 - **入れていないときは、操作パネルの追尾の設定が灰色になり、その場で `install-UETrack.bat` の実行を案内します。**
 
-**使い方**: AviUtl2 のタイムラインで、追いかけたい映像の**下の段**に部分フィルタを置き、プレビューを見ながら枠を被写体に合わせます。その部分フィルタを右クリックして「🎯 物体追尾（部分フィルタを使用）」を選ぶと、操作パネルが Toolbox タブに切り替わって追尾が始まります。部分フィルタを選んだまま、操作パネルの Toolbox タブにある「🎯 追尾を開始」を押しても同じです。終わると部分フィルタの先頭から末尾まで枠に中間点が打たれているので、あとはモザイクでもぼかしでも好きな効果を足してください。**追尾は枠を動かすだけで、効果の種類には関与しません。**
+**使い方**: AviUtl2 のタイムラインで、追いかけたい映像の**下の段**に部分フィルタを置き、プレビューを見ながら枠を被写体に合わせます。その部分フィルタを右クリックして「🎯 物体追尾（部分フィルタを使用）」を選ぶと、操作パネルが Toolbox タブに切り替わって追尾が始まります。部分フィルタを選んだまま、操作パネルの Toolbox タブの「Tracking」サブタブにある「🎯 追尾を開始」を押しても同じです。終わると部分フィルタの先頭から末尾まで枠に中間点が打たれているので、あとはモザイクでもぼかしでも好きな効果を足してください。**追尾は枠を動かすだけで、効果の種類には関与しません。**
 
 **設計・設定項目・制限の詳細は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) が正本です。**
 
@@ -529,11 +529,18 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 
 **操作パネルの上端には、左から Toolbox・Single・Chained・Edit・Inventory の5つのタブが並びます。** どのタブも常に読み込まれたままなので、切り替えても入力した内容は消えません。
 
-- **Toolbox**: 動画を生成しない道具箱で、いまは**物体追尾**が入っています。入口は2つあり、タイムラインで部分フィルタを右クリックする方法と、部分フィルタを選んだままこのタブの「🎯 追尾を開始」を押す方法です（§1「物体追尾を追加する」。設計の正本は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md)）。
+- **Toolbox**: 動画を生成しない道具箱で、**Tracking** と **mp4 info** の2つのサブタブに分かれます。
+  - **Tracking**（物体追尾）: 入口は2つあり、タイムラインで部分フィルタを右クリックする方法と、部分フィルタを選んだままこのサブタブの「🎯 追尾を開始」を押す方法です（§1「物体追尾を追加する」。設計の正本は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md)）。
+  - **mp4 info**: 生成した mp4 をドロップする（またはボタンから選ぶ）と、その動画に書き込まれた生成条件を右側の欄に表示します（§5「[生成条件を mp4 に記録する](#mp4-recipe)」）。
 - **Single**: 動画を1本ずつ作るタブです。テキスト・画像・音声から作る基本の生成に加えて、途中の絵を指定するキーフレームと、フォルダの中身をまとめて流すバッチ（音声フォルダから作る a2v モードと、画像フォルダから作る i2v モード）がここにあります。
 - **Chained**: クリップをつないで長い動画を作るタブです。素材（冒頭）に動画を置いて続きを作る V2V と、素材（末尾）もここにあります。
 - **Edit**: できあがった動画に手を入れるタブで、**Retake**（選んだ区間の撮り直し）・**Outpainting**（画角拡張）・**Inpainting**（部分フィルタの枠の内側だけを描き替える）の3つのサブタブに分かれます。入口は動画や部分フィルタの右クリックが中心です（§1「Inpainting」。設計の正本は [`Docs/INPAINTING_DESIGN.md`](Docs/INPAINTING_DESIGN.md)）。
 - **Inventory**: 上がスタイル LoRA の棚、下が生成済みジョブの一覧です。棚のカードを押すとプロンプト欄へその LoRA のタグが入り、一覧の `🎞` ボタンで完成した動画をタイムラインへ送れます。
+
+**Settings（上端の ⚙ ボタンで開く設定画面）** には、次の項目も並びます。
+
+- **Base model（ベースモデル）**: 「モデル」区画のすぐ上にあり、画面左上の選択と同じもの（LTX 2.3 ／ LTX 2.5 の切り替え）です。どちらで切り替えても両方が追随し、生成中やモデルの読み込み中は、どちらも選べません。切り替えが終わると、下の「モデル」区画も新しいベースモデルの内容に入れ替わります。
+- **Output（出力）**: 「生成したmp4に生成条件をメタデータとして書き込む」の On / Off です（既定は On）。§5「[生成条件を mp4 に記録する](#mp4-recipe)」を参照してください。
 
 右クリックメニューの項目と、それぞれがどのタブのどの欄へ着地するかは、フロントエンドの `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md` が正本です。
 
@@ -554,6 +561,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | GET | `/jobs/{id}/video` | 完了動画(mp4)を取得 |
 | DELETE | `/jobs/{id}` | 実行中ジョブのキャンセル(best-effort) / 完了ジョブの削除 |
 | POST / DELETE | `/utils/track/*` | 物体追尾のセッション（開く / フレームを1枚送る / 閉じる）。**生成とは別の名前空間**で、ジョブもキューの枠も保存物も作りません（[`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) §4） |
+| POST | `/utils/mp4-info` | サーバーと同じ PC 上の動画ファイルのパスを渡すと、書き込まれた生成条件（`comment` タグ）を返します。**同じ PC からの要求だけに答えます**（§5「[生成条件を mp4 に記録する](#mp4-recipe)」） |
 
 ### 凍結 API 契約（付録A・変更しない）
 - 幅・高さは **64の倍数**（two-stage distilled が stage1 を半解像度で生成し x2 アップサンプルするための帰結。由来の解説は [`Docs/LTX23_REFERENCE.md`](Docs/LTX23_REFERENCE.md) §3、検証は [`api/models.py`](api/models.py) の `GenerateRequest` validator）。
@@ -568,11 +576,25 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 
 > **本節は LTX 2.3 を選んでいるときの説明です。LTX 2.5 を選んでいるときの違いは §7.1 にまとめてあります。**
 
-出力は `outputs/{job_id}/output.mp4` と `outputs/{job_id}/metadata.json` に保存されます。`peak_vram_mb` は `metadata.json` またはワーカーログの `GENERATED_OK peak_vram_mb=` から取得できます（jobs API 応答には含まれません）。**ワーカーログはエンジン系統ごとに別ファイル**です（§7.4）。
+出力は `outputs/{job_id}/output.mp4` と `outputs/{job_id}/metadata.json` に保存されます（`output.mp4` の中にも、既定で `metadata.json` と同じ生成条件が書き込まれます。下の「[生成条件を mp4 に記録する](#mp4-recipe)」）。`peak_vram_mb` は `metadata.json` またはワーカーログの `GENERATED_OK peak_vram_mb=` から取得できます（jobs API 応答には含まれません）。**ワーカーログはエンジン系統ごとに別ファイル**です（§7.4）。
 
 動作確認用の `smoke_test`（384×256/17f）・`minimal`（512×320/49f）・720p・最小I2V を API から叩くときの curl / PowerShell の例は、[`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §16.1 にあります。
 
 **使うときに困りやすい注意が3つあり、それぞれ正本は次の場所です。** ①[`sage attention` は選ぶと絵の細部が変わる](#sage-seed-note)／②[PrunaVAED も同じく絵が変わり、LTX 2.5 では使えない](#prunavaed-quality-note)／③[素材（末尾）だけを使うときはクリップ1本での使用を推奨](#end-source-note)。
+
+<a id="mp4-recipe"></a>
+### 生成条件を mp4 に記録する
+
+**完成した `output.mp4` には、その動画を作った生成条件（`metadata.json` とまったく同じ JSON）が書き込まれています。** 置き場所は mp4 の入れ物の標準的なコメント欄（`comment` タグ）です。動画を V2V の結合（Join）でつないだ `joined.mp4` にも、元のジョブの生成条件が入ります（書き込むかどうかは元のジョブを生成したときの設定に従います。規則は下に挙げる仕様書 §6.6）。Stable Diffusion web UI（A1111）が PNG 画像に生成条件を書き込み、「PNG Info」で読み戻せるのと同じ考え方です。
+
+- **プロンプトもそのまま入ります。** 動画を人に渡すと、プロンプトや設定も一緒に渡ることになります。素材のファイルは `uploads/…`・`outputs/…` の形の相対パスで記録され、PC のユーザー名が分かるような絶対パスは入りません。
+- **書き込みを止めることもできます。** AviUtl2 の操作パネルなら Settings の「Output（出力）」、Gradio UI なら Settings タブの「Output（出力）」にある「生成したmp4に生成条件をメタデータとして書き込む」を Off にします（既定は On）。API から使う場合は要求に `embed_mp4_metadata: false` を載せます。
+- **再エンコードすると消えます。** AviUtl2 から書き出し直した動画や、動画サイトにアップロードした動画には残りません（PNG の生成条件が画像の変換で消えるのと同じです）。
+- **読み方は3通りです。** AviUtl2 の操作パネルでは Toolbox タブの「mp4 info」サブタブへ mp4 をドロップします。Gradio UI では「MP4 Info（mp4 情報）」タブへファイルを置きます。MCP のツールでは `get_mp4_info` を使います（§8）。操作パネルと Gradio UI では、欄の文字を選択してコピーできます（コピー専用のボタンはありません）。生成条件が入っていない動画では「見つかりませんでした」と表示されます。
+- **操作パネルと MCP の読み出しは、サーバーと同じ PC でだけ使えます。** バックエンドがファイルのパスを受け取って中を調べる仕組みなので、操作パネルの接続先を別の PC にしていると、手元でドロップしたファイルは接続先の PC に存在せず読めません。ネットワーク上の共有フォルダのパス（`\\サーバー名\…` の形）も受け付けません。Gradio UI はブラウザからサーバーへファイルを送る仕組みなので、別の PC からでも読めます。
+- Windows のエクスプローラーの「詳細」欄では、生成条件が長いと「コメント」が空欄に見えることがあります。中身は入っているので、確かめるときは上の読み方を使ってください。
+
+仕組みと約束事の正本は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.6（書き込みの規則）と §6.1（読み出しの入口）です。
 
 ### worker 単体スモーク（engine を直接叩く場合）
 
@@ -827,7 +849,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 
 ## 8. AIエージェント連携（MCPサーバー）
 
-Claude Code などの **MCP（Model Context Protocol。AIエージェントが外部ツールを呼び出すための標準規格）クライアント**から、このバックエンドを直接操作できます。`mcp_server/` パッケージが、Web の操作パネルと同等の**22個のツール**（状態確認・アップロード・生成・ジョブ管理・出力取得・バッチ計画）を公開する MCP サーバーです。**AviUtl2 のタイムラインへの配置・編集はこのツール群の対象外**です（あくまでバックエンド単体の操作。タイムライン連携はフロントエンド側の拡張機能です）。
+Claude Code などの **MCP（Model Context Protocol。AIエージェントが外部ツールを呼び出すための標準規格）クライアント**から、このバックエンドを直接操作できます。`mcp_server/` パッケージが、Web の操作パネルと同等のツール群（状態確認・アップロード・生成・ジョブ管理・出力取得・バッチ計画。本数の正本は [`Docs/MCP_SERVER_DESIGN.md`](Docs/MCP_SERVER_DESIGN.md) §8）を公開する MCP サーバーです。**AviUtl2 のタイムラインへの配置・編集はこのツール群の対象外**です（あくまでバックエンド単体の操作。タイムライン連携はフロントエンド側の拡張機能です）。
 
 ### 前提
 
@@ -837,7 +859,7 @@ Claude Code などの **MCP（Model Context Protocol。AIエージェントが�
 
 1. このリポジトリのフォルダを Claude Code で開く。
 2. 初回はワークスペースの信頼確認と、プロジェクトスコープの MCP サーバー登録に対する承認（**⏸ Pending approval**）が表示されるので、内容を確認して承認する。
-3. `/mcp` コマンドで `nz-videomni` サーバーと 22 個のツールが一覧に出れば成功。
+3. `/mcp` コマンドで `nz-videomni` サーバーとツールの一覧が出れば成功（本数の正本は [`Docs/MCP_SERVER_DESIGN.md`](Docs/MCP_SERVER_DESIGN.md) §8）。
 4. 承認をやり直したい場合（設定を変えた・一度拒否してしまった等）は `claude mcp reset-project-choices` を実行すると、次回起動時に承認確認からやり直せる。
 
 ### 他のMCPクライアント向け設定
@@ -856,7 +878,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 }
 ```
 
-### ツール一覧（22個）
+### ツール一覧（23個）
 
 | ツール | 説明 |
 |---|---|
@@ -881,6 +903,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `get_job_video_path` | ジョブの出力動画（`output.mp4`）のローカル絶対パスを返す |
 | `get_joined_video_path` | join済み動画（`joined.mp4`）のローカル絶対パスを返す |
 | `save_job_video` | 出力動画をローカルの任意フォルダへコピーする |
+| `get_mp4_info` | 動画ファイルに書き込まれた生成条件（`comment` タグ）を読み出す（`POST /utils/mp4-info`）。このアプリが生成した `output.mp4`／`joined.mp4` なら `metadata.json` と同じ JSON が返る。パスは MCP サーバーを動かしているマシン上のもの |
 | `plan_a2v_batch` | A2Vバッチの実行計画を立てる（音声フォルダを走査するだけ、HTTP不使用） |
 
 各ツールの引数の意味はツールの説明文（docstring）が正本で、設計の理由は [`Docs/MCP_SERVER_DESIGN.md`](Docs/MCP_SERVER_DESIGN.md) にあります。
@@ -915,6 +938,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
 - **「生成の高速化（Acceleration）」の6項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings`）。**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**です（§7.1。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。
+- **`submit_generate` / `submit_chain` には引数 `embed_mp4_metadata`（既定 `True`）があります。** `False` にすると、完成した mp4 に生成条件を書き込みません（§5「[生成条件を mp4 に記録する](#mp4-recipe)」）。
 
 ---
 

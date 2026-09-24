@@ -1,12 +1,12 @@
 # MCPサーバー設計判断の記録（`mcp_server/`）
 
-> **本書の位置づけ**: `mcp_server/` パッケージ（Claude Code 等の MCP クライアントからバックエンドを操作するための22ツール）の設計判断を記録する。実装計画そのもの（Wave分割・敵対的レビュー原文）はオーナーのプランファイル（リポジトリ外）が正本で、本書はその決定事項をリポジトリ内に定着させたもの。利用者向けの使い方は [`README.md`](../README.md) 「AIエージェント連携（MCPサーバー）」節、機械検証の実行記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) の該当節を参照。
+> **本書の位置づけ**: `mcp_server/` パッケージ（Claude Code 等の MCP クライアントからバックエンドを操作するためのツール群。本数は§8）の設計判断を記録する。実装計画そのもの（Wave分割・敵対的レビュー原文）はオーナーのプランファイル（リポジトリ外）が正本で、本書はその決定事項をリポジトリ内に定着させたもの。利用者向けの使い方は [`README.md`](../README.md) 「AIエージェント連携（MCPサーバー）」節、機械検証の実行記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) の該当節を参照。
 
 ## 1. 何を作ったか
 
-**MCP（Model Context Protocol。AIエージェントが外部ツールを呼び出すための標準規格）** サーバーを `mcp_server/` に新設し、既存の FastAPI バックエンド（`/api/v1/*`）を **22個のツール**として公開した。Web の操作パネル（`gradio_ui/`）が使える操作は一通りツール化してあり、パネルと同等の操作性が MCP 経由でも成立する（AviUtl2 のタイムライン連携は対象外——これはフロントエンド側の責務であり、本パッケージは扱わない）。
+**MCP（Model Context Protocol。AIエージェントが外部ツールを呼び出すための標準規格）** サーバーを `mcp_server/` に新設し、既存の FastAPI バックエンド（`/api/v1/*`）をツール群として公開した（本数と内訳の正本は§8）。Web の操作パネル（`gradio_ui/`）が使える操作は一通りツール化してあり、パネルと同等の操作性が MCP 経由でも成立する（AviUtl2 のタイムライン連携は対象外——これはフロントエンド側の責務であり、本パッケージは扱わない）。
 
-## 2. 主要な設計判断（D1〜D23）
+## 2. 主要な設計判断（D1〜D24）
 
 以下は実装計画で決定した設計判断の要約。番号は計画書の通し番号に対応する。
 
@@ -35,6 +35,7 @@
 | D21（2026-09-01追加） | **`upload_video` に `max_frames: int \| None = None` を足し、既存のクエリ引数（`api/uploads.py` の `max_frames: int \| None = Query(None)`）へ素通しする**。渡したときだけ応答の `frame_count` / `fps` が実測値になり、渡さなければクエリごと送らない（従来のアップロードのリクエストは1バイトも変わらない）。docstring に**「`max_frames` を渡すと尺と fps が実測されて返る。撮り直しの窓開始秒（D19）の下調べに使え」**と、**「`max_frames` は先頭Nフレームだけ残す切り詰め引数でもあるので、測るだけのときは元の尺より確実に大きい値を渡すこと」**を明記する。**ツール本数は22本のまま不変**（引数の追加であってツールの追加ではない） | 当初のスコープ判断は「docstring で『アップロード前にローカルで ffprobe を使え』と案内するだけ」だったが、敵対的レビューで**実 API の `upload_video` は `max_frames` クエリで `frame_count` / `fps` を返せる**ことが判明し（裏取り済み）、2026-09-01 のオーナー裁定で拡張することにした。これで**撮り直しの下調べは MCP 内で完結する**（バックエンド無改修）。**解像度（width / height）だけは今も返せない**ので、画角拡張（D20）のキャンバス逆算は ffprobe 案内のままである。出典は台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-115（2026-09-01にクローズ済み。[`PENDING_TASKS.md`](PENDING_TASKS.md) 側は欠番）、検証記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §86 |
 | D22（2026-09-03追加） | **D12 の「Acceleration の5フィールドは全て公開する」を、6フィールドへ拡張する**——`submit_generate` / `submit_chain` の両方へ `keep_resident_embeddings`（bool・既定 `false`）を足す（**D12 本文は当時の判断の記録として不改変**。件数の現行値は本項が持つ）。加算の規約は既存の5つと同じで、**サーバー既定（`api/models.py` の `KEEP_RESIDENT_EMBEDDINGS_DEFAULT` を import）と違うときだけ**ボディへ鍵を載せる（「True のときだけ送る」という分岐にはしない——将来既定が反転しても正しいのは定数との比較のほうだからである。`keep_resident` と同じ作法）。**POST 前の `ToolError` は 1 本も足さない**（D15・D19 と同じ理由——可否判定はサーバーの 422 が既に全部返しており、MCP 側に同じ判断を二重に持つのは食い違う余地を作るだけである）。**`INSTRUCTIONS` と両ツールの docstring には「LTX 2.5 専用であり、LTX 2.3 で `true` にすると 422 になる」と明記する**。**ツール本数は22本のまま不変**（引数の追加であってツールの追加ではない） | **D16・D17・D18 が扱ってきた「LTX 2.5 で使えない機能」の一覧に、初めて逆向きの項目が加わったからである**——`keep_resident_embeddings` が名指しする埋め込み処理器（embeddings processor＝プロンプトを読み取ったあとの内部表現を整える部品）は LTX 2.5 にしか無いので、**断るのは LTX 2.3 の側**である。エージェントの説明文は「LTX 2.5 では○○が使えない」という形で書き溜まってきたので、**逆向きの項目をその形のまま並べると必ず読み違えられる**——そこで説明文には「これだけは向きが逆である」と明示する 1 文を添えた（D16 が「同名別実装の誤読」に 1 文を割いたのと同じ手当てである）。**この4箇所（`server.py` の `INSTRUCTIONS` 2箇所と `generate.py` の docstring 2箇所）にテストが1件も無いという D18 の指摘は、本項でもそのまま当てはまる**——人手の確認が唯一の防波堤である。台帳は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-114（2026-09-03にクローズ済み）、契約の正本は [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2・§6.10、実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §92 |
 | D23（2026-09-07追加） | **`submit_chain` が `source_video_id`（素材（冒頭））と `end_source_video_id` / `end_source_image_id`（素材（末尾））の併用を、クリップ2件以上でも受け付けるようになったことを、`INSTRUCTIONS` と docstring の文言だけで反映する**（**ツール本数は22本のまま不変**・引数の増減も無し）。文言は「2件以上で `source_video` を併用すると**ブリッジモード**になる。クリップは通常どおり正順（先頭から順）に生成され、最後のクリップだけが両側で条件付けされる（冒頭は1つ前のクリップからののりしろ、末尾は素材（末尾）の凍結フレーム）。**内容の似ている2本の動画の間の欠落区間を補完する用途**で、2本の内容が離れていると最後のクリップの中でクロスフェードや不自然なモーフが起きるが、これは仕様として許容している。クリップ1件のときは従来どおり窓内モード（冒頭と末尾の間を補間）」へ改めた。D13・D14 が書いていた**「2件以上のときは `source_video` との併用が拒否される（422）」という案内は撤去した** | 引数は最初から全部公開してあり、変わったのは**サーバーが受理する範囲**だけなので、MCP 側で足すものは無い（D15・D16・D17 と同じく、可否判定はサーバーの422に委ねて二重のガードを置かない）。それでも文言を直したのは、**エージェントは docstring を読んで「試すまでもない」と判断する**ためで、古い案内を残すと使えるようになった機能が使われないまま終わる。**この4箇所（`server.py` の `INSTRUCTIONS` と `generate.py` の docstring）にテストが1件も無いという D18 の指摘は、本項でもそのまま当てはまる。** 人手の確認が唯一の防波堤である。用途と許容する劣化はオーナーの裁定（2026-09-07）で、**エージェントが「品質の問題では」と判断して使うのをやめないよう、仕様として許容している旨まで文言に書いた**。契約の正本は [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2、実測とゲートは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §102、設計の理由は [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11の【2026-09-07】の項、台帳のクローズ記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-90 である。 |
+| D24（2026-09-24追加） | **生成条件の mp4 埋め込み（台帳 §3-164）に合わせて、ツールを1本・引数を1つ足す**（**ツール本数は22本→23本**）。①**新ツール `get_mp4_info(path)`** を outputs カテゴリ（`mcp_server/tools/outputs.py`）に置く。中身は `POST /utils/mp4-info` へ `{"path": path}` を送り、`{"path", "comment"}` を返すだけの薄いクライアントで、**ローカルの事前検査はしない**（存在しない・読めないは、サーバーの 404 `MEDIA_NOT_FOUND`／422 `MEDIA_UNREADABLE` を既存の `_raise_for_error` が `ToolError` に翻訳する）。②**`submit_generate` / `submit_chain` に `embed_mp4_metadata: bool`** を足す。既定は `api/models.py` の `EMBED_MP4_METADATA_DEFAULT` を import し、**サーバー既定と違うとき（`False`）だけ**ボディへ載せる（D22 と同じ作法）。`plan_a2v_batch` はローカルの計画ツールなので変えない | 読み出しの入口はサーバーの PC 上のパスを受け取り、しかも**ループバックからの要求にしか答えない**。**MCP サーバーはバックエンドと同じマシンで動き、パスもそのマシン上のものを扱う**という本パッケージの前提（§7、`mcp_server/server.py` の `INSTRUCTIONS`）とそのまま整合するので、ツール側に新しい前提を足す必要が無い。**生成物を自分で調べられるツールが無いと、エージェントは「この動画をどの条件で作ったか」を `metadata.json` の場所から推測するしかない**——mp4 だけが手元に残った場合でも答えられるよう、パネルの「mp4 info」と同じ操作をツールにした。事前検査を持たないのは D15・D19・D22 と同じ理由（判定をサーバーと二重に持つと食い違う余地を作る）。契約の正本は [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.1・§6.6、実測とゲートは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §115 |
 
 ## 3. `.mcp.json` 絶対パス生成方式の経緯
 
@@ -55,7 +56,7 @@
 
 MCP SDK（`mcp>=1.28,<2`）の実ソースを確認したところ、**同期関数として登録したツールは、サーバーのイベントループ上で直接呼び出される**（内部で `anyio.to_thread` 等へ自動的に逃がす仕組みは無い）ことが分かった。これは、1つのツール呼び出し中にブロッキングI/O（ファイルコピー・wavファイルの走査等）が発生すると、サーバープロセス全体（他のリクエストの処理も含む）が止まってしまうことを意味する。
 
-そのため、**全22ツールを `async def` として実装**し、内部でブロッキングI/Oが必要な箇所（`save_job_video` の `shutil.copy2`、`plan_a2v_batch` のフォルダ走査等）は個別に `anyio.to_thread.run_sync` でスレッドへ逃がす方式に統一した。HTTPコールはすべて `httpx.AsyncClient` を使うため、この点は自然に非同期になっている。
+そのため、**全ツールを `async def` として実装**し、内部でブロッキングI/Oが必要な箇所（`save_job_video` の `shutil.copy2`、`plan_a2v_batch` のフォルダ走査等）は個別に `anyio.to_thread.run_sync` でスレッドへ逃がす方式に統一した。HTTPコールはすべて `httpx.AsyncClient` を使うため、この点は自然に非同期になっている。
 
 ## 6. stdout禁止の理由
 
@@ -73,7 +74,7 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 
 一見、`GET /jobs/{id}` のレスポンス（`JobResult.output_path`）を使えば良さそうに見えるが、これは**相対パスのハードコード**であり信用できない。また `GET /config` のレスポンスにも `output_dir` は含まれない。そのため `mcp_server/paths.py` は**HTTPレスポンスを一切見ず**、`mcp_server.client.BackendClient.output_dir`（= `Settings.output_dir` = ローカルの `config.load_config().output_dir`）だけを入力にパスを組み立てる純関数として実装した。これはMCPサーバーがバックエンドと**同じマシン上で、同じ `config.yaml` を読める**という前提（stdioトランスポートの性質上、両者は常に同一マシン上にある）に立脚した設計である。
 
-## 8. 22ツール一覧
+## 8. ツール一覧（23本）
 
 | カテゴリ | 本数 | ツール名 |
 |---|---|---|
@@ -81,8 +82,9 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 | uploads | 3 | `upload_image` / `upload_video` / `upload_audio` |
 | generate | 2 | `submit_generate` / `submit_chain` |
 | jobs | 7 | `job_status` / `list_jobs` / `wait_for_job` / `cancel_job` / `delete_job` / `purge_terminal_jobs` / `join_job` |
-| outputs | 3 | `get_job_video_path` / `get_joined_video_path` / `save_job_video` |
+| outputs | 4 | `get_job_video_path` / `get_joined_video_path` / `save_job_video` / `get_mp4_info` |
 | batch | 1 | `plan_a2v_batch` |
+| **合計** | **23** | |
 
 一覧の1行説明は [`README.md`](../README.md) 「AIエージェント連携（MCPサーバー）」節のツール一覧表を参照。ツール名の集合は `tests/test_mcp_registration.py::EXPECTED_TOOLS` が厳密アサートで固定している。
 
@@ -104,12 +106,12 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 
 | ファイル | 主な検証内容 |
 |---|---|
-| `test_mcp_registration.py` | 登録ツール数22・名前集合の厳密一致・全ツールに空でない説明文があること・MCPプロトコル経由の1往復（`structuredContent` が `{"result": ...}` でラップされずそのまま返ること） |
+| `test_mcp_registration.py` | 登録ツール数23・名前集合の厳密一致・全ツールに空でない説明文があること・MCPプロトコル経由の1往復（`structuredContent` が `{"result": ...}` でラップされずそのまま返ること） |
 | `test_mcp_tools_system.py` | system系6ツール（疎通・設定取得・モデル一覧・パイプライン読み込み/解放・LoRA一覧）と**ベースモデル軸**（`load_pipeline` の `base_model` がbodyへ載ること・指定時にno_opの近道を通らないこと・`two_family_client` を使った実アプリでの切替と `list_models` の透過） |
 | `test_mcp_errors.py` | エラー封筒の `ToolError` 翻訳・接続不能時の日本語文言・`ReadTimeout` の非翻訳（D5） |
-| `test_mcp_tools_generate.py` | アップロード3本＋`submit_generate`/`submit_chain` のペイロード契約（隠しフィールド不在・None/空を送らない・XOR事前弾き等）。**撮り直し（D19）と画角拡張（D20）**では、`retake` / `outpaint` ネストの厳密一致・既定値のみのボディにこの2キーが現れないこと（トリップワイヤ）・POST前 `ToolError` 3本がHTTP呼び出しゼロで上がること・`in-outpainting` の自動注入と非重複・5:2追従の全域一致・`inputSchema` への露出。**`upload_video` の `max_frames`（D21）**はクエリ透過と `frame_count`/`fps` の返却 |
+| `test_mcp_tools_generate.py` | アップロード3本＋`submit_generate`/`submit_chain` のペイロード契約（隠しフィールド不在・None/空を送らない・XOR事前弾き等）。**撮り直し（D19）と画角拡張（D20）**では、`retake` / `outpaint` ネストの厳密一致・既定値のみのボディにこの2キーが現れないこと（トリップワイヤ）・POST前 `ToolError` 3本がHTTP呼び出しゼロで上がること・`in-outpainting` の自動注入と非重複・5:2追従の全域一致・`inputSchema` への露出。**`upload_video` の `max_frames`（D21）**はクエリ透過と `frame_count`/`fps` の返却。**`embed_mp4_metadata`（D24）**は、既定では送らず、`False` のときだけ `embed_mp4_metadata: false` が載ること（両ツール） |
 | `test_mcp_tools_jobs.py` | jobs系7ツール（`wait_for_job` のクランプとtimed_out契約・`cancel_job`/`delete_job` の状態ガード・`purge_terminal_jobs` のdry_run） |
-| `test_mcp_outputs.py` | outputs系3ツール（パス導出の回帰・`no_clobber` 連番・`to_thread` 化） |
+| `test_mcp_outputs.py` | outputs系4ツール（パス導出の回帰・`no_clobber` 連番・`to_thread` 化）。**`get_mp4_info`（D24）**は `POST /api/v1/utils/mp4-info` へ `{"path"}` が飛んで `comment` が返ること・404 が `ToolError` になること・実アプリ経由で実ジョブの `output.mp4` を読めること |
 | `test_mcp_batch_planning.py` | `plan_a2v_batch` の走査規約（mtime昇順・Skip行可視・上限超過判定〔`min(max_frames, 481)`〕）と、本家 `suggest_frames_for_audio` との総当たりパリティ |
 
 ## 11. 参照

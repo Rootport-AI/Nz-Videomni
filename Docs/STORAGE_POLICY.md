@@ -28,6 +28,7 @@
 ### outputs/（成果物）
 
 - `outputs/{job_id}/` に `output.mp4`・`metadata.json`（設定で有効時）・V2V結合後は`joined.mp4`。job_idはジョブ作成時に発行されるUUID。
+- **（2026-09-24〜）`output.mp4`と`joined.mp4`は、既定で`metadata.json`と同じ生成条件をmp4の中（`comment`タグ）にも持つ。** 書き込みの条件・止め方・`file_size_bytes`の扱いなどの規則は[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.6が正本。
 - **撮り直し・画角拡張・Inpaintingは、途中で作った窓とキャンバスをそのジョブのディレクトリに残す**（`_retake_window.mp4`／`outpaint_canvas.mp4`／`_inpaint_window.mp4`／`inpaint_canvas.mp4`）。「何を入れたらこれが出たか」を後から確かめるための証拠であり、**uploads/へは書かない**——あちらは利用者がいつ消してもよい領域だからである（§0）。ジョブを消せば一緒に消える。
 - `DELETE /jobs/{job_id}`（終了済みジョブのみ）が`outputs/{job_id}`を削除する。これが唯一のディスク削除API。
 - 実測（2026-08-01）: 433件・約1.5GB。
@@ -37,6 +38,7 @@
 
 - **命名上の一貫性は無い**（両方UUIDだが独立に発行される）。
 - **ジョブ→アップロードの追跡は可能**: `outputs/{job_id}/metadata.json`の`request`にリクエスト全体が保存されており、使用した`image_id`（conditioning_images）・`reference_video_id`・`source_video.video_id`・`source_audio.audio_id`がそのまま読める。チェーンジョブは`v2v.source_video_id`/`a2v.source_audio_id`の明示ブロックも持つ。
+- **`metadata.json`に記録するファイルのパスは、保存領域からの相対形である**（`uploads/audios/<ID>/input.wav`・`outputs/<ジョブ>/inpaint_canvas.mp4`のように、`uploads/`・`outputs/`から始まる形。**絶対パスは書かない**）。フォルダの改名・移設で壊れず、mp4に埋め込んで人に渡してもPCのユーザー名が漏れないためである。対象は名前が`path`で終わるキーの値で、変換の規則は[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.6が正本。この形になる前に作られたジョブの`metadata.json`は書き換えていないので、古いジョブには絶対パスが残っている。
 - **アップロード→ジョブの逆引きは不可能**（参照カウント・使用履歴の類は無い）。突き合わせるには全metadata.jsonのID全文検索が必要。
 
 ## 3. ユーザー向けのディスク整理ルール

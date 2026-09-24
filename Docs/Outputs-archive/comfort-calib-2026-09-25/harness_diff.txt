@@ -1,0 +1,303 @@
+# harness_diff.txt -- every change made to the copied calibration harness (2026-09-25, §3-165 stage-2 window ladder campaign)
+# baseline = outputs/comfort-calib-2026-09-17/   (READ-ONLY history; not modified).  Generated: 2026-09-25 00:21:57
+# Copied (code only): calib.py mkplan.py make_results.py batch_table.py vram_sampler2.ps1 README.md selftest/
+# NOT copied: original_state.json manifest.jsonl runs/ plans/ calib/ preflight.json luid.json progress.md harness_diff.txt and every other output
+#   (original_state.json in particular: record_original_state() returns early when the file exists, so the 09-17 copy -- LTX23 = Q4_K_M -- would make restore-state go back to the wrong transformer).
+# THREE changes and nothing else:
+#   T12  calib.py        -- STAGE2_V_TILE gains w25..w61 (13 rungs, v_tile = the number); token_counts() used to count an unknown name as 22
+#   T13  selftest/parser_selftest.py -- section H rewritten for THIS campaign's plan (11 labels / 15 runs); one header sentence updated; sections A-G untouched
+#   T14  mkplan.py       -- new --label (explicit label for a single-rung file; --suffix still appended; --label-prefix no longer required when --label is given).
+#        Reason: the only label shape was <prefix>_<WxH>, which cannot name the stage-2 window of a same-size point (a_w46 vs a_b1216). Default path is byte-identical.
+# make_results.py / batch_table.py: read; no assumption about window values or label format found -> unchanged.
+#
+--- comfort-calib-2026-09-17/calib.py	2026-09-17 16:25:21.129832800 +0900
++++ comfort-calib-2026-09-25/calib.py	2026-09-25 00:17:55.217871100 +0900
+@@ -121,6 +121,12 @@
+ DECODE_CHUNK_FRAMES = 40
+ # chain stage-2 window presets (chain_math.STAGE2_WINDOW_PRESETS), v_tile only.
+ STAGE2_V_TILE = {"standard": 22, "high_resolution": 19, "full_length": 61}
++# T12 (2026-09-25, §3-165): the 13 new multi-tile windows w25..w61 (v_tile =
++# the number in the name; chain_math.STAGE2_WINDOW_PRESETS).  Without them an
++# unknown name is silently counted as 22 by token_counts().
++STAGE2_V_TILE.update({"w25": 25, "w28": 28, "w31": 31, "w34": 34, "w37": 37,
++                      "w40": 40, "w43": 43, "w46": 46, "w49": 49, "w52": 52,
++                      "w55": 55, "w58": 58, "w61": 61})
+ # T8 (2026-09-14): the product's ceiling on what a chain's CLIPS may assemble to
+ # -- api/models.py:664 ``MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481``.  Quoted, not
+ # invented, so preflight and the API agree on where 422 begins.
+--- comfort-calib-2026-09-17/mkplan.py	2026-09-17 16:28:39.376469100 +0900
++++ comfort-calib-2026-09-25/mkplan.py	2026-09-25 00:18:55.080974200 +0900
+@@ -153,7 +153,7 @@
+     ap = argparse.ArgumentParser()
+     ap.add_argument("--out", required=True, help="plan file name under plans/")
+     ap.add_argument("--kind", choices=["single", "chain"], default="single")
+-    ap.add_argument("--label-prefix", required=True,
++    ap.add_argument("--label-prefix", default=None,
+                     help="e.g. q6_s_720 / q6_c / q6_allon_1080")
+     ap.add_argument("--transformer", required=True,
+                     help="registered GGUF name, or 'default' for the official one")
+@@ -178,6 +178,14 @@
+     ap.add_argument("--suffix", default="",
+                     help="label suffix for a re-run, e.g. _r2 (§3-9: never "
+                          "re-use a label)")
++    # T14 (2026-09-25, §3-165): the label used to be built only as
++    # <prefix>_<WxH> / <prefix>_b<WxH>, which cannot say WHICH stage-2 window a
++    # chain point runs (the window campaign keeps one size and varies the
++    # window).  --label names ONE rung outright; --suffix is still appended and
++    # taken() still refuses a label already spent.
++    ap.add_argument("--label", default=None,
++                    help="explicit label for a single-rung file (overrides "
++                         "--label-prefix/<size>); --suffix is still appended")
+     ap.add_argument("--seed", type=int, default=SEED)
+     ap.add_argument("--tier", default="B")
+     ap.add_argument("--purpose", default="")
+@@ -191,6 +199,10 @@
+         if not args.sizes:
+             raise SystemExit("chain needs --sizes WxH [WxH ...]")
+         rungs = [parse_size(s) + (None,) for s in args.sizes]
++    if not args.label and not args.label_prefix:
++        raise SystemExit("give --label-prefix or --label")
++    if args.label and len(rungs) != 1:
++        raise SystemExit("--label names exactly one rung (got %d)" % len(rungs))
+     if not args.baseline and not args.baseline_first:
+         raise SystemExit("give --baseline <label> or --baseline-first")
+ 
+@@ -207,7 +219,8 @@
+             stem = ("b%d" % frames) if is_baseline else str(frames)
+         else:
+             stem = ("b%dx%d" % (width, height)) if is_baseline else "%dx%d" % (width, height)
+-        label = "%s_%s%s" % (args.label_prefix, stem, args.suffix)
++        label = ("%s%s" % (args.label, args.suffix) if args.label
++                 else "%s_%s%s" % (args.label_prefix, stem, args.suffix))
+         if is_baseline:
+             own_baseline = label
+         if label in busy:
+--- comfort-calib-2026-09-17/selftest/parser_selftest.py	2026-09-17 16:40:08.644329000 +0900
++++ comfort-calib-2026-09-25/selftest/parser_selftest.py	2026-09-25 00:21:24.684645100 +0900
+@@ -29,9 +29,9 @@
+ # written against are therefore carried here as a read-only FIXTURE, and
+ # ``calib.PLANS_DIR`` is left alone so ``preflight`` and ``known_labels`` still
+ # see only this campaign's own plans.  Section H then adds the checks that ARE
+-# about this campaign (rewritten 2026-09-14): that the transformer a plan point
+-# declares never leaks into a /generate body, and that the *_used cross-check
+-# expects the registered name.
++# about this campaign (rewritten per campaign; 2026-09-25: the stage-2 window
++# ladder): that the transformer a plan point declares never leaks into a
++# /generate body, and that the *_used cross-check expects the registered name.
+ FIXTURE_PLANS = HERE / "plans_fixture"
+ FAILURES = []
+ CHECKS = 0
+@@ -298,73 +298,138 @@
+                             "num_frames"] + list(calib.ACCEL_KEYS)))
+ 
+ # ===========================================================================
+-# H -- THIS campaign's own arms (T11, 2026-09-17: the Sulphur-2 Q6_K transformer
+-# on LTX 2.3).  Rewritten against THIS campaign's plan files, exactly as the
+-# 09-14 section H was rewritten against its own: the expected values below are
+-# read off the points this campaign will actually run, never refitted from
+-# another campaign's ladder.  The offline half of the transformer gate -- a
+-# transformer is chosen by POST /pipeline/load and must NEVER leak into a
+-# /generate body, while the *_used cross-check has to expect the registered NAME
+-# the plan point declares.
+-print("\nH. this campaign's arms (Sulphur-2 Q6_K on LTX 2.3, all-on)")
+-
+-
+-def campaign_point(plan_name, label):
+-    return [p for p in json.loads((calib.PLANS_DIR / plan_name)
+-                                  .read_text(encoding="utf-8"))
+-            if p["label"] == label][0]
+-
++# H -- THIS campaign's own arms (T13, 2026-09-25, §3-165: the stage-2 window
++# ladder w25..w61 on a multi-tile chain).  Rewritten against THIS campaign's
++# plan files, exactly as the 09-14 and 09-17 section H were rewritten against
++# their own: the expected values below are the plan's §5 table (tokens, sizes,
++# windows, run counts), read off the points this campaign will actually run and
++# never refitted.  What this section guards:
++#   (1) T12 -- every window the plan names is in calib.STAGE2_V_TILE, and
++#       token_counts() gives the §5 token count (an unknown name used to be
++#       counted SILENTLY as 22, which would make every w46/w61 point look like
++#       its own baseline);
++#   (2) the /generate/chain body carries the window NAME verbatim and no
++#       transformer (a transformer is chosen by POST /pipeline/load only);
++#   (3) every point is paired with a window-22 baseline of the SAME size and
++#       the SAME clips, and each inner point is planned twice (_r2);
++#   (4) the 2.3 arm declares Sulphur-2 Q6_K, the 2.5 arm the official weights
++#       ("default"), each with its own all-on set, and used_check expects that.
++print("\nH. this campaign's arms (stage-2 window ladder, multi-tile chain, all-on)")
++
++PLAN_FILES = ("plan_T1_ltx23_inner.json", "plan_T3a_ltx23_outer.json",
++              "plan_T2_ltx25_inner.json", "plan_T3b_ltx25_outer.json")
++POINTS = {}
++for plan_name in PLAN_FILES:
++    for p in json.loads((calib.PLANS_DIR / plan_name).read_text(encoding="utf-8")):
++        POINTS[p["label"]] = p
+ 
+ Q6 = "Sulphur-2-base-distil-Q6_K"
+-# The control arm (Tier C / Tier D-2) declares "Sulphur-2-base-distil-Q4_K_M" --
+-# a REGISTERED NAME, not "default" -- and its plan file does not exist yet at P0;
+-# add one of its points here once it does.
+ ALLON_23 = {"attention_backend": "sage", "block_swap_prefetch": True,
+             "keep_resident": True, "fused_gguf_dequant_kernel": True,
+             "vae_mode": "prune_vaed", "keep_resident_embeddings": False}
+-
+-# (1) the point declares the whole measurement condition itself (T10): base
+-# model, transformer and the 2.3 all-on set -- prune_vaed, and
+-# keep_resident_embeddings FALSE, because 2.3 answers 422 to true.
+-p_q6 = campaign_point("plan_A1_single_720_1080_q6.json", "q6_s_720_361")
+-check("H: the Tier A point is an LTX 2.3 point", p_q6.get("base_model"), "LTX23")
+-check("H: the Tier A point declares the transformer", p_q6.get("transformer"), Q6)
+-check("H: the Tier A point carries the 2.3 all-on set", p_q6.get("accel"), ALLON_23)
+-check("H: the Tier A point pins NO prompt (T10)", "prompt" in p_q6, False)
+-
+-# (2) build_request turns that into the 2.3 body: PROMPT_23 chosen by base model,
+-# the same six accel values, and no transformer field (/generate has none).
+-path_q6, body_q6 = calib.build_request(p_q6)
+-check("H: single endpoint", path_q6, "/generate")
+-check("H: a point with no prompt gets PROMPT_23", body_q6["prompt"], calib.PROMPT_23)
+-check("H: the body carries the all-on values",
+-      {k: body_q6[k] for k in calib.ACCEL_KEYS}, ALLON_23)
+-check("H: transformer is NOT in the request body", "transformer" in body_q6, False)
+-check("H: body keys are the campaign-1 single-shot set",
+-      sorted(body_q6), sorted(["prompt", "width", "height", "frame_rate", "seed",
+-                               "num_frames"] + list(calib.ACCEL_KEYS)))
+-
+-# (3) the chain baseline -- the endpoint changes, the rules do not.
+-p_chain = campaign_point("plan_D1_chain_q6.json", "q6_c_base")
+-path_chain, body_chain = calib.build_request(p_chain)
+-check("H: chain endpoint", path_chain, "/generate/chain")
+-check("H: the chain point declares the transformer", p_chain.get("transformer"), Q6)
+-check("H: the chain point carries the 2.3 all-on set", p_chain.get("accel"), ALLON_23)
+-check("H: chain body carries no transformer", "transformer" in body_chain, False)
+-check("H: chain body gets PROMPT_23 too", body_chain["prompt"], calib.PROMPT_23)
+-check("H: chain body carries the clips",
+-      body_chain["clips"], [{"num_frames": 25}, {"num_frames": 161}])
++ALLON_25 = {"attention_backend": "sage", "block_swap_prefetch": True,
++            "keep_resident": True, "fused_gguf_dequant_kernel": True,
++            "vae_mode": "default", "keep_resident_embeddings": True}
++# label: (base model, W, H, window, v_tile, stage-2 tokens per tile, runs,
++#         baseline label or None) -- the plan's §5 table, row for row.
++TABLE = {
++    "a_b1216": ("LTX23", 1216, 704, "standard", 22, 18392, 1, None),
++    "a_w46":   ("LTX23", 1216, 704, "w46", 46, 38456, 2, "a_b1216"),
++    "a_b1152": ("LTX23", 1152, 576, "standard", 22, 14256, 1, None),
++    "a_w61":   ("LTX23", 1152, 576, "w61", 61, 39528, 2, "a_b1152"),
++    "a_b1280": ("LTX23", 1280, 768, "standard", 22, 21120, 1, None),
++    "a_o46":   ("LTX23", 1280, 768, "w46", 46, 44160, 1, "a_b1280"),
++    "b_b1280": ("LTX25", 1280, 768, "standard", 22, 21120, 1, None),
++    "b_w46":   ("LTX25", 1280, 768, "w46", 46, 44160, 2, "b_b1280"),
++    "b_b1152": ("LTX25", 1152, 640, "standard", 22, 15840, 1, None),
++    "b_w61":   ("LTX25", 1152, 640, "w61", 61, 43920, 2, "b_b1152"),
++    "b_o52":   ("LTX25", 1280, 768, "w52", 52, 49920, 1, "b_b1280"),
++}
++CLIPS = [{"num_frames": 361}, {"num_frames": 361}]
++
++# (0) the shape of the campaign: 11 labels, 15 runs, _r2 only on inner points.
++expected_labels = set()
++for label, row in TABLE.items():
++    expected_labels.add(label)
++    if row[6] == 2:
++        expected_labels.add(label + "_r2")
++check("H: the plan files hold exactly the §5 labels",
++      sorted(POINTS), sorted(expected_labels))
++check("H: 15 runs in total", len(POINTS), 15)
++
++# (1) T12: the window ladder is known to the harness, 13 rungs, v_tile = name.
++check("H: STAGE2_V_TILE knows w25..w61 as their own number",
++      {k: v for k, v in calib.STAGE2_V_TILE.items() if k.startswith("w")},
++      {"w%d" % n: n for n in range(25, 62, 3)})
++check("H: every window the plan names is known to the harness",
++      sorted({p["stage2_window"] for p in POINTS.values()
++              if p["stage2_window"] not in calib.STAGE2_V_TILE}), [])
++
++for label, p in sorted(POINTS.items()):
++    base_label = label[:-3] if label.endswith("_r2") else label
++    bm, w, h, window, v_tile, tokens, _runs, baseline = TABLE[base_label]
++    counts = calib.token_counts(p)
++    check("H: %s geometry" % label,
++          (p["base_model"], p["width"], p["height"], p["stage2_window"],
++           p["clips"], p["frame_rate"], p["seed"], p["chunked_upsample"]),
++          (bm, w, h, window, CLIPS, 24.0, 12345, False))
++    check("H: %s stage-2 latent frames / tokens" % label,
++          (counts["stage2_latent_frames"], counts["stage2_tokens"]),
++          (v_tile, tokens))
++    # (3) baseline pairing: same size, same clips, window 22; or IS a baseline.
++    if baseline is None:
++        check("H: %s is a baseline" % label,
++              (p.get("is_baseline"), p.get("baseline_label")), (True, None))
++    else:
++        b = POINTS[baseline]
++        check("H: %s -> baseline %s (same size+clips, window 22)" % (label, baseline),
++              (p.get("baseline_label"), b["width"], b["height"], b["clips"],
++               b["stage2_window"], b["base_model"]),
++              (baseline, w, h, CLIPS, "standard", bm))
++    # (4) the declared condition of each arm.
++    if bm == "LTX23":
++        check("H: %s declares Q6_K + 2.3 all-on, no prompt" % label,
++              (p["transformer"], p.get("accel"), "prompt" in p),
++              (Q6, ALLON_23, False))
++    else:
++        check("H: %s declares official weights + 2.5 all-on + PROMPT_25" % label,
++              (p["transformer"], p.get("accel"), p.get("prompt")),
++              ("default", ALLON_25, calib.PROMPT_25))
++
++# (2) build_request for one point of each arm: the window NAME goes verbatim,
++# the clips go as planned, and no transformer leaks into the body.
++for label, allon, prompt in (("a_w61", ALLON_23, calib.PROMPT_23),
++                             ("b_w46", ALLON_25, calib.PROMPT_25)):
++    path_c, body_c = calib.build_request(POINTS[label])
++    check("H: %s endpoint" % label, path_c, "/generate/chain")
++    check("H: %s body window / clips / chunked_upsample" % label,
++          (body_c["stage2_window"], body_c["clips"], body_c["chunked_upsample"]),
++          (POINTS[label]["stage2_window"], CLIPS, False))
++    check("H: %s body carries the all-on values" % label,
++          {k: body_c[k] for k in calib.ACCEL_KEYS}, allon)
++    check("H: %s body prompt" % label, body_c["prompt"], prompt)
++    check("H: %s body carries no transformer" % label, "transformer" in body_c, False)
++    check("H: %s body keys" % label, sorted(body_c),
++          sorted(["prompt", "width", "height", "frame_rate", "seed", "clips",
++                  "stage2_window", "chunked_upsample"] + list(calib.ACCEL_KEYS)))
+ 
+ # (4) used_check expects the REGISTERED NAME the point declared; a point that
+ # declares NOTHING is held to "default" (preflight refuses it outright -- T5b),
+ # and a disagreement is flagged.
+-check("H: the Q6_K point expects its registered name",
++p_q6 = POINTS["a_w46"]
++p_25 = POINTS["b_w46"]
++check("H: the 2.3 point expects its registered name",
+       calib.used_check(p_q6, {})["expected"]["transformer_used"], Q6)
++check("H: the 2.5 point expects the official weights",
++      calib.used_check(p_25, {})["expected"]["transformer_used"], "default")
++check("H: a 2.5 point that ran on REDGraft Q6_K is flagged",
++      sorted(calib.used_check(
++          p_25, {"transformer_used":
++                 "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K"})["mismatches"]),
++      ["transformer_used"])
+ p_bare = {k: v for k, v in p_q6.items() if k != "transformer"}
+-check("H: an undeclared point is held to 'default'",
+-      calib.used_check(p_bare, {})["expected"]["transformer_used"], "default")
+ check("H: preflight makes an undeclared point an ERROR",
+-      [e for e in calib.check_point(p_bare, {"q6_s_720_b185"})["errors"]
++      [e for e in calib.check_point(p_bare, {"a_b1216"})["errors"]
+        if "transformer" in e],
+       ["transformer is not declared (name the registered GGUF, or 'default' "
+        "for the official weights)"])
+@@ -373,16 +438,11 @@
+       ["transformer_used"])
+ check("H: the matching case is clean",
+       calib.used_check(p_q6, {"transformer_used": Q6})["ok"], True)
+-# metadata that carries no models block at all leaves the value None, and
+-# used_check skips a None -- the same rule the 2.3 keep_resident_embeddings
+-# answer relies on.  Recorded here so the skip stays deliberate.
+ check("H: a missing transformer_used is skipped, not flagged",
+       calib.used_check(p_q6, {"transformer_used": None})["ok"], True)
+-# ...and the OTHER half of that same rule: metadata.json really does carry the
+-# registered name where analyse() (T6a) reaches for it.  Read verbatim out of a
+-# REAL Sulphur-2 Q6_K job on LTX 2.3 (2026-09-17 01:30 UTC, today's G7 gate), so
+-# a change to the product's metadata layout fails here instead of sliding past
+-# ``if actual is not None`` as a silent None.
++# metadata.json really does carry the registered name where analyse() (T6a)
++# reaches for it -- read verbatim out of a REAL Sulphur-2 Q6_K job on LTX 2.3
++# (2026-09-17 01:30 UTC, the 09-17 G7 gate; carried over unchanged).
+ real_meta = json.loads(
+     (calib.OUTPUTS / "9754fc09-317d-4c47-ae76-91b0e315bc3d" / "metadata.json")
+     .read_text(encoding="utf-8"))

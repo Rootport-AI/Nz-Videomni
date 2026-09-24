@@ -1,0 +1,24 @@
+# git state at campaign start (2026-09-25)
+branch: dev
+HEAD: 4e3c14479f3dd1301831bba2526bc59f9294bbd5
+
+## git status --short (uncommitted §3-165 implementation in the working tree)
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/api/types.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/i18n/strings.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/chained/ChainedScreen.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/chained/stage2Window.test.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/chained/useChainForm.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/EditScreen.retake.test.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/EditScreen.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/RetakePanel.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/useRetakeForm.test.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/useRetakeForm.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/shell/AppShell.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/shell/tokenBudget.test.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/shell/tokenBudget.ts
+ M api/models.py
+ M chain_math.py
+ M config.py
+ M tests/test_chain_math_end_source.py
+ M tests/test_retake_api.py
+ M tests/test_stage2_window.py

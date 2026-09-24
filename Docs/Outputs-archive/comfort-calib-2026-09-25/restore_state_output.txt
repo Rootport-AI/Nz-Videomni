@@ -1,0 +1,22 @@
+=== restore step 1: LTX25 -> REDGraft Q6_K 03:13:34 ===
+[2026-09-25 03:13:34.277] restoring original base model 'LTX25' transformer 'redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K'
+[2026-09-25 03:13:34.278] POST /pipeline/load base_model=LTX25 transformer=redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K
+[2026-09-25 03:13:41.411]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX25", "models": {"transformer": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-25 03:13:41.413] load finished in 7.1s: state=ready base_model=LTX25 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-25 03:13:41.421]   transformer check: load response='redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K' GET /models active='redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K' want='redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K'
+[2026-09-25 03:13:41.425] state.json after restore: {"schema": 1, "active_base_model": "LTX25", "selections": {"LTX23": {"transformer": "Sulphur-2-base-distil-Q4_K_M", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-25 03:13:41.425] state.json verified: selections.LTX25.transformer = 'redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K'
+rc=0
+=== restore step 2: default (LTX23 Sulphur-2 Q6_K) 03:13:41 ===
+[2026-09-25 03:13:41.565] restoring original base model 'LTX23' transformer 'Sulphur-2-base-distil-Q6_K'
+[2026-09-25 03:13:41.566] POST /pipeline/load base_model=LTX23 transformer=Sulphur-2-base-distil-Q6_K
+[2026-09-25 03:13:48.369]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX23", "models": {"transformer": "Sulphur-2-base-distil-Q6_K", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-25 03:13:48.382] load finished in 6.8s: state=ready base_model=LTX23 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-25 03:13:48.401]   transformer check: load response='Sulphur-2-base-distil-Q6_K' GET /models active='Sulphur-2-base-distil-Q6_K' want='Sulphur-2-base-distil-Q6_K'
+[2026-09-25 03:13:48.404] state.json after restore: {"schema": 1, "active_base_model": "LTX23", "selections": {"LTX23": {"transformer": "Sulphur-2-base-distil-Q6_K", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-25 03:13:48.404] state.json verified: selections.LTX23.transformer = 'Sulphur-2-base-distil-Q6_K'
+rc=0
+=== compare state.json vs original_state.json ===
+active: LTX23 | original: LTX23
+LTX23 now= {'transformer': 'Sulphur-2-base-distil-Q6_K', 'text_encoder': 'default', 'video_vae': 'default', 'audio': 'default'} | orig= {'transformer': 'Sulphur-2-base-distil-Q6_K', 'text_encoder': 'default', 'video_vae': 'default', 'audio': 'default'} | MATCH
+LTX25 now= {'transformer': 'redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K', 'text_encoder': 'default', 'video_vae': 'default', 'audio': 'default'} | orig= {'transformer': 'redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K', 'text_encoder': 'default', 'video_vae': 'default', 'audio': 'default'} | MATCH

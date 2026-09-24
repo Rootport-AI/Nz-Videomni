@@ -6,6 +6,7 @@ import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import type { TimelineSelection } from "../../timeline/menuSelection";
 import { resetProvisionalReservation } from "../../timeline/provisionalReservation";
+import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
 import {
   RETAKE_GLUE_HEAD_FRAMES,
   clearRetakeCarryOver,
@@ -214,13 +215,48 @@ describe("useRetakeForm — 窓", () => {
     expect(result.current.windowFrames).toBe(169);
   });
 
+  // §3-165: 窓の梯子（w25…w61）も同じ式。w61 = 8·61 − 7 = 481。
+  it("Stage-2 が w61 なら窓の上限は 481", () => {
+    const { result } = renderForm(makeIntent());
+    act(() => result.current.setStage2Window("w61"));
+    expect(result.current.maxWindowFrames).toBe(481);
+  });
+
+  // §3-165 の回帰: 以前は配信値 `retake_window_max_frames`（standard の値 169）
+  // との `min` を取っていたので、窓を広げても 169 で頭打ちになっていた。
+  it("配信値 retake_window_max_frames が 169 のままでも、w61 なら上限は 481", () => {
+    const config = {
+      ...FALLBACK_APP_CONFIG,
+      limits: { ...FALLBACK_APP_CONFIG.limits, retake_window_max_frames: 169 },
+    };
+    const nativeBridge = createBridge();
+    const { result } = renderHook(() => useRetakeForm({ config, nativeBridge, initialIntent: makeIntent() }));
+    expect(result.current.maxWindowFrames).toBe(169);
+    act(() => result.current.setStage2Window("w61"));
+    expect(result.current.maxWindowFrames).toBe(481);
+  });
+
+  // §3-165: ドロップダウンのラベルは Chain と同じ式・同じ配信予算。
+  it("stage2WindowLabel はエンジンの配信予算と表示名で目安解像度を出す", () => {
+    const nativeBridge = createBridge();
+    const template = "{frames}f（{engine} {width}×{height}）";
+    const unknown = renderHook(() =>
+      useRetakeForm({ nativeBridge, initialIntent: makeIntent(), engineLabel: "LTX 2.3" }),
+    );
+    expect(unknown.result.current.stage2WindowLabel("w46", template)).toBe("46f（LTX 2.3 1216×704）");
+    const ltx25 = renderHook(() =>
+      useRetakeForm({ nativeBridge, initialIntent: makeIntent(), engineFamily: "ltx25", engineLabel: "LTX 2.5" }),
+    );
+    expect(ltx25.result.current.stage2WindowLabel("w46", template)).toBe("46f（LTX 2.5 1280×768）");
+    expect(ltx25.result.current.stage2WindowLabel("w61", template)).toBe("61f（LTX 2.5 1152×640）");
+  });
+
   // §1-19 (2026-08-11): 型レベルの露出防止ガード。バックエンドは
-  // `stage2_window` に第三のプリセット `"full_length"` を持つが、Retake との
-  // 併用はサーバが 422 で弾く上、`Stage2Window` を 3 値に広げると
-  // `retakeMaxWindowPx` の上限計算が 169 → 481 へ化けてしまう。だから
-  // `Stage2Window`（`shell/tokenBudget.ts`）は意図的に 2 値のまま —
-  // 万一そこへ `"full_length"` が混ざれば、下の `@ts-expect-error` が
-  // 「未使用」になって typecheck が落ちる。
+  // `stage2_window` に `"full_length"`（61/61・1 クリップ＋音声専用）を持つが、
+  // Retake との併用はサーバが 422 で弾く。だから `Stage2Window`
+  // （`shell/tokenBudget.ts`）には意図的に含めない（§3-165 で増えた `w61` は
+  // 別物の普通の窓）— 万一そこへ `"full_length"` が混ざれば、下の
+  // `@ts-expect-error` が「未使用」になって typecheck が落ちる。
   it("setStage2Window は 'full_length' を型として受理しない（§1-19の露出防止）", () => {
     const { result } = renderForm(makeIntent());
     // 型チェックのためだけの参照 —— 実際には呼ばない（"full_length" は

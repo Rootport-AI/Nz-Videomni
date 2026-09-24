@@ -592,36 +592,33 @@ export const en = {
      * (`vTile`, in latent frames — not the `vAdv` advance the old copy used),
      * spelled out plainly as "latent frames", with fixed approximate seconds
      * (24fps assumption, `Math.round`-free — see the literals below) rather
-     * than a live frameRate-derived readout. `shell/tokenBudget.ts` still owns
-     * the underlying geometry (`STAGE2_WINDOW_PRESETS`); only the display
-     * copy stopped reading it dynamically. All four leaves below are now
-     * plain strings, not template functions — `ChainedScreen.tsx` no longer
-     * imports `stage2AdvanceSeconds` at all as a result. */
+     * than a live frameRate-derived readout. §3-165 (owner decision
+     * 2026-09-24): with the 15-step ladder every option shares ONE template,
+     * {@link optionTemplate}; the numbers in it (latent frames and the
+     * recommended 16:9 size at the served budget) are computed by
+     * `shell/tokenBudget.ts`'s `stage2WindowOptionLabel`, and the engine name
+     * is the selected base model's `/models` `display_name`. */
     stage2Window: {
       label: "Stage-2 (upscale pass) clip length",
-      /** vTile=22 -> pxFromVLatent(22) = 169px / 24fps ≈ 7.0s. */
-      standardOption: "22 latent frames (≈7.0 s)",
-      /** vTile=19 -> pxFromVLatent(19) = 145px / 24fps ≈ 6.0s. */
-      highResolutionOption: "19 latent frames (≈6.0 s, reduces VRAM overflow)",
+      /** `{frames}` = vTile, `{engine}` = base-model display name,
+       * `{width}×{height}` = the recommended 16:9 size for that window. When no
+       * size fits, `stage2WindowOptionLabel` shows just `{frames}f`. */
+      optionTemplate: "{frames}f ({engine} {width}×{height})",
       /** Two paragraphs, separated by a blank line (`\n\n`) — rendered as two
        * stacked `.field-hint` <p>s by `ChainedScreen.tsx` so the break survives
        * (that element doesn't set `white-space`, so a literal `\n` alone would
        * collapse). */
       hint:
-        "22 latent frames is recommended. 19 latent frames makes VRAM overflow less likely even on high-resolution video, but increases drift and artifacts in the result.\n\n[How it works] LTX 2.3 generation goes through three stages: Stage-1 (generate a low-resolution draft), Stage-2 (upscale the draft), then VAE decode. In chained-clip generation, Stage-1 joins your specified clip lengths into one long draft video. That draft is too long to upscale all at once in Stage-2, so it is split into fixed-length segments from the start, each upscaled separately, then rejoined. This dropdown is where you set the length used for that split — measured in latent-representation frames, not real time.",
+        "A longer clip length means fewer seams, but each segment is heavier to process. Going above the resolution shown in the option's label may slow generation down because of VRAM overflow.\n\n[How it works] LTX 2.3 generation goes through three stages: Stage-1 (generate a low-resolution draft), Stage-2 (upscale the draft), then VAE decode. In chained-clip generation, Stage-1 joins your specified clip lengths into one long draft video. That draft is too long to upscale all at once in Stage-2, so it is split into fixed-length segments from the start, each upscaled separately, then rejoined. This dropdown is where you set the length used for that split — measured in latent-representation frames, not real time.",
       /** Shown when the current resolution exceeds the comfortable budget on
        * the currently-selected step. Advisory — Generate stays enabled.
        * Rewritten (修正3, 2026-08-09) to drop the seconds-based phrasing (the
        * option labels above no longer read as durations either), then split in
-       * two (owner decision, 2026-08-12): this sentence now states ONLY the
-       * consequence and is shown on BOTH steps, because 19 latent frames can go
-       * over budget too. The "switch to 19" nudge moved to
-       * {@link overBudgetShorterWindowHint} below. */
+       * two (owner decision, 2026-08-12): this sentence states ONLY the
+       * consequence and is shown on every step. §3-165 removed the old
+       * "switch to 19" nudge — the option labels now carry each step's
+       * recommended size instead. */
       overBudgetWarning: "Generation may slow down because of VRAM overflow.",
-      /** Appended to {@link overBudgetWarning} with a single space, and only on
-       * the `standard` step — on the shorter one there is nothing shorter left
-       * to suggest. */
-      overBudgetShorterWindowHint: "Choosing 19 latent frames may reduce it.",
     },
     /** Chain's unified source-input slot (task brief "Chainのソース入力欄一本
      * 化"): one picker button that accepts either an image (start frame for a
@@ -931,10 +928,10 @@ export const en = {
        * whole file, so generating would continue from the wrong footage. */
       sourceTrimFailed:
         "The source video's range could not be cut out. The plugin may be out of date — update it, or pick the file again to run with the whole video.",
-      /** §1-14/§3-57: the shorter finishing-pass step cannot hold this many
+      /** §1-14/§3-57: the selected finishing-pass step cannot hold this many
        * carried-over frames (the server would 422). */
       contextFramesTooLongForWindow: (maxFrames: number): string =>
-        `With the current Stage-2 clip length, at most ${maxFrames} frames can be carried over from the source video. Lower the carried-over frame count, or return the clip length to 22 latent frames (standard).`,
+        `With the current Stage-2 clip length, at most ${maxFrames} frames can be carried over from the source video. Lower the carried-over frame count, or choose a longer clip length.`,
       /** §1-16 長尺A2V. `audioUploading` is deliberately absent — that code reuses
        * `create.generateReasons.audioUploading` verbatim, since it is the exact
        * same sentence about the exact same upload. */
@@ -2620,12 +2617,10 @@ export const ja: Strings = {
       "長尺でもGPUメモリを節約するチャンク方式でアップサンプルする。通常はオンのまま推奨。",
     stage2Window: {
       label: "Stage-2（アップスケール工程）のクリップ長",
-      standardOption: "潜在22フレーム（約7.0秒）",
-      highResolutionOption: "潜在19フレーム（約6.0秒／VRAM溢れ軽減）",
+      optionTemplate: "{frames}f（{engine} {width}×{height}）",
       hint:
-        "潜在22フレーム推奨。潜在19フレームでは高解像度動画でもVRAM溢れが起こりにくくなりますが、動画のドリフトやアーティファクトが増えます。\n\n【解説】LTX 2.3の動画生成は、Stage-1（低解像度で仮動画を生成） → Stage-2（仮動画をアップスケール） → VAEデコードという工程を経ます。連結クリップ生成では、Stage-1ではユーザー指定のクリップ長を繋げて、長い仮動画を生成します。この仮動画は長すぎるため、Stage-2で丸ごとアップスケールできません。そこで、動画冒頭から一定の長さで区切ってアップスケールを行い、後から再連結します。この再連結時の長さを指定するためのドロップダウンリストです。（実時間ではなく、潜在表現でのフレーム数を指定します）",
+        "クリップ長が長いほど継ぎ目が減りますが、1回あたりの負荷が増えます。ラベルの目安解像度を超えるとVRAM溢れで遅くなることがあります。\n\n【解説】LTX 2.3の動画生成は、Stage-1（低解像度で仮動画を生成） → Stage-2（仮動画をアップスケール） → VAEデコードという工程を経ます。連結クリップ生成では、Stage-1ではユーザー指定のクリップ長を繋げて、長い仮動画を生成します。この仮動画は長すぎるため、Stage-2で丸ごとアップスケールできません。そこで、動画冒頭から一定の長さで区切ってアップスケールを行い、後から再連結します。この再連結時の長さを指定するためのドロップダウンリストです。（実時間ではなく、潜在表現でのフレーム数を指定します）",
       overBudgetWarning: "VRAM溢れにより生成が遅くなる可能性があります。",
-      overBudgetShorterWindowHint: "潜在19フレームで軽減できる可能性があります。",
     },
     sourceInput: {
       heading: "素材（冒頭）",
@@ -2735,7 +2730,7 @@ export const ja: Strings = {
       sourceTrimFailed:
         "元動画の範囲切り出しが適用されませんでした。プラグインが古い可能性があります。プラグインを更新するか、ファイルを選び直すと全体を使って実行できます。",
       contextFramesTooLongForWindow: (maxFrames: number): string =>
-        `現在のStage-2のクリップ長では、元動画から引き継げるのは最大${maxFrames}フレームです。引き継ぎフレーム数を下げるか、クリップ長を潜在22フレーム（標準）に戻してください。`,
+        `現在のStage-2のクリップ長では、元動画から引き継げるのは最大${maxFrames}フレームです。引き継ぎフレーム数を下げるか、より長いクリップ長を選んでください。`,
       audioConflictsWithSourceVideo: "v2vとa2vは併用できません。元動画か音声のどちらかを外してください。",
       audioNotReady: "音声を添付し直してください（アップロードに失敗しました）。",
       audioTooShort: "音声が短すぎます。動画を短くするか、↔️再生時間の自動調整を押してください。",

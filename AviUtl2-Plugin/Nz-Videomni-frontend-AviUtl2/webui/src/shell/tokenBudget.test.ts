@@ -15,6 +15,7 @@ import {
   stage2AdvancePixelFrames,
   stage2AdvanceSeconds,
   stage2MaxContextFrames,
+  stage2WindowOptionLabel,
 } from "./tokenBudget";
 
 describe("tokenBudget", () => {
@@ -84,6 +85,28 @@ describe("tokenBudget", () => {
       expect(isChainWindowOverBudget(1920, 1152, "high_resolution")).toBe(true);
     });
 
+    it("gives the §3-165 ladder its recommended pairs at both served budgets", () => {
+      // 40,000 = the LTX 2.3 all-on row / fallback; 44,880 = the LTX 2.5 row
+      // (config.py comfort_budgets). Same values as COMFORT_LIMIT_TABLE §12.
+      expect(chainComfortSize16x9("w25", 40_000)).toEqual({ width: 1664, height: 960 });
+      expect(chainComfortSize16x9("w46", 40_000)).toEqual({ width: 1216, height: 704 });
+      expect(chainComfortSize16x9("w61", 40_000)).toEqual({ width: 1088, height: 576 });
+      expect(chainComfortSize16x9("w25", 44_880)).toEqual({ width: 1792, height: 1024 });
+      expect(chainComfortSize16x9("w46", 44_880)).toEqual({ width: 1280, height: 768 });
+      expect(chainComfortSize16x9("w61", 44_880)).toEqual({ width: 1152, height: 640 });
+      // The 128 grid a reference video puts the form on (owner check 3).
+      expect(chainComfortSize16x9("w46", 40_000, 128)).toEqual({ width: 1152, height: 768 });
+    });
+
+    it("keeps every window's recommended pair inside the budget", () => {
+      for (const budget of [40_000, 44_880]) {
+        for (const window of STAGE2_WINDOW_OPTIONS) {
+          const comfort = chainComfortSize16x9(window, budget);
+          expect(isChainWindowOverBudget(comfort.width, comfort.height, window, budget), window).toBe(false);
+        }
+      }
+    });
+
     it("moves with the budget", () => {
       const tight = chainComfortSize16x9("standard", 30_000);
       expect(isChainWindowOverBudget(tight.width, tight.height, "standard", 30_000)).toBe(false);
@@ -100,14 +123,22 @@ describe("tokenBudget", () => {
       expect(chainComfortAxisMax(1920, "standard")).toBe(960);
     });
 
-    it("is self-consistent with the recommended pair (on the 64 grid)", () => {
-      // The height guide inverted back gives the width guide again — the pair
-      // is a fixed point. TRUE ONLY on the default 64 grid: with a reference
-      // video active (128) the two floorings no longer commute, e.g.
-      // high_resolution's 1024 inverts to 2048, not 1920. That asymmetry is
-      // harmless (flooring only ever moves a guide to the safe side) but it
-      // must not be asserted, hence the grid argument stays omitted here.
+    it("is consistent with the recommended pair (on the 64 grid)", () => {
+      // The height guide inverted back never gives LESS than the width guide:
+      // the 16:9 pair sits inside the budget, so it is at or below the per-axis
+      // ceiling. It was an exact fixed point (`toBe`) while only standard and
+      // high_resolution existed, but the §3-165 ladder breaks the equality on
+      // some windows (w37, w40, w43, w49, w52, w55, w61 — e.g. w61 is 1088x576,
+      // and 576 inverts to 1152), because the width is solved from a 16:9 ratio
+      // rather than from the height. Only on the default 64 grid: with a
+      // reference video active (128) the floorings interact differently, and
+      // the grid argument stays omitted here.
       for (const window of STAGE2_WINDOW_OPTIONS) {
+        const comfort = chainComfortSize16x9(window);
+        expect(chainComfortAxisMax(comfort.height, window), window).toBeGreaterThanOrEqual(comfort.width);
+      }
+      // The two original windows are still exact fixed points.
+      for (const window of ["standard", "high_resolution"] as const) {
         const comfort = chainComfortSize16x9(window);
         expect(chainComfortAxisMax(comfort.height, window)).toBe(comfort.width);
       }
@@ -261,6 +292,61 @@ describe("tokenBudget", () => {
     });
   });
 
+  // §3-165: the dropdown label — numbers from the geometry, wording from i18n.
+  describe("stage2WindowOptionLabel", () => {
+    const template = "{frames}f ({engine} {width}×{height})";
+
+    it("fills frames, engine and the recommended 16:9 size", () => {
+      expect(stage2WindowOptionLabel("w46", { template, engineLabel: "LTX 2.5", budget: 44_880 })).toBe(
+        "46f (LTX 2.5 1280×768)",
+      );
+      expect(stage2WindowOptionLabel("w46", { template, engineLabel: "LTX 2.3", budget: 40_000 })).toBe(
+        "46f (LTX 2.3 1216×704)",
+      );
+      expect(stage2WindowOptionLabel("standard", { template, engineLabel: "LTX 2.3", budget: 40_000 })).toBe(
+        "22f (LTX 2.3 1792×1024)",
+      );
+      expect(stage2WindowOptionLabel("high_resolution", { template, engineLabel: "LTX 2.3", budget: 40_000 })).toBe(
+        "19f (LTX 2.3 1920×1088)",
+      );
+    });
+
+    it("uses the slider grid (128 with a reference video)", () => {
+      expect(
+        stage2WindowOptionLabel("w46", { template, engineLabel: "LTX 2.3", budget: 40_000, grid: 128 }),
+      ).toBe("46f (LTX 2.3 1152×768)");
+    });
+
+    it("works with the Japanese template", () => {
+      expect(
+        stage2WindowOptionLabel("w61", {
+          template: "{frames}f（{engine} {width}×{height}）",
+          engineLabel: "LTX 2.5",
+          budget: 44_880,
+        }),
+      ).toBe("61f（LTX 2.5 1152×640）");
+    });
+
+    it("drops the engine name and its space while the engine is unknown", () => {
+      expect(stage2WindowOptionLabel("standard", { template, engineLabel: "", budget: 40_000 })).toBe(
+        "22f (1792×1024)",
+      );
+      expect(
+        stage2WindowOptionLabel("standard", {
+          template: "{frames}f（{engine} {width}×{height}）",
+          engineLabel: "",
+          budget: 40_000,
+        }),
+      ).toBe("22f（1792×1024）");
+    });
+
+    it("keeps only the frame count when no size fits the budget", () => {
+      // 61 x 1 cell x 1 cell = 61 tokens > 60 → the 16:9 guide collapses to 0.
+      expect(chainComfortSize16x9("w61", 60).width).toBe(0);
+      expect(stage2WindowOptionLabel("w61", { template, engineLabel: "LTX 2.5", budget: 60 })).toBe("61f");
+    });
+  });
+
   // §1-19 (2026-08-11): exposure-prevention guard. The backend gained a third
   // stage-2 preset, `"full_length"`, that Single/Batch A2V send as a fixed
   // wire literal (`modes/batch/buildA2vChainPayload.ts`) — it must NEVER show
@@ -270,13 +356,24 @@ describe("tokenBudget", () => {
   // from. If someone "helpfully" mirrors the new backend preset into this
   // file, one of these two assertions goes red.
   describe("full_length exposure guard (§1-19)", () => {
-    it("STAGE2_WINDOW_OPTIONS stays exactly the 2 UI-selectable presets", () => {
-      expect(STAGE2_WINDOW_OPTIONS).toEqual(["standard", "high_resolution"]);
+    const LADDER = ["w25", "w28", "w31", "w34", "w37", "w40", "w43", "w46", "w49", "w52", "w55", "w58", "w61"];
+
+    it("STAGE2_WINDOW_OPTIONS is exactly the 15 UI-selectable presets (§3-165), default first", () => {
+      expect(STAGE2_WINDOW_OPTIONS).toEqual(["standard", "high_resolution", ...LADDER]);
+      expect(STAGE2_WINDOW_OPTIONS).not.toContain("full_length");
     });
 
-    it("STAGE2_WINDOW_PRESETS stays exactly 2 entries (no full_length key)", () => {
-      expect(Object.keys(STAGE2_WINDOW_PRESETS)).toHaveLength(2);
-      expect(Object.keys(STAGE2_WINDOW_PRESETS).sort()).toEqual(["high_resolution", "standard"]);
+    it("STAGE2_WINDOW_PRESETS is exactly those 15 entries (no full_length key)", () => {
+      expect(Object.keys(STAGE2_WINDOW_PRESETS)).toHaveLength(15);
+      expect(Object.keys(STAGE2_WINDOW_PRESETS).sort()).toEqual(["high_resolution", "standard", ...LADDER].sort());
+    });
+
+    it("the w* ladder is windows 25..61 in steps of 3 with overlap 4 (mirror of chain_math)", () => {
+      LADDER.forEach((name, i) => {
+        const vTile = 25 + 3 * i;
+        expect(STAGE2_WINDOW_PRESETS[name as keyof typeof STAGE2_WINDOW_PRESETS]).toEqual({ vTile, vAdv: vTile - 4 });
+        expect(name).toBe(`w${vTile}`);
+      });
     });
   });
 });

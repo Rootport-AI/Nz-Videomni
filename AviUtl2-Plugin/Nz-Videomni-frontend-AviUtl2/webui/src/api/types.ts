@@ -298,12 +298,14 @@ export interface SourceVideoSpec {
  * 載せると、`clips[0].num_frames` の長さの窓を素材の `window_start_sec` から
  * 切り出し、その**両端を凍結したまま中身だけ**を作り直す。
  *
- * 3 フィールドしか無いのは意図的で、糊代（`head_px`/`tail_px`）と
- * `stage2_window` は**送らない** —— サーバ既定（頭25/尾24、`"standard"`）に
- * 自動追随させるため。糊代は実測で較正された値であり、UI に出す価値のある
- * つまみではない（RangeBand が「触れない領域」として見せるだけ）。
- * `stage2_window="high_resolution"` との併用はサーバが 422 で弾く。
- * `stage2_window="full_length"` との併用も同様にサーバが 422 で弾く（§1-19）。
+ * 3 フィールドしか無いのは意図的で、糊代（`head_px`/`tail_px`）は**送らない**
+ * —— サーバ既定（頭25/尾24）に自動追随させるため。糊代は実測で較正された値で
+ * あり、UI に出す価値のあるつまみではない（RangeBand が「触れない領域」として
+ * 見せるだけ）。Stage-2 の窓はこの型ではなく `GenerateChainRequest.stage2_window`
+ * で送る（既定 `"standard"` は省略）。窓は UI の全段（`standard`・
+ * `high_resolution`・`w25`…`w61`）を選べ、Retake の窓の上限は
+ * `8 * vTile - 7`（standard 169 … w61 481。窓はどの段でもタイル 1 枚）。
+ * `stage2_window="full_length"` との併用はサーバが 422 で弾く（§1-19）。
  */
 export interface RetakeSpec {
   /** `POST /upload/video` の `video_id`。 */
@@ -430,6 +432,8 @@ export interface GenerateChainRequest {
    * costs ~14% fewer attention tokens per stage-2 window and so keeps high
    * resolutions inside the comfortable budget
    * (`shell/tokenBudget.ts`'s `CHAIN_COMFORT_TOKEN_BUDGET`) instead of spilling.
+   * `"w25"`…`"w61"` (§3-165) are the wider ladder `(v, v - 4)`: fewer seams,
+   * heavier tile.
    *
    * Unlike `chunked_upsample` above, this is OMITTED at its default — the
    * ordinary optional-field treatment every other field on this interface gets,
@@ -444,9 +448,25 @@ export interface GenerateChainRequest {
    * otherwise), so it is only ever sent by the Single and Batch A2V builders
    * (`modes/batch/buildA2vChainPayload.ts`) as a fixed literal — it is not a
    * choice the interactive Chain screen offers, which is why
-   * `shell/tokenBudget.ts`'s `Stage2Window` union deliberately stays at just
-   * `"standard"`/`"high_resolution"`. */
-  stage2_window?: "standard" | "high_resolution" | "full_length";
+   * `shell/tokenBudget.ts`'s `Stage2Window` union deliberately leaves it out
+   * (`"w61"` is a different, ordinary multi-tile window). */
+  stage2_window?:
+    | "standard"
+    | "high_resolution"
+    | "full_length"
+    | "w25"
+    | "w28"
+    | "w31"
+    | "w34"
+    | "w37"
+    | "w40"
+    | "w43"
+    | "w46"
+    | "w49"
+    | "w52"
+    | "w55"
+    | "w58"
+    | "w61";
   /** Reference-video CONTROL IC-LoRA conditioning source, mirroring
    * `GenerateRequest.reference_video_id`: the `video_id` from
    * `POST /upload/video`. Requires at least one entry in `loras`; mutually

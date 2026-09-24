@@ -2,6 +2,7 @@ import { useStrings } from "../../i18n/LanguageContext";
 import { useJobsContext } from "../../jobs/JobsContext";
 import { latestJobSeed } from "../../jobs/seedUtils";
 import { VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
+import { STAGE2_WINDOW_OPTIONS } from "../../shell/tokenBudget";
 import type { Stage2Window } from "../../shell/tokenBudget";
 import { SizeFields } from "../single/CommonGenerationFields";
 import { FRAME_RATE_MAX, FRAME_RATE_MIN } from "../single/paramUtils";
@@ -287,7 +288,9 @@ function RetakeSettings({ form, disabled }: RetakePanelProps) {
           なので、i18n も `strings.chained.stage2Window` を直接読む —— 同じ文言を
           2 箇所で持つと、片方だけ直る事故になる。JSX は `ChainedScreen` の同じ
           ブロックの写しで、あちらは本作業の立入禁止領域なので触っていない。
-          Retake ではこの選択が**窓長の上限**にも効く（潜在19フレーム = 145）。 */}
+          Retake ではこの選択が**窓長の上限**にも効く（`8·vTile − 7`：潜在19
+          フレーム = 145・standard = 169・w61 = 481）。§3-165 で選択肢は
+          `STAGE2_WINDOW_OPTIONS` の 15 段、ラベルは Chain と同じ式。 */}
       <label className="field">
         <span className="field-label">{strings.chained.stage2Window.label}</span>
         <select
@@ -295,8 +298,11 @@ function RetakeSettings({ form, disabled }: RetakePanelProps) {
           disabled={disabled}
           onChange={(e) => form.setStage2Window(e.target.value as Stage2Window)}
         >
-          <option value="standard">{strings.chained.stage2Window.standardOption}</option>
-          <option value="high_resolution">{strings.chained.stage2Window.highResolutionOption}</option>
+          {STAGE2_WINDOW_OPTIONS.map((window) => (
+            <option key={window} value={window}>
+              {form.stage2WindowLabel(window, strings.chained.stage2Window.optionTemplate)}
+            </option>
+          ))}
         </select>
         {strings.chained.stage2Window.hint.split("\n\n").map((paragraph, i) => (
           <p className="field-hint" key={i}>

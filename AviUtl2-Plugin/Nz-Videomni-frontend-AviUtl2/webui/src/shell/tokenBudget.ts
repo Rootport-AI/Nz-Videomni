@@ -31,17 +31,30 @@
  * (`GenerateChainRequest.stage2_window`).
  *
  * This type represents only the windows the UI lets a user PICK. The backend
- * also has a third preset, `"full_length"` (61, 61) — one stage-2 tile
- * spanning the whole clip, no seams — but it is a fixed wire value the
- * Single/Batch A2V builders always send (`modes/batch/buildA2vChainPayload.ts`),
- * never a choice, so it is deliberately NOT added here (§1-19, 2026-08-11).
- * Widening this union to 3 values would leak into places that assume exactly
- * 2: `modes/edit/useRetakeForm.ts`'s `retakeMaxWindowPx` window-size ceiling
- * (which would silently jump from 169 to 481 px) and the Chained screen's
- * stage-2 window dropdown (which would type-check accepting a value it must
- * never offer). See `api/types.ts`'s `GenerateChainRequest.stage2_window` for
- * the wire type that does include `"full_length"`. */
-export type Stage2Window = "standard" | "high_resolution";
+ * also has a `"full_length"` preset (61, 61) — one stage-2 tile spanning the
+ * whole clip, no seams, 1 clip + source audio only — but it is a fixed wire
+ * value the Single/Batch A2V builders always send
+ * (`modes/batch/buildA2vChainPayload.ts`), never a choice, so it is
+ * deliberately NOT added here (§1-19, 2026-08-11): the Chained/Retake window
+ * dropdowns must never type-check accepting it. See `api/types.ts`'s
+ * `GenerateChainRequest.stage2_window` for the wire type that does include
+ * `"full_length"`. `"w61"` (61, 57) is a different, ordinary multi-tile window. */
+export type Stage2Window =
+  | "standard"
+  | "high_resolution"
+  | "w25"
+  | "w28"
+  | "w31"
+  | "w34"
+  | "w37"
+  | "w40"
+  | "w43"
+  | "w46"
+  | "w49"
+  | "w52"
+  | "w55"
+  | "w58"
+  | "w61";
 
 export const STAGE2_WINDOW_DEFAULT: Stage2Window = "standard";
 
@@ -55,14 +68,46 @@ export const STAGE2_WINDOW_DEFAULT: Stage2Window = "standard";
  *   §3-57 follow-up run added to suppress the drift the bare 19/4 window showed.
  *   It advances LESS per tile, so the same timeline gets MORE seams — hence
  *   opt-in, never the default (owner decision 2026-08-09).
+ * - `w25` … `w61` (v, v - 4) — the wider-window ladder (§3-165, owner decision
+ *   2026-09-24): 25..61 in steps of 3, overlap 4, so every advance is a
+ *   multiple of 3. Fewer seams for the same timeline, heavier tile.
  */
 export const STAGE2_WINDOW_PRESETS: Readonly<Record<Stage2Window, { vTile: number; vAdv: number }>> = {
   standard: { vTile: 22, vAdv: 18 },
   high_resolution: { vTile: 19, vAdv: 12 },
+  w25: { vTile: 25, vAdv: 21 },
+  w28: { vTile: 28, vAdv: 24 },
+  w31: { vTile: 31, vAdv: 27 },
+  w34: { vTile: 34, vAdv: 30 },
+  w37: { vTile: 37, vAdv: 33 },
+  w40: { vTile: 40, vAdv: 36 },
+  w43: { vTile: 43, vAdv: 39 },
+  w46: { vTile: 46, vAdv: 42 },
+  w49: { vTile: 49, vAdv: 45 },
+  w52: { vTile: 52, vAdv: 48 },
+  w55: { vTile: 55, vAdv: 51 },
+  w58: { vTile: 58, vAdv: 54 },
+  w61: { vTile: 61, vAdv: 57 },
 };
 
 /** The stage-2 window order the UI offers, default first. */
-export const STAGE2_WINDOW_OPTIONS: readonly Stage2Window[] = ["standard", "high_resolution"];
+export const STAGE2_WINDOW_OPTIONS: readonly Stage2Window[] = [
+  "standard",
+  "high_resolution",
+  "w25",
+  "w28",
+  "w31",
+  "w34",
+  "w37",
+  "w40",
+  "w43",
+  "w46",
+  "w49",
+  "w52",
+  "w55",
+  "w58",
+  "w61",
+];
 
 /** Comfortable attention-token ceiling for ONE stage-2 window of a chain.
  * Mirror of `chain_math.CHAIN_COMFORT_TOKEN_BUDGET`.
@@ -184,6 +229,34 @@ export function chainComfortSize16x9(
   const cells = Math.floor(budget / STAGE2_WINDOW_PRESETS[window].vTile);
   const width = floorToGrid(Math.sqrt((cells * 1024 * 16) / 9), grid);
   return { width, height: chainComfortAxisMax(width, window, budget, grid) };
+}
+
+/** The dropdown label for `window`: its latent frame count plus the
+ * recommended 16:9 size ({@link chainComfortSize16x9}) at the served `budget`
+ * and slider `grid`, tagged with the engine's display name (`/models`
+ * `base_models[].display_name`, e.g. "LTX 2.5").
+ *
+ * The numbers are computed here; the wording is the i18n `template`, whose
+ * `{frames}`/`{engine}`/`{width}`/`{height}` are substituted. When no size fits
+ * the budget (the recommended width or height is 0) the label is just
+ * `{frames}f` (e.g. "61f"), the language-neutral head of every template. */
+export function stage2WindowOptionLabel(
+  window: Stage2Window,
+  opts: { template: string; engineLabel: string; budget: number; grid?: number },
+): string {
+  const frames = String(STAGE2_WINDOW_PRESETS[window].vTile);
+  const comfort = chainComfortSize16x9(window, opts.budget, opts.grid ?? GUIDE_GRID_DEFAULT);
+  if (comfort.width <= 0 || comfort.height <= 0) {
+    return `${frames}f`;
+  }
+  // An unknown engine (`""`, before the first `GET /models` lands) drops the
+  // `{engine} ` placeholder together with its trailing space.
+  const template = opts.engineLabel ? opts.template : opts.template.replace("{engine} ", "");
+  return template
+    .replace("{frames}", () => frames)
+    .replace("{engine}", () => opts.engineLabel)
+    .replace("{width}", () => String(comfort.width))
+    .replace("{height}", () => String(comfort.height));
 }
 
 /** Everything the width/height sliders draw for `window` at the current

@@ -169,6 +169,49 @@ describe("useChainForm — the served comfort budget", () => {
   });
 });
 
+// §3-165: the dropdown label names the recommended 16:9 size at the SAME
+// budget and grid the slider guides use, tagged with the loaded engine's name.
+describe("useChainForm — stage2WindowLabel (§3-165)", () => {
+  const template = en.chained.stage2Window.optionTemplate;
+
+  it("uses the engine-unknown budget (40,000) and the given engine name", () => {
+    const mockBridge = createMockBridge({ delayMs: 0 });
+    const { result } = renderHook(() =>
+      useChainForm(FALLBACK_APP_CONFIG, "p", { nativeBridge: mockBridge, engineLabel: "LTX 2.3" }),
+    );
+    expect(result.current.stage2WindowLabel("standard", template)).toBe("22f (LTX 2.3 1792×1024)");
+    expect(result.current.stage2WindowLabel("w46", template)).toBe("46f (LTX 2.3 1216×704)");
+    expect(result.current.stage2WindowLabel("w61", template)).toBe("61f (LTX 2.3 1088×576)");
+  });
+
+  it("follows the engine's served chain budget (LTX 2.5 = 44,880)", () => {
+    const mockBridge = createMockBridge({ delayMs: 0 });
+    const { result } = renderHook(() =>
+      useChainForm(FALLBACK_APP_CONFIG, "p", {
+        nativeBridge: mockBridge,
+        engineFamily: "ltx25",
+        engineLabel: "LTX 2.5",
+      }),
+    );
+    expect(result.current.stage2WindowLabel("standard", template)).toBe("22f (LTX 2.5 1920×1088)");
+    expect(result.current.stage2WindowLabel("w46", template)).toBe("46f (LTX 2.5 1280×768)");
+    expect(result.current.stage2WindowLabel("w61", template)).toBe("61f (LTX 2.5 1152×640)");
+  });
+
+  it("moves onto the 128 grid while a reference video is active (§1-15)", async () => {
+    const mockBridge = createMockBridge({ delayMs: 0 });
+    const { result } = renderHook(() =>
+      useChainForm(FALLBACK_APP_CONFIG, "p", { nativeBridge: mockBridge, engineLabel: "LTX 2.3" }),
+    );
+    expect(result.current.stage2WindowLabel("w46", template)).toBe("46f (LTX 2.3 1216×704)");
+    await act(async () => {
+      await result.current.referenceVideo.uploadPath("C:\\v\\ref.mp4", "ref.mp4");
+    });
+    await waitFor(() => expect(result.current.isReferenceActive).toBe(true));
+    expect(result.current.stage2WindowLabel("w46", template)).toBe("46f (LTX 2.3 1152×768)");
+  });
+});
+
 describe("useChainForm — contextFramesTooLongForWindow (the V2V 422 pre-block)", () => {
   it("reports the ceiling of the CURRENT window", () => {
     const { result } = setup();
@@ -232,6 +275,7 @@ function renderChain() {
         highlightedJobId={null}
         onJobSubmitted={() => {}}
         controlLoraNames={new Set()}
+        engineLabel="LTX 2.3"
       />
     </Providers>,
   );
@@ -239,22 +283,44 @@ function renderChain() {
 }
 
 describe("ChainedScreen — the finishing-pass step control", () => {
-  it("renders a step selector whose options are the vTile latent-frame lengths, with fixed approximate seconds", async () => {
+  it("renders a step selector with all 15 windows, each labelled with its recommended size for the engine", async () => {
     const { container } = renderChain();
     await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
 
-    // Copy rework (owner decision, 2026-08-09): the option text is now a fixed
-    // "N latent frames (≈S s)" string (pxFromVLatent(vTile)/24fps), not a
-    // duration read live off the form's frame rate. vTile=22 -> 169px/24fps
-    // ≈ 7.0s; vTile=19 -> 145px/24fps ≈ 6.0s.
-    const option7 = screen.getByRole("option", { name: /7\.0/ });
-    const option6 = screen.getByRole("option", { name: /6\.0/ });
-    expect(option7).toHaveValue("standard");
-    expect(option6).toHaveValue("high_resolution");
+    // §3-165 (owner decision 2026-09-24): "{frames}f ({engine} {width}×{height})"
+    // — the recommended 16:9 size at the served budget (40,000 here: no engine
+    // family is passed, so the comfort table falls back to the scalar budget).
+    const standard = screen.getByRole("option", { name: "22f (LTX 2.3 1792×1024)" });
+    const high = screen.getByRole("option", { name: "19f (LTX 2.3 1920×1088)" });
+    const w46 = screen.getByRole("option", { name: "46f (LTX 2.3 1216×704)" });
+    const w61 = screen.getByRole("option", { name: "61f (LTX 2.3 1088×576)" });
+    expect(standard).toHaveValue("standard");
+    expect(high).toHaveValue("high_resolution");
+    expect(w46).toHaveValue("w46");
+    expect(w61).toHaveValue("w61");
 
-    const select = option7.closest("select");
+    const select = standard.closest("select");
     expect(select).not.toBeNull();
     expect(select).toHaveValue("standard");
+    const values = Array.from(select!.querySelectorAll("option")).map((o) => o.value);
+    expect(values).toEqual([
+      "standard",
+      "high_resolution",
+      "w25",
+      "w28",
+      "w31",
+      "w34",
+      "w37",
+      "w40",
+      "w43",
+      "w46",
+      "w49",
+      "w52",
+      "w55",
+      "w58",
+      "w61",
+    ]);
+    expect(values).not.toContain("full_length");
     expect(container).toBeTruthy();
   });
 
@@ -301,7 +367,7 @@ describe("ChainedScreen — the comfortable-resolution guides", () => {
   }
 
   function selectWindow(value: string) {
-    const select = screen.getByRole("option", { name: /7\.0/ }).closest("select")!;
+    const select = screen.getByRole("option", { name: /^22f/ }).closest("select")!;
     fireEvent.change(select, { target: { value } });
   }
 
@@ -353,44 +419,49 @@ describe("ChainedScreen — the over-budget advisory", () => {
     expect(screen.queryByText(en.chained.stage2Window.overBudgetWarning)).not.toBeInTheDocument();
   });
 
-  it("states the slowdown AND the shorter-step nudge on the default step, without blocking Generate", async () => {
+  it("states the slowdown as ONE sentence on the default step, without blocking Generate", async () => {
     const { container } = renderChain();
     await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
 
-    // 1920x1088 on the standard step = 44,880 tokens > 40,000.
+    // 1920x1088 on the standard step = 44,880 tokens > 40,000. §3-165 removed
+    // the "switch to 19" nudge: the banner is the slowdown sentence alone.
     setSize(container, 1920, 1088);
-    const banner = await screen.findByText(
-      `${en.chained.stage2Window.overBudgetWarning} ${en.chained.stage2Window.overBudgetShorterWindowHint}`,
-    );
-    expect(banner).toBeInTheDocument();
+    const banner = await screen.findByText(en.chained.stage2Window.overBudgetWarning);
+    expect(banner.textContent).toBe(en.chained.stage2Window.overBudgetWarning);
     // §1-14: advisory, never a gate.
     expect(screen.getByRole("button", { name: en.chained.generateButton })).toBeEnabled();
   });
 
-  it("never nudges towards the shorter step while the shorter step is already selected", async () => {
-    // The nudge is the ONLY part that is step-specific (2026-08-12): the
-    // slowdown sentence itself is shown on both steps, which is why it is a
-    // separate string. At the mock backend's 1920x1088 ceiling the shorter step
-    // is back inside the budget, so here the whole banner goes away — and the
-    // nudge must not survive it.
+  it("clears the banner when a window whose budget fits is picked", async () => {
+    // At the mock backend's 1920x1088 ceiling the shorter step is back inside
+    // the budget, so the whole banner goes away.
     const { container } = renderChain();
     await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
     setSize(container, 1920, 1088);
-    await screen.findByText(new RegExp(en.chained.stage2Window.overBudgetShorterWindowHint));
+    await screen.findByText(en.chained.stage2Window.overBudgetWarning);
 
-    const select = screen.getByRole("option", { name: /7\.0/ }).closest("select")!;
+    const select = screen.getByRole("option", { name: /^22f/ }).closest("select")!;
     fireEvent.change(select, { target: { value: "high_resolution" } });
     await waitFor(() =>
-      expect(screen.queryByText(new RegExp(en.chained.stage2Window.overBudgetShorterWindowHint))).not.toBeInTheDocument(),
+      expect(screen.queryByText(en.chained.stage2Window.overBudgetWarning)).not.toBeInTheDocument(),
     );
-    expect(screen.queryByText(new RegExp(en.chained.stage2Window.overBudgetWarning))).not.toBeInTheDocument();
+  });
+
+  it("shows the same single sentence on a ladder window (§3-165)", async () => {
+    // The default 1280x768 is 40*24*61 = 58,560 tokens on w61 > 40,000.
+    renderChain();
+    await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
+    expect(screen.queryByText(en.chained.stage2Window.overBudgetWarning)).not.toBeInTheDocument();
+
+    const select = screen.getByRole("option", { name: /^22f/ }).closest("select")!;
+    fireEvent.change(select, { target: { value: "w61" } });
+    const banner = await screen.findByText(en.chained.stage2Window.overBudgetWarning);
+    expect(banner.textContent).toBe(en.chained.stage2Window.overBudgetWarning);
   });
 
   // B-2 (2026-08-12, adversarial review): the shorter step (high_resolution)
   // can still be over budget at a large enough width — this pins the
-  // single-sentence rendering (`ChainedScreen.tsx`'s
-  // `form.stage2Window === "standard" && ...` guard means the nudge ONLY ever
-  // joins the slowdown sentence on the default step). No IN-BOUNDS
+  // single-sentence rendering on that step too. No IN-BOUNDS
   // width/height pair can reach this state on this mock backend: its own
   // ceiling (1920x1088) is exactly high_resolution's recommended point
   // (38,760 tokens, under the 40,000 line — see this file's own "moves the
@@ -419,14 +490,14 @@ describe("ChainedScreen — the over-budget advisory", () => {
   // own" above); this test only adds the one thing that describe block
   // cannot reach through the hook alone — the RENDERED banner text with the
   // shorter step already selected.
-  it("shows only the slowdown sentence (no shorter-step nudge) when the shorter step ITSELF is still over budget", async () => {
+  it("shows only the slowdown sentence when the shorter step ITSELF is still over budget", async () => {
     const user = userEvent.setup();
     const { container } = renderChain();
     await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
 
-    const select = screen.getByRole("option", { name: /7\.0/ }).closest("select")!;
+    const select = screen.getByRole("option", { name: /^22f/ }).closest("select")!;
     fireEvent.change(select, { target: { value: "high_resolution" } });
-    await screen.findByRole("option", { name: /6\.0/ });
+    await waitFor(() => expect(select).toHaveValue("high_resolution"));
 
     const widthField = container.querySelectorAll<HTMLElement>(".size-field-stack .field")[0]!;
     const widthNumberInput = widthField.querySelector<HTMLInputElement>('input[type="number"]')!;
@@ -436,7 +507,6 @@ describe("ChainedScreen — the over-budget advisory", () => {
     // 4096 x 768 x 19 latent frames = 58,368 tokens > 40,000 — still over
     // budget even on the shorter step.
     const banner = await screen.findByText(en.chained.stage2Window.overBudgetWarning);
-    expect(banner).toBeInTheDocument();
-    expect(banner.textContent).not.toContain(en.chained.stage2Window.overBudgetShorterWindowHint);
+    expect(banner.textContent).toBe(en.chained.stage2Window.overBudgetWarning);
   });
 });

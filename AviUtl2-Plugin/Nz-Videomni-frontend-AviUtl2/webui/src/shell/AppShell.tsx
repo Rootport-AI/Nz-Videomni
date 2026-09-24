@@ -220,6 +220,11 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // open) and `handleRoute` (a right-click routed AT such a mode must be refused
   // before it writes anything). One value, so the two can never disagree.
   const disabledModes = baseModels.disabledModes;
+  // §3-165: the LOADED base model's `/models` display name ("LTX 2.3" /
+  // "LTX 2.5"), read off `active` for the same reason `activeEngineFamily` is
+  // — the stage-2 window labels quote that engine's comfort size. `""` until
+  // the first `GET /models` lands.
+  const activeEngineLabel = baseModels.options.find((o) => o.id === baseModels.active)?.displayName ?? "";
 
   // Shared note area (RIGHTCLICK_REDESIGN_SPEC.md §6): a single persistent slot
   // above the operation panel. One note at a time — `showNote` REPLACES whatever
@@ -1587,6 +1592,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  LTX 2.5. */
               sageAvailable={sageAvail}
               engineFamily={baseModels.activeEngineFamily}
+              /* §3-165: the stage-2 window dropdown names the loaded engine. */
+              engineLabel={activeEngineLabel}
               /* §3-102: the four material panels the loaded engine's feature
                  scope can take down one by one — see `chainPanels` above. */
               v2vUnavailable={chainPanels.v2v}
@@ -1622,6 +1629,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  快適上限 warning threshold, the same way it keys Create's and
                  Chained's comfort markers above. */
               engineFamily={baseModels.activeEngineFamily}
+              /* §3-165: the Retake stage-2 window labels read the same comfort
+                 row Chained's do, and name the loaded engine. */
+              sageAvailable={sageAvail}
+              engineLabel={activeEngineLabel}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "inventory"}>

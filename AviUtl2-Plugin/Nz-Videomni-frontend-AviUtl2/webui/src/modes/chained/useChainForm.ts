@@ -16,6 +16,7 @@ import {
   isChainWindowOverBudget,
   resolveChainComfortBudget,
   stage2MaxContextFrames,
+  stage2WindowOptionLabel,
 } from "../../shell/tokenBudget";
 import type { ChainWindowBudgetMarkers, Stage2Window } from "../../shell/tokenBudget";
 import { resolveComfortRow } from "../../shell/comfortTable";
@@ -157,6 +158,11 @@ export interface UseChainFormDeps {
    * `shell/comfortTable.ts`'s compatibility shim, so every pre-existing unit
    * test keeps its current budget. */
   engineFamily?: string | undefined;
+  /** §3-165: the LOADED base model's display name (`/models`
+   * `base_models[].display_name`, e.g. "LTX 2.5"), owned by `shell/AppShell.tsx`
+   * alongside {@link engineFamily}. Only printed in the stage-2 window
+   * dropdown's labels ({@link UseChainFormResult.stage2WindowLabel}). Omitted = `""`. */
+  engineLabel?: string | undefined;
 }
 
 const EMPTY_CONTROL_LORA_NAMES: ReadonlySet<string> = new Set();
@@ -641,6 +647,11 @@ export interface UseChainFormResult {
    * stored — so it follows a window change, a served-budget change and a
    * reference video's 128 grid on its own. */
   chainWindowMarkers: ChainWindowBudgetMarkers;
+  /** §3-165: the stage-2 window dropdown's option label for `window`, filled
+   * into the i18n `template` with the SAME budget and slider grid the markers
+   * above use (`shell/tokenBudget.ts`'s `stage2WindowOptionLabel`), so a label
+   * names the recommended size the marker will move to once it is picked. */
+  stage2WindowLabel: (window: Stage2Window, template: string) => string;
   /** The largest `contextFrames` the CURRENT stage-2 window can hold
    * (`shell/tokenBudget.ts`'s `stage2MaxContextFrames`) — 161 on `"standard"`
    * (never binding, the server caps context at 145) and 137 on
@@ -1127,6 +1138,7 @@ export function useChainForm(
   // shim — i.e. the pre-table budget.
   const sageAvailable = deps.sageAvailable ?? null;
   const engineFamily = deps.engineFamily;
+  const engineLabel = deps.engineLabel ?? "";
 
   // ── §1-15 参照動画: declared FIRST because the width/height grid depends on
   // it. A reference video (or a control LoRA, which mandates one) puts the
@@ -2447,6 +2459,11 @@ export function useChainForm(
     () => chainWindowBudgetMarkers(common.width, common.height, stage2Window, comfortBudget, active.multiple),
     [common.width, common.height, stage2Window, comfortBudget, active.multiple],
   );
+  const stage2WindowLabel = useCallback(
+    (window: Stage2Window, template: string) =>
+      stage2WindowOptionLabel(window, { template, engineLabel, budget: comfortBudget, grid: active.multiple }),
+    [engineLabel, comfortBudget, active.multiple],
+  );
 
   // ── §1-16 長尺A2V: the audio gates and the panel's advisory numbers ────────
   const clipNumFramesList = clips.map((clip) => clip.numFrames);
@@ -2902,6 +2919,7 @@ export function useChainForm(
     setStage2Window,
     chainWindowOverBudget,
     chainWindowMarkers,
+    stage2WindowLabel,
     stage2MaxContextFrames: maxContextForWindow,
     sourceVideo,
     contextFrames,

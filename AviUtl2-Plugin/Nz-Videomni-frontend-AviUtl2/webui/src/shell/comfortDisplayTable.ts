@@ -124,6 +124,8 @@ const ALL_ON_ACCELERATION: AccelerationSettings = {
   fusedGgufDequantKernel: true,
   vaeMode: "prune_vaed",
   keepResidentEmbeddings: false,
+  // Output setting sharing the store (§3-164); the comfort matcher ignores it.
+  embedMp4Metadata: true,
 };
 
 /**

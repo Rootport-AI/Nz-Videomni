@@ -5,6 +5,8 @@ import type { ApiClient } from "../api/client";
 import { useLanguage, useStrings } from "../i18n/LanguageContext";
 import type { Lang } from "../i18n/LanguageContext";
 import { ModelsPanel } from "./ModelsPanel";
+import { BaseModelSelect } from "./BaseModelSelect";
+import type { BaseModelOption } from "./useBaseModels";
 import { DangerZonePanel } from "./DangerZonePanel";
 import { useSettings } from "./useSettings";
 import { useConfig } from "../modes/single/useConfig";
@@ -88,6 +90,24 @@ export interface SettingsPanelProps {
    * OTHER WAY ROUND: the embeddings processor is LTX 2.5's own component, so it
    * is LTX 2.3 that publishes the name and hides this row. */
   keepResidentEmbeddingsUnsupported: boolean;
+  /** Output (§3-164, 2026-09-24): whether finished mp4s get the generation
+   * conditions written into their `comment` tag. Stored alongside the
+   * acceleration choices (`acceleration.embedMp4Metadata`). */
+  onEmbedMp4MetadataChange: (value: boolean) => void;
+  /** §3-166 (2026-09-24): the base-model dropdown shown above the Models
+   * section. All four come from `AppShell`'s single `useBaseModels()` call and
+   * its `handleBaseModelChange` — the same ones the header dropdown uses — so
+   * this panel holds no base-model state of its own. */
+  baseModelOptions: BaseModelOption[];
+  baseModelValue: string;
+  onBaseModelChange: (id: string) => void;
+  /** Disables the dropdown while the server is occupied, like the header's. */
+  serverBusy: boolean;
+  /** The LOADED base model's id (`useBaseModels().active`). The Models section
+   * is keyed on it: `useModels` reads `GET /models` only on mount, so a
+   * completed switch must remount it or it would keep showing (and sending)
+   * the previous base model's categories. */
+  activeBaseModelId: string;
   /** §3-163: the LOADED base model's engine family (`AppShell`'s
    * `baseModels.activeEngineFamily`), which decides WHICH comfort-limit table
    * the section at the bottom shows — or, for a family with no table (and for
@@ -121,6 +141,12 @@ export function SettingsPanel({
   vaeUnsupported,
   onKeepResidentEmbeddingsChange,
   keepResidentEmbeddingsUnsupported,
+  onEmbedMp4MetadataChange,
+  baseModelOptions,
+  baseModelValue,
+  onBaseModelChange,
+  serverBusy,
+  activeBaseModelId,
   engineFamily,
   serverStatus,
   nativeBridge,
@@ -309,7 +335,23 @@ export function SettingsPanel({
          * below the Save/Close actions, away from the connection settings'
          * primary button; the owner asked for the base-model controls to be
          * reachable without scrolling past every acceleration row instead. */}
-        <ModelsPanel {...(modelsApiClient !== undefined ? { apiClient: modelsApiClient } : {})} />
+        {/* §3-166 (2026-09-24): the base-model dropdown, directly above the
+         * Models section it decides the contents of. Same component and same
+         * handler as the header's, fed from `AppShell`. */}
+        <div className="models-section">
+          <h3>{strings.settings.baseModelHeading}</h3>
+          <BaseModelSelect
+            className="field-select"
+            options={baseModelOptions}
+            value={baseModelValue}
+            disabled={serverBusy}
+            onChange={onBaseModelChange}
+          />
+        </div>
+        <ModelsPanel
+          key={activeBaseModelId}
+          {...(modelsApiClient !== undefined ? { apiClient: modelsApiClient } : {})}
+        />
 
         {/* Acceleration (2026-07-31, backend §43; block-swap prefetch added
             2026-08-01, backend §44; keep-resident added 2026-08-02, backend
@@ -528,6 +570,30 @@ export function SettingsPanel({
             {acceleration.vaeMode === "prune_vaed" && <p className="field-hint">{strings.settings.accelVaeNote}</p>}
           </>
         )}
+
+        {/* Output (§3-164, 2026-09-24): right after Acceleration, before the
+            connection settings. Same two-button shape as every other boolean
+            row in this panel. */}
+        <span className="field-label settings-group-heading">{strings.settings.outputHeading}</span>
+        <div className="field">
+          <span className="field-label">{strings.settings.embedMp4MetadataLabel}</span>
+          <div className="settings-lang-toggle" role="group" aria-label={strings.settings.embedMp4MetadataLabel}>
+            {[
+              { on: true, label: strings.settings.embedMp4MetadataOn },
+              { on: false, label: strings.settings.embedMp4MetadataOff },
+            ].map(({ on, label }) => (
+              <button
+                key={label}
+                type="button"
+                className={`mode-tab${acceleration.embedMp4Metadata === on ? " mode-tab--active" : ""}`}
+                aria-pressed={acceleration.embedMp4Metadata === on}
+                onClick={() => onEmbedMp4MetadataChange(on)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <label className="field">
           <span className="field-label">{strings.settings.backendUrlLabel}</span>

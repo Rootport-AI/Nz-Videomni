@@ -1,4 +1,8 @@
 /**
+ * NOTE (§3-164, 2026-09-24): this store is the Settings panel's home for
+ * per-job generation settings, so besides acceleration it also carries the
+ * panel's Output setting (`embedMp4Metadata`).
+ *
  * Acceleration (生成高速化) settings — the Settings-panel section that picks
  * which attention implementation the backend runs a job with (2026-07-31,
  * backend §43), whether it prefetches block-swap transfers (2026-08-01,
@@ -136,6 +140,15 @@ export interface AccelerationSettings {
    * to `false`. The one row here whose SUPPORT points the other way: LTX 2.3
    * has no embeddings processor, so 2.3 is the engine that refuses it. */
   keepResidentEmbeddings: boolean;
+  /** Output setting (§3-164, 2026-09-24), not an acceleration knob — it lives
+   * in this object because this is the Settings panel's per-job store (see the
+   * note at the top of this file). Whether the finished output.mp4 /
+   * joined.mp4 gets the same JSON as metadata.json written into its `comment`
+   * tag. Sent as `embed_mp4_metadata` — but only while OFF, since the server
+   * defaults to `true`. It is deliberately NOT part of
+   * {@link AccelerationRequestFields}: the comfort-budget matcher
+   * ({@link effectiveAccelerationFields}) has nothing to match it against. */
+  embedMp4Metadata: boolean;
 }
 
 /** Mirrors the backend's `api/models.py` `Field(...)` defaults as of
@@ -193,6 +206,11 @@ export const VAE_MODE_DEFAULT: VaeMode = "default";
  * ignores an absent key (see
  * {@link AccelerationSettings.keepResidentEmbeddings}). */
 export const KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT = false;
+/** Server default for `embed_mp4_metadata` as of §3-164 (2026-09-24): `true`
+ * (the finished mp4 carries its generation conditions, like A1111's
+ * `enable_pnginfo`). Direction matches `fused_gguf_dequant_kernel`: the key
+ * rides along only when the user turns it OFF. */
+export const EMBED_MP4_METADATA_SERVER_DEFAULT = true;
 
 /** `localStorage` key every Acceleration choice is persisted under — all FIVE
  * as of 2026-08-05, when `vaeMode` stopped being a mock. The key is named for the section
@@ -217,6 +235,7 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
   vaeMode: VAE_MODE_DEFAULT,
   keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+  embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 });
 
 /**
@@ -242,9 +261,9 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
  * stored choice is still `true`, so an effective-basis test would skip a
  * write-back that is still needed. Stored is the basis that stays correct.
  *
- * All six fields are enumerated explicitly rather than spread over a computed
+ * All fields are enumerated explicitly rather than spread over a computed
  * key, deliberately and for {@link effectiveAccelerationFields}'s reason: a
- * seventh field added to {@link AccelerationSettings} must fail `typecheck` here
+ * new field added to {@link AccelerationSettings} must fail `typecheck` here
  * instead of quietly slipping through a `{ ...acceleration, [f]: … }`.
  */
 export function withServerDefaults(
@@ -266,6 +285,8 @@ export function withServerDefaults(
     keepResidentEmbeddings: at("keepResidentEmbeddings")
       ? ACCELERATION_DEFAULTS.keepResidentEmbeddings
       : acceleration.keepResidentEmbeddings,
+    // No feature-scope row resets the Output setting, so it is carried over as is.
+    embedMp4Metadata: acceleration.embedMp4Metadata,
   };
 }
 
@@ -281,6 +302,8 @@ export interface StoredAcceleration {
   fusedGgufDequantKernel: boolean;
   vaeMode: VaeMode;
   keepResidentEmbeddings: boolean;
+  /** §3-164 (2026-09-24): the Output row, persisted from its first day. */
+  embedMp4Metadata: boolean;
 }
 
 const STORED_DEFAULTS: StoredAcceleration = {
@@ -290,6 +313,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
   fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
   vaeMode: VAE_MODE_DEFAULT,
   keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+  embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 };
 
 /** Reads the persisted acceleration choices. Wrapped in a `try` since
@@ -304,13 +328,14 @@ const STORED_DEFAULTS: StoredAcceleration = {
  *  3. the current JSON object `{"attentionBackend":...,
  *     "blockSwapPrefetch":...,"keepResident":...,
  *     "fusedGgufDequantKernel":...,"vaeMode":...,
- *     "keepResidentEmbeddings":...}`
+ *     "keepResidentEmbeddings":...,"embedMp4Metadata":...}`
  * Any unrecognized/malformed value inside falls back to its own default —
  * same defensive posture as `ThemeContext.tsx`'s `readStoredTheme`. The
  * per-field fallback is what lets a JSON blob written by a pre-§48 build
  * (which has no `keepResident` key at all) — or a pre-§51 one (no
  * `fusedGgufDequantKernel`), or a pre-§52 one (no `vaeMode`), or a pre-§3-114
- * one (no `keepResidentEmbeddings`) — read back
+ * one (no `keepResidentEmbeddings`), or a pre-§3-164 one (no
+ * `embedMp4Metadata`) — read back
  * cleanly. EVERY field added to
  * {@link StoredAcceleration} needs its own line here: without one, the
  * whole-object write below would persist an `undefined` that reads back as
@@ -331,6 +356,7 @@ export function readStoredAcceleration(): StoredAcceleration {
       fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
       vaeMode: VAE_MODE_DEFAULT,
       keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+      embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
   }
   try {
@@ -353,6 +379,8 @@ export function readStoredAcceleration(): StoredAcceleration {
         typeof rec.keepResidentEmbeddings === "boolean"
           ? rec.keepResidentEmbeddings
           : KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+      embedMp4Metadata:
+        typeof rec.embedMp4Metadata === "boolean" ? rec.embedMp4Metadata : EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
   } catch {
     return { ...STORED_DEFAULTS };
@@ -524,9 +552,9 @@ export function effectiveAccelerationFields(
  */
 export function accelerationRequestFields(
   acceleration: AccelerationSettings | undefined,
-): AccelerationRequestFields {
+): AccelerationRequestFields & { embed_mp4_metadata?: false } {
   if (!acceleration) return {};
-  const out: AccelerationRequestFields = {};
+  const out: AccelerationRequestFields & { embed_mp4_metadata?: false } = {};
   if (acceleration.attentionBackend !== ATTENTION_BACKEND_DEFAULT) {
     out.attention_backend = acceleration.attentionBackend;
   }
@@ -578,6 +606,12 @@ export function accelerationRequestFields(
   // reaches this function the answer is already in it.
   if (acceleration.keepResidentEmbeddings !== KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT) {
     out.keep_resident_embeddings = acceleration.keepResidentEmbeddings;
+  }
+  // §3-164 (2026-09-24): the Output row. The server default is `true`, so the
+  // key only ever appears as `false`. Emitted last, for the same key-order
+  // reason as the rows above.
+  if (acceleration.embedMp4Metadata !== EMBED_MP4_METADATA_SERVER_DEFAULT) {
+    out.embed_mp4_metadata = false;
   }
   return out;
 }

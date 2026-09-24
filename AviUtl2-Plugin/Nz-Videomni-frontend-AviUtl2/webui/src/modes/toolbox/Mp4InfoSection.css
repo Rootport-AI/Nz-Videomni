@@ -1,0 +1,46 @@
+/* Toolbox › mp4 info（§3-164, 2026-09-24）。
+ *
+ * 2 カラムの器は `modes/single/SingleScreen.css` の `.single-layout` と同じ
+ * grid・同じ `@container mode-body` の折り返しを自分の名前で持つ（他タブの
+ * クラス名に依存しない）。区画の枠は `ToolboxScreen.css` の `.toolbox-section`、
+ * 右欄の見た目は `.prompt-input`（SingleScreen.css・グローバル）を借用する。
+ * 新しい色は定義しない。 */
+
+.mp4info-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) minmax(280px, 440px);
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+}
+
+@container mode-body (max-width: 680px) {
+  .mp4info-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ドラッグ中の強調。`modes/chained/ChainedScreen.css` の
+ * `.source-section-dragover` と同じ 2 色。 */
+.mp4info-drop-dragover {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.mp4info-pick {
+  align-self: flex-start;
+}
+
+/* 長いファイル名でカードが横に伸びないように折り返す。 */
+.mp4info-file {
+  overflow-wrap: anywhere;
+}
+
+/* 生成条件の JSON は整形済みの複数行なので、等幅で折り返さずに見せる。 */
+.mp4info-textarea {
+  min-height: 360px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  white-space: pre;
+  overflow: auto;
+}

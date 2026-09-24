@@ -245,6 +245,11 @@ export interface GenerateRequest {
    * The backend records `keep_resident_embeddings_used` ("on"/"off" only —
    * there is no degrade path, so no `"on->off"`) in the job metadata. */
   keep_resident_embeddings?: boolean;
+  /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
+   * later joined.mp4) gets the same JSON as metadata.json written into its
+   * `comment` tag. Server default `true`, so `accelerationRequestFields` sends
+   * this key only as `false`. */
+  embed_mp4_metadata?: boolean;
   /** Outpainting (2026-08-09, 台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-70, filed
    * as §1-13 at the time): the canvas-extension spec. Built
    * exclusively by `modes/edit/useOutpaintForm.ts` and omitted entirely by
@@ -503,6 +508,9 @@ export interface GenerateChainRequest {
    * "omitted while server default (`false`)" rule, and the same LTX 2.3-side
    * 422 on a `true`. */
   keep_resident_embeddings?: boolean;
+  /** Output (§3-164): mirrors `GenerateRequest.embed_mp4_metadata` — same
+   * single builder, same "sent only as `false`" rule. */
+  embed_mp4_metadata?: boolean;
   /** §1-17 Retake（選択範囲の撮り直し）。指定すると `clips` はちょうど 1 本
    * （その `num_frames` が窓の長さ＝窓長の単一ソース）でなければならず、
    * `source_video`/`source_audio`/`reference_video_id` とは排他。
@@ -1104,6 +1112,15 @@ export interface PipelineLoadResponse {
 export interface PipelineUnloadResponse {
   pipeline_loaded: boolean;
   state: string;
+}
+
+/** `POST /utils/mp4-info`'s response (§3-164, 2026-09-24). `comment` is the
+ * mp4's global `comment` tag verbatim — for a video this app generated, the
+ * same JSON as its metadata.json — or `null` when the file has none. Errors
+ * use the usual envelope: `MEDIA_NOT_FOUND` (404), `MEDIA_UNREADABLE` (422),
+ * `LOCAL_ONLY` (403). */
+export interface Mp4InfoResponse {
+  comment: string | null;
 }
 
 /** One row from `GET /loras` (Docs/API_REFERENCE.md §3.6,

@@ -1025,6 +1025,28 @@ export interface MockBridge extends NativeBridge {
 const DEFAULT_UPLOAD_VIDEO_FRAME_COUNT = 300;
 const DEFAULT_UPLOAD_VIDEO_FPS = 24;
 
+/** §3-164: the fixed `comment` `POST /utils/mp4-info` answers with — a small
+ * metadata.json-shaped object, pretty-printed the way the backend's
+ * `recipe_text` writes it (2-space indent). Exported so tests can assert the
+ * textarea shows it verbatim. */
+export const MOCK_MP4_INFO_COMMENT = JSON.stringify(
+  {
+    job_id: "mock-job-0001",
+    mode: "t2v",
+    request: {
+      prompt: "a cat riding a skateboard",
+      width: 768,
+      height: 512,
+      num_frames: 121,
+      frame_rate: 24,
+      seed: 42,
+    },
+    output: { path: "outputs/mock-job-0001/output.mp4" },
+  },
+  null,
+  2,
+);
+
 const MOCK_THUMBNAIL_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -1725,6 +1747,17 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     return { status: 200, body: { job_id: jobId, deleted: true } };
   }
 
+  /** §3-164 (2026-09-24): `POST /utils/mp4-info`. One fixed rule: a path
+   * containing "nometa" models a video with no `comment` tag (`null`);
+   * anything else answers with {@link MOCK_MP4_INFO_COMMENT}. */
+  function handleMp4Info(body: unknown): ResultOf<"backend.request"> {
+    const path = (body as { path?: unknown } | undefined)?.path;
+    if (typeof path === "string" && path.includes("nometa")) {
+      return { status: 200, body: { comment: null } };
+    }
+    return { status: 200, body: { comment: MOCK_MP4_INFO_COMMENT } };
+  }
+
   const JOB_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)$/;
   const JOB_JOIN_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)\/join$/;
   const JOB_JOINED_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)\/joined$/;
@@ -1749,6 +1782,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     if (method === "GET" && path === "/api/v1/models") return handleModels();
     if (method === "POST" && path === "/api/v1/pipeline/load") return handlePipelineLoad(body);
     if (method === "POST" && path === "/api/v1/pipeline/unload") return handlePipelineUnload();
+    if (method === "POST" && path === "/api/v1/utils/mp4-info") return handleMp4Info(body);
 
     const joinId = JOB_JOIN_PATH.exec(path)?.groups?.id;
     if (joinId && method === "POST") return handleJoinJob(joinId, body);

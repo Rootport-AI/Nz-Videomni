@@ -1,7 +1,11 @@
 import type { NativeBridge } from "../../bridge";
 import type { LostBehavior, ObjectTrackingSettings } from "../../shell/objectTrackingSettings";
 import type { TimelineSelection } from "../../timeline/menuSelection";
+import { useState } from "react";
 import { ObjectTrackingSection } from "./ObjectTrackingSection";
+import { Mp4InfoSection } from "./Mp4InfoSection";
+import { ToolboxSubTabs } from "./ToolboxSubTabs";
+import type { ToolboxSubMode } from "./ToolboxSubTabs";
 import type { ObjectTrackRequest } from "./useObjectTracking";
 import "./ToolboxScreen.css";
 
@@ -16,12 +20,21 @@ import "./ToolboxScreen.css";
  * It is deliberately a THIN container. Unlike `EditScreen` — which owns its
  * panels' form state because the Generate button lives in a separate column and
  * needs it — a Toolbox tool has no shared column to reach across: it owns its
- * own controls, its own run and its own readout. So this screen holds no state
- * at all; it passes `AppShell`'s props through to the one section below.
+ * own controls, its own run and its own readout. The only state this screen
+ * holds is WHICH tool is showing.
  *
- * That also settles where a SECOND tool would go: another `<section>` here,
- * with its own hook, needing nothing from this file but a row of props. The
- * tab is the container; the sections are the tools.
+ * Since §3-164 (2026-09-24) there are two tools, and they sit under sub-tabs
+ * (`ToolboxSubTabs`, the same shape as `EditSubTabs`): "Tracking"
+ * (`ObjectTrackingSection`, unchanged) and "mp4 info" (`Mp4InfoSection`). Both
+ * panels stay mounted and are hidden with the plain `hidden` attribute, like
+ * Edit's sub-panels, so switching tabs never loses a tool's state or cuts off
+ * a running tracking run. They carry NO `role="tabpanel"` — see
+ * `ToolboxSubTabs`'s doc comment. A routed 追尾 remounts this screen
+ * (`remountTokens.toolbox`), which also brings the selection back to its
+ * default, "tracking" — the tab that run needs.
+ *
+ * A further tool is one more sub-tab id and one more hidden panel here, with
+ * its own section and hook.
  */
 export interface ToolboxScreenProps {
   /** From `AppShell`'s `/status` poll: whether the server can run tracking at
@@ -67,23 +80,30 @@ export function ToolboxScreen({
   onRunningChange,
   onStartTracking,
 }: ToolboxScreenProps) {
+  const [subMode, setSubMode] = useState<ToolboxSubMode>("tracking");
   return (
     <div className="toolbox-screen">
-      <ObjectTrackingSection
-        trackingAvailable={trackingAvailable}
-        trackingReason={trackingReason}
-        trackRequest={trackRequest}
-        nativeBridge={nativeBridge}
-        settings={settings}
-        onSearchFactorChange={onSearchFactorChange}
-        onLostScoreThresholdChange={onLostScoreThresholdChange}
-        onLostBehaviorChange={onLostBehaviorChange}
-        onSmoothingChange={onSmoothingChange}
-        onFollowSizeChange={onFollowSizeChange}
-        onKeyframeStrideChange={onKeyframeStrideChange}
-        onRunningChange={onRunningChange}
-        onStartTracking={onStartTracking}
-      />
+      <ToolboxSubTabs mode={subMode} onChange={setSubMode} />
+      <div className="toolbox-subpanel" hidden={subMode !== "tracking"}>
+        <ObjectTrackingSection
+          trackingAvailable={trackingAvailable}
+          trackingReason={trackingReason}
+          trackRequest={trackRequest}
+          nativeBridge={nativeBridge}
+          settings={settings}
+          onSearchFactorChange={onSearchFactorChange}
+          onLostScoreThresholdChange={onLostScoreThresholdChange}
+          onLostBehaviorChange={onLostBehaviorChange}
+          onSmoothingChange={onSmoothingChange}
+          onFollowSizeChange={onFollowSizeChange}
+          onKeyframeStrideChange={onKeyframeStrideChange}
+          onRunningChange={onRunningChange}
+          onStartTracking={onStartTracking}
+        />
+      </div>
+      <div className="toolbox-subpanel" hidden={subMode !== "mp4info"}>
+        <Mp4InfoSection nativeBridge={nativeBridge} />
+      </div>
     </div>
   );
 }

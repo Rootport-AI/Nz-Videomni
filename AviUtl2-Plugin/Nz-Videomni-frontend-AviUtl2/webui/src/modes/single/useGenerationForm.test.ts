@@ -625,6 +625,8 @@ describe("useGenerationForm", () => {
       // `requires` map names `keep_resident_embeddings`, so it takes no part in
       // the match, and the calibration behind these rows is the five above.
       keepResidentEmbeddings: false,
+      // §3-164: the Output row, at its server default; not part of the match.
+      embedMp4Metadata: true,
     };
 
     /** LTX 2.3's engine family — the id whose only served row is the all-on

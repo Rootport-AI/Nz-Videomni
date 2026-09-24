@@ -48,6 +48,10 @@ export interface UseAccelerationSettingsResult {
    * it should survive a reload like the other five (台帳 §3-114,
    * 2026-09-03). */
   setKeepResidentEmbeddings: (value: boolean) => void;
+  /** Write-through to `localStorage` (§3-164, 2026-09-24): the Settings
+   * panel's Output row — whether finished mp4s carry their generation
+   * conditions. A standing preference, persisted like the rows above. */
+  setEmbedMp4Metadata: (value: boolean) => void;
   /** §3-135: forces the named fields back to their SERVER default and persists
    * that, exactly like the six setters above (the write-through effect below
    * does not care which setter moved the state). Not a user action — it is the
@@ -76,7 +80,8 @@ export interface UseAccelerationSettingsResult {
  * every mount and had no setter, exactly the state `fusedGgufDequantKernel`
  * left on 2026-08-04. `keepResidentEmbeddings` joined on 2026-09-03 (台帳
  * §3-114) with its setter and its Settings row in the same change, so it never
- * spent a day in that state.
+ * spent a day in that state. `embedMp4Metadata` (§3-164, 2026-09-24) is the
+ * Output row that shares this store; it too was persisted from its first day.
  *
  * The `localStorage` write itself lives in a `useEffect` keyed off the
  * persisted fields, NOT inside the setters' functional updaters — writing to
@@ -110,6 +115,7 @@ export function useAccelerationSettings(
       fusedGgufDequantKernel: stored.fusedGgufDequantKernel,
       vaeMode: stored.vaeMode,
       keepResidentEmbeddings: stored.keepResidentEmbeddings,
+      embedMp4Metadata: stored.embedMp4Metadata,
     };
   });
 
@@ -124,6 +130,7 @@ export function useAccelerationSettings(
       fusedGgufDequantKernel: acceleration.fusedGgufDequantKernel,
       vaeMode: acceleration.vaeMode,
       keepResidentEmbeddings: acceleration.keepResidentEmbeddings,
+      embedMp4Metadata: acceleration.embedMp4Metadata,
     });
   }, [
     acceleration.attentionBackend,
@@ -132,6 +139,7 @@ export function useAccelerationSettings(
     acceleration.fusedGgufDequantKernel,
     acceleration.vaeMode,
     acceleration.keepResidentEmbeddings,
+    acceleration.embedMp4Metadata,
   ]);
 
   const setAttentionBackend = useCallback((value: AttentionBackend) => {
@@ -156,6 +164,10 @@ export function useAccelerationSettings(
 
   const setKeepResidentEmbeddings = useCallback((value: boolean) => {
     setAcceleration((prev) => ({ ...prev, keepResidentEmbeddings: value }));
+  }, []);
+
+  const setEmbedMp4Metadata = useCallback((value: boolean) => {
+    setAcceleration((prev) => ({ ...prev, embedMp4Metadata: value }));
   }, []);
 
   // §3-135: the same functional-update shape as the six setters above, so it
@@ -185,6 +197,7 @@ export function useAccelerationSettings(
     setFusedGgufDequantKernel,
     setVaeMode,
     setKeepResidentEmbeddings,
+    setEmbedMp4Metadata,
     resetToServerDefaults,
   };
 }

@@ -84,6 +84,16 @@ KEEP_RESIDENT_EMBEDDINGS_DEFAULT = False
 # emits the key only when the box is UNCHECKED.
 FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True
 
+# Output: write the generation conditions (the same JSON as metadata.json) into
+# the finished output.mp4 / joined.mp4 as the ``comment`` tag (§3-164). Mirrors
+# the server default of GenerateRequest/GenerateChainRequest.embed_mp4_metadata
+# (api/models.py) for the same reason as the constants above (this module talks
+# to the backend purely over HTTP, so it does not import from api/). Same
+# direction as block_swap_prefetch: the server default is ON, so the "send only
+# when it differs from the default" discipline below emits the key only when
+# the box is UNCHECKED.
+EMBED_MP4_METADATA_DEFAULT = True
+
 
 # MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def _wav_duration_seconds(path) -> float | None:
@@ -500,6 +510,7 @@ def build_a2v_chain_payload(
     vae_mode="default",
     keep_resident_embeddings=KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
     chunked_upsample: bool | None = None,
+    embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT,
 ):
     """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -561,6 +572,10 @@ def build_a2v_chain_payload(
     switch here, and on a base model that lists it in ``unsupported_features``
     the UI hides the control and writes it back to the default, so the key
     cannot ride into a 422.
+    ``embed_mp4_metadata`` (§3-164, the Settings-tab Output checkbox) is
+    appended after it, LAST, same "differs from the default" rule with the
+    same direction as block_swap_prefetch (default on -> the key rides only on
+    an UNCHECKED box).
 
     ``chunked_upsample`` is the ONE key here that is neither unconditional nor
     "differs from the default": it is TRI-STATE. ``None`` (the default) emits
@@ -650,6 +665,10 @@ def build_a2v_chain_payload(
     # control is hidden and reset, see gradio_ui/feature_scope.py).
     if keep_resident_embeddings != KEEP_RESIDENT_EMBEDDINGS_DEFAULT:
         chain_payload["keep_resident_embeddings"] = bool(keep_resident_embeddings)
+    # mp4 metadata embedding (additive, conditional): appended last, same
+    # rule. Default on -> the key rides only on an UNCHECKED box.
+    if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
+        chain_payload["embed_mp4_metadata"] = bool(embed_mp4_metadata)
     return chain_payload
 
 
@@ -696,7 +715,12 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # keep-resident-embeddings checkbox (LTX 2.5). Same discipline
                  # again -- keyword-only from ui.py's dispatch(), appended after
                  # vae_mode.
-                 keep_resident_embeddings=KEEP_RESIDENT_EMBEDDINGS_DEFAULT):
+                 keep_resident_embeddings=KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+                 # Output (ADDITIVE, last): the Settings-tab "write generation
+                 # conditions into the mp4" checkbox (§3-164). Same discipline
+                 # -- keyword-only from ui.py's dispatch(), appended after
+                 # keep_resident_embeddings.
+                 embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs (S6). They are optional so the pre-S6 call signature (and every
         # existing test) keeps working with the build-time default language and
@@ -925,6 +949,7 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 fused_gguf_dequant_kernel=fused_gguf_dequant_kernel,
                 vae_mode=vae_mode,
                 keep_resident_embeddings=keep_resident_embeddings,
+                embed_mp4_metadata=embed_mp4_metadata,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -1030,6 +1055,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # rides only on a checked box).
         if keep_resident_embeddings != KEEP_RESIDENT_EMBEDDINGS_DEFAULT:
             payload["keep_resident_embeddings"] = bool(keep_resident_embeddings)
+        # mp4 metadata embedding (additive, conditional): appended last, same
+        # rule and the same direction as block_swap_prefetch (default on ->
+        # the key rides only on an unchecked box).
+        if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
+            payload["embed_mp4_metadata"] = bool(embed_mp4_metadata)
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -1154,7 +1184,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        # keep-resident-embeddings checkbox (LTX 2.5), appended
                        # after vae_mode and forwarded as a KEYWORD by ui.py's
                        # chain_dispatch.
-                       keep_resident_embeddings=KEEP_RESIDENT_EMBEDDINGS_DEFAULT):
+                       keep_resident_embeddings=KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+                       # Output (ADDITIVE, last): the "write generation
+                       # conditions into the mp4" checkbox (§3-164), appended
+                       # after keep_resident_embeddings and forwarded as a
+                       # KEYWORD by ui.py's chain_dispatch.
+                       embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
         # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
@@ -1508,6 +1543,11 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # rides only on a checked box).
         if keep_resident_embeddings != KEEP_RESIDENT_EMBEDDINGS_DEFAULT:
             payload["keep_resident_embeddings"] = bool(keep_resident_embeddings)
+        # mp4 metadata embedding (additive, conditional): appended last, same
+        # rule and the same direction as block_swap_prefetch (default on ->
+        # the key rides only on an unchecked box).
+        if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
+            payload["embed_mp4_metadata"] = bool(embed_mp4_metadata)
 
         try:
             resp = api.generate_chain(payload)
@@ -1752,3 +1792,45 @@ def load_selected_models(api: ApiClient, transformer: str | None, text_encoder: 
         f"{category}={active.get(category, MODEL_DEFAULT)}" for category in MODEL_CATEGORIES
     )
     return L("model_load_ok", lang).format(models=summary)
+
+
+# --------------------------------------------------------------------------- #
+# MP4 Info tab (§3-164): read the generation conditions back out of an mp4's
+# ``comment`` tag via POST /utils/mp4-info. The gr.File component hands over a
+# server-local path (Gradio's upload cache), which is what the loopback-only
+# endpoint expects.
+# --------------------------------------------------------------------------- #
+def make_mp4_info_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
+    default_lang = lang
+
+    def mp4_info(path, ui_lang=None) -> str:
+        """Return the textbox content for the dropped file:
+
+        * no file (the File component was cleared) -> ``""``
+        * ``comment`` present -> the string as-is (already formatted JSON)
+        * ``comment`` null -> the localized "not found" message
+        * REST error -> :func:`format_api_error` (the localized ``apierr_*``
+          hint for MEDIA_NOT_FOUND / MEDIA_UNREADABLE / LOCAL_ONLY, plus the
+          envelope's ``detail`` when present)
+        * transport error -> the exception text
+        """
+        lang_now = ui_lang or default_lang
+        if not path:
+            return ""
+        try:
+            body = api.mp4_info(str(path))
+        except httpx.HTTPStatusError as exc:
+            try:
+                err_body: object = exc.response.json()
+            except Exception:
+                err_body = exc.response.text
+            return format_api_error(err_body, lang_now)
+        except Exception as exc:
+            return str(exc)
+        comment = body.get("comment") if isinstance(body, dict) else None
+        if comment is None:
+            return L("mp4info_not_found", lang_now)
+        return comment
+
+    return mp4_info
+

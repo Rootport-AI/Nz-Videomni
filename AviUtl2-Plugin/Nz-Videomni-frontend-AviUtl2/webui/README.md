@@ -60,7 +60,7 @@ npm install       # first time only
 npm run dev       # start the Vite dev server (mock bridge, browser only)
 npm run build     # type-check (tsc -b) + production build -> dist/
 npm run preview   # serve the dist/ build locally, for a quick sanity check
-npm test          # run the vitest suite once (CI mode)
+npm test          # run the vitest suite once (CI mode) — see the caution under Testing
 npm run test:watch  # run vitest in watch mode
 npm run typecheck # tsc -b --noEmit, no build output
 npm run lint      # oxlint
@@ -212,9 +212,12 @@ in `Docs/BRIDGE_CONTRACT.md` §5.
 ## Testing
 
 `npm test` runs the full suite once (vitest, jsdom environment); `npm run
-test:watch` runs it in watch mode. Tests live next to the code they cover
-(`*.test.ts` / `*.test.tsx` throughout `src/`, ~48 files at the time of
-writing) rather than in a separate top-level directory. The bridge layer's
+test:watch` runs it in watch mode. **Caution:** if a real backend is running
+on 127.0.0.1:18620, `backend.integration.test.ts` sends real requests to it, so
+for everyday runs use `npx vitest run --exclude "**/backend.integration.test.ts"`.
+Tests live next to the code they cover (`*.test.ts` / `*.test.tsx`
+throughout `src/`; the output of `npx vitest run` is the authority on how
+many there are) rather than in a separate top-level directory. The bridge layer's
 tests remain the most load-bearing ones since every mode ultimately talks to
 native through it:
 

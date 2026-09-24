@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-24（§3-164 をクローズし [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-164 へ移送）
+- 作成: 2026-07-15／最終更新: 2026-09-24（§3-164 をクローズし [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移送・§3-141 の行番号を現行化・§4-6 に判断材料を追記）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
@@ -154,13 +154,13 @@
 
 - **概要**: 撮り直し（Retake）でスタイルLoRA（画風・キャラクター系）は使えるようになった（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-62-02）。**残るのは、参照動画を要する制御系のIC-LoRA（canny／pose／depth等）を撮り直しでも使えるようにすることである。** スタイルLoRA側は「フロントエンドが`loras`を送っていなかっただけ」で済んだが、こちらはそうではない——**現在は3つの層で明示的に禁止されている。**
 - **禁止している3箇所（着手時に外す対象。すべて現物を確認済み）**:
-  1. **アプリ層（422）**: `api/models.py:1046-1051`。`GenerateChainRequest`のバリデータが「`retake`と`reference_video_id`は排他（制御アダプタの参照条件付けが、撮り直しの凍結帯と競合する）」として弾く。
-  2. **LTX 2.3のエンジン**: `engine/pipeline/chain_pipeline.py:1076-1081`。`assert ic_reference is None or (source is None and retake is None and end_source is None)`。**分岐ではなくassertにしてある**のは、排他が「場合分けして扱うもの」ではなく不変条件だという設計判断からである。
-  3. **LTX 2.5のエンジン**: `engine25/chain25.py:1841-1846`。同文のassert。
-- **参照動画を窓区間で配る機構は既にある**: `chain_math.py`の`video_segment_windows`（:1565）が、1本の長い参照動画をstage-1セグメントごとの`(開始画素, 長さ)`へ切り分ける。**撮り直しは1クリップなので、これは窓1つ（`[(0, clip_frames[0])]`）へ自然に縮退する**——同関数のdocstringが単発生成と同一になる旨を明記している。**ただし同じdocstringの:1583-1587が「参照はAPI層で`source_video`・retakeと排他なので、`retake_glue_px`を持つレイアウトが参照つきでここへ到達することはない」を契約として書いている。** 排他を外すならこの契約文の見直しが必要で、**書き換えずに通すと、コードと契約文が食い違ったまま残る。**（行番号は`chain_math.py`へ定数を足すたびにずれる。ずれていたら`def video_segment_windows`と`No V2V / retake terms appear here on purpose`で引き直すこと。）
-- **参照条件をどこへ挿すか（LTX 2.3）**: 撮り直しの分岐は`conds = []`固定である（`chain_pipeline.py:1471`。「retakeとconditioning_imagesは排他（アプリ層が保証）」というコメント付き）。参照条件の注入はその後段の`conds = conds + pipe._reference_conditioning_from_pixels(...)`（:1705-1710）なので、**改修は「head側の分岐が作った空リストと、後段の注入を繋ぐ」形になる。**
-  - **凍結位置のずれは、この経路では既に対策済みである。** 尾側の凍結範囲は**絶対添字**（`chain_math.retake_tail_token_range`）で取っており、`m[:, -k*hw:]`のような負の添字は使っていない（`chain_pipeline.py:445-449`のdocstringが「条件付けトークンを後ろへ足すと負の添字は静かに凍結不足になる」と理由まで書いている）。**つまり条件付けトークンが増えても、凍結する場所は動かない。**
-- **LTX 2.5は別実装になる**: `engine25/chain25.py`はセグメントごとの参照条件を`ref_conds`という別のリストで持ち（:2314で全セグメント空リストに初期化）、`conds_v = band_v + (stage1_conds if i == 0 else []) + ref_conds[i]`（:2754）で足し合わせる。**載せる場所は構造としては既にあるが、直前のコメント（:2749-2753）が「撮り直しではこれは`band_v`だけになる。それは偶然ではなく、関数冒頭の2つの排他が保証している」と明記している。** 2.3側とは書き方が違うので、**改修は2エンジンぶんの別作業になる**（共有できるのは`chain_math`の窓計算だけである）。
+  1. **アプリ層（422）**: `api/models.py:1251-1256`（行番号がずれていたら`retake and reference_video_id are mutually exclusive`で引き直すこと）。`GenerateChainRequest`のバリデータが「`retake`と`reference_video_id`は排他（制御アダプタの参照条件付けが、撮り直しの凍結帯と競合する）」として弾く。
+  2. **LTX 2.3のエンジン**: `engine/pipeline/chain_pipeline.py:1099-1104`。`assert ic_reference is None or (source is None and retake is None and end_source is None)`。**分岐ではなくassertにしてある**のは、排他が「場合分けして扱うもの」ではなく不変条件だという設計判断からである。
+  3. **LTX 2.5のエンジン**: `engine25/chain25.py:1846-1851`。同文のassert。
+- **参照動画を窓区間で配る機構は既にある**: `chain_math.py`の`video_segment_windows`（:1681）が、1本の長い参照動画をstage-1セグメントごとの`(開始画素, 長さ)`へ切り分ける。**撮り直しは1クリップなので、これは窓1つ（`[(0, clip_frames[0])]`）へ自然に縮退する**——同関数のdocstringが単発生成と同一になる旨を明記している。**ただし同じdocstringの:1699-1703が「参照はAPI層で`source_video`・retakeと排他なので、`retake_glue_px`を持つレイアウトが参照つきでここへ到達することはない」を契約として書いている。** 排他を外すならこの契約文の見直しが必要で、**書き換えずに通すと、コードと契約文が食い違ったまま残る。**（行番号は`chain_math.py`へ定数を足すたびにずれる。ずれていたら`def video_segment_windows`と`No V2V / retake terms appear here on purpose`で引き直すこと。）
+- **参照条件をどこへ挿すか（LTX 2.3）**: 撮り直しの分岐は`conds = []`固定である（`chain_pipeline.py:1494`。「retakeとconditioning_imagesは排他（アプリ層が保証）」というコメント付き）。参照条件の注入はその後段の`conds = conds + pipe._reference_conditioning_from_pixels(...)`（:1741-1746）なので、**改修は「head側の分岐が作った空リストと、後段の注入を繋ぐ」形になる。**
+  - **凍結位置のずれは、この経路では既に対策済みである。** 尾側の凍結範囲は**絶対添字**（`chain_math.retake_tail_token_range`）で取っており、`m[:, -k*hw:]`のような負の添字は使っていない（`chain_pipeline.py:455-457`のdocstringが「条件付けトークンを後ろへ足すと負の添字は静かに凍結不足になる」と理由まで書いている）。**つまり条件付けトークンが増えても、凍結する場所は動かない。**
+- **LTX 2.5は別実装になる**: `engine25/chain25.py`はセグメントごとの参照条件を`ref_conds`という別のリストで持ち（:2320で全セグメント空リストに初期化）、`conds_v = band_v + (stage1_conds if i == 0 else []) + ref_conds[i]`（:2770）で足し合わせる。**載せる場所は構造としては既にあるが、直前のコメント（:2765-2769）が「撮り直しではこれは`band_v`だけになる。それは偶然ではなく、関数冒頭の2つの排他が保証している」と明記している。** 2.3側とは書き方が違うので、**改修は2エンジンぶんの別作業になる**（共有できるのは`chain_math`の窓計算だけである）。
 - **未検証の懸念**: **凍結帯の境界で、制御の効きが不連続になる可能性がある。** 撮り直しの窓は前後ののりしろ（既定で頭25・尾24画素フレーム）が元映像のまま凍結され、その内側だけが作り直される。参照動画による制御は窓全体へ一様に掛かるので、**凍結された帯では制御が効かず、自由部分では効く**という段差が継ぎ目に出ないかは、実機で見るまで分からない。**着手時はここを最初に確かめること。**
 - **状態**: 未着手（将来の研究課題）。**急ぎではない**——スタイルLoRAの解禁で、撮り直しにLoRAが使えない状態そのものは解消している。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-62-02（スタイルLoRA側の解禁記録と、そこで置いた設計判断）、`api/models.py`・`engine/pipeline/chain_pipeline.py`・`engine25/chain25.py`・`chain_math.py`（上記の各行）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57（長尺IC-LoRAの窓機構）・§55.3（両側凍結の検証）。
@@ -176,7 +176,7 @@
 - **検討点（起票時の整理）**:
   1. **候補は 3 刻み**: 送りが 3 潜在フレーム（1.0 秒）の倍数という音声整合の条件を守り、重なり 4 を据え置くと、取れる窓は 25・28・31・34・37・40・43・46（送り 21〜42）。46＝42＋4。RoPE の学習上限 20 秒にも 46（約 15 秒）は収まる。選択肢は 22／28／34／40／46 のように間引くのが選びやすい。
   2. **梯子の最上段は既知の非単調点と同じ幾何**: 960 マス×46 潜在フレーム＝44,160 トークンは、Sulphur-2 Q6_K の較正で唯一孤立して退避した点（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §11.3。単発生成・Q4_K_M は快適）。連結でも同じことが起きうるので重点的に実測する。
-  3. **マーカーは式のうえでは窓に連動する**: フロントエンドの `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/shell/tokenBudget.ts` は「マス目×窓」でトークンを数えるので、新しい窓を足せばマーカーは自動で下がる。「未較正の窓では出さない」は、その式が広い窓でも成り立つか未検証だから出さない、という意図的な選択。較正は窓ごとに 10 本前後の小さな計測で足せる（手順は §113 の較正台を流用）。
+  3. **マーカーは式のうえでは窓に連動する**: フロントエンドの `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/shell/tokenBudget.ts` は「マス目×窓」でトークンを数えるので、新しい窓を足せばマーカーは自動で下がる。「未較正の窓では出さない」は、その式が広い窓でも成り立つか未検証だから出さない、という意図的な選択。較正は窓ごとに 10 本前後の小さな計測で足せる（手順は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §113 の較正台を流用）。
   4. **ラベルの解像度ヒントはエンジンで違う**: 同じ 1280×768 でも 2.3 は 41f・2.5 は 46f が上限。固定文で書くと片方の利用者を誤解させるので、配信されている `chain_budget` から「この窓で入る 16:9 の目安解像度」を計算して添える形（`tokenBudget.ts` の `chainComfortSize16x9` の流用）を候補にする。
   5. **品質仮説の安い裏取り**: `full_length`（61・1 タイル・A2V 1 クリップ限定）は境界ゼロの出力を既に作れる。同じ素材で 22 と 61 を見比べれば「境界を跨ぐ回数が減れば劣化が減る」の初期証拠になり、研究ノートにある「22 の乱視のようなブレ」が境界由来かタイル内由来かも分かる。
   6. **実装上の注意**: 窓の追加はプリセット表・API の選択肢（`api/models.py` の `stage2_window`）・フロントエンドの写しの 3 箇所。`api/models.py` の V2V 文脈フレーム上限の検査は窓に紐づくので、新しい窓でも式で通るようにする。LTX 2.5 も同じ窓表を使う（[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §12）。窓を広げても第 1 段・アップスケーラ・VAE・常駐重みの VRAM は変わらない（同 §1-B）。
@@ -234,6 +234,7 @@
 
 - **概要（残る4件）**: ①`GET /jobs/{id}/metadata`エンドポイント（GUIでVRAMピークやバックエンド種別を表示する用途。「新規エンドポイントを足さない」方針で見送り）②`gr.BrowserState`による言語／テーマの永続化（固定secretと実機検証が必要）③`gr.render`によるキーフレーム／クリップ行の動的追加（現状は固定スロット）④Settingsのデフォルトnegative promptの設定欄（NAG経由ならnegative promptは生きるが、**既定negative promptをどこに持たせるかの設計が未着手**のため見送り）。
 - **何が塞いでいるか**: いずれもバックエンド同梱GUIの利便性向上であり、製品の入口はフロントエンド側という位置づけのため優先度が低い。
+- **①の判断材料**: 既定の設定のとき（`output.save_metadata_json`が真で、要求の`embed_mp4_metadata`がon）、完了したジョブの記録（`metadata.json`と同じJSON。`backend`と、`vram_optimization`ブロックの中の`peak_vram_mb`を含む）は、Gradioの「MP4 Info（mp4 情報）」タブで`output.mp4`を開けば読める（読み出し口は`POST /utils/mp4-info`。書き込みの規則はバックエンド[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.6、画面は同§12.2）。①に着手する前に、この画面で用が足りるかを確かめること。なお①を見送った理由の「新規エンドポイントを足さない」方針は、`POST /utils/mp4-info`を足したので、それだけでは理由として成り立たなくなっている。
 - **既知の差分**: in-outpaintingアダプタをIC-LoRA制御アダプタのドロップダウンから除外する挙動（フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73）はWebUIのみに効き、Gradioには効かない。`gradio_ui/adapters.py`が`/config`のキーを直接列挙して選択肢を作る実装のため。α版の割り切りとしてWebUI側のみで対応する方針である。
 - **出典**: [`Nz-Videomni/Docs/VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §23.5、フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §73。
 

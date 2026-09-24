@@ -249,8 +249,8 @@
 
 以下2点は、バッチA2V実装時に「意図的に見送り済み・記録あり」の項目として`Docs/DEVLOG.md`§9.8に既に記載されている。Shared共有キーフレームは上記の未実装項目側（実装差として扱う）へ分離したため、ここには含めない。**なお2026-07-15オーナー方針（全項目実装がゴール）のもとでは、この2点も最終的には実装対象へ戻る**——ここでは「バッチ実装当初に意図的に省略した」という経緯の記録として残す。
 
-- **バッチA2Vの参照動画（IC-LoRAコントロール）**: Gradio＝`batch.py:163-166`（`use_adapter`／`ref_video_path`／`control_adherence`／`reference_strength`フィールド）／`batch.py:479-485`（`_ensure_ref_video`）。フロント＝`batchRunner.ts:30-34`のドキュメントコメントで非対応を明記（バッチ設定パネルの「必要最小限」スコープ外という判断）。
-- **バッチ開始時の一括再検証（re-judgement）**: Gradio＝`batch.py:602-695`（`_plan_rejudgement`／適用／foolproofバリデーション）。フロント＝`batchRunner.ts:18-24`のドキュメントコメントで非採用を明記（行ごとtry/catchで「1行の失敗が全体を止めない」不変条件を代替として満たす設計）。
+- **バッチA2Vの参照動画（IC-LoRAコントロール）**: Gradio＝`batch.py`の`use_adapter`／`ref_video_path`／`control_adherence`／`reference_strength`フィールドと`_ensure_ref_video`（行番号はファイルの増減でずれるので、名前で引くこと）。フロント＝`batchRunner.ts:30-34`のドキュメントコメントで非対応を明記（バッチ設定パネルの「必要最小限」スコープ外という判断）。
+- **バッチ開始時の一括再検証（re-judgement）**: Gradio＝`batch.py`の`_plan_rejudgement`（一括再検証の計画）と、その適用・foolproofバリデーション。フロント＝`batchRunner.ts:18-24`のドキュメントコメントで非採用を明記（行ごとtry/catchで「1行の失敗が全体を止めない」不変条件を代替として満たす設計）。
 
 ### 逆方向の差分について（重複記載なし）
 

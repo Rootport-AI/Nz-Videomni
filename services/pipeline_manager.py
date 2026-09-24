@@ -44,6 +44,7 @@ from services.job_store import JobRecord, JobStore, now_iso
 from services.low_vram import build_low_vram_settings, safe_memory_cleanup
 from services.lora_registry import LoraRegistry
 from services.ltx_runner import LTXRunner, resolve_seed
+from services.recipe_paths import relativize_recipe_paths
 from services.model_registry import CATEGORIES, DEFAULT_NAME, ModelRegistry
 from services.runtime_state import RuntimeState
 from services.upload_store import UploadStore
@@ -1367,6 +1368,7 @@ class PipelineManager:
             if self.config.output.save_metadata_json:
                 self._write_chain_metadata(
                     job=job, chain=chain, metadata_path=metadata_path,
+                    output_path=output_path,
                     resolution=resolution, duration=duration, file_size=file_size,
                     elapsed=elapsed, seed_used=outcome.seed_used,
                     backend=outcome.backend or "mock",
@@ -1430,7 +1432,7 @@ class PipelineManager:
             safe_memory_cleanup()
 
     def _write_chain_metadata(
-        self, *, job, chain, metadata_path, resolution, duration, file_size,
+        self, *, job, chain, metadata_path, output_path, resolution, duration, file_size,
         elapsed, seed_used, backend, peak_vram_mb, total_frames, chain_meta,
         v2v_provenance=None, a2v_provenance=None, retake_provenance=None,
         end_source_provenance=None,
@@ -1593,7 +1595,16 @@ class PipelineManager:
             if reference_provenance:
                 ic_lora_block.update(reference_provenance)
             metadata["ic_lora"] = ic_lora_block
+        # Store-relative paths (no absolute local path in the recipe). Applied
+        # here, after every optional block has been added.
+        metadata = relativize_recipe_paths(
+            metadata,
+            output_dir=self.config.output_dir,
+            upload_dir=self.config.upload_dir,
+        )
         video_io.save_metadata(metadata_path, metadata)
+        if chain.embed_mp4_metadata:
+            self._embed_recipe(output_path, metadata)
 
     # ------------------------------------------------------------ finalize
 
@@ -1756,7 +1767,27 @@ class PipelineManager:
                 **(outcome.inpaint or {}),
                 **(inpaint_provenance or {}),
             }
+        # Store-relative paths (no absolute local path in the recipe). Applied
+        # here, after every optional block has been added.
+        metadata = relativize_recipe_paths(
+            metadata,
+            output_dir=self.config.output_dir,
+            upload_dir=self.config.upload_dir,
+        )
         video_io.save_metadata(metadata_path, metadata)
+        if req.embed_mp4_metadata:
+            self._embed_recipe(outcome.output_path, metadata)
+
+    @staticmethod
+    def _embed_recipe(output_path: Path, metadata: dict) -> None:
+        """Embed the recipe (the metadata.json text) as the mp4 ``comment`` tag.
+
+        Best effort (:func:`video_io.try_embed_comment_tag`): a failure is
+        logged and the untouched mp4 is kept, so the job still completes.
+        ``file_size_bytes`` in the recipe is the size before this rewrite (the
+        recipe cannot contain its own final size).
+        """
+        video_io.try_embed_comment_tag(output_path, video_io.recipe_text(metadata))
 
     def _environment_block(self) -> dict:
         torch_version = None

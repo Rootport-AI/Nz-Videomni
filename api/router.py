@@ -9,6 +9,7 @@ from api import (
     generate_chain,
     jobs,
     loras,
+    media_info,
     models_registry,
     pipeline,
     status,
@@ -28,3 +29,6 @@ api_router.include_router(jobs.router, tags=["jobs"])
 # Object tracking (§3-54). Its own tag and its own namespace: it creates no job
 # and shares nothing with the generation endpoints above.
 api_router.include_router(tracking.router, tags=["tracking"])
+# mp4 recipe read-out (台帳 §3-164). Loopback-only; reads a local file's
+# container ``comment`` tag via ffprobe.
+api_router.include_router(media_info.router, tags=["utils"])

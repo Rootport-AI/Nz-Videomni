@@ -641,6 +641,18 @@ def test_chain_to_clip_request_transcribes_acceleration_fields():
     assert plain.vae_mode == "default"
 
 
+def test_chain_to_clip_request_transcribes_embed_mp4_metadata():
+    # 台帳 §3-164: the same silent-drop hazard as the acceleration fields above.
+    # Without the transcription a chain job's stored request would claim the
+    # default (True) for a chain that opted out.
+    from api.models import GenerateChainRequest
+
+    off = GenerateChainRequest(**{**CHAIN_BASE, "embed_mp4_metadata": False})
+    assert off.to_clip_request(0).embed_mp4_metadata is False
+    plain = GenerateChainRequest(**CHAIN_BASE)
+    assert plain.to_clip_request(0).embed_mp4_metadata is True
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # keep_resident (cross-job CPU-skeleton cache, §48)
 # ─────────────────────────────────────────────────────────────────────────────

@@ -234,7 +234,8 @@ def test_a2v_mock_e2e(client, tmp_path):
     assert a2v["muxed_audio_samples"] > 0
     # app-side provenance
     assert a2v["source_audio_id"] == aid
-    assert a2v["source_audio_path"].endswith("input.wav")
+    # Store-relative, not absolute (台帳 §3-164, services/recipe_paths.py).
+    assert a2v["source_audio_path"] == f"uploads/audios/{aid}/input.wav"
     # the additive request field round-trips
     assert meta["request"]["source_audio"]["audio_id"] == aid
 

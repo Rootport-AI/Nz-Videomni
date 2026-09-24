@@ -286,6 +286,10 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "seed",
         "conditioning_images",
         "crop_output",
+        # 台帳 §3-164: the app-side recipe embed into the finished mp4
+        # (``PipelineManager._embed_recipe``), engine-independent post-processing
+        # like ``crop_output``.
+        "embed_mp4_metadata",
         "loras",
         "reference_video_id",
         "conditioning_attention_strength",
@@ -482,6 +486,8 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "width",
         "height",
         "crop_output",
+        # 台帳 §3-164: see the same entry in :data:`HONOURED_FIELDS`.
+        "embed_mp4_metadata",
         "frame_rate",
         "seed",
         "overlap_frames",

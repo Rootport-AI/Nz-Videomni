@@ -46,6 +46,7 @@ from api.models import JobStatus, JoinRequest, JoinResponse
 from config import AppConfig
 from services import video_io
 from services.job_store import JobStore
+from services.recipe_paths import relativize_recipe_paths
 from services.video_upload_store import VideoUploadStore
 
 JOINED_FILENAME = "joined.mp4"
@@ -77,8 +78,11 @@ class JoinManager:
             raise joined_not_ready(job_id)
         return path
 
-    def _resolve_materials(self, job_id: str) -> tuple[Path, Path, dict]:
-        """Validate the job + collect (source_video, continuation, v2v_meta).
+    def _resolve_materials(self, job_id: str) -> tuple[Path, Path, dict, dict]:
+        """Validate the job + collect (source_video, continuation, v2v_meta, metadata).
+
+        ``metadata`` is the whole loaded ``metadata.json`` (the recipe embedded
+        into ``joined.mp4``).
 
         Up-front-failure discipline (mirrors api/generate_chain.py): every
         reject happens before any ffmpeg work.
@@ -119,12 +123,12 @@ class JoinManager:
             # the client can tell "re-upload the source" from "wrong job".
             raise source_video_not_found(str(source_video_id))
 
-        return source, continuation, v2v
+        return source, continuation, v2v, metadata
 
     # ---------------------------------------------------------------- join
 
     def join(self, job_id: str, request: JoinRequest) -> JoinResponse:
-        source, continuation, v2v = self._resolve_materials(job_id)
+        source, continuation, v2v, metadata = self._resolve_materials(job_id)
         job_dir = self._job_dir(job_id)
         out = job_dir / JOINED_FILENAME
 
@@ -193,6 +197,17 @@ class JoinManager:
                 # not exposed by the GUI.
                 video_io.concat_mp4s([source_use, continuation], out_tmp, cont_fps)
                 info = {"join_mode": "hard_concat"}
+            # The source job's recipe as the joined file's ``comment`` tag
+            # (unless that job opted out; a job recorded before the field
+            # existed counts as opted in). Best effort, like the generation
+            # path: a failure keeps the untagged join.
+            if metadata.get("request", {}).get("embed_mp4_metadata", True):
+                recipe = relativize_recipe_paths(
+                    metadata,
+                    output_dir=self.config.output_dir,
+                    upload_dir=self.config.upload_dir,
+                )
+                video_io.try_embed_comment_tag(out_tmp, video_io.recipe_text(recipe))
             os.replace(out_tmp, out)
         except video_io.FFmpegError as exc:
             raise join_failed(job_id, detail=str(exc)[-1000:])

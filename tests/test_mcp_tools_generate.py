@@ -1910,3 +1910,66 @@ def test_submit_chain_snaps_frame_rate_in_payload(given, expected):
     )
 
     assert captured["body"]["frame_rate"] == expected
+
+
+# ------------------------------------------- embed_mp4_metadata (台帳 §3-164)
+
+
+def _capture_generate_body(**kwargs) -> dict:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+    anyio.run(functools.partial(generate.submit_generate, "a prompt", **kwargs))
+    return captured["body"]
+
+
+def _capture_chain_body(**kwargs) -> dict:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 1},
+        )
+
+    set_client(_client_for_handler(handler))
+    anyio.run(
+        functools.partial(
+            generate.submit_chain, "a prompt", [ChainClipArg(num_frames=25)], **kwargs
+        )
+    )
+    return captured["body"]
+
+
+def test_submit_generate_embed_mp4_metadata_sent_only_when_off():
+    # Default True: omitted and an explicit default are both off the wire.
+    assert "embed_mp4_metadata" not in _capture_generate_body()
+    assert "embed_mp4_metadata" not in _capture_generate_body(embed_mp4_metadata=True)
+    assert _capture_generate_body(embed_mp4_metadata=False)["embed_mp4_metadata"] is False
+
+
+def test_submit_chain_embed_mp4_metadata_sent_only_when_off():
+    assert "embed_mp4_metadata" not in _capture_chain_body()
+    assert "embed_mp4_metadata" not in _capture_chain_body(embed_mp4_metadata=True)
+    assert _capture_chain_body(embed_mp4_metadata=False)["embed_mp4_metadata"] is False
+
+
+def test_embed_mp4_metadata_argument_default_matches_the_server():
+    from api.models import EMBED_MP4_METADATA_DEFAULT, GenerateChainRequest, GenerateRequest
+
+    async def _run():
+        return await build_server().list_tools()
+
+    tools = {t.name: t for t in anyio.run(_run)}
+    for name in ("submit_generate", "submit_chain"):
+        prop = tools[name].inputSchema["properties"]["embed_mp4_metadata"]
+        assert prop["default"] is EMBED_MP4_METADATA_DEFAULT
+    assert GenerateRequest.model_fields["embed_mp4_metadata"].default is EMBED_MP4_METADATA_DEFAULT
+    assert GenerateChainRequest.model_fields["embed_mp4_metadata"].default is EMBED_MP4_METADATA_DEFAULT

@@ -1,4 +1,4 @@
-"""出力動画の実パス取得・ローカル保存ツール（3本、W5）。
+"""出力動画の実パス取得・ローカル保存・生成条件の読み出しツール（4本、W5＋台帳 §3-164）。
 
 ``get_job_video_path`` / ``get_joined_video_path`` は ``GET /jobs/{id}`` で
 状態だけを確認し、実パスは常に ``mcp_server.client.BackendClient.output_dir``
@@ -10,6 +10,9 @@
 ``output_dir`` から直接コピーする）。ブロッキングI/O（``Path.exists`` /
 ``Path.stat`` / ``Path.mkdir`` / ``shutil.copy2``）は ``anyio.to_thread.run_sync``
 経由で呼ぶ（計画D3）。
+
+``get_mp4_info`` は ``POST /utils/mp4-info`` を呼ぶだけの薄いラッパー（ローカルの
+事前検査はしない。404／422 は ``_raise_for_error`` が ``ToolError`` に翻訳する）。
 """
 
 from __future__ import annotations
@@ -181,7 +184,29 @@ async def save_job_video(
     }
 
 
+async def get_mp4_info(path: str) -> dict[str, Any]:
+    """動画ファイルに書き込まれた生成条件（コンテナの ``comment`` タグ）を読み出します。
+
+    このアプリが生成した ``output.mp4`` / ``joined.mp4`` なら、``metadata.json``
+    と同じ JSON 文字列が返ります（生成時に ``embed_mp4_metadata`` が既定のTrue
+    だった場合）。読み取りはバックエンドの ``POST /utils/mp4-info``（ffprobe）が
+    行います。パスは MCP サーバー（＝バックエンド）を動かしているマシン上の
+    ものです。ファイルが無いと ``MEDIA_NOT_FOUND``、読めない・ネットワーク
+    （UNC）パスだと ``MEDIA_UNREADABLE`` のエラーになります。
+
+    Args:
+        path: 動画ファイルのローカル絶対パス（``get_job_video_path`` などが返すもの）。
+
+    Returns:
+        path: 渡したパス。
+        comment: ``comment`` タグの文字列。タグが無ければ None。
+    """
+    result = await get_client().post_json("/utils/mp4-info", {"path": path})
+    return {"path": path, "comment": result.get("comment")}
+
+
 def register(mcp: FastMCP) -> None:
     mcp.tool()(get_job_video_path)
     mcp.tool()(get_joined_video_path)
     mcp.tool()(save_job_video)
+    mcp.tool()(get_mp4_info)

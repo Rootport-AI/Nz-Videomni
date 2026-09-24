@@ -3077,6 +3077,16 @@ def test_the_nested_chain_clip_fields_are_all_accounted_for():
     assert "conditioning_images" in source
 
 
+#: Honoured fields that the ADAPTER never reads, exempt from the two "declared
+#: honoured -> read by the adapter" audits below. The classification states
+#: whether a request field really takes effect on this engine.
+#: ``embed_mp4_metadata`` (台帳 §3-164) does: it is read and applied by
+#: ``PipelineManager._embed_recipe`` as engine-independent post-processing of the
+#: finished mp4, so it is HONOURED — but no adapter source reads it, so the
+#: source-needle check does not apply to it.
+_APP_SIDE_HONOURED_FIELDS = frozenset({"embed_mp4_metadata"})
+
+
 #: ``field -> the text that proves it is read``. Three fields need an entry,
 #: and each for the same reason: the request field is not what ``generate_chain``
 #: touches. The global ``prompt`` is reached THROUGH the schema's own helper (a
@@ -3114,6 +3124,8 @@ def test_chain_honoured_fields_are_exactly_what_generate_chain_acts_on():
     never read fails here (the chain twin of the single-path test above)."""
     source = inspect.getsource(ltx25._RealBackend25.generate_chain)
     for field in ltx25.CHAIN_HONOURED_FIELDS:
+        if field in _APP_SIDE_HONOURED_FIELDS:
+            continue
         needle = _CHAIN_HONOURED_READS.get(field, f"chain.{field}")
         assert needle in source, f"{field} is declared honoured but never read"
 
@@ -3161,6 +3173,8 @@ def test_honoured_fields_are_exactly_what_generate_acts_on(ltx25_paths):
 
     source = inspect.getsource(ltx25._RealBackend25.generate)
     for field in ltx25.HONOURED_FIELDS:
+        if field in _APP_SIDE_HONOURED_FIELDS:
+            continue
         needle = _HONOURED_READS.get(field, f"request.{field}")
         assert needle in source, f"{field} is declared honoured but never read"
 

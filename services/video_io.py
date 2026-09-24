@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import shutil
 import subprocess
 import tempfile
@@ -954,6 +955,10 @@ def concat_mp4s(
         "yuv420p",
         "-r",
         str(frame_rate),
+        # Drop the inputs' global tags: the output's container tags are either
+        # the recipe written by embed_comment_tag or nothing.
+        "-map_metadata",
+        "-1",
         str(output_path),
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -1436,6 +1441,10 @@ def join_v2v(
         "yuv420p",
         "-r",
         str(src_fps),
+        # Drop the inputs' global tags: the joined file's container tags are
+        # either the recipe written by embed_comment_tag or nothing.
+        "-map_metadata",
+        "-1",
         str(out),
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -1464,8 +1473,125 @@ def join_v2v(
     return info
 
 
+def recipe_text(metadata: dict[str, Any]) -> str:
+    """The JSON text of ``metadata.json``; also embedded as the mp4 ``comment`` tag."""
+    return json.dumps(metadata, ensure_ascii=False, indent=2)
+
+
 def save_metadata(path: Path, metadata: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Text mode on purpose: newlines are written as the platform's line ending
+    # (CRLF on Windows), as before.
     with path.open("w", encoding="utf-8") as fh:
-        json.dump(metadata, fh, ensure_ascii=False, indent=2)
+        fh.write(recipe_text(metadata))
     return path
+
+
+def _escape_ffmetadata_value(value: str) -> str:
+    r"""Escape ``value`` for an ffmetadata file (``key=value`` line).
+
+    Line endings are normalised to ``\n`` first: a bare CR left in the value
+    makes ffmpeg truncate it without an error. Then ``\``, ``;``, ``#``, ``=``
+    and newlines are backslash-escaped as the ffmetadata format requires.
+    Meant for the JSON recipe only: a value ending in ``\`` reads back from
+    ffmpeg with one extra newline (``recipe_text`` always ends with ``}``).
+    """
+    text = value.replace("\r\n", "\n").replace("\r", "\n")
+    out: list[str] = []
+    for ch in text:
+        if ch in ("\\", ";", "#", "=", "\n"):
+            out.append("\\")
+        out.append(ch)
+    return "".join(out)
+
+
+def embed_comment_tag(mp4_path: Path, comment: str) -> None:
+    """Rewrite ``mp4_path`` in place with its container ``comment`` tag set to ``comment``.
+
+    Stream copy (no re-encode). The value is passed through an ffmetadata file
+    rather than the command line (no command-line length limit, no quoting
+    issues). The input's global tags are replaced; per-stream tags are kept.
+    The result is written to a temporary file next to ``mp4_path`` and moved
+    over it with ``os.replace``, so on failure the original file is untouched.
+    Raises :class:`FFmpegError` when ffmpeg fails.
+    """
+    exe = ffmpeg_path()
+    mp4_path = Path(mp4_path)
+    meta_path = mp4_path.with_name(f"{mp4_path.stem}.ffmetadata.tmp.txt")
+    tmp_out = mp4_path.with_name(f"{mp4_path.stem}.embed.tmp{mp4_path.suffix}")
+    try:
+        meta_path.write_bytes(
+            (";FFMETADATA1\ncomment=" + _escape_ffmetadata_value(comment) + "\n").encode("utf-8")
+        )
+        cmd = [
+            exe,
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "ffmetadata",
+            "-i",
+            str(meta_path),
+            "-i",
+            str(mp4_path),
+            "-map",
+            "1",
+            "-map_metadata",
+            "0",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(tmp_out),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if proc.returncode != 0:
+            raise FFmpegError(
+                f"ffmpeg embed_comment_tag failed (code {proc.returncode}): {proc.stderr[-2000:]}"
+            )
+        os.replace(tmp_out, mp4_path)
+    finally:
+        for leftover in (meta_path, tmp_out):
+            try:
+                leftover.unlink(missing_ok=True)
+            except OSError:
+                logger.warning("embed_comment_tag: could not remove temporary file %s", leftover)
+
+
+def try_embed_comment_tag(mp4_path: Path, comment: str) -> bool:
+    """:func:`embed_comment_tag`, best effort: a failure is logged as a warning.
+
+    Returns True when the tag was written. On ``FFmpegError`` or ``OSError``
+    (e.g. a ``PermissionError`` from ``os.replace``) the untouched mp4 is kept
+    and False is returned, so the caller's job still completes.
+    """
+    try:
+        embed_comment_tag(mp4_path, comment)
+    except (FFmpegError, OSError) as exc:
+        logger.warning("Could not embed the recipe into %s: %s", mp4_path, exc)
+        return False
+    return True
+
+
+def probe_comment_tag(path: Path) -> str | None:
+    """Return the container ``comment`` tag of ``path`` (via ffprobe), or None.
+
+    The tag key is matched case-insensitively (Matroska reports ``COMMENT``).
+    Raises :class:`FFmpegError` when ffprobe is missing or cannot read the file.
+    """
+    exe = shutil.which("ffprobe")
+    if not exe:
+        raise FFmpegError("ffprobe not found on PATH. Install ffmpeg and add it to PATH.")
+    cmd = [exe, "-v", "error", "-print_format", "json", "-show_format", str(path)]
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if proc.returncode != 0:
+        raise FFmpegError(f"ffprobe failed (code {proc.returncode}): {proc.stderr[-2000:]}")
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except ValueError as exc:
+        raise FFmpegError(f"ffprobe: unparsable output: {exc}") from exc
+    tags = (data.get("format") or {}).get("tags") or {}
+    for key, value in tags.items():
+        if key.lower() == "comment":
+            return value
+    return None

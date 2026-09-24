@@ -32,6 +32,10 @@ G1〜G8全PASSを条件にオーナーが確定した既定反転）、``vae_mod
 （``RetakeSpec`` / ``OutpaintSpec``）は前から実装済みで、MCPは引数を素通し
 するだけである。
 
+台帳 §3-164（2026-09-24）: 両ツールに ``embed_mp4_metadata``（既定True、既定と
+違うときだけ送る）を追加し、``outputs`` に読み出し用の ``get_mp4_info`` を
+足した（ツールは23本になった）。
+
 送信ボディは「Noneまたは空は送らない」を徹底する（計画のペイロード契約）。
 ``crop_width`` / ``crop_height`` は両方指定 or 両方省略のみを許す（片側だけの
 指定はサーバーへ投げる前にここで弾く）。NAG系フィールドは ``nag_enabled=False``
@@ -50,6 +54,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 
 from api.models import (
     BLOCK_SWAP_PREFETCH_DEFAULT,
+    EMBED_MP4_METADATA_DEFAULT,
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
     KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
@@ -167,6 +172,7 @@ async def submit_generate(
     outpaint_pad_bottom: int = 0,
     outpaint_blend_dilation_stage1: int = _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT,
     outpaint_freeze_source_audio: bool = True,
+    embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -384,6 +390,11 @@ async def submit_generate(
             作り直させたい場合だけFalseにします）。**既定のままなら送信
             しません。** 画角拡張をしない（4辺すべて0）のにFalseにすると、
             黙って無視される代わりにエラーになります。
+        embed_mp4_metadata: 完成した ``output.mp4``（と、結合した
+            ``joined.mp4``）に、``metadata.json`` と同じ JSON をコンテナの
+            ``comment`` タグとして書き込むか（**既定True**。再エンコード無しの
+            後付けで、生成結果の映像・音声は変わりません）。**既定のままなら
+            送信しません。** 書き込んだ内容は ``get_mp4_info`` で読めます。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -469,6 +480,11 @@ async def submit_generate(
     # body's key set and order stay frozen. Mirrors gradio_ui/handlers.py:908.
     if vae_mode != "default":
         payload["vae_mode"] = vae_mode
+    # embed_mp4_metadata (台帳 §3-164): the same "differs from the server's own
+    # default" rule against EMBED_MP4_METADATA_DEFAULT (True), so in practice
+    # the key rides only on an explicit False.
+    if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
+        payload["embed_mp4_metadata"] = embed_mp4_metadata
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -582,6 +598,7 @@ async def submit_chain(
     retake_head_px: int = _RETAKE_HEAD_PX_DEFAULT,
     retake_tail_px: int = _RETAKE_TAIL_PX_DEFAULT,
     retake_regenerate_audio: bool = _RETAKE_REGENERATE_AUDIO_DEFAULT,
+    embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -831,6 +848,9 @@ async def submit_chain(
             広げれば良いというものではありません。**
         retake_regenerate_audio: 窓の音声を作り直すか（既定True）。Falseにすると
             元の波形をそのまま使い戻します（元動画に音声トラックが無いと422）。
+        embed_mp4_metadata: submit_generate と同じ意味（**既定True**。完成した
+            連結動画の ``output.mp4`` に生成条件を書き込みます。既定のままなら
+            送信しません）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -913,6 +933,9 @@ async def submit_chain(
     # literal), appended after it. Mirrors gradio_ui/handlers.py:537.
     if vae_mode != "default":
         payload["vae_mode"] = vae_mode
+    # embed_mp4_metadata: same rule as submit_generate.
+    if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
+        payload["embed_mp4_metadata"] = embed_mp4_metadata
 
     payload["overlap_frames"] = overlap_frames
     payload["overlap_strength"] = overlap_strength

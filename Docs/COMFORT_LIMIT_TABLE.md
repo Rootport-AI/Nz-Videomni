@@ -533,6 +533,8 @@ Singleタブのフレーム数スライダーが必要としているのは、�
 
 **結果: LTX 2.5（公式 `default`）では、線は窓を w46・w61 に広げても成り立ちました。LTX 2.3 では、Sulphur-2 Q4_K_M の対照点では成り立ち、Sulphur-2 Q6_K では w46 の目安解像度で破れました。配信値は変えていません（反映は別途検討）。** 点の設計・数値・解釈の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.6 です。
 
+- **Sulphur-2 Q6_K の w46 の VRAM 溢れは、配信値に反映しません**（オーナー裁定 2026-09-25）。最終判断は fp8 の快適上限較正（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117 の段階 B-3）の後に行います。
+
 ---
 
 ## 付記（前提と限界）

@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-25（§3-167 の状態を B-1 実装済み・機械確認済み・オーナー目視待ちへ更新）
+- 作成: 2026-07-15／最終更新: 2026-09-25（§3-165 をクローズして CLOSED へ移送。§3-167 を B-1 完結・次は B-2 へ更新）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
@@ -165,21 +165,11 @@
 - **状態**: 未着手（将来の研究課題）。**急ぎではない**——スタイルLoRAの解禁で、撮り直しにLoRAが使えない状態そのものは解消している。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-62-02（スタイルLoRA側の解禁記録と、そこで置いた設計判断）、`api/models.py`・`engine/pipeline/chain_pipeline.py`・`engine25/chain25.py`・`chain_math.py`（上記の各行）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57（長尺IC-LoRAの窓機構）・§55.3（両側凍結の検証）。
 
-#### 3-165. Chained エンジンの潜在クリップサイズの追加（起票：2026-09-24）
-
-- **状態**: **実装済み（dev にコミット済み `74f0d19`・`3cb5f89`・`e3493b5`・`75a9549`）・較正は完了（配信値は据え置き）・オーナーの実機目視待ち。MCP の `submit_chain` も対応済み（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.9）。** 残りは次の 2 つです。
-  1. **オーナーの実機目視**（8 項目。項目と結果の欄は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.7）。合格したらクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移します。
-  2. **較正結果（Sulphur-2 Q6_K の w46 が線の内側で退避）を配信値へ反映するかの判断**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.6・§116.8）。
-- **概要**: 連結生成の第 2 段（Stage-2）で選べる窓（潜在クリップ）に、22 より広い 25〜61 潜在フレームの 13 段（`w25`〜`w61`）を足しました。同じ尺なら窓が広いほど窓の境目を跨ぐ回数が減り、境目で出やすいちらつき・モーフィング・ドリフトが減る、というオーナーの見立てが動機です。
-- **裁定**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.1 にあります（理由を含む正本）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116（実装・ゲート・較正・申し送り）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第12節（窓ごとの目安解像度）、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 冒頭の【2026-09-25 追記】（広い窓の注意点）、`chain_math.py` の `STAGE2_WINDOW_PRESETS`。
-
 #### 3-167. CivitAI 等で配布されている fp8 の safetensors を models ディレクトリに配置するだけで使えるようにする（起票：2026-09-25）
 
-- **状態**: **B-1 実装済み・機械確認済み・オーナー目視待ち。裁定と規則の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117。** 残りは次の 3 つです。
-  1. **B-1 の実機確認とオーナー目視**（項目と結果の欄は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117.8）。目視の結果で B-2 へ進むかを決めます。
-  2. **B-2**: LTX 2.5 でも fp8 safetensors を置けば選べるようにする。
-  3. **B-3**: fp8 用の快適上限の行を較正する（今は未較正で、マーカーは GGUF 用の目安のまま出ます）。
+- **状態**: **B-1 完結（オーナー目視合格・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117）。次＝B-2（LTX 2.5）→ B-3。裁定と規則の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117。** 残りは次の 2 つです。
+  1. **B-2**: LTX 2.5 でも fp8 safetensors を置けば選べるようにする。
+  2. **B-3**: fp8 用の快適上限の行を較正する（今は未較正で、マーカーは GGUF 用の目安のまま出ます）。Sulphur-2 Q6_K の w46 の VRAM 溢れを配信値へ反映するかの最終判断も、この較正の後に行います（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第12.4節）。
 - **概要**: CivitAI などで配布される LTX 2.3／2.5 のファインチューン（多くは fp8 の safetensors）を、変換せずに `models\<系統>\Weights\` へ置くだけで選べるようにする。A1111 SD WebUI の「モデルを置けば使える」体験が目標。対象は fp8 に限る。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117（裁定・設計・判定規則・VRAM の見立て・申し送り）、`sft_fp8_format.py`、`engine/fp8/`、README「追加の transformer（GGUF／fp8 safetensors）/ LoRA を配置する」。
 

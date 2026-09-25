@@ -1,4 +1,4 @@
-"""§3-167 B-1: sft_fp8_format — header reader and fp8 acceptance table.
+"""§3-167 B-1/B-2: sft_fp8_format — header reader and fp8 acceptance table.
 
 Synthetic, tiny safetensors files only (no real 29 GB checkpoint): a header is
 assembled from a {key: (dtype, shape)} spec, the body is zero bytes except for
@@ -17,7 +17,9 @@ from sft_fp8_format import (
     Fp8FormatError,
     Layout,
     MAX_HEADER_LEN,
+    detect_prefix,
     inspect,
+    parse_metadata,
     read_header,
     read_tensor_bytes,
 )
@@ -187,6 +189,134 @@ def test_unreadable_quantization_metadata_is_ignored(tmp_path):
     assert inspect(_write(tmp_path / "q.safetensors", spec, meta, pay)).flavor == "scaled"
 
 
+# --- B-2: rules widened for the real LTX 2.5 community fp8 files ------------ #
+
+_BODY_LAYERS = frozenset(f"transformer_blocks.{b}.{LINEAR}" for b in range(2, 46))
+
+
+def test_accepts_scale_of_shape_1(tmp_path):
+    """ChrisColeTech fp8_scaled stores every weight_scale as F32 shape [1]."""
+    spec, meta, pay = _model("scaled")
+    for b in range(2, 46):
+        spec[f"{_layer(b)}.weight_scale"] = ("F32", (1,))
+    layout = inspect(_write(tmp_path / "s1.safetensors", spec, meta, pay))
+    assert layout.scaled_layers == _BODY_LAYERS
+
+
+def test_accepts_fp8_connector_without_scale(tmp_path):
+    spec, meta, pay = _model("scaled")
+    spec[f"{P}video_embeddings_connector.proj.weight"] = ("F8_E4M3", (4, 4))
+    layout = inspect(_write(tmp_path / "c.safetensors", spec, meta, pay))
+    assert f"{P}video_embeddings_connector.proj.weight" in layout.connector_keys
+    assert layout.scaled_layers == _BODY_LAYERS
+
+
+def test_accepts_fp8_connector_with_scale_but_keeps_it_out_of_scaled_layers(tmp_path):
+    """A scaled connector obeys the body's rules but is the text encoder's layer:
+    it must not reach scaled_layers (the transformer's module op would then
+    look it up on LTXModel and fail)."""
+    spec, meta, pay = _model("scaled")
+    conn = f"{P}video_embeddings_connector.proj"
+    spec[f"{conn}.weight"] = ("F8_E4M3", (4, 4))
+    spec[f"{conn}.weight_scale"] = ("F32", (1,))
+    layout = inspect(_write(tmp_path / "cs.safetensors", spec, meta, pay))
+    assert f"{conn}.weight_scale" in layout.connector_keys
+    assert layout.scaled_layers == _BODY_LAYERS
+
+
+def test_accepts_fp8_connector_with_comfy_quant_marker(tmp_path):
+    """A connector fp8 layer carrying its comfy_quant marker (U8) is accepted:
+    the marker is optional and its U8 dtype was already cleared in step 3."""
+    spec, meta, pay = _model("scaled")
+    conn = f"{P}video_embeddings_connector.proj"
+    spec[f"{conn}.weight"] = ("F8_E4M3", (4, 4))
+    spec[f"{conn}.comfy_quant"] = _quant_u8(FMT_OK)
+    pay[f"{conn}.comfy_quant"] = FMT_OK
+    layout = inspect(_write(tmp_path / "cq.safetensors", spec, meta, pay))
+    assert f"{conn}.comfy_quant" in layout.connector_keys
+    assert layout.scaled_layers == _BODY_LAYERS
+
+
+def test_refuses_non_scalar_scale_on_connector(tmp_path):
+    spec, meta, pay = _model("scaled")
+    conn = f"{P}video_embeddings_connector.proj"
+    spec[f"{conn}.weight"] = ("F8_E4M3", (4, 4))
+    spec[f"{conn}.weight_scale"] = ("F32", (4,))
+    with pytest.raises(Fp8FormatError, match="per-row"):
+        inspect(_write(tmp_path / "cr.safetensors", spec, meta, pay))
+
+
+def test_accepts_bare_names(tmp_path):
+    """No ``model.diffusion_model.`` prefix at all (ChrisColeTech). Everything
+    is "inside" then; text_embedding_projection and the connectors (fp8 and
+    scaled here) are checked but kept out of scaled_layers."""
+    spec, meta, pay = _model("scaled", prefix="")
+    spec["video_embeddings_connector.proj.weight"] = ("F8_E4M3", (4, 4))
+    spec["video_embeddings_connector.proj.weight_scale"] = ("F32", (1,))
+    spec["text_embedding_projection.video_aggregate_embed.weight"] = ("F8_E4M3", (4, 4))
+    spec["text_embedding_projection.video_aggregate_embed.weight_scale"] = ("F32", ())
+    del spec["vae.decoder.conv.weight"]
+    layout = inspect(_write(tmp_path / "bare.safetensors", spec, meta, pay))
+    assert layout.prefix == ""
+    assert layout.n_blocks == N_BLOCKS
+    assert layout.scaled_layers == _BODY_LAYERS
+    assert layout.connector_keys == (
+        "audio_embeddings_connector.proj.bias",
+        "video_embeddings_connector.proj.weight",
+        "video_embeddings_connector.proj.weight_scale",
+    )
+
+
+def test_bare_names_police_every_tensor(tmp_path):
+    """With prefix "" nothing is outside: a non-float tensor anywhere is refused."""
+    spec, meta, pay = _model("scaled", prefix="")
+    spec["audio_vae.encoder.stats"] = ("F16", (2,))
+    with pytest.raises(Fp8FormatError, match="F16"):
+        inspect(_write(tmp_path / "bare.safetensors", spec, meta, pay))
+
+
+@pytest.mark.parametrize(
+    "keys, expected",
+    [
+        ([f"{P}transformer_blocks.0.x", "vae.a"], P),
+        (["transformer_blocks.0.x", "video_embeddings_connector.w"], ""),
+        # the prefixed spelling wins when (oddly) both exist
+        ([f"{P}transformer_blocks.0.x", "transformer_blocks.0.x"], P),
+    ],
+    ids=["prefixed", "bare", "both"],
+)
+def test_detect_prefix(tmp_path, keys, expected):
+    path = _write(tmp_path / "d.safetensors", {k: ("BF16", (1,)) for k in keys})
+    assert detect_prefix(read_header(path)) == expected
+
+
+def test_detect_prefix_refuses_unknown_prefix(tmp_path):
+    path = _write(tmp_path / "d.safetensors", {"diffusion_model.transformer_blocks.0.x": ("BF16", (1,))})
+    with pytest.raises(Fp8FormatError, match="接頭辞"):
+        detect_prefix(read_header(path))
+
+
+def test_parse_metadata_matches_ltx_core_1_2_shape(tmp_path):
+    """Each value JSON-parsed when valid JSON, else kept as the raw string
+    (ltx_core 1.2 SafetensorsModelStateDictLoader.metadata)."""
+    meta = {
+        "config": CONFIG,
+        "gemma_source_checkpoint": json.dumps({"ltx_version": "2.5.0"}),
+        "model_version": "2.5.0",  # not JSON -> raw string
+        "license": "some license text",
+        "n": "3",  # valid JSON -> 3
+    }
+    path = _write(tmp_path / "m.safetensors", {"a": ("BF16", (1,))}, meta)
+    assert parse_metadata(read_header(path)) == {
+        "config": json.loads(CONFIG),
+        "gemma_source_checkpoint": {"ltx_version": "2.5.0"},
+        "model_version": "2.5.0",
+        "license": "some license text",
+        "n": 3,
+    }
+    assert parse_metadata(read_header(_write(tmp_path / "e.safetensors", {"a": ("BF16", (1,))}))) == {}
+
+
 # --------------------------------------------------------------------------- #
 # refusal table
 # --------------------------------------------------------------------------- #
@@ -272,10 +402,6 @@ def _no_connector(spec, meta, pay):
         del spec[key]
 
 
-def _fp8_connector(spec, meta, pay):
-    spec[f"{P}video_embeddings_connector.proj.weight"] = ("F8_E4M3", (4, 4))
-
-
 def _f16_tensor(spec, meta, pay):
     spec[f"{P}patchify_proj.weight"] = ("F16", (4, 4))
 
@@ -310,7 +436,6 @@ def _fp8_3d(spec, meta, pay):
         (_drop_block_47, "47 個"),
         (_no_fp8, "1 本もありません"),
         (_no_connector, "connector）がありません"),
-        (_fp8_connector, "connector '"),
         (_f16_tensor, "F16"),
         (_fp8_outside_prefix, "の外にあります"),
         (_fp8_3d, "2 次元 .weight"),

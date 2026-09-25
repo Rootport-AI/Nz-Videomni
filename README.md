@@ -350,13 +350,13 @@ backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行い�
 
 GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字列）が埋め込まれていること、(2) テンソル名が LTX ネイティブの生キーであること、(3) `embeddings_connector` 層が非量子化（F32/BF16）であること。これらを満たさない外部配布 GGUF はロードに失敗します（条件を満たすのは QuantStack 製、および自家製変換ツール `Nz-GGUF-Converter-LTX23` の出力）。量子化タイプは既定の Q4_K_M に加え Q6_K / Q8_0 等にも対応します。
 
-**fp8 safetensors（LTX 2.3 のみ）**: CivitAI などで配布されている fp8（重みを 8 ビットの浮動小数点で持つ形式）の transformer の `.safetensors` も、**変換せずに `models/LTX23/Weights/` へ置くだけで**、GGUF と同じドロップダウンに並びます。登録名の決まり方・選び方・API は上の GGUF と同じです。LTX 2.5 の `models/LTX25/Weights/` ではまだ使えません（置いても一覧に出ません）。
+**fp8 safetensors（LTX 2.3・LTX 2.5）**: CivitAI などで配布されている fp8（重みを 8 ビットの浮動小数点で持つ形式）の transformer の `.safetensors` も、**変換せずに `models/LTX23/Weights/`（LTX 2.5 なら `models/LTX25/Weights/`）へ置くだけで**、GGUF と同じドロップダウンに並びます。登録名の決まり方・選び方・API は上の GGUF と同じです。**LTX 2.5 は Lightricks 公式が fp8 を配っていない**ので、使えるのはコミュニティが変換した fp8 です。
 
-- **使える作り**: 層ごとに倍率（`weight_scale`。fp8 の値に掛けて元の重みへ戻す係数）が付いているもの（Sulphur 2 の fp8・Lightricks 公式の fp8・Kijai 氏の配布物など）と、倍率の無い素の fp8 の両方を読めます。1 つのファイルの中で両方が混ざっていても構いません。VAE を含まない transformer だけのファイルも使えます。目安は「ComfyUI の典型的なワークフローで動く fp8 ファイルなら、ここでも置けば動く」です。
-- **使えない例**: int8・nvfp4 など fp8 以外の量子化／倍率が 1 個の数（スカラー）ではないもの（行ごと・ブロックごとの倍率）／ヘッダの `__metadata__` に `config`（モデル設定の JSON）が無いもの（ComfyUI でも LTX 2.3 として組めない形です）／LTX 2.0・LTX 2.5 のファイル（ヘッダの `model_version` で見分けます）／旧形式（`scaled_fp8`）／fp8 を含まない bf16 のファイル（44 GB 級で、この機体では実用になりません）。これらを選ぶと、読み込みの前に 422 `MODEL_INCOMPATIBLE` で止まり、`detail` に不合格の箇所が 1 行で出ます。
+- **使える作り**: 層ごとに倍率（`weight_scale`。fp8 の値に掛けて元の重みへ戻す係数）が付いているもの（Sulphur 2 の fp8・Lightricks 公式の fp8・Kijai 氏の配布物など）と、倍率の無い素の fp8 の両方を読めます。1 つのファイルの中で両方が混ざっていても構いません。VAE を含まない transformer だけのファイル、テンソル名の頭に `model.diffusion_model.` が付かないファイル、connector（テキスト埋め込みを transformer へ渡す部品）まで fp8 にしたファイルも使えます。目安は「ComfyUI の典型的なワークフローで動く fp8 ファイルなら、ここでも置けば動く」です。
+- **使えない例**: int8・nvfp4 など fp8 以外の量子化（LTX 2.5 公式の INT8-ConvRot・NVFP4 と、REDGraft LTX 2.5 の独自量子化もこれに当たり、断られるのが正しい動作です）／倍率が 1 個の数（スカラー）ではないもの（行ごと・ブロックごとの倍率）／ヘッダの `__metadata__` に `config`（モデル設定の JSON）が無いもの（ComfyUI でも LTX として組めない形です）／置いたフォルダと世代が違うファイル（LTX 2.3 のフォルダに置いた LTX 2.5 のファイルなど。ヘッダの `model_version` で見分けます）／旧形式（`scaled_fp8`）／fp8 を含まない bf16 のファイル（44 GB 級で、この機体では実用になりません）。これらを選ぶと、読み込みの前に 422 `MODEL_INCOMPATIBLE` で止まり、`detail` に不合格の箇所が 1 行で出ます。
 - **同じ名前のファイル**: `X.gguf` と `X.safetensors` を同じフォルダに並べると、上の衝突の規則どおり、GGUF が `X`、safetensors が `Weights__X`（親フォルダ名つき）という登録名になります。
-- **VRAM の目安**: fp8 は GPU に常駐させるブロックが Q4_K_M より重く、専有 VRAM は Q4_K_M 比で **+1 GiB 前後**の見込みです（実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §117）。**画面の快適上限マーカーは fp8 では較正していません**（GGUF 用の目安がそのまま出ます）。
-- **コミット（仮想メモリ）の目安**: fp8 は Windows のコミットを Q6_K より約 15 GiB 多く使います（開発機では最大で約 100 GiB）。ページファイルが小さい機体では、keep_resident と併用するとコミットの上限に当たることがあります（実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §117.8）。
+- **VRAM の目安**: fp8 は GPU に常駐させるブロックが Q4_K_M より重く、専有 VRAM は Q4_K_M 比で **+1 GiB 前後**の見込みです（実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §117・§118）。**画面の快適上限マーカーは fp8 では較正していません**（GGUF 用の目安がそのまま出ます）。
+- **コミット（仮想メモリ）の目安**: fp8 は Windows のコミットを Q6_K より約 15 GiB 多く使います（開発機では最大で約 100 GiB）。LTX 2.5 でも GGUF より増えます（数値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §118.8）。ページファイルが小さい機体では、keep_resident と併用するとコミットの上限に当たることがあります（実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §117.8）。
 - **`config.yaml` の `dit_cpu_load` は有効（既定の `true`）のままにしてください。** 無効にすると fp8 の transformer を GPU 上で組むことになり必ずメモリが溢れるため、読み込みの時点でエラーにしています。
 
 **LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所はベースモデルで分かれていません**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。
@@ -384,7 +384,7 @@ models/
     ├─ StyleLoRA/            利用者が用意する画風・キャラクター系 LoRA
     └─ IC-LoRA/              pixel-spatial-upscaler / union-control / deblur / in-outpainting
 └─ LTX25/                    LTX 2.5 のためのファイル一式
-    ├─ Weights/              transformer の GGUF
+    ├─ Weights/              transformer の GGUF または fp8 safetensors
     ├─ TextEncoder/          Gemma 4 の GGUF（tokenizer は GGUF の中に入っています）
     ├─ VAE/                  映像 VAE（畳み込みデコーダ版）・音声 VAE
     │   └─ diffvae/          拡散デコーダ版の映像 VAE（現在は使いません・退避先）

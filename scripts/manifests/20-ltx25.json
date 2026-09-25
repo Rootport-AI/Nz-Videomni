@@ -8,7 +8,7 @@
   "categories": {
     "transformer": {
       "scan": ["LTX25/Weights"],
-      "extensions": [".gguf"],
+      "extensions": [".gguf", ".safetensors"],
       "recursive": true,
       "default_file": "LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf"
     },

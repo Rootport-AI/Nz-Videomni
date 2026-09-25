@@ -84,13 +84,13 @@ def test_shipped_ltx23_asset_paths_match_the_removed_config_fields():
     assert "component_video_vae_pruned_path" not in REQUIRED_ASSETS
 
 
-def test_shipped_transformer_extensions_fp8_safetensors_is_ltx23_only():
-    """§3-167 B-1: an fp8 safetensors transformer is accepted for LTX 2.3 only.
-    LTX 2.5 keeps refusing it by extension until B-2."""
+def test_shipped_transformer_extensions_accept_fp8_safetensors():
+    """§3-167: an fp8 safetensors transformer is accepted next to the GGUF for
+    LTX 2.3 (B-1) and LTX 2.5 (B-2)."""
     shipped = _shipped()
-    assert ".safetensors" in shipped["LTX23"].categories["transformer"].extensions
-    assert ".gguf" in shipped["LTX23"].categories["transformer"].extensions
-    assert ".safetensors" not in shipped["LTX25"].categories["transformer"].extensions
+    for base in ("LTX23", "LTX25"):
+        assert ".safetensors" in shipped[base].categories["transformer"].extensions
+        assert ".gguf" in shipped[base].categories["transformer"].extensions
 
 
 def test_deprecated_model_keys_warn_and_are_ignored(tmp_path, caplog):

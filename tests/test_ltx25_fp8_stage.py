@@ -1,0 +1,424 @@
+"""§3-167 B-2: the LTX 2.5 engine reads an fp8 safetensors transformer (CPU only).
+
+Pins what engine25 adds on top of the shared fp8 pieces (``sft_fp8_format`` and
+``engine.fp8.quant_service``, tested on their own):
+
+  * ``Ltx25DiffusionStage.from_fp8`` builds a 4-block model from a fake fp8 file
+    -- prefixed and bare names, scale shape ``()`` and ``[1]``, scaled and plain
+    layers mixed, F32 tensors, a connector in fp8 -- and its forward equals the
+    forward of the same model loaded with the weights brought back to bf16 by
+    hand; ``dispose`` and a rebuild give the same numbers again;
+  * ``Ltx25Fp8StateDictLoader.metadata()`` has ltx_core 1.2's shape
+    (``metadata()["config"]["transformer"]``) and is parsed once;
+  * the EmbeddingsProcessor loader takes the connectors from the safetensors and
+    the projections from a GGUF, and still refuses overlapping files;
+  * ``ancestral_detection_skipped`` rebinds the probe the constructor looks up
+    and restores it in ``finally``; ``verify`` pins the global-name lookup;
+  * ``Ltx25Pipeline`` picks ``from_fp8`` / ``from_gguf`` by extension and
+    reports ``detected`` as None.
+
+Run with ``.venv-engine-ltx25`` and ``--noconftest`` (through the runner that
+borrows the app venv's pytest).
+"""
+
+from __future__ import annotations
+
+import functools
+import json
+import types
+
+import pytest
+
+pytest.importorskip("torch")
+pytest.importorskip("ltx_core")
+
+import torch  # noqa: E402
+from torch import nn  # noqa: E402
+
+import sft_fp8_format  # noqa: E402
+from engine25 import ltxcore_compat, pipeline25  # noqa: E402
+from engine25.gguf_gemma4 import (  # noqa: E402
+    Ltx25Fp8ConnectorLoader,
+    Ltx25GemmaError,
+    Ltx25MultiGgufStateDictLoader,
+)
+from engine25.gguf_transformer import (  # noqa: E402
+    LTX25_EMBEDDINGS_PROCESSOR_KEY_OPS,
+    Ltx25CpuModelBuilder,
+    Ltx25DiffusionStage,
+    Ltx25Fp8StateDictLoader,
+    _dummy_video_modality,
+)
+from engine25.ltxcore_compat import (  # noqa: E402
+    DistilledPipeline,
+    LTXModelConfigurator,
+    ancestral_detection_skipped,
+    ltx_distilled,
+)
+
+BF16 = torch.bfloat16
+FP8 = torch.float8_e4m3fn
+CPU = torch.device("cpu")
+P = "model.diffusion_model."
+N_BLOCKS = 4
+
+#: The real LTX 2.5 transformer config (from the distilled GGUF's KV block),
+#: shrunk to 4 blocks and toy widths. The flags are the real ones so the
+#: skeleton has the real 2.5 layout (gated attention, cross-attention AdaLN, no
+#: FF bias, 84 tensors per block).
+TRANSFORMER_CONFIG = {
+    "activation_fn": "gelu-approximate", "attention_bias": True, "attention_type": "default",
+    "caption_channels": 3840, "double_self_attention": False, "dropout": 0.0,
+    "norm_elementwise_affine": False, "norm_eps": 1e-06, "num_embeds_ada_norm": 1000,
+    "num_vector_embeds": None, "only_cross_attention": False, "cross_attention_norm": True,
+    "upcast_attention": False, "use_linear_projection": False, "qk_norm": "rms_norm",
+    "standardization_norm": "rms_norm", "positional_embedding_type": "rope",
+    "positional_embedding_theta": 10000.0, "positional_embedding_max_pos": [20, 2048, 2048],
+    "timestep_scale_multiplier": 1000, "av_ca_timestep_scale_multiplier": 1000.0,
+    "use_audio_video_cross_attention": True, "ff_bias": False, "share_ff": False,
+    "audio_positional_embedding_max_pos": [20], "av_cross_ada_norm": True,
+    "use_middle_indices_grid": True, "apply_gated_attention": True,
+    "caption_proj_before_connector": True, "cross_attention_adaln": True, "rope_type": "split",
+    "frequencies_precision": "float64", "use_keyframes_abs_pos_embedding": True,
+    # toy sizes
+    "num_layers": N_BLOCKS, "num_attention_heads": 2, "attention_head_dim": 8,
+    "in_channels": 8, "out_channels": 8, "cross_attention_dim": 16,
+    "audio_num_attention_heads": 2, "audio_attention_head_dim": 4,
+    "audio_in_channels": 8, "audio_out_channels": 8, "audio_cross_attention_dim": 8,
+}
+CONFIG = {"transformer": TRANSFORMER_CONFIG, "scheduler": {}}
+GEMMA_SOURCE = {"ltx_version": "2.5.0", "gemma_version": "gemma4-12b-ltx-v1"}
+METADATA = {
+    "config": json.dumps(CONFIG),
+    "model_version": "2.5.0",
+    "gemma_source_checkpoint": json.dumps(GEMMA_SOURCE),
+    "license": "not json",
+}
+
+#: A few connector tensors (names as in the real file, sizes toy).
+CONNECTOR_SHAPES = {
+    "video_embeddings_connector.transformer_1d_blocks.0.attn1.to_q.weight": (16, 16),
+    "video_embeddings_connector.transformer_1d_blocks.0.attn1.to_q.bias": (16,),
+    "video_embeddings_connector.learnable_registers": (4, 16),
+    "audio_embeddings_connector.transformer_1d_blocks.0.attn1.to_q.weight": (8, 8),
+    "audio_embeddings_connector.transformer_1d_blocks.0.attn1.to_q.bias": (8,),
+    "audio_embeddings_connector.learnable_registers": (4, 8),
+}
+
+
+# --------------------------------------------------------------------------- #
+# fake file
+# --------------------------------------------------------------------------- #
+
+
+def _skeleton() -> nn.Module:
+    return LTXModelConfigurator.from_metadata({"config": CONFIG})
+
+
+def _write_fp8(path, *, prefix: str, scale_shape: tuple, fp8_connector: bool):
+    """Write a 4-block fp8 transformer; return (reference bf16 sd, reference connectors).
+
+    Block Linear weights alternate scaled fp8 (``weight_scale`` of *scale_shape*,
+    plus an ``input_scale`` the loader must ignore) and plain-cast fp8. Every
+    ``scale_shift_table`` is stored F32 (the loader brings F32 to bf16), the
+    rest bf16. The references are what the model should end up holding.
+    """
+    from safetensors.torch import save_file
+
+    model = _skeleton()
+    linears = {name for name, mod in model.named_modules() if isinstance(mod, nn.Linear)}
+    gen = torch.Generator().manual_seed(0)
+    tensors: dict[str, torch.Tensor] = {}
+    ref: dict[str, torch.Tensor] = {}
+    n_fp8 = 0
+    for key, value in model.state_dict().items():
+        val = torch.randn(value.shape, generator=gen) * 0.1
+        layer = key[: -len(".weight")] if key.endswith(".weight") else None
+        if key.startswith("transformer_blocks.") and layer in linears:
+            n_fp8 += 1
+            if n_fp8 % 2:
+                scale = torch.tensor(0.01, dtype=torch.float32)
+                w8 = (val / scale).to(FP8)
+                tensors[prefix + layer + ".weight_scale"] = scale.reshape(scale_shape)
+                tensors[prefix + layer + ".input_scale"] = torch.ones((), dtype=torch.float32)
+                ref[key] = (w8.to(torch.float32) * scale).to(BF16)
+            else:
+                w8 = val.to(FP8)
+                ref[key] = w8.to(BF16)
+            tensors[prefix + key] = w8
+        elif key.endswith("scale_shift_table"):
+            tensors[prefix + key] = val.to(torch.float32)
+            ref[key] = val.to(BF16)
+        else:
+            tensors[prefix + key] = val.to(BF16)
+            ref[key] = tensors[prefix + key]
+
+    connectors: dict[str, torch.Tensor] = {}
+    for key, shape in CONNECTOR_SHAPES.items():
+        val = torch.randn(shape, generator=gen) * 0.1
+        if fp8_connector and key.endswith(".weight"):
+            scale = torch.tensor(0.02, dtype=torch.float32)
+            w8 = (val / scale).to(FP8)
+            tensors[prefix + key] = w8
+            tensors[prefix + key[: -len(".weight")] + ".weight_scale"] = scale.reshape(scale_shape)
+            connectors[key] = (w8.to(torch.float32) * scale).to(BF16)
+        else:
+            tensors[prefix + key] = val.to(BF16)
+            connectors[key] = tensors[prefix + key]
+
+    # The TE-side projection some files carry: inside the prefix for a bare
+    # file, outside it for a prefixed one. Never part of the transformer.
+    tensors["text_embedding_projection.video_aggregate_embed.weight"] = torch.zeros(4, 4, dtype=BF16)
+
+    save_file(tensors, str(path), metadata=METADATA)
+    return ref, connectors
+
+
+@pytest.fixture
+def inspect_4_blocks(monkeypatch):
+    """``inspect`` expects the real 48 blocks; the fake has 4."""
+    monkeypatch.setattr(
+        sft_fp8_format, "inspect", functools.partial(sft_fp8_format.inspect, expected_blocks=N_BLOCKS)
+    )
+
+
+def _reference_forward(ref_sd: dict[str, torch.Tensor], modality) -> torch.Tensor:
+    model = _skeleton()
+    model.load_state_dict(ref_sd, strict=True, assign=True)
+    with torch.no_grad():
+        return model.eval()(modality, None, None)[0]
+
+
+def _modality():
+    return _dummy_video_modality(CONFIG, device=CPU, dtype=BF16, width=64, height=64, frames=9)
+
+
+CASES = [
+    pytest.param(P, (), False, id="prefixed-scale0d"),
+    pytest.param("", (1,), True, id="bare-scale1-fp8connector"),
+    pytest.param(P, (1,), True, id="prefixed-scale1-fp8connector"),
+]
+
+
+# --------------------------------------------------------------------------- #
+# transformer
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(("prefix", "scale_shape", "fp8_connector"), CASES)
+def test_from_fp8_forward_matches_bf16_reference_and_survives_dispose(
+    tmp_path, inspect_4_blocks, prefix, scale_shape, fp8_connector
+):
+    path = tmp_path / "t.safetensors"
+    ref_sd, _ = _write_fp8(path, prefix=prefix, scale_shape=scale_shape, fp8_connector=fp8_connector)
+    modality = _modality()
+    expected = _reference_forward(ref_sd, modality)
+
+    stage = Ltx25DiffusionStage.from_fp8(str(path), device=CPU, blocks_on_gpu=0, cache_weights=True)
+    assert isinstance(stage._transformer_builder, Ltx25CpuModelBuilder)
+    assert isinstance(stage._transformer_builder.model_loader, Ltx25Fp8StateDictLoader)
+
+    outs = []
+    for _ in range(2):  # build, forward, dispose -- then again from the cache
+        x0 = stage._build_transformer(device=CPU)
+        velocity = x0.velocity_model
+        state = velocity.state_dict()
+        assert any(t.dtype == FP8 for t in state.values())
+        scales = [k for k in state if k.endswith(".weight_scale")]
+        assert scales and all(state[k].shape == () for k in scales)
+        assert not any(k.startswith(("text_embedding_projection.", "video_embeddings_connector."))
+                       for k in state)
+        with torch.no_grad():
+            outs.append(velocity(modality, None, None)[0])
+        x0.dispose()
+        assert all(t.is_meta for t in velocity.state_dict().values())
+
+    assert torch.equal(outs[0], expected)
+    assert torch.equal(outs[1], expected)
+
+
+def test_fp8_loader_metadata_has_ltx_core_1_2_shape_and_is_parsed_once(tmp_path, inspect_4_blocks, monkeypatch):
+    path = tmp_path / "t.safetensors"
+    _write_fp8(path, prefix=P, scale_shape=(), fp8_connector=False)
+    loader = Ltx25Fp8StateDictLoader(str(path), sft_fp8_format.inspect(str(path)))
+
+    def _no_second_read(_path):
+        raise AssertionError("metadata() re-read the header")
+
+    monkeypatch.setattr(sft_fp8_format, "read_header", _no_second_read)
+    for _ in range(2):
+        meta = loader.metadata(str(path))
+        assert meta["config"]["transformer"]["num_layers"] == N_BLOCKS
+        assert meta["model_version"] == "2.5.0"
+        assert meta["gemma_source_checkpoint"] == GEMMA_SOURCE
+        assert meta["license"] == "not json"
+
+
+def test_build_calls_the_fp8_placement_check(tmp_path, inspect_4_blocks, monkeypatch):
+    from engine25 import gguf_transformer
+
+    seen = []
+    monkeypatch.setattr(gguf_transformer, "_assert_fp8_only_in_linears", seen.append)
+    path = tmp_path / "t.safetensors"
+    _write_fp8(path, prefix=P, scale_shape=(), fp8_connector=False)
+    stage = Ltx25DiffusionStage.from_fp8(str(path), device=CPU, blocks_on_gpu=0)
+    x0 = stage._build_transformer(device=CPU)
+    assert seen == [x0.velocity_model]
+
+
+def test_from_fp8_refuses_what_inspect_refuses(tmp_path):
+    # 4 blocks against the real 48: the one acceptance check runs in from_fp8.
+    path = tmp_path / "t.safetensors"
+    _write_fp8(path, prefix=P, scale_shape=(), fp8_connector=False)
+    with pytest.raises(sft_fp8_format.Fp8FormatError, match="transformer_blocks"):
+        Ltx25DiffusionStage.from_fp8(str(path), device=CPU)
+
+
+# --------------------------------------------------------------------------- #
+# EmbeddingsProcessor loader
+# --------------------------------------------------------------------------- #
+
+
+def _write_te_gguf(path) -> dict[str, torch.Tensor]:
+    import gguf
+    import numpy as np
+
+    arrays = {
+        "text_embedding_projection.video_aggregate_embed.weight": np.arange(12, dtype=np.float32).reshape(3, 4),
+        "text_embedding_projection.audio_aggregate_embed.weight": np.ones((2, 4), dtype=np.float32),
+        "model.layers.0.mlp.down_proj.weight": np.zeros((4, 4), dtype=np.float32),  # Gemma: dropped
+    }
+    writer = gguf.GGUFWriter(str(path), arch="gemma4")
+    writer.add_string("config", json.dumps({"text_encoder": {}}))
+    for name, array in arrays.items():
+        writer.add_tensor(name, array)
+    writer.write_header_to_file()
+    writer.write_kv_data_to_file()
+    writer.write_tensors_to_file()
+    writer.close()
+    return {
+        "feature_extractor.video_aggregate_embed.weight": torch.from_numpy(arrays[
+            "text_embedding_projection.video_aggregate_embed.weight"]),
+        "feature_extractor.audio_aggregate_embed.weight": torch.from_numpy(arrays[
+            "text_embedding_projection.audio_aggregate_embed.weight"]),
+    }
+
+
+@pytest.mark.parametrize(("prefix", "scale_shape", "fp8_connector"), CASES)
+def test_embeddings_loader_mixes_fp8_safetensors_and_gguf(
+    tmp_path, prefix, scale_shape, fp8_connector
+):
+    sft = tmp_path / "t.safetensors"
+    te = tmp_path / "te.gguf"
+    _, connectors = _write_fp8(sft, prefix=prefix, scale_shape=scale_shape, fp8_connector=fp8_connector)
+    projections = _write_te_gguf(te)
+
+    loader = Ltx25MultiGgufStateDictLoader((str(sft), str(te)))
+    assert isinstance(loader._loaders[0], Ltx25Fp8ConnectorLoader)
+    meta = loader.metadata()
+    assert meta["config"]["transformer"]["num_layers"] == N_BLOCKS
+    assert meta["gemma_source_checkpoint"] == GEMMA_SOURCE
+
+    sd = loader.load((str(sft), str(te)), sd_ops=LTX25_EMBEDDINGS_PROCESSOR_KEY_OPS, device=CPU).sd
+    expected_connectors = {
+        key.replace("video_embeddings_connector.", "video_connector.")
+        .replace("audio_embeddings_connector.", "audio_connector."): value
+        for key, value in connectors.items()
+    }
+    assert set(sd) == set(expected_connectors) | set(projections)
+    for key, value in expected_connectors.items():
+        assert sd[key].dtype == BF16
+        assert torch.equal(sd[key], value), key
+    for key, value in projections.items():
+        assert torch.equal(sd[key], value), key
+
+
+def test_embeddings_loader_refuses_overlapping_files(tmp_path):
+    sft = tmp_path / "t.safetensors"
+    _write_fp8(sft, prefix=P, scale_shape=(), fp8_connector=False)
+    loader = Ltx25MultiGgufStateDictLoader((str(sft), str(sft)))
+    with pytest.raises(Ltx25GemmaError, match=r"t\.safetensors redefines"):
+        loader.load((str(sft), str(sft)), sd_ops=LTX25_EMBEDDINGS_PROCESSOR_KEY_OPS, device=CPU)
+
+
+# --------------------------------------------------------------------------- #
+# the ancestral-sampler probe and the pipeline
+# --------------------------------------------------------------------------- #
+
+
+def test_ancestral_detection_skipped_rebinds_and_restores():
+    original = ltx_distilled.should_use_ancestral_sampler
+    # The constructor reads the name from this very namespace.
+    assert DistilledPipeline.__init__.__globals__ is vars(ltx_distilled)
+    with ancestral_detection_skipped():
+        assert ltx_distilled.should_use_ancestral_sampler("S:/never/opened.safetensors") is True
+    assert ltx_distilled.should_use_ancestral_sampler is original
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with ancestral_detection_skipped():
+            raise RuntimeError("boom")
+    assert ltx_distilled.should_use_ancestral_sampler is original
+
+
+def test_constructor_calls_the_probe_by_global_name_and_verify_pins_it():
+    assert "should_use_ancestral_sampler" in DistilledPipeline.__init__.__code__.co_names
+    ltxcore_compat.verify()
+
+
+class _Stop(Exception):
+    pass
+
+
+@pytest.mark.parametrize(("suffix", "expected"), [(".safetensors", "from_fp8"), (".gguf", "from_gguf")])
+def test_pipeline_picks_the_loader_by_extension_and_reports_detected_none(
+    tmp_path, monkeypatch, suffix, expected
+):
+    files = {}
+    for name, filename in (
+        ("transformer", "transformer" + suffix),
+        ("text_encoder", "te.gguf"),
+        ("video_vae", "vv.safetensors"),
+        ("audio_vae", "av.safetensors"),
+        ("spatial_upsampler", "up.safetensors"),
+    ):
+        (tmp_path / filename).write_bytes(b"")
+        files[name] = str(tmp_path / filename)
+
+    monkeypatch.setattr(
+        pipeline25.assets_export,
+        "ensure_assets_only",
+        lambda *_a, **_k: types.SimpleNamespace(path=tmp_path / "assets.safetensors", as_dict=dict),
+    )
+    probes = []
+
+    class _FakeDistilled:
+        def __init__(self, *, model_paths, **_kwargs):
+            # What the real constructor does, through the same module global.
+            probes.append(ltx_distilled.should_use_ancestral_sampler(model_paths.transformer()))
+            self.use_ancestral_sampler = probes[-1]
+
+    monkeypatch.setattr(pipeline25, "DistilledPipeline", _FakeDistilled)
+    called = []
+
+    def _stage(name):
+        def build(path, **kwargs):
+            called.append((name, path, sorted(kwargs)))
+            raise _Stop
+
+        return staticmethod(build)
+
+    monkeypatch.setattr(pipeline25.Ltx25ProgressStage, "from_fp8", _stage("from_fp8"))
+    monkeypatch.setattr(pipeline25.Ltx25ProgressStage, "from_gguf", _stage("from_gguf"))
+
+    pipe = object.__new__(pipeline25.Ltx25Pipeline)
+    with pytest.raises(_Stop):
+        pipeline25.Ltx25Pipeline.__init__(
+            pipe, pipeline25.ModelFiles(**files), device=CPU, deterministic=False
+        )
+
+    assert probes == [True]  # the rebound probe; the file (empty) was never opened
+    assert ltx_distilled.should_use_ancestral_sampler is ltxcore_compat.should_use_ancestral_sampler
+    assert pipe.build_report["use_ancestral_sampler"] == {"detected": None, "forced": True}
+    assert called == [
+        (expected, files["transformer"], ["blocks_on_gpu", "cache_weights", "device", "dtype"])
+    ]

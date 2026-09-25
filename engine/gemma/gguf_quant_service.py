@@ -640,8 +640,10 @@ class GemmaGGUFQuantStateDictLoader:
 
         The transformer file is the GGUF (bare ``{video,audio}_embeddings_connector.*``
         keys, F32/BF16, NEVER K-quantized) or, since §3-167, an fp8 safetensors
-        (keys already prefixed ``model.diffusion_model.``, BF16/F32). To reproduce
-        the monolith path byte-for-byte we:
+        (prefixed ``model.diffusion_model.`` or bare keys; BF16/F32/fp8, read by
+        ``engine.fp8.quant_service.load_connector_bf16``, which brings fp8
+        connectors back to bf16, times their scale when they have one). To
+        reproduce the monolith path byte-for-byte we:
           1. bring each key to the monolith's original form
              ``model.diffusion_model.<...>_embeddings_connector.*`` (the form the AV
              ops expect),
@@ -650,8 +652,8 @@ class GemmaGGUFQuantStateDictLoader:
              final keys become ``embeddings_processor.{video,audio}_connector.*`` —
              identical to what the monolith connectors produced.
 
-        Fails loudly if any connector tensor is not float, since the float-only
-        assumption (no dequant kernel) would otherwise corrupt weights.
+        Fails loudly if a GGUF connector tensor is not float (there is no dequant
+        kernel for it), or if the file is neither .gguf nor .safetensors.
         """
         path = self._connector_gguf_path
         assert path is not None
@@ -745,36 +747,34 @@ class GemmaGGUFQuantStateDictLoader:
     def _connector_orig_form_safetensors(
         self, path: str
     ) -> tuple[dict[str, torch.Tensor], int, int]:
-        """fp8 safetensors transformer: keys are already in the original form.
+        """fp8 safetensors transformer: connectors in bf16, keys in the original form.
 
-        Tensors are read one by one with seek + readinto (``engine.fp8.sft_reader``,
-        never mmap) — the same reader the fp8 transformer loader uses.
+        ``engine.fp8.quant_service.load_connector_bf16`` reads them (one by one,
+        seek + readinto, never mmap; fp8 connectors upcast, times their scale
+        when they have one) with the file's prefix removed — prefixed or bare
+        file alike — and the original ``model.diffusion_model.`` form is put
+        back here. The counts are by stored dtype (fp8 connectors are in
+        neither).
         """
         import sft_fp8_format
-        from engine.fp8.sft_reader import read_tensors
+        from engine.fp8.quant_service import load_connector_bf16
 
         logger.info(
             "Gemma component-files: reading embeddings_connector tensors from "
             "safetensors %s",
             Path(path).name,
         )
+        _ORIG_CONN_PREFIX = "model.diffusion_model."
         header = sft_fp8_format.read_header(path)
-        keys = [k for k in header.tensors if "_embeddings_connector." in k]
+        file_prefix = sft_fp8_format.detect_prefix(header)
         orig_form: dict[str, torch.Tensor] = {}
         n_f32 = 0
         n_bf16 = 0
-        for key, value in read_tensors(path, keys, header):
-            if value.dtype == torch.float32:
-                value = value.to(torch.bfloat16)
-                n_f32 += 1
-            elif value.dtype == torch.bfloat16:
-                n_bf16 += 1
-            else:
-                raise RuntimeError(
-                    f"Gemma component-files: connector tensor {key!r} is {value.dtype} "
-                    "— expected F32/BF16."
-                )
-            orig_form[key] = value
+        for key, value in load_connector_bf16(path).items():
+            stored = header.tensors[file_prefix + key].dtype
+            n_f32 += stored == "F32"
+            n_bf16 += stored == "BF16"
+            orig_form[_ORIG_CONN_PREFIX + key] = value
         return orig_form, n_f32, n_bf16
 
 

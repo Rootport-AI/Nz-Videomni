@@ -1,4 +1,4 @@
-"""fp8 safetensors transformer: loader, module op and install (§3-167 B-1).
+"""fp8 safetensors transformer: loader, module op and install (§3-167 B-1, B-2).
 
 The GGUF per-layer service's twin (``engine/gguf/quant_service.py``) for an
 fp8 safetensors transformer that ``sft_fp8_format.inspect`` has accepted:
@@ -13,6 +13,9 @@ fp8 safetensors transformer that ``sft_fp8_format.inspect`` has accepted:
     keep_resident cache — is never written to.
   * :class:`Fp8LoaderService.install` wires both into the ledger in the same
     three steps as the GGUF service (loader, policy, transformer() wrapper).
+  * :func:`fp8_transformer_sd_ops` and :func:`load_connector_bf16` are the
+    pieces shared with the LTX 2.5 engine (engine25): the key ops for the
+    detected prefix, and the text encoder side's connectors in bf16.
 
 ``weight_scale`` is a persistent 0-dim f32 buffer registered on the meta
 skeleton, so ``load_state_dict(strict=False, assign=True)`` fills it from the
@@ -38,6 +41,8 @@ logger = logging.getLogger(__name__)
 
 _SCALE_SUFFIX = ".weight_scale"
 _SKIPPED_SUFFIXES = (".comfy_quant", ".input_scale")
+_TEXT_PROJ_HEAD = "text_embedding_projection."
+_CONNECTOR_MARK = "_embeddings_connector."
 _FP8_DTYPES = (torch.float8_e4m3fn, torch.float8_e5m2)
 
 
@@ -83,11 +88,13 @@ class Fp8StateDictLoader:
         # key in the file -> key after sd_ops. Not read: comfy_quant (only the
         # scheme's label, already checked by inspect), input_scale (activation
         # quantization; this engine computes in bf16 and the skeleton has no
-        # such key) and the connectors (the text encoder's; engine/gemma reads
-        # them itself).
+        # such key) and the connectors and text_embedding_projection (the text
+        # encoder's; engine/gemma reads them itself — the latter matters only
+        # for a bare-named file, where the identity sd_ops would keep it).
+        text_proj = self.layout.prefix + _TEXT_PROJ_HEAD
         wanted: dict[str, str] = {}
         for key in header.tensors:
-            if key.endswith(_SKIPPED_SUFFIXES) or key in connectors:
+            if key.endswith(_SKIPPED_SUFFIXES) or key in connectors or key.startswith(text_proj):
                 continue
             expected = key if sd_ops is None else sd_ops.apply_to_key(key)
             if expected is None:
@@ -101,8 +108,10 @@ class Fp8StateDictLoader:
             # With a quantization policy the wheel does no dtype cast, so F32
             # norms / scale_shift_table would stay F32 unless unified here (the
             # GGUF loader's rule). weight_scale stays F32: the forward multiplies
-            # in f32.
-            if value.dtype == torch.float32 and not key.endswith(_SCALE_SUFFIX):
+            # in f32; shape [1] is brought to 0-dim, the module op's buffer.
+            if key.endswith(_SCALE_SUFFIX):
+                value = value.reshape(())
+            elif value.dtype == torch.float32:
                 value = value.to(torch.bfloat16)
             if device.type != "cpu":
                 value = value.to(device)  # the CPU copy is dropped with the name
@@ -122,6 +131,65 @@ class Fp8StateDictLoader:
             len(sd), Path(self.path).name, device, self.layout.flavor,
         )
         return StateDict(sd=sd, device=device, size=size, dtype=dtypes)
+
+
+def fp8_transformer_sd_ops(prefix: str):
+    """Transformer key ops for the prefix ``inspect`` detected.
+
+    ``"model.diffusion_model."`` -> the wheel's own ``LTXV_MODEL_COMFY_RENAMING_MAP``
+    (what ``ModelLedger`` already puts on the transformer builder, so the 2.3
+    path is unchanged). ``""`` (bare names) -> identity: ``with_matching()``
+    with no prefix/suffix matches every key. A named SDOps WITHOUT a matcher
+    would drop every key instead.
+    """
+    from ltx_core.loader.sd_ops import SDOps
+    from ltx_core.model.transformer import LTXV_MODEL_COMFY_RENAMING_MAP
+
+    if prefix == "model.diffusion_model.":
+        return LTXV_MODEL_COMFY_RENAMING_MAP
+    if prefix == "":
+        return SDOps("FP8_BARE_PASSTHRU").with_matching()
+    raise ValueError(f"fp8 transformer: unknown key prefix {prefix!r}")
+
+
+def load_connector_bf16(path: str) -> dict[str, torch.Tensor]:
+    """The embeddings connectors of an fp8 safetensors transformer, in bf16.
+
+    Keys come back WITHOUT the file's prefix (``video_embeddings_connector.*`` /
+    ``audio_embeddings_connector.*``). Read one tensor at a time with
+    :func:`read_tensors` (never mmap). fp8 -> ``float32 * <layer>.weight_scale``
+    -> bf16 when the layer has a scale, else a plain cast; F32 -> bf16; BF16 as
+    is. ``weight_scale`` / ``input_scale`` / ``comfy_quant`` are not returned.
+    """
+    import sft_fp8_format
+
+    header = sft_fp8_format.read_header(path)
+    prefix = sft_fp8_format.detect_prefix(header)
+    keys = [k for k in header.tensors if k.startswith(prefix) and _CONNECTOR_MARK in k]
+    scale_keys = [k for k in keys if k.endswith(_SCALE_SUFFIX)]
+    # "<layer>.weight" -> its 0-dim f32 scale
+    scales = {
+        k[: -len(_SCALE_SUFFIX)] + ".weight": v.reshape(())
+        for k, v in read_tensors(path, scale_keys, header)
+    }
+    wanted = [k for k in keys if not k.endswith((_SCALE_SUFFIX, *_SKIPPED_SUFFIXES))]
+
+    out: dict[str, torch.Tensor] = {}
+    for key, value in read_tensors(path, wanted, header):
+        if value.dtype in _FP8_DTYPES:
+            scale = scales.get(key)
+            if scale is None:
+                value = value.to(torch.bfloat16)
+            else:
+                value = (value.to(torch.float32) * scale).to(torch.bfloat16)
+        elif value.dtype == torch.float32:
+            value = value.to(torch.bfloat16)
+        elif value.dtype != torch.bfloat16:
+            raise RuntimeError(
+                f"fp8 connector: '{key}' is {value.dtype} — expected BF16, F32 or fp8"
+            )
+        out[key[len(prefix):]] = value
+    return out
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -239,10 +307,12 @@ class Fp8LoaderService:
         layout = sft_fp8_format.inspect(self.path)
         self.layout = layout
 
-        # 1. Replace the transformer builder's loader.
+        # 1. Replace the transformer builder's loader and key ops (for a
+        #    prefixed file the key ops are the ones the ledger already had).
         model_ledger.transformer_builder = dc_replace(
             model_ledger.transformer_builder,
             model_loader=Fp8StateDictLoader(self.path, layout),
+            model_sd_ops=fp8_transformer_sd_ops(layout.prefix),
         )
 
         # 2. Replace the policy WHOLESALE. fp8_cast's sd_ops

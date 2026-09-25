@@ -105,6 +105,15 @@ from engine.gguf.quant_service import (
     GGMLQuantizedTensor,
     _patch_model_for_ggml_dequant,
 )
+# fp8 safetensors transformer (§3-167 B-2): the acceptance check and the loader /
+# module op shared with the 2.3 engine. Only the metadata shape differs (below).
+import sft_fp8_format
+from engine.fp8.quant_service import (
+    Fp8StateDictLoader,
+    _assert_fp8_only_in_linears,
+    _make_fp8_module_ops,
+    fp8_transformer_sd_ops,
+)
 from engine.transformer.block_swap_service import (
     _BLOCK_SWAP_ATTR,
     BlockSwapService,
@@ -429,6 +438,23 @@ class Ltx25GgufStateDictLoader:
         return StateDict(sd=state_dict, device=target, size=raw_bytes, dtype=dtypes)
 
 
+class Ltx25Fp8StateDictLoader(Fp8StateDictLoader):
+    """The 2.3 fp8 safetensors loader with ltx_core 1.2's metadata shape (§3-167 B-2).
+
+    1.2's ``LTXModelConfigurator.from_metadata`` reads ``metadata["config"]["transformer"]``
+    from the WHOLE ``__metadata__`` (each value JSON-parsed), where 1.0 took the
+    ``config`` dict itself. Parsed once here: ``model_metadata()`` runs on every
+    build (stage 1, stage 2, each chain clip and tile).
+    """
+
+    def __init__(self, path: str, layout: Any) -> None:
+        super().__init__(path, layout)
+        self._metadata = sft_fp8_format.parse_metadata(sft_fp8_format.read_header(path))
+
+    def metadata(self, path: str | None = None) -> dict:  # noqa: ARG002 -- see the base class
+        return self._metadata
+
+
 # ---------------------------------------------------------------------------
 # 3. Quantization policy
 # ---------------------------------------------------------------------------
@@ -506,9 +532,12 @@ class Ltx25CpuModelBuilder(SingleGPUModelBuilder):
             raise Ltx25BuildError(
                 f"{len(uninitialized)} parameter(s)/buffer(s) were left on the meta device after "
                 f"loading {self.model_path}: {head}"
-                f"{' ...' if len(uninitialized) > len(head) else ''}. The GGUF is missing keys the "
+                f"{' ...' if len(uninitialized) > len(head) else ''}. The checkpoint is missing keys the "
                 f"model expects (or the sd_ops filter dropped too much)."
             )
+        # fp8 anywhere but a patched Linear has nothing to upcast it (§3-167 B-2).
+        # A GGUF build has no fp8 tensor, so this finds nothing there.
+        _assert_fp8_only_in_linears(meta_model)
         return meta_model
 
 
@@ -834,6 +863,59 @@ class Ltx25DiffusionStage(DiffusionStage):
         logger.info(
             "Ltx25DiffusionStage.from_gguf(%s): device=%s dtype=%s blocks_on_gpu=%d cache_weights=%s",
             Path(gguf_path).name, device, dtype, blocks_on_gpu, cache_weights,
+        )
+        return cls(
+            builder,
+            dtype,
+            device,
+            blocks_on_gpu=blocks_on_gpu,
+            quantization=quantization,
+            **kwargs,
+        )
+
+    @classmethod
+    def from_fp8(
+        cls,
+        path: str,
+        *,
+        device: torch.device,
+        dtype: torch.dtype = torch.bfloat16,
+        blocks_on_gpu: int = 8,
+        cache_weights: bool = True,
+        registry: Registry | None = None,
+        **kwargs: Any,
+    ) -> "Ltx25DiffusionStage":
+        """Assemble the stage from an fp8 safetensors transformer (§3-167 B-2).
+
+        :meth:`from_gguf`'s twin: same arguments, same CPU builder and placement,
+        with the fp8 loader, the key ops for the detected prefix and the
+        ``fp8_linear`` module op in place of the GGUF ones. ``inspect`` is the one
+        acceptance check and runs once; its Layout feeds the loader and the op.
+        """
+        path = str(path)
+        if not Path(path).exists():
+            raise FileNotFoundError(f"transformer safetensors not found: {path}")
+
+        layout = sft_fp8_format.inspect(path)
+        registry = registry or ModelRegistry(cache_models=True, cache_weights=cache_weights)
+        quantization = QuantizationPolicy(
+            sd_ops=None,
+            module_ops=(_make_fp8_module_ops(layout.scaled_layers),),
+            model_configurator=LTXModelConfigurator,
+            fuse_rule=bf16_fuse_rule,
+        )
+        builder = Ltx25CpuModelBuilder(
+            model_class_configurator=LTXModelConfigurator,
+            model_path=path,
+            model_sd_ops=fp8_transformer_sd_ops(layout.prefix),
+            model_loader=Ltx25Fp8StateDictLoader(path, layout),
+            registry=registry,
+        )
+        logger.info(
+            "Ltx25DiffusionStage.from_fp8(%s): flavor=%s prefix=%r scaled_layers=%d "
+            "device=%s dtype=%s blocks_on_gpu=%d cache_weights=%s",
+            Path(path).name, layout.flavor, layout.prefix, len(layout.scaled_layers),
+            device, dtype, blocks_on_gpu, cache_weights,
         )
         return cls(
             builder,

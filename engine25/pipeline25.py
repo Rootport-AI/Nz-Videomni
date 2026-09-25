@@ -26,13 +26,15 @@ The three substitutions
    ``text_encoder_builder=`` parameter, so the encode/enhance/process
    choreography is the official one. Only the two builders behind it are ours.
 3. ``pipeline.use_ancestral_sampler = True`` (fact B). ``DistilledPipeline``
-   resolves that flag by reading ``model_version`` out of a *safetensors*
-   header; handed a ``.gguf`` it logs a warning, returns ``()``, and silently
-   selects the deterministic Euler sampler -- i.e. a different generation than
-   the checkpoint was distilled for. The transformer GGUF does carry
-   ``model_version=2.5.0`` in its KV block, so the correct answer is known; it
-   is asserted here rather than hoped for, and republished on the ``ready``
-   event so the app can see which sampler the process actually holds.
+   resolves that flag by reading ``model_version`` out of the transformer file
+   with ``safe_open`` -- a memory map, which this product never takes on a
+   multi-GB checkpoint (and which a ``.gguf`` cannot satisfy at all). So the
+   pipeline is constructed inside ``ancestral_detection_skipped()``, which
+   skips that probe (§3-167 B-2), and the flag is then set explicitly: this
+   engine loads LTX 2.5 checkpoints only (``model_version=2.5.0``, past the
+   ancestral sampler's threshold), so the correct answer is known; it is
+   asserted here rather than hoped for, and republished on the ``ready`` event
+   so the app can see which sampler the process actually holds.
 
 Why the prompt encoder needed only a subclass
 ---------------------------------------------
@@ -160,6 +162,7 @@ from engine25.ltxcore_compat import (
     PromptEncoder,
     TilingConfig,
     VideoPixelShape,
+    ancestral_detection_skipped,
     as_path_list,
     cleanup_memory,
     encode_video,
@@ -1071,21 +1074,25 @@ class Ltx25Pipeline:
         # offload_mode=NONE: the official OffloadMode paths are a *different*
         # streaming implementation (StreamingModelBuilder) that would fight
         # engine25's block-swap window for the same GPU budget.
-        pipeline = DistilledPipeline(
-            model_paths=model_paths,
-            spatial_upsampler_path=files.spatial_upsampler,
-            loras=[],
-            device=self.device,
-            registry=None,
-            offload_mode=OffloadMode.NONE,
-        )
+        #
+        # ancestral_detection_skipped: the constructor's `model_version` probe
+        # would `safe_open` (memory-map) the transformer file; skipped, and the
+        # sampler is set explicitly just below (fact B, §3-167 B-2).
+        with ancestral_detection_skipped():
+            pipeline = DistilledPipeline(
+                model_paths=model_paths,
+                spatial_upsampler_path=files.spatial_upsampler,
+                loras=[],
+                device=self.device,
+                registry=None,
+                offload_mode=OffloadMode.NONE,
+            )
 
         # -- fact B: the ancestral sampler ------------------------------------
-        # Resolved (wrongly) in __init__ from a safetensors header read that a
-        # GGUF path cannot satisfy; corrected here, then asserted, because a
-        # silent downgrade to deterministic Euler is a different generation and
-        # would be invisible in the output.
-        detected = bool(pipeline.use_ancestral_sampler)
+        # Not detected (the probe was skipped above); set here, then asserted,
+        # because a silent downgrade to deterministic Euler is a different
+        # generation and would be invisible in the output.
+        detected = None
         pipeline.use_ancestral_sampler = True
         if not pipeline.use_ancestral_sampler:  # pragma: no cover -- property-shadowing guard
             raise Ltx25PipelineError(
@@ -1093,15 +1100,22 @@ class Ltx25Pipeline:
                 "into a read-only property and engine25 can no longer select the 2.5 sampler."
             )
         logger.info(
-            "use_ancestral_sampler: detected=%s -> forced True (sampler=%s). "
-            "The GGUF checkpoint declares model_version=2.5.0 in its KV block; the official "
-            "detector only reads safetensors headers.",
-            detected, SAMPLER_NAME,
+            "use_ancestral_sampler: forced True (sampler=%s). The official model_version "
+            "probe is skipped (it would memory-map the transformer file); an LTX 2.5 "
+            "checkpoint always takes the ancestral sampler.",
+            SAMPLER_NAME,
         )
         self.build_report["use_ancestral_sampler"] = {"detected": detected, "forced": True}
 
         # -- substitution 1: the diffusion stage -------------------------------
-        stage = Ltx25ProgressStage.from_gguf(
+        # The transformer file's extension picks the loader: an fp8 safetensors
+        # (§3-167 B-2) or the GGUF. Same arguments either way.
+        from_file = (
+            Ltx25ProgressStage.from_fp8
+            if Path(files.transformer).suffix.lower() == ".safetensors"
+            else Ltx25ProgressStage.from_gguf
+        )
+        stage = from_file(
             files.transformer,
             device=self.device,
             dtype=self.dtype,
@@ -1128,7 +1142,7 @@ class Ltx25Pipeline:
         stage._neg_service = NegPromptService(lambda: self._nag)
 
         # -- substitution 2: the prompt encoder --------------------------------
-        # The transformer GGUF leads the EmbeddingsProcessor's path list: the
+        # The transformer file (GGUF or fp8 safetensors) leads the EmbeddingsProcessor's path list: the
         # official configurator reads `config.transformer` and
         # `gemma_source_checkpoint` from path[0], and only the four
         # `text_embedding_projection.*` tensors come from the TE side.

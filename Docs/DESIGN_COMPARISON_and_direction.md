@@ -33,6 +33,8 @@
 | API/job/output 層 | ★**きれいな凍結契約**（AviUtl2/Resolve 向け・÷64・ポータブル） | アプリ寄り handler 群（WSL 依存多・凍結契約なし） |
 | 保守性・脆さ | 薄く小さい（公式依存・カスタム少） | 低VRAM中核**テスト皆無**／GGUF dequant 誤実装が2系統併存（zero-tensor fallback含む）／ltx_core 内部APIへの**monkeypatch 密結合**／Windows crash 場当たり対策多数 |
 
+> 2026-09-25 注記: B-1 で fp8 safetensors の直接読みを採用。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117（上表「16GB transformer」の行について。GGUF の経路はそのまま残る）。
+
 ※現状コードの real 経路は **一度も実行されていない**（ltx_pipelines が venv 未install、`_real_available()` が False→mock）。「16GB で動いた」のは**全て vendor の fork 側**での実証。
 
 ## 2. 重要な気づき（二択の前提がズレている）
@@ -40,10 +42,12 @@
 - **両者は競合ではなく“層”が違う**。我々の**きれいな凍結API/job/output/config 層**は資産（残すべき）。fork は**実際に動くengine＋将来必要な音声・IC-LoRA**を持つ。
 - 当初計画の **Phase B＝「fork engine を我々の API の裏に移植」** が、まさにこの統合だった。つまり進むべきは「全カスタム維持」でも「ComfyUI へ破壊的再設計」でもなく、**我々のAPI ＋ fork engine（我々の修正込み）＋ FP4-Gemma（コミュニティ手法）** という、**当初意図の完遂**。
 - 現状コードの real 経路（公式 DistilledPipeline）は、**この16GB機では transformer safetensors ロードで crash する死に筋**。fork の GGUF がそれを回避。→ **fork engine の採用は事実上必須**。
+  - 2026-09-25 注記: B-1 で fp8 safetensors の直接読みを採用。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117（mmap で開かず 1 本ずつ読むので、このクラッシュには当たらない）。
 
 ## 3. 16GB 先行事例の確定レシピ（コミュニティ標準）
 
 - **transformer**: fp8 safetensors（25GB）＋ ComfyUI Sequential Offloading＋`--reserve-vram`、**または** GGUF（Q3_K_M 14.7GB / Q4_K_M 17.8GB）。我々は後者(GGUF+block_swap)で実証済。
+  - 2026-09-25 注記: B-1 で fp8 safetensors の直接読みを採用。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117（LTX 2.3 の transformer のみ）。
 - **★Gemma = `gemma_3_12B_it_fp4_mixed.safetensors`(9.5GB, ~90%FP4) を GPU で**。これが**16-24GB カードの標準**。RTX 4070 Ti SUPER の実走報告(note.com)も**この FP4 ファイル使用**で video+audio 成功。
   - ComfyUI では `LTXAVTextEncoderLoader` ノードで単一ファイルとしてロード（公式HF/Gemmaローダは ComfyUI で壊れていると報告 #106）。**別途 text projection** `ltx-2.3_text_projection_bf16.safetensors` が要る。
   - CPU encode は「数秒遅いが OOM 回避」の**フォールバック**として存在（我々が試した道＝主流ではない）。

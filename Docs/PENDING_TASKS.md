@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-25（§3-167「CivitAI 等で配布されている fp8 の safetensors を models ディレクトリに配置するだけで使えるようにする」を起票。直近の追記は 2026-09-24 の §3-165）
+- 作成: 2026-07-15／最終更新: 2026-09-25（§3-167 の状態を B-1 実装済み・機械確認済み・オーナー目視待ちへ更新）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
@@ -176,21 +176,12 @@
 
 #### 3-167. CivitAI 等で配布されている fp8 の safetensors を models ディレクトリに配置するだけで使えるようにする（起票：2026-09-25）
 
-- **概要**: CivitAI などで配布される LTX 2.3／2.5 のファインチューン（safetensors、多くは fp8）を、変換せずに `models\<系統>\Weights\` へ置くだけで選べるようにする。A1111 SD WebUI の「モデルを置けば使える」体験を目標にする。**対象は fp8 に限る**（bf16 の 44GB 級は §「VRAM の見立て」のとおりこの機体では実用にならない）。
-- **調査で判明したこと（2026-09-25・読み取り専用の棚卸し）**:
-  1. **入場**: モデル台帳（`scripts/manifests/10-ltx23.json`・`20-ltx25.json`）は transformer を `.gguf` のみ走査し、`services/model_registry.py` の `precheck_model_file` が拡張子で 422 にする。safetensors のヘッダ検査 `_precheck_safetensors` は VAE・音声用に存在する。`check_kv` は KV の欠落を警告止まりにするので、本当の門番は台帳の拡張子。
-  2. **エンジンの配線**: transformer を組む経路は GGUF ローダ2種のみ。`services/engines/ltx/adapter.py` は `checkpoint_path=""` 固定、`engine/pipeline/fast_video_pipeline.py` の初期化は `gguf_transformer_path` 必須で即停止。bf16 と fp8 キャストで組む `DistilledNativePipeline`（`engine/pipeline/common.py`）は残っているが呼び出しゼロの死コード。GGUF 導入失敗時の「safetensors へフォールバック」も `checkpoint_path` が空なので実質死んでいる。
-  3. **fp8 の推論経路は事実上無い**: 設定の `fp8_transformer` は worker へ伝わらない無効フラグ（`config.py` の「凍結 API 契約」注記、adapter の「表示されるが効かない罠」）。CUDA なら `fp8_cast` の module_ops が付くが、GGUF の層ごと逆量子化の module op が後から forward を上書きし、sd_ops は読まれない。同梱の `fp8_scaled_mm` は tensorrt_llm 必須で未使用。2.5 側の同梱 `ltx_core` 1.2.0 には fp8_cast・fp8_scaled_mm・nvfp4 があるが `engine25/` は使っていない。
-  4. **重み表現に依存する部分**: block swap は素のテンソル用の分岐が既にある（`engine/transformer/block_swap_prefetch.py`）、CPU 常駐（`dit_cpu_load_service.py`）は汎用、融合カーネルは GGUF 専用だが使われないだけで無害。**IC-LoRA の実行時付与は `ggml_linear_forward` だけが読むので、素の `nn.Linear` では黙って無効になる**（要対処）。画角拡張・インペイント・連結は重み表現に触れておらず無改修。
-  5. **CivitAI の配布実態**（Sulphur-2 base、model 2601098）: fp8 の safetensors 2本（dev／distilled、各 28.48 GB、基盤 LTX 2.3）で bf16 版は無い。サイズから、transformer の線形層（約 18.5B パラメータ＝GGUF が量子化している行と同じ範囲）だけ fp8、他は bf16 と推定。ComfyUI 系の fp8 には「素のキャスト」「テンソルごとの倍率つき」「comfy-kitchen の印つき」の流儀があり、**受け入れ形式の検査が必須**（REDGraft の教訓。ヘッダだけで判別できる）。
-  6. **VRAM の見立て**: fp8 の1ブロックは約 0.45 GB（Q4_K_M 254 MB・Q6_K 303 MB）で、常駐8ブロックでは Q4_K_M 比 +1.5 GB 前後。Q6_K の +0.4 GB より重く、快適上限は目に見えて下がるが動く範囲。bf16 は1ブロック約 0.9 GB で常駐だけで約 7.3 GB、CPU 側の正本 44 GB も RAM を圧迫し、この機体では非実用。
-  7. **変換ツール側**（`Nz-GGUF-Converter-LTX23`）: `ltx23` プロファイルは bf16 のみで、メタデータは `config` だけ必須（他は任意）。fp8 の復号表は `ltx25-comfyquant` 用の `comfy_dequant.py` に既にある。
-- **実作業の見立て（2案。A を先行）**:
-  - **A. 変換して置く（現行の設計思想を保つ）**: 変換ツールに 2.3 用の fp8 プロファイルを足す（fp8→float32→Q6_K。受け入れ形式の検査。`config` が無い配布物には参照 GGUF の config を使う選択肢）。**難易度 小〜中**。エンジン無改修。fp8 元は二重量子化になる（fp8 の誤差≈3〜4%＋Q6_K≈2%）。
-  - **B. 直接読む（本項の目標そのもの）**: 台帳の拡張子とヘッダ検査、adapter の `checkpoint_path` とペイロード、パイプライン初期化の必須条件、素のテンソル用の読み込み経路（層ごとに fp8→bf16、block swap の既存分岐を使う）、IC-LoRA 付与の非 GGUF 版（または読み込み時融合）、両エンジン分、テスト、快適上限の較正（fp8 の行が無い＝§4-1 と同じく未較正の留保）。**難易度 中〜大**。二重量子化は無い。
-  - **順序**: A で fp8 元の品質を目視で確かめる → 需要があれば B。B に着手するときは §4-1 の背景知識（GGUF を選んだ経緯・Windows のコミット制約＝巨大 safetensors を mmap で開かない）を前提にする。
-- **状態**: 未着手（将来の研究課題）。
-- **出典**: `scripts/manifests/10-ltx23.json`・`20-ltx25.json`、`services/model_registry.py`、`services/engines/ltx/adapter.py`、`engine/pipeline/fast_video_pipeline.py`、`engine/pipeline/common.py`、`engine/gguf/quant_service.py`、`engine/transformer/block_swap_prefetch.py`、`engine25/gguf_transformer.py`、[`DESIGN_COMPARISON_and_direction.md`](DESIGN_COMPARISON_and_direction.md)（fp8 safetensors 案を退けた記録）、CivitAI API（model 2601098）、converter の `Docs/DESIGN.md` §1。
+- **状態**: **B-1 実装済み・機械確認済み・オーナー目視待ち。裁定と規則の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117。** 残りは次の 3 つです。
+  1. **B-1 の実機確認とオーナー目視**（項目と結果の欄は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117.8）。目視の結果で B-2 へ進むかを決めます。
+  2. **B-2**: LTX 2.5 でも fp8 safetensors を置けば選べるようにする。
+  3. **B-3**: fp8 用の快適上限の行を較正する（今は未較正で、マーカーは GGUF 用の目安のまま出ます）。
+- **概要**: CivitAI などで配布される LTX 2.3／2.5 のファインチューン（多くは fp8 の safetensors）を、変換せずに `models\<系統>\Weights\` へ置くだけで選べるようにする。A1111 SD WebUI の「モデルを置けば使える」体験が目標。対象は fp8 に限る。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117（裁定・設計・判定規則・VRAM の見立て・申し送り）、`sft_fp8_format.py`、`engine/fp8/`、README「追加の transformer（GGUF／fp8 safetensors）/ LoRA を配置する」。
 
 ---
 

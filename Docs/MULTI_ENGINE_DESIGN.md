@@ -69,6 +69,13 @@
 
 **記述子×KVの4組はすべて契約テストで固定してある**（LTX 2.3 の記述子×2.3のKV／LTX 2.5 の記述子×2.5のKV は通過、交差する2組は明示的な422）。
 
+**fp8 safetensors の transformer（2026-09-25〜・LTX 2.3 のみ・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167）は、KV の代わりにヘッダを材料にして同じ2段へ流す。** safetensors には GGUF の KV が無いので、次のように読み替える。
+
+- **1段目（系統）**: ヘッダの**指紋**——テンソル名の接頭辞が `model.diffusion_model.`、`transformer_blocks` がちょうど 48 個（0〜47）、`__metadata__` に `config`（`transformer` を含むモデル設定の JSON）がある——に合格したことを根拠に `general.architecture = ltxv` と見なす。
+- **2段目（世代）**: `__metadata__.model_version`（`2.3.0` など）をそのまま `model_version` として渡す。無ければキーを入れず、上と同じく WARNING で通す。
+
+判定そのものは既存の `check_kv` が行い、新しい判別の仕組みは作っていない。LTX 2.5 の safetensors を LTX 2.3 で選べば、GGUF と同じ文面の 422 になる。指紋の検査と fp8 の受け入れ規則の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117 である。
+
 ### 2.3 KVを読む経路
 
 読み書きの分担は3つに分かれている。**読む・拾う・裁くを1本にまとめない**のがこの設計の要点である。
@@ -76,7 +83,8 @@
 | モジュール | 役割 |
 |---|---|
 | `services/gguf_kv.py` | **読む**。GGUFヘッダを走査して、指定されたキーだけを文字列の辞書で返す。欲しいキーが揃った時点で読み止める。構造が壊れていれば `GgufParseError`。要求したキーがファイルに無いのは異常ではない（辞書に入らないだけ） |
-| `services/model_registry.py` の `precheck_model_file` | **拾う**。軽量チェック（GGUFのマジックナンバー・safetensorsヘッダの妥当性）に加え、GGUFならKVの辞書も一緒に返す |
+| `sft_fp8_format.py`（リポジトリ直下） | **読む**（safetensors 版）。ヘッダと量子化の印（数十バイト）だけを読み、指紋と fp8 の受け入れ規則を検査して `Layout`（`model_version` を含む）を返す。不合格は `Fp8FormatError`。torch に依存しないので、アプリ側とエンジン側の両方から呼べる（2026-09-25〜） |
+| `services/model_registry.py` の `precheck_model_file` | **拾う**。軽量チェック（GGUFのマジックナンバー・safetensorsヘッダの妥当性）に加え、GGUFならKVの辞書も一緒に返す。fp8 safetensors の transformer なら `sft_fp8_format.inspect` の結果から同じ形の辞書（§2.2 の読み替え）を作って返す |
 | `services/engines/__init__.py` の `check_kv` と、各アダプタの `check_kv` | **裁く**。前者が系統の照合（§2.1）、後者が系統内の判定（アーキテクチャ名・扱える世代）を行う。**裁きだけがエンジン固有の知識**なので、エンジン側に置いてある |
 
 `gguf_kv.py` を独立モジュールにしてあるのは責務が別だからである——`model_registry.py` は「名前をパスへ解決する」役、`gguf_kv.py` は「ファイルの先頭を読んで辞書を返す」役で、後者はモデル管理の概念を一切知らない。おかげで単体テスト（`tests/test_gguf_kv.py`）が合成バイト列だけで完結し、実重みファイルを必要としない。
@@ -91,6 +99,8 @@
 - 配布物（HuggingFace の `Rootport/Nz-LTX23-weights` ほか）も、利用者の自家変換ファイルも、同じツールの出力なので自動的に規約を満たす（実ファイルでの確認は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §67.1）。
 
 将来 safetensors を直接読むエンジンを足すときは、GGUFのKVに相当するものが無い。その場合は **ComfyUI 方式のヘッダキー指紋**——safetensors ヘッダに並ぶテンソル名の特徴的な組み合わせを見てモデル種別を当てる方法——で対応できる。上流の LTX wheel（`ltx_pipelines/utils/constants.py` の `detect_params()`）には safetensors メタデータから `model_version` を読む前例もあり、そちらを流用してもよい。**安全に拡張できる余地があることだけ記録しておき、実装は必要になった時点でよい。**
+
+> **2026-09-25 注記**: 必要になったので実装した（§3-167 の段階 B-1・LTX 2.3 のみ）。採ったのは上流の前例と同じく `__metadata__.model_version` を読む方法で、系統は「接頭辞＋48 ブロック＋`config`」の指紋で確かめる（§2.2 の末尾）。テンソル名の組み合わせからモデル種別を当てる ComfyUI 方式の推測は採っていない。自前の変換ツールを通らないファイルなので、上の規約（両キーを必ず持つ）は及ばず、`model_version` が無いファイルは WARNING で通る。
 
 ### 2.5 フールプルーフは作らない。エラー品質で解決する 【オーナー裁定】
 

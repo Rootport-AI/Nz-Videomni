@@ -13221,3 +13221,160 @@ LTX 2.5・公式 `default`（線 44,880）:
 - [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) に D25 を足し、見出しを「D1〜D25」に改め、テストの表に新しいテスト 3 本を書き足しました（D16 の本文は変えていません）。
 - [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-165 の残りから MCP の項目を削り、状態の行に「MCP も対応済み」と書きました。
 - 本節（§116.9）を足し、§116.2 に追補のコミットの行を足しました。
+
+## 117. ★fp8 safetensors の transformer を、変換せずに置くだけで選べるようにした（段階 B-1・LTX 2.3 のみ）＝B-1 実装済み・機械確認済み・オーナー目視待ち（2026-09-25。台帳は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167）
+
+**要約**: CivitAI などで配布されている LTX 2.3 の fp8（重みを 8 ビットの浮動小数点で持つ形式）の transformer を、`models/LTX23/Weights/` に `.safetensors` のまま置けば、GGUF と同じドロップダウンで選べるようにしました。読み込みは巨大なファイルを mmap（ファイルをメモリに見せかけて開く仕組み）で開かず、テンソルを 1 本ずつ読みます。受け入れの規則の正本は §117.3 です。
+
+- **状態**: B-1 実装済み・機械確認済み・オーナー目視待ちです（コミット: `2595c91`＝検査モジュール・台帳・登録簿・adapter・テスト、`b499971`＝エンジン内・selfcheck・テスト。文書はその次のコミット）。機械ゲート（§117.6）は既知の 1 件を除いて合格、敵対的コードレビュー（§117.7）は重大・主要の指摘なし、実機確認（§117.8）は 10 手順すべて完走・失敗 0 でした。残りはオーナーによる出力の目視です。
+- **実機で分かった注意点**: fp8 は Windows のコミットを Q6_K より約 15 GiB 多く使い、keep_resident と併用すると開発機では上限の 87% に達しました（§117.8）。
+- **快適上限マーカーは fp8 では較正していません。** 配信テーブル `comfort_budgets` に fp8 の行はありません（段階 B-3 で較正します）。
+- **GGUF を選んだときの挙動は変えていません。** ワーカーへ送るペイロードも、`GET /models` の応答の形も、画面の表示（ファイル名から拡張子を除いた登録名）も従来のままです。
+
+### 117.1 オーナー裁定（2026-09-25）
+
+1. **変換ツールに fp8 用の設定を足す案（A 案）は飛ばし、最初から直接読む案（B 案）にします。**
+2. **`engine/` の凍結は §3-167 に限って解除します。** 必要な箇所は改修してよいことにしました。
+3. **段階は B-1（LTX 2.3）→ オーナー目視 → B-2（LTX 2.5）→ B-3（fp8 の快適上限の較正）の順です。** B-1 の目視で続けるかを決めます。
+4. **Windows のコミット（仮想メモリの予約）の制約が設計の前提です。** 巨大な safetensors を mmap で開くと、読む量に関係なくファイルサイズ分のコミットが予約されるためです（§9.1）。`.venv-engine` の safetensors 0.7.0 は上げません。
+5. **判定規則の基準は「ComfyUI の典型的なワークフローで動く fp8 ファイルは、こちらでも置けば動く。生成結果もほぼ同じ」です**（同日の昼に、この基準で規則を改めました。改めた後の規則が §117.3 です）。
+
+### 117.2 設計の要点
+
+- **受け入れの検査は 1 か所だけです。** リポジトリ直下の `sft_fp8_format.py`（torch に依存しない。`read_header`・`inspect`・`Layout`）が規則を持ち、API 側の `precheck_model_file`（`services/model_registry.py`。不合格は 422 `MODEL_INCOMPATIBLE`）とエンジン側の組み込み（不合格は読み込みの失敗）の 2 か所から同じ関数を呼びます。`state.json` から復元した選択は API の検査を通りませんが、エンジン側で同じ文言で止まります。
+- **入口**: `scripts/manifests/10-ltx23.json` の transformer の拡張子に `.safetensors` を足しました（`20-ltx25.json` は変えていません）。
+- **ワーカーへの受け渡し**: 選ばれたファイルが `.safetensors` のときだけ、`gguf_transformer_path` を空にし、末尾に `safetensors_transformer_path` を足します。GGUF のときのペイロードは 1 バイトも変わりません（形の正本は `Videomni_Backend_Specification.md` §4.2）。
+- **読み方**: `engine/fp8/sft_reader.py` がヘッダの位置情報に従って 1 本ずつ seek と readinto で読みます。mmap も `safe_open` も使いません。
+- **計算の仕方**: `engine/fp8/quant_service.py` の fp8 用の線形層は、呼ばれるたびに「fp8 → fp32 → 倍率を掛ける → bf16」で重みを戻して掛け算し、戻した重みは捨てます。倍率（`weight_scale`。fp8 の値に掛けて元の重みへ戻す係数）は state_dict に載るバッファとして持つので、block swap・CPU 常駐・keep_resident の保管庫をそのまま通ります。`weight_scale` 以外の F32 のテンソルは bf16 にして載せます。
+- **IC-LoRA（と、同じ仕組みで効くスタイル LoRA）**: 差分は bf16 で足します。重みそのものは書き換えません。
+- **組み込み**: `Fp8LoaderService.install` が、上流の fp8 変換の方針（バイアスや bf16 のまま残すブロックまで fp8 に落としてしまう）を丸ごと差し替えます。`config.yaml` の `dit_cpu_load` が無効だと fp8 を GPU 上で組むことになり必ずメモリが溢れるので、明確な例外で止めます（代わりの経路には逃がしません）。
+- **その他**: パイプラインに `_install_fp8` を足しました。Gemma 側の connector（テキスト埋め込みを transformer へ渡す部品）は、拡張子で読み先を分けます。ワーカーは新しいキーを受け取り、keep_resident の安全確認を「GGUF のときだけ逐次量子化の有無を見る」形に改めました。
+- **変えていないもの**: 画面（登録名の表示）・`fp8_transformer` の設定（凍結されたままで、今回の経路とは無関係）・`engine25/`・GGUF の経路・インストーラ。
+- **登録名の衝突**: `X.gguf` と `X.safetensors` が同じフォルダに並ぶと、既存の規則どおり GGUF が `X`、safetensors が `Weights__X` になります。
+
+### 117.3 判定規則（正本）
+
+`sft_fp8_format.inspect` が、ヘッダと量子化の印（数十バイト）だけを読んで判定します。重み本体は読みません。
+
+**受け入れる条件**
+
+1. **層ごとに見ます。** fp8 の `.weight` に `<層>.weight_scale`（F32 のスカラー）があれば「fp8 × 倍率」、無ければそのまま bf16 へ戻します。
+2. **1 つのファイルの中で、倍率つきの層と倍率なしの層が混ざっていても受け入れます。**
+3. fp8 は E4M3 と E5M2 の両方を受け入れます。
+4. fp8 の `.bias` も受け入れます。
+5. **量子化の印は任意です。** 層ごとの `comfy_quant` か、メタデータの `_quantization_metadata` があれば、fp8 系であることだけを確かめます。印の無い倍率つきの層も受け入れます。
+6. `input_scale` は無視します。
+7. **`__metadata__.config` は必須です。** ComfyUI も LTX 2.3 は `config` 無しでは組めません。
+8. **指紋**: テンソル名の接頭辞が `model.diffusion_model.` で、`transformer_blocks` がちょうど 48 個（0〜47）あること。
+9. transformer だけのファイル（VAE などを含まないもの）も受け入れます。
+
+**断る条件**（422 の文言は「どこが不合格か」を 1 行で示します。文言の例は `Videomni_Backend_Specification.md` §6.9(b)）
+
+- int8・nvfp4 など、fp8 以外の量子化の印があるもの
+- 倍率が F32 のスカラーでないもの（行ごと・ブロックごとの倍率）
+- `config` が無いもの
+- 接頭辞が違うもの、ブロック数が 48 でないもの
+- 旧形式（`scaled_fp8`／`scale_weight`）。実例が見つからないため未対応とします
+- fp8 の重みが 1 本も無いもの（bf16 などの非 fp8 ファイル）
+- connector が無いもの、または BF16・F32 以外のもの
+
+**世代の見分け**: 合格したファイルは、ヘッダの `__metadata__.model_version` を GGUF の KV の代わりにして、既存の `check_kv` で世代を判定します（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §2.2）。LTX 2.5 などは 422 で止まります。`model_version` が無いファイルは警告を出して通します。
+
+### 117.4 段階 0 の事実（机上・GPU なし・ヘッダだけを取得）
+
+- **Sulphur 2 の fp8**: dev 版と distilled 版はどちらも 29,161,842,846 バイトで、ヘッダも同一です。倍率と `comfy_quant` つきで、fp8 はブロック 2〜45 の線形層 1,232 本です。ブロック 0・1・46・47 は bf16 のままです。
+- **Lightricks 公式の fp8**: 倍率つきで、`input_scale` とメタデータ側の印 `_quantization_metadata` を持ちます。distilled 版はブロック 0・1・2・3・47 が bf16 のままです。F32 の `scale_shift_table` 系が 290 本あります。
+- **骨格との突き合わせ**: 重みを持たない骨格（4,186 本）のキーと、5 ファイルとも欠け 0・余り 0 で一致しました。
+- fp8 のバイアスは 0 本でした。connector は 258 本で、すべて BF16 でした。
+- 調べた 20 ファイルは、すべて接頭辞が `model.diffusion_model.`、fp8 は E4M3、`config` ありでした。
+- **倍率なしの素の fp8 も実在します**（NerdyRodent・nalexand・TenStrip 10Eros v1）。
+
+### 117.5 ComfyUI との一致
+
+- **重みを戻す計算は、ComfyUI の CUDA 実装とビット単位で一致します**（fp8 → fp32 → 倍率を掛ける → bf16）。
+- **RTX 40／50 系の ComfyUI の既定とは完全には一致しません。** ComfyUI はこの世代で入力も fp8 にして掛け算するためで、こちらは bf16 で掛けるぶん精度が高い側にずれます。
+- **LoRA を併用したときは、原理的に一致しません。** ComfyUI は LoRA を足した重みを確率的な丸めで fp8 に戻すためです。
+
+### 117.6 機械ゲート
+
+**結論: アプリ側の全件は既知の 1 件を除いて合格、エンジン側の fp8 系のテストと GPU の自己点検は全件合格です。**
+
+- **アプリの環境（app venv）の pytest 全件**: 2,812 件のうち、失敗 1・スキップ 52 でした。失敗の 1 件は既知の `test_mcp_registration.py::test_backend_status_structured_content_not_wrapped_and_reachable_false` で、サーバーを動かしたまま流すと落ちるテストです（今回の改修とは無関係）。
+- **判定規則のテスト** `tests/test_sft_fp8_format.py`: 49 件合格。
+- **エンジンの環境（engine venv。`--noconftest` で実行）の fp8 系 5 ファイル**: すべて合格。対象は `tests/test_fp8_sft_reader.py`・`tests/test_fp8_linear_forward.py`・`tests/test_fp8_loader_service.py`・`tests/test_worker_keep_resident_resolve.py`・`tests/test_ic_lora_forward.py` です。
+- **GPU の自己点検** `engine/transformer/block_swap_prefetch_selfcheck.py`（engine venv・`PYTHONPATH` にプロジェクト直下を指定して実行）: 17 件すべて合格。C1〜C16 の既存ケースに加え、新設の C17（fp8 の Parameter と 0 次元 f32 の `weight_scale` バッファが block swap の prefetch でバイト単位に往復する）も合格（2026-09-25 14:03）。
+
+### 117.7 敵対的コードレビュー
+
+**結論: 重大 0・主要 0・軽微 5 で、軽微の 5 件はすべて採用して直しました。** レビューは Opus が読み取り専用で行いました。
+
+**確かめられたこと**
+
+- **Windows のコミットの制約（§117.1 の 4）を守れています。** mmap・`safe_open`・`load_file`・ファイル全体の一括読みは、どれも使っていません。
+- **fp8 の線形層の計算（forward）は、計画と一字一句同じです。**
+- **不合格を大きな声で止める作り（fail-loud）の中に、例外の握りつぶしはありません。**
+
+**軽微の 5 件（すべて採用）**
+
+1. mmap を使っていないことを確かめるテストの穴を、`safetensors.torch` と `numpy.memmap` の経路まで塞ぐ。
+2. 使われていない `metadata()` を削る。
+3. ワーカーに GGUF と safetensors の両方のパスが渡されたときの単体テストを足す。
+4. `read_header` と `inspect` が読むバイト数を確かめるテストを足す。
+5. 規則を確定したことを docstring に明記する。
+
+### 117.8 実機確認
+
+**結果: 10 手順すべて完走し、失敗は 0 でした（2026-09-25 13:49〜14:01）。残りはオーナーの目視です。** サーバーは新しいコードで立て直してから流しました。VRAM は nvidia-smi の専有（MiB）、ピーク VRAM は `metadata.json` の `peak_vram_mb`（MB）、コミットは Windows の `\Memory\Committed Bytes`（GiB）です。コミットの上限はこの機体でページファイルを含めて 113.82 GiB でした。
+
+**各手順の結果**（生成はすべて同じプロンプト・seed 12345・49 フレーム）
+
+1. **配置**: Sulphur 2 distilled の fp8 を `models/LTX23/Weights/sulphur_distil_fp8mixed.safetensors` として置きました。
+2. **一覧**: `GET /models` に登録名 `sulphur_distil_fp8mixed` が出ました（`source=scan`・`exists=True`）。
+3. **切り替え**: `POST /pipeline/load` で Sulphur-2 Q6_K から切り替えられました（200・3.6 秒）。この製品のロードは選択の登録で、重みを実際に読み込むのは最初のジョブです。
+4. **Single（512×320）**: 完了（経過 60.1 秒・生成 57.32 秒・keep_resident なし）。ピーク VRAM 8,442 MB（予約 8,972 MB）、nvidia-smi の最大 9,747 MiB。コミットは 34.18 → 最大 70.58 GiB（増分 36.4 GiB）でした。
+5. **IC-LoRA deblur（強さ 1.0・参照動画つき・512×384）**: 完了（経過 70.1 秒・生成 68.89 秒）。ピーク VRAM 7,196 MB（予約 9,506 MB）、コミットの最大 86.77 GiB。`metadata.json` の `ic_lora` に deblur・強さ 1.0 と `reference_video_id` が記録されていました。**効いているかの目視は未実施です。**
+6. **スタイル LoRA Pixar_Toon（強さ 0.8・512×320）**: 完了（経過 70.1 秒・生成 65.75 秒）。ピーク VRAM 8,445 MB、コミットの最大 86.67 GiB。**効き目の目視は未実施です。**
+7. **keep_resident で 2 本続けて（512×320）**: どちらも完了し、`keep_resident_used=on` でした。
+   - 1 本目: 経過 70.1 秒・生成 68.02 秒。コミット 73.36 → 最大 91.28 GiB。
+   - 2 本目: 経過 25.0 秒・生成 22.67 秒。コミット 88.48 → 最大 99.48 GiB。
+8. **metadata**: fp8 で生成した 5 本すべてで、`models.selection.transformer.file` が `sulphur_distil_fp8mixed.safetensors` でした。
+9. **偽のヘッダ**: 行ごとの倍率（F32[64]）を持つ約 10.8 KB（10,846 バイト）の偽ファイル `zz_bad_perrow_fp8.safetensors` を置いてロードすると、**422 `MODEL_INCOMPATIBLE`** で止まりました。選択は fp8 のまま変わらず、偽ファイルは確認後に消しました。応答の文言は次のとおりです。
+   - `message`: 「selected model 'transformer/zz_bad_perrow_fp8' failed the compatibility precheck」
+   - `detail`: 「fp8 safetensors の検査に不合格: 倍率 'model.diffusion_model.transformer_blocks.0.attn1.to_q.weight_scale' が F32[64] です（受理するのは F32 のスカラー倍率のみ。per-row／per-block は未対応）」
+10. **Q6_K との比較**: Sulphur-2 Q6_K に切り替え（200・10.2 秒）、同じ条件（512×320・keep_resident あり）で 3 本続けて生成しました。
+    - 1 本目（切り替え直後）: 経過 70.1 秒・生成 69.19 秒。ピーク VRAM 8,442 MB（予約 8,972 MB）、nvidia-smi の最大 8,161 MiB。コミット 29.77 → 最大 82.96 GiB。
+    - 2 本目: 経過 25.0 秒・生成 24.7 秒。コミット 76.84 → 最大 82.68 GiB。
+    - 3 本目: 経過 20.0 秒・生成 16.93 秒。コミット 83.07 → 最大 83.07 GiB。
+
+最後に選択を Q6_K へ戻し、`state.json` の LTX 2.3 の transformer が `Sulphur-2-base-distil-Q6_K` であることを確かめました。
+
+**比較の読み方**
+
+- **速さ**: 切り替え直後の 1 本目は fp8 が 57.3 秒、Q6_K が 69.2 秒でした。ただし fp8 のこの 1 本は keep_resident なし、Q6_K の 1 本目は keep_resident ありで、常駐の写しを作る分を含みます。keep_resident の写しができた後は、fp8 が 22.7 秒（2 本目）、Q6_K が 24.7 秒（2 本目）と 16.9 秒（3 本目）でした。fp8 の keep_resident の 1 本目（68.0 秒）も写しを作る分を含みます。
+- **ピーク VRAM**: 512×320 では fp8 も Q6_K も 8,442 MB で、差はありませんでした。GPU に常駐させる窓の重さの差（この節の末尾の見立て）は、この低い解像度では表に出ません。快適上限は fp8 では未較正です。
+- **Windows のコミット**: **fp8 は Q6_K より約 15 GiB 多く使います。** 落ち着いたときの値は fp8 が 88〜92 GiB、Q6_K が 76〜77 GiB、ピークは fp8 が 99.48 GiB、Q6_K が 83.07 GiB でした。fp8 のピークは上限 113.82 GiB の 87% に当たります。**ページファイルの小さい機体では、fp8 と keep_resident を併用するとコミットの上限に当たるおそれがあります**（README の fp8 の段落に目安を書きました）。
+
+**出力の場所**（オーナーの目視用に残してあります）
+
+- fp8 の Single: `outputs/aac9e161-5617-4103-8ead-abd224bd0659/`
+- IC-LoRA deblur: `outputs/779e80a3-3e05-4beb-996b-ee50bea9f3d2/`
+- スタイル LoRA Pixar_Toon: `outputs/09469e78-167b-482d-bec9-eaf1a37ec7d7/`
+- keep_resident の 1 本目: `outputs/687ab41c-9dee-4122-805e-ba9cb360694b/`
+- keep_resident の 2 本目: `outputs/0f8b075e-4341-45b8-8473-f87acd091096/`
+- Q6_K の比較（1 本目）: `outputs/cfc967c6-2bcc-4f7c-a3fb-a0c870df92ca/`
+
+**オーナーの目視**: 【後で記入】（IC-LoRA とスタイル LoRA の効き目、fp8 と Q6_K の画質の比較）
+
+**完了の条件**: 4〜8 が完走し、オーナーが品質を目視で確かめること。4〜8 の完走は済んでおり、残りは目視です。
+
+**VRAM の見立て（実測の前の検算）**: fp8 の 1 ブロックは約 0.386 GB です（Q4_K_M は 254 MiB、Q6_K は 303 MiB）。GPU に常駐させる 9 ブロックで、Q4_K_M より約 1.0 GiB 増える見込みです。bf16 のまま残るブロックは各約 0.77 GB で、これが常駐の窓に入る時間帯はさらに増えます。固定メモリの中継バッファ 2 本が最大のブロックに合わせて伸びるので、約 1.5 GB になります。CPU 側に置く正本は Q6_K より数 GB〜十数 GB 増える見込みです（未実測）。台帳の起票時の「+1.5 GB」は過大でした。
+
+### 117.9 申し送り
+
+- **快適上限は fp8 では未較正です。** マーカーは GGUF 用の目安のまま出ます。較正は段階 B-3 で行います。
+- **段階 B-2（LTX 2.5）と B-3（fp8 の快適上限の較正）は未着手です。** 検査の関数はブロック数と接頭辞を引数で受けるので、B-2 でもそのまま使えます。
+- **旧形式（`scaled_fp8`）は未対応のまま断ります。** 実例が見つかったら改めて検討します。
+- **RTX 40／50 系の ComfyUI の既定とは、生成結果が完全には一致しません**（§117.5）。こちらが精度の高い側です。
+- **LoRA を併用したときの ComfyUI との一致は、原理的に望めません**（§117.5）。
+- **`model_version` を持たない LTX 2.5 の safetensors は、API の検査を素通りし、エンジン側で落ちます。** B-2 で扱います。
+- **`models/LTX23/Weights/put_GGUF_here.txt`**（git の追跡外で、生成元がリポジトリに無いファイル）の「safetensors は変換してから」という文言が古くなります。直すか消すかはオーナーの判断です。

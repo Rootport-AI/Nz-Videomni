@@ -13258,6 +13258,8 @@ LTX 2.5・公式 `default`（線 44,880）:
 
 ### 117.3 判定規則（正本）
 
+> **2026-09-26 注記**: B-2（LTX 2.5）でこの規則を 3 点改めました（倍率の shape [1] をスカラーとして受け入れる・接頭辞の自動判別・connector の fp8 を受け入れる）。改めた点は §118.3 で、下の 8（指紋）と断る条件の最後の項目は §118.3 が優先します。
+
 `sft_fp8_format.inspect` が、ヘッダと量子化の印（数十バイト）だけを読んで判定します。重み本体は読みません。
 
 **受け入れる条件**
@@ -13390,3 +13392,185 @@ LTX 2.5・公式 `default`（線 44,880）:
 - **LoRA を併用したときの ComfyUI との一致は、原理的に望めません**（§117.5）。
 - **`model_version` を持たない LTX 2.5 の safetensors は、API の検査を素通りし、エンジン側で落ちます。** B-2 で扱います。
 - **`models/LTX23/Weights/put_GGUF_here.txt`**（git の追跡外で、生成元がリポジトリに無いファイル）の「safetensors は変換してから」という文言は、fp8 も置けば使える旨に書き換えました（2026-09-25・オーナー裁定）。
+
+## 118. ★LTX 2.5 でも、fp8 safetensors の transformer を置くだけで選べるようにした（段階 B-2）＝機械ゲート緑・実機確認は 11 手順すべて完走・オーナー目視は未実施（2026-09-26。台帳は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167）
+
+**要約**: LTX 2.5 の fp8（重みを 8 ビットの浮動小数点で持つ形式）の transformer を、`models/LTX25/Weights/` に `.safetensors` のまま置けば、GGUF と同じドロップダウンで選べるようにしました。LTX 2.3 で作った受け入れの規則（§117.3）を、実在する LTX 2.5 の配布物に合わせて 3 点広げています（§118.3）。読み込みは LTX 2.3 と同じく、巨大なファイルを mmap（ファイルをメモリに見せかけて開く仕組み）で開かず、テンソルを 1 本ずつ読みます。
+
+- **状態**: B-2 は機械ゲートと実機確認まで終わりました。次はオーナーの目視（§118.10）、その後に B-3（fp8 の快適上限の較正）です。コミットは `16c1170`（共通部品・LTX 2.3 側・エンジンの外）と `fc3629b`（LTX 2.5 のエンジン `engine25/`）で、文書はその次のコミットです。
+- **最初に知っておくこと**: **Lightricks 公式は LTX 2.5 の fp8 を配っていません。** 使えるのはコミュニティが変換した fp8 です。公式の INT8-ConvRot・NVFP4 と、REDGraft LTX 2.5 の独自量子化は fp8 ではないので、**選ぶと断られるのが正しい動作です**（§118.4）。
+- **実機で分かった注意点**: fp8 は Windows のコミット（仮想メモリの予約）を GGUF より約 11 GiB 多く使います（§118.8）。
+- **快適上限マーカーは fp8 では較正していません**（B-3 で較正します）。
+- **GGUF を選んだときの挙動は変えていません。** LTX 2.5 では、ワーカーへ送るペイロードの形も GGUF と fp8 で同じです（§118.2）。
+
+### 118.1 オーナー裁定と承認（2026-09-25）
+
+1. **B-1（LTX 2.3）を完結とし、B-2（LTX 2.5）へ進みます**（2026-09-25 午後）。B-3（fp8 の快適上限の較正）は B-2 の後です。
+2. 計画を立て（B-1 と同じ計画ファイルを上書き）、敵対的な計画レビューにかけました。指摘は重大 0・主要 3・軽微 5 で、すべて採用しました。
+3. **承認は 2026-09-25 夜です。** 承認には、段階 3（実機確認）で HuggingFace から fp8 のファイルを 2 本ダウンロードすることと、GPU を使うことの了承が含まれます。
+
+### 118.2 設計の要点
+
+- **ペイロードは変えていません。** LTX 2.5 は transformer を `transformer_path` 1 本で受け取ったままで、`engine25/pipeline25.py` がファイルの拡張子を見て、fp8 の組み立て（`Ltx25DiffusionStage.from_fp8`）か GGUF の組み立て（`from_gguf`）かを振り分けます。アプリ側の adapter・ワーカー・ゴールデンスナップショット（ペイロードの形を固定するテスト）は変わりません。LTX 2.3 のように別のキーを足す形（§117.2）は採っていません。
+- **入口**: `scripts/manifests/20-ltx25.json` の transformer の拡張子に `.safetensors` を足しました。
+- **受け入れの検査は LTX 2.3 と同じ 1 か所です**（`sft_fp8_format.py`）。3 点の改定は両方のエンジンに効きます（§118.3）。
+- **共通部品**（`engine/fp8/quant_service.py`）
+  - `Fp8StateDictLoader` は、倍率（`weight_scale`。fp8 の値に掛けて元の重みへ戻す係数）を 0 次元にそろえて載せ、`text_embedding_projection.` で始まるテンソルは読み飛ばします。
+  - `fp8_transformer_sd_ops(prefix)` は、テンソル名の付け替えを接頭辞に合わせて選びます。接頭辞ありのファイルでは上流の wheel（LTX の公式ライブラリ）の `LTXV_MODEL_COMFY_RENAMING_MAP` をそのまま使うので、LTX 2.3 の経路は変わりません。接頭辞なしのファイルでは名前をそのまま通します。
+  - `load_connector_bf16(path)` は、connector（テキスト埋め込みを transformer へ渡す部品）を 1 本ずつ読んで bf16 にします。fp8 の connector は、倍率があれば掛けます。`weight_scale`・`input_scale`・`comfy_quant` は返しません。**LTX 2.3 の Gemma 側の connector 読み（`engine/gemma/gguf_quant_service.py`）もこの関数へ寄せました。** 接頭辞つきで connector が BF16 のファイルでは、旧実装と同じ辞書になることを、変更前のコミットを別の作業ツリーに取り出して突き合わせて確かめました。
+  - `parse_metadata(header)` は、ヘッダのメタデータを LTX の公式ライブラリ（ltx_core 1.2）の `SafetensorsModelStateDictLoader.metadata` と同じ形で返します。
+- **LTX 2.5 のエンジン側**（`engine25/`）
+  - `Ltx25DiffusionStage.from_fp8` は、検査（`inspect`）を 1 回だけ行い、`Ltx25Fp8StateDictLoader` で重みを読み、fp8 用の線形層（`fp8_linear`）を差し込んで組み立てます。
+  - `Ltx25Fp8StateDictLoader.metadata()` は、メタデータを `__init__` で 1 回だけ解析して持っておきます（組み立てのたびに呼ばれるため）。
+  - 埋め込み処理器（EmbeddingsProcessor）側は `Ltx25Fp8ConnectorLoader` で connector を読みます。GGUF のテキストエンコーダとの組み合わせも可能です。
+  - 組み立ての後、fp8 の重みが線形層の外に残っていないことを毎回検査します（`_assert_fp8_only_in_linears`）。
+- **mmap で開かせない工夫**: 上流の `DistilledPipeline` は、組み立ての途中で 1 か所だけ transformer のファイルを `safe_open`（mmap で開く読み方）で開きます（`ltx_pipelines/distilled.py:168` の `should_use_ancestral_sampler`。ファイルからモデルの世代を調べる処理）。巨大な fp8 を mmap で開くと、ファイルサイズ分のコミットが予約されます（§117.1 の 4）。そこで、組み立ての間だけこの関数を「常に真を返す」ものに差し替える仕組み `ancestral_detection_skipped()` を `engine25/ltxcore_compat.py` に置きました。
+  - GGUF にも同じく効かせています。以前は GGUF のファイルでこの関数が失敗し、例外が握りつぶされていたので、無駄な 1 回が無くなっただけで結果は同じです。記録の `build_report["use_ancestral_sampler"]["detected"]` は None になります。
+  - 上流が関数の中身を変えたときに気づけるよう、`verify()` で関数の中で使っている名前（`co_names`）を検査しています。
+  - 採らなかった案: 世代を調べる処理に別のファイルのパスを渡す案は、ダミーのパスを渡すことになり正直でないため採りませんでした。`DistilledPipeline` を通さずに組む案は、上流の組み立て一式を写して保守し続けることになるため採りませんでした。
+- **LoRA**: Nz-Videomni の LoRA にはベースモデルの区別が無く、LTX 2.5 でも `models/LTX23/` の IC-LoRA とスタイル LoRA がそのまま使われます（README・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)「LoRA はベースモデル軸を持たない」・§74）。fp8 の線形層は LTX 2.3 と同じ仕組みで IC-LoRA の差分を足します。
+- **CPU 側の常駐**: LTX 2.5 の transformer は常に CPU に常駐させる設定（`cache_weights=True`）なので、fp8 は GGUF より CPU 側のコミットが増えます（実測は §118.8）。
+- **融合カーネル**（`dequant_triton`。GGUF の逆量子化を速める仕組み）は GGUF 専用です。fp8 を選んだときはテキストエンコーダ側にだけ効きます。記録の `fused_gguf_dequant_kernel_used=on` は、そのまま記録しています。
+
+### 118.3 判定規則の改定（§117.3 への 3 点）
+
+**§117.3 の規則を、次の 3 点だけ広げました。両方のエンジンに共通です（`sft_fp8_format.py`）。** それ以外の規則は §117.3 のままです。
+
+1. **倍率の形**: `weight_scale` の shape が `()`（0 次元）でも `(1,)`（要素 1 個の 1 次元）でも、1 個の数（スカラー）として受け入れます。行ごと・ブロックごとの倍率は、今までどおり断ります。
+2. **接頭辞の自動判別**: テンソル名に `model.diffusion_model.transformer_blocks.0.` があれば接頭辞あり、接頭辞の無い `transformer_blocks.0.` があれば接頭辞なし（裸名）と判断します。どちらも無ければ不合格です。§117.3 の 8（指紋）の「接頭辞が `model.diffusion_model.`」は、この 2 通りに改めました。ブロックが 48 個であることは変わりません。
+3. **fp8 の connector**: connector が fp8 のファイルも受け入れます。倍率つきでも倍率なしでも構いません。`comfy_quant` の印は任意です。倍率つきの層の一覧（`scaled_layers`）からは、connector と `text_embedding_projection.` を除きます。これに合わせ、「connector は BF16・F32 のみ」の検査（§117.3 の断る条件の最後）を削りました。全テンソルの型は別の手順で既に絞っているためです。
+
+- 検査の関数が返す `Layout` に項目は足していません。
+- 断るときの文言の「LTX 2.3」は「LTX」に改めました。
+- 422 の文言の例は `Videomni_Backend_Specification.md` §6.9(b) にあります。
+
+### 118.4 段階 0 の事実（机上・ダウンロード前・ヘッダだけを取得）
+
+**LTX 2.5 の fp8 の配布の実態**（2026-09-25 にヘッダを実測）
+
+- **Lightricks 公式に LTX 2.5 の fp8 はありません。** 公式は bf16・INT8-ConvRot・NVFP4 で、ComfyUI 公式の低 VRAM 向けの形式も INT8-ConvRot と NVFP4 です。
+- **CivitAI の「LTX 2.5」は、公式の INT8-ConvRot の複製でした。** `weight_scale` が F32 の shape [2048,1]、`comfy_quant` が 1,440 本あり、「fp8 以外」「スカラーでない倍率」として正しく断られます。
+- **REDGraft LTX 2.5（`fp:int8`）は独自の量子化です。** I8・U8・F8 が混在し、`weight_codebook` や `weight_s_channel` を持つので、対象外です。
+- **INT8-ConvRot・NVFP4・REDGraft は、断られるのが正しい動作です。**
+
+**本当に fp8 の LTX 2.5 は、コミュニティの変換物だけでした。** 調べたのは次の 3 本です。
+
+- **(a) `guillaume127/LTX-2.5-FP8` の `ltx-2.5-22b-distilled-transformer-fp8_e4m3fn.safetensors`**（23,485,111,216 バイト）
+  - 公式 distilled を fp8 にしたものです。
+  - 接頭辞は `model.diffusion_model.` です。
+  - BF16 が 3,001 本、F8_E4M3 が 1,348 本で、倍率はありません（素の fp8）。
+  - connector は 258 本で、すべて BF16 です。
+- **(b) `ChrisColeTech/LTX-2.5-uncensored-v1.1-FP8` の `split/diffusion_models/ltx25_uncensored_v1.1-fp8_scaled.safetensors`**（21,473,651,432 バイト）
+  - **接頭辞がありません（裸名）。**
+  - fp8 の 1,440 本すべてに、F32 で shape **[1]** の `weight_scale` が付いています。
+  - **connector も fp8 で、倍率つきです。** video・audio の各 177 本の内訳は F32 48・BF16 81・F8 48 です。
+  - メタデータの `_quantization_metadata` では、全層が `full_precision_matrix_mult: true` です。`comfy_quant` は 0 本です。
+- **(b') 参考: 同じリポジトリの `*-fp8.safetensors`**（21,016,146,736 バイト）
+  - 裸名で、倍率の無い素の fp8 です。connector の一部が fp8 で、倍率はありません。
+
+**3 本に共通する事実**
+
+- `config.transformer` が 61 キーです。
+- `model_version` は "2.5.0" です。
+- `gemma_source_checkpoint` は `{"ltx_version":"2.5.0","gemma_version":"gemma4-12b-ltx-v1"}` です。
+- ブロックは 48 個です。
+- `text_embedding_projection.*` は LTX 2.5 のファイルには存在しません。
+
+**段階 0（G0）の確認**: ダウンロードする 2 本（(a) と (b)）のヘッダを HTTP の範囲指定（Range）で取得し、`config.transformer`・`gemma_source_checkpoint`・`model_version` がそろっていることを確かめてから、ダウンロードに進みました。
+
+### 118.5 機械ゲート
+
+**結論: アプリ側の全件は既知の 1 件を除いて合格、エンジン側の fp8 系のテストは全件合格です。**
+
+- **アプリの環境（app venv）の pytest 全件**: 失敗 1・合格 2,770・スキップ 53 でした（着手前は合格 2,759・スキップ 52）。失敗の 1 件は既知の `test_mcp_registration`（§117.6 と同じもの）です。
+- **LTX 2.3 のエンジンの環境（`--noconftest` で実行）の fp8 系 5 ファイル**: 70 件合格（着手前は 63 件）。
+- **LTX 2.5 のエンジンの環境**（pytest が入っていないので `run_ltx25_pytest.py` 経由）: 既存の 10 ファイルは 270 件合格で変わらず、新設の `tests/test_ltx25_fp8_stage.py` が 14 件合格、合わせて 284 件です。
+
+### 118.6 敵対的コードレビュー
+
+**結論: 重大 0・主要 1・軽微 5 でした。主要の 1 件と軽微の 2 件を採用して直し、軽微の 3 件は不採用としました。** レビューは Opus が読み取り専用で行いました。
+
+**採用したもの**
+
+- **主要 M1**: 検査（`inspect`）の手順 5 にあった connector の型の検査が、`comfy_quant` の印（U8）を誤って断っていました。「印は任意」という判定規則に反するので、この検査を削りました（手順 3 が既に全テンソルの型を絞っています）。テストを 1 件足しました。
+- **軽微 m1**: 古くなった docstring と例外の文言を現行化しました。
+- **軽微 m4**: テストを 2 件足しました（connector に `comfy_quant` の印があるもの・connector の fp8 のバイアスに倍率を掛けないこと）。
+
+**採用しなかったもの**
+
+- **m2**: `_assert_fp8_only_in_linears` が埋め込み処理器の組み立てでも走る件。害が無いので変えていません。
+- **m3**: `co_names` の検査は、属性として呼ぶ書き方の変化に弱いという件。新設のテストが関数の `__globals__` まで押さえており、計画どおりとしました。
+- **m5**: ローカルの定数名の見た目の件。
+
+**確かめられたこと**
+
+- 実在の 3 本が、新しい検査・ローダー・埋め込み処理器のローダーを通りました。重みを持たない骨格とのキーの差は、欠け 0・余り 0 でした。線形層の外にある fp8 は 0 本でした。
+- **mmap で開く経路がありません。** wheel の現物で、`should_use_ancestral_sampler` のほかに transformer のファイルを開く箇所が無いことを確かめました。
+- LTX 2.3 の経路と GGUF の経路は変わっていません。判定規則と設計方針も計画どおりです。
+
+### 118.7 実機確認
+
+**結果: 11 手順すべて完走し、失敗は 0 でした（2026-09-26 00:25〜00:33）。** サーバーは新しいコードで立て直してから流しました。実行台は作業用フォルダの `stage3_25/stage3_runner25.py`（B-1 の実行台の写し）で、結果の表は同じ場所の `RESULTS_stage3_25.md` です。数値の単位と測り方は §117.8 と同じで、コミットの上限はこの機体で 113.82 GiB です。
+
+**条件**: 512×320・49 フレーム・24fps・テキストから動画（T2V）・seed 12345・注意機構は sdpa・block swap の先読みあり・融合カーネルあり。
+
+**各手順の結果**
+
+1. **一覧**: `GET /models` に (a) が `source=scan` で出ました。
+2. **(a) への切り替え**: 200・4.3 秒。選択を登録するだけなので、VRAM は変わりません。
+3. **(a) の単発生成**: 完了（経過 50.0 秒・生成 48.97 秒）。ピーク VRAM 6,952 MB（予約 7,180 MB）、nvidia-smi の最大 8,590 MiB、コミット 32.15 → 最大 66.35 GiB。`metadata.json` の transformer のファイル名は fp8 のファイルでした。
+4. **IC-LoRA deblur（強さ 1.0・参照動画つき・512×384）**: 完了（経過 40.1 秒・生成 38.57 秒）。ピーク VRAM 6,606 MB、コミットの最大 78.37 GiB。
+5. **スタイル LoRA Pixar_Toon（強さ 0.8）**: 完了（経過 40.1 秒・生成 35.02 秒）。コミットの最大 80.09 GiB。
+6. **keep_resident で 2 本続けて**: どちらも完了しました。
+   - 1 本目: 経過 35.0 秒・生成 31.58 秒。コミットの最大 84.91 GiB（**今回のピーク**）。
+   - 2 本目: 経過 25.0 秒・生成 21.89 秒。`keep_resident_used=on`。
+   - **2 本はバイト単位で同一でした**（同梱の ffmpeg の `psnr`／`ssim` フィルタで PSNR が無限大・SSIM が 1.0）。
+7. **偽のヘッダ**（行ごとの倍率 F32[64]）: 422 で止まりました。`detail` は「倍率 … が F32[64] です（受理するのは F32 のスカラー倍率のみ…）」でした。選択は変わらず、偽ファイルは後で消しました。
+8. **(b) への切り替え**: 200・8.4 秒。
+9. **(b) の単発生成**: 完了（経過 50.1 秒・生成 49.57 秒）。ピーク VRAM 6,952 MB、nvidia-smi の最大 8,335 MiB、コミットの最大 67.01 GiB。
+10. **公式 GGUF（登録名 `default`）で同じ条件**: 完了（経過 50.1 秒・生成 47.93 秒）。ピーク VRAM 6,952 MB、コミット 31.26 → 最大 55.81 GiB。
+11. **元に戻す**: `state.json` の LTX 2.5 の transformer が `default` であることを確かめました。
+
+**画質の比べ方**（同梱の ffmpeg の `psnr`／`ssim` フィルタ。PSNR はピーク信号対雑音比、SSIM は構造の類似度）
+
+- **(a) と公式 GGUF**: PSNR は Y で 24.71 dB（平均 26.26 dB）、SSIM は Y で 0.826（全体 0.864）。同じ公式 distilled を、fp8 にしたか GGUF に量子化したかの差です。
+- **(b) と公式 GGUF**: PSNR は Y で 17.61 dB（平均 19.14 dB）、SSIM は Y で 0.639（全体 0.714）。(b) は別のファインチューンなので、低いのが自然です。
+- **(a) と (b)**: PSNR は Y で 17.71 dB、SSIM は Y で 0.645。
+
+**出力の場所**（オーナーの目視用に残してあります）
+
+- (a) の単発: `outputs/6ab421cd-d078-4a23-9655-7902d3ee2ff7/output.mp4`
+- IC-LoRA deblur: `outputs/433d9a90-af93-4a77-bb06-0a092ed1462c/output.mp4`
+- スタイル LoRA Pixar_Toon: `outputs/57a61ec3-81ea-4b9f-82a3-0ec38a2ee461/output.mp4`
+- keep_resident の 1 本目: `outputs/b2b13873-1c5d-415a-b99b-e8390209dd52/`
+- keep_resident の 2 本目: `outputs/fa066599-f0c1-4011-a9fb-ba3e70e1b400/`
+- (b) の単発: `outputs/1e14fec7-36cd-457c-b80b-9c8f05ef692f/output.mp4`
+- 公式 GGUF: `outputs/04505fda-285e-40dd-abe6-1c5a817d99d1/output.mp4`
+
+### 118.8 コミット量と速さ
+
+- **fp8 は GGUF より、Windows のコミットを約 11 GiB 多く使います。** 切り替え直後の単発生成で、fp8 の (a)(b) は最大 66〜67 GiB、公式 GGUF は最大 55.81 GiB でした。
+- **keep_resident と併用したときのピークは 84.91 GiB** で、この機体の上限 113.82 GiB の 75% に当たります。
+- **生成時間は fp8 と GGUF でほぼ同じです。** 切り替え直後の単発は fp8 が 49〜50 秒、GGUF が 48 秒でした。keep_resident の写しができた後の 2 本目は 22 秒でした。
+- ピーク VRAM は、512×320 では fp8 と公式 GGUF のどちらも 6,952 MB で、差はありませんでした。
+
+### 118.9 申し送り
+
+- **快適上限は fp8 では未較正です。** マーカーは GGUF 用の目安のまま出ます。較正は段階 B-3 で行います。
+- **オーナーの目視は未実施です**（§118.10）。
+- **`model_version` を持たない LTX 2.5 の safetensors（§117.9 の申し送り）**: 調べた実在の 3 本は、すべて `model_version` を持っていました（§118.4）。API の検査が警告を出して通す点は §117.3 のままです。その後エンジン側でどうなるかは、実例が無いため未確認です。
+- **ComfyUI との一致の限界**（RTX 40／50 系の既定・LoRA の併用）は §117.5 と同じです。
+
+### 118.10 オーナーの目視
+
+**未実施です。**
+
+| 項目 | 結果 |
+|---|---|
+| (a) の単発生成 | |
+| IC-LoRA deblur の効き目 | |
+| スタイル LoRA Pixar_Toon の効き目 | |
+| keep_resident の 2 本の同一性（PSNR・SSIM では確認済み・§118.7 の 6） | |
+| (b) の単発生成 | |
+| (a) と公式 GGUF の画質の差 | |
+| README の fp8 の段落 | |

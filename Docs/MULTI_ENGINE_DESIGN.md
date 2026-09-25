@@ -69,12 +69,14 @@
 
 **記述子×KVの4組はすべて契約テストで固定してある**（LTX 2.3 の記述子×2.3のKV／LTX 2.5 の記述子×2.5のKV は通過、交差する2組は明示的な422）。
 
-**fp8 safetensors の transformer（2026-09-25〜・LTX 2.3 のみ・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167）は、KV の代わりにヘッダを材料にして同じ2段へ流す。** safetensors には GGUF の KV が無いので、次のように読み替える。
+**fp8 safetensors の transformer（LTX 2.3 は 2026-09-25〜、LTX 2.5 は 2026-09-26〜・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167）は、KV の代わりにヘッダを材料にして同じ2段へ流す。** safetensors には GGUF の KV が無いので、次のように読み替える。
 
-- **1段目（系統）**: ヘッダの**指紋**——テンソル名の接頭辞が `model.diffusion_model.`、`transformer_blocks` がちょうど 48 個（0〜47）、`__metadata__` に `config`（`transformer` を含むモデル設定の JSON）がある——に合格したことを根拠に `general.architecture = ltxv` と見なす。
+- **1段目（系統）**: ヘッダの**指紋**——テンソル名の接頭辞が `model.diffusion_model.` か接頭辞なし（2026-09-26〜。どちらかを自動で見分ける）、`transformer_blocks` がちょうど 48 個（0〜47）、`__metadata__` に `config`（`transformer` を含むモデル設定の JSON）がある——に合格したことを根拠に `general.architecture = ltxv` と見なす。
 - **2段目（世代）**: `__metadata__.model_version`（`2.3.0` など）をそのまま `model_version` として渡す。無ければキーを入れず、上と同じく WARNING で通す。
 
 判定そのものは既存の `check_kv` が行い、新しい判別の仕組みは作っていない。LTX 2.5 の safetensors を LTX 2.3 で選べば、GGUF と同じ文面の 422 になる。指紋の検査と fp8 の受け入れ規則の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117 である。
+
+**LTX 2.5 も同じ2段を通る（2026-09-26〜・§3-167 B-2）。** ワーカーへのペイロードは変えていない——transformer は GGUF でも safetensors でも `transformer_path` 1 本で渡り、`engine25/pipeline25.py` が拡張子で読み方を振り分ける。受け入れ規則は LTX 2.5 の実在の配布物に合わせて 3 点広げた（両エンジン共通）。改定の中身と、実在の配布物が `model_version` を持っていたかどうかの確認は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §118 が正本である。
 
 ### 2.3 KVを読む経路
 
@@ -101,6 +103,8 @@
 将来 safetensors を直接読むエンジンを足すときは、GGUFのKVに相当するものが無い。その場合は **ComfyUI 方式のヘッダキー指紋**——safetensors ヘッダに並ぶテンソル名の特徴的な組み合わせを見てモデル種別を当てる方法——で対応できる。上流の LTX wheel（`ltx_pipelines/utils/constants.py` の `detect_params()`）には safetensors メタデータから `model_version` を読む前例もあり、そちらを流用してもよい。**安全に拡張できる余地があることだけ記録しておき、実装は必要になった時点でよい。**
 
 > **2026-09-25 注記**: 必要になったので実装した（§3-167 の段階 B-1・LTX 2.3 のみ）。採ったのは上流の前例と同じく `__metadata__.model_version` を読む方法で、系統は「接頭辞＋48 ブロック＋`config`」の指紋で確かめる（§2.2 の末尾）。テンソル名の組み合わせからモデル種別を当てる ComfyUI 方式の推測は採っていない。自前の変換ツールを通らないファイルなので、上の規約（両キーを必ず持つ）は及ばず、`model_version` が無いファイルは WARNING で通る。
+
+> **2026-09-26 注記**: B-2 で LTX 2.5 にも広げた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §118）。指紋の接頭辞は `model.diffusion_model.` つきと接頭辞なしの両方を自動で見分ける（§2.2 の末尾）。
 
 ### 2.5 フールプルーフは作らない。エラー品質で解決する 【オーナー裁定】
 

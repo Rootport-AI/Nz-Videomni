@@ -1,1 +1,4 @@
-﻿ここに .gguf を置くと自動認識されます(サブフォルダ可)。safetensors形式のモデルは Nz-GGUF-Converter-LTX23 でGGUFに変換してから置いてください。
+﻿ここに transformer の .gguf を置くと自動認識されます（サブフォルダ可）。
+fp8 の .safetensors（コミュニティが変換した LTX 2.5 用のもの。Lightricks 公式は LTX 2.5 の fp8 を配っていません）も、変換せずにここへ置けば選べます。
+それ以外の safetensors は Nz-GGUF-Converter-LTX23 で GGUF に変換してから置いてください。
+詳しくは README の「追加の transformer（GGUF／fp8 safetensors）/ LoRA を配置する」と、Docs/VERIFICATION_LOG.md §118 を参照してください。

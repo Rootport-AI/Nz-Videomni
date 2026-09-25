@@ -112,6 +112,9 @@ from engine.gguf.quant_service import (
     _patch_model_for_ggml_dequant,
     dequantize_ggml_tensor,
 )
+# fp8 safetensors transformer (§3-167 B-2): its connectors, in bf16.
+import sft_fp8_format
+from engine.fp8.quant_service import load_connector_bf16
 
 # --- engine25 siblings -------------------------------------------------------
 # `_move_module_tree` and the two selftest helpers are module-private to
@@ -190,6 +193,50 @@ class Ltx25GemmaError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
+class Ltx25Fp8ConnectorLoader:
+    """The connector half of an fp8 safetensors transformer, as a part loader (§3-167 B-2).
+
+    Returns ONLY the ``*_embeddings_connector.*`` tensors, in bf16 and without the
+    file's prefix (``load_connector_bf16``), put through the ``sd_ops`` it is handed
+    the same way :class:`Ltx25GgufStateDictLoader` does. The metadata is the whole
+    ``__metadata__`` JSON-parsed per value (ltx_core 1.2's shape), parsed once.
+    """
+
+    def __init__(self, path: str) -> None:
+        self.path = str(path)
+        self._metadata = sft_fp8_format.parse_metadata(sft_fp8_format.read_header(self.path))
+
+    def metadata(self, path: str | None = None) -> dict:  # noqa: ARG002 -- this file's, always
+        return self._metadata
+
+    def load(
+        self,
+        path: str | list[str],  # noqa: ARG002 -- this file's, always
+        sd_ops: SDOps | None = None,
+        device: torch.device | None = None,
+    ) -> StateDict:
+        target = device or _CPU
+        state_dict: dict[str, torch.Tensor] = {}
+        dtypes: set[torch.dtype] = set()
+        size = 0
+        for name, value in load_connector_bf16(self.path).items():
+            key = name if sd_ops is None else sd_ops.apply_to_key(name)
+            if key is None:
+                continue
+            if target.type != "cpu":
+                value = value.to(target)
+            pairs = ((key, value),) if sd_ops is None else sd_ops.apply_to_key_value(key, value)
+            for out_key, out_value in pairs:
+                state_dict[out_key] = out_value
+                dtypes.add(out_value.dtype)
+                size += out_value.nbytes
+        logger.info(
+            "fp8 safetensors connectors %s -> %s: %d tensors (bf16)",
+            Path(self.path).name, target, len(state_dict),
+        )
+        return StateDict(sd=state_dict, device=target, size=size, dtype=dtypes)
+
+
 class Ltx25MultiGgufStateDictLoader:
     """``StateDictLoader`` that merges several GGUFs into one state dict.
 
@@ -207,17 +254,24 @@ class Ltx25MultiGgufStateDictLoader:
     Per-file reading is delegated to :class:`Ltx25GgufStateDictLoader` rather than
     reimplemented, so the dtype handling, the ``copy=True`` defence against
     aliasing a closed memmap, and the ``Ltx25GGMLTensor`` wrapping all stay in
-    one place.
+    one place. An fp8 ``.safetensors`` transformer is read by
+    :class:`Ltx25Fp8ConnectorLoader` instead (§3-167 B-2); the part loader is
+    chosen by the file's extension.
     """
 
     def __init__(self, paths: tuple[str, ...] | list[str]) -> None:
         self.paths = tuple(str(path) for path in paths)
         if not self.paths:
-            raise Ltx25GemmaError("Ltx25MultiGgufStateDictLoader needs at least one GGUF path")
-        self._loaders = tuple(Ltx25GgufStateDictLoader(path) for path in self.paths)
+            raise Ltx25GemmaError("Ltx25MultiGgufStateDictLoader needs at least one path")
+        self._loaders = tuple(
+            Ltx25Fp8ConnectorLoader(path)
+            if Path(path).suffix.lower() == ".safetensors"
+            else Ltx25GgufStateDictLoader(path)
+            for path in self.paths
+        )
 
-    def metadata(self, path: str | None = None) -> dict:
-        return read_gguf_metadata(path or self.paths[0])
+    def metadata(self, path: str | None = None) -> dict:  # noqa: ARG002 -- the first file's
+        return self._loaders[0].metadata()
 
     def load(
         self,
@@ -229,13 +283,13 @@ class Ltx25MultiGgufStateDictLoader:
         merged: dict[str, torch.Tensor] = {}
         dtypes: set[torch.dtype] = set()
         size = 0
-        for loader in self._loaders:
+        for part_path, loader in zip(self.paths, self._loaders):
             part = loader.load(path, sd_ops=sd_ops, device=target)
             clash = sorted(merged.keys() & part.sd.keys())
             if clash:
                 raise Ltx25GemmaError(
-                    f"{Path(loader.gguf_path).name} redefines {len(clash)} key(s) already supplied by an "
-                    f"earlier GGUF ({clash[:5]}). The two files overlap; the sd_ops filter is wrong."
+                    f"{Path(part_path).name} redefines {len(clash)} key(s) already supplied by an "
+                    f"earlier file ({clash[:5]}). The two files overlap; the sd_ops filter is wrong."
                 )
             merged.update(part.sd)
             dtypes |= set(part.dtype)

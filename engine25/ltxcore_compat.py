@@ -93,9 +93,11 @@ becomes unnecessary is visible in the log rather than guessed at.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import inspect
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -364,6 +366,7 @@ __all__ = [
     "_build_gemma4_unified_llm_key_ops",
     "_check_uninitialized",
     "_load_model_weights",
+    "ancestral_detection_skipped",
     "as_path_list",
     "bf16_fuse_rule",
     "cleanup_memory",
@@ -419,6 +422,27 @@ def upsampler_builders(upsampler: VideoUpsampler) -> tuple[Any, Any]:
     before any weights are touched.
     """
     return upsampler._encoder_builder, upsampler._upsampler_builder
+
+
+@contextlib.contextmanager
+def ancestral_detection_skipped() -> Iterator[None]:
+    """Build a ``DistilledPipeline`` without its ``model_version`` probe (§3-167 B-2).
+
+    ``DistilledPipeline.__init__`` resolves ``use_ancestral_sampler`` by calling
+    ``should_use_ancestral_sampler(transformer_path)``, which opens the file with
+    ``safe_open`` -- a memory map. On a 20+ GB fp8 safetensors that is the Windows
+    commit hazard this product never takes, and on a GGUF it only fails and is
+    swallowed; engine25 forces the flag to True right after either way. So the
+    module global the constructor looks up is rebound to ``True`` for the
+    duration and restored in ``finally``. :func:`verify` pins that the
+    constructor still calls it by that global name.
+    """
+    original = ltx_distilled.should_use_ancestral_sampler
+    ltx_distilled.should_use_ancestral_sampler = lambda _p: True
+    try:
+        yield
+    finally:
+        ltx_distilled.should_use_ancestral_sampler = original
 
 
 class CompatError(RuntimeError):
@@ -1110,6 +1134,15 @@ def verify() -> None:
         "helpers.combined_image_conditionings",
         "images", "height", "width", "video_encoder", "dtype", "device", "color_space",
     )
+    #       The same seam for `ancestral_detection_skipped` (§3-167 B-2): the
+    #       constructor must look the probe up as a module global, or the
+    #       rebinding is inert and `safe_open` maps the transformer file again.
+    if "should_use_ancestral_sampler" not in DistilledPipeline.__init__.__code__.co_names:
+        _fail(
+            "DistilledPipeline.__init__",
+            "no longer calls should_use_ancestral_sampler by its module-global name; "
+            "ancestral_detection_skipped would be silently inert",
+        )
 
     # (12b) The STAGE DISCRIMINATOR. `height` is the only per-stage-differing
     #       argument the conditioning function receives (no stage index, no

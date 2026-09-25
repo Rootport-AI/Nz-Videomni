@@ -4,13 +4,12 @@ import type { AppConfig } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { parseLoraPrompt } from "../../lora/loraTags";
-import { accelerationRequestFields } from "../../shell/accelerationSettings";
+import { ACCELERATION_DEFAULTS, accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { deriveGenerationParams } from "../../timeline/deriveGenerationParams";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import type { TimelineSelection } from "../../timeline/menuSelection";
 import {
-  RETAKE_WINDOW_MAX_PX,
   RETAKE_WINDOW_MIN_PX,
   mapRangeToMaterialSec,
   resolveRetakeWindow,
@@ -24,7 +23,13 @@ import {
   rollbackReservedPlacement,
 } from "../../timeline/provisionalReservation";
 import { decideSourceTrim, trimQuery } from "../../timeline/sourceTrim";
-import { STAGE2_WINDOW_DEFAULT, STAGE2_WINDOW_PRESETS } from "../../shell/tokenBudget";
+import {
+  STAGE2_WINDOW_DEFAULT,
+  STAGE2_WINDOW_PRESETS,
+  resolveChainComfortBudget,
+  stage2WindowOptionLabel,
+} from "../../shell/tokenBudget";
+import { resolveComfortRow } from "../../shell/comfortTable";
 import type { Stage2Window } from "../../shell/tokenBudget";
 import { FALLBACK_APP_CONFIG, MIN_HEIGHT, MIN_WIDTH } from "../single/defaultConfig";
 import { fileNameFromPath } from "../single/keyframeUtils";
@@ -118,6 +123,16 @@ export interface UseRetakeFormDeps {
    * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
    * Omitted keeps `accelerationRequestFields` sending nothing at all. */
   acceleration?: AccelerationSettings | undefined;
+  /** §3-165: 読み込み中のベースモデルの engine family と SageAttention の可否
+   * （`AppShell` 所有。`useChainForm` と同じ入力）。Stage-2 のクリップ長の
+   * ドロップダウンのラベルに出す目安解像度の予算を、Chain と同じ配信テーブルから
+   * 引くためだけに使う（Retake にマーカー・警告は無い）。省略時は「不明」扱いで
+   * 配信のスカラー予算へ退避する。 */
+  engineFamily?: string | undefined;
+  sageAvailable?: boolean | null | undefined;
+  /** §3-165: 読み込み中のベースモデルの表示名（`/models` の
+   * `base_models[].display_name`、例「LTX 2.5」）。ラベルに出すだけ。省略時は `""`。 */
+  engineLabel?: string | undefined;
 }
 
 export interface UseRetakeFormResult {
@@ -163,7 +178,8 @@ export interface UseRetakeFormResult {
   setWindow: (next: { startFrame: number; frames: number }) => void;
 
   /** 窓長の下限・上限。下限は config 由来（読めなければ F1 の定数）。上限は
-   * {@link stage2Window} 連動 —— 潜在19フレームを選ぶと 145 へ縮む。 */
+   * {@link stage2Window} 連動の `8·vTile − 7`（standard 169・潜在19フレーム 145・
+   * w61 481）。 */
   minWindowFrames: number;
   maxWindowFrames: number;
   glueHeadFrames: number;
@@ -176,10 +192,15 @@ export interface UseRetakeFormResult {
   regenerateAudio: boolean;
   setRegenerateAudio: (value: boolean) => void;
 
-  /** Stage-2（アップスケール工程）のクリップ長。Chain と同じ 2 択で、既定は
-   * `standard`。既定のときは**リクエストに載せない**（サーバ既定に追随）。 */
+  /** Stage-2（アップスケール工程）のクリップ長。Chain と同じ選択肢（§3-165 で
+   * 15 段）で、既定は `standard`。既定のときは**リクエストに載せない**（サーバ
+   * 既定に追随）。 */
   stage2Window: Stage2Window;
   setStage2Window: (value: Stage2Window) => void;
+  /** §3-165: ドロップダウンの選択肢ラベル。Chain の
+   * `UseChainFormResult.stage2WindowLabel` と同じ式（`stage2WindowOptionLabel`）で、
+   * 予算は Chain と同じ配信テーブルから、グリッドは既定の 64。 */
+  stage2WindowLabel: (window: Stage2Window, template: string) => string;
 
   /**
    * 生成される解像度。初期値は素材の実寸ベース（{@link RetakeSnapshot.mediaWidth}
@@ -247,7 +268,9 @@ export interface UseRetakeFormResult {
  *    そのまま持ち越される導線で、「素材の差し替え」ではない。
  */
 export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult {
-  const { nativeBridge, initialIntent, acceleration } = deps;
+  const { nativeBridge, initialIntent, acceleration, engineFamily } = deps;
+  const sageAvailable = deps.sageAvailable ?? null;
+  const engineLabel = deps.engineLabel ?? "";
   const config = deps.config ?? FALLBACK_APP_CONFIG;
   const prompt = deps.prompt ?? "";
 
@@ -345,13 +368,23 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
   const minWindowFrames = resolveWindowLimit(config.limits.retake_window_min_frames, RETAKE_WINDOW_MIN_PX);
   // 上限は Stage-2 のクリップ長に連動する。Retake の窓は stage-2 の**1タイル**で
   // 精錬されるので、タイルに収まる最大画素フレーム数（`8·vTile − 7`）が窓長の
-  // 上限そのもの。config が公開している `retake_window_max_frames` は
-  // `standard`（潜在22フレーム = 169）の値なので、短い方のプリセットを選んだ
-  // ときは `min` を取って 145 まで下げる。backend の
-  // `chain_math.retake_max_window_px(v_tile)` のミラー。
-  const maxWindowFrames = Math.min(
-    resolveWindowLimit(config.limits.retake_window_max_frames, RETAKE_WINDOW_MAX_PX),
-    retakeMaxWindowPx(STAGE2_WINDOW_PRESETS[stage2Window].vTile),
+  // 上限そのもの（backend の `chain_math.retake_max_window_px(v_tile)` のミラー）。
+  // §3-165: 以前は config の `retake_window_max_frames`（standard の値 169）との
+  // `min` を取っていたが、窓を広げても 169 で頭打ちになるので外した。配信値は
+  // 型と既定値の写しとして残るが、フロントはもう読まない。
+  const maxWindowFrames = retakeMaxWindowPx(STAGE2_WINDOW_PRESETS[stage2Window].vTile);
+
+  // §3-165: ラベルの目安解像度の予算。`useChainForm` と同じ 2 行（配信テーブルの
+  // 行 → 無ければ配信スカラー → 無ければ 40,000）。
+  const comfortRow = useMemo(
+    () => resolveComfortRow(config.limits, engineFamily, acceleration ?? ACCELERATION_DEFAULTS, sageAvailable),
+    [config.limits, engineFamily, acceleration, sageAvailable],
+  );
+  const comfortBudget = comfortRow?.chainBudget ?? resolveChainComfortBudget(config.limits.chain_comfort_token_budget);
+  const stage2WindowLabel = useCallback(
+    (w: Stage2Window, template: string) =>
+      stage2WindowOptionLabel(w, { template, engineLabel, budget: comfortBudget }),
+    [engineLabel, comfortBudget],
   );
 
   const window = useMemo<RetakeWindowResult | null>(() => {
@@ -591,12 +624,13 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
       // 窓長の単一ソース。サーバはこの 1 本の `num_frames` を窓長として読む。
       clips: [{ num_frames: window?.ok ? window.frames : minWindowFrames }],
       // Stage-2 のクリップ長。**既定（standard）のときはキーごと省く** ——
-      // サーバ側の既定に追随させるため。潜在19フレームを選んだときだけ載せる。
+      // サーバ側の既定に追随させるため。それ以外の段を選んだときだけ載せる。
       ...(stage2Window === STAGE2_WINDOW_DEFAULT ? {} : { stage2_window: stage2Window }),
       // `chunked_upsample` は**意図的に載せない**。`api/types.ts` の同フィールドは
       // 「WebUI は常に明示送信すること」と書いており Chain 系の他のビルダーは全て
-      // そうしているが、Retake の窓は上限 169 フレーム＝ stage-2 のタイル1枚に
-      // 収まる長さで、一括アップサンプルで足りる（チャンク化して得るものが無い）。
+      // そうしているが、Retake の窓はどの段でも stage-2 のタイル 1 枚に収まる長さ
+      // （上限 `8·vTile − 7`）で、一括アップサンプルで足りる（チャンク化して得る
+      // ものが無い）。
       // ※ Retake も stage-2 での精錬そのものは通る（`upscaled_v` 経由。
       //   `chain_pipeline.py`）。「stage-2 を使わない」ではない。
       retake: {
@@ -650,6 +684,7 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     setRegenerateAudio,
     stage2Window,
     setStage2Window,
+    stage2WindowLabel,
     width,
     height,
     setWidth,

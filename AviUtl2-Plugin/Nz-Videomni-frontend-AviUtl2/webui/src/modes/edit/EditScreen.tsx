@@ -69,6 +69,15 @@ export interface EditScreenProps {
    * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
    * Threaded to both `useOutpaintForm` and `useRetakeForm`. */
   acceleration?: AccelerationSettings | undefined;
+  /** §3-165: whether the server reports SageAttention as installed — with
+   * {@link engineFamily} and {@link acceleration} it picks the served comfort
+   * row whose CHAIN budget sizes the Retake stage-2 window labels (the same
+   * three inputs `ChainedScreen` passes to `useChainForm`). Omitted ⇒ `null`. */
+  sageAvailable?: boolean | null | undefined;
+  /** §3-165: the LOADED base model's display name (`/models`
+   * `base_models[].display_name`), printed in the Retake stage-2 window labels.
+   * Omitted ⇒ `""`. */
+  engineLabel?: string | undefined;
 }
 
 /** The Edit mode screen (2026-08-09). Until this day the Edit tab was a
@@ -150,6 +159,8 @@ export function EditScreen({
   subTabsDisabled = { retake: false, outpainting: false, inpainting: false },
   engineFamily,
   acceleration,
+  sageAvailable,
+  engineLabel,
 }: EditScreenProps = {}) {
   const strings = useStrings();
   // Consumed EXACTLY ONCE, in the lazy initializer: `AppShell` bumps
@@ -224,7 +235,16 @@ export function EditScreen({
 
   // ── §1-17 Retake ────────────────────────────────────────────────────────
   // 窓長の上下限（`limits.retake_window_*`）は上で読んだ `config` から取る。
-  const retakeForm = useRetakeForm({ prompt, config, nativeBridge, initialIntent, acceleration });
+  const retakeForm = useRetakeForm({
+    prompt,
+    config,
+    nativeBridge,
+    initialIntent,
+    acceleration,
+    engineFamily,
+    sageAvailable,
+    engineLabel,
+  });
   const retakeReasonMessages = useMemo(() => buildRetakeReasonMessages(strings), [strings]);
   const tr = strings.edit.retake;
 

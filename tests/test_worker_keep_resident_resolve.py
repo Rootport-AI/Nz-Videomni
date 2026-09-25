@@ -4,8 +4,9 @@ Covers ``engine.worker._resolve_keep_resident`` and its ``done``-event
 companion ``_keep_resident_used``: the missing-key default, the three guards
 (G-A fail-loud / G-B + G-C auto-off), and the used-string each case reports.
 
-``_PIPE`` is monkeypatched to a ``SimpleNamespace`` carrying just the two
-attributes the guards read (``_gguf_per_layer_quant`` / ``_dit_cpu_load``) — the
+``_PIPE`` is monkeypatched to a ``SimpleNamespace`` carrying just the three
+attributes the guards read (``_transformer_format`` / ``_gguf_per_layer_quant`` /
+``_dit_cpu_load``) — the
 resolver never builds or touches a real pipeline, which is exactly why these
 guards can be pinned without a GPU or any weights.
 
@@ -27,8 +28,14 @@ pytest.importorskip("ltx_core")
 from engine import worker  # noqa: E402
 
 
-def _pipe(*, per_layer_quant: bool = True, dit_cpu_load: bool = True):
+def _pipe(
+    *,
+    per_layer_quant: bool = True,
+    dit_cpu_load: bool = True,
+    transformer_format: str = "gguf",
+):
     return types.SimpleNamespace(
+        _transformer_format=transformer_format,
         _gguf_per_layer_quant=per_layer_quant,
         _dit_cpu_load=dit_cpu_load,
     )
@@ -88,6 +95,17 @@ def test_g_a_does_not_fire_when_keep_resident_is_off(monkeypatch):
     assert worker._resolve_keep_resident({}, True) == (False, None)
 
 
+def test_g_a_does_not_fire_for_fp8_transformer(monkeypatch):
+    # §3-167: the fp8 forward adds LoRA deltas out of place, so the per-layer
+    # flag (a GGUF-only notion) must not block keep_resident there.
+    monkeypatch.setattr(
+        worker, "_PIPE", _pipe(per_layer_quant=False, transformer_format="fp8")
+    )
+    msg = {"keep_resident": True}
+    assert worker._resolve_keep_resident(msg, True) == (True, None)
+    assert worker._keep_resident_used(msg, True) == "on"
+
+
 # ── G-B / G-C: main-memory doubling -> warn + auto-off ───────────────────────
 
 
@@ -124,3 +142,22 @@ def test_g_b_is_checked_before_g_c(monkeypatch):
     monkeypatch.setattr(worker, "_PIPE", _pipe(dit_cpu_load=False))
     _, reason = worker._resolve_keep_resident({"keep_resident": True}, False)
     assert reason == "dit_cpu_load=0"
+
+
+# ── §3-167: load refuses two transformer sources ─────────────────────────────
+
+
+def test_load_with_both_transformer_sources_raises(monkeypatch):
+    def _never(**_kw):
+        raise AssertionError("the pipeline must not be built")
+
+    monkeypatch.setattr(worker, "_PIPE", None)
+    monkeypatch.setattr(worker, "probe_sage", lambda: False)
+    monkeypatch.setattr(worker.LTXFastVideoPipeline, "create", staticmethod(_never))
+    msg = {
+        "gguf_transformer_path": "t.gguf",
+        "safetensors_transformer_path": "t.safetensors",
+    }
+    with pytest.raises(RuntimeError, match="exactly one transformer source"):
+        worker._do_load(msg)
+    assert worker._PIPE is None

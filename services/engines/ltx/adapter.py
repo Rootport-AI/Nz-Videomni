@@ -86,7 +86,8 @@ REQUIRED_ASSETS: tuple[str, ...] = (
 )
 
 #: LTX generation this adapter can actually run, as the first two segments of
-#: the transformer GGUF's ``model_version`` KV ("2.3.0" -> "2.3"). The LTX 2.5
+#: the transformer's ``model_version`` (GGUF KV or safetensors ``__metadata__``;
+#: "2.3.0" -> "2.3"). The LTX 2.5
 #: inference path is the NEXT stage (PENDING_TASKS §3-98); until it exists, a
 #: 2.5 weight file must fail loud at load time instead of being handed to a
 #: worker that would mis-run it.
@@ -196,7 +197,12 @@ def _minor_version(version: str) -> str:
 
 
 def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
-    """Rule on the GGUF KV metadata of a model about to be loaded (§2.2).
+    """Rule on the engine KV of a model about to be loaded (§2.2).
+
+    ``kv`` is the GGUF header's KV for a ``.gguf``; for an fp8 ``.safetensors``
+    transformer (§3-167) the precheck derives the same two keys from the
+    ``__metadata__`` (``general.architecture`` = ``ltxv`` once the layout check
+    passed, ``model_version`` verbatim), so one ruling covers both formats.
 
     The two-step contract, judged ONLY for the ``transformer`` category (the
     file that defines the generation; VAEs and text encoders carry no such
@@ -211,7 +217,7 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
 
     A MISSING key is a WARNING, not a refusal: both keys are present in every
     file the project's own converter produces, but a hand-made or third-party
-    GGUF may lack them, and rejecting all of those would be a bigger regression
+    GGUF (or a safetensors without ``__metadata__.model_version``) may lack them, and rejecting all of those would be a bigger regression
     than letting the engine's own loader have the last word (design §2.5).
 
     ``kv`` comes from ``services.model_registry.precheck_model_file`` — the
@@ -222,7 +228,7 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
     architecture = (kv.get("general.architecture") or "").strip()
     if not architecture:
         logger.warning(
-            "model '%s' declares no general.architecture in its GGUF header; "
+            "model '%s' declares no general.architecture in its header metadata; "
             "loading it anyway (the engine's own loader has the last word).",
             name,
         )
@@ -238,7 +244,7 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
     version = (kv.get("model_version") or "").strip()
     if not version:
         logger.warning(
-            "model '%s' declares no model_version in its GGUF header; loading "
+            "model '%s' declares no model_version in its header metadata; loading "
             "it anyway (assuming it matches this engine's LTX generation).",
             name,
         )
@@ -1844,7 +1850,7 @@ class _RealBackend:
             str(self.config._abs(self._models_path(pruned_rel))) if pruned_rel else ""
         )
 
-        return {
+        payload = {
             "op": "load",
             "checkpoint_path": checkpoint_path,
             "gemma_root": gemma_root,
@@ -1861,6 +1867,16 @@ class _RealBackend:
             "vae_spatial_tile_size": int(self.low_vram.vae_spatial_tile_size),
             "vae_temporal_tile_size": int(self.low_vram.vae_temporal_tile_size),
         }
+        # fp8 safetensors transformer (§3-167 B-1): the selection still rides
+        # SELECTION_FIELDS' "gguf_transformer_path", but the worker must not
+        # hand a .safetensors to the GGUF loader. Blank that field and APPEND
+        # one key, so a GGUF selection's payload keeps its key set and order
+        # byte-identical (golden snapshot in tests/test_model_swap_load.py).
+        transformer_path = payload["gguf_transformer_path"]
+        if transformer_path.lower().endswith(".safetensors"):
+            payload["gguf_transformer_path"] = ""
+            payload["safetensors_transformer_path"] = transformer_path
+        return payload
 
     def _build_child_env(self, project_root: Path) -> dict[str, str]:
         """The worker subprocess's environment (§3-98 P3a seam).

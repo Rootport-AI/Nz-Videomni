@@ -161,6 +161,7 @@ function renderRetake(intent: GenerationPrefill | null = RETAKE_INTENT, options:
           prompt="a cat"
           nativeBridge={nativeBridge}
           onJobSubmitted={onJobSubmitted}
+          engineLabel="LTX 2.3"
         />
       </ToastProvider>
     </LanguageProvider>,
@@ -393,15 +394,31 @@ describe("EditScreen — Retake の通し", () => {
   });
 
   // ── ⑤ Stage-2 クリップ長 ──────────────────────────────────────────────
-  it("Stage-2 クリップ長は Chained と同じ 2 択で、潜在19フレームなら stage2_window を送る", async () => {
+  it("Stage-2 クリップ長は Chained と同じ 15 段で、潜在19フレームなら stage2_window を送る", async () => {
     const user = userEvent.setup();
     const { request } = renderRetake();
     const panel = document.querySelector<HTMLElement>(".retake-panel")!;
     const select = within(panel).getByRole("combobox") as HTMLSelectElement;
-    // 文言は `strings.chained.stage2Window` の直読み（Retake 専用キーは作らない）。
+    // 文言は `strings.chained.stage2Window.optionTemplate` の直読み（Retake 専用
+    // キーは作らない）。§3-165: 目安解像度はエンジン不明＝配信スカラー 40,000 で
+    // 計算した 16:9（グリッド 64）。
+    expect(en.chained.stage2Window.optionTemplate).toBe("{frames}f ({engine} {width}×{height})");
     expect([...select.options].map((o) => o.textContent)).toEqual([
-      en.chained.stage2Window.standardOption,
-      en.chained.stage2Window.highResolutionOption,
+      "22f (LTX 2.3 1792×1024)",
+      "19f (LTX 2.3 1920×1088)",
+      "25f (LTX 2.3 1664×960)",
+      "28f (LTX 2.3 1600×896)",
+      "31f (LTX 2.3 1472×896)",
+      "34f (LTX 2.3 1408×832)",
+      "37f (LTX 2.3 1344×768)",
+      "40f (LTX 2.3 1344×704)",
+      "43f (LTX 2.3 1280×704)",
+      "46f (LTX 2.3 1216×704)",
+      "49f (LTX 2.3 1216×640)",
+      "52f (LTX 2.3 1152×640)",
+      "55f (LTX 2.3 1088×640)",
+      "58f (LTX 2.3 1088×640)",
+      "61f (LTX 2.3 1088×576)",
     ]);
     expect(select.value).toBe("standard");
 

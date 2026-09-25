@@ -1,0 +1,43 @@
+# git state at campaign end (2026-09-25 03:26)
+branch: dev
+HEAD: 4e3c14479f3dd1301831bba2526bc59f9294bbd5  (unchanged during the campaign; the §3-165 implementation is committed after this snapshot)
+
+## git status --short at campaign end
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/api/types.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/i18n/strings.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/chained/ChainedScreen.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/chained/stage2Window.test.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/chained/useChainForm.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/EditScreen.retake.test.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/EditScreen.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/RetakePanel.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/useRetakeForm.test.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/edit/useRetakeForm.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/shell/AppShell.tsx
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/shell/tokenBudget.test.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/shell/tokenBudget.ts
+ M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/timeline/retakeWindow.ts
+ M AviUtl2-Plugin/NzVideomni.aux2
+ M Docs/CHAIN_STAGE2_RESEARCH_NOTES.md
+ M Docs/COMFORT_LIMIT_TABLE.md
+ M Docs/PENDING_TASKS.md
+ M Docs/VERIFICATION_LOG.md
+ M Videomni_Backend_Specification.md
+ M api/models.py
+ M chain_math.py
+ M config.py
+ M gradio_ui/handlers.py
+ M gradio_ui/i18n.py
+ M gradio_ui/presets.py
+ M gradio_ui/ui.py
+ M gradio_ui/validation.py
+ M tests/test_chain_math_end_source.py
+ M tests/test_gradio_models.py
+ M tests/test_gradio_ui.py
+ M tests/test_retake_api.py
+ M tests/test_stage2_window.py
+?? Docs/Outputs-archive/comfort-calib-2026-09-25/
+?? gradio_ui/comfort.py
+?? tests/test_gradio_stage2_window.py

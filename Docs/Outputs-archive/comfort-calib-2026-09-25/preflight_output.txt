@@ -1,0 +1,13 @@
+[2026-09-25 00:21:29.996] plan_T1_ltx23_inner.json      6 point(s), 0 failed
+[2026-09-25 00:21:29.996]    warn a_b1216: prompt not pinned; the engine-default prompt will be used
+[2026-09-25 00:21:29.996]    warn a_w46: prompt not pinned; the engine-default prompt will be used
+[2026-09-25 00:21:29.996]    warn a_w46_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-25 00:21:29.996]    warn a_b1152: prompt not pinned; the engine-default prompt will be used
+[2026-09-25 00:21:29.996]    warn a_w61: prompt not pinned; the engine-default prompt will be used
+[2026-09-25 00:21:29.996]    warn a_w61_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-25 00:21:29.997] plan_T2_ltx25_inner.json      6 point(s), 0 failed
+[2026-09-25 00:21:30.006] plan_T3a_ltx23_outer.json     2 point(s), 0 failed
+[2026-09-25 00:21:30.006]    warn a_b1280: prompt not pinned; the engine-default prompt will be used
+[2026-09-25 00:21:30.006]    warn a_o46: prompt not pinned; the engine-default prompt will be used
+[2026-09-25 00:21:30.006] plan_T3b_ltx25_outer.json     1 point(s), 0 failed
+[2026-09-25 00:21:30.007] wrote preflight.json -- 15 point(s), 0 failed, ok=True

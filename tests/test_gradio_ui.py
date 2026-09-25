@@ -782,11 +782,32 @@ def _wiring_inputs(dep):
     indices point at keyframe components instead of the Acceleration block, so
     the canaries below strip that trailing run first and keep the same negative
     index meaning the same thing on the Generate and Chain deps alike.
+
+    The Chain flow likewise has ONE chain-only input appended after the
+    shared block -- the stage-2 window dropdown (§3-165), which the Generate
+    flow does not have -- so it is stripped too (its own position is pinned by
+    ``tests/test_gradio_stage2_window.py::test_chain_stage2_window_is_the_last_chain_input``).
     """
     ins = list(dep.inputs)
-    if getattr(dep.fn, "__name__", "") == "dispatch":
+    name = getattr(dep.fn, "__name__", "")
+    if name == "dispatch":
         ins = ins[:-4 * KF_MAX_SLOTS]
+    elif name == "chain_dispatch":
+        ins = ins[:-1]
     return ins
+
+
+def _generate_flow_deps(demo, component):
+    """The Generate (``dispatch``) and Chain (``chain_dispatch``) flows that
+    take ``component`` as an input.
+
+    The acceleration controls are also inputs of the stage-2 window label
+    rebuild (§3-165: the comfort budget depends on them), which has nothing to
+    do with the trailing-order contract these canaries lock, so the canaries
+    look at the two generate flows only -- and require BOTH."""
+    return [d for d in demo.fns.values()
+            if component in getattr(d, "inputs", [])
+            and getattr(d.fn, "__name__", "") in ("dispatch", "chain_dispatch")]
 
 
 def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
@@ -796,9 +817,8 @@ def test_acceleration_attention_radio_is_wired_into_generate_and_chain():
     en = LABELS["en"]
     radio = next(c for c in demo.blocks.values()
                  if isinstance(c, gr.Radio) and c.label == en["accel_lbl_attention"])
-    deps_with_radio = [d for d in demo.fns.values()
-                       if radio in getattr(d, "inputs", [])]
-    assert len(deps_with_radio) >= 2, "attention radio not wired into 2 flows"
+    deps_with_radio = _generate_flow_deps(demo, radio)
+    assert len(deps_with_radio) == 2, "attention radio not wired into 2 flows"
     # And it is the SEVENTH-TO-LAST input of each: the APPENDED wiring
     # discipline put it last when it was the only Acceleration control, then
     # the block-swap prefetch checkbox went after it, the keep-resident
@@ -873,8 +893,8 @@ def test_keep_resident_checkbox_is_wired_last_into_generate_and_chain():
     box = next(c for c in demo.blocks.values()
                if isinstance(c, gr.Checkbox)
                and c.label == en["accel_lbl_keep_resident"])
-    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
-    assert len(deps) >= 2, "keep-resident checkbox not wired into 2 flows"
+    deps = _generate_flow_deps(demo, box)
+    assert len(deps) == 2, "keep-resident checkbox not wired into 2 flows"
     # FIFTH-TO-LAST since §1-11 appended the fused-dequant checkbox after it,
     # PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
     # time) appended the VAE radio after that, the keep-resident-embeddings
@@ -902,9 +922,8 @@ def test_block_swap_prefetch_checkbox_is_wired_into_generate_and_chain():
     en = LABELS["en"]
     box = next(c for c in demo.blocks.values()
                if isinstance(c, gr.Checkbox) and c.label == en["accel_lbl_prefetch"])
-    deps_with_box = [d for d in demo.fns.values()
-                     if box in getattr(d, "inputs", [])]
-    assert len(deps_with_box) >= 2, "prefetch checkbox not wired into 2 flows"
+    deps_with_box = _generate_flow_deps(demo, box)
+    assert len(deps_with_box) == 2, "prefetch checkbox not wired into 2 flows"
     # And it is the SIXTH-TO-LAST input of each: APPENDED after
     # attention_backend, then the keep-resident checkbox (§48), the
     # fused-dequant checkbox (§1-11), the VAE radio (PrunaVAED,
@@ -958,8 +977,8 @@ def test_fused_dequant_checkbox_is_wired_into_generate_and_chain():
     box = next(c for c in demo.blocks.values()
                if isinstance(c, gr.Checkbox)
                and c.label == en["accel_lbl_fused_dequant"])
-    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
-    assert len(deps) >= 2, "fused-dequant checkbox not wired into 2 flows"
+    deps = _generate_flow_deps(demo, box)
+    assert len(deps) == 2, "fused-dequant checkbox not wired into 2 flows"
     # FOURTH-TO-LAST since PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66,
     # filed as §3-50 at the time) appended the VAE radio after it, the
     # keep-resident-embeddings checkbox went after that, and the Output
@@ -977,8 +996,8 @@ def test_vae_radio_is_wired_into_generate_and_chain():
     en = LABELS["en"]
     radio = next(c for c in demo.blocks.values()
                  if isinstance(c, gr.Radio) and c.label == en["accel_lbl_vae"])
-    deps = [d for d in demo.fns.values() if radio in getattr(d, "inputs", [])]
-    assert len(deps) >= 2, "VAE radio not wired into 2 flows"
+    deps = _generate_flow_deps(demo, radio)
+    assert len(deps) == 2, "VAE radio not wired into 2 flows"
     for dep in deps:
         assert _wiring_inputs(dep)[-3] is radio
 
@@ -996,8 +1015,8 @@ def test_keep_resident_embeddings_checkbox_is_wired_into_generate_and_chain():
     box = next(c for c in demo.blocks.values()
                if isinstance(c, gr.Checkbox)
                and c.label == en["accel_lbl_keep_resident_embeddings"])
-    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
-    assert len(deps) >= 2, "keep-resident-embeddings checkbox not wired into 2 flows"
+    deps = _generate_flow_deps(demo, box)
+    assert len(deps) == 2, "keep-resident-embeddings checkbox not wired into 2 flows"
     for dep in deps:
         assert _wiring_inputs(dep)[-2] is box
 

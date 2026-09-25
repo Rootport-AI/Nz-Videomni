@@ -12,6 +12,7 @@ import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
 import { isChainStage1OverBudget } from "../../shell/tokenBudget";
+import { STAGE2_WINDOW_OPTIONS } from "../../shell/tokenBudget";
 import type { Stage2Window } from "../../shell/tokenBudget";
 import { computeTargetNumFrames } from "../../timeline/deriveDuration";
 import { resolvePrefillSeed } from "../../timeline/prefillSeed";
@@ -113,6 +114,10 @@ export interface ChainedScreenProps {
    * shim in `shell/comfortTable.ts`, i.e. the pre-table behaviour, so every
    * direct-render test that predates it keeps compiling. */
   engineFamily?: string | undefined;
+  /** §3-165: the LOADED base model's display name (`/models`
+   * `base_models[].display_name`), printed in the stage-2 window dropdown's
+   * labels. Omitted ⇒ `""`. */
+  engineLabel?: string | undefined;
   /** §3-102 (LTX 2.5 Chained, first stage): the four material panels the
    * LOADED base model's engine cannot use, computed by `AppShell` from
    * `useBaseModels`' `unsupportedFeatures` (`shell/featureScope.ts`'s
@@ -157,6 +162,7 @@ export function ChainedScreen({
   acceleration,
   sageAvailable,
   engineFamily,
+  engineLabel,
   v2vUnavailable,
   a2vUnavailable,
   endSourceUnavailable,
@@ -186,6 +192,7 @@ export function ChainedScreen({
       acceleration={acceleration}
       sageAvailable={sageAvailable}
       engineFamily={engineFamily}
+      engineLabel={engineLabel}
       v2vUnavailable={v2vUnavailable}
       a2vUnavailable={a2vUnavailable}
       endSourceUnavailable={endSourceUnavailable}
@@ -210,6 +217,7 @@ interface ChainedScreenBodyProps {
   acceleration?: AccelerationSettings | undefined;
   sageAvailable?: boolean | null | undefined;
   engineFamily?: string | undefined;
+  engineLabel?: string | undefined;
   v2vUnavailable?: boolean | undefined;
   a2vUnavailable?: boolean | undefined;
   endSourceUnavailable?: boolean | undefined;
@@ -232,6 +240,7 @@ function ChainedScreenBody({
   acceleration,
   sageAvailable,
   engineFamily,
+  engineLabel,
   v2vUnavailable = false,
   a2vUnavailable = false,
   endSourceUnavailable = false,
@@ -351,7 +360,7 @@ function ChainedScreenBody({
   const form = useChainForm(
     config,
     prompt,
-    { nativeBridge, controlLoraNames, depthLoraNames, nag, acceleration, sageAvailable, engineFamily },
+    { nativeBridge, controlLoraNames, depthLoraNames, nag, acceleration, sageAvailable, engineFamily, engineLabel },
     initialCommon,
   );
 
@@ -893,20 +902,9 @@ function ChainedScreenBody({
             セレクト" below): both are advisories surfaced as early as possible,
             ahead of every field they're about, rather than buried after the
             clip list. §1-14: never a Generate gate — the budget marks "this
-            will get heavy", not "this is invalid".
-
-            2026-08-12 オーナー決定により、旧仕様（PENDING_TASKS_CLOSED.md §3-68
-            由来の「潜在19フレームに切り替えれば解消する場合＝standardのときだけ
-            表示」）を反転して BOTH の窓で出すようにした: 潜在19フレームでも予算
-            超過は普通に起こり、そのとき黙っているのは「重くなる」という事実を
-            隠すことになる。代わりに文面を2つに割り、事実（遅くなる）は常に、
-            誘導（19にすれば軽くなるかも）は効き目のある standard のときだけ、
-            空白1つで連結して見せる。 */}
+            will get heavy", not "this is invalid". */}
         {form.chainWindowOverBudget && (
-          <p className="warning-banner">
-            {strings.chained.stage2Window.overBudgetWarning}
-            {form.stage2Window === "standard" && ` ${strings.chained.stage2Window.overBudgetShorterWindowHint}`}
-          </p>
+          <p className="warning-banner">{strings.chained.stage2Window.overBudgetWarning}</p>
         )}
 
         {/* §1-15, plan F5: the reference video's OWN comfort-budget advisory —
@@ -1096,10 +1094,10 @@ function ChainedScreenBody({
 
         {/* §1-14/§3-57 stage-2 window. Copy rework (owner decision, 2026-08-09):
             presented as the LATENT-FRAME LENGTH of the clip stage-2 cuts the
-            draft into (`vTile`), with fixed approximate seconds baked into the
-            copy rather than derived live from the form's frame rate — see
-            `strings.chained.stage2Window`'s own JSDoc in `i18n/strings.ts` for
-            why. The hint is two paragraphs (`\n\n`-separated in the dictionary)
+            draft into (`vTile`). §3-165: one option per `STAGE2_WINDOW_OPTIONS`
+            entry, each labelled with its recommended 16:9 size for the loaded
+            engine (`form.stage2WindowLabel`) — see
+            `strings.chained.stage2Window`'s own JSDoc in `i18n/strings.ts`. The hint is two paragraphs (`\n\n`-separated in the dictionary)
             rendered as two stacked `.field-hint`s so the break survives — that
             class doesn't set `white-space`, so a lone `\n` would collapse. */}
         <label className="field">
@@ -1109,8 +1107,11 @@ function ChainedScreenBody({
             disabled={disabled}
             onChange={(e) => form.setStage2Window(e.target.value as Stage2Window)}
           >
-            <option value="standard">{strings.chained.stage2Window.standardOption}</option>
-            <option value="high_resolution">{strings.chained.stage2Window.highResolutionOption}</option>
+            {STAGE2_WINDOW_OPTIONS.map((window) => (
+              <option key={window} value={window}>
+                {form.stage2WindowLabel(window, strings.chained.stage2Window.optionTemplate)}
+              </option>
+            ))}
           </select>
           {strings.chained.stage2Window.hint.split("\n\n").map((paragraph, i) => (
             <p className="field-hint" key={i}>

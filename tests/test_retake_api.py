@@ -121,7 +121,7 @@ def test_422_matrix(client, clips, over, needle):
 
 # ── the retake window ceiling follows the stage-2 window preset ─────────────
 # chain_math.retake_max_window_px(v_tile): 169 for "standard" (v_tile=22), 145
-# for "high_resolution" (v_tile=19). The invariant is unchanged -- the window is
+# for "high_resolution" (v_tile=19), 481 for "w61". The invariant is unchanged -- the window is
 # still refined as ONE stage-2 tile -- but it is enforced by BOUNDING the window
 # per preset rather than by refusing the combination outright.
 @pytest.mark.parametrize(
@@ -134,6 +134,11 @@ def test_422_matrix(client, clips, over, needle):
         (153, "high_resolution", False, "[73, 145]"),
         (73, "high_resolution", True, None),       # the floor is preset-independent
         (65, "high_resolution", False, "[73, 145]"),
+        # §3-165: the widest ladder window lifts the ceiling to
+        # retake_max_window_px(61) = 481 (== the per-clip maximum), so 489 is
+        # over BOTH bars and still a 422.
+        (481, "w61", True, None),
+        (489, "w61", False, "481"),
     ],
 )
 def test_window_ceiling_follows_the_stage2_window_preset(

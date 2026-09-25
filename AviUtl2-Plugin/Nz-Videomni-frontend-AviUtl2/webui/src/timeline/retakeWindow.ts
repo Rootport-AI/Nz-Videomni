@@ -2,7 +2,7 @@
  * §1-17 Retake（選択範囲の撮り直し）の**窓**を決める判定コア。
  *
  * 「タイムライン上で選んだ時間範囲」を、元の動画ファイル自身の時間軸へ写し、
- * さらに Retake が実際に生成できる形（長さ 8n+1・[73, 169] フレーム）へ整える
+ * さらに Retake が実際に生成できる形（長さ 8n+1・[73, 上限] フレーム）へ整える
  * までを担当する。ここで決まった窓が、そのまま
  *  - バックエンドへ渡す `window_start_sec` / 窓長、
  *  - 画面の RangeBand（`modes/edit/RangeBand.tsx`）が描く帯、
@@ -17,15 +17,14 @@
  *
  * ## 窓の定義（実装計画 §1）
  *
- * 窓 ＝ 選択範囲を 8n+1 へスナップし [73, 169] へクランプしたもの。
+ * 窓 ＝ 選択範囲を 8n+1 へスナップし [73, 上限] へクランプしたもの。
  * 糊代（のりしろ）は**窓の内側**にあり、リボン全長とは無関係。
  * 73 と 169 の出どころは backend の `chain_math` 側の幾何で、169 は
  * 「stage-2 のタイル1枚に収まる最大の画素フレーム数」（`outputs/retake_spike/
  * T1_RESULTS.md` C1 の実測）、73 は自由中間潜在が成立する最小窓。
  *
- * 上限 169 は Stage-2 のクリップ長が既定（潜在22フレーム）のときの値で、
- * ユーザーが潜在19フレームを選ぶと 145 へ縮む（{@link retakeMaxWindowPx}）。
- * 実際に効かせる上限は呼び出し側が `maxFrames` で渡す。
+ * 上限は `8·vTile − 7`（{@link retakeMaxWindowPx}。既定窓 standard で 169）で、
+ * 呼び出し側が `maxFrames` で渡す。{@link RETAKE_WINDOW_MAX_PX} は既定引数用。
  */
 
 import type { TimelineSelection } from "./menuSelection";
@@ -61,9 +60,8 @@ export const RETAKE_WINDOW_GRID = 8;
  * `chain_math.retake_max_window_px(v_tile)` のミラー。
  *
  * Retake は窓ぜんぶを stage-2 の**1タイル**で精錬するので、これがそのまま
- * 窓長の上限になる。`standard`（vTile 22）で 169 = {@link RETAKE_WINDOW_MAX_PX}、
- * `high_resolution`（vTile 19）で 145。つまり Stage-2 のクリップ長を短い方へ
- * 切り替えると、撮り直せる最長区間もその分だけ縮む。
+ * 窓長の上限になる（既定窓 standard で 169 = {@link RETAKE_WINDOW_MAX_PX}。
+ * この定数は既定引数用）。
  *
  * `shell/tokenBudget.ts` の `STAGE2_WINDOW_PRESETS` を**ここから import しない**
  * のは、このモジュールが依存ゼロの判定コアだから（冒頭 doc の「純関数であること」）。

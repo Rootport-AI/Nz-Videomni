@@ -2225,6 +2225,21 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   - **サーバーを LAN に開く `--listen` で使っているとき、別の PC からの読み出しには対応していない**（入口がこの PC からの要求にしか答えないため）。その旨はフロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §3.23 に記載してある。
 - **正本・出典**: 書き込みの規則・要求のフィールド・読み出しの入口＝[`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) **§6.6・§6.8・§6.10**（Gradio 検証UIは §12.2）、フロントエンドから見た入口＝[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) **§3.23**、相対パスの位置づけ＝[`STORAGE_POLICY.md`](STORAGE_POLICY.md) **§1・§2**、MCP＝[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) **D24・§8**、操作パネルの設計＝フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) **§124**、利用者向けの説明＝[`README.md`](../README.md) §5「生成条件を mp4 に記録する」、検証＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§115**。コミット＝`535531e`（バックエンド＋MCP）・`6d263c7`（操作パネル）・`bd5a623`（Gradio）・`fd1b6a8`（配布`.aux2`）・`596903e`（文書）・`1285c1f`（操作パネルの文言と折り返し）・`02b137e`（Gradio の文言）・`811d17e`（配布`.aux2`の再ビルド）。
 
+### 3-165. Chained エンジンの潜在クリップ（Stage-2 窓）サイズの追加（起票：2026-09-24、実装・機械ゲート全緑・較正完了：2026-09-25、オーナー実機目視合格・クローズ：2026-09-25）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-165 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-165（**同書側は欠番**）。§3（将来の研究課題）に起票されていた項目を、オーナーの依頼で着手し、§2 を経ずにクローズした。**番号は3-165**（本書に同番号の記録は無いため無印）。
+- **何が完了したか**: 連結生成の第 2 段（Stage-2）で選べる窓に、22 より広い 25〜61 潜在フレームの 13 段（`w25`〜`w61`）を足した。選択肢は操作パネルの Chained タブと撮り直し（Retake）、Gradio 検証UIの連結タブに出る。MCP の `submit_chain` にも `stage2_window` 引数を足した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.9）。
+- **オーナー裁定の要点**（正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.1）:
+  1. 13 段を全部出す。上端は 61（クリップ 1 本の最大 481 フレームで決まる）。
+  2. 48fps で奇数段が止まるのは許容する（多くの構成で止まるが、クリップ長の組み合わせによっては通る。§116.4）。
+  3. 快適上限マーカーは式どおり全窓で出す。
+  4. **配信値は据え置く（2026-09-25）。** Sulphur-2 Q6_K の w46 の VRAM 溢れは配信値に反映せず、最終判断は fp8 の快適上限較正（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167 の B-3）の後に行う（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第12.4節）。
+- **どの物差しで通ったか**: 機械ゲート全緑・較正完了（**実数は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.3・§116.6 であり、本書には書き写さない**）。**オーナーの実機目視は 2026-09-25 に合格した**（同§116.7）。
+- **クローズ理由**: 実機目視合格・オーナー受容。
+- **状態**: **クローズ（2026-09-25）。** ブランチは`dev`。
+- **残課題**: 配信値の最終判断は §3-167 の B-3 の後（上の裁定 4）。
+- **正本・出典**: 実装・ゲート・較正・申し送り＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§116**（MCP の追補は **§116.9**）、窓ごとの目安解像度＝[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) **第12節**、広い窓の注意点＝[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 冒頭の【2026-09-25 追記】、操作パネルの設計＝フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) **§125**、数値の正本＝`chain_math.py` の `STAGE2_WINDOW_PRESETS`。コミット＝§116.2 に一覧。
+
 ### 3-166. Settings 画面にベースモデル選択を追加（オーナー依頼・起票：2026-09-24、実装・機械ゲート全緑：2026-09-24、オーナー実機ゲート G5 合格・クローズ：2026-09-24）（§1／§2 を経ず直接クローズ・出自番号なし）
 
 - **出自**: 台帳外のオーナー依頼（2026-09-24）。§3-164 と同じ回で実装した。**番号は3-166**（本書にも [`PENDING_TASKS.md`](PENDING_TASKS.md) にも同番号の記録は無いため無印）。**同書§3-165（Chained エンジンの潜在クリップサイズの追加）は生きているので、次に新しく起票するときの番号は3-167である。**

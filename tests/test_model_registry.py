@@ -199,6 +199,28 @@ def test_scan_discovers_sibling_gguf_alongside_default(tmp_path):
     assert "LTX-dev-Q8" in reg.names("transformer")
 
 
+def test_scan_lists_same_stem_gguf_and_safetensors_side_by_side(tmp_path):
+    """§3-167 B-1: with ``.safetensors`` accepted for the transformer, a fp8
+    safetensors dropped next to a GGUF of the same stem stays reachable — the
+    existing collision rule names the second one ``<parent>__<stem>`` (sorted
+    scan: ``.gguf`` comes first)."""
+    import copy
+
+    descriptor = copy.deepcopy(LAYOUT_DESCRIPTOR)
+    descriptor["categories"]["transformer"]["extensions"] = [".gguf", ".safetensors"]
+    cfg = _config(tmp_path, descriptor)
+    for rel in LAYOUT_DEFAULTS.values():
+        _touch(tmp_path / "models" / rel)
+    weights = tmp_path / "models" / "ltx-gguf" / "Weights"
+    gguf = _touch(weights / "X.gguf")
+    sft = _touch(weights / "X.safetensors")
+    reg = ModelRegistry(cfg)
+    names = reg.names("transformer")
+    assert "X" in names and "Weights__X" in names
+    assert reg.resolve("transformer", "X") == gguf.resolve()
+    assert reg.resolve("transformer", "Weights__X") == sft.resolve()
+
+
 def test_scan_text_encoder_non_recursive(tmp_path):
     cfg = _config_with_layout(tmp_path)
     _touch(tmp_path / "models" / "gemma-gguf" / "gemma-Q6_K.gguf")

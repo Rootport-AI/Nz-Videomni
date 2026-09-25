@@ -449,8 +449,9 @@ def _gated_update(updates, control: str):
 def test_refresh_hides_and_resets_the_vae_radio_for_an_engine_without_it():
     updates = _refresh_with(_models_json_with("LTX25",
                                               ["two_stage_hq", "prune_vaed"]))
-    # base dropdown + one per category + one per gated control.
-    assert len(updates) == 1 + len(MODEL_CATEGORIES) + len(GATED_CONTROLS)
+    # base dropdown + one per category + the Clip Chain engine State
+    # (§3-165) + one per gated control.
+    assert len(updates) == 1 + len(MODEL_CATEGORIES) + 1 + len(GATED_CONTROLS)
     vae_update = _gated_update(updates, "accel_vae")
     assert vae_update["visible"] is False
     # Hiding alone is not enough: an invisible component still SENDS its value.
@@ -500,6 +501,7 @@ def test_refresh_failure_leaves_every_output_untouched():
     demo.api._client = httpx.Client(transport=httpx.MockTransport(handler))
     updates = demo.refresh_model_dropdowns("en", warn=False)
     # Same arity as the success path (Gradio matches outputs positionally), and
-    # every one of them a bare no-op update.
-    assert len(updates) == 1 + len(MODEL_CATEGORIES) + len(GATED_CONTROLS)
+    # every one of them a bare no-op update (the "+ 1" is the Clip Chain
+    # engine State, §3-165; a bare update leaves a State as it is).
+    assert len(updates) == 1 + len(MODEL_CATEGORIES) + 1 + len(GATED_CONTROLS)
     assert all("value" not in u and "visible" not in u for u in updates)

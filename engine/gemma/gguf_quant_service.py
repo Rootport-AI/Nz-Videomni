@@ -636,26 +636,67 @@ class GemmaGGUFQuantStateDictLoader:
     def _load_gguf_connectors(
         self, target_device: torch.device
     ) -> dict[str, torch.Tensor]:
-        """Read the 258 embeddings-connector tensors from the LTX transformer GGUF.
+        """Read the 258 embeddings-connector tensors from the LTX transformer file.
 
-        The connectors are stored in the GGUF under BARE keys
-        ``{video,audio}_embeddings_connector.*`` as F32/BF16 (NEVER K-quantized).
-        To reproduce the monolith path byte-for-byte we:
-          1. prepend ``model.diffusion_model.`` to each key (the monolith's original
-             key form the AV ops expect),
+        The transformer file is the GGUF (bare ``{video,audio}_embeddings_connector.*``
+        keys, F32/BF16, NEVER K-quantized) or, since §3-167, an fp8 safetensors
+        (keys already prefixed ``model.diffusion_model.``, BF16/F32). To reproduce
+        the monolith path byte-for-byte we:
+          1. bring each key to the monolith's original form
+             ``model.diffusion_model.<...>_embeddings_connector.*`` (the form the AV
+             ops expect),
           2. cast F32->bf16 / pass bf16 through (the monolith stored these bf16),
           3. run the SAME AV key-ops (AV_GEMMA_TEXT_ENCODER_KEY_OPS) over them so the
              final keys become ``embeddings_processor.{video,audio}_connector.*`` —
              identical to what the monolith connectors produced.
 
-        Fails loudly if any connector tensor is a quantized (K-quant) ggml type, since
-        the float-only assumption (no dequant kernel) would otherwise corrupt weights.
+        Fails loudly if any connector tensor is not float, since the float-only
+        assumption (no dequant kernel) would otherwise corrupt weights.
         """
+        path = self._connector_gguf_path
+        assert path is not None
+        suffix = Path(path).suffix.lower()
+        if suffix == ".gguf":
+            orig_form, n_f32, n_bf16 = self._connector_orig_form_gguf(path)
+        elif suffix == ".safetensors":
+            orig_form, n_f32, n_bf16 = self._connector_orig_form_safetensors(path)
+        else:
+            raise RuntimeError(
+                "Gemma component-files: cannot read embeddings connectors from "
+                f"{Path(path).name!r} (expected a .gguf or .safetensors transformer)"
+            )
+
+        # Run the SAME AV ops the monolith connectors would have gone through so the
+        # final keys/values match exactly (-> embeddings_processor.*_connector.*).
+        out: dict[str, torch.Tensor] = {}
+        ops = self._connector_sd_ops
+        for orig_key, value in orig_form.items():
+            if ops is None:
+                out[orig_key] = value
+                continue
+            mapped = ops.apply_to_key(orig_key)
+            if mapped is None:
+                # The AV ops do not drop connector keys; defensive only.
+                continue
+            for k, v in ops.apply_to_key_value(mapped, value):
+                out[k] = v
+
+        logger.info(
+            "Gemma component-files: prepared %d connector tensors (%d F32->bf16, "
+            "%d bf16 passthrough) -> embeddings_processor.*_connector.*",
+            len(out),
+            n_f32,
+            n_bf16,
+        )
+        return out
+
+    def _connector_orig_form_gguf(
+        self, path: str
+    ) -> tuple[dict[str, torch.Tensor], int, int]:
+        """GGUF transformer: bare connector keys -> prefixed original form."""
         import gguf as gguf_lib
         import numpy as np
 
-        path = self._connector_gguf_path
-        assert path is not None
         logger.info(
             "Gemma component-files: reading embeddings_connector tensors from GGUF %s",
             Path(path).name,
@@ -699,29 +740,42 @@ class GemmaGGUFQuantStateDictLoader:
                 n_bf16 += 1
             orig_form[_ORIG_CONN_PREFIX + name] = deq
 
-        # Run the SAME AV ops the monolith connectors would have gone through so the
-        # final keys/values match exactly (-> embeddings_processor.*_connector.*).
-        out: dict[str, torch.Tensor] = {}
-        ops = self._connector_sd_ops
-        for orig_key, value in orig_form.items():
-            if ops is None:
-                out[orig_key] = value
-                continue
-            mapped = ops.apply_to_key(orig_key)
-            if mapped is None:
-                # The AV ops do not drop connector keys; defensive only.
-                continue
-            for k, v in ops.apply_to_key_value(mapped, value):
-                out[k] = v
+        return orig_form, n_f32, n_bf16
+
+    def _connector_orig_form_safetensors(
+        self, path: str
+    ) -> tuple[dict[str, torch.Tensor], int, int]:
+        """fp8 safetensors transformer: keys are already in the original form.
+
+        Tensors are read one by one with seek + readinto (``engine.fp8.sft_reader``,
+        never mmap) — the same reader the fp8 transformer loader uses.
+        """
+        import sft_fp8_format
+        from engine.fp8.sft_reader import read_tensors
 
         logger.info(
-            "Gemma component-files: prepared %d connector tensors (%d F32->bf16, "
-            "%d bf16 passthrough) -> embeddings_processor.*_connector.*",
-            len(out),
-            n_f32,
-            n_bf16,
+            "Gemma component-files: reading embeddings_connector tensors from "
+            "safetensors %s",
+            Path(path).name,
         )
-        return out
+        header = sft_fp8_format.read_header(path)
+        keys = [k for k in header.tensors if "_embeddings_connector." in k]
+        orig_form: dict[str, torch.Tensor] = {}
+        n_f32 = 0
+        n_bf16 = 0
+        for key, value in read_tensors(path, keys, header):
+            if value.dtype == torch.float32:
+                value = value.to(torch.bfloat16)
+                n_f32 += 1
+            elif value.dtype == torch.bfloat16:
+                n_bf16 += 1
+            else:
+                raise RuntimeError(
+                    f"Gemma component-files: connector tensor {key!r} is {value.dtype} "
+                    "— expected F32/BF16."
+                )
+            orig_form[key] = value
+        return orig_form, n_f32, n_bf16
 
 
 def _dequant_to_bf16(

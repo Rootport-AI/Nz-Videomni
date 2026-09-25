@@ -119,7 +119,10 @@ SINGLE_CLIP_SETS = (
     [169],
 )
 
-BOTH_WINDOWS = ("standard", "high_resolution")
+# Representative windows only (the narrowest, the default and the widest ladder
+# window, §3-165) — the sweeps below multiply by this, so all 15 tiled windows
+# would cost too much run time.
+BOTH_WINDOWS = ("standard", "high_resolution", "w61")
 
 # The stage-2 audio tiling has a PRE-EXISTING quirk at the fractional and 50fps
 # rates (it rejects some clip/window combinations with or without an end

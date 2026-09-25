@@ -347,14 +347,25 @@ def _do_load(msg: dict) -> None:
         return
 
     _log(f"sage_available={sage_available}")
-    _log("creating pipeline (GGUF transformer + GGUF Gemma)...")
+    # §3-167: an fp8 safetensors transformer arrives in its own key, with
+    # gguf_transformer_path emptied (older parents never send the key).
+    gguf_t = msg["gguf_transformer_path"]
+    st = msg.get("safetensors_transformer_path", "")
+    if gguf_t and st:
+        raise RuntimeError(
+            "worker: load got both gguf_transformer_path and "
+            "safetensors_transformer_path - exactly one transformer source is allowed"
+        )
+    fmt = "fp8 safetensors" if st else "GGUF"
+    _log(f"creating pipeline ({fmt} transformer + GGUF Gemma)...")
     _PIPE = LTXFastVideoPipeline.create(
         checkpoint_path=msg["checkpoint_path"],
         gemma_root=msg["gemma_root"],
         upsampler_path=msg["upsampler_path"],
         device=DEV,
         block_swap_blocks_on_gpu=int(msg["block_swap_blocks_on_gpu"]),
-        gguf_transformer_path=msg["gguf_transformer_path"],
+        gguf_transformer_path=gguf_t,
+        safetensors_transformer_path=st,
         gguf_gemma_path=msg["gguf_gemma_path"],
         gguf_per_layer_quant=bool(msg["gguf_per_layer_quant"]),
         vae_spatial_tile_size=int(msg["vae_spatial_tile_size"]),
@@ -680,7 +691,9 @@ def _resolve_keep_resident(msg: dict, bs_prefetch: bool) -> tuple[bool, str | No
     assert _PIPE is not None  # only reachable from a post-load generate op
     # 直接属性アクセス（getattrの既定値ではなく）：属性が消えたらガードが
     # 黙って素通りになるより AttributeError で落ちるほうがよい。
-    if not _PIPE._gguf_per_layer_quant:
+    # The fp8 transformer's forward is always out of place (engine/fp8), so
+    # only the GGUF bf16 fused path can contaminate the cache.
+    if _PIPE._transformer_format == "gguf" and not _PIPE._gguf_per_layer_quant:
         raise RuntimeError(
             "worker: keep_resident=1 is not allowed with "
             "gguf_per_layer_quant=0 - the bf16 fused-LoRA path mutates the "

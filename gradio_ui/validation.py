@@ -27,10 +27,9 @@ def check_chain_total(clip_frames, fps, overlap_frames, lang: str = _DEFAULT_LAN
 
     ``stage2_window`` (ADDITIVE): the stage-2 window preset NAME the request will
     carry. ``None`` -> the default preset, i.e. exactly the geometry this
-    function computed before the knob existed. This Gradio tab has no window
-    selector today, so it always resolves to "standard" in practice; the
-    parameter exists so the precheck can never silently diverge from the server
-    if one is ever added — the two must agree byte-for-byte (that is this
+    function computed before the knob existed. The Clip Chain tab's window
+    dropdown (§3-165) passes its value here, so the precheck runs the same
+    geometry the server will — the two must agree byte-for-byte (that is this
     module's entire reason to exist).
 
     NOTE on argument order: ``stage2_window`` is appended AFTER ``lang``

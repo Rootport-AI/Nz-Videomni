@@ -1152,6 +1152,48 @@ def test_submit_chain_input_schema_exposes_vae_mode_enum():
     assert prop["default"] == "default"
 
 
+# ---------- stage2_window (§3-165 追補: MCP submit_chain に stage2_window) ---
+
+
+# The chain-body capture helper is the shared _capture_chain_body defined
+# further down (§3-164 section; one clip). Resolved at call time.
+
+
+def test_submit_chain_stage2_window_non_default_is_sent():
+    body = _capture_chain_body(stage2_window="w46")
+    assert body["stage2_window"] == "w46"
+
+
+@pytest.mark.parametrize("kwargs", [{}, {"stage2_window": "standard"}])
+def test_submit_chain_stage2_window_default_is_omitted_and_key_set_unchanged(kwargs):
+    # Omitting it and passing the server default must be indistinguishable:
+    # same rule as vae_mode (sent only when it differs from "standard").
+    body = _capture_chain_body(**kwargs)
+    assert "stage2_window" not in body
+    assert set(body.keys()) == {
+        "prompt", "width", "height", "frame_rate", "seed",
+        "overlap_frames", "overlap_strength", "clips", "chunked_upsample",
+    }
+
+
+def test_submit_chain_input_schema_stage2_window_enum_matches_presets():
+    # Parity: the Literal in submit_chain is written out statically, so a
+    # change to chain_math.STAGE2_WINDOW_PRESETS must fail here rather than
+    # drift silently.
+    import chain_math
+
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "submit_chain")
+    prop = tool.inputSchema["properties"]["stage2_window"]
+    assert len(prop["enum"]) == 16
+    assert set(prop["enum"]) == set(chain_math.STAGE2_WINDOW_PRESETS)
+    assert prop["default"] == "standard"
+
+
 def test_submit_chain_payload_contract_key_set_unchanged_with_default_block_swap_prefetch():
     # Explicitly passing the default (True, post-S4) must be indistinguishable
     # from omitting it.

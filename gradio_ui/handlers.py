@@ -1189,7 +1189,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        # conditions into the mp4" checkbox (§3-164), appended
                        # after keep_resident_embeddings and forwarded as a
                        # KEYWORD by ui.py's chain_dispatch.
-                       embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT):
+                       embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT,
+                       # Stage-2 window (ADDITIVE, last, §3-165): the chain
+                       # tab's window dropdown, forwarded as a KEYWORD by
+                       # ui.py's chain_dispatch. ``None`` / the default
+                       # ("standard") keeps the key off the payload.
+                       stage2_window=None):
         # Runtime language + poll cadence from Settings (S6); optional so the
         # pre-S6 signature and existing tests are unchanged.
         # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
@@ -1382,6 +1387,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         err = check_chain_total(
             clip_frames, fps, kv, lang,
             source_context_px=int(context_frames) if mode == MODE_V2V else None,
+            stage2_window=stage2_window or None,
         )
         if err is not None:
             yield _precheck_reject(err), "", None
@@ -1548,6 +1554,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # the key rides only on an unchecked box).
         if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
             payload["embed_mp4_metadata"] = bool(embed_mp4_metadata)
+        # Stage-2 window (additive, conditional, §3-165): appended last and
+        # omitted at the default, like the WebUI (chainUtils.ts), so a chain
+        # that never touches the dropdown stays byte-identical to before.
+        import chain_math   # function-local, like the other helpers here
+        if stage2_window and stage2_window != chain_math.STAGE2_WINDOW_DEFAULT:
+            payload["stage2_window"] = stage2_window
 
         try:
             resp = api.generate_chain(payload)

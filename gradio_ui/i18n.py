@@ -269,6 +269,14 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_chain_preset": "Preset",
         "info_chain_preset": ("Automatically fills in the resolution, frame rate, and the "
                               "recommended (comfortable-limit) frame count for each clip."),
+        # Stage-2 window dropdown (§3-165). The option template's numbers are
+        # computed by gradio_ui/comfort.py (same wording as the WebUI's
+        # stage2Window.optionTemplate); {engine} is /models display_name.
+        "lbl_stage2_window": "Stage-2 (upscale pass) clip length",
+        "info_stage2_window": ("A longer clip length means fewer seams, but each segment is "
+                               "heavier to process. Going above the resolution shown in the "
+                               "option's label may slow generation down because of VRAM overflow."),
+        "stage2_window_option": "{frames}f ({engine} {width}×{height})",
         "lbl_overlap": "Transition frames (overlap between clips, 1-8)",
         "lbl_overlap_strength": "Transition strength",
         "cap_crossfade": "Clips are joined with a cross-fade-like blend using these settings.",
@@ -824,6 +832,10 @@ LABELS: dict[str, dict[str, str]] = {
         # --- clip chain tab (S5) ---
         "lbl_chain_preset": "プリセット",
         "info_chain_preset": "解像度・フレームレート・各クリップの推奨フレーム数（快適上限）を自動入力します。",
+        "lbl_stage2_window": "Stage-2（アップスケール工程）のクリップ長",
+        "info_stage2_window": ("クリップ長が長いほど継ぎ目が減りますが、1回あたりの負荷が増えます。"
+                               "ラベルの目安解像度を超えるとVRAM溢れで遅くなることがあります。"),
+        "stage2_window_option": "{frames}f（{engine} {width}×{height}）",
         "lbl_overlap": "つなぎ目のフレーム数 (クリップ間のオーバーラップ・1〜8)",
         "lbl_overlap_strength": "つなぎ目の強さ",
         "cap_crossfade": "クリップ間はこの設定でクロスフェード的に接続されます。",

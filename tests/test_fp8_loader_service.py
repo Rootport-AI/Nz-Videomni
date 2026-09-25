@@ -12,6 +12,10 @@ Pins the three install steps without any weights or GPU:
     fp8 tensor outside a Linear, and the pipeline's ``_install_fp8``);
   * the pipeline accepts exactly one transformer source.
 
+B-2 additions (shared with engine25): the loader's 0-dim scale and
+text_embedding_projection skip, ``fp8_transformer_sd_ops`` and
+``load_connector_bf16``.
+
 Run with ``.venv-engine`` and ``--noconftest``; the app venv skips the module.
 """
 
@@ -32,7 +36,12 @@ import torch.nn as nn  # noqa: E402
 from ltx_core.quantization import QuantizationPolicy  # noqa: E402
 
 import sft_fp8_format  # noqa: E402
-from engine.fp8.quant_service import Fp8LoaderService, Fp8StateDictLoader  # noqa: E402
+from engine.fp8.quant_service import (  # noqa: E402
+    Fp8LoaderService,
+    Fp8StateDictLoader,
+    fp8_transformer_sd_ops,
+    load_connector_bf16,
+)
 
 _LAYOUT = types.SimpleNamespace(
     flavor="scaled",
@@ -86,6 +95,10 @@ def test_install_replaces_loader_and_policy(fake_inspect):
     assert isinstance(loader, Fp8StateDictLoader)
     assert loader.path == "X.safetensors" and loader.layout is _LAYOUT
     assert loader.metadata("") == _LAYOUT.config
+    # prefixed file: the very SDOps the wheel's ModelLedger puts there (2.3 unchanged)
+    from ltx_core.model.transformer import LTXV_MODEL_COMFY_RENAMING_MAP
+
+    assert ledger.transformer_builder.model_sd_ops is LTXV_MODEL_COMFY_RENAMING_MAP
 
     policy = ledger.quantization
     assert policy.sd_ops is None
@@ -231,9 +244,181 @@ def test_gemma_connectors_from_fp8_safetensors(tmp_path):
     loader._connector_sd_ops = None
     out = loader._load_gguf_connectors(torch.device("cpu"))
     assert set(out) == {p + "video_embeddings_connector.w", p + "audio_embeddings_connector.b"}
+    assert all(t.dtype == torch.bfloat16 for t in out.values())
     assert torch.equal(out[p + "video_embeddings_connector.w"], v)
     assert torch.equal(out[p + "audio_embeddings_connector.b"], a.to(torch.bfloat16))
 
     loader._connector_gguf_path = str(tmp_path / "t.bin")
     with pytest.raises(RuntimeError, match="expected a .gguf or .safetensors"):
         loader._load_gguf_connectors(torch.device("cpu"))
+
+
+def test_gemma_connectors_from_bare_fp8_safetensors(tmp_path):
+    """A bare-named file with a scaled fp8 connector: keys come back in the
+    original ``model.diffusion_model.`` form, upcast times the scale."""
+    from safetensors.torch import save_file
+
+    from engine.gemma.gguf_quant_service import GemmaGGUFQuantStateDictLoader
+
+    w = torch.randn(3, 2).to(torch.float8_e4m3fn)
+    path = tmp_path / "bare.safetensors"
+    save_file(
+        {
+            "video_embeddings_connector.w.weight": w,
+            "video_embeddings_connector.w.weight_scale": torch.tensor([0.5]),
+            "transformer_blocks.0.attn1.to_q.weight": torch.zeros(2, 2).to(torch.float8_e4m3fn),
+        },
+        str(path),
+    )
+    loader = GemmaGGUFQuantStateDictLoader.__new__(GemmaGGUFQuantStateDictLoader)
+    loader._connector_gguf_path = str(path)
+    loader._connector_sd_ops = None
+    out = loader._load_gguf_connectors(torch.device("cpu"))
+    key = "model.diffusion_model.video_embeddings_connector.w.weight"
+    assert set(out) == {key}
+    assert torch.equal(out[key], (w.to(torch.float32) * 0.5).to(torch.bfloat16))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# B-2: pieces shared with engine25
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _bare_layout(**over):
+    kw = dict(
+        flavor="scaled",
+        config={"transformer": {}},
+        model_version="2.5.0",
+        prefix="",
+        scaled_layers=frozenset({"transformer_blocks.0.attn1.to_q"}),
+        connector_keys=("video_embeddings_connector.w",),
+        n_blocks=1,
+    )
+    kw.update(over)
+    return types.SimpleNamespace(**kw)
+
+
+def test_loader_scale_shape_1_becomes_0_dim_and_text_projection_is_skipped(tmp_path):
+    from safetensors.torch import save_file
+
+    lin = "transformer_blocks.0.attn1.to_q"
+    w = torch.randn(2, 2).to(torch.float8_e4m3fn)
+    path = tmp_path / "bare.safetensors"
+    save_file(
+        {
+            f"{lin}.weight": w,
+            f"{lin}.weight_scale": torch.tensor([0.25]),
+            f"{lin}.input_scale": torch.tensor([1.0]),
+            "transformer_blocks.0.scale_shift_table": torch.randn(2),
+            "text_embedding_projection.video_aggregate_embed.weight": torch.randn(2, 2).to(torch.bfloat16),
+            "video_embeddings_connector.w": torch.randn(2).to(torch.bfloat16),
+        },
+        str(path),
+    )
+    loader = Fp8StateDictLoader(str(path), _bare_layout())
+    sd = loader.load("", sd_ops=fp8_transformer_sd_ops("")).sd
+    assert set(sd) == {f"{lin}.weight", f"{lin}.weight_scale", "transformer_blocks.0.scale_shift_table"}
+    assert sd[f"{lin}.weight_scale"].shape == () and sd[f"{lin}.weight_scale"].dtype == torch.float32
+    assert float(sd[f"{lin}.weight_scale"]) == 0.25
+    assert sd[f"{lin}.weight"].dtype == torch.float8_e4m3fn
+    assert sd["transformer_blocks.0.scale_shift_table"].dtype == torch.bfloat16
+
+
+def test_loader_prefixed_file_keeps_0_dim_scale(tmp_path):
+    from safetensors.torch import save_file
+
+    p = "model.diffusion_model."
+    lin = "transformer_blocks.0.attn1.to_q"
+    path = tmp_path / "p.safetensors"
+    save_file(
+        {
+            f"{p}{lin}.weight": torch.randn(2, 2).to(torch.float8_e4m3fn),
+            f"{p}{lin}.weight_scale": torch.tensor(0.5),
+            "text_embedding_projection.aggregate_embed.weight": torch.randn(2, 2).to(torch.bfloat16),
+        },
+        str(path),
+    )
+    loader = Fp8StateDictLoader(str(path), _bare_layout(prefix=p, connector_keys=()))
+    sd = loader.load("", sd_ops=fp8_transformer_sd_ops(p)).sd
+    assert set(sd) == {f"{lin}.weight", f"{lin}.weight_scale"}
+    assert sd[f"{lin}.weight_scale"].shape == ()
+
+
+def test_fp8_transformer_sd_ops_two_branches():
+    from ltx_core.model.transformer import LTXV_MODEL_COMFY_RENAMING_MAP
+
+    assert fp8_transformer_sd_ops("model.diffusion_model.") is LTXV_MODEL_COMFY_RENAMING_MAP
+    bare = fp8_transformer_sd_ops("")
+    # identity: every key matches and nothing is renamed (a matcher-less SDOps
+    # would return None for everything)
+    for key in ("transformer_blocks.0.attn1.to_q.weight", "patchify_proj.bias", "x"):
+        assert bare.apply_to_key(key) == key
+    with pytest.raises(ValueError, match="prefix"):
+        fp8_transformer_sd_ops("diffusion_model.")
+
+
+@pytest.mark.parametrize("prefix", ["model.diffusion_model.", ""], ids=["prefixed", "bare"])
+def test_load_connector_bf16_four_dtypes_and_excluded_keys(tmp_path, prefix):
+    from safetensors.torch import save_file
+
+    c = prefix + "video_embeddings_connector."
+    a = prefix + "audio_embeddings_connector."
+    bf16 = torch.randn(2, 3).to(torch.bfloat16)
+    f32 = torch.randn(3)
+    fp8 = torch.randn(2, 3).to(torch.float8_e4m3fn)
+    fp8s = torch.randn(2, 3).to(torch.float8_e5m2)
+    marker = torch.tensor(list(b'{"format":"float8_e5m2"}'), dtype=torch.uint8)
+    path = tmp_path / "c.safetensors"
+    save_file(
+        {
+            prefix + "transformer_blocks.0.attn1.to_q.weight": torch.zeros(2, 2).to(torch.float8_e4m3fn),
+            c + "bf.weight": bf16,
+            c + "f.bias": f32,
+            a + "plain.weight": fp8,
+            a + "scaled.weight": fp8s,
+            a + "scaled.weight_scale": torch.tensor([2.0]),
+            a + "scaled.input_scale": torch.tensor([1.0]),
+            a + "scaled.comfy_quant": marker,
+        },
+        str(path),
+    )
+    out = load_connector_bf16(str(path))
+    assert set(out) == {
+        "video_embeddings_connector.bf.weight",
+        "video_embeddings_connector.f.bias",
+        "audio_embeddings_connector.plain.weight",
+        "audio_embeddings_connector.scaled.weight",
+    }
+    assert all(t.dtype == torch.bfloat16 for t in out.values())
+    assert torch.equal(out["video_embeddings_connector.bf.weight"], bf16)
+    assert torch.equal(out["video_embeddings_connector.f.bias"], f32.to(torch.bfloat16))
+    assert torch.equal(out["audio_embeddings_connector.plain.weight"], fp8.to(torch.bfloat16))
+    assert torch.equal(
+        out["audio_embeddings_connector.scaled.weight"],
+        (fp8s.to(torch.float32) * 2.0).to(torch.bfloat16),
+    )
+
+
+def test_load_connector_bf16_fp8_bias_is_not_scaled(tmp_path):
+    """A connector layer with a scaled fp8 .weight and an fp8 .bias: the scale
+    belongs to the weight only, so the bias comes back as a plain cast."""
+    from safetensors.torch import save_file
+
+    lay = "video_embeddings_connector.proj"
+    w = torch.full((2, 3), 1.5).to(torch.float8_e4m3fn)
+    b = torch.full((2,), 1.5).to(torch.float8_e4m3fn)
+    path = tmp_path / "bias.safetensors"
+    save_file(
+        {
+            "transformer_blocks.0.attn1.to_q.weight": torch.zeros(2, 2).to(torch.float8_e4m3fn),
+            f"{lay}.weight": w,
+            f"{lay}.weight_scale": torch.tensor([2.0]),
+            f"{lay}.bias": b,
+        },
+        str(path),
+    )
+    out = load_connector_bf16(str(path))
+    assert set(out) == {f"{lay}.weight", f"{lay}.bias"}
+    assert out[f"{lay}.bias"].dtype == torch.bfloat16
+    assert torch.equal(out[f"{lay}.bias"], b.to(torch.bfloat16))
+    assert torch.equal(out[f"{lay}.weight"], (w.to(torch.float32) * 2.0).to(torch.bfloat16))

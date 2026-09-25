@@ -674,7 +674,7 @@ def _log_ignored(request, table: dict[str, str] | None = None) -> None:
 
 
 def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
-    """Rule on a transformer GGUF's KV header for the LTX 2.5 engine (§2.2).
+    """Rule on a transformer's KV header for the LTX 2.5 engine (§2.2).
 
     Same two-step contract, same missing-key-is-a-WARNING discipline and same
     "only the transformer is judged" rule as the 2.3 adapter's ``check_kv``;
@@ -689,7 +689,7 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
     architecture = (kv.get("general.architecture") or "").strip()
     if not architecture:
         logger.warning(
-            "model '%s' declares no general.architecture in its GGUF header; "
+            "model '%s' declares no general.architecture in its header; "
             "loading it anyway (the engine's own loader has the last word).",
             name,
         )
@@ -705,7 +705,7 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
     version = (kv.get("model_version") or "").strip()
     if not version:
         logger.warning(
-            "model '%s' declares no model_version in its GGUF header; loading "
+            "model '%s' declares no model_version in its header; loading "
             "it anyway (assuming it matches this engine's LTX generation).",
             name,
         )

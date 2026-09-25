@@ -202,6 +202,7 @@ def test_loader_skips_keys_that_sd_ops_drops(tmp_path, monkeypatch):
     layout = types.SimpleNamespace(
         config={"transformer": {}},
         flavor="scaled",
+        prefix=p,
         connector_keys=(p + "video_embeddings_connector.w",),
     )
     counter = {"n": 0}

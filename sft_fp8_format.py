@@ -1,4 +1,4 @@
-"""fp8 safetensors transformer: header reader + acceptance check (§3-167 B-1).
+"""fp8 safetensors transformer: header reader + acceptance check (§3-167 B-1, B-2).
 
 SINGLE SOURCE OF TRUTH for "which fp8 safetensors transformer does this
 product accept", shared by:
@@ -32,7 +32,9 @@ __all__ = [
     "Header",
     "Layout",
     "TensorInfo",
+    "detect_prefix",
     "inspect",
+    "parse_metadata",
     "read_header",
     "read_tensor_bytes",
 ]
@@ -76,6 +78,12 @@ _QUANT_SUFFIX = ".comfy_quant"
 #: Last key segments of the old ComfyUI "scaled_fp8" layout (not supported).
 _LEGACY_LEAVES = frozenset({"scaled_fp8", "scale_weight"})
 _CONNECTOR_MARK = "_embeddings_connector."
+#: Text-encoder side projection; a bare-named file keeps it inside the (empty)
+#: prefix, so it is excluded from ``scaled_layers`` like the connectors.
+_TEXT_PROJ_HEAD = "text_embedding_projection."
+#: Key prefix of a ComfyUI-style file; a bare-named file has none ("").
+_COMFY_PREFIX = "model.diffusion_model."
+_FIRST_BLOCK = "transformer_blocks.0."
 
 
 @dataclass(frozen=True)
@@ -99,9 +107,9 @@ class Layout:
     flavor: str  # "scaled" if any layer is scaled, else "plain" (kept for compatibility)
     config: dict  # json.loads(metadata["config"]) (required)
     model_version: str | None  # metadata.get("model_version")
-    prefix: str  # "model.diffusion_model."
-    scaled_layers: frozenset[str]  # prefix-less Linear names, ".weight" removed (plain: empty)
-    connector_keys: tuple[str, ...]  # full (prefixed) "*_embeddings_connector.*" keys
+    prefix: str  # "model.diffusion_model." or "" (bare names), see detect_prefix
+    scaled_layers: frozenset[str]  # prefix-less transformer Linear names, ".weight" removed (plain: empty)
+    connector_keys: tuple[str, ...]  # full (with prefix) "*_embeddings_connector.*" keys
     n_blocks: int
 
 
@@ -194,6 +202,21 @@ def _read_range(fh, header: Header, key: str) -> bytes:
     return data
 
 
+def parse_metadata(header: Header) -> dict:
+    """``__metadata__`` with each value JSON-parsed when it is valid JSON, else the raw string.
+
+    Same shape as ltx_core 1.2's ``SafetensorsModelStateDictLoader.metadata``
+    (``ltx_core/loader/sft_loader.py``), without opening the file again.
+    """
+    parsed: dict = {}
+    for key, value in header.metadata.items():
+        try:
+            parsed[key] = json.loads(value)
+        except json.JSONDecodeError:
+            parsed[key] = value
+    return parsed
+
+
 # --------------------------------------------------------------------------- #
 # acceptance (owner ruling 2026-09-25: "an fp8 file a typical ComfyUI workflow
 # runs must run here when dropped in")
@@ -202,31 +225,43 @@ def _read_range(fh, header: Header, key: str) -> bytes:
 _NG = "fp8 safetensors の検査に不合格: "
 
 
-def inspect(
-    path,
-    *,
-    expected_blocks: int = 48,
-    prefix: str = "model.diffusion_model.",
-) -> Layout:
+def detect_prefix(header: Header) -> str:
+    """The transformer key prefix: ``"model.diffusion_model."`` or ``""`` (bare names).
+
+    Judged by where ``transformer_blocks.0.`` lives; neither -> refused.
+    """
+    keys = header.tensors
+    if any(k.startswith(_COMFY_PREFIX + _FIRST_BLOCK) for k in keys):
+        return _COMFY_PREFIX
+    if any(k.startswith(_FIRST_BLOCK) for k in keys):
+        return ""
+    raise Fp8FormatError(
+        _NG + f"'{_COMFY_PREFIX}{_FIRST_BLOCK}' も '{_FIRST_BLOCK}' もありません"
+        "（接頭辞が違うか、transformer ではありません）"
+    )
+
+
+def inspect(path, *, expected_blocks: int = 48) -> Layout:
     """Accept or refuse an fp8 safetensors transformer.
 
     Rules finalized by the owner on 2026-09-25 (canonical: Docs/VERIFICATION_LOG.md
     §117.3). Failures raise :class:`Fp8FormatError` naming the failing spot in
     one line.
 
-    Reads the header plus the ``comfy_quant`` payloads only. Tensors outside
-    ``prefix`` (``vae.*`` / ``audio_vae.*`` / ``vocoder.*`` /
-    ``text_embedding_projection.*`` of a monolithic checkpoint) are ignored —
-    except that no fp8 tensor may live there.
+    Reads the header plus the ``comfy_quant`` payloads only. The key prefix is
+    detected (:func:`detect_prefix`). Tensors outside it (``vae.*`` /
+    ``audio_vae.*`` / ``vocoder.*`` / ``text_embedding_projection.*`` of a
+    monolithic checkpoint) are ignored — except that no fp8 tensor may live
+    there. A bare-named file (prefix ``""``) has nothing outside.
     """
     header = read_header(path)
     tensors = header.tensors
 
     # 1) __metadata__.config with a transformer section (required: without it
-    #    ComfyUI cannot build LTX 2.3 either)
+    #    ComfyUI cannot build the LTX model either)
     raw_config = header.metadata.get("config")
     if raw_config is None:
-        raise Fp8FormatError(_NG + "__metadata__ に config がありません（ComfyUI でも LTX 2.3 として組めない形です）")
+        raise Fp8FormatError(_NG + "__metadata__ に config がありません（ComfyUI でも LTX として組めない形です）")
     try:
         config = json.loads(raw_config)
     except Exception as exc:  # noqa: BLE001
@@ -235,10 +270,9 @@ def inspect(
         raise Fp8FormatError(_NG + "__metadata__.config に transformer がありません")
 
     # 2) prefix + block count
+    prefix = detect_prefix(header)
     block_re = re.compile(re.escape(prefix) + r"transformer_blocks\.(\d+)\.")
     blocks = {int(m.group(1)) for k in tensors if (m := block_re.match(k))}
-    if not blocks:
-        raise Fp8FormatError(_NG + f"'{prefix}transformer_blocks.N.' のキーがありません（接頭辞が違います）")
     if blocks != set(range(expected_blocks)):
         raise Fp8FormatError(
             _NG + f"transformer_blocks が {len(blocks)} 個（番号 {min(blocks)}..{max(blocks)}）で、"
@@ -277,16 +311,19 @@ def inspect(
     if not fp8_weights:
         raise Fp8FormatError(_NG + "fp8 の重みが 1 本もありません（bf16 等の非 fp8 ファイルは未対応です）")
 
-    # 4) per-layer scales and quantization markers
+    # 4) per-layer scales and quantization markers (connectors included: same
+    #    rules). Only the transformer's own Linears go to scaled_layers — the
+    #    connectors and text_embedding_projection belong to the text encoder side.
     scaled = _scaled_layers(path, header, prefix, {k[: -len(".weight")] for k in fp8_weights})
+    scaled = {
+        layer for layer in scaled
+        if _CONNECTOR_MARK not in layer and not layer[len(prefix):].startswith(_TEXT_PROJ_HEAD)
+    }
 
-    # 5) Gemma-side embeddings connector must be present and float
+    # 5) Gemma-side embeddings connector must be present (dtypes were checked in step 3)
     connector_keys = tuple(sorted(k for k in tensors if k.startswith(prefix) and _CONNECTOR_MARK in k))
     if not connector_keys:
         raise Fp8FormatError(_NG + f"'{prefix}*{_CONNECTOR_MARK}*'（テキスト埋め込みの connector）がありません")
-    for key in connector_keys:
-        if tensors[key].dtype not in _FLOAT_DTYPES:
-            raise Fp8FormatError(_NG + f"connector '{key}' が {tensors[key].dtype} です（BF16 か F32 のみ）")
 
     return Layout(
         flavor="scaled" if scaled else "plain",
@@ -302,8 +339,9 @@ def inspect(
 def _scaled_layers(path, header: Header, prefix: str, fp8_layers: set[str]) -> set[str]:
     """Judge scales and markers layer by layer; return the prefixed scaled layers.
 
-    * ``<layer>.weight_scale`` present -> scaled (must be a scalar F32 and
-      belong to an fp8 ``.weight``); absent -> plain cast. Both may coexist.
+    * ``<layer>.weight_scale`` present -> scaled (must be a scalar F32 — shape
+      ``()`` or ``(1,)`` — and belong to an fp8 ``.weight``); absent -> plain
+      cast. Both may coexist.
     * ``<layer>.comfy_quant`` (optional) and ``__metadata__._quantization_metadata``
       (optional) must name fp8 formats only.
     * ``<layer>.input_scale`` is allowed and ignored (activation scale; this
@@ -322,7 +360,7 @@ def _scaled_layers(path, header: Header, prefix: str, fp8_layers: set[str]) -> s
         layer = key[: -len(_SCALE_SUFFIX)]
         if layer not in fp8_layers:
             raise Fp8FormatError(_NG + f"倍率 '{key}' に対応する fp8 の .weight がありません（孤立した倍率）")
-        if info.dtype != "F32" or info.shape != ():
+        if info.dtype != "F32" or info.shape not in ((), (1,)):
             raise Fp8FormatError(
                 _NG + f"倍率 '{key}' が {info.dtype}{list(info.shape)} です"
                 "（受理するのは F32 のスカラー倍率のみ。per-row／per-block は未対応）"

@@ -1,0 +1,10 @@
+Only in comfort-calib-2026-09-26: mkplan_commands.sh
+Files comfort-calib-2026-09-25/selftest/parser_selftest.py and comfort-calib-2026-09-26/selftest/parser_selftest.py differ
+DIFFERS: README.md
+DIFFERS: selftest/parser_selftest.py
+same: calib.py
+same: mkplan.py
+same: make_results.py
+same: batch_table.py
+same: vram_sampler2.ps1
+same: selftest/analyse_selftest.py

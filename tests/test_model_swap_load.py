@@ -213,6 +213,23 @@ def test_load_payload_selection_overrides_only_named_field(real_paths):
     assert list(p) == GOLDEN_PAYLOAD_KEYS
 
 
+def test_load_payload_fp8_safetensors_transformer_appends_one_key(real_paths):
+    """§3-167 B-1: a .safetensors transformer blanks gguf_transformer_path and
+    APPENDS safetensors_transformer_path — the 14 golden keys keep their order,
+    every other value is the golden one."""
+    cfg, gemma_root, paths, descriptor = real_paths
+    backend = _backend(cfg, descriptor)
+    fp8 = _touch(paths["tr"].parent.parent / "fp8" / "Sulphur-fp8.SafeTensors")
+    p = backend._build_load_payload({"transformer": str(fp8)})
+    golden = _golden(cfg, gemma_root, paths)
+    assert list(p) == GOLDEN_PAYLOAD_KEYS + ["safetensors_transformer_path"]
+    assert p["gguf_transformer_path"] == ""
+    assert p["safetensors_transformer_path"] == str(fp8)
+    for key in GOLDEN_PAYLOAD_KEYS:
+        if key != "gguf_transformer_path":
+            assert p[key] == golden[key]
+
+
 def test_load_payload_all_four_categories_map_to_expected_fields(real_paths):
     cfg, _gemma_root, paths, descriptor = real_paths
     backend = _backend(cfg, descriptor)
@@ -294,6 +311,67 @@ def test_precheck_extension_category_mismatch(tmp_path):
         precheck_model_file("transformer", "weights", st, descriptor=transformer)
     assert ei.value.code == "MODEL_INCOMPATIBLE"
     assert ei.value.status_code == 422
+
+
+def _shipped_ltx23():
+    from services.base_models import load_base_models
+
+    return load_base_models(AppConfig().manifest_dir)["LTX23"]
+
+
+def _fp8_transformer(path, model_version: str | None = "2.3.0"):
+    from test_sft_fp8_format import _model, _write
+
+    spec, meta, payloads = _model("scaled")
+    if model_version is None:
+        del meta["model_version"]
+    else:
+        meta["model_version"] = model_version
+    return _write(path, spec, meta, payloads)
+
+
+def test_precheck_accepts_fp8_safetensors_transformer(tmp_path):
+    """§3-167 B-1: the shipped LTX 2.3 transformer category takes an fp8
+    safetensors; the precheck answers in the KV dialect check_kv rules on."""
+    from services import engines
+
+    descriptor = _shipped_ltx23()
+    path = _fp8_transformer(tmp_path / "Sulphur-fp8.safetensors")
+    kv = precheck_model_file(
+        "transformer", "Sulphur-fp8", path, descriptor=descriptor.categories["transformer"]
+    )
+    assert kv == {"general.architecture": "ltxv", "model_version": "2.3.0"}
+    engines.check_kv(descriptor, "transformer", "Sulphur-fp8", kv)  # no raise
+    # No model_version in __metadata__ -> the key is left out (check_kv warns).
+    bare = _fp8_transformer(tmp_path / "bare.safetensors", model_version=None)
+    assert precheck_model_file("transformer", "bare", bare) == {"general.architecture": "ltxv"}
+
+
+def test_precheck_refuses_non_accepted_fp8_safetensors_transformer(tmp_path):
+    """A header that fails sft_fp8_format.inspect is MODEL_INCOMPATIBLE (422),
+    with the one-line reason as the detail."""
+    st = _touch(tmp_path / "weights.safetensors", struct.pack("<Q", 2) + b"{}")
+    with pytest.raises(APIError) as ei:
+        precheck_model_file(
+            "transformer", "weights", st, descriptor=_shipped_ltx23().categories["transformer"]
+        )
+    assert ei.value.code == "MODEL_INCOMPATIBLE" and ei.value.status_code == 422
+    assert "fp8 safetensors の検査に不合格" in (ei.value.detail or "")
+
+
+def test_ltx25_fp8_safetensors_on_ltx23_is_refused_by_check_kv(tmp_path):
+    """No new fingerprinting: __metadata__.model_version 2.5 makes the existing
+    family ruling refuse it for the LTX 2.3 base model (422)."""
+    from services import engines
+
+    descriptor = _shipped_ltx23()
+    path = _fp8_transformer(tmp_path / "ltx25-fp8.safetensors", model_version="2.5.0")
+    kv = precheck_model_file(
+        "transformer", "ltx25-fp8", path, descriptor=descriptor.categories["transformer"]
+    )
+    with pytest.raises(APIError) as ei:
+        engines.check_kv(descriptor, "transformer", "ltx25-fp8", kv)
+    assert ei.value.code == "MODEL_INCOMPATIBLE" and ei.value.status_code == 422
 
 
 # --------------------------------------------------------------------------- #

@@ -44,6 +44,7 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
+import sft_fp8_format
 from api.errors import APIError, model_file_missing, model_incompatible, model_not_found
 from config import PROJECT_ROOT, AppConfig
 from services.base_models import BaseModelDescriptor, CategoryDescriptor, load_base_models
@@ -138,8 +139,14 @@ def precheck_model_file(
     and this module refuses to guess with a hard-coded table): the file's own
     suffix then picks the structural check, and any other suffix is rejected.
 
-    Returns the GGUF KV metadata read along the way (``{}`` for safetensors and
-    for a GGUF that declares none of :data:`GGUF_ENGINE_KV_KEYS`). Raises
+    A ``.safetensors`` offered as the ``transformer`` is ruled on by the fp8
+    acceptance check (:func:`sft_fp8_format.inspect`, §3-167) instead of the
+    bare header check.
+
+    Returns the GGUF KV metadata read along the way (``{}`` for other
+    safetensors and for a GGUF that declares none of
+    :data:`GGUF_ENGINE_KV_KEYS`; an accepted fp8 transformer yields the same
+    keys taken from its ``__metadata__``). Raises
     ``model_incompatible`` (422) on any failure, including a malformed GGUF
     header (:class:`services.gguf_kv.GgufParseError`).
     """
@@ -160,6 +167,12 @@ def precheck_model_file(
     try:
         if suffix == ".gguf":
             return _precheck_gguf(category, name, path)
+        if category == "transformer":
+            # fp8 safetensors transformer (§3-167 B-1). ``inspect`` reads the
+            # header itself with every check ``_precheck_safetensors`` makes
+            # (length 0 / past EOF / over 100 MB / broken JSON) and more, so
+            # the generic check is skipped here instead of reading it twice.
+            return _precheck_fp8_transformer(category, name, path)
         _precheck_safetensors(category, name, path)
         return {}
     except APIError:
@@ -181,6 +194,28 @@ def _precheck_gguf(category: str, name: str, path: Path) -> dict[str, str]:
         raise model_incompatible(
             category, name, detail=f"not a readable GGUF file: {exc}"
         ) from exc
+
+
+def _precheck_fp8_transformer(category: str, name: str, path: Path) -> dict[str, str]:
+    """Rule on an fp8 safetensors transformer with :func:`sft_fp8_format.inspect`.
+
+    The acceptance table lives in that module alone (the engine calls the same
+    function at load time). The return value speaks the GGUF KV dialect so the
+    existing ``engines.check_kv`` does the family/generation ruling unchanged:
+    a safetensors transformer has no ``general.architecture`` KV, but passing
+    ``inspect`` (prefix + block count + config) is what makes it ``ltxv``, and
+    ``__metadata__.model_version`` stands in for the GGUF ``model_version``.
+    Empty values are left out (a missing key is check_kv's WARNING case).
+    """
+    try:
+        layout = sft_fp8_format.inspect(path)
+    except sft_fp8_format.Fp8FormatError as exc:
+        raise model_incompatible(category, name, detail=str(exc)) from exc
+    kv = {"general.architecture": "ltxv"}
+    version = (layout.model_version or "").strip()
+    if version:
+        kv["model_version"] = version
+    return kv
 
 
 def _precheck_safetensors(category: str, name: str, path: Path) -> None:

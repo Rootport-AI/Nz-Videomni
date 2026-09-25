@@ -7,7 +7,7 @@
   "categories": {
     "transformer": {
       "scan": ["LTX23/Weights"],
-      "extensions": [".gguf"],
+      "extensions": [".gguf", ".safetensors"],
       "recursive": true,
       "default_file": "LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
     },

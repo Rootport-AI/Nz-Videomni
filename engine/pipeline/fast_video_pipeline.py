@@ -94,6 +94,7 @@ class LTXFastVideoPipeline:
         component_video_vae_pruned_path: str = "",
         te_offload_text_encoder: bool = True,
         dit_cpu_load: bool = True,
+        safetensors_transformer_path: str = "",
         *,
         ic_loras: list[IcLoraEntry] | None = None,
         ic_reference: tuple[str, float] | None = None,
@@ -120,6 +121,7 @@ class LTXFastVideoPipeline:
             component_video_vae_pruned_path=component_video_vae_pruned_path,
             te_offload_text_encoder=te_offload_text_encoder,
             dit_cpu_load=dit_cpu_load,
+            safetensors_transformer_path=safetensors_transformer_path,
             ic_loras=ic_loras,
             ic_reference=ic_reference,
             ic_attention_strength=ic_attention_strength,
@@ -147,6 +149,7 @@ class LTXFastVideoPipeline:
         component_video_vae_pruned_path: str = "",
         te_offload_text_encoder: bool = True,
         dit_cpu_load: bool = True,
+        safetensors_transformer_path: str = "",
         *,
         ic_loras: list[IcLoraEntry] | None = None,
         ic_reference: tuple[str, float] | None = None,
@@ -252,16 +255,26 @@ class LTXFastVideoPipeline:
             "component_video_vae_path": component_video_vae_path,
             "component_audio_vae_path": component_audio_vae_path,
             "component_text_projection_path": component_text_projection_path,
-            "gguf_transformer_path": gguf_transformer_path,
             "gguf_gemma_path": gguf_gemma_path,
         }
         _missing = [name for name, val in _required.items() if not val]
+        if not gguf_transformer_path and not safetensors_transformer_path:
+            _missing.append("gguf_transformer_path or safetensors_transformer_path")
         if _missing:
             raise RuntimeError(
                 "LTXFastVideoPipeline requires the GGUF + component-file sources "
                 "(the monolith/QAT path is retired); missing/empty: "
                 + ", ".join(_missing)
             )
+        if gguf_transformer_path and safetensors_transformer_path:
+            raise RuntimeError(
+                "LTXFastVideoPipeline: exactly one transformer source may be given, "
+                f"got both gguf_transformer_path={gguf_transformer_path!r} and "
+                f"safetensors_transformer_path={safetensors_transformer_path!r}"
+            )
+        # Which transformer path this pipeline was built with ("gguf" | "fp8").
+        # Read by the worker's keep_resident guard.
+        self._transformer_format = "fp8" if safetensors_transformer_path else "gguf"
 
         # Transformer device defaults to primary device if not set.
         self._transformer_device = transformer_device or device
@@ -328,6 +341,10 @@ class LTXFastVideoPipeline:
                 per_layer_quant=gguf_per_layer_quant,
                 ic_loras=self._ic_loras,
             )
+        # ── fp8 safetensors transformer (§3-167). NOT wrapped in try/except:
+        # a rejected or broken file must fail the load, never fall back.
+        if safetensors_transformer_path:
+            self._install_fp8(safetensors_transformer_path)
 
         # ── Install Gemma GGUF text encoder (keep 24GB bf16 Gemma compressed on GPU) ──
         # GGUF keeps Gemma quantized in VRAM (~7.3GB Q4_K_M) with per-layer dequant —
@@ -339,12 +356,14 @@ class LTXFastVideoPipeline:
             # non-Gemma monolith survivors off standalone files so the 46GB monolith
             # is no longer opened by ANY builder: aggregate_embed from the projection
             # file (replaces the monolith in model_path) and the 258 connectors
-            # injected from the transformer GGUF. Both must be present to enable the
-            # drop; otherwise the monolith-base path is unchanged.
+            # injected from the transformer file (GGUF or fp8 safetensors). Both
+            # must be present to enable the drop; otherwise the monolith-base path
+            # is unchanged.
+            _transformer_file = gguf_transformer_path or safetensors_transformer_path
             _gemma_component = (
                 use_component_files
                 and component_text_projection_path
-                and gguf_transformer_path
+                and _transformer_file
             )
             self._install_gemma_gguf(
                 gguf_gemma_path,
@@ -353,7 +372,7 @@ class LTXFastVideoPipeline:
                     component_text_projection_path if _gemma_component else None
                 ),
                 connector_gguf_path=(
-                    gguf_transformer_path if _gemma_component else None
+                    _transformer_file if _gemma_component else None
                 ),
                 te_offload=self._te_offload_text_encoder,
             )
@@ -966,6 +985,30 @@ class LTXFastVideoPipeline:
             logging.getLogger(__name__).warning(
                 "GGUF install failed (%s) — falling back to safetensors", exc
             )
+
+    def _install_fp8(self, path: str) -> None:
+        """Install an fp8 safetensors transformer (§3-167 B-1).
+
+        Checks the file with ``sft_fp8_format.inspect`` (a refusal raises and
+        fails the load), then replaces the transformer loader, the quantization
+        policy and the transformer() wrapper — see ``engine/fp8/quant_service``.
+        IC-LoRA is attached per build from the CURRENT job's adapters, exactly
+        like the GGUF per-layer path.
+        """
+        from engine.fp8.quant_service import Fp8LoaderService
+
+        service = Fp8LoaderService(
+            path,
+            dit_cpu_load=self._dit_cpu_load,
+            ic_loras_provider=lambda: self._ic_loras,
+        )
+        service.install(self.pipeline.model_ledger)
+        self._fp8_service = service
+        import logging
+        logging.getLogger(__name__).info(
+            "fp8 safetensors transformer installed (flavor=%s): %s",
+            service.layout.flavor, path,
+        )
 
     def _install_gemma_gguf(
         self,

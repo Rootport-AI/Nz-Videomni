@@ -19,7 +19,7 @@ odd-sized buffer and a 0-dim buffer that exercise the arena's alignment padding
 and the ``reshape(-1)`` guard. Everything runs inside ``torch.inference_mode()``
 because that is where the production install() runs.
 
-What the 16 checks prove, in one line each:
+What the 17 checks prove, in one line each:
 
   C1  ON and OFF produce BIT-identical output (the only thing that changed is
       how the bytes travel, so anything less is a bug).
@@ -47,6 +47,8 @@ What the 16 checks prove, in one line each:
       previous pass's leftover tail block before its slot is reused, teardown()
       gives the ring back, and hold_arenas=False holds nothing while producing
       the same bits.
+  C17 An fp8 Parameter and its 0-dim f32 ``weight_scale`` buffer (the fp8
+      safetensors transformer, §3-167) travel bit-exactly, masters intact.
 """
 
 from __future__ import annotations
@@ -1067,6 +1069,112 @@ def check_c16_arena_ring() -> None:
     )
 
 
+# --------------------------------------------------------------------------- #
+# C17: fp8 Parameter + 0-dim f32 weight_scale (§3-167)                          #
+# --------------------------------------------------------------------------- #
+
+
+class _Fp8Block(nn.Module):
+    """A block shaped like an fp8 safetensors transformer's: one "scaled" fp8
+    Linear (fp8 Parameter + persistent 0-dim f32 ``weight_scale`` buffer), one
+    "plain cast" fp8 Linear, a bf16 LayerNorm — all behind the real
+    ``fp8_linear`` forward from engine.fp8.quant_service."""
+
+    def __init__(self, dim: int, scale: float) -> None:
+        super().__init__()
+        from engine.fp8.quant_service import _patch_model_for_fp8
+
+        self.lin = nn.Linear(dim, dim, bias=True).to(torch.bfloat16)
+        self.plain = nn.Linear(dim, dim, bias=False).to(torch.bfloat16)
+        _patch_model_for_fp8(self, frozenset({"lin"}))
+        self.lin.weight = nn.Parameter(
+            (torch.randn(dim, dim) * 4).to(torch.float8_e4m3fn), requires_grad=False
+        )
+        self.plain.weight = nn.Parameter(
+            (torch.randn(dim, dim) * 0.25).to(torch.float8_e4m3fn), requires_grad=False
+        )
+        self.lin._buffers["weight_scale"] = torch.tensor(scale, dtype=torch.float32)
+        self.norm = nn.LayerNorm(dim).to(torch.bfloat16)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.norm(self.plain(self.lin(x)))
+
+
+def _build_fp8_model(n_blocks: int = 12, dim: int = 256, seed: int = 17) -> _DummyTransformer:
+    torch.manual_seed(seed)
+    return _DummyTransformer([_Fp8Block(dim, 2.0 ** -(4 + i % 3)) for i in range(n_blocks)])
+
+
+def _u8_snapshot(model: nn.Module) -> list[torch.Tensor]:
+    """Byte view of every parameter/buffer (torch.equal is not defined for fp8)."""
+    out = []
+    for mod in model.modules():
+        for t in (*mod._parameters.values(), *mod._buffers.values()):
+            if t is not None:
+                out.append(t.detach().cpu().reshape(-1).view(torch.uint8).clone())
+    return out
+
+
+def check_c17_fp8_parameter_and_scale_round_trip() -> None:
+    """fp8 weights and their 0-dim f32 scale travel like any plain tensor.
+
+    1. ON and OFF are bit-identical over 3 passes.
+    2. The CPU masters (fp8 bytes and scales) are never written.
+    3. On the GPU the fp8 Parameter keeps its dtype and bytes, and the 0-dim
+       ``weight_scale`` arrives 0-dim, f32, with the master's value.
+    """
+    model_off, model_on = _build_fp8_model(), _build_fp8_model()
+    before = _u8_snapshot(model_on)
+    if not all(torch.equal(a, b) for a, b in zip(_u8_snapshot(model_off), before)):
+        raise AssertionError("the two fp8 model builds differ — the comparison would be meaningless")
+    x = _make_input()
+    service = _service(3)
+    probe_idx = 5
+    seen = {"n": 0}
+    blocks = list(model_on.transformer_blocks)
+    master_scale = blocks[probe_idx].lin._buffers["weight_scale"].item()
+
+    def on_entry(idx: int) -> None:
+        if idx != probe_idx or seen["n"]:
+            return
+        engine = service._prefetch_engine
+        if idx not in engine._state:
+            return
+        seen["n"] += 1
+        torch.cuda.synchronize()
+        w = blocks[idx].lin.weight
+        s = blocks[idx].lin._buffers["weight_scale"]
+        if w.device.type != "cuda" or w.dtype != torch.float8_e4m3fn:
+            raise AssertionError(f"device weight is {w.dtype} on {w.device}")
+        if s.device.type != "cuda" or s.dtype != torch.float32 or s.dim() != 0:
+            raise AssertionError(f"device scale is {s.dtype}{tuple(s.shape)} on {s.device}")
+        if s.item() != master_scale:
+            raise AssertionError(f"scale {s.item()} != master {master_scale}")
+        lin = blocks[idx].lin
+        slot = next(
+            i for i, (m, n, _p) in enumerate(engine._layout[idx].slots)
+            if m is lin and n == "weight"
+        )
+        raw_cpu = engine._master_u8[idx][slot]
+        if not torch.equal(w.reshape(-1).view(torch.uint8).cpu(), raw_cpu):
+            raise AssertionError("the transferred fp8 bytes differ from the CPU master")
+
+    off = _run(service, model_off, x, passes=3, prefetch=False)
+    on = _run(service, model_on, x, passes=3, prefetch=True, on_entry=on_entry)
+    if service.last_prefetch_used != "on":
+        raise AssertionError(f"prefetch did not engage: {service.last_prefetch_used!r}")
+    service.teardown_prefetch()
+    if not seen["n"]:
+        raise AssertionError("the probe never ran")
+    for i, (a, b) in enumerate(zip(off, on)):
+        if not torch.equal(a, b):
+            raise AssertionError(f"pass {i}: fp8 outputs differ ON vs OFF")
+    after = _u8_snapshot(model_on)
+    if len(after) != len(before) or not all(torch.equal(a, b) for a, b in zip(before, after)):
+        raise AssertionError("an fp8 CPU master (weight or scale) was modified")
+    print("       fp8 Parameter + 0-dim f32 weight_scale: ON == OFF, masters intact, dtype/bytes/value on GPU")
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -1099,6 +1207,8 @@ def main() -> int:
          check_c15_ggml_subclass_preserved),
         ("C16  the arena ring is fixed, recycled, released at teardown, and "
          "optional", check_c16_arena_ring),
+        ("C17  fp8 Parameter + 0-dim f32 weight_scale round-trip (§3-167)",
+         check_c17_fp8_parameter_and_scale_round_trip),
     ]
 
     for name, fn in checks:

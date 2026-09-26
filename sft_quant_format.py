@@ -1,21 +1,22 @@
-"""fp8 safetensors transformer: header reader + acceptance check (§3-167 B-1, B-2).
+"""Quantized safetensors transformer: header reader + acceptance check (§3-167, §3-168).
 
-SINGLE SOURCE OF TRUTH for "which fp8 safetensors transformer does this
-product accept", shared by:
+SINGLE SOURCE OF TRUTH for "which quantized (fp8 / int8) safetensors
+transformer does this product accept, and how is each layer stored", shared by:
   * services/model_registry.py ``precheck_model_file`` (API side; a refusal
     becomes MODEL_INCOMPATIBLE 422 before the worker is touched),
-  * engine/sft_quant/ (engine side; the same refusal fails the load loudly).
+  * engine/sft_quant/ and engine25/ (engine side; the same refusal fails the
+    load loudly, and :data:`SCHEME_TABLE` drives the auxiliary tensors).
 
 ZERO heavy deps (no torch / numpy / safetensors) so it imports in BOTH the app
 venv (.venv) and the engine venv (.venv-engine) — the ``chain_math.py``
 precedent. It reads only the JSON header and the few-dozen-byte
 ``comfy_quant`` tensors; the multi-GB weight body is never read and the file is
-never memory-mapped (Windows commit-charge constraint, plan §2).
+never memory-mapped (Windows commit-charge constraint).
 
-The acceptance rules were FINALIZED by the owner on 2026-09-25 (criterion: an
-fp8 file a typical ComfyUI workflow runs must run here when dropped in). The
-canonical statement of the rules is Docs/VERIFICATION_LOG.md §121.3; the code
-below implements it and does not restate it.
+Criterion (owner): a file a typical ComfyUI workflow runs must run here when
+dropped in. The canonical statement of the rules is
+Docs/VERIFICATION_LOG.md §121.3; the code below implements it and does not
+restate it.
 """
 
 from __future__ import annotations
@@ -29,19 +30,29 @@ from pathlib import Path
 __all__ = [
     "DTYPE_ITEMSIZE",
     "QuantFormatError",
+    "AuxRule",
     "Header",
     "Layout",
+    "Scheme",
+    "SCHEMES",
+    "SCHEME_TABLE",
+    "SKIPPED_SUFFIXES",
     "TensorInfo",
+    "aux_shape",
+    "AUX_NAMES",
+    "aux_specs",
     "detect_prefix",
     "inspect",
+    "layer_schemes",
     "parse_metadata",
     "read_header",
     "read_tensor_bytes",
+    "weight_shape",
 ]
 
 
 class QuantFormatError(ValueError):
-    """The file is not an fp8 safetensors transformer this product accepts."""
+    """The file is not a quantized safetensors transformer this product accepts."""
 
 
 #: safetensors dtype string -> bytes per element.
@@ -68,18 +79,139 @@ DTYPE_ITEMSIZE: dict[str, int] = {
 #: services/model_registry.py's generic safetensors precheck).
 MAX_HEADER_LEN = 100 * 1024 * 1024
 
-#: fp8 dtypes accepted as weights / bias (both upcast to bf16 at forward time).
-_FP8_DTYPES = frozenset({"F8_E4M3", "F8_E5M2"})
-#: comfy_quant / _quantization_metadata ``format`` values that are fp8.
-_FP8_FORMATS = frozenset({"float8_e4m3fn", "float8_e5m2"})
-_FLOAT_DTYPES = frozenset({"BF16", "F32"})
-_SCALE_SUFFIX = ".weight_scale"
-_QUANT_SUFFIX = ".comfy_quant"
+
+# --------------------------------------------------------------------------- #
+# the scheme table (ONE table; placement, aux_specs and weight_shape derive from it)
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class AuxRule:
+    """One auxiliary tensor ``<layer>.<name>`` of a scheme.
+
+    ``raw_dtypes`` / ``raw_shapes`` are what a file may hold; ``dtype`` /
+    ``shape`` are what the loader normalizes it to. Shape rules are the
+    strings :func:`aux_shape` understands.
+    """
+
+    raw_dtypes: frozenset[str]
+    raw_shapes: tuple[str, ...]
+    dtype: str
+    shape: str
+
+
+@dataclass(frozen=True)
+class Scheme:
+    """How one quantized Linear is stored.
+
+    ``weight`` is the raw dtype class of ``.weight`` (a key of
+    ``_WEIGHT_DTYPES``); ``packing`` input columns share one stored column
+    (see :func:`weight_shape`); the input dimension must be a multiple of
+    ``in_multiple``; ``quant_bias`` lets ``.bias`` share the weight's dtype.
+    """
+
+    weight: str
+    aux: dict[str, AuxRule]
+    packing: int = 1
+    in_multiple: int = 1
+    quant_bias: bool = False
+
+
+_SCALAR_SCALE = AuxRule(frozenset({"F32"}), ("()", "(1,)"), "F32", "()")
+_ROW_SCALE = AuxRule(frozenset({"F32"}), ("()", "(1,)", "(o,1)"), "F32", "(o,1)")
+
+#: Scheme name -> storage. C-3 adds the "w4a8" row.
+SCHEME_TABLE: dict[str, Scheme] = {
+    "fp8": Scheme(weight="F8", aux={}, quant_bias=True),
+    "fp8_scaled": Scheme(weight="F8", aux={"weight_scale": _SCALAR_SCALE}, quant_bias=True),
+    "int8": Scheme(weight="I8", aux={"weight_scale": _ROW_SCALE}),
+    "int8_convrot": Scheme(weight="I8", aux={"weight_scale": _ROW_SCALE}, in_multiple=256),
+}
+
+SCHEMES: tuple[str, ...] = tuple(SCHEME_TABLE)
+
+#: Leaves read past everywhere (activation scale / the marker itself).
+SKIPPED_SUFFIXES: tuple[str, ...] = (".input_scale", ".comfy_quant")
+
+#: Raw ``.weight`` dtypes of each weight class used in SCHEME_TABLE.
+_WEIGHT_DTYPES: dict[str, frozenset[str]] = {
+    "F8": frozenset({"F8_E4M3", "F8_E5M2"}),
+    "I8": frozenset({"I8"}),
+}
+#: Marker ``format`` -> the weight class it describes. Anything else is refused.
+_FORMATS: dict[str, str] = {
+    "float8_e4m3fn": "F8",
+    "float8_e5m2": "F8",
+    "int8_tensorwise": "I8",
+}
+_CONVROT_GROUPSIZE = 256
+
+_FLOAT_DTYPES = frozenset({"BF16", "F16", "F32"})
+_MARKER_DTYPES = frozenset({"U8", "I8"})
+_QUANT_WEIGHT_DTYPES = frozenset().union(*_WEIGHT_DTYPES.values())
+#: Every dtype accepted inside the transformer prefix.
+_ACCEPTED_DTYPES = _FLOAT_DTYPES | _QUANT_WEIGHT_DTYPES | _MARKER_DTYPES
+#: Union of every scheme's auxiliary names (an orphan of one is refused; the
+#: loaders use it to recognise auxiliary leaves).
+AUX_NAMES: frozenset[str] = frozenset(name for s in SCHEME_TABLE.values() for name in s.aux)
+
+
+def _placement() -> dict[str, frozenset[str]]:
+    """Non-float dtype -> the leaves it may be stored under (derived from SCHEME_TABLE)."""
+    place: dict[str, set[str]] = {d: set() for d in _QUANT_WEIGHT_DTYPES | _MARKER_DTYPES}
+    for d in _MARKER_DTYPES:
+        place[d].add("comfy_quant")
+    for scheme in SCHEME_TABLE.values():
+        for d in _WEIGHT_DTYPES[scheme.weight]:
+            place[d].add("weight")
+            if scheme.quant_bias:
+                place[d].add("bias")
+        for name, rule in scheme.aux.items():
+            for d in rule.raw_dtypes & place.keys():
+                place[d].add(name)
+    return {d: frozenset(leaves) for d, leaves in place.items()}
+
+
+#: I8 -> {weight, comfy_quant} / U8 -> {comfy_quant} / F8_* -> {weight, bias}
+_PLACEMENT: dict[str, frozenset[str]] = _placement()
+
+
+def aux_specs(scheme: str) -> dict[str, tuple[str, str]]:
+    """Auxiliary name -> (normalized safetensors dtype, normalized shape rule)."""
+    return {name: (rule.dtype, rule.shape) for name, rule in SCHEME_TABLE[scheme].aux.items()}
+
+
+def aux_shape(rule: str, o: int, i: int) -> tuple[int, ...]:
+    """A shape rule made concrete for a Linear with ``o`` outputs and ``i`` inputs."""
+    if rule == "()":
+        return ()
+    if rule == "(1,)":
+        return (1,)
+    if rule == "(o,1)":
+        return (o, 1)
+    if rule == "(o,)":
+        return (o,)
+    if rule == "(16,)":
+        return (16,)
+    if rule == "(o,i/16)":
+        return (o, i // 16)
+    raise ValueError(f"unknown shape rule {rule!r}")
+
+
+def weight_shape(scheme: str, o: int, i: int) -> tuple[int, int]:
+    """Stored ``.weight`` shape of a Linear with ``o`` outputs and ``i`` inputs."""
+    return (o, i // SCHEME_TABLE[scheme].packing)
+
+
+# --------------------------------------------------------------------------- #
+# header
+# --------------------------------------------------------------------------- #
+
 #: Last key segments of the old ComfyUI "scaled_fp8" layout (not supported).
 _LEGACY_LEAVES = frozenset({"scaled_fp8", "scale_weight"})
 _CONNECTOR_MARK = "_embeddings_connector."
 #: Text-encoder side projection; a bare-named file keeps it inside the (empty)
-#: prefix, so it is excluded from ``scaled_layers`` like the connectors.
+#: prefix, so it is excluded from ``Layout.layers`` like the connectors.
 _TEXT_PROJ_HEAD = "text_embedding_projection."
 #: Key prefix of a ComfyUI-style file; a bare-named file has none ("").
 _COMFY_PREFIX = "model.diffusion_model."
@@ -104,19 +236,15 @@ class Header:
 
 @dataclass(frozen=True)
 class Layout:
-    flavor: str  # "scaled" if any layer is scaled, else "plain" (kept for compatibility)
     config: dict  # json.loads(metadata["config"]) (required)
     model_version: str | None  # metadata.get("model_version")
     prefix: str  # "model.diffusion_model." or "" (bare names), see detect_prefix
-    scaled_layers: frozenset[str]  # prefix-less transformer Linear names, ".weight" removed (plain: empty)
+    #: prefix-less transformer Linear name (".weight" removed) -> scheme. Only
+    #: quantized layers (bf16 ones are absent); the connectors and
+    #: text_embedding_projection are excluded.
+    layers: dict[str, str]
     connector_keys: tuple[str, ...]  # full (with prefix) "*_embeddings_connector.*" keys
     n_blocks: int
-
-
-# --------------------------------------------------------------------------- #
-# header
-# --------------------------------------------------------------------------- #
-
 
 def read_header(path) -> Header:
     """Parse and structurally validate a safetensors header (no weight I/O)."""
@@ -217,12 +345,13 @@ def parse_metadata(header: Header) -> dict:
     return parsed
 
 
+
 # --------------------------------------------------------------------------- #
-# acceptance (owner ruling 2026-09-25: "an fp8 file a typical ComfyUI workflow
-# runs must run here when dropped in")
+# acceptance (owner: "a file a typical ComfyUI workflow runs must run here when
+# dropped in"; canonical rules: VERIFICATION_LOG §121.3)
 # --------------------------------------------------------------------------- #
 
-_NG = "fp8 safetensors の検査に不合格: "
+_NG = "量子化 safetensors の検査に不合格: "
 
 
 def detect_prefix(header: Header) -> str:
@@ -242,22 +371,19 @@ def detect_prefix(header: Header) -> str:
 
 
 def inspect(path, *, expected_blocks: int = 48) -> Layout:
-    """Accept or refuse an fp8 safetensors transformer.
+    """Accept or refuse a quantized safetensors transformer.
 
-    Rules finalized by the owner on 2026-09-25 (canonical: Docs/VERIFICATION_LOG.md
-    §121.3). Failures raise :class:`QuantFormatError` naming the failing spot in
-    one line.
-
-    Reads the header plus the ``comfy_quant`` payloads only. The key prefix is
-    detected (:func:`detect_prefix`). Tensors outside it (``vae.*`` /
-    ``audio_vae.*`` / ``vocoder.*`` / ``text_embedding_projection.*`` of a
-    monolithic checkpoint) are ignored — except that no fp8 tensor may live
-    there. A bare-named file (prefix ``""``) has nothing outside.
+    Failures raise :class:`QuantFormatError` naming the failing spot in one
+    line. Reads the header plus the ``comfy_quant`` payloads only. Tensors
+    outside the detected prefix (``vae.*`` / ``audio_vae.*`` / ``vocoder.*`` /
+    ``text_embedding_projection.*`` of a monolithic checkpoint) are ignored —
+    except that no quantized weight dtype may live there.
     """
+    # ① header
     header = read_header(path)
     tensors = header.tensors
 
-    # 1) __metadata__.config with a transformer section (required: without it
+    # ② __metadata__.config with a transformer section (required: without it
     #    ComfyUI cannot build the LTX model either)
     raw_config = header.metadata.get("config")
     if raw_config is None:
@@ -269,7 +395,7 @@ def inspect(path, *, expected_blocks: int = 48) -> Layout:
     if not isinstance(config, dict) or "transformer" not in config:
         raise QuantFormatError(_NG + "__metadata__.config に transformer がありません")
 
-    # 2) prefix + block count
+    # ③ prefix + block count
     prefix = detect_prefix(header)
     block_re = re.compile(re.escape(prefix) + r"transformer_blocks\.(\d+)\.")
     blocks = {int(m.group(1)) for k in tensors if (m := block_re.match(k))}
@@ -279,139 +405,220 @@ def inspect(path, *, expected_blocks: int = 48) -> Layout:
             f"{expected_blocks} 個（0..{expected_blocks - 1}）ではありません"
         )
 
-    # 3) dtypes / fp8 placement / old layout
-    fp8_weights: list[str] = []
-    for key, info in tensors.items():
-        is_fp8 = info.dtype in _FP8_DTYPES
-        if info.dtype.startswith("F8_") and not is_fp8:
-            raise QuantFormatError(_NG + f"'{key}' の {info.dtype} は未対応です（受理: F8_E4M3・F8_E5M2）")
-        if not key.startswith(prefix):
-            if is_fp8:
-                raise QuantFormatError(_NG + f"fp8 テンソル '{key}' が '{prefix}' の外にあります")
-            continue
-        if key.rsplit(".", 1)[-1] in _LEGACY_LEAVES:
-            raise QuantFormatError(_NG + f"旧形式（scaled_fp8／scale_weight）は未対応です（'{key}'）")
-        if is_fp8:
-            is_weight = key.endswith(".weight") and len(info.shape) == 2
-            is_bias = key.endswith(".bias") and len(info.shape) == 1
-            if not (is_weight or is_bias):
-                raise QuantFormatError(
-                    _NG + f"fp8 は 2 次元 .weight か 1 次元 .bias に限ります（'{key}' shape {list(info.shape)}）"
-                )
-            if is_weight:
-                fp8_weights.append(key)
-            continue
-        if info.dtype == "U8" and key.endswith(_QUANT_SUFFIX):
-            continue
-        if info.dtype not in _FLOAT_DTYPES:
-            raise QuantFormatError(
-                _NG + f"'{key}' の dtype {info.dtype} は未対応です"
-                "（fp8 以外の量子化の可能性。受理: BF16・F32・fp8・comfy_quant の U8）"
-            )
-    if not fp8_weights:
-        raise QuantFormatError(_NG + "fp8 の重みが 1 本もありません（bf16 等の非 fp8 ファイルは未対応です）")
+    # ④ scheme of every quantized layer (connectors included: same rules)
+    schemes = layer_schemes(path, header, prefix)
 
-    # 4) per-layer scales and quantization markers (connectors included: same
-    #    rules). Only the transformer's own Linears go to scaled_layers — the
-    #    connectors and text_embedding_projection belong to the text encoder side.
-    scaled = _scaled_layers(path, header, prefix, {k[: -len(".weight")] for k in fp8_weights})
-    scaled = {
-        layer for layer in scaled
-        if _CONNECTOR_MARK not in layer and not layer[len(prefix):].startswith(_TEXT_PROJ_HEAD)
-    }
+    # ⑤ at least one quantized weight
+    if not schemes:
+        raise QuantFormatError(_NG + "量子化された重みが 1 本もありません（bf16 等の非量子化ファイルは未対応です）")
 
-    # 5) Gemma-side embeddings connector must be present (dtypes were checked in step 3)
+    # ⑥ Gemma-side embeddings connector must be present
     connector_keys = tuple(sorted(k for k in tensors if k.startswith(prefix) and _CONNECTOR_MARK in k))
     if not connector_keys:
         raise QuantFormatError(_NG + f"'{prefix}*{_CONNECTOR_MARK}*'（テキスト埋め込みの connector）がありません")
 
+    # Only the transformer's own Linears go to Layout.layers — the connectors
+    # and text_embedding_projection belong to the text encoder side.
+    layers = {}
+    for layer, scheme in schemes.items():
+        name = layer[len(prefix):]
+        if _CONNECTOR_MARK in layer or name.startswith(_TEXT_PROJ_HEAD):
+            continue
+        layers[name] = scheme
     return Layout(
-        flavor="scaled" if scaled else "plain",
         config=config,
         model_version=header.metadata.get("model_version"),
         prefix=prefix,
-        scaled_layers=frozenset(layer[len(prefix):] for layer in scaled),
+        layers=layers,
         connector_keys=connector_keys,
         n_blocks=len(blocks),
     )
 
 
-def _scaled_layers(path, header: Header, prefix: str, fp8_layers: set[str]) -> set[str]:
-    """Judge scales and markers layer by layer; return the prefixed scaled layers.
+def layer_schemes(path, header: Header, prefix: str) -> dict[str, str]:
+    """Prefixed Linear name (".weight" removed) -> scheme, for every quantized layer.
 
-    * ``<layer>.weight_scale`` present -> scaled (must be a scalar F32 — shape
-      ``()`` or ``(1,)`` — and belong to an fp8 ``.weight``); absent -> plain
-      cast. Both may coexist.
-    * ``<layer>.comfy_quant`` (optional) and ``__metadata__._quantization_metadata``
-      (optional) must name fp8 formats only.
-    * ``<layer>.input_scale`` is allowed and ignored (activation scale; this
-      engine computes in bf16).
+    Top-down (§121.3 ④):
+      A  global dtype / placement checks, key by key;
+      B  keys grouped into layer (all but the last segment) and leaf (the last);
+      C  markers resolved per layer (``__metadata__._quantization_metadata.layers``
+         first, else ``<layer>.comfy_quant``), ``params`` flattened, format checked;
+      D  per layer: scheme from (weight dtype class, format, convrot), then the
+         auxiliary set must equal the scheme's, each aux dtype/shape checked.
+    Connectors and text_embedding_projection are included (the caller filters).
     """
     tensors = header.tensors
-    scaled: set[str] = set()
-    quant_keys: list[str] = []
+
+    # A — dtypes and placement
+    groups: dict[str, dict[str, str]] = {}  # B is folded into the same pass
     for key, info in tensors.items():
+        dtype = info.dtype
+        if dtype.startswith("F8_") and dtype not in _QUANT_WEIGHT_DTYPES:
+            raise QuantFormatError(_NG + f"'{key}' の {dtype} は未対応です（受理: F8_E4M3・F8_E5M2）")
         if not key.startswith(prefix):
+            if dtype in _QUANT_WEIGHT_DTYPES:
+                raise QuantFormatError(_NG + f"量子化テンソル '{key}' が '{prefix}' の外にあります")
             continue
-        if key.endswith(_QUANT_SUFFIX):
-            quant_keys.append(key)
-        if not key.endswith(_SCALE_SUFFIX):
-            continue
-        layer = key[: -len(_SCALE_SUFFIX)]
-        if layer not in fp8_layers:
-            raise QuantFormatError(_NG + f"倍率 '{key}' に対応する fp8 の .weight がありません（孤立した倍率）")
-        if info.dtype != "F32" or info.shape not in ((), (1,)):
+        layer, _, leaf = key.rpartition(".")
+        if leaf in _LEGACY_LEAVES:
+            raise QuantFormatError(_NG + f"旧形式（scaled_fp8／scale_weight）は未対応です（'{key}'）")
+        if dtype not in _ACCEPTED_DTYPES:
             raise QuantFormatError(
-                _NG + f"倍率 '{key}' が {info.dtype}{list(info.shape)} です"
-                "（受理するのは F32 のスカラー倍率のみ。per-row／per-block は未対応）"
+                _NG + f"'{key}' の dtype {dtype} は未対応です"
+                "（受理: BF16・F16・F32・F8_E4M3・F8_E5M2・I8・U8）"
             )
-        scaled.add(layer)
+        if dtype in _PLACEMENT:
+            places = _PLACEMENT[dtype]
+            if leaf not in places:
+                allowed = "・".join("." + p for p in sorted(places))
+                raise QuantFormatError(_NG + f"{dtype} を置けるのは {allowed} だけです（'{key}'）")
+            if leaf == "weight" and len(info.shape) != 2:
+                raise QuantFormatError(
+                    _NG + f"量子化された .weight は 2 次元に限ります（'{key}' shape {list(info.shape)}）"
+                )
+            if leaf in ("bias", "comfy_quant") and len(info.shape) != 1:
+                raise QuantFormatError(
+                    _NG + f"{dtype} の .{leaf} は 1 次元に限ります（'{key}' shape {list(info.shape)}）"
+                )
+        # B — layer / leaf
+        groups.setdefault(layer, {})[leaf] = key
 
-    if quant_keys:
+    # C — markers, per layer
+    markers = _resolve_markers(path, header, groups)
+
+    # D — scheme per layer
+    schemes: dict[str, str] = {}
+    for layer, leaves in groups.items():
+        weight_key = leaves.get("weight")
+        weight_dtype = tensors[weight_key].dtype if weight_key else None
+        if weight_dtype not in _QUANT_WEIGHT_DTYPES:
+            orphans = sorted(AUX_NAMES & leaves.keys())
+            if orphans:
+                raise QuantFormatError(
+                    _NG + f"倍率 '{leaves[orphans[0]]}' に対応する量子化された .weight がありません（孤立した倍率）"
+                )
+            continue  # a float layer: bf16 whatever its marker says
+        scheme = _scheme_of(layer, weight_key, weight_dtype, leaves, markers.get(layer))
+        _check_aux(layer, scheme, tensors[weight_key].shape, leaves, tensors)
+        schemes[layer] = scheme
+    return schemes
+
+
+def _scheme_of(layer: str, weight_key: str, weight_dtype: str, leaves: dict, marker) -> str:
+    """D: (weight dtype class, marker format, convrot) -> scheme."""
+    fmt, conf, where = marker if marker is not None else (None, {}, None)
+    if weight_dtype in _WEIGHT_DTYPES["F8"]:
+        if fmt is not None and _FORMATS[fmt] != "F8":
+            raise QuantFormatError(
+                _NG + f"量子化の印 format='{fmt}' と重みの dtype {weight_dtype} が合いません（{where}）"
+            )
+        return "fp8_scaled" if "weight_scale" in leaves else "fp8"
+    # I8: the marker is mandatory
+    if fmt is None:
+        raise QuantFormatError(
+            _NG + f"I8 の重み '{weight_key}' に量子化の印がありません"
+            "（comfy_quant も __metadata__._quantization_metadata もありません）"
+        )
+    if _FORMATS[fmt] != "I8":
+        raise QuantFormatError(
+            _NG + f"量子化の印 format='{fmt}' と重みの dtype {weight_dtype} が合いません（{where}）"
+        )
+    convrot = conf.get("convrot", False)
+    if not isinstance(convrot, bool):
+        raise QuantFormatError(_NG + f"量子化の印の convrot が真偽値ではありません（{convrot!r}・{where}）")
+    groupsize = conf.get("convrot_groupsize", _CONVROT_GROUPSIZE)
+    if groupsize != _CONVROT_GROUPSIZE:
+        raise QuantFormatError(
+            _NG + f"convrot_groupsize={groupsize!r} は未対応です（受理: {_CONVROT_GROUPSIZE} のみ・{where}）"
+        )
+    return "int8_convrot" if convrot else "int8"
+
+
+def _check_aux(layer: str, scheme: str, stored: tuple[int, ...], leaves: dict, tensors: dict) -> None:
+    """D: the aux set equals the scheme's; each aux dtype/shape; the input-dim constraint."""
+    row = SCHEME_TABLE[scheme]
+    present = {leaf for leaf in leaves if leaf not in ("weight", "bias") and "." + leaf not in SKIPPED_SUFFIXES}
+    missing = sorted(row.aux.keys() - present)
+    extra = sorted(present - row.aux.keys())
+    if missing:
+        raise QuantFormatError(_NG + f"'{layer}'（方式 {scheme}）に補助テンソル {missing} がありません")
+    if extra:
+        raise QuantFormatError(
+            _NG + f"'{layer}'（方式 {scheme}）に未対応の補助テンソル {extra} があります（未対応の量子化の可能性）"
+        )
+    o, i = stored[0], stored[1] * row.packing
+    for name, rule in row.aux.items():
+        key = leaves[name]
+        info = tensors[key]
+        shapes = [aux_shape(r, o, i) for r in rule.raw_shapes]
+        if info.dtype not in rule.raw_dtypes or info.shape not in shapes:
+            accepted = "・".join(sorted(rule.raw_dtypes)) + " の " + "／".join(str(list(s)) for s in shapes)
+            label = "倍率" if name == "weight_scale" else "補助テンソル"
+            raise QuantFormatError(
+                _NG + f"{label} '{key}' が {info.dtype}{list(info.shape)} です"
+                f"（方式 {scheme} で受理するのは {accepted} のみ）"
+            )
+    if i % row.in_multiple:
+        raise QuantFormatError(
+            _NG + f"'{layer}'（方式 {scheme}）の入力次元 {i} が {row.in_multiple} の倍数ではありません"
+        )
+
+
+def _resolve_markers(path, header: Header, groups: dict[str, dict[str, str]]) -> dict[str, tuple]:
+    """C: layer -> (format, flattened marker, where). Metadata first, then comfy_quant.
+
+    Mirrors ComfyUI (``utils.convert_old_quants`` writes each metadata entry
+    over ``<layer>.comfy_quant``; ``ops`` flattens ``params``). Unknown keys and
+    ``full_precision_matrix_mult`` are ignored. An unreadable
+    ``_quantization_metadata`` is ignored as a whole (as before).
+    """
+    resolved: dict[str, tuple] = {}
+    for layer, conf in _metadata_layers(header.metadata.get("_quantization_metadata")).items():
+        where = f"__metadata__._quantization_metadata.layers['{layer}']"
+        resolved[layer] = _read_marker(conf, where)
+
+    tensor_markers = sorted(
+        (layer, leaves["comfy_quant"])
+        for layer, leaves in groups.items()
+        if "comfy_quant" in leaves and layer not in resolved
+    )
+    if tensor_markers:
         with Path(path).open("rb") as fh:
-            for key in sorted(quant_keys):
-                if len(tensors[key].shape) != 1:
-                    raise QuantFormatError(_NG + f"'{key}' は 1 次元の U8 ではありません")
-                fmt = _comfy_format(key, _read_range(fh, header, key))
-                if fmt not in _FP8_FORMATS:
-                    raise QuantFormatError(_NG + f"量子化の印 format='{fmt}' は fp8 ではなく未対応です（'{key}'）")
-
-    for fmt in _metadata_formats(header.metadata.get("_quantization_metadata")):
-        if fmt not in _FP8_FORMATS:
-            raise QuantFormatError(
-                _NG + f"__metadata__._quantization_metadata に fp8 以外の format '{fmt}' があり未対応です"
-            )
-    return scaled
+            for layer, key in tensor_markers:
+                resolved[layer] = _read_marker(_comfy_json(key, _read_range(fh, header, key)), f"'{key}'")
+    return resolved
 
 
-def _metadata_formats(raw) -> list[str]:
-    """Every string under a ``"format"`` key anywhere in the JSON (unreadable -> [])."""
+def _read_marker(conf, where: str) -> tuple:
+    if not isinstance(conf, dict):
+        raise QuantFormatError(_NG + f"量子化の印が JSON オブジェクトではありません（{where}）")
+    params = conf.get("params", {})
+    if not isinstance(params, dict):
+        raise QuantFormatError(_NG + f"量子化の印の params が JSON オブジェクトではありません（{where}）")
+    conf = {**params, **conf}
+    fmt = conf.get("format")
+    if fmt is None:
+        raise QuantFormatError(_NG + f"量子化の印に format がありません（旧 INT8-Fast 形式などは未対応・{where}）")
+    if fmt not in _FORMATS:
+        accepted = "・".join(_FORMATS)
+        raise QuantFormatError(_NG + f"量子化の印 format='{fmt}' は未対応です（受理: {accepted}・{where}）")
+    return fmt, conf, where
+
+
+def _metadata_layers(raw) -> dict:
+    """``_quantization_metadata`` -> its ``layers`` table (unreadable or absent -> {})."""
     if not isinstance(raw, str):
-        return []
+        return {}
     try:
         doc = json.loads(raw)
     except Exception:  # noqa: BLE001 — a structure we cannot read is ignored (ruling)
-        return []
-    found: list[str] = []
-    stack = [doc]
-    while stack:
-        node = stack.pop()
-        if isinstance(node, dict):
-            for k, v in node.items():
-                if k == "format" and isinstance(v, str):
-                    found.append(v)
-                else:
-                    stack.append(v)
-        elif isinstance(node, list):
-            stack.extend(node)
-    return found
+        return {}
+    layers = doc.get("layers") if isinstance(doc, dict) else None
+    return layers if isinstance(layers, dict) else {}
 
 
-def _comfy_format(key: str, data: bytes):
+def _comfy_json(key: str, data: bytes):
     try:
-        doc = json.loads(data.decode("utf-8"))
+        return json.loads(data.decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
         raise QuantFormatError(_NG + f"'{key}' が JSON として読めません（{exc}）") from exc
-    if not isinstance(doc, dict):
-        raise QuantFormatError(_NG + f"'{key}' が JSON オブジェクトではありません")
-    return doc.get("format")

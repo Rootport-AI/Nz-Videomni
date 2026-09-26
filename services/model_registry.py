@@ -139,13 +139,13 @@ def precheck_model_file(
     and this module refuses to guess with a hard-coded table): the file's own
     suffix then picks the structural check, and any other suffix is rejected.
 
-    A ``.safetensors`` offered as the ``transformer`` is ruled on by the fp8
-    acceptance check (:func:`sft_quant_format.inspect`, §3-167) instead of the
+    A ``.safetensors`` offered as the ``transformer`` is ruled on by the quantized-safetensors
+    acceptance check (:func:`sft_quant_format.inspect`, §3-167/§3-168) instead of the
     bare header check.
 
     Returns the GGUF KV metadata read along the way (``{}`` for other
     safetensors and for a GGUF that declares none of
-    :data:`GGUF_ENGINE_KV_KEYS`; an accepted fp8 transformer yields the same
+    :data:`GGUF_ENGINE_KV_KEYS`; an accepted quantized-safetensors transformer yields the same
     keys taken from its ``__metadata__``). Raises
     ``model_incompatible`` (422) on any failure, including a malformed GGUF
     header (:class:`services.gguf_kv.GgufParseError`).
@@ -168,7 +168,7 @@ def precheck_model_file(
         if suffix == ".gguf":
             return _precheck_gguf(category, name, path)
         if category == "transformer":
-            # fp8 safetensors transformer (§3-167 B-1). ``inspect`` reads the
+            # quantized (fp8 / int8) safetensors transformer (§3-167 B-1, §3-168). ``inspect`` reads the
             # header itself with every check ``_precheck_safetensors`` makes
             # (length 0 / past EOF / over 100 MB / broken JSON) and more, so
             # the generic check is skipped here instead of reading it twice.
@@ -197,7 +197,7 @@ def _precheck_gguf(category: str, name: str, path: Path) -> dict[str, str]:
 
 
 def _precheck_sft_transformer(category: str, name: str, path: Path) -> dict[str, str]:
-    """Rule on an fp8 safetensors transformer with :func:`sft_quant_format.inspect`.
+    """Rule on a quantized (fp8 / int8) safetensors transformer with :func:`sft_quant_format.inspect`.
 
     The acceptance table lives in that module alone (the engine calls the same
     function at load time). The return value speaks the GGUF KV dialect so the

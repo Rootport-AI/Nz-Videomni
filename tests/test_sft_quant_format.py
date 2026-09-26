@@ -1,4 +1,5 @@
-"""§3-167 B-1/B-2: sft_quant_format — header reader and fp8 acceptance table.
+"""§3-167 B-1/B-2 + §3-168 C-1b: sft_quant_format — header reader, the scheme
+table and the quantized-safetensors acceptance rules (VERIFICATION_LOG §121.3).
 
 Synthetic, tiny safetensors files only (no real 29 GB checkpoint): a header is
 assembled from a {key: (dtype, shape)} spec, the body is zero bytes except for
@@ -10,18 +11,27 @@ from __future__ import annotations
 import json
 import struct
 
+from collections import Counter
+
 import pytest
 
 from sft_quant_format import (
     DTYPE_ITEMSIZE,
-    QuantFormatError,
-    Layout,
     MAX_HEADER_LEN,
+    SCHEME_TABLE,
+    SCHEMES,
+    SKIPPED_SUFFIXES,
+    Layout,
+    QuantFormatError,
+    aux_shape,
+    aux_specs,
     detect_prefix,
     inspect,
+    layer_schemes,
     parse_metadata,
     read_header,
     read_tensor_bytes,
+    weight_shape,
 )
 
 P = "model.diffusion_model."
@@ -85,6 +95,16 @@ def _layer(b: int) -> str:
     return f"{P}transformer_blocks.{b}.{LINEAR}"
 
 
+def _scaled_names(layout: Layout) -> frozenset[str]:
+    """The fp8_scaled layers (what the retired ``Layout.scaled_layers`` held)."""
+    return frozenset(name for name, scheme in layout.layers.items() if scheme == "fp8_scaled")
+
+
+def _flavor(layout: Layout) -> str:
+    """What the retired ``Layout.flavor`` said."""
+    return "scaled" if _scaled_names(layout) else "plain"
+
+
 # --------------------------------------------------------------------------- #
 # acceptance (owner ruling 2026-09-25: an fp8 file a typical ComfyUI workflow
 # runs must run here when dropped in; judged layer by layer)
@@ -95,13 +115,13 @@ def test_accepts_sulphur_style_scale_and_marker(tmp_path):
     spec, meta, pay = _model("scaled")
     layout = inspect(_write(tmp_path / "s.safetensors", spec, meta, pay))
     assert isinstance(layout, Layout)
-    assert layout.flavor == "scaled"
+    assert _flavor(layout) == "scaled"
     assert layout.n_blocks == N_BLOCKS
     assert layout.model_version == "2.3.0"
     assert layout.config == json.loads(CONFIG)
     assert layout.prefix == P
     # names line up with what LTXV_MODEL_COMFY_RENAMING_MAP leaves after the prefix
-    assert layout.scaled_layers == frozenset(f"transformer_blocks.{b}.{LINEAR}" for b in range(2, 46))
+    assert layout.layers == {f"transformer_blocks.{b}.{LINEAR}": "fp8_scaled" for b in range(2, 46)}
     assert layout.connector_keys == (
         f"{P}audio_embeddings_connector.proj.bias",
         f"{P}video_embeddings_connector.proj.weight",
@@ -120,16 +140,16 @@ def test_accepts_lightricks_official_style_scale_input_scale_metadata_marker(tmp
         {"format_version": "1.0", "layers": {_layer(b): {"format": "float8_e4m3fn"} for b in fp8_blocks}}
     )
     layout = inspect(_write(tmp_path / "o.safetensors", spec, meta, pay))
-    assert layout.flavor == "scaled"
-    assert layout.scaled_layers == frozenset(f"transformer_blocks.{b}.{LINEAR}" for b in fp8_blocks)
+    assert _flavor(layout) == "scaled"
+    assert _scaled_names(layout) == frozenset(f"transformer_blocks.{b}.{LINEAR}" for b in fp8_blocks)
 
 
 def test_accepts_unscaled_cast(tmp_path):
     spec, meta, pay = _model("plain", fp8_blocks=range(N_BLOCKS))
     del meta["model_version"]
     layout = inspect(_write(tmp_path / "p.safetensors", spec, meta, pay))
-    assert layout.flavor == "plain"
-    assert layout.scaled_layers == frozenset()
+    assert _flavor(layout) == "plain"
+    assert layout.layers == {f"transformer_blocks.{b}.{LINEAR}": "fp8" for b in range(N_BLOCKS)}
     assert layout.model_version is None
 
 
@@ -139,9 +159,9 @@ def test_accepts_scaled_and_unscaled_layers_mixed(tmp_path):
         del spec[_layer(5) + suffix]
     pay.pop(_layer(5) + ".comfy_quant")
     layout = inspect(_write(tmp_path / "x.safetensors", spec, meta, pay))
-    assert layout.flavor == "scaled"
-    assert f"transformer_blocks.5.{LINEAR}" not in layout.scaled_layers
-    assert f"transformer_blocks.6.{LINEAR}" in layout.scaled_layers
+    assert _flavor(layout) == "scaled"
+    assert layout.layers[f"transformer_blocks.5.{LINEAR}"] == "fp8"
+    assert f"transformer_blocks.6.{LINEAR}" in _scaled_names(layout)
 
 
 def test_accepts_scaled_layer_without_marker(tmp_path):
@@ -149,7 +169,7 @@ def test_accepts_scaled_layer_without_marker(tmp_path):
     del spec[_layer(5) + ".comfy_quant"]
     pay.pop(_layer(5) + ".comfy_quant")
     layout = inspect(_write(tmp_path / "x.safetensors", spec, meta, pay))
-    assert f"transformer_blocks.5.{LINEAR}" in layout.scaled_layers
+    assert f"transformer_blocks.5.{LINEAR}" in _scaled_names(layout)
 
 
 def test_accepts_e5m2(tmp_path):
@@ -158,20 +178,20 @@ def test_accepts_e5m2(tmp_path):
     spec[_layer(5) + ".weight"] = ("F8_E5M2", (4, 4))
     spec[_layer(5) + ".comfy_quant"] = _quant_u8(fmt)
     pay[_layer(5) + ".comfy_quant"] = fmt
-    assert f"transformer_blocks.5.{LINEAR}" in inspect(_write(tmp_path / "e.safetensors", spec, meta, pay)).scaled_layers
+    assert f"transformer_blocks.5.{LINEAR}" in _scaled_names(inspect(_write(tmp_path / "e.safetensors", spec, meta, pay)))
 
 
 def test_accepts_transformer_only_file(tmp_path):
     spec, meta, pay = _model("scaled")
     del spec["vae.decoder.conv.weight"]
-    assert inspect(_write(tmp_path / "t.safetensors", spec, meta, pay)).flavor == "scaled"
+    assert _flavor(inspect(_write(tmp_path / "t.safetensors", spec, meta, pay))) == "scaled"
 
 
 def test_accepts_fp8_bias_and_custom_block_count(tmp_path):
     spec, meta, pay = _model("plain", blocks=3, fp8_blocks=range(3))
     spec[f"{_layer(0)}.bias"] = ("F8_E4M3", (4,))
     layout = inspect(_write(tmp_path / "b.safetensors", spec, meta, pay), expected_blocks=3)
-    assert layout.n_blocks == 3 and layout.flavor == "plain"
+    assert layout.n_blocks == 3 and _flavor(layout) == "plain"
 
 
 def test_tensors_outside_prefix_are_ignored(tmp_path):
@@ -180,13 +200,13 @@ def test_tensors_outside_prefix_are_ignored(tmp_path):
     spec, meta, pay = _model("scaled")
     spec["vocoder.resblocks.0.num_batches_tracked"] = ("I64", ())
     spec["audio_vae.encoder.stats"] = ("F16", (2,))
-    assert inspect(_write(tmp_path / "m.safetensors", spec, meta, pay)).flavor == "scaled"
+    assert _flavor(inspect(_write(tmp_path / "m.safetensors", spec, meta, pay))) == "scaled"
 
 
 def test_unreadable_quantization_metadata_is_ignored(tmp_path):
     spec, meta, pay = _model("scaled")
     meta["_quantization_metadata"] = "not json"
-    assert inspect(_write(tmp_path / "q.safetensors", spec, meta, pay)).flavor == "scaled"
+    assert _flavor(inspect(_write(tmp_path / "q.safetensors", spec, meta, pay))) == "scaled"
 
 
 # --- B-2: rules widened for the real LTX 2.5 community fp8 files ------------ #
@@ -200,7 +220,7 @@ def test_accepts_scale_of_shape_1(tmp_path):
     for b in range(2, 46):
         spec[f"{_layer(b)}.weight_scale"] = ("F32", (1,))
     layout = inspect(_write(tmp_path / "s1.safetensors", spec, meta, pay))
-    assert layout.scaled_layers == _BODY_LAYERS
+    assert _scaled_names(layout) == _BODY_LAYERS
 
 
 def test_accepts_fp8_connector_without_scale(tmp_path):
@@ -208,7 +228,7 @@ def test_accepts_fp8_connector_without_scale(tmp_path):
     spec[f"{P}video_embeddings_connector.proj.weight"] = ("F8_E4M3", (4, 4))
     layout = inspect(_write(tmp_path / "c.safetensors", spec, meta, pay))
     assert f"{P}video_embeddings_connector.proj.weight" in layout.connector_keys
-    assert layout.scaled_layers == _BODY_LAYERS
+    assert _scaled_names(layout) == _BODY_LAYERS
 
 
 def test_accepts_fp8_connector_with_scale_but_keeps_it_out_of_scaled_layers(tmp_path):
@@ -221,7 +241,7 @@ def test_accepts_fp8_connector_with_scale_but_keeps_it_out_of_scaled_layers(tmp_
     spec[f"{conn}.weight_scale"] = ("F32", (1,))
     layout = inspect(_write(tmp_path / "cs.safetensors", spec, meta, pay))
     assert f"{conn}.weight_scale" in layout.connector_keys
-    assert layout.scaled_layers == _BODY_LAYERS
+    assert _scaled_names(layout) == _BODY_LAYERS
 
 
 def test_accepts_fp8_connector_with_comfy_quant_marker(tmp_path):
@@ -234,7 +254,7 @@ def test_accepts_fp8_connector_with_comfy_quant_marker(tmp_path):
     pay[f"{conn}.comfy_quant"] = FMT_OK
     layout = inspect(_write(tmp_path / "cq.safetensors", spec, meta, pay))
     assert f"{conn}.comfy_quant" in layout.connector_keys
-    assert layout.scaled_layers == _BODY_LAYERS
+    assert _scaled_names(layout) == _BODY_LAYERS
 
 
 def test_refuses_non_scalar_scale_on_connector(tmp_path):
@@ -242,7 +262,7 @@ def test_refuses_non_scalar_scale_on_connector(tmp_path):
     conn = f"{P}video_embeddings_connector.proj"
     spec[f"{conn}.weight"] = ("F8_E4M3", (4, 4))
     spec[f"{conn}.weight_scale"] = ("F32", (4,))
-    with pytest.raises(QuantFormatError, match="per-row"):
+    with pytest.raises(QuantFormatError, match="方式 fp8_scaled で受理するのは"):
         inspect(_write(tmp_path / "cr.safetensors", spec, meta, pay))
 
 
@@ -259,7 +279,7 @@ def test_accepts_bare_names(tmp_path):
     layout = inspect(_write(tmp_path / "bare.safetensors", spec, meta, pay))
     assert layout.prefix == ""
     assert layout.n_blocks == N_BLOCKS
-    assert layout.scaled_layers == _BODY_LAYERS
+    assert _scaled_names(layout) == _BODY_LAYERS
     assert layout.connector_keys == (
         "audio_embeddings_connector.proj.bias",
         "video_embeddings_connector.proj.weight",
@@ -268,10 +288,10 @@ def test_accepts_bare_names(tmp_path):
 
 
 def test_bare_names_police_every_tensor(tmp_path):
-    """With prefix "" nothing is outside: a non-float tensor anywhere is refused."""
+    """With prefix "" nothing is outside: an unaccepted dtype anywhere is refused."""
     spec, meta, pay = _model("scaled", prefix="")
-    spec["audio_vae.encoder.stats"] = ("F16", (2,))
-    with pytest.raises(QuantFormatError, match="F16"):
+    spec["audio_vae.encoder.stats"] = ("I64", (2,))
+    with pytest.raises(QuantFormatError, match="I64"):
         inspect(_write(tmp_path / "bare.safetensors", spec, meta, pay))
 
 
@@ -402,10 +422,6 @@ def _no_connector(spec, meta, pay):
         del spec[key]
 
 
-def _f16_tensor(spec, meta, pay):
-    spec[f"{P}patchify_proj.weight"] = ("F16", (4, 4))
-
-
 def _fp8_outside_prefix(spec, meta, pay):
     spec["vae.decoder.conv.weight"] = ("F8_E4M3", (2, 2))
 
@@ -417,16 +433,18 @@ def _fp8_3d(spec, meta, pay):
 @pytest.mark.parametrize(
     "mutate, needle",
     [
-        (_marker("int8_tensorwise"), "int8_tensorwise"),
-        (_marker("asym_w4a8_int8"), "asym_w4a8_int8"),
-        (_marker("nvfp4"), "nvfp4"),
+        # an int8 marker on an fp8 weight / an I8 weight under an fp8 marker
+        (_marker("int8_tensorwise"), "format='int8_tensorwise' と重みの dtype F8_E4M3 が合いません"),
+        (_metadata_int8, "format='int8_tensorwise' と重みの dtype F8_E4M3 が合いません"),
+        (_int8_weight, "format='float8_e4m3fn' と重みの dtype I8 が合いません"),
+        (_marker("asym_w4a8_int8"), "format='asym_w4a8_int8' は未対応です"),  # until C-3
+        (_marker("nvfp4"), "format='nvfp4' は未対応です"),
         (_marker("mxfp8"), "mxfp8"),
-        (_metadata_int8, "_quantization_metadata"),
-        (_int8_weight, "I8"),
+        (_marker("convrot_w4a4"), "convrot_w4a4"),
         (_f8_e8m0, "F8_E8M0"),
-        (_per_row_scale, "per-row"),
-        (_per_block_scale, "per-block"),
-        (_bf16_scale, "F32 のスカラー倍率"),
+        (_per_row_scale, "F32[4] です（方式 fp8_scaled で受理するのは F32 の []／[1] のみ）"),
+        (_per_block_scale, "F32[2, 2]"),
+        (_bf16_scale, "BF16[]"),
         (_orphan_scale, "孤立した倍率"),
         (_scaled_fp8_marker, "旧形式"),
         (_scale_weight, "旧形式"),
@@ -436,9 +454,8 @@ def _fp8_3d(spec, meta, pay):
         (_drop_block_47, "47 個"),
         (_no_fp8, "1 本もありません"),
         (_no_connector, "connector）がありません"),
-        (_f16_tensor, "F16"),
         (_fp8_outside_prefix, "の外にあります"),
-        (_fp8_3d, "2 次元 .weight"),
+        (_fp8_3d, "2 次元に限ります"),
     ],
     ids=lambda v: getattr(v, "__name__", None),
 )
@@ -450,6 +467,7 @@ def test_refusals(tmp_path, mutate, needle):
         inspect(path)
     message = str(ei.value)
     assert needle in message
+    assert message.startswith("量子化 safetensors の検査に不合格: ")
     assert "\n" not in message  # one line
 
 
@@ -610,3 +628,421 @@ def test_module_is_torch_free():
     source = open(sft_quant_format.__file__, encoding="utf-8").read()
     for heavy in ("import torch", "import numpy", "import safetensors", "mmap"):
         assert heavy not in source
+
+
+
+# --------------------------------------------------------------------------- #
+# §3-168 C-1b: the scheme table and ComfyUI int8_tensorwise
+# --------------------------------------------------------------------------- #
+
+IN = 256  # ConvRot needs the input dimension to be a multiple of 256
+_INT8_BLOCKS = range(2, 46)  # blocks 0, 1, 46, 47 stay bf16 (Kijai / silveroxides style)
+
+
+def _name(b: int) -> str:
+    return f"transformer_blocks.{b}.{LINEAR}"
+
+
+def _conf_bytes(conf: dict) -> bytes:
+    return json.dumps(conf).encode()
+
+
+def _int8_model(
+    *,
+    scale=(4, 1),
+    conf: dict | None = None,
+    where: str = "tensor",
+    marker_dtype: str = "U8",
+    prefix: str = P,
+    blocks=_INT8_BLOCKS,
+    in_dim: int = IN,
+):
+    """A minimal transformer whose ``blocks`` Linears are ComfyUI int8_tensorwise.
+
+    where: "tensor" (<layer>.comfy_quant), "meta" (__metadata__._quantization_metadata
+    only) or "both" (the same marker in both places).
+    """
+    conf = {"format": "int8_tensorwise"} if conf is None else conf
+    spec, meta, pay = _model("plain", prefix=prefix, fp8_blocks=())
+    meta_layers = {}
+    for b in blocks:
+        layer = f"{prefix}transformer_blocks.{b}.{LINEAR}"
+        spec[f"{layer}.weight"] = ("I8", (4, in_dim))
+        spec[f"{layer}.weight_scale"] = ("F32", scale)
+        if where in ("tensor", "both"):
+            data = _conf_bytes(conf)
+            spec[f"{layer}.comfy_quant"] = (marker_dtype, (len(data),))
+            pay[f"{layer}.comfy_quant"] = data
+        if where in ("meta", "both"):
+            meta_layers[layer] = conf
+    if meta_layers:
+        meta["_quantization_metadata"] = json.dumps({"format_version": "1.0", "layers": meta_layers})
+    return spec, meta, pay
+
+
+def _inspect(tmp_path, spec, meta, pay, name="i.safetensors", **kw):
+    return inspect(_write(tmp_path / name, spec, meta, pay), **kw)
+
+
+def _all(scheme: str, blocks=_INT8_BLOCKS) -> dict[str, str]:
+    return {_name(b): scheme for b in blocks}
+
+
+# --- the table and the helpers derived from it ------------------------------ #
+
+
+def test_scheme_table_rows():
+    assert SCHEMES == ("fp8", "fp8_scaled", "int8", "int8_convrot")
+    assert tuple(SCHEME_TABLE) == SCHEMES
+    assert SKIPPED_SUFFIXES == (".input_scale", ".comfy_quant")
+
+
+def test_aux_names_is_the_union_of_the_table():
+    import sft_quant_format
+
+    assert sft_quant_format.AUX_NAMES == frozenset({"weight_scale"})
+    assert "AUX_NAMES" in sft_quant_format.__all__
+
+
+def test_aux_specs():
+    assert aux_specs("fp8") == {}
+    assert aux_specs("fp8_scaled") == {"weight_scale": ("F32", "()")}
+    assert aux_specs("int8") == {"weight_scale": ("F32", "(o,1)")}
+    assert aux_specs("int8_convrot") == {"weight_scale": ("F32", "(o,1)")}
+
+
+@pytest.mark.parametrize(
+    "rule, expected",
+    [("()", ()), ("(1,)", (1,)), ("(o,1)", (32, 1)), ("(o,)", (32,)), ("(16,)", (16,)), ("(o,i/16)", (32, 16))],
+)
+def test_aux_shape(rule, expected):
+    assert aux_shape(rule, 32, 256) == expected
+
+
+def test_aux_shape_refuses_unknown_rule():
+    with pytest.raises(ValueError):
+        aux_shape("(i,)", 32, 256)
+
+
+@pytest.mark.parametrize("scheme", ["fp8", "fp8_scaled", "int8", "int8_convrot"])
+def test_weight_shape(scheme):
+    assert weight_shape(scheme, 4096, 16384) == (4096, 16384)
+
+
+def test_placement_is_derived_from_the_table():
+    from sft_quant_format import _PLACEMENT
+
+    assert _PLACEMENT == {
+        "I8": frozenset({"weight", "comfy_quant"}),
+        "U8": frozenset({"comfy_quant"}),
+        "F8_E4M3": frozenset({"weight", "bias"}),
+        "F8_E5M2": frozenset({"weight", "bias"}),
+    }
+
+
+# --- acceptance --------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("scale", [(), (1,)], ids=["scalar", "shape_1"])
+def test_accepts_int8_scalar_scale(tmp_path, scale):
+    """silveroxides int8mixedtensorwise: one F32 scale per layer."""
+    layout = _inspect(tmp_path, *_int8_model(scale=scale))
+    assert layout.layers == _all("int8")
+
+
+def test_accepts_int8_row_scale(tmp_path):
+    """A per-row [o,1] scale (Kijai style) without the convrot flag."""
+    assert _inspect(tmp_path, *_int8_model(scale=(4, 1))).layers == _all("int8")
+
+
+def test_accepts_int8_convrot(tmp_path):
+    spec, meta, pay = _int8_model(conf={"format": "int8_tensorwise", "convrot": True, "convrot_groupsize": 256})
+    assert _inspect(tmp_path, spec, meta, pay).layers == _all("int8_convrot")
+
+
+def test_accepts_int8_convrot_in_nested_params(tmp_path):
+    """The ``params`` nesting ComfyUI also writes is flattened before reading:
+    missing it would silently drop the rotation (adversarial review, critical 1)."""
+    conf = {"format": "int8_tensorwise", "params": {"convrot": True, "convrot_groupsize": 256}}
+    assert _inspect(tmp_path, *_int8_model(conf=conf)).layers == _all("int8_convrot")
+
+
+def test_top_level_marker_keys_win_over_params(tmp_path):
+    """``{**params, **conf}``: a top-level key overrides the nested one."""
+    conf = {"format": "int8_tensorwise", "convrot": False, "params": {"convrot": True}}
+    assert _inspect(tmp_path, *_int8_model(conf=conf)).layers == _all("int8")
+
+
+@pytest.mark.parametrize("where", ["tensor", "meta", "both"])
+def test_accepts_int8_marker_in_any_place(tmp_path, where):
+    conf = {"format": "int8_tensorwise", "convrot": True}
+    assert _inspect(tmp_path, *_int8_model(conf=conf, where=where)).layers == _all("int8_convrot")
+
+
+def test_metadata_marker_wins_per_layer(tmp_path):
+    """Per layer, a ``_quantization_metadata`` entry replaces that layer's
+    comfy_quant (ComfyUI convert_old_quants); other layers keep their tensor."""
+    spec, meta, pay = _int8_model(conf={"format": "int8_tensorwise"}, where="tensor")
+    meta["_quantization_metadata"] = json.dumps(
+        {"layers": {_layer(5): {"format": "int8_tensorwise", "convrot": True}}}
+    )
+    layout = _inspect(tmp_path, spec, meta, pay)
+    assert layout.layers[_name(5)] == "int8_convrot"
+    assert layout.layers[_name(6)] == "int8"
+
+
+def test_metadata_marker_wins_even_over_a_broken_tensor_marker(tmp_path):
+    """The overridden comfy_quant is not read at all (ComfyUI overwrites it)."""
+    spec, meta, pay = _int8_model(where="both")
+    pay[_layer(5) + ".comfy_quant"] = b"{" * len(pay[_layer(5) + ".comfy_quant"])
+    assert _inspect(tmp_path, spec, meta, pay).layers == _all("int8")
+
+
+def test_accepts_i8_comfy_quant(tmp_path):
+    assert _inspect(tmp_path, *_int8_model(marker_dtype="I8")).layers == _all("int8")
+
+
+def test_marker_unknown_keys_and_full_precision_matrix_mult_are_ignored(tmp_path):
+    conf = {"format": "int8_tensorwise", "full_precision_matrix_mult": True, "some_future_key": [1, 2]}
+    assert _inspect(tmp_path, *_int8_model(conf=conf)).layers == _all("int8")
+
+
+def test_int8_input_scale_is_ignored(tmp_path):
+    spec, meta, pay = _int8_model()
+    spec[_layer(5) + ".input_scale"] = ("F32", ())
+    assert _inspect(tmp_path, spec, meta, pay).layers == _all("int8")
+
+
+def test_accepts_int8_bare_names_with_bare_metadata_keys(tmp_path):
+    spec, meta, pay = _int8_model(prefix="", where="meta")
+    del spec["vae.decoder.conv.weight"]
+    spec["video_embeddings_connector.proj.weight"] = ("I8", (4, IN))
+    spec["video_embeddings_connector.proj.weight_scale"] = ("F32", (4, 1))
+    qm = json.loads(meta["_quantization_metadata"])
+    qm["layers"]["video_embeddings_connector.proj"] = {"format": "int8_tensorwise"}
+    meta["_quantization_metadata"] = json.dumps(qm)
+    layout = _inspect(tmp_path, spec, meta, pay)
+    assert layout.prefix == ""
+    assert layout.layers == _all("int8")  # the connector stays out of layers
+    assert "video_embeddings_connector.proj.weight_scale" in layout.connector_keys
+
+
+def test_accepts_gate_row_scale(tmp_path):
+    """The attention gate Linear has 32 outputs: weight [32, i], scale [32, 1]."""
+    spec, meta, pay = _int8_model()
+    gate = f"{P}transformer_blocks.5.attn1.to_gate_logits"
+    data = _conf_bytes({"format": "int8_tensorwise"})
+    spec[f"{gate}.weight"] = ("I8", (32, IN))
+    spec[f"{gate}.weight_scale"] = ("F32", (32, 1))
+    spec[f"{gate}.comfy_quant"] = _quant_u8(data)
+    pay[f"{gate}.comfy_quant"] = data
+    assert _inspect(tmp_path, spec, meta, pay).layers["transformer_blocks.5.attn1.to_gate_logits"] == "int8"
+
+
+def test_accepts_f16_unquantized_layers(tmp_path):
+    """F16 non-quantized tensors are accepted (patientxtr) — weights and biases."""
+    spec, meta, pay = _int8_model()
+    spec[f"{P}patchify_proj.weight"] = ("F16", (4, 4))
+    spec[f"{_layer(0)}.weight"] = ("F16", (4, 4))
+    spec[f"{_layer(0)}.bias"] = ("F16", (4,))
+    assert _inspect(tmp_path, spec, meta, pay).layers == _all("int8")
+
+
+def test_float_layer_with_a_marker_stays_unquantized(tmp_path):
+    spec, meta, pay = _int8_model()
+    data = _conf_bytes({"format": "int8_tensorwise"})
+    spec[_layer(0) + ".comfy_quant"] = _quant_u8(data)
+    pay[_layer(0) + ".comfy_quant"] = data
+    assert _name(0) not in _inspect(tmp_path, spec, meta, pay).layers
+
+
+def test_edge_blocks_stay_bf16(tmp_path):
+    layout = _inspect(tmp_path, *_int8_model())
+    for b in (0, 1, 46, 47):
+        assert _name(b) not in layout.layers
+
+
+def test_accepts_fp8_and_int8_layers_mixed(tmp_path):
+    spec, meta, pay = _int8_model(blocks=range(2, 24))
+    for b in range(24, 46):
+        spec[f"{_layer(b)}.weight"] = ("F8_E4M3", (4, 4))
+        if b % 2:
+            spec[f"{_layer(b)}.weight_scale"] = ("F32", ())
+    layout = _inspect(tmp_path, spec, meta, pay)
+    assert Counter(layout.layers.values()) == {"int8": 22, "fp8_scaled": 11, "fp8": 11}
+
+
+def test_layer_schemes_is_prefixed_and_includes_connectors(tmp_path):
+    spec, meta, pay = _int8_model()
+    conn = f"{P}video_embeddings_connector.proj"
+    spec[f"{conn}.weight"] = ("F8_E4M3", (4, 4))
+    path = _write(tmp_path / "ls.safetensors", spec, meta, pay)
+    schemes = layer_schemes(path, read_header(path), P)
+    assert schemes[conn] == "fp8"
+    assert schemes[_layer(5)] == "int8"
+    assert len(schemes) == len(_INT8_BLOCKS) + 1
+
+
+# --- refusals ----------------------------------------------------------------- #
+
+
+def _set_conf(conf):
+    def mutate(spec, meta, pay):
+        data = _conf_bytes(conf)
+        spec[_layer(5) + ".comfy_quant"] = _quant_u8(data)
+        pay[_layer(5) + ".comfy_quant"] = data
+
+    mutate.__name__ = "conf_" + "_".join(f"{k}={v}" for k, v in conf.items())
+    return mutate
+
+
+def _i8_no_marker(spec, meta, pay):
+    del spec[_layer(5) + ".comfy_quant"]
+    pay.pop(_layer(5) + ".comfy_quant")
+
+
+def _i8_no_scale(spec, meta, pay):
+    del spec[_layer(5) + ".weight_scale"]
+
+
+def _extra_aux(name):
+    def mutate(spec, meta, pay):
+        spec[f"{_layer(5)}.{name}"] = ("F32", (4,))
+
+    mutate.__name__ = f"extra_{name}"
+    return mutate
+
+
+def _scale_shape(shape, dtype="F32"):
+    def mutate(spec, meta, pay):
+        spec[_layer(5) + ".weight_scale"] = (dtype, shape)
+
+    mutate.__name__ = f"scale_{dtype}_{'x'.join(map(str, shape)) or 'scalar'}"
+    return mutate
+
+
+def _convrot_on_128_inputs(spec, meta, pay):
+    spec[_layer(5) + ".weight"] = ("I8", (4, 128))
+    _set_conf({"format": "int8_tensorwise", "convrot": True})(spec, meta, pay)
+
+
+def _i8_bias(spec, meta, pay):
+    spec[_layer(5) + ".bias"] = ("I8", (4,))
+
+
+def _quanto_data(spec, meta, pay):
+    spec[_layer(5) + ".weight._data"] = ("I8", (4, IN))
+
+
+def _i8_outside_prefix(spec, meta, pay):
+    spec["vae.decoder.conv.weight"] = ("I8", (2, 2))
+
+
+def _i8_1d_weight(spec, meta, pay):
+    spec[_layer(5) + ".weight"] = ("I8", (4 * IN,))
+
+
+def _no_quantized_weight(spec, meta, pay):
+    for key in [k for k in spec if k.endswith((".weight_scale", ".comfy_quant"))]:
+        del spec[key]
+        pay.pop(key, None)
+    for key, (dtype, shape) in list(spec.items()):
+        if dtype == "I8":
+            spec[key] = ("BF16", shape)
+
+
+def _metadata_entry_not_object(spec, meta, pay):
+    meta["_quantization_metadata"] = json.dumps({"layers": {_layer(5): "int8_tensorwise"}})
+
+
+def _legacy_scaled_fp8(spec, meta, pay):
+    spec[f"{P}scaled_fp8"] = ("F8_E4M3", (0,))
+
+
+def _e8m0_scale(spec, meta, pay):
+    spec[_layer(5) + ".weight_scale"] = ("F8_E8M0", (4, 1))
+
+
+_QUANTO_KEY = f"'{P}transformer_blocks.5.{LINEAR}.weight._data'"
+
+
+@pytest.mark.parametrize(
+    "mutate, needle",
+    [
+        (_set_conf({"format": "nvfp4"}), "format='nvfp4' は未対応です"),
+        (_set_conf({"format": "mxfp8"}), "format='mxfp8' は未対応です"),
+        (_set_conf({"format": "convrot_w4a4"}), "format='convrot_w4a4' は未対応です"),
+        (_set_conf({"format": "asym_w4a8_int8", "group_size": 16}), "format='asym_w4a8_int8' は未対応です"),
+        (_set_conf({"convrot": True}), "format がありません"),  # old INT8-Fast
+        (_i8_no_marker, "量子化の印がありません"),
+        (_set_conf({"format": "float8_e4m3fn"}), "format='float8_e4m3fn' と重みの dtype I8 が合いません"),
+        (_i8_no_scale, "補助テンソル ['weight_scale'] がありません"),
+        (_extra_aux("weight_correction"), "未対応の補助テンソル ['weight_correction']"),
+        (_extra_aux("pre_quant_scale"), "未対応の補助テンソル ['pre_quant_scale']"),
+        (_extra_aux("weight_scale_2"), "未対応の補助テンソル ['weight_scale_2']"),
+        (_scale_shape((4, 2)), "F32[4, 2] です（方式 int8 で受理するのは F32 の []／[1]／[4, 1] のみ）"),
+        (_scale_shape((4,)), "F32[4] です"),
+        (_scale_shape((4, 1), "BF16"), "BF16[4, 1] です"),
+        (_convrot_on_128_inputs, "入力次元 128 が 256 の倍数ではありません"),
+        (_set_conf({"format": "int8_tensorwise", "convrot": True, "convrot_groupsize": 128}),
+         "convrot_groupsize=128 は未対応です"),
+        (_set_conf({"format": "int8_tensorwise", "convrot": "yes"}), "convrot が真偽値ではありません"),
+        (_set_conf({"format": "int8_tensorwise", "params": [1]}), "params が JSON オブジェクトではありません"),
+        (_metadata_entry_not_object, "量子化の印が JSON オブジェクトではありません"),
+        (_i8_bias, "I8 を置けるのは .comfy_quant・.weight だけです"),
+        (_quanto_data, f"I8 を置けるのは .comfy_quant・.weight だけです（{_QUANTO_KEY}）"),
+        (_i8_outside_prefix, f"量子化テンソル 'vae.decoder.conv.weight' が '{P}' の外にあります"),
+        (_i8_1d_weight, "2 次元に限ります"),
+        (_no_quantized_weight, "量子化された重みが 1 本もありません"),
+        (_legacy_scaled_fp8, "旧形式"),
+        (_e8m0_scale, "F8_E8M0 は未対応です"),
+    ],
+    ids=lambda v: getattr(v, "__name__", None) if callable(v) else "",
+)
+def test_int8_refusals(tmp_path, mutate, needle):
+    spec, meta, pay = _int8_model()
+    mutate(spec, meta, pay)
+    with pytest.raises(QuantFormatError) as ei:
+        _inspect(tmp_path, spec, meta, pay)
+    message = str(ei.value)
+    assert needle in message
+    assert message.startswith("量子化 safetensors の検査に不合格: ")
+    assert len(message.splitlines()) == 1
+
+
+def test_int8_orphan_scale_on_float_layer_is_refused(tmp_path):
+    spec, meta, pay = _int8_model()
+    spec[_layer(0) + ".weight_scale"] = ("F32", (4, 1))
+    with pytest.raises(QuantFormatError, match="孤立した倍率"):
+        _inspect(tmp_path, spec, meta, pay)
+
+
+# --- reads the header and the markers only ------------------------------------ #
+
+
+def _big_int8_model(tmp_path, where):
+    spec, meta, pay = _int8_model(where=where, conf={"format": "int8_tensorwise", "convrot": True})
+    for b in _INT8_BLOCKS:
+        spec[f"{_layer(b)}.weight"] = ("I8", (64, IN))
+        spec[f"{_layer(b)}.weight_scale"] = ("F32", (64, 1))
+    return _write(tmp_path / f"big_{where}.safetensors", spec, meta, pay)
+
+
+@pytest.mark.parametrize("where", ["tensor", "meta", "both"])
+def test_inspect_int8_reads_only_header_and_needed_markers(tmp_path, monkeypatch, where):
+    """Metadata markers make the comfy_quant tensors unnecessary: nothing past
+    the header is read then. Otherwise only the markers' few bytes are."""
+    import io
+
+    path = _big_int8_model(tmp_path, where)
+    header = read_header(path)
+    quant_bytes = sum(
+        info.data_offsets[1] - info.data_offsets[0]
+        for key, info in header.tensors.items()
+        if key.endswith(".comfy_quant")
+    )
+    counter = _CountingOpen(path)
+    monkeypatch.setattr(io, "open", counter)
+    assert set(inspect(path).layers.values()) == {"int8_convrot"}
+    assert counter.total <= 8 + header.header_len + (quant_bytes if where == "tensor" else 0)
+    assert header.file_size > 8 + header.header_len + 44 * 64 * IN  # the body is big

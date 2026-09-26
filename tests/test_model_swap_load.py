@@ -347,6 +347,19 @@ def test_precheck_accepts_fp8_safetensors_transformer(tmp_path):
     assert precheck_model_file("transformer", "bare", bare) == {"general.architecture": "ltxv"}
 
 
+def test_precheck_accepts_int8_safetensors_transformer(tmp_path):
+    """§3-168 C-1b: a ComfyUI int8_tensorwise (ConvRot) transformer passes the
+    same precheck and answers in the same KV dialect."""
+    from test_sft_quant_format import _int8_model, _write
+
+    spec, meta, payloads = _int8_model(conf={"format": "int8_tensorwise", "convrot": True})
+    path = _write(tmp_path / "ltx23-int8.safetensors", spec, meta, payloads)
+    kv = precheck_model_file(
+        "transformer", "ltx23-int8", path, descriptor=_shipped_ltx23().categories["transformer"]
+    )
+    assert kv == {"general.architecture": "ltxv", "model_version": "2.3.0"}
+
+
 def test_precheck_refuses_non_accepted_fp8_safetensors_transformer(tmp_path):
     """A header that fails sft_quant_format.inspect is MODEL_INCOMPATIBLE (422),
     with the one-line reason as the detail."""
@@ -356,7 +369,7 @@ def test_precheck_refuses_non_accepted_fp8_safetensors_transformer(tmp_path):
             "transformer", "weights", st, descriptor=_shipped_ltx23().categories["transformer"]
         )
     assert ei.value.code == "MODEL_INCOMPATIBLE" and ei.value.status_code == 422
-    assert "fp8 safetensors の検査に不合格" in (ei.value.detail or "")
+    assert "量子化 safetensors の検査に不合格" in (ei.value.detail or "")
 
 
 def test_ltx25_fp8_safetensors_on_ltx23_is_refused_by_check_kv(tmp_path):

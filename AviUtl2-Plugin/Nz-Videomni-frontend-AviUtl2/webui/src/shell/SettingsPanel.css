@@ -131,7 +131,7 @@
  * happens, rather than the columns being squeezed to fit. */
 .comfort-table {
   width: auto;
-  min-width: 440px;
+  min-width: 560px;
   border-collapse: collapse;
   font-size: 12px;
 }

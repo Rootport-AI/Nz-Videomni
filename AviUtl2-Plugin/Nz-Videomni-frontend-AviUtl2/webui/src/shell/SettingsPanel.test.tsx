@@ -757,6 +757,8 @@ describe("SettingsPanel", () => {
     expect(await screen.findByText("Comfort-limit guide")).toBeInTheDocument();
     expect(container.querySelector(".comfort-table-scroll")).not.toBeNull();
     expect(screen.getByRole("columnheader", { name: "2.5 Q6" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "2.5 fp8" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "2.3 fp8 (default)" })).toBeInTheDocument();
   });
 
   it("closing calls onClose", async () => {

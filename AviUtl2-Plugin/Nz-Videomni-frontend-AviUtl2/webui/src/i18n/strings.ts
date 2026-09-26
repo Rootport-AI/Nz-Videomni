@@ -2176,12 +2176,14 @@ export const en = {
      * are only its labels. */
     comfortSectionTitle: "Comfort-limit guide",
     comfortHint:
-      "A guide to the frame count per resolution that avoids VRAM overflow and keeps generation from slowing down 2-4x (single generation).",
+      "A guide to the frame count per resolution that avoids VRAM overflow and keeps generation from slowing down 2-4x (single generation). The 2.5 fp8 column extends a line through the three measured resolutions (1280×768, 1920×1088, 896×1152) to the other rows by formula. The 2.3 fp8 column is a single measured point at 1920×1088 (server-default acceleration; all-on not measured).",
     comfortResolutionHeader: "Resolution",
     comfortColumnLtxDefault: "2.3 default",
+    comfortColumnLtxFp8Default: "2.3 fp8 (default)",
     comfortColumnLtxAllOn: "2.3 all-on (Q4, Q6)",
     comfortColumnLtx25: "2.5",
     comfortColumnLtx25Q6: "2.5 Q6",
+    comfortColumnLtx25Fp8: "2.5 fp8",
     /** The empty cell. A dedicated key rather than a literal in the panel:
      * the em dash is copy, and a font that renders it badly is a translation
      * problem, not a code change. */
@@ -3404,12 +3406,15 @@ export const ja: Strings = {
     close: "閉じる",
     configLoading: "設定を読み込み中…",
     comfortSectionTitle: "快適上限の目安",
-    comfortHint: "各解像度で、VRAM溢れが起きずに生成が2～4倍遅くならないフレーム数の目安です（単発生成）。",
+    comfortHint:
+      "各解像度で、VRAM溢れが起きずに生成が2～4倍遅くならないフレーム数の目安です（単発生成）。2.5 fp8 の列は、実測した 3 解像度（1280×768・1920×1088・896×1152）を通る線から式で他の解像度へ延ばした目安です。2.3 fp8 の列は 1920×1088 だけの実測（加速の設定はサーバー既定。全 on は未計測）です。",
     comfortResolutionHeader: "解像度",
     comfortColumnLtxDefault: "2.3 既定",
+    comfortColumnLtxFp8Default: "2.3 fp8（既定）",
     comfortColumnLtxAllOn: "2.3 全on(Q4, Q6)",
     comfortColumnLtx25: "2.5",
     comfortColumnLtx25Q6: "2.5 Q6",
+    comfortColumnLtx25Fp8: "2.5 fp8",
     comfortDash: "—",
     rawConfigSectionTitle: "生の /config",
     rawConfigFallbackNote: "サーバーに接続できなかったため、内蔵のフォールバック設定を表示しています。",

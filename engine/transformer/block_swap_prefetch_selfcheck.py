@@ -52,6 +52,10 @@ What the 18 checks prove, in one line each:
   C18 An int8 Parameter (``requires_grad=False``) and its ``(o, 1)`` f32
       ``weight_scale`` buffer (the int8 safetensors transformer, §3-168, plain
       and ConvRot) travel bit-exactly, masters intact.
+  C19 A packed w4a8 int8 Parameter ``(o, i/2)`` (``requires_grad=False``) and
+      its three auxiliary buffers — fp8 ``weight_s_rel`` ``(o, i/16)``, f32
+      ``weight_s_channel`` ``(o,)``, f32 ``weight_codebook`` ``(16,)`` (§3-168
+      C-3) — travel bit-exactly, masters intact.
 """
 
 from __future__ import annotations
@@ -1286,6 +1290,131 @@ def check_c18_int8_parameter_and_scale_round_trip() -> None:
           "masters intact, dtype/bytes/value on GPU")
 
 
+# --------------------------------------------------------------------------- #
+# C19: w4a8 packed int8 Parameter + s_rel / s_channel / codebook (§3-168 C-3)    #
+# --------------------------------------------------------------------------- #
+
+_W4A8_AUX = ("weight_s_rel", "weight_s_channel", "weight_codebook")
+
+
+class _W4a8Block(nn.Module):
+    """A block shaped like a w4a8 layer of a quantized safetensors transformer:
+    one w4a8 Linear (packed int8 Parameter ``(o, i/2)`` with
+    ``requires_grad=False`` + persistent fp8 ``(o, i/16)`` / f32 ``(o,)`` /
+    f32 ``(16,)`` buffers), a bf16 LayerNorm — behind the real
+    ``sft_quant_linear`` forward."""
+
+    def __init__(self, dim: int, s_channel: float) -> None:
+        super().__init__()
+        from engine.sft_quant.quant_service import _patch_model_for_quant
+
+        self.lin = nn.Linear(dim, dim, bias=True).to(torch.bfloat16)
+        _patch_model_for_quant(self, {"lin": "w4a8"})
+        self.lin.weight = nn.Parameter(
+            torch.randint(-128, 128, (dim, dim // 2), dtype=torch.int8), requires_grad=False
+        )
+        self.lin._buffers["weight_s_rel"] = (
+            torch.rand(dim, dim // 16) * 100 + 20
+        ).to(torch.float8_e4m3fn)
+        self.lin._buffers["weight_s_channel"] = (
+            torch.rand(dim) * s_channel + s_channel / 4
+        ).to(torch.float32)
+        self.lin._buffers["weight_codebook"] = torch.sort(torch.randn(16) * 0.7).values.to(torch.float32)
+        self.norm = nn.LayerNorm(dim).to(torch.bfloat16)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.norm(self.lin(x))
+
+
+def _build_w4a8_model(n_blocks: int = 12, dim: int = 256, seed: int = 19) -> _DummyTransformer:
+    torch.manual_seed(seed)
+    return _DummyTransformer([_W4a8Block(dim, 2.0 ** -(9 + i % 3)) for i in range(n_blocks)])
+
+
+def check_c19_w4a8_parameter_and_aux_round_trip() -> None:
+    """The packed w4a8 weight and its three auxiliary tensors travel like any
+    plain tensor.
+
+    1. ON and OFF are bit-identical over 3 passes.
+    2. The CPU masters (packed bytes, s_rel, s_channel, codebook) are never
+       written.
+    3. On the GPU the int8 Parameter keeps its dtype, ``(o, i/2)`` shape, bytes
+       and ``requires_grad=False``; each auxiliary tensor arrives with the
+       master's dtype, shape and bytes.
+    """
+    model_off, model_on = _build_w4a8_model(), _build_w4a8_model()
+    before = _u8_snapshot(model_on)
+    if not all(torch.equal(a, b) for a, b in zip(_u8_snapshot(model_off), before)):
+        raise AssertionError("the two w4a8 model builds differ — the comparison would be meaningless")
+    x = _make_input()
+    service = _service(3)
+    probe_idx = 5
+    seen = {"n": 0}
+    blocks = list(model_on.transformer_blocks)
+    master_aux = {
+        leaf: blocks[probe_idx].lin._buffers[leaf].clone() for leaf in _W4A8_AUX
+    }
+
+    def on_entry(idx: int) -> None:
+        if idx != probe_idx or seen["n"]:
+            return
+        engine = service._prefetch_engine
+        if idx not in engine._state:
+            return
+        seen["n"] += 1
+        torch.cuda.synchronize()
+        lin = blocks[idx].lin
+        w = lin.weight
+        if (
+            w.device.type != "cuda" or w.dtype != torch.int8 or w.requires_grad
+            or tuple(w.shape) != (lin.out_features, lin.in_features // 2)
+        ):
+            raise AssertionError(
+                f"device weight is {w.dtype}{tuple(w.shape)} on {w.device} "
+                f"(requires_grad={w.requires_grad})"
+            )
+        for leaf, master in master_aux.items():
+            t = lin._buffers[leaf]
+            if t.device.type != "cuda" or t.dtype != master.dtype or t.shape != master.shape:
+                raise AssertionError(
+                    f"{leaf}: device tensor is {t.dtype}{tuple(t.shape)} on {t.device}, "
+                    f"master {master.dtype}{tuple(master.shape)}"
+                )
+            if not torch.equal(
+                t.cpu().reshape(-1).view(torch.uint8), master.reshape(-1).view(torch.uint8)
+            ):
+                raise AssertionError(f"{leaf}: bytes differ from the master")
+        slot = next(
+            i for i, (m, n, _p) in enumerate(engine._layout[idx].slots)
+            if m is lin and n == "weight"
+        )
+        raw_cpu = engine._master_u8[idx][slot]
+        if not torch.equal(w.reshape(-1).view(torch.uint8).cpu(), raw_cpu):
+            raise AssertionError("the transferred packed w4a8 bytes differ from the CPU master")
+
+    off = _run(service, model_off, x, passes=3, prefetch=False)
+    on = _run(service, model_on, x, passes=3, prefetch=True, on_entry=on_entry)
+    if service.last_prefetch_used != "on":
+        raise AssertionError(f"prefetch did not engage: {service.last_prefetch_used!r}")
+    service.teardown_prefetch()
+    if not seen["n"]:
+        raise AssertionError("the probe never ran")
+    for i, (a, b) in enumerate(zip(off, on)):
+        if not torch.isfinite(a).all():
+            raise AssertionError(f"pass {i}: non-finite w4a8 output")
+        if not torch.equal(a, b):
+            raise AssertionError(f"pass {i}: w4a8 outputs differ ON vs OFF")
+    after = _u8_snapshot(model_on)
+    if len(after) != len(before) or not all(torch.equal(a, b) for a, b in zip(before, after)):
+        raise AssertionError("a w4a8 CPU master (weight or auxiliary tensor) was modified")
+    for model in (model_off, model_on):
+        for mod in model.modules():
+            if isinstance(mod, nn.Linear) and mod.weight.requires_grad:
+                raise AssertionError("a w4a8 weight came back with requires_grad=True")
+    print("       w4a8 packed int8 Parameter + fp8 s_rel / f32 s_channel / f32 codebook: "
+          "ON == OFF, masters intact, dtype/shape/bytes on GPU")
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -1322,6 +1451,8 @@ def main() -> int:
          check_c17_fp8_parameter_and_scale_round_trip),
         ("C18  int8 Parameter + (o,1) f32 weight_scale round-trip (§3-168)",
          check_c18_int8_parameter_and_scale_round_trip),
+        ("C19  w4a8 packed int8 Parameter + s_rel/s_channel/codebook round-trip (§3-168 C-3)",
+         check_c19_w4a8_parameter_and_aux_round_trip),
     ]
 
     for name, fn in checks:

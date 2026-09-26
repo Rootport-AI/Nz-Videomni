@@ -13,12 +13,20 @@ on the CPU).
     and the connector share it, so the forward sees one shape per scheme).
   * :func:`hadamard` — the 256 x 256 ConvRot matrix, cached per device.
 
-The int8 / ConvRot maths follows the converter's NumPy implementation
+The int8 / ConvRot / w4a8 maths follows the converter's NumPy implementation
 (``Nz-GGUF-Converter-LTX23/src/converter/comfy_dequant.py``, the cross-check
 reference; not imported): ``q.float() * scale`` per output row, then each
-contiguous group of 256 input columns times ``H``. No row chunking: the
-intermediates are released in order so the peak for the largest layer
-([16384, 4096]) stays at two float32 copies (~512 MiB), as for fp8 today.
+contiguous group of 256 input columns times ``H``. w4a8 (§3-168 C-3) first
+unpacks two 4-bit codes per byte (even column in the low nibble), looks them
+up in the layer's 16-entry codebook, multiplies each group of 16 columns by
+its ``s_rel``, rounds onto the int8 grid (round half to even, clamp +/-127),
+multiplies by ``s_channel`` per row and rotates like ConvRot. No row chunking:
+the intermediates are released in order so the peak for the largest layer
+([16384, 4096]) stays at two float32-sized copies (~512 MiB), as for fp8
+today. w4a8 too: the int32 codes plus the float32 lookup, then the lookup
+plus the rotated copy (``index_select`` reads the int32 index as is;
+``codebook[idx]`` would first copy it to int64, doubling the peak). CPU
+profiler, [4096, 4096]: 128 MiB = two float32 copies.
 
 Depends on torch and the torch-free ``sft_quant_format`` only.
 """
@@ -33,6 +41,8 @@ import sft_quant_format
 
 #: ConvRot group size (the only one ``sft_quant_format`` accepts).
 CONVROT_GROUPSIZE = 256
+#: The int8 grid w4a8's intermediate is rounded onto.
+_INT8_GRID = 127.0
 
 #: The 4 x 4 regular Hadamard seed ComfyUI's ConvRot is built from (symmetric,
 #: -1 on the anti-diagonal — not the Sylvester H4), the converter's ``_H4``.
@@ -96,6 +106,30 @@ def dequantize(
         )
         del wf
         return rotated.view(o, i).to(dtype)
+    if scheme == "w4a8":
+        o, half = weight.shape
+        i = half * 2
+        # Two 4-bit codes per byte: element 2k in bits 0-3, 2k+1 in bits 4-7.
+        p = weight.view(torch.uint8)
+        codes = torch.stack((p & 0x0F, p >> 4), dim=-1).view(o, i)
+        idx = codes.to(torch.int32)
+        del codes
+        # index_select takes the int32 index as is; codebook[idx] would make an
+        # int64 copy of it first (+2 float32 copies of peak).
+        v = aux["weight_codebook"].index_select(0, idx.view(-1)).view(o, i)  # float32
+        del idx
+        # Per group of 16 columns: x s_rel, then onto the int8 grid.
+        gs = sft_quant_format.W4A8_GROUP_SIZE
+        g = v.view(o, i // gs, gs)
+        g.mul_(aux["weight_s_rel"].to(torch.float32).unsqueeze(-1))
+        g.round_()  # half to even, as np.rint
+        g.clamp_(-_INT8_GRID, _INT8_GRID)
+        v.mul_(aux["weight_s_channel"].unsqueeze(1))
+        rotated = torch.matmul(
+            v.view(o, i // CONVROT_GROUPSIZE, CONVROT_GROUPSIZE), hadamard(weight.device)
+        )
+        del g, v
+        return rotated.view(o, i).to(dtype)
     raise RuntimeError(f"quantized safetensors: unknown scheme {scheme!r}")
 
 
@@ -105,11 +139,13 @@ def normalize_aux(
     """An auxiliary tensor of a ``scheme`` layer with weight shape ``(o, i)``,
     brought to the dtype and shape ``sft_quant_format.aux_specs`` prescribes.
 
-    Shapes: ``"()"`` — ``reshape(())`` (the fp8 scale, as §3-167);
-    ``"(o,1)"`` — a scalar or one value per row, ``(o, 1)`` either way (the
-    int8 scale); any other rule raises (C-3 adds its own). A value of another
-    dtype raises: the ``inspect`` check has already ruled on what the file may
-    hold.
+    Shapes: ``"(o,1)"`` — a scalar or one value per row, ``(o, 1)`` either
+    way (the int8 scale); every other rule — ``"()"`` (the fp8 scale, as
+    §3-167), w4a8's ``"(o,)"`` / ``"(16,)"`` / ``"(o,i/16)"`` — a reshape to
+    ``sft_quant_format.aux_shape`` (which raises on an unknown rule). A U8 ``weight_s_rel`` is
+    the same bytes as F8_E4M3 and is read as such (``view``). A value of any
+    other dtype raises: the ``inspect`` check has already ruled on what the
+    file may hold.
     """
     from engine.sft_quant.sft_reader import TORCH_DTYPES
 
@@ -120,6 +156,8 @@ def normalize_aux(
         )
     dtype_name, rule = specs[leaf]
     dtype = TORCH_DTYPES[dtype_name]
+    if leaf == "weight_s_rel" and value.dtype == torch.uint8:
+        value = value.view(dtype)  # byte-identical reinterpretation
     if value.dtype != dtype:
         raise RuntimeError(
             f"quantized safetensors: '{leaf}' is {value.dtype}, expected {dtype}"
@@ -128,4 +166,4 @@ def normalize_aux(
         return value.reshape(())
     if rule == "(o,1)":
         return value.reshape(-1, 1).expand(o, 1).contiguous()
-    raise RuntimeError(f"quantized safetensors: unhandled shape rule {rule!r} for '{leaf}'")
+    return value.reshape(sft_quant_format.aux_shape(rule, o, i))

@@ -20,6 +20,9 @@ text_embedding_projection skip, ``sft_transformer_sd_ops`` and
 stored, auxiliary tensors F32 in the one ``(o, 1)`` shape, a surplus auxiliary
 key raises, F16 -> bf16), loader -> skeleton -> forward end to end, the int8
 connector (row / scalar scale, ConvRot, F16), and int8 outside a Linear.
+C-3: w4a8 through the loader (packed weight ``(o, i//2)``, fp8 ``s_rel`` ``(o, i/16)``
+whether stored as fp8 or U8, f32 ``s_channel`` ``(o,)`` and codebook ``(16,)``),
+loader -> skeleton -> forward, and the w4a8 connector (REDGraft).
 
 Run with ``.venv-engine`` and ``--noconftest``; the app venv skips the module.
 """
@@ -607,3 +610,137 @@ def test_load_connector_bf16_int8_without_marker_is_refused(tmp_path):
     )
     with pytest.raises(sft_quant_format.QuantFormatError):
         load_connector_bf16(str(path))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# §3-168 C-3: w4a8
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _w4a8_marker() -> torch.Tensor:
+    import json
+
+    conf = {"format": "asym_w4a8_int8", "group_size": 16, "convrot": True, "convrot_groupsize": 256}
+    return torch.tensor(list(json.dumps(conf).encode()), dtype=torch.uint8)
+
+
+def _w4a8_tensors(o: int, i: int, s_rel_u8: bool) -> dict[str, torch.Tensor]:
+    """Raw file tensors of one w4a8 layer (leaf -> tensor)."""
+    s_rel = (torch.rand(o, i // 16) * 150 + 20).to(torch.float8_e4m3fn)
+    return {
+        "weight": torch.randint(-128, 128, (o, i // 2), dtype=torch.int8),
+        "weight_s_rel": s_rel.view(torch.uint8).clone() if s_rel_u8 else s_rel,
+        "weight_s_channel": (torch.rand(o) * 0.01 + 1e-3).to(torch.float32),
+        "weight_codebook": torch.sort(torch.randn(16) * 0.7).values.to(torch.float32),
+        "comfy_quant": _w4a8_marker(),
+    }
+
+
+def _w4a8_aux(raw: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """The normalized auxiliary tensors (U8 s_rel read as fp8)."""
+    s_rel = raw["weight_s_rel"]
+    if s_rel.dtype == torch.uint8:
+        s_rel = s_rel.view(torch.float8_e4m3fn)
+    return {
+        "weight_s_rel": s_rel,
+        "weight_s_channel": raw["weight_s_channel"],
+        "weight_codebook": raw["weight_codebook"],
+    }
+
+
+@pytest.mark.parametrize("s_rel_u8", [False, True], ids=["s_rel_fp8", "s_rel_u8"])
+def test_loader_w4a8_keeps_packed_weight_and_normalizes_aux(tmp_path, s_rel_u8):
+    from safetensors.torch import save_file
+
+    torch.manual_seed(50)
+    o, i = 4, 256
+    raw = _w4a8_tensors(o, i, s_rel_u8)
+    path = tmp_path / "w4.safetensors"
+    save_file({f"{_LIN}.{leaf}": t for leaf, t in raw.items()}, str(path))
+    layout = _bare_layout(layers={_LIN: "w4a8"}, connector_keys=())
+    sd = SftQuantStateDictLoader(str(path), layout).load("", sd_ops=sft_transformer_sd_ops("")).sd
+    assert set(sd) == {f"{_LIN}.{leaf}" for leaf in raw if leaf != "comfy_quant"}
+    w = sd[f"{_LIN}.weight"]
+    assert w.dtype == torch.int8 and w.shape == (o, i // 2) and torch.equal(w, raw["weight"])
+    s_rel = sd[f"{_LIN}.weight_s_rel"]
+    assert s_rel.dtype == torch.float8_e4m3fn and s_rel.shape == (o, i // 16)
+    assert torch.equal(s_rel.view(torch.uint8), raw["weight_s_rel"].view(torch.uint8))
+    s_ch = sd[f"{_LIN}.weight_s_channel"]
+    assert s_ch.dtype == torch.float32 and s_ch.shape == (o,)
+    cb = sd[f"{_LIN}.weight_codebook"]
+    assert cb.dtype == torch.float32 and cb.shape == (16,)
+    assert torch.equal(cb, raw["weight_codebook"])
+
+
+def test_loader_w4a8_to_skeleton_to_forward(tmp_path):
+    """File -> loader -> patched meta skeleton (weight slot (o, i//2)) ->
+    load_state_dict(assign) -> forward."""
+    from safetensors.torch import save_file
+
+    from engine.sft_quant.dequant import dequantize
+    from engine.sft_quant.quant_service import _patch_model_for_quant
+
+    torch.manual_seed(51)
+    o, i = 8, 512
+    raw = _w4a8_tensors(o, i, s_rel_u8=True)
+    bias = torch.randn(o).to(torch.bfloat16)
+    tensors = {f"{_LIN}.{leaf}": t for leaf, t in raw.items()}
+    tensors[f"{_LIN}.bias"] = bias
+    path = tmp_path / "w4e2e.safetensors"
+    save_file(tensors, str(path))
+    layout = _bare_layout(layers={_LIN: "w4a8"}, connector_keys=())
+    sd = SftQuantStateDictLoader(str(path), layout).load("", sd_ops=sft_transformer_sd_ops("")).sd
+
+    with torch.device("meta"):
+        root = nn.Module()
+        root.transformer_blocks = nn.ModuleList([nn.Module()])
+        root.transformer_blocks[0].attn1 = nn.Module()
+        root.transformer_blocks[0].attn1.to_q = nn.Linear(i, o)
+    _patch_model_for_quant(root, layout.layers)
+    assert root.transformer_blocks[0].attn1.to_q.weight.shape == (o, i // 2)
+    res = root.load_state_dict(sd, strict=False, assign=True)
+    assert not res.missing_keys and not res.unexpected_keys
+    m = root.transformer_blocks[0].attn1.to_q
+    assert m.weight.dtype == torch.int8 and not m.weight.requires_grad
+    assert m.weight_s_rel.dtype == torch.float8_e4m3fn
+
+    x = torch.randn(3, i).to(torch.bfloat16)
+    ref = dequantize("w4a8", raw["weight"], _w4a8_aux(raw), torch.bfloat16)
+    assert torch.equal(m(x), torch.nn.functional.linear(x, ref, bias))
+
+
+@pytest.mark.parametrize("prefix", ["model.diffusion_model.", ""], ids=["prefixed", "bare"])
+def test_load_connector_bf16_w4a8(tmp_path, prefix):
+    """REDGraft's connector layers are w4a8: the two passes (auxiliary first,
+    then one weight at a time) dequantize them with i = stored width x 2."""
+    from safetensors.torch import save_file
+
+    from engine.sft_quant.dequant import dequantize
+
+    torch.manual_seed(52)
+    c = prefix + "video_embeddings_connector."
+    fp8_raw = _w4a8_tensors(4, 256, s_rel_u8=False)
+    u8_raw = _w4a8_tensors(4, 512, s_rel_u8=True)
+    tensors = {
+        prefix + "transformer_blocks.0.attn1.to_q.weight": torch.zeros(2, 2).to(torch.float8_e4m3fn),
+        c + "bias_only.bias": torch.randn(4).to(torch.bfloat16),
+    }
+    tensors.update({f"{c}a.{leaf}": t for leaf, t in fp8_raw.items()})
+    tensors.update({f"{c}b.{leaf}": t for leaf, t in u8_raw.items()})
+    tensors[c + "b.bias"] = torch.randn(4).to(torch.float16)
+    path = tmp_path / "w4c.safetensors"
+    save_file(tensors, str(path))
+
+    out = load_connector_bf16(str(path))
+    v = "video_embeddings_connector."
+    assert set(out) == {v + "bias_only.bias", v + "a.weight", v + "b.weight", v + "b.bias"}
+    assert all(t.dtype == torch.bfloat16 for t in out.values())
+    bf = torch.bfloat16
+    assert out[v + "a.weight"].shape == (4, 256) and out[v + "b.weight"].shape == (4, 512)
+    assert torch.equal(
+        out[v + "a.weight"], dequantize("w4a8", fp8_raw["weight"], _w4a8_aux(fp8_raw), bf)
+    )
+    assert torch.equal(
+        out[v + "b.weight"], dequantize("w4a8", u8_raw["weight"], _w4a8_aux(u8_raw), bf)
+    )
+    assert torch.equal(out[v + "b.bias"], tensors[c + "b.bias"].to(bf))

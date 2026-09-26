@@ -6,8 +6,9 @@ Pins what engine25 adds on top of the shared pieces (``sft_quant_format`` and
   * ``Ltx25DiffusionStage.from_safetensors`` builds a 4-block model from a fake
     quantized file -- prefixed and bare names; fp8 with scale shape ``()`` and
     ``[1]``, scaled and plain layers mixed; int8 with a scalar or a per-row
-    scale; int8 ConvRot mixed with int8 and fp8 on a 256-wide config; F32
-    tensors; a connector in fp8 or int8 -- and its forward equals the forward
+    scale; int8 ConvRot mixed with int8 and fp8 on a 256-wide config; the
+    REDGraft mix (int8 ConvRot + w4a8 + fp8, §3-168 C-3) on the same config; F32
+    tensors; a connector in fp8, int8 or w4a8 -- and its forward equals the forward
     of the same model loaded with the weights brought back to bf16 (by
     ``engine.sft_quant.dequant.dequantize``); ``dispose`` and a rebuild give
     the same numbers again;
@@ -135,6 +136,40 @@ def _int8_marker(convrot: bool) -> torch.Tensor:
     return torch.tensor(list(json.dumps(conf).encode()), dtype=torch.uint8)
 
 
+def _w4a8_marker() -> torch.Tensor:
+    conf = {"format": "asym_w4a8_int8", "group_size": 16, "convrot": True, "convrot_groupsize": 256}
+    return torch.tensor(list(json.dumps(conf).encode()), dtype=torch.uint8)
+
+
+def _quantize_w4a8(val: torch.Tensor) -> tuple[dict, torch.Tensor]:
+    """A w4a8 encoding of ``val`` (rotate, per-row s_channel onto +/-127, per
+    16-column s_rel in fp8, nearest code of a non-uniform codebook, two codes
+    per byte, low nibble first). s_rel is stored F8_E4M3, as REDGraft's file
+    does (a U8 s_rel is covered by test_sft_quant_loader_service).
+    The reference is the engine's own ``dequantize``."""
+    o, i = val.shape
+    rotated = (val.view(o, i // 256, 256) @ hadamard("cpu")).view(o, i)
+    s_channel = (rotated.abs().amax(dim=1) / 127).clamp_min(1e-8).to(torch.float32)
+    target = (rotated / s_channel[:, None]).view(o, i // 16, 16)
+    codebook = torch.tensor(
+        [-1.0, -0.8, -0.62, -0.47, -0.34, -0.22, -0.11, -0.03,
+         0.03, 0.11, 0.22, 0.34, 0.47, 0.62, 0.8, 1.0], dtype=torch.float32,
+    )
+    s_rel = target.abs().amax(dim=2).clamp_min(1.0).to(FP8)
+    level = target / s_rel.to(torch.float32)[:, :, None]
+    codes = (level.unsqueeze(-1) - codebook).abs().argmin(-1).view(o, i).to(torch.uint8)
+    packed = (codes[:, 0::2] | (codes[:, 1::2] << 4)).view(torch.int8)
+    leaves = {
+        "weight": packed,
+        "weight_s_rel": s_rel,
+        "weight_s_channel": s_channel,
+        "weight_codebook": codebook,
+        "comfy_quant": _w4a8_marker(),
+    }
+    aux = {"weight_s_rel": s_rel, "weight_s_channel": s_channel, "weight_codebook": codebook}
+    return leaves, dequantize("w4a8", packed, aux, BF16)
+
+
 def _quantize(scheme: str, val: torch.Tensor, scale_shape) -> tuple[dict, torch.Tensor]:
     """One Linear weight in ``scheme``: (leaf -> stored tensor, bf16 reference).
 
@@ -143,6 +178,8 @@ def _quantize(scheme: str, val: torch.Tensor, scale_shape) -> tuple[dict, torch.
     engine's own ``dequantize`` (the rules are pinned in test_sft_quant_dequant).
     """
     o, i = val.shape
+    if scheme == "w4a8":
+        return _quantize_w4a8(val)
     if scheme == "fp8":
         w8 = val.to(FP8)
         return {"weight": w8}, w8.to(BF16)
@@ -175,6 +212,11 @@ def _scheme_for(pattern: str, n: int, in_features: int) -> str:
         return "fp8_scaled" if n % 2 else "fp8"
     if pattern == "int8":
         return "int8"
+    if pattern == "redgraft":
+        # REDGraft LTX 2.5: ConvRot and w4a8 wherever the width allows, else fp8
+        if in_features % 256 == 0:
+            return "w4a8" if n % 2 else "int8_convrot"
+        return "fp8_scaled"
     # "mixed": ConvRot wherever the width allows, else int8 and fp8 in turn
     if in_features % 256 == 0:
         return "int8_convrot"
@@ -189,8 +231,9 @@ def _write_quant(
 
     Block Linear weights follow ``pattern`` (see :func:`_scheme_for`). Every
     ``scale_shift_table`` is stored F32 (the loader brings F32 to bf16), the
-    rest bf16. The connector's weights are bf16, scaled fp8 or int8 (per-row
-    scale). The references are what the model should end up holding.
+    rest bf16. The connector's weights are bf16, scaled fp8, int8 (per-row
+    scale) or w4a8 (REDGraft's; widened to 256 inputs, which w4a8 needs). The
+    references are what the model should end up holding.
     """
     from safetensors.torch import save_file
 
@@ -219,10 +262,12 @@ def _write_quant(
 
     connectors: dict[str, torch.Tensor] = {}
     for key, shape in CONNECTOR_SHAPES.items():
+        if connector == "w4a8" and key.endswith(".weight"):
+            shape = (shape[0], 256)
         val = torch.randn(shape, generator=gen) * 0.1
         layer = key[: -len(".weight")]
         if connector != "bf16" and key.endswith(".weight"):
-            scheme = "fp8_scaled" if connector == "fp8" else "int8"
+            scheme = {"fp8": "fp8_scaled", "int8": "int8", "w4a8": "w4a8"}[connector]
             leaves, connectors[key] = _quantize(
                 scheme, val, "row" if connector == "int8" else scale_shape
             )
@@ -268,9 +313,16 @@ CASES = [
     pytest.param(P, "int8", "row", "int8", CONFIG, id="int8-prefixed-row-int8connector"),
     pytest.param("", "int8", (1,), "int8", CONFIG, id="int8-bare-scale1-int8connector"),
     pytest.param(P, "mixed", "row", "int8", CONFIG_256, id="convrot-mixed-256"),
+    pytest.param(P, "redgraft", "row", "w4a8", CONFIG_256, id="w4a8-redgraft-mix-256-w4a8connector"),
 ]
 CASE_ARGS = ("prefix", "pattern", "scale_shape", "connector", "config")
 _SCALE_SHAPE_OF = {"fp8_scaled": lambda o: (), "int8": lambda o: (o, 1), "int8_convrot": lambda o: (o, 1)}
+#: w4a8's auxiliary tensors after normalization: leaf -> (dtype, shape of (o, i)).
+_W4A8_AUX_OF = {
+    "weight_s_rel": (FP8, lambda o, i: (o, i // 16)),
+    "weight_s_channel": (torch.float32, lambda o, i: (o,)),
+    "weight_codebook": (torch.float32, lambda o, i: (16,)),
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -294,7 +346,8 @@ def test_from_safetensors_forward_matches_bf16_reference_and_survives_dispose(
     assert isinstance(stage._transformer_builder.model_loader, Ltx25SftStateDictLoader)
     layers = stage._transformer_builder.model_loader.layout.layers
     wanted = {"fp8": {"fp8", "fp8_scaled"}, "int8": {"int8"},
-              "mixed": {"int8_convrot", "int8", "fp8_scaled"}}[pattern]
+              "mixed": {"int8_convrot", "int8", "fp8_scaled"},
+              "redgraft": {"int8_convrot", "w4a8", "fp8_scaled"}}[pattern]
     assert set(layers.values()) == wanted
 
     outs = []
@@ -316,6 +369,14 @@ def test_from_safetensors_forward_matches_bf16_reference_and_survives_dispose(
         for layer in layers:
             w = velocity.get_submodule(layer).weight
             assert isinstance(w, nn.Parameter) and not w.requires_grad
+        # w4a8: packed weight (o, i/2) and its three auxiliary tensors
+        for layer in (n for n, sch in layers.items() if sch == "w4a8"):
+            mod = velocity.get_submodule(layer)
+            o, i = mod.out_features, mod.in_features
+            assert mod.weight.dtype == torch.int8 and mod.weight.shape == (o, i // 2)
+            for leaf, (dtype, shape) in _W4A8_AUX_OF.items():
+                t = state[f"{layer}.{leaf}"]
+                assert (t.dtype, tuple(t.shape)) == (dtype, shape(o, i)), f"{layer}.{leaf}"
         assert not any(k.startswith(("text_embedding_projection.", "video_embeddings_connector."))
                        for k in state)
         with torch.no_grad():

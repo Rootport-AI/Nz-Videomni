@@ -14,7 +14,10 @@ a quantized (fp8 / int8) transformer:
   * §3-168: int8 / int8_convrot layers — the skeleton takes an int8 Parameter
     (``requires_grad=False``) and an ``(o, 1)`` f32 scale, the forward matches
     ``F.linear`` over the dequantized weight plus the unchanged LoRA delta, and
-    nothing stored is written.
+    nothing stored is written;
+  * §3-168 C-3: w4a8 — the skeleton takes the packed int8 Parameter ``(o, i//2)``
+    and the three auxiliary buffers (fp8 ``(o, i/16)``, f32 ``(o,)``, f32 ``(16,)``),
+    the forward matches an independent reference plus the unchanged LoRA delta.
 
 Run with ``.venv-engine`` and ``--noconftest``; the app venv skips the module.
 """
@@ -337,3 +340,112 @@ def test_int8_forward_does_not_mutate_weight_or_scale(scheme, in_f):
     assert m.weight.dtype == I8 and m.weight_scale.dtype == torch.float32
     assert torch.equal(_u8(m.weight), w_before)
     assert torch.equal(_u8(m.weight_scale), s_before)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# §3-168 C-3: w4a8
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _w4a8_reference(packed: torch.Tensor, aux: dict) -> torch.Tensor:
+    """Written out independently of engine.sft_quant.dequant (fp32, then bf16):
+    low nibble = even column, codebook, x s_rel per 16 columns, int8 grid,
+    x s_channel, ConvRot."""
+    o, half = packed.shape
+    i = half * 2
+    u = packed.view(torch.uint8).to(torch.int64)
+    codes = torch.empty(o, i, dtype=torch.int64)
+    codes[:, 0::2] = u & 0x0F
+    codes[:, 1::2] = u >> 4
+    v = aux["weight_codebook"][codes]
+    s_rel = aux["weight_s_rel"].float().repeat_interleave(16, dim=1)
+    v = torch.clamp(torch.round(v * s_rel), -127, 127)
+    v = v * aux["weight_s_channel"][:, None]
+    return (v.view(o, i // 256, 256) @ _h256()).view(o, i).to(BF16)
+
+
+def _w4a8_root(in_f: int = IN_ROT, s_rel_raw_u8: bool = False):
+    """A meta skeleton with one w4a8 Linear, loaded like the builder does."""
+    from engine.sft_quant.dequant import normalize_aux
+
+    with torch.device("meta"):
+        root = nn.Module()
+        root.blk = nn.Module()
+        root.blk.lin = nn.Linear(in_f, OUT_F, bias=True)
+    _patch_model_for_quant(root, {"blk.lin": "w4a8"})
+    packed = torch.randint(-128, 128, (OUT_F, in_f // 2), dtype=I8)
+    s_rel = (torch.rand(OUT_F, in_f // 16) * 150 + 20).to(FP8)
+    aux = {
+        "weight_s_rel": s_rel,
+        "weight_s_channel": (torch.rand(OUT_F) * 0.01 + 1e-3).to(torch.float32),
+        "weight_codebook": torch.sort(torch.randn(16) * 0.7).values.to(torch.float32),
+    }
+    raw = dict(aux, weight_s_rel=s_rel.view(torch.uint8).clone()) if s_rel_raw_u8 else aux
+    bias = torch.randn(OUT_F).to(BF16)
+    sd = {"blk.lin.weight": packed, "blk.lin.bias": bias}
+    for leaf, t in raw.items():
+        sd[f"blk.lin.{leaf}"] = normalize_aux("w4a8", leaf, t, OUT_F, in_f)
+    result = root.load_state_dict(sd, strict=False, assign=True)
+    assert not result.unexpected_keys and not result.missing_keys
+    return root, packed, aux, bias
+
+
+def test_meta_skeleton_takes_w4a8_packed_parameter_and_three_aux():
+    with torch.device("meta"):
+        root = nn.Module()
+        root.blk = nn.Module()
+        root.blk.lin = nn.Linear(IN_ROT, OUT_F, bias=True)
+    _patch_model_for_quant(root, {"blk.lin": "w4a8"})
+    skel = root.state_dict()
+    assert skel["blk.lin.weight"].shape == (OUT_F, IN_ROT // 2)
+    assert (skel["blk.lin.weight_s_rel"].shape, skel["blk.lin.weight_s_rel"].dtype) == (
+        (OUT_F, IN_ROT // 16), FP8)
+    assert (skel["blk.lin.weight_s_channel"].shape, skel["blk.lin.weight_s_channel"].dtype) == (
+        (OUT_F,), torch.float32)
+    assert (skel["blk.lin.weight_codebook"].shape, skel["blk.lin.weight_codebook"].dtype) == (
+        (16,), torch.float32)
+    assert not root.blk.lin.weight.requires_grad and root.blk.lin._sft_scheme == "w4a8"
+
+    torch.manual_seed(40)
+    root, packed, aux, bias = _w4a8_root(s_rel_raw_u8=True)  # U8 on disk -> fp8 buffer
+    w = root.blk.lin.weight
+    assert isinstance(w, nn.Parameter) and w.dtype == I8 and not w.requires_grad
+    assert w.shape == (OUT_F, IN_ROT // 2)
+    assert root.blk.lin.weight_s_rel.dtype == FP8
+    assert torch.equal(_u8(root.blk.lin.weight_s_rel), _u8(aux["weight_s_rel"]))
+    assert not [n for n, t in root.state_dict().items() if t.device.type == "meta"]
+
+
+@pytest.mark.parametrize("n_lora", [0, 1, 2])
+def test_w4a8_layer_matches_reference(n_lora):
+    torch.manual_seed(41 + n_lora)
+    root, packed, aux, bias = _w4a8_root()
+    m = root.blk.lin
+    x = torch.randn(5, IN_ROT).to(BF16)
+    factors = [
+        (torch.randn(RANK, IN_ROT).to(BF16), torch.randn(OUT_F, RANK).to(BF16), s)
+        for s in (0.75, -0.3)[:n_lora]
+    ]
+    if factors:
+        _set_specs(m, factors)
+    wd = _w4a8_reference(packed, aux)
+    acc = None
+    for a, b, s in factors:  # the LoRA delta, exactly as for fp8 / int8
+        d = torch.matmul(b.float() * s, a.float()).to(BF16)
+        acc = d if acc is None else acc + d
+    ref = wd if acc is None else wd + acc
+    assert torch.equal(m(x), F.linear(x, ref, bias))
+
+
+def test_w4a8_forward_does_not_mutate_weight_or_aux():
+    torch.manual_seed(45)
+    root, packed, aux, bias = _w4a8_root()
+    m = root.blk.lin
+    _set_specs(m, [(torch.randn(RANK, IN_ROT).to(BF16), torch.randn(OUT_F, RANK).to(BF16), 0.5)])
+    names = ("weight", "weight_s_rel", "weight_s_channel", "weight_codebook")
+    before = {n: _u8(getattr(m, n)) for n in names}
+    x = torch.randn(5, IN_ROT).to(BF16)
+    _ = m(x)
+    _ = m(x)
+    for n in names:
+        assert torch.equal(_u8(getattr(m, n)), before[n]), n

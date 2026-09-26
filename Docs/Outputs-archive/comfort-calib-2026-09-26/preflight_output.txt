@@ -1,0 +1,116 @@
+[2026-09-26 07:44:59.839] p_a_1080_161.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.839]    warn a_s_1080_161: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.839] p_a_1080_169.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.839]    warn a_s_1080_169: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.839] p_a_1080_b89.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.839]    warn a_s_1080_b89: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_b_1080_161.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.840] p_b_1080_169.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.840] p_b_1080_b89.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.840] p_f_1080_105_d.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_105_d: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_121_d.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_121_d: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_121_d_r2.json        1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_121_d_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_129_d.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_129_d: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_137_d.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_137_d: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_145_d.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_145_d: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_153_d.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_153_d: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_161.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_161: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_161_d.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_161_d: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_169.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_169: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_177.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_177: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_b89.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_b89: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_1080_b89_d.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_1080_b89_d: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_720_345.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_720_345: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_720_361.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_720_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_720_369.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_720_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_720_b185.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_s_720_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.840] p_f_c_1792x1024.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.840]    warn f_c_1792x1024: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.850] p_f_c_1856x1024.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.850]    warn f_c_1856x1024: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.850] p_f_c_1920x1088.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.850]    warn f_c_1920x1088: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.850] p_f_c_b1280x768.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.850]    warn f_c_b1280x768: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.850] p_f_p1280_361.json            1 point(s), 0 failed
+[2026-09-26 07:44:59.850]    warn f_s_p1280_361: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.850] p_f_p1280_369.json            1 point(s), 0 failed
+[2026-09-26 07:44:59.850]    warn f_s_p1280_369: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.850] p_f_p1280_b185.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.850]    warn f_s_p1280_b185: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.850] p_g_1080_145.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.850] p_g_1080_145_r2.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_1080_153.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_1080_153_r2.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_1080_161.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_1080_161_r2.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_1080_169.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_1080_169_r2.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_1080_b89.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_720_297.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_720_297_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_720_313.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.851] p_g_720_313_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_313_r2b.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_329.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_329_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_345.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_345_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_353.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_353_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_361.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_361_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_369.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_720_b169.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_297.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_297_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_313.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_313_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_329.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_329_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_345.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_345_r2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_353.json              1 point(s), 0 failed
+[2026-09-26 07:44:59.852] p_g_896_b161.json             1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1664x960.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1664x960_r2.json        1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1728x1024.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1728x1024_r2.json       1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1792x1024.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1792x1024_r2.json       1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1856x1024.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1856x1024_r2.json       1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1920x1024.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1920x1024_r2.json       1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1920x1088.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1920x1088_r2.json       1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1984x1024.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_1984x1024_r2.json       1 point(s), 0 failed
+[2026-09-26 07:44:59.853] p_g_c_b1280x768.json          1 point(s), 0 failed
+[2026-09-26 07:44:59.853] plan_B1_f_1080_169_r2.json    1 point(s), 0 failed
+[2026-09-26 07:44:59.853]    warn f_s_1080_169_r2: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.853] plan_W_a_warm.json            1 point(s), 0 failed
+[2026-09-26 07:44:59.853]    warn a_warm: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.853] plan_W_b_warm.json            1 point(s), 0 failed
+[2026-09-26 07:44:59.853] plan_W_f_warm.json            1 point(s), 0 failed
+[2026-09-26 07:44:59.853]    warn f_warm: prompt not pinned; the engine-default prompt will be used
+[2026-09-26 07:44:59.854] plan_W_g_warm.json            1 point(s), 0 failed
+[2026-09-26 07:44:59.854] plan_W_g_warm2.json           1 point(s), 0 failed
+[2026-09-26 07:44:59.855] wrote preflight.json -- 85 point(s), 0 failed, ok=True

@@ -1,0 +1,56 @@
+[2026-09-26 07:03:25.620] restoring original base model 'LTX23' transformer 'sulphur_distil_fp8mixed'
+[2026-09-26 07:03:25.621] POST /pipeline/load base_model=LTX23 transformer=sulphur_distil_fp8mixed
+[2026-09-26 07:03:25.689]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX23", "models": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-26 07:03:25.691] load finished in 0.1s: state=ready base_model=LTX23 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-26 07:03:25.701]   transformer check: load response='sulphur_distil_fp8mixed' GET /models active='sulphur_distil_fp8mixed' want='sulphur_distil_fp8mixed'
+[2026-09-26 07:03:25.706] state.json after restore: {"schema": 1, "active_base_model": "LTX23", "selections": {"LTX23": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-26 07:03:25.706] state.json verified: selections.LTX23.transformer = 'sulphur_distil_fp8mixed'
+[2026-09-26 07:03:25.910] restoring original base model 'LTX25' transformer 'default'
+[2026-09-26 07:03:25.910] POST /pipeline/load base_model=LTX25 transformer=default
+[2026-09-26 07:03:36.865]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX25", "models": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-26 07:03:36.868] load finished in 11.0s: state=ready base_model=LTX25 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-26 07:03:36.878]   transformer check: load response='default' GET /models active='default' want='default'
+[2026-09-26 07:03:36.882] state.json after restore: {"schema": 1, "active_base_model": "LTX25", "selections": {"LTX23": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-26 07:03:36.882] state.json verified: selections.LTX25.transformer = 'default'
+[2026-09-26 07:14:34.270] restoring original base model 'LTX23' transformer 'sulphur_distil_fp8mixed'
+[2026-09-26 07:14:34.271] POST /pipeline/load base_model=LTX23 transformer=sulphur_distil_fp8mixed
+[2026-09-26 07:14:43.577]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX23", "models": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-26 07:14:43.579] load finished in 9.3s: state=ready base_model=LTX23 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-26 07:14:43.588]   transformer check: load response='sulphur_distil_fp8mixed' GET /models active='sulphur_distil_fp8mixed' want='sulphur_distil_fp8mixed'
+[2026-09-26 07:14:43.592] state.json after restore: {"schema": 1, "active_base_model": "LTX23", "selections": {"LTX23": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "ltx-2.5-22b-distilled-transformer-fp8_e4m3fn", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-26 07:14:43.592] state.json verified: selections.LTX23.transformer = 'sulphur_distil_fp8mixed'
+[2026-09-26 07:14:43.753] restoring original base model 'LTX25' transformer 'default'
+[2026-09-26 07:14:43.753] POST /pipeline/load base_model=LTX25 transformer=default
+[2026-09-26 07:14:49.355]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX25", "models": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-26 07:14:49.357] load finished in 5.6s: state=ready base_model=LTX25 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-26 07:14:49.366]   transformer check: load response='default' GET /models active='default' want='default'
+[2026-09-26 07:14:49.366] state.json after restore: {"schema": 1, "active_base_model": "LTX25", "selections": {"LTX23": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-26 07:14:49.366] state.json verified: selections.LTX25.transformer = 'default'
+[2026-09-26 07:29:34.985] restoring original base model 'LTX23' transformer 'sulphur_distil_fp8mixed'
+[2026-09-26 07:29:34.985] POST /pipeline/load base_model=LTX23 transformer=sulphur_distil_fp8mixed
+[2026-09-26 07:29:35.046]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX23", "models": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-26 07:29:35.048] load finished in 0.1s: state=ready base_model=LTX23 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-26 07:29:35.058]   transformer check: load response='sulphur_distil_fp8mixed' GET /models active='sulphur_distil_fp8mixed' want='sulphur_distil_fp8mixed'
+[2026-09-26 07:29:35.063] state.json after restore: {"schema": 1, "active_base_model": "LTX23", "selections": {"LTX23": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-26 07:29:35.063] state.json verified: selections.LTX23.transformer = 'sulphur_distil_fp8mixed'
+[2026-09-26 07:29:35.224] restoring original base model 'LTX25' transformer 'default'
+[2026-09-26 07:29:35.224] POST /pipeline/load base_model=LTX25 transformer=default
+[2026-09-26 07:29:45.281]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX25", "models": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-26 07:29:45.283] load finished in 10.1s: state=ready base_model=LTX25 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-26 07:29:45.292]   transformer check: load response='default' GET /models active='default' want='default'
+[2026-09-26 07:29:45.293] state.json after restore: {"schema": 1, "active_base_model": "LTX25", "selections": {"LTX23": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-26 07:29:45.293] state.json verified: selections.LTX25.transformer = 'default'
+[2026-09-26 07:45:20.232] restoring original base model 'LTX23' transformer 'sulphur_distil_fp8mixed'
+[2026-09-26 07:45:20.242] POST /pipeline/load base_model=LTX23 transformer=sulphur_distil_fp8mixed
+[2026-09-26 07:45:20.312]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX23", "models": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-26 07:45:20.313] load finished in 0.1s: state=ready base_model=LTX23 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-26 07:45:20.334]   transformer check: load response='sulphur_distil_fp8mixed' GET /models active='sulphur_distil_fp8mixed' want='sulphur_distil_fp8mixed'
+[2026-09-26 07:45:20.334] state.json after restore: {"schema": 1, "active_base_model": "LTX23", "selections": {"LTX23": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-26 07:45:20.334] state.json verified: selections.LTX23.transformer = 'sulphur_distil_fp8mixed'
+[2026-09-26 07:45:20.500] restoring original base model 'LTX25' transformer 'default'
+[2026-09-26 07:45:20.501] POST /pipeline/load base_model=LTX25 transformer=default
+[2026-09-26 07:45:30.774]   -> 200 {"pipeline_loaded": true, "pipeline_type": "distilled", "state": "ready", "base_model": "LTX25", "models": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}
+[2026-09-26 07:45:30.776] load finished in 10.3s: state=ready base_model=LTX25 pipeline_loaded=True acceleration={"attention_backends": ["sdpa", "sage"], "sage_available": true, "block_swap_prefetch_available": true}
+[2026-09-26 07:45:30.796]   transformer check: load response='default' GET /models active='default' want='default'
+[2026-09-26 07:45:30.797] state.json after restore: {"schema": 1, "active_base_model": "LTX25", "selections": {"LTX23": {"transformer": "sulphur_distil_fp8mixed", "text_encoder": "default", "video_vae": "default", "audio": "default"}, "LTX25": {"transformer": "default", "text_encoder": "default", "video_vae": "default", "audio": "default"}}}
+[2026-09-26 07:45:30.797] state.json verified: selections.LTX25.transformer = 'default'

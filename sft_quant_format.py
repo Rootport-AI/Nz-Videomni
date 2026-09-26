@@ -38,6 +38,7 @@ __all__ = [
     "SCHEME_TABLE",
     "SKIPPED_SUFFIXES",
     "TensorInfo",
+    "W4A8_GROUP_SIZE",
     "aux_shape",
     "AUX_NAMES",
     "aux_specs",
@@ -119,13 +120,21 @@ class Scheme:
 
 _SCALAR_SCALE = AuxRule(frozenset({"F32"}), ("()", "(1,)"), "F32", "()")
 _ROW_SCALE = AuxRule(frozenset({"F32"}), ("()", "(1,)", "(o,1)"), "F32", "(o,1)")
+#: w4a8: 4-bit codes packed two per I8 column (``i`` below is the logical input
+#: width = stored columns x packing); ConvRot is unconditional.
+_W4A8_AUX = {
+    "weight_s_rel": AuxRule(frozenset({"F8_E4M3", "U8"}), ("(o,i/16)",), "F8_E4M3", "(o,i/16)"),
+    "weight_s_channel": AuxRule(frozenset({"F32"}), ("(o,)",), "F32", "(o,)"),
+    "weight_codebook": AuxRule(frozenset({"F32"}), ("(16,)",), "F32", "(16,)"),
+}
 
-#: Scheme name -> storage. C-3 adds the "w4a8" row.
+#: Scheme name -> storage.
 SCHEME_TABLE: dict[str, Scheme] = {
     "fp8": Scheme(weight="F8", aux={}, quant_bias=True),
     "fp8_scaled": Scheme(weight="F8", aux={"weight_scale": _SCALAR_SCALE}, quant_bias=True),
     "int8": Scheme(weight="I8", aux={"weight_scale": _ROW_SCALE}),
     "int8_convrot": Scheme(weight="I8", aux={"weight_scale": _ROW_SCALE}, in_multiple=256),
+    "w4a8": Scheme(weight="I8", aux=_W4A8_AUX, packing=2, in_multiple=256),
 }
 
 SCHEMES: tuple[str, ...] = tuple(SCHEME_TABLE)
@@ -143,8 +152,11 @@ _FORMATS: dict[str, str] = {
     "float8_e4m3fn": "F8",
     "float8_e5m2": "F8",
     "int8_tensorwise": "I8",
+    "asym_w4a8_int8": "I8",
 }
 _CONVROT_GROUPSIZE = 256
+#: The only w4a8 group size (ComfyUI ops.py defaults a missing one to 16).
+W4A8_GROUP_SIZE = 16
 
 _FLOAT_DTYPES = frozenset({"BF16", "F16", "F32"})
 _MARKER_DTYPES = frozenset({"U8", "I8"})
@@ -172,7 +184,8 @@ def _placement() -> dict[str, frozenset[str]]:
     return {d: frozenset(leaves) for d, leaves in place.items()}
 
 
-#: I8 -> {weight, comfy_quant} / U8 -> {comfy_quant} / F8_* -> {weight, bias}
+#: I8 -> {weight, comfy_quant} / U8 -> {comfy_quant, weight_s_rel} /
+#: F8_E4M3 -> {weight, bias, weight_s_rel} / F8_E5M2 -> {weight, bias}
 _PLACEMENT: dict[str, frozenset[str]] = _placement()
 
 
@@ -194,7 +207,7 @@ def aux_shape(rule: str, o: int, i: int) -> tuple[int, ...]:
     if rule == "(16,)":
         return (16,)
     if rule == "(o,i/16)":
-        return (o, i // 16)
+        return (o, i // W4A8_GROUP_SIZE)
     raise ValueError(f"unknown shape rule {rule!r}")
 
 
@@ -495,7 +508,7 @@ def layer_schemes(path, header: Header, prefix: str) -> dict[str, str]:
             orphans = sorted(AUX_NAMES & leaves.keys())
             if orphans:
                 raise QuantFormatError(
-                    _NG + f"倍率 '{leaves[orphans[0]]}' に対応する量子化された .weight がありません（孤立した倍率）"
+                    _NG + f"補助テンソル '{leaves[orphans[0]]}' に対応する量子化された .weight がありません（孤立した補助テンソル）"
                 )
             continue  # a float layer: bf16 whatever its marker says
         scheme = _scheme_of(layer, weight_key, weight_dtype, leaves, markers.get(layer))
@@ -523,14 +536,21 @@ def _scheme_of(layer: str, weight_key: str, weight_dtype: str, leaves: dict, mar
         raise QuantFormatError(
             _NG + f"量子化の印 format='{fmt}' と重みの dtype {weight_dtype} が合いません（{where}）"
         )
-    convrot = conf.get("convrot", False)
-    if not isinstance(convrot, bool):
-        raise QuantFormatError(_NG + f"量子化の印の convrot が真偽値ではありません（{convrot!r}・{where}）")
     groupsize = conf.get("convrot_groupsize", _CONVROT_GROUPSIZE)
     if groupsize != _CONVROT_GROUPSIZE:
         raise QuantFormatError(
             _NG + f"convrot_groupsize={groupsize!r} は未対応です（受理: {_CONVROT_GROUPSIZE} のみ・{where}）"
         )
+    if fmt == "asym_w4a8_int8":  # always rotated: the convrot key is not read
+        group_size = conf.get("group_size", W4A8_GROUP_SIZE)
+        if group_size != W4A8_GROUP_SIZE:
+            raise QuantFormatError(
+                _NG + f"group_size={group_size!r} は未対応です（受理: {W4A8_GROUP_SIZE} のみ・{where}）"
+            )
+        return "w4a8"
+    convrot = conf.get("convrot", False)
+    if not isinstance(convrot, bool):
+        raise QuantFormatError(_NG + f"量子化の印の convrot が真偽値ではありません（{convrot!r}・{where}）")
     return "int8_convrot" if convrot else "int8"
 
 
@@ -553,9 +573,8 @@ def _check_aux(layer: str, scheme: str, stored: tuple[int, ...], leaves: dict, t
         shapes = [aux_shape(r, o, i) for r in rule.raw_shapes]
         if info.dtype not in rule.raw_dtypes or info.shape not in shapes:
             accepted = "・".join(sorted(rule.raw_dtypes)) + " の " + "／".join(str(list(s)) for s in shapes)
-            label = "倍率" if name == "weight_scale" else "補助テンソル"
             raise QuantFormatError(
-                _NG + f"{label} '{key}' が {info.dtype}{list(info.shape)} です"
+                _NG + f"補助テンソル '{key}' が {info.dtype}{list(info.shape)} です"
                 f"（方式 {scheme} で受理するのは {accepted} のみ）"
             )
     if i % row.in_multiple:

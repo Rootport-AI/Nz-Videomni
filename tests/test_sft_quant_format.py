@@ -437,7 +437,7 @@ def _fp8_3d(spec, meta, pay):
         (_marker("int8_tensorwise"), "format='int8_tensorwise' と重みの dtype F8_E4M3 が合いません"),
         (_metadata_int8, "format='int8_tensorwise' と重みの dtype F8_E4M3 が合いません"),
         (_int8_weight, "format='float8_e4m3fn' と重みの dtype I8 が合いません"),
-        (_marker("asym_w4a8_int8"), "format='asym_w4a8_int8' は未対応です"),  # until C-3
+        (_marker("asym_w4a8_int8"), "format='asym_w4a8_int8' と重みの dtype F8_E4M3 が合いません"),
         (_marker("nvfp4"), "format='nvfp4' は未対応です"),
         (_marker("mxfp8"), "mxfp8"),
         (_marker("convrot_w4a4"), "convrot_w4a4"),
@@ -445,7 +445,7 @@ def _fp8_3d(spec, meta, pay):
         (_per_row_scale, "F32[4] です（方式 fp8_scaled で受理するのは F32 の []／[1] のみ）"),
         (_per_block_scale, "F32[2, 2]"),
         (_bf16_scale, "BF16[]"),
-        (_orphan_scale, "孤立した倍率"),
+        (_orphan_scale, "孤立した補助テンソル"),
         (_scaled_fp8_marker, "旧形式"),
         (_scale_weight, "旧形式"),
         (_no_config, "config がありません"),
@@ -692,7 +692,7 @@ def _all(scheme: str, blocks=_INT8_BLOCKS) -> dict[str, str]:
 
 
 def test_scheme_table_rows():
-    assert SCHEMES == ("fp8", "fp8_scaled", "int8", "int8_convrot")
+    assert SCHEMES == ("fp8", "fp8_scaled", "int8", "int8_convrot", "w4a8")
     assert tuple(SCHEME_TABLE) == SCHEMES
     assert SKIPPED_SUFFIXES == (".input_scale", ".comfy_quant")
 
@@ -700,7 +700,9 @@ def test_scheme_table_rows():
 def test_aux_names_is_the_union_of_the_table():
     import sft_quant_format
 
-    assert sft_quant_format.AUX_NAMES == frozenset({"weight_scale"})
+    assert sft_quant_format.AUX_NAMES == frozenset(
+        {"weight_scale", "weight_s_rel", "weight_s_channel", "weight_codebook"}
+    )
     assert "AUX_NAMES" in sft_quant_format.__all__
 
 
@@ -709,6 +711,11 @@ def test_aux_specs():
     assert aux_specs("fp8_scaled") == {"weight_scale": ("F32", "()")}
     assert aux_specs("int8") == {"weight_scale": ("F32", "(o,1)")}
     assert aux_specs("int8_convrot") == {"weight_scale": ("F32", "(o,1)")}
+    assert aux_specs("w4a8") == {
+        "weight_s_rel": ("F8_E4M3", "(o,i/16)"),
+        "weight_s_channel": ("F32", "(o,)"),
+        "weight_codebook": ("F32", "(16,)"),
+    }
 
 
 @pytest.mark.parametrize(
@@ -729,13 +736,25 @@ def test_weight_shape(scheme):
     assert weight_shape(scheme, 4096, 16384) == (4096, 16384)
 
 
+def test_w4a8_weight_shape_and_aux_shapes_agree():
+    """``i`` is the LOGICAL input width: the stored I8 has i/2 columns, s_rel i/16."""
+    assert weight_shape("w4a8", 4096, 16384) == (4096, 8192)
+    assert aux_shape("(o,i/16)", 4096, 16384) == (4096, 1024)
+    import sft_quant_format
+
+    assert sft_quant_format.W4A8_GROUP_SIZE == 16 and "W4A8_GROUP_SIZE" in sft_quant_format.__all__
+    row = SCHEME_TABLE["w4a8"]
+    assert (row.weight, row.packing, row.in_multiple, row.quant_bias) == ("I8", 2, 256, False)
+    assert row.aux["weight_s_rel"].raw_dtypes == frozenset({"F8_E4M3", "U8"})
+
+
 def test_placement_is_derived_from_the_table():
     from sft_quant_format import _PLACEMENT
 
     assert _PLACEMENT == {
         "I8": frozenset({"weight", "comfy_quant"}),
-        "U8": frozenset({"comfy_quant"}),
-        "F8_E4M3": frozenset({"weight", "bias"}),
+        "U8": frozenset({"comfy_quant", "weight_s_rel"}),
+        "F8_E4M3": frozenset({"weight", "bias", "weight_s_rel"}),
         "F8_E5M2": frozenset({"weight", "bias"}),
     }
 
@@ -972,7 +991,8 @@ _QUANTO_KEY = f"'{P}transformer_blocks.5.{LINEAR}.weight._data'"
         (_set_conf({"format": "nvfp4"}), "format='nvfp4' は未対応です"),
         (_set_conf({"format": "mxfp8"}), "format='mxfp8' は未対応です"),
         (_set_conf({"format": "convrot_w4a4"}), "format='convrot_w4a4' は未対応です"),
-        (_set_conf({"format": "asym_w4a8_int8", "group_size": 16}), "format='asym_w4a8_int8' は未対応です"),
+        (_set_conf({"format": "asym_w4a8_int8", "group_size": 16}),
+         "（方式 w4a8）に補助テンソル ['weight_codebook', 'weight_s_channel', 'weight_s_rel'] がありません"),
         (_set_conf({"convrot": True}), "format がありません"),  # old INT8-Fast
         (_i8_no_marker, "量子化の印がありません"),
         (_set_conf({"format": "float8_e4m3fn"}), "format='float8_e4m3fn' と重みの dtype I8 が合いません"),
@@ -1013,7 +1033,7 @@ def test_int8_refusals(tmp_path, mutate, needle):
 def test_int8_orphan_scale_on_float_layer_is_refused(tmp_path):
     spec, meta, pay = _int8_model()
     spec[_layer(0) + ".weight_scale"] = ("F32", (4, 1))
-    with pytest.raises(QuantFormatError, match="孤立した倍率"):
+    with pytest.raises(QuantFormatError, match="孤立した補助テンソル"):
         _inspect(tmp_path, spec, meta, pay)
 
 
@@ -1046,3 +1066,204 @@ def test_inspect_int8_reads_only_header_and_needed_markers(tmp_path, monkeypatch
     assert set(inspect(path).layers.values()) == {"int8_convrot"}
     assert counter.total <= 8 + header.header_len + (quant_bytes if where == "tensor" else 0)
     assert header.file_size > 8 + header.header_len + 44 * 64 * IN  # the body is big
+
+
+# --------------------------------------------------------------------------- #
+# §3-168 C-3: ComfyUI asym_w4a8_int8 (4-bit codes + codebook, always ConvRot)
+# --------------------------------------------------------------------------- #
+
+W4A8_CONF = {"format": "asym_w4a8_int8", "group_size": 16, "convrot_groupsize": 256}
+
+
+def _put_w4a8(spec, layer: str, *, o: int = 4, i: int = IN, s_rel: str = "F8_E4M3"):
+    """One w4a8 Linear with ``o`` outputs and LOGICAL input width ``i``."""
+    spec[f"{layer}.weight"] = ("I8", (o, i // 2))
+    spec[f"{layer}.weight_s_rel"] = (s_rel, (o, i // 16))
+    spec[f"{layer}.weight_s_channel"] = ("F32", (o,))
+    spec[f"{layer}.weight_codebook"] = ("F32", (16,))
+
+
+def _put_marker(spec, pay, layer: str, conf: dict):
+    data = _conf_bytes(conf)
+    spec[f"{layer}.comfy_quant"] = _quant_u8(data)
+    pay[f"{layer}.comfy_quant"] = data
+
+
+def _w4a8_model(*, conf: dict | None = None, where: str = "tensor", s_rel: str = "F8_E4M3",
+                prefix: str = P, blocks=_INT8_BLOCKS):
+    """A minimal transformer whose ``blocks`` Linears are w4a8 (``where`` as in _int8_model)."""
+    conf = W4A8_CONF if conf is None else conf
+    spec, meta, pay = _model("plain", prefix=prefix, fp8_blocks=())
+    meta_layers = {}
+    for b in blocks:
+        layer = f"{prefix}transformer_blocks.{b}.{LINEAR}"
+        _put_w4a8(spec, layer, s_rel=s_rel)
+        if where in ("tensor", "both"):
+            _put_marker(spec, pay, layer, conf)
+        if where in ("meta", "both"):
+            meta_layers[layer] = conf
+    if meta_layers:
+        meta["_quantization_metadata"] = json.dumps({"format_version": "1.0", "layers": meta_layers})
+    return spec, meta, pay
+
+
+# --- acceptance --------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("s_rel", ["F8_E4M3", "U8"])
+@pytest.mark.parametrize("where", ["tensor", "meta", "both"])
+def test_accepts_w4a8(tmp_path, where, s_rel):
+    layout = _inspect(tmp_path, *_w4a8_model(where=where, s_rel=s_rel))
+    assert layout.layers == _all("w4a8")
+
+
+@pytest.mark.parametrize(
+    "conf",
+    [
+        {"format": "asym_w4a8_int8"},  # both group sizes default (16 / 256, ComfyUI ops.py)
+        {"format": "asym_w4a8_int8", "convrot": True, "convrot_groupsize": 256, "group_size": 16},
+        {"format": "asym_w4a8_int8", "convrot": False},  # not read: w4a8 is always rotated
+        {"format": "asym_w4a8_int8", "params": {"group_size": 16, "convrot_groupsize": 256}},
+    ],
+    ids=["defaults", "full", "convrot_false", "nested_params"],
+)
+def test_accepts_w4a8_marker_variants(tmp_path, conf):
+    assert _inspect(tmp_path, *_w4a8_model(conf=conf)).layers == _all("w4a8")
+
+
+def test_accepts_redgraft_style_mix(tmp_path):
+    """REDGraft 3250230: int8 ConvRot + w4a8 + bf16 edge blocks, a w4a8
+    connector, every marker a comfy_quant tensor."""
+    spec, meta, pay = _int8_model(blocks=range(2, 24), conf={"format": "int8_tensorwise", "convrot": True})
+    conn = f"{P}video_embeddings_connector.proj"
+    for layer in [_layer(b) for b in range(24, 46)] + [conn]:
+        _put_w4a8(spec, layer)
+        _put_marker(spec, pay, layer, W4A8_CONF)
+    path = _write(tmp_path / "redgraft.safetensors", spec, meta, pay)
+    layout = inspect(path)
+    assert Counter(layout.layers.values()) == {"int8_convrot": 22, "w4a8": 22}
+    assert f"{conn}.weight_codebook" in layout.connector_keys
+    assert layer_schemes(path, read_header(path), P)[conn] == "w4a8"
+
+
+def test_accepts_joaozaokk_style(tmp_path):
+    """JoaoZaokk 2.3 distilled-1.1 w4a8: markers in the metadata only, s_rel
+    stored as U8, no ``convrot`` key."""
+    layout = _inspect(tmp_path, *_w4a8_model(conf=W4A8_CONF, where="meta", s_rel="U8"))
+    assert layout.layers == _all("w4a8")
+
+
+def test_accepts_tsolful_style_bare_names(tmp_path):
+    """tsolful 2.5: bare tensor names and bare metadata layer names."""
+    conf = {"convrot": True, "convrot_groupsize": 256, "format": "asym_w4a8_int8", "group_size": 16}
+    spec, meta, pay = _w4a8_model(conf=conf, where="meta", prefix="")
+    del spec["vae.decoder.conv.weight"]
+    layout = _inspect(tmp_path, spec, meta, pay)
+    assert layout.prefix == ""
+    assert layout.layers == _all("w4a8")
+
+
+def test_accepts_w4a8_gate_and_wide_layers(tmp_path):
+    """o and i are read per layer: a 32-output gate and a 4x-wide ff input."""
+    spec, meta, pay = _w4a8_model()
+    for layer, o, i in [(f"{P}transformer_blocks.5.attn1.to_gate_logits", 32, IN),
+                        (f"{P}transformer_blocks.5.ff.net.2", 4, 4 * IN)]:
+        _put_w4a8(spec, layer, o=o, i=i)
+        _put_marker(spec, pay, layer, W4A8_CONF)
+    layers = _inspect(tmp_path, spec, meta, pay).layers
+    assert layers["transformer_blocks.5.attn1.to_gate_logits"] == "w4a8"
+    assert layers["transformer_blocks.5.ff.net.2"] == "w4a8"
+
+
+# --- refusals ----------------------------------------------------------------- #
+
+
+def _w4a8_conf(conf):
+    def mutate(spec, meta, pay):
+        _put_marker(spec, pay, _layer(5), conf)
+
+    mutate.__name__ = "conf_" + "_".join(f"{k}={v}" for k, v in conf.items())
+    return mutate
+
+
+def _w4a8_drop(name):
+    def mutate(spec, meta, pay):
+        del spec[f"{_layer(5)}.{name}"]
+
+    mutate.__name__ = f"no_{name}"
+    return mutate
+
+
+def _w4a8_aux(name, dtype, shape):
+    def mutate(spec, meta, pay):
+        spec[f"{_layer(5)}.{name}"] = (dtype, shape)
+
+    mutate.__name__ = f"{name}_{dtype}_{'x'.join(map(str, shape)) or 'scalar'}"
+    return mutate
+
+
+def _w4a8_on_128_inputs(spec, meta, pay):
+    _put_w4a8(spec, _layer(5), i=128)
+
+
+def _w4a8_marker_on_f8_weight(spec, meta, pay):
+    spec[_layer(5) + ".weight"] = ("F8_E4M3", (4, IN // 2))
+
+
+def _w4a8_on_bf16_weight(spec, meta, pay):
+    spec[_layer(5) + ".weight"] = ("BF16", (4, IN // 2))
+
+
+def _f8_s_rel_on_f8_layer(spec, meta, pay):
+    """An fp8 layer carrying an s_rel: placement allows it, the aux set does not."""
+    spec[_layer(0) + ".weight"] = ("F8_E4M3", (4, 4))
+    spec[_layer(0) + ".weight_s_rel"] = ("F8_E4M3", (4, 1))
+
+
+_S_REL = f"'{P}transformer_blocks.5.{LINEAR}.weight_s_rel'"
+
+
+@pytest.mark.parametrize(
+    "mutate, needle",
+    [
+        (_w4a8_drop("weight_codebook"), "（方式 w4a8）に補助テンソル ['weight_codebook'] がありません"),
+        (_w4a8_drop("weight_s_rel"), "（方式 w4a8）に補助テンソル ['weight_s_rel'] がありません"),
+        (_w4a8_drop("weight_s_channel"), "（方式 w4a8）に補助テンソル ['weight_s_channel'] がありません"),
+        (_w4a8_aux("weight_correction", "F32", (4,)), "（方式 w4a8）に未対応の補助テンソル ['weight_correction']"),
+        (_w4a8_aux("weight_scale", "F32", ()), "（方式 w4a8）に未対応の補助テンソル ['weight_scale']"),
+        (_w4a8_conf({**W4A8_CONF, "group_size": 32}), "group_size=32 は未対応です（受理: 16 のみ"),
+        (_w4a8_conf({"format": "asym_w4a8_int8", "params": {"group_size": 64}}), "group_size=64 は未対応です"),
+        (_w4a8_conf({**W4A8_CONF, "convrot_groupsize": 128}), "convrot_groupsize=128 は未対応です"),
+        (_w4a8_aux("weight_s_rel", "F8_E4M3", (4, 8)),
+         f"補助テンソル {_S_REL} が F8_E4M3[4, 8] です（方式 w4a8 で受理するのは F8_E4M3・U8 の [4, 16] のみ）"),
+        (_w4a8_aux("weight_s_rel", "F32", (4, 16)), "F32[4, 16] です"),
+        (_w4a8_aux("weight_s_rel", "BF16", (4, 16)), "BF16[4, 16] です"),
+        (_w4a8_aux("weight_s_channel", "F32", (4, 1)), "F32[4, 1] です（方式 w4a8 で受理するのは F32 の [4] のみ）"),
+        (_w4a8_aux("weight_s_channel", "F32", ()), "F32[] です"),
+        (_w4a8_aux("weight_codebook", "F32", (8,)), "F32[8] です（方式 w4a8 で受理するのは F32 の [16] のみ）"),
+        (_w4a8_aux("weight_codebook", "F8_E4M3", (16,)),
+         "F8_E4M3 を置けるのは .bias・.weight・.weight_s_rel だけです"),
+        (_w4a8_aux("weight_s_channel", "U8", (4,)), "U8 を置けるのは .comfy_quant・.weight_s_rel だけです"),
+        (_w4a8_on_128_inputs, "（方式 w4a8）の入力次元 128 が 256 の倍数ではありません"),
+        (_w4a8_marker_on_f8_weight, "format='asym_w4a8_int8' と重みの dtype F8_E4M3 が合いません"),
+        (_w4a8_on_bf16_weight, "孤立した補助テンソル"),
+        (_f8_s_rel_on_f8_layer, "（方式 fp8）に未対応の補助テンソル ['weight_s_rel']"),
+    ],
+    ids=lambda v: getattr(v, "__name__", None) if callable(v) else "",
+)
+def test_w4a8_refusals(tmp_path, mutate, needle):
+    spec, meta, pay = _w4a8_model()
+    mutate(spec, meta, pay)
+    with pytest.raises(QuantFormatError) as ei:
+        _inspect(tmp_path, spec, meta, pay)
+    message = str(ei.value)
+    assert needle in message
+    assert message.startswith("量子化 safetensors の検査に不合格: ")
+    assert len(message.splitlines()) == 1
+
+
+def test_int8_marker_on_w4a8_layer_is_refused(tmp_path):
+    """The reverse of the int8 refusal table's w4a8 row: the aux sets differ."""
+    spec, meta, pay = _w4a8_model(conf={"format": "int8_tensorwise", "convrot": True})
+    with pytest.raises(QuantFormatError, match=r"（方式 int8_convrot）に補助テンソル \['weight_scale'\] がありません"):
+        _inspect(tmp_path, spec, meta, pay)

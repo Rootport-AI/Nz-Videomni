@@ -119,7 +119,8 @@ name and `package.ini`).
   (one clip); reverse Chained and bridge mode are both waived, and reverse
   Chained additionally defaults to 1. A mild warning appears when a
   single clip (window-internal mode) outgrows one stage-2 tile (169 frames on
-  `standard`, 145 on `high_resolution`), because the anchor and the frames
+  `standard`, 145 on `high_resolution`; in general 8×window−7, up to 481
+  on `w61`, where the warning never fires), because the anchor and the frames
   blending into it then sit in different tiles and the join smears; it is
   advice only, never blocks, and does not apply to any multi-clip mode.
   Mutually exclusive with a2v and the IC-LoRA reference video; combines freely

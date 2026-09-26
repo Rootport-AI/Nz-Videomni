@@ -83,6 +83,8 @@ vram:
   # services/low_vram.py 経由で GET /status・metadata.json に出力されるため保持必須。
   # ただし worker へは非伝播: fp8 は runtime の device_supports_fp8 自動判定、
   # CPU text-encode オフロードは別フィールド te_offload_text_encoder（LTX_TE_OFFLOAD）で駆動。
+  # fp8_transformer は、fp8 safetensors を置いて使う機能（README「追加の transformer
+  # （GGUF／fp8 safetensors）」・Docs/VERIFICATION_LOG.md §117〜§119）とは無関係。
   fp8_transformer: true
   cpu_offload_text_encoder: true
   te_offload_text_encoder: true   # 逐次レイヤーCPUオフロード（GGUF Gemma）。encode peak ~15GB→数GB。compute は GPU 維持。
@@ -224,6 +226,10 @@ limits:
   # §1-17 Retake の窓長（POST /generate/chain の clips[0].num_frames）。/config で公開。
   # いずれも 8n+1。169 = stage-2 の 1 窓に収まる最大（standard 窓 v_tile=22）で、
   # high_resolution 窓（v_tile=19）では実上限が 145 へ下がる（サーバが 422 で拒否）。
+  # 2026-09-25 から Stage-2 の窓は w25〜w61 の 13 段が加わり（正本は chain_math.py の
+  # STAGE2_WINDOW_PRESETS と Docs/COMFORT_LIMIT_TABLE.md 第12節）、Retake の上限は
+  # 窓の式 8×潜在フレーム数−7 だけで決まる（最大 481）。操作パネルはこの配信値を
+  # 読まなくなった（型と既定値は配信値の写しとして残っている）。
   retake_window_min_frames: 73
   retake_window_max_frames: 169
   # 快適な stage-2 1 窓あたりの注意トークン上限。/config で公開し、クライアントが

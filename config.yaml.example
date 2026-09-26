@@ -85,6 +85,9 @@ vram:
   # CPU text-encode オフロードは別フィールド te_offload_text_encoder（LTX_TE_OFFLOAD）で駆動。
   # fp8_transformer は、fp8 safetensors を置いて使う機能（README「追加の transformer
   # （GGUF／fp8 safetensors）」・Docs/VERIFICATION_LOG.md §117〜§119）とは無関係。
+  # ComfyUI 標準の int8 safetensors（int8_tensorwise・asym_w4a8_int8）を置いて使う機能も、
+  # fp8 と同じ経路（sft_quant_format.py の検査・dit_cpu_load の CPU 構築）を通るだけで、
+  # この fp8_transformer フラグとは同様に無関係（Docs/VERIFICATION_LOG.md §121）。
   fp8_transformer: true
   cpu_offload_text_encoder: true
   te_offload_text_encoder: true   # 逐次レイヤーCPUオフロード（GGUF Gemma）。encode peak ~15GB→数GB。compute は GPU 維持。

@@ -69,14 +69,16 @@
 
 **記述子×KVの4組はすべて契約テストで固定してある**（LTX 2.3 の記述子×2.3のKV／LTX 2.5 の記述子×2.5のKV は通過、交差する2組は明示的な422）。
 
-**fp8 safetensors の transformer（LTX 2.3 は 2026-09-25〜、LTX 2.5 は 2026-09-26〜・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167）は、KV の代わりにヘッダを材料にして同じ2段へ流す。** safetensors には GGUF の KV が無いので、次のように読み替える。
+**量子化 safetensors（fp8／int8／w4a8）の transformer（fp8 は LTX 2.3 が 2026-09-25〜・LTX 2.5 が 2026-09-26〜・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167。int8 系〔`int8_tensorwise`・`asym_w4a8_int8`〕は両エンジンとも 2026-09-26〜・同 §3-168）は、KV の代わりにヘッダを材料にして同じ2段へ流す。** safetensors には GGUF の KV が無いので、次のように読み替える。
 
 - **1段目（系統）**: ヘッダの**指紋**——テンソル名の接頭辞が `model.diffusion_model.` か接頭辞なし（2026-09-26〜。どちらかを自動で見分ける）、`transformer_blocks` がちょうど 48 個（0〜47）、`__metadata__` に `config`（`transformer` を含むモデル設定の JSON）がある——に合格したことを根拠に `general.architecture = ltxv` と見なす。
 - **2段目（世代）**: `__metadata__.model_version`（`2.3.0` など）をそのまま `model_version` として渡す。無ければキーを入れず、上と同じく WARNING で通す。
 
-判定そのものは既存の `check_kv` が行い、新しい判別の仕組みは作っていない。LTX 2.5 の safetensors を LTX 2.3 で選べば、GGUF と同じ文面の 422 になる。指紋の検査と fp8 の受け入れ規則の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117 である。
+判定そのものは既存の `check_kv` が行い、新しい判別の仕組みは作っていない。LTX 2.5 の safetensors を LTX 2.3 で選べば、GGUF と同じ文面の 422 になる。指紋の検査と量子化 safetensors の受け入れ規則の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.3 である（fp8 のみを対象にしていた当時の記録は §117.3・§118.3 に残しており、書き換えていない）。
 
-**LTX 2.5 も同じ2段を通る（2026-09-26〜・§3-167 B-2）。** ワーカーへのペイロードは変えていない——transformer は GGUF でも safetensors でも `transformer_path` 1 本で渡り、`engine25/pipeline25.py` が拡張子で読み方を振り分ける。受け入れ規則は LTX 2.5 の実在の配布物に合わせて 3 点広げた（両エンジン共通）。改定の中身と、実在の配布物が `model_version` を持っていたかどうかの確認は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §118 が正本である。
+**LTX 2.5 も同じ2段を通る（fp8 は 2026-09-26〜・§3-167 B-2）。** ワーカーへのペイロードは変えていない——transformer は GGUF でも量子化 safetensors でも `transformer_path` 1 本で渡り、`engine25/pipeline25.py` が拡張子で読み方を振り分ける。受け入れ規則は LTX 2.5 の実在の配布物に合わせて 3 点広げた（両エンジン共通）。改定の中身と、実在の配布物が `model_version` を持っていたかどうかの確認は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §118 が正本である。
+
+**int8 系（`int8_tensorwise`・`asym_w4a8_int8`）も同じ2段を通る（2026-09-26〜・§3-168。LTX 2.3・LTX 2.5 とも）。** 到達条件だった REDGraft LTX 2.5（CivitAI 3250230）は独自形式ではなく、ComfyUI 標準のこの 2 形式の混在だった。判定規則は `sft_quant_format.py`（旧名 `sft_fp8_format.py`）に、復元処理は `engine/sft_quant/`（旧名 `engine/fp8/`）に、fp8 専用だった名前を量子化全般の名前へ改めたうえで実装済みである。改定の中身は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121 が正本である。
 
 ### 2.3 KVを読む経路
 
@@ -85,8 +87,8 @@
 | モジュール | 役割 |
 |---|---|
 | `services/gguf_kv.py` | **読む**。GGUFヘッダを走査して、指定されたキーだけを文字列の辞書で返す。欲しいキーが揃った時点で読み止める。構造が壊れていれば `GgufParseError`。要求したキーがファイルに無いのは異常ではない（辞書に入らないだけ） |
-| `sft_fp8_format.py`（リポジトリ直下） | **読む**（safetensors 版）。ヘッダと量子化の印（数十バイト）だけを読み、指紋と fp8 の受け入れ規則を検査して `Layout`（`model_version` を含む）を返す。不合格は `Fp8FormatError`。torch に依存しないので、アプリ側とエンジン側の両方から呼べる（2026-09-25〜） |
-| `services/model_registry.py` の `precheck_model_file` | **拾う**。軽量チェック（GGUFのマジックナンバー・safetensorsヘッダの妥当性）に加え、GGUFならKVの辞書も一緒に返す。fp8 safetensors の transformer なら `sft_fp8_format.inspect` の結果から同じ形の辞書（§2.2 の読み替え）を作って返す |
+| `sft_quant_format.py`（リポジトリ直下。旧名 `sft_fp8_format.py`） | **読む**（safetensors 版）。ヘッダと量子化の印（数十バイト）だけを読み、指紋と量子化 safetensors（fp8／int8／w4a8）の受け入れ規則を検査して `Layout`（`model_version` を含む）を返す。不合格は `QuantFormatError`（旧名 `Fp8FormatError`）。torch に依存しないので、アプリ側とエンジン側の両方から呼べる（fp8 は 2026-09-25〜、int8 系は 2026-09-26〜） |
+| `services/model_registry.py` の `precheck_model_file` | **拾う**。軽量チェック（GGUFのマジックナンバー・safetensorsヘッダの妥当性）に加え、GGUFならKVの辞書も一緒に返す。量子化 safetensors の transformer なら `sft_quant_format.inspect` の結果から同じ形の辞書（§2.2 の読み替え）を作って返す |
 | `services/engines/__init__.py` の `check_kv` と、各アダプタの `check_kv` | **裁く**。前者が系統の照合（§2.1）、後者が系統内の判定（アーキテクチャ名・扱える世代）を行う。**裁きだけがエンジン固有の知識**なので、エンジン側に置いてある |
 
 `gguf_kv.py` を独立モジュールにしてあるのは責務が別だからである——`model_registry.py` は「名前をパスへ解決する」役、`gguf_kv.py` は「ファイルの先頭を読んで辞書を返す」役で、後者はモデル管理の概念を一切知らない。おかげで単体テスト（`tests/test_gguf_kv.py`）が合成バイト列だけで完結し、実重みファイルを必要としない。
@@ -105,6 +107,8 @@
 > **2026-09-25 注記**: 必要になったので実装した（§3-167 の段階 B-1・LTX 2.3 のみ）。採ったのは上流の前例と同じく `__metadata__.model_version` を読む方法で、系統は「接頭辞＋48 ブロック＋`config`」の指紋で確かめる（§2.2 の末尾）。テンソル名の組み合わせからモデル種別を当てる ComfyUI 方式の推測は採っていない。自前の変換ツールを通らないファイルなので、上の規約（両キーを必ず持つ）は及ばず、`model_version` が無いファイルは WARNING で通る。
 
 > **2026-09-26 注記**: B-2 で LTX 2.5 にも広げた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §118）。指紋の接頭辞は `model.diffusion_model.` つきと接頭辞なしの両方を自動で見分ける（§2.2 の末尾）。
+
+> **2026-09-26〜27 注記**: §3-168 で、fp8 専用だった経路を「量子化 safetensors 一般」へ一般化し、ComfyUI 標準の int8 系（`int8_tensorwise`・`asym_w4a8_int8`）にも広げた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121）。指紋・キーの読み替え方は fp8 と共通で、モジュールは `sft_quant_format.py`（旧名 `sft_fp8_format.py`）・`engine/sft_quant/`（旧名 `engine/fp8/`）へ改称した。**コードは dev ブランチで C-3 まで実装完結しているが、実機の門（G3〜G8）はサーバー起動待ちで未実施**（§121.4）。
 
 ### 2.5 フールプルーフは作らない。エラー品質で解決する 【オーナー裁定】
 

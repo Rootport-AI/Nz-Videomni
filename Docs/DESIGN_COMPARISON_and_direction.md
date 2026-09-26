@@ -49,6 +49,7 @@
 - **transformer**: fp8 safetensors（25GB）＋ ComfyUI Sequential Offloading＋`--reserve-vram`、**または** GGUF（Q3_K_M 14.7GB / Q4_K_M 17.8GB）。我々は後者(GGUF+block_swap)で実証済。
   - 2026-09-25 注記: B-1 で fp8 safetensors の直接読みを採用。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117（LTX 2.3 の transformer のみ）。
   - 2026-09-26 注記: B-2 で LTX 2.5 の transformer にも広げた。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §118。
+  - 2026-09-26〜27 注記: §3-168 で ComfyUI 標準の int8 系（`int8_tensorwise`・`asym_w4a8_int8`）にも広げた（LTX 2.3・LTX 2.5 とも。実機の門はサーバー起動待ち）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121。
 - **★Gemma = `gemma_3_12B_it_fp4_mixed.safetensors`(9.5GB, ~90%FP4) を GPU で**。これが**16-24GB カードの標準**。RTX 4070 Ti SUPER の実走報告(note.com)も**この FP4 ファイル使用**で video+audio 成功。
   - ComfyUI では `LTXAVTextEncoderLoader` ノードで単一ファイルとしてロード（公式HF/Gemmaローダは ComfyUI で壊れていると報告 #106）。**別途 text projection** `ltx-2.3_text_projection_bf16.safetensors` が要る。
   - CPU encode は「数秒遅いが OOM 回避」の**フォールバック**として存在（我々が試した道＝主流ではない）。

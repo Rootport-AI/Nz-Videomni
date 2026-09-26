@@ -7,7 +7,7 @@ that is charged against the commit limit — exactly the failure the plan's
 buffer, filled straight from the file, and reinterpreted in place; nothing
 larger than the one tensor being read is ever held on the reader's behalf.
 
-The header is parsed by the torch-free ``sft_fp8_format.read_header`` (the one
+The header is parsed by the torch-free ``sft_quant_format.read_header`` (the one
 place that validates offsets against the file size and element counts).
 """
 
@@ -34,13 +34,13 @@ def read_tensors(
     """Yield ``(key, tensor)`` for each of ``keys``, in file (data_offsets) order.
 
     Each tensor is a fresh CPU tensor that owns its bytes. ``header`` is an
-    ``sft_fp8_format.Header``; when omitted it is read from ``path``. A key
+    ``sft_quant_format.Header``; when omitted it is read from ``path``. A key
     missing from the header, an unsupported dtype, or a short read raises.
     """
     if header is None:
-        import sft_fp8_format
+        import sft_quant_format
 
-        header = sft_fp8_format.read_header(path)
+        header = sft_quant_format.read_header(path)
     infos = [(key, header.tensors[key]) for key in keys]
     infos.sort(key=lambda item: item[1].data_offsets[0])
     with open(path, "rb") as f:

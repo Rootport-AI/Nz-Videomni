@@ -1111,7 +1111,7 @@ class Ltx25Pipeline:
         # The transformer file's extension picks the loader: an fp8 safetensors
         # (§3-167 B-2) or the GGUF. Same arguments either way.
         from_file = (
-            Ltx25ProgressStage.from_fp8
+            Ltx25ProgressStage.from_safetensors
             if Path(files.transformer).suffix.lower() == ".safetensors"
             else Ltx25ProgressStage.from_gguf
         )

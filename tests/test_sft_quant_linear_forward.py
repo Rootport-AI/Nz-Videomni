@@ -1,6 +1,6 @@
-"""§3-167: the ``fp8_linear`` forward — test_ic_lora_forward.py's twin (CPU only).
+"""§3-167: the ``sft_quant_linear`` forward — test_ic_lora_forward.py's twin (CPU only).
 
-Pins the forward that ``engine.fp8.quant_service`` installs on every Linear of
+Pins the forward that ``engine.sft_quant.quant_service`` installs on every Linear of
 an fp8 transformer:
 
   * a bf16 layer without LoRA is byte-identical to a plain ``nn.Linear``,
@@ -23,7 +23,7 @@ torch = pytest.importorskip("torch")
 import torch.nn as nn  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 
-from engine.fp8.quant_service import _patch_model_for_fp8  # noqa: E402
+from engine.sft_quant.quant_service import _patch_model_for_quant  # noqa: E402
 from engine.gguf.ic_lora_common import IC_LORA_SPECS_ATTR  # noqa: E402
 
 OUT_F, IN_F, RANK = 16, 12, 4
@@ -40,7 +40,7 @@ def _linear(weight: torch.Tensor, scale: float | None = None) -> nn.Linear:
     root = nn.Module()
     root.lin = nn.Linear(IN_F, OUT_F, bias=True)
     root.lin.bias = nn.Parameter(torch.randn(OUT_F).to(BF16), requires_grad=False)
-    _patch_model_for_fp8(root, frozenset({"lin"}) if scale is not None else frozenset())
+    _patch_model_for_quant(root, frozenset({"lin"}) if scale is not None else frozenset())
     root.lin.weight = nn.Parameter(weight, requires_grad=False)
     if scale is not None:
         root.lin._buffers["weight_scale"] = torch.tensor(scale, dtype=torch.float32)
@@ -172,7 +172,7 @@ def test_meta_skeleton_takes_fp8_parameter_and_scale_buffer():
         root.blk = nn.Module()
         root.blk.lin = nn.Linear(IN_F, OUT_F, bias=True)
         root.blk.plain = nn.Linear(IN_F, OUT_F, bias=False)
-    _patch_model_for_fp8(root, frozenset({"blk.lin"}))
+    _patch_model_for_quant(root, frozenset({"blk.lin"}))
     # The scale buffer is persistent: it is part of the skeleton's state_dict keys.
     assert "blk.lin.weight_scale" in root.state_dict()
     assert "weight_scale" not in root.blk.plain._buffers
@@ -204,4 +204,4 @@ def test_unknown_scaled_layer_raises():
     root = nn.Module()
     root.lin = nn.Linear(IN_F, OUT_F)
     with pytest.raises(AttributeError):
-        _patch_model_for_fp8(root, frozenset({"missing.lin"}))
+        _patch_model_for_quant(root, frozenset({"missing.lin"}))

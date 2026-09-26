@@ -44,7 +44,7 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
-import sft_fp8_format
+import sft_quant_format
 from api.errors import APIError, model_file_missing, model_incompatible, model_not_found
 from config import PROJECT_ROOT, AppConfig
 from services.base_models import BaseModelDescriptor, CategoryDescriptor, load_base_models
@@ -140,7 +140,7 @@ def precheck_model_file(
     suffix then picks the structural check, and any other suffix is rejected.
 
     A ``.safetensors`` offered as the ``transformer`` is ruled on by the fp8
-    acceptance check (:func:`sft_fp8_format.inspect`, §3-167) instead of the
+    acceptance check (:func:`sft_quant_format.inspect`, §3-167) instead of the
     bare header check.
 
     Returns the GGUF KV metadata read along the way (``{}`` for other
@@ -172,7 +172,7 @@ def precheck_model_file(
             # header itself with every check ``_precheck_safetensors`` makes
             # (length 0 / past EOF / over 100 MB / broken JSON) and more, so
             # the generic check is skipped here instead of reading it twice.
-            return _precheck_fp8_transformer(category, name, path)
+            return _precheck_sft_transformer(category, name, path)
         _precheck_safetensors(category, name, path)
         return {}
     except APIError:
@@ -196,8 +196,8 @@ def _precheck_gguf(category: str, name: str, path: Path) -> dict[str, str]:
         ) from exc
 
 
-def _precheck_fp8_transformer(category: str, name: str, path: Path) -> dict[str, str]:
-    """Rule on an fp8 safetensors transformer with :func:`sft_fp8_format.inspect`.
+def _precheck_sft_transformer(category: str, name: str, path: Path) -> dict[str, str]:
+    """Rule on an fp8 safetensors transformer with :func:`sft_quant_format.inspect`.
 
     The acceptance table lives in that module alone (the engine calls the same
     function at load time). The return value speaks the GGUF KV dialect so the
@@ -208,8 +208,8 @@ def _precheck_fp8_transformer(category: str, name: str, path: Path) -> dict[str,
     Empty values are left out (a missing key is check_kv's WARNING case).
     """
     try:
-        layout = sft_fp8_format.inspect(path)
-    except sft_fp8_format.Fp8FormatError as exc:
+        layout = sft_quant_format.inspect(path)
+    except sft_quant_format.QuantFormatError as exc:
         raise model_incompatible(category, name, detail=str(exc)) from exc
     kv = {"general.architecture": "ltxv"}
     version = (layout.model_version or "").strip()

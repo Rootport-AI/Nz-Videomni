@@ -4,7 +4,7 @@ SINGLE SOURCE OF TRUTH for "which fp8 safetensors transformer does this
 product accept", shared by:
   * services/model_registry.py ``precheck_model_file`` (API side; a refusal
     becomes MODEL_INCOMPATIBLE 422 before the worker is touched),
-  * engine/fp8/ (engine side; the same refusal fails the load loudly).
+  * engine/sft_quant/ (engine side; the same refusal fails the load loudly).
 
 ZERO heavy deps (no torch / numpy / safetensors) so it imports in BOTH the app
 venv (.venv) and the engine venv (.venv-engine) — the ``chain_math.py``
@@ -14,7 +14,7 @@ never memory-mapped (Windows commit-charge constraint, plan §2).
 
 The acceptance rules were FINALIZED by the owner on 2026-09-25 (criterion: an
 fp8 file a typical ComfyUI workflow runs must run here when dropped in). The
-canonical statement of the rules is Docs/VERIFICATION_LOG.md §117.3; the code
+canonical statement of the rules is Docs/VERIFICATION_LOG.md §121.3; the code
 below implements it and does not restate it.
 """
 
@@ -28,7 +28,7 @@ from pathlib import Path
 
 __all__ = [
     "DTYPE_ITEMSIZE",
-    "Fp8FormatError",
+    "QuantFormatError",
     "Header",
     "Layout",
     "TensorInfo",
@@ -40,7 +40,7 @@ __all__ = [
 ]
 
 
-class Fp8FormatError(ValueError):
+class QuantFormatError(ValueError):
     """The file is not an fp8 safetensors transformer this product accepts."""
 
 
@@ -125,10 +125,10 @@ def read_header(path) -> Header:
     with path.open("rb") as fh:
         raw = fh.read(8)
         if len(raw) != 8:
-            raise Fp8FormatError("safetensors として読めません: 先頭 8 バイトのヘッダ長がありません")
+            raise QuantFormatError("safetensors として読めません: 先頭 8 バイトのヘッダ長がありません")
         (header_len,) = struct.unpack("<Q", raw)
         if header_len == 0 or header_len > file_size - 8 or header_len > MAX_HEADER_LEN:
-            raise Fp8FormatError(
+            raise QuantFormatError(
                 f"safetensors として読めません: ヘッダ長 {header_len} が不正です"
                 f"（ファイル長 {file_size}・上限 {MAX_HEADER_LEN}）"
             )
@@ -136,15 +136,15 @@ def read_header(path) -> Header:
     try:
         doc = json.loads(blob.decode("utf-8"))
     except Exception as exc:  # noqa: BLE001 — any decode failure is a format error
-        raise Fp8FormatError(f"safetensors として読めません: ヘッダの JSON が壊れています（{exc}）") from exc
+        raise QuantFormatError(f"safetensors として読めません: ヘッダの JSON が壊れています（{exc}）") from exc
     if not isinstance(doc, dict):
-        raise Fp8FormatError("safetensors として読めません: ヘッダが JSON オブジェクトではありません")
+        raise QuantFormatError("safetensors として読めません: ヘッダが JSON オブジェクトではありません")
 
     metadata = doc.pop("__metadata__", None) or {}
     if not isinstance(metadata, dict) or not all(
         isinstance(k, str) and isinstance(v, str) for k, v in metadata.items()
     ):
-        raise Fp8FormatError("safetensors として読めません: __metadata__ が文字列→文字列の表ではありません")
+        raise QuantFormatError("safetensors として読めません: __metadata__ が文字列→文字列の表ではありません")
 
     data_base = 8 + header_len
     data_len = file_size - data_base
@@ -166,13 +166,13 @@ def _tensor_info(key: str, entry, data_len: int) -> TensorInfo:
         shape = tuple(int(d) for d in entry["shape"])
         begin, end = (int(o) for o in entry["data_offsets"])
     except Exception as exc:  # noqa: BLE001
-        raise Fp8FormatError(f"safetensors として読めません: '{key}' の記述が不完全です（{exc}）") from exc
+        raise QuantFormatError(f"safetensors として読めません: '{key}' の記述が不完全です（{exc}）") from exc
     if dtype not in DTYPE_ITEMSIZE:
-        raise Fp8FormatError(f"safetensors として読めません: '{key}' の dtype '{dtype}' は未知です")
+        raise QuantFormatError(f"safetensors として読めません: '{key}' の dtype '{dtype}' は未知です")
     if any(d < 0 for d in shape):
-        raise Fp8FormatError(f"safetensors として読めません: '{key}' の shape {list(shape)} が不正です")
+        raise QuantFormatError(f"safetensors として読めません: '{key}' の shape {list(shape)} が不正です")
     if not (0 <= begin <= end <= data_len):
-        raise Fp8FormatError(
+        raise QuantFormatError(
             f"safetensors として読めません: '{key}' の data_offsets [{begin}, {end}] が"
             f"データ領域 [0, {data_len}] の外です"
         )
@@ -180,7 +180,7 @@ def _tensor_info(key: str, entry, data_len: int) -> TensorInfo:
     for d in shape:
         count *= d
     if end - begin != count * DTYPE_ITEMSIZE[dtype]:
-        raise Fp8FormatError(
+        raise QuantFormatError(
             f"safetensors として読めません: '{key}' の長さ {end - begin} バイトが"
             f" {dtype}{list(shape)} の {count * DTYPE_ITEMSIZE[dtype]} バイトと一致しません"
         )
@@ -198,7 +198,7 @@ def _read_range(fh, header: Header, key: str) -> bytes:
     fh.seek(header.data_base + begin)
     data = fh.read(end - begin)
     if len(data) != end - begin:
-        raise Fp8FormatError(f"safetensors の読み取りが途中で終わりました: '{key}'")
+        raise QuantFormatError(f"safetensors の読み取りが途中で終わりました: '{key}'")
     return data
 
 
@@ -235,7 +235,7 @@ def detect_prefix(header: Header) -> str:
         return _COMFY_PREFIX
     if any(k.startswith(_FIRST_BLOCK) for k in keys):
         return ""
-    raise Fp8FormatError(
+    raise QuantFormatError(
         _NG + f"'{_COMFY_PREFIX}{_FIRST_BLOCK}' も '{_FIRST_BLOCK}' もありません"
         "（接頭辞が違うか、transformer ではありません）"
     )
@@ -245,7 +245,7 @@ def inspect(path, *, expected_blocks: int = 48) -> Layout:
     """Accept or refuse an fp8 safetensors transformer.
 
     Rules finalized by the owner on 2026-09-25 (canonical: Docs/VERIFICATION_LOG.md
-    §117.3). Failures raise :class:`Fp8FormatError` naming the failing spot in
+    §121.3). Failures raise :class:`QuantFormatError` naming the failing spot in
     one line.
 
     Reads the header plus the ``comfy_quant`` payloads only. The key prefix is
@@ -261,20 +261,20 @@ def inspect(path, *, expected_blocks: int = 48) -> Layout:
     #    ComfyUI cannot build the LTX model either)
     raw_config = header.metadata.get("config")
     if raw_config is None:
-        raise Fp8FormatError(_NG + "__metadata__ に config がありません（ComfyUI でも LTX として組めない形です）")
+        raise QuantFormatError(_NG + "__metadata__ に config がありません（ComfyUI でも LTX として組めない形です）")
     try:
         config = json.loads(raw_config)
     except Exception as exc:  # noqa: BLE001
-        raise Fp8FormatError(_NG + f"__metadata__.config が JSON として読めません（{exc}）") from exc
+        raise QuantFormatError(_NG + f"__metadata__.config が JSON として読めません（{exc}）") from exc
     if not isinstance(config, dict) or "transformer" not in config:
-        raise Fp8FormatError(_NG + "__metadata__.config に transformer がありません")
+        raise QuantFormatError(_NG + "__metadata__.config に transformer がありません")
 
     # 2) prefix + block count
     prefix = detect_prefix(header)
     block_re = re.compile(re.escape(prefix) + r"transformer_blocks\.(\d+)\.")
     blocks = {int(m.group(1)) for k in tensors if (m := block_re.match(k))}
     if blocks != set(range(expected_blocks)):
-        raise Fp8FormatError(
+        raise QuantFormatError(
             _NG + f"transformer_blocks が {len(blocks)} 個（番号 {min(blocks)}..{max(blocks)}）で、"
             f"{expected_blocks} 個（0..{expected_blocks - 1}）ではありません"
         )
@@ -284,18 +284,18 @@ def inspect(path, *, expected_blocks: int = 48) -> Layout:
     for key, info in tensors.items():
         is_fp8 = info.dtype in _FP8_DTYPES
         if info.dtype.startswith("F8_") and not is_fp8:
-            raise Fp8FormatError(_NG + f"'{key}' の {info.dtype} は未対応です（受理: F8_E4M3・F8_E5M2）")
+            raise QuantFormatError(_NG + f"'{key}' の {info.dtype} は未対応です（受理: F8_E4M3・F8_E5M2）")
         if not key.startswith(prefix):
             if is_fp8:
-                raise Fp8FormatError(_NG + f"fp8 テンソル '{key}' が '{prefix}' の外にあります")
+                raise QuantFormatError(_NG + f"fp8 テンソル '{key}' が '{prefix}' の外にあります")
             continue
         if key.rsplit(".", 1)[-1] in _LEGACY_LEAVES:
-            raise Fp8FormatError(_NG + f"旧形式（scaled_fp8／scale_weight）は未対応です（'{key}'）")
+            raise QuantFormatError(_NG + f"旧形式（scaled_fp8／scale_weight）は未対応です（'{key}'）")
         if is_fp8:
             is_weight = key.endswith(".weight") and len(info.shape) == 2
             is_bias = key.endswith(".bias") and len(info.shape) == 1
             if not (is_weight or is_bias):
-                raise Fp8FormatError(
+                raise QuantFormatError(
                     _NG + f"fp8 は 2 次元 .weight か 1 次元 .bias に限ります（'{key}' shape {list(info.shape)}）"
                 )
             if is_weight:
@@ -304,12 +304,12 @@ def inspect(path, *, expected_blocks: int = 48) -> Layout:
         if info.dtype == "U8" and key.endswith(_QUANT_SUFFIX):
             continue
         if info.dtype not in _FLOAT_DTYPES:
-            raise Fp8FormatError(
+            raise QuantFormatError(
                 _NG + f"'{key}' の dtype {info.dtype} は未対応です"
                 "（fp8 以外の量子化の可能性。受理: BF16・F32・fp8・comfy_quant の U8）"
             )
     if not fp8_weights:
-        raise Fp8FormatError(_NG + "fp8 の重みが 1 本もありません（bf16 等の非 fp8 ファイルは未対応です）")
+        raise QuantFormatError(_NG + "fp8 の重みが 1 本もありません（bf16 等の非 fp8 ファイルは未対応です）")
 
     # 4) per-layer scales and quantization markers (connectors included: same
     #    rules). Only the transformer's own Linears go to scaled_layers — the
@@ -323,7 +323,7 @@ def inspect(path, *, expected_blocks: int = 48) -> Layout:
     # 5) Gemma-side embeddings connector must be present (dtypes were checked in step 3)
     connector_keys = tuple(sorted(k for k in tensors if k.startswith(prefix) and _CONNECTOR_MARK in k))
     if not connector_keys:
-        raise Fp8FormatError(_NG + f"'{prefix}*{_CONNECTOR_MARK}*'（テキスト埋め込みの connector）がありません")
+        raise QuantFormatError(_NG + f"'{prefix}*{_CONNECTOR_MARK}*'（テキスト埋め込みの connector）がありません")
 
     return Layout(
         flavor="scaled" if scaled else "plain",
@@ -359,9 +359,9 @@ def _scaled_layers(path, header: Header, prefix: str, fp8_layers: set[str]) -> s
             continue
         layer = key[: -len(_SCALE_SUFFIX)]
         if layer not in fp8_layers:
-            raise Fp8FormatError(_NG + f"倍率 '{key}' に対応する fp8 の .weight がありません（孤立した倍率）")
+            raise QuantFormatError(_NG + f"倍率 '{key}' に対応する fp8 の .weight がありません（孤立した倍率）")
         if info.dtype != "F32" or info.shape not in ((), (1,)):
-            raise Fp8FormatError(
+            raise QuantFormatError(
                 _NG + f"倍率 '{key}' が {info.dtype}{list(info.shape)} です"
                 "（受理するのは F32 のスカラー倍率のみ。per-row／per-block は未対応）"
             )
@@ -371,14 +371,14 @@ def _scaled_layers(path, header: Header, prefix: str, fp8_layers: set[str]) -> s
         with Path(path).open("rb") as fh:
             for key in sorted(quant_keys):
                 if len(tensors[key].shape) != 1:
-                    raise Fp8FormatError(_NG + f"'{key}' は 1 次元の U8 ではありません")
+                    raise QuantFormatError(_NG + f"'{key}' は 1 次元の U8 ではありません")
                 fmt = _comfy_format(key, _read_range(fh, header, key))
                 if fmt not in _FP8_FORMATS:
-                    raise Fp8FormatError(_NG + f"量子化の印 format='{fmt}' は fp8 ではなく未対応です（'{key}'）")
+                    raise QuantFormatError(_NG + f"量子化の印 format='{fmt}' は fp8 ではなく未対応です（'{key}'）")
 
     for fmt in _metadata_formats(header.metadata.get("_quantization_metadata")):
         if fmt not in _FP8_FORMATS:
-            raise Fp8FormatError(
+            raise QuantFormatError(
                 _NG + f"__metadata__._quantization_metadata に fp8 以外の format '{fmt}' があり未対応です"
             )
     return scaled
@@ -411,7 +411,7 @@ def _comfy_format(key: str, data: bytes):
     try:
         doc = json.loads(data.decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
-        raise Fp8FormatError(_NG + f"'{key}' が JSON として読めません（{exc}）") from exc
+        raise QuantFormatError(_NG + f"'{key}' が JSON として読めません（{exc}）") from exc
     if not isinstance(doc, dict):
-        raise Fp8FormatError(_NG + f"'{key}' が JSON オブジェクトではありません")
+        raise QuantFormatError(_NG + f"'{key}' が JSON オブジェクトではありません")
     return doc.get("format")

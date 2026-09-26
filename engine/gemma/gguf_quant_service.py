@@ -641,7 +641,7 @@ class GemmaGGUFQuantStateDictLoader:
         The transformer file is the GGUF (bare ``{video,audio}_embeddings_connector.*``
         keys, F32/BF16, NEVER K-quantized) or, since §3-167, an fp8 safetensors
         (prefixed ``model.diffusion_model.`` or bare keys; BF16/F32/fp8, read by
-        ``engine.fp8.quant_service.load_connector_bf16``, which brings fp8
+        ``engine.sft_quant.quant_service.load_connector_bf16``, which brings fp8
         connectors back to bf16, times their scale when they have one). To
         reproduce the monolith path byte-for-byte we:
           1. bring each key to the monolith's original form
@@ -749,15 +749,15 @@ class GemmaGGUFQuantStateDictLoader:
     ) -> tuple[dict[str, torch.Tensor], int, int]:
         """fp8 safetensors transformer: connectors in bf16, keys in the original form.
 
-        ``engine.fp8.quant_service.load_connector_bf16`` reads them (one by one,
+        ``engine.sft_quant.quant_service.load_connector_bf16`` reads them (one by one,
         seek + readinto, never mmap; fp8 connectors upcast, times their scale
         when they have one) with the file's prefix removed — prefixed or bare
         file alike — and the original ``model.diffusion_model.`` form is put
         back here. The counts are by stored dtype (fp8 connectors are in
         neither).
         """
-        import sft_fp8_format
-        from engine.fp8.quant_service import load_connector_bf16
+        import sft_quant_format
+        from engine.sft_quant.quant_service import load_connector_bf16
 
         logger.info(
             "Gemma component-files: reading embeddings_connector tensors from "
@@ -765,8 +765,8 @@ class GemmaGGUFQuantStateDictLoader:
             Path(path).name,
         )
         _ORIG_CONN_PREFIX = "model.diffusion_model."
-        header = sft_fp8_format.read_header(path)
-        file_prefix = sft_fp8_format.detect_prefix(header)
+        header = sft_quant_format.read_header(path)
+        file_prefix = sft_quant_format.detect_prefix(header)
         orig_form: dict[str, torch.Tensor] = {}
         n_f32 = 0
         n_bf16 = 0

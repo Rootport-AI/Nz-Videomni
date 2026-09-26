@@ -272,9 +272,9 @@ class LTXFastVideoPipeline:
                 f"got both gguf_transformer_path={gguf_transformer_path!r} and "
                 f"safetensors_transformer_path={safetensors_transformer_path!r}"
             )
-        # Which transformer path this pipeline was built with ("gguf" | "fp8").
+        # Which transformer path this pipeline was built with ("gguf" | "safetensors").
         # Read by the worker's keep_resident guard.
-        self._transformer_format = "fp8" if safetensors_transformer_path else "gguf"
+        self._transformer_format = "safetensors" if safetensors_transformer_path else "gguf"
 
         # Transformer device defaults to primary device if not set.
         self._transformer_device = transformer_device or device
@@ -344,7 +344,7 @@ class LTXFastVideoPipeline:
         # ── fp8 safetensors transformer (§3-167). NOT wrapped in try/except:
         # a rejected or broken file must fail the load, never fall back.
         if safetensors_transformer_path:
-            self._install_fp8(safetensors_transformer_path)
+            self._install_safetensors(safetensors_transformer_path)
 
         # ── Install Gemma GGUF text encoder (keep 24GB bf16 Gemma compressed on GPU) ──
         # GGUF keeps Gemma quantized in VRAM (~7.3GB Q4_K_M) with per-layer dequant —
@@ -986,24 +986,24 @@ class LTXFastVideoPipeline:
                 "GGUF install failed (%s) — falling back to safetensors", exc
             )
 
-    def _install_fp8(self, path: str) -> None:
+    def _install_safetensors(self, path: str) -> None:
         """Install an fp8 safetensors transformer (§3-167 B-1).
 
-        Checks the file with ``sft_fp8_format.inspect`` (a refusal raises and
+        Checks the file with ``sft_quant_format.inspect`` (a refusal raises and
         fails the load), then replaces the transformer loader, the quantization
-        policy and the transformer() wrapper — see ``engine/fp8/quant_service``.
+        policy and the transformer() wrapper — see ``engine/sft_quant/quant_service``.
         IC-LoRA is attached per build from the CURRENT job's adapters, exactly
         like the GGUF per-layer path.
         """
-        from engine.fp8.quant_service import Fp8LoaderService
+        from engine.sft_quant.quant_service import SftQuantLoaderService
 
-        service = Fp8LoaderService(
+        service = SftQuantLoaderService(
             path,
             dit_cpu_load=self._dit_cpu_load,
             ic_loras_provider=lambda: self._ic_loras,
         )
         service.install(self.pipeline.model_ledger)
-        self._fp8_service = service
+        self._sft_service = service
         import logging
         logging.getLogger(__name__).info(
             "fp8 safetensors transformer installed (flavor=%s): %s",

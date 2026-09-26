@@ -113,8 +113,8 @@ from engine.gguf.quant_service import (
     dequantize_ggml_tensor,
 )
 # fp8 safetensors transformer (§3-167 B-2): its connectors, in bf16.
-import sft_fp8_format
-from engine.fp8.quant_service import load_connector_bf16
+import sft_quant_format
+from engine.sft_quant.quant_service import load_connector_bf16
 
 # --- engine25 siblings -------------------------------------------------------
 # `_move_module_tree` and the two selftest helpers are module-private to
@@ -193,7 +193,7 @@ class Ltx25GemmaError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-class Ltx25Fp8ConnectorLoader:
+class Ltx25SftConnectorLoader:
     """The connector half of an fp8 safetensors transformer, as a part loader (§3-167 B-2).
 
     Returns ONLY the ``*_embeddings_connector.*`` tensors, in bf16 and without the
@@ -204,7 +204,7 @@ class Ltx25Fp8ConnectorLoader:
 
     def __init__(self, path: str) -> None:
         self.path = str(path)
-        self._metadata = sft_fp8_format.parse_metadata(sft_fp8_format.read_header(self.path))
+        self._metadata = sft_quant_format.parse_metadata(sft_quant_format.read_header(self.path))
 
     def metadata(self, path: str | None = None) -> dict:  # noqa: ARG002 -- this file's, always
         return self._metadata
@@ -255,7 +255,7 @@ class Ltx25MultiGgufStateDictLoader:
     reimplemented, so the dtype handling, the ``copy=True`` defence against
     aliasing a closed memmap, and the ``Ltx25GGMLTensor`` wrapping all stay in
     one place. An fp8 ``.safetensors`` transformer is read by
-    :class:`Ltx25Fp8ConnectorLoader` instead (§3-167 B-2); the part loader is
+    :class:`Ltx25SftConnectorLoader` instead (§3-167 B-2); the part loader is
     chosen by the file's extension.
     """
 
@@ -264,7 +264,7 @@ class Ltx25MultiGgufStateDictLoader:
         if not self.paths:
             raise Ltx25GemmaError("Ltx25MultiGgufStateDictLoader needs at least one path")
         self._loaders = tuple(
-            Ltx25Fp8ConnectorLoader(path)
+            Ltx25SftConnectorLoader(path)
             if Path(path).suffix.lower() == ".safetensors"
             else Ltx25GgufStateDictLoader(path)
             for path in self.paths

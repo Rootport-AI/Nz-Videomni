@@ -1,19 +1,19 @@
-"""§3-167: ``Fp8LoaderService.install`` against a mock ledger (CPU only).
+"""§3-167: ``SftQuantLoaderService.install`` against a mock ledger (CPU only).
 
 Pins the three install steps without any weights or GPU:
 
   * the policy is replaced WHOLESALE — ``sd_ops`` is None (fp8_cast's
     TRANSFORMER_LINEAR_DOWNCAST_MAP would push biases and the bf16 blocks down
     to fp8) and fp8_cast's ``UPCAST_DURING_INFERENCE`` is gone, leaving only
-    ``fp8_linear``;
-  * the builder's loader is an ``Fp8StateDictLoader`` sharing the ONE Layout
+    ``sft_quant_linear``;
+  * the builder's loader is an ``SftQuantStateDictLoader`` sharing the ONE Layout
     ``inspect`` returned;
   * errors are never swallowed (inspect's refusal, ``dit_cpu_load=0``, a stray
-    fp8 tensor outside a Linear, and the pipeline's ``_install_fp8``);
+    fp8 tensor outside a Linear, and the pipeline's ``_install_safetensors``);
   * the pipeline accepts exactly one transformer source.
 
 B-2 additions (shared with engine25): the loader's 0-dim scale and
-text_embedding_projection skip, ``fp8_transformer_sd_ops`` and
+text_embedding_projection skip, ``sft_transformer_sd_ops`` and
 ``load_connector_bf16``.
 
 Run with ``.venv-engine`` and ``--noconftest``; the app venv skips the module.
@@ -35,11 +35,11 @@ import ltx_core.loader  # noqa: E402,F401
 import torch.nn as nn  # noqa: E402
 from ltx_core.quantization import QuantizationPolicy  # noqa: E402
 
-import sft_fp8_format  # noqa: E402
-from engine.fp8.quant_service import (  # noqa: E402
-    Fp8LoaderService,
-    Fp8StateDictLoader,
-    fp8_transformer_sd_ops,
+import sft_quant_format  # noqa: E402
+from engine.sft_quant.quant_service import (  # noqa: E402
+    SftQuantLoaderService,
+    SftQuantStateDictLoader,
+    sft_transformer_sd_ops,
     load_connector_bf16,
 )
 
@@ -82,17 +82,17 @@ def fake_inspect(monkeypatch):
         seen.append(path)
         return _LAYOUT
 
-    monkeypatch.setattr(sft_fp8_format, "inspect", _inspect)
+    monkeypatch.setattr(sft_quant_format, "inspect", _inspect)
     return seen
 
 
 def test_install_replaces_loader_and_policy(fake_inspect):
     ledger = _Ledger()
-    Fp8LoaderService("X.safetensors", dit_cpu_load=True).install(ledger)
+    SftQuantLoaderService("X.safetensors", dit_cpu_load=True).install(ledger)
 
     assert fake_inspect == ["X.safetensors"]  # inspected exactly once
     loader = ledger.transformer_builder.model_loader
-    assert isinstance(loader, Fp8StateDictLoader)
+    assert isinstance(loader, SftQuantStateDictLoader)
     assert loader.path == "X.safetensors" and loader.layout is _LAYOUT
     assert loader.metadata("") == _LAYOUT.config
     # prefixed file: the very SDOps the wheel's ModelLedger puts there (2.3 unchanged)
@@ -102,14 +102,14 @@ def test_install_replaces_loader_and_policy(fake_inspect):
 
     policy = ledger.quantization
     assert policy.sd_ops is None
-    assert [op.name for op in policy.module_ops] == ["fp8_linear"]  # fp8_cast is gone
+    assert [op.name for op in policy.module_ops] == ["sft_quant_linear"]  # fp8_cast is gone
 
 
 def test_module_op_registers_scale_from_the_shared_layout(fake_inspect):
     from ltx_core.model.transformer.model import LTXModel
 
     ledger = _Ledger()
-    Fp8LoaderService("X.safetensors", dit_cpu_load=True).install(ledger)
+    SftQuantLoaderService("X.safetensors", dit_cpu_load=True).install(ledger)
     (op,) = ledger.quantization.module_ops
     assert not op.matcher(nn.Linear(2, 2))
     assert op.matcher(LTXModel.__new__(LTXModel))
@@ -127,44 +127,44 @@ def test_dit_cpu_load_off_raises_before_anything(monkeypatch):
     def _never(*_a, **_k):
         raise AssertionError("inspect must not run when dit_cpu_load is off")
 
-    monkeypatch.setattr(sft_fp8_format, "inspect", _never)
+    monkeypatch.setattr(sft_quant_format, "inspect", _never)
     ledger = _Ledger()
     before = (ledger.transformer_builder, ledger.quantization)
     with pytest.raises(RuntimeError, match="dit_cpu_load"):
-        Fp8LoaderService("X.safetensors", dit_cpu_load=False).install(ledger)
+        SftQuantLoaderService("X.safetensors", dit_cpu_load=False).install(ledger)
     assert (ledger.transformer_builder, ledger.quantization) == before
 
 
 def test_inspect_refusal_propagates(monkeypatch):
     def _refuse(*_a, **_k):
-        raise sft_fp8_format.Fp8FormatError("流儀 F8_E5M2 は扱えません")
+        raise sft_quant_format.QuantFormatError("流儀 F8_E5M2 は扱えません")
 
-    monkeypatch.setattr(sft_fp8_format, "inspect", _refuse)
+    monkeypatch.setattr(sft_quant_format, "inspect", _refuse)
     ledger = _Ledger()
-    with pytest.raises(sft_fp8_format.Fp8FormatError, match="F8_E5M2"):
-        Fp8LoaderService("X.safetensors", dit_cpu_load=True).install(ledger)
+    with pytest.raises(sft_quant_format.QuantFormatError, match="F8_E5M2"):
+        SftQuantLoaderService("X.safetensors", dit_cpu_load=True).install(ledger)
     assert ledger.quantization.sd_ops is not None  # still fp8_cast: untouched
     assert ledger.transformer_builder.model_loader is None
 
 
-def test_pipeline_install_fp8_does_not_swallow(monkeypatch):
+def test_pipeline_install_safetensors_does_not_swallow(monkeypatch):
     from engine.pipeline.fast_video_pipeline import LTXFastVideoPipeline
 
     def _refuse(*_a, **_k):
-        raise sft_fp8_format.Fp8FormatError("per-row weight_scale")
+        raise sft_quant_format.QuantFormatError("per-row weight_scale")
 
-    monkeypatch.setattr(sft_fp8_format, "inspect", _refuse)
+    monkeypatch.setattr(sft_quant_format, "inspect", _refuse)
     fake_self = types.SimpleNamespace(
         _dit_cpu_load=True,
         _ic_loras=[],
         pipeline=types.SimpleNamespace(model_ledger=_Ledger()),
     )
-    with pytest.raises(sft_fp8_format.Fp8FormatError, match="per-row"):
-        LTXFastVideoPipeline._install_fp8(fake_self, "X.safetensors")
+    with pytest.raises(sft_quant_format.QuantFormatError, match="per-row"):
+        LTXFastVideoPipeline._install_safetensors(fake_self, "X.safetensors")
 
     fake_self._dit_cpu_load = False
     with pytest.raises(RuntimeError, match="dit_cpu_load"):
-        LTXFastVideoPipeline._install_fp8(fake_self, "X.safetensors")
+        LTXFastVideoPipeline._install_safetensors(fake_self, "X.safetensors")
 
 
 def test_wrapped_transformer_detaches_and_passes_clean_model(fake_inspect, monkeypatch):
@@ -176,7 +176,7 @@ def test_wrapped_transformer_detaches_and_passes_clean_model(fake_inspect, monke
     import engine.gguf.ic_lora_common as ic
 
     monkeypatch.setattr(ic, "detach_ic_loras", lambda t: detached.append(t) or 0)
-    Fp8LoaderService("X.safetensors", dit_cpu_load=True, ic_loras_provider=lambda: []).install(ledger)
+    SftQuantLoaderService("X.safetensors", dit_cpu_load=True, ic_loras_provider=lambda: []).install(ledger)
     assert ledger.transformer() is built
     assert ledger.calls == 1 and detached == [built]
 
@@ -186,7 +186,7 @@ def test_wrapped_transformer_rejects_fp8_outside_linear(fake_inspect):
     built.norm = nn.LayerNorm(2)
     built.norm.weight = nn.Parameter(torch.ones(2).to(torch.float8_e4m3fn), requires_grad=False)
     ledger = _Ledger(built)
-    Fp8LoaderService("X.safetensors", dit_cpu_load=True).install(ledger)
+    SftQuantLoaderService("X.safetensors", dit_cpu_load=True).install(ledger)
     with pytest.raises(RuntimeError, match="outside Linear"):
         ledger.transformer()
 
@@ -220,7 +220,7 @@ def test_pipeline_requires_exactly_one_transformer_source():
 
 
 
-def test_gemma_connectors_from_fp8_safetensors(tmp_path):
+def test_gemma_connectors_via_fp8_safetensors(tmp_path):
     """The Gemma side reads the connectors out of the fp8 file (prefixed keys,
     F32 -> bf16, BF16 as is) with the same seek + readinto reader."""
     from safetensors.torch import save_file
@@ -315,8 +315,8 @@ def test_loader_scale_shape_1_becomes_0_dim_and_text_projection_is_skipped(tmp_p
         },
         str(path),
     )
-    loader = Fp8StateDictLoader(str(path), _bare_layout())
-    sd = loader.load("", sd_ops=fp8_transformer_sd_ops("")).sd
+    loader = SftQuantStateDictLoader(str(path), _bare_layout())
+    sd = loader.load("", sd_ops=sft_transformer_sd_ops("")).sd
     assert set(sd) == {f"{lin}.weight", f"{lin}.weight_scale", "transformer_blocks.0.scale_shift_table"}
     assert sd[f"{lin}.weight_scale"].shape == () and sd[f"{lin}.weight_scale"].dtype == torch.float32
     assert float(sd[f"{lin}.weight_scale"]) == 0.25
@@ -338,23 +338,23 @@ def test_loader_prefixed_file_keeps_0_dim_scale(tmp_path):
         },
         str(path),
     )
-    loader = Fp8StateDictLoader(str(path), _bare_layout(prefix=p, connector_keys=()))
-    sd = loader.load("", sd_ops=fp8_transformer_sd_ops(p)).sd
+    loader = SftQuantStateDictLoader(str(path), _bare_layout(prefix=p, connector_keys=()))
+    sd = loader.load("", sd_ops=sft_transformer_sd_ops(p)).sd
     assert set(sd) == {f"{lin}.weight", f"{lin}.weight_scale"}
     assert sd[f"{lin}.weight_scale"].shape == ()
 
 
-def test_fp8_transformer_sd_ops_two_branches():
+def test_sft_transformer_sd_ops_two_branches():
     from ltx_core.model.transformer import LTXV_MODEL_COMFY_RENAMING_MAP
 
-    assert fp8_transformer_sd_ops("model.diffusion_model.") is LTXV_MODEL_COMFY_RENAMING_MAP
-    bare = fp8_transformer_sd_ops("")
+    assert sft_transformer_sd_ops("model.diffusion_model.") is LTXV_MODEL_COMFY_RENAMING_MAP
+    bare = sft_transformer_sd_ops("")
     # identity: every key matches and nothing is renamed (a matcher-less SDOps
     # would return None for everything)
     for key in ("transformer_blocks.0.attn1.to_q.weight", "patchify_proj.bias", "x"):
         assert bare.apply_to_key(key) == key
     with pytest.raises(ValueError, match="prefix"):
-        fp8_transformer_sd_ops("diffusion_model.")
+        sft_transformer_sd_ops("diffusion_model.")
 
 
 @pytest.mark.parametrize("prefix", ["model.diffusion_model.", ""], ids=["prefixed", "bare"])

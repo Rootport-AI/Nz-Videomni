@@ -1,20 +1,20 @@
 """§3-167 B-2: the LTX 2.5 engine reads an fp8 safetensors transformer (CPU only).
 
-Pins what engine25 adds on top of the shared fp8 pieces (``sft_fp8_format`` and
-``engine.fp8.quant_service``, tested on their own):
+Pins what engine25 adds on top of the shared fp8 pieces (``sft_quant_format`` and
+``engine.sft_quant.quant_service``, tested on their own):
 
-  * ``Ltx25DiffusionStage.from_fp8`` builds a 4-block model from a fake fp8 file
+  * ``Ltx25DiffusionStage.from_safetensors`` builds a 4-block model from a fake fp8 file
     -- prefixed and bare names, scale shape ``()`` and ``[1]``, scaled and plain
     layers mixed, F32 tensors, a connector in fp8 -- and its forward equals the
     forward of the same model loaded with the weights brought back to bf16 by
     hand; ``dispose`` and a rebuild give the same numbers again;
-  * ``Ltx25Fp8StateDictLoader.metadata()`` has ltx_core 1.2's shape
+  * ``Ltx25SftStateDictLoader.metadata()`` has ltx_core 1.2's shape
     (``metadata()["config"]["transformer"]``) and is parsed once;
   * the EmbeddingsProcessor loader takes the connectors from the safetensors and
     the projections from a GGUF, and still refuses overlapping files;
   * ``ancestral_detection_skipped`` rebinds the probe the constructor looks up
     and restores it in ``finally``; ``verify`` pins the global-name lookup;
-  * ``Ltx25Pipeline`` picks ``from_fp8`` / ``from_gguf`` by extension and
+  * ``Ltx25Pipeline`` picks ``from_safetensors`` / ``from_gguf`` by extension and
     reports ``detected`` as None.
 
 Run with ``.venv-engine-ltx25`` and ``--noconftest`` (through the runner that
@@ -35,10 +35,10 @@ pytest.importorskip("ltx_core")
 import torch  # noqa: E402
 from torch import nn  # noqa: E402
 
-import sft_fp8_format  # noqa: E402
+import sft_quant_format  # noqa: E402
 from engine25 import ltxcore_compat, pipeline25  # noqa: E402
 from engine25.gguf_gemma4 import (  # noqa: E402
-    Ltx25Fp8ConnectorLoader,
+    Ltx25SftConnectorLoader,
     Ltx25GemmaError,
     Ltx25MultiGgufStateDictLoader,
 )
@@ -46,7 +46,7 @@ from engine25.gguf_transformer import (  # noqa: E402
     LTX25_EMBEDDINGS_PROCESSOR_KEY_OPS,
     Ltx25CpuModelBuilder,
     Ltx25DiffusionStage,
-    Ltx25Fp8StateDictLoader,
+    Ltx25SftStateDictLoader,
     _dummy_video_modality,
 )
 from engine25.ltxcore_compat import (  # noqa: E402
@@ -178,7 +178,7 @@ def _write_fp8(path, *, prefix: str, scale_shape: tuple, fp8_connector: bool):
 def inspect_4_blocks(monkeypatch):
     """``inspect`` expects the real 48 blocks; the fake has 4."""
     monkeypatch.setattr(
-        sft_fp8_format, "inspect", functools.partial(sft_fp8_format.inspect, expected_blocks=N_BLOCKS)
+        sft_quant_format, "inspect", functools.partial(sft_quant_format.inspect, expected_blocks=N_BLOCKS)
     )
 
 
@@ -206,7 +206,7 @@ CASES = [
 
 
 @pytest.mark.parametrize(("prefix", "scale_shape", "fp8_connector"), CASES)
-def test_from_fp8_forward_matches_bf16_reference_and_survives_dispose(
+def test_from_safetensors_forward_matches_bf16_reference_and_survives_dispose(
     tmp_path, inspect_4_blocks, prefix, scale_shape, fp8_connector
 ):
     path = tmp_path / "t.safetensors"
@@ -214,9 +214,9 @@ def test_from_fp8_forward_matches_bf16_reference_and_survives_dispose(
     modality = _modality()
     expected = _reference_forward(ref_sd, modality)
 
-    stage = Ltx25DiffusionStage.from_fp8(str(path), device=CPU, blocks_on_gpu=0, cache_weights=True)
+    stage = Ltx25DiffusionStage.from_safetensors(str(path), device=CPU, blocks_on_gpu=0, cache_weights=True)
     assert isinstance(stage._transformer_builder, Ltx25CpuModelBuilder)
-    assert isinstance(stage._transformer_builder.model_loader, Ltx25Fp8StateDictLoader)
+    assert isinstance(stage._transformer_builder.model_loader, Ltx25SftStateDictLoader)
 
     outs = []
     for _ in range(2):  # build, forward, dispose -- then again from the cache
@@ -240,12 +240,12 @@ def test_from_fp8_forward_matches_bf16_reference_and_survives_dispose(
 def test_fp8_loader_metadata_has_ltx_core_1_2_shape_and_is_parsed_once(tmp_path, inspect_4_blocks, monkeypatch):
     path = tmp_path / "t.safetensors"
     _write_fp8(path, prefix=P, scale_shape=(), fp8_connector=False)
-    loader = Ltx25Fp8StateDictLoader(str(path), sft_fp8_format.inspect(str(path)))
+    loader = Ltx25SftStateDictLoader(str(path), sft_quant_format.inspect(str(path)))
 
     def _no_second_read(_path):
         raise AssertionError("metadata() re-read the header")
 
-    monkeypatch.setattr(sft_fp8_format, "read_header", _no_second_read)
+    monkeypatch.setattr(sft_quant_format, "read_header", _no_second_read)
     for _ in range(2):
         meta = loader.metadata(str(path))
         assert meta["config"]["transformer"]["num_layers"] == N_BLOCKS
@@ -258,20 +258,20 @@ def test_build_calls_the_fp8_placement_check(tmp_path, inspect_4_blocks, monkeyp
     from engine25 import gguf_transformer
 
     seen = []
-    monkeypatch.setattr(gguf_transformer, "_assert_fp8_only_in_linears", seen.append)
+    monkeypatch.setattr(gguf_transformer, "_assert_quant_only_in_linears", seen.append)
     path = tmp_path / "t.safetensors"
     _write_fp8(path, prefix=P, scale_shape=(), fp8_connector=False)
-    stage = Ltx25DiffusionStage.from_fp8(str(path), device=CPU, blocks_on_gpu=0)
+    stage = Ltx25DiffusionStage.from_safetensors(str(path), device=CPU, blocks_on_gpu=0)
     x0 = stage._build_transformer(device=CPU)
     assert seen == [x0.velocity_model]
 
 
-def test_from_fp8_refuses_what_inspect_refuses(tmp_path):
-    # 4 blocks against the real 48: the one acceptance check runs in from_fp8.
+def test_from_safetensors_refuses_what_inspect_refuses(tmp_path):
+    # 4 blocks against the real 48: the one acceptance check runs in from_safetensors.
     path = tmp_path / "t.safetensors"
     _write_fp8(path, prefix=P, scale_shape=(), fp8_connector=False)
-    with pytest.raises(sft_fp8_format.Fp8FormatError, match="transformer_blocks"):
-        Ltx25DiffusionStage.from_fp8(str(path), device=CPU)
+    with pytest.raises(sft_quant_format.QuantFormatError, match="transformer_blocks"):
+        Ltx25DiffusionStage.from_safetensors(str(path), device=CPU)
 
 
 # --------------------------------------------------------------------------- #
@@ -314,7 +314,7 @@ def test_embeddings_loader_mixes_fp8_safetensors_and_gguf(
     projections = _write_te_gguf(te)
 
     loader = Ltx25MultiGgufStateDictLoader((str(sft), str(te)))
-    assert isinstance(loader._loaders[0], Ltx25Fp8ConnectorLoader)
+    assert isinstance(loader._loaders[0], Ltx25SftConnectorLoader)
     meta = loader.metadata()
     assert meta["config"]["transformer"]["num_layers"] == N_BLOCKS
     assert meta["gemma_source_checkpoint"] == GEMMA_SOURCE
@@ -369,7 +369,7 @@ class _Stop(Exception):
     pass
 
 
-@pytest.mark.parametrize(("suffix", "expected"), [(".safetensors", "from_fp8"), (".gguf", "from_gguf")])
+@pytest.mark.parametrize(("suffix", "expected"), [(".safetensors", "from_safetensors"), (".gguf", "from_gguf")])
 def test_pipeline_picks_the_loader_by_extension_and_reports_detected_none(
     tmp_path, monkeypatch, suffix, expected
 ):
@@ -407,7 +407,7 @@ def test_pipeline_picks_the_loader_by_extension_and_reports_detected_none(
 
         return staticmethod(build)
 
-    monkeypatch.setattr(pipeline25.Ltx25ProgressStage, "from_fp8", _stage("from_fp8"))
+    monkeypatch.setattr(pipeline25.Ltx25ProgressStage, "from_safetensors", _stage("from_safetensors"))
     monkeypatch.setattr(pipeline25.Ltx25ProgressStage, "from_gguf", _stage("from_gguf"))
 
     pipe = object.__new__(pipeline25.Ltx25Pipeline)

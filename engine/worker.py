@@ -691,7 +691,7 @@ def _resolve_keep_resident(msg: dict, bs_prefetch: bool) -> tuple[bool, str | No
     assert _PIPE is not None  # only reachable from a post-load generate op
     # 直接属性アクセス（getattrの既定値ではなく）：属性が消えたらガードが
     # 黙って素通りになるより AttributeError で落ちるほうがよい。
-    # The fp8 transformer's forward is always out of place (engine/fp8), so
+    # The fp8 transformer's forward is always out of place (engine/sft_quant), so
     # only the GGUF bf16 fused path can contaminate the cache.
     if _PIPE._transformer_format == "gguf" and not _PIPE._gguf_per_layer_quant:
         raise RuntimeError(

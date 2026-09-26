@@ -1,19 +1,19 @@
 """fp8 safetensors transformer: loader, module op and install (§3-167 B-1, B-2).
 
 The GGUF per-layer service's twin (``engine/gguf/quant_service.py``) for an
-fp8 safetensors transformer that ``sft_fp8_format.inspect`` has accepted:
+fp8 safetensors transformer that ``sft_quant_format.inspect`` has accepted:
 
-  * :class:`Fp8StateDictLoader` reads the file one tensor at a time
-    (``engine.fp8.sft_reader``: seek + readinto, never mmap) and keeps the fp8
+  * :class:`SftQuantStateDictLoader` reads the file one tensor at a time
+    (``engine.sft_quant.sft_reader``: seek + readinto, never mmap) and keeps the fp8
     Linear weights AS fp8 — the whole model in bf16 would be ~37 GB of CPU RAM.
-  * the ``fp8_linear`` module op replaces every Linear's forward with
-    :func:`_fp8_linear_forward`, which upcasts the weight per call (times the
+  * the ``sft_quant_linear`` module op replaces every Linear's forward with
+    :func:`_quant_linear_forward`, which upcasts the weight per call (times the
     scalar ``weight_scale`` for the "scaled" flavor) and adds the IC-LoRA /
     LoRA delta out of place, so the stored weight — shared with the
     keep_resident cache — is never written to.
-  * :class:`Fp8LoaderService.install` wires both into the ledger in the same
+  * :class:`SftQuantLoaderService.install` wires both into the ledger in the same
     three steps as the GGUF service (loader, policy, transformer() wrapper).
-  * :func:`fp8_transformer_sd_ops` and :func:`load_connector_bf16` are the
+  * :func:`sft_transformer_sd_ops` and :func:`load_connector_bf16` are the
     pieces shared with the LTX 2.5 engine (engine25): the key ops for the
     detected prefix, and the text encoder side's connectors in bf16.
 
@@ -34,7 +34,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-from engine.fp8.sft_reader import read_tensors
+from engine.sft_quant.sft_reader import read_tensors
 from engine.gguf.ic_lora_common import IC_LORA_SPECS_ATTR
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ _FP8_DTYPES = (torch.float8_e4m3fn, torch.float8_e5m2)
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-class Fp8StateDictLoader:
+class SftQuantStateDictLoader:
     """``StateDictLoader`` over an fp8 safetensors transformer.
 
     Same shape as the wheel's ``SafetensorsStateDictLoader`` (sd_ops applied per
@@ -78,11 +78,11 @@ class Fp8StateDictLoader:
         sd_ops: Any = None,
         device: torch.device | None = None,
     ) -> Any:
-        import sft_fp8_format
+        import sft_quant_format
         from ltx_core.loader.primitives import StateDict
 
         device = device or torch.device("cpu")
-        header = sft_fp8_format.read_header(self.path)
+        header = sft_quant_format.read_header(self.path)
         connectors = set(self.layout.connector_keys)
 
         # key in the file -> key after sd_ops. Not read: comfy_quant (only the
@@ -133,7 +133,7 @@ class Fp8StateDictLoader:
         return StateDict(sd=sd, device=device, size=size, dtype=dtypes)
 
 
-def fp8_transformer_sd_ops(prefix: str):
+def sft_transformer_sd_ops(prefix: str):
     """Transformer key ops for the prefix ``inspect`` detected.
 
     ``"model.diffusion_model."`` -> the wheel's own ``LTXV_MODEL_COMFY_RENAMING_MAP``
@@ -161,10 +161,10 @@ def load_connector_bf16(path: str) -> dict[str, torch.Tensor]:
     -> bf16 when the layer has a scale, else a plain cast; F32 -> bf16; BF16 as
     is. ``weight_scale`` / ``input_scale`` / ``comfy_quant`` are not returned.
     """
-    import sft_fp8_format
+    import sft_quant_format
 
-    header = sft_fp8_format.read_header(path)
-    prefix = sft_fp8_format.detect_prefix(header)
+    header = sft_quant_format.read_header(path)
+    prefix = sft_quant_format.detect_prefix(header)
     keys = [k for k in header.tensors if k.startswith(prefix) and _CONNECTOR_MARK in k]
     scale_keys = [k for k in keys if k.endswith(_SCALE_SUFFIX)]
     # "<layer>.weight" -> its 0-dim f32 scale
@@ -197,7 +197,7 @@ def load_connector_bf16(path: str) -> dict[str, torch.Tensor]:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _fp8_linear_forward(self: torch.nn.Linear, x: torch.Tensor) -> torch.Tensor:
+def _quant_linear_forward(self: torch.nn.Linear, x: torch.Tensor) -> torch.Tensor:
     w = self.weight
     s = self._buffers.get("weight_scale")
     specs = getattr(self, IC_LORA_SPECS_ATTR, None)
@@ -219,13 +219,13 @@ def _fp8_linear_forward(self: torch.nn.Linear, x: torch.Tensor) -> torch.Tensor:
     return F.linear(x, wd, b)
 
 
-def _patch_model_for_fp8(
+def _patch_model_for_quant(
     model: torch.nn.Module, scaled_layers: frozenset[str]
 ) -> torch.nn.Module:
     count = 0
     for m in model.modules():
         if isinstance(m, torch.nn.Linear):
-            m.forward = types.MethodType(_fp8_linear_forward, m)
+            m.forward = types.MethodType(_quant_linear_forward, m)
             count += 1
     for name in scaled_layers:
         # get_submodule raises when a scaled layer has no module (its scale
@@ -242,18 +242,18 @@ def _patch_model_for_fp8(
     return model
 
 
-def _make_fp8_module_ops(scaled_layers: frozenset[str]):
+def _make_quant_module_ops(scaled_layers: frozenset[str]):
     from ltx_core.loader.module_ops import ModuleOps
     from ltx_core.model.transformer.model import LTXModel
 
     return ModuleOps(
-        name="fp8_linear",
+        name="sft_quant_linear",
         matcher=lambda model: isinstance(model, LTXModel),
-        mutator=lambda model: _patch_model_for_fp8(model, scaled_layers),
+        mutator=lambda model: _patch_model_for_quant(model, scaled_layers),
     )
 
 
-def _assert_fp8_only_in_linears(model: torch.nn.Module) -> None:
+def _assert_quant_only_in_linears(model: torch.nn.Module) -> None:
     """Only a patched Linear knows how to upcast fp8; anywhere else it is a bug."""
     stray = []
     for mod_name, mod in model.named_modules():
@@ -274,7 +274,7 @@ def _assert_fp8_only_in_linears(model: torch.nn.Module) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-class Fp8LoaderService:
+class SftQuantLoaderService:
     """Install an fp8 safetensors transformer into a ``ModelLedger``."""
 
     def __init__(
@@ -299,30 +299,30 @@ class Fp8LoaderService:
                 "to use an fp8 safetensors transformer."
             )
 
-        import sft_fp8_format
+        import sft_quant_format
         from ltx_core.quantization import QuantizationPolicy
 
         # The ONE acceptance check on the engine side; its Layout feeds both the
         # loader and the module op.
-        layout = sft_fp8_format.inspect(self.path)
+        layout = sft_quant_format.inspect(self.path)
         self.layout = layout
 
         # 1. Replace the transformer builder's loader and key ops (for a
         #    prefixed file the key ops are the ones the ledger already had).
         model_ledger.transformer_builder = dc_replace(
             model_ledger.transformer_builder,
-            model_loader=Fp8StateDictLoader(self.path, layout),
-            model_sd_ops=fp8_transformer_sd_ops(layout.prefix),
+            model_loader=SftQuantStateDictLoader(self.path, layout),
+            model_sd_ops=sft_transformer_sd_ops(layout.prefix),
         )
 
         # 2. Replace the policy WHOLESALE. fp8_cast's sd_ops
         #    (TRANSFORMER_LINEAR_DOWNCAST_MAP) would push biases and the bf16
         #    blocks down to fp8, and its only module op (UPCAST_DURING_INFERENCE)
-        #    is superseded by fp8_linear. Not None: without a policy the ledger
+        #    is superseded by sft_quant_linear. Not None: without a policy the ledger
         #    casts the whole state dict to bf16 (~37 GB).
         model_ledger.quantization = QuantizationPolicy(
             sd_ops=None,
-            module_ops=(_make_fp8_module_ops(layout.scaled_layers),),
+            module_ops=(_make_quant_module_ops(layout.scaled_layers),),
         )
 
         # 3. Wrap transformer(): IC-LoRA attach/detach (the GGUF service's copy),
@@ -339,12 +339,12 @@ class Fp8LoaderService:
                 else:
                     from engine.gguf.ic_lora_common import detach_ic_loras
                     detach_ic_loras(result)
-            _assert_fp8_only_in_linears(result)
+            _assert_quant_only_in_linears(result)
             return result
 
         model_ledger.transformer = types.MethodType(patched_transformer, model_ledger)
 
         logger.info(
-            "Fp8LoaderService installed: %s (flavor=%s, %d scaled layers)",
+            "SftQuantLoaderService installed: %s (flavor=%s, %d scaled layers)",
             Path(self.path).name, layout.flavor, len(layout.scaled_layers),
         )

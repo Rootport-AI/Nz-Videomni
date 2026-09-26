@@ -1078,15 +1078,15 @@ class _Fp8Block(nn.Module):
     """A block shaped like an fp8 safetensors transformer's: one "scaled" fp8
     Linear (fp8 Parameter + persistent 0-dim f32 ``weight_scale`` buffer), one
     "plain cast" fp8 Linear, a bf16 LayerNorm — all behind the real
-    ``fp8_linear`` forward from engine.fp8.quant_service."""
+    ``sft_quant_linear`` forward from engine.sft_quant.quant_service."""
 
     def __init__(self, dim: int, scale: float) -> None:
         super().__init__()
-        from engine.fp8.quant_service import _patch_model_for_fp8
+        from engine.sft_quant.quant_service import _patch_model_for_quant
 
         self.lin = nn.Linear(dim, dim, bias=True).to(torch.bfloat16)
         self.plain = nn.Linear(dim, dim, bias=False).to(torch.bfloat16)
-        _patch_model_for_fp8(self, frozenset({"lin"}))
+        _patch_model_for_quant(self, frozenset({"lin"}))
         self.lin.weight = nn.Parameter(
             (torch.randn(dim, dim) * 4).to(torch.float8_e4m3fn), requires_grad=False
         )

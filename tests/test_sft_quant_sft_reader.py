@@ -1,4 +1,4 @@
-"""§3-167: ``engine.fp8.sft_reader`` — seek + readinto, never mmap (CPU only).
+"""§3-167: ``engine.sft_quant.sft_reader`` — seek + readinto, never mmap (CPU only).
 
 A tiny safetensors file is written by hand (so the data section can be laid
 out in an order different from the header's key order) and read back; every
@@ -19,9 +19,9 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-import sft_fp8_format  # noqa: E402
-from engine.fp8 import sft_reader  # noqa: E402
-from engine.fp8.sft_reader import read_tensors  # noqa: E402
+import sft_quant_format  # noqa: E402
+from engine.sft_quant import sft_reader  # noqa: E402
+from engine.sft_quant.sft_reader import read_tensors  # noqa: E402
 
 _DTYPE_NAMES = {
     torch.bfloat16: "BF16",
@@ -137,7 +137,7 @@ def test_no_mmap_and_no_safe_open(tmp_path, monkeypatch):
 def test_short_read_raises(tmp_path):
     src = _sample()
     path = write_sft(tmp_path / "m.safetensors", src, data_order=list(src))
-    header = sft_fp8_format.read_header(path)
+    header = sft_quant_format.read_header(path)
     # Truncate inside the LAST tensor after the header was validated.
     path.write_bytes(path.read_bytes()[:-3])
     with pytest.raises(OSError, match="short read"):
@@ -177,14 +177,14 @@ class _CountingFile:
 
 
 def test_loader_skips_keys_that_sd_ops_drops(tmp_path, monkeypatch):
-    """Fp8StateDictLoader: keys mapped to None by sd_ops are never read
+    """SftQuantStateDictLoader: keys mapped to None by sd_ops are never read
     (counted at readinto), nor are comfy_quant / input_scale / connectors."""
     pytest.importorskip("ltx_core")
     import types
 
     from ltx_core.model.transformer.model_configurator import LTXV_MODEL_COMFY_RENAMING_MAP
 
-    from engine.fp8.quant_service import Fp8StateDictLoader
+    from engine.sft_quant.quant_service import SftQuantStateDictLoader
 
     p = "model.diffusion_model."
     src = {
@@ -211,7 +211,7 @@ def test_loader_skips_keys_that_sd_ops_drops(tmp_path, monkeypatch):
         sft_reader, "open", lambda *a, **k: _CountingFile(real_open(*a, **k), counter), raising=False
     )
 
-    loader = Fp8StateDictLoader(str(path), layout)
+    loader = SftQuantStateDictLoader(str(path), layout)
     assert loader.metadata("") == {"transformer": {}}
     sd = loader.load([""], sd_ops=LTXV_MODEL_COMFY_RENAMING_MAP, device=torch.device("cpu"))
 

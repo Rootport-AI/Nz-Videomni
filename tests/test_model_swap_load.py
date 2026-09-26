@@ -320,7 +320,7 @@ def _shipped_ltx23():
 
 
 def _fp8_transformer(path, model_version: str | None = "2.3.0"):
-    from test_sft_fp8_format import _model, _write
+    from test_sft_quant_format import _model, _write
 
     spec, meta, payloads = _model("scaled")
     if model_version is None:
@@ -348,7 +348,7 @@ def test_precheck_accepts_fp8_safetensors_transformer(tmp_path):
 
 
 def test_precheck_refuses_non_accepted_fp8_safetensors_transformer(tmp_path):
-    """A header that fails sft_fp8_format.inspect is MODEL_INCOMPATIBLE (422),
+    """A header that fails sft_quant_format.inspect is MODEL_INCOMPATIBLE (422),
     with the one-line reason as the detail."""
     st = _touch(tmp_path / "weights.safetensors", struct.pack("<Q", 2) + b"{}")
     with pytest.raises(APIError) as ei:

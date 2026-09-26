@@ -99,7 +99,7 @@ def test_g_a_does_not_fire_for_fp8_transformer(monkeypatch):
     # §3-167: the fp8 forward adds LoRA deltas out of place, so the per-layer
     # flag (a GGUF-only notion) must not block keep_resident there.
     monkeypatch.setattr(
-        worker, "_PIPE", _pipe(per_layer_quant=False, transformer_format="fp8")
+        worker, "_PIPE", _pipe(per_layer_quant=False, transformer_format="safetensors")
     )
     msg = {"keep_resident": True}
     assert worker._resolve_keep_resident(msg, True) == (True, None)

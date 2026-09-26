@@ -1,4 +1,4 @@
-"""§3-167 B-1/B-2: sft_fp8_format — header reader and fp8 acceptance table.
+"""§3-167 B-1/B-2: sft_quant_format — header reader and fp8 acceptance table.
 
 Synthetic, tiny safetensors files only (no real 29 GB checkpoint): a header is
 assembled from a {key: (dtype, shape)} spec, the body is zero bytes except for
@@ -12,9 +12,9 @@ import struct
 
 import pytest
 
-from sft_fp8_format import (
+from sft_quant_format import (
     DTYPE_ITEMSIZE,
-    Fp8FormatError,
+    QuantFormatError,
     Layout,
     MAX_HEADER_LEN,
     detect_prefix,
@@ -242,7 +242,7 @@ def test_refuses_non_scalar_scale_on_connector(tmp_path):
     conn = f"{P}video_embeddings_connector.proj"
     spec[f"{conn}.weight"] = ("F8_E4M3", (4, 4))
     spec[f"{conn}.weight_scale"] = ("F32", (4,))
-    with pytest.raises(Fp8FormatError, match="per-row"):
+    with pytest.raises(QuantFormatError, match="per-row"):
         inspect(_write(tmp_path / "cr.safetensors", spec, meta, pay))
 
 
@@ -271,7 +271,7 @@ def test_bare_names_police_every_tensor(tmp_path):
     """With prefix "" nothing is outside: a non-float tensor anywhere is refused."""
     spec, meta, pay = _model("scaled", prefix="")
     spec["audio_vae.encoder.stats"] = ("F16", (2,))
-    with pytest.raises(Fp8FormatError, match="F16"):
+    with pytest.raises(QuantFormatError, match="F16"):
         inspect(_write(tmp_path / "bare.safetensors", spec, meta, pay))
 
 
@@ -292,7 +292,7 @@ def test_detect_prefix(tmp_path, keys, expected):
 
 def test_detect_prefix_refuses_unknown_prefix(tmp_path):
     path = _write(tmp_path / "d.safetensors", {"diffusion_model.transformer_blocks.0.x": ("BF16", (1,))})
-    with pytest.raises(Fp8FormatError, match="接頭辞"):
+    with pytest.raises(QuantFormatError, match="接頭辞"):
         detect_prefix(read_header(path))
 
 
@@ -446,7 +446,7 @@ def test_refusals(tmp_path, mutate, needle):
     spec, meta, pay = _model("scaled")
     mutate(spec, meta, pay)
     path = _write(tmp_path / "x.safetensors", spec, meta, pay)
-    with pytest.raises(Fp8FormatError) as ei:
+    with pytest.raises(QuantFormatError) as ei:
         inspect(path)
     message = str(ei.value)
     assert needle in message
@@ -456,7 +456,7 @@ def test_refusals(tmp_path, mutate, needle):
 def test_refuses_wrong_prefix(tmp_path):
     spec, meta, pay = _model("scaled", prefix="diffusion_model.")
     path = _write(tmp_path / "x.safetensors", spec, meta, pay)
-    with pytest.raises(Fp8FormatError, match="接頭辞"):
+    with pytest.raises(QuantFormatError, match="接頭辞"):
         inspect(path)
 
 
@@ -465,7 +465,7 @@ def test_refuses_data_offsets_out_of_range(tmp_path):
     path = _write(tmp_path / "x.safetensors", spec, meta, pay)
     raw = path.read_bytes()
     path.write_bytes(raw[:-4])  # body shorter than the header claims
-    with pytest.raises(Fp8FormatError, match="data_offsets"):
+    with pytest.raises(QuantFormatError, match="data_offsets"):
         inspect(path)
 
 
@@ -504,7 +504,7 @@ def test_read_header_without_metadata(tmp_path):
 def test_read_header_boundaries(tmp_path, raw):
     path = tmp_path / "bad.safetensors"
     path.write_bytes(raw)
-    with pytest.raises(Fp8FormatError):
+    with pytest.raises(QuantFormatError):
         read_header(path)
 
 
@@ -512,7 +512,7 @@ def test_read_header_rejects_length_mismatch(tmp_path):
     blob = json.dumps({"a": {"dtype": "BF16", "shape": [2], "data_offsets": [0, 3]}}).encode()
     path = tmp_path / "m.safetensors"
     path.write_bytes(struct.pack("<Q", len(blob)) + blob + b"\0" * 3)
-    with pytest.raises(Fp8FormatError, match="一致しません"):
+    with pytest.raises(QuantFormatError, match="一致しません"):
         read_header(path)
 
 
@@ -520,7 +520,7 @@ def test_read_header_rejects_unknown_dtype(tmp_path):
     blob = json.dumps({"a": {"dtype": "F4", "shape": [2], "data_offsets": [0, 1]}}).encode()
     path = tmp_path / "u.safetensors"
     path.write_bytes(struct.pack("<Q", len(blob)) + blob + b"\0")
-    with pytest.raises(Fp8FormatError, match="未知"):
+    with pytest.raises(QuantFormatError, match="未知"):
         read_header(path)
 
 
@@ -605,8 +605,8 @@ def test_inspect_reads_only_header_and_comfy_quant(tmp_path, monkeypatch):
 
 
 def test_module_is_torch_free():
-    import sft_fp8_format
+    import sft_quant_format
 
-    source = open(sft_fp8_format.__file__, encoding="utf-8").read()
+    source = open(sft_quant_format.__file__, encoding="utf-8").read()
     for heavy in ("import torch", "import numpy", "import safetensors", "mmap"):
         assert heavy not in source

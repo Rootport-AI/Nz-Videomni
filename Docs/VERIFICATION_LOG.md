@@ -13398,7 +13398,7 @@ LTX 2.5・公式 `default`（線 44,880）:
 **要約**: LTX 2.5 の fp8（重みを 8 ビットの浮動小数点で持つ形式）の transformer を、`models/LTX25/Weights/` に `.safetensors` のまま置けば、GGUF と同じドロップダウンで選べるようにしました。LTX 2.3 で作った受け入れの規則（§117.3）を、実在する LTX 2.5 の配布物に合わせて 3 点広げています（§118.3）。読み込みは LTX 2.3 と同じく、巨大なファイルを mmap（ファイルをメモリに見せかけて開く仕組み）で開かず、テンソルを 1 本ずつ読みます。
 
 - **状態**: B-2 は機械ゲート・実機確認・オーナーの目視（§118.10）まで完結しました。7 項目すべて合格です。B-3（fp8 の快適上限の較正）は 2026-09-26 に §119 で完了しました（配信値は未変更・反映は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31）。コミットは `16c1170`（共通部品・LTX 2.3 側・エンジンの外）と `fc3629b`（LTX 2.5 のエンジン `engine25/`）で、文書はその次のコミットです。
-- **最初に知っておくこと**: **Lightricks 公式は LTX 2.5 の fp8 を配っていません。** 使えるのはコミュニティが変換した fp8 です。公式の INT8-ConvRot・NVFP4 と、REDGraft LTX 2.5 の独自量子化は fp8 ではないので、**選ぶと断られるのが正しい動作です**（§118.4）。
+- **最初に知っておくこと**: **Lightricks 公式は LTX 2.5 の fp8 を配っていません。** 使えるのはコミュニティが変換した fp8 です。公式の INT8-ConvRot・NVFP4 と、REDGraft LTX 2.5 の int8（ComfyUI 標準の int8 形式の混在）は fp8 ではないので、**選ぶと断られるのが正しい動作です**（§118.4）。
 - **実機で分かった注意点**: fp8 は Windows のコミット（仮想メモリの予約）を GGUF より約 11 GiB 多く使います（§118.8）。
 - **快適上限マーカーは fp8 では較正していません**（B-3 で較正します）。→ 2026-09-26 に §119 で較正済みです（配信値は未変更・反映は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31）。
 - **GGUF を選んだときの挙動は変えていません。** LTX 2.5 では、ワーカーへ送るペイロードの形も GGUF と fp8 で同じです（§118.2）。
@@ -13450,8 +13450,9 @@ LTX 2.5・公式 `default`（線 44,880）:
 
 - **Lightricks 公式に LTX 2.5 の fp8 はありません。** 公式は bf16・INT8-ConvRot・NVFP4 で、ComfyUI 公式の低 VRAM 向けの形式も INT8-ConvRot と NVFP4 です。
 - **CivitAI の「LTX 2.5」は、公式の INT8-ConvRot の複製でした。** `weight_scale` が F32 の shape [2048,1]、`comfy_quant` が 1,440 本あり、「fp8 以外」「スカラーでない倍率」として正しく断られます。
-- **REDGraft LTX 2.5（`fp:int8`）は独自の量子化です。** I8・U8・F8 が混在し、`weight_codebook` や `weight_s_channel` を持つので、対象外です。
+- **REDGraft LTX 2.5（`fp:int8`）は、ComfyUI 本体が標準で読む 2 つの形式を 1 つのファイルに混ぜたものでした（2026-09-26 にヘッダを再実測）。** `int8_tensorwise`＋ConvRot（アダマール回転を重みに焼き込んだ int8。`weight` が I8、`weight_scale` が F32 の shape [出力,1]、`comfy_quant` が `{"format":"int8_tensorwise","convrot":true,"convrot_groupsize":256}`）が 831 層、`asym_w4a8_int8`（重み 4 ビットのコードブック方式。`weight` が I8 の shape [出力,入力/2]、`weight_codebook` が F32 の shape [16]、`weight_s_channel` が F32 の shape [出力]、`weight_s_rel` が F8_E4M3、`comfy_quant` が `{"format":"asym_w4a8_int8","group_size":16,"convrot_groupsize":256}`）が 609 層です。`__metadata__` に `quant_format="mixed:w4a8+int8"` があります。ComfyUI v0.31.0 以降の標準ローダー（`UNETLoader`）で読め、量子化のためのカスタムノードは要りません。
 - **INT8-ConvRot・NVFP4・REDGraft は、断られるのが正しい動作です。**
+- **訂正（2026-09-26）**: 2026-09-25 時点では独自形式と記していたが、ヘッダの再実測で ComfyUI 標準形式の混在と判明したため改めた。
 
 **本当に fp8 の LTX 2.5 は、コミュニティの変換物だけでした。** 調べたのは次の 3 本です。
 

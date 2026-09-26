@@ -341,7 +341,7 @@ class LTXFastVideoPipeline:
                 per_layer_quant=gguf_per_layer_quant,
                 ic_loras=self._ic_loras,
             )
-        # ── fp8 safetensors transformer (§3-167). NOT wrapped in try/except:
+        # ── quantized (fp8 / int8) safetensors transformer (§3-167, §3-168). NOT wrapped in try/except:
         # a rejected or broken file must fail the load, never fall back.
         if safetensors_transformer_path:
             self._install_safetensors(safetensors_transformer_path)
@@ -356,7 +356,7 @@ class LTXFastVideoPipeline:
             # non-Gemma monolith survivors off standalone files so the 46GB monolith
             # is no longer opened by ANY builder: aggregate_embed from the projection
             # file (replaces the monolith in model_path) and the 258 connectors
-            # injected from the transformer file (GGUF or fp8 safetensors). Both
+            # injected from the transformer file (GGUF or quantized (fp8 / int8) safetensors). Both
             # must be present to enable the drop; otherwise the monolith-base path
             # is unchanged.
             _transformer_file = gguf_transformer_path or safetensors_transformer_path
@@ -987,7 +987,7 @@ class LTXFastVideoPipeline:
             )
 
     def _install_safetensors(self, path: str) -> None:
-        """Install an fp8 safetensors transformer (§3-167 B-1).
+        """Install a quantized (fp8 / int8) safetensors transformer (§3-167 B-1, §3-168).
 
         Checks the file with ``sft_quant_format.inspect`` (a refusal raises and
         fails the load), then replaces the transformer loader, the quantization
@@ -1005,9 +1005,10 @@ class LTXFastVideoPipeline:
         service.install(self.pipeline.model_ledger)
         self._sft_service = service
         import logging
+        from collections import Counter
         logging.getLogger(__name__).info(
-            "fp8 safetensors transformer installed (flavor=%s): %s",
-            service.layout.flavor, path,
+            "quantized safetensors transformer installed (schemes=%s): %s",
+            dict(Counter(service.layout.layers.values())), path,
         )
 
     def _install_gemma_gguf(

@@ -347,7 +347,7 @@ def _do_load(msg: dict) -> None:
         return
 
     _log(f"sage_available={sage_available}")
-    # §3-167: an fp8 safetensors transformer arrives in its own key, with
+    # §3-167 / §3-168: a quantized (fp8 / int8) safetensors transformer arrives in its own key, with
     # gguf_transformer_path emptied (older parents never send the key).
     gguf_t = msg["gguf_transformer_path"]
     st = msg.get("safetensors_transformer_path", "")
@@ -356,7 +356,7 @@ def _do_load(msg: dict) -> None:
             "worker: load got both gguf_transformer_path and "
             "safetensors_transformer_path - exactly one transformer source is allowed"
         )
-    fmt = "fp8 safetensors" if st else "GGUF"
+    fmt = "quantized safetensors" if st else "GGUF"
     _log(f"creating pipeline ({fmt} transformer + GGUF Gemma)...")
     _PIPE = LTXFastVideoPipeline.create(
         checkpoint_path=msg["checkpoint_path"],
@@ -691,7 +691,7 @@ def _resolve_keep_resident(msg: dict, bs_prefetch: bool) -> tuple[bool, str | No
     assert _PIPE is not None  # only reachable from a post-load generate op
     # 直接属性アクセス（getattrの既定値ではなく）：属性が消えたらガードが
     # 黙って素通りになるより AttributeError で落ちるほうがよい。
-    # The fp8 transformer's forward is always out of place (engine/sft_quant), so
+    # The quantized (fp8 / int8) safetensors transformer's forward is always out of place (engine/sft_quant), so
     # only the GGUF bf16 fused path can contaminate the cache.
     if _PIPE._transformer_format == "gguf" and not _PIPE._gguf_per_layer_quant:
         raise RuntimeError(

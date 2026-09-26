@@ -112,7 +112,7 @@ from engine.gguf.quant_service import (
     _patch_model_for_ggml_dequant,
     dequantize_ggml_tensor,
 )
-# fp8 safetensors transformer (§3-167 B-2): its connectors, in bf16.
+# Quantized (fp8 / int8) safetensors transformer (§3-167 B-2, §3-168): its connectors, in bf16.
 import sft_quant_format
 from engine.sft_quant.quant_service import load_connector_bf16
 
@@ -194,7 +194,7 @@ class Ltx25GemmaError(RuntimeError):
 
 
 class Ltx25SftConnectorLoader:
-    """The connector half of an fp8 safetensors transformer, as a part loader (§3-167 B-2).
+    """The connector half of a quantized safetensors transformer, as a part loader (§3-167 B-2, §3-168).
 
     Returns ONLY the ``*_embeddings_connector.*`` tensors, in bf16 and without the
     file's prefix (``load_connector_bf16``), put through the ``sd_ops`` it is handed
@@ -231,7 +231,7 @@ class Ltx25SftConnectorLoader:
                 dtypes.add(out_value.dtype)
                 size += out_value.nbytes
         logger.info(
-            "fp8 safetensors connectors %s -> %s: %d tensors (bf16)",
+            "quantized safetensors connectors %s -> %s: %d tensors (bf16)",
             Path(self.path).name, target, len(state_dict),
         )
         return StateDict(sd=state_dict, device=target, size=size, dtype=dtypes)
@@ -254,7 +254,7 @@ class Ltx25MultiGgufStateDictLoader:
     Per-file reading is delegated to :class:`Ltx25GgufStateDictLoader` rather than
     reimplemented, so the dtype handling, the ``copy=True`` defence against
     aliasing a closed memmap, and the ``Ltx25GGMLTensor`` wrapping all stay in
-    one place. An fp8 ``.safetensors`` transformer is read by
+    one place. A quantized (fp8 / int8) ``.safetensors`` transformer is read by
     :class:`Ltx25SftConnectorLoader` instead (§3-167 B-2); the part loader is
     chosen by the file's extension.
     """

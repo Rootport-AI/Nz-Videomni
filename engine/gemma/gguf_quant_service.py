@@ -639,10 +639,11 @@ class GemmaGGUFQuantStateDictLoader:
         """Read the 258 embeddings-connector tensors from the LTX transformer file.
 
         The transformer file is the GGUF (bare ``{video,audio}_embeddings_connector.*``
-        keys, F32/BF16, NEVER K-quantized) or, since §3-167, an fp8 safetensors
-        (prefixed ``model.diffusion_model.`` or bare keys; BF16/F32/fp8, read by
-        ``engine.sft_quant.quant_service.load_connector_bf16``, which brings fp8
-        connectors back to bf16, times their scale when they have one). To
+        keys, F32/BF16, NEVER K-quantized) or, since §3-167 / §3-168, a quantized
+        (fp8 / int8) safetensors (prefixed ``model.diffusion_model.`` or bare keys;
+        BF16/F16/F32/fp8/int8, read by
+        ``engine.sft_quant.quant_service.load_connector_bf16``, which dequantizes
+        quantized connectors back to bf16 by their scheme). To
         reproduce the monolith path byte-for-byte we:
           1. bring each key to the monolith's original form
              ``model.diffusion_model.<...>_embeddings_connector.*`` (the form the AV
@@ -747,14 +748,14 @@ class GemmaGGUFQuantStateDictLoader:
     def _connector_orig_form_safetensors(
         self, path: str
     ) -> tuple[dict[str, torch.Tensor], int, int]:
-        """fp8 safetensors transformer: connectors in bf16, keys in the original form.
+        """Quantized (fp8 / int8) safetensors transformer: connectors in bf16, keys in the original form.
 
         ``engine.sft_quant.quant_service.load_connector_bf16`` reads them (one by one,
-        seek + readinto, never mmap; fp8 connectors upcast, times their scale
-        when they have one) with the file's prefix removed — prefixed or bare
+        seek + readinto, never mmap; quantized connectors dequantized by their
+        scheme) with the file's prefix removed — prefixed or bare
         file alike — and the original ``model.diffusion_model.`` form is put
-        back here. The counts are by stored dtype (fp8 connectors are in
-        neither).
+        back here. The counts are by stored dtype (quantized and F16
+        connectors are in neither).
         """
         import sft_quant_format
         from engine.sft_quant.quant_service import load_connector_bf16

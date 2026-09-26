@@ -1,7 +1,7 @@
-"""§3-167: the ``sft_quant_linear`` forward — test_ic_lora_forward.py's twin (CPU only).
+"""§3-167 / §3-168: the ``sft_quant_linear`` forward — test_ic_lora_forward.py's twin (CPU only).
 
 Pins the forward that ``engine.sft_quant.quant_service`` installs on every Linear of
-an fp8 transformer:
+a quantized (fp8 / int8) transformer:
 
   * a bf16 layer without LoRA is byte-identical to a plain ``nn.Linear``,
   * fp8 layers (scaled and plain cast), with and without (IC-)LoRA, match the
@@ -10,7 +10,11 @@ an fp8 transformer:
     the ACTIVATION dtype, never to the fp8 weight dtype,
   * the forward never writes the stored weight or scale (keep_resident cache),
   * the meta skeleton takes an fp8 Parameter and the 0-dim f32 persistent
-    ``weight_scale`` buffer through ``load_state_dict(strict=False, assign=True)``.
+    ``weight_scale`` buffer through ``load_state_dict(strict=False, assign=True)``;
+  * §3-168: int8 / int8_convrot layers — the skeleton takes an int8 Parameter
+    (``requires_grad=False``) and an ``(o, 1)`` f32 scale, the forward matches
+    ``F.linear`` over the dequantized weight plus the unchanged LoRA delta, and
+    nothing stored is written.
 
 Run with ``.venv-engine`` and ``--noconftest``; the app venv skips the module.
 """
@@ -40,7 +44,13 @@ def _linear(weight: torch.Tensor, scale: float | None = None) -> nn.Linear:
     root = nn.Module()
     root.lin = nn.Linear(IN_F, OUT_F, bias=True)
     root.lin.bias = nn.Parameter(torch.randn(OUT_F).to(BF16), requires_grad=False)
-    _patch_model_for_quant(root, frozenset({"lin"}) if scale is not None else frozenset())
+    if scale is not None:
+        layers = {"lin": "fp8_scaled"}
+    elif weight.dtype in (FP8, torch.float8_e5m2):
+        layers = {"lin": "fp8"}
+    else:
+        layers = {}
+    _patch_model_for_quant(root, layers)
     root.lin.weight = nn.Parameter(weight, requires_grad=False)
     if scale is not None:
         root.lin._buffers["weight_scale"] = torch.tensor(scale, dtype=torch.float32)
@@ -172,7 +182,7 @@ def test_meta_skeleton_takes_fp8_parameter_and_scale_buffer():
         root.blk = nn.Module()
         root.blk.lin = nn.Linear(IN_F, OUT_F, bias=True)
         root.blk.plain = nn.Linear(IN_F, OUT_F, bias=False)
-    _patch_model_for_quant(root, frozenset({"blk.lin"}))
+    _patch_model_for_quant(root, {"blk.lin": "fp8_scaled", "blk.plain": "fp8"})
     # The scale buffer is persistent: it is part of the skeleton's state_dict keys.
     assert "blk.lin.weight_scale" in root.state_dict()
     assert "weight_scale" not in root.blk.plain._buffers
@@ -191,6 +201,8 @@ def test_meta_skeleton_takes_fp8_parameter_and_scale_buffer():
 
     assert isinstance(root.blk.lin.weight, nn.Parameter)
     assert root.blk.lin.weight.dtype == FP8 and root.blk.lin.weight.device.type == "cpu"
+    # §3-168 ruling 8: fp8 layers take the same requires_grad=False rule as int8
+    assert not root.blk.lin.weight.requires_grad and not root.blk.plain.weight.requires_grad
     assert root.blk.lin.weight_scale.dim() == 0
     assert root.blk.lin.weight_scale.item() == 0.125
     assert not [n for n, t in root.state_dict().items() if t.device.type == "meta"]
@@ -204,4 +216,124 @@ def test_unknown_scaled_layer_raises():
     root = nn.Module()
     root.lin = nn.Linear(IN_F, OUT_F)
     with pytest.raises(AttributeError):
-        _patch_model_for_quant(root, frozenset({"missing.lin"}))
+        _patch_model_for_quant(root, {"missing.lin": "fp8"})
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# §3-168: int8 / int8_convrot
+# ──────────────────────────────────────────────────────────────────────────────
+
+I8 = torch.int8
+IN_ROT = 512  # ConvRot needs in_features % 256 == 0; two groups
+
+
+def _h256() -> torch.Tensor:
+    h4 = torch.tensor([[1, 1, 1, -1], [1, 1, -1, 1], [1, -1, 1, 1], [-1, 1, 1, 1]], dtype=torch.float32)
+    m = h4
+    for _ in range(3):
+        m = torch.kron(m, h4)
+    return m / 16
+
+
+def _int8_reference(q: torch.Tensor, scale: torch.Tensor, rotate: bool) -> torch.Tensor:
+    """Written out independently of engine.sft_quant.dequant (fp32, then bf16)."""
+    w = q.float() * scale
+    if rotate:
+        o, i = w.shape
+        w = (w.view(o, i // 256, 256) @ _h256()).view(o, i)
+    return w.to(BF16)
+
+
+def _int8_root(scheme: str, in_f: int):
+    """A meta skeleton with one quantized Linear, loaded like the builder does."""
+    with torch.device("meta"):
+        root = nn.Module()
+        root.blk = nn.Module()
+        root.blk.lin = nn.Linear(in_f, OUT_F, bias=True)
+    _patch_model_for_quant(root, {"blk.lin": scheme})
+    q = torch.randint(-127, 128, (OUT_F, in_f), dtype=I8)
+    scale = (torch.rand(OUT_F, 1) * 0.01 + 1e-3).to(torch.float32)
+    bias = torch.randn(OUT_F).to(BF16)
+    sd = {"blk.lin.weight": q, "blk.lin.bias": bias, "blk.lin.weight_scale": scale}
+    result = root.load_state_dict(sd, strict=False, assign=True)
+    assert not result.unexpected_keys and not result.missing_keys
+    return root, q, scale, bias
+
+
+def test_int8_parameter_cannot_require_grad():
+    """Why the module op re-makes the weight: the default Parameter fails on int8."""
+    with pytest.raises(RuntimeError):
+        nn.Parameter(torch.zeros(2, 2, dtype=I8))
+    with torch.device("meta"):
+        lin = nn.Linear(4, 2)
+    with pytest.raises(RuntimeError):
+        lin.load_state_dict({"weight": torch.zeros(2, 4, dtype=I8), "bias": torch.zeros(2)}, assign=True)
+
+
+@pytest.mark.parametrize("scheme,in_f", [("int8", IN_F), ("int8_convrot", IN_ROT)])
+def test_meta_skeleton_takes_int8_parameter_and_row_scale(scheme, in_f):
+    torch.manual_seed(20)
+    with torch.device("meta"):
+        root = nn.Module()
+        root.blk = nn.Module()
+        root.blk.lin = nn.Linear(in_f, OUT_F, bias=True)
+    _patch_model_for_quant(root, {"blk.lin": scheme})
+    skel = root.state_dict()
+    assert skel["blk.lin.weight"].shape == (OUT_F, in_f)
+    assert skel["blk.lin.weight_scale"].shape == (OUT_F, 1)
+    assert skel["blk.lin.weight_scale"].dtype == torch.float32
+    assert not root.blk.lin.weight.requires_grad
+    assert root.blk.lin._sft_scheme == scheme
+
+    root, q, scale, bias = _int8_root(scheme, in_f)
+    w = root.blk.lin.weight
+    assert isinstance(w, nn.Parameter) and w.dtype == I8 and not w.requires_grad
+    assert root.blk.lin.weight_scale.dtype == torch.float32
+    assert root.blk.lin.weight_scale.shape == (OUT_F, 1)
+    assert not [n for n, t in root.state_dict().items() if t.device.type == "meta"]
+
+
+@pytest.mark.parametrize("scheme,in_f", [("int8", IN_F), ("int8_convrot", IN_ROT)])
+@pytest.mark.parametrize("n_lora", [0, 1, 2])
+def test_int8_layer_matches_reference(scheme, in_f, n_lora):
+    torch.manual_seed(21 + n_lora)
+    root, q, scale, bias = _int8_root(scheme, in_f)
+    m = root.blk.lin
+    x = torch.randn(5, in_f).to(BF16)
+    factors = [
+        (torch.randn(RANK, in_f).to(BF16), torch.randn(OUT_F, RANK).to(BF16), s)
+        for s in (0.75, -0.3)[:n_lora]
+    ]
+    if factors:
+        _set_specs(m, factors)
+    wd = _int8_reference(q, scale, scheme == "int8_convrot")
+    acc = None
+    for a, b, s in factors:  # the LoRA delta, exactly as for fp8
+        d = torch.matmul(b.float() * s, a.float()).to(BF16)
+        acc = d if acc is None else acc + d
+    ref = wd if acc is None else wd + acc
+    assert torch.equal(m(x), F.linear(x, ref, bias))
+
+
+def test_int8_convrot_differs_from_int8():
+    torch.manual_seed(25)
+    root, q, scale, bias = _int8_root("int8_convrot", IN_ROT)
+    x = torch.randn(5, IN_ROT).to(BF16)
+    rotated = root.blk.lin(x)
+    root.blk.lin._sft_scheme = "int8"
+    assert not torch.equal(rotated, root.blk.lin(x))
+
+
+@pytest.mark.parametrize("scheme,in_f", [("int8", IN_F), ("int8_convrot", IN_ROT)])
+def test_int8_forward_does_not_mutate_weight_or_scale(scheme, in_f):
+    torch.manual_seed(26)
+    root, q, scale, bias = _int8_root(scheme, in_f)
+    m = root.blk.lin
+    _set_specs(m, [(torch.randn(RANK, in_f).to(BF16), torch.randn(OUT_F, RANK).to(BF16), 0.5)])
+    w_before, s_before = _u8(m.weight), _u8(m.weight_scale)
+    x = torch.randn(5, in_f).to(BF16)
+    _ = m(x)
+    _ = m(x)
+    assert m.weight.dtype == I8 and m.weight_scale.dtype == torch.float32
+    assert torch.equal(_u8(m.weight), w_before)
+    assert torch.equal(_u8(m.weight_scale), s_before)

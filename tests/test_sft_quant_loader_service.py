@@ -16,6 +16,11 @@ B-2 additions (shared with engine25): the loader's 0-dim scale and
 text_embedding_projection skip, ``sft_transformer_sd_ops`` and
 ``load_connector_bf16``.
 
+§3-168 additions: int8 / int8_convrot through the loader (quantized weight as
+stored, auxiliary tensors F32 in the one ``(o, 1)`` shape, a surplus auxiliary
+key raises, F16 -> bf16), loader -> skeleton -> forward end to end, the int8
+connector (row / scalar scale, ConvRot, F16), and int8 outside a Linear.
+
 Run with ``.venv-engine`` and ``--noconftest``; the app venv skips the module.
 """
 
@@ -44,11 +49,10 @@ from engine.sft_quant.quant_service import (  # noqa: E402
 )
 
 _LAYOUT = types.SimpleNamespace(
-    flavor="scaled",
     config={"transformer": {"num_layers": 48}},
     model_version="2.3.0",
     prefix="model.diffusion_model.",
-    scaled_layers=frozenset({"transformer_blocks.2.attn1.to_q"}),
+    layers={"transformer_blocks.2.attn1.to_q": "fp8_scaled"},
     connector_keys=("model.diffusion_model.video_embeddings_connector.w",),
     n_blocks=48,
 )
@@ -286,11 +290,10 @@ def test_gemma_connectors_from_bare_fp8_safetensors(tmp_path):
 
 def _bare_layout(**over):
     kw = dict(
-        flavor="scaled",
         config={"transformer": {}},
         model_version="2.5.0",
         prefix="",
-        scaled_layers=frozenset({"transformer_blocks.0.attn1.to_q"}),
+        layers={"transformer_blocks.0.attn1.to_q": "fp8_scaled"},
         connector_keys=("video_embeddings_connector.w",),
         n_blocks=1,
     )
@@ -422,3 +425,185 @@ def test_load_connector_bf16_fp8_bias_is_not_scaled(tmp_path):
     assert out[f"{lay}.bias"].dtype == torch.bfloat16
     assert torch.equal(out[f"{lay}.bias"], b.to(torch.bfloat16))
     assert torch.equal(out[f"{lay}.weight"], (w.to(torch.float32) * 2.0).to(torch.bfloat16))
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# §3-168: int8 / int8_convrot
+# ──────────────────────────────────────────────────────────────────────────────
+
+_LIN = "transformer_blocks.0.attn1.to_q"
+
+
+def _marker(convrot: bool) -> torch.Tensor:
+    import json
+
+    conf = {"format": "int8_tensorwise", "convrot": convrot, "convrot_groupsize": 256}
+    return torch.tensor(list(json.dumps(conf).encode()), dtype=torch.uint8)
+
+
+def _int8_weight(o: int, i: int) -> torch.Tensor:
+    return torch.randint(-127, 128, (o, i), dtype=torch.int8)
+
+
+@pytest.mark.parametrize(
+    "raw_scale",
+    [torch.tensor(0.5), torch.tensor([0.5]), torch.full((4, 1), 0.5)],
+    ids=["0dim", "(1,)", "(o,1)"],
+)
+def test_loader_int8_keeps_weight_and_normalizes_scale(tmp_path, raw_scale):
+    from safetensors.torch import save_file
+
+    q = _int8_weight(4, 8)
+    path = tmp_path / "i8.safetensors"
+    save_file(
+        {
+            f"{_LIN}.weight": q,
+            f"{_LIN}.weight_scale": raw_scale,
+            f"{_LIN}.comfy_quant": _marker(False),
+            f"{_LIN}.input_scale": torch.tensor([1.0]),
+            "transformer_blocks.0.norm.weight": torch.randn(8).to(torch.float16),
+            "transformer_blocks.0.scale_shift_table": torch.randn(2),
+        },
+        str(path),
+    )
+    layout = _bare_layout(layers={_LIN: "int8"}, connector_keys=())
+    sd = SftQuantStateDictLoader(str(path), layout).load("", sd_ops=sft_transformer_sd_ops("")).sd
+    assert set(sd) == {
+        f"{_LIN}.weight", f"{_LIN}.weight_scale",
+        "transformer_blocks.0.norm.weight", "transformer_blocks.0.scale_shift_table",
+    }
+    assert sd[f"{_LIN}.weight"].dtype == torch.int8 and torch.equal(sd[f"{_LIN}.weight"], q)
+    s = sd[f"{_LIN}.weight_scale"]
+    assert s.dtype == torch.float32 and s.shape == (4, 1) and torch.equal(s, torch.full((4, 1), 0.5))
+    # the one rule for non-quantized floats: F16 and F32 -> bf16
+    assert sd["transformer_blocks.0.norm.weight"].dtype == torch.bfloat16
+    assert sd["transformer_blocks.0.scale_shift_table"].dtype == torch.bfloat16
+
+
+@pytest.mark.parametrize("scheme", [None, "fp8"], ids=["bf16_layer", "plain_fp8_layer"])
+def test_loader_surplus_auxiliary_key_raises(tmp_path, scheme):
+    from safetensors.torch import save_file
+
+    w = torch.randn(4, 8).to(torch.bfloat16 if scheme is None else torch.float8_e4m3fn)
+    path = tmp_path / "extra.safetensors"
+    save_file({f"{_LIN}.weight": w, f"{_LIN}.weight_scale": torch.tensor(0.5)}, str(path))
+    layout = _bare_layout(layers={} if scheme is None else {_LIN: scheme}, connector_keys=())
+    with pytest.raises(RuntimeError, match="no quantized"):
+        SftQuantStateDictLoader(str(path), layout).load("", sd_ops=sft_transformer_sd_ops(""))
+
+
+@pytest.mark.parametrize("scheme,in_f", [("int8", 16), ("int8_convrot", 256)])
+def test_loader_to_skeleton_to_forward(tmp_path, scheme, in_f):
+    """File -> loader -> patched meta skeleton -> load_state_dict(assign) -> forward."""
+    from safetensors.torch import save_file
+
+    from engine.sft_quant.dequant import dequantize
+    from engine.sft_quant.quant_service import _patch_model_for_quant
+
+    torch.manual_seed(31)
+    o = 8
+    q = _int8_weight(o, in_f)
+    scale = torch.rand(o, 1) * 0.01 + 1e-3
+    bias = torch.randn(o).to(torch.bfloat16)
+    path = tmp_path / "e2e.safetensors"
+    save_file(
+        {
+            f"{_LIN}.weight": q,
+            f"{_LIN}.weight_scale": scale,
+            f"{_LIN}.bias": bias,
+            f"{_LIN}.comfy_quant": _marker(scheme == "int8_convrot"),
+        },
+        str(path),
+    )
+    layout = _bare_layout(layers={_LIN: scheme}, connector_keys=())
+    sd = SftQuantStateDictLoader(str(path), layout).load("", sd_ops=sft_transformer_sd_ops("")).sd
+
+    with torch.device("meta"):
+        root = nn.Module()
+        root.transformer_blocks = nn.ModuleList([nn.Module()])
+        root.transformer_blocks[0].attn1 = nn.Module()
+        root.transformer_blocks[0].attn1.to_q = nn.Linear(in_f, o)
+    _patch_model_for_quant(root, layout.layers)
+    res = root.load_state_dict(sd, strict=False, assign=True)
+    assert not res.missing_keys and not res.unexpected_keys
+    m = root.transformer_blocks[0].attn1.to_q
+    assert m.weight.dtype == torch.int8 and not m.weight.requires_grad
+
+    x = torch.randn(3, in_f).to(torch.bfloat16)
+    ref = dequantize(scheme, q, {"weight_scale": scale}, torch.bfloat16)
+    assert torch.equal(m(x), torch.nn.functional.linear(x, ref, bias))
+
+
+def test_wrapped_transformer_rejects_int8_outside_linear_but_not_uint8(fake_inspect):
+    built = nn.Module()
+    built.norm = nn.LayerNorm(2)
+    built.norm.register_buffer("ggml", torch.zeros(4, dtype=torch.uint8))  # GGUF-like: allowed
+    ledger = _Ledger(built)
+    SftQuantLoaderService("X.safetensors", dit_cpu_load=True).install(ledger)
+    assert ledger.transformer() is built
+    built.norm.register_buffer("q", torch.zeros(2, dtype=torch.int8))
+    with pytest.raises(RuntimeError, match="outside Linear"):
+        ledger.transformer()
+
+
+@pytest.mark.parametrize("prefix", ["model.diffusion_model.", ""], ids=["prefixed", "bare"])
+def test_load_connector_bf16_int8_convrot_and_f16(tmp_path, prefix):
+    from safetensors.torch import save_file
+
+    from engine.sft_quant.dequant import dequantize
+
+    torch.manual_seed(32)
+    c = prefix + "video_embeddings_connector."
+    row_q, row_s = _int8_weight(4, 16), torch.rand(4, 1) * 0.01
+    sca_q, sca_s = _int8_weight(4, 16), torch.tensor([0.02])
+    rot_q, rot_s = _int8_weight(4, 256), torch.rand(4, 1) * 0.01
+    f16 = torch.randn(3).to(torch.float16)
+    path = tmp_path / "ic.safetensors"
+    save_file(
+        {
+            prefix + "transformer_blocks.0.attn1.to_q.weight": torch.zeros(2, 2).to(torch.float8_e4m3fn),
+            c + "row.weight": row_q,
+            c + "row.weight_scale": row_s,
+            c + "row.comfy_quant": _marker(False),
+            c + "sca.weight": sca_q,
+            c + "sca.weight_scale": sca_s,
+            c + "sca.comfy_quant": _marker(False),
+            c + "rot.weight": rot_q,
+            c + "rot.weight_scale": rot_s,
+            c + "rot.comfy_quant": _marker(True),
+            c + "rot.bias": torch.randn(4).to(torch.bfloat16),
+            c + "norm.bias": f16,
+        },
+        str(path),
+    )
+    out = load_connector_bf16(str(path))
+    v = "video_embeddings_connector."
+    assert set(out) == {v + "row.weight", v + "sca.weight", v + "rot.weight", v + "rot.bias", v + "norm.bias"}
+    assert all(t.dtype == torch.bfloat16 for t in out.values())
+    bf = torch.bfloat16
+    assert torch.equal(out[v + "row.weight"], (row_q.float() * row_s).to(bf))
+    assert torch.equal(out[v + "sca.weight"], (sca_q.float() * 0.02).to(bf))
+    assert torch.equal(
+        out[v + "rot.weight"],
+        dequantize("int8_convrot", rot_q, {"weight_scale": rot_s}, bf),
+    )
+    assert not torch.equal(out[v + "rot.weight"], (rot_q.float() * rot_s).to(bf))
+    assert torch.equal(out[v + "norm.bias"], f16.to(bf))
+
+
+def test_load_connector_bf16_int8_without_marker_is_refused(tmp_path):
+    """The connector goes through the same judge (layer_schemes) as inspect."""
+    from safetensors.torch import save_file
+
+    path = tmp_path / "nomark.safetensors"
+    save_file(
+        {
+            "transformer_blocks.0.attn1.to_q.weight": torch.zeros(2, 2).to(torch.float8_e4m3fn),
+            "video_embeddings_connector.w.weight": _int8_weight(4, 16),
+            "video_embeddings_connector.w.weight_scale": torch.rand(4, 1),
+        },
+        str(path),
+    )
+    with pytest.raises(sft_quant_format.QuantFormatError):
+        load_connector_bf16(str(path))

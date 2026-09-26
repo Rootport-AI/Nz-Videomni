@@ -1,13 +1,16 @@
-"""§3-167 B-2: the LTX 2.5 engine reads an fp8 safetensors transformer (CPU only).
+"""§3-167 B-2 / §3-168: the LTX 2.5 engine reads a quantized safetensors transformer (CPU only).
 
-Pins what engine25 adds on top of the shared fp8 pieces (``sft_quant_format`` and
+Pins what engine25 adds on top of the shared pieces (``sft_quant_format`` and
 ``engine.sft_quant.quant_service``, tested on their own):
 
-  * ``Ltx25DiffusionStage.from_safetensors`` builds a 4-block model from a fake fp8 file
-    -- prefixed and bare names, scale shape ``()`` and ``[1]``, scaled and plain
-    layers mixed, F32 tensors, a connector in fp8 -- and its forward equals the
-    forward of the same model loaded with the weights brought back to bf16 by
-    hand; ``dispose`` and a rebuild give the same numbers again;
+  * ``Ltx25DiffusionStage.from_safetensors`` builds a 4-block model from a fake
+    quantized file -- prefixed and bare names; fp8 with scale shape ``()`` and
+    ``[1]``, scaled and plain layers mixed; int8 with a scalar or a per-row
+    scale; int8 ConvRot mixed with int8 and fp8 on a 256-wide config; F32
+    tensors; a connector in fp8 or int8 -- and its forward equals the forward
+    of the same model loaded with the weights brought back to bf16 (by
+    ``engine.sft_quant.dequant.dequantize``); ``dispose`` and a rebuild give
+    the same numbers again;
   * ``Ltx25SftStateDictLoader.metadata()`` has ltx_core 1.2's shape
     (``metadata()["config"]["transformer"]``) and is parsed once;
   * the EmbeddingsProcessor loader takes the connectors from the safetensors and
@@ -36,6 +39,7 @@ import torch  # noqa: E402
 from torch import nn  # noqa: E402
 
 import sft_quant_format  # noqa: E402
+from engine.sft_quant.dequant import dequantize, hadamard  # noqa: E402
 from engine25 import ltxcore_compat, pipeline25  # noqa: E402
 from engine25.gguf_gemma4 import (  # noqa: E402
     Ltx25SftConnectorLoader,
@@ -87,13 +91,24 @@ TRANSFORMER_CONFIG = {
     "audio_in_channels": 8, "audio_out_channels": 8, "audio_cross_attention_dim": 8,
 }
 CONFIG = {"transformer": TRANSFORMER_CONFIG, "scheduler": {}}
-GEMMA_SOURCE = {"ltx_version": "2.5.0", "gemma_version": "gemma4-12b-ltx-v1"}
-METADATA = {
-    "config": json.dumps(CONFIG),
-    "model_version": "2.5.0",
-    "gemma_source_checkpoint": json.dumps(GEMMA_SOURCE),
-    "license": "not json",
+#: The same, 256 wide (2 heads x 128): the video Linears' in_features become
+#: multiples of 256, which ConvRot needs (the audio side stays 8 wide).
+CONFIG_256 = {
+    "transformer": {
+        **TRANSFORMER_CONFIG, "attention_head_dim": 128, "cross_attention_dim": 256,
+    },
+    "scheduler": {},
 }
+GEMMA_SOURCE = {"ltx_version": "2.5.0", "gemma_version": "gemma4-12b-ltx-v1"}
+
+
+def _metadata(config: dict) -> dict:
+    return {
+        "config": json.dumps(config),
+        "model_version": "2.5.0",
+        "gemma_source_checkpoint": json.dumps(GEMMA_SOURCE),
+        "license": "not json",
+    }
 
 #: A few connector tensors (names as in the real file, sizes toy).
 CONNECTOR_SHAPES = {
@@ -111,41 +126,90 @@ CONNECTOR_SHAPES = {
 # --------------------------------------------------------------------------- #
 
 
-def _skeleton() -> nn.Module:
-    return LTXModelConfigurator.from_metadata({"config": CONFIG})
+def _skeleton(config: dict = CONFIG) -> nn.Module:
+    return LTXModelConfigurator.from_metadata({"config": config})
 
 
-def _write_fp8(path, *, prefix: str, scale_shape: tuple, fp8_connector: bool):
-    """Write a 4-block fp8 transformer; return (reference bf16 sd, reference connectors).
+def _int8_marker(convrot: bool) -> torch.Tensor:
+    conf = {"format": "int8_tensorwise", "convrot": convrot, "convrot_groupsize": 256}
+    return torch.tensor(list(json.dumps(conf).encode()), dtype=torch.uint8)
 
-    Block Linear weights alternate scaled fp8 (``weight_scale`` of *scale_shape*,
-    plus an ``input_scale`` the loader must ignore) and plain-cast fp8. Every
+
+def _quantize(scheme: str, val: torch.Tensor, scale_shape) -> tuple[dict, torch.Tensor]:
+    """One Linear weight in ``scheme``: (leaf -> stored tensor, bf16 reference).
+
+    ``scale_shape`` is ``()`` / ``(1,)`` (one scale) or ``"row"`` (int8 only:
+    one per output row, stored ``(o, 1)``). The int8 references come from the
+    engine's own ``dequantize`` (the rules are pinned in test_sft_quant_dequant).
+    """
+    o, i = val.shape
+    if scheme == "fp8":
+        w8 = val.to(FP8)
+        return {"weight": w8}, w8.to(BF16)
+    if scheme == "fp8_scaled":
+        scale = torch.tensor(0.01, dtype=torch.float32)
+        w8 = (val / scale).to(FP8)
+        leaves = {
+            "weight": w8,
+            "weight_scale": scale.reshape(scale_shape),
+            "input_scale": torch.ones((), dtype=torch.float32),  # ignored by the loader
+        }
+        return leaves, (w8.to(torch.float32) * scale).to(BF16)
+    convrot = scheme == "int8_convrot"
+    if convrot:
+        val = (val.view(o, i // 256, 256) @ hadamard("cpu")).view(o, i)
+    if scale_shape == "row":
+        scale = (val.abs().amax(dim=1, keepdim=True) / 127).clamp_min(1e-8)
+        stored_scale = scale
+    else:
+        scale = (val.abs().amax() / 127).clamp_min(1e-8).reshape(1, 1).expand(o, 1)
+        stored_scale = scale[0, 0].reshape(scale_shape).clone()
+    q = torch.clamp(torch.round(val / scale), -127, 127).to(torch.int8)
+    leaves = {"weight": q, "weight_scale": stored_scale, "comfy_quant": _int8_marker(convrot)}
+    return leaves, dequantize(scheme, q, {"weight_scale": scale.contiguous()}, BF16)
+
+
+def _scheme_for(pattern: str, n: int, in_features: int) -> str:
+    """The n-th block Linear's scheme under a CASE's pattern."""
+    if pattern == "fp8":
+        return "fp8_scaled" if n % 2 else "fp8"
+    if pattern == "int8":
+        return "int8"
+    # "mixed": ConvRot wherever the width allows, else int8 and fp8 in turn
+    if in_features % 256 == 0:
+        return "int8_convrot"
+    return "int8" if n % 2 else "fp8_scaled"
+
+
+def _write_quant(
+    path, *, prefix: str, pattern: str = "fp8", scale_shape=(), connector: str = "bf16",
+    config: dict = CONFIG,
+):
+    """Write a 4-block quantized transformer; return (reference bf16 sd, reference connectors).
+
+    Block Linear weights follow ``pattern`` (see :func:`_scheme_for`). Every
     ``scale_shift_table`` is stored F32 (the loader brings F32 to bf16), the
-    rest bf16. The references are what the model should end up holding.
+    rest bf16. The connector's weights are bf16, scaled fp8 or int8 (per-row
+    scale). The references are what the model should end up holding.
     """
     from safetensors.torch import save_file
 
-    model = _skeleton()
+    model = _skeleton(config)
     linears = {name for name, mod in model.named_modules() if isinstance(mod, nn.Linear)}
     gen = torch.Generator().manual_seed(0)
     tensors: dict[str, torch.Tensor] = {}
     ref: dict[str, torch.Tensor] = {}
-    n_fp8 = 0
+    n_quant = 0
     for key, value in model.state_dict().items():
         val = torch.randn(value.shape, generator=gen) * 0.1
         layer = key[: -len(".weight")] if key.endswith(".weight") else None
         if key.startswith("transformer_blocks.") and layer in linears:
-            n_fp8 += 1
-            if n_fp8 % 2:
-                scale = torch.tensor(0.01, dtype=torch.float32)
-                w8 = (val / scale).to(FP8)
-                tensors[prefix + layer + ".weight_scale"] = scale.reshape(scale_shape)
-                tensors[prefix + layer + ".input_scale"] = torch.ones((), dtype=torch.float32)
-                ref[key] = (w8.to(torch.float32) * scale).to(BF16)
-            else:
-                w8 = val.to(FP8)
-                ref[key] = w8.to(BF16)
-            tensors[prefix + key] = w8
+            n_quant += 1
+            scheme = _scheme_for(pattern, n_quant, val.shape[1])
+            shape = scale_shape if scheme.startswith("int8") or scale_shape != "row" else ()
+            leaves, ref[key] = _quantize(scheme, val, shape)
+            for leaf, tensor in leaves.items():
+                tensors[prefix + layer + "." + leaf] = tensor
         elif key.endswith("scale_shift_table"):
             tensors[prefix + key] = val.to(torch.float32)
             ref[key] = val.to(BF16)
@@ -156,12 +220,14 @@ def _write_fp8(path, *, prefix: str, scale_shape: tuple, fp8_connector: bool):
     connectors: dict[str, torch.Tensor] = {}
     for key, shape in CONNECTOR_SHAPES.items():
         val = torch.randn(shape, generator=gen) * 0.1
-        if fp8_connector and key.endswith(".weight"):
-            scale = torch.tensor(0.02, dtype=torch.float32)
-            w8 = (val / scale).to(FP8)
-            tensors[prefix + key] = w8
-            tensors[prefix + key[: -len(".weight")] + ".weight_scale"] = scale.reshape(scale_shape)
-            connectors[key] = (w8.to(torch.float32) * scale).to(BF16)
+        layer = key[: -len(".weight")]
+        if connector != "bf16" and key.endswith(".weight"):
+            scheme = "fp8_scaled" if connector == "fp8" else "int8"
+            leaves, connectors[key] = _quantize(
+                scheme, val, "row" if connector == "int8" else scale_shape
+            )
+            for leaf, tensor in leaves.items():
+                tensors[prefix + layer + "." + leaf] = tensor
         else:
             tensors[prefix + key] = val.to(BF16)
             connectors[key] = tensors[prefix + key]
@@ -170,7 +236,7 @@ def _write_fp8(path, *, prefix: str, scale_shape: tuple, fp8_connector: bool):
     # file, outside it for a prefixed one. Never part of the transformer.
     tensors["text_embedding_projection.video_aggregate_embed.weight"] = torch.zeros(4, 4, dtype=BF16)
 
-    save_file(tensors, str(path), metadata=METADATA)
+    save_file(tensors, str(path), metadata=_metadata(config))
     return ref, connectors
 
 
@@ -182,22 +248,29 @@ def inspect_4_blocks(monkeypatch):
     )
 
 
-def _reference_forward(ref_sd: dict[str, torch.Tensor], modality) -> torch.Tensor:
-    model = _skeleton()
+def _reference_forward(ref_sd: dict[str, torch.Tensor], modality, config: dict = CONFIG) -> torch.Tensor:
+    model = _skeleton(config)
     model.load_state_dict(ref_sd, strict=True, assign=True)
     with torch.no_grad():
         return model.eval()(modality, None, None)[0]
 
 
-def _modality():
-    return _dummy_video_modality(CONFIG, device=CPU, dtype=BF16, width=64, height=64, frames=9)
+def _modality(config: dict = CONFIG):
+    return _dummy_video_modality(config, device=CPU, dtype=BF16, width=64, height=64, frames=9)
 
 
+#: (prefix, pattern, scale_shape, connector, config)
 CASES = [
-    pytest.param(P, (), False, id="prefixed-scale0d"),
-    pytest.param("", (1,), True, id="bare-scale1-fp8connector"),
-    pytest.param(P, (1,), True, id="prefixed-scale1-fp8connector"),
+    pytest.param(P, "fp8", (), "bf16", CONFIG, id="prefixed-scale0d"),
+    pytest.param("", "fp8", (1,), "fp8", CONFIG, id="bare-scale1-fp8connector"),
+    pytest.param(P, "fp8", (1,), "fp8", CONFIG, id="prefixed-scale1-fp8connector"),
+    pytest.param(P, "int8", (), "bf16", CONFIG, id="int8-prefixed-scalar"),
+    pytest.param(P, "int8", "row", "int8", CONFIG, id="int8-prefixed-row-int8connector"),
+    pytest.param("", "int8", (1,), "int8", CONFIG, id="int8-bare-scale1-int8connector"),
+    pytest.param(P, "mixed", "row", "int8", CONFIG_256, id="convrot-mixed-256"),
 ]
+CASE_ARGS = ("prefix", "pattern", "scale_shape", "connector", "config")
+_SCALE_SHAPE_OF = {"fp8_scaled": lambda o: (), "int8": lambda o: (o, 1), "int8_convrot": lambda o: (o, 1)}
 
 
 # --------------------------------------------------------------------------- #
@@ -205,27 +278,44 @@ CASES = [
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize(("prefix", "scale_shape", "fp8_connector"), CASES)
+@pytest.mark.parametrize(CASE_ARGS, CASES)
 def test_from_safetensors_forward_matches_bf16_reference_and_survives_dispose(
-    tmp_path, inspect_4_blocks, prefix, scale_shape, fp8_connector
+    tmp_path, inspect_4_blocks, prefix, pattern, scale_shape, connector, config
 ):
     path = tmp_path / "t.safetensors"
-    ref_sd, _ = _write_fp8(path, prefix=prefix, scale_shape=scale_shape, fp8_connector=fp8_connector)
-    modality = _modality()
-    expected = _reference_forward(ref_sd, modality)
+    ref_sd, _ = _write_quant(
+        path, prefix=prefix, pattern=pattern, scale_shape=scale_shape, connector=connector, config=config
+    )
+    modality = _modality(config)
+    expected = _reference_forward(ref_sd, modality, config)
 
     stage = Ltx25DiffusionStage.from_safetensors(str(path), device=CPU, blocks_on_gpu=0, cache_weights=True)
     assert isinstance(stage._transformer_builder, Ltx25CpuModelBuilder)
     assert isinstance(stage._transformer_builder.model_loader, Ltx25SftStateDictLoader)
+    layers = stage._transformer_builder.model_loader.layout.layers
+    wanted = {"fp8": {"fp8", "fp8_scaled"}, "int8": {"int8"},
+              "mixed": {"int8_convrot", "int8", "fp8_scaled"}}[pattern]
+    assert set(layers.values()) == wanted
 
     outs = []
     for _ in range(2):  # build, forward, dispose -- then again from the cache
         x0 = stage._build_transformer(device=CPU)
         velocity = x0.velocity_model
         state = velocity.state_dict()
-        assert any(t.dtype == FP8 for t in state.values())
+        stored = {t.dtype for t in state.values()}
+        assert (FP8 in stored) == (pattern != "int8")
+        assert (torch.int8 in stored) == (pattern != "fp8")
         scales = [k for k in state if k.endswith(".weight_scale")]
-        assert scales and all(state[k].shape == () for k in scales)
+        assert scales
+        for k in scales:
+            layer = k[: -len(".weight_scale")]
+            o = state[layer + ".weight"].shape[0]
+            assert state[k].dtype == torch.float32
+            assert state[k].shape == _SCALE_SHAPE_OF[layers[layer]](o), k
+        # the quantized weights are Parameters that do not require grad (int8 cannot)
+        for layer in layers:
+            w = velocity.get_submodule(layer).weight
+            assert isinstance(w, nn.Parameter) and not w.requires_grad
         assert not any(k.startswith(("text_embedding_projection.", "video_embeddings_connector."))
                        for k in state)
         with torch.no_grad():
@@ -239,7 +329,7 @@ def test_from_safetensors_forward_matches_bf16_reference_and_survives_dispose(
 
 def test_fp8_loader_metadata_has_ltx_core_1_2_shape_and_is_parsed_once(tmp_path, inspect_4_blocks, monkeypatch):
     path = tmp_path / "t.safetensors"
-    _write_fp8(path, prefix=P, scale_shape=(), fp8_connector=False)
+    _write_quant(path, prefix=P)
     loader = Ltx25SftStateDictLoader(str(path), sft_quant_format.inspect(str(path)))
 
     def _no_second_read(_path):
@@ -260,7 +350,7 @@ def test_build_calls_the_fp8_placement_check(tmp_path, inspect_4_blocks, monkeyp
     seen = []
     monkeypatch.setattr(gguf_transformer, "_assert_quant_only_in_linears", seen.append)
     path = tmp_path / "t.safetensors"
-    _write_fp8(path, prefix=P, scale_shape=(), fp8_connector=False)
+    _write_quant(path, prefix=P)
     stage = Ltx25DiffusionStage.from_safetensors(str(path), device=CPU, blocks_on_gpu=0)
     x0 = stage._build_transformer(device=CPU)
     assert seen == [x0.velocity_model]
@@ -269,7 +359,7 @@ def test_build_calls_the_fp8_placement_check(tmp_path, inspect_4_blocks, monkeyp
 def test_from_safetensors_refuses_what_inspect_refuses(tmp_path):
     # 4 blocks against the real 48: the one acceptance check runs in from_safetensors.
     path = tmp_path / "t.safetensors"
-    _write_fp8(path, prefix=P, scale_shape=(), fp8_connector=False)
+    _write_quant(path, prefix=P)
     with pytest.raises(sft_quant_format.QuantFormatError, match="transformer_blocks"):
         Ltx25DiffusionStage.from_safetensors(str(path), device=CPU)
 
@@ -304,13 +394,15 @@ def _write_te_gguf(path) -> dict[str, torch.Tensor]:
     }
 
 
-@pytest.mark.parametrize(("prefix", "scale_shape", "fp8_connector"), CASES)
-def test_embeddings_loader_mixes_fp8_safetensors_and_gguf(
-    tmp_path, prefix, scale_shape, fp8_connector
+@pytest.mark.parametrize(CASE_ARGS, CASES)
+def test_embeddings_loader_mixes_quantized_safetensors_and_gguf(
+    tmp_path, prefix, pattern, scale_shape, connector, config
 ):
     sft = tmp_path / "t.safetensors"
     te = tmp_path / "te.gguf"
-    _, connectors = _write_fp8(sft, prefix=prefix, scale_shape=scale_shape, fp8_connector=fp8_connector)
+    _, connectors = _write_quant(
+        sft, prefix=prefix, pattern=pattern, scale_shape=scale_shape, connector=connector, config=config
+    )
     projections = _write_te_gguf(te)
 
     loader = Ltx25MultiGgufStateDictLoader((str(sft), str(te)))
@@ -335,7 +427,7 @@ def test_embeddings_loader_mixes_fp8_safetensors_and_gguf(
 
 def test_embeddings_loader_refuses_overlapping_files(tmp_path):
     sft = tmp_path / "t.safetensors"
-    _write_fp8(sft, prefix=P, scale_shape=(), fp8_connector=False)
+    _write_quant(sft, prefix=P)
     loader = Ltx25MultiGgufStateDictLoader((str(sft), str(sft)))
     with pytest.raises(Ltx25GemmaError, match=r"t\.safetensors redefines"):
         loader.load((str(sft), str(sft)), sd_ops=LTX25_EMBEDDINGS_PROCESSOR_KEY_OPS, device=CPU)

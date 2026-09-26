@@ -1108,8 +1108,9 @@ class Ltx25Pipeline:
         self.build_report["use_ancestral_sampler"] = {"detected": detected, "forced": True}
 
         # -- substitution 1: the diffusion stage -------------------------------
-        # The transformer file's extension picks the loader: an fp8 safetensors
-        # (§3-167 B-2) or the GGUF. Same arguments either way.
+        # The transformer file's extension picks the loader: a quantized (fp8 /
+        # int8) safetensors (§3-167 B-2, §3-168) or the GGUF. Same arguments
+        # either way.
         from_file = (
             Ltx25ProgressStage.from_safetensors
             if Path(files.transformer).suffix.lower() == ".safetensors"
@@ -1142,7 +1143,7 @@ class Ltx25Pipeline:
         stage._neg_service = NegPromptService(lambda: self._nag)
 
         # -- substitution 2: the prompt encoder --------------------------------
-        # The transformer file (GGUF or fp8 safetensors) leads the EmbeddingsProcessor's path list: the
+        # The transformer file (GGUF or quantized safetensors) leads the EmbeddingsProcessor's path list: the
         # official configurator reads `config.transformer` and
         # `gemma_source_checkpoint` from path[0], and only the four
         # `text_embedding_projection.*` tensors come from the TE side.

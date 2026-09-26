@@ -201,7 +201,7 @@ def test_loader_skips_keys_that_sd_ops_drops(tmp_path, monkeypatch):
     path = write_sft(tmp_path / "m.safetensors", src)
     layout = types.SimpleNamespace(
         config={"transformer": {}},
-        flavor="scaled",
+        layers={"blk.lin": "fp8_scaled"},
         prefix=p,
         connector_keys=(p + "video_embeddings_connector.w",),
     )

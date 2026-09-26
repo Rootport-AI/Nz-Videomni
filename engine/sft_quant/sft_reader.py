@@ -1,4 +1,4 @@
-"""Read safetensors tensors one by one with seek + readinto (§3-167 B-1).
+"""Read safetensors tensors one by one with seek + readinto (§3-167 B-1, §3-168).
 
 Why not the usual readers: ``safetensors.safe_open`` and ``torch.frombuffer``
 over a memory map would map the whole ~29 GB transformer file, and on Windows
@@ -25,6 +25,7 @@ TORCH_DTYPES: dict[str, torch.dtype] = {
     "F8_E4M3": torch.float8_e4m3fn,
     "F8_E5M2": torch.float8_e5m2,
     "U8": torch.uint8,
+    "I8": torch.int8,
 }
 
 

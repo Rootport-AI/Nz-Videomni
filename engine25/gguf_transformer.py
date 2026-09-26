@@ -89,6 +89,7 @@ import logging
 import os
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -105,8 +106,9 @@ from engine.gguf.quant_service import (
     GGMLQuantizedTensor,
     _patch_model_for_ggml_dequant,
 )
-# fp8 safetensors transformer (§3-167 B-2): the acceptance check and the loader /
-# module op shared with the 2.3 engine. Only the metadata shape differs (below).
+# Quantized (fp8 / int8) safetensors transformer (§3-167 B-2, §3-168): the
+# acceptance check and the loader / module op shared with the 2.3 engine. Only
+# the metadata shape differs (below).
 import sft_quant_format
 from engine.sft_quant.quant_service import (
     SftQuantStateDictLoader,
@@ -439,7 +441,7 @@ class Ltx25GgufStateDictLoader:
 
 
 class Ltx25SftStateDictLoader(SftQuantStateDictLoader):
-    """The 2.3 fp8 safetensors loader with ltx_core 1.2's metadata shape (§3-167 B-2).
+    """The 2.3 quantized safetensors loader with ltx_core 1.2's metadata shape (§3-167 B-2).
 
     1.2's ``LTXModelConfigurator.from_metadata`` reads ``metadata["config"]["transformer"]``
     from the WHOLE ``__metadata__`` (each value JSON-parsed), where 1.0 took the
@@ -535,8 +537,9 @@ class Ltx25CpuModelBuilder(SingleGPUModelBuilder):
                 f"{' ...' if len(uninitialized) > len(head) else ''}. The checkpoint is missing keys the "
                 f"model expects (or the sd_ops filter dropped too much)."
             )
-        # fp8 anywhere but a patched Linear has nothing to upcast it (§3-167 B-2).
-        # A GGUF build has no fp8 tensor, so this finds nothing there.
+        # fp8 / int8 anywhere but a patched Linear has nothing to dequantize it
+        # (§3-167 B-2, §3-168). A GGUF build has neither (its quantized buffers
+        # are uint8), so this finds nothing there.
         _assert_quant_only_in_linears(meta_model)
         return meta_model
 
@@ -885,10 +888,10 @@ class Ltx25DiffusionStage(DiffusionStage):
         registry: Registry | None = None,
         **kwargs: Any,
     ) -> "Ltx25DiffusionStage":
-        """Assemble the stage from an fp8 safetensors transformer (§3-167 B-2).
+        """Assemble the stage from a quantized safetensors transformer (§3-167 B-2, §3-168).
 
         :meth:`from_gguf`'s twin: same arguments, same CPU builder and placement,
-        with the fp8 loader, the key ops for the detected prefix and the
+        with the quantized safetensors loader, the key ops for the detected prefix and the
         ``sft_quant_linear`` module op in place of the GGUF ones. ``inspect`` is the one
         acceptance check and runs once; its Layout feeds the loader and the op.
         """
@@ -900,7 +903,7 @@ class Ltx25DiffusionStage(DiffusionStage):
         registry = registry or ModelRegistry(cache_models=True, cache_weights=cache_weights)
         quantization = QuantizationPolicy(
             sd_ops=None,
-            module_ops=(_make_quant_module_ops(layout.scaled_layers),),
+            module_ops=(_make_quant_module_ops(layout.layers),),
             model_configurator=LTXModelConfigurator,
             fuse_rule=bf16_fuse_rule,
         )
@@ -912,9 +915,9 @@ class Ltx25DiffusionStage(DiffusionStage):
             registry=registry,
         )
         logger.info(
-            "Ltx25DiffusionStage.from_safetensors(%s): flavor=%s prefix=%r scaled_layers=%d "
+            "Ltx25DiffusionStage.from_safetensors(%s): schemes=%s prefix=%r "
             "device=%s dtype=%s blocks_on_gpu=%d cache_weights=%s",
-            Path(path).name, layout.flavor, layout.prefix, len(layout.scaled_layers),
+            Path(path).name, dict(Counter(layout.layers.values())), layout.prefix,
             device, dtype, blocks_on_gpu, cache_weights,
         )
         return cls(

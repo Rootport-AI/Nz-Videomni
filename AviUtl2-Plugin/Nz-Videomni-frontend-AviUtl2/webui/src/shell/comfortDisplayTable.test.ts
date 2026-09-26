@@ -14,7 +14,7 @@ function limitsWith(overrides: Partial<AppLimits> = {}): AppLimits {
 }
 
 /** A column of each source kind, built here rather than plucked out of the
- * shipped table, so the three branches of `resolveComfortCell` are exercised
+ * shipped table, so the four branches of `resolveComfortCell` are exercised
  * independently of which columns the LTX table happens to carry. */
 const LEGACY_COLUMN: ComfortDisplayColumn = {
   id: "test-legacy",
@@ -146,7 +146,7 @@ describe("the LTX table as it ships", () => {
   it("carries the calibrated `2.5 Q6` points and leaves the rest of that column empty", () => {
     // 数値の正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §10。
     const table = comfortDisplayTableFor("ltx25");
-    const column = table?.columns.find((c) => c.source.kind === "static");
+    const column = table?.columns.find((c) => c.id === "ltx25-q6");
     expect(column).toBeDefined();
     if (!column) return;
     const limits = limitsWith();
@@ -156,5 +156,58 @@ describe("the LTX table as it ships", () => {
     expect(resolveComfortCell(limits, "512x320", column)).toBeNull();
     expect(resolveComfortCell(limits, "960x576", column)).toBeNull();
     expect(resolveComfortCell(limits, "2560x1472", column)).toBeNull();
+  });
+
+  it("carries six columns, including the two fp8 ones", () => {
+    const ids = comfortDisplayTableFor("ltx")?.columns.map((c) => c.id) ?? [];
+    expect(ids).toHaveLength(6);
+    expect(ids).toContain("ltx-fp8-default");
+    expect(ids).toContain("ltx25-fp8");
+  });
+
+  it("extends the `2.5 fp8` line to every row, reproducing the three measured points", () => {
+    // 数値の正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` 第13節。
+    const column = comfortDisplayTableFor("ltx25")?.columns.find((c) => c.id === "ltx25-fp8");
+    expect(column).toBeDefined();
+    if (!column) return;
+    const limits = limitsWith();
+    expect(resolveComfortCell(limits, "1280x768", column)).toBe(313);
+    expect(resolveComfortCell(limits, "1920x1088", column)).toBe(145);
+    expect(resolveComfortCell(limits, "896x1152", column)).toBe(297);
+    expect(resolveComfortCell(limits, "2560x1472", column)).toBe(73);
+    expect(resolveComfortCell(limits, "512x320", column)).toBe(limits.max_num_frames);
+    expect(resolveComfortCell(limits, "960x576", column)).toBe(limits.max_num_frames);
+  });
+
+  it("carries the single `2.3 fp8 (default)` point and leaves the rest of that column empty", () => {
+    const table = comfortDisplayTableFor("ltx");
+    const column = table?.columns.find((c) => c.id === "ltx-fp8-default");
+    expect(column).toBeDefined();
+    if (!table || !column) return;
+    const limits = limitsWith();
+    expect(resolveComfortCell(limits, "1920x1088", column)).toBe(121);
+    const others = table.rows.filter((r) => r !== "1920x1088");
+    expect(others).toHaveLength(5);
+    for (const resolution of others) {
+      expect(resolveComfortCell(limits, resolution, column)).toBeNull();
+    }
+  });
+
+  it("gives `null` for the `2.5 fp8` column when its family is not in the served table", () => {
+    const column = comfortDisplayTableFor("ltx25")?.columns.find((c) => c.id === "ltx25-fp8");
+    expect(column).toBeDefined();
+    if (!column) return;
+    const limits = limitsWith({ comfort_budgets: {} });
+    expect(resolveComfortCell(limits, "1280x768", column)).toBeNull();
+  });
+
+  it("gives `null` for the `2.5 fp8` column when its family's profile has no rows", () => {
+    const column = comfortDisplayTableFor("ltx25")?.columns.find((c) => c.id === "ltx25-fp8");
+    expect(column).toBeDefined();
+    if (!column) return;
+    const limits = limitsWith({
+      comfort_budgets: { ltx25: { spatial_factor: 32, temporal_factor: 8, rows: [] } },
+    });
+    expect(resolveComfortCell(limits, "1280x768", column)).toBeNull();
   });
 });

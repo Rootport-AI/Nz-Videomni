@@ -2251,3 +2251,15 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **クローズ理由**: 実機ゲート合格・オーナー受容。
 - **状態**: **クローズ（2026-09-24）。** ブランチは`dev`。
 - **正本・出典**: 設計の記録＝フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) **§124**（§124.4）、検証＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§115**（G5）。コミット＝`6d263c7`（操作パネル）。**このコミットは §3-164 の操作パネル側と共有している**——Settings の画面と部品のファイルが両方の改修で重なるため、1つのコミットにまとめた。
+
+### 3-168. ComfyUI 標準の int8 safetensors（int8_tensorwise・asym_w4a8_int8）を models ディレクトリに配置するだけで使えるようにする（起票：2026-09-26、実装〔C-0〜C-3〕・客観検査 G1／G2 合格：2026-09-26〜27、実機の門 G3〜G8 合格・オーナー目視全件合格・クローズ：2026-09-27）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-168 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-168（**同書側は欠番**）。§3（将来の研究課題）に起票されていた項目を、オーナーの依頼で着手し、§2 を経ずにクローズした。**番号は3-168**（本書に同番号の記録は無いため無印）。
+- **到達条件**: REDGraft LTX 2.5（CivitAI 3250230）が、変換せずに置くだけで動くこと。**達成した。**
+- **何が完了したか**: §3-167 の fp8 safetensors を置くだけで使う経路を「量子化 safetensors 一般」へ一般化し、ComfyUI 標準の `int8_tensorwise`（ConvRot あり／なし）と `asym_w4a8_int8` を、LTX 2.3・LTX 2.5 の両方で受け入れるようにした（fp8 専用だった名前は量子化全般の名前へ改称。ワーカーへのペイロード・API・UI は不変）。
+- **オーナー裁定の要点**（正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.1）: 復元は fp8 と同じく forward のたびに bf16 へ戻す方式で、ComfyUI 自身の int8 行列積は模倣しない／fp8 経路を一般化して int8 を載せる（別経路を並べない）／C-3 まではオーナーの目視を挟まず、監督が客観検査で合否を決める。
+- **どの物差しで通ったか**: 客観検査 G1〜G8 がすべて合格し（**実数は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.4・§121.6〜§121.8 であり、本書には書き写さない**）、**オーナーの目視も 2026-09-27 に全件合格した**（同 §121.9）。
+- **クローズ理由**: 実機の門と目視の合格・オーナー受容。
+- **状態**: **クローズ（2026-09-27）。** ブランチは`dev`。
+- **残課題**: C-4（int8 系の快適上限の較正）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32 として起票した。そのほかの申し送りは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10。
+- **正本・出典**: 判定規則＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§121.3**、設計＝**§121.2**、検証の門＝**§121.4**、目視＝**§121.9**、較正の手順＝**§121.11**。コードの正本＝`sft_quant_format.py`（`SCHEME_TABLE`・`layer_schemes`）・`engine/sft_quant/`。コミット＝§121 の各節に一覧。

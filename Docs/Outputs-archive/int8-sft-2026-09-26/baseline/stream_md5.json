@@ -1,0 +1,17 @@
+{
+  "g6_23_fp8": {
+    "file": "c0_23_fp8.mp4",
+    "video_md5": "cef1129a83e76df7144f26c3aa832070",
+    "audio_md5": "607c55471f289bd42952eec0e91ba591"
+  },
+  "g6_23_fp8_pixar": {
+    "file": "c0_23_fp8_pixar.mp4",
+    "video_md5": "8d9a2c25c6a38b977f42d8f27e8dfb76",
+    "audio_md5": "88af419e95cd0283790ecde9bca14d91"
+  },
+  "g6_25_fp8": {
+    "file": "c0_25_fp8.mp4",
+    "video_md5": "042cfe644e72f2ff64da17a0eb9fd28c",
+    "audio_md5": "0ffd125508f36a511f0531752456228a"
+  }
+}

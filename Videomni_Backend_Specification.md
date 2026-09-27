@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.68**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-09-26**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.70**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-09-27**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -116,7 +116,9 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.65 | 2026-09-24 | **文書の点検のみ（API 変更なし）**。コードの行番号を現物へ合わせた（§4.2 の `_build_load_payload`・§4.3 の `_real_available()`・§6.5b の `or 8` の式。いずれも `services/engines/ltx/adapter.py`）。§6.10(a) の「オーナーの目視は未実施」を、同日に合格した事実（台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-150）へ改めた。§12b.4 からツールの本数の書き写しを外した（本数の正本は `Docs/MCP_SERVER_DESIGN.md` §8）。 |
 | v0.5.66 | 2026-09-25 | **連結生成の `stage2_window` に 13 名（`w25`〜`w61`）を追加（選択肢の追加のみ。既存 3 名の意味と既定は不変）**。窓は 16 名（`standard`／`high_resolution`／`full_length`／`w25`〜`w61`）になった。§6.10(f) の `full_length` の項で、素の連結生成で使える窓を「`full_length` を除く 15 名」へ改め、§6.2 の `end_source` の注記の品質上の助言を式（8×潜在フレーム数−7）で書いた。窓の数値は `chain_math.py` の `STAGE2_WINDOW_PRESETS` が正本で、本書には書き写さない（実装の記録は `Docs/VERIFICATION_LOG.md` §116。台帳 `Docs/PENDING_TASKS.md` §3-165）。 |
 | v0.5.67 | 2026-09-25 | **LTX 2.3 の transformer に fp8 safetensors（重みを 8 ビットの浮動小数点で持つ形式）を置けば選べるようにした（台帳 `Docs/PENDING_TASKS.md` §3-167 の段階 B-1。加算のみで、GGUF を選んだときの挙動・ワーカーへのペイロード・`GET /models` の応答形は1バイトも変わらない）**。**§4.2**（`load` に任意キー `safetensors_transformer_path` を加算。fp8 を選んだときだけ `gguf_transformer_path` を空にして末尾へ足す）／**§6.8**（`MODEL_INCOMPATIBLE` の原因に fp8 の受け入れ検査の不合格を追加）／**§6.9(b)**（事前チェック①に fp8 の受け入れ検査を追加し、422 の文言例を掲載）／**§6.9(c)**（`entries[]` の形は不変であることを明記）。受け入れ規則の正本は `sft_fp8_format.py` と `Docs/VERIFICATION_LOG.md` §117。 |
-| v0.5.68 | 2026-09-26 | **LTX 2.5 の transformer にも fp8 safetensors を置けば選べるようにした（台帳 `Docs/PENDING_TASKS.md` §3-167 の段階 B-2。加算のみで、`ltx25` のワーカーへのペイロードの形は変わらない）**。**§4.2**（`ltx25` は GGUF でも fp8 でも `transformer_path` 1 本で渡し、ワーカーが拡張子で読み方を振り分けることを明記）／**§6.9(b)**（受け入れ検査が LTX 2.5 にも及ぶことと、接頭辞・倍率の形に関する 422 の文言例を追加）。受け入れ規則の改定の正本は `Docs/VERIFICATION_LOG.md` §118.3。 |
+| v0.5.68 | 2026-09-26 | **LTX 2.5 の transformer にも fp8 safetensors を置けば選べるようにした（台帳 `Docs/PENDING_TASKS.md` §3-167 の段階 B-2。加算のみで、`ltx25` のワーカーへのペイロードの形は変わらない）**。**§4.2**（`ltx25` は GGUF でも量子化 safetensors〔fp8／int8〕でも `transformer_path` 1 本で渡し、ワーカーが拡張子で読み方を振り分けることを明記）／**§6.9(b)**（受け入れ検査が LTX 2.5 にも及ぶことと、接頭辞・倍率の形に関する 422 の文言例を追加）。受け入れ規則の改定の正本は `Docs/VERIFICATION_LOG.md` §118.3。 |
+| v0.5.69 | 2026-09-27 | **LTX 2.3・LTX 2.5 の transformer に、ComfyUI 標準の int8 safetensors（`int8_tensorwise`・`asym_w4a8_int8`）を置いても選べるようにした（台帳 `Docs/PENDING_TASKS.md` §3-168。C-0〜C-3 実装完結・dev `c18d9aa`。加算のみで、`GET /models` の応答形・ワーカーへのペイロードの形は変わらない）**。fp8 専用だった受け入れ検査を「量子化 safetensors 一般」の検査へ一般化し（`sft_fp8_format.py`→`sft_quant_format.py` ほかの改称を伴う）、422 `MODEL_INCOMPATIBLE` の `detail` の接頭語を「量子化 safetensors の検査に不合格: 」へ改めた。**§6.8**（`MODEL_INCOMPATIBLE` の原因説明を「量子化 safetensors（fp8／int8）」へ一般化）／**§6.9(b)**（受け入れ検査の対象形式と 422 の文言例を更新）。受け入れ規則の正本は `Docs/VERIFICATION_LOG.md` §121.3（設計は §121.2）。**実機の門（G3〜G8）はサーバー起動待ちで未実施**（§121.4）。 |
+| v0.5.70 | 2026-09-27 | **§3-168（ComfyUI 標準の int8 safetensors）の完結を反映し、fp8 だけを前提にしていた記述を量子化 safetensors 一般へ揃えた（文書のみ。API・実装への変更は無い）**。実機の門 G3〜G8 とオーナーの目視が合格し、台帳は `Docs/PENDING_TASKS_CLOSED.md` §3-168 へ移った（記録は `Docs/VERIFICATION_LOG.md` §121.4・§121.9）。**§4.2**（`safetensors_transformer_path` を使う条件と `ltx25` の振り分けを「量子化 safetensors〔fp8／int8〕」へ一般化し、ローダの置き場所を改称後の `engine/sft_quant/` へ訂正）／**§6.9(b)**（422 の文言例 2 つを現行コードの文言へ訂正し、台帳の参照先を CLOSED へ）。 |
 
 ### 0.2 スコープ
 
@@ -366,7 +368,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | op | 主なフィールド | 意味 |
 |----|----------------|------|
-| `load` | `checkpoint_path`, `gemma_root`, `upsampler_path`, `gguf_transformer_path`, `gguf_gemma_path`, `component_video_vae_path`, `component_audio_vae_path`, `component_text_projection_path`, `component_video_vae_pruned_path`, `gguf_per_layer_quant`, `block_swap_blocks_on_gpu`, `vae_spatial_tile_size`, `vae_temporal_tile_size`（fp8 safetensors の transformer を選んだときだけ末尾に `safetensors_transformer_path`） | パイプラインを1度だけ構築 |
+| `load` | `checkpoint_path`, `gemma_root`, `upsampler_path`, `gguf_transformer_path`, `gguf_gemma_path`, `component_video_vae_path`, `component_audio_vae_path`, `component_text_projection_path`, `component_video_vae_pruned_path`, `gguf_per_layer_quant`, `block_swap_blocks_on_gpu`, `vae_spatial_tile_size`, `vae_temporal_tile_size`（量子化 safetensors〔fp8／int8〕の transformer を選んだときだけ末尾に `safetensors_transformer_path`） | パイプラインを1度だけ構築 |
 | `generate` | `prompt`, `seed`, `height`, `width`, `num_frames`, `frame_rate`, `num_steps`, `images:[{path,frame_idx,strength}]`, `output_path` | 1本生成し `output_path` へ mp4 を書く |
 | `shutdown` | （なし） | best-effort 解放 → `exit 0` |
 
@@ -380,8 +382,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 補足:
 - **`load` ペイロードの重みパスの出所は `config.yaml` ではなくベースモデル記述子である（2026-08-20〜）**。`_build_load_payload`（`services/engines/ltx/adapter.py:1769`）は、選択可能な 4 カテゴリ（transformer / text_encoder / video_vae / audio）については記述子の `categories[].default_file` を、固定ファイル（`gemma_root` / `upsampler_path` / `component_text_projection_path` / `component_video_vae_pruned_path`）については記述子の `assets` を読む。`POST /pipeline/load` でカテゴリ別の選択が明示された場合だけ、そのカテゴリの値が解決済みの絶対パスで上書きされる（カテゴリ→ペイロード項目名の対応表は同ファイルの `SELECTION_FIELDS`（同ファイル冒頭の定数） が唯一の正本）。**キー集合と挿入順は従来どおり契約**で、ゴールデンスナップショット（`tests/test_model_swap_load.py`）が固定している。`checkpoint_path` だけは config にも記述子にも対応物が無く、直値の `""` がハードコードされる（§5.5）。
-- **transformer に fp8 safetensors（`.safetensors`）が選ばれたときだけ、ペイロードの形が 2 点変わる（2026-09-25〜・§3-167 B-1・LTX 2.3 のみ）。** `gguf_transformer_path` を `""` にし、選ばれた絶対パスを新しいキー `safetensors_transformer_path` として**末尾に 1 つ足す**。GGUF を選んだときは、このキーは現れず、キー集合・順序・値とも従来とバイト同一である（ゴールデンスナップショットもそのまま通る）。`SELECTION_FIELDS` の対応（transformer → `gguf_transformer_path`）は変えていない。worker は 2 つのうちちょうど 1 つが空でないことを要求し、fp8 のときは `engine/fp8/` のローダでテンソルを 1 本ずつ読む（巨大なファイルを mmap で開かない。理由は `Docs/VERIFICATION_LOG.md` §117）。
-- **LTX 2.5（`ltx25`）では、fp8 safetensors を選んでもペイロードの形は変わらない（2026-09-26〜・§3-167 B-2）。** transformer は GGUF でも fp8 safetensors でも同じキー `transformer_path` 1 本で渡り、ワーカー側の `engine25/pipeline25.py` が拡張子で読み方を振り分ける。新しいキーは足していない（設計は `Docs/VERIFICATION_LOG.md` §118.2）。
+- **transformer に量子化 safetensors（fp8／int8。`.safetensors`）が選ばれたときだけ、ペイロードの形が 2 点変わる（fp8 は 2026-09-25〜・§3-167 B-1、int8 系は 2026-09-26〜・§3-168。LTX 2.3 のみ）。** `gguf_transformer_path` を `""` にし、選ばれた絶対パスを新しいキー `safetensors_transformer_path` として**末尾に 1 つ足す**。GGUF を選んだときは、このキーは現れず、キー集合・順序・値とも従来とバイト同一である（ゴールデンスナップショットもそのまま通る）。`SELECTION_FIELDS` の対応（transformer → `gguf_transformer_path`）は変えていない。worker は 2 つのうちちょうど 1 つが空でないことを要求し、safetensors のときは `engine/sft_quant/` のローダでテンソルを 1 本ずつ読む（巨大なファイルを mmap で開かない。理由は `Docs/VERIFICATION_LOG.md` §117）。
+- **LTX 2.5（`ltx25`）では、量子化 safetensors（fp8／int8）を選んでもペイロードの形は変わらない（fp8 は 2026-09-26〜・§3-167 B-2、int8 系は同日〜・§3-168）。** transformer は GGUF でも量子化 safetensors でも同じキー `transformer_path` 1 本で渡り、ワーカー側の `engine25/pipeline25.py` が拡張子で読み方を振り分ける。新しいキーは足していない（設計は `Docs/VERIFICATION_LOG.md` §118.2）。
 - **seed は親（アプリ側）で解決**する（`request.seed >= 0` ならそのまま、`-1` なら乱数）。`done.seed_used` は worker から返るが決定性の基準は親が握る。
 - stderr は**パイプでなくログファイル**へ流す（stderr をパイプすると、worker が大量の tqdm/log を吐く間に親が stdout でブロックしてデッドロックしうるため）。`GENERATED_OK peak_vram_mb=` 等の診断行はこのログに出る。**行き先はエンジン系統ごとに別ファイル**で、`ltx`（LTX 2.3）は `logs/ltx_worker.log`、`ltx25`（LTX 2.5）は `logs/ltx25_worker.log` である（2.3 ↔ 2.5 を往復しても両方の記録が残るようにするため。§15.1）。
 - `load` タイムアウトは 600 秒。タイムアウトすると watchdog スレッドが worker を kill し、ブロック中の readline を返させる。
@@ -1142,7 +1144,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `LORA_NOT_FOUND` | 404 | 未登録の IC-LoRA アダプタ名 |
 | `MODEL_NOT_FOUND` | 404 | 未登録のモデル名（またはカテゴリ不明）。生パスは受けない |
 | `MODEL_FILE_MISSING` | 422 | 登録名は在るが重みファイルがディスク上に無い |
-| `MODEL_INCOMPATIBLE` | 422 | 選択ファイルが互換性の事前チェックに失敗（拡張子違い・GGUF でない・safetensors ヘッダ破損・fp8 safetensors の受け入れ検査に不合格〔§6.9(b)〕） |
+| `MODEL_INCOMPATIBLE` | 422 | 選択ファイルが互換性の事前チェックに失敗（拡張子違い・GGUF でない・safetensors ヘッダ破損・量子化 safetensors〔fp8／int8〕の受け入れ検査に不合格〔§6.9(b)〕） |
 | `LORA_REQUIRES_REFERENCE` | 422 | 制御系 IC-LoRA を `reference_video_id` 無しで要求した |
 | `REFERENCE_REQUIRES_CONTROL_LORA` | 422 | `reference_video_id` を渡したが、要求アダプタに制御系が1つも無い（逆方向チェック） |
 | `LORA_DEPTH_CHAIN_UNSUPPORTED` | 422 | 2クリップ以上のチェーンで `depth-control`（深度制御）アダプタを要求した。深度マップを作る前処理が全編一括設計でメモリに載らないため、depth系のみ多クリップ非対応（**2026-08-11・長尺IC-LoRA実装で `LORA_CONTROL_UNSUPPORTED_IN_CHAIN` を置換**。他の制御系〔canny/pose〕・参照系〔upscaler/deblur〕アダプタは多クリップで受理される。クリップ1本のチェーンと単発生成は depth 込みで従来どおり使える） |
@@ -1216,15 +1218,15 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 - **未知の `base_model` は 404 `MODEL_NOT_FOUND`**（既知の id 一覧を `detail` に入れる）。カテゴリ名の検証も**切替先の**記述子から引くため、切替先に存在しないカテゴリを名指しすると同じく 404 になる。
 - **ベースモデルが変わるときは、`"default"` のままのカテゴリも含めて全カテゴリを解決・事前チェックする。** ベースモデルが変われば既定のファイル自体が別物になるので、素通しすると「中身を一度も見ないまま新しい重みをエンジンへ渡す」ことになるためである。ベースモデルが変わらない場合は従来どおり、`"default"` のカテゴリはペイロードへ上書きを出さない（＝全既定のロードは従来とバイト同一）。
 - **事前チェックは 2 段**である。①`precheck_model_file`（拡張子・GGUF/safetensors のヘッダ健全性 → 不適合は 422 `MODEL_INCOMPATIBLE`）、②`adapter.check_kv`（transformer カテゴリのみ。GGUF の KV メタデータを読み、`general.architecture` が `ltxv` でなければ 422、`model_version` の世代がそのアダプタの対応外なら 422〔`ltx` 系統のアダプタが受けるのは 2.3 のみ。2.5 の重みは別系統 `ltx25` が受けるため、文面は「ベースモデルに『LTX 2.5』を選んでください」と案内する〕。キーが無い場合は WARNING を出して通す）。KV の読み取りは依存パッケージ無しの自前パーサ（`services/gguf_kv.py`）がヘッダだけを読むもので、巨大なテンソル本体には触れない。
-- **transformer に `.safetensors` が選ばれたとき（LTX 2.3 は 2026-09-25〜、LTX 2.5 は 2026-09-26〜）は、①が fp8 の受け入れ検査になる。** 検査の本体は `sft_fp8_format.inspect`（リポジトリ直下。ワーカーも読み込み時に同じ関数を呼ぶ）で、ヘッダと数十バイトの印だけを読み、何 GB もある重み本体は読まない。受け入れ規則の正本は `Docs/VERIFICATION_LOG.md` §117（LTX 2.5 に合わせた 3 点の改定は §118.3）である。不合格は 422 `MODEL_INCOMPATIBLE` で、`detail` に「どこが不合格か」を 1 行で入れる。例:
+- **transformer に `.safetensors` が選ばれたときは、①が量子化 safetensors（fp8／int8）の受け入れ検査になる。** 対応する量子化形式は fp8・fp8_scaled（LTX 2.3 は 2026-09-25〜、LTX 2.5 は 2026-09-26〜）に加え、ComfyUI（画像・動画生成の定番 UI）標準の `int8_tensorwise`（スカラー／行ごと倍率・ConvRot＝アダマール回転の前処理あり／なし）と `asym_w4a8_int8`（4 ビットの重みをコードブックで復元する方式。両形式とも 2026-09-26〜・台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-168）である。検査の本体は `sft_quant_format.inspect`（リポジトリ直下。旧名 `sft_fp8_format.inspect`。ワーカーも読み込み時に同じ関数を呼ぶ）で、ヘッダと数十バイトの印だけを読み、何 GB もある重み本体は読まない。**受け入れ規則の正本は `Docs/VERIFICATION_LOG.md` §121.3 である**（§117.3・§118.3 は fp8 のみを対象にしていた当時の記録として残っており、書き換えていない）。不合格は 422 `MODEL_INCOMPATIBLE` で、`detail` に「量子化 safetensors の検査に不合格: 」で始まる 1 行で「どこが不合格か」を入れる。例:
 
   ```jsonc
   { "error": { "code": "MODEL_INCOMPATIBLE",
                 "message": "selected model 'transformer/my-fp8' failed the compatibility precheck",
-                "detail": "fp8 safetensors の検査に不合格: 倍率 'model.diffusion_model.transformer_blocks.2.attn1.to_q.weight_scale' が F32[4096] です（受理するのは F32 のスカラー倍率のみ。per-row／per-block は未対応）" } }
+                "detail": "量子化 safetensors の検査に不合格: 補助テンソル 'model.diffusion_model.transformer_blocks.2.attn1.to_q.weight_scale' が F32[4096] です（方式 fp8_scaled で受理するのは F32 の []／[1] のみ）" } }
   ```
 
-  LTX 2.5 の例（接頭辞が見つからないとき）: `"detail": "fp8 safetensors の検査に不合格: 'model.diffusion_model.transformer_blocks.0.' も 'transformer_blocks.0.' もありません"`。接頭辞は `model.diffusion_model.` つきと接頭辞なしの両方を自動で見分け、倍率は shape `[]` と `[1]` のどちらも 1 個の数として受け入れる（それ以外の shape は上の例と同じ文言で断る）。
+  LTX 2.5 の例（接頭辞が見つからないとき）: `"detail": "量子化 safetensors の検査に不合格: 'model.diffusion_model.transformer_blocks.0.' も 'transformer_blocks.0.' もありません（接頭辞が違うか、transformer ではありません）"`。接頭辞は `model.diffusion_model.` つきと接頭辞なしの両方を自動で見分け、fp8・fp8_scaled の倍率は shape `[]` と `[1]` のどちらも、int8 系の倍率はそれらに加え出力チャンネルごとの `[o,1]` も受け入れる（それ以外の shape は上の例と同じ形の文言で断る。括弧内の方式名と受理する形は方式ごとに変わる）。`asym_w4a8_int8` には `weight_scale` が無く、`weight_s_rel`・`weight_s_channel`・`weight_codebook` の 3 種の補助テンソルで復元する（§121.2）。
 
   合格したファイルは、②の `check_kv` へ GGUF の KV と同じ 2 キーを渡す——`general.architecture` は検査に合格したこと自体を根拠に `ltxv`、`model_version` はヘッダの `__metadata__.model_version` をそのまま（無ければキーを入れず、②が WARNING で通す）。したがって LTX 2.5 の safetensors を LTX 2.3 で選ぶと、GGUF と同じ文面の 422 になる。
 - **ロード中の二重ロードは 409 `PIPELINE_LOADING`**（新設・下記 (f)）。実行中ジョブがあるときの 409 `JOB_BUSY` は従来どおり。
@@ -1252,7 +1254,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 }
 ```
 
-**トップレベルの `categories` ブロックはキー・順序・値とも従来のまま**で、意味も従来どおり「アクティブなベースモデルのカテゴリ一覧」である（ベースモデルが 1 つしかなかった時代も同じ意味だった）。旧来の形しか知らないクライアント（`gradio_ui/adapters.py` など）は無改修で動く。**fp8 safetensors の transformer が並ぶようになっても（2026-09-25〜）`entries[]` の形 `{name, path, is_default, exists, source}` は変わらない**——形式を示す欄は足しておらず、`path` の拡張子で見分けられる。`installed` / `present` / `missing_categories` は、未導入のベースモデルを「選べるが導入案内を出す」形で見せるための材料である。
+**トップレベルの `categories` ブロックはキー・順序・値とも従来のまま**で、意味も従来どおり「アクティブなベースモデルのカテゴリ一覧」である（ベースモデルが 1 つしかなかった時代も同じ意味だった）。旧来の形しか知らないクライアント（`gradio_ui/adapters.py` など）は無改修で動く。**量子化 safetensors（fp8 は 2026-09-25〜、int8 系は 2026-09-26〜）の transformer が並ぶようになっても `entries[]` の形 `{name, path, is_default, exists, source}` は変わらない**——形式を示す欄は足していない。拡張子で分かるのは GGUF か safetensors かまでで、fp8／int8 の種別を示す欄は無い（名乗らせるのは台帳 §1-31 の予定）。`installed` / `present` / `missing_categories` は、未導入のベースモデルを「選べるが導入案内を出す」形で見せるための材料である。
 
 **`category_order`（配列）は `base_models[]` の各要素に必ず入る**（`api/models_registry.py::list_models` が常に出力する）。中身はそのベースモデルの記述子（`scripts/manifests/<base>.json`）の `categories` のキー宣言順そのもので、表示順の正本はこの配列である——JSON オブジェクトのキー順は転送の途中で保たれる保証が無いため、順序は**値として運ぶ**という決めにしてある。画面のモデル選択欄はこれを読み、交換頻度の高い順（動画モデル → テキストエンコーダ → 動画 VAE → 音声モデル）に並べる。
 

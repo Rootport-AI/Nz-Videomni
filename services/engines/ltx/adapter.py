@@ -199,8 +199,8 @@ def _minor_version(version: str) -> str:
 def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
     """Rule on the engine KV of a model about to be loaded (§2.2).
 
-    ``kv`` is the GGUF header's KV for a ``.gguf``; for an fp8 ``.safetensors``
-    transformer (§3-167) the precheck derives the same two keys from the
+    ``kv`` is the GGUF header's KV for a ``.gguf``; for a quantized (fp8 / int8) ``.safetensors``
+    transformer (§3-167/§3-168) the precheck derives the same two keys from the
     ``__metadata__`` (``general.architecture`` = ``ltxv`` once the layout check
     passed, ``model_version`` verbatim), so one ruling covers both formats.
 
@@ -1867,7 +1867,7 @@ class _RealBackend:
             "vae_spatial_tile_size": int(self.low_vram.vae_spatial_tile_size),
             "vae_temporal_tile_size": int(self.low_vram.vae_temporal_tile_size),
         }
-        # fp8 safetensors transformer (§3-167 B-1): the selection still rides
+        # quantized (fp8 / int8) safetensors transformer (§3-167 B-1, §3-168): the selection still rides
         # SELECTION_FIELDS' "gguf_transformer_path", but the worker must not
         # hand a .safetensors to the GGUF loader. Blank that field and APPEND
         # one key, so a GGUF selection's payload keeps its key set and order

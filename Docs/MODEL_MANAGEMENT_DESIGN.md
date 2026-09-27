@@ -4,6 +4,8 @@
 > （`phase1_default`→`minimal`、`phase1_target`→`small`）が変更された。最新の配置・名称は
 > [`README.md`](../README.md) を参照。本書は当時の設計判断ログのため、以下の記述は変更しない。
 
+> **注記（2026-09-27）**: 本書 §2.1・§5.1 の「transformer は `.gguf` のみ」は当時の規則である。現在は transformer に**量子化 safetensors（fp8／int8／w4a8）**も置け、同じ走査で GGUF と同じ一覧に並ぶ（受け入れ検査は `sft_quant_format.inspect`、規則の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.3、置き方は [`README.md`](../README.md)「追加の transformer（GGUF／量子化 safetensors）」）。**`GET /models` の行には重みの種別（GGUF／fp8／int8 など）を示す項目は無い**——種別を名乗らせるのは [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31 の予定である。
+
 > **✅ 実装完了（2026-07-05）。本書は S0 設計書で以後は歴史記録。** S1〜S4 全 PASS（S4 実機＝別名二重登録 swap→同 seed→**SHA 一致×3**・未知名 404・後片付け済み）。§9 の裁定6点は本文へ反映済み（各所「裁定（§9-x）」注記）。正本＝VERIFICATION_LOG §26.1。**実代替モデルの DL はしない方針（ユーザー決定）**＝切替配線は別名二重登録で実証済み・実重み投入は将来ユーザー任意。
 
 - 作成: 2026-07-05（子B・branch `feature/model-management-dropdown`）

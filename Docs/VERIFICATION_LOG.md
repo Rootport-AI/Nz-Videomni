@@ -13258,7 +13258,7 @@ LTX 2.5・公式 `default`（線 44,880）:
 
 ### 117.3 判定規則（正本）
 
-> **2026-09-26 注記**: B-2（LTX 2.5）でこの規則を 3 点改めました（倍率の shape [1] をスカラーとして受け入れる・接頭辞の自動判別・connector の fp8 を受け入れる）。改めた点は §118.3 で、下の 8（指紋）と断る条件の最後の項目は §118.3 が優先します。
+> **2026-09-26 注記**: 判定規則の正本は §121.3 へ移りました（2026-09-26）。
 
 `sft_fp8_format.inspect` が、ヘッダと量子化の印（数十バイト）だけを読んで判定します。重み本体は読みません。
 
@@ -13398,7 +13398,7 @@ LTX 2.5・公式 `default`（線 44,880）:
 **要約**: LTX 2.5 の fp8（重みを 8 ビットの浮動小数点で持つ形式）の transformer を、`models/LTX25/Weights/` に `.safetensors` のまま置けば、GGUF と同じドロップダウンで選べるようにしました。LTX 2.3 で作った受け入れの規則（§117.3）を、実在する LTX 2.5 の配布物に合わせて 3 点広げています（§118.3）。読み込みは LTX 2.3 と同じく、巨大なファイルを mmap（ファイルをメモリに見せかけて開く仕組み）で開かず、テンソルを 1 本ずつ読みます。
 
 - **状態**: B-2 は機械ゲート・実機確認・オーナーの目視（§118.10）まで完結しました。7 項目すべて合格です。B-3（fp8 の快適上限の較正）は 2026-09-26 に §119 で完了しました（配信値は未変更・反映は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31）。コミットは `16c1170`（共通部品・LTX 2.3 側・エンジンの外）と `fc3629b`（LTX 2.5 のエンジン `engine25/`）で、文書はその次のコミットです。
-- **最初に知っておくこと**: **Lightricks 公式は LTX 2.5 の fp8 を配っていません。** 使えるのはコミュニティが変換した fp8 です。公式の INT8-ConvRot・NVFP4 と、REDGraft LTX 2.5 の独自量子化は fp8 ではないので、**選ぶと断られるのが正しい動作です**（§118.4）。
+- **最初に知っておくこと**: **Lightricks 公式は LTX 2.5 の fp8 を配っていません。** 使えるのはコミュニティが変換した fp8 です。公式の INT8-ConvRot・NVFP4 と、REDGraft LTX 2.5 の int8（ComfyUI 標準の int8 形式の混在）は fp8 ではないので、**選ぶと断られるのが正しい動作です**（§118.4）。
 - **実機で分かった注意点**: fp8 は Windows のコミット（仮想メモリの予約）を GGUF より約 11 GiB 多く使います（§118.8）。
 - **快適上限マーカーは fp8 では較正していません**（B-3 で較正します）。→ 2026-09-26 に §119 で較正済みです（配信値は未変更・反映は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31）。
 - **GGUF を選んだときの挙動は変えていません。** LTX 2.5 では、ワーカーへ送るペイロードの形も GGUF と fp8 で同じです（§118.2）。
@@ -13434,6 +13434,8 @@ LTX 2.5・公式 `default`（線 44,880）:
 
 ### 118.3 判定規則の改定（§117.3 への 3 点）
 
+> **2026-09-26 注記**: 判定規則の正本は §121.3 へ移りました（2026-09-26）。
+
 **§117.3 の規則を、次の 3 点だけ広げました。両方のエンジンに共通です（`sft_fp8_format.py`）。** それ以外の規則は §117.3 のままです。
 
 1. **倍率の形**: `weight_scale` の shape が `()`（0 次元）でも `(1,)`（要素 1 個の 1 次元）でも、1 個の数（スカラー）として受け入れます。行ごと・ブロックごとの倍率は、今までどおり断ります。
@@ -13450,8 +13452,9 @@ LTX 2.5・公式 `default`（線 44,880）:
 
 - **Lightricks 公式に LTX 2.5 の fp8 はありません。** 公式は bf16・INT8-ConvRot・NVFP4 で、ComfyUI 公式の低 VRAM 向けの形式も INT8-ConvRot と NVFP4 です。
 - **CivitAI の「LTX 2.5」は、公式の INT8-ConvRot の複製でした。** `weight_scale` が F32 の shape [2048,1]、`comfy_quant` が 1,440 本あり、「fp8 以外」「スカラーでない倍率」として正しく断られます。
-- **REDGraft LTX 2.5（`fp:int8`）は独自の量子化です。** I8・U8・F8 が混在し、`weight_codebook` や `weight_s_channel` を持つので、対象外です。
+- **REDGraft LTX 2.5（`fp:int8`）は、ComfyUI 本体が標準で読む 2 つの形式を 1 つのファイルに混ぜたものでした（2026-09-26 にヘッダを再実測）。** `int8_tensorwise`＋ConvRot（アダマール回転を重みに焼き込んだ int8。`weight` が I8、`weight_scale` が F32 の shape [出力,1]、`comfy_quant` が `{"format":"int8_tensorwise","convrot":true,"convrot_groupsize":256}`）が 831 層、`asym_w4a8_int8`（重み 4 ビットのコードブック方式。`weight` が I8 の shape [出力,入力/2]、`weight_codebook` が F32 の shape [16]、`weight_s_channel` が F32 の shape [出力]、`weight_s_rel` が F8_E4M3、`comfy_quant` が `{"format":"asym_w4a8_int8","group_size":16,"convrot_groupsize":256}`）が 609 層です。`__metadata__` に `quant_format="mixed:w4a8+int8"` があります。ComfyUI v0.31.0 以降の標準ローダー（`UNETLoader`）で読め、量子化のためのカスタムノードは要りません。
 - **INT8-ConvRot・NVFP4・REDGraft は、断られるのが正しい動作です。**
+- **訂正（2026-09-26）**: 2026-09-25 時点では独自形式と記していたが、ヘッダの再実測で ComfyUI 標準形式の混在と判明したため改めた。
 
 **本当に fp8 の LTX 2.5 は、コミュニティの変換物だけでした。** 調べたのは次の 3 本です。
 
@@ -13680,3 +13683,334 @@ LTX 2.5・公式 `default`（線 44,880）:
 
 - **この 2 列は暫定です。** 台帳 §1-31「快適上限のマニフェスト一本化」で重みの種別ごとの行を配信するとき、既存の「2.5 Q6」の直書きと合わせて吸収し、フロントエンドの直書きを消します（台帳の判断材料に明記済み）。
 - dev へのコミットはコード・配布コピーの aux2・文書で、main へのマージはオーナーの目視の後です。
+
+## 121. ★ComfyUI 標準の int8 safetensors（int8_tensorwise・asym_w4a8_int8）を、fp8 と同じ仕組みで置くだけで使えるようにした＝**完結・CLOSED §3-168（2026-09-27）**（2026-09-26〜27。台帳は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168。C-4 の較正は[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32）
+
+**要約**: §3-167（§117〜§119）で完成させた fp8（重みを 8 ビットの浮動小数点で持つ形式）の safetensors を置くだけで使う仕組みを、int8（重みを 8 ビットの整数で持つ形式）の safetensors にも広げました。到達条件は REDGraft LTX 2.5（CivitAI 3250230）が動くことです。調べたところ REDGraft は独自形式ではなく、ComfyUI（画像・動画生成の定番 UI）が標準で読む 2 つの量子化形式——`int8_tensorwise`（層ごとに 1 個の倍率を持つ int8。多くはアダマール回転という前処理＝ConvRot を伴う）と `asym_w4a8_int8`（4 ビットの重みをコードブックで復元する方式）——の混在でした。復元方式は fp8 と同じく forward（推論の順伝播）のたびに bf16（16 ビット浮動小数点の一種）へ戻す方式とし、ComfyUI 自身の int8 行列積（活性値側も量子化してから掛ける方式）は模倣していません。
+
+- **状態**: 判定規則・設計・製品コードは **C-3（`asym_w4a8_int8`）まで実装が完結しています**。改称（C-1a `6c5de6e`）→ LTX 2.3 の `int8_tensorwise`（C-1b エンジン外 `87f06af`／エンジン内 `fc91c88`）→ 敵対的レビュー C-1c（採否は §121.6）→ LTX 2.5 の `int8_tensorwise`（C-2。実装はコード共通で追加なし・§121.7）→ `asym_w4a8_int8`（C-3 エンジン外 `05fa85c`／エンジン内 `c18d9aa`）→ 敵対的レビュー C-3c（採否は §121.8）の順で dev へ積みました。**客観検査の G1（NumPy 突き合わせ）・G2（単体テスト全件）は合格**（§121.4）。**実機の門 G3〜G8 も 2026-09-27 にオーナーが `run.bat` で起動したサーバー（コミット `78226b6`）上で実施し、5 本の変換器（(a)Kijai・(b)silveroxides・(c)JoaoZaokk・(d)LTX 2.5 公式複製・(e)REDGraft）すべてで合格しました**（ジョブ 39 件・失敗 0。詳細は §121.4・§121.6〜§121.8）。C-4（重みの種別ごとの快適上限の較正）は敵対的レビュー反映済みの手順 v2 まで確定しており、実施はこれからです（§121.11）。**2026-09-27 にオーナーの目視も全件合格し（§121.9）、§3-168 は完結・クローズしました**（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168）。C-4 は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32 として別に起票しました。
+- **本節が、判定規則（§121.3）・設計（§121.2）・検証の門（§121.4）の正本です。** §117.3・§118.3 は fp8 のみを対象にしていた当時の記録として残し、書き換えていません。
+- **main へのマージの条件（オーナーの目視・§121.9）は 2026-09-27 にそろいました。**
+
+### 121.1 位置づけと裁定
+
+- **テーマ**: §3-167 で完成させた fp8 safetensors の直接読み（LTX 2.3＝§117・LTX 2.5＝§118）を、int8 の safetensors にも広げます（「fp8 経路の一般化」）。
+- **到達条件**: **REDGraft LTX 2.5（CivitAI 3250230）が動くこと**です。オーナーの目標は「ComfyUI の典型的なワークフローで動く重みなら、置くだけで動き、結果もほぼ同じ」です。
+- **調査で確定した事実（2026-09-26）**
+  - REDGraft LTX 2.5（3250230）は独自形式ではなく、ComfyUI 本体が標準で読む 2 つの形式——`int8_tensorwise`＋ConvRot（831 層）と `asym_w4a8_int8`（609 層）——の混在でした。ComfyUI v0.31.0 以降の標準ローダーで読め、量子化のためのカスタムノードは要りません。
+  - LTX 2.3 にも ComfyUI 標準 int8 の配布物が複数あります（Kijai・silveroxides・ovpresent・Winnougan・TenStrip 10Eros・patientxtr・joeygambino・JoaoZaokk の w4a8 など）。このため **LTX 2.3 の `int8_tensorwise` から着手して LTX 2.5 へ進みます**。
+  - 変換ツール `Nz-GGUF-Converter-LTX23` の `comfy_dequant.py` に、両形式の NumPy（Python の数値計算ライブラリ）実装があり、REDGraft（3250230）で検証済みです。**移植元・数値の突き合わせ相手**として使います（変換ツールは編集せず、製品コードから import もしません）。
+  - **bf16 への復元は、数式の上で ComfyUI の W8A8（重みだけでなく活性値も 8 ビットに量子化してから掛け算する方式）の上位互換に当たります**（活性値の量子化と、それに伴う二重の丸めが無いためです）。
+- **オーナー裁定（6 点）**
+  1. **復元方式は「forward のたびに bf16 へ復元」とします**（fp8 と同じ）。ComfyUI 自身の int8 行列積（W8A8）は模倣しません。
+  2. **fp8 経路を「量子化 safetensors 一般」へ一般化して int8 を載せます**（別経路として並置しません）。この一般化に伴う改称は許容します。
+  3. **C-3 完了までオーナーの目視を挟みません。** 各段の合否は監督（Claude）が MCP 経由の客観検査で決めます。
+  4. **fp8 の safetensors は常用中のため削除しません。**
+  5. **ディスク容量の確保はオーナーが手動で行います**（着手時点で S: ドライブの空きは 158 GB）。
+  6. **コーディング担当（Opus）は「設計に疑問を抱いたら手を止めてエスカレーションする権限」を持ち、勝手な設計変更は禁止します。**
+
+### 121.2 設計（HEAD の実装に合わせた記録）
+
+**対象の方式（5 方式）**。いずれも forward のたびに fp32（32 ビット浮動小数点）で計算してから bf16 へ戻します。表内の o は出力チャンネル数、i は入力チャンネル数、H はアダマール行列（256×256 の対称直交行列。H・H＝単位行列）です。
+
+| 方式（内部名） | 重み | 必須の補助テンソル | 復元 |
+|---|---|---|---|
+| `fp8` | F8_E4M3／F8_E5M2 | なし | `w.to(dt)`（現行と同一） |
+| `fp8_scaled` | 同上 | `weight_scale` F32（スカラー） | `(w.float()*s).to(dt)`（現行と同一） |
+| `int8` | I8（8 ビット整数）`[o,i]` | `weight_scale` F32（スカラーまたは `[o,1]`） | `q.float()*s` |
+| `int8_convrot` | 同上（i は 256 の倍数） | 同上 | 上に続けて 256 列ごとに `@ H` |
+| `w4a8` | I8 `[o,i/2]`（4 ビット×2 詰め・偶数列が下位） | `weight_s_rel`（F8_E4M3 または U8 `[o,i/16]`。U8 は読むときに `view(float8_e4m3fn)` で F8_E4M3 へ読み替える）・`weight_s_channel` F32 `[o]`・`weight_codebook` F32 `[16]` | codebook 引き（`index_select`。添字は int32）→ `×s_rel`（16 列群）→ round・clamp(±127) で int8 格子へ → `×s_channel` → `@ H` |
+
+- **公開 API（`sft_quant_format.py`）**: 方式の集合は `SCHEMES = ("fp8","fp8_scaled","int8","int8_convrot","w4a8")` です。5 方式すべてを 1 つの表 `SCHEME_TABLE` から導きます——各行は `Scheme`（重みの dtype 区分）と、補助の規則 `AuxRule`（受理する生の dtype と形・正規化後の dtype と形）・`packing`（重みの 1 要素に詰まっている量子化値の個数）・`in_multiple`（入力次元が満たすべき倍数）を持ちます。検査（受理する生の形）・ローダーの正規化・エンジン側の meta 置き場の生成は、すべてこの 1 表から導きます。ほかに `aux_specs`・`aux_shape`・`weight_shape`・`AUX_NAMES`（補助テンソル名の集合）・`SKIPPED_SUFFIXES`（読み飛ばすキーの接尾辞）・`W4A8_GROUP_SIZE`（＝16）を公開します。`Layout.layers` は層名→方式の辞書で、計画段階にあった `flavor`・`scaled_layers` は廃止しました（`layers` から導けるため）。
+- **非量子化の浮動小数（BF16・F16・F32）は、すべて bf16 へ戻します。** この 1 規則を、ローダーと connector（テキスト埋め込みを transformer へ渡す部品）の同じ位置に置いています。**F16 は今回新規に受理します**（patientxtr の配布物が該当。ComfyUI と同じ扱いです）。補助テンソル自体はこの規則の対象外で、元の dtype を保ちます。
+- **印の読み方**（ComfyUI の `ops.py` と同じ規則）: 量子化の印（JSON）に `params` の入れ子があれば、直下へ平らに混ぜてから読みます。`convrot`（既定 False）・`convrot_groupsize`（256 のみ。印に無ければ既定の 256）・`group_size`（16 のみ。印に無ければ既定の 16＝ComfyUI 自身の既定値）を見ます。w4a8 は `convrot` キーを見ずに常に回転させます。
+- **印の解決**（ComfyUI の `utils.py` の `convert_old_quants` と同じ規則）: 層ごとに、メタデータの `_quantization_metadata.layers` にその層があればそれを優先し、無ければ層ごとの `comfy_quant`（U8 または I8 の 1 次元・JSON）を使います。
+- **読み込み**: 重みはこれまでどおり `Parameter` のまま持ちます（GGUF のようにバッファへ移しません）。PyTorch は整数 dtype の `Parameter` に勾配を持たせられないため、骨格を組む段階で量子化対象の全層（fp8 も含めて 1 規則）を `requires_grad=False` の meta `Parameter` として作り直します。補助テンソルの正規化と meta バッファの事前登録は、5 方式共通の `SCHEME_TABLE` から導きます。
+- **forward**: fp8 用線形層の変更は 2 箇所だけです。早期 return の条件（`w.dtype == x.dtype` を残しつつ量子化の有無を見る条件へ拡張）と、重みを戻す 1 行（`dequantize(scheme, w, self._buffers, x.dtype)` を呼ぶ形へ拡張）です。**LoRA（追加学習した差分を実行時に足す機構）の加算部分は 1 文字も変えていません。** 行ごとのチャンク分割（メモリ節約の細切れ処理）は採用していません（単純さ優先。敵対的レビューで簡略化しました）。
+- **復元処理（`engine/sft_quant/dequant.py`・新設）**: `dequantize` 関数が方式ごとの if/elif 5 分岐（GGUF の `dequantize_ggml_tensor` に当たる振り分け）で復元します。`hadamard(device)` が 256×256 fp32 のアダマール行列を device ごとにキャッシュします。`normalize_aux` が補助テンソルの正規化を担い、`(o,1)` への広げ以外は `reshape(aux_shape(...))` の 1 行に単純化しています（敵対的レビュー C-3c で採用）。
+- **w4a8 の codebook 引き**: 高度な添字付け（fancy indexing）は添字が int64 へ自動昇格して複製されるコストがあるため、`index_select`（添字は int32 のまま）を使います。CPU 実測のピークは最大の層 `[4096,4096]` で約 128 MiB、層全体では約 512 MiB で、int8 と同水準です。
+- **connector**: fp8 と同じ二段構えで読みます。1 回目で補助テンソル（倍率・`weight_s_rel`・`weight_s_channel`・`weight_codebook`）をすべて読み、2 回目で重みを 1 本ずつ読んで CPU 上で復元して bf16 にします（生の重みをまとめて持ちません）。
+- **配置検査**（量子化された重みが線形層の外に残っていないことを確かめる検査）に、int8 の dtype を足しました（GGUF の uint8 とは区別）。**補助テンソルの余り（方式表に無いキー）の防御は 2 段**——inspect の時点で拒否する段と、ローダーが `RuntimeError` で止める段です。LTX 2.5 はさらに、骨格に meta のまま残ったテンソルが無いかを確かめる検査（`_check_uninitialized`）を持ちますが、これは骨格の初期化漏れを見つけるための別目的の検査で、余り防御の段数には数えません（2.3 は同じ状況を警告のみで通します）。孤立検査の文言は「補助テンソル」に統一しました。
+- **LTX 2.3／2.5 の共有**: 判定規則・復元処理（`dequant.py`）・読み込みの共通部品は両エンジンで共有し、エンジン固有の変更は名前と `Layout.layers` への引数の受け渡しだけです。
+- **改称（実施済み）**: fp8 専用だった名前を、量子化全般を指す名前へ改めました。主なもの: `sft_fp8_format.py`→`sft_quant_format.py`、`Fp8FormatError`→`QuantFormatError`、`engine/fp8/`→`engine/sft_quant/`、`Fp8StateDictLoader`→`SftQuantStateDictLoader`、`Fp8LoaderService`→`SftQuantLoaderService`、`_fp8_linear_forward`→`_quant_linear_forward`、`_install_fp8`→`_install_safetensors`、`from_fp8`→`from_safetensors`（詳細は §121.6 のコミット `6c5de6e`）。**ワーカーへのペイロード・API・UI は変わっていません。** 歴史記録（本ログの既存節・DEVLOG）は書き換えていません。
+
+**敵対的レビューの採否（2026-09-26・Opus。重大 1／主要 6／軽微 9／過剰設計 5）**
+
+| 区分 | 件数 | 採否 |
+|---|---|---|
+| 重大 | 1 | 採用。印の `params` 入れ子を読まないと回転が抜けて黙って動く指摘で、変換ツール `comfy_dequant.py` の実装で裏取りしました |
+| 主要 | 6 | すべて採用。C-0 の fp8 回帰基準を実在するファイルの組み合わせに変更・F16 受理をローダーと connector の両方に明記・forward の早期 return 条件を明確化・G6 に LoRA あり 1 本を追加・G5 の床が弱い点を補うため G1 に方式判定の集計を追加・connector は補助先読み＋重み 1 本ずつの二段構えに |
+| 軽微 | 9 | すべて採用。印の解決は層ごと・2.3 の防御は 2 段・codebook の添字は int32・G1 台本のスカラー→`(o,1)` 変換は GPU でも行う・担当ファイルの漏れを補充・quanto 向けのヒントは諦める・`model_version` の無い 2.5 の申し送りを追加・§2.2 と §2.4 の食い違いを修正・ConvRot の費用は実測方針のまま |
+| 過剰設計 | 5 | 2 件採用（方式表を 1 つに統合し復元を if/elif 分岐へ単純化・行チャンクを削除）。3 件は妥当と判断して据え置き（`(o,1)` への正規化・`_sft_scheme` 属性・`_transformer_format` の値変更は改称に含める） |
+
+**実装段階の C-1c・C-3c レビューの採否は §121.6・§121.8 に記載します**（この計画段階のレビューとは別物です）。
+
+### 121.3 判定規則の正本
+
+> 本節が、量子化 safetensors（fp8・int8 系）の受理条件・拒否条件の正本です。§117.3・§118.3 は fp8 のみを対象にしていた当時の記録として残し、書き換えていません。
+
+`sft_quant_format.inspect`（改称後の名称）が、ヘッダと量子化の印だけを読んで判定します。重み本体は読みません。判定はトップダウンの条件分岐で、torch（機械学習ライブラリ）に依存しません。
+
+**手順**: ①ヘッダを読む→②`config.transformer` を確かめる→③テンソル名の接頭辞とブロック数を確かめる（ここまでは既存の fp8 判定と同じ）→④層ごとに方式を判定する（`layer_schemes`。新設。connector も同じ関数で判定します）→⑤量子化された重みが 1 本もない、または connector が無い場合は拒否します。
+
+④の層ごとの判定は、次の 4 段階です。
+- **A（大域の下ごしらえ）**: dtype は BF16・F16・F32・F8_E4M3・F8_E5M2・I8・U8 だけを受理し、接頭辞の外にある量子化 dtype や旧形式は拒否します。テンソルの置き場所（`weight`・`bias`・`comfy_quant`・`weight_s_rel` のどれに、どの dtype が来てよいか）も方式表（§121.2）から決めます。
+- **B（束ね）**: キーを、層（最後の成分の手前まで）と葉（最後の成分）に束ねます。
+- **C（印の解決）**: 層ごとに印を解決します（メタデータ優先→`comfy_quant`、`params` の入れ子は平らにする）。
+- **D（方式の確定）**: 葉ごとに、重みの dtype 区分・印の format・convrot の有無から方式を 1 つ引き、補助テンソルの集合が方式の必須集合とちょうど一致し、各補助の dtype と形が合っていることを確かめます。
+
+**受理する形式**: `fp8`・`fp8_scaled`・`int8`・`int8_convrot`・`w4a8` の 5 方式です（詳細は §121.2 の表）。
+
+**受け入れる条件**
+
+1. 層ごとに見ます。量子化された重み（F8 系・I8）に、方式表が定める必須の補助テンソルがそろっていれば、その方式として復元します。非量子化の重み（BF16・F16・F32）は、印の有無によらず無条件で bf16 へ戻します。印の中身（format 等）はどの層でも検査します。
+2. 1 つのファイルの中で、複数の量子化方式や非量子化の層が混ざっていても受け入れます。
+3. fp8 は E4M3 と E5M2 の両方を受け入れます。非量子化浮動小数は BF16・F16・F32 のすべてを受け入れます（F16 は今回新規受理です）。
+4. fp8 はバイアスも F8 のまま受け入れます。int8 系のバイアスは浮動小数（BF16・F16・F32）のときだけ受け入れ、I8 のバイアスは置き場所違反として断ります。
+5. **倍率の形**: `weight_scale` は 0 次元（スカラー）でも要素 1 個の 1 次元でも、1 個の数として受け入れます。int8・ConvRot では、出力チャンネルごとの形（`[o,1]`）も受け入れます。方式表が定める形以外は受け入れません。**w4a8 に `weight_scale` はありません**（`weight_s_rel`・`weight_s_channel`・`weight_codebook` の 3 種の補助テンソルで復元します。§121.2 の表）。
+6. **量子化の印**: fp8 は印が任意です。層ごとの `comfy_quant` か、メタデータの `_quantization_metadata` があれば方式を確かめ、印の無い倍率つきの層（`fp8_scaled`）も受け入れます。int8・ConvRot・w4a8 は印が必須です。
+7. `input_scale`・`comfy_quant`・印の未知キー・`full_precision_matrix_mult` は読み飛ばします（ComfyUI も読まないため、同じ計算になります）。
+8. `__metadata__.config` は必須です。ComfyUI も LTX 2.3 は `config` 無しでは組めません。
+9. **指紋**: テンソル名の接頭辞が `model.diffusion_model.` のものと、接頭辞の無い裸名のものの両方を受け入れ、`transformer_blocks` がちょうど 48 個（0〜47）あることを確かめます。
+10. transformer だけのファイル（VAE などを含まないもの）も受け入れます。
+11. connector が量子化されたファイルも受け入れます。倍率つきでも倍率なしでも構いません。印の要否は条件 6 と同じです（fp8 は任意、int8 系は必須）。
+12. w4a8 のコードブック引きの添字は int32 として扱います。
+
+**断る条件**（422 の文言は「**量子化 safetensors の検査に不合格: **」で始まる 1 行で、どこが不合格かを示します）
+
+- 受理集合の外の量子化形式（`nvfp4`・`mxfp8`・`convrot_w4a4` など）
+- 印に `format` が無いもの（旧 INT8-Fast 形式）
+- I8 の重みに印が無いもの
+- 印と重みの dtype が合わないもの
+- 補助テンソルの不足・余り（`weight_correction`・`weight_scale_2`・`pre_quant_scale` など）
+- 倍率の形が方式表と違うもの
+- ConvRot・w4a8 で入力次元が 256 の倍数でないもの
+- `convrot_groupsize` が 256 以外、`group_size` が 16 以外のもの
+- w4a8 で codebook が無いもの
+- I8・U8 の置き場所違反（例: I8 の `.bias`・optimum-quanto の `_data` キー）
+- 印の構造違反（JSON オブジェクトでない・`params` が辞書でない・convrot が真偽値でない）と、量子化テンソルの次元違反（量子化された `.weight` は 2 次元・`.bias` と `.comfy_quant` は 1 次元）
+- 量子化された重みが 1 本もないもの
+- `config` が無いもの
+- ブロック数が 48 でないもの
+- 旧形式（`scaled_fp8`／`scale_weight`）
+- F8_E8M0 など未対応の dtype
+- connector が無いもの
+
+**quanto（別ライブラリの量子化形式）向けの専用ヒントは出しません。** `config` が無い時点で先に断られるためです。
+
+**世代の見分け**: 合格したファイルは、ヘッダの `__metadata__.model_version` を GGUF の KV の代わりにして、既存の `check_kv` で世代を判定します。`model_version` が無いファイルは警告を出して通します（fp8 のときから変わりません）。
+
+### 121.4 段階と検証の門
+
+各段の合否は、オーナーの目視ではなく次の客観検査で決めます。G1・G2 は C-1・C-3 で実施し合格しました。G3〜G8 は 2026-09-27 の実機投入で実施し、すべて合格しました（詳細は下記の実施記録、および §121.6〜§121.8 の個別表）。
+
+| 門 | 内容 | 合格条件 | 結果 |
+|---|---|---|---|
+| G1 | NumPy 突き合わせ（変換ツールの `comfy_dequant` と torch の `dequantize` を、乱数テンソルと実ファイルの層で比較。実ファイル全層の方式判定の集計も突き合わせ） | fp32 で `max|Δ| ≤ 1e-5·max|W|`、bf16 化後の不一致は 1 ulp 以内。方式判定の集計は完全一致 | **合格（C-1・C-3。§121.6・§121.8）** |
+| G2 | 単体テスト全件（app・LTX 2.3 エンジン・LTX 2.5 エンジン） | 既知 1 件を除き全緑。新規テストは受理／拒否表の全行・往復・丸め・LoRA 不変・F16・connector 等を網羅 | **合格（C-1・C-3。§121.6・§121.8）** |
+| G3 | 実機（MCP 経由。single・IC-LoRA・スタイル LoRA・Chained・先読みオフの 1 本） | 全ジョブ completed・mp4 メタデータに transformer ファイル名と LoRA が記録 | **合格**（39 ジョブ全件 completed・失敗 0。手順と個別記録は §121.6〜§121.8） |
+| G4 | keep_resident 2 本 | PSNR 無限大・SSIM 1.0（バイト単位で同一） | **合格**（5 本とも映像／音声ストリーム MD5 一致・PSNR 無限大・SSIM 1.0。判定基準をファイル全体 SHA-256 からストリーム MD5 へ修正した経緯は下記・§121.10） |
+| G5 | 同じ元モデルの公式 GGUF との PSNR／SSIM、LoRA あり／なしの差 | 健全性の床（崩壊の検出）: PSNR Y ≥ 15 dB・SSIM ≥ 0.5。数値は記録してオーナーへ報告 | **合格**（PSNR Y 18.8〜30.7 dB・SSIM Y 0.69〜0.94 で床を満たす。LoRA あり／なしの差は 15.3〜20.4 dB と有限＝LoRA が効いている証拠。個別値は §121.6〜§121.8） |
+| G6 | fp8 回帰（C-0 の基準と同じ設定で再生成） | 3 本ともバイト単位で同一（PSNR 無限大）。改称や早期 return の変更が fp8・LoRA 経路を変えていない証拠 | **合格**（3 本とも C-0 基準と映像／音声ストリーム MD5 完全一致。判定基準の変更は下記） |
+| G7 | 偽ヘッダ 422（nvfp4 の印・印なし I8・codebook 無し w4a8 など） | 期待どおりの文言を含み、選択が変わらない | **合格**（6 件すべて 422 MODEL_INCOMPATIBLE・想定どおりの文言・選択は不変） |
+| G8 | 資源（生成時間・torch 割当ピーク・Windows のコミット・connector の復元時間） | コミットが上限の 95% 未満で完走。数値を記録 | **合格**（コミット最大値は全ジョブで上限の 95% 未満。ConvRot は fp8 同条件比で (a)1.04 倍・(d)1.13 倍。connector 復元時間・EP 常駐再発は未計測＝申し送り） |
+
+**実施記録（2026-09-27 09:11〜10:10・サーバーはコミット `78226b6`・オーナーが `run.bat` で起動・ジョブ 39 件・失敗 0）**: G3〜G5 は変換器 5 本——(a) Kijai の LTX 2.3 `int8_convrot`・(b) silveroxides の LTX 2.3 `int8`（スカラー）・(c) JoaoZaokk の LTX 2.3 `w4a8`・(d) LTX 2.5 公式 `int8_convrot` の複製・(e) REDGraft LTX 2.5（`int8_convrot`＋`w4a8` 混在）——を 1 本ずつ順に実施しました。各本の手順は、single（512×320×49f・seed 12345）→スタイル LoRA `Pixar_Toon:0.8` を足した single→〔(a) のみ〕先読みオフの single→IC-LoRA `deblur`（参照動画あり）→Chained 2 クリップ→keep_resident 2 本連続→基準 GGUF（(a)(b)(c) は `LTX-2.3-22B-distilled-1.1-Q4_K_M`・(d) は LTX 2.5 公式 GGUF・(e) は同じ重みから変換した `redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K`）の同条件 single→PSNR／SSIM 比較、という順です。個別のジョブ ID・生成秒・peak_vram・コミット最大・PSNR／SSIM・判定は §121.6（C-1＝(a)(b)）・§121.7（C-2＝(d)）・§121.8（C-3＝(c)(e)）の表にまとめました。道具と結果の複写は [`Outputs-archive/int8-sft-2026-09-26/`](Outputs-archive/int8-sft-2026-09-26/)（fp8 回帰の基準のストリーム MD5 は `baseline/stream_md5.json`）にあります。
+
+- **G6（fp8 回帰）**: 2.3 fp8 単発（`sulphur_distil_fp8mixed`）・同＋Pixar_Toon・2.5 fp8（`ltx25_uncensored_v1.1-fp8_scaled`）の 3 本を C-0 と全く同じ条件で再生成し、C-0 の基準 mp4（`scratchpad\int8\baseline\*.mp4`）と映像／音声ストリーム MD5 を比較したところ **3 本とも完全一致**しました。改称や forward の早期 return 条件の変更が、fp8・LoRA 経路の出力を変えていないことの直接の証拠です。
+- **G7（偽ヘッダ 422）**: 既存の `fp8_per_row_scale` に加え、`nvfp4_format`・`i8_no_marker`・`w4a8_no_codebook`・`quanto_data_placement`・`weight_scale_wrong_shape` の 5 ケースを追加し、計 6 件すべてが `load_pipeline` の `MODEL_INCOMPATIBLE`（422）で拒否されました。文言はいずれも「量子化 safetensors の検査に不合格: 」で始まり、不合格の理由（受理集合外の format・印の欠落・補助テンソルの不足・置き場所違反・倍率の形違いなど）を具体的に示しています。拒否後も `active_transformer` は不変でした。
+- **G8（資源）**: ConvRot を伴う (a) Kijai と (d) LTX 2.5 公式複製について、同条件の fp8 との生成時間比を測ったところ、(a) は **1.04 倍**（60.33 秒 対 57.81 秒）・(d) は **1.13 倍**（54.29 秒 対 48.09 秒）でした。生成秒・peak_vram・コミット最大の全数値は §121.6〜§121.8 の各表のとおりです。**connector の復元時間と、EP（埋め込み処理器）常駐オン／オフでの再発の有無は、今回の台本では自動化しておらず未計測のまま残っています**（§121.10 の申し送り）。
+
+### 121.5 C-0（回帰基準・ダウンロード・道具）
+
+**改称前のコード**で、MCP（Model Context Protocol。ツール呼び出しの共通規格）経由の実機ランナーを使い、fp8 の回帰基準を 3 本採取しました。
+
+- LTX 2.3 fp8（`sulphur_distil_fp8mixed`）single 512×320×49f seed 12345: job `51bd113b-4c11-4451-923b-5e644b256a56`（生成時間 64.79 秒・torch 割当ピーク 8,442 MB）
+- 同条件＋スタイル LoRA `Pixar_Toon` 0.8: job `4f04197d-e67e-40a6-a4af-16565f89db93`（生成時間 82.63 秒）
+- LTX 2.5 uncensored fp8（`ltx25_uncensored_v1.1-fp8_scaled`）single: job `7d09d4de-ecf6-4632-9134-29f3fa32f048`（生成時間 52.06 秒）
+
+生成した mp4 の SHA-256 先頭 8 桁は順に `0ebc3b96`／`9b385f9f`／`e862e95d` です。G6（fp8 回帰）で同一設定の再生成と突き合わせます。
+
+**無効になった 1 本**: 実機ランナーの `single` サブコマンドは transformer の選択を切り替えないため、LTX 2.5 を指定したつもりのジョブが LTX 2.3 のまま走った回がありました。以後は `load` で明示的にベースモデルと transformer を切り替えてから `single` を呼ぶ手順に改めています（§121.10）。
+
+**ダウンロード**（`models/LTX23/Weights/`・`models/LTX25/Weights/`）: Kijai `ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot`（21,505,993,424 バイト）・silveroxides `distilled-1.1_int8mixedtensorwise`（29,171,311,014 バイト）・JoaoZaokk `distilled-1.1_w4a8`（16,651,422,654 バイト）は取得完了しています。CivitAI 3219797（LTX 2.5 の int8_convrot・公式複製・21,504,034,224 バイト）と REDGraft 3250230（17,026,023,216 バイト）は、本節記録の時点でダウンロード中でした。完了の確認は C-2・C-3 の実機検証（G3〜G8）のときに行います。
+
+**落とし穴**: サブエージェントに CivitAI の調査を委ねた際、HTTP の Range ヘッダを無視する応答により 750 MB だけ受信した不完全なファイルができる事故がありました（気づいて即削除）。以後の取得は curl の `.part` ファイル→改名の手順に統一しています。
+
+**道具**: NumPy 突き合わせスクリプトと MCP 実機ランナー（前段 `stage3_runner25.py` の構造を MCP stdio クライアント呼び出しへ置き換えたもの）は scratchpad に作成し、G1・G3 以降で使います。
+
+### 121.6 C-1（改称・LTX 2.3 の `int8_tensorwise`）
+
+**C-1a 改称のみ**（コミット `6c5de6e`）: `git mv` と参照の置換のみで、挙動は不変です。`sft_fp8_format.py`→`sft_quant_format.py`・`engine/fp8/`→`engine/sft_quant/`・`Fp8FormatError`→`QuantFormatError`・`Fp8LoaderService`→`SftQuantLoaderService`・`from_fp8`→`from_safetensors` ほか（§121.2 の一覧）。テストファイル 5 本を改名。文言・ロジックは不変で、fp8 のテストは全緑のまま 1 コミットにまとめました。
+
+**C-1b エンジン外**（コミット `87f06af`）: 判定規則を「量子化 safetensors 一般」へ一般化し、ComfyUI 標準の `int8_tensorwise`（スカラー／行ごと倍率・ConvRot）を受理するようにしました。`sft_quant_format.py` に `SCHEME_TABLE`・`Layout.layers`・`layer_schemes`・印の解決（`params` 入れ子の平坦化）・受理／拒否表・F16 の新規受理を実装。422 の文言の接頭語を「量子化 safetensors の検査に不合格: 」に統一しました。テスト 150 件（新規 66 件・実ファイル 4 本の inspect 受理を確認）。
+
+**C-1b エンジン内**（コミット `fc91c88`）: `int8_tensorwise` の読み込み・復元・forward を fp8 と同じ骨組みに載せました。`engine/sft_quant/dequant.py` を新設（256×256 の hadamard を device 別にキャッシュ・`dequantize` の if/elif 5 分岐・`normalize_aux`）。reader に I8 を追加。ローダーは補助テンソルを `SCHEME_TABLE` で正規化（int8 の倍率はスカラーも `(o,1)` へ）。F16／F32 は bf16 へ。余りキーは `RuntimeError`。module op は量子化層すべてを `requires_grad=False` の meta Parameter として作り直します（整数 dtype の Parameter は勾配を持てないため）。forward の変更は早期 return の条件と `wd = dequantize(...)` の 1 行のみ（LoRA の加算部分は不変）。自己点検 C18（int8 Parameter＋`(o,1)` 倍率の block swap 往復・18/18 合格）。テスト: LTX 2.3 エンジン 114・LTX 2.5 側 291・アプリ 2,838。**G1**: NumPy 実装と int8 は完全一致、ConvRot は fp32 で `|Δ|max ≤ 8e-6`。
+
+**C-1c 敵対的コードレビュー（重大 0・主要 0・軽微 7・過剰設計 3）の採否**（監督判断）:
+
+- **採用**: worker ログの文言を「quantized safetensors」に修正・古いコメントの修正・ConvRot の forward テストを `in=512` に変更・`_aux_target` を `packing` で単純化・`_aux_leaves` を `AUX_NAMES` に統一・`normalize_aux` の未使用分岐を削除。
+- **据え置き**: ComfyUI より厳しい拒否（`convrot` が真偽値でない場合の拒否など・事後に検知できる指摘）・`packing` と形の規則の語彙に関する指摘。
+- **記録のみ**（対応不要）: fp8 の印の E4M3／E5M2 と重み dtype の不一致は未検査のまま（従来どおり）。TF32 は既定 False であることを G1 で確認しました。
+
+**コミット**: `6c5de6e`（C-1a）・`87f06af`（C-1b エンジン外）・`fc91c88`（C-1b エンジン内）。
+
+**実機の結果（2026-09-27・G3〜G5）**: 512×320×49f・seed 12345・基準は `LTX-2.3-22B-distilled-1.1-Q4_K_M`（登録名 `default`）。ジョブ ID は先頭 8 桁。
+
+**(a) Kijai `ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot`**
+
+| 手順 | ジョブ ID | 生成秒 | peak_vram(MB) | コミット最大(GiB) | PSNR Y／SSIM Y | 判定 |
+|---|---|---|---|---|---|---|
+| single | `d05677f0…` | 60.33 | 8442 | 67.16 | — | 合格 |
+| ＋Pixar_Toon 0.8 | `2d25092a…` | 69.93 | 8442 | 87.25 | 対 single: 16.1 dB／0.63（LoRA有限差） | 合格 |
+| 先読みオフ（同期経路） | `c950e40e…` | 100.60 | 8442 | 87.35 | — | 合格 |
+| IC-LoRA deblur | `4de17234…` | 67.97 | 6828 | 85.34 | — | 合格 |
+| Chained 2クリップ | `a7bdda0e…` | 79.90 | 8442 | 87.58 | — | 合格 |
+| keep_resident r1 | `0c153e4b…` | 63.41 | 8442 | 92.90 | 対 r2: ストリームMD5一致・PSNR無限大・SSIM 1.0 | 合格 |
+| keep_resident r2 | `f6e908c6…` | 25.75 | 8442 | 96.76 | 同上 | 合格 |
+| 基準GGUF single | `8dbc7ce8…` | 59.19 | 8442 | 64.50 | 対 int8: 20.8 dB／0.75 | 合格（床 PSNR≥15dB・SSIM≥0.5 超） |
+
+**(b) silveroxides `ltx-2.3-22b-distilled-1.1_int8mixedtensorwise`**
+
+| 手順 | ジョブ ID | 生成秒 | peak_vram(MB) | コミット最大(GiB) | PSNR Y／SSIM Y | 判定 |
+|---|---|---|---|---|---|---|
+| single | `5af6f005…` | 53.26 | 8442 | 73.07 | — | 合格 |
+| ＋Pixar_Toon 0.8 | `77e0eb60…` | 64.66 | 8445 | 89.26 | 対 single: 17.2 dB／0.66（LoRA有限差） | 合格 |
+| IC-LoRA deblur | `44511094…` | 66.92 | 7196 | 89.04 | — | 合格 |
+| Chained 2クリップ | `a38c6ce7…` | 77.43 | 8445 | 89.16 | — | 合格 |
+| keep_resident r1 | `4a0616b3…` | 61.46 | 8442 | 96.80 | 対 r2: ストリームMD5一致・PSNR無限大・SSIM 1.0 | 合格 |
+| keep_resident r2 | `ed6e8ccb…` | 32.97 | 8442 | 103.07 | 同上 | 合格 |
+| 基準GGUF single | `7dd19030…` | 59.36 | 8442 | 67.08 | 対 int8: 20.1 dB／0.71 | 合格（床超） |
+
+### 121.7 C-2（LTX 2.5 の `int8_tensorwise`）
+
+判定規則・復元処理は C-1 でエンジン共通の部品として実装済みのため、**C-2 でコードの追加はありません**。LTX 2.5 側のケース（int8 スカラー／行ごと／裸名／int8 connector）はテストとして先行して用意していましたが、**CivitAI 3219797（公式 int8 ConvRot の複製）の実ファイルでの検証は、2026-09-27 の実機の門 G3〜G5 で完了しました**（下記）。
+
+**実機の結果（2026-09-27・G3〜G5）**: (d) `ltx-2.5-22b-distilled-transformer-comfy-int8-convrot`（CivitAI 3219797・LTX 2.5 公式 int8_convrot の複製）。512×320×49f・seed 12345・基準は LTX 2.5 公式 GGUF（登録名 `default`）。ジョブ ID は先頭 8 桁。
+
+| 手順 | ジョブ ID | 生成秒 | peak_vram(MB) | コミット最大(GiB) | PSNR Y／SSIM Y | 判定 |
+|---|---|---|---|---|---|---|
+| single | `0f7b128c…` | 54.29 | 6952 | 67.70 | — | 合格 |
+| ＋Pixar_Toon 0.8 | `fc25c393…` | 41.31 | 6606 | 80.31 | 対 single: 20.4 dB／0.73（LoRA有限差） | 合格 |
+| IC-LoRA deblur | `4b55f3ac…` | 47.03 | 6606 | 81.18 | — | 合格 |
+| Chained 2クリップ | `d15fd666…` | 48.52 | 6606 | 80.85 | — | 合格 |
+| keep_resident r1 | `9aa26caa…` | 34.61 | 6606 | 86.08 | 対 r2: ストリームMD5一致・PSNR無限大・SSIM 1.0 | 合格 |
+| keep_resident r2 | `02ea2fbf…` | 27.09 | 6606 | 85.77 | 同上 | 合格 |
+| 基準GGUF single | `693bff44…` | 45.15 | 6952 | 56.36 | 対 int8: 23.7 dB／0.80 | 合格（床 PSNR≥15dB・SSIM≥0.5 超） |
+
+IC-LoRA `deblur` は LTX 2.5 側にも実在し、422 にはならず完走しました（実機投入前は LTX 2.5 側の登録有無が未確認でしたが、この結果で解消しました）。
+
+### 121.8 C-3（`asym_w4a8_int8`。LTX 2.3・LTX 2.5 同時）
+
+**C-3 エンジン外**（コミット `05fa85c`）: `asym_w4a8_int8`（重み 4 ビット・コードブック方式）を判定規則に追加しました。`SCHEME_TABLE` に w4a8 の 1 行（`weight_s_rel` F8_E4M3 または U8 `(o,i/16)`→F8_E4M3・`weight_s_channel` F32 `(o,)`・`weight_codebook` F32 `(16,)`・`packing` 2・`in_multiple` 256）。format `asym_w4a8_int8`→I8。`group_size` は 16 のみ（無ければ既定 16）・`convrot_groupsize` は 256 のみ（無ければ既定 256）・w4a8 は `convrot` キーを見ません。`W4A8_GROUP_SIZE` を公開し、孤立検査の文言を「補助テンソル」に統一しました。断る条件: codebook 無し・`weight_correction` 等の余り・`group_size`≠16・s_rel／s_channel／codebook の形と dtype 違い・`i%256≠0`・印と dtype の不一致。テスト 186 件（新規 36 件・REDGraft 型混在／JoaoZaokk 型／tsolful 型の受理と拒否 20 行）。実ファイル: JoaoZaokk の LTX 2.3 w4a8 を受理（transformer 1,344 層＋connector 96 層）。
+
+**C-3 エンジン内**（コミット `c18d9aa`）: w4a8 の復元を `dequantize` に追加しました。uint8 view→偶数列が下位 4 ビット→int32 添字で codebook を `index_select`（高度な添字付けの int64 複製を避け、`[4096,4096]` の CPU 実測ピーク 128 MiB＝int8 と同水準）→16 列群で `×s_rel`→round・clamp(±127) で int8 格子へ→`×s_channel`→256 列群で `@ H`→dtype（変換ツール `comfy_dequant` と comfy-kitchen eager と同じ順）。`normalize_aux` は `(o,1)` の広げ以外を `reshape(aux_shape(...))` の 1 行に単純化。`weight_s_rel` の U8 は `view(float8_e4m3fn)`。群の大きさは `sft_quant_format.W4A8_GROUP_SIZE` を参照します。ローダー・module op・connector は表駆動のため無変更で通りました。自己点検 C19（w4a8 Parameter `(o,i/2)`＋補助 3 種の block swap 往復・19/19 合格）。テスト: LTX 2.3 エンジン 132・LTX 2.5 側 294（REDGraft 型 CASE＝接頭辞あり・connector w4a8・s_rel F8）・アプリ 2,928。**G1**: NumPy 実装と w4a8 は乱数・実ファイル（JoaoZaokk の transformer 2 層＋connector 1 層）で実質の不一致 0（許容 `1e-5·max|W|` に対し `≤4.8e-6`）。
+
+**C-3c 敵対的コードレビュー（重大 0・主要 1＝int64 複製・軽微 9・過剰設計 3）の採否**（監督判断）:
+
+- **採用**: `index_select` への変更（主要 1。上記のとおり実装済み）・孤立文言の統一・LTX 2.5 の CASE を実物の REDGraft に寄せる（接頭辞あり・connector w4a8・s_rel F8）・「16」の定数を `W4A8_GROUP_SIZE` の 1 箇所に集約・`normalize_aux` を `reshape(aux_shape(...))` の 1 行に単純化。
+- **記録のみ**: ComfyUI の eager 実行は bf16 のまま回転する一方、本エンジンは fp32 で回転します（変換ツールと同じ）・印の値の型（`16.0` は受理・`"16"` は拒否）・w4a8 の `convrot:false` は無視します（変換ツールは拒否する非対称な扱いですが、ComfyUI 実行時の計算と一致させるため据え置きました）・NaN の s_rel は検査しません・W6A8（codebook 無し）は断られます。
+
+**コミット**: `05fa85c`（C-3 エンジン外）・`c18d9aa`（C-3 エンジン内）。
+
+**実機の結果（2026-09-27・G3〜G5）**: 512×320×49f・seed 12345。ジョブ ID は先頭 8 桁。
+
+**(c) JoaoZaokk `ltx-2.3-22b-distilled-1.1_w4a8`（LTX 2.3・基準は `LTX-2.3-22B-distilled-1.1-Q4_K_M`＝登録名 `default`）**
+
+| 手順 | ジョブ ID | 生成秒 | peak_vram(MB) | コミット最大(GiB) | PSNR Y／SSIM Y | 判定 |
+|---|---|---|---|---|---|---|
+| single | `681dd22a…` | 60.64 | 8442 | 71.65 | — | 合格 |
+| ＋Pixar_Toon 0.8 | `5494ca2a…` | 74.71 | 8445 | 83.66 | 対 single: 15.3 dB／0.61（LoRA有限差） | 合格 |
+| IC-LoRA deblur | `cdf9f0ed…` | 66.54 | 6666 | 79.15 | — | 合格 |
+| Chained 2クリップ | `9b00e11b…` | 90.33 | 8445 | 84.38 | — | 合格 |
+| keep_resident r1 | `e808534c…` | 60.64 | 8442 | 79.23 | 対 r2: ストリームMD5一致・PSNR無限大・SSIM 1.0 | 合格 |
+| keep_resident r2 | `3d39a734…` | 32.00 | 8442 | 83.25 | 同上 | 合格 |
+| 基準GGUF single | `6969dd75…` | 59.88 | 8442 | 64.19 | 対 w4a8: 18.8 dB／0.69 | 合格（床超） |
+
+**(e) REDGraft LTX 2.5（`redgraftLTX25Fast2K_ltx25RedgraftNSFW`。`int8_convrot`＋`w4a8` 混在・基準は同じ重みから変換した `redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K`＝同じ経路どうしの比較のため高い値が出る）**
+
+| 手順 | ジョブ ID | 生成秒 | peak_vram(MB) | コミット最大(GiB) | PSNR Y／SSIM Y | 判定 |
+|---|---|---|---|---|---|---|
+| single | `8eaf613c…` | 49.79 | 6952 | 60.07 | — | 合格 |
+| ＋Pixar_Toon 0.8 | `1de121be…` | 44.90 | 6607 | 70.90 | 対 single: 18.4 dB／0.73（LoRA有限差） | 合格 |
+| IC-LoRA deblur | `f084c583…` | 46.22 | 6607 | 74.94 | — | 合格 |
+| Chained 2クリップ | `63b0044e…` | 54.24 | 6607 | 75.05 | — | 合格 |
+| keep_resident r1 | `dc21e661…` | 36.32 | 6605 | 78.34 | 対 r2: ストリームMD5一致・PSNR無限大・SSIM 1.0 | 合格 |
+| keep_resident r2 | `d02cd292…` | 31.70 | 6607 | 78.23 | 同上 | 合格 |
+| 基準 Q6_K single | `e6698dad…` | 52.69 | 6952 | 62.79 | 対 混在: 30.7 dB／0.94 | 合格（床超・同一経路のため高値） |
+
+w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 dB）はいずれも有限で、LoRA が実際に効いていることを示しています。
+
+**G1・G2（C-3 完了時点の最終値）**: NumPy 突き合わせ（G1）は C-1・C-3 で個別に確認し、実ファイル全層の方式判定の集計（変換ツールの `parse_quant_marker` と製品 `inspect`）も完全一致しました——Kijai＝int8_convrot 1,440 層（transformer 1,344＋connector 96）・silveroxides＝int8 1,232 層・JoaoZaokk＝w4a8 1,440 層（1,344＋connector 96）・fp8 2 本（sulphur 1,232・uncensored 1,344）の受理は不変です。単体テスト（G2）はアプリ側 2,928 件（2,874 合格・54 スキップ・0 失敗）・LTX 2.3 エンジン側 132 件（`--noconftest`・6 ファイル）・LTX 2.5 側 294 件（293 合格・1 スキップ）。GPU 自己点検は 19/19（C18＝int8、C19＝w4a8 の block swap 往復）合格です。
+
+### 121.9 オーナー目視
+
+**オーナー目視: 全件合格（2026-09-27）。** オーナーが次の項目を見て、すべて合格と判定しました（番号は目視を依頼したときの項目番号です）。
+
+- **項目 1**: REDGraft LTX 2.5（(e)）の単発 `8eaf613c…` を、同じ重みから変換した Q6_K GGUF の単発 `e6698dad…` と見比べる → 合格（画質は同等以上）。
+- **項目 2**: REDGraft＋スタイル LoRA `Pixar_Toon` の単発 `1de121be…` → 合格。
+- **項目 3**: REDGraft の IC-LoRA `deblur` `f084c583…` と Chained `63b0044e…` → 合格。
+- **項目 4**: LTX 2.3 の int8 系の 1 本 → 合格。
+- **項目 6**: LTX 2.5 公式 int8（(d)。`int8_convrot` の複製）の単発 `0f7b128c…` を、LTX 2.5 公式 GGUF の単発 `693bff44…` と見比べる → 合格。
+- **項目 7**: README「追加の transformer」節の量子化 safetensors の段落 → 合格。
+
+これで §3-168 は完結しました（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168）。C-4（int8 系の快適上限の較正）は、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32 として起票しました（手順の正本は §121.11）。
+
+### 121.10 申し送り
+
+- **`model_version` の無い LTX 2.5 の safetensors は、エンジン側でどうなるか未確認のままです**（§118.9 と同じ申し送り。実在の 3 本はすべて `model_version` を持っていたため、実例が無く確認できていません）。
+- **CivitAI の認証（ログイン）が要るファイル（DragonLeap 等）は未検証のままです。** 標準形式なら通る設計ですが、実在の変種が他にもあり得ます。
+- **ConvRot（アダマール回転）の逆回転コストは、G8 で実測済みです（fp8 比で 2.3 が 1.04 倍・2.5 が 1.13 倍）。** 最適化の要否はオーナー判断です（現状は据え置き）。
+- **変換ツール `Nz-GGUF-Converter-LTX23` は編集しません。NumPy 実装は数値の突き合わせ専用で、製品コードから import しません。**
+- **稼働中のサーバーは `install()` の内側で遅延 import する**ため、fp8 回帰基準（C-0）のような「改称前の挙動」を採るときは、改称のコミットより前に基準を採ってからコードを進める必要があります。今回は C-0 を先に済ませたので問題になりませんでしたが、次に同種の改称を行うときも同じ順序を守ってください。
+- **MCP 実機ランナーの `single`／`iclora`／`chain` サブコマンドは transformer の選択を切り替えません。** 現在ロード済みのパイプラインへそのまま投げるだけで、`--base-model`／`--transformer` 引数は記録用のラベルに過ぎません。ベースモデルや transformer を変えるジョブを送るときは、必ず `load` を先に呼んで切り替えを確認してから `single`／`iclora`／`chain`／`submit_generate` を呼んでください（§121.5 で 1 件、この落とし穴により無効になったジョブが出ました）。
+- **`wait_for_job` は、モデルの cold load 中や LoRA 読み込み中に一時的に `BACKEND_UNREACHABLE` を返すことがあります（2026-09-27 の実機投入で実際に確認・耐性追加済み）。** サーバーが立ち上がったばかりの直後や、LoRA 読み込みでサーバーが一時的に応答しない間にポーリングすると誤って失敗と判定しかねません。実際に `single --tag c0_23_fp8_pixar` で `wait_for_job` が一時的に `BACKEND_UNREACHABLE` を返しながらサーバー側ではジョブが正常に完走している事例があり、以後は実機ランナー側で「短い待機を挟んで再試行し、1 回でも成功したら連続失敗カウントをリセットする」耐性（連続 6 回＝約 30 秒まで）を追加しました。実機の門（G3〜G8）のポーリングには、この種の短い待機と再試行の耐性を持たせてください。
+- **サブエージェントへ外部ダウンロード調査を委ねるときは、取得したファイルのサイズを必ず検証してください。** CivitAI の調査で、HTTP の Range ヘッダを無視する応答により 750 MB だけ受信した不完全なファイルができる事故が実際に起きました（§121.5。気づいて即削除）。
+- **keep_resident 2 本の同一性判定は、ファイル全体の SHA-256 ではなく映像／音声のストリーム MD5 で行ってください。** 2026-09-27 の実機投入で、(a) の keep2 が「PSNR 無限大・SSIM 1.0 なのにファイル全体 SHA-256 だけ不一致」という結果になりました。原因は mp4 コンテナのメタデータ（§3-164 で埋め込む job_id 等）が 2 本で異なるためで、映像・音声それぞれのストリーム MD5（`-map <selector> -c copy -f md5 -`）は完全一致していました。以後 keep_resident・fp8 回帰（G6）の同一性判定は、ファイル全体 SHA-256 ではなくストリーム MD5 を合否基準にしてください（ファイル全体 SHA-256 は参考値として記録するだけにとどめます）。
+- **LTX 2.3 公式 GGUF（`LTX-2.3-22B-distilled-1.1-Q4_K_M`）の登録名は `default` です。** LTX 2.5 公式 GGUF の登録名も `default`（同名で base_model が異なるだけ）なので、比較や切り替えのログを読むときは base_model と合わせて確認してください。
+- **connector の復元時間と、EP（埋め込み処理器）常駐オン／オフでの再発の有無は、G8 の今回の台本では自動化していません。** `metadata.json` に該当の計測フィールドが無く、追加の計測実装が必要です（次回の課題）。
+
+### 121.11 C-4 較正の手順（v2・敵対的レビュー反映・2026-09-27）
+
+**位置づけ**: C-4（重みの種別ごとの快適上限の較正）の実施手順です。**本節（§121.11）が実施の正本です**（v1 に対する敵対的レビュー〔重大 2／主要 6／軽微 7／過剰設計 5〕を反映した v2 の内容）。較正台の README（`outputs/comfort-calib-2026-09-27/README.md`）は実施のための写し（開発機のローカルのみ・git 追跡外）で、実施時には両方に結果を追記します。**実施はまだしていません。** 実施は実機の門 G3〜G8（§121.4）の後、日を分けて行います（台帳は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32）。
+
+**前提（事実）**:
+- 1 ランの周期は、LTX 2.5 全 on で基準点 約 4 分・重い点 約 7 分、LTX 2.3 既定構成で基準点 約 5.5 分・重い点 約 8.5 分、変換器の切り替えは約 8 分（load＋アイドル較正 3 分＋捨てラン）です。ConvRot（アダマール回転）を伴う腕はこれより伸びると見込み、G8 で実測します。
+- §13.1（COMFORT_LIMIT_TABLE）の LTX 2.5 fp8（guillaume）は実機に無いため、基準は `ltx25_uncensored_v1.1-fp8_scaled` で新たに 2 回一致の境界を取り直します。
+- transformer_blocks の常駐量（ヘッダ実測）は Kijai 17.35 GiB・fp8mixed 18.76 GiB・silveroxides 18.77 GiB・LTX 2.5 int8_convrot 17.35 GiB・LTX 2.5 uncensored fp8 17.32 GiB・LTX 2.3 w4a8 9.8 GiB（Q4_K_M の約 11.9 GiB より軽い）です。Kijai と fp8mixed のブロック差は約 1.4 GiB（快適上限比で約 1.2 ポイント）で、ファイルサイズの差の大半は常駐に影響しない周辺コンポーネント（VAE・vocoder・投影）です。
+- LTX 2.3 の既定構成には製品の行がありません。既定構成の値は診断値（fp8 との比較材料）として記録します。
+- 判定は規則 v3（stage2 窓と restore 窓・基準点比 +300 MB・10 標本未満は判定不能）を使い、境界の材料は 2 回一致した点だけとします。
+
+**問い**: Q1＝REDGraft 混在（LTX 2.5）の線は fp8 より上か、Q6_K GGUF（1080p 42,840 快適・44,880 溢れ）まで届くか。Q2＝LTX 2.5 int8_convrot（公式複製）の線は fp8 と同じか。Q3＝LTX 2.5 の 2 種（REDGraft・int8_convrot）は単一値で表せるか（720p で確認）。Q4＝LTX 2.3 int8（silveroxides＝fp8mixed とブロック重量・層数が同じ）は既定構成で fp8 と同じか。Q5＝LTX 2.3 w4a8 は fp8 より上か、全 on で測れるか（入口判定で決める）。（任意）Q4'＝LTX 2.3 Kijai（ConvRot・transformer のみ）は silveroxides と同じか（時間が余れば測ります）。
+
+**判定規則**（計測前に固定）: 刻みは 1080p の潜在 1 コマ（2,040 トークン）。**比較は「2 回快適の上端 c」だけで行い**、溢れ側は「c の 1 段上が 2 回快適でない」ことだけを要件にします（1 回溢れ＋1 回快適の「割れ」は上端にしません）。「同じ」は int8 側の c が同一プロセスの fp8 の c と同じ段であることで、1 段でもずれれば「上／下」と判定します。下の段が溢れて上の段が快適という**逆行**が出た場合は両点を撮り直し、それでも残れば「非単調」と記録してその腕を止めます。単一値で表せるかどうかは、1080p の c 以下の最大の 720p 点が 2 回快適かつ c の 1 段上以上の最小の 720p 点が溢れる、の両方が成り立つかで判定します。
+
+**腕と点**（幾何は 1080p を主、720p は LTX 2.5 の確認のみ。連結生成と 896×1152 は測りません。優先度 P1〜P4 の順で実施）:
+- **u_**（LTX 2.5 uncensored fp8・全 on・P1・LTX 2.5 の最初）: 145f・153f を測り、境界の両側を撮り直して 2 回一致の基準を作ります。
+- **r_**（REDGraft 混在・全 on・P1）: 153f・161f から開始し、溢れ側は下方向・快適側は上方向（169f が 2 回快適なら「線まで」で止める）。境界両側を撮り直し。720p 確認は 1080p の c 以下の最大点（2 回）と c の 1 段上以上の最小点（1 回）。
+- **h_**（LTX 2.5 int8_convrot・全 on・P2）: u_ と同じ規則。720p は u_ と結果が違ったときだけ測ります。
+- **f_**（LTX 2.3 fp8mixed・既定構成・P2・LTX 2.3 の最初）: 121f・129f（既定構成）から開始し、境界両側を撮り直します。
+- **x_**（LTX 2.3 silveroxides int8・既定構成・P2）: f_ と同じ規則。
+- **j_**（LTX 2.3 w4a8・入口判定 G-C で全 on か既定構成かを決める・P2）: 全 on の捨てランと 89f 基準点のコミット最大が、どちらも上限比 88% 未満なら全 on、以上なら既定構成で測ります。
+- **k_**（LTX 2.3 Kijai int8_convrot・既定構成・P4・任意）: 時間が余ったときだけ測ります。
+
+削ったもの: 連結生成の腕・REDGraft の Q6_K 対照・Kijai の全 on 試し・896×1152。見込みは約 48〜53 ラン・約 6〜7 時間（上限 8 時間。ConvRot の遅れは未含）。
+
+**実行順**: LTX 2.5 → LTX 2.3 の順で、ベースモデルの切り替えは 1 回だけ（u_→r_→h_→〔切替〕→f_→x_→j_→(k_)→復元）。各腕は `load`→**別の呼び出しで** `idle-calib --minutes 3`→捨てランを次の弾の先頭に入れ、弾と弾の間は冷却 150 秒以上あけます。
+
+**安全弁**:
+1. `server start` は `server status` が「稼働中」（0）のときだけ、`--pid` なしで打ちます（ポートが閉じていると較正台が自分でサーバーを起動してしまうため。閉じていたら止めてオーナーへ報告します）。
+2. 各弾の起動前に、コミット監視ログ（`commit_log.csv`）の最終行の時刻が 10 秒以内であることを確認します（監視が死ぬとコミットの停止線が素通りになるため）。90% で警戒、95% で次弾を止めます（実行中のジョブは完走させます）。
+3. 1 点 1 計画ファイルとし、監督が 1 弾ずつ手動で起動・終了通知の後に結果を読みます（待ち受けスクリプトは使いません）。起動前に前回のプロセスが残っていないことを確認します。
+4. 止める条件は `transformer_used` が要求と不一致・ワーカー落ち・422・待ち時間切れ（3600 秒）・コミット 95% です。他の `*_used`（`fused_gguf_dequant_kernel_used` 等）の不一致は記録して続行します。
+5. 計測中はオーナーが Create／Batch を使わない前提です（開始前に了承を得ます）。各弾の前にジョブ待ち行列が空であることを確認します。
+6. サーバーは止めず、再起動もしません。
+7. 終了時に `restore-state` を 2 回実行し、開始時の選択（LTX 2.3＝fp8 Sulphur・LTX 2.5＝default）へ戻します。復元先は開始前に記録した `original_state.json` と一致することを確認します。
+
+**較正台**: 複製先 `outputs/comfort-calib-2026-09-27/`（2026-09-26 の較正台のコードを複製し、腕・計画ファイル・パスの差分のみ変更。`original_state.json`・`calib/`・`plans/`・`runs/`・ログ類は複製しません。差分は `harness_diff.txt` に記録）。
+
+**成果物**: 一次記録 `outputs/comfort-calib-2026-09-27/RESULTS.md`（種別ごとの 1080p 境界・LTX 2.5 の幾何ごと境界・基準点の torch 割当ピークと専有ピーク・コミット最大・所要時間・出来事・ジョブ ID）。[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) **第 14 節**「int8 系 safetensors での実測（配信値は未変更）」（LTX 2.5・LTX 2.3・同一プロセスの対照・留保の 4 小節と、「§1-31 への材料」小節。行の案はこの小節に置き、台帳 §1-31 には第 14 節への参照 1 つだけを置きます）。本節（VERIFICATION_LOG §121）に結果を追記します。C-4 の完了は台帳 §1-32 のクローズ（CLOSED への移送）で表します。[`Outputs-archive/comfort-calib-2026-09-27/`](Outputs-archive/comfort-calib-2026-09-27/) へも複写します。
+
+**日程**: C-1〜C-3 の実機の門 G3〜G8 は、5 本の変換器で 2026-09-27 に完了しました（§121.4）。C-4 は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32 として、GPU を約 6〜8 時間占有する了承を得たうえで日を改めて実施します。較正の出力と検証用 safetensors は削除せず残し、削除はオーナー判断とします。
+
+**v1→v2 の敵対的レビューの採否（要点）**: **重大 2 件**（`server start` がポート閉鎖時に較正台自身を起動させてしまう／コミット監視が止まると停止線が素通りになる）はいずれも採用し、上の安全弁 1・2 に反映しました。**主要 6 件**（u_ を最初に測って 2 回一致の基準にする・逆行と割れの判定規則・k_ の全 on 試しを削り j_ を入口判定に改める・ブロック差の数値の裏取り・止める条件を `transformer_used` 不一致だけに絞る・切り替え直後と弾間の冷却）はすべて採用しました。**軽微 7 件**（720p の例示を規則で書く・自己検査節のジョブ ID 照合を削る・復元先の確認・`load` と `idle-calib` を別呼び出しにする・q_ 腕（REDGraft の Q6_K 対照）の削除・ConvRot の遅さが判定を甘くする向きを留保に記す・成果物の置き方）もすべて採用しました。**過剰設計の指摘**（連結生成腕の削除・h_ の 720p 条件付け・q_ 削除・k_ の全 on 試し削除・x_ を優先し k_ は任意にする）も採用し、上の腕と点の記述に反映済みです。

@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-27（§3-168 の状態欄を「実機の門 G3〜G8 合格（2026-09-27）・オーナー目視待ち → main merge → C-4」に更新——オーナーが `run.bat` で起動したサーバー〔コミット `78226b6`〕上で 5 本の変換器（(a)Kijai・(b)silveroxides・(c)JoaoZaokk・(d)LTX 2.5 公式複製・(e)REDGraft）すべてが完走し、G3〜G8 全門が合格したことを反映。前回 2026-09-27: §3-168 の状態欄を現況に更新——C-3〔`asym_w4a8_int8`〕までコードが完結し dev `c18d9aa` に積んであること、客観検査 G1・G2 は合格、実機の門 G3〜G8 はサーバー起動待ちであること、C-4〔較正〕は手順 v2 まで確定していることを反映。§1-31 の判断材料に、較正値の材料は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節〔C-4 の後〕である旨の参照を追記。前回 2026-09-26: §3-168「ComfyUI 標準の int8 safetensors を置くだけで使えるようにする」を起票し、§3-167 の状態欄に int8 の扱いを §3-168 へ移した旨を追記。同日それ以前: §1-31 の判断材料に、操作パネルの快適上限表へ暫定で足した fp8 の 2 列も吸収する旨を追記。さらにそれ以前: §1 を立て直し §1-31「快適上限のマニフェスト一本化」を起票し、§3-167 の判断事項 2 はそこへ移した）
+- 作成: 2026-07-15／最終更新: 2026-09-27（§3-168 をオーナー目視全件合格でクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移し、その C-4〔int8 系の快適上限の較正〕を §1-32 として起票。§1 冒頭の案内・§1-31 の種別の書き方・§3-167 の状態欄と出典を現況に合わせた。前回 2026-09-27: §3-168 の状態欄を「実機の門 G3〜G8 合格・オーナー目視待ち」に更新）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31 と §1-32 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -17,9 +17,18 @@
 
 ### 1-31. 快適上限のマニフェスト一本化（起票：2026-09-26）
 
-- **概要**: 快適上限の線（配信値）を `config.py` の既定値から、ベースモデルごとの定義ファイル（`scripts/manifests/*.json`）へ移して正本を 1 箇所にする。**同じ作業の中で、読み込んだ重みファイルの種別（GGUF の量子化・fp8）ごとの行を足し、§3-167 B-3 の較正値を配信値へ反映する**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13節）。サーバーが選択中の transformer の種別を `GET /models` で名乗り、操作パネルと Gradio は既存の「加速設定で行を照合する」仕組みに種別を 1 項目足すだけにする。UI の隠し方の表（`featureScope.ts`）は触らない。
-- **判断材料**: 反映できる実測は LTX 2.5 の fp8（快適側の上端 38,304〜39,424・幾何差は潜在 1 コマ未満で単一の値で表せる）と Q6_K の 2 件（同 第10節＝REDGraft 2.5 は解像度で割れる・第11節＝Sulphur 2.3 は線は動かないが w46 に孤立した溢れ）。LTX 2.3 の fp8 は全 on を測り切れていない（第13.2節）。種別の数は絞る（規則は単純に・例外を増やさない）。`config.yaml` の表ごと上書きを残すか 1 本に絞るかは設計時に決める。パネル側の手書き例外（`comfortDisplayTable.ts` の Q6_K 3 点）はこの表に吸収する。fp8 の 2 列（2.5 の固定の線・2.3 の 1 点。フロントエンド `Docs/DEVLOG.md` §126）も吸収する。**int8 系（`int8_tensorwise`・`asym_w4a8_int8`）の較正値の材料は、§3-168 の C-4 較正が終わったあとの [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節です**（C-4 の手順は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.11 が正本）。
+- **概要**: 快適上限の線（配信値）を `config.py` の既定値から、ベースモデルごとの定義ファイル（`scripts/manifests/*.json`）へ移して正本を 1 箇所にする。**同じ作業の中で、読み込んだ重みファイルの種別（GGUF の量子化・fp8・int8 系〔`int8_tensorwise`・`asym_w4a8_int8`〕）ごとの行を足し、§3-167 B-3 の較正値を配信値へ反映する**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13節）。サーバーが選択中の transformer の種別を `GET /models` で名乗り、操作パネルと Gradio は既存の「加速設定で行を照合する」仕組みに種別を 1 項目足すだけにする。UI の隠し方の表（`featureScope.ts`）は触らない。
+- **判断材料**: 反映できる実測は LTX 2.5 の fp8（快適側の上端 38,304〜39,424・幾何差は潜在 1 コマ未満で単一の値で表せる）と Q6_K の 2 件（同 第10節＝REDGraft 2.5 は解像度で割れる・第11節＝Sulphur 2.3 は線は動かないが w46 に孤立した溢れ）。LTX 2.3 の fp8 は全 on を測り切れていない（第13.2節）。種別の数は絞る（規則は単純に・例外を増やさない）。`config.yaml` の表ごと上書きを残すか 1 本に絞るかは設計時に決める。パネル側の手書き例外（`comfortDisplayTable.ts` の Q6_K 3 点）はこの表に吸収する。fp8 の 2 列（2.5 の固定の線・2.3 の 1 点。フロントエンド `Docs/DEVLOG.md` §126）も吸収する。**int8 系（`int8_tensorwise`・`asym_w4a8_int8`）の較正値の材料は、§1-32 の較正が終わったあとの [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節です**（§1-32）。
 - **出典**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第10.4・11.4・12.4・13節、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §119.5、`config.py` の `_default_comfort_budgets()`・`services/base_models.py`・`services/model_registry.py`（`GET /models`）、`webui/src/shell/comfortTable.ts`・`comfortDisplayTable.ts`、`gradio_ui/comfort.py`、`tests/test_comfort_budgets.py`（キー集合の固定）。
+
+### 1-32. int8／w4a8 safetensors の快適上限の較正（§3-168 C-4）（起票：2026-09-27）
+
+- **目的**: ComfyUI 標準の int8 系 safetensors（`int8_tensorwise`〔ConvRot＝アダマール回転の前処理あり／なし〕と `asym_w4a8_int8`〔4 ビットの重みをコードブックで復元する方式〕）の transformer で、快適上限の線が重みの種別ごとにどこにあるかを「測って結論」します。本項は測って結論を書いたところで閉じ、配信値への反映や画面の受け皿は扱いません（反映は §1-31）。
+- **手順の正本**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.11（手順 v2。問い・判定規則・腕と点・安全弁）と、較正台 `outputs/comfort-calib-2026-09-27/README.md`（計画ファイル 33 本を作成済み・selftest 済み）です。
+- **実施の条件**: 較正台の `server start` は、`server status` が稼働中（0）のときだけ `--pid` なしで打ちます（サーバーが閉じていたら止めてオーナーへ報告します）。所要は 6〜8 時間で、その間 GPU を占有します。計測中はオーナーが Create／Batch を使わない前提なので、開始前に了承を得ます。
+- **成果物**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節「int8 系 safetensors での実測（配信値は未変更）」と、一次記録 `outputs/comfort-calib-2026-09-27/RESULTS.md` です。結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121 にも追記します。
+- **§1-31 との関係**: 本項の第14節が、§1-31 で int8 系の行を作るときの材料になります。
+- **着手**: オーナーの時間があるときです。
 
 ---
 
@@ -183,15 +192,9 @@
   1. **第12.4節の最終判断**: Sulphur-2 Q6_K の w46 の VRAM 溢れを配信値へ反映するか。材料は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13.4節です。反映する場合の受け皿は §1-31（重みの種別ごとの行）です。
   2. **配信値への反映**: §1-31「快適上限のマニフェスト一本化」の中で行う（起票済み・2026-09-26）。
   3. **§3-167 全体を CLOSED へ移すか**。
-  4. **int8 への拡張は §3-168 へ（2026-09-26）**。
+  4. **int8 への拡張は §3-168 で完結しました**（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168）。int8 系の快適上限の較正は §1-32 です。
 - **概要**: CivitAI などで配布される LTX 2.3／2.5 のファインチューン（多くは fp8 の safetensors）を、変換せずに `models\<系統>\Weights\` へ置くだけで選べるようにする。A1111 SD WebUI の「モデルを置けば使える」体験が目標。対象は fp8 に限る。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117（裁定・設計・判定規則・VRAM の見立て・申し送り）・§118（LTX 2.5）・§119（fp8 の快適上限の較正）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13節、`sft_fp8_format.py`、`engine/fp8/`、`engine25/`、README「追加の transformer（GGUF／fp8 safetensors）/ LoRA を配置する」。
-
-#### 3-168. ComfyUI 標準の int8 safetensors（int8_tensorwise・asym_w4a8_int8）を models ディレクトリに配置するだけで使えるようにする（起票：2026-09-26）
-
-- **状態**: **コードは C-3（`asym_w4a8_int8`）まで実装が完結し、dev ブランチ `c18d9aa` に積んであります。** 進んだ段は 改称（C-1a）→C-1b（LTX 2.3 の `int8_tensorwise`。エンジン外・エンジン内）→C-1c（敵対的コードレビュー）→C-2（LTX 2.5 の `int8_tensorwise`。実装はコード共通で追加なし）→C-3（`asym_w4a8_int8`。LTX 2.3・2.5 同時。エンジン外・エンジン内）→C-3c（敵対的コードレビュー）です。客観検査のうち **G1（NumPy 突き合わせ）・G2（単体テスト全件）は合格しました**。**実機の門 G3〜G8 合格（2026-09-27）・オーナー目視待ち → main merge → C-4 です。** 2026-09-27 にオーナーが `run.bat` でサーバー（コミット `78226b6`）を起動し、5 本の変換器（(a)Kijai・(b)silveroxides・(c)JoaoZaokk・(d)LTX 2.5 公式複製・(e)REDGraft）すべてで G3〜G8 が合格しました（ジョブ 39 件・失敗 0。詳細は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.4・§121.6〜§121.8）。**続く段はオーナー目視（未実施）→ main マージ→ C-4（重みの種別ごとの快適上限の較正。敵対的レビュー反映済みの手順 v2 まで確定）**です。各段の合否は監督（Claude）が MCP（Model Context Protocol。ツール呼び出しの共通規格）経由の客観検査 G1〜G8 で判断します（内容は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.4）。C-4 の手順は同 §121.11 が正本です。
-- **概要**: §3-167 で完成させた fp8（重みを 8 ビットの浮動小数点で持つ形式）の safetensors を置くだけで使う仕組みを、同じ考え方のまま int8（重みを 8 ビットの整数で持つ形式）へも広げるテーマです。**到達条件は REDGraft LTX 2.5（CivitAI 3250230）が動くこと**です。調べたところ、この配布物は独自形式ではなく、ComfyUI（画像・動画生成の定番 UI）が標準で読む 2 つの量子化形式——`int8_tensorwise`（層ごとに 1 個の倍率を持つ int8。多くはアダマール回転という前処理＝ConvRot を伴う）と `asym_w4a8_int8`（4 ビットの重みをコードブックで復元する方式）——の混在でした。**復元方式はオーナー裁定により、fp8 と同じく forward（推論の順伝播）のたびに bf16（16 ビット浮動小数点の一種）へ戻す方式とし**、ComfyUI 自身の int8 行列積（活性値側も量子化してから掛ける方式）は模倣しません。**fp8 専用だった経路を「量子化 safetensors 一般」へ一般化し、その上に int8 を載せます**（fp8 と並ぶ別経路を新設するのではなく一本化。ファイル名・クラス名などの改称を伴いますが、ワーカーへのペイロード・API・UI は変わりません）。ComfyUI の受理集合に無い形式（`nvfp4` など）や、印と重みの食い違い、補助テンソルの過不足があるものは断ります。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121（判定規則と設計の正本）、`Nz-GGUF-Converter-LTX23` の `comfy_dequant.py`（ComfyUI 標準 2 形式の NumPy（Python の数値計算ライブラリ）実装。移植元・数値の突き合わせ相手として使い、編集はしません）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117（裁定・設計・判定規則・VRAM の見立て・申し送り）・§118（LTX 2.5）・§119（fp8 の快適上限の較正）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13節、`sft_quant_format.py`（旧名 `sft_fp8_format.py`）、`engine/sft_quant/`（旧名 `engine/fp8/`）、`engine25/`、README「追加の transformer（GGUF／量子化 safetensors）/ LoRA を配置する」。
 
 ---
 

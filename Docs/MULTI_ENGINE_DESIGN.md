@@ -69,7 +69,7 @@
 
 **記述子×KVの4組はすべて契約テストで固定してある**（LTX 2.3 の記述子×2.3のKV／LTX 2.5 の記述子×2.5のKV は通過、交差する2組は明示的な422）。
 
-**量子化 safetensors（fp8／int8／w4a8）の transformer（fp8 は LTX 2.3 が 2026-09-25〜・LTX 2.5 が 2026-09-26〜・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167。int8 系〔`int8_tensorwise`・`asym_w4a8_int8`〕は両エンジンとも 2026-09-26〜・同 §3-168）は、KV の代わりにヘッダを材料にして同じ2段へ流す。** safetensors には GGUF の KV が無いので、次のように読み替える。
+**量子化 safetensors（fp8／int8／w4a8）の transformer（fp8 は LTX 2.3 が 2026-09-25〜・LTX 2.5 が 2026-09-26〜・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167。int8 系〔`int8_tensorwise`・`asym_w4a8_int8`〕は両エンジンとも 2026-09-26〜・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168）は、KV の代わりにヘッダを材料にして同じ2段へ流す。** safetensors には GGUF の KV が無いので、次のように読み替える。
 
 - **1段目（系統）**: ヘッダの**指紋**——テンソル名の接頭辞が `model.diffusion_model.` か接頭辞なし（2026-09-26〜。どちらかを自動で見分ける）、`transformer_blocks` がちょうど 48 個（0〜47）、`__metadata__` に `config`（`transformer` を含むモデル設定の JSON）がある——に合格したことを根拠に `general.architecture = ltxv` と見なす。
 - **2段目（世代）**: `__metadata__.model_version`（`2.3.0` など）をそのまま `model_version` として渡す。無ければキーを入れず、上と同じく WARNING で通す。
@@ -78,7 +78,7 @@
 
 **LTX 2.5 も同じ2段を通る（fp8 は 2026-09-26〜・§3-167 B-2）。** ワーカーへのペイロードは変えていない——transformer は GGUF でも量子化 safetensors でも `transformer_path` 1 本で渡り、`engine25/pipeline25.py` が拡張子で読み方を振り分ける。受け入れ規則は LTX 2.5 の実在の配布物に合わせて 3 点広げた（両エンジン共通）。改定の中身と、実在の配布物が `model_version` を持っていたかどうかの確認は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §118 が正本である。
 
-**int8 系（`int8_tensorwise`・`asym_w4a8_int8`）も同じ2段を通る（2026-09-26〜・§3-168。LTX 2.3・LTX 2.5 とも）。** 到達条件だった REDGraft LTX 2.5（CivitAI 3250230）は独自形式ではなく、ComfyUI 標準のこの 2 形式の混在だった。判定規則は `sft_quant_format.py`（旧名 `sft_fp8_format.py`）に、復元処理は `engine/sft_quant/`（旧名 `engine/fp8/`）に、fp8 専用だった名前を量子化全般の名前へ改めたうえで実装済みである。改定の中身は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121 が正本である。
+**int8 系（`int8_tensorwise`・`asym_w4a8_int8`）も同じ2段を通る（2026-09-26〜・§3-168。LTX 2.3・LTX 2.5 とも）。** 到達条件だった REDGraft LTX 2.5（CivitAI 3250230）は独自形式ではなく、ComfyUI 標準のこの 2 形式の混在だった。判定規則は `sft_quant_format.py`（旧名 `sft_fp8_format.py`）に、復元処理は `engine/sft_quant/`（旧名 `engine/fp8/`）に、fp8 専用だった名前を量子化全般の名前へ改めたうえで実装済みである。**方式（`fp8`・`fp8_scaled`・`int8`・`int8_convrot`・`w4a8`）は `sft_quant_format.SCHEME_TABLE` の 1 表が正本で**、検査が返す `Layout.layers`（層名→方式の辞書）を両エンジンのローダがそのまま受け取り、補助テンソルの正規化と復元（`engine/sft_quant/dequant.py`）もこの表から導く。**組み込み点**は、LTX 2.3 が `engine/pipeline/fast_video_pipeline.py` の `_install_safetensors`（ワーカーが `safetensors_transformer_path` を受けたとき。キーの契約は `Videomni_Backend_Specification.md` §4.2）、LTX 2.5 が `engine25/pipeline25.py` の拡張子による振り分け（`Ltx25ProgressStage.from_safetensors`）である。改定の中身は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121 が正本である（判定規則 §121.3・設計 §121.2）。
 
 ### 2.3 KVを読む経路
 
@@ -108,7 +108,7 @@
 
 > **2026-09-26 注記**: B-2 で LTX 2.5 にも広げた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §118）。指紋の接頭辞は `model.diffusion_model.` つきと接頭辞なしの両方を自動で見分ける（§2.2 の末尾）。
 
-> **2026-09-26〜27 注記**: §3-168 で、fp8 専用だった経路を「量子化 safetensors 一般」へ一般化し、ComfyUI 標準の int8 系（`int8_tensorwise`・`asym_w4a8_int8`）にも広げた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121）。指紋・キーの読み替え方は fp8 と共通で、モジュールは `sft_quant_format.py`（旧名 `sft_fp8_format.py`）・`engine/sft_quant/`（旧名 `engine/fp8/`）へ改称した。**コードは dev ブランチで C-3 まで実装完結しているが、実機の門（G3〜G8）はサーバー起動待ちで未実施**（§121.4）。
+> **2026-09-26〜27 注記**: §3-168 で、fp8 専用だった経路を「量子化 safetensors 一般」へ一般化し、ComfyUI 標準の int8 系（`int8_tensorwise`・`asym_w4a8_int8`）にも広げた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121）。指紋・キーの読み替え方は fp8 と共通で、モジュールは `sft_quant_format.py`（旧名 `sft_fp8_format.py`）・`engine/sft_quant/`（旧名 `engine/fp8/`）へ改称した。**実機の門（G3〜G8）とオーナーの目視に合格し、2026-09-27 に完結した**（§121.4・§121.9。台帳は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168）。
 
 ### 2.5 フールプルーフは作らない。エラー品質で解決する 【オーナー裁定】
 

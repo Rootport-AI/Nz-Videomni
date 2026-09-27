@@ -1,4 +1,4 @@
-> **このフォルダは、§3-168（ComfyUI 標準の int8 safetensors を置くだけで使えるようにするテーマ）の実機検証で使った道具と結果一式のスナップショットである（2026-09-27 複写）。** 原本はセッションの scratchpad（`...\scratchpad\int8\`。git 追跡外・セッション終了後は消える一時領域）にあり、正本の結論は [`../../VERIFICATION_LOG.md`](../../VERIFICATION_LOG.md) §121（§121.4・§121.6〜§121.8 に実機の門 G3〜G8 の結果表）と台帳 [`../../PENDING_TASKS.md`](../../PENDING_TASKS.md) §3-168 に転記済みである。本フォルダは、その転記の元になったツールと生データを git 追跡下に残し、読者が結論の裏取りや道具の再利用をできるようにするために複写した。**mp4 本体は複写していない**（結果の数値・ジョブ ID・ハッシュ先頭 8 桁だけで足りるため）。
+> **このフォルダは、§3-168（ComfyUI 標準の int8 safetensors を置くだけで使えるようにするテーマ）の実機検証で使った道具と結果一式のスナップショットである（2026-09-27 複写）。** 原本はセッションの scratchpad（`...\scratchpad\int8\`。git 追跡外・セッション終了後は消える一時領域）にあり、正本の結論は [`../../VERIFICATION_LOG.md`](../../VERIFICATION_LOG.md) §121（§121.4・§121.6〜§121.8 に実機の門 G3〜G8 の結果表）と台帳 [`../../PENDING_TASKS_CLOSED.md`](../../PENDING_TASKS_CLOSED.md) §3-168 に転記済みである。本フォルダは、その転記の元になったツールと生データを git 追跡下に残し、読者が結論の裏取りや道具の再利用をできるようにするために複写した。**mp4 本体は複写していない**（結果の数値・ジョブ ID・ハッシュ先頭 8 桁だけで足りるため）。
 
 # §3-168 int8／w4a8 safetensors 実機検証ツール一式（2026-09-27 実施分）
 
@@ -25,5 +25,5 @@
 ## 対応関係
 
 - 実機の門 G3〜G8 の結果と判定: [`../../VERIFICATION_LOG.md`](../../VERIFICATION_LOG.md) §121.4（総括・G6/G7/G8）・§121.6（C-1＝(a)Kijai・(b)silveroxides）・§121.7（C-2＝(d)LTX 2.5 公式複製）・§121.8（C-3＝(c)JoaoZaokk w4a8・(e)REDGraft）
-- 台帳の状態: [`../../PENDING_TASKS.md`](../../PENDING_TASKS.md) §3-168
+- 台帳の状態: [`../../PENDING_TASKS_CLOSED.md`](../../PENDING_TASKS_CLOSED.md) §3-168（C-4 は [`../../PENDING_TASKS.md`](../../PENDING_TASKS.md) §1-32）
 - C-4（較正）の手順の正本: [`../../VERIFICATION_LOG.md`](../../VERIFICATION_LOG.md) §121.11

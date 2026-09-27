@@ -368,7 +368,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | op | 主なフィールド | 意味 |
 |----|----------------|------|
-| `load` | `checkpoint_path`, `gemma_root`, `upsampler_path`, `gguf_transformer_path`, `gguf_gemma_path`, `component_video_vae_path`, `component_audio_vae_path`, `component_text_projection_path`, `component_video_vae_pruned_path`, `gguf_per_layer_quant`, `block_swap_blocks_on_gpu`, `vae_spatial_tile_size`, `vae_temporal_tile_size`（fp8 safetensors の transformer を選んだときだけ末尾に `safetensors_transformer_path`） | パイプラインを1度だけ構築 |
+| `load` | `checkpoint_path`, `gemma_root`, `upsampler_path`, `gguf_transformer_path`, `gguf_gemma_path`, `component_video_vae_path`, `component_audio_vae_path`, `component_text_projection_path`, `component_video_vae_pruned_path`, `gguf_per_layer_quant`, `block_swap_blocks_on_gpu`, `vae_spatial_tile_size`, `vae_temporal_tile_size`（量子化 safetensors〔fp8／int8〕の transformer を選んだときだけ末尾に `safetensors_transformer_path`） | パイプラインを1度だけ構築 |
 | `generate` | `prompt`, `seed`, `height`, `width`, `num_frames`, `frame_rate`, `num_steps`, `images:[{path,frame_idx,strength}]`, `output_path` | 1本生成し `output_path` へ mp4 を書く |
 | `shutdown` | （なし） | best-effort 解放 → `exit 0` |
 
@@ -1254,7 +1254,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 }
 ```
 
-**トップレベルの `categories` ブロックはキー・順序・値とも従来のまま**で、意味も従来どおり「アクティブなベースモデルのカテゴリ一覧」である（ベースモデルが 1 つしかなかった時代も同じ意味だった）。旧来の形しか知らないクライアント（`gradio_ui/adapters.py` など）は無改修で動く。**fp8 safetensors の transformer が並ぶようになっても（2026-09-25〜）`entries[]` の形 `{name, path, is_default, exists, source}` は変わらない**——形式を示す欄は足しておらず、`path` の拡張子で見分けられる。`installed` / `present` / `missing_categories` は、未導入のベースモデルを「選べるが導入案内を出す」形で見せるための材料である。
+**トップレベルの `categories` ブロックはキー・順序・値とも従来のまま**で、意味も従来どおり「アクティブなベースモデルのカテゴリ一覧」である（ベースモデルが 1 つしかなかった時代も同じ意味だった）。旧来の形しか知らないクライアント（`gradio_ui/adapters.py` など）は無改修で動く。**量子化 safetensors（fp8 は 2026-09-25〜、int8 系は 2026-09-26〜）の transformer が並ぶようになっても `entries[]` の形 `{name, path, is_default, exists, source}` は変わらない**——形式を示す欄は足していない。拡張子で分かるのは GGUF か safetensors かまでで、fp8／int8 の種別を示す欄は無い（名乗らせるのは台帳 §1-31 の予定）。`installed` / `present` / `missing_categories` は、未導入のベースモデルを「選べるが導入案内を出す」形で見せるための材料である。
 
 **`category_order`（配列）は `base_models[]` の各要素に必ず入る**（`api/models_registry.py::list_models` が常に出力する）。中身はそのベースモデルの記述子（`scripts/manifests/<base>.json`）の `categories` のキー宣言順そのもので、表示順の正本はこの配列である——JSON オブジェクトのキー順は転送の途中で保たれる保証が無いため、順序は**値として運ぶ**という決めにしてある。画面のモデル選択欄はこれを読み、交換頻度の高い順（動画モデル → テキストエンコーダ → 動画 VAE → 音声モデル）に並べる。
 

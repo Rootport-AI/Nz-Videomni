@@ -1,5 +1,7 @@
 # §3-168 C-4「重みの種別ごとの快適上限の較正」手順書 v2（敵対的レビュー反映・2026-09-27）
 
+> 一次記録の複写。正本は `VERIFICATION_LOG.md` §121.11。
+
 v1（`c4_procedure_draft.md`）に対する敵対的レビュー（Opus・重大 2／主要 6／軽微 7／過剰設計 5）の採否を第 11 節に記す。**この v2 が実施の正本**（実施時に較正台の README と VERIFICATION_LOG §121 へ写す）。
 
 ## 0. 前提（事実）
@@ -64,7 +66,7 @@ v1（`c4_procedure_draft.md`）に対する敵対的レビュー（Opus・重大
 ## 6. 成果物
 - `outputs/comfort-calib-2026-09-27/RESULTS.md`（一次記録: 結論・環境・点と順番・判定の読み方・機械生成の表・表 1 種別ごとの 1080p 境界（fp8 対照と並べる）・表 2 2.5 の幾何ごと境界・表 3 基準点の torch 割当ピークと専有ピークの種別差・表 4 点ごとのコミット最大・表 5 所要時間（ConvRot と fp8 の比）・出来事・ジョブ ID）。
 - `COMFORT_LIMIT_TABLE.md` **第 14 節**「int8 系 safetensors での実測（配信値は未変更）」: 14.1 2.5／14.2 2.3／14.3 同一プロセスの対照／14.4 留保（種別ごとの行が製品に無い・各 1 ファイル・§13.1 のファイル消失で基準が uncensored・silveroxides と Kijai の差は ConvRot だけではない・ConvRot の遅さが判定を甘くする向き）／**「§1-31 への材料」小節**（行の案はここに置き、台帳 §1-31 には第 14 節への参照 1 つだけ）。第 1.1 節末尾を「第 10・11・13・14 節」「（Q6_K・fp8・int8）」に。
-- `VERIFICATION_LOG.md` §121 に C-4 の節（手順・門・結果要約・出来事・申し送り）。台帳 §3-168 の段の列に C-4 を足す。
+- `VERIFICATION_LOG.md` §121 に C-4 の節（手順・門・結果要約・出来事・申し送り）。C-4 の完了は台帳 §1-32 のクローズ（CLOSED への移送）で表す。
 - `Docs/Outputs-archive/comfort-calib-2026-09-27/` へ複写（RESULTS・README・progress・digest・commit_table）。
 
 ## 7. 実施の門と日程

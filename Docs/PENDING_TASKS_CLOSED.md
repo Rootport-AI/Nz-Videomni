@@ -2261,5 +2261,15 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: 客観検査 G1〜G8 がすべて合格し（**実数は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.4・§121.6〜§121.8 であり、本書には書き写さない**）、**オーナーの目視も 2026-09-27 に全件合格した**（同 §121.9）。
 - **クローズ理由**: 実機の門と目視の合格・オーナー受容。
 - **状態**: **クローズ（2026-09-27）。** ブランチは`dev`。
-- **残課題**: C-4（int8 系の快適上限の較正）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32 として起票した。そのほかの申し送りは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10。
+- **残課題**: C-4（int8 系の快適上限の較正）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32 として起票した。→ 2026-09-28 に §3-169 でクローズ。 そのほかの申し送りは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10。
 - **正本・出典**: 判定規則＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§121.3**、設計＝**§121.2**、検証の門＝**§121.4**、目視＝**§121.9**、較正の手順＝**§121.11**。コードの正本＝`sft_quant_format.py`（`SCHEME_TABLE`・`layer_schemes`）・`engine/sft_quant/`。コミット＝§121 の各節に一覧。
+
+### 3-169. int8／w4a8 safetensors の快適上限の較正（起票：2026-09-27、実施：2026-09-27〜28、クローズ：2026-09-28）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32（**同書側は欠番**）。本書§3-168（クローズ済みの直接読みの実装）の C-4（重みの種別ごとの快適上限の較正）として台帳へ起票された項目を、§2 を経ずに直接クローズした。**番号は3-169**（本書に同番号の記録は無いため無印）。
+- **到達条件**: ComfyUI 標準の int8 系 safetensors（`int8_tensorwise`・`asym_w4a8_int8`）で、快適上限の線が重みの種別ごとにどこにあるかを「測って結論」を出すこと。**達成した**（47 ラン・失敗 0・打ち切り 0・取り直し 0・規則からの逸脱 0）。
+- **結論の要約**: LTX 2.5 全 on は、fp8・REDGraft 混在・int8 ConvRot の 3 種の 1080p の境界が同じ段で揃った。REDGraft の safetensors は同系統の Q6_K GGUF より下だった。LTX 2.3 既定構成（診断値）は、fp8mixed と silveroxides int8 の境界が同じ段で揃い、Kijai int8 ConvRot だけ 2 段以上上だった。LTX 2.3 の w4a8 は、全 on で測れた唯一の量子化 safetensors として、線まで 2 回とも快適だった。**詳しい数値と表は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節と一次記録 `outputs/comfort-calib-2026-09-27/RESULTS.md` が正本です。**
+- **クローズ理由**: 「測って結論を出す」というスコープが完了した。反映（配信値・UI・マニフェスト）は別途検討（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31）。
+- **状態**: **クローズ（2026-09-28）。** ブランチは `dev`。**配信値は変えていない。**
+- **残課題**: Kijai int8 ConvRot の真の境界（梯子の上限より上）は未測定（追うかはオーナー判断）。LTX 2.3 の fp8・int8 系の全 on の境界は、今回は測っていない（第13.2節で fp8 の全 on がコミットの上限に当たったため、計画の段階で既定構成の診断に絞った）。生成時間の比からの Go／No-go 判断は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-33 で行う。
+- **正本・出典**: 結論＝[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) **第14節**、実施記録＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§121.12**（手順は §121.11）、数値の一次記録＝`outputs/comfort-calib-2026-09-27/RESULTS.md`（複写：[`Docs/Outputs-archive/comfort-calib-2026-09-27/`](Outputs-archive/comfort-calib-2026-09-27/)）。

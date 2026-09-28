@@ -13226,7 +13226,7 @@ LTX 2.5・公式 `default`（線 44,880）:
 - [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-165 の残りから MCP の項目を削り、状態の行に「MCP も対応済み」と書きました。
 - 本節（§116.9）を足し、§116.2 に追補のコミットの行を足しました。
 
-## 117. ★fp8 safetensors の transformer を、変換せずに置くだけで選べるようにした（段階 B-1・LTX 2.3 のみ）＝B-1 完結（オーナー目視合格）・次は B-2（2026-09-25。台帳は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167）
+## 117. ★fp8 safetensors の transformer を、変換せずに置くだけで選べるようにした（段階 B-1・LTX 2.3 のみ）＝B-1 完結（オーナー目視合格）・次は B-2（2026-09-25。台帳は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167〔2026-09-28 クローズ〕）
 
 **要約**: CivitAI などで配布されている LTX 2.3 の fp8（重みを 8 ビットの浮動小数点で持つ形式）の transformer を、`models/LTX23/Weights/` に `.safetensors` のまま置けば、GGUF と同じドロップダウンで選べるようにしました。読み込みは巨大なファイルを mmap（ファイルをメモリに見せかけて開く仕組み）で開かず、テンソルを 1 本ずつ読みます。受け入れの規則の正本は §117.3 です。
 
@@ -13393,7 +13393,7 @@ LTX 2.5・公式 `default`（線 44,880）:
 - **`model_version` を持たない LTX 2.5 の safetensors は、API の検査を素通りし、エンジン側で落ちます。** B-2 で扱います。
 - **`models/LTX23/Weights/put_GGUF_here.txt`**（git の追跡外で、生成元がリポジトリに無いファイル）の「safetensors は変換してから」という文言は、fp8 も置けば使える旨に書き換えました（2026-09-25・オーナー裁定）。
 
-## 118. ★LTX 2.5 でも、fp8 safetensors の transformer を置くだけで選べるようにした（段階 B-2）＝機械ゲート緑・実機確認は 11 手順すべて完走・オーナー目視 7 項目全合格＝B-2 完結（2026-09-26。台帳は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167）
+## 118. ★LTX 2.5 でも、fp8 safetensors の transformer を置くだけで選べるようにした（段階 B-2）＝機械ゲート緑・実機確認は 11 手順すべて完走・オーナー目視 7 項目全合格＝B-2 完結（2026-09-26。台帳は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167〔2026-09-28 クローズ〕）
 
 **要約**: LTX 2.5 の fp8（重みを 8 ビットの浮動小数点で持つ形式）の transformer を、`models/LTX25/Weights/` に `.safetensors` のまま置けば、GGUF と同じドロップダウンで選べるようにしました。LTX 2.3 で作った受け入れの規則（§117.3）を、実在する LTX 2.5 の配布物に合わせて 3 点広げています（§118.3）。読み込みは LTX 2.3 と同じく、巨大なファイルを mmap（ファイルをメモリに見せかけて開く仕組み）で開かず、テンソルを 1 本ずつ読みます。
 
@@ -13580,7 +13580,7 @@ LTX 2.5・公式 `default`（線 44,880）:
 
 **裁定（2026-09-26）**: 「全件合格。main にマージして、快適上限の較正に進んでほしい。」というオーナーの言葉のとおり、B-2 はこれで完結です。次は B-3（fp8 の快適上限の較正・LTX 2.3 と LTX 2.5）に進みます。
 
-## 119. ★fp8 safetensors の transformer の快適上限を実機で較正した（段階 B-3・57 ラン）＝結論は「LTX 2.5 は線が下がる（単一の低い値）・LTX 2.3 は全 on ではコミットの上限で測り切れず、既定構成では線が大きく下がる」・**配信値は未変更**（2026-09-26。台帳は[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167）
+## 119. ★fp8 safetensors の transformer の快適上限を実機で較正した（段階 B-3・57 ラン）＝結論は「LTX 2.5 は線が下がる（単一の低い値）・LTX 2.3 は全 on ではコミットの上限で測り切れず、既定構成では線が大きく下がる」・**配信値は未変更**（2026-09-26。台帳は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167〔2026-09-28 クローズ〕）
 
 **要約**: B-1・B-2 で置くだけで使えるようにした fp8 の transformer で、快適上限の線（VRAM 溢れが起きない生成規模の目安）が GGUF と同じく成り立つかを、57 ランの実測で確かめました。**LTX 2.5 fp8 では線が下がります。** どの幾何でも、2 回とも快適だった上端は 38,304〜39,424 トークン（現行の線 44,880 の 85〜88%）にそろっていて、単一の低い値で表せる形です。**LTX 2.3 fp8 では、線を定義している全 on 構成は、Windows のコミット（仮想メモリの予約）が停止線を 2 回超えたため測り切れませんでした。** 代わりにサーバーの既定構成で測ると、境界は 32,640〜34,680（線の 73〜77%）でした。同じプロセスの GGUF（LTX 2.5 公式・LTX 2.3 Q6_K）は、fp8 が溢れた点で快適でした。**配信値（`config.py`の`_default_comfort_budgets()`）は変更していません。**
 
@@ -13637,10 +13637,10 @@ LTX 2.5・公式 `default`（線 44,880）:
 ### 119.5 申し送り（判断はオーナー）
 
 - **配信値への反映の要否と形**: LTX 2.5 fp8 は線が下がり、LTX 2.3 fp8 も下がる側です。現行の製品では、fp8 を選んだ利用者にも GGUF 用の線がそのまま当たり、楽観側に出ます。反映するかどうか、どういう形にするかは別途検討で、判断はオーナーです。
-- **§12.4 の最終判断**（Sulphur-2 Q6_K の w46 の VRAM 溢れを配信値に反映するか）: 材料は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13.4節です（fp8 でも w46 の目安解像度は溢れた）。
-- **§3-167 全体を CLOSED へ移すか**: B-1・B-2 は完結、B-3 は計測まで完了しました。
+- **§12.4 の最終判断**（Sulphur-2 Q6_K の w46 の VRAM 溢れを配信値に反映するか）: 材料は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13.4節です（fp8 でも w46 の目安解像度は溢れた）。 → 2026-09-27 のオーナー裁定で §1-31 の材料として閉じました。
+- **§3-167 全体を CLOSED へ移すか**: B-1・B-2 は完結、B-3 は計測まで完了しました。 → 2026-09-28 にクローズしました（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167）。
 - **LTX 2.3 fp8 の全 on をこの機体で測るなら**、ページファイルを広げるなどコミットの上限を上げる手当てが要ります（全 on は基準点でもコミットが上限の 91% に達しました）。事実として記録するだけで、手当ての方法は検討していません。
-- **fp8 のファイル 2 本と、較正の出力 57 本を消すかどうか**: fp8 は `models/LTX23/Weights/sulphur_distil_fp8mixed.safetensors` と `models/LTX25/Weights/ltx-2.5-22b-distilled-transformer-fp8_e4m3fn.safetensors`、出力は一次記録の第8.2節の一覧です。
+- **fp8 のファイル 2 本と、較正の出力 57 本を消すかどうか**: fp8 は `models/LTX23/Weights/sulphur_distil_fp8mixed.safetensors` と `models/LTX25/Weights/ltx-2.5-22b-distilled-transformer-fp8_e4m3fn.safetensors`、出力は一次記録の第8.2節の一覧です。 → fp8 の 2 本はオーナーが常用しているため削除しません（2026-09-27 裁定）。
 
 ## 120. ★操作パネルの Settings の快適上限表に fp8 の 2 列を暫定で足した＝機械ゲート緑・aux2 配置済み・オーナー目視は未実施（2026-09-26。台帳は[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31 で配信に移すまでの暫定）
 

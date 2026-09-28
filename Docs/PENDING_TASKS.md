@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-28（C-4〔int8／w4a8 safetensors の快適上限の較正〕が完了したため §1-32 をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169 へ移し、§1 冒頭の案内を §1-31・§1-33 のみの記述に更新。§1-31・§1-33 の材料の参照先を[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節へ更新。前回 2026-09-27: オーナー裁定で第12.4節・第13.4節の最終判断を §1-31 の材料として閉じ、§3-167 の状態欄の判断事項1を更新。§1-31 の判断材料に w46 溢れの吸収先を追記。§1「近日中の改修項目」に §1-33「int8 ウェイトの ConvRot の高速化」を起票し、§1 冒頭の案内を §1-33 まで含む記述に更新。前々回 2026-09-27: §3-168 をオーナー目視全件合格でクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移し、その C-4〔int8 系の快適上限の較正〕を §1-32 として起票。§1 冒頭の案内・§1-31 の種別の書き方・§3-167 の状態欄と出典を現況に合わせた）
+- 作成: 2026-07-15／最終更新: 2026-09-28（オーナー裁定「§3-167をクローズしてほしい」を受け、§3-167をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167 へ移し、本書の§3-167を削除。§1-31 の§3-167参照をCLOSED側へ付け替え。前回 2026-09-28: C-4〔int8／w4a8 safetensors の快適上限の較正〕が完了したため §1-32 をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169 へ移し、§1 冒頭の案内を §1-31・§1-33 のみの記述に更新。§1-31・§1-33 の材料の参照先を[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節へ更新。前々回 2026-09-27: オーナー裁定で第12.4節・第13.4節の最終判断を §1-31 の材料として閉じ、§3-167 の状態欄の判断事項1を更新。§1-31 の判断材料に w46 溢れの吸収先を追記。§1「近日中の改修項目」に §1-33「int8 ウェイトの ConvRot の高速化」を起票し、§1 冒頭の案内を §1-33 まで含む記述に更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
@@ -17,7 +17,7 @@
 
 ### 1-31. 快適上限のマニフェスト一本化（起票：2026-09-26）
 
-- **概要**: 快適上限の線（配信値）を `config.py` の既定値から、ベースモデルごとの定義ファイル（`scripts/manifests/*.json`）へ移して正本を 1 箇所にする。**同じ作業の中で、読み込んだ重みファイルの種別（GGUF の量子化・fp8・int8 系〔`int8_tensorwise`・`asym_w4a8_int8`〕）ごとの行を足し、§3-167 B-3 の較正値を配信値へ反映する**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13節）。サーバーが選択中の transformer の種別を `GET /models` で名乗り、操作パネルと Gradio は既存の「加速設定で行を照合する」仕組みに種別を 1 項目足すだけにする。UI の隠し方の表（`featureScope.ts`）は触らない。
+- **概要**: 快適上限の線（配信値）を `config.py` の既定値から、ベースモデルごとの定義ファイル（`scripts/manifests/*.json`）へ移して正本を 1 箇所にする。**同じ作業の中で、読み込んだ重みファイルの種別（GGUF の量子化・fp8・int8 系〔`int8_tensorwise`・`asym_w4a8_int8`〕）ごとの行を足し、台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167 の B-3 の較正値を配信値へ反映する**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13節）。サーバーが選択中の transformer の種別を `GET /models` で名乗り、操作パネルと Gradio は既存の「加速設定で行を照合する」仕組みに種別を 1 項目足すだけにする。UI の隠し方の表（`featureScope.ts`）は触らない。
 - **判断材料**: 反映できる実測は LTX 2.5 の fp8（快適側の上端 38,304〜39,424・幾何差は潜在 1 コマ未満で単一の値で表せる）と Q6_K の 2 件（同 第10節＝REDGraft 2.5 は解像度で割れる・第11節＝Sulphur 2.3 は線は動かないが w46 に孤立した溢れ）。LTX 2.3 の fp8 は全 on を測り切れていない（第13.2節）。第12.4節（Sulphur-2 Q6_K の w46）と第13.4節（fp8 の w46）の溢れは、種別ごとの行で吸収する（オーナー裁定 2026-09-27）。種別の数は絞る（規則は単純に・例外を増やさない）。`config.yaml` の表ごと上書きを残すか 1 本に絞るかは設計時に決める。パネル側の手書き例外（`comfortDisplayTable.ts` の Q6_K 3 点）はこの表に吸収する。fp8 の 2 列（2.5 の固定の線・2.3 の 1 点。フロントエンド `Docs/DEVLOG.md` §126）も吸収する。**int8 系（`int8_tensorwise`・`asym_w4a8_int8`）の較正値の材料は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14.5節です**（較正は完了。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169）。
 - **進め方**: int8 系の行の材料は第14.5節です。fp8／Q6_K の行だけ先行して進めるかはオーナー判断です。
 - **出典**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第10.4・11.4・12.4・13・14節、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §119.5・§121.12、`config.py` の `_default_comfort_budgets()`・`services/base_models.py`・`services/model_registry.py`（`GET /models`）、`webui/src/shell/comfortTable.ts`・`comfortDisplayTable.ts`、`gradio_ui/comfort.py`、`tests/test_comfort_budgets.py`（キー集合の固定）。
@@ -186,16 +186,6 @@
 - **未検証の懸念**: **凍結帯の境界で、制御の効きが不連続になる可能性がある。** 撮り直しの窓は前後ののりしろ（既定で頭25・尾24画素フレーム）が元映像のまま凍結され、その内側だけが作り直される。参照動画による制御は窓全体へ一様に掛かるので、**凍結された帯では制御が効かず、自由部分では効く**という段差が継ぎ目に出ないかは、実機で見るまで分からない。**着手時はここを最初に確かめること。**
 - **状態**: 未着手（将来の研究課題）。**急ぎではない**——スタイルLoRAの解禁で、撮り直しにLoRAが使えない状態そのものは解消している。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-62-02（スタイルLoRA側の解禁記録と、そこで置いた設計判断）、`api/models.py`・`engine/pipeline/chain_pipeline.py`・`engine25/chain25.py`・`chain_math.py`（上記の各行）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57（長尺IC-LoRAの窓機構）・§55.3（両側凍結の検証）。
-
-#### 3-167. CivitAI 等で配布されている fp8 の safetensors を models ディレクトリに配置するだけで使えるようにする（起票：2026-09-25）
-
-- **状態**: **B-1（LTX 2.3）完結・オーナー目視合格（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117）。B-2（LTX 2.5）はオーナー目視 7 項目全合格で完結しました（同 §118.10）。B-3（fp8 の快適上限の較正）は計測まで完了しました（同 §119）。結論は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13節です。配信値は変えていません。** 規則の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.3 です（§117.3・§118.3 は fp8 だけの当時の記録です）。残りはオーナーの判断です。
-  1. **裁定済み（2026-09-27）**: 材料は §1-31 へ（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第12.4節）。
-  2. **配信値への反映**: §1-31「快適上限のマニフェスト一本化」の中で行う（起票済み・2026-09-26）。
-  3. **§3-167 全体を CLOSED へ移すか**。
-  4. **int8 への拡張は §3-168 で完結しました**（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168）。int8 系の快適上限の較正も完了しました（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169・結論は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節）。
-- **概要**: CivitAI などで配布される LTX 2.3／2.5 のファインチューン（多くは fp8 の safetensors）を、変換せずに `models\<系統>\Weights\` へ置くだけで選べるようにする。A1111 SD WebUI の「モデルを置けば使える」体験が目標。対象は fp8 に限る。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117（裁定・設計・判定規則・VRAM の見立て・申し送り）・§118（LTX 2.5）・§119（fp8 の快適上限の較正）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13節、`sft_quant_format.py`（旧名 `sft_fp8_format.py`）、`engine/sft_quant/`（旧名 `engine/fp8/`）、`engine25/`、README「追加の transformer（GGUF／量子化 safetensors）/ LoRA を配置する」。
 
 ---
 

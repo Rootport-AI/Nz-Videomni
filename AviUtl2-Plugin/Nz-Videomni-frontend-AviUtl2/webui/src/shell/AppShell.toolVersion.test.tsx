@@ -85,7 +85,7 @@ describe("AppShell — header base-model dropdown", () => {
 
     // The server's `detail` verbatim — the WebUI must not paraphrase the
     // incompatibility, since only the server knows what it actually found.
-    expect(await toastText(container)).toContain("LTX 2.5エンジンは次段階");
+    expect(await toastText(container)).toContain("LTX 2.3エンジンが扱えるのは");
     // Guard 4: back to the base model that is still loaded.
     await waitFor(() => expect(select.value).toBe("LTX23"));
     expect(loadCalls(requests)).toHaveLength(1);

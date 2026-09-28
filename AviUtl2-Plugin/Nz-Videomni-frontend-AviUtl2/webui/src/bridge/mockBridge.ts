@@ -287,7 +287,7 @@ const MOCK_MODEL_ENTRIES: Record<MockModelCategory, MockModelEntryFixture[]> = {
 /** Multi-engine (§3-97): the BASE MODELS this fixture server declares, in the
  * order `GET /models` returns them. `LTX23` is the one that actually works;
  * `LTX25` exists so the header dropdown's interesting paths — the install
- * guidance, and the server's "next phase" refusal — can be exercised without
+ * guidance, and the server's 422 refusal — can be exercised without
  * a real 22B download. How much of `LTX25` is on disk is the
  * {@link MockBridgeOptions.ltx25Install} knob. */
 const MOCK_BASE_MODELS = [
@@ -470,11 +470,11 @@ const MOCK_DEFAULT_BASE_MODEL = "LTX23";
 
 /** Verbatim from `services/engines/ltx/adapter.py`'s `check_kv`: the KV
  * metadata in an LTX 2.5 transformer says `ltxv 2.5.0`, and the ltx adapter
- * only implements `2.3` so far. The WebUI shows this `detail` unchanged
+ * only runs `2.3`. The WebUI shows this `detail` unchanged
  * (`shell/useBaseModels.ts`), which is the whole reason it is reproduced here
  * literally rather than paraphrased. */
 const MOCK_LTX25_INCOMPATIBLE_DETAIL =
-  "このtransformerはltxv 2.5.0です。LTX 2.5エンジンは次段階(PENDING_TASKS §3-98)で実装予定のため、まだ読み込めません。";
+  "このtransformerはltxv 2.5.0です。LTX 2.3エンジンが扱えるのはltxv 2.3系のみです。";
 
 /** Which of `LTX25`'s per-category default files are on disk, per install
  * state. `"partial"` (the default) mirrors what P8's real-device gate sets up:
@@ -902,7 +902,7 @@ export interface MockBridgeOptions {
   /** Multi-engine (§3-97 P7): how much of the `LTX25` base model this fixture
    * server has on disk, which decides what picking it in the header dropdown
    * does. `"partial"` (default) → `present: true, installed: false`, so the
-   * WebUI does call the server and gets the 422 "next phase" refusal.
+   * WebUI does call the server and gets the 422 refusal.
    * `"none"` → `present: false`, so the WebUI short-circuits with the
    * `install-LTX25.bat` guidance and never issues a request. `"full"` models a
    * complete install (still 422s — the engine, not the files, is what's

@@ -146,7 +146,7 @@ describe("useBaseModels", () => {
     expect(loadPipeline).toHaveBeenCalledWith({}, "LTX25");
     // 422 carries the server's `detail` through untouched.
     expect(outcome?.kind).toBe("rejected");
-    expect(outcome?.kind === "rejected" ? outcome.reason : "").toContain("LTX 2.5エンジンは次段階");
+    expect(outcome?.kind === "rejected" ? outcome.reason : "").toContain("LTX 2.3エンジンが扱えるのは");
     expect(result.current.current).toBe("LTX23");
   });
 

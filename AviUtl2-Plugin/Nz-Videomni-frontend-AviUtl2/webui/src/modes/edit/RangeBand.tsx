@@ -35,7 +35,8 @@ import "./RangeBand.css";
  * 触覚はこのクランプが作る）、格子への吸着は制御された値として親から戻ってくる
  * —— React の controlled input と同じ形。だから `minFrames`/`maxFrames` は
  * props で受け、既定値だけを `retakeWindow.ts` の定数から借りている
- * （将来 `AppConfig.limits` で上書きされたら親が渡すだけで済む）。
+ * （実際の値は親の `RetakePanel` が `useRetakeForm` の `minWindowFrames`／
+ * `maxWindowFrames` を渡す）。
  *
  * ## ポインタ作法は `modes/single/KeyframeTimeline.tsx` 踏襲
  *

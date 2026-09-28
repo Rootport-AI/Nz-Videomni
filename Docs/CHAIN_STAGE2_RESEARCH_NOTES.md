@@ -280,8 +280,8 @@ VRAM（グラフィックスメモリ）から溢れて共有メモリへ退避�
 
 ### プロンプトと画像は扱いが非対称
 
-- **プロンプト**: stage-1で解釈され、stage-2は単一のコンテキストを使い回す。チェーンではクリップごとに別のプロンプトを書けるが、[`engine/pipeline/chain_pipeline.py`](../engine/pipeline/chain_pipeline.py) 788行が `stage2_vctx, stage2_actx = seg_ctx[0]` としているとおり、**stage-2で使われるのはクリップ0のプロンプト1本だけ**である（548行でクリップごとの符号化は作ってある）。
-- **画像条件**: [`vendor/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/distilled.py`](../vendor/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/distilled.py) 118〜127行と145〜152行が、**同じ`images`から半分の解像度用と最終解像度用の条件を別々に作り、stage-1とstage-2の両方へ渡している**。チェーン側も同じで、[`engine/pipeline/chain_pipeline.py`](../engine/pipeline/chain_pipeline.py) 671〜672行（stage-1・半解像度）と831〜832行（stage-2・全解像度）で二度注入している。
+- **プロンプト**: stage-1で解釈され、stage-2は単一のコンテキストを使い回す。チェーンではクリップごとに別のプロンプトを書けるが、[`engine/pipeline/chain_pipeline.py`](../engine/pipeline/chain_pipeline.py) がStage-2ブロックの冒頭で `stage2_vctx, stage2_actx = seg_ctx[0]` と代入しているとおり、**stage-2で使われるのはクリップ0のプロンプト1本だけ**である（クリップごとの符号化の対応表 `seg_ctx` は作ってあり、stage-1はそれを引く）。LTX 2.5（[`engine25/chain25.py`](../engine25/chain25.py)）も同じ作りである。挙動の正本は[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2の補足「チェーンのプロンプトの効き方」。
+- **画像条件**: vendor の [`vendor/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/distilled.py`](../vendor/LTX-2/packages/ltx-pipelines/src/ltx_pipelines/distilled.py) の`DistilledPipeline.__call__`が、**同じ`images`から半分の解像度用と最終解像度用の条件を別々に作り、stage-1とstage-2の両方へ渡している**。チェーン側も同じで、[`engine/pipeline/chain_pipeline.py`](../engine/pipeline/chain_pipeline.py) は`_build_video_conditionings`を、stage-1（クリップ0・半解像度）と、stage-2の各タイル（`_tile_images`でそのタイルに入るキーフレームだけに絞り込む・全解像度）とで呼び、二度注入している。
 
 ### frame 0 と frame>0 で意味が違う
 
@@ -300,13 +300,13 @@ stage-2のノイズ量は `STAGE_2_DISTILLED_SIGMA_VALUES = [0.909375, 0.725, 0.
 
 | 入力 | 現状 | 根拠 |
 | --- | --- | --- |
-| プロンプト | クリップごとに指定可。ただしstage-2はクリップ0の1本のみ | `chain_pipeline.py` 548・788行 |
+| プロンプト | クリップごとに指定可。ただしstage-2はクリップ0の1本のみ | `chain_pipeline.py`（LTX 2.5は`engine25/chain25.py`）の対応表 `seg_ctx` と、Stage-2ブロック冒頭の `seg_ctx[0]` の代入。正本は仕様書§6.2 |
 | キーフレーム画像（`conditioning_images`） | **クリップ0のみ**・最大10枚（上限の正本は`config.py`の`MAX_CONDITIONING_IMAGES`）。frame>0もクリップ0の中でなら可（UIは1枚・frame 0固定）。スナップ後に同じフレームへ落ちた2枚は422 | [`api/models.py`](../api/models.py)の`_normalize_conditioning_images` |
 | 参照音声（A2V＝音声から動画を作る機能） | **1〜24クリップ**（2026-08-10・長尺A2Vで「クリップが1本のときだけ」を撤廃）。連結タイムライン全体に音声を1本添付し、各クリップが担当する音声潜在窓を`chain_math.audio_segment_windows`がサーバー側で自動割り当てる | [`api/models.py`](../api/models.py)、`PENDING_TASKS_CLOSED.md` §3-74 |
 | 参照動画（IC-LoRA control系＝参照動画から輪郭線や骨格を読み取って条件付けするアダプタ） | **1〜24クリップ**（2026-08-11・長尺IC-LoRAで「クリップが1本のときだけ」を撤廃）。長い参照動画を1本添付すると、各クリップが担当する区間を`chain_math.video_segment_windows`がサーバー側で自動的に切り出す。参照はstage-1にのみ注入する（単発生成も同じ意味論）。**`depth-control`のみ例外で2本以上は引き続き422 `LORA_DEPTH_CHAIN_UNSUPPORTED`**（深度前処理が全編一括設計でメモリに載らないため。旧`LORA_CONTROL_UNSUPPORTED_IN_CHAIN`はこの改修で削除済み） | [`api/models.py`](../api/models.py)、[`api/generate_chain.py`](../api/generate_chain.py)、[`api/errors.py`](../api/errors.py)、`chain_pipeline.py`、`chain_math.py`の`video_segment_windows`、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57 |
 | スタイルLoRA | チェーン全体に一律。クリップごとの強度指定はv1では採らないというオーナー裁定 | — |
 
-なお`chain_pipeline.py` 719行が `conds = []` としているとおり、**クリップ1本目より後ろのstage-1には画像条件が一切入っていない**。次節の拡張はここが起点になる。
+なお`chain_pipeline.py`のstage-1が、前のクリップから引き継ぐセグメントでは `conds = []` としているとおり、**クリップ1本目より後ろのstage-1には画像条件が一切入っていない**。次節の拡張はここが起点になる。
 
 ---
 

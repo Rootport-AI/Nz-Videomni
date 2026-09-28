@@ -41,12 +41,18 @@ import type { SourceTrimSkipReason, TrimSelectionItem } from "./sourceTrim";
 /**
  * 窓の最小・最大フレーム数（生成 fps 上の画素フレーム）。
  *
- * 将来 `AppConfig.limits` の `retake_window_min_frames` /
- * `retake_window_max_frames` で上書きできるようにする予定（実装計画 B4 が
- * サーバ側 `LimitsConfig` に 2 定数だけを公開する）。そのときに備えて、
- * {@link resolveRetakeWindow} と `RangeBand` は**この定数を直接読まず**、
- * 引数・props の既定値としてだけ受け取る形にしてある —— 差し替え点は
- * 「呼び出し側が既定値を渡さない」1 箇所に閉じている。
+ * {@link resolveRetakeWindow} と `RangeBand` はこの定数を直接読まず、
+ * **引数・props の既定値**としてだけ受け取る。実際の値は呼び出し側
+ * （`modes/edit/useRetakeForm.ts`）が決めて渡す:
+ *  - 下限は配信値 `AppConfig.limits.retake_window_min_frames`。欠けている・
+ *    壊れているとき（古いサーバーなど）だけ {@link RETAKE_WINDOW_MIN_PX} に戻る。
+ *    下限の定数はほかに、右クリック時のガード（`timeline/menuSelection.ts` の
+ *    `retakeRangeTooShort`）が直接読む。
+ *  - 上限は選んだ Stage-2 の窓で決まる `8·vTile − 7`（{@link retakeMaxWindowPx}。
+ *    `vTile` は `shell/tokenBudget.ts` の `STAGE2_WINDOW_PRESETS` から引く）。
+ *    §3-165（2026-09-25）以降、配信値 `retake_window_max_frames` は操作パネルでは
+ *    読まない（standard の 169 で頭打ちになり、広い窓を選んでも上限が伸びなかった
+ *    ため）。{@link RETAKE_WINDOW_MAX_PX} は既定の窓 standard での値にすぎない。
  */
 export const RETAKE_WINDOW_MIN_PX = 73;
 export const RETAKE_WINDOW_MAX_PX = 169;

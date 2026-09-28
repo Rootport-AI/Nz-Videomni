@@ -1854,7 +1854,8 @@ def run_chain(
         cleanup_memory()
 
     # ── STAGE 2: always-tiled refine (video+audio jointly). ───────────────────
-    # ONE context (the base/clip-0 prompt) for the ENTIRE stage-2 refine — this
+    # ONE context (clip 0's EFFECTIVE prompt -- its own override if set, else the
+    # base prompt) for the ENTIRE stage-2 refine — this
     # is what the validated S2 spike did (single prompt everywhere). Per-segment
     # prompt variation lives in STAGE 1 (where the carry+freeze+crossfade absorbs
     # it smoothly — all segment seams stay continuous). Switching the AUDIO

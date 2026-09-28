@@ -68,18 +68,37 @@ Two 2.5-only facts the band has to answer for:
 
 Scope
 -----
-Multi-clip T2V/I2V, plus V2V and A2V (§3-102 second stage) and RETAKE:
-per-clip prompts, clip 0's conditioning images, the overlap knobs,
-``chunked_upsample``, ``stage2_window``, ``source``, ``audio_source`` and
-``retake``. The end source, NAG/VSF and ``vae_mode`` are NOT here and are
-refused at the API. ``chain_math`` still computes their geometry; this file
-simply never passes those arguments.
+Multi-clip T2V/I2V, plus V2V and A2V (§3-102 second stage), RETAKE, the END
+SOURCE and Style/IC-LoRA: per-clip prompts, clip 0's conditioning images, the
+overlap knobs, ``chunked_upsample``, ``stage2_window``, ``source``,
+``audio_source``, ``retake``, ``end_source`` and the LoRA / reference
+arguments. The end source runs in the modes the API can reach (``in_window``
+/ ``reverse`` / ``bridge``); its legacy ``internal_segment`` geometry is
+refused by name in :func:`run_chain`.
 
-The three ways material gets frozen
------------------------------------
-V2V, A2V and a retake all start from an uploaded file and all end up freezing
-latents, but they use DIFFERENT mechanisms, and the differences are not
-stylistic:
+The non-CFG negative prompt (NAG/VSF) runs too, but never passes through this
+file: the worker arms it on the pipeline (``Ltx25Pipeline.set_nag_job``)
+before calling :func:`run_chain`, the prompt encoder encodes the negative
+prompt alongside the clips' prompts, and the patch is installed on every
+transformer build -- so it applies to every stage-1 clip and every stage-2
+tile alike. Two features are still refused, both engine-level rather than
+modes: ``vae_mode`` (PrunaVAED) and ``pipeline="two_stage_hq"``. Both are a
+422 at the API (``CHAIN_REJECT_TABLE`` in
+``services/engines/ltx25/adapter.py``); the worker additionally refuses
+``vae_mode`` by name (``CHAIN_UNSUPPORTED_KEYS`` in ``engine25/worker.py``) --
+``pipeline`` never rides in the worker payload, so there is nothing there to
+refuse.
+
+Prompts: stage 1 conditions each clip on that clip's own effective prompt;
+stage 2 refines every tile with clip 0's (see the note at the top of the
+stage-2 block in :func:`run_chain`). The public statement of this is
+``Videomni_Backend_Specification.md`` §6.2.
+
+The four ways material gets frozen
+----------------------------------
+V2V, A2V, a retake and the end source all start from an uploaded file and all
+end up freezing latents, but they use DIFFERENT mechanisms, and the
+differences are not stylistic:
 
 * **V2V** freezes a HEAD BAND -- the same one an inter-clip carry uses, via
   ``VideoConditionByMask`` / :class:`AudioBandMask`. Stage 1 holds it at
@@ -106,10 +125,14 @@ stylistic:
   decode -- the whole window is the deliverable, glue bands included -- because
   the app lays the result back over the original and wants the seam at the
   window's OUTER edge, not at the regenerated region's boundary.
+* **End source** freezes a TAIL BAND -- V2V's mirror: the timeline must END on
+  the material rather than start from it. Where the band sits (the mode,
+  ``in_window`` / ``reverse`` / ``bridge``) and how hard each stage holds it
+  are stated once, in the :class:`EndSourceSpec` docstring.
 
-With ``source``, ``audio_source`` and ``retake`` all ``None`` -- every plain
-T2V/I2V chain -- none of the branches these features open is taken, and the
-output is byte-identical to the chain that shipped before them (gate G1(a)).
+With ``source``, ``audio_source``, ``retake`` and ``end_source`` all ``None``
+-- every plain T2V/I2V chain -- none of the branches these features open is
+taken, and the output is byte-identical to the chain that shipped before them (gate G1(a)).
 """
 
 from __future__ import annotations
@@ -457,11 +480,16 @@ class EndSourceSpec:
 class ChainSpec:
     """One chain job: exactly the body keys of the ``generate_chain`` payload.
 
-    Deliberately nothing else. The features this engine still refuses (NAG/VSF,
-    ``vae_mode``) have no field here at all, so "this engine does not do that"
-    is visible in the type rather than in a runtime branch -- and adding one
-    later is a deliberate act. The features it DOES run but that arrive as
-    prepared MATERIAL rather than as body keys -- ``retake``, ``end_source``,
+    Deliberately nothing else. The two features this engine still refuses
+    (``vae_mode`` and ``pipeline="two_stage_hq"``) have no field here at all,
+    so "this engine does not do that" is visible in the type rather than in a
+    runtime branch -- and adding one later is a deliberate act. The non-CFG
+    negative prompt (NAG/VSF) has no field here either, for a different
+    reason: it DOES run, but it never passes through this module -- the worker
+    arms it on the pipeline (``Ltx25Pipeline.set_nag_job``), the prompt encoder
+    encodes it alongside the clips' prompts, and the patch is installed per
+    transformer build. The features it DOES run but that arrive as prepared
+    MATERIAL rather than as body keys -- ``retake``, ``end_source``,
     ``ic_loras``, ``ic_reference`` -- are keyword arguments of
     :func:`run_chain` instead, which is also where 2.3 takes them.
 

@@ -770,14 +770,16 @@ export interface AppLimits {
   v2v_context_frames_max: number;
   /** §1-17 Retake の窓長の下限・上限（生成 fps 上の画素フレーム数、いずれも
    * 8n+1）。169 は「stage-2 のタイル1枚に収まる最大の画素フレーム数」という
-   * 幾何そのもので、73 は自由中間潜在が成立する最小窓
+   * 幾何そのもの（既定の窓 standard での値）で、73 は自由中間潜在が成立する最小窓
    * （`outputs/retake_spike/T1_RESULTS.md` C1 の実測）。サーバの
    * `LimitsConfig` に公開されている 2 定数だけを写しており、糊代（頭25/尾24）は
    * UI 非公開なのでここには出さない。
    *
-   * `timeline/retakeWindow.ts` の `RETAKE_WINDOW_MIN_PX`/`MAX_PX` はこの 2 つが
-   * 読めないとき（古いサーバ・`GET /config` 失敗）のフォールバックであり、
-   * 実際の判定は常にここの値が優先される。 */
+   * 操作パネルの扱いは 2 つで異なる。下限はこの値を読み、読めないとき（古い
+   * サーバ・`GET /config` 失敗）だけ `timeline/retakeWindow.ts` の
+   * `RETAKE_WINDOW_MIN_PX` へ戻る。上限は §3-165 以降、操作パネルは読まない
+   * （選んだ Stage-2 の窓から `retakeMaxWindowPx` で決まる。
+   * `timeline/retakeWindow.ts` 参照）。 */
   retake_window_min_frames: number;
   retake_window_max_frames: number;
   /** 素材（末尾）の `end_source.context_frames` の既定値・下限・上限

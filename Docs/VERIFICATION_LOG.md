@@ -14040,3 +14040,39 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 **申し送り**: Kijai int8 ConvRot の真の境界（梯子の上限より上）は未測定です。追うかどうかはオーナー判断です。→ 追加の計測は行いません（オーナー裁定・2026-09-28。[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14.6節）。LTX 2.3 の fp8・int8 系の全 on の境界は、今回は測っていません（第13.2節で fp8 の全 on がコミットの上限に当たったため、計画の段階で既定構成の診断に絞りました）。生成時間の比からの Go／No-go 判断は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-33 で行います。
 
 **敵対的レビュー（計画）の採否の要約**: 運用計画（`floofy-enchanting-sundae.md`）第10節に記録済みです。重大 2 件（コミットの門の引き上げ／t_ 腕の削除）・主要 6 件（時間比の取り方・失敗判定の読み方・ハングの検知・電源と更新の門・preflight をオフラインにする・復元順序の明記）・軽微 10 件・過剰設計の指摘 1 件（表5から r_ を外す）はすべて採用し、実施はレビュー後の計画どおりに行いました。**実施中に計画から変更した箇所はありません**（見込みに対する実績の差は一次記録の第3.3節のとおりです）。
+
+## 122. ★Chained の Stage-2 でプロンプトがどう効くかをコードで確かめ、仕様書・API リファレンス・README・研究ノートへ反映した（古くなっていたコードのコメントと docstring も現行化）＝文書とコメントのみ・動作の変更なし（2026-09-28）
+
+**要約**: 連結生成（Chained）で、共通のプロンプトとクリップ別のプロンプトが Stage-1（半解像度で動きを作る第1段階）と Stage-2（全解像度へ仕上げ直す第2段階）でどう効くかを、LTX 2.3・LTX 2.5 の両エンジンのコードで確かめました。挙動の正本は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2 の補足「チェーンのプロンプトの効き方」として新設し（仕様書 v0.5.71）、他の文書はそこを指す形にしました。あわせて、古くなっていたコードのコメントと docstring を現行化しました（一覧は下）。**コードの動作は 1 ビットも変えていません。**
+
+**確認した事実**（詳細は仕様書 §6.2 の補足が正本です）:
+1. 実効プロンプトは「置き換え」です。クリップ別のプロンプトがあればそれだけ、無ければ（空文字列も無い扱い）共通のプロンプトを使い、2つを結合しません（`api/models.py` の `GenerateChainRequest.clip_prompt`）。
+2. Stage-1 はクリップごとに自分の実効プロンプトで条件付けします。テキストの符号化は異なるプロンプトごとに 1 回です（両エンジンの対応表 `seg_ctx`）。
+3. Stage-2 は全部の窓がクリップ 0 の実効プロンプト 1 本を使います（両エンジンとも Stage-2 ブロック冒頭の `seg_ctx[0]` の代入）。窓の重なりの途中で音声側の条件を切り替えると継ぎ目にクリック音が入ることを実測したため、というコードのコメントどおりの理由です。
+4. ネガティブプロンプト（NAG／VSF）と LoRA はジョブ全体で 1 組で、Stage-1 と Stage-2 の全窓に掛かります。`<lora:…>` タグを解釈するのはクライアントで、対象は共通のプロンプトだけです。
+5. IC-LoRA の参照動画は Stage-1 だけに入り、キーフレーム画像はクリップ 0 のものだけが Stage-1 と Stage-2 の両方に入ります（既存の記述どおり）。
+
+**変更した文書とコメント**:
+- `Videomni_Backend_Specification.md`: §6.2 に補足を新設（正本）／§6.10(f) の「動作」欄から §6.2 を指す 1 文（同じ欄の「クリップ 1 の画像」は最初のクリップを指すので「クリップ 0 の画像」に揃えました）／版を v0.5.71 へ（改訂履歴・版メタ）。
+- `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md` §5.2: `prompt` の行に置き換えの規則と Stage-2 の扱いを追記し、仕様書 §6.2 を指す（`<lora:…>` タグを `loras` へ変換するのは操作パネルと Gradio で、サーバーは解釈しない）。`ChainClip` の説明は二重にならないよう `prompt` 行と仕様書 §6.2 を指すだけにしました／冒頭の「最終更新」を現行化（直前の 2026-09-27 の記載は変更履歴の末尾へ移しました）。
+- `README.md` §3「AviUtl2 操作パネルのタブ」の Chained の項に、利用者向けの説明を追加（凍結ゾーンの外）。Gradio の節にはクリップ別プロンプトの説明が無いため、追記していません。
+- `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §2・§3: プロンプトの箇所に残っていた古い行番号を削り、目印（Stage-2 ブロック冒頭の `seg_ctx[0]` の代入・対応表 `seg_ctx`）で指す形へ。LTX 2.5 も同じ作りである旨を追記。§2 の画像条件の行と §3 の末尾に残っていた行番号も、関数名（vendor の `DistilledPipeline.__call__`、チェーン側の `_build_video_conditionings`・`_tile_images`）で指す形へ直しました。結論は変えていません。
+- コードのコメントと docstring（動作は変えていません。テストは名前の文字列 1 つだけ）:
+  - `chain_math.py` の `video_segment_windows`: Stage-1 だけなのは参照動画で、LoRA の重みは全段に掛かる。
+  - `engine25/chain25.py` のモジュール docstring と `ChainSpec`: End source と NAG／VSF は現在動く。断るのは `vae_mode`（PrunaVAED）と `pipeline="two_stage_hq"` の 2 つで、どちらもエンジンの機能でありモードではない。API では `services/engines/ltx25/adapter.py` の `CHAIN_REJECT_TABLE` で 422、ワーカーが名前で断るのは `vae_mode` だけ（`pipeline` はワーカーへのペイロードに乗らない）。NAG に `ChainSpec` のフィールドが無い理由。素材を凍結する方式の説明に End source を加え（末尾の帯を凍結する＝V2V の鏡像。方式と各段の保持の強さは `EndSourceSpec` の docstring）、「素の T2V／I2V では分岐を通らない」の条件に `end_source` を加えた。
+  - `engine/pipeline/chain_pipeline.py` の Stage-2 ブロック冒頭のコメント: Stage-2 の 1 本はクリップ 0 の実効プロンプト（個別の指定があればそれ、無ければ共通のプロンプト）。
+  - `engine25/worker.py` の `generate_chain` のペイロード説明: 名前で断るのは `vae_mode` だけ（`nag` は外れた）。
+  - `services/engines/ltx25/adapter.py` のモジュール docstring: 拒否は `pipeline="two_stage_hq"` と `vae_mode` だけで、範囲は下の表がフィールドごとに述べる。
+  - `services/pipeline_manager.py` のチェーンのジョブ情報ログのコメント: クリップ別のプロンプトは、指定したクリップで共通のプロンプトを置き換える。
+  - フロントエンド `webui/src/timeline/retakeWindow.ts` の窓の最小・最大の定数: 上限は選んだ Stage-2 の窓で決まり、配信値 `retake_window_max_frames` は操作パネルでは読まない。`resolveRetakeWindow` と `RangeBand` は定数を既定値としてだけ受け取り、下限の定数は右クリック時のガードと予備値にも使う。
+  - フロントエンド `webui/src/api/types.ts` の `retake_window_min_frames`／`retake_window_max_frames`: 下限は配信値を読み、読めないときだけ定数へ戻る。上限は操作パネルでは読まない。
+  - フロントエンド `webui/src/modes/edit/RangeBand.tsx` の冒頭: 実際の値は親の `RetakePanel` が `useRetakeForm` から渡す。
+  - フロントエンド `webui/src/timeline/retakeWindow.test.ts`: 「将来の AppConfig.limits 追随」を掲げたテスト名を、今の意味（呼び出し側が渡す値に従う）に改名。
+
+**機械ゲート**:
+1. Python（上の一覧で触った `.py` すべて）: HEAD 版と作業ツリー版を `ast.parse` し、docstring を除いた `ast.dump` が全ファイルで一致。`py_compile` も合格。
+2. TypeScript: `retakeWindow.ts`・`api/types.ts`・`RangeBand.tsx` の差分はコメント行だけ、`retakeWindow.test.ts` はテスト名の 1 行だけ。`webui/` で `npm run typecheck` 合格、`npx vitest run src/timeline/retakeWindow.test.ts src/modes/edit` 全件合格。
+3. 関連テスト: `pytest tests -k "chain"` で 1054 件合格・30 件スキップ・失敗 0。`tests/test_ltx25_adapter.py` も全件合格。
+4. `README.md` の凍結ゾーン（見出し「Nz-Videomniの詳細」より前）は HEAD と同一（差分は §3 の Chained の項だけ）。
+
+**申し送り**: 操作パネルの画面（Chained タブのプロンプト欄の近く）には、この説明がまだありません。画面の文言は今回変えていません。

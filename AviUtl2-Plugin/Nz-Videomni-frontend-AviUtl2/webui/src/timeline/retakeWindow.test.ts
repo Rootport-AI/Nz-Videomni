@@ -542,7 +542,7 @@ describe("resolveRetakeWindow", () => {
     );
   });
 
-  it("下限・上限は引数で上書きできる（将来の AppConfig.limits 追随）", () => {
+  it("下限・上限は呼び出し側が渡す値に従う", () => {
     const result = resolveRetakeWindow({
       startSec: 0,
       durationSec: 400 / GEN_FPS,

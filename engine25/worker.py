@@ -114,9 +114,10 @@ Protocol (one JSON object per line; parent -> worker):
       segment by ``run_chain`` -- and are ADDITIVE here (sent only when asked
       for), which is 2.3's chain payload shape verbatim.
       Unlike ``generate``, a field naming a feature this chain does not have
-      (``nag``, ``vae_mode``) is REFUSED BY NAME rather than
-      ignored -- see ``CHAIN_UNSUPPORTED_KEYS``. Both are engine-level knobs;
-      no chain MODE is on that list any more.
+      (``vae_mode`` -- the only one left; ``nag`` left the list once the
+      chain ran NAG/VSF) is REFUSED BY NAME rather than ignored -- see
+      ``CHAIN_UNSUPPORTED_KEYS``. It is an engine-level knob; no chain MODE is
+      on that list any more.
       The five acceleration knobs are NOT on that list: all of them apply to
       the chain unchanged.
       The ``done`` reply adds ``vae_mode_used`` (same fact and vocabulary as the

@@ -755,6 +755,23 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
   });
 });
 
+describe("POST /pipeline/load — base model switch", () => {
+  it("refuses a switch to a partly installed LTX 2.5, naming the first missing category", async () => {
+    // A partial install has the transformer only, so in category order the
+    // first default file missing on disk is the text encoder's.
+    const bridge = createMockBridge({ delayMs: 0, ltx25Install: "partial" });
+    const result = await bridge.request("backend.request", {
+      method: "POST",
+      path: "/api/v1/pipeline/load",
+      body: { base_model: "LTX25" },
+    });
+    expect(result.status).toBe(422);
+    const { error } = result.body as { error: { code: string; message: string } };
+    expect(error.code).toBe("MODEL_FILE_MISSING");
+    expect(error.message).toContain("'text_encoder/default'");
+  });
+});
+
 // §3-102 (LTX 2.5 Chained, first stage): the fixture's chain endpoint now
 // refuses the individual MATERIALS the active base model declares it cannot
 // use, instead of refusing the whole endpoint. The two properties that matter
@@ -808,7 +825,6 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     const bridge = createMockBridge({
       delayMs: 0,
       ltx25Install: "full",
-      supportedBaseModels: ["LTX23", "LTX25"],
     });
     const loaded = await bridge.request("backend.request", {
       method: "POST",

@@ -214,9 +214,13 @@ def model_file_missing(category: str, name: str, detail: str | None = None) -> A
 
 def model_incompatible(category: str, name: str, detail: str | None = None) -> APIError:
     """Model management: the selected file failed the cheap compatibility
-    precheck (wrong extension / not a GGUF / broken safetensors header) that
-    runs BEFORE the worker is restarted — guarding against a native loader
-    crash deep in the engine. 422."""
+    precheck that runs BEFORE the worker is restarted — guarding against a
+    native loader crash deep in the engine. Either the file itself is
+    unusable (wrong extension / not a GGUF / broken safetensors header / a
+    safetensors transformer that fails the acceptance check / unreadable),
+    or it is a healthy transformer that does not belong here (made for a
+    different LTX version than the selected base model, or not an LTX model
+    at all). 422."""
     return APIError(
         "MODEL_INCOMPATIBLE",
         f"selected model '{category}/{name}' failed the compatibility precheck",

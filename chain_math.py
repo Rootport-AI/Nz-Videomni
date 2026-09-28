@@ -1716,8 +1716,15 @@ def video_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
     spans its own ``clip_frames[i]`` pixel frames from there.
 
     Windows are per STAGE-1 SEGMENT because that is the only place a reference is
-    injected: LoRAs are applied to the stage-1 ledger only, and stage 2 refines
-    the already-assembled timeline with no reference conditioning at all.
+    injected: the reference video's latents are appended to the stage-1
+    segments' conditionings only, and stage 2 refines the already-assembled
+    timeline with no reference conditioning at all. The LoRA WEIGHTS are a
+    different matter and are NOT stage-1-only: they are attached to the
+    transformer for the whole job, so they act on every stage-1 segment AND
+    every stage-2 tile alike (2.3: ``run_chain``'s ``pipe._set_ic_job`` call
+    before the transformer is built in ``engine/pipeline/chain_pipeline.py``;
+    2.5: ``set_loras`` / ``_apply_loras`` in ``engine25/gguf_transformer.py``,
+    which attach the adapters on every transformer build).
 
     No V2V / retake terms appear here on purpose. A reference is mutually
     exclusive with ``source_video``, with retake, and with the end source at

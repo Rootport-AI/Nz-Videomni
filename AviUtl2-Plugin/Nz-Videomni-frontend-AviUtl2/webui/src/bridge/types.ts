@@ -1,5 +1,5 @@
 /**
- * Bridge RPC contract v1/v2/v3 — the single source of truth for the WebUI <->
+ * Bridge RPC contract — the single source of truth for the WebUI <->
  * native (.aux2) message shapes. Native code implements the mirror image of
  * this contract; if either side changes, this file must change first and the
  * other side must be updated to match.
@@ -203,7 +203,7 @@
  * tracking's `TRACK_BUSY` guards: one timeline job at a time, whichever kind.
  */
 
-/** All RPC methods defined as of contract v6. */
+/** Every RPC method the contract defines. */
 export type BridgeMethod = keyof BridgeParamsMap;
 
 /** Request parameter shape for each method. M1 methods take no parameters. */
@@ -302,9 +302,11 @@ export interface BridgeParamsMap {
     /** Contract v10 (source trim, §1-6): extra query parameters to append to
      * the upload URL, URL-encoded by native. Omit (the pre-v10 shape) for the
      * plain "upload the whole file" call — the resulting URL is then
-     * byte-identical to before v10. Today's only producer is
-     * `timeline/sourceTrim.ts`'s `trimQuery()`, which returns `undefined`
-     * (so the key is spread away entirely) whenever no trim applies. */
+     * byte-identical to before v10. The keys are the upload endpoint's own
+     * query parameters — for example `/upload/video`'s trim pair
+     * (`timeline/sourceTrim.ts`'s `trimQuery()`, which returns `undefined`
+     * whenever no trim applies) and its `max_frames` upload cap
+     * (`modes/chained/useChainForm.ts`). */
     query?: Record<string, string>;
   };
   /** Opens a native file-picker dialog scoped to the given media kind
@@ -998,8 +1000,8 @@ export interface TimelineMaskProgressData {
 export type ParamsOf<M extends BridgeMethod> = BridgeParamsMap[M];
 export type ResultOf<M extends BridgeMethod> = BridgeResultMap[M];
 
-/** Error codes defined by contract v1/v2/v3. Native may add new codes over
- * time; unrecognized codes are treated as opaque strings by the WebUI. */
+/** Error codes the contract defines. Native may add new codes over time;
+ * unrecognized codes are treated as opaque strings by the WebUI. */
 export type KnownBridgeErrorCode =
   | "BAD_REQUEST"
   | "UNKNOWN_METHOD"

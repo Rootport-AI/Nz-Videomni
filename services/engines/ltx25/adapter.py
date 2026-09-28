@@ -14,8 +14,9 @@ restates only the facts that are genuinely different:
 * which payload field each model-management category feeds;
 * which child-process environment it gets (NONE of 2.3's ``LTX_*`` knobs — every
   one of them is read by 2.3's worker and would be a borrowed assumption here);
-* the feature scope: single two-stage T2V/I2V and the plain Chained clip
-  chain; everything else refused.
+* the feature scope, field by field, in the tables below. What is still
+  refused is two engine-level features, on both the single ``/generate`` and
+  the chain schema: ``pipeline="two_stage_hq"`` and ``vae_mode``.
 
 V1 SCOPE, STATED ONCE (owner ruling 2026-08-21). :data:`REJECT_TABLE` is the
 422 half and :data:`IGNORED_FIELDS` the ignore-and-log half of the

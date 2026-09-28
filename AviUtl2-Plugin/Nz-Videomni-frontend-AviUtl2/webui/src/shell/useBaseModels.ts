@@ -71,8 +71,8 @@ export type BaseModelSwitchOutcome =
   /** 422: the server refused this base model for a SPECIFIC, already-worded
    * reason (an incompatible weight file, a missing default file, …). `reason`
    * is the envelope's `detail` verbatim — the backend writes the sentence the
-   * user should read (e.g. the "LTX 2.5 エンジンは次段階…" notice), and
-   * paraphrasing it here would only make it staler than the server. */
+   * user should read, and paraphrasing it here would only make it staler than
+   * the server. */
   | { kind: "rejected"; reason: string }
   /** Anything else: 404 for an id the server does not know, a transport
    * failure, an unexpected status. */

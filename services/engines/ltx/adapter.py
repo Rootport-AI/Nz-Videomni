@@ -87,10 +87,11 @@ REQUIRED_ASSETS: tuple[str, ...] = (
 
 #: LTX generation this adapter can actually run, as the first two segments of
 #: the transformer's ``model_version`` (GGUF KV or safetensors ``__metadata__``;
-#: "2.3.0" -> "2.3"). The LTX 2.5
-#: inference path is the NEXT stage (PENDING_TASKS §3-98); until it exists, a
-#: 2.5 weight file must fail loud at load time instead of being handed to a
-#: worker that would mis-run it.
+#: "2.3.0" -> "2.3"). LTX 2.5 weights are
+#: run by the sibling ``ltx25`` family; a 2.5 file chosen under a 2.3 base model
+#: is refused by the dispatcher (``services.engines.check_kv``) before this
+#: adapter is asked. Any other generation must fail loud at load time instead of
+#: being handed to a worker that would mis-run it.
 SUPPORTED_MODEL_VERSIONS: frozenset[str] = frozenset({"2.3"})
 
 #: ``general.architecture`` value of every LTX weight file (2.3 and 2.5 alike).
@@ -211,9 +212,11 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
     1. ``general.architecture`` — the engine FAMILY. Anything other than
        ``ltxv`` is a different model lineage entirely and is refused (422).
     2. ``model_version`` — the LTX generation. Only
-       :data:`SUPPORTED_MODEL_VERSIONS` can be run today; a newer one is
-       refused with a message that names the next stage rather than pretending
-       the file is broken.
+       :data:`SUPPORTED_MODEL_VERSIONS` can be run by this engine. The
+       dispatcher (``services.engines.check_kv``) matches the file's
+       generation against the chosen base model's family BEFORE this function
+       is reached, so this branch is the backstop for a file whose family the
+       dispatcher could not determine.
 
     A MISSING key is a WARNING, not a refusal: both keys are present in every
     file the project's own converter produces, but a hand-made or third-party
@@ -254,8 +257,8 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
             category,
             name,
             detail=(
-                f"このtransformerはltxv {version}です。LTX 2.5エンジンは次段階"
-                "(PENDING_TASKS §3-98)で実装予定のため、まだ読み込めません。"
+                f"このtransformerはltxv {version}です。LTX 2.3エンジンが扱えるのは"
+                f"ltxv {'/'.join(sorted(SUPPORTED_MODEL_VERSIONS))}系のみです。"
             ),
         )
 

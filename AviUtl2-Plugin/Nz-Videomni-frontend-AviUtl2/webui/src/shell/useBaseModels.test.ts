@@ -49,7 +49,7 @@ async function renderReady(apiClient: ApiClient) {
 
 describe("useBaseModels", () => {
   it("lists base_models[] in server order and reports the active one", async () => {
-    const { result } = await renderReady(createApiClient(createMockBridge({ delayMs: 0 })));
+    const { result } = await renderReady(createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "partial" })));
 
     expect(result.current.options.map((o) => o.id)).toEqual(["LTX23", "LTX25"]);
     expect(result.current.options[0]).toMatchObject({
@@ -58,17 +58,14 @@ describe("useBaseModels", () => {
       present: true,
       missingCategories: [],
     });
-    // The default fixture install of LTX 2.5 is partial: selectable (present),
-    // but not complete.
+    // A partial install of LTX 2.5 is selectable (present), but not complete.
     expect(result.current.options[1]).toMatchObject({ installed: false, present: true });
     expect(result.current.options[1]?.missingCategories).toContain("audio");
     expect(result.current.current).toBe("LTX23");
   });
 
   it("a successful switch moves `current` and re-reads GET /models", async () => {
-    const apiClient = createApiClient(
-      createMockBridge({ delayMs: 0, ltx25Install: "full", supportedBaseModels: ["LTX23", "LTX25"] }),
-    );
+    const apiClient = createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "full" }));
     const loadPipeline = vi.spyOn(apiClient, "loadPipeline");
     const { result } = await renderReady(apiClient);
 
@@ -101,9 +98,7 @@ describe("useBaseModels", () => {
   });
 
   it("trackLoad wraps exactly one request per switch, and none for a local refusal", async () => {
-    const apiClient = createApiClient(
-      createMockBridge({ delayMs: 0, ltx25Install: "full", supportedBaseModels: ["LTX23", "LTX25"] }),
-    );
+    const apiClient = createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "full" }));
     const { spy: tracked, trackLoad } = countingTrackLoad();
     const view = renderHook(() => useBaseModels({ apiClient, trackLoad }));
     await waitFor(() => expect(view.result.current.options.length).toBeGreaterThan(0));
@@ -134,7 +129,7 @@ describe("useBaseModels", () => {
   });
 
   it("a partial install is NOT short-circuited — the server gets to say why", async () => {
-    const apiClient = createApiClient(createMockBridge({ delayMs: 0 }));
+    const apiClient = createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "partial" }));
     const loadPipeline = vi.spyOn(apiClient, "loadPipeline");
     const { result } = await renderReady(apiClient);
 
@@ -146,7 +141,7 @@ describe("useBaseModels", () => {
     expect(loadPipeline).toHaveBeenCalledWith({}, "LTX25");
     // 422 carries the server's `detail` through untouched.
     expect(outcome?.kind).toBe("rejected");
-    expect(outcome?.kind === "rejected" ? outcome.reason : "").toContain("LTX 2.5エンジンは次段階");
+    expect(outcome?.kind === "rejected" ? outcome.reason : "").toContain("registered model file missing");
     expect(result.current.current).toBe("LTX23");
   });
 
@@ -269,9 +264,7 @@ describe("useBaseModels", () => {
     // Mirrors "carries each base model's unsupported_features and reports the
     // ACTIVE one's" above, for the sibling field threaded to
     // `shell/comfortTable.ts`'s `resolveComfortRow`.
-    const real = createApiClient(
-      createMockBridge({ delayMs: 0, ltx25Install: "full", supportedBaseModels: ["LTX23", "LTX25"] }),
-    );
+    const real = createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "full" }));
     let releaseLoad: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
       releaseLoad = resolve;
@@ -326,11 +319,7 @@ describe("useBaseModels", () => {
     // tell "moved" from "greyed everything".
     const apiClient = createApiClient(
       withExtraUnsupportedFeatures(
-        createMockBridge({
-          delayMs: 0,
-          ltx25Install: "full",
-          supportedBaseModels: ["LTX23", "LTX25"],
-        }),
+        createMockBridge({ delayMs: 0, ltx25Install: "full" }),
         "LTX25",
         ["retake"],
       ),
@@ -387,10 +376,11 @@ describe("useBaseModels", () => {
   });
 
   it("a REFUSED switch leaves the disabled modes where they were", async () => {
-    // The 422 path (fixture default: the engine cannot run LTX25). Guard 4
-    // reverts the displayed selection; the feature scope must revert with it,
-    // or the user is left with tabs greyed for a base model that never loaded.
-    const apiClient = createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "full" }));
+    // The 422 path (a partial install: the server refuses the first missing
+    // default file). Guard 4 reverts the displayed selection; the feature
+    // scope must revert with it, or the user is left with tabs greyed for a
+    // base model that never loaded.
+    const apiClient = createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "partial" }));
     const { result } = await renderReady(apiClient);
 
     await act(async () => {

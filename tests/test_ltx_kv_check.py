@@ -8,9 +8,11 @@ synthesized here (no weight files involved) — the parser itself has its own
 tests in tests/test_gguf_kv.py, and the real 2.3/2.5 files were verified by
 hand in P2.
 
-Wiring this into POST /pipeline/load is the API-axis phase (§3-97 P6); what is
-pinned here is the ruling and, above all, its wording — the LTX 2.5 message is
-what an owner sees when they select a base model the engine cannot run yet.
+In production this function is reached only through the dispatcher
+(``services.engines.check_kv``), which rules on a file that belongs to a
+different engine family first (tests/test_engine_dispatch.py). What is pinned
+here is the adapter's own ruling and its wording — the backstop for a file
+whose family the dispatcher could not determine.
 """
 
 from __future__ import annotations
@@ -36,14 +38,14 @@ def test_patch_segment_is_ignored():
     check_kv("transformer", "respin", {**LTX23_KV, "model_version": "2.3.7"})
 
 
-def test_ltx25_is_refused_with_the_next_stage_message():
+def test_an_unsupported_generation_is_refused_naming_what_this_engine_runs():
     with pytest.raises(APIError) as ei:
         check_kv("transformer", "ltx25", LTX25_KV)
     assert ei.value.code == "MODEL_INCOMPATIBLE" and ei.value.status_code == 422
     detail = ei.value.detail
     assert "ltxv 2.5.0" in detail
-    assert "次段階" in detail and "§3-98" in detail
-    assert "まだ読み込めません" in detail
+    assert "LTX 2.3エンジンが扱えるのは" in detail
+    assert "ltxv 2.3系のみ" in detail
 
 
 def test_foreign_architecture_is_refused():

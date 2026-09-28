@@ -121,7 +121,8 @@ async def load_pipeline(
             現在のベースモデルを維持します。切り替えはワーカーの載せ替えを
             伴うため数秒〜十数秒かかります。エラーは、ジョブ実行中なら
             409 JOB_BUSY、未知のidなら 404 MODEL_NOT_FOUND、重みが未導入なら
-            422 MODEL_FILE_MISSING、重みとベースモデルの系統が食い違うなら
+            422 MODEL_FILE_MISSING、重みファイルが使えない（形式が違う・
+            壊れている・選択中のベースモデルとは別の LTX バージョン用）なら
             422 MODEL_INCOMPATIBLE、既に読み込み処理中なら 409 PIPELINE_LOADING
             です。**切り替え直後の1本目の生成はキャッシュが冷えているため
             通常の約2倍かかります**（``wait_for_job`` がタイムアウトしても

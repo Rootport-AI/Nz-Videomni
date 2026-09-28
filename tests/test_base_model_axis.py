@@ -69,8 +69,9 @@ def _second_descriptor() -> dict:
 
 
 def _build(tmp_path, *, second_version: str):
-    """Two installed base models; the second's transformer declares
-    ``second_version`` ("2.5.0" -> unrunnable, "2.3.0" -> runnable)."""
+    """Two installed base models, both declaring the 2.3 engine family; the
+    second's transformer declares ``second_version`` ("2.5.0" -> a crossed
+    pair the dispatcher refuses, "2.3.0" -> loads)."""
     descriptors = [base_model_descriptor(), _second_descriptor()]
     fragment = build_model_layout(tmp_path, descriptors)  # writes base #1's files
     models_dir = tmp_path / "models"
@@ -97,7 +98,9 @@ def _build(tmp_path, *, second_version: str):
 
 @pytest.fixture()
 def client25(tmp_path):
-    """Base model #2 is an LTX 2.5 this engine cannot run yet."""
+    """Base model #2 is named "LTX 2.5" but declares the 2.3 engine family
+    (``engine_family: "ltx"``) while its transformer is ``ltxv 2.5.0`` — a
+    crossed pair, which the engine dispatcher refuses."""
     app = _build(tmp_path, second_version="2.5.0")
     with TestClient(app) as c:
         c.app_context = app.state.context  # type: ignore[attr-defined]

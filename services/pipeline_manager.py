@@ -1192,7 +1192,8 @@ class PipelineManager:
                     pass
 
             # Console job-info line (owner requirement): base weight + LoRAs +
-            # base prompt (clip overrides propagate from it). Mirrors run_job so
+            # base prompt (a clip's own prompt, where set, replaces it for that
+            # clip). Mirrors run_job so
             # LoRA application is visible from the uvicorn console.
             logger.info(
                 'Chain job %s base=%s loras=%s prompt="%s"',

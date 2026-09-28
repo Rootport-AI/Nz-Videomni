@@ -10,14 +10,17 @@ chunked upsampling), **Edit** (video-editing tools, with its own sub-tab row —
 2026-08-10, see `../../../Docs/PENDING_TASKS_CLOSED.md` §3-73), **Outpainting**
 (shipped 2026-08-09, `../../../Docs/PENDING_TASKS_CLOSED.md` §3-70) and
 **Inpainting** (repaints only the inside of a mask that AviUtl2 renders from a
-timeline **partial filter**; LTX 2.3 only — the sub-tab greys out while LTX 2.5
-is loaded; shipped 2026-09-15, design canon
-`../../../Docs/INPAINTING_DESIGN.md`, completion record
-`../../../Docs/PENDING_TASKS_CLOSED.md` §3-55-02)), and **Inventory**
+timeline **partial filter**; runs on both LTX 2.3 and LTX 2.5; shipped
+2026-09-15, design canon `../../../Docs/INPAINTING_DESIGN.md`, completion
+records `../../../Docs/PENDING_TASKS_CLOSED.md` §3-55-02 and, for LTX 2.5,
+§3-150)), and **Inventory**
 (job history, downloads, and
 a LoRA browser — model management lives in the settings panel's `ModelsPanel`,
-not here) — plus a batch-A2V section (stateless folder-scan-driven bulk
-generation, no CSV manifest) and a job ledger (a table of all jobs shown
+not here) — plus two batch panels (both stateless and folder-scan-driven, with
+no CSV manifest: the batch panel on the Single screen makes one video per
+audio file, or one video per image when only an image folder is given, and
+the batch i2v-long panel on the Chained screen makes one long clip chain per
+image) and a job ledger (a table of all jobs shown
 next to the Generate button; there
 is no separate job lane or reservation queue — the backend runs one job at a
 time, so the Generate button just disables itself while one is running). The
@@ -96,6 +99,7 @@ webui/
   src/
     bridge/            # RPC contract + both bridge implementations (see below)
     api/               # Backend REST client built on top of the bridge
+    assets/            # Static images
     i18n/
       strings.ts       # All UI copy, en/ja dictionaries (see below)
       strings.test.ts  # Enforces en/ja key parity
@@ -105,19 +109,24 @@ webui/
     modes/
       single/          # Single screen: T2V/I2V, keyframes, audio attach, LoRAs
       chained/          # Chained screen: multi-clip chains, presets, per-clip LoRAs
-      batch/            # Batch A2V: folder scan, in-memory row list (stateless), batch runner
+      batch/            # Batch panel (Single screen): folder scan, in-memory row list
+                        #   (stateless), batch runner
+      batch-i2v-long/   # Batch i2v-long panel (Chained screen): one long clip chain per image
+      edit/             # Edit screen: EditSubTabs + the Retake, Outpainting and
+                        #   Inpainting panels
       inventory/        # Inventory screen: job history, LoRA browser
                         #   (model management lives in shell/ModelsPanel, not here)
       toolbox/          # Toolbox screen: ToolboxSubTabs + Tracking (ObjectTrackingSection)
                         #   and mp4 info (Mp4InfoSection)
     shell/             # AppShell, mode tabs, prompt bar, settings, models panel,
                         #   BaseModelSelect (shared by the header and the settings panel)
+    styles/            # CSS shared across modes
     timeline/          # Right-click-from-timeline routing and prefill logic
     test/
       setupTests.ts    # vitest + @testing-library/jest-dom wiring
     App.tsx            # Root component, renders AppShell
     App.css / index.css
-    App.test.tsx, App.chained.test.tsx, App.prefill.test.tsx
+    App.test.tsx, App.*.test.tsx   # App-level tests (see Testing)
     main.tsx
   index.html
   vite.config.ts
@@ -126,10 +135,10 @@ webui/
 ## Bridge architecture
 
 `src/bridge/types.ts` is **the single source of truth** for the RPC contract
-between the WebUI and the native `.aux2` plugin (currently contract v7 — see
-[`Docs/BRIDGE_CONTRACT.md`](../Docs/BRIDGE_CONTRACT.md) for the authoritative,
-implementation-cross-checked reference). v7 adds `ui.resolveDroppedFiles`
-for drag-and-drop (see below). If the contract changes, this file
+between the WebUI and the native `.aux2` plugin. The current contract version
+and its history are in
+[`Docs/BRIDGE_CONTRACT.md`](../Docs/BRIDGE_CONTRACT.md), the authoritative,
+implementation-cross-checked reference. If the contract changes, this file
 changes first, and the native side is updated to match — everything else in
 `src/bridge/` and in the UI is typed against it.
 
@@ -151,28 +160,26 @@ changes first, and the native side is updated to match — everything else in
   // native-initiated push (no id)
   { event: string, data: object }
   ```
-  Events are actively used: `timeline.menuInvoked` is pushed by the native
-  side when a timeline right-click menu action is chosen, and
+  Events are actively used: for example, `timeline.menuInvoked` is pushed by
+  the native side when a timeline right-click menu action is chosen, and
   `src/timeline/useMenuRouter.ts` subscribes to it to route into the
-  appropriate mode with a prefill. See `Docs/BRIDGE_CONTRACT.md` §1.4/§4.14
-  for the full picture (including which other events exist and are not yet
-  emitted by native).
+  appropriate mode with a prefill. See `Docs/BRIDGE_CONTRACT.md` §1.4 for the
+  event mechanism and §3 for the list of every event the native side pushes.
 
 ### Methods
 
 The full, versioned list of RPC methods, their params/results, error codes,
 timeouts, and thread model lives in
-[`Docs/BRIDGE_CONTRACT.md`](../Docs/BRIDGE_CONTRACT.md) (contract v7 as of
-this writing) — that document is the source of truth and is kept in sync
-with `src/bridge/types.ts` and the native implementation, so it isn't
-duplicated here. At a glance, methods span plugin/edit-info queries
-(`ping`, `getEditInfo`), backend proxying (`backend.request`,
-`backend.downloadVideo`, `backend.uploadFile`, `backend.getBaseUrl`),
-timeline interaction (`timeline.insertMedia`, `timeline.captureFrame`,
-`timeline.getSelection`), native file/UI pickers (`ui.pickFile`,
-`ui.pickFolder`, `ui.makeThumbnail`), settings (`settings.get`/`set`), and
-the filesystem bridge used by batch A2V (`fs.listFiles`,
-`fs.probeAudioDuration`).
+[`Docs/BRIDGE_CONTRACT.md`](../Docs/BRIDGE_CONTRACT.md) — that document is
+the source of truth and is kept in sync with `src/bridge/types.ts` and the
+native implementation, so it isn't duplicated here. At a glance, methods
+span plugin/edit-info queries (`ping`, `getEditInfo`), backend proxying
+(`backend.*`), timeline interaction (`timeline.*` — inserting media,
+capturing a frame, reading the selection, cutting out a range, extracting
+audio, the provisional placeholder objects that stand in for a job while it
+runs, object tracking, and rendering the Inpainting mask), native file/UI
+pickers and drag-and-drop (`ui.*`), settings (`settings.get`/`set`), and the
+filesystem bridge (`fs.*` — folder listing and media probing).
 
 Extra fields on a result are ignored by the WebUI. The WebUI also raises two
 purely local error codes that never come from native: `TIMEOUT` (no response

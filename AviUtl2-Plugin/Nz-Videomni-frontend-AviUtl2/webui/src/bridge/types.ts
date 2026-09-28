@@ -302,9 +302,11 @@ export interface BridgeParamsMap {
     /** Contract v10 (source trim, §1-6): extra query parameters to append to
      * the upload URL, URL-encoded by native. Omit (the pre-v10 shape) for the
      * plain "upload the whole file" call — the resulting URL is then
-     * byte-identical to before v10. Today's only producer is
-     * `timeline/sourceTrim.ts`'s `trimQuery()`, which returns `undefined`
-     * (so the key is spread away entirely) whenever no trim applies. */
+     * byte-identical to before v10. The keys are the upload endpoint's own
+     * query parameters — for example `/upload/video`'s trim pair
+     * (`timeline/sourceTrim.ts`'s `trimQuery()`, which returns `undefined`
+     * whenever no trim applies) and its `max_frames` upload cap
+     * (`modes/chained/useChainForm.ts`). */
     query?: Record<string, string>;
   };
   /** Opens a native file-picker dialog scoped to the given media kind

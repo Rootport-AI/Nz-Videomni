@@ -2271,7 +2271,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **結論の要約**: LTX 2.5 全 on は、fp8・REDGraft 混在・int8 ConvRot の 3 種の 1080p の境界が同じ段で揃った。REDGraft の safetensors は同系統の Q6_K GGUF より下だった。LTX 2.3 既定構成（診断値）は、fp8mixed と silveroxides int8 の境界が同じ段で揃い、Kijai int8 ConvRot だけ 2 段以上上だった。LTX 2.3 の w4a8 は、全 on で測れた唯一の量子化 safetensors として、線まで 2 回とも快適だった。**詳しい数値と表は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節と一次記録 `outputs/comfort-calib-2026-09-27/RESULTS.md` が正本です。**
 - **クローズ理由**: 「測って結論を出す」というスコープが完了した。反映（配信値・UI・マニフェスト）は別途検討（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31）。
 - **状態**: **クローズ（2026-09-28）。** ブランチは `dev`。**配信値は変えていない。**
-- **残課題**: Kijai int8 ConvRot の真の境界（梯子の上限より上）は未測定（追うかはオーナー判断）。LTX 2.3 の fp8・int8 系の全 on の境界は、今回は測っていない（第13.2節で fp8 の全 on がコミットの上限に当たったため、計画の段階で既定構成の診断に絞った）。生成時間の比からの Go／No-go 判断は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-33 で行う。
+- **残課題**: Kijai int8 ConvRot の真の境界（梯子の上限より上）は未測定（追うかはオーナー判断）。→ 追加の計測は行わない（オーナー裁定・2026-09-28。[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14.6節）。LTX 2.3 の fp8・int8 系の全 on の境界は、今回は測っていない（第13.2節で fp8 の全 on がコミットの上限に当たったため、計画の段階で既定構成の診断に絞った）。生成時間の比からの Go／No-go 判断は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-33 で行う。
 - **正本・出典**: 結論＝[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) **第14節**、実施記録＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§121.12**（手順は §121.11）、数値の一次記録＝`outputs/comfort-calib-2026-09-27/RESULTS.md`（複写：[`Docs/Outputs-archive/comfort-calib-2026-09-27/`](Outputs-archive/comfort-calib-2026-09-27/)）。
 
 ### 3-167. CivitAI 等で配布されている fp8 の safetensors を models ディレクトリに配置するだけで使えるようにする（起票：2026-09-25、B-1 完結・オーナー目視合格：2026-09-25、B-2 完結・オーナー目視合格：2026-09-26、B-3 較正完了：2026-09-26、クローズ：2026-09-28）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167 からクローズ）

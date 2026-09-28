@@ -1,5 +1,5 @@
 /**
- * Bridge RPC contract v1/v2/v3 — the single source of truth for the WebUI <->
+ * Bridge RPC contract — the single source of truth for the WebUI <->
  * native (.aux2) message shapes. Native code implements the mirror image of
  * this contract; if either side changes, this file must change first and the
  * other side must be updated to match.
@@ -203,7 +203,7 @@
  * tracking's `TRACK_BUSY` guards: one timeline job at a time, whichever kind.
  */
 
-/** All RPC methods defined as of contract v6. */
+/** Every RPC method the contract defines. */
 export type BridgeMethod = keyof BridgeParamsMap;
 
 /** Request parameter shape for each method. M1 methods take no parameters. */
@@ -998,8 +998,8 @@ export interface TimelineMaskProgressData {
 export type ParamsOf<M extends BridgeMethod> = BridgeParamsMap[M];
 export type ResultOf<M extends BridgeMethod> = BridgeResultMap[M];
 
-/** Error codes defined by contract v1/v2/v3. Native may add new codes over
- * time; unrecognized codes are treated as opaque strings by the WebUI. */
+/** Error codes the contract defines. Native may add new codes over time;
+ * unrecognized codes are treated as opaque strings by the WebUI. */
 export type KnownBridgeErrorCode =
   | "BAD_REQUEST"
   | "UNKNOWN_METHOD"

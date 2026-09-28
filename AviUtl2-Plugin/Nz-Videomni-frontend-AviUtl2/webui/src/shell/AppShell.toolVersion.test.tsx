@@ -45,7 +45,7 @@ async function toastText(container: HTMLElement) {
 
 describe("AppShell — header base-model dropdown", () => {
   it("builds its options from base_models[], annotating anything not fully installed", async () => {
-    const { select } = await renderApp();
+    const { select } = await renderApp({ ltx25Install: "partial" });
 
     const options = within(select).getAllByRole("option") as HTMLOptionElement[];
     expect(options.map((o) => o.value)).toEqual(["LTX23", "LTX25"]);
@@ -59,11 +59,8 @@ describe("AppShell — header base-model dropdown", () => {
   });
 
   it("switching to an installed base model loads it and the value moves there", async () => {
-    // Models the world after §3-98: LTX 2.5 fully installed AND runnable.
-    const { select, container, requests } = await renderApp({
-      ltx25Install: "full",
-      supportedBaseModels: ["LTX23", "LTX25"],
-    });
+    // LTX 2.5 fully installed, so the load succeeds.
+    const { select, container, requests } = await renderApp({ ltx25Install: "full" });
     const user = userEvent.setup();
 
     await user.selectOptions(select, "LTX25");
@@ -78,14 +75,14 @@ describe("AppShell — header base-model dropdown", () => {
   });
 
   it("a 422 shows the server's own reason and puts the selection back", async () => {
-    const { select, container, requests } = await renderApp({ ltx25Install: "full" });
+    const { select, container, requests } = await renderApp({ ltx25Install: "partial" });
     const user = userEvent.setup();
 
     await user.selectOptions(select, "LTX25");
 
     // The server's `detail` verbatim — the WebUI must not paraphrase the
-    // incompatibility, since only the server knows what it actually found.
-    expect(await toastText(container)).toContain("LTX 2.3エンジンが扱えるのは");
+    // refusal, since only the server knows what it actually found.
+    expect(await toastText(container)).toContain("registered model file missing");
     // Guard 4: back to the base model that is still loaded.
     await waitFor(() => expect(select.value).toBe("LTX23"));
     expect(loadCalls(requests)).toHaveLength(1);
@@ -127,13 +124,12 @@ describe("AppShell — header base-model dropdown", () => {
     // under the full suite (2026-08-22, flaky in CI-shaped runs, unrelated to
     // what was being changed); 400ms buys an order of magnitude of headroom
     // without making the test wait for it — the `waitFor` at the end settles as
-    // soon as the load resolves. A FULL LTX 2.5 install is opted into because
-    // the default fixture answers 422 for it, which would end the flight before
-    // there is anything to observe.
+    // soon as the load resolves. A FULL LTX 2.5 install is used because a
+    // partial one answers 422 at once, which would end the flight before there
+    // is anything to observe.
     const { select, container } = await renderApp({
       delayMs: 400,
       ltx25Install: "full",
-      supportedBaseModels: ["LTX23", "LTX25"],
     });
     const user = userEvent.setup();
 
@@ -151,10 +147,7 @@ describe("AppShell — header base-model dropdown", () => {
   // same `useBaseModels()` call. Its aria-label matches the header's, so every
   // lookup inside the dialog is scoped with `within(dialog)`.
   it("the Settings panel offers the same options, and picking there loads the base model and remounts the Models section", async () => {
-    const { select, requests } = await renderApp({
-      ltx25Install: "full",
-      supportedBaseModels: ["LTX23", "LTX25"],
-    });
+    const { select, requests } = await renderApp({ ltx25Install: "full" });
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "Settings" }));

@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.71**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 版 | **v0.5.72**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-09-28**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -120,6 +120,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.69 | 2026-09-27 | **LTX 2.3・LTX 2.5 の transformer に、ComfyUI 標準の int8 safetensors（`int8_tensorwise`・`asym_w4a8_int8`）を置いても選べるようにした（台帳 `Docs/PENDING_TASKS.md` §3-168。C-0〜C-3 実装完結・dev `c18d9aa`。加算のみで、`GET /models` の応答形・ワーカーへのペイロードの形は変わらない）**。fp8 専用だった受け入れ検査を「量子化 safetensors 一般」の検査へ一般化し（`sft_fp8_format.py`→`sft_quant_format.py` ほかの改称を伴う）、422 `MODEL_INCOMPATIBLE` の `detail` の接頭語を「量子化 safetensors の検査に不合格: 」へ改めた。**§6.8**（`MODEL_INCOMPATIBLE` の原因説明を「量子化 safetensors（fp8／int8）」へ一般化）／**§6.9(b)**（受け入れ検査の対象形式と 422 の文言例を更新）。受け入れ規則の正本は `Docs/VERIFICATION_LOG.md` §121.3（設計は §121.2）。**実機の門（G3〜G8）はサーバー起動待ちで未実施**（§121.4）。 |
 | v0.5.70 | 2026-09-27 | **§3-168（ComfyUI 標準の int8 safetensors）の完結を反映し、fp8 だけを前提にしていた記述を量子化 safetensors 一般へ揃えた（文書のみ。API・実装への変更は無い）**。実機の門 G3〜G8 とオーナーの目視が合格し、台帳は `Docs/PENDING_TASKS_CLOSED.md` §3-168 へ移った（記録は `Docs/VERIFICATION_LOG.md` §121.4・§121.9）。**§4.2**（`safetensors_transformer_path` を使う条件と `ltx25` の振り分けを「量子化 safetensors〔fp8／int8〕」へ一般化し、ローダの置き場所を改称後の `engine/sft_quant/` へ訂正）／**§6.9(b)**（422 の文言例 2 つを現行コードの文言へ訂正し、台帳の参照先を CLOSED へ）。 |
 | v0.5.71 | 2026-09-28 | **連結生成（Chained）のプロンプトが Stage-1 と Stage-2 でどう効くかを、コードで確かめたうえで正本として明文化した（文書のみ・凍結 API 契約への変更なし）**。**§6.2** に補足「チェーンのプロンプトの効き方（Stage-1 と Stage-2）」を新設（実効プロンプトは共通とクリップ別の「置き換え」であること・Stage-1 はクリップごとの実効プロンプト・Stage-2 は全窓がクリップ0の実効プロンプト1本・ネガティブプロンプトと LoRA はジョブ全体で1組）／**§6.10(f)** の「動作」欄から同補足を指す1文を追加。確認の記録は `Docs/VERIFICATION_LOG.md` §122。 |
+| v0.5.72 | 2026-09-28 | **§6.9(b) の「事前チェックは 2 段」の項を実装どおりに訂正（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。②を `adapter.check_kv` 1 つとして書き、「ベースモデルに『LTX 2.5』を選んでください」という案内をアダプタの文面としていたが、この案内を出すのは振り分け層（`services/engines/__init__.py` の `check_kv`）であり、アダプタの `check_kv` はその後で系統内の判定（アーキテクチャ名・世代）を行う。②を 2 層に書き分けた（設計の正本は `Docs/MULTI_ENGINE_DESIGN.md` §2.1・§2.3）。**v0.5.24 の行は本項の記述を「もともと正しく」としているが、この案内の帰属については当てはまらない**（v0.5.24 の時点でも、この文面を持っていたのは振り分け層で、アダプタには無かった）。記録は `Docs/VERIFICATION_LOG.md` §124。 |
 
 ### 0.2 スコープ
 
@@ -1228,7 +1229,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 - `base_model` 指定時の応答は `{"pipeline_loaded", "pipeline_type", "state", "base_model", "models"}`。
 - **未知の `base_model` は 404 `MODEL_NOT_FOUND`**（既知の id 一覧を `detail` に入れる）。カテゴリ名の検証も**切替先の**記述子から引くため、切替先に存在しないカテゴリを名指しすると同じく 404 になる。
 - **ベースモデルが変わるときは、`"default"` のままのカテゴリも含めて全カテゴリを解決・事前チェックする。** ベースモデルが変われば既定のファイル自体が別物になるので、素通しすると「中身を一度も見ないまま新しい重みをエンジンへ渡す」ことになるためである。ベースモデルが変わらない場合は従来どおり、`"default"` のカテゴリはペイロードへ上書きを出さない（＝全既定のロードは従来とバイト同一）。
-- **事前チェックは 2 段**である。①`precheck_model_file`（拡張子・GGUF/safetensors のヘッダ健全性 → 不適合は 422 `MODEL_INCOMPATIBLE`）、②`adapter.check_kv`（transformer カテゴリのみ。GGUF の KV メタデータを読み、`general.architecture` が `ltxv` でなければ 422、`model_version` の世代がそのアダプタの対応外なら 422〔`ltx` 系統のアダプタが受けるのは 2.3 のみ。2.5 の重みは別系統 `ltx25` が受けるため、文面は「ベースモデルに『LTX 2.5』を選んでください」と案内する〕。キーが無い場合は WARNING を出して通す）。KV の読み取りは依存パッケージ無しの自前パーサ（`services/gguf_kv.py`）がヘッダだけを読むもので、巨大なテンソル本体には触れない。
+- **事前チェックは 2 段**である。①`precheck_model_file`（拡張子・GGUF/safetensors のヘッダ健全性 → 不適合は 422 `MODEL_INCOMPATIBLE`）、②KV の判定（transformer カテゴリのみ。GGUF の KV メタデータで裁く。不合格はいずれも 422 `MODEL_INCOMPATIBLE`）。②は 2 層で、まず振り分け層（`services/engines/__init__.py` の `check_kv`）が、KV の `general.architecture` と `model_version` の世代から系統を引き（表は同モジュールの `FAMILY_BY_KV`）、選択中のベースモデルの `engine_family` と照合する。食い違えば 422 で、文面は選ぶべきベースモデルを案内する（「ベースモデルに『LTX 2.5』を選んでください」など）。次に系統のアダプタの `check_kv` が系統内を判定し、`general.architecture` が `ltxv` でなければ 422、`model_version` の世代がそのアダプタの対応外なら 422 とする（世代の判定は、振り分け層が系統を決められなかったファイル——キーが欠けている、または表に無い世代——のための最後の砦である）。キーが無い場合は照合を見送り、アダプタが WARNING を出して通す。KV の読み取りは依存パッケージ無しの自前パーサ（`services/gguf_kv.py`）がヘッダだけを読むもので、巨大なテンソル本体には触れない。
 - **transformer に `.safetensors` が選ばれたときは、①が量子化 safetensors（fp8／int8）の受け入れ検査になる。** 対応する量子化形式は fp8・fp8_scaled（LTX 2.3 は 2026-09-25〜、LTX 2.5 は 2026-09-26〜）に加え、ComfyUI（画像・動画生成の定番 UI）標準の `int8_tensorwise`（スカラー／行ごと倍率・ConvRot＝アダマール回転の前処理あり／なし）と `asym_w4a8_int8`（4 ビットの重みをコードブックで復元する方式。両形式とも 2026-09-26〜・台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-168）である。検査の本体は `sft_quant_format.inspect`（リポジトリ直下。旧名 `sft_fp8_format.inspect`。ワーカーも読み込み時に同じ関数を呼ぶ）で、ヘッダと数十バイトの印だけを読み、何 GB もある重み本体は読まない。**受け入れ規則の正本は `Docs/VERIFICATION_LOG.md` §121.3 である**（§117.3・§118.3 は fp8 のみを対象にしていた当時の記録として残っており、書き換えていない）。不合格は 422 `MODEL_INCOMPATIBLE` で、`detail` に「量子化 safetensors の検査に不合格: 」で始まる 1 行で「どこが不合格か」を入れる。例:
 
   ```jsonc

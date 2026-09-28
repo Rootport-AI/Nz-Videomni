@@ -16,14 +16,12 @@ import { AppShell } from "./AppShell";
 // design is that the names come from the backend, and a test that supplies
 // them itself would pass even if the response were never read.
 //
-// The fixture models the world after §3-98 ships: `ltx25Install: "full"` puts
-// the weights on disk and `supportedBaseModels` lets the engine actually run
-// them, which together make LTX 2.5 selectable AND loadable.
+// `ltx25Install: "full"` puts LTX 2.5's weights on disk, which makes it
+// selectable AND loadable.
 
 const AS_LTX25: MockBridgeOptions = {
   delayMs: 0,
   ltx25Install: "full",
-  supportedBaseModels: ["LTX23", "LTX25"],
 };
 
 async function renderApp(options: MockBridgeOptions = {}, extraUnsupported: readonly string[] = []) {

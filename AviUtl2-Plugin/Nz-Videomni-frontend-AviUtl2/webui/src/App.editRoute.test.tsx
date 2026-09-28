@@ -411,7 +411,6 @@ describe("App / Edit screens receive Settings' acceleration (§1-27)", () => {
  * — see the helper's own note for why these tests need it. */
 const AS_LTX25: MockBridgeOptions = {
   ltx25Install: "full",
-  supportedBaseModels: ["LTX23", "LTX25"],
 };
 
 describe("App / Edit-系 right-click on a base model that cannot run Edit", () => {

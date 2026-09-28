@@ -10,10 +10,10 @@ chunked upsampling), **Edit** (video-editing tools, with its own sub-tab row —
 2026-08-10, see `../../../Docs/PENDING_TASKS_CLOSED.md` §3-73), **Outpainting**
 (shipped 2026-08-09, `../../../Docs/PENDING_TASKS_CLOSED.md` §3-70) and
 **Inpainting** (repaints only the inside of a mask that AviUtl2 renders from a
-timeline **partial filter**; LTX 2.3 only — the sub-tab greys out while LTX 2.5
-is loaded; shipped 2026-09-15, design canon
-`../../../Docs/INPAINTING_DESIGN.md`, completion record
-`../../../Docs/PENDING_TASKS_CLOSED.md` §3-55-02)), and **Inventory**
+timeline **partial filter**; runs on both LTX 2.3 and LTX 2.5; shipped
+2026-09-15, design canon `../../../Docs/INPAINTING_DESIGN.md`, completion
+records `../../../Docs/PENDING_TASKS_CLOSED.md` §3-55-02 and, for LTX 2.5,
+§3-150)), and **Inventory**
 (job history, downloads, and
 a LoRA browser — model management lives in the settings panel's `ModelsPanel`,
 not here) — plus a batch-A2V section (stateless folder-scan-driven bulk

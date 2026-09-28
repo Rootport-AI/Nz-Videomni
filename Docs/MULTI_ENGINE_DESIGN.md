@@ -69,7 +69,7 @@
 
 **記述子×KVの4組はすべて契約テストで固定してある**（LTX 2.3 の記述子×2.3のKV／LTX 2.5 の記述子×2.5のKV は通過、交差する2組は明示的な422）。
 
-**量子化 safetensors（fp8／int8／w4a8）の transformer（fp8 は LTX 2.3 が 2026-09-25〜・LTX 2.5 が 2026-09-26〜・[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167。int8 系〔`int8_tensorwise`・`asym_w4a8_int8`〕は両エンジンとも 2026-09-26〜・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168）は、KV の代わりにヘッダを材料にして同じ2段へ流す。** safetensors には GGUF の KV が無いので、次のように読み替える。
+**量子化 safetensors（fp8／int8／w4a8）の transformer（fp8 は LTX 2.3 が 2026-09-25〜・LTX 2.5 が 2026-09-26〜・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167。int8 系〔`int8_tensorwise`・`asym_w4a8_int8`〕は両エンジンとも 2026-09-26〜・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168）は、KV の代わりにヘッダを材料にして同じ2段へ流す。** safetensors には GGUF の KV が無いので、次のように読み替える。
 
 - **1段目（系統）**: ヘッダの**指紋**——テンソル名の接頭辞が `model.diffusion_model.` か接頭辞なし（2026-09-26〜。どちらかを自動で見分ける）、`transformer_blocks` がちょうど 48 個（0〜47）、`__metadata__` に `config`（`transformer` を含むモデル設定の JSON）がある——に合格したことを根拠に `general.architecture = ltxv` と見なす。
 - **2段目（世代）**: `__metadata__.model_version`（`2.3.0` など）をそのまま `model_version` として渡す。無ければキーを入れず、上と同じく WARNING で通す。

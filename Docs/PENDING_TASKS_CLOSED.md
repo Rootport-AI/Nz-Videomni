@@ -2237,7 +2237,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: 機械ゲート全緑・較正完了（**実数は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.3・§116.6 であり、本書には書き写さない**）。**オーナーの実機目視は 2026-09-25 に合格した**（同§116.7）。
 - **クローズ理由**: 実機目視合格・オーナー受容。
 - **状態**: **クローズ（2026-09-25）。** ブランチは`dev`。
-- **残課題**: 配信値の最終判断は §3-167 の B-3 の後（上の裁定 4）。→ B-3 は完了しました（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §119）。判断は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167 の判断事項 1 です。
+- **残課題**: 配信値の最終判断は §3-167 の B-3 の後（上の裁定 4）。→ B-3 は完了しました（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §119）。判断は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167 の判断事項 1 です。 → 2026-09-27 のオーナー裁定で §1-31 の材料として閉じた（本書 §3-167・台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31）。
 - **正本・出典**: 実装・ゲート・較正・申し送り＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§116**（MCP の追補は **§116.9**）、窓ごとの目安解像度＝[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) **第12節**、広い窓の注意点＝[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) 冒頭の【2026-09-25 追記】、操作パネルの設計＝フロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) **§125**、数値の正本＝`chain_math.py` の `STAGE2_WINDOW_PRESETS`。コミット＝§116.2 に一覧。
 
 ### 3-166. Settings 画面にベースモデル選択を追加（オーナー依頼・起票：2026-09-24、実装・機械ゲート全緑：2026-09-24、オーナー実機ゲート G5 合格・クローズ：2026-09-24）（§1／§2 を経ず直接クローズ・出自番号なし）
@@ -2261,5 +2261,27 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: 客観検査 G1〜G8 がすべて合格し（**実数は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.4・§121.6〜§121.8 であり、本書には書き写さない**）、**オーナーの目視も 2026-09-27 に全件合格した**（同 §121.9）。
 - **クローズ理由**: 実機の門と目視の合格・オーナー受容。
 - **状態**: **クローズ（2026-09-27）。** ブランチは`dev`。
-- **残課題**: C-4（int8 系の快適上限の較正）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32 として起票した。そのほかの申し送りは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10。
+- **残課題**: C-4（int8 系の快適上限の較正）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32 として起票した。→ 2026-09-28 に §3-169 でクローズ。 そのほかの申し送りは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10。
 - **正本・出典**: 判定規則＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§121.3**、設計＝**§121.2**、検証の門＝**§121.4**、目視＝**§121.9**、較正の手順＝**§121.11**。コードの正本＝`sft_quant_format.py`（`SCHEME_TABLE`・`layer_schemes`）・`engine/sft_quant/`。コミット＝§121 の各節に一覧。
+
+### 3-169. int8／w4a8 safetensors の快適上限の較正（起票：2026-09-27、実施：2026-09-27〜28、クローズ：2026-09-28）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-32（**同書側は欠番**）。本書§3-168（クローズ済みの直接読みの実装）の C-4（重みの種別ごとの快適上限の較正）として台帳へ起票された項目を、§2 を経ずに直接クローズした。**番号は3-169**（本書に同番号の記録は無いため無印）。
+- **到達条件**: ComfyUI 標準の int8 系 safetensors（`int8_tensorwise`・`asym_w4a8_int8`）で、快適上限の線が重みの種別ごとにどこにあるかを「測って結論」を出すこと。**達成した**（47 ラン・失敗 0・打ち切り 0・取り直し 0・規則からの逸脱 0）。
+- **結論の要約**: LTX 2.5 全 on は、fp8・REDGraft 混在・int8 ConvRot の 3 種の 1080p の境界が同じ段で揃った。REDGraft の safetensors は同系統の Q6_K GGUF より下だった。LTX 2.3 既定構成（診断値）は、fp8mixed と silveroxides int8 の境界が同じ段で揃い、Kijai int8 ConvRot だけ 2 段以上上だった。LTX 2.3 の w4a8 は、全 on で測れた唯一の量子化 safetensors として、線まで 2 回とも快適だった。**詳しい数値と表は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節と一次記録 `outputs/comfort-calib-2026-09-27/RESULTS.md` が正本です。**
+- **クローズ理由**: 「測って結論を出す」というスコープが完了した。反映（配信値・UI・マニフェスト）は別途検討（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31）。
+- **状態**: **クローズ（2026-09-28）。** ブランチは `dev`。**配信値は変えていない。**
+- **残課題**: Kijai int8 ConvRot の真の境界（梯子の上限より上）は未測定（追うかはオーナー判断）。LTX 2.3 の fp8・int8 系の全 on の境界は、今回は測っていない（第13.2節で fp8 の全 on がコミットの上限に当たったため、計画の段階で既定構成の診断に絞った）。生成時間の比からの Go／No-go 判断は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-33 で行う。
+- **正本・出典**: 結論＝[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) **第14節**、実施記録＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§121.12**（手順は §121.11）、数値の一次記録＝`outputs/comfort-calib-2026-09-27/RESULTS.md`（複写：[`Docs/Outputs-archive/comfort-calib-2026-09-27/`](Outputs-archive/comfort-calib-2026-09-27/)）。
+
+### 3-167. CivitAI 等で配布されている fp8 の safetensors を models ディレクトリに配置するだけで使えるようにする（起票：2026-09-25、B-1 完結・オーナー目視合格：2026-09-25、B-2 完結・オーナー目視合格：2026-09-26、B-3 較正完了：2026-09-26、クローズ：2026-09-28）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-167（**同書側は欠番**）。§3（将来の研究課題）に起票されていた項目を、オーナーの依頼で着手し、§2 を経ずにクローズした。**番号は3-167**（本書に同番号の記録は無いため無印）。
+- **到達条件**: CivitAI などで配布される LTX 2.3／2.5 のファインチューン（fp8 の safetensors）を、変換せずに `models\<系統>\Weights\` へ置くだけで選べるようにすること（A1111 SD WebUI の「モデルを置けば使える」体験が目標。対象は fp8 に限る）。**達成した。**
+- **何が完了したか**: 段階 B-1（LTX 2.3）・B-2（LTX 2.5）で、fp8 safetensors の transformer を変換せずに置くだけで選べるようにした。段階 B-3 で、快適上限が fp8 でどこにあるかを実機で較正した（LTX 2.3 の全 on はコミットの上限に当たって測り切れず、既定構成の診断で代えた）。**int8 系（`int8_tensorwise`・`asym_w4a8_int8`）への一般化は §3-168 で、その快適上限の較正は §3-169 で、それぞれ別項目として完結している**——本項が扱うのは fp8 に限る。
+- **判定規則**: 正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§121.3**（int8 への一般化後の現行規則）。§117.3・§118.3 は fp8 だけを対象にしていた当時の記録で、書き換えていない。
+- **どの物差しで通ったか**: B-1・B-2 とも機械ゲート緑・敵対的コードレビュー通過・実機確認完走・オーナー目視全合格（**実数と項目数は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §117.6〜§117.8・§118.5〜§118.10 が正本であり、本書には書き写さない**）。B-3 は失敗ランなしで終えたが、実行の門は条件つき合格（無効のランが 1 本あり、取り直し済み）で、LTX 2.3 fp8 の全 on はコミットの停止線を超えたため打ち切り、既定構成の診断で代えた（同 §119.2〜§119.4）。
+- **クローズ理由**: 状態欄に残っていた4件の判断事項——(1) 第12.4節・第13.4節の最終判断、(2) 配信値への反映先、(3) CLOSED へ移すか、(4) int8 への拡張——がすべて決着したため、オーナー裁定（2026-09-28「§3-167をクローズしてほしい」）でクローズした。
+- **状態**: **クローズ（2026-09-28）。** 実装と較正の記録は main へ merge 済み。**配信値は変えていない。**
+- **残課題**: 配信値への反映は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31 で行う。検証に使った fp8 の safetensors 2 本は、オーナーが常用しているため削除しない（オーナー裁定・2026-09-27）。LTX 2.3 fp8 の全 on の境界は未確定（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13.2節。この機体で測るにはコミットの上限を上げる手当てが要る。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §119.5）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§117**（LTX 2.3・B-1）・**§118**（LTX 2.5・B-2）・**§119**（快適上限の較正・B-3）・**§121.3**（現在の判定規則）、結論の要約＝[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) **第13節**、コードの正本＝`sft_quant_format.py`（旧名 `sft_fp8_format.py`）・`engine/sft_quant/`（旧名 `engine/fp8/`）・`engine25/`、README「追加の transformer（GGUF／量子化 safetensors）/ LoRA を配置する」。

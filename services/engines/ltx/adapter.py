@@ -1,12 +1,13 @@
-"""LTX pipeline adapter — the ONLY file that knows about LTX internals (spec 9.4).
+"""LTX 2.3 pipeline adapter (engine family ``ltx``) — the only file that knows
+about LTX 2.3 internals (spec §1.2, §4.4).
 
 Two backends live behind one facade (:class:`LTXRunner`):
 
 * ``_MockBackend`` — renders a short synthetic clip with PIL and encodes it to
   ``output.mp4`` with no GPU and no model weights. Used for tests and GPU-less
-  development. This is the original Phase-1 implementation, kept intact.
-* ``_RealBackend`` — Phase 5 (Approach W): manages a persistent subprocess
-  worker (``engine.worker``, launched as ``python -m engine.worker``) that runs
+  development.
+* ``_RealBackend`` — manages a persistent subprocess worker
+  (``engine.worker``, launched as ``python -m engine.worker``) that runs
   inside the engine venv where the proven GGUF low-VRAM engine lives. It builds
   the model once, then serves jobs over a small JSON-lines protocol; the engine
   writes ``output.mp4`` directly to the shared output dir. This backend NEVER
@@ -16,9 +17,9 @@ Two backends live behind one facade (:class:`LTXRunner`):
 Backend selection (``LTXRunner.load``):
 
 * ``config.model.backend == "mock"`` -> always mock.
-* ``config.model.backend == "real"`` -> always real (RuntimeError if the fork
+* ``config.model.backend == "real"`` -> always real (RuntimeError if the engine
   python / worker / model weights are unavailable).
-* ``config.model.backend == "auto"`` (default) -> real when the fork python,
+* ``config.model.backend == "auto"`` (default) -> real when the engine python,
   worker script and all model paths exist, else mock.
 
 IMPORTANT: torch / ltx_pipelines / ltx_core are NEVER imported in this file.
@@ -27,7 +28,9 @@ torch installed (the mock test path depends on this); the real backend defers
 all engine work to the subprocess worker.
 
 Everything outside this file — request schema, job layer, output layout — is
-unchanged. Only ``GenerationOutcome.backend`` differs between backends.
+the same for both backends; they differ only in what ``GenerationOutcome``
+reports: ``backend``, and the engine-reported fields (the ``*_used`` fields,
+``peak_vram_reserved_mb``, ``inpaint``), which the mock leaves None.
 """
 
 from __future__ import annotations
@@ -99,7 +102,7 @@ LTX_ARCHITECTURE = "ltxv"
 
 
 # --------------------------------------------------------------------------- #
-# feature scope (§3-114)
+# feature scope
 # --------------------------------------------------------------------------- #
 
 #: The 422 half of this engine's ``GenerateRequest`` field table: ``(field,
@@ -107,17 +110,15 @@ LTX_ARCHITECTURE = "ltxv"
 #: table has, so a reader comparing the two engines is comparing one form.
 #:
 #: THE DIRECTION IS THE OPPOSITE ONE, AND THAT IS WHY THIS TABLE EXISTS AT ALL.
-#: Until §3-114 this engine declared nothing: every field the schema had, it
-#: could run, and all the refusals lived on the NEWER engine. That is no longer
-#: true. ``keep_resident_embeddings`` names LTX 2.5's EmbeddingsProcessor — a
+#: ``keep_resident_embeddings`` names LTX 2.5's EmbeddingsProcessor — a
 #: component 2.3's pipeline simply does not have — so here it is 2.3 that has to
-#: say no, and it is the first field it has ever had to say no to.
+#: say no.
 #:
 #: THE PREDICATE TESTS "DIFFERS FROM THE DEFAULT", exactly like every row of the
 #: 2.5 table: the frontend sends the whole schema on every request, so refusing
-#: a PRESENT field would make plain T2V impossible. The bare attribute read IS
-#: that test here, because the field's default is ``False``
-#: (``KEEP_RESIDENT_EMBEDDINGS_DEFAULT`` in api/models.py).
+#: a PRESENT field would make plain T2V impossible. The bare attribute read is
+#: that test only while ``KEEP_RESIDENT_EMBEDDINGS_DEFAULT`` (api/models.py) is
+#: falsy.
 #:
 #: ONE ROW, AND THE TABLE IS DELIBERATELY THIN BECAUSE OF IT: adding a second
 #: row means bringing the 2.5 adapter's exhaustive classification audit over
@@ -143,15 +144,14 @@ CHAIN_REJECT_TABLE: tuple[
 #: Everything GET /models publishes as this engine's ``unsupported_features``.
 #: DERIVED from :data:`REJECT_TABLE` rather than transcribed — the same
 #: machinery the 2.5 adapter uses — so the published list and the 422 can never
-#: disagree. It used to be absent entirely, which ``services/engines/__init__``
-#: read as the empty tuple; now it is a real (one-name) list.
+#: disagree.
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     feature for _field, feature, _pred in REJECT_TABLE
 )
 
 
 def reject_unsupported(request: GenerateRequest) -> None:
-    """422 the first out-of-scope field of ``request`` (§3-114).
+    """422 the first out-of-scope field of ``request``.
 
     The MIRROR IMAGE of :func:`services.engines.ltx25.adapter.reject_unsupported`,
     including the first-offender-wins rule: listing every offender would read as
@@ -159,8 +159,8 @@ def reject_unsupported(request: GenerateRequest) -> None:
     layer through :func:`services.engines.reject_unsupported`, so a refusal
     costs no worker round-trip and no job record.
 
-    The message points the other way, and that is the whole novelty: it names
-    LTX 2.5 as the base model to switch TO.
+    The message points the other way: it names LTX 2.5 as the base model to
+    switch TO.
     """
     for field, feature, is_non_default in REJECT_TABLE:
         if is_non_default(request):
@@ -175,7 +175,7 @@ def reject_unsupported(request: GenerateRequest) -> None:
 
 
 def reject_chain(request: GenerateChainRequest) -> None:
-    """422 the first out-of-scope field of a chain ``request`` (§3-114).
+    """422 the first out-of-scope field of a chain ``request``.
 
     The chain twin of :func:`reject_unsupported`, with the same table discipline
     and the same first-offender rule; see :data:`CHAIN_REJECT_TABLE`.
@@ -200,10 +200,12 @@ def _minor_version(version: str) -> str:
 def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
     """Rule on the engine KV of a model about to be loaded (§2.2).
 
-    ``kv`` is the GGUF header's KV for a ``.gguf``; for a quantized (fp8 / int8) ``.safetensors``
-    transformer (§3-167/§3-168) the precheck derives the same two keys from the
-    ``__metadata__`` (``general.architecture`` = ``ltxv`` once the layout check
-    passed, ``model_version`` verbatim), so one ruling covers both formats.
+    ``kv`` is the GGUF header's KV for a ``.gguf``; for a quantized
+    ``.safetensors`` transformer (accepted schemes:
+    ``sft_quant_format.SCHEME_TABLE``) the precheck derives the same two keys
+    from the ``__metadata__`` (``general.architecture`` = ``ltxv`` once the
+    layout check passed, ``model_version`` verbatim), so one ruling covers both
+    formats.
 
     The two-step contract, judged ONLY for the ``transformer`` category (the
     file that defines the generation; VAEs and text encoders carry no such
@@ -221,7 +223,7 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
     A MISSING key is a WARNING, not a refusal: both keys are present in every
     file the project's own converter produces, but a hand-made or third-party
     GGUF (or a safetensors without ``__metadata__.model_version``) may lack them, and rejecting all of those would be a bigger regression
-    than letting the engine's own loader have the last word (design §2.5).
+    than letting the engine's own loader have the last word (design §2.2).
 
     ``kv`` comes from ``services.model_registry.precheck_model_file`` — the
     header was already read there, so this function does no file I/O.
@@ -273,23 +275,24 @@ def resolve_seed(requested: int) -> int:
     """
     return requested if requested >= 0 else random.randint(0, 2**31 - 1)
 
-# S2: friendly labels for the coarse chain-progress stages the engine emits
+# Friendly labels for the coarse chain-progress stages the engine emits
 # (worker.py _progress -> chain_pipeline progress("stage1"|"tile"|"decode")).
-# ``index`` is a COUNT of completed units (segments / tiles), not a denoise step,
-# so the reported rate is honestly "units/s" for that stage, not raw it/s.
+# ``index`` counts units (segments / tiles; 0-based, so unit index+1 has just
+# completed), not denoise steps, so the reported rate is honestly "units/s"
+# for that stage, not raw it/s.
 _CHAIN_STAGE_LABELS: dict[str, tuple[str, str]] = {
     "stage1": ("stage-1 denoise", "segment"),
     "tile": ("stage-2 tiled upsample", "tile"),
     "decode": ("VAE decode", "step"),
-    # F2 additions: chain text-encode marker + per-step denoise stages emitted
-    # by the worker's tqdm shim (engine/progress_shim.py).
+    # Chain text-encode marker + per-step denoise stages emitted by the
+    # worker's tqdm shim (engine/progress_shim.py).
     "encode": ("text encode", "step"),
     "stage1_denoise": ("stage-1 denoise", "step"),
     "stage2_denoise": ("stage-2 denoise", "step"),
     "denoise": ("denoise", "step"),
 }
 
-# Per-step denoise stages (F2): their ``index`` is the 1-based count of
+# Per-step denoise stages: their ``index`` is the 1-based count of
 # COMPLETED steps (the tqdm shim emits AFTER each step), unlike the coarse
 # chain stages whose 0-based ``index`` means "unit index+1 is now complete".
 # Their step/total pass straight through to the ProgressCallback.
@@ -360,12 +363,12 @@ def _progress_frac(
 ) -> float | None:
     """Map one worker progress event to the coarse job fraction (0..1).
 
-    Chain milestones keep their historical values (0.05..0.50 stage 1,
-    0.50..0.90 stage 2, 0.95 decode); per-step events interpolate WITHIN those
-    bands using the segment/tile position (``outer_index``/``outer_total``)
-    the shim attaches, so the fraction now moves every denoise step instead of
-    once per 100+ seconds. Returns None for unknown stages (the caller keeps
-    the last fraction — an unknown stage must never yank the bar around).
+    Chain milestones: 0.05..0.50 stage 1, 0.50..0.90 stage 2, 0.95 decode;
+    per-step events interpolate WITHIN those bands using the segment/tile
+    position (``outer_index``/``outer_total``) the shim attaches, so the
+    fraction moves every denoise step. Returns None for unknown stages (the
+    caller keeps the last fraction — an unknown stage must never yank the bar
+    around).
     """
     step = done / total if total > 0 else 0.0
     if outer_total:
@@ -390,7 +393,7 @@ def _progress_frac(
             return 0.95
         return None
     # Single generate: 0.05 is emitted before dispatch and 0.90/1.0 after the
-    # terminal done (unchanged); the denoise steps fill the space between.
+    # terminal done; the denoise steps fill the space between.
     if stage == "encode":
         return 0.06
     if stage == "stage1_denoise":
@@ -400,14 +403,15 @@ def _progress_frac(
     return None
 
 
-# (current_step, total_steps, progress 0..1[, stage]). ``stage`` (F2, additive)
-# names the pipeline phase of per-step events ("stage1_denoise" /
-# "stage2_denoise" / "encode" / coarse chain stages); callbacks MUST declare it
-# with a None default — mock-backend milestone calls pass only 3 args.
+# (current_step, total_steps, progress 0..1[, stage]). ``stage`` names the
+# pipeline phase of per-step events ("stage1_denoise" / "stage2_denoise" /
+# "encode" / coarse chain stages); callbacks MUST declare it with a None
+# default — the milestone calls of both backends pass only 3 args.
 # Chain stage-1 events ADDITIONALLY pass ``clip=``/``clip_count=`` keywords
-# (1-based segment position / segment total, from the worker's outer_index /
-# outer_total); they are only passed when known, so callbacks MUST declare them
-# with None defaults too (all other events keep the exact pre-existing calls).
+# (1-based clip position / clip total: from the worker's outer_index /
+# outer_total on per-step events, from index / total on the coarse
+# ``stage1`` event); they are only passed when known, so callbacks MUST
+# declare them with None defaults too (all other events omit them).
 ProgressCallback = Callable[..., None]
 
 # Mock backend identifier surfaced in logs / status / metadata.
@@ -417,19 +421,20 @@ REAL_BACKEND = "ltx-distilled"
 
 
 def _resolve_reference_preprocess(lora_paths: list[ResolvedLora]) -> str:
-    """Phase C: derive the single control-preprocess kind for the one reference
-    video from the resolved loras of a job.
+    """Derive the single control-preprocess kind for the one reference video
+    from the resolved loras of a job.
 
     ``lora_paths`` entries are ``ResolvedLora`` (``path``, ``strength``,
     ``preprocess``, ``audio_strength``; see
     ``services.lora_registry.LoraRegistry.resolve``) — index access (``lp[2]``)
-    so plain 3-tuples from legacy/test call sites are still accepted. All-
-    ``"none"`` (Phase B reference-only adapters, or no loras) -> ``"none"``.
-    Exactly one non-``"none"`` kind -> that kind. More than one distinct kind is
-    a conflict: a single uploaded reference video can only be converted into ONE
-    control signal, so this raises ``LORA_PREPROCESS_CONFLICT`` (400) -- the
-    same check the API layer (``api/generate.py``) already performs up front;
-    this is the defensive re-check at the runner hop.
+    so plain 3-tuples from test call sites are also accepted. All-``"none"``
+    (reference-only adapters, or no loras) -> ``"none"``. Exactly one
+    non-``"none"`` kind -> that kind. More than one distinct kind is a
+    conflict: a single uploaded reference video can only be converted into ONE
+    control signal, so this raises ``api.errors.lora_preprocess_conflict``
+    -- the same check the API layer (``api/generate.py`` /
+    ``api/generate_chain.py``) performs up front; this is the defensive
+    re-check at the runner hop.
     """
     kinds = {lp[2] for lp in lora_paths if lp[2] != "none"}
     if len(kinds) > 1:
@@ -442,10 +447,10 @@ def _lora_payload_entry(lp) -> dict:
     ``"audio_strength"`` when the resolved entry carries one.
 
     Index access (``lp[0]``/``lp[1]``) + ``getattr(lp, "audio_strength", None)``
-    so a plain 3-tuple (legacy/test call sites, no ``audio_strength`` field at
-    all) still works — only a real ``ResolvedLora`` with a non-None
-    ``audio_strength`` adds the key, keeping a no-audio job's payload
-    byte-identical to before.
+    so a plain 3-tuple (test call sites, no ``audio_strength`` field at all)
+    also works — only a real ``ResolvedLora`` with a non-None
+    ``audio_strength`` adds the key, so a no-audio job's lora dicts carry no
+    ``audio_strength`` key at all.
     """
     entry = {"path": str(lp[0]), "strength": float(lp[1])}
     audio_strength = getattr(lp, "audio_strength", None)
@@ -461,21 +466,21 @@ class GenerationOutcome:
     peak_vram_mb: int | None
     generation_mode: str  # "t2v" | "i2v" | "chain"
     backend: str = MOCK_BACKEND
-    # Phase 3 WP4 masked AV-latent chain: junction pixel-frame indices + full
-    # geometry (from chain_math / the engine). None for single-clip generate.
+    # Masked AV-latent chain: junction pixel-frame indices + full geometry
+    # (from chain_math / the engine). None for single-clip generate.
     chain_metadata: dict | None = None
     # Acceleration: the attention backend the engine ACTUALLY ran with
     # ("sdpa" | "sage" | "sage->sdpa" when it fell back). Reported by the
     # worker's terminal ``done`` event and carried to metadata.json exactly like
     # ``seed_used``, so "the request said sage" and "sage actually ran" can never
     # silently diverge (the fp8 "displayed but not applied" trap). None on the
-    # mock backend and on any worker that predates the field.
+    # mock backend and whenever the ``done`` event omits the key.
     attention_used: str | None = None
     # Acceleration: whether block-swap prefetch ACTUALLY ran ("off" | "on" |
     # "on->off" when it fell back to the synchronous path). Reported by the
     # worker's terminal ``done`` event and carried to metadata.json exactly like
-    # ``attention_used``. None on the mock backend and on any worker that
-    # predates the field.
+    # ``attention_used``. None on the mock backend and whenever the ``done``
+    # event omits the key.
     block_swap_prefetch_used: str | None = None
     # Acceleration: whether the cross-job CPU-skeleton cache ACTUALLY stayed
     # resident for this job ("off" | "on" | "on->off" when a worker-side guard
@@ -483,10 +488,10 @@ class GenerationOutcome:
     # Same relay discipline as ``block_swap_prefetch_used``: the worker's
     # terminal ``done`` event carries it into metadata.json, which is the ONLY
     # way to tell "the request asked for it" from "it actually ran" without
-    # reading worker logs. None on the mock backend and on any worker that
-    # predates the field.
+    # reading worker logs. None on the mock backend and whenever the ``done``
+    # event omits the key.
     keep_resident_used: str | None = None
-    # Acceleration, LTX 2.5 ONLY (§3-114): whether the EmbeddingsProcessor's CPU
+    # Acceleration, LTX 2.5 ONLY: whether the EmbeddingsProcessor's CPU
     # state dict actually stayed resident for this job ("off" | "on"; there is
     # no degrade path, so the third value ``keep_resident_used`` can take never
     # appears). Always None on THIS engine — 2.3's worker has no such key
@@ -498,7 +503,7 @@ class GenerationOutcome:
     # applied — Triton unavailable, a kernel exception latched the fallback, the
     # first-call self-check mismatched, or no eligible tensor existed). Same
     # relay discipline as ``block_swap_prefetch_used``. None on the mock backend
-    # and on any worker that predates the field.
+    # and whenever the ``done`` event omits the key.
     fused_gguf_dequant_kernel_used: str | None = None
     # Acceleration: which video VAE decoder ACTUALLY ran for this job ("off" =
     # the stock decoder, "on" = the pruned PrunaVAED one, "on->off" when it was
@@ -506,24 +511,24 @@ class GenerationOutcome:
     # relay discipline as ``block_swap_prefetch_used``, but note this is the one
     # acceleration field whose "on" CHANGES THE PIXELS — which is exactly why
     # recording what actually ran matters here more than anywhere else. None on
-    # the mock backend and on any worker that predates the field.
-    # LTX 2.5 only (台帳 §3-131): the vocabulary differs there — the value is
+    # the mock backend and whenever the ``done`` event omits the key.
+    # LTX 2.5 only: the vocabulary differs there — the value is
     # the REAL NAME of the video VAE decoder that was loaded ("conv" / "diff"),
     # not a PrunaVAED on/off echo like the 2.3 description above.
     vae_mode_used: str | None = None
     # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
     # peak_vram_mb (which is max_memory_allocated-based and cannot see
     # allocator-reserved-but-unallocated growth from stream-separate pools).
-    # Additive — does not replace peak_vram_mb. None on the mock backend and on
-    # any worker that predates the field.
+    # Additive — does not replace peak_vram_mb. None on the mock backend and
+    # whenever the ``done`` event omits the key.
     peak_vram_reserved_mb: int | None = None
-    # LTX 2.5 only, single-job generation (台帳 §3-131): the worker's own
+    # LTX 2.5 only, single-job generation: the worker's own
     # engine25-specific facts (encode_fps/video_chunks/tiling/size_bytes/phases,
     # or an outpaint job's larger dict) — relayed verbatim into metadata.json.
     # A chain rides the same facts inside chain_metadata["ltx25"] instead, so
     # this field stays None there too. None on the mock backend and on LTX 2.3.
     ltx25: dict | None = None
-    # Inpainting (台帳 §3-55): the engine's own ``inpaint`` block — geometry,
+    # Inpainting: the engine's own ``inpaint`` block — geometry,
     # blend settings, VRAM peaks, the audio record and ``mask_proof``. Relayed
     # verbatim from the worker's terminal ``done`` event and merged with the
     # app's provenance in ``pipeline_manager._write_metadata``.
@@ -542,25 +547,26 @@ class GenerationOutcome:
 class LTXRunner:
     """Facade around the LTX pipeline; delegates to a mock or real backend.
 
-    Public contract (unchanged): ``LTXRunner(config, low_vram)``, properties
+    Public contract: ``LTXRunner(config, low_vram)``, properties
     ``loaded`` / ``pipeline_type``, methods ``load`` / ``unload`` /
     ``generate(...) -> GenerationOutcome``.
 
-    ``descriptor`` (keyword, additive) is the BASE MODEL this runner serves —
-    where every fixed weight path now comes from (§3-97 P3b). The app injects
-    the one it loaded at startup (``AppContext.base_models``); omitted, it is
-    read lazily from ``config.manifest_dir`` so the standalone constructions
-    (tests, outputs/ drivers) keep working unchanged. Switching base model at
-    runtime is the API axis's job (P6), not this constructor's.
+    ``descriptor`` (keyword) is the BASE MODEL this runner serves — where
+    every fixed weight path comes from. The app injects the one it loaded at
+    startup (``AppContext.base_models``); omitted, it is read lazily from
+    ``config.manifest_dir`` so the standalone constructions (tests,
+    outputs/ drivers) work without it. Switching base model at runtime is
+    ``PipelineManager``'s job (``_point_runner_at``): within one engine family
+    it calls :meth:`set_descriptor`; across families it builds a new runner of
+    the target family's class.
     """
 
     # ------------------------------------------------------------------ seams
-    # §3-98 P3a. The nine (plus supporting) attributes below are THE override
-    # points a sibling engine family subclasses this facade through; every one
-    # of them holds the LTX 2.3 value here, so this class behaves exactly as it
-    # did before they existed. Bound after both backend classes are defined
-    # (they are declared further down this module) — see the assignment block at
-    # the end of the file.
+    # The three attributes below are THE override points a sibling engine
+    # family subclasses this facade through; every one of them holds the
+    # LTX 2.3 value here. The two backend classes are bound after both are
+    # defined (they are declared further down this module) — see the
+    # assignment block right after ``_RealBackend``.
 
     #: The real backend class this family spawns. Also the holder of
     #: :data:`REQUIRED_ASSETS` and of the engine-dir / engine-python resolution
@@ -568,8 +574,8 @@ class LTXRunner:
     #: facts ONCE, on its backend.
     _REAL_BACKEND_CLS: type
     #: The GPU-less backend class. LTX 2.5 deliberately REUSES 2.3's — a second
-    #: synthetic-clip renderer would be a copy with nothing to say (§3-98 plan,
-    #: "やらない"). Only the label below differs.
+    #: synthetic-clip renderer would be a copy with nothing to say. Only the
+    #: label below differs.
     _MOCK_BACKEND_CLS: type
     #: ``GenerationOutcome.backend`` the mock reports. The one thing that must
     #: differ per family, so a metadata.json says WHICH engine's mock ran.
@@ -604,7 +610,7 @@ class LTXRunner:
         return self._descriptor
 
     def set_descriptor(self, descriptor: BaseModelDescriptor) -> None:
-        """Point this runner at ANOTHER base model (§3-97 P6).
+        """Point this runner at ANOTHER base model.
 
         The backend captured its descriptor when it was constructed
         (``_RealBackend.__init__``) and builds every weight path in its load
@@ -633,8 +639,9 @@ class LTXRunner:
     def pipeline_type(self) -> str:
         return self.config.model.pipeline_type
 
-    # Back-compat: pipeline_manager / tests never read this, but the original
-    # attribute existed. The active backend's handle (None for mock) is exposed.
+    # Not read anywhere in this repository. Exposes the active backend's
+    # ``pipeline`` attribute, which both backends keep at None (the real
+    # engine lives in the worker process).
     @property
     def pipeline(self):
         return getattr(self._backend, "pipeline", None)
@@ -642,10 +649,11 @@ class LTXRunner:
     # ------------------------------------------------------------------ load
 
     def load(self, selection: dict[str, str] | None = None) -> None:
-        """Load the pipeline. ``selection`` (model management, additive) maps a
-        category (services.model_registry.CATEGORIES) to an ABSOLUTE weight
-        path; absent categories / a None selection use the config defaults, so
-        the legacy no-argument call is byte-identical to before."""
+        """Load the pipeline. ``selection`` (model management) maps a category
+        (services.model_registry.CATEGORIES) to an ABSOLUTE weight path; absent
+        categories / a None selection use the base-model descriptor's
+        ``default_file``, so the no-argument call loads the base model's
+        defaults."""
         if self._backend is not None and self._backend.loaded:
             return
         if self._backend is None:
@@ -672,16 +680,15 @@ class LTXRunner:
         inpaint_source_path: Path | None = None,
         inpaint_mask_path: Path | None = None,
     ) -> GenerationOutcome:
-        """``outpaint_source_path`` (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as
-        §1-13 at the time; additive): the ORIGINAL uploaded video
+        """``outpaint_source_path``: the ORIGINAL uploaded video
         for an outpainting job. ``reference_video_path`` already points at the
         green-padded canvas pipeline_manager built from it; this second path is
         what the engine reads the frozen-guidance AUDIO from, because the canvas
         is deliberately written video-only (see ``video_io.pad_green_mp4``).
         ``None`` for every non-outpaint job.
 
-        ``inpaint_source_path`` / ``inpaint_mask_path`` (台帳 §3-55; additive)
-        are the same idea one feature over: the CUT WINDOW (its audio, and the
+        ``inpaint_source_path`` / ``inpaint_mask_path`` are the same idea one
+        feature over: the CUT WINDOW (its audio, and the
         picture the restore falls back to) and the uploaded MASK video.
         ``reference_video_path`` already points at the green-FILLED canvas
         built from the two. Both are ``None`` for every non-inpaint job."""
@@ -718,52 +725,50 @@ class LTXRunner:
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
-        """Masked AV-latent clip chain -> ONE continuous output.mp4 (Phase 3 WP4).
+        """Masked AV-latent clip chain -> ONE continuous output.mp4.
 
-        ``source_tail_path`` / ``source_context_frames`` (V2V continuation,
-        additive): when set, the fps-correct source tail is frozen as clip-0's
-        head and the delivered mp4 is the NEW part only (both backends).
+        ``source_tail_path`` / ``source_context_frames`` (V2V continuation):
+        when set, the fps-correct source tail is frozen as clip-0's head and the
+        delivered mp4 is the NEW part only (both backends).
 
-        ``source_audio_path`` (A2V, additive): when set, the uploaded audio is
-        frozen as the chain's audio latent and its original waveform is muxed onto
-        the output; the terminal ``chain.a2v`` sub-dict pins the contract. Mutually
-        exclusive with ``source_tail_path`` (enforced at the API layer).
+        ``source_audio_path`` (A2V): when set, the uploaded audio is frozen as
+        the chain's audio latent and its original waveform is muxed onto the
+        output; the terminal ``chain.a2v`` sub-dict pins the contract.
 
-        ``retake_window_path`` (retake / temporal inpainting, additive): the
-        app-cut window mp4 (frame-exact, CFR, at the request fps — the engine
-        never cuts or resamples). The glue-band sizes and the regenerate_audio
-        flag are NOT separate arguments: they ride on ``chain_request.retake``,
-        the same convention ``stage2_window`` uses. Mutually exclusive with both
-        ``source_tail_path`` and ``source_audio_path`` (enforced at the API
-        layer). None -> byte-identical to before, payload key set included.
+        ``retake_window_path`` (retake / temporal inpainting): the app-cut
+        window mp4 (frame-exact, CFR, at the request fps — the engine never cuts
+        or resamples). The glue-band sizes and the regenerate_audio flag are NOT
+        separate arguments: they ride on ``chain_request.retake``, the same
+        convention ``stage2_window`` uses. None -> the payload carries no retake
+        keys.
 
-        ``end_source_path`` / ``end_source_context_frames`` (end source,
-        additive): the app-prepared ``_end_source.mp4`` (a cut video or a looped
-        still — the engine only ever sees a video) plus the length of the tail
-        band frozen from it. The file holds ``context_frames + 1`` frames: the
-        extra leading frame is the causal VAE's primer and never reaches the
-        output. The delivered length is UNCHANGED (unlike the V2V head, nothing
-        is trimmed). Mutually exclusive with ``retake_window_path`` and
-        ``source_audio_path``, combinable with ``source_tail_path`` (enforced at
-        the API layer). None -> byte-identical to before, payload key set
-        included.
+        ``end_source_path`` / ``end_source_context_frames`` (end source): the
+        app-prepared ``_end_source.mp4`` (a cut video or a looped still — the
+        engine only ever sees a video) plus the length of the tail band frozen
+        from it. The file holds ``context_frames + 1`` frames: the extra leading
+        frame is the causal VAE's primer and never reaches the output. In the
+        API-reachable modes the end source does not change the delivered length
+        (unlike the V2V head, nothing is trimmed). None -> the payload carries
+        no end-source keys.
 
-        ``end_source_strength`` (additive, 0.0..1.0): softens ONLY stage 1's
-        freeze of the band (stage 2 always hard-freezes regardless). None ->
-        treated as 1.0, a hard freeze byte-identical to before this field
-        existed.
+        Which of these inputs may be combined is decided by
+        ``GenerateChainRequest``'s validator (api/models.py); this method does
+        not re-check it.
 
-        ``lora_paths`` (style/character IC-LoRA, additive): resolved
-        ``ResolvedLora`` (``path``, ``strength``, ``preprocess``, ``audio_strength``)
-        entries applied uniformly across the whole chain (every clip / stage).
-        Empty/None -> no loras (byte-identical default); the mock ignores them,
-        the real backend forwards them to the worker.
+        ``end_source_strength`` (0.0..1.0): softens ONLY stage 1's freeze of the
+        band (stage 2 always hard-freezes regardless). None -> treated as 1.0,
+        a hard freeze.
 
-        ``reference_video_path`` (Phase C reference-video CONTROL IC-LoRA, ALPHA
-        scope — clips=1 only, enforced by the schema/endpoint): mirrors
-        :meth:`generate`'s ``reference_video_path``. None -> no reference (byte-
-        identical default); the mock ignores it, the real backend forwards it to
-        the worker.
+        ``lora_paths`` (style/character IC-LoRA): resolved ``ResolvedLora``
+        (``path``, ``strength``, ``preprocess``, ``audio_strength``) entries
+        applied uniformly across the whole chain (every clip / stage).
+        Empty/None -> no loras (no ``loras`` key in the payload); the mock
+        ignores them, the real backend forwards them to the worker.
+
+        ``reference_video_path`` (reference-video CONTROL IC-LoRA): mirrors
+        :meth:`generate`'s ``reference_video_path``. None -> no reference (no
+        ``reference_video`` key in the payload); the mock ignores it, the real
+        backend forwards it to the worker.
         """
         if self._backend is None or not self._backend.loaded:
             self.load()
@@ -817,12 +822,12 @@ class LTXRunner:
         """True only if the engine python, worker script and every file the real
         GGUF + component-file path actually loads are present.
 
-        WHICH files those are comes from the base-model descriptor: the four
-        categories' ``default_file`` plus the three required ``assets``
-        (:data:`REQUIRED_ASSETS`). ``component_video_vae_pruned_path`` is
-        deliberately NOT gated — a job that asks for the pruned decoder
-        downgrades to the stock one, so its absence must not demote the whole
-        server to mock.
+        WHICH files those are comes from the base-model descriptor: the
+        ``default_file`` of every category it declares plus the required
+        ``assets`` listed in :data:`REQUIRED_ASSETS`.
+        ``component_video_vae_pruned_path`` is deliberately NOT gated — a job
+        that asks for the pruned decoder downgrades to the stock one, so its
+        absence must not demote the whole server to mock.
 
         The GGUF + component-file recipe never opens the 43GB monolith. The
         worker payload's ``checkpoint_path`` field is a hardcoded ``""`` (see
@@ -943,8 +948,8 @@ class LTXRunner:
         """The LOADED worker's OWN sage probe result, or None when unknown.
 
         None means "no loaded worker has told us anything" — no backend, an
-        unloaded/dead backend, the mock (which has no engine), or a worker that
-        predates the ``ready.sage_available`` field. Callers fall back to the
+        unloaded/dead backend, the mock (which has no engine), or a worker whose
+        ``ready`` event omits the ``sage_available`` field. Callers fall back to the
         file-existence :attr:`sage_available` in that case.
         """
         backend = self._backend
@@ -972,19 +977,19 @@ class LTXRunner:
 
 
 class _MockBackend:
-    """Synthetic-clip backend (no GPU, no weights). Original Phase-1 logic.
+    """Synthetic-clip backend (no GPU, no weights).
 
-    SHARED BY EVERY ENGINE FAMILY (§3-98 P3b). A synthetic gradient clip says
+    SHARED BY EVERY ENGINE FAMILY. A synthetic gradient clip says
     nothing about which engine would have rendered it, so a second copy of this
     class for LTX 2.5 would be a copy with no content of its own. The ONE fact
     that must still differ is what ``GenerationOutcome.backend`` reports, so the
     label is a constructor argument (``backend_label``) rather than a hardcoded
-    constant — an omitted argument keeps the historical ``"mock"``.
+    constant — an omitted argument falls back to :data:`MOCK_BACKEND`.
     """
 
     #: Class-level default for :attr:`backend_label`, so an instance built
     #: WITHOUT ``__init__`` (tests drive ``generate_chain`` on a hand-assembled
-    #: ``__new__`` object) still reports the historical label instead of
+    #: ``__new__`` object) still reports :data:`MOCK_BACKEND` instead of
     #: raising. ``__init__`` shadows it per instance.
     backend_label: str = MOCK_BACKEND
 
@@ -1051,24 +1056,23 @@ class _MockBackend:
     ) -> GenerationOutcome:
         """Generate a synthetic video and return the outcome (output.mp4 + metrics).
 
-        ``conditioning_images`` empty -> T2V; one entry -> minimal I2V using the
-        resolved image path as the start frame (frame_idx=0, Phase 1).
+        ``request.conditioning_images`` empty -> T2V; otherwise I2V, where the
+        mock uses only the first resolved image path as the start frame and
+        ignores the rest.
 
-        ``lora_paths`` (now ``ResolvedLora`` entries — ``path``, ``strength``,
-        ``preprocess``, ``audio_strength``, Phase C/S1) /
-        ``reference_video_path`` are the Phase B/C IC-LoRA inputs; the mock
-        backend accepts (and ignores) them so the full route completes GPU-free —
-        the real weight patch (and the preprocess -> control-signal conversion)
-        lives in the engine worker.
+        ``lora_paths`` (:class:`ResolvedLora` entries) and
+        ``reference_video_path`` (the IC-LoRA reference) are accepted and
+        ignored so the full route completes GPU-free — the real weight patch
+        (and the preprocess -> control-signal conversion) lives in the engine
+        worker.
 
-        ``outpaint_source_path`` (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as
-        §1-13 at the time) is accepted and ignored for the same
+        ``outpaint_source_path`` is accepted and ignored for the same
         reason: the mock never opens a video. It does honour the outpaint
         GEOMETRY though — ``request.width``/``height`` are already the canvas, so
         the placeholder comes out at the extended size and ``_render_frames``
         outlines where the source footage would have gone.
 
-        ``inpaint_source_path`` / ``inpaint_mask_path`` (台帳 §3-55) are accepted
+        ``inpaint_source_path`` / ``inpaint_mask_path`` are accepted
         and ignored for the same reason, and the geometry is honoured the same
         way — but INVERTED. An inpaint job's delivered mp4 is at the SOURCE's
         resolution (the engine crops the green pad bands off before the encode),
@@ -1089,7 +1093,7 @@ class _MockBackend:
         if progress_callback:
             progress_callback(0, request.num_inference_steps, 0.05)
 
-        # Inpainting (台帳 §3-55): the mock renders at the DELIVERED size, which
+        # Inpainting: the mock renders at the DELIVERED size, which
         # for an inpaint job is the source's own resolution rather than the
         # canvas ``request.width``/``height`` names.
         #
@@ -1196,23 +1200,25 @@ class _MockBackend:
         reference_video_path: Path | None = None,
         seed: int | None = None,
     ) -> GenerationOutcome:
-        """Simulate a masked AV-latent chain: ONE synthetic mp4 of the full
-        timeline length + junction metadata (from :mod:`chain_math`). GPU-free;
+        """Simulate a masked AV-latent chain: ONE synthetic mp4 of the delivered
+        length + junction metadata (from :mod:`chain_math`). GPU-free;
         exercises the app-side orchestrator/metadata without model weights.
 
-        ``lora_paths`` (style/character IC-LoRA, additive) is accepted and ignored
+        ``lora_paths`` (style/character IC-LoRA) is accepted and ignored
         — the mock has no weights to patch; the real forward-time patch lives in
         the engine worker (mirrors :meth:`generate`).
 
-        ``reference_video_path`` (Phase C reference-video CONTROL IC-LoRA,
-        additive) is likewise accepted and ignored — the mock has no weights to
-        patch against the reference either.
+        ``reference_video_path`` (reference-video CONTROL IC-LoRA) is likewise
+        accepted and ignored — the mock has no weights to patch against the
+        reference either.
 
         THE MOCK MP4'S LENGTH IS ALWAYS ``layout.new_frames_px`` (== ``total_px -
         trim_px``), for every chain shape — see the comment at the call site. So a
-        V2V continuation is the NEW part only (matching the engine's context trim)
-        and an end source's mp4 is LONGER than the clips by exactly the frozen
-        band (the band is an internal segment appended after the clips).
+        V2V continuation is the NEW part only (matching the engine's context trim).
+        An end source adds nothing to the length in the API-reachable modes (the
+        band is the last clip's own tail); the API-unreachable
+        ``internal_segment`` mode appends the band after the clips and makes the
+        mp4 LONGER by exactly that band.
 
         V2V continuation (``source_tail_path`` / ``source_context_frames``): mirror
         the engine geometry via ``compute_chain_layout(source_context_px=...)`` —
@@ -1238,10 +1244,11 @@ class _MockBackend:
         # compute_chain_layout, so omitting it would let every mock-backed test
         # pass with plain-chain geometry no matter what the request asked for.
         retake = getattr(chain, "retake", None)
-        # End source: likewise resolved HERE — the frozen tail band adds a whole
-        # internal segment to the layout (and with it a junction, a stage-2 tile
-        # boundary and the timeline's own length), so a mock that skipped it
-        # would report a different geometry AND a shorter mp4 than the engine.
+        # End source: likewise resolved HERE — the frozen tail band is part of
+        # the layout (its size, the derived end-source mode and, in the
+        # API-unreachable ``internal_segment`` mode, a whole appended segment
+        # with its own junction and length), so a mock that skipped it would
+        # report a different geometry than the engine.
         end_source = getattr(chain, "end_source", None)
         layout = chain_math.compute_chain_layout(
             [c.num_frames for c in chain.clips], chain.frame_rate,
@@ -1412,7 +1419,7 @@ class _MockBackend:
         # a ffprobe of the uploaded audio). The mock does NOT decode/mux audio, so
         # the output mp4 has no audio — but the metadata contract (key set +
         # geometry) is pinned so pytest can assert it without a GPU. Source-less
-        # and V2V paths never set it, so their metas are unchanged.
+        # and V2V paths never set it, so their metas carry no ``a2v`` key.
         if source_audio_path is not None:
             a_total = int(layout.a_total)
             sr, channels = video_io.probe_audio_stream(source_audio_path)
@@ -1508,9 +1515,8 @@ class _MockBackend:
 
         ``render_size`` overrides ``request.width``/``height`` for the one case
         where the delivered mp4 is NOT the requested size: an inpaint job, whose
-        width/height are the canvas and whose output is the source (台帳 §3-55).
-        ``None`` — every other job — keeps the request's own size, so nothing
-        about the existing paths changes.
+        width/height are the canvas and whose output is the source.
+        ``None`` — every other job — keeps the request's own size.
         """
         rng = random.Random(seed)
         w, h = render_size or (request.width, request.height)
@@ -1543,8 +1549,7 @@ class _MockBackend:
             cy = int(h * (0.5 + 0.3 * math.sin(t * 2 * math.pi)))
             r = max(6, min(w, h) // 12)
             draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=ball_color)
-            # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at
-            # the time): the clip is already the CANVAS size (width /
+            # Outpainting: the clip is already the CANVAS size (width /
             # height ARE the canvas), so the only thing the placeholder has to
             # add is where the original footage would have sat — otherwise a
             # mock outpaint run is indistinguishable from a plain one and the
@@ -1558,7 +1563,7 @@ class _MockBackend:
                     outline=(102, 255, 0),
                     width=3,
                 )
-            # Inpainting (台帳 §3-55): the same marker for the same reason, with
+            # Inpainting: the same marker for the same reason, with
             # the geometry inverted. The frame IS the source rectangle here, so
             # the outline runs around the whole placeholder — it says "this clip
             # came out at the source size, not the canvas size", which is the
@@ -1579,7 +1584,8 @@ class _MockBackend:
 
 
 class _RealBackend:
-    """Real GGUF low-VRAM backend via a persistent subprocess worker (Phase 5).
+    """Real low-VRAM backend (GGUF / quantized-safetensors weights) via a
+    persistent subprocess worker.
 
     This class NEVER imports torch / ltx_* (they live only in the engine venv).
     It spawns ``engine.worker`` (``python -m engine.worker``) in the engine venv,
@@ -1596,16 +1602,17 @@ class _RealBackend:
     _SHUTDOWN_TIMEOUT_S = 30.0
 
     # ------------------------------------------------------------------ seams
-    # §3-98 P3a. Everything about this class that is a fact about the LTX 2.3
-    # ENGINE rather than about "how to talk to a worker subprocess" is named
-    # here, so a sibling family (engine25) inherits the process plumbing —
-    # spawn, frame, read, unload — and restates only these. Every value below
-    # is the 2.3 one, so this class behaves exactly as it did before the seams.
+    # Everything about this class that is a fact about the LTX 2.3 ENGINE
+    # rather than about "how to talk to a worker subprocess" is named here, so
+    # a sibling family (engine25) inherits the process plumbing — spawn,
+    # frame, read, unload — and restates only these. Every value below is the
+    # 2.3 one.
 
     #: Model-management category -> worker load-payload field. See the
     #: module-level :data:`SELECTION_FIELDS`, which this is THE binding of;
-    #: ``_build_load_payload`` reads it through ``self`` so a subclass's table
-    #: reaches the payload without re-implementing the builder.
+    #: ``_build_load_payload`` reads it through ``self`` (as the 2.5
+    #: subclass's own builder does), so the mapping is never transcribed into
+    #: a builder.
     SELECTION_FIELDS: dict[str, str] = SELECTION_FIELDS
     #: Fixed (non-selectable) descriptor assets this engine requires. Read
     #: through the backend CLASS by ``LTXRunner._real_available`` too, so a
@@ -1614,8 +1621,9 @@ class _RealBackend:
     #: ``python -m <this>`` — the worker entry point inside the engine venv.
     _WORKER_MODULE: str = "engine.worker"
     #: Worker stderr log filename under ``config.log_dir``. Distinct per family
-    #: on purpose: after a 2.3<->2.5 swap BOTH logs must survive for the
-    #: round-trip gate to be checkable.
+    #: on purpose: after a 2.3<->2.5 swap BOTH logs survive, so each engine's
+    #: record stays checkable (the 2.3<->2.5 round-trip check is recorded in
+    #: Docs/VERIFICATION_LOG.md §69.15).
     _LOG_NAME: str = "ltx_worker.log"
     #: Fixed engine package directory for this family, or None to take
     #: ``config.model.engine_dir`` (2.3 keeps its configurable one).
@@ -1644,7 +1652,7 @@ class _RealBackend:
         self.config = config
         self.low_vram = low_vram
         #: The base model whose ``default_file``s and ``assets`` this worker is
-        #: built from (§3-97 P3b) — the only source of fixed weight paths.
+        #: built from — the only source of fixed weight paths.
         self.descriptor = descriptor
         self.pipeline = None  # back-compat attribute; always None for this backend
         self._proc: subprocess.Popen | None = None
@@ -1741,9 +1749,9 @@ class _RealBackend:
                 line = raw.strip()
                 if not line.startswith(self._PREFIX):
                     # Non-protocol stdout (a stray library/tqdm print that escaped
-                    # the worker's STDERR routing). Previously dropped silently;
-                    # now surfaced at DEBUG so it is recoverable when diagnosing a
-                    # wedged worker, without flooding the default INFO console.
+                    # the worker's STDERR routing) is surfaced at DEBUG so it is
+                    # recoverable when diagnosing a wedged worker, without flooding
+                    # the default INFO console.
                     # Lazy %-formatting means no cost unless DEBUG is enabled, so
                     # even a tqdm bar spamming stdout stays cheap and quiet here.
                     if line:
@@ -1781,12 +1789,9 @@ class _RealBackend:
         ``selection`` maps a model-management category to an ABSOLUTE weight
         path, already resolved + prechecked by the API layer. Categories absent
         from ``selection`` (or a ``None``/empty selection) resolve from the base
-        model's ``default_file`` / ``assets`` (§3-97 P3b — they used to be fixed
-        ``config.model`` fields holding the very same paths), so the
-        no-selection payload is BYTE-IDENTICAL to the pre-model-management
-        payload. Key set AND insertion order are part of that contract, pinned
-        by the golden snapshot in tests/test_model_swap_load.py — do not
-        reorder.
+        model's ``default_file`` / ``assets``. The no-selection payload's key
+        set AND insertion order are a contract, pinned by ``GOLDEN_PAYLOAD_KEYS``
+        in tests/test_model_swap_load.py — do not reorder.
 
         Which category feeds which payload field is :data:`SELECTION_FIELDS`,
         read here rather than transcribed — there is no second table to drift.
@@ -1794,23 +1799,19 @@ class _RealBackend:
         selection = selection or {}
         model = self.config.model
 
-        # checkpoint_path: hardcoded "" (2026-07-28, PENDING_TASKS.md 3-26; the
-        # ModelConfig field this used to read no longer exists — see config.py's
-        # NOTE on checkpoint_path for the full evidence chain). The GGUF +
-        # component-file path never opens this string; it is forwarded only
-        # because DistilledPipeline requires a non-None str so
-        # ModelLedger.build_model_builders() populates the lazy builder objects
-        # that the GGUF/component re-sourcing later overwrites via
-        # dataclasses.replace(). "" satisfies that "not None" requirement and
-        # keeps this payload byte-identical to every prior config state (no
-        # config.yaml value ever set this to anything else in practice).
+        # checkpoint_path: hardcoded "". The GGUF + component-file path never
+        # opens this string; it is forwarded only because DistilledPipeline
+        # requires a non-None str so ModelLedger.build_model_builders()
+        # populates the lazy builder objects that the GGUF/component re-sourcing
+        # later overwrites via dataclasses.replace(). "" satisfies that
+        # "not None" requirement.
         checkpoint_path = ""
         # gemma_root (tokenizer-only ~40MB) IS load-bearing: DistilledPipeline is
         # built with gemma_root=None so the wheel's weight glob (model*.safetensors)
         # is bypassed, but the engine loads the tokenizer/processor
         # module_ops from this dir (tokenizer.model + preprocessor_config.json), so a
         # missing dir must fail fast here rather than crash deep in the encode path.
-        # Forwarded to the worker as a payload field exactly as before.
+        # Forwarded to the worker as a payload field.
         gemma_root = self._require_asset("gemma_root")
 
         upsampler_path = self._require_asset("spatial_upsampler_path")
@@ -1822,8 +1823,9 @@ class _RealBackend:
         # SELECTION_FIELDS and the descriptor's category set meaningful — a
         # category missing from the mapping cannot reach the worker at all.
         # Component-file re-sourcing (video/audio VAE) rides the same route:
-        # fixed on in config.yaml, the standalone files replace the monolith,
-        # so they are load-bearing and always validated for existence.
+        # with ``vram.use_component_files`` on (default: config.py's
+        # ``VramConfig``), the standalone files replace the monolith, so they
+        # are load-bearing and always validated for existence.
         swapped = {
             field: (
                 str(selection[category])
@@ -1860,7 +1862,7 @@ class _RealBackend:
             "upsampler_path": upsampler_path,
             "gguf_transformer_path": swapped["gguf_transformer_path"],
             "gguf_gemma_path": swapped["gguf_gemma_path"],
-            # Phase 1 component-file paths (gate via LTX_COMPONENT_FILES env).
+            # Component-file paths (gated by the LTX_COMPONENT_FILES env).
             "component_video_vae_path": swapped["component_video_vae_path"],
             "component_audio_vae_path": swapped["component_audio_vae_path"],
             "component_text_projection_path": component_text_projection_path,
@@ -1870,11 +1872,12 @@ class _RealBackend:
             "vae_spatial_tile_size": int(self.low_vram.vae_spatial_tile_size),
             "vae_temporal_tile_size": int(self.low_vram.vae_temporal_tile_size),
         }
-        # quantized (fp8 / int8) safetensors transformer (§3-167 B-1, §3-168): the selection still rides
+        # quantized safetensors transformer (schemes:
+        # ``sft_quant_format.SCHEME_TABLE``): the selection still rides
         # SELECTION_FIELDS' "gguf_transformer_path", but the worker must not
         # hand a .safetensors to the GGUF loader. Blank that field and APPEND
-        # one key, so a GGUF selection's payload keeps its key set and order
-        # byte-identical (golden snapshot in tests/test_model_swap_load.py).
+        # one key, so a GGUF selection's payload keeps exactly the key set and
+        # order of ``GOLDEN_PAYLOAD_KEYS`` (tests/test_model_swap_load.py).
         transformer_path = payload["gguf_transformer_path"]
         if transformer_path.lower().endswith(".safetensors"):
             payload["gguf_transformer_path"] = ""
@@ -1882,7 +1885,7 @@ class _RealBackend:
         return payload
 
     def _build_child_env(self, project_root: Path) -> dict[str, str]:
-        """The worker subprocess's environment (§3-98 P3a seam).
+        """The worker subprocess's environment (a per-family override point).
 
         Inherit, force the compile knob, unbuffered IO, and set PYTHONPATH to
         the project root so the worker's ``engine.*`` package (and the
@@ -1900,29 +1903,29 @@ class _RealBackend:
         env["PYTHONUNBUFFERED"] = "1"
         env.pop("PYTHONPATH", None)
         env["PYTHONPATH"] = str(project_root)
-        # Phase 1 gate: the worker reads LTX_COMPONENT_FILES.
+        # Component-file gate: the worker reads LTX_COMPONENT_FILES.
         env["LTX_COMPONENT_FILES"] = "1" if bool(self.config.vram.use_component_files) else "0"
-        # NOTE (§48): the old ``LTX_KEEP_RESIDENT`` env var is GONE. Keep-resident
-        # weights are now a PER-JOB request field (``GenerateRequest.keep_resident``)
-        # carried on the generate payload, so there is exactly one source of truth
-        # and the setting can be flipped without a 60-90s worker reload. The worker
-        # creates the pipeline with keep_resident_weights=False unconditionally and
-        # arms/disarms the registry per job. An LTX_KEEP_RESIDENT left over in
-        # someone's environment is now inert (it is neither set nor read) — the
-        # reproduction steps in §10.2/§46/§47 that export it are historical.
+        # Keep-resident weights are a PER-JOB request field
+        # (``GenerateRequest.keep_resident``) carried on the generate payload,
+        # not an env var, so there is exactly one source of truth and the
+        # setting can be flipped without a 60-90s worker reload. The worker
+        # creates the pipeline with keep_resident_weights=False unconditionally
+        # and arms/disarms the registry per job.
         # Sequential per-layer CPU offload of the GGUF Gemma during text-encode
-        # (caps the ~15GB encode peak). On by default; the worker reads this and
-        # keeps the 48 Gemma decoder layers CPU-resident, streaming them to GPU
-        # per layer. Compute stays on GPU (only PCIe transfer overhead).
+        # (caps the ~15GB encode peak). Default: config.py's
+        # ``vram.te_offload_text_encoder``; the worker reads this and keeps the
+        # 48 Gemma decoder layers CPU-resident, streaming them to GPU per layer.
+        # Compute stays on GPU (only PCIe transfer overhead).
         env["LTX_TE_OFFLOAD"] = "1" if self.low_vram.te_offload_text_encoder else "0"
         # Build the DiT (transformer) on CPU and move only non-block submodules to
-        # GPU, removing the ~16.9GB load-time GPU spike. On by default; the worker
-        # reads this and keeps the blocks CPU-resident for block-swap streaming.
+        # GPU, removing the ~16.9GB load-time GPU spike. Default: config.py's
+        # ``vram.dit_cpu_load``; the worker reads this and keeps the blocks
+        # CPU-resident for block-swap streaming.
         env["LTX_DIT_CPU_LOAD"] = "1" if self.low_vram.dit_cpu_load else "0"
         return env
 
     def _log_load_start(self, engine_python: str, engine_dir: Path, payload: dict) -> None:
-        """The one INFO line that opens a worker launch (§3-98 P3a seam).
+        """The one INFO line that opens a worker launch (a per-family override point).
 
         It quotes payload FIELDS, and a payload's fields are family-specific —
         which is why this is an override point rather than an inline call.
@@ -1952,12 +1955,15 @@ class _RealBackend:
         worker = engine_dir / "worker.py"
         if not worker.exists():
             raise RuntimeError(f"LTX worker script not found: {worker}")
-        # The worker is launched as `python -m engine.worker`, so its imports
-        # (`engine.*`, `ltx_core`, `ltx_pipelines`) resolve from the project root.
+        # The worker is launched as `python -m engine.worker` from the project
+        # root, so its `engine.*` imports resolve from there (`ltx_core` /
+        # `ltx_pipelines` come from the engine venv).
         project_root = self.config._abs(".")
 
         # Full worker payload: validates the model paths and applies any
-        # model-management selection overrides (byte-identical when absent).
+        # model-management selection overrides (with no selection and a GGUF
+        # transformer, its key set and order match ``GOLDEN_PAYLOAD_KEYS`` in
+        # tests/test_model_swap_load.py).
         payload = self._build_load_payload(selection)
 
         env = self._build_child_env(project_root)
@@ -2002,8 +2008,8 @@ class _RealBackend:
         if kind == "ready":
             # Acceleration (additive): the worker's own SageAttention probe,
             # run inside the engine venv where the import can actually be
-            # attempted. Absent on a pre-acceleration worker -> stays None and
-            # the app falls back to LTXRunner's file-existence probe.
+            # attempted. Absent from the ready event -> stays None and the app
+            # falls back to LTXRunner's file-existence probe.
             raw_sage = event.get("sage_available")
             self.sage_available = None if raw_sage is None else bool(raw_sage)
             logger.info("LTX worker ready. sage_available=%s", self.sage_available)
@@ -2078,11 +2084,13 @@ class _RealBackend:
         # Resolve the seed IN THE PARENT so seed_used is deterministic regardless
         # of the worker. When the caller (pipeline_manager) already resolved it —
         # so it could log the real value at job start — that value is used as-is;
-        # a direct caller that passes nothing resolves here exactly as before.
+        # a direct caller that passes nothing gets it resolved here from
+        # ``request.seed``.
         seed = int(seed) if seed is not None else resolve_seed(request.seed)
 
-        # Image conditioning: multi-keyframe I2V. frame_idx is already snapped to
-        # a multiple of 8 and clamped in the validator (api/models.py). cond_paths
+        # Image conditioning: multi-keyframe I2V. frame_idx is already snapped
+        # onto the 8n+1 latent grid (0 kept as-is) and clamped in the validator
+        # (``_normalize_conditioning_images`` in api/models.py). cond_paths
         # are built by pipeline_manager in the same order as conditioning_images.
         # The engine's ImageConditioningInput has NO crf -> drop it.
         images: list[dict] = []
@@ -2102,21 +2110,22 @@ class _RealBackend:
         if progress_callback:
             progress_callback(None, None, 0.05)
 
-        # Phase B/C IC-LoRA (forward-time weight patch). ``loras`` is the list of
+        # IC-LoRA (forward-time weight patch). ``loras`` is the list of
         # ResolvedLora (adapter safetensors path, strength, preprocess,
         # audio_strength) resolved by the registry; empty list -> the worker
-        # passes ic_loras=[] (explicit clean detach per Stage 1 semantics).
+        # passes ic_loras=[] (explicit clean detach).
         # ``reference_video`` is the raw reference
         # (Pixel-Spatial-Upscaler: used as-is / Union-Control: converted to a
         # control signal by the worker per ``preprocess``). The reference
         # conditioning ``strength`` defaults to 1.0 (official guidance) but is
-        # overridable per request via ``reference_video_strength``; None when no
-        # loras. ``preprocess`` is derived from the job's loras -- a conflict (>1
+        # overridable per request via ``reference_video_strength``;
+        # ``reference_video`` is None when the job has no reference video.
+        # ``preprocess`` is derived from the job's loras -- a conflict (>1
         # distinct kind) is rejected up front by api/generate.py already, this is
         # the defensive re-check at the runner. When the request carries a
         # ``conditioning_attention_strength`` an ``attention_strength`` key is
-        # spliced in (control-adherence override); it is entirely absent
-        # otherwise so an omitted-field job's payload stays byte-identical.
+        # spliced in (control-adherence override); otherwise the key is
+        # entirely absent.
         loras_payload = [_lora_payload_entry(lp) for lp in lora_paths]
         preprocess = _resolve_reference_preprocess(lora_paths)
         if reference_video_path is not None:
@@ -2152,8 +2161,8 @@ class _RealBackend:
             "output_path": str(target),
         }
         # NAG (additive): only present when enabled, so a non-NAG job's payload
-        # stays byte-identical to pre-NAG (regression contract, mirrors the
-        # reference_video/loras additive style above).
+        # carries no "nag" key at all (regression contract:
+        # tests/test_ltx_runner_payload.py pins the default key set).
         if request.nag_enabled:
             payload["nag"] = {
                 "negative_prompt": request.negative_prompt,
@@ -2168,49 +2177,48 @@ class _RealBackend:
             payload["nag"]["vsf_scale"] = request.vsf_scale
 
         # Acceleration (additive): the attention backend is sent ONLY when it is
-        # not the default, so a default job's payload stays byte-identical to
-        # pre-acceleration (regression contract, same style as nag above). The
-        # worker fails loud on an unknown value and degrades sage -> sdpa when
-        # the import is unavailable.
+        # not the default, so a default job's payload carries no
+        # attention_backend key (regression contract, same style as nag above).
+        # The worker fails loud on an unknown value and degrades sage -> sdpa
+        # when the import is unavailable.
         if request.attention_backend != "sdpa":
             payload["attention_backend"] = request.attention_backend
-        # block_swap_prefetch: same additive contract as attention_backend above
-        # — sent only when True, so a default job's payload stays byte-identical
-        # to pre-acceleration.
+        # block_swap_prefetch: sent only when True; its default follows
+        # ``BLOCK_SWAP_PREFETCH_DEFAULT`` (api/models.py). An omitted key means
+        # off on the worker side. The key set of a default job is pinned by
+        # test_default_payload_key_set_is_unchanged_by_acceleration in
+        # tests/test_ltx_runner_payload.py.
         if request.block_swap_prefetch:
             payload["block_swap_prefetch"] = True
-        # keep_resident: same additive contract, but the DEFAULT IS OFF here —
-        # so "sent only when True" is also "sent only when it differs from the
-        # default", and an omitted key on the worker side means off (which is
-        # additionally the explicit trigger that FREES the cache). A default
-        # job's payload therefore stays byte-identical to pre-keep_resident.
+        # keep_resident: same additive contract, sent only when True; its
+        # default follows ``KEEP_RESIDENT_DEFAULT`` (api/models.py). An omitted
+        # key on the worker side means off (which is additionally the explicit
+        # trigger that FREES the cache). The key set of a default job is pinned
+        # by test_default_payload_key_set_is_unchanged_by_keep_resident in
+        # tests/test_ltx_runner_payload.py.
         if request.keep_resident:
             payload["keep_resident"] = True
-        # fused_gguf_dequant_kernel: same additive contract, but as of
-        # 2026-08-04 the DEFAULT IS ON (§51: gates G1-G8 passed, owner approved
-        # the flip) — so, exactly like block_swap_prefetch above, the key rides
-        # on a DEFAULT job too and only disappears when the caller explicitly
-        # turns it off (the frozen default-key-set test lists it for that
-        # reason). An omitted key still means off on the worker side.
+        # fused_gguf_dequant_kernel: sent only when True, exactly like
+        # block_swap_prefetch above; its default follows
+        # ``FUSED_GGUF_DEQUANT_KERNEL_DEFAULT`` (api/models.py), and the default
+        # flip is recorded in Docs/VERIFICATION_LOG.md §51.5. An omitted key
+        # means off on the worker side. The key set of a default job is pinned
+        # by the same test as block_swap_prefetch above.
         if request.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
         # vae_mode: same additive contract, default "default" — so the key rides
         # ONLY on a job that explicitly asks for the pruned decoder, and a
-        # default job's payload stays byte-identical to pre-PrunaVAED. Until
-        # 2026-08-05 this field was a MOCK that was deliberately never put on
-        # the wire; it is now consumed by the engine (§3-50). An environment
-        # without the weight file still completes the job — the worker reports
+        # default job's payload carries no vae_mode key. An environment without
+        # the weight file still completes the job — the worker reports
         # vae_mode_used="on->off".
         if request.vae_mode != "default":
             payload["vae_mode"] = request.vae_mode
-        # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the
-        # time): same additive contract — the key is absent from
-        # every non-outpaint job, so their payloads stay byte-identical. Its
-        # presence is ALSO the switch that routes the worker to
-        # ``generate_outpaint`` instead of ``generate``, so it carries the full
-        # geometry (the engine must rebuild the blend mask) rather than a flag.
-        # ``reference_video.path`` above is already the green canvas; the
-        # ``source_path`` here is the original upload, read only for audio.
+        # Outpainting: same additive contract — the key is absent from every
+        # non-outpaint job. Its presence is ALSO the switch that routes the
+        # worker to ``generate_outpaint`` instead of ``generate``, so it carries
+        # the full geometry (the engine must rebuild the blend mask) rather than
+        # a flag. ``reference_video.path`` above is already the green canvas;
+        # the ``source_path`` here is the original upload, read only for audio.
         if request.outpaint is not None:
             op = request.outpaint
             payload["outpaint"] = {
@@ -2225,14 +2233,13 @@ class _RealBackend:
                 "blend_dilation_stage2": op.blend_dilation_stage2,
                 "freeze_source_audio": op.freeze_source_audio,
             }
-        # Inpainting (台帳 §3-55): the same additive contract, key for key — the
-        # block is absent from every non-inpaint job, so their payloads stay
-        # byte-identical, and its PRESENCE is what routes the worker to
-        # ``generate_inpaint``. It carries the geometry because the engine has
-        # to rebuild the canvas arithmetic, and the two FILE PATHS the canvas
-        # cannot supply: the cut window (audio + the restore's fallback picture)
-        # and the mask video itself. ``reference_video.path`` above is already
-        # the green-filled canvas.
+        # Inpainting: the same additive contract, key for key — the block is
+        # absent from every non-inpaint job, and its PRESENCE is what routes the
+        # worker to ``generate_inpaint``. It carries the geometry because the
+        # engine has to rebuild the canvas arithmetic, and the two FILE PATHS the
+        # canvas cannot supply: the cut window (audio + the restore's fallback
+        # picture) and the mask video itself. ``reference_video.path`` above is
+        # already the green-filled canvas.
         #
         # Note what is NOT here: pads. The engine derives them from
         # ``canvas − source``, which is the same single-source-of-truth rule the
@@ -2273,10 +2280,10 @@ class _RealBackend:
             }
 
         # Serialize the stdin/stdout exchange (single-job server, but be safe).
-        # F2: the worker now streams per-step ``progress`` events during a
-        # single generate too, so read through them (same receipt loop as the
-        # chain) instead of the old one-shot _read_event() — which turned the
-        # first progress event into "unexpected event" and failed the job.
+        # The worker streams per-step ``progress`` events during a single
+        # generate too, so read through them with the same receipt loop as the
+        # chain rather than a one-shot _read_event(), which would hand back the
+        # first progress event and fail the job as an "unexpected event" below.
         with self._lock:
             try:
                 self._send(payload)
@@ -2316,7 +2323,7 @@ class _RealBackend:
             generation_mode=mode,
             backend=REAL_BACKEND,
             # Acceleration: what the engine ACTUALLY ran with (same relay as
-            # seed_used). None on a worker that predates the field.
+            # seed_used). None when the done event does not carry the field.
             attention_used=event.get("attention_used"),
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
             keep_resident_used=event.get("keep_resident_used"),
@@ -2325,9 +2332,9 @@ class _RealBackend:
             ),
             vae_mode_used=event.get("vae_mode_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
-            # Inpainting (台帳 §3-55): the engine's own block, relayed verbatim.
-            # Absent on every other job, so ``None`` there — the same shape as
-            # every relay above.
+            # Inpainting: the engine's own block, relayed verbatim. Absent on
+            # every other job, so ``None`` there — the same shape as every relay
+            # above.
             inpaint=event.get("inpaint"),
         )
 
@@ -2367,18 +2374,18 @@ class _RealBackend:
         including the ``freeze_proof`` only real latents can produce — returned
         as-is in ``chain_metadata``. ``end_source_strength`` rides on that same
         block ({path, context_frames, strength}); None -> 1.0, a hard stage-1
-        freeze byte-identical to before this field existed.
+        freeze.
 
         Style/character IC-LoRA: when ``lora_paths`` is non-empty an additive
         ``loras`` block ([{path, strength[, audio_strength]}, ...]) is added to
         the worker payload (mirrors the single-generate ``loras_payload``). The
         strengths apply uniformly to every clip/stage. Absent for a no-lora
-        chain (payload byte-identical to before); the worker clears any stale
-        LoRA regardless.
+        chain; the worker clears any stale LoRA regardless.
 
-        Reference-video CONTROL IC-LoRA (Phase C; 1..24 clips — owner decision
-        2026-08-11 lifted the old clips=1 ALPHA scope, except a depth-preprocess
-        adapter, still rejected on >1 clip at the API layer): when
+        Reference-video CONTROL IC-LoRA (any clip count allowed by
+        ``GenerateChainRequest.clips``, except a depth-preprocess adapter, which
+        the API layer rejects on >1 clip with LORA_DEPTH_CHAIN_UNSUPPORTED):
+        when
         ``reference_video_path`` is set an additive ``reference_video`` block
         ({path, strength, preprocess[, attention_strength]}) is added to the
         worker payload, mirroring the single-generate ``reference_payload`` (see
@@ -2386,14 +2393,12 @@ class _RealBackend:
         count -- the engine slices the single long reference into each stage-1
         segment's own window (chain_math.video_segment_windows); a reference
         shorter than the timeline just runs out (later segments generate
-        without one). Absent when no reference video was requested, so the
-        payload stays byte-identical to before that case.
+        without one). Absent when no reference video was requested.
 
         NAG (Normalized Attention Guidance, ADDITIVE/optional): when
         ``chain.nag_enabled`` an additive ``nag`` block ({negative_prompt, scale,
         tau, alpha}) is added to the worker payload, applying uniformly across
-        every clip/stage. Absent for a non-NAG chain (payload byte-identical to
-        before).
+        every clip/stage. Absent for a non-NAG chain.
         """
         if not self.loaded:
             self.load()
@@ -2441,7 +2446,7 @@ class _RealBackend:
             "clips": clips_payload,
         }
         # V2V continuation (additive): the app-cut fps-correct source tail. Absent
-        # for a normal chain (payload byte-identical to before).
+        # for a normal chain.
         if source_tail_path is not None and source_context_frames is not None:
             payload["source"] = {
                 "path": str(source_tail_path),
@@ -2453,8 +2458,9 @@ class _RealBackend:
             payload["audio_source"] = {"path": str(source_audio_path)}
         # Retake (additive): the app-cut window plus the glue geometry. The
         # ``is not None`` guard on BOTH the path and the request block is what
-        # keeps a non-retake chain's payload key set byte-identical
-        # (tests/test_ltx_runner_payload.py pins that set in two places).
+        # keeps a non-retake chain's payload free of a ``retake`` key
+        # (tests/test_ltx_runner_payload.py pins the default chain key set in two
+        # places).
         if retake_window_path is not None and getattr(chain, "retake", None) is not None:
             payload["retake"] = {
                 "path": str(retake_window_path),
@@ -2465,8 +2471,9 @@ class _RealBackend:
         # End source (additive): the app-prepared tail material (a cut video or a
         # looped still — the engine sees only a video) plus the band length. The
         # ``is not None`` guard on BOTH values is what keeps a chain without an
-        # end source byte-identical, payload key set included
-        # (tests/test_ltx_runner_payload.py pins that set in two places).
+        # end source free of an ``end_source`` key
+        # (tests/test_ltx_runner_payload.py pins the default chain key set in two
+        # places).
         if end_source_path is not None and end_source_context_frames is not None:
             payload["end_source"] = {
                 "path": str(end_source_path),
@@ -2477,19 +2484,21 @@ class _RealBackend:
             }
         # Style/character AND control IC-LoRA (additive): (path, strength[,
         # audio_strength]) per adapter, applied uniformly across the chain. Only
-        # added when non-empty so a no-lora chain payload is byte-identical to
-        # before (the worker parses msg.get("loras", []) and clears stale LoRA
-        # either way). ``preprocess`` is dropped here -- it is derived separately
+        # added when non-empty, so a no-lora chain carries no ``loras`` key (the
+        # worker parses msg.get("loras", []) and clears stale LoRA either way).
+        # ``preprocess`` is dropped here -- it is derived separately
         # below (via ``_resolve_reference_preprocess``) and only matters when a
         # reference video is also present, since a control adapter without one is
         # already rejected at the API layer (LORA_REQUIRES_REFERENCE).
         if lora_paths:
             payload["loras"] = [_lora_payload_entry(lp) for lp in lora_paths]
-        # Reference-video CONTROL IC-LoRA (additive; 1..24 clips — owner decision
-        # 2026-08-11, except a depth-preprocess adapter which is still API-layer
-        # rejected on >1 clip): mirrors the single-generate ``reference_payload``
-        # (see :meth:`generate` above). Only added when a reference video was
-        # requested, so a chain without one keeps a byte-identical payload.
+        # Reference-video CONTROL IC-LoRA (additive; any clip count allowed by
+        # ``GenerateChainRequest.clips``, except a depth-preprocess adapter,
+        # which the API layer rejects on >1 clip with
+        # LORA_DEPTH_CHAIN_UNSUPPORTED): mirrors the single-generate
+        # ``reference_payload`` (see :meth:`generate` above). Only added when a
+        # reference video was requested, so a chain without one carries no
+        # ``reference_video`` key.
         if reference_video_path is not None:
             ref_strength = (
                 1.0
@@ -2508,7 +2517,8 @@ class _RealBackend:
             payload["reference_video"] = reference_payload
 
         # NAG (additive): only present when enabled, so a non-NAG chain's payload
-        # stays byte-identical to pre-NAG (regression contract).
+        # carries no ``nag`` key (regression contract:
+        # tests/test_ltx_runner_payload.py pins the default key set).
         if chain.nag_enabled:
             payload["nag"] = {
                 "negative_prompt": chain.negative_prompt,
@@ -2523,19 +2533,25 @@ class _RealBackend:
             payload["nag"]["vsf_scale"] = chain.vsf_scale
 
         # Acceleration (additive): mirrors the single-generate block in
-        # :meth:`generate` — sent only when non-default (byte-identical default
-        # payload). See there for the full rationale.
+        # :meth:`generate` — sent only when non-default, so a default chain
+        # carries no ``attention_backend`` key. See there for the full rationale.
         if chain.attention_backend != "sdpa":
             payload["attention_backend"] = chain.attention_backend
-        # block_swap_prefetch: same additive contract as attention_backend above.
+        # block_swap_prefetch: sent only when True; its default follows
+        # ``BLOCK_SWAP_PREFETCH_DEFAULT`` (api/models.py). An omitted key means
+        # off on the worker side. The key set of a default chain job is pinned
+        # by test_default_payload_key_set_is_unchanged_by_acceleration in
+        # tests/test_ltx_runner_payload.py.
         if chain.block_swap_prefetch:
             payload["block_swap_prefetch"] = True
-        # keep_resident: mirrors the single-generate block (default OFF, so the
-        # key is sent only when True and an omission means off/free-the-cache).
+        # keep_resident: mirrors the single-generate block — sent only when
+        # True; its default follows ``KEEP_RESIDENT_DEFAULT`` (api/models.py),
+        # and an omission means off/free-the-cache.
         if chain.keep_resident:
             payload["keep_resident"] = True
-        # fused_gguf_dequant_kernel: mirrors the single-generate block (default
-        # ON since 2026-08-04, so the key rides on a default chain job too).
+        # fused_gguf_dequant_kernel: mirrors the single-generate block (sent only
+        # when True; its default follows ``FUSED_GGUF_DEQUANT_KERNEL_DEFAULT`` in
+        # api/models.py).
         if chain.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
         # vae_mode: mirrors the single-generate block (default "default", so the
@@ -2543,10 +2559,10 @@ class _RealBackend:
         # value covers every clip and every stage of the chain.
         if chain.vae_mode != "default":
             payload["vae_mode"] = chain.vae_mode
-        # stage2_window: same additive contract as the acceleration keys above —
-        # sent ONLY when the request opted off "standard", so a default chain's
-        # worker payload stays byte-identical to before this knob existed
-        # (tests/test_ltx_runner_payload.py pins the exact key set).
+        # stage2_window: additive — sent ONLY when the request differs from
+        # chain_math.STAGE2_WINDOW_DEFAULT, so a default chain's worker payload
+        # carries no ``stage2_window`` key (tests/test_ltx_runner_payload.py
+        # pins the exact key set).
         if chain.stage2_window != chain_math.STAGE2_WINDOW_DEFAULT:
             payload["stage2_window"] = chain.stage2_window
 
@@ -2594,7 +2610,7 @@ class _RealBackend:
     def _read_chain_events(self, progress_callback: ProgressCallback | None) -> dict:
         """Read framed events until a terminal ``done``/``error``; forward
         ``progress`` events to ``progress_callback`` and emit rate-limited INFO
-        lines per stage (S2 console progress). See :meth:`_read_worker_events`."""
+        lines per stage. See :meth:`_read_worker_events`."""
         return self._read_worker_events(progress_callback, chain=True, prefix="chain")
 
     def _read_worker_events(
@@ -2610,16 +2626,16 @@ class _RealBackend:
         (``done``/``error``/anything unexpected) and returns it — the caller
         keeps its existing terminal-event validation. Each ``progress`` event:
 
-        * per-step denoise stages (F2 tqdm shim): step/total pass through to
+        * per-step denoise stages (tqdm shim): step/total pass through to
           ``progress_callback(current_step, total_steps, frac, stage)``;
         * coarse stages (chain segment/tile/decode, encode): forwarded as
-          ``(None, None, frac, stage)`` — same fractions as before F2;
+          ``(None, None, frac, stage)``;
         * chain stage-1 events (per-step ``stage1_denoise`` with a segment
           position, and the coarse per-segment ``stage1``) additionally pass
           ``clip=``/``clip_count=`` keywords (1-based clip being denoised /
           clip total) so the job store can surface "clip n/N" to the GUI. The
           keywords are only added when the position is known — every other
-          event keeps its exact pre-existing call shape;
+          event is called without them;
         * the fraction is monotone non-decreasing across the whole read (clamped
           against the last emitted value), and unknown stages never move it;
         * a rate-limited INFO line per stage keeps the console readable
@@ -2658,7 +2674,7 @@ class _RealBackend:
             # (= stage-1 segment) is being worked on. Per-step events name it
             # via the shim's outer position; the coarse per-segment event fires
             # when segment idx+1 has just completed. Keywords are only passed
-            # when known, so non-stage-1 events keep their exact old call shape
+            # when known, so non-stage-1 events are called without them
             # (callbacks declare clip/clip_count with None defaults).
             clip_kwargs: dict[str, int] = {}
             if chain:
@@ -2684,8 +2700,11 @@ class _RealBackend:
 # here rather than inside the class body because ``LTXRunner`` is declared
 # FIRST (it is the file's public face) and Python evaluates a class body at
 # definition time — a forward reference in the body would be a NameError.
-# Declared (annotation-only) up in the class so a family that forgets to bind
-# them fails with a clear AttributeError instead of silently inheriting 2.3's.
+# Declared (annotation-only) up in the class. Because the binding below sets
+# them on LTXRunner itself, a subclass family inherits 2.3's value for any
+# seam it does not bind, so a family binds its own ``_REAL_BACKEND_CLS``; the
+# mock class may be shared (LTX25Runner binds both explicitly, the mock one to
+# 2.3's ``_MockBackend``).
 LTXRunner._REAL_BACKEND_CLS = _RealBackend
 LTXRunner._MOCK_BACKEND_CLS = _MockBackend
 

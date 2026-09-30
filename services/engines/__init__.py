@@ -1,7 +1,6 @@
-"""エンジン系統のディスパッチ層(§3-98 P3c)。
+"""エンジン系統のディスパッチ層。
 
-ベースモデルが2つになった時点で「どの重みを、どのアダプタが走らせるのか」を
-決める場所が必要になった。ここがその一箇所である。
+「どの重みを、どのアダプタが走らせるのか」を決める場所はここ一箇所である。
 
 **すべて遅延import**。この モジュールを import しただけでは、どのアダプタも
 読み込まれない。理由は二つある。(1) LTXアダプタは2000行を超え、PIL・
@@ -17,7 +16,7 @@ chain_math・api.models を芋づるに引き込む。ベースモデルを列�
 ``from __future__ import annotations`` により文字列のままなので、
 TYPE_CHECKING ガードの下で書ける。
 
-**判定の主体はKV、記述子は照合相手**(設計原則F-1)。ユーザーが選んだ
+**判定の主体はKV、記述子は照合相手**。ユーザーが選んだ
 ベースモデルが何を名乗っていようと、実際に走るのはファイルの中身である。
 :func:`check_kv` は「KVが指す系統」と「記述子が宣言する系統」が食い違ったら
 明示的に422で止める——黙ってどちらかに合わせると、LTX 2.3のワーカーに2.5の
@@ -37,9 +36,10 @@ if TYPE_CHECKING:  # 実行時にはimportしない(上のdocstringの規約)
     from services.base_models import BaseModelDescriptor
 
 #: (``general.architecture``, ``model_version``のminor) -> エンジン系統id。
-#: GGUFヘッダから読み取った事実だけで引ける表。ここに無い組み合わせは
+#: 重みファイルのヘッダ(GGUFのKV、または量子化safetensorsのヘッダから読み替えた
+#: KV)から読み取った事実だけで引ける表。ここに無い組み合わせは
 #: 「この配布物が知らない世代」であり、系統の照合はせず各アダプタ自身の
-#: ``check_kv`` に最終判断を委ねる(未知のminorを名乗る自作GGUFなど)。
+#: ``check_kv`` に最終判断を委ねる(未知のminorを名乗る自作の重みなど)。
 FAMILY_BY_KV: dict[tuple[str, str], str] = {
     ("ltxv", "2.3"): "ltx",
     ("ltxv", "2.5"): "ltx25",
@@ -64,9 +64,9 @@ FAMILY_DISPLAY: dict[str, str] = {
 def _minor(version: str) -> str:
     """``"2.5.0"`` -> ``"2.5"``。パッチ番号は系統を選ばない。
 
-    各アダプタの ``_minor_version`` と同じ規則をここにも置いてある。1行の
-    文字列処理のためにアダプタ(2000行超)をimportしては、このモジュールが
-    遅延importである意味が消えるため。
+    LTX 2.3 アダプタの ``_minor_version``(LTX 2.5 アダプタもこれを import して
+    使う)と同じ規則をここにも置いてある。1行の文字列処理のためにアダプタ
+    (2000行超)をimportしては、このモジュールが遅延importである意味が消えるため。
     """
     return ".".join(version.strip().split(".")[:2])
 
@@ -87,12 +87,14 @@ def _adapter(family: str) -> ModuleType:
 
 
 def family_by_kv(kv: dict[str, str]) -> str | None:
-    """GGUFのKVヘッダだけから系統を引く。判らないときは None。
+    """KV(GGUFのKVヘッダ、または量子化safetensorsのヘッダから読み替えた辞書)
+    だけから系統を引く。判らないときは None。
 
     Noneは「不正」ではなく「この表からは決められない」。アーキテクチャ名か
-    世代のどちらかを欠くGGUF(自作・第三者製)はそれに当たり、系統の照合を
-    見送って各アダプタの ``check_kv`` に最終判断を委ねる——欠損キーを拒否
-    しないのは§2.5からの一貫した方針である。
+    世代のどちらかを欠く重み(自作・第三者製のGGUF、``model_version`` を持たない
+    量子化safetensorsなど)はそれに当たり、系統の照合を見送って各アダプタの
+    ``check_kv`` に最終判断を委ねる。欠損キーを拒否せず警告で通す方針の正本は
+    MULTI_ENGINE_DESIGN.md §2.2。
     """
     architecture = (kv.get("general.architecture") or "").strip()
     version = (kv.get("model_version") or "").strip()
@@ -142,7 +144,7 @@ def check_kv(
 
 
 def runner_class_for(family: str) -> type:
-    """系統のRunnerクラス(``LTXRunner`` / ``LTX25Runner``)。
+    """系統のRunnerクラス(対応は ``FAMILY_BY_ID``)。
 
     ``PipelineManager`` がベースモデルを切り替えるときに、Runnerオブジェクト
     そのものを作り直すために使う。系統が変わればワーカーのプロセスも、venvも、
@@ -153,30 +155,27 @@ def runner_class_for(family: str) -> type:
 
 
 def unsupported_features(family: str) -> tuple[str, ...]:
-    """この系統が扱えない機能名(GET /modelsが公開する。§3-98 Phase 5)。
+    """この系統が扱えない機能名(GET /modelsが公開する)。
 
     宣言していない系統は空タプル——「制限なし」が既定であって、機能表を
-    持たないことが「全部だめ」を意味してはならない。**いまはどちらの系統も
-    宣言を持つ**(§3-114で ``ltx`` 側にも1件できた)が、既定の向きはそのまま
-    である:新しい系統を足した人がこの関数を知らなくても、正しく動く側に倒れる。
+    持たないことが「全部だめ」を意味してはならない。新しい系統を足した人が
+    この関数を知らなくても、正しく動く側に倒れる。
     """
     return tuple(getattr(_adapter(family), "UNSUPPORTED_FEATURES", ()))
 
 
 def reject_unsupported(family: str, request: GenerateRequest) -> None:
-    """この系統が走らせられないリクエストなら、その場で422にする(§3-98 P5)。
+    """この系統が走らせられないリクエストなら、その場で422にする。
 
-    **判断はアダプタが持ち、ここは取り次ぐだけ**である。「LTX 2.5では非蒸留
-    パイプライン(``pipeline``)を走らせられない」というのはエンジンの事実で
-    あって、エンドポイントの事情ではない。api/generate.py が系統名で分岐して
+    **判断はアダプタが持ち、ここは取り次ぐだけ**である。どの系統がどの
+    フィールドを断るかはエンジンの事実(各アダプタの ``REJECT_TABLE`` が正本)
+    であって、エンドポイントの事情ではない。api/generate.py が系統名で分岐して
     機能表を持ち始めた瞬間に、同じ表が2箇所に生まれて必ずずれる。
 
     宣言していない系統は素通り。``getattr`` で見に行くのは、「制限を宣言
     しない」が既定であるという :func:`unsupported_features` と同じ規約に
     よる——新しい系統を足した人が、この関数の存在を知らなくても正しく動く側に
-    倒れる。**いまは ``ltx`` / ``ltx25`` の両方が判断を持つ**(§3-114で
-    ``ltx`` 側にも ``reject_unsupported`` ができた)ので、素通りするのは
-    「まだ何も宣言していない将来の系統」だけである。
+    倒れる。
 
     エンドポイントから**関数として**呼ぶ(FastAPIの ``Depends`` にはしない)。
     Dependsは引数の解決順に依存するため、リクエスト本文の検証と機能の可否の
@@ -194,17 +193,11 @@ def reject_chain(family: str, request: GenerateChainRequest) -> None:
     :func:`reject_unsupported` と同じく、**判断はアダプタが持ち、ここは
     取り次ぐだけ**である。
 
-    かつては引数にリクエストを取らなかった。「chain系はまるごと扱えるか扱えない
-    かのどちらかで、中身を見ても答えが変わらない」からだった——LTX 2.5が連結生成
-    を一切できなかった頃の話である。いまは**系統によって中身で答えが変わる**:
-    LTX 2.5の連結生成で断られるのは ``pipeline``(非蒸留)と ``vae_mode``
-    (PrunaVAED)の2フィールドが既定と違うときだけで、それ以外のモード
-    (V2V・A2V・Retake・End source・LoRA・参照動画など)は走る。だから
-    リクエストを渡す。**どのフィールドを断るかの正本は各アダプタの
-    ``CHAIN_REJECT_TABLE`` であり、ここには書き写さない**——§3-114で
-    ``ltx`` 側にも同名の表ができたので、正本は1枚ではなく系統ごとに1枚である。
+    **系統によってリクエストの中身で答えが変わる**ので、リクエストを渡す。
+    **どのフィールドを断るかの正本は各アダプタの ``CHAIN_REJECT_TABLE``
+    であり、ここには書き写さない**——正本は1枚ではなく系統ごとに1枚である。
 
-    まだ何も宣言していない系統は素通り、という :func:`reject_unsupported` と
+    何も宣言していない系統は素通り、という :func:`reject_unsupported` と
     同じ規約。
     """
     guard = getattr(_adapter(family), "reject_chain", None)

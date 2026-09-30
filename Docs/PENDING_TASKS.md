@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-34「V2V／End source の `context_frames` 上限が `config.yaml` に書いても検証に効かない」を起票し、§1 冒頭の案内を §1-34 まで含む記述に更新。前回 2026-09-28: オーナー裁定「§3-167をクローズしてほしい」を受け、§3-167をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167 へ移し、本書の§3-167を削除。§1-31 の§3-167参照をCLOSED側へ付け替え。前々回 2026-09-28: C-4〔int8／w4a8 safetensors の快適上限の較正〕が完了したため §1-32 をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169 へ移し、§1 冒頭の案内を §1-31・§1-33 のみの記述に更新。§1-31・§1-33 の材料の参照先を[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節へ更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-35〜§1-39 の5件〔block swap の状態報告の整合／読み込みの最中の`unload`で409の見張りが開く／連結ジョブの取り消しが結果に反映されない／`join_v2v`の尺の検査が音声の短いずれを見ない／`Docs/MULTI_ENGINE_DESIGN.md` §4.1の文書訂正〕を起票し、§1 冒頭の案内を §1-35〜§1-39 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-34「V2V／End source の `context_frames` 上限が `config.yaml` に書いても検証に効かない」を起票し、§1 冒頭の案内を §1-34 まで含む記述に更新。前々回 2026-09-28: オーナー裁定「§3-167をクローズしてほしい」を受け、§3-167をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167 へ移し、本書の§3-167を削除。§1-31 の§3-167参照をCLOSED側へ付け替え。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -41,6 +41,57 @@
   - B: 「この2行は画面の目安であり、サーバー側の上限は `config.py` で決まる」と定義し直し、上記2文書の「`config.yaml` の1行で引き上げられる」という記述を訂正する（コードは変えない）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §131「申し送り」3.（コメント現行化の `api/` 区域で検出、2026-10-01 起票）。
 - **関連ファイル**: `api/models.py`（`_LIMITS_DEFAULTS`・`SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source`）、`config.py`（`LimitsConfig`）、`config.yaml.example`、`gradio_ui/validation.py`（`check_v2v_context`）、`api/status.py`（`get_config`）。
+
+### 1-35. block swap の状態報告の整合（起票：2026-10-01）
+
+- **現象**: `services/pipeline_manager.py` の `PipelineManager._block_swap_prefetch_available` は `self.low_vram.block_swap_blocks_on_gpu or 8` が 0 より大きいかしか見ない。`or 8` により値 0 も 8 として扱われるため、モックでない限り事実上いつも真になる。`engine/transformer/block_swap_service.py`（`blocks_on_gpu >= total` のときスワップしない。`engine25/gguf_transformer.py` も同様に全常駐）や、組み込みに失敗した場合は実際にはスワップが効かないが、`GET /status` の `acceleration.block_swap_prefetch_available` は真のまま変わらない。あわせて `services/low_vram.py` の `LowVramSettings.status_block` が返す `vram_optimization.block_swap` は `config.vram.block_swap`（真偽値）を写すだけで、実際にスワップを駆動する式（LTX 2.3＝`services/engines/ltx/adapter.py` の `_RealBackend._build_load_payload` の `block_swap_blocks_on_gpu or 8`、LTX 2.5＝`services/engines/ltx25/adapter.py` の `or DEFAULT_BLOCKS_ON_GPU`）とは別経路であり、一致しないことがある。
+- **文書との食い違い**: [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.5b は `block_swap_prefetch_available` について「判定式は実ゲートと完全同一」と書き、根拠コードとして `services/engines/ltx/adapter.py:1860` を挙げるが、現在この式は同ファイルの1872行目にある（行番号の書き写しで、LTX 2.5 は別式 `DEFAULT_BLOCKS_ON_GPU` を使うため「完全同一」は LTX 2.3 限定）。同 §11.3 は `vram_optimization.block_swap` について「この値をそのまま反映する」と書いており、こちらは設計どおりとも読める。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `_block_swap_prefetch_available` の判定式と `vram_optimization.block_swap` を、実際にスワップが効くかどうかに合わせる。
+  - B: 両フィールドの意味を「設定値をそのまま反映するもの」と定め直し、§6.5b の「判定式は実ゲートと完全同一」という言い切りと行番号を訂正する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」（コメント現行化で検出、2026-10-01 起票）。
+- **関連ファイル**: `services/pipeline_manager.py`（`_block_swap_prefetch_available`・`acceleration_status_block`）、`services/low_vram.py`（`LowVramSettings.status_block`）、`services/engines/ltx/adapter.py`（`_RealBackend._build_load_payload`）、`services/engines/ltx25/adapter.py`（`DEFAULT_BLOCKS_ON_GPU`）、`engine/transformer/block_swap_service.py`、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.5b・§11.3。
+
+### 1-36. 読み込みの最中の `unload` で 409 の見張りが開く（起票：2026-10-01）
+
+- **現象**: `services/pipeline_manager.py` の `PipelineManager.load`／`reload` は冒頭の区間でだけロックを取り、`self.runner.load(...)`（ワーカーの起動と読み込みの待ち）はロックの外で走る。その間に `unload` が来ると、ロックを取って `runner.unload()` を呼んだ後に `state` を `STATE_UNLOADED` に戻す。ワーカー構築前（`_proc` がまだ無い時点）に `unload` が来た場合は `runner.unload()` は何もせず読み込みはそのまま続いて最後に `state` を `STATE_READY` にするが、その間 `state` が `unloaded` になっているため、2 度目の `load` が `_reject_while_loading`（409 の見張り）を素通りし、ワーカーの構築が重なり得る。`_proc` がある時点で `unload` が来た場合は `shutdown`・`terminate` で読み込み側の `_read_event` が失敗し、`_cleanup_after_error` を経て `pipeline_load_failed` になる。
+- **影響**: 利用者が読み込み中に解放ボタンを押した場合だけ発生する。クラッシュ・データ破損は無い。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `unload` にも読み込み中の見張りを置く。
+  - B: 読み込み中に来た `unload` を、読み込みの完了（成功／失敗）まで待たせる。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」（コメント現行化で検出、2026-10-01 起票）。
+- **関連ファイル**: `services/pipeline_manager.py`（`PipelineManager.load`・`reload`・`unload`・`_reject_while_loading`）、`services/engines/ltx/adapter.py`（`_RealBackend.unload`・`_proc`）。
+
+### 1-37. 連結ジョブの取り消しが結果に反映されない（起票：2026-10-01）
+
+- **現象**: `services/pipeline_manager.py` の `PipelineManager.run_chain_job` は `start_job` の直後に一度だけ `job.cancel_requested` を見て、真ならその場で `cancelled` にして戻る。生成の開始後に `cancel_requested` が立っても、それを見る箇所が無いため `completed` のまま終わる。単発の `PipelineManager.run_job` は生成後にも `job.cancel_requested` を見て `cancelled` にする分岐を持つ。
+- **文書との食い違い**: [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §7.2 は「生成が終わったとき `cancel_requested` が立っていれば最終ステータスを `cancelled` にする」と、単発と連結を分けずに書いている。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: コードを仕様書に合わせる（`run_chain_job` の生成後にも `cancel_requested` の確認を足す）。
+  - B: 仕様書に「連結ジョブは dispatch 後の取り消しを結果へ反映しない（常に completed で終わる）」と明記する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」（コメント現行化で検出、2026-10-01 起票）。
+- **関連ファイル**: `services/pipeline_manager.py`（`PipelineManager.run_job`・`run_chain_job`）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §7.2。
+
+### 1-38. `join_v2v` の尺の検査が音声の短いずれを見ない（起票：2026-10-01）
+
+- **現象**: `services/video_io.py` の `join_v2v` は、`handle_audio` を使う経路（HANDLE TRUE-CROSSFADE mode）で出力の尺を検査する際、フレーム数（`frame_count`）と `probe_duration`（ffprobe の `format=duration`＝コンテナの長さ）だけを比べる。コンテナの長さは通常いちばん長いストリーム（多くは映像）になるため、音声ストリームだけが映像より短く出たずれは検出されない（映像側のフレーム数のずれ・長いずれは検出される）。docstring の「``acrossfade`` shrinks the summed stream by ``d`` ... Asserted within a small tolerance.」は、音声の尺そのものを保証するように読める書き方をしている。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 音声ストリームの長さも別途比べる検査を足す。
+  - B: 現状を許容し、docstring に「コンテナの長さでの近似であり、音声だけが短く出たずれは検出しない」という限界を明記する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」（コメント現行化で検出、2026-10-01 起票）。
+- **関連ファイル**: `services/video_io.py`（`join_v2v`・`probe_duration`）。
+
+### 1-39. `Docs/MULTI_ENGINE_DESIGN.md` §4.1の「import している3ファイル」の訂正（起票：2026-10-01）
+
+- **現象**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §4.1 は「`CATEGORIES`（モジュール定数のリテラル）...これを import している3ファイルを触らずに済ませるため」と書くが、実際に `services/model_registry.py` の `CATEGORIES` を import するのは `api/models_registry.py` と `services/pipeline_manager.py` の 2 モジュールだけ（テストを除く）。`gradio_ui/adapters.py` は同じ内容の `MODEL_CATEGORIES` を自前で定義しており import はしていない。
+- **選択肢**（オーナー判断・優劣はつけない）: 件数を書かない参照形へ変えるか、実際の2モジュールを名指しする形へ訂正する。コードは変えない。
+- **着手**: 着手時は go／no-go の検討から始める（文書だけの訂正のため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」（コメント現行化で検出、2026-10-01 起票）。
+- **関連ファイル**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §4.1、`services/model_registry.py`（`CATEGORIES`）、`api/models_registry.py`、`services/pipeline_manager.py`、`gradio_ui/adapters.py`（`MODEL_CATEGORIES`）。
 
 ---
 

@@ -6,20 +6,21 @@ producing ``outputs/{job_id}/joined.mp4``. GPU-free (ffmpeg only) and fully
 independent of the single-GPU-job guard, so a join can run while another
 generation is in flight.
 
-Design (Docs/mockups/JOIN_API_PROPOSAL.md, approved 2026-07-05):
+Design (Docs/mockups/JOIN_API_PROPOSAL.md):
 
 * materials — the uploads store's original source video
   (``video_upload_store.path_for``), the job's ``output.mp4``, and (when the
   source had audio) the engine's ``<stem>_audio_handle.wav`` sidecar recorded in
   ``metadata.json``'s ``v2v`` block.
-* audio_smoothing=True (default) — :func:`services.video_io.join_v2v`: a true
+* audio_smoothing=True — :func:`services.video_io.join_v2v`: a true
   overlapped equal-power crossfade via the handle sidecar when present, else
   the no-handle fade-pair. audio_smoothing=False — hard concat
   (:func:`services.video_io.concat_mp4s`, no fades; API parity only, the GUI
-  does not expose it).
-* R3 normalization (smoke-verified 2026-07-05) — ``join_v2v``/``concat`` demand
-  matching resolution+fps, but the full uploaded source generally differs from
-  the delivered continuation (only the consumed context TAIL was fps-aligned).
+  does not expose it). An omitted field takes the ``JoinRequest`` default.
+* Normalization (verification record: Docs/VERIFICATION_LOG.md §26.1) —
+  ``join_v2v``/``concat`` demand matching resolution+fps, but the full
+  uploaded source generally differs from the delivered continuation (only
+  the consumed context TAIL was fps-aligned).
   When they differ the source is first re-encoded to the continuation's
   geometry via :func:`services.video_io.normalize_clip` (scale-to-cover +
   centered crop + ``setsar=1`` + fps resample; one extra encode generation is
@@ -198,9 +199,9 @@ class JoinManager:
                 video_io.concat_mp4s([source_use, continuation], out_tmp, cont_fps)
                 info = {"join_mode": "hard_concat"}
             # The source job's recipe as the joined file's ``comment`` tag
-            # (unless that job opted out; a job recorded before the field
-            # existed counts as opted in). Best effort, like the generation
-            # path: a failure keeps the untagged join.
+            # (unless that job opted out; a metadata.json without the field
+            # counts as opted in). Best effort, like the generation path: a
+            # failure keeps the untagged join.
             if metadata.get("request", {}).get("embed_mp4_metadata", True):
                 recipe = relativize_recipe_paths(
                     metadata,

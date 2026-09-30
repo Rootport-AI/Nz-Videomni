@@ -11,19 +11,20 @@ Two things live here and nothing else does:
 WHY THIS IS NOT A SUBCLASS OF ``services/engines/ltx/adapter.py``'s _RealBackend
 --------------------------------------------------------------------------------
 The launch/teardown DISCIPLINE below is copied from it deliberately -- stderr to
-a log file rather than a pipe (:1841-1845), a watchdog that kills the child so a
-blocked read returns (:1617-1624), and the ``threading.Lock`` that serialises
-every send/receive pair (:1537, used at :2108 and :2377) -- but the CLASS is not
-reusable here:
+a log file rather than a pipe (``_RealBackend.load``), a watchdog that kills the
+child so a blocked read returns (``_RealBackend._read_event``), and the
+``threading.Lock`` that serialises every send/receive pair (created in
+``_RealBackend.__init__``, held in ``generate`` and ``generate_chain``) -- but
+the CLASS is not reusable here:
 
-* ``adapter.py:51`` imports ``GenerateRequest``; that module is welded to the
+* ``adapter.py`` imports ``GenerateRequest``; that module is welded to the
   generation vocabulary this feature has nothing to do with.
-* ``SELECTION_FIELDS`` / ``REQUIRED_ASSETS`` / ``_build_load_payload`` (:1664)
-  are all LTX base-model descriptor language. A tracker has one weight file and
-  no categories.
-* Tracking needs BINARY pipes for the raw frames, so ``_send`` (:1602) and
-  ``_read_event`` (:1607) -- the only two methods worth inheriting -- would both
-  be overridden. The reusable surface is empty.
+* ``SELECTION_FIELDS`` / ``REQUIRED_ASSETS`` / ``_build_load_payload`` are all
+  LTX base-model descriptor language. A tracker has one weight file and no
+  categories.
+* Tracking needs BINARY pipes for the raw frames, so ``_send`` and
+  ``_read_event`` -- the only two methods worth inheriting -- would both be
+  overridden. The reusable surface is empty.
 
 THE LOCK IS LOAD-BEARING, NOT DEFENSIVE
 ---------------------------------------
@@ -37,8 +38,8 @@ write would not help.
 NO SHUTDOWN HOOK AT APP EXIT
 ----------------------------
 By design, matching the LTX worker: closing our stdin is the signal, and the
-worker exits on EOF (``engine/worker.py:1330-1331``). Adding a lifespan handler
-would be a second, racier path to the same place.
+worker exits on EOF (the end of ``main`` in ``engine/worker.py``). Adding a
+lifespan handler would be a second, racier path to the same place.
 """
 
 from __future__ import annotations
@@ -97,11 +98,11 @@ _LOG_NAME = "utils_worker.log"
 
 _WORKER_MODULE = "tracking.worker"
 
-#: Model load. Generous: it is a ~107 MB safetensors read on a cold file cache.
+#: Model load. Generous: it is a full safetensors read of the checkpoint on a
+#: cold file cache.
 _LOAD_TIMEOUT_S = 180.0
-#: One frame. 1080p measures ~25 ms on this class of CPU; this is two orders of
-#: magnitude of headroom, and exists only so a wedged worker cannot hang the
-#: request thread forever.
+#: One frame. This is far above the measured per-frame CPU time, and exists
+#: only so a wedged worker cannot hang the request thread forever.
 _FRAME_TIMEOUT_S = 120.0
 
 #: The two ``/status.tracking.reason`` values. Exactly two, by contract.
@@ -415,7 +416,8 @@ class _WorkerBackend:
 
         The watchdog has to KILL rather than signal: the read below is blocking
         on a pipe, and the only portable way to make it return is to close the
-        far end. Copied from ``adapter.py:1607-1651``.
+        far end. Copied from ``_RealBackend._read_event`` in
+        ``services/engines/ltx/adapter.py``.
         """
         proc = self._proc
         if proc is None or proc.stdout is None:
@@ -538,7 +540,7 @@ class TrackingManager:
     """The one object the API layer talks to. Built at startup, starts nothing.
 
     Construction is free and side-effect-free on purpose: ``AppContext`` builds
-    one unconditionally, including in the two ``main.build_app`` calls the test
+    one unconditionally, including in the ``main.build_app`` calls the test
     suite makes, and a server that has never been asked to track must never have
     paid for a subprocess.
     """
@@ -719,8 +721,8 @@ class TrackingManager:
             return
         idle = time.monotonic() - session.touched_at
         # ">=" so that a timeout of zero means "always evict". The boundary is
-        # otherwise academic (the shipped value is 60 seconds against a clock
-        # whose resolution on Windows is ~16 ms), but it is what makes the rule
+        # otherwise academic (the shipped IDLE_TIMEOUT_S dwarfs a clock whose
+        # resolution on Windows is ~16 ms), but it is what makes the rule
         # statable without reference to the clock.
         if idle < IDLE_TIMEOUT_S:
             return

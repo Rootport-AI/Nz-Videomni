@@ -1,7 +1,6 @@
-"""互換shim: 実装はservices/engines/ltx/adapter.pyへ移動(§3-97 P4)。
+"""互換shim: 実装はservices/engines/ltx/adapter.pyにある。
 
-outputs/配下の実機ドライバ10本とtests 12本がこのパスに依存するため互換維持。
-テスト無変更全緑が移動の正当性証明。
+outputs/配下の実機ドライバとtests/のテストがこのパスに依存するため互換維持。
 """
 
 from __future__ import annotations

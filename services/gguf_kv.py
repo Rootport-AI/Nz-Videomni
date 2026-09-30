@@ -59,7 +59,7 @@ _SCALAR_FORMATS: dict[int, str] = {
 _TYPE_STRING = 8
 _TYPE_ARRAY = 9
 
-# Sanity ceilings (§2.5 "上限ガード"). These bound how much a single call can
+# Sanity ceilings. These bound how much a single call can
 # be made to read/allocate even when handed a hostile or corrupted file --
 # real GGUFs from Nz-GGUF-Converter-LTX23 stay far under all four.
 _MAX_KV_COUNT = 4096

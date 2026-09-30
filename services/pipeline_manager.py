@@ -1,8 +1,8 @@
-"""Pipeline manager (spec ch.9).
+"""Pipeline manager (spec §7.4).
 
 Owns pipeline load/unload lifecycle, auto-load on first generation, OOM cleanup,
 and runs a job to completion on a background thread: updates the JobRecord,
-encodes the video (via the runner), and writes ``metadata.json`` (spec 10.2).
+encodes the video (via the runner), and writes ``metadata.json`` (spec §6.6).
 """
 
 from __future__ import annotations
@@ -99,12 +99,12 @@ def _loras_for_log(specs, resolved) -> str:
     """``name(strength=R)[, audio=A]`` per adapter, or ``none``.
 
     ``specs`` are the request ``LoraSpec``s (friendly NAME + strength);
-    ``resolved`` are the registry ``ResolvedLora``s in the SAME order. Since
-    §3-108, ``LoraRegistry.resolve`` returns the requested strength untouched
-    (the alpha/rank metadata multiplier is gone), so requested and effective can
-    no longer differ and only one number is ever worth printing. The ``audio=``
-    segment is appended only when the resolved audio_strength is not None
-    (video-axis-only jobs keep the exact prior rendering).
+    ``resolved`` are the registry ``ResolvedLora``s in the SAME order.
+    ``LoraRegistry.resolve`` returns the requested strength untouched (no
+    alpha/rank metadata multiplier), so requested and effective strength are
+    the same number and only that one is printed. The ``audio=`` segment is
+    appended only when the resolved audio_strength is not None (a
+    video-axis-only job prints no ``audio=`` segment).
     """
     if not specs:
         return "none"
@@ -119,10 +119,9 @@ def _loras_for_log(specs, resolved) -> str:
 
 
 def _lora_metadata_entry(spec, registry: LoraRegistry) -> dict:
-    """One ``ic_lora.loras[]`` row: ``name``/``strength``/``preprocess`` (Phase
-    B/C, unchanged) plus ``audio_strength`` — added only when the spec carries
-    one (``None`` before WP4 adds the field to ``LoraSpec``), so a video-axis-
-    only job's metadata keeps its exact prior key set.
+    """One ``ic_lora.loras[]`` row: ``name``/``strength``/``preprocess`` plus
+    ``audio_strength`` — added only when the spec carries one, so a
+    video-axis-only job's row has no ``audio_strength`` key.
     """
     entry = {
         "name": spec.name,
@@ -160,32 +159,33 @@ class PipelineManager:
         self.config = config
         self.job_store = job_store
         self.upload_store = upload_store
-        # Phase B: reference-video store + IC-LoRA name registry. Defaulted so
-        # existing constructions (tests) still work; the app always injects them.
+        # Reference-video store + IC-LoRA name registry. Defaulted so
+        # constructions that omit them (tests) work; the app always injects them.
         self.video_upload_store = video_upload_store or VideoUploadStore(config)
-        # A2V: source-audio store. Defaulted like the video store so existing
-        # constructions keep working; the app always injects it.
+        # A2V: source-audio store. Defaulted like the video store so
+        # constructions that omit it work; the app always injects it.
         self.audio_upload_store = audio_upload_store or AudioUploadStore(config)
         self.lora_registry = lora_registry or LoraRegistry(config)
         self.low_vram = build_low_vram_settings(config)
-        # ``descriptor``: the base model this pipeline serves (§3-97 P3b). The
-        # app injects the first descriptor it loaded at startup; None lets the
-        # runner resolve it lazily from config.manifest_dir (tests/tools). Read
-        # back through ``self.runner.descriptor`` so there is ONE resolution
-        # rule, not two.
+        # ``descriptor``: the base model this pipeline serves. The app injects
+        # the descriptor of the active base model restored from the runtime
+        # state; None lets the runner resolve it lazily from
+        # config.manifest_dir (tests/tools). Read back through
+        # ``self.runner.descriptor`` so there is ONE resolution rule, not two.
         #
-        # WHICH RUNNER CLASS depends on the descriptor's engine family (§3-98
-        # P3c). A None descriptor keeps ``LTXRunner``: resolving the family
-        # would mean loading the manifests here, and constructing a manager is
+        # WHICH RUNNER CLASS depends on the descriptor's engine family. A None
+        # descriptor keeps ``LTXRunner``: resolving the family would mean
+        # loading the manifests here, and constructing a manager is
         # deliberately free of file reads — the lazy default is the first
-        # declared base model, which is LTX 2.3.
+        # declared base model (manifest file order under config.manifest_dir),
+        # which the shipped manifests make an ``ltx``-family one.
         runner_cls = LTXRunner if descriptor is None else runner_class_for(descriptor.engine_family)
         self.runner = runner_cls(config, self.low_vram, descriptor)
-        # Server runtime state (§3-97 P5): the file that remembers the last
-        # active base model + selection across restarts. Defaulted so existing
-        # constructions (tests, tools) keep working; the app always injects the
-        # one it read at startup. Written on a successful load/reload ONLY —
-        # see :meth:`_remember`.
+        # Server runtime state: the file that remembers the last active base
+        # model + selection across restarts. Defaulted so constructions that
+        # omit it (tests, tools) work; the app always injects the one it read
+        # at startup. Written on a successful load/reload ONLY — see
+        # :meth:`_remember`.
         self.runtime_state = runtime_state or RuntimeState(config.state_path)
         # The model registry, needed for exactly two things: looking up the
         # descriptor of a base model a load asks to switch TO, and publishing
@@ -196,9 +196,8 @@ class PipelineManager:
         # The base model this pipeline currently serves. Injected by the app
         # from the runtime state; None here means "whatever the runner's
         # descriptor turns out to be", resolved LAZILY (see the property) so
-        # constructing a manager still reads no manifest file. The
-        # request-level axis that CHANGES it is POST /pipeline/load's
-        # ``base_model`` (P6).
+        # constructing a manager reads no manifest file. The request-level
+        # axis that CHANGES it is POST /pipeline/load's ``base_model``.
         self._active_base_model: str | None = active_base_model
         self.state = self.STATE_UNLOADED
         self._lock = threading.Lock()
@@ -207,7 +206,7 @@ class PipelineManager:
         # retained while the worker is unloaded — load-state questions belong to
         # ``pipeline_loaded`` (design ruling §9-6). Never updated on a failed
         # swap-load (the previous successful selection stays authoritative).
-        # ``active_models`` (P5): seeded from the runtime state when the app
+        # ``active_models``: seeded from the runtime state when the app
         # injects one, so a restart resumes the operator's last combination
         # instead of reverting to the shipped defaults. Always spans the full
         # CATEGORIES set — a remembered name for a category this build does not
@@ -250,7 +249,7 @@ class PipelineManager:
 
     @property
     def active_engine_family(self) -> str:
-        """Engine family that would run a job submitted right now (§3-98 P5).
+        """Engine family that would run a job submitted right now.
 
         Read from the RUNNER's descriptor, not from ``active_base_model``: the
         runner object is what actually holds the worker (``_point_runner_at``
@@ -270,10 +269,11 @@ class PipelineManager:
             low_vram_disabled_required=self.config.limits.low_vram_disabled_required
         )
 
-    # Acceleration backends advertised by GET /status. Only ``attention_backend``
-    # is a real implementation choice; the MOCK request field (vae_mode) is
-    # deliberately NOT advertised here — /status describes what the server can
-    # actually DO.
+    # Acceleration backends advertised by GET /status: the values
+    # ``attention_backend`` accepts. ``vae_mode`` is deliberately NOT
+    # advertised here — whether it can run depends on the pruned decoder file
+    # at job time, not on the server environment, so a /status answer could
+    # disagree with what a job gets (spec §6.5b).
     ATTENTION_BACKENDS = ["sdpa", "sage"]
 
     def acceleration_status_block(self) -> dict:
@@ -302,11 +302,11 @@ class PipelineManager:
         return {
             "attention_backends": list(self.ATTENTION_BACKENDS),
             "sage_available": self._sage_available(),
-            # Block-swap prefetch (backend §44). Judged by the SAME formula as
-            # the real gate (services/ltx_runner.py's block-swap-blocks-on-GPU
-            # expression), NOT the display-only ``low_vram.block_swap`` bool —
-            # that bool is never read on the real path and defaults to False,
-            # which would make this field lie in the default configuration.
+            # Block-swap prefetch (VERIFICATION_LOG §44). Judged by the same
+            # ``block_swap_blocks_on_gpu`` expression the load payload uses (see
+            # _block_swap_prefetch_available), NOT the display-only
+            # ``low_vram.block_swap`` bool — that bool is never read on the real
+            # path, so it can disagree with what the worker is sent.
             "block_swap_prefetch_available": self._block_swap_prefetch_available(),
         }
 
@@ -319,28 +319,29 @@ class PipelineManager:
         return self.runner.sage_available
 
     def _block_swap_prefetch_available(self) -> bool:
-        """True iff block swap is actually active on the real worker.
+        """True when the load payload asks the worker to keep a positive
+        number of blocks on GPU.
 
-        Mirrors ``services/ltx_runner.py``'s
-        ``self.low_vram.block_swap_blocks_on_gpu or 8`` expression exactly (the
-        ``load`` payload's ``block_swap_blocks_on_gpu``), so this can never
-        disagree with what the worker was actually told to do.
+        Uses the same ``self.low_vram.block_swap_blocks_on_gpu or 8`` expression
+        as the LTX 2.3 load payload (``services/engines/ltx/adapter.py``'s
+        ``_RealBackend._build_load_payload``); the LTX 2.5 adapter substitutes
+        its own ``DEFAULT_BLOCKS_ON_GPU``. Whether the engine then swaps at all
+        (it does not when the blocks on GPU cover every block) is not checked
+        here.
         """
         if self.runner.is_mock:
             return False
         return int(self.low_vram.block_swap_blocks_on_gpu or 8) > 0
 
     def _base_model_name(self) -> str:
-        """Filename of the transformer weight (GGUF) that would actually load.
+        """Filename of the transformer weight that would actually load.
 
         A model-management swap records the selected transformer path in
         ``_active_selection_paths``; otherwise the BASE MODEL's own
-        ``default_file`` applies (§3-97 P3b — this used to read a config field
-        holding the same path). Only the basename is surfaced (no path leak) —
-        e.g. ``LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf`` — so the operator can
-        tell from the console which base weight a job ran on. Falls back to the
-        configured ``checkpoint_name`` when the base model declares no
-        transformer default.
+        ``default_file`` applies. Only the basename is surfaced (no path
+        leak) so the operator can tell from the console which base weight a
+        job ran on. Falls back to the configured ``checkpoint_name`` when the
+        base model declares no transformer default.
         """
         path = self._active_selection_paths.get("transformer") or self._default_file("transformer")
         if path:
@@ -357,13 +358,12 @@ class PipelineManager:
         return spec.default_file if spec else None
 
     def _models_metadata_block(self) -> dict:
-        """The ``models`` block of metadata.json (§1-23 + §3-97 P3b).
+        """The ``models`` block of metadata.json.
 
-        ``base_model`` is the descriptor id of the base model that ran (P3b:
-        always the active one — the request-level base-model axis arrives with
-        the API phase). ``selection`` is per category: the NAME the user sees
-        plus the FILE that name resolved to. A category still on ``"default"``
-        now records the base model's ``default_file`` basename instead of null,
+        ``base_model`` is the descriptor id of the base model that ran (read
+        from the runner's descriptor). ``selection`` is per category: the NAME
+        the user sees plus the FILE that name resolved to. A category on
+        ``"default"`` records the base model's ``default_file`` basename,
         which is what makes an old output reproducible after the default
         changes.
         """
@@ -395,13 +395,11 @@ class PipelineManager:
         ``selection`` maps a category to a resolved ABSOLUTE weight path;
         ``active_names`` is the matching category->NAME map recorded (on
         success only) for GET /models. Both default to None: a plain ``load()``
-        reuses the last successful selection (all-default on boot), keeping the
-        legacy call — and auto-load-on-generate — behaviorally unchanged while
-        honoring a previous swap.
+        reuses the last successful selection (on boot, the one restored from
+        the runtime state), so auto-load-on-generate honors a previous swap.
 
-        ``base_model`` (§3-97 P6) switches the BASE MODEL this pipeline serves.
-        None — every pre-P6 caller — keeps the current one, so nothing about
-        the legacy paths changes.
+        ``base_model`` switches the BASE MODEL this pipeline serves. None
+        keeps the current one.
         """
         with self._lock:
             self._reject_while_loading()
@@ -437,16 +435,16 @@ class PipelineManager:
         """Swap-load (model management): force a worker rebuild with a new
         model selection.
 
-        The worker builds its pipeline exactly once (engine/worker.py) and
-        ``load()`` early-returns while loaded, so a swap is unload (kill the
-        subprocess) + load — never an in-place re-load op. On failure there is
-        NO automatic fallback (design ruling §9-1): the pipeline stays
-        unloaded, ``active_models`` keeps the previous successful selection,
-        and the error tells the user how to recover.
+        The worker builds its pipeline exactly once (engine/worker.py,
+        engine25/worker.py) and ``load()`` early-returns while loaded, so a
+        swap is unload (kill the subprocess) + load — never an in-place re-load
+        op. On failure there is NO automatic fallback (design ruling §9-1): the
+        pipeline stays unloaded, ``active_models`` keeps the previous
+        successful selection, and the error tells the user how to recover.
 
-        ``base_model`` (§3-97 P6): see :meth:`load`. A base-model change is
-        always a rebuild, so it necessarily comes through here or through a
-        ``load`` of an unloaded pipeline.
+        ``base_model``: see :meth:`load`. A base-model change is always a
+        rebuild, so it necessarily comes through here or through a ``load`` of
+        an unloaded pipeline.
         """
         with self._lock:
             self._reject_while_loading()
@@ -474,14 +472,14 @@ class PipelineManager:
         self._remember()
 
     def unload(self) -> None:
-        # NO ``_reject_while_loading()`` HERE, DELIBERATELY (§3-97 P6). A load
-        # that dies in a way ``except Exception`` cannot see — a BaseException,
-        # a killed thread — leaves ``state`` stuck at "loading", and the 409
-        # guard would then reject every load/reload forever. Unload is the one
-        # door kept unlocked so the operator can always get back to a clean
-        # ``unloaded`` state without restarting the server. Unloading during a
-        # real in-flight load is harmless anyway: it takes the same lock, so it
-        # can only run between the load's own locked sections.
+        # NO ``_reject_while_loading()`` HERE, DELIBERATELY. A load that dies
+        # in a way ``except Exception`` cannot see — a BaseException, a killed
+        # thread — leaves ``state`` stuck at "loading", and the 409 guard would
+        # then reject every load/reload forever. Unload is the one door kept
+        # unlocked so the operator can always get back to a clean ``unloaded``
+        # state without restarting the server. It takes the same lock, but
+        # ``load``/``reload`` build the worker outside that lock, so an unload
+        # can land in the middle of a real in-flight load.
         with self._lock:
             self.runner.unload()
             self.state = self.STATE_UNLOADED
@@ -500,9 +498,10 @@ class PipelineManager:
         """409 if a load is already in flight. CALLED ONLY UNDER ``_lock``.
 
         A model load takes minutes and runs OUTSIDE the lock (holding it for
-        the whole load would block GET /status), so the in-flight window is
-        wide and a second load arriving inside it is ordinary — a double-click
-        on the frontend's Load button. Letting it through would start a second
+        the whole load would block ``unload`` and the ``reject_if_loading``
+        check in front of generation), so the in-flight window is wide and a
+        second load arriving inside it is ordinary — a double-click on the
+        frontend's Load button. Letting it through would start a second
         worker build on top of the first.
         """
         if self.state == self.STATE_LOADING:
@@ -540,7 +539,7 @@ class PipelineManager:
 
     def _point_runner_at(self, descriptor: BaseModelDescriptor) -> None:
         """Aim ``self.runner`` at ``descriptor`` — replacing the runner OBJECT
-        when the engine family changes (§3-98 P3c).
+        when the engine family changes.
 
         WITHIN one family, ``set_descriptor`` is the whole story: it discards
         the backend (so the next load builds its payload from the new base
@@ -580,7 +579,7 @@ class PipelineManager:
         self.runner = target_cls(self.config, self.low_vram, descriptor)
 
     def _remember(self) -> None:
-        """Publish the combination that just loaded (§3-97 P5/P6).
+        """Publish the combination that just loaded.
 
         Two destinations: the model REGISTRY (so ``GET /models`` and every
         base-less resolve follow the active base model from the next request
@@ -661,11 +660,11 @@ class PipelineManager:
                 for ci in job.request.conditioning_images
             ]
 
-            # Phase B/C IC-LoRA: resolve adapter names -> (path, strength,
-            # preprocess) via the registry and reference_video_id -> path via the
-            # video store. The API layer already validated existence + preprocess-
-            # kind conflicts (mirroring conditioning images), so these re-resolve
-            # the same objects for the runner hop.
+            # IC-LoRA: resolve adapter names -> ``ResolvedLora`` (path, strength,
+            # preprocess, audio_strength) via the registry and reference_video_id
+            # -> path via the video store. The API layer already validated
+            # existence + preprocess-kind conflicts (mirroring conditioning
+            # images), so these re-resolve the same objects for the runner hop.
             lora_paths = [
                 self.lora_registry.resolve(
                     spec.name, spec.strength, getattr(spec, "audio_strength", None)
@@ -678,8 +677,7 @@ class PipelineManager:
                 else None
             )
 
-            # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at
-            # the time): build the green-padded canvas and hand THAT to
+            # Outpainting: build the green-padded canvas and hand THAT to
             # the runner as the reference video. Substituting the path here is
             # what keeps the whole IC-LoRA chain below untouched — the engine's
             # ``_resolve_ic_reference`` and ``_reference_conditioning_for_stage``
@@ -711,7 +709,7 @@ class PipelineManager:
                     canvas_path.name,
                 )
 
-            # Inpainting (台帳 §3-55): cut the window out of the source, paint
+            # Inpainting: cut the window out of the source, paint
             # the mask's white region green, pad to the canvas, and hand THAT to
             # the runner as the reference video. Substituting the path here is
             # what keeps the whole IC-LoRA chain below untouched, exactly as the
@@ -795,10 +793,11 @@ class PipelineManager:
                 )
 
             # Console job-info line (owner requirement): base weight file + LoRAs
-            # (name/requested/effective strength) + prompt, so LoRA application is
-            # visible from the uvicorn console (the worker's per-adapter attach
-            # line only reaches logs/ltx_worker.log). Additive — the start line
-            # above keeps its exact format.
+            # (name + strength, and the audio strength when one is set) + prompt,
+            # so LoRA application is visible from the uvicorn console (the
+            # worker's per-adapter attach line goes to the worker's own log file,
+            # the adapter's ``_LOG_NAME``). A separate line: the start line above
+            # keeps its own format (tests/test_logging.py reads its fields).
             logger.info(
                 'Job %s base=%s loras=%s prompt="%s"',
                 job.job_id,
@@ -878,7 +877,8 @@ class PipelineManager:
         SOURCE_VIDEO_TOO_SHORT) when it cannot supply the requested
         ``context_frames`` tail after resampling to ``request_frame_rate``. The
         video_id is assumed already resolved (the endpoint 404s first). Geometry
-        bounds (8n+1, [25,145], context < clip-0) are enforced by the schema.
+        bounds (8n+1, the schema's ``v2v_context_frames_min``/``_max`` range,
+        context < clip-0) are enforced by the schema.
         """
         src_path = self.video_upload_store.path_for(source_video.video_id)
         n_src = video_io.frame_count(src_path)
@@ -918,8 +918,9 @@ class PipelineManager:
         The endpoint only calls this for a video anyway; the guard is here so the
         method is safe to call with either kind. The id is assumed already
         resolved (the endpoint 404s first), and the band's geometry (multiple of
-        8, within [8,136], overlap >= 2) is enforced by the schema and
-        ``chain_math.compute_chain_layout``.
+        8, within the schema's ``end_context_frames_min``/``_max`` range,
+        overlap >= 2 except in the ``reverse``/``bridge`` modes) is enforced by
+        the schema and ``chain_math.compute_chain_layout``.
 
         THE ASYMMETRY WITH THE APP IS DELIBERATE. This check resamples with
         ``round`` and asks for ``context_frames + 1``; the app derives the band
@@ -1009,7 +1010,7 @@ class PipelineManager:
         request_frame_rate: float,
     ) -> None:
         """Validate an inpaint window against the uploaded source BEFORE a job
-        is created (台帳 §3-55).
+        is created.
 
         THE MIRROR OF :meth:`preflight_retake_window`, minus its second check:
         inpainting never regenerates audio (the source window's own waveform is
@@ -1057,7 +1058,7 @@ class PipelineManager:
 
         Resolves the ``audio_id`` (the endpoint 404s first) and ffprobes the
         stored file for an audio stream + duration. The chain timeline needs
-        ``chain_math.audio_latents_required(...)`` audio-latent frames (25/sec —
+        ``chain_math.audio_latents_required(...)`` audio-latent frames (rate:
         :data:`chain_math.AUDIO_LATENTS_PER_SEC`, the SINGLE SOURCE OF TRUTH the
         engine also encodes against); an upload whose duration VAE-encodes to
         fewer than that is rejected (422 SOURCE_AUDIO_TOO_SHORT). Video length is
@@ -1090,17 +1091,17 @@ class PipelineManager:
     # -------------------------------------------------------- run chain job
 
     def run_chain_job(self, job: JobRecord) -> None:
-        """Run a multi-clip chain to ONE continuous output.mp4 (Phase 3 WP4).
+        """Run a multi-clip chain to ONE continuous output.mp4.
 
         Masked AV-latent concatenation: the whole chain runs INSIDE ONE worker
         invocation (latents resident across segments) — per-segment stage-1 with
         AV carry+freeze, crossfade assembly, always-tiled stage-2, ONE VAE decode.
-        Replaces the old per-clip generate + carry.pt + ffmpeg-concat + trim path
-        (which cut hard at every boundary). Junction pixel-frame indices (segment
-        seams AND stage-2 tile seams) are recorded in metadata for the review
-        harness. The single-clip :meth:`run_job` is untouched.
+        Running the whole chain in one invocation is what lets every clip
+        boundary be a latent crossfade rather than a hard cut between
+        separately generated clips. Junction pixel-frame indices (segment seams
+        AND stage-2 tile seams) are recorded in metadata for the review harness.
 
-        Cancellation: the chain is now one atomic worker op, so cancel is honored
+        Cancellation: the chain is one atomic worker op, so cancel is honored
         at the job boundary (before dispatch) — matching that a single generate is
         also not interruptible mid-run.
         """
@@ -1154,11 +1155,11 @@ class PipelineManager:
                 for ci in chain.clips[0].conditioning_images
             ]
 
-            # Style/character IC-LoRA: resolve adapter names -> (path, strength,
-            # preprocess) via the registry (mirrors run_job:235-238). The endpoint
-            # already validated existence + rejected control adapters, so this
-            # re-resolves the same style objects for the runner hop. Empty list
-            # when the chain requested no loras (byte-identical default path).
+            # IC-LoRA adapters (style/character and control): resolve adapter
+            # names -> ``ResolvedLora`` via the registry (mirrors run_job). The
+            # endpoint already resolved every adapter and checked the control-
+            # adapter/reference pairing, so this re-resolves the same adapters for
+            # the runner hop. Empty list when the chain requested no loras.
             lora_paths = [
                 self.lora_registry.resolve(
                     spec.name, spec.strength, getattr(spec, "audio_strength", None)
@@ -1166,17 +1167,16 @@ class PipelineManager:
                 for spec in chain.loras
             ]
 
-            # Reference-video CONTROL IC-LoRA (ALPHA, clips=1 only): resolve
-            # reference_video_id -> path via the video store, mirroring run_job
-            # (see above). The endpoint already validated existence + the
-            # clips=1/preprocess-kind constraints, so this re-resolves the same
-            # path for the runner hop. None when the chain requested no reference
-            # video (byte-identical default path).
+            # Reference-video CONTROL IC-LoRA: resolve reference_video_id -> path
+            # via the video store, mirroring run_job (see above). The endpoint
+            # already validated existence + the adapter-kind, depth-on-multi-clip
+            # and preprocess-kind constraints, so this re-resolves the same path
+            # for the runner hop. None when the chain requested no reference video.
             reference_video_path = (
                 self.video_upload_store.path_for(chain.reference_video_id)
                 if chain.reference_video_id else None
             )
-            # §1-15 metadata provenance: the reference upload's actual measured
+            # Metadata provenance: the reference upload's actual measured
             # frame count, best-effort (an ffprobe failure here must not turn a
             # completed job into a 500 — the job already ran successfully with
             # whatever the engine itself decoded). Absent entirely when there is
@@ -1344,12 +1344,12 @@ class PipelineManager:
             meta = outcome.chain_metadata or {}
             total_frames = int(meta.get("total_px", 0))
             # DELIVERED frames, which is what ``output.duration_seconds``
-            # describes (§3-88). V2V hands back a shorter mp4 than the assembled
+            # describes. V2V hands back a shorter mp4 than the assembled
             # timeline because the frozen head is trimmed off, so the delivered
             # length is ``v2v.new_frames_px``. Every other chain (no V2V, retake,
             # end source alone, A2V) carries no ``v2v`` block at all and falls
-            # back to ``total_px`` exactly as before. ``chain.total_frames`` in
-            # the metadata keeps meaning the assembled total and is untouched.
+            # back to ``total_px``. ``chain.total_frames`` in the metadata is the
+            # assembled total.
             if "new_frames_px" in meta.get("v2v", {}):
                 delivered_frames = int(meta["v2v"]["new_frames_px"])
             else:
@@ -1497,34 +1497,33 @@ class PipelineManager:
                 "file_size_bytes": file_size,
             },
             "vram_optimization": self.low_vram.metadata_block(peak_vram_mb=peak_vram_mb),
-            # §1-23 (PENDING_TASKS.md): which base model and which model file
-            # actually backed this generation, per category. See
-            # ``_models_metadata_block``.
+            # Which base model and which model file actually backed this
+            # generation, per category. See ``_models_metadata_block``.
             "models": self._models_metadata_block(),
             "environment": self._environment_block(),
         }
         # V2V continuation (additive): only present when a source_video was used,
-        # so a normal chain's metadata key set is byte-unchanged. The engine's
-        # (or mock's) chain.v2v sub-dict + the app-side provenance (source_video_id,
+        # so a chain without one carries no ``v2v`` key. The engine's (or mock's)
+        # chain.v2v sub-dict + the app-side provenance (source_video_id,
         # source_fps, resampled).
         v2v = cm.get("v2v")
         if v2v is not None:
             metadata["v2v"] = {**v2v, **(v2v_provenance or {})}
         # A2V continuation (additive): only present when a source_audio was used,
-        # so a normal chain's metadata key set is byte-unchanged. The engine's (or
-        # mock's) chain.a2v sub-dict + the app-side provenance (source_audio_id).
+        # so a chain without one carries no ``a2v`` key. The engine's (or mock's)
+        # chain.a2v sub-dict + the app-side provenance (source_audio_id).
         a2v = cm.get("a2v")
         if a2v is not None:
             metadata["a2v"] = {**a2v, **(a2v_provenance or {})}
         # Retake (additive): only present when a retake was requested, so a
-        # normal chain's metadata key set is byte-unchanged. The engine's (or
-        # mock's) chain.retake sub-dict — geometry + runtime + freeze_proof —
-        # plus the app-side provenance (which upload, which frames, resampled?).
+        # chain without one carries no ``retake`` key. The engine's (or mock's)
+        # chain.retake sub-dict — geometry + runtime + freeze_proof — plus the
+        # app-side provenance (which upload, which frames, resampled?).
         retake = cm.get("retake")
         if retake is not None:
             metadata["retake"] = {**retake, **(retake_provenance or {})}
-        # End source (additive): only present when an end_source was requested, so
-        # a normal chain's metadata key set is byte-unchanged. The engine's (or
+        # End source (additive): only present when an end_source was requested,
+        # so a chain without one carries no ``end_source`` key. The engine's (or
         # mock's) chain.end_source sub-dict — geometry + runtime (+ freeze_proof
         # from the real engine, which the mock deliberately never fabricates) —
         # plus the app-side provenance (which upload, which kind, how many frames
@@ -1532,24 +1531,23 @@ class PipelineManager:
         end_source = cm.get("end_source")
         if end_source is not None:
             metadata["end_source"] = {**end_source, **(end_source_provenance or {})}
-        # LTX 2.5 engine facts (additive, 台帳 §3-131): only present on an LTX
-        # 2.5 chain, so a 2.3 (or mock) chain's metadata key set is
-        # byte-unchanged. The engine's own ``chain["ltx25"]`` sub-dict, relayed
-        # verbatim — no app-side provenance to merge in, unlike the blocks
-        # above.
+        # LTX 2.5 engine facts (additive): only present on an LTX 2.5 chain, so
+        # a 2.3 (or mock) chain carries no ``ltx25`` key. The engine's own
+        # ``chain["ltx25"]`` sub-dict, relayed verbatim — no app-side provenance
+        # to merge in, unlike the blocks above.
         ltx25 = cm.get("ltx25")
         if ltx25 is not None:
             metadata["ltx25"] = ltx25
-        # §1-15 (clip-wise IC-LoRA reference, additive): only present when a
-        # reference video was actually used, so a normal (or style-loras-only)
-        # chain's metadata key set is byte-unchanged. Mirrors _write_metadata's
-        # single-generate ``ic_lora`` block (same ``loras``/``reference_video_id``/
+        # Clip-wise IC-LoRA reference (additive): only present when a reference
+        # video was actually used, so a normal (or style-loras-only) chain
+        # carries no ``ic_lora`` key. Mirrors _write_metadata's single-generate
+        # ``ic_lora`` block (same ``loras``/``reference_video_id``/
         # conditioning_attention_strength/reference_video_strength shape), plus
         # the geometry that block has no equivalent for: WHICH slice of the one
         # long reference lands on each stage-1 segment. The mock backend ignores
         # the reference entirely, so this is the only way a real-device gate can
         # confirm "clip i actually got the right window" without eyeballing the
-        # video (§1-15 plan, B9).
+        # video.
         if chain.reference_video_id:
             ic_lora_block: dict = {
                 "loras": [
@@ -1567,7 +1565,8 @@ class PipelineManager:
             # pure function of clip_frames/fps/kv, all echoed verbatim on the
             # request, so recomputing it here (rather than threading the
             # engine's internal ChainLayout through the runner boundary) is
-            # guaranteed to match what chain_pipeline.py actually sliced with.
+            # guaranteed to match what the engine actually sliced with
+            # (engine/pipeline/chain_pipeline.py, engine25/chain25.py).
             # Reference is mutually exclusive with source_video/retake at the
             # API layer (api/models.py), so the plain layout (no
             # source_context_px/retake_glue_px) is always the right one here.
@@ -1621,10 +1620,10 @@ class PipelineManager:
     ) -> JobResult:
         req = job.request
         if inpaint_source_size is not None:
-            # Inpainting (台帳 §3-55): ``width``/``height`` are the CANVAS, and
-            # the engine crops the green pad bands off again before the encode,
-            # so the delivered mp4 is at the SOURCE's own resolution. Reporting
-            # the canvas here would put a size in the job result and in
+            # Inpainting: ``width``/``height`` are the CANVAS, and the engine
+            # crops the green pad bands off again before the encode, so the
+            # delivered mp4 is at the SOURCE's own resolution. Reporting the
+            # canvas here would put a size in the job result and in
             # metadata.json that no file on disk actually has.
             res_w, res_h = inpaint_source_size
         elif req.crop_output is not None:
@@ -1688,7 +1687,7 @@ class PipelineManager:
             # auto-downgrade (see engine/worker._resolve_keep_resident) becomes
             # visible — the real-device gate judges on this field, not on logs.
             "keep_resident_used": outcome.keep_resident_used,
-            # Acceleration, LTX 2.5 only (§3-114): whether the
+            # Acceleration, LTX 2.5 only: whether the
             # EmbeddingsProcessor's CPU state dict actually stayed resident
             # ("off" | "on" — no degrade path, so never "on->off"). Same relay
             # discipline again, and the same reason it is a field rather than an
@@ -1703,11 +1702,13 @@ class PipelineManager:
             "fused_gguf_dequant_kernel_used": (
                 outcome.fused_gguf_dequant_kernel_used
             ),
-            # Acceleration: which video VAE decoder actually ran ("off" = stock,
-            # "on" = pruned PrunaVAED, "on->off" = asked for but the weight file
-            # was missing). Same relay discipline again — and the one field here
-            # that also documents WHY two runs with the same seed can differ in
-            # fine detail, since the pruned decoder is not bit-identical.
+            # Acceleration: which video VAE decoder actually ran. On LTX 2.3 the
+            # PrunaVAED echo ("off" = stock, "on" = pruned PrunaVAED, "on->off" =
+            # asked for but the weight file was missing) — the field that also
+            # documents WHY two runs with the same seed can differ in fine detail,
+            # since the pruned decoder is not bit-identical. On LTX 2.5 the name of
+            # the decoder the checkpoint built ("diff" | "conv"). Same relay
+            # discipline again.
             "vae_mode_used": outcome.vae_mode_used,
             # torch.cuda.max_memory_reserved()-based, additive alongside the
             # vram_optimization block's peak_vram_mb (max_memory_allocated-
@@ -1723,25 +1724,25 @@ class PipelineManager:
                 "file_size_bytes": file_size,
             },
             "vram_optimization": self.low_vram.metadata_block(peak_vram_mb=outcome.peak_vram_mb),
-            # §1-23 (PENDING_TASKS.md): the same block as _write_chain_metadata
-            # writes — see ``_models_metadata_block``.
+            # The same block as _write_chain_metadata writes — see
+            # ``_models_metadata_block``.
             "models": self._models_metadata_block(),
             "environment": self._environment_block(),
         }
-        # Phase B IC-LoRA: additive block, only present for lora jobs so non-lora
-        # metadata keeps its exact prior key set. (The two new GenerateRequest
-        # fields also appear inside the frozen-additive ``request`` dump.)
+        # IC-LoRA: additive block, only present for lora jobs, so non-lora
+        # metadata carries no ``ic_lora`` key. (``loras``/``reference_video_id``
+        # also appear inside the frozen-additive ``request`` dump.)
         if req.loras:
             metadata["ic_lora"] = {
-                # Phase C: additive ``preprocess`` field (control-signal kind per
-                # adapter). Existing ``name``/``strength``/``reference_video_id``
-                # keys are unchanged so Phase B metadata parsers keep working.
+                # Each ``loras[]`` row carries ``preprocess`` (control-signal
+                # kind per adapter) next to ``name``/``strength`` — see
+                # ``_lora_metadata_entry``.
                 "loras": [_lora_metadata_entry(spec, self.lora_registry) for spec in req.loras],
                 "reference_video_id": req.reference_video_id,
             }
-            # Control-adjustability overrides: record only when meaningful
-            # (mirrors the source_audio precedent), so an omitted-field lora job's
-            # ic_lora block stays byte-identical to before.
+            # Control-adjustability overrides: recorded only when the request
+            # sets them, so a lora job that omits them carries no such key in
+            # its ic_lora block.
             if req.conditioning_attention_strength is not None:
                 metadata["ic_lora"]["conditioning_attention_strength"] = (
                     req.conditioning_attention_strength
@@ -1750,13 +1751,12 @@ class PipelineManager:
                 metadata["ic_lora"]["reference_video_strength"] = (
                     req.reference_video_strength
                 )
-        # LTX 2.5 engine facts (additive, 台帳 §3-131): only present on an LTX
-        # 2.5 single generation, so a 2.3 (or mock) job's metadata key set stays
-        # byte-unchanged.
+        # LTX 2.5 engine facts (additive): only present on an LTX 2.5 single
+        # generation, so a 2.3 (or mock) job carries no ``ltx25`` key.
         if outcome.ltx25 is not None:
             metadata["ltx25"] = outcome.ltx25
-        # Inpainting (台帳 §3-55, additive): only present when an inpaint was
-        # requested, so every other job's metadata key set is byte-unchanged.
+        # Inpainting (additive): only present when an inpaint was requested, so
+        # every other job carries no ``inpaint`` key.
         # The ENGINE's own block (geometry, blend settings, VRAM peaks, the
         # audio record and ``mask_proof``) merged with the APP's provenance
         # (which upload, which mask, which frames, was the source resampled) —

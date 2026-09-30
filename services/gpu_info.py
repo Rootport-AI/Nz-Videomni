@@ -1,9 +1,10 @@
 """GPU / VRAM information.
 
-torch is NOT a Phase-1 dependency (it ships with the official LTX stack). This
+torch is NOT an app dependency (it ships with the official LTX stack). This
 module therefore degrades gracefully: if torch is unavailable or no CUDA device
-is present, it reports ``available=False`` instead of raising. The real LTX
-runner (Step 7) will make torch importable and these readings become live.
+is present, it reports ``available=False`` instead of raising. The engines run
+in their own worker processes and virtual environments, so the app process
+normally sees no torch and reports ``available=False`` (spec §6.5).
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ def gpu_available() -> bool:
 
 
 def get_gpu_info() -> dict[str, Any]:
-    """Return the spec 7.4 ``gpu`` block. Never raises."""
+    """Return the ``gpu`` block of GET /status (spec §6.5). Never raises."""
     torch = _torch()
     if not torch or not torch.cuda.is_available():
         return {

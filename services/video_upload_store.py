@@ -1,10 +1,14 @@
-"""Upload store for reference videos (Phase B, POST /upload/video).
+"""Upload store for uploaded videos (POST /upload/video).
 
-Mirrors :mod:`services.upload_store` (the image store) but for the reference
-video used by the Pixel-Spatial-Upscaler IC-LoRA. Videos are stored AS-IS (no
-re-encode) under ``uploads/videos/{video_id}/input{ext}`` — the engine's
-ffmpeg-based video IO reads the container directly. Validation is minimal
-(extension + size), consistent with the image store's allow-list pattern.
+Mirrors :mod:`services.upload_store` (the image store) but for videos: the
+reference video of an IC-LoRA, and the other videos the services resolve
+through ``path_for`` (V2V and retake sources, end-source material, Inpainting
+masks). Videos are stored as received under
+``uploads/videos/{video_id}/input{ext}`` unless a trim window or a
+``max_frames`` ceiling cuts them (see :meth:`VideoUploadStore.save`) -- the
+engine's ffmpeg-based video IO reads the container directly. Validation is
+minimal (extension, non-empty, size), consistent with the image store's
+allow-list pattern.
 
 Videos live in a dedicated ``videos/`` subdir so a ``video_id`` can never be
 confused with an image ``image_id`` (both are UUIDs, but the subdir keeps the
@@ -42,11 +46,11 @@ def _trim_window(start_sec: float | None, duration_sec: float | None) -> tuple[f
     """Return a usable ``(start, duration)`` window, or None to store as-is.
 
     Anything unusable -- either value missing, non-numeric, NaN/inf, a negative
-    start or a non-positive duration -- returns None so the caller falls through
-    to the plain (byte-identical) store path. Deliberately NOT an error: the
-    trim arguments are an optional refinement of an existing endpoint, so bad
-    values must never invent a new 4xx/5xx response for an upload that would
-    otherwise have succeeded.
+    start or a non-positive duration -- returns None so the caller takes the
+    path without a window (see :meth:`VideoUploadStore.save`). Deliberately
+    NOT an error: the trim arguments are an optional refinement of the upload,
+    so bad values must never invent a new 4xx/5xx response for an upload that
+    would otherwise have succeeded.
     """
     if start_sec is None or duration_sec is None:
         return None
@@ -114,9 +118,9 @@ class VideoUploadStore:
         """Store an uploaded video, optionally keeping only one time window of it.
 
         With ``trim_start_sec``/``trim_duration_sec`` omitted (or unusable, see
-        :func:`_trim_window`) this is the original store: the received bytes are
-        written verbatim and nothing else runs -- the no-trim path below is
-        byte-for-byte the pre-trim behavior and must stay that way.
+        :func:`_trim_window`) and no ``max_frames``, the received bytes are
+        written verbatim and nothing else runs -- the plain path must stay that
+        way.
 
         With a usable window, the file is still written verbatim FIRST, then cut
         into a sibling temp file and swapped in only on success. So any ffmpeg
@@ -124,24 +128,27 @@ class VideoUploadStore:
         original upload untouched and simply returns it with ``trimmed=False``
         -- the endpoint never gains a new error response because of trimming.
 
-        ``max_frames`` (§1-15: the 11544f chain-reference upload ceiling) is a
-        SEPARATE, lower-priority mechanism: an explicit trim window always wins
-        (the V2V source-video upload path is unchanged by this parameter). When
-        no trim window applies and ``max_frames`` is given, the stored file's
-        frame count is measured (:func:`services.video_io.frame_count`) and, ONLY
-        if it exceeds ``max_frames``, the first ``max_frames`` frames are cut out
-        the same tmp-then-``os.replace`` way the trim path does. At or under the
-        limit nothing runs -- no re-encode, ``trimmed=False``, byte-identical to
-        the plain store. A failed probe or cut (ffprobe/ffmpeg missing, unreadable
-        source) degrades the same way the trim path does: the untouched original
-        comes back with ``trimmed=False`` rather than a new error response.
+        ``max_frames`` (an upload-time frame-count ceiling whose value the caller
+        picks; the chain reference sends the chain ceiling, ``api/models.py``'s
+        ``MAX_CHAIN_TOTAL_PIXEL_FRAMES``) is a SEPARATE, lower-priority
+        mechanism: an explicit trim window always wins (``max_frames`` never
+        cuts an upload that carries a usable trim window). When no trim window
+        applies and ``max_frames`` is given, the stored file's frame count is
+        measured (:func:`services.video_io.frame_count`) and, ONLY if it exceeds
+        ``max_frames``, the first ``max_frames`` frames are cut out the same
+        tmp-then-``os.replace`` way the trim path does. At or under the limit
+        nothing is cut -- no re-encode, ``trimmed=False``, the received bytes
+        stay as written. A failed probe or cut (ffprobe/ffmpeg missing,
+        unreadable source) degrades the same way the trim path does: the
+        untouched original comes back with ``trimmed=False`` rather than a new
+        error response.
 
         MEASUREMENT (``StoredVideo.frame_count`` / ``.fps``, surfaced by
         ``UploadVideoResponse``). ``max_frames`` doubles as the "please measure
         this" opt-in: it is only ever sent by the slots that need the real length
         of the material (the end source's automatic band length, the chain
-        reference). Uploads WITHOUT it are byte-for-byte unchanged -- no extra
-        ffprobe, both fields ``None``. The paths:
+        reference). Uploads WITHOUT it are not measured -- no extra ffprobe, both
+        fields ``None``. The paths:
 
         * no trim window, no ``max_frames`` -> ``(None, None)``, nothing probed;
         * ``max_frames``, upload at or under it -> ``(total, probe_fps())``,
@@ -261,15 +268,14 @@ class VideoUploadStore:
         data: bytes,
         max_frames: int,
     ) -> StoredVideo:
-        """§1-15 upload-time frame-count ceiling: keep only the first
+        """Upload-time frame-count ceiling: keep only the first
         ``max_frames`` frames of ``dest`` when it has more than that.
 
         Mirrors the trim path's tmp-then-``os.replace`` swap and its
         degrade-to-the-untouched-original failure handling (:func:`save`'s
         docstring), but measures with :func:`services.video_io.frame_count`
-        instead of taking a caller-given window, and does nothing at all
-        (no probe result needed beyond the one comparison, no re-encode) when
-        the upload is already at or under the limit.
+        instead of taking a caller-given window, and cuts nothing (no
+        re-encode) when the upload is already at or under the limit.
 
         This is also the path that MEASURES the upload for the caller (see
         :meth:`save`): the ceiling comparison already needs the frame count, so

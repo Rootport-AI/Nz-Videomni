@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.74**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 版 | **v0.5.75**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-09-30**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -123,6 +123,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.72 | 2026-09-28 | **§6.9(b) の「事前チェックは 2 段」の項を実装どおりに訂正（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。②を `adapter.check_kv` 1 つとして書き、「ベースモデルに『LTX 2.5』を選んでください」という案内をアダプタの文面としていたが、この案内を出すのは振り分け層（`services/engines/__init__.py` の `check_kv`）であり、アダプタの `check_kv` はその後で系統内の判定（アーキテクチャ名・世代）を行う。②を 2 層に書き分けた（設計の正本は `Docs/MULTI_ENGINE_DESIGN.md` §2.1・§2.3）。**v0.5.24 の行は本項の記述を「もともと正しく」としているが、この案内の帰属については当てはまらない**（v0.5.24 の時点でも、この文面を持っていたのは振り分け層で、アダプタには無かった）。記録は `Docs/VERIFICATION_LOG.md` §124。 |
 | v0.5.73 | 2026-09-29 | **§6.8 のエラーコード表の `MODEL_INCOMPATIBLE` の行に、足りなかった例を足した（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。括弧内の例は、ファイルそのものの不備（拡張子・ヘッダ・量子化 safetensors の検査）だけを挙げており、ファイルは正常だが選択中のベースモデルと合わない場合（LTX 2.3 を選んで LTX 2.5 用の transformer を読ませた等）と、LTX 以外のモデルの場合が抜けていた。どちらも以前から 422 `MODEL_INCOMPATIBLE` で断っており、動作は変えていない（判定の説明は §6.9(b)）。記録は `Docs/VERIFICATION_LOG.md` §125。 |
 | v0.5.74 | 2026-09-30 | **§6.10 (e) のロードペイロードの表の `cache_weights` の行を実装に合わせて訂正した（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。行は「RAM の厳しい環境では `false` にできる」と書いていたが、アプリ（`_RealBackend25._build_load_payload`）は常に `true` を送り、アプリの設定に切り替えは無い。`false` にできるのはワーカーを単体で起動するときの `--no-cache-weights`（`engine25/worker.py`）だけである。`services/engines/` のコード内コメントの見直しで見つかった。記録は `Docs/VERIFICATION_LOG.md` §130。 |
+| v0.5.75 | 2026-09-30 | **§6.7・§11 の `limits.max_width` / `max_height` の実値を配布値へ訂正し、`config.py` の補完値と書き分けた（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。§6.7 の表と §11.7 は実値を `1920` / `1088` と書いていたが、配布ひな型 `config.yaml.example` の実値は `4096` / `4096` であり、`1920` / `1088` は `config.py::LimitsConfig` の補完値（キー省略時の値）である。検証はこの値を読まず `api/models.py` の `Field(le=4096)` 固定値で決まる旨も併記した。あわせて**§6.8** のエラーコードの件数の書き写しを、正本 `api/errors.py` への参照へ改めた。記録は `Docs/VERIFICATION_LOG.md` §131。 |
 
 ### 0.2 スコープ
 
@@ -1111,8 +1112,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 | キー | 値 | 意味 |
 |-----|----|------|
-| `max_width` | `1920` | 生成幅の運用上限（Pydantic の `le=4096` とは別の運用リミット） |
-| `max_height` | `1088` | 生成高の運用上限 |
+| `max_width` | `4096` | 生成幅の運用上限（配布ひな型 `config.yaml.example` の実値。`config.py::LimitsConfig` の補完値〔`limits.max_width` 省略時の値〕は `1920`）。サーバー側の検証（API）はこの値を読まず `api/models.py` の `Field(le=4096)` 固定値で決まる。Gradio GUI の送信前検査は `GET /config` で受け取ったこの値を上限に使う（キーが無いときは `1920`。`gradio_ui/handlers.py`） |
+| `max_height` | `4096` | 生成高の運用上限（配布ひな型 `config.yaml.example` の実値。補完値〔省略時の値〕は `1088`）。サーバー側の検証は同じく `Field(le=4096)` 固定値で決まる。Gradio GUI の送信前検査はこの値を上限に使う（キーが無いときは `1088`） |
 | `max_num_frames` | `481` | 20s@24fps（481=8×60+1） |
 | `max_conditioning_images` | `10` | I2V キーフレーム画像は最大10枚（Phase 3 で 1→5、2026-09-08 に 5→10）。**`limits` の中でただ 1 つ `config.yaml` から設定できない項目である。下記参照** |
 | `phase1_max_concurrent_jobs` | `1` | 単一ジョブ |
@@ -1137,7 +1138,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 ```
 （`job_id`・`detail` は非 None のときだけ含まれる。）
 
-実在するエラーコードと HTTP ステータス。**`api/errors.py` のファクトリは現在 52 件**あり、本表はそのうち 42 件＋`main.py` のハンドラ側で生成される 2 件を掲げる（残る 10 件＝Retake の `RETAKE_VIDEO_NOT_FOUND` / `RETAKE_WINDOW_OUT_OF_RANGE`、Outpainting の `OUTPAINT_PREPROCESS_CONFLICT` / `OUTPAINT_SOURCE_MISMATCH` / `OUTPAINT_SOURCE_TOO_SHORT`、物体追尾の `TRACK_*` 5 本〔§4.7(d)〕は、各テーマの節とフロントエンド `Docs/API_REFERENCE.md` を正本とする。件数は 2026-08-20 に実装と突き合わせて訂正し、**2026-09-15 に Inpainting と物体追尾の分を反映して再訂正し、2026-09-24 に mp4 の読み出し口の 3 件を加えた**）:
+実在するエラーコードと HTTP ステータス。**エラーコードの件数と一覧の正本は `api/errors.py`** であり、本表は `main.py` のハンドラ側で生成される分も含めた主要なコードを掲げる（Retake の `RETAKE_VIDEO_NOT_FOUND` / `RETAKE_WINDOW_OUT_OF_RANGE`、Outpainting の `OUTPAINT_PREPROCESS_CONFLICT` / `OUTPAINT_SOURCE_MISMATCH` / `OUTPAINT_SOURCE_TOO_SHORT`、物体追尾の `TRACK_*` 系〔§4.7(d)〕は、各テーマの節とフロントエンド `Docs/API_REFERENCE.md` を正本とする）:
 
 | code | HTTP | 送出条件 |
 |------|:---:|---------|
@@ -1762,7 +1763,7 @@ Gradio / API の初期値。
 | `normalize_to_png` | `true` | PNG 正規化（EXIF orientation 反映・RGB 変換） |
 
 ### 11.7 limits
-§6.7 の表と同一（`max_width=1920`, `max_height=1088`, `max_num_frames=481`, `max_conditioning_images=10`（**`config.yaml` からは設定できない算出値。§6.7 参照**）, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`, `comfort_budgets`, `single_comfort_token_budget=44880`, `chain_comfort_token_budget=40000`）。**`spill_free_frames` と `comfort_budgets` の中身は本書へ書き写さない**——実体は、`spill_free_frames` は `config.yaml`（git 追跡外。リポジトリで確認するときは配布元の `config.yaml.example`。`config.py` の既定は空の辞書で、鍵が無ければ配信されない）、`comfort_budgets` は `config.py` のコード既定（`config.yaml` には書かない。書けば上書きはできる）。説明の正本は `Docs/COMFORT_LIMIT_TABLE.md`（線の表＝§1.1、レガシー表＝§付記）である。
+§6.7 の表と同一（`max_width=4096`, `max_height=4096`, `max_num_frames=481`, `max_conditioning_images=10`（**`config.yaml` からは設定できない算出値。§6.7 参照**）, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`, `comfort_budgets`, `single_comfort_token_budget=44880`, `chain_comfort_token_budget=40000`）。**`spill_free_frames` と `comfort_budgets` の中身は本書へ書き写さない**——実体は、`spill_free_frames` は `config.yaml`（git 追跡外。リポジトリで確認するときは配布元の `config.yaml.example`。`config.py` の既定は空の辞書で、鍵が無ければ配信されない）、`comfort_budgets` は `config.py` のコード既定（`config.yaml` には書かない。書けば上書きはできる）。説明の正本は `Docs/COMFORT_LIMIT_TABLE.md`（線の表＝§1.1、レガシー表＝§付記）である。
 
 ### 11.8 output
 | キー | 実値 | 説明 |

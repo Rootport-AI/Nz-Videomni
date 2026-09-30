@@ -1,4 +1,4 @@
-"""GET /status and GET /config (spec 7.4 / 5.2)."""
+"""GET /status and GET /config (spec §6.1)."""
 
 from __future__ import annotations
 
@@ -23,13 +23,13 @@ def get_status(context: AppContext = Depends(get_context)) -> dict:
         "port": context.runtime.port,
         "pipeline_loaded": pm.loaded,
         "pipeline_type": pm.pipeline_type if pm.loaded else None,
-        # ADDITIVE (§3-97 P6). ``pipeline_loaded`` is a bool and therefore
-        # cannot express the state a base-model switch spends minutes in:
-        # "loading". ``state`` is the full lifecycle value (unloaded / loading
-        # / ready / running / error) a client needs to show a progress state
-        # and to keep its Load button disabled meanwhile. ``base_model`` is the
-        # descriptor id currently in effect — retained across an unload, like
-        # GET /models' ``active``, because it is a SELECTION, not a load state.
+        # ADDITIVE. ``pipeline_loaded`` is a bool and therefore cannot express
+        # the state a base-model switch spends minutes in: "loading".
+        # ``state`` is the full lifecycle value (PipelineManager's STATE_*
+        # constants) a client needs to show a progress state and to keep its
+        # Load button disabled meanwhile. ``base_model`` is the descriptor id
+        # in effect — retained across an unload, like GET /models' ``active``,
+        # because it is a SELECTION, not a load state.
         "state": pm.state,
         "base_model": pm.active_base_model,
         "gpu": gpu_info.get_gpu_info(),
@@ -40,12 +40,13 @@ def get_status(context: AppContext = Depends(get_context)) -> dict:
         # non-default one can actually run here. See
         # PipelineManager.acceleration_status_block for the truth table.
         "acceleration": pm.acceleration_status_block(),
-        # Object tracking (§3-54), ADDITIVE and deliberately its own block:
-        # {"available": true} or {"available": false, "reason": ...} with
-        # exactly two reasons ("not installed" / "worker failed"). It is NOT
-        # folded into ``queue`` or ``state`` because tracking takes no queue
-        # slot and has no bearing on the pipeline's lifecycle — the frontend
-        # reads it to grey out the Toolbox panel, nothing more.
+        # Object tracking, ADDITIVE and deliberately its own block:
+        # {"available": true} or {"available": false, "reason": ...}, the
+        # reason being one of services.tracking_manager's REASON_* constants.
+        # It is NOT folded into ``queue`` or ``state`` because tracking takes
+        # no queue slot and has no bearing on the pipeline's lifecycle — the
+        # frontend reads it to grey out the Toolbox tracking controls and to
+        # refuse the tracking right-click.
         "tracking": context.tracking_manager.status_block(),
         "queue": {
             "mode": "single_job_in_memory",
@@ -56,5 +57,5 @@ def get_status(context: AppContext = Depends(get_context)) -> dict:
 
 @router.get("/config")
 def get_config(context: AppContext = Depends(get_context)) -> dict:
-    """Expose the effective configuration (spec 5.2)."""
+    """Expose the effective configuration (spec §6.1)."""
     return context.config.model_dump()

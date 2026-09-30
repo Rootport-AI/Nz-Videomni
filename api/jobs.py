@@ -1,4 +1,4 @@
-"""Job endpoints: list / get / video / cancel-delete (spec 5.2 / 8.2) and the
+"""Job endpoints: list / get / video / cancel-delete (spec §6.1 / §7) and the
 ADDITIVE V2V join pair (POST /jobs/{id}/join, GET /jobs/{id}/joined)."""
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def join_job(
     """Server-side V2V join (ADDITIVE endpoint): source video + continuation ->
     ``joined.mp4``. Synchronous 200 — ffmpeg only, no GPU, independent of the
     single-job guard (FastAPI runs sync endpoints on the thread pool). The body
-    is optional; ``{}`` (or none) gives the default smoothed join."""
+    is optional; ``{}`` (or none) joins with the ``JoinRequest`` defaults."""
     return context.join_manager.join(job_id, request or JoinRequest())
 
 
@@ -93,8 +93,8 @@ def delete_job(job_id: str, context: AppContext = Depends(get_context)) -> dict:
         if context.job_store.cancel_if_queued(record):
             return {"job_id": job_id, "cancelled": True, "status": record.status.value}
         # Running (or won the race to running): inference cannot be safely
-        # interrupted mid-flight (Phase 1), so this stays best-effort — the
-        # worker checks cancel_requested where it can.
+        # interrupted mid-flight, so this is best-effort — the worker checks
+        # cancel_requested where it can.
         record.cancel_requested = True
         return {"job_id": job_id, "cancel_requested": True, "status": record.status.value}
 

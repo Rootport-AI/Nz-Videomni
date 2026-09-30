@@ -1,9 +1,9 @@
-"""POST /upload/image — minimal-I2V image upload (spec 7.1).
+"""POST /upload/image, POST /upload/video, POST /upload/audio (spec §6.1).
 
-POST /upload/video — reference-video upload for the Phase B IC-LoRA
-(Pixel-Spatial-Upscaler). Same storage/naming/error pattern as the image
-endpoint; the returned ``video_id`` is passed as ``reference_video_id`` to
-POST /generate.
+Each endpoint stores one uploaded file and returns its id; later requests to
+POST /generate and POST /generate/chain refer to the file by that id (a video
+id goes into fields such as ``reference_video_id``). The three share the same
+storage/naming/error pattern.
 """
 
 from __future__ import annotations
@@ -41,18 +41,20 @@ async def upload_image(
 @router.post("/upload/video", response_model=UploadVideoResponse, dependencies=[Depends(require_auth)])
 async def upload_video(
     file: UploadFile = File(...),
-    # Optional ribbon trim window (V2V): keep only [start, start+duration) of the
+    # Optional ribbon trim window: keep only [start, start+duration) of the
     # uploaded video. Deliberately UNCONSTRAINED (no ge=/le=): out-of-range or
     # non-finite values must fall through to a normal untrimmed upload rather
-    # than turn a previously-successful request into a 422. The store decides.
+    # than turn an upload that succeeds without them into a 422. The store
+    # decides.
     trim_start_sec: float | None = Query(None),
     trim_duration_sec: float | None = Query(None),
-    # §1-15 clip-wise IC-LoRA reference: keep only the first max_frames frames
-    # of the uploaded video (the 11544f chain-reference ceiling,
-    # api/models.py's MAX_CHAIN_TOTAL_PIXEL_FRAMES). Same unconstrained
-    # (no ge=/le=) convention as the trim window above: an out-of-range value
-    # falls through to a normal untrimmed upload rather than a 422, and an
-    # explicit trim window (when both are somehow sent) always wins -- see
+    # Keep only the first max_frames frames of the uploaded video. The caller
+    # picks the cap (the chain reference uses the chain ceiling,
+    # api/models.py's MAX_CHAIN_TOTAL_PIXEL_FRAMES), and sending it also asks
+    # for frame_count/fps to be measured. Same unconstrained (no ge=/le=)
+    # convention as the trim window above: an out-of-range value falls through
+    # to a normal untrimmed upload rather than a 422, and an explicit trim
+    # window (when both are somehow sent) always wins -- see
     # VideoUploadStore.save's docstring.
     max_frames: int | None = Query(None),
     context: AppContext = Depends(get_context),

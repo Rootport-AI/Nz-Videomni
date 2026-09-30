@@ -14510,3 +14510,41 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 2. 対象外で気づいた古い記述（`findings.md` 第 6 節の要約）: `services/` の `model_registry.py`・`pipeline_manager.py`・`video_upload_store.py`・`video_io.py`・`lora_registry.py`・`ltx_runner.py`、`engine/worker.py`、`engine25/worker.py`・`reference25.py`、`chain_math.py`、テスト（`test_ltx_runner_payload.py` 等）、操作パネルの `src/api/types.ts`・`useChainForm.ts` に、段階名・台帳番号・比べる相手のない同一性の言い回しが残っています。
 3. `config.yaml.example` にあるのに検証に効かない `limits.v2v_context_frames_max`・`end_context_frames_max`（検証は `config.py` の既定値だけを読み `config.yaml` を読まない）は、コードの問題として台帳への起票をオーナーに提案します。
 4. `MOD-023` の NAG 既定値（`nag_scale`／`nag_tau`／`nag_alpha`）と、外部実装 kijai/ComfyUI-KJNodes の LTX2_NAG との一致は、リポジトリの中からは確かめられません。
+
+### 131.2 申し送りの外部文言 6 グループの対応（2026-09-30）
+
+**要約**: §131 の申し送り 1 の外部文言（利用者やログに見えるエラー文言）6 グループを、オーナーの了承どおりに書き換えました。変えたのは文字列の中身だけで、コードの構造・エラーコード・HTTP ステータスは変えていません。写しはテスト 2 ファイル（計 3 箇所）にあり、同じ文言に合わせました。
+
+**変更の前後**:
+
+1. 段階名（`api/models.py` の `GenerateRequest.validate_ltx_constraints` と `GenerateChainRequest.validate_chain_constraints`、`SourceVideoSpec.validate_context_frames`）
+   - `distilled pipeline requires num_inference_steps=8 in Phase 1` → `distilled pipeline requires num_inference_steps=8`（2 関数とも）
+   - `distilled pipeline requires guidance_scale=1.0 in Phase 1` → `distilled pipeline requires guidance_scale=1.0`（2 関数とも）
+   - `source_audio and source_video are mutually exclusive (A2V and V2V cannot be combined in v1)` → `… (A2V and V2V cannot be combined)`（`GenerateChainRequest.validate_chain_constraints`）
+   - 「conservative v1 cap」はグループ 6 の書き換えで消えました。
+   - 理由: 「Phase 1」「v1」という段階名は利用者に伝わらず、使い方も揃っていないため。
+2. `job_busy`（`api/errors.py`）
+   - `A job is already running (Phase 1 allows one concurrent job)` → `A job is already running (the server runs one job at a time)`
+   - 理由: 段階名は利用者に伝わらないため。同時 1 ジョブという決まりそのものは今も正しいので、決まりは残しました。
+3. `upload_invalid_type`／`upload_too_large`（`api/errors.py`）
+   - `Unsupported image format` → `Unsupported file format`
+   - `Image file size exceeds the limit` → `File size exceeds the limit`
+   - 理由: 同じコードを動画・音声の保管庫でも使うので、画像向けの文言が動画・音声のアップロードにも出ていたため。
+4. `lora_depth_chain_unsupported`（`api/errors.py`）
+   - `depth-type IC-LoRA is not supported on a multi-clip chain in this version (the depth preprocessor cannot process a chain-length reference); use pose/canny/deblur, or a single clip.` → `depth-type IC-LoRA is not supported on a multi-clip chain (the depth preprocessor cannot process a chain-length reference); use pose/canny/deblur, or a single clip.`
+   - 理由: 深度の前処理が全フレームを一度に扱う作りに由来する構造的な制限なのに、「in this version」が一時的な制限のように見せていたため。
+5. `reference_resolution_invalid`（`api/errors.py`）
+   - `reference-video jobs require width/height divisible by 128 (reference is used at half resolution on the 64-grid)` → `reference-video jobs require width/height divisible by 128`
+   - 理由: 「half resolution」は縮小率 2 のアダプタにしか当てはまらず、縮小率 1 のアダプタでは誤りになるため。検査自体はすべての参照動画に掛かるので、括弧の説明だけを外しました。
+6. 上限値の指し先（`api/models.py` の `SourceVideoSpec.validate_context_frames` と `EndSourceSpec.validate_end_source`）
+   - `source_video.context_frames must be <= {cf_max} (conservative v1 cap, config.limits.v2v_context_frames_max; see chain_math's stage-2 tile-fit invariant)` → `source_video.context_frames must be <= {cf_max} (the cap is LimitsConfig.v2v_context_frames_max in config.py)`
+   - `end_source.context_frames must be <= {cf_max} (config.limits.end_context_frames_max — an OPERATIONAL cap on the measured range, not a geometric limit; see config.py)` → `end_source.context_frames must be <= {cf_max} (the cap is LimitsConfig.end_context_frames_max in config.py — an operational cap on the measured range, not a geometric limit)`
+   - 理由: `config.limits.*` は `config.yaml` の値（`GET /config` が配信する側）を指して読めますが、検証が読むのは `config.py` の既定値だけで、指す先が検証の読む側と違っていたため。書き換えの前に、2 つの検証が `_LIMITS_DEFAULTS = LimitsConfig()`（`config.yaml` を読まない既定値）から `cf_max` を取っていることをコードで確かめました。
+
+**写しとテストの追随**:
+- 古い文言（`Phase 1 allows`・`Unsupported image format`・`Image file size exceeds`・`cannot be combined in v1`・`in this version`・`half resolution`・`conservative v1 cap`・`in Phase 1`・`see config.py)`）をリポジトリ全体（`node_modules` を除く）で探しました。写しは `tests/test_mcp_tools_system.py`（2 箇所）と操作パネルの `webui/src/shell/useBaseModels.test.ts`（1 箇所）の `job_busy` の文言で、どちらも新しい文言に合わせました。どちらも擬似応答の本文で、文言そのものは検査していません。
+- モック（`webui/src/bridge/mockBridge.ts`）・MCP・操作パネルの画面文言・Gradio GUI の文言には写しはありませんでした（モックの JOB_BUSY は独自の `Another job is already running`、Gradio GUI はコードごとの独自の翻訳文を使っています）。文書（`Docs/`・`README`・フロントの `Docs/API_REFERENCE.md`・仕様書）に文言の引用は無く、過去の記録（本書の §39 など）は触っていません。
+- 変えた文言の、外した部分を検査しているテストはありませんでした（テストが見ているのはエラーコードと `mutually exclusive` など残した部分だけ）。
+- pytest（`tests/test_mcp_tools_system.py`・`test_validation.py`・`test_v2v_chain.py`・`test_a2v_chain.py`・`test_end_source_chain.py`・`test_chain_reference.py`・`test_ic_lora_api.py`・`test_smoke.py`・`test_gradio_handlers.py`）: 485 件すべて通過。`tests/test_api_*.py` という名前のファイルはありません。
+- 操作パネル: `npm run typecheck` 通過、`npx vitest run src/shell/useBaseModels.test.ts --exclude "**/backend.integration.test.ts"` 17 件通過。
+- 変更後に古い文言を探し直し、文字列としての残りが無いことを確かめました。コメントや docstring の中に残った語（別の意味のものを含む）は直していません: `config.py` のコメントの「conservative v1 cap」、`tests/test_v2v_chain.py` のコメントの「conservative v1 cap of 145」、`services/low_vram.py` の docstring の「in Phase 1」、`api/models.py` のコメントの「(see config.py)」（Retake の窓の上限の話で別件）。「half resolution」の残りは Inpainting／Outpainting の stage 1 の説明（`engine/`・`engine25/`・テスト・`tokenBudget.ts`）で、別の事柄です。

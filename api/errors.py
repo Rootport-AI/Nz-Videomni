@@ -43,18 +43,18 @@ class APIError(Exception):
 def job_busy(detail: str | None = None) -> APIError:
     return APIError(
         "JOB_BUSY",
-        "A job is already running (Phase 1 allows one concurrent job)",
+        "A job is already running (the server runs one job at a time)",
         409,
         detail=detail,
     )
 
 
 def upload_invalid_type(detail: str | None = None) -> APIError:
-    return APIError("UPLOAD_INVALID_TYPE", "Unsupported image format", 400, detail=detail)
+    return APIError("UPLOAD_INVALID_TYPE", "Unsupported file format", 400, detail=detail)
 
 
 def upload_too_large(detail: str | None = None) -> APIError:
-    return APIError("UPLOAD_TOO_LARGE", "Image file size exceeds the limit", 400, detail=detail)
+    return APIError("UPLOAD_TOO_LARGE", "File size exceeds the limit", 400, detail=detail)
 
 
 def image_not_found(image_id: str) -> APIError:
@@ -292,8 +292,8 @@ def lora_depth_chain_unsupported(names: list[str]) -> APIError:
     adapter kind is unsupported on this route."""
     return APIError(
         "LORA_DEPTH_CHAIN_UNSUPPORTED",
-        "depth-type IC-LoRA is not supported on a multi-clip chain in this "
-        "version (the depth preprocessor cannot process a chain-length "
+        "depth-type IC-LoRA is not supported on a multi-clip chain (the "
+        "depth preprocessor cannot process a chain-length "
         "reference); use pose/canny/deblur, or a single clip.",
         422,
         detail=f"depth loras rejected on multi-clip chain: {sorted(names)}",
@@ -509,8 +509,7 @@ def reference_resolution_invalid(width: int, height: int) -> APIError:
     reference-video request, whatever the factor."""
     return APIError(
         "REFERENCE_RESOLUTION_INVALID",
-        "reference-video jobs require width/height divisible by 128 "
-        "(reference is used at half resolution on the 64-grid)",
+        "reference-video jobs require width/height divisible by 128",
         422,
         detail=f"width={width}, height={height}",
     )

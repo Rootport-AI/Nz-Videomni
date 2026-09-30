@@ -556,11 +556,11 @@ class GenerateRequest(BaseModel):
         if self.pipeline == "distilled":
             if self.num_inference_steps != 8:
                 raise ValueError(
-                    "distilled pipeline requires num_inference_steps=8 in Phase 1"
+                    "distilled pipeline requires num_inference_steps=8"
                 )
             if self.guidance_scale != 1.0:
                 raise ValueError(
-                    "distilled pipeline requires guidance_scale=1.0 in Phase 1"
+                    "distilled pipeline requires guidance_scale=1.0"
                 )
 
         # Conditioning: multi-keyframe I2V — 枚数 / スナップ / 重複の3段。
@@ -742,8 +742,7 @@ class SourceVideoSpec(BaseModel):
         if cf > cf_max:
             raise ValueError(
                 f"source_video.context_frames must be <= {cf_max} "
-                "(conservative v1 cap, config.limits.v2v_context_frames_max; "
-                "see chain_math's stage-2 tile-fit invariant)"
+                "(the cap is LimitsConfig.v2v_context_frames_max in config.py)"
             )
         if (cf - 1) % 8 != 0:
             raise ValueError("source_video.context_frames must be 8n+1")
@@ -1020,8 +1019,9 @@ class EndSourceSpec(BaseModel):
         if cf > cf_max:
             raise ValueError(
                 f"end_source.context_frames must be <= {cf_max} "
-                "(config.limits.end_context_frames_max — an OPERATIONAL cap on "
-                "the measured range, not a geometric limit; see config.py)"
+                "(the cap is LimitsConfig.end_context_frames_max in config.py "
+                "— an operational cap on the measured range, not a geometric "
+                "limit)"
             )
         if cf % 8 != 0:
             raise ValueError(
@@ -1224,11 +1224,11 @@ class GenerateChainRequest(BaseModel):
         if self.pipeline == "distilled":
             if self.num_inference_steps != 8:
                 raise ValueError(
-                    "distilled pipeline requires num_inference_steps=8 in Phase 1"
+                    "distilled pipeline requires num_inference_steps=8"
                 )
             if self.guidance_scale != 1.0:
                 raise ValueError(
-                    "distilled pipeline requires guidance_scale=1.0 in Phase 1"
+                    "distilled pipeline requires guidance_scale=1.0"
                 )
 
         # A2V + V2V are mutually exclusive (do not mix an uploaded continuation
@@ -1236,7 +1236,7 @@ class GenerateChainRequest(BaseModel):
         if self.source_audio is not None and self.source_video is not None:
             raise ValueError(
                 "source_audio and source_video are mutually exclusive "
-                "(A2V and V2V cannot be combined in v1)"
+                "(A2V and V2V cannot be combined)"
             )
 
         # A2V accepts any clip count the ``clips`` field allows (long A2V). The

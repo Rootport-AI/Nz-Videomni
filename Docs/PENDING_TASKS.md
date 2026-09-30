@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-09-28（オーナー裁定「§3-167をクローズしてほしい」を受け、§3-167をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167 へ移し、本書の§3-167を削除。§1-31 の§3-167参照をCLOSED側へ付け替え。前回 2026-09-28: C-4〔int8／w4a8 safetensors の快適上限の較正〕が完了したため §1-32 をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169 へ移し、§1 冒頭の案内を §1-31・§1-33 のみの記述に更新。§1-31・§1-33 の材料の参照先を[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節へ更新。前々回 2026-09-27: オーナー裁定で第12.4節・第13.4節の最終判断を §1-31 の材料として閉じ、§3-167 の状態欄の判断事項1を更新。§1-31 の判断材料に w46 溢れの吸収先を追記。§1「近日中の改修項目」に §1-33「int8 ウェイトの ConvRot の高速化」を起票し、§1 冒頭の案内を §1-33 まで含む記述に更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-34「V2V／End source の `context_frames` 上限が `config.yaml` に書いても検証に効かない」を起票し、§1 冒頭の案内を §1-34 まで含む記述に更新。前回 2026-09-28: オーナー裁定「§3-167をクローズしてほしい」を受け、§3-167をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167 へ移し、本書の§3-167を削除。§1-31 の§3-167参照をCLOSED側へ付け替え。前々回 2026-09-28: C-4〔int8／w4a8 safetensors の快適上限の較正〕が完了したため §1-32 をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169 へ移し、§1 冒頭の案内を §1-31・§1-33 のみの記述に更新。§1-31・§1-33 の材料の参照先を[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14節へ更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -30,6 +30,17 @@
 - **触らないもの**: 復元の方針（forward ごとに bf16 へ戻す）・判定規則・UI・API。
 - **正本**: 復元の設計は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.2、コードは `engine/sft_quant/dequant.py`。
 - **着手**: 上の (1) の Go／No-go の判断からです（C-4 較正は完了・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169）。
+
+### 1-34. V2V／End source の `context_frames` 上限が `config.yaml` に書いても検証に効かない（起票：2026-10-01）
+
+- **現象**: `api/models.py` の `SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source` は、上限 `cf_max` をモジュール定数 `_LIMITS_DEFAULTS = LimitsConfig()`（`config.py` の既定値。`config.yaml` を読まない）から取る。一方 `GET /config`（`api/status.py` の `get_config`）は `load_config` が `config.yaml` から読んだ値を配り、Gradio の事前検査（`gradio_ui/validation.py` の `check_v2v_context`）は `/config` の `limits.v2v_context_frames_max` を上限に使う。`config.yaml.example` の `v2v_context_frames_max`（145）・`end_context_frames_max`（136）は `config.py` の既定値と同じなので、配布状態では食い違いが表面化しない。
+- **影響**: 利用者が `config.yaml` のこの 2 行を変えたときだけ発生する。上げた場合は画面の事前検査は通すがサーバーは 422 で弾く（文言は「上限は `config.py` の `LimitsConfig`」）。下げた場合は画面は止めるが、API を直接叩く経路（MCP・curl）ではサーバーが `config.py` の既定値まで受け付ける。クラッシュ・データ破損は無い。
+- **文書との食い違い**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.2、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §10「136は運用上限であって幾何上限ではない」は、いずれも「`end_context_frames_max` の引き上げは `config.yaml` の1行と実機の品質確認で足りる」と書くが、サーバー側の検証がその設定を読まないため実装ではそうならない。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 検証が読み込んだ設定を見るようにする（`_LIMITS_DEFAULTS` を起動時に `config.limits` で差し替えられる形にする。凍結ゾーンの `api/models.py` に触れるので計画→敵対的レビュー→承認の通常手順を通す）。
+  - B: 「この2行は画面の目安であり、サーバー側の上限は `config.py` で決まる」と定義し直し、上記2文書の「`config.yaml` の1行で引き上げられる」という記述を訂正する（コードは変えない）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §131「申し送り」3.（コメント現行化の `api/` 区域で検出、2026-10-01 起票）。
+- **関連ファイル**: `api/models.py`（`_LIMITS_DEFAULTS`・`SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source`）、`config.py`（`LimitsConfig`）、`config.yaml.example`、`gradio_ui/validation.py`（`check_v2v_context`）、`api/status.py`（`get_config`）。
 
 ---
 

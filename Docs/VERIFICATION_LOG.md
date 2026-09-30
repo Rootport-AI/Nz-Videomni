@@ -14511,6 +14511,35 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 3. `config.yaml.example` にあるのに検証に効かない `limits.v2v_context_frames_max`・`end_context_frames_max`（検証は `config.py` の既定値だけを読み `config.yaml` を読まない）は、コードの問題として台帳への起票をオーナーに提案します。
 4. `MOD-023` の NAG 既定値（`nag_scale`／`nag_tau`／`nag_alpha`）と、外部実装 kijai/ComfyUI-KJNodes の LTX2_NAG との一致は、リポジトリの中からは確かめられません。
 
+### 131.1 判定モデルの比較の採点（2026-09-30）
+
+**方法**: §131 の 11 区域で確定した一覧（`changes.jsonl` 143 件）を正解とし、同じ区域を独立に判定した Opus と Sonnet の判定をブロック単位で採点しました（`tools/ab_compare.py`）。数える項目は、見逃し（正解は変える〔change〕のに判定は現行のまま〔keep〕）・一部だけ直した（判定は変えるが、`old_lines` にあった文言が判定の `new_lines` にまだ残る）・余分（正解は現行のままなのに判定は変える）・区分の食い違い（両方とも変えるが「事実が古い」「導入時期の記録」の割り振りが違う）・新しい誤り（採点スクリプトが数える「余分」のうち誤りと確定したもの）・使用トークンです。あわせて、Sonnet が変えるとした文面のうち正解と文面が異なる 92 件を Opus が事実確認しました（`sonnet_check.md`）。
+
+**結果**（`ab_compare.md` の「計」、`sonnet_check.md` の規則への当てはめより）:
+
+| 指標 | Opus | Sonnet |
+|---|---:|---:|
+| 見逃し | 0 | 27 |
+| 一部だけ直した | 4 | 48 |
+| 余分 | 0 | 0 |
+| 区分の食い違い | 0 | 29 |
+| 新しく持ち込んだ誤り | 1（`MOD-001`） | 0 |
+| 直し残し（元の誤りを残した） | — | 34（重 25・軽 9） |
+| 使用トークン | 約 167 万 | 約 228 万（Opus の約 1.37 倍） |
+
+**規則への当てはめ**:
+- 規則 1（Sonnet の見逃し ≤ Opus の見逃し＋5 件）: 27 > 5 で満たしません。
+- 規則 2（Sonnet の新しい誤り ≤ Opus の新しい誤り＋3 件）: 自分で新しく持ち込んだ誤りだけで数えれば満たしますが（0 ≤ 1＋3）、直し残し（元の誤りを残したもの）を含めて数えると満たしません（34 > 1＋3）。
+- **結論: 以後の区域でも、判定担当は Opus のままとします。** Sonnet は「見つけたものは全て Opus も見つけていた」（独自の候補は 0 件）一方で、一度手を付けた古い文の一部を直し残す傾向があります。
+
+**限界**:
+- 正解は Opus の判定を検算して作ったものなので、Opus の見逃し 0 は作り方に依る面があります。両モデルがそろって見逃したものは正解に入らず、測れません。
+- 1 回ずつの実行なので、同じモデルを繰り返したときの揺れは測っていません。
+- `api/` はモジュールと関数の docstring が多く、長い文の一部だけを直す作業が多い区域なので、直し残しが出やすい区域です。他の区域にそのまま当てはまるとは限りません。
+- 「一部だけ」は行の完全一致で数えるため、改行位置を変えただけのもの（事実は直っている）も含みます。
+
+**採点の副産物**: 事実確認の過程で、正解（`changes.jsonl`）の側に誤りが 1 件見つかりました（`MOD-100`）。次節 §131.3 で訂正します。
+
 ### 131.2 申し送りの外部文言 6 グループの対応（2026-09-30）
 
 **要約**: §131 の申し送り 1 の外部文言（利用者やログに見えるエラー文言）6 グループを、オーナーの了承どおりに書き換えました。変えたのは文字列の中身だけで、コードの構造・エラーコード・HTTP ステータスは変えていません。写しはテスト 2 ファイル（計 3 箇所）にあり、同じ文言に合わせました。
@@ -14548,3 +14577,14 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 - pytest（`tests/test_mcp_tools_system.py`・`test_validation.py`・`test_v2v_chain.py`・`test_a2v_chain.py`・`test_end_source_chain.py`・`test_chain_reference.py`・`test_ic_lora_api.py`・`test_smoke.py`・`test_gradio_handlers.py`）: 485 件すべて通過。`tests/test_api_*.py` という名前のファイルはありません。
 - 操作パネル: `npm run typecheck` 通過、`npx vitest run src/shell/useBaseModels.test.ts --exclude "**/backend.integration.test.ts"` 17 件通過。
 - 変更後に古い文言を探し直し、文字列としての残りが無いことを確かめました。コメントや docstring の中に残った語（別の意味のものを含む）は直していません: `config.py` のコメントの「conservative v1 cap」、`tests/test_v2v_chain.py` のコメントの「conservative v1 cap of 145」、`services/low_vram.py` の docstring の「in Phase 1」、`api/models.py` のコメントの「(see config.py)」（Retake の窓の上限の話で別件）。「half resolution」の残りは Inpainting／Outpainting の stage 1 の説明（`engine/`・`engine25/`・テスト・`tokenBudget.ts`）で、別の事柄です。
+
+### 131.3 採点で見つかった正解側の誤り 1 件の訂正（2026-09-30）
+
+§131.1 の事実確認（`sonnet_check.md`）の過程で、判定の正解（`changes.jsonl`）の側に誤りが 1 件見つかりました。
+
+`api/models.py` の `GenerateChainRequest.to_clip_request`（`MOD-100`）の docstring で、「``retake`` を写さない前例」として ``source_video`` / ``source_audio`` / ``reference_video_id`` を並べ、「``GenerateRequest`` に対応する項目が無い」と書いていましたが、``GenerateRequest.reference_video_id`` は実在します（``source_video`` / ``source_audio`` は実在しません）。前例の列挙から ``reference_video_id`` を外しました。
+
+- 変更前: `as ``source_video`` / ``source_audio`` / ``reference_video_id``: it has no counterpart on ``GenerateRequest``, …`
+- 変更後: `as ``source_video`` / ``source_audio``: it has no counterpart on ``GenerateRequest``, …`（続く「so there is nothing to drop it INTO, and dropping it changes no validation outcome.」以降は変えていません）
+
+判定担当（Opus）と検算担当（V4 は「retake 段落の言い回しは 2 通りに読める」という注記のみで、判定担当の扱いに従って通しました）がこの誤りを見過ごし、Sonnet はここを正しく外していました（`sonnet_check.md` の `MOD-100` の項）。docstring を除いた構文木は HEAD と一致していることを監督が確認済みです。

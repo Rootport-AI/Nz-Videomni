@@ -1582,9 +1582,9 @@ class GenerateChainRequest(BaseModel):
         record would otherwise claim the default).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
-        as ``source_video`` / ``source_audio`` / ``reference_video_id``: it has no
-        counterpart on ``GenerateRequest``, so there is nothing to drop it INTO,
-        and dropping it changes no validation outcome. The authoritative copy is
+        as ``source_video`` / ``source_audio``: it has no counterpart on
+        ``GenerateRequest``, so there is nothing to drop it INTO, and dropping it
+        changes no validation outcome. The authoritative copy is
         ``JobRecord.chain_request``, which ``run_chain_job`` reads and which the
         worker payload is built from.
         ``end_source`` follows that same precedent for the same reasons.

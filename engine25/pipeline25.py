@@ -816,8 +816,8 @@ IGNORED_FIELDS: dict[str, str] = {
     # and ``engine25/neg_prompt25.py``). Leaving them here would make the worker
     # log "ignored" for the three fields the feature is made of.
     "guidance_scale": "2.5 distilled runs without classifier-free guidance",
-    "num_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
-    "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
+    "num_steps": "the distilled schedule has a fixed step count",
+    "num_inference_steps": "the distilled schedule has a fixed step count",
     # ``attention_backend`` LEFT WITH THE SAGE COMMIT. It used to sit here as
     # "v1 is SDPA-only", which was true until this engine got a
     # ``SageAttentionService``; it is now ACTED ON (see

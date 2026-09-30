@@ -14367,8 +14367,8 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 
 **申し送り**（気づいただけで、今回は直していません）:
 1. 利用者やログに見える文言 2 件（オーナーが文面を決める）
-   - LTX 2.5 側の `reject_unsupported` の 422 の文言に「(v1)」が付いています。同じファイルの `reject_chain` の文言と、LTX 2.3 側の 2 つの文言には付いていません。コメントの側では「v1」を作業段階の名前として消しました。
-   - LTX 2.5 側の `IGNORED_FIELDS`／`CHAIN_IGNORED_FIELDS` の理由文（無視したときのログに出る）が「8 + 3 sigmas」と数を書いています。この数の持ち主は上流のパッケージの定数で、リポジトリの中からは確かめられません。コメントの側では数を書かず、この理由文を指す形にしました。
+   - LTX 2.5 側の `reject_unsupported` の 422 の文言に「(v1)」が付いています。同じファイルの `reject_chain` の文言と、LTX 2.3 側の 2 つの文言には付いていません。コメントの側では「v1」を作業段階の名前として消しました。→ §130.1 で対応
+   - LTX 2.5 側の `IGNORED_FIELDS`／`CHAIN_IGNORED_FIELDS` の理由文（無視したときのログに出る）が「8 + 3 sigmas」と数を書いています。この数の持ち主は上流のパッケージの定数で、リポジトリの中からは確かめられません。コメントの側では数を書かず、この理由文を指す形にしました。→ §130.1 で対応
 2. LTX 2.3 側の `_RealBackend` のロードペイロードの「Component-file paths (gated by the LTX_COMPONENT_FILES env).」は、4 つのキーの上にありますが、4 つ目の PrunaVAED のパス（`component_video_vae_pruned_path`）にはこのゲートが掛かっていません。範囲が狭いのは最初の状態の文からです。
 3. 文字列の既定値（`attention_backend` の `"sdpa"`、`vae_mode` の `"default"`）を前提にした句が 6 箇所残っています。`api/models.py` の該当フィールドが値を直に書いていて、指す定数が無いためです。
 4. 対象外（テストとほかのファイル）で気づいた古い記述
@@ -14376,3 +14376,25 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
    - `tests/test_ltx_runner_payload.py` の `test_default_payload_key_set_is_unchanged_by_acceleration` と `test_default_payload_key_set_is_unchanged_by_keep_resident` のコメント: 作業段階の名前・日付・台帳の番号と、「pre-acceleration」「byte-identical」が残っています。
    - `api/generate_chain.py` の参照動画の注記: 作業段階の名前・日付・以前の状態（「lifted the old 1-clip-only ALPHA scope」など）が残っています。
    - `README.md` の動作要件の表のメインメモリの行: `cache_weights` の説明に続く「この既定を off にすれば常駐は減りますが」という 1 文が、アプリから off にできるように読めます（仕様書 §6.10 (e) で訂正したのと同じ事柄です）。
+
+### 130.1 申し送りの外部文言 2 件の対応（2026-09-30）
+
+上の申し送りの 1 点目の 2 件について、オーナーが決めた文面に変えました。コードの動作は、文字列の中身のほかは変わっていません。
+
+1. 422 の文言から「(v1)」を外す
+   - 変更前: `LTX 2.5(v1)は{feature}に対応していません`
+   - 変更後: `LTX 2.5は{feature}に対応していません`（後ろに続く文は変えていません）
+   - 変えた場所: `services/engines/ltx25/adapter.py` の `reject_unsupported`、操作パネルのモック `webui/src/bridge/mockBridge.ts` の同じ 422 の `detail`
+   - 理由: 「v1」は内部の作業段階の名前で、利用者には意味が伝わりません。同じファイルの `reject_chain` の文言や LTX 2.3 側の文言とも不揃いでした。
+2. 無視ログの理由文から数を外す
+   - 変更前: `the distilled schedule is fixed at 8 + 3 sigmas`
+   - 変更後: `the distilled schedule has a fixed step count`
+   - 変えた場所: `services/engines/ltx25/adapter.py` の `IGNORED_FIELDS` と `CHAIN_IGNORED_FIELDS` の `num_inference_steps`、`engine25/pipeline25.py` の `IGNORED_FIELDS` の `num_steps` と `num_inference_steps`（計 4 箇所）
+   - 理由: 「8 + 3」は上流のパッケージの定数を書き写したもので、リポジトリの中からは確かめられません。
+
+**残存の確認**: リポジトリ全体（`node_modules` を除く）で、`LTX 2.5(v1)` と「8 + 3 sigmas」は、コードと文字列には残っていません。コメントと docstring には、`engine25/` の `chain25.py`・`worker.py`・`outpaint25.py` のほか、`pipeline25.py` の冒頭の docstring（「a fixed 8 + 3 sigma schedule」）、`ltxcore_compat.py` の docstring（「8 + 3 steps」）、`inpaint25.py` の docstring（行をまたいだ「8 + 3 / sigmas」）が残っています。どれも今回の対象外で、触っていません。本書の §70.3 の実測の表（`submit_chain` の結果）にある「LTX 2.5(v1)」は、当時の出力の記録なのでそのままです。
+
+**確かめたこと**:
+1. `tests/` と `webui/src/` に、古い文言（「(v1)」「8 + 3」「fixed at」）を検査しているテストはありませんでした。直したテストはありません。
+2. `tests/` で `IGNORED_FIELDS`／`CHAIN_IGNORED_FIELDS` に触れているのは `tests/test_ltx25_adapter.py` だけで、`pipeline25` の理由文に触れているテストはありませんでした。`tests/test_ltx25_adapter.py` は 171 件合格（GPU と実モデルには触れていません）。
+3. 操作パネルの `npm run typecheck` は合格しました。モックの文言を検査している vitest のファイルは無いので、vitest は走らせていません。

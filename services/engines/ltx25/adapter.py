@@ -152,7 +152,7 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
 #: attach to.
 IGNORED_FIELDS: dict[str, str] = {
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
-    "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
+    "num_inference_steps": "the distilled schedule has a fixed step count",
 }
 
 #: Fields this engine ACTS ON. Six of them ride the generate payload verbatim
@@ -323,7 +323,7 @@ CHAIN_REJECT_TABLE: tuple[
 #: the audit test reads one schema against one table.
 CHAIN_IGNORED_FIELDS: dict[str, str] = {
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
-    "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
+    "num_inference_steps": "the distilled schedule has a fixed step count",
 }
 
 #: Fields the chain path ACTS ON. The scalar settings ride the worker payload
@@ -482,7 +482,7 @@ def reject_unsupported(request: GenerateRequest) -> None:
             raise feature_unsupported(
                 feature,
                 detail=(
-                    f"LTX 2.5(v1)は{feature}に対応していません"
+                    f"LTX 2.5は{feature}に対応していません"
                     f"(リクエストの{field}が既定値ではありません)。"
                     "この機能を使うにはベースモデルに「LTX 2.3」を選んでください。"
                 ),

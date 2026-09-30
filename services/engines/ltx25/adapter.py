@@ -1,4 +1,4 @@
-"""LTX 2.5 engine adapter — the app-side half of the ``engine25`` worker (§3-98).
+"""LTX 2.5 engine adapter — the app-side half of the ``engine25`` worker.
 
 A SIBLING of :mod:`services.engines.ltx.adapter`, not a replacement. The two
 engines share nothing at runtime: 2.5 runs official LTX-2 v1.2.0 with
@@ -6,25 +6,27 @@ transformers 5.x inside ``.venv-engine-ltx25``, which cannot coexist with 2.3's
 transformers 4.57 in one environment. What they DO share is the app-side
 plumbing — the ``@@LTX@@`` JSON-lines protocol, the subprocess spawn/read/kill
 loop, the progress-receipt loop, the synthetic mock backend — so this module
-subclasses the 2.3 adapter's classes through the seams introduced in P3a and
-restates only the facts that are genuinely different:
+subclasses the 2.3 adapter's classes through their override seams (class
+attributes and hook methods) and restates only the facts that are genuinely
+different:
 
 * which venv and which ``python -m`` module the worker is (``engine25.worker``);
 * which worker log file it writes (so BOTH logs survive a 2.3<->2.5 swap);
 * which payload field each model-management category feeds;
 * which child-process environment it gets (NONE of 2.3's ``LTX_*`` knobs — every
   one of them is read by 2.3's worker and would be a borrowed assumption here);
-* the feature scope, field by field, in the tables below. What is still
-  refused is two engine-level features, on both the single ``/generate`` and
-  the chain schema: ``pipeline="two_stage_hq"`` and ``vae_mode``.
+* the feature scope, field by field, in the tables below. What is refused is
+  listed in :data:`REJECT_TABLE` (single ``/generate``) and
+  :data:`CHAIN_REJECT_TABLE` (chain schema), and both hold engine-level
+  features rather than modes.
 
-V1 SCOPE, STATED ONCE (owner ruling 2026-08-21). :data:`REJECT_TABLE` is the
+THE SCOPE, STATED ONCE. :data:`REJECT_TABLE` is the
 422 half and :data:`IGNORED_FIELDS` the ignore-and-log half of the
 ``GenerateRequest`` field table; ``crop_output`` is deliberately in NEITHER —
 it is an ffmpeg post-process the app applies to the finished mp4, so it is
 engine-independent and simply works (see :meth:`_RealBackend25.generate`).
 
-THE CHAIN SCHEMA HAS ITS OWN FOUR TABLES (``CHAIN_*``, §3-102). The rules are
+THE CHAIN SCHEMA HAS ITS OWN FOUR TABLES (``CHAIN_*``). The rules are
 identical; the schemas are not, so one table forced to serve both would need a
 per-schema exception list — the very thing the audit tests exist to prevent.
 
@@ -79,9 +81,10 @@ SELECTION_FIELDS: dict[str, str] = {
 
 #: Fixed (non-selectable) descriptor assets this engine needs.
 #:
-#: JUST THE SPATIAL UPSAMPLER. LTX 2.3 needs three (a tokenizer directory, the
-#: upsampler and a separate text-projection file); 2.5 needs one, because the
-#: other two have no counterpart here: the Gemma 4 tokenizer/processor metadata
+#: JUST THE SPATIAL UPSAMPLER. LTX 2.3's
+#: :data:`services.engines.ltx.adapter.REQUIRED_ASSETS` also names a tokenizer
+#: directory and a separate text-projection file; 2.5 needs neither, because
+#: they have no counterpart here: the Gemma 4 tokenizer/processor metadata
 #: travels INSIDE the text-encoder GGUF (engine25/assets_export.py exports it
 #: to a sidecar next to the GGUF, and regenerates it when stale — nothing for
 #: the app to point at), and 2.5 has no standalone text-projection file at all.
@@ -97,7 +100,8 @@ SELECTION_FIELDS: dict[str, str] = {
 REQUIRED_ASSETS: tuple[str, ...] = ("spatial_upsampler_path",)
 
 #: LTX generation this adapter runs, as the first two segments of the
-#: transformer GGUF's ``model_version`` KV. Mirror image of the 2.3 adapter's.
+#: transformer's ``model_version`` KV (the GGUF header, or a quantized
+#: safetensors' ``__metadata__``). Mirror image of the 2.3 adapter's.
 SUPPORTED_MODEL_VERSIONS: frozenset[str] = frozenset({"2.5"})
 
 #: Real backend identifier surfaced in metadata.json. Distinct from 2.3's
@@ -105,18 +109,19 @@ SUPPORTED_MODEL_VERSIONS: frozenset[str] = frozenset({"2.5"})
 REAL_BACKEND_25 = "ltx25-distilled"
 #: Mock backend identifier. The mock CLASS is 2.3's (a synthetic gradient clip
 #: says nothing about the engine that would have rendered it); only this label
-#: differs, which is what lets the 2.3<->2.5 round-trip gate be checked from
-#: metadata.json alone even when no GPU was involved.
+#: differs, which is what lets the 2.3<->2.5 round trip (Docs/VERIFICATION_LOG.md
+#: §69.15) be checked from metadata.json alone even when no GPU was involved.
 MOCK_BACKEND_25 = "mock-ltx25"
 
-#: Worker load defaults. ``blocks_on_gpu`` is the documented 16GB fallback
-#: ladder's top rung (8 -> 6 -> 4) and is overridable through the existing
-#: low-VRAM setting, so walking the ladder is a config change, not a code one.
+#: Worker load defaults. ``blocks_on_gpu`` is the top rung of the documented
+#: 16GB fallback ladder (Videomni_Backend_Specification.md §6.10 (e)) and is
+#: overridable through the low-VRAM setting, so walking the ladder is a config
+#: change, not a code one.
 DEFAULT_BLOCKS_ON_GPU = 8
 
 
 # --------------------------------------------------------------------------- #
-# v1 feature scope
+# feature scope
 # --------------------------------------------------------------------------- #
 
 #: The 422 half of the GenerateRequest field table: ``(field, feature,
@@ -130,34 +135,8 @@ DEFAULT_BLOCKS_ON_GPU = 8
 #: whole schema on every request), so rejecting it would make plain T2V
 #: impossible.
 #:
-#: ``outpaint`` LEFT THIS TABLE with the Outpainting increment (§3-102), and it
-#: was the LAST whole MODE the single path refused. ``engine25/outpaint25.py``
-#: drives the official 2.5 outpainting workflow now — the 2.3-shipped
-#: In/Outpainting IC-LoRA over the app's green canvas, two stages with a
-#: Laplacian pyramid blend between them — so the field is HONOURED (see
-#: :data:`HONOURED_FIELDS`) rather than refused.
-#:
-#: ``nag_enabled`` LEFT THIS TABLE with the NAG/VSF increment. A CFG-free model
-#: cannot be pushed away from an unconditional prediction, which is why this row
-#: stood here — but it can be argued with INSIDE the single pass it does run,
-#: and that is what NAG and VSF do (``engine25/neg_prompt25.py`` replaces the
-#: 96 text cross-attention forwards). So the field is honoured now, and with it
-#: the six knobs that were only ever inert because this row refused them.
-#: What is left is TWO engine-level features, neither of them a mode.
-#:
-#: ``inpaint`` JOINED THIS TABLE with the Inpainting increment (台帳 §3-55) and
-#: LEFT IT AGAIN with 台帳 §3-150 — the only row in this table's history to do
-#: both, and it was here for one day short of a fortnight. Its arrival was a
-#: staging decision rather than a discovered limitation ("LTX 2.3 first, by
-#: owner ruling"), and what §3-150 built is the missing half: ``engine25/
-#: inpaint25.py`` drives the masked two-stage workflow on 2.5 — the same
-#: 2.3-shipped In-Outpainting IC-LoRA over the app's green-FILLED canvas, the
-#: same Laplacian pyramid blend, plus the mask decode, the two de-greens, the
-#: restore and the crop. Lightricks' own documentation says the 2.3 adapter is
-#: what 2.5 inpaints with, and ships an Inpaint workflow for 2.5 to prove it.
-#: So the field is HONOURED (see :data:`HONOURED_FIELDS`), the sub-tab is lit
-#: while 2.5 is loaded, and this table is back to the two ENGINE-LEVEL features
-#: it held before — neither of them a mode.
+#: Every row is an engine-level feature rather than a mode; outpaint, inpaint
+#: and NAG/VSF are in :data:`HONOURED_FIELDS`.
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
@@ -168,78 +147,58 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
 #: be hostile — the frontend sends the whole schema on every request, so a plain
 #: T2V request carries them all.
 #:
-#: THE THREE NEGATIVE-PROMPT FIELDS LEFT THIS TABLE with the NAG/VSF increment
-#: (``negative_prompt``, ``neg_method``, ``vsf_scale``): they are the feature
-#: now, so calling them ignored would be exactly the silent lie the audit below
-#: exists to catch. What remains is ONE kind, and now the reason really is one
-#: reason: the distilled 2.5 schedule is fixed and has no classifier-free
-#: guidance, so a CFG SCALE and a STEP COUNT have nothing to attach to.
-#:
-#: ``fused_gguf_dequant_kernel`` AND ``block_swap_prefetch`` LEFT THIS TABLE
-#: with 高速化第1弾 (§3-102): both are real engine25 code paths now — the Triton
-#: dequant kernel patches the 2.5 GGUF transformer AND its Gemma text encoder,
-#: and the prefetch engine rides engine25's own block-swap window. They are ON
-#: by default, so a plain T2V request now genuinely turns both on, and leaving
-#: them classified "ignored" would have been exactly the silent lie the audit
-#: below exists to catch. See :data:`HONOURED_FIELDS`.
+#: Every entry has the same reason: the distilled 2.5 schedule is fixed and has
+#: no classifier-free guidance, so a CFG scale and a step count have nothing to
+#: attach to.
 IGNORED_FIELDS: dict[str, str] = {
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
-    "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
+    "num_inference_steps": "the distilled schedule has a fixed step count",
 }
 
 #: Fields this engine ACTS ON. Six of them ride the generate payload verbatim
-#: (see :meth:`_RealBackend25.generate`), three more ride it as additive
-#: acceleration flags, ``conditioning_images`` becomes the ``images`` list, and
-#: ``crop_output`` is the app-side ffmpeg centre-crop that happens after the
-#: worker is done. Declared rather than merely implied so the model_fields audit
-#: below can name a home for every field.
+#: (see :meth:`_RealBackend25.generate`), the acceleration and residency flags
+#: ride it as additive keys, ``conditioning_images`` becomes the ``images``
+#: list, and ``crop_output`` / ``embed_mp4_metadata`` are app-side
+#: post-processing of the finished mp4. Declared rather than merely implied so
+#: the model_fields audit below can name a home for every field.
 #:
-#: ``loras`` / ``reference_video_id`` AND THEIR TWO STRENGTHS JOINED THIS SET
-#: with §3-102's third increment (Style LoRA + IC-LoRA). None of the four is
-#: read off the request the way the six above are: the orchestrator has already
-#: resolved the adapter NAMES into files and the upload ID into a path, so what
-#: :meth:`_RealBackend25.generate` acts on is the ``lora_paths`` /
-#: ``reference_video_path`` keyword arguments carrying that material. The two
-#: strengths ARE read from the request, and only shape the ``reference_video``
-#: block. See the needle table in tests/test_ltx25_adapter.py.
+#: ``loras`` / ``reference_video_id`` and their two strengths. ``loras`` and
+#: ``reference_video_id`` are not read off the request the way the six above
+#: are: the orchestrator has already resolved the adapter NAMES into files and
+#: the upload ID into a path, so what :meth:`_RealBackend25.generate` acts on
+#: is the ``lora_paths`` / ``reference_video_path`` keyword arguments carrying
+#: that material. The two strengths ARE read from the request, and only shape
+#: the ``reference_video`` block. See the needle table in
+#: tests/test_ltx25_adapter.py.
 #:
-#: ``block_swap_prefetch`` / ``fused_gguf_dequant_kernel`` JOINED THIS SET with
-#: 高速化第1弾 (§3-102). Unlike the four above they ARE plain request reads: each
-#: rides the payload as a bare ``True`` under the same additive contract 2.3
-#: uses, and the worker echoes back what actually happened
+#: ``block_swap_prefetch`` / ``fused_gguf_dequant_kernel``. Unlike ``loras`` /
+#: ``reference_video_id`` they ARE plain request reads: each rides the payload
+#: as a bare ``True`` under the same additive contract 2.3 uses, and the
+#: worker echoes back what actually happened
 #: (``block_swap_prefetch_used`` / ``fused_gguf_dequant_kernel_used``) so a
 #: degrade is visible in metadata.json rather than assumed.
 #:
-#: ``keep_resident`` JOINED THIS SET with 高速化第2弾 (§3-102), leaving
-#: :data:`REJECT_TABLE`. THE CONTRACT IS 2.3's WORD FOR WORD — the key rides
+#: ``keep_resident``. THE CONTRACT IS 2.3's WORD FOR WORD — the key rides
 #: only when asked for, an absent key IS the release request, and the worker
 #: echoes "on"/"off" back — but THE IMPLEMENTATION IS A DIFFERENT THING: 2.3
 #: keeps the skeletons of every sub-model resident, while 2.5 keeps ONE thing,
-#: the Gemma 4 text encoder's state dict (about 7.7 GiB in RAM), and nothing
-#: else. Default OFF on this engine, deliberately: the win is only ever on a
-#: SECOND job in the same process, and the RAM it costs is real. So the two
+#: the Gemma 4 text encoder's state dict (size: Videomni_Backend_Specification.md
+#: §6.10 (d)), and nothing else. Its default is ``KEEP_RESIDENT_DEFAULT``
+#: (api/models.py). That fits this engine: the win is only ever on a SECOND
+#: job in the same process, and the RAM it costs is real. So the two
 #: engines answering to the same field name do not do the same amount of work,
 #: and a reader comparing them should expect different numbers.
 #:
-#: ``keep_resident_embeddings`` JOINED THIS SET with §3-114, the loose end
-#: 高速化第2弾 left behind: that increment made the Gemma 4 text encoder's state
-#: dict survive a job, while the EmbeddingsProcessor standing next to it went on
-#: being rebuilt from its own GGUF on every single job. THE CONTRACT IS
-#: ``keep_resident``'s, restated: the key rides only when asked for, an absent
-#: key IS the release request, and the worker echoes "on"/"off" back. The two
-#: are INDEPENDENT switches over two different objects, so their RAM costs add
-#: rather than overlap.
+#: ``keep_resident_embeddings`` keeps the EmbeddingsProcessor resident (it is
+#: otherwise rebuilt from its own GGUF on every job), beside the text encoder
+#: that ``keep_resident`` holds. THE CONTRACT IS ``keep_resident``'s, restated:
+#: the key rides only when asked for, an absent key IS the release request, and
+#: the worker echoes "on"/"off" back. The two are INDEPENDENT switches over two
+#: different objects, so their RAM costs add rather than overlap.
+#: This one names a component only LTX 2.5 has, so the 422 for it belongs to
+#: the OTHER engine (``services/engines/ltx/adapter.py``'s ``REJECT_TABLE``).
 #:
-#: AND IT IS THE FIRST MEMBER THAT WAS BORN HERE. Every other field in this set
-#: ARRIVED from :data:`REJECT_TABLE`, :data:`IGNORED_FIELDS` or
-#: :data:`GOVERNED_FIELDS` — something this engine used to refuse and now runs.
-#: This one names a component only LTX 2.5 has, so it was honoured on the day it
-#: existed, and the 422 it produces belongs to the OTHER engine: it is the field
-#: that created ``services/engines/ltx/adapter.py``'s own ``REJECT_TABLE``.
-#:
-#: ``outpaint`` JOINED THIS SET with the Outpainting increment (§3-102),
-#: leaving :data:`REJECT_TABLE` as the last MODE on it. Unlike every other
-#: member it is not a knob but a whole job kind: its PRESENCE is what routes the
+#: ``outpaint`` is not a knob but a whole job kind: its PRESENCE is what routes the
 #: worker to ``engine25.outpaint25.run_outpaint`` instead of the plain
 #: generation, so the payload block below carries the full canvas geometry
 #: rather than a flag (the engine has to rebuild the blend mask from it). The
@@ -248,14 +207,12 @@ IGNORED_FIELDS: dict[str, str] = {
 #: arrives separately as ``outpaint_source_path``, read only for its audio.
 #: THE PAYLOAD SHAPE IS 2.3's, key for key (services/engines/ltx/adapter.py):
 #: one app-side contract for one feature, so an operator comparing two engines'
-#: worker logs is comparing the same eleven names.
+#: worker logs is comparing the same names.
 #:
-#: ``attention_backend`` JOINED THIS SET with 高速化第3弾 (§3-102), leaving
-#: :data:`REJECT_TABLE` — the last acceleration knob that still 422'd on this
-#: engine. THE CONTRACT IS 2.3's WORD FOR WORD once more: the key rides ONLY
-#: when the request asked for something other than the default ``"sdpa"``, so a
-#: plain job's payload is byte-identical to what it was before this field was
-#: honoured, and the worker echoes back what ACTUALLY ran
+#: ``attention_backend``. THE CONTRACT IS 2.3's WORD FOR WORD once more: the key
+#: rides ONLY when the request asked for something other than the default
+#: ``"sdpa"``, so a plain job's payload carries no ``attention_backend`` key,
+#: and the worker echoes back what ACTUALLY ran
 #: (``attention_used``: "sdpa" / "sage" / "sage->sdpa"). And here the
 #: implementation really IS the same thing: engine25 shares 2.3's
 #: ``services/sage_attention_service.py`` verbatim, because the two engines'
@@ -264,17 +221,13 @@ IGNORED_FIELDS: dict[str, str] = {
 #: 2.5 reuses one model shell across jobs, so every build strips and re-installs
 #: rather than patching a fresh transformer.
 #:
-#: THE SEVEN NEGATIVE-PROMPT FIELDS JOINED THIS SET with the NAG/VSF increment,
-#: from THREE different tables at once: ``nag_enabled`` left
-#: :data:`REJECT_TABLE`, ``negative_prompt`` / ``neg_method`` / ``vsf_scale``
-#: left :data:`IGNORED_FIELDS`, and ``nag_scale`` / ``nag_tau`` / ``nag_alpha``
-#: left :data:`GOVERNED_FIELDS` — which emptied it. All seven are plain
-#: ``request.<field>`` reads that ride the additive ``nag`` payload block below,
-#: key for key in 2.3's order, so one app-side contract serves both engines.
+#: The seven negative-prompt fields are plain ``request.<field>`` reads that
+#: ride the additive ``nag`` payload block below, key for key in 2.3's order, so
+#: one app-side contract serves both engines.
 #:
 #: "Honoured" and not "governed" for the three NAG knobs specifically: governed
-#: promises that a field cannot reach a running job, which was true only while
-#: its governor was a 422. It no longer is, so a scale really does change the
+#: would promise that a field cannot reach a running job, and their governor
+#: ``nag_enabled`` is itself honoured, so a scale really does change the
 #: video. And not "ignored" either, for the obvious reason — this engine acts on
 #: them. HONOURED is the only classification that is true.
 HONOURED_FIELDS: frozenset[str] = frozenset(
@@ -287,7 +240,7 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "seed",
         "conditioning_images",
         "crop_output",
-        # 台帳 §3-164: the app-side recipe embed into the finished mp4
+        # The app-side recipe embed into the finished mp4
         # (``PipelineManager._embed_recipe``), engine-independent post-processing
         # like ``crop_output``.
         "embed_mp4_metadata",
@@ -301,11 +254,8 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "keep_resident_embeddings",
         "attention_backend",
         "outpaint",
-        # 台帳 §3-150. It rode :data:`REJECT_TABLE` for a fortnight while the
-        # 2.5 driver did not exist; ``engine25/inpaint25.py`` exists now, so
-        # "honoured" is the only classification that is true. Listed next to
-        # ``outpaint`` because the two are one mechanism seen from two sides —
-        # the same IC-LoRA, the same canvas, the same blend.
+        # Listed next to ``outpaint`` because the two are one mechanism seen
+        # from two sides — the same IC-LoRA, the same canvas, the same blend.
         "inpaint",
         # The non-CFG negative prompt (NAG / VSF), seven fields that travel as
         # one feature: the switch, the prompt, the method, and the two methods'
@@ -327,20 +277,11 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
 #: makes one of them meaningful is already refused, by the governor, before this
 #: field could have mattered.
 #:
-#: THE TWO REFERENCE STRENGTHS LEFT THIS TABLE with §3-102's third increment.
-#: They were only ever here because their governor (``loras``) was a 422; now
-#: that LoRA and the reference video run on this engine, a strength really does
-#: change the job, so it is HONOURED — and leaving it classified "governed"
-#: would have been the silent-drop the audit exists to catch.
-#:
 #: The distinction is worth keeping rather than folding into
 #: :data:`IGNORED_FIELDS`: "ignored" promises a job runs anyway, which is false
 #: for a governed field — it cannot reach a running job at all.
 #:
-#: THE TABLE IS NOW EMPTY, and is KEPT rather than deleted. The three NAG knobs
-#: were its last rows and they left with the NAG/VSF increment: their governor
-#: ``nag_enabled`` is no longer a 422, so a scale really does change the video
-#: and "governed" would have become the silent-drop the audit exists to catch.
+#: The table may be empty, and is KEPT rather than deleted when it is.
 #:
 #: Empty is a real state and a checkable one: the classification audit reads
 #: this table by name, ``test_every_governor_is_itself_refused`` iterates it (an
@@ -350,7 +291,7 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
 GOVERNED_FIELDS: dict[str, str] = {}
 
 # --------------------------------------------------------------------------- #
-# chain feature scope (§3-102 第1段: Chained本体)
+# chain feature scope
 # --------------------------------------------------------------------------- #
 #
 # THE SAME FOUR-WAY CLASSIFICATION as the single-``/generate`` table above,
@@ -369,26 +310,6 @@ GOVERNED_FIELDS: dict[str, str] = {}
 #: NO WHOLE MODE IS LEFT HERE. Every row is an engine-level feature the single
 #: path refuses for the same reason it refuses it there; ``outpaint`` has no
 #: counterpart at all, because the chain schema has no such field.
-#:
-#: ``source_video`` AND ``source_audio`` LEFT THIS TABLE with §3-102's second
-#: increment: V2V continuation and A2V (Single, long and Batch alike) run on
-#: this engine now, so both moved to :data:`CHAIN_HONOURED_FIELDS`. ``loras``
-#: and ``reference_video_id`` LEFT WITH THE THIRD: Style/character LoRA and the
-#: reference-video control IC-LoRA (long chains included) run here too.
-#: ``retake`` LEFT WITH §3-102's Retake increment — engine25's chain now
-#: freezes BOTH ends of a single window (``chain25.run_chain(retake=...)``), so
-#: the mode has a code path and moved to :data:`CHAIN_HONOURED_FIELDS`.
-#: ``end_source`` LEFT WITH THE END-SOURCE INCREMENT, the LAST chain MODE to do
-#: so: engine25 runs the layout's own stage-1 SCHEDULE now
-#: (``chain25.run_chain(end_source=...)`` — reverse order on 2+ clips without a
-#: start source, plain forward order under ``bridge`` when one is present) and
-#: freezes the material's band at the timeline's tail in both stages. With it
-#: gone, every chain mode the schema can express has a code path here.
-#: ``nag_enabled`` LEFT WITH THE NAG/VSF INCREMENT, the chain twin of the
-#: single-path move and on the strongest form of its argument: the patch is
-#: installed per transformer BUILD and a chain is the path with the most builds,
-#: while the negative prompt is encoded once per job by a prompt encoder a chain
-#: calls once. Nothing about it was ever chain-shaped.
 CHAIN_REJECT_TABLE: tuple[
     tuple[str, str, Callable[[GenerateChainRequest], bool]], ...
 ] = (
@@ -396,24 +317,18 @@ CHAIN_REJECT_TABLE: tuple[
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
 )
 
-#: The ignore-and-log half. Field-for-field the same two as
+#: The ignore-and-log half. Field-for-field the same as
 #: :data:`IGNORED_FIELDS` and for the same one reason (the distilled schedule
 #: has no CFG and no step count to honour) — spelled out rather than aliased so
 #: the audit test reads one schema against one table.
-#:
-#: The three negative-prompt fields LEFT THIS TABLE with the NAG/VSF increment,
-#: the chain twin of the single-path move: they are the feature now.
-#:
-#: The two acceleration knobs LEFT THIS TABLE with 高速化第1弾 (§3-102), the
-#: chain twin of the single-path move: engine25 really runs both code paths now,
-#: on every build a chain makes, so both are in :data:`CHAIN_HONOURED_FIELDS`.
 CHAIN_IGNORED_FIELDS: dict[str, str] = {
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
-    "num_inference_steps": "the distilled schedule is fixed at 8 + 3 sigmas",
+    "num_inference_steps": "the distilled schedule has a fixed step count",
 }
 
-#: Fields the chain path ACTS ON. Eight ride the worker payload verbatim and
-#: three more ride it as additive acceleration flags (see
+#: Fields the chain path ACTS ON. The scalar settings ride the worker payload
+#: verbatim (``stage2_window`` only when it differs from the default) and the
+#: acceleration and residency flags ride it as additive keys (see
 #: :meth:`_RealBackend25.generate_chain`), ``prompt`` and ``clips`` together
 #: become the per-clip list (effective prompt / num_frames / clip-0 images), and
 #: ``crop_output`` is the app-side ffmpeg centre-crop applied to the finished
@@ -428,57 +343,50 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #:
 #: ``num_inference_steps`` is deliberately NOT here even though the payload
 #: carries a ``num_steps`` key built from it: the distilled schedule is fixed,
-#: so the engine records the number in metadata and denoises 8 + 3 steps
-#: regardless. "Honoured" would claim it changes the output; it does not.
+#: so the engine records the number in metadata and denoises its fixed distilled
+#: schedule regardless (the reason text is in :data:`CHAIN_IGNORED_FIELDS`).
+#: "Honoured" would claim it changes the output; it does not.
 #:
-#: ``loras`` / ``reference_video_id`` AND THEIR TWO STRENGTHS JOINED THIS SET
-#: with §3-102's third increment, for the same reason and in the same shape as
-#: the single path's :data:`HONOURED_FIELDS`: the orchestrator resolves the
-#: adapter names and the upload id into material, and the payload carries the
-#: additive ``loras`` / ``reference_video`` blocks below. A long reference is
-#: sliced per stage-1 segment by the ENGINE; the app recomputes the same windows
-#: from ``chain_math`` for metadata, so nothing about that geometry is decided
-#: here.
+#: ``loras`` / ``reference_video_id`` and their two strengths are honoured for
+#: the same reason and in the same shape as the single path's
+#: :data:`HONOURED_FIELDS`: the orchestrator resolves the adapter names and the
+#: upload id into material, and the payload carries the additive ``loras`` /
+#: ``reference_video`` blocks below. A long reference is sliced per stage-1
+#: segment by the ENGINE; the app recomputes the same windows from
+#: ``chain_math`` for metadata, so nothing about that geometry is decided here.
 #:
-#: ``block_swap_prefetch`` / ``fused_gguf_dequant_kernel`` JOINED WITH 高速化
-#: 第1弾 (§3-102), for the same reason as on the single path — and the chain is
-#: where the prefetch work is actually visible, because a chain rebuilds the
-#: transformer once per stage and the engine now re-arms the prefetch engine on
-#: every one of those builds.
+#: ``block_swap_prefetch`` / ``fused_gguf_dequant_kernel``: the same reason as
+#: on the single path — and the chain is where the prefetch work is actually
+#: visible, because a chain rebuilds the transformer once per stage and the
+#: engine re-arms the prefetch engine on every one of those builds.
 #:
-#: ``keep_resident`` JOINED WITH 高速化第2弾, the chain twin of the single-path
-#: move, and with the same warning attached: THE CONTRACT is 2.3's verbatim (key
-#: only when asked for, absent key = release, echo back what happened) but THE
-#: IMPLEMENTATION IS A DIFFERENT THING — 2.3 holds every sub-model's skeleton,
-#: 2.5 holds ONE state dict, the Gemma 4 text encoder's ~7.7 GiB. Default OFF.
-#: A chain builds the text encoder once per JOB just as a single job does, so
-#: what is saved here is likewise the SECOND job's rebuild, not anything inside
-#: the chain itself.
+#: ``keep_resident``, with the same warning as on the single path: THE CONTRACT
+#: is 2.3's verbatim (key only when asked for, absent key = release, echo back
+#: what happened) but THE IMPLEMENTATION IS A DIFFERENT THING — 2.3 holds every
+#: sub-model's skeleton, 2.5 holds ONE state dict, the Gemma 4 text encoder's
+#: (size: Videomni_Backend_Specification.md §6.10 (d)). Its default follows
+#: ``KEEP_RESIDENT_DEFAULT`` (api/models.py). A chain builds the text encoder
+#: once per JOB just as a single job does, so what is saved here is likewise
+#: the SECOND job's rebuild, not anything inside the chain itself.
 #:
-#: ``keep_resident_embeddings`` JOINED WITH §3-114, the chain twin of the
-#: single-path move and with the same reading: what it saves is the NEXT job's
-#: rebuild of the EmbeddingsProcessor, because a chain builds that component
-#: once per JOB exactly as a single generate does. Same additive contract as
-#: ``keep_resident`` beside it, and the same independence — two switches, two
-#: objects, two RAM costs that add.
+#: ``keep_resident_embeddings``, with the same reading as on the single path:
+#: what it saves is the NEXT job's rebuild of the EmbeddingsProcessor, because
+#: a chain builds that component once per JOB exactly as a single generate
+#: does. Same additive contract as ``keep_resident`` beside it, and the same
+#: independence — two switches, two objects, two RAM costs that add.
 #:
-#: IT IS ALSO THE FIRST FIELD IN THIS SET THAT NEVER SAT IN
-#: :data:`CHAIN_REJECT_TABLE`: the component it names exists only on this
-#: engine, so the refusal it produces is LTX 2.3's, not this engine's.
+#: The component it names exists only on this engine, so the refusal it
+#: produces is LTX 2.3's, not this engine's.
 #:
-#: ``attention_backend`` JOINED WITH 高速化第3弾, the chain twin of the
-#: single-path move and with the same contract: the key rides only when the
-#: request asked for something other than ``"sdpa"``, and the worker echoes what
-#: ran. A chain is where the wrapper's lifetime matters most — it rebuilds the
-#: transformer once per stage, and every one of those builds strips the previous
-#: job's wrapper before installing a fresh one, so the echo a chain returns is a
-#: fold over every build it made ("sage->sdpa" when one of them fell back).
+#: ``attention_backend``, with the same contract as on the single path: the
+#: key rides only when the request asked for something other than ``"sdpa"``,
+#: and the worker echoes what ran. A chain is where the wrapper's lifetime
+#: matters most — it rebuilds the transformer once per stage, and every one of
+#: those builds strips the previous job's wrapper before installing a fresh
+#: one, so the echo a chain returns is a fold over every build it made
+#: ("sage->sdpa" when one of them fell back).
 #:
-#: THE SEVEN NEGATIVE-PROMPT FIELDS JOINED WITH THE NAG/VSF INCREMENT, the chain
-#: twin of the single-path move and from the same three tables at once
-#: (``nag_enabled`` from the reject table, the prompt/method/vsf_scale trio from
-#: the ignore table, the three NAG knobs from :data:`CHAIN_GOVERNED_FIELDS`,
-#: which that emptied). All seven are plain ``chain.<field>`` reads riding the
+#: The seven negative-prompt fields are plain ``chain.<field>`` reads riding the
 #: additive ``nag`` block, key for key as on the single path and as on 2.3.
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
     {
@@ -487,7 +395,7 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "width",
         "height",
         "crop_output",
-        # 台帳 §3-164: see the same entry in :data:`HONOURED_FIELDS`.
+        # See the same entry in :data:`HONOURED_FIELDS`.
         "embed_mp4_metadata",
         "frame_rate",
         "seed",
@@ -540,76 +448,41 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
 #: in :data:`CHAIN_REJECT_TABLE`, so a request that could make one of them
 #: matter is already refused before this field is read.
 #:
-#: THE TWO REFERENCE STRENGTHS LEFT THIS TABLE with §3-102's third increment,
-#: the chain twin of the single-path move: their governor is no longer a 422, so
-#: "governed" would now be a promise that they cannot reach a running job — and
-#: they can.
-#:
-#: THE TABLE IS NOW EMPTY, for the reason :data:`GOVERNED_FIELDS` is: the three
-#: NAG knobs were its last rows and their governor stopped being a 422 with the
-#: NAG/VSF increment. Kept rather than deleted for the same reasons — the audit
-#: reads it by name, the governor test's loop is honestly empty, and a future
-#: sub-parameter behind a future 422 has an obvious home.
+#: Kept even when empty, for the same reasons as :data:`GOVERNED_FIELDS` — the
+#: audit reads it by name, the governor test's loop passes when it is empty,
+#: and a future sub-parameter behind a future 422 has an obvious home.
 CHAIN_GOVERNED_FIELDS: dict[str, str] = {}
 
 
-#: Everything GET /models publishes as this engine's ``unsupported_features``
-#: (§3-98 Phase 5). The request-field features come from :data:`REJECT_TABLE`
-#: so the two can never disagree; the four chain-family MODE names are added
-#: because they are not single-request FIELDS at all, and the frontend needs
-#: their names to grey out the Edit tab and the Chained tab's mode panels.
-#:
-#: ``"chain"`` LEFT THIS TUPLE with §3-102's first increment (a plain Chained
-#: job runs on this engine, so publishing "no chain" would grey out a tab that
-#: works), and ``"v2v"`` / ``"a2v"`` left with the second: V2V continuation and
-#: A2V run here too, which also lights the Single tab's A2V accordion and the
-#: Batch tab's A2V rows, because the frontend greys all three by these names.
-#: ``"loras"`` and ``"reference_video"`` left with the THIRD increment, which
-#: re-opens the LoRA chips and the reference-video panel on both tabs.
-#: ``"sage_attention"`` left with 高速化第3弾, which un-greys the Settings
-#: panel's attention control — the last acceleration name this engine published.
-#: ``"retake"`` LEFT WITH THE RETAKE INCREMENT, which un-greys the Edit tab's
-#: 撮り直し sub-tab (and with it the timeline's right-click route into it).
-#: ``"end_source"`` LEFT WITH THE END-SOURCE INCREMENT, which un-greys the
-#: Chained tab's 素材（末尾） panel — and it was the LAST chain-family MODE name
-#: here, which is why nothing is prepended any more: what this tuple publishes
-#: is now exactly :data:`REJECT_TABLE`'s features, because the chain half of
-#: the ruling has no mode of its own left to add.
-#: ``"outpaint"`` LEFT WITH THE OUTPAINTING INCREMENT, which un-greys the Edit
-#: tab's 画角拡張 sub-tab — the LAST MODE of any kind this engine published.
-#: ``"nag"`` LEFT WITH THE NAG/VSF INCREMENT, which un-greys the negative-prompt
-#: panel on the Single and Chained tabs (and with it the method switch and the
-#: three NAG knobs behind it).
-#: ``"inpaint"`` ARRIVED WITH THE INPAINTING INCREMENT (2026-09-14) — the only
-#: name ever to enter this tuple — and LEFT AGAIN WITH 台帳 §3-150
-#: (2026-09-15), which un-greys the Edit tab's Inpainting sub-tab: the engine
-#: runs the masked two-stage workflow now (``engine25/inpaint25.py``), so
-#: publishing the name would grey a sub-tab that works. What is left is TWO
-#: engine-level feature names, and no mode of any kind:
-#: ``two_stage_hq`` / ``prune_vaed``.
+#: Everything GET /models publishes as this engine's ``unsupported_features``.
+#: The request-field features come from :data:`REJECT_TABLE` so the two can
+#: never disagree, and nothing is added to them: the published names are
+#: exactly :data:`REJECT_TABLE`'s feature column. The frontend greys tabs and
+#: panels by these names.
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     feature for _field, feature, _pred in REJECT_TABLE
 )
 
 
 def reject_unsupported(request: GenerateRequest) -> None:
-    """422 the first v1-out-of-scope field of ``request`` (§3-98 P3b).
+    """422 the first out-of-scope field of ``request``.
 
     Called from :meth:`_RealBackend25.generate` — the adapter is the SOURCE OF
     TRUTH for what this engine can run, so the ruling lives next to the engine
-    rather than in the endpoint. Phase 5 additionally calls it at the API layer
-    so a rejection costs no worker round-trip and no job record; wiring it there
+    rather than in the endpoint. The API layer also calls it
+    (``services.engines.reject_unsupported`` from api/generate.py) so a
+    rejection costs no worker round-trip and no job record; calling it there
     changes nothing about the answer, only how early it arrives.
 
-    First offender wins. Listing all of them would read as "fix these five
-    things" when in practice one control was left on.
+    First offender wins. Listing all of them would read as "fix all of these"
+    when in practice one control was left on.
     """
     for field, feature, is_non_default in REJECT_TABLE:
         if is_non_default(request):
             raise feature_unsupported(
                 feature,
                 detail=(
-                    f"LTX 2.5(v1)は{feature}に対応していません"
+                    f"LTX 2.5は{feature}に対応していません"
                     f"(リクエストの{field}が既定値ではありません)。"
                     "この機能を使うにはベースモデルに「LTX 2.3」を選んでください。"
                 ),
@@ -617,18 +490,14 @@ def reject_unsupported(request: GenerateRequest) -> None:
 
 
 def reject_chain(request: GenerateChainRequest) -> None:
-    """422 the first out-of-scope field of a chain ``request`` (§3-102).
+    """422 the first out-of-scope field of a chain ``request``.
 
-    UNTIL §3-102 THIS TOOK NO ARGUMENT and refused every chain outright, on the
-    grounds that nothing in the body could make this engine able to chain. That
-    is no longer true: a plain Chained job runs here now, and what is left out
-    of scope is decided FIELD BY FIELD, exactly like the single path. So the
-    request has to be read. (Retake, End source, the acceleration knobs and —
-    since the NAG/VSF increment — the negative prompt have all since left the
-    table; what it still refuses is the two engine-level fields below.)
+    What is out of scope for a chain is decided FIELD BY FIELD, exactly like
+    the single path, so the request has to be read. The refused fields are
+    listed in :data:`CHAIN_REJECT_TABLE`.
 
     Same first-offender-wins rule and same table discipline as
-    :func:`reject_unsupported`; see :data:`CHAIN_REJECT_TABLE`.
+    :func:`reject_unsupported`.
 
     Lives at module level (like :func:`reject_unsupported`) so the API layer can
     refuse before a job record is created, while the backend method keeps it as
@@ -650,9 +519,9 @@ def _log_ignored(request, table: dict[str, str] | None = None) -> None:
     """ONE log line naming every ignored field this request actually SET.
 
     Only non-default values are named: a default-valued field was not a choice
-    the user made, and reporting all five on every job would train the reader
-    to skip the line. The default comes from the schema itself
-    (``model_fields[...].default``) rather than a transcribed copy, so a
+    the user made, and reporting every entry of the ignore table on every job
+    would train the reader to skip the line. The default comes from the schema
+    itself (``model_fields[...].default``) rather than a transcribed copy, so a
     changed default cannot make this lie.
 
     ``table`` selects which of the two ignore tables to read
@@ -767,21 +636,16 @@ class _RealBackend25(_RealBackend):
         unbuffered IO, and PYTHONPATH pinned to the project root so
         ``python -m engine25.worker`` resolves the first-party package.
 
-        ``PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`` used to be set here
-        as a fourth item, described as "the expandable-segments allocator (16GB
-        is the whole point)". That description was wrong and the line is now
-        GONE. Its removal cannot change behaviour, because the option never took
-        effect on this platform: torch refuses it on Windows ("expandable_segments
-        not supported on this platform") and keeps the segmented caching
-        allocator, measured on torch 2.9.1 — see
-        ``outputs/b4-vram-diag/probe_expandable.py``. torch 2.9 additionally
-        deprecates the variable's NAME in favour of ``PYTORCH_ALLOC_CONF``. The
-        fragmentation it was supposed to prevent is dealt with where it actually
-        happens instead: the arena ring in
-        ``engine/transformer/block_swap_prefetch.py``. Note also that the parent's
-        own environment still passes through (``dict(os.environ)`` below), so an
-        operator who exports the variable by hand is not overridden — what stops
-        is this adapter asserting a setting that does nothing.
+        ``PYTORCH_CUDA_ALLOC_CONF`` is deliberately not set. The
+        ``expandable_segments:True`` option has no effect on this platform:
+        torch refuses it on Windows ("expandable_segments not supported on this
+        platform") and keeps the segmented caching allocator (measured on torch
+        2.9.1; see Docs/VERIFICATION_LOG.md §75.7 and §89.3), and torch 2.9
+        deprecates the variable's NAME in favour of ``PYTORCH_ALLOC_CONF``.
+        Fragmentation is dealt with where it happens: the arena ring in
+        ``engine/transformer/block_swap_prefetch.py``. The parent's own
+        environment passes through (``dict(os.environ)`` below), so an operator
+        who exports the variable by hand is not overridden.
         """
         env = dict(os.environ)
         env["TORCH_COMPILE_DISABLE"] = "1"
@@ -804,11 +668,12 @@ class _RealBackend25(_RealBackend):
     def _build_load_payload(self, selection: dict[str, str] | None = None) -> dict:
         """Build the ``{"op": "load"}`` payload engine25's worker expects (pure).
 
-        The five weight paths come from the base-model descriptor exactly as
+        The four category paths come from the base-model descriptor exactly as
         2.3's do — a selection override wins, otherwise the category's
         ``default_file`` — with :data:`SELECTION_FIELDS` again read rather than
         transcribed, so a category missing from that table cannot reach the
-        worker at all.
+        worker at all. The spatial upsampler is a fixed descriptor asset
+        (:data:`REQUIRED_ASSETS`) and takes no override.
 
         NOT SENT: ``text_encoder_assets_path``. The assets-only safetensors
         export (the ~30MB metadata twin the official ``GemmaAssets.load`` opens
@@ -820,7 +685,7 @@ class _RealBackend25(_RealBackend):
         for a deployment that keeps the two apart.
 
         Key set AND insertion order are the byte contract, pinned by the golden
-        snapshot in tests/test_ltx25_load_payload.py — do not reorder.
+        snapshot in tests/test_ltx25_adapter.py — do not reorder.
         """
         selection = selection or {}
         swapped = {
@@ -841,14 +706,17 @@ class _RealBackend25(_RealBackend):
             # The 16GB ladder's current rung. ``or`` (not a None check) matches
             # the 2.3 adapter: 0 means "unset" in this setting, not "zero blocks".
             "blocks_on_gpu": self.low_vram.block_swap_blocks_on_gpu or DEFAULT_BLOCKS_ON_GPU,
-            # +14.7GB of host RAM to avoid re-reading the transformer from disk
-            # for stage 2 (the official pipeline disposes the stage-1 weights,
-            # meta-ing the buffers). Owner ruling H改: on by default, with the
-            # RAM requirement documented; a RAM-tight machine turns it off.
+            # Keeps the transformer weights in host RAM so stage 2 does not
+            # re-read them from disk (the official pipeline disposes the stage-1
+            # weights, meta-ing the buffers). The RAM cost is in
+            # Videomni_Backend_Specification.md §6.10 (e). Always sent as True:
+            # the app exposes no setting for it (the worker's own
+            # ``--no-cache-weights`` is for standalone runs).
             "cache_weights": True,
             # cuDNN algorithm selection pinned, so a same-seed rerun is
-            # bit-identical (the audio vocoder is what varies otherwise). The
-            # determinism gate H6 rests on this being ON by default.
+            # bit-identical (the audio vocoder is what varies otherwise). Always
+            # sent as True; the same-seed determinism check in
+            # Docs/VERIFICATION_LOG.md §69.14 depends on it.
             "deterministic": True,
         }
 
@@ -867,43 +735,40 @@ class _RealBackend25(_RealBackend):
         inpaint_source_path: Path | None = None,
         inpaint_mask_path: Path | None = None,
     ) -> GenerationOutcome:
-        """One two-stage T2V/I2V generation, with Style / IC-LoRA (§3-102).
+        """One two-stage T2V/I2V generation, with Style / IC-LoRA, Outpainting
+        and Inpainting.
 
-        ``lora_paths`` and ``reference_video_path`` ARE ACTED ON since §3-102's
-        third increment: the orchestrator resolved the adapter names into
-        safetensors files and the upload id into a path, and both ride the
-        payload in 2.3's shape (see the ``loras`` / ``reference_video`` keys
-        below).
+        ``lora_paths`` and ``reference_video_path`` ARE ACTED ON: the
+        orchestrator resolved the adapter names into safetensors files and the
+        upload id into a path, and both ride the payload in 2.3's shape (see the
+        ``loras`` / ``reference_video`` keys below).
 
-        ``outpaint_source_path`` IS ACTED ON since the Outpainting increment
-        (§3-102), and it is the one argument whose meaning is not obvious from
-        its name: it is the ORIGINAL upload, not the material the engine
-        extends. By the time the orchestrator calls this it has already built
-        the green canvas and substituted it for ``reference_video_path``, so
-        the canvas is what the IC-LoRA conditions on; the source travels
-        separately because the canvas is written WITHOUT an audio stream on
-        purpose, and the clip's own waveform is what the finished mp4 carries.
-        It rides the ``outpaint`` block below, whose mere PRESENCE is what
-        routes the worker to the two-stage outpaint driver.
+        ``outpaint_source_path`` IS ACTED ON, and it is the one argument whose
+        meaning is not obvious from its name: it is the ORIGINAL upload, not the
+        material the engine extends. By the time the orchestrator calls this it
+        has already built the green canvas and substituted it for
+        ``reference_video_path``, so the canvas is what the IC-LoRA conditions
+        on; the source travels separately because the canvas is written WITHOUT
+        an audio stream on purpose, and the clip's own waveform is what the
+        finished mp4 carries. It rides the ``outpaint`` block below, whose mere
+        PRESENCE is what routes the worker to the two-stage outpaint driver.
 
-        ``inpaint_source_path`` / ``inpaint_mask_path`` ARE ACTED ON since 台帳
-        §3-150, where they stopped being the two arguments this engine accepted
-        and never read. They are the orchestrator's two extra paths for an
-        inpaint job and the canvas cannot supply either: the CUT WINDOW
-        (``_inpaint_window.mp4`` — the source size is ffprobed from it and its
-        waveform is what the finished mp4 carries, because the canvas is written
-        without an audio stream on purpose) and the MASK VIDEO the engine
-        decodes for the blend. Both ride the ``inpaint`` block below, whose mere
-        PRESENCE routes the worker to ``engine25.inpaint25.run_inpaint``. The
-        canvas itself rides where it always did — ``reference_video_path``, which
-        the orchestrator has already substituted — so the IC-LoRA plumbing needs
-        no notion of inpainting at all.
+        ``inpaint_source_path`` / ``inpaint_mask_path`` ARE ACTED ON. They are
+        the orchestrator's two extra paths for an inpaint job and the canvas
+        cannot supply either: the CUT WINDOW (``_inpaint_window.mp4`` — the
+        source size is ffprobed from it and its waveform is what the finished
+        mp4 carries, because the canvas is written without an audio stream on
+        purpose) and the MASK VIDEO the engine decodes for the blend. Both ride
+        the ``inpaint`` block below, whose mere PRESENCE routes the worker to
+        ``engine25.inpaint25.run_inpaint``. The canvas itself rides in
+        ``reference_video_path``, which the orchestrator has already
+        substituted — so the IC-LoRA plumbing needs no notion of inpainting at
+        all.
 
-        ``crop_output`` IS honoured, and is the one v1-scope decision worth
-        naming: it is an ffmpeg centre-crop the app performs on the finished
-        mp4, so it is engine-independent and a 2.5 job gets the same non-64
-        display sizes a 2.3 job does. Silently dropping it would have been the
-        easy mistake.
+        ``crop_output`` IS honoured: it is an ffmpeg centre-crop the app
+        performs on the finished mp4, so it is engine-independent and a 2.5 job
+        gets the same non-64 display sizes a 2.3 job does. Silently dropping it
+        is the easy mistake.
         """
         if not self.loaded:
             self.load()
@@ -936,7 +801,7 @@ class _RealBackend25(_RealBackend):
         if progress_callback:
             progress_callback(None, None, 0.05)
 
-        # Style/character AND control IC-LoRA (§3-102 third increment), in 2.3's
+        # Style/character AND control IC-LoRA, in 2.3's
         # shape verbatim — ``_lora_payload_entry`` is IMPORTED from the 2.3
         # adapter rather than restated, because the (path, strength[,
         # audio_strength]) triple is the app's contract with a resolved adapter,
@@ -949,7 +814,7 @@ class _RealBackend25(_RealBackend):
         # defensive re-check at the runner hop, exactly as on 2.3. The reference
         # ``strength`` defaults to 1.0 (official guidance) and
         # ``attention_strength`` is spliced in ONLY when the request set it, so
-        # an omitted-field job's block stays byte-identical.
+        # an omitted-field job's block carries no ``attention_strength`` key.
         loras_payload = [_lora_payload_entry(lp) for lp in lora_paths]
         if reference_video_path is not None:
             reference_payload: dict | None = {
@@ -968,9 +833,10 @@ class _RealBackend25(_RealBackend):
         else:
             reference_payload = None
 
-        # The v1 contract, whole. Fields this engine ignores are NOT forwarded:
-        # they were already logged above, and a payload that carries only what
-        # is acted upon is a payload a golden snapshot can pin.
+        # The base payload; the blocks below append to it. Fields this engine
+        # ignores are NOT forwarded: they were already logged above, and a
+        # payload that carries only what is acted upon is a payload a golden
+        # snapshot can pin.
         payload: dict = {
             "op": "generate",
             "prompt": request.prompt,
@@ -984,45 +850,40 @@ class _RealBackend25(_RealBackend):
             "reference_video": reference_payload,
             "output_path": str(target),
         }
-        # Acceleration (additive, 高速化第1弾): each key rides ONLY when the
-        # request asked for it, so a payload with either knob turned off stays
-        # byte-identical to the pre-acceleration golden. Both pydantic defaults
-        # are True, so a plain job carries both — an omitted key means off on
-        # the worker side, which is 2.3's contract restated verbatim
-        # (services/engines/ltx/adapter.py). Written as a literal
-        # ``request.<field>`` read on purpose: the needle table in
-        # tests/test_ltx25_adapter.py proves an honoured field is really read by
-        # searching this function's source for exactly that text.
+        # Acceleration (additive): each key rides ONLY when the request asked
+        # for it, so a job with either knob turned off carries no key for it.
+        # Whether a plain job carries them is decided by the pydantic defaults
+        # (``BLOCK_SWAP_PREFETCH_DEFAULT`` / ``FUSED_GGUF_DEQUANT_KERNEL_DEFAULT``
+        # in api/models.py) — an omitted key means off on the worker side, which
+        # is 2.3's contract restated verbatim (services/engines/ltx/adapter.py).
+        # Written as a literal ``request.<field>`` read on purpose: the needle
+        # table in tests/test_ltx25_adapter.py proves an honoured field is
+        # really read by searching this function's source for exactly that text.
         if request.block_swap_prefetch:
             payload["block_swap_prefetch"] = True
         if request.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
-        # 高速化第2弾: the same additive contract once more, appended LAST so the
-        # 第1弾 key order above is untouched. This one's pydantic default is
-        # FALSE, so a plain job carries no key at all and the golden payload is
-        # byte-identical to what it was before this line existed — and an absent
+        # keep_resident: the same additive contract, appended after the keys
+        # above so their order does not move. The key rides only when True (the
+        # default is ``KEEP_RESIDENT_DEFAULT`` in api/models.py) — and an absent
         # key is not merely "not asked for", it is the RELEASE request the
         # worker acts on (2.3's contract, restated verbatim). What the engine
         # then holds is only the text encoder's state dict, not 2.3's whole set
         # of sub-model skeletons.
         if request.keep_resident:
             payload["keep_resident"] = True
-        # 高速化第3弾, appended LAST for the same reason each block before it
-        # was: the newest key goes at the end, so no existing key order moves.
-        # The pydantic default is "sdpa", so a plain job carries NO key and the
-        # golden payload is byte-identical to what it was before this line
-        # existed — which is what keeps the frozen-SHA evidence of every earlier
-        # increment valid. An absent key means "sdpa" on the worker side (2.3's
-        # contract restated verbatim), and the worker echoes back what actually
-        # ran rather than what was asked for.
+        # attention_backend, appended after the keys above so no existing key
+        # order moves. The key rides only when the request picks something
+        # other than "sdpa" (the pydantic default), so a plain job carries NO
+        # key. An absent key means "sdpa" on the worker side (2.3's contract
+        # restated verbatim), and the worker echoes back what actually ran
+        # rather than what was asked for.
         if request.attention_backend != "sdpa":
             payload["attention_backend"] = request.attention_backend
-        # Outpainting (§3-102), appended LAST for the same reason each block
-        # before it was: the newest key goes at the end, so no existing key
-        # order moves and every earlier increment's frozen-SHA evidence stays
-        # valid. The key is ABSENT from every non-outpaint job — the pydantic
-        # default is None and the frontend sends ``outpaint: null`` on a plain
-        # request — so those payloads stay byte-identical.
+        # Outpainting, appended after the blocks above so no existing key order
+        # moves. The key is ABSENT from every non-outpaint job: the pydantic
+        # default is None, and an omitted field and an explicit
+        # ``outpaint: null`` both arrive as None.
         #
         # ITS PRESENCE IS ALSO THE SWITCH that routes the worker to
         # ``engine25.outpaint25.run_outpaint`` instead of the plain generate,
@@ -1049,11 +910,11 @@ class _RealBackend25(_RealBackend):
                 "blend_dilation_stage2": op.blend_dilation_stage2,
                 "freeze_source_audio": op.freeze_source_audio,
             }
-        # Inpainting (台帳 §3-150), immediately after its sibling because the two
-        # are one mechanism seen from two sides — and MUTUALLY EXCLUSIVE, which
-        # the schema enforces and the worker asserts, so the two blocks can
-        # never both be present. Additive like every block before it: absent
-        # from every non-inpaint job, so their payloads stay byte-identical.
+        # Inpainting, immediately after its sibling because the two are one
+        # mechanism seen from two sides — and MUTUALLY EXCLUSIVE, which the
+        # schema enforces and the worker asserts, so the two blocks can never
+        # both be present. Additive like every block before it: absent from
+        # every non-inpaint job, so their payloads carry no ``inpaint`` key.
         #
         # It carries the geometry because the engine has to rebuild the canvas
         # arithmetic, and the two FILE PATHS the canvas cannot supply: the cut
@@ -1067,10 +928,9 @@ class _RealBackend25(_RealBackend):
         #
         # KEY FOR KEY 2.3's block (services/engines/ltx/adapter.py), same order
         # and the same three guards: one app-side contract per feature, not one
-        # per engine. Written out rather than shared with 2.3 for the reason the
-        # outpaint block above is — this theme does not touch the 2.3 adapter,
-        # and a common helper would be a change to a shipped engine's code path
-        # bought for nothing but line count.
+        # per engine. Written out rather than shared with 2.3, as the outpaint
+        # block above is: a common helper would change a shipped engine's code
+        # path for nothing but line count.
         if request.inpaint is not None:
             ip = request.inpaint
             # The source size is READ FROM THE FILE, not taken from the request,
@@ -1105,12 +965,10 @@ class _RealBackend25(_RealBackend):
                 "blend_dilation_stage1": ip.blend_dilation_stage1,
                 "blend_dilation_stage2": ip.blend_dilation_stage2,
             }
-        # The non-CFG negative prompt (NAG / VSF), appended LAST for the reason
-        # every block before it was: the newest key goes at the end, so no
-        # existing key order moves and every earlier increment's frozen-SHA
-        # evidence stays valid. ADDITIVE — the block rides only when the request
-        # actually enabled it, so a plain job's payload is byte-identical to what
-        # it was before this line existed.
+        # The non-CFG negative prompt (NAG / VSF), appended after the blocks
+        # above so no existing key order moves. ADDITIVE — the block rides only
+        # when the request actually enabled it, so a job without it carries no
+        # ``nag`` key.
         #
         # KEY FOR KEY 2.3's BLOCK, in 2.3's order (services/engines/ltx/adapter.py):
         # one app-side contract per feature, not one per engine, so an operator
@@ -1127,14 +985,13 @@ class _RealBackend25(_RealBackend):
             }
             payload["nag"]["method"] = request.neg_method
             payload["nag"]["vsf_scale"] = request.vsf_scale
-        # §3-114, appended LAST for the reason every block above it was: the
-        # newest key goes at the end, so no existing key order moves and every
-        # earlier increment's frozen-SHA evidence stays valid. Contract-for-
-        # contract ``keep_resident``'s (pydantic default FALSE, so a plain job
-        # carries no key at all and the golden payload is byte-identical; an
-        # absent key is not silence but the RELEASE request the worker acts on),
-        # over a different object: the EmbeddingsProcessor's CPU state dict
-        # rather than the text encoder's. Written as a literal
+        # keep_resident_embeddings, appended after the blocks above so no
+        # existing key order moves. Contract-for-contract ``keep_resident``'s
+        # (the key rides only when True — the default is
+        # ``KEEP_RESIDENT_EMBEDDINGS_DEFAULT`` in api/models.py — and an absent
+        # key is not silence but the RELEASE request the worker acts on), over
+        # a different object: the EmbeddingsProcessor's CPU state dict rather
+        # than the text encoder's. Written as a literal
         # ``request.keep_resident_embeddings`` read for the needle table's sake,
         # same as the blocks above.
         if request.keep_resident_embeddings:
@@ -1175,7 +1032,7 @@ class _RealBackend25(_RealBackend):
             peak_vram_mb=event.get("peak_vram_mb"),
             generation_mode=mode,
             backend=REAL_BACKEND_25,
-            # The acceleration relays engine25 HAS (高速化第1弾 and 第2弾): the
+            # The acceleration relays engine25 HAS: the
             # worker reports what actually happened, not what was asked for —
             # "off" / "on" / "on->off", the last being a degrade (no Triton, or a
             # build the prefetch engine could not be installed on).
@@ -1190,26 +1047,25 @@ class _RealBackend25(_RealBackend):
             # built would have echoed "on" too, but then no done event arrives,
             # so nothing is relayed at all (2.3 behaves identically).
             keep_resident_used=event.get("keep_resident_used"),
-            # §3-114: the EmbeddingsProcessor's own echo, on exactly the
+            # The EmbeddingsProcessor's own echo, on exactly the
             # two-value contract of the line above ("on"/"off", never
             # "on->off" -- there is no degrade path here either). Separate from
             # ``keep_resident_used`` because the two switches are separate: a
             # job can hold one object resident and release the other.
             keep_resident_embeddings_used=event.get("keep_resident_embeddings_used"),
-            # 台帳 §3-131: ``vae_mode_used`` used to stay None here -- it named
-            # 2.3's PrunaVAED knob, which this engine does not have. It is
-            # REPURPOSED now as this engine's OWN decoder-name echo ("diff" /
-            # "conv"), a different question with a different vocabulary from
-            # 2.3's "off"/"on"/"on->off". ``ltx25`` is this engine's own
-            # additive facts (encode_fps/video_chunks/tiling/size_bytes/phases,
-            # or the outpaint superset) -- absent on 2.3 and on the mock, so
-            # it stays ``None`` there. ``vae_mode_used`` is ``None`` only on
-            # the mock, though: on 2.3 it is the PrunaVAED echo, not absent.
-            # Same ``.get`` discipline as the relays above: a worker that
-            # never spoke leaves None.
+            # ``vae_mode_used`` is this engine's OWN decoder-name echo ("diff" /
+            # "conv"): this engine has no PrunaVAED knob, and the echo answers a
+            # different question with a different vocabulary from 2.3's
+            # "off"/"on"/"on->off". ``ltx25`` is this engine's own additive facts
+            # (encode_fps/video_chunks/tiling/size_bytes/phases, or the larger
+            # block ``outpaint25._ltx25_block`` builds for an outpaint or inpaint
+            # job) -- absent on 2.3 and on the mock, so it stays ``None`` there.
+            # ``vae_mode_used`` is ``None`` only on the mock, though: on 2.3 it
+            # is the PrunaVAED echo, not absent. Same ``.get`` discipline as the
+            # relays above: a worker that never spoke leaves None.
             vae_mode_used=event.get("vae_mode_used"),
             ltx25=event.get("ltx25"),
-            # 台帳 §3-150: the inpaint job's own facts, relayed verbatim. THIS
+            # The inpaint job's own facts, relayed verbatim. THIS
             # LINE IS THE ONLY ROUTE ``mask_proof`` TAKES TO metadata.json —
             # ``services/pipeline_manager.py`` writes ``metadata["inpaint"] =
             # {**outcome.inpaint, **provenance}``, and without the relay the
@@ -1219,12 +1075,11 @@ class _RealBackend25(_RealBackend):
             # other job, including outpaint: ``.get`` is the honest answer for a
             # key that is absent by design.
             inpaint=event.get("inpaint"),
-            # 高速化第3弾: attention_used is no longer the hard-coded "sdpa" it
-            # was while this engine's scope excluded sage. It is the worker's
-            # own echo now — "sdpa", "sage", or "sage->sdpa" for a build that
-            # asked for sage and could not have it — so a degrade is visible in
-            # metadata.json rather than assumed. ``.get`` for the same reason as
-            # the three above: a worker that never spoke leaves None.
+            # attention_used is the worker's own echo — "sdpa", "sage", or
+            # "sage->sdpa" for a build that asked for sage and could not have
+            # it — so a degrade is visible in metadata.json rather than assumed.
+            # ``.get`` for the same reason as the relays above: a worker that
+            # never spoke leaves None.
             attention_used=event.get("attention_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
@@ -1255,12 +1110,9 @@ class _RealBackend25(_RealBackend):
         and must not: the ORCHESTRATOR's job is to prepare material, the
         ADAPTER's job is to rule on it.
 
-        NONE of those keywords names a mode outside this engine's scope any
-        more. Until the End-source increment three of them did, and a
-        non-``None`` arrival raised a loud ``RuntimeError`` because it could
-        only mean the reject table and this signature had drifted apart. With
-        that mode implemented the guard had nothing left to guard, so it was
-        REMOVED rather than left standing as a branch no request can reach.
+        None of those keywords names a mode outside this engine's scope; the
+        request fields this engine refuses are ruled on by
+        ``CHAIN_REJECT_TABLE``, not by this signature.
 
         HONOURED, and worth naming: ``clip0_conditioning_paths`` (clip 0's I2V
         keyframes — the only clip the schema lets carry them) and
@@ -1268,37 +1120,39 @@ class _RealBackend25(_RealBackend):
         which is engine-independent for a chain exactly as it is for a single
         job.
 
-        ALSO HONOURED SINCE §3-102's SECOND INCREMENT: ``source_tail_path`` +
+        ALSO HONOURED: ``source_tail_path`` +
         ``source_context_frames`` (V2V continuation) and ``source_audio_path``
         (A2V). All three are material the ORCHESTRATOR prepared — the tail cut
         to the requested fps, the uploaded wav — and they ride the payload as
         the additive ``source`` / ``audio_source`` blocks below, in 2.3's shape
         so the two engines' chain payloads stay comparable.
 
-        ALSO HONOURED SINCE THE THIRD: ``lora_paths`` (Style/character and
+        ALSO HONOURED: ``lora_paths`` (Style/character and
         control adapters, applied uniformly across the chain) and
         ``reference_video_path`` (the ONE reference video, sliced per stage-1
         segment by the engine). Both ride as ADDITIVE blocks — non-empty /
-        non-``None`` only — so a plain chain's payload stays byte-identical to
-        the golden, which is 2.3's discipline for the same two keys.
+        non-``None`` only — so a plain chain carries neither key
+        (``GOLDEN_CHAIN_KEYS_25`` + ``GOLDEN_ACCEL_KEYS_25`` in
+        tests/test_ltx25_adapter.py pin a plain chain's key set and order),
+        which is 2.3's discipline for the same two keys.
 
-        ALSO HONOURED SINCE THE RETAKE INCREMENT: ``retake_window_path``, the
+        ALSO HONOURED: ``retake_window_path``, the
         frame-exact CFR window the orchestrator cut out of the user's material
         (``video_io.cut_window_mp4``). The glue widths ride with it off
         ``chain.retake``, in 2.3's block shape — the engine owns "what happens
         to those pixels", the app owns "which pixels", and neither engine cuts
         or resamples.
 
-        ALSO HONOURED SINCE THE END-SOURCE INCREMENT, and with it the LAST of
-        the thirteen: ``end_source_path`` / ``end_source_context_frames`` /
+        ALSO HONOURED: ``end_source_path`` / ``end_source_context_frames`` /
         ``end_source_strength``. The same division of labour once more — the
         orchestrator prepared the material (a cut video, or a still image it
         looped into one; always ``context_frames + 1`` frames at the request
         fps, which is the primer the causal VAE needs) and the engine decides
         what happens to those latents. ``end_source_strength`` is the one of
-        the three that is a KNOB rather than material, and ``None`` there
-        means the request left it at its default — a statement about the
-        schema, which is why it is resolved to 1.0 here and not in the engine.
+        the three that is a KNOB rather than material. The orchestrator passes
+        the schema's value (``EndSourceSpec.strength``); a ``None`` from a
+        caller that omits the keyword falls back to 1.0 here, so the engine
+        never sees ``None``.
         """
         chain = chain_request
         # BEFORE the load, unlike :meth:`generate`. The ruling is a pure read of
@@ -1351,7 +1205,8 @@ class _RealBackend25(_RealBackend):
         # key set would make the two engines' chain metadata incomparable.
         #
         # ``num_steps`` rides even though the distilled schedule is fixed — the
-        # engine records it in metadata and denoises 8 + 3 regardless, which is
+        # engine records it in metadata and denoises the fixed schedule
+        # regardless (the reason text is in ``CHAIN_IGNORED_FIELDS``), which is
         # why num_inference_steps is classified ignore-and-log, not honoured.
         payload: dict = {
             "op": "generate_chain",
@@ -1367,9 +1222,10 @@ class _RealBackend25(_RealBackend):
             "clips": clips_payload,
         }
         # V2V continuation (additive): the app-cut fps-correct source tail. The
-        # ``is not None`` guard on BOTH values is what keeps a plain chain's
-        # payload key set byte-identical to the golden above — the same
-        # discipline, and the same key names and key ORDER, as 2.3's.
+        # ``is not None`` guard on BOTH values is what keeps a plain chain free
+        # of a ``source`` key (``GOLDEN_CHAIN_KEYS_25`` + ``GOLDEN_ACCEL_KEYS_25``
+        # in tests/test_ltx25_adapter.py pin a plain chain's key set and order) —
+        # the same discipline, and the same key names and key ORDER, as 2.3's.
         if source_tail_path is not None and source_context_frames is not None:
             payload["source"] = {
                 "path": str(source_tail_path),
@@ -1384,9 +1240,11 @@ class _RealBackend25(_RealBackend):
         # block shape (services/engines/ltx/adapter.py) key for key and in the
         # same key ORDER, because the two workers are unrelated code but a
         # retake's geometry is the same in both. The ``is not None`` guard on
-        # BOTH the path and the request block is what keeps a non-retake chain's
-        # payload key set byte-identical to the golden above — the same
-        # discipline as the two source blocks, and the same one 2.3 keeps.
+        # BOTH the path and the request block is what keeps a non-retake chain
+        # free of a ``retake`` key (``GOLDEN_CHAIN_KEYS_25`` +
+        # ``GOLDEN_ACCEL_KEYS_25`` in tests/test_ltx25_adapter.py pin a plain
+        # chain's key set and order) — the same discipline as the two source
+        # blocks, and the same one 2.3 keeps.
         if retake_window_path is not None and getattr(chain, "retake", None) is not None:
             payload["retake"] = {
                 "path": str(retake_window_path),
@@ -1400,7 +1258,9 @@ class _RealBackend25(_RealBackend):
         # (services/engines/ltx/adapter.py) key for key and in the same key
         # ORDER, for the reason the retake block above gives. The ``is not
         # None`` guard on BOTH values is what keeps a chain without an end
-        # source byte-identical to the golden, payload key set included.
+        # source free of an ``end_source`` key (``GOLDEN_CHAIN_KEYS_25`` +
+        # ``GOLDEN_ACCEL_KEYS_25`` in tests/test_ltx25_adapter.py pin a plain
+        # chain's key set and order).
         if end_source_path is not None and end_source_context_frames is not None:
             payload["end_source"] = {
                 "path": str(end_source_path),
@@ -1411,10 +1271,12 @@ class _RealBackend25(_RealBackend):
             }
         # Style/character AND control IC-LoRA (additive): (path, strength[,
         # audio_strength]) per adapter, applied uniformly across the chain, and
-        # sent ONLY when non-empty so a no-lora chain's payload is byte-identical
-        # to the golden above. ``preprocess`` is deliberately NOT part of an
-        # entry — it is derived once for the reference block below, and a control
-        # adapter without a reference is already refused at the API layer.
+        # sent ONLY when non-empty, so a no-lora chain carries no ``loras`` key
+        # (``GOLDEN_CHAIN_KEYS_25`` + ``GOLDEN_ACCEL_KEYS_25`` in
+        # tests/test_ltx25_adapter.py pin a plain chain's key set and order).
+        # ``preprocess`` is deliberately NOT part of an entry — it is derived once
+        # for the reference block below, and a control adapter without a
+        # reference is already refused at the API layer.
         if lora_paths:
             payload["loras"] = [_lora_payload_entry(lp) for lp in lora_paths]
         # Reference-video CONTROL IC-LoRA (additive): the ONE reference video,
@@ -1435,34 +1297,39 @@ class _RealBackend25(_RealBackend):
                     chain.conditioning_attention_strength
                 )
             payload["reference_video"] = reference_payload
-        # stage2_window: additive, sent ONLY when the request opted off
-        # "standard", so a default chain's payload stays byte-identical to the
-        # golden key set above (same contract as 2.3's).
+        # stage2_window: additive, sent ONLY when the request differs from
+        # ``chain_math.STAGE2_WINDOW_DEFAULT``, so a default chain carries no
+        # ``stage2_window`` key (same contract as 2.3's).
         if chain.stage2_window != chain_math.STAGE2_WINDOW_DEFAULT:
             payload["stage2_window"] = chain.stage2_window
-        # Acceleration (additive, 高速化第1弾): the same contract and the same
-        # literal-read discipline as the single path above, and LAST in the key
-        # order for the same reason 2.3 puts them last — every other additive
-        # block predates them, so appending keeps those blocks' orders untouched.
+        # Acceleration (additive): the same contract and the same literal-read
+        # discipline as the single path above. Each block's position in this
+        # function fixes its key's place in the payload; the conditional blocks
+        # above are absent from a default chain. The key set and order of a
+        # default chain are pinned by ``GOLDEN_CHAIN_KEYS_25`` +
+        # ``GOLDEN_ACCEL_KEYS_25`` in tests/test_ltx25_adapter.py.
         if chain.block_swap_prefetch:
             payload["block_swap_prefetch"] = True
         if chain.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
-        # 高速化第2弾, appended after the 第1弾 pair for the same reason they were
-        # appended after everything else: the newest block goes last, so no
-        # existing key order moves. Default FALSE, so a plain chain's payload is
-        # unchanged; an absent key is the release request, not silence.
+        # keep_resident, appended after the blocks above so no existing key
+        # order moves. The key rides only when True; the default is
+        # ``KEEP_RESIDENT_DEFAULT`` (api/models.py). An absent key is the release
+        # request, not silence. The key set of a default chain job is pinned by
+        # ``GOLDEN_CHAIN_KEYS_25`` + ``GOLDEN_ACCEL_KEYS_25`` in
+        # tests/test_ltx25_adapter.py.
         if chain.keep_resident:
             payload["keep_resident"] = True
-        # 高速化第3弾, appended last for the same reason as everything above it.
-        # Default "sdpa", so a plain chain's payload is unchanged; the key rides
-        # only when the user asked for something else, and an absent key is
-        # "sdpa" on the worker side rather than silence.
+        # attention_backend, appended after the blocks above for the same reason.
+        # Default "sdpa", so a plain chain carries no ``attention_backend`` key;
+        # the key rides only when the user asked for something else, and an
+        # absent key is "sdpa" on the worker side rather than silence.
         if chain.attention_backend != "sdpa":
             payload["attention_backend"] = chain.attention_backend
-        # The non-CFG negative prompt (NAG / VSF), appended last for the reason
-        # everything above it was, and byte-for-byte the single path's block on
-        # the chain schema — which is also 2.3's chain block, key for key.
+        # The non-CFG negative prompt (NAG / VSF), appended after the blocks
+        # above for the reason they were, and byte-for-byte the single path's
+        # block on the chain schema — which is also 2.3's chain block, key for
+        # key.
         if chain.nag_enabled:
             payload["nag"] = {
                 "negative_prompt": chain.negative_prompt,
@@ -1472,10 +1339,13 @@ class _RealBackend25(_RealBackend):
             }
             payload["nag"]["method"] = chain.neg_method
             payload["nag"]["vsf_scale"] = chain.vsf_scale
-        # §3-114, appended last for the reason everything above it was, and the
-        # chain twin of the single path's block key for key. Default FALSE, so a
-        # plain chain's payload is unchanged; an absent key is the release
-        # request, not silence.
+        # keep_resident_embeddings, appended last for the reason everything above
+        # it was, and the chain twin of the single path's block key for key. The
+        # key rides only when True; the default is
+        # ``KEEP_RESIDENT_EMBEDDINGS_DEFAULT`` (api/models.py). An absent key is
+        # the release request, not silence. The key set of a default chain job
+        # is pinned by ``GOLDEN_CHAIN_KEYS_25`` + ``GOLDEN_ACCEL_KEYS_25`` in
+        # tests/test_ltx25_adapter.py.
         if chain.keep_resident_embeddings:
             payload["keep_resident_embeddings"] = True
 
@@ -1521,20 +1391,20 @@ class _RealBackend25(_RealBackend):
             # once for the whole chain, so this echo is "on"/"off" and never the
             # folded "on->off" the two above can produce.
             keep_resident_used=event.get("keep_resident_used"),
-            # §3-114: the chain twin, and per-JOB for the same reason the line
+            # The chain twin, and per-JOB for the same reason the line
             # above is -- the EmbeddingsProcessor is built once for the whole
             # chain, so this echo is "on"/"off" and never a folded "on->off".
             keep_resident_embeddings_used=event.get("keep_resident_embeddings_used"),
-            # 台帳 §3-131: same repurposing as the single path -- see the
-            # comment there. No ``ltx25=`` here: ``chain_metadata`` (built
+            # Same decoder-name echo as the single path -- see the comment
+            # there. No ``ltx25=`` here: ``chain_metadata`` (built
             # above from ``event.get("chain")``) already carries
             # ``chain_metadata["ltx25"]``, so ``GenerationOutcome.ltx25`` stays
             # None on a chain outcome, single-job only by contract.
             vae_mode_used=event.get("vae_mode_used"),
-            # 高速化第3弾: attention_used is the worker's echo now, and on a
-            # chain it is a FOLD over every build the chain made — "sage->sdpa"
-            # when one of them fell back, the same shape the two 第1弾 echoes
-            # take here.
+            # attention_used is the worker's echo, and on a chain it is a FOLD
+            # over every build the chain made — "sage->sdpa" when one of them
+            # fell back, the same shape the block_swap_prefetch /
+            # fused_gguf_dequant_kernel echoes above take here.
             attention_used=event.get("attention_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
@@ -1546,15 +1416,13 @@ class LTX25Runner(LTXRunner):
     Everything the base facade does — lazy descriptor resolution, mock/real
     selection, ``set_descriptor`` teardown, the availability probe and its
     missing-file report — applies unchanged; the class attributes below are the
-    only per-family facts, and they are exactly the seams P3a introduced.
+    only per-family facts.
 
-    ``sage_available`` USED TO BE OVERRIDDEN HERE, hard-coded to False because
-    SageAttention was not installed in ``.venv-engine-ltx25`` and this engine's
-    v1 scope was SDPA-only. 高速化第3弾 removed the override rather than
-    changing its answer: the base class's file-existence probe reads
-    ``_REAL_BACKEND_CLS._engine_python_value(config)``, which on this class is
-    ``model.engine_python_ltx25`` — so it already looks in the 2.5 venv's own
-    site-packages, and the honest answer is whatever it finds there.
+    ``sage_available`` is deliberately NOT overridden: the base class's
+    file-existence probe reads ``_REAL_BACKEND_CLS._engine_python_value(config)``,
+    which on this class is ``model.engine_python_ltx25`` — so it looks in the
+    2.5 venv's own site-packages, and the honest answer is whatever it finds
+    there.
     """
 
     _REAL_BACKEND_CLS = _RealBackend25

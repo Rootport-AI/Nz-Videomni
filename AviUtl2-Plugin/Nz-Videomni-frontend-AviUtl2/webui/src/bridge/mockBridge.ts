@@ -1443,7 +1443,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
           code: "FEATURE_UNSUPPORTED",
           message: `'${feature}' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)`,
           detail:
-            `LTX 2.5(v1)は${feature}に対応していません(リクエストの${field}が既定値ではありません)。` +
+            `LTX 2.5は${feature}に対応していません(リクエストの${field}が既定値ではありません)。` +
             "この機能を使うにはベースモデルに「LTX 2.3」を選んでください。",
         },
       },

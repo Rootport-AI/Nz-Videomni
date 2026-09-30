@@ -14362,7 +14362,7 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 1. 手がかり 1〜4 の印が無いブロックにも、古いものが 14〜24% 残りました。全体へ広げるときも全件を判定します。手がかりの印は、判定担当に渡す根拠のヒントとして残します。
 2. 変更日時の比較（手がかり 2）は、印が最も多いのに的中率が最も低い手がかりでした（60%。事実が古いものだけなら 49%）。定数の表や別ファイルの変更で古くなったコメントは、この手がかりでは捉えられません。
 3. 判定担当の誤りは、「only」「not X」「Every one」のような限定の言葉の範囲を確かめずに書いた型に集中しました（検算の異論 4 件と、レビューの直すべき 1 件）。判定担当への指示に「限定の言葉を書くときは、その範囲の全体を確かめる」を加えます。
-4. 区域をまたいで同じ言い回しが出てくるものは、判定の前に基準で決めておきます。今回そろえたのは、比べる相手を書かない「byte-identical」（相手のテストの定数を名指しするか、「〜のキーを含まない」と書く）、「still」の意味（「それでも」なのか「引き続き」なのか）、設定の既定値の正本（利用者が上書きする `config.yaml` ではなく、`config.py` の `VramConfig`）、作業段階の名前として扱うもの（「v1」や検証ゲートの呼び名）です。
+4. 区域をまたいで同じ言い回しが出てくるものは、判定の前に基準で決めておきます。今回そろえたのは、比べる相手を書かない「byte-identical」（相手のテストの定数を名指しするか、「〜のキーを含まない」と書く）、「still」の意味（「それでも」なのか「引き続き」なのか）、設定の既定値の正本（当初は `config.py` の `VramConfig` としたが、実コードと合わず §130.2 で「実際に効く `config.yaml` のキー名を指し、`config.py` は補完値としてだけ触れる」に改めた）、作業段階の名前として扱うもの（「v1」や検証ゲートの呼び名）です。
 5. コメントだけの変更でも、ソースを読むテスト（`inspect.getsource`）は壊れることがあります。触るモジュールのソースを読むテストを、先に洗い出します。
 
 **申し送り**（気づいただけで、今回は直していません）:
@@ -14398,3 +14398,14 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 1. `tests/` と `webui/src/` に、古い文言（「(v1)」「8 + 3」「fixed at」）を検査しているテストはありませんでした。直したテストはありません。
 2. `tests/` で `IGNORED_FIELDS`／`CHAIN_IGNORED_FIELDS` に触れているのは `tests/test_ltx25_adapter.py` だけで、`pipeline25` の理由文に触れているテストはありませんでした。`tests/test_ltx25_adapter.py` は 171 件合格（GPU と実モデルには触れていません）。
 3. 操作パネルの `npm run typecheck` は合格しました。モックの文言を検査している vitest のファイルは無いので、vitest は走らせていません。
+
+### 130.2 既定値の正本の規則の訂正（2026-09-30）
+
+`services/engines/` の一覧づくり（comment-audit）で立てた基準「既定値の正本は `config.py`」が、実コードと合っていませんでした。`load_config`（config.py）は `config.yaml` にある値で上書きし、無いキーだけ `config.py` の Pydantic 既定値で補完します。セットアップが `config.yaml.example` を複製するので、利用者が実際に動かす既定は `config.yaml.example` の値です。両者は `use_component_files`（`config.py` は False、`config.yaml.example` は true）・`block_swap`・解像度上限・生成の既定値など、複数の項目で値が異なります（件数は数え方で変わるので書かない。意図してそうしているかはコードからは分からない）。`comfort_budgets` だけは `config.yaml` に書かない設計なので、これは `config.py` が正本のままです。
+
+この訂正の影響で、LTX-117（`services/engines/ltx/adapter.py` の `_build_load_payload`）の「新しい文」が `VramConfig` の既定（off）を指すように読め、実際に効いている `config.yaml.example` の on と逆の印象を与えていました。次のとおり直しました。
+
+- 変更前:「with ``vram.use_component_files`` on (default: config.py's ``VramConfig``), the standalone files replace the monolith,」
+- 変更後:「with ``vram.use_component_files`` on (the shipped config.yaml.example sets it on; ``VramConfig`` in config.py only supplies the fallback when the key is absent), the standalone files replace the monolith,」
+
+`te_offload_text_encoder`・`dit_cpu_load`（LTX-123・LTX-124）は `config.py` と `config.yaml.example` の既定がどちらも true で揃っているため、この訂正による実害はありません。基準 3 の全体展開は「実際に効く側（`config.yaml` のキー名）を指す」に改めました。なお `config.py` の `use_component_files` に付いたコメント「Off by default; flip to True to exercise the component-file path.」は、配布する設定では on になっているため古い言い方のままですが、これは `config.py` 側を扱う回で直します（今回は対象外）。

@@ -973,8 +973,9 @@ class LTXFastVideoPipeline:
                 self._gguf_service = service
                 import logging
                 logging.getLogger(__name__).info(
-                    "GGUF per-layer quant installed: weights stay compressed in VRAM "
-                    "(%s); IC-LoRA applied at forward time (per-job)", gguf_path
+                    "GGUF per-layer quant installed: weights stay compressed "
+                    "(in VRAM, or on the CPU side under block swap) (%s); IC-LoRA "
+                    "applied at forward time (per-job)", gguf_path
                 )
             else:
                 from engine.gguf.loader_service import GGUFLoaderService

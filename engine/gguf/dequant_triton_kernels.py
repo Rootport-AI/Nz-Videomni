@@ -11,9 +11,10 @@ What these kernels replace
 ``quant_service._dequant_q4_k`` / ``_q5_k`` / ``_q6_k`` are element-for-element
 ports of ``gguf.quants.{Q4_K,Q5_K,Q6_K}.dequantize_blocks``. They are correct,
 but they materialise ~20-30x the minimum bytes through DRAM as int32/fp32
-intermediates and issue 18-33 CUDA kernels per call, which costs ~1.96s of GPU
-time per DiT forward pass (1632 quantised linears, VERIFICATION_LOG section 50).
-Each kernel below does the whole thing in ONE pass: raw bytes in, bf16 out.
+intermediates and issue 18-33 CUDA kernels per call, which on the LTX 2.3
+transformer costs ~1.96s of GPU time per DiT forward pass (1632 quantised
+linears, VERIFICATION_LOG §50.2). Each kernel below does the whole thing in
+ONE pass: raw bytes in, bf16 out.
 
 Bit-exactness is a hard requirement (the ON and OFF paths must produce the same
 video), so the numerics follow three rules, all of which are load-bearing:
@@ -90,12 +91,13 @@ _Q4_K_BYTES = tl.constexpr(Q4_K_BLOCK_BYTES)
 _Q5_K_BYTES = tl.constexpr(Q5_K_BLOCK_BYTES)
 _Q6_K_BYTES = tl.constexpr(Q6_K_BLOCK_BYTES)
 
-# Super-blocks handled by one Triton program. Frozen at 8 after benchmarking
-# 4/8/16/32 over all 16 shapes of the real model, weighted by their per-pass call
-# counts (STEP 1, RTX 4070 Ti SUPER): 97.9 / 96.6 / 103.9 / 113.9 ms per DiT
-# forward pass. 8 wins outright, 4 is within 1.3%, and the two larger settings
-# lose because 16-32 super-blocks per program is 4096-8192 elements over 4 warps
-# and the register pressure costs occupancy on the big Q6_K shapes.
+# Super-blocks handled by one Triton program. Frozen at 8 (VERIFICATION_LOG
+# §51.2) after benchmarking 4/8/16/32 over all 16 shapes of the LTX 2.3
+# transformer, weighted by their per-pass call counts (RTX 4070 Ti SUPER):
+# 97.9 / 96.6 / 103.9 / 113.9 ms per DiT forward pass. 8 wins outright, 4 is
+# within 1.3%, and the two larger settings lose because 16-32 super-blocks per
+# program is 4096-8192 elements over 4 warps and the register pressure costs
+# occupancy on the big Q6_K shapes.
 # constexpr, so BPP * 256 is a compile-time power of two and ``tl.arange`` is
 # legal.
 BLOCKS_PER_PROG = 8

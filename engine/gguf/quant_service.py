@@ -30,7 +30,8 @@ Mechanism:
 4. model.to(device) moves GGMLQuantizedTensors to GPU. The overridden .to() method
    preserves the GGMLQuantizedTensor subclass and its metadata through device moves.
 5. ggml_linear_forward() checks isinstance(weight, GGMLQuantizedTensor), extracts raw
-   uint8 bytes via weight.view(uint8), dequantizes on-the-fly, runs F.linear(), frees BF16.
+   uint8 bytes via weight.as_subclass(torch.Tensor).view(torch.uint8), dequantizes
+   on-the-fly, runs F.linear(), frees the dequantised weight.
 """
 
 from __future__ import annotations
@@ -78,7 +79,8 @@ _GGML_BF16  = 30
 _TRITON_TYPES = (_GGML_Q4_K, _GGML_Q5_K, _GGML_Q6_K)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Per-type dequantisation (pure PyTorch, runs on CUDA)
+# Per-type dequantisation (pure PyTorch, runs on CPU or CUDA; Q4_K/Q5_K/Q6_K
+# (``_TRITON_TYPES``) can be routed to the fused Triton kernels in dequant_triton)
 # Based on city96/ComfyUI-GGUF/dequant.py — standalone, no C++ kernels
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -160,7 +162,7 @@ def _dequant_q8_0(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
     data = raw.view(torch.uint8)
     n_blocks = data.numel() // BLOCK
     blocks = data.reshape(n_blocks, BLOCK)
-    scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n_blocks,)
+    scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n_blocks, 1)
     qs = blocks[:, 2:].view(torch.int8).to(torch.float32)                       # (n_blocks, 32)
     out = (qs * scale).reshape(-1)
     ne = _n_elems(shape)
@@ -173,7 +175,7 @@ def _dequant_q4_0(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
     data = raw.view(torch.uint8)
     n_blocks = data.numel() // BLOCK
     blocks = data.reshape(n_blocks, BLOCK)
-    scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n,)
+    scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
     raw_q = blocks[:, 2:].to(torch.int32)                                        # (n, 16)
     lo = (raw_q & 0x0F).to(torch.float32) - 8                                   # lower nibbles
     hi = ((raw_q >> 4) & 0x0F).to(torch.float32) - 8                            # upper nibbles
@@ -189,8 +191,8 @@ def _dequant_q4_1(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
     data = raw.view(torch.uint8)
     n_blocks = data.numel() // BLOCK
     blocks = data.reshape(n_blocks, BLOCK)
-    scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n,)
-    bias  = blocks[:, 2:4].reshape(-1, 2).view(torch.float16).to(torch.float32) # (n,)
+    scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
+    bias  = blocks[:, 2:4].reshape(-1, 2).view(torch.float16).to(torch.float32) # (n, 1)
     raw_q = blocks[:, 4:].to(torch.int32)
     lo = (raw_q & 0x0F).to(torch.float32)
     hi = ((raw_q >> 4) & 0x0F).to(torch.float32)
@@ -201,8 +203,7 @@ def _dequant_q4_1(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
 
 
 def _dequant_q5(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype, ggml_type: int) -> torch.Tensor:
-    """Q5_0 / Q5_1: simplified via Q4_0/Q4_1 fallback (loses 5th bit precision but avoids errors)."""
-    # Approximate: treat as Q4_0 or Q4_1 — good enough for inference
+    """Q5_0 / Q5_1: Q4_0/Q4_1-style nibble unpacking plus the 5th bit from qh."""
     if ggml_type == _GGML_Q5_0:
         # Q5_0 block: 22 bytes = 2 scale + 4 high-bits + 16 low-bits
         BLOCK = 22
@@ -245,7 +246,7 @@ def _dequant_q5(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype, g
 
 def _dequant_q2_k(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype) -> torch.Tensor:
     """Q2_K: super-blocks of 256 weights.
-    Block layout (256 bytes):
+    Block layout (84 bytes):
       scales (16 bytes, 4-bit each) + qs (64 bytes, 2-bit each) + d (fp16) + dmin (fp16)
     """
     BLOCK = 84  # 16 scale bytes + 64 quant bytes + 2 d + 2 dmin
@@ -254,8 +255,8 @@ def _dequant_q2_k(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
     blocks = data.reshape(n_blocks, BLOCK)
 
     # d and dmin (fp16) at offsets 80, 82
-    d    = blocks[:, 80:82].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n,)
-    dmin = blocks[:, 82:84].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n,)
+    d    = blocks[:, 80:82].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
+    dmin = blocks[:, 82:84].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
 
     # Sub-block scales: 16 bytes, 2 scales per byte (4-bit each), 16 sub-blocks total
     sc_raw = blocks[:, :16].to(torch.int32)  # (n, 16)
@@ -288,7 +289,7 @@ def _dequant_q3_k(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
     n_blocks = data.numel() // BLOCK
     blocks = data.reshape(n_blocks, BLOCK)
 
-    d = blocks[:, 108:110].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n,)
+    d = blocks[:, 108:110].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
 
     # Low 2 bits
     ql = blocks[:, :32].to(torch.int32)  # (n, 32)
@@ -328,11 +329,13 @@ def _dequant_q3_k(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
 # Q_K dequant kernels — faithful torch/GPU port of gguf.quants (Q4_K/Q5_K/Q6_K).
 #
 # Ported element-for-element from `gguf.quants.{Q4_K,Q5_K,Q6_K}.dequantize_blocks`
-# (the same reference used as the numerical-verification oracle), so results match
-# the reference by construction. The previous hand-rolled kernels mis-derived both
-# the nibble interleave order (used a flat cat([lo,hi]) instead of the reference's
-# (n,-1,1,32) >> [0,4] interleave) and the 6-bit scale/min unpacking, producing
-# noise-level outputs. Everything below runs on the input tensor's device (GPU).
+# (the reference the numerical verification in VERIFICATION_LOG §1.1 compared
+# against), so results match the reference by construction. The nibble
+# interleave order (the reference's (n,-1,1,32) >> [0,4], not a flat
+# cat([lo,hi])) and the 6-bit scale/min unpacking both follow the reference; a
+# hand-derived layout produces noise-level outputs (VERIFICATION_LOG §1.1,
+# bug #4). Everything below runs on the input tensor's device (the GPU in the
+# per-layer forward).
 # ──────────────────────────────────────────────────────────────────────────────
 
 _QK_K = 256
@@ -442,7 +445,10 @@ def _dequant_q6_k(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
 
 def _dequant_iq4(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype, ggml_type: int) -> torch.Tensor:
     """IQ4_NL / IQ4_XS: lookup-table based 4-bit quant.
-    Approximate via Q4_0 dequant — slightly inaccurate but avoids LUT implementation.
+    Routed to the Q4_0 kernel instead of a lookup-table implementation, which
+    does not reproduce either format: IQ4_NL maps each nibble through a
+    non-linear table rather than Q4_0's (q - 8) * d, and IQ4_XS packs 256
+    weights into 136-byte blocks that the 18-byte Q4_0 layout misreads.
     """
     return _dequant_q4_0(raw, shape, dtype)
 
@@ -614,11 +620,11 @@ class GGUFQuantStateDictLoader:
                 state_dict[name] = qt
                 n_quant += 1
 
-        # NOTE: key remapping is intentionally not applied. On rev 00dc53d
-        # `ltx_core.loader.sd_ops.apply_sd_ops` does not exist, so the former
-        # remap block always fell through to the except branch. GGUF raw keys
-        # have been verified to match all model keys exactly (no remap needed),
-        # so we use the raw-key state_dict directly.
+        # NOTE: key remapping is intentionally not applied (``sd_ops`` is
+        # ignored): the pinned ``ltx_core`` has no
+        # ``ltx_core.loader.sd_ops.apply_sd_ops``, and the GGUF raw keys match
+        # the model keys exactly (no remap needed), so we use the raw-key
+        # state_dict directly.
 
         logger.info(
             "GGUF quant-load complete: %d float tensors (→ bf16), %d quantised tensors (GGMLQuantizedTensor)",
@@ -651,11 +657,13 @@ def _patch_linear_for_ggml_dequant(m: torch.nn.Linear) -> None:
 
     def ggml_linear_forward(self: torch.nn.Linear, x: torch.Tensor) -> torch.Tensor:
         w = self.weight
-        # IC-LoRA (Phase B): forward-time weight patch. When no factors are
-        # attached (`specs` is None/empty) EVERY branch below is byte-identical
-        # to the historical no-LoRA code path — this is only a cheap attribute
-        # read + skipped branch (gate G1). When attached, the delta is computed
-        # in fp32 and cast ONCE, matching the bf16-fuse formula exactly (G2).
+        # IC-LoRA: forward-time weight patch. When no factors are attached
+        # (`specs` is None/empty) the forward is the plain no-LoRA path (dequant
+        # + linear, or linear on a float weight); the only extra cost is this
+        # attribute read and a skipped branch (VERIFICATION_LOG §21.3). When
+        # attached, the delta is computed in fp32 and cast ONCE; on the quantised
+        # branch this matches the bf16-fuse formula
+        # (`GGUFStateDictLoader._fuse_ic_loras`) exactly (VERIFICATION_LOG §21.4).
         specs = getattr(self, _IC_LORA_SPECS_ATTR, None)
         if isinstance(w, GGMLQuantizedTensor):
             # Raw uint8 bytes (1D flat) live in the underlying storage.
@@ -744,10 +752,11 @@ class GGUFQuantLoaderService:
         ic_loras_provider: Any = None,
     ) -> None:
         self.gguf_path = gguf_path
-        # Callable[[], list[(safetensors_path, strength)]] returning the CURRENT
-        # job's IC-LoRA adapters. Read fresh on every transformer build so a
-        # keep_resident=0 worker can toggle LoRAs per generate() (Phase B). None
-        # or a call returning [] → no attach → forward path byte-identical.
+        # Callable[[], list[IcLoraEntry]] (``(path, strength, audio_strength)``
+        # tuples) returning the CURRENT job's IC-LoRA adapters. Read fresh on
+        # every transformer build so the worker can toggle LoRAs per generate(),
+        # with or without keep_resident. None attaches nothing; a call returning
+        # [] detaches, so the forward takes its no-LoRA branch.
         self._ic_loras_provider = ic_loras_provider
 
     def install(self, model_ledger: Any) -> None:
@@ -783,18 +792,20 @@ class GGUFQuantLoaderService:
                 module_ops=(ggml_module_ops,),
             )
 
-        # 3. Wrap transformer() to log completion; GGMLQuantizedTensor is self-describing
+        # 3. Wrap transformer() to attach/detach the job's IC-LoRA adapters and
+        #    log the quantised buffer count; GGMLQuantizedTensor is self-describing
         #    so no post-build parameter tagging is needed.
         original_transformer_fn = model_ledger.transformer.__func__
 
         def patched_transformer(self_ledger: Any) -> Any:
             result = original_transformer_fn(self_ledger)
-            # IC-LoRA (Phase B): attach the CURRENT job's adapters to the freshly
+            # IC-LoRA: attach the CURRENT job's adapters to the freshly
             # built transformer BEFORE block-swap moves blocks to CPU. attach
             # registers A/B as non-persistent buffers on each target Linear, so
-            # they ride block.to(device) during the swap and the forward patch
-            # adds their delta onto the per-call dequant tensor. Empty/None
-            # provider → no attach → byte-identical to the no-LoRA build.
+            # they move with their block during the swap and the forward patch
+            # adds their delta onto the per-call dequant tensor. A None
+            # provider attaches nothing; an empty list detaches
+            # (`detach_ic_loras`), so the build carries no LoRA buffers.
             if self._ic_loras_provider is not None:
                 ic_loras = list(self._ic_loras_provider() or [])
                 if ic_loras:
@@ -825,6 +836,7 @@ class GGUFQuantLoaderService:
         model_ledger.transformer = types.MethodType(patched_transformer, model_ledger)
 
         logger.info(
-            "GGUFQuantLoaderService installed: %s — weights stay compressed in VRAM",
+            "GGUFQuantLoaderService installed: %s — weights stay compressed "
+            "(in VRAM, or on the CPU side under block swap)",
             Path(self.gguf_path).name,
         )

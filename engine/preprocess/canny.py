@@ -1,8 +1,8 @@
-"""Canny edge-map control-signal processor (IC-LoRA Phase C, Slice 2).
+"""Canny edge-map control-signal processor (IC-LoRA).
 
 Faithful re-implementation of the deleted low-VRAM fork's ``apply_canny``
 (``vendor/LTX-Desktop-LOW-VRAM/backend/services/video_processor/video_processor_impl.py``
-at commit ``d0d3df5^``, ~L44): pad each frame up to a 64-multiple with edge
+at commit ``d0d3df5^``): pad each frame up to a 64-multiple with edge
 replication (matches the training-time flow), run ``cv2.Canny(gray, 100, 200)``,
 crop back to the original size, and expand the single-channel edge map to 3
 channels. Thresholds (100, 200) are the fork's proven values. This is the

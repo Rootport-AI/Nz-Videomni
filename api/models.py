@@ -67,10 +67,10 @@ OUTPAINT_MIN_KEEP_SIDE = 256
 # and the engine venv never import each other.
 INPAINT_MIN_SOURCE_SIDE = 256
 
-# The canvas grid. The VAE / patchifier stride chain needs both canvas sides on
-# a multiple of 128 (64px VAE stride x 2 for the two-stage upscale), which is
-# also the rule ``reference_resolution_invalid`` already enforces for every
-# reference-video job.
+# The canvas grid. Both canvas sides must be multiples of 128. The video VAE's
+# spatial stride is 32 in both engines and stage 1 runs at half the canvas
+# size, which alone needs 64; 128 is the grid ``reference_resolution_invalid``
+# already enforces for every reference-video job.
 INPAINT_CANVAS_MULTIPLE = 128
 
 

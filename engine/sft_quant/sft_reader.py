@@ -1,11 +1,12 @@
-"""Read safetensors tensors one by one with seek + readinto (§3-167 B-1, §3-168).
+"""Read safetensors tensors one by one with seek + readinto.
 
 Why not the usual readers: ``safetensors.safe_open`` and ``torch.frombuffer``
 over a memory map would map the whole ~29 GB transformer file, and on Windows
-that is charged against the commit limit — exactly the failure the plan's
-§2 ruling forbids. Here every tensor gets its own freshly allocated uint8
-buffer, filled straight from the file, and reinterpreted in place; nothing
-larger than the one tensor being read is ever held on the reader's behalf.
+that is charged against the commit limit — exactly the failure the Windows
+commit constraint recorded in VERIFICATION_LOG §117.1 rules out. Here every
+tensor gets its own freshly allocated uint8 buffer, filled straight from the
+file, and reinterpreted in place; nothing larger than the one tensor being
+read is ever held on the reader's behalf.
 
 The header is parsed by the torch-free ``sft_quant_format.read_header`` (the one
 place that validates offsets against the file size and element counts).

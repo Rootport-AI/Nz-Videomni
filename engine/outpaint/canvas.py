@@ -1,10 +1,10 @@
 """Outpainting canvas geometry — the padded canvas and its blend mask.
 
 This module is deliberately **importable without torch**: everything except
-``build_blend_mask`` is plain integer arithmetic, and ``build_blend_mask``
-imports torch inside the function body. That keeps the geometry unit tests
-runnable in the app ``.venv`` (which has no torch) while the engine ``.venv``
-still gets the tensor helper.
+``build_blend_mask`` and ``fill_pad_with_generated_`` is plain integer
+arithmetic, and both of those import torch inside the function body. That
+keeps the geometry unit tests runnable in the app ``.venv`` (which has no
+torch) while the engine ``.venv`` still gets the tensor helpers.
 
 Vocabulary used throughout:
 
@@ -32,8 +32,11 @@ logger = logging.getLogger(__name__)
 # recognises "this area is to be invented" from the pixel values alone.
 GREEN_RGB: tuple[int, int, int] = (102, 255, 0)
 
-# The VAE / patchifier stride chain requires both canvas sides to be multiples
-# of 128 (64px VAE stride x 2 for the two-stage chain's stage-2 upscale).
+# Both canvas sides must be multiples of 128. The video VAE's spatial stride is
+# 32 in both engines and stage 1 runs at half the canvas size, which alone
+# needs 64; 128 is the grid ``api/generate.py`` requires of every
+# reference-video job (``reference_resolution_invalid``), and it leaves no
+# remainder for LTX 2.5 either (VERIFICATION_LOG §79.2 (e)).
 CANVAS_MULTIPLE = 128
 
 # Minimum side length of the kept (inner) rectangle. See ``OutpaintGeometry``.
@@ -46,16 +49,18 @@ class OutpaintGeometry:
 
     ``MIN_INNER_SIDE`` (256) is not arbitrary. The Laplacian blend dilates the
     mask at a fixed low resolution: the mask is first resized so its **long side
-    is 64px**, then max-pooled with radius ``r``, then resized back. The
-    effective transition width at full resolution is therefore
+    is** ``pyramid_blend._MASK_LOW_RES_LONG_SIDE``, then max-pooled with radius
+    ``r``, then resized back. The effective transition width at full
+    resolution is therefore
 
         r * (canvas_long_side / 64)
 
-    which for a 1920-wide canvas and the default ``r = 5`` is roughly 150px of
+    which for a 1920-wide canvas and ``r = 5`` is roughly 150px of
     full-resolution feathering that eats *inwards*, into the kept rectangle.
     An inner rectangle of, say, 64px would be consumed outright — the "kept"
-    source would be entirely replaced by generated pixels. 256px leaves a solid
-    untouched core even at the largest canvas and the largest dilation radius.
+    source would be entirely replaced by generated pixels. 256px is a flat
+    floor against that case, not a bound sized for every canvas and radius:
+    the band grows with both.
     """
 
     canvas_width: int
@@ -169,8 +174,9 @@ def build_blend_mask(
     full-resolution mask. The official workflow downsamples a full-resolution
     mask with ``area`` interpolation; the half-pixel differences that produces
     are erased downstream anyway, because the blender resizes the mask to a
-    64px long side before dilating it and then back up again. Generating the
-    rectangle analytically is exact and costs nothing.
+    low-resolution long side (``pyramid_blend._MASK_LOW_RES_LONG_SIDE``)
+    before dilating it and then back up again. Generating the rectangle
+    analytically is exact and costs nothing.
 
     ``dtype`` defaults to ``torch.float32``; it is not spelled as a default
     argument value because evaluating ``torch.float32`` at import time would

@@ -25,12 +25,15 @@ Processor = FrameProcessor | VideoProcessor
 
 
 def _make_depth_processor() -> VideoProcessor:
-    """Deferred-import factory for the depth processor.
+    """Factory for the depth processor (``DepthProcessor``).
 
-    ``engine.preprocess.depth`` reaches into the vendored Video-Depth-Anything
-    tree (torchvision + the DINOv2 stack), so it is imported only when a depth
-    job actually asks for it — a canny/pose job must not pay for it, and an
-    import failure there must not take canny/pose down with it.
+    The heavy part of depth, the vendored Video-Depth-Anything tree
+    (torchvision + the DINOv2 stack), is imported inside
+    ``DepthProcessor._ensure_loaded`` on the first depth job, so a canny/pose
+    job does not pay for it and an import failure there does not take
+    canny/pose down with it. The import of ``engine.preprocess.depth`` below
+    is not where that deferral happens: the package ``__init__`` imports it
+    eagerly, and its top level needs only cv2, numpy and torch.
     """
     from engine.preprocess.depth import DepthProcessor
 
@@ -46,9 +49,10 @@ _FACTORIES: dict[str, Callable[[], Processor]] = {
     "depth": _make_depth_processor,
 }
 
-# Process-level instance cache: a stateless Canny is cheap, but a future DWPose
-# holds TorchScript models and must be built once per worker process, not per
-# job. Caching here keeps that concern out of the worker.
+# Process-level instance cache: a stateless Canny is cheap; DWPose and Depth
+# are built once per worker process, not per job (``release()`` frees their
+# weights after each video and the next call reloads them into the same
+# instance). Caching here keeps that concern out of the worker.
 _CACHE: dict[str, Processor] = {}
 
 
@@ -85,9 +89,10 @@ def preprocess_video(
     ``frame_cap`` stops the decode after that many frames: a ``VideoProcessor``
     normalises over everything it is given, so handing it footage the generation
     will never use would both cost time and shift the normalisation range.
-    ``None`` (every ``FrameProcessor`` caller) decodes the whole source, exactly
-    as before. Returns the number of frames written. Fails loud if the source
-    cannot be opened or the writer cannot be created.
+    ``None`` decodes the whole source (what the workers pass when the payload
+    gives no frame count; see each worker's ``_preprocess_frame_cap``).
+    Returns the number of frames written. Fails loud if the source cannot be
+    opened or the writer cannot be created.
     """
     cap = cv2.VideoCapture(str(src))
     if not cap.isOpened():
@@ -141,10 +146,11 @@ def preprocess_video(
     finally:
         cap.release()
         # Evict any GPU-resident weights the processor loaded for this video
-        # (DWPose caches ~355 MB of TorchScript models, Depth ~4 GB) BEFORE the
-        # caller runs the 16 GB-tight generation denoise. Optional per the
-        # processor protocols: stateless processors (Canny) have no ``release``.
-        # The cached processor instance itself survives; its next call reloads.
+        # (DWPose's two TorchScript models, Depth's VDA network; resident
+        # sizes in VERIFICATION_LOG §22.2 and §49.2) BEFORE the caller runs the
+        # 16 GB-tight generation denoise. Optional per the processor protocols:
+        # stateless processors (Canny) have no ``release``. The cached
+        # processor instance itself survives; its next call reloads.
         release = getattr(processor, "release", None)
         if callable(release):
             release()

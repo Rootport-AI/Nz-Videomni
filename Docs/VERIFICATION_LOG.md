@@ -2925,6 +2925,9 @@ sage を使うには外部パッケージが要るため、**`sageattention` 2.2
 
 - **`engine/transformer/block_swap_prefetch.py`（新規）**: `PrefetchEngine` 本体。CPU 正本のスナップショット・レイアウト計算（512B アライン）・pinned ステージング・専用転送 stream・event 管理・arena 確保/解放を持つ。`GGMLQuantizedTensor`（GGUF 圧縮重み）はメタ（`_ggml_type`/`_float_shape`）を保持したまま生バイトとして転送し、GPU 側で `_make_subclass` により再構成する（S0 スパイクで `inference_mode()` 下での可否を実機検証済み・成功）。
 - **`engine/transformer/block_swap_prefetch_selfcheck.py`（新規）**: `.venv-engine` で直接実行する自己検証（pytest では収集しない。engine 用仮想環境に pytest が無いため）。14項目（§44.4）。
+
+> **訂正（§137）**: 記録時点の記述。今は `.venv-engine` に pytest があり（pytest で集めない理由は `fastapi` が無く `tests/conftest.py` を集められないこと）、検査は C1〜C19 の 19 項目である。詳細は §137。
+
 - **`engine/transformer/block_swap_service.py`**: 既存の `_patch_block`（同期スワップ本体）は無改変。`prefetch_requested`/`last_prefetch_used`/`_patch_block_prefetch`/`teardown_prefetch()` を追加し、prefetch 要求時だけ `PrefetchEngine` を張る二択分岐にした。pinned プールと転送 stream はサービス常駐インスタンスがジョブ跨ぎで保持し再利用する（grow-only）。
 - **`engine/pipeline/fast_video_pipeline.py`**: `_set_block_swap_prefetch_job()`/`_reset_block_swap_prefetch_job()`（`_set_sage_job` と同じ per-job set/finally-reset 規律）。ジョブ終了の `finally` で `teardown_prefetch()`（in-flight 転送の完走待ち＋前ジョブの CPU 正本・arena 参照の解放）を呼び、次ジョブの `install()` 冒頭にも冪等な安全網として同じ呼び出しを置いた（`VERIFICATION_LOG.md` §9.6 の旧リークと同形の再発を防ぐため）。
 - **`api/models.py`**: `/generate`・`/generate/chain` に `block_swap_prefetch: bool`（S4で既定 `True` へ反転）を追加、`to_clip_request()` へ転記。
@@ -2945,6 +2948,9 @@ sage を使うには外部パッケージが要るため、**`sageattention` 2.2
 ### 44.4 機械検証の結果
 
 - **エンジン用仮想環境の selfcheck**（`block_swap_prefetch_selfcheck.py`、新規）: **14項目（C1〜C14）全PASS**——出力ビット一致（off/on）、CPU 正本の不変性、常駐数上限 `<= blocks_on_gpu+2`、発行スケジュール（sync miss はパス先頭のみ）、GGML メタ保持、pinned 確保失敗時のフォールバック、`blocks_on_gpu>=total` の早期return、ジョブ跨ぎのリーク無し、stream 安全性の負荷テスト（S1b を意図的にスキップするネガティブケースで破綻を確認＝S1b の必要性を実証）、例外後の再 install、レイアウト計算、スロット列挙、発行スケジュールの純関数境界、共有テンソル検出の14点。
+
+> **訂正（§137）**: 記録時点の記述。今は `.venv-engine` に pytest があり（pytest で集めない理由は `fastapi` が無く `tests/conftest.py` を集められないこと）、検査は C1〜C19 の 19 項目である。詳細は §137。
+
 - **バックエンドの pytest**（アプリ用仮想環境）: 全緑（§43.4 のベースライン 817 passed / 6 skipped を下回らず、既定リクエストでは worker ペイロードのキーが1つも増えないことをペイロード完全一致テスト群が固定した状態のまま新規分もすべて通過）。
 - **フロントエンドの型検査**: `npm run typecheck`（`tsc -b`）**0エラー**。
 - **フロントエンドの vitest／ネイティブ doctest**: 全緑・不変（本件によるケース数の増減は次回のフロントエンド側記録〔`DEVLOG.md`〕を正本とする）。
@@ -3369,6 +3375,9 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 - **`engine/preprocess/depth.py`（新規）**: `DepthProcessor`。公式 `infer_video_depth`（**32フレームの移動窓・10フレームの重なり・窓どうしの整合処理**）をそのまま呼ぶ薄いラッパー。重いimport（torchvision＋DINOv2スタック）は `_ensure_loaded()` 内に**遅延**（DWPose と同じ作法。トップレベルのimport失敗が canny/pose を道連れにするのを防ぐ）。ジョブごとにロードし、制御動画を書き終えたら `release()` でGPUから追い出す（16GBぎりぎりの生成デノイズ中に深度の重みを残さない）。
 - **`engine/preprocess/base.py`・`driver.py`・`__init__.py`**: 新プロトコル **`VideoProcessor`（クリップ単位）** を `FrameProcessor`（フレーム単位）と並置し、ドライバがどちらを持つかで分岐する。深度は時間方向の移動窓とクリップ全体の正規化を使うため1枚ずつでは処理できない。**`frame_cap`**（デコード打ち切り）を追加——深度は与えられた分をすべて正規化に使うので、生成で使わないフレームまで処理すると時間を無駄にするうえ**グレーの割り当てレンジがずれる**。
 - **`engine/worker.py`**: `_preprocess_frame_cap(msg)`。**単発＝`num_frames`／チェーン＝`clips[0]["num_frames"]`**（参照条件は先頭クリップのstage-1にしか付かないため）。キーが無ければ `None`（全デコード＝従来どおり）。**`frame_cap` は `preprocess == "depth"` のときだけ渡す**ので、**canny/dwpose の経路はバイト不変**であり、ログ行も `cap=` の部分は該当するときにしか付かない（Phase C で記録した実行ログと文字単位で一致し続ける）。
+
+> **訂正（§137）**: 今の `_resolve_ic_reference` は前処理の種類によらず `_preprocess_frame_cap(msg)` を渡し、チェーンでは全クリップの stage-1 の画素フレーム総数を返す（engine25 も同じ）。記録の時点の実装の記述としては残す。詳細は §137。
+
 - **`config.yaml.example`・`config.py`・`services/lora_registry.py`**: `depth-control`（**union-control のファイルを共用**・`preprocess: depth`）と `deblur`（前処理不要のため**文字列形式**でパスのみ）の2エントリ登録。`IcLoraEntry.preprocess` のリテラル型に `"depth"` 追加。**Gradio の静的フォールバック一覧には手を触れていない**（`/config` 不達時だけの死に枝と確認済み）。
 - **`gradio_ui/adapters.py`・`i18n.py`・`ui.py`**: `ADAPTER_FRIENDLY` に2件、英日それぞれ**ヒント3種**（アスペクト比／Depth の推奨値／Deblur の書式とVRAM）。**アダプタ選択に連動して出し分ける仕組みは既存に無く、そのためだけの新UI機構は足していない**（既存の `note_ref128` と同じ常時表示の注記）。
 - **フロントエンド**（`Nz-LTX23-frontend-AviUtl2`）: `webui/src/i18n/strings.ts`（英日の同内容ヒント3種）／`GenerationForm.tsx`（参照動画セクションに3行）／`api/types.ts`（`"depth"`）／`bridge/mockBridge.ts`（`depth-control` マップ形式＋`deblur` 文字列形式のフィクスチャ）。**選択肢そのものは `/config` 経由で自動的に増える。** 詳細は[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §59。
@@ -3783,6 +3792,9 @@ stage2（パス9〜11）でCPU発行時間だけが3倍以上に跳ねている�
 
 - **新規モジュール3本**（`engine/gguf/`）
   - `dequant_triton.py`（234行）: 製品側の窓口。`enabled()` / `dequant()` / `set_job()` / `reset_job()` / `last_used()` の5つだけを公開し、状態（要求の有無・降格の掛かり方・呼び出し回数・型ごとの自己検証済みフラグ）をこのモジュール内に閉じ込めている。Tritonの読み込みは遅延（実際に必要になるまでimportしない）で、失敗したという事実もキャッシュする。
+
+> **訂正（§137）**: `_VERIFIED` は型ごとのフラグではなく（型, 16 バイト境界か）の組の集合である。3 ファイルの行数は記録時点の値。詳細は §137。
+
   - `dequant_triton_kernels.py`（314行）: Q4_K・Q5_K・Q6_Kの3本のTritonカーネル本体。
   - `dequant_triton_selfcheck.py`（698行）: 自己検証スクリプト（C1〜C10。§51.2）。
 - **既存コードへの差し込みは1箇所だけ**: `engine/gguf/quant_service.py` の `dequantize_ggml_tensor` に「Tritonで試す→戻り値が `None` なら従来実装へ落ちる」という分岐を入れた（`:47` のimportと `:128-130`）。K量子化3形式・GPU上のテンソル・出力がbf16、という3条件すべてを満たすときだけ新経路に入る。GemmaのembeddingのようにCPU上で展開されるものは条件で弾かれ、従来どおりに動く。
@@ -3794,6 +3806,8 @@ stage2（パス9〜11）でCPU発行時間だけが3倍以上に跳ねている�
 ### 51.2 STEP1＝自己検証（selfcheck）の結果＝C1〜C10全PASS
 
 `.venv-engine\Scripts\python.exe -m engine.gguf.dequant_triton_selfcheck` で実行する（engine用の仮想環境にはpytestが無いため、テストモジュールではなく単体スクリプトの形にしてある。sage・block swap prefetchと同じ作法）。**10項目すべてPASS・skipゼロ・終了コード0**。
+
+> **訂正（§137）**: `.venv-engine` には pytest がある（§51.3 も `.venv-engine` の pytest を実行している）。単体スクリプトにしてある理由は `fastapi` が無く `tests/conftest.py` を集められないことである。詳細は §137。
 
 | 番号 | 何を証明するか | 結果 |
 |---|---|---|
@@ -3813,6 +3827,8 @@ stage2（パス9〜11）でCPU発行時間だけが3倍以上に跳ねている�
 **速度（カーネル単体）**: 加重速度比 **R = 18.89**（1パスあたり eager 1823.7ミリ秒 → 融合後 96.6ミリ秒）。§50.2で `torch.compile` を下限の目安として測った R = 13.42 を上回った。
 
 **`BLOCKS_PER_PROG` の凍結**: 1つのプログラムが担当するブロック数を4/8/16/32でスイープし、**8** で凍結した（`dequant_triton_kernels.py:89`）。`triton.autotune` は使っていない。
+
+> **訂正（§137）**: 行番号 89 は記録時点のもの（定義位置は変わる。`BLOCKS_PER_PROG` の名前で探す）。詳細は §137。
 
 **初回コンパイル（JIT）の実費**: キャッシュが空の状態からの合計 **0.81秒**（Q4_K 483ミリ秒／Q5_K 184ミリ秒／Q6_K 147ミリ秒）。キャッシュが効いた2回目以降は0.12秒。形状に依存しない設計（ブロック数を実行時引数にした）にしてあるため、**1プロセスにつき1形式1回しかコンパイルが起きない**（`do_not_specialize` を明示）。Tritonのキャッシュ置き場は既定のまま（`~/.triton/cache`）で、環境変数による設定は追加していない。§50.2で `torch.compile` について記録した「16通りで合計11.1秒」という入場料が、Tritonの手書きカーネルでは0.81秒に下がったことになる。
 
@@ -14991,5 +15007,83 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 6. `sft_quant/__init__.py` の方式の列挙に `w4a8` が抜けている。
 7. VERIFICATION_LOG §44.2・§44.4（先読みの自己検査が「pytest 無し・14 項目・+2」と書いている）は古い（文書側の記述）。
 8. 事実表 `facts\engine-bc.md` の A-23（G2-6 を飛ばす）・A-26（`neg_selfcheck25` が `_FakeTransformer` を使う）は誤り。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 137. ★コード内コメントの現行化・第 5 区域 `engine/` 第 3 回（C）＝ `engine/gguf/`（6 ファイル）・`engine/sft_quant/`（4）・`engine/outpaint/`（3）・`engine/inpaint/`（2）・`engine/preprocess/`（8。`vda/` は vendored で対象外）の 453 ブロック中 87 を現行化（コメントのみ・動作は不変）＋利用者やログに出る文字列 3 件＋台帳 §1-61〜§1-63 と §1-58 の追記＋ VERIFICATION_LOG §51.1／§51.2・§49.4・§44.2／§44.4 の訂正＋ `api/models.py` と `loader_service.py` の数値の訂正（2026-10-01）
+
+**要約**: §135（A）・§136（B）に続く `engine/` の第 3 回（C）として、`engine/` 全体（A・B・C）がこれで完了しました。対象は 23 ファイル・6,694 行・453 ブロックです。87 ブロック（事実が古いもの 68・導入時期の記録だけのもの 19）を書き換え、コードは変わっていないことを構文木で確かめました。あわせて利用者やログに出る文字列 3 件（オーナー決定 2 件＋レビューで見つかった同型の 1 件）を反映し、台帳 §1-61〜§1-63 を新しく起票し §1-58 に追記しました。検算の過程で GGUF の純 torch 逆量子化のうち 8 型の誤りが確定しました（製品の経路では通りません）。VERIFICATION_LOG 側の記述にも誤りが 4 件見つかり、§51.1／§51.2・§49.4・§44.2／§44.4 にそれぞれ訂正を1行添えました（本文そのものは書き換えていません）。`api/models.py`（api の回で現行のままとされた MOD-005）と `engine/gguf/loader_service.py` の数値2件も直しました。
+
+**目的**: 骨格は §135・§136 と同じです。判定担当への指示（v6.2）に、B（§136）からの申し送りを足しました。
+1. 計画上の呼び名「Lever 3」は、ログを出すファイルでは残し、他では関数名を主にする。
+2. 自己検査の docstring の「`.venv-engine` には pytest が無い」は「`fastapi` が無く `tests/conftest.py` を集められない（pytest はある）」に揃える。
+3. 共有部品は 2.3（殻を毎ジョブ組み直す）と 2.5（殻を使い回しビルドごとに付け直す）の両方で成り立つ書き方にし、呼び手を Grep で確かめる。
+4. 上流の空間ストライドは 2.3 でも 2.5 でも 32。
+5. `preprocess/` の「future DWPose」は実装済み・「Slice 2／3」は段階名。
+6. `sft_quant/__init__.py` の方式の列挙に `w4a8` が抜けている。
+7. §44.2・§44.4 は文書の食い違いとして記録済み（指さない）。
+
+**対象**: 23 ファイル（`engine/gguf/` の `dequant_triton.py`・`dequant_triton_kernels.py`・`dequant_triton_selfcheck.py`・`ic_lora_common.py`・`loader_service.py`・`quant_service.py`、`engine/sft_quant/` の `__init__.py`・`dequant.py`・`quant_service.py`・`sft_reader.py`、`engine/outpaint/` の `__init__.py`・`canvas.py`・`pyramid_blend.py`、`engine/inpaint/` の `__init__.py`・`canvas.py`、`engine/preprocess/` の `__init__.py`・`base.py`・`canny.py`・`depth.py`・`depth_g1_gate.py`・`driver.py`・`dwpose.py`・`preprocess_selfcheck.py`）・6,694 行・453 ブロックです。起点コミットは `86a199f`（B のコミット）。差し替えが入ったのは 21 ファイル（`outpaint/__init__.py`・`inpaint/__init__.py` は変更なし）です。
+
+**方法**:
+1. **抜き出し・区域分け**: 16 区域へ切りました（最大の区域 R06＝`quant_service.py` の 90 ブロックはブロック番号で 2 体に分けました）。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 17 体を走らせました。
+3. **検算（Opus 4 体・V1〜V4）**: 192 ブロック（change 全件＋keep の抜き取り）を確かめました。確認済み 188・異論 3・一部だけ直した 0・見逃し 1 でした。検算 V2 が `.venv-engine` の `torch` と参照実装 `gguf.quants`（gguf-py 0.18.0）で逆量子化を突き合わせ、8 型の誤りを確定しました。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 16 件を直し（語を変えたもの 10・折り返しだけ 6）、再検算 29 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 87 件の差し替えを適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**:
+
+最終の判定（453 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 68 |
+| 導入時期の記録だけ | 19 |
+| 現行のまま | 366 |
+| 保留 | 0 |
+
+古いままの割合は 19%で、A（38%）・B（29%）より低くなりました。
+
+**検算で確定した事実（コードの問題）**: `engine/gguf/quant_service.py` の純 torch の逆量子化のうち Q4_0・Q4_1・Q5_0・Q5_1・Q2_K・Q3_K・IQ4_NL・IQ4_XS の 8 型は参照実装と合いません（誤った値を返すか止まります）。Q8_0・Q4_K・Q5_K・Q6_K は完全一致しました。製品の経路では通りません（Triton の融合カーネルが受け持つのは Q4_K・Q5_K・Q6_K で、配布の GGUF と `models\` の量子化テンソルもこの 3 型だけです。レビューが `models\` の GGUF 7 本を `GGUFReader` で数えて確認しました）。台帳 §1-61 に起票しました。コメント側は「今のコードが返す形」で注記を直し、`_dequant_q3_k` の中の 3 つのコメントは意図を述べているので現行のままにしました。
+
+**当初から誤っていた主張の訂正の例**: OCV-004（`outpaint/canvas.py` の「64px VAE stride x 2」→ 動画 VAE の空間ストライドは 2.3・2.5 とも 32。stage 1 が半分で走るので 64 で足り、128 は `reference_resolution_invalid` の格子です）、QSG-020（Q5 の「5 ビット目を捨てる」というコメントを削除。実際のコードは `qh` から 5 ビット目を足しています）、ICV-003（「256 を下回ると stage-2 の帯が画面全体を覆う」の 1 文を落としました。§105.3 の式で検算すると成り立ちません）、PDR-006・PPS-001・PPS-012（`frame_cap` は前処理の種類によらず渡され、チェーンでは全クリップの stage-1 の画素フレーム総数です）、DTS-001・DG1-001・BPS-001 と同型（自己検査の「pytest が無い」→「fastapi が無く `tests/conftest.py` を集められない」）、`dequant_triton.py` の `_VERIFIED` は「型ごとのフラグ」ではなく（型, 16 バイト境界か）の組です。
+
+**共有部品**: `gguf/quant_service.py`（2.5 は `GGMLQuantizedTensor`・`_patch_linear_for_ggml_dequant`・`_patch_model_for_ggml_dequant`・`dequantize_ggml_tensor` を `engine25/gguf_gemma4.py` から使います）・`sft_quant/quant_service.py`（2.5 は `SftQuantStateDictLoader`・`sft_transformer_sd_ops` などを `engine25/gguf_transformer.py` から使います）・`ic_lora_common.py`（`attach_ic_loras`／`detach_ic_loras` を 2.5 の `gguf_transformer.py` が使います）は、両エンジンで成り立つ書き方にしました。`GGUFLoaderService`・`GGUFQuantLoaderService`・`GGUFQuantStateDictLoader` は 2.3 だけが使います。
+
+**証明**: 23 ファイル（`engine/` 22 ＋ `api/models.py`）で、コメントと docstring 以外のトークン列の差は文字列 3 件だけでした（文字列に触れていない 20 ファイルは docstring を除いた構文木が起点 `86a199f` と一致しました）。
+- `engine/gguf/quant_service.py` の `GGUFQuantLoaderService.install` のログ「weights stay compressed in VRAM」→「weights stay compressed (in VRAM, or on the CPU side under block swap)」に変えました（オーナー決定。block swap のときブロックの重みは CPU 側に置かれます）。
+- `engine/preprocess/preprocess_selfcheck.py` の検査名「C5  the frame branch is unchanged, and frame_cap is generic」→「C5  the frame branch stays the single-frame path, and frame_cap is generic」に変えました（オーナー決定。関数名 `check_c5_frame_branch_unchanged` は変えていません）。
+- `engine/pipeline/fast_video_pipeline.py` の「GGUF per-layer quant installed: weights stay compressed in VRAM」→ 上と同じ決定済みの文言に変えました（レビューの指摘。同じジョブで隣に出る同型の1行。§136 の connector の文字列と同じ扱いです）。
+
+数値は残しました。改行コードは CRLF でした（`engine/outpaint/canvas.py` と `engine/outpaint/__init__.py` は作業コピーが元から LF。`core.autocrlf=true` のため blob は LF で変わりません）。コミットに入るファイルは 25（`engine/` 21・`engine/pipeline/fast_video_pipeline.py`・`api/models.py`・`Docs/PENDING_TASKS.md`・`Docs/VERIFICATION_LOG.md`）です。
+
+**テスト**: `.venv-engine` の 16 ファイル 313 件合格（失敗 0）でした。`api/models.py` に触れたためアプリ側 `.venv` は `tests/test_ltx25_adapter.py`・`tests/test_ltx25_api_guard.py` を加えた 6 ファイルで 330 件合格・19 件スキップでした（監督が最終状態で再実行した結果）。
+
+**他の区域の訂正 2 件**: `api/models.py` の `INPAINT_CANVAS_MULTIPLE` の直前のコメント「64px VAE stride x 2 for the two-stage upscale」（api の回・§131 で現行のままとされた MOD-005）を、OCV-004 と同じ事実（空間ストライド 32・stage 1 は半分・128 は `reference_resolution_invalid` の格子）に直しました。`engine/gguf/loader_service.py` の `_fuse_ic_loras` の docstring の「68 s no-LoRA load」は、この docstring を入れたコミット `016f442` のメッセージ自身と §20.6 の表がともに 71 s と書いており、コメント側の書き損じだったので 71 s に直し §20.6 を添えました。
+
+**台帳**: §1-61（GGUF の純 torch 逆量子化 8 型）・§1-62（`GGUFStateDictLoader.load` の `apply_sd_ops` の付け替えが固定先の両 `ltx_core` に無く bf16 の経路で毎回警告）・§1-63（画角拡張の `MIN_INNER_SIDE` 一律 256）を起票しました。§1-58（使われていないコード）に `build_gguf_loader_service`・`GGUFLoaderService.uninstall`・`_make_depth_processor` の関数内 import（遅延の効果が無い）を追記しました。
+
+**文書の訂正 4 件**（オーナー指示: 記録文書なので本文は書き換えず、本節に訂正を書き、該当箇所に 1 行添える）:
+1. §51.1（`dequant_triton.py` の箇条）: 「型ごとの自己検証済みフラグ」は、コードの `_VERIFIED` が（型, 16 バイト境界か）の組の集合であることと合いません。3 ファイルの行数（234／314／698 行）も記録時点の値です。
+2. §51.2（冒頭の段落と `BLOCKS_PER_PROG` の段落）: 「engine用の仮想環境にはpytestが無いため」は、`.venv-engine` に pytest がある今は事実と違います（同じ §51.3 が `.venv-engine` の pytest を実行しています）。単体スクリプトにしてある理由は `fastapi` が無く `tests/conftest.py` を集められないことです。「`dequant_triton_kernels.py:89`」の行番号は記録時点のものです（定義は今 101 行目付近。行番号で指しません）。
+3. §49.4（`engine/worker.py` の箇条）: 「`frame_cap` は `preprocess == "depth"` のときだけ渡す」「チェーン＝`clips[0]["num_frames"]`」は、今の `_resolve_ic_reference` が前処理の種類によらず `_preprocess_frame_cap(msg)` を渡し、チェーンでは全クリップの stage-1 の画素フレーム総数を返すことと合いません（engine25 も同じです）。記録の時点の実装としては正しい可能性があります。
+4. §44.2（`block_swap_prefetch_selfcheck.py` の箇条）と §44.4（「14項目（C1〜C14）全PASS」の箇条）: 「engine 用仮想環境に pytest が無いため」「14項目（C1〜C14）」は記録時点のものです。今は `.venv-engine` に pytest があり（走らせない理由は fastapi）、検査は C1〜C19 の 19 項目です（`main()` の検査表）。§136 が C へ申し送っていた項目です。
+
+§20.6 と `loader_service.py` の「68 s」の食い違いは、コメント側の書き損じと確定したのでコメントを直しました（上の「他の区域の訂正」）。文書側は正しいままです。
+
+**敵対的レビュー**（Opus・(b)／(c) 全件＋(a) 全件＋共有部品の呼び手＋逆量子化を参照実装と CPU で突き合わせ＋上流の `SpatioTemporalScaleFactors` の確認）:
+- **直すべき 3 件（全件採用）**: LDS-002（bf16 経路のノイズの出典を §1.3 から §20.1 (a-0) に変えました。§1.3 は逐層量子化側のカーネルの記録です）、QSG-004（「the K-quant types」には Q2_K・Q3_K も含まれるので「Q4_K/Q5_K/Q6_K (`_TRITON_TYPES`)」に変えました）、台帳 §1-61 の「Q3_K の 3 つの関数」は関数 1 つの中の 3 つのコメントです。
+- **注意 6 件（5 件採用。6 件目は本節を同じコミットで書くことで解消）**: DTK-004（§51.2 が裏づけるのは凍結だけになるよう語順を変えました。4 つの実測値はコメントだけにある値として残しました）、IQ4_XS は実寸ではほぼ reshape の段で止まるので台帳の文を寄せました、対応表に無い型は警告を出してゼロのテンソルを返す経路を §1-61 に1文足しました、§1-62 の選択肢 A と B が同じ変更になっていたので B を「記録を debug に下げる」に書き分けました、`fast_video_pipeline.py` のログ1件（上の証明の3件目）。
+- **参考 8 件（2 件採用）**: DTS-001 の「C8 and C9 replay」は C8 が 32M 要素超を飛ばすので限定を添えました、§1-61 の「scale」を「スケール（`d`・`dmin`）」に変えました。不採用 6 件は誤りではないもの（許容誤差つきの固定・2.3 の事実の括弧書き・作業コピーの改行コード・指示書のファイル数の数え違い・`changes.jsonl` の記録の古さ・§1-58 の置き場）です。
+
+**費用の目安**（Opus のトークン、概算）: 判定〜揃え 約 370 万・レビュー 約 28 万・反映と修正 約 12 万でした。C は約 410 万となり、計画の見込み（約 300 万）を超えました（`quant_service.py` の 121 ブロックと逆量子化の検算が重かったためです）。`engine/` 全体（A 約 600 万・B 約 510 万・C 約 410 万）は約 1,520 万となり、計画の見込み（約 1,190 万）を超えました。
+
+**申し送り**（次の区域へ）:
+1. `engine/` は A・B・C で完了しました。残る区域は `gradio_ui/`・`mcp_server/`・`scripts/`・`config.py` などです（オーナー判断）。
+2. 事実表 `facts\engine-bc.md` の誤り3件（`laplacian_pyramid_blend` が `blend_video_u8` の内部で使われる／A-23／A-26）は一覧表側の問題で判定には影響していません。
+3. `engine/fp8/__pycache__/` にソースの無い古いキャッシュが残っています（`sft_quant/` へ移転後の残骸。コメントの問題ではありません）。
 
 候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。

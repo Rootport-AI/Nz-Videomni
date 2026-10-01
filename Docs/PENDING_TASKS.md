@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-59〜§1-60〔Gemma の GGUF 量子化サービスの `_read_target_vocab_from_header` の名前と型が本体に合わない／`embed_cpu_offload` が `install` で固定され通らない枝が残る〕を起票し、§1-58「使われていないコード」に `BlockSwapService.uninstall`・`build_block_swap_service`・`_load_gguf_connectors` の引数 `target_device` の3件を追記したうえ、§1 冒頭の案内を §1-60 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-51〜§1-58〔Gemma の GGUF の取り付けに失敗しても読み込みが成功扱いになる／GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性／V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない／マスクの二値化の基準が2箇所で違う／`keep_resident_used` の報告が arm の失敗を反映しない／`peak_vram_mb` に参照動画の encode より前のピークが入らない／区切り幅の既定 `chunk_size or 8` が定数の値を書き写している／使われていないコード〕を起票し、§1 冒頭の案内を §1-58 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-47〜§1-50〔自己試験の `prefetch_used` が「install の飛ばし」を検出できない可能性／画角拡張（Outpainting）で凍結を無効にしたジョブの `source_had_audio`／`cross_attention_modules` に呼び出し元が無い／効かない設定 `model_configurator=LTXModelConfigurator`〕を起票し、§1 冒頭の案内を §1-47〜§1-50 まで含む記述に更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-61〜§1-63〔GGUF の純 torch の逆量子化で 8 つの型が誤った値を返すか止まる／`GGUFStateDictLoader.load` の鍵の付け替えが死んだコードで bf16 の経路では読み込みのたびに警告が出る／画角拡張（Outpainting）の `MIN_INNER_SIDE` がキャンバスと半径に応じた下限になっていない〕を起票し、§1-58「使われていないコード」に `build_gguf_loader_service`・`GGUFLoaderService.uninstall`・`_make_depth_processor` の関数内 import の3件を追記したうえ、§1 冒頭の案内を §1-63 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-59〜§1-60〔Gemma の GGUF 量子化サービスの `_read_target_vocab_from_header` の名前と型が本体に合わない／`embed_cpu_offload` が `install` で固定され通らない枝が残る〕を起票し、§1-58「使われていないコード」に `BlockSwapService.uninstall`・`build_block_swap_service`・`_load_gguf_connectors` の引数 `target_device` の3件を追記したうえ、§1 冒頭の案内を §1-60 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-51〜§1-58〔Gemma の GGUF の取り付けに失敗しても読み込みが成功扱いになる／GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性／V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない／マスクの二値化の基準が2箇所で違う／`keep_resident_used` の報告が arm の失敗を反映しない／`peak_vram_mb` に参照動画の encode より前のピークが入らない／区切り幅の既定 `chunk_size or 8` が定数の値を書き写している／使われていないコード〕を起票し、§1 冒頭の案内を §1-58 まで含む記述に更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58・§1-59・§1-60 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58・§1-59・§1-60・§1-61・§1-62・§1-63 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -300,11 +300,13 @@
   - `engine/worker.py` の `_do_generate`・`_do_generate_chain` が受ける `_resolve_keep_resident` の戻り値の2つ目（`_keep_res_reason`。代入するだけで使わない）。
   - `engine/transformer/block_swap_service.py` の `BlockSwapService.uninstall`（呼び出し元なし。クラス自身のdocstringの使用例とコメントが言及するだけ）と `build_block_swap_service`（呼び出し元なし。LTX 2.3の `_install_block_swap`〔`engine/pipeline/fast_video_pipeline.py`〕も、LTX 2.5の `engine25/gguf_transformer.py` も、`BlockSwapService` を直接作ってこの関数を経由しない）。
   - `engine/gemma/gguf_quant_service.py` の `_load_gguf_connectors` の引数 `target_device`（本体のどこからも参照されない。呼び出し元の `load` は `cpu_device` を渡している）。
+  - `engine/gguf/loader_service.py` の `build_gguf_loader_service` と `GGUFLoaderService.uninstall`（呼び出し元なし）。
+  - `engine/preprocess/driver.py` の `_make_depth_processor` の関数内 import（パッケージの `__init__` が `depth` を即時に import するため遅延の効果が無い。重い `vda` の import は `_ensure_loaded` の中で遅延のまま。害は無い）。
 - **影響**: 無い（未使用のコードが残っているだけ）。
 - **選択肢**（オーナー判断・優劣はつけない）: 項目ごとに消すか残すかを決める。
 - **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135・§136（申し送り）。
-- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）、`engine/transformer/block_swap_service.py`（`BlockSwapService.uninstall`・`build_block_swap_service`）、`engine/gemma/gguf_quant_service.py`（`_load_gguf_connectors`）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135・§136・§137（申し送り）。
+- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）、`engine/transformer/block_swap_service.py`（`BlockSwapService.uninstall`・`build_block_swap_service`）、`engine/gemma/gguf_quant_service.py`（`_load_gguf_connectors`）、`engine/gguf/loader_service.py`（`build_gguf_loader_service`・`GGUFLoaderService.uninstall`）、`engine/preprocess/driver.py`（`_make_depth_processor`）。
 
 ### 1-59. `_read_target_vocab_from_header` の名前と型が本体に合わない（起票：2026-10-01）
 
@@ -331,6 +333,39 @@
 - **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §136（申し送り）。
 - **関連ファイル**: `engine/gemma/gguf_quant_service.py`（`GemmaGGUFQuantLoaderService.install`・`GemmaGGUFQuantStateDictLoader.load`・`_load_gguf_gemma`・`_patch_gemma_skip_full_logits`・`_install_cpu_embed_offload`）。
+
+### 1-61. GGUF の純 torch の逆量子化で 8 つの型が誤った値を返すか止まる（起票：2026-10-01）
+
+- **現象**: `engine/gguf/quant_service.py` の `_dequant_q4_0`・`_dequant_q4_1`・`_dequant_q5`・`_dequant_q2_k`・`_dequant_q3_k`・`_dequant_iq4` を、`.venv-engine` の `torch` と参照実装 `gguf.quants`（gguf-py）を比べて検算したところ（コメント現行化の検算で確定）、8つの型で誤った値を返すか止まることが分かった。Q4_0・Q4_1・Q5_0・Q5_1・Q2_K はスケール（`d`・`dmin`）の `[:, None]` で中間テンソルが (n, n, …) に広がり（実寸ではメモリ不足で止まる。小さなブロック数では黙って誤った値を返す）、ニブルや2ビット値の並べ方も参照と違う。Q3_K は必ず `IndexError` で止まる。IQ4_NL は非線形の表を通らず、IQ4_XS はブロックの大きさ（136 バイト）が Q4_0 の 18 バイトと合わず、ほとんどの形で reshape の段で止まる。Q8_0・Q4_K・Q5_K・Q6_K は参照と完全一致する。
+- **影響**: **製品の経路では通らない**。Triton の融合カーネルが受け持つのは Q4_K・Q5_K・Q6_K で、配布の GGUF と `models\` の量子化テンソルもこの3型だけである。利用者が自分で置いた GGUF（Q3_K_M・Q4_0 など）を使ったときだけ当たる。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §1.1 のバグ #3／#4 と同じ型の誤りが、直されなかった型に残っている。なお、対応表に無い型（Q8_1・Q8_K・IQ2／IQ3 系など）は、`dequantize_ggml_tensor` が警告を出してゼロのテンソルを返す（止まらずに重みがゼロになる）。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 参照実装（gguf-py の `gguf.quants`）の写しに置き換える。
+  - B: 対応外の型（対応表に無い型を含む）として読み込み時に明示的に断る。
+- **着手**: 着手時は go／no-go の検討から始める。コード側を直すときは、同ファイルの Q3_K の関数（`_dequant_q3_k`）の中の3つのコメント（今の意図を述べている）と、他の型の「今のコードが返す形」の注記も合わせて見直す。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §137（コメント現行化 engine/ 第3回の検算の申し送り）。
+- **関連ファイル**: `engine/gguf/quant_service.py`（`_dequant_q4_0`・`_dequant_q4_1`・`_dequant_q5`・`_dequant_q2_k`・`_dequant_q3_k`・`_dequant_iq4`）。
+
+### 1-62. `GGUFStateDictLoader.load` の鍵の付け替えが死んだコードで、bf16 の経路では読み込みのたびに警告が出る（起票：2026-10-01）
+
+- **現象**: `engine/gguf/loader_service.py` の `GGUFStateDictLoader.load` が呼ぶ `from ltx_core.loader.sd_ops import apply_sd_ops` は、固定先の `ltx_core`（LTX 2.3 用にも LTX 2.5 用にも）に無く、`sd_ops` が渡るたびに ImportError になり `logger.warning("sd_ops application failed: %s — using raw keys")` を出して生の鍵のまま続行する。上流の `ModelLedger` は transformer の読み込みに常に `model_sd_ops` を渡すので、`gguf_per_layer_quant=False` の経路（GGUF を bf16 に戻して読む経路）では毎回この警告が出る。per-layer 側の `GGUFQuantStateDictLoader.load` は同じ理由で付け替えをやめている。
+- **影響**: 動作は正しい（生の鍵で読めている）。警告が常態になっているのが問題である。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 付け替えの試みを消して警告を止める（per-layer 側の `GGUFQuantStateDictLoader.load` と同じ扱いになる）。
+  - B: 試みは残し、ImportError のときの記録を警告から debug に下げる（生の鍵で続行するのが通常の経路であることを明示する）。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §137（コメント現行化 engine/ 第3回の検算の申し送り）。
+- **関連ファイル**: `engine/gguf/loader_service.py`（`GGUFStateDictLoader.load`・`GGUFQuantStateDictLoader.load`）。
+
+### 1-63. 画角拡張（Outpainting）の `MIN_INNER_SIDE`（256）がキャンバスと半径に応じた下限になっていない（起票：2026-10-01）
+
+- **現象**: `engine/outpaint/canvas.py` の `MIN_INNER_SIDE`（`api/models.py` の `OUTPAINT_MIN_KEEP_SIDE` と同じ値の二重化）は固定値256だが、docstring自身の式 `r * (canvas_long_side / 64)` で計算すると、1920幅・半径5の帯は約150pxにしかならない一方、API が受け付ける上限（半径15・キャンバス4096。`api/models.py` の `Field`）では片側約960pxになり、256pxの辺はマスクの膨張の帯に収まってしまう。
+- **影響**: 小さい見込み（極端な半径とキャンバスの組み合わせだけ）。最終の画素は stage 2 の混合で決まるので実害の大きさは未確認。`api/models.py` の `OUTPAINT_MIN_KEEP_SIDE` の注記は「病的な場合を止める一律の床」と書いており、設計としてそう割り切っている可能性もある。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 下限をキャンバスと半径から求める。
+  - B: 一律の床として文書に明記する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §137（コメント現行化 engine/ 第3回の検算の申し送り）。
+- **関連ファイル**: `engine/outpaint/canvas.py`（`MIN_INNER_SIDE`）、`api/models.py`（`OUTPAINT_MIN_KEEP_SIDE`・`Field`）。
 
 ---
 

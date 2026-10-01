@@ -1,12 +1,13 @@
-"""Shared IC-LoRA plumbing for both fuse paths.
+"""Shared IC-LoRA plumbing for the load-time fuse and the forward-time paths.
 
-Two engine paths consume IC-LoRA adapters:
+IC-LoRA adapters are applied in two ways:
 
   * bf16 full-dequant path (``GGUFStateDictLoader._fuse_ic_loras``) — fuses the
-    delta in-place into the full BF16 state-dict at load time (Phase A spike).
-  * per-layer-quant path (``quant_service.ggml_linear_forward``) — keeps the
-    weights compressed in VRAM and adds the delta AT FORWARD TIME onto the
-    fresh per-call dequant tensor (Phase B).
+    delta in-place into the full BF16 state-dict at load time.
+  * forward-time paths (``quant_service.ggml_linear_forward`` for GGUF,
+    ``engine.sft_quant.quant_service._quant_linear_forward`` for quantized
+    safetensors) — keep the weights compressed in VRAM and add the delta AT
+    FORWARD TIME onto the per-call dequantised weight.
 
 Both need the SAME front half: load the LoRA safetensors through the wheel's
 ``SafetensorsStateDictLoader`` with ``LTXV_LORA_COMFY_RENAMING_MAP`` (which strips
@@ -16,17 +17,20 @@ kohya-named file, ``<prefix>.lora_down.weight`` / ``<prefix>.lora_up.weight``
 with its ``<prefix>.alpha`` folded into B — and shape-check. That reusable front
 half lives here in :func:`load_ic_lora_pairs`.
 
-The forward-time path additionally needs to attach the A/B factors to the target
-``nn.Linear`` instances so they ride ``block.to(device)`` during block-swap — see
-:func:`attach_ic_loras` / :func:`detach_ic_loras`.
+The forward-time paths additionally need to attach the A/B factors to the
+target ``nn.Linear`` instances so they ride ``block.to(device)`` during
+block-swap — see :func:`attach_ic_loras` / :func:`detach_ic_loras`.
 
-DELTA FORMULA (kept byte-identical across both paths, per Phase B gate G2):
+DELTA FORMULA (shared by the load-time fuse and the GGUF forward on a quantized
+weight; VERIFICATION_LOG §21.4, gate G2, matched their outputs byte for byte):
     delta = torch.matmul(B.float() * strength, A.float())          # fp32 matmul
     weight_bf16 += delta.to(weight_bf16.dtype)                     # single cast, in-place add
-The forward-time path recomputes this every call onto the transient dequant
-tensor; the load-time path does it once onto the persisted BF16 weight. Same
-math, same operation order — do not "optimise" it (a bf16 intermediate or a
-different strength fold would break G2).
+The GGUF forward recomputes this every call onto the transient dequant tensor;
+the load-time path does it once onto the persisted BF16 weight. Same math, same
+operation order — do not "optimise" it (a bf16 intermediate or a different
+strength fold would break that match). The float-weight branch of the GGUF
+forward and the safetensors forward add the delta out of place instead, so the
+stored weight is never written.
 """
 
 from __future__ import annotations
@@ -46,7 +50,7 @@ IC_LORA_SPECS_ATTR = "_ic_lora_specs"
 _SUFFIX_A = ".lora_A.weight"
 _SUFFIX_B = ".lora_B.weight"
 
-# kohya/sd-scripts naming (§3-108). Same factor shapes as A/B — down is the
+# kohya/sd-scripts naming. Same factor shapes as A/B — down is the
 # (rank, in) projection, up the (out, rank) one, so NO transpose is needed —
 # but the alpha/rank scale is carried as a separate 0-dim tensor instead of
 # being baked into the weights. Kept in sync with
@@ -56,7 +60,7 @@ _SUFFIX_UP = ".lora_up.weight"
 _SUFFIX_ALPHA = ".alpha"
 
 # One configured LoRA: ``audio_strength`` None → the audio side follows
-# ``strength`` (historical behaviour, byte-identical delta path).
+# ``strength`` and :func:`strength_for_prefix` skips the axis classification.
 IcLoraEntry = tuple[str, float, "float | None"]
 
 # Cross-attention blocks are named after their SOURCE stream but write into the
@@ -119,7 +123,8 @@ def strength_for_prefix(
     """Pick the per-axis strength for one LoRA key.
 
     ``audio_strength is None`` returns ``strength`` untouched WITHOUT classifying
-    (G-BC: the no-audio_strength path must stay identical to the historical one).
+    (G-BC, ``Docs/LORA_AUDIO_STRENGTH_WORKORDER.md`` §6: the
+    no-``audio_strength`` path never reaches the classifier).
     """
     if audio_strength is None:
         return strength
@@ -129,7 +134,7 @@ def strength_for_prefix(
 def normalize_ic_loras(
     ic_loras: list[tuple[str, float]] | list[IcLoraEntry],
 ) -> list[IcLoraEntry]:
-    """Accept legacy 2-tuples and 3-tuples, return 3-tuples with float fields."""
+    """Accept 2-tuples and 3-tuples, return 3-tuples with float fields."""
     out: list[IcLoraEntry] = []
     for entry in ic_loras:
         if len(entry) == 2:
@@ -163,11 +168,11 @@ def load_ic_lora_pairs(
 
     ``module_prefix`` is the ``diffusion_model.``-stripped key prefix, which is
     exactly the dotted ``named_modules()`` name of the target Linear in the LTX
-    transformer (verified in Phase A: the raw GGUF/model keys and the renamed
-    LoRA keys agree exactly). ``lora_A``/``lora_B`` are returned in their native
-    dtype (bf16) on CPU; callers cast to fp32 at delta time.
+    transformer (the raw GGUF/model keys and the renamed LoRA keys agree
+    exactly). ``lora_A``/``lora_B`` are returned in their native dtype (e.g.
+    bf16) on CPU; callers cast to fp32 at delta time.
 
-    TWO KEY LAYOUTS are read (§3-108), chosen PER FILE, never mixed:
+    TWO KEY LAYOUTS are read, chosen PER FILE, never mixed:
 
       * A/B (``.lora_A.weight`` / ``.lora_B.weight``) — the diffusers/musubi
         converted form, whose alpha is already folded into the weights;
@@ -346,7 +351,7 @@ def attach_ic_loras(
             slot = len(specs)
             a_name = f"_ic_lora_A_{slot}"
             b_name = f"_ic_lora_B_{slot}"
-            # Keep native dtype (bf16); persistent=False so state_dict is
+            # Keep native dtype (e.g. bf16); persistent=False so state_dict is
             # untouched but .to(device) still moves them with the block.
             module.register_buffer(a_name, lora_a.contiguous(), persistent=False)
             module.register_buffer(b_name, lora_b.contiguous(), persistent=False)
@@ -382,9 +387,14 @@ def attach_ic_loras(
 def detach_ic_loras(transformer: nn.Module) -> int:
     """Remove all attached IC-LoRA buffers + specs from every Linear.
 
-    Restores the module tree to its byte-identical no-LoRA state (used for the
-    keep-resident toggle path and defensively before every attach). Returns the
-    number of Linear modules cleared.
+    Restores the module tree to its byte-identical no-LoRA state. Called
+    defensively before each attach in ``attach_ic_loras``, by the build
+    wrappers when the job asks for no adapter (2.3's ``patched_transformer``
+    in ``engine/gguf/quant_service.py`` and
+    ``engine/sft_quant/quant_service.py``, 2.5's ``_apply_loras``; 2.5 reuses
+    the model shell across builds, so this is what drops the previous job's
+    adapters there), and by 2.5's per-job ``begin_job``. Returns the number
+    of Linear modules cleared.
     """
     root = _find_target_model(transformer)
     cleared = 0

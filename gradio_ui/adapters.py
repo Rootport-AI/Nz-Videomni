@@ -1,9 +1,10 @@
-"""IC-LoRA reference-video control (S4). The Generate tab exposes an adapter
+"""IC-LoRA reference-video control. The Generate tab exposes an adapter
 Dropdown whose choices are rebuilt on page load from /config model.ic_loras;
 the static list below is the offline fallback (server /config unavailable).
-``ADAPTER_NONE`` is the sentinel value meaning "no adapter" (payload omits
-loras + reference_video_id entirely). The five known adapter keys get a
-friendly label; any unknown registered key is shown as-is.
+``ADAPTER_NONE`` is the sentinel value meaning "no adapter" (the payload
+carries no adapter entry in ``loras`` and no ``reference_video_id``). The
+five known adapter keys get a friendly label; any unknown registered key is
+shown as-is.
 """
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ ADAPTER_FRIENDLY: dict[str, str] = {
     "deblur": "Deblur (deblur)",
 }
 
-# Fallbacks used when /config is unavailable (mirrors config.yaml upload.*).
+# Fallbacks used when /config is unavailable (mirrors the config.UploadConfig
+# defaults served as /config ``upload.*``).
 _FALLBACK_VIDEO_EXTS = [".mp4", ".mov", ".webm", ".mkv"]
 _FALLBACK_MAX_VIDEO_MB = 200
 
@@ -44,7 +46,7 @@ def build_adapter_choices(config: dict | None, lang: str = _DEFAULT_LANG) -> lis
 
 
 # --------------------------------------------------------------------------- #
-# Model-management dropdowns (Settings tab "Models" section, S3). Same shape
+# Model-management dropdowns (Settings tab "Models" section). Same shape
 # as the IC-LoRA adapter dropdown above: choices are (label, value) pairs whose
 # VALUE is always the server-side registered NAME from GET /models — never a
 # filesystem path.
@@ -69,13 +71,13 @@ def _category_block(
 ) -> dict:
     """The ``{default, active, entries}`` block for one category.
 
-    ``base_model=None`` reads the legacy top-level ``categories`` block, which
-    always describes the ACTIVE base model (unchanged behaviour for every
-    pre-multi-engine caller). A non-empty ``base_model`` instead reads that
-    base model's own listing out of ``base_models[]`` — the shape the Settings
-    tab needs while the user is browsing a base model that is not loaded yet.
-    An unknown id (or a server too old to send ``base_models``) yields ``{}``,
-    which the callers below degrade to the "default" fallback.
+    ``base_model=None`` reads the top-level ``categories`` block, which
+    always describes the ACTIVE base model. A non-empty ``base_model``
+    instead reads that base model's own listing out of ``base_models[]`` —
+    the shape the Settings tab needs while the user is browsing a base model
+    that is not loaded yet. An unknown id (or a response without
+    ``base_models``) yields ``{}``, which the callers below degrade to the
+    "default" fallback.
     """
     root = models_json or {}
     if base_model:
@@ -93,8 +95,8 @@ def build_base_model_choices(models_json: dict | None) -> list[tuple[str, str]]:
     descriptor's human display name, which is language-independent — so a
     language switch never has to rebuild these choices.
 
-    A response without ``base_models`` (a server predating the multi-engine
-    layer) yields an empty list; the caller leaves its dropdown untouched."""
+    A response without ``base_models`` yields an empty list; the caller
+    leaves its dropdown untouched."""
     choices: list[tuple[str, str]] = []
     for entry in (models_json or {}).get("base_models") or []:
         if not isinstance(entry, dict):
@@ -118,10 +120,10 @@ def active_unsupported_features(models_json: dict | None) -> list[str]:
     Read off the ``base_models[]`` entry flagged ``active`` — the judgment is
     about what the pipeline is actually on, not what the base dropdown happens
     to show (the dropdown is a pending selection until the Load button sends
-    it). A response with no active entry, no ``base_models`` block at all (a
-    server predating the multi-engine layer), or no list on the active entry
-    yields ``[]``, which :func:`gradio_ui.feature_scope.hidden_controls` turns
-    into "nothing is closed"."""
+    it). A response with no active entry, no ``base_models`` block at all,
+    or no list on the active entry yields ``[]``, which
+    :func:`gradio_ui.feature_scope.hidden_controls` turns into "nothing is
+    closed"."""
     for entry in (models_json or {}).get("base_models") or []:
         if isinstance(entry, dict) and entry.get("active"):
             return [name for name in (entry.get("unsupported_features") or [])
@@ -144,13 +146,14 @@ def build_model_choices(
     The injected default entry (``name == "default"``) gets a descriptive
     label of the form ``"default — <filename>"`` built from its ``path``, so
     the user can tell which file the config-side default actually points at
-    instead of seeing a bare, uninformative "default". This is a DISPLAY-ONLY
-    change: the choice's VALUE stays ``"default"`` (the server-side resolution
-    logic and callers key off that name, never the label). When ``path`` is
-    empty or missing the label falls back to plain "default", same as before.
+    instead of seeing a bare, uninformative "default". The label is
+    DISPLAY-ONLY: the choice's VALUE stays ``"default"`` (the server-side
+    resolution logic and callers key off that name, never the label). When
+    ``path`` is empty or missing the label is plain "default".
 
     ``base_model`` (optional) reads the listing of THAT base model instead of
-    the active one's legacy block — see :func:`_category_block`.
+    the top-level block (the active base model's) — see
+    :func:`_category_block`.
     """
     block = _category_block(models_json, category, base_model)
     choices: list[tuple[str, str]] = []
@@ -175,15 +178,15 @@ def model_active_value(models_json: dict | None, category: str,
     """The currently active NAME for a category (``"default"`` fallback).
 
     With ``base_model`` set to a base model that is NOT the active one the
-    server sends an empty ``active`` (no live selection exists for it), so this
-    naturally falls back to ``"default"`` — the right pre-selection for a base
-    model the user is only browsing."""
+    server lists that base model's ``active`` as ``"default"`` (no live
+    selection exists for it), so this returns ``"default"`` — the right
+    pre-selection for a base model the user is only browsing."""
     block = _category_block(models_json, category, base_model)
     return block.get("active") or MODEL_DEFAULT
 
 
 # --------------------------------------------------------------------------- #
-# Style/character LoRA gallery (Style LoRA tab, S2). GET /loras enumerates every
+# Style/character LoRA gallery (Style LoRA tab). GET /loras enumerates every
 # adapter with its ``kind``; the gallery shows ONLY the ``style`` ones (control
 # adapters — canny/pose/upscaler — stay in the Generate tab's reference-video
 # field). Each entry's thumbnail is served by the API (GET /loras/{name}/

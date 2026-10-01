@@ -81,9 +81,10 @@ def format_api_error(body: object, lang: str = _DEFAULT_LANG) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Jobs tab (S6). A failed job's ``error`` is NOT the REST error envelope: it is
+# Jobs tab. A failed job's ``error`` is NOT the REST error envelope: it is
 # the pre-formatted string the pipeline_manager writes as
-# ``"CODE: message (detail)"`` (pipeline_manager.py:196,321). We reuse the SAME
+# ``"CODE: message (detail)"`` (``PipelineManager.run_job`` /
+# ``run_chain_job`` in services/pipeline_manager.py). We reuse the SAME
 # ``apierr_*`` hints as the envelope path: parse the ``CODE`` prefix and, when
 # it is a known code, prepend the localized hint (keeping the raw server text for
 # debugging). An unknown prefix is returned verbatim.
@@ -103,7 +104,7 @@ def format_job_error(error_str: object, lang: str = _DEFAULT_LANG) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Jobs tab (S6): localized Dataframe headers + row building from a /jobs list.
+# Jobs tab: localized Dataframe headers + row building from a /jobs list.
 # Fields verified against api/models.py JobResponse (job_id / status / progress /
 # created_at / completed_at / error). ``progress`` is a 0..1 float rendered as a
 # percent; a terminal-without-progress job shows "—". The error column shows the

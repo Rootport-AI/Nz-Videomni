@@ -1,6 +1,6 @@
-"""UI assembly: ``build_ui()`` assembles the top common bar + gr.Tabs
-(Generate / Clip Chain / Jobs / Settings). Placeholder tabs are filled in by
-later slices (S3-S6).
+"""UI assembly: ``build_ui()`` assembles the top common bar, the shared
+prompt / Negative Prompt (NAG) area above the tabs, and gr.Tabs (Generate /
+Clip Chain / Style LoRA / Jobs / MP4 Info / Settings).
 """
 
 from __future__ import annotations
@@ -105,9 +105,9 @@ def build_spill_rows(config: dict | None) -> list[list]:
 
 
 # --------------------------------------------------------------------------- #
-# Batch A2V (WP3) — pure display/formatting helpers. Kept module-level (not in
-# batch.py, which is frozen) so the UI wiring below stays terse; none of them
-# touch Gradio state, so they are trivially reusable + testable.
+# Batch A2V — pure display/formatting helpers. Kept module-level here (not in
+# batch.py) so the UI wiring below stays terse; none of them touch Gradio
+# state, so they are trivially reusable + testable.
 # --------------------------------------------------------------------------- #
 # Image extensions offered in the per-row image dropdown (mirrors the Generate
 # tab's gr.Image filepath input's practical set).
@@ -115,16 +115,15 @@ _BATCH_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")
 
 # Initial per-column widths for the 7-column batch table (gr.Dataframe
 # ``column_widths``, supported in Gradio 6.19). FIXED PIXEL widths (not
-# percentages): with pixels the frontend sizes the header table to the SUM of
-# the column widths (Gradio 6.19 Index-*.js: ``d.style.width = `${G}px``` where
-# G = Σ column px), so once that sum (here 1270px) exceeds the accordion's width
-# the ``.table-wrap`` container (``overflow-x:auto`` in the compiled Dataframe
-# CSS) shows a HORIZONTAL SCROLLBAR instead of squeezing every column. A
-# percentage list, by contrast, is always resolved as a fraction of the viewport
-# width (``v/100*viewport``) so it can never overflow — which is exactly why the
-# old percentages shrank the Prompt column rather than scrolling. ``wrap=True``
-# is kept, so the 480px Prompt column is always clickable and only text longer
-# than 480px wraps inside its own cell.
+# percentages): with pixels the compiled Dataframe frontend (Gradio 6.19)
+# sizes the header table to the SUM of the column widths, so once that sum
+# (here 1270px) exceeds the accordion's width the ``.table-wrap`` container
+# (``overflow-x:auto`` in the compiled Dataframe CSS) shows a HORIZONTAL
+# SCROLLBAR instead of squeezing every column. A percentage list, by
+# contrast, is always resolved as a fraction of the viewport width so it can
+# never overflow — it shrinks the Prompt column rather than scrolling.
+# ``wrap=True`` is set, so the 480px Prompt column is always clickable and
+# only text longer than 480px wraps inside its own cell.
 # Columns: # / Audio / dur. / Image / Prompt / Status / Output.
 _BATCH_COL_WIDTHS = ["50px", "220px", "70px", "140px", "480px", "90px", "220px"]
 
@@ -139,10 +138,10 @@ _BATCH_STAT_DISPLAY = {
 }
 
 # scan_wav_folder's skip_reason strings -> localized i18n key. "over-481f" is
-# the LEGACY code this GUI wrote before the cap became DURATION-linked
-# (Docs/PENDING_TASKS_CLOSED.md's old §4-29, closed 2026-09-01); manifests
-# written back then still carry it, so it maps to the same label as the
-# current "over-cap" instead of falling through as a raw string.
+# a skip code no GUI writes but a manifest may carry
+# (Docs/BATCH_A2V_CSV_SPEC.md §3 lists it as a synonym of "over-cap"), so it
+# maps to the same label as "over-cap" instead of falling through as a raw
+# string.
 _BATCH_SKIP_KEY = {
     "over-cap": "batch_skip_overcap",
     "over-481f": "batch_skip_overcap",
@@ -188,8 +187,9 @@ def batch_summary_text(rows, lang: str) -> str:
 
 
 def batch_maxdur_text(width, height, fps, config, lang: str) -> str:
-    """The "max duration: 481f (Ns)" line, plus the comfortable (spill-free)
-    frame ceiling for the CURRENT resolution when /config advertises one."""
+    """The ``batch_maxdur`` line ("max duration: <MAX_FRAMES>f (Ns)"), plus
+    the comfortable (spill-free) frame ceiling for the CURRENT resolution
+    when /config advertises one."""
     fps_v = _resolve_fps(fps)
     txt = L("batch_maxdur", lang).format(frames=MAX_FRAMES, secs=MAX_FRAMES / fps_v)
     try:
@@ -259,8 +259,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     chain_join = make_join_handler(api)
     mp4_info = make_mp4_info_handler(api)
 
-    # Component registry: (component, label_key, attr). S6 iterates this to
-    # implement live language switching. attr is the gr.update field to set.
+    # Component registry: (component, label_key, attr). switch_language
+    # iterates this to implement live language switching. attr is the
+    # gr.update field to set.
     registry: list[tuple[object, str, str]] = []
 
     def reg(component, key: str, attr: str = "label"):
@@ -340,8 +341,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 gr.update(choices=build_adapter_choices(cfg)))
 
     def on_qmode_change(value: str):
-        # two_stage_hq is not yet consumed by the backend (ltx_runner ignores
-        # pipeline/guidance_scale). Revert to distilled and warn.
+        # two_stage_hq is not consumed by the backend (the LTX 2.3 engine,
+        # services/engines/ltx/adapter.py, ignores pipeline/guidance_scale;
+        # LTX 2.5 rejects it via REJECT_TABLE / CHAIN_REJECT_TABLE). Revert to
+        # distilled and warn.
         if value == "two_stage_hq":
             gr.Warning(L("warn_hq_unsupported"))
             return gr.update(value="distilled")
@@ -350,14 +353,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     def on_crop_toggle(enabled: bool):
         return gr.update(visible=bool(enabled))
 
-    # Feature 3: grey out + relabel generate_btn / chain_generate_btn while a
-    # generation is in flight, via a .click().then(generate).then(restore)
+    # Grey out + relabel generate_btn / chain_generate_btn while a
+    # generation is in flight, via a .click(start).then(dispatch).then(restore)
     # chain — the restore step runs unconditionally (gradio's default .then()
     # semantics: "regardless of success or failure" of the preceding step),
     # so a failed/raising generation still re-enables the button. The button's
     # normal label lives in the language-switch registry (reg(..., "value"));
-    # the restore step looks it up by ``label_key`` so it matches whichever
-    # label the OTHER button uses (btn_generate vs btn_concat).
+    # make_generate_btn_restore looks it up by ``label_key`` (btn_concat for
+    # chain_generate_btn), while generate_btn restores through the batch-aware
+    # ``_restore`` wired with its own click chain (btn_generate / batch_start).
     def on_generate_btn_start(lang):
         return gr.update(interactive=False, value=L("btn_generating", lang))
 
@@ -376,13 +380,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # component config and is applied on the page regardless of the mount
         # path, with no deprecation warning.
         gr.HTML(f"<style>{CUSTOM_CSS}</style>", padding=False)
-        # /config is fetched on page load and stashed for later slices (presets,
-        # limits, ic_loras, etc.).
+        # /config is fetched on page load and stashed here for the handlers
+        # that read it (presets, limits, ic_loras, etc.).
         config_state = gr.State({})
-        # Current UI language (S6). Fed as a runtime input to the generate/chain
+        # Current UI language. Fed as a runtime input to the generate/chain
         # handlers so flow messages localize, and updated by the Language switch.
         lang_state = gr.State("en")
-        # Settings /config auto-retry (bug fix): counts failed attempts since
+        # Settings /config auto-retry: counts failed attempts since
         # the timer was armed; the timer itself starts inactive and is only
         # switched on by on_page_load / on_config_retry after a fetch failure.
         config_retry_state = gr.State(0)
@@ -410,14 +414,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         # ---- shared Negative Prompt / NAG accordion (always visible, above the
         # tabs) ----
-        # NAG (Normalized Attention Guidance) is the ONLY way a negative prompt
-        # has any effect: the distilled model is frozen at CFG=1, so a plain
-        # negative_prompt is otherwise a no-op. One negative prompt is shared by
-        # Generate / Clip Chain / Batch A2V (same rationale as the shared prompt
-        # box above), so this accordion sits outside gr.Tabs() rather than being
-        # duplicated per tab. The textbox variable name stays ``negative`` (the
-        # pre-NAG Generate-tab component's name) so the existing generate_btn
-        # inputs list / dispatch signature below need no renumbering.
+        # The NAG block (nag_enabled, method NAG or VSF) is the ONLY way a
+        # negative prompt has any effect: the distilled model is frozen at
+        # CFG=1, so a plain negative_prompt is otherwise a no-op. One negative
+        # prompt is shared by Generate / Clip Chain / Batch A2V (same rationale
+        # as the shared prompt box above), so this accordion sits outside
+        # gr.Tabs() rather than being duplicated per tab.
         with gr.Accordion(L("nag_accordion"), open=False) as nag_accordion:
             reg(nag_accordion, "nag_accordion", "label")
             reg(gr.Markdown(L("nag_note"), elem_classes=["note"]), "nag_note", "value")
@@ -459,10 +461,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     # LEFT: inputs
                     with gr.Column(scale=3):
                         # Prompt lives in the shared draft box above the tabs.
-                        # Negative prompt / NAG now live in the shared accordion
+                        # Negative prompt / NAG live in the shared accordion
                         # above gr.Tabs() (see ``negative`` there).
 
-                        # quality mode (two_stage_hq is non-selectable in S1)
+                        # quality mode (on_qmode_change reverts a two_stage_hq pick to
+                        # distilled with a warning)
                         qmode = reg(gr.Radio(
                             choices=[(L("qmode_fast"), "distilled"),
                                      (L("qmode_hq"), "two_stage_hq")],
@@ -504,7 +507,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         # panels below, just horizontal here via Row+Column
                         # instead of the slots' vertical stacking. Duration
                         # itself carries no input: a bold "Duration" heading
-                        # (deliberately un-i18n'd -- i18n.py is frozen) sits
+                        # (not i18n-registered) sits
                         # above the accent-coloured "N.NNs" readout, centred
                         # in a narrower middle column so it reads as a
                         # standout summary rather than a third input field.
@@ -512,7 +515,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             with gr.Row():
                                 with gr.Column(scale=3, min_width=0):
                                     # minimum omitted server-side (see width note);
-                                    # client min=9 applied via demo.load(js=...).
+                                    # client-side min applied via demo.load(js=_min_attr_js).
                                     num_frames = reg(gr.Number(
                                         value=49, label=L("lbl_frames"), precision=0,
                                         step=8, elem_id="gen_num_frames"), "lbl_frames")
@@ -526,11 +529,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                         elem_classes=["duration-line"])
                                 with gr.Column(scale=3, min_width=0):
                                     # precision=0 is a real defence, not cosmetics
-                                    # (§3-71 / §3-72 — see handlers._snap_frame_rate):
+                                    # (VERIFICATION_LOG §91 — see handlers._snap_frame_rate):
                                     # it makes Gradio hand every downstream consumer a
-                                    # whole number, including the live duration/spill
-                                    # readouts and the A2V length precheck, which read
-                                    # the raw field rather than the snapped payload.
+                                    # whole number, including the live duration and batch
+                                    # max-duration readouts and the A2V length precheck, which
+                                    # read the raw field rather than the snapped payload.
                                     # minimum/maximum stay omitted server-side for the
                                     # same reason as the width field above.
                                     frame_rate = reg(gr.Number(
@@ -633,8 +636,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             ), "lbl_ref_video")
                             reg(gr.Markdown(L("note_ref128"),
                                             elem_classes=["note"]), "note_ref128", "value")
-                            # Static hints for the newer control adapters (depth-control,
-                            # deblur). No adapter-conditional show/hide mechanism exists
+                            # Static hints for the depth-control and deblur control adapters.
+                            # No adapter-conditional show/hide mechanism exists
                             # (only ref_video's enabled state tracks the selection via
                             # on_adapter_change), so these stay always-visible notes like
                             # note_ref128 above rather than adding a new UI mechanism.
@@ -645,18 +648,18 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             reg(gr.Markdown(L("note_iclora_deblur"),
                                             elem_classes=["note"]), "note_iclora_deblur", "value")
 
-                        # accordion: Audio-to-Video (案A). Attaching an audio
+                        # accordion: Audio-to-Video. Attaching an audio
                         # file routes generate() down the A2V path (src_audio,
                         # the handler's last positional input). Style LoRAs
                         # (<lora:> tokens), keyframe images, AND the
                         # reference-video CONTROL adapter above (dropdown +
                         # ref_video) can all combine with audio -- this handler
-                        # always sends a single-clip chain, and a chain now
-                        # accepts a reference_video_id on any clip count
-                        # (1..24 -- owner decision 2026-08-11), so a 1-clip A2V
-                        # chain is unaffected either way. All three are wired
+                        # always sends a single-clip chain, and a chain
+                        # accepts a reference_video_id on any clip count the
+                        # ``clips`` field allows (owner decision; VERIFICATION_LOG
+                        # §57). All three are wired
                         # into the chain payload below (``loras`` +
-                        # ``reference_video_id`` / S3 strength keys).
+                        # ``reference_video_id`` / strength keys).
                         with gr.Accordion(L("gen_a2v_accordion"), open=False) as gen_a2v_accordion:
                             reg(gen_a2v_accordion, "gen_a2v_accordion", "label")
                             reg(gr.Markdown(L("gen_a2v_note"), elem_classes=["note"]),
@@ -666,7 +669,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                 file_count="single", file_types=["audio"],
                             ), "a2v_lbl_audio")
 
-                        # accordion: Batch A2V (WP3). A wav folder -> CSV
+                        # accordion: Batch A2V. A wav folder -> CSV
                         # manifest -> a queue table the in-process BatchRunner
                         # (batch.py) drives one clip at a time for unattended
                         # overnight runs. The heavy lifting (scan/merge/CSV,
@@ -760,19 +763,20 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
             # =========================== Clip Chain ==========================
             # One continuous masked AV-latent timeline (POST /generate/chain):
-            # shared params + join (overlap) params on the left, 8 FIXED clip
-            # slots (only slot 1 carries a start image = conditioning on clip 0),
-            # and the action panel / output trio on the right.
+            # shared params + join (overlap) params on the left, CHAIN_MAX_CLIPS
+            # FIXED clip slots (only slot 1 carries a start image = conditioning
+            # on clip 0), and the action panel / output trio on the right.
             with gr.Tab(L("tab_concat")) as tab_concat:
                 reg(tab_concat, "tab_concat", "label")
                 chain_clip_slots: list[tuple] = []
                 with gr.Row():
                     # LEFT: shared + join params + clip list
                     with gr.Column(scale=3):
-                        # ---- generation mode (none / V2V / A2V) ----
-                        # ONE radio makes the V2V x A2V exclusivity structural
-                        # (mirrors the API's source_video x source_audio 422);
-                        # each mode's panel is shown only while selected.
+                        # ---- generation mode (none / V2V) ----
+                        # ONE radio picks the mode; A2V has no entry on this tab (see
+                        # below), so a Clip Chain request never pairs source_video with
+                        # source_audio (the API's 422). Each mode's panel is shown only
+                        # while selected.
                         chain_mode = reg(gr.Radio(
                             choices=[(L("v2v_mode_none"), "none"),
                                      (L("v2v_mode_v2v"), "v2v")],
@@ -798,7 +802,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                 25, 145, value=73, step=8,
                                 label=L("v2v_lbl_context"),
                             ), "v2v_lbl_context")
-                            # F4: usage guide, same rank/placement as a2v_guide.
+                            # V2V usage guide.
                             reg(gr.Markdown(L("v2v_guide"), elem_classes=["note"]),
                                 "v2v_guide", "value")
                             reg(gr.Markdown(L("v2v_cap_panel"), elem_classes=["note"]),
@@ -806,8 +810,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             v2v_join_chk = reg(gr.Checkbox(value=True,
                                                            label=L("v2v_chk_join")),
                                                "v2v_chk_join")
-                            # F5: crossfade length for the joined version
-                            # (JoinRequest.handle_crossfade_ms; server default 300).
+                            # Crossfade length for the joined version
+                            # (JoinRequest.handle_crossfade_ms; the default matches that
+                            # field's server default).
                             v2v_crossfade = reg(gr.Dropdown(
                                 choices=[("150 ms", 150), ("300 ms", 300),
                                          ("500 ms", 500)],
@@ -816,23 +821,23 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             reg(gr.Markdown(L("v2v_cap_join"), elem_classes=["note"]),
                                 "v2v_cap_join", "value")
 
-                        # A2V for the Clip Chain flow now lives on the Generate
-                        # tab's Audio-to-Video accordion (案A). The chain A2V
-                        # handler/i18n keys are kept; only this UI entry point
-                        # was removed.
+                        # A2V has no entry point on this tab: it runs from the Generate
+                        # tab's Audio-to-Video accordion. The chain handler's A2V branch
+                        # (MODE_A2V) and its i18n keys remain, unreachable from here.
 
                         # Shared prompt lives in the draft box above the tabs
                         # (it is the common base for every clip). Negative
-                        # prompt / NAG now live in the shared accordion above
+                        # prompt / NAG live in the shared accordion above
                         # gr.Tabs() (see ``negative`` there) -- this tab reuses
-                        # that SAME component; there is no chain_negative.
+                        # that SAME component.
                         chain_qmode = reg(gr.Radio(
                             choices=[(L("qmode_fast"), "distilled"),
                                      (L("qmode_hq"), "two_stage_hq")],
                             value="distilled", label=L("lbl_qmode"),
                         ), "lbl_qmode")
                         # Chain preset: fills resolution/crop + a recommended
-                        # per-clip length into all 24 slots (apply_chain_preset).
+                        # per-clip length into all CHAIN_MAX_CLIPS slots
+                        # (apply_chain_preset).
                         chain_preset = reg(gr.Dropdown(
                             list(PRESETS.keys()), value="minimal",
                             label=L("lbl_chain_preset"), info=L("info_chain_preset"),
@@ -859,11 +864,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                          precision=0), "lbl_crop_h")
                         with gr.Row():
                             # precision=0: same real defence as the Generate tab's
-                            # fps field (§3-71 / §3-72 — see the note there and
-                            # handlers._snap_frame_rate). Here it also guards the
-                            # live chain estimate (presets.compute_chain_layout),
-                            # which reads this field raw. minimum/maximum stay
-                            # omitted server-side (see the Generate width note).
+                            # fps field (see the note there, handlers._snap_frame_rate
+                            # and VERIFICATION_LOG §91). Here it also guards
+                            # the live chain estimate
+                            # (presets.compute_chain_duration_label), which reads this
+                            # field raw. minimum/maximum stay omitted server-side (see
+                            # the Generate width note).
                             chain_fps = reg(gr.Number(value=24, label=L("lbl_fps"),
                                                       precision=0), "lbl_fps")
                             chain_steps = reg(gr.Slider(1, 50, value=8, step=1, label=L("lbl_steps"),
@@ -884,17 +890,18 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             ), "lbl_overlap_strength")
                         reg(gr.Markdown(L("cap_crossfade")), "cap_crossfade", "value")
 
-                        # Default ON (owner decision 2026-07-14, after the real-GPU
-                        # 4-clip gate: complete, seam-free, 9311MB peak). UI-side
-                        # default only — the API model keeps False so flag-omitting
-                        # clients (WebView2 etc.) are unchanged; Gradio always sends
-                        # the checkbox's actual value explicitly.
+                        # Default ON (owner decision after the real-GPU 4-clip run:
+                        # complete, seam-free, 9311MB peak; implementation summary of
+                        # Docs/CHUNKED_UPSAMPLE_WORKORDER.md). UI-side default only —
+                        # a client that omits the flag gets the API model's own
+                        # GenerateChainRequest.chunked_upsample default; Gradio always
+                        # sends the checkbox's actual value explicitly.
                         chain_chunked_upsample = reg(
                             gr.Checkbox(value=True, label=L("chk_chunked_upsample")),
                             "chk_chunked_upsample",
                         )
 
-                        # Stage-2 window (§3-165): the choices are
+                        # Stage-2 window: the choices are
                         # gradio_ui.comfort.STAGE2_WINDOW_CHOICES (the
                         # chain_math table minus "full_length"). Each label
                         # quotes the loaded engine and its recommended 16:9
@@ -903,7 +910,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         # rebuilt by relabel_stage2_window (see events) from
                         # chain_engine_state, which refresh_model_dropdowns
                         # fills from GET /models + GET /status. Built here with
-                        # the no-engine / 40,000 fallback.
+                        # the no-engine / chain_math.CHAIN_COMFORT_TOKEN_BUDGET
+                        # fallback.
                         chain_stage2_window = reg(gr.Dropdown(
                             choices=build_stage2_window_choices(),
                             value=STAGE2_WINDOW_DEFAULT,
@@ -915,10 +923,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         #  "prefetch_available"} of the ACTIVE base model.
                         chain_engine_state = gr.State({})
 
-                        # clip list: 24 fixed slots (slots 1-2 shown by default;
-                        # the ± buttons grow/shrink the visible count). The open
-                        # count lives in a gr.State because Gradio does not expose
-                        # a component's live visibility to the server.
+                        # clip list: CHAIN_MAX_CLIPS fixed slots (the first
+                        # CHAIN_MIN_OPEN shown by default; the ± buttons grow/shrink
+                        # the visible count). The open count lives in a gr.State
+                        # because Gradio does not expose a component's live
+                        # visibility to the server.
                         chain_open_count = gr.State(CHAIN_MIN_OPEN)
                         reg(gr.Markdown(f"### {L('h_clips')}"), "h_clips", "value")
                         # Estimated total duration for the enabled clips. NOT
@@ -947,11 +956,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             reg(gr.Markdown(L("cap_first_clip")), "cap_first_clip", "value")
                         chain_clip_slots.append((c1_enabled, c1_prompt, c1_frames,
                                                  c1_image, c1_strength))
-                        # slots 2-24 — no start image (later timeline segments).
-                        # Each is wrapped in a gr.Group so the ± buttons can
-                        # hide/show it non-destructively (gr.update(visible=...)
+                        # slots 2..CHAIN_MAX_CLIPS — no start image (later timeline
+                        # segments). Each is wrapped in a gr.Group so the ± buttons
+                        # can hide/show it non-destructively (gr.update(visible=...)
                         # keeps the field values). Only slot 2's group is visible
-                        # at startup (chain_open_count == 2).
+                        # at startup (chain_open_count starts at CHAIN_MIN_OPEN).
                         chain_extra_groups: list[object] = []
                         for _slot_i in range(2, CHAIN_MAX_CLIPS + 1):
                             clip_key = f"clip{_slot_i}"
@@ -968,15 +977,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             chain_clip_slots.append((cN_enabled, cN_prompt, cN_frames))
                             chain_extra_groups.append(chain_slot_group)
                         # ± buttons (symbols only, i18n non-registered): grow /
-                        # shrink the visible clip count (min 2, max 24). "＋" also
-                        # checks the newly-revealed slot's Use box on (owner
-                        # request) and greys out at the 24-slot ceiling; "−"
-                        # unchecks the newly-hidden slots' Use box so they are
-                        # never submitted (the handler collects every ENABLED
-                        # slot regardless of visibility) and greys out at the
-                        # 2-slot floor (the startup state, hence
-                        # interactive=False here). Owner-requested order: ＋ left,
-                        # − right, plus an "n/24" counter (digits only -> not
+                        # shrink the visible clip count (CHAIN_MIN_OPEN to
+                        # CHAIN_MAX_CLIPS). "＋" also checks the newly-revealed
+                        # slot's Use box on (owner request) and greys out at the
+                        # ceiling; "−" unchecks the newly-hidden slots' Use box so
+                        # they are never submitted (the handler collects every
+                        # ENABLED slot regardless of visibility) and greys out at
+                        # the floor (the startup state, hence interactive=False
+                        # here). Owner-requested order: ＋ left, − right, plus an
+                        # "n/CHAIN_MAX_CLIPS" counter (digits only -> not
                         # i18n-registered) — all mirroring the keyframe grid.
                         with gr.Row():
                             chain_plus_btn = gr.Button("＋", scale=0)
@@ -1008,11 +1017,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                      "v2v_lbl_joined")
 
             # =========================== Style LoRA ==========================
-            # Style/character LoRA browser (S2). GET /loras -> gallery of the
+            # Style/character LoRA browser. GET /loras -> gallery of the
             # kind=="style" adapters only (thumbnails served by the API);
-            # selecting one appends a <lora:name:1.0> token to the Generate-tab
-            # prompt. Control LoRAs (canny/pose/upscaler) are NOT shown here —
-            # they stay in the Generate tab's reference-video adapter field.
+            # selecting one appends a <lora:name:1.0:1.0> token to the shared
+            # prompt above the tabs. Control LoRAs (the IC-LoRA adapters, e.g.
+            # canny/pose/upscaler) are NOT shown here — they stay in the
+            # Generate tab's reference-video adapter field.
             with gr.Tab(L("tab_style_lora")) as tab_style_lora:
                 reg(tab_style_lora, "tab_style_lora", "label")
                 # Style-LoRA names parallel to the gallery order, so a gallery
@@ -1062,7 +1072,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                 interactive=False, container=False)
 
             # ============================ MP4 Info ===========================
-            # §3-164: drop an mp4 -> POST /utils/mp4-info with the server-local
+            # Drop an mp4 -> POST /utils/mp4-info with the server-local
             # path Gradio's upload cache hands over -> the ``comment`` tag
             # (the same JSON as metadata.json) shown as-is. Read-only textbox;
             # no copy button (select-and-copy, owner ruling).
@@ -1121,9 +1131,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     "accel_section_title", "value")
                 reg(gr.Markdown(L("accel_note"), elem_classes=["note"]),
                     "accel_note", "value")
-                # 実装のあるつまみ（GGUF逆量子化の Triton 1カーネル化）。位置は
-                # 撤去した旧モック accel_fused_gguf（受理のみで効果の無かった
-                # fused_gguf_dequant_gemm）をそのまま継承している。
+                # GGUF逆量子化の Triton 1カーネル化のつまみ。
                 # 利用可否はクライアント側でゲートしない（attention と同じ理由
                 # ＝サーバが Triton 不在・例外・自己検証不一致のいずれでも黙って
                 # 従来実装へ降格するので、二つ目の真理の源を作らない）。
@@ -1158,8 +1166,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 reg(accel_prefetch, "accel_info_prefetch", "info")
                 # ここもクライアント側でゲートしない
                 # （利用可否ではなく「積んでいるメモリ量しだい」で、サーバから
-                # は判定できない。既定offのまま説明文で「64GB以上推奨」と伝え、
-                # 判断はユーザーに委ねる方針＝オーナー確定）。
+                # は判定できない。既定値は KEEP_RESIDENT_DEFAULT のまま説明文で
+                # 「64GB以上推奨」と伝え、判断はユーザーに委ねる方針＝オーナー確定）。
                 accel_keep_resident = reg(gr.Checkbox(
                     value=KEEP_RESIDENT_DEFAULT, label=L("accel_lbl_keep_resident"),
                     info=L("accel_info_keep_resident"),
@@ -1169,9 +1177,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # it has no precondition on the keep-resident checkbox above or
                 # on the prefetch one, so nothing here greys it out. Created
                 # INVISIBLE on purpose: LTX 2.3 has no embeddings processor and
-                # names the field in its ``unsupported_features``, and the
-                # default base model is 2.3, so the row must not flash into
-                # view before the first /models pull — refresh_model_dropdowns
+                # names the field in its ``unsupported_features``, and which base
+                # model is active is unknown until the first /models pull, so the
+                # row must not flash into view before it — refresh_model_dropdowns
                 # below shows it once the ACTIVE base model says it is
                 # supported (and hides + resets it again when it is not, via
                 # gradio_ui/feature_scope.py). Screen position and wiring
@@ -1187,12 +1195,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 ), "accel_lbl_keep_resident_embeddings")
                 reg(accel_keep_resident_embeddings,
                     "accel_info_keep_resident_embeddings", "info")
-                # Display name: "PruneVAED" -> "PrunaVAED" (correct product name
-                # per PRUNAVAED_WORKORDER.md §6.1). The API literal value
-                # "prune_vaed" is an external contract and is unchanged.
-                # PrunaVAED (Docs/PENDING_TASKS_CLOSED.md §3-66, filed as
-                # §3-50 at the time): pruned video-VAE decoder, real as of
-                # 2026-08-05. Wired the same way as attention_backend/
+                # Display name "PrunaVAED" is the product's correct name
+                # (Docs/PRUNAVAED_WORKORDER.md §6.1); the API literal value
+                # "prune_vaed" is an external contract and is not renamed.
+                # PrunaVAED (VERIFICATION_LOG §52): pruned video-VAE
+                # decoder. Wired the same way as attention_backend/
                 # accel_prefetch/accel_keep_resident/accel_fused_dequant above
                 # -- see dispatch()/chain_dispatch() below for how the selected
                 # value reaches vae_mode in the request payload (single, chain
@@ -1205,7 +1212,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 ), "accel_lbl_vae")
                 reg(accel_vae, "accel_info_vae", "info")
 
-                # ---- Output (§3-164: generation conditions in the mp4) ----
+                # ---- Output (generation conditions in the mp4) ----
                 # Not an acceleration option, but a per-job request field
                 # carried the same way (request field, sent only when it
                 # differs from the server default) -- see dispatch()/
@@ -1235,17 +1242,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
                 # ---- Models (model management: per-category dropdowns) ----
                 # Independent section (parent ruling): it shares NO closure or
-                # outputs with on_page_load / on_refresh_config / the top-bar
-                # load buttons — only additive event listeners below.
+                # outputs with on_page_load / on_refresh_config — it registers
+                # its own event listeners below.
                 reg(gr.Markdown(f"### {L('model_section_title')}"),
                     "model_section_title", "value")
-                # Base model (multi-engine axis; Docs/PENDING_TASKS_CLOSED.md's
-                # old §1-25, closed 2026-09-01). Choices come from GET
-                # /models' base_models[] — label = display_name, value = id —
-                # and the value doubles as the "which base model is active"
-                # readout (refresh_model_dropdowns re-selects active_base_model).
-                # The labels are language-independent, so switch_language only
-                # has to re-stamp this component's own label.
+                # Base model (multi-engine axis; VERIFICATION_LOG §85).
+                # Choices come from GET /models' base_models[] — label =
+                # display_name, value = id — and the value doubles as the
+                # "which base model is active" readout (refresh_model_dropdowns
+                # re-selects active_base_model). The labels are
+                # language-independent, so switch_language only has to
+                # re-stamp this component's own label.
                 model_base_dd = reg(gr.Dropdown(
                     choices=[], value=None, label=L("model_base_label")),
                     "model_base_label")
@@ -1296,9 +1303,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             outputs=[config_state, server_config_json, spill_table, preset, adapter],
         )
 
-        # Settings /config auto-retry: ticks every 3s while active, calling
-        # on_config_retry, which disables the timer on success (or once
-        # CONFIG_RETRY_MAX_ATTEMPTS is exhausted).
+        # Settings /config auto-retry: ticks at config_retry_timer's interval
+        # while active, calling on_config_retry, which disables the timer on
+        # success (or once CONFIG_RETRY_MAX_ATTEMPTS is exhausted).
         config_retry_timer.tick(
             on_config_retry, inputs=[config_state, config_retry_state, lang_state],
             outputs=[config_state, preset, adapter, server_config_json, spill_table,
@@ -1308,9 +1315,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # chain_preset choices mirror the Generate preset, but are refreshed via
         # this dedicated config_state.change listener rather than folded into the
         # shared on_page_load / on_config_retry / on_refresh_config returns --
-        # those closures' return arity is asserted by test_gradio_handlers and
-        # must stay fixed. config_state is updated by every one of those paths,
-        # so this single listener covers page-load, refresh and retry uniformly.
+        # those closures' return arity must stay fixed (test_gradio_handlers
+        # unpacks the on_page_load and on_config_retry returns by position).
+        # config_state is updated by every one of those paths, so this single
+        # listener covers page-load, refresh and retry uniformly.
         config_state.change(
             lambda cfg: gr.update(choices=build_preset_choices(cfg),
                                   value=pick_default_preset(cfg)),
@@ -1381,16 +1389,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         # ---- Generate button dispatch (single vs. batch A2V) ----
         # The middle stage of the Generate button's click chain. When batch A2V
-        # is OFF it delegates verbatim to the frozen ``generate`` handler (same
+        # is OFF it delegates verbatim to the ``generate`` handler (same
         # values, same 3 outputs). When ON it instead snapshots the whole
         # Generate tab into a BatchSnapshot and hands it to the in-process
         # BatchRunner, then returns immediately (the run proceeds on a daemon
         # thread; the batch_timer below reflects its progress). The batch
-        # inputs are APPENDED after the pre-existing scalar positionals so every
-        # one of those maps to the exact same generate() argument as before,
-        # and a NEW batch input goes at the end of that batch run rather than
-        # after the Acceleration block (whose trailing order is pinned by
-        # tests/test_gradio_ui.py).
+        # inputs come after the single-path scalar positionals so each of
+        # those maps to the same generate() argument, and a NEW batch input
+        # goes at the end of that batch run rather than after the Acceleration
+        # block (whose trailing order is pinned by tests/test_gradio_ui.py).
         # *kf_flat: the keyframe quads, wired as the TAIL of inputs (see generate_btn.click below).
         def dispatch(prompt_v, negative_v,
                      width_v, height_v, crop_en_v, crop_w_v, crop_h_v,
@@ -1410,11 +1417,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             kf_slot_values = [tuple(kf_flat[i:i + 4])
                               for i in range(0, len(kf_flat), 4)]
             if not batch_enable_v:
-                # Single-generation path: byte-identical delegation (these
+                # Single-generation path: straight delegation (these
                 # positionals ARE the generate() signature, with the whole
                 # keyframe grid handed over as the single ``kf_slots`` list in
-                # third position); nag_*/neg_method/vsf_* are passed as keywords
-                # since they sit at the very end of generate()'s signature.
+                # third position); nag_*/neg_method/vsf_* and the
+                # Acceleration/Output fields are passed as keywords since they
+                # sit at the end of generate()'s signature.
                 yield from generate(
                     prompt_v, negative_v, kf_slot_values,
                     width_v, height_v, crop_en_v, crop_w_v, crop_h_v,
@@ -1442,8 +1450,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
             # NAG precheck (owner requirement): non-CFG Negative enabled but the
             # shared negative prompt is empty -> reject with zero API calls,
-            # same yield-shape as the "no wav rows" check above (toast handled
-            # by the caller reading this message, not gr.Warning here).
+            # same yield-shape as the "no wav rows" check above (the message
+            # goes to the progress textbox only; no gr.Warning toast here).
             if nag_enabled_v and not (negative_v or "").strip():
                 yield L("nag_msg_negative_required", lang_v), "", None
                 return
@@ -1474,7 +1482,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 yield lora_err, "", None
                 return
 
-            # crop_output — identical arithmetic to the frozen generate path.
+            # crop_output — identical arithmetic to the generate handler's path.
             crop_output = None
             try:
                 if crop_en_v and int(crop_w_v) > 0 and int(crop_h_v) > 0:
@@ -1483,7 +1491,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 crop_output = None
 
             # shared keyframe images (common i2v slots) -> (path, frame, strength),
-            # collected the same way the frozen path builds ``to_upload``.
+            # collected the same way the generate handler builds ``to_upload``.
             shared_images: list[tuple] = []
             for en, img, fr, st in kf_slot_values:
                 if en and img:
@@ -1541,7 +1549,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 chunked_upsample=bool(batch_chunked_upsample_v),
                 vae_mode=accel_vae_v or "default",
                 keep_resident_embeddings=bool(accel_keep_resident_embeddings_v),
-                # Output (§3-164): same reason as the Acceleration fields --
+                # Output: same reason as the Acceleration fields --
                 # the runner reads the snapshot, so an unfilled field would
                 # silently stay at the default.
                 embed_mp4_metadata=bool(output_embed_mp4_metadata_v),
@@ -1582,12 +1590,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # nag_enabled/nag_scale/nag_tau/nag_alpha, then nag_method/
             # vsf_scale, then the Acceleration attention selector, the
             # block-swap prefetch checkbox, the keep-resident checkbox, the
-            # fused-dequant checkbox, the VAE radio (PrunaVAED,
-            # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time)
-            # AND the keep-resident-embeddings checkbox, then the Output
-            # embed-mp4-metadata checkbox (§3-164), are APPENDED after
-            # every pre-existing scalar positional (matching dispatch()'s
-            # signature order, which appends them after batch_img_dir_v).
+            # fused-dequant checkbox, the VAE radio (PrunaVAED) AND the
+            # keep-resident-embeddings checkbox, then the Output
+            # embed-mp4-metadata checkbox, come after every other scalar
+            # positional (matching dispatch()'s signature order, which places
+            # them after batch_chunked_upsample_v).
             inputs=[prompt, negative, width, height,
                     crop_enabled, crop_w, crop_h, num_frames, frame_rate, seed,
                     adapter, adapter_strength, control_adherence,
@@ -1622,10 +1629,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         nag_method.change(on_nag_method_change, inputs=nag_method,
                           outputs=[nag_group, vsf_group])
 
-        # Feature 1: attaching a .wav to the A2V audio field auto-adjusts
+        # Attaching a .wav to the A2V audio field auto-adjusts
         # Frames to fit its measured duration (non-wav / unreadable / cleared
         # attachments are a no-op). num_frames' OWN .change listeners (Duration
-        # readout, spill-free warning — wired below) fire on this programmatic
+        # readout, spill-free warning — wired above) fire on this programmatic
         # update too (gradio's .change semantics do not distinguish a
         # user edit from a value set by another event's output), so no extra
         # wiring is needed here to keep those in sync.
@@ -1635,12 +1642,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             outputs=[num_frames],
         )
 
-        # ---- Batch A2V events (WP3) ----
+        # ---- Batch A2V events ----
         # Enabling batch mode repurposes the Generate button ("Start a2v batch")
         # and freezes the single-shot audio + Frames inputs (per-wav Frames are
         # auto-computed on scan). switch_language re-stamps generate_btn to its
         # plain label, so a dedicated lang listener below re-applies these while
-        # enabled (the frozen switch_language signature/arity is untouched).
+        # enabled (switch_language's signature and output arity stay as they
+        # are; test_gradio_handlers pins the arity).
         def on_batch_enable_toggle(enable, lang):
             if enable:
                 return (gr.update(value=L("batch_start", lang)),
@@ -1678,9 +1686,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # "Set audios": scan the wav folder, merge over any existing manifest,
         # persist the CSV, and (re)build the table + image dropdown + summary.
         # ``num_frames_v`` is the Generate tab's frame count: it doubles as the
-        # batch's Skip ceiling (effective cap = min(num_frames, 481), the same
-        # rule the WebView2 frontend uses), so a row over it is excluded here
-        # and comes back on the next Set audios once the value is raised.
+        # batch's Skip ceiling (effective cap = min(num_frames, MAX_FRAMES), the
+        # same rule the WebView2 frontend uses), so a row over it is excluded
+        # here and comes back on the next Set audios once the value is raised.
         def on_batch_set_audios(wav_dir, img_dir, width_v, height_v, fps_v,
                                 num_frames_v, config_v, lang):
             # Locked while a run is in flight: re-scanning would rewrite the CSV
@@ -1826,7 +1834,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # A Skip row is still refused here: this button only flips a stat, and
         # a Skip is a judgment about the row's LENGTH ("over-cap" against the
         # Generate tab's frame count, or a non-wav file), which re-queueing
-        # alone cannot change. The way back is to raise DURATION (or replace
+        # alone cannot change. The way back is to raise Frames (or replace
         # the file) and press "Set audios" again — the rescan clears the Skip
         # (manifest.merge_rows Rule 1) — so the warning says exactly that.
         def on_batch_regen(sel_idx, rows, wav_dir, lang):
@@ -1854,7 +1862,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             outputs=[batch_table, batch_rows_state],
         )
 
-        # Stop button: ask the runner to halt (in-flight row rewinds to Waiting).
+        # Stop button: ask the runner to halt (no further rows are submitted; an
+        # in-flight row whose job gets cancelled rewinds to Waiting).
         def on_batch_stop(lang):
             get_runner().request_stop()
             gr.Info(L("batch_msg_stopped", lang))
@@ -1999,7 +2008,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # visibility updates, the 23 Use-box updates (forced ON for slots newly
         # revealed by "＋" — owner request —, forced OFF when hidden, no-op for
         # slots that merely stay visible so a hand-unchecked box is respected),
-        # and the refreshed estimate.
+        # the −/＋ buttons' grey-out flags, the "n/max" counter text and the
+        # refreshed estimate.
         chain_extra_use = chain_enabled_boxes[1:]
 
         def _make_chain_step(delta):
@@ -2070,13 +2080,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         # Acceleration: the attention selector, the block-swap prefetch
         # checkbox, the keep-resident checkbox, the fused-dequant checkbox, the
-        # VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed
-        # as §3-50 at the time) AND the keep-resident-embeddings checkbox are
+        # VAE radio (PrunaVAED, VERIFICATION_LOG §52) AND the
+        # keep-resident-embeddings checkbox are
         # APPENDED at the very end of the chain inputs list below, in that
         # order (attention_backend, accel_prefetch, accel_keep_resident,
         # accel_fused_dequant, accel_vae, accel_keep_resident_embeddings),
-        # followed by the Output embed-mp4-metadata checkbox (§3-164) and,
-        # LAST, the chain-only stage-2 window dropdown (§3-165).
+        # followed by the Output embed-mp4-metadata checkbox and,
+        # LAST, the chain-only stage-2 window dropdown.
         # generate_chain keeps
         # ``src_audio`` as its last POSITIONAL parameter (never wired from this
         # tab, and relied on positionally by tests/test_gradio_v2v_a2v.py's
@@ -2113,11 +2123,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # it is intentionally left off the end and keeps its None default.
             # The Acceleration attention selector, the block-swap prefetch
             # checkbox, the keep-resident checkbox, the fused-dequant checkbox,
-            # the VAE radio (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md
-            # §3-66, filed as §3-50 at the time) AND the
+            # the VAE radio (PrunaVAED, VERIFICATION_LOG §52) AND the
             # keep-resident-embeddings checkbox, then the Output
-            # embed-mp4-metadata checkbox (§3-164), then the stage-2 window
-            # dropdown (§3-165), are APPENDED last (in that order) and reach
+            # embed-mp4-metadata checkbox, then the stage-2 window
+            # dropdown, are APPENDED last (in that order) and reach
             # the handler as keywords via chain_dispatch above.
             inputs=[prompt, negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
@@ -2136,7 +2145,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             inputs=lang_state, outputs=chain_generate_btn,
         )
 
-        # MP4 Info tab (§3-164): a new / cleared file re-reads the comment tag
+        # MP4 Info tab: a new / cleared file re-reads the comment tag
         # (a cleared File passes None, which the handler turns into "").
         mp4info_file.change(
             mp4_info, inputs=[mp4info_file, lang_state], outputs=mp4info_text,
@@ -2146,7 +2155,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # The V2V panel + join panel are visible in v2v mode only; clip 1's start
         # image is unavailable in V2V (the frozen source tail occupies clip 0's
         # head — the server rejects the combination with 422, and the handler
-        # prechecks it too). A2V now lives on the Generate tab, so this radio is
+        # prechecks it too). A2V lives on the Generate tab, so this radio is
         # a none/v2v toggle only.
         def on_chain_mode_change(mode):
             is_v2v = mode == "v2v"
@@ -2339,9 +2348,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         demo.load(None, js=_min_attr_js)
 
         # ---- Settings: model management (INDEPENDENT listeners) ----
-        # Parent ruling: the shared on_page_load / on_refresh_config closures
-        # above stay untouched — the Models section registers its own page-load
-        # hook (gr.Blocks allows several) and its own Refresh button.
+        # Parent ruling: the Models section does not ride on the shared
+        # on_page_load / on_refresh_config closures above — it registers its
+        # own page-load hook (gr.Blocks allows several) and its own Refresh
+        # button.
         model_dds = [model_dd_transformer, model_dd_text_encoder,
                      model_dd_video_vae, model_dd_audio]
         # The base dropdown is the FIRST output of refresh_model_dropdowns; the
@@ -2361,7 +2371,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             "accel_vae": accel_vae,
             "accel_keep_resident_embeddings": accel_keep_resident_embeddings,
         }
-        # chain_engine_state (§3-165) sits between the category dropdowns and
+        # chain_engine_state sits between the category dropdowns and
         # the gated controls, so the gated updates stay the TAIL.
         model_refresh_outputs = [
             *model_all_dds,
@@ -2382,7 +2392,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                              value=active if active in ids else ids[0])
 
         def _chain_engine_state(models_json):
-            """The Clip Chain tab's engine State (§3-165): the ACTIVE base
+            """The Clip Chain tab's engine State: the ACTIVE base
             model's engine family + display name from /models, plus sage /
             prefetch availability from /status (``None`` = unknown, e.g. the
             status fetch failed — counted as available, like the WebUI)."""
@@ -2404,8 +2414,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 if warn:
                     gr.Warning(err)
                 return tuple(gr.update() for _ in model_refresh_outputs)
-            # The legacy top-level ``categories`` block always describes the
-            # ACTIVE base model, so the four category dropdowns keep reading it
+            # The top-level ``categories`` block always describes the
+            # ACTIVE base model, so the four category dropdowns read it
             # verbatim (no base_model argument) — a refresh always shows what
             # the pipeline is actually on.
             #
@@ -2427,7 +2437,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         model_refresh_btn.click(refresh_model_dropdowns, inputs=lang_state,
                                 outputs=model_refresh_outputs)
 
-        # ---- Clip Chain stage-2 window labels (§3-165) ----
+        # ---- Clip Chain stage-2 window labels ----
         # The labels depend on the language, the served limits, the loaded
         # engine (chain_engine_state, refilled by every refresh_model_dropdowns
         # run — the Refresh button, page load and the post-Load re-pull) and
@@ -2548,9 +2558,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         def on_style_select(prompt_val, names, lang, evt: gr.SelectData):
             # Gallery.select gives evt.index (the selected tile index); resolve
             # it to a name via style_names_state and APPEND a <lora:name:1.0:1.0>
-            # token to the Generate-tab prompt (existing value preserved). The
-            # 3-arg form surfaces the audio-strength slot up front (audio=1.0
-            # numerically matches "follow video", so generation is unchanged).
+            # token to the shared prompt above the tabs (existing value
+            # preserved). The 3-arg form surfaces the audio-strength slot up
+            # front (audio=1.0 numerically matches "follow video", so generation
+            # equals that of the 2-arg <lora:name:1.0> form).
             idx = evt.index
             if isinstance(idx, (list, tuple)):
                 idx = idx[0] if idx else None
@@ -2575,7 +2586,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                   outputs=[style_gallery, style_names_state],
                   show_progress="hidden")
 
-    # Expose the registry + language-switch fn for the S6 handler (and tests).
+    # Expose the registry + language-switch fn for tests.
     demo.label_registry = registry  # type: ignore[attr-defined]
     demo.switch_language = switch_language  # type: ignore[attr-defined]
     demo.lang_switch_outputs = lang_switch_outputs  # type: ignore[attr-defined]
@@ -2586,7 +2597,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     demo.api = api  # type: ignore[attr-defined]
     demo.on_page_load = on_page_load  # type: ignore[attr-defined]
     demo.on_config_retry = on_config_retry  # type: ignore[attr-defined]
-    # Style LoRA closures (S2): let a test drive the gallery load / reload /
+    # Style LoRA closures: let a test drive the gallery load / reload /
     # select paths against a mock transport without a live server.
     demo.load_style_gallery = load_style_gallery  # type: ignore[attr-defined]
     demo.on_style_reload = on_style_reload  # type: ignore[attr-defined]
@@ -2594,27 +2605,25 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     # Adapter -> reference-video enable/disable closure: lets a test drive the
     # greying logic directly (mirrors the on_page_load / on_style_select exposure).
     demo.on_adapter_change = on_adapter_change  # type: ignore[attr-defined]
-    # Batch Regenerate closure (2nd-round FB, modification C): lets a test drive
-    # the Skip-row refusal directly without a live event round-trip.
+    # Batch Regenerate closure: lets a test drive the Skip-row refusal
+    # directly without a live event round-trip.
     demo.on_batch_regen = on_batch_regen  # type: ignore[attr-defined]
     # NAG (non-CFG Negative) toggle / method-fallback closures: lets a test
     # drive them directly (mirrors the on_adapter_change exposure above).
     demo.on_nag_enable_toggle = on_nag_enable_toggle  # type: ignore[attr-defined]
     demo.on_nag_method_change = on_nag_method_change  # type: ignore[attr-defined]
-    # Models-section closures (base-model dropdown; Docs/PENDING_TASKS_CLOSED.md's
-    # old §1-25, closed 2026-09-01): the refresh that fills base + 4 category
-    # dropdowns, and the base-model .input handler.
+    # Models-section closures (base-model dropdown): the refresh that fills
+    # base + 4 category dropdowns, and the base-model .input handler.
     demo.refresh_model_dropdowns = refresh_model_dropdowns  # type: ignore[attr-defined]
     demo.on_base_model_change = on_base_model_change  # type: ignore[attr-defined]
-    # Clip Chain stage-2 window (§3-165): the label rebuild + the closures
-    # whose argument layout the window changed.
+    # Clip Chain stage-2 window: the label rebuild + the closures that take
+    # the window among their arguments.
     demo.relabel_stage2_window = relabel_stage2_window  # type: ignore[attr-defined]
     demo.on_chain_estimate = on_chain_estimate  # type: ignore[attr-defined]
     demo.make_chain_step = _make_chain_step  # type: ignore[attr-defined]
     demo.chain_dispatch = chain_dispatch  # type: ignore[attr-defined]
     demo.on_chain_window_preset_warning = on_chain_window_preset_warning  # type: ignore[attr-defined]
-    # "Set audios" closure (Docs/PENDING_TASKS_CLOSED.md's old §4-29, closed
-    # 2026-09-01): lets a test drive the scan/merge/write path with an
+    # "Set audios" closure: lets a test drive the scan/merge/write path with an
     # explicit frame cap without a live event round-trip.
     demo.on_batch_set_audios = on_batch_set_audios  # type: ignore[attr-defined]
     return demo

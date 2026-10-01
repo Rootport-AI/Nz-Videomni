@@ -1,4 +1,5 @@
-"""Presets (S1 fallback only — S2 replaces this with /config generation_presets).
+"""Presets: ``/config`` ``generation_presets`` when delivered, the static
+``PRESETS`` table below as the fallback when it is not.
 width/height are multiples of 64 (two-stage distilled).
 """
 
@@ -19,17 +20,17 @@ PRESETS: dict[str, dict] = {
 
 
 # --------------------------------------------------------------------------- #
-# Preset handling (S2). The hardcoded PRESETS dict above is now only a fallback
-# for when the server /config fetch (demo.load) failed or returned no presets;
-# the normal path reads config["generation_presets"] (GET /config, which
-# model_dumps config.py's GenerationPreset -- width/height/num_frames/
-# crop_output, the last being {"width", "height"} or None).
+# Preset handling. The normal path reads config["generation_presets"] (GET
+# /config, which model_dumps config.py's GenerationPreset -- width/height/
+# num_frames/crop_output, the last being {"width", "height"} or None); the
+# hardcoded PRESETS dict above is the fallback for when the server /config
+# fetch (demo.load) failed or returned no presets.
 # --------------------------------------------------------------------------- #
 def build_preset_choices(config: dict | None) -> list[tuple[str, str]]:
     """Build Dropdown ``choices`` from the fetched /config generation_presets.
 
-    Falls back to the hardcoded ``PRESETS`` keys (label == value, matching S1
-    behaviour) when the server config is empty/unavailable.
+    Falls back to the hardcoded ``PRESETS`` keys (label == value) when the
+    server config is empty/unavailable.
     """
     presets = (config or {}).get("generation_presets") or {}
     if not presets:
@@ -49,7 +50,7 @@ def build_preset_choices(config: dict | None) -> list[tuple[str, str]]:
 
 def pick_default_preset(config: dict | None) -> str:
     """Pick the Dropdown's initial value: ``standard_720p`` if present, else the
-    first server preset, else the S1 fallback default."""
+    first server preset, else the static ``PRESETS`` fallback default."""
     presets = (config or {}).get("generation_presets") or {}
     if "standard_720p" in presets:
         return "standard_720p"
@@ -129,7 +130,7 @@ def format_duration_label(num_frames, fps) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Collapsible clip / keyframe slot bounds (owner decision 2026-07-13). The Clip
+# Collapsible clip / keyframe slot bounds (owner decision). The Clip
 # Chain tab shows a growable list of clip slots (min CHAIN_MIN_OPEN, max
 # CHAIN_MAX_CLIPS); the Generate tab's keyframe grid is likewise collapsible
 # (min KF_MIN_OPEN, max KF_MAX_SLOTS). The ± state transition + the estimated-
@@ -191,8 +192,9 @@ def slot_step_state(count, delta, min_open, max_slots,
                     enable_new: bool = False):
     """Full semantic state of a ± step over a collapsible slot list (pure,
     unit-testable; the UI handlers only wrap this into ``gr.update`` calls).
-    Shared by the Generate tab's keyframe grid (min 1 / max KF_MAX_SLOTS) and the Clip
-    Chain tab's clip list (min 2 / max 24, ``enable_new=True``).
+    Shared by the Generate tab's keyframe grid (min ``KF_MIN_OPEN`` / max
+    ``KF_MAX_SLOTS``) and the Clip Chain tab's clip list (min
+    ``CHAIN_MIN_OPEN`` / max ``CHAIN_MAX_CLIPS``, ``enable_new=True``).
 
     Returns ``(new_count, slot_states, minus_interactive, plus_interactive,
     counter_text)``:
@@ -232,12 +234,11 @@ def compute_chain_duration_label(enabled_flags, frames_list, fps,
     since this is a live readout, not a submit-time gate. An over-cap total gets
     the ``chain_est_over`` warning wording. Returns a Markdown string.
 
-    ``stage2_window`` (ADDITIVE, appended AFTER ``lang`` because ``ui.py`` wires
-    this function's arguments POSITIONALLY through Gradio ``inputs=[...]``):
-    the stage-2 window preset NAME; ``None`` -> the default, i.e. the exact
-    geometry this readout used before the knob existed. See
+    ``stage2_window`` (after ``lang``, because the ``ui.py`` callers pass
+    ``lang`` POSITIONALLY): the stage-2 window preset NAME; ``None`` -> the
+    default preset (``chain_math.resolve_stage2_window``). See
     ``gradio_ui/validation.check_chain_total`` for why this is plumbed through
-    (the tab's window dropdown, §3-165, feeds it)."""
+    (the tab's window dropdown feeds it)."""
     import chain_math
 
     flags = list(enabled_flags or [])
@@ -306,7 +307,7 @@ def _chain_preset_total_warning(recommended_frames, n_enabled_clips, fps,
         fps_v = float(fps) if fps else 24.0
         kv = int(overlap_frames) if overlap_frames is not None else chain_math.DEFAULT_OVERLAP_FRAMES
         clip_frames = [int(recommended_frames)] * int(n_enabled_clips)
-        # ``stage2_window`` (ADDITIVE, after ``lang`` — see
+        # ``stage2_window`` (after ``lang`` — see
         # ``compute_chain_duration_label``): ``None`` -> the default preset.
         v_tile, v_adv = chain_math.resolve_stage2_window(stage2_window)
         layout = chain_math.compute_chain_layout(clip_frames, fps_v, kv=kv,
@@ -330,15 +331,16 @@ def apply_chain_preset(name: str, config: dict | None,
 
     Mirrors :func:`apply_preset`'s server-config-first / ``PRESETS``-fallback
     lookup, but targets the Clip Chain tab's components (``chain_width`` /
-    ``chain_height`` / ``chain_crop_*`` + the 24 fixed clip-length ``Number``
-    fields from ``chain_clip_slots`` in ``gradio_ui/ui.py``, which has NO
-    single ``num_frames`` field of its own — each of the 24 slots gets the
-    preset's recommended per-clip length instead) plus a chain-total-timeline
-    warning, since applying a preset to every enabled slot can overshoot the
-    server's total-pixel-frame cap.
+    ``chain_height`` / ``chain_crop_*`` + the ``CHAIN_MAX_CLIPS`` fixed
+    clip-length ``Number`` fields from ``chain_clip_slots`` in
+    ``gradio_ui/ui.py``, which has NO single ``num_frames`` field of its own
+    — every slot gets the preset's recommended per-clip length instead) plus
+    a chain-total-timeline warning, since applying a preset to every enabled
+    slot can overshoot the server's total-pixel-frame cap.
 
-    Argument order (CONTRACT for the future ``preset.change`` wiring in
-    ``ui.py`` — callers MUST pass positionally/keyword in this shape):
+    Argument order (CONTRACT for the ``chain_preset.change`` wiring in
+    ``ui.py`` via ``on_chain_preset_change`` — callers MUST pass
+    positionally/keyword in this shape):
       1. ``name``           -- selected chain-preset key (Dropdown value).
       2. ``config``         -- fetched ``/config`` dict, or ``None``. Reads
                                 ``config["generation_presets"][name]`` first;
@@ -346,36 +348,41 @@ def apply_chain_preset(name: str, config: dict | None,
                                 only when the server config is unavailable or
                                 does not contain ``name`` (same precedence as
                                 ``apply_preset``).
-      3. ``enabled_flags``  -- optional list of the 24 clip-slot Checkbox
-                                current values, in slot 1..24 order (i.e.
+      3. ``enabled_flags``  -- optional list of the ``CHAIN_MAX_CLIPS``
+                                clip-slot Checkbox current values, in slot
+                                order (i.e.
                                 ``[s[0].value for s in chain_clip_slots]``).
                                 Only its COUNT of truthy entries feeds the
                                 total-timeline warning (which slots are on
                                 does not matter, since every slot receives
                                 the same recommended length). ``None``
-                                (the default) assumes all 24 slots enabled --
-                                the conservative worst case. A list shorter
-                                than 24 is padded with ``True``; longer lists
-                                are truncated to the first 24 entries.
+                                (the default) assumes every slot enabled --
+                                the conservative worst case. A shorter list
+                                is padded with ``True``; a longer list is
+                                truncated to the first ``CHAIN_MAX_CLIPS``
+                                entries.
       4. ``fps``             -- ``chain_fps`` Number's current value (used
                                 only for the warning's audio-latent-aware
                                 total-pixel-frame math). Falls back to 24.0
-                                when falsy/non-numeric.
+                                when falsy; a non-numeric value hides the
+                                warning (like degenerate geometry).
       5. ``overlap_frames``  -- ``chain_overlap`` Slider's current value (the
                                 join overlap, K_v). ``None`` (the default)
-                                falls back to ``chain_math.DEFAULT_OVERLAP_FRAMES``
-                                (3), the same default the Slider itself uses.
+                                falls back to ``chain_math.DEFAULT_OVERLAP_FRAMES``,
+                                the same default the Slider itself uses.
       6. ``lang``            -- current UI language for ``L()`` lookups.
-      7. ``stage2_window``   -- (ADDITIVE, §3-165, keyword after ``lang`` —
-                                see ``compute_chain_duration_label``) the
+      7. ``stage2_window``   -- (keyword after ``lang`` — see
+                                ``compute_chain_duration_label``) the
                                 chain tab's stage-2 window NAME; feeds only
                                 the warning's geometry. ``None`` -> default.
 
-    Returns a 31-tuple of ``gr.update()``/plain values, in this exact order
-    (CONTRACT for the ``chain_preset.change`` ``outputs=[...]`` wiring):
+    Returns a ``(6 + CHAIN_MAX_CLIPS + 1)``-tuple of ``gr.update()``/plain
+    values, in this exact order (CONTRACT for the ``chain_preset.change``
+    ``outputs=[...]`` wiring):
       ``(width, height, crop_enabled, crop_w, crop_h, crop_row_update,
-      clip1_frames, clip2_frames, ..., clip24_frames, chain_total_warning_update)``
-      (6 leading values + 24 per-clip frame updates + 1 warning update)
+      clip1_frames, clip2_frames, ..., clipN_frames, chain_total_warning_update)``
+      (6 leading values + ``CHAIN_MAX_CLIPS`` per-clip frame updates + 1
+      warning update; N == ``CHAIN_MAX_CLIPS``)
 
     Notes on the per-element semantics:
       * ``width`` / ``height`` -- plain ints, straight into ``chain_width`` /
@@ -386,22 +393,20 @@ def apply_chain_preset(name: str, config: dict | None,
         ``chain_crop_h`` (0/0 when the preset has no crop).
       * ``crop_row_update`` -- ``gr.update(visible=crop_enabled)`` for
         ``chain_crop_row`` (mirrors ``apply_preset``'s ``crop_row_update``).
-      * ``clip1_frames`` .. ``clip24_frames`` -- ``gr.update(value=...)``, ALL
-        24 set to the SAME recommended per-clip frame count: the preset
+      * ``clip1_frames`` .. ``clipN_frames`` -- ``gr.update(value=...)``, ALL
+        set to the SAME recommended per-clip frame count: the preset
         resolution's ``limits.spill_free_frames["{width}x{height}"]``
         comfortable cap when the server publishes one for this exact
-        resolution, else the preset's own ``num_frames`` (e.g. ``minimal``'s
-        512x320 has no ``spill_free_frames`` entry -> falls back to its
-        ``num_frames`` 49; ``FHD_1080p``'s 1920x1088 -> 161 from
-        ``spill_free_frames``). Callers may still hand-edit individual slots
-        afterwards; this only sets the initial suggestion.
+        resolution, else the preset's own ``num_frames``. Callers may still
+        hand-edit individual slots afterwards; this only sets the initial
+        suggestion.
       * ``chain_total_warning_update`` -- ``gr.update`` for a Markdown
         warning (hidden with ``value=""`` when within budget), worded with
         the ``warn_chain_preset_total`` i18n key ({total}/{max}
         placeholders), computed via :func:`_chain_preset_total_warning` --
         the SAME ``chain_math.compute_chain_layout`` + cap
-        (``MAX_CHAIN_TOTAL_PIXEL_FRAMES`` == 11544, imported from
-        ``gradio_ui.validation``) the server/`` check_chain_total`` precheck
+        (``MAX_CHAIN_TOTAL_PIXEL_FRAMES``, imported from
+        ``gradio_ui.validation``) the server / ``check_chain_total`` precheck
         use, run over ``n_enabled_clips`` copies of the recommended length.
     """
     presets = (config or {}).get("generation_presets") or {}

@@ -15087,3 +15087,80 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 3. `engine/fp8/__pycache__/` にソースの無い古いキャッシュが残っています（`sft_quant/` へ移転後の残骸。コメントの問題ではありません）。
 
 候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 138. ★コード内コメントの現行化・第 6 区域 `gradio_ui/`（バックエンド同梱の Gradio 検証 UI・14 ファイル）＝ 636 ブロック中 271 を現行化（コメントのみ・動作は不変）＋利用者に見える文言 6 グループ（UI 文言 4 組・バッチの検査の失敗理由・CSS のコメント）＋台帳 §1-64〜§1-66 と §1-58 の追記（2026-10-01〜02）
+
+**要約**: `engine/`（§135〜§137）に続く第 6 区域です。`gradio_ui/` は最初期コミット（2026-06-25）から存在する単一ファイル `gradio_ui.py` を 2026-07-04 にパッケージ化したもので、オーナーの見立て（古いコメントが多く残っているはず）どおり、古いままの割合は 43%とこれまでの区域で最高でした（engine/ A（§135）の 38%を超えています）。14 ファイル・8,775 行・636 ブロックのうち 271 ブロック（事実が古いもの 151・導入時期の記録だけのもの 120）を書き換え、コードは変わっていないことを構文木とトークン列で確かめました。利用者に見える文言は、この区域で初めて UI の文言（`i18n.py` の英日の辞書の値）が対象になり、オーナーが文面を決めた 6 グループ（10 箇所）を反映しました。台帳 §1-64〜§1-66 を起票し §1-58 に追記しました。VERIFICATION_LOG 側の訂正はありません。
+
+**目的**: 骨格は §135〜§137 と同じです（関数・メソッドの境目で区域を切り、Opus が全件を判定し、別の Opus が検算し、さらに別の Opus が揃えます）。判定担当への指示（v7）に `gradio_ui/` に固有の注意を足しました。
+1. 文字列リテラル（`i18n.py` の辞書の値・`label=`・`gr.Markdown`・整形したエラー文言）は判定しない。
+2. Gradio の版に依存する記述は、「verified on gradio 6.19.0」のような検証時点の版の来歴は残し（固定先 `pyproject.toml` の `[project.dependencies]` が範囲指定のため版が意味を持つ）、コンパイル後の資産のハッシュ付きファイル名（`Index-BAOWiMqV.js` など）と Gradio 内部の行番号（`queueing.py 898-973`）は関数名・コンポーネント名・ハッシュ抜きのファイル名で指す。
+3. 節番号の系統（ダッシュ付き `§N-M` は台帳の番号で (a-hist)、裁定の根拠として要るものは VERIFICATION_LOG の記録の節〔§3-165→§116・§3-164→§115・§3-66〔旧 §3-50〕→§52・§3-137〔旧 §1-25〕と §3-138〔旧 §4-29〕→§85・§3-80〔旧 §1-19〕→§58・§3-74〔旧 §1-16〕→§56・§3-71/§3-72→§91〕に、ピリオド付き `§N.M` はワークオーダー文書の節、「spec ch.12」は仕様書 §12）。
+4. 段階名 S1〜S6・WP2/3・「v1」は (a-hist)。
+5. 操作パネル（WebView2 フロントエンド）との対応は `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/` で実在を確かめる（旧リポジトリ `_frozen_` は見ない）。「future frontends (AviUtl2, …)」は AviUtl2 の操作パネルが実在する今は (c)。
+6. `gradio_ui/` に専用のモックモードは無く、テストは `ApiClient` に `httpx.MockTransport` を注入する（バックエンド側の `model.backend: "mock"` とは別物）。
+7. `/config` 不達時の静的フォールバックは死に枝（§49.4）。
+
+**対象**: `gradio_ui/` の 14 ファイル（`ui.py` 2,620 行・`handlers.py` 1,848・`i18n.py` 1,128・`batch.py` 925・`manifest.py` 526・`presets.py` 452・`adapters.py` 227・`comfort.py` 221・`api_client.py` 208・`styles.py` 206・`formatting.py` 143・`__init__.py` 123・`validation.py` 86・`feature_scope.py` 62）・8,775 行・636 ブロック（コメント 479・docstring 125・行末コメント 32）です。起点コミットは `e0c77b3`（§137 のコミット）です。第三者由来のコードはありません。
+
+**方法**:
+1. **抜き出し・区域分け**: 19 区域へ切りました（`i18n.py` の辞書リテラル 1,126 行は文の境目で分けられないので、R11 をブロック番号で R11a／R11b の 2 体に分けました）。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 20 体を走らせました。
+3. **検算（Opus 6 体・V1〜V6）**: 360 ブロック（change 全件＋keep の抜き取り）を確かめました。確認済み 346・異論 6・一部だけ直した 6・見逃し 2 でした（ほかに同型の取り残しを 3 件足しました）。検算 V2 が「A2V の長さの事前検査は fps の丸めで 422 に当たりうる」を `chain_math.audio_latents_required` の総当たりで確定しました。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 45 件を直し（`replace_new_lines` 36・判定で現行のままだった同型のブロックへの `add` 9）、残存語 65 行のうち 4 行を直して 61 行は理由つきで残しました。続く再検算 90 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 271 件の差し替えを適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**:
+
+最終の判定（636 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 151 |
+| 導入時期の記録だけ | 120 |
+| 現行のまま | 365 |
+| 保留 | 0 |
+
+古いままの割合は 43%で、これまでの区域で最高でした（A（§135）の 38%を超えています）。
+
+**区域をまたぐ揃えの裁定**（この区域で決めたもので、次の区域にも適用します）: 文書の指し方は英語コメントで `VERIFICATION_LOG §N` に揃えました（`Docs/VERIFICATION_LOG.md §N` の形も揃えています）。CSV の契約（列・判定規約・実効上限）の正本は `Docs/BATCH_A2V_CSV_SPEC.md` としました（`BATCH_A2V_WORKORDER.md` は冒頭の注記で本文を作成時点の記録と断り、CSV の正本を CSV_SPEC に譲っています。コメントが WORKORDER の節を指していたものは CSV_SPEC の節に揃えました）。既定値の向きは値を書かず `*_DEFAULT` の定数を指す書き方にしました（「same rule against `KEEP_RESIDENT_DEFAULT` (direction: see its definition)」の形です）。「ADDITIVE」は 2 つの意味を見分けました（「additive, conditional」＝既定と違うときだけキーを足すという送り方の規則は残し、「(ADDITIVE, keyword)」「additive extension」のような後から足した拡張という来歴の札は落としました）。「frozen」は凍結された REST API を指すものだけ残しました（「frozen generate」「i18n.py is frozen」「batch.py, which is frozen」「frozen Generate-tab A2V send」は落としました）。作業項目の番号「F3」「F4」「F5」「Feature 1／3」「機能1／3」「案A」は段階名と同じ扱いです（(a-hist)）。
+
+**当初から誤っていた主張の訂正の例**: GH-012（A2V の長さの事前検査「cannot turn a passing precheck into a 422」。fps を整数に丸めると必要な音声潜在フレーム数が増えるので当たりえます）、GH-050（「1s / 60min poll defaults」。`_resolve_poll` のフォールバックは 120 分です）、GH-055（「empty slots are skipped」。画像やフレーム位置が欠けた有効な枠は拒否されます）、GH-030（`attention_backend` が「always LAST」。後に 6 キー続きます）、GU-059（「8 FIXED clip slots」。`CHAIN_MAX_CLIPS` は 24 です）、GU-041・GU-004（「i18n.py is frozen」「batch.py, which is frozen」。どちらも以後も改修されています）、GS-001・GN-001（「`gr.Blocks(css=...)` で注入」。実際は `build_ui` の `gr.HTML("<style>…")` で、`mount_gradio_app` が `blocks.css` を上書きするためです）、GN-001（タブは 4 つではなく 6 つ・モジュール一覧に `comfort` が無い・言語切替はサーバ側の `switch_language` です）、GH-002・GU-061（モードのラジオは none／v2v の 2 択で A2V はありません）、GA-013（ベースモデルが無いとき `active` は空ではなく `"default"` です）、GK-009（`delete_job` の戻りは待機中が `cancelled`・走行中が `cancel_requested` です）、GM-019（`read_manifest` は途中で例外が起きるとそこまでの行を返します）、GM-032（マージの 4 規則は WORKORDER ではなく CSV_SPEC §6 です）、GU-034（否定プロンプトが効くのは NAG だけではなく VSF もです）、GU-026（LTX 2.5 の `two_stage_hq` を断るのは `REJECT_TABLE` と `CHAIN_REJECT_TABLE` です）。Gradio の実物（`.venv` の 6.19.0）で確かめた記述もあります: `Queue.process_events` が接続の切れたイベントを捨てる箇所、`BaseForm-*.css`・`Index-*.js`・`Textbox-*.css` の実在、`gr.Warning` はイベントの外では `warnings.warn` に落ちること、`Number(precision=0).preprocess` は int か None を返すことです。
+
+**証明**: 14 ファイルとも、コメントと docstring 以外のトークン列の差は、オーナーが文面を決めた文字列 10 件（下の外部文言）だけでした（文字列に触れていない 11 ファイルは docstring を除いた構文木が起点 `e0c77b3` と一致しました）。改行コードは CRLF でした（`gradio_ui/styles.py` は作業コピーが LF でしたが、`core.autocrlf=true` のため blob は変わりません）。
+
+**テスト**: `.venv` で `tests/test_gradio_*.py` 11 本＋`tests/test_stage2_window.py`＋`tests/test_mcp_batch_planning.py` の 13 ファイルを実行し、750 件合格・7 件スキップでした（`-q` を付けずに実行しました。`pyproject.toml` の `addopts="-q"` と重なると件数が出ないためです）。すべてオフラインです（`httpx.MockTransport`／`TestClient`＋mock バックエンド）。下の敵対的レビューの台帳の訂正を反映した最終状態で監督が再実行した結果も、同じ 13 ファイル 750 件合格・7 件スキップでした。
+
+**外部文言 6 グループ（10 箇所。オーナー決定）**:
+1. `i18n.py` の `v2v_cap_mode`（英日）: 「V2V and A2V cannot be combined — pick one mode」／「V2VとA2Vは同時に使えません…」→「A2V (audio-to-video) for Clip Chain is available in the AviUtl2 control panel; this screen offers V2V only」／「Clip ChainのA2V（音声から動画）はAviUtl2の操作パネルで使えます。この画面ではV2Vだけです」（モードのラジオに A2V はありません）。
+2. `i18n.py` の `style_note`（英日）: 追記先「Generate タブのプロンプト」→「タブの上のプロンプト欄」、トークン「<lora:name:1.0>」→「<lora:name:1.0:1.0>」、「数値」→「最初の数値」。
+3. `i18n.py` の `info_chain_preset`（英日）: 列挙から「フレームレート／frame rate」を外しました（`apply_chain_preset` の出力に fps はありません）。
+4. `i18n.py` の `warn_hq_unsupported`（英日）: 「not yet supported by the backend」／「まだバックエンドが対応していません」→「not available on this backend」／「このバックエンドでは使えません」。
+5. `batch.py` の `_validate` の失敗理由: 「no shared image is set」→「no shared keyframe at frame 0 is set」。
+6. `styles.py` の `CUSTOM_CSS` の中の CSS コメント: 「Owner feedback (2026-07)」→「Owner feedback」。
+旧文面を固定しているテストはありませんでした（Grep で確認）。
+
+**台帳**: §1-64（Gradio の A2V の音声の長さの事前検査が丸める前の fps で計算されること。画面の fps 欄は整数なので実害は直接呼び出しだけです）・§1-65（バッチ A2V に幅・高さの ÷64 の事前検査が無く、全行がアップロード後に 422 で失敗すること）・§1-66（`preset.change` が言語を渡さず、快適上限の警告が英語で固定されること）を起票しました。§1-58（使われていないコード）に `ApiClient.lora_thumbnail_url`（呼び出し 0 件。ギャラリーは `build_style_gallery` が同じパスを自前で組みます）と `i18n.py` の `LABELS` の参照されないキーを追記しました（`a2v_mode_a2v`・`a2v_guide`・`a2v_cap_panel` は意図して残したもの、`btn_load_model`・`btn_unload_model`・`msg_coming` は理由がコードにありません）。
+
+**文書の訂正**: なし。台帳番号の置き換え先として引いた VERIFICATION_LOG の節（§44.7・§51・§52・§56・§57・§58・§85・§91・§115・§116）は検算が見出しと中身で確かめ、食い違いはありませんでした。`Docs/BATCH_A2V_WORKORDER.md` の §2.9・§4.3・§4.5 は今のコードと合いませんが、同書は冒頭の注記で本文を作成時点の記録と断っているので訂正していません。
+
+**敵対的レビュー**（Opus・(b)／(c) 全件＋(a) 全件＋キーの並び＋既定値の定数＋Gradio の実物＋UI 文言＋台帳）: コメントと docstring の新しい文に事実の誤りはありませんでした。
+- **直すべき 2 件（どちらも台帳の記述。全件採用）**: §1-58 の追記の「引かれないキー 6 つ」は 10 個が正しいです（`lbl_apikey`・`msg_generate_error`・`msg_upload_done`・`batch_image_shared` も定義以外に出てきません。監督が Grep で確認しました）。§1-66 は現象が狭く（言語を渡さない経路は `preset.change` のほかに、幅・高さ・フレーム数の `.change` リスナーと `on_qmode_change` の `gr.Warning(L("warn_hq_unsupported"))` にもあります。今回直した日本語の警告文は画面に出ません）、題名・現象・選択肢を 3 経路に広げました。
+- **注意 1 件**: 台帳が出典に引く §138 は、本節を同じコミットで書くことで解消しました。
+- **参考 6 件（不採用）**: `qmode_hq` のラベル「backend support pending」は台帳 §4-28 で保留中の事実と矛盾しないのでオーナー判断に委ねます。`styles.py` の作業コピーの改行コード、`_STAGE_LABEL_KEYS` のコメントの範囲、±ボタンのコメントの 24・23 は構造上の事実として残す裁定済みです。`compute_spill_warnings` の CSV_SPEC §6 の引き方は CSV_SPEC §6・§3.2 で裏づけられます。`style_note` の「最初の数値」は音声の重みに触れていませんが、画面の動きと矛盾しません。
+
+**費用の目安**（Opus のトークン、概算）: 事実の一覧表 約 35 万・判定 約 330 万・検算 約 120 万・揃え 約 33 万・レビュー 約 28 万・反映と修正 約 10 万でした。合計約 555 万となり、計画の見込み（約 450 万）を超えました（`ui.py`・`handlers.py` の古さと、検算の総当たりが要因です）。
+
+**申し送り**（次の区域へ）:
+1. 残る区域は `mcp_server/`・`scripts/`・`config.py`・`chain_math.py`・`main.py` などです（オーナー判断）。`mcp_server/` には「S4 2026-08-01」「v1の既知の制限」と、`over_frame_limit` の docstring（0 の扱いが操作パネルと違う）があります。
+2. `chain_math.py` の `resolve_stage2_window` の docstring に「byte-identical … before this knob existed」、zero-overlap 窓のコメントが `gradio_ui/validation.py:44`・`gradio_ui/presets.py:260,309` と行番号で指しています（今回の差し替えで行がずれました）。
+3. `api/models_registry.py` の「Purely ADDITIVE」は api の回で残った来歴の札です。
+4. テストの docstring・コメント（`tests/test_gradio_ui.py`・`test_gradio_v2v_a2v.py`・`test_gradio_handlers.py`）に台帳番号・S6・ADDITIVE・「案A」が残り、`test_gradio_v2v_a2v.py` の「ui.py's click inputs stop at vsf_scale」は不正確です（テストは対象外）。
+5. 操作パネル側 `webui/src/shell/tokenBudget.ts`・`accelerationSettings.ts` のコメントに日付と台帳番号があります（対象外）。
+6. `Docs/BATCH_A2V_CSV_SPEC.md` §3 の「算出式自体の正本は `chain_math.py`」は、8n+1 の式そのものが `manifest.raw_frame_count`・`handlers.suggest_frames_for_audio` にある点で言い方が不正確です（文書側）。
+7. 判定指示書に「F1〜F5・Feature N・機能N・案A は段階名」「ADDITIVE は来歴の札なら (a-hist)」「frozen は凍結 API 以外は落とす」「CSV の契約は CSV_SPEC を指す」を書き足します（v7.1）。
+8. 棚卸しの担当が旧リポジトリ `_frozen_Nz-LTX23-frontend-AviUtl2` を見て「`featureScope.ts` が無い」と誤報しました。フロントエンドの実在確認は `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/` で行います。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。

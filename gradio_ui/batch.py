@@ -10,12 +10,12 @@ REST API's single-job queue.
 Why a thread and not a Gradio event handler
 --------------------------------------------
 A Gradio event handler that loops over the rows dies the moment the browser's
-SSE stream drops: Gradio abandons the generator (queueing.py 898-973 on Gradio
-6.19) and the whole batch stops. So the loop lives here, in a **daemon thread
-inside the server process**, decoupled from any browser connection. The UI
-layer (WP3) only ever reads state back via :meth:`BatchRunner.snapshot_rows` /
-:meth:`BatchRunner.summary` on a ``gr.Timer`` tick and never runs the loop
-itself.
+SSE stream drops: Gradio abandons the generator (``Queue.process_events`` in
+``queueing.py`` on Gradio 6.19 drops the closed events and returns) and the
+whole batch stops. So the loop lives here, in a **daemon thread inside the
+server process**, decoupled from any browser connection. The UI layer reads
+state back via :meth:`BatchRunner.snapshot_rows` / :attr:`BatchRunner.state`
+on a ``gr.Timer`` tick and never runs the loop itself.
 
 Source of truth
 ---------------
@@ -98,17 +98,17 @@ _JOB_BUSY_BACKOFF_S = 3.0
 
 
 # --------------------------------------------------------------------------- #
-# BatchSnapshot — the WP3 -> WP2 interface contract.
+# BatchSnapshot — the UI -> runner interface contract.
 # --------------------------------------------------------------------------- #
 @dataclass
 class BatchSnapshot:
     """Frozen copy of the Generate-tab settings at batch-start time.
 
-    WP3 (the UI wiring) builds ONE of these when the user presses "Run batch",
-    capturing every Generate-tab knob so the overnight run is immune to later
-    UI edits, then hands it to :meth:`BatchRunner.start`. Everything here is a
-    plain value (no Gradio component, no live state) so it can cross the thread
-    boundary safely.
+    The UI wiring (ui.py's ``dispatch()``) builds ONE of these when the user
+    presses the batch start button, capturing every Generate-tab knob so the
+    overnight run is immune to later UI edits, then hands it to
+    :meth:`BatchRunner.start`. Everything here is a plain value (no Gradio
+    component, no live state) so it can cross the thread boundary safely.
 
     Path fields
         wav_dir      Absolute path to the folder of source audio files. Each
@@ -117,7 +117,7 @@ class BatchSnapshot:
                      drawn from (the UI's "Image folder path"). A row's
                      individually-named image (a bare filename) is resolved
                      against this when set; empty -> fall back to ``wav_dir``
-                     (so an unset image folder keeps the old behaviour).
+                     (image folder == audio folder).
         out_dir      Absolute path to the (already resolved, see
                      :func:`gradio_ui.manifest.resolve_output_dir`) output
                      folder. Created on demand if missing.
@@ -134,11 +134,14 @@ class BatchSnapshot:
                        "replace" -> per-row prompt replaces the common one
                        (empty per-row prompt always falls back to the common one).
 
-    Generation geometry (identical to the frozen Generate-tab A2V send)
-        width, height   ints (÷64, validated upstream).
+    Generation geometry (identical to the Generate-tab A2V send)
+        width, height   ints, expected ÷64. The batch path does not pre-check
+                        this: the server's request validation rejects any
+                        other size, which fails the row.
         crop_output     Pre-computed ``{"width","height"}`` dict, or ``None``.
                         The runner passes this THROUGH unchanged — the "is crop
-                        enabled" decision is made by WP3 when it snapshots.
+                        enabled" decision is made by the UI wiring when it
+                        snapshots.
         frame_rate      float fps.
         seed            int seed (applied verbatim to every row).
 
@@ -166,8 +169,8 @@ class BatchSnapshot:
 
     NAG (non-CFG Negative)
         nag_enabled, nag_scale, nag_tau, nag_alpha — forwarded to
-        build_a2v_chain_payload for every row; defaults reproduce the pre-NAG
-        payload (NAG off) byte-for-byte.
+        build_a2v_chain_payload for every row; with ``nag_enabled`` off none
+        of the NAG keys reach the payload.
         neg_method, vsf_scale — the method selector + VSF's own
         param, forwarded the same way (only reach the payload when
         nag_enabled is True, per build_a2v_chain_payload's discipline).
@@ -181,48 +184,50 @@ class BatchSnapshot:
                      payload only when it differs from "sdpa".
         block_swap_prefetch  Snapshotted from the Settings-tab checkbox, same
                      reasoning as attention_backend. Reaches the payload only
-                     when it differs from the API's own default (now True).
+                     when it differs from ``BLOCK_SWAP_PREFETCH_DEFAULT``.
         keep_resident  Snapshotted from the Settings-tab checkbox, same
-                     reasoning again. The API default is OFF, so this one
-                     reaches the payload only when True. For a batch it is the
+                     reasoning again. Reaches the payload only when it differs
+                     from ``KEEP_RESIDENT_DEFAULT``. For a batch it is the
                      setting that matters most (every row after the first is a
-                     cache HIT) — and also the one that parks ~20GB of main
-                     memory for the whole overnight run.
+                     cache HIT) — and also the one that parks a large amount
+                     of main memory for the whole overnight run (see the owner
+                     decision at ``KEEP_RESIDENT_DEFAULT``).
         fused_gguf_dequant_kernel  Snapshotted from the Settings-tab checkbox,
-                     same reasoning again. The API default is ON since
-                     2026-08-04 (§51), so this one reaches the payload only
-                     when False. The output is bit-identical either way — only
-                     the speed changes.
-        chunked_upsample  Snapshotted from the batch accordion's own checkbox
-                     (default ON). Unlike every other field in this block it is
+                     same reasoning again. Reaches the payload only when it
+                     differs from ``FUSED_GGUF_DEQUANT_KERNEL_DEFAULT`` (the
+                     default flip is recorded in VERIFICATION_LOG §51). The
+                     output is bit-identical either way — only the speed
+                     changes.
+        chunked_upsample  Snapshotted from the batch accordion's own checkbox.
+                     Unlike every other field in this block it is
                      sent EXPLICITLY, true or false, exactly as the plugin's
                      batch does — omitting it would silently fall back to the
                      slow one-pass upsample.
         vae_mode  Snapshotted from the Settings-tab VAE radio (PrunaVAED,
-                     Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the
-                     time), same reasoning again. The default is "default"
-                     and never flips (owner ruling 0-11), so this one reaches
-                     the payload only when "prune_vaed" is selected.
-        keep_resident_embeddings  Snapshotted from the Settings-tab checkbox
-                     (LTX 2.5), same reasoning again. The API default is OFF,
-                     so this one reaches the payload only when True. On a base
-                     model that does not support it the checkbox is hidden and
-                     reset, so the snapshot can only ever carry False there.
+                     VERIFICATION_LOG §52), same reasoning again. The default
+                     is "default" and never flips (owner ruling 0-11,
+                     Docs/PRUNAVAED_WORKORDER.md §0), so this one reaches the
+                     payload only when "prune_vaed" is selected.
+        keep_resident_embeddings  Snapshotted from the Settings-tab checkbox,
+                     same reasoning again. Reaches the payload only when it
+                     differs from ``KEEP_RESIDENT_EMBEDDINGS_DEFAULT``. On a
+                     base model that lists it in ``unsupported_features`` the
+                     checkbox is hidden and written back to that default, so
+                     the snapshot can only ever carry the default there.
 
     Output
         embed_mp4_metadata  Snapshotted from the Settings-tab Output checkbox
-                     (§3-164), same reasoning as the acceleration fields. The
-                     API default is ON, so this one reaches the payload only
-                     when False.
+                     (VERIFICATION_LOG §115), same reasoning as the
+                     acceleration fields. Reaches the payload only when it
+                     differs from ``EMBED_MP4_METADATA_DEFAULT``.
 
     Skip cap
         num_frames  The Generate tab's own frame count, snapshotted so the
                      start-time re-judgment uses the SAME effective cap
-                     (``min(num_frames, 481)``) the "Set audios" scan did —
-                     without it a Start would re-judge every row against a bare
-                     481 and silently un-skip rows the scan excluded
-                     (Docs/PENDING_TASKS_CLOSED.md's old §4-29, closed
-                     2026-09-01).
+                     (``min(num_frames, MAX_FRAMES)``) the "Set audios" scan
+                     did — without it a Start would re-judge every row against
+                     the bare ``MAX_FRAMES`` and silently un-skip rows the scan
+                     excluded (VERIFICATION_LOG §85).
     """
 
     wav_dir: str
@@ -358,8 +363,7 @@ def prepare_batch_rows(rows: List[BatchRow], common: str, mode: str,
 # row's own image is a keyframe like any other, so it is conditioned at the
 # LEADING shared keyframe's strength -- "leading" by frame_idx, since the
 # Generate tab's slots are not in frame order. No shared keyframe at all -> the
-# app-wide keyframe default. A fixed 1.0 here used to make a row image the one
-# keyframe in the app that ignored the slider.
+# app-wide keyframe default.
 # --------------------------------------------------------------------------- #
 ROW_IMAGE_STRENGTH_DEFAULT = 0.8
 
@@ -435,7 +439,9 @@ class BatchRunner:
             return [dataclasses.replace(r) for r in self._rows]
 
     def summary(self) -> dict:
-        """Per-status counts + the runner state, for the UI status line."""
+        """Per-status counts + the runner state, as a dict. The end-of-run log
+        line reads it; the UI's batch status line is built from
+        :meth:`snapshot_rows` instead."""
         with self._lock:
             counts = {STAT_DONE: 0, STAT_FAILED: 0, STAT_SKIP: 0,
                       STAT_WAITING: 0, STAT_GENERATING: 0}
@@ -467,12 +473,14 @@ class BatchRunner:
         are the UI thread's send-time freeze, written by ui.py's ``dispatch()``
         through :func:`prepare_batch_rows` BEFORE ``start()`` is ever called,
         and they are not CSV columns. The order is:
-          1. re-judge every unfinished row's frame count / 481-frame Skip at the
-             snapshot's ``frame_rate`` (PROJECTED only — nothing mutated yet);
+          1. re-judge every unfinished row's frame count / frame-cap Skip
+             (effective cap ``min(snapshot.num_frames, MAX_FRAMES)``, see
+             :func:`_plan_rejudgement`) at the snapshot's ``frame_rate``
+             (PROJECTED only — nothing mutated yet);
           2. validate against that projection: ``wav_dir`` must exist, at least
              one unfinished row must survive the re-judgment, and the image /
              prompt foolproof checks must pass;
-          3. only once every check passes, APPLY the re-judgment (over-481 rows
+          3. only once every check passes, APPLY the re-judgment (over-cap rows
              -> Skip, others -> refreshed frames), persist it to the CSV, and
              begin the run.
 
@@ -578,8 +586,9 @@ class BatchRunner:
             conditioning = self._build_conditioning(row)
             ref_id = self._ensure_ref_video()
 
-            # 5/6) build the byte-identical A2V chain payload + submit. The
-            # prompt and the lora list are taken VERBATIM from the row: both
+            # 5/6) build the A2V chain payload with the same
+            # build_a2v_chain_payload the Generate-tab A2V send uses + submit.
+            # The prompt and the lora list are taken VERBATIM from the row: both
             # were frozen by prepare_batch_rows on the UI thread.
             payload = build_a2v_chain_payload(
                 audio_id=audio_id,
@@ -634,8 +643,8 @@ class BatchRunner:
 
     # --- per-row helpers -------------------------------------------------- #
     def _build_conditioning(self, row: BatchRow) -> list:
-        """Assemble the clip's ``conditioning_images`` (same shape as the frozen
-        Generate-tab A2V path): a ``"Shared"`` row uses every snapshot shared
+        """Assemble the clip's ``conditioning_images`` (same shape as the
+        Generate-tab A2V path builds): a ``"Shared"`` row uses every snapshot shared
         image at its own frame/strength; an individually-named image attaches as
         a single frame-0 keyframe at :func:`row_image_strength`."""
         snap = self._snapshot
@@ -807,7 +816,7 @@ def _plan_rejudgement(snapshot: BatchSnapshot, rows: List[BatchRow]) -> dict:
     """Project each unfinished row's re-judgment WITHOUT mutating anything.
 
     Returns ``{id(row): ("skip", "over-cap")}`` for a row whose duration now
-    overruns the effective cap (``min(snapshot.num_frames, 481)``) at
+    overruns the effective cap (``min(snapshot.num_frames, MAX_FRAMES)``) at
     ``snapshot.frame_rate``, or ``{id(row): ("frames", n)}`` with its refreshed
     ``suggest_frames_for_audio`` count otherwise. Rows with a non-positive
     ``duration_s`` (non-wav / already Skip remnants) are left out entirely —
@@ -869,10 +878,10 @@ def _validate(snapshot: BatchSnapshot, rows: List[BatchRow],
         return False, "no rows to process"
 
     # --- Image foolproof (blanket -> branch) ---
-    # 1. the FIRST common keyframe (slot 1, frame_idx == 0) is set        -> OK
+    # 1. a common keyframe at frame_idx == 0 is set (any slot)      -> OK
     # 2. it is not set -> every target must carry its OWN image; else fail.
-    #    (a shared_images entry from slot 2+ alone, i.e. frame_idx > 0,
-    #    does NOT satisfy the "Shared" rows — only the frame-0 slot does.)
+    #    (shared_images entries that all sit at frame_idx > 0 do NOT
+    #    satisfy the "Shared" rows — only a frame-0 keyframe does.)
     has_first_keyframe = any(int(frame_idx) == 0
                               for _path, frame_idx, _strength in snapshot.shared_images)
     if not has_first_keyframe:
@@ -881,7 +890,7 @@ def _validate(snapshot: BatchSnapshot, rows: List[BatchRow],
             return False, (
                 "shared keyframe image(s) required: "
                 f"{len(shared_targets)} row(s) reference '{IMAGE_SHARED}' but "
-                "no shared image is set"
+                "no shared keyframe at frame 0 is set"
             )
 
     # --- Prompt foolproof (blanket -> branch) ---
@@ -915,7 +924,7 @@ _RUNNER_LOCK = threading.Lock()
 def get_runner() -> BatchRunner:
     """Return the process-wide :class:`BatchRunner` singleton (lazily created).
 
-    The UI (WP3) and its ``gr.Timer`` share this ONE instance so the batch
+    The UI and its ``gr.Timer`` share this ONE instance so the batch
     survives browser reconnects. Unit tests construct :class:`BatchRunner`
     directly for isolation rather than going through here."""
     global _RUNNER

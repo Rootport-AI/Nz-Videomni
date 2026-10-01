@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-61〜§1-63〔GGUF の純 torch の逆量子化で 8 つの型が誤った値を返すか止まる／`GGUFStateDictLoader.load` の鍵の付け替えが死んだコードで bf16 の経路では読み込みのたびに警告が出る／画角拡張（Outpainting）の `MIN_INNER_SIDE` がキャンバスと半径に応じた下限になっていない〕を起票し、§1-58「使われていないコード」に `build_gguf_loader_service`・`GGUFLoaderService.uninstall`・`_make_depth_processor` の関数内 import の3件を追記したうえ、§1 冒頭の案内を §1-63 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-59〜§1-60〔Gemma の GGUF 量子化サービスの `_read_target_vocab_from_header` の名前と型が本体に合わない／`embed_cpu_offload` が `install` で固定され通らない枝が残る〕を起票し、§1-58「使われていないコード」に `BlockSwapService.uninstall`・`build_block_swap_service`・`_load_gguf_connectors` の引数 `target_device` の3件を追記したうえ、§1 冒頭の案内を §1-60 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-51〜§1-58〔Gemma の GGUF の取り付けに失敗しても読み込みが成功扱いになる／GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性／V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない／マスクの二値化の基準が2箇所で違う／`keep_resident_used` の報告が arm の失敗を反映しない／`peak_vram_mb` に参照動画の encode より前のピークが入らない／区切り幅の既定 `chunk_size or 8` が定数の値を書き写している／使われていないコード〕を起票し、§1 冒頭の案内を §1-58 まで含む記述に更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-64〜§1-66〔Gradio の A2V の音声の長さの事前検査が丸める前の fps で計算している／バッチ A2V に幅・高さの ÷64 の事前検査が無い／Gradio の快適上限の警告と高品質モードの警告が言語を渡さず英語固定〕を起票し、§1-58「使われていないコード」に `gradio_ui/api_client.py` の `ApiClient.lora_thumbnail_url`・`gradio_ui/i18n.py` の `LABELS` のうち参照されないキー10個の2件を追記したうえ、§1 冒頭の案内を §1-66 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-61〜§1-63〔GGUF の純 torch の逆量子化で 8 つの型が誤った値を返すか止まる／`GGUFStateDictLoader.load` の鍵の付け替えが死んだコードで bf16 の経路では読み込みのたびに警告が出る／画角拡張（Outpainting）の `MIN_INNER_SIDE` がキャンバスと半径に応じた下限になっていない〕を起票し、§1-58「使われていないコード」に `build_gguf_loader_service`・`GGUFLoaderService.uninstall`・`_make_depth_processor` の関数内 import の3件を追記したうえ、§1 冒頭の案内を §1-63 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-59〜§1-60〔Gemma の GGUF 量子化サービスの `_read_target_vocab_from_header` の名前と型が本体に合わない／`embed_cpu_offload` が `install` で固定され通らない枝が残る〕を起票し、§1-58「使われていないコード」に `BlockSwapService.uninstall`・`build_block_swap_service`・`_load_gguf_connectors` の引数 `target_device` の3件を追記したうえ、§1 冒頭の案内を §1-60 まで含む記述に更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58・§1-59・§1-60・§1-61・§1-62・§1-63 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58・§1-59・§1-60・§1-61・§1-62・§1-63・§1-64・§1-65・§1-66 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -302,11 +302,13 @@
   - `engine/gemma/gguf_quant_service.py` の `_load_gguf_connectors` の引数 `target_device`（本体のどこからも参照されない。呼び出し元の `load` は `cpu_device` を渡している）。
   - `engine/gguf/loader_service.py` の `build_gguf_loader_service` と `GGUFLoaderService.uninstall`（呼び出し元なし）。
   - `engine/preprocess/driver.py` の `_make_depth_processor` の関数内 import（パッケージの `__init__` が `depth` を即時に import するため遅延の効果が無い。重い `vda` の import は `_ensure_loaded` の中で遅延のまま。害は無い）。
+  - `gradio_ui/api_client.py` の `ApiClient.lora_thumbnail_url`（呼び出し元なし。導入コミット `591d4be` 以来）。Style LoRA のギャラリーは `gradio_ui/adapters.py` の `build_style_gallery` が `/api/v1/loras/{name}/thumbnail` のパスを自前で組んでおり、同じパスが2箇所にある（どちらかに寄せる）。
+  - `gradio_ui/i18n.py` の `LABELS` のうち、どこからも引かれないキー10個。`a2v_mode_a2v`・`a2v_guide`・`a2v_cap_panel` は `gradio_ui/ui.py` の注記のとおり Clip Chain の A2V の入口を画面から外したときに意図して残したもの。`btn_load_model`・`btn_unload_model`・`msg_coming` は残す理由がコードに無い（`tests/test_gradio_ui.py` は `btn_load_model` が上部バーに無いことを固定しているだけ）。`lbl_apikey`・`msg_generate_error`・`msg_upload_done`・`batch_image_shared` の4つも同じく引かれない。
 - **影響**: 無い（未使用のコードが残っているだけ）。
 - **選択肢**（オーナー判断・優劣はつけない）: 項目ごとに消すか残すかを決める。
 - **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135・§136・§137（申し送り）。
-- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）、`engine/transformer/block_swap_service.py`（`BlockSwapService.uninstall`・`build_block_swap_service`）、`engine/gemma/gguf_quant_service.py`（`_load_gguf_connectors`）、`engine/gguf/loader_service.py`（`build_gguf_loader_service`・`GGUFLoaderService.uninstall`）、`engine/preprocess/driver.py`（`_make_depth_processor`）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135・§136・§137・§138（申し送り）。
+- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）、`engine/transformer/block_swap_service.py`（`BlockSwapService.uninstall`・`build_block_swap_service`）、`engine/gemma/gguf_quant_service.py`（`_load_gguf_connectors`）、`engine/gguf/loader_service.py`（`build_gguf_loader_service`・`GGUFLoaderService.uninstall`）、`engine/preprocess/driver.py`（`_make_depth_processor`）、`gradio_ui/api_client.py`（`ApiClient.lora_thumbnail_url`）、`gradio_ui/adapters.py`（`build_style_gallery`）、`gradio_ui/i18n.py`（`LABELS`）。
 
 ### 1-59. `_read_target_vocab_from_header` の名前と型が本体に合わない（起票：2026-10-01）
 
@@ -366,6 +368,39 @@
 - **着手**: 着手時は go／no-go の検討から始める。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §137（コメント現行化 engine/ 第3回の検算の申し送り）。
 - **関連ファイル**: `engine/outpaint/canvas.py`（`MIN_INNER_SIDE`）、`api/models.py`（`OUTPAINT_MIN_KEEP_SIDE`・`Field`）。
+
+### 1-64. Gradio の A2V の音声の長さの事前検査が、丸める前の fps で計算している（起票：2026-10-01）
+
+- **現象**: `gradio_ui/handlers.py` の `make_generate_handler` の A2V（音声から動画）の経路は、音声の長さに対して必要な潜在フレーム数を入力の fps そのままで計算して事前検査する。一方、実際に送る `frame_rate` は `build_a2v_chain_payload` の中で `_snap_frame_rate` により整数に丸められる。fps が切り下がる入力（例 29.4 → 29）では送る側のほうが多くの音声潜在フレームを要するので、事前検査を通った要求がサーバの422に当たりうる（コメント現行化の検算が `chain_math.audio_latents_required` で総当たりして確定: 97フレームのとき29.4fpsで82・29fpsで84。0.1刻みの総当たりで1万組以上）。
+- **影響**: 画面の fps 欄は `gr.Number(precision=0)` で整数しか来ないので、画面からの操作では起きない。実害は直接呼び出し（テスト・プログラムからの呼び出し）に限られる。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 事前検査でも `_snap_frame_rate` 後の fps を使う。
+  - B: 現状のまま（画面からは起きない）とし、docstring に限定を書く（コメントは今の挙動に合わせて直してある）。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138（コメント現行化 `gradio_ui/` の検算の申し送り）。
+- **関連ファイル**: `gradio_ui/handlers.py`（`make_generate_handler`・`build_a2v_chain_payload`・`_snap_frame_rate`）、`chain_math.py`（`audio_latents_required`）。
+
+### 1-65. バッチ A2V に幅・高さの ÷64 の事前検査が無い（起票：2026-10-01）
+
+- **現象**: Generate と Clip Chain は `gradio_ui/handlers.py` で幅・高さが64の倍数でなければ API を呼ばずに止めるが、バッチ A2V（`gradio_ui/ui.py` の `dispatch()` のバッチ分岐・`on_batch_set_audios`・`gradio_ui/batch.py` の `_validate`）のどれも検査しない。64の倍数でない値でバッチを始めると、各行で音声などをアップロードした後にサーバの422で Failed になり、全行が同じ理由で失敗する。
+- **影響**: 誤った値を入れたときだけ。全行が失敗するまで気づけない。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `batch._validate` に ÷64 の検査を足す。
+  - B: `dispatch()` のバッチ分岐で Generate と同じ事前検査を通す。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138。
+- **関連ファイル**: `gradio_ui/ui.py`（`dispatch`・`on_batch_set_audios`）、`gradio_ui/batch.py`（`_validate`）、`gradio_ui/handlers.py`（Generate と Clip Chain の÷64の事前検査）。
+
+### 1-66. Gradio の快適上限の警告と高品質モードの警告が、言語を渡さず英語で固定される（起票：2026-10-01）
+
+- **現象**: 言語を渡していない経路が3つある。(a) `gradio_ui/ui.py` の `preset.change(apply_preset, inputs=[preset, config_state], …)` は `lang_state` を渡さない。`apply_preset` → `compute_spill_warning` の快適上限の警告（`warn_spill_limit`）は、UI を日本語にしていても既定の言語（英語）で出る。(b) 幅・高さ・フレーム数を手で変えたときの `.change` リスナー（`gradio_ui/ui.py` の `for _ctrl in (width, height, num_frames): _ctrl.change(compute_spill_warning, inputs=[width, height, num_frames, config_state], outputs=spill_warning)`）も `lang_state` を渡さない。プリセット適用で幅・高さ・フレーム数が変わるとこのリスナーも走るので、(a) だけ直しても日本語の画面に英語の警告が残りうる。(c) `on_qmode_change` の `gr.Warning(L("warn_hq_unsupported"))` も言語を渡さないので、高品質モードの警告は常に英語（日本語の文言 `warn_hq_unsupported` は画面に一度も出ない）。
+- **影響**: 表示だけ。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 3経路とも `lang_state` を `inputs` に足し、`apply_preset`・`compute_spill_warning`・`on_qmode_change` が受け取って `L(key, lang)` に渡す。
+  - B: 現状のまま。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138。
+- **関連ファイル**: `gradio_ui/ui.py`（`preset.change` の配線・幅／高さ／フレーム数の `.change` の配線・`on_qmode_change`）、`gradio_ui/presets.py`（`apply_preset`・`compute_spill_warning`）、`gradio_ui/i18n.py`（`warn_hq_unsupported`・`warn_spill_limit`）。
 
 ---
 

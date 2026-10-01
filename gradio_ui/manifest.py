@@ -1,14 +1,14 @@
 """Batch A2V CSV manifest — pure-Python data layer (no Gradio/thread/HTTP deps).
 
 Owns the on-disk contract for the "Batch A2V" feature (bedside/overnight
-keyframe-audio-to-video batches, see ``Docs/BATCH_A2V_WORKORDER.md``): scanning
+keyframe-audio-to-video batches, see ``Docs/BATCH_A2V_CSV_SPEC.md``): scanning
 a wav folder into rows, reading/writing the CSV manifest that lives next to the
 audio files, merging a rescan into a previously-edited manifest without losing
 user edits or generation results, and resolving/deconflicting output paths.
 
 Deliberately dependency-light: no ``gradio``, no ``threading``, no HTTP client.
 This keeps the module trivially unit-testable and safe to import from any
-layer (batch worker thread, Gradio handlers, future WebView2-facing tooling)
+layer (batch worker thread, Gradio handlers, any headless tool)
 without dragging in a GUI framework. In particular this is why the wav-length
 probe below is a small local reimplementation of
 ``gradio_ui.handlers._wav_duration_seconds`` rather than an import of it: that
@@ -37,18 +37,19 @@ from typing import Callable
 # Constants
 # --------------------------------------------------------------------------- #
 
-# Manifest file lives directly under the audio folder (WORKORDER §2.9/§4.5).
+# Manifest file lives directly under the audio folder
+# (Docs/BATCH_A2V_CSV_SPEC.md §1).
 MANIFEST_NAME = "batch_a2v_manifest.csv"
 # Fallback write target when the primary CSV is locked (e.g. open in Excel)
 # even after retrying ``os.replace`` — see write_manifest_atomic().
 AUTOSAVE_NAME = "batch_a2v_manifest.autosave.csv"
 
-# Same set as config.yaml's upload.allowed_audio_extensions (kept as a literal
-# constant here rather than read from config.yaml, per the WP spec — the batch
-# scan step never talks to the API/config layer).
+# Same set as the default of config.UploadConfig.allowed_audio_extensions
+# (kept as a literal constant here rather than read from the config — the
+# batch scan step never talks to the API/config layer).
 ALLOWED_AUDIO_EXTENSIONS = (".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg")
 
-# Row status values (WORKORDER §2.3).
+# Row status values (Docs/BATCH_A2V_CSV_SPEC.md §3.2).
 STAT_WAITING = "Waiting"
 STAT_GENERATING = "Generating"
 STAT_DONE = "Done"
@@ -58,12 +59,13 @@ STAT_SKIP = "Skip"
 # image column sentinel meaning "use the Generate tab's common i2v keyframe".
 IMAGE_SHARED = "Shared"
 
-# Server hard cap (num_frames <= 481, api/models.py). Mirrors
-# gradio_ui.handlers.suggest_frames_for_audio's raw-frame-count formula.
+# Server hard cap (num_frames <= 481, api/models.py) — the same upper bound
+# gradio_ui.handlers.suggest_frames_for_audio clamps its result to.
 MAX_FRAMES = 481
 
-# CSV header — English lowercase, 10 columns, fixed order (shared contract
-# with the WebView2/React frontend per WORKORDER §2.9).
+# CSV header — English lowercase, 10 columns, fixed order
+# (Docs/BATCH_A2V_CSV_SPEC.md §3). The WebView2/React frontend reads and
+# writes no CSV; it shares the vocabulary and judgment rules (same spec, §0).
 CSV_FIELDS = [
     "queue", "wav", "duration", "image", "prompt",
     "stat", "output", "frames", "skip_reason", "error",
@@ -179,9 +181,9 @@ def read_manifest(wav_dir) -> list[BatchRow] | None:
     Returns ``None`` when the file does not exist (caller treats this as "no
     prior manifest — first scan"). Returns a (possibly empty) list otherwise;
     a malformed row never aborts the whole read — see :func:`_row_from_dict`.
-    A totally unreadable file (I/O error, garbage encoding) degrades to an
-    empty list rather than raising, for the same "never die on a bad CSV"
-    reason."""
+    A file that cannot be read through (I/O error, garbage encoding) degrades
+    to the rows read before the failure (an empty list when there are none)
+    rather than raising, for the same "never die on a bad CSV" reason."""
     path = Path(wav_dir) / MANIFEST_NAME
     if not path.exists():
         return None
@@ -220,10 +222,10 @@ def write_manifest_atomic(wav_dir, rows: list[BatchRow]) -> WriteResult:
     it into place (atomic on both POSIX and Windows). If the target is locked
     by another process (e.g. open in Excel) ``os.replace`` raises
     ``PermissionError`` on Windows; this is retried with a short exponential
-    backoff (5 attempts). If every retry fails, the same rows are written to
-    ``batch_a2v_manifest.autosave.csv`` instead (best effort) and the result
-    carries ``locked=True`` so the caller can warn the user (e.g.
-    ``gr.Warning``) instead of silently losing the edit.
+    backoff (``_WRITE_RETRY_ATTEMPTS`` attempts). If every retry fails, the
+    same rows are written to ``batch_a2v_manifest.autosave.csv`` instead
+    (best effort) and the result carries ``locked=True`` so the caller can
+    warn the user (e.g. ``gr.Warning``) instead of silently losing the edit.
     """
     wav_dir = Path(wav_dir)
     path = wav_dir / MANIFEST_NAME
@@ -259,8 +261,8 @@ def write_manifest_atomic(wav_dir, rows: list[BatchRow]) -> WriteResult:
 
 
 # --------------------------------------------------------------------------- #
-# Frame-count arithmetic (pure) — the ONE place the raw 8n+1 frame-count formula
-# and the frame-cap Skip test live, so scan_wav_folder (initial scan) and the
+# Frame-count arithmetic (pure) — the batch's raw 8n+1 frame-count formula and
+# frame-cap Skip test, kept here so scan_wav_folder (initial scan) and the
 # batch runner's start-time re-judgment (gradio_ui.batch) share exactly the same
 # math instead of re-deriving it. Deliberately policy-free (no clamp/shrink):
 # that "which frame count does the app actually pick" policy stays in
@@ -277,11 +279,12 @@ def over_frame_limit(dur: float, fps, max_frames=MAX_FRAMES) -> bool:
     """True when ``dur`` at ``fps`` needs more raw frames than the effective
     cap (i.e. the row must be Skipped with ``skip_reason="over-cap"``).
 
-    The effective cap is ``min(max_frames, MAX_FRAMES)`` — the same
-    ``Math.min(cap, 481)`` the WebView2 frontend applies, so both GUIs skip
-    exactly the same rows: the Generate tab's own frame count is the ceiling a
-    batch row may reach, and the server's hard 481 caps that in turn. A missing
-    / zero ``max_frames`` (empty input box) falls back to the hard cap."""
+    The effective cap is ``min(max_frames, MAX_FRAMES)`` — the same cap the
+    WebView2 frontend applies (``webui/src/modes/batch/manifestMerge.ts``),
+    so both GUIs skip the same rows: the Generate tab's own frame count is
+    the ceiling a batch row may reach, and the server's hard cap
+    (:data:`MAX_FRAMES`) caps that in turn. A missing / zero ``max_frames``
+    (empty input box) falls back to the hard cap."""
     cap = min(int(max_frames or MAX_FRAMES), MAX_FRAMES)
     return raw_frame_count(dur, fps) > cap
 
@@ -320,15 +323,15 @@ def scan_wav_folder(
     * Only ``ALLOWED_AUDIO_EXTENSIONS`` files are considered; the manifest CSV
       itself and its ``.tmp``/autosave siblings are always excluded.
     * Sorted by **mtime ascending** (VOICEROID writes files in script order —
-      WORKORDER §2.7).
+      ``Docs/BATCH_A2V_CSV_SPEC.md`` §6).
     * Non-``.wav`` files, and ``.wav`` files whose length cannot be read, get
       ``stat=Skip, skip_reason="wav-only-alpha"`` (kept in the list — visible
       but excluded — rather than dropped silently).
     * ``.wav`` files whose raw frame count (``((floor(dur*fps)-1)//8)*8+1``)
-      exceeds the effective cap ``min(max_frames, 481)`` get
+      exceeds the effective cap ``min(max_frames, MAX_FRAMES)`` get
       ``stat=Skip, skip_reason="over-cap"``. ``max_frames`` is the Generate
-      tab's own frame count (the caller passes it in), so raising DURATION and
-      re-running "Set audios" brings a skipped row back — see
+      tab's own frame count (the caller passes it in), so raising that frame
+      count and re-running "Set audios" brings a skipped row back — see
       :func:`merge_rows`' Rule 1.
     * Everything else gets its ``frames`` from the injected ``frames_for(dur,
       fps)`` callable (the caller wires in
@@ -383,10 +386,11 @@ def compute_spill_warnings(
 ) -> list[str]:
     """Return one warning string per non-Skip row whose ``frames`` exceeds the
     comfortable (spill-free) threshold for ``{width}x{height}`` in
-    ``spill_free_frames`` (config.yaml's ``limits.spill_free_frames`` shape,
-    e.g. ``{"1280x768": 273}``). Unknown resolution -> no warnings. This never
-    changes ``stat`` — spill is a slowdown, not an exclusion (WORKORDER §2.6 /
-    §4.3: only the 481-frame cap Skips)."""
+    ``spill_free_frames`` (the ``/config`` ``limits.spill_free_frames`` mapping,
+    keyed ``"{width}x{height}"``). Unknown resolution -> no warnings. This never
+    changes ``stat`` — spill is a slowdown, not an exclusion
+    (``Docs/BATCH_A2V_CSV_SPEC.md`` §6: the frame-count Skip is
+    :func:`over_frame_limit`'s effective cap, not the spill threshold)."""
     key = f"{int(width)}x{int(height)}"
     threshold = (spill_free_frames or {}).get(key)
     if threshold is None:
@@ -407,7 +411,7 @@ def merge_rows(
     existing: list[BatchRow] | None, scanned: list[BatchRow]
 ) -> tuple[list[BatchRow], list[str]]:
     """Merge a fresh :func:`scan_wav_folder` result into a previously-saved
-    manifest, per WORKORDER's 4 merge rules:
+    manifest, per the 4 merge rules of ``Docs/BATCH_A2V_CSV_SPEC.md`` §6:
 
     1. A wav present in both keeps the existing row's ``prompt``/``image``/
        ``stat``/``output``/``error`` (user edits + generation results
@@ -416,8 +420,8 @@ def merge_rows(
        overwritten to Skip UNLESS the existing row was already ``Done`` — a
        completed row is never demoted, it just earns a warning instead.
        Conversely, a row that WAS Skip and comes back clean from the rescan
-       returns to the rescan's stat (Waiting): the frame cap is the Generate
-       tab's own frame count now, so raising it and pressing "Set audios"
+       returns to the rescan's stat (Waiting): the frame cap follows the
+       Generate tab's own frame count, so raising it and pressing "Set audios"
        again is how a user un-skips a row (without this the row would stay
        Skip forever while its reason silently blanked out).
     2. A wav present only in the rescan is a brand-new row, inserted as-is

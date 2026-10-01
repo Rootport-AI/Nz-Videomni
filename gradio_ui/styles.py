@@ -1,20 +1,22 @@
 """Custom CSS for the Gradio Blocks UI in ``gradio_ui/ui.py``.
 
 This module only defines the :data:`CUSTOM_CSS` constant. Wiring it in
-(``gr.Blocks(css=CUSTOM_CSS)``) is done separately in ``ui.py``; this file
-does not import from or modify ``ui.py`` in any way.
+(an in-tree ``gr.HTML("<style>...</style>")`` block in ``build_ui``) is
+done separately in ``ui.py``; this file does not import from or modify
+``ui.py`` in any way.
 
 Dark/light theme detection
 ---------------------------
-Gradio 6.19's own theme bootstrap script (compiled at
-``gradio/templates/frontend/assets/Index-BAOWiMqV.js``, function ``Oe``)
-toggles a plain ``dark`` class on ``document.body``::
+Gradio 6.19's own theme bootstrap script (compiled into the frontend's
+``gradio/templates/frontend/assets/Index-*.js`` bundle, in the function
+that applies the resolved theme mode) toggles a plain ``dark`` class on
+``document.body``::
 
     d==="dark" ? l.classList.add("dark") : l.classList.remove("dark")
 
 -- there is no ``data-theme`` attribute involved anywhere in Gradio 6's
 runtime. ``ui.py``'s own theme switcher (``theme_dd.change(..., js=...)``
-around line 656) mirrors this exact convention:
+in ``build_ui``) mirrors this exact convention:
 
     document.body.classList.toggle('light', v === 'light');
     document.body.classList.toggle('dark', v === 'dark');
@@ -37,7 +39,7 @@ Group/Form DOM shape (``.duration-panel``)
 --------------------------------------------
 Gradio 6.19's ``gr.Group`` renders its children through the compiled
 ``BaseForm`` component (see
-``gradio/templates/frontend/assets/BaseForm-DJxyhkeW.css``)::
+``gradio/templates/frontend/assets/BaseForm-*.css``)::
 
     div.svelte-d5xbca {
         border: var(--block-border-width) solid var(--block-border-color);
@@ -63,7 +65,7 @@ Duration heading/value text and center it within its narrower middle
 Textbox DOM shape
 ------------------
 Gradio's compiled Textbox component (see
-``gradio/templates/frontend/assets/Textbox-B5AH0EoL.css``) renders as
+``gradio/templates/frontend/assets/Textbox-*.css``) renders as
 ``label > textarea`` (or ``label > input``) inside the wrapping ``.block``
 div that receives ``elem_classes``, roughly::
 
@@ -129,7 +131,7 @@ body.dark .base-url-box input {
    Frames (8n+1) / Duration / Frame rate, fused into one panel by gr.Group
    (see the BaseForm note above -- Gradio strips the child blocks' own chrome).
 
-   Owner feedback (2026-07): the panel's background differed from the other
+   Owner feedback: the panel's background differed from the other
    input panels, and the middle "Duration" text sat at a different height/size
    than the Frames / Frame-rate field labels. Two fixes:
 

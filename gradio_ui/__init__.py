@@ -1,21 +1,20 @@
-"""Gradio verification UI (spec ch.12) — thin client over the frozen REST API.
+"""Gradio verification UI (spec §12) — thin client over the frozen REST API.
 
 The UI is a *thin client* over the frozen REST API (/api/v1/*). It never calls
-LTX directly; it exercises the very same endpoints future frontends (AviUtl2,
-DaVinci Resolve) will use:
+LTX directly; it exercises the very same endpoints the AviUtl2 WebView2
+frontend uses (and a future DaVinci Resolve frontend would use):
 
     [optional] POST /api/v1/upload/image  -> image_id
     POST /api/v1/generate                 -> job_id
     poll GET /api/v1/jobs/{job_id}         -> progress
     GET /api/v1/jobs/{job_id}/video        -> mp4
 
-Package layout (split from the original single-file gradio_ui.py, one
-cohesive concern per module):
+Package layout (one cohesive concern per module):
   * ``i18n``       — ``LABELS`` / ``L()``, the i18n-ready label table (English
-                      default, Japanese ported). Every user-visible string is
+                      default, Japanese ported). User-visible strings are
                       looked up via ``L(key)``.
-  * ``api_client`` — ``ApiClient``, the only place /api/v1/* paths + auth
-                      headers live. Holds an injectable ``httpx.Client`` so
+  * ``api_client`` — ``ApiClient``, where the /api/v1/* calls + auth headers
+                      live. Holds an injectable ``httpx.Client`` so
                       tests can feed it an ``httpx.MockTransport``.
   * ``presets``    — ``PRESETS`` fallback table + preset/spill-warning logic
                       (``build_preset_choices``, ``pick_default_preset``,
@@ -33,6 +32,10 @@ cohesive concern per module):
                       envelope.
   * ``validation`` — ``check_chain_total()``, the clip-chain total-timeline
                       precheck that mirrors the server's chain_math validator.
+  * ``comfort``    — the Clip Chain tab's Stage-2 window dropdown: the window
+                      choices, the chain comfort budget for the current
+                      engine + acceleration settings, and the option labels
+                      (ports of the WebUI's rules).
   * ``manifest``   — Batch A2V CSV manifest, the pure-Python data layer: scan
                       a wav folder into rows, read/write/merge the CSV that
                       lives next to the audio files, resolve output paths. No
@@ -44,20 +47,24 @@ cohesive concern per module):
   * ``handlers``   — ``make_generate_handler()`` / ``make_chain_handler()``,
                       the yield-based generate/chain flows factored out so
                       they are unit-testable with a mock transport.
-  * ``styles``     — ``CUSTOM_CSS``, the stylesheet for the Blocks UI; it is
-                      wired in (``gr.Blocks(css=...)``) by ``ui`` alone.
-  * ``ui``         — ``build_ui()``, assembling the top common bar + gr.Tabs
-                      (Generate / Clip Chain / Jobs / Settings).
+  * ``styles``     — ``CUSTOM_CSS``, the stylesheet for the Blocks UI; ``ui``
+                      alone imports it and injects it as an in-tree
+                      ``gr.HTML`` ``<style>`` block (``mount_gradio_app``
+                      overwrites ``blocks.css``, so ``gr.Blocks(css=...)``
+                      would be dropped).
+  * ``ui``         — ``build_ui()``, assembling the top common bar, the shared
+                      prompt area above the tabs, and the ``gr.Tabs``.
 
-Dark theme + language switching are wired at the mount site (main.py passes a
-``js=`` dark-default) and, for the Theme dropdown, a pure-frontend js handler.
+The dark default is wired at the mount site (main.py passes a ``js=``
+dark-default); the Theme dropdown uses a pure-frontend js handler, and the
+Language dropdown is a server-side handler in ``ui`` (``switch_language``).
 No HTTP is performed at build time (build_ui runs before uvicorn listens); the
-initial /status + /config fetch happens in ``demo.load``.
+initial /status, /config, /models and /loras fetches happen in ``demo.load``
+handlers.
 
-This ``__init__`` re-exports the public API so existing imports
-(``from gradio_ui import build_ui``, ``from gradio_ui import ApiClient``,
-etc.) keep working unchanged -- this package split is a pure refactor with no
-behavior change.
+This ``__init__`` re-exports the public API so callers can import from the
+package root (``from gradio_ui import build_ui``,
+``from gradio_ui import ApiClient``, etc.).
 """
 
 from __future__ import annotations

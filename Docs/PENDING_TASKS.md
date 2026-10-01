@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-51〜§1-58〔Gemma の GGUF の取り付けに失敗しても読み込みが成功扱いになる／GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性／V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない／マスクの二値化の基準が2箇所で違う／`keep_resident_used` の報告が arm の失敗を反映しない／`peak_vram_mb` に参照動画の encode より前のピークが入らない／区切り幅の既定 `chunk_size or 8` が定数の値を書き写している／使われていないコード〕を起票し、§1 冒頭の案内を §1-58 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-47〜§1-50〔自己試験の `prefetch_used` が「install の飛ばし」を検出できない可能性／画角拡張（Outpainting）で凍結を無効にしたジョブの `source_had_audio`／`cross_attention_modules` に呼び出し元が無い／効かない設定 `model_configurator=LTXModelConfigurator`〕を起票し、§1 冒頭の案内を §1-47〜§1-50 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-46「撮り直し（Retake）の `source_had_audio` が、音声があったのに `false` になる場合がある」を起票し、§1 冒頭の案内を §1-46 まで含む記述に更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-59〜§1-60〔Gemma の GGUF 量子化サービスの `_read_target_vocab_from_header` の名前と型が本体に合わない／`embed_cpu_offload` が `install` で固定され通らない枝が残る〕を起票し、§1-58「使われていないコード」に `BlockSwapService.uninstall`・`build_block_swap_service`・`_load_gguf_connectors` の引数 `target_device` の3件を追記したうえ、§1 冒頭の案内を §1-60 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-51〜§1-58〔Gemma の GGUF の取り付けに失敗しても読み込みが成功扱いになる／GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性／V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない／マスクの二値化の基準が2箇所で違う／`keep_resident_used` の報告が arm の失敗を反映しない／`peak_vram_mb` に参照動画の encode より前のピークが入らない／区切り幅の既定 `chunk_size or 8` が定数の値を書き写している／使われていないコード〕を起票し、§1 冒頭の案内を §1-58 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-47〜§1-50〔自己試験の `prefetch_used` が「install の飛ばし」を検出できない可能性／画角拡張（Outpainting）で凍結を無効にしたジョブの `source_had_audio`／`cross_attention_modules` に呼び出し元が無い／効かない設定 `model_configurator=LTXModelConfigurator`〕を起票し、§1 冒頭の案内を §1-47〜§1-50 まで含む記述に更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58・§1-59・§1-60 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -291,18 +291,46 @@
 
 ### 1-58. 使われていないコード（起票：2026-10-01）
 
-- **現象**: 次がリポジトリ全体をGrepしても呼び出し元・import元が無い。
+- **現象**: 次がリポジトリ全体をGrepしても呼び出し元・import元・参照が無い。
   - `engine/api_types.py` のTypedDict群（`ChainClipPayload`・`SourceVideoPayload`・`EndSourcePayload`・`GenerateChainParams`・`GenerationState`）とPydanticモデル群（`CheckpointVariant`以下、ファイル末尾までの全モデル）。同ファイルから実際に他所でimportされているのは `ImageConditioningInput` だけ（`engine/worker.py`・`engine/pipeline/common.py`・`chain_pipeline.py`・`fast_video_pipeline.py`）。中でも `GenerateChainParams` は、Grepで確かめた限りこのTypedDictをimportしている箇所がリポジトリ全体に無く、契約として読むと誤解を招く。
   - `engine/lora_types.py` の `LoraEntry`（Grepで確かめた限りこのモジュールをimportしている箇所が無い。IC-LoRAは別の `engine.gguf.ic_lora_common.IcLoraEntry` を使う）。
   - `engine/pipeline/fast_video_pipeline.py` の `LTXFastVideoPipeline.compile_transformer`（メソッド自身のコメントが「誰も呼んでいない」と明記）。
   - `engine/pipeline/common.py` の `default_guiders`・`DistilledNativePipeline`（後者はコメントで「本番経路ではない（`worker.py` は `LTXFastVideoPipeline` しか使わない）」と明記）。
   - `LTXFastVideoPipeline.__init__` が持たせる `self._component_video_vae_path`・`_component_audio_vae_path`・`_component_text_projection_path`（代入後どこからも読まれない）。
   - `engine/worker.py` の `_do_generate`・`_do_generate_chain` が受ける `_resolve_keep_resident` の戻り値の2つ目（`_keep_res_reason`。代入するだけで使わない）。
+  - `engine/transformer/block_swap_service.py` の `BlockSwapService.uninstall`（呼び出し元なし。クラス自身のdocstringの使用例とコメントが言及するだけ）と `build_block_swap_service`（呼び出し元なし。LTX 2.3の `_install_block_swap`〔`engine/pipeline/fast_video_pipeline.py`〕も、LTX 2.5の `engine25/gguf_transformer.py` も、`BlockSwapService` を直接作ってこの関数を経由しない）。
+  - `engine/gemma/gguf_quant_service.py` の `_load_gguf_connectors` の引数 `target_device`（本体のどこからも参照されない。呼び出し元の `load` は `cpu_device` を渡している）。
 - **影響**: 無い（未使用のコードが残っているだけ）。
 - **選択肢**（オーナー判断・優劣はつけない）: 項目ごとに消すか残すかを決める。
 - **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
-- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135・§136（申し送り）。
+- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）、`engine/transformer/block_swap_service.py`（`BlockSwapService.uninstall`・`build_block_swap_service`）、`engine/gemma/gguf_quant_service.py`（`_load_gguf_connectors`）。
+
+### 1-59. `_read_target_vocab_from_header` の名前と型が本体に合わない（起票：2026-10-01）
+
+- **現象**: `engine/gemma/gguf_quant_service.py` の `_read_target_vocab_from_header` は、名前はGGUFなどのヘッダから語彙数を読むことを示すが、本体は `ltx_core.text_encoders.gemma.config` の `GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size`（LTXのGemma設定が持つ語彙数の定数）を返すだけで、ファイルのヘッダは読まない。関数自身のdocstringも「model_pathにGemmaのシャードが無いため、base側のembed_tokensのヘッダからは取れない」とこの作りを明記している。戻り値の型注釈は `int | None` だが、実装は常に `int(...)` を返すだけで `None` を返す分岐が無い。呼び出し側の `GemmaGGUFQuantStateDictLoader.load` と `_load_gguf_gemma` は、この戻り値を `target_vocab` として受け取り `is not None` で分岐するが、この判定は常に真になる。
+- **影響**: 無い（現状唯一の値が常に返るだけで、結果は変わらない）。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 名前と型注釈を実態（設定の定数を返すだけ）に合わせる。
+  - B: ヘッダから読む形に戻す（ただし、パディング後の語彙数を持つヘッダは今の読み込み経路に無い。GGUF は実語彙の行だけを持ち、model_path に Gemma のシャードは無いため、読み元から設計し直す必要がある）。
+- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §136（申し送り）。
+- **関連ファイル**: `engine/gemma/gguf_quant_service.py`（`_read_target_vocab_from_header`・`GemmaGGUFQuantStateDictLoader.load`・`_load_gguf_gemma`）。
+
+### 1-60. `embed_cpu_offload` が `install` で固定され、通らない枝が残る（起票：2026-10-01）
+
+- **現象**: `engine/gemma/gguf_quant_service.py` の `GemmaGGUFQuantLoaderService.install` は `GemmaGGUFQuantStateDictLoader` を組み立てるとき `embed_cpu_offload=True` を固定で渡す。このため次の枝が製品の経路では通らない。
+  - `load` の「4. Overlay」にある、lm_headをembed_tokensへ結び直す枝（`embed_key in merged and _LTX_LM_HEAD_KEY not in merged`）。`embed_cpu_offload=True` のときは直前でGGUF側のembed_tokensを `gguf_sd` から取り除き済みのため、この条件は常に偽になる（結び直しは別途 `_install_cpu_embed_offload` がCPU上で行う）。
+  - `_load_gguf_gemma` にある、埋め込みをGPUへ移す枝（`target_device.type != "cpu" and not self.embed_cpu_offload`）。
+  - `_patch_gemma_skip_full_logits` が包む `Gemma3ForCausalLM.forward`（`GemmaTextEncoder.model.forward`）も、ビルド後に `_install_cpu_embed_offload` が同じ `forward` を丸ごと `_cpu_embed_forward` へ差し替えるため実質効いていない。ただし `_cpu_embed_forward` 自身が引数 `logits_to_keep` の既定を1に持つため、結果（最後のトークンだけlogitsを計算する）は同じになる。
+  - あわせて、`connector_gguf_path=None` の経路（`component_text_projection_path`・`connector_gguf_path` のどちらかが無いときに通る、モノリスを `model_path` に残したままの経路）も、モノリス（`ltx-2.3-22b-distilled-1.1.safetensors`）が物理削除済み（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §13.3）のため実際には動かない。アダプタは `checkpoint_path` に固定で空文字を入れる（`services/engines/ltx/adapter.py` の `checkpoint_path = ""`）。
+- **影響**: 無い（通らない枝が残っているだけで、動作には影響しない）。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `embed_cpu_offload` を固定値の前提で外し、通らない枝を消す。
+  - B: 引数を残し、現状を維持する。
+- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §136（申し送り）。
+- **関連ファイル**: `engine/gemma/gguf_quant_service.py`（`GemmaGGUFQuantLoaderService.install`・`GemmaGGUFQuantStateDictLoader.load`・`_load_gguf_gemma`・`_patch_gemma_skip_full_logits`・`_install_cpu_embed_offload`）。
 
 ---
 

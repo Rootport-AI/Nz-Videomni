@@ -2,28 +2,30 @@
 
 Problem
 -------
-Even with the Gemma transformer kept *compressed* in VRAM (Q4_K_M GGUF, ~7.3 GB
-file) the text-encode forward still has a ~15 GB VRAM peak on the 16 GB card,
-because all 48 GGUF-quantized decoder layers are GPU-resident simultaneously
-(their dequant intermediates and activations stack up across the stack).
+Even with the Gemma transformer kept *compressed* in VRAM (the Gemma GGUF) the
+text-encode forward still has a large VRAM peak (VERIFICATION_LOG §11.3 measures
+it with and without this service), because all of the GGUF-quantized decoder
+layers (``GEMMA3_CONFIG_FOR_LTX.text_config.num_hidden_layers``) are
+GPU-resident simultaneously (their dequant intermediates and activations stack
+up across the stack).
 
-This service applies the SAME sliding-window streaming pattern already proven for
-the LTX DiT in ``services.block_swap_service``, but for the Gemma decoder layers:
-the 48 quantized decoder layers are kept CPU-resident and streamed to the GPU one
-window at a time during the text-encode forward (compute stays on the GPU). Only
-``layers_on_gpu`` layers are GPU-resident at any instant, capping the ~15 GB encode
-peak to a few GB.
+This service applies the SAME sliding-window streaming pattern that
+``engine.transformer.block_swap_service`` uses for the LTX DiT, but for the Gemma
+decoder layers: the quantized decoder layers are kept CPU-resident and streamed
+to the GPU one window at a time during the text-encode forward (compute stays on
+the GPU). Only ``layers_on_gpu`` layers are GPU-resident at any instant, which
+lowers the encode peak (VERIFICATION_LOG §11.3).
 
 Key difference vs ``BlockSwapService``
 --------------------------------------
 The Gemma decoder Linear weights are GGUF-quantized and registered as **buffers**
-(see ``gguf_quant_service._patch_linear_for_ggml_dequant``), NOT as parameters.
-``module.parameters()`` therefore does NOT see them, so we must NOT gate the
-device moves on ``layer.parameters()`` device checks the way BlockSwapService does
-(that would miss the quantized weights entirely). Instead we call
-``layer.to(device)`` / ``layer.to("cpu")`` unconditionally for window members and
-evictions: the ``GGMLQuantizedTensor.to()`` override is out-of-place, cheap, and
-preserves the dequant metadata (``_ggml_type`` / ``_float_shape``).
+(see ``engine.gguf.quant_service._patch_linear_for_ggml_dequant``), NOT as
+parameters. ``module.parameters()`` therefore does NOT see them, so we must NOT
+gate the device moves on ``layer.parameters()`` device checks the way
+BlockSwapService does (that would miss the quantized weights entirely). Instead
+we call ``layer.to(device)`` / ``layer.to("cpu")`` unconditionally for window
+members and evictions: the ``GGMLQuantizedTensor.to()`` override is out-of-place,
+cheap, and preserves the dequant metadata (``_ggml_type`` / ``_float_shape``).
 
 Usage
 -----
@@ -66,8 +68,10 @@ class GemmaLayerOffloadService:
                         (the sliding window size). Compute always runs on the GPU.
         compute_device: The GPU device layers run on during their forward pass.
                         When None, it is inferred at install() time from the
-                        model's final language-model norm weight device (matching
-                        Lever-3's ``compute_dev = lang.norm.weight.device``).
+                        model's final language-model norm weight device, matching
+                        the ``compute_dev = lang.norm.weight.device`` of the
+                        CPU-embed forward installed by
+                        ``_install_cpu_embed_offload`` (Lever 3).
     """
 
     def __init__(
@@ -106,7 +110,8 @@ class GemmaLayerOffloadService:
             return
 
         # Resolve the compute device. Prefer the explicit one; else infer from the
-        # final language-model norm weight (match Lever-3's compute_dev).
+        # final language-model norm weight (the same compute_dev the CPU-embed
+        # forward of _install_cpu_embed_offload uses).
         device = self.compute_device
         if device is None:
             device = self._infer_compute_device(lang, layers)
@@ -172,17 +177,16 @@ class GemmaLayerOffloadService:
     def _get_layers(
         self, text_encoder_model: nn.Module
     ) -> tuple[list[nn.Module], nn.Module | None]:
-        """Locate the 48-layer Gemma decoder ModuleList (robust lookup).
+        """Locate the Gemma decoder-layer ModuleList (robust lookup).
 
-        Current nesting (TEXT-ONLY, after QAT gemma_root reclamation — the encoder
-        now holds a Gemma3ForCausalLM, so the ``language_model.`` level is gone;
-        verified against modeling_gemma3 + the GGUF key remap
-        ``model.model.layers.N...``):
+        Nesting (TEXT-ONLY — the encoder holds a Gemma3ForCausalLM, so there is
+        no ``language_model.`` level; verified against modeling_gemma3 + the GGUF
+        key remap ``model.model.layers.N...``):
             text_encoder.model            (Gemma3ForCausalLM)
               .model                      (Gemma3TextModel) -> .layers / .norm
 
-        The probing below still also checks the older multimodal nesting
-        (``text_encoder.model.model.language_model``, from the retired
+        The probing below also checks the multimodal nesting
+        (``text_encoder.model.model.language_model``, as in the wheel's
         Gemma3ForConditionalGeneration build) as a harmless fallback.
 
         ``text_encoder_model`` may be passed in at any of these levels, so we probe
@@ -199,13 +203,13 @@ class GemmaLayerOffloadService:
 
         m = text_encoder_model
         _add(m)
-        # text_encoder.model -> Gemma3ForCausalLM (was Gemma3ForConditionalGeneration)
+        # text_encoder.model -> Gemma3ForCausalLM
         outer = getattr(m, "model", None)
         _add(outer)
-        # .model.model -> Gemma3TextModel (text-only) / Gemma3Model (old multimodal)
+        # .model.model -> Gemma3TextModel (text-only) / Gemma3Model (multimodal)
         inner = getattr(outer, "model", None) if outer is not None else None
         _add(inner)
-        # Old multimodal fallback: .model.model.language_model -> Gemma3TextModel
+        # Multimodal fallback: .model.model.language_model -> Gemma3TextModel
         # (absent on the text-only build; harmless when missing).
         for parent in (m, outer, inner):
             lang = getattr(parent, "language_model", None) if parent is not None else None
@@ -219,7 +223,7 @@ class GemmaLayerOffloadService:
                 return list(layers), cand
 
         # Fallback: search the whole module tree for the largest ModuleList with
-        # >4 children whose container path mentions the language model.
+        # >4 children.
         best: tuple[int, nn.ModuleList, nn.Module | None] | None = None
         for name, child in text_encoder_model.named_modules():
             if isinstance(child, nn.ModuleList) and len(child) > 4:
@@ -249,8 +253,9 @@ class GemmaLayerOffloadService:
     def _infer_compute_device(
         lang: nn.Module | None, layers: list[nn.Module]
     ) -> torch.device | None:
-        """Infer the GPU compute device from the final norm weight (Lever-3 style),
-        falling back to any tensor found among the layers."""
+        """Infer the GPU compute device from the final norm weight (as the CPU-embed
+        forward of ``_install_cpu_embed_offload`` does), falling back to any tensor
+        found among the layers."""
         norm = getattr(lang, "norm", None) if lang is not None else None
         w = getattr(norm, "weight", None) if norm is not None else None
         if isinstance(w, torch.Tensor):

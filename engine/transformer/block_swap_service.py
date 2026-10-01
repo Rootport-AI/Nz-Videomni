@@ -13,9 +13,10 @@ Usage:
 Optional per-job prefetching (``prefetch_requested``): when a job opts in, the
 same window is served by ``block_swap_prefetch.PrefetchEngine`` instead — the
 H2D transfer runs ahead of the compute on its own CUDA stream and the D2H
-eviction disappears entirely. The synchronous path below is left byte-identical
-so that OFF remains an exact A/B baseline; a prefetch that cannot be set up
-(no pinned memory, non-CUDA device) simply falls back to it.
+eviction disappears entirely. The prefetch path leaves the synchronous path
+below (``_patch_block``) untouched, so OFF remains an exact A/B baseline; a
+prefetch that cannot be set up (no pinned memory, non-CUDA device) simply
+falls back to it.
 """
 
 from __future__ import annotations
@@ -56,11 +57,13 @@ class BlockSwapService:
         hold_arenas:   Give the prefetch engine a fixed ring of device arenas to
                        recycle instead of allocating and freeing one per block.
                        OFF by default, because the ring stays allocated from the
-                       last denoise pass until the job ends: that is free for an
-                       engine whose VRAM peak is INSIDE denoise (LTX 2.5) and
-                       costs blocks_on_gpu+1 extra arenas for one whose peak is
-                       outside it (LTX 2.3, measured +2,286MB on Chain A). The
-                       measurement is in ``block_swap_prefetch``'s docstring.
+                       last denoise pass until teardown_prefetch() (the job's
+                       finally on LTX 2.3): that is free for an engine whose
+                       VRAM peak is INSIDE denoise (LTX 2.5) and costs
+                       blocks_on_gpu+1 extra arenas for one whose peak is
+                       outside it (LTX 2.3). The Chain A measurement is in
+                       VERIFICATION_LOG §75.7 and in ``block_swap_prefetch``'s
+                       docstring.
     """
 
     def __init__(
@@ -76,8 +79,9 @@ class BlockSwapService:
 
         # ── Per-job prefetch (opt-in) ─────────────────────────────────────
         # `prefetch_requested` is written by the pipeline's per-job setter and
-        # read by install(); `last_prefetch_used` is what the job actually got
-        # ("off" / "on" / "on->off"), or None until install() has decided.
+        # read by install(); `last_prefetch_used` is what the most recent
+        # install() decided ("off" / "on" / "on->off"), or None until install()
+        # has decided. teardown_prefetch() does not reset it.
         self.prefetch_requested = False
         self.last_prefetch_used: str | None = None
         self._prefetch_engine: Any = None
@@ -96,7 +100,7 @@ class BlockSwapService:
         # Safety net for a job that never reached its finally (the normal
         # teardown site): a no-op when nothing is in flight. Also resets the
         # verdict so an early return below reports "off" rather than the
-        # previous job's value.
+        # previous install's verdict.
         self.teardown_prefetch()
         self.last_prefetch_used = "off"
 
@@ -141,19 +145,19 @@ class BlockSwapService:
             else:
                 self._patch_block_prefetch(block, idx, engine)
 
-        # Resident-reuse leak fix: the BlockSwapService is a single resident
-        # instance, and install() runs on a freshly-built transformer on EVERY
-        # generate (model_ledger never caches the model). The previous job's
-        # transformer was already del'd by DistilledPipeline.__call__, so this
-        # list held its last live reference — retaining it leaked one resident
+        # Keep ONLY the current transformer. The BlockSwapService is a single
+        # resident instance, and on LTX 2.3 install() runs on a freshly-built
+        # transformer on EVERY generate (model_ledger never caches the model).
+        # The previous job's transformer has already been del'd by the entry
+        # point that ran it (e.g. DistilledPipeline.__call__), so this list
+        # would hold its last live reference — retaining it leaks one resident
         # transformer per job (~1GB GPU window + ~18GB CPU/commit of CPU-evicted
-        # blocks), ratcheting to the job-5 native crash. Keep ONLY the current
-        # transformer so the prior one becomes collectable (gc.collect() breaks
-        # its swapped_forward reference cycles; see the between-job cleanup in
-        # engine.worker._do_generate).
+        # blocks), ratcheting up to a native crash. Clearing it makes the prior
+        # one collectable (gc.collect() breaks its swapped_forward reference
+        # cycles; see the between-job cleanup in engine.worker._do_generate).
         #
         # LTX 2.3 also lets go of this reference earlier, at end-of-job, via
-        # release_installed() (FastVideoPipeline's finally) — this clear() is
+        # release_installed() (LTXFastVideoPipeline's finally) — this clear() is
         # then just its safety net for a job that never reached that finally.
         # engine25 never calls release_installed(), so for it this clear()
         # remains the ONLY mechanism.
@@ -188,7 +192,8 @@ class BlockSwapService:
         """Drop the keep-latest reference to the job's transformer. Idempotent.
 
         NOT uninstall(): that one is unused in production and moves all blocks
-        back to GPU (the trap engine25 warns about at gguf_transformer.py:1090).
+        back to GPU (the trap engine25 warns about in
+        ``Ltx25DiffusionStage.uninstall_block_swap``).
         This touches no tensor and no device; it only lets go of the reference
         so the job's trailing gc.collect() can reclaim the transformer (the
         swapped_forward closures are reference cycles).
@@ -198,10 +203,13 @@ class BlockSwapService:
     def teardown_prefetch(self) -> None:
         """Drop this job's prefetch state. Idempotent, and never raises.
 
-        Called from the pipeline's per-job ``finally`` — NOT deferred to the
-        next install(), which would keep the finished transformer's 48 CPU
-        masters and one GPU arena alive across the gap between jobs (the same
-        shape of leak as the resident-transformer one fixed in install()).
+        Called from the job's ``finally`` (on LTX 2.3 the pipeline's own, on
+        LTX 2.5 the worker's via ``Ltx25Pipeline.reset_acceleration_job``) —
+        NOT deferred to the next install(), which would keep the finished
+        transformer's 48 CPU masters and its GPU arenas (one at the end of a
+        pass, the whole ring with ``hold_arenas``) alive across the gap between
+        jobs (the same shape of leak as the resident-transformer one handled in
+        install()).
         """
         engine = self._prefetch_engine
         self._prefetch_engine = None
@@ -292,7 +300,7 @@ class BlockSwapService:
                 if prev_params and any(p.device.type != "cpu" for p in prev_params):
                     prev.to("cpu")
 
-            # BUG FIX: move input tensors to GPU before calling forward.
+            # Move input tensors to GPU before calling forward.
             # block.to(device) moves the weights, but args/kwargs still
             # hold tensors on CPU (output of the previous evicted block).
             # PyTorch dispatches ops to the device of the *input tensors*,
@@ -312,10 +320,11 @@ class BlockSwapService:
     def _build_prefetch_engine(self, blocks: list[nn.Module]) -> Any:
         """Set the prefetch engine up, or return None to use the sync path.
 
-        Every failure mode (no CUDA, cudaHostAlloc refusing ~740MB of pinned
-        memory, an unexpected tensor layout) degrades this job to the existing
-        synchronous swap instead of failing it — this is a speed knob, not a
-        correctness prerequisite.
+        Every failure mode (no CUDA, cudaHostAlloc refusing the pinned staging
+        memory, i.e. two slots of the largest block's size in
+        ``PinnedStagingPool``, an unexpected tensor layout) degrades this job
+        to the existing synchronous swap instead of failing it — this is a
+        speed knob, not a correctness prerequisite.
         """
         try:
             from engine.transformer.block_swap_prefetch import (
@@ -352,13 +361,16 @@ class BlockSwapService:
         PyTorch dispatches on the *inputs'* device, so without it the whole
         forward would silently run on CPU.
         """
-        # Prefer the stashed original over the current forward: production
-        # rebuilds the transformer every job so they are the same thing, but a
-        # second install() on the SAME block (selfcheck, or a future caller)
-        # would otherwise wrap the previous wrapper and drive two engines.
+        # Prefer the stashed original over the current forward: in production
+        # they are the same thing (LTX 2.3 rebuilds the transformer every job,
+        # and engine25 strips the previous build's wrappers before installing),
+        # but a second install() on the SAME block (selfcheck, or a future
+        # caller) would otherwise wrap the previous wrapper and drive two
+        # engines.
         original_forward = getattr(block, _BLOCK_SWAP_ATTR, None) or block.forward
-        # Same attribute the synchronous path sets — uninstall() and the IC-LoRA
-        # phase-B machinery both rely on it being there regardless of mode.
+        # Same attribute the synchronous path sets — uninstall(), the line above
+        # and engine25's marker checks (``ensure_block_swap_installed`` /
+        # ``_unpatch_block_swap``) rely on it being there regardless of mode.
         setattr(block, _BLOCK_SWAP_ATTR, original_forward)
 
         device = self.device

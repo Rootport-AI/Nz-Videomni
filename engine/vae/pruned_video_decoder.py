@@ -1,4 +1,4 @@
-"""PrunaVAED: the pruned LTX-2.3 video VAE **decoder** (§3-50).
+"""PrunaVAED: the pruned LTX-2.3 video VAE **decoder**.
 
 PrunaVAED (Pruna AI) is a channel-pruned + distilled drop-in replacement for the
 video VAE decoder only — the encoder is byte-identical to the stock one and is
@@ -7,17 +7,18 @@ own vocabulary, and this module exists for exactly those two:
 
 1. **Two projection resnets** (512->384 and 384->256) sit between the stock
    blocks. ``_make_decoder_block``'s ``res_x_y`` derives its output width by
-   INTEGER DIVISION (``in_channels // multiplier``, video_vae.py:505), and
-   512->384 needs 4/3. So the block list cannot be written as ``decoder_blocks``
-   at all — the ``up_blocks`` ModuleList has to be built explicitly.
+   INTEGER DIVISION (``in_channels // multiplier``), and 512->384 needs 4/3. So
+   the block list cannot be written as ``decoder_blocks`` at all — the
+   ``up_blocks`` ModuleList has to be built explicitly.
 2. **``norm3`` is a different operator** in the implementation the weights were
    trained against. See ``ChannelLayerNorm3d`` below; this is the one place in
    the whole feature where getting it wrong is SILENT.
 
 Everything else is inherited: ``forward`` / ``tiled_decode`` / ``_prepare_tiles``
 are unchanged, and the tile geometry does not depend on channel widths at all
-(``video_downscale_factors`` is a hardcoded constant, video_vae.py:601-605), so
-a pruned job uses exactly the same tiling config as a default job.
+(``video_downscale_factors`` is a hardcoded constant in the wheel's
+``VideoDecoder.__init__``), so a pruned job uses exactly the same tiling config
+as a default job.
 
 The wheel is not modified in any way (the ltx-core wheel inside ``.venv-engine``
 is reinstallable and must stay pristine); this module only composes the wheel's
@@ -41,10 +42,11 @@ from ltx_core.model.video_vae.video_vae import VideoDecoder, _make_decoder_block
 # 使い捨ての「幅合わせ専用」ブロック列。1024 // 16 = 64 で、枝刈りデコーダの
 # 最終幅と一致する。``VideoDecoder.__init__`` はブロック列を (1) up_blocks の
 # 構築と (2) ループ後の feature_channels（= conv_norm_out と conv_out の入力幅）
-# にしか使わない（video_vae.py:620-668）。up_blocks は直後に丸ごと差し替えるので、
-# この骨組みが必要なのは **conv_out を 64 入力で作らせるためだけ** である。
-# Configurator は ``torch.device("meta")`` の下で呼ばれる
-# （single_gpu_model_builder.py:60-62）ため、捨てる畳み込み1個の確保コストはゼロ。
+# にしか使わない。up_blocks は直後に丸ごと差し替えるので、この骨組みが必要なのは
+# **conv_out を 64 入力で作らせるためだけ** である。
+# Configurator は上流の ``SingleGPUModelBuilder.meta_model`` で
+# ``torch.device("meta")`` の下で呼ばれるため、捨てる畳み込み1個の
+# 確保コストはゼロ。
 _WIDTH_ONLY_SKELETON: Final[list[tuple[str, dict[str, Any]]]] = [
     ("compress_space", {"multiplier": 16}),
 ]
@@ -53,10 +55,11 @@ _WIDTH_ONLY_SKELETON: Final[list[tuple[str, dict[str, Any]]]] = [
 # この名前を知らない（渡せば ValueError）ので、下のループが自前で分岐する。
 _PROJECTION: Final = "__projection__"
 
-# 実行順に並べた枝刈りデコーダの up_blocks（§4.1 の平坦キー表と1対1に対応する。
-# flat idx はこのタプルの添字そのもの）。第3要素はブロック通過後の出力チャンネル
-# 数で、**検算値**である——wheel 側の導出（multiplier による整数除算）が変わった
-# ことを黙って受け入れないために、構築のたびに突き合わせる。
+# 実行順に並べた枝刈りデコーダの up_blocks（``Docs/PRUNAVAED_WORKORDER.md``
+# §4.1 の平坦キー表と1対1に対応する。flat idx はこのタプルの添字そのもの）。
+# 第3要素はブロック通過後の出力チャンネル数で、**検算値**である——wheel 側の
+# 導出（multiplier による整数除算）が変わったことを黙って受け入れないために、
+# 構築のたびに突き合わせる。
 _PRUNED_UP_BLOCKS: Final[tuple[tuple[str, dict[str, Any], int], ...]] = (
     ("res_x", {"num_layers": 2}, 1024),          # 0
     ("compress_all", {"multiplier": 2}, 512),    # 1  conv [4096,1024,3,3,3]
@@ -73,15 +76,18 @@ _PRUNED_UP_BLOCKS: Final[tuple[tuple[str, dict[str, Any], int], ...]] = (
 
 # 上の構成から積算した学習パラメータ数（``per_channel_statistics`` の2バッファ
 # 計256要素は別勘定）。上流モデルカードの報告値と1個の違いも無く一致する数で、
-# 「構造が仕様どおりに組まれた」ことの決定的な指紋になる（§2.3）。
+# 「構造が仕様どおりに組まれた」ことの決定的な指紋になる
+# （``Docs/PRUNAVAED_WORKORDER.md`` §2.3）。
 EXPECTED_PARAMETER_COUNT: Final = 345_006_256
 
-# 学習パラメータ・バッファを合わせた state_dict のキー本数（§2.3）。
+# 学習パラメータ・バッファを合わせた state_dict のキー本数
+# （``Docs/PRUNAVAED_WORKORDER.md`` §2.3）。
 EXPECTED_STATE_DICT_KEYS: Final = 102
 
 # 変換後ファイルの ``__metadata__["config"]["vae"]`` に対する突き合わせ表。
 # 正本はこのコードであり、ファイル側の config は「同じ値を持つが権威ではない
-# 参照情報」として扱う（§4.2）。食い違えば黙って動かず例外で落とす。
+# 参照情報」として扱う（``Docs/PRUNAVAED_WORKORDER.md`` §4.2）。食い違えば
+# 黙って動かず例外で落とす。
 _REQUIRED_CONFIG: Final[dict[str, Any]] = {
     "_class_name": "PrunaVAEDDecoder",
     "latent_channels": 128,
@@ -99,8 +105,8 @@ class ChannelLayerNorm3d(nn.LayerNorm):
     上流の重みは diffusers の ``LTX2VideoResnetBlock3d`` で学習されており、
     そこでの ``norm3`` は ``nn.LayerNorm(in_channels)`` を channel-last で
     掛けたもの＝**各 (バッチ, フレーム, 縦, 横) 位置ごとにチャンネル方向だけ**
-    で平均と分散を取る。一方 ltx-core の ``ResnetBlock3D`` は
-    ``nn.GroupNorm(num_groups=1)`` を使っており（resnet.py:91-97）、これは
+    で平均と分散を取る。一方 ltx-core の ``ResnetBlock3D.__init__`` は
+    ``nn.GroupNorm(num_groups=1)`` を使っており、これは
     ``nn.LayerNorm([C, F, H, W])`` 相当＝チャンネルと時空間を**まとめて**
     正規化する別物である（wheel 側のコメントの「GroupNorm(1) は LayerNorm と
     等価」という主張は、チャンネルのみの LayerNorm に対しては誤り）。
@@ -108,14 +114,16 @@ class ChannelLayerNorm3d(nn.LayerNorm):
     たちが悪いのは**両者の学習パラメータがどちらも形状 [C] の weight / bias**
     だという点で、取り違えても ``load_state_dict(strict=False)`` の
     "Uninitialized parameters" 警告に一切掛からない。発現するのは映像が壊れる
-    形だけである（§2.5）。無改変デコーダは ``in_channels == out_channels`` の
-    resnet しか持たず ``norm3`` が ``nn.Identity()`` になるため、この経路を
-    踏むのは射影 resnet を持ち込む本モジュールが初めてである。
+    形だけである（``Docs/PRUNAVAED_WORKORDER.md`` §2.5）。無改変デコーダは
+    ``in_channels == out_channels`` の resnet しか持たず ``norm3`` が
+    ``nn.Identity()`` になるため、この経路を踏むのは射影 resnet を持ち込む
+    本モジュールが初めてである。
 
     ``nn.Module`` ではなく **``nn.LayerNorm`` を直接継承する**。こうすると学習
     パラメータが自分自身の weight / bias になり、state_dict のキーが GroupNorm
     版と同じ ``norm3.weight`` / ``norm3.bias`` のまま（1段深くならない）で済む
-    ——配布ファイル側の改名も階層追加も不要になる（§4.2）。
+    ——配布ファイル側の改名も階層追加も不要になる
+    （``Docs/PRUNAVAED_WORKORDER.md`` §4.2）。
     """
 
     def __init__(self, num_channels: int, eps: float = 1e-6) -> None:
@@ -137,16 +145,17 @@ def _make_projection_resnet(
     """入出力の幅が違う resnet を1つ作り、``norm3`` だけ差し替える。
 
     **属性差し替えを選ぶ理由**: ``VideoDecoder.forward`` のブロック分岐は
-    ``isinstance(up_block, ResnetBlock3D)`` である（video_vae.py:734）。派生
-    クラスを作っても ``isinstance`` は通るが、属性差し替えなら**分岐の判定
-    方法に一切依存しない**ぶん安全である。分岐の順序は ``UNetMidBlock3D`` →
+    ``isinstance(up_block, ResnetBlock3D)`` である。派生クラスを作っても
+    ``isinstance`` は通るが、属性差し替えなら**分岐の判定方法に一切依存しない**
+    ぶん安全である。分岐の順序は ``UNetMidBlock3D`` →
     ``ResnetBlock3D`` → else（＝``DepthToSpaceUpsample``）で、射影 resnet は
     ``causal`` と ``generator`` を受け取る2番目の経路に正しく乗る。
 
     ``eps`` は上流 config の ``resnet_norm_eps=1e-06`` に一致させる（wheel の
     ``res_x_y`` 経路も 1e-6 なので既定と同じ）。``norm1`` / ``norm2`` は
     ``PixelNorm``＝パラメータ無しで、diffusers の ``PerChannelRMSNorm``
-    （eps=1e-8）と同一式である（§2.5 の付随確認表）。
+    （eps=1e-8）と同一式である（``Docs/PRUNAVAED_WORKORDER.md`` §2.5 の
+    付随確認表）。
     """
     block = ResnetBlock3D(
         dims=convolution_dimensions,
@@ -167,9 +176,10 @@ class PrunedVideoDecoder(VideoDecoder):
     """``VideoDecoder`` の派生。``up_blocks`` だけを枝刈り構成へ差し替える。
 
     ``decoder_blocks`` に依存する学習パラメータは ``up_blocks`` と ``conv_out``
-    の2つに限られる（§2.4-E で ``VideoDecoder.__init__`` を通読して確定）ので、
-    基底クラスに幅合わせ用の骨組みを渡して ``conv_out`` を 64 入力で作らせ、
-    ``up_blocks`` はこちらで組み直す、という最小の介入で済む。
+    の2つに限られる（``Docs/PRUNAVAED_WORKORDER.md`` §2.4-E で
+    ``VideoDecoder.__init__`` を通読して確定）ので、基底クラスに幅合わせ用の
+    骨組みを渡して ``conv_out`` を 64 入力で作らせ、``up_blocks`` はこちらで
+    組み直す、という最小の介入で済む。
     """
 
     def __init__(
@@ -265,8 +275,9 @@ class PrunedVideoDecoderConfigurator:
     構成の正本は**このモジュールのコード**であり、ファイルの
     ``__metadata__["config"]`` は権威ではない。それでも config を読むのは、
     ltx-core のローダーが起動時に必ず ``json.loads(f.metadata()["config"])``
-    を呼ぶ（sft_loader.py:58-60、ガード無し）ため、埋め込みが**必須**だから
-    である（§2.4-C）。
+    を呼ぶ（上流の ``SafetensorsModelStateDictLoader.metadata``、ガード無し）
+    ため、埋め込みが**必須**だからである
+    （``Docs/PRUNAVAED_WORKORDER.md`` §2.4-C）。
 
     そこで本 Configurator は config を「素性の確認」にだけ使う: 主要キーが固定値
     と食い違ったら例外で落とす。こうすると (i) ローダーの必須要求を満たし、
@@ -294,10 +305,11 @@ class PrunedVideoDecoderConfigurator:
                 f"{ {k: _REQUIRED_CONFIG[k] for k in mismatched} }"
             )
         if "decoder_blocks" in vae:
-            # 含めてはならない（§4.2）。ltx-core の語彙では射影 resnet を表現
-            # できないので、含まれていれば標準の VideoDecoderConfigurator に
-            # 食わされたとき「読めてしまい」、射影 resnet を欠いた別物が**静か
-            # に**構築される。省いてあれば、そのとき確実に例外で落ちる。
+            # 含めてはならない（``Docs/PRUNAVAED_WORKORDER.md`` §4.2）。ltx-core
+            # の語彙では射影 resnet を表現できないので、含まれていれば標準の
+            # VideoDecoderConfigurator に食わされたとき「読めてしまい」、射影
+            # resnet を欠いた別物が**静かに**構築される。省いてあれば、そのとき
+            # 確実に例外で落ちる。
             raise ValueError(
                 "PrunaVAED config must NOT carry 'decoder_blocks': the pruned "
                 "layout cannot be expressed in ltx-core's block vocabulary, and "

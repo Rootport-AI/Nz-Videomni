@@ -1,16 +1,18 @@
 """Async block-swap prefetching — hides the CPU->GPU weight transfer behind compute.
 
-The synchronous swap in ``block_swap_service._patch_block`` costs ~2.9s per
-forward pass on the production model (47 blocks x ~340MB, pageable H2D at
-14.0GB/s plus a D2H eviction copy at 9.1GB/s). This module removes both halves:
+The synchronous swap in ``block_swap_service._patch_block`` pays for two
+transfers on every forward pass: a pageable H2D load and a D2H eviction copy
+(the measured bandwidths and per-pass cost are in Docs/VERIFICATION_LOG.md
+§44.3). This module removes both halves:
 
   * The **D2H eviction is deleted outright.** Weights are immutable during
     inference, so the CPU copy taken at install() stays authoritative and the
     GPU side is simply dropped (``_release`` re-points the module at the CPU
     master; no transfer at all).
   * The **H2D is issued ahead of time** on a dedicated CUDA stream through
-    pinned staging memory (23.4GB/s), so by the time a block's forward runs its
-    weights have already landed. The compute stream only waits on an event.
+    pinned staging memory (faster than pageable memory, same section), so by
+    the time a block's forward runs its weights have already landed. The
+    compute stream only waits on an event.
 
 Everything a block owns (GGUF-compressed ``GGMLQuantizedTensor`` buffers, Linear
 biases, norm weights, block-level ``scale_shift_table`` parameters, IC-LoRA
@@ -41,49 +43,52 @@ would be reserved-but-unusable right when the spatial upsampler needs it.
 **Arena ring** (opt-in, ``hold_arenas``) — the arenas are allocated ONCE and
 recycled; none is handed back to the allocator between blocks. ``prepare()``
 takes ``min(total, blocks_on_gpu + 2)`` arenas of the largest block's size and
-holds them for the whole job, and ``_issue`` takes the next slot round-robin,
+holds them until ``teardown()``, and ``_issue`` takes the next slot round-robin,
 sliced down to that block's own ``total_bytes``. With ``hold_arenas=False``
-``_issue`` allocates and frees per block exactly as it always did.
+``_issue`` allocates and frees one arena per block.
 
 The reason is the Windows allocator. ``PYTORCH_CUDA_ALLOC_CONF=
 expandable_segments:True`` is a documented no-op here ("WARN: expandable_segments
 not supported on this platform"; torch 2.9 also renames the variable to
 ``PYTORCH_ALLOC_CONF``), so every run on this platform uses the SEGMENTED caching
-allocator. Under it, allocating and freeing a ~208MB arena per block, interleaved
-with the denoise's own live allocations, walks the reserved pool one way: the
-freed arena leaves a hole inside a segment that the next, differently sized live
-tensor cannot use, and the pool grows to cover both. Diagnosed on B4
-(1920x1088, 2x169f, standard window): idle-inside-segment bytes 2.6x higher with
-the per-block allocate/free, peak reserved 15,292MB. The ring prototype answered
-14,824MB and 412.6s (from 438.5s on the same box, same session), output
-bit-identical. Evidence: ``outputs/b4-vram-diag/``; the shipped numbers are in
-``outputs/ltx25-accel-gate/c2b_summary.json``.
+allocator. Under it, allocating and freeing a block-sized arena per block,
+interleaved with the denoise's own live allocations, walks the reserved pool one
+way: the freed arena leaves a hole inside a segment that the next, differently
+sized live tensor cannot use, and the pool grows to cover both. Diagnosed on the
+B4 benchmark: the per-block allocate/free left more idle bytes inside segments
+and a higher peak reserved, and the ring brought the peak back down with
+bit-identical output (Docs/VERIFICATION_LOG.md §75.7). Evidence:
+``outputs/b4-vram-diag/``; the gated numbers are in
+``outputs/ltx25-accel-gate/c2b_summary.json`` (Docs/VERIFICATION_LOG.md §75.8).
 
-The ring costs nothing in ceiling terms WHILE A PASS IS RUNNING — the same
-``blocks_on_gpu + 2`` arenas were live simultaneously at the old steady state —
-and it moves the failure mode earlier and softer: a machine that cannot fit the
-ring now fails inside ``prepare()``, which ``install()`` answers by falling back
-to the synchronous path for the whole job, instead of OOMing mid-pass.
+WHILE A PASS IS RUNNING the ring raises the ceiling by at most one arena over
+the per-block version's peak — it is sized ``blocks_on_gpu + 2``, one above the
+steady-state residency described below — and it moves the failure mode earlier
+and softer: a machine that cannot fit the ring fails inside ``prepare()``,
+which ``install()`` answers by falling back to the synchronous path for that
+build, instead of OOMing mid-pass.
 
 It is NOT free BETWEEN passes, and that is why it is opt-in rather than the
-unconditional behaviour. There is no end-of-denoise hook (see ``_CYCLIC`` below):
-teardown happens once, at the end of the job. So from the last block of the last
-pass until the job ends, the ring keeps ``blocks_on_gpu + 2`` arenas allocated
-where the per-block version kept exactly one. Whether that costs anything depends
-on WHERE the job's VRAM peak sits:
+unconditional behaviour. The engine has no end-of-denoise hook of its own (see
+``_CYCLIC`` below): the ring goes back only at ``teardown()``, which LTX 2.3
+calls in the job's ``finally``. So from the last block of the last pass until
+``teardown()``, the ring keeps ``blocks_on_gpu + 2`` arenas allocated where the
+per-block version keeps exactly one. Whether that costs anything depends on
+WHERE the job's VRAM peak sits:
 
   * LTX 2.5 (``engine25``) peaks INSIDE denoise — the stage-2 tiles are the
     high-water mark — so the held arenas are bytes the job needed anyway, and the
-    fragmentation the ring removes is pure profit. Measured on B4:
-    15,292 -> 14,840MB peak reserved (421.7 -> 420.3s), and every one of the 17
-    fixed benchmarks bit-identical and inside the +400MB budget.
+    fragmentation the ring removes is pure profit. Measured on B4 (lower peak
+    reserved) and on the fixed benchmarks (bit-identical, inside the VRAM
+    budget): Docs/VERIFICATION_LOG.md §75.8.
   * LTX 2.3 (``engine/``) peaks OUTSIDE denoise. Its worker deliberately runs
-    ``gc.collect() + empty_cache()`` immediately before each denoise (the Phase
-    5(B) fix, ``engine/worker.py``), and its high-water mark then lands in the
-    decode/VAE phase where nothing is resident. Held arenas survive
-    ``empty_cache()``, so the whole ring stacks under that peak: Chain A measured
-    13,264 -> 15,550MB reserved, i.e. exactly nine extra 253.8MB arenas, for no
-    benefit at all (2.3 shows no fragmentation growth to begin with).
+    ``gc.collect() + empty_cache()`` immediately before each denoise
+    (Docs/VERIFICATION_LOG.md §7.4, ``engine/worker.py``), and its high-water
+    mark then lands in the decode/VAE phase where nothing is resident. Held
+    arenas survive ``empty_cache()``, so the whole ring stacks under that peak:
+    Chain A's reserved VRAM grew by the held arenas (Docs/VERIFICATION_LOG.md
+    §75.7), for no benefit at all (2.3 shows no fragmentation growth to begin
+    with).
 
 Hence ``hold_arenas`` defaults to False and ``engine25`` is the only caller that
 turns it on. This is a deliberate exception to "one behaviour for both engines":
@@ -100,17 +105,17 @@ a slot about to be overwritten, which is what the pass-head release below is for
 The resident window is NOT cyclic: it mirrors the synchronous path's
 ``W(idx) = {j | idx <= j < min(idx + blocks_on_gpu, total)}`` exactly, so it
 drains to a single block at the end of every pass and the VRAM profile at the
-stage1->stage2 boundary is unchanged. The head of the next pass then releases
-that leftover before anything else (``on_block_forward``, ``idx == 0``): with the
-ring its slot is about to be recycled, and a block left pointing at a recycled
-slot reads another block's weights — which is a CHANGED output digest, not a
-crash, and was measured as exactly that while the ring was prototyped without
-this release. Steady-state residency is therefore ``blocks_on_gpu + 1`` (the
-window plus the block being released); it was ``blocks_on_gpu + 2`` before the
-pass-head release existed, and the ring is deliberately still sized for that
-older bound, as one slot of headroom. If cyclic prefetch is ever tried
-(``_CYCLIC``), the pass-head release stops being reachable and an explicit
-``release_all()`` at the end of denoise becomes mandatory.
+stage1->stage2 boundary matches the synchronous path's. The head of the next
+pass then releases that leftover before anything else (``on_block_forward``,
+``idx == 0``): with the ring its slot is about to be recycled, and a block left
+pointing at a recycled slot reads another block's weights — which is a CHANGED
+output digest, not a crash, and was measured as exactly that while the ring was
+prototyped without this release. Steady-state residency is therefore
+``blocks_on_gpu + 1`` (the window plus the block being released), and the ring
+is deliberately sized ``blocks_on_gpu + 2``, one slot of headroom above that. If
+cyclic prefetch is ever tried (``_CYCLIC``), the pass-head release stops being
+reachable and an explicit ``release_all()`` at the end of denoise becomes
+mandatory.
 
 This module is only ever reached when a job explicitly asks for prefetching;
 with the feature off, ``block_swap_service`` does not even import it.
@@ -171,8 +176,9 @@ def _alloc_pinned(nbytes: int) -> torch.Tensor:
 def _window(idx: int, blocks_on_gpu: int, total: int) -> range:
     """Blocks that must be resident while block ``idx`` runs.
 
-    Identical to the synchronous path's window (``block_swap_service`` :168-170)
-    — same start, same clamp, no wrap-around.
+    Identical to the synchronous path's window (``swapped_forward`` in
+    ``block_swap_service._patch_block``) — same start, same clamp, no
+    wrap-around.
     """
     return range(idx, min(idx + blocks_on_gpu, total))
 
@@ -232,9 +238,8 @@ class PinnedStagingPool:
     less reliable as the process fragments host memory, so re-allocating every
     job is how "prefetch mysteriously stopped working at job 7" happens. The
     cost is two slots sized to the model's LARGEST block, held for the process
-    lifetime: ~416MB on LTX 2.5 (2 x 207.9MB) and ~508MB on LTX 2.3
-    (2 x 253.8MB, growing with LoRA -- 260.8 / 266.8 / 277.9MB measured).
-    Documented in the README.
+    lifetime; LoRAs grow the largest block and the pool grows with it. The
+    measured sizes are in the README's block-swap prefetch section.
     """
 
     def __init__(self, num_slots: int = _NUM_STAGING_SLOTS) -> None:
@@ -260,7 +265,7 @@ class PinnedStagingPool:
             return self._buffers
         # Drop the old buffers BEFORE allocating the bigger ones: holding both
         # would double the pinned high-water mark for no reason. Safe because a
-        # grow only ever happens inside install(), after the previous job's
+        # grow only ever happens inside install(), after the previous
         # teardown already synchronised the transfer stream.
         self._buffers = []
         self._nbytes = 0
@@ -299,12 +304,14 @@ def _enumerate_slots(block: nn.Module) -> Iterator[tuple[nn.Module, str, bool, t
 
 
 class PrefetchEngine:
-    """Per-job prefetching state for one transformer's block list.
+    """Prefetching state for one transformer build's block list.
 
     Created by ``BlockSwapService.install()`` when the job asked for it, thrown
-    away by ``BlockSwapService.teardown_prefetch()`` in the job's ``finally``.
+    away by ``BlockSwapService.teardown_prefetch()`` — in the job's ``finally``
+    on LTX 2.3, and at more points on LTX 2.5 (the callers of
+    ``Ltx25DiffusionStage.teardown_block_swap_prefetch``).
     The pinned pool and the transfer stream outlive it (they belong to the
-    service); everything else — CPU masters, arenas, events — dies with the job
+    service); everything else — CPU masters, arenas, events — dies with it
     so nothing keeps the previous transformer alive.
     """
 
@@ -325,7 +332,7 @@ class PrefetchEngine:
         self._xfer = xfer_stream
 
         self._layout: list[_BlockLayout] = []
-        # CPU masters: the authoritative weights for the whole job. `_master`
+        # CPU masters: the authoritative weights until teardown(). `_master`
         # holds the tensors handed back to the modules on release; `_master_u8`
         # holds the same storage viewed as flat uint8 (cached so the per-step
         # host memcpy is dtype-agnostic and allocation-free).
@@ -334,7 +341,7 @@ class PrefetchEngine:
 
         self._state: dict[int, _BlockState] = {}
         # The arena ring: a fixed set of device buffers, allocated in prepare()
-        # and recycled for the whole job. Empty unless `hold_arenas` is set, and
+        # and recycled until teardown(). Empty unless `hold_arenas` is set, and
         # empty is what makes `_issue` take the per-block allocate/free path.
         # See the module docstring for which engine wants which and why.
         self._arenas: list[torch.Tensor] = []
@@ -351,9 +358,9 @@ class PrefetchEngine:
     def prepare(self) -> None:
         """Snapshot the CPU masters, plan the arenas, secure pinned memory.
 
-        Runs once per install (i.e. once per job), with every block already on
-        CPU. Any failure here propagates to install(), which falls back to the
-        synchronous path for the whole job.
+        Runs once per install (i.e. once per transformer build), with every
+        block already on CPU. Any failure here propagates to install(), which
+        falls back to the synchronous path for that build.
         """
         if self.device.type != "cuda":
             raise RuntimeError(f"prefetch requires a CUDA device, got {self.device}")
@@ -393,7 +400,7 @@ class PrefetchEngine:
         # COMPUTE stream (prepare() runs on it) and held until teardown().
         # min(): a model with fewer blocks than the ring would size can never
         # have more than `total` live at once. If this OOMs, prepare() raises and
-        # install() falls back to the synchronous path for the whole job — the
+        # install() falls back to the synchronous path for that build — the
         # same VRAM would have been demanded a few blocks into the first pass.
         ring = 0
         if self.hold_arenas:
@@ -433,11 +440,14 @@ class PrefetchEngine:
                     f"prepare() requires every block tensor on CPU; {name} is on {src.device}"
                 )
             if isinstance(src, GGMLQuantizedTensor):
-                # shape/numel/size lie (they report the dequantised float shape,
-                # quant_service.py:459-471). The real byte count only exists
-                # under the subclass, reached the same way the forward does
-                # (quant_service.py:645). reshape(-1) precedes view(uint8) so a
-                # 0-dim tensor cannot hit view(dtype)'s hard error.
+                # shape/numel/size lie (they report the dequantised float
+                # shape: see the overrides on ``GGMLQuantizedTensor`` in
+                # quant_service.py). The real byte count only exists under the
+                # subclass, reached the same way the forward does
+                # (``ggml_linear_forward`` inside
+                # ``_patch_linear_for_ggml_dequant``). reshape(-1) precedes
+                # view(uint8) so a 0-dim tensor cannot hit view(dtype)'s hard
+                # error.
                 raw = src.as_subclass(torch.Tensor).reshape(-1).view(torch.uint8)
                 nbytes = raw.numel()
                 # `type(src)`, not the base class: see `_BlockLayout.kinds`.
@@ -476,8 +486,8 @@ class PrefetchEngine:
         A view reconstruction that is subtly wrong (dtype, shape, lost quant
         metadata) would otherwise surface as garbage pixels, not as an error.
         Deliberately no ``empty_cache()`` here: the ON path must not perturb the
-        allocator in ways the OFF path does not, or the VRAM gate compares two
-        different things.
+        allocator in ways the OFF path does not, or an ON/OFF VRAM comparison
+        (e.g. VERIFICATION_LOG §44.5, G5) compares two different things.
         """
         targets = self._layout if _VALIDATE_ALL else self._layout[:1]
         for idx, lay in enumerate(targets):
@@ -515,9 +525,9 @@ class PrefetchEngine:
         total = len(self._blocks)
         bs = self.blocks_on_gpu
 
-        # (0) One log line per pass. At the pass HEAD rather than after step (1)
-        #     as the design sketch had it, so that this pass's own cold-start
-        #     miss is attributed to this pass instead of being reset away.
+        # (0) One log line per pass. At the pass HEAD rather than after step
+        #     (1), so that this pass's own cold-start miss is attributed to
+        #     this pass instead of being reset away.
         if idx == 0:
             self._log_and_reset_stats()
             # The previous pass ended with its tail block still resident (the
@@ -562,9 +572,9 @@ class PrefetchEngine:
     def _issue(self, idx: int) -> None:
         """CPU master -> pinned slot -> (transfer stream) -> GPU arena.
 
-        The host memcpy is synchronous (~14ms for a 370MB block); the device
-        copy is not. The arena is allocated on the COMPUTE stream on purpose —
-        see the module docstring.
+        The host memcpy is synchronous (its bandwidth is measured in
+        VERIFICATION_LOG §44.3); the device copy is not. The arena is allocated
+        on the COMPUTE stream on purpose — see the module docstring.
         """
         lay = self._layout[idx]
         slot = self._acquire_slot()                       # S1
@@ -625,8 +635,10 @@ class PrefetchEngine:
         ):
             raw = arena[off:off + nbytes]                 # 1D uint8, offset is 512-aligned
             if kind[0] == "ggml":
-                # Same construction as the GGUF loader (quant_service.py:586) —
-                # verified to work under inference_mode (WORKORDER S0 spike).
+                # Same construction as the GGUF loader
+                # (``GGUFQuantStateDictLoader.load`` in quant_service.py) —
+                # verified to work under inference_mode (the S0 spike,
+                # Docs/BLOCKSWAP_PREFETCH_WORKORDER.md §6.1).
                 # `kind[3]` is the CPU master's own class, so a subclass round
                 # trips as itself (three-argument __new__ is the shared shape).
                 dev_t: torch.Tensor = kind[3](raw, kind[1], kind[2])
@@ -640,7 +652,7 @@ class PrefetchEngine:
             if is_param:
                 mod._parameters[name].data = dev_t        # keeps the Parameter object's identity
             else:
-                mod._buffers[name] = dev_t                # dit_cpu_load_service.py:77's idiom
+                mod._buffers[name] = dev_t                # dit_cpu_load_service's idiom
 
     def _release(self, idx: int) -> None:
         """Point the module back at its CPU master. Zero transfers."""
@@ -652,22 +664,24 @@ class PrefetchEngine:
                 if mod._parameters[name].is_meta:
                     # engine25's ``gpu_model`` contract calls ``dispose()``, which leaves
                     # this block's parameters on ``device="meta"``; ``.data =`` then raises
-                    # "set_data ... incompatible tensor type" and used to abort the whole
+                    # "set_data ... incompatible tensor type" and would abort the whole
                     # loop, stranding every slot behind it — the IC-/Style-LoRA A/B buffers
                     # among them, which are ``persistent=False`` and so never metaed — on
                     # the arena. Skipping costs nothing: the next build's
                     # ``load_state_dict(assign=True)`` replaces these slots wholesale
-                    # (``engine25/gguf_transformer.py:857-867``). Parameters only, because
+                    # (reached from ``Ltx25CpuModelBuilder.build`` in
+                    # ``engine25/gguf_transformer.py``). Parameters only, because
                     # ``_plan`` refuses any slot that is not on CPU — nothing here is meta
                     # before ``dispose()`` — and 2.3's quantised weights are metaed on the
-                    # BUFFER branch (``engine/gguf/quant_service.py:641-650``), where a
-                    # plain dict assignment cannot fail.
+                    # BUFFER branch (``_patch_linear_for_ggml_dequant`` in
+                    # ``engine/gguf/quant_service.py``), where a plain dict assignment
+                    # cannot fail.
                     continue
                 mod._parameters[name].data = cpu_t
             else:
                 mod._buffers[name] = cpu_t
         # With the ring on, dropping the last reference drops only the VIEW: the
-        # arena is a ring slot and stays allocated for the whole job. With it off,
+        # arena is a ring slot and stays allocated until teardown(). With it off,
         # this returns the arena to the allocator. Either way the next use of
         # those bytes is ordered behind this block's forward — by S1b for a
         # recycled slot (module docstring, "Arena ring"), and by the compute
@@ -679,12 +693,15 @@ class PrefetchEngine:
     # ------------------------------------------------------------------ #
 
     def teardown(self) -> None:
-        """End-of-job cleanup. Idempotent, and never raises.
+        """Cleanup when this engine's use ends. Idempotent, and never raises.
 
-        Called from the pipeline's ``finally`` (and defensively at the next
-        install), so it also runs after an exception mid-pass: S4 drains the
-        transfer stream first, then every arena, CPU master and event reference
-        is dropped so the finished transformer can be collected.
+        Reached through ``BlockSwapService.teardown_prefetch()``: from the job's
+        ``finally`` (LTX 2.3: the pipeline's own; LTX 2.5: the worker's, via
+        ``Ltx25Pipeline.reset_acceleration_job``, and also before each build
+        and after each denoise), and defensively at the next install. So it
+        also runs after an exception mid-pass: S4 drains the transfer stream
+        first, then every arena, CPU master and event reference is dropped so
+        the finished transformer can be collected.
         """
         try:
             if self._xfer is not None:
@@ -711,8 +728,9 @@ class PrefetchEngine:
         if s["pass"] > 0:
             misses = s["misses"]
             # A miss on block 0 is structural (a pass always starts with an
-            # empty window, ~46ms); misses anywhere else mean the look-ahead is
-            # not keeping up — the expected cause is blocks_on_gpu == 1.
+            # empty window; its cost is estimated in VERIFICATION_LOG §44.3);
+            # misses anywhere else mean the look-ahead is not keeping up — the
+            # expected cause is blocks_on_gpu == 1.
             late = [m for m in misses if m != 0]
             logger.info(
                 "BlockSwap prefetch pass %d: %d issued, %d sync miss(es)%s, "

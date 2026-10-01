@@ -9,13 +9,12 @@ The stock LTX text encoder loads Gemma-3-12b in bf16 directly onto the GPU:
 
 The Gemma transformer alone is ~24 GB in bf16, which overflows our 16 GB card
 (and forces a ~17 GB WDDM spillover into shared system RAM, making text encoding
-crawl). `_install_cpu_text_encoder` sidesteps this by running Gemma on the CPU,
-but that is slow.
+crawl; VERIFICATION_LOG §2.4).
 
 This service instead keeps the Gemma transformer weights *compressed* in VRAM
 (loaded from a single Q4_K_M GGUF, ~7.3 GB) and dequantizes one Linear layer at a
 time during the forward pass — the exact mechanism already proven for the LTX
-transformer in `services.gguf_quant_service`, applied here to Gemma's nn.Linears.
+transformer in `engine.gguf.quant_service`, applied here to Gemma's nn.Linears.
 
 VRAM comparison for Gemma-3-12b:
   bf16 (2 bytes/param):  ~24 GB VRAM
@@ -24,26 +23,29 @@ At inference: +1 layer bf16 (~tens of MB peak overhead, freed after each matmul)
 
 We REPLICATE the proven ComfyUI approach (city96/ComfyUI-GGUF) for the GGUF->HF
 gemma3 key map and the RMSNorm "+1" correction; we do NOT invent quantization
-math (that is reused verbatim from `services.gguf_quant_service`).
+math (that is reused verbatim from `engine.gguf.quant_service`).
 
 Key differences vs the transformer GGUF service
 -----------------------------------------------
 1. KEY REMAP IS MANDATORY. The transformer service notes its GGUF raw keys match
-   the model keys exactly (gguf_quant_service.py ~L587). That is FALSE for Gemma:
+   the model keys exactly (the NOTE in GGUFQuantStateDictLoader.load,
+   engine/gguf/quant_service.py). That is FALSE for Gemma:
    GGUF uses llama.cpp names (``blk.N.attn_q.weight`` ...) that must be remapped
    to HF names (``model.layers.N.self_attn.q_proj.weight`` ...) and then prefixed
    to the LTX-nested location (``model.model.layers.N....`` — the TEXT-ONLY
-   Gemma3ForCausalLM namespace; the old multimodal build nested these one level
-   deeper under ``model.model.language_model.layers.N...``).
+   Gemma3ForCausalLM namespace; the upstream multimodal build nests these one
+   level deeper under ``model.model.language_model.layers.N...``).
 
 2. MERGE, NOT REPLACE-ALL. The text encoder's state_dict mixes Gemma transformer
    weights (from the GGUF) with LTX-side weights that are NOT in the GGUF:
      - ``feature_extractor.video_aggregate_embed.{weight,bias}``
      - ``feature_extractor.audio_aggregate_embed.{weight,bias}``
      - ``embeddings_processor.{video,audio}_connector.*``
-   These come from the distilled LTX checkpoint (bf16). We load everything from
-   safetensors as usual, then OVERLAY the Gemma language-model weights from the
-   GGUF, dropping the original bf16 Gemma keys.
+   In component-files mode the aggregate embeds come from the standalone
+   text-projection safetensors and the connectors are injected from the LTX
+   transformer file (VERIFICATION_LOG §9.5); without the component paths both
+   come from the distilled LTX checkpoint. We load these LTX-side weights first,
+   then OVERLAY the Gemma language-model weights from the GGUF.
 
 3. RMSNorm "+1" CORRECTION. llama.cpp bakes (1 + w) into the stored norm weight,
    but HF's Gemma3RMSNorm computes ``output * (1.0 + self.weight.float())`` itself
@@ -150,18 +152,19 @@ _NORM_SUFFIXES = (
 #   model.norm.weight
 #   lm_head.weight
 #
-# QAT reclamation: the GemmaTextEncoder now nests a TEXT-ONLY Gemma3ForCausalLM
-# (built by engine.gemma.text_encoder_configurator) instead of the multimodal
-# Gemma3ForConditionalGeneration, so the ``language_model.`` level is gone:
+# The GemmaTextEncoder nests a TEXT-ONLY Gemma3ForCausalLM (built by
+# engine.gemma.text_encoder_configurator; VERIFICATION_LOG §14) instead of the
+# upstream multimodal Gemma3ForConditionalGeneration, so there is no
+# ``language_model.`` level:
 #   GemmaTextEncoder.model            (Gemma3ForCausalLM)
 #     .model                          (Gemma3TextModel)  -> layers / embed_tokens / norm
 #   GemmaTextEncoder.model.lm_head    (nn.Linear, tied to embed_tokens)
 #
 # This matches TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS, which maps the original
 # safetensors keys via:
-#   language_model.model.* -> model.model.*        (was model.model.language_model.*)
-# and duplicates embed_tokens.weight onto model.lm_head.weight (unchanged — lm_head
-# lives at the same location in both model classes).
+#   language_model.model.* -> model.model.*   (upstream: model.model.language_model.*)
+# and duplicates embed_tokens.weight onto model.lm_head.weight (lm_head lives at
+# the same location in both model classes).
 # Confirmed in:
 #   engine/gemma/text_encoder_configurator.py
 #   transformers/models/gemma3/modeling_gemma3.py (Gemma3ForCausalLM attribute names)
@@ -181,14 +184,12 @@ def _read_target_vocab_from_header() -> int | None:
     padded vocab (262208 = 262144 + 64 padding rows), while the GGUF ships only the
     real 262144 rows; the merge zero-pads up to this target (see the caller).
 
-    Formerly this was read from the base ``language_model.model.embed_tokens.weight``
-    header. Under the QAT gemma_root reclamation the Gemma shards are no longer in
-    model_path, so that tensor is absent from every path here — the
-    header probe would return None and DISABLE the required embedding padding.
-    Instead we source the value directly from the wheel's Gemma config
-    (GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size == 262208), which is exactly the
-    padded size the meta model is built with — byte-identical to the value the header
-    probe used to return.
+    The value is sourced directly from the wheel's Gemma config
+    (GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size), which is exactly the padded
+    size the meta model is built with. It cannot come from a base
+    ``language_model.model.embed_tokens.weight`` header: model_path holds no Gemma
+    shards (see GemmaGGUFQuantLoaderService._build_shardless_text_encoder_builder),
+    so that tensor is absent from every path here.
     """
     from ltx_core.text_encoders.gemma.config import GEMMA3_CONFIG_FOR_LTX
 
@@ -199,11 +200,12 @@ def _to_ltx_key(hf_key: str) -> str | None:
     """Map a plain HF gemma3 key to its location inside GemmaTextEncoder.
 
     Returns None for keys we intentionally drop (the GGUF lm_head; it is tied to
-    embed_tokens and supplied from the safetensors checkpoint via the LTX key ops).
+    embed_tokens and re-tied to it after the merge — see load() and
+    _install_cpu_embed_offload).
     """
     if hf_key == "lm_head.weight":
         # gemma3 GGUFs usually do NOT ship a separate output.weight (weights tied),
-        # but guard anyway: prefer the safetensors-provided tied lm_head.
+        # but guard anyway: lm_head is re-tied to embed_tokens instead.
         return None
     if hf_key.startswith("model.layers."):
         return _LTX_LM_PREFIX + hf_key[len("model.") :]
@@ -254,20 +256,20 @@ class GemmaGGUFQuantStateDictLoader:
     """A StateDictLoader that produces a MERGED Gemma text-encoder state_dict.
 
     Steps:
-      1. Delegate to the original SafetensorsModelStateDictLoader to load the full
-         bf16 state_dict (Gemma transformer + feature_extractor + connectors),
-         applying the LTX key remap (TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS) as usual.
-      2. Drop every Gemma language-model key (``model.model.*``, the text-only
-         namespace) from that dict — the ~24 GB bf16 weights we are replacing.
+      1. Delegate to the original SafetensorsModelStateDictLoader (on CPU) to load
+         the bf16 LTX-side tensors (model_path carries no Gemma shards), applying
+         the LTX key remap (TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS) as usual.
+      2. In component-files mode, inject the embeddings connectors read from the
+         LTX transformer file; then move the kept tensors to the target device.
       3. Read the Gemma GGUF, remap gemma3 keys -> HF -> LTX-nested prefix, apply
          the RMSNorm +1 correction, dequantize embed/norm to bf16, and wrap the
          decoder Linear weights as GGMLQuantizedTensor.
-      4. Overlay the GGUF-derived Gemma weights onto the (Gemma-stripped) base.
+      4. Overlay the GGUF-derived Gemma weights onto the base.
 
     The merged dict is returned so the builder's
     ``meta_model.load_state_dict(sd, strict=False, assign=True)`` populates the
-    feature_extractor/connectors from safetensors and the Gemma transformer from
-    the GGUF in one pass.
+    feature_extractor/connectors from the base (and the injected connectors) and
+    the Gemma transformer from the GGUF in one pass.
     """
 
     def __init__(
@@ -282,21 +284,26 @@ class GemmaGGUFQuantStateDictLoader:
         self.gguf_path = gguf_path
         # The original SafetensorsModelStateDictLoader from the text_encoder_builder.
         self._base_loader = base_loader
-        # ── Phase 2 (component files) ────────────────────────────────────────────
-        # When set, the 46GB monolith is NO LONGER in the builder's model_path (it is
+        # ── Component files ──────────────────────────────────────────────────────
+        # When set, the 46GB monolith is NOT in the builder's model_path (it is
         # replaced by the standalone text-projection file, which supplies the 4
         # `text_embedding_projection.*aggregate_embed.*` survivors). The monolith's
         # OTHER survivors — the 258 `model.diffusion_model.{video,audio}_embeddings_
         # connector.*` tensors — are then absent from the base load, so we INJECT
-        # them here from the LTX transformer GGUF (Option A, VERIFICATION_LOG §9.5).
-        # These connector tensors are stored F32/BF16 in the GGUF (NOT K-quantized),
-        # so a plain float cast reproduces the monolith's bf16 values exactly. When
-        # ``connector_gguf_path`` is None, behavior is the unchanged monolith path.
+        # them here from the LTX transformer file (Option A, VERIFICATION_LOG §9.5;
+        # see _load_gguf_connectors). In a GGUF these connector tensors are stored
+        # F32/BF16 (NOT K-quantized), so a plain float cast reproduces the
+        # monolith's bf16 values exactly; a quantized safetensors transformer's
+        # connectors are dequantized back to bf16 by their scheme. When
+        # ``connector_gguf_path`` is None, the monolith (checkpoint_path) stays in
+        # model_path and nothing is injected.
         self._connector_gguf_path = connector_gguf_path
-        # The real AV key-ops (AV_GEMMA_TEXT_ENCODER_KEY_OPS), used to remap the
-        # injected connectors' monolith-form keys through the SAME ops the monolith
-        # connectors would have passed through (-> embeddings_processor.*_connector.*),
-        # yielding byte-identical merged keys/values.
+        # The text encoder's key-ops (TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS, whose
+        # connector group is copied verbatim from the wheel's
+        # AV_GEMMA_TEXT_ENCODER_KEY_OPS), used to remap the injected connectors'
+        # monolith-form keys through the SAME ops the monolith connectors would have
+        # passed through (-> embeddings_processor.*_connector.*), yielding the same
+        # merged keys as the monolith path.
         self._connector_sd_ops = connector_sd_ops
         # VRAM (Lever 3): when True, the 1.9 GB bf16 token embedding (and its tied
         # lm_head) is NOT placed in the returned state_dict; it is stashed on CPU in
@@ -307,17 +314,19 @@ class GemmaGGUFQuantStateDictLoader:
         # otherwise drag the embedding onto the GPU. See GemmaGGUFQuantLoaderService.
         self.embed_cpu_offload = embed_cpu_offload
         self.held_embed_cpu: torch.Tensor | None = None
-        # VRAM (Lever — TE per-layer offload): when True, the per-layer GGUF Gemma
+        # VRAM (TE per-layer offload): when True, the per-layer GGUF Gemma
         # decoder weights (and the per-layer norms) under ``model.model.layers.``
         # are left on CPU rather than moved to ``target_device`` during the GGUF load.
         # They are then streamed to the GPU one window at a time during the encode
-        # forward by GemmaLayerOffloadService, capping the ~15 GB encode peak. When
-        # False this is a no-op (all layers GPU-resident, today's exact behavior).
+        # forward by GemmaLayerOffloadService, lowering the encode peak
+        # (VERIFICATION_LOG §11.3 records the figures). When False this is a no-op
+        # (all layers GPU-resident).
         self.layer_offload = layer_offload
 
     def metadata(self, path: str) -> dict:
-        # Config still comes from the distilled checkpoint metadata (it carries the
-        # LTX feature-extractor / connector config). GGUF has no LTX config.
+        # Config comes from the safetensors base's metadata (model_path[0]: the text-
+        # projection file in component-files mode, else the distilled checkpoint); it
+        # carries the LTX feature-extractor / connector config. GGUF has no LTX config.
         return self._base_loader.metadata(path)
 
     def load(
@@ -336,9 +345,7 @@ class GemmaGGUFQuantStateDictLoader:
         # only the real 262144 rows. We must zero-pad the GGUF embedding up to this
         # target, or load_state_dict raises a size mismatch. This value comes from
         # GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size (see _read_target_vocab_from_
-        # header) — the same size the meta model is built with, and byte-identical to
-        # the value the former base-embedding-header probe returned (the Gemma shards
-        # that carried that header are no longer in model_path post-reclamation).
+        # header) — the same size the meta model is built with.
         target_vocab: int | None = _read_target_vocab_from_header()
         if target_vocab is not None:
             logger.info(
@@ -346,28 +353,27 @@ class GemmaGGUFQuantStateDictLoader:
                 target_vocab,
             )
 
-        # ── 1. Base bf16 LTX-side weights, LTX-remapped (Gemma LM SKIPPED at read) ─
-        # CRITICAL (OOM avoidance): load the BASE safetensors on CPU regardless of
-        # the requested target_device, then move only the small kept LTX-side tensors
-        # to cuda. The base safetensors contain the FULL ~24 GB bf16 Gemma language
-        # model, which we replace with the compressed GGUF below.
+        # ── 1. Base bf16 LTX-side weights, LTX-remapped ──────────────────────────
+        # Load the BASE safetensors on CPU regardless of the requested target_device;
+        # step 2b then moves the kept LTX-side tensors to target_device.
         #
-        # COMMIT REDUCTION (Stage 1): under QAT gemma_root reclamation the Gemma
-        # shards are no longer in model_path, so the base safetensors load carries NO
+        # model_path holds no Gemma shards (see
+        # GemmaGGUFQuantLoaderService._build_shardless_text_encoder_builder; the GGUF
+        # below supplies the Gemma LM), so the base safetensors load carries NO
         # ``language_model.model.*`` Gemma-LM keys at all — there is nothing to skip or
         # strip. Survivors (feature_extractor / connectors) are the only tensors kept.
         # TEXT-ONLY: no vision_tower / multi_modal_projector survivors — the text model
-        # lacks those modules and their QAT-shard source is no longer read.
+        # lacks those modules and no QAT shard is in model_path.
         cpu_device = torch.device("cpu")
         base = self._base_loader.load(path, sd_ops=sd_ops, device=cpu_device)
         base_sd: dict[str, torch.Tensor] = dict(base.sd)
 
-        # ── 2a-inject. (Phase 2) Inject the embeddings connectors from the GGUF ───
-        # When the monolith has been dropped from model_path (component-files mode),
-        # the base load no longer contains the 258 connector tensors. Re-source them
-        # from the LTX transformer GGUF here, with keys + dtype byte-identical to
-        # what the monolith path produced, so the downstream merge / module ops see
-        # an identical state_dict. Injection happens BEFORE the 2b device move +
+        # ── 2a-inject. Inject the embeddings connectors from the transformer file ──
+        # In component-files mode the monolith is not in model_path, so the base load
+        # does not contain the 258 connector tensors. Re-source them from the LTX
+        # transformer file here (_load_gguf_connectors), with the same keys + dtype
+        # as the monolith path produced, so the downstream merge / module ops see the
+        # same state_dict layout. Injection happens BEFORE the 2b device move +
         # GGUF-Gemma overlay so the connectors ride the same code path as the kept
         # safetensors survivors.
         if self._connector_gguf_path is not None:
@@ -385,7 +391,7 @@ class GemmaGGUFQuantStateDictLoader:
             base_sd.update(injected)
             logger.info(
                 "Gemma component-files: injected %d embeddings_connector tensors from "
-                "GGUF %s (monolith dropped; aggregate_embed from projection file)",
+                "%s (monolith dropped; aggregate_embed from projection file)",
                 n_inj,
                 Path(self._connector_gguf_path).name,
             )
@@ -442,13 +448,14 @@ class GemmaGGUFQuantStateDictLoader:
         merged = base_sd
         merged.update(gguf_sd)
 
-        # Re-tie lm_head to the (plain bf16, now vocab-padded) embed_tokens so
-        # generate()/lm_head paths still work even though we dropped the tied
-        # safetensors copy. Both share the [target_vocab, 3840] padded embedding,
+        # Re-tie lm_head to the (plain bf16, vocab-padded) embed_tokens so
+        # generate()/lm_head paths work even though _to_ltx_key drops the GGUF
+        # lm_head. Both share the [target_vocab, 3840] padded embedding,
         # matching the meta model's tied lm_head shape.
         # When embed is CPU-offloaded (Lever 3) we intentionally do NOT add either
         # embed_tokens or lm_head to the merged sd here — the service re-ties them on
-        # CPU after build (see GemmaGGUFQuantLoaderService.patched_text_encoder).
+        # CPU after build (see _install_cpu_embed_offload, called from
+        # patched_text_encoder in GemmaGGUFQuantLoaderService.install).
         if embed_key in merged and _LTX_LM_HEAD_KEY not in merged:
             merged[_LTX_LM_HEAD_KEY] = merged[embed_key]
 
@@ -523,8 +530,8 @@ class GemmaGGUFQuantStateDictLoader:
             # quantized Linears AND the per-layer norms) stay on CPU; only this
             # ``model.model.layers.*`` keyset is held back. The final
             # ``model.model.norm.weight``, rotary buffers, embeddings (Lever 3),
-            # and all LTX-side connector/base weights still go to target_device as
-            # today. GemmaLayerOffloadService streams these CPU layers to the GPU per
+            # and all LTX-side connector/base weights are not held back by it.
+            # GemmaLayerOffloadService streams these CPU layers to the GPU per
             # window during encode. ``key_device`` is the device THIS key lands on.
             # TEXT-ONLY namespace: decoder layers are at ``model.model.layers.N...``
             # (== _LTX_LM_PREFIX + "layers."), one level shallower than the multimodal
@@ -639,19 +646,21 @@ class GemmaGGUFQuantStateDictLoader:
         """Read the 258 embeddings-connector tensors from the LTX transformer file.
 
         The transformer file is the GGUF (bare ``{video,audio}_embeddings_connector.*``
-        keys, F32/BF16, NEVER K-quantized) or, since §3-167 / §3-168, a quantized
-        (fp8 / int8) safetensors (prefixed ``model.diffusion_model.`` or bare keys;
-        BF16/F16/F32/fp8/int8, read by
-        ``engine.sft_quant.quant_service.load_connector_bf16``, which dequantizes
-        quantized connectors back to bf16 by their scheme). To
-        reproduce the monolith path byte-for-byte we:
+        keys, F32/BF16, NEVER K-quantized) or a quantized (fp8 / int8) safetensors
+        (prefixed ``model.diffusion_model.`` or bare keys; BF16/F16/F32/fp8/int8,
+        read by ``engine.sft_quant.quant_service.load_connector_bf16``, which
+        dequantizes quantized connectors back to bf16 by their scheme). To
+        reproduce the monolith path's keys and dtype (and, from a GGUF, its
+        values byte-for-byte) we:
           1. bring each key to the monolith's original form
              ``model.diffusion_model.<...>_embeddings_connector.*`` (the form the AV
              ops expect),
           2. cast F32->bf16 / pass bf16 through (the monolith stored these bf16),
-          3. run the SAME AV key-ops (AV_GEMMA_TEXT_ENCODER_KEY_OPS) over them so the
-             final keys become ``embeddings_processor.{video,audio}_connector.*`` —
-             identical to what the monolith connectors produced.
+          3. run the text encoder's key-ops (``TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS``,
+             whose connector group is the wheel's ``AV_GEMMA_TEXT_ENCODER_KEY_OPS``
+             verbatim) over them so the final keys become
+             ``embeddings_processor.{video,audio}_connector.*`` — identical to what
+             the monolith connectors produced.
 
         Fails loudly if a GGUF connector tensor is not float (there is no dequant
         kernel for it), or if the file is neither .gguf nor .safetensors.
@@ -669,8 +678,9 @@ class GemmaGGUFQuantStateDictLoader:
                 f"{Path(path).name!r} (expected a .gguf or .safetensors transformer)"
             )
 
-        # Run the SAME AV ops the monolith connectors would have gone through so the
-        # final keys/values match exactly (-> embeddings_processor.*_connector.*).
+        # Run the same connector key-ops the monolith connectors would have gone
+        # through so the final keys/values match exactly
+        # (-> embeddings_processor.*_connector.*).
         out: dict[str, torch.Tensor] = {}
         ops = self._connector_sd_ops
         for orig_key, value in orig_form.items():
@@ -701,7 +711,7 @@ class GemmaGGUFQuantStateDictLoader:
         import numpy as np
 
         logger.info(
-            "Gemma component-files: reading embeddings_connector tensors from GGUF %s",
+            "Gemma component-files: reading embeddings_connector tensors from the transformer file %s",
             Path(path).name,
         )
         reader = gguf_lib.GGUFReader(path, mode="r")
@@ -735,7 +745,9 @@ class GemmaGGUFQuantStateDictLoader:
             float_shape = tuple(reversed(tensor.shape.tolist()))
             raw_np = np.array(tensor.data, copy=True)
             raw_flat = torch.from_numpy(raw_np).reshape(-1)
-            # Cast to bf16 on CPU (these are tiny vs the Gemma LM); device move below.
+            # Cast to bf16 on CPU (these are tiny vs the Gemma LM); they reach the
+            # compute device in load() (2b), or, when the text encoder is built on
+            # CPU (keep-resident), in the move inside patched_text_encoder.
             deq = _dequant_to_bf16(raw_flat, ggml_type, float_shape, torch.device("cpu"))
             if ggml_type == _GGML_F32:
                 n_f32 += 1
@@ -897,12 +909,10 @@ def _patch_gemma_for_ggml_dequant(model: torch.nn.Module) -> torch.nn.Module:
         if leaf not in _TARGET_LEAF_NAMES:
             continue
         # Only patch Linears inside the Gemma decoder stack. TEXT-ONLY namespace:
-        # the Gemma3TextModel decoder layers live at ``model.model.layers.N...`` (the
-        # multimodal build had them one level deeper under ``...language_model...``,
-        # hence the old ``"language_model" in name`` guard). Verified that no other
-        # module in the text encoder uses these leaf names — the connectors use
-        # to_q/to_k/to_v and the feed-forward uses proj — so this subtree match is
-        # exact (48 layers x 7 = 336 Linears).
+        # the Gemma3TextModel decoder layers live at ``model.model.layers.N...``.
+        # Verified that no other module in the text encoder uses these leaf names —
+        # the connectors use to_q/to_k/to_v and the feed-forward uses proj — so this
+        # subtree match is exact (48 layers x 7 = 336 Linears).
         if not name.startswith("model.model.layers."):
             continue
         _patch_linear_for_ggml_dequant(module)
@@ -956,7 +966,7 @@ def _install_cpu_embed_offload(text_encoder: Any, embed_cpu: torch.Tensor) -> No
     from transformers.modeling_outputs import CausalLMOutputWithPast
 
     outer = text_encoder.model  # Gemma3ForCausalLM
-    inner = outer.model  # Gemma3TextModel (decoder stack + norm + embed_tokens, on GPU)
+    inner = outer.model  # Gemma3TextModel (decoder stack + norm + embed_tokens)
     lang = inner  # the Gemma3TextModel IS the language model (.embed_tokens, .norm)
 
     with torch.no_grad():
@@ -969,8 +979,8 @@ def _install_cpu_embed_offload(text_encoder: Any, embed_cpu: torch.Tensor) -> No
         # built on CPU and moved to the GPU out-of-place; that whole-model move also
         # pulls embed_scale onto the GPU, but the CPU-lookup forward computes
         # embed_tokens(input_ids) * embed_scale on CPU and would otherwise mix devices.
-        # No-op on the default GPU-build (DummyRegistry) path where embed_scale is
-        # already on CPU.
+        # No-op on the GPU-build (DummyRegistry, keep-resident off) path where
+        # embed_scale is already on CPU.
         embed_dev = embed_param.device
         for _bname, _buf in list(lang.embed_tokens._buffers.items()):
             if _buf is not None and _buf.device != embed_dev:
@@ -1029,7 +1039,7 @@ def _install_cpu_embed_offload(text_encoder: Any, embed_cpu: torch.Tensor) -> No
 # Sliding-window size for the TE per-layer offload. Read by BOTH the keep-resident
 # move (to decide which decoder layers must STAY on CPU) and the
 # GemmaLayerOffloadService construction below, so the two can never disagree about
-# the window. Next step (config knob) only has to swap the source of this value.
+# the window.
 _GEMMA_LAYERS_ON_GPU = 2
 
 # The one legitimate CPU residency outside the offloaded decoder layers: the
@@ -1150,11 +1160,14 @@ def _assert_no_stray_cpu_leaves(
 class GemmaGGUFQuantLoaderService:
     """Per-layer GGUF dequantization for the Gemma-3 text encoder.
 
-    Keeps the Gemma transformer compressed in VRAM (~7.3 GB Q4_K_M instead of
-    ~24 GB bf16). Each decoder Linear dequantizes its weight at forward() time and
-    frees the temporary bf16 tensor after the matmul. The LTX-side feature
-    extractor / embedding connectors remain bf16 (loaded from the distilled
-    checkpoint), merged in by GemmaGGUFQuantStateDictLoader.
+    Keeps the Gemma decoder weights GGUF-compressed (~7.3 GB Q4_K_M instead of
+    ~24 GB bf16) — in VRAM, or on CPU and streamed to the GPU one window at a time
+    when ``layer_offload`` is set. Each decoder Linear dequantizes its weight at
+    forward() time and frees the temporary bf16 tensor after the matmul. The
+    LTX-side feature extractor / embedding connectors are not in the Gemma GGUF and
+    remain bf16: they come from the distilled checkpoint — or, in component-files
+    mode, from the projection file and the transformer file — merged in by
+    GemmaGGUFQuantStateDictLoader.
 
     Usage:
         service = GemmaGGUFQuantLoaderService(gguf_path)
@@ -1170,25 +1183,26 @@ class GemmaGGUFQuantLoaderService:
         layer_offload: bool = False,
     ) -> None:
         self.gguf_path = gguf_path
-        # QAT gemma_root reclamation: the (tokenizer-only) gemma_root dir.
-        # DistilledPipeline is now built with gemma_root=None, so the wheel does
-        # NOT create model_ledger.text_encoder_builder; install() rebuilds it here
-        # (Gemma shards excluded) and loads the tokenizer/processor module_ops from
-        # this dir (module_ops_from_gemma_root globs only tokenizer.model +
-        # preprocessor_config.json, ~40MB — no model*.safetensors).
+        # QAT gemma_root reclamation (VERIFICATION_LOG §14): the (tokenizer-only)
+        # gemma_root dir. DistilledPipeline is built with gemma_root=None, so the
+        # wheel does NOT create model_ledger.text_encoder_builder; install() rebuilds
+        # it here (Gemma shards excluded) and loads the tokenizer/processor
+        # module_ops from this dir (module_ops_from_gemma_root globs only
+        # tokenizer.model + preprocessor_config.json, ~40MB — no model*.safetensors).
         self.gemma_tokenizer_root = gemma_tokenizer_root
-        # ── Phase 2 (component files), both must be set to enable the monolith drop ──
+        # ── Component files: both must be set to enable the monolith drop ──
         # component_text_projection_path: standalone bf16 file with the 4 aggregate_
         #   embed survivors; replaces the 46GB monolith as the text-encoder base path.
-        # connector_gguf_path: the LTX transformer GGUF that carries the 258 connector
-        #   tensors we inject (Option A). When either is None, the loader runs the
-        #   unchanged monolith path (monolith still in model_path).
+        # connector_gguf_path: the LTX transformer file (GGUF or quantized
+        #   safetensors) that carries the 258 connector tensors we inject (Option A,
+        #   VERIFICATION_LOG §9.5). When either is None, the loader keeps the
+        #   monolith in model_path and injects no connectors.
         self.component_text_projection_path = component_text_projection_path
         self.connector_gguf_path = connector_gguf_path
         # When True, keep the 48 GGUF-quantized Gemma decoder layers CPU-resident and
         # stream them to the GPU one window at a time during the encode forward
-        # (GemmaLayerOffloadService), capping the ~15 GB encode peak. When False the
-        # decoder layers are all GPU-resident (today's exact behavior).
+        # (GemmaLayerOffloadService), capping the text-encode VRAM peak
+        # (VERIFICATION_LOG §11.3). When False the decoder layers are all GPU-resident.
         self.layer_offload = layer_offload
 
     def _build_shardless_text_encoder_builder(self, model_ledger: Any) -> None:
@@ -1203,22 +1217,23 @@ class GemmaGGUFQuantLoaderService:
              tokenizer.model + preprocessor_config.json (present, ~40MB), NOT
              model*.safetensors.
           2. model_path is SHARDLESS: ``(str(checkpoint_path),)`` — just the
-             checkpoint placeholder, no ``*weight_paths``. The wheel used
+             checkpoint placeholder, no ``*weight_paths``. The wheel uses
              ``(str(checkpoint_path), *rglob("*.safetensors"))``; dropping the shards
              means the Gemma language-model weights are never read from disk (the GGUF
              supplies them). Keeping the checkpoint at model_path[0] also lets the
-             Phase-2 component-mode guard below (mp_tuple[0] == checkpoint) still pass,
+             component-files guard in install() (mp_tuple[0] == checkpoint) pass,
              after which ``new_model_path = (proj, *mp_tuple[1:]) == (proj,)`` — so the
              projection file is the ONLY safetensors opened at build.
           3. TEXT-ONLY model class: the configurator/key-ops/module-ops come from
              engine.gemma.text_encoder_configurator (a faithful text-only port), which
              builds ``Gemma3ForCausalLM`` (no vision_tower / multi_modal_projector) so
-             there is nothing left to strand on meta. This is what fixes the
-             ``model.device == meta`` crash the multimodal build hit when its
-             (weightless, GGUF-absent) vision_tower stayed on the meta device: the
-             text model's first parameter is the language embedding, which always gets
-             a real weight. Only the held_embed_cpu path (Lever 3) intentionally leaves
-             embed_tokens on meta until it is assigned on CPU post-build.
+             there is nothing left to strand on meta. This avoids the
+             ``model.device == meta`` crash a multimodal build hits when its
+             (weightless, GGUF-absent) vision_tower stays on the meta device. The
+             text model's first parameter is the language embedding, which the
+             held_embed_cpu path (Lever 3) leaves on meta until it is assigned on CPU
+             post-build, so ``.device`` is anchored to the decoder by the
+             configurator's ``_ComputeDeviceGemma3ForCausalLM``.
 
         Everything else (Builder factory, registry, tokenizer/processor module_ops via
         the wheel's ``module_ops_from_gemma_root``) is identical to the wheel; only the
@@ -1264,7 +1279,8 @@ class GemmaGGUFQuantLoaderService:
 
         # QAT gemma_root reclamation: DistilledPipeline is built with gemma_root=None,
         # so the wheel's build_model_builders() never created the
-        # text_encoder_builder (it skips model_ledger.py:158-169). Rebuild it here —
+        # text_encoder_builder (it skips the ``if self.gemma_root_path is not None:``
+        # body of ``ModelLedger.build_model_builders``). Rebuild it here —
         # a faithful port of that wheel block with Gemma shards EXCLUDED (weights come
         # from the GGUF below, not from `model*.safetensors`) AND the model class
         # switched to the text-only Gemma3ForCausalLM. This restores a GemmaTextEncoder
@@ -1274,27 +1290,30 @@ class GemmaGGUFQuantLoaderService:
             self._build_shardless_text_encoder_builder(model_ledger)
 
         # Warm-import guard: import ltx_core.loader before our tensor-subclass
-        # quantization touches the build path (mirrors the transformer service,
-        # avoids a circular-import edge during meta-model construction).
+        # quantization touches the build path (avoids a circular-import edge during
+        # meta-model construction; engine/worker.py makes the same import before the
+        # pipeline import).
         import ltx_core.loader  # noqa: F401
 
         builder = model_ledger.text_encoder_builder
 
-        # ── Phase 2: component-files mode (drop the 46GB monolith) ────────────────
-        # Post-reclamation our rebuilt builder.model_path is a single entry
-        # (checkpoint_path=MONOLITH,) — the Gemma qat shards are gone (the Gemma LM
-        # weights come from the GGUF; the text-only Gemma3ForCausalLM has no
-        # vision_tower / multi_modal_projector at all). The monolith placeholder
-        # contributes EXACTLY two survivor sets to the text encoder:
+        # ── Component-files mode (drop the 46GB monolith) ─────────────────────────
+        # Our rebuilt builder.model_path is a single entry (checkpoint_path=MONOLITH,)
+        # — no Gemma qat shards (the Gemma LM weights come from the GGUF; the
+        # text-only Gemma3ForCausalLM has no vision_tower / multi_modal_projector at
+        # all). The monolith placeholder contributes EXACTLY two survivor sets to the
+        # text encoder:
         #   * 4   text_embedding_projection.*aggregate_embed.*  -> from projection file
-        #   * 258 model.diffusion_model.*embeddings_connector.*  -> injected from GGUF
+        #   * 258 model.diffusion_model.*embeddings_connector.*  -> injected from the
+        #     transformer file (GGUF or quantized safetensors)
         # So when both component paths are present we (a) swap the monolith for the
         # standalone projection file in model_path (aggregate_embed source), and
-        # (b) hand the connector GGUF + AV ops to the loader for connector injection.
+        # (b) hand the connector file + key ops to the loader for connector injection.
         # With mp_tuple == (monolith,), new_model_path == (proj,) — the projection
         # file is the ONLY safetensors opened at build. With either component path
         # absent we keep the monolith placeholder and inject nothing (but note: the
-        # monolith is physically deleted, so component mode is the production path).
+        # adapter sends an empty checkpoint_path and ships no monolith, so component
+        # mode is the production path).
         new_model_path = builder.model_path
         connector_gguf_path: str | None = None
         connector_sd_ops: Any = None
@@ -1308,12 +1327,15 @@ class GemmaGGUFQuantLoaderService:
             if not Path(proj).exists():
                 raise FileNotFoundError(f"Text projection file not found: {proj}")
             if not Path(conn).exists():
-                raise FileNotFoundError(f"Connector GGUF not found: {conn}")
+                raise FileNotFoundError(
+                    f"Connector source (transformer file) not found: {conn}"
+                )
             mp = builder.model_path
             mp_tuple = tuple(mp) if isinstance(mp, tuple) else (mp,)
             mono = str(model_ledger.checkpoint_path)
-            # Replace the monolith entry (model_path[0]) with the projection file;
-            # keep the qat shards. Guard that the first entry is indeed the monolith.
+            # Replace the monolith entry (model_path[0]) with the projection file and
+            # keep any entries after it (the shardless builder has none). Guard that
+            # the first entry is indeed the monolith.
             if not mp_tuple or str(mp_tuple[0]) != mono:
                 raise RuntimeError(
                     "Gemma component-files: text_encoder_builder.model_path[0] "
@@ -1327,7 +1349,7 @@ class GemmaGGUFQuantLoaderService:
             connector_sd_ops = builder.model_sd_ops
             logger.info(
                 "Gemma component-files: dropping monolith from text encoder model_path; "
-                "aggregate_embed <- %s ; connectors <- GGUF %s",
+                "aggregate_embed <- %s ; connectors <- %s",
                 Path(proj).name,
                 Path(conn).name,
             )
@@ -1378,8 +1400,8 @@ class GemmaGGUFQuantLoaderService:
             # Build on the ledger's TARGET device (CPU when a StateDictRegistry is
             # active, else the GPU). NO dtype cast (see above). With a registry the
             # merged Gemma state_dict is materialized + cached on CPU (commit-cheap);
-            # with the default DummyRegistry _target_device() == ledger_device so this
-            # is byte-identical to the prior `device=ledger_device` build.
+            # with the default DummyRegistry _target_device() == ledger_device, so the
+            # model is built directly on ledger_device.
             build_device = model_ledger._target_device()
             model = tb.build(device=build_device)
 
@@ -1415,17 +1437,20 @@ class GemmaGGUFQuantLoaderService:
                 # mirrors install()'s own gate, so the mover and the streamer can never
                 # disagree about which layers are CPU-resident. We deliberately do NOT
                 # use "is this tensor already on CPU" as the proxy for "the loader left
-                # it behind" any more: with a StateDictRegistry active EVERYTHING is
-                # CPU-built, so that proxy skipped the whole model and Gemma silently
-                # ran on the CPU (553 s text-encode) before dying on a device mismatch.
+                # it behind": with a StateDictRegistry active EVERYTHING is CPU-built,
+                # so that proxy would skip the whole model and Gemma would run on the
+                # CPU (553 s text-encode) before dying on a device mismatch
+                # (VERIFICATION_LOG §47).
                 #
                 # Cache-safe by construction: params are re-pointed through .data and
                 # buffers are slot-rebound out-of-place, so the cached CPU state_dict
                 # objects are never mutated (see _move_leaf_tensors_to_device).
                 #
                 # NOTE: ``ledger_device`` is the snapshot taken at install() time, not
-                # re-read per build. Nothing mutates ledger.device between the two
-                # today; if that ever changes this is the line to revisit.
+                # re-read per build. ledger.device holds the same value whenever the
+                # text encoder is built (DitCpuLoadService.build_cpu_resident flips it
+                # only around the transformer build and restores it); if that ever
+                # changes this is the line to revisit.
                 excluded: tuple[Any, ...] = ()
                 if gemma_loader_ref.layer_offload:
                     from engine.gemma.layer_offload_service import (
@@ -1471,12 +1496,12 @@ class GemmaGGUFQuantLoaderService:
             model = model.eval()
 
             # (TE per-layer offload) Stream the GGUF-quantized Gemma decoder layers
-            # CPU->GPU one window at a time during encode, capping the ~15 GB encode
-            # peak. The loader already left the ``model.model.layers.*`` buffers on
-            # CPU; here we patch each decoder layer's forward with the sliding-window
-            # swap. Compute device = the language-model final norm weight device
-            # (matches Lever-3's compute_dev). No-op + safe if the layer container
-            # can't be located.
+            # CPU->GPU one window at a time during encode, capping the encode VRAM
+            # peak (VERIFICATION_LOG §11.3). The loader already left the
+            # ``model.model.layers.*`` buffers on CPU; here we patch each decoder
+            # layer's forward with the sliding-window swap. Compute device = the
+            # language-model final norm weight device (matches Lever-3's
+            # compute_dev). No-op + safe if the layer container can't be located.
             if gemma_loader_ref.layer_offload:
                 compute_dev = None
                 if lang is not None and getattr(lang, "norm", None) is not None:
@@ -1484,8 +1509,8 @@ class GemmaGGUFQuantLoaderService:
                 if compute_dev is None:
                     compute_dev = ledger_device
                 if offload_svc is None:
-                    # keep-resident OFF (production default): the move above never
-                    # ran, so no instance exists yet — build it here as before.
+                    # keep-resident off: the move above never ran, so no instance
+                    # exists yet — build it here.
                     from engine.gemma.layer_offload_service import (
                         GemmaLayerOffloadService,
                     )
@@ -1514,7 +1539,7 @@ class GemmaGGUFQuantLoaderService:
             if n_quant:
                 # Report the ACTUAL placement: with the TE offload on, the decoder
                 # layer buffers are CPU-resident and only streamed to the compute
-                # device per window (the old single-device line was misleading).
+                # device per window.
                 logger.info(
                     "Gemma GGUF per-layer quant active: %d quantized buffers "
                     "(%d on %s, %d held on CPU for per-layer streaming)",
@@ -1536,7 +1561,8 @@ class GemmaGGUFQuantLoaderService:
         _ = original_text_encoder_fn  # retained for clarity; original not chained.
 
         logger.info(
-            "GemmaGGUFQuantLoaderService installed: %s — Gemma stays compressed in VRAM "
-            "(~7.3 GB vs ~24 GB bf16)",
+            "GemmaGGUFQuantLoaderService installed: %s — Gemma stays compressed "
+            "(decoder layers in VRAM, or streamed from CPU when LTX_TE_OFFLOAD "
+            "is on) (~7.3 GB vs ~24 GB bf16)",
             Path(self.gguf_path).name,
         )

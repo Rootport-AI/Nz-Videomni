@@ -1267,11 +1267,14 @@ def verify() -> None:
     #          release that started routing masked calls back through
     #          ``attention_function`` would silently push masks into a kernel
     #          that cannot express one; the wrapper WOULD still catch them (its
-    #          mask branch is kept for exactly this reason, and for 2.3, where
-    #          NAG/VSF call it with a mask directly), but the "IC-LoRA on 2.5
-    #          never logs a masked fallback" fact recorded in VERIFICATION_LOG
-    #          §77.7 (a) and checked on the real device (§77.5) would quietly
-    #          stop being true.
+    #          mask branch is kept for exactly this reason, and for 2.3, whose
+    #          upstream ``Attention.forward`` hands ``mask`` to
+    #          ``attention_function`` itself, so a masked call (the IC-LoRA
+    #          attention-strength path) reaches the wrapper; NAG's and VSF's
+    #          replacement ``forward``s call it with ``mask=None``), but the
+    #          "IC-LoRA on 2.5 never logs a masked fallback" fact recorded in
+    #          VERIFICATION_LOG §77.7 (a) and checked on the real device
+    #          (§77.5) would quietly stop being true.
     #          The ORDER is what is pinned, not just the presence of the two
     #          names: `if mask is None` must come FIRST, because it is the
     #          branch that sends the unmasked call to the slot sage owns.

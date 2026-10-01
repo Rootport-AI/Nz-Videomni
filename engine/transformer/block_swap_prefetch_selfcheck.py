@@ -1,8 +1,8 @@
 """Standalone self-check for engine.transformer.block_swap_prefetch.
 
 Run with the ENGINE venv (needs torch + a CUDA GPU — the app venv has neither,
-and .venv-engine has no pytest, which is why this is a script and not a test
-module):
+and .venv-engine has no fastapi, so tests/conftest.py cannot be collected there,
+which is why this is a script and not a test module):
 
     .venv-engine\\Scripts\\python.exe -m engine.transformer.block_swap_prefetch_selfcheck
 
@@ -19,7 +19,7 @@ odd-sized buffer and a 0-dim buffer that exercise the arena's alignment padding
 and the ``reshape(-1)`` guard. Everything runs inside ``torch.inference_mode()``
 because that is where the production install() runs.
 
-What the 18 checks prove, in one line each:
+What the checks prove, in one line each:
 
   C1  ON and OFF produce BIT-identical output (the only thing that changed is
       how the bytes travel, so anything less is a bug).
@@ -32,7 +32,8 @@ What the 18 checks prove, in one line each:
   C6  A machine that cannot pin memory degrades to the synchronous path.
   C7  blocks_on_gpu >= total short-circuits before anything is allocated.
   C8  install -> passes -> teardown, three times, leaks no VRAM and no pinned
-      memory (the E9 finally path).
+      memory (the finally path of edge case E9,
+      Docs/BLOCKSWAP_PREFETCH_WORKORDER.md §7).
   C9  20 passes of heavy compute stay bit-identical, and S1b is a real
       cross-stream dependency (proven by removing it and watching the copy
       complete early).
@@ -48,14 +49,14 @@ What the 18 checks prove, in one line each:
       gives the ring back, and hold_arenas=False holds nothing while producing
       the same bits.
   C17 An fp8 Parameter and its 0-dim f32 ``weight_scale`` buffer (the fp8
-      safetensors transformer, §3-167) travel bit-exactly, masters intact.
+      safetensors transformer) travel bit-exactly, masters intact.
   C18 An int8 Parameter (``requires_grad=False``) and its ``(o, 1)`` f32
-      ``weight_scale`` buffer (the int8 safetensors transformer, §3-168, plain
+      ``weight_scale`` buffer (the int8 safetensors transformer, plain
       and ConvRot) travel bit-exactly, masters intact.
   C19 A packed w4a8 int8 Parameter ``(o, i/2)`` (``requires_grad=False``) and
       its three auxiliary buffers — fp8 ``weight_s_rel`` ``(o, i/16)``, f32
-      ``weight_s_channel`` ``(o,)``, f32 ``weight_codebook`` ``(16,)`` (§3-168
-      C-3) — travel bit-exactly, masters intact.
+      ``weight_s_channel`` ``(o,)``, f32 ``weight_codebook`` ``(16,)`` —
+      travel bit-exactly, masters intact.
 """
 
 from __future__ import annotations
@@ -180,7 +181,7 @@ class _DummyBlock(nn.Module):
             # Weight tying (C14): the SAME storage under two owners.
             self.lin._buffers["weight"] = tie_with.lin._buffers["weight"]
 
-        # IC-LoRA phase-B style: non-persistent buffers + the real specs attr,
+        # IC-LoRA style: non-persistent buffers + the real specs attr,
         # so the LoRA delta actually participates in the output.
         self.lin.register_buffer(
             "_ic_lora_A_0", (torch.randn(rank, dim) * 0.01).to(torch.bfloat16), persistent=False
@@ -355,18 +356,16 @@ def check_c2_master_invariance() -> None:
 def check_c3_c4_residency_and_schedule() -> None:
     """Residency bound and issue schedule.
 
-    CONTRACT CHANGED WITH THE ARENA RING (see C16 and the module docstring).
-    The bound used to be ``blocks_on_gpu + 2``: the window, plus the block being
-    released, plus the tail block of the PREVIOUS pass, which nothing ever
-    released and which therefore sat resident through the whole next pass. The
-    ring made that leftover unsafe (its arena slot gets recycled), so
-    ``on_block_forward`` now releases it at ``idx == 0``, and the steady-state
-    residency is one lower: ``blocks_on_gpu + 1``. Both the ceiling and the
-    "peak is reached exactly" assertion below moved with it.
+    The bound is ``blocks_on_gpu + 1``: the window plus the block being
+    released (see C16 and the module docstring). The tail block of the
+    PREVIOUS pass does not add to it, because ``on_block_forward`` releases that
+    leftover at ``idx == 0`` — with the arena ring its slot gets recycled, so it
+    must not stay resident into the next pass. Both the ceiling and the "peak is
+    reached exactly" assertion below use this bound.
 
-    Unchanged: a pass still ENDS with exactly one resident block, because the
-    window still drains rather than wrapping. That leftover is now released at
-    the head of the next pass instead of lingering through it.
+    A pass ENDS with exactly one resident block, because the window drains
+    rather than wrapping. That leftover is released at the head of the next
+    pass instead of lingering through it.
     """
     # Two shapes: a small one, and the production one (48 blocks, 8 resident).
     for n_blocks, bs, passes in ((12, 3, 4), (48, 8, 3)):
@@ -523,8 +522,9 @@ def check_c7_no_swap_needed() -> None:
     with torch.inference_mode():
         service.install(model)
     # No forward here on purpose: install() returned before patching anything,
-    # so the blocks are still wherever the loader left them (in production
-    # DitCpuLoadService puts the whole model on GPU in exactly this case).
+    # so the blocks are still wherever the loader left them (in production the
+    # whole model sits on GPU in exactly this case, e.g. DitCpuLoadService in
+    # LTX 2.3 and ``_place_transformer`` in engine25 put it there).
     for block in model.transformer_blocks:
         if getattr(block, "_block_swap_original_forward", None) is not None:
             raise AssertionError("blocks were patched even though no swapping is needed")
@@ -564,7 +564,7 @@ def check_c8_no_leak_across_jobs() -> None:
         if service.last_prefetch_used != "on":
             raise AssertionError(f"job {job}: prefetch did not engage")
         engine = service._prefetch_engine
-        service.teardown_prefetch()        # what the pipeline's finally does
+        service.teardown_prefetch()        # what the end-of-job finally does
         if engine._state or engine._master or engine._layout:
             raise AssertionError(f"job {job}: teardown left engine state behind")
         if service._prefetch_engine is not None:
@@ -881,7 +881,7 @@ def check_c15_ggml_subclass_preserved() -> None:
     `torch.empty_like(..., device="meta")`. The non-cyclic window leaves the last
     block of every pass resident, so a GPU view rebuilt as the BASE class would
     still be attached to the model when `dispose()` runs and would resurrect
-    exactly the F1 AttributeError the subclass exists to prevent. The subclass is
+    exactly the AttributeError the subclass exists to prevent. The subclass is
     declared here rather than imported so this check stays a property of the
     shared module and does not drag engine25 into the 2.3 venv.
     """
@@ -948,13 +948,13 @@ def check_c15_ggml_subclass_preserved() -> None:
 def check_c16_arena_ring() -> None:
     """The ring is allocated once, recycled, and drained at teardown.
 
-    Four claims, all of them things the per-block ``torch.empty``/free version
-    did NOT have to satisfy:
+    Five claims; the first four are things the per-block ``torch.empty``/free
+    path (``hold_arenas=False``) does not have to satisfy:
 
       1. ``prepare()`` allocates exactly ``min(total, blocks_on_gpu + 2)``
          distinct arenas, each sized for the LARGEST block (so any block fits
          any slot).
-      2. Those arenas do not move for the life of the job — the addresses seen
+      2. Those arenas do not move until ``teardown()`` — the addresses seen
          at the first block of pass 0 are the addresses seen at every later
          block — and one pass of 12 issues uses no more than the 5 of them, i.e.
          slots really are recycled rather than re-allocated.
@@ -1077,7 +1077,7 @@ def check_c16_arena_ring() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# C17: fp8 Parameter + 0-dim f32 weight_scale (§3-167)                          #
+# C17: fp8 Parameter + 0-dim f32 weight_scale                                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -1183,7 +1183,7 @@ def check_c17_fp8_parameter_and_scale_round_trip() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# C18: int8 Parameter + (o, 1) f32 weight_scale (§3-168)                        #
+# C18: int8 Parameter + (o, 1) f32 weight_scale                               #
 # --------------------------------------------------------------------------- #
 
 
@@ -1291,7 +1291,7 @@ def check_c18_int8_parameter_and_scale_round_trip() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# C19: w4a8 packed int8 Parameter + s_rel / s_channel / codebook (§3-168 C-3)    #
+# C19: w4a8 packed int8 Parameter + s_rel / s_channel / codebook              #
 # --------------------------------------------------------------------------- #
 
 _W4A8_AUX = ("weight_s_rel", "weight_s_channel", "weight_codebook")
@@ -1447,11 +1447,11 @@ def main() -> int:
          check_c15_ggml_subclass_preserved),
         ("C16  the arena ring is fixed, recycled, released at teardown, and "
          "optional", check_c16_arena_ring),
-        ("C17  fp8 Parameter + 0-dim f32 weight_scale round-trip (§3-167)",
+        ("C17  fp8 Parameter + 0-dim f32 weight_scale round-trip",
          check_c17_fp8_parameter_and_scale_round_trip),
-        ("C18  int8 Parameter + (o,1) f32 weight_scale round-trip (§3-168)",
+        ("C18  int8 Parameter + (o,1) f32 weight_scale round-trip",
          check_c18_int8_parameter_and_scale_round_trip),
-        ("C19  w4a8 packed int8 Parameter + s_rel/s_channel/codebook round-trip (§3-168 C-3)",
+        ("C19  w4a8 packed int8 Parameter + s_rel/s_channel/codebook round-trip",
          check_c19_w4a8_parameter_and_aux_round_trip),
     ]
 

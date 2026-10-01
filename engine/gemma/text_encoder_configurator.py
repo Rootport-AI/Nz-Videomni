@@ -10,21 +10,23 @@ language model) on the meta device. The LTX text encoder, however, only ever
 consumes ``language_model``'s hidden states (``GemmaTextEncoder.precompute`` runs
 the model with ``output_hidden_states=True`` and throws the logits away).
 
-Under the QAT ``gemma_root`` reclamation the Gemma weights are no longer read from
-``model*.safetensors`` — they come from the Q4_K_M GGUF, which
-carries ONLY the language model. The vision_tower / multi_modal_projector then have
-no weights and stay on the meta device. That is fatal for the multimodal build:
-``model.device`` is ``next(model.parameters()).device`` (transformers
-``get_parameter_device``), and the FIRST parameter of
+The Gemma weights are not read from ``model*.safetensors`` (``gemma_root`` is a
+tokenizer-only directory) — they come from the Gemma GGUF (``gguf_gemma_path``),
+which carries ONLY the language model. The vision_tower / multi_modal_projector
+then have no weights and stay on the meta device. That is fatal for the
+multimodal build: ``model.device`` is ``next(model.parameters()).device``
+(transformers ``get_parameter_device``), and the FIRST parameter of
 ``Gemma3ForConditionalGeneration`` is ``model.vision_tower...`` (constructed first
 inside ``Gemma3Model.__init__``). A meta vision parameter makes ``model.device ==
 meta`` -> ``precompute`` builds ``input_ids`` on ``meta`` -> crash.
 
-Building ``Gemma3ForCausalLM`` instead removes vision entirely: its first parameter
-is ``model.embed_tokens.weight`` (the language embedding), which always receives a
-real weight, so ``model.device`` resolves naturally and the text hidden states are
+Building ``Gemma3ForCausalLM`` instead removes vision entirely, so no weightless
+vision module is left on the meta device, and the text hidden states are
 byte-identical to the multimodal build (same ``Gemma3TextModel`` math, same
-weights).
+weights). Its first parameter is ``model.embed_tokens.weight`` (the language
+embedding), which the CPU-embed offload holds on the CPU, so ``.device`` is
+anchored to the decoder by ``_ComputeDeviceGemma3ForCausalLM`` (see its
+docstring).
 
 What is a faithful copy vs. what changed
 ----------------------------------------
@@ -36,8 +38,10 @@ Copied verbatim from ``ltx_core.text_encoders.gemma.encoders.encoder_configurato
   * the feature_extractor / connector key-op groups.
 
 Changed for the text-only model class (the ONLY deltas):
-  1. build ``Gemma3ForCausalLM(text_config)`` instead of
-     ``Gemma3ForConditionalGeneration(full_config)``;
+  1. build ``_ComputeDeviceGemma3ForCausalLM(text_config)`` (a ``Gemma3ForCausalLM``
+     subclass that changes only ``.device``) instead of
+     ``Gemma3ForConditionalGeneration(full_config)``, and match
+     ``TEXT_ONLY_GEMMA_MODEL_OPS`` on ``Gemma3ForCausalLM``;
   2. the language-model key-op replacement target loses the ``language_model.``
      level: ``language_model.model.`` -> ``model.model.`` (was
      ``model.model.language_model.``), and the embed->lm_head kv-op is keyed on the
@@ -48,8 +52,8 @@ Changed for the text-only model class (the ONLY deltas):
      ``position_ids`` registration. The rope ``inv_freq`` + ``embed_scale`` maths are
      kept BYTE-IDENTICAL to the wheel (same head_dim/base/rope_type/hidden_size).
 
-Namespace map (empirically verified, see the session probes)
-------------------------------------------------------------
+Namespace map
+-------------
               Gemma3ForConditionalGeneration            Gemma3ForCausalLM (this)
   embed:      model.model.language_model.embed_tokens   model.model.embed_tokens
   layers:     model.model.language_model.layers.N.*     model.model.layers.N.*
@@ -88,19 +92,21 @@ class _ComputeDeviceGemma3ForCausalLM(Gemma3ForCausalLM):
 
     Why override ``.device``
     ------------------------
-    ``GemmaTextEncoder.precompute`` (wheel ``base_encoder.py:57-58``) builds
+    ``GemmaTextEncoder.precompute`` (wheel ``base_encoder.py``) builds
     ``input_ids`` / ``attention_mask`` on ``self.model.device``, and the prompt-
-    enhance path (``base_encoder.py:89,93``) moves inputs / seeds RNG on the same
+    enhance path (``GemmaTextEncoder._enhance``) moves inputs / seeds RNG on the same
     device. The stock ``PreTrainedModel.device`` is
     ``next(self.parameters()).device`` (transformers ``get_parameter_device``).
 
-    Under Lever-3 CPU-embed offload the token embedding — the FIRST parameter of a
-    text-only ``Gemma3ForCausalLM`` — is held on the CPU, so the stock property
-    reports ``cpu``. ``precompute`` then builds ``attention_mask`` on the CPU while
-    the decoder runs on the GPU (the CPU-embed forward ships only the hidden states
-    to cuda), and the downstream ``feature_extractor`` mixes a cuda ``hidden_states``
-    with a cpu ``attention_mask`` -> "Expected all tensors to be on the same device:
-    cuda:0 and cpu" at ``feature_extractor.py:78`` (``torch.where``).
+    Under the CPU-embed offload of ``_install_cpu_embed_offload`` (Lever 3) the
+    token embedding — the FIRST parameter of a text-only ``Gemma3ForCausalLM`` —
+    is held on the CPU, so the stock property reports ``cpu``. ``precompute`` then
+    builds ``attention_mask`` on the CPU while the decoder runs on the GPU (the
+    CPU-embed forward ships only the hidden states to cuda), and the downstream
+    ``feature_extractor`` mixes a cuda ``hidden_states`` with a cpu
+    ``attention_mask`` -> "Expected all tensors to be on the same device: cuda:0
+    and cpu" at the ``torch.where`` in the wheel's
+    ``norm_and_concat_per_token_rms`` (``feature_extractor.py``).
 
     The MULTIMODAL baseline never hit this because its FIRST parameter was
     ``vision_tower.*`` (constructed first in ``Gemma3Model.__init__``), which stayed
@@ -156,14 +162,15 @@ class TextOnlyGemmaTextEncoderConfigurator(ModelConfigurator[GemmaTextEncoder]):
 
         # The wheel builds Gemma3Config.from_dict(...).  We take its .text_config —
         # the exact Gemma3TextConfig the multimodal model nests as its language model
-        # (verified: hidden_size=3840, num_hidden_layers=48, head_dim=256,
-        # vocab_size=262208, rope_scaling={'rope_type':'linear','factor':8.0}).
+        # (its sizes and rope scaling are those of
+        # GEMMA3_CONFIG_FOR_LTX.text_config).
         gemma_config = Gemma3Config.from_dict(GEMMA3_CONFIG_FOR_LTX.to_dict())
         text_config = gemma_config.text_config
         with torch.device("meta"):
             # Device-anchored subclass: reports the decoder-norm (compute) device from
             # .device so precompute builds input_ids/attention_mask on cuda even when
-            # embed_tokens is CPU-offloaded (Lever 3). See the subclass docstring.
+            # embed_tokens is held on CPU by _install_cpu_embed_offload. See the
+            # subclass docstring.
             model = _ComputeDeviceGemma3ForCausalLM(text_config)
 
         # Create video embeddings connector (always needed) — wheel-identical.

@@ -1,13 +1,14 @@
 """Standalone self-check for loading the REAL PrunaVAED decoder file (gate G2).
 
 Run with the ENGINE venv (needs torch + ltx_core; the app venv has neither, and
-.venv-engine has no pytest, which is why this is a script and not a test module):
+.venv-engine has no fastapi, so tests/conftest.py cannot be collected there —
+which is why this is a script and not a test module):
 
     .venv-engine\\Scripts\\python.exe -m engine.vae.prunavaed_g2_selfcheck [PATH]
 
-``PATH`` defaults to config.yaml's ``model.component_video_vae_pruned_path``
-(itself defaulting to
-``models/LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors``).
+``PATH`` defaults to ``DEFAULT_PATH`` (relative to the current directory). The
+production worker instead receives its path as the
+``component_video_vae_pruned_path`` payload key.
 
 Same conventions as the other ``*_selfcheck`` modules: every check either PASSes
 or FAILs loudly, and the exit code is 0 only when all of them pass. ONE extra
@@ -22,17 +23,20 @@ ONLY this script can prove is the half that needs the real bytes:
   G2-1  the builder path used in production builds the decoder with ZERO
         "Uninitialized parameters or buffers" warnings. That warning is the only
         signal ``load_state_dict(strict=False, assign=True)`` gives when the key
-        names do not line up (single_gpu_model_builder.py:77-84) — a file whose
-        keys are wrong otherwise produces a perfectly healthy-looking model full
-        of meta tensors.
+        names do not line up (upstream ``SingleGPUModelBuilder._return_model``)
+        — a file whose keys are wrong otherwise produces a perfectly
+        healthy-looking model full of meta tensors.
   G2-2  ``load_state_dict``'s RETURN VALUE has empty ``missing_keys`` and
         ``unexpected_keys`` (strict=False hides them from raising, but they are
-        still reported), and the file carries exactly 102 tensors.
-  G2-3  the built module's parameter count is exactly 345,006,256.
-  G2-4  the measured tensor shapes match §4.1.
+        still reported), and the file carries exactly
+        ``EXPECTED_STATE_DICT_KEYS`` tensors.
+  G2-3  the built module's parameter count is exactly
+        ``EXPECTED_PARAMETER_COUNT``.
+  G2-4  the measured tensor shapes match ``Docs/PRUNAVAED_WORKORDER.md`` §4.1.
   G2-5  both projection resnets carry ChannelLayerNorm3d, NOT nn.GroupNorm.
-  G2-6  the same build succeeds on the GPU as well as on the CPU (skipped, and
-        reported as such, when no CUDA device is present).
+  G2-6  the same build succeeds on the GPU as well as on the CPU (reported as
+        a FAIL that asks for a re-run on a GPU machine when no CUDA device is
+        present).
 
 Authority: ``Docs/PRUNAVAED_WORKORDER.md`` §9 G2.
 """

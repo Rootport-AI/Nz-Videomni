@@ -31,13 +31,13 @@ actually break silently:
 
   3. INSTALL COUNT. A 48-block transformer yields exactly 288 wrapped modules —
      6 per block (attn1 / attn2 / audio_attn1 / audio_attn2 /
-     audio_to_video_attn / video_to_audio_attn), matching the real-device spike.
+     audio_to_video_attn / video_to_audio_attn).
      Plus the OFF case: a job that did not request sage leaves every module's
      ``attention_function`` untouched, identity-checked.
 
-Why no end-to-end generation here: that is the real-device gate's job (G4/G5),
-and it needs the 16GB model. This file only has to prove the swap itself is
-correct and safe.
+Why no end-to-end generation here: that is the real-device gate's job (G4/G5
+in VERIFICATION_LOG §43.5), and it needs the real model. This file only has
+to prove the swap itself is correct and safe.
 """
 
 from __future__ import annotations
@@ -122,7 +122,8 @@ class _LogCapture(logging.Handler):
     """Collect the sage service's own log records for the duration of a block.
 
     Used to assert the "logged once per job, not once per call" contract — the
-    thing that makes the masked-call fallback observable (G5's evidence) without
+    thing that makes the masked-call fallback observable (the real-device
+    IC-LoRA check, G5 in VERIFICATION_LOG §43.5, looks for that line) without
     turning an IC-LoRA job's log into tens of thousands of identical lines.
     """
 
@@ -355,11 +356,13 @@ def check_fallback_matrix() -> None:
             f"per-call fallbacks changed attention_used to {state.attention_used!r}"
         )
 
-    # Leak guard: the transformer is rebuilt per job, so a wrapper should never
-    # outlive the job that installed it — but if one ever did, it must be inert
-    # rather than silently accelerating (and mis-reporting) an sdpa job.
+    # Leak guard: a wrapper should never be called by a job other than the one
+    # that installed it (2.3 rebuilds the transformer per job; 2.5 strips the
+    # previous build's wrappers before installing) — but if one ever were, it
+    # must be inert rather than silently accelerating (and mis-reporting) an
+    # sdpa job.
     qb, kb, vb = _qkv(1, 64, attn.heads, 128, torch.bfloat16, device)
-    state.reset()  # what the pipeline's finally does at the end of the job
+    state.reset()  # what the end-of-job finally does (see SageState.reset)
     if state.masked_calls != 0:
         raise AssertionError(
             f"reset() left masked_calls={state.masked_calls}; the counter is "

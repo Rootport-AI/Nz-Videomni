@@ -1076,7 +1076,9 @@ class LTXFastVideoPipeline:
             self._gemma_gguf_service = service
             import logging
             logging.getLogger(__name__).info(
-                "Gemma GGUF per-layer quant installed: Gemma stays compressed in VRAM (%s)",
+                "Gemma GGUF per-layer quant installed: Gemma stays compressed "
+                "(decoder layers in VRAM, or streamed from CPU when "
+                "LTX_TE_OFFLOAD is on) (%s)",
                 gguf_path,
             )
         except Exception as exc:

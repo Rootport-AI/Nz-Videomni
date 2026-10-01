@@ -639,8 +639,8 @@ class Ltx25DiffusionStage(DiffusionStage):
             # allocator (measured on B4: 15,292 -> 14,840MB peak reserved).
             # LTX 2.3 deliberately leaves it off - its peak is in decode, where
             # a held ring would just stack under it. The full measurement and
-            # the reason the two engines differ are in the module docstring of
-            # engine/transformer/block_swap_prefetch.py.
+            # the reason the two engines differ are in VERIFICATION_LOG §75.7
+            # and §75.8.
             BlockSwapService(blocks_on_gpu=self.blocks_on_gpu, device=device,
                              hold_arenas=True)
             if self.blocks_on_gpu > 0

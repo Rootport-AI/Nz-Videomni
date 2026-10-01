@@ -1,8 +1,8 @@
 """Standalone self-check for the LTX 2.5 negative-prompt patch (NAG / VSF).
 
-Run with the 2.5 ENGINE venv (needs the official ltx_core 1.2.0 wheel; no GPU
-and no model weights are required -- every check below runs on CPU against a
-tiny real ``BasicAVTransformerBlock``):
+Run with the 2.5 ENGINE venv (needs the pinned ltx_core, ``$ltx25DirectPins``
+in ``scripts/install_ltx.ps1``; no GPU and no model weights are required --
+every check below runs on CPU against a tiny real ``BasicAVTransformerBlock``):
 
     .venv-engine-ltx25\\Scripts\\python.exe -m engine25.neg_selfcheck25
 
@@ -14,16 +14,16 @@ nothing is skipped, exit code 0 only when all of them pass.
 WHAT IS SHARED AND WHAT IS NEW
 ------------------------------
 The ALGEBRA is 2.3's -- ``nag_combine`` is imported, not reimplemented -- so the
-three checks that judge the FORMULA are 2.3's own, imported from
-:mod:`engine.transformer.nag_selfcheck` and re-run here rather than copied. A
-second copy could only drift.
+checks that judge the FORMULA (the ``shared`` list in :func:`main`) are 2.3's
+own, imported from :mod:`engine.transformer.nag_selfcheck` and re-run here
+rather than copied. A second copy could only drift.
 
-The eight checks below have no 2.3 counterpart, because they are about the two
-things this engine does differently: the replacement ``forward`` is written
-against 2.5's ``Attention`` (one ``preattention_function`` call over
-CONCATENATED keys, a four-argument ``attention_function``, the official
-``gated_attention_function`` slot), and the model SHELL is reused across jobs so
-the patch has an uninstall.
+The checks below (the ``ltx25_only`` list in :func:`main`) have no 2.3
+counterpart, because they are about the two things this engine does
+differently: the replacement ``forward`` is written against 2.5's
+``Attention`` (one ``preattention_function`` call over CONCATENATED keys, a
+four-argument ``attention_function``, the official ``gated_attention_function``
+slot), and the model SHELL is reused across jobs so the patch has an uninstall.
 
 **THE REAL-MODULE CHECKS CALL ``attn2`` DIRECTLY, AND MUST KEEP DOING SO.**
 There is a tempting shortcut -- drive a whole block through
@@ -100,7 +100,7 @@ def _build_block(dim: int = 32, heads: int = 2, d_head: int = 16):
     """2.5's ``BasicAVTransformerBlock`` in the PRODUCTION configuration.
 
     ``apply_gated_attention`` and ``cross_attention_adaln`` are both True
-    because all three production GGUF configs set them, and both matter here:
+    because the production checkpoints' configs set them, and both matter here:
     gating is the step the NAG combine has to happen BEFORE, and the AdaLN flag
     is what makes the positive context arrive modulated while the negative one
     stays raw (the deliberate asymmetry this patch inherits from 2.3).
@@ -178,7 +178,7 @@ def _ref_cross_attn(attn, x, context):
     """One UNPATCHED cross-attention output, assembled from attn's own parts.
 
     Deliberately NOT a call into :mod:`engine25.neg_prompt25` and not a call
-    into ``Attention.forward`` either: the four lines below are what the patched
+    into ``Attention.forward`` either: the lines below are what the patched
     forward has to be equal to, written out here so the comparison tests the
     arithmetic rather than restating it.
     """
@@ -246,9 +246,10 @@ def check_concat_preattention_equals_split() -> None:
 def check_nag_forward_matches_reference() -> None:
     """The patched attn2 output equals a reference built from attn2's own parts.
 
-    By CONSTRUCTION this also proves the ordering the plan requires: the
-    reference gates the ALREADY-COMBINED tensor, never z_pos or z_neg
-    individually, so a patch that gated before combining could not match it.
+    By CONSTRUCTION this also proves the combine-then-gate ordering described
+    under compat pin (14c) in :mod:`engine25.ltxcore_compat`: the reference
+    gates the ALREADY-COMBINED tensor, never z_pos or z_neg individually, so a
+    patch that gated before combining could not match it.
 
     attn2 is called DIRECTLY (see the module docstring on why the block-level
     dummy modality is not usable here).
@@ -430,11 +431,13 @@ def check_double_install_raises() -> None:
 def check_uninstall_on_meta_shell() -> None:
     """The reason ``uninstall`` may not touch a tensor.
 
-    In production it runs FIRST on the build path, against a shell that has been
-    through ``Disposable.dispose()``: every parameter is a ``device="meta"``
-    tensor, where any operator dispatch raises ``NotImplementedError``. Moving
-    the block to meta here reproduces that exactly, so a future ``.cpu()`` or
-    ``empty_cache()`` added "to be tidy" fails here rather than on a real job.
+    In production ``Ltx25DiffusionStage._ensure_neg_installed`` calls it after
+    the new state dict has been loaded, but between builds the reused shell has
+    been through ``Disposable.dispose()``: every parameter is a
+    ``device="meta"`` tensor, where any operator dispatch raises
+    ``NotImplementedError``. Moving the block to meta here reproduces that
+    state, so a future ``.cpu()`` or ``empty_cache()`` added "to be tidy"
+    fails here.
     """
     block = _build_block()
     transformer = _FakeTransformer([block])

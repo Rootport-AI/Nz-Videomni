@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-46「撮り直し（Retake）の `source_had_audio` が、音声があったのに `false` になる場合がある」を起票し、§1 冒頭の案内を §1-46 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-40〜§1-45〔撮り直し（Retake）の窓のタイル予算が広い Stage-2 窓で未計測／拡散 VAE を置いたときの復号タイルの決め方／ワーカーが未知の op に応答しない／`done` イベントに段階ごとの表が二重に載る／連結生成のワーカーログの綴りが LTX 2.3 と違う／carry の頭と末尾素材の帯が合体したタイルのキーフレーム印の消去〕を起票し、§1 冒頭の案内を §1-40〜§1-45 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-35〜§1-39 の5件〔block swap の状態報告の整合／読み込みの最中の`unload`で409の見張りが開く／連結ジョブの取り消しが結果に反映されない／`join_v2v`の尺の検査が音声の短いずれを見ない／`Docs/MULTI_ENGINE_DESIGN.md` §4.1の文書訂正〕を起票し、§1 冒頭の案内を §1-35〜§1-39 まで含む記述に更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-47〜§1-50〔自己試験の `prefetch_used` が「install の飛ばし」を検出できない可能性／画角拡張（Outpainting）で凍結を無効にしたジョブの `source_had_audio`／`cross_attention_modules` に呼び出し元が無い／効かない設定 `model_configurator=LTXModelConfigurator`〕を起票し、§1 冒頭の案内を §1-47〜§1-50 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-46「撮り直し（Retake）の `source_had_audio` が、音声があったのに `false` になる場合がある」を起票し、§1 冒頭の案内を §1-46 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-40〜§1-45〔撮り直し（Retake）の窓のタイル予算が広い Stage-2 窓で未計測／拡散 VAE を置いたときの復号タイルの決め方／ワーカーが未知の op に応答しない／`done` イベントに段階ごとの表が二重に載る／連結生成のワーカーログの綴りが LTX 2.3 と違う／carry の頭と末尾素材の帯が合体したタイルのキーフレーム印の消去〕を起票し、§1 冒頭の案内を §1-40〜§1-45 まで含む記述に更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -167,6 +167,51 @@
 - **着手**: 着手時は go／no-go の検討から始める。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
 - **関連ファイル**: `engine25/chain25.py`（Retake の音声の取り込み・`retake_had_audio`・`n_head_a`・`n_tail_a`）、`engine/pipeline/chain_pipeline.py`（`_encode_retake_window`）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2「チェーンの retake（撮り直し）の音声の補足」。
+
+### 1-47. 自己試験の `prefetch_used` が「install の飛ばし」を検出できない可能性（起票：2026-10-01）
+
+- **現象**: `engine25/gguf_transformer.py` の `_selftest` は、各ラウンドの `round_report["prefetch_used"]` を `BlockSwapService.last_prefetch_used`（`engine/transformer/block_swap_service.py`）から読んで記録する。この値を "off" に戻しているのは `install()` の冒頭（`self.last_prefetch_used = "off"`）だけで、ビルドの先頭で呼ばれる `teardown_prefetch()` 自体はこの値を戻さない。もし `ensure_block_swap_installed` が（ブロックに前のビルドの印が残っていることを理由に）`install()` を飛ばしたラウンドがあれば、`last_prefetch_used` は前のラウンドの値（"on"）をそのまま読んでしまい、ラウンドごとの判定 `prefetch_every_round_engaged` も、ジョブ全体の判定 `block_swap_prefetch_verdict` も "on" のまま変わらないと見られる（`_prefetch_builds` の集計自体が「install を飛ばしたビルド」を数えないため）。
+- **影響**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §75.4(b)「3ラウンド連続・全ラウンドでエコー"on"」は、この欄を「1プロセスにつき1回きり」問題が起きていないことの直接証拠として引用しているが、上の経路が実際には起きていないことまでを確かめた記録ではない。実行して確かめてはいない。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `teardown_prefetch()` でも `last_prefetch_used` を "off" に戻す。
+  - B: 自己試験が `install()` の実際の呼び出し回数を別の変数で数え、ラウンド数と突き合わせる。
+  - C: 現状を維持し、§75.4(b) を「install が飛ばされていないこと」まで証明する記録ではない点を文書に注記する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §75.4(b)・§134（申し送り）。
+- **関連ファイル**: `engine25/gguf_transformer.py`（`_selftest`・`ensure_block_swap_installed`・`block_swap_prefetch_verdict`）、`engine/transformer/block_swap_service.py`（`install`・`teardown_prefetch`・`last_prefetch_used`）。
+
+### 1-48. 画角拡張（Outpainting）で凍結を無効にしたジョブの `source_had_audio`（起票：2026-10-01）
+
+- **現象**: `engine25/outpaint25.py` の `_freeze_source_audio` は、`enabled and source_path` のときだけ元動画の音声を読む。凍結を無効にしたジョブ（`freeze_source_audio=False`）や、元動画の指定が無いジョブはこの分岐に入らないため、`source_had_audio` はファイルに実際の音声があっても常に `False` のまま返る。`run_outpaint` の `metadata.json` の組み立てにある同名の鍵の脇のコメントは、現在の挙動（凍結を無効にすると元動画の音声は読まれないので、ファイルの中身にかかわらず `False` になる）を書いている。書き直す前のコメントは「音声があっても凍結しないことがある（凍結の無効化、または長さ 0 の符号化）」と書いており、元の意図は鍵の名前どおり（音声の有無を表す）だった可能性がある。鍵の名前は「元動画に音声があったか」と読めるため、値の意味と鍵の名前が食い違って見える。§1-46（撮り直しの `source_had_audio`）と同じ型の食い違いである。
+- **影響**: 凍結を無効にして画角拡張したジョブ（または元動画の指定が無いジョブ）のメタデータだけで発生する。生成物（映像・音声）には影響しない。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 凍結を無効にした場合も、音声ストリームの有無だけを別途調べて書く。
+  - B: 鍵の意味を「凍結のために読んだ音声があったか」だと文書で定め、現状の値を契約とする。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §134（申し送り）。
+- **関連ファイル**: `engine25/outpaint25.py`（`_freeze_source_audio`・`FrozenSourceAudio.source_had_audio`・`run_outpaint` の `metadata.json` 組み立て）。
+
+### 1-49. `cross_attention_modules` に呼び出し元が無い（起票：2026-10-01）
+
+- **現象**: `engine25/neg_prompt25.py` の `cross_attention_modules` は、docstring で「`engine25.neg_selfcheck25`（とその先の利用者）のための、selfcheck 用の公開の別名」と説明している。ところが `engine25/neg_selfcheck25.py` は、2.3 側の private な走査関数へ直接触れず自前の期待値を attn2 自身から組み立てる設計のため、`engine25.neg_prompt25` からの import にこの関数を含めていない。リポジトリ全体を見ても呼び出し元は無い。
+- **影響**: 無い（未使用の公開関数が残っているだけで、動作には影響しない）。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 消す。
+  - B: docstring どおり selfcheck で使う配線を足す。
+- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §134（申し送り）。
+- **関連ファイル**: `engine25/neg_prompt25.py`（`cross_attention_modules`）、`engine25/neg_selfcheck25.py`。
+
+### 1-50. 効かない設定 `model_configurator=LTXModelConfigurator`（起票：2026-10-01）
+
+- **現象**: `engine25/gguf_transformer.py` の `build_quantization_policy`（GGUF 経路）と `Ltx25DiffusionStage.from_safetensors` が組み立てる `QuantizationPolicy(...)`（量子化済み safetensors 経路）は、どちらも `model_configurator=LTXModelConfigurator` を持たせている。`build_quantization_policy` 自身の docstring が明記するとおり、上流 `ltx_core` でこの値を読むのは `DiffusionStage.from_checkpoint` だけであり、本エンジンのどちらの経路もこのメソッドを通らず、`Ltx25CpuModelBuilder` に `model_class_configurator=LTXModelConfigurator` を直接渡す形で組み立てている。そのため `QuantizationPolicy` 側の `model_configurator` は実際には一度も読まれない。
+- **影響**: 無い（効かない設定が重複して残っているだけ）。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `QuantizationPolicy` から `model_configurator` 引数を外す。
+  - B: 現状を維持する。
+- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §134（申し送り）。
+- **関連ファイル**: `engine25/gguf_transformer.py`（`build_quantization_policy`・`Ltx25DiffusionStage.from_safetensors` の `QuantizationPolicy(...)`・`Ltx25CpuModelBuilder`）。
 
 ---
 

@@ -1,4 +1,4 @@
-"""LTX 2.5 text encoder: Gemma 4 unified from GGUF, with layer offload (§3-98 Phase 2c).
+"""LTX 2.5 text encoder: Gemma 4 unified from GGUF, with layer offload.
 
 The 2.5 text encoder is a 12B Gemma 4 "unified" model plus the two aggregate
 projections that turn its 49 hidden-state layers into the transformer's video and
@@ -8,14 +8,14 @@ pipeline.
 
 Four parts, in the order they matter:
 
-1. Assets, not weights (F2) -- :mod:`engine25.assets_export`
+1. Assets, not weights -- :mod:`engine25.assets_export`
    ``PromptEncoder`` reads the tokenizer / processor / HF config from
    ``text_encoder_path`` through ``GemmaAssets.load``, which only accepts a
-   directory or a ``.safetensors``. So engine25 exports a ~31 MB assets-only
+   directory or a ``.safetensors``. So engine25 exports a small assets-only
    ``.safetensors`` from the GGUF's own sidecars and points the official code at
    that. Nothing in ``ltx_core`` is patched to make the assets work.
 
-2. Key mapping (E, verified against the real model)
+2. Key mapping (verified against the real model)
    The converter wrote the TE in ComfyUI's flattened layout (``model.layers.*``,
    ``vision_model.*``, ``multi_modal_projector.*``, ``audio_projector.*``). The
    official probe that picks between HF and Comfy layouts,
@@ -43,7 +43,7 @@ Four parts, in the order they matter:
    file), and transformers' own RMSNorm applies ``1 + w`` at runtime. Folding
    twice would silently shift every normalisation in the model.
 
-4. The aggregate projections (L)
+4. The aggregate projections
    ``FeatureExtractorV2`` holds two enormous ``nn.Linear``s -- 4096x188160 and
    2048x188160, i.e. 1.54 GiB and 0.77 GiB *dequantised*. Naive per-layer dequant
    materialises the whole weight, and the eager Q6_K kernel needs roughly a dozen
@@ -65,27 +65,26 @@ Four parts, in the order they matter:
    size are bit-identical to each other, across both re-encode and full
    dispose/rebuild cycles.
 
-Notes for Phase 2d
-------------------
+Notes for callers
+-----------------
 * :func:`build_text_encoder_builder` returns something ``PromptEncoder`` accepts
   as ``text_encoder_builder=``; it builds on CPU and places itself, because
   ``gpu_model`` only disposes, it never moves anything to the GPU.
 * ``model_config()`` on that builder reports ``model_type="gemma4_unified"``
   straight out of the GGUF KV, which is what ``PromptEncoder`` checks first.
-* The ``ProcessorLoad`` module op is **off by default**. Building a
-  ``Gemma4UnifiedProcessor`` imports ``torchvision``, which this venv does not
-  have; the processor is only used by prompt *enhancement*, which is out of v1
-  scope. Pass ``include_processor=True`` (and install torchvision) if enhance is
-  ever brought in.
+* The ``ProcessorLoad`` module op is built only when ``include_processor=True``
+  is passed. Building a ``Gemma4UnifiedProcessor`` imports ``torchvision``, and
+  the processor serves prompt *enhancement*, which engine25 does not enable.
+  Pass ``include_processor=True`` if enhance is ever brought in.
 
-Selftest (gate G3)::
+Selftest (recorded in VERIFICATION_LOG §69.5)::
 
     python -m engine25.gguf_gemma4 --selftest <te.gguf> \
         --transformer-gguf <transformer.gguf> --official-te <official bf16 .safetensors>
 
-encodes three prompts (short / long / Japanese-mixed), repeats one to prove
-bit-identical output, reconciles the GGUF key set against a meta-device build of
-the real model, asserts the 48-layer / 5-sliding-1-full attention pattern, and
+encodes three prompts (short / long / Japanese-mixed), encodes them again to
+prove bit-identical output, reconciles the GGUF key set against a meta-device
+build of the real model, asserts the 5-sliding-1-full attention pattern, and
 reports per-phase VRAM and RSS peaks as JSON.
 """
 
@@ -103,16 +102,16 @@ from typing import Any
 
 import torch
 
-# --- 2.3 engine reuse (import only; those modules are never edited) ----------
+# --- 2.3 engine reuse (import only; shared with 2.3, not copied) -------------
 # NOTE: `engine.gemma.gguf_quant_service` is the Gemma *3* loader and folds
-# RMSNorm's `1 + w`. It must not appear in this file -- see part 4 above.
+# RMSNorm's `1 + w`. It must not appear in this file -- see part 3 above.
 from engine.gguf.quant_service import (
     GGMLQuantizedTensor,
     _patch_linear_for_ggml_dequant,
     _patch_model_for_ggml_dequant,
     dequantize_ggml_tensor,
 )
-# Quantized (fp8 / int8) safetensors transformer (§3-167 B-2, §3-168): its connectors, in bf16.
+# Quantized (fp8 / int8) safetensors transformer: its connectors, in bf16.
 import sft_quant_format
 from engine.sft_quant.quant_service import load_connector_bf16
 
@@ -152,8 +151,9 @@ logger = logging.getLogger(__name__)
 
 _CPU = torch.device("cpu")
 
-#: Name of the official ``ModuleOps`` that builds the HF processor. Skipped by
-#: default (torchvision; enhance is out of v1 scope) -- see the module docstring.
+#: Name of the official ``ModuleOps`` that builds the HF processor. Skipped
+#: unless ``include_processor=True`` (it serves prompt enhancement, which
+#: engine25 does not enable) -- see the module docstring.
 PROCESSOR_MODULE_OP = "ProcessorLoad"
 
 #: Dotted path from ``LTXGemmaTextEncoder`` down to the decoder-layer list. Also
@@ -189,17 +189,18 @@ class Ltx25GemmaError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
-# 1. State-dict loading across the two GGUFs
+# 1. State-dict loading across the text-encoder GGUF and the transformer file
 # ---------------------------------------------------------------------------
 
 
 class Ltx25SftConnectorLoader:
-    """The connector half of a quantized safetensors transformer, as a part loader (§3-167 B-2, §3-168).
+    """The connector half of a quantized safetensors transformer, as a part loader.
 
     Returns ONLY the ``*_embeddings_connector.*`` tensors, in bf16 and without the
     file's prefix (``load_connector_bf16``), put through the ``sd_ops`` it is handed
     the same way :class:`Ltx25GgufStateDictLoader` does. The metadata is the whole
-    ``__metadata__`` JSON-parsed per value (ltx_core 1.2's shape), parsed once.
+    ``__metadata__`` JSON-parsed per value (``sft_quant_format.parse_metadata``, the
+    official safetensors loader's shape), parsed once.
     """
 
     def __init__(self, path: str) -> None:
@@ -238,16 +239,16 @@ class Ltx25SftConnectorLoader:
 
 
 class Ltx25MultiGgufStateDictLoader:
-    """``StateDictLoader`` that merges several GGUFs into one state dict.
+    """``StateDictLoader`` that merges several weight files into one state dict.
 
     The EmbeddingsProcessor is the only consumer that needs it, and it needs it
     because its weights are genuinely split: the two aggregate projections live
-    in the text-encoder GGUF, the 258 connector tensors in the transformer GGUF.
+    in the text-encoder GGUF, the connector tensors in the transformer file.
     That is the same split the official code handles with
     ``ModelPaths.embeddings_weight_paths``.
 
     Metadata comes from the FIRST path, matching ``read_model_metadata``. Order
-    therefore matters: the transformer GGUF must come first, because
+    therefore matters: the transformer file must come first, because
     ``EmbeddingsProcessorConfigurator`` reads ``config.transformer`` and
     ``gemma_source_checkpoint`` from it.
 
@@ -255,7 +256,7 @@ class Ltx25MultiGgufStateDictLoader:
     reimplemented, so the dtype handling, the ``copy=True`` defence against
     aliasing a closed memmap, and the ``Ltx25GGMLTensor`` wrapping all stay in
     one place. A quantized (fp8 / int8) ``.safetensors`` transformer is read by
-    :class:`Ltx25SftConnectorLoader` instead (§3-167 B-2); the part loader is
+    :class:`Ltx25SftConnectorLoader` instead; the part loader is
     chosen by the file's extension.
     """
 
@@ -302,7 +303,7 @@ class Ltx25MultiGgufStateDictLoader:
 
 
 def build_text_encoder_sd_ops() -> SDOps:
-    """The official Gemma 4 unified key map, pinned to the Comfy-flat layout (E).
+    """The official Gemma 4 unified key map, pinned to the Comfy-flat layout.
 
     ``get_gemma_ops`` would pick the layout by probing the weight file, and the
     weight file it probes is the assets-only export -- which has no weights, so
@@ -433,8 +434,8 @@ def build_text_encoder_module_ops(
     kept = tuple(op for op in official_ops if include_processor or op.name != PROCESSOR_MODULE_OP)
     if len(kept) != len(official_ops):
         logger.info(
-            "skipping the %s module op: the HF processor needs torchvision and is only used by "
-            "prompt enhancement, which is out of the v1 scope",
+            "skipping the %s module op: the HF processor is only used by "
+            "prompt enhancement, which this engine does not run",
             PROCESSOR_MODULE_OP,
         )
     if not kept:
@@ -457,7 +458,10 @@ def build_embeddings_processor_module_ops(
     chunk_elements: int = AGGREGATE_CHUNK_ELEMENTS,
     threshold: int = CHUNKED_FORWARD_THRESHOLD,
 ) -> tuple[ModuleOps, ...]:
-    """The dequant patch for the EmbeddingsProcessor, with chunked aggregates (L)."""
+    """The dequant patch for the EmbeddingsProcessor, with chunked aggregates.
+
+    The chunking is described in the module docstring, part 4.
+    """
     return (
         ModuleOps(
             name="ltx25_embeddings_ggml_per_layer_dequant",
@@ -488,7 +492,7 @@ def language_model_layers_of(model: torch.nn.Module) -> torch.nn.ModuleList:
 
 
 def assert_layer_pattern(model: torch.nn.Module) -> dict[str, Any]:
-    """Assert 48 layers and the 5-sliding / 1-full interleave, and report it.
+    """Assert a consistent layer count and the 5-sliding / 1-full interleave.
 
     ``full_attention`` layers use a wider head dimension (``global_head_dim``
     512 vs 256) and "proportional" RoPE instead of "default", so a shifted
@@ -673,7 +677,7 @@ class Ltx25GemmaBuilder(Ltx25CpuModelBuilder):
 
 
 def resolve_assets_path(te_gguf: str | Path, assets_path: str | Path | None = None) -> Path:
-    """The assets-only file for *te_gguf*, exported if missing or stale (F2)."""
+    """The assets-only file for *te_gguf*, exported if missing or stale."""
     if assets_path is not None:
         target = Path(assets_path)
         if not target.is_file():
@@ -697,7 +701,8 @@ def build_text_encoder_builder(
     ``cache_weights`` defaults to False, unlike the transformer's. The text
     encoder is built once per job and disposed before the diffusion stages start,
     so there is no mid-job rebuild to protect against -- and retaining its state
-    dict would add 9.2 GB of resident RAM on top of the transformer's 14.7 GB.
+    dict would add several GiB of resident RAM on top of the transformer's cached
+    weights (measured in VERIFICATION_LOG §76).
     """
     te_gguf = str(te_gguf)
     if not Path(te_gguf).is_file():
@@ -729,14 +734,16 @@ def build_embeddings_processor_builder(
     cache_weights: bool = False,
     chunk_elements: int = AGGREGATE_CHUNK_ELEMENTS,
 ) -> Ltx25CpuModelBuilder:
-    """A builder for the ``EmbeddingsProcessor`` spanning both GGUFs.
+    """A builder for the ``EmbeddingsProcessor`` spanning two weight files.
 
-    The transformer GGUF comes first: it is the file the official
+    The transformer file comes first: it is the file the official
     ``EmbeddingsProcessorConfigurator`` reads ``config.transformer`` and
     ``gemma_source_checkpoint`` from, and ``read_model_metadata`` takes the first
-    path. The text-encoder GGUF supplies only the four
-    ``text_embedding_projection.*`` tensors; everything else in it is filtered out
-    by ``LTX25_EMBEDDINGS_PROCESSOR_KEY_OPS``, and because that filter runs before
+    path. It is a GGUF or a quantized ``.safetensors``;
+    :class:`Ltx25MultiGgufStateDictLoader` picks the part loader by extension.
+    The text-encoder GGUF supplies only the four ``text_embedding_projection.*``
+    tensors; everything else in it is filtered out by
+    ``LTX25_EMBEDDINGS_PROCESSOR_KEY_OPS``, and because that filter runs before
     any tensor data is touched, the 9.2 GB of Gemma weights are never read.
     """
     te_gguf, transformer_gguf = str(te_gguf), str(transformer_gguf)
@@ -758,7 +765,7 @@ def build_embeddings_processor_builder(
 
 
 # ---------------------------------------------------------------------------
-# 5. Key reconciliation (gate G3.2)
+# 5. Key reconciliation (VERIFICATION_LOG §69.5)
 # ---------------------------------------------------------------------------
 
 
@@ -853,13 +860,13 @@ def compare_with_official_safetensors(gguf_path: str | Path, official_path: str 
 
 
 # ---------------------------------------------------------------------------
-# 6. Selftest (gate G3)
+# 6. Selftest (VERIFICATION_LOG §69.5)
 # ---------------------------------------------------------------------------
 
 #: Short / long / Japanese-mixed. The third is the one that matters most: the
-#: tokenizer is the only piece rebuilt from a sidecar rather than a real file, so
-#: a multi-byte prompt is what proves the 32 MB tokenizer_json survived the round
-#: trip through the GGUF and back out of the assets export.
+#: tokenizer is rebuilt from a sidecar rather than read from a real file, so
+#: a multi-byte prompt is what proves the tokenizer_json survived the round trip
+#: through the GGUF and back out of the assets export.
 SELFTEST_PROMPTS = (
     "A red balloon.",
     (
@@ -943,7 +950,7 @@ def _selftest(  # noqa: PLR0913, PLR0915
         "engine.gemma.gguf_quant_service" not in sys.modules
     )
 
-    # -- assets export (F2) --------------------------------------------------
+    # -- assets export -------------------------------------------------------
     vram.reset()
     started = time.perf_counter()
     export = assets_export.ensure_assets_only(te_gguf)
@@ -951,7 +958,7 @@ def _selftest(  # noqa: PLR0913, PLR0915
     report["assets_export"]["official_loader"] = assets_export.verify_with_official_loader(export.path)
     vram.record("00_assets_export", time.perf_counter() - started)
 
-    # -- key reconciliation (G3.2) ------------------------------------------
+    # -- key reconciliation -------------------------------------------------
     started = time.perf_counter()
     reconcile = reconcile_text_encoder_keys(te_gguf, export.path)
     report["reconcile"] = reconcile
@@ -1043,7 +1050,7 @@ def _selftest(  # noqa: PLR0913, PLR0915
         cleanup_memory()
         vram.record(f"{index:02d}d_te_dispose", time.perf_counter() - started)
 
-        # -- EmbeddingsProcessor (aggregate projections; gate L) -------------
+        # -- EmbeddingsProcessor (aggregate projections) ---------------------
         if embeddings_builder is not None:
             vram.reset()
             started = time.perf_counter()

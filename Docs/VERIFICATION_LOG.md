@@ -9532,6 +9532,8 @@ B7の接合位置J=47では、音声RMS比が 0.2側・0.8側とも **8.5066** �
 
 **`uninstall` はテンソルに一切触れず、例外も投げない。** これはビルド経路の最初に走り、そのとき殻は `Disposable.dispose()` を通過済み＝全パラメータが `device="meta"` のテンソルになっている（演算を投げると `NotImplementedError` になる）。**この規律は `Ltx25DiffusionStage._unpatch_block_swap` が大文字で書いているものと同一で、「きれいにするため」に `.cpu()` や `empty_cache()` を足してはいけない。**
 
+> **訂正（§134）**: `uninstall` が呼ばれるのは `build()` が重みを読み込んだ後で、そのとき殻は読み込み済みである（殻が meta になるのはビルドとビルドの間だけ）。詳細は §134。
+
 **剥がした枚数が0でないことは、欠陥ではなく正常である。** 常駐ワーカーでネガティブプロンプト付きのジョブが2本続けば、2本目のビルドは1本目の96枚を見つける。だから **INFO** で記録する（ERROR ではない）。
 
 **`install` 側に残した `"forward" in __dict__` の検査は、不変条件のガードである。** 出荷経路では直前に無条件 `uninstall` が走るので**構造的に到達しない**——これは直接呼び出しの誤用（将来のリファクタリング、ライブラリとしての利用）を捕まえるためのもので、`neg_selfcheck25` の検査9がその発火を証明している。**「sage とは意図的に分岐させる」という当初案は撤回した**（S1）。
@@ -14745,5 +14747,67 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 4. `engine/`（LTX 2.3）側の同型の古い記述（`engine/worker.py`・`chain_pipeline.py`・`sage_attention_service.py`・`block_swap_prefetch.py`）。
 5. `tests/test_ltx25_band.py` の docstring の段階名（テストは対象外）。
 6. 事実表 A-52 の `end_audio_status` の値域に `"frozen"`／`"partial"` が無い。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 134. ★コード内コメントの現行化・第 4 区域 `engine25/` 第 2 回（B）＝残り 10 ファイル（`outpaint25.py`・`inpaint25.py`・`gguf_transformer.py`・`gguf_gemma4.py`・`ltxcore_compat.py`・`reference25.py`・`neg_prompt25.py`・`sage_selfcheck25.py`・`neg_selfcheck25.py`・`assets_export.py`）の 525 ブロック中 132 を現行化（コメントのみ・動作は不変）＋利用者やログに出る文字列 6 件＋台帳 §1-47〜§1-50＋ §80.2 の訂正＝ `engine25/` 全体の現行化が完了（2026-10-01）
+
+**要約**: §133（A）に続き、`engine25/` の残り 10 ファイル（9,365 行）を第 2 回（B）として進めました。オーナー指示でファイルは分割せず一括で扱いました。525 ブロックのうち 132 ブロック（事実が古いもの 90・導入時期の記録だけのもの 42）を書き換え、コードは1文字も変わっていないことを構文木で確かめました。あわせて利用者やログに出る文字列 6 件をオーナーが文面を決めて反映し、コードの問題の疑い 4 件を台帳 §1-47〜§1-50 に起票しました。検算の過程で、§80.2 の「`uninstall` はビルド経路の最初に走り、そのとき殻は meta になっている」という記述が、コードの実際の呼び出し順と逆であることが分かり、§80.2 に訂正を1行足しました（本文そのものは書き換えていません）。これで `engine25/` 全体の現行化が完了しました。
+
+**目的**: 骨格は §133（A）と同じです（関数・メソッド・クラスの境目で区域を切り、Opus が全件を判定し、別の Opus が検算する）。判定担当への指示（v5）に「A で決まった扱い」の節を1つ足しました。
+- 研究段階の事実番号「fact B／F1／F2／E／L」は Docs に定義が無いので、参照している側からも落とす。
+- 検証の関門の名前は、段・テーマごとに別の節を指す。
+- 上流の定数の書き写し「8 + 3」は `ltxcore_compat.verify()` か定数名を指す形にする。
+- bf16 の書き写しは `DTYPE` か実際の dtype の式を指す形にする。
+- 裁定の帰属は残し、日付と段階名だけを落とす。
+- 上流 1.2.0 との違いは版番号を書かず、固定先の版（`$ltx25DirectPins`）の言い方にする。
+- 行番号の書き写しは関数名を指す形にする。
+- 撮り直しの音声の補足は仕様書 §6.2 を指す。
+- `inspect.getsource` が頼る目印（needle）を壊さない——`run_inpaint` の中のコメントに「inpaint crop:」「restore_and_measure_(」を書かない、`run_outpaint` の中のコメントに `def _encode_reference(`・`def _reencode(` を書かない。
+
+**対象**: `engine25/` の残り 10 ファイル・9,365 行・525 ブロック。起点コミットは §133 と同じ `444c8dc`（A のコミット。B の対象ファイルは A では変わっていません）。
+
+**方法**:
+1. **抜き出し・区域分け**: 22 区域へ切りました（最大 642 行・50 ブロック＝`ltxcore_compat.verify` の前半で切れる区域があります）。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 22 区域それぞれに Opus 1 体を判定担当として走らせました。
+3. **検算（Opus 5 体）**: 240 ブロックを確かめました。確認済み 233・異論 3・一部だけ直した 1・見逃し 3 です（GT-073・NP-023・NS-025。判定担当が保留にしていたもので、検算担当が根拠を確かめて文面を確定しました）。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 34 件を直しました（「uninstall は meta の殻に走る」という記述 5 箇所を「読み込み後に呼ばれる。殻が meta になるのはビルドの間だけ」に統一・上流の版の言い換えの統一・「~32 MB」は §69.8 を指す形に統一・行の折り返し、が主な内容です）。続く再検算 58 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 132 件の差し替えを適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**: 変えたのは 132 件（事実が古いもの 90・導入時期の記録だけのもの 42）、現行のまま 393 件でした。古いままの割合は 25%で、A の 34%より低くなりました。
+
+**監督の裁定（オーナー確認済み）**: 判定担当は「古くなったのではなく、書かれた当初からコードと合わない文」を参考に留めていましたが、目的は現在の仕様との食い違いを無くすことなので、**コードの挙動や理由についての誤った主張は、書かれた時期にかかわらず (c) として直す**と定めました。該当は 14 件です（GG-001・GG-031・GG-049・GT-008・GT-016・GT-040・GT-051・LC-014・LC-045・LC-061・NP-001・NP-019・NP-021・RF-023）。例えば「48 層を検める」と書くコメントがありますが、コードが検めているのは層数の一致と並びだけです。「`Audio.to` が唯一の cast」と書くコメントもありますが、上流は mel の出力にも dtype を当てています。「check 6」と書きながら実際には check 9 を指していた例もありました。単位・数え方・言い回しだけの軽い不正確さ（例えば「385 MiB」の単位の違い）は参考に留めました。この裁定は後の区域にも適用します。
+
+**証明**: 10 ファイルとも、docstring を除いた構文木が起点と一致しました。コメントと docstring 以外のトークン列の差は、オーナーが文面を決めた文字列 6 件だけです。
+- `outpaint25.py`: `_encode_reference_conditionings`・`_reencode_stage2` のログ 3 文から、Inpainting のジョブでも「outpaint」と名乗っていた接頭辞を外しました。
+- 同ファイルの `_require_frames` の例外文は「pad_green_mp4」から「The canvas writer must honour the exact-frame-count guarantee.」に変えました。
+- 同ファイルの `_freeze_source_audio` の警告は「widened frame」を「edited frame」に変えました（`_mux_plan` の docstring も同じ語に揃えました）。
+- `gguf_gemma4.py` の `build_text_encoder_module_ops` のログからは、段階名「v1 scope」と「needs torchvision」を外し、「which this engine does not run」に変えました。
+
+`ltxcore_compat.py` の `_fail(...)` の検査失敗文に含まれる上流の版番号は、オーナー裁定で据え置きました（固定した版との違いを報告するのが役目のためです）。改行コードは各ファイルの元の形式を維持しました（CRLF 7・LF 3。`reference25.py`・`sage_selfcheck25.py`・`assets_export.py` は元から LF でした）。
+
+**テスト**: `tests/test_ltx25_band.py`・`test_ltx25_outpaint.py`・`test_ltx25_inpaint.py`・`test_ltx25_reference_encode.py`・`test_ltx25_keep_resident_registry.py` を `.venv-engine-ltx25`（`outputs/start-end-bridge-2026-09-07/implA_engine_runner/run_ltx25_pytest.py`・`--noconftest`。GPU での生成はしていません）で 110 件合格しました。アプリ側 `.venv` で `tests/test_ltx25_adapter.py`・`test_ltx25_api_guard.py` を 265 件合格しました。
+
+**台帳**: コードの問題の疑いを 4 件、§1-47〜§1-50 に起票しました（着手は個別に go／no-go の検討からです）。
+
+**§80.2 の訂正**: §80.2「(2) 取り付けと取り外し」は、NAG／VSF の `uninstall` が「ビルド経路の最初に走り、そのとき殻は `Disposable.dispose()` を通過済み＝全パラメータが `device="meta"`」と書いています。しかしコードでは `_build_transformer` が `_ensure_neg_installed`（`uninstall` を含みます）を `build()`・`_place_transformer`・`_ensure_sage_installed` の後、最後に呼んでいます。つまり `uninstall` が呼ばれる時点で殻は読み込み済みで、殻が meta になるのはビルドとビルドの間だけです。コメント側（`gguf_transformer.py`・`neg_prompt25.py`・`neg_selfcheck25.py`・`sage_selfcheck25.py` の 5 箇所）はコードに合わせて直しました。§80.2 の本文そのものは書き換えず、本節で訂正します（§78.7 を §78.13 で訂正したのと同じ形です）。
+
+**敵対的レビュー**（Opus・(b)／(c) 89 ブロック全件＋抜き取り）:
+- **直すべき 1 件**: 台帳 §1-48 の「意図して書かれた挙動」の根拠が、今回書き直したコメントで、しかも場所が違っていたため訂正しました。
+- **注意 6 件**: 採用 4 件はこちらです——GT-091 の「only」の言い切りを外した／`gguf_gemma4.py` の見出し「never edited」を GT-002 と揃えた／IP-013 の「future MCP tool」を OP-053 と揃えた／RF-022 に据え置きの理由（出力をバイト同一に保つ・§101.2）を戻した。残り 2 件は、§134 を本節として書き起こすことと、`engine/` 側の同型の記述を申し送りに回すことで答えました。
+- **参考 3 件**: 参照なしの警告にジョブの種類が出なくなった点（オーナー決定の文面）・改行コードの表現・`ltxcore_compat` の docstring の番号です。
+
+**費用の目安**（Opus のトークン、概算）: 判定 約 356 万・検算 約 106 万・揃え 約 43 万・レビュー 約 31 万・反映と修正 約 19 万でした。A と合わせて `engine25/` 全体で約 1,030 万となり、計画の見込み（約 1,200 万）の範囲内でした。
+
+**申し送り**（後の区域へ）:
+1. `engine/transformer/sage_attention_service.py` の `SageAttentionService.uninstall` の docstring は「ビルド経路の最初に走る」「meta の殻に対して」と、今回直した 5 箇所と逆のことを言っています（`engine/` の回で同じ形に直します）。
+2. `engine/transformer/block_swap_service.py`・`block_swap_prefetch.py`・`sage_attention_service.py` が `engine25/gguf_transformer.py` を行番号で指していますが、ずれています。
+3. `engine/` 側の「byte-identical to before」「Phase B」「§1-15」など、同型の古い記述。
+4. `engine/pipeline/chain_pipeline.py` の Retake の音声の裁定の出典が §55.6 になっていますが、仕様書 §6.2 を指すべきです。
+5. `tests/test_ltx25_band.py`・`test_ltx25_reference_encode.py` の docstring の段階名（テストは対象外）。
+6. `config.py` の「conservative v1 cap」。
+7. 事実表 A-52 の `end_audio_status` の値域。
 
 候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。

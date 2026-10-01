@@ -1,4 +1,4 @@
-"""Inpainting for LTX 2.5 (台帳 §3-150): repaint a masked region, two stages.
+"""Inpainting for LTX 2.5: repaint a masked region, two stages.
 
 What this is
 ------------
@@ -29,17 +29,17 @@ band AROUND the footage; inpainting repaints a region INSIDE it.
       -> mux the source window's ORIGINAL waveform -> one mp4.
 
 Design canon: ``Docs/INPAINTING_DESIGN.md`` (§6 is the mask contract, §7 the
-procedure). The PROCEDURE is 2.3's, which gate G6 validated on
-``engine/pipeline/inpaint_pipeline.py``; the CODE is not, because 2.5 drives
-official 1.2.0 blocks (``prompt_encoder`` / ``audio_conditioner`` /
-``image_conditioner`` / ``stage`` / ``video_decoder`` / ``audio_decoder``)
-instead of a ``ModelLedger``.
+procedure). The PROCEDURE is 2.3's, which the real-GPU gate validated on
+``engine/pipeline/inpaint_pipeline.py`` (VERIFICATION_LOG §105.7); the CODE
+is not, because 2.5 drives the official pipeline's blocks (``prompt_encoder``
+/ ``audio_conditioner`` / ``image_conditioner`` / ``stage`` /
+``video_decoder`` / ``audio_decoder``) instead of a ``ModelLedger``.
 
 WHAT IS BORROWED, AND WHY NOTHING IS COPIED
 -------------------------------------------
-This module defines exactly TWO things of its own -- the mask decode and the
-result class -- and imports everything else. Each borrowing says what a second
-copy would cost:
+Besides :func:`run_inpaint`, this module defines the mask decode, the result
+class and the error class of its own, and imports everything else. Each
+borrowing says what a second copy would cost:
 
 * ``engine.inpaint.canvas`` (``InpaintGeometry`` / ``place_mask_on_canvas`` /
   ``half_res_mask`` / ``fill_pad_bands_with_generated_`` /
@@ -54,9 +54,9 @@ copy would cost:
   implementation would be a second set of seams to gate.
 * :mod:`engine25.outpaint25`'s twenty-odd helpers -- the pixel boundaries, the
   audio freeze and its proof, the mux plan, the reference encode, the stage-2
-  re-encode and the ``ltx25`` sub-dict. Those six in particular were lifted out
-  of ``run_outpaint`` INTO module scope for this driver to call (see that
-  module's own §"The two ImageConditioner calls"), because each is either a
+  re-encode and the ``ltx25`` sub-dict. Six of them sit at that module's top
+  level for this driver to call (see that module's own §"The two
+  ImageConditioner calls"), because each is either a
   MEASURED path (the ``channels_last_3d`` re-layout: 27188 MB -> 6174 MB) or a
   user-visible CONTRACT (the ``ltx25`` sub-dict lands in ``metadata.json``
   verbatim). A copy of either would be a second answer to one question.
@@ -68,13 +68,14 @@ What this module OWNS
 ---------------------
 * :func:`_decode_mask_u8` -- 2.3's ``engine.pipeline.common.decode_mask_video``
   cannot be imported here: that module is bound to 2.3's wheel at import time
-  (``ltx_core`` names that differ in 1.2.0) and its decoder is
+  (``ltx_core`` names that differ in the pinned upstream, ``$ltx25DirectPins``
+  in ``scripts/install_ltx.ps1``) and its decoder is
   ``decode_video_from_file``, whose signature is not the one
-  :mod:`engine25.ltxcore_compat` re-exports. The CONTRACT is identical, line for
-  line, and the two decoders yield the same ``(1, H, W, C)`` uint8 RGB frame, so
-  the same "red channel >= 128" produces the same plane. ``tests/
-  test_ltx25_inpaint.py`` rounds an H.264 mask through this one and holds it
-  against that contract.
+  :mod:`engine25.ltxcore_compat` re-exports. The CONTRACT is identical, line
+  for line, and the two decoders yield the same ``(1, H, W, C)`` uint8 RGB
+  frame, so the same "red channel >= 128" produces the same plane.
+  ``tests/test_ltx25_inpaint.py`` rounds an H.264 mask through this one and
+  holds it against that contract.
 * :class:`InpaintResult` -- :class:`~engine25.outpaint25.OutpaintResult` with
   one ``ClassVar`` changed, so ``as_dict``'s additive key is named for THIS job
   kind. Nothing else differs, which is why it is a subclass rather than a twin.
@@ -229,7 +230,8 @@ def _decode_mask_u8(
     The 2.5 twin of ``engine.pipeline.common.decode_mask_video``, and
     deliberately its sibling rather than a call into it: that module binds 2.3's
     wheel at import time and reaches for ``decode_video_from_file``, whose
-    signature differs in 1.2.0. What this DOES call is the one decoder
+    signature differs in the pinned upstream (``$ltx25DirectPins`` in
+    ``scripts/install_ltx.ps1``). What this DOES call is the one decoder
     :mod:`engine25.ltxcore_compat` re-exports, which yields the same
     ``(1, H, W, C)`` uint8 RGB frame (``frame.to_rgb().to_ndarray()``) -- so the
     same red-channel rule produces the same plane, which
@@ -310,10 +312,9 @@ class InpaintResult(OutpaintResult):
 
     :class:`~engine25.outpaint25.OutpaintResult` with ONE thing changed: the
     name ``as_dict`` gives its single additive key. Everything the worker's
-    ``done`` builder reads -- the eight attributes by name, plus
-    ``as_dict()`` for the ``GENERATE_REPORT`` line -- is inherited unchanged, so
-    the worker needs no branch and the app still finds ``peak_vram_mb`` for the
-    job-VRAM gate.
+    ``done`` builder reads -- the attributes it names, plus ``as_dict()`` for
+    the ``GENERATE_REPORT`` line -- is inherited unchanged, so the worker needs
+    no branch and the app still finds ``peak_vram_mb`` for the job-VRAM gate.
 
     A SUBCLASS rather than a twin dataclass, and ``_JOB_KEY`` a ``ClassVar``
     rather than a field, because a ``ClassVar`` is not a dataclass field: the
@@ -368,11 +369,11 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
     ``canvas_path`` is the lossless, video-only canvas built by
     ``services.video_io.fill_mask_green_mp4``: the cut window with the mask's
     white region painted #66FF00 and the right/bottom bands padded out to the
-    128-multiple canvas. ``ic_reference`` points at that SAME file (the app
-    substitutes it for the uploaded reference, so the IC-LoRA plumbing needs no
-    changes at all). ``source_path`` is the CUT WINDOW -- the same footage the
-    canvas was built from, still carrying the audio the canvas deliberately does
-    not.
+    canvas grid (``CANVAS_MULTIPLE``). ``ic_reference`` points at that SAME
+    file (the app substitutes it for the uploaded reference, so the IC-LoRA
+    plumbing needs no changes at all). ``source_path`` is the CUT WINDOW -- the
+    same footage the canvas was built from, still carrying the audio the canvas
+    deliberately does not.
 
     ``mask_path`` is the uploaded mask video at the SOURCE resolution. It is
     decoded here rather than read off the canvas because the blend needs the
@@ -387,11 +388,11 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
     the mask both cover.
 
     ``num_steps`` is carried and reported but never acted on, exactly as in
-    outpainting and in the chain: the distilled schedule is fixed at 8 + 3
-    sigmas, and stage 2's is further fixed at
-    :data:`~engine25.outpaint25.OUTPAINT_STAGE2_SIGMAS` -- the SAME schedule,
-    imported rather than restated, because the two features start stage 2 from
-    the same kind of re-encode.
+    outpainting and in the chain: the distilled schedule is fixed
+    (``ltxcore_compat.verify()`` checks its shape at start-up), and stage 2's
+    is further fixed at :data:`~engine25.outpaint25.OUTPAINT_STAGE2_SIGMAS` --
+    the SAME schedule, imported rather than restated, because the two features
+    start stage 2 from the same kind of re-encode.
 
     ``stage2_sigmas`` is an ENGINE-INTERNAL experiment knob, not a request
     field. ``None`` -- every real job -- uses that constant.
@@ -400,12 +401,15 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
     result, so the worker's ``done`` builder needs no branch.
     """
     # ── Geometry: the app's rules, restated by the two owners of them ─────────
-    # ``validate_geometry`` is the two-stage pipeline's own backstop (multiples
-    # of 64, 8n+1 frames) and ``geometry.validate()`` is the canvas module's
-    # (multiples of 128, an even source, a source no smaller than 256 a side).
+    # ``validate_geometry`` is the two-stage pipeline's own backstop
+    # (``RESOLUTION_DIVISOR`` sides, the ``FRAME_GRID`` frame count) and
+    # ``geometry.validate()`` is the canvas module's (``CANVAS_MULTIPLE``
+    # sides, an even source, a source no smaller than
+    # ``INPAINT_MIN_SOURCE_SIDE`` a side).
     # BOTH, because they check different things and each is the last line of
-    # defence for its own: a payload that reached the engine another way -- the
-    # selftest CLI, a future MCP tool -- has passed neither.
+    # defence for its own: a call that reached this function without the app's
+    # validation -- a direct call from a test or a gate driver -- has passed
+    # neither.
     width = int(geometry.canvas_width)
     height = int(geometry.canvas_height)
     validate_geometry(width, height, int(num_frames))
@@ -550,7 +554,7 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
 
         # NO ``outer_index`` / ``outer_total``: inpainting is one clip, so the
         # per-step events go out as THREE POSITIONAL ARGUMENTS and a receiver
-        # written for a single generation is unchanged.
+        # written for a single generation reads them with no special case.
         stage.announce(STAGE_1_DENOISE, vram_phase="21_stage1_denoise")
         vstate, astate = stage(
             denoiser=SimpleDenoiser(video_ctx, audio_ctx),
@@ -811,7 +815,7 @@ def run_inpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it
         # the mask the canvas IS the source window (that is what
         # ``fill_mask_green_mp4`` writes), which is why the source does not have
         # to be decoded separately here. The pad bands come back green and are
-        # cropped off two steps later.
+        # cropped off by the CROP step right after this one.
         #
         # ITS OWN VRAM PHASE, numbered above the blends because it is a new
         # measurement this driver adds and ``30_decode_encode`` already names

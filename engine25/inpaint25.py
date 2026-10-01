@@ -259,8 +259,10 @@ def _decode_mask_u8(
       every edge; ``threshold`` is what turns that ring back into a decision.
 
     The RED channel is taken and the other two dropped: for a genuinely grey
-    mask all three are equal, and for one that somehow is not, red is the
-    channel ``video_io.fill_mask_green_mp4``'s ``lut`` reads too.
+    mask all three are equal. (The ``lut`` in ``video_io.fill_mask_green_mp4``
+    thresholds the mask after ``format=gray``, i.e. on luma rather than on
+    red, so for a mask that is not grey the two sides can binarise
+    differently.)
 
     ``num_frames`` is both the decode cap and an assertion. A short mask would
     silently leave the tail of the window unrepainted, so a shortfall raises --

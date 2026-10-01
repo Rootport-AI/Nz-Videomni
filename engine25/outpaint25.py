@@ -418,8 +418,9 @@ assert {f.name for f in fields(GenerationResult)} <= {f.name for f in fields(Out
 #   (3) the mp4 ENCODER wants float ``[0, 1]`` ``(F, H, W, C)`` -- 2.3's wanted
 #       a materialised uint8 tensor;
 #   (4) a video FILE decodes to ``(1, H, W, C)`` uint8 through
-#       ``decode_video_by_frame``, where 2.3's decoder gave ``(1, C, 1, H, W)``
-#       float ``[0, 255]``.
+#       ``decode_video_by_frame``, as 2.3's ``decode_video_from_file`` did;
+#       ``(1, C, 1, H, W)`` float ``[0, 255]`` is what the
+#       ``resize_and_center_crop`` both versions call next returns.
 #
 # Everything BETWEEN those crossings is uint8, and that is a memory decision,
 # not a style one: a 1920x1152x241 timeline is 1.6 GB as uint8 against 6.4 GB as

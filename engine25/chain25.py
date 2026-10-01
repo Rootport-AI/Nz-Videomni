@@ -2248,9 +2248,9 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         #     slice below is anchored at ``a_total`` and not at ``avail``:
         #     there is no correct narrower band, only a misplaced one.)
         #   * the same shortfall with ``regenerate_audio=False`` -> a WARNING
-        #     and no audio freeze at all. The delivered audio is the original
-        #     waveform, so a short encode can only under-freeze latents that
-        #     are about to be discarded.
+        #     and the audio freeze is dropped altogether (``retake_had_audio``
+        #     becomes False). The delivered audio is the original waveform,
+        #     so the latents it would have frozen are discarded anyway.
         #   * the window has NO audio track -> continue with no audio freeze,
         #     recorded in the metadata rather than raised. A silent clip is a
         #     legitimate thing to retake.

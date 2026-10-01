@@ -1,4 +1,4 @@
-"""Shared types/protocols for backend service modules."""
+"""Type aliases, protocols and device helpers shared by the pipeline modules."""
 
 from __future__ import annotations
 

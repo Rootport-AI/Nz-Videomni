@@ -1,8 +1,7 @@
-"""LoRA data types shared by the fast video pipeline.
+"""LoRA data type ``LoraEntry`` (path, strength, enabled flag).
 
-Extracted from ``lora_service.py`` so the pipeline can reference the
-``LoraEntry`` dataclass without importing the heavy LoRA loading/apply
-implementation (which is not exercised by the current T2V/GGUF path).
+Nothing in the repository imports this module. The IC-LoRA entries the
+engine passes around are ``engine.gguf.ic_lora_common.IcLoraEntry`` tuples.
 """
 
 from __future__ import annotations

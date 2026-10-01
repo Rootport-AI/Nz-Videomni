@@ -1,4 +1,4 @@
-"""Pydantic request/response models and TypedDicts for ltx2_server."""
+"""``ImageConditioningInput`` plus Pydantic models and TypedDicts."""
 
 from __future__ import annotations
 
@@ -23,14 +23,14 @@ ModelFileType = Literal[
 
 
 class ImageConditioningInput(NamedTuple):
-    """Image conditioning triplet used by all video pipelines."""
+    """Conditioning triplet: keyframe image path, frame index, strength."""
 
     path: str
     frame_idx: int
     strength: float
 
 
-# ── Phase 3 WP4 — masked AV-latent clip chaining protocol (worker op) ────────
+# ── masked AV-latent clip chaining protocol (worker op) ──────────────────────
 # The ``generate_chain`` op runs the WHOLE chain inside one worker invocation
 # (latents resident across segments) and writes ONE mp4. Geometry is resolved by
 # the shared pure-Python ``chain_math`` so the engine and the app agree on the
@@ -84,10 +84,17 @@ class EndSourcePayload(TypedDict, total=False):
 
 
 class GenerateChainParams(TypedDict, total=False):
-    """Keys on the worker ``generate_chain`` op.
+    """Descriptive list of keys on the worker ``generate_chain`` op.
 
-    Emits ``progress`` events (stage in {stage1, tile, decode}) during the run
-    and a terminal ``done`` carrying ``peak_vram_mb`` + ``chain`` (the full
+    Nothing imports this TypedDict, and it declares only part of the payload:
+    the keys the worker reads are in ``engine/worker.py``'s
+    ``_do_generate_chain``, and the payload the app sends is built in
+    ``services/engines/ltx/adapter.py``'s ``generate_chain``.
+
+    Emits ``progress`` events (stage in {encode, stage1, upsample, tile,
+    decode}; ``upsample`` only with ``chunked_upsample``) plus the per-step
+    events from ``engine/progress_shim.py`` during the run and a terminal
+    ``done`` carrying ``peak_vram_mb`` + ``chain`` (the full
     junction metadata: segment_seam_junctions, tile_seam_junctions,
     all_junctions, total_px, tiles, ...). For a V2V run the ``chain`` dict also
     holds a ``v2v`` sub-dict (context_frames, n_ctx_v, n_ctx_a, trimmed_px,
@@ -102,16 +109,19 @@ class GenerateChainParams(TypedDict, total=False):
     ``done`` also carries an ``end_source`` sub-dict (geometry from
     ``ChainLayout.to_dict()`` plus the engine's ``freeze_proof``).
 
-    NAG (non-CFG negative prompt guidance, Wave 1): both this op and
+    NAG (non-CFG negative prompt guidance): both this op and
     ``generate`` also accept an optional ``nag`` block —
     ``{negative_prompt: str, scale: float, tau: float, alpha: float}`` — present
     ONLY when the request enabled NAG (see engine/transformer/nag_service.py
-    and engine/worker.py's ``_resolve_nag``). Absent/omitted ``nag`` -> the
-    payload is byte-identical to before NAG existed. Not declared as a
-    TypedDict field here (mirrors the existing ``reference_video`` block, which
-    is also a plain untyped dict) — see ``_resolve_nag`` for the keys it reads.
+    and engine/worker.py's ``_resolve_nag``). A request without NAG carries
+    no ``nag`` key (``tests/test_ltx_runner_payload.py``'s
+    ``test_generate_payload_omits_nag_by_default`` and
+    ``test_chain_payload_omits_nag_by_default`` check this for both ops).
+    Not declared as a TypedDict field here (mirrors the existing
+    ``reference_video`` block, which is also a plain untyped dict) — see
+    ``_resolve_nag`` for the keys it reads.
 
-    VSF (Value Sign Flip, arXiv:2508.10931, Wave 1/2): the second non-CFG
+    VSF (Value Sign Flip, arXiv:2508.10931): the second non-CFG
     negative-prompt method, selected via the same ``nag`` block above. Two
     additional keys ride alongside the four above (present whenever ``nag`` is
     present, regardless of method — the API layer always sends them):
@@ -120,8 +130,8 @@ class GenerateChainParams(TypedDict, total=False):
     engine's existing ``nag`` block naming) and ``vsf_scale: float`` (the
     negative-side V multiplier α). ``scale`` / ``tau`` / ``alpha`` above are
     still sent unconditionally but are read by the engine only when
-    ``method == "nag"``. ``method`` missing (older payload) falls back to
-    ``"nag"`` in ``_resolve_nag``.
+    ``method == "nag"``. ``method`` missing (a payload without the key) falls
+    back to ``"nag"`` in ``_resolve_nag``.
     """
 
     width: int
@@ -138,7 +148,7 @@ class GenerateChainParams(TypedDict, total=False):
 
 
 # ============================================================
-# TypedDicts for module-level state globals
+# TypedDicts and type aliases
 # ============================================================
 
 
@@ -367,14 +377,13 @@ class GenerateVideoRequest(BaseModel):
     seed: int | None = None
     enhancedPrompt: str | None = None
     conditioningImages: list[ConditioningImageRequest] | None = None  # multi-frame conditioning
-    numSteps: int | None = None        # per-request override for distilledNumSteps
-    stgScale: float | None = None     # per-request override for stgScale
-    stgBlockIndex: int | None = None  # per-request override for stgBlockIndex
-    # Dev (two-stage) pipeline overrides
-    cfgScale: float | None = None        # video CFG scale (dev pipeline, default 3.0)
-    audioCfgScale: float | None = None   # audio CFG scale (dev pipeline, default 7.0)
-    rescaleScale: float | None = None    # CFG rescale factor (dev pipeline, default 0.7)
-    modalityScale: float | None = None   # modality coupling scale (dev pipeline, default 3.0)
+    numSteps: int | None = None
+    stgScale: float | None = None
+    stgBlockIndex: int | None = None
+    cfgScale: float | None = None        # video CFG scale
+    audioCfgScale: float | None = None   # audio CFG scale
+    rescaleScale: float | None = None    # CFG rescale factor
+    modalityScale: float | None = None   # modality coupling scale
 
 
 class GenerateImageRequest(BaseModel):

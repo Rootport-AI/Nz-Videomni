@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-47〜§1-50〔自己試験の `prefetch_used` が「install の飛ばし」を検出できない可能性／画角拡張（Outpainting）で凍結を無効にしたジョブの `source_had_audio`／`cross_attention_modules` に呼び出し元が無い／効かない設定 `model_configurator=LTXModelConfigurator`〕を起票し、§1 冒頭の案内を §1-47〜§1-50 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-46「撮り直し（Retake）の `source_had_audio` が、音声があったのに `false` になる場合がある」を起票し、§1 冒頭の案内を §1-46 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-40〜§1-45〔撮り直し（Retake）の窓のタイル予算が広い Stage-2 窓で未計測／拡散 VAE を置いたときの復号タイルの決め方／ワーカーが未知の op に応答しない／`done` イベントに段階ごとの表が二重に載る／連結生成のワーカーログの綴りが LTX 2.3 と違う／carry の頭と末尾素材の帯が合体したタイルのキーフレーム印の消去〕を起票し、§1 冒頭の案内を §1-40〜§1-45 まで含む記述に更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-51〜§1-58〔Gemma の GGUF の取り付けに失敗しても読み込みが成功扱いになる／GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性／V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない／マスクの二値化の基準が2箇所で違う／`keep_resident_used` の報告が arm の失敗を反映しない／`peak_vram_mb` に参照動画の encode より前のピークが入らない／区切り幅の既定 `chunk_size or 8` が定数の値を書き写している／使われていないコード〕を起票し、§1 冒頭の案内を §1-58 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-47〜§1-50〔自己試験の `prefetch_used` が「install の飛ばし」を検出できない可能性／画角拡張（Outpainting）で凍結を無効にしたジョブの `source_had_audio`／`cross_attention_modules` に呼び出し元が無い／効かない設定 `model_configurator=LTXModelConfigurator`〕を起票し、§1 冒頭の案内を §1-47〜§1-50 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-46「撮り直し（Retake）の `source_had_audio` が、音声があったのに `false` になる場合がある」を起票し、§1 冒頭の案内を §1-46 まで含む記述に更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -166,7 +166,7 @@
   - B: 現状の値（この場合は `false`）を契約として文書に書く。
 - **着手**: 着手時は go／no-go の検討から始める。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
-- **関連ファイル**: `engine25/chain25.py`（Retake の音声の取り込み・`retake_had_audio`・`n_head_a`・`n_tail_a`）、`engine/pipeline/chain_pipeline.py`（`_encode_retake_window`）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2「チェーンの retake（撮り直し）の音声の補足」。
+- **関連ファイル**: `engine25/chain25.py`（Retake の音声の取り込み・`retake_had_audio`・`n_head_a`・`n_tail_a`）、`engine/pipeline/chain_pipeline.py`（`_encode_retake_window`。LTX 2.3 側も同じ作り）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2「チェーンの retake（撮り直し）の音声の補足」。
 
 ### 1-47. 自己試験の `prefetch_used` が「install の飛ばし」を検出できない可能性（起票：2026-10-01）
 
@@ -212,6 +212,97 @@
 - **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §134（申し送り）。
 - **関連ファイル**: `engine25/gguf_transformer.py`（`build_quantization_policy`・`Ltx25DiffusionStage.from_safetensors` の `QuantizationPolicy(...)`・`Ltx25CpuModelBuilder`）。
+
+### 1-51. Gemma の GGUF の取り付けに失敗しても読み込みが成功扱いになる（起票：2026-10-01）
+
+- **現象**: `engine/pipeline/fast_video_pipeline.py` の `_install_gemma_gguf` は、例外を捕まえると「falling back to stock GPU text encoder」と警告ログを出すだけで `load` を続行する。ところが `__init__` が `DistilledPipeline(..., gemma_root=None)` で作るため、戻り先であるはずの「素のGPUテキストエンコーダ」は実在しない。同じ型の食い違いが `_install_gguf` の非LoRA時の失敗（「falling back to safetensors」ログ）にもあり、本番では `services/engines/ltx/adapter.py` の `_RealBackend._build_load_payload` が `checkpoint_path` を常に `""`（ハードコード）で送るため、戻り先の safetensors 経路も存在しない。
+- **影響**: どちらも通常は起きない（GGUFファイルが壊れている・欠けているなど稀な場合のみ）。発生すると `load` 自体は成功と報告されるが、最初の生成ジョブでテキストエンコーダ（または transformer）が無い状態で落ちる。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 取り付けの失敗を `load` 自体の失敗にする（例外を外へ出す）。
+  - B: ログに「戻り先が存在しない」旨を明記し、現状の動作（最初のジョブで失敗する）を契約として文書に書く。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
+- **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`_install_gemma_gguf`・`_install_gguf`）、`services/engines/ltx/adapter.py`（`_RealBackend._build_load_payload`・`checkpoint_path`）。
+
+### 1-52. GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性（起票：2026-10-01）
+
+- **現象**: `engine/pipeline/fast_video_pipeline.py` の `_install_gguf` は `gguf_per_layer_quant=False` のとき `GGUFLoaderService(gguf_path=gguf_path, ic_loras=ic_loras)` を組み立てる。ここへ渡る `ic_loras` はパイプライン作成時点の値（`__init__` 冒頭の `_set_ic_job` が張った固定リスト）で、ワーカー（`engine/worker.py`）はパイプライン作成時に IC-LoRA を渡さないため常に空になる。一方 `generate()`／`generate_chain()` がジョブごとに呼ぶ `_set_ic_job` は `self._ic_loras` を書き換えるだけで、`per_layer_quant=True` の経路（`GGUFQuantLoaderService` に `ic_loras_provider=lambda: self._ic_loras` を渡し、フォワード時に毎回読み直す）と違い、`GGUFLoaderService` 側にはジョブごとの値を読み直す仕組みが無い。
+- **影響**: `model.gguf_per_layer_quant` を偽にした構成でのみ発生しうる。ジョブで指定した IC-LoRA が黙って効かないおそれがあるが、実機では未確認。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `GGUFLoaderService` にも per-job の読み直し（`ic_loras_provider` 相当）を足す。
+  - B: 実機で確かめたうえで、問題が無ければ現状を維持する。
+- **着手**: 着手時は go／no-go の検討から始める（まず実機確認）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
+- **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`_install_gguf`・`_set_ic_job`・`_ic_loras`）、`engine/gguf/loader_service.py`（`GGUFLoaderService`）、`engine/gguf/quant_service.py`（`GGUFQuantLoaderService`）。
+
+### 1-53. V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない（起票：2026-10-01）
+
+- **現象**: `engine/pipeline/chain_pipeline.py` の `_encode_end_source`・`_encode_retake_window`・A2V の各音声符号化は、符号化前に波形のチャンネル数が1かどうかを見てステレオへ複製する（`wf.repeat(1, 2, 1)`。コメントは「音声VAEの `conv_in` はステレオ専用（weight `[128,2,3,3]`）」と明記）。ところが `_encode_source_heads` の音声符号化はこの分岐を持たず、デコードした波形をそのまま音声VAEの符号化に渡す。
+- **影響**: モノラル音声を持つ素材を V2V の頭（連結の先頭）に使ったときに発生する。音声VAEの符号化器がステレオ入力専用であることは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §25.2 の G0 スパイクで実測済みで、上流の `encode_audio` はチャンネル数を揃えないため、ジョブが符号化の段で失敗する見込みが高い（実機でモノラルの元動画を流した記録は無い）。この抜けは §73.1 の 4（LTX 2.5 への移植時の記録）にも書かれている。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `_encode_source_heads` にも同じ複製を足す。
+- **着手**: 着手時は go／no-go の検討から始める（まず実機確認）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §25.2・§73.1・§135（申し送り）。
+- **関連ファイル**: `engine/pipeline/chain_pipeline.py`（`_encode_source_heads`・`_encode_end_source`・`_encode_retake_window`）。
+
+### 1-54. マスクの二値化の基準が2箇所で違う（起票：2026-10-01）
+
+- **現象**: `engine/pipeline/common.py` の `decode_mask_video`（`engine/pipeline/inpaint_pipeline.py` がこれを import して使う）と `engine25/inpaint25.py` の `_decode_mask_u8` は、どちらもRGBの赤チャンネル（`f[0, :, :, 0]`）をしきい値128で二値化する。一方 `services/video_io.py` の `fill_mask_green_mp4` は、ffmpegの `format=gray`（輝度）を経てからしきい値128のlutを掛ける。灰色でないマスク（R=G=Bでない）では、この2つの基準が異なって二値化しうる。
+- **影響**: マスクがRGBで純粋な灰色（R=G=B）でない場合だけ発生する。緑で塗る範囲（`fill_mask_green_mp4`側）と、ブレンド・復元に使うマスク（`decode_mask_video`側）がずれるおそれがある。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 片側をもう片方の基準（赤チャンネルまたは輝度）に揃える。
+  - B: 現状を許容し、「マスクは灰色で渡すこと」を契約として明記する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
+- **関連ファイル**: `engine/pipeline/common.py`（`decode_mask_video`）、`engine25/inpaint25.py`（`_decode_mask_u8`）、`services/video_io.py`（`fill_mask_green_mp4`）、`engine/pipeline/inpaint_pipeline.py`。
+
+### 1-55. `keep_resident_used` の報告が arm の失敗を反映しない（起票：2026-10-01）
+
+- **現象**: `engine/pipeline/fast_video_pipeline.py` の `_set_keep_resident_job` は `_swap_registry` が例外を投げてもERRORログに落として握りつぶす（最外の入口で動くため「切替に失敗しても生成は続ける」という設計判断。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48.1 の9）。`engine/worker.py` の `_keep_resident_used` はdocstring自身が「パイプラインの状態を読まない。要求と解決値だけが全てである」と明記するとおり、要求と上流のガード結果だけから "off"／"on"／"on->off" を決める。そのため `_swap_registry` の実際の切替が失敗したジョブでも、`metadata.json` の `keep_resident_used` は "on" のまま報告される。
+- **影響**: `_swap_registry` が失敗する状況（まれ）でのみ発生する。キャッシュが効かないだけで生成自体は通常どおり完了する。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `_set_keep_resident_job` の失敗を状態として持ち、`_keep_resident_used` の判定へ反映する（"on->off"で報告する）。
+  - B: 現状の「要求と解決値だけで決まる」仕様を契約として文書に明記する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §48.1・§135（申し送り）。
+- **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`_set_keep_resident_job`・`_swap_registry`）、`engine/worker.py`（`_keep_resident_used`）。
+
+### 1-56. `peak_vram_mb` に参照動画の encode より前のピークが入らない（起票：2026-10-01）
+
+- **現象**: `engine/pipeline/fast_video_pipeline.py` の `_reference_conditioning_from_pixels` は、参照動画のVAE符号化の直前に `torch.cuda.reset_peak_memory_stats()` を呼ぶ（コメントは「`worker.py` が報告するper-jobの2カウンタ〔`peak_vram_mb`・`peak_vram_reserved_mb`〕の両方をクリアする」と明記し、この時点までのピークをログ行へ別途持ち越している）。この結果、`engine/worker.py` が `done` イベントに書く `peak_vram_mb`／`peak_vram_reserved_mb`（生成が終わったあとまとめて読む値）には、この地点より前（テキストの符号化など）のピークが反映されない。
+- **影響**: 参照動画を使うジョブ（IC-LoRA参照conditioning）でのみ発生する。連結生成では参照の符号化が Stage-1 の区間ごとに走るため、最後の区間より前の区間のノイズ除去のピークも消える。`metadata.json` の `chain` にある `vram_peak_mb`／`vram_within_16gb` も同じカウンタを読む。`metadata.json` のVRAM値が実際のジョブ全体のピークより低く出るおそれがある。ログ行自体には持ち越した値が残るため、情報そのものは失われていない。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: リセット前後のピークの最大値を `done` のVRAM値に反映する。
+  - B: 現状を許容し、「`peak_vram_mb` は参照encode以降のピークである」ことを文書に明記する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
+- **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`_reference_conditioning_from_pixels`）、`engine/pipeline/chain_pipeline.py`（参照の窓ごとの符号化・`vram_peak_mb`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain` の `peak` 算出）。
+
+### 1-57. 区切り幅の既定 `chunk_size or 8` が定数の値を書き写している（起票：2026-10-01）
+
+- **現象**: `engine/pipeline/outpaint_pipeline.py` の `step = chunk_size or 8`（2倍拡大）と、`engine/pipeline/inpaint_pipeline.py` の `blend_chunk = chunk_size or 8`（緑抜きの区切り）・`step = chunk_size or 8`（2倍拡大）は、`engine/outpaint/pyramid_blend.py` の `_CHUNK_SIZE = 8` の値をリテラルで書き写している。
+- **影響**: 無い（`_CHUNK_SIZE` は変わっておらず、結果も害も無い）。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `engine.outpaint.pyramid_blend._CHUNK_SIZE` を参照する形に直す。
+  - B: 現状を維持する。
+- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
+- **関連ファイル**: `engine/pipeline/outpaint_pipeline.py`、`engine/pipeline/inpaint_pipeline.py`、`engine/outpaint/pyramid_blend.py`（`_CHUNK_SIZE`）。
+
+### 1-58. 使われていないコード（起票：2026-10-01）
+
+- **現象**: 次がリポジトリ全体をGrepしても呼び出し元・import元が無い。
+  - `engine/api_types.py` のTypedDict群（`ChainClipPayload`・`SourceVideoPayload`・`EndSourcePayload`・`GenerateChainParams`・`GenerationState`）とPydanticモデル群（`CheckpointVariant`以下、ファイル末尾までの全モデル）。同ファイルから実際に他所でimportされているのは `ImageConditioningInput` だけ（`engine/worker.py`・`engine/pipeline/common.py`・`chain_pipeline.py`・`fast_video_pipeline.py`）。中でも `GenerateChainParams` は、Grepで確かめた限りこのTypedDictをimportしている箇所がリポジトリ全体に無く、契約として読むと誤解を招く。
+  - `engine/lora_types.py` の `LoraEntry`（Grepで確かめた限りこのモジュールをimportしている箇所が無い。IC-LoRAは別の `engine.gguf.ic_lora_common.IcLoraEntry` を使う）。
+  - `engine/pipeline/fast_video_pipeline.py` の `LTXFastVideoPipeline.compile_transformer`（メソッド自身のコメントが「誰も呼んでいない」と明記）。
+  - `engine/pipeline/common.py` の `default_guiders`・`DistilledNativePipeline`（後者はコメントで「本番経路ではない（`worker.py` は `LTXFastVideoPipeline` しか使わない）」と明記）。
+  - `LTXFastVideoPipeline.__init__` が持たせる `self._component_video_vae_path`・`_component_audio_vae_path`・`_component_text_projection_path`（代入後どこからも読まれない）。
+  - `engine/worker.py` の `_do_generate`・`_do_generate_chain` が受ける `_resolve_keep_resident` の戻り値の2つ目（`_keep_res_reason`。代入するだけで使わない）。
+- **影響**: 無い（未使用のコードが残っているだけ）。
+- **選択肢**（オーナー判断・優劣はつけない）: 項目ごとに消すか残すかを決める。
+- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
+- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）。
 
 ---
 
@@ -392,10 +483,10 @@
   - **Windows のコミット（仮想メモリ）制約**（同 §9.1）: 巨大な safetensors をコピーオンライトの mmap で開くと、読む量に関係なくファイルサイズ分のコミットが予約され、巨大なページファイルなしでは落ちる。OS 側にこの予約を止める設定は無い。現行設計はモノリスを開かず、小さな部品ファイルと GGUF（共有読み取り専用の memmap）だけを読むので当たらない。大きな safetensors を直接読む必要が出たら、safetensors 0.8 以降の `backend="pread"`（`.venv-engine-ltx25` の 0.8.0 にはあり、`.venv-engine` の 0.7.0 には無い）か「テンソルを1本ずつ読んで即 GPU へ送る」で収める。
   - **dev モデルの扱い**: dev も同じ 22B 構造なので `Nz-GGUF-Converter-LTX23` で GGUF にでき、読み込み自体は現行の 16GB 機で塞がっていない（前例＝非蒸留の 10Eros を Q4_K_M に変換し読み込みまで確認、Converter の VERIFICATION §6。蒸留 LoRA は `StyleLoRA` から実行時に当てられる。Q6_K への変換も同ツールで可能）。本項の本当のコストは時間で、CFG はステップごとに順伝播が2回になり、ステップ数も 8 ではなく数十になる。2回の順伝播をバッチにすると活性化が倍になり快適上限を割りやすく、逐次にすると時間が伸びる、という設計上の分かれ目がある。「CFG あり・多ステップ」の推論経路は未検証（10Eros は蒸留 LoRA 込みの 8 ステップで確認しただけ）。着手時は、dev チェックポイントのテンソル名・形状が参照 GGUF の型マップと過不足なく一致することの照合から始める。§4-28（`two_stage_hq`＝非量子化の第2段）は bf16 を VRAM に載せる前提なので、本項とは別に塞がったまま。
 
-### 4-2. attention tilingの本番投入
+### 4-2. attention tilingの再実装
 
-- **概要**: attention（注意機構）の計算を分割してピークVRAMを抑える仕組み。SDPAへのグローバルパッチとして**実装・配線は済んでいるが、既定はOFFのまま**（`config.yaml`の`attention_tile_size`が`null`）で、本番の生成経路では一度も使っていない。
-- **何が塞いでいるか**: 現行の16GB運用が二段パイプライン＋block-swapで足りており、ONにする動機と実測がまだ無い。高解像度側へ踏み込むときに、推奨値（256／512／1024／2048）で効果と副作用を測るところから。
+- **概要**: attention（注意機構）の計算を分割してピークVRAMを抑える仕組み。SDPAへのグローバルパッチとして一度実装されたが、**その実装は除去済み**（エンジンの移設時。残っていた引数の除去は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §16.1）。再投入するなら実装からやり直しになる。設定キー `attention_tile_size`（`config.py`・`config.yaml.example`）は残っており `GET /config` の状態報告にも載るが、`engine/`側に実装も引数も無いためワーカーには届かず効かない。
+- **何が塞いでいるか**: 現行の16GB運用が二段パイプライン＋block-swapで足りており、作り直す動機と実測がまだ無い。高解像度側へ踏み込むときに、実装を作り直したうえで推奨値（256／512／1024／2048）の効果と副作用を測るところから。
 - **出典**: [`Nz-Videomni/Docs/SCALEUP_16GB_RESEARCH.md`](SCALEUP_16GB_RESEARCH.md) §2、`Nz-Videomni/config.yaml`。
 
 ### 4-3. VRAMの残レバー3件

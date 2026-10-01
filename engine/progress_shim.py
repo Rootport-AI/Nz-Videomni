@@ -1,13 +1,16 @@
-"""Per-step denoise progress observation for the engine worker (F2, G3 gate).
+"""Per-step denoise progress observation for the engine worker.
+
+Verification record: VERIFICATION_LOG §26.3.
 
 The installed wheel's denoising loops (``ltx_pipelines/utils/samplers.py``:
 ``euler_denoising_loop`` and friends) expose NO callback — but they all wrap
 their sigma iteration in the module-level ``tqdm`` binding (``from tqdm import
-tqdm`` at samplers.py:7). That binding is the single per-step observation
-point shared by the single-generate pipeline AND the chain pipeline, so the
-worker swaps it for :class:`TqdmShim` at startup (:func:`install`) — the same
-module-global monkeypatch mechanism engine/worker.py already uses for
-``denoise_audio_video`` and fast_video_pipeline uses for sigma schedules.
+tqdm`` at the top of samplers.py). That binding is the single per-step
+observation point shared by the single-generate pipeline AND the chain
+pipeline, so the worker swaps it for :class:`TqdmShim` at startup
+(:func:`install`) — the same module-global monkeypatch mechanism
+engine/worker.py already uses for ``denoise_audio_video`` and
+fast_video_pipeline uses for sigma schedules.
 
 STRICT OBSERVATION ONLY: the shim yields the wrapped iterable's items
 unchanged, never touches tensors / seeds / schedules, and swallows every
@@ -27,8 +30,8 @@ declare it here (module-level cooperation, single-threaded worker):
   runs its two denoising loops back-to-back with no seam we can hook, so the
   shim infers the phase from the LOOP INVOCATION COUNT within the op: 1st loop
   -> ``stage1_denoise``, 2nd -> ``stage2_denoise``, any further -> the generic
-  ``denoise``. This is the documented F2 "phase inference" trade-off: it holds
-  for the distilled two-stage pipeline this backend ships and degrades to a
+  ``denoise``. This phase inference is a trade-off: it holds for the
+  distilled two-stage pipeline this backend ships and degrades to a
   still-truthful generic label if a future pipeline runs more loops.
 
 This module is deliberately dependency-free (no torch, no ltx_*) so the app

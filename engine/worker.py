@@ -1,24 +1,31 @@
-"""Persistent LTX-2.3 generation worker (Phase 5, Approach W).
+"""Persistent LTX-2.3 generation worker.
 
 Runs inside the engine venv (.venv-engine), which is the only environment that
-has torch + ltx_core/ltx_pipelines@00dc53d + gguf. The
-app process (FastAPI, its own torch-less .venv) spawns ONE of these per loaded
-model and talks to it over a tiny JSON-lines protocol on stdin/stdout. The mp4 is
-written by the engine directly to a shared-disk path; only small control JSON
-crosses the pipe.
+has torch + ltx_core/ltx_pipelines + gguf (``$engineDirectPins`` in
+scripts/install_ltx.ps1 pins the upstream revision). The app process (FastAPI,
+its own torch-less .venv) spawns ONE of these per loaded model and talks to it
+over a tiny JSON-lines protocol on stdin/stdout. The mp4 is written by the
+engine directly to a shared-disk path; only small control JSON crosses the pipe.
 
 Bootstrap mirrors outputs/phase4_gguf_gemma/run_t2v_bs8.py VERBATIM (proven to
 run on this Windows + 16GB box):
   * TORCH_COMPILE_DISABLE=1 set before importing torch.
   * chdir(ROOT) + sys.path.insert(0, ROOT) so the first-party `engine.*` package
     (and the venv-installed `ltx_core` / `ltx_pipelines`) import.
-  * `import ltx_core.loader` BEFORE the pipeline import (rev-00dc53d circular
-    import gotcha — required).
+  * `import ltx_core.loader` BEFORE the pipeline import (the pinned upstream
+    revision's circular import gotcha — required).
 
 Protocol (one JSON object per line; parent -> worker):
   {"op": "load", checkpoint_path, gemma_root, upsampler_path,
    gguf_transformer_path, gguf_gemma_path, gguf_per_layer_quant,
    block_swap_blocks_on_gpu, vae_spatial_tile_size, vae_temporal_tile_size,
+   # safetensors_transformer_path (optional): a quantized safetensors
+   # transformer, sent with gguf_transformer_path emptied (both set is fatal):
+   safetensors_transformer_path,
+   # The component files (optional keys here, but the pipeline build fails
+   # when any of these three is empty):
+   component_video_vae_path, component_audio_vae_path,
+   component_text_projection_path,
    # component_video_vae_pruned_path (optional): the PrunaVAED decoder file.
    # Unlike the other component paths this one is NOT required to exist — a
    # job asking for vae_mode="prune_vaed" downgrades when it is missing:
@@ -28,49 +35,63 @@ Protocol (one JSON object per line; parent -> worker):
    # attention_backend (optional, default "sdpa"): "sdpa" | "sage". Present on
    # BOTH generate ops. Purely a speed knob — see _resolve_attention:
    attention_backend,
-   # block_swap_prefetch (optional, default False): hides the block-swap
+   # block_swap_prefetch (optional; absent -> off, the request-side default is
+   # api/models.py's BLOCK_SWAP_PREFETCH_DEFAULT): hides the block-swap
    # CPU<->GPU weight transfer behind computation on a dedicated CUDA stream.
    # Present on BOTH generate ops. Also purely a speed knob (unlike
    # attention_backend, output is bit-identical on/off) — see
    # _resolve_block_swap_prefetch:
    block_swap_prefetch,
-   # keep_resident (optional, default False): keeps each submodel's CPU-side
+   # keep_resident (optional; absent -> off, the request-side default is
+   # api/models.py's KEEP_RESIDENT_DEFAULT): keeps each submodel's CPU-side
    # state_dict resident BETWEEN jobs (wheel StateDictRegistry), cutting the
-   # per-job preprocessing from 66-79s to 9-15s at the cost of ~20GB of main
-   # memory. Present on BOTH generate ops. Output is bit-identical on/off.
+   # per-job preprocessing time at a large main-memory cost (measured in
+   # Docs/VERIFICATION_LOG.md §47.3 and §48.6). Present on BOTH generate ops.
+   # Output is bit-identical on/off.
    # A MISSING key means off AND is the explicit "free the cache" trigger —
    # see _resolve_keep_resident (which can also auto-downgrade it):
    keep_resident,
-   # fused_gguf_dequant_kernel (optional, default False): runs the GGUF K-quant
-   # dequantization (Q4_K/Q5_K/Q6_K) through a fused Triton kernel instead of
-   # the multi-step pure-PyTorch path. Present on BOTH generate ops. Output is
-   # bit-identical on/off (a mismatch self-check and an exception latch both
-   # fall back to the eager path) — see _resolve_fused_dequant:
+   # fused_gguf_dequant_kernel (optional; absent -> off, the request-side
+   # default is api/models.py's FUSED_GGUF_DEQUANT_KERNEL_DEFAULT): runs the
+   # GGUF K-quant dequantization (the types engine/gguf/dequant_triton.py has
+   # kernels for) through a fused Triton kernel instead of the multi-step
+   # pure-PyTorch path. Present on BOTH generate ops. Output is bit-identical
+   # on/off (a mismatch self-check and an exception latch both fall back to the
+   # eager path) — see _resolve_fused_dequant:
    fused_gguf_dequant_kernel,
    # vae_mode (optional, default "default"): "default" | "prune_vaed". Selects
    # the video VAE DECODER for this job — the pruned PrunaVAED decoder is
-   # faster but NOT bit-identical (the only knob here that changes pixels).
+   # faster but NOT bit-identical to the stock one.
    # Present on BOTH generate ops; an unknown value is fatal, a missing weight
    # file is not (it degrades to "on->off") — see _resolve_vae_mode:
    vae_mode,
-   # Phase B/C IC-LoRA (forward-time weight patch); loras always present (may be []),
-   # reference_video null unless a reference is supplied. preprocess (Phase C):
-   # "none" -> raw reference used as-is (Phase B); "canny"/... -> converted to a
-   # control-signal video via engine/preprocess/, path swapped to it:
+   # nag (optional; absent -> no non-CFG negative prompt): {negative_prompt,
+   # scale, tau, alpha, method, vsf_scale} with method "nag" | "vsf". Present
+   # on BOTH generate ops — see _resolve_nag:
+   nag,
+   # IC-LoRA: loras always present (may be []), reference_video null unless a
+   # reference is supplied. preprocess: "none" -> raw reference used as-is;
+   # "canny"/... -> converted to a control-signal video via engine/preprocess/,
+   # path swapped to it. attention_strength is optional (see
+   # _resolve_ic_reference):
    # loras[].audio_strength is optional: absent -> the audio side follows
-   # strength (byte-identical to before this feature existed); 0 -> skip the
-   # audio-side weights entirely.
-   loras:[{path,strength,audio_strength?}...], reference_video:{path,strength,preprocess}|null}
-  # Phase 3 WP4 — masked AV-latent clip chaining (ONE decode, always-tiled stage2):
+   # strength; 0 -> skip the audio-side weights entirely.
+   loras:[{path,strength,audio_strength?}...],
+   reference_video:{path,strength,preprocess,attention_strength?}|null,
+   # outpaint / inpaint (optional, mutually exclusive): the job's canvas block,
+   # whose PRESENCE routes the op to generate_outpaint / generate_inpaint;
+   # reference_video.path is then the app-built green canvas:
+   outpaint, inpaint}
+  # Masked AV-latent clip chaining (ONE decode, always-tiled stage2):
   {"op": "generate_chain", width, height, frame_rate, num_steps, seed,
    overlap_frames, overlap_strength, output_path,
-   # chunked_upsample (optional, default False): when true the whole-timeline
+   # chunked_upsample (optional; absent -> off): when true the whole-timeline
    # spatial upsample runs in halo-padded temporal chunks (VRAM-bounded for long
-   # 768p chains). Omitted/false -> the one-shot upsample path is byte-identical.
+   # 768p chains). Omitted/false -> the one-shot upsample path.
    chunked_upsample,
-   # stage2_window (optional, default "standard"): stage-2 tile geometry preset,
-   # resolved via chain_math.STAGE2_WINDOW_PRESETS. Omitted -> the frozen 22/18
-   # layout, byte-identical to before this knob existed.
+   # stage2_window (optional): stage-2 tile geometry preset, resolved via
+   # chain_math.resolve_stage2_window. Omitted -> the
+   # chain_math.STAGE2_WINDOW_DEFAULT preset.
    stage2_window,
    clips:[{prompt, num_frames, images:[{path,frame_idx,strength}...]}...],
    # V2V continuation (optional; null unless continuing an uploaded video). When
@@ -84,24 +105,39 @@ Protocol (one JSON object per line; parent -> worker):
    # ``path`` is ALREADY the context_frames+1-frame cut at the request fps (a
    # still image was turned into a video by the app — the engine never sees an
    # image here). Its latents are frozen as the TAIL of the last stage-1 segment
-   # and the last stage-2 tile. UNLIKE ``source`` nothing is trimmed: the output
-   # length is the clips' own total whether there is one clip (the band is that
-   # clip's tail) or several (the chain is generated last-to-first towards it,
-   # or — with a ``source`` — forwards, with only the last clip frozen at both
-   # ends). ``strength`` (0..1, default 1.0) softens the STAGE-1 tail freeze
-   # only. Combines with ``source`` at any clip count (start+end = an
-   # interpolation on one clip, a bridge between the two uploads on a chain):
-   end_source:{path, context_frames, strength}|null}
+   # and re-frozen in every stage-2 tile that reaches it. UNLIKE ``source``
+   # nothing is trimmed: the output length is the clips' own total whether there
+   # is one clip (the band is that clip's tail) or several (the chain is
+   # generated last-to-first towards it, or — with a ``source`` — forwards, with
+   # only the last clip frozen at both ends). ``strength`` (0..1, default 1.0)
+   # softens the STAGE-1 tail freeze only. Combines with ``source`` at any clip
+   # count (start+end = an interpolation on one clip, a bridge between the two
+   # uploads on a chain):
+   end_source:{path, context_frames, strength}|null,
+   # A2V (optional): an audio track the chain is rendered against; its
+   # waveform is muxed verbatim. Mutually exclusive with source:
+   audio_source:{path}|null,
+   # Retake (optional): ``path`` is the frame-exact CFR window the app cut,
+   # and head_px/tail_px are the bands kept frozen at its two ends. Mutually
+   # exclusive with source and audio_source:
+   retake:{path, head_px, tail_px, regenerate_audio}|null,
+   # loras / reference_video / nag: the generate op's blocks, sent only when
+   # asked for; run_chain slices the reference per stage-1 segment. The
+   # acceleration keys above ride here too:
+   loras, reference_video, nag}
   {"op": "shutdown"}
 
 Replies are framed with a unique prefix so library/tqdm stdout noise can be
 ignored by the parent. Every protocol line: @@LTX@@<compact-json>, flushed. All
 other logging goes to STDERR.
   @@LTX@@{"event":"ready","sage_available":true|false}
+  @@LTX@@{"event":"progress","stage":...,"index":...,"total":...}
+          (per-step events may add "it_s", "outer_index", "outer_total")
   @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...,"attention_used":...,
           "block_swap_prefetch_used":...,"keep_resident_used":...,
           "fused_gguf_dequant_kernel_used":...,"vae_mode_used":...,
           "peak_vram_reserved_mb":...}
+          (+ "outpaint" or "inpaint" on those jobs, "chain" on generate_chain)
   @@LTX@@{"event":"error","detail":...}
 
 ``ready.sage_available`` is this process's SageAttention probe (see
@@ -110,47 +146,49 @@ engine/transformer/sage_attention_service.probe_sage); the app publishes it as
 the finished job ACTUALLY ran on — "sdpa", "sage", or "sage->sdpa" when sage was
 asked for but degraded (unavailable, or a kernel call raised mid-job). It rides
 the same route as ``seed_used`` into metadata.json, and it — not any log line —
-is the judging criterion for the sage real-device gates.
+is what the sage real-device checks (Docs/VERIFICATION_LOG.md §43.5) judge by.
 
 ``done.block_swap_prefetch_used`` is the block-swap-prefetch analogue: "off",
 "on", or "on->off" when prefetch was requested but degraded (block swap not
 installed, pinned-memory allocation failed, etc.) — see
-``FastVideoPipeline.block_swap_prefetch_used()``. Unlike attention, this is a
+``LTXFastVideoPipeline.block_swap_prefetch_used()``. Unlike attention, this is a
 pure transfer-mechanism switch, so it never changes generated bytes.
 
 ``done.keep_resident_used`` is the same idea for the cross-job CPU-skeleton
 cache: "off", "on", or "on->off" when the job asked for it but a worker-side
 guard downgraded it (see ``_resolve_keep_resident`` — the reason is always
 spelled out in a WARNING on STDERR, because "on->off" alone does not say
-WHICH guard fired). Bit-identical output either way (§47.3 G9).
+WHICH guard fired). Bit-identical output either way
+(Docs/VERIFICATION_LOG.md §47.3, G9).
 
 ``done.fused_gguf_dequant_kernel_used`` is the same idea for the fused Triton
 GGUF dequantization kernel: "off", "on", or "on->off" when the job asked for it
 but it never actually applied (Triton unavailable, a kernel raised and latched
 the eager fallback, the first-call bit-comparison self-check mismatched, or the
 job dequantized no eligible tensor at all) — see
-``FastVideoPipeline.fused_gguf_dequant_kernel_used()``. Like block-swap
+``LTXFastVideoPipeline.fused_gguf_dequant_kernel_used()``. Like block-swap
 prefetch, it is a pure implementation switch: bit-identical output either way.
 
 ``done.vae_mode_used`` is the same idea for the video VAE decoder: "off" (the
 stock decoder ran), "on" (the pruned PrunaVAED decoder ran), or "on->off" when
 the job asked for PrunaVAED but its weight file was absent, so the stock decoder
-ran instead — see ``FastVideoPipeline.vae_mode_used()``. UNLIKE every other
-knob above, this one DOES change the generated pixels when it is on: PrunaVAED
-is a pruned + distilled decoder and is not bit-identical to the stock one by
-design (that is why its default is permanently off).
+ran instead — see ``LTXFastVideoPipeline.vae_mode_used()``. Like sage attention
+(and unlike the other knobs above), this one DOES change the generated pixels
+when it is on: PrunaVAED is a pruned + distilled decoder and is not
+bit-identical to the stock one by design (that is why its default is
+permanently off).
 
 ``done.peak_vram_reserved_mb`` is ``torch.cuda.max_memory_reserved()`` in MB,
-reported ADDITIVELY alongside the existing ``peak_vram_mb`` (which is
-``max_memory_allocated``-based and cannot see allocator-reserved-but-unused
-growth from stream-separate pools) — it is the VRAM-risk signal for this
-feature's real-device gate.
+reported alongside ``peak_vram_mb`` (which is ``max_memory_allocated``-based
+and cannot see allocator-reserved-but-unused growth from stream-separate
+pools), so it is the VRAM-risk signal for that growth.
 
 The generate_chain ``done`` event carries a ``chain`` dict (full junction
 geometry). For a V2V run it additionally holds a ``chain.v2v`` sub-dict:
-{context_frames, n_ctx_v, n_ctx_a, freeze_ka, trimmed_px, trimmed_audio_samples,
-audio_fade_in_samples, source_had_audio, audio_head_frozen, new_frames_px,
-decoded_frames_px, v2v_context_junction_px, source_context_px}.
+{context_frames, n_ctx_v, n_ctx_a, freeze_ka, trim_px, trimmed_px,
+trimmed_audio_samples, audio_fade_in_samples, source_had_audio,
+audio_head_frozen, new_frames_px, decoded_frames_px, v2v_context_junction_px,
+source_context_px, audio_handle_filename, handle_context_seconds}.
 ``source_had_audio`` = the source FILE had an audio stream; ``audio_head_frozen``
 (= freeze_ka > 0) = the frozen head actually carries audio continuity — these
 can differ if the source's encoded audio latents ran out before n_ctx_a (a
@@ -171,8 +209,8 @@ os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
 # import cwd = project root: make the first-party `engine.*` package (and the
 # venv-installed `ltx_core`/`ltx_pipelines`) importable. Launched as
 # `python -m engine.worker` with PYTHONPATH=<root>, but we also insert the root
-# on sys.path + chdir(ROOT) here so a bare `python engine/worker.py` still works
-# (mirrors the pre-relocation chdir/sys.path bootstrap).
+# on sys.path + chdir(ROOT) here so a bare `python engine/worker.py` still
+# works.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
@@ -185,13 +223,13 @@ def _configure_worker_logging() -> None:
     """Route the engine's ``logging.getLogger(__name__)`` calls to STDERR.
 
     The engine modules (engine/gguf, engine/gemma, engine/transformer,
-    engine/pipeline/*) log via module loggers that, until now, had no handler
-    anywhere in the worker process -> everything below WARNING was silently
-    dropped, so the GGUF/block-swap/model-load breakdown never reached
+    engine/pipeline/*) log via module loggers; without a handler anywhere in
+    the worker process everything below WARNING would be silently dropped, so
+    the GGUF/block-swap/model-load breakdown would never reach
     logs/ltx_worker.log. We add ONE StreamHandler on the root logger pointed at
-    STDERR (which the parent redirects to logs/ltx_worker.log — the peak_vram
-    primary source) so those INFO lines become visible in the same file, framed
-    with the familiar ``[ltx_worker]`` prefix + the emitting module name.
+    STDERR (which the parent redirects to logs/ltx_worker.log) so those INFO
+    lines become visible in the same file, framed with the familiar
+    ``[ltx_worker]`` prefix + the emitting module name.
 
     This never touches STDOUT (the ``@@LTX@@`` protocol channel), and it does
     NOT duplicate the ``_log()`` print path: ``_log`` writes to STDERR directly
@@ -231,9 +269,9 @@ def _emit(event: str, **fields: object) -> None:
 def _detail(exc: BaseException) -> str:
     """repr + head/tail of the traceback for an error reply.
 
-    Tail-only truncation dropped the OUTER frames, which is where "which of our
-    call sites raised" lives — a deep wheel traceback then says only that some
-    VAE op OOM'd. Keep both ends (budget roughly unchanged).
+    A tail-only truncation would drop the OUTER frames, which is where "which
+    of our call sites raised" lives — a deep wheel traceback then says only
+    that some VAE op OOM'd. Keep both ends.
     """
     tb = "".join(traceback.format_exc())
     if len(tb) > 2800:
@@ -243,14 +281,16 @@ def _detail(exc: BaseException) -> str:
 
 import torch  # noqa: E402
 
-# Pre-warm to avoid the rev-00dc53d cold-import circular bug (MUST precede any
-# quantization / pipeline import). Mirrors run_t2v_bs8.py L52-54.
+# Pre-warm to avoid the pinned upstream revision's cold-import circular bug
+# (MUST precede any quantization / pipeline import). Mirrors the pre-warm in
+# outputs/phase4_gguf_gemma/run_t2v_bs8.py.
 import ltx_core.loader  # noqa: E402,F401
 
 _log(f"pre-warmed ltx_core.loader; torch {torch.__version__} cuda={torch.cuda.is_available()}")
 
 DEV = torch.device("cuda:0")
-# init cuda context + warm + reset stats (mirrors run_t2v_bs8.py L57-61).
+# init cuda context + warm + reset stats (mirrors the CUDA init in
+# run_t2v_bs8.py).
 torch.cuda.set_device(DEV)
 torch.cuda.init()
 _ = torch.zeros(1, device=DEV)
@@ -269,14 +309,15 @@ import chain_math  # noqa: E402
 
 _log("imported LTXFastVideoPipeline + ImageConditioningInput")
 
-# Phase 5(B) VRAM fix: release the Windows-stranded caching-allocator reserved
-# pool before each denoise. expandable_segments is a no-op on this box, so after
-# block-swap loads the full GGUF transformer to GPU then evicts blocks to CPU,
+# VRAM fix (Docs/VERIFICATION_LOG.md §7.4): release the Windows-stranded
+# caching-allocator reserved pool before each denoise. expandable_segments is
+# a no-op on this box, so after block-swap loads the full GGUF transformer to
+# GPU then evicts blocks to CPU (the build-on-GPU path, LTX_DIT_CPU_LOAD=0),
 # ~16GB of freed segments stay reserved and spill to WDDM shared during denoise.
 # A gc+empty_cache right before denoise drops reserved ~17.5GB -> ~1.5GB (live
 # unchanged), keeping denoise inside the 16GB card. Proven in outputs/phase5b_diag
-# (tag EC): denoise shared 3969 -> 742MB (ambient), wall 210.9 -> 114.9s, output
-# bit-identical.
+# (tag EC; Docs/VERIFICATION_LOG.md §7.3): denoise shared 3969 -> 742MB
+# (ambient), wall 210.9 -> 114.9s, output bit-identical.
 import ltx_pipelines.distilled as _distilled  # noqa: E402
 
 _orig_denoise_audio_video = _distilled.denoise_audio_video
@@ -289,15 +330,15 @@ def _denoise_with_cache_release(*args, **kwargs):
 
 
 _distilled.denoise_audio_video = _denoise_with_cache_release
-_log("installed pre-denoise empty_cache monkeypatch (Phase 5B VRAM fix)")
+_log("installed pre-denoise empty_cache monkeypatch")
 
-# F2 (G3 gate): per-step denoise progress. The wheel's denoising loops have no
-# callback, but they all iterate via the samplers module's ``tqdm`` binding —
-# engine/progress_shim.py swaps that for an observation-only wrapper that calls
-# the emitter below after every completed step. STRICTLY additive: the shim
-# yields the wheel's items unchanged (numbers/seeds/tensors untouched) and any
-# emit failure is logged and swallowed so a progress hiccup can never fail a
-# generation.
+# Per-step denoise progress (Docs/VERIFICATION_LOG.md §26.3): the wheel's
+# denoising loops have no callback, but they all iterate via the samplers
+# module's ``tqdm`` binding — engine/progress_shim.py swaps that for an
+# observation-only wrapper that calls the emitter below after every completed
+# step. STRICTLY additive: the shim yields the wheel's items unchanged
+# (numbers/seeds/tensors untouched) and any emit failure is logged and
+# swallowed so a progress hiccup can never fail a generation.
 from engine import progress_shim  # noqa: E402
 
 
@@ -327,28 +368,30 @@ def _emit_step_progress(
 
 
 progress_shim.install(_emit_step_progress)
-_log("installed per-step tqdm progress shim (F2)")
+_log("installed per-step tqdm progress shim")
 
 # Module-global pipeline, built once on the first {"op":"load"}.
 _PIPE: LTXFastVideoPipeline | None = None
 
 
 def _do_load(msg: dict) -> None:
-    """Build the pipeline ONCE. Mirrors run_t2v_bs8.py create() arg names/values."""
+    """Build the pipeline ONCE."""
     global _PIPE
     # Probe BEFORE the (multi-minute, memory-hungry) pipeline build: probe_sage()
     # is fully guarded and cached, so this cannot fail the load, and doing it
     # first means the answer is already known no matter which branch below emits
-    # ``ready``. The early-return branch is currently unreachable (the parent
-    # never sends a second "load"), but it must carry the same field.
+    # ``ready``. The early-return branch is unreachable from ``main`` (a second
+    # "load" after a successful one falls through to its unknown-op branch), but
+    # it must carry the same field.
     sage_available = probe_sage()
     if _PIPE is not None:
         _emit("ready", sage_available=sage_available)
         return
 
     _log(f"sage_available={sage_available}")
-    # §3-167 / §3-168: a quantized (fp8 / int8) safetensors transformer arrives in its own key, with
-    # gguf_transformer_path emptied (older parents never send the key).
+    # A quantized (fp8 / int8) safetensors transformer arrives in its own key, with
+    # gguf_transformer_path emptied (the adapter sends the key only for a
+    # .safetensors transformer, hence .get).
     gguf_t = msg["gguf_transformer_path"]
     st = msg.get("safetensors_transformer_path", "")
     if gguf_t and st:
@@ -370,29 +413,28 @@ def _do_load(msg: dict) -> None:
         gguf_per_layer_quant=bool(msg["gguf_per_layer_quant"]),
         vae_spatial_tile_size=int(msg["vae_spatial_tile_size"]),
         vae_temporal_tile_size=int(msg["vae_temporal_tile_size"]),
-        # Stage 3: load-once / keep-resident weights (StateDictRegistry).
-        # ALWAYS False at create time — this is now a PER-JOB setting
+        # Keep-resident weights (StateDictRegistry) are a PER-JOB setting
         # (``keep_resident`` on the generate payload), armed/disarmed by
         # ``LTXFastVideoPipeline._set_keep_resident_job`` at each job's entry
-        # point. The old ``LTX_KEEP_RESIDENT`` env var is gone entirely (it
-        # defaulted to "1" here while services/ltx_runner.py forced "0" into the
-        # child env — an asymmetry that only worked because both halves agreed
-        # by accident). Starting False also means a worker that never receives
-        # a keep_resident job behaves exactly as it does today.
+        # point, so the pipeline is ALWAYS created with them off. Starting
+        # False also means a worker that never receives a keep_resident job
+        # never arms the cross-job cache.
         keep_resident_weights=False,
         # TE per-layer CPU offload: stream the GGUF-quantized Gemma decoder layers
-        # CPU->GPU one window at a time during text-encode (caps the ~15 GB encode
-        # peak to a few GB). Default ON when the env var is ABSENT; LTX_TE_OFFLOAD=0
-        # reproduces today's all-layers-GPU-resident behavior.
+        # CPU->GPU one window at a time during text-encode (lowers the encode
+        # peak; VERIFICATION_LOG §11.3 records the figures). Default ON when the
+        # env var is ABSENT; LTX_TE_OFFLOAD=0 keeps all decoder layers
+        # GPU-resident.
         te_offload_text_encoder=(os.environ.get("LTX_TE_OFFLOAD", "1") == "1"),
         # DiT CPU-resident build: build the transformer on CPU and move only the
-        # non-block submodules to GPU, eliminating the ~16.9 GB load-time GPU
-        # spike. Default ON when the env var is ABSENT; LTX_DIT_CPU_LOAD=0
-        # reproduces today's build-on-GPU-then-evict behavior.
+        # non-block submodules to GPU, eliminating the load-time GPU spike
+        # (VERIFICATION_LOG §12.1). Default ON when the env var is ABSENT;
+        # LTX_DIT_CPU_LOAD=0 builds on the GPU and then evicts the blocks.
         dit_cpu_load=(os.environ.get("LTX_DIT_CPU_LOAD", "1") == "1"),
-        # Phase 1: re-source VIDEO VAE + AUDIO VAE/vocoder from standalone files
-        # (gate via LTX_COMPONENT_FILES, default OFF). Text projection path is
-        # passed through but NOT wired (Phase 2).
+        # Component files (gate via LTX_COMPONENT_FILES, default OFF): re-source
+        # VIDEO VAE + AUDIO VAE/vocoder from standalone files, and hand the text
+        # projection path to the Gemma install (see
+        # LTXFastVideoPipeline.__init__).
         use_component_files=(os.environ.get("LTX_COMPONENT_FILES", "0") == "1"),
         component_video_vae_path=msg.get("component_video_vae_path", ""),
         component_audio_vae_path=msg.get("component_audio_vae_path", ""),
@@ -401,7 +443,6 @@ def _do_load(msg: dict) -> None:
         # vae_mode="prune_vaed" job downgrades to the stock decoder; the file's
         # existence is re-checked PER JOB, not here (see _set_vae_mode_job).
         component_video_vae_pruned_path=msg.get("component_video_vae_pruned_path", ""),
-        # cpu_text_encode intentionally NOT set -> GGUF Gemma path wins.
     )
     _log("PIPELINE_CREATED_OK")
     _emit("ready", sage_available=sage_available)
@@ -414,22 +455,20 @@ def _preprocess_frame_cap(msg: dict) -> int | None:
     waste decode time on footage the generation will never use), so this caps
     the preprocessor's input to exactly what stage-1 can consume. The
     generation length is ``num_frames`` for a single generate. For a chain
-    (§1-15, clip-wise IC-LoRA reference) a reference is attached to EVERY
+    (clip-wise IC-LoRA reference) a reference is attached to EVERY
     clip's stage-1 conditioning, sliced per-segment via
     ``chain_math.video_segment_windows`` — so the cap is the PIXEL TOTAL the
     chain's stage-1 ledger spans across all clips, not just clip 0. The
     per-segment slicing (which window of these frames a given clip actually
     sees) happens downstream in ``engine/pipeline/chain_pipeline.py``; this
     cap only bounds how much of the source the decoder reads. Returns None
-    (decode everything, the pre-existing behaviour) when neither key is
-    present.
+    (decode everything) when neither key is present.
 
-    NOTE (depth specifically): the API layer rejects depth-preprocess
-    references on chains with more than one clip (422
-    ``LORA_DEPTH_CHAIN_UNSUPPORTED`` — depth's whole-clip VideoProcessor
-    normalisation does not chunk safely, see B7 in the §1-15 plan), so a
-    depth job only ever reaches this branch with exactly one clip, where the
-    formula above reduces to the pre-existing single-clip value
+    NOTE (depth specifically): the API layer rejects depth-preprocess references
+    on chains with more than one clip (422 ``LORA_DEPTH_CHAIN_UNSUPPORTED`` —
+    depth's whole-clip VideoProcessor normalisation does not chunk safely; spec
+    §6.8 lists the code), so a depth job only ever reaches this branch with
+    exactly one clip, where the formula above reduces to the single-clip value
     (``clips[0]["num_frames"]``, since ``seg_latent`` has one element and the
     ``- (n-1)*kv`` term vanishes). The multi-clip total_px path is real for
     canny/dwpose only.
@@ -456,23 +495,25 @@ def _resolve_ic_reference(
     no reference is supplied. ``attention_strength`` is the IC-LoRA
     control-adherence knob (conditioning_attention_strength, 0..1, default 1.0):
     at 1.0 no attention-strength wrapper is applied downstream (structurally
-    byte-identical to before); < 1.0 relaxes how strongly the reference drives
-    self-attention. For a Phase C control adapter (``preprocess`` != "none") the
-    raw reference is converted to a control-signal video (edge map / skeleton /
-    depth map) via engine/preprocess/ and the returned path is swapped to that
-    control mp4 (written next to ``output_path``); "none" leaves the raw video
-    as-is and cv2 is never imported. An unknown ``preprocess`` fails the job loud
-    (``get_processor`` raises). Extracted verbatim from _do_generate so the
-    single-generate and chain paths resolve the reference identically.
+    identical, not merely numerically equal); < 1.0 relaxes how strongly the
+    reference drives self-attention. For a control adapter (``preprocess`` !=
+    "none") the raw reference is converted to a control-signal video (edge
+    map / skeleton / depth map) via engine/preprocess/ and the returned path is
+    swapped to that control mp4 (written next to ``output_path``); "none"
+    leaves the raw video as-is and cv2 is never imported. An unknown
+    ``preprocess`` fails the job loud (``get_processor`` raises). The
+    single-generate and chain paths both call this, so they resolve the
+    reference identically.
 
     ``frame_cap`` is forwarded to the driver for EVERY preprocess kind. depth
     is a whole-clip ``VideoProcessor`` (normalises over everything it is
     given, so capping also avoids shifting the gray range); canny/dwpose are
     per-frame ``FrameProcessor``s and produce byte-identical output either
     way — capping them only skips decoding/processing frames the generation
-    will never use (relevant once a reference can span the 11544f chain
-    upload ceiling instead of one clip). ``None`` (no ``num_frames``/``clips``
-    key in ``msg``) still decodes the whole source, unchanged.
+    will never use (relevant because a chain's reference spans the whole
+    chain, up to ``api/models.py``'s ``MAX_CHAIN_TOTAL_PIXEL_FRAMES``, rather
+    than one clip). ``None`` (no ``num_frames``/``clips`` key in ``msg``)
+    decodes the whole source.
     """
     ic_reference = None
     attn_strength = 1.0
@@ -498,8 +539,8 @@ def _resolve_ic_reference(
             elapsed = time.perf_counter() - t0
             # cap= is appended only when one applies (frame_cap is None for a
             # bare reference_video with no num_frames/clips context, e.g. a
-            # future caller that omits it — every worker.py call site today
-            # always supplies one).
+            # caller that omits it; both worker.py call sites pass
+            # ``_preprocess_frame_cap(msg)``).
             _log(
                 f"PREPROCESS {preprocess} {ref_path} -> {control_path} "
                 f"frames={n_frames}"
@@ -517,16 +558,14 @@ def _resolve_nag(msg: dict) -> "NagParams | VsfParams | None":
 
     ``nag`` is present only when the app/API layer had a non-CFG negative
     prompt enabled for this job (payload is additive — absent for every
-    pre-NAG caller and every disabled request, so this returns None and the
-    job is byte-identical to before the feature existed).
+    request that did not ask, so this returns None).
 
     ``method`` selects between the two methods and defaults to ``"nag"`` when
-    the key is missing: the app layer gained that key with VSF, so an older
-    client (or a replayed pre-VSF payload) must keep resolving to exactly the
-    NAG params it always did. An UNKNOWN method is a different situation
-    entirely — it means the two layers disagree — and fails loudly rather than
-    quietly falling back to the wrong algorithm. VSF's own knob defaults to
-    the API's default (scale 1.5) for the same forward-compatibility reason.
+    the key is missing, so a ``nag`` block without the key resolves to the NAG
+    params. An UNKNOWN method is a different situation entirely — it means the
+    two layers disagree — and fails loudly rather than quietly falling back to
+    the wrong algorithm. VSF's own knob falls back to the API's default (scale
+    1.5) when its key is missing.
     """
     blk = msg.get("nag")
     if not blk:
@@ -553,9 +592,9 @@ def _resolve_nag(msg: dict) -> "NagParams | VsfParams | None":
 def _neg_label(nag: "NagParams | VsfParams | None") -> str:
     """Job-log tag for the non-CFG negative-prompt method: off / nag / vsf.
 
-    Replaces the old ``nag=on|off``: with two methods, "on" no longer says
-    which algorithm actually ran, and that is the first thing anyone reading
-    a log for a suspicious result needs to know.
+    Not ``nag=on|off``: with two methods, "on" would not say which algorithm
+    actually ran, and that is the first thing anyone reading a log for a
+    suspicious result needs to know.
     """
     if nag is None:
         return "off"
@@ -568,9 +607,8 @@ def _resolve_attention(msg: dict) -> tuple[str, bool]:
     ``degraded`` means "sage was asked for but this process cannot deliver it",
     which is what turns into ``attention_used="sage->sdpa"`` below.
 
-    Missing key -> "sdpa": the payload is additive, so every pre-Acceleration
-    caller (and every default request, which does not send the key at all)
-    resolves to exactly the behaviour it always had.
+    Missing key -> "sdpa": the payload is additive, and a default request does
+    not send the key at all.
 
     An UNKNOWN value fails the job loudly, exactly like ``_resolve_nag``'s
     unknown method: it can only mean the app and the engine disagree about the
@@ -646,36 +684,39 @@ def _block_swap_prefetch_used() -> str:
 def _resolve_keep_resident(msg: dict, bs_prefetch: bool) -> tuple[bool, str | None]:
     """Resolve a job's ``keep_resident`` -> ``(effective, degraded_reason)``.
 
-    Missing key -> ``(False, None)``: the payload is additive, so every
-    pre-keep_resident caller resolves to today's behaviour. "Absent means off"
-    is ALSO the explicit release trigger — the pipeline frees the ~20GB cache
-    the first time a job resolves to False after a job that resolved to True.
+    Missing key -> ``(False, None)``: the payload is additive, and a default
+    request does not send the key at all. "Absent means off" is ALSO the
+    explicit release trigger — the pipeline frees the cross-job cache
+    (VERIFICATION_LOG §48.6 records its size) the first time a job resolves to
+    False after a job that resolved to True.
 
     Three guards, all on the ON path only (an OFF job is never blocked):
 
-    **G-A ``gguf_per_layer_quant=False`` -> RuntimeError (fail loud).** The
-    bf16 fused path (engine/gguf/loader_service.py) applies IC-LoRA by
-    ``weight.add_()`` — an IN-PLACE mutation of the state dict. With a
-    persistent registry that mutation is written straight into the cached
+    **G-A GGUF transformer with ``gguf_per_layer_quant=False`` -> RuntimeError
+    (fail loud).** The bf16 fused path (engine/gguf/loader_service.py) applies
+    IC-LoRA by ``weight.add_()`` — an IN-PLACE mutation of the state dict. With
+    a persistent registry that mutation is written straight into the cached
     tensors, so every later job silently inherits the LoRA. This is a
     CORRECTNESS problem, not a speed one, hence the different regime from the
-    two guards below. Unreachable through today's API (the app always loads
-    with per-layer quant on), kept as the breakwater for whoever wires that
-    switch up later.
+    two guards below. No API field turns per-layer quant off (the load
+    payload's ``gguf_per_layer_quant`` comes from the config's
+    ``model.gguf_per_layer_quant``), so this guard is the breakwater for a
+    config that does.
 
     **G-B ``dit_cpu_load=False`` -> warn + auto-off.** Not a VRAM issue (the
-    §47.3 G8 measurement showed peak VRAM unchanged within +-3MB): with the DiT
-    built on the GPU, block swap keeps its own CPU eviction copies of the
-    blocks, which DOUBLE UP with the same blocks living in the cache — ~11GB of
-    main memory for nothing, on the exact axis this feature is already tight on.
+    VERIFICATION_LOG §47.3 G8 measurement showed peak VRAM unchanged within
+    +-3MB): with the DiT built on the GPU, block swap keeps its own CPU
+    eviction copies of the blocks, which DOUBLE UP with the same blocks living
+    in the cache — main memory spent for nothing, on the exact axis this
+    feature is already tight on.
 
     **G-C ``block_swap_prefetch=False`` -> warn + auto-off.** Same doubling,
     worse: the synchronous swap path makes a fresh GPU->CPU eviction copy every
-    step while the cache holds the CPU master anyway (+11.4GB). §47.3 G7
-    already measured commit at 96% of the ceiling with prefetch ON; stacking
-    this on top lands in crash territory. And unlike G-B this combination is
-    two adjacent checkboxes away in the UI, so it is a NORMAL thing to do by
-    accident.
+    step while the cache holds the CPU master anyway (VERIFICATION_LOG §48.3).
+    VERIFICATION_LOG §47.3 G7 measured commit close to the ceiling with
+    prefetch ON; stacking this on top lands in crash territory. And unlike G-B
+    this combination is two adjacent checkboxes away in the UI, so it is a
+    NORMAL thing to do by accident.
 
     Residual risk accepted (documented, not guarded): prefetch can still
     degrade LATER, inside install() (pinned allocation failure etc.), after
@@ -683,7 +724,7 @@ def _resolve_keep_resident(msg: dict, bs_prefetch: bool) -> tuple[bool, str | No
     ``block_swap_prefetch_used="on->off"`` next to ``keep_resident_used="on"``.
 
     Every auto-off logs WHY: ``keep_resident_used="on->off"`` in the metadata
-    cannot tell G-B from G-C from a mid-job failure on its own.
+    cannot tell G-B from G-C on its own.
     """
     if not bool(msg.get("keep_resident", False)):
         return False, None
@@ -764,9 +805,8 @@ def _fused_gguf_dequant_kernel_used() -> str:
 def _resolve_vae_mode(msg: dict) -> str:
     """Resolve a job's ``vae_mode`` -> "default" | "prune_vaed".
 
-    Missing key -> "default": the payload is additive, so every caller that
-    predates this feature (and every default request, which does not send the
-    key at all) resolves to exactly the behaviour it always had.
+    Missing key -> "default": the payload is additive, and a default request
+    does not send the key at all.
 
     An UNKNOWN value fails the job loudly, like ``_resolve_attention`` and
     UNLIKE the boolean speed knobs (``_resolve_block_swap_prefetch`` /
@@ -795,9 +835,9 @@ def _resolve_vae_mode(msg: dict) -> str:
 def _resolve_stage2_window(msg: dict) -> tuple[int, int]:
     """Resolve a chain job's ``stage2_window`` -> ``(v_tile, v_adv)``.
 
-    Missing key -> the default preset, i.e. the frozen (22, 18) layout every
-    chain used before this knob existed (the payload is additive: the app only
-    sends the key for a NON-default window).
+    Missing key -> the default preset (``chain_math.STAGE2_WINDOW_DEFAULT``;
+    the payload is additive: the app only sends the key for a NON-default
+    window).
 
     An unknown value fails the job loudly, the same regime as
     ``_resolve_vae_mode`` / ``_resolve_attention`` and deliberately UNLIKE the
@@ -835,8 +875,8 @@ def _peak_vram_reserved_mb() -> int:
     """``torch.cuda.max_memory_reserved()`` in MB. The existing ``peak_vram_mb``
     (``max_memory_allocated``-based) cannot see allocator-reserved-but-unused
     growth from stream-separate pools, so this rides alongside it as an
-    additional signal for this feature's VRAM real-device gate — it does not
-    replace ``peak_vram_mb``.
+    additional signal (the block-swap prefetch VRAM criterion in
+    Docs/VERIFICATION_LOG.md §44.1) — it does not replace ``peak_vram_mb``.
     """
     return int(torch.cuda.max_memory_reserved(DEV) // (1024 * 1024))
 
@@ -872,11 +912,11 @@ def _do_generate(msg: dict) -> None:
         for i in msg.get("images", [])
     ]
 
-    # Phase B IC-LoRA (forward-time weight patch on the per-layer-quant path).
+    # IC-LoRA (forward-time weight patch on the per-layer-quant path).
     # ``ic_loras`` is always passed EXPLICITLY (even []): an explicit empty list is
     # the authoritative "no LoRA this job" -> clean detach, so a no-LoRA job after a
-    # LoRA job is byte-identical to base (gate G3). ``ic_reference`` is the
-    # Pixel-Spatial-Upscaler reference video (None when absent).
+    # LoRA job is byte-identical to base (Docs/VERIFICATION_LOG.md §21.5).
+    # ``ic_reference`` is the IC-LoRA reference video (None when absent).
     ic_loras = [
         (
             str(lo["path"]),
@@ -885,39 +925,36 @@ def _do_generate(msg: dict) -> None:
         )
         for lo in msg.get("loras", [])
     ]
-    # ``reference_video`` -> (ic_reference, attn_strength). The Phase C control
+    # ``reference_video`` -> (ic_reference, attn_strength). The control
     # preprocess (edge/pose) and the conditioning_attention_strength knob are
     # both resolved inside the shared helper (see _resolve_ic_reference); no
-    # reference -> (None, 1.0), inert + byte-identical to before.
+    # reference -> (None, 1.0), inert.
     ic_reference, attn_strength = _resolve_ic_reference(
         msg.get("reference_video"), output_path, _preprocess_frame_cap(msg)
     )
-    # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None, byte-
-    # identical to before this feature existed.
+    # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None.
     nag = _resolve_nag(msg)
-    # Attention backend (speed only): absent -> "sdpa", byte-identical to before
-    # this feature existed.
+    # Attention backend (speed only): absent -> "sdpa".
     attention, attn_degraded = _resolve_attention(msg)
-    # Block-swap prefetch (speed only, output bit-identical): absent -> False,
-    # byte-identical to before this feature existed.
+    # Block-swap prefetch (speed only, output bit-identical): absent -> False.
     bs_prefetch = _resolve_block_swap_prefetch(msg)
     # Cross-job CPU-skeleton cache (preprocessing speed only, output
-    # bit-identical): absent -> False, byte-identical to before. May raise
-    # (G-A) or auto-off (G-B/G-C) — see _resolve_keep_resident.
+    # bit-identical): absent -> False. May raise (G-A) or auto-off (G-B/G-C)
+    # — see _resolve_keep_resident.
     keep_res, _keep_res_reason = _resolve_keep_resident(msg, bs_prefetch)
     # Fused Triton GGUF dequantization (speed only, output bit-identical):
-    # absent -> False, byte-identical to before this feature existed.
+    # absent -> False.
     fused_dequant = _resolve_fused_dequant(msg)
-    # Video VAE decoder selection: absent -> "default", byte-identical to before
-    # this feature existed. Unlike the knobs above this one CHANGES THE PIXELS
-    # (the pruned decoder is not bit-identical to the stock one by design).
+    # Video VAE decoder selection: absent -> "default". Unlike the knobs above
+    # this one CHANGES THE PIXELS (the pruned decoder is not bit-identical to
+    # the stock one by design).
     vae_mode = _resolve_vae_mode(msg)
 
     outpaint = msg.get("outpaint")
-    # Inpainting (台帳 §3-55): the same additive contract outpaint uses — absent
-    # on every other job, and its PRESENCE is what routes this call to the
-    # masked two-stage driver. The two are mutually exclusive at the schema
-    # layer (api/models.py), which the assert below restates where it would
+    # Inpainting: the same additive contract outpaint uses — absent on every
+    # other job, and its PRESENCE is what routes this call to the masked
+    # two-stage driver. The two are mutually exclusive at the schema layer
+    # (api/models.py), which the assert below restates where it would
     # actually bite.
     inpaint = msg.get("inpaint")
     assert not (outpaint is not None and inpaint is not None), (
@@ -935,10 +972,12 @@ def _do_generate(msg: dict) -> None:
         f"keepresident={keep_res} fuseddequant={fused_dequant} vae={vae_mode}"
     )
 
-    # Every knob the two entry points share, built ONCE. Splatting the same dict
-    # into both calls is what makes it structurally impossible for the outpaint
-    # branch to quietly miss one — dropping e.g. keep_resident or vae_mode would
-    # not fail, it would silently leak the previous job's state.
+    # Every knob the three entry points share, built ONCE. Splatting the same
+    # dict into every call is what makes it structurally impossible for the
+    # outpaint or inpaint branch to quietly miss one — dropping a knob would
+    # not fail, it would silently change the job: e.g. keep_resident would
+    # keep the previous job's state, and vae_mode would fall back to the stock
+    # decoder.
     common = dict(
         prompt=msg["prompt"],
         seed=seed,
@@ -962,13 +1001,14 @@ def _do_generate(msg: dict) -> None:
     meta = None
     meta_key = "inpaint" if inpaint is not None else "outpaint"
     if inpaint is not None:
-        # Inpainting (台帳 §3-55). ``reference_video.path`` is already the
-        # green-FILLED canvas the app built (the mask's white region painted
-        # #66FF00, padded out to the 128-multiple canvas), so ic_reference above
-        # points at it and this branch only has to hand run_inpaint the geometry
-        # and the mask video it needs. Like outpaint, run_inpaint drives its two
-        # stages itself and tags them explicitly, so the shim's loop-counting
-        # inference (begin_single_op) must NOT be used here.
+        # Inpainting. ``reference_video.path`` is already the green-FILLED
+        # canvas the app built (the mask's white region painted #66FF00, padded
+        # out to a ``CANVAS_MULTIPLE`` canvas — see engine/outpaint/canvas.py),
+        # so ic_reference above points at it and this branch only has to hand
+        # run_inpaint the geometry and the mask video it needs. Like outpaint,
+        # run_inpaint drives its two stages itself and tags them explicitly, so
+        # the shim's loop-counting inference (begin_single_op) must NOT be used
+        # here.
         from engine.inpaint.canvas import InpaintGeometry
 
         geometry = InpaintGeometry(
@@ -991,8 +1031,7 @@ def _do_generate(msg: dict) -> None:
             **common,
         )
     elif outpaint is not None:
-        # Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the
-        # time). ``reference_video.path`` is already the green
+        # Outpainting. ``reference_video.path`` is already the green
         # canvas the app built, so ic_reference above points at it and this
         # branch only has to hand run_outpaint the geometry it needs to rebuild
         # the blend mask. Unlike the wheel's single generate, run_outpaint drives
@@ -1022,7 +1061,7 @@ def _do_generate(msg: dict) -> None:
             **common,
         )
     else:
-        # F2: single-generate runs the wheel's two denoising loops back-to-back
+        # Single-generate runs the wheel's two denoising loops back-to-back
         # inside __call__ (no seam to hook), so the shim infers stage1/stage2 from
         # the loop-invocation count within this op (see engine/progress_shim.py).
         progress_shim.begin_single_op()
@@ -1067,9 +1106,10 @@ def _do_generate(msg: dict) -> None:
         peak_vram_reserved_mb=peak_reserved,
         # Outpainting (or inpainting) geometry/blend/audio record, mirroring how
         # the chain path relays its own ``chain=meta``. Absent on every other
-        # job, so a plain generate's done event stays byte-identical — and so
-        # does an outpaint one, since ``meta_key`` is "outpaint" unless an
-        # inpaint block routed the call above.
+        # job, so a plain generate's done event carries only the keys above, an
+        # outpaint job adds ``outpaint`` and an inpaint job ``inpaint``
+        # (``meta_key`` is "outpaint" unless an inpaint block routed the call
+        # above).
         **({} if meta is None else {meta_key: meta[meta_key]}),
     )
 
@@ -1078,9 +1118,9 @@ def _do_generate(msg: dict) -> None:
     # (swapped_forward closures capturing block lists) that plain refcounting
     # can't reclaim, so an explicit gc.collect() is required; empty_cache() then
     # returns the freed CUDA blocks to the driver. Pairs with the end-of-job
-    # release in FastVideoPipeline's finally (BlockSwapService.release_installed()
-    # drops the keep-latest reference there; this gc.collect() is what actually
-    # reclaims it).
+    # release in LTXFastVideoPipeline's entry-point finally
+    # (BlockSwapService.release_installed() drops the keep-latest reference
+    # there; this gc.collect() is what actually reclaims it).
     gc.collect()
     torch.cuda.empty_cache()
 
@@ -1150,8 +1190,7 @@ def _do_generate_chain(msg: dict) -> None:
 
     # Retake (temporal inpainting): optional window (an mp4 that is ALREADY the
     # frame-exact, CFR window the app cut). Mutually exclusive with source and
-    # audio_source (asserted in run_chain + 422 at the API layer). Absent ->
-    # byte-identical to before.
+    # audio_source (asserted in run_chain + 422 at the API layer).
     retake = None
     rt = msg.get("retake")
     if rt:
@@ -1172,7 +1211,7 @@ def _do_generate_chain(msg: dict) -> None:
     # ALREADY cut to context_frames+1 frames at the request fps; a still image
     # was turned into a video app-side). Mutually exclusive with retake and
     # audio_source, combinable with source (asserted in run_chain + 422 at the
-    # API layer). Absent -> byte-identical to before.
+    # API layer).
     end_source = None
     es = msg.get("end_source")
     if es:
@@ -1192,11 +1231,10 @@ def _do_generate_chain(msg: dict) -> None:
     # chain). Always parsed EXPLICITLY (even []): an explicit empty list is the
     # authoritative "no LoRA this chain" -> clean detach, clearing any stale LoRA
     # left on the resident pipeline by a prior single generate() (mirrors
-    # _do_generate). α: control (reference) adapters are now accepted for
-    # clips=1 chains — the reference_video block (present only when a reference
-    # was supplied) is resolved below via the SAME helper as single generate()
-    # and wired to run_chain's stage-1 clip-0 conditioning; without it the chain
-    # is byte-identical to before.
+    # _do_generate). Control (reference) adapters: the reference_video block
+    # (present only when a reference was supplied) is resolved below via the
+    # SAME helper as single generate() and wired to run_chain's stage-1
+    # conditioning, cut into per-segment windows (_iter_reference_windows).
     ic_loras = [
         (
             str(lo["path"]),
@@ -1209,21 +1247,20 @@ def _do_generate_chain(msg: dict) -> None:
         msg.get("reference_video"), output_path, _preprocess_frame_cap(msg)
     )
 
-    # Opt-in memory-bounded spatial upsample (additive; default False keeps the
-    # one-shot whole-timeline upsample byte-identical). When True the engine
-    # upsamples the assembled stage-1 latent in halo-padded temporal chunks so a
-    # long 768p chain fits in 16GB VRAM.
+    # Opt-in memory-bounded spatial upsample (additive; absent or False -> the
+    # one-shot whole-timeline upsample). When True the engine upsamples the
+    # assembled stage-1 latent in halo-padded temporal chunks so a long 768p
+    # chain fits in 16GB VRAM.
     chunked_upsample = bool(msg.get("chunked_upsample", False))
 
-    # Stage-2 window preset (additive; absent -> the frozen (22, 18) geometry,
-    # byte-identical to before). One window covers every stage-2 tile of the
-    # chain — see _resolve_stage2_window.
+    # Stage-2 window preset (additive; absent -> chain_math's
+    # STAGE2_WINDOW_DEFAULT, i.e. STAGE2_V_TILE / STAGE2_V_ADV). One window
+    # covers every stage-2 tile of the chain — see _resolve_stage2_window.
     stage2_v_tile, stage2_v_adv = _resolve_stage2_window(msg)
 
-    # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None, byte-
-    # identical to before this feature existed.
+    # NAG (non-CFG negative prompt guidance): absent/falsy "nag" -> None.
     nag = _resolve_nag(msg)
-    # Attention backend (speed only): absent -> "sdpa", byte-identical to before.
+    # Attention backend (speed only): absent -> "sdpa".
     attention, attn_degraded = _resolve_attention(msg)
     # Block-swap prefetch (speed only, output bit-identical): absent -> False.
     bs_prefetch = _resolve_block_swap_prefetch(msg)

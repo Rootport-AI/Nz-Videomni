@@ -14811,3 +14811,94 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 7. 事実表 A-52 の `end_audio_status` の値域。
 
 候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 135. ★コード内コメントの現行化・第 5 区域 `engine/`（LTX 2.3 の推論エンジン）第 1 回（A）＝ `engine/pipeline/`（6 ファイル）・`worker.py`・`api_types.py`・`lora_types.py`・`progress_shim.py` の 532 ブロック中 204 を現行化（コメントのみ・動作は不変）＋利用者やログに出る文字列 4 件＋台帳 §1-51〜§1-58 と §4-2・設計書 §7.3 の訂正＋ engine25 側のコメントの誤り 3 件の訂正（2026-10-01）
+
+**要約**: §133・§134（`engine25/`）に続き、LTX 2.3 の推論エンジン本体 `engine/` を第 5 区域として進めました。今回は第 1 回（A）として、`engine/pipeline/`（6 ファイル）と `worker.py`・`api_types.py`・`lora_types.py`・`progress_shim.py`（計 10 ファイル・8,563 行）を扱いました。532 ブロックのうち 204 ブロック（事実が古いもの 144・導入時期の記録だけのもの 60。うちブロックごと削除は 3）を書き換え、コードは 1 文字も変わっていないことを構文木で確かめました。あわせて利用者やログに出る文字列 4 件をオーナーが文面を決めて反映し、上流のスケジューラの説明など挙動そのものの誤りも見つかって訂正し、コードの問題の疑い 8 件を台帳 §1-51〜§1-58 に起票し、台帳 §4-2 と設計書 `INPAINTING_DESIGN.md` §7.3 の訂正をオーナー指示で行いました。検算の過程で `engine25/` 側のコメントの誤りも 3 件見つかり、あわせて直しました。`engine/` の残り（B・C）は別に行います。
+
+**目的**: 骨格は §133・§134 と同じ（関数・メソッド・クラスの境目で区域を切り、Opus が全件を判定し、別の Opus が検算する）です。`engine/` 固有として、判定担当への指示に次を足しました。
+1. 節番号が指す文書は 3 系統あるため、裸の番号には文書名を補う——「VERIFICATION_LOG §N.M」と明記されたものはそのまま、裸の「§4.x」「§8」などは `Docs/PRUNAVAED_WORKORDER.md`、「§6.2」「§7.6」は `Docs/INPAINTING_DESIGN.md`、ダッシュ付きの「§N-M」は台帳を指す。
+2. Retake（撮り直し）の窓の音声の 3 つの裁定の出典は、§55.6 ではなく仕様書 §6.2 の補足（v0.5.76。§133 で新設）を指す。
+3. 共有部品の docstring は、誰が呼ぶかを Grep で確かめたうえで、両エンジン（`engine/`・`engine25/`）で成り立つ書き方にする。
+4. 行番号の書き写しは関数名を指す形にする。
+5. 上流の版の言い方は `scripts/install_ltx.ps1` の `$engineDirectPins` を指す形にする。
+6. `engine25/` で決まった扱い（研究段階の番号・関門名は Docs に定義が無ければ落とす、「当初から合わない文」であっても挙動についての誤った主張なら書かれた時期にかかわらず直す〔§134 の裁定〕）を同じ基準にする。
+7. ソースを文字列として読んでいるテストは `tests/test_retake_payload.py` の 1 件だけだと確かめた（`chain_pipeline.py` を `ast.parse` して `retake_meta` の鍵を拾うだけで、コメントは読まない）。
+
+道具は 2 点拡張しました。`apply_changes.py` にブロックごと削除（`delete`）を足し（`merge_changes.py` が安全性を検査済みのものだけに適用）、`flag_comments.py` が使う辞書の置き場を `comment-audit` 直下に揃えました。
+
+**対象**: `engine/` は 76 ファイル・26,074 行ですが、`engine/preprocess/vda/`（22 ファイル。Video-Depth-Anything の vendored コードで `VENDOR_NOTICE.md` に明記）は対象外としました。残り 54 ファイル・23,521 行を 3 回に分けます——A: `pipeline/` と `worker.py` 等 10 ファイル・8,563 行、B: `transformer/`・`gemma/`・`vae/`、C: `gguf/`・`sft_quant/`・`outpaint/`・`inpaint/`・`preprocess/`。今回は A です。起点コミットは `da19554` です。
+
+**方法**:
+1. **抜き出し・区域分け**: 21 区域（400〜550 行）へ切りました。`run_chain` と `fast_video_pipeline.py` は関数の途中ではなく文の境目で区域をまたいで分けました。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 21 区域それぞれに Opus 1 体を判定担当として走らせました。
+3. **検算（Opus 7 体）**: 306 ブロックを確かめました。確認済み 300・異論 4・一部だけ直した 1・見逃し 1 でした。異論 4 件は FV-061（保留文「戻り先の標準のテキストエンコーダ」は実在しない）・FV-079・FV-092（Beta スケジューラの説明）・CP-009、見逃しは FV-131 です。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 51 件を直しました（規則 6 の対の文・節の表記・折り返し・区域外の取り残し CP-054／FV-004 が主な内容）。続く再検算 80 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 204 件の差し替えを適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**:
+
+最終の判定（532 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 144 |
+| 導入時期の記録だけ | 60 |
+| 現行のまま | 328 |
+| 保留 | 0 |
+
+古いままの割合は 38%で、これまでで最も高くなりました（`engine25/` A は 34%・B は 25%）。
+
+**上流の挙動についての訂正**: 検算と監督が `.venv-engine` の `ltx_core/components/schedulers.py` を直接開いて確かめたところ、当初から誤っていた上流の挙動の説明が見つかり、書かれた時期にかかわらず訂正しました（§134 の裁定どおり）。`LinearQuadraticScheduler` は線形部と二次部の関係が逆に書かれていました。`BetaScheduler` は Beta(0.6, 0.6) が時刻の密度を両端に寄せる分布であること、`shift` を通した後のシグマの刻みは σ=1.0 付近で最小になることの 2 点が誤っていました。このほか「入口は 4 つ」「NAG の後に sage が包む」「transformer は毎ジョブ組み直す」「Retake と素材（末尾）は排他」「素材（末尾）の尾は `1 - strength`」「`_normalize_conditioning_images` は 0 か 8n+1 の格子」などの説明も訂正しています。
+
+**証明**: 13 ファイル（`engine/` の 10 ＋ `engine25/` の 3）とも、docstring を除いた構文木が起点と一致しました。コメントと docstring 以外のトークン列の差は、オーナーが文面を決めた文字列 4 件だけです。
+- `engine/worker.py` の起動ログ 2 文から、段階名「(Phase 5B VRAM fix)」と作業項目名「(F2)」を外しました。
+- `engine/pipeline/fast_video_pipeline.py` の `_install_component_sources` のログ「(text projection NOT wired — Phase 2)」を「(text projection is wired by the Gemma GGUF install)」に変えました。
+- `_swap_registry` の常駐 OFF のログから「block-swap CPU masters」と実測値「~1.9GB」を外しました。
+
+`_resolve_keep_resident` の降格の警告に残る実測値（11GB・+11.4GB・96 percent）は、オーナー裁定で据え置きました（降格の理由を数で示す役目のためです）。改行コードは全ファイル CRLF を維持しました（Python でバイト数を数えて確認）。
+
+**テスト**: `.venv-engine`（pytest あり）で §102.5・§105.5 の 16 ファイルを `--noconftest -p no:cacheprovider` で走らせ、313 件合格（失敗 0）でした。§107.3 の 321 件からの減少は、その後のテスト側の変更によるもので、今回の差分の影響ではありません。アプリ側 `.venv` で `test_step_progress`・`test_outpaint_canvas`・`test_inpaint_geometry`・`test_retake_payload` を走らせ、65 件合格・19 件スキップでした。`engine25/` の 3 ファイルにも触れたため、`.venv-engine-ltx25` で `test_ltx25_band`・`test_ltx25_outpaint`・`test_ltx25_inpaint` も合格しました。
+
+**台帳**: コードの問題の疑いを 8 件、§1-51〜§1-58 に起票しました（着手は個別に go／no-go の検討から）。
+- §1-51: Gemma の GGUF の取り付けに失敗しても `load` は成功扱いになる。
+- §1-52: GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性。
+- §1-53: V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない（§25.2 の実測どおり、符号化の段で失敗する見込み）。
+- §1-54: マスクの二値化の基準が 2 箇所で違う。
+- §1-55: `keep_resident_used` の報告が切替の失敗を反映しない。
+- §1-56: `peak_vram_mb` のリセットにより、参照動画の符号化より前のピークが落ちる（連結では区間ごと。`vram_within_16gb` も同じ）。
+- §1-57: 区切り幅の既定 `chunk_size or 8` が定数の値を書き写している。
+- §1-58: 使われていないコード一式。
+
+あわせて §1-46 に、LTX 2.3 側（`engine/pipeline/chain_pipeline.py` の `_encode_retake_window`）も同じ作りである旨を追記しました。
+
+**文書の訂正**（オーナー指示「文書を今直す」）:
+- 台帳 §4-2「attention tiling の本番投入」は、「SDPA へのグローバルパッチとして実装・配線は済んでいるが既定は OFF」と書いていましたが、実装はエンジンの移設時に除去済みでした（残っていた引数の除去は §16.1）。題を「attention tiling の再実装」に改め、概要と「何が塞いでいるか」を書き直しました。設定キー `attention_tile_size` は `config.py`・`config.yaml.example`・`GET /config` に残っていますが、`engine/` 側に実装も引数も無いためワーカーには届きません（扱いは別途）。
+- `Docs/INPAINTING_DESIGN.md` §7.3「音声凍結・音声の初期化・音声の付け直しの 3 か所だけ」を、実際に画角拡張と共有しているもの（音声の凍結・初期化・付け直し、キャンバスと復号結果を 8 ビットで扱う補助関数、ブレンドの区切り幅、Stage-2 のシグマ、`pyramid_blend` のブレンドの仕組み）を数を書かずに列挙する形に直しました。
+
+**`engine25/` 側のコメントの誤り 3 件の訂正**: 今回の検算で、§133・§134 で既にコミット済みの `engine25/` 側のコメントにも誤りが見つかり、オーナー了承のうえ直しました。
+- `engine25/chain25.py` の Retake の音声の 2 つ目の枝の説明「under-freeze」を、「凍結を丸ごとやめる」に変えました（2.3 側 `_encode_retake_window` の docstring と同じ事実になりました）。
+- `engine25/inpaint25.py` の `_decode_mask_u8` の docstring「`lut` も赤チャンネルを読む」を、`fill_mask_green_mp4` の `lut` は `format=gray` を経たあとの輝度で二値化する、という説明に変えました。
+- `engine25/outpaint25.py` の (4)「2.3 のデコーダは `(1, C, 1, H, W)`」を、2.3 の `decode_video_from_file` も `(1, H, W, C)` uint8 で返すこと、`(1, C, F, H, W)` は次に呼ぶ `resize_and_center_crop` の戻り値であることに変えました。
+
+**敵対的レビュー**（Opus・(b)／(c) 130 ブロック全件＋削除だけ 74 ブロックの抜き取り＋上流の実行確認）:
+- **直すべき 1 件**: 台帳 §1-53 の「影響」が §25.2 の実測（音声 VAE はステレオ入力必須）と逆向きに書かれていたため、訂正しました。
+- **注意 9 件**: 全件採用しました——§1-56 の連結での広がり方の補足／§1-57 の数え方の訂正／§1-54 に `engine25/` 側（`_decode_mask_u8`）を追加／台帳 3 件が今回書いたコメント自身を根拠にしていた点をコードの記述に置き換え／FV-079 の理由を §101.2 の裁定に差し替え／FV-031 を削除した跡の空行の整理／§7.3 の挙げ漏れを補った／ATY-007 のテストの名指し（レビューの「連結側のテストは無い」は誤りで `test_chain_payload_omits_nag_by_default` が実在するため、両方を名指しする形に訂正）／§4-2 の題と「何が塞いでいるか」の書き方。
+- **参考 3 件**: 全件採用しました——OPL-010「mp4 writer's AAC encoder」の訂正・FV-059「戻り先は無い」の訂正・§4-2 からの §16.1 の引き方。
+
+**費用の目安**（Opus のトークン、概算）: 事実の一覧表 約 82 万（A・B・C 共通）・判定 約 340 万・検算 約 146 万・揃え 約 54 万・レビュー 約 38 万・反映と修正 約 16 万。A 全体で約 600 万となり、計画の見込み（約 470 万）を上回りました（古い割合が高く、書き直しが多かったためです）。
+
+**申し送り**（B・C へ）:
+1. `engine/transformer/nag_service.py` に、定義の無い研究段階の計画番号 D1〜D5 が残っています（A では落としていません）。`NagService.install` の例外文「D2's ordering guarantee」は外部（上流）の文言です。
+2. `sage_attention_service.py` の `uninstall`・`_strip_wrappers` の docstring「ビルド経路の最初に meta の殻に対して」は誤りです（§134 の訂正と同じ向き）。
+3. `block_swap_service.py`・`block_swap_prefetch.py` の `engine25/` への行番号参照はずれています。
+4. 自己検査 3 本にある「`.venv-engine` には pytest が無い」は、今は誤りです。
+5. `outpaint/canvas.py` の「64px VAE stride x 2」は、上流の空間ストライド 32 と合いません。
+6. `preprocess/` の「future DWPose」「Slice 2／3」。
+7. `gemma/gguf_quant_service.py` の「Phase 2」「`model_ledger.py:158-169`」。
+
+**対象外**（今回は手を付けていません）: `chain_math.py`・`config.py` の時点依存の言い回し（「pre-long-A2V」「no longer reachable」「now」など）、`services/engines/ltx/adapter.py` の「43GB monolith」「~16.9GB」、本書 §48.8 の「OFF 時の残留に先読み ON 時の DiT 分」という記述（終了時の後始末の後では成り立たない可能性がありますが、記録した時点の観測としては正しいため）、事実表の `outputs/phase5b_diag` の記述の誤り、`engine/fp8/__pycache__/` に残るソースの無いキャッシュ。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。

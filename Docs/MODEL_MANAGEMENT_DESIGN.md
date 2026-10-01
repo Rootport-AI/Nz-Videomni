@@ -343,3 +343,6 @@ def load_pipeline_models(self, models: dict) -> dict:  # POST /pipeline/load {"m
 6. **active 定義 = 直近成功 load の選択（未ロード時 `"default"`）で確定**。worker 停止中も active は最後の成功選択を保持し、ロード状態は既存 `pipeline_loaded` で判断。
 
 追加の境界指示（親・確定）: GUI は既存共有クロージャ（`on_page_load`/`on_refresh_config`/トップバー `load_model`・`unload_model`）を改変せず、**独立イベントリスナー**＋モデルセクション専用 Refresh ボタンで実装（§6.1）。
+
+- **（2026-09-30 追記）ベースモデル変更後の本文なしロードの扱い**: ベースモデルを切り替えたあと、本文なしで `POST /pipeline/load` を呼ぶと、その回のワーカー payload は、全既定選択のときの payload（既定のカテゴリをパスなしで送るもの）と VALUES は同じだが BYTES は同じにならない。直前のベースモデル変更で各カテゴリがすでに明示パスへ解決されており、本文なしロードはその選択をそのまま使うため。この状態はサーバーを再起動するまで続く。再起動時の選択の復元（`api/context.py` の `_restore_selection`）は `"default"` の名前にパスを入れないので、再起動後の本文なしロードは全既定選択のときと BYTES も同じに戻る。
+- 選択名は `"default"` のまま変わらないため、`GET /models` の表示や `metadata.json` の記録には影響しない。

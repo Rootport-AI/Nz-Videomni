@@ -1,9 +1,9 @@
 """Standalone self-check for the fused GGUF dequantisation kernels.
 
 Run with an ENGINE venv (needs torch, triton and a CUDA GPU; the app venv has
-none of them, and neither engine venv has pytest, which is why this is a script
-and not a test module). With no arguments it checks the 2.3 engine's two GGUFs,
-which is what it has always done:
+none of them, and neither engine venv has fastapi, so tests/conftest.py cannot
+be collected there, which is why this is a script and not a test module). With
+no arguments it checks the 2.3 engine's two GGUFs:
 
     .venv-engine\\Scripts\\python.exe -m engine.gguf.dequant_triton_selfcheck
 
@@ -15,8 +15,8 @@ taken from the project root, so a command reads the same as the config does:
         --gguf models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf
         --gguf models/LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf
 
-Only C1 and C9 read those files at all; every other check builds its payloads by
-hand and is model-independent.
+Only C1 reads those files; C9 replays the shapes C1 enumerated (C8 all but the
+largest, > 32M elements), and every other check builds its payloads by hand and is model-independent.
 
 Same conventions as sage_selfcheck / block_swap_prefetch_selfcheck: NOT a pytest
 module, every check either PASSes or FAILs loudly, nothing is ever skipped, and
@@ -89,9 +89,9 @@ _SCALE_FIELDS = {_GGML_Q4_K: [(0, 2), (2, 4)], _GGML_Q5_K: [(0, 2), (2, 4)],
                  _GGML_Q6_K: [(208, 210)]}
 
 #: Default file set: the 2.3 engine's two GGUFs. Kept as the DEFAULT rather than
-#: turned into a required argument, so the 2.3 engine's invocation stays exactly
-#: the string it has always been - a verification run that has to be re-spelled
-#: for another engine's sake is a regression risk for no gain.
+#: turned into a required argument, so the 2.3 engine's invocation needs no
+#: arguments - a verification run that has to be re-spelled for another engine's
+#: sake is a regression risk for no gain.
 _MODELS = [
     Path("models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"),
     Path("models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf"),
@@ -109,9 +109,8 @@ def _resolve_models(specs: list[str] | None) -> list[Path]:
     one command mean different things from different directories.
 
     Existence is deliberately NOT checked here. A missing file has to surface as
-    a C1 FAILURE, which is what it did before this argument existed; a startup
-    error instead would make "the checks never ran" and "the checks passed"
-    harder to tell apart than they need to be.
+    a C1 FAILURE; a startup error instead would make "the checks never ran" and
+    "the checks passed" harder to tell apart than they need to be.
     """
     raw = [Path(s) for s in specs] if specs else list(_MODELS)
     return [q if q.is_absolute() else _PROJECT_ROOT / q for q in raw]
@@ -350,16 +349,16 @@ def check_c9_offset_arena() -> None:
 # C2 - hand-built boundary blocks                                              #
 # --------------------------------------------------------------------------- #
 
-# fp16 bit patterns for d / dmin: +0, -0, smallest subnormal, largest
-# subnormal, smallest normal, 1.0, -1.0, largest normal, and two arbitrary
-# mid-range values. inf/NaN are deliberately absent: they are not valid GGUF
-# scales, and a NaN would only test how two libraries spell NaN.
+# fp16 bit patterns for d / dmin: +0, -0, the two smallest subnormals, largest
+# subnormal, smallest normal, 1.0, -1.0, largest normal (both signs), and two
+# arbitrary mid-range values. inf/NaN are deliberately absent: they are not
+# valid GGUF scales, and a NaN would only test how two libraries spell NaN.
 _F16_PATTERNS = [0x0000, 0x8000, 0x0001, 0x03FF, 0x0400, 0x3C00, 0xBC00,
                  0x7BFF, 0xFBFF, 0x1234, 0x5678, 0x0002]
 
-# Scale-byte fills called out by the plan. 0x80 and 0xFF matter twice over: they
-# are the sign boundary of Q6_K's int8 scales AND the all-ones case of the 6-bit
-# scale/min packing.
+# Scale-byte fills, including the ones C2 names in the module docstring. 0x80
+# and 0xFF matter twice over: they are the sign boundary of Q6_K's int8 scales
+# AND the all-ones case of the 6-bit scale/min packing.
 _SCALE_FILLS = [0x00, 0x0F, 0x3F, 0x80, 0xFF, 0x40, 0x7F, 0xC0]
 
 
@@ -369,9 +368,9 @@ def _boundary_blocks(ggml_type: int) -> torch.Tensor:
     Block ``b`` sets payload byte ``p`` to ``(b + p) & 0xFF``, so across 256
     blocks every payload position takes every one of the 256 possible values -
     which covers every qh bit position, every nibble pair and (for Q6_K) the
-    whole signed scale range including 0x7F/0x80/0xFF. The first blocks are then
-    overwritten with uniform fills so the "all scale bytes equal X" cases from
-    the plan are present explicitly rather than only implicitly.
+    whole signed scale range including 0x7F/0x80/0xFF. Extra blocks after
+    those 256 then carry uniform fills so the "all scale bytes equal X" cases
+    C2 names are present explicitly rather than only implicitly.
     """
     bb = _BLOCK_BYTES[ggml_type]
     n = 256 + len(_SCALE_FILLS) + 8
@@ -634,7 +633,7 @@ def check_c8_no_recompiles() -> None:
             "something is specialising per shape"
         )
     dequant_triton.set_job(True)
-    # Replay every shape once more, in the order a forward pass would see them.
+    # Replay every shape once more, in C1's order (ascending element count).
     for ggml_type, shape in _COMBOS:
         ne = _n_elems(shape)
         if ne > 32 * 1024 * 1024:

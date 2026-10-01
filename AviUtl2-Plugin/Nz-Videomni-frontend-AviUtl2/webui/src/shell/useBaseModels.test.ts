@@ -147,7 +147,7 @@ describe("useBaseModels", () => {
 
   it("409 JOB_BUSY is its own outcome and reverts the selection", async () => {
     const apiClient = clientRejectingLoadWith(
-      new BackendApiError("JOB_BUSY", "A job is already running (Phase 1 allows one concurrent job)", 409),
+      new BackendApiError("JOB_BUSY", "A job is already running (the server runs one job at a time)", 409),
     );
     const { result } = await renderReady(apiClient);
 

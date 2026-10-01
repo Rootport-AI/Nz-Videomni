@@ -29,8 +29,7 @@ a validated numeric path is worse than no copy.
 ``_`` -prefixed constants they read). engine25 depends on them, so **the 2.3
 side may not rename those four without updating this module** — the leading
 underscore means "not part of 2.3's public API", not "unused". This is stated
-here and in ``Docs/MULTI_ENGINE_DESIGN.md``; the 2.3 files themselves are
-untouched by this theme (zero lines).
+here and in ``Docs/MULTI_ENGINE_DESIGN.md`` §8.5.
 
 WHAT IS *NOT* BORROWED: the replacement ``forward``
 ---------------------------------------------------
@@ -76,9 +75,10 @@ forward is written fresh here. Four differences, each load bearing:
 3. **Per-head gating goes through the official slot.** 2.5 hoisted the gate
    arithmetic into ``gated_attention_function(x, attn_out, attn_module)``, so
    this module calls that rather than re-implementing the four lines 2.3 had to
-   inline. Pinned as (14c), which also fixes the ORDER: combine (or the VSF
-   single softmax) → gate → ``to_out``, matching both the vanilla forward and
-   KJNodes' patched one.
+   inline. Pinned as (14c), which fixes the official forward's ORDER of gate
+   → ``to_out``; the combine (or the VSF single softmax) comes before the
+   gate, matching both the vanilla forward and KJNodes' patched one, and
+   ``engine25.neg_selfcheck25``'s check 5 proves that order.
 
 4. **Fail-loud guards are 2.3's set exactly** — ``context is None``, ``pe``,
    ``k_pe``, ``mask``, ``perturbation_mask``, ``all_perturbed``. Identical
@@ -110,11 +110,13 @@ the original bound method anywhere:
   22B-parameter shell.
 
 ``uninstall`` **touches no tensor and never raises**, verbatim the discipline
-``Ltx25DiffusionStage._unpatch_block_swap`` states in capitals: it runs on a
-shell that has been through ``Disposable.dispose()``, where every parameter is a
+``Ltx25DiffusionStage._unpatch_block_swap`` states in capitals: it runs on the
+shell the registry reuses. ``Ltx25DiffusionStage._ensure_neg_installed`` calls
+it after the new state dict has been loaded, but between builds that shell has
+been through ``Disposable.dispose()``, where every parameter is a
 ``device="meta"`` tensor and any operator dispatch raises
-``NotImplementedError``. Restoring a Python attribute is the only thing that is
-safe here, and the only thing that is needed. Do not add a ``.to()``, a
+``NotImplementedError``. Restoring a Python attribute is safe in both states of
+the shell, and it is the only thing that is needed. Do not add a ``.to()``, a
 ``.cpu()`` or an ``empty_cache()`` "just to be tidy".
 
 A non-zero strip count is therefore **NORMAL, not a defect**: a resident worker
@@ -275,7 +277,7 @@ def _make_nag_forward(
         q = attn.to_q(x)
         k = torch.cat([attn.to_k(context), attn.to_k(neg_context)], dim=1)
         # ONE preattention call. mask/pe/k_pe are all None here by the guard
-        # above; the four-argument shape below is 2.5's
+        # above; the six-argument shape below is 2.5's
         # ``PreAttentionCallable`` protocol, not a convenience.
         q, k = attn.preattention_function(q, k, attn, None, None, None)
         k_pos, k_neg = k[:, :n_pos], k[:, n_pos:]
@@ -347,8 +349,8 @@ def _make_vsf_forward(
         k = torch.cat([attn.to_k(context), attn.to_k(neg_context)], dim=1)
         q, k = attn.preattention_function(q, k, attn, None, None, None)
 
-        # Out-of-place negation: ``to_v``'s output is a fresh tensor today, but
-        # an in-place multiply would be a trap the day the projection returns a
+        # Out-of-place negation: ``to_v``'s output is a fresh tensor, but an
+        # in-place multiply would be a trap if the projection ever returned a
         # view.
         v = torch.cat(
             [attn.to_v(context), attn.to_v(neg_context) * (-params.scale)], dim=1
@@ -376,7 +378,7 @@ def make_negative_forward(
     *,
     log_budget: _MassLogBudget | None = None,
 ) -> Callable[..., torch.Tensor]:
-    """Pick the forward for this job's method. THE ONLY place that branches.
+    """Pick the forward for this job's method. THE ONLY forward choice.
 
     The params TYPE carries the method, exactly as on 2.3 — ``VsfParams`` means
     VSF, anything else means NAG — so neither forward has to ask "which method
@@ -397,8 +399,9 @@ class NegPromptService:
 
     ONE service class for BOTH methods, unlike 2.3's ``NagService`` +
     ``VsfService`` pair. The strip/install lifecycle is what this class is, and
-    that lifecycle does not depend on the method: only
-    :func:`make_negative_forward` does, and it is one call.
+    that lifecycle does not depend on the method. The forward is chosen by
+    :func:`make_negative_forward`, in one call; beyond that the method only
+    picks VSF's mass-log budget and the wording of the install log line.
 
     State is read through ``state_provider()`` on every call rather than
     captured at construction, so one long-lived service always sees the CURRENT
@@ -417,9 +420,11 @@ class NegPromptService:
 
         **NEVER RAISES, AND TOUCHES NO TENSOR.** Both halves are load bearing
         and neither is decoration — the module docstring gives the full
-        argument; the short version is that this is the FIRST thing that happens
-        on the build path, and it runs against a shell whose parameters are all
-        on ``device="meta"`` after ``Disposable.dispose()``.
+        argument; the short version is that it runs on the shell the registry
+        reuses: ``Ltx25DiffusionStage._ensure_neg_installed`` calls it after the
+        new state dict has been loaded, but between builds that shell has been
+        through ``Disposable.dispose()`` and every parameter is on
+        ``device="meta"``, so it has to be safe in both states.
 
         ``__dict__.pop("forward")`` and nothing else: the instance attribute
         that shadows the class method is removed, so the module goes back to
@@ -447,8 +452,9 @@ class NegPromptService:
 
         Returns the number of modules patched — 0 when this job did not ask for
         a negative prompt, in which case **nothing on the model is touched**:
-        that early return is what keeps an ordinary 2.5 job byte-identical to
-        what it was before this feature existed.
+        that early return leaves an ordinary 2.5 job's modules without an
+        instance-level ``forward`` (``engine25.neg_selfcheck25``'s check 7,
+        ``check_off_is_inert``, holds this).
 
         "Requested but not encoded" is a WIRING BUG, not a reason to skip:
         by the time a transformer is built the prompt encoder has already run
@@ -516,8 +522,9 @@ class NegPromptService:
         ``install()`` without the matching ``uninstall()``, i.e. the misuse a
         future refactor could introduce — and because a double install would
         nest one patch inside another SILENTLY (a nested patch still returns
-        plausible numbers). ``engine25.neg_selfcheck25``'s check 6 is what
-        proves the detection actually fires.
+        plausible numbers). ``engine25.neg_selfcheck25``'s check 9
+        (``check_double_install_raises``) is what proves the detection
+        actually fires.
 
         (b) ``q_norm`` / ``k_norm`` are ``torch.nn.RMSNorm``. This is the RUNTIME
         leg of compat pin (14d): the single-preattention-over-concatenated-keys

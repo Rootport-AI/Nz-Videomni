@@ -159,24 +159,29 @@ class LTXFastVideoPipeline:
         from ltx_pipelines.distilled import DistilledPipeline
 
         # ── IC-LoRA state (all inert by default) ──────────────────────────────
-        # ic_loras: (safetensors_path, strength, audio_strength) LoRAs applied to
-        #   the GGUF base transformer. Phase A fused them into the full BF16
-        #   state-dict at load (bf16 path); Phase B adds them at FORWARD time on
-        #   the per-layer-quant path (GGUFQuantLoaderService + ggml_linear_forward).
-        #   Selectable via gguf_per_layer_quant. audio_strength is None unless the
-        #   caller opts in (see engine.gguf.ic_lora_common.IcLoraEntry).
+        # ic_loras: (safetensors_path, strength, audio_strength) LoRAs applied
+        #   to the base transformer. The GGUF bf16 path
+        #   (gguf_per_layer_quant=False) fuses the create-time LoRAs into the
+        #   full BF16 state-dict at load; the GGUF per-layer-quant path
+        #   (GGUFQuantLoaderService + ggml_linear_forward) and the quantized
+        #   safetensors path add them at FORWARD time. audio_strength is None
+        #   unless the caller opts in (see
+        #   engine.gguf.ic_lora_common.IcLoraEntry).
         # ic_reference: (reference_video_path, strength) appended as a
         #   VideoConditionByReferenceLatent on the stage-1 conditioning pass.
-        # When both are None/empty every changed path is byte-identical to before.
+        # When both are None/empty no LoRA and no reference conditioning is
+        # added.
         #
-        # These are CREATE-TIME DEFAULTS. generate(ic_loras=..., ic_reference=...)
-        # overrides them per job (keep_resident=0 rebuilds the transformer every
-        # job, so the forward-time attach reads the live values). The live values
-        # are held in self._ic_loras / self._ic_reference / the resolved factor.
-        # ic_attention_strength: IC-LoRA control-adherence knob (0..1, default 1.0).
-        #   Forwarded to a ConditioningItemAttentionStrengthWrapper around the
-        #   reference conditioning ONLY when < 1.0 (upstream iclora_utils parity);
-        #   at 1.0 no wrapper is added → structurally byte-identical to before.
+        # These are CREATE-TIME DEFAULTS.
+        # generate(ic_loras=..., ic_reference=...) overrides them per job (the
+        # transformer is rebuilt on every job, so the forward-time attach reads
+        # the live values). The live values are held in self._ic_loras /
+        # self._ic_reference / the resolved factor.
+        # ic_attention_strength: IC-LoRA control-adherence knob
+        #   (0..1, default 1.0). Forwarded to a
+        #   ConditioningItemAttentionStrengthWrapper around the reference
+        #   conditioning ONLY when < 1.0 (parity with the upstream
+        #   ICLoraPipeline._create_conditionings); at 1.0 no wrapper is added.
         self._ic_loras_default: list[IcLoraEntry] = list(ic_loras or [])
         self._ic_reference_default: tuple[str, float] | None = ic_reference
         self._ic_attention_strength_default: float = float(ic_attention_strength)
@@ -191,20 +196,20 @@ class LTXFastVideoPipeline:
         )
 
         # ── NAG (Normalized Attention Guidance) state ──────────────────────────
-        # One NagState per pipeline instance, scoped to a single generate()/
-        # generate_chain() call by _set_nag_job / the try/finally reset in both
-        # entry points (see engine/transformer/nag_service.py). Installed
-        # unconditionally below (after block-swap), regardless of whether any
-        # job ever requests NAG — install() itself is the zero-overhead-when-off
-        # gate (D3).
+        # One NagState per pipeline instance, scoped to a single job by
+        # _set_nag_job / the try/finally reset in every entry point (generate /
+        # generate_chain / generate_outpaint / generate_inpaint; see
+        # engine/transformer/nag_service.py). Installed unconditionally below
+        # (after block-swap), regardless of whether any job ever requests NAG —
+        # install() itself is the zero-overhead-when-off gate.
         self._nag = NagState()
 
         # ── Attention backend (sdpa / SageAttention) state ─────────────────────
         # Same lifetime rules as NagState above: one instance per pipeline,
-        # scoped to a single generate()/generate_chain() call by _set_sage_job +
-        # the try/finally reset in both entry points. Defaults to "sdpa", so a
-        # caller that never mentions the backend gets exactly today's behaviour
-        # (see engine/transformer/sage_attention_service.py).
+        # scoped to a single job by _set_sage_job + the try/finally reset in
+        # every entry point. Defaults to "sdpa", so a caller that never mentions
+        # the backend gets plain SDPA attention (see
+        # engine/transformer/sage_attention_service.py).
         self._sage = SageState()
 
         # ── Block-swap prefetch state ──────────────────────────────────────────
@@ -225,7 +230,7 @@ class LTXFastVideoPipeline:
         # arm/reset and reads the finished job's verdict back out.
 
         # ── keep_resident（ジョブ間のCPU骨格キャッシュ）state ──────────────────
-        # 上の3つ（NAG/sage/prefetch）と決定的に違うのは**ジョブ終了時に
+        # 上の NAG・sage・prefetch・fused dequant と決定的に違うのは**ジョブ終了時に
         # リセットしない**点。残ること自体が機能（次のジョブで再利用されるのが
         # 目的）なので、``generate()``/``generate_chain()`` の finally には
         # 対応するリセットが無い。この非対称は意図的。
@@ -239,9 +244,10 @@ class LTXFastVideoPipeline:
         # ── PrunaVAED（枝刈り映像VAEデコーダ）state ─────────────────────────────
         # ジョブ単位のトグル。``_set_vae_mode_job`` が毎ジョブ必ず明示設定する
         # ので、prefetch/sage のような finally 側のリセットは**持たない**
-        # （持たなくても前ジョブの選択が残らない。§4.3）。この文字列は直前の
-        # ジョブが実際に何で復元したか（"off" / "on" / "on->off"）で、
-        # ワーカーが done イベントへ載せるために読む。
+        # （持たなくても前ジョブの選択が残らない。Docs/PRUNAVAED_WORKORDER.md
+        # §4.3）。この文字列は直前のジョブが実際に何で復元したか
+        # （"off" / "on" / "on->off"）で、ワーカーが done イベントへ載せる
+        # ために読む。
         self._vae_mode_used = "off"
         # 既定ビルダーのスナップショット。``__init__`` の最後（無条件位置）で
         # 撮る。
@@ -283,8 +289,9 @@ class LTXFastVideoPipeline:
         self._gguf_per_layer_quant = gguf_per_layer_quant
         self._vae_spatial_tile_size = vae_spatial_tile_size
         self._vae_temporal_tile_size = vae_temporal_tile_size
-        # Phase 1 component-file re-sourcing (text projection path stored but NOT
-        # wired here — that is Phase 2).
+        # Component-file paths. __init__ passes the local arguments on directly:
+        # the two VAE paths to _install_component_sources, the text projection
+        # path to the Gemma install below.
         self._component_video_vae_path = component_video_vae_path
         self._component_audio_vae_path = component_audio_vae_path
         self._component_text_projection_path = component_text_projection_path
@@ -294,14 +301,16 @@ class LTXFastVideoPipeline:
         # ``_set_vae_mode_job`` の docstring 参照）。
         self._component_video_vae_pruned_path = component_video_vae_pruned_path
         # TE per-layer offload: stream the GGUF-quantized Gemma decoder layers
-        # CPU->GPU per window during encode (caps the ~15 GB encode peak). Default ON;
-        # when OFF the Gemma layers are all GPU-resident (today's exact behavior).
+        # CPU->GPU per window during encode (lowers the encode peak;
+        # VERIFICATION_LOG §11.3 records the figures). The worker sets it from
+        # LTX_TE_OFFLOAD; when off, the Gemma layers are all GPU-resident.
         self._te_offload_text_encoder = te_offload_text_encoder
         # DiT CPU-resident build: build the transformer directly on CPU RAM and
-        # move only non-block submodules to GPU, eliminating the ~16.9 GB load-time
-        # GPU spike. Blocks stay on CPU for the existing block-swap streaming.
-        # Default ON; when OFF the transformer is built on GPU then evicted
-        # (today's exact behavior).
+        # move only non-block submodules to GPU, eliminating the load-time GPU
+        # spike (VERIFICATION_LOG §12.1). Blocks stay on CPU for the existing
+        # block-swap streaming.
+        # The worker sets it from LTX_DIT_CPU_LOAD; when off, the transformer is
+        # built on GPU then evicted.
         self._dit_cpu_load = dit_cpu_load
 
         # FP8: use setting OR auto-detect CUDA support.
@@ -309,13 +318,13 @@ class LTXFastVideoPipeline:
         use_fp8 = use_fp8_transformer or device_supports_fp8(device)
 
         # QAT gemma_root reclamation: pass gemma_root=None so the wheel's
-        # ModelLedger.build_model_builders() skips its Gemma block entirely
-        # (model_ledger.py:158-169) — no `model*.safetensors` glob, no shard paths in
-        # model_path, no `text_encoder_builder`. We rebuild that builder ourselves in
-        # _install_gemma_gguf without any Gemma shards (weights come from the GGUF).
-        # The gemma_root dir now only needs the tokenizer files (~40MB), which we
-        # still hand to the Gemma install below so its module_ops can load the
-        # tokenizer/processor. Keep the original path (do NOT drop it).
+        # ModelLedger.build_model_builders() skips its Gemma block entirely — no
+        # `model*.safetensors` glob, no shard paths in model_path, no
+        # `text_encoder_builder`. We rebuild that builder ourselves in
+        # _install_gemma_gguf without any Gemma shards (weights come from the
+        # GGUF). The gemma_root dir only needs the tokenizer files (~40MB),
+        # which we still hand to the Gemma install below so its module_ops can
+        # load the tokenizer/processor. Keep the original path (do NOT drop it).
         self._gemma_tokenizer_root = gemma_root
         self.pipeline = DistilledPipeline(
             distilled_checkpoint_path=checkpoint_path,
@@ -327,10 +336,10 @@ class LTXFastVideoPipeline:
         )
 
         # ── Re-source VIDEO VAE + AUDIO VAE/vocoder from standalone component files ──
-        # Phase 1: drop the 46GB monolith for the VAE/audio builders by re-pointing
+        # Drop the 46GB monolith for the VAE/audio builders by re-pointing
         # their model_path to small standalone files. Runs BEFORE the
-        # transformer/Gemma GGUF installs. Gated on use_component_files + both
-        # VAE paths present.
+        # transformer (GGUF / quantized safetensors) and Gemma GGUF installs.
+        # Gated on use_component_files + both VAE paths present.
         if use_component_files and component_video_vae_path and component_audio_vae_path:
             self._install_component_sources(component_video_vae_path, component_audio_vae_path)
 
@@ -341,24 +350,23 @@ class LTXFastVideoPipeline:
                 per_layer_quant=gguf_per_layer_quant,
                 ic_loras=self._ic_loras,
             )
-        # ── quantized (fp8 / int8) safetensors transformer (§3-167, §3-168). NOT wrapped in try/except:
+        # ── quantized (fp8 / int8) safetensors transformer. NOT wrapped in try/except:
         # a rejected or broken file must fail the load, never fall back.
         if safetensors_transformer_path:
             self._install_safetensors(safetensors_transformer_path)
 
         # ── Install Gemma GGUF text encoder (keep 24GB bf16 Gemma compressed on GPU) ──
         # GGUF keeps Gemma quantized in VRAM (~7.3GB Q4_K_M) with per-layer dequant —
-        # fits the 16GB card. This is the only text-encoder path (the CPU text-encode
-        # branch was removed as dead: the worker never requested it).
+        # fits the 16GB card. This is the only text-encoder path.
         if gguf_gemma_path:
-            # Phase 2: when component files are enabled (and the connector GGUF +
+            # When component files are enabled (and the connector GGUF +
             # projection file are present), re-source the Gemma text encoder's
             # non-Gemma monolith survivors off standalone files so the 46GB monolith
-            # is no longer opened by ANY builder: aggregate_embed from the projection
+            # is not opened by ANY builder: aggregate_embed from the projection
             # file (replaces the monolith in model_path) and the 258 connectors
             # injected from the transformer file (GGUF or quantized (fp8 / int8) safetensors). Both
-            # must be present to enable the drop; otherwise the monolith-base path
-            # is unchanged.
+            # must be present to enable the drop; otherwise the text encoder keeps
+            # the monolith (checkpoint_path) in its model_path.
             _transformer_file = gguf_transformer_path or safetensors_transformer_path
             _gemma_component = (
                 use_component_files
@@ -381,13 +389,12 @@ class LTXFastVideoPipeline:
         if block_swap_blocks_on_gpu > 0:
             self._install_block_swap(block_swap_blocks_on_gpu)
 
-        # ── Install NAG (unconditional — D1) ──
-        # Wraps ledger.transformer LAST, so NAG's install() runs against the
-        # fully-assembled transformer (block-swap/GGUF already applied). Runs
-        # every time (not gated on any job ever requesting NAG): the per-job
-        # gate lives inside NagService.install() (state.requested check), which
-        # is what keeps a NAG-OFF job byte-identical to before this feature
-        # existed (D3).
+        # ── Install NAG (unconditional) ──
+        # Wraps ledger.transformer after block swap, so NAG's install() runs
+        # against the fully-assembled transformer (block-swap/GGUF already
+        # applied). Runs every time (not gated on any job ever requesting NAG):
+        # the per-job gate lives inside NagService.install() (state.requested
+        # check), which is what leaves a NAG-OFF job's transformer unpatched.
         self._install_nag()
 
         # ── Install the attention-backend swap (unconditional — same rule) ─────
@@ -399,21 +406,20 @@ class LTXFastVideoPipeline:
         # wrap ledger.transformer and therefore run on every build.
         self._install_sage()
 
-        # ── Stage 3: load-once / keep-resident weights via StateDictRegistry ──
+        # ── load-once / keep-resident weights via StateDictRegistry ──
         # 各サブモデルのCPU側 state_dict を1回だけ読み、以降のジョブでは再利用
-        # する（ジョブ毎のディスク再マテリアライズの除去。前処理 66〜79秒 →
-        # 9〜15秒、出力はビット一致）。
+        # する（ジョブ毎のディスク再マテリアライズの除去。前処理の短縮と出力の
+        # ビット一致は VERIFICATION_LOG §47.3）。
         #
         # ここは**create時の初期値**を張るだけの入口で、本番の切り替えは
         # ``generate()``/``generate_chain()`` の ``keep_resident=`` 引数
         # →``_set_keep_resident_job`` が担う。実装を1本にするため、create時も
-        # ジョブ時とまったく同じ ``_swap_registry`` を通す（以前はここだけ
-        # ``build_model_builders()`` を呼び直す別実装だった。あの方式は
-        # install群を**先に**走らせると model_path / model_loader /
-        # model_sd_ops / module_ops が作り直しで消えるので、install群より前に
-        # 置くしかなかった。``_swap_registry`` は frozen dataclass の
-        # ``dataclasses.replace(registry=...)`` なので他フィールドを保存でき、
-        # install群の**後**に置ける＝スパイクスクリプトも本番と同じ経路を通る）。
+        # ジョブ時とまったく同じ ``_swap_registry`` を通す。``_swap_registry`` は
+        # frozen dataclass の ``dataclasses.replace(registry=...)`` なので、
+        # install群が書き換えた model_path / model_loader / model_sd_ops /
+        # module_ops を保存でき、install群の**後**に置ける（``build_model_builders()``
+        # を呼び直すとそれらが作り直しで消える）。スパイクスクリプトも本番と
+        # 同じ経路を通る。
         #
         # 非Dummy registry は ``ModelLedger._target_device()`` を CPU に倒すので、
         # サブモデルはCPUでビルド（＝キャッシュ）され、生成毎にGPUへ
@@ -423,7 +429,7 @@ class LTXFastVideoPipeline:
 
         # ── PrunaVAED: 既定の映像VAEデコーダのビルダーを1本だけ控える ──────────
         # 枝刈り側はジョブ毎にここから ``dataclasses.replace`` で作る（保持
-        # しない＝同期ずれの余地を作らない。§4.3）。
+        # しない＝同期ずれの余地を作らない。Docs/PRUNAVAED_WORKORDER.md §4.3）。
         #
         # **位置が load-bearing**: ``_install_component_sources()`` の直後では
         # なく、ここ（無条件位置）に置く。前者は ``use_component_files=True``
@@ -431,16 +437,9 @@ class LTXFastVideoPipeline:
         # 枝刈りビルダーが作られない。上の ``_swap_registry(True)`` より**後**
         # なのも意図的で、ここで撮ったスナップショットの ``registry`` は撮った
         # 時点のもので固定される——だからこそ ``_set_vae_mode_job`` は代入の
-        # たびに ``registry=ledger.registry`` を注入し直す（§4.4）。
+        # たびに ``registry=ledger.registry`` を注入し直す
+        # （Docs/PRUNAVAED_WORKORDER.md §4.4）。
         self._default_vae_builder = self.pipeline.model_ledger.vae_decoder_builder
-
-        # NOTE: attention-tiling and LoRA install branches (guarded by
-        # attention_tile_size > 0 / loras) were removed during the engine
-        # relocation: their services (AttentionTileService / LoraService) are not
-        # part of the first-party engine keep-set, the worker never enables these
-        # guards (both default off), and the current T2V/GGUF path never reaches
-        # them. The now-dead `attention_tile_size` and `loras` constructor
-        # parameters (no caller ever passed them) have also been removed.
 
     def _set_ic_job(
         self,
@@ -450,9 +449,11 @@ class LTXFastVideoPipeline:
     ) -> None:
         """Set the live IC-LoRA state for the upcoming build/generate.
 
-        Called from __init__ (create-time defaults) and from generate() (per-job
-        override). Recomputes the reference downscale factor from the LoRA
-        metadata and re-validates the ``ic_reference requires ic_loras`` contract.
+        Called from __init__ (create-time defaults), from generate() (per-job
+        override) and from run_chain() / run_outpaint() / run_inpaint() (per job,
+        before the transformer is built). Recomputes the reference downscale
+        factor from the LoRA metadata and re-validates the
+        ``ic_reference requires ic_loras`` contract.
         The forward-time attach reads ``self._ic_loras`` via the provider on the
         next transformer build; the reference conditioning reads
         ``self._ic_reference`` / the resolved factor / the attention strength.
@@ -522,15 +523,17 @@ class LTXFastVideoPipeline:
         _install_nag's service selection below plus the encode wrapper's slice
         decision. Everything else in this class is method-agnostic.
 
-        Called from generate() directly and from run_chain() (chain_pipeline.py,
-        IC-LoRA convention — generate_chain() itself does not call this; run_chain
-        is the single place that sets it for the chain path). Always calling this
-        — even with None — is what gives stale-clear semantics: a NAG job
-        followed by a non-NAG job on the same resident pipeline does not leak the
-        prior negative prompt (NagState.set_params clears any encoded contexts
-        too, so a caller that forgets the matching set_contexts() call correctly
-        hits install()'s "requested but not ready" RuntimeError instead of
-        silently reusing a stale encoding).
+        Called from generate() directly and from run_chain()
+        (chain_pipeline.py), run_outpaint() and run_inpaint() (IC-LoRA
+        convention — generate_chain(), generate_outpaint() and
+        generate_inpaint() themselves do not call this; each run_* function is
+        the single place that sets it for its path). Always calling this — even
+        with None — is what gives stale-clear semantics: a NAG job followed by a
+        non-NAG job on the same resident pipeline does not leak the prior
+        negative prompt (NagState.set_params clears any encoded contexts too, so
+        a caller that forgets the matching set_contexts() call correctly hits
+        install()'s "requested but not ready" RuntimeError instead of silently
+        reusing a stale encoding).
         """
         self._nag.set_params(nag)
 
@@ -573,8 +576,9 @@ class LTXFastVideoPipeline:
         NEVER raises, for exactly the reason spelled out in ``_set_sage_job``:
         this runs outside generate()'s try/finally, so an exception here would
         skip the matching reset and leak the request into the next job on a
-        resident worker. When block swap is not installed at all the flag is
-        simply never read and the job silently runs without prefetching.
+        resident worker. When block swap is not installed at all nothing
+        consumes the request: the job runs without prefetching, and the
+        end-of-job reset records it as "on->off".
         """
         self._block_swap_prefetch_requested = bool(enabled)
         svc = getattr(self, "_block_swap_service", None)
@@ -596,12 +600,14 @@ class LTXFastVideoPipeline:
             self._block_swap_prefetch_used = svc.last_prefetch_used or (
                 "on->off" if self._block_swap_prefetch_requested else "off"
             )
-            # The job owns the prefetch resources (transfer stream, pinned
-            # masters, arenas); releasing them here — rather than deferring to
-            # the next install() — keeps them from surviving the gap between
-            # jobs. The transformer reference itself is a separate concern:
-            # _release_block_swap_transformer() (called right after this, from
-            # the same finally) is what lets THAT go.
+            # The job owns its prefetch state (the CPU masters and any arenas;
+            # the transfer stream is drained first); releasing it here — rather
+            # than deferring to the next install() — keeps it from surviving the
+            # gap between jobs. The pinned staging pool and the transfer stream
+            # live on the resident service and stay. The transformer reference
+            # itself is a separate concern: _release_block_swap_transformer()
+            # (called right after this, from the same finally) is what lets THAT
+            # go.
             svc.teardown_prefetch()
             svc.prefetch_requested = False
         else:
@@ -613,11 +619,11 @@ class LTXFastVideoPipeline:
     def _release_block_swap_transformer(self) -> None:
         """End-of-job release of the keep-latest transformer reference.
 
-        All three entry points (single, chain, outpaint) already ``del`` the
-        transformer before decode on their success path — this drops the last
-        strong reference BlockSwapService still holds, so the worker's
-        trailing ``gc.collect()`` can reclaim it. Never raises, same as the
-        other per-job resets in this same ``finally``.
+        All four entry points (single, chain, outpaint, inpaint) already
+        ``del`` the transformer before decode on their success path — this
+        drops the last strong reference BlockSwapService still holds, so the
+        worker's trailing ``gc.collect()`` can reclaim it. Never raises, same
+        as the other per-job resets in this same ``finally``.
         """
         svc = getattr(self, "_block_swap_service", None)
         if svc is not None:
@@ -689,10 +695,11 @@ class LTXFastVideoPipeline:
         and the Gemma service's wrapper all read ``ledger``/``ledger.*_builder``
         live on every build, so a swap takes effect from the very next build.
 
-        All 8 builder attributes must EXIST (assert). ``getattr(..., None)``
-        with a silent skip is deliberately NOT used: a typo'd or wheel-renamed
-        attribute would then mean "that one submodel is CPU-built with no
-        cache", i.e. slower AND memory-heavier with nothing in any log.
+        Every attribute in ``_LEDGER_BUILDER_ATTRS`` must EXIST (assert).
+        ``getattr(..., None)`` with a silent skip is deliberately NOT used: a
+        typo'd or wheel-renamed attribute would then mean "that one submodel
+        is CPU-built with no cache", i.e. slower AND memory-heavier with
+        nothing in any log.
         """
         import dataclasses
         import gc
@@ -725,18 +732,18 @@ class LTXFastVideoPipeline:
             setattr(ledger, attr, dataclasses.replace(getattr(ledger, attr), registry=new))
 
         if not enabled and old is not None and not isinstance(old, DummyRegistry):
-            # 明示的な解放：ここを通らないと約20GBのCPU骨格が居座り続ける。
-            # ``clear()`` は state_dict の参照を落とすだけなので、循環参照
-            # （block swap の swapped_forward クロージャ等）を確実に回収する
-            # ため gc を1回回す。残留はログで追える形にする（実測では
-            # prefetch ON時のDiT分が次の install() まで／``_pinned_pool`` ／
-            # ``held_embed_cpu`` 約1.9GB が残りうる）。
+            # 明示的な解放：ここを通らないとキャッシュした CPU 骨格（大きさは
+            # VERIFICATION_LOG §48.6）が居座り続ける。``clear()`` は state_dict
+            # の参照を落とすだけなので、循環参照（block swap の swapped_forward
+            # クロージャ等）を確実に回収するため gc を1回回す。残留はログで
+            # 追える形にする（実測では ``_pinned_pool`` ／ ``held_embed_cpu``
+            # が残りうる）。
             old.clear()
             gc.collect()
             log.info(
                 "keep_resident OFF: StateDictRegistry cleared + gc.collect() done "
                 "(residual CPU memory may remain until the next transformer build: "
-                "block-swap CPU masters, pinned pool, held_embed_cpu ~1.9GB)"
+                "pinned pool, held_embed_cpu)"
             )
         else:
             log.info("keep_resident %s: registry swapped on ledger + %d builders",
@@ -754,15 +761,16 @@ class LTXFastVideoPipeline:
         cached" beats "failed". The state flag is only advanced by a swap that
         actually succeeded, so the next job retries the same transition.
 
-        **Deliberately NOT reset at the end of a job** (the one asymmetry
-        against _set_nag_job / _set_sage_job / _set_block_swap_prefetch_job):
-        the cache surviving into the next job IS the feature. It is released
-        only when a later job explicitly asks for ``keep_resident=False`` —
-        which is exactly what an omitted request field resolves to — or when
-        the worker dies (model switch: services/pipeline_manager's reload()
-        kills the worker process, so a model change can never serve stale
-        weights out of this cache; that is the structural guarantee behind
-        §1-9's invalidation requirement).
+        **Deliberately NOT reset at the end of a job** (unlike _set_nag_job /
+        _set_sage_job / _set_block_swap_prefetch_job; ``_set_vae_mode_job``
+        has no reset either, but for a different reason): the cache surviving
+        into the next job IS the feature. It is released only when a later
+        job explicitly asks for ``keep_resident=False`` — which is exactly
+        what an omitted request field resolves to — or when the worker dies
+        (model switch: services/pipeline_manager's reload() kills the worker
+        process, so a model change can never serve stale weights out of this
+        cache; that is the structural guarantee that a model change
+        invalidates the cache).
         """
         enabled = bool(enabled)
         if enabled == self._keep_resident_enabled:
@@ -778,6 +786,8 @@ class LTXFastVideoPipeline:
 
     def _set_vae_mode_job(self, mode: str) -> None:
         """ジョブ単位の映像VAEデコーダ選択（"default" / "prune_vaed"）。
+
+        節番号とオーナー確定事項の番号は ``Docs/PRUNAVAED_WORKORDER.md`` のもの。
 
         sage / prefetch と同じ per-job set 規律に従うが、**reset は持たない**
         ——毎ジョブ必ず明示設定するので、前ジョブの選択が残る余地が無いため
@@ -822,8 +832,9 @@ class LTXFastVideoPipeline:
                 # 素通し。変換器がモジュール相対の素キーを直接出力するので
                 # SDOps は要らない。**名前だけの SDOps を作ってはならない**
                 # ——matcher を1つも持たない SDOps は「何もしない」ではなく
-                # 「全キーを捨てる」であり（sd_ops.py:92-97、``any([])`` は
-                # False）、``strict=False`` の静かな失敗に直行する（§4.1）。
+                # 「全キーを捨てる」であり（上流の ``SDOps.apply_to_key`` で
+                # ``any([])`` は False）、``strict=False`` の静かな失敗に直行する
+                # （``Docs/PRUNAVAED_WORKORDER.md`` §4.1）。
                 model_sd_ops=None,
                 registry=ledger.registry,
             )
@@ -856,10 +867,11 @@ class LTXFastVideoPipeline:
 
         Replaces the 46GB monolith as the weight source for the video VAE
         (decoder/encoder) and the audio VAE (decoder/encoder) + vocoder, leaving
-        the transformer and text encoder untouched (text projection is Phase 2).
+        the transformer and text encoder untouched (the text projection is
+        re-sourced separately, by ``_install_gemma_gguf``).
 
         VIDEO VAE file: keys use BARE prefixes ``decoder.* / encoder.* /
-        per_channel_statistics.*`` (no ``vae.`` prefix). The fork's
+        per_channel_statistics.*`` (no ``vae.`` prefix). ltx_core's
         VAE_{DECODER,ENCODER}_COMFY_KEYS_FILTER expect ``vae.decoder.* /
         vae.encoder.* / vae.per_channel_statistics.*`` input. We CHAIN a
         prepend-``vae.`` SDOps BEFORE the existing filter so the final
@@ -933,7 +945,7 @@ class LTXFastVideoPipeline:
 
         _log.info(
             "Component sources installed: video VAE <- %s ; audio VAE/vocoder <- %s "
-            "(text projection NOT wired — Phase 2)",
+            "(text projection is wired by the Gemma GGUF install)",
             video_vae_path, audio_vae_path,
         )
 
@@ -946,12 +958,12 @@ class LTXFastVideoPipeline:
         ic_loras = list(ic_loras or [])
         try:
             if per_layer_quant:
-                # Phase B: the per-layer-quant path applies IC-LoRA at FORWARD
+                # The per-layer-quant path applies IC-LoRA at FORWARD
                 # time (ggml_linear_forward adds the fp32 delta onto the fresh
                 # per-call dequant tensor). We hand the service a provider that
                 # returns the CURRENT job's adapters (self._ic_loras), read on
-                # every transformer build — so keep_resident=0 can toggle LoRAs
-                # per generate() without mutating any compressed/cached bytes.
+                # every transformer build — so LoRAs can change per generate()
+                # without mutating any compressed/cached bytes.
                 from engine.gguf.quant_service import GGUFQuantLoaderService
                 service = GGUFQuantLoaderService(
                     gguf_path=gguf_path,
@@ -961,8 +973,9 @@ class LTXFastVideoPipeline:
                 self._gguf_service = service
                 import logging
                 logging.getLogger(__name__).info(
-                    "GGUF per-layer quant installed: weights stay compressed in VRAM "
-                    "(%s); IC-LoRA applied at forward time (per-job)", gguf_path
+                    "GGUF per-layer quant installed: weights stay compressed "
+                    "(in VRAM, or on the CPU side under block swap) (%s); IC-LoRA "
+                    "applied at forward time (per-job)", gguf_path
                 )
             else:
                 from engine.gguf.loader_service import GGUFLoaderService
@@ -977,8 +990,10 @@ class LTXFastVideoPipeline:
                 )
         except Exception as exc:
             # Fail-loud when LoRAs were requested: a silent safetensors fallback
-            # would produce a plausible-but-wrong (no-LoRA) result and corrupt the
-            # spike measurement. With no LoRAs, preserve the historical fallback.
+            # would produce a plausible-but-wrong (no-LoRA) result. With no
+            # LoRAs, only log a warning and continue (in production
+            # ``checkpoint_path`` is empty, so there is no safetensors build
+            # to fall back to).
             if ic_loras:
                 raise
             import logging
@@ -987,7 +1002,7 @@ class LTXFastVideoPipeline:
             )
 
     def _install_safetensors(self, path: str) -> None:
-        """Install a quantized (fp8 / int8) safetensors transformer (§3-167 B-1, §3-168).
+        """Install a quantized (fp8 / int8) safetensors transformer.
 
         Checks the file with ``sft_quant_format.inspect`` (a refusal raises and
         fails the load), then replaces the transformer loader, the quantization
@@ -1022,17 +1037,23 @@ class LTXFastVideoPipeline:
         """Load the Gemma-3 text encoder from a quantized GGUF, per-layer dequant.
 
         Replaces the stock ~24GB bf16 full-GPU Gemma load (which overflows the 16GB
-        card) with a ~7.3GB Q4_K_M GGUF kept compressed in VRAM. Each Gemma decoder
+        card) with a ~7.3GB Q4_K_M GGUF kept compressed (in VRAM, or streamed from
+        CPU layer by layer when ``te_offload`` is set). Each Gemma decoder
         Linear dequantizes its weight on-the-fly during the forward pass and frees
         the temporary bf16 tensor after the matmul. The LTX-side feature extractor
-        and embedding connectors remain bf16, loaded from the distilled checkpoint
-        and merged with the GGUF Gemma weights by GemmaGGUFQuantStateDictLoader.
+        and embedding connectors are not in the Gemma GGUF: they are loaded from
+        the distilled checkpoint — or, when ``component_text_projection_path`` and
+        ``connector_gguf_path`` are both given, from the projection file and the
+        transformer file — and merged with the GGUF Gemma weights by
+        GemmaGGUFQuantStateDictLoader.
 
         Mirrors _install_gguf but targets text_encoder_builder instead of
-        transformer_builder. On failure, falls back to the stock GPU text encoder.
+        transformer_builder. On failure it only logs a warning: there is no stock
+        GPU text encoder to fall back to, because DistilledPipeline is built with
+        gemma_root=None (see below).
 
         ``gemma_tokenizer_root`` is the (tokenizer-only) gemma_root dir. Because we
-        now build DistilledPipeline with gemma_root=None, the wheel does not create
+        build DistilledPipeline with gemma_root=None, the wheel does not create
         the text_encoder_builder; the service rebuilds it (shards excluded) and needs
         this dir to load the tokenizer/processor module_ops.
         """
@@ -1056,7 +1077,9 @@ class LTXFastVideoPipeline:
             self._gemma_gguf_service = service
             import logging
             logging.getLogger(__name__).info(
-                "Gemma GGUF per-layer quant installed: Gemma stays compressed in VRAM (%s)",
+                "Gemma GGUF per-layer quant installed: Gemma stays compressed "
+                "(decoder layers in VRAM, or streamed from CPU when "
+                "LTX_TE_OFFLOAD is on) (%s)",
                 gguf_path,
             )
         except Exception as exc:
@@ -1087,8 +1110,10 @@ class LTXFastVideoPipeline:
             # re-installed on every build (model_ledger never caches the model).
             original_transformer = self.pipeline.model_ledger.transformer
             ledger = self.pipeline.model_ledger
-            # DiT CPU-resident builder (default ON): builds on CPU to avoid the
-            # load-time GPU spike, then moves only non-block tensors to GPU.
+            # DiT CPU-resident builder (used when self._dit_cpu_load is set —
+            # the worker's LTX_DIT_CPU_LOAD): builds on CPU to avoid the
+            # load-time GPU spike, then moves the non-block tensors to GPU
+            # (everything, when no block is swapped).
             dit_service = DitCpuLoadService(self._transformer_device, service)
 
             def patched_transformer() -> torch.nn.Module:
@@ -1183,9 +1208,10 @@ class LTXFastVideoPipeline:
 
         Stage discriminator: DistilledPipeline builds stage-1 conditionings at
         HALF resolution (distilled.py stage_1_output_shape uses height//2) and
-        stage-2 at full resolution. ``height`` is the least-fragile signal here —
-        it is the only per-stage-differing argument passed to this conditioning
-        function (num_frames and any stage index are not forwarded to it).
+        stage-2 at full resolution. ``height`` is the signal checked here — the
+        stage index and num_frames are not forwarded to this conditioning
+        function, and of what is forwarded only the pair ``height`` / ``width``
+        differs per stage.
         """
         cond_height = int(cond_kwargs["height"])
         if cond_height != full_height // 2:
@@ -1203,11 +1229,10 @@ class LTXFastVideoPipeline:
         # with the SQUARE of the frame count (measured 46.8GB reserved at
         # 640x384x257). Numerics are bit-identical — see the docstring.
         #
-        # The decode now sits just OUTSIDE the encode's measured/logged interval
-        # (§1-15 B5 moved it out of _reference_conditioning_from_pixels, which the
-        # chain feeds already-decoded windows). Log-line only: the decode holds one
-        # frame at a time on the GPU and produces the same CPU tensor as before, so
-        # neither the encode's inputs nor its outputs move a bit.
+        # The decode sits just OUTSIDE the encode's measured/logged interval:
+        # _reference_conditioning_from_pixels takes already-decoded pixels,
+        # which is what the chain feeds it (its own decoded windows). The decode
+        # holds one frame at a time on the GPU.
         video = load_video_conditioning_cpu(
             video_path=ref_path,
             height=ref_height,
@@ -1226,11 +1251,11 @@ class LTXFastVideoPipeline:
         """``(scale, ref_height, ref_width)``: the size the reference video is
         decoded at for a conditioning built at ``cond_height x cond_width``.
 
-        Split out of ``_reference_conditioning_for_stage`` (§1-15 B5) so the chain
+        Kept separate from ``_reference_conditioning_for_stage`` so the chain
         path — which decodes its OWN per-clip pixel windows out of one long
         reference and then calls ``_reference_conditioning_from_pixels`` directly —
         resolves the decode size through the same guards and the same arithmetic.
-        Pure; the two guards below are moved verbatim, not re-derived.
+        Pure; both paths share the two guards below.
         """
         scale = self._ic_reference_downscale_factor
         if scale is None or scale < 1:
@@ -1256,8 +1281,8 @@ class LTXFastVideoPipeline:
     ) -> list:
         """VAE-encode already-decoded reference PIXELS into ``[conditioning]``.
 
-        The back half of ``_reference_conditioning_for_stage``, split out verbatim
-        (§1-15 B5): the tiled/untiled encode branch, the channels_last_3d switch
+        The back half of ``_reference_conditioning_for_stage``, kept as its own
+        method: the tiled/untiled encode branch, the channels_last_3d switch
         that rides along with the tiled half of it, the restore in ``finally``
         and the attention-strength wrapper. ``video`` is a CPU (1,C,F,H,W) tensor
         at ``_reference_pixel_dims`` resolution.
@@ -1301,12 +1326,12 @@ class LTXFastVideoPipeline:
         )
         # The layout switch rides on ``tiled``, NOT on ``scale``: "tiled +
         # contiguous" has no successful precedent in this repo — it OOM'd for
-        # real at factor 1 (§49.9 first fix) and only passed once
-        # channels_last_3d was added (second fix). So the tiled path always
+        # real at factor 1 (VERIFICATION_LOG §49.9 first fix) and only passed
+        # once channels_last_3d was added (second fix). So the tiled path always
         # carries channels_last_3d with it: the one combination proven both by
-        # the factor-1 production path and by §79.2(d). The untiled path is
-        # untouched (no relayout, as before), which is what keeps every shipped
-        # factor-2 output byte-identical.
+        # the factor-1 production path and by VERIFICATION_LOG §79.2 (d). The
+        # untiled path gets no relayout, so a below-budget factor-2 reference
+        # encodes exactly as the plain one-shot call does.
         _relayout = _accel and tiled
         _converted = 0
         if _relayout:
@@ -1320,20 +1345,20 @@ class LTXFastVideoPipeline:
             #
             # This is NOT bit-identical, and it reaches exactly the latents that
             # take the tiled branch: the factor-1 REFERENCE latent (rel_rms
-            # 1.2e-2 / cos 0.99993 measured) and, since §3-76, an above-budget
-            # factor-2 reference — which is tiled and therefore already not
-            # byte-identical to its untiled self. Keyframes, factor-2 references
-            # BELOW the budget, chain source heads and stage 2 all stay
-            # bit-identical (measured), and deblur has no shipped baseline
-            # output, so nothing published shifts.
+            # 1.2e-2 / cos 0.99993 measured) and an above-budget factor-2
+            # reference (VERIFICATION_LOG §101) — which is tiled and therefore
+            # already not byte-identical to its untiled self. Keyframes,
+            # factor-2 references BELOW the budget, chain source heads and
+            # stage 2 all stay bit-identical (measured), and deblur has no
+            # shipped baseline output, so nothing published shifts.
             #
-            # The input video is deliberately NOT converted: CausalConv3d's
-            # repeat+cat (convolution.py:304-313) re-normalises it to contiguous
+            # The input video is deliberately NOT converted: the upstream
+            # CausalConv3d.forward's repeat+cat re-normalises it to contiguous
             # before the first convolution, so an input-side channels_last is
             # provably inert (measured rel_rms 0.0).
             #
-            # Nothing leaks downstream either: tiled_encode returns a contiguous
-            # accumulator (video_vae.py:371-404 — ``torch.zeros`` + ``+=``).
+            # Nothing leaks downstream either: the upstream tiled_encode returns
+            # a contiguous accumulator (``torch.zeros`` + ``+=``).
             _converted = _set_conv3d_memory_format(video_encoder, torch.channels_last_3d)
         try:
             # cleanup AFTER the switch, so the contiguous weight storages it just
@@ -1362,16 +1387,20 @@ class LTXFastVideoPipeline:
                 #
                 #   * factor-1 adapters (deblur) ALWAYS — they feed the reference
                 #     at 4x the pixel count of the factor-2 ones and the untiled
-                #     encode's intermediates OOM a 16GB card (§49.9), the same
-                #     reason chain_pipeline._encode_source_heads is tiled;
+                #     encode's intermediates OOM a 16GB card (VERIFICATION_LOG
+                #     §49.9), the same reason
+                #     chain_pipeline._encode_source_heads is tiled;
                 #   * factor >= 2 only ABOVE REFERENCE_ENCODE_TILE_TOKEN_BUDGET.
-                #     Below the line it stays untiled (the ``else`` below), and
-                #     that is what carries byte-identity with every factor-2
-                #     output shipped so far — tiling splits the encode
-                #     temporally, so it cannot be bit-equal to the one-shot. Above
-                #     the line it switches over on its own, on the SAME line the
-                #     UI's amber banner already draws (§57.6 G4's cost knee —
-                #     0.0205 -> 0.1263 s/frame; §3-76).
+                #     Below the line it stays untiled (the ``else`` below) --
+                #     an owner ruling that keeps those jobs' output
+                #     byte-identical and accepts a light spill there in
+                #     exchange (VERIFICATION_LOG §101.2); tiling splits the
+                #     encode temporally, so it cannot be bit-equal to the
+                #     one-shot. Above the line it switches over on its own.
+                #     The line is the cost knee of VERIFICATION_LOG §57.6 G4;
+                #     its match with the Chained screen's stage-1 comfort
+                #     banner is documented at
+                #     chain_math.REFERENCE_ENCODE_TILE_TOKEN_BUDGET.
                 #
                 # The tiling config is the DECODE-side default reused here; there
                 # is no separate encode config.
@@ -1414,8 +1443,10 @@ class LTXFastVideoPipeline:
                 try:
                     # Restoring is a CORRECTNESS requirement, not hygiene: stage 2
                     # of the SAME job re-encodes the keyframes through this very
-                    # encoder (distilled.py:164-171 / chain_pipeline.py:877) and
-                    # those latents do change under channels_last (measured).
+                    # encoder (stage 2 of the upstream
+                    # DistilledPipeline.__call__ / of chain_pipeline.run_chain)
+                    # and those latents do change under channels_last
+                    # (measured).
                     # Later jobs rebuild the encoder from scratch, so they are
                     # structurally safe regardless — that is the second net, not
                     # the first. The encoder always enters here contiguous, so
@@ -1423,18 +1454,20 @@ class LTXFastVideoPipeline:
                     _set_conv3d_memory_format(video_encoder, torch.contiguous_format)
                     # ...and release the channels_last storages just discarded:
                     # the chain route has no pre-denoise release wrapper of its
-                    # own (chain_pipeline.py:659 — its private denoise never goes
-                    # through worker.py's monkeypatch). Costs a few ms.
+                    # own (its private denoise,
+                    # chain_pipeline._denoise_av_with_carry, never goes through
+                    # worker.py's monkeypatch). Costs a few ms.
                     cleanup_memory()
                 except Exception:  # must never mask an in-flight encode failure
                     logging.getLogger(__name__).exception(
                         "IC-LoRA reference encode: failed to restore the video "
                         "encoder's contiguous layout"
                     )
-        # Control-adherence knob (upstream iclora_utils parity): only when the
-        # attention strength is < 1.0 do we wrap the reference conditioning so a
-        # scalar additive self-attention mask reaches SDPA. At 1.0 the bare
-        # VideoConditionByReferenceLatent is returned (byte-identical to before).
+        # Control-adherence knob (parity with the upstream
+        # ICLoraPipeline._create_conditionings): only when the attention
+        # strength is < 1.0 do we wrap the reference conditioning so a scalar
+        # additive self-attention mask reaches SDPA. At 1.0 the bare
+        # VideoConditionByReferenceLatent is returned.
         cond = VideoConditionByReferenceLatent(
             latent=encoded_video,
             downscale_factor=scale,
@@ -1517,10 +1550,12 @@ class LTXFastVideoPipeline:
     def _make_linearquadratic_sigmas(num_steps: int) -> list[float]:
         """Return a LinearQuadratic sigma schedule.
 
-        First half of steps is linear (coarse, high-noise region); second half is
-        quadratic (fine, low-noise region).  The quadratic tail gives more step
-        budget to the low-noise refinement region than the plain linear schedule.
-        Params: threshold_noise=0.025, linear_steps=num_steps//2 (library defaults).
+        The first half of the steps is linear, taking small steps just below
+        σ=1.0 (high-noise region, down to 1 - threshold_noise); the second half
+        is quadratic, with steps that grow toward σ=0.  Compared with the plain
+        linear schedule this spends more of the step budget in the high-noise
+        region.  Params: the library defaults of
+        ``LinearQuadraticScheduler.execute`` (threshold_noise, linear_steps).
         """
         from ltx_core.components.schedulers import LinearQuadraticScheduler
         return LinearQuadraticScheduler().execute(steps=num_steps).tolist()
@@ -1529,8 +1564,12 @@ class LTXFastVideoPipeline:
     def _make_beta_sigmas(num_steps: int) -> list[float]:
         """Return a Beta distribution sigma schedule (arXiv 2407.12173).
 
-        Samples timesteps according to a Beta(0.6, 0.6) distribution, producing
-        a bell-curve step density concentrated toward midrange noise levels.
+        Samples timesteps through the inverse CDF of a Beta distribution with
+        the library defaults of ``BetaScheduler.execute`` (alpha, beta).  Both
+        are below 1 there, so the TIMESTEPS are densest toward both ends of
+        their range rather than at midrange; the scheduler's time shift
+        (``BetaScheduler.shift``) then maps them to sigmas, and the resulting
+        sigma steps are smallest near σ=1.0.
         May return fewer than num_steps+1 values due to deduplication of
         identical timesteps — the Euler loop handles variable-length schedules.
         """
@@ -1571,10 +1610,10 @@ class LTXFastVideoPipeline:
         _orig_sigmas = _distilled_mod.DISTILLED_SIGMA_VALUES
         _orig_simple = _distilled_mod.simple_denoising_func
         _orig_euler = _distilled_mod.euler_denoising_loop
-        # NAG: encode_text is patched (only when this job requested NAG) so the
-        # negative prompt gets encoded into NagState using the same live
-        # text_encoder, exactly once, before ledger.transformer() is built
-        # (distilled.py:99 -> :108; see _make_nag_encode_text below).
+        # NAG/VSF: encode_text is patched (only when this job requested NAG or
+        # VSF) so the negative prompt gets encoded into NagState using the same
+        # live text_encoder, exactly once, before ledger.transformer() is built
+        # (both in DistilledPipeline.__call__; see _make_nag_encode_text below).
         _orig_encode = _distilled_mod.encode_text
 
         # ── Keyframe conditioning hybrid ──────────────────────────────────────
@@ -1583,9 +1622,9 @@ class LTXFastVideoPipeline:
         # which constructs VideoConditionByLatentIndex(latent_idx=img.frame_idx)
         # for EVERY image — treating our PIXEL frame_idx as a LATENT index.  For
         # frame_idx > 0 that overflows the latent token buffer and crashes
-        # (RuntimeError: expanded size (0) must match existing size (40) at
-        # latent_cond.py:40).  frame_idx == 0 coincides in both index spaces, so
-        # single-image I2V worked and masked the bug.
+        # (RuntimeError: expanded size (0) must match existing size (40) in
+        # VideoConditionByLatentIndex.apply_to).  frame_idx == 0 coincides in
+        # both index spaces, so it is safe on the replace path.
         #
         # This replicates Lightricks' `combined_image_conditionings` (absent in
         # the installed wheel) WITHOUT a wheel upgrade: route per-image by
@@ -1593,23 +1632,22 @@ class LTXFastVideoPipeline:
         # idx > 0 → keyframe/guide APPEND via image_conditionings_by_adding_guiding_latent,
         # which builds VideoConditionByKeyframeIndex(frame_idx=img.frame_idx) as a
         # PIXEL RoPE offset (no ÷8).  frame_idx is passed through as-is (already
-        # snapped to a multiple of 8 by the API validator).  Both Stage 1 and
-        # Stage 2 pick this up because DistilledPipeline reads the module-global
-        # name — the same LOAD_GLOBAL mechanism as DISTILLED_SIGMA_VALUES above.
+        # snapped onto the 0-or-8n+1 latent grid by the API's
+        # _normalize_conditioning_images).  Both Stage 1 and Stage 2 pick this
+        # up because DistilledPipeline reads the module-global name — the same
+        # LOAD_GLOBAL mechanism as DISTILLED_SIGMA_VALUES above.
         #
-        # DESIGN INVARIANT: images with frame_idx == 0 (and T2V with no images)
-        # go through _orig_replace exactly as before → byte-identical to today.
+        # DESIGN INVARIANT: images with frame_idx == 0 go through _orig_replace
+        # unmodified, and T2V (no images) gets the same empty list the wheel's
+        # helper returns.
         _orig_replace = _distilled_mod.image_conditionings_by_replacing_latent
 
-        # try/finally window widened (was: only around self.pipeline(...) below)
-        # to also cover the patch-application section right below this comment.
-        # Latent defect this closes: if any of the patch-building calls between
-        # here and the old try (e.g. _make_stg_denoising_func, the sigma-schedule
-        # builders) had raised, the _orig_* saves above would never be restored
-        # — the NEXT job on this resident pipeline would silently inherit a
-        # half-applied previous job's globals. Widening the window one level up
-        # is required before adding the encode_text patch below (a 5th global to
-        # get this same guarantee).
+        # The try/finally starts here, ahead of the patch-application section
+        # right below this comment: if any of the patch-building calls (e.g.
+        # _make_stg_denoising_func, the sigma-schedule builders) raises, the
+        # _orig_* saves above are still restored — otherwise the NEXT job on
+        # this resident pipeline would silently inherit a half-applied previous
+        # job's globals.
         try:
             # The guide helper is NOT imported into distilled.py's namespace, so we
             # reference it from the helpers module (its canonical home).  Both helpers
@@ -1629,8 +1667,8 @@ class LTXFastVideoPipeline:
                 if guide_imgs:
                     conds += _orig_add_guide(guide_imgs, *args, **kwargs)
                 # IC-LoRA reference-video conditioning — appended on the STAGE-1 pass
-                # only. Inert (returns []) when no ic_reference is configured, so the
-                # keyframe-only path above stays byte-identical.
+                # only. Skipped when no ic_reference is configured, so the
+                # keyframe-only conditionings above are returned unchanged.
                 if self._ic_reference is not None:
                     # tiling_config rides along in a COPY of the wheel's kwargs
                     # (the originals above must stay exactly as the wheel passed
@@ -1708,11 +1746,12 @@ class LTXFastVideoPipeline:
             _distilled_mod.image_conditionings_by_replacing_latent = _hybrid_image_conditionings  # type: ignore[attr-defined]
 
             # ── NAG negative-prompt encode patch ──────────────────────────────────
-            # Only when THIS job requested NAG (NagState.requested) — otherwise
-            # encode_text is left untouched, so a NAG-OFF job never even sees this
-            # branch (D3). See _make_nag_encode_text: the wrapper encodes the
-            # negative prompt into NagState using the SAME live text_encoder,
-            # exactly once, before returning the positive result unchanged.
+            # Only when THIS job requested NAG or VSF (NagState.requested) —
+            # otherwise encode_text is left untouched, so a job without either
+            # never even sees this branch. See _make_nag_encode_text: the wrapper
+            # encodes the negative prompt into NagState using the SAME live
+            # text_encoder, exactly once, before returning the positive result
+            # unchanged.
             if self._nag.requested:
                 _distilled_mod.encode_text = self._make_nag_encode_text(_orig_encode)  # type: ignore[attr-defined]
 
@@ -1744,10 +1783,10 @@ class LTXFastVideoPipeline:
         when ``self._nag.requested``) over ``ltx_pipelines.distilled``'s module-
         global during ``_run_inference``.
 
-        Called exactly once per job at distilled.py:99
-        (``encode_text(text_encoder, prompts=[prompt])``), before
-        ``ledger.transformer()`` is built at distilled.py:108 — this ordering
-        (encode negative -> build transformer) is D2's correctness guarantee:
+        Called exactly once per job inside ``DistilledPipeline.__call__``
+        (``encode_text(text_encoder, prompts=[prompt])``), before that method
+        builds ``ledger.transformer()`` — this ordering (encode negative ->
+        build transformer) is a correctness requirement:
         NagService.install() raises if the transformer is built before the
         negative context is in NagState.
 
@@ -1765,7 +1804,7 @@ class LTXFastVideoPipeline:
             # and negates its values, so it must never see the connector's
             # learned register embeddings — hence the encode-time slice, taken
             # here where the method is known (see encode_negative's docstring).
-            # NAG passes False and stays byte-identical.
+            # NAG passes False and keeps the full, unsliced context.
             video_ctx, audio_ctx = encode_negative(
                 text_encoder,
                 params.negative_prompt,
@@ -1807,10 +1846,11 @@ class LTXFastVideoPipeline:
         vae_mode: str = "default",
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
-        # (backward compat — the Phase A harness supplies loras at create()).
+        # (for callers that supply loras at create()).
         # An explicit list (incl. []) is authoritative for THIS job, so a no-LoRA
-        # job after a LoRA job cleanly detaches → byte-identical output (gate G3),
-        # with no leak across the resident worker's job loop.
+        # job after a LoRA job cleanly detaches (its output matches a run without
+        # LoRA; VERIFICATION_LOG §21.5), with no leak across the resident
+        # worker's job loop.
         eff_loras = ic_loras if ic_loras is not None else self._ic_loras_default
         eff_reference = (
             ic_reference if ic_reference is not None else self._ic_reference_default
@@ -1826,7 +1866,7 @@ class LTXFastVideoPipeline:
         # cleanly detaches instead of leaking the prior negative prompt.
         self._set_nag_job(nag)
         # Attention backend, same "every job sets it explicitly" rule as NAG.
-        # Kept LAST of the three _set_*_job calls on purpose: _set_ic_job can
+        # Kept after _set_ic_job and _set_nag_job on purpose: _set_ic_job can
         # raise, and it must not do so with the sage request already armed but
         # the try/finally not yet entered.
         self._set_sage_job(attention_backend)
@@ -1835,20 +1875,22 @@ class LTXFastVideoPipeline:
         self._set_block_swap_prefetch_job(block_swap_prefetch)
         # Fused Triton GGUF dequantization, armed alongside prefetch for the same
         # reason (no ordering constraint, and its reset lives in the finally
-        # below). Must be armed BEFORE the try, because the transformer build
-        # that dequantizes the GGUF weights happens inside it.
+        # below). Must be armed BEFORE the try, because the GGUF dequantization
+        # it governs (at the transformer build, or in the forward passes on the
+        # per-layer-quant path) happens inside it.
         self._set_fused_dequant_job(fused_gguf_dequant_kernel)
         # keep_resident: ``None`` = 触らない（現在の状態を維持）。ワーカーは
         # 常に明示的な bool を渡すが、outputs/ 配下のスパイクスクリプトは
         # create時に keep_resident_weights=True を張って直接 generate() を
         # 呼ぶので、既定 False にすると1本目でキャッシュを剥がしてしまう。
-        # 上の3つと違い、finally に対応するリセットは**無い**（残ることが機能。
-        # ``_set_keep_resident_job`` のdocstring参照）。
+        # 上の NAG・sage・prefetch・fused dequant と違い、finally に対応する
+        # リセットは**無い**（残ることが機能。``_set_keep_resident_job`` のdocstring参照）。
         if keep_resident is not None:
             self._set_keep_resident_job(keep_resident)
         # 映像VAEデコーダの選択。keep_resident の**後**に置くのは読みやすさの
         # ためだけで、順序の制約は無い（`_set_vae_mode_job` は代入のたびに
-        # registry を注入し直すので、_swap_registry との前後を問わない。§4.4）。
+        # registry を注入し直すので、_swap_registry との前後を問わない。
+        # `Docs/PRUNAVAED_WORKORDER.md` §4.4）。
         self._set_vae_mode_job(vae_mode)
 
         try:
@@ -1897,9 +1939,10 @@ class LTXFastVideoPipeline:
             # transfer state down (drains the stream, frees the arenas and the
             # CPU masters) so nothing survives into the next job.
             self._reset_block_swap_prefetch_job()
-            # And the job's transformer reference itself (§3-105 F2): the
-            # success path already del'd the transformer before decode, so
-            # this drops BlockSwapService's own keep-latest reference to it.
+            # And the job's transformer reference itself
+            # (VERIFICATION_LOG §100): the success path already del'd the
+            # transformer before decode, so this drops BlockSwapService's own
+            # keep-latest reference to it.
             self._release_block_swap_transformer()
             # Same again for the fused GGUF dequantization kernels; reset also
             # snapshots this job's verdict for
@@ -1936,7 +1979,7 @@ class LTXFastVideoPipeline:
         fused_gguf_dequant_kernel: bool = False,
         vae_mode: str = "default",
     ) -> dict:
-        """Masked AV-latent clip chaining -> ONE continuous mp4 (Phase 3 WP4).
+        """Masked AV-latent clip chaining -> ONE continuous mp4.
 
         Delegates to :func:`engine.pipeline.chain_pipeline.run_chain`, which
         reuses THIS pipeline's ledger/components/low-VRAM machinery. ``clips`` is
@@ -1955,12 +1998,12 @@ class LTXFastVideoPipeline:
 
         ``end_source`` (optional ``EndSourceSpec``, additive) is the mirror of
         ``source`` at the far end: the app-cut material is VAE-encoded and frozen
-        as the TAIL of the last stage-1 segment and the last stage-2 tile, so the
-        chain ENDS on it. UNLIKE ``source`` nothing is trimmed — the delivered
-        length is exactly what it would be without one. Combinable with
-        ``source`` (start + end = interpolation), mutually exclusive with
-        ``retake`` and ``audio_source``. Another pure pass-through; ``None``
-        keeps every other path byte-identical.
+        as the TAIL of the last stage-1 segment and re-frozen in every stage-2
+        tile that reaches it, so the chain ENDS on it. UNLIKE ``source`` nothing
+        is trimmed — the delivered length is exactly what it would be without
+        one. Combinable with ``source`` (start + end = interpolation), mutually
+        exclusive with ``retake`` and ``audio_source``. Another pure
+        pass-through; ``run_chain``'s docstring lists the modes.
 
         ``ic_loras`` (style/character IC-LoRA, additive): ``(path, strength,
         audio_strength)`` adapters applied via the forward-time weight patch
@@ -1969,11 +2012,12 @@ class LTXFastVideoPipeline:
         before building the transformer (empty list clears any stale LoRA left by
         a prior single ``generate()`` on the resident pipeline).
 
-        ``ic_reference`` / ``ic_attention_strength`` (α, additive): a control-adapter
-        reference video ``(path, strength)`` wired to clip-0's STAGE-1 conditioning
-        (accepted only for clips=1 chains; the API layer enforces that). ``None``
-        reference -> the chain is byte-identical to before; ``ic_attention_strength``
-        is normalised to 1.0 when unset so run_chain's ``float`` contract holds.
+        ``ic_reference`` / ``ic_attention_strength`` (additive): a control-adapter
+        reference video ``(path, strength)`` that ``run_chain`` slices per stage-1
+        segment and adds to that segment's STAGE-1 conditioning (stage-2 tiles
+        get none; see ``run_chain``'s docstring). A ``None`` reference adds no
+        conditioning; ``ic_attention_strength`` is normalised to 1.0 when unset
+        so run_chain's ``float`` contract holds.
 
         ``nag`` (NAG negative-prompt guidance, additive): passed straight through
         to ``run_chain``, which is the single place that calls
@@ -2004,21 +2048,22 @@ class LTXFastVideoPipeline:
 
         ``fused_gguf_dequant_kernel`` (additive): armed here and reset in the
         finally, same discipline as ``block_swap_prefetch``. One arm covers the
-        whole chain because the chain builds (and therefore dequantizes) the
-        transformer exactly once.
+        whole chain because the flag stays set from here to the finally, so
+        every GGUF dequantization inside ``run_chain`` sees it.
 
-        ``stage2_v_tile`` / ``stage2_v_adv`` (additive, ``None`` = the frozen
-        (22, 18) default): the stage-2 tile geometry, passed straight through to
-        ``run_chain`` — nothing is armed on the pipeline for it, unlike the
-        acceleration knobs below, because it is pure layout arithmetic that
-        ``chain_math.compute_chain_layout`` resolves inside ``run_chain``.
+        ``stage2_v_tile`` / ``stage2_v_adv`` (additive, ``None`` =
+        ``chain_math.STAGE2_V_TILE`` / ``STAGE2_V_ADV``): the stage-2 tile
+        geometry, passed straight through to ``run_chain`` — nothing is armed on
+        the pipeline for it, unlike the acceleration knobs, because it is pure
+        layout arithmetic that ``chain_math.compute_chain_layout`` resolves
+        inside ``run_chain``.
 
         ``vae_mode`` ("default" / "prune_vaed", additive): armed here too, and
         it is load-bearing that this call is NOT forgotten — the chain's decoder
         is created at ``chain_pipeline.py``'s ``ledger.video_decoder()``, a
         different call site from the single-generate one, and both are reached
-        only through the ledger builder this sets (§8 E2). One setting covers
-        every clip and every stage of the chain.
+        only through the ledger builder this sets (``Docs/PRUNAVAED_WORKORDER.md``
+        §8 E2). One setting covers every clip and every stage of the chain.
         """
         from engine.pipeline.chain_pipeline import run_chain
 
@@ -2090,8 +2135,7 @@ class LTXFastVideoPipeline:
         fused_gguf_dequant_kernel: bool = False,
         vae_mode: str = "default",
     ) -> dict:
-        """Canvas extension (outpainting, Docs/PENDING_TASKS_CLOSED.md §3-70,
-        filed as §1-13 at the time) -> ONE mp4.
+        """Canvas extension (outpainting) -> ONE mp4.
 
         Delegates to :func:`engine.pipeline.outpaint_pipeline.run_outpaint`,
         which reuses THIS pipeline's ledger/components/low-VRAM machinery the
@@ -2103,7 +2147,8 @@ class LTXFastVideoPipeline:
         also set it, or NagService.install() rejects the job), everything else is
         armed here at the outermost entry point where its ``finally`` reset also
         lives. ``keep_resident`` deliberately has no reset — surviving the job is
-        what the CPU-skeleton cache is for.
+        what the CPU-skeleton cache is for — and ``vae_mode`` needs none because
+        every job sets it afresh.
         """
         from engine.pipeline.outpaint_pipeline import run_outpaint
 
@@ -2172,7 +2217,7 @@ class LTXFastVideoPipeline:
         fused_gguf_dequant_kernel: bool = False,
         vae_mode: str = "default",
     ) -> dict:
-        """Masked partial regeneration (inpainting, 台帳 §3-55) -> ONE mp4.
+        """Masked partial regeneration (inpainting) -> ONE mp4.
 
         Delegates to :func:`engine.pipeline.inpaint_pipeline.run_inpaint`, the
         sibling of ``run_outpaint``: same two-stage driver, same IC-LoRA, same
@@ -2186,8 +2231,9 @@ class LTXFastVideoPipeline:
         armed INSIDE run_inpaint (whoever encodes the negative prompt must also
         set it, or NagService.install() rejects the job), everything else is
         armed here at the outermost entry point where its ``finally`` reset also
-        lives, and ``keep_resident`` deliberately has no reset — surviving the
-        job is what the CPU-skeleton cache is for.
+        lives, ``keep_resident`` deliberately has no reset — surviving the job
+        is what the CPU-skeleton cache is for — and ``vae_mode`` needs none
+        because every job sets it afresh.
         """
         from engine.pipeline.inpaint_pipeline import run_inpaint
 
@@ -2254,11 +2300,11 @@ class LTXFastVideoPipeline:
     def compile_transformer(self) -> None:
         # NOT compatible with NAG/VSF: this caches ONE compiled transformer
         # instance and replaces ledger.transformer with a lambda that returns it
-        # forever, which defeats D1 (NAG's/VSF's install() must re-run against a
-        # FRESH transformer every job, since attn2/audio_attn2 are patched
-        # per-job based on that job's NagState). No caller currently uses this
-        # method in the production path (see D1's dead-code note), so it is left
-        # as-is rather than reworked to cooperate with per-job NAG/VSF install.
+        # forever, which defeats the per-job install (NAG's/VSF's install() must
+        # re-run against a FRESH transformer every job, since attn2/audio_attn2
+        # are patched per-job based on that job's NagState). Nothing calls this
+        # method, so it is left as-is rather than reworked to cooperate with
+        # per-job NAG/VSF install.
         transformer = self.pipeline.model_ledger.transformer()
 
         compiled = cast(

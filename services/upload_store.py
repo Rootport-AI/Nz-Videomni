@@ -1,4 +1,4 @@
-"""Upload store for minimal-I2V input images (spec 7.1 / 0.4).
+"""Upload store for input images (POST /upload/image, spec §6.3).
 
 Saves an uploaded image, normalizing it to ``uploads/{image_id}/input.png``:
 EXIF orientation applied, converted to RGB. Returns metadata used by the API.
@@ -76,7 +76,7 @@ class UploadStore:
         )
 
     def stored_relpath(self, image_id: str) -> str:
-        """Project-relative path used in API responses (spec 7.1)."""
+        """Project-relative path used in API responses (spec §6.3)."""
         return f"uploads/{image_id}/input.png"
 
     def path_for(self, image_id: str) -> Path:

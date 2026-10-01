@@ -1,11 +1,12 @@
-"""G1 gate harness for the depth control signal (needs the ENGINE venv + a GPU).
+"""G1 gate harness for the depth control signal (needs an engine venv + a GPU).
 
     .venv-engine\\Scripts\\python.exe -m engine.preprocess.depth_g1_gate \\
         --video uploads/videos/<id>/source.mp4 --frames 121 --dump outputs/g1_depth
 
 Runs the REAL production path once — ``get_processor("depth")`` +
 ``driver.preprocess_video`` — while tapping the pre-encode frames, so all three
-G1 measurements describe exactly what a job would produce:
+G1 measurements describe exactly what a job would produce (the G1 record is
+VERIFICATION_LOG §49.3):
 
   (a) near = white. Reported as statistics + side-by-side PNG dumps for the
       visual call. It can also be made OBJECTIVE by naming two boxes in the

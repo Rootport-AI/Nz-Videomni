@@ -1,4 +1,4 @@
-"""IC-LoRA reference-video conditioning for LTX 2.5 (§3-102 third stage).
+"""IC-LoRA reference-video conditioning for LTX 2.5.
 
 An IC-LoRA (In-Context LoRA) does not work from its weights alone. It was
 trained on a sequence where the reference material's tokens sit alongside the
@@ -7,27 +7,33 @@ VAE-encode it, and APPEND the resulting tokens to the latent sequence as clean
 latents. This module is the whole of that second half. The weights half lives in
 :mod:`engine25.gguf_transformer` (``Ltx25DiffusionStage.set_loras``).
 
-Three callers, one set of rules
--------------------------------
+Callers, one set of rules
+-------------------------
 * **Single** (:mod:`engine25.pipeline25`) installs :func:`reference_patch` around
   ``DistilledPipeline.__call__``. The official pipeline builds its conditioning
   list through ``combined_image_conditionings``, a MODULE GLOBAL of
   ``ltx_pipelines.distilled`` that it looks up once per stage, so rebinding that
   name is what lets a reference be appended without forking the pipeline. The
-  same seam and the same stage discriminator LTX 2.3 uses
-  (``engine/pipeline/fast_video_pipeline.py:1526-1545``); ``ltxcore_compat.verify``
-  pins both.
+  same seam and the same stage discriminator LTX 2.3 uses (``_run_inference``
+  and ``_reference_conditioning_for_stage`` of ``LTXFastVideoPipeline`` in
+  ``engine/pipeline/fast_video_pipeline.py``); ``ltxcore_compat.verify`` pins
+  both.
 * **Chained** (:mod:`engine25.chain25`) has no ``DistilledPipeline.__call__`` to
   patch -- it drives the blocks itself -- so it calls
   :func:`reference_conditioning_from_pixels` directly, once per stage-1 segment,
   with that segment's window of one long reference (:func:`iter_reference_windows`).
-* Both resolve the reference's decode size through :func:`reference_pixel_dims`
-  and its downscale factor through :func:`resolve_reference_downscale_factor`, so
-  the two cannot drift apart.
+* **Outpainting** and **Inpainting** (:mod:`engine25.outpaint25`,
+  :mod:`engine25.inpaint25`) append their green-canvas reference through
+  ``outpaint25._encode_reference_conditionings``, which builds it with the same
+  :func:`reference_pixel_dims` and :func:`reference_conditioning_from_pixels`.
+* All of them resolve the reference's decode size through
+  :func:`reference_pixel_dims` and its downscale factor through
+  :func:`resolve_reference_downscale_factor`, so they cannot drift apart.
 
-STAGE 1 ONLY, in both. Stage 2 never gets a reference: 2.3 does not add one
-either, and experiment 2C measured that stage-1 injection alone carries both the
-composition and the sharpening (``outputs/ltx25-iclora-compat/C_RESULTS.md``).
+STAGE 1 ONLY, on every path. Stage 2 never gets a reference: 2.3 does not add one
+either, and experiment 2C (VERIFICATION_LOG §71.8) measured that stage-1
+injection alone carries both the composition and the sharpening
+(``outputs/ltx25-iclora-compat/C_RESULTS.md``).
 
 Why not ``append_ic_lora_reference_video_conditionings``
 -------------------------------------------------------
@@ -104,8 +110,8 @@ def resolve_reference_downscale_factor(
     stored in the LoRA's safetensors header and nowhere else (union-control
     declares 2, deblur declares 1).
 
-    Transcribed from 2.3's ``FastVideoPipeline._set_ic_job``
-    (``engine/pipeline/fast_video_pipeline.py:425-493``), including the part that
+    Transcribed from 2.3's ``LTXFastVideoPipeline._set_ic_job``
+    (``engine/pipeline/fast_video_pipeline.py``), including the part that
     is easy to get wrong: the official reader returns 1 BOTH for "declared 1" and
     for "key absent", so a Style LoRA (which has no such key) would otherwise
     cast a vote for 1 and quietly override a union-control adapter's 2. Key
@@ -168,8 +174,8 @@ def reference_pixel_dims(scale: int | None, cond_height: int, cond_width: int) -
     built -- stage 1's half-resolution pair on every path that uses this, which is
     every path (stage 2 gets no reference).
 
-    Transcribed from 2.3's ``_reference_pixel_dims``
-    (``engine/pipeline/fast_video_pipeline.py:1164-1186``). The divisibility guard
+    Transcribed from 2.3's ``LTXFastVideoPipeline._reference_pixel_dims``
+    (``engine/pipeline/fast_video_pipeline.py``). The divisibility guard
     is the same one the official ``append_ic_lora_reference_video_conditionings``
     applies, and it is why every reference-carrying request is held to
     ``width/height % 128 == 0`` at the API: a factor-2 adapter at an odd
@@ -264,7 +270,7 @@ def iter_reference_windows(
     buffering is ``max(clip_frames)`` frames rather than the whole file.
 
     Transcribed from 2.3's ``chain_pipeline._iter_reference_windows``
-    (``engine/pipeline/chain_pipeline.py:326-385``), short-reference policy
+    (``engine/pipeline/chain_pipeline.py``), short-reference policy
     included: a partially covered window yields the frames it DOES have (the VAE
     crops a non-8n+1 pixel run itself, so there is no need to round down), and
     only the zero-frame case yields ``None``.
@@ -310,7 +316,7 @@ def set_conv3d_memory_format(module: Any, memory_format: torch.memory_format) ->
     """Re-lay-out every ``Conv3d`` weight inside *module* in place; return the count.
 
     Transcribed from 2.3's ``_set_conv3d_memory_format``
-    (``engine/pipeline/fast_video_pipeline.py:47``). ``Conv3d`` ONLY, never a
+    (``engine/pipeline/fast_video_pipeline.py``). ``Conv3d`` ONLY, never a
     whole-module ``.to(memory_format=channels_last_3d)``: the video encoder also
     holds rank-4 ``Conv2d`` weights, which raise "required rank 5 tensor".
     """
@@ -365,14 +371,16 @@ def reference_conditioning_from_pixels(
     * **factor >= 2** is encoded in ONE SHOT up to
       :data:`chain_math.REFERENCE_ENCODE_TILE_TOKEN_BUDGET` reference tokens,
       and switches to the SAME tiled + ``channels_last_3d`` path above it
-      (§3-76). Below the line nothing moved: every reference short enough for
-      the Chained screen's stage-1 comfort banner to stay silent takes the
-      untiled branch it always took, so already-shipped outputs stay
-      byte-identical. Above it the two mechanisms hand over together --
-      tiling and the memory-layout switch are the one combination this
-      repository has measured as safe, and tiling with contiguous weights was
-      measured OOM. The reference's OWN LENGTH is the entire switch: there is
-      no config key, no API field and no UI control for it.
+      (VERIFICATION_LOG §101). The line cuts the same jobs as the Chained
+      screen's stage-1 comfort banner (see the constant), and keeping the
+      untiled branch below it is an owner ruling that keeps those jobs'
+      output byte-identical and accepts a light spill there in exchange
+      (VERIFICATION_LOG §101.2). Above it the two mechanisms hand over
+      together -- tiling and the memory-layout switch are the one
+      combination this repository has measured as safe, and tiling with
+      contiguous weights was measured OOM. The reference's OWN LENGTH is the
+      entire switch: there is no config key, no API field and no UI control
+      for it.
       ``VideoEncoder.forward`` expects its input already on the compute device
       (``tiled_encode`` moves tiles itself; the plain call does not), which is
       why only the untiled branch does the ``.to(device)``.
@@ -382,14 +390,15 @@ def reference_conditioning_from_pixels(
     official ``iclora_utils`` does and what keeps the ordinary case structurally
     identical to an unpatched run.
     """
-    # (1,C,F,H,W) -> the reference's own latent token count, the only switch.
+    # (1,C,F,H,W) -> the reference's own latent token count, the switch for
+    # factor >= 2.
     ref_tokens = reference_encode_tokens(
         int(video.shape[4]), int(video.shape[3]), int(video.shape[2])
     )
     tiled = scale == 1 or ref_tokens > REFERENCE_ENCODE_TILE_TOKEN_BUDGET
     # channels_last_3d rides WITH tiling, never without it: tiled + contiguous
     # was measured OOM, tiled + channels_last_3d is the combination the
-    # factor-1 path has shipped on all along.
+    # factor-1 path runs on.
     relayout = torch.device(device).type == "cuda" and tiled
     converted = 0
     started = time.perf_counter()

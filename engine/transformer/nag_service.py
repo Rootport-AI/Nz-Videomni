@@ -16,10 +16,10 @@ block. Self-attention (attn1/audio_attn1) and the audio<->video cross-attention
 (audio_to_video_attn/video_to_audio_attn) are untouched — NAG only ever
 argues with the *text* prompt, never with the other modality.
 
-Deliberate asymmetry (do not "fix" this without re-reading D1/D4 of the NAG
-plan): this wheel's GGUF configs all set `cross_attention_adaln: true`, so
-the production call path is `apply_cross_attention_adaln`
-(ltx_core/model/transformer/transformer.py:373-392), which feeds attn2 a
+Deliberate asymmetry (do not "fix" this without re-reading VERIFICATION_LOG
+§38.1): the production checkpoints' configs set `cross_attention_adaln: true`,
+so the production call path is `apply_cross_attention_adaln`
+(ltx_core/model/transformer/transformer.py), which feeds attn2 a
 POSITIVE context that has already been AdaLN-modulated for the current
 timestep (`context * (1 + scale_kv) + shift_kv`). The NAG NEGATIVE context
 held in `NagState`, by contrast, is encoded once up front and never touched
@@ -33,10 +33,10 @@ a different algorithm with untuned defaults, so it is intentionally not done
 here.
 
 Combine-before-gating order: per-head gating (`2 * sigmoid(to_gate_logits(x))`,
-active whenever `apply_gated_attention: true`, which all three production GGUF
-configs set) is applied AFTER the NAG combine, matching both the vanilla
-`Attention.forward` (attention.py:237-247, gating is the last step before
-`to_out`) and KJNodes' patched forward (NAG combine, then gate, then to_out).
+active whenever `apply_gated_attention: true`, which the production
+checkpoints' configs set) is applied AFTER the NAG combine, matching both the
+vanilla `Attention.forward` (gating is the last step before `to_out`) and
+KJNodes' patched forward (NAG combine, then gate, then to_out).
 The AdaLN `q_gate` multiply that wraps the whole `attn(...)` call in
 `apply_cross_attention_adaln` happens outside this module's patched forward
 entirely and needs no changes.
@@ -77,7 +77,8 @@ _EPS = 1e-7
 @dataclass(frozen=True)
 class NagParams:
     """One job's NAG request. Field names mirror KJNodes' `LTX2_NAG` node
-    inputs so the defaults (scale=11.0, tau=2.5, alpha=0.25) transfer as-is."""
+    inputs so KJNodes' tuned defaults transfer as-is (the API holds them as
+    the `nag_scale`/`nag_tau`/`nag_alpha` defaults in api/models.py)."""
 
     negative_prompt: str
     scale: float
@@ -86,20 +87,22 @@ class NagParams:
 
 
 class NagState:
-    """Mutable NAG state for exactly one job.
+    """Mutable NAG (or VSF) state for exactly one job.
 
-    Lifetime: one instance lives on the pipeline (`FastVideoPipeline._nag`)
-    for as long as the process is resident; `set_params`/`reset` scope it to a
-    single generate()/generate_chain() call so a keep_resident worker never
-    leaks one job's negative prompt into the next job's transformer.
+    Lifetime: one instance lives on the pipeline (`LTXFastVideoPipeline._nag`
+    on 2.3, `Ltx25Pipeline._nag` on 2.5) for as long as the process is
+    resident; `set_params`/`reset` scope it to a single job so a
+    keep_resident worker never leaks one job's negative prompt into the next
+    job's transformer.
 
     `requested` and `ready` are deliberately different: a job can request NAG
     (`set_params` called with non-None params) before its negative prompt has
-    actually been encoded. `NagService.install` treats "requested but not
-    ready" as a wiring bug (RuntimeError) rather than silently skipping,
-    because by the time `transformer()` is built, encoding must already have
-    happened (D2's ordering guarantee) — see nag_service.encode_negative and
-    callers in fast_video_pipeline.py / chain_pipeline.py (Wave 1).
+    actually been encoded. `NagService.install` (like its VSF and LTX 2.5
+    counterparts) treats "requested but not ready" as a wiring bug
+    (RuntimeError) rather than silently skipping, because by the time
+    `transformer()` is built, encoding must already have happened — see
+    encode_negative and its callers under engine/pipeline/ (on 2.5,
+    Ltx25PromptEncoder encodes the negative prompt).
     """
 
     def __init__(self) -> None:
@@ -121,8 +124,8 @@ class NagState:
 
     @property
     def requested(self) -> bool:
-        """A job has asked for NAG (params were set), regardless of whether
-        the negative prompt has been encoded into contexts yet."""
+        """A job has asked for NAG or VSF (params were set), regardless of
+        whether the negative prompt has been encoded into contexts yet."""
         return self._params is not None
 
     @property
@@ -163,9 +166,11 @@ class NagState:
         raise ValueError(f"NagState.context_for: unknown modality {modality!r}")
 
     def reset(self) -> None:
-        """Called from the pipeline's try/finally so NAG state never survives
-        past the job that requested it (resident-worker leak guard, same
-        reasoning as BlockSwapService's resident-reuse fix)."""
+        """Called at the end of every job (the 2.3 pipeline's try/finally,
+        2.5's ``Ltx25Pipeline.reset_nag_job`` in the worker's finally) so NAG
+        or VSF state never survives past the job that requested it
+        (resident-worker leak guard, same reasoning as BlockSwapService's
+        resident-reuse fix)."""
         self._params = None
         self._video_context = None
         self._audio_context = None
@@ -185,16 +190,16 @@ def encode_negative(
     loaded text encoder or its transformers/tokenizer dependencies.
 
     Reshape rationale: `encode_text` (ltx_core/text_encoders/gemma/encoders/
-    base_encoder.py:230) returns raw (video_encoding, audio_encoding) tensors
+    base_encoder.py) returns raw (video_encoding, audio_encoding) tensors
     straight out of the embeddings processor. The production path instead
     runs every context through `TransformerArgsPreprocessor._prepare_context`
-    (transformer_args.py:77-86):
+    (ltx_core's transformer_args.py):
 
         if self.caption_projection is not None:
             context = self.caption_projection(context)
         return context.view(batch_size, -1, x.shape[-1])
 
-    All three production GGUF configs set `caption_proj_before_connector:
+    The production checkpoints' configs set `caption_proj_before_connector:
     true`, which means `caption_projection` is None on this wheel's
     transformer — so `_prepare_context` is *only* the trailing `.view(...)`,
     never a projection. We apply the identical reshape here (using the
@@ -204,9 +209,9 @@ def encode_negative(
     same representation stage as the positive context those modules receive
     from the real preprocessing path.
 
-    ``slice_to_real_tokens`` (default False — every NAG caller keeps the full,
-    historically-encoded context, so this argument cannot change NAG's output
-    by a single bit): trim both contexts to the prompt's REAL token count.
+    ``slice_to_real_tokens`` (default False — every NAG caller keeps the full
+    encoded context, so this argument cannot change NAG's output by a single
+    bit): trim both contexts to the prompt's REAL token count.
     The encoder always returns a fixed-length sequence whose tail is filled by
     the connector's learned register embeddings, and those registers are real
     trained data rather than padding. NAG can live with them because it
@@ -275,8 +280,8 @@ def nag_combine(
     scale-1=0 term and the alpha=0 blend both still touch every element via a
     zero multiply/add, which is a fresh floating-point op, not a no-op at the
     bit level). Short-circuiting here is what makes "NAG OFF" (alpha=0) and
-    "NAG scale=1" bit-identical to the unpatched path, which is the G2 real-
-    device gate.
+    "NAG scale=1" bit-identical to the unpatched path, which the real-device
+    gate G2 checks (VERIFICATION_LOG §38.4).
     """
     if alpha == 0.0 or scale == 1.0:
         return z_pos
@@ -303,11 +308,11 @@ def _make_nag_forward(
 ) -> Callable[..., torch.Tensor]:
     """Build a NAG-patched replacement for one Attention module's forward.
 
-    This is an equivalent expansion of `Attention.forward`
-    (attention.py:180-249) for the cross-attention case ONLY, with the
-    RoPE/perturbation-mask branches dropped: cross-attention calls on this
-    pipeline never pass pe/k_pe/mask/perturbation_mask/all_perturbed (the
-    AdaLN path, transformer.py:392, calls `attn(attn_input, context=...,
+    This is an equivalent expansion of upstream `Attention.forward` for the
+    cross-attention case ONLY, with the RoPE/perturbation-mask branches
+    dropped: cross-attention calls on this pipeline never pass
+    pe/k_pe/mask/perturbation_mask/all_perturbed (the AdaLN path,
+    `apply_cross_attention_adaln`, calls `attn(attn_input, context=...,
     mask=context_mask)` with context_mask always None for text cross-
     attention — confirmed by tracing helpers.py's modality construction).
     `orig_forward` is accepted for signature/documentation symmetry with
@@ -315,7 +320,7 @@ def _make_nag_forward(
     restore on uninstall) but is intentionally never called: an unexpected
     call shape below means NAG's install-time assumptions broke, and this
     module has no uninstall path to fall back to, so failing loud is the
-    only safe response (D5).
+    only safe response.
     """
 
     def nag_forward(
@@ -362,10 +367,10 @@ def _make_nag_forward(
 
         if neg_context.shape[0] != context.shape[0]:
             # Batch-expand safety net: negative context is encoded once per
-            # job (batch size 1) while positive context can be batched (e.g.
-            # classifier-free-guidance-free batched T2V requests still batch
-            # over multiple prompts/seeds upstream). Broadcasting keeps the
-            # same negative prompt applied to every item in the batch.
+            # job (batch size 1), while the positive context arrives with the
+            # caller's batch size (the selfcheck drives a batch of 2).
+            # Broadcasting keeps the same negative prompt applied to every
+            # item in the batch.
             neg_context = neg_context.expand(context.shape[0], -1, -1)
 
         params = state.params
@@ -379,7 +384,8 @@ def _make_nag_forward(
         # attribute, on all 288 attention modules, while NAG swaps `forward`).
         # So a NAG+sage job runs its positive AND negative attention on the sage
         # kernel; nothing here needs to change for that, but it is why the
-        # sage x NAG combination has its own real-device gate (G5.5).
+        # sage x NAG combination has its own real-device gate (G5.5 in
+        # VERIFICATION_LOG §43.5).
         k_pos = attn.k_norm(attn.to_k(context))
         v_pos = attn.to_v(context)
         z_pos = attn.attention_function(q, k_pos, v_pos, attn.heads, None)
@@ -393,8 +399,9 @@ def _make_nag_forward(
         out = nag_combine(z_pos, z_neg, params.scale, params.tau, params.alpha)
         del z_pos, z_neg  # free promptly: peak VRAM for this call is 3 tensors, not 1
 
-        # Per-head gating, identical to Attention.forward's tail (attention.py:
-        # 237-247) — NAG combine happens BEFORE gating (D4/KJNodes order).
+        # Per-head gating, identical to upstream Attention.forward's tail —
+        # NAG combine happens BEFORE gating (KJNodes order; VERIFICATION_LOG
+        # §38.1).
         if attn.to_gate_logits is not None:
             gate_logits = attn.to_gate_logits(x)  # (B, T, H)
             b, t, _ = out.shape
@@ -412,9 +419,11 @@ def _cross_attn_modules(transformer: torch.nn.Module) -> Iterator[tuple[torch.nn
     """Yield (attn2, "video") and (audio_attn2, "audio") for every dual-stream
     transformer block, 96 total on the production 48-block model.
 
-    Traversal mirrors block_swap_service._get_blocks: `ledger.transformer()`
-    returns an X0Model wrapping the real LTXModel as `velocity_model`, so we
-    look there first, then fall back to the object itself (this also lets the
+    Traversal mirrors block_swap_service._get_blocks: the production
+    transformer is an X0Model wrapping the real LTXModel as `velocity_model`
+    (2.3's `ledger.transformer()` and 2.5's
+    `Ltx25DiffusionStage._build_transformer` both hand one over), so we look
+    there first, then fall back to the object itself (this also lets the
     selfcheck script call this directly against a bare LTXModel/stub without
     the X0Model wrapper).
     """
@@ -444,7 +453,7 @@ class NagService:
     same pattern GGUFQuantLoaderService uses for its IC-LoRA provider.
 
     No uninstall: `ledger.transformer()` builds a brand new transformer
-    instance per job (ModelLedger never caches it — see D1), so a patched
+    instance per job (ModelLedger never caches it), so a patched
     instance is simply never reused; there is nothing to restore. No double-
     patch guard either, for the same reason (this method never runs twice
     against the same instance).
@@ -462,7 +471,7 @@ class NagService:
                 "NAG requested for this job but its negative prompt was "
                 "never encoded (NagState.ready is False) — encode_negative()/"
                 "set_contexts() must complete before ledger.transformer() is "
-                "built (D2's ordering guarantee)."
+                "built (the ordering guarantee NAG relies on)."
             )
 
         params = state.params

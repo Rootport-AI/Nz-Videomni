@@ -8,7 +8,7 @@ server and the combination the operator had chosen is still there, instead of
 silently reverting to the shipped defaults.
 
 WHAT THIS IS NOT: it is not configuration (the operator never edits it, and
-``config.yaml`` never mentions a weight file any more), and it is not user
+``config.yaml`` has no key for the selection it records), and it is not user
 data. It is a CACHE OF THE LAST CHOICE, so every failure mode here is a
 fall-back-to-defaults, never an error that reaches a request:
 

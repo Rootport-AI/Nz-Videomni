@@ -6,15 +6,17 @@ the default safetensors loader.
 
 The LTX-2 GGUF situation:
 - The GGUF file contains ONLY the transformer (DiT) weights, quantized.
-- VAE, audio VAE, vocoder, text encoder are still loaded from the
-  original safetensors checkpoint separately.
-- The GGUF file metadata must contain a 'config' key with the model
-  config JSON (same format as the safetensors metadata).
+- VAE, audio VAE, vocoder, text encoder are loaded separately by their
+  own builders (from the safetensors checkpoint, or from the component
+  files and the Gemma GGUF the pipeline installs).
+- The model config JSON (same format as the safetensors metadata) is
+  read from a 'config', 'ltx.config' or 'general.config' GGUF metadata
+  key; GGUFStateDictLoader.metadata falls back to the safetensors
+  checkpoint's config when none is found.
 
 Usage:
     service = GGUFLoaderService(
         gguf_path="/path/to/ltx2_transformer_Q4_K_M.gguf",
-        safetensors_checkpoint="/path/to/ltxv2.safetensors",
     )
     service.install(model_ledger)   # replaces transformer_builder loader
     service.uninstall(model_ledger) # restores safetensors loader
@@ -40,13 +42,17 @@ logger = logging.getLogger(__name__)
 # GGUF tensor dequantization                                          #
 # ------------------------------------------------------------------ #
 #
-# NOTE (a-0 fix): the bf16-path dequant now delegates to the FAITHFUL,
-# numerically-validated kernels in quant_service.dequantize_ggml_tensor
-# (VERIFICATION_LOG §1.3). The former hand-rolled Q4_K/Q6_K kernels here were
-# admittedly "simplified" (wrong nibble-interleave and 6-bit scale/min
-# unpacking) and produced noise-level weights on this bf16 GGUFStateDictLoader
-# path. quant_service imports no ltx_core at module top (only stdlib + torch),
-# so this top-level import cannot form a circular import with loader_service.
+# NOTE: the bf16-path dequant delegates to quant_service.dequantize_ggml_tensor
+# rather than carrying its own Q4_K/Q6_K kernels: a hand-rolled copy is easy
+# to get wrong in the nibble interleave and the 6-bit scale/min unpacking,
+# which turns the weights on this bf16 GGUFStateDictLoader path into noise
+# (VERIFICATION_LOG §20.1 (a-0); the per-layer kernels' own record is §1.3).
+# quant_service's Q4_K/Q5_K/Q6_K kernels are ports
+# of gguf.quants verified bit-exact against it (VERIFICATION_LOG §1.1, bug #4).
+# quant_service imports no ltx_core at module top (only stdlib, torch and the
+# engine.gguf modules dequant_triton and ic_lora_common, which import neither
+# ltx_core nor loader_service there), so this top-level import cannot form a
+# circular import with loader_service.
 from engine.gguf.quant_service import dequantize_ggml_tensor
 
 
@@ -58,10 +64,10 @@ def _dequantize_tensor(
 ) -> torch.Tensor:
     """Dequantize a raw GGUF tensor to a floating point torch tensor.
 
-    Thin wrapper over the faithful per-tensor kernel in quant_service. Float
-    types (F32/F16/BF16) reinterpret+reshape+cast identically to before; the
-    quantized types (Q8_0/Q4_K/Q6_K/…) now use the validated kernels instead of
-    the old simplified ones. Output dtype behaviour is unchanged (bf16 default).
+    Thin wrapper over the per-tensor kernel in quant_service. Float types
+    (F32/F16/BF16) are reinterpreted, reshaped and cast; the quantized types
+    (Q8_0/Q4_K/Q6_K/…) go through quant_service's per-type kernels.
+    The output dtype is ``dtype`` (bf16 by default).
     """
     # dequantize_ggml_tensor expects a FLAT (1-D) input — its production caller
     # in quant_service flattens explicitly via reshape(-1). GGUFReader's
@@ -93,9 +99,9 @@ class GGUFStateDictLoader:
     ) -> None:
         self.gguf_path = gguf_path
         self.target_dtype = target_dtype
-        # IC-LoRA spike: (path, strength, audio_strength) entries fused in-place
-        # into the base state-dict just before it is returned from load(). Empty
-        # by default → load() is byte-identical to the historical behaviour.
+        # IC-LoRA (path, strength, audio_strength) entries fused in-place into
+        # the base state-dict just before it is returned from load(). Empty by
+        # default → load() returns the GGUF state-dict without a fuse.
         self.ic_loras: list[IcLoraEntry] = list(ic_loras or [])
 
     def metadata(self, path: str) -> dict:
@@ -172,7 +178,11 @@ class GGUFStateDictLoader:
             state_dict[name] = weight
             total_params += weight.numel()
 
-        # Apply sd_ops key remapping if provided.
+        # Try sd_ops key remapping if provided. The pinned ltx_core (see
+        # scripts/install_ltx.ps1) has no
+        # ``ltx_core.loader.sd_ops.apply_sd_ops``, so the import below fails
+        # and the except branch keeps the raw GGUF keys
+        # (GGUFQuantStateDictLoader.load skips the remap for this reason).
         if sd_ops is not None:
             try:
                 wrapped = StateDict(
@@ -201,8 +211,8 @@ class GGUFStateDictLoader:
             dtype={t.dtype for t in state_dict.values()},
         )
 
-        # IC-LoRA in-place fuse (spike). No-op when self.ic_loras is empty →
-        # byte-identical to the historical return above.
+        # IC-LoRA in-place fuse. Skipped when self.ic_loras is empty, so base_sd
+        # is returned as built above.
         if self.ic_loras:
             base_sd = self._fuse_ic_loras(base_sd)
 
@@ -215,7 +225,8 @@ class GGUFStateDictLoader:
         The wheel's apply_loras is deliberately NOT used: it matmuls the LoRA
         delta in bf16 on CPU (fuse_loras.py _prepare_deltas), and on CPUs without
         AVX512-BF16/AMX torch's bf16 matmul falls into a ~54x-slower-than-fp32
-        path (measured: ~19 min per fuse vs 68 s no-LoRA load). This loop is
+        path (measured: ~19 min per fuse vs 71 s no-LoRA load; VERIFICATION_LOG
+        §20.6). This loop is
         mathematically IDENTICAL to the wheel's bf16 route
         (_prepare_deltas + _fuse_delta_with_bfloat16): both compute
         W + (B*strength) @ A per key; the only difference is where the single
@@ -225,7 +236,7 @@ class GGUFStateDictLoader:
         """
         # Shared front half (load + LTXV_LORA_COMFY_RENAMING_MAP rename +
         # lora_A/lora_B pairing) with the forward-time path; only the in-place
-        # fp32 fuse below is bf16-path specific and stays UNCHANGED.
+        # fp32 fuse below is bf16-path specific.
         from engine.gguf.ic_lora_common import load_ic_lora_pairs, strength_for_prefix
 
         total_lora_keys = 0
@@ -305,7 +316,7 @@ class GGUFLoaderService:
 
     Replaces the transformer_builder's model_loader with a GGUF-aware
     loader while leaving all other builders (VAE, text encoder etc.)
-    untouched — they still load from the original safetensors checkpoint.
+    untouched — they load from whatever their own builders point at.
     """
 
     def __init__(
@@ -314,8 +325,7 @@ class GGUFLoaderService:
         self.gguf_path = gguf_path
         self._original_loader: Any = None
         # IC-LoRA (path, strength, audio_strength) entries forwarded to the
-        # GGUFStateDictLoader for in-place fuse. Empty by default → historical
-        # behaviour unchanged.
+        # GGUFStateDictLoader for in-place fuse. Empty by default → no fuse.
         self.ic_loras: list[IcLoraEntry] = list(ic_loras or [])
 
     def install(self, model_ledger: Any) -> None:

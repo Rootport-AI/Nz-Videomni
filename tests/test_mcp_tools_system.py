@@ -183,7 +183,7 @@ def test_unload_pipeline_job_busy_raises_tool_error_with_code():
             json={
                 "error": {
                     "code": "JOB_BUSY",
-                    "message": "A job is already running (Phase 1 allows one concurrent job)",
+                    "message": "A job is already running (the server runs one job at a time)",
                     "detail": "cannot unload while a job is running",
                 }
             },
@@ -272,7 +272,7 @@ def test_load_pipeline_base_model_job_busy_raises_tool_error_with_code():
             json={
                 "error": {
                     "code": "JOB_BUSY",
-                    "message": "A job is already running (Phase 1 allows one concurrent job)",
+                    "message": "A job is already running (the server runs one job at a time)",
                     "detail": "cannot swap models while a job is running",
                 }
             },

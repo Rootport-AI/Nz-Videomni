@@ -1,9 +1,11 @@
-"""In-memory single-job store (spec ch.8).
+"""In-memory single-job store (spec §7.1).
 
-Phase 1 keeps one job in flight. There is no DB and no queue: history lives in
+One job is in flight at a time. There is no DB and no queue: history lives in
 a dict and is lost on restart (the ``outputs/{job_id}/metadata.json`` files
-remain on disk). The generate endpoint enforces single-concurrency by checking
-:meth:`JobStore.has_active` and returning 409 (JOB_BUSY) otherwise.
+remain on disk). The generate endpoints reserve a job through
+:meth:`JobStore.create_if_idle` / :meth:`JobStore.create_chain_if_idle`,
+which create one only while no job is active and otherwise return ``None``
+so the endpoint answers 409 (JOB_BUSY).
 """
 
 from __future__ import annotations
@@ -35,8 +37,8 @@ class JobRecord:
         chain_request: GenerateChainRequest | None = None,
     ):
         self.job_id = job_id
-        # ``request`` is always a GenerateRequest so the JobResponse contract is
-        # unchanged. For a chain job it is the clip-0 request (representative);
+        # ``request`` is always a GenerateRequest because JobResponse.request is
+        # typed as one. For a chain job it is the clip-0 request (representative);
         # ``chain_request`` carries the full multi-clip spec for the orchestrator.
         self.request = request
         self.chain_request = chain_request
@@ -44,10 +46,11 @@ class JobRecord:
         self.progress: float = 0.0
         self.current_step: int | None = None
         self.total_steps: int | None = None
-        # F3: pipeline phase of the latest progress event (see JobResponse.stage).
+        # Pipeline phase of the latest progress event (see JobResponse.stage).
         self.stage: str | None = None
         # Chain clip progress (see JobResponse.clip / clip_count): 1-based
-        # current stage-1 segment + clip total; None outside chain stage 1.
+        # current stage-1 segment + clip total. None until a chain stage-1 event
+        # reports one; run_chain_job keeps the last value through stage 2 / decode.
         self.clip: int | None = None
         self.clip_count: int | None = None
         self.created_at: str = now_iso()
@@ -62,7 +65,7 @@ class JobRecord:
         return self.status in (JobStatus.queued, JobStatus.running)
 
     def to_response(self, output_dir: Path | None = None) -> JobResponse:
-        # V2V (ADDITIVE): a job is joinable iff it is a chain continuation of an
+        # V2V: a job is joinable iff it is a chain continuation of an
         # uploaded source video. ``joined`` needs the output root to look for the
         # sidecar; callers without it (unit tests) get False.
         is_v2v = (

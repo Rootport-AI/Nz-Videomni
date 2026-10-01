@@ -5,17 +5,19 @@ as its "depth" control signal: near = white, far = black, normalised ONCE over
 the whole clip.
 
 Unlike Canny and DWPose this is a WHOLE-VIDEO processor, not a frame processor:
-Video-Depth-Anything's official ``infer_video_depth`` runs a 32-frame sliding
-window with a 10-frame overlap and rescales each window onto the previous one,
-which is exactly what keeps the depth temporally stable. Feeding it one frame at
-a time would throw that away, and the min-max normalisation is global by
-definition. Hence the ``VideoProcessor`` protocol and the video-level branch in
+Video-Depth-Anything's official ``infer_video_depth`` runs a sliding window
+(``INFER_LEN`` frames overlapping by ``OVERLAP``, in the vendored
+``video_depth.py``) and rescales each window onto the previous one, which is
+exactly what keeps the depth temporally stable. Feeding it one frame at a time
+would throw that away, and the min-max normalisation is global by definition.
+Hence the ``VideoProcessor`` protocol and the video-level branch in
 ``driver.preprocess_video``.
 
 Fixed parameters (all from the official ComfyUI Union-Control workflow, and
-re-measured in the G0 smoke on the engine venv):
+re-measured in the G0 smoke on the engine venv, Docs/VERIFICATION_LOG.md
+§49.2):
 
-  * ``vits`` / "Small" checkpoint  -- ~4 GB VRAM, ~15 fps at 1280x768
+  * ``vits`` / "Small" checkpoint  -- VRAM and fps: VERIFICATION_LOG §49.2
   * ``input_size=518``            -- the network's working resolution
   * ``fp32=True``                 -- autocast disabled
   * ``max_res=960``               -- inference input is downscaled so the long
@@ -40,12 +42,8 @@ import torch
 
 # Project root = engine/preprocess/depth.py -> parents[2]. The checkpoint lives
 # under ``models/Preprocessors/VDA/``, a sibling of DWPose/ inside the shared
-# Preprocessors category. The old reason for the sibling split (a per-DIRECTORY
-# installer size check that one preprocessor's files could fool for the other)
-# is void: the installer now guards per EXPECTED FILE (manifest ``files``), so
-# neighbouring files can no longer mask a missing checkpoint. The split is kept
-# purely as layout hygiene. Resolved from this file (not cwd) so the path holds
-# regardless of chdir.
+# Preprocessors category; the split is kept as layout hygiene. Resolved from
+# this file (not cwd) so the path holds regardless of chdir.
 _MODELS_DIR = Path(__file__).resolve().parents[2] / "models" / "Preprocessors" / "VDA"
 _CHECKPOINT_PATH = _MODELS_DIR / "video_depth_anything_vits.pth"
 
@@ -136,10 +134,10 @@ class DepthProcessor:
     def _to_inference_input(self, frames_bgr: list[np.ndarray]) -> np.ndarray:
         """BGR frame list -> uint8 RGB array [N, H, W, 3], long edge <= _MAX_RES.
 
-        Downscaling is what the official workflow does (``max_res``) and is what
-        keeps VRAM at ~4 GB; the depth map is resized back to the source
-        resolution on the way out. No padding: the network's own transform
-        handles its 14-multiple alignment.
+        Downscaling is what the official workflow does (``max_res``) and helps
+        keep VRAM at the level measured in VERIFICATION_LOG §49.2; the depth map
+        is resized back to the source resolution on the way out. No padding: the
+        network's own transform handles its 14-multiple alignment.
         """
         height, width = frames_bgr[0].shape[:2]
         target = self._inference_size(width, height)

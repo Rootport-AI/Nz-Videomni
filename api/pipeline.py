@@ -1,32 +1,37 @@
-"""POST /pipeline/load and /pipeline/unload (spec 5.2).
+"""POST /pipeline/load and /pipeline/unload (spec §6.1 / §6.9).
 
 Model management (additive): /pipeline/load accepts an OPTIONAL body with a
 ``models`` block mapping a category (GET /models) to a registered model NAME.
-No body / no block keeps the legacy behavior byte-identical (the current
-active selection is loaded — all-default on boot). A selection differing from
-the live one forces a worker rebuild (unload -> load); the same selection is a
-no-op. Swap failures do NOT fall back (design ruling §9-1).
+No body / no block loads the current active selection (at startup, the one
+remembered in the runtime state file, or the defaults when there is none). A
+selection differing from the live one forces a worker rebuild (unload ->
+load); the same selection is a no-op. Swap failures do NOT fall back (design
+ruling: Docs/MODEL_MANAGEMENT_DESIGN.md §9, item 1).
 
-MULTI-ENGINE (§3-97 P6, Docs/MULTI_ENGINE_DESIGN.md §6.2): the body gained a
-``base_model`` field — the OTHER axis. ``models`` picks a file WITHIN a base
-model; ``base_model`` picks the base model itself (LTX 2.3 / LTX 2.5 / ...),
-and the two can arrive together or alone.
+MULTI-ENGINE (Docs/MULTI_ENGINE_DESIGN.md §6.2): the body's ``base_model``
+field is the OTHER axis. ``models`` picks a file WITHIN a base model;
+``base_model`` picks the base model itself (LTX 2.3 / LTX 2.5 / ...), and the
+two can arrive together or alone.
 
 WHY A BASE-MODEL CHANGE PRECHECKS EVERY CATEGORY, INCLUDING THE DEFAULTS. On
 an unchanged base, a category on ``"default"`` is deliberately left out of the
-selection: "no override" is what keeps the worker payload byte-identical to the
-pre-model-management one. But when the base model CHANGES, every default is a
-different file, and skipping it would hand the engine the new base model's
-weights without ever having looked inside them — which is exactly where the
-GGUF KV ruling (``services.engines.check_kv``: does this file's engine FAMILY
-match the base model being selected, and can that family run this generation?)
-has to fire. So a base change resolves, prechecks and rules on all four
-categories, and passes them all as explicit paths.
+selection: "no override" is what keeps an all-default load's worker payload
+equal to the snapshot ``tests/test_model_swap_load.py`` fixes
+(``test_load_payload_byte_identical_without_selection``). But when the base
+model CHANGES, every default is a different file, and skipping it would hand
+the engine the new base model's weights without ever having looked inside
+them — which is exactly where the KV ruling (``services.engines.check_kv``:
+does this file's engine FAMILY match the base model being selected, and can
+that family run this generation?) has to fire. So a base change resolves,
+prechecks and rules on every category the target base model's descriptor
+declares, and passes them all as explicit paths.
 
-The price is stated openly (design note U4): after a base-model change the
-selection is never empty again, so a later body-less load is "the same VALUES"
-rather than "the same BYTES" as the legacy payload. The NAMES stay ``"default"``
-throughout, so nothing a client displays — nor metadata.json — changes.
+The price (recorded in Docs/MODEL_MANAGEMENT_DESIGN.md §9): after a
+base-model change the selection carries explicit paths even for
+``"default"`` names, and a later body-less load reuses it, so its
+payload has the same VALUES as an all-default one but not the same BYTES.
+The NAMES stay ``"default"`` throughout, so nothing a client displays — nor
+metadata.json — changes.
 """
 
 from __future__ import annotations
@@ -47,12 +52,13 @@ class LoadPipelineRequest(BaseModel):
     """Optional body for POST /pipeline/load (additive).
 
     ``models``: category -> registered NAME (never a filesystem path). Absent
-    categories keep the current active selection, so a partial block only
-    swaps what it names.
+    categories keep the current active selection while the base model stays
+    the same, so a partial block only swaps what it names; after a base-model
+    change they start from that base model's defaults.
 
     ``base_model``: descriptor id from ``GET /models``' ``base_models[]``.
-    Absent keeps the current base model — which is what every pre-P6 client
-    sends, and why they see no change at all.
+    Absent keeps the current base model, so a client that never sends it sees
+    no change at all.
     """
 
     models: dict[str, str] | None = None
@@ -69,9 +75,10 @@ def load_pipeline(
     requested_base = body.base_model if body is not None else None
 
     if not requested and requested_base is None:
-        # Legacy path: bodyless (or empty) load. Response shape unchanged —
-        # no ``models`` key, and no ``base_model`` key either, so a client that
-        # predates either axis sees byte-identical output.
+        # Bodyless (or empty) load. The response carries no ``models`` key and
+        # no ``base_model`` key, so a client that sends neither field sees only
+        # the keys below (test_a_bodyless_load_is_unaffected_by_the_new_axis
+        # fixes the key set).
         pm.load()  # raises PIPELINE_LOAD_FAILED (503) / PIPELINE_LOADING (409)
         return {"pipeline_loaded": pm.loaded, "pipeline_type": pm.pipeline_type, "state": pm.state}
 
@@ -113,20 +120,22 @@ def load_pipeline(
     for category, name in effective.items():
         if name == DEFAULT_NAME and not base_changed:
             # "default" on the SAME base model means "no payload override",
-            # which is what keeps the all-default load byte-identical to the
-            # legacy one (golden-snapshot guarantee).
+            # which keeps an all-default load's worker payload equal to the
+            # snapshot tests/test_model_swap_load.py fixes.
             continue
         path = registry.resolve(category, name, base_model=effective_base)
         # The category descriptor of the TARGET base model states which
-        # extensions this category accepts, and the GGUF KV read on the way
-        # back is what the engine-generation ruling judges on.
+        # extensions this category accepts, and the KV dict read on the way
+        # back (from a GGUF header, or in the same keys from a quantized
+        # safetensors transformer's header) is what the engine-generation
+        # ruling judges on.
         kv = precheck_model_file(  # MODEL_INCOMPATIBLE (422)
             category,
             name,
             path,
             descriptor=descriptor.categories.get(category),
         )
-        # §2.2's second step, now family-aware (§3-98 P3c). ``engines.check_kv``
+        # The KV ruling (Docs/MULTI_ENGINE_DESIGN.md §2.1 / §2.3). ``engines.check_kv``
         # first rules on WHICH ENGINE the file belongs to — the KV is the judge,
         # the chosen base model is what it is judged against — and refuses a
         # mismatch with a message naming the base model to pick instead. Only

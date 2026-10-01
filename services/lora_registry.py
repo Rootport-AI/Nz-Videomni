@@ -1,4 +1,4 @@
-"""IC-LoRA / style-LoRA adapter-name registry (Phase B, extended Phase C, S1).
+"""IC-LoRA / style-LoRA adapter-name registry.
 
 Resolves a server-side adapter NAME (accepted in ``GenerateRequest.loras[].name``)
 to the safetensors file on disk plus its ``preprocess`` kind, passing the
@@ -6,8 +6,8 @@ requested strength through untouched. Names come from two sources, config
 authoritative over the scan:
 
 1. ``config.yaml`` ``model.ic_loras`` (name -> project-relative path, or name ->
-   ``IcLoraEntry`` for Phase C control adapters) — the authoritative registration;
-2. a directory scan of ``config.model.lora_dir`` (S1): every ``*.safetensors``
+   ``IcLoraEntry`` for control adapters) — the authoritative registration;
+2. a directory scan of ``config.model.lora_dir``: every ``*.safetensors``
    there is exposed under its filename stem, so a style/character LoRA dropped in
    the folder shows up without any config edit (mirrors ``services.model_registry``).
 
@@ -25,14 +25,13 @@ has no torch):
     loader cannot read is refused up front (``LORA_FORMAT_UNSUPPORTED``, 422)
     instead of silently producing a LoRA-free video. See :func:`_detect_layout`.
 
-§3-108 (2026-09-02) removed the former ``scale`` field: it multiplied the
-requested strength by ``ss_network_alpha / ss_network_dim`` read from the
-header metadata, but musubi-tuner's A/B conversion already bakes alpha into the
-weights and copies that metadata over verbatim — so the multiplier was a second,
-fossil application (``Pixar_Toon`` and ``LTX-2.3-Henshin`` ran at half the
-requested strength). Alpha is now handled where it is real: the engine loader
-folds a kohya file's ``.alpha`` tensor into B at load time, and this layer
-passes ``strength`` through exactly as requested (ComfyUI semantics).
+There is no alpha/rank multiplier on ``strength``: musubi-tuner's A/B
+conversion already bakes alpha into the weights and copies the
+``ss_network_alpha`` / ``ss_network_dim`` header metadata over verbatim, so
+scaling by that metadata would apply alpha a second time. Alpha is handled
+where it is real: the engine loader folds a kohya file's ``.alpha`` tensor into
+B at load time, and this layer passes ``strength`` through exactly as requested
+(ComfyUI semantics).
 
 Fail loud, no silent skip — but only for CONFIG registrations:
   * config name whose file is missing on disk -> ``LORA_NOT_FOUND`` at resolve;
@@ -59,8 +58,8 @@ logger = logging.getLogger("ltx.loras")
 
 class ResolvedLora(NamedTuple):
     """``resolve()``'s return shape. Indices 0-2 (``path``/``strength``/
-    ``preprocess``) are positionally compatible with the pre-audio_strength
-    3-tuple, so callers that still unpack/index only those stay correct.
+    ``preprocess``) keep fixed positions, so index access to those three
+    (``lp[2]`` and the like) does not depend on ``audio_strength`` at index 3.
     """
 
     path: Path
@@ -92,13 +91,13 @@ class LoraEntryInfo:
 
     name: str
     path: Path  # absolute (config._abs of the registered/scanned path)
-    preprocess: str  # "none" | "canny" | "dwpose" | "depth"
+    preprocess: str  # IcLoraEntry.preprocess ("none" for string/scan entries)
     kind: str  # "style" | "control"
     layout: str  # "ab" | "kohya" | "unsupported:<reason>" (see _detect_layout)
     has_thumbnail: bool  # a sibling <stem>.png exists
     source: str  # "config" | "scan"
     exists: bool
-    # §1-15 (clip-wise IC-LoRA reference): the safetensors header's own
+    # Clip-wise IC-LoRA reference: the safetensors header's own
     # ``reference_downscale_factor`` (union-control=2, deblur=1) — the SAME
     # value ``engine/pipeline``'s ``_ic_reference_downscale_factor`` reads at
     # generation time (test_ic_lora_engine_conditioning.py), just surfaced here
@@ -116,11 +115,11 @@ class LoraEntryInfo:
             "has_thumbnail": self.has_thumbnail,
             "exists": self.exists,
             "source": self.source,
-            # §1-15 additive fields (both new on GET /loras; an old FE build
-            # simply ignores unknown keys, so this is safe to always include —
-            # unlike webui/src/api/types.ts's LoraEntry.preprocess, which marks
+            # Both fields are always included: a frontend build that does not
+            # know them simply ignores unknown keys — unlike
+            # webui/src/api/types.ts's LoraEntry.preprocess, which marks
             # it OPTIONAL only because an OLDER SERVER may omit it, not because
-            # this server ever leaves it out).
+            # this server ever leaves it out.
             "preprocess": self.preprocess,
             "reference_downscale_factor": self.reference_downscale_factor,
         }
@@ -170,7 +169,7 @@ def _detect_layout(header: dict) -> str:
        DOTTED module path once the suffix is stripped. LyCORIS/sd-scripts also
        emit underscore-joined names (``lora_unet_transformer_blocks_0_...``)
        that no ``named_modules()`` lookup can resolve — those would attach to
-       0 Linears, i.e. exactly the silent no-op §3-108 exists to end.
+       0 Linears, i.e. exactly the silent no-op this check exists to prevent.
     4. ``hada_`` / ``lokr_`` -> LoHa / LoKr: different factorisations
        altogether (Hadamard product / Kronecker product), not a B@A delta.
     5. Nothing recognisable -> unknown.
@@ -203,9 +202,9 @@ def _detect_layout(header: dict) -> str:
 class LoraRegistry:
     def __init__(self, config: AppConfig):
         self.config = config
-        # name -> project-relative (or absolute) safetensors path (Phase B, string)
-        # or an IcLoraEntry (Phase C: path + preprocess kind). Config-authoritative
-        # source; kept verbatim so ``preprocess_for`` stays byte-compatible.
+        # name -> project-relative (or absolute) safetensors path (string form)
+        # or an IcLoraEntry (path + preprocess kind). Config-authoritative
+        # source, kept verbatim: ``preprocess_for`` reads it directly.
         self.registry: dict[str, str | IcLoraEntry] = dict(config.model.ic_loras or {})
         # name -> LoraEntryInfo, rebuilt by rescan() (config entries + scan hits).
         self._entries: dict[str, LoraEntryInfo] = {}
@@ -279,8 +278,8 @@ class LoraRegistry:
         back to preprocess-derived kind + layout ``"ab"``, and resolve() fails
         loud later if the file is absent when a job actually needs it. That
         ``"ab"`` default is deliberate: with no header there is nothing to judge
-        a layout on, so the pre-§3-108 behaviour (accept, let the engine speak)
-        is kept rather than inventing a rejection out of missing evidence.
+        a layout on, so the file is accepted and the engine is left to
+        speak, rather than inventing a rejection out of missing evidence.
         """
         exists = abs_path.exists()
         has_thumbnail = abs_path.with_suffix(".png").exists()
@@ -348,9 +347,9 @@ class LoraRegistry:
     def preprocess_for(self, name: str) -> str:
         """Return the ``preprocess`` kind for a registered ``name`` (no file check).
 
-        ``"none"`` for legacy string entries, scanned files, or an unknown name;
+        ``"none"`` for string-form entries, scanned files, or an unknown name;
         the ``IcLoraEntry.preprocess`` value for config dict entries. Used for
-        metadata annotation (``pipeline_manager._write_metadata``).
+        metadata annotation (``pipeline_manager._lora_metadata_entry``).
         """
         entry = self.registry.get(name)
         if entry is None or isinstance(entry, str):
@@ -366,18 +365,18 @@ class LoraRegistry:
         audio_strength)``.
 
         ``strength`` and ``audio_strength`` are returned EXACTLY as requested
-        (§3-108: the alpha/rank metadata multiplier is gone — see the module
+        (no alpha/rank metadata multiplier is applied — see the module
         docstring); ``audio_strength`` stays ``None`` when the caller passed
         ``None`` (video-axis follow — no independent audio strength was asked
-        for). ``preprocess`` is ``"none"`` for legacy string entries / scanned
+        for). ``preprocess`` is ``"none"`` for string-form entries / scanned
         files or the ``IcLoraEntry.preprocess`` value for config dict entries.
 
         Raises ``lora_not_found`` (404) for a path-like name, an empty registry,
         an unknown name, or a registered-but-missing file; and
         ``lora_format_unsupported`` (422) for a file whose weight-key layout the
         engine loader cannot read. Both endpoint validation loops (single and
-        chain) already call this per requested adapter, so neither needed a new
-        check of its own.
+        chain) call this per requested adapter, so the layout refusal needs
+        no check of its own there.
         """
         if "/" in name or "\\" in name or ".." in name:
             raise lora_not_found(name, detail="adapter name must not be a path")

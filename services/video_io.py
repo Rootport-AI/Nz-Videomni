@@ -1,8 +1,9 @@
-"""Video encoding (ffmpeg) and metadata persistence (spec ch.10).
+"""Video I/O through ffmpeg / ffprobe, and metadata persistence (spec §8).
 
-The LTX runner hands us decoded frames (PIL images); this module is the single
-place that shells out to ffmpeg to produce ``output.mp4`` with an optional
-centered crop, and writes ``metadata.json``.
+This module is the app layer's single place that shells out to ffmpeg: it
+applies the optional centered crop to ``output.mp4``, encodes the mock
+backend's PIL frames, cuts, pads, joins and probes mp4 files, and writes
+``metadata.json``.
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ def encode_frames_to_mp4(
     """Encode PIL frames into an H.264 MP4.
 
     ``crop`` is a ``(width, height)`` target applied as a centered crop via the
-    ffmpeg ``crop`` filter (spec 10.3). Returns ``output_path``.
+    ffmpeg ``crop`` filter (spec §8.2). Returns ``output_path``.
     """
     exe = ffmpeg_path()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,10 +99,11 @@ def encode_frames_to_mp4(
 def crop_mp4(input_path: Path, output_path: Path, width: int, height: int) -> Path:
     """Center-crop an existing MP4 to ``width`` x ``height`` via ffmpeg.
 
-    Used by the real LTX backend: the pipeline encodes at the (multiple-of-64)
-    generation size, then this re-encodes a centered crop to the requested final
-    display size. Reuses the same crop filter as :func:`encode_frames_to_mp4`.
-    Returns ``output_path``.
+    Used by the real backends for ``crop_output``: the worker encodes at the
+    generation size (on the grid the request schema enforces), then this
+    re-encodes a centered crop to the requested final display size. Reuses
+    the same crop filter as :func:`encode_frames_to_mp4`. Returns
+    ``output_path``.
     """
     exe = ffmpeg_path()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,11 +135,10 @@ def crop_mp4(input_path: Path, output_path: Path, width: int, height: int) -> Pa
 
 
 # The outpainting sentinel colour, RGB(102, 255, 0) = #66FF00. The official
-# ComfyUI node paints it under the mask before diffusion
-# (``LTXVInpaintPreprocess``, uploads/_outpaint_verify/vanish_nodes.py:92) and
-# the In-Outpainting IC-LoRA was trained to replace exactly this colour. Black
-# would collide with genuinely dark scene content; this green does not occur in
-# natural footage.
+# ComfyUI node ``LTXVInpaintPreprocess`` paints it under the mask before
+# diffusion (its ``_BG_COLOR_RGB``) and the In-Outpainting IC-LoRA was trained
+# to replace exactly this colour. Black would collide with genuinely dark
+# scene content; this green does not occur in natural footage.
 OUTPAINT_GREEN_HEX = "0x66FF00"
 
 
@@ -155,7 +156,8 @@ def pad_green_mp4(
     """Place ``input_path`` inside a green canvas and write a LOSSLESS, video-only
     MP4 with EXACTLY ``num_frames`` frames at ``frame_rate`` fps.
 
-    This is the outpainting pre-processing step (`Docs/OUTPAINTING_DESIGN_NOTES.md`
+    This is the outpainting pre-processing step
+    (`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/OUTPAINTING_DESIGN_NOTES.md`
     §3-2 step 1): the source video is centred/aligned inside a larger canvas and
     the surrounding pad band is filled with the sentinel green the In-Outpainting
     IC-LoRA was trained on. The result is what `engine/pipeline/outpaint_pipeline`
@@ -169,7 +171,7 @@ def pad_green_mp4(
       fallback for ffmpeg builds without libx264rgb (also lossless RGB).
     * **Exact frame count.** The blends pair frame *i* of the generation with
       frame *i* of this canvas, and stage 2 asserts its initial latent matches the
-      target shape (``ltx_core/tools.py:106`` ``create_initial_state``), so a
+      target shape (``ltx_core/tools.py`` ``create_initial_state``), so a
       canvas that is even one frame short crashes the job deep inside the
       denoiser. ``tpad=stop=-1:stop_mode=clone`` extends the last frame
       indefinitely and ``-frames:v`` cuts at exactly ``num_frames`` — the source
@@ -244,12 +246,13 @@ def fill_mask_green_mp4(
     """Paint ``mask``'s white region of ``source`` sentinel green, pad to the
     canvas, and write a LOSSLESS, video-only MP4 — frame count MEASURED.
 
-    The inpainting counterpart of :func:`pad_green_mp4` (台帳 §3-55,
-    ``Docs/INPAINTING_DESIGN.md`` §7.2). Where that one fills a rectangular band
+    The inpainting counterpart of :func:`pad_green_mp4`
+    (``Docs/INPAINTING_DESIGN.md`` §7.2). Where that one fills a rectangular band
     AROUND the footage with the sentinel, this one fills an ARBITRARY, per-frame
     region INSIDE it — and then still pads the right/bottom bands out to the
-    128-multiple canvas, because the source resolution is the user's project
-    resolution and is rarely a multiple of 128.
+    canvas (each source side rounded up by ``api.models.round_up_128``), because
+    the source resolution is the user's project resolution and rarely lands on
+    that grid.
 
     Returns ``{"written_frames", "codec", "filtergraph"}``; ``written_frames``
     is re-probed from the finished file, never predicted.
@@ -601,17 +604,17 @@ def cut_range_mp4(
     same material the user sees on the timeline ribbon, so the source cadence is
     preserved verbatim (``-r src_fps``) and only the frame window changes.
 
-    UNIT NOTE (deliberate hedge, now exercised): the public signature takes
-    SECONDS, but this function internally converts to frames immediately
+    UNIT NOTE (deliberate hedge): the public signature takes SECONDS, but this
+    function internally converts to frames immediately
     (``start_frame = round(start_sec * src_fps)``) and does all of its work in
-    frame space via the ``select`` filter. ``start_frame``/``num_frames`` are the
-    additive short-circuit this note always promised: when given, each one
-    replaces the corresponding seconds->frames conversion outright (``start_sec``/
-    ``duration_sec`` are ignored for the side that has a frame value), and none of
-    the selection logic below has to move. §1-15's upload-time frame-count trim
-    (``services/video_upload_store.save``'s ``max_frames``) is the first caller —
-    it wants "first N frames", which is a frame count, not a duration computed
-    from a frame rate that may not even matter to it.
+    frame space via the ``select`` filter. ``start_frame``/``num_frames`` are an
+    additive short-circuit: when given, each one replaces the corresponding
+    seconds->frames conversion outright (``start_sec``/``duration_sec`` are
+    ignored for the side that has a frame value), and none of the selection
+    logic below has to move. The upload-time frame-count trim
+    (``services/video_upload_store.save``'s ``max_frames``) uses it — it wants
+    "first N frames", which is a frame count, not a duration computed from a
+    frame rate that may not even matter to it.
 
     The window is inclusive on both ends in frame space
     (``select='between(n,start,end)'``) and ``end`` is clamped to the last
@@ -690,7 +693,8 @@ def cut_window_mp4(
     fps: float,
 ) -> dict:
     """Write to ``out`` EXACTLY ``num_frames`` frames of ``src`` starting at
-    ``window_start_sec``, at ``fps`` — the retake window the engine consumes.
+    ``window_start_sec``, at ``fps`` — the frame-exact window the engine
+    consumes (the retake window, the Inpainting window, a video end source).
 
     A third cutter next to :func:`cut_tail_mp4` and :func:`cut_range_mp4` because
     its CONTRACT is different from both, not just its arguments:
@@ -700,20 +704,20 @@ def cut_window_mp4(
         ``cut_tail_mp4``'s two-pass shape;
       * it is FRAME-EXACT OR IT FAILS. ``cut_range_mp4`` clamps a too-long
         request to the remainder and reports a PREDICTED ``written_frames``;
-        here the frame count is load-bearing geometry (the whole window must be
+        here the frame count is load-bearing geometry (a retake window must be
         8n+1 and must land on one stage-2 tile), so the written file is
         re-probed with :func:`frame_count` and a mismatch raises;
       * it encodes for a VAE round trip rather than for delivery — see the
         codec note below.
 
     CODEC CHOICE (deliberate, not defaults): ``-crf 12`` instead of the usual 23
-    and CFR output. The window's two glue bands are re-encoded, VAE-encoded and
-    then frozen bit-exact, so whatever this file loses is a permanent ceiling on
-    the frozen ends' quality — the one place in the pipeline where the
-    intermediate's fidelity shows up in the deliverable. Audio is written as
-    PCM when the container/build accepts it (``pcm_s16le``), falling back to AAC
-    192k, for the same reason: a lossy intermediate would be baked into the
-    frozen audio latents.
+    and CFR output. For a retake, the window's two glue bands are re-encoded,
+    VAE-encoded and then frozen bit-exact, so whatever this file loses is a
+    permanent ceiling on the frozen ends' quality — the intermediate's fidelity
+    shows up in the deliverable. Audio is written as PCM when the
+    container/build accepts it (``pcm_s16le``), falling back to AAC 192k, for
+    the same reason: a lossy intermediate would be baked into the frozen audio
+    latents.
 
     Returns ``{source_fps, resampled, total_frames, start_frame, written_frames,
     has_audio}`` where ``written_frames`` is MEASURED, not predicted. Raises
@@ -1000,7 +1004,7 @@ def frame_count(mp4: Path) -> int:
 
     Counts frames rather than trusting the container's ``nb_frames`` tag (which
     can be absent/approximate for some encoders), so this is safe to use as the
-    source of truth for frame-accurate indexing (Phase 3 boundary verification).
+    source of truth for frame-accurate indexing.
     """
     exe = shutil.which("ffprobe")
     if not exe:
@@ -1074,7 +1078,7 @@ def _loudnorm_measure(exe: str, path: Path) -> dict[str, float]:
     """Run ffmpeg's ``loudnorm`` filter in pass-1 (measure-only) mode and parse
     the JSON stats block it writes to stderr. Used by :func:`join_v2v` to read
     the actual integrated loudness (LUFS) of an existing audio track without
-    modifying it (spec ch.10 V2V join: "measure before you touch anything").
+    modifying it.
 
     The ``I``/``TP``/``LRA`` target values passed here only affect the
     *analysis* thresholds, not the reported ``input_i`` (the file's own
@@ -1115,9 +1119,10 @@ def _loudnorm_stats_usable(stats: dict, *, as_target: bool) -> bool:
     with a muted track) makes ffmpeg report ``input_i`` (and friends) as
     ``-inf``. Feeding that straight back into ``loudnorm=I=-inf`` /
     ``measured_I=-inf`` makes ffmpeg reject the filter graph
-    (``Value -inf for parameter 'I' out of range [-70 - -5]``), which surfaced as
-    a 503 on the V2V join. This guard detects non-finite / out-of-range measured
-    values so the caller can skip loudness matching instead of crashing.
+    (``Value -inf for parameter 'I' out of range [-70 - -5]``), which would fail
+    the V2V join (``Docs/VERIFICATION_LOG.md`` §27). This guard detects
+    non-finite / out-of-range measured values so the caller can skip loudness
+    matching instead of crashing.
 
     ``as_target`` selects the range that ``input_i`` must satisfy: True when the
     value will be passed as the pass-2 *target* ``I=`` (ffmpeg accepts
@@ -1148,12 +1153,12 @@ def normalize_clip(src: Path, out: Path, width: int, height: int, fps: float) ->
     share resolution and fps, but the user's uploaded source video generally does
     not match the generated continuation (the engine only fps-aligns the context
     TAIL it consumes — the full source is untouched). This is the app-side
-    normalization pass (R3 smoke, 2026-07-05): scale-to-cover + centered crop
-    (mirroring the engine's resize+center-crop conditioning semantics) + fps
-    resample. ``setsar=1`` is REQUIRED — scaling can leave a fractional sample
-    aspect ratio and ffmpeg's ``concat`` filter then rejects the pair even though
-    the pixel dimensions match (verified in the R3 smoke). Audio is carried
-    through untouched (``-c:a aac`` re-mux). Returns ``out``.
+    normalization pass: scale-to-cover + centered crop (mirroring the engine's
+    resize+center-crop conditioning semantics) + fps resample. ``setsar=1`` is
+    REQUIRED — scaling can leave a fractional sample aspect ratio and ffmpeg's
+    ``concat`` filter then rejects the pair even though the pixel dimensions
+    match (``Docs/VERIFICATION_LOG.md`` §26.1). Audio is carried through
+    untouched (``-c:a aac`` re-mux). Returns ``out``.
     """
     exe = ffmpeg_path()
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -1193,10 +1198,11 @@ def join_v2v(
     segments share one continuous vocoder-audio stream), the two inputs here
     come from independent audio sources -- a real source recording and a
     freshly generated (vocoder) continuation with a different noise floor.
-    Research (R0) confirmed a true overlapped ``acrossfade`` is not possible:
-    neither file has audio *past* the visual join point, and shrinking either
-    track by the fade duration would desync audio from video. So this
-    implements the no-handle standard instead:
+    Without an audio handle a true overlapped ``acrossfade`` is not possible
+    (``Docs/V2V_AUDIO_JOIN_RESEARCH.md`` §2): neither file has audio *past* the
+    visual join point, and shrinking either track by the fade duration would
+    desync audio from video. So the default path implements the no-handle
+    standard instead:
 
     - Video: a hard cut, concatenated the same way as :func:`concat_mp4s`
       (re-encoded; ``source`` and ``continuation`` must share resolution and
@@ -1221,20 +1227,19 @@ def join_v2v(
     ``audio_fade_ms`` is clamped to the shorter of the two clips' audio
     durations if it would otherwise exceed one side's available audio.
 
-    Writes the joined video to ``out``. Returns a small dict for
-    metadata/logging: ``{source_lufs, continuation_lufs_before,
-    fade_ms_applied, loudness_matched}`` (``source_lufs`` /
-    ``continuation_lufs_before`` are ``None`` when loudness was not measured).
+    Writes the joined video to ``out``. Returns the ``info`` dict built below
+    for metadata/logging (``source_lufs`` / ``continuation_lufs_before`` are
+    ``None`` when loudness was not matched).
 
     HANDLE TRUE-CROSSFADE mode (opt-in, ``handle_audio`` given). The engine can
-    now emit a sidecar wav (``<stem>_audio_handle.wav``) holding the FULL
+    emit a sidecar wav (``<stem>_audio_handle.wav``) holding the FULL
     untrimmed timeline audio — the pre-junction *context* region (which BOTH the
     real source recording and this vocoder render depict) plus the continuation
     region, in one sample-continuous stream. Given that handle, this does a real
     overlapped equal-power crossfade instead of the no-overlap fade pair (which
     leaves an energy valley at the seam):
 
-    - Video: the SAME hard concat as the default path (unchanged).
+    - Video: the SAME hard concat as the default path.
     - Audio: ``acrossfade=d=<handle_crossfade_ms>:c1=qsin:c2=qsin`` between the
       real source audio (stream A) and the handle stream (stream B), where B is
       the sidecar trimmed to start at ``handle_context_seconds − crossfade`` so
@@ -1253,7 +1258,7 @@ def join_v2v(
 
     Handle mode requires both inputs to carry audio (``with_audio``); otherwise it
     falls back to the default video-only behavior. When ``handle_audio`` is None
-    the behavior is byte-identical to before (the default fade-pair join).
+    the join takes the default path described above (the fade-pair join).
     """
     exe = ffmpeg_path()
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -1481,7 +1486,7 @@ def recipe_text(metadata: dict[str, Any]) -> str:
 def save_metadata(path: Path, metadata: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     # Text mode on purpose: newlines are written as the platform's line ending
-    # (CRLF on Windows), as before.
+    # (CRLF on Windows).
     with path.open("w", encoding="utf-8") as fh:
         fh.write(recipe_text(metadata))
     return path

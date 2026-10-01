@@ -34,7 +34,7 @@ not a runtime condition to degrade around.
 
 INVARIANT — THIS MODULE MUST NOT IMPORT ``services.engines`` (nor any engine
 adapter, directly or transitively). Descriptors are pure data read by the
-registry, the API and (later) the engine layer; an engine adapter importing a
+registry, the API and the engine layer; an engine adapter importing a
 descriptor while a descriptor imports an adapter is a circular import waiting
 to happen, and would additionally drag the multi-thousand-line LTX adapter into
 every process that merely wants to enumerate base models. ``engine_family`` is

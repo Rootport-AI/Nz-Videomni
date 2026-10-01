@@ -1,8 +1,8 @@
 """Standalone self-check for engine/preprocess (driver dispatch + depth helpers).
 
-Run with the ENGINE venv (needs cv2; the app venv has neither cv2 nor torch, and
-.venv-engine has no fastapi so tests/conftest.py cannot be collected there —
-which is why this is a script and not a pytest module, the same split
+Run with an engine venv (needs cv2; the app venv has neither cv2 nor torch, and
+neither engine venv has fastapi, so tests/conftest.py cannot be collected there
+— which is why this is a script and not a pytest module, the same split
 block_swap_prefetch_selfcheck.py uses):
 
     .venv-engine\\Scripts\\python.exe -m engine.preprocess.preprocess_selfcheck
@@ -11,7 +11,8 @@ Same conventions as the transformer self-checks: every check either PASSes or
 FAILs loudly (nothing is skipped), exit code 0 only when all of them pass. No
 GPU and no model weights are needed — the driver is exercised with fake
 processors, and only ``DepthProcessor``'s pure array helpers are called. Real
-VDA inference is the G1 gate (see depth_g1_gate.py), not this script.
+VDA inference is the G1 gate (depth_g1_gate.py; VERIFICATION_LOG §49.3), not
+this script.
 
 What the checks prove, in one line each:
 
@@ -21,8 +22,8 @@ What the checks prove, in one line each:
   C3  The whole-clip branch hands the processor EVERY frame in ONE call, in
       order, and writes exactly as many frames back.
   C4  frame_cap truncates the whole-clip branch from the head of the source.
-  C5  frame_cap=None (what canny/dwpose always get) decodes the whole source,
-      and the frame branch still sees each frame exactly once, in order.
+  C5  frame_cap=None decodes the whole source and the frame branch sees each
+      frame exactly once, in order; frame_cap truncates the frame branch too.
   C6  FPS and resolution survive both branches.
   C7  release() runs after both branches, and after a failure too.
   C8  A whole-clip processor that returns the wrong frame count fails loud.
@@ -218,7 +219,7 @@ def check_c5_frame_branch_unchanged() -> None:
         src, dst = Path(tmp) / "src.mp4", Path(tmp) / "dst.mp4"
         _write_source(src)
         proc = _RecordingFrameProcessor()
-        # No frame_cap argument at all: exactly how the worker calls canny/dwpose.
+        # No frame_cap argument at all: the default decodes the whole source.
         n = preprocess_video(src, dst, proc)
         assert n == _N, n
         assert len(proc.frames) == _N, len(proc.frames)
@@ -355,7 +356,7 @@ def main() -> int:
         ("C2  only depth is a VideoProcessor (dispatch cannot mis-route)", check_c2_protocol_dispatch),
         ("C3  the whole-clip branch passes every frame in one ordered call", check_c3_video_branch_single_batch),
         ("C4  frame_cap truncates the whole-clip branch from the head", check_c4_video_branch_frame_cap),
-        ("C5  the frame branch is unchanged, and frame_cap is generic", check_c5_frame_branch_unchanged),
+        ("C5  the frame branch stays the single-frame path, and frame_cap is generic", check_c5_frame_branch_unchanged),
         ("C6  FPS and resolution survive both branches", check_c6_fps_and_resolution_preserved),
         ("C7  release() runs after success and after failure", check_c7_release_always_runs),
         ("C8  a wrong whole-clip frame count fails loud", check_c8_frame_count_mismatch_fails_loud),

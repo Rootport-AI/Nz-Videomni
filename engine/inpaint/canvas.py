@@ -14,8 +14,8 @@ Vocabulary used throughout:
   (0, 0). Its own resolution is what the delivered mp4 comes out at.
 * **pad** — the right and bottom bands between the source and the canvas edge.
   There are only two of them (never a left or a top band) precisely because the
-  source is anchored at the origin: a 1920x1080 source on a 1920x1088 canvas
-  has an 8px bottom band and nothing else. The bands are sentinel green in the
+  source is anchored at the origin: a 1920x1080 source on a 1920x1152 canvas
+  has a 72px bottom band and nothing else. The bands are sentinel green in the
   canvas file and are cut off again, losslessly, at the very end of the job.
 * **mask** — the white region the model is asked to repaint. Unlike outpainting's
   static rectangle it is a DIFFERENT PICTURE PER FRAME (the plugin bakes the
@@ -73,20 +73,18 @@ __all__ = [
 #   canvas, and the two-stage path halves the canvas for stage 1 before handing
 #   it to a VAE with a 32px patch stride — at 128px the stage-1 frame is 64px
 #   and there is no room left for the model to see any context around the mask.
-#
-# 256 is also the point below which the stage-2 blend's own dilation band
-# (``r * canvas_long_side / 64`` plus a measured constant ~18px, see
-# Docs/VERIFICATION_LOG.md) would cover the whole frame at the default r=2.
 INPAINT_MIN_SOURCE_SIDE = 256
 
 
 def round_up_128(value: int) -> int:
     """Smallest multiple of ``CANVAS_MULTIPLE`` (128) that is >= ``value``.
 
-    This is the ONE place the canvas size is derived from a source size. The API
-    layer uses it to check the request's ``width``/``height``, the app layer
-    uses it to build the geometry, and the engine re-derives the same number on
-    the other side of the worker pipe — three readers, one rule.
+    The engine-side copy of the rule that derives the canvas size from a source
+    size. The API layer and the app layer use the twin
+    ``api.models.round_up_128``; on the engine side
+    :meth:`InpaintGeometry.validate` enforces the same rule by requiring each
+    pad band to be smaller than ``CANVAS_MULTIPLE``, and
+    ``tests/test_inpaint_geometry.py`` checks that the two copies agree.
 
     >>> round_up_128(1280), round_up_128(1920), round_up_128(1080)
     (1280, 1920, 1152)
@@ -455,17 +453,18 @@ def restore_outside_mask_(
     ``True`` where the dilation reached. The predicate below is ``< 1e-6``, which
     on a bool tensor reads ``False`` as zero and ``True`` as one, so the pipeline
     can do its comparison on the GPU and send only the verdict back (see
-    ``inpaint_pipeline._restore_and_measure_``) without a second convention.
+    :func:`restore_and_measure_`) without a second convention.
 
     **Why "exactly zero" and not "below a half".** The dilated mask is not
-    binary: the dilation resizes to a 64px long side, max-pools, and resizes
-    back, so around the mask there is a ramp from 1.0 down to 0.0 that is
-    roughly ``r * long_side / 64 + 18`` pixels wide (measured — see
-    Docs/VERIFICATION_LOG.md). That ramp is exactly the band the Laplacian blend
-    used to hide the seam. Restoring any of it would put a hard edge back where
-    the blend had just removed one, so the rule is the weakest one that still
-    delivers the promise: only pixels the blend provably never touched —
-    ``dilated < 1e-6`` — go back to the original.
+    binary: the dilation resizes to a low-resolution long side
+    (``pyramid_blend._MASK_LOW_RES_LONG_SIDE``), max-pools, and resizes back, so
+    around the mask there is a ramp from 1.0 down to 0.0 whose width grows with
+    the dilation radius and the long side (measured — see
+    Docs/VERIFICATION_LOG.md §105.3). That ramp is exactly the band the
+    Laplacian blend used to hide the seam. Restoring any of it would put a hard
+    edge back where the blend had just removed one, so the rule is the weakest
+    one that still delivers the promise: only pixels the blend provably never
+    touched — ``dilated < 1e-6`` — go back to the original.
 
     The guarantee this buys is pixel-exact: outside the dilated support the
     delivered frame IS the source frame, byte for byte, up to the final mp4

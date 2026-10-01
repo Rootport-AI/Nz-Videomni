@@ -1,4 +1,4 @@
-"""POST /generate — start a generation job (spec 7.2 / 8.1)."""
+"""POST /generate — start a generation job (spec §6.1 / §6.2)."""
 
 from __future__ import annotations
 
@@ -65,27 +65,25 @@ def generate(
     background_tasks: BackgroundTasks,
     context: AppContext = Depends(get_context),
 ) -> GenerateResponse:
-    # ── Engine feature scope (§3-98 P5) ─────────────────────────────────────
+    # ── Engine feature scope ────────────────────────────────────────────────
     # FIRST, before every other check. What the ACTIVE base model's engine can
     # do is a property of the server, not of this request, so it is answered
     # without touching the upload stores or the lora registry: telling a user
     # "that reference video does not exist" for a request whose engine cannot
     # consume reference videos at all would send them to fix the wrong thing.
-    # NOT a no-op for either engine any more. LTX 2.3 declared nothing until
-    # §3-114 gave it one refusal of its own (``keep_resident_embeddings``, which
-    # names a component only 2.5 has), so the guard now answers on both sides.
-    # What is still true is that a DEFAULT request passes on both: every
-    # predicate in both tables tests "differs from the default", which is why
-    # every pre-existing test is unaffected — deliberately, not by luck.
+    # Each engine declares its refusals in its adapter's ``REJECT_TABLE``
+    # (services/engines/<family>/adapter.py), so the guard answers on both
+    # engines. A DEFAULT request passes on both: every predicate in those
+    # tables tests "differs from the default" — deliberately, not by luck.
     engines.reject_unsupported(context.pipeline_manager.active_engine_family, request)
 
-    # Validate conditioning images exist up front (minimal I2V).
+    # Validate conditioning images exist up front.
     for ci in request.conditioning_images:
         context.upload_store.path_for(ci.image_id)  # raises IMAGE_NOT_FOUND
 
-    # Phase B/C/S1 IC-LoRA: validate the reference video + adapter names up front,
-    # the same way conditioning image_ids are checked (fail at job creation, not
-    # deep in the worker).
+    # IC-LoRA: validate the reference video + adapter names up front, the same
+    # way conditioning image_ids are checked (fail at job creation, not deep in
+    # the worker).
     if request.reference_video_id is not None:
         context.video_upload_store.path_for(request.reference_video_id)  # 404 if missing
         # CONTROL adapters declare reference_downscale_factor=2 (union-control
@@ -97,15 +95,14 @@ def generate(
             raise reference_resolution_invalid(request.width, request.height)
     # Resolve every requested adapter (404 unknown/missing) and inspect its kind:
     #   * a CONTROL adapter derives its conditioning from a reference video, so it
-    #     requires reference_video_id (S1: replaces the old all-or-nothing rule,
-    #     which is now kind-aware -- a STYLE/character adapter needs no reference);
+    #     requires reference_video_id (a STYLE/character adapter needs no
+    #     reference);
     #   * conversely a reference video is ONLY consumable through a control
     #     adapter (its downscale factor comes from that adapter's metadata), so a
-    #     reference + style-only request is rejected here. Until the factor guard
-    #     was relaxed to accept factor 1, the engine happened to catch this misuse
-    #     deep in the job; this endpoint check is now the only one;
+    #     reference + style-only request is rejected here, at job creation rather
+    #     than deep in the job;
     #   * a single reference video can only be turned into ONE control signal, so
-    #     >1 distinct non-"none" preprocess kind is a conflict (Phase C).
+    #     >1 distinct non-"none" preprocess kind is a conflict.
     preprocess_kinds: set[str] = set()
     control_names: list[str] = []
     for spec in request.loras:
@@ -122,7 +119,7 @@ def generate(
     if len(preprocess_kinds) > 1:
         raise lora_preprocess_conflict(sorted(preprocess_kinds))
 
-    # ── Outpainting (Docs/PENDING_TASKS_CLOSED.md §3-70, filed as §1-13 at the time) ──
+    # ── Outpainting ───────────────────────────────────────────────────────
     # The shape-only rules (pads, exclusivity, keep-region floor) live in the
     # pydantic validator; the three below need the registry or the file on disk,
     # so they belong here — the same split the control-adapter checks above use.
@@ -147,7 +144,7 @@ def generate(
         if available < request.num_frames:
             raise outpaint_source_too_short(available, request.num_frames)
 
-    # ── Inpainting (台帳 §3-55) ─────────────────────────────────────────────
+    # ── Inpainting ────────────────────────────────────────────────────────
     # The same split the outpaint block above uses: the shape-only rules
     # (exclusivity, the 128 grid, the window's 8n+1) are in the pydantic
     # validator; everything that needs the registry or a file on disk is here.
@@ -227,13 +224,13 @@ def generate(
     if job is None:
         raise job_busy()
 
-    # Run the generation off the request path. The mock backend keeps using
+    # Run the generation off the request path. The mock backend uses
     # BackgroundTasks (Starlette's threadpool) so the TestClient's synchronous
-    # after-response semantics — which the whole test suite relies on — are
-    # preserved. The real backend instead gets its OWN daemon thread: a real job
-    # can run for many minutes, and parking it in the shared anyio worker-thread
-    # pool would let long jobs starve the polling GET /jobs and self-issued POSTs
-    # that the UI depends on. Dedicated threads sidestep that entirely.
+    # after-response semantics — which the test suite relies on — hold. The
+    # real backend instead gets its OWN daemon thread: a real job can run for
+    # many minutes, and parking it in the shared anyio worker-thread pool would
+    # let long jobs starve the polling GET /jobs and self-issued POSTs that the
+    # UI depends on. Dedicated threads sidestep that entirely.
     if (context.config.model.backend or "auto").strip().lower() == "mock":
         background_tasks.add_task(context.pipeline_manager.run_job, job)
     else:

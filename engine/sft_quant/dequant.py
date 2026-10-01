@@ -1,4 +1,4 @@
-"""Dequantization of a quantized safetensors Linear weight (§3-168 C-1b).
+"""Dequantization of a quantized safetensors Linear weight.
 
 The GGUF side's ``dequantize_ggml_tensor`` counterpart for the quantization
 schemes ``sft_quant_format`` accepts (its ``SCHEMES``): one ``if``/``elif`` per
@@ -16,15 +16,16 @@ on the CPU).
 The int8 / ConvRot / w4a8 maths follows the converter's NumPy implementation
 (``Nz-GGUF-Converter-LTX23/src/converter/comfy_dequant.py``, the cross-check
 reference; not imported): ``q.float() * scale`` per output row, then each
-contiguous group of 256 input columns times ``H``. w4a8 (§3-168 C-3) first
-unpacks two 4-bit codes per byte (even column in the low nibble), looks them
-up in the layer's 16-entry codebook, multiplies each group of 16 columns by
-its ``s_rel``, rounds onto the int8 grid (round half to even, clamp +/-127),
-multiplies by ``s_channel`` per row and rotates like ConvRot. No row chunking:
-the intermediates are released in order so the peak for the largest layer
-([16384, 4096]) stays at two float32-sized copies (~512 MiB), as for fp8
-today. w4a8 too: the int32 codes plus the float32 lookup, then the lookup
-plus the rotated copy (``index_select`` reads the int32 index as is;
+contiguous group of 256 input columns times ``H``. w4a8 first unpacks two
+4-bit codes per byte (even column in the low nibble), looks them up in the
+layer's 16-entry codebook, multiplies each group of
+``sft_quant_format.W4A8_GROUP_SIZE`` columns by its ``s_rel``, rounds onto
+the int8 grid (round half to even, clamp +/-127), multiplies by
+``s_channel`` per row and rotates like ConvRot. No row chunking: the
+intermediates are released in order so the peak for the largest layer
+([16384, 4096]) stays at two float32-sized copies (~512 MiB), as for fp8.
+w4a8 too: the int32 codes plus the float32 lookup, then the lookup plus the
+rotated copy (``index_select`` reads the int32 index as is;
 ``codebook[idx]`` would first copy it to int64, doubling the peak). CPU
 profiler, [4096, 4096]: 128 MiB = two float32 copies.
 
@@ -91,7 +92,8 @@ def dequantize(
     if scheme is None or scheme == "fp8":
         return weight.to(dtype)
     if scheme == "fp8_scaled":
-        # The §3-167 expression, unchanged (bit-identical fp8 output).
+        # float32 multiply, one cast; tests/test_sft_quant_dequant.py pins
+        # the output bits.
         return (weight.to(torch.float32) * aux["weight_scale"]).to(dtype)
     if scheme == "int8":
         wf = weight.to(torch.float32)
@@ -118,7 +120,7 @@ def dequantize(
         # int64 copy of it first (+2 float32 copies of peak).
         v = aux["weight_codebook"].index_select(0, idx.view(-1)).view(o, i)  # float32
         del idx
-        # Per group of 16 columns: x s_rel, then onto the int8 grid.
+        # Per W4A8_GROUP_SIZE-column group: x s_rel, then onto the int8 grid.
         gs = sft_quant_format.W4A8_GROUP_SIZE
         g = v.view(o, i // gs, gs)
         g.mul_(aux["weight_s_rel"].to(torch.float32).unsqueeze(-1))
@@ -140,8 +142,8 @@ def normalize_aux(
     brought to the dtype and shape ``sft_quant_format.aux_specs`` prescribes.
 
     Shapes: ``"(o,1)"`` — a scalar or one value per row, ``(o, 1)`` either
-    way (the int8 scale); every other rule — ``"()"`` (the fp8 scale, as
-    §3-167), w4a8's ``"(o,)"`` / ``"(16,)"`` / ``"(o,i/16)"`` — a reshape to
+    way (the int8 scale); every other rule — ``"()"`` (the fp8 scale),
+    w4a8's ``"(o,)"`` / ``"(16,)"`` / ``"(o,i/16)"`` — a reshape to
     ``sft_quant_format.aux_shape`` (which raises on an unknown rule). A U8 ``weight_s_rel`` is
     the same bytes as F8_E4M3 and is read as such (``view``). A value of any
     other dtype raises: the ``inspect`` check has already ruled on what the

@@ -1,4 +1,4 @@
-"""Object tracking: the three ``/utils/track/...`` endpoints (§3-54).
+"""Object tracking: the three ``/utils/track/...`` endpoints.
 
     POST   /utils/track/sessions                  -> 201 {session_id, width, height, frame_bytes}
     POST   /utils/track/sessions/{sid}/frame      -> 200 {frame, box, score}
@@ -12,8 +12,8 @@ rather than in ``api/models.py`` (which is the generation vocabulary).
 THE SERVER RETURNS A RAW BOX AND A RAW SCORE AND NOTHING ELSE. "Lost", smoothing,
 size-following and keyframe thinning are all pure functions in the plugin, so a
 change to any of them is a plugin change and this contract does not move. That
-is the whole reason the settings panel can grow to seven items without an API
-version bump.
+is the whole reason the settings panel can gain items without an API version
+bump.
 
 See Docs/OBJECT_TRACKING_DESIGN.md §4.
 """
@@ -59,7 +59,9 @@ class OpenTrackSessionRequest(BaseModel):
     is restated, because it is a server-side limit rather than a default: the
     search window is cropped at this multiple of the box, so an unbounded value
     is an unbounded crop and resize on the worker's CPU. The settings panel's
-    own range (2.0-6.0) sits inside it; this is the outer edge, not the UI's.
+    own range (``SEARCH_FACTOR_MIN``/``SEARCH_FACTOR_MAX`` in the plugin's
+    ``webui/src/shell/objectTrackingSettings.ts``) sits inside it; this is the
+    outer edge, not the UI's.
     """
 
     width: int = Field(..., gt=0)
@@ -80,8 +82,8 @@ async def open_track_session(
     """Open the tracking session. 409 if one is already open, 503 if not installed.
 
     Threadpooled because opening the session is what STARTS the worker on a cold
-    server: a ~107 MB checkpoint read plus model construction is seconds of
-    blocking work, and it must not sit on the event loop.
+    server: a checkpoint read plus model construction is seconds of blocking
+    work, and it must not sit on the event loop.
     """
     return await run_in_threadpool(
         context.tracking_manager.open,
@@ -116,7 +118,7 @@ async def push_track_frame(
     BEFORE it is buffered: reading a claimed 200 MB first and then measuring it
     would be paying the whole cost of the mistake to find out. The exact
     per-session length check still happens in the manager — this is only the
-    ceiling, and a request without the header is read as before.
+    ceiling, and a request without the header skips it and is read whole.
     """
     declared = request.headers.get("content-length")
     if declared is not None and declared.isdigit():

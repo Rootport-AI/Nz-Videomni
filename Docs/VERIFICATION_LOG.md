@@ -2828,6 +2828,9 @@ HFの非公開dataset（41.6のリンク）をオーナーが実際に目視し�
 
 - **`engine/transformer/sage_attention_service.py`（新規）**: sage の本体。`SageState`（そのジョブで要求された backend 文字列だけを持つ）、`probe_sage()`（sageattention が実際に import できるかを1回だけ確かめてモジュール変数へキャッシュする。失敗した import を Python 自身はキャッシュしないため必須）、`SageAttentionService.install()`（transformer の各ブロックが持つ `attention_function` を sage 版へ差し替える）。**差し替え対象は48ブロック×6種（`attn1`／`attn2`／`audio_attn1`／`audio_attn2`／`audio_to_video_attn`／`video_to_audio_attn`）＝288モジュール**（NAG が96なのは cross-attention だけを対象にするためで、数が違うのは正しい）。head_dim が sage の対応外であるといった**静的に判定できる条件はインストール時に判定し、対象外のモジュールにはラップ自体を張らない**。実行時に見るのは「マスク付きの呼び出しかどうか」と dtype/device だけにした。
 - **`engine/transformer/sage_selfcheck.py`（新規）**: エンジン用仮想環境（`.venv-engine`）のpythonで直接実行する自己検証（pytestからは収集されない）。3項目＝①`sdpa` と `sage` の出力が数値的に一致すること（コサイン類似度 ≥0.999）②フォールバック行列（マスク付き・非対応dtype等でSDPAへ戻ること）③install件数が288であること。NAG/VSF の selfcheck のような大型のものにはせず、G0の単一成果物として必要な3点に絞った。
+
+> **訂正（§136）**: `sage_selfcheck.py` の `_COS_TOL` は 0.995 であり、基準は「≥0.995」が正しい（§43.4 の「cos≥0.999」は実測値 0.9993 の記述）。詳細は §136。
+
 - **`engine/pipeline/fast_video_pipeline.py`**: `_install_nag()` の直後に `_install_sage()` を追加（毎回のビルドで `ledger.transformer` をラップする）。`_set_sage_job()` は `_set_nag_job` と同じ位置に置くため**例外を投げない実装**にし、`finally` でリセットする。**インストールの順序は結果に影響しない**——NAG は `attn.forward` を、sage は `attn.attention_function` を差し替えるので、触る属性が独立しているため。
 - **`engine/pipeline/chain_pipeline.py` / `engine/worker.py`**: chain 側は `generate_chain()` で設定する（NAG が `run_chain` の中で設定しているのは負プロンプトのエンコード順序の制約によるもので、この非対称は相互参照コメントで固定した）。worker には `_resolve_attention()`（未知の値は fail-loud、sage が使えなければ降格）、ジョブ開始ログへの `attn=` 表示、`ready` イベントへの `sage_available` 付与、`done` イベントへの `attention_used` 付与を入れた。**利用可否のプローブはパイプライン構築より前に `try/except BaseException` で完全に囲んで実行し、結果をキャッシュする**（DLLの読み込み失敗やABI不一致が起きてもworkerの起動そのものは絶対に落とさないため）。
 - **`api/models.py`**: `GenerateRequest` / `GenerateChainRequest` の両方に `attention_backend`（`"sdpa"` / `"sage"`、既定 `"sdpa"`）・`fused_gguf_dequant_gemm`（bool、既定 `false`）・`vae_mode`（`"default"` / `"prune_vaed"`、既定 `"default"`）の3フィールドを追加し、`to_clip_request()` にも3つとも転記した（転記漏れの実害はジョブ記録の表示欠落だが、再現性のためのメタデータが正しくなくなるので必須）。
@@ -2922,6 +2925,9 @@ sage を使うには外部パッケージが要るため、**`sageattention` 2.2
 
 - **`engine/transformer/block_swap_prefetch.py`（新規）**: `PrefetchEngine` 本体。CPU 正本のスナップショット・レイアウト計算（512B アライン）・pinned ステージング・専用転送 stream・event 管理・arena 確保/解放を持つ。`GGMLQuantizedTensor`（GGUF 圧縮重み）はメタ（`_ggml_type`/`_float_shape`）を保持したまま生バイトとして転送し、GPU 側で `_make_subclass` により再構成する（S0 スパイクで `inference_mode()` 下での可否を実機検証済み・成功）。
 - **`engine/transformer/block_swap_prefetch_selfcheck.py`（新規）**: `.venv-engine` で直接実行する自己検証（pytest では収集しない。engine 用仮想環境に pytest が無いため）。14項目（§44.4）。
+
+> **訂正（§137）**: 記録時点の記述。今は `.venv-engine` に pytest があり（pytest で集めない理由は `fastapi` が無く `tests/conftest.py` を集められないこと）、検査は C1〜C19 の 19 項目である。詳細は §137。
+
 - **`engine/transformer/block_swap_service.py`**: 既存の `_patch_block`（同期スワップ本体）は無改変。`prefetch_requested`/`last_prefetch_used`/`_patch_block_prefetch`/`teardown_prefetch()` を追加し、prefetch 要求時だけ `PrefetchEngine` を張る二択分岐にした。pinned プールと転送 stream はサービス常駐インスタンスがジョブ跨ぎで保持し再利用する（grow-only）。
 - **`engine/pipeline/fast_video_pipeline.py`**: `_set_block_swap_prefetch_job()`/`_reset_block_swap_prefetch_job()`（`_set_sage_job` と同じ per-job set/finally-reset 規律）。ジョブ終了の `finally` で `teardown_prefetch()`（in-flight 転送の完走待ち＋前ジョブの CPU 正本・arena 参照の解放）を呼び、次ジョブの `install()` 冒頭にも冪等な安全網として同じ呼び出しを置いた（`VERIFICATION_LOG.md` §9.6 の旧リークと同形の再発を防ぐため）。
 - **`api/models.py`**: `/generate`・`/generate/chain` に `block_swap_prefetch: bool`（S4で既定 `True` へ反転）を追加、`to_clip_request()` へ転記。
@@ -2942,6 +2948,9 @@ sage を使うには外部パッケージが要るため、**`sageattention` 2.2
 ### 44.4 機械検証の結果
 
 - **エンジン用仮想環境の selfcheck**（`block_swap_prefetch_selfcheck.py`、新規）: **14項目（C1〜C14）全PASS**——出力ビット一致（off/on）、CPU 正本の不変性、常駐数上限 `<= blocks_on_gpu+2`、発行スケジュール（sync miss はパス先頭のみ）、GGML メタ保持、pinned 確保失敗時のフォールバック、`blocks_on_gpu>=total` の早期return、ジョブ跨ぎのリーク無し、stream 安全性の負荷テスト（S1b を意図的にスキップするネガティブケースで破綻を確認＝S1b の必要性を実証）、例外後の再 install、レイアウト計算、スロット列挙、発行スケジュールの純関数境界、共有テンソル検出の14点。
+
+> **訂正（§137）**: 記録時点の記述。今は `.venv-engine` に pytest があり（pytest で集めない理由は `fastapi` が無く `tests/conftest.py` を集められないこと）、検査は C1〜C19 の 19 項目である。詳細は §137。
+
 - **バックエンドの pytest**（アプリ用仮想環境）: 全緑（§43.4 のベースライン 817 passed / 6 skipped を下回らず、既定リクエストでは worker ペイロードのキーが1つも増えないことをペイロード完全一致テスト群が固定した状態のまま新規分もすべて通過）。
 - **フロントエンドの型検査**: `npm run typecheck`（`tsc -b`）**0エラー**。
 - **フロントエンドの vitest／ネイティブ doctest**: 全緑・不変（本件によるケース数の増減は次回のフロントエンド側記録〔`DEVLOG.md`〕を正本とする）。
@@ -3366,6 +3375,9 @@ keep=0対照1本（G9参照兼用）→keep=1で捨て768p+計測4本→復帰�
 - **`engine/preprocess/depth.py`（新規）**: `DepthProcessor`。公式 `infer_video_depth`（**32フレームの移動窓・10フレームの重なり・窓どうしの整合処理**）をそのまま呼ぶ薄いラッパー。重いimport（torchvision＋DINOv2スタック）は `_ensure_loaded()` 内に**遅延**（DWPose と同じ作法。トップレベルのimport失敗が canny/pose を道連れにするのを防ぐ）。ジョブごとにロードし、制御動画を書き終えたら `release()` でGPUから追い出す（16GBぎりぎりの生成デノイズ中に深度の重みを残さない）。
 - **`engine/preprocess/base.py`・`driver.py`・`__init__.py`**: 新プロトコル **`VideoProcessor`（クリップ単位）** を `FrameProcessor`（フレーム単位）と並置し、ドライバがどちらを持つかで分岐する。深度は時間方向の移動窓とクリップ全体の正規化を使うため1枚ずつでは処理できない。**`frame_cap`**（デコード打ち切り）を追加——深度は与えられた分をすべて正規化に使うので、生成で使わないフレームまで処理すると時間を無駄にするうえ**グレーの割り当てレンジがずれる**。
 - **`engine/worker.py`**: `_preprocess_frame_cap(msg)`。**単発＝`num_frames`／チェーン＝`clips[0]["num_frames"]`**（参照条件は先頭クリップのstage-1にしか付かないため）。キーが無ければ `None`（全デコード＝従来どおり）。**`frame_cap` は `preprocess == "depth"` のときだけ渡す**ので、**canny/dwpose の経路はバイト不変**であり、ログ行も `cap=` の部分は該当するときにしか付かない（Phase C で記録した実行ログと文字単位で一致し続ける）。
+
+> **訂正（§137）**: 今の `_resolve_ic_reference` は前処理の種類によらず `_preprocess_frame_cap(msg)` を渡し、チェーンでは全クリップの stage-1 の画素フレーム総数を返す（engine25 も同じ）。記録の時点の実装の記述としては残す。詳細は §137。
+
 - **`config.yaml.example`・`config.py`・`services/lora_registry.py`**: `depth-control`（**union-control のファイルを共用**・`preprocess: depth`）と `deblur`（前処理不要のため**文字列形式**でパスのみ）の2エントリ登録。`IcLoraEntry.preprocess` のリテラル型に `"depth"` 追加。**Gradio の静的フォールバック一覧には手を触れていない**（`/config` 不達時だけの死に枝と確認済み）。
 - **`gradio_ui/adapters.py`・`i18n.py`・`ui.py`**: `ADAPTER_FRIENDLY` に2件、英日それぞれ**ヒント3種**（アスペクト比／Depth の推奨値／Deblur の書式とVRAM）。**アダプタ選択に連動して出し分ける仕組みは既存に無く、そのためだけの新UI機構は足していない**（既存の `note_ref128` と同じ常時表示の注記）。
 - **フロントエンド**（`Nz-LTX23-frontend-AviUtl2`）: `webui/src/i18n/strings.ts`（英日の同内容ヒント3種）／`GenerationForm.tsx`（参照動画セクションに3行）／`api/types.ts`（`"depth"`）／`bridge/mockBridge.ts`（`depth-control` マップ形式＋`deblur` 文字列形式のフィクスチャ）。**選択肢そのものは `/config` 経由で自動的に増える。** 詳細は[`DEVLOG.md`](../../Nz-LTX23-frontend-AviUtl2/Docs/DEVLOG.md) §59。
@@ -3780,6 +3792,9 @@ stage2（パス9〜11）でCPU発行時間だけが3倍以上に跳ねている�
 
 - **新規モジュール3本**（`engine/gguf/`）
   - `dequant_triton.py`（234行）: 製品側の窓口。`enabled()` / `dequant()` / `set_job()` / `reset_job()` / `last_used()` の5つだけを公開し、状態（要求の有無・降格の掛かり方・呼び出し回数・型ごとの自己検証済みフラグ）をこのモジュール内に閉じ込めている。Tritonの読み込みは遅延（実際に必要になるまでimportしない）で、失敗したという事実もキャッシュする。
+
+> **訂正（§137）**: `_VERIFIED` は型ごとのフラグではなく（型, 16 バイト境界か）の組の集合である。3 ファイルの行数は記録時点の値。詳細は §137。
+
   - `dequant_triton_kernels.py`（314行）: Q4_K・Q5_K・Q6_Kの3本のTritonカーネル本体。
   - `dequant_triton_selfcheck.py`（698行）: 自己検証スクリプト（C1〜C10。§51.2）。
 - **既存コードへの差し込みは1箇所だけ**: `engine/gguf/quant_service.py` の `dequantize_ggml_tensor` に「Tritonで試す→戻り値が `None` なら従来実装へ落ちる」という分岐を入れた（`:47` のimportと `:128-130`）。K量子化3形式・GPU上のテンソル・出力がbf16、という3条件すべてを満たすときだけ新経路に入る。GemmaのembeddingのようにCPU上で展開されるものは条件で弾かれ、従来どおりに動く。
@@ -3791,6 +3806,8 @@ stage2（パス9〜11）でCPU発行時間だけが3倍以上に跳ねている�
 ### 51.2 STEP1＝自己検証（selfcheck）の結果＝C1〜C10全PASS
 
 `.venv-engine\Scripts\python.exe -m engine.gguf.dequant_triton_selfcheck` で実行する（engine用の仮想環境にはpytestが無いため、テストモジュールではなく単体スクリプトの形にしてある。sage・block swap prefetchと同じ作法）。**10項目すべてPASS・skipゼロ・終了コード0**。
+
+> **訂正（§137）**: `.venv-engine` には pytest がある（§51.3 も `.venv-engine` の pytest を実行している）。単体スクリプトにしてある理由は `fastapi` が無く `tests/conftest.py` を集められないことである。詳細は §137。
 
 | 番号 | 何を証明するか | 結果 |
 |---|---|---|
@@ -3810,6 +3827,8 @@ stage2（パス9〜11）でCPU発行時間だけが3倍以上に跳ねている�
 **速度（カーネル単体）**: 加重速度比 **R = 18.89**（1パスあたり eager 1823.7ミリ秒 → 融合後 96.6ミリ秒）。§50.2で `torch.compile` を下限の目安として測った R = 13.42 を上回った。
 
 **`BLOCKS_PER_PROG` の凍結**: 1つのプログラムが担当するブロック数を4/8/16/32でスイープし、**8** で凍結した（`dequant_triton_kernels.py:89`）。`triton.autotune` は使っていない。
+
+> **訂正（§137）**: 行番号 89 は記録時点のもの（定義位置は変わる。`BLOCKS_PER_PROG` の名前で探す）。詳細は §137。
 
 **初回コンパイル（JIT）の実費**: キャッシュが空の状態からの合計 **0.81秒**（Q4_K 483ミリ秒／Q5_K 184ミリ秒／Q6_K 147ミリ秒）。キャッシュが効いた2回目以降は0.12秒。形状に依存しない設計（ブロック数を実行時引数にした）にしてあるため、**1プロセスにつき1形式1回しかコンパイルが起きない**（`do_not_specialize` を明示）。Tritonのキャッシュ置き場は既定のまま（`~/.triton/cache`）で、環境変数による設定は追加していない。§50.2で `torch.compile` について記録した「16通りで合計11.1秒」という入場料が、Tritonの手書きカーネルでは0.81秒に下がったことになる。
 
@@ -7688,6 +7707,8 @@ B7の接合位置J=47では、音声RMS比が 0.2側・0.8側とも **8.5066** �
 
 **リングは「denoise の最中はタダだが、denoise と denoise のあいだはタダではない」。** 後始末はジョブの最後に1度しかないので、最後のパスからジョブの終わりまで受け皿を持ち続ける。したがって「どちらのエンジンにも同じ挙動を」という原則の**意図的な例外**として、`hold_arenas` という名前でこの違いを隠さず表に出し、**LTX 2.5 だけが on にする**形にした。**LTX 2.3 の挙動はバイト・数値とも完全に従来どおりへ戻してある**（Chain A の予約 13,264MB は基準と同値）。
 
+> **訂正（§136）**: LTX 2.5 は denoise の後にも `teardown` を呼ぶ（`engine25/pipeline25.py`）。「後始末はジョブの最後に 1 度」は記録の時点の観測である。詳細は §136。
+
 **(6) `expandable_segments` の整理（C2b で同時に実施）**: LTX 2.5 のアダプタからは当該の設定行を削除した（**もともと効いていないので挙動は不変**。実測で確認済み）。LTX 2.3 側は凍結中のため行は残し、コメントだけ訂正した。`main.py` の起動時のメッセージは、効かない設定を勧める内容だったので**警告から事実を述べる情報行へ**改めた。仕様書側（§2.4 の環境変数の表・§9.2）の訂正は **v0.5.31（C2b と同時）で済んでいる**ので、本段の文書更新では重ねて直していない。
 
 ### 75.8 C2b 再ゲート（アリーナリング適用後）
@@ -8265,6 +8286,8 @@ B7の接合位置J=47では、音声RMS比が 0.2側・0.8側とも **8.5066** �
 ### 77.7 知見と申し送り
 
 **(a) LTX 2.5 のマスク経路は、そもそも sage に触れない。これは 2.3 との設計差である。** LTX 2.5 の注意モジュールは、**マスク無しの呼び出し用（`attention_function`）とマスク付きの呼び出し用（`masked_attention_function`）を別々の属性として持っている**。sage が差し替えるのは前者だけなので、**マスク付きの呼び出しは構造的に PyTorch 標準の実装へ行く**——降格の判定すら通らない。**したがって IC-LoRA で制御強度を 1.0 未満にしても、LTX 2.5 では「マスクがあったので標準実装へ落とした」という INFO ログは出ないのが正しい**（LTX 2.3 では同じ操作で1回出る。2.3 は NAG／VSF の置換 forward が masked 側を直接呼ぶため、こちらの経路は生きている）。**2.5 のほうが構造として綺麗なので、直していない。** 2.3 側のマスク降格のコードは死蔵ではなく現役なので、消さないこと。
+
+> **訂正（§136）**: 2.3 でマスクの分岐が生きている理由は、NAG／VSF が masked 側を直接呼ぶからではなく、2.3 の上流 `Attention.forward` が mask をそのまま `attention_function` へ渡すためである（NAG／VSF は `mask=None` で呼ぶ）。詳細は §136。
 
 **(b) 変換器を組み立てるたびに、剥がして貼り直す。** LTX 2.5 はモデルの殻をジョブ間で使い回すので、貼りっぱなしにするとラッパーが**本当に**積み上がる（§77.3 の `stripped 288` が実機の証拠）。**通常運転で出る `stripped …` の INFO は正常な動作の記録**であって異常ではない。**異常なのは `surviving wrapper(s)` の ERROR のほう**で、これは「どこかの経路が剥がしを飛ばした」という意味である。ログを読むときはこの2つを取り違えないこと。
 
@@ -9531,6 +9554,8 @@ B7の接合位置J=47では、音声RMS比が 0.2側・0.8側とも **8.5066** �
 **`uninstall` は `attn.__dict__.pop("forward")` だけを行う**（インスタンスに被せた属性を外すと、クラスのメソッドへ戻る）。**元の `forward` は保存しない。** 保存すると、殻を使い回す2.5では**次のビルドの閉包が前のビルドの閉包を「元」として捕まえ、パッチが1段ずつ入れ子になっていく**——しかも入れ子になっても数の形は正しいので、静かに壊れる。加えて、モジュールが自分の束縛メソッドを持つと参照の循環になる。
 
 **`uninstall` はテンソルに一切触れず、例外も投げない。** これはビルド経路の最初に走り、そのとき殻は `Disposable.dispose()` を通過済み＝全パラメータが `device="meta"` のテンソルになっている（演算を投げると `NotImplementedError` になる）。**この規律は `Ltx25DiffusionStage._unpatch_block_swap` が大文字で書いているものと同一で、「きれいにするため」に `.cpu()` や `empty_cache()` を足してはいけない。**
+
+> **訂正（§134）**: `uninstall` が呼ばれるのは `build()` が重みを読み込んだ後で、そのとき殻は読み込み済みである（殻が meta になるのはビルドとビルドの間だけ）。詳細は §134。
 
 **剥がした枚数が0でないことは、欠陥ではなく正常である。** 常駐ワーカーでネガティブプロンプト付きのジョブが2本続けば、2本目のビルドは1本目の96枚を見つける。だから **INFO** で記録する（ERROR ではない）。
 
@@ -14409,3 +14434,656 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 - 変更後:「with ``vram.use_component_files`` on (the shipped config.yaml.example sets it on; ``VramConfig`` in config.py only supplies the fallback when the key is absent), the standalone files replace the monolith,」
 
 `te_offload_text_encoder`・`dit_cpu_load`（LTX-123・LTX-124）は `config.py` と `config.yaml.example` の既定がどちらも true で揃っているため、この訂正による実害はありません。基準 3 の全体展開は「実際に効く側（`config.yaml` のキー名）を指す」に改めました。なお `config.py` の `use_component_files` に付いたコメント「Off by default; flip to True to exercise the component-file path.」は、配布する設定では on になっているため古い言い方のままですが、これは `config.py` 側を扱う回で直します（今回は対象外）。
+
+## 131. ★コード内のコメントと docstring の現行化を `api/` 16 ファイルへ広げ、264 ブロック中 143 ブロックを現行化した＝コメントと docstring のみ・コードの動作は変更なし・文書の訂正 2 件＋設計書への追記 1 件（2026-09-30）
+
+**要約**: `services/engines/` での試行（§130）を踏まえ、進め方を REST API 層の `api/`（16 ファイル・4,055 行）へ広げました。264 ブロック（`#` のコメント・docstring・行末のコメントの合計）のうち 143 ブロック（事実が古いもの 89・導入時期の記録だけのもの 54）を書き換え、コードは 1 文字も変わっていないことを構文木で確かめました。判定・変更ともコメントと docstring だけで、あわせて文書の訂正 2 件と設計書への追記 1 件を行いました。
+
+**目的**: §130 の反省を 3 点反映して試しました。(1) 全件判定を前提にし、機械的な絞り込み（手がかり）は判定担当へのヒントとしてだけ渡す。変更日時の比較（git blame）は今回は外した。(2) 判定担当が判定と同時に正確な差し替え行を作ることで、一覧づくりの工程を無くした。(3) 判定担当のモデルを測るため、本番の Opus とは別に Sonnet にも同じ区域を独立に判定させ、確定した一覧を正解として後から採点する（以後の区域で Sonnet に替えられるかの目安にする）。
+
+**オーナーの裁定**（2026-09-30）:
+1. `api/` の docstring（FastAPI の `/docs` に表示される）は、読み手が開発者だけで機械的な読み取りもテストも無いので、コメントと同じ扱いとする。
+2. 判定モデルの比較は、本番は Opus の判定で進め、同じ区域を Sonnet にも独立に判定させて、確定した一覧を正解として後から採点する。
+3. 設定値は「そのコードが実際に読む側」を指す。検証が読むのは `_LIMITS_DEFAULTS = LimitsConfig()`（`config.py` の既定値。`config.yaml` は読まない）で、`GET /config` が配信するのは `config.yaml` を読んだ値。両者は一致するとは限らない。
+4. 文字列の既定値（`attention_backend` の `"sdpa"`、`vae_mode` の `"default"` など）を前提にした句は直さない。
+5. 対象外の場所（テスト・`services/` 等の他ファイル）で見つけた古い記述は放置する。
+6. 手元の `config.yaml` にあった無効なキー `max_conditioning_images` は削除する。
+
+**方法**:
+1. **抜き出し・区域分け**: `tokenize` と `ast` で 264 ブロックを一覧にし、`build_regions.py`（自動分割）で関数・メソッド・クラスの境目を基準に 11 区域（R01〜R11）へ切りました。
+2. **3 つの手がかりと台帳参照の印**: §130 の 4 手がかりのうち、変更日時の比較（git blame）は今回は外し、仕様変更の逆引き・名指しの実在確認・時点依存の言い回しの 3 つと、台帳参照の印だけを付けました。
+3. **全件の判定（2 波）**: 11 区域それぞれに Opus 1 体を本番として走らせ、同じ区域・同じ指示書・同じ入力で Sonnet 11 体にも独立に判定させました（採点用。互いの判定は読ませていません）。判定担当は判定と同時に正確な差し替え行（`old_lines`・`new_lines`・`action`）を `Rxx.jsonl` に書きました。
+4. **検算**: Opus 4 体（V1〜V4。担当区域は V1=R01〜R04、V2=R05〜R06、V3=R07〜R08、V4=R09〜R11）が、Opus の判定のうち変えるもの全件と、現行のままの判定から区域ごとに 2 割目安で抜き取り、あわせて 174 ブロックを確かめました。
+5. **統合・確認**: `merge_changes.py` で Opus の `Rxx.jsonl` に検算の修正を反映して結合し、`old_lines` の一致・行範囲の重なり・構文木の不変・残存語（`2026-`・`§3-`・`byte-identical`・`Phase`・`v1`・`still` など）を機械で確認しました。
+6. **区域をまたぐ揃え・再検算**: 残存語の検査で挙がった 48 行を Opus 1 体が見て、47 行は残し 1 行（`PIP-001` の日付付きの呼び名）だけを直しました。揃えで文面を変えたブロック 8 件と、変える項目からの抜き取り 30 件（計 38 件）を同じ担当が再検算しました。
+7. **`findings.md` の組み立て**（Sonnet）: 試行と同じ節構成で一覧をまとめました。
+8. **オーナーの了承**（了承ゲート 2）: `findings.md` の内容を了承していただきました。
+9. **適用**: 143 件の差し替え（全件が行の置き換え）をスクリプトで各ファイルへ当てました。改行コード（CRLF）とエンコーディングは保っています。
+10. **証明とレビュー**: 下の「確かめたこと」「敵対的レビュー」のとおりです。
+
+**結果**:
+
+最終の判定（264 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 89 |
+| 導入時期の記録だけ | 54 |
+| 現行のまま | 121 |
+| 保留 | 0 |
+
+手がかりごとの的中率（「古い」は「事実が古い」と「導入時期の記録だけ」の合計）:
+
+| 手がかり | 印 | 古い（事実／記録） | 的中率 |
+|---|---:|---:|---:|
+| 1 仕様変更の逆引き | 46 | 44（27／17） | 96% |
+| 3 名指しの実在確認 | 30 | 27（20／7） | 90% |
+| 4 時点依存の言い回し | 31 | 28（22／6） | 90% |
+| 台帳参照 | 44 | 44（15／29） | 100% |
+| 1・3・4 のどれか | 85 | 77（50／27） | 91% |
+| 1・3・4＋台帳参照のどれか | 108 | 100（52／48） | 93% |
+
+見逃し（印が無いブロックのうち古い数。割合は「古い」全体 143 件に占める割合）:
+
+| 手がかり | 印なし | 古い（見逃し） | 印なしのうちの割合 | 古い全体に占める割合 |
+|---|---:|---:|---:|---:|
+| 1・3・4 のどれか | 179 | 66（39／27） | 37% | 46% |
+| 1・3・4＋台帳参照のどれか | 156 | 43（37／6） | 28% | 30% |
+
+何もしなければ 264 件中 143 件（54%）が古いまま残ります。的中率は最も高い台帳参照で 100%、印（血統の比較を使わない）全体でも 91〜93% と高く、印は判定担当への手がかりとして信頼できますが、見逃しは印なし全体の 37%（台帳参照込みで 28%）残るため、全件判定は省けません。
+
+検算: 174 ブロックを確かめ、異論 2 件（`MOD-001` の「future」を落とすと DaVinci Resolve のフロントエンドが実在するように読めた点、`REG-002` の「(P6)」を消した跡の空白が新しい文に残っていた点）、一部だけ直した 3 件（`MOD-070`・`MOD-074`・`MOD-096`。いずれも `clips` フィールドの `max_length` の書き写し「1..24」が、`clips` フィールドから離れた場所に残っていた）、見逃しは 0 件でした。異論・一部だけ直したものは、どれも検算の修正案を採りました。
+
+揃え: 残存語 48 行のうち 47 行は残してよいと判断し（「それでも」の意味の `still` など、時点に依存しない語がほとんど）、1 行（`PIP-001` の日付付きの裁定の呼び名を、参照先の設計書の節番号を使う言い方に直した）だけを直しました。揃えで文面を変えたのは 8 件、続く再検算 38 件でも新しい誤りはありませんでした。
+
+判定モデルの比較（途中経過。`diff_report.md` より）: primary（Opus）の change 143 件・secondary（Sonnet）の change 116 件。Sonnet が変えるとした 116 件は全て Opus も変えるとしており、Sonnet だけの候補は 0 件でした。Opus だけが変えるとしたのは 27 件で、検算で全て本物の古さと確認しました（古いもの全体 143 件の 19% が Sonnet の見逃しにあたります）。両方が change としたが区分（事実が古い／導入時期の記録）の割り振りが違ったブロックは 28 件ありました。使用トークンは Opus 11 体で約 167 万、Sonnet 11 体で約 228 万でした。**「新しい誤り」の採点と最終の比較表は、この一覧にご了承をいただいた後 `ab_compare.py` で出す予定で、この時点ではまだです（§131.1 として後日追記）。**
+
+**敵対的レビュー**（適用のあと、コミットの前に 1 回。直すべき 1・注意 3・参考 6）:
+- 直すべき 1 件: 仕様書の改訂履歴 v0.5.75 の行が「記録は `Docs/VERIFICATION_LOG.md` §131。」と書いていましたが、レビューの時点で本書の最後の節は `## 130.` で §131 はまだありませんでした。本節を追加したことで解消しています。
+- 注意 3 件はいずれも採用しました。
+  1. 仕様書 §6.7 の「検証はこの値を読まず」は、サーバー側の検証（API）に限って正しい指摘でした。Gradio GUI は送信前の事前検査で `GET /config` の `limits.max_width`／`max_height` を読み、キーが無いときは 1920／1088 を使う（`gradio_ui/handlers.py`）ため、「サーバー側の検証はこの値を読まず固定値で決まる。Gradio GUI の送信前検査はこの配信値を上限に使う」という一言を足しました。
+  2. `Docs/MODEL_MANAGEMENT_DESIGN.md` §9 の追記 2 行は、比較相手（全既定選択のときの payload と VALUES は同じだが BYTES は同じにならない）と、成り立つのはサーバーを再起動するまでという限定が抜けていました。追記の前に置き場所を示す 1 行を足し、比較相手と再起動の限定を明記しました。
+  3. `api/pipeline.py` の「The price: …」段落が、根拠の置き場所を指していませんでした（`PIP-001` で「design note U4」という呼び名を落とした結果）。今回 §9 に同じ決定を書いたので、この段落から §9 を指す参照を足しました。
+- 参考 6 件のうち採用したのは 2 件です。`MOD-028` の「実測は §47」を「実測は §47.3・§48」に絞りました（§47 自体の見出しは別件）。`PIP-011` が指す節を「§2.3」だけから「§2.1 / §2.3」に直しました（仕様書 v0.5.72 の行も両方を指しているため）。残り 4 件（定数の置き場所の言い方、残存語の意味の確認、`/docs` に出る docstring の読みやすさ、書式の確認）は記録だけで文面は変えていません。
+
+**確かめたこと**:
+1. レビューの反映のあとも、14 ファイルすべてで `ast.parse` が成功し、docstring を除いた `ast.dump` が HEAD（`eed294b`）と一致し、コンパイルも通りました。コメント・文字列・改行・インデントのトークンを除いたトークン列も 14 ファイルすべて一致しています。
+2. HEAD 版に `changes.jsonl` の 143 件を当てた結果が、14 ファイルすべてで作業ツリーと行単位で完全一致しました（`old_lines` と HEAD の食い違いは 0）。
+3. `api/` のソースや docstring を読むテストは無い（調査済み）ので、テストは走らせていません。
+4. 追加した行に、時点に依存する語（「現在」「まだ」「currently」「now」など）、台帳の番号、行末の空白はありません。
+5. **証明の限界**: docstring は構文木の比較から除いているので、`/docs` の表示が変わることは証明の範囲外です（裁定どおりコメントと同じ扱い）。
+
+**文書の訂正 2 件＋設計書への追記 1 件**:
+1. 仕様書 §6.7・§11.7 の `max_width`／`max_height` の実値を訂正しました。配布ひな型 `config.yaml.example` は 4096／4096、`config.py::LimitsConfig` の補完値は 1920／1088 で、サーバー側の検証（API）はどちらも読まず `GenerateRequest.width`／`height` の `Field(le=4096)` 固定値で決まります。Gradio GUI の送信前検査は `GET /config` が配信するこの値を上限に使います。仕様書は v0.5.75（[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) の改訂履歴）。
+2. 仕様書 §6.8 のエラーコードの件数の書き写しを、件数を書かず正本 `api/errors.py` を指す形に改めました。
+3. `Docs/MODEL_MANAGEMENT_DESIGN.md` §9 に、ベースモデルを切り替えたあと本文なしで `POST /pipeline/load` を呼んだときの payload の決定（全既定選択のときと VALUES は同じだが BYTES は同じにならないこと。サーバーを再起動すると既定の名前はパスなしで復元されるので BYTES も戻ること）を追記しました。
+
+**全体へ広げるときの結論**:
+1. 印なし全体の 37%（台帳参照込みで 28%）に古いものが残るため、全体へ広げるときも全件を判定します。手がかりの印は、判定担当に渡す根拠のヒントとして残します。
+2. 判定担当が判定と同時に正確な差し替え行まで作る形にしたことで、一覧づくりの工程を無くせました（§130 比で工程が減っています）。
+3. 新しい基準を加えます: 仕様書の節は「spec §N.N」の形にそろえる／定数の定義位置のすぐそばにある値の書き写しは規則3（既定値を値で書かない）の対象外とする／「existing／既存の」は「別に既にある」の意味なら残す／「future／将来／構想」を示す語は、落として事実が変わるなら残すか言い換える／排他の相手の列挙は、複数を並べた列挙だけを網羅とみなし単独の言及はみなさない。
+4. 判定モデル（Opus と Sonnet）の比較の結論は §131.1 で示します。ここまでの範囲では、Sonnet の変えるという判定は Opus の判定にすべて含まれており、Sonnet だけの独自の候補はありませんでした。
+
+**申し送り**:
+1. 利用者やログに見える文言（外部文言）6 グループ（オーナー了承済み・別コミットで対応予定→ §131.2 で対応）
+   - 422 文言の「in Phase 1」「in v1」「conservative v1 cap」（3 箇所。`api/models.py` の 2 つの検証関数と `SourceVideoSpec.validate_context_frames`）
+   - `job_busy` の「Phase 1 allows one concurrent job」（同時 1 ジョブという決まり自体は今も正しい）
+   - `upload_invalid_type`／`upload_too_large` の画像向けの文言（動画・音声の保管庫でも同じコードを使う）
+   - 深度 LoRA（`lora_depth_chain_unsupported`）の「in this version」
+   - `reference_resolution_invalid` の「half resolution」（縮小係数 1 のアダプタでは半分にならない）
+   - `SourceVideoSpec.validate_context_frames`／`EndSourceSpec.validate_end_source` の 422 文言が `config.limits.*` を指すが、検証が読むのは `config.py` の既定値であるという食い違い
+2. 対象外で気づいた古い記述（`findings.md` 第 6 節の要約）: `services/` の `model_registry.py`・`pipeline_manager.py`・`video_upload_store.py`・`video_io.py`・`lora_registry.py`・`ltx_runner.py`、`engine/worker.py`、`engine25/worker.py`・`reference25.py`、`chain_math.py`、テスト（`test_ltx_runner_payload.py` 等）、操作パネルの `src/api/types.ts`・`useChainForm.ts` に、段階名・台帳番号・比べる相手のない同一性の言い回しが残っています。
+3. `config.yaml.example` にあるのに検証に効かない `limits.v2v_context_frames_max`・`end_context_frames_max`（検証は `config.py` の既定値だけを読み `config.yaml` を読まない）は、コードの問題として台帳への起票をオーナーに提案します。
+4. `MOD-023` の NAG 既定値（`nag_scale`／`nag_tau`／`nag_alpha`）と、外部実装 kijai/ComfyUI-KJNodes の LTX2_NAG との一致は、リポジトリの中からは確かめられません。
+
+### 131.1 判定モデルの比較の採点（2026-09-30）
+
+**方法**: §131 の 11 区域で確定した一覧（`changes.jsonl` 143 件）を正解とし、同じ区域を独立に判定した Opus と Sonnet の判定をブロック単位で採点しました（`tools/ab_compare.py`）。数える項目は、見逃し（正解は変える〔change〕のに判定は現行のまま〔keep〕）・一部だけ直した（判定は変えるが、`old_lines` にあった文言が判定の `new_lines` にまだ残る）・余分（正解は現行のままなのに判定は変える）・区分の食い違い（両方とも変えるが「事実が古い」「導入時期の記録」の割り振りが違う）・新しい誤り（採点スクリプトが数える「余分」のうち誤りと確定したもの）・使用トークンです。あわせて、Sonnet が変えるとした文面のうち正解と文面が異なる 92 件を Opus が事実確認しました（`sonnet_check.md`）。
+
+**結果**（`ab_compare.md` の「計」、`sonnet_check.md` の規則への当てはめより）:
+
+| 指標 | Opus | Sonnet |
+|---|---:|---:|
+| 見逃し | 0 | 27 |
+| 一部だけ直した | 4 | 48 |
+| 余分 | 0 | 0 |
+| 区分の食い違い | 0 | 29 |
+| 新しく持ち込んだ誤り | 1（`MOD-001`） | 0 |
+| 直し残し（元の誤りを残した） | — | 34（重 25・軽 9） |
+| 使用トークン | 約 167 万 | 約 228 万（Opus の約 1.37 倍） |
+
+**規則への当てはめ**:
+- 規則 1（Sonnet の見逃し ≤ Opus の見逃し＋5 件）: 27 > 5 で満たしません。
+- 規則 2（Sonnet の新しい誤り ≤ Opus の新しい誤り＋3 件）: 自分で新しく持ち込んだ誤りだけで数えれば満たしますが（0 ≤ 1＋3）、直し残し（元の誤りを残したもの）を含めて数えると満たしません（34 > 1＋3）。
+- **結論: 以後の区域でも、判定担当は Opus のままとします。** Sonnet は「見つけたものは全て Opus も見つけていた」（独自の候補は 0 件）一方で、一度手を付けた古い文の一部を直し残す傾向があります。
+
+**限界**:
+- 正解は Opus の判定を検算して作ったものなので、Opus の見逃し 0 は作り方に依る面があります。両モデルがそろって見逃したものは正解に入らず、測れません。
+- 1 回ずつの実行なので、同じモデルを繰り返したときの揺れは測っていません。
+- `api/` はモジュールと関数の docstring が多く、長い文の一部だけを直す作業が多い区域なので、直し残しが出やすい区域です。他の区域にそのまま当てはまるとは限りません。
+- 「一部だけ」は行の完全一致で数えるため、改行位置を変えただけのもの（事実は直っている）も含みます。
+
+**採点の副産物**: 事実確認の過程で、正解（`changes.jsonl`）の側に誤りが 1 件見つかりました（`MOD-100`）。次節 §131.3 で訂正します。
+
+### 131.2 申し送りの外部文言 6 グループの対応（2026-09-30）
+
+**要約**: §131 の申し送り 1 の外部文言（利用者やログに見えるエラー文言）6 グループを、オーナーの了承どおりに書き換えました。変えたのは文字列の中身だけで、コードの構造・エラーコード・HTTP ステータスは変えていません。写しはテスト 2 ファイル（計 3 箇所）にあり、同じ文言に合わせました。
+
+**変更の前後**:
+
+1. 段階名（`api/models.py` の `GenerateRequest.validate_ltx_constraints` と `GenerateChainRequest.validate_chain_constraints`、`SourceVideoSpec.validate_context_frames`）
+   - `distilled pipeline requires num_inference_steps=8 in Phase 1` → `distilled pipeline requires num_inference_steps=8`（2 関数とも）
+   - `distilled pipeline requires guidance_scale=1.0 in Phase 1` → `distilled pipeline requires guidance_scale=1.0`（2 関数とも）
+   - `source_audio and source_video are mutually exclusive (A2V and V2V cannot be combined in v1)` → `… (A2V and V2V cannot be combined)`（`GenerateChainRequest.validate_chain_constraints`）
+   - 「conservative v1 cap」はグループ 6 の書き換えで消えました。
+   - 理由: 「Phase 1」「v1」という段階名は利用者に伝わらず、使い方も揃っていないため。
+2. `job_busy`（`api/errors.py`）
+   - `A job is already running (Phase 1 allows one concurrent job)` → `A job is already running (the server runs one job at a time)`
+   - 理由: 段階名は利用者に伝わらないため。同時 1 ジョブという決まりそのものは今も正しいので、決まりは残しました。
+3. `upload_invalid_type`／`upload_too_large`（`api/errors.py`）
+   - `Unsupported image format` → `Unsupported file format`
+   - `Image file size exceeds the limit` → `File size exceeds the limit`
+   - 理由: 同じコードを動画・音声の保管庫でも使うので、画像向けの文言が動画・音声のアップロードにも出ていたため。
+4. `lora_depth_chain_unsupported`（`api/errors.py`）
+   - `depth-type IC-LoRA is not supported on a multi-clip chain in this version (the depth preprocessor cannot process a chain-length reference); use pose/canny/deblur, or a single clip.` → `depth-type IC-LoRA is not supported on a multi-clip chain (the depth preprocessor cannot process a chain-length reference); use pose/canny/deblur, or a single clip.`
+   - 理由: 深度の前処理が全フレームを一度に扱う作りに由来する構造的な制限なのに、「in this version」が一時的な制限のように見せていたため。
+5. `reference_resolution_invalid`（`api/errors.py`）
+   - `reference-video jobs require width/height divisible by 128 (reference is used at half resolution on the 64-grid)` → `reference-video jobs require width/height divisible by 128`
+   - 理由: 「half resolution」は縮小率 2 のアダプタにしか当てはまらず、縮小率 1 のアダプタでは誤りになるため。検査自体はすべての参照動画に掛かるので、括弧の説明だけを外しました。
+6. 上限値の指し先（`api/models.py` の `SourceVideoSpec.validate_context_frames` と `EndSourceSpec.validate_end_source`）
+   - `source_video.context_frames must be <= {cf_max} (conservative v1 cap, config.limits.v2v_context_frames_max; see chain_math's stage-2 tile-fit invariant)` → `source_video.context_frames must be <= {cf_max} (the cap is LimitsConfig.v2v_context_frames_max in config.py)`
+   - `end_source.context_frames must be <= {cf_max} (config.limits.end_context_frames_max — an OPERATIONAL cap on the measured range, not a geometric limit; see config.py)` → `end_source.context_frames must be <= {cf_max} (the cap is LimitsConfig.end_context_frames_max in config.py — an operational cap on the measured range, not a geometric limit)`
+   - 理由: `config.limits.*` は `config.yaml` の値（`GET /config` が配信する側）を指して読めますが、検証が読むのは `config.py` の既定値だけで、指す先が検証の読む側と違っていたため。書き換えの前に、2 つの検証が `_LIMITS_DEFAULTS = LimitsConfig()`（`config.yaml` を読まない既定値）から `cf_max` を取っていることをコードで確かめました。
+
+**写しとテストの追随**:
+- 古い文言（`Phase 1 allows`・`Unsupported image format`・`Image file size exceeds`・`cannot be combined in v1`・`in this version`・`half resolution`・`conservative v1 cap`・`in Phase 1`・`see config.py)`）をリポジトリ全体（`node_modules` を除く）で探しました。写しは `tests/test_mcp_tools_system.py`（2 箇所）と操作パネルの `webui/src/shell/useBaseModels.test.ts`（1 箇所）の `job_busy` の文言で、どちらも新しい文言に合わせました。どちらも擬似応答の本文で、文言そのものは検査していません。
+- モック（`webui/src/bridge/mockBridge.ts`）・MCP・操作パネルの画面文言・Gradio GUI の文言には写しはありませんでした（モックの JOB_BUSY は独自の `Another job is already running`、Gradio GUI はコードごとの独自の翻訳文を使っています）。文書（`Docs/`・`README`・フロントの `Docs/API_REFERENCE.md`・仕様書）に文言の引用は無く、過去の記録（本書の §39 など）は触っていません。
+- 変えた文言の、外した部分を検査しているテストはありませんでした（テストが見ているのはエラーコードと `mutually exclusive` など残した部分だけ）。
+- pytest（`tests/test_mcp_tools_system.py`・`test_validation.py`・`test_v2v_chain.py`・`test_a2v_chain.py`・`test_end_source_chain.py`・`test_chain_reference.py`・`test_ic_lora_api.py`・`test_smoke.py`・`test_gradio_handlers.py`）: 485 件すべて通過。`tests/test_api_*.py` という名前のファイルはありません。
+- 操作パネル: `npm run typecheck` 通過、`npx vitest run src/shell/useBaseModels.test.ts --exclude "**/backend.integration.test.ts"` 17 件通過。
+- 変更後に古い文言を探し直し、文字列としての残りが無いことを確かめました。コメントや docstring の中に残った語（別の意味のものを含む）は直していません: `config.py` のコメントの「conservative v1 cap」、`tests/test_v2v_chain.py` のコメントの「conservative v1 cap of 145」、`services/low_vram.py` の docstring の「in Phase 1」、`api/models.py` のコメントの「(see config.py)」（Retake の窓の上限の話で別件）。「half resolution」の残りは Inpainting／Outpainting の stage 1 の説明（`engine/`・`engine25/`・テスト・`tokenBudget.ts`）で、別の事柄です。
+
+### 131.3 採点で見つかった正解側の誤り 1 件の訂正（2026-09-30）
+
+§131.1 の事実確認（`sonnet_check.md`）の過程で、判定の正解（`changes.jsonl`）の側に誤りが 1 件見つかりました。
+
+`api/models.py` の `GenerateChainRequest.to_clip_request`（`MOD-100`）の docstring で、「``retake`` を写さない前例」として ``source_video`` / ``source_audio`` / ``reference_video_id`` を並べ、「``GenerateRequest`` に対応する項目が無い」と書いていましたが、``GenerateRequest.reference_video_id`` は実在します（``source_video`` / ``source_audio`` は実在しません）。前例の列挙から ``reference_video_id`` を外しました。
+
+- 変更前: `as ``source_video`` / ``source_audio`` / ``reference_video_id``: it has no counterpart on ``GenerateRequest``, …`
+- 変更後: `as ``source_video`` / ``source_audio``: it has no counterpart on ``GenerateRequest``, …`（続く「so there is nothing to drop it INTO, and dropping it changes no validation outcome.」以降は変えていません）
+
+判定担当（Opus）と検算担当（V4 は「retake 段落の言い回しは 2 通りに読める」という注記のみで、判定担当の扱いに従って通しました）がこの誤りを見過ごし、Sonnet はここを正しく外していました（`sonnet_check.md` の `MOD-100` の項）。docstring を除いた構文木は HEAD と一致していることを監督が確認済みです。
+
+## 132. ★コード内のコメントと docstring の現行化を `services/`（`engines/` を除く）17 ファイルへ広げ、435 ブロック中 117 ブロックを現行化した＝コメントと docstring のみ・コードの動作は変更なし（2026-10-01）
+
+**要約**: `api/`（§131）に続き、`services/` 直下の 17 ファイル（`engines/` を除く・7,137 行）へ広げました。435 ブロック（`#` のコメント・docstring・行末のコメントの合計）のうち 117 ブロック（事実が古いもの 68・導入時期の記録だけのもの 49）を書き換え、コードは 1 文字も変わっていないことを構文木で確かめました。判定・変更ともコメントと docstring だけです。
+
+**目的**: §131 の反省を 3 点反映しました。(1) 判定モデルの比較は終わり、判定担当は Opus に固定します（§131.1 の採点で Sonnet は見逃し 27・直し残し 34、使用トークンも Opus の約 1.37 倍だったため）。(2) 試行錯誤が起きやすい作業は Opus、型どおりの作業は Sonnet に分けます。`api/` で Sonnet に任せた一覧の組み立てが出力上限に当たって手間取ったので、組み立てはスクリプト（`assemble_findings2.py`）に置き換えます。(3) 区域の大きさを 400〜550 行にします（実行時は 16 区域）。
+
+**オーナーの裁定**（2026-10-01）:
+1. 判定担当は Opus に固定する（§131.1 の結果）。
+2. 試行錯誤が起きやすい作業は Opus、型どおりの作業は Sonnet に分ける。
+3. 一覧の組み立てはスクリプト（`assemble_findings2.py`）で行う。
+4. HTTP 状態の括弧書き（「(404)」「(422)」）は凍結された API 契約なので残す。
+5. VERIFICATION_LOG の節を指すときは文書名つきで書く（「Docs/VERIFICATION_LOG.md §N」の形）。
+6. その行のコードを今の形に置く理由としての実測値（緑色のパディングが yuv420p の往復で数値のずれる実測値など）は残す。
+7. `pipeline_manager.py` の `[25,145]`・`[8,136]` の書き写しは「schema の上限」と読める形にし、`config.yaml`・`config.py` のどちらの値かは断定しない（台帳 §1-34 の結論待ち）。
+8. 117 件全部を差し替える。コードの問題の疑い 5 件と文書の食い違い 3 件は台帳 §1-35〜§1-39 へ起票する（着手するかどうかは go／no-go から判断する）。
+
+**方法**:
+1. **抜き出し・区域分け**: `extract_comments.py --prefix-map services.json` → `build_regions.py --min 400 --max 550` → `flag_comments.py --sub services --no-blame` で 435 ブロックを関数・メソッド・クラスの境目で 16 区域（R01〜R16）へ切りました。
+2. **3 つの手がかりと台帳参照の印**: §131 と同じ 3 手がかり（仕様変更の逆引き・名指しの実在確認・時点依存の言い回し）と台帳参照の印を付けました（変更日時の比較＝git blame は §131 に続き今回も対象外）。
+3. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 16 区域それぞれに Opus 1 体を判定担当として走らせました（2 波に分けて起動）。判定担当は判定と同時に正確な差し替え行（`old_lines`・`new_lines`・`action`）を `Rxx.jsonl` に書きました。`Rxx.md` の見出し・欄の名前・末尾の節名は指示書 v3 で固定しています。
+4. **検算（Opus 4 体。V1=R01〜R04、V2=R05〜R08、V3=R09〜R12、V4=R13〜R16）**: 変えるもの全件と、現行のままの判定から区域ごとに 2 割目安（最低 1 件）を抜き取り、あわせて 218 ブロックを確かめました。
+5. **統合**（`merge_changes.py`）: 判定の change 118 件に検算の修正（`overrides_verification.jsonl`: PM-046・PM-030 の `new_lines` の差し替え）を反映して結合し、`old_lines` の一致・行範囲の重なり・構文木の不変・残存語（`2026-`・`§3-`・`byte-identical`・`Phase`・`v1`・`still` など）を機械で確認しました。
+6. **区域をまたぐ揃え・再検算**: 残存語の検査で挙がった 47 行を Opus 1 体が見て、全部「残す」と判断しました。揃えの規則に当てはめ、規則 1（HTTP 状態の括弧書き）で 1 件（MR-046）だけを落としました（118 件→117 件）。揃えで変えた 1 件と、区域の 2 割抜き取り 26 件（計 27 件）を同じ担当が再検算しました。
+7. **`findings.md` の組み立て**（スクリプト `assemble_findings2.py`。§131 の Sonnet による手組みから変更）。
+8. **オーナーの了承**（了承ゲート 2）: `findings.md` の内容を了承していただきました。
+9. **適用**: 117 件の差し替え（全件が行の置き換え）をスクリプトで 15 ファイルへ当てました。改行コード（CRLF・LF がファイルごとに混在。ファイルごとに元を保つ）とエンコーディングは保っています。
+10. **証明とレビュー**: 下の「確かめたこと」「敵対的レビュー」のとおりです。
+
+**結果**:
+
+最終の判定（435 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 68 |
+| 導入時期の記録だけ | 49 |
+| 現行のまま | 318 |
+| 保留 | 0 |
+
+手がかりごとの的中率:
+
+| 手がかり | 印 | 古い（事実／記録） | 的中率 |
+|---|---:|---:|---:|
+| 1 仕様変更の逆引き | 41 | 38（23／15） | 93% |
+| 3 名指しの実在確認 | 36 | 22（14／8） | 61% |
+| 4 時点依存の言い回し | 19 | 12（6／6） | 63% |
+| 台帳参照 | 42 | 40（14／26） | 95% |
+| 1・3・4 のどれか | 80 | 57（34／23） | 71% |
+| 1・3・4＋台帳参照のどれか | 98 | 73（36／37） | 74% |
+
+見逃し（印が無いブロックのうち古い数。割合は「古い」全体 117 件に占める割合）:
+
+| 手がかり | 印なし | 古い（見逃し） | 古い全体に占める割合 |
+|---|---:|---:|---:|
+| 1・3・4 のどれか | 355 | 60（34／26） | 51% |
+| 1・3・4＋台帳参照のどれか | 337 | 44（32／12） | 38% |
+
+何もしなければ 435 件中 117 件（27%）が古いまま残ります。的中率は台帳参照で 95%、印（1・3・4 のどれか）でも 71% と高く、見逃しは印なし全体の 51%（台帳参照込みで 38%）残るため、§131 と同じく全件判定は省けません。
+
+検算: 218 ブロックを確かめ、確認済み 217 件・異論あり 0 件・一部だけ直した 1 件（PM-046。「(name/requested/effective strength)」の書き写しが残っていた）・見逃し 0 件でした（抜き取り分 100 件を含みます）。機械の検査（`merge_changes.py` の構文検査）で、判定担当の差し替え行（PM-030）に docstring の閉じ `"""` が抜けていたことも検出し、監督が修正しました。
+
+揃え: 残存語 47 行は全部「残す」と判断しました（「それでも」の意味の `still` など、時点に依存しない語がほとんど）。揃えの規則で変えたのは 1 件（MR-046。HTTP 状態の括弧書きをブロックごと落とした）、続く再検算 27 件でも新しい誤りはありませんでした。
+
+**敵対的レビュー**（適用のあと、コミットの前に 1 回。直すべき 0・注意 1・参考 6）:
+- 直すべき指摘は 0 件でした。
+- 注意 1 件は採用しました: `services/pipeline_manager.py` の `run_chain_job` の docstring（PM-062）から、連結を 1 回の呼び出しにまとめる設計意図（クリップの境目がハードカットになる理由）が消えていたため、現在形の 1 文で戻しました。
+- 参考 6 件のうち採用したのは 2 件です。`MR-014` の「existing」を落とし、`JM-001` の「R3 normalization」を「Resolution/fps normalization」に言い換えました。残り 4 件（メタデータの折り返しの見た目、`_BG_COLOR_RGB` の指し方、設計ノートへの参照の書き方〔バッククォート・節番号〕、改行コードの確認）は記録だけで文面は変えていません。
+
+**確かめたこと**:
+1. 15 ファイルすべてで `ast.parse` が成功し、docstring を除いた `ast.dump` が HEAD（`57d970d`）と一致し、コンパイルも通りました。コメント・文字列・改行・インデントのトークンを除いたトークン列も 15 ファイルすべて一致しています。
+2. HEAD 版に `changes.jsonl` の 117 件を当てた結果が、15 ファイルすべてで作業ツリーと行単位で完全一致しました（`old_lines` と HEAD の食い違いは 0）。
+3. `services/` のソースや docstring を読むテストは無い（調査済み）ので、テストは走らせていません。
+4. 追加した行に、時点に依存する語（「現在」「まだ」「currently」「now」など）、台帳の番号、行末の空白はありません。
+
+**文書の訂正**: 今回はありません（コードと文書の食い違い 3 件は台帳へ。次の「申し送り」参照）。
+
+**全体へ広げるときの結論**:
+1. 古いままの割合は区域で大きく違います（`api/` 54%・`services/` 27%）。次の区域の見積もりに使えます。
+2. 判定指示に「判定担当の差し替え行の `"""` の数の一致」を加えます（PM-030 の見逃しを踏まえた再発防止）。
+3. `findings.md` の組み立てをスクリプト化したことで、§131 比で工程が減りました。
+4. 使用トークン（概算）: 判定 16 体 約 224 万・検算 4 体 約 73 万・揃えと再検算 約 19 万・事実の一覧表 約 31 万・敵対的レビュー 約 22 万。
+
+**申し送り**:
+1. 台帳 §1-35〜§1-39 に起票した 5 件（要旨を 1 行ずつ）: block swap の状態報告の整合／読み込みの最中の `unload` で 409 の見張りが開く／連結ジョブの取り消しが結果に反映されない／`join_v2v` の尺の検査が音声の短いずれを見ない／`Docs/MULTI_ENGINE_DESIGN.md` §4.1 の文書訂正。
+2. 対象外で気づいた古い記述（`findings.md` 第 7 節の要約）: `engine/`・`engine25/`・`chain_math.py`・`config.py`、操作パネルの `src/api/types.ts`、文書側の節番号などに、段階名・台帳番号・比べる相手のない同一性の言い回しが残っています。
+3. `config.yaml.example` の件は §1-34（既出）。
+
+## 133. ★コード内コメントの現行化・第 4 区域 `engine25/`（LTX 2.5 エンジン）第 1 回（A）＝ `worker.py`・`pipeline25.py`・`chain25.py` の 460 ブロック中 155 を現行化（コメントのみ・動作は不変）＋利用者やログに出る文字列 5 件＋仕様書 v0.5.76（撮り直しの音声の裁定の補足）＋台帳 §1-40〜§1-46（2026-10-01）
+
+**要約**: `services/`（§132）に続き、LTX 2.5 のエンジン本体 `engine25/`（13 ファイル）を第 4 区域として進めました。対象が大きいため今回は 2 回に分け、第 1 回（A）としてうち 3 ファイル（`worker.py`・`pipeline25.py`・`chain25.py`。計 7,964 行）を扱いました。460 ブロックのうち 155 ブロック（事実が古いもの 98・導入時期の記録だけのもの 57）を書き換え、コードは 1 文字も変わっていないことを構文木で確かめました。あわせて利用者やログに出る文字列 5 件をオーナーが文面を決めて反映し、連結生成の撮り直し（retake）の窓の音声の扱いが仕様書のどこにも記録されていなかった点を仕様書 v0.5.76 として補い、コードの問題の疑い 7 件を台帳 §1-40〜§1-46 に起票しました。`engine25/` の残り 10 ファイルは第 2 回（B）として別に行います（範囲は A の結果を見てオーナーが決めます）。
+
+**目的**: 骨格は §132 と同じ（関数・メソッド・クラスの境目で区域を切り、Opus が全件を判定し、別の Opus が検算する）ですが、次の 3 点を変えました。
+1. 対象が 13 ファイルと大きいため、2 回（A・B）に分けてオーナーの了承を取ります。今回は A の 3 ファイルだけです。
+2. 判定担当への指示に、差し替え行の `"""` の数の一致（§132 の PM-030 の見逃しを踏まえた再発防止として §132 の結論で予告済み）に加え、テストがソースを文字列として読んでいる語の一覧（`tests/test_ltx25_band.py` の行頭 `conds_v =`・`conditionings=`・`clear_keyframes=`・`seg_clear_kf =`、`tests/test_ltx25_outpaint.py` の `inference_mode`）を渡し、これらの語を壊す書き換えを避けさせました。
+3. 1 つの関数で区域の上限（550 行）を超えるもの（`chain25.py` の `run_chain`。1,811 行）が出たため、区域分けの道具を拡張し、文の境目で区域をまたいで分けられるようにしました（判定担当には関数全体を読ませ、判定は自分の担当範囲だけに絞らせています）。道具は Python 3.12 の `.venv` で走らせています（`worker.py` が 3.12 の構文を使っており、3.10 では docstring の数え上げが落ちるためです）。
+
+**対象**: `engine25/` の 3 ファイル・7,964 行・460 ブロック（`worker.py` 172・`pipeline25.py` 108・`chain25.py` 180）。起点コミットは `50e8937` です。
+
+**方法**:
+1. **抜き出し・区域分け**: 上の目的 3 点目のとおり道具を拡張し、19 区域（400〜550 行）へ切りました。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 19 区域それぞれに Opus 1 体を判定担当として走らせました（2 波に分けて起動）。
+3. **検算（Opus 5 体）**: 変えるもの全件と、現行のままの判定からの抜き取りをあわせて 225 ブロックを確かめました。確認済み 215・異論 4・一部だけ直した 2・見逃し 4 でした。見逃し 4 件（CH-028・CH-070・CH-100・CH-101）は判定担当が保留にしていたもので、検算担当が出典と根拠を確かめて文面を確定しました。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 13 件を直し、続く再検算 39 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 155 件の差し替えを適用しました。
+7. **証明とレビュー**: 下の「証明」「敵対的レビュー」のとおりです。
+
+**結果**:
+
+最終の判定（460 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 98 |
+| 導入時期の記録だけ | 57 |
+| 現行のまま | 305 |
+| 保留 | 0 |
+
+古いままの割合は 34%でした。これまでの区域（`services/` 27%・`api/` 54%・`services/engines/` 60%）と比べると、その間に収まります。
+
+**基準に足した規則（A 固有）**: 判定の基準に次の 5 つを足しました。
+- 研究段階の事実番号「fact B」「F2」「M」は、Docs に定義が無いため、参照している側からも落とす（B の対象である `gguf_gemma4.py`・`assets_export.py` にも残っています）。
+- 検証の関門の名前（「G1(a)」など）は、段階ごとに別の節を指す（第 1 段は §72.2、第 2 段は §73.2、撮り直しと末尾素材は §78.3）。
+- 上流の定数（`DISTILLED_SIGMAS` など）の書き写し「8 + 3」は、起動時にこの形を検査する `ltxcore_compat.verify()` を指す形にする。
+- `seg_clear_kf` の直前のコメント（§78.7(8) が実測根拠の正本と定めているもの）は、数値・判定線・裁定の帰属を残し、日付と段階名だけを落とす。
+- bf16 の書き写しは、`DTYPE` か実際の dtype の式を指す形にする。
+
+**証明**: 3 ファイルとも、docstring を除いた構文木が起点（`50e8937`）と一致しました。コメントと docstring 以外のトークン列の差は、オーナーが文面を決めた文字列 5 件だけでした。
+- `engine25/pipeline25.py` の `IGNORED_FIELDS["vae_mode"]` の理由文
+- 同ファイルの `_log_ignored` の既定の理由文（段階名「v1」を含んでいた）
+- 同ファイルの `_default_device` の例外文（上流のステップ数「8 sigma steps」の書き写し）
+- 同ファイルの `_swap_keep_resident` の OFF のログ（「from the GGUF」→「from the weights」）
+- `engine25/worker.py` の `--context` の help（アプリの既定値「73」の書き写し）
+
+常駐量の名札「(~7.7 GiB)」「(~4.6 GiB)」と `--keep-resident*` の help は、オーナー裁定で据え置きました（OFF のログで見積もりと実際の解放量を並べて読ませる設計のためです）。
+
+**テスト**: `tests/test_ltx25_band.py`・`test_ltx25_outpaint.py`・`test_ltx25_inpaint.py` を `.venv-engine-ltx25`（pytest が入っていないため `outputs/start-end-bridge-2026-09-07/implA_engine_runner/run_ltx25_pytest.py` と `--noconftest` を使用。GPU での生成はしていません）で 98 件合格しました。アプリ側 `.venv` で `tests/test_ltx25_adapter.py`・`test_ltx25_api_guard.py` を 265 件合格しました。`CUDA_VISIBLE_DEVICES` を空にすると import 時のデバイス問い合わせで収集そのものが失敗するため、環境変数はそのまま走らせています。
+
+**仕様書 v0.5.76**: `engine25/chain25.py` と `engine/pipeline/chain_pipeline.py` が実装している撮り直しの窓の音声の 3 つの扱い（符号化が窓の長さに足りず `regenerate_audio=true` なら失敗・`false` なら警告のみで凍結なし・音声トラックが無ければ凍結なしで続行）は、コードのコメントが「オーナーの裁定（VERIFICATION_LOG §55.6）」として指していたにもかかわらず、§55.6 にも Docs のどこにも記録がありませんでした。オーナーに確認したところ制作時の会話で決めた記憶があるとのことで、Docs への追記を指示されました。仕様書 §6.2 に「チェーンの `retake`（撮り直し）の音声の補足」を新設し、`engine25/chain25.py` のコメントはここを指す形に直しました。LTX 2.3 側（`engine/`）のコメントは今も §55.6 を指していますが、`engine/` は別の区域（第 4 区域の対象外）のため据え置いています。
+
+**台帳**: コードの問題の疑いを 7 件、§1-40〜§1-46 に起票しました（着手は個別に go／no-go の検討から）。§1-46（`source_had_audio` が音声があったのに `false` になる場合がある）は、仕様書の追記の過程で見つかったものです。
+
+**敵対的レビュー**（Opus。適用のあと 1 回。直すべき 1・注意 5（採用 4）・参考 6（採用 4・不採用 2））:
+- 直すべき 1 件: PL-043。LTX 2.3 側の検査 G-A を「LoRA を断る」と誤って説明していました。実際は GGUF の `gguf_per_layer_quant=False` で `keep_resident` を求めたときに失敗させる検査で、その通りに訂正しました。
+- 注意 5 件のうち採用 4 件: 仕様書の 422 の判定場所を `PipelineManager.preflight_retake_window` に訂正／`vae_mode` の理由文を「読み込んだ映像 VAE ファイルで決まる」に精密化（オーナー決定の文面からの変更。趣旨は同じ）／`WK-001` の `$ltx25DirectPins` が固定する範囲の言い方を訂正／改訂履歴と台帳の記録の節の参照を訂正。
+- 参考 6 件のうち採用 4 件: §1-45 の見出し／CH-100 の 1 つ目の枝に `regenerate_audio=True` の条件を明記／WK-035 と PL-001 の理由を復元。不採用 2 件は「from the weights」の語の重複（オーナー決定の文面のため）と CH-108 の「last」（撮り直しのジョブの中では正しいため）です。
+
+**費用の目安**（Opus のトークン、概算）: 判定 約 320 万・検算 約 108 万・揃え 約 35 万・レビュー 約 37 万・反映と修正 約 26 万。計画の見込み（A 約 620 万）の範囲内でした。
+
+**申し送り**（B と後の区域へ）:
+1. `gguf_gemma4.py` 3 箇所・`assets_export.py` 1 箇所の「F2」。
+2. `ltxcore_compat.py` の版と `LimitsConfig` の値の書き写し。
+3. `chain25.py` のモジュール docstring 以外の B 対象ファイルの「8 + 3」3 箇所。
+4. `engine/`（LTX 2.3）側の同型の古い記述（`engine/worker.py`・`chain_pipeline.py`・`sage_attention_service.py`・`block_swap_prefetch.py`）。
+5. `tests/test_ltx25_band.py` の docstring の段階名（テストは対象外）。
+6. 事実表 A-52 の `end_audio_status` の値域に `"frozen"`／`"partial"` が無い。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 134. ★コード内コメントの現行化・第 4 区域 `engine25/` 第 2 回（B）＝残り 10 ファイル（`outpaint25.py`・`inpaint25.py`・`gguf_transformer.py`・`gguf_gemma4.py`・`ltxcore_compat.py`・`reference25.py`・`neg_prompt25.py`・`sage_selfcheck25.py`・`neg_selfcheck25.py`・`assets_export.py`）の 525 ブロック中 132 を現行化（コメントのみ・動作は不変）＋利用者やログに出る文字列 6 件＋台帳 §1-47〜§1-50＋ §80.2 の訂正＝ `engine25/` 全体の現行化が完了（2026-10-01）
+
+**要約**: §133（A）に続き、`engine25/` の残り 10 ファイル（9,365 行）を第 2 回（B）として進めました。オーナー指示でファイルは分割せず一括で扱いました。525 ブロックのうち 132 ブロック（事実が古いもの 90・導入時期の記録だけのもの 42）を書き換え、コードは1文字も変わっていないことを構文木で確かめました。あわせて利用者やログに出る文字列 6 件をオーナーが文面を決めて反映し、コードの問題の疑い 4 件を台帳 §1-47〜§1-50 に起票しました。検算の過程で、§80.2 の「`uninstall` はビルド経路の最初に走り、そのとき殻は meta になっている」という記述が、コードの実際の呼び出し順と逆であることが分かり、§80.2 に訂正を1行足しました（本文そのものは書き換えていません）。これで `engine25/` 全体の現行化が完了しました。
+
+**目的**: 骨格は §133（A）と同じです（関数・メソッド・クラスの境目で区域を切り、Opus が全件を判定し、別の Opus が検算する）。判定担当への指示（v5）に「A で決まった扱い」の節を1つ足しました。
+- 研究段階の事実番号「fact B／F1／F2／E／L」は Docs に定義が無いので、参照している側からも落とす。
+- 検証の関門の名前は、段・テーマごとに別の節を指す。
+- 上流の定数の書き写し「8 + 3」は `ltxcore_compat.verify()` か定数名を指す形にする。
+- bf16 の書き写しは `DTYPE` か実際の dtype の式を指す形にする。
+- 裁定の帰属は残し、日付と段階名だけを落とす。
+- 上流 1.2.0 との違いは版番号を書かず、固定先の版（`$ltx25DirectPins`）の言い方にする。
+- 行番号の書き写しは関数名を指す形にする。
+- 撮り直しの音声の補足は仕様書 §6.2 を指す。
+- `inspect.getsource` が頼る目印（needle）を壊さない——`run_inpaint` の中のコメントに「inpaint crop:」「restore_and_measure_(」を書かない、`run_outpaint` の中のコメントに `def _encode_reference(`・`def _reencode(` を書かない。
+
+**対象**: `engine25/` の残り 10 ファイル・9,365 行・525 ブロック。起点コミットは §133 と同じ `444c8dc`（A のコミット。B の対象ファイルは A では変わっていません）。
+
+**方法**:
+1. **抜き出し・区域分け**: 22 区域へ切りました（最大 642 行・50 ブロック＝`ltxcore_compat.verify` の前半で切れる区域があります）。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 22 区域それぞれに Opus 1 体を判定担当として走らせました。
+3. **検算（Opus 5 体）**: 240 ブロックを確かめました。確認済み 233・異論 3・一部だけ直した 1・見逃し 3 です（GT-073・NP-023・NS-025。判定担当が保留にしていたもので、検算担当が根拠を確かめて文面を確定しました）。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 34 件を直しました（「uninstall は meta の殻に走る」という記述 5 箇所を「読み込み後に呼ばれる。殻が meta になるのはビルドの間だけ」に統一・上流の版の言い換えの統一・「~32 MB」は §69.8 を指す形に統一・行の折り返し、が主な内容です）。続く再検算 58 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 132 件の差し替えを適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**: 変えたのは 132 件（事実が古いもの 90・導入時期の記録だけのもの 42）、現行のまま 393 件でした。古いままの割合は 25%で、A の 34%より低くなりました。
+
+**監督の裁定（オーナー確認済み）**: 判定担当は「古くなったのではなく、書かれた当初からコードと合わない文」を参考に留めていましたが、目的は現在の仕様との食い違いを無くすことなので、**コードの挙動や理由についての誤った主張は、書かれた時期にかかわらず (c) として直す**と定めました。該当は 14 件です（GG-001・GG-031・GG-049・GT-008・GT-016・GT-040・GT-051・LC-014・LC-045・LC-061・NP-001・NP-019・NP-021・RF-023）。例えば「48 層を検める」と書くコメントがありますが、コードが検めているのは層数の一致と並びだけです。「`Audio.to` が唯一の cast」と書くコメントもありますが、上流は mel の出力にも dtype を当てています。「check 6」と書きながら実際には check 9 を指していた例もありました。単位・数え方・言い回しだけの軽い不正確さ（例えば「385 MiB」の単位の違い）は参考に留めました。この裁定は後の区域にも適用します。
+
+**証明**: 10 ファイルとも、docstring を除いた構文木が起点と一致しました。コメントと docstring 以外のトークン列の差は、オーナーが文面を決めた文字列 6 件だけです。
+- `outpaint25.py`: `_encode_reference_conditionings`・`_reencode_stage2` のログ 3 文から、Inpainting のジョブでも「outpaint」と名乗っていた接頭辞を外しました。
+- 同ファイルの `_require_frames` の例外文は「pad_green_mp4」から「The canvas writer must honour the exact-frame-count guarantee.」に変えました。
+- 同ファイルの `_freeze_source_audio` の警告は「widened frame」を「edited frame」に変えました（`_mux_plan` の docstring も同じ語に揃えました）。
+- `gguf_gemma4.py` の `build_text_encoder_module_ops` のログからは、段階名「v1 scope」と「needs torchvision」を外し、「which this engine does not run」に変えました。
+
+`ltxcore_compat.py` の `_fail(...)` の検査失敗文に含まれる上流の版番号は、オーナー裁定で据え置きました（固定した版との違いを報告するのが役目のためです）。改行コードは各ファイルの元の形式を維持しました（CRLF 7・LF 3。`reference25.py`・`sage_selfcheck25.py`・`assets_export.py` は元から LF でした）。
+
+**テスト**: `tests/test_ltx25_band.py`・`test_ltx25_outpaint.py`・`test_ltx25_inpaint.py`・`test_ltx25_reference_encode.py`・`test_ltx25_keep_resident_registry.py` を `.venv-engine-ltx25`（`outputs/start-end-bridge-2026-09-07/implA_engine_runner/run_ltx25_pytest.py`・`--noconftest`。GPU での生成はしていません）で 110 件合格しました。アプリ側 `.venv` で `tests/test_ltx25_adapter.py`・`test_ltx25_api_guard.py` を 265 件合格しました。
+
+**台帳**: コードの問題の疑いを 4 件、§1-47〜§1-50 に起票しました（着手は個別に go／no-go の検討からです）。
+
+**§80.2 の訂正**: §80.2「(2) 取り付けと取り外し」は、NAG／VSF の `uninstall` が「ビルド経路の最初に走り、そのとき殻は `Disposable.dispose()` を通過済み＝全パラメータが `device="meta"`」と書いています。しかしコードでは `_build_transformer` が `_ensure_neg_installed`（`uninstall` を含みます）を `build()`・`_place_transformer`・`_ensure_sage_installed` の後、最後に呼んでいます。つまり `uninstall` が呼ばれる時点で殻は読み込み済みで、殻が meta になるのはビルドとビルドの間だけです。コメント側（`gguf_transformer.py`・`neg_prompt25.py`・`neg_selfcheck25.py`・`sage_selfcheck25.py` の 5 箇所）はコードに合わせて直しました。§80.2 の本文そのものは書き換えず、本節で訂正します（§78.7 を §78.13 で訂正したのと同じ形です）。
+
+**敵対的レビュー**（Opus・(b)／(c) 89 ブロック全件＋抜き取り）:
+- **直すべき 1 件**: 台帳 §1-48 の「意図して書かれた挙動」の根拠が、今回書き直したコメントで、しかも場所が違っていたため訂正しました。
+- **注意 6 件**: 採用 4 件はこちらです——GT-091 の「only」の言い切りを外した／`gguf_gemma4.py` の見出し「never edited」を GT-002 と揃えた／IP-013 の「future MCP tool」を OP-053 と揃えた／RF-022 に据え置きの理由（出力をバイト同一に保つ・§101.2）を戻した。残り 2 件は、§134 を本節として書き起こすことと、`engine/` 側の同型の記述を申し送りに回すことで答えました。
+- **参考 3 件**: 参照なしの警告にジョブの種類が出なくなった点（オーナー決定の文面）・改行コードの表現・`ltxcore_compat` の docstring の番号です。
+
+**費用の目安**（Opus のトークン、概算）: 判定 約 356 万・検算 約 106 万・揃え 約 43 万・レビュー 約 31 万・反映と修正 約 19 万でした。A と合わせて `engine25/` 全体で約 1,030 万となり、計画の見込み（約 1,200 万）の範囲内でした。
+
+**申し送り**（後の区域へ）:
+1. `engine/transformer/sage_attention_service.py` の `SageAttentionService.uninstall` の docstring は「ビルド経路の最初に走る」「meta の殻に対して」と、今回直した 5 箇所と逆のことを言っています（`engine/` の回で同じ形に直します）。
+2. `engine/transformer/block_swap_service.py`・`block_swap_prefetch.py`・`sage_attention_service.py` が `engine25/gguf_transformer.py` を行番号で指していますが、ずれています。
+3. `engine/` 側の「byte-identical to before」「Phase B」「§1-15」など、同型の古い記述。
+4. `engine/pipeline/chain_pipeline.py` の Retake の音声の裁定の出典が §55.6 になっていますが、仕様書 §6.2 を指すべきです。
+5. `tests/test_ltx25_band.py`・`test_ltx25_reference_encode.py` の docstring の段階名（テストは対象外）。
+6. `config.py` の「conservative v1 cap」。
+7. 事実表 A-52 の `end_audio_status` の値域。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 135. ★コード内コメントの現行化・第 5 区域 `engine/`（LTX 2.3 の推論エンジン）第 1 回（A）＝ `engine/pipeline/`（6 ファイル）・`worker.py`・`api_types.py`・`lora_types.py`・`progress_shim.py` の 532 ブロック中 204 を現行化（コメントのみ・動作は不変）＋利用者やログに出る文字列 4 件＋台帳 §1-51〜§1-58 と §4-2・設計書 §7.3 の訂正＋ engine25 側のコメントの誤り 3 件の訂正（2026-10-01）
+
+**要約**: §133・§134（`engine25/`）に続き、LTX 2.3 の推論エンジン本体 `engine/` を第 5 区域として進めました。今回は第 1 回（A）として、`engine/pipeline/`（6 ファイル）と `worker.py`・`api_types.py`・`lora_types.py`・`progress_shim.py`（計 10 ファイル・8,563 行）を扱いました。532 ブロックのうち 204 ブロック（事実が古いもの 144・導入時期の記録だけのもの 60。うちブロックごと削除は 3）を書き換え、コードは 1 文字も変わっていないことを構文木で確かめました。あわせて利用者やログに出る文字列 4 件をオーナーが文面を決めて反映し、上流のスケジューラの説明など挙動そのものの誤りも見つかって訂正し、コードの問題の疑い 8 件を台帳 §1-51〜§1-58 に起票し、台帳 §4-2 と設計書 `INPAINTING_DESIGN.md` §7.3 の訂正をオーナー指示で行いました。検算の過程で `engine25/` 側のコメントの誤りも 3 件見つかり、あわせて直しました。`engine/` の残り（B・C）は別に行います。
+
+**目的**: 骨格は §133・§134 と同じ（関数・メソッド・クラスの境目で区域を切り、Opus が全件を判定し、別の Opus が検算する）です。`engine/` 固有として、判定担当への指示に次を足しました。
+1. 節番号が指す文書は 3 系統あるため、裸の番号には文書名を補う——「VERIFICATION_LOG §N.M」と明記されたものはそのまま、裸の「§4.x」「§8」などは `Docs/PRUNAVAED_WORKORDER.md`、「§6.2」「§7.6」は `Docs/INPAINTING_DESIGN.md`、ダッシュ付きの「§N-M」は台帳を指す。
+2. Retake（撮り直し）の窓の音声の 3 つの裁定の出典は、§55.6 ではなく仕様書 §6.2 の補足（v0.5.76。§133 で新設）を指す。
+3. 共有部品の docstring は、誰が呼ぶかを Grep で確かめたうえで、両エンジン（`engine/`・`engine25/`）で成り立つ書き方にする。
+4. 行番号の書き写しは関数名を指す形にする。
+5. 上流の版の言い方は `scripts/install_ltx.ps1` の `$engineDirectPins` を指す形にする。
+6. `engine25/` で決まった扱い（研究段階の番号・関門名は Docs に定義が無ければ落とす、「当初から合わない文」であっても挙動についての誤った主張なら書かれた時期にかかわらず直す〔§134 の裁定〕）を同じ基準にする。
+7. ソースを文字列として読んでいるテストは `tests/test_retake_payload.py` の 1 件だけだと確かめた（`chain_pipeline.py` を `ast.parse` して `retake_meta` の鍵を拾うだけで、コメントは読まない）。
+
+道具は 2 点拡張しました。`apply_changes.py` にブロックごと削除（`delete`）を足し（`merge_changes.py` が安全性を検査済みのものだけに適用）、`flag_comments.py` が使う辞書の置き場を `comment-audit` 直下に揃えました。
+
+**対象**: `engine/` は 76 ファイル・26,074 行ですが、`engine/preprocess/vda/`（22 ファイル。Video-Depth-Anything の vendored コードで `VENDOR_NOTICE.md` に明記）は対象外としました。残り 54 ファイル・23,521 行を 3 回に分けます——A: `pipeline/` と `worker.py` 等 10 ファイル・8,563 行、B: `transformer/`・`gemma/`・`vae/`、C: `gguf/`・`sft_quant/`・`outpaint/`・`inpaint/`・`preprocess/`。今回は A です。起点コミットは `da19554` です。
+
+**方法**:
+1. **抜き出し・区域分け**: 21 区域（400〜550 行）へ切りました。`run_chain` と `fast_video_pipeline.py` は関数の途中ではなく文の境目で区域をまたいで分けました。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 21 区域それぞれに Opus 1 体を判定担当として走らせました。
+3. **検算（Opus 7 体）**: 306 ブロックを確かめました。確認済み 300・異論 4・一部だけ直した 1・見逃し 1 でした。異論 4 件は FV-061（保留文「戻り先の標準のテキストエンコーダ」は実在しない）・FV-079・FV-092（Beta スケジューラの説明）・CP-009、見逃しは FV-131 です。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 51 件を直しました（規則 6 の対の文・節の表記・折り返し・区域外の取り残し CP-054／FV-004 が主な内容）。続く再検算 80 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 204 件の差し替えを適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**:
+
+最終の判定（532 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 144 |
+| 導入時期の記録だけ | 60 |
+| 現行のまま | 328 |
+| 保留 | 0 |
+
+古いままの割合は 38%で、これまでで最も高くなりました（`engine25/` A は 34%・B は 25%）。
+
+**上流の挙動についての訂正**: 検算と監督が `.venv-engine` の `ltx_core/components/schedulers.py` を直接開いて確かめたところ、当初から誤っていた上流の挙動の説明が見つかり、書かれた時期にかかわらず訂正しました（§134 の裁定どおり）。`LinearQuadraticScheduler` は線形部と二次部の関係が逆に書かれていました。`BetaScheduler` は Beta(0.6, 0.6) が時刻の密度を両端に寄せる分布であること、`shift` を通した後のシグマの刻みは σ=1.0 付近で最小になることの 2 点が誤っていました。このほか「入口は 4 つ」「NAG の後に sage が包む」「transformer は毎ジョブ組み直す」「Retake と素材（末尾）は排他」「素材（末尾）の尾は `1 - strength`」「`_normalize_conditioning_images` は 0 か 8n+1 の格子」などの説明も訂正しています。
+
+**証明**: 13 ファイル（`engine/` の 10 ＋ `engine25/` の 3）とも、docstring を除いた構文木が起点と一致しました。コメントと docstring 以外のトークン列の差は、オーナーが文面を決めた文字列 4 件だけです。
+- `engine/worker.py` の起動ログ 2 文から、段階名「(Phase 5B VRAM fix)」と作業項目名「(F2)」を外しました。
+- `engine/pipeline/fast_video_pipeline.py` の `_install_component_sources` のログ「(text projection NOT wired — Phase 2)」を「(text projection is wired by the Gemma GGUF install)」に変えました。
+- `_swap_registry` の常駐 OFF のログから「block-swap CPU masters」と実測値「~1.9GB」を外しました。
+
+`_resolve_keep_resident` の降格の警告に残る実測値（11GB・+11.4GB・96 percent）は、オーナー裁定で据え置きました（降格の理由を数で示す役目のためです）。改行コードは全ファイル CRLF を維持しました（Python でバイト数を数えて確認）。
+
+**テスト**: `.venv-engine`（pytest あり）で §102.5・§105.5 の 16 ファイルを `--noconftest -p no:cacheprovider` で走らせ、313 件合格（失敗 0）でした。§107.3 の 321 件からの減少は、その後のテスト側の変更によるもので、今回の差分の影響ではありません。アプリ側 `.venv` で `test_step_progress`・`test_outpaint_canvas`・`test_inpaint_geometry`・`test_retake_payload` を走らせ、65 件合格・19 件スキップでした。`engine25/` の 3 ファイルにも触れたため、`.venv-engine-ltx25` で `test_ltx25_band`・`test_ltx25_outpaint`・`test_ltx25_inpaint` も合格しました。
+
+**台帳**: コードの問題の疑いを 8 件、§1-51〜§1-58 に起票しました（着手は個別に go／no-go の検討から）。
+- §1-51: Gemma の GGUF の取り付けに失敗しても `load` は成功扱いになる。
+- §1-52: GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性。
+- §1-53: V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない（§25.2 の実測どおり、符号化の段で失敗する見込み）。
+- §1-54: マスクの二値化の基準が 2 箇所で違う。
+- §1-55: `keep_resident_used` の報告が切替の失敗を反映しない。
+- §1-56: `peak_vram_mb` のリセットにより、参照動画の符号化より前のピークが落ちる（連結では区間ごと。`vram_within_16gb` も同じ）。
+- §1-57: 区切り幅の既定 `chunk_size or 8` が定数の値を書き写している。
+- §1-58: 使われていないコード一式。
+
+あわせて §1-46 に、LTX 2.3 側（`engine/pipeline/chain_pipeline.py` の `_encode_retake_window`）も同じ作りである旨を追記しました。
+
+**文書の訂正**（オーナー指示「文書を今直す」）:
+- 台帳 §4-2「attention tiling の本番投入」は、「SDPA へのグローバルパッチとして実装・配線は済んでいるが既定は OFF」と書いていましたが、実装はエンジンの移設時に除去済みでした（残っていた引数の除去は §16.1）。題を「attention tiling の再実装」に改め、概要と「何が塞いでいるか」を書き直しました。設定キー `attention_tile_size` は `config.py`・`config.yaml.example`・`GET /config` に残っていますが、`engine/` 側に実装も引数も無いためワーカーには届きません（扱いは別途）。
+- `Docs/INPAINTING_DESIGN.md` §7.3「音声凍結・音声の初期化・音声の付け直しの 3 か所だけ」を、実際に画角拡張と共有しているもの（音声の凍結・初期化・付け直し、キャンバスと復号結果を 8 ビットで扱う補助関数、ブレンドの区切り幅、Stage-2 のシグマ、`pyramid_blend` のブレンドの仕組み）を数を書かずに列挙する形に直しました。
+
+**`engine25/` 側のコメントの誤り 3 件の訂正**: 今回の検算で、§133・§134 で既にコミット済みの `engine25/` 側のコメントにも誤りが見つかり、オーナー了承のうえ直しました。
+- `engine25/chain25.py` の Retake の音声の 2 つ目の枝の説明「under-freeze」を、「凍結を丸ごとやめる」に変えました（2.3 側 `_encode_retake_window` の docstring と同じ事実になりました）。
+- `engine25/inpaint25.py` の `_decode_mask_u8` の docstring「`lut` も赤チャンネルを読む」を、`fill_mask_green_mp4` の `lut` は `format=gray` を経たあとの輝度で二値化する、という説明に変えました。
+- `engine25/outpaint25.py` の (4)「2.3 のデコーダは `(1, C, 1, H, W)`」を、2.3 の `decode_video_from_file` も `(1, H, W, C)` uint8 で返すこと、`(1, C, F, H, W)` は次に呼ぶ `resize_and_center_crop` の戻り値であることに変えました。
+
+**敵対的レビュー**（Opus・(b)／(c) 130 ブロック全件＋削除だけ 74 ブロックの抜き取り＋上流の実行確認）:
+- **直すべき 1 件**: 台帳 §1-53 の「影響」が §25.2 の実測（音声 VAE はステレオ入力必須）と逆向きに書かれていたため、訂正しました。
+- **注意 9 件**: 全件採用しました——§1-56 の連結での広がり方の補足／§1-57 の数え方の訂正／§1-54 に `engine25/` 側（`_decode_mask_u8`）を追加／台帳 3 件が今回書いたコメント自身を根拠にしていた点をコードの記述に置き換え／FV-079 の理由を §101.2 の裁定に差し替え／FV-031 を削除した跡の空行の整理／§7.3 の挙げ漏れを補った／ATY-007 のテストの名指し（レビューの「連結側のテストは無い」は誤りで `test_chain_payload_omits_nag_by_default` が実在するため、両方を名指しする形に訂正）／§4-2 の題と「何が塞いでいるか」の書き方。
+- **参考 3 件**: 全件採用しました——OPL-010「mp4 writer's AAC encoder」の訂正・FV-059「戻り先は無い」の訂正・§4-2 からの §16.1 の引き方。
+
+**費用の目安**（Opus のトークン、概算）: 事実の一覧表 約 82 万（A・B・C 共通）・判定 約 340 万・検算 約 146 万・揃え 約 54 万・レビュー 約 38 万・反映と修正 約 16 万。A 全体で約 600 万となり、計画の見込み（約 470 万）を上回りました（古い割合が高く、書き直しが多かったためです）。
+
+**申し送り**（B・C へ）:
+1. `engine/transformer/nag_service.py` に、定義の無い研究段階の計画番号 D1〜D5 が残っています（A では落としていません）。`NagService.install` の例外文「D2's ordering guarantee」は外部（上流）の文言です。
+2. `sage_attention_service.py` の `uninstall`・`_strip_wrappers` の docstring「ビルド経路の最初に meta の殻に対して」は誤りです（§134 の訂正と同じ向き）。
+3. `block_swap_service.py`・`block_swap_prefetch.py` の `engine25/` への行番号参照はずれています。
+4. 自己検査 3 本にある「`.venv-engine` には pytest が無い」は、今は誤りです。
+5. `outpaint/canvas.py` の「64px VAE stride x 2」は、上流の空間ストライド 32 と合いません。
+6. `preprocess/` の「future DWPose」「Slice 2／3」。
+7. `gemma/gguf_quant_service.py` の「Phase 2」「`model_ledger.py:158-169`」。
+
+**対象外**（今回は手を付けていません）: `chain_math.py`・`config.py` の時点依存の言い回し（「pre-long-A2V」「no longer reachable」「now」など）、`services/engines/ltx/adapter.py` の「43GB monolith」「~16.9GB」、本書 §48.8 の「OFF 時の残留に先読み ON 時の DiT 分」という記述（終了時の後始末の後では成り立たない可能性がありますが、記録した時点の観測としては正しいため）、事実表の `outputs/phase5b_diag` の記述の誤り、`engine/fp8/__pycache__/` に残るソースの無いキャッシュ。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 136. ★コード内コメントの現行化・第 5 区域 `engine/` 第 2 回（B）＝ `engine/transformer/`（10 ファイル）・`engine/gemma/`（3）・`engine/vae/`（2）の 540 ブロック中 156 を現行化（コメントのみ・動作は不変）＋利用者やログに出る文字列 10 件＋台帳 §1-59・§1-60 と §1-58 の追記＋ VERIFICATION_LOG §77.7 (a)・§43.2／§43.4・§75.7 (5) の訂正＋ engine25 側のコメント 2 件の訂正（2026-10-01）
+
+**要約**: §135（A）に続き、`engine/` の第 2 回（B）として `engine/transformer/`（10 ファイル）・`engine/gemma/`（3 ファイル）・`engine/vae/`（2 ファイル）計 15 ファイル・8,264 行を進めました。540 ブロックのうち 156 ブロック（事実が古いもの 128・導入時期の記録だけのもの 28）を書き換え、コードは 1 文字も変わっていないことを構文木で確かめました。あわせて利用者やログに出る文字列 10 件をオーナーが文面を決めて反映し、台帳 §1-59・§1-60 を新しく起票し §1-58 に追記しました。検算の過程で VERIFICATION_LOG 側の記述にも誤りが 3 件見つかり、§77.7 (a)・§43.2／§43.4・§75.7 (5) にそれぞれ訂正を 1 行添えました（本文そのものは書き換えていません）。`engine25/` 側のコメントの誤りも 2 件見つかり、あわせて直しました。`engine/` の残り（C）は別に行います。
+
+**目的**: 骨格は §135 と同じ（関数・メソッド・クラスの境目で区域を切り、Opus が全件を判定し、別の Opus が検算する）です。判定担当への指示（v6.1）に、A（§135）からの申し送りを足しました。
+1. 検証の関門の名前は、A で挙げたものを含めて置き換え先を明記する（F2→§26.3、G0→§24.2／§25.2、G3→§21.5 など）。
+2. 研究段階の計画番号 D1〜D5 は、Docs に定義が無いので落とす。
+3. 「spike」という語は、現行も使う意味（着手前の GO/NO-GO 判定）と、撤去済みの研究段階の意味の両方があるので、都度どちらかを見極める。
+4. 事実の一覧表に無い節でも、開いて事実と合っていれば指してよい。
+5. 鍵が欠落したときの既定値についての記述は、現行のまま残す。
+6. コメントが挙げている例示の語（ログの文言・設定キー名など）は、書き換えても落とさない。
+7. 「入口は◯つ」のような数え方の記述は、現行の入口の数と照合する。
+8. 共有部品の docstring は、誰が呼ぶかを Grep で確かめたうえで直す。
+
+**対象**: `engine/transformer/`（10 ファイル）・`engine/gemma/`（3 ファイル）・`engine/vae/`（2 ファイル）計 15 ファイル・8,264 行・540 ブロック。起点コミットは §135 と同じ `fce3d08`（A のコミット。B の対象ファイルは A では変わっていません）。
+
+**方法**:
+1. **抜き出し・区域分け**: 19 区域へ切りました。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 19 区域それぞれに Opus 1 体を判定担当として走らせました。
+3. **検算（Opus 6 体）**: 261 ブロックを確かめました。確認済み 253・異論 3・一部だけ直した 3・見逃し 2 でした。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 31 件を直しました。続く再検算 51 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 156 件の差し替えを適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**:
+
+最終の判定（540 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 128 |
+| 導入時期の記録だけ | 28 |
+| 現行のまま | 384 |
+| 保留 | 0 |
+
+古いままの割合は 29%で、A（§135）の 38%より低くなりました。
+
+**区域をまたぐ揃えの裁定**: 計画上の呼び名「Lever 3」（Docs に定義が無いが、`gguf_quant_service.py` のログ 2 件と例外 1 件が印字する）は、ログを出す `gguf_quant_service.py` では残し、`layer_offload_service.py`・`text_encoder_configurator.py` では関数名 `_install_cpu_embed_offload` を主にして各ファイルの初出だけ「(Lever 3)」を添えることにしました（ログから Grep で辿れるようにするためです）。`vsf_selfcheck.py` の見出しの check 番号は、撤去された旧 check 3（§41.10）の欠番を詰めて 1〜5 に揃えました（印字される検査名に番号は無く、モジュール docstring の一覧と一致します。`neg_selfcheck25.py` は `vsf_selfcheck` を継承しないので影響しません）。
+
+**共有部品（`sage_attention_service`・`block_swap_service`・`block_swap_prefetch`・`nag_service`・`vsf_service`・自己検査の基底）の docstring は**、2.3（殻を毎ジョブ組み直す。取り外しは無い）と 2.5（殻を使い回し、ビルドごとに前のラッパを剥がして付け直す。ジョブ末の後始末はワーカーの finally から `reset_acceleration_job`／`reset_nag_job` を通す）の両方で成り立つ書き方に統一しました。`SageAttentionService.uninstall`・`_strip_wrappers` の docstring「ビルド経路の最初に meta の殻に対して走る」（§134 の申し送り）は、2.5 の `_ensure_sage_installed` が `build()` で重みを読み込み LoRA を当てて配置した後に呼ぶ事実に揃えました。
+
+**当初から誤っていた主張の訂正の例**: SA-034（2.3 でマスクの分岐が生きる理由は上流 `Attention.forward` が mask をそのまま渡すこと。NAG/VSF は `mask=None` で呼ぶ。2.5 の自己試験の masked 呼び出しは `masked_attention_function` へ行く）、SA-021（元の callable は 2.3 が DEFAULT・2.5 が AUTOMATIC）、LOS-001（層オフロードの encode ピークは §11.3 のとおり約 10.5GB で「数 GB に抑える」ではない）、LOS-020（経路名を見ずに最大の ModuleList を選ぶ）、GQS-019（渡される鍵 op は `TEXT_ONLY_GEMMA_TEXT_ENCODER_KEY_OPS`）、GQS-052（keep-resident では `load()` の 2b は何もせず connector は `patched_text_encoder` の中の移動で移る）、NG-019（上流の蒸留パイプラインは batch=1・1 プロンプト）、VS-001（VSF の alpha の API の上限は `api/models.py` の `Field`。§41.9 の結論は忠実度の崩壊が先に来るという点です）、PVS-001（G2-6 は CUDA が無ければ FAIL で終了コード 1）です。上流の主張は検算と監督が `.venv-engine` の `ltx_core` を開いて確かめました。
+
+**証明**: 18 ファイル（`engine/` の 16 ＋ `engine25/` の 2）とも docstring を除いた構文木が起点と一致しました。コメントと docstring 以外のトークン列の差は、オーナーが文面を決めた文字列 10 件だけです。
+- `block_swap_prefetch_selfcheck.py` の自己検査の検査名 3 つから、台帳番号と段階名「(§3-167)」「(§3-168)」「(§3-168 C-3)」を外しました。
+- `nag_service.py` の `NagService.install` の例外文「(D2's ordering guarantee)」を「(the ordering guarantee NAG relies on)」に変えました。
+- `gguf_quant_service.py` の connector の供給元を「GGUF」と決め打ちするログ 3 文と例外文 1 文を、transformer ファイル一般の言い方に変えました。
+- `gguf_quant_service.py` と `fast_video_pipeline.py` の「Gemma stays compressed in VRAM」のログ 2 文を「decoder layers in VRAM, or streamed from CPU when LTX_TE_OFFLOAD is on」に変えました。
+
+数値は残しました。改行コードは全ファイル CRLF でした（Python でバイトを数えて確認）。
+
+**テスト**: `.venv-engine` の 16 ファイル 313 件合格（失敗 0）でした。アプリ側 `.venv` の 4 ファイル 65 件合格・19 件スキップでした。`engine25/` の 2 ファイルに触れたので `.venv-engine-ltx25` の 5 ファイルも合格しました。
+
+**`engine25/` 側のコメントの訂正 2 件**: 今回の検算で `engine25/` 側のコメントにも誤りが見つかり、オーナー了承のうえ直しました。
+- `engine25/ltxcore_compat.py` の (13)(a)「2.3 の NAG/VSF がマスクを直接渡す」を、上流 `Attention.forward` が mask を渡す（SA-034 と同じ事実）という説明に変えました。
+- `engine25/gguf_transformer.py` の `hold_arenas=True` のコメントの指し先を、`block_swap_prefetch` の docstring から VERIFICATION_LOG §75.7・§75.8 に変えました（実測値を節へ移したためです）。
+
+**台帳**: §1-59（`_read_target_vocab_from_header` の名前と型）・§1-60（`embed_cpu_offload` の固定と通らない枝・モノリスの経路）を起票しました。§1-58（使われていないコード）に `BlockSwapService.uninstall`・`build_block_swap_service`・`_load_gguf_connectors` の `target_device` を追記しました。
+
+**文書の訂正 3 件**（オーナー指示: 記録文書なので本文は書き換えず、本節に訂正を書き、該当箇所に 1 行添える）:
+1. §77.7 (a)「2.3 は NAG／VSF の置換 forward が masked 側を直接呼ぶため、こちらの経路は生きている」は、結論は正しいが理由が違います。NAG/VSF は `attention_function(q, k, v, heads, None)` と mask なしで呼びます。2.3 でマスクの分岐が生きている理由は、2.3 の上流 `Attention.forward` が mask をそのまま `attention_function` へ渡すことです（IC-LoRA の attention-strength は attn1 の `self_attention_mask`）。
+2. §43.2・§43.4 の「コサイン類似度 ≥0.999」は、`sage_selfcheck.py` の `_COS_TOL` がこのファイルを入れたコミットから一貫して 0.995 であるため、誤りです。§43.4 の「cos≥0.999」は実測値 0.9993 の記述としては成り立ちますが、基準と読まれやすい書き方でした。
+3. §75.7 (5)「後始末はジョブの最後に 1 度しかないので」は、2.5 が denoise の後にも `teardown` を呼ぶ（`engine25/pipeline25.py`）ことと合いません。記録の時点の観測としては正しい記述です。
+
+**敵対的レビュー**（Opus・(b)／(c) 全件＋抜き取り＋上流の確認）:
+- **直すべき 1 件**: SA-032「the official code all patch ``forward`` instead」は、2.5 の上流 `DiffusionStage.with_attention` が `set_attention_module_op` で `attention_function` に代入するので誤りでした。`engine25/` は `forward` を呼びませんが、事実に合わせて直しました。
+- **注意 4 件（全件採用）**: GQS-047 の docstring に残っていた鍵 op の名前を更新した／connector の「GGUF」決め打ちの文字列があと 2 件見つかり、了承済みのグループと同じ型に直した／§1-59 の選択肢 B は今の読み込み経路では実現できない旨を添えた／§1-60 が今回書いたコメント自身を根拠にしていたので、コードの記述を根拠に差し替えた。
+- **参考 2 件（採用）**: BP-001「at most one arena」を上限どうしの比較と明記する言い方にした／§1-58 の冒頭の言い方を整えた。
+
+**費用の目安**（Opus のトークン、概算）: 判定 約 300 万・検算 約 120 万・揃え 約 43 万・レビュー 約 30 万・反映と修正 約 13 万でした。B は約 510 万となり、計画の見込み（約 520 万）の範囲内でした。
+
+**申し送り**（C へ）:
+1. `dequant_triton_selfcheck.py` の「`.venv-engine` には pytest が無い」（B の 2 本と同じ文面に揃えること）。
+2. `outpaint/canvas.py` の「64px VAE stride x 2」（上流の空間ストライドは 32）。
+3. `preprocess/` の「future DWPose」「Slice 2／3」。
+4. `gguf/quant_service.py` の「IC-LoRA (Phase B)」「byte-identical to the no-LoRA build」。
+5. `gguf/ic_lora_common.py` の「Phase B」「§3-108」。
+6. `sft_quant/__init__.py` の方式の列挙に `w4a8` が抜けている。
+7. VERIFICATION_LOG §44.2・§44.4（先読みの自己検査が「pytest 無し・14 項目・+2」と書いている）は古い（文書側の記述）。
+8. 事実表 `facts\engine-bc.md` の A-23（G2-6 を飛ばす）・A-26（`neg_selfcheck25` が `_FakeTransformer` を使う）は誤り。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 137. ★コード内コメントの現行化・第 5 区域 `engine/` 第 3 回（C）＝ `engine/gguf/`（6 ファイル）・`engine/sft_quant/`（4）・`engine/outpaint/`（3）・`engine/inpaint/`（2）・`engine/preprocess/`（8。`vda/` は vendored で対象外）の 453 ブロック中 87 を現行化（コメントのみ・動作は不変）＋利用者やログに出る文字列 3 件＋台帳 §1-61〜§1-63 と §1-58 の追記＋ VERIFICATION_LOG §51.1／§51.2・§49.4・§44.2／§44.4 の訂正＋ `api/models.py` と `loader_service.py` の数値の訂正（2026-10-01）
+
+**要約**: §135（A）・§136（B）に続く `engine/` の第 3 回（C）として、`engine/` 全体（A・B・C）がこれで完了しました。対象は 23 ファイル・6,694 行・453 ブロックです。87 ブロック（事実が古いもの 68・導入時期の記録だけのもの 19）を書き換え、コードは変わっていないことを構文木で確かめました。あわせて利用者やログに出る文字列 3 件（オーナー決定 2 件＋レビューで見つかった同型の 1 件）を反映し、台帳 §1-61〜§1-63 を新しく起票し §1-58 に追記しました。検算の過程で GGUF の純 torch 逆量子化のうち 8 型の誤りが確定しました（製品の経路では通りません）。VERIFICATION_LOG 側の記述にも誤りが 4 件見つかり、§51.1／§51.2・§49.4・§44.2／§44.4 にそれぞれ訂正を1行添えました（本文そのものは書き換えていません）。`api/models.py`（api の回で現行のままとされた MOD-005）と `engine/gguf/loader_service.py` の数値2件も直しました。
+
+**目的**: 骨格は §135・§136 と同じです。判定担当への指示（v6.2）に、B（§136）からの申し送りを足しました。
+1. 計画上の呼び名「Lever 3」は、ログを出すファイルでは残し、他では関数名を主にする。
+2. 自己検査の docstring の「`.venv-engine` には pytest が無い」は「`fastapi` が無く `tests/conftest.py` を集められない（pytest はある）」に揃える。
+3. 共有部品は 2.3（殻を毎ジョブ組み直す）と 2.5（殻を使い回しビルドごとに付け直す）の両方で成り立つ書き方にし、呼び手を Grep で確かめる。
+4. 上流の空間ストライドは 2.3 でも 2.5 でも 32。
+5. `preprocess/` の「future DWPose」は実装済み・「Slice 2／3」は段階名。
+6. `sft_quant/__init__.py` の方式の列挙に `w4a8` が抜けている。
+7. §44.2・§44.4 は文書の食い違いとして記録済み（指さない）。
+
+**対象**: 23 ファイル（`engine/gguf/` の `dequant_triton.py`・`dequant_triton_kernels.py`・`dequant_triton_selfcheck.py`・`ic_lora_common.py`・`loader_service.py`・`quant_service.py`、`engine/sft_quant/` の `__init__.py`・`dequant.py`・`quant_service.py`・`sft_reader.py`、`engine/outpaint/` の `__init__.py`・`canvas.py`・`pyramid_blend.py`、`engine/inpaint/` の `__init__.py`・`canvas.py`、`engine/preprocess/` の `__init__.py`・`base.py`・`canny.py`・`depth.py`・`depth_g1_gate.py`・`driver.py`・`dwpose.py`・`preprocess_selfcheck.py`）・6,694 行・453 ブロックです。起点コミットは `86a199f`（B のコミット）。差し替えが入ったのは 21 ファイル（`outpaint/__init__.py`・`inpaint/__init__.py` は変更なし）です。
+
+**方法**:
+1. **抜き出し・区域分け**: 16 区域へ切りました（最大の区域 R06＝`quant_service.py` の 90 ブロックはブロック番号で 2 体に分けました）。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 17 体を走らせました。
+3. **検算（Opus 4 体・V1〜V4）**: 192 ブロック（change 全件＋keep の抜き取り）を確かめました。確認済み 188・異論 3・一部だけ直した 0・見逃し 1 でした。検算 V2 が `.venv-engine` の `torch` と参照実装 `gguf.quants`（gguf-py 0.18.0）で逆量子化を突き合わせ、8 型の誤りを確定しました。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 16 件を直し（語を変えたもの 10・折り返しだけ 6）、再検算 29 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 87 件の差し替えを適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**:
+
+最終の判定（453 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 68 |
+| 導入時期の記録だけ | 19 |
+| 現行のまま | 366 |
+| 保留 | 0 |
+
+古いままの割合は 19%で、A（38%）・B（29%）より低くなりました。
+
+**検算で確定した事実（コードの問題）**: `engine/gguf/quant_service.py` の純 torch の逆量子化のうち Q4_0・Q4_1・Q5_0・Q5_1・Q2_K・Q3_K・IQ4_NL・IQ4_XS の 8 型は参照実装と合いません（誤った値を返すか止まります）。Q8_0・Q4_K・Q5_K・Q6_K は完全一致しました。製品の経路では通りません（Triton の融合カーネルが受け持つのは Q4_K・Q5_K・Q6_K で、配布の GGUF と `models\` の量子化テンソルもこの 3 型だけです。レビューが `models\` の GGUF 7 本を `GGUFReader` で数えて確認しました）。台帳 §1-61 に起票しました。コメント側は「今のコードが返す形」で注記を直し、`_dequant_q3_k` の中の 3 つのコメントは意図を述べているので現行のままにしました。
+
+**当初から誤っていた主張の訂正の例**: OCV-004（`outpaint/canvas.py` の「64px VAE stride x 2」→ 動画 VAE の空間ストライドは 2.3・2.5 とも 32。stage 1 が半分で走るので 64 で足り、128 は `reference_resolution_invalid` の格子です）、QSG-020（Q5 の「5 ビット目を捨てる」というコメントを削除。実際のコードは `qh` から 5 ビット目を足しています）、ICV-003（「256 を下回ると stage-2 の帯が画面全体を覆う」の 1 文を落としました。§105.3 の式で検算すると成り立ちません）、PDR-006・PPS-001・PPS-012（`frame_cap` は前処理の種類によらず渡され、チェーンでは全クリップの stage-1 の画素フレーム総数です）、DTS-001・DG1-001・BPS-001 と同型（自己検査の「pytest が無い」→「fastapi が無く `tests/conftest.py` を集められない」）、`dequant_triton.py` の `_VERIFIED` は「型ごとのフラグ」ではなく（型, 16 バイト境界か）の組です。
+
+**共有部品**: `gguf/quant_service.py`（2.5 は `GGMLQuantizedTensor`・`_patch_linear_for_ggml_dequant`・`_patch_model_for_ggml_dequant`・`dequantize_ggml_tensor` を `engine25/gguf_gemma4.py` から使います）・`sft_quant/quant_service.py`（2.5 は `SftQuantStateDictLoader`・`sft_transformer_sd_ops` などを `engine25/gguf_transformer.py` から使います）・`ic_lora_common.py`（`attach_ic_loras`／`detach_ic_loras` を 2.5 の `gguf_transformer.py` が使います）は、両エンジンで成り立つ書き方にしました。`GGUFLoaderService`・`GGUFQuantLoaderService`・`GGUFQuantStateDictLoader` は 2.3 だけが使います。
+
+**証明**: 23 ファイル（`engine/` 22 ＋ `api/models.py`）で、コメントと docstring 以外のトークン列の差は文字列 3 件だけでした（文字列に触れていない 20 ファイルは docstring を除いた構文木が起点 `86a199f` と一致しました）。
+- `engine/gguf/quant_service.py` の `GGUFQuantLoaderService.install` のログ「weights stay compressed in VRAM」→「weights stay compressed (in VRAM, or on the CPU side under block swap)」に変えました（オーナー決定。block swap のときブロックの重みは CPU 側に置かれます）。
+- `engine/preprocess/preprocess_selfcheck.py` の検査名「C5  the frame branch is unchanged, and frame_cap is generic」→「C5  the frame branch stays the single-frame path, and frame_cap is generic」に変えました（オーナー決定。関数名 `check_c5_frame_branch_unchanged` は変えていません）。
+- `engine/pipeline/fast_video_pipeline.py` の「GGUF per-layer quant installed: weights stay compressed in VRAM」→ 上と同じ決定済みの文言に変えました（レビューの指摘。同じジョブで隣に出る同型の1行。§136 の connector の文字列と同じ扱いです）。
+
+数値は残しました。改行コードは CRLF でした（`engine/outpaint/canvas.py` と `engine/outpaint/__init__.py` は作業コピーが元から LF。`core.autocrlf=true` のため blob は LF で変わりません）。コミットに入るファイルは 25（`engine/` 21・`engine/pipeline/fast_video_pipeline.py`・`api/models.py`・`Docs/PENDING_TASKS.md`・`Docs/VERIFICATION_LOG.md`）です。
+
+**テスト**: `.venv-engine` の 16 ファイル 313 件合格（失敗 0）でした。`api/models.py` に触れたためアプリ側 `.venv` は `tests/test_ltx25_adapter.py`・`tests/test_ltx25_api_guard.py` を加えた 6 ファイルで 330 件合格・19 件スキップでした（監督が最終状態で再実行した結果）。
+
+**他の区域の訂正 2 件**: `api/models.py` の `INPAINT_CANVAS_MULTIPLE` の直前のコメント「64px VAE stride x 2 for the two-stage upscale」（api の回・§131 で現行のままとされた MOD-005）を、OCV-004 と同じ事実（空間ストライド 32・stage 1 は半分・128 は `reference_resolution_invalid` の格子）に直しました。`engine/gguf/loader_service.py` の `_fuse_ic_loras` の docstring の「68 s no-LoRA load」は、この docstring を入れたコミット `016f442` のメッセージ自身と §20.6 の表がともに 71 s と書いており、コメント側の書き損じだったので 71 s に直し §20.6 を添えました。
+
+**台帳**: §1-61（GGUF の純 torch 逆量子化 8 型）・§1-62（`GGUFStateDictLoader.load` の `apply_sd_ops` の付け替えが固定先の両 `ltx_core` に無く bf16 の経路で毎回警告）・§1-63（画角拡張の `MIN_INNER_SIDE` 一律 256）を起票しました。§1-58（使われていないコード）に `build_gguf_loader_service`・`GGUFLoaderService.uninstall`・`_make_depth_processor` の関数内 import（遅延の効果が無い）を追記しました。
+
+**文書の訂正 4 件**（オーナー指示: 記録文書なので本文は書き換えず、本節に訂正を書き、該当箇所に 1 行添える）:
+1. §51.1（`dequant_triton.py` の箇条）: 「型ごとの自己検証済みフラグ」は、コードの `_VERIFIED` が（型, 16 バイト境界か）の組の集合であることと合いません。3 ファイルの行数（234／314／698 行）も記録時点の値です。
+2. §51.2（冒頭の段落と `BLOCKS_PER_PROG` の段落）: 「engine用の仮想環境にはpytestが無いため」は、`.venv-engine` に pytest がある今は事実と違います（同じ §51.3 が `.venv-engine` の pytest を実行しています）。単体スクリプトにしてある理由は `fastapi` が無く `tests/conftest.py` を集められないことです。「`dequant_triton_kernels.py:89`」の行番号は記録時点のものです（定義は今 101 行目付近。行番号で指しません）。
+3. §49.4（`engine/worker.py` の箇条）: 「`frame_cap` は `preprocess == "depth"` のときだけ渡す」「チェーン＝`clips[0]["num_frames"]`」は、今の `_resolve_ic_reference` が前処理の種類によらず `_preprocess_frame_cap(msg)` を渡し、チェーンでは全クリップの stage-1 の画素フレーム総数を返すことと合いません（engine25 も同じです）。記録の時点の実装としては正しい可能性があります。
+4. §44.2（`block_swap_prefetch_selfcheck.py` の箇条）と §44.4（「14項目（C1〜C14）全PASS」の箇条）: 「engine 用仮想環境に pytest が無いため」「14項目（C1〜C14）」は記録時点のものです。今は `.venv-engine` に pytest があり（走らせない理由は fastapi）、検査は C1〜C19 の 19 項目です（`main()` の検査表）。§136 が C へ申し送っていた項目です。
+
+§20.6 と `loader_service.py` の「68 s」の食い違いは、コメント側の書き損じと確定したのでコメントを直しました（上の「他の区域の訂正」）。文書側は正しいままです。
+
+**敵対的レビュー**（Opus・(b)／(c) 全件＋(a) 全件＋共有部品の呼び手＋逆量子化を参照実装と CPU で突き合わせ＋上流の `SpatioTemporalScaleFactors` の確認）:
+- **直すべき 3 件（全件採用）**: LDS-002（bf16 経路のノイズの出典を §1.3 から §20.1 (a-0) に変えました。§1.3 は逐層量子化側のカーネルの記録です）、QSG-004（「the K-quant types」には Q2_K・Q3_K も含まれるので「Q4_K/Q5_K/Q6_K (`_TRITON_TYPES`)」に変えました）、台帳 §1-61 の「Q3_K の 3 つの関数」は関数 1 つの中の 3 つのコメントです。
+- **注意 6 件（5 件採用。6 件目は本節を同じコミットで書くことで解消）**: DTK-004（§51.2 が裏づけるのは凍結だけになるよう語順を変えました。4 つの実測値はコメントだけにある値として残しました）、IQ4_XS は実寸ではほぼ reshape の段で止まるので台帳の文を寄せました、対応表に無い型は警告を出してゼロのテンソルを返す経路を §1-61 に1文足しました、§1-62 の選択肢 A と B が同じ変更になっていたので B を「記録を debug に下げる」に書き分けました、`fast_video_pipeline.py` のログ1件（上の証明の3件目）。
+- **参考 8 件（2 件採用）**: DTS-001 の「C8 and C9 replay」は C8 が 32M 要素超を飛ばすので限定を添えました、§1-61 の「scale」を「スケール（`d`・`dmin`）」に変えました。不採用 6 件は誤りではないもの（許容誤差つきの固定・2.3 の事実の括弧書き・作業コピーの改行コード・指示書のファイル数の数え違い・`changes.jsonl` の記録の古さ・§1-58 の置き場）です。
+
+**費用の目安**（Opus のトークン、概算）: 判定〜揃え 約 370 万・レビュー 約 28 万・反映と修正 約 12 万でした。C は約 410 万となり、計画の見込み（約 300 万）を超えました（`quant_service.py` の 121 ブロックと逆量子化の検算が重かったためです）。`engine/` 全体（A 約 600 万・B 約 510 万・C 約 410 万）は約 1,520 万となり、計画の見込み（約 1,190 万）を超えました。
+
+**申し送り**（次の区域へ）:
+1. `engine/` は A・B・C で完了しました。残る区域は `gradio_ui/`・`mcp_server/`・`scripts/`・`config.py` などです（オーナー判断）。
+2. 事実表 `facts\engine-bc.md` の誤り3件（`laplacian_pyramid_blend` が `blend_video_u8` の内部で使われる／A-23／A-26）は一覧表側の問題で判定には影響していません。
+3. `engine/fp8/__pycache__/` にソースの無い古いキャッシュが残っています（`sft_quant/` へ移転後の残骸。コメントの問題ではありません）。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。

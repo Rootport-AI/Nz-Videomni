@@ -21,9 +21,8 @@ def default_tiling_config(
 ) -> TilingConfigType:
     """Return a TilingConfig, optionally overriding the spatial/temporal tile sizes.
 
-    Passing 0 (the default) uses the library defaults:
-      spatial  512 px tiles with 64 px overlap
-      temporal  64 frame tiles with 24 frame overlap
+    Passing 0 (the default) for an axis uses that axis of the library's
+    ``TilingConfig.default()``.
     """
     from ltx_core.model.video_vae import TilingConfig, SpatialTilingConfig, TemporalTilingConfig
 
@@ -96,13 +95,13 @@ def iter_video_conditioning_cpu(
     loader below — ``decode_video_from_file`` -> ``resize_and_center_crop`` on
     float32 -> ``normalize_latent`` to ``dtype`` -> ``.to("cpu")``. The loader is
     literally ``torch.cat(list(this), dim=2)``, so the two are byte-identical by
-    construction; nothing about the numerics, the order, the dtype or the device
-    changed when this generator was split out (§1-15 B4).
+    construction.
 
-    Split out for the clip-wise chain reference (§1-15): a 24-clip chain needs
-    24 DIFFERENT overlapping pixel windows of one long reference video, and
-    materialising the whole video just to slice it would cost the full
-    ``total_px`` (up to 11544 frames) on CPU at once. ``chain_pipeline``'s window
+    A separate generator because of the clip-wise chain reference: a chain needs
+    one DIFFERENT overlapping pixel window per stage-1 segment from one long
+    reference video, and materialising the whole video just to slice it would
+    cost the full ``total_px`` (capped by ``api/models.py``'s
+    ``MAX_CHAIN_TOTAL_PIXEL_FRAMES``) on CPU at once. ``chain_pipeline``'s window
     generator consumes this stream lazily instead, holding at most
     ``max(clip_frames)`` frames.
 
@@ -216,9 +215,10 @@ def decode_mask_video(
     ``decode_video_from_file`` hands back one ``(1, H, W, C)`` uint8 tensor per
     frame, with C == 3 even for a grey source (it goes through
     ``frame.to_rgb()``), so the RED channel is taken and the other two are
-    dropped: for a genuinely grey mask all three are equal, and for a mask that
-    somehow is not grey, red is the channel the ``lut`` in
-    ``video_io.fill_mask_green_mp4`` reads too. The frames are NOT put through
+    dropped: for a genuinely grey mask all three are equal. (The ``lut`` in
+    ``video_io.fill_mask_green_mp4`` thresholds the mask after ``format=gray``,
+    i.e. on luma rather than on red, so for a mask that is not grey the two
+    sides can binarise differently.) The frames are NOT put through
     ``resize_and_center_crop`` the way ``_load_canvas_pixels_u8`` puts the canvas
     — that helper's whole job is to make a video fit a target size, which is
     exactly what must not happen here.
@@ -260,7 +260,7 @@ def decode_mask_video(
 
 
 class DistilledNativePipeline:
-    """Fast native pipeline implementation moved from ltx2_server.py."""
+    """Fast native pipeline implementation."""
 
     def __init__(
         self,

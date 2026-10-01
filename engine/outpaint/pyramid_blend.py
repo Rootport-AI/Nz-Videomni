@@ -261,9 +261,10 @@ def _prepare_mask_pyramid(
 
     A ``uint8`` mask is accepted as 0/255 and scaled here, which is the
     convention ``engine.pipeline.common.decode_mask_video`` and
-    ``engine.inpaint.canvas.half_res_mask`` produce. A float mask goes through
-    untouched, so the outpaint path is bit-identical to before this branch
-    existed.
+    ``engine.inpaint.canvas.half_res_mask`` produce. A float mask is only cast
+    to ``dtype``, never rescaled -- that is the outpaint path, whose
+    single-plane float mask ``test_matches_kornia_golden`` pins against the
+    kornia golden fixture.
     """
     if mask.ndim != 4 or mask.shape[1] != 1:
         raise ValueError(f"mask must have shape (1, 1, H, W), got {tuple(mask.shape)}")
@@ -334,9 +335,9 @@ def _effective_level(
 ) -> tuple[int, tuple[int, int]]:
     """``(depth, padding)``: the pyramid depth this frame size supports.
 
-    Split out of :func:`_plan` so the per-chunk mask path in
-    :func:`blend_video_u8` resolves the depth with the SAME three lines rather
-    than a copy of them. Pure arithmetic, no tensors.
+    Shared by :func:`_plan` and the per-chunk mask path in
+    :func:`blend_video_u8`, so both resolve the depth with the SAME three lines
+    rather than a copy of them. Pure arithmetic, no tensors.
     """
     padding = _power_of_two_padding(height, width)
     padded_min = min(height + padding[1], width + padding[0])
@@ -397,8 +398,8 @@ def laplacian_pyramid_blend(
             silently broadcast from the wrong axis.
         max_level: requested pyramid depth; clamped to ``log2`` of the padded
             short side.
-        mask_low_res_dilation: dilation radius applied at the 64px working
-            resolution (0 disables).
+        mask_low_res_dilation: dilation radius applied at the low working
+            resolution (long side ``_MASK_LOW_RES_LONG_SIDE``; 0 disables).
         chunk_size: frames per pass (default ``_CHUNK_SIZE``).
         device: compute device; ``None`` computes where the inputs already live.
         output_device: where results are collected; ``None`` keeps them on the
@@ -443,8 +444,8 @@ def laplacian_pyramid_blend(
         # A per-frame mask pyramid covers the WHOLE batch here (this entry point
         # is for small tensors -- the big uint8 one below builds it per chunk
         # instead), so each chunk takes its own slice of every level. A
-        # single-plane pyramid is passed through untouched and broadcasts, which
-        # is what keeps the outpaint path bit-identical.
+        # single-plane pyramid is passed through untouched and broadcasts -- the
+        # outpaint path that ``test_matches_kornia_golden`` pins.
         chunk_mask_pyramid = (
             [level[start:end] for level in mask_pyramid] if per_frame_mask else mask_pyramid
         )
@@ -487,7 +488,8 @@ def blend_video_u8(
     blended, quantised back and written into the pre-allocated output. Following
     ``chain_pipeline.py``'s V2V path -- which hands ``encode_video_output`` a
     fully materialised tensor -- this returns a finished tensor rather than a
-    generator, so the caller's encode path is unchanged.
+    generator, which the caller can crop and hand to ``encode_video_output``
+    directly.
     """
     if generated.shape != original.shape:
         raise ValueError(
@@ -512,9 +514,9 @@ def blend_video_u8(
     # whole timeline. A full-timeline pyramid of a 1920x1088x481 mask is 4.0GB
     # of float32 at level 0 alone (plus a third again for the levels above it),
     # which is the allocation ``_prepare_mask_pyramid``'s docstring exists to
-    # avoid; a chunk of 8 is 65MB. ``_plan``'s signature and return type are
-    # deliberately untouched -- ``laplacian_pyramid_blend`` still calls it, and
-    # the single-plane path below is the same call it always was.
+    # avoid; a chunk of 8 is 65MB. ``_plan`` keeps its signature and return type
+    # because ``laplacian_pyramid_blend`` calls it as well, and the single-plane
+    # branch below makes that same ``_plan`` call.
     if mask.ndim == 4 and mask.shape[0] != 1:
         effective_level, padding = _effective_level(orig_h, orig_w, max_level)
         mask_pyramid = None

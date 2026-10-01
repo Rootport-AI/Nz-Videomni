@@ -1,4 +1,4 @@
-"""The ONE import site for official ltx_core / ltx_pipelines symbols (§3-98 Phase 2a).
+"""The ONE import site for official ltx_core / ltx_pipelines symbols.
 
 Why this module exists
 ----------------------
@@ -10,10 +10,12 @@ stage, supplies its own builder, and reuses two module-private helpers from
 a patch release can rename ``_load_model_weights`` and every call site breaks at
 a different, later, harder-to-read place.
 
-So the rule for engine25 is: **nothing under engine25/ imports ``ltx_core`` or
-``ltx_pipelines`` directly. Everything comes through this module, and every
-worker start calls :func:`verify`.** There is deliberately no "we import N
-symbols" claim anywhere -- such a count rots the moment a phase adds one. The
+So the rule for engine25 is: **nothing on engine25's product path imports
+``ltx_core`` or ``ltx_pipelines`` directly. Everything comes through this
+module, and every worker start calls :func:`verify`.** The two standalone
+self-checks (``sage_selfcheck25`` / ``neg_selfcheck25``) import a few upstream
+names inside their own functions instead. There is deliberately no "we import
+N symbols" claim anywhere -- such a count rots the moment a phase adds one. The
 contract is the two halves above: one entry point, and one assertion pass over
 it that runs before any model is built, so a version drift is reported as
 "engine25/ltxcore_compat.py: <symbol> changed" at load time instead of as a
@@ -32,7 +34,8 @@ What :func:`verify` checks
      * ``_load_model_weights`` still takes ``model_sd_ops`` / ``fuse_rule`` /
        ``lora_load_device`` (engine25 calls it by keyword).
      * ``ModelRegistry`` still takes keyword-only ``cache_weights`` /
-       ``cache_models`` (the H-revision default ``cache_weights=True`` rides on it).
+       ``cache_models`` (``Ltx25DiffusionStage``'s ``cache_weights`` default
+       rides on it).
      * ``QuantizationPolicy`` still has exactly the four fields the policy is
        built from.
      * ``SDOps`` still has ``allowed_keys`` + ``with_additional_allowed_keys``
@@ -42,18 +45,19 @@ What :func:`verify` checks
        still assigns ``self.stage`` / ``self.prompt_encoder`` /
        ``self.use_ancestral_sampler`` (the three engine25 substitutes or asserts
        after construction), and ``__call__`` still takes the generation
-       parameters the v1 contract maps onto.
+       parameters ``Ltx25Pipeline.generate`` passes.
      * ``PromptEncoder.__init__`` still takes ``text_encoder_builder`` -- the
        public injection point that lets GGUF weights sit behind the official
        prompt encoder without forking it.
      * ``ModelPaths.from_split`` still takes ``text_encoder_path``.
-     * ``DISTILLED_SIGMAS`` / ``STAGE_2_DISTILLED_SIGMAS`` are still 8 + 3 steps,
-       and ``encode_video`` / ``get_video_chunks_number`` /
+     * ``DISTILLED_SIGMAS`` / ``STAGE_2_DISTILLED_SIGMAS`` still have the step
+       counts the schedule check in :func:`verify` asserts, and
+       ``encode_video`` / ``get_video_chunks_number`` /
        ``ImageConditioningInput`` still have the shape the mp4 write depends on.
      * ``Disposable`` still exposes ``dispose``.
-3. For §3-102 (Chained), a handful of BODIES as well as signatures. The chain
+3. For Chained, a handful of BODIES as well as signatures. The chain
    does not run ``DistilledPipeline.__call__``; it drives the same blocks itself
-   with a frozen carry band in front of every segment and tile, so three facts
+   with frozen carry bands in front of its segments and tiles, so three facts
    that the pipeline would otherwise have guaranteed are asserted from source:
      * ``euler_ancestral_denoising_loop`` still gates noise on
        ``draw_noise=stepper.eta > 0``, and the driver still re-pins the
@@ -71,24 +75,33 @@ What :func:`verify` checks
    names, ``ModalitySpec``'s fields, the ``replacing``/``guiding`` image pair
    with ``resolve_crf``, ``ensure_tiling_config``'s three keyword-only
    arguments, ``LatentState.keyframes_mask`` + the helper that marks the first
-   latent frame, ``LatentUpsampler``'s block count (from which halo=18 is
-   derived, not remembered), and 25 audio latents per second.
-4. For §3-102's second stage (V2V + A2V), the MATERIAL-INGEST surface: the audio
+   latent frame, ``LatentUpsampler``'s block count (from which
+   ``chain_math.UPSAMPLE_HALO_FRAMES`` is derived, not remembered), and the
+   audio latent rate ``chain_math.AUDIO_LATENTS_PER_SEC`` assumes.
+4. For V2V + A2V, the MATERIAL-INGEST surface: the audio
    encoder's lifecycle block (``AudioConditioner``), the waveform-to-latent
    encoder (re-exported as ``vae_encode_audio``, because upstream has a second,
    unrelated ``encode_audio`` that writes wav files), the two file decoders and
    the three per-frame preprocessing ops chain25 assembles source pixels from on
-   CPU, ``VideoEncoder.tiled_encode``'s silent 8k+1 crop, the 80/24 decode
-   chunking a V2V trim has to be spliced across, and -- the one genuinely new
-   MECHANISM -- ``ModalitySpec(frozen=True)``: both the branch that zeroes the
-   whole denoise mask and the one that zeroes the scalar ``sigma`` with it, which
-   is what makes A2V's frozen audio different in kind from the carry band.
+   CPU, ``VideoEncoder.tiled_encode``'s silent 8k+1 crop, the default temporal
+   decode chunking (``TileSizeConfig.default()``) a V2V trim has to be spliced
+   across, and -- the one genuinely new MECHANISM -- ``ModalitySpec(frozen=True)``:
+   both the branch that zeroes the whole denoise mask and the one that zeroes
+   the scalar ``sigma`` with it, which is what makes A2V's frozen audio
+   different in kind from the carry band.
+5. For the patches engine25 lays over upstream code, the seams they rest on:
+   the reference conditioning engine25/reference25.py monkeypatches or builds
+   by hand, and the module global ``ancestral_detection_skipped`` rebinds
+   (section 12); the routing and slots SageAttention installs into (section
+   13); and the attention facts the ``engine25.neg_prompt25`` forward
+   reproduces (section 14).
 
-The F1 canary (``Disposable.dispose`` metas storage via
+The ``Disposable.dispose`` canary (whether it metas storage via
 ``torch.empty_like(..., device="meta")``) is checked but only LOGGED, never
-asserted: engine25's tensor subclass is written so that a future upstream that
-stops doing this stays correct. It is recorded so the day the workaround
-becomes unnecessary is visible in the log rather than guessed at.
+asserted: engine25's tensor subclass (``gguf_transformer.Ltx25GGMLTensor``) is
+written so that a future upstream that stops doing this stays correct. It is
+recorded so the day the workaround becomes unnecessary is visible in the log
+rather than guessed at.
 """
 
 from __future__ import annotations
@@ -178,7 +191,7 @@ from ltx_core.model.transformer.attention import Attention, AttentionOps
 
 # VERIFY-ONLY as well, and for section 14: the two call sites of the TEXT
 # cross-attention `attn2` / `audio_attn2` that `engine25.neg_prompt25` replaces
-# the `forward` of. Nothing outside `verify` names either.
+# the `forward` of. Neither is re-exported; only `verify` uses them here.
 from ltx_core.model.transformer.transformer import (
     BasicAVTransformerBlock,
     apply_cross_attention_adaln,
@@ -204,8 +217,8 @@ from ltx_core.types import (
 )
 
 # ---------------------------------------------------------------------------
-# ltx_core -- text encoders (Phase 2c consumes these; imported here so the ONE
-# entry-point rule holds for the whole engine, not just the transformer half)
+# ltx_core -- text encoders (imported here so the ONE entry-point rule holds for
+# the whole engine, not just the transformer half)
 # ---------------------------------------------------------------------------
 from ltx_core.text_encoders.gemma import (
     EMBEDDINGS_PROCESSOR_KEY_OPS,
@@ -235,7 +248,7 @@ from ltx_pipelines.distilled import (
     combined_image_conditionings,
     should_use_ancestral_sampler,
 )
-# The IC-LoRA metadata reader. Public in 1.2.0 (2.3 had to reach for
+# The IC-LoRA metadata reader, public upstream (2.3 had to reach for
 # `ic_lora._read_lora_reference_downscale_factor`); it returns 1 BOTH for a
 # declared 1 and for an absent key, which is why the factor VOTE in
 # reference25.py tests key presence with `safe_open` before letting a LoRA vote.
@@ -288,8 +301,8 @@ from ltx_pipelines.utils.model_paths import ModelPaths
 # `_ancestral_euler_denoising_loop` is module-private upstream and is NOT
 # re-exported: nothing outside this file calls it. It is imported only so
 # `verify` can read the body that decides whether the conditioned tokens are
-# re-pinned after each ancestral step -- the single fact the chain's frozen
-# carry band depends on, and one that lives in an `if`, not in a signature.
+# re-pinned after each ancestral step -- a fact the chain's frozen carry band
+# depends on, and one that lives in an `if`, not in a signature.
 from ltx_pipelines.utils.samplers import (
     _ancestral_euler_denoising_loop,
     euler_ancestral_denoising_loop,
@@ -410,7 +423,7 @@ def upsampler_builders(upsampler: VideoUpsampler) -> tuple[Any, Any]:
     """The ``(encoder_builder, upsampler_builder)`` behind a :class:`VideoUpsampler`.
 
     The ONE reach into ``VideoUpsampler``'s privates, kept here for the same
-    reason ``_load_model_weights`` is: the chunked upsample (§3-102) must build
+    reason ``_load_model_weights`` is: the chunked upsample must build
     the video encoder and the latent upsampler **once** and drive them over ~N
     temporal chunks, while the public ``VideoUpsampler.__call__`` builds both,
     upsamples one tensor, and frees them again. Its ``registry`` is constructed
@@ -426,7 +439,7 @@ def upsampler_builders(upsampler: VideoUpsampler) -> tuple[Any, Any]:
 
 @contextlib.contextmanager
 def ancestral_detection_skipped() -> Iterator[None]:
-    """Build a ``DistilledPipeline`` without its ``model_version`` probe (§3-167 B-2).
+    """Build a ``DistilledPipeline`` without its ``model_version`` probe.
 
     ``DistilledPipeline.__init__`` resolves ``use_ancestral_sampler`` by calling
     ``should_use_ancestral_sampler(transformer_path)``, which opens the file with
@@ -593,7 +606,8 @@ def verify() -> None:
     )
     _require_params(_check_uninitialized, "single_gpu_model_builder._check_uninitialized", "model")
 
-    # Weight/shell caching -- the cache_weights=True default (plan H revision).
+    # Weight/shell caching -- the registry behind the ``cache_weights`` load
+    # option.
     _require_keyword_only(ModelRegistry.__init__, "ModelRegistry.__init__", "cache_weights", "cache_models")
     for method in ("add", "get", "pop", "clear", "get_model", "add_model", "pop_model"):
         if not callable(getattr(ModelRegistry, method, None)):
@@ -603,8 +617,9 @@ def verify() -> None:
     # key (``pipeline25._swap_keep_resident``). A signature check cannot see any
     # of that -- a wheel that renamed the private attribute, or started reading
     # the flag in ``get`` as well, would leave every signature intact and turn
-    # the feature into a silent 7.7 GiB leak. So the round trip is driven here,
-    # on a THROWAWAY registry with a fake path list: no I/O, no GPU, no tensors.
+    # the feature into a silent leak of the resident text encoder (its size is
+    # in VERIFICATION_LOG §76). So the round trip is driven here, on a THROWAWAY
+    # registry with a fake path list: no I/O, no GPU, no tensors.
     probe = ModelRegistry(cache_weights=False, cache_models=True)
     if not isinstance(getattr(probe, "_cache_weights", None), bool):
         _fail("ModelRegistry._cache_weights", "is no longer a bool attribute keep_resident can flip")
@@ -618,12 +633,13 @@ def verify() -> None:
         _fail("ModelRegistry.pop", "left the entry in place; keep_resident's OFF path would leak it")
     # The SAME round trip on a TUPLE of paths, because the second registry
     # keep_resident reaches is keyed on two files: the EmbeddingsProcessor's
-    # builder spans the transformer GGUF and the text-encoder GGUF, so its
+    # builder spans the transformer file and the text-encoder GGUF, so its
     # ``model_path`` is a 2-tuple and ``pipeline25._swap_keep_resident`` pops
     # through ``as_path_list``. A wheel that stopped caching multi-file keys --
     # or expanded them differently on the way in than on the way out -- would
-    # leave every signature intact and quietly strand 4.6 GiB, which the
-    # single-path probe above cannot see. MULTI_ENGINE_DESIGN.md's rule for
+    # leave every signature intact and quietly strand the resident embeddings
+    # processor (its size is in VERIFICATION_LOG §92), which the single-path
+    # probe above cannot see. MULTI_ENGINE_DESIGN.md §8.5's rule for
     # private-attribute dependencies: the same shape of dependency gets the same
     # handling.
     probe = ModelRegistry(cache_weights=False, cache_models=True)
@@ -669,7 +685,8 @@ def verify() -> None:
         _fail("Modality", "is no longer a dataclass")
     _require_params(LTXModelConfigurator.from_metadata, "LTXModelConfigurator.from_metadata", "metadata")
 
-    # Phase 2c/2d entry points (checked now so a drift is reported once, early).
+    # Pipeline / prompt-encoder entry points (checked here so a drift is
+    # reported once, early).
     loras_param = _params(DistilledPipeline.__init__).get("loras")
     if loras_param is None:
         _fail("DistilledPipeline.__init__", "the `loras` parameter is gone")
@@ -707,7 +724,7 @@ def verify() -> None:
             _fail("PromptEncoder", f"method {method!r} is gone; engine25's phase timers no longer intercept it")
     _require_params(gpu_model, "gpu_model", "model", "alloc_trim_strategy")
 
-    # --- Phase 2d: assembly surface -----------------------------------------
+    # --- Assembly surface ---------------------------------------------------
     _require_params(
         DistilledPipeline.__init__,
         "DistilledPipeline.__init__",
@@ -788,11 +805,11 @@ def verify() -> None:
     _require_params(should_use_ancestral_sampler, "should_use_ancestral_sampler", "transformer_path")
     _require_params(is_diffusion_video_vae, "is_diffusion_video_vae", "checkpoint_path")
 
-    # 3. §3-102 (Chained): the surface engine25/chain25.py drives directly.
+    # 3. Chained: the surface engine25/chain25.py drives directly.
     #
     # The chain does not go through ``DistilledPipeline.__call__``. It calls the
-    # same blocks the pipeline calls, in its own order, with a frozen carry band
-    # in front of every segment and tile -- so the pieces that pipeline's own
+    # same blocks the pipeline calls, in its own order, with frozen carry bands
+    # in front of its segments and tiles -- so the pieces that pipeline's own
     # code would have guaranteed have to be asserted here instead.
 
     # (1) The two denoising loops, called by KEYWORD from ``DiffusionStage`` and
@@ -886,7 +903,7 @@ def verify() -> None:
     if not callable(getattr(ConditioningItem, "apply_to", None)):
         _fail("ConditioningItem", "the `apply_to` protocol method is gone")
 
-    # (5) ``keyframes_mask`` (new in 1.2.0). ``create_initial_state`` marks the
+    # (5) ``keyframes_mask``. ``create_initial_state`` marks the
     #     first latent frame UNCONDITIONALLY; for a chain segment/tile i >= 1
     #     that frame is carried-over content, not a keyframe, so chain25 clears
     #     the marker. Both the field and the marking helper are pinned: were the
@@ -984,7 +1001,7 @@ def verify() -> None:
     )
     _require_params(tiling_scale_factors_for_vae, "helpers.tiling_scale_factors_for_vae", "vae_checkpoint_path")
 
-    # (11) §3-102 second stage (V2V + A2V): the material-ingest surface.
+    # (11) V2V + A2V: the material-ingest surface.
     #
     # Everything below is about turning an UPLOADED file into a latent chain25
     # can freeze. None of it is reached by a plain T2V/I2V chain, so a drift here
@@ -1011,8 +1028,9 @@ def verify() -> None:
         "target_sample_rate", "mel_bins", "mel_hop_length", "n_fft",
     )
     # The encoder takes the waveform's dtype through to the mel transform, so
-    # chain25 casts to bf16 BEFORE the call rather than after. `Audio.to` is the
-    # only cast the encoder itself performs, and it is device-only.
+    # chain25 casts to its ``DTYPE`` BEFORE the call rather than after. The
+    # only cast ahead of the mel transform is `Audio.to`, and it is
+    # device-only; the encoder's own dtype is applied to the mel output.
     _require_in_source(
         _source_of(vae_encode_audio, "audio_vae.encode_audio"),
         "audio_vae.encode_audio",
@@ -1022,9 +1040,8 @@ def verify() -> None:
     # (11c) The decoders chain25 ingests material through. `decode_audio_from_file`
     #       returning a 3-D (1, channels, samples) waveform is what makes
     #       "channels is dim 1" -- and therefore the mono-to-stereo duplication --
-    #       correct; `decode_video_by_frame` is the ONLY 1.2.0 video decoder with
-    #       a `frame_cap`, which is how a tail context is read without decoding
-    #       the whole upload.
+    #       correct; `decode_video_by_frame` takes a `frame_cap`, which is how a
+    #       tail context is read without decoding the whole upload.
     _require_params(
         decode_audio_from_file, "media_io.decode_audio_from_file",
         "path", "device", "start_time", "max_duration",
@@ -1064,8 +1081,9 @@ def verify() -> None:
         "video = video[:, :, :-frames_to_crop, ...]",
     )
     # The decode chunking chain25 shares with the encode. 80/24 is a stride of 56
-    # frames, which is what makes a V2V trim of 25..145 pixel frames land ACROSS
-    # chunk boundaries -- the reason `_drop_leading_frames` exists at all.
+    # frames, which is what makes a V2V trim (``context_frames``, bounded by
+    # ``SourceVideoSpec.validate_context_frames``) land ACROSS chunk
+    # boundaries -- the reason `_drop_leading_frames` exists at all.
     default_tiles = TileSizeConfig.default()
     if (default_tiles.frames.tile_size, default_tiles.frames.overlap) != (80, 24):
         _fail(
@@ -1113,10 +1131,10 @@ def verify() -> None:
         "if samples.ndim != 2 or 2 not in samples.shape:",
     )
 
-    # (12) §3-102 third stage (Style LoRA + IC-LoRA): the reference-conditioning
-    #      surface. Everything below is what engine25/reference25.py either
-    #      MONKEYPATCHES or constructs by hand, so a drift here would show up as
-    #      "the reference had no effect" -- a silent wrong picture, not a crash.
+    # (12) The reference-conditioning surface (Style LoRA + IC-LoRA). Most of
+    #      what follows is what engine25/reference25.py either MONKEYPATCHES or
+    #      constructs by hand, so a drift here would show up as "the reference
+    #      had no effect" -- a silent wrong picture, not a crash.
 
     # (12a) The patch seam. `DistilledPipeline.__call__` looks `combined_image_conditionings`
     #       up as a MODULE GLOBAL of `ltx_pipelines.distilled` once per stage, which
@@ -1134,7 +1152,7 @@ def verify() -> None:
         "helpers.combined_image_conditionings",
         "images", "height", "width", "video_encoder", "dtype", "device", "color_space",
     )
-    #       The same seam for `ancestral_detection_skipped` (§3-167 B-2): the
+    #       The same seam for `ancestral_detection_skipped`: the
     #       constructor must look the probe up as a module global, or the
     #       rebinding is inert and `safe_open` maps the transformer file again.
     if "should_use_ancestral_sampler" not in DistilledPipeline.__init__.__code__.co_names:
@@ -1249,10 +1267,14 @@ def verify() -> None:
     #          release that started routing masked calls back through
     #          ``attention_function`` would silently push masks into a kernel
     #          that cannot express one; the wrapper WOULD still catch them (its
-    #          mask branch is kept for exactly this reason, and for 2.3, where
-    #          NAG/VSF call it with a mask directly), but the "IC-LoRA on 2.5
-    #          never logs a masked fallback" fact written into §77 and asserted
-    #          by the real-device gate would quietly stop being true.
+    #          mask branch is kept for exactly this reason, and for 2.3, whose
+    #          upstream ``Attention.forward`` hands ``mask`` to
+    #          ``attention_function`` itself, so a masked call (the IC-LoRA
+    #          attention-strength path) reaches the wrapper; NAG's and VSF's
+    #          replacement ``forward``s call it with ``mask=None``), but the
+    #          "IC-LoRA on 2.5 never logs a masked fallback" fact recorded in
+    #          VERIFICATION_LOG §77.7 (a) and checked on the real device
+    #          (§77.5) would quietly stop being true.
     #          The ORDER is what is pinned, not just the presence of the two
     #          names: `if mask is None` must come FIRST, because it is the
     #          branch that sends the unmasked call to the slot sage owns.
@@ -1350,7 +1372,8 @@ def verify() -> None:
         "return attn(attn_input, context=encoder_hidden_states, mask=context_mask) * q_gate",
     )
 
-    # 4. F1 canary -- logged, never asserted (see module docstring).
+    # 4. The ``Disposable.dispose`` canary -- logged, never asserted (see the
+    #    module docstring).
     try:
         source = inspect.getsource(Disposable.dispose)
         metas_storage = 'device="meta"' in source or "device='meta'" in source

@@ -16,8 +16,8 @@ What is checked, and why:
      batch 2 where the batch-1 negative context has to be expanded.
   2. The encode-time slice: ``encode_negative(..., slice_to_real_tokens=True)``
      keeps exactly the tokenizer's real-token count and drops the connector's
-     learned register tail, while the default (False) leaves NAG's historical
-     encoding untouched. The forward half of the same check shows that a
+     learned register tail, while the default (False) leaves the NAG encoding
+     untouched. The forward half of the same check shows that a
      sliced negative context genuinely changes the attention output — i.e.
      that the registers would otherwise be sign-flipped into the result.
   3. OFF is structurally inert: install() with nothing requested patches zero
@@ -26,13 +26,13 @@ What is checked, and why:
      and install-before-encode.
   5. The worker's method-resolution helpers (``engine.worker._resolve_nag``/
      ``_neg_label``): a ``nag`` block with no ``method`` key resolves to
-     NagParams (forward-compat default), an explicit ``method="vsf"`` block
-     resolves to VsfParams with its own knob propagated, an unknown method
-     raises RuntimeError, and ``_neg_label`` maps None/NagParams/VsfParams to
-     "off"/"nag"/"vsf".
+     NagParams (``method`` defaults to ``"nag"``), an explicit
+     ``method="vsf"`` block resolves to VsfParams with its own knob
+     propagated, an unknown method raises RuntimeError, and ``_neg_label``
+     maps None/NagParams/VsfParams to "off"/"nag"/"vsf".
 
 The negative context is always raw here: the AdaLN 3-mode experiment settled
-on raw on real hardware and was removed (VERIFICATION_LOG §41.9).
+on raw on real hardware (VERIFICATION_LOG §41.9) and was removed (§41.10).
 """
 
 from __future__ import annotations
@@ -189,7 +189,7 @@ def check_concat_attention_matches_formula() -> None:
 class _FakeTokenizer:
     """tokenize_with_weights stub: ``n_real`` weight-1 tokens, then zeros —
     the same (token_id, attention_weight) pair shape the real Gemma tokenizer
-    returns (ltx_core/text_encoders/gemma/tokenizer.py:28)."""
+    returns (upstream ``LTXVGemmaTokenizer.tokenize_with_weights``)."""
 
     def __init__(self, n_real: int, total: int) -> None:
         self._n_real = n_real
@@ -231,7 +231,7 @@ def check_encode_time_slice() -> None:
     try:
         encoder = _FakeTextEncoder(_FakeTokenizer(n_real, total))
 
-        # Default (NAG's historical behaviour): nothing is dropped.
+        # Default (the NAG encoding): nothing is dropped.
         v_full, a_full = encode_negative(encoder, "blurry, low quality")
         if v_full.shape[1] != total or a_full.shape[1] != total:
             raise AssertionError(
@@ -281,7 +281,7 @@ def check_encode_time_slice() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Check 4: OFF is structurally inert                                           #
+# Check 3: OFF is structurally inert                                           #
 # --------------------------------------------------------------------------- #
 
 
@@ -303,7 +303,7 @@ def check_off_is_inert() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Check 5: fail-loud                                                           #
+# Check 4: fail-loud                                                           #
 # --------------------------------------------------------------------------- #
 
 
@@ -370,7 +370,7 @@ def check_fail_loud() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Check 6: engine.worker's method-resolution helpers                          #
+# Check 5: engine.worker's method-resolution helpers                          #
 # --------------------------------------------------------------------------- #
 
 
@@ -384,9 +384,9 @@ def check_worker_resolve() -> None:
 
     Imported lazily (inside this function, not at module scope) because
     engine.worker has real import-time side effects (chdir to the project
-    root, torch/ltx_core/ltx_pipelines imports, a couple of stdout log
-    lines) that the rest of this selfcheck module does not need and should
-    not pay for just to run checks 1-5.
+    root, torch/ltx_core/ltx_pipelines imports, CUDA initialisation, wheel
+    monkeypatches, stderr log lines) that the rest of this selfcheck module
+    does not need and should not pay for just to run checks 1-4.
     """
     from engine.worker import _neg_label, _resolve_nag
 

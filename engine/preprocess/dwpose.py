@@ -1,4 +1,4 @@
-"""DWPose skeleton control-signal processor (IC-LoRA Phase C, Slice 3).
+"""DWPose skeleton control-signal processor.
 
 Renders an OpenPose-style colour skeleton (body + hands + face) for every person
 in a frame, the "pose" control signal the Union-Control IC-LoRA consumes to keep
@@ -7,14 +7,15 @@ the reference motion while replacing content.
 The detection/keypoint/drawing algorithm is ported VERBATIM from the deleted
 low-VRAM fork's ``DWPosePipeline``
 (``vendor/LTX-Desktop-LOW-VRAM/backend/services/pose_processor_pipeline/dw_pose_pipeline.py``
-at commit ``d0d3df5^``), which was re-validated in the Gate 0-b throughput
-smoke test (13.3 fps, ~355 MB resident, fully released by ``del`` + ``empty_cache``).
-Only the packaging changed: the class now satisfies the ``FrameProcessor``
-protocol (``process(frame_bgr) -> frame_bgr``), loads its two TorchScript models
-LAZILY on the first ``process`` call (so a canny-only job never touches these
-weights), and exposes ``release()`` to evict them from the GPU between the
-preprocess pass and the generation denoise (the driver calls it once the control
-video is written, so ~355 MB is not resident during the 16 GB-tight denoise).
+at commit ``d0d3df5^``), which was re-validated in the G0-b DWPose throughput
+smoke test (VERIFICATION_LOG §22.2: throughput, resident size, and full release
+by ``del`` + ``empty_cache``). Only the packaging changed: the class satisfies
+the ``FrameProcessor`` protocol (``process(frame_bgr) -> frame_bgr``), loads its
+two TorchScript models LAZILY on the first ``process`` call (so a canny-only job
+never touches these weights), and exposes ``release()`` to evict them from the
+GPU between the preprocess pass and the generation denoise (the driver calls it
+once the control video is written, so the pose weights are not resident during
+the 16 GB-tight denoise).
 
 Two-stage inference per frame:
   1. YOLOX-L (TorchScript) person detector -> person bounding boxes.
@@ -91,10 +92,11 @@ class DwposeProcessor:
     def release(self) -> None:
         """Evict the TorchScript models from the GPU and free the CUDA blocks.
 
-        Called by the driver after the control video is written so the ~355 MB
-        of pose weights are not resident during the generation denoise (the
-        16 GB card is weight-dominated at denoise time). A subsequent ``process``
-        transparently reloads via ``_ensure_loaded``.
+        Called by the driver after the control video is written so the pose
+        weights (resident size in VERIFICATION_LOG §22.2) are not resident during
+        the generation denoise (the 16 GB card is weight-dominated at denoise
+        time). A subsequent ``process`` transparently reloads via
+        ``_ensure_loaded``.
         """
         self._pose_model = None
         self._detector_model = None

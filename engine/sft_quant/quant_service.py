@@ -1,4 +1,4 @@
-"""Quantized safetensors transformer: loader, module op and install (§3-167 B-1, B-2, §3-168).
+"""Quantized safetensors transformer: loader, module op and install.
 
 The GGUF per-layer service's twin (``engine/gguf/quant_service.py``) for a
 quantized (fp8 / int8) safetensors transformer that ``sft_quant_format.inspect``
@@ -15,9 +15,12 @@ has accepted:
     the keep_resident cache — is never written to.
   * :class:`SftQuantLoaderService.install` wires both into the ledger in the same
     three steps as the GGUF service (loader, policy, transformer() wrapper).
-  * :func:`sft_transformer_sd_ops` and :func:`load_connector_bf16` are the
-    pieces shared with the LTX 2.5 engine (engine25): the key ops for the
-    detected prefix, and the text encoder side's connectors in bf16.
+  * :func:`sft_transformer_sd_ops` gives the key ops for the detected prefix,
+    and :func:`load_connector_bf16` the text encoder side's connectors in
+    bf16. The LTX 2.5 engine (engine25) builds its transformer from the
+    loader, the module op, :func:`sft_transformer_sd_ops` and
+    :func:`_assert_quant_only_in_linears` here, and the text encoder sides of
+    both engines call :func:`load_connector_bf16`.
 
 Each quantized layer's weight is re-made on the meta skeleton as a
 ``requires_grad=False`` Parameter of the stored shape (an int8 Parameter cannot
@@ -123,8 +126,10 @@ class SftQuantStateDictLoader:
         # scheme's label, already checked by inspect), input_scale (activation
         # quantization; this engine computes in bf16 and the skeleton has no
         # such key) and the connectors and text_embedding_projection (the text
-        # encoder's; engine/gemma reads them itself — the latter matters only
-        # for a bare-named file, where the identity sd_ops would keep it).
+        # encoder's; the text encoder side reads them itself — engine/gemma for
+        # LTX 2.3, engine25/gguf_gemma4.py for LTX 2.5 — and skipping the latter
+        # matters only for a bare-named file, where the identity sd_ops would
+        # keep it).
         text_proj = prefix + _TEXT_PROJ_HEAD
         wanted: dict[str, str] = {}
         # auxiliary key -> (scheme, leaf, o, i), resolved BEFORE any read so a
@@ -185,10 +190,9 @@ def sft_transformer_sd_ops(prefix: str):
     """Transformer key ops for the prefix ``inspect`` detected.
 
     ``"model.diffusion_model."`` -> the wheel's own ``LTXV_MODEL_COMFY_RENAMING_MAP``
-    (what ``ModelLedger`` already puts on the transformer builder, so the 2.3
-    path is unchanged). ``""`` (bare names) -> identity: ``with_matching()``
-    with no prefix/suffix matches every key. A named SDOps WITHOUT a matcher
-    would drop every key instead.
+    (the key ops ``ModelLedger`` puts on the transformer builder). ``""`` (bare
+    names) -> identity: ``with_matching()`` with no prefix/suffix matches
+    every key. A named SDOps WITHOUT a matcher would drop every key instead.
     """
     from ltx_core.loader.sd_ops import SDOps
     from ltx_core.model.transformer import LTXV_MODEL_COMFY_RENAMING_MAP

@@ -1,24 +1,25 @@
-"""LTX 2.5 transformer: GGUF load path, per-layer dequant, block swap (§3-98 Phase 2b).
+"""LTX 2.5 transformer: GGUF / quantized safetensors load, per-layer dequant, block swap.
 
 This is the whole 14.7GB-transformer-on-a-16GB-card story for the 2.5 engine.
 The official ``DiffusionStage.from_checkpoint`` cannot be used as shipped: it
 reads a bf16 safetensors monolith straight onto the GPU. So this module supplies
 the four replacement parts and re-assembles the stage around them.
 
-1. :class:`Ltx25GGMLTensor` -- the F1 fix
-   Official 1.2.0 added ``Disposable.dispose()``, which releases storage by
-   replacing every parameter and persistent buffer with
-   ``torch.empty_like(x, device="meta")``. The two-stage distilled pipeline
-   disposes the transformer between stage 1 and stage 2 *within a single job*,
-   so this runs on every generation, not just between jobs.
+1. :class:`Ltx25GGMLTensor` -- surviving ``dispose()``
+   Official ``Disposable.dispose()`` releases storage by replacing every
+   parameter and persistent buffer with ``torch.empty_like(x, device="meta")``
+   (``ltxcore_compat.verify()`` logs whether the installed package does this).
+   The two-stage distilled pipeline disposes the transformer between stage 1
+   and stage 2 *within a single job*, so this runs on every generation, not
+   just between jobs.
 
    ``GGMLQuantizedTensor`` (2.3's, reused here) keeps its quantisation metadata
    -- ``_ggml_type`` and ``_float_shape`` -- as plain Python attributes, and
    reports the *dequantised* shape from a ``shape`` property that reads
    ``_float_shape``. ``empty_like`` returns a fresh instance of the subclass
    with those attributes ABSENT, so the very next ``.shape`` access raises
-   AttributeError. Reproduced in the real venv before this module was written:
-   without the fix the first job dies at the stage-1 -> stage-2 handover.
+   AttributeError. Without the fix the first job dies at the stage-1 -> stage-2
+   handover (reproduced in the engine venv).
 
    The fix is a ``__torch_function__`` that re-attaches the metadata to any
    result of the subclass type. It covers ``empty_like`` / ``empty``
@@ -57,19 +58,19 @@ the four replacement parts and re-assembles the stage around them.
    weights arriving as buffers, a key that failed to land is a silent
    wrong-numbers bug rather than a crash.
 
-Weight caching (plan H revision): the registry defaults to
-``cache_weights=True``. ``dispose()`` metas the model's storage, so stage 2 would
-otherwise re-read 14.7GB from disk mid-job. The cost is ~14.7GB of resident RAM
-on top of the working copy; ``cache_weights=False`` is available for RAM-tight
-machines.
+Weight caching: ``from_gguf`` / ``from_safetensors`` build the registry with
+``cache_weights`` (the load payload's key of that name). ``dispose()`` metas the
+model's storage, so stage 2 would otherwise re-read 14.7GB from disk mid-job.
+The cost is ~14.7GB of resident RAM on top of the working copy;
+``cache_weights=False`` is available for RAM-tight machines.
 
-Reuse from the 2.3 engine (explicitly sanctioned; those files are not edited):
+Reuse from the 2.3 engine (explicitly sanctioned; imported, not copied):
 ``engine.gguf.quant_service`` for the tensor subclass and the per-layer dequant
 module op, ``engine.transformer.block_swap_service`` for the swap itself.
 ``engine.gemma.gguf_quant_service`` is deliberately NOT used -- it is Gemma3
 specific and folds RMSNorm.
 
-Selftest (gate G2)::
+Selftest (its run is recorded in VERIFICATION_LOG §69.4)::
 
     python -m engine25.gguf_transformer --selftest <path-to-transformer.gguf>
 
@@ -95,7 +96,7 @@ from typing import Any
 
 import torch
 
-# --- 2.3 engine reuse (import only; those modules are never edited) ----------
+# --- 2.3 engine reuse (import only; shared with 2.3, not copied) -------------
 from engine.gguf import ic_lora_common
 from engine.gguf.ic_lora_common import (
     attach_ic_loras,
@@ -106,9 +107,9 @@ from engine.gguf.quant_service import (
     GGMLQuantizedTensor,
     _patch_model_for_ggml_dequant,
 )
-# Quantized (fp8 / int8) safetensors transformer (§3-167 B-2, §3-168): the
-# acceptance check and the loader / module op shared with the 2.3 engine. Only
-# the metadata shape differs (below).
+# Quantized (fp8 / int8) safetensors transformer: the acceptance check and the
+# loader / module op shared with the 2.3 engine. Only the metadata shape
+# differs (below).
 import sft_quant_format
 from engine.sft_quant.quant_service import (
     SftQuantStateDictLoader,
@@ -173,11 +174,14 @@ _EMBEDDINGS_PREFIXES = (
     "text_embedding_projection.",
 )
 
-#: Renaming for the EmbeddingsProcessor half of the same GGUF (Phase 2c consumes
-#: this). Exactly four rules -- the official ``EMBEDDINGS_PROCESSOR_KEY_OPS``
-#: rules minus the ``model.diffusion_model.`` prefix the converter already
-#: stripped, and minus the V1 single-``aggregate_embed`` rule that a 2.5
-#: checkpoint never has.
+#: Renaming for the EmbeddingsProcessor's tensors, read from the transformer
+#: file and the text-encoder GGUF (used by
+#: ``gguf_gemma4.build_embeddings_processor_builder``). Exactly four rules --
+#: the official ``EMBEDDINGS_PROCESSOR_KEY_OPS`` rules minus the
+#: ``model.diffusion_model.`` prefix, which no key carries by the time it gets
+#: here (the converter wrote the GGUFs without it, and ``load_connector_bf16``
+#: returns a safetensors file's keys without it), and minus the V1
+#: single-``aggregate_embed`` rule that a 2.5 checkpoint never has.
 LTX25_EMBEDDINGS_PROCESSOR_KEY_OPS = (
     SDOps("LTX25_EMBEDDINGS_PROCESSOR_KEY_OPS")
     .with_matching(prefix="text_embedding_projection.video_aggregate_embed.")
@@ -196,7 +200,7 @@ class Ltx25BuildError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
-# 1. Ltx25GGMLTensor -- survives dispose() (F1)
+# 1. Ltx25GGMLTensor -- survives dispose()
 # ---------------------------------------------------------------------------
 
 
@@ -301,7 +305,7 @@ def read_gguf_metadata(gguf_path: str) -> dict:
     value is ``json.loads``-ed when it parses and left as a raw string when it
     does not. So ``config`` and ``gemma_source_checkpoint`` come back as dicts,
     ``model_version`` and ``license`` as strings -- which is what the official
-    consumers expect (``_check_gemma_version`` subscripts
+    consumers expect (``_check_gemma_version`` calls ``.get`` on
     ``gemma_source_checkpoint``; a JSON string there would raise).
 
     ``GGUF.*`` (reader-synthesised structure counts) and ``general.*`` (GGUF's
@@ -441,12 +445,13 @@ class Ltx25GgufStateDictLoader:
 
 
 class Ltx25SftStateDictLoader(SftQuantStateDictLoader):
-    """The 2.3 quantized safetensors loader with ltx_core 1.2's metadata shape (§3-167 B-2).
+    """The 2.3 quantized safetensors loader with the metadata shape the 2.5 ltx_core reads.
 
-    1.2's ``LTXModelConfigurator.from_metadata`` reads ``metadata["config"]["transformer"]``
-    from the WHOLE ``__metadata__`` (each value JSON-parsed), where 1.0 took the
-    ``config`` dict itself. Parsed once here: ``model_metadata()`` runs on every
-    build (stage 1, stage 2, each chain clip and tile).
+    ``LTXModelConfigurator.from_metadata`` in the pinned ltx_core (``$ltx25DirectPins``
+    in ``scripts/install_ltx.ps1``) reads ``metadata["config"]["transformer"]``
+    from the WHOLE ``__metadata__`` (each value JSON-parsed), where the base
+    class returns the ``config`` dict itself. Parsed once here: ``model_metadata()``
+    runs on every build (stage 1, stage 2, each chain clip and tile).
     """
 
     def __init__(self, path: str, layout: Any) -> None:
@@ -470,8 +475,12 @@ def build_quantization_policy() -> QuantizationPolicy:
     -- it copies neither ``allowed_keys`` nor anything else, so contributing
     sd_ops here would silently re-admit the 258 EmbeddingsProcessor tensors.
 
-    ``model_configurator`` is pinned so the policy, not the caller, decides the
-    transformer class -- matching how the official fp8/nvfp4 policies behave.
+    ``model_configurator`` names the same ``LTXModelConfigurator`` the builder
+    is given. Upstream reads a policy's configurator in
+    ``DiffusionStage.from_checkpoint``, and this policy never reaches that
+    method (:meth:`Ltx25DiffusionStage.from_gguf` constructs the stage
+    directly), so the builder's ``model_class_configurator`` is what decides
+    the transformer class.
     """
     ggml_op = ModuleOps(
         name="ltx25_ggml_per_layer_dequant",
@@ -537,9 +546,9 @@ class Ltx25CpuModelBuilder(SingleGPUModelBuilder):
                 f"{' ...' if len(uninitialized) > len(head) else ''}. The checkpoint is missing keys the "
                 f"model expects (or the sd_ops filter dropped too much)."
             )
-        # fp8 / int8 anywhere but a patched Linear has nothing to dequantize it
-        # (§3-167 B-2, §3-168). A GGUF build has neither (its quantized buffers
-        # are uint8), so this finds nothing there.
+        # fp8 / int8 anywhere but a patched Linear has nothing to dequantize it.
+        # A GGUF build has neither (its quantized buffers are uint8), so this
+        # finds nothing there.
         _assert_quant_only_in_linears(meta_model)
         return meta_model
 
@@ -594,18 +603,21 @@ def _move_module_tree(root: torch.nn.Module, device: torch.device, skip: set[int
 
 
 class Ltx25DiffusionStage(DiffusionStage):
-    """``DiffusionStage`` that builds from a GGUF and places weights itself.
+    """``DiffusionStage`` that builds a quantized model and places it itself.
 
     Overrides exactly one method, :meth:`_build_transformer`, so everything else
     -- the denoising loop, conditioning checks, ``with_attention`` /
     ``with_loras``, the ``gpu_model`` dispose-on-exit contract -- is the
     official code path unchanged.
 
-    Block swap is installed once per model shell and is idempotent: with
-    ``cache_models=True`` the registry hands back the SAME ``LTXModel``
-    instance on every build, so the second build finds the blocks already
-    patched and leaves them alone. Re-wrapping would stack two swap windows on
-    one block and drive twice the traffic.
+    Block swap is stripped and re-installed on every build that streams
+    blocks: with ``cache_models=True`` the registry hands back the SAME
+    ``LTXModel`` instance on every build, so the blocks arrive still wearing
+    the previous build's swap wrappers. :meth:`_place_transformer` puts the
+    original ``forward``s back before :meth:`ensure_block_swap_installed`
+    wraps them again, and that method skips the install when the blocks are
+    already patched. Re-wrapping would stack two swap windows on one block and
+    drive twice the traffic.
     """
 
     def __init__(
@@ -627,14 +639,14 @@ class Ltx25DiffusionStage(DiffusionStage):
             # allocator (measured on B4: 15,292 -> 14,840MB peak reserved).
             # LTX 2.3 deliberately leaves it off - its peak is in decode, where
             # a held ring would just stack under it. The full measurement and
-            # the reason the two engines differ are in the module docstring of
-            # engine/transformer/block_swap_prefetch.py.
+            # the reason the two engines differ are in VERIFICATION_LOG §75.7
+            # and §75.8.
             BlockSwapService(blocks_on_gpu=self.blocks_on_gpu, device=device,
                              hold_arenas=True)
             if self.blocks_on_gpu > 0
             else None
         )
-        # -- IC-LoRA / Style LoRA state (§3-102 third stage) -----------------
+        # -- IC-LoRA / Style LoRA state --------------------------------------
         #: The CURRENT job's adapters as ``(path, strength, audio_strength)``.
         #: Empty is the ordinary case and costs one no-op detach per build.
         self._ic_loras: list[tuple[str, float, float | None]] = []
@@ -654,8 +666,9 @@ class Ltx25DiffusionStage(DiffusionStage):
         #: clip/tile in a chain).
         self._prefetch_requested = False
         #: How many of this job's builds reached ``install()`` on the swap path,
-        #: and how many of those actually got a prefetch engine. The pair is the
-        #: whole echo: equal and non-zero means every build ran accelerated.
+        #: and how many of those actually got a prefetch engine. The pair
+        #: decides the echo whenever a build took the swap path: equal and
+        #: non-zero means every build ran accelerated.
         self._prefetch_builds = 0
         self._prefetch_engaged = 0
         # -- SageAttention (per build) ---------------------------------------
@@ -717,11 +730,12 @@ class Ltx25DiffusionStage(DiffusionStage):
     def _apply_loras(self, model: X0Model) -> None:
         """Attach the job's adapters to a freshly built transformer, or detach.
 
-        2.3's product form (``engine/gguf/quant_service.py:798-805``), verbatim
-        in shape: ``if ic_loras: attach else: detach``. The ELSE half is what
-        makes it safe on this engine -- the shell registry hands back the SAME
-        ``LTXModel`` instance on every build, so a job that stopped asking for a
-        LoRA would otherwise inherit the previous job's buffers.
+        2.3's product form (``patched_transformer`` inside
+        ``GGUFQuantLoaderService.install`` in ``engine/gguf/quant_service.py``),
+        verbatim in shape: ``if ic_loras: attach else: detach``. The ELSE half
+        is what makes it safe on this engine -- the shell registry hands back
+        the SAME ``LTXModel`` instance on every build, so a job that stopped
+        asking for a LoRA would otherwise inherit the previous job's buffers.
 
         Called between the ``X0Model`` wrap and ``_place_transformer`` on purpose:
         ``attach_ic_loras`` registers A/B as NON-PERSISTENT buffers on each target
@@ -796,11 +810,13 @@ class Ltx25DiffusionStage(DiffusionStage):
           of them got an engine, otherwise "on->off" (a partial degradation is
           still a degradation, and averaging it away would hide it);
         * no build went down the swap path at all -> the feature had nothing to
-          apply to. Full residency (``blocks_on_gpu >= total``) is the ordinary
-          way to get here: ``install()`` returns before it would build an engine
-          and leaves ``last_prefetch_used == "off"``, which is 2.3's answer for
-          the same configuration. Anything else there is unexplained, so it is
-          reported as a degradation rather than as a clean "off".
+          apply to. Full residency is the ordinary way to get here: with no swap
+          service at all (``blocks_on_gpu`` not positive) the answer is "off",
+          and with ``blocks_on_gpu >= total`` ``install()`` returns before it
+          would build an engine and leaves ``last_prefetch_used == "off"``,
+          which is 2.3's answer for the same configuration. Anything else there
+          is unexplained, so it is reported as a degradation rather than as a
+          clean "off".
         """
         if not self._prefetch_requested:
             return "off"
@@ -844,7 +860,7 @@ class Ltx25DiffusionStage(DiffusionStage):
     ) -> "Ltx25DiffusionStage":
         """Assemble the stage from a transformer GGUF.
 
-        ``cache_weights=True`` is the default on purpose (plan H revision): the
+        ``cache_weights=True`` is the default on purpose: the
         pipeline disposes the transformer between stage 1 and stage 2, so
         without a retained state dict every job pays a second 14.7GB disk read
         mid-generation. The price is that much resident RAM; pass
@@ -888,7 +904,7 @@ class Ltx25DiffusionStage(DiffusionStage):
         registry: Registry | None = None,
         **kwargs: Any,
     ) -> "Ltx25DiffusionStage":
-        """Assemble the stage from a quantized safetensors transformer (§3-167 B-2, §3-168).
+        """Assemble the stage from a quantized safetensors transformer.
 
         :meth:`from_gguf`'s twin: same arguments, same CPU builder and placement,
         with the quantized safetensors loader, the key ops for the detected prefix and the
@@ -965,10 +981,11 @@ class Ltx25DiffusionStage(DiffusionStage):
         # A teardown after this line would resurrect the PREVIOUS job's LoRA
         # buffers on top of this job's. It cannot: ``_apply_loras`` always runs
         # after it and always ends in either an attach -- whose first act is
-        # ``detach_ic_loras`` (``engine/gguf/ic_lora_common.py:247``, the
-        # defensive "never stack onto stale specs" call) -- or, when the job asks
-        # for no adapter, the ``else`` branch's bare ``detach_ic_loras``. Either
-        # way every resurrected buffer is removed before the forward sees it.
+        # ``detach_ic_loras`` (the defensive "never stack onto stale specs"
+        # call in ``attach_ic_loras``, ``engine/gguf/ic_lora_common.py``) -- or,
+        # when the job asks for no adapter, the ``else`` branch's bare
+        # ``detach_ic_loras``. Either way every resurrected buffer is removed
+        # before the forward sees it.
         self._apply_loras(model)
         self._place_transformer(model, target)
         # AFTER placement, and last: swapping ``attention_function`` is a plain
@@ -993,14 +1010,13 @@ class Ltx25DiffusionStage(DiffusionStage):
         hands back the SAME ``LTXModel`` on every build and ``dispose()`` does
         not touch plain Python attributes, so job N's wrappers are still on the
         modules when job N+1 builds -- the same shell-reuse hazard
-        ``_place_transformer`` handles for block swap two methods up, with the
-        same answer. Left alone they would nest one level deeper per build,
-        silently: a nested wrapper still returns the right numbers.
+        ``_place_transformer`` handles for block swap, with the same answer.
+        Left alone they would nest one level deeper per build, silently: a
+        nested wrapper still returns the right numbers.
 
         The OFF case costs exactly one traversal that finds nothing (``install``
         returns 0 at its ``state.requested`` gate having touched nothing at all),
-        which is what keeps an sdpa job bit-identical to the one that ran before
-        this feature existed.
+        which is what keeps sage entirely absent from an sdpa job's model.
         """
         service = self._sage_service
         if service is None:
@@ -1012,7 +1028,7 @@ class Ltx25DiffusionStage(DiffusionStage):
             # INFO, not ERROR: on this engine a surviving wrapper is the NORMAL
             # state of a reused shell, not a defect. (The service's own ERROR
             # line fires only when a wrapper survives past THIS call, i.e. when
-            # the strip below did not happen at all.)
+            # the strip above did not happen at all.)
             logger.info(
                 "SageAttention: stripped %d wrapper(s) from the reused shell before rebuilding",
                 removed,
@@ -1032,12 +1048,13 @@ class Ltx25DiffusionStage(DiffusionStage):
 
         Strip-and-re-install rather than "install once" is also what makes the
         strip count uninteresting: a resident worker running two negative-prompt
-        jobs in a row finds 96 wrappers here and that is NORMAL. Hence INFO.
+        jobs in a row finds every text cross-attention module patched here
+        (``neg_selfcheck25`` checks the count) and that is NORMAL. Hence INFO.
 
         The OFF case costs one traversal that finds nothing (``uninstall``
         returns 0) plus an ``install`` that returns at its ``state.requested``
-        gate having touched nothing at all -- which is what keeps a plain job
-        identical to the one that ran before this feature existed.
+        gate having touched nothing at all -- which is what keeps NAG/VSF
+        entirely absent from a plain job's model.
         """
         service = self._neg_service
         if service is None:
@@ -1117,10 +1134,9 @@ class Ltx25DiffusionStage(DiffusionStage):
                 )
             logger.info("BlockSwap already installed on %d blocks -- skipped (idempotent)", len(blocks))
             return False
-        # IMMEDIATELY before install(), never at the top of this method: the
-        # selftest calls this a second time on an already-installed model to
-        # prove the idempotency, and a write up there would clear the flag the
-        # real install is still going to be judged on.
+        # Written right before install(), which reads it, rather than at the
+        # top of this method: the idempotent return above (the selftest's
+        # second call on an already-installed model) has no install to arm.
         self._swap_service.prefetch_requested = self._prefetch_requested
         self._swap_service.install(model)
         # ``last_prefetch_used`` is install()'s own verdict for THIS build:
@@ -1139,14 +1155,15 @@ class Ltx25DiffusionStage(DiffusionStage):
         **TOUCHES NO TENSOR, AND MUST NOT START TO.** Add no ``block.to(...)``,
         no ``.cpu()``, no ``.data`` assignment, nothing that dispatches an
         operator -- not even "just to be tidy". This runs on the model shell the
-        registry reuses, which by then has been through ``Disposable.dispose()``:
-        every parameter and persistent buffer is a ``device="meta"`` tensor, and
-        a ``.to()`` on one of those raises NotImplementedError. Restoring a
-        Python attribute is the only thing that is safe here, and it is also the
-        only thing that is needed.
+        registry reuses. :meth:`_place_transformer` calls it after the new state
+        dict has been loaded, but between builds that shell has been through
+        ``Disposable.dispose()``: every parameter and persistent buffer is a
+        ``device="meta"`` tensor, and a ``.to()`` on one of those raises
+        NotImplementedError. Restoring a Python attribute is safe in both states
+        of the shell, and it is also the only thing that is needed.
 
         The whole body is wrapped, ``transformer_blocks_of`` included: this is on
-        the build path now, and a model whose block list cannot be walked must
+        the build path, and a model whose block list cannot be walked must
         leave the build to fail on its own terms rather than be killed by the
         cleanup that was meant to help it.
         """
@@ -1174,9 +1191,10 @@ class Ltx25DiffusionStage(DiffusionStage):
 
         Deliberately NOT ``BlockSwapService.uninstall``: that one ends with
         ``block.to(self.device)`` for all 48 blocks, i.e. exactly the 14.7GB
-        GPU residency this engine exists to avoid. Everything else it does --
-        restore ``forward``, drop the marker, release the prefetch pool -- is
-        reproduced here.
+        GPU residency this engine exists to avoid. Of the rest of what it does,
+        restoring ``forward``, dropping the marker and tearing down the prefetch
+        engine are reproduced here; dropping the service's reference to the
+        transformer and releasing its pinned staging pool are not.
         """
         # Read the markers BEFORE stripping them: which blocks were patched is
         # what decides which ones get moved back to CPU.
@@ -1193,12 +1211,12 @@ class Ltx25DiffusionStage(DiffusionStage):
 
 
 # ---------------------------------------------------------------------------
-# Selftest (gate G2)
+# Selftest (VERIFICATION_LOG §69.4)
 # ---------------------------------------------------------------------------
 
 
 def _rss_bytes() -> int | None:
-    """Process working set, best effort (no psutil in this venv)."""
+    """Process working set via Win32, best effort (``None`` on failure)."""
     try:
         import ctypes
         import ctypes.wintypes as wintypes
@@ -1389,9 +1407,11 @@ def _selftest(  # noqa: PLR0913, PLR0915
         vram.record(f"{index:02d}a_build", build_seconds)
         round_report["build_seconds"] = round(build_seconds, 2)
         round_report["num_blocks"] = int(transformer.num_blocks)
-        # THE point of this selftest for the prefetch gate: install() runs once
-        # per BUILD, so this is "off" only on a round whose install was skipped
-        # -- which is exactly the failure the marker-stripping fixes.
+        # THE point of this selftest for block-swap prefetch (VERIFICATION_LOG
+        # §75.4 (b)): install() runs once per BUILD and resets this to "off"
+        # before deciding; a round that skipped install() would keep the
+        # previous round's value, so this catches a skipped install -- the
+        # failure the marker-stripping fixes -- only on the first round.
         round_report["prefetch_used"] = (
             stage._swap_service.last_prefetch_used if stage._swap_service is not None else "off"
         )

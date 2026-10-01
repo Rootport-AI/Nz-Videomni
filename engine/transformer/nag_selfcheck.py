@@ -20,12 +20,13 @@ What is checked, and why:
      BOTH branches of the tau clamp (engaged and not engaged).
   2. The alpha=0.0 / scale=1.0 identity short-circuits return the exact same
      z_pos object (not just an equal-valued copy) — this is what makes NAG's
-     "OFF" state bit-identical to the unpatched path (real-device gate G2).
+     "OFF" state bit-identical to the unpatched path (real-device gate G2,
+     VERIFICATION_LOG §38.4).
   3. Degenerate zero-norm inputs (z_pos all zeros, z_neg all zeros, and a
      constructed case where the extrapolated z_g is exactly zero) never
      produce NaN/Inf, thanks to the epsilon terms in nag_combine.
   4. A REAL `BasicAVTransformerBlock` (cross_attention_adaln=True,
-     apply_gated_attention=True — the production GGUF configuration) is built
+     apply_gated_attention=True — the production model configuration) is built
      on CPU. Against its actual attn2 module we verify: (a) NagService.install
      with NAG not requested patches nothing and returns 0; (b) with NAG
      requested, the patched forward's output matches an independently
@@ -41,9 +42,10 @@ What is checked, and why:
      requested returns 0 and leaves every module's `forward` attribute
      untouched (identity-checked, not just behaviourally unchanged).
 
-A bonus check (6) is included beyond the plan's five: `install()` raises
-RuntimeError when NAG is requested but the negative context was never
-encoded (`NagState.ready is False`) — the fail-loud path D2 relies on.
+Check 6: `install()` raises RuntimeError when NAG is requested but the
+negative context was never encoded (`NagState.ready is False`) — the
+fail-loud guard on encoding the negative prompt before
+`ledger.transformer()` is built.
 """
 
 from __future__ import annotations
@@ -259,10 +261,10 @@ def check_real_block_off_then_on() -> None:
 
     # Simulate the AdaLN modulation the production path applies to the
     # POSITIVE context before it reaches attn2/audio_attn2
-    # (apply_cross_attention_adaln, transformer.py:391):
+    # (upstream apply_cross_attention_adaln):
     #   encoder_hidden_states = context * (1 + scale_kv) + shift_kv
     # The NAG negative context is intentionally never modulated this way
-    # (D1/D4's deliberate asymmetry) — it stays raw below.
+    # (a deliberate asymmetry, VERIFICATION_LOG §38.1) — it stays raw below.
     scale_kv = torch.randn(batch, 1, 16) * 0.1
     shift_kv = torch.randn(batch, 1, 16) * 0.1
     pos_ctx_modulated = pos_ctx_raw * (1 + scale_kv) + shift_kv

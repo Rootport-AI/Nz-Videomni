@@ -1,4 +1,4 @@
-"""Outpainting for LTX 2.5 (§3-102 Outpainting increment, commit C1) -- INACTIVE.
+"""Outpainting for LTX 2.5.
 
 What this is
 ------------
@@ -14,19 +14,19 @@ rectangle blended back in pixel space between the two stages.
       -> STAGE 1 at half resolution, with that reference attached
       -> decode stage 1 to pixels (half res)
       -> DE-GREEN: the canvas' pad bands are replaced by these same pixels
-      -> BLEND 1: Laplacian pyramid, dilation 5, against that canvas
+      -> BLEND 1: Laplacian pyramid, dilation ``blend_dilation_stage1``,
+         against that canvas
       -> 2x PIXEL upscale
       -> tiled VAE re-encode at full resolution
       -> STAGE 2 at full resolution, no reference conditioning
       -> decode stage 2 to pixels (full res)
       -> DE-GREEN again, at full resolution
-      -> BLEND 2: Laplacian pyramid, dilation 2, against that canvas
+      -> BLEND 2: Laplacian pyramid, dilation ``blend_dilation_stage2``,
+         against that canvas
       -> mux the source's ORIGINAL waveform -> one mp4.
 
-NOTHING CALLS THIS YET. Commit C1 lands the driver with zero call sites: the
-adapter still refuses ``outpaint`` at the API and the worker has no branch for
-it, so the shipped behaviour of every existing job is unchanged by
-construction, not merely by inspection. The opening is commit C2.
+Called by ``engine25/worker.py``'s ``_do_generate`` when the job carries an
+``outpaint`` block.
 
 Why a separate module rather than a flag on the single-generate path
 --------------------------------------------------------------------
@@ -37,10 +37,11 @@ there -- decode to pixels, blend the generated frame with the green canvas,
 upscale in PIXEL space, re-encode -- so it needs its own two-stage driver.
 :func:`engine25.chain25.run_chain` is the precedent for writing one, and 2.3's
 ``engine/pipeline/outpaint_pipeline.py`` is the same argument made on the older
-wheel. THE PROCEDURE HERE IS 2.3's, which the W2 gate validated; the CODE is
-not, because 2.5 drives official 1.2.0 blocks (``prompt_encoder`` /
-``audio_conditioner`` / ``image_conditioner`` / ``stage`` / ``video_decoder`` /
-``audio_decoder``) instead of a ``ModelLedger``.
+wheel. THE PROCEDURE HERE IS 2.3's, which LTX 2.3's real-device outpaint gate
+validated (VERIFICATION_LOG §54.4); the CODE is not, because 2.5 drives the
+official pipeline's blocks (``prompt_encoder`` / ``audio_conditioner`` /
+``image_conditioner`` / ``stage`` / ``video_decoder`` / ``audio_decoder``)
+instead of a ``ModelLedger``.
 
 WHAT IS BORROWED, AND WHY EACH IS NOT COPIED
 --------------------------------------------
@@ -49,9 +50,10 @@ one -- one definition per fact -- and each line says what would go wrong with a
 second copy:
 
 * ``engine.outpaint.canvas.OutpaintGeometry`` / ``build_blend_mask`` /
-  ``CANVAS_MULTIPLE`` (via the geometry) -- the API validator, the mock backend
-  and the 2.3 engine already share this module, so a copy would let the canvas
-  the app validated and the canvas this engine blends disagree.
+  ``CANVAS_MULTIPLE`` (via the geometry) -- the 2.3 engine and
+  ``engine25/worker.py`` (which builds the ``OutpaintGeometry`` handed in here)
+  use this module too, so a copy would let the geometry the worker built and
+  the canvas this engine blends disagree.
 * ``engine.outpaint.pyramid_blend.blend_video_u8`` -- the blend IS the feature;
   a second implementation would be a second set of seams to gate.
 * ``engine25.chain25.DTYPE`` -- the dtype every conditioning latent in this
@@ -85,7 +87,7 @@ second copy:
 
 Deliberate differences from 2.3, all recorded rather than hidden
 ---------------------------------------------------------------
-* **SAMPLER (M-7).** 2.3 runs plain euler in BOTH stages. This engine runs the
+* **SAMPLER.** 2.3 runs plain euler in BOTH stages. This engine runs the
   ANCESTRAL euler in stage 1 -- what the 2.5 distilled checkpoint was distilled
   for, what ``DistilledPipeline`` selects for a single generation, and what
   :data:`chain25.STAGE1_SAMPLER` already uses. It is also nearer the official
@@ -100,19 +102,21 @@ Deliberate differences from 2.3, all recorded rather than hidden
   (stage 2 always starts from stage 1's audio) applied here. With a fully
   frozen head the two are identical; they can only differ over a PARTIAL
   freeze, where 2.3 hands stage 2 zeros for the un-frozen tail and this hands
-  it stage 1's generated audio. Recorded as
-  ``stage2_audio_init_policy: "stage1_carry"`` so gate O7's judgement is made
-  against this policy and NOT against 2.3's absolute numbers (M-2).
-* **RE-ENCODE TILING (G0-d).** Both engines hand the full-resolution re-encode
+  it stage 1's generated audio. Recorded as ``stage2_audio_init_policy``
+  (:data:`STAGE2_AUDIO_INIT_POLICY`) so a partial-freeze run (VERIFICATION_LOG
+  §79.5, arm O7) is judged against this policy and NOT against 2.3's absolute
+  numbers.
+* **RE-ENCODE TILING.** Both engines hand the full-resolution re-encode
   the DECODE's resolved tiling config. 2.3 additionally narrows the spatial
   tiles for its retake-class encodes; this engine does not, and instead wraps
   the encode in ``set_conv3d_memory_format`` -- measured at 27188 MB -> 6174 MB
   reserved for -0.002 dB, where the tile budget cost -0.378 dB. See
-  ``outputs/ltx25-outpaint-prep/RESULTS.md`` §1.
+  VERIFICATION_LOG §79.2 (d) and ``outputs/ltx25-outpaint-prep/RESULTS.md`` §1.
 * **PIXEL DOMAIN.** 2.3's video VAE decode already yielded uint8; 2.5's yields
   float ``[0, 1]`` in ``(F, H, W, C)``, and its mp4 encoder WANTS float
   ``[0, 1]`` where 2.3's wanted a materialised uint8 tensor. The four
-  conversion points are named in :func:`run_outpaint`'s body (C-1).
+  conversion points are the helpers whose docstrings say "Boundary (1)" to
+  "(4)" (the "Pixels" section below).
 
 What this module deliberately does NOT do
 -----------------------------------------
@@ -128,20 +132,21 @@ What this module deliberately does NOT do
   already maps (``encode`` / ``stage1_denoise`` / ``stage2_denoise`` /
   ``decode``) and no chain position is announced, so a receiver that has only
   ever seen a single generation sees exactly the calls it has always seen.
-  KNOWN CONSEQUENCE (M-3): the app's SINGLE-generate fraction maps
-  ``stage1_denoise`` to 0.06..0.50 and ``stage2_denoise`` to 0.50..0.85 and
-  ignores ``decode`` entirely, so the bar STANDS STILL at 0.50 for the whole of
-  decode 1 + blend 1 + upscale + re-encode. That is a long, silent stretch at
-  production resolution. It is documented rather than fixed: a new phase name
-  would need an app-side branch, which this theme does not touch.
-* **Its ``ltx25`` sub-dict reaches ``metadata.json`` now; the rest of it still
-  does not (台帳 §3-131).** ``done``'s additive keys and the worker log are
-  where the REST of the outpaint facts (geometry, blend, sigmas, the audio
-  freeze proof) land -- putting THOSE in ``metadata.json`` would still need a
-  further app-layer change and is out of scope. The one exception is the
-  nested ``ltx25`` sub-dict: the worker re-sends that SAME dict object as a
-  top-level ``ltx25`` key on ``done`` (see ``engine25/worker.py``), and the app
-  writes it into ``metadata.json`` verbatim.
+  KNOWN CONSEQUENCE: the app's SINGLE-generate fraction (``_progress_frac`` in
+  ``services/engines/ltx/adapter.py``) gives ``stage1_denoise`` and
+  ``stage2_denoise`` their own bands and ignores ``decode`` entirely, so the
+  bar STANDS STILL at the end of the stage-1 band for the whole of decode 1 +
+  blend 1 + upscale + re-encode. That is a long, silent stretch at production
+  resolution (measured in VERIFICATION_LOG §79.6). It is documented rather
+  than fixed: a new phase name would need an app-side branch.
+* **Its ``ltx25`` sub-dict reaches ``metadata.json``; the rest of it does
+  not.** ``done``'s additive keys and the worker log are where the REST of
+  the outpaint facts (geometry, blend, sigmas, the audio freeze proof) land
+  -- putting THOSE in ``metadata.json`` would need an app-layer change. The
+  one exception is the nested ``ltx25`` sub-dict: the worker re-sends that
+  SAME dict object as a top-level ``ltx25`` key on ``done`` (see
+  ``engine25/worker.py``), and the app writes it into ``metadata.json``
+  verbatim.
   :class:`OutpaintResult` is a superset of
   :class:`~engine25.pipeline25.GenerationResult` precisely so the numbers the
   app DOES store (``vram_optimization.peak_vram_mb``) still get filled in.
@@ -150,8 +155,9 @@ Run notes
 ---------
 One job at a time, like everything else in this engine. The two
 ``ImageConditioner`` calls (the reference encode and the re-encode) each build
-and free the video encoder; G0-d measured the second build at 0.34-0.47 s and
-proved the two calls bit-identical, so the lifecycle is left alone.
+and free the video encoder; VERIFICATION_LOG §79.2 (d) measured the second
+build at 0.34-0.47 s and proved the two calls bit-identical, so the lifecycle
+is left alone.
 """
 
 from __future__ import annotations
@@ -239,22 +245,22 @@ ProgressFn = Callable[..., None]
 #: REMOVED.
 #:
 #: DERIVED, NOT TRANSCRIBED, and that is the whole point of this line. 2.3
-#: writes ``[0.725, 0.421875, 0.0]`` as a literal; here the same three numbers
-#: are a SLICE of the constant the wheel ships, so an upstream that re-tunes the
-#: distilled schedule moves this with it instead of leaving a stale literal
-#: behind. The two engines' ``constants.py`` files are NOT identical, but the
-#: two schedule lines in them are, which is what makes the slice legitimate
-#: rather than a coincidence:
+#: writes its schedule as a literal list; here the same numbers are a SLICE of
+#: the constant the wheel ships, so an upstream that re-tunes the distilled
+#: schedule moves this with it instead of leaving a stale literal behind. The
+#: two engines' ``constants.py`` files are NOT identical, but the two schedule
+#: lines in them are (VERIFICATION_LOG §79.2 (f)), which is what makes the
+#: slice legitimate rather than a coincidence:
 #:
 #:     DISTILLED_SIGMA_VALUES[-4:] == STAGE_2_DISTILLED_SIGMA_VALUES
-#:                                 == [0.909375, 0.725, 0.421875, 0.0]
 #:
 #: WHY DROP THE FIRST RUNG. The official outpaint workflow's ManualSigmas node
 #: (5211) starts one step LOWER than the stock stage 2, at 0.725, and the
 #: difference is load-bearing rather than cosmetic: stage 2's initial latent is
 #: the RE-ENCODE of the BLENDED pixels, so the noise level it starts from
 #: decides how much of the blend survives. Starting where the stock schedule
-#: does (0.909375) would partly re-generate the very seam blend 1 just fixed.
+#: does (``STAGE_2_DISTILLED_SIGMAS[0]``) would partly re-generate the very
+#: seam blend 1 just fixed.
 #:
 #: ``.tolist()`` IS MANDATORY, not stylistic: ``STAGE_2_DISTILLED_SIGMAS`` is a
 #: ``torch.Tensor`` and ``[1:]`` on a tensor is a VIEW. Holding a module-global
@@ -287,8 +293,8 @@ _PIXEL_CHUNK_FRAMES = 8
 
 #: What stage 2's audio latent is initialised FROM. Recorded in the metadata
 #: because it is an INTENTIONAL DIFFERENCE from 2.3 (see the module docstring),
-#: and gate O7's partial-freeze arm must be judged against this policy rather
-#: than against 2.3's absolute numbers.
+#: and a partial-freeze run (VERIFICATION_LOG §79.5, arm O7) must be judged
+#: against this policy rather than against 2.3's absolute numbers.
 STAGE2_AUDIO_INIT_POLICY = "stage1_carry"
 
 
@@ -318,19 +324,18 @@ class OutpaintResult:
     ``result.as_dict()``, as the ``GENERATE_REPORT`` line. The app then stores
     ``peak_vram_mb`` into ``metadata.json``'s ``vram_optimization`` block, which
     is what the job-VRAM gate reads. An outpaint result that answered to fewer
-    names would leave that number empty and the gate blind -- so the C2 worker
-    branch can hand this object to exactly the same ``done`` builder.
+    names would leave that number empty and the gate blind -- so the worker's
+    outpaint branch can hand this object to exactly the same ``done`` builder.
 
     :attr:`metadata` is the 2.3-shaped job metadata dict (the ``outpaint``
     sub-dict, the flat geometry/timing keys, and the ``ltx25`` sub-dict), the
     same shape :class:`engine25.chain25.ChainResult` carries. It rides on
     ``done`` as an additive key and in the worker log. Of the two halves, only
-    the nested ``ltx25`` sub-dict reaches ``metadata.json`` (台帳 §3-131) -- the
-    worker re-sends that SAME dict object as a top-level ``ltx25`` key on
-    ``done``, and the app writes it in verbatim. The rest of ``metadata``
-    (geometry, blend, sigmas, the audio freeze proof) does NOT reach
-    ``metadata.json``, which would still need a further app-layer change (out
-    of scope -- see the module docstring).
+    the nested ``ltx25`` sub-dict reaches ``metadata.json`` -- the worker
+    re-sends that SAME dict object as a top-level ``ltx25`` key on ``done``,
+    and the app writes it in verbatim. The rest of ``metadata`` (geometry,
+    blend, sigmas, the audio freeze proof) does NOT reach ``metadata.json``;
+    that would need an app-layer change (see the module docstring).
     """
 
     #: The one ADDITIVE key :meth:`as_dict` ends on, named for the job kind. A
@@ -362,7 +367,7 @@ class OutpaintResult:
         """``GenerationResult.as_dict()``'s keys, in its order, plus ``outpaint``.
 
         The order is copied deliberately: the ``GENERATE_REPORT`` line is read
-        by eye as often as by machine, and a report whose first twelve keys sit
+        by eye as often as by machine, and a report whose generation keys sit
         where a plain generation's do is one a reader can compare across job
         kinds without re-learning it.
         """
@@ -399,12 +404,11 @@ assert {f.name for f in fields(GenerationResult)} <= {f.name for f in fields(Out
 
 
 # ---------------------------------------------------------------------------
-# Pixels: the four uint8 <-> float boundaries (C-1)
+# Pixels: the four uint8 <-> float boundaries
 # ---------------------------------------------------------------------------
 #
 # 2.5's pixel domain is NOT 2.3's, and every one of the four crossings below was
-# measured in C0-prep before a line of this module existed
-# (``outputs/ltx25-outpaint-prep/RESULTS.md`` §4):
+# measured (``outputs/ltx25-outpaint-prep/RESULTS.md`` §4):
 #
 #   (1) the video VAE DECODE yields float ``[0, 1]`` chunks shaped
 #       ``(F, H, W, C)`` -- 2.3's yielded uint8, so a straight port would have
@@ -414,8 +418,9 @@ assert {f.name for f in fields(GenerationResult)} <= {f.name for f in fields(Out
 #   (3) the mp4 ENCODER wants float ``[0, 1]`` ``(F, H, W, C)`` -- 2.3's wanted
 #       a materialised uint8 tensor;
 #   (4) a video FILE decodes to ``(1, H, W, C)`` uint8 through
-#       ``decode_video_by_frame``, where 2.3's decoder gave ``(1, C, 1, H, W)``
-#       float ``[0, 255]``.
+#       ``decode_video_by_frame``, as 2.3's ``decode_video_from_file`` did;
+#       ``(1, C, 1, H, W)`` float ``[0, 255]`` is what the
+#       ``resize_and_center_crop`` both versions call next returns.
 #
 # Everything BETWEEN those crossings is uint8, and that is a memory decision,
 # not a style one: a 1920x1152x241 timeline is 1.6 GB as uint8 against 6.4 GB as
@@ -426,10 +431,11 @@ def _resolve_stage2_sigmas(stage2_sigmas: list[float] | None) -> list[float]:
     """The stage-2 schedule this job runs: the override, or the module default.
 
     A function rather than an inline ``or`` because it is the ONE place the
-    override arm (gate O4's three-step schedule) and the shipped default meet,
-    and because the values are re-read downstream in TWO places -- the sigma
-    tensor handed to the stage, and ``noise_scale`` (C-4). Both read this list,
-    so an override cannot move one without the other.
+    override arm (the longer schedule run as arm O4 in VERIFICATION_LOG §79.5)
+    and the shipped default meet, and because the values are re-read
+    downstream in TWO places -- the sigma tensor handed to the stage, and
+    ``noise_scale``. Both read this list, so an override cannot move one
+    without the other.
 
     Copied to ``float`` rather than passed through: a caller's list must not be
     able to change under the job, and the metadata must carry plain floats
@@ -459,20 +465,20 @@ def _require_frames(
     """The frame-shortfall detector, said once for both operands.
 
     ``label`` names the job kind in the message and nothing else; its default
-    keeps every existing caller's text byte for byte, and the inpaint driver
-    passes its own.
+    is the outpaint wording, and the inpaint driver passes its own.
 
-    NAMED AND LOUD on purpose. The app layer already rejects a source shorter
-    than ``num_frames`` and ``services.video_io.pad_green_mp4`` clone-pads the
-    tail as a backstop, so a shortfall here means one of those two failed. The
-    alternative to raising is worse than a failed job: stage 2's
-    ``create_initial_state`` would assert instead, several minutes later,
-    naming a latent shape rather than the file that was short.
+    NAMED AND LOUD on purpose. For an outpaint job the app layer already
+    rejects a source shorter than ``num_frames`` and
+    ``services.video_io.pad_green_mp4`` clone-pads the tail as a backstop, so a
+    shortfall here means one of those two failed. The alternative to raising
+    is worse than a failed job: stage 2's ``create_initial_state`` would
+    assert instead, several minutes later, naming a latent shape rather than
+    the file that was short.
     """
     if int(got) < int(need):
         raise ValueError(
             f"{label} frame shortfall: {what} yielded {int(got)} frames but the job needs "
-            f"{int(need)} ({source}). The canvas must be built with pad_green_mp4's "
+            f"{int(need)} ({source}). The canvas writer must honour the "
             f"exact-frame-count guarantee."
         )
 
@@ -485,8 +491,7 @@ def _canvas_u8(
 
     ``label`` names the job kind in this function's two failure messages and
     nothing else, exactly as it does in :func:`_require_frames`; its default
-    keeps every existing caller's text byte for byte, and the inpaint driver
-    passes its own.
+    is the outpaint wording, and the inpaint driver passes its own.
 
     A uint8 twin of :func:`engine25.chain25._load_video_frames_cpu`, running the
     SAME per-frame op on the same device (``resize_and_center_crop`` on float32)
@@ -495,10 +500,11 @@ def _canvas_u8(
     here would be converting twice.
 
     NO FRAME-RATE CHECK, unlike the V2V/retake loader it is otherwise a twin of.
-    The canvas is written by ``pad_green_mp4`` from the very source this job was
-    validated against, at the rate the app resolved; a rate check here would be
-    checking the app against itself. What IS checked is the frame COUNT, which
-    is the one thing that can silently go wrong (see :func:`_require_frames`).
+    The canvas is written by ``pad_green_mp4`` (``fill_mask_green_mp4`` for an
+    inpaint job) from the very source this job was validated against, at the
+    rate the app resolved; a rate check here would be checking the app against
+    itself. What IS checked is the frame COUNT, which is the one thing that can
+    silently go wrong (see :func:`_require_frames`).
     """
     frames: list[torch.Tensor] = []
     for raw in decode_video_by_frame(path=str(video_path), device=device, frame_cap=int(frame_cap)):
@@ -523,9 +529,9 @@ def _decoded_to_u8(
 
     ``decoded`` is the LAZY iterator ``VideoDecoder.__call__`` returns: one
     temporally-tiled ``(f, H, W, C)`` float ``[0, 1]`` chunk at a time, in the
-    decoder's own dtype (bf16 on this engine). Each chunk is quantised AS IT
-    ARRIVES and moved to the CPU, so the GPU never holds more than one chunk and
-    the host never holds a float copy of the timeline.
+    decoder's own dtype (chosen upstream, not here). Each chunk is quantised AS
+    IT ARRIVES and moved to the CPU, so the GPU never holds more than one chunk
+    and the host never holds a float copy of the timeline.
 
     THE PROMOTION TO float32 BEFORE THE MULTIPLY IS DELIBERATE. bf16 carries 8
     mantissa bits, so ``x * 255`` in bf16 rounds to a grid 0.5 wide near the top
@@ -568,8 +574,7 @@ def _upscale_u8(
 
     Bicubic, where the official workflow uses lanczos: torch has no lanczos
     kernel and bicubic is the closest windowed-sinc-like resampler available.
-    Recorded as an intentional difference and A/B'd in the GPU gate, exactly as
-    in 2.3.
+    An intentional difference, exactly as in 2.3.
 
     CHUNK-INVARIANT BY CONSTRUCTION, and the unit test pins it: the resample is
     SPATIAL only, so frames do not see each other and the chunk size is a
@@ -707,14 +712,14 @@ def _freeze_source_audio(
 ) -> FrozenSourceAudio:
     """Encode the SOURCE video's audio once and keep its head frozen.
 
-    Lifted verbatim out of :func:`run_outpaint` so the inpaint driver calls this
-    code instead of owning a second copy -- 2.3's outpaint pipeline made the same
-    three extractions for the same reason. It carries the "underrun is not
-    fatal" ruling AND the ``12_audio_conditioning`` VRAM record, so both live in
-    one place rather than one per driver.
+    Shared by :func:`run_outpaint` and the inpaint driver so neither owns a
+    second copy -- 2.3's inpaint pipeline imports its outpaint pipeline's
+    helpers the same way. It carries the "underrun is not fatal" ruling AND
+    the ``12_audio_conditioning`` VRAM record, so both live in one place
+    rather than one per driver.
 
     ``label`` names the job kind in the two warnings and nothing else; its
-    default keeps every existing line byte for byte, and
+    default is the outpaint wording, and
     :func:`engine25.inpaint25.run_inpaint` passes its own so an operator reading
     one log can tell which driver spoke. Exactly the device
     :func:`_require_frames` already uses.
@@ -731,7 +736,7 @@ def _freeze_source_audio(
         if loaded is None:
             logger.warning(
                 "%s: %s has no decodable audio stream; the model will generate "
-                "audio for the widened frame instead of following it",
+                "audio for the edited frame instead of following it",
                 label,
                 source_path,
             )
@@ -774,9 +779,9 @@ def _audio_init(
 ) -> torch.Tensor | None:
     """A fresh full-length audio latent with the frozen head copied in.
 
-    Lifted verbatim out of :func:`run_outpaint` so both two-stage drivers call
-    one implementation. A FRESH tensor per call, because the denoiser writes
-    into the initial latent it is handed.
+    Shared so both two-stage drivers call one implementation. A FRESH tensor
+    per call, because the denoiser writes into the initial latent it is
+    handed.
     """
     if frozen_audio is None:
         return None
@@ -805,8 +810,9 @@ def _freeze_proof(
     ``s1_audio_head`` / ``s2_audio_head`` are what came OUT of each denoise over
     the frozen span; ``frozen_audio`` is what went IN. Both differences MUST be
     exactly 0.0, and exactly rather than approximately is attainable for the
-    reason the retake proof gives: every write is a bf16 copy of the encoder's
-    own output and a denoise mask of 0.0 returns those tokens untouched.
+    reason the retake proof gives: every write is a :data:`DTYPE` copy of the
+    encoder's own output and a denoise mask of 0.0 returns those tokens
+    untouched.
 
     ``None`` -- NEVER 0.0 -- when nothing was frozen. There is nothing to
     compare, and an invented zero would fake a passing proof of exactly the
@@ -843,7 +849,7 @@ def _mux_plan(
       on a waveform that is then discarded AND would leave the output one
       round-trip away from the input.
     * ``generated_freeze_disabled`` -- the caller asked for ``freeze=False``, so
-      the model invented audio for the widened frame and the vocoder renders it.
+      the model invented audio for the edited frame and the vocoder renders it.
     * ``generated_no_source_audio`` -- the caller asked to freeze but the source
       has no decodable audio stream. Same outcome as above, DIFFERENT cause, and
       a gate reading "vocoder ran" needs to know which.
@@ -880,14 +886,14 @@ def _mux_audio(
 ) -> tuple[Any, int]:
     """``(audio_for_the_mux, muxed_sample_count)`` for the final encode.
 
-    Lifted verbatim out of :func:`run_outpaint` so the inpaint driver calls this
-    code rather than restating it. The ``round(px / fps * sr)`` trim is ONE fact
-    about how many samples a frame count is, and a second spelling of it is a
-    second chance to truncate a track by a frame.
+    Shared with the inpaint driver, which calls this code rather than restating
+    it. The ``round(px / fps * sr)`` trim is ONE fact about how many samples a
+    frame count is, and a second spelling of it is a second chance to truncate
+    a track by a frame.
 
     ``label`` names the job kind in the log line and nothing else -- the same
     pass-through :func:`_freeze_source_audio` and :func:`_require_frames` take,
-    with the same default, so no existing text moves.
+    with the same default.
 
     The caller keeps the ``del``/``cleanup_memory`` that follows: the audio
     latent is ITS local, and freeing a parameter here would only drop an alias.
@@ -937,10 +943,11 @@ def _phase_peak_mb(phases: dict[str, dict[str, Any]], name: str) -> float | None
 # The two ImageConditioner calls, and the engine-facts sub-dict
 # ---------------------------------------------------------------------------
 #
-# All three are lifted verbatim out of :func:`run_outpaint` so the inpaint
-# driver calls them rather than carrying a second copy of a measured
-# path or of a user-visible contract. Every ``vram.reset()`` / ``vram.record()``
-# that surrounded them at the call site STAYED there.
+# All three are shared with the inpaint driver, which calls them rather than
+# carrying a second copy of a measured path or of a user-visible contract. The
+# ``vram.reset()`` / ``vram.record()`` pair that times the re-encode sits at
+# each call site; the reference encode is timed inside ``reference25`` under
+# ``REFERENCE_ENCODE_PHASE``.
 
 
 def _encode_reference_conditionings(
@@ -983,10 +990,10 @@ def _encode_reference_conditionings(
             if pixels is None:
                 # "A missing reference means generate without one", never an
                 # error -- the owner's standing rule. It would be a very bad
-                # outpaint, and the metadata says so rather than the job
-                # failing at the end of the encode.
+                # outpaint or inpaint, and the metadata says so rather than the
+                # job failing at the end of the encode.
                 logger.warning(
-                    "outpaint: the canvas reference %s yielded no frames; "
+                    "the canvas reference %s yielded no frames; "
                     "generating without a reference", ref_path,
                 )
                 return [], 0
@@ -1017,13 +1024,13 @@ def _reencode_stage2(
 ) -> torch.Tensor:
     """Re-encode the blended full-resolution pixels as stage 2's initial latent.
 
-    Extracted verbatim -- the ``channels_last_3d`` re-layout and its ``finally``
-    restore are a MEASURED requirement (27188 MB -> 6174 MB reserved for
-    -0.002 dB, G0-d), and the restore is a correctness requirement rather than
-    hygiene: torch's bf16 Conv3d produces different latents under the two
-    layouts and this same encoder object is reachable again within the process.
-    A second copy would be an unmeasured second path, which is why the inpaint
-    driver calls this one.
+    Shared with the inpaint driver -- the ``channels_last_3d`` re-layout and its
+    ``finally`` restore are a MEASURED requirement (27188 MB -> 6174 MB reserved
+    for -0.002 dB, VERIFICATION_LOG §79.2 (d)), and the restore is a correctness
+    requirement rather than hygiene: torch's bf16 Conv3d produces different
+    latents under the two layouts and this same encoder object is reachable
+    again within the process. A second copy would be an unmeasured second path,
+    which is why the inpaint driver calls this one.
     """
 
     def _reencode(encoder: Any) -> torch.Tensor:
@@ -1039,7 +1046,7 @@ def _reencode_stage2(
             latent = encoder.tiled_encode(encode_input, tiling_config)
             del encode_input
             logger.info(
-                "outpaint stage-2 re-encode (channels_last_3d convs=%d): latent %s",
+                "stage-2 re-encode (channels_last_3d convs=%d): latent %s",
                 converted, tuple(latent.shape),
             )
             return latent.detach().clone()
@@ -1050,7 +1057,7 @@ def _reencode_stage2(
                     cleanup_memory()
                 except Exception:  # noqa: BLE001 -- must never mask an in-flight failure
                     logger.exception(
-                        "outpaint: failed to restore the video encoder's contiguous layout"
+                        "failed to restore the video encoder's contiguous layout"
                     )
 
     return image_conditioner(_reencode)
@@ -1110,7 +1117,9 @@ def _ltx25_block(
 # ---------------------------------------------------------------------------
 
 
-# No decorator: the mode is :1219's ``with torch.no_grad():``, as on every engine25 path -- the inference-mode one that stood here is VERIFICATION_LOG §81.
+# No decorator: the mode is the ``with torch.no_grad():`` below, as on every
+# engine25 path -- the inference-mode alternative is banned here
+# (VERIFICATION_LOG §81).
 def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting it would hide the order
     pipeline: Any,
     *,
@@ -1153,12 +1162,14 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
     has already checked the source is long enough for.
 
     ``num_steps`` is carried and reported but never acted on, exactly as in the
-    chain: the distilled schedule is fixed at 8 + 3 sigmas, and stage 2's is
-    further fixed at :data:`OUTPAINT_STAGE2_SIGMAS`.
+    chain: the distilled schedule is fixed (``ltxcore_compat.verify()`` checks
+    its shape at start-up), and stage 2's is further fixed at
+    :data:`OUTPAINT_STAGE2_SIGMAS`.
 
     ``stage2_sigmas`` is an ENGINE-INTERNAL experiment knob, not a request
-    field: gate O4's three-step arm runs against the shipped code path rather
-    than a copy of it. ``None`` -- every real job -- uses the module constant.
+    field: an experiment arm such as the longer stage-2 schedule in
+    VERIFICATION_LOG §79.5 runs against the shipped code path rather than a
+    copy of it. ``None`` -- every real job -- uses the module constant.
 
     ``ignored`` is the subset of the request this engine drops; it is reported
     through the same :func:`~engine25.pipeline25._log_ignored` a plain
@@ -1168,12 +1179,13 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
     result, so the worker's ``done`` builder needs no branch.
     """
     # ── Geometry: the app's rules, restated by the two owners of them ─────────
-    # ``validate_geometry`` is the two-stage pipeline's own backstop (multiples
-    # of 64, 8n+1 frames) and ``geometry.validate()`` is the canvas module's
-    # (multiples of 128, a non-empty pad, a kept rectangle the blend cannot
-    # eat). BOTH, because they check different things and each is the last line
-    # of defence for its own: a payload that reached the engine another way --
-    # the selftest CLI, a future MCP tool -- has passed neither.
+    # ``validate_geometry`` is the two-stage pipeline's own backstop
+    # (``RESOLUTION_DIVISOR``, the ``FRAME_GRID`` frame lattice) and
+    # ``geometry.validate()`` is the canvas module's (``CANVAS_MULTIPLE``, a
+    # non-empty pad, a kept rectangle the blend cannot eat). BOTH, because they
+    # check different things and each is the last line of defence for its own:
+    # a call that reached this function without the app's validation -- a
+    # direct call from a test or a gate driver -- has passed neither.
     width = int(geometry.canvas_width)
     height = int(geometry.canvas_height)
     validate_geometry(width, height, int(num_frames))
@@ -1238,7 +1250,7 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
 
     with torch.no_grad():
         # ── 10_prompt_encode ──────────────────────────────────────────────────
-        # ONE prompt, ONE call. The phase, its two sub-phases and the ``encode``
+        # ONE prompt, ONE call. The phase, its sub-phases and the ``encode``
         # progress events are all emitted by ``Ltx25PromptEncoder`` itself,
         # which is why nothing is recorded here: they fire around the actual
         # Gemma load rather than around this function's idea of when it happens.
@@ -1275,13 +1287,14 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
         # ``ImageConditioner.__call__(fn)`` builds the video encoder, calls
         # ``fn(encoder)`` once and frees it again, so the closure is where the
         # encoder exists. This is the FIRST of the job's two builds; the
-        # re-encode below is the second, and G0-d measured the extra build at
-        # 0.34-0.47 s with bit-identical output, which is why the lifecycle is
-        # left exactly as upstream wrote it.
+        # re-encode below is the second, and VERIFICATION_LOG §79.2 (d) measured
+        # the extra build at 0.34-0.47 s with bit-identical output, which is why
+        # the lifecycle is left exactly as upstream wrote it.
         #
         # THE TILING CONFIG IS THE DECODE'S, HANDED OVER RESOLVED. Resolving it
-        # here, with no models built, is also where the (unused, conv-VAE)
-        # free-memory branch would be at its most optimistic -- the same hoist
+        # here, with no models built, is also where the free-memory branch (the
+        # one a diffusion video VAE takes; the conv VAE's layout does not read
+        # free memory) would be at its most optimistic -- the same hoist
         # ``run_chain`` makes and for the same reason.
         tiling_config = ensure_tiling_config(
             AUTO_TILING,
@@ -1317,8 +1330,8 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
         band_a1 = _audio_freeze(init_a1, n_frozen)
 
         # NO ``outer_index`` / ``outer_total``: outpainting is one clip, so the
-        # per-step events go out as THREE POSITIONAL ARGUMENTS and a receiver
-        # written for a single generation is unchanged.
+        # per-step events go out as THREE POSITIONAL ARGUMENTS, the form a
+        # receiver written for a single generation takes.
         stage.announce(STAGE_1_DENOISE, vram_phase="21_stage1_denoise")
         vstate, astate = stage(
             denoiser=SimpleDenoiser(video_ctx, audio_ctx),
@@ -1412,15 +1425,17 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
 
         # ── 27_stage2_encode: the SECOND ImageConditioner build ──────────────
         # DECODE TILING, DIRECT, plus ``channels_last_3d`` for the duration.
-        # G0-d measured both halves of that sentence: with the decode config
-        # alone a 1280x768 x 241f encode reserves 27188 MB and takes 52.3 s (a
-        # WDDM spill on a 16 GB card); with the Conv3d weights re-laid out it is
-        # 6174 MB and 19.0 s for a 0.002 dB difference. The alternative --
-        # 2.3's spatial tile budget -- costs 0.378 dB and is NOT taken.
+        # VERIFICATION_LOG §79.2 (d) measured both halves of that sentence: with
+        # the decode config alone a 1280x768 x 241f encode reserves 27188 MB and
+        # takes 52.3 s (a WDDM spill on a 16 GB card); with the Conv3d weights
+        # re-laid out it is 6174 MB and 19.0 s for a 0.002 dB difference. The
+        # alternative -- 2.3's spatial tile budget -- costs 0.378 dB and is NOT
+        # taken.
         #
-        # THE RESTORE IN ``finally`` IS A CORRECTNESS REQUIREMENT, not hygiene:
-        # torch's bf16 Conv3d produces different latents under the two layouts,
-        # and this same encoder object is reachable again within the process.
+        # THE RESTORE IN ``_reencode_stage2``'s ``finally`` IS A CORRECTNESS
+        # REQUIREMENT, not hygiene: torch's bf16 Conv3d produces different
+        # latents under the two layouts, and this same encoder object is
+        # reachable again within the process.
         vram.reset()
         encode2_started = time.perf_counter()
 
@@ -1434,19 +1449,20 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
         # ── 22_stage2_denoise: full resolution, NO reference conditioning ────
         # The official graph strips the guide latents with ``LTXVCropGuides``
         # before stage 2; here the conditioning list is simply empty, which says
-        # the same thing with nothing to strip. Experiment 2C measured that
-        # stage-1 injection alone carries both the composition and the
+        # the same thing with nothing to strip. VERIFICATION_LOG §71.8 measured
+        # that stage-1 injection alone carries both the composition and the
         # sharpening, so this is also what every other reference path in this
         # engine does.
         stage2_sigma_tensor = torch.tensor(
             stage2_values, dtype=torch.float32, device=device
         )
-        # C-4: computed ONCE and handed to BOTH modalities. Stage 2 starts from
-        # a re-encode rather than from noise, so its noise scale must be the
+        # Computed ONCE and handed to BOTH modalities. Stage 2 starts from a
+        # re-encode rather than from noise, so its noise scale must be the
         # schedule's own first sigma -- and if a caller overrides the schedule
-        # (gate O4), the scale has to follow it. Two separate reads is how that
-        # link gets broken; a partial audio freeze is the only arm that would
-        # expose the break (gate O7), which is why O7 is mandatory.
+        # (the longer stage-2 arm in VERIFICATION_LOG §79.5), the scale has to
+        # follow it. Two separate reads is how that link gets broken; a partial
+        # audio freeze is the case that would expose the break (the
+        # partial-freeze arm in the same section).
         noise_scale2 = float(stage2_sigma_tensor[0].item())
 
         # STAGE 1's AUDIO, CARRIED, with the frozen head written back over it
@@ -1622,7 +1638,9 @@ def run_outpaint(  # noqa: PLR0913, PLR0915 -- one linear procedure; splitting i
             # Which of the three audio outcomes ran, and whether the vocoder
             # did. ``source_had_audio`` is DISTINCT from
             # ``muxed_original_waveform``: a source can have a track and still
-            # freeze nothing (freeze disabled, or a zero-length encode).
+            # freeze nothing (a zero-length encode). With the freeze disabled
+            # the source's audio is never read, so ``source_had_audio`` is
+            # False whatever the file holds.
             "audio_branch": mux_meta["audio_branch"],
             "vocoder_skipped": bool(mux_meta["vocoder_skipped"]),
             "source_had_audio": bool(source_had_audio),

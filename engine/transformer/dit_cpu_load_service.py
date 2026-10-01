@@ -1,12 +1,14 @@
 """DiT (transformer) CPU-resident build — removes the load-time GPU spike.
 
 Background / 背景:
-    block-swap は denoise 中こそ 8 ブロックだけ GPU に置くが、transformer ロードの
-    一瞬だけ凍結 ``ModelLedger.transformer()`` が全 48 ブロックを GPU に materialize
-    してから CPU へ退避する（max_alloc ~16.9GB の一過性スパイク）。本サービスは
-    transformer を最初から CPU RAM 上に構築し、**非ブロック部分だけ** GPU へ移すことで
-    このスパイクを消す。denoise 時の CPU<->GPU ブロック・ストリーミングは
-    ``BlockSwapService`` がそのまま担い、演算は従来どおり GPU・出力はバイト同一。
+    block-swap は denoise 中こそ ``blocks_on_gpu`` 個のブロックだけ GPU に置くが、
+    transformer ロードの一瞬だけ凍結 ``ModelLedger.transformer()`` が全ブロックを
+    GPU に materialize してから CPU へ退避する（一過性のスパイク。実測は
+    VERIFICATION_LOG §12.3）。本サービスは transformer を最初から CPU RAM 上に構築し、
+    **非ブロック部分だけ** GPU へ移すことでこのスパイクを消す。denoise 時の
+    CPU<->GPU ブロック・ストリーミングは ``BlockSwapService`` がそのまま担い、演算は
+    GPU のまま・出力は本サービスを使わないビルドとバイト同一（VERIFICATION_LOG
+    §12.3 の A/B）。
 
 Design / 設計:
     - CPU ビルド強制：凍結 ``ModelLedger.transformer()`` が読む ``ledger.device`` を

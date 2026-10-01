@@ -1,7 +1,8 @@
 """Standalone self-check for SageAttention on the LTX 2.5 engine.
 
-Run with the 2.5 ENGINE venv (needs the official ltx_core 1.2.0 wheel, a CUDA
-GPU, and the sageattention wheel -- none of which the app venv has):
+Run with the 2.5 ENGINE venv (needs the pinned ltx_core -- ``$ltx25DirectPins``
+in ``scripts/install_ltx.ps1`` -- a CUDA GPU, and the sageattention wheel --
+none of which the app venv has):
 
     .venv-engine-ltx25\\Scripts\\python.exe -m engine25.sage_selfcheck25
 
@@ -17,8 +18,8 @@ WHAT THIS FILE IS, AND WHAT IT DELIBERATELY IS NOT
     count) are 2.3's, imported and re-run here rather than copied: a second copy
     could only drift, and a drifted copy of a passing test is worse than no test.
     What they are re-run AGAINST is 2.5's own block, via the module-attribute
-    swap in :func:`_ltx25_helpers` -- ``BasicAVTransformerBlock`` lost its
-    ``idx`` argument and moved its attention selection into a
+    swap in :func:`_ltx25_helpers` -- 2.5's ``BasicAVTransformerBlock`` takes no
+    ``idx`` argument and selects its attention through a
     ``TransformerOpsConfig``, so the block builder is the one piece that cannot
     be shared.
 
@@ -51,8 +52,8 @@ WHAT THIS FILE IS, AND WHAT IT DELIBERATELY IS NOT
 
 A TRAP WORTH KNOWING, since it is the one place 2.5 exercises the mask branch:
     ``engine25.gguf_transformer``'s selftest dummy passes
-    ``context_mask=torch.ones(...)`` (gguf_transformer.py:1129), so on THAT path
-    ``attn2`` takes ``Attention.forward``'s masked route -- through
+    ``context_mask=torch.ones(...)`` (in ``_dummy_video_modality``), so on THAT
+    path ``attn2`` takes ``Attention.forward``'s masked route -- through
     ``masked_attention_function``, which sage does not own, so it is not a sage
     fallback at all. A real 2.5 job never gets there (reference25's IC-LoRA
     attention-strength wrapper is the only mask producer and it goes to the same
@@ -87,7 +88,8 @@ def _build_block(video_d_head: int, audio_d_head: int, heads: int = 2, dim: int 
 
     Two differences from 2.3's builder, and only two:
 
-    * no ``idx`` -- 1.2.0 dropped the per-block index from the constructor;
+    * no ``idx`` -- the pinned ltx_core (``$ltx25DirectPins``) takes no
+      per-block index in the constructor;
     * the attention backend is chosen through a ``TransformerOpsConfig`` rather
       than an ``attention_function=`` argument, and BOTH slots are pinned to
       PYTORCH. The masked one matters as much as the unmasked one here: check 1
@@ -318,7 +320,7 @@ def check_install_idempotent() -> None:
                 f"module {index}: the wrapper is NESTED -- self-repair stripped nothing"
             )
 
-    # -- (c) install -> uninstall -> install, 288 every time -------------------
+    # -- (c) install -> uninstall -> install, _EXPECTED_MODULES every time -----
     removed = service.uninstall(transformer)
     if removed != _EXPECTED_MODULES:
         raise AssertionError(f"uninstall() peeled {removed}, expected {_EXPECTED_MODULES}")
@@ -333,9 +335,9 @@ def check_install_idempotent() -> None:
         raise AssertionError(f"third install wrapped {third}, expected {_EXPECTED_MODULES}")
 
     # A clean strip-and-reinstall must be SILENT on the ERROR channel: that
-    # silence is the judging criterion for the real-device idempotency gate,
-    # since a self-repaired install is otherwise indistinguishable from a clean
-    # one (same count, same numbers, same speed).
+    # silence is how VERIFICATION_LOG §77.3 (d) judges idempotency on a real
+    # GPU, since a self-repaired install is otherwise indistinguishable from a
+    # clean one (same count, same numbers, same speed).
     service.uninstall(transformer)
     with base._LogCapture() as clean_logs:
         service.install(transformer)
@@ -389,8 +391,9 @@ def check_wrappers_survive_dispose() -> None:
             "the reason it exists has changed."
         )
 
-    # THE POINT: peeling has to work HERE, on the meta'd shell, because that is
-    # exactly the state the next build finds it in. Anything in uninstall() that
+    # THE POINT: peeling has to work HERE, on the meta'd shell. The build path
+    # peels after the new state dict has been loaded, but between builds the
+    # reused shell sits in exactly this state. Anything in uninstall() that
     # dispatched an operator would raise NotImplementedError on this line.
     removed = service.uninstall(transformer)
     if removed != _EXPECTED_MODULES:

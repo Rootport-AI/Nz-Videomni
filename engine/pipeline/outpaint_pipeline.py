@@ -13,8 +13,9 @@ back with a LATENT-space upsampler in between. Outpainting has to interrupt
 exactly there — decode to pixels, blend the generated frame with the green
 canvas, upscale in PIXEL space, re-encode — so it needs its own two-stage
 driver. ``chain_pipeline.run_chain`` is the precedent for writing one: it also
-reaches into ``pipe.pipeline`` for the ledger/components and arms every
-acceleration knob through the same ``pipe._set_*_job`` pattern.
+reaches into ``pipe.pipeline`` for the ledger/components and sets its per-job
+NAG and IC-LoRA state through the same ``pipe._set_*_job`` pattern (the other
+acceleration knobs are armed by the ``generate_*`` entry point that calls it).
 
 Flow (one worker invocation):
 
@@ -25,14 +26,16 @@ Flow (one worker invocation):
          IC-LoRA reference conditioning
       -> decode stage 1 to pixels (half res)
       -> DE-GREEN: the canvas' pad bands are replaced by these same pixels
-      -> BLEND 1: Laplacian pyramid, dilation 5, against that canvas
+      -> BLEND 1: Laplacian pyramid, dilation ``blend_dilation_stage1``,
+         against that canvas
       -> 2x pixel upscale
       -> tiled VAE re-encode
       -> STAGE 2 at full resolution (no reference conditioning: the official
          graph strips the guide latents with ``LTXVCropGuides`` before stage 2)
       -> decode stage 2 to pixels (full res)
       -> DE-GREEN again, at full resolution
-      -> BLEND 2: Laplacian pyramid, dilation 2, against that canvas
+      -> BLEND 2: Laplacian pyramid, dilation ``blend_dilation_stage2``,
+         against that canvas
       -> mux with the source's original waveform -> one mp4
 
 Deliberate differences from the official workflow, all recorded rather than
@@ -44,8 +47,8 @@ hidden (see the module-level constants and the inline notes):
   IS the distilled base;
 * the 2x pixel upscale is bicubic, not lanczos (torch has no lanczos kernel);
 * the IC-LoRA reference is TILE-encoded (``_reference_conditioning_for_stage``
-  does this for every downscale-factor-1 adapter to survive a 16GB card — and,
-  since §3-76, for any reference whose own encode crosses
+  does this for every downscale-factor-1 adapter to survive a 16GB card — and
+  for any reference whose own encode crosses
   ``chain_math.REFERENCE_ENCODE_TILE_TOKEN_BUDGET``, which in-outpainting's
   factor-1 references reach first via the factor rule anyway), whereas the
   official ``LTXAddVideoICLoRAGuideAdvanced`` has ``use_tiled_encode=False``;
@@ -93,20 +96,23 @@ from engine.transformer.vsf_service import VsfParams
 
 logger = logging.getLogger(__name__)
 
-# Stage-2 sigma schedule. The wheel's own STAGE_2_DISTILLED_SIGMA_VALUES starts
-# at 0.909375; the official outpaint workflow's ManualSigmas node (5211) starts
-# one step LOWER, at 0.725, and that difference is load-bearing here rather than
+# Stage-2 sigma schedule. The official outpaint workflow's ManualSigmas node
+# (5211) starts one step LOWER than the wheel's own
+# STAGE_2_DISTILLED_SIGMA_VALUES (it drops that ladder's first rung;
+# VERIFICATION_LOG §54.2), and that difference is load-bearing here rather than
 # cosmetic: stage 2's initial latent is the RE-ENCODE of the blended pixels, so
-# the noise level it starts from decides how much of the blend survives. Starting
-# where the wheel does would partly re-generate the very seam blend 1 just fixed.
+# the noise level it starts from decides how much of the blend survives.
+# Starting where the wheel does would partly re-generate the very seam
+# blend 1 just fixed.
 # 0.421875 is the exact wheel value the workflow displays rounded as 0.4219.
 OUTPAINT_STAGE2_SIGMAS = [0.725, 0.421875, 0.0]
 
 # Frames per Laplacian-pyramid blend chunk. Blending pads each frame out to the
 # next power of two per side (960x544 -> 1024x1024, 1920x1088 -> 2048x2048), so
-# VRAM scales with this directly — roughly 2.2-2.6GB at 8 frames on a 2048^2
-# canvas, on top of a transformer that is still resident. Overridable for the
-# GPU gate without an API field, because it changes nothing about the result.
+# VRAM scales with this directly (the default is
+# ``engine.outpaint.pyramid_blend._CHUNK_SIZE``), on top of a transformer that
+# is still resident. Overridable for the GPU gate without an API field, because
+# it changes nothing about the result.
 _BLEND_CHUNK_ENV = "LTX_OUTPAINT_BLEND_CHUNK"
 
 
@@ -139,17 +145,19 @@ def _load_canvas_pixels_u8(
     difference between ~4.5GB and ~18GB of resident host memory for the three
     full-res buffers (canvas, generated, output).
 
-    The frame count is the caller's frame-shortfall detector: the app layer
-    already rejects a source shorter than ``num_frames`` and
-    ``video_io.pad_green_mp4`` clone-pads the tail as a backstop, so anything
-    short here means one of those two failed and the caller must say so loudly
-    rather than let stage 2's ``create_initial_state`` assert fire instead.
+    The frame count is the caller's frame-shortfall detector. For an outpaint
+    job the app layer already rejects a source shorter than ``num_frames`` and
+    ``video_io.pad_green_mp4`` clone-pads the tail as a backstop (an inpaint
+    job's canvas comes from ``video_io.fill_mask_green_mp4``, which measures
+    the frames it wrote), so anything short here means one of those failed
+    and the caller must say so loudly rather than let stage 2's
+    ``create_initial_state`` assert fire instead.
     """
     from ltx_pipelines.utils.media_io import decode_video_from_file, resize_and_center_crop
 
     frames: list[torch.Tensor] = []
     for f in decode_video_from_file(path=video_path, frame_cap=frame_cap, device=device):
-        # (1, C, 1, H, W) float32 in [0, 255] -> (1, H, W, C) uint8
+        # (1, C, 1, H, W) float32 in [0, 255] -> (H, W, C) uint8
         frame = resize_and_center_crop(f.to(torch.float32), height, width)
         frame = frame.round().clamp(0, 255).to(torch.uint8)
         frames.append(frame[0].permute(1, 2, 3, 0)[0].cpu())
@@ -185,12 +193,11 @@ def _freeze_source_audio(
 ) -> FrozenSourceAudio:
     """Encode the SOURCE video's audio once and keep its head frozen.
 
-    Lifted VERBATIM out of :func:`run_outpaint` so :func:`run_inpaint` can call
-    the same code instead of owning a second copy of it — a pure extraction,
-    with ``label`` (log text only) as the sole addition. The three blocks that
-    moved (this one, :func:`_audio_init` and :func:`_mux_audio`) are the whole
-    of what the two pipelines share; everything else differs in geometry and
-    lives in its own module.
+    Shared by :func:`run_outpaint` and :func:`run_inpaint` so neither owns a
+    second copy of it; ``label`` (log text only) names the job kind. With
+    :func:`_audio_init` and :func:`_mux_audio` it is the audio half of what
+    the two pipelines share; the parts that differ in geometry live in each
+    pipeline's own module.
 
     The official note (node 5392): "Frozen audio helps guiding outpainting to be
     consistent with the sounds in the video." Same shape as run_chain's A2V path
@@ -253,10 +260,9 @@ def _audio_init(
 ) -> torch.Tensor | None:
     """A fresh a_total-length audio latent with the frozen head copied in.
 
-    Lifted verbatim out of :func:`run_outpaint` (where it was a closure over the
-    three names now carried by ``audio``) so both two-stage drivers call one
-    implementation. Called once per stage — a FRESH tensor each time, because
-    the denoiser writes into the initial latent it is handed.
+    Shared so both two-stage drivers call one implementation. Called once per
+    stage — a FRESH tensor each time, because the denoiser writes into the
+    initial latent it is handed.
     """
     from ltx_core.types import AudioLatentShape
 
@@ -271,11 +277,13 @@ def _audio_init(
 def _mux_audio(audio: FrozenSourceAudio, *, decoded_audio, num_frames: int, frame_rate: float):
     """``(audio_for_the_mux, muxed_sample_count)`` for the final encode.
 
-    Lifted verbatim out of :func:`run_outpaint`. When the source's audio was
-    frozen, the ORIGINAL waveform is muxed, trimmed to the video duration — the
-    vocoder is skipped entirely, exactly as run_chain's A2V path does, so the
-    delivered audio track is bit-for-bit the source's. Otherwise the caller's
-    decoded audio (which it produced with the vocoder) rides through unchanged.
+    Shared by both two-stage drivers. When the source's audio was frozen, the
+    ORIGINAL waveform is muxed, trimmed to the video duration — the vocoder is
+    skipped entirely, exactly as run_chain's A2V path does, so the mp4
+    writer's AAC encoder is handed the source's own samples rather than a
+    vocoder render. Otherwise
+    the caller's decoded audio (which it produced with the vocoder) rides
+    through unchanged.
     """
     if audio.latent is None:
         return decoded_audio, 0
@@ -390,9 +398,8 @@ def run_outpaint(
     cleanup_memory()
 
     # ── Freeze the source video's audio. ─────────────────────────────────────
-    # Extracted into ``_freeze_source_audio`` so ``run_inpaint`` calls the same
-    # code rather than a second copy; the semantics are the block that used to
-    # stand here, unchanged.
+    # ``_freeze_source_audio`` is shared with ``run_inpaint``, so both drivers
+    # call one implementation rather than a second copy.
     audio = _freeze_source_audio(
         ledger=ledger,
         device=device,
@@ -428,12 +435,13 @@ def run_outpaint(
     half_shape = VideoPixelShape(1, num_frames, height // 2, width // 2, frame_rate)
     conds = []
     if ic_reference is not None:
-        # The same builder the single-generate and chain paths use, called with
-        # the half-res cond_kwargs so its own stage-1 discriminator
-        # (cond_height == full_height // 2) accepts it. It returns [] for
-        # anything else, which is exactly why stage 2 below can call nothing at
-        # all and still be certain no guide latent leaks across — the official
-        # graph achieves the same with an explicit LTXVCropGuides node.
+        # The same builder the single-generate and inpaint paths use (the chain
+        # path calls its back half, ``_reference_conditioning_from_pixels``,
+        # directly), called with the half-res cond_kwargs so its own stage-1
+        # discriminator (cond_height == full_height // 2) accepts it. It returns
+        # [] for anything else, which is exactly why stage 2 below can call
+        # nothing at all and still be certain no guide latent leaks across — the
+        # official graph achieves the same with an explicit LTXVCropGuides node.
         conds = pipe._reference_conditioning_for_stage(
             full_height=height,
             num_frames=num_frames,
@@ -517,7 +525,7 @@ def run_outpaint(
 
     # 2x pixel upscale (official: lanczos; torch offers no lanczos kernel, so
     # bicubic — the closest windowed-sinc-like resampler available. Recorded as an
-    # intentional difference and A/B'd in the GPU gate).
+    # intentional difference).
     upscaled = torch.empty(
         (num_frames, height, width, 3), dtype=torch.uint8, device="cpu"
     )
@@ -536,10 +544,10 @@ def run_outpaint(
 
     # Tiled VAE re-encode. channels_last_3d on the Conv3d weights is the known
     # fix for the im2col intermediate that OOMs a 16GB card on a full-resolution
-    # encode (fast_video_pipeline._reference_conditioning_for_stage carries the
-    # measurements); restoring contiguous afterwards is a CORRECTNESS
-    # requirement, not hygiene, because this same encoder is reused within the
-    # job and its latents shift under the other layout.
+    # encode (fast_video_pipeline._reference_conditioning_from_pixels carries
+    # the measurements); restoring contiguous afterwards follows that function's
+    # own ``finally``: the encoder's latents shift under the other layout, so it
+    # is never left re-laid out after an encode.
     _accel = torch.device(device).type == "cuda" and callable(
         getattr(video_encoder, "modules", None)
     )
@@ -637,8 +645,8 @@ def run_outpaint(
     del stage2_pixels, canvas_full, mask_full
     cleanup_memory()
 
-    # Extracted into ``_mux_audio`` so ``run_inpaint`` calls the same code; the
-    # semantics are the block that used to stand here, unchanged.
+    # ``_mux_audio`` is shared with ``run_inpaint``, so both drivers call one
+    # implementation.
     mux_audio, muxed_samples = _mux_audio(
         audio, decoded_audio=decoded_audio, num_frames=num_frames, frame_rate=frame_rate
     )

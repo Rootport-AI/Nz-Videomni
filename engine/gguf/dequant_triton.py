@@ -7,12 +7,12 @@ whole contract: **this module can never make a job fail, only make it faster.**
 Why the state lives here and not in the kernel module
 -----------------------------------------------------
 ``quant_service`` imports stdlib and torch only, and a great deal downstream
-(the app venv's test suite among other things) depends on that staying true. So
-the import of ``triton`` is pushed one module further out, into
-``dequant_triton_kernels``, and reached only through ``_kernels()`` - lazily, on
-the first call of a job that actually asked for the feature. A machine with no
-Triton, a broken wheel or an incompatible CUDA driver therefore pays nothing and
-notices nothing except one warning.
+(the torch-only tests under ``tests/`` among other things) depends on that
+staying true. So the import of ``triton`` is pushed one module further out,
+into ``dequant_triton_kernels``, and reached only through ``_kernels()`` -
+lazily, on the first call of a job that actually asked for the feature. A
+machine with no Triton, a broken wheel or an incompatible CUDA driver
+therefore pays nothing and notices nothing except one warning.
 
 The four ways this degrades, all of which end in "eager runs instead"
 --------------------------------------------------------------------
@@ -106,10 +106,11 @@ _KERNEL_IMPORT_FAILED = False
 def set_job(requested: bool) -> None:
     """Arm (or disarm) the feature for the job that is about to run.
 
-    Called OUTSIDE the pipeline's try block so that the matching
-    ``reset_job()`` in its ``finally`` always has something to snapshot.
-    Clears the latch: a job that failed for a transient reason must not
-    disable the feature for every job that follows.
+    Called OUTSIDE the job's try block (the 2.3 pipeline's entry points; the
+    2.5 worker, through ``set_acceleration_job``) so that the matching
+    ``reset_job()`` in that block's ``finally`` always has something to
+    snapshot. Clears the latch: a job that failed for a transient reason must
+    not disable the feature for every job that follows.
     """
     global _REQUESTED, _LATCHED, _CALLS, _WARNED
     _REQUESTED = bool(requested)
@@ -215,9 +216,10 @@ def dequant(
     """Dequantise on Triton, or return ``None`` and let the caller run eager.
 
     ``raw`` is the 1-D uint8 payload, exactly what the eager kernels take. The
-    caller has already checked ``enabled()``, the type and ``raw.is_cuda``; the
-    checks are repeated here anyway because this is also the entry point the
-    selfcheck drives directly.
+    caller has already checked ``enabled()``, the type, the output dtype and
+    ``raw.is_cuda``; the dtype, ``enabled()`` and type checks are repeated
+    here anyway, so a call that does not qualify returns ``None`` without
+    latching the feature off.
     """
     global _CALLS
 

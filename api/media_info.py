@@ -1,4 +1,4 @@
-"""mp4 recipe read-out: ``POST /utils/mp4-info`` (台帳 §3-164).
+"""mp4 recipe read-out: ``POST /utils/mp4-info``.
 
     POST /utils/mp4-info  {"path": "<absolute local path>"}  -> 200 {"comment": str | null}
 

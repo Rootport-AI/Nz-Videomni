@@ -1,4 +1,4 @@
-"""Custom API errors and error codes (spec ch.17).
+"""Custom API errors and error codes (spec §6.8).
 
 All domain errors raise :class:`APIError`, which is translated to the spec's
 error envelope by an exception handler registered in ``main.py``::
@@ -37,24 +37,24 @@ class APIError(Exception):
         return {"error": error}
 
 
-# --- factory helpers for the spec's named error codes (spec 17.3) ---
+# --- factory helpers for the named error codes (spec §6.8) ---
 
 
 def job_busy(detail: str | None = None) -> APIError:
     return APIError(
         "JOB_BUSY",
-        "A job is already running (Phase 1 allows one concurrent job)",
+        "A job is already running (the server runs one job at a time)",
         409,
         detail=detail,
     )
 
 
 def upload_invalid_type(detail: str | None = None) -> APIError:
-    return APIError("UPLOAD_INVALID_TYPE", "Unsupported image format", 400, detail=detail)
+    return APIError("UPLOAD_INVALID_TYPE", "Unsupported file format", 400, detail=detail)
 
 
 def upload_too_large(detail: str | None = None) -> APIError:
-    return APIError("UPLOAD_TOO_LARGE", "Image file size exceeds the limit", 400, detail=detail)
+    return APIError("UPLOAD_TOO_LARGE", "File size exceeds the limit", 400, detail=detail)
 
 
 def image_not_found(image_id: str) -> APIError:
@@ -119,8 +119,9 @@ def retake_window_out_of_range(detail: str | None = None) -> APIError:
     upload (at the request frame rate), or ``regenerate_audio=False`` was asked
     for on an upload with no audio stream to keep. Rejected up front (422) before
     any GPU work — mirrors :func:`source_video_too_short`. The window's own
-    geometry (8n+1, [73, 169], glue grids) is a schema/``chain_math`` 422 and
-    never reaches here."""
+    geometry (8n+1, the ``chain_math.RETAKE_WINDOW_MIN_PX`` /
+    ``retake_max_window_px`` range, glue grids) is a schema/``chain_math`` 422
+    and never reaches here."""
     return APIError(
         "RETAKE_WINDOW_OUT_OF_RANGE",
         "the requested retake window does not fit the uploaded video",
@@ -230,12 +231,12 @@ def model_incompatible(category: str, name: str, detail: str | None = None) -> A
 
 
 def lora_requires_reference(names: list[str]) -> APIError:
-    """S1: a CONTROL-type IC-LoRA (union-control / pixel-spatial-upscaler — it
+    """A CONTROL-type IC-LoRA (union-control / pixel-spatial-upscaler — it
     derives its conditioning from a reference video) was requested without a
-    ``reference_video_id``. Style/character LoRAs need no reference, so the old
-    all-or-nothing ``loras <=> reference_video_id`` rule was relaxed to this
-    kind-aware endpoint check. 422 — the request is well-formed; the required
-    companion input (a reference video) is what is missing."""
+    ``reference_video_id``. Style/character LoRAs need no reference, so this
+    endpoint check looks at each adapter's kind. 422 — the request is
+    well-formed; the required companion input (a reference video) is what is
+    missing."""
     return APIError(
         "LORA_REQUIRES_REFERENCE",
         "a control-type IC-LoRA requires a reference_video_id",
@@ -261,14 +262,14 @@ def reference_requires_control_lora(names: list[str]) -> APIError:
 
 
 def lora_format_unsupported(name: str, detail: str) -> APIError:
-    """§3-108: the adapter file is a real safetensors, but its weight layout is
+    """The adapter file is a real safetensors, but its weight layout is
     one the engine loader cannot read — DoRA, LoHa, LoKr, kohya keys joined by
     underscores instead of dots (they resolve to no ``named_modules()`` name),
     or no LoRA weight keys at all. Only ``.lora_A``/``.lora_B`` (A/B) and
     ``.lora_down``/``.lora_up`` (+ ``.alpha``, kohya) are supported. Refusing
-    here is what turns the old SILENT no-op (0 pairs -> a video identical to the
-    LoRA-free one) into a loud rejection. 422 — the request is well-formed; the
-    server-side artifact is what is unusable."""
+    here turns what would otherwise be a silent no-op (0 pairs -> a video
+    identical to the LoRA-free one) into a loud rejection. 422 — the request is
+    well-formed; the server-side artifact is what is unusable."""
     return APIError(
         "LORA_FORMAT_UNSUPPORTED",
         f"LoRA '{name}' uses an unsupported weight layout",
@@ -278,20 +279,21 @@ def lora_format_unsupported(name: str, detail: str) -> APIError:
 
 
 def lora_depth_chain_unsupported(names: list[str]) -> APIError:
-    """Chain LoRA (owner decision 2026-08-11): a depth-preprocess CONTROL IC-LoRA
-    (Video-Depth-Anything) was requested on a chain with clips > 1. Multi-clip
-    reference-video conditioning is otherwise supported (chain_math.
-    video_segment_windows slices one long reference into per-clip windows), but
-    the depth preprocessor is a whole-clip, all-frames-in-memory design (32-frame
-    windows + full-clip min-max normalization) that cannot be chunked to a
-    chain-length reference without OOM or breaking its normalization — so it is
-    v1-scoped to single-clip chains and single-shot /generate only. Mirrors
+    """Chain LoRA: a depth-preprocess CONTROL IC-LoRA (Video-Depth-Anything)
+    was requested on a chain with clips > 1. Multi-clip reference-video
+    conditioning is otherwise supported (chain_math.video_segment_windows
+    slices one long reference into per-clip windows), but the depth
+    preprocessor is a whole-clip, all-frames-in-memory design (sliding windows
+    + full-clip min-max normalization, engine/preprocess/depth.py) that cannot
+    be chunked to a chain-length reference without OOM or breaking its
+    normalization — so it is accepted on single-clip chains and single-shot
+    /generate, and rejected here on multi-clip chains. Mirrors
     :func:`lora_requires_reference` (422) — the request is well-formed but the
     adapter kind is unsupported on this route."""
     return APIError(
         "LORA_DEPTH_CHAIN_UNSUPPORTED",
-        "depth-type IC-LoRA is not supported on a multi-clip chain in this "
-        "version (the depth preprocessor cannot process a chain-length "
+        "depth-type IC-LoRA is not supported on a multi-clip chain (the "
+        "depth preprocessor cannot process a chain-length "
         "reference); use pose/canny/deblur, or a single clip.",
         422,
         detail=f"depth loras rejected on multi-clip chain: {sorted(names)}",
@@ -299,9 +301,9 @@ def lora_depth_chain_unsupported(names: list[str]) -> APIError:
 
 
 def lora_thumbnail_not_found(name: str) -> APIError:
-    """S1: GET /loras/{name}/thumbnail for an adapter that has no sibling
-    ``<stem>.png`` (or an unknown adapter name). Mirrors :func:`lora_not_found`
-    (404)."""
+    """GET /loras/{name}/thumbnail for a registered adapter that has no
+    sibling ``<stem>.png``. An unknown adapter name gets :func:`lora_not_found`
+    instead. Mirrors :func:`lora_not_found` (404)."""
     return APIError(
         "LORA_THUMBNAIL_NOT_FOUND",
         f"no thumbnail for IC-LoRA adapter: {name}",
@@ -310,7 +312,7 @@ def lora_thumbnail_not_found(name: str) -> APIError:
 
 
 def lora_preprocess_conflict(kinds: list[str]) -> APIError:
-    """Phase C: the requested loras imply more than one control preprocess kind
+    """The requested loras imply more than one control preprocess kind
     (e.g. one canny-control + one pose-control adapter) for a single reference
     video. Only one control signal can be derived from the one uploaded video."""
     return APIError(
@@ -322,8 +324,7 @@ def lora_preprocess_conflict(kinds: list[str]) -> APIError:
 
 
 def outpaint_preprocess_conflict(kinds: list[str]) -> APIError:
-    """Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time): outpainting
-    hands the engine a green-padded CANVAS as the reference
+    """Outpainting hands the engine a green-padded CANVAS as the reference
     video, so a control adapter that would first run it through a preprocessor
     (canny / dwpose / depth) is incoherent — the edge map or depth map of a
     sentinel-green border is meaningless, and the In-Outpainting IC-LoRA expects
@@ -340,10 +341,9 @@ def outpaint_preprocess_conflict(kinds: list[str]) -> APIError:
 def outpaint_source_mismatch(
     expected: tuple[int, int], actual: tuple[int, int] | None
 ) -> APIError:
-    """Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time):
-    ``width``/``height`` are the final canvas and the four pads are cut
-    out of it, so the keep rectangle is fully determined by the request. If the
-    reference video's own resolution differs, the source would be silently
+    """Outpainting: ``width``/``height`` are the final canvas and the four pads
+    are cut out of it, so the keep rectangle is fully determined by the request.
+    If the reference video's own resolution differs, the source would be silently
     rescaled and centre-cropped into the canvas (``resize_and_center_crop``),
     quietly breaking outpainting's one invariant — that the original pixels come
     through untouched. Reject instead of rescaling."""
@@ -358,12 +358,12 @@ def outpaint_source_mismatch(
 
 
 def outpaint_source_too_short(available: int, required: int) -> APIError:
-    """Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time): the two
-    blends pair frame *i* of the generation with frame *i* of
-    the green canvas, and stage 2 asserts its initial latent matches the target
-    shape, so a source shorter than ``num_frames`` cannot be honoured — the tail
-    would be a frozen clone of the last frame while the request claims real
-    footage. Reject up front instead of failing deep inside the denoiser."""
+    """Outpainting: the two blends pair frame *i* of the generation with
+    frame *i* of the green canvas, and stage 2 asserts its initial latent
+    matches the target shape, so a source shorter than ``num_frames`` cannot be
+    honoured — the tail would be a frozen clone of the last frame while the
+    request claims real footage. Reject up front instead of failing deep inside
+    the denoiser."""
     return APIError(
         "OUTPAINT_SOURCE_TOO_SHORT",
         "num_frames exceeds the reference video's own frame count",
@@ -373,7 +373,7 @@ def outpaint_source_too_short(available: int, required: int) -> APIError:
 
 
 def inpaint_preprocess_conflict(kinds: list[str]) -> APIError:
-    """Inpainting（マスクによる部分再生成）: 台帳 §3-55。塗り潰したキャンバスを
+    """Inpainting（マスクによる部分再生成）: 塗り潰したキャンバスを
     参照動画として渡す方式なので、参照を前処理（輪郭抽出・姿勢推定・深度）へ
     通す制御アダプタとは併用できない——センチネル緑の輪郭線には意味が無く、
     In-Outpainting用のアダプタは生の画素を受け取る前提で学習されている。
@@ -390,10 +390,10 @@ def inpaint_preprocess_conflict(kinds: list[str]) -> APIError:
 def inpaint_source_mismatch(
     expected: tuple[int, int], actual: tuple[int, int] | None, *, reason: str | None = None
 ) -> APIError:
-    """Inpainting: 要求の ``width``/``height`` は**キャンバス**（素材の実寸を128の
-    倍数へ切り上げた値）でなければならない。素材の実寸から導いた値と違えば、
+    """Inpainting: 要求の ``width``/``height`` は**キャンバス**（素材の実寸を
+    ``round_up_128`` で切り上げた値）でなければならない。素材の実寸から導いた値と違えば、
     余白の位置が実際とずれたまま生成され、最後の切り落としが別の場所を切る。
-    素材の辺が ``INPAINT_MIN_SOURCE_SIDE``（256画素）未満のときも同じ符号で断る
+    素材の辺が ``INPAINT_MIN_SOURCE_SIDE`` 未満のときも同じ符号で断る
     ——理由は違うが、どちらも「この素材ではキャンバスを作れない」という同じ
     結論で、利用者が直す先も同じ（素材を差し替える）。
 
@@ -425,7 +425,7 @@ def inpaint_source_mismatch(
 
 def inpaint_mask_not_found(mask_video_id: str) -> APIError:
     """Inpainting: ``inpaint.mask_video_id`` が保管庫に無い。アップロードが
-    失敗していたか、保存期間を過ぎて消えている。"""
+    失敗していたか、保管庫（``uploads/``）から消されている。"""
     return APIError(
         "INPAINT_MASK_NOT_FOUND",
         f"mask video not found: {mask_video_id}",
@@ -488,7 +488,8 @@ def inpaint_lora_invalid(names: list[str]) -> APIError:
 
     **この符号が実際に出るのは「制御アダプタが2本以上」のときだけ**である。
     0本の場合はここへ来ない——参照動画が必須で、参照動画があって制御アダプタが
-    無い要求は既存の :func:`reference_requires_control_lora` が先に断る。
+    無い要求は、LoRAが空ならリクエストの検証（``GenerateRequest.validate_ltx_constraints``）が、
+    スタイル系のLoRAだけなら既存の :func:`reference_requires_control_lora` が先に断る。
     重複した検査を置かず、到達する場合だけをこの文面が説明する。"""
     return APIError(
         "INPAINT_LORA_INVALID",
@@ -500,15 +501,15 @@ def inpaint_lora_invalid(names: list[str]) -> APIError:
 
 
 def reference_resolution_invalid(width: int, height: int) -> APIError:
-    """Phase C: the reference video is consumed on the VAE's 64-grid. The
-    downscale factor is 2 (union-control family) or 1 (deblur); the divisible-by-128
-    requirement is unchanged either way. If width/height are not divisible by 128,
-    the reference lands off the 64-grid and the worker's VAE encode fails with an
-    unfriendly einops error deep in the job -- reject it up front instead."""
+    """The reference video is consumed on the VAE's 64-grid, at the size set by
+    the control adapter's ``reference_downscale_factor`` metadata. Under a
+    factor of 2 a width/height not divisible by 128 puts the reference off the
+    64-grid and the worker's VAE encode fails with an unfriendly einops error
+    deep in the job -- reject it up front instead. The check applies to every
+    reference-video request, whatever the factor."""
     return APIError(
         "REFERENCE_RESOLUTION_INVALID",
-        "reference-video jobs require width/height divisible by 128 "
-        "(reference is used at half resolution on the 64-grid)",
+        "reference-video jobs require width/height divisible by 128",
         422,
         detail=f"width={width}, height={height}",
     )
@@ -527,7 +528,7 @@ def pipeline_load_failed(detail: str | None = None) -> APIError:
 
 
 def pipeline_loading(detail: str | None = None) -> APIError:
-    """A load/reload arrived while one is already in flight (§3-97 P6).
+    """A load/reload arrived while one is already in flight.
 
     409, the same "you are asking at the wrong moment" family as
     :func:`job_busy` — nothing is wrong with the request, it just has to wait.
@@ -549,7 +550,7 @@ def pipeline_loading(detail: str | None = None) -> APIError:
 
 
 def feature_unsupported(feature: str, detail: str | None = None) -> APIError:
-    """The request asks for something THIS base model's engine cannot do (§3-98).
+    """The request asks for something THIS base model's engine cannot do.
 
     422, not 400: the request is perfectly well-formed and would have been
     accepted by another base model — what makes it unrunnable is the engine
@@ -586,7 +587,7 @@ def generation_failed(job_id: str | None = None, detail: str | None = None) -> A
     return APIError("GENERATION_FAILED", "Generation failed", 503, job_id=job_id, detail=detail)
 
 
-# --- object tracking (§3-54, Docs/OBJECT_TRACKING_DESIGN.md §4.3) -----------
+# --- object tracking (Docs/OBJECT_TRACKING_DESIGN.md §4.3) ------------------
 #
 # Five codes, one per state the plugin has to tell apart. They are their own
 # family rather than reuses of the generation codes because tracking shares
@@ -629,10 +630,10 @@ def track_unavailable(detail: str | None = None) -> APIError:
 def track_session_not_found(session_id: str) -> APIError:
     """No open session with that id. 404, exactly like :func:`job_not_found`.
 
-    Also what a caller sees after the 60-second idle expiry, and on a second
-    DELETE of the same session — the id genuinely does not exist any more, and
-    inventing a softer answer for those two cases would hide a plugin that lost
-    track of its own session.
+    Also what a caller sees after the idle expiry (``IDLE_TIMEOUT_S`` in
+    services/tracking_manager.py), and on a second DELETE of the same session
+    — the id genuinely does not exist any more, and inventing a softer answer
+    for those two cases would hide a plugin that lost track of its own session.
     """
     return APIError(
         "TRACK_SESSION_NOT_FOUND", f"tracking session not found: {session_id}", 404
@@ -663,7 +664,7 @@ def track_failed(detail: str | None = None) -> APIError:
     return APIError("TRACK_FAILED", "Object tracking failed", 503, detail=detail)
 
 
-# --- mp4 recipe read-out (台帳 §3-164, POST /utils/mp4-info) ---------------
+# --- mp4 recipe read-out (POST /utils/mp4-info) --------------------------
 
 
 def local_only(detail: str | None = None) -> APIError:

@@ -1,4 +1,4 @@
-"""Assets-only text-encoder safetensors, extracted from the TE GGUF (§3-98 Phase 2c, F2).
+"""Assets-only text-encoder safetensors, extracted from the TE GGUF.
 
 Why this file exists
 --------------------
@@ -21,9 +21,10 @@ The cheaper and far more durable trick: give the official code the file it is
 asking for. Everything ``GemmaAssets`` wants is *already inside the TE GGUF* --
 the converter packed the same five U8 sidecar payloads the official bf16 TE file
 carries (``tokenizer_json`` plus four ``hf_asset__*``), and the same HF config
-JSON, as a ``config`` KV. So this module writes a ~32 MB ``.safetensors`` that is
-byte-identical to the official 26.3 GB file *minus its 681 weight tensors*, and
-engine25 hands that path to ``ModelPaths.from_split(text_encoder_path=...)``.
+JSON, as a ``config`` KV. So this module writes a small ``.safetensors`` (its
+size on disk is recorded in VERIFICATION_LOG §69.8) that is byte-identical to
+the official bf16 TE file *minus its weight tensors*, and engine25 hands that
+path to ``ModelPaths.from_split(text_encoder_path=...)``.
 
 The official asset code then runs completely unmodified. The weights come from
 the GGUF through engine25's own builder (see :mod:`engine25.gguf_gemma4`), which
@@ -39,15 +40,16 @@ What is written
 
 Idempotence
 -----------
-:func:`ensure_assets_only` regenerates only when the file is missing, unreadable,
-or does not match the GGUF byte-for-byte (metadata *and* payloads). A match is a
-no-op with a log line, so it is safe to call on every worker start. The write is
-atomic (temp file + ``os.replace``), so an interrupted export never leaves a
-half-file that would then load as a corrupt tokenizer.
+:func:`ensure_assets_only` regenerates when ``force`` is set, or when the file is
+missing, unreadable, or does not match the GGUF byte-for-byte (metadata *and*
+payloads). A match is a no-op with a log line, so it is safe to call on every
+worker start. The write is atomic (temp file + ``os.replace``), so an
+interrupted export never leaves a half-file that would then load as a corrupt
+tokenizer.
 
 Usage::
 
-    python -m engine25.assets_export <te.gguf> [--out PATH] [--force] [--json]
+    python -m engine25.assets_export <te.gguf> [--out PATH] [--force] [--verify] [--json]
 """
 
 from __future__ import annotations
@@ -84,8 +86,7 @@ HF_ASSET_TENSOR_PREFIX = "hf_asset__"
 GGUF_CONFIG_KEY = "config"
 
 #: Suffix appended to the GGUF stem. The file lands beside the GGUF so the two
-#: travel together: a weights file and its assets are one unit, and the manifest
-#: step (Phase 4) copies/links them side by side.
+#: travel together: a weights file and its assets are one unit.
 ASSETS_SUFFIX = ".assets.safetensors"
 
 #: Bumped when the written layout changes, so old exports regenerate instead of
@@ -139,9 +140,9 @@ def read_payload(gguf_path: str | Path) -> tuple[dict[str, bytes], str]:
 
     The sidecars are stored as GGML type I8 -- gguf-py has no U8 writer type, and
     I8 is bit-identical storage, so the bytes are simply reinterpreted. Only the
-    five payload tensors are touched; the 681 weight tensors are never faulted in
-    (the reader memory-maps the file), which is what keeps this a sub-second
-    operation on a 9.2 GB input.
+    payload tensors (``tokenizer_json`` and ``hf_asset__*``) are touched; the
+    weight tensors are never faulted in (the reader memory-maps the file), which
+    is what keeps this cheap on a multi-GB input.
     """
     import gguf as gguf_lib
     import numpy as np
@@ -295,7 +296,9 @@ def ensure_assets_only(
     """Make sure an assets-only ``.safetensors`` for *gguf_path* exists and is current.
 
     Safe to call on every worker start: when the file already matches the GGUF
-    this reads ~32 MB, compares, and returns ``action="reused"``.
+    this reads the small payloads (the assets file's size on disk is recorded
+    in VERIFICATION_LOG §69.8) rather than the weights, compares, and returns
+    ``action="reused"``.
     """
     gguf = Path(gguf_path)
     if not gguf.is_file():

@@ -49,13 +49,13 @@ class AppContext:
     #: (the model registry and the pipeline/engine layer alike). A broken or
     #: missing descriptor fails the server at boot, not per request.
     base_models: dict[str, BaseModelDescriptor] = field(init=False)
-    #: Last active base model + per-base selection, read ONCE here at startup
-    #: (§3-97 P5). Unusable/absent -> the shipped defaults, never a boot error.
+    #: Last active base model + per-base selection, read ONCE here at startup.
+    #: Unusable/absent -> the shipped defaults, never a boot error.
     runtime_state: RuntimeState = field(init=False)
     model_registry: ModelRegistry = field(init=False)
     pipeline_manager: PipelineManager = field(init=False)
     join_manager: JoinManager = field(init=False)
-    #: Object tracking (§3-54). Built unconditionally and STARTS NOTHING — the
+    #: Object tracking. Built unconditionally and STARTS NOTHING — the
     #: utility worker is spawned by the first tracking session, never at boot,
     #: so a server nobody tracks on pays nothing and a machine without
     #: ``.venv-utils`` still starts normally (``/status`` then says why).
@@ -89,10 +89,9 @@ class AppContext:
             self.lora_registry,
             audio_upload_store=self.audio_upload_store,
             # The engine layer builds its worker payload from the base model's
-            # descriptor (§3-97 P3b). Which base model that is comes from the
-            # runtime state (P5) — the one the operator last loaded — and
-            # changes per request through POST /pipeline/load's ``base_model``
-            # axis (P6).
+            # descriptor. Which base model that is comes from the runtime
+            # state — the one the operator last loaded — and changes per
+            # request through POST /pipeline/load's ``base_model`` axis.
             descriptor=self.base_models[active_base],
             runtime_state=self.runtime_state,
             active_base_model=active_base,
@@ -102,7 +101,7 @@ class AppContext:
             active_models=active_models,
             active_selection_paths=selection_paths,
             # Needed to look up the descriptor of a base model a load switches
-            # TO, and to publish the new active base back (P6).
+            # TO, and to publish the new active base back.
             model_registry=self.model_registry,
         )
         # Last, and independent of everything above: tracking shares no state

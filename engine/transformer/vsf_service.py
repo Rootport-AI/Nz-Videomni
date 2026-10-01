@@ -35,16 +35,17 @@ and is unambiguously harmful, so the slice is a correctness requirement, not
 an optimisation. But the consequence is a mass imbalance: ~10 negative keys
 against 1024 positive ones, so the share of softmax mass the negative half
 captures (call it ``m``) can be ~1%. The output's negative term is
--alpha * m * mean(V-), so a small ``m`` is recoverable by raising alpha —
-which is exactly why ``vsf_scale``'s API range goes to 100 instead of the
-reference implementation's 10. To make this measurable rather than guessable,
-the first few patched forwards of every job log ``m`` at INFO (see
-_log_negative_mass): that number, not a pixel diff of the output video, is
-the primary "is it working?" signal.
+-alpha * m * mean(V-), but raising alpha to make up for a small ``m`` does
+not pay off: real-hardware A/B found that fidelity collapses before the
+negative prompt gains strength (VERIFICATION_LOG §41.9). The ``vsf_scale``
+range is the ``Field`` in api/models.py. To make ``m`` measurable rather
+than guessable, the first few patched forwards of every job log ``m`` at
+INFO (see _log_negative_mass): that number, not a pixel diff of the output
+video, is the primary "is it working?" signal.
 
 The negative context stays raw (never AdaLN-modulated), matching NAG's
-asymmetry. Three AdaLN hypotheses were briefly selectable here; real-hardware
-A/B settled on raw and the switch was removed — see VERIFICATION_LOG §41.9.
+asymmetry. Real-hardware A/B of three AdaLN variants settled on raw — see
+VERIFICATION_LOG §41.9.
 """
 
 from __future__ import annotations
@@ -60,7 +61,7 @@ from engine.transformer.nag_service import NagState, _cross_attn_modules
 
 logger = logging.getLogger(__name__)
 
-# How many patched forwards per job log their negative softmax mass. Cross-
+# How many patched forwards per install log their negative softmax mass. Cross-
 # attention runs in block order within a denoising step, so 4 covers block 0
 # and block 1 for both modalities (video/audio interleaved) — enough to see
 # whether m is uniform across blocks without paying for the extra matmul on
@@ -80,9 +81,9 @@ class VsfParams:
     """One job's VSF request.
 
     ``scale`` is the paper's alpha (the negative values' multiplier); the
-    reference implementations' default is 1.5 and Wan's tuned value is 1.7,
-    but see the module docstring on why this backend allows much larger
-    values.
+    reference implementations' default is 1.5 and Wan's tuned value is 1.7.
+    The API range is the ``vsf_scale`` ``Field`` in api/models.py (see the
+    module docstring on why a larger alpha does not help).
     """
 
     negative_prompt: str
@@ -91,8 +92,9 @@ class VsfParams:
 
 class _MassLogBudget:
     """Per-install counter that limits the ``m`` logging to the first few
-    forwards of a job. One instance is shared by all 96 patched closures, and
-    a fresh transformer (hence a fresh install) per job resets it."""
+    forwards after an install. One instance is shared by all 96 patched
+    closures of that install, and every install creates a fresh one (2.3
+    builds a fresh transformer, hence a fresh install, per job)."""
 
     def __init__(self, remaining: int) -> None:
         self.remaining = int(remaining)
@@ -125,9 +127,10 @@ def _log_negative_mass(
     stride = max(1, t // _MASS_LOG_QUERIES)
     q_sample = q[:, ::stride][:, :_MASS_LOG_QUERIES]
 
-    # detach(): production runs under inference_mode so this is already a
-    # no-op there, but the selfcheck (and any future grad-enabled caller)
-    # must not build an autograd graph for a log line.
+    # detach(): production runs with autograd off (inference_mode on 2.3,
+    # no_grad on 2.5) so this is already a no-op there, but the selfcheck
+    # (and any future grad-enabled caller) must not build an autograd graph
+    # for a log line.
     q_h = q_sample.detach().reshape(b, -1, heads, dim_head).transpose(1, 2).float()
     k_h = k.detach().reshape(b, -1, heads, dim_head).transpose(1, 2).float()
     weights = torch.softmax(
@@ -163,8 +166,8 @@ def _make_vsf_forward(
     pe/k_pe/mask/perturbation arguments), the same never-called ``orig_forward``
     parameter (kept for symmetry with the engine's other patch closures; there
     is no uninstall path, so an unexpected call shape must fail rather than
-    fall back), and the same per-head-gate + to_out tail copied from
-    Attention.forward (attention.py:237-249).
+    fall back), and the same per-head-gate + to_out tail copied from the
+    upstream Attention.forward.
 
     The middle is the whole feature: ONE attention call over concatenated
     keys/values, with the negative half's values multiplied by ``-scale``.
@@ -253,12 +256,12 @@ def _make_vsf_forward(
         # [K+; K-] / [V+; -scale*V-] tensors, i.e. values whose negative half is
         # sign-flipped and scaled — the widest dynamic range any INT8/FP8
         # quantized attention call in this engine sees. Hence its own real-device
-        # gate (G5.6).
+        # gate (G5.6, VERIFICATION_LOG §43.5).
         out = attn.attention_function(q, k, v, attn.heads, None)
         del k, v, q
 
-        # Per-head gating, identical to Attention.forward's tail (attention.py:
-        # 237-247) and to NAG's — gating is always the last step before to_out.
+        # Per-head gating, identical to the upstream Attention.forward's tail
+        # and to NAG's — gating is always the last step before to_out.
         if attn.to_gate_logits is not None:
             gate_logits = attn.to_gate_logits(x)  # (B, T, H)
             b, t, _ = out.shape

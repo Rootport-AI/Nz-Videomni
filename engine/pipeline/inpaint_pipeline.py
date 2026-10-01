@@ -11,10 +11,11 @@ the metadata block and the mask decode), which as hook parameters on one
 function would be six new arguments threaded through a 400-line body. The
 decisive reason though is regression risk, not tidiness: outpainting ships on
 BOTH engines (LTX 2.3 here, LTX 2.5 through ``engine25/outpaint25.py``, which
-shares this repo's ``engine.outpaint`` blend), and its output has to stay
-bit-identical. Keeping ``run_outpaint`` to three pure extractions
-(``_freeze_source_audio`` / ``_audio_init`` / ``_mux_audio``, all imported
-below) is what makes that provable rather than hoped for.
+shares this repo's ``engine.outpaint`` blend), and inpainting's own steps must
+not reach its output. ``run_outpaint`` and this module share helpers
+(``_freeze_source_audio`` / ``_audio_init`` / ``_mux_audio`` and the others
+imported below) rather than a body, so the inpainting-only steps live here and
+never sit on its path.
 
 Flow (one worker invocation):
 
@@ -123,11 +124,11 @@ def run_inpaint(
     ``canvas_path`` is the lossless, video-only canvas built by
     ``services.video_io.fill_mask_green_mp4``: the source window with the mask's
     white region painted #66FF00 and the right/bottom bands padded out to the
-    128-multiple canvas. ``ic_reference`` points at that same file (the app
-    substitutes it for the uploaded reference, so the IC-LoRA plumbing needs no
-    changes at all). ``source_path`` is the CUT WINDOW — the same footage the
-    canvas was built from, still carrying its audio, which the canvas
-    deliberately does not.
+    canvas grid (``CANVAS_MULTIPLE``). ``ic_reference`` points at that same
+    file (the app substitutes it for the uploaded reference, so the IC-LoRA
+    plumbing needs no changes at all). ``source_path`` is the CUT WINDOW — the
+    same footage the canvas was built from, still carrying its audio, which the
+    canvas deliberately does not.
 
     ``mask_path`` is the uploaded mask video at the SOURCE resolution; it is
     decoded here rather than baked into the canvas because the blend needs the
@@ -338,8 +339,9 @@ def run_inpaint(
 
     # Tiled VAE re-encode. channels_last_3d on the Conv3d weights is the known
     # fix for the im2col intermediate that OOMs a 16GB card on a full-resolution
-    # encode; restoring contiguous afterwards is a CORRECTNESS requirement, not
-    # hygiene, because this same encoder is reused within the job.
+    # encode; the finally puts the weights back to contiguous so the encoder
+    # leaves in the layout it arrived in. Nothing later in this job encodes
+    # through it (it is dropped after stage 2), and the next job builds its own.
     _accel = torch.device(device).type == "cuda" and callable(
         getattr(video_encoder, "modules", None)
     )
@@ -461,7 +463,7 @@ def run_inpaint(
     # is no longer the original anywhere it matters. Outside the mask the canvas
     # IS the source window (that is what fill_mask_green_mp4 writes), which is
     # why the source does not have to be decoded separately here. The pad bands
-    # come back green and are cropped off two steps later.
+    # come back green and are cropped off by the CROP step right after this one.
     canvas_restore = _load_canvas_pixels_u8(
         video_path=str(canvas_path),
         height=height,

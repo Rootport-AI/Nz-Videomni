@@ -5,13 +5,14 @@ attention kernel with an INT8-quantized-QK / FP8-or-FP16-PV one. It is a pure
 SPEED optimization: same inputs, same shapes, same output *semantics*, but the
 numbers differ by quantization noise, so a sage job and an sdpa job with the
 same seed produce videos that differ in fine detail. Measured on the real box
-(RTX 4070 Ti SUPER, 720p, VERIFICATION_LOG §43): 1.17x end-to-end, 1.56x on
+(RTX 4070 Ti SUPER, 720p, VERIFICATION_LOG §43.5): 1.17x end-to-end, 1.56x on
 stage 2, no VRAM increase.
 
 What is patched: ``Attention.attention_function`` — a plain Python attribute on
-every ``Attention`` module (attention.py:157), NOT an nn.Module child. Assigning
-a non-Module there lands in ``object.__setattr__``, so the module tree, the
-state dict and block-swap's per-block ``.to()`` bookkeeping are all untouched.
+every ``Attention`` module (set in upstream ``Attention.__init__``), NOT an
+nn.Module child. Assigning a non-Module there lands in ``object.__setattr__``,
+so the module tree, the state dict and block-swap's per-block ``.to()``
+bookkeeping are all untouched.
 The production 48-block model has 6 attention modules per block (attn1 / attn2 /
 audio_attn1 / audio_attn2 / audio_to_video_attn / video_to_audio_attn) = 288
 modules, and ALL of them are candidates — unlike NAG/VSF, which only argue with
@@ -19,13 +20,14 @@ the text prompt and therefore only patch the 96 cross-attention modules.
 
 Interaction with NAG/VSF (load-bearing, do not "simplify" away): those services
 patch ``Attention.forward`` and their replacement forwards call
-``attn.attention_function(...)`` directly (nag_service.py:378/:383,
-vsf_service.py:249). So a NAG or VSF job that also asks for sage runs its
+``attn.attention_function(...)`` directly (``nag_service._make_nag_forward``,
+``vsf_service._make_vsf_forward``, and on 2.5 the forwards in
+``engine25.neg_prompt25``). So a NAG or VSF job that also asks for sage runs its
 positive/negative attention calls through the sage kernel too — including VSF's
 concatenated ``[K+; K-]`` / ``[V+; -s*V-]`` tensors. The two patches compose by
 construction (different attributes) and install order does not matter.
 
-Discipline, and why it differs from NAG's (D3):
+Discipline, and why it differs from NAG's (VERIFICATION_LOG §43.1):
   * NAG changes the OUTPUT the user asked for, so any failure is fail-loud.
   * sage only changes the SPEED, so a job must never die because of it. The
     degradations are, in order of when they are decided:
@@ -49,7 +51,7 @@ Discipline, and why it differs from NAG's (D3):
   * Whether sage was *actually* used is reported back to the app as
     ``attention_used`` ("sage" / "sage->sdpa"), so a degraded job is visible in
     metadata.json rather than only in a log nobody reads (the "fp8 display-only"
-    trap, D3).
+    trap, VERIFICATION_LOG §43.1).
 
 Availability is probed once per worker process by ``probe_sage()`` and published
 on the ``ready`` event; the app never has to guess.
@@ -82,8 +84,8 @@ _SAGE_HEAD_DIMS = (64, 128)
 
 # sageattn quantizes FROM half precision; anything else has to take the
 # original path. ``v`` carries the authoritative compute dtype here, mirroring
-# XFormersAttention's ``memory_efficient_attention(q.to(v.dtype), ...)``
-# (attention.py:89).
+# the ``memory_efficient_attention(q.to(v.dtype), ...)`` call in 2.3's
+# upstream ``XFormersAttention.__call__``.
 _SAGE_DTYPES = (torch.float16, torch.bfloat16)
 
 # Resolved-once sage entry point (see _sage_callable) and probe result (see
@@ -103,9 +105,9 @@ def _sage_callable() -> Callable[[torch.Tensor, torch.Tensor, torch.Tensor], tor
 
     Layout: ``Attention.forward`` hands the attention function q/k/v still in
     the FLAT per-token layout ``(B, S, heads * dim_head)``. Viewing that as
-    ``(B, S, H, D)`` is exactly SageAttention's "NHD" and exactly what
-    XFormersAttention does (attention.py:65/:90) before calling its kernel —
-    i.e. the cheap round trip, no transpose, and a shape this wheel already
+    ``(B, S, H, D)`` is exactly SageAttention's "NHD" and exactly what 2.3's
+    upstream ``XFormersAttention.__call__`` does before calling its kernel —
+    i.e. the cheap round trip, no transpose, and a shape the wheel already
     ships a first-class AttentionCallable for. "HND" would additionally cost
     two transposes per call for nothing.
     """
@@ -155,7 +157,7 @@ def probe_sage() -> bool:
     The failure reason goes to STDERR directly rather than through ``logging``
     so it is captured even if this is called before the worker's logging
     handler is installed (the parent redirects the worker's STDERR to
-    logs/ltx_worker.log).
+    logs/ltx_worker.log on 2.3, logs/ltx25_worker.log on 2.5).
     """
     global _PROBE_RESULT
     if _PROBE_RESULT is not None:
@@ -177,10 +179,10 @@ class SageState:
     """Which attention backend one job asked for, and what it actually got.
 
     Lifetime mirrors ``NagState``: one instance lives on the pipeline
-    (``LTXFastVideoPipeline._sage``) for as long as the process is resident, and
-    ``set_backend``/``reset`` scope it to a single generate()/generate_chain()
-    call so a keep_resident worker never leaks one job's backend choice into the
-    next job.
+    (``LTXFastVideoPipeline._sage`` on 2.3, ``Ltx25Pipeline._sage`` on 2.5) for
+    as long as the process is resident, and ``set_backend``/``reset`` scope it
+    to a single job so a keep_resident worker never leaks one job's backend
+    choice into the next job.
 
     Only a backend string is held — deliberately no ``SageParams`` dataclass
     (there is exactly one knob and no room for a second: kernel selection is
@@ -216,14 +218,16 @@ class SageState:
     def masked_calls(self) -> int:
         """How many calls in THIS job took the attention-mask fallback.
 
-        Nonzero is normal and expected on an IC-LoRA job with
-        conditioning_attention_strength < 1.0 — it is the only thing on this
+        Nonzero is normal and expected on a 2.3 IC-LoRA job with
+        conditioning_attention_strength < 1.0 — it is the only thing on that
         pipeline that produces an attention mask, and sageattn cannot express
-        one. It is exposed (and logged once, see ``note_masked_fallback``)
-        because "some calls quietly went to sdpa" is otherwise invisible: it
-        does not change ``attention_used``, so without this the real-device
-        IC-LoRA gate (G5) would have no positive evidence that the mask path
-        was actually taken.
+        one (in a 2.5 job masked calls go to the separate
+        ``masked_attention_function`` slot, which this module does not wrap).
+        It is exposed (and logged once, see ``note_masked_fallback``) because
+        "some calls quietly went to sdpa" is otherwise invisible: it does not
+        change ``attention_used``, so without this the real-device IC-LoRA
+        check (G5, VERIFICATION_LOG §43.5) would have no positive evidence that
+        the mask path was actually taken.
         """
         return self._masked_calls
 
@@ -233,11 +237,12 @@ class SageState:
 
         Covers BOTH ways sage can be off at call time: the job never asked for
         it, or a kernel failure latched the job onto sdpa. Checking "requested"
-        here and not just "latched" is the leak guard: the transformer is
-        rebuilt per job, so a wrapper should never survive into a job that did
-        not ask for sage — but if that invariant ever breaks, this makes the
-        stale wrapper inert instead of silently accelerating (and mis-reporting)
-        an sdpa job. It costs one string compare against a matmul.
+        here and not just "latched" is the leak guard: 2.3 rebuilds the
+        transformer per job and 2.5 strips the previous build's wrappers before
+        installing, so a wrapper should never survive into a job that did not
+        ask for sage — but if that invariant ever breaks, this makes the stale
+        wrapper inert instead of silently accelerating (and mis-reporting) an
+        sdpa job. It costs one string compare against a matmul.
         """
         return self._backend == "sage" and not self._latched
 
@@ -253,21 +258,23 @@ class SageState:
     def last_attention_used(self) -> str:
         """``attention_used`` as of the last ``reset()``.
 
-        The pipeline resets this state in its own ``finally``, so by the time
-        the worker gets control back the live value is already cleared. This
-        snapshot is what the worker reports on the ``done`` event — the
-        judging criterion for the real-device gates is that metadata field,
-        not a log line.
+        The pipeline resets this state at the end of a job (2.3 in its own
+        ``finally``; 2.5 through ``Ltx25Pipeline.reset_acceleration_job``, from
+        the worker's ``finally``), so by the time the worker reads the result
+        the live value is already cleared. This snapshot is what the worker
+        reports on the ``done`` event — the real-device gates judge by that
+        metadata field, not a log line (VERIFICATION_LOG §43.1).
         """
         return self._last_attention_used
 
     def set_backend(self, backend: str) -> None:
         """Start a job on ``backend``. Never raises (see
-        ``LTXFastVideoPipeline._set_sage_job`` for why that matters): an
+        ``LTXFastVideoPipeline._set_sage_job`` and
+        ``Ltx25Pipeline.set_acceleration_job`` for why that matters): an
         unrecognised value degrades to "sdpa" here, because the worker has
         already rejected unknown values fail-loud at the protocol edge and a
-        second, later, exception-throwing gate would only be able to fire from
-        outside the pipeline's try/finally."""
+        second, later, exception-throwing gate would only be able to fire
+        before the try/finally that resets this state."""
         self._backend = "sage" if backend == "sage" else "sdpa"
         self._latched = False
         self._masked_calls = 0
@@ -279,8 +286,9 @@ class SageState:
         conditioning_attention_strength < 1.0 this is the correct and expected
         behaviour, not a malfunction, and routinely emitting warnings for normal
         operation is how people learn to ignore warnings. The worker sets the
-        root logger to INFO and pipes it to STDERR, so this still lands in
-        logs/ltx_worker.log where the G5 gate looks for it.
+        root logger to INFO and pipes it to STDERR, so this still lands in the
+        worker log (logs/ltx_worker.log on 2.3, logs/ltx25_worker.log on 2.5),
+        where the IC-LoRA check G5 (VERIFICATION_LOG §43.5) looks for it.
 
         Logged once per job rather than per call, for the same reason
         ``latch_fallback`` is: a masked job would otherwise emit one line per
@@ -310,9 +318,11 @@ class SageState:
         )
 
     def reset(self) -> None:
-        """Resident-worker leak guard, called from the pipeline's try/finally.
-        Snapshots ``attention_used`` first — that is the only record of what the
-        finished job actually ran on."""
+        """Resident-worker leak guard, called from the job's finally (2.3: the
+        pipeline's own; 2.5: the worker's, via
+        ``Ltx25Pipeline.reset_acceleration_job``). Snapshots ``attention_used``
+        first — that is the only record of what the finished job actually ran
+        on."""
         self._last_attention_used = self.attention_used
         self._backend = "sdpa"
         self._latched = False
@@ -323,17 +333,19 @@ class _SageAttentionFunction:
     """Drop-in ``AttentionCallable`` that routes to sage when it is safe to.
 
     Not an ``nn.Module`` (see this module's docstring). Every rejection calls
-    ``self._fallback`` — the ORIGINAL callable found on the module, normally
-    ``AttentionFunction.DEFAULT`` which resolves to ``PytorchAttention`` in this
-    venv — with the untouched q/k/v/mask, so a fallback call is bit-identical to
-    an sdpa run. That is why the NHD views below are bound to NEW names: rebinding
-    q/k/v would hand the fallback reshaped tensors and silently change its result.
+    ``self._fallback`` — the ORIGINAL callable found on the module (on 2.3
+    normally ``AttentionFunction.DEFAULT``, which resolves to
+    ``PytorchAttention`` in ``.venv-engine``; on 2.5 normally the
+    ``AttentionFunction.AUTOMATIC`` pick) — with the untouched q/k/v/mask, so a
+    fallback call is bit-identical to an sdpa run. That is why the NHD views
+    below are bound to NEW names: rebinding q/k/v would hand the fallback
+    reshaped tensors and silently change its result.
 
-    FA3/FA4 (``AttentionFunction.FLASH_ATTENTION_3`` / ``_4``) are OUT OF SCOPE and
-    would not merely be slower here: their ``__call__`` takes no ``mask``, so on a
-    machine where AUTOMATIC picks one — Hopper and datacenter Blackwell — the
-    five-argument fallback call below would itself be a ``TypeError`` (this
-    project runs RTX 40xx, where AUTOMATIC picks SDPA).
+    FA3/FA4 (2.5's ``AttentionFunction.FLASH_ATTENTION_3`` / ``_4``) are OUT OF
+    SCOPE and would not merely be slower here: their ``__call__`` takes no
+    ``mask``, so on a machine where AUTOMATIC picks one — Hopper and datacenter
+    Blackwell — the five-argument fallback call below would itself be a
+    ``TypeError`` (on Ada and consumer Blackwell, AUTOMATIC picks SDPA).
     """
 
     __slots__ = ("_fallback", "_sage", "_state", "_name", "_dim_head")
@@ -404,7 +416,7 @@ class _SageAttentionFunction:
         qh = q.reshape(b, -1, heads, dim_head)
         kh = k.reshape(b, -1, heads, dim_head)
         vh = v.reshape(b, -1, heads, dim_head)
-        # Mirror XFormersAttention's ``q.to(v.dtype)`` (attention.py:89): v holds
+        # Mirror the upstream ``XFormersAttention``'s ``q.to(v.dtype)``: v holds
         # the compute dtype, q/k may still be in the norm's dtype.
         if qh.dtype != vh.dtype:
             qh = qh.to(vh.dtype)
@@ -423,8 +435,8 @@ class _SageAttentionFunction:
             self._state.latch_fallback(f"{self._name} raised {exc!r}")
             return self._fallback(q, k, v, heads, mask)
 
-        # NHD out -> flat (B, S, H*D): the identical unwind XFormersAttention
-        # uses (attention.py:90).
+        # NHD out -> flat (B, S, H*D): the identical unwind the upstream
+        # ``XFormersAttention`` uses.
         return out.reshape(b, -1, heads * dim_head)
 
 
@@ -453,9 +465,11 @@ def _strip_wrappers(module: torch.nn.Module) -> int:
     Follows the wrapper's own ``_fallback`` chain down rather than re-resolving
     the module's default callable: re-resolving (``automatic_attention()``, or
     the block's ``AttentionOps``) would clobber any OTHER wrapper that had been
-    layered underneath. Nothing else assigns to ``attention_function`` today —
-    NAG, VSF and the official code all patch ``forward`` instead — but walking
-    the chain costs one isinstance per level and never has to be revisited.
+    layered underneath. Nothing in this project's production path assigns to
+    ``attention_function`` — NAG and VSF patch ``forward`` instead, and engine25
+    does not use 2.5's ``DiffusionStage.with_attention`` (which does assign it,
+    at build time, via ``set_attention_module_op``) — but walking the chain
+    costs one isinstance per level and never has to be revisited.
 
     A ``while``, not an ``if``: nesting is what this exists to undo, and a
     single-level strip would leave an N-1 deep stack that still works, still
@@ -463,10 +477,12 @@ def _strip_wrappers(module: torch.nn.Module) -> int:
 
     **TOUCHES NO TENSOR, AND MUST NOT START TO.** Same discipline (and same
     reason) as ``Ltx25DiffusionStage._unpatch_block_swap``: on the 2.5 engine
-    this runs on a model shell that has been through ``Disposable.dispose()``,
-    where every parameter is a ``device="meta"`` tensor and any operator
-    dispatch raises. Rebinding one Python attribute is all that is safe here,
-    and all that is needed.
+    this runs on the model shell the registry reuses. The build path reaches it
+    after the new state dict has been loaded, but between builds that shell has
+    been through ``Disposable.dispose()``, where every parameter is a
+    ``device="meta"`` tensor and any operator dispatch raises. Rebinding one
+    Python attribute is safe in both states of the shell, and it is all that is
+    needed.
     """
     removed = 0
     while isinstance(module.attention_function, _SageAttentionFunction):
@@ -506,20 +522,22 @@ class SageAttentionService:
     and adding a slot for one would be a second thing to keep in sync with the
     thing it describes.
 
-    LTX 2.5'S MASKED PATH NEVER REACHES THIS WRAPPER. ``Attention.forward``
-    (ltx_core attention.py:566-570) routes a non-None ``mask`` to a SEPARATE
-    attribute, ``masked_attention_function``, which this service does not touch.
-    So on 2.5 the mask branch inside ``_SageAttentionFunction`` is dead code in
-    production — the one masked path there is reference25's IC-LoRA
-    attention-strength wrapper, which is structurally sent to SDPA and never
-    asks sage anything. The branch is KEPT, not deleted, because on 2.3 it is
-    fully alive: NAG's and VSF's replacement ``forward``s call
-    ``attn.attention_function(q, k, v, heads, mask)`` directly, mask included.
-    The one place it does fire on 2.5 is the engine25 SELFTEST, whose dummy
-    ``Modality`` carries ``context_mask=ones``
-    (``engine25/gguf_transformer.py:1129``) and so drives attn2 down the masked
-    route — which is why an engine25 selftest, alone, can log the masked-fallback
-    line that a real 2.5 job never will.
+    LTX 2.5'S MASKED PATH NEVER REACHES THIS WRAPPER. ``Attention.forward`` in
+    2.5's pinned ltx_core (``$ltx25DirectPins``) routes a non-None ``mask`` to
+    a SEPARATE attribute, ``masked_attention_function``, which this service
+    does not touch. So on 2.5 the mask branch inside ``_SageAttentionFunction``
+    is dead code in production — the one masked path there is reference25's
+    IC-LoRA attention-strength wrapper, which is structurally sent to SDPA and
+    never asks sage anything. The branch is KEPT, not deleted, because on 2.3
+    it is fully alive: 2.3's upstream ``Attention.forward`` hands ``mask`` to
+    ``attention_function`` itself, so a masked call (the IC-LoRA
+    attention-strength path) reaches this wrapper. (NAG's and VSF's replacement
+    ``forward``s also call ``attn.attention_function`` directly, with
+    ``mask=None``.) The engine25 SELFTEST makes masked calls on 2.5 too: its
+    dummy ``Modality`` carries ``context_mask=ones`` (``_dummy_video_modality``
+    in ``engine25/gguf_transformer.py``), so attn2 takes the masked route —
+    through ``masked_attention_function`` again, so it is not a sage fallback
+    either and logs no masked-fallback line.
     """
 
     def __init__(self, state_provider: Callable[[], SageState]) -> None:
@@ -529,25 +547,26 @@ class SageAttentionService:
         """Put every wrapped ``attention_function`` back. Returns how many were peeled.
 
         For the LTX 2.5 engine, whose model shell outlives the job (see the class
-        docstring). LTX 2.3 never calls this and its behaviour is unchanged by
-        its existence.
+        docstring). LTX 2.3 never calls this.
 
         **NEVER RAISES, AND TOUCHES NO TENSOR.** Both halves of that are load
         bearing and neither is decoration:
 
-        * never-raises, because this is the FIRST thing that happens on the
-          build path and the whole discipline of this module is that "sage must
-          never be the reason a job dies" (see the module docstring, D3). A
-          traversal that cannot complete leaves the build to fail on its own
-          terms — and leaves ``install()`` to strip what is left, which it does
-          anyway.
-        * no tensor, because on 2.5 this runs against a shell that has been
-          through ``Disposable.dispose()``: every parameter is on
-          ``device="meta"`` and a ``.to()`` on one of those raises
-          NotImplementedError. This is the same rule, for the same reason, that
-          ``Ltx25DiffusionStage._unpatch_block_swap`` states in capitals — do
-          not add a ``.cpu()``, a ``.data`` assignment or an ``empty_cache()``
-          here "just to be tidy".
+        * never-raises, because this runs on the build path
+          (``Ltx25DiffusionStage._ensure_sage_installed``) and the whole
+          discipline of this module is that "sage must never be the reason a
+          job dies" (see the module docstring). A traversal that cannot
+          complete leaves the build to fail on its own terms — and leaves
+          ``install()`` to strip what is left, which it does anyway.
+        * no tensor, because on 2.5 this runs on the shell the registry reuses:
+          ``_ensure_sage_installed`` calls it after the new state dict has been
+          loaded, but between builds that shell has been through
+          ``Disposable.dispose()``: every parameter is on ``device="meta"`` and
+          a ``.to()`` on one of those raises NotImplementedError, so it has to
+          be safe in both states. This is the same rule, for the same reason,
+          that ``Ltx25DiffusionStage._unpatch_block_swap`` states in capitals —
+          do not add a ``.cpu()``, a ``.data`` assignment or an
+          ``empty_cache()`` here "just to be tidy".
         """
         removed = 0
         try:
@@ -571,7 +590,7 @@ class SageAttentionService:
         obvious and complete (peel to ``_fallback``, wrap once), and raising
         instead would kill a job over an accounting problem the method has
         already fixed. "sage must never be the reason a job dies" (module
-        docstring, D3) is not suspended for bookkeeping.
+        docstring) is not suspended for bookkeeping.
 
         This is a DIFFERENT KIND of thing from the ``count == 0`` fail-loud at
         the bottom of this method, and they are not in tension. There, the
@@ -624,8 +643,8 @@ class SageAttentionService:
                         "logs instead.)"
                     )
                 surviving += _strip_wrappers(module)
-            # Static condition, decided once here instead of 8 steps x 48 blocks
-            # x N tokens times at run time.
+            # Static condition, decided once here instead of on every attention
+            # call (every step, every block) at run time.
             if int(module.dim_head) not in _SAGE_HEAD_DIMS:
                 skipped += 1
                 continue
@@ -656,9 +675,9 @@ class SageAttentionService:
         if surviving:
             # ERROR, not WARNING: the damage is repaired, but the CAUSE is a
             # missing uninstall on the build path, and that is a defect in the
-            # caller rather than a condition of the machine. It is also the
-            # judging criterion for the idempotency gate — "no ERROR line" is
-            # what proves the strip/install pairing held, since a nested
+            # caller rather than a condition of the machine. It is also how
+            # VERIFICATION_LOG §77.3 (d) judges idempotency — "no ERROR line"
+            # is what proves the strip/install pairing held, since a nested
             # install that self-repaired would otherwise look identical to a
             # clean one from the outside (same count, same output, same speed).
             logger.error(
@@ -672,9 +691,10 @@ class SageAttentionService:
             # WARNING, unlike the INFO line below, because a PARTIAL install is
             # the one failure this feature cannot detect any other way: the job
             # still reports attention_used="sage" while some fraction of its
-            # attention ran on SDPA. It cannot happen with today's checkpoints
-            # (128 video / 64 audio, both supported) — which is exactly why it
-            # would go unnoticed if a future GGUF config ever changed a head dim.
+            # attention ran on SDPA. It cannot happen with the shipped
+            # checkpoints (their video and audio head dims are both in
+            # _SAGE_HEAD_DIMS) — which is exactly why it would go unnoticed if a
+            # future GGUF config ever changed a head dim.
             logger.warning(
                 "SageAttention: %d of %d attention module(s) were NOT wrapped because their "
                 "head_dim is outside the kernel's supported set %s. Those calls run on SDPA "

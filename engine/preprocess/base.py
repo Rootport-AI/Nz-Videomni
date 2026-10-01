@@ -1,9 +1,10 @@
-"""``FrameProcessor`` protocol — the contract every control-signal converter obeys.
+"""The ``FrameProcessor`` and ``VideoProcessor`` control-signal protocols.
 
-A processor maps ONE decoded video frame to ONE control-signal frame of the same
-spatial dimensions. Keeping this a single-frame contract lets the video driver
-(``driver.preprocess_video``) own all decode/encode + logging concerns, so a new
-control type (e.g. the DWPose skeleton in Slice 3) only has to implement
+A ``FrameProcessor`` maps ONE decoded video frame to ONE control-signal frame of
+the same spatial dimensions; a ``VideoProcessor`` does the same for a whole clip
+(see its docstring). Keeping the contracts this small lets the video driver
+(``driver.preprocess_video``) own decode/encode, ``frame_cap`` and ``release``,
+so a per-frame control type (e.g. the DWPose skeleton) only has to implement
 ``process`` — regardless of whether it is stateless (Canny) or holds cached
 TorchScript models across calls.
 """
@@ -36,7 +37,7 @@ class VideoProcessor(Protocol):
     so per-frame calls would be both wrong and slower. Such a processor
     implements ``process_video`` INSTEAD of ``process``; the driver dispatches on
     which of the two is present, and everything else (decode, encode, FPS,
-    ``frame_cap``, ``release``) stays in the driver exactly as before.
+    ``frame_cap``, ``release``) stays in the driver, shared by both kinds.
     """
 
     def process_video(self, frames_bgr: list[np.ndarray]) -> list[np.ndarray]:

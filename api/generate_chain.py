@@ -1,4 +1,4 @@
-"""POST /generate/chain — start a clip-concatenation chain job (Phase 3).
+"""POST /generate/chain — start a clip-concatenation chain job.
 
 Additive to the frozen single-``/generate`` contract: a base prompt + a list of
 clip specs are generated sequentially (each seeded from the previous clip's
@@ -43,15 +43,13 @@ def generate_chain(
     background_tasks: BackgroundTasks,
     context: AppContext = Depends(get_context),
 ) -> GenerateChainResponse:
-    # ── Engine feature scope (§3-98 P5, widened §3-102) ─────────────────────
+    # ── Engine feature scope ────────────────────────────────────────────────
     # Chained, Retake, End source, V2V continuation and A2V are all shapes of
     # THIS request, and which of them an engine can serve is a FIELD-BY-FIELD
-    # answer, not one blanket yes/no — LTX 2.5 runs a plain Chained job but none
-    # of the four modes layered on it. Hence the body is passed. LTX 2.3 serves
-    # all of them — but it is no longer a no-op there either: §3-114 gave 2.3
-    # one refusal of its own (``keep_resident_embeddings``, which names a
-    # component only 2.5 has). A DEFAULT chain still passes on both engines,
-    # because every predicate in both tables tests "differs from the default".
+    # answer, not one blanket yes/no. Hence the body is passed. The fields each
+    # engine refuses are listed in its adapter's ``CHAIN_REJECT_TABLE``. A
+    # DEFAULT chain passes on both engines, because every predicate in both
+    # tables tests "differs from the default".
     #
     # STAYS AHEAD OF THE UPLOAD LOOKUPS BELOW. "This engine cannot do that" is a
     # fact about the server; "that video does not exist" is a fact about the
@@ -130,9 +128,8 @@ def generate_chain(
             except APIError:
                 raise end_source_not_found(request.end_source.image_id)
 
-    # Reference-video CONTROL IC-LoRA (Phase C chain support, ADDITIVE, 1..24
-    # clips — owner decision 2026-08-11): validate the reference video up front,
-    # mirroring api/generate.py 57-63.
+    # Reference-video CONTROL IC-LoRA (ADDITIVE, on any clip count the schema
+    # allows): validate the reference video up front, mirroring api/generate.py.
     if request.reference_video_id is not None:
         context.video_upload_store.path_for(request.reference_video_id)  # 404 if missing
         # CONTROL adapters declare reference_downscale_factor=2 (union-control
@@ -148,21 +145,20 @@ def generate_chain(
     # requested adapter (404 unknown/missing) up front — same discipline as
     # api/generate.py — and inspect its kind:
     #   * a CONTROL adapter (union-control / pixel-spatial-upscaler) derives its
-    #     conditioning from a reference video, on any clip count (1..24 — owner
-    #     decision 2026-08-11 lifted the old 1-clip-only ALPHA scope): it needs
-    #     the reference_video_id, exactly like the single-generate check
-    #     (LORA_REQUIRES_REFERENCE);
-    #   * a depth-preprocess CONTROL adapter is the one exception: it remains
+    #     conditioning from a reference video, on any clip count the schema
+    #     allows: it needs the reference_video_id, exactly like the
+    #     single-generate check (LORA_REQUIRES_REFERENCE);
+    #   * a depth-preprocess CONTROL adapter is the one exception: it is
     #     rejected outright on a >1-clip chain (LORA_DEPTH_CHAIN_UNSUPPORTED) —
     #     the depth preprocessor (Video-Depth-Anything) is a whole-clip design
-    #     that cannot process a chain-length reference (owner decision
-    #     2026-08-11; the engine-side chunking to lift this is a later item);
+    #     that cannot process a chain-length reference; lifting this needs
+    #     engine-side chunking of the depth preprocess;
     #   * conversely a reference video is ONLY consumable through a control
     #     adapter (its downscale factor comes from that adapter's metadata), so a
     #     reference + style-only chain is rejected here
     #     (REFERENCE_REQUIRES_CONTROL_LORA, mirrors api/generate.py);
     #   * a single reference video can only be turned into ONE control signal, so
-    #     >1 distinct non-"none" preprocess kind is a conflict (Phase C, mirrors
+    #     >1 distinct non-"none" preprocess kind is a conflict (mirrors
     #     api/generate.py).
     preprocess_kinds: set[str] = set()
     control_names: list[str] = []

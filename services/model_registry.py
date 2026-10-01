@@ -1,4 +1,4 @@
-"""Category-scoped model registry (model management S1, multi-engine P3a).
+"""Category-scoped model registry.
 
 Mirrors :mod:`services.lora_registry`: resolves a server-side model NAME (what
 ``GET /models`` lists and what ``POST /pipeline/load`` accepts in its optional
@@ -6,20 +6,19 @@ Mirrors :mod:`services.lora_registry`: resolves a server-side model NAME (what
 
 Base models and their categories come from the JSON descriptors in
 ``config.model.manifest_dir`` (:mod:`services.base_models`) — the registry
-itself hard-codes nothing about LTX 2.3's layout any more. Every descriptor
+itself hard-codes nothing about LTX 2.3's layout. Every descriptor
 path is relative to ``config.model.models_dir``. Names within one
 (base model, category) come from three sources, in priority order:
 
 1. the injected ``"default"`` entry — always present, pointing at the
-   descriptor's ``default_file`` for that category, which is the VERBATIM
-   transcription of the fixed default path the worker payload is built from
-   today, so "no selection" stays byte-identical;
+   descriptor's ``default_file`` for that category, which is the path the
+   worker payload uses when nothing is selected;
 2. explicit ``config.yaml`` registrations (``model.transformers`` /
    ``text_encoders`` / ``video_vaes`` / ``audio_models``, name -> path) — the
    authoritative way to expose a file the scanner cannot classify. These maps
-   have no base-model axis, so they apply to the ACTIVE base model only (P3a:
-   the first descriptor; the pipeline-driven active base arrives with the API
-   axis in a later phase);
+   have no base-model axis, so they apply to the ACTIVE base model only (the
+   one restored from the runtime state at startup and moved by each
+   successful pipeline load; see :meth:`ModelRegistry.set_active_base_model`);
 3. directory scanning of every ``scan`` root the descriptor declares for that
    category, so a fine-tune dropped next to the stock weight shows up without
    any config edit. Multiple roots per category are supported, which is what
@@ -56,11 +55,11 @@ logger = logging.getLogger("ltx.models")
 DEFAULT_NAME = "default"
 
 #: Fixed category order (dropdown/GET /models order). A LITERAL, not derived
-#: from a descriptor: three modules import it to validate request categories
-#: and to build the legacy two-layer ``GET /models`` block, and that contract
-#: is the 4 categories LTX 2.3 declares. Making the SET of categories itself
-#: descriptor-driven is deliberately out of scope until a second base model
-#: actually needs a different set (Docs/MULTI_ENGINE_DESIGN.md §4.1, S-6).
+#: from a descriptor: the pipeline keys its per-category selection by it and
+#: ``GET /models`` builds its top-level two-layer block from it, and that
+#: contract is the 4 categories LTX 2.3 declares. Making the SET of categories
+#: itself descriptor-driven is deliberately out of scope until a base model
+#: actually needs a different set (Docs/MULTI_ENGINE_DESIGN.md §4.1).
 CATEGORIES: tuple[str, ...] = ("transformer", "text_encoder", "video_vae", "audio")
 
 #: Category -> the ``config.model`` field holding explicit name->path
@@ -107,11 +106,12 @@ _STRUCTURAL_CHECKS: frozenset[str] = frozenset({".gguf", ".safetensors"})
 
 
 #: The KV keys the GGUF precheck lifts out of a transformer header, and hands
-#: back to the caller for the engine-generation ruling (§2.2's two-step
-#: contract: ``general.architecture`` = engine family, ``model_version`` =
-#: variant). Reading them costs one header scan that already happens here, so
-#: the caller never re-opens the file. WHAT they mean is the engine adapter's
-#: business (``services.engines.ltx.adapter.check_kv``), not the registry's.
+#: back to the caller for the engine-generation ruling (the two-step contract
+#: of Docs/MULTI_ENGINE_DESIGN.md §2.2: ``general.architecture`` = engine
+#: family, ``model_version`` = variant). Reading them costs one header scan
+#: that already happens here, so the caller never re-opens the file. WHAT they
+#: mean is the engines' business (``services.engines.check_kv`` and each
+#: adapter's ``check_kv``), not the registry's.
 GGUF_ENGINE_KV_KEYS = frozenset({"general.architecture", "model_version"})
 
 
@@ -131,16 +131,16 @@ def precheck_model_file(
     Deep key/shape validation stays with the engine's fail-fast load path
     (design §5.2).
 
-    ``descriptor`` (KEYWORD-ONLY, additive) is the CATEGORY descriptor of the
-    base model the file is being selected for. Given one, the file's extension
-    must be one this category accepts — the "a .safetensors cannot be the
-    transformer" gate, which only a descriptor can state. Without one there is
-    no category gate at all (the caller has not said which base model it means,
-    and this module refuses to guess with a hard-coded table): the file's own
-    suffix then picks the structural check, and any other suffix is rejected.
+    ``descriptor`` (KEYWORD-ONLY) is the CATEGORY descriptor of the base model
+    the file is being selected for. Given one, the file's extension must be one
+    this category accepts — a gate only a descriptor can state. Without one
+    there is no category gate at all (the caller has not said which base model
+    it means, and this module refuses to guess with a hard-coded table): the
+    file's own suffix then picks the structural check, and any other suffix is
+    rejected.
 
     A ``.safetensors`` offered as the ``transformer`` is ruled on by the quantized-safetensors
-    acceptance check (:func:`sft_quant_format.inspect`, §3-167/§3-168) instead of the
+    acceptance check (:func:`sft_quant_format.inspect`) instead of the
     bare header check.
 
     Returns the GGUF KV metadata read along the way (``{}`` for other
@@ -168,10 +168,11 @@ def precheck_model_file(
         if suffix == ".gguf":
             return _precheck_gguf(category, name, path)
         if category == "transformer":
-            # quantized (fp8 / int8) safetensors transformer (§3-167 B-1, §3-168). ``inspect`` reads the
+            # quantized (fp8 / int8) safetensors transformer. ``inspect`` reads the
             # header itself with every check ``_precheck_safetensors`` makes
-            # (length 0 / past EOF / over 100 MB / broken JSON) and more, so
-            # the generic check is skipped here instead of reading it twice.
+            # (length 0 / past EOF / over ``sft_quant_format.MAX_HEADER_LEN`` /
+            # broken JSON) and more, so the generic check is skipped here
+            # instead of reading it twice.
             return _precheck_sft_transformer(category, name, path)
         _precheck_safetensors(category, name, path)
         return {}
@@ -184,9 +185,9 @@ def precheck_model_file(
 def _precheck_gguf(category: str, name: str, path: Path) -> dict[str, str]:
     """Parse the GGUF header far enough to read the engine-selection KV.
 
-    Supersedes the old 4-byte magic sniff: :func:`~services.gguf_kv.read_gguf_kv`
-    checks the magic itself and then walks only the KV section (never the
-    tensor data), so the stronger check costs the same single header read.
+    :func:`~services.gguf_kv.read_gguf_kv` checks the magic itself and then
+    walks only the KV section (never the tensor data), so the magic check and
+    the KV read share one header read.
     """
     try:
         return read_gguf_kv(path, set(GGUF_ENGINE_KV_KEYS))
@@ -200,12 +201,13 @@ def _precheck_sft_transformer(category: str, name: str, path: Path) -> dict[str,
     """Rule on a quantized (fp8 / int8) safetensors transformer with :func:`sft_quant_format.inspect`.
 
     The acceptance table lives in that module alone (the engine calls the same
-    function at load time). The return value speaks the GGUF KV dialect so the
-    existing ``engines.check_kv`` does the family/generation ruling unchanged:
-    a safetensors transformer has no ``general.architecture`` KV, but passing
-    ``inspect`` (prefix + block count + config) is what makes it ``ltxv``, and
-    ``__metadata__.model_version`` stands in for the GGUF ``model_version``.
-    Empty values are left out (a missing key is check_kv's WARNING case).
+    function at load time). The return value speaks the GGUF KV dialect so
+    ``engines.check_kv`` does the family/generation ruling the same way it does
+    for a GGUF: a safetensors transformer has no ``general.architecture``
+    KV, but passing ``inspect`` (prefix + block count + config) is what makes it
+    ``ltxv``, and ``__metadata__.model_version`` stands in for the GGUF
+    ``model_version``. Empty values are left out (a missing key is check_kv's
+    WARNING case).
     """
     try:
         layout = sft_quant_format.inspect(path)
@@ -293,14 +295,14 @@ class ModelRegistry:
 
     @property
     def active_base_model(self) -> str:
-        """The base model an unqualified call means, and the one ``GET /models``
-        describes in its legacy two-layer ``categories`` block.
+        """The base model an unqualified call means.
 
         Kept in step with ``PipelineManager.active_base_model`` — the pipeline
-        publishes here on every successful load (§3-97 P6). It is the pipeline
-        that owns the truth; this copy exists so the registry can answer
-        base-less calls and so the listing follows without every caller having
-        to thread the id through.
+        publishes here on every successful load. It is the pipeline that owns
+        the truth (``GET /models`` reads the pipeline's value for its top-level
+        two-layer ``categories`` block); this copy exists so the registry can
+        answer base-less calls without every caller having to thread the id
+        through.
         """
         return self._active_base
 
@@ -345,10 +347,10 @@ class ModelRegistry:
 
         Normalized to ``<models_dir>/<rel>`` with POSIX separators, i.e.
         ``models/LTX23/Weights/....gguf`` for the shipped ``models_dir``. That
-        keeps :meth:`_display_path` emitting exactly the project-relative
-        strings clients have always seen, while ``config._abs`` still resolves
-        it (an absolute ``models_dir`` — as tests use — simply yields an
-        absolute raw path, which displays as a bare filename, as before).
+        keeps :meth:`_display_path` emitting project-relative strings, while
+        ``config._abs`` still resolves it (an absolute ``models_dir`` — as
+        tests use — simply yields an absolute raw path, which displays as a
+        bare filename).
         """
         return (Path(self.config.model.models_dir) / rel).as_posix()
 
@@ -394,10 +396,10 @@ class ModelRegistry:
                     )
                     for name, rel in configured.items():
                         if name == DEFAULT_NAME:
-                            # "default" is reserved for the injected entry (the
-                            # byte-identical guarantee); shadowing it would
-                            # silently change what "no selection" means. Refuse
-                            # + log, keep serving.
+                            # "default" is reserved for the injected entry
+                            # (always the descriptor's default_file); shadowing
+                            # it would silently change what "no selection"
+                            # means. Refuse + log, keep serving.
                             logger.warning(
                                 "model.%s: entry name 'default' is reserved (ignored); "
                                 "the default always maps to the descriptor's default_file",

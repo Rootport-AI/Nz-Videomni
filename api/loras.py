@@ -1,4 +1,4 @@
-"""GET/POST /loras — style/character + control IC-LoRA enumeration (S1).
+"""GET/POST /loras — style/character + control IC-LoRA enumeration.
 
 Additive endpoints (the frozen API is extended, never changed): list the
 selectable IC-LoRA adapter names the server knows about — ``config.model.ic_loras``

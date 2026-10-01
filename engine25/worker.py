@@ -1,10 +1,12 @@
-"""Persistent LTX-2.5 generation worker (§3-98 Phase 1 skeleton).
+"""Persistent LTX-2.5 generation worker.
 
-Runs inside .venv-engine-ltx25 -- the ONLY environment that has torch 2.9.1+cu128
-together with official LTX-2 v1.2.0 (ltx_core / ltx_pipelines @ d151147) and
-transformers 5.x. It is a SIBLING of engine/worker.py, never a replacement: the
-2.3 worker keeps its own venv (.venv-engine, transformers 4.57) and neither
-process can import the other's stack.
+Runs inside .venv-engine-ltx25 -- the environment that holds the official LTX-2
+packages (ltx_core / ltx_pipelines) with the torch and transformers stack they
+need; ``$ltx25DirectPins`` in scripts/install_ltx.ps1 pins the LTX-2 commit,
+torch and sageattention, and engine25/venv-engine-ltx25.freeze.txt holds the
+rest. It is a SIBLING of engine/worker.py, never a replacement: the 2.3
+worker keeps its own venv (.venv-engine, on a different transformers line) and
+neither process can import the other's stack.
 
 The app process (FastAPI, its own torch-less .venv) spawns ONE of these per
 loaded model and talks to it over the same tiny JSON-lines protocol the 2.3
@@ -18,10 +20,10 @@ WHAT THIS FILE DELIBERATELY DOES NOT DO
     pre-warm -- are absent, and stay absent. Each is tuned to the 2.3 wheel's
     internals; re-applying them blind to a different pipeline is exactly the
     kind of borrowed-assumption bug this separate engine exists to avoid. The
-    SageAttention PROBE is the one that came back, and it came back on this
-    engine's own terms: 2.3 runs it at import time, here it is a lazy import
-    inside ``load``, after the cheap path checks, so a typo'd model path is
-    still reported in under a second and the module scope stays import-free.
+    SageAttention PROBE is the exception, on this engine's own terms: both its
+    import and the probe itself are lazy, inside ``load`` after the cheap path
+    checks, so a typo'd model path is still reported in under a second and the
+    module scope stays import-free.
     Per-step progress in particular needs no shim here: the official denoising
     loops call their ``denoiser`` once per step, so
     :mod:`engine25.pipeline25` counts steps at that seam instead of swapping
@@ -40,19 +42,19 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "load", transformer_path, text_encoder_path, video_vae_path,
    audio_vae_path, spatial_upsampler_path,
    [text_encoder_assets_path], [blocks_on_gpu], [te_layers_on_gpu],
-   [cache_weights]}
+   [cache_weights], [deterministic]}
       Every path present and non-empty is checked for existence first, then the
-      pipeline is assembled (see :mod:`engine25.pipeline25`). The three optional
-      numeric knobs are the documented 16 GB fallback ladder -- blocks 8/6/4 --
-      exposed as payload fields so the ladder is a config change and not a code
-      change. A failure here is fatal: ``error`` + exit 1, which is what the
-      app's load-failure path expects.
+      pipeline is assembled (see :mod:`engine25.pipeline25`). The optional
+      knobs ride the payload, so walking the 16 GB fallback ladder
+      (``blocks_on_gpu``; Videomni_Backend_Specification.md §6.10 (e)) is a
+      config change and not a code change. A failure here is fatal: ``error``
+      + exit 1, which is what the app's load-failure path expects.
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
-   output_path, [images], loras, reference_video, [outpaint]}
+   output_path, [images], loras, reference_video, [outpaint], [inpaint]}
       One two-stage generation, mp4 written by this process to ``output_path``.
-      ``images`` empty/absent -> T2V; entries -> I2V. Fields the v1 contract
-      ignores (negative_prompt, num_steps, vae_mode, ...) may ride along; each
-      is logged as ignored and dropped. ``crop_output`` is NOT
+      ``images`` empty/absent -> T2V; entries -> I2V. Fields named in
+      ``pipeline25.IGNORED_FIELDS`` may ride along; each one present is logged
+      as ignored and dropped. ``crop_output`` is NOT
       one of them -- it never reaches the worker in either engine, because it is
       an ffmpeg post-process the app applies to the finished mp4.
       ``loras`` = [{path, strength, [audio_strength]}...] is the job's Style /
@@ -64,25 +66,30 @@ Protocol (one JSON object per line; parent -> worker):
       (``control_<kind>.mp4`` next to the output) via engine/preprocess/ first.
       ``outpaint`` = {source_path, canvas_width, canvas_height, pad_*,
       blend_dilation_stage1, blend_dilation_stage2, freeze_source_audio} is
-      ADDITIVE and ABSENT on every other job, so their payloads are unchanged.
+      ADDITIVE: the app puts it on the payload only for an outpaint job.
       Its PRESENCE routes the op to :mod:`engine25.outpaint25` instead of the
       plain generation, which is why it carries the whole canvas geometry (the
       engine rebuilds the blend mask from it) rather than a flag.
       ``reference_video.path`` is then ALREADY the app-built green canvas, and
       ``source_path`` is the ORIGINAL upload, read only for its audio -- the
       canvas is written without an audio stream on purpose.
+      ``inpaint`` is the inpaint job's additive block (canvas geometry, the cut
+      window and the mask video); its PRESENCE routes the op to
+      :mod:`engine25.inpaint25`, and it never rides with ``outpaint``.
       The ``done`` reply adds ``vae_mode_used`` (which VAE decoder this
-      checkpoint built -- "diff" or "conv"; a load-time fact, 台帳 §3-131) and
-      ``ltx25`` (encode_fps/video_chunks/tiling/size_bytes/phases -- deliberately
-      no ``sampler``, that is already ``ready.sampler``) to EVERY generate job,
-      plain or outpaint. On an outpaint job it ALSO adds ``outpaint``: the job's
-      metadata dict (geometry, blend, sigmas, the audio freeze proof, and its
-      own nested ``ltx25`` sub-dict, a superset of the plain one -- the SAME
-      dict object as the top-level ``ltx25`` key, not a second copy).
-      ``outpaint`` itself rides the event and the ``GENERATE_REPORT`` line
-      only; metadata.json does NOT carry it. ``vae_mode_used`` and ``ltx25``
-      are different: metadata.json DOES carry both -- the app reads only the
-      top-level ``ltx25``, never ``outpaint.ltx25``.
+      checkpoint built -- "diff" or "conv"; a load-time fact) and ``ltx25``
+      (encode_fps/video_chunks/tiling/size_bytes/phases -- deliberately no
+      ``sampler``, that is already ``ready.sampler``) to EVERY generate job,
+      plain, outpaint or inpaint. On an outpaint job it ALSO adds
+      ``outpaint``: the job's metadata dict (geometry, blend, sigmas, the audio
+      freeze proof, and its own nested ``ltx25`` sub-dict, a superset of the
+      plain one -- the SAME dict object as the top-level ``ltx25`` key, not a
+      second copy). ``outpaint`` itself rides the event and the
+      ``GENERATE_REPORT`` line only; metadata.json does NOT carry it. An
+      inpaint job ALSO adds ``inpaint``: only the metadata's ``inpaint``
+      sub-dict, which the app does write into metadata.json. ``vae_mode_used``
+      and ``ltx25`` are different: metadata.json DOES carry both -- the app
+      reads only the top-level ``ltx25``, never ``outpaint.ltx25``.
   {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
    num_steps, overlap_frames, overlap_strength, [chunked_upsample],
    [stage2_window], [source], [audio_source], [retake], [end_source]}
@@ -96,8 +103,7 @@ Protocol (one JSON object per line; parent -> worker):
       clip 0 and trimmed back off before delivery. ``audio_source`` = {path}
       renders a timeline against a given audio track (A2V) and muxes that
       waveform verbatim. The two are mutually exclusive. Both are optional and
-      ABSENT on a plain T2V/I2V chain, whose output is byte-identical to the
-      chain that shipped before they existed.
+      ABSENT on a plain T2V/I2V chain.
       ``retake`` = {path, head_px, tail_px, regenerate_audio} regenerates the
       MIDDLE of an existing clip: ``path`` is the frame-exact CFR window the app
       already cut, and the two glue widths are the pixel bands kept frozen at
@@ -114,14 +120,12 @@ Protocol (one JSON object per line; parent -> worker):
       segment by ``run_chain`` -- and are ADDITIVE here (sent only when asked
       for), which is 2.3's chain payload shape verbatim.
       Unlike ``generate``, a field naming a feature this chain does not have
-      (``vae_mode`` -- the only one left; ``nag`` left the list once the
-      chain ran NAG/VSF) is REFUSED BY NAME rather than ignored -- see
-      ``CHAIN_UNSUPPORTED_KEYS``. It is an engine-level knob; no chain MODE is
-      on that list any more.
-      The five acceleration knobs are NOT on that list: all of them apply to
-      the chain unchanged.
+      is REFUSED BY NAME rather than ignored -- ``CHAIN_UNSUPPORTED_KEYS`` is
+      the list.
+      The acceleration knobs are NOT on that list: ``_do_generate_chain``
+      reads and arms them the same way ``_do_generate`` does.
       The ``done`` reply adds ``vae_mode_used`` (same fact and vocabulary as the
-      single op's, 台帳 §3-131) and ``chain``: the whole layout + metadata dict,
+      single op's) and ``chain``: the whole layout + metadata dict,
       in 2.3's shape -- including its ``v2v`` / ``a2v`` blocks when those modes
       ran, and its own ``ltx25`` sub-dict (``chain["ltx25"]``). Unlike the
       single op, no additive top-level ``ltx25`` key: ``chain`` already carries
@@ -151,13 +155,13 @@ observable to the app instead of living only in a log line -- the official code
 silently downgrades that flag to False on GGUF paths and only WARNs.
 
 ``ready.sage_available`` is the MEASURED answer for this process, from
-``engine.transformer.sage_attention_service.probe_sage`` (it used to be a
-hard-coded false, from the days when this engine was SDPA-only and the wheel was
-not installed in .venv-engine-ltx25). The app publishes it as
-``acceleration.sage_available`` on GET /status for whichever engine is loaded,
-which is what greys the option out when the wheel is missing or unusable.
+``engine.transformer.sage_attention_service.probe_sage``. The app publishes it
+as ``acceleration.sage_available`` on GET /status for whichever engine is
+loaded, which is what greys the option out when the wheel is missing or
+unusable.
 
-Selftest (gate G4), run inside the venv without the app::
+Selftest (recorded in Docs/VERIFICATION_LOG.md §69.6), run inside the venv
+without the app::
 
     python -m engine25.worker --selftest-generate \\
         --transformer <t.gguf> --text-encoder <te.gguf> \\
@@ -176,7 +180,8 @@ must be IDENTICAL, because the fused kernels are a bit-exact substitution.
 way: sage is a QUANTIZED kernel, so ``sage`` and ``sdpa`` at one seed must
 DIFFER, and two ``sage`` rounds at one seed must agree with each other.
 
-The chain has its own (gate G2), same discipline, plus captured receipts::
+The chain has its own (recorded in Docs/VERIFICATION_LOG.md §72.3), same
+discipline, plus captured receipts::
 
     python -m engine25.worker --selftest-chain \\
         <the same five model paths> \\
@@ -260,11 +265,11 @@ def _detail(exc: BaseException) -> str:
     return f"{exc!r}\n{tb}"
 
 
-# The load payload's path fields, in the order they are reported. Every one is
-# OPTIONAL at the protocol level (an absent or empty value is simply not
-# checked) so the adapter can grow the payload without this skeleton rejecting
-# older or shorter messages; what the app actually guarantees is enforced on the
-# app side by the manifest's REQUIRED_ASSETS.
+# The load payload's path fields, in the order they are reported. The
+# existence check skips an absent or empty value rather than rejecting it, but
+# ``ModelFiles`` below reads all five keys regardless; what the app guarantees
+# is enforced on the app side by the adapter's ``_build_load_payload``
+# (``SELECTION_FIELDS`` and ``REQUIRED_ASSETS``).
 _LOAD_PATH_FIELDS = (
     "transformer_path",
     "text_encoder_path",
@@ -297,9 +302,8 @@ def _emit_progress(
     n/N" line the GUI shows has nothing to read.
 
     They are OMITTED from the line when absent, so a single generation's
-    ``progress`` events stay byte-identical to what they were before the chain
-    existed -- the single path calls this with three positional arguments and
-    nothing else.
+    ``progress`` events carry only ``stage`` / ``index`` / ``total`` -- the
+    single path calls this with three positional arguments and nothing else.
     """
     try:
         fields: dict[str, object] = {
@@ -462,7 +466,7 @@ def _resolve_ic_reference(
     """A ``reference_video`` block -> ``((path, strength), attention_strength)``.
 
     ``None``/absent -> ``(None, 1.0)``, which is inert: no reference tokens are
-    built and the job is byte-identical to one from before the feature existed.
+    built.
 
     ``attention_strength`` (0..1, default 1.0) is the control-adherence knob; at
     1.0 the engine applies no wrapper at all, so the default stays structurally
@@ -599,16 +603,14 @@ def _resolve_nag(msg: dict):
 
     ``nag`` is present only when the app/API layer had a non-CFG negative prompt
     enabled for this job (the payload is additive -- absent for every request
-    that did not ask, so this returns None and the job is byte-identical to
-    before the feature existed).
+    that did not ask, so this returns None).
 
     ``method`` selects between the two methods and defaults to ``"nag"`` when
-    the key is missing: the app layer gained that key with VSF, so an older
-    client (or a replayed pre-VSF payload) must keep resolving to exactly the
-    NAG params it always did. An UNKNOWN method is a different situation
-    entirely -- it means the two layers disagree -- and fails loudly rather than
-    quietly falling back to the wrong algorithm. VSF's own knob defaults to the
-    API's default (scale 1.5) for the same forward-compatibility reason.
+    the key is missing, so a ``nag`` block without the key resolves to the NAG
+    params. An UNKNOWN method is a different situation entirely -- it means the
+    two layers disagree -- and fails loudly rather than quietly falling back to
+    the wrong algorithm. VSF's own knob falls back to the API's default (scale
+    1.5) when its key is missing.
     """
     from engine25.neg_prompt25 import NagParams, VsfParams  # noqa: PLC0415
 
@@ -637,8 +639,8 @@ def _resolve_nag(msg: dict):
 def _neg_label(nag) -> str:
     """Job-log tag for the non-CFG negative-prompt method: off / nag / vsf.
 
-    2.3's function verbatim. Not ``on|off``: with two methods, "on" no longer
-    says which algorithm actually ran, and that is the first thing anyone
+    2.3's function verbatim. Not ``on|off``: with two methods, "on" would not
+    say which algorithm actually ran, and that is the first thing anyone
     reading a log for a suspicious result needs to know.
 
     The type import is function-local for the reason :func:`_resolve_nag`'s is,
@@ -662,10 +664,9 @@ def _resolve_attention(msg: dict) -> tuple[str, bool]:
     ``degraded`` means "sage was asked for but this process cannot deliver it",
     which is what turns into ``attention_used="sage->sdpa"`` below.
 
-    Missing key -> "sdpa": the payload is additive, so every caller written
-    before this existed (and every default request, which does not send the key
-    at all) resolves to exactly the behaviour it always had -- which is what
-    keeps the frozen default-job digests valid.
+    Missing key -> "sdpa": the payload is additive, and a default request does
+    not send the key at all. That is what keeps a default job's digest
+    comparable to the frozen baseline.
 
     An UNKNOWN value fails the job loudly. It can only mean the app and the
     engine disagree about the protocol, and quietly running the wrong backend
@@ -693,7 +694,7 @@ def _resolve_attention(msg: dict) -> tuple[str, bool]:
     if backend == "sage" and not probe_sage():
         # ASCII only, deliberately. This goes straight to STDERR, which on a
         # Japanese Windows is cp932 with errors="backslashreplace" - an em dash
-        # here would land in logs/ltx_worker.log as a backslash-u2014 escape,
+        # here would land in logs/ltx25_worker.log as a backslash-u2014 escape,
         # right in the middle of the one sentence an operator reads when asking
         # "why did my sage job run slow?". (Nothing crashes either way;
         # backslashreplace is exactly why it does not - this is only legibility,
@@ -745,16 +746,15 @@ def _do_generate(msg: dict) -> None:
     # test: a caller that sends ``num_steps=8`` still gets told it had no effect.
     ignored = {name: msg[name] for name in IGNORED_FIELDS if name in msg}
 
-    # Style/character LoRA and the IC-LoRA reference video (§3-102 third
-    # increment). Both are resolved BEFORE the log line below, because a
-    # preprocess kind can take a minute of its own and the line is what says the
-    # job understood what it was asked for.
+    # Style/character LoRA and the IC-LoRA reference video. Both are resolved
+    # BEFORE the log line below, because a preprocess kind can take a minute of
+    # its own and the line is what says the job understood what it was asked for.
     ic_loras = _ic_loras(msg)
     ic_reference, attn_strength = _resolve_ic_reference(
         msg.get("reference_video"), str(msg["output_path"]), _preprocess_frame_cap(msg)
     )
 
-    # Outpainting (§3-102). MEMBERSHIP is the switch, exactly as on 2.3: the
+    # Outpainting. MEMBERSHIP is the switch, exactly as on 2.3: the
     # adapter puts this key on the payload only for an outpaint job, so its
     # presence routes the whole op to the two-stage driver below. It carries the
     # canvas GEOMETRY rather than a flag because the engine rebuilds the blend
@@ -762,7 +762,7 @@ def _do_generate(msg: dict) -> None:
     # validated is the one thing this feature must never do.
     outpaint = msg.get("outpaint")
 
-    # Inpainting (台帳 §3-150). The SAME additive contract outpaint uses, on the
+    # Inpainting. The SAME additive contract outpaint uses, on the
     # same two engines: the adapter puts this key on the payload only for an
     # inpaint job, so its presence routes the whole op to the masked two-stage
     # driver below. It carries the canvas GEOMETRY and the two FILE PATHS the
@@ -779,9 +779,8 @@ def _do_generate(msg: dict) -> None:
         "combination before a job is created"
     )
 
-    # The five acceleration knobs. All are ABSENT-MEANS-OFF, so every payload
-    # written before they existed resolves to today's behaviour, and all are
-    # armed below rather than passed to ``generate``: they are per-job state on a
+    # The five acceleration knobs. All are ABSENT-MEANS-OFF, and all are armed
+    # below rather than passed to ``generate``: they are per-job state on a
     # resident process, not generation parameters. For ``keep_resident`` and
     # ``keep_resident_embeddings`` the absent case is an instruction rather than
     # a default -- see their readers. ``attention_backend`` is the only one that
@@ -794,11 +793,11 @@ def _do_generate(msg: dict) -> None:
     keep_resident_embeddings = _resolve_keep_resident_embeddings(msg)
     attention, attention_degraded = _resolve_attention(msg)
 
-    # The non-CFG negative prompt. ABSENT-MEANS-OFF like the five above, and
-    # additive for the same reason: a payload written before this existed
-    # resolves to None and the job runs exactly as it did. Unlike those five it
-    # is not an acceleration knob -- it changes what the model computes -- which
-    # is why it is armed through its own method below.
+    # The non-CFG negative prompt. ABSENT-MEANS-OFF like the five above: a
+    # payload without the block resolves to None and the job runs with no
+    # negative prompt. Unlike those five it is not an acceleration knob -- it
+    # changes what the model computes -- which is why it is armed through its
+    # own method below.
     nag = _resolve_nag(msg)
 
     # ONE line per job, after the parse: what the request ASKED for, in the
@@ -810,10 +809,10 @@ def _do_generate(msg: dict) -> None:
         f"generate {msg['width']}x{msg['height']} / {msg['num_frames']} frames "
         f"seed={seed} images={len(images)} "
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
-        # 台帳 §3-150, in 2.3's spelling and 2.3's place on the line (right
-        # after the reference), because the two engines' worker logs are read
-        # side by side when a result is compared. Outpainting has no such token
-        # here and does not gain one: this line is what a reader consults to
+        # In 2.3's spelling and after the reference, as on 2.3's line (where
+        # ``outpaint=`` sits between them), because the two engines' worker logs
+        # are read side by side when a result is compared. Outpainting has no such
+        # token here and does not gain one: this line is what a reader consults to
         # tell a MASKED job from a plain one, and the canvas both features send
         # arrives as ``ic_reference=yes`` either way.
         f"inpaint={'yes' if inpaint else 'no'} "
@@ -854,10 +853,10 @@ def _do_generate(msg: dict) -> None:
     _PIPE.set_nag_job(nag)
     try:
         if inpaint is not None:
-            # Inpainting (台帳 §3-150). ``reference_video.path`` is ALREADY the
-            # green-FILLED canvas the app built (the mask's white region painted
-            # #66FF00, padded out to the 128-multiple canvas), so
-            # ``ic_reference`` above points at it and this branch only has to
+            # Inpainting. ``reference_video.path`` is ALREADY the green-FILLED
+            # canvas the app built (the mask's white region painted #66FF00, padded
+            # out to a ``CANVAS_MULTIPLE`` canvas -- see ``engine.outpaint.canvas``),
+            # so ``ic_reference`` above points at it and this branch only has to
             # hand ``run_inpaint`` the geometry, the cut window and the mask
             # video it needs. Imported HERE rather than at module scope for the
             # same reason every other engine import in this file is: a worker
@@ -906,8 +905,8 @@ def _do_generate(msg: dict) -> None:
                 ic_reference=ic_reference,
                 ic_attention_strength=attn_strength,
                 # The workflow's own defaults, and the app always sends both.
-                # Defaulted here as well because the worker is reachable from a
-                # payload written before the panel exposed them.
+                # Defaulted here as well, so a payload that omits them still
+                # resolves to these values.
                 blend_dilation_stage1=int(inpaint.get("blend_dilation_stage1", 5)),
                 blend_dilation_stage2=int(inpaint.get("blend_dilation_stage2", 2)),
                 # NO ``freeze_source_audio``: the app's inpaint block does not
@@ -922,7 +921,7 @@ def _do_generate(msg: dict) -> None:
                 progress=_emit_progress,
             )
         elif outpaint is not None:
-            # Outpainting (§3-102). ``reference_video.path`` is ALREADY the
+            # Outpainting. ``reference_video.path`` is ALREADY the
             # green canvas the app built, so ``ic_reference`` above points at
             # it and this branch only has to hand ``run_outpaint`` the geometry
             # it needs to rebuild the blend mask. Imported HERE rather than at
@@ -958,10 +957,11 @@ def _do_generate(msg: dict) -> None:
                 num_frames=int(msg["num_frames"]),
                 frame_rate=float(msg["frame_rate"]),
                 # Carried and reported, never acted on: the distilled schedule
-                # is fixed at 8 + 3 sigmas. The single-generate payload does not
-                # carry the key at all (the adapter forwards only what is acted
-                # upon), so 0 is the honest "not stated" -- the chain op reads
-                # it exactly this way.
+                # is fixed, and ``ltxcore_compat.verify()`` checks its shape at
+                # start-up. The single-generate payload does not carry the key
+                # at all (the adapter forwards only what is acted upon), so 0
+                # is the honest "not stated" -- the chain op reads it exactly
+                # this way.
                 num_steps=int(msg.get("num_steps", 0)),
                 seed=seed,
                 output_path=str(msg["output_path"]),
@@ -998,11 +998,12 @@ def _do_generate(msg: dict) -> None:
                 ignored=ignored,
             )
 
-        # ONE report line for BOTH job kinds, and deliberately still the
-        # ``GENERATE_REPORT`` marker: ``OutpaintResult`` is a strict superset of
-        # ``GenerationResult`` (same field names, same ``as_dict`` order plus one
-        # additive ``outpaint`` key), so every existing evidence collector that
-        # greps for this marker keeps working on an outpaint job.
+        # ONE report line for every job kind, under the ``GENERATE_REPORT``
+        # marker on purpose: ``OutpaintResult`` (and its subclass
+        # ``InpaintResult``) is a strict superset of ``GenerationResult`` (same
+        # field names, same ``as_dict`` order plus one additive ``outpaint`` /
+        # ``inpaint`` key), so an evidence collector that greps for this marker
+        # works on an outpaint or inpaint job too.
         report = result.as_dict()
         _log(f"GENERATE_REPORT {json.dumps(report, ensure_ascii=False, default=str)}")
     finally:
@@ -1018,32 +1019,29 @@ def _do_generate(msg: dict) -> None:
     # ride EVERY job. The app reads this event by NAME (``event.get(...)``
     # per field), so an unknown key adds a fact without disturbing one. WHAT
     # IS IN IT (aside from its own ``ltx25`` sub-dict, see below) does not
-    # reach metadata.json -- that would need an app-layer change, which this
-    # theme does not make -- so the freeze proof, the audio branch and the
-    # sampler's intentional differences live here and in the GENERATE_REPORT
-    # line above. That is where the gates collect them from.
+    # reach metadata.json -- that would need an app-layer change -- so the
+    # freeze proof, the audio branch and the sampler's intentional differences
+    # live here and in the GENERATE_REPORT line above.
     extra: dict = {} if outpaint is None else {"outpaint": result.metadata}
 
-    # 台帳 §3-150: the inpaint twin of the line above, and DELIBERATELY NOT the
-    # same shape. Outpainting sends the WHOLE metadata dict because nothing
-    # app-side reads it (only the nested ``ltx25`` below reaches metadata.json);
-    # inpainting sends only the SUB-DICT, because the app DOES read this one --
+    # The inpaint twin of the line above, and DELIBERATELY NOT the same shape.
+    # Outpainting sends the WHOLE metadata dict because nothing app-side reads
+    # it (only the nested ``ltx25`` below reaches metadata.json); inpainting
+    # sends only the SUB-DICT, because the app DOES read this one --
     # ``services/pipeline_manager.py`` writes ``metadata["inpaint"] =
     # {**outcome.inpaint, **provenance}``, so handing it the whole dict would
     # nest ``inpaint``/``ltx25``/``seed``/``width`` INSIDE the block and break
-    # the §6/§7 contract that ``mask_proof`` rides on. 2.3's worker sends the
-    # sub-dict for exactly this reason (``engine/worker.py``'s ``meta[meta_key]``).
-    #
-    # Written as its own statement rather than folded into the conditional
-    # above, so the outpaint line stays byte for byte what it was.
+    # the contract ``mask_proof`` rides on (Docs/INPAINTING_DESIGN.md §6.3 and
+    # §7.6). 2.3's worker sends the sub-dict for exactly this reason
+    # (``engine/worker.py``'s ``meta[meta_key]``).
     if inpaint is not None:
         extra = {"inpaint": result.metadata["inpaint"]}
 
-    # 台帳 §3-131: ``ltx25``, a SECOND and SEPARATE ``done`` key, present on
-    # EVERY generate job (plain or outpaint), unlike ``extra`` above. Its
-    # content DOES reach metadata.json -- ``services/engines/ltx25/adapter.py``
-    # lifts it onto ``GenerationOutcome.ltx25`` and
-    # ``services/pipeline_manager.py`` writes it in verbatim when present.
+    # ``ltx25``, a SECOND and SEPARATE ``done`` key, present on EVERY generate
+    # job (plain, outpaint or inpaint), unlike ``extra`` above. Its content
+    # DOES reach metadata.json -- ``services/engines/ltx25/adapter.py`` lifts it
+    # onto ``GenerationOutcome.ltx25`` and ``services/pipeline_manager.py``
+    # writes it in verbatim when present.
     # ``outpaint25.py`` already builds its own ``ltx25`` sub-dict inside
     # ``result.metadata`` (the same dict that just went into ``extra``), so an
     # outpaint job reuses it rather than building a second, possibly-drifting
@@ -1053,13 +1051,13 @@ def _do_generate(msg: dict) -> None:
     # ``done`` event below already reports (deliberately NO ``sampler`` -- a
     # constant already on ``ready.sampler``/LOAD_OK -- and no
     # ``stage1_eta``/``stage2_sampler``/``vram``, which only a two-stage
-    # outpaint/chain build has).
-    # 台帳 §3-150 adds the second two-stage driver to the left-hand arm:
-    # ``run_inpaint`` builds its ``ltx25`` sub-dict with the SAME
-    # ``outpaint25._ltx25_block``, so both masked/widened job kinds reuse the
-    # dict they already have rather than a second, possibly-drifting copy. Note
-    # that for an inpaint job this is the ONLY route the sub-dict takes to the
-    # app: ``extra`` above carries the ``inpaint`` block, not the whole dict.
+    # outpaint/inpaint/chain build has).
+    # An inpaint job takes the left-hand arm too: ``run_inpaint`` builds its
+    # ``ltx25`` sub-dict with the SAME ``outpaint25._ltx25_block``, so both
+    # masked/widened job kinds reuse the dict they already have rather than a
+    # second, possibly-drifting copy. Note that for an inpaint job this is the
+    # ONLY route the sub-dict takes to the app: ``extra`` above carries the
+    # ``inpaint`` block, not the whole dict.
     ltx25: dict = result.metadata["ltx25"] if (
         outpaint is not None or inpaint is not None
     ) else {
@@ -1101,23 +1099,23 @@ def _do_generate(msg: dict) -> None:
         # ``Ltx25Pipeline.keep_resident_embeddings_used``). 2.3 has no matching
         # key: the EmbeddingsProcessor is a 2.5-only component.
         keep_resident_embeddings_used=_PIPE.keep_resident_embeddings_used(),
-        # 2.3's fourth echo key, same name and same three values. Read AFTER the
+        # 2.3's echo key, same name and same three values. Read AFTER the
         # reset like the others, because the reset is what snapshots it -- and
         # computed from the pre-job degrade as well as the pipeline's record, so
         # a request that never reached the pipeline (no wheel) is still reported
         # as "sage->sdpa" rather than as a clean "sdpa".
         attention_used=_attention_used(attention, attention_degraded),
-        # 台帳 §3-131: which VAE decoder this checkpoint built ("diff" / "conv").
+        # Which VAE decoder this checkpoint built ("diff" / "conv").
         # A DIFFERENT vocabulary from 2.3's PrunaVAED echo above (that "off" /
         # "on" / "on->off" triad is whether the PRUNED decoder ran instead of
         # the stock one; this is the real decoder's own name) on purpose -- the
         # two answer different questions. Load-time, not per-job: it never
         # moves between jobs on one worker.
         vae_mode_used=_PIPE.video_vae_kind,
-        # 台帳 §3-131: see the ``ltx25`` build above -- present on every job,
-        # unlike ``extra``.
+        # See the ``ltx25`` build above -- present on every job, unlike
+        # ``extra``.
         ltx25=ltx25,
-        # Appended LAST, and empty for every job but an outpaint one.
+        # Appended LAST; empty unless the job is an outpaint or an inpaint one.
         **extra,
     )
 
@@ -1126,59 +1124,32 @@ def _do_generate(msg: dict) -> None:
 #:
 #: REFUSED BY NAME, not ignored. Every one of them is already refused at the
 #: endpoint (``services/engines/ltx25/adapter.py``'s ``CHAIN_REJECT_TABLE``), and
-#: ``_RealBackend25.generate_chain`` builds its payload from a fixed literal --
-#: plus the additive ``source`` / ``audio_source`` blocks below -- that contains
-#: none of them, so an arrival here is not a stray field, it is the reject table
-#: and the payload builder having drifted apart. Dropping it silently would hand
-#: the user a video that quietly ignored the LoRA / the reference video / the
-#: end source they asked for, which is the one failure this engine must never
-#: produce.
+#: ``_RealBackend25.generate_chain`` builds its payload from a fixed literal plus
+#: additive blocks that contain none of them, so an arrival here is not a stray
+#: field, it is the reject table and the payload builder having drifted apart.
+#: Dropping it silently would hand the user a video that quietly ignored what
+#: they asked for, which is the one failure this engine must never produce.
 #:
-#: ``source`` (V2V) and ``audio_source`` (A2V) USED to be on this list and are
-#: not any more: §3-102's second increment implemented both, so they are now
-#: read below into :class:`~engine25.chain25.SourceSpec` /
-#: :class:`~engine25.chain25.AudioSourceSpec`. ``loras`` and ``reference_video``
-#: LEFT WITH THE THIRD, which implemented Style LoRA and the IC-LoRA reference
-#: (the long-form one included: ONE reference video, sliced per stage-1 segment).
-#: ``retake`` LEFT WITH THE RETAKE INCREMENT, which taught the chain to freeze
-#: BOTH ends of a single window. What is left is what the engine still genuinely
-#: does not have.
+#: The test is MEMBERSHIP, not truthiness: a key that arrives empty is as much a
+#: sign of drift as a populated one, and "the key was there but empty so we
+#: allowed it" is exactly the kind of exception the single-rule principle exists
+#: to avoid.
 #:
-#: The test is MEMBERSHIP, not truthiness: ``{"end_source": {}}`` is as much a sign
-#: of drift as a populated block, and "the key was there but empty so we allowed
-#: it" is exactly the kind of exception the single-rule principle exists to avoid.
-#: ``fused_gguf_dequant_kernel`` LEFT WITH THE FUSED-KERNEL COMMIT: the chain
-#: builds its transformer through the same GGUF loaders the single generate does,
-#: so the Triton dequantization kernels apply to it unchanged and there is
-#: nothing left to refuse. ``block_swap_prefetch`` LEFT WITH THE PREFETCH COMMIT
-#: for the same reason, and the chain is where it matters most: it re-arms per
-#: BUILD, and a chain builds the transformer once per stage-1 clip and once per
-#: stage-2 tile. ``keep_resident`` LEFT WITH THE KEEP-RESIDENT COMMIT: it now
-#: retains the text encoder's state dict between jobs, and a chain builds that
-#: encoder exactly once per job like everything else does, so there is nothing
-#: chain-shaped left to refuse. ``attention_backend`` LEFT WITH THE SAGE COMMIT,
-#: and for the strongest version of that reason: the sage wrappers are installed
-#: per transformer BUILD, and a chain is the path with the most builds (one per
-#: stage-1 clip, one per stage-2 tile). Nothing about it is chain-shaped.
+#: The chain's mode blocks (``source``, ``audio_source``, ``retake``,
+#: ``end_source``), ``loras`` and ``reference_video`` are READ below rather than
+#: refused (:class:`~engine25.chain25.SourceSpec`,
+#: :class:`~engine25.chain25.AudioSourceSpec`,
+#: :class:`~engine25.chain25.RetakeSpec`,
+#: :class:`~engine25.chain25.EndSourceSpec`). The acceleration knobs and ``nag``
+#: are armed below exactly as on the single generate: nothing about them is
+#: chain-shaped. The patches they install (block-swap prefetch, sage, NAG/VSF)
+#: go on at every transformer build, and a chain builds once per stage-1 clip
+#: and once per stage-2 tile.
 #:
-#: The single-generate op differs deliberately for the knobs that remain here --
-#: there they are ignored-and-logged (``IGNORED_FIELDS``) rather than refused,
-#: because the app sends them on every single job.
+#: The single-generate op handles the field differently: there it is
+#: ignored-and-logged (``engine25.pipeline25.IGNORED_FIELDS``) rather than
+#: refused.
 #:
-#: ``retake`` LEFT WITH THE RETAKE INCREMENT: the 2.5 chain freezes BOTH ends of
-#: a single window now, so the block is READ below into
-#: :class:`~engine25.chain25.RetakeSpec` rather than refused by name.
-#: ``end_source`` LEFT WITH THE END-SOURCE INCREMENT for the same reason and it
-#: was the last chain MODE on this list: the 2.5 chain runs the layout's own
-#: stage-1 schedule and freezes the material's band at the timeline's tail, so
-#: the block is READ below into :class:`~engine25.chain25.EndSourceSpec`.
-#:
-#: ``nag`` LEFT THIS TUPLE WITH THE NAG/VSF COMMIT, on exactly the argument
-#: ``attention_backend`` left on: the patch is installed per transformer BUILD,
-#: and a chain is the path with the MOST builds (one per stage-1 clip, one per
-#: stage-2 tile). The negative prompt itself is encoded once per job by the
-#: prompt encoder, which a chain calls once like everything else does. Nothing
-#: about it is chain-shaped, so there was nothing chain-shaped left to refuse.
 #: What remains is ONE engine-level field, and no mode of any kind.
 CHAIN_UNSUPPORTED_KEYS = ("vae_mode",)
 
@@ -1318,7 +1289,7 @@ def _do_generate_chain(msg: dict) -> None:
     # Read exactly as 2.3's chain op reads it (``engine/worker.py``): same four
     # keys, same truthiness test, same ``KeyError`` -> ``ValueError`` translation,
     # because the app builds ONE chain payload shape for whichever engine is
-    # loaded. Absent -> byte-identical to before.
+    # loaded.
     retake = None
     rt = msg.get("retake")
     if rt:
@@ -1341,14 +1312,14 @@ def _do_generate_chain(msg: dict) -> None:
     # ONE code path). The extra frame is the causal VAE's PRIMER: the encode
     # drops latent 0 so the remaining ones land on the timeline's own grid.
     # Mutually exclusive with ``retake`` and ``audio_source`` and COMBINABLE
-    # with ``source`` (the one-clip interpolation the API allows) — asserted
-    # in ``run_chain`` and refused at the endpoint, so it is not re-stated
-    # here; this stays a payload reader.
+    # with ``source`` (the interpolation case on one clip, the bridge on two
+    # or more) — asserted in ``run_chain`` and refused at the endpoint, so it
+    # is not re-stated here; this stays a payload reader.
     #
     # Read exactly as 2.3's chain op reads it (``engine/worker.py``): same
     # three keys, same truthiness test, same ``KeyError`` -> ``ValueError``
     # translation, and the same ``strength`` default of 1.0 for a payload
-    # whose builder left it out. Absent -> byte-identical to before.
+    # whose builder left it out.
     end_source = None
     es = msg.get("end_source")
     if es:
@@ -1431,23 +1402,24 @@ def _do_generate_chain(msg: dict) -> None:
         # engines' worker logs are read side by side when a chain is compared.
         f"source={'yes(ctx=' + str(source.context_frames) + ')' if source else 'no'} "
         f"audio_source={'yes' if audio_source else 'no'} "
-        # The retake receipt, in the same line and the same spelling 2.3 uses:
-        # the two glue widths and the audio ruling, as PARSED, before any of it
-        # runs. ``regen`` is the one field that changes what is delivered (a
-        # False re-muxes the window's own waveform and skips the vocoder), so it
-        # is spelled out rather than folded into "yes".
+        # The retake receipt, in the same line: the two glue widths and the
+        # audio ruling, as PARSED, before any of it runs. ``regen`` is the one
+        # field that changes what is delivered (a False re-muxes the window's
+        # own waveform and skips the vocoder), so it is spelled out rather than
+        # folded into "yes".
         f"retake={'yes(head=' + str(retake.head_px) + ' tail=' + str(retake.tail_px)
                  + ' regen=' + ('on' if retake.regenerate_audio else 'off') + ')'
                  if retake else 'no'} "
-        # The end source's parse receipt, in 2.3's spelling for the same
-        # side-by-side reason: the band length as ASKED FOR (the file itself
-        # carries one frame more) and the strength, which is the one field
-        # that changes how hard stage 1 holds the video tail.
+        # The end source's parse receipt, in the same line: the band length as
+        # ASKED FOR (the file itself carries one frame more) and the strength,
+        # which is the one field that changes how hard stage 1 holds the video
+        # tail.
         f"end_source={'yes(ctx=' + str(end_source.context_frames)
                      + ' strength=' + format(end_source.strength, '.3f') + ')'
                      if end_source else 'no'} "
-        # The parse receipt for the two §3-102 blocks, in the same line rather
-        # than a second one: what the chain was ASKED for, before any of it runs.
+        # The parse receipt for the ``loras`` and ``reference_video`` blocks, in
+        # the same line rather than a second one: what the chain was ASKED for,
+        # before any of it runs.
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
         f"preprocess={_preprocess_kind(msg)} attn={ic_attn:.3f} "
         f"stage2win={spec.stage2_window or 'standard'} "
@@ -1554,14 +1526,14 @@ def _do_generate_chain(msg: dict) -> None:
         # key: the EmbeddingsProcessor is a 2.5-only component. A chain builds
         # it once per job like everything else does, same as the single op.
         keep_resident_embeddings_used=_PIPE.keep_resident_embeddings_used(),
-        # 2.3's fourth echo key. A chain's value covers the WHOLE job: the
+        # 2.3's echo key, same name. A chain's value covers the WHOLE job: the
         # kernel-failure latch lives on the pipeline's ``SageState``, which
         # outlives every one of the chain's transformer builds, so one failed
         # kernel call in the last stage-2 tile makes the whole chain
         # "sage->sdpa".
         attention_used=_attention_used(attention, attention_degraded),
-        # 台帳 §3-131: same vocabulary and same load-time fact as the single
-        # op's done -- see the comment there. No additive ``ltx25=`` key here:
+        # Same vocabulary and same load-time fact as the single op's done --
+        # see the comment there. No additive ``ltx25=`` key here:
         # ``chain=meta`` already carries ``meta["ltx25"]`` (built by
         # ``chain25.py``), and duplicating it at the top level would be two
         # copies of one dict to keep in sync instead of one.
@@ -1633,9 +1605,8 @@ def main() -> None:
                 sys.exit(1)
             continue
 
-        # Serving loop (post-load). An unsupported op is ANSWERED rather than
-        # ignored, because the parent blocks waiting for a reply and silence
-        # would read as a hang.
+        # Serving loop (post-load). An unknown op is logged and skipped; no
+        # event answers it.
         if op == "shutdown":
             _shutdown()
         if op == "generate":
@@ -1665,7 +1636,7 @@ def main() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Selftest CLI (gate G4)
+# Selftest CLI (see VERIFICATION_LOG §69.6 and §72.3)
 # ---------------------------------------------------------------------------
 
 
@@ -1741,8 +1712,8 @@ def _resolve_lora_path(name: str) -> str:
     filename rather than taking a directory argument is what lets the selftest
     say ``--lora Pixar_Toon`` for a Style adapter and
     ``--lora ltx-2.3-22b-ic-lora-union-control-ref0.5`` for a control one without
-    knowing which subdirectory each lives in -- the config's three logical
-    control names all point at that ONE file, so the lookup stays unambiguous.
+    knowing which subdirectory each lives in -- the ``*-control`` names in the
+    ``ic_loras`` config point at that ONE file, so the lookup stays unambiguous.
 
     Not-found and ambiguous both raise: a selftest that silently generated
     without the adapter it was told to use would be a green run that proves the
@@ -1860,9 +1831,10 @@ def _add_acceleration_arguments(parser) -> None:
     # DEFAULT OFF -- the opposite direction from the two above, and not an
     # oversight. The other two are free (same output, less time), so their
     # selftest default is the accelerated path. This one BUYS TIME WITH RAM:
-    # ~7.7 GiB stays resident between jobs. The app ships it off by default for
-    # that reason, and a selftest whose default did not match would measure a
-    # configuration nobody runs.
+    # the text encoder's state dict stays resident between jobs (measured in
+    # VERIFICATION_LOG §76). The app's default (``KEEP_RESIDENT_DEFAULT`` in
+    # api/models.py) is chosen for that reason, and a selftest whose default
+    # did not match would measure a configuration nobody runs.
     parser.add_argument(
         "--keep-resident",
         choices=("on", "off"),
@@ -1872,9 +1844,10 @@ def _add_acceleration_arguments(parser) -> None:
     )
     # DEFAULT OFF, same reasoning as ``--keep-resident`` immediately above: this
     # BUYS TIME WITH RAM too, just for the EmbeddingsProcessor's state dict
-    # instead of the text encoder's -- ~4.6 GiB stays resident between jobs. The
-    # app ships it off by default for that reason, and a selftest whose default
-    # did not match would measure a configuration nobody runs.
+    # instead of the text encoder's (measured in VERIFICATION_LOG §92). The
+    # app's default (``KEEP_RESIDENT_EMBEDDINGS_DEFAULT`` in api/models.py) is
+    # chosen for that reason, and a selftest whose default did not match would
+    # measure a configuration nobody runs.
     parser.add_argument(
         "--keep-resident-embeddings",
         choices=("on", "off"),
@@ -1905,10 +1878,10 @@ def _acceleration_payload(args) -> dict:
     ADDITIVE, exactly as the app's payload builder is: ``off`` omits the key
     entirely rather than sending ``False``, because absent-means-off is the
     contract the workers' readers implement and an ``off`` run has to exercise
-    the same absent-key path a pre-acceleration payload would take. For
-    ``keep_resident`` the omission is doubly the point: an absent key is the
-    RELEASE instruction, so an ``off`` round on a warm worker is what proves the
-    release path runs (see :func:`_resolve_keep_resident`).
+    the same absent-key path as a payload that carries no acceleration keys.
+    For ``keep_resident`` the omission is doubly the point: an absent key is
+    the RELEASE instruction, so an ``off`` round on a warm worker is what
+    proves the release path runs (see :func:`_resolve_keep_resident`).
     """
     payload: dict = {}
     if args.fused_dequant == "on":
@@ -1919,9 +1892,9 @@ def _acceleration_payload(args) -> dict:
         payload["keep_resident"] = True
     if args.attention != "sdpa":
         # Additive like the three above: ``sdpa`` omits the key rather than
-        # sending it, so an sdpa round exercises the same absent-key path a
-        # pre-sage payload takes -- which is what makes its digest comparable to
-        # the frozen baseline at all.
+        # sending it, so an sdpa round exercises the same absent-key path as a
+        # payload without ``attention_backend`` -- which is what makes its
+        # digest comparable to the frozen baseline at all.
         payload["attention_backend"] = args.attention
     if args.keep_resident_embeddings == "on":
         payload["keep_resident_embeddings"] = True
@@ -1949,10 +1922,11 @@ def _selftest_generate(argv: list[str]) -> int:
     the measured path is the shipped one. ``--rounds 2`` with an unchanged seed
     is the determinism probe: the two mp4 digests are compared and reported.
 
-    ``--lora`` / ``--reference`` / ``--preprocess`` build the two §3-102 blocks
-    the app sends. Both keys ride on EVERY message, ``[]``/``None`` included,
-    which is what makes an unchanged digest on a no-LoRA run evidence that the
-    explicit-detach path costs nothing rather than evidence that it never ran.
+    ``--lora`` / ``--reference`` / ``--preprocess`` build the ``loras`` and
+    ``reference_video`` blocks the app sends. Both keys ride on EVERY message,
+    ``[]``/``None`` included, which is what makes a no-LoRA digest that matches
+    the frozen baseline evidence that the explicit-detach path costs nothing
+    rather than evidence that it never ran.
     """
     import argparse
     import hashlib
@@ -1986,12 +1960,11 @@ def _selftest_generate(argv: list[str]) -> int:
     acceleration = _acceleration_payload(args)
 
     # Every framed event, captured on its way to stdout, exactly as the chain
-    # selftest does it. Added with the acceleration knobs: this selftest used to
-    # print its ``done`` event and keep nothing, so the echo keys -- the ONLY
-    # statement of what the job actually got, as opposed to what it asked for --
-    # were unavailable to anything reading the report. Patching the module global
-    # is what leaves the handler itself untouched: the run under observation is
-    # the shipped one, and the lines still reach stdout.
+    # selftest does it, so the report carries the echo keys -- the ONLY
+    # statement of what the job actually got, as opposed to what it asked for.
+    # Patching the module global is what leaves the handler itself untouched:
+    # the run under observation is the shipped one, and the lines still reach
+    # stdout.
     events: list[dict] = []
     real_emit = _emit
 
@@ -2041,12 +2014,14 @@ def _selftest_generate(argv: list[str]) -> int:
                     # the explicit detach the worker must be told about.
                     "loras": loras,
                     "reference_video": reference,
-                    # Deliberately present: proves the ignore-and-log path runs on
-                    # the same messages the app will send.
+                    # Deliberately present: ``num_steps`` is in the engine's
+                    # ``IGNORED_FIELDS``, so the run proves the ignore-and-log
+                    # path works. The app's single generate does not forward
+                    # these keys.
                     "num_steps": 8,
                     "negative_prompt": "",
-                    # Additive, exactly as the app builds it: absent entirely when
-                    # --fused-dequant off.
+                    # Additive, exactly as the app builds it: a knob that is off
+                    # (or ``--attention sdpa``) contributes no key.
                     **acceleration,
                 }
             )
@@ -2057,9 +2032,9 @@ def _selftest_generate(argv: list[str]) -> int:
                 raise RuntimeError("the generation produced no terminal done event")
             round_report = {"round": index, "output": out, "sha256": digest,
                             "size_bytes": Path(out).stat().st_size,
-                            # The done event VERBATIM, which is where the two
-                            # acceleration echoes live. The chain selftest has
-                            # always reported this; the single one now does too.
+                            # The done event VERBATIM, which is where the
+                            # acceleration echoes live, as the chain selftest
+                            # reports it.
                             "done": done}
             # The control mp4 by MEASUREMENT: a preprocess kind that silently wrote
             # nothing would otherwise look like a clean run.
@@ -2094,7 +2069,7 @@ _SELFTEST_CHAIN_PROMPTS = (
 
 
 def _selftest_chain(argv: list[str]) -> int:
-    """Load + run one clip chain from the command line, then report JSON (gate G2).
+    """Load + run one clip chain from the command line, then report JSON.
 
     Drives ``_do_load`` / :func:`_do_generate_chain` with synthesised protocol
     messages -- the SAME handlers the ``@@LTX@@`` protocol dispatches to -- so a
@@ -2108,13 +2083,14 @@ def _selftest_chain(argv: list[str]) -> int:
     ``--source`` (V2V) and ``--audio-source`` (A2V) add the one payload block
     each mode rides on, and are mutually exclusive here for the same reason they
     are at the endpoint: a chain is either a continuation of a video or a
-    rendering of an audio track. Neither given, the payload's key set is
-    byte-identical to the one that shipped before the two modes existed, which
-    is what makes an unchanged digest evidence rather than a coincidence.
+    rendering of an audio track. Neither given, the payload carries neither
+    block -- the plain chain whose digest VERIFICATION_LOG §72.3 and §73.3 (a)
+    record, and for which §74.4 records a matching digest.
 
     ``--lora`` / ``--reference`` / ``--preprocess`` are the single selftest's,
     with the chain's ADDITIVE payload discipline: neither key is written unless
-    asked for, so a plain chain's message is the dict it always was.
+    asked for, so a plain chain's message carries neither ``loras`` nor
+    ``reference_video``.
 
     ``stage2_window`` is deliberately not an argument: the default chain is what
     is under test, and the app sends that key only when a request opted off
@@ -2180,7 +2156,7 @@ def _selftest_chain(argv: list[str]) -> int:
         type=int,
         default=73,
         help="V2V context span in PIXEL frames (8n+1); read only with --source. "
-        "The app's default is 73",
+        "(the selftest default matches the app's)",
     )
     _add_ic_lora_arguments(parser)
     _add_acceleration_arguments(parser)
@@ -2234,8 +2210,8 @@ def _selftest_chain(argv: list[str]) -> int:
                 "chunked_upsample": args.chunked_upsample,
                 "stage2_window": "standard (the key is omitted from the payload)",
                 "images": images,
-                # None/None is the plain-chain case whose digest gate G2(a)
-                # compares against the pre-V2V baseline.
+                # None/None is the plain-chain case (its digest is the one
+                # VERIFICATION_LOG §73.3 (a) records).
                 "source": (
                     None
                     if args.source is None
@@ -2245,8 +2221,8 @@ def _selftest_chain(argv: list[str]) -> int:
                     None if args.audio_source is None else {"path": args.audio_source}
                 ),
                 # The RESOLVED blocks (which file a bare --lora NAME became),
-                # both None/[] on the plain chain whose digest gate G2(a)
-                # compares against the pre-LoRA baseline.
+                # both None/[] on the plain chain (VERIFICATION_LOG §74.4
+                # records a matching digest for it).
                 "loras": loras,
                 "reference_video": reference,
                 # What was ASKED for. Every round's ``done`` says what was got --
@@ -2291,7 +2267,8 @@ def _selftest_chain(argv: list[str]) -> int:
                 ],
             }
             # ADDITIVE, exactly as the adapter builds them: absent unless asked
-            # for, so the plain chain's payload is the same dict it always was.
+            # for, so a plain chain's payload carries neither key (the adapter's
+            # plain-chain key set is pinned by ``GOLDEN_CHAIN_KEYS_25``).
             if args.source is not None:
                 payload["source"] = {"path": args.source, "context_frames": args.context}
             if args.audio_source is not None:
@@ -2302,8 +2279,8 @@ def _selftest_chain(argv: list[str]) -> int:
                 payload["loras"] = loras
             if reference is not None:
                 payload["reference_video"] = reference
-            # Additive here too: absent entirely when --fused-dequant off, which
-            # is the same absent-key path a pre-acceleration payload took.
+            # Additive here too: each acceleration key is absent unless its flag
+            # asked for it (see :func:`_acceleration_payload`).
             payload.update(acceleration)
             _do_generate_chain(payload)
             seconds = time.perf_counter() - round_started
@@ -2370,8 +2347,9 @@ def _selftest_chain(argv: list[str]) -> int:
                         "expected_total_px": px_from_v_latent(expected_f_total),
                     },
                     # The two mode blocks VERBATIM (``None`` on a plain chain,
-                    # which is itself the check that a plain chain grew no new
-                    # metadata): 16 keys for V2V, 8 for A2V, same names as 2.3's.
+                    # which is itself the check that a plain chain carries neither
+                    # block), with 2.3's key names; the key counts a gate run
+                    # found are in VERIFICATION_LOG §73.3 (b) and (c).
                     "v2v": chain_meta.get("v2v"),
                     "a2v": chain_meta.get("a2v"),
                     "v2v_key_count": len(v2v_meta) or None,

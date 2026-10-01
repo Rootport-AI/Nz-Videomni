@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-35〜§1-39 の5件〔block swap の状態報告の整合／読み込みの最中の`unload`で409の見張りが開く／連結ジョブの取り消しが結果に反映されない／`join_v2v`の尺の検査が音声の短いずれを見ない／`Docs/MULTI_ENGINE_DESIGN.md` §4.1の文書訂正〕を起票し、§1 冒頭の案内を §1-35〜§1-39 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-34「V2V／End source の `context_frames` 上限が `config.yaml` に書いても検証に効かない」を起票し、§1 冒頭の案内を §1-34 まで含む記述に更新。前々回 2026-09-28: オーナー裁定「§3-167をクローズしてほしい」を受け、§3-167をクローズして[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-167 へ移し、本書の§3-167を削除。§1-31 の§3-167参照をCLOSED側へ付け替え。）
+- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-46「撮り直し（Retake）の `source_had_audio` が、音声があったのに `false` になる場合がある」を起票し、§1 冒頭の案内を §1-46 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-40〜§1-45〔撮り直し（Retake）の窓のタイル予算が広い Stage-2 窓で未計測／拡散 VAE を置いたときの復号タイルの決め方／ワーカーが未知の op に応答しない／`done` イベントに段階ごとの表が二重に載る／連結生成のワーカーログの綴りが LTX 2.3 と違う／carry の頭と末尾素材の帯が合体したタイルのキーフレーム印の消去〕を起票し、§1 冒頭の案内を §1-40〜§1-45 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-35〜§1-39 の5件〔block swap の状態報告の整合／読み込みの最中の`unload`で409の見張りが開く／連結ジョブの取り消しが結果に反映されない／`join_v2v`の尺の検査が音声の短いずれを見ない／`Docs/MULTI_ENGINE_DESIGN.md` §4.1の文書訂正〕を起票し、§1 冒頭の案内を §1-35〜§1-39 まで含む記述に更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -92,6 +92,81 @@
 - **着手**: 着手時は go／no-go の検討から始める（文書だけの訂正のため軽い）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」（コメント現行化で検出、2026-10-01 起票）。
 - **関連ファイル**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §4.1、`services/model_registry.py`（`CATEGORIES`）、`api/models_registry.py`、`services/pipeline_manager.py`、`gradio_ui/adapters.py`（`MODEL_CATEGORIES`）。
+
+### 1-40. 撮り直し（Retake）の窓のタイル予算が広い Stage-2 窓で未計測（起票：2026-10-01）
+
+- **現象**: `engine25/chain25.py` の `RETAKE_ENCODE_TILE_AREA_BUDGET`（撮り直しの窓を符号化するときの空間タイルの面積上限・448×384）は、実測が撮り直しの窓 73・121・169 フレーム（`standard` のStage-2 窓で許される上限）までしかない。一方 `chain_math.py` の `retake_max_window_px(v_tile)` は、より広い Stage-2 窓（`stage2_window="w61"`）を選ぶと撮り直しの窓を `8 * v_tile - 7` で計算し、481 フレームまで許す。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.5 の2つ目の表では、同じタイル設定のまま 121→169 フレームで予約ピークが 8,182→13,926 MB に増えており、この先 481 フレームまで伸ばしたときに 16 GiB のカードへ収まるかどうかは測られていない。
+- **影響**: 広い Stage-2 窓を選んだ上で長い撮り直しの窓を指定したときだけ発生する。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 広い窓での撮り直しを実測し、タイル予算を較正し直す。
+  - B: 予算を窓の長さに応じて段階化する。
+  - C: 撮り直しの窓の上限を `standard` 相当（169フレーム）に戻す。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.5・§133（申し送り）。
+- **関連ファイル**: `engine25/chain25.py`（`RETAKE_ENCODE_TILE_AREA_BUDGET`・`_retake_encode_tiling`）、`chain_math.py`（`retake_max_window_px`・`resolve_stage2_window`）。
+
+### 1-41. 拡散 VAE を置いたときの復号タイルの決め方（起票：2026-10-01）
+
+- **現象**: `engine25/chain25.py` の `run_chain` は、連結生成全体の復号タイルを `ensure_tiling_config(AUTO_TILING, ...)` の1回の呼び出しで、モデルを何も組み立てる前に決める。配布の既定である Conv 版の映像 VAE では、`AUTO_TILING` は縦横比だけを見る分岐を通るため空き VRAM を読まず無害だが、利用者が拡散 VAE のファイルを置いた場合（`video_vae_kind == "diff"`）は空き VRAM を読む分岐を通る。この呼び出し位置はモデルを何も組んでいない、空き VRAM が最も楽観的に見える時点であり、コード自身のコメントがこの位置の危うさを明記している。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 拡散 VAE のときだけ、モデルを組み終えた後の空き VRAM でタイルを決め直す。
+  - B: 現状を許容し、拡散 VAE では保守的な固定タイルへ倒す。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
+- **関連ファイル**: `engine25/chain25.py`（`run_chain` の `tiling_config = ensure_tiling_config(...)`）。
+
+### 1-42. ワーカーが未知の op に応答しない（起票：2026-10-01）
+
+- **現象**: `engine25/worker.py` の `main` の、読み込み完了後のサービスループは、既知でない `op`（ワーカーへ送る操作の種別を示す文字列）を `_log` で記録するだけで、どのイベントも送り返さない（LTX 2.3 の `engine/worker.py` の `main` も同じ作り）。現在アダプタ（`services/engines/ltx25/adapter.py` の `_RealBackend25`。基底は `services/engines/ltx/adapter.py` の `_RealBackend`）が送る `op` は `load`／`generate`／`generate_chain`／`shutdown` の4つだけなので実際には起きないが、もし未知の `op` が送られれば、応答を待つ側（`_RealBackend._read_worker_events`）はいつまでも次の行を待ち続けることになる。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 未知の `op` には `error` イベントを返すようにする。
+  - B: 現状を許容し、「未知の op には応答しない」という仕様をコード上に明記する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
+- **関連ファイル**: `engine25/worker.py`（`main`）、`engine/worker.py`（`main`）、`services/engines/ltx/adapter.py`（`_RealBackend._read_worker_events`）、`services/engines/ltx25/adapter.py`（`_RealBackend25`）。
+
+### 1-43. `done` イベントに段階ごとの表が二重に載る（起票：2026-10-01）
+
+- **現象**: `engine25/chain25.py` の `run_chain` は、段階ごとの VRAM ピークを要約した `count`・ピーク値だけの表（`_vram_summary` が返す）を `metadata["ltx25"]["vram"]` に、段階ごとの生の全表を `metadata["ltx25"]["phases"]` に、別々の鍵で持たせる。`_vram_summary` 自身のdocstringは「全表はアプリが読まない場所に置く」という設計を明言している。ところが `engine25/worker.py` の `_do_generate_chain` は `done` イベントを組むとき、この全表を `phases=ltx25.get("phases")` としてトップレベルにもう一度載せたうえ、`chain=meta`（`metadata` 丸ごと。中に同じ `metadata["ltx25"]["phases"]` を含む）も同時に載せるため、同じ全表が1つの `done` イベントの中に2か所現れる。
+- **影響**: イベントのサイズが余分に大きくなるだけで、値そのものの食い違いは無い。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `done` のトップレベルの `phases=` を外し、`chain=meta` 側の1か所だけにする。
+  - B: 現状を許容する。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
+- **関連ファイル**: `engine25/worker.py`（`_do_generate_chain`）、`engine25/chain25.py`（`run_chain`・`_vram_summary`）。
+
+### 1-44. 連結生成のワーカーログの綴りが LTX 2.3 と違う（起票：2026-10-01）
+
+- **現象**: `engine25/worker.py` の `_do_generate_chain` が書く1行ログ（`generate_chain ...`）のうち、`source=`／`audio_source=` の2項目は「2.3のチェーンのログ行と同じ綴り」とコメントで明記したうえでLTX 2.3の `engine/worker.py` と同じ綴りに揃えてある。ところが同じ行の `retake=`・`end_source=` の綴りはLTX 2.3と違う（2.3: `retake=yes(<head>/<tail>,audio=regen|keep)`・`end_source=yes(ctx=..,s=..)`／2.5: `retake=yes(head=.. tail=.. regen=on|off)`・`end_source=yes(ctx=.. strength=..)`）。両エンジンのワーカーログを並べて読むという同じ行の設計意図からすると、この2項目だけ字面が揃っていない。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 2.3と同じ綴りに揃える。
+  - B: 現状を許容する（意味は同じなので実害は無い）。
+- **着手**: 着手時は go／no-go の検討から始める（ログ文言だけの変更のため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
+- **関連ファイル**: `engine25/worker.py`（`_do_generate_chain` の `_log` 行）、`engine/worker.py`（`_do_generate_chain` の `_log` 行）。
+
+### 1-45. carry の頭と末尾素材の帯が合体したタイルのキーフレーム印の消去（起票：2026-10-01）
+
+- **現象**: `engine25/chain25.py` の Stage-2 のタイルループでは、タイル `i >= 1` の carry（直前タイルの出力から引き継ぐ先頭の凍結幅・`fkv`）と、末尾素材（End source）の帯（`ftv`）が同じタイルの中で重なって `fkv + ftv > vlen` になると、両者を1つの帯として扱うために `fkv, ftv = 0, vlen` へ書き換える。この書き換えのあと、`clear_keyframes=tile_clear_kf and fkv > 0` は `fkv` が0になったことで偽になり、本来 carry のタイルで立つはずのキーフレーム印の消去（`ClearKeyframesMask`）が行われない。
+- **影響（低）**: 書き換え後のタイルは `vlen` 全体が強度1.0で凍結される帯になっており、そもそも denoise が走らない区間なのでキーフレーム印が残っていても出力に影響しないと見られる。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 書き換えのあとも、元々 `fkv` が0でなかった場合はキーフレーム印を消すよう条件を直す。
+  - B: 現状を許容する（実害が無いと見られるため）。
+- **着手**: 着手時は go／no-go の検討から始める（実害無しと見られるため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
+- **関連ファイル**: `engine25/chain25.py`（Stage-2 のタイルループ・`_band_conditionings`）。
+
+### 1-46. 撮り直し（Retake）の `source_had_audio` が、音声があったのに `false` になる場合がある（起票：2026-10-01）
+
+- **現象**: `engine25/chain25.py` の Retake（撮り直し）の窓の音声の取り込みでは、窓に音声トラックがあっても、符号化した音声潜在が窓の長さ（`a_total`）に足りず `regenerate_audio=False` のとき、警告ログを出したうえで `retake_had_audio` を `False` に書き換え、続く `if not retake_had_audio:` で凍結する先頭・末尾の音声潜在数（`n_head_a`・`n_tail_a`）を0にする。`metadata.json` の `retake` ブロックの `source_had_audio` は `bool(retake_had_audio)` をそのまま書き写すので、この場合「窓に音声トラックは実際にあった」のに `false` になる。同じ代入のすぐ上のコメントは「`source_had_audio` と `audio_frozen` は別物で、`regenerate_audio=False` と短い符号化の組み合わせでは両者が分かれる（窓は音声を持ちながら凍結された帯は無い、という状態になりうる）」という意図を述べているが、実際には `source_had_audio` 自体も `false` になるため、この意図どおりには動いていない。LTX 2.3 側の `engine/pipeline/chain_pipeline.py` の `_encode_retake_window` も同じ作りで、同じ食い違いを持つ。
+- **影響**: `regenerate_audio=false` で、窓の音声の符号化が窓の長さに足りないとき（珍しい状況）だけ発生する。メタデータの `source_had_audio` の値が実際と違う値になるだけで、生成物（映像・音声）には影響しない。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 「音声トラックがあったか」と「実際に凍結したか」を別の変数で持ち、`source_had_audio` はこの場合も `true` のままにする。
+  - B: 現状の値（この場合は `false`）を契約として文書に書く。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
+- **関連ファイル**: `engine25/chain25.py`（Retake の音声の取り込み・`retake_had_audio`・`n_head_a`・`n_tail_a`）、`engine/pipeline/chain_pipeline.py`（`_encode_retake_window`）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2「チェーンの retake（撮り直し）の音声の補足」。
 
 ---
 

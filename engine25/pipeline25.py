@@ -1,13 +1,14 @@
-"""The LTX 2.5 two-stage generation pipeline, assembled from GGUF weights (§3-98 Phase 2d).
+"""The LTX 2.5 two-stage generation pipeline, assembled around engine25's own loaders.
 
 What this module is
 -------------------
-Phases 2b and 2c built the two halves that cannot come from the official
-packages on a 16 GB card -- a transformer stage that loads a Q4 GGUF, keeps it
-on the CPU and pages 48 blocks through a small GPU window, and a Gemma 4 text
-encoder that does the same for its 48 layers. This module is the assembly: it
-constructs the OFFICIAL :class:`DistilledPipeline`, substitutes those two
-components, and exposes one ``generate`` call that writes an mp4.
+Two halves cannot come from the official packages on a 16 GB card -- a
+transformer stage that loads the transformer checkpoint (``.gguf`` or
+``.safetensors``), keeps it on the CPU and pages 48 blocks through a small GPU
+window, and a Gemma 4 text encoder that does the same for its 48 layers. This
+module is the assembly: it constructs the OFFICIAL :class:`DistilledPipeline`,
+substitutes those two components, and exposes one ``generate`` call that
+writes an mp4.
 
 Everything the official code can still do, it still does. The video VAE, the
 audio VAE, the spatial upsampler and the image conditioner are plain
@@ -25,12 +26,12 @@ The three substitutions
    SUBCLASS of the official ``PromptEncoder`` constructed through its public
    ``text_encoder_builder=`` parameter, so the encode/enhance/process
    choreography is the official one. Only the two builders behind it are ours.
-3. ``pipeline.use_ancestral_sampler = True`` (fact B). ``DistilledPipeline``
+3. ``pipeline.use_ancestral_sampler = True``. ``DistilledPipeline``
    resolves that flag by reading ``model_version`` out of the transformer file
    with ``safe_open`` -- a memory map, which this product never takes on a
    multi-GB checkpoint (and which a ``.gguf`` cannot satisfy at all). So the
    pipeline is constructed inside ``ancestral_detection_skipped()``, which
-   skips that probe (§3-167 B-2), and the flag is then set explicitly: this
+   skips that probe, and the flag is then set explicitly: this
    engine loads LTX 2.5 checkpoints only (``model_version=2.5.0``, past the
    ancestral sampler's threshold), so the correct answer is known; it is
    asserted here rather than hoped for, and republished on the ``ready`` event
@@ -38,7 +39,7 @@ The three substitutions
 
 Why the prompt encoder needed only a subclass
 ---------------------------------------------
-Because of the assets-only ``.safetensors`` from Phase 2c (fact F2). The
+Because of the assets-only ``.safetensors`` (``engine25.assets_export``). The
 official ``PromptEncoder.__init__`` reads the tokenizer/config/processor
 sidecars from ``model_paths.text_encoder()`` before any builder is consulted;
 pointing that at the assets-only file satisfies all of it. What remains is
@@ -49,16 +50,17 @@ parameter for is the EmbeddingsProcessor builder, which is why
 private attribute, checked for existence first so a rename fails loudly instead
 of leaving the official (safetensors-reading) builder quietly in place.
 
-The v1 generation contract
---------------------------
-:meth:`Ltx25Pipeline.generate` accepts what LTX 2.5 v1 supports and nothing
-else: prompt, width/height (multiples of 64), ``num_frames`` (8n+1), frame
-rate, seed, and zero or more conditioning images (T2V / I2V). What the app may
-still send and this engine does not act on -- ``guidance_scale``,
-``num_inference_steps`` -- is IGNORED WITH A LOG LINE, never silently: the
-distilled 2.5 model runs a fixed 8 + 3 sigma schedule with no classifier-free
-guidance, so a step count or a CFG scale has nothing to attach to.
-``negative_prompt`` USED TO BE ON THAT LIST AND NO LONGER IS: a CFG-free model
+The generation contract
+-----------------------
+:meth:`Ltx25Pipeline.generate` takes a prompt, width/height (multiples of
+``RESOLUTION_DIVISOR``), ``num_frames`` (8n+1), frame rate, seed, zero or
+more conditioning images (T2V / I2V), and the job's LoRAs and IC-LoRA
+reference video (see its docstring). Request fields this engine accepts but
+does not act on (:data:`IGNORED_FIELDS`) are IGNORED WITH A LOG LINE, never
+silently: the distilled 2.5 model runs the fixed distilled sigma schedule
+(its shape is checked at startup by ``ltxcore_compat.verify()``) with no
+classifier-free guidance, so a step count or a CFG scale has nothing to
+attach to. ``negative_prompt`` is not on that list: a CFG-free model
 cannot be pushed away from an unconditional prediction, but it can be argued
 with inside the single pass it does run, which is what NAG and VSF do (see
 :meth:`Ltx25Pipeline.set_nag_job` and ``engine25/neg_prompt25.py``).
@@ -70,29 +72,34 @@ engines.
 The acceleration knobs that DO apply are not generation parameters and are not
 on ``generate``'s signature: they are per-job state on a resident worker
 process, armed by :meth:`Ltx25Pipeline.set_acceleration_job` before the job and
-disarmed in its ``finally``. All FOUR are live: the fused Triton GGUF
-dequantization kernels (which work here because this engine's transformer and
-text encoder both dequantize through 2.3's ``engine.gguf.quant_service``),
+disarmed in its ``finally``. There are five: the fused Triton GGUF
+dequantization kernels (which work here because this engine's GGUF weights --
+the text encoder, and the transformer when it is a ``.gguf`` -- dequantize
+through 2.3's ``engine.gguf.quant_service``),
 asynchronous block-swap prefetching (which the diffusion stage re-arms on every
 transformer build -- see ``Ltx25DiffusionStage.set_block_swap_prefetch``),
-``keep_resident``, which retains the Gemma 4 text encoder's 7.7 GiB state dict
-between jobs instead of re-reading it from the GGUF every time, and
-``attention_backend``, which swaps every transformer block's attention kernel
-for SageAttention (2.3's ``engine.transformer.sage_attention_service``,
-imported unchanged -- the two engines' attention contracts are identical).
-``keep_resident`` is the odd one out twice over: it is opt-in rather than on by
-default (it costs resident RAM), and its state deliberately OUTLIVES the job
-that armed it -- see :func:`_swap_keep_resident`. ``attention_backend`` is the
-only one of the four that changes the OUTPUT: sage is a quantized kernel, so a
-sage job and an sdpa job at one seed differ in fine detail, which is why it too
-defaults to off and why the job echoes back what it really ran on
+``keep_resident``, which retains the Gemma 4 text encoder's state dict
+between jobs instead of re-reading it from the GGUF every time,
+``keep_resident_embeddings``, which does the same for the EmbeddingsProcessor
+(the measured sizes of both retentions are in Docs/VERIFICATION_LOG.md §76
+and §92), and ``attention_backend``, which swaps every transformer block's
+attention kernel for SageAttention (2.3's
+``engine.transformer.sage_attention_service``, imported unchanged -- the two
+engines' attention contracts are identical). The two keep-resident knobs are
+the odd ones out twice over: each is its own request, off by default
+(``KEEP_RESIDENT_DEFAULT`` / ``KEEP_RESIDENT_EMBEDDINGS_DEFAULT`` in
+``api/models.py``) because each costs resident RAM, and their state
+deliberately OUTLIVES the job that armed it -- see :func:`_swap_keep_resident`.
+``attention_backend`` changes the OUTPUT: sage is a quantized kernel, so a
+sage job and an sdpa job at one seed differ in fine detail, which is why sdpa
+is the default backend and why the job echoes back what it really ran on
 (:meth:`Ltx25Pipeline.attention_used`).
 
-A FIFTH per-job knob sits beside those four and is a different kind of thing:
+One more per-job knob sits beside those five and is a different kind of thing:
 :meth:`Ltx25Pipeline.set_nag_job` arms the job's non-CFG negative prompt (NAG or
 VSF). It is armed and reset in the same place and by the same discipline, but it
 is not an acceleration knob -- it changes what the model computes, on purpose,
-which is why it has its own method rather than a fifth argument to
+which is why it has its own method rather than another argument to
 ``set_acceleration_job``.
 
 Determinism
@@ -101,11 +108,11 @@ Same seed, same file. The video half gets there on its own -- two runs at one
 seed produce a bit-identical video stream -- but the audio vocoder does not: its
 transposed convolutions reduce with atomics, so three decodes of ONE fixed
 latent give three different waveforms. :func:`enable_deterministic_convolutions`
-(on by default, one constructor flag away from off) pins cuDNN and closes that
-gap. See its docstring for the measurement and the cost caveat.
+(the constructor's ``deterministic`` flag) pins cuDNN and closes that
+gap. See its docstring for the measurement and the cost.
 
-fps rounding (fact M)
----------------------
+fps rounding
+------------
 ``frame_rate`` stays a float everywhere the model sees it -- RoPE positions and
 the audio/video latent grids are built from it, and rounding there is what
 makes long clips drift out of sync. It is rounded exactly once, at the mp4
@@ -129,8 +136,9 @@ from engine.gguf import dequant_triton
 # contract is 2.3's to the letter (flat (B, S, H*D) q/k/v, head dims 128/64, six
 # attention modules per block), so a second copy could only drift. The module's
 # own imports are stdlib + torch, so this costs nothing at import time and works
-# in a venv with no sageattention wheel -- the wheel is imported lazily, on the
-# first job that actually asks for sage.
+# in a venv with no sageattention wheel -- the wheel is imported lazily, on
+# first use (``probe_sage()``, which the worker calls at load, or the first
+# job that asks for sage).
 from engine.transformer.sage_attention_service import SageAttentionService, SageState
 from engine25 import assets_export
 # The non-CFG negative-prompt patch (NAG / VSF). ``NagState``/``NagParams``/
@@ -180,13 +188,17 @@ from engine25.reference25 import (
 logger = logging.getLogger(__name__)
 
 #: The sampler this engine reports on ``ready``. Not a preference: 2.5 distilled
-#: was trained with the ancestral (SDE) Euler stage-1 sampler, and
-#: ``ANCESTRAL_SAMPLER_SINCE_VERSION`` in the official pipeline is ``(2, 5)``.
+#: was trained with the ancestral (SDE) Euler stage-1 sampler, and the official
+#: pipeline's ``ANCESTRAL_SAMPLER_SINCE_VERSION`` threshold puts 2.5 on the
+#: ancestral side.
 SAMPLER_NAME = "euler_ancestral"
 
-#: Blocks of the 48 that stay resident on the GPU. 8 is the plan's starting
-#: point; the documented 16 GB fallback ladder is 8 -> 6 -> 4 -> explicit VAE
-#: tiling, and every rung is a constructor argument rather than an edit.
+#: Blocks of the 48 that stay resident on the GPU, for the self-tests and
+#: direct callers that name no count. A worker started by the app gets
+#: ``blocks_on_gpu`` in its load payload, defaulted by ``DEFAULT_BLOCKS_ON_GPU``
+#: in ``services/engines/ltx25/adapter.py``. The documented 16 GB fallback
+#: ladder (spec §6.10 (e)) walks this count down, and every rung is a
+#: constructor argument rather than an edit.
 DEFAULT_BLOCKS_ON_GPU = 8
 
 #: Gemma layers kept resident. 0 = every layer is streamed. The text encoder
@@ -223,9 +235,9 @@ _DENOISE_STAGE_NAMES = {1: STAGE_1_DENOISE, 2: STAGE_2_DENOISE}
 #: The two keyword-only arguments are the chain's position (which clip, which
 #: tile) and are the SAME pair the 2.3 worker emits from
 #: ``engine/worker.py``'s progress shim. They are optional, and every caller
-#: that does not need them is called with THREE POSITIONAL ARGUMENTS exactly as
-#: before -- a single-generation job never passes them, so its receipts and any
-#: three-argument receiver (``engine25/worker.py:_emit_progress``) are unchanged.
+#: that does not need them is called with THREE POSITIONAL ARGUMENTS -- a
+#: single-generation job never passes them, so its ``progress`` events carry
+#: no ``outer_*`` keys and a three-argument receiver works unmodified.
 #: Without them the app's chain receipt loop cannot tell step 3-of-8 of clip 1
 #: from step 3-of-8 of clip 2, and the job fraction rewinds at every clip.
 ProgressCallback = Callable[..., None]
@@ -254,9 +266,9 @@ def enable_deterministic_convolutions() -> dict[str, bool]:
     warm machine than on a cold one.
 
     Cost: cuDNN loses the freedom to pick the fastest algorithm for the VAE
-    convolutions. At 320x192/25f the whole decode+encode phase is 0.2 s, so the
-    cost is unmeasurable there; it has NOT been measured at production
-    resolution, which is why this is a constructor flag rather than a constant.
+    convolutions. The measured speed cost is recorded in
+    Docs/VERIFICATION_LOG.md §69.18; the pin stays a constructor flag rather
+    than a constant so that it can be switched off.
     """
     previous = {
         "deterministic": bool(torch.backends.cudnn.deterministic),
@@ -352,16 +364,16 @@ class _GpuPlacedBuilder:
     :class:`~engine25.gguf_transformer.Ltx25CpuModelBuilder` deliberately ignores
     the requested device: for the 14.7 GB transformer, placement is a selective
     operation the stage performs. The EmbeddingsProcessor is the opposite case --
-    a ~4.6 GiB model (the raw size of the state dict it loads, measured) that has
-    to sit wholly on the GPU because the hidden states it consumes are already
-    there -- so this puts the move back.
+    a multi-GiB model (the measured size of the state dict it loads is in
+    Docs/VERIFICATION_LOG.md §92) that has to sit wholly on the GPU because the
+    hidden states it consumes are already there -- so this puts the move back.
 
     A wrapper rather than a subclass because the builder is produced by
     :func:`engine25.gguf_gemma4.build_embeddings_processor_builder`, which owns
     the (four-way) configuration of that builder; re-deriving it here to change
     one line would duplicate the part most likely to drift. Only ``build`` is
     intercepted; everything else is delegated, so ``with_*``/``model_config``
-    still work if a later phase needs them -- and so, through ``__getattr__``, do
+    still work if a caller needs them -- and so, through ``__getattr__``, do
     ``registry`` / ``model_path`` / ``model_sd_ops``, which is the whole reason
     keep_resident (embeddings) can key its release off this wrapper instead of
     having to reach past it for the builder inside.
@@ -389,9 +401,9 @@ class _CountingDenoiser:
     step_idx)`` exactly once per step and drive their progress bar off a plain
     ``tqdm``. Wrapping the denoiser is therefore an exact step counter that
     needs no patching of tqdm, no global state, and no assumption about the
-    loop's internals beyond its documented call contract. (This is why §3-98
-    rules out porting the 2.3 ``progress_shim``: there is a legitimate seam here
-    and the 2.3 shim's tqdm swap exists only because the 2.3 wheel has none.)
+    loop's internals beyond its documented call contract. (This is why the 2.3
+    ``progress_shim`` is not ported: there is a legitimate seam here and
+    the 2.3 shim's tqdm swap exists only because the 2.3 wheel has none.)
     """
 
     def __init__(self, inner: Any, total: int, report: Callable[[int, int], None]) -> None:
@@ -411,7 +423,7 @@ class _CountingDenoiser:
 
 
 class Ltx25ProgressStage(Ltx25DiffusionStage):
-    """The GGUF diffusion stage, plus per-step progress and per-stage timing.
+    """engine25's diffusion stage, plus per-step progress and per-stage timing.
 
     Overrides ``__call__`` only to wrap the ``denoiser`` argument and to time the
     call; the whole body is then ``super().__call__``, i.e. the official
@@ -425,10 +437,10 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
     A CHAIN calls this stage many more than twice -- once per stage-1 clip and
     once per stage-2 tile -- so the invocation counter cannot name those calls.
     :meth:`announce` is the seam: the caller says what the next call is, and the
-    counter is used only when it has not. Everything about the single-generation
-    path is therefore unchanged, down to the phase strings: ``begin_job()``
-    clears any announcement, so a job that never announces gets exactly the
-    ``stage1_denoise`` / ``stage2_denoise`` + ``21_`` / ``22_`` naming it had.
+    counter is used only when it has not. ``begin_job()`` clears any
+    announcement, so a job that never announces (the single-generation path)
+    is named by the counter alone: ``stage1_denoise`` / ``stage2_denoise`` +
+    ``21_`` / ``22_``.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -457,7 +469,7 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
         outer_index: int | None = None,
         outer_total: int | None = None,
     ) -> None:
-        """Name the NEXT ``__call__`` explicitly (chain only; consumed once).
+        """Name the NEXT ``__call__`` explicitly (consumed once).
 
         ``stage_name`` is the progress stage the per-step events carry,
         ``vram_phase`` the key the per-phase peak is recorded under, and
@@ -494,8 +506,8 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
             ) -> None:
                 # THREE POSITIONAL ARGUMENTS when there is no chain position:
                 # the single-generation receipt path (and any three-argument
-                # receiver such as engine25/worker.py's ``_emit_progress``) must
-                # keep seeing the call it has always seen.
+                # receiver) gets a plain ``(stage, index, total)`` call, and the
+                # chain position rides as keyword arguments only when there is one.
                 if _outer_index is None and _outer_total is None:
                     progress(_name, done, total)
                 else:
@@ -522,17 +534,17 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
             # reach it; only this call can. MEASURED at 320x192x25: 229.1 MB still
             # allocated at the end of denoise without this line, 21.2 MB with it.
             #
-            # Safe against the disposed model, and silently so since 2026-09-02:
+            # Safe against the disposed model, and silently so:
             # ``PrefetchEngine._release`` re-points module slots at the CPU masters
-            # and now SKIPS the parameter slots ``dispose()`` left on
+            # and SKIPS the parameter slots ``dispose()`` left on
             # ``device="meta"`` instead of raising on the first one, so the loop
             # runs to completion and no "release of block N failed" warning is
             # logged. Completing it matters beyond the log line: the IC-LoRA /
             # Style-LoRA A/B buffers are ``persistent=False``, so ``dispose()``
-            # never metas them and they sit BEHIND those parameter slots -- with
-            # the loop aborting they kept viewing the arena (~208 MB carried into
-            # the upsampler on a LoRA job) until the next build's
-            # ``detach_ic_loras``. They are restored here now, and the arena comes
+            # never metas them and they sit BEHIND those parameter slots -- a
+            # loop that aborted would leave them viewing the arena (~208 MB
+            # carried into the upsampler on a LoRA job) until the next build's
+            # ``detach_ic_loras``. They are restored here, and the arena comes
             # back immediately when ``teardown()`` clears ``_state``. The same
             # holds on the exception path, where ``_state`` can still hold several
             # blocks: every one of them is restored, not just the first.
@@ -542,7 +554,7 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
 
 
 class Ltx25PromptEncoder(PromptEncoder):
-    """The official prompt encoder, fed by engine25's two GGUF builders.
+    """The official prompt encoder, fed by engine25's two ``gguf_gemma4`` builders.
 
     The text encoder goes in through the public ``text_encoder_builder=``
     parameter. The EmbeddingsProcessor has no such parameter, so its builder is
@@ -581,7 +593,7 @@ class Ltx25PromptEncoder(PromptEncoder):
         #: The job's NAG/VSF state, read through a CLOSURE on every call rather
         #: than captured by value -- one long-lived encoder, many jobs, and the
         #: same pattern the sage service uses on this engine. ``None`` is a real
-        #: and supported state (a direct library user, the selftest): it means
+        #: and supported state (a direct library user): it means
         #: "never encode a negative prompt", which is what :meth:`__call__`
         #: falls back to.
         self._neg_state_provider = neg_state_provider
@@ -593,7 +605,7 @@ class Ltx25PromptEncoder(PromptEncoder):
     # -- sub-phase timers ----------------------------------------------------
     #
     # ``10_prompt_encode`` is one number for three very different pieces of
-    # work: building the 9.2 GB Gemma 4 text encoder, running the encode, and
+    # work: building the Gemma 4 text encoder, running the encode, and
     # building the embeddings processor. These two overrides split the two
     # BUILDS out of it so the split is measured instead of assumed -- the
     # encode's own cost is then the parent minus these two.
@@ -641,12 +653,11 @@ class Ltx25PromptEncoder(PromptEncoder):
         """The official encode, plus this job's negative prompt when it has one.
 
         THE BRANCH IS THE POINT. A job that did not ask for a negative prompt
-        takes the ``super().__call__(prompts, **kwargs)`` line below -- the same
-        call, with the same arguments, that stood here before this feature
-        existed -- so its encode is not merely equivalent to what it was, it is
-        the same code path. That is the structural half of "a non-NAG job is
-        unchanged"; routing every job through the negative-prompt helper and
-        having it no-op would not have been.
+        takes the ``super().__call__(prompts, **kwargs)`` line below -- the
+        official call with the caller's own arguments -- so its encode is not
+        merely equivalent to the official one, it is the same code path.
+        Routing every job through the negative-prompt helper and having it
+        no-op would not give a non-NAG job that guarantee.
         """
         if self.progress is not None:
             self.progress(STAGE_ENCODE, 0, 1)
@@ -668,8 +679,8 @@ class Ltx25PromptEncoder(PromptEncoder):
         """Encode the negative prompt in the SAME Gemma pass, then slice it off.
 
         ONE EXTRA LIST ENTRY, AT THE END. The official encoder tokenizes every
-        prompt to the same fixed 1024 length and stacks them into a single ``[N,
-        1024]`` batch, so appending costs one more row through Gemma and one
+        prompt to the same fixed length and stacks them into a single ``[N, L]``
+        batch, so appending costs one more row through Gemma and one
         more row through the connectors -- not a second model load, which is the
         expensive part. Appending at the END rather than the front matters for
         one reason: ``enhance_first_prompt`` rewrites ``prompts[0]``, and the
@@ -801,30 +812,33 @@ def validate_geometry(width: int, height: int, num_frames: int) -> None:
         )
 
 
-#: Request fields v1 accepts but does not act on, and why. Logged (once per
-#: generate, only for the ones actually present) rather than rejected: the app
-#: sends a full GenerateRequest and rejecting on arrival would make every
-#: default-valued field a hard error. The API layer is where non-default values
-#: of the *unsupported* fields become a 422 (Phase 5); this list is the set that
-#: is safe to drop on the floor whatever the value.
+#: Request fields this engine accepts but does not act on, and why. Logged
+#: (once per generate, only for the ones actually present) rather than
+#: rejected, so a default-valued field in the payload is never a hard error.
+#: The app's adapter keeps its own ``IGNORED_FIELDS`` and does not forward
+#: those fields in the generate payload, so this list is what the selftest
+#: CLI and direct callers meet. Non-default values of the fields this engine
+#: refuses become a 422 at the API layer (``REJECT_TABLE`` in
+#: ``services/engines/ltx25/adapter.py``); this list is the set that is safe
+#: to drop on the floor whatever the value.
 IGNORED_FIELDS: dict[str, str] = {
-    # ``negative_prompt`` / ``neg_method`` / ``vsf_scale`` LEFT THIS LIST with
-    # the NAG/VSF commit. They used to sit here as "no negative-prompt
-    # mechanism in v1", which was true until this engine got one: the request's
-    # negative prompt is now encoded alongside the positive one and its
-    # cross-attention contribution is real (see :meth:`Ltx25Pipeline.set_nag_job`
-    # and ``engine25/neg_prompt25.py``). Leaving them here would make the worker
-    # log "ignored" for the three fields the feature is made of.
+    # ``negative_prompt`` / ``neg_method`` / ``vsf_scale`` are not on this list:
+    # the request's negative prompt is encoded alongside the positive one and
+    # its cross-attention contribution is real (see
+    # :meth:`Ltx25Pipeline.set_nag_job` and ``engine25/neg_prompt25.py``).
+    # Listing them would make the worker log "ignored" for the three fields the
+    # feature is made of.
     "guidance_scale": "2.5 distilled runs without classifier-free guidance",
     "num_steps": "the distilled schedule has a fixed step count",
     "num_inference_steps": "the distilled schedule has a fixed step count",
-    # ``attention_backend`` LEFT WITH THE SAGE COMMIT. It used to sit here as
-    # "v1 is SDPA-only", which was true until this engine got a
-    # ``SageAttentionService``; it is now ACTED ON (see
+    # ``attention_backend`` is not on this list: it is ACTED ON (see
     # :meth:`Ltx25Pipeline.set_acceleration_job`) and echoed back on ``done`` as
-    # ``attention_used``, so leaving it on this list would make the worker log
-    # "ignored" for the one field whose whole point is that it is obeyed.
-    "vae_mode": "v1 uses the Conv VAE only",
+    # ``attention_used``, so listing it would make the worker log "ignored" for
+    # the one field whose whole point is that it is obeyed.
+    "vae_mode": (
+        "the LTX 2.5 engine's video VAE is set by the loaded video VAE file, "
+        "not by this field"
+    ),
 }
 
 
@@ -832,29 +846,31 @@ IGNORED_FIELDS: dict[str, str] = {
 # keep_resident: a builder's state dict between jobs
 # ---------------------------------------------------------------------------
 #
-# ``keep_resident`` used to sit in IGNORED_FIELDS above ("2.5 keeps its weights
-# in the registry instead"), which was true of the TRANSFORMER and only of the
-# transformer. The Gemma 4 text encoder's own registry is built with
+# The TRANSFORMER keeps its weights in its registry between jobs (the load's
+# ``cache_weights``). The Gemma 4 text encoder's own registry is built with
 # ``cache_weights=False`` (``gguf_gemma4.build_text_encoder_builder``), so its
-# 7.7 GiB state dict is re-read from the GGUF on every single job. This function
-# is the switch for that, and the reason the field is now acted on.
+# state dict (resident size: VERIFICATION_LOG §76) is re-read from the GGUF on
+# every single job. This function is the switch for that, and the reason the
+# ``keep_resident`` field is acted on.
 #
 # TWO REGISTRIES, ONE FUNCTION. The EmbeddingsProcessor sits behind the very same
 # arrangement -- ``gguf_gemma4.build_embeddings_processor_builder`` also defaults
-# to ``cache_weights=False``, so its ~4.6 GiB state dict is re-read job after job
+# to ``cache_weights=False``, so its state dict (resident size: VERIFICATION_LOG
+# §92) is re-read job after job
 # too -- and gets its own switch (``keep_resident_embeddings``) rather than
 # riding on the first one, because the two cost different amounts of RAM and the
 # machine that can afford one may not be able to afford both. The only thing that
 # differs between them is the KEY: the text encoder's builder has a single path,
-# while the EmbeddingsProcessor's spans TWO files (the transformer GGUF leads;
+# while the EmbeddingsProcessor's spans TWO files (the transformer file leads;
 # the text-encoder GGUF supplies the four projection tensors), so its
 # ``model_path`` is a tuple. ``as_path_list`` -- the same normalisation
 # ``load_state_dict`` runs on the way IN -- is what makes one ``pop`` fit both.
 #
 # NAME SHARED WITH 2.3, IMPLEMENTATION NOT. 2.3's ``keep_resident`` retains the
 # skeletons of every sub-model behind a two-argument call that returns a tuple
-# and carries three internal degradation guards (LoRA in-place mutation, and two
-# more). Each of these is one registry holding one state dict, with no
+# and carries three internal guards (one fails the job when the GGUF fused-LoRA
+# path would mutate the retained weights in place, two degrade the request to
+# off). Each of these is one registry holding one state dict, with no
 # degradation path at all -- neither 2.5 component takes a LoRA and both are
 # loaded with ``assign=True``, so nothing mutates the retained tensors in place.
 # The CONTRACT is 2.3's verbatim (absent key means off, no end-of-job reset, an
@@ -885,9 +901,10 @@ def _swap_keep_resident(registry: Any, builder: Any, enabled: bool, *, label: st
     way in.
 
     ``label`` names the component in the two log lines and carries its RAM
-    estimate with it (``"text encoder (~7.7 GiB)"``), so the OFF line reads as the
+    estimate with it (the ``label=`` arguments in
+    :meth:`Ltx25Pipeline.set_acceleration_job`), so the OFF line reads as the
     estimate next to the bytes actually given back -- a released 0.00 GiB under a
-    label promising 7.7 is a visible symptom rather than a silent one. Keyword-
+    label promising more is a visible symptom rather than a silent one. Keyword-
     only and without a default: two components share this function, and a caller
     that forgot to say which one would write the other one's name into the log.
 
@@ -910,7 +927,8 @@ def _swap_keep_resident(registry: Any, builder: Any, enabled: bool, *, label: st
         # ``del`` is what frees it: this is the last reference to the state dict
         # once the registry has let go, so the tensors are gone at this line.
         # ``gc.collect()`` is insurance for reference CYCLES only (a released
-        # StateDict participates in none today) -- it is not the mechanism.
+        # StateDict is not known to participate in any) -- it is not the
+        # mechanism.
         # Both run BEFORE the log line so that the line is a statement about
         # memory already given back, not about memory that is about to be.
         size = state_dict.size if state_dict is not None else 0
@@ -918,7 +936,7 @@ def _swap_keep_resident(registry: Any, builder: Any, enabled: bool, *, label: st
         gc.collect()
         logger.info(
             "keep-resident OFF: released %.2f GiB of retained %s weights "
-            "(the next job rebuilds them from the GGUF)",
+            "(the next job rebuilds them from the weights)",
             size / 2**30, label,
         )
         return size
@@ -939,11 +957,13 @@ class Ltx25Pipeline:
     """One loaded LTX 2.5 model, ready to generate.
 
     Construction is cheap and does no I/O worth naming: the assets-only
-    text-encoder file is refreshed if stale (~30 MB), the official pipeline
+    text-encoder file (no weights) is refreshed if stale, the official pipeline
     object is built -- every one of its component builders is lazy, so no
     checkpoint is opened -- and the two engine25 components are substituted in.
-    Measured at 3.9 s for the whole of it. Weights arrive on the first
-    :meth:`generate`, and every model except the retained transformer state dict
+    The time for the whole of it is in the measurement records. Weights arrive
+    on the first :meth:`generate`, and every model except the state dicts the
+    registries retain (the transformer's, and the text encoder's /
+    EmbeddingsProcessor's under ``keep_resident`` / ``keep_resident_embeddings``)
     is freed again before that call returns.
     """
 
@@ -982,11 +1002,13 @@ class Ltx25Pipeline:
         # -- per-job acceleration state ---------------------------------------
         # Armed by :meth:`set_acceleration_job` at the worker's entry point and
         # cleared by :meth:`reset_acceleration_job` in its ``finally``; the
-        # ``generate`` / ``run_chain`` signatures carry neither knob, so a caller
-        # that never arms anything (the spike scripts under ``outputs/``, a
-        # direct library user) gets both features OFF, which is the safe default.
+        # ``generate`` / ``run_chain`` signatures carry none of the knobs, so a
+        # caller that never arms anything (the spike scripts under ``outputs/``,
+        # a direct library user) gets every knob un-armed, which is the safe
+        # default.
         #
-        # The two halves live in different places, exactly as they do in 2.3:
+        # The fused and prefetch halves live in different places, exactly as
+        # they do in 2.3:
         #
         # * the fused GGUF dequantization kernels have NO state here at all --
         #   it is MODULE globals in ``engine/gguf/dequant_triton``, because the
@@ -1051,7 +1073,7 @@ class Ltx25Pipeline:
             logger.info("cuDNN pinned to deterministic convolutions (was %s)", previous)
         self.build_report["deterministic"] = self.deterministic
 
-        # -- F2: the assets-only text encoder the official code reads ---------
+        # -- the assets-only text encoder the official code reads -------------
         export = assets_export.ensure_assets_only(files.text_encoder, files.text_encoder_assets)
         self.assets_path = str(export.path)
         self.build_report["assets_export"] = export.as_dict()
@@ -1060,7 +1082,8 @@ class Ltx25Pipeline:
         # duration_head_path stays None: the split 2.5 pack has no DurationHead
         # file, so `DurationPredictor.from_checkpoint(None, ...)` returns None
         # and `require_num_frames_source` insists on an explicit num_frames --
-        # which the v1 contract always supplies. AutoDuration is out of scope.
+        # which ``generate`` always supplies (a required argument). AutoDuration
+        # is out of scope.
         model_paths = ModelPaths.from_split(
             transformer_path=files.transformer,
             text_encoder_path=self.assets_path,
@@ -1069,15 +1092,16 @@ class Ltx25Pipeline:
             duration_head_path=None,
         )
         # `loras=[]` is passed explicitly because it is a REQUIRED positional
-        # parameter with no default -- and because an explicit empty list is the
-        # statement that this engine runs no LoRA, which v1 rejects at the API.
+        # parameter with no default -- and because LoRAs do not go through the
+        # official pipeline here: the diffusion stage attaches them per job
+        # (``Ltx25DiffusionStage.set_loras``).
         # offload_mode=NONE: the official OffloadMode paths are a *different*
         # streaming implementation (StreamingModelBuilder) that would fight
         # engine25's block-swap window for the same GPU budget.
         #
         # ancestral_detection_skipped: the constructor's `model_version` probe
         # would `safe_open` (memory-map) the transformer file; skipped, and the
-        # sampler is set explicitly just below (fact B, §3-167 B-2).
+        # sampler is set explicitly just below.
         with ancestral_detection_skipped():
             pipeline = DistilledPipeline(
                 model_paths=model_paths,
@@ -1088,7 +1112,7 @@ class Ltx25Pipeline:
                 offload_mode=OffloadMode.NONE,
             )
 
-        # -- fact B: the ancestral sampler ------------------------------------
+        # -- the ancestral sampler --------------------------------------------
         # Not detected (the probe was skipped above); set here, then asserted,
         # because a silent downgrade to deterministic Euler is a different
         # generation and would be invisible in the output.
@@ -1109,7 +1133,7 @@ class Ltx25Pipeline:
 
         # -- substitution 1: the diffusion stage -------------------------------
         # The transformer file's extension picks the loader: a quantized (fp8 /
-        # int8) safetensors (§3-167 B-2, §3-168) or the GGUF. Same arguments
+        # int8) safetensors or the GGUF. Same arguments
         # either way.
         from_file = (
             Ltx25ProgressStage.from_safetensors
@@ -1126,7 +1150,8 @@ class Ltx25Pipeline:
         stage.vram = self.vram
         pipeline.stage = stage
         self.stage = stage
-        # Attached AFTER construction rather than passed to ``from_gguf``: the
+        # Attached AFTER construction rather than passed to the factory
+        # (``from_gguf`` / ``from_safetensors``): the
         # service needs a handle on the per-job ``SageState`` this class owns,
         # and the state has to be reachable through a CLOSURE (not captured by
         # value) so one long-lived service always sees the CURRENT job -- the
@@ -1192,7 +1217,7 @@ class Ltx25Pipeline:
         pipeline.prompt_encoder = prompt_encoder
         self.prompt_encoder = prompt_encoder
 
-        # -- addition: the audio ENCODER's lifecycle block (§3-102 C1) ---------
+        # -- addition: the audio ENCODER's lifecycle block ---------------------
         # ``DistilledPipeline`` has an image conditioner (video encoder) and an
         # audio DECODER, but no audio encoder: nothing in a plain generation ever
         # turns a waveform into a latent. V2V and A2V both do, so the chain needs
@@ -1203,7 +1228,7 @@ class Ltx25Pipeline:
         #
         # Constructed unconditionally and eagerly, with no lazy wrapper: the
         # constructor only builds a ``Builder``, opens no file and touches no
-        # GPU (``ltxcore_compat.verify`` pins that signature). The ~46MB encoder
+        # GPU (``ltxcore_compat.verify`` pins that signature). The encoder
         # itself is built and freed inside ``audio_conditioner(fn)``, so a chain
         # with neither a source video nor a source audio never loads it -- which
         # is what a lazy mechanism would have bought, for the price of a
@@ -1219,7 +1244,7 @@ class Ltx25Pipeline:
         self.build_report["te_layers_on_gpu"] = self.te_layers_on_gpu
         self.build_report["cache_weights"] = self.cache_weights
         self.build_report["sampler"] = SAMPLER_NAME
-        # 台帳 §3-131: which VAE decoder this checkpoint builds -- "diff" (the
+        # Which VAE decoder this checkpoint builds -- "diff" (the
         # DiT-based diffusion decoder) or "conv" (the plain convolutional one).
         # ``VideoDecoder.__init__`` calls the same function on the same path to
         # pick its own internals, but does not keep the answer anywhere reachable
@@ -1264,7 +1289,8 @@ class Ltx25Pipeline:
         without a matching reset would leak one job's request into the next one.
 
         ``keep_resident`` is an ASYMMETRIC one and deliberately so: the reset
-        does not turn it off, because the retained 7.7 GiB of text-encoder weights
+        does not turn it off, because the retained text-encoder weights (their
+        measured size is in VERIFICATION_LOG §76)
         ARE the feature -- they have to outlive the job that asked for them or
         there is nothing for the next job to hit. What the reset does is freeze
         the echo. The setting therefore changes only here, and only when the new
@@ -1274,7 +1300,8 @@ class Ltx25Pipeline:
 
         ``keep_resident_embeddings`` IS THE SECOND ASYMMETRIC KNOB, and the same
         one: same never-raise swap, same no-op guard, same "a missing key means
-        release", pointed at the EmbeddingsProcessor's registry (~4.6 GiB) rather
+        release", pointed at the EmbeddingsProcessor's registry (measured in
+        VERIFICATION_LOG §92) rather
         than the text encoder's. Two switches rather than one because the two
         retentions cost different amounts of RAM and are worth buying separately
         -- a machine that can hold one may not be able to hold both. They are
@@ -1362,11 +1389,11 @@ class Ltx25Pipeline:
         """Arm (or clear, with ``None``) this job's non-CFG negative prompt.
 
         ONE ASSIGNMENT, and deliberately a SEPARATE method from
-        :meth:`set_acceleration_job` rather than one more argument to it. That
-        method's whole contract is "these knobs do not change the output"
-        (``attention_backend`` is the acknowledged exception and says so); a
-        negative prompt changes it on purpose, and folding the two together
-        would make one docstring have to say both things.
+        :meth:`set_acceleration_job` rather than one more argument to it. The
+        acceleration knobs' contract is "these knobs do not change the output"
+        (``attention_backend`` is the acknowledged exception, as the module
+        docstring says); a negative prompt changes it on purpose, and folding
+        the two together would make one docstring have to say both things.
 
         CALLED ON EVERY JOB, ``None`` INCLUDED. That is what gives stale-clear
         semantics on a resident worker: ``NagState.set_params`` drops any
@@ -1417,9 +1444,10 @@ class Ltx25Pipeline:
         failure to tear down prefetch must not leave the fused kernels armed for
         the next job, and vice versa.
 
-        ``self.stage is None`` (i.e. after :meth:`close`) is absorbed by the same
-        handlers rather than by a guard of its own: a reset arriving after the
-        pipeline was closed is a shutdown race, not a bug worth failing on.
+        ``self.stage is None`` (after :meth:`close`, or before the pipeline
+        finished building) takes its own branch inside the prefetch handler
+        rather than raising: a reset arriving after the pipeline was closed is
+        a shutdown race, not a bug worth failing on.
 
         The keep-resident third is DELIBERATELY ASYMMETRIC and needs no handler
         of its own, because it undoes nothing: the four plain lines below freeze
@@ -1510,9 +1538,9 @@ class Ltx25Pipeline:
 
         The echo CONTRACT is 2.3's three-valued one ("off" / "on" / "on->off"),
         and the app relays whatever arrives; this engine simply has no third
-        value to emit. 2.3's "on->off" is its automatic degradation -- a LoRA
-        that would mutate retained weights in place, and two more guards -- and
-        none of those mechanisms exist here: 2.5's text encoder takes no LoRA
+        value to emit. 2.3's "on->off" is its automatic degradation (the
+        auto-off guards in ``engine.worker._resolve_keep_resident``), and none
+        of those mechanisms exist here: 2.5's text encoder takes no LoRA
         and is loaded with ``assign=True``, so there is nothing that could force
         a retained state dict to be dropped mid-job. The value is the REQUEST,
         frozen at :meth:`reset_acceleration_job`, because with no degradation
@@ -1662,8 +1690,9 @@ class Ltx25Pipeline:
                 seed=seed,
                 height=height,
                 width=width,
-                # float on purpose (fact M): every latent grid and RoPE position
-                # downstream is built from this value.
+                # float on purpose (see "fps rounding" in the module docstring):
+                # every latent grid and RoPE position downstream is built from
+                # this value.
                 frame_rate=frame_rate,
                 images=images,
                 num_frames=num_frames,
@@ -1758,12 +1787,13 @@ class Ltx25Pipeline:
         self.stage = None  # type: ignore[assignment]
         self.prompt_encoder = None  # type: ignore[assignment]
         # The keep-resident handles have to go too, or a close() taken while the
-        # feature was ON would leave 7.7 GiB of text-encoder weights alive for as
-        # long as this object is: the three lines above drop every path to the
-        # builder EXCEPT these, and the registry holds the state dict directly.
-        # Dropping the handles is enough -- no pop is needed and none is wanted,
-        # because the collector below frees the registry itself. Setting the flag
-        # back to False keeps the state honest if the object is somehow reused.
+        # feature was ON would leave the retained text-encoder weights (measured
+        # size: Docs/VERIFICATION_LOG.md §76) alive for as long as this object
+        # is: the three lines above drop every path to the builder EXCEPT these,
+        # and the registry holds the state dict directly. Dropping the handles
+        # is enough -- no pop is needed and none is wanted, because the
+        # collector below frees the registry itself. Setting the flag back to
+        # False keeps the state honest if the object is somehow reused.
         self._te_builder = None
         self._te_registry = None
         self._keep_resident_enabled = False
@@ -1796,8 +1826,8 @@ class Ltx25Pipeline:
 def _default_device() -> torch.device:
     if not torch.cuda.is_available():
         raise Ltx25PipelineError(
-            "no CUDA device is available. The LTX 2.5 engine has no CPU path: a 22B "
-            "transformer at 8 sigma steps would not finish."
+            "no CUDA device is available. The LTX 2.5 engine has no CPU path: "
+            "a 22B transformer would not finish on the CPU."
         )
     return torch.device("cuda", torch.cuda.current_device())
 
@@ -1807,7 +1837,7 @@ def _log_ignored(ignored: dict[str, Any] | None) -> None:
     if not ignored:
         return
     for name, value in sorted(ignored.items()):
-        reason = IGNORED_FIELDS.get(name, "not supported by the LTX 2.5 v1 contract")
+        reason = IGNORED_FIELDS.get(name, "not read by the LTX 2.5 engine")
         logger.info("ignoring %s=%r -- %s", name, value, reason)
 
 
@@ -1815,9 +1845,9 @@ def _peaks(vram: _Vram, device: torch.device) -> dict[str, float | None]:
     """Highest per-phase peaks of a finished job.
 
     Per-phase maxima rather than a single global reading: the phases are reset
-    around each other precisely so a 14.7 GB transformer build and a 1.5 GB
-    aggregate projection can be told apart, and a global peak would report only
-    the larger and hide which phase owns it.
+    around each other precisely so a transformer build and an aggregate
+    projection of very different sizes can be told apart, and a global peak
+    would report only the larger and hide which phase owns it.
     """
     rss_values = [entry.get("rss_gib") or 0.0 for entry in vram.phases.values()]
     rss_now = _rss_bytes()

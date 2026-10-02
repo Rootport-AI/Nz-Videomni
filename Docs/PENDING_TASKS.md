@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-02（第2弾: CLOSED 3-185〜3-192・§1-60の更新）。前回 2026-10-02: 第1弾: CLOSED 3-170〜3-184・§2へ2件・§1-76起票・残る項目の訂正。
+- 作成: 2026-07-15／最終更新: 2026-10-03（第3弾: CLOSED 3-193〜3-196）。前回 2026-10-02: 第2弾: CLOSED 3-185〜3-192・§1-60の更新。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-36・§1-37・§1-40・§1-41・§1-42・§1-46・§1-47・§1-51・§1-52・§1-53・§1-54・§1-60・§1-61・§1-70・§1-71・§1-73・§1-74・§1-76 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-36・§1-37・§1-40・§1-41・§1-42・§1-46・§1-47・§1-51・§1-52・§1-53・§1-54・§1-60・§1-61・§1-76 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**2026-10-02に §2-1・§2-2 として立て直した（元は §1-43・§1-56）。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -178,53 +178,6 @@
 - **着手**: 着手時は go／no-go の検討から始める。コード側を直すときは、同ファイルの Q3_K の関数（`_dequant_q3_k`）の中の3つのコメント（今の意図を述べている）と、他の型の「今のコードが返す形」の注記も合わせて見直す。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §137（コメント現行化 engine/ 第3回の検算の申し送り）。
 - **関連ファイル**: `engine/gguf/quant_service.py`（`_dequant_q4_0`・`_dequant_q4_1`・`_dequant_q5`・`_dequant_q2_k`・`_dequant_q3_k`・`_dequant_iq4`）、`engine/gguf/loader_service.py`（`GGUFStateDictLoader.load`）。
-
-### 1-70. `install_ltx.ps1` Step 7 の検証表に `.venv-engine-ltx25` の python が無い（起票：2026-10-02）
-
-- **現象**: `scripts/install_ltx.ps1` の検証表（Step 7）を作る `$required` 配列は、固定の3行（`engine_python`＝`.venv-engine/Scripts/python.exe`、`app_python`＝`.venv/Scripts/python.exe`、`engine worker.py`）とUETrack選択時の2行、マニフェスト由来のモデルファイルの行だけを持ち、`.venv-engine-ltx25/Scripts/python.exe`（変数 `$ltx25Py`）を検証表の行に加えない。ただし `setup.bat` の通常の実行では、Step 5 で `.venv-engine-ltx25` の作成やインストールに失敗するとその場で throw して止まる（`$ErrorActionPreference = "Stop"`）ので、検証表までは進まない。表がこの venv の欠けを MISSING にできないことが実際に効くのは、`-SkipVenv` 付きで呼ばれて Step 5 を飛ばし、しかも `.venv-engine-ltx25` がもともと無い場合で、具体的には `install-LTX25.bat`（`scripts/install_model.ps1` が `install_ltx.ps1` を `-BaseModel LTX25 -SkipVenv -SkipMigrate` で呼ぶ）である。たとえば `setup.bat` が `.venv-engine`（先に作る）を作った後、`.venv-engine-ltx25` の段で止まった環境で `install-LTX25.bat` を実行すると、この状態になる。その手前で `install_model.ps1` の `Test-SetupDone` が確かめるのも `tools\uv\uv.exe`・`.venv`・`.venv-engine` の3つだけで、`.venv-engine-ltx25` は見ない。あわせて、`-SkipVenv` のときの案内（`if ($SkipVenv -and -not (Test-Path $enginePy)) { Write-Warning … }`）も `$enginePy`（`.venv-engine` 側）だけを見ており、しかも検証表に MISSING があるときの分岐の中にしか無いので、このケースでは出ない。
-- **影響**: LTX 2.5 のモデルファイルがそろっていれば、検証表は全行 PASS で終わる。ところがサーバーは既定の `backend: auto` のとき、実行可否の判定（`services/engines/ltx/adapter.py` の `_real_available`。LTX 2.5 では `model.engine_python_ltx25` を見る）で engine の python が無いので、LTX 2.5 を黙ってお試し表示（mock）に落とす。理由はサーバーログの警告（`real backend unavailable — … missing: …`）に出るだけで、画面の上では生成が動いているように見える（同じ docstring が「silent-mock-demotion trap」と呼ぶ挙動）。`backend: real` のときは LTX 2.5 の読み込みが RuntimeError で失敗する。クラッシュ・データ破損は無い。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 検証表に `.venv-engine-ltx25` のpython行を足す。
-  - B: `-SkipVenv` 時の案内の判定を `$enginePy`・`$ltx25Py` の両方に広げる（案内は検証表に MISSING があるときの分岐の中にあるので、A と組み合わせないと表示されない）。
-  - C: `install_model.ps1` の `Test-SetupDone` で、LTX 2.5 を入れるときは `.venv-engine-ltx25` も確かめる。
-  - D: 現状維持。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
-- **関連ファイル**: `scripts/install_ltx.ps1`（`$required`・`$enginePy`・`$ltx25Py`・`-SkipVenv` 時の案内・`Ensure-EngineVenv` の `-SkipVenv` の分岐）、`scripts/install_model.ps1`（`Test-SetupDone`・`install_ltx.ps1` の呼び出し）、`services/engines/ltx/adapter.py`（`_select_backend`・`_real_available`）。
-
-### 1-71. `build_xformers.ps1` のCUDA探索が `-CudaVersion` と食い違う（起票：2026-10-02）
-
-- **現象**: `scripts/build_xformers.ps1` のCUDAツールキット探索は、最優先で固定の環境変数名 `$env:CUDA_PATH_V12_8` を見るため、`-CudaVersion` に12.8以外を渡しても `$env:CUDA_PATH_V12_8` が存在すればそちらが優先され、指定した版は使われない。次点の `$env:CUDA_PATH` も版を確かめずにそのまま採用する。`-CudaVersion` が実際に効くのは、どちらの環境変数も無いときのフォールバック（`C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v$CudaVersion`）だけである。CUDAを選ぶ段（画面の見出し「Selecting CUDA Toolkit」、コード上のコメントは 2a）は、選んだnvccの `nvcc --version` の release 行を表示するだけで、その版が `-CudaVersion` や torchのcu128（その前の段「Checking engine venv」〔コメント上の 1〕が表示する）と一致するかは照合しない。
-- **影響**: 複数のCUDA版をインストールした環境で `-CudaVersion` を明示的に変えたときだけ発生する。意図と違う版のnvccでビルドされても気づきにくい。クラッシュ・データ破損は無い（このスクリプトは手動実行のxformersビルド補助）。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: `$env:CUDA_PATH_V12_8` の優先を `-CudaVersion` の値に応じた環境変数名に一般化する、または採用前に版を確かめる。
-  - B: CUDAを選ぶ段（2a）の後に、選んだnvccの版が `-CudaVersion`・torchのcu128と一致するかの照合を足す。
-  - C: 現状維持。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
-- **関連ファイル**: `scripts/build_xformers.ps1`（CUDA探索ブロック〔2a〕・`-CudaVersion`・2a の `nvcc --version` の表示・1 の torch の表示）。
-
-### 1-73. `run.ps1` の二重起動判定が `config.yaml` の `server.port` を読まない（起票：2026-10-02）
-
-- **現象**: `run.ps1` の二重起動判定は `--port` 引数（または `--port=N` 形式）だけを読み、無指定なら固定で18620を使う（`if ($port -le 0) { $port = 18620 }`）。`config.yaml` の `server.port`（`ServerConfig.port`）でポートを変えている利用者が `--port` を付けずに `run.bat` を2回起動した場合、判定は実際の待受ポートではなく18620を見るため、2枚目の起動を検出できない。
-- **影響**: `config.yaml` でポートを変えた利用者だけに発生する。2枚目は判定をすり抜けて `main.py` に進み、アプリの組み立て（`build_app`）と startup を一度走らせた後、uvicorn がポートの bind に失敗してエラーをログに出し、`exit 1` で終わる。すると `run.ps1` が異常終了の案内（「サーバーが異常終了しました。…git pull の直後なら setup.bat を再実行してください。」）を出すので、この判定が防ぐはずの誤誘導がそのまま起きる。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: `run.ps1` が `config.yaml` の `server.port` も読んで判定に使う。
-  - B: 現状維持し、「`--port` を省略する利用者は `config.yaml` でポートを変えない」ことを前提とする。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
-- **関連ファイル**: `run.ps1`（二重起動の判定・異常終了の案内）、`main.py`（`uvicorn.run` の `port=runtime.port`）、`config.py`（`ServerConfig.port`）。
-
-### 1-74. `Get-EngineStateHash` がコメント行を含む freeze の全文をハッシュする（起票：2026-10-02）
-
-- **現象**: `scripts/install_ltx.ps1` の `Get-EngineStateHash` は、freezeファイルの全文（改行コードだけCRLFをLFに揃える）を読んでSHA256を取る。コメント行も本文に含まれるため、freezeファイルの説明コメントだけを書き直しても、本体の依存関係（パッケージ名・版）が変わっていなくてもハッシュが変わり、次に `setup.bat`（`.venv-utils` が対象のときは次の `install-UETrack.bat`）を実行したときに該当する仮想環境の貼り直し（re-sync）が1回起きる。
-- **影響**: この回（コメント現行化 第8区域）でfreeze 3本（`engine/venv-engine.freeze.txt`・`engine25/venv-engine-ltx25.freeze.txt`・`tracking/venv-utils.freeze.txt`）のコメントを直したため、次回1回この貼り直しが起きる（環境は同じになる・時間がかかるだけ）。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: コメント行（`#` 始まりの行・行末コメント）を除いてからハッシュする。
-  - B: 現状維持（コメントの変更頻度は低いため許容する）。
-- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
-- **関連ファイル**: `scripts/install_ltx.ps1`（`Get-EngineStateHash`）、`engine/venv-engine.freeze.txt`、`engine25/venv-engine-ltx25.freeze.txt`、`tracking/venv-utils.freeze.txt`。
 
 ### 1-76. 使われていないコード（第2次）（起票：2026-10-02）
 

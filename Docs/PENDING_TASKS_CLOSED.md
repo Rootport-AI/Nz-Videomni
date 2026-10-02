@@ -2467,7 +2467,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: `git check-ignore` で3パターンがいずれも実在しない対象であることを確認し、追跡中の `*.whl` が0件であることを確認した（敵対的レビュー項目9）。
 - **クローズ理由**: 処理が完了した。
 - **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
-- **残課題**: `scripts/build_xformers.ps1` 自体を消すかどうかは別途判断（台帳の提案。第3弾）。
+- **残課題**: `scripts/build_xformers.ps1` 自体を消すかどうかは別途判断（台帳の提案。第3弾）。→ 削除した（§3-194）。`*.whl` の無視も外した。
 - **正本・出典**: `.gitignore`。
 
 ### 3-185. V2V／End source／幅・高さ・フレーム数・撮り直し窓の `limits` は配信専用で、サーバーの検査には効かないと文書で定義（起票：2026-10-01、文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-34 からクローズ）
@@ -2557,3 +2557,47 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
 - **残課題**: 既に`config.yaml.example`を複製した利用者の`config.yaml`には、この2行が実値のまま残っている（今回の変更は及ばない）。`scripts/install_ltx.ps1`の削除リストに足すかどうかは別途判断。
 - **正本・出典**: `config.yaml.example`（`limits`節）、`config.py`（`LimitsConfig.chain_comfort_token_budget`・`single_comfort_token_budget`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-193. `install_model.ps1` の `Test-SetupDone` に `.venv-engine-ltx25` の python を追加（検証表の見落としを解消）（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-70 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-70（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `install_ltx.ps1` Step 7 の検証表（`$required` 配列）が `.venv-engine-ltx25` の欠落を検出できず、`-SkipVenv` 経由（`install-LTX25.bat`）でこの venv が無くても全行 PASS になってしまう件を、選択肢C（`install_model.ps1` の `Test-SetupDone` に確認を足す）で解消すること。**達成した。**
+- **何が完了したか**: `scripts/install_ltx.ps1` の Step 7 の `$required` 配列そのものは変更していない。代わりに、`install-LTX25.bat`・`install-UETrack.bat` の入口で先に呼ばれる `scripts/install_model.ps1` の `Test-SetupDone` の `$needed`（順序付きハッシュ）に `'LTX 2.5 エンジン用 Python 環境' = Join-Path $ProjectRoot '.venv-engine-ltx25\Scripts\python.exe'` を1行足し、この venv が無い状態でこれらのバッチが `install_ltx.ps1` の `-SkipVenv` 経路まで進むこと自体を防いだ（既存の4つの鍵名とは別名で、名前で引く箇所〔`$needed['エンジン用 Python 環境']`〕と衝突しない）。MISSING 時の案内文言（205行）も「.venv と .venv-engine」から「.venv・.venv-engine・.venv-engine-ltx25」に直した。**選択**: `setup.bat` は3つの venv を無条件に作るので「`setup.bat` が済んだ」の定義に3つとも含めるのが素直で条件分岐が要らない、という判断（選択肢C単独。台帳の選択肢A〔Step 7にMISSING行を足す〕・B〔`-SkipVenv` 時の案内を `$ltx25Py` にも広げる〕は採らなかった——Cだけで、この venv が無いまま40GB級のダウンロードへ進む経路自体を断てるため）。`install-UETrack.bat` の経路でもこの確認が掛かるが、`setup.bat` 後なら常にこの venv があるため実害はない。
+- **どの物差しで通ったか**: `install_model.ps1` の構文解析（エラー0）。敵対的レビューで、`$needed` の4つの鍵名がすべて別名で衝突しないこと、`install_ltx.ps1` の1455〜1463行で `.venv-engine` と `.venv-engine-ltx25` の `Ensure-EngineVenv` が `-SkipVenv` 以外では条件なく呼ばれる（`setup.bat` 後なら `install-UETrack.bat` の経路でこの行が誤って引っかかることは無い）ことを確認済み。実機（venvを1つ消した状態での `install-LTX25.bat` 実行）は指示により実行していない。アプリ `.venv` 全件2,885 passed・54 skipped（新規2本を含む）。
+- **クローズ理由**: 選択肢Cの実装が完了した。
+- **状態**: dev（第3弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143）。
+- **残課題**: 実機確認（venvを1つ消した状態での `install-LTX25.bat`）は merge 後にオーナーが手で行う。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143、`scripts/install_model.ps1`（`Test-SetupDone`）。
+
+### 3-194. `scripts/build_xformers.ps1` を削除（xformers は同梱せず、ビルドの道具も置かない）（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-71 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-71（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `build_xformers.ps1` のCUDA探索が `-CudaVersion` と食い違う件を解消すること。台帳の選択肢（A: 環境変数名を版から作る／B: 照合を足す／C: 現状維持）のいずれでもなく、オーナーと合意してスクリプトそのものを削除する方針を採った。**達成した。**
+- **何が完了したか**: `scripts/build_xformers.ps1` を削除した（製品は全アーキで PyTorch SDPA が既定であり、xformers は入れずコードからも呼ばない。このスクリプトは手動実験用で、CUDA探索の不具合〔`-CudaVersion` を無視して `CUDA_PATH_V12_8`・`CUDA_PATH` を優先する〕を抱えテストも無かった。xformers を手で入れると LTX 2.3 の上流 `ltx-core` が既定の attention でそれを使ってしまうため同梱しない、という判断）。`install_ltx.ps1` の1506〜1513行付近のコメント（スクリプトへの参照とインストール手順の案内）を、スクリプトへの言及を落として事実だけ残す形（prebuilt な xformers wheel は拾わない・xformers を手で入れると2.3の `ltx-core` が既定の attention でそれを使う、という趣旨）に縮めた。`.gitignore` の58〜59行（「Wheels built by scripts/build_xformers.ps1」のコメントと `*.whl`。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-184でこの回に追加した1行）を削除した。仕様書のツリー図（§4.4）から `build_xformers.ps1` の行を削除し、§5.4（603行・613行）の「必要ならソースビルドする（`scripts/build_xformers.ps1`）」「手動ツールとして残す」の記述を「xformers は同梱せず、ビルドの道具も置かない」という事実に改めた（v0.5.79）。`Docs/note.md`（2026-06の歴史ノート）は据え置いた。
+- **どの物差しで通ったか**: `git grep build_xformers` の残りが記録文書（`HANDOFF_ARCHIVE.md`・`PENDING_TASKS.md` §1-71・`PENDING_TASKS_CLOSED.md`・`VERIFICATION_LOG.md`・`Docs/note.md`）と仕様書の改訂履歴・本文（削除したと書く文）だけで、コード・スクリプト・設定への参照が0件であることを敵対的レビューで確認済み。`git ls-files -o --exclude-standard` の未追跡ファイルに `.whl` は無い（作業ツリーにある `.whl` は `.python/`・`.uv_cache/` の中だけで、別の規則で無視済み）。アプリ `.venv` 全件2,885 passed・54 skipped。
+- **クローズ理由**: スクリプトの削除により§1-71の論点（CUDA探索の不具合）そのものが消滅した。
+- **状態**: dev（第3弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143、`Videomni_Backend_Specification.md` §4.4・§5.4（v0.5.79）、`.gitignore`。
+
+### 3-195. 二重起動の判定を `run.ps1` から `main.py` に移し、終了コード3（`EXIT_PORT_IN_USE`）で `run.ps1` が案内する形に変更（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-73 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-73（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `run.ps1` の二重起動判定が `config.yaml` の `server.port` を読まない件を解消すること。台帳の選択肢A（`run.ps1` がYAMLを正規表現で読む）は、PowerShell に2つ目の設定パーサーを持ち込み、フロー形式や `--config` で例外が増えるため採らず、オーナーと合意した別案（実効ポートを知る `main.py` が起動直前にbindを試し、使用中なら終了コード3で終わる）を実装した。**達成した。**
+- **何が完了したか**: `main.py` に `EXIT_PORT_IN_USE = 3` の定数と関数 `_require_port_free(port: int) -> None` を足した。この関数は `socket.socket(AF_INET, SOCK_STREAM)` に `SO_EXCLUSIVEADDRUSE`（`getattr` で存在確認したときだけ。`SO_REUSEADDR` は付けない——Windowsでは付けると使用中でもbindが通ってしまうため）を付けて `("0.0.0.0", port)` へbindを試し、`OSError` なら英語＋日本語で「ポートNは既に使われている」と `logger.error` して `raise SystemExit(EXIT_PORT_IN_USE)`、`finally` でソケットを閉じる。`main()` は `build_app(args)` の後・`runtime` が決まった直後（`--listen` の警告と起動バナーより前）に `_require_port_free(runtime.port)` を呼ぶ。docstringは「`0.0.0.0` へ排他bindを試す（`SO_EXCLUSIVEADDRUSE`。`SO_REUSEADDR` は使わない）ため、uvicorn自身のbindより厳しい」という実態に合わせて書いた。`run.ps1` は70〜102行（ポートの割り出し・`GetActiveTcpListeners` による探索・「すでに起動しています」の案内と `exit 0`）を削除した。`$code = $LASTEXITCODE` の後、`$code -eq 3` のときは同じ文言（「すでに起動しています。先に開いた画面をそのまま使ってください。」「見当たらないときは、黒い画面をすべて閉じてから run.bat を実行し直してください。」）を出して `$code = 0` にし、それ以外の非0は従来どおり「サーバーが異常終了しました」の案内を出す。ヘッダーの使い方の例・`run.bat`（`pause` の前に `exit /b` する部分）は変更していない。仕様書§2.5・§3.3を、二重起動ガードの主体が `main.py` であること・終了コード3の意味・`run.ps1` が `server.port` を読まないことに合わせて訂正した（v0.5.79）。新規テスト2本（`tests/test_main_startup.py`）——listen中のポートに対して `_require_port_free` が `SystemExit(3)` を投げること、ソケットを閉じた後は例外にならないこと。
+- **どの物差しで通ったか**: 敵対的レビューで直すべき2件を指摘され反映した——(1) 当初の実装はbind先を `runtime.host` にしていたため、先に `--listen`（`0.0.0.0`）で待ち受けるサーバーがあると `127.0.0.1` へのbindは通ってしまい2枚目を検出できない不備が見つかり（消した旧 `run.ps1` の判定はポート番号だけを見ていたのでこの組み合わせも検出していた）、bind先を `0.0.0.0` に固定し関数の引数を `host` 無しの `port` のみに変えた（起動順とアドレスの4通りの組み合わせすべてでerrno 10048になることをレビューがscratchpadの実験で確認）。(2) docstringの「uvicornと同じ条件でbindを試す」という記述も事実と違う（`SO_EXCLUSIVEADDRUSE` を付ける分uvicornより厳しい）との指摘を受け、記述を直した。あわせて、uvicorn 0.49.0の `server.py` の `startup` とCPython 3.12.9の `asyncio/base_events.py`（Windowsでは `reuse_address=False`）をレビューが読み、Windowsの条件と一致することを確認した。`run.ps1` の残り1〜97行に削除した変数（`$port`・`$argList`・`$listeners`・`$portInUse`・`$parsed`）への参照が無いこと（grep 0件）、`run.ps1`・`main.py`・`install_model.ps1`・`install_ltx.ps1` の構文解析エラー0、改行とBOM（`run.ps1` はBOM付きCRLF、`main.py` はCRLFのみでBOM無し）をPythonで確認。アプリ `.venv` 全件2,885 passed・54 skipped（新規2本を含む）。
+- **クローズ理由**: 別案の実装が完了し、敵対的レビューで見つかった不備（bind先のアドレス・docstringの不正確な記述）も反映した。
+- **状態**: dev（第3弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143）。
+- **残課題**: 2枚目の起動でも `build_app`（Gradioの組み立てを含む）が走ってから止まるため、案内が数秒遅れて `logs/server.log` に記録される（1枚目を壊す処理は無いことをレビューで確認済み。merge後のオーナー確認〔`run.bat` 2枚〕のときの参考）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143、`main.py`（`_require_port_free`・`EXIT_PORT_IN_USE`）、`run.ps1`、`Videomni_Backend_Specification.md` §2.5・§3.3（v0.5.79）、`tests/test_main_startup.py`。
+
+### 3-196. `Get-EngineStateHash` がコメント行と空行を除いてからハッシュするよう修正（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-74 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-74（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `Get-EngineStateHash` がfreezeファイルのコメント行を含めた全文をハッシュする件を、選択肢A（コメント行と空行を除いてからハッシュする）で解消すること。**達成した。**
+- **何が完了したか**: `scripts/install_ltx.ps1` の `Get-EngineStateHash` の `$body` の作り方を、「`ReadAllText` して CRLF を LF に揃えた後、行に分け、`Trim()` が空の行と `TrimStart()` が `#` で始まる行を落として `"`n"` で結ぶ」に変えた（行末コメントの除去は入れない——実例が無く、URLに含まれる `#` を誤って切る危険だけが増えるため）。関数の上のコメントも「コメント行・空行は先に落とすので、freezeファイルのコメントだけの変更では貼り直しが起きない」という趣旨に直した。計算方法が変わるため、各環境で**次回のsetup.batでエンジンvenv2本（`.venv-engine`・`.venv-engine-ltx25`）の貼り直しが1回起きる**。`.venv-utils` は `setup.bat` では貼り直されず（`Ensure-EngineVenv` はUETrackが選ばれたときだけ呼ばれる）、次回の `install-UETrack.bat` で1回起きる。以後はコメントの変更で貼り直しは起きない。`README.md` 315行（「freezeファイルの中身と…をまとめてハッシュ」→「freezeファイルの依存の行（コメント行は除く）と…」）と仕様書§2.5の280行付近（ハッシュの説明を実装に合わせ、「3つのgitリビジョン」という古い記述も `$engineDirectPins`〔git3件・wheel1件〕／`$ltx25DirectPins`〔5件〕という実数に直した）を訂正した（v0.5.79）。
+- **どの物差しで通ったか**: `Get-EngineStateHash` 関数をscratchpadに抜き出し Windows PowerShell 5.1.26100 で実行し、コメント行・字下げコメント・空行・空白だけの行・CRLFの違いを変えた2つのファイルで同じハッシュになること、本体が空（コメントだけ）のとき `"`n`n"`・1行のとき `"a==1`n`n"` のSHA-256と一致すること（Pythonで同じ値を計算して照合）を敵対的レビューで確認済み。新しいコメントはASCIIのみ（`install_ltx.ps1` の非ASCIIバイト0）。freeze3本（`engine/venv-engine.freeze.txt`・`engine25/venv-engine-ltx25.freeze.txt`・`tracking/venv-utils.freeze.txt`）は空行0・字下げ0・行末コメント0・`==` を含まない非コメント行0であることをPythonで数えて確認済み。`tests/test_base_model_contract.py` の `$DeprecatedModelKeys = @(` の正規表現には影響しない。`install_ltx.ps1` の構文解析エラー0。アプリ `.venv` 全件2,885 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第3弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143）。
+- **残課題**: 全環境で次回1回の貼り直しが起きる（merge後にオーナーが手で `setup.bat` を1回実行して確認）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143、`scripts/install_ltx.ps1`（`Get-EngineStateHash`）、`README.md` 315行、`Videomni_Backend_Specification.md` §2.5（v0.5.79）。

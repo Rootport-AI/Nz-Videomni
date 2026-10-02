@@ -15450,3 +15450,51 @@ CLOSED は `Docs/PENDING_TASKS_CLOSED.md` §3-185〜§3-192（§1-34・64・65�
 **申し送り**（次へ）: 第 3 弾は E（§1-70・71・73・74）。`build_xformers.ps1` をまるごと消す案と §1-73 の別案（`main.py` 側で bind 失敗を終了コードで返す）はここで判断する。§1-74 を直すなら直後の `setup.bat` の 1 回分の貼り直しが要る。第 4 弾は F1（§1-36・37・42・46・47・51・52・53・54・61・63 のうち未処理のもの）で、§1-36 は凍結 API 契約の変更を伴うため単独の計画が要る。第 5 弾は F2（§2-1・§2-2 の実機確認、§1-60 の (1)〜(3) と `use_component_files` の鍵・偽の経路そのものの撤去、§1-40 の計測）。第 6 弾は G（§1-31・33・40・41）。すでに複製した利用者の `config.yaml` に残る `chain_comfort_token_budget` などの行を `install_ltx.ps1` の削除リストで消すかは、別途の判断とする。
 
 裏取りの表と道具はリポジトリの外（`ledger-work/`。git 管理外）に置いています。
+
+## 143. ★台帳 §1 の消化・第 3 弾「E インストーラと起動」＝ 4 件（§1-70・71・73・74）を処理・二重起動の判定を `main.py` に一本化（終了コード 3）・`build_xformers.ps1` を削除・freeze のハッシュはコメント行を除く・CLOSED 4 件（3-193〜3-196）・仕様書 v0.5.79（2026-10-03）
+
+**要約**: 台帳 `Docs/PENDING_TASKS.md` §1 の消化・第 3 弾として、計画 `radiant-wondering-melody.md`（オーナー承認済み）に基づき、裏取り `ledger-work/stage1/triage_scripts.md`（§1-70・71・73・74）で確定済みの内容どおりに、担当 E-1（コードとスクリプト）と E-2（文書）の 2 系列で 4 件を処理した。E-1 は、二重起動の判定を `run.ps1` のポート探索（`GetActiveTcpListeners`）から `main.py` に一本化した——起動直前に実効ポートへ `0.0.0.0` の排他 bind（`SO_EXCLUSIVEADDRUSE`。`SO_REUSEADDR` は付けない）を試し、失敗なら終了コード 3（`EXIT_PORT_IN_USE`）で終わる関数 `_require_port_free` を足し、`run.ps1` はその終了コードを「すでに起動しています」の案内に変えて 0 で終わるだけに縮めた（§1-73。約 30 行減）。CUDA 探索が `-CudaVersion` と食い違っていた `scripts/build_xformers.ps1` はまるごと削除し（§1-71）、参照していた `install_ltx.ps1` のコメントと `.gitignore` の `*.whl` 関連 2 行も片づけた。`install_model.ps1` の `Test-SetupDone` の検証表に `.venv-engine-ltx25` の python の行を無条件で 1 行足した（§1-70）。`Get-EngineStateHash` の SHA-256 の対象を、freeze ファイルの全文からコメント行・空行を除いた `名前==版` の行だけに絞った（§1-74）。合わせてテスト 2 本（`tests/test_main_startup.py`）を追加し、E-2 は仕様書を v0.5.79 に進め、README を 1 行訂正した。CLOSED は 4 件（`Docs/PENDING_TASKS_CLOSED.md` §3-193〜§3-196、§1-70・71・73・74 の順）で、台帳 §1 は 16 件になった。敵対的レビュー（Opus 1 体）の結論は直すべき 2 件（両方採用: `_require_port_free` の bind 先を `0.0.0.0` に固定し `host` 引数を外した／docstring の「uvicorn と同じ条件」という誤りを訂正した）・注意 3 件（いずれも現状維持か本節での明記で解消）・参考 6 件（据え置き）。
+
+**目的**: オーナーと合意した 6 段階（第 1 弾: 裏取り＋A 引き算＋B 報告と記録の整合／第 2 弾: D Gradio・MCP・バッチ＋C 設定と配信値／**第 3 弾: E インストーラと起動**／第 4 弾: F1 エンジンの挙動で単体テストで決着／第 5 弾: F2 実機が要るもの＋第 1 弾の実機確認／第 6 弾: G 単独の大きなテーマ。§141・§142 に記載）のうち、本節は第 3 弾を実施する。対象の 4 件（§1-70・71・73・74）は、いずれも第 1 弾の裏取りで選択肢が確定済みであり、オーナーの基準「過剰設計とスパゲッティ化を避けたエレガントな設計」に基づいて計画 `radiant-wondering-melody.md` でオーナーと合意した 4 つの選択どおりに処理する。GPU・実バックエンド・ネットワークを使わず、`.ps1`・`.bat`（インストーラ・起動）は実行しない（構文解析と、抽出した関数の単体実行までに留める）。バックエンド凍結の例外は必要最小限（`main.py` の起動時の数行のみ。API 契約には触れない）。
+
+**対象**: `Nz-Videomni` リポジトリ（バックエンド。dev、起点 HEAD `c50b32f`）。担当 E-1 は `main.py`・`run.ps1`・`scripts/install_ltx.ps1`・`scripts/install_model.ps1`・`scripts/build_xformers.ps1`（削除）・`.gitignore` と新規 `tests/test_main_startup.py`。担当 E-2 は `Videomni_Backend_Specification.md`・`README.md`。操作パネル（フロントエンド）・`tests/` の設計・第三者コードは対象外（前弾と同じ規約）。差分は計 9 ファイル（変更 7・削除 1・新規 1）。
+
+**方法**:
+1. 実装（Opus 2 体・担当 E-1 と E-2 が互いに触らないファイルで並行）: 裏取り `triage_scripts.md` と計画 `radiant-wondering-melody.md` の選択どおりに直し、固定テストを足した。
+2. 証明とテスト（監督）: 差分 9 ファイルの読み合わせ、`.ps1` 3 本（`run.ps1`・`install_ltx.ps1`・`install_model.ps1`）の構文解析、新しいテスト 2 本を HEAD（本節の変更前のコード）で走らせて新しい挙動を固定する型であることを確かめ、`Get-EngineStateHash` を抽出した一時スクリプトでの単体実行、GPU 生成に触れない範囲での全件テストを実行した。
+3. 敵対的レビュー（Opus 1 体・サブエージェント起動なし）→ 2 フィルタ（過剰設計の棄却・独立裏取り）で採否 → 指摘を反映。
+4. 台帳（`PENDING_TASKS.md`・`PENDING_TASKS_CLOSED.md`。別担当が並行で更新）と記録（本節）を整えた。
+5. 了承ゲート（差分と検証結果の報告）。main へのマージはオーナー指示で保留。
+
+**結果**:
+
+4 件の処理内容:
+
+| 区分 | 内容 |
+|---|---|
+| 二重起動判定の一本化 | §1-73（`main.py` に `EXIT_PORT_IN_USE = 3` と `_require_port_free(port)` を追加。起動直前に `0.0.0.0` へ `SO_EXCLUSIVEADDRUSE` の排他 bind を試し、失敗なら `SystemExit(3)`。`run.ps1` のポート探索〔約 30 行〕を削除し、終了コード 3 を案内に変えて 0 で終わる分岐に置き換えた。`run.bat` は変更なし） |
+| スクリプトの削除 | §1-71（`scripts/build_xformers.ps1` を削除。`install_ltx.ps1` のコメントと `.gitignore` の `*.whl` 関連 2 行を整理） |
+| 検証表の追加 | §1-70（`scripts/install_model.ps1` の `Test-SetupDone` の `$needed` に `.venv-engine-ltx25` の python の行を 1 行追加。案内文言も 3 つの venv に揃えた） |
+| ハッシュ対象の変更 | §1-74（`scripts/install_ltx.ps1` の `Get-EngineStateHash` が、freeze ファイルのコメント行・空行を除いた `名前==版` の行だけをハッシュする） |
+| テストの追加 | §1-73（`tests/test_main_startup.py` 2 本: ポートが使用中なら `SystemExit(3)`／解放後は例外なし） |
+| 文書 | 仕様書 `Videomni_Backend_Specification.md` v0.5.79（§0.1・§2.5・§3.3・§4.4・§5.4・改訂履歴）、`README.md` 315 行 |
+
+CLOSED は `Docs/PENDING_TASKS_CLOSED.md` §3-193〜§3-196（§1-70・71・73・74 の順）の 4 件。`Docs/PENDING_TASKS_CLOSED.md` §3-184 の残課題（`scripts/build_xformers.ps1` 自体を消すかどうかは別途判断）は、この削除で決着した。仕様書は v0.5.79 に進め、二重起動ガードの主体が `main.py` であること・freeze のハッシュ対象の実態を記した。
+
+**裁定と新事実**: §1-73 は、台帳の選択肢 A（`run.ps1` が `config.yaml` を正規表現で読んでポートを知る）を採らず、別案（実効ポートを知っている `main.py` が bind を試し、終了コードで `run.ps1` に伝える）を採った——A は PowerShell に 2 つ目の設定パーサーを持ち込み、フロー形式（`server: {port: …}`）や `--config` で別ファイルを指したときに例外が増えるのに対し、別案はポートの正本を `main.py` 1 箇所に保てるうえ `run.ps1` が約 30 行減り、`run.bat` の変更も要らない。bind の確認に `SO_REUSEADDR` を付けないのは、Windows では `SO_REUSEADDR` を付けると使用中のポートでも bind が通ってしまうため（Linux と異なる）。敵対的レビューで、当初の実装（`_require_port_free(host, port)` で `runtime.host` に bind）には抜けがあると判明した——1 枚目が `--listen`（`0.0.0.0`）で待ち受けていると、2 枚目の `127.0.0.1` への bind は `SO_EXCLUSIVEADDRUSE` の有無にかかわらず通ってしまい、2 枚目を検出できない（消した `run.ps1` の判定はポート番号だけを見ていたのでこの組み合わせも検出していた——退化になっていた）。レビューは起動順とアドレスの 4 通りの組み合わせを scratchpad で実測し、bind 先を常に `0.0.0.0` に固定すればすべて errno 10048 で検出できることを確かめたため、`host` 引数を外して `_require_port_free(port)` に直した。docstring の「uvicorn と同じ条件で bind を試す」も事実と違う（uvicorn が付けない `SO_EXCLUSIVEADDRUSE` を付けているため、uvicorn より厳しい）ので、実態に合わせて訂正した。注意 3 件は、(1) bind できない理由が「使用中」以外（存在しないアドレス・名前解決の失敗等）でも終了コード 3 になる点——直すべき 1 の直し（`0.0.0.0` 固定）でこの 2 つの errno 自体が起きなくなるため解消、(2) 仕様書が指す §143 が存在しなかった点——本節の作成で解消、(3) 2 枚目の起動でも `build_app`（Gradio の組み立てを含む）が全部走ってから止まる点——`build_context` 以下の各サービスの `__init__` に書き込み・削除・子プロセスの起動は無く 1 枚目を壊す処理が無いため、案内が数秒遅れて `logs/server.log` に 2 枚目の行が入るだけとして許容した。§1-71 は `scripts/build_xformers.ps1` をまるごと削除する判断——製品は SDPA 既定で xformers を入れず呼ばない、このスクリプトは手動実験用で不具合（`-CudaVersion` を無視する）とテストが無く、xformers を手で入れると LTX 2.3 の上流 `ltx-core` が既定の attention でそれを使ってしまうため同梱しない方が筋、という理由による（`.gitignore` の §3-184 で足した `*.whl` の無視も合わせて不要になった）。§1-74 は「中身（`名前==版` の行と直接指定）だけを見る」規則を採った代償として、計算方法が変わるため次回の `setup.bat` でエンジン venv 2 本（`.venv-engine`・`.venv-engine-ltx25`）の貼り直しが 1 回起きる（`.venv-utils` は `setup.bat` では貼り直されず、次回の `install-UETrack.bat` で 1 回貼り直される）。§1-70 を無条件の 1 行にしたのは、`setup.bat` がこの 3 つの venv を必ず作るため「`setup.bat` が済んだ」の定義に入れるのに条件分岐が要らないため（`install-LTX25.bat` 等の `-SkipVenv` 経路でも、`setup.bat` 完了後なら実害は無い）。
+
+**証明**: 敵対的レビュー（Opus 1 体）は、uvicorn 0.49.0（`.venv` 内）の `server.py` の bind 処理と CPython 3.12.9 の `asyncio/base_events.py`（Windows では `reuse_address` を付けない）をソースで確認し、scratchpad の実験スクリプトで待ち受け中のソケットと bind だけのソケットの組み合わせを asyncio の `create_server` で再現して、直すべき 1 の抜け（`--listen` が先だと検出できない）と、直した後に 4 通りの組み合わせすべてが errno 10048 になることを実測した。新しいテスト 2 本を HEAD（本節の変更前のコード。`_require_port_free`・`EXIT_PORT_IN_USE` が存在しない）で走らせて `AttributeError` になることを確かめ、差分が意図した新しい挙動だけを固定していることを裏付けた。`Get-EngineStateHash` は一時スクリプトへ抽出し、Windows PowerShell 5.1.26100 でコメント行・字下げコメント・空行・空白だけの行・CRLF の違いを変えた 2 つの freeze ファイルが同じハッシュになること、`名前==版` の行を 1 行変えると違うハッシュになることを確認し、同じ値を Python でも計算して照合した。`tests/test_base_model_contract.py` の `$DeprecatedModelKeys` を含む正規表現はこの変更の対象外であることを確かめた（新しいテスト 2 本と合わせて 12 passed）。`git grep build_xformers` の残りは記録文書・仕様書の改訂履歴・本文の言及だけで、コード・スクリプト・設定への参照は 0 件であることを確認した。全変更ファイルの改行は作業ツリーで CRLF のまま（監督が確認）であり、仕様書の版欄（§0.1）と改訂履歴の最終行がどちらも v0.5.79 で一致することも確かめた。
+
+**テスト**（GPU・実バックエンド・ネットワークに触れない。監督が実行）: アプリ `.venv` 全件 2,885 passed・54 skipped（新しいテスト 2 本を含み、第 2 弾の 2,883 passed から +2）。`.ps1` 3 本（`run.ps1`・`scripts/install_ltx.ps1`・`scripts/install_model.ps1`）の構文解析エラー 0・`install_ltx.ps1` は非 ASCII バイト 0 を確認。本弾はエンジン側（`engine/`・`engine25/` の Python）を変更していないため、`.venv-engine` 系は実行していない。インストーラ・起動スクリプト自体の実行とモデルのダウンロード・実機での二重起動確認は、計画どおり行っていない（オーナーが merge 後に手で行う）。
+
+**台帳**: CLOSED §3-193〜§3-196（§1-70・71・73・74 の順。別担当が台帳本体と並行で更新）。§3-184 の残課題（`scripts/build_xformers.ps1` 自体を消すかどうか）に決着を追記した。これで台帳 §1 は 16 件（§1-31・33・36・37・40・41・42・46・47・51・52・53・54・60・61・76）になった。
+
+**文書**: 仕様書 `Videomni_Backend_Specification.md` v0.5.79（§0.1 の版欄・改訂履歴・§2.5 の二重起動ガードと `Get-EngineStateHash` の説明・§3.3・§4.4 のツリー図〔`build_xformers.ps1` の行を削除〕・§5.4〔xformers は同梱せず、ビルドの道具も置かないと訂正〕）。`README.md` 315 行（freeze ファイルのハッシュの説明を実装に合わせて訂正）。`.gitignore`（`*.whl` 関連 2 行を削除）。`Docs/note.md` は歴史ノートとして据え置いた。
+
+**敵対的レビュー**（Opus 1 体・サブエージェント起動なし）: 差分全件と、uvicorn・asyncio の bind 条件を CPython のソースで確認し、scratchpad で起動順とアドレスの組み合わせを実測し、抽出したハッシュ関数を PowerShell 5.1 で動かして Python の計算と照合し、新しいテストが HEAD で落ちることを確認した（上記「証明」）。結論は**直すべき 2 件（両方採用）**: (1) `_require_port_free` の bind 先を `host`（`runtime.host`）から `0.0.0.0` に固定し `host` 引数を外した（`--listen` が先だと検出できない抜けの修正）。(2) docstring の「uvicorn と同じ条件」という事実と違う記述を訂正した。**注意 3 件**: (1) bind できない理由が「使用中」以外でも終了コード 3 になる点は直すべき 1 の修正で解消、(2) §143 が未作成だった点は本節で解消、(3) 2 枚目でも `build_app` が走ってから止まる点（1 枚目を壊す処理は無い）は許容。**参考 6 件（いずれも据え置き）**: 終了コード 3 が自作コードの他の用途やクラッシュ（`os.abort()` 等は 3 ではない）と重ならないこと／サーバーを閉じた直後の TIME_WAIT で誤検出しないこと／Hyper-V 等に予約されたポート範囲に当たっても誤った案内になるのは HEAD と同様で退化ではないこと／`install_ltx.ps1` の「the project's own code never imports it」は同梱済みの第三者 VDA コードが例外的に xformers を try-import する点を指すが「own」は自作コードの意味で誤りではないこと／仕様書 §5.4 の理由づけの因果がやや読みにくい点（言い回しの好みの範囲）／`install_model.ps1` の新しい行の `=` の位置が他の行と揃っていない点（見た目だけ）。
+
+**費用の目安**（Opus・Sonnet のトークン、概算）: Opus＝実装 約 18 万（2 体）・レビュー 約 15 万・指摘の反映 約 5 万、合計約 38 万（計画の見込み 55 万の範囲内）。Sonnet＝台帳と記録 約 30 万（見込みどおり）。
+
+**申し送り**（次へ）: (1) merge 後にオーナーが手で確認: `setup.bat` を 1 回（§1-74 でエンジン venv 2 本〔`.venv-engine`・`.venv-engine-ltx25`〕がそれぞれ 1 回貼り直される。`.venv-utils` は貼り直されず、次回の `install-UETrack.bat` で 1 回貼り直される。できる環境は同じ）、`run.bat` を 2 枚（2 枚目に「すでに起動しています」が出て終了コード 0）。(2) 先に `127.0.0.1` で待ち受けているところへ `--listen`（`0.0.0.0`）で確認したときの挙動は、敵対的レビューの直すべき 1 の採用により、起動順とアドレスの 4 通りの組み合わせすべてで検出できることを実測済み（退化は無い）。(3) 第 4 弾は F1（§1-36・37・42・46・47・51・52・53・54・61。§1-36 は凍結 API 契約の変更なので単独の計画）／第 5 弾は F2（§2-1・§2-2 の実機確認、§1-60 (1)〜(3) と `use_component_files` の鍵・偽の経路の撤去、§1-40 の計測）／第 6 弾は G（§1-31・33・40・41）。
+
+裏取りの表と道具はリポジトリの外（`ledger-work/`。git 管理外）に置いています。

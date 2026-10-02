@@ -55,8 +55,6 @@ vendor/*
 *.npz
 *.tar
 *.zip
-# Wheels built by scripts/build_xformers.ps1
-*.whl
 
 # HuggingFace / uv caches inside the project (install_ltx.ps1 points HF_HOME at
 # hf_home/ and UV_CACHE_DIR at .uv_cache/), plus other local cache directories

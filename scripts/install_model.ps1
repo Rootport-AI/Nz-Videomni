@@ -161,6 +161,7 @@ function Test-SetupDone {
         'uv（道具）'             = Join-Path $ProjectRoot 'tools\uv\uv.exe'
         'アプリ用 Python 環境'   = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
         'エンジン用 Python 環境' = Join-Path $ProjectRoot '.venv-engine\Scripts\python.exe'
+        'LTX 2.5 エンジン用 Python 環境' = Join-Path $ProjectRoot '.venv-engine-ltx25\Scripts\python.exe'
     }
     $missing = @()
     foreach ($k in $needed.Keys) {
@@ -202,7 +203,7 @@ function Test-SetupDone {
     Write-Host ''
     Write-Info ('setup.bat の場所: ' + (Join-Path $ProjectRoot 'setup.bat'))
     Write-Info 'setup.bat をダブルクリックして、終わるのを待ってから、もう一度このバッチを実行してください。'
-    Write-Info '（フォルダごと移動したり名前を変えたりした直後にこの案内が出た場合は、.venv と .venv-engine のフォルダを削除してから setup.bat を実行してください。setup.bat は環境が揃っていると見なすと作り直さないためです。）'
+    Write-Info '（フォルダごと移動したり名前を変えたりした直後にこの案内が出た場合は、.venv・.venv-engine・.venv-engine-ltx25 のフォルダを削除してから setup.bat を実行してください。setup.bat は環境が揃っていると見なすと作り直さないためです。）'
     Write-Host ''
     return $false
 }

@@ -36,6 +36,9 @@ logger = logging.getLogger("ltx")
 
 LOCALHOST_CORS_REGEX = r"^http://(127\.0\.0\.1|localhost)(:\d+)?$"
 
+# run.ps1 turns this exit code into its "すでに起動しています" notice.
+EXIT_PORT_IN_USE = 3
+
 
 def configure_logging(log_dir: Path) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -443,6 +446,31 @@ def local_ip() -> str:
         return "127.0.0.1"
 
 
+def _require_port_free(port: int) -> None:
+    """Exit with EXIT_PORT_IN_USE if the port is already taken.
+
+    Binds 0.0.0.0 with SO_EXCLUSIVEADDRUSE, so a server listening on ANY
+    address is detected (stricter than uvicorn's own bind). If another process
+    grabs the port between this check and uvicorn's bind, uvicorn still exits 1.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+        if exclusive is not None:
+            sock.setsockopt(socket.SOL_SOCKET, exclusive, 1)
+        sock.bind(("0.0.0.0", port))
+    except OSError:
+        logger.error(
+            "port %d is already in use: another server is probably running (second run.bat?). "
+            "ポート %d は既に使われています。別の黒い画面でサーバーが動いていないか確かめてください。",
+            port,
+            port,
+        )
+        raise SystemExit(EXIT_PORT_IN_USE)
+    finally:
+        sock.close()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Nz-Videomni backend")
     parser.add_argument("--listen", action="store_true", help="bind 0.0.0.0 (home LAN)")
@@ -469,6 +497,7 @@ def main() -> None:
     args = parse_args()
     app = build_app(args)
     runtime: RuntimeInfo = app.state.context.runtime
+    _require_port_free(runtime.port)
 
     if args.listen:
         logger.warning("--listen enabled: server is reachable on your LAN (no internet exposure intended).")

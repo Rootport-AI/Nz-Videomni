@@ -231,8 +231,8 @@ async def purge_terminal_jobs(dry_run: bool = False) -> dict[str, Any]:
         try:
             await client.delete_json(f"/jobs/{job_id}")
             deleted += 1
-        except ToolError as exc:
-            failed.append({"job_id": job_id, "error": str(exc)})
+        except (ToolError, httpx.ReadTimeout) as exc:
+            failed.append({"job_id": job_id, "error": str(exc) or type(exc).__name__})
     return {"attempted": len(candidates), "deleted": deleted, "failed": failed, "dry_run": False}
 
 

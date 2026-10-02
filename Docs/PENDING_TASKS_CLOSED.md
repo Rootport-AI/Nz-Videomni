@@ -986,6 +986,9 @@
   - **のりしろ（`overlap_frames`）は2以上が必須**。内部区画が音声のクロスフェードを1本増やすため、のりしろ1では音声ののりしろ予算が枯渇する。総当たり検証で退化はのりしろ1に完全に限定されることを確認したうえで、条件を1つ足して理由付きでブロックしている（フロントは`endSourceNeedsOverlap`、サーバーは422）。
   - **仮オブジェクトは「末尾合わせ」で置く**: 生成中を示す仮オブジェクトを「素材の開始−(出力長−帯長)」の位置に置き、生成動画の帯が素材の冒頭に重なるようにした。**この配置のためのネイティブ（C++）改修はゼロ**で、シフト済みの座標を既存の頭揃え配置として渡すRetakeと同じ手法である（右クリックの新項目そのものはネイティブと言語ファイルに追加している）。予約時はベストエフォートの見積り、Generate時に確定値で打ち直す。
   - **上限136は運用上限**（幾何上の限界ではない）。実測済みの範囲の端という意味で据え置いた。`config.yaml`の1行と実機の品質確認で引き上げられる。
+
+> **訂正（VERIFICATION_LOG §142）**: サーバーの検査は `config.py` の既定値（`api/models.py` の `_LIMITS_DEFAULTS`）で行われ `config.yaml` の値は読まない。引き上げは `config.py` の既定値の変更と実機の品質確認。詳細は VERIFICATION_LOG §142。
+
   - **排他と併用**: Retake・a2v（音声から動画を生成する機能）・IC-LoRA参照動画とは排他。**素材（冒頭）との併用と、クリップ0のキーフレーム画像との併用は無条件で可能**（クリップは帯に届かないため衝突しない）。バッチi2v-longではテンプレート合成時に素材（末尾）を除去し、添付中はバッチをブロックする。
 - **機械ゲート（エージェント実施）は11項目すべて合格**。実GPUで8ジョブを流し、①出力長＝クリップ合計＋帯がすべての構成で一致 ②凍結の証明（stage-1組み立て後と再結合後の末尾テンソルの差）が**厳密に0.0** ③帯がタイルを2枚・3枚またぐ構成と、帯だけで埋まる完全凍結タイルが出る構成でも破綻なし ④VRAMピークは実確保約9.3GB・予約約13.5GBで従来のチェーン生成と同水準、を確認した。詳細はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §60。
 - **既知の許容事項（すべて仕様として受け入れ済み）**
@@ -2466,3 +2469,91 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
 - **残課題**: `scripts/build_xformers.ps1` 自体を消すかどうかは別途判断（台帳の提案。第3弾）。
 - **正本・出典**: `.gitignore`。
+
+### 3-185. V2V／End source／幅・高さ・フレーム数・撮り直し窓の `limits` は配信専用で、サーバーの検査には効かないと文書で定義（起票：2026-10-01、文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-34 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-34（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §131「申し送り」3.）から起票された項目。2026-10-02に `width`・`height`・`num_frames`・`retake_window_*` にも同型の論点があることを追記して範囲が広がった。
+- **到達条件**: `limits` のV2V・End source・幅／高さ／フレーム数・撮り直し窓の各値が `config.yaml` に書いても検証に効かない食い違いを、選択肢B（コードは変えず「配信専用で検査には効かない」と文書で定義し直す）で解消すること。**達成した。**
+- **何が完了したか**: `config.yaml.example` に3箇所の注記を追加した（幅・高さ・フレーム数の節、V2V継続節、撮り直しの窓節。いずれも「検査は〜で行い、ここの値は `/config` で配信されるだけ」という文言）。`config.py` の `end_context_frames_max` のコメントを「`config.yaml` の1行で足りる」から「`api/models.py` は `LimitsConfig()` を検査し `config.yaml` を読まない」実態に訂正した。仕様書 `Videomni_Backend_Specification.md` §6.7 に1段落を追加し（v0.5.78）、`limits` の範囲系の鍵（幅・高さ・フレーム数・V2V継続・End source・撮り直し窓）は配信専用でサーバーの検査には別の正本（`config.py::LimitsConfig` の既定値・`api/models.py` の `Field` 固定値・`chain_math` の定数と式）があることを明記した。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.2 と [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §10 の「`config.yaml` の1行で引き上げられる」という言い切りに、本文を書き換えず「> **訂正（§142）**」の1行を添えた。回帰テスト1本（`tests/test_validation.py::test_config_yaml_context_frame_caps_change_only_the_published_value`）を追加し、`config.yaml` に `end_context_frames_max: 144`／`v2v_context_frames_max: 153` を書いても `/config` の配信値はその値になる一方 `EndSourceSpec`・`SourceVideoSpec` の検査は `config.py` の既定値（136・145）で弾くことを固定した。
+- **どの物差しで通ったか**: 敵対的レビューでGradio側が読む箇所（`gradio_ui/validation.py` の `check_v2v_context`・`gradio_ui/handlers.py` の連結の幅・高さの検査）と操作パネルが読む箇所（`useGenerationForm.ts` ほか・`useChainForm.ts`・`useRetakeForm.ts`）、サーバーの検査箇所（`_LIMITS_DEFAULTS`・`Field(le=4096)` 等・`chain_math.RETAKE_WINDOW_MIN_PX`）を実地で突き合わせ、新しい文がすべて事実どおりと確認した。新規テスト1本を含むアプリ `.venv` 全件2884 passed・54 skipped（失敗0）。
+- **クローズ理由**: 選択肢B（文書での定義し直し）のスコープが完了した。検証ロジック自体を変える選択肢Aは採らなかった。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 検証が `config.yaml` の値を読むようにする選択肢Aは未着手（凍結ゾーンの `api/models.py` に触れるため計画→敵対的レビュー→承認の通常手順が要る）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142、`Videomni_Backend_Specification.md` §6.7（v0.5.78）、`config.yaml.example`（`limits` 節）、`config.py`（`LimitsConfig`）、`api/models.py`（`_LIMITS_DEFAULTS`・`SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source`）。
+
+### 3-186. Gradio の A2V 事前検査の fps を `_snap_frame_rate` で丸め、送信値と一致させた（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-64 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-64（**同書側は欠番**）。コメント現行化 `gradio_ui/` の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138）から起票された項目。
+- **到達条件**: Gradio の A2V の音声の長さの事前検査を、送信される `frame_rate`（`_snap_frame_rate` で丸めた値）と同じ基準で行うこと（選択肢A）。**達成した。**
+- **何が完了したか**: `gradio_ui/handlers.py::make_generate_handler` のA2V経路で、事前検査に使うfpsを `float(frame_rate)` から `_snap_frame_rate(float(frame_rate)) if frame_rate else 24.0` に変えた（1行）。これにより事前検査と `build_a2v_chain_payload` が送る `frame_rate` の丸めが一致する。`_snap_frame_rate` のdocstringの「Known limitation」からA2Vの部分（29.4→29で事前検査が422を見落とす件）を落とし、丸め後もなお丸め前のfpsを読む `presets.py` の連結見積もりの限界だけを残した。`suggest_frames_for_audio` はMCPの写しとパリティテストに連動するため、計画どおり据え置いた（画面からは `gr.Number(precision=0)` で整数しか来ないため実害が無い）。
+- **どの物差しで通ったか**: テスト1本（`tests/test_gradio_handlers.py::test_generate_a2v_precheck_uses_snapped_fps`）。3.32秒・29.4fps・97フレームの直接呼び出しで、`chain_math.audio_latents_required` により29.4fpsなら82（通る）・送信値29fpsなら84（422相当）必要になる食い違いを再現し、API呼び出しゼロで「29.0 fps」「3.36」「3.32」を含む拒否メッセージになることを確認した。HEAD（変更前）のコードでは落ちることを敵対的レビューで確認済み。アプリ `.venv` 全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: `suggest_frames_for_audio` は丸め前のfpsのまま（画面からは整数しか来ないため実害なし。MCPの写しとパリティテストに連動するため触らない判断）。
+- **正本・出典**: `gradio_ui/handlers.py`（`make_generate_handler`・`_snap_frame_rate`）、`chain_math.py`（`audio_latents_required`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-187. バッチ A2V の `dispatch()` に幅・高さの ÷64 の事前検査を追加（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-65 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-65（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138から起票された項目。
+- **到達条件**: バッチA2Vにも幅・高さの÷64の事前検査を足すこと（選択肢B。`dispatch()` の中でGenerateと同じ事前検査を通す）。**達成した。**
+- **何が完了したか**: `gradio_ui/ui.py::dispatch()` のバッチ分岐で、幅・高さ・seed・fpsを`int()`／`float()`に変換する既存の`try`ブロックを「行が無ければ止める」の直後（LoRAの`api.list_loras()`より前）へ移し、直後に `if width_i % 64 != 0 or height_i % 64 != 0: yield L("msg_bad_dimension", lang_v), "", None; return` を追加した。Generateタブと同じ文言 `msg_bad_dimension` を使うが、出し方はNAGの検査と同じく進捗欄への`yield`だけでトーストは出さない。`gradio_ui/batch.py` の `BatchSnapshot` のdocstring「The batch path does not pre-check this」を、実際の検査内容に合わせて書き直した。
+- **どの物差しで通ったか**: テスト1本（`tests/test_gradio_ui.py::test_batch_dispatch_rejects_non_64_width_with_zero_api_calls`）。幅500（64の倍数でない）・LoRAタグ `<lora:x:1.0>` を含む行で`dispatch`を直接呼び、`msg_bad_dimension` だけがyieldされAPI呼び出しが0件（`list_loras`も呼ばれない）であることを確認した。HEADでは`Unknown LoRA`の文言が先に出るか`calls["n"]==1`になって落ちることを敵対的レビューで確認済み。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Bの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: Generateタブの`_precheck_reject`（トースト＋進捗欄）に揃えるかどうかはオーナー判断（敵対的レビュー注意1。計画の「Generateと同じ出し方」という前提はNAGの検査〔トーストを出さない〕には揃っているが、Generateの`_precheck_reject`自体〔トーストも出す〕とは出し方が異なる。揃えるなら3箇所の`yield L(...)`を`yield _precheck_reject(L(...))`に替える）。
+- **正本・出典**: `gradio_ui/ui.py`（`dispatch`）、`gradio_ui/batch.py`（`BatchSnapshot`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-188. Gradio の快適上限／高品質モード警告の配線 4 箇所に `lang_state` を足し、UI の言語に追随させた（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-66 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-66（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138から起票された項目。台帳は経路を3通りと数えていたが、`qmode.change`・`chain_qmode.change`が同じ`on_qmode_change`を呼ぶため実際の配線は4箇所だった。
+- **到達条件**: 4箇所の配線に`lang_state`を足し、快適上限の警告と高品質モードの警告をUIの言語に追随させること（選択肢A）。**達成した。**
+- **何が完了したか**: `gradio_ui/ui.py`の配線4箇所（`preset.change`・幅／高さ／フレーム数の`.change`〔3コントロール分〕・`qmode.change`・`chain_qmode.change`）の`inputs`の末尾に`lang_state`を追加した。`apply_preset`・`compute_spill_warning`は末尾に`lang`引数を既に持っていたため配線を足すだけで済んだ。`on_qmode_change(value: str)`を`on_qmode_change(value: str, lang: str = "en")`に変え、`gr.Warning(L("warn_hq_unsupported"))`を`gr.Warning(L("warn_hq_unsupported", lang))`に変えた。
+- **どの物差しで通ったか**: テスト2本。(1) `test_preset_spill_and_qmode_wirings_end_with_lang_state`——`apply_preset`配線1件・`compute_spill_warning`配線3件・`on_qmode_change`配線2件のすべてで`inputs`の末尾が`lang_state`と同じ`gr.State`であることを確認。(2) `test_on_qmode_change_warns_in_the_ui_language`——`lang="ja"`で呼ぶと日本語の`warn_hq_unsupported`文言で`gr.Warning`が呼ばれることを確認（英日の文言が異なることも確認）。HEADでは`TypeError`と配線の不一致で両方落ちることを敵対的レビューで確認済み。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 無し。
+- **正本・出典**: `gradio_ui/ui.py`（`on_qmode_change`・配線4箇所）、`gradio_ui/presets.py`（`apply_preset`・`compute_spill_warning`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-189. `config.py` の既定値（`use_component_files`・`checkpoint_name`）を配布値に揃えた（起票：2026-10-02、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-67 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-67（**同書側は欠番**）。コメント現行化 第7区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139）から起票された項目。
+- **到達条件**: `config.py`の既定値を配布値（`config.yaml.example`・仕様書§11.2／§11.3）に揃えること（選択肢A）。**達成した。**
+- **何が完了したか**: `config.py`の`VramConfig.use_component_files`の既定を`False`から`True`に、`ModelConfig.checkpoint_name`の既定を`"ltx-2.3-22b-distilled"`から`"ltx-2.3-22b-distilled-1.1"`に変えた。`use_component_files`のコメントを「Off by default」から「On by default, the same as the shipped config.yaml.example. Off is not a working configuration: the adapter always sends checkpoint_path="" and no LTX 2.3 monolith ships」に訂正した。`services/engines/ltx/adapter.py`のコメント1箇所と`main.py`の警告のコメント1箇所も実態に合わせて直した。仕様書`Videomni_Backend_Specification.md` §5.5の「fail-fastアサートがcomponentソースの揃いを要求するのでモノリスへ黙って戻ることは無い」を、実態（fail-fastは4つのパスとtransformerのパスが空でないことだけを確認し`use_component_files`は見ない。偽だと付け替えが飛ばされ`model_path=""`が読み込みで失敗する）に訂正した（v0.5.78）。
+- **どの物差しで通ったか**: テスト1本（`tests/test_validation.py::test_defaults_without_config_yaml_match_the_shipped_example`）——`config.yaml`が存在しないパスで`load_config`を呼び、既定が`use_component_files=True`・`checkpoint_name="ltx-2.3-22b-distilled-1.1"`になることを確認した。敵対的レビューで`use_component_files`を読む箇所は`_build_child_env`の`LTX_COMPONENT_FILES`だけ、`checkpoint_name`を読む箇所はモックのログと`_base_model_name`の予備値だけと確認済み（既定変更の副作用は無い）。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 読み込み元が欠落したときの失敗の仕方（読み込みのどの段で落ちるか）は実機未確認（CPUでは`ModelLedger(checkpoint_path="")`の4つのビルダーが`model_path=''`になることまで確認済み）。`connector_gguf_path=None`の経路の鍵と偽の経路の撤去は[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-60 (1)〜(3)と一緒に別途扱う（テストの無いGPU経路。実機1本とセット）。
+- **正本・出典**: `config.py`（`VramConfig.use_component_files`・`ModelConfig.checkpoint_name`）、`Videomni_Backend_Specification.md` §5.5（v0.5.78）、`services/engines/ltx/adapter.py`、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-190. MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` でも個別の失敗として受けて続行するよう修正（起票：2026-10-02、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-68 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-68（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139から起票された項目。
+- **到達条件**: `purge_terminal_jobs`が`httpx.ReadTimeout`で止まる件を、個別の失敗として受けて続行するよう直すこと（選択肢B。`_request`の素通し＝設計D5は変えない）。**達成した。**
+- **何が完了したか**: `mcp_server/tools/jobs.py::purge_terminal_jobs`の削除ループの`except ToolError`を`except (ToolError, httpx.ReadTimeout)`に変え、`failed[].error`を`str(exc) or type(exc).__name__`にした（空文字になりうる`httpx.ReadTimeout`の`str(exc)`対策。敵対的レビュー参考1の指摘を反映）。`mcp_server/client.py::_request`の`httpx.ReadTimeout`の素通し（設計D5）とdocstringは変えていない。台帳の「`httpx.TimeoutException`も」という選択肢Aの表現は範囲が広すぎたため、素通しが実際に起きるのは`httpx.ReadTimeout`だけという選択肢Bを採った。
+- **どの物差しで通ったか**: テスト1本（`tests/test_mcp_tools_jobs.py::test_purge_terminal_jobs_continues_past_a_read_timeout`）——`completed-ok`→`failed-boom`（DELETEで`httpx.ReadTimeout`を発生）→`cancelled-ok`の順でフィクスチャを並べ、3件目の削除まで続くこと（`deleted == 2`・`failed`に`failed-boom`だけ・`"simulated timeout"`を含むエラー文言）を確認した。HEADでは2件目で止まり落ちることを敵対的レビューで確認済み。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Bの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 無し。
+- **正本・出典**: `mcp_server/tools/jobs.py`（`purge_terminal_jobs`）、`mcp_server/client.py`（`_request`。設計D5は不変）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-191. バッチ A2V の計画の写し（MCP）のパリティテストを `raw_frame_count`・`over_frame_limit` にも拡張（起票：2026-10-02、文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-69 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-69（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §9から起票された項目。
+- **到達条件**: バッチA2Vの計画の写し（MCP）と本家（Gradio）の挙動の差3点のうち、パリティテストを`raw_frame_count`・`over_frame_limit`にも広げること（選択肢B。正常域=fpsが正・`max_frames`が1以上）。**達成した。**
+- **何が完了したか**: `tests/test_mcp_batch_planning.py`に`test_raw_frame_count_matches_gradio_ui_manifest_exhaustively`・`test_over_frame_limit_matches_gradio_ui_manifest_exhaustively`を追加し、fps（24・30・23.976・60・29.97）×`max_frames`（9・49・481・9999）の正常域で本家`gradio_ui.manifest`の`raw_frame_count`・`over_frame_limit`との総当たり一致を固定した。`Docs/MCP_SERVER_DESIGN.md` §9・§10の「写経元は`suggest_frames_for_audio`だけ」という記述を、3関数（`suggest_frames_for_audio`・`raw_frame_count`・`over_frame_limit`。後の2つは正常域のみ）に更新した。`mcp_server/batch_planning.py`のモジュールdocstringも同様に更新した。異常入力（fpsが0・None・数値でない、`max_frames=0`）での3実装の扱いの差は、台帳の選択肢Aの範囲であり、計画どおり直さずdocstringに明記したまま残した。
+- **どの物差しで通ったか**: 乱数20万組（dur 0〜40、fps 0.01〜120の実数と整数、max_frames 1〜20000）での自前の突き合わせで不一致0件を敵対的レビューで確認済み（差があるのは正常域の外だけ）。新規テスト2本を含むアプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Bの実装が完了した。異常入力の扱いを揃える選択肢Aは採らなかった。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 異常入力（fpsが0・None・数値でない、`max_frames=0`）での3実装の扱いの差は未解消（docstringに明記済み）。
+- **正本・出典**: `tests/test_mcp_batch_planning.py`、`mcp_server/batch_planning.py`、[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §9・§10、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-192. `config.yaml.example` の comfort token budget 2 行をコメントアウトした例示に変更（起票：2026-10-02、文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-72 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-72（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `config.yaml.example`の`chain_comfort_token_budget`／`single_comfort_token_budget`の値の行が、複製した`config.yaml`にもそのまま入ってしまう件を、コメントアウトした例示に変えること（選択肢A）。**達成した。**
+- **何が完了したか**: `config.yaml.example`の`chain_comfort_token_budget: 40000`・`single_comfort_token_budget: 44880`の2行をコメントアウトした例示に変えた。周囲の注記2箇所を、「example限定・実運用には追記しない」という前提から、「この鍵は書かなければ`config.py`の既定値が配信され、書くとその値で固定される」という今の形に書き直した。`retake_window_min_frames: 73`・`max_frames: 169`の値の行は実際の設定行のまま据え置いた（§1-34の注記で性質を説明済みのため）。
+- **どの物差しで通ったか**: テスト1本（`tests/test_comfort_budgets.py::test_config_yaml_example_leaves_the_two_comfort_scalars_to_config_py`）——`yaml.safe_load`した`config.yaml.example`の`limits`に2つの鍵が無いこと、`load_config`経由の配信値が`LimitsConfig()`の既定値（40000・44880）と一致することを確認した。既存の`tests/test_retake_api.py`の40000／44880の固定も通ることを敵対的レビューで確認済み。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 既に`config.yaml.example`を複製した利用者の`config.yaml`には、この2行が実値のまま残っている（今回の変更は及ばない）。`scripts/install_ltx.ps1`の削除リストに足すかどうかは別途判断。
+- **正本・出典**: `config.yaml.example`（`limits`節）、`config.py`（`LimitsConfig.chain_comfort_token_budget`・`single_comfort_token_budget`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。

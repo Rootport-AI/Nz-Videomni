@@ -340,13 +340,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 gr.update(choices=build_preset_choices(cfg)),
                 gr.update(choices=build_adapter_choices(cfg)))
 
-    def on_qmode_change(value: str):
+    def on_qmode_change(value: str, lang: str = "en"):
         # two_stage_hq is not consumed by the backend (the LTX 2.3 engine,
         # services/engines/ltx/adapter.py, ignores pipeline/guidance_scale;
         # LTX 2.5 rejects it via REJECT_TABLE / CHAIN_REJECT_TABLE). Revert to
         # distilled and warn.
         if value == "two_stage_hq":
-            gr.Warning(L("warn_hq_unsupported"))
+            gr.Warning(L("warn_hq_unsupported", lang))
             return gr.update(value="distilled")
         return gr.update()
 
@@ -1326,7 +1326,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         )
 
         preset.change(
-            apply_preset, inputs=[preset, config_state],
+            apply_preset, inputs=[preset, config_state, lang_state],
             outputs=[width, height, num_frames, crop_enabled, crop_w, crop_h,
                      crop_row, spill_warning],
         ).then(
@@ -1338,7 +1338,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         for _dctrl in (num_frames, frame_rate):
             _dctrl.change(format_duration_label, inputs=[num_frames, frame_rate],
                           outputs=duration_md)
-        qmode.change(on_qmode_change, inputs=qmode, outputs=qmode)
+        qmode.change(on_qmode_change, inputs=[qmode, lang_state], outputs=qmode)
         crop_enabled.change(on_crop_toggle, inputs=crop_enabled, outputs=crop_row)
 
         # Spill-free warning: recompute on any manual width/height/num_frames
@@ -1346,7 +1346,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         for _ctrl in (width, height, num_frames):
             _ctrl.change(
                 compute_spill_warning,
-                inputs=[width, height, num_frames, config_state],
+                inputs=[width, height, num_frames, config_state, lang_state],
                 outputs=spill_warning,
             )
 
@@ -1448,6 +1448,17 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 yield L("batch_msg_no_wav", lang_v), "", None
                 return
 
+            try:
+                width_i, height_i = int(width_v), int(height_v)
+                seed_i = int(seed_v)
+                fps_f = float(frame_rate_v) if frame_rate_v else 24.0
+            except (TypeError, ValueError):
+                yield L("msg_bad_dimension", lang_v), "", None
+                return
+            if width_i % 64 != 0 or height_i % 64 != 0:
+                yield L("msg_bad_dimension", lang_v), "", None
+                return
+
             # NAG precheck (owner requirement): non-CFG Negative enabled but the
             # shared negative prompt is empty -> reject with zero API calls,
             # same yield-shape as the "no wav rows" check above (the message
@@ -1499,14 +1510,6 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         shared_images.append((img, int(fr or 0), float(st)))
                     except (TypeError, ValueError):
                         continue
-
-            try:
-                width_i, height_i = int(width_v), int(height_v)
-                seed_i = int(seed_v)
-                fps_f = float(frame_rate_v) if frame_rate_v else 24.0
-            except (TypeError, ValueError):
-                yield L("msg_bad_dimension", lang_v), "", None
-                return
 
             interval, timeout_s = _resolve_poll(poll_interval_v, poll_timeout_v)
             out_dir = str(batch_manifest.resolve_output_dir(
@@ -1918,7 +1921,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         # ---- Clip Chain events ----
         # Reuse the SAME quality-mode revert + crop-toggle handlers as Generate.
-        chain_qmode.change(on_qmode_change, inputs=chain_qmode, outputs=chain_qmode)
+        chain_qmode.change(on_qmode_change, inputs=[chain_qmode, lang_state],
+                           outputs=chain_qmode)
         chain_crop_enabled.change(on_crop_toggle, inputs=chain_crop_enabled,
                                   outputs=chain_crop_row)
 

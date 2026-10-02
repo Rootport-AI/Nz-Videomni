@@ -135,9 +135,10 @@ class BatchSnapshot:
                        (empty per-row prompt always falls back to the common one).
 
     Generation geometry (identical to the Generate-tab A2V send)
-        width, height   ints, expected ÷64. The batch path does not pre-check
-                        this: the server's request validation rejects any
-                        other size, which fails the row.
+        width, height   ints, ÷64. ``ui.py``'s ``dispatch()`` checks this
+                        before the batch starts (same ``msg_bad_dimension``
+                        as the Generate tab) and stops with zero API calls
+                        on any other size.
         crop_output     Pre-computed ``{"width","height"}`` dict, or ``None``.
                         The runner passes this THROUGH unchanged — the "is crop
                         enabled" decision is made by the UI wiring when it

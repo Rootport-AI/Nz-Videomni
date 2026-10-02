@@ -172,14 +172,10 @@ def _snap_frame_rate(value: float) -> float:
     for direct (non-UI) handler calls — tests, and anything driving these
     functions programmatically.
 
-    Known limitation on that direct path: the A2V length precheck
-    (:func:`make_generate_handler`) and the live chain estimate still read the
-    RAW fps, so a caller who passes 29.97 straight in can see a message computed
-    from 29.97 while the request carries 30. The divergence leans safe when the
-    snap rounds UP (the higher rate needs no more audio latents than the message
-    quoted) but not when it rounds DOWN: 29.4 is sent as 29, which needs more
-    audio latents than the precheck measured, so a passing precheck can still
-    meet the server's 422.
+    Known limitation on that direct path: the live chain estimate
+    (``presets.py``'s ``fps_v = float(fps) if fps else 24.0``) still reads the
+    RAW fps, so a caller who passes 29.97 straight in can see an estimate
+    computed from 29.97 while the request carries 30.
     """
     if not math.isfinite(value) or value < 1.0 or value > 60.0:
         return value
@@ -790,13 +786,15 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             # (services/pipeline_manager.preflight_source_audio): required =
             # chain_math.audio_latents_required([num_frames], fps, kv=3) latent
             # frames, available = round(duration * AUDIO_LATENTS_PER_SEC). kv=3
-            # mirrors the A2V chain payload's fixed overlap_frames below. Non-wav
+            # mirrors the A2V chain payload's fixed overlap_frames below. fps is
+            # snapped with _snap_frame_rate, the same rounding as the frame_rate
+            # value build_a2v_chain_payload sends. Non-wav
             # (mp3/m4a/…) and unreadable wavs skip this and defer to the server.
             audio_dur = _wav_duration_seconds(src_audio)
             if audio_dur is not None:
                 import chain_math
 
-                fps_v = float(frame_rate) if frame_rate else 24.0
+                fps_v = _snap_frame_rate(float(frame_rate)) if frame_rate else 24.0
                 required = chain_math.audio_latents_required([nf_i], fps_v, kv=3)
                 available = round(audio_dur * chain_math.AUDIO_LATENTS_PER_SEC)
                 if available < required:

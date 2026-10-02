@@ -78,7 +78,7 @@ class ServerConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    checkpoint_name: str = "ltx-2.3-22b-distilled"
+    checkpoint_name: str = "ltx-2.3-22b-distilled-1.1"
     pipeline_type: str = "distilled"
     auto_load_on_generate: bool = True
 
@@ -201,8 +201,11 @@ class VramConfig(BaseModel):
     # the text-projection file present, the text encoder's projection is read
     # from that file and its connectors from the transformer file as well.
     # Read by the LTX 2.3 worker via LTX_COMPONENT_FILES
-    # (services/engines/ltx/adapter.py). Off by default.
-    use_component_files: bool = False
+    # (services/engines/ltx/adapter.py). On by default, the same as the shipped
+    # config.yaml.example. Off is not a working configuration: the adapter
+    # always sends checkpoint_path="" and no LTX 2.3 monolith ships, so with
+    # it off the VAE / audio builders are left with no file to load from.
+    use_component_files: bool = True
 
 
 class CropOutputPreset(BaseModel):
@@ -425,7 +428,9 @@ class LimitsConfig(BaseModel):
     # (ChainLayout.end_tile_bands is the per-tile freeze plan), so no window
     # geometry bounds it. 136 == 17 latent frames ~= 5.67 s at 24 fps is simply
     # the edge of the measured region, kept so nobody ships an unvalidated one.
-    # Raising it is a config edit plus a real-run quality gate, and it applies
+    # Raising it is an edit to this default (api/models.py validates against
+    # LimitsConfig(), not config.yaml, which only changes the value /config
+    # publishes) plus a real-run quality gate, and it applies
     # to every stage-2 window preset alike, so a client can trust
     # end_context_frames_max unconditionally (unlike retake_window_max_frames,
     # which really is preset-dependent). The geometry truth stays in chain_math.

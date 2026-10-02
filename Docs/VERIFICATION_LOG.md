@@ -5071,6 +5071,8 @@ Chainedタブの幅・高さスライダーには目安が何も無く、いま�
 
 **136は運用上限であって幾何上限ではない**（幾何上の限界は2の帰結として消えた）。17潜在フレーム≒24fpsで5.67秒という実測済み領域の端という意味で据え置いており、引き上げは`config.yaml`の1行と実機の品質確認で足りる。根拠コメントは`config.py`の`end_context_frames_max`と`api/models.py::EndSourceSpec`のdocstringに置いた。
 
+> **訂正（§142）**: サーバーの検査は `config.py` の既定値（`api/models.py` の `_LIMITS_DEFAULTS`）で行われ `config.yaml` の値は読まない。引き上げは `config.py` の既定値の変更と実機の品質確認。詳細は §142。
+
 ### 60.3 実装内容（バックエンド）
 
 - **`chain_math.py`**: `n_end_v`確定後に`seg_frames`へ内部区画を1本appendし、以降の潜在フレーム数・音声窓・タイル配置・チャンク化アップサンプル・つなぎ目をすべて`seg_frames`から導出する（`n`は「セグメント数」の意味に改名）。`ChainLayout`に`seg_frames`／`end_segment_px`／`end_segment_latent`／`end_tile_bands`を追加した。`end_tile_bands`は`t = max(0, min(L, e − B))`・`off = e − B`の一般式で、クランプの省略は禁止である（タイルが帯に届かず`t=0`・`off`が負になるケースが実際に出る——§60.6のG-M5・G-M8）。
@@ -15400,3 +15402,51 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 **申し送り**（次へ）: 第 2 弾以降の順と各項目の推奨は `triage.md` 第 5 節のとおり。第 5 弾で実機確認する点は §1-43・§1-56（連結の経路も）・§1-55（これまでは偽物での再現のみ）・§1-60 (1)〜(3)。操作パネル側の文書とモックに消した設定の写しが 2 箇所残る（記録のみ・対象外）。2.5 の単発ログの `attn=` を `ic_attn=` に揃えたが、参照の取り付けの行（`chain25.py`・`inpaint25.py`・`outpaint25.py`・`pipeline25.py`）の `attn=` は文脈から意味が読めるため据え置き。`build_xformers.ps1` をまるごと消す判断は第 3 弾。bf16 経路（`gguf_per_layer_quant=False`）そのものを消す判断は第 6 弾 G 候補。
 
 裏取りの表と道具はリポジトリの外（`ledger-work/stage1/`。git 管理外）に置いています。
+
+## 142. ★台帳 §1 の消化・第 2 弾「D Gradio・MCP・バッチ ＋ C 設定と配信値」＝ 9 件（§1-64・65・66・68・69・34・72・67・60 (4)）を処理・CLOSED 8 件（3-185〜3-192）・テスト 10 本追加・`config.py` の既定を配布値に（`use_component_files=True`・`checkpoint_name` は `-1.1`）・仕様書 v0.5.78（2026-10-02）
+
+**要約**: 台帳 `Docs/PENDING_TASKS.md` §1 の消化・第 2 弾として、計画 `radiant-wondering-melody.md`（オーナー承認済み）に基づき、裏取り `triage_app.md`・`triage_engine.md`（§141 で実施）の推奨どおりに、担当 D（Gradio・MCP・バッチ）と担当 C（設定と配信値）の 2 系列で 9 件（§1-64・65・66・68・69・34・72・67・60 (4)）を処理した。D は、Gradio の A2V 音声長事前検査が丸める前の fps で計算していた点（§1-64）・バッチ A2V に幅・高さの ÷64 事前検査が無かった点（§1-65）・快適上限と高品質モードの警告に言語が渡らず英語で固定されていた点（§1-66）・MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` で止まっていた点（§1-68）・バッチ A2V の計画の写し（MCP）と本家（Gradio）のパリティテストの範囲が狭かった点（§1-69）を直した。C は、`limits` の V2V・末尾素材・快適予算の配信値がサーバーの検査には効かないことを文書で明記した（§1-34・§1-72）うえ、`use_component_files` の既定 `False` が実機では動かない構成であることを確かめ、`config.py` の既定を配布値（`True`）に揃えた（§1-67・§1-60 (4)）。合わせてテスト 10 本（D 7 本・C 3 本）を追加し、CLOSED は 8 件（`Docs/PENDING_TASKS_CLOSED.md` §3-185〜§3-192、§1-34・64・65・66・67・68・69・72 の順）、§1-60 は箇条 (4) の記述だけを更新して台帳に残した。仕様書は v0.5.78 に進めた。敵対的レビュー（Opus 1 体）の結論は直すべき 0 件・注意 3 件（いずれも現状維持か本節・台帳側の対応で解消）・参考 5 件（1 件採用: `purge_terminal_jobs` の失敗欄を `str(exc) or type(exc).__name__` に変更）。
+
+**目的**: オーナーと合意した 6 段階（第 1 弾: 裏取り＋A 引き算＋B 報告と記録の整合／**第 2 弾: D Gradio・MCP・バッチ＋C 設定と配信値**／第 3 弾: E インストーラと起動／第 4 弾: F1 エンジンの挙動で単体テストで決着／第 5 弾: F2 実機が要るもの＋第 1 弾の実機確認／第 6 弾: G 単独の大きなテーマ。§141 に記載）のうち、本節は第 2 弾を実施する。対象の 9 件は、いずれも第 1 弾の裏取りで状態が確定済みで、実機を要さず mock・読解・設定の既定変更で決着する項目だけに絞った。
+
+**対象**: `Nz-Videomni` リポジトリ（バックエンド。dev、起点 HEAD `07e5998`）。担当 D は `gradio_ui/handlers.py`・`gradio_ui/ui.py`・`gradio_ui/batch.py`・`mcp_server/tools/jobs.py`・`mcp_server/batch_planning.py`・`Docs/MCP_SERVER_DESIGN.md` とテスト 4 ファイル（`tests/test_gradio_handlers.py`・`tests/test_gradio_ui.py`・`tests/test_mcp_batch_planning.py`・`tests/test_mcp_tools_jobs.py`）。担当 C は `config.py`・`config.yaml.example`・`services/engines/ltx/adapter.py` のコメント・`main.py` のコメント・`Videomni_Backend_Specification.md`（§5.5・§6.7・改訂履歴・§0.1）・`Docs/VERIFICATION_LOG.md` §60.2 の訂正行・`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §10 の訂正行とテスト 2 ファイル（`tests/test_comfort_budgets.py`・`tests/test_validation.py`）。操作パネル（フロントエンド）・`tests/` の設計・第三者コードは対象外（前弾と同じ規約）。差分は計 19 ファイル。
+
+**方法**:
+1. 実装（Opus 2 体・担当 D と担当 C が互いに触らないファイルで並行）: 裏取り `triage_app.md`・`triage_engine.md` と計画 `radiant-wondering-melody.md` の推奨どおりに直し、各項目に固定テストを足した。
+2. 証明とテスト（監督）: 差分 19 ファイルの読み合わせと、新しいテスト 10 本を HEAD（本節の変更前のコード）で走らせて、新しい挙動を固定する型か、もとから成り立っていた挙動を固定する型かを確かめ、GPU 生成に触れない範囲での全件テストを実行した。
+3. 敵対的レビュー（Opus 1 体・サブエージェント起動なし）→ 2 フィルタ（過剰設計の棄却・独立裏取り）で採否 → 指摘を反映。
+4. 台帳（`PENDING_TASKS.md`・`PENDING_TASKS_CLOSED.md`。別担当が並行で更新）と記録（本節）を整えた。
+5. 了承ゲート（差分と検証結果の報告）。main へのマージはオーナー指示で保留。
+
+**結果**:
+
+9 件の処理内容:
+
+| 区分 | 内容 |
+|---|---|
+| コードの修正 | §1-64（`gradio_ui/handlers.py` の A2V 音声長事前検査に `_snap_frame_rate` を通す）／§1-65（`gradio_ui/ui.py` のバッチ分岐に幅・高さの `% 64` 検査を追加）／§1-66（`gradio_ui/ui.py` の配線 4 か所〔`preset.change`・幅・高さ・フレーム数の `_ctrl.change`・`qmode.change`・`chain_qmode.change`〕に `lang_state` を追加）／§1-68（`mcp_server/tools/jobs.py` の `purge_terminal_jobs` の except に `httpx.ReadTimeout` を追加） |
+| `config.py` の既定変更 | §1-67・§1-60 (4)（`VramConfig.use_component_files` を `False` から `True` に、`ModelConfig.checkpoint_name` を `"ltx-2.3-22b-distilled"` から `"ltx-2.3-22b-distilled-1.1"` に変更） |
+| `config.yaml.example` の例示変更 | §1-72（快適予算 2 行をコメントアウトした例示に変更） |
+| パリティテストの対象拡張（本体ロジックは変更なし） | §1-69（`mcp_server/batch_planning.py` のパリティテストを `raw_frame_count`・`over_frame_limit` の正常域〔fps が正・`max_frames` が 1 以上〕にも広げた） |
+| 文書のみの訂正 | §1-34（仕様書 §6.7・`Docs/VERIFICATION_LOG.md` §60.2・`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §10・`config.yaml.example` の注記） |
+| テストの追加 | §1-64・65・66（2 本）・68・69（2 本）・72・34・67 の計 10 本（担当 D 7 本・担当 C 3 本） |
+
+CLOSED は `Docs/PENDING_TASKS_CLOSED.md` §3-185〜§3-192（§1-34・64・65・66・67・68・69・72 の順）の 8 件。§1-60 は箇条 (4) の記述だけを更新し、台帳本文に残した（(4) は `use_component_files` の既定変更で通常は到達しなくなる経路になり、鍵そのものと偽の経路の撤去は第 5 弾で (1)〜(3) と一緒に判断する）。仕様書 `Videomni_Backend_Specification.md` は v0.5.78 に進め、`config.yaml` を置かずに起動したときの `GET /api/v1/config` の `vram.use_component_files`・`model.checkpoint_name` がこの新しい既定値になることを明記した。
+
+**裁定と新事実**: `limits` の配信値の読み手は Gradio の `validation.py`（V2V の事前検査）・`handlers.py`（連結の幅・高さの事前検査）と操作パネル（`max_*`・`v2v_context_frames_*`・`retake_window_min_frames`）であり、**End source の鍵を読むクライアントは無い**（型とモックだけが持つ）。サーバーの検査は `config.yaml` の値を読まず、V2V・末尾素材は `config.py::LimitsConfig` の既定値（`api/models.py` の `_LIMITS_DEFAULTS`）、幅・高さ・フレーム数は `api/models.py` の `Field` の固定値、撮り直しの窓は `chain_math` の定数と式（`RETAKE_WINDOW_MIN_PX`・`retake_max_window_px`）で行う。`use_component_files=False` は動かない構成である——アダプタ（`services/engines/ltx/adapter.py`）は `checkpoint_path=""` を固定で送り、LTX 2.3 のモノリスは配布されないため、`False` だと VAE・音声の読み込み元が無くなる。`fast_video_pipeline.py` の fail-fast 検査は 4 つの部品パスと transformer のパスが空でないことだけを見て、`use_component_files` そのものは見ない。`suggest_frames_for_audio` は丸める前の fps のまま据え置いた——MCP 側の写し（`mcp_server/batch_planning.py`）とパリティテストに連動しており、画面からは整数の fps しか来ないため、直す実益が無い。§1-66 の言語配線漏れは「3 経路」ではなく、配線 4 か所（上記）である。§1-68 で MCP の `_request` が素通しにするのは `httpx.ReadTimeout` だけで、ほかのタイムアウト（`WriteTimeout` など）はすでに `ToolError` に変換されて処理が続く。§1-72 の `config.yaml.example` の快適予算 2 行をコメントアウトしても配信値は変わらない——`config.py` の既定値が同じ値だからで、すでに複製した利用者の `config.yaml`（2 行が値として残る）は今回の変更では直らない。
+
+**証明**: 敵対的レビュー（Opus 1 体）は、新しいテスト 10 本を HEAD（本節の変更前のコード）で走らせ、7 本が失敗し（新しい挙動を固定するテスト。§1-64・65・66 の 2 本・68・72・67）、3 本は HEAD でも通ること（もとから成り立っていた挙動を固定するテスト。§1-69 の 2 本・§1-34 の 1 本——いずれも実装側のロジックは変えず文書・テストの範囲だけで対応した項目）を確かめ、差分が意図した変更だけを含むことを裏付けた。さらに §1-69 のパリティ（`mcp_server.batch_planning` の `raw_frame_count`・`over_frame_limit` と `gradio_ui.manifest` の原型）を、正常域（fps が正・`max_frames` が 1 以上）の乱数 20 万組で突き合わせ、不一致 0 件を確認した。全変更ファイルの改行は作業ツリーで CRLF のまま（監督が確認）であり、仕様書の版欄（§0.1）と改訂履歴の最終行がどちらも v0.5.78 で一致することも確かめた。
+
+**テスト**（GPU・実バックエンド・ネットワークに触れない。監督が実行）: アプリ `.venv` 全件 2,883 passed・54 skipped（既知の 1 件を `--deselect`。新しいテスト 10 本を含み、第 1 弾の 2,873 passed から +10）。本弾はエンジン側（`engine/`・`engine25/` の Python）を変更していないため、`.venv-engine` 系は実行していない。
+
+**台帳**: CLOSED §3-185〜§3-192（§1-34・64・65・66・67・68・69・72 の順。別担当が台帳本体と並行で更新）。§1-60 は箇条 (4) の記述を更新し、台帳に残した（(4) は既定の変更で通常は到達しない経路になり、鍵と偽の経路そのものの撤去は第 5 弾で (1)〜(3) と一緒に判断する）。これで台帳 §1 は 20 件になった。
+
+**文書**: 仕様書 `Videomni_Backend_Specification.md` v0.5.78（§0.1 の版欄・§5.5・§6.7・改訂履歴）。`Docs/MCP_SERVER_DESIGN.md` §9・§10（パリティテストの対象を `suggest_frames_for_audio` 1 関数から `raw_frame_count`・`over_frame_limit` を含む 3 関数に広げた記述）。`Docs/VERIFICATION_LOG.md` §60.2 と `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §10 は、記録文書の本文を書き換えず「> **訂正（§142）**」の 1 行を添えた。`config.yaml.example` の `vram`・`limits` 節の注記（配信される値とサーバーの検査の関係、快適予算 2 行の扱い）。
+
+**敵対的レビュー**（Opus 1 体・サブエージェント起動なし）: 差分 19 ファイル全件と新しいテスト 10 本を HEAD のコードで走らせて差分を固定しているかを確認し（上記「証明」）、§1-69 のパリティを乱数 20 万組で突き合わせ、改行と仕様書の版の一致も確かめた。結論は**直すべき 0 件**。**注意 3 件**: §1-65 のバッチの検査がトーストを出さない点（Generate の `_precheck_reject` はトーストも出す）は、バッチ分岐の既存の規約（NAG の検査もトースト無し）に揃えているため現状維持。§142 が未作成だった点は本節で解消。`Docs/PENDING_TASKS_CLOSED.md` に「`config.yaml` の 1 行で引き上げられる」という同じ誤りが 1 箇所残っていた点は、台帳担当が訂正行を足して解消した。**参考 5 件（1 件採用）**: `httpx.ReadTimeout` の `str(exc)` が空になりうるため、`purge_terminal_jobs` の失敗の欄を `str(exc) or type(exc).__name__` に変更した。残り 4 件（`suggest_frames_for_audio` は丸める前の fps のまま据え置く／`engine/worker.py` の「default OFF」はワーカー側の環境変数の既定として事実のまま／子プロセスの `LTX_COMPONENT_FILES` が既定で `"1"` になることを固定するテストが無い／`main.py` の長い行）は据え置いた。
+
+**費用の目安**（Opus・Sonnet のトークン、概算）: Opus＝実装 約 28 万（2 体）・レビュー 約 16 万・指摘の反映 約 3 万、合計約 47 万（計画の見込み 75 万の範囲内）。Sonnet＝台帳と記録 約 30 万（見込み 35 万の範囲内）。
+
+**申し送り**（次へ）: 第 3 弾は E（§1-70・71・73・74）。`build_xformers.ps1` をまるごと消す案と §1-73 の別案（`main.py` 側で bind 失敗を終了コードで返す）はここで判断する。§1-74 を直すなら直後の `setup.bat` の 1 回分の貼り直しが要る。第 4 弾は F1（§1-36・37・42・46・47・51・52・53・54・61・63 のうち未処理のもの）で、§1-36 は凍結 API 契約の変更を伴うため単独の計画が要る。第 5 弾は F2（§2-1・§2-2 の実機確認、§1-60 の (1)〜(3) と `use_component_files` の鍵・偽の経路そのものの撤去、§1-40 の計測）。第 6 弾は G（§1-31・33・40・41）。すでに複製した利用者の `config.yaml` に残る `chain_comfort_token_budget` などの行を `install_ltx.ps1` の削除リストで消すかは、別途の判断とする。
+
+裏取りの表と道具はリポジトリの外（`ledger-work/`。git 管理外）に置いています。

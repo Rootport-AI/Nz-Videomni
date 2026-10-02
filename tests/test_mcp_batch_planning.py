@@ -5,7 +5,9 @@ The frame-suggestion arithmetic (``suggest_frames_for_audio``) is a literal
 copy of ``gradio_ui.handlers.suggest_frames_for_audio`` -- that module imports
 ``gradio`` at package-init time, which ``mcp_server`` must never do (plan D2 /
 module docstring). This is pinned by an exhaustive comparison against the real
-thing below; the row-scan conventions mirror ``gradio_ui.manifest.scan_wav_folder``.
+thing below, as are ``raw_frame_count`` / ``over_frame_limit`` against
+``gradio_ui.manifest`` (normal domain only); the row-scan conventions mirror
+``gradio_ui.manifest.scan_wav_folder``.
 """
 
 from __future__ import annotations
@@ -49,6 +51,33 @@ def test_suggest_frames_for_audio_matches_gradio_ui_handlers_exhaustively():
             expected = reference(dur, fps)
             actual = batch_planning.suggest_frames_for_audio(dur, fps)
             assert actual == expected, (dur, fps, expected, actual)
+
+
+# Normal domain only (fps > 0, max_frames >= 1): outside it the copies differ
+# on purpose (batch_planning.raw_frame_count's docstring, PENDING_TASKS §1-69).
+_PARITY_FPS = (24, 30, 23.976, 60, 29.97)
+_PARITY_MAX_FRAMES = (9, 49, 481, 9999)
+
+
+def test_raw_frame_count_matches_gradio_ui_manifest_exhaustively():
+    from gradio_ui.manifest import raw_frame_count as reference
+
+    for dur in _DURATIONS:
+        for fps in _PARITY_FPS:
+            expected = reference(dur, fps)
+            actual = batch_planning.raw_frame_count(dur, fps)
+            assert actual == expected, (dur, fps, expected, actual)
+
+
+def test_over_frame_limit_matches_gradio_ui_manifest_exhaustively():
+    from gradio_ui.manifest import over_frame_limit as reference
+
+    for dur in _DURATIONS:
+        for fps in _PARITY_FPS:
+            for max_frames in _PARITY_MAX_FRAMES:
+                expected = reference(dur, fps, max_frames)
+                actual = batch_planning.over_frame_limit(dur, fps, max_frames)
+                assert actual == expected, (dur, fps, max_frames, expected, actual)
 
 
 def test_suggest_frames_for_audio_always_8n_plus_1_in_range():

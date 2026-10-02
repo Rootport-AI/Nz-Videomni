@@ -111,6 +111,7 @@ vram:
   # ※keep_resident はジョブごとのフィールド（POST /generate・/generate/chain の
   #   keep_resident・既定 false。正本は api.models の KEEP_RESIDENT_DEFAULT）。
   #   Docs/VERIFICATION_LOG.md §48。
+  # false は動かない構成（LTX 2.3 のモノリスは配布されず、アダプタは常に空のパスを送る）。
   use_component_files: true
 
 # 生成サイズ(width/height)は必ず64の倍数(two-stage distilled)。最終表示サイズは crop_output で。
@@ -182,6 +183,9 @@ upload:
   allowed_audio_extensions: [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 
 limits:
+  # 生成の幅・高さ・フレーム数の上限。/config で公開し、Gradio の連結の事前検査（幅・高さ）と
+  # 操作パネルが使う。サーバの範囲検査は api/models.py の Field の固定値（幅・高さ 4096、
+  # フレーム数 481）で行い、ここの値は /config で配信されるだけ（サーバの検査には効かない）。
   max_width: 4096
   max_height: 4096
   max_num_frames: 481        # 20s@24fps(481=8×60+1)。溢れ/低速/非実用はクライアント警告に委ねる（Docs/RESOLUTION_DURATION_CAPABILITY.md §8.4/§8.6）。
@@ -202,6 +206,8 @@ limits:
   # V2V 継続（POST /generate/chain の source_video.context_frames）。/config で公開。
   # context_frames は 8n+1。max=145 は保守的な上限（凍結ヘッドを stage-2 の
   # 1タイル内に収める。api.models.SourceVideoSpec 参照）。
+  # サーバの範囲検査は config.py の LimitsConfig の既定値で行い、ここの値は /config で
+  # 配信されるだけ（サーバの検査には効かない。Gradio の事前検査と操作パネルが使う）。
   v2v_context_frames_default: 73
   v2v_context_frames_min: 25
   v2v_context_frames_max: 145
@@ -233,6 +239,9 @@ limits:
   # STAGE2_WINDOW_PRESETS と Docs/COMFORT_LIMIT_TABLE.md 第12節）。サーバはこの式で
   # 範囲を検査し、範囲外は 422 で拒否する。操作パネルは上限の配信値を読まず、同じ式で
   # 上限を求める（型と既定値は配信値の写しとして残っている）。
+  # 下限 73 も上限もサーバの検査は chain_math の定数と式（RETAKE_WINDOW_MIN_PX・
+  # retake_max_window_px）で行い、ここの値は /config で配信されるだけ（サーバの検査には
+  # 効かない。操作パネルは下限の配信値を窓の下限に使う）。
   retake_window_min_frames: 73
   retake_window_max_frames: 169
   # 快適な stage-2 1 窓あたりの注意トークン上限。/config で公開する。サーバはこの値で
@@ -240,9 +249,11 @@ limits:
   # クライアントは目安線を、まず limits.comfort_budgets（エンジンごとの表。既定の表は
   # config.py の _default_comfort_budgets）からエンジンと高速化設定に合う行を引き、合う行が
   # 無いとき（表が無い・エンジンが未確定・LTX 2.3 で 5 つの高速化トグルの一部が off など）に
-  # この値へ戻る。目安線を VRAM 容量に合わせて動かすときは、この値と comfort_budgets の
-  # 両方を見直す（comfort_budgets は config.yaml に書くと表全体が置き換わる）。
-  chain_comfort_token_budget: 40000
+  # この値へ戻る。この鍵は書かなければ config.py の既定値（chain_math の
+  # CHAIN_COMFORT_TOKEN_BUDGET＝40000）が配信され、書くとその値で固定される（将来の定数
+  # 調整が届かなくなる）ので、下の行は例示としてコメントアウトしてある。目安線を動かす
+  # ときは comfort_budgets も見直す（comfort_budgets も config.yaml に書くと表全体が置き換わる）。
+  # chain_comfort_token_budget: 40000
   # Create（単発 `/generate`）1 発が快適に収まる注意トークン上限。/config で公開。
   # chain_comfort_token_budget とは別軸（1 発は stage-2 タイル分割なしで全体を
   # 1 パスで精製するため、ワークロードが異なる）。サーバはこの値で何も判定しない
@@ -254,10 +265,10 @@ limits:
   # spill_free_frames へフォールバックする。44,880 は実機検証で較正された
   # 最大の共通快適値。正本は Docs/COMFORT_LIMIT_TABLE.md。
   #
-  # 注意: このコメントは example のみに書く。実運用 config.yaml には追記しない
-  # ——chain_comfort_token_budget も実運用 yaml には無く Pydantic 既定値のまま
-  # 配信されている前例に倣う（yaml に書くと将来の定数調整が実機に届かなくなる）。
-  single_comfort_token_budget: 44880
+  # 注意: この鍵も書かなければ config.py の既定値（44880）が配信され、書くとその値で
+  # 固定される（将来の定数調整が実機に届かなくなる）。chain_comfort_token_budget と同じく、
+  # 下の行は例示としてコメントアウトしてある。
+  # single_comfort_token_budget: 44880
 
 output:
   dir: "./outputs"

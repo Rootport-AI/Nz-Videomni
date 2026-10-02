@@ -530,6 +530,8 @@ off = e − B                   # 帯内での「終端」オフセット
 
 またがり凍結によって幾何上の限界は消えたので、136に残っているのは「実測した範囲の端」という意味だけである（17潜在フレーム≒24fpsで5.67秒）。`config.yaml`の1行と実機の品質確認で引き上げられる。**どのstage-2窓プリセットでも同じ値が使える**ので、クライアントは`limits.end_context_frames_max`を無条件に信じてよい——プリセット依存の`retake_window_max_frames`とは性質が異なる点に注意（この非対称は`config.py`のコメントに明記した）。
 
+> **訂正（VERIFICATION_LOG §142）**: サーバーの検査は `config.py` の既定値（`api/models.py` の `_LIMITS_DEFAULTS`）で行われ `config.yaml` の値は読まない。引き上げは `config.py` の既定値の変更と実機の品質確認。詳細は VERIFICATION_LOG §142。
+
 ---
 
 ## 11. 逆順Chainedの設計候補（第2段階、2026-08-17ディスカッション）

@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-02（第1弾: CLOSED 3-170〜3-184・§2へ2件・§1-76起票・残る項目の訂正）。前回 2026-10-02: §1「近日中の改修項目」に §1-70〜§1-75〔`install_ltx.ps1` Step 7 の検証表に `.venv-engine-ltx25` の python が無い／`build_xformers.ps1` の CUDA 探索が `-CudaVersion` と食い違う／`config.yaml.example` の comfort token budget の値の行が実運用 yaml にも入る／`run.ps1` の二重起動判定が `server.port` を読まない／`Get-EngineStateHash` がコメントを含む freeze の全文をハッシュする／`.gitignore` の死にパターンと抜け〕を起票し、§1-34 に `limits` の他の項目（`max_width`・`max_height`・`max_num_frames`・`retake_window_*`）でも同型の論点があることを、§1-58 に読み手0件の設定項目5つと `install_model.ps1` の `Format-Size` 未使用を追記したうえ、§1 冒頭の案内を §1-75 まで含む記述に更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-02（第2弾: CLOSED 3-185〜3-192・§1-60の更新）。前回 2026-10-02: 第1弾: CLOSED 3-170〜3-184・§2へ2件・§1-76起票・残る項目の訂正。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-36・§1-37・§1-40・§1-41・§1-42・§1-46・§1-47・§1-51・§1-52・§1-53・§1-54・§1-60・§1-61・§1-64・§1-65・§1-66・§1-67・§1-68・§1-69・§1-70・§1-71・§1-72・§1-73・§1-74・§1-76 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-36・§1-37・§1-40・§1-41・§1-42・§1-46・§1-47・§1-51・§1-52・§1-53・§1-54・§1-60・§1-61・§1-70・§1-71・§1-73・§1-74・§1-76 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**2026-10-02に §2-1・§2-2 として立て直した（元は §1-43・§1-56）。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -30,18 +30,6 @@
 - **触らないもの**: 復元の方針（forward ごとに bf16 へ戻す）・判定規則・UI・API。
 - **正本**: 復元の設計は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.2、コードは `engine/sft_quant/dequant.py`。
 - **着手**: 上の (1) の Go／No-go の判断からです（C-4 較正は完了・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169）。
-
-### 1-34. V2V／End source の `context_frames` 上限が `config.yaml` に書いても検証に効かない（起票：2026-10-01）
-
-- **現象**: `api/models.py` の `SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source` は、上限 `cf_max` をモジュール定数 `_LIMITS_DEFAULTS = LimitsConfig()`（`config.py` の既定値。`config.yaml` を読まない）から取る。一方 `GET /config`（`api/status.py` の `get_config`）は `load_config` が `config.yaml` から読んだ値を配り、Gradio の事前検査（`gradio_ui/validation.py` の `check_v2v_context`）は `/config` の `limits.v2v_context_frames_max` を上限に使う。`config.yaml.example` の `v2v_context_frames_max`（145）・`end_context_frames_max`（136）は `config.py` の既定値と同じなので、配布状態では食い違いが表面化しない。
-- **影響**: 利用者が `config.yaml` のこの 2 行を変えたときだけ発生する。上げた場合は画面の事前検査は通すがサーバーは 422 で弾く（文言は「上限は `config.py` の `LimitsConfig`」）。下げた場合は画面は止めるが、API を直接叩く経路（MCP・curl）ではサーバーが `config.py` の既定値まで受け付ける。クラッシュ・データ破損は無い。
-- **文書との食い違い**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.2、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §10「136は運用上限であって幾何上限ではない」は、いずれも「`end_context_frames_max` の引き上げは `config.yaml` の1行と実機の品質確認で足りる」と書くが、サーバー側の検証がその設定を読まないため実装ではそうならない。
-- **他の `limits` 項目にも同じ論点がある**（2026-10-02 追記）: `GenerateRequest`等の `width`・`height`・`num_frames` は `api/models.py` の各 `Field(..., ge=…, le=…)` に直書きの値（例: `width: int = Field(512, ge=256, le=4096)`）で検査しており、`config.limits.max_width`・`max_height`・`max_num_frames`（`GET /config` が配信する値）は検査の側では一切読まない。`retake_window_min_frames`・`retake_window_max_frames` も、`/config` では「標準プリセットの参考値」として配信されるだけで、実際の上限は `RetakeSpec` のdocstringが明記するとおり `chain_math.RETAKE_WINDOW_MIN_PX`・`chain_math.retake_max_window_px(v_tile)` という別の定数・関数で検査される。いずれも `config.yaml` でこれらの値を変えてもサーバーの検査は変わらない。特に `retake_window_min_frames` は操作パネルが撮り直し窓の下限として読むため、`config.yaml` でこの値を下げると画面の事前検査は通すが、サーバー側は固定の `chain_math.RETAKE_WINDOW_MIN_PX` で検査するため 422 になる。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 検証が読み込んだ設定を見るようにする（`_LIMITS_DEFAULTS` を起動時に `config.limits` で差し替えられる形にする。凍結ゾーンの `api/models.py` に触れるので計画→敵対的レビュー→承認の通常手順を通す）。
-  - B: 「この2行は画面の目安であり、サーバー側の上限は `config.py` で決まる」と定義し直し、上記2文書の「`config.yaml` の1行で引き上げられる」という記述を訂正する（コードは変えない）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §131「申し送り」3.（コメント現行化の `api/` 区域で検出、2026-10-01 起票）。
-- **関連ファイル**: `api/models.py`（`_LIMITS_DEFAULTS`・`SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source`・`width`/`height`/`num_frames` の `Field`・`RetakeSpec`）、`config.py`（`LimitsConfig`）、`config.yaml.example`、`gradio_ui/validation.py`（`check_v2v_context`）、`api/status.py`（`get_config`）、`chain_math.py`（`RETAKE_WINDOW_MIN_PX`・`retake_max_window_px`）。
 
 ### 1-36. 読み込みの最中の `unload` で 409 の見張りが開く（起票：2026-10-01）
 
@@ -171,12 +159,12 @@
   - `load` の「4. Overlay」にある、lm_headをembed_tokensへ結び直す枝（`embed_key in merged and _LTX_LM_HEAD_KEY not in merged`）。`embed_cpu_offload=True` のときは直前でGGUF側のembed_tokensを `gguf_sd` から取り除き済みのため、この条件は常に偽になる（結び直しは別途 `_install_cpu_embed_offload` がCPU上で行う）。
   - `_load_gguf_gemma` にある、埋め込みをGPUへ移す枝（`target_device.type != "cpu" and not self.embed_cpu_offload`）。
   - `_patch_gemma_skip_full_logits` が包む `Gemma3ForCausalLM.forward`（`GemmaTextEncoder.model.forward`）も、ビルド後に `_install_cpu_embed_offload` が同じ `forward` を丸ごと `_cpu_embed_forward` へ差し替えるため実質効いていない。ただし `_cpu_embed_forward` 自身が引数 `logits_to_keep` の既定を1に持つため、結果（最後のトークンだけlogitsを計算する）は同じになる。
-  - あわせて、`connector_gguf_path=None` の経路（`component_text_projection_path`・`connector_gguf_path` のどちらかが無いときに通る、モノリスを `model_path` に残したままの経路）も、モノリス（`ltx-2.3-22b-distilled-1.1.safetensors`）が物理削除済み（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §13.3）のため実際には動かない。アダプタは `checkpoint_path` に固定で空文字を入れる（`services/engines/ltx/adapter.py` の `checkpoint_path = ""`）。**この(4)は、設定 `vram.use_component_files` の既定 `False` から到達する設定上の判断であり（§1-67 と同じ論点）、(1)〜(3) のようなコード上だけで閉じた到達不能とは性質が違う。**
+  - あわせて、`connector_gguf_path=None` の経路（`component_text_projection_path`・`connector_gguf_path` のどちらかが無いときに通る、モノリスを `model_path` に残したままの経路）も、モノリス（`ltx-2.3-22b-distilled-1.1.safetensors`）が物理削除済み（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §13.3）のため実際には動かない。アダプタは `checkpoint_path` に固定で空文字を入れる（`services/engines/ltx/adapter.py` の `checkpoint_path = ""`）。**この(4)は設定 `vram.use_component_files` から到達する設定上の判断である。`config.py` の既定が `True` になったため、既定からはこの経路に到達しない——明示的に `config.yaml` へ `use_component_files: false` を書いた場合だけ残る（`config.yaml.example` に「`false` は動かない構成」と注記済み）。(1)〜(3) のようなコード上だけで閉じた到達不能とは性質が違う。**
 - **影響**: 無い（通らない枝が残っているだけで、動作には影響しない）。
 - **選択肢**（オーナー判断・優劣はつけない）:
   - A: `embed_cpu_offload` を固定値の前提で外し、通らない枝を消す。
   - B: 引数を残し、現状を維持する。
-- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。**(1)〜(3) はテストの無い GPU 経路（Gemma GGUF の読み込み）なので、消した後に実機で1本流して出力が変わらないことを確かめるのが安全である。**
+- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。**(1)〜(3) はテストの無い GPU 経路（Gemma GGUF の読み込み）なので、消した後に実機で1本流して出力が変わらないことを確かめるのが安全である。(4) の鍵（`use_component_files`）と偽の経路を撤去する場合も、同じ実機1本の確認とまとめて行う。**
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §136（申し送り）。
 - **関連ファイル**: `engine/gemma/gguf_quant_service.py`（`GemmaGGUFQuantLoaderService.install`・`GemmaGGUFQuantStateDictLoader.load`・`_load_gguf_gemma`・`_patch_gemma_skip_full_logits`・`_install_cpu_embed_offload`）。
 
@@ -190,73 +178,6 @@
 - **着手**: 着手時は go／no-go の検討から始める。コード側を直すときは、同ファイルの Q3_K の関数（`_dequant_q3_k`）の中の3つのコメント（今の意図を述べている）と、他の型の「今のコードが返す形」の注記も合わせて見直す。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §137（コメント現行化 engine/ 第3回の検算の申し送り）。
 - **関連ファイル**: `engine/gguf/quant_service.py`（`_dequant_q4_0`・`_dequant_q4_1`・`_dequant_q5`・`_dequant_q2_k`・`_dequant_q3_k`・`_dequant_iq4`）、`engine/gguf/loader_service.py`（`GGUFStateDictLoader.load`）。
-
-### 1-64. Gradio の A2V の音声の長さの事前検査が、丸める前の fps で計算している（起票：2026-10-01）
-
-- **現象**: `gradio_ui/handlers.py` の `make_generate_handler` の A2V（音声から動画）の経路は、音声の長さに対して必要な潜在フレーム数を入力の fps そのままで計算して事前検査する。一方、実際に送る `frame_rate` は `build_a2v_chain_payload` の中で `_snap_frame_rate` により整数に丸められる。fps が切り下がる入力（例 29.4 → 29）では送る側のほうが多くの音声潜在フレームを要するので、事前検査を通った要求がサーバの422に当たりうる（コメント現行化の検算が `chain_math.audio_latents_required` で総当たりして確定: 97フレームのとき29.4fpsで82・29fpsで84。0.1刻みの総当たりで1万組以上）。
-- **影響**: 画面の fps 欄は `gr.Number(precision=0)` で整数しか来ないので、画面からの操作では起きない。実害は直接呼び出し（テスト・プログラムからの呼び出し）に限られる。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 事前検査でも `_snap_frame_rate` 後の fps を使う。
-  - B: 現状のまま（画面からは起きない）とし、docstring に限定を書く（コメントは今の挙動に合わせて直してある）。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138（コメント現行化 `gradio_ui/` の検算の申し送り）。
-- **関連ファイル**: `gradio_ui/handlers.py`（`make_generate_handler`・`build_a2v_chain_payload`・`_snap_frame_rate`）、`chain_math.py`（`audio_latents_required`）。
-
-### 1-65. バッチ A2V に幅・高さの ÷64 の事前検査が無い（起票：2026-10-01）
-
-- **現象**: Generate と Clip Chain は `gradio_ui/handlers.py` で幅・高さが64の倍数でなければ API を呼ばずに止めるが、バッチ A2V（`gradio_ui/ui.py` の `dispatch()` のバッチ分岐・`on_batch_set_audios`・`gradio_ui/batch.py` の `_validate`）のどれも検査しない。64の倍数でない値でバッチを始めると、各行で音声などをアップロードした後にサーバの422で Failed になり、全行が同じ理由で失敗する。
-- **影響**: 誤った値を入れたときだけ。全行が失敗するまで気づけない。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: `batch._validate` に ÷64 の検査を足す。
-  - B: `dispatch()` のバッチ分岐で Generate と同じ事前検査を通す。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138。
-- **関連ファイル**: `gradio_ui/ui.py`（`dispatch`・`on_batch_set_audios`）、`gradio_ui/batch.py`（`_validate`）、`gradio_ui/handlers.py`（Generate と Clip Chain の÷64の事前検査）。
-
-### 1-66. Gradio の快適上限の警告と高品質モードの警告が、言語を渡さず英語で固定される（起票：2026-10-01）
-
-- **現象**: 言語を渡していない配線が4箇所ある（経路としては3通りだが、(c)は`qmode.change`・`chain_qmode.change`の2箇所から同じ`on_qmode_change`を呼ぶため配線は4つ）。(a) `gradio_ui/ui.py` の `preset.change(apply_preset, inputs=[preset, config_state], …)` は `lang_state` を渡さない。`apply_preset` → `compute_spill_warning` の快適上限の警告（`warn_spill_limit`）は、UI を日本語にしていても既定の言語（英語）で出る。(b) 幅・高さ・フレーム数を手で変えたときの `.change` リスナー（`gradio_ui/ui.py` の `for _ctrl in (width, height, num_frames): _ctrl.change(compute_spill_warning, inputs=[width, height, num_frames, config_state], outputs=spill_warning)`）も `lang_state` を渡さない。プリセット適用で幅・高さ・フレーム数が変わるとこのリスナーも走るので、(a) だけ直しても日本語の画面に英語の警告が残りうる。(c) `on_qmode_change` の `gr.Warning(L("warn_hq_unsupported"))` も言語を渡さないので、高品質モードの警告は常に英語（日本語の文言 `warn_hq_unsupported` は画面に一度も出ない）。Generate画面の `qmode.change` とClip Chain画面の `chain_qmode.change` の両方の配線が同じ `on_qmode_change` を呼ぶため、どちらの画面でも英語で出る。
-- **影響**: 表示だけ。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 4箇所とも `lang_state` を `inputs` に足し、`apply_preset`・`compute_spill_warning`・`on_qmode_change` が受け取って `L(key, lang)` に渡す。
-  - B: 現状のまま。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138。
-- **関連ファイル**: `gradio_ui/ui.py`（`preset.change` の配線・幅／高さ／フレーム数の `.change` の配線・`on_qmode_change`）、`gradio_ui/presets.py`（`apply_preset`・`compute_spill_warning`）、`gradio_ui/i18n.py`（`warn_hq_unsupported`・`warn_spill_limit`）。
-
-### 1-67. `use_component_files` の既定 False のまま LTX 2.3 を real で読み込むと、VAE／音声の読み込み元が無くなる疑い（起票：2026-10-02）
-
-- **現象**: `config.py` の `VramConfig.use_component_files` の既定は False だが、配布の `config.yaml.example` と仕様書 `Videomni_Backend_Specification.md` §11.3 は `true`。LTX 2.3 のアダプタ `services/engines/ltx/adapter.py` の `_build_load_payload` は `checkpoint_path` に常に `""` を渡し、VAE／音声のビルダーを部品ファイルへ付け替えるのは `use_component_files` が真のときだけ（`engine/pipeline/fast_video_pipeline.py`）。`_real_available` はこの鍵を見ないので、`config.yaml` が無い（または鍵が欠けた）環境で LTX 2.3 を real で読み込むと、mock に落ちずに読み込みで失敗する疑いが強い（コメント現行化の検算がコードで確認。CPU で再現済み——`ModelLedger(checkpoint_path="")` を組み立てると、VAE・音声の4つのビルダーがいずれも `model_path=''` になることを確認した。実際に失敗する時点〔読み込みのどの段で落ちるか〕は実機依存のため未確認）。同じく `ModelConfig.checkpoint_name` の既定（`"ltx-2.3-22b-distilled"`）も example と仕様書 §11.2（`-1.1` 付き）と違う。
-- **影響**: `config.yaml.example` を写した環境では起きない。既定値で起動した環境だけ。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 既定を配布の値（`use_component_files=True`・`checkpoint_name` は `-1.1` 付き）に揃える。
-  - B: `_real_available` でこの鍵も見て mock に落とす。
-  - C: `main.py` の `config.yaml` 不在の警告にこの鍵のことを書く。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139（コメント現行化 第 7 区域の検算の申し送り）。
-- **関連ファイル**: `config.py`（`VramConfig`・`ModelConfig`）、`config.yaml.example`、`services/engines/ltx/adapter.py`（`_build_load_payload`・`_real_available`）、`engine/pipeline/fast_video_pipeline.py`、`main.py`（`build_app` の警告）。
-
-### 1-68. MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` で止まる（起票：2026-10-02）
-
-- **現象**: `mcp_server/tools/jobs.py` の `purge_terminal_jobs` は、個別の削除の失敗として `ToolError` だけを受けて続行する。しかし `mcp_server/client.py` の `BackendClient._request` は `httpx.ReadTimeout` を `ToolError` に変換せずそのまま投げ直すので、DELETE の1件が読み取りタイムアウトになると一括削除がそこで止まる。ツールの説明文（AI エージェントに渡る）の「個別の削除が失敗しても処理を止めず」が成り立たない場合がある。
-- **影響**: DELETE は軽い処理なので起きにくい。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: `_request` でタイムアウト（`httpx.TimeoutException`）も `ToolError` に包む（ただし `load_pipeline`・`join_job` は素通しの `httpx.ReadTimeout` を自分で受けて `finished: false` を返す設計〔[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §2 の D5〕なので、包むなら `purge_terminal_jobs` の経路だけにするか、2 ツール側も合わせて直す）。
-  - B: `purge_terminal_jobs` で `httpx.ReadTimeout` だけを個別の失敗として受ける（他の `httpx.TimeoutException` 系は、`_request` が既に `BACKEND_UNREACHABLE` へ変換しているため対象に含めない）。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139。
-- **関連ファイル**: `mcp_server/tools/jobs.py`（`purge_terminal_jobs`）、`mcp_server/client.py`（`_request`）。
-
-### 1-69. バッチ A2V の計画の写し（MCP）と本家（Gradio・操作パネル）の挙動の差（起票：2026-10-02）
-
-- **現象**: `mcp_server/batch_planning.py` は `gradio_ui/manifest.py`・`handlers.py` の写しだが、3点で挙動が違う。(a) `raw_frame_count` は fps を `_resolve_fps` に通す（0・None・数値でないときは24.0）が、写し元 `manifest.raw_frame_count` は `float(fps)` をそのまま使う。(b) `over_frame_limit` の `max_frames=0` は MCP と Gradio が481（`MAX_FRAMES`）に戻すが、操作パネルの `webui/src/modes/batch/manifestMerge.ts` は `??` で0のまま使う（全行が over-cap）。(c) パリティテスト `tests/test_mcp_batch_planning.py` が本家と総当たりで比べるのは `suggest_frames_for_audio` だけで、`raw_frame_count`・`over_frame_limit` の写しは比べていない。
-- **影響**: 正常な入力（fps が正の数・`max_frames` が1以上）では3実装とも同じ。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 0と数値でない fps の扱いを決めて3実装を揃える。
-  - B: パリティテストを `raw_frame_count`・`over_frame_limit` にも広げる。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139。[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §9。
-- **関連ファイル**: `mcp_server/batch_planning.py`、`gradio_ui/manifest.py`（`raw_frame_count`・`over_frame_limit`）、`tests/test_mcp_batch_planning.py`、操作パネルの `webui/src/modes/batch/manifestMerge.ts`。
 
 ### 1-70. `install_ltx.ps1` Step 7 の検証表に `.venv-engine-ltx25` の python が無い（起票：2026-10-02）
 
@@ -282,18 +203,6 @@
 - **着手**: 着手時は go／no-go の検討から始める。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
 - **関連ファイル**: `scripts/build_xformers.ps1`（CUDA探索ブロック〔2a〕・`-CudaVersion`・2a の `nvcc --version` の表示・1 の torch の表示）。
-
-### 1-72. `config.yaml.example` の comfort token budget の値の行が、複製した `config.yaml` にもそのまま入る（起票：2026-10-02）
-
-- **現象**: `config.yaml.example` の `limits` 節は `chain_comfort_token_budget: 40000` と `single_comfort_token_budget: 44880` を、コメントではない実際の設定行として持つ。直前の注記は「このコメントはexampleのみに書く。実運用config.yamlには追記しない——`chain_comfort_token_budget`も実運用yamlには無くPydantic既定値のまま配信されている前例に倣う（yamlに書くと将来の定数調整が実機に届かなくなる）」と書き、この2つの値が `config.yaml` に「書かれない」運用を前提にしている。しかし `config.yaml.example` を複製して `config.yaml` を作る通常の導入手順では、この2行もそのままコピーされるため、値そのものが最初から利用者の `config.yaml` に入ってしまう。
-- **影響**: `config.py` の既定値（`LimitsConfig.chain_comfort_token_budget`・`single_comfort_token_budget`）を将来調整しても、example由来の `config.yaml` を使っている利用者には届かない。快適上限の目安線の表示がずれるだけで、クラッシュ・データ破損は無い。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 2行をコメントアウトした例示（値は書くがyamlとしては無効）に変える。
-  - B: 値の行は残し、注記を「example限定」ではなく「複製した場合もこの値が有効になる」という現状に合わせて書き直す。
-  - C: 現状維持（値の行を残すかはコード側の判断）。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
-- **関連ファイル**: `config.yaml.example`（`limits` 節）、`config.py`（`LimitsConfig.chain_comfort_token_budget`・`single_comfort_token_budget`）。
 
 ### 1-73. `run.ps1` の二重起動判定が `config.yaml` の `server.port` を読まない（起票：2026-10-02）
 

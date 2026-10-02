@@ -312,8 +312,8 @@ def build_app(args: argparse.Namespace) -> FastAPI:
     # Last line of defence: load_config() falls back to the code defaults
     # WITHOUT raising when config.yaml is absent, and those defaults differ
     # from the shipped config.yaml.example (empty ic_loras and
-    # generation_presets, for one), so the server boots without the operator's
-    # settings. Say so, once, in English and Japanese.
+    # generation_presets, for one; vram.use_component_files is on in both),
+    # so the server boots without the operator's settings. Say so, once, in English and Japanese.
     _config_path = Path(args.config) if args.config else DEFAULT_CONFIG_PATH
     if not _config_path.exists():
         logger.warning(

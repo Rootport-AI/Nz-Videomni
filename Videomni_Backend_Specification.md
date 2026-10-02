@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.77**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 版 | **v0.5.78**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-10-02**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -126,6 +126,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.75 | 2026-09-30 | **§6.7・§11 の `limits.max_width` / `max_height` の実値を配布値へ訂正し、`config.py` の補完値と書き分けた（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。§6.7 の表と §11.7 は実値を `1920` / `1088` と書いていたが、配布ひな型 `config.yaml.example` の実値は `4096` / `4096` であり、`1920` / `1088` は `config.py::LimitsConfig` の補完値（キー省略時の値）である。検証はこの値を読まず `api/models.py` の `Field(le=4096)` 固定値で決まる旨も併記した。あわせて**§6.8** のエラーコードの件数の書き写しを、正本 `api/errors.py` への参照へ改めた。記録は `Docs/VERIFICATION_LOG.md` §131。 |
 | v0.5.76 | 2026-10-01 | **§6.2 に撮り直し（`retake`）の音声の裁定の補足を追加した（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。補足「チェーンの `retake`（撮り直し）の音声の補足」を新設し、窓の音声の符号化が窓の長さに足りないとき（`regenerate_audio` の真偽で、ジョブの失敗か警告のみかが分かれる）と、窓に音声トラックが無いときの扱いを、エンジンの実装（`engine/pipeline/chain_pipeline.py` の `_encode_retake_window`・`engine25/chain25.py`）に合わせて記した。結果を読む `metadata.json` の `retake` ブロックのキーも併記した。記録は `Docs/VERIFICATION_LOG.md` §133。 |
 | v0.5.77 | 2026-10-02 | **§11 から、どのコードからも読まれていなかった設定 7 項目を削除した**（`model.ltx_repo_dir`・`model.reload_interval`・`model.text_encoder`・`vram.allow_disable_low_vram`・`vram.attention_tile_size`・`upload.normalize_to_png`・`output.format`）。`config.py`・`config.yaml.example` から消したのに合わせ、§11.2・§11.3・§11.6・§11.8 の行と、§5.5・§9.4 の言及を直した。`GET /api/v1/config`（`AppConfig.model_dump()`）の応答からもこれらのキーが消える。古い `config.yaml` に残った行は Pydantic の `extra='ignore'` で黙って無視される（警告は出ない）。**§6.5b の `block_swap_prefetch_available` の意味を定め直した**——「実際に効く構成かどうか」「判定式は実ゲートと完全同一」という言い切りをやめ、設定値（`block_swap_blocks_on_gpu`）から算出した利用可否であり、全ブロック常駐や組み込みの失敗は反映しないこと、実際に効いたかは `metadata.json` の `block_swap_prefetch_used` で見ることを書いた。コードの場所は行番号ではなく関数名で指すようにした（値そのものと算出式は変えていない）。§6.6 の `keep_resident_used` の行に、常駐の切り替え（arm）が失敗したときも `"on->off"` になることを足した。記録は `Docs/VERIFICATION_LOG.md` §141。 |
+| v0.5.78 | 2026-10-02 | **§6.7 に、`limits` の範囲の鍵（幅・高さ・フレーム数、V2V 継続の `v2v_context_frames_*`、素材（末尾）の `end_context_frames_*`、撮り直しの窓の `retake_window_min_frames` / `max_frames`）は配信されるだけでサーバーの検査には効かないことと、検査の正本（`config.py::LimitsConfig` の既定値・`api/models.py` の `Field` の固定値・`chain_math` の定数と式）を書いた**（文書のみ。凍結 API 契約〔§6〕の鍵・型・既定・応答形は変えていない。既に配信されている鍵の性質の説明である）。**§5.5 の「fail-fast アサートが component ソースの揃いを要求するので、モノリスへ黙って戻ることは無い」を実態に直した**——fail-fast は 4 つのパスと transformer のパスが空でないことだけを確かめ、`use_component_files` は見ない。偽なら付け替えだけが飛ばされ、読み込み元が空のまま読み込みで失敗する。あわせて `config.py` の既定値を配布値に揃えた（`vram.use_component_files` を `false`→`true`、`model.checkpoint_name` を `"ltx-2.3-22b-distilled"`→`"ltx-2.3-22b-distilled-1.1"`。§11.2・§11.3 は既に配布値なので変更なし）。`config.yaml` を置かずに起動したときの `GET /api/v1/config` の `vram.use_component_files`・`model.checkpoint_name` がこの値になる。記録は `Docs/VERIFICATION_LOG.md` §142。 |
 
 ### 0.2 スコープ
 
@@ -613,7 +614,7 @@ LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の 
 
 ### 5.5 reference-only パスの位置づけ
 
-`checkpoint_name` / `pipeline_type` は config に残るが、GGUF + component 経路の重みの読み込みには使われない（§11.2）。かつて同じく config に残っていた `ltx_repo_dir`（`vendor/LTX-2` 上流クローンを指す reference-only のパス）・`text_encoder`・`reload_interval` は、どのコードからも読まれていなかったため 2026-10-02 に `config.py` から削除した。`checkpoint_path`（43GB モノリスへの旧参照パス）は2026-07-28に`config.model`から削除済みで、現在は`services/engines/ltx/adapter.py`が worker payload へ直値の`""`をハードコードして渡すのみ（`DistilledPipeline` 構築のシグネチャを満たすためだけで存在チェック無し）。`fast_video_pipeline.py` の fail-fast アサートが「component/GGUF ソースが全て揃っていること」を build 前に要求するため、モノリスへサイレントにフォールバックすることは無い。
+`checkpoint_name` / `pipeline_type` は config に残るが、GGUF + component 経路の重みの読み込みには使われない（§11.2）。かつて同じく config に残っていた `ltx_repo_dir`（`vendor/LTX-2` 上流クローンを指す reference-only のパス）・`text_encoder`・`reload_interval` は、どのコードからも読まれていなかったため 2026-10-02 に `config.py` から削除した。`checkpoint_path`（43GB モノリスへの旧参照パス）は2026-07-28に`config.model`から削除済みで、現在は`services/engines/ltx/adapter.py`が worker payload へ直値の`""`をハードコードして渡すのみ（`DistilledPipeline` 構築のシグネチャを満たすためだけで存在チェック無し）。`fast_video_pipeline.py` の fail-fast 検査は、build 前に 4 つのパス（`component_video_vae_path`・`component_audio_vae_path`・`component_text_projection_path`・`gguf_gemma_path`）と transformer のパスが空でないことだけを確かめ、`use_component_files` は見ない。`use_component_files` が偽だと部品ファイルへの付け替えだけが飛ばされ、VAE／音声の読み込み元に `model_path=""` が残って読み込みで失敗する（モノリスは配布されない）。そのため偽は動かない構成であり、`config.py` の既定値も配布ひな型 `config.yaml.example` も `true` である。
 
 ---
 
@@ -1132,6 +1133,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `single_comfort_token_budget` | `44880` | 単発 `/generate` 1発が快適に収まる注意トークン上限（2026-08-18追加）。**表を持たない古いサーバー向けの互換値**。下記参照 |
 
 **`max_conditioning_images`**（2026-09-08 改）は、`limits` の中でただ 1 つ **`config.yaml` から設定できない項目**である。`LimitsConfig` はこの名前を入力フィールドとしては持たず、`config.py` の定数 `MAX_CONDITIONING_IMAGES`（現在 10）をそのまま返す **computed field（pydantic の読み取り専用の算出項目）**として持つ。`GET /config` が返す JSON の形は従来と変わらない（`model_dump()` に含まれる）。変わったのは **`config.yaml` に書いても効かない**ことだけで、古い `config.yaml` に `max_conditioning_images: 5` が残っていても `extra='ignore'` で捨てられ、**クライアントへ知らせる値と、サーバーが実際に弾く値とが原理的にズレない**。以前はこの 2 つが別々の場所にあり、`config.yaml` を書き換えても上限は変わらないのに知らせる値だけが変わる、という罠になっていた。ひな型 `config.yaml.example` からはこのキーの行を削除してある。**廃止キーの警告機構（`DEPRECATED_MODEL_KEYS`）はここへ広げていない**——無視した結果が正しい値になるので実害が無く、規則を 1 つ増やすだけになるためである。
+
+**範囲の鍵は配信されるだけで、サーバーの検査には効かない**（2026-10-02 明記。鍵の追加や型の変更ではなく、既に配信されている鍵の性質の説明である）。上の表の `max_width` / `max_height` / `max_num_frames` のほか、`limits` は V2V 継続の `v2v_context_frames_min` / `max`（と `_default`）、素材（末尾）の `end_context_frames_min` / `max`（と `_default`）、撮り直しの窓の `retake_window_min_frames` / `max_frames` も `GET /config` で配信する。これらの値はクライアントの事前検査と画面の範囲に使われる（Gradio は `gradio_ui/validation.py` の V2V の検査と `gradio_ui/handlers.py` の連結の幅・高さの検査、操作パネルは幅・高さ・フレーム数・V2V・撮り直しの窓の下限）。サーバー側の検査の正本は別にあり、`config.yaml` の値を読まない——**V2V と素材（末尾）は `config.py::LimitsConfig` の既定値**（`api/models.py` の `_LIMITS_DEFAULTS = LimitsConfig()`）、**幅・高さ・フレーム数は `api/models.py` の `Field` の固定値**、**撮り直しの窓は `chain_math` の定数と式**（`RETAKE_WINDOW_MIN_PX`・`retake_max_window_px`）で行う。したがって `config.yaml` でこれらの鍵を書き換えても変わるのは配信値だけで、サーバーが受け付ける範囲は変わらない（範囲を広げる向き〔上限を上げる・下限を下げる〕に書くと、画面は通すがサーバーは 422 を返す。狭める向きなら画面で選べる範囲が狭まるだけである）。範囲そのものを変えるときは、上記の正本（V2V・素材（末尾）なら `config.py` の既定値）を変える。
 
 `spill_free_frames`（キーは `"WxH"` 生成サイズ文字列）は、API が 481f まで受理する一方でこの値を超えると shared メモリへ溢れて低速化する（OOM はしない）という境界を、クライアント UI の警告用に配る。**マップの中身は 2026-08-31 に判定規則 v3 で再測定してあり、数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記（実体は `config.yaml` の `limits.spill_free_frames`）である**——本書へは写さない。当初の実測経緯は `Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6（同 §8.4 末尾に再測定の追記あり）。
 

@@ -16,8 +16,10 @@
   _DEFAULT_MAX_FRAMES)``）超は ``"over-cap"``。理由コードと上限の規約の正本は
   ``Docs/BATCH_A2V_CSV_SPEC.md``）。
 
-写経ロジックの乖離を防ぐため、``tests/test_mcp_batch_planning.py`` が本家
-（``gradio_ui.handlers.suggest_frames_for_audio``）との総当たりパリティで
+写経ロジックの乖離を防ぐため、``tests/test_mcp_batch_planning.py`` が本家の
+3 関数（``gradio_ui.handlers.suggest_frames_for_audio``・
+``gradio_ui.manifest.raw_frame_count``・``gradio_ui.manifest.over_frame_limit``。
+後の 2 つは fps が正・``max_frames`` が 1 以上の正常域）との総当たりパリティで
 固定している。**ロジックを変更する場合は本家側とこのファイルとパリティ
 テストの3点を必ず同時に更新すること。**
 

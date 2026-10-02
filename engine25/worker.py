@@ -816,7 +816,7 @@ def _do_generate(msg: dict) -> None:
         # tell a MASKED job from a plain one, and the canvas both features send
         # arrives as ``ic_reference=yes`` either way.
         f"inpaint={'yes' if inpaint else 'no'} "
-        f"preprocess={_preprocess_kind(msg)} attn={attn_strength:.3f} "
+        f"preprocess={_preprocess_kind(msg)} ic_attn={attn_strength:.3f} "
         # What was ASKED for. What was GOT is the pair of echo keys on the done
         # event below, which can differ ("on->off").
         f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'} "
@@ -1085,7 +1085,8 @@ def _do_generate(msg: dict) -> None:
         num_frames=result.num_frames,
         encode_fps=result.encode_fps,
         size_bytes=result.size_bytes,
-        phases=result.phases,
+        # No top-level ``phases``: the phase ledger rides in ``ltx25["phases"]``
+        # only (one copy, the one the app writes into metadata.json).
         # 2.3's echo keys, same names and same three values ("off" / "on" /
         # "on->off"), so the app relays them from one code path per engine.
         block_swap_prefetch_used=_PIPE.block_swap_prefetch_used(),
@@ -1421,7 +1422,7 @@ def _do_generate_chain(msg: dict) -> None:
         # the same line rather than a second one: what the chain was ASKED for,
         # before any of it runs.
         f"ic_loras={len(ic_loras)} ic_reference={'yes' if ic_reference else 'no'} "
-        f"preprocess={_preprocess_kind(msg)} attn={ic_attn:.3f} "
+        f"preprocess={_preprocess_kind(msg)} ic_attn={ic_attn:.3f} "
         f"stage2win={spec.stage2_window or 'standard'} "
         # What was ASKED for; the done event's echo keys say what was GOT.
         f"fused={'on' if fused else 'off'} prefetch={'on' if prefetch else 'off'} "
@@ -1508,7 +1509,6 @@ def _do_generate_chain(msg: dict) -> None:
         num_frames=meta.get("total_px"),
         encode_fps=ltx25.get("encode_fps"),
         size_bytes=ltx25.get("size_bytes"),
-        phases=ltx25.get("phases"),
         # 2.3's chain contract: the whole layout + metadata under one key.
         chain=meta,
         # The same echo keys, same values, as the single op's done: a chain runs
@@ -1537,6 +1537,8 @@ def _do_generate_chain(msg: dict) -> None:
         # ``chain=meta`` already carries ``meta["ltx25"]`` (built by
         # ``chain25.py``), and duplicating it at the top level would be two
         # copies of one dict to keep in sync instead of one.
+        # ``phases`` gets the same treatment: no top-level key, the one copy is
+        # ``chain=meta``'s ``metadata["ltx25"]["phases"]``.
         vae_mode_used=_PIPE.video_vae_kind,
     )
 

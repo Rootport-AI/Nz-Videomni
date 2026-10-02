@@ -1275,11 +1275,13 @@ $utilsPy = "$ProjectRoot\.venv-utils\Scripts\python.exe"
 $utilsFreezeSrc = "$ProjectRoot\tracking\venv-utils.freeze.txt"
 $utilsStateFile = "$ProjectRoot\.venv-utils\.nz-engine-state"
 
-# SHA-256 over the freeze body PLUS the direct pins. The freeze file alone is
-# NOT a sufficient input: the pinned revs/URLs are hardcoded in this script, so
-# a bump would otherwise leave the hash unchanged and never re-apply. Line
-# endings are normalised first so a CRLF/LF checkout flip does not masquerade
-# as a change.
+# SHA-256 over the freeze file's pinned lines PLUS the direct pins. The freeze
+# file alone is NOT a sufficient input: the pinned revs/URLs are hardcoded in
+# this script, so a bump would otherwise leave the hash unchanged and never
+# re-apply. Comment lines and blank lines are dropped before hashing (line
+# endings are normalised first), so editing a freeze file's comments or a
+# CRLF/LF checkout flip does not re-apply the venv; the pinned name==version
+# lines and the direct pins are what count. Trailing comments are not stripped.
 # $DirectPins is OPTIONAL (default @()) for the pin-less .venv-utils stack, whose
 # whole dependency set lives in its freeze file. An empty array joins to the empty
 # string, so the payload stays deterministic ("<body>`n`n") and a venv with no pins
@@ -1289,7 +1291,8 @@ function Get-EngineStateHash {
         [Parameter(Mandatory)] [string]   $FreezeFile,
         [string[]] $DirectPins = @()
     )
-    $body = [System.IO.File]::ReadAllText($FreezeFile).Replace("`r`n", "`n")
+    $lines = [System.IO.File]::ReadAllText($FreezeFile).Replace("`r`n", "`n") -split "`n"
+    $body = @($lines | Where-Object { $_.Trim() -ne '' -and -not $_.TrimStart().StartsWith('#') }) -join "`n"
     $payload = $body + "`n" + ($DirectPins -join "`n") + "`n"
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
@@ -1503,14 +1506,10 @@ if ($foundIds -contains 'UETrack') {
 #
 # PyTorch SDPA is the always-available backend on every architecture, and this
 # step does not install anything for it -- not on any arch, not optionally.
-# (This step does not pick up a prebuilt xformers wheel either: such a wheel is
-# compiled for ONE compute capability and installs cleanly on machines it cannot
-# run on. If you want to experiment with xformers, build and install it by hand
-# -- see scripts/build_xformers.ps1 -- and note that installing it is not inert:
-# the project's own engine code does not import it, but the 2.3 engine's
-# ltx-core in .venv-engine uses xformers for its default attention whenever
-# xformers is importable, so the 2.3 engine's sdpa jobs would then run on
-# xformers.)
+# (No prebuilt xformers wheel is picked up either. Installing xformers by hand
+# is not inert: the project's own code never imports it, but the 2.3 engine's
+# ltx-core in .venv-engine uses it for its default attention whenever it is
+# importable.)
 #
 # sageattention, the optional second backend, is NOT installed here either --
 # it is a pinned wheel in the $engineDirectPins / $ltx25DirectPins arrays above
@@ -1552,7 +1551,7 @@ if ($CloneUpstreamReference) {
         git clone https://github.com/Lightricks/LTX-2.git $vendorDir
         if ($LASTEXITCODE -ne 0) { throw "vendor/LTX-2 clone failed." }
     }
-    Write-Host "  (reference only: config.model.ltx_repo_dir points here; no venv built)"
+    Write-Host "  (reference only; no venv built)"
 }
 
 # ----------------------------------------------------------------------------

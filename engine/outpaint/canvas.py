@@ -47,20 +47,24 @@ MIN_INNER_SIDE = 256
 class OutpaintGeometry:
     """Canvas size plus the four pad bands around the kept source rectangle.
 
-    ``MIN_INNER_SIDE`` (256) is not arbitrary. The Laplacian blend dilates the
-    mask at a fixed low resolution: the mask is first resized so its **long side
-    is** ``pyramid_blend._MASK_LOW_RES_LONG_SIDE``, then max-pooled with radius
+    ``MIN_INNER_SIDE`` (256) is a flat floor that stops the pathological case,
+    not a lower bound derived from the canvas and the blend radius. The
+    Laplacian blend dilates the mask at a fixed low resolution: the mask is
+    first resized so its **long side is**
+    ``pyramid_blend._MASK_LOW_RES_LONG_SIDE``, then max-pooled with radius
     ``r``, then resized back. The effective transition width at full
     resolution is therefore
 
         r * (canvas_long_side / 64)
 
     which for a 1920-wide canvas and ``r = 5`` is roughly 150px of
-    full-resolution feathering that eats *inwards*, into the kept rectangle.
-    An inner rectangle of, say, 64px would be consumed outright — the "kept"
-    source would be entirely replaced by generated pixels. 256px is a flat
-    floor against that case, not a bound sized for every canvas and radius:
-    the band grows with both.
+    full-resolution feathering that eats *inwards*, into the kept rectangle,
+    from every padded side. 256 does not keep the source safe from that: with
+    bands on both the left and the right, a 256-wide inner rectangle on a
+    1920-wide canvas keeps 0 of its 256 columns at the stage-1 default
+    ``r = 5`` (120 at the stage-2 default ``r = 2``; 96 at ``r = 5`` on a
+    1024-wide canvas; 0 at ``r = 2`` on a 4096-wide one). The band grows with
+    both the canvas and the radius; the floor does not.
     """
 
     canvas_width: int

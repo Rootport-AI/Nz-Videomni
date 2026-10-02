@@ -986,6 +986,9 @@
   - **のりしろ（`overlap_frames`）は2以上が必須**。内部区画が音声のクロスフェードを1本増やすため、のりしろ1では音声ののりしろ予算が枯渇する。総当たり検証で退化はのりしろ1に完全に限定されることを確認したうえで、条件を1つ足して理由付きでブロックしている（フロントは`endSourceNeedsOverlap`、サーバーは422）。
   - **仮オブジェクトは「末尾合わせ」で置く**: 生成中を示す仮オブジェクトを「素材の開始−(出力長−帯長)」の位置に置き、生成動画の帯が素材の冒頭に重なるようにした。**この配置のためのネイティブ（C++）改修はゼロ**で、シフト済みの座標を既存の頭揃え配置として渡すRetakeと同じ手法である（右クリックの新項目そのものはネイティブと言語ファイルに追加している）。予約時はベストエフォートの見積り、Generate時に確定値で打ち直す。
   - **上限136は運用上限**（幾何上の限界ではない）。実測済みの範囲の端という意味で据え置いた。`config.yaml`の1行と実機の品質確認で引き上げられる。
+
+> **訂正（VERIFICATION_LOG §142）**: サーバーの検査は `config.py` の既定値（`api/models.py` の `_LIMITS_DEFAULTS`）で行われ `config.yaml` の値は読まない。引き上げは `config.py` の既定値の変更と実機の品質確認。詳細は VERIFICATION_LOG §142。
+
   - **排他と併用**: Retake・a2v（音声から動画を生成する機能）・IC-LoRA参照動画とは排他。**素材（冒頭）との併用と、クリップ0のキーフレーム画像との併用は無条件で可能**（クリップは帯に届かないため衝突しない）。バッチi2v-longではテンプレート合成時に素材（末尾）を除去し、添付中はバッチをブロックする。
 - **機械ゲート（エージェント実施）は11項目すべて合格**。実GPUで8ジョブを流し、①出力長＝クリップ合計＋帯がすべての構成で一致 ②凍結の証明（stage-1組み立て後と再結合後の末尾テンソルの差）が**厳密に0.0** ③帯がタイルを2枚・3枚またぐ構成と、帯だけで埋まる完全凍結タイルが出る構成でも破綻なし ④VRAMピークは実確保約9.3GB・予約約13.5GBで従来のチェーン生成と同水準、を確認した。詳細はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §60。
 - **既知の許容事項（すべて仕様として受け入れ済み）**
@@ -2285,3 +2288,316 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: **クローズ（2026-09-28）。** 実装と較正の記録は main へ merge 済み。**配信値は変えていない。**
 - **残課題**: 配信値への反映は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31 で行う。検証に使った fp8 の safetensors 2 本は、オーナーが常用しているため削除しない（オーナー裁定・2026-09-27）。LTX 2.3 fp8 の全 on の境界は未確定（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第13.2節。この機体で測るにはコミットの上限を上げる手当てが要る。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §119.5）。
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§117**（LTX 2.3・B-1）・**§118**（LTX 2.5・B-2）・**§119**（快適上限の較正・B-3）・**§121.3**（現在の判定規則）、結論の要約＝[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) **第13節**、コードの正本＝`sft_quant_format.py`（旧名 `sft_fp8_format.py`）・`engine/sft_quant/`（旧名 `engine/fp8/`）・`engine25/`、README「追加の transformer（GGUF／量子化 safetensors）/ LoRA を配置する」。
+
+### 3-170. `block_swap_prefetch_available` の意味を「設定値から算出した利用可否」と定め直す（起票：2026-10-01、裏取り・文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-35 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-35（**同書側は欠番**）。コメント現行化で検出した申し送り（§132）から起票された項目。
+- **到達条件**: 仕様書 §6.5b の「判定式は実ゲートと完全同一」という言い切りと行番号での指し方（`adapter.py:1860`）を、実態（設定値 `block_swap_blocks_on_gpu` から算出した利用可否であり、全ブロック常駐や組み込みの失敗を反映しない）に合わせて訂正すること。**達成した。**
+- **何が完了したか**: [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.5b の該当箇所を、行番号ではなく関数名で指す形に訂正し、「実際に効いたかは `metadata.json` の `block_swap_prefetch_used` で見る」ことを明記した。LTX 2.5 のアダプタが `or 8` ではなく `DEFAULT_BLOCKS_ON_GPU`（値8）を使うが、None・0・正・負のどの設定値でも正負の判定は同じ結果になることも追記した。`tests/test_smoke.py` の該当コメント2箇所（84〜87行・106〜108行）も新しい定義に合わせて書き直した。選択肢Aの「実際に効くかどうかに合わせる」実装変更は、ワーカーからの報告経路の新設を要する大きい変更のため見送った。
+- **どの物差しで通ったか**: 文書とコードの対応を敵対的レビューで照合した（`services/pipeline_manager.py` の `_block_swap_prefetch_available`・`services/engines/ltx/adapter.py` の `_build_load_payload`・`services/engines/ltx25/adapter.py` の `DEFAULT_BLOCKS_ON_GPU` を実物で確認）。機械的な動作変更は無い。
+- **クローズ理由**: 文書訂正のスコープが完了した。実際の判定式を実ゲートに合わせる選択肢Aは見送った。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 実際の判定式を実ゲートに合わせる改修（選択肢A）は未着手（ワーカーからの報告経路の新設が要る）。
+- **正本・出典**: [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.5b（v0.5.77）、`tests/test_smoke.py`、`services/pipeline_manager.py`（`_block_swap_prefetch_available`）。
+
+### 3-171. `join_v2v` の尺の検査の限界を docstring に明記（起票：2026-10-01、裏取り・文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-38 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-38（**同書側は欠番**）。
+- **到達条件**: `join_v2v` が音声だけ短く出たずれを検出しない現状を文書に明記すること。選択肢A（音声ストリームの長さも別途比べる検査を足す）は結合自体を失敗させ利用者の手元に何も残らず悪化するため採らない。**達成した。**
+- **何が完了したか**: `services/video_io.py` の `join_v2v` の docstring とコメントを、実際の検査内容（映像のフレーム数は完全一致・コンテナの長さ〔ffprobe の `format=duration`、通常は映像ストリーム〕は±0.15秒以内・音声ストリーム自体の長さは検査しない）に合わせて書き直した。
+- **どの物差しで通ったか**: ffmpeg で音声が0.5秒短い素材を結合しても例外が出ないことを確認済み（裏取りの確定事実）。
+- **クローズ理由**: 文書訂正のスコープが完了した。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 音声ストリーム単独の長さ検査を足す選択肢Aは見送ったまま。
+- **正本・出典**: `services/video_io.py`（`join_v2v`）。
+
+### 3-172. 誤報。`MULTI_ENGINE_DESIGN.md` §4.1 の「import している3ファイル」は正しかった（起票：2026-10-01、裏取り：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-39 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-39（**同書側は欠番**）。
+- **到達条件**: `services/model_registry.py` の `CATEGORIES` を import するファイル数の食い違いを裏取りすること。
+- **何が完了したか**: `CATEGORIES` を import するのは `api/models_registry.py`・`services/pipeline_manager.py`・`tests/test_model_registry.py` の3ファイルであることを確認した。これは記述を入れたコミットの時点でも同じで、[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §4.1 の記述（3ファイル）は正しい。台帳側が「テストを除く」という数え方を後から持ち込んだために2ファイルと誤って記載していた。`gradio_ui/adapters.py` は同じ内容の `MODEL_CATEGORIES` を自前で定義しており import はしていない。
+- **どの物差しで通ったか**: `git grep -w` で裏取り（裏取りの確定事実）。
+- **クローズ理由**: 文書に誤りは無いと確認できたため、変更なしでクローズした。
+- **状態**: dev（確認のみ。コード・文書変更なし。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 無し。
+- **正本・出典**: [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §4.1、`services/model_registry.py`（`CATEGORIES`）。
+
+### 3-173. 連結生成のワーカーログの `attn=` を `ic_attn=` に改名（単発・連結とも）（起票：2026-10-01、裏取り・実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-44 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-44（**同書側は欠番**）。
+- **到達条件**: LTX 2.3 と LTX 2.5 の連結生成のワーカーログの綴りの違いを裏取りすること。
+- **何が完了したか**: 裏取りの結果、違うのは `retake=`・`end_source=` の2項目だけでなく大半で、全体を2.3に揃える価値は無いと判断した。ただし同じ鍵名 `attn=` が2.3では注意機構の実装名・2.5ではIC-LoRAの強度という別の意味を持っていたため、読み違いの元になるこの1点だけを `engine25/worker.py` の単発（`_do_generate`）・連結（`_do_generate_chain`）の要約行で `ic_attn=` に改めた。IC-LoRA専用のログ行（`chain25.py`・`inpaint25.py`・`outpaint25.py`・`pipeline25.py` の「IC-LoRA reference patch installed: … attn=」）は参照の取り付けの行で文脈から意味が読めるため据え置いた。
+- **どの物差しで通ったか**: ログを解析する自動の道具は無い（`Docs/Outputs-archive`・`scripts`・`mcp_server`・`services` を grep して確認）。
+- **クローズ理由**: 綴りの統一は価値が無いと判断し、鍵名の衝突だけ解消して閉じた。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 無し。
+- **正本・出典**: `engine25/worker.py`（`_do_generate`・`_do_generate_chain`）。
+
+### 3-174. carry と末尾素材の帯が合体したタイルは映像も音声もdenoise対象外と確認（起票：2026-10-01、裏取り：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-45 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-45（**同書側は欠番**）。
+- **到達条件**: carry と末尾素材（End source）の帯が合体したタイルで、キーフレーム印の消去が行われない件の実害を裏取りすること。
+- **何が完了したか**: 総当たり24,750枚を調べ、映像が合体した3,613枚の全部で音声も合体していることを確認した。合体したタイルは映像も音声もdenoiseの対象外であり、キーフレーム印が残っていても出力に影響しない。効かない印のための条件分岐は追加しない。
+- **どの物差しで通ったか**: 総当たり確認（裏取りの確定事実）。
+- **クローズ理由**: 実害が無いと確認できたため、コード変更なしでクローズした。
+- **状態**: dev（確認のみ。コード変更なし。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 無し。
+- **正本・出典**: `engine25/chain25.py`（Stage-2 のタイルループ）。
+
+### 3-175. 画角拡張の `source_had_audio` は `metadata.json` に載らないと確認。台帳の記述を訂正（起票：2026-10-01、裏取り：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-48 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-48（**同書側は欠番**）。
+- **到達条件**: 画角拡張で凍結を無効にしたジョブの `source_had_audio` が `metadata.json` に誤った値で載る件を裏取りすること。
+- **何が完了したか**: `engine25/outpaint25.py` の `run_outpaint` が組み立てる `metadata.json` の `outpaint` ブロックには `source_had_audio` が載らないことを確認した。値が出るのはログと、アプリが読まない `done` イベントの鍵だけである。**台帳の「メタデータだけで発生」という記述は誤りだった。** 該当コメントは既に現在の意味を書いている。
+- **どの物差しで通ったか**: コード読解（裏取りの確定事実）。
+- **クローズ理由**: 台帳の記述が誤りだったと確認できたため、コード変更なしでクローズした。
+- **状態**: dev（確認のみ。コード変更なし。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 無し。
+- **正本・出典**: `engine25/outpaint25.py`（`_freeze_source_audio`・`FrozenSourceAudio.source_had_audio`・`run_outpaint` の `metadata.json` 組み立て）。
+
+### 3-176. `cross_attention_modules` を削除（未使用）（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-49 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-49（**同書側は欠番**）。
+- **到達条件**: 呼び出し元の無い公開関数を消すこと。**達成した。**
+- **何が完了したか**: `engine25/neg_prompt25.py` の `cross_attention_modules` を削除した（参照0件。`__all__` にも無い）。未使用になった `Iterator`・`Any` の import も外した。
+- **どの物差しで通ったか**: `git grep -w` で作業ツリー全体を検索し参照0件を確認した（敵対的レビュー項目1）。
+- **クローズ理由**: 消す作業が完了した。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 無し。
+- **正本・出典**: `engine25/neg_prompt25.py`。
+
+### 3-177. `QuantizationPolicy(model_configurator=…)` を外す（読まれない設定）（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-50 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-50（**同書側は欠番**）。
+- **到達条件**: 上流で読まれない設定を外すこと。**達成した。**
+- **何が完了したか**: `engine25/gguf_transformer.py` の `build_quantization_policy` と `Ltx25DiffusionStage.from_safetensors` が組み立てる `QuantizationPolicy(...)` の両方から `model_configurator=LTXModelConfigurator` 引数を外した（既定の `None` のまま）。`engine25/ltxcore_compat.py` の `verify()` のコメントも「4欄のうち3欄から組み立てる」に訂正した——上流の互換性検査そのものは4欄の完全一致を見るので変えていない。
+- **どの物差しで通ったか**: 上流でこの値を読むのは `DiffusionStage.from_checkpoint` だけで、どちらの経路もこのメソッドを通らないためこの設定は一度も読まれないことをコード読解で確認した（敵対的レビュー項目7）。`.venv-engine-ltx25` で `ltxcore_compat.verify()` が例外なく戻ることを確認した。
+- **クローズ理由**: 消す作業が完了した。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 無し。
+- **正本・出典**: `engine25/gguf_transformer.py`（`build_quantization_policy`・`Ltx25DiffusionStage.from_safetensors`）、`engine25/ltxcore_compat.py`（`verify`）。
+
+### 3-178. `keep_resident_used` が arm の失敗を "on->off" として報告するよう修正（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-55 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-55（**同書側は欠番**）。
+- **到達条件**: 常駐の切り替え（arm）が失敗しても `keep_resident_used` が "on" のまま報告される件を直すこと。**達成した。**
+- **何が完了したか**: `engine/worker.py` の `_do_generate`・`_do_generate_chain` が `_keep_resident_used` へ渡す値を `keep_res and _PIPE._keep_resident_enabled` に変えた。`_keep_resident_enabled` は `engine/pipeline/fast_video_pipeline.py` の `_swap_registry` が切り替えに成功したときだけ進む既存の旗で、`_set_keep_resident_job` が例外を握りつぶしても旗は進まないため、armが失敗したジョブは "on->off" として報告されるようになった。`_keep_resident_used` のdocstringの「never half-applies」という言い切りも実態に合わせて書き直した。[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.6 の `keep_resident_used` の行にも、armの失敗が "on->off" の理由に含まれることを追記した。
+- **どの物差しで通ったか**: 新規の回帰テスト `tests/test_worker_keep_resident_resolve.py::test_a_failed_arm_reports_on_to_off` を1本追加し、`_swap_registry` が例外を投げる偽物のパイプラインで `_keep_resident_enabled` がFalseのまま・`keep_resident_used` が "on->off" になることを固定した。敵対的レビューで本物の `_set_keep_resident_job`・`_keep_resident_used` を通ることを確認済み。
+- **クローズ理由**: 修正と回帰テストが完了した。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 実機でarmが実際に失敗する状況は稀で、実機での再確認は特に予定していない（偽物での再現で足りると判断）。
+- **正本・出典**: `engine/pipeline/fast_video_pipeline.py`（`_set_keep_resident_job`・`_swap_registry`）、`engine/worker.py`（`_keep_resident_used`）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.6（v0.5.77）、`tests/test_worker_keep_resident_resolve.py`。
+
+### 3-179. `chunk_size or 8` は画素の区切りで定数の書き写しではないと確認（閉じる）。`retake_window_min_frames` は参照に変更（起票：2026-10-01、裏取り・実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-57 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-57（**同書側は欠番**）。裏取りで見つかった未起票の論点（`config.py` の `retake_window_min_frames = 73` が `chain_math.RETAKE_WINDOW_MIN_PX` の書き写し）も、同じ型として本項の箇条として処理した。
+- **到達条件**: 画角拡張・Inpaintingの2倍拡大が使う `chunk_size or 8` が `pyramid_blend._CHUNK_SIZE` の書き写しかどうかを裏取りすること。
+- **何が完了したか**: 2倍拡大の8は混合の `_CHUNK_SIZE` の書き写しではなく画素の区切りで、LTX 2.5は別の定数 `_PIXEL_CHUNK_FRAMES` で持つことを確認した。別の意味を持つ2つの定数を1つに結びつけないため、`engine/pipeline/outpaint_pipeline.py`・`engine/pipeline/inpaint_pipeline.py` のリテラル `8` はそのまま残した。同じ型の論点だった `config.py` の `LimitsConfig.retake_window_min_frames = 73`（上限側の `retake_window_max_frames` は既に `chain_math.px_from_v_latent(STAGE2_V_TILE)` という式で持っている）は、`chain_math.RETAKE_WINDOW_MIN_PX` への参照に変えた。
+- **どの物差しで通ったか**: 既存テストがそのまま通ることを確認した（コード変更は値の書き写しを参照に変えるだけで値そのものは変わらない）。
+- **クローズ理由**: `chunk_size or 8` は結びつけないのが正しいと確認できたため閉じ、`retake_window_min_frames` は参照に変える修正を完了した。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 無し。
+- **正本・出典**: `engine/pipeline/outpaint_pipeline.py`、`engine/pipeline/inpaint_pipeline.py`、`engine/outpaint/pyramid_blend.py`（`_CHUNK_SIZE`）、`config.py`（`LimitsConfig.retake_window_min_frames`）、`chain_math.py`（`RETAKE_WINDOW_MIN_PX`）。
+
+### 3-180. 使われていないコードの棚卸し（第1次）をすべて処理（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-58 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-58（**同書側は欠番**）。
+- **到達条件**: 箇条a〜j・config・thumbnail・LABELS・NUM_CHANNELS・Format-Sizeの各項目について、消すか残すかを決めて処理すること。**達成した。**
+- **何が完了したか（削除した項目）**:
+  - `engine/api_types.py`: 他から使われている `ImageConditioningInput` 以外のTypedDict・Pydanticモデル群（`ChainClipPayload`ほか、PrismAudio／Qwen3-TTS関連を含む全モデル）を削除した。
+  - `engine/lora_types.py` をファイルごと削除した（`LoraEntry`、import 0件）。
+  - `engine/pipeline/fast_video_pipeline.py` の `LTXFastVideoPipeline.compile_transformer`（`cast` のimportも外した）。
+  - `engine/pipeline/common.py` の `default_guiders`・`DistilledNativePipeline`（未使用になったimport 7つも削除した）。
+  - `LTXFastVideoPipeline.__init__` の `_component_video_vae_path`・`_component_audio_vae_path`・`_component_text_projection_path` の代入3行。
+  - `engine/transformer/block_swap_service.py` の `BlockSwapService.uninstall` と `build_block_swap_service`（同ファイルのdocstring・コメントと `engine25/gguf_transformer.py` の `uninstall_block_swap` の注意書きも実態に合わせて訂正した）。
+  - `engine/gemma/gguf_quant_service.py` の `_load_gguf_connectors` の引数 `target_device`（`tests/test_sft_quant_loader_service.py` の呼び出し3行を位置引数なしに修正した）。
+  - `engine/gguf/loader_service.py` の `build_gguf_loader_service`・`GGUFLoaderService.uninstall`・書くだけの `_original_loader`。
+  - `engine/preprocess/driver.py` の `_make_depth_processor` の関数内import（先頭でimportし `_FACTORIES` の表に `DepthProcessor` を直接書いて関数を削除した。重いVDAのimportは `DepthProcessor._ensure_loaded` の中で遅延のまま）。
+  - `gradio_ui/api_client.py` の `ApiClient.lora_thumbnail_url`（呼び出し0件。Style LoRAのギャラリーは `build_style_gallery` が自前で組む別経路）。
+  - `gradio_ui/i18n.py` の `LABELS` の引かれない10キー（`btn_load_model`・`btn_unload_model`・`msg_coming`・`msg_upload_done`・`msg_generate_error`・`lbl_apikey`・`batch_image_shared`、a2vの3つ `a2v_mode_a2v`・`a2v_guide`・`a2v_cap_panel`）。`tests/test_gradio_ui.py` の2行を文字列の直書きに修正し、`gradio_ui/ui.py` の注記も「its i18n keys remain」を削った。
+  - `config.py` の未使用7項目（`ModelConfig.ltx_repo_dir`・`reload_interval`・`text_encoder`、`VramConfig.allow_disable_low_vram`・`attention_tile_size`、`UploadConfig.normalize_to_png`、`OutputConfig.format`）。`config.yaml.example` の対応する行、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) の §5.5・§9.4・§11.2・§11.3・§11.6・§11.8、`scripts/install_ltx.ps1` の実行時文字列（「reference only: config.model.ltx_repo_dir points here; no venv built」→「reference only; no venv built」）も合わせて直した。`DEPRECATED_MODEL_KEYS` には足していない（7項目は一度も効いたことが無く、同リストが想定する「かつて効いた値が記述子へ移った」という性質と違うため）。
+  - `tracking/uetrack_runtime.py` の `_BASE_CFG` の `MODEL.TASK_DECODER.NUM_CHANNELS`。
+  - `scripts/install_model.ps1` の `Format-Size`（BOM・CRLFは保持した）。
+- **残した項目**: `engine/worker.py` の `_resolve_keep_resident` の戻り値 `_keep_res_reason`（`_`始まりの慣例どおり。理由の値はテストがガードの区別に使う）。
+- **台帳の記述の誤り2点の訂正**: `tracking/uetrack_runtime.py` の `NUM_CHANNELS` について「vendoredの既定と同じ256で無害」は不正確——vendored側に既定値という概念は無く、vendored（`uetrack.py:153`）が実際に読むのは `DECODER.NUM_CHANNELS` であって `TASK_DECODER.NUM_CHANNELS` ではない。`gradio_ui/i18n.py` のLABELSのa2v 3キー（`a2v_mode_a2v`・`a2v_guide`・`a2v_cap_panel`）について、`gradio_ui/ui.py` の注記は「意図して残した」と読めたが、実際は理由の記載が無く残っている事実だけだった。
+- **どの物差しで通ったか**: `git grep -w` で作業ツリー全体（`Docs/VERIFICATION_LOG.md`・`Docs/PENDING_TASKS*.md`除く。`scripts/`・`Docs/Outputs-archive/`・操作パネル `webui/src` を含む）を検索し、消した名前の参照が0件であることを確認した（敵対的レビュー項目1）。AST比較でこの差分により新たに未使用になったimportが0件であることを確認した。`config.yaml.example` を `yaml.safe_load`→`AppConfig.model_validate` で検証し、7項目を足した辞書でも検証が通り `model_dump()` には出ないこと（Pydanticの既定 `extra='ignore'`）を確認した（敵対的レビュー項目2）。`.venv-engine`・`.venv-engine-ltx25`・`.venv`・`.venv-utils` の各venvで関係モジュールのimportが成功することを確認した。実重みのスモーク5件はNUM_CHANNELS削除後も合格した。
+- **クローズ理由**: 棚卸しの対象をすべて処理し終えた。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 無し（参考として見つかった追加の未使用候補2件は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-76 として新規起票した）。
+- **正本・出典**: 各ファイルは上記のとおり。[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §0.1（v0.5.77）・§5.5・§9.4・§11。
+
+### 3-181. `_read_target_vocab_from_header` を `_ltx_gemma_vocab_size` に改名（int・分岐削除）（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-59 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-59（**同書側は欠番**）。
+- **到達条件**: 名前・型・分岐が実態に合っていない関数を実態に合わせること。**達成した。**
+- **何が完了したか**: `engine/gemma/gguf_quant_service.py` の `_read_target_vocab_from_header`（名前はヘッダから読むことを示すが、実際は `GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size` の定数を返すだけで常に `int` を返し `None` を返す分岐が無かった）を `_ltx_gemma_vocab_size` に改名し、戻り値の型注釈を `int | None` から `int` に、呼び出し側の `is not None` 判定（常に真だった）を削除した。`_load_gguf_gemma` の `target_vocab` 引数も `int | None` から `int` に変更した。
+- **どの物差しで通ったか**: `_ltx_gemma_vocab_size` の本体がHEADと同じ値を返すこと、`_load_gguf_gemma` を呼ぶのはモジュール内の1箇所だけで常に `target_vocab` を渡すことをコード読解で確認した（敵対的レビュー項目7）。
+- **クローズ理由**: 名前・型・分岐の整理が完了した。結果は変わらない。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: ヘッダから読む形に戻す選択肢Bは見送ったまま（パディング後の語彙数を持つヘッダは今の読み込み経路に無い）。
+- **正本・出典**: `engine/gemma/gguf_quant_service.py`（`_ltx_gemma_vocab_size`・`GemmaGGUFQuantStateDictLoader.load`・`_load_gguf_gemma`）。
+
+### 3-182. `apply_sd_ops` の試みと警告を削除（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-62 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-62（**同書側は欠番**）。
+- **到達条件**: bf16経路で読み込みのたびに出る警告の原因（死んだコード）を消すこと。**達成した。**
+- **何が完了したか**: `engine/gguf/loader_service.py` の `GGUFStateDictLoader.load` から、存在しない `ltx_core.loader.sd_ops.apply_sd_ops` をimportしようとする試みと、ImportErrorのたびに出ていたWARNINGを削除し、生のGGUFキーをそのまま使う形にした（per-layer側の `GGUFQuantStateDictLoader.load` と同じ扱い）。
+- **どの物差しで通ったか**: `.venv-engine`・`.venv-engine-ltx25` の両venvの `ltx_core.loader.sd_ops` のどちらにも `apply_sd_ops` が無いことを確認し、旧コードは必ずexceptに落ちて生のキーを使っていたこと、差分で変わるのはWARNING1行が出なくなることだけであることを確認した（敵対的レビュー項目7）。
+- **クローズ理由**: 試みの削除が完了した。動作は変わらない。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 無し。
+- **正本・出典**: `engine/gguf/loader_service.py`（`GGUFStateDictLoader.load`）。
+
+### 3-183. `MIN_INNER_SIDE`（256）は一律の床であり、キャンバスと半径に応じた下限ではないと文書で定義（起票：2026-10-01、裏取り・文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-63 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-63（**同書側は欠番**）。
+- **到達条件**: 既定の1920幅・半径5でも256幅の内側がどれだけ膨張の帯に食われるかを実測し、docstringの理由づけを訂正すること。**達成した。**
+- **何が完了したか**: `engine/outpaint/canvas.py` の `MIN_INNER_SIDE` のdocstringと `api/models.py` の `OUTPAINT_MIN_KEEP_SIDE` の注記を、実際に計算し直した値に書き直した——1920幅・半径5（stage-1既定）で256幅の内側は0列しか残らず（stage-2既定の半径2では120列・1024幅で半径5なら96列・4096幅で半径2なら0列）、**台帳の「極端な組み合わせだけ」という記述は過小だった。** 256は一律の床であり、キャンバスと半径から求めた下限ではないことを明記した。
+- **どの物差しで通ったか**: 本物の `build_blend_mask`＋`apply_low_res_mask_dilation` で再計算し、上記の列数と一致することを確認した（敵対的レビュー項目9・参考4）。
+- **クローズ理由**: 文書訂正のスコープが完了した。選択肢A（下限をキャンバスと半径から求める）はAPIとエンジンの2箇所の設計変更を要するため見送った。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: 選択肢A（下限の動的化）は未着手。
+- **正本・出典**: `engine/outpaint/canvas.py`（`MIN_INNER_SIDE`）、`api/models.py`（`OUTPAINT_MIN_KEEP_SIDE`）。
+
+### 3-184. `.gitignore` の死にパターン3つを削除し `*.whl` を追加（起票：2026-10-02、裏取り・実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-75 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-75（**同書側は欠番**）。
+- **到達条件**: `logs_diag/`・`.hf_cache/`・`LTX-2/` が実在しないパターンであることと、`wheels/` の抜けを確認し処理すること。**達成した。**
+- **何が完了したか**: `.gitignore` から死にパターン3つ（`logs_diag/`・`.hf_cache/`・`LTX-2/`）を削除した。**`LTX-2/` は `vendor/*` パターンと重複していただけだったという訂正も含む**（`vendor/LTX-2` は `vendor/*` で既に無視されている）。`scripts/build_xformers.ps1` の既定の出力先（ビルドしたwheelファイル）を無視するため、選択肢Aの案だった `wheels/` 固定ディレクトリではなく、より広い `*.whl` 拡張子パターンを追加した（`-OutDir` を変えても効く）。
+- **どの物差しで通ったか**: `git check-ignore` で3パターンがいずれも実在しない対象であることを確認し、追跡中の `*.whl` が0件であることを確認した（敵対的レビュー項目9）。
+- **クローズ理由**: 処理が完了した。
+- **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **残課題**: `scripts/build_xformers.ps1` 自体を消すかどうかは別途判断（台帳の提案。第3弾）。→ 削除した（§3-194）。`*.whl` の無視も外した。
+- **正本・出典**: `.gitignore`。
+
+### 3-185. V2V／End source／幅・高さ・フレーム数・撮り直し窓の `limits` は配信専用で、サーバーの検査には効かないと文書で定義（起票：2026-10-01、文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-34 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-34（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §131「申し送り」3.）から起票された項目。2026-10-02に `width`・`height`・`num_frames`・`retake_window_*` にも同型の論点があることを追記して範囲が広がった。
+- **到達条件**: `limits` のV2V・End source・幅／高さ／フレーム数・撮り直し窓の各値が `config.yaml` に書いても検証に効かない食い違いを、選択肢B（コードは変えず「配信専用で検査には効かない」と文書で定義し直す）で解消すること。**達成した。**
+- **何が完了したか**: `config.yaml.example` に3箇所の注記を追加した（幅・高さ・フレーム数の節、V2V継続節、撮り直しの窓節。いずれも「検査は〜で行い、ここの値は `/config` で配信されるだけ」という文言）。`config.py` の `end_context_frames_max` のコメントを「`config.yaml` の1行で足りる」から「`api/models.py` は `LimitsConfig()` を検査し `config.yaml` を読まない」実態に訂正した。仕様書 `Videomni_Backend_Specification.md` §6.7 に1段落を追加し（v0.5.78）、`limits` の範囲系の鍵（幅・高さ・フレーム数・V2V継続・End source・撮り直し窓）は配信専用でサーバーの検査には別の正本（`config.py::LimitsConfig` の既定値・`api/models.py` の `Field` 固定値・`chain_math` の定数と式）があることを明記した。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.2 と [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §10 の「`config.yaml` の1行で引き上げられる」という言い切りに、本文を書き換えず「> **訂正（§142）**」の1行を添えた。回帰テスト1本（`tests/test_validation.py::test_config_yaml_context_frame_caps_change_only_the_published_value`）を追加し、`config.yaml` に `end_context_frames_max: 144`／`v2v_context_frames_max: 153` を書いても `/config` の配信値はその値になる一方 `EndSourceSpec`・`SourceVideoSpec` の検査は `config.py` の既定値（136・145）で弾くことを固定した。
+- **どの物差しで通ったか**: 敵対的レビューでGradio側が読む箇所（`gradio_ui/validation.py` の `check_v2v_context`・`gradio_ui/handlers.py` の連結の幅・高さの検査）と操作パネルが読む箇所（`useGenerationForm.ts` ほか・`useChainForm.ts`・`useRetakeForm.ts`）、サーバーの検査箇所（`_LIMITS_DEFAULTS`・`Field(le=4096)` 等・`chain_math.RETAKE_WINDOW_MIN_PX`）を実地で突き合わせ、新しい文がすべて事実どおりと確認した。新規テスト1本を含むアプリ `.venv` 全件2884 passed・54 skipped（失敗0）。
+- **クローズ理由**: 選択肢B（文書での定義し直し）のスコープが完了した。検証ロジック自体を変える選択肢Aは採らなかった。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 検証が `config.yaml` の値を読むようにする選択肢Aは未着手（凍結ゾーンの `api/models.py` に触れるため計画→敵対的レビュー→承認の通常手順が要る）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142、`Videomni_Backend_Specification.md` §6.7（v0.5.78）、`config.yaml.example`（`limits` 節）、`config.py`（`LimitsConfig`）、`api/models.py`（`_LIMITS_DEFAULTS`・`SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source`）。
+
+### 3-186. Gradio の A2V 事前検査の fps を `_snap_frame_rate` で丸め、送信値と一致させた（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-64 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-64（**同書側は欠番**）。コメント現行化 `gradio_ui/` の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138）から起票された項目。
+- **到達条件**: Gradio の A2V の音声の長さの事前検査を、送信される `frame_rate`（`_snap_frame_rate` で丸めた値）と同じ基準で行うこと（選択肢A）。**達成した。**
+- **何が完了したか**: `gradio_ui/handlers.py::make_generate_handler` のA2V経路で、事前検査に使うfpsを `float(frame_rate)` から `_snap_frame_rate(float(frame_rate)) if frame_rate else 24.0` に変えた（1行）。これにより事前検査と `build_a2v_chain_payload` が送る `frame_rate` の丸めが一致する。`_snap_frame_rate` のdocstringの「Known limitation」からA2Vの部分（29.4→29で事前検査が422を見落とす件）を落とし、丸め後もなお丸め前のfpsを読む `presets.py` の連結見積もりの限界だけを残した。`suggest_frames_for_audio` はMCPの写しとパリティテストに連動するため、計画どおり据え置いた（画面からは `gr.Number(precision=0)` で整数しか来ないため実害が無い）。
+- **どの物差しで通ったか**: テスト1本（`tests/test_gradio_handlers.py::test_generate_a2v_precheck_uses_snapped_fps`）。3.32秒・29.4fps・97フレームの直接呼び出しで、`chain_math.audio_latents_required` により29.4fpsなら82（通る）・送信値29fpsなら84（422相当）必要になる食い違いを再現し、API呼び出しゼロで「29.0 fps」「3.36」「3.32」を含む拒否メッセージになることを確認した。HEAD（変更前）のコードでは落ちることを敵対的レビューで確認済み。アプリ `.venv` 全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: `suggest_frames_for_audio` は丸め前のfpsのまま（画面からは整数しか来ないため実害なし。MCPの写しとパリティテストに連動するため触らない判断）。
+- **正本・出典**: `gradio_ui/handlers.py`（`make_generate_handler`・`_snap_frame_rate`）、`chain_math.py`（`audio_latents_required`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-187. バッチ A2V の `dispatch()` に幅・高さの ÷64 の事前検査を追加（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-65 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-65（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138から起票された項目。
+- **到達条件**: バッチA2Vにも幅・高さの÷64の事前検査を足すこと（選択肢B。`dispatch()` の中でGenerateと同じ事前検査を通す）。**達成した。**
+- **何が完了したか**: `gradio_ui/ui.py::dispatch()` のバッチ分岐で、幅・高さ・seed・fpsを`int()`／`float()`に変換する既存の`try`ブロックを「行が無ければ止める」の直後（LoRAの`api.list_loras()`より前）へ移し、直後に `if width_i % 64 != 0 or height_i % 64 != 0: yield L("msg_bad_dimension", lang_v), "", None; return` を追加した。Generateタブと同じ文言 `msg_bad_dimension` を使うが、出し方はNAGの検査と同じく進捗欄への`yield`だけでトーストは出さない。`gradio_ui/batch.py` の `BatchSnapshot` のdocstring「The batch path does not pre-check this」を、実際の検査内容に合わせて書き直した。
+- **どの物差しで通ったか**: テスト1本（`tests/test_gradio_ui.py::test_batch_dispatch_rejects_non_64_width_with_zero_api_calls`）。幅500（64の倍数でない）・LoRAタグ `<lora:x:1.0>` を含む行で`dispatch`を直接呼び、`msg_bad_dimension` だけがyieldされAPI呼び出しが0件（`list_loras`も呼ばれない）であることを確認した。HEADでは`Unknown LoRA`の文言が先に出るか`calls["n"]==1`になって落ちることを敵対的レビューで確認済み。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Bの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: Generateタブの`_precheck_reject`（トースト＋進捗欄）に揃えるかどうかはオーナー判断（敵対的レビュー注意1。計画の「Generateと同じ出し方」という前提はNAGの検査〔トーストを出さない〕には揃っているが、Generateの`_precheck_reject`自体〔トーストも出す〕とは出し方が異なる。揃えるなら3箇所の`yield L(...)`を`yield _precheck_reject(L(...))`に替える）。
+- **正本・出典**: `gradio_ui/ui.py`（`dispatch`）、`gradio_ui/batch.py`（`BatchSnapshot`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-188. Gradio の快適上限／高品質モード警告の配線 4 箇所に `lang_state` を足し、UI の言語に追随させた（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-66 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-66（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138から起票された項目。台帳は経路を3通りと数えていたが、`qmode.change`・`chain_qmode.change`が同じ`on_qmode_change`を呼ぶため実際の配線は4箇所だった。
+- **到達条件**: 4箇所の配線に`lang_state`を足し、快適上限の警告と高品質モードの警告をUIの言語に追随させること（選択肢A）。**達成した。**
+- **何が完了したか**: `gradio_ui/ui.py`の配線4箇所（`preset.change`・幅／高さ／フレーム数の`.change`〔3コントロール分〕・`qmode.change`・`chain_qmode.change`）の`inputs`の末尾に`lang_state`を追加した。`apply_preset`・`compute_spill_warning`は末尾に`lang`引数を既に持っていたため配線を足すだけで済んだ。`on_qmode_change(value: str)`を`on_qmode_change(value: str, lang: str = "en")`に変え、`gr.Warning(L("warn_hq_unsupported"))`を`gr.Warning(L("warn_hq_unsupported", lang))`に変えた。
+- **どの物差しで通ったか**: テスト2本。(1) `test_preset_spill_and_qmode_wirings_end_with_lang_state`——`apply_preset`配線1件・`compute_spill_warning`配線3件・`on_qmode_change`配線2件のすべてで`inputs`の末尾が`lang_state`と同じ`gr.State`であることを確認。(2) `test_on_qmode_change_warns_in_the_ui_language`——`lang="ja"`で呼ぶと日本語の`warn_hq_unsupported`文言で`gr.Warning`が呼ばれることを確認（英日の文言が異なることも確認）。HEADでは`TypeError`と配線の不一致で両方落ちることを敵対的レビューで確認済み。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 無し。
+- **正本・出典**: `gradio_ui/ui.py`（`on_qmode_change`・配線4箇所）、`gradio_ui/presets.py`（`apply_preset`・`compute_spill_warning`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-189. `config.py` の既定値（`use_component_files`・`checkpoint_name`）を配布値に揃えた（起票：2026-10-02、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-67 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-67（**同書側は欠番**）。コメント現行化 第7区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139）から起票された項目。
+- **到達条件**: `config.py`の既定値を配布値（`config.yaml.example`・仕様書§11.2／§11.3）に揃えること（選択肢A）。**達成した。**
+- **何が完了したか**: `config.py`の`VramConfig.use_component_files`の既定を`False`から`True`に、`ModelConfig.checkpoint_name`の既定を`"ltx-2.3-22b-distilled"`から`"ltx-2.3-22b-distilled-1.1"`に変えた。`use_component_files`のコメントを「Off by default」から「On by default, the same as the shipped config.yaml.example. Off is not a working configuration: the adapter always sends checkpoint_path="" and no LTX 2.3 monolith ships」に訂正した。`services/engines/ltx/adapter.py`のコメント1箇所と`main.py`の警告のコメント1箇所も実態に合わせて直した。仕様書`Videomni_Backend_Specification.md` §5.5の「fail-fastアサートがcomponentソースの揃いを要求するのでモノリスへ黙って戻ることは無い」を、実態（fail-fastは4つのパスとtransformerのパスが空でないことだけを確認し`use_component_files`は見ない。偽だと付け替えが飛ばされ`model_path=""`が読み込みで失敗する）に訂正した（v0.5.78）。
+- **どの物差しで通ったか**: テスト1本（`tests/test_validation.py::test_defaults_without_config_yaml_match_the_shipped_example`）——`config.yaml`が存在しないパスで`load_config`を呼び、既定が`use_component_files=True`・`checkpoint_name="ltx-2.3-22b-distilled-1.1"`になることを確認した。敵対的レビューで`use_component_files`を読む箇所は`_build_child_env`の`LTX_COMPONENT_FILES`だけ、`checkpoint_name`を読む箇所はモックのログと`_base_model_name`の予備値だけと確認済み（既定変更の副作用は無い）。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 読み込み元が欠落したときの失敗の仕方（読み込みのどの段で落ちるか）は実機未確認（CPUでは`ModelLedger(checkpoint_path="")`の4つのビルダーが`model_path=''`になることまで確認済み）。`connector_gguf_path=None`の経路の鍵と偽の経路の撤去は[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-60 (1)〜(3)と一緒に別途扱う（テストの無いGPU経路。実機1本とセット）。
+- **正本・出典**: `config.py`（`VramConfig.use_component_files`・`ModelConfig.checkpoint_name`）、`Videomni_Backend_Specification.md` §5.5（v0.5.78）、`services/engines/ltx/adapter.py`、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-190. MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` でも個別の失敗として受けて続行するよう修正（起票：2026-10-02、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-68 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-68（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139から起票された項目。
+- **到達条件**: `purge_terminal_jobs`が`httpx.ReadTimeout`で止まる件を、個別の失敗として受けて続行するよう直すこと（選択肢B。`_request`の素通し＝設計D5は変えない）。**達成した。**
+- **何が完了したか**: `mcp_server/tools/jobs.py::purge_terminal_jobs`の削除ループの`except ToolError`を`except (ToolError, httpx.ReadTimeout)`に変え、`failed[].error`を`str(exc) or type(exc).__name__`にした（空文字になりうる`httpx.ReadTimeout`の`str(exc)`対策。敵対的レビュー参考1の指摘を反映）。`mcp_server/client.py::_request`の`httpx.ReadTimeout`の素通し（設計D5）とdocstringは変えていない。台帳の「`httpx.TimeoutException`も」という選択肢Aの表現は範囲が広すぎたため、素通しが実際に起きるのは`httpx.ReadTimeout`だけという選択肢Bを採った。
+- **どの物差しで通ったか**: テスト1本（`tests/test_mcp_tools_jobs.py::test_purge_terminal_jobs_continues_past_a_read_timeout`）——`completed-ok`→`failed-boom`（DELETEで`httpx.ReadTimeout`を発生）→`cancelled-ok`の順でフィクスチャを並べ、3件目の削除まで続くこと（`deleted == 2`・`failed`に`failed-boom`だけ・`"simulated timeout"`を含むエラー文言）を確認した。HEADでは2件目で止まり落ちることを敵対的レビューで確認済み。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Bの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 無し。
+- **正本・出典**: `mcp_server/tools/jobs.py`（`purge_terminal_jobs`）、`mcp_server/client.py`（`_request`。設計D5は不変）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-191. バッチ A2V の計画の写し（MCP）のパリティテストを `raw_frame_count`・`over_frame_limit` にも拡張（起票：2026-10-02、文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-69 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-69（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §9から起票された項目。
+- **到達条件**: バッチA2Vの計画の写し（MCP）と本家（Gradio）の挙動の差3点のうち、パリティテストを`raw_frame_count`・`over_frame_limit`にも広げること（選択肢B。正常域=fpsが正・`max_frames`が1以上）。**達成した。**
+- **何が完了したか**: `tests/test_mcp_batch_planning.py`に`test_raw_frame_count_matches_gradio_ui_manifest_exhaustively`・`test_over_frame_limit_matches_gradio_ui_manifest_exhaustively`を追加し、fps（24・30・23.976・60・29.97）×`max_frames`（9・49・481・9999）の正常域で本家`gradio_ui.manifest`の`raw_frame_count`・`over_frame_limit`との総当たり一致を固定した。`Docs/MCP_SERVER_DESIGN.md` §9・§10の「写経元は`suggest_frames_for_audio`だけ」という記述を、3関数（`suggest_frames_for_audio`・`raw_frame_count`・`over_frame_limit`。後の2つは正常域のみ）に更新した。`mcp_server/batch_planning.py`のモジュールdocstringも同様に更新した。異常入力（fpsが0・None・数値でない、`max_frames=0`）での3実装の扱いの差は、台帳の選択肢Aの範囲であり、計画どおり直さずdocstringに明記したまま残した。
+- **どの物差しで通ったか**: 乱数20万組（dur 0〜40、fps 0.01〜120の実数と整数、max_frames 1〜20000）での自前の突き合わせで不一致0件を敵対的レビューで確認済み（差があるのは正常域の外だけ）。新規テスト2本を含むアプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Bの実装が完了した。異常入力の扱いを揃える選択肢Aは採らなかった。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 異常入力（fpsが0・None・数値でない、`max_frames=0`）での3実装の扱いの差は未解消（docstringに明記済み）。
+- **正本・出典**: `tests/test_mcp_batch_planning.py`、`mcp_server/batch_planning.py`、[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §9・§10、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-192. `config.yaml.example` の comfort token budget 2 行をコメントアウトした例示に変更（起票：2026-10-02、文書訂正：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-72 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-72（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `config.yaml.example`の`chain_comfort_token_budget`／`single_comfort_token_budget`の値の行が、複製した`config.yaml`にもそのまま入ってしまう件を、コメントアウトした例示に変えること（選択肢A）。**達成した。**
+- **何が完了したか**: `config.yaml.example`の`chain_comfort_token_budget: 40000`・`single_comfort_token_budget: 44880`の2行をコメントアウトした例示に変えた。周囲の注記2箇所を、「example限定・実運用には追記しない」という前提から、「この鍵は書かなければ`config.py`の既定値が配信され、書くとその値で固定される」という今の形に書き直した。`retake_window_min_frames: 73`・`max_frames: 169`の値の行は実際の設定行のまま据え置いた（§1-34の注記で性質を説明済みのため）。
+- **どの物差しで通ったか**: テスト1本（`tests/test_comfort_budgets.py::test_config_yaml_example_leaves_the_two_comfort_scalars_to_config_py`）——`yaml.safe_load`した`config.yaml.example`の`limits`に2つの鍵が無いこと、`load_config`経由の配信値が`LimitsConfig()`の既定値（40000・44880）と一致することを確認した。既存の`tests/test_retake_api.py`の40000／44880の固定も通ることを敵対的レビューで確認済み。アプリ`.venv`全件2884 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
+- **残課題**: 既に`config.yaml.example`を複製した利用者の`config.yaml`には、この2行が実値のまま残っている（今回の変更は及ばない）。`scripts/install_ltx.ps1`の削除リストに足すかどうかは別途判断。
+- **正本・出典**: `config.yaml.example`（`limits`節）、`config.py`（`LimitsConfig.chain_comfort_token_budget`・`single_comfort_token_budget`）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
+
+### 3-193. `install_model.ps1` の `Test-SetupDone` に `.venv-engine-ltx25` の python を追加（検証表の見落としを解消）（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-70 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-70（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `install_ltx.ps1` Step 7 の検証表（`$required` 配列）が `.venv-engine-ltx25` の欠落を検出できず、`-SkipVenv` 経由（`install-LTX25.bat`）でこの venv が無くても全行 PASS になってしまう件を、選択肢C（`install_model.ps1` の `Test-SetupDone` に確認を足す）で解消すること。**達成した。**
+- **何が完了したか**: `scripts/install_ltx.ps1` の Step 7 の `$required` 配列そのものは変更していない。代わりに、`install-LTX25.bat`・`install-UETrack.bat` の入口で先に呼ばれる `scripts/install_model.ps1` の `Test-SetupDone` の `$needed`（順序付きハッシュ）に `'LTX 2.5 エンジン用 Python 環境' = Join-Path $ProjectRoot '.venv-engine-ltx25\Scripts\python.exe'` を1行足し、この venv が無い状態でこれらのバッチが `install_ltx.ps1` の `-SkipVenv` 経路まで進むこと自体を防いだ（既存の4つの鍵名とは別名で、名前で引く箇所〔`$needed['エンジン用 Python 環境']`〕と衝突しない）。MISSING 時の案内文言（205行）も「.venv と .venv-engine」から「.venv・.venv-engine・.venv-engine-ltx25」に直した。**選択**: `setup.bat` は3つの venv を無条件に作るので「`setup.bat` が済んだ」の定義に3つとも含めるのが素直で条件分岐が要らない、という判断（選択肢C単独。台帳の選択肢A〔Step 7にMISSING行を足す〕・B〔`-SkipVenv` 時の案内を `$ltx25Py` にも広げる〕は採らなかった——Cだけで、この venv が無いまま40GB級のダウンロードへ進む経路自体を断てるため）。`install-UETrack.bat` の経路でもこの確認が掛かるが、`setup.bat` 後なら常にこの venv があるため実害はない。
+- **どの物差しで通ったか**: `install_model.ps1` の構文解析（エラー0）。敵対的レビューで、`$needed` の4つの鍵名がすべて別名で衝突しないこと、`install_ltx.ps1` の1455〜1463行で `.venv-engine` と `.venv-engine-ltx25` の `Ensure-EngineVenv` が `-SkipVenv` 以外では条件なく呼ばれる（`setup.bat` 後なら `install-UETrack.bat` の経路でこの行が誤って引っかかることは無い）ことを確認済み。実機（venvを1つ消した状態での `install-LTX25.bat` 実行）は指示により実行していない。アプリ `.venv` 全件2,885 passed・54 skipped（新規2本を含む）。
+- **クローズ理由**: 選択肢Cの実装が完了した。
+- **状態**: dev（第3弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143）。
+- **残課題**: 実機確認（venvを1つ消した状態での `install-LTX25.bat`）は merge 後にオーナーが手で行う。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143、`scripts/install_model.ps1`（`Test-SetupDone`）。
+
+### 3-194. `scripts/build_xformers.ps1` を削除（xformers は同梱せず、ビルドの道具も置かない）（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-71 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-71（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `build_xformers.ps1` のCUDA探索が `-CudaVersion` と食い違う件を解消すること。台帳の選択肢（A: 環境変数名を版から作る／B: 照合を足す／C: 現状維持）のいずれでもなく、オーナーと合意してスクリプトそのものを削除する方針を採った。**達成した。**
+- **何が完了したか**: `scripts/build_xformers.ps1` を削除した（製品は全アーキで PyTorch SDPA が既定であり、xformers は入れずコードからも呼ばない。このスクリプトは手動実験用で、CUDA探索の不具合〔`-CudaVersion` を無視して `CUDA_PATH_V12_8`・`CUDA_PATH` を優先する〕を抱えテストも無かった。xformers を手で入れると LTX 2.3 の上流 `ltx-core` が既定の attention でそれを使ってしまうため同梱しない、という判断）。`install_ltx.ps1` の1506〜1513行付近のコメント（スクリプトへの参照とインストール手順の案内）を、スクリプトへの言及を落として事実だけ残す形（prebuilt な xformers wheel は拾わない・xformers を手で入れると2.3の `ltx-core` が既定の attention でそれを使う、という趣旨）に縮めた。`.gitignore` の58〜59行（「Wheels built by scripts/build_xformers.ps1」のコメントと `*.whl`。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-184でこの回に追加した1行）を削除した。仕様書のツリー図（§4.4）から `build_xformers.ps1` の行を削除し、§5.4（603行・613行）の「必要ならソースビルドする（`scripts/build_xformers.ps1`）」「手動ツールとして残す」の記述を「xformers は同梱せず、ビルドの道具も置かない」という事実に改めた（v0.5.79）。`Docs/note.md`（2026-06の歴史ノート）は据え置いた。
+- **どの物差しで通ったか**: `git grep build_xformers` の残りが記録文書（`HANDOFF_ARCHIVE.md`・`PENDING_TASKS.md` §1-71・`PENDING_TASKS_CLOSED.md`・`VERIFICATION_LOG.md`・`Docs/note.md`）と仕様書の改訂履歴・本文（削除したと書く文）だけで、コード・スクリプト・設定への参照が0件であることを敵対的レビューで確認済み。`git ls-files -o --exclude-standard` の未追跡ファイルに `.whl` は無い（作業ツリーにある `.whl` は `.python/`・`.uv_cache/` の中だけで、別の規則で無視済み）。アプリ `.venv` 全件2,885 passed・54 skipped。
+- **クローズ理由**: スクリプトの削除により§1-71の論点（CUDA探索の不具合）そのものが消滅した。
+- **状態**: dev（第3弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143、`Videomni_Backend_Specification.md` §4.4・§5.4（v0.5.79）、`.gitignore`。
+
+### 3-195. 二重起動の判定を `run.ps1` から `main.py` に移し、終了コード3（`EXIT_PORT_IN_USE`）で `run.ps1` が案内する形に変更（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-73 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-73（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `run.ps1` の二重起動判定が `config.yaml` の `server.port` を読まない件を解消すること。台帳の選択肢A（`run.ps1` がYAMLを正規表現で読む）は、PowerShell に2つ目の設定パーサーを持ち込み、フロー形式や `--config` で例外が増えるため採らず、オーナーと合意した別案（実効ポートを知る `main.py` が起動直前にbindを試し、使用中なら終了コード3で終わる）を実装した。**達成した。**
+- **何が完了したか**: `main.py` に `EXIT_PORT_IN_USE = 3` の定数と関数 `_require_port_free(port: int) -> None` を足した。この関数は `socket.socket(AF_INET, SOCK_STREAM)` に `SO_EXCLUSIVEADDRUSE`（`getattr` で存在確認したときだけ。`SO_REUSEADDR` は付けない——Windowsでは付けると使用中でもbindが通ってしまうため）を付けて `("0.0.0.0", port)` へbindを試し、`OSError` なら英語＋日本語で「ポートNは既に使われている」と `logger.error` して `raise SystemExit(EXIT_PORT_IN_USE)`、`finally` でソケットを閉じる。`main()` は `build_app(args)` の後・`runtime` が決まった直後（`--listen` の警告と起動バナーより前）に `_require_port_free(runtime.port)` を呼ぶ。docstringは「`0.0.0.0` へ排他bindを試す（`SO_EXCLUSIVEADDRUSE`。`SO_REUSEADDR` は使わない）ため、uvicorn自身のbindより厳しい」という実態に合わせて書いた。`run.ps1` は70〜102行（ポートの割り出し・`GetActiveTcpListeners` による探索・「すでに起動しています」の案内と `exit 0`）を削除した。`$code = $LASTEXITCODE` の後、`$code -eq 3` のときは同じ文言（「すでに起動しています。先に開いた画面をそのまま使ってください。」「見当たらないときは、黒い画面をすべて閉じてから run.bat を実行し直してください。」）を出して `$code = 0` にし、それ以外の非0は従来どおり「サーバーが異常終了しました」の案内を出す。ヘッダーの使い方の例・`run.bat`（`pause` の前に `exit /b` する部分）は変更していない。仕様書§2.5・§3.3を、二重起動ガードの主体が `main.py` であること・終了コード3の意味・`run.ps1` が `server.port` を読まないことに合わせて訂正した（v0.5.79）。新規テスト2本（`tests/test_main_startup.py`）——listen中のポートに対して `_require_port_free` が `SystemExit(3)` を投げること、ソケットを閉じた後は例外にならないこと。
+- **どの物差しで通ったか**: 敵対的レビューで直すべき2件を指摘され反映した——(1) 当初の実装はbind先を `runtime.host` にしていたため、先に `--listen`（`0.0.0.0`）で待ち受けるサーバーがあると `127.0.0.1` へのbindは通ってしまい2枚目を検出できない不備が見つかり（消した旧 `run.ps1` の判定はポート番号だけを見ていたのでこの組み合わせも検出していた）、bind先を `0.0.0.0` に固定し関数の引数を `host` 無しの `port` のみに変えた（起動順とアドレスの4通りの組み合わせすべてでerrno 10048になることをレビューがscratchpadの実験で確認）。(2) docstringの「uvicornと同じ条件でbindを試す」という記述も事実と違う（`SO_EXCLUSIVEADDRUSE` を付ける分uvicornより厳しい）との指摘を受け、記述を直した。あわせて、uvicorn 0.49.0の `server.py` の `startup` とCPython 3.12.9の `asyncio/base_events.py`（Windowsでは `reuse_address=False`）をレビューが読み、Windowsの条件と一致することを確認した。`run.ps1` の残り1〜97行に削除した変数（`$port`・`$argList`・`$listeners`・`$portInUse`・`$parsed`）への参照が無いこと（grep 0件）、`run.ps1`・`main.py`・`install_model.ps1`・`install_ltx.ps1` の構文解析エラー0、改行とBOM（`run.ps1` はBOM付きCRLF、`main.py` はCRLFのみでBOM無し）をPythonで確認。アプリ `.venv` 全件2,885 passed・54 skipped（新規2本を含む）。
+- **クローズ理由**: 別案の実装が完了し、敵対的レビューで見つかった不備（bind先のアドレス・docstringの不正確な記述）も反映した。
+- **状態**: dev（第3弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143）。
+- **残課題**: 2枚目の起動でも `build_app`（Gradioの組み立てを含む）が走ってから止まるため、案内が数秒遅れて `logs/server.log` に記録される（1枚目を壊す処理は無いことをレビューで確認済み。merge後のオーナー確認〔`run.bat` 2枚〕のときの参考）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143、`main.py`（`_require_port_free`・`EXIT_PORT_IN_USE`）、`run.ps1`、`Videomni_Backend_Specification.md` §2.5・§3.3（v0.5.79）、`tests/test_main_startup.py`。
+
+### 3-196. `Get-EngineStateHash` がコメント行と空行を除いてからハッシュするよう修正（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-74 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-74（**同書側は欠番**）。コメント現行化 第8区域の検算の申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140）から起票された項目。
+- **到達条件**: `Get-EngineStateHash` がfreezeファイルのコメント行を含めた全文をハッシュする件を、選択肢A（コメント行と空行を除いてからハッシュする）で解消すること。**達成した。**
+- **何が完了したか**: `scripts/install_ltx.ps1` の `Get-EngineStateHash` の `$body` の作り方を、「`ReadAllText` して CRLF を LF に揃えた後、行に分け、`Trim()` が空の行と `TrimStart()` が `#` で始まる行を落として `"`n"` で結ぶ」に変えた（行末コメントの除去は入れない——実例が無く、URLに含まれる `#` を誤って切る危険だけが増えるため）。関数の上のコメントも「コメント行・空行は先に落とすので、freezeファイルのコメントだけの変更では貼り直しが起きない」という趣旨に直した。計算方法が変わるため、各環境で**次回のsetup.batでエンジンvenv2本（`.venv-engine`・`.venv-engine-ltx25`）の貼り直しが1回起きる**。`.venv-utils` は `setup.bat` では貼り直されず（`Ensure-EngineVenv` はUETrackが選ばれたときだけ呼ばれる）、次回の `install-UETrack.bat` で1回起きる。以後はコメントの変更で貼り直しは起きない。`README.md` 315行（「freezeファイルの中身と…をまとめてハッシュ」→「freezeファイルの依存の行（コメント行は除く）と…」）と仕様書§2.5の280行付近（ハッシュの説明を実装に合わせ、「3つのgitリビジョン」という古い記述も `$engineDirectPins`〔git3件・wheel1件〕／`$ltx25DirectPins`〔5件〕という実数に直した）を訂正した（v0.5.79）。
+- **どの物差しで通ったか**: `Get-EngineStateHash` 関数をscratchpadに抜き出し Windows PowerShell 5.1.26100 で実行し、コメント行・字下げコメント・空行・空白だけの行・CRLFの違いを変えた2つのファイルで同じハッシュになること、本体が空（コメントだけ）のとき `"`n`n"`・1行のとき `"a==1`n`n"` のSHA-256と一致すること（Pythonで同じ値を計算して照合）を敵対的レビューで確認済み。新しいコメントはASCIIのみ（`install_ltx.ps1` の非ASCIIバイト0）。freeze3本（`engine/venv-engine.freeze.txt`・`engine25/venv-engine-ltx25.freeze.txt`・`tracking/venv-utils.freeze.txt`）は空行0・字下げ0・行末コメント0・`==` を含まない非コメント行0であることをPythonで数えて確認済み。`tests/test_base_model_contract.py` の `$DeprecatedModelKeys = @(` の正規表現には影響しない。`install_ltx.ps1` の構文解析エラー0。アプリ `.venv` 全件2,885 passed・54 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev（第3弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143）。
+- **残課題**: 全環境で次回1回の貼り直しが起きる（merge後にオーナーが手で `setup.bat` を1回実行して確認）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143、`scripts/install_ltx.ps1`（`Get-EngineStateHash`）、`README.md` 315行、`Videomni_Backend_Specification.md` §2.5（v0.5.79）。

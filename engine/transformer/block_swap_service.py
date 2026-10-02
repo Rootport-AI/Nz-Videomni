@@ -8,7 +8,6 @@ transformer block list).
 Usage:
     service = BlockSwapService(blocks_on_gpu=20, device=torch.device("cuda:0"))
     service.install(transformer)   # call once after model load
-    service.uninstall(transformer) # call to restore original behaviour
 
 Optional per-job prefetching (``prefetch_requested``): when a job opts in, the
 same window is served by ``block_swap_prefetch.PrefetchEngine`` instead — the
@@ -164,36 +163,9 @@ class BlockSwapService:
         self._installed_transformers.clear()
         self._installed_transformers.append(transformer)
 
-    def uninstall(self, transformer: nn.Module) -> None:
-        """Remove swap hooks and move all blocks back to GPU."""
-        blocks = self._get_blocks(transformer)
-        if not blocks:
-            return
-
-        for block in blocks:
-            orig = getattr(block, _BLOCK_SWAP_ATTR, None)
-            if orig is not None:
-                block.forward = orig  # type: ignore[method-assign]
-                delattr(block, _BLOCK_SWAP_ATTR)
-            block.to(self.device)
-
-        if transformer in self._installed_transformers:
-            self._installed_transformers.remove(transformer)
-
-        # Not used in production, but if it ever is: the pinned pool is the one
-        # resource worth handing back when the service is explicitly retired.
-        self.teardown_prefetch()
-        if self._pinned_pool is not None:
-            self._pinned_pool.release()
-
-        logger.info("BlockSwap: uninstalled, all blocks moved to %s", self.device)
-
     def release_installed(self) -> None:
         """Drop the keep-latest reference to the job's transformer. Idempotent.
 
-        NOT uninstall(): that one is unused in production and moves all blocks
-        back to GPU (the trap engine25 warns about in
-        ``Ltx25DiffusionStage.uninstall_block_swap``).
         This touches no tensor and no device; it only lets go of the reference
         so the job's trailing gc.collect() can reclaim the transformer (the
         swapped_forward closures are reference cycles).
@@ -368,8 +340,8 @@ class BlockSwapService:
         # caller) would otherwise wrap the previous wrapper and drive two
         # engines.
         original_forward = getattr(block, _BLOCK_SWAP_ATTR, None) or block.forward
-        # Same attribute the synchronous path sets — uninstall(), the line above
-        # and engine25's marker checks (``ensure_block_swap_installed`` /
+        # Same attribute the synchronous path sets — the line above and
+        # engine25's marker checks (``ensure_block_swap_installed`` /
         # ``_unpatch_block_swap``) rely on it being there regardless of mode.
         setattr(block, _BLOCK_SWAP_ATTR, original_forward)
 
@@ -384,13 +356,3 @@ class BlockSwapService:
             return original_forward(*args, **kwargs)
 
         block.forward = swapped_forward_prefetch  # type: ignore[method-assign]
-
-
-def build_block_swap_service(
-    blocks_on_gpu: int,
-    device: torch.device,
-) -> BlockSwapService | None:
-    """Factory: returns None when swapping is disabled (blocks_on_gpu=0)."""
-    if blocks_on_gpu <= 0:
-        return None
-    return BlockSwapService(blocks_on_gpu=blocks_on_gpu, device=device)

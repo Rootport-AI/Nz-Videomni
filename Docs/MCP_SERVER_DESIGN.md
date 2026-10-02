@@ -91,13 +91,13 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 
 ## 9. 写経（`batch_planning.py`）のパリティテスト方針
 
-`plan_a2v_batch` ツールは、パネルの Batch A2V 機能（`gradio_ui/manifest.py::scan_wav_folder`・`gradio_ui/handlers.py::suggest_frames_for_audio`）と同じ規約でフォルダを走査する必要がある。しかし `gradio_ui` パッケージは `__init__.py` 経由で重い `gradio` を import してしまう（起動コスト・stdout汚染リスク）ため、`mcp_server/` から直接importすることを避け、代わりに **`mcp_server/batch_planning.py` へロジックを写経**した（ただし `raw_frame_count` は fps が 0・None・数値でないときの扱いが `manifest.py` 版と違い、`over_frame_limit` の `max_frames=0` の扱いは操作パネルと違う。台帳 `PENDING_TASKS.md` §1-69）。
+`plan_a2v_batch` ツールは、パネルの Batch A2V 機能（`gradio_ui/manifest.py::scan_wav_folder`・`gradio_ui/handlers.py::suggest_frames_for_audio`）と同じ規約でフォルダを走査する必要がある。しかし `gradio_ui` パッケージは `__init__.py` 経由で重い `gradio` を import してしまう（起動コスト・stdout汚染リスク）ため、`mcp_server/` から直接importすることを避け、代わりに **`mcp_server/batch_planning.py` へロジックを写経**した（ただし `raw_frame_count` は fps が 0・None・数値でないときの扱いが `manifest.py` 版と違い、`over_frame_limit` の `max_frames=0` の扱いは操作パネルと違う。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-191）。
 
 写経元は2箇所:
 - `gradio_ui/handlers.py::suggest_frames_for_audio`（フレーム数提案。長さは `gradio_ui/manifest.py::_wav_duration_seconds` の写しが stdlib `wave` で取得し、`chain_math.audio_latents_required` と突き合わせて8刻みで縮める）。
 - `gradio_ui/manifest.py::scan_wav_folder` の走査規約（全音声拡張子を候補にし、`manifest`/`autosave`/`*.tmp` を除外、mtime昇順、非wav・読めないwavは可視Skip行 `skip_reason="wav-only-alpha"`、実効上限 `min(max_frames, 481)` 超は `"over-cap"`）。理由コードと上限の規約の正本は [`BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)。
 
-写経の乖離を防ぐため、`tests/test_mcp_batch_planning.py` が本家 `gradio_ui.handlers.suggest_frames_for_audio` との**総当たりパリティテスト**（多数の秒数・fps値の組み合わせで両実装の出力を突き合わせる）で固定している。さらに写経元の2ファイル（`gradio_ui/handlers.py` / `gradio_ui/manifest.py`）側にも「MCPサーバー側に写経あり・変更時は両方＋パリティテストを更新」というコメントを追加してあり、将来どちらかを変更する開発者が反対側の存在に気づける設計にした。
+写経の乖離を防ぐため、`tests/test_mcp_batch_planning.py` が本家の 3 関数（`gradio_ui.handlers.suggest_frames_for_audio`・`gradio_ui.manifest.raw_frame_count`・`gradio_ui.manifest.over_frame_limit`）との**総当たりパリティテスト**（多数の秒数・fps値〔`over_frame_limit` はさらに `max_frames`〕の組み合わせで両実装の出力を突き合わせる。後の 2 つは fps が正・`max_frames` が 1 以上の正常域だけ）で固定している。さらに写経元の2ファイル（`gradio_ui/handlers.py` / `gradio_ui/manifest.py`）側にも「MCPサーバー側に写経あり・変更時は両方＋パリティテストを更新」というコメントを追加してあり、将来どちらかを変更する開発者が反対側の存在に気づける設計にした。
 
 画像フォルダの同stemマッチング（`plan_rows` の `image_dir` 引数）は、パネルには存在しないMCP専用の追加規約である。パネルの Batch A2V は行ごとに手動でドロップダウンから画像を選ぶ方式のため、自動マッチングに相当する既存ロジックがそもそも存在しない。エージェントが非対話で計画を立てられるよう、ここで新設した。
 
@@ -113,7 +113,7 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 | `test_mcp_tools_generate.py` | アップロード3本＋`submit_generate`/`submit_chain` のペイロード契約（隠しフィールド不在・None/空を送らない・XOR事前弾き等）。**撮り直し（D19）と画角拡張（D20）**では、`retake` / `outpaint` ネストの厳密一致・既定値のみのボディにこの2キーが現れないこと（トリップワイヤ）・POST前 `ToolError` 3本がHTTP呼び出しゼロで上がること・`in-outpainting` の自動注入と非重複・5:2追従の全域一致・`inputSchema` への露出。**`upload_video` の `max_frames`（D21）**はクエリ透過と `frame_count`/`fps` の返却。**`embed_mp4_metadata`（D24）**は、既定では送らず、`False` のときだけ `embed_mp4_metadata: false` が載ること（両ツール）。**`stage2_window`（D25）**は、`w46` のときだけ載り、省略と `standard` ではキー集合が変わらないこと、inputSchema の選択肢 16 件と既定 `standard` が `chain_math.STAGE2_WINDOW_PRESETS` のキーと一致すること（3 本） |
 | `test_mcp_tools_jobs.py` | jobs系7ツール（`wait_for_job` のクランプとtimed_out契約・`cancel_job`/`delete_job` の状態ガード・`purge_terminal_jobs` のdry_run） |
 | `test_mcp_outputs.py` | outputs系4ツール（パス導出の回帰・`no_clobber` 連番・`to_thread` 化）。**`get_mp4_info`（D24）**は `POST /api/v1/utils/mp4-info` へ `{"path"}` が飛んで `comment` が返ること・404 が `ToolError` になること・実アプリ経由で実ジョブの `output.mp4` を読めること |
-| `test_mcp_batch_planning.py` | `plan_a2v_batch` の走査規約（mtime昇順・Skip行可視・上限超過判定〔`min(max_frames, 481)`〕）と、本家 `suggest_frames_for_audio` との総当たりパリティ |
+| `test_mcp_batch_planning.py` | `plan_a2v_batch` の走査規約（mtime昇順・Skip行可視・上限超過判定〔`min(max_frames, 481)`〕）と、本家の 3 関数（`suggest_frames_for_audio`・`raw_frame_count`・`over_frame_limit`）との総当たりパリティ |
 
 ## 11. 参照
 

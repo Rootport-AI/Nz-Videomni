@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.76**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-10-01**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.79**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-10-03**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -125,6 +125,9 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.74 | 2026-09-30 | **§6.10 (e) のロードペイロードの表の `cache_weights` の行を実装に合わせて訂正した（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。行は「RAM の厳しい環境では `false` にできる」と書いていたが、アプリ（`_RealBackend25._build_load_payload`）は常に `true` を送り、アプリの設定に切り替えは無い。`false` にできるのはワーカーを単体で起動するときの `--no-cache-weights`（`engine25/worker.py`）だけである。`services/engines/` のコード内コメントの見直しで見つかった。記録は `Docs/VERIFICATION_LOG.md` §130。 |
 | v0.5.75 | 2026-09-30 | **§6.7・§11 の `limits.max_width` / `max_height` の実値を配布値へ訂正し、`config.py` の補完値と書き分けた（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。§6.7 の表と §11.7 は実値を `1920` / `1088` と書いていたが、配布ひな型 `config.yaml.example` の実値は `4096` / `4096` であり、`1920` / `1088` は `config.py::LimitsConfig` の補完値（キー省略時の値）である。検証はこの値を読まず `api/models.py` の `Field(le=4096)` 固定値で決まる旨も併記した。あわせて**§6.8** のエラーコードの件数の書き写しを、正本 `api/errors.py` への参照へ改めた。記録は `Docs/VERIFICATION_LOG.md` §131。 |
 | v0.5.76 | 2026-10-01 | **§6.2 に撮り直し（`retake`）の音声の裁定の補足を追加した（文書のみ。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードのいずれにも変更は無い）**。補足「チェーンの `retake`（撮り直し）の音声の補足」を新設し、窓の音声の符号化が窓の長さに足りないとき（`regenerate_audio` の真偽で、ジョブの失敗か警告のみかが分かれる）と、窓に音声トラックが無いときの扱いを、エンジンの実装（`engine/pipeline/chain_pipeline.py` の `_encode_retake_window`・`engine25/chain25.py`）に合わせて記した。結果を読む `metadata.json` の `retake` ブロックのキーも併記した。記録は `Docs/VERIFICATION_LOG.md` §133。 |
+| v0.5.77 | 2026-10-02 | **§11 から、どのコードからも読まれていなかった設定 7 項目を削除した**（`model.ltx_repo_dir`・`model.reload_interval`・`model.text_encoder`・`vram.allow_disable_low_vram`・`vram.attention_tile_size`・`upload.normalize_to_png`・`output.format`）。`config.py`・`config.yaml.example` から消したのに合わせ、§11.2・§11.3・§11.6・§11.8 の行と、§5.5・§9.4 の言及を直した。`GET /api/v1/config`（`AppConfig.model_dump()`）の応答からもこれらのキーが消える。古い `config.yaml` に残った行は Pydantic の `extra='ignore'` で黙って無視される（警告は出ない）。**§6.5b の `block_swap_prefetch_available` の意味を定め直した**——「実際に効く構成かどうか」「判定式は実ゲートと完全同一」という言い切りをやめ、設定値（`block_swap_blocks_on_gpu`）から算出した利用可否であり、全ブロック常駐や組み込みの失敗は反映しないこと、実際に効いたかは `metadata.json` の `block_swap_prefetch_used` で見ることを書いた。コードの場所は行番号ではなく関数名で指すようにした（値そのものと算出式は変えていない）。§6.6 の `keep_resident_used` の行に、常駐の切り替え（arm）が失敗したときも `"on->off"` になることを足した。記録は `Docs/VERIFICATION_LOG.md` §141。 |
+| v0.5.78 | 2026-10-02 | **§6.7 に、`limits` の範囲の鍵（幅・高さ・フレーム数、V2V 継続の `v2v_context_frames_*`、素材（末尾）の `end_context_frames_*`、撮り直しの窓の `retake_window_min_frames` / `max_frames`）は配信されるだけでサーバーの検査には効かないことと、検査の正本（`config.py::LimitsConfig` の既定値・`api/models.py` の `Field` の固定値・`chain_math` の定数と式）を書いた**（文書のみ。凍結 API 契約〔§6〕の鍵・型・既定・応答形は変えていない。既に配信されている鍵の性質の説明である）。**§5.5 の「fail-fast アサートが component ソースの揃いを要求するので、モノリスへ黙って戻ることは無い」を実態に直した**——fail-fast は 4 つのパスと transformer のパスが空でないことだけを確かめ、`use_component_files` は見ない。偽なら付け替えだけが飛ばされ、読み込み元が空のまま読み込みで失敗する。あわせて `config.py` の既定値を配布値に揃えた（`vram.use_component_files` を `false`→`true`、`model.checkpoint_name` を `"ltx-2.3-22b-distilled"`→`"ltx-2.3-22b-distilled-1.1"`。§11.2・§11.3 は既に配布値なので変更なし）。`config.yaml` を置かずに起動したときの `GET /api/v1/config` の `vram.use_component_files`・`model.checkpoint_name` がこの値になる。記録は `Docs/VERIFICATION_LOG.md` §142。 |
+| v0.5.79 | 2026-10-03 | **§2.5・§3.3 の二重起動ガードの主体を `run.ps1` から `main.py` に改めた**——`main.py` が起動直前に実効ポートへ bind を試し、使用中なら案内して終了コード 3（`EXIT_PORT_IN_USE`）で終わり、`run.ps1` は終了コード 3 を「すでに起動しています」の案内に変えて 0 で終わる（ポートの正本を `main.py` 1 箇所に。`run.ps1` は `config.yaml` の `server.port` を読んでいなかった）。**§4.4 のツリー図と §5.4 から `scripts/build_xformers.ps1` を削除した**（スクリプトそのものを削除した。xformers は同梱せず、ビルドの道具も置かない）。**§2.5 のエンジン venv の判定ハッシュの説明を実装に合わせた**——freeze ファイルはコメント行と空行を除いた `名前==版` の行だけをハッシュに入れる（コメントだけの変更では貼り直しが起きない）。連結する直接指定は「3 つの git リビジョン」ではなく `$engineDirectPins`（git 3 件と wheel 1 件）／`$ltx25DirectPins`（5 件）である。凍結 API 契約〔§6〕の変更は無い。記録は `Docs/VERIFICATION_LOG.md` §143。 |
 
 ### 0.2 スコープ
 
@@ -270,12 +273,12 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 エンドユーザーの入口は **`setup.bat`（ダブルクリック）→ `scripts/setup.ps1` → `install_ltx.ps1`** である。`setup.ps1` は前提ツール（`uv` / `ffmpeg`+`ffprobe`）を `tools/` 配下へ取り込み、`config.yaml` が無ければ `config.yaml.example` から複製し、`logs/setup_<日時>.log` へ記録を残したうえで `install_ltx.ps1` を `&` で呼ぶ（ドットソースは禁止＝`install_ltx.ps1` の `exit` が呼び出し元ごと落とすため）。想定利用者が PowerShell を自分で開けないことを前提とした導線であり、`.bat` は純 ASCII・CRLF・末尾 `pause`、日本語のメッセージはすべて `.ps1` 側に置く。
 
-`setup.ps1` は本処理の前に**事前チェックを 3 種**（インストール先ドライブの空き容量／ページファイルの設定／NVIDIA GPU の有無）行うが、**いずれも警告を出すだけでセットアップは止めない**（環境の自動判定で利用者の作業を止めない方針）。起動側にも同種のガードがあり、`run.ps1` は待ち受けポートが既に使われていれば「すでに起動しています」と案内して `exit 0` する＝**二重起動ガード**（詳細は §3.3）。
+`setup.ps1` は本処理の前に**事前チェックを 3 種**（インストール先ドライブの空き容量／ページファイルの設定／NVIDIA GPU の有無）行うが、**いずれも警告を出すだけでセットアップは止めない**（環境の自動判定で利用者の作業を止めない方針）。起動側にも同種のガードがあり、`main.py` は起動直前に実効ポート（`config.yaml` の `server.port`、`--port` を渡せばその値）へ bind を試し、既に使われていれば案内して終了コード 3（`EXIT_PORT_IN_USE`）で終わる。`run.ps1` はこの終了コード 3 を「すでに起動しています」の案内に変えて終了コード 0 で終わる＝**二重起動ガード**（詳細は §3.3。ポートの正本は `main.py` の 1 箇所で、`run.ps1` はポートを読まない）。
 
 **冪等の粒度（2026-07-26 更新）**: 「既存物は無条件 SKIP」ではない。
 
 - **アプリ venv `./.venv`**: `uv sync` は毎回走る（冪等だが SKIP はしない）。
-- **エンジン venv `./.venv-engine`**: **ピン留めされた依存が前回適用時から変わっていないときだけ SKIP** する。判定は `engine/venv-engine.freeze.txt` の本文と、`install_ltx.ps1` 内にハードコードされた 3 つの git リビジョン（`diffusers` / `ltx-core` / `ltx-pipelines`）を連結した SHA-256 で行い、適用済みの値を `.venv-engine/.nz-engine-state` に記録する（`.gitignore` 配下＝追跡外・venv と運命を共にする）。このファイルは**完了マーカーを兼ねる**ため、記録が無い場合は「再適用する」側へ倒す（中断で半端に残った venv と、この仕組み以前に作られた venv を救うため）。この再同期があってはじめて「`git pull` → `setup.bat` 再実行」という更新手順が成立する。
+- **エンジン venv `./.venv-engine`**: **ピン留めされた依存が前回適用時から変わっていないときだけ SKIP** する。判定は freeze ファイル（`engine/venv-engine.freeze.txt`）の `名前==版` の行（コメント行と空行を除く）と、`install_ltx.ps1` 内にハードコードされた直接指定（`$engineDirectPins`／`$ltx25DirectPins`。LTX 2.3 は git 3 件と wheel 1 件、LTX 2.5 は 5 件）を連結した SHA-256 で行い（freeze ファイルのコメントだけを変えても貼り直しは起きない）、適用済みの値を `.venv-engine/.nz-engine-state` に記録する（`.gitignore` 配下＝追跡外・venv と運命を共にする）。このファイルは**完了マーカーを兼ねる**ため、記録が無い場合は「再適用する」側へ倒す（中断で半端に残った venv と、この仕組み以前に作られた venv を救うため）。この再同期があってはじめて「`git pull` → `setup.bat` 再実行」という更新手順が成立する。
 - **モデル群（2026-08-19 全面改訂）**: 判定単位は**ディレクトリではなく期待ファイル 1 件**である。manifest の `files[]` が「このパスに、この `min` バイト以上のファイルがあること」を宣言し、**全行が満たされたときにだけそのダウンロードを SKIP** する（1 行でも欠ければダウンロードが走り、完了後に同じ `files[]` で再検証して不足なら throw）。ディレクトリ合計方式（`-Check` の `@{ Dir; Min }`・2026-08-19 廃止）は 2 つの理由で破綻していた: (a) `TextEncoder/` は 2 つのリポジトリから供給されるため、ディレクトリ合計で事後検証するとどちらの順に落としても片方だけでは合計に届かず、**新規インストールが 100% 失敗**する。(b) `Weights/` は利用者の自家変換 GGUF が同居してサイズが水増しされ、公式ファイルの欠損を隠す。ファイル単位なら「公式ファイルが無ければ必ず落ちてくる」が成立し、欠損隠蔽によるデッドロックが原理的に消える。**利用者資産はガードに一切影響しない。**
 - **ダウンロードの再試行（2026-08-30 追加）**: `hf download` の呼び出しは**固定 5 回**まで試みる（間隔は 5 / 10 / 20 / 40 秒）。`huggingface_hub` は転送中の再試行を内部で行うが、`snapshot_download` 冒頭の `repo_info` と Xet の接続情報の取得は再試行しないため、TLS のリセット 1 回でプロセスごと落ちるのを補う。**リマップは `.cache/`（レジューム情報）を消さない**ので、再試行も再実行も取得済みのバイトを取り直さない。**回数を固定してあるのは意図的である**（諦めないインストーラは、案内を出して止まるものより悪い）。実測は `Docs/VERIFICATION_LOG.md` §82.7。
 - **`min` の取り方**: 公式ファイルの実測サイズの約 5% 下に置く（GiB/GB 混同を避けるため 10 進バイトのリテラルで書き、根拠は各行の `_min` キーに直付けする）。例外は tokenizer の 1 行だけで、こちらは `kind:"dir"` として直下ファイルの合計を見る（10 ファイルを個別に列挙しても得るものが無いため）。この `files[]` が**ガード＝検証表＝`INSTALLED_PATHS.txt` の単一真実源**であり、二重管理は存在しない。
@@ -314,7 +317,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 ./run.ps1 --port 19000
 ```
 
-`run.ps1` は環境変数設定 → `tools/` を `PATH` 先頭へ → `config.yaml` 不在時の `.example` からの複製 → アプリ venv で `main.py` 起動、を行う。**依存の再同期（`uv sync` 等）は行わない**（起動を軽く保つための設計判断。更新は「`git pull` → `setup.bat` 再実行」＝§2.5）。`.venv` が無い場合は `setup.bat` を促して `exit 1` する（`throw` は使わない＝`$ErrorActionPreference = "Stop"` 下では案内ブロックへ到達しないため）。ポートが既に使われている場合は「すでに起動しています」と案内して `exit 0` する（`setup.bat` への誤誘導を避けるため）。**利用者に見せる URL の正本は `main.py` の起動バナー**であり（CLI フラグ適用後のポートを知っているのはそこだけ）、`run.ps1` は URL を一切表示しない。
+`run.ps1` は環境変数設定 → `tools/` を `PATH` 先頭へ → `config.yaml` 不在時の `.example` からの複製 → アプリ venv で `main.py` 起動、を行う。**依存の再同期（`uv sync` 等）は行わない**（起動を軽く保つための設計判断。更新は「`git pull` → `setup.bat` 再実行」＝§2.5）。`.venv` が無い場合は `setup.bat` を促して `exit 1` する（`throw` は使わない＝`$ErrorActionPreference = "Stop"` 下では案内ブロックへ到達しないため）。二重起動の判定は `main.py` が行う。`build_app` の後・起動バナーより前に、実効ポート（`config.yaml` の `server.port`、`--port` を渡せばその値）へ bind を試し（`_require_port_free`）、既に使われていれば案内して終了コード 3（`EXIT_PORT_IN_USE`）で終わる（2 枚目の画面に起動バナーは出ない）。`run.ps1` は自分ではポートを読まず、終了コードが 3 なら「すでに起動しています」と案内して終了コード 0 で終わる（`setup.bat` への誤誘導を避けるため。3 以外の非 0 は従来どおり異常終了の案内）。**利用者に見せる URL の正本は `main.py` の起動バナー**であり（CLI フラグ適用後のポートを知っているのはそこだけ）、`run.ps1` は URL を一切表示しない。
 
 `run.ps1` は**アプリ**（`./.venv` の `main.py`）だけを起動する。real backend が選ばれると、アプリが `./.venv-engine\Scripts\python.exe -m engine.worker` を subprocess として自動 spawn する（worker の手動起動は不要）。起動後のエンドポイント:
 
@@ -470,8 +473,7 @@ Nz-Videomni/
 │                          worker.py（python -m engine25.worker）ほか。
 │                          engine/ とは1バイトも共有しない独立ツリー
 ├─ scripts/                setup.ps1（setup.bat の本体）/ install_ltx.ps1 /
-│   │                      install_model.ps1（install-<ID>.bat の本体）/
-│   │                      build_xformers.ps1 ...
+│   │                      install_model.ps1（install-<ID>.bat の本体） ...
 │   └─ manifests/          ベースモデル記述子（10-ltx23.json / 20-ltx25.json）と
 │                          共有アセット manifest（00-preprocessors.json）。
 │                          **モデル既定パスの正本**（§4.3・§5.1・§11.2）
@@ -598,7 +600,7 @@ LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の 
 
 ### 5.4 attention バックエンド
 
-既定は **PyTorch SDPA**（全アーキ共通）。Ada Lovelace + torch 2.9 では SDPA の実体は **FlashAttention-2** カーネルであり、16GB の律速は attention でなく重み転送（PCIe）であるため、これで十分である（`Docs/note.md` の結論サマリ）。**xformers は任意**の最適化で、Windows では自動導入されず、必要ならソースビルドする（`scripts/build_xformers.ps1`）。
+既定は **PyTorch SDPA**（全アーキ共通）。Ada Lovelace + torch 2.9 では SDPA の実体は **FlashAttention-2** カーネルであり、16GB の律速は attention でなく重み転送（PCIe）であるため、これで十分である（`Docs/note.md` の結論サマリ）。**xformers は同梱せず、ビルドの道具も置かない**（`scripts/build_xformers.ps1` は削除した。xformers を手で入れると LTX 2.3 の上流 `ltx-core` が既定の attention でそれを使ってしまうため、同梱しない）。
 
 **SageAttention によるジョブ単位の切替（2026-07-31追加）**: 上記の既定は変えないまま、**ジョブごとに attention の実装を選べる**ようにした（`GenerateRequest` / `GenerateChainRequest` の `attention_backend`＝`"sdpa"`（既定）/ `"sage"`。§6.2）。`"sage"` を選んだジョブでは、engine 側の `engine/transformer/sage_attention_service.py` が transformer の **48 ブロック × 6 種（`attn1`／`attn2`／`audio_attn1`／`audio_attn2`／`audio_to_video_attn`／`video_to_audio_attn`）＝ 288 モジュール**の `attention_function` を SageAttention 2.2.0 の実装へ差し替える。サーバー再起動・パイプライン再ロードは不要。
 
@@ -608,11 +610,11 @@ LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の 
 - **エンジン系統 `ltx25`（LTX 2.5）でも 2026-08-25 から同じ仕組みが動く（高速化第 3 弾）**: `engine25` は上記の `engine/transformer/sage_attention_service.py` を**そのまま共有**する（2 つのエンジンの注意機構の規約——q/k/v が平坦な `(B, S, H*D)` で来る・転置が要らない・head_dim が 128 と 64——が完全に同一のため。専用のサブクラスは作っていない）。**違いは貼ったラッパーの寿命だけ**である——LTX 2.5 は 1 つのモデルの殻をジョブ間で使い回すので、**変換器を組み立てるたびに前のジョブのラッパーを剥がしてから貼り直す**（剥がさないと二重・三重に積み上がり、無症状のまま遅くなる）。**LTX 2.5 では、マスク付きの呼び出しは sage に触れない**——2.5 の注意モジュールはマスク無し用とマスク付き用を別々の属性として持っており、sage が差し替えるのは前者だけだからである。したがって **IC-LoRA で制御強度を 1.0 未満にしても、LTX 2.5 では「マスクがあったので SDPA へ落とした」というログは出ないのが正しい**（LTX 2.3 では出る）。`Docs/VERIFICATION_LOG.md` §77.7(a)。
 - **実測と設計判断の正本**: `Docs/VERIFICATION_LOG.md` §43（LTX 2.3）・**§77（LTX 2.5 開通の全ゲート。オーナーの目視ゲート G8 は 2026-08-25 に合格＝同 §77.10）**。利用者向け説明は `README.md`「生成の高速化（Acceleration）」節。
 
-インストーラ `scripts/install_ltx.ps1` は「全アーキで SDPA、xformers/flash-attn は自動導入しない」方針である。かつては GPU アーキを `nvidia-smi` で自動判定し、ada/ampere/hopper については `wheels/` にプリビルド wheel があればそれを導入する分岐を持っていたが、**この自動導入は 2026-07-26 に廃止した**（全アーキ SDPA 固定である以上、アーキごとに導入物を変える理由が無く、判定の失敗・誤判定が事故の種になるだけであるため）。`scripts/build_xformers.ps1` は、xformers を自分でビルドしたいユーザーのための**手動ツール**として引き続き `scripts/` に残す（インストーラからは呼ばれない）。
+インストーラ `scripts/install_ltx.ps1` は「全アーキで SDPA、xformers/flash-attn は自動導入しない」方針である。かつては GPU アーキを `nvidia-smi` で自動判定し、ada/ampere/hopper については `wheels/` にプリビルド wheel があればそれを導入する分岐を持っていたが、**この自動導入は 2026-07-26 に廃止した**（全アーキ SDPA 固定である以上、アーキごとに導入物を変える理由が無く、判定の失敗・誤判定が事故の種になるだけであるため）。xformers をビルドするための道具も `scripts/` には置いていない（上記のとおり）。
 
 ### 5.5 reference-only パスの位置づけ
 
-`ltx_repo_dir`（`vendor/LTX-2` 上流クローン）は config に残るが **reference-only** で、GGUF + component 経路では読まれない（`checkpoint_name` / `text_encoder` / `pipeline_type` / `reload_interval` も同様に config へ残っている＝§11.2）。`checkpoint_path`（43GB モノリスへの旧参照パス）は2026-07-28に`config.model`から削除済みで、現在は`services/engines/ltx/adapter.py`が worker payload へ直値の`""`をハードコードして渡すのみ（`DistilledPipeline` 構築のシグネチャを満たすためだけで存在チェック無し）。`fast_video_pipeline.py` の fail-fast アサートが「component/GGUF ソースが全て揃っていること」を build 前に要求するため、モノリスへサイレントにフォールバックすることは無い。
+`checkpoint_name` / `pipeline_type` は config に残るが、GGUF + component 経路の重みの読み込みには使われない（§11.2）。かつて同じく config に残っていた `ltx_repo_dir`（`vendor/LTX-2` 上流クローンを指す reference-only のパス）・`text_encoder`・`reload_interval` は、どのコードからも読まれていなかったため 2026-10-02 に `config.py` から削除した。`checkpoint_path`（43GB モノリスへの旧参照パス）は2026-07-28に`config.model`から削除済みで、現在は`services/engines/ltx/adapter.py`が worker payload へ直値の`""`をハードコードして渡すのみ（`DistilledPipeline` 構築のシグネチャを満たすためだけで存在チェック無し）。`fast_video_pipeline.py` の fail-fast 検査は、build 前に 4 つのパス（`component_video_vae_path`・`component_audio_vae_path`・`component_text_projection_path`・`gguf_gemma_path`）と transformer のパスが空でないことだけを確かめ、`use_component_files` は見ない。`use_component_files` が偽だと部品ファイルへの付け替えだけが飛ばされ、VAE／音声の読み込み元に `model_path=""` が残って読み込みで失敗する（モノリスは配布されない）。そのため偽は動かない構成であり、`config.py` の既定値も配布ひな型 `config.yaml.example` も `true` である。
 
 ---
 
@@ -1015,7 +1017,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 ```
 
 - `attention_backends`: `attention_backend`（§6.2）が受け付ける値の一覧。**実装のある項目だけ**を並べる。**`vae_mode` は 2026-08-05 に実装されたが、この acceleration ブロックには意図的に載せていない**（`keep_resident` と `fused_gguf_dequant_kernel` と同じ理由——環境依存の可否ではないためである）。`vae_mode` は「サーバーの環境で使えるか」ではなく「枝刈りデコーダのファイルがその瞬間に存在するか」で決まり、しかも判定はジョブ単位である。**起動時に1回答える `/status` に載せると、実態と食い違う値を返しうる**（`Docs/VERIFICATION_LOG.md` §52.7 のとおり、サーバーを動かしたままファイルを着脱できる）。実際にどちらで生成されたかは `metadata.json` の `vae_mode_used` で確認する、というのがこのフィールドの正しい観測経路である。**その `vae_mode_used` 自体の語彙はエンジン系統で異なる**（LTX 2.3はPrunaVAEDの可否、LTX 2.5は載せたデコーダの実名）——詳細は §6.6。
-- `block_swap_prefetch_available`（**2026-08-02追加**）: 先読み block swap（`block_swap_prefetch`、§6.2）が実際に効く構成かどうか。判定式は実ゲートと完全同一で `not runner.is_mock and int(low_vram.block_swap_blocks_on_gpu or 8) > 0`（`services/pipeline_manager.py::_block_swap_prefetch_available`）。§6.5 の凍結 `vram_optimization` ブロックには一切触れていない。`block_swap_blocks_on_gpu=0` を `or 8` により実質8として扱う式は本項のために新設したものではなく、worker ペイロード組み立て側の既存の式（現在は `services/engines/ltx/adapter.py:1860`。2026-08-20 の引っ越し前は `services/ltx_runner.py:1086`）をそのまま流用している。詳細は `Docs/VERIFICATION_LOG.md` §44.1・§44.8。
+- `block_swap_prefetch_available`（**2026-08-02追加**。2026-10-02 に意味を定め直した）: 先読み block swap（`block_swap_prefetch`、§6.2）の**設定値（`low_vram.block_swap_blocks_on_gpu`）から算出した利用可否**。式は `not runner.is_mock and int(low_vram.block_swap_blocks_on_gpu or 8) > 0`（`services/pipeline_manager.py` の `_block_swap_prefetch_available`）。**全ブロックが GPU に常駐してスワップが組まれない構成や、block swap の組み込みの失敗は反映しない**——先読みが実際に効いたかどうかは、ジョブの `metadata.json` の `block_swap_prefetch_used`（§6.6）で見る。§6.5 の凍結 `vram_optimization` ブロックには一切触れていない。`block_swap_blocks_on_gpu=0` を `or 8` により実質8として扱う式は本項のために新設したものではなく、LTX 2.3 の worker ペイロード組み立て側の既存の式（`services/engines/ltx/adapter.py` の `_RealBackend._build_load_payload`。2026-08-20 の引っ越し前は `services/ltx_runner.py`）をそのまま流用している。LTX 2.5 のアダプタは `or 8` の代わりに `DEFAULT_BLOCKS_ON_GPU`（値は 8）を使うが、None・0・正・負のどの設定値でも正負の判定は同じ結果になる。詳細は `Docs/VERIFICATION_LOG.md` §44.1・§44.8。
 - `sage_available`: SageAttention が使えるかどうか。サーバーの状態によって判定経路が変わる（**真理値表**。この表の置き場が `acceleration_status_block()` である）:
 
 | サーバーの状態 | `sage_available` の由来 |
@@ -1057,7 +1059,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `seed_used` | int |
 | `attention_used` | str \| null（**2026-07-31追加**。実際に使われた attention の実装＝`"sdpa"` / `"sage"` / `"sage->sdpa"`。`seed_used` とまったく同じ経路〔worker の完了イベント → outcome → メタデータ〕で書き出される。mock backend や旧 worker では `null`。**エンジン系統 `ltx25`（LTX 2.5）では 2026-08-25 から値が入り、3 値がそのまま出る**——`keep_resident_used` と違って降格経路が実在し、`"sage->sdpa"` が出ることを実機で確認済みである〔`Docs/VERIFICATION_LOG.md` §77.5 の R7〕。連結生成のエコーは**チェーン全体の畳み込み**で、どこか 1 回でも降格すれば `"sage->sdpa"` になる） |
 | `block_swap_prefetch_used` | str \| null（**2026-08-02追加**。実際に効いた先読み block swap の状態＝`"off"` / `"on"` / `"on->off"`〔on を要求したが block swap 未インストール・pinned 確保失敗などで同期経路へ降格〕。`attention_used` と同じ経路で書き出される。mock backend や旧 worker では `null`） |
-| `keep_resident_used` | str \| null（**2026-08-03追加**。モデル骨格の常駐が実際に効いたか＝`"off"` / `"on"` / `"on->off"`〔on を要求したが `dit_cpu_load=false` / `block_swap_prefetch=false` との併用で自動 off になった〕。`attention_used` と同じ経路で書き出される。mock backend や旧 worker では `null`。**エンジン系統 `ltx25`（LTX 2.5）では 2026-08-25 から値が入るが、出るのは `"on"` と `"off"` の 2 値だけである**——`"on->off"` を生む降格条件が 2.5 には構造的に存在しないためで、**契約そのものは 3 値のまま据え置いてある**（`Docs/VERIFICATION_LOG.md` §76.6(2)）。詳細は同 §48・§76） |
+| `keep_resident_used` | str \| null（**2026-08-03追加**。モデル骨格の常駐が実際に効いたか＝`"off"` / `"on"` / `"on->off"`〔on を要求したが `dit_cpu_load=false` / `block_swap_prefetch=false` との併用で自動 off になった、または常駐の切り替え（arm）そのものが失敗した。後者は LTX 2.3 のパイプラインが `ERROR` をログに出し、ジョブはそのまま続く。`engine/worker.py` の `_keep_resident_used`〕。`attention_used` と同じ経路で書き出される。mock backend や旧 worker では `null`。**エンジン系統 `ltx25`（LTX 2.5）では 2026-08-25 から値が入るが、出るのは `"on"` と `"off"` の 2 値だけである**——`"on->off"` を生む降格条件が 2.5 には構造的に存在しないためで、**契約そのものは 3 値のまま据え置いてある**（`Docs/VERIFICATION_LOG.md` §76.6(2)）。詳細は同 §48・§76） |
 | `keep_resident_embeddings_used` | str \| null（**2026-09-03追加**。LTX 2.5 の埋め込み処理器（embeddings processor）の常駐が実際に効いたか＝**`"off"` / `"on"` の 2 値だけ**である。`attention_used` と同じ経路〔worker の完了イベント → outcome → メタデータ〕で書き出される。**`keep_resident_used` と違って契約そのものが 2 値である**——このフィールドは LTX 2.5 にしか無く、その 2.5 側に降格を生む条件が構造的に存在しないため、`"on->off"` を出す余地が最初から無いからである。**エンジン系統 `ltx`（LTX 2.3）と mock backend では `null`**——2.3 にはこの部品自体が無いので、答えないことが正直な答えである（そもそも `true` を送れば 422 になる。§6.10(c)）。詳細は §6.2 の同名フィールドの行と `Docs/VERIFICATION_LOG.md` §92） |
 | `fused_gguf_dequant_kernel_used` | str \| null（**2026-08-04追加**。GGUF 逆量子化の1カーネル化が実際に効いたか＝`"off"` / `"on"` / `"on->off"`〔on を要求したが実際には適用されなかった。Triton 不在・カーネル例外での降格・型ごとの初回自己検証の不一致・対象テンソル0件のいずれか〕。`attention_used` と同じ経路で書き出される。mock backend や旧 worker では `null`。実機ゲートの判定基準もこのフィールドである。詳細は `Docs/VERIFICATION_LOG.md` §51） |
 | `vae_mode_used` | str \| null（**2026-07-31追加。本表への記載漏れを2026-09-02に埋めた（台帳 §3-131）**。実際に使われた映像 VAE デコーダの状態で、**エンジン系統によって語彙が異なる**。**LTX 2.3**: 他の実効値と同じ3値規約＝PrunaVAED（枝刈り済みデコーダ）が実際に効いたか＝`"off"` / `"on"` / `"on->off"`（詳細は §6.2 の `vae_mode` 行・`Docs/VERIFICATION_LOG.md` §52）。**LTX 2.5**: 語彙が別物で、**そのジョブが実際にロードしていたデコーダの実名**＝`"conv"`（畳み込み版。現行の既定）または `"diff"`（拡散版・DiffVAE）。`Ltx25Pipeline` がロード時に1回だけ `is_diffusion_video_vae` で判定して属性 `video_vae_kind` に持つ**ロード単位の事実**であり（`build_report`・`LOAD_OK` にも同じ値が出る）、ジョブごとには変わらない。mock backend では `null`。詳細は台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-131、`Docs/MULTI_ENGINE_DESIGN.md` §10） |
@@ -1131,6 +1133,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `single_comfort_token_budget` | `44880` | 単発 `/generate` 1発が快適に収まる注意トークン上限（2026-08-18追加）。**表を持たない古いサーバー向けの互換値**。下記参照 |
 
 **`max_conditioning_images`**（2026-09-08 改）は、`limits` の中でただ 1 つ **`config.yaml` から設定できない項目**である。`LimitsConfig` はこの名前を入力フィールドとしては持たず、`config.py` の定数 `MAX_CONDITIONING_IMAGES`（現在 10）をそのまま返す **computed field（pydantic の読み取り専用の算出項目）**として持つ。`GET /config` が返す JSON の形は従来と変わらない（`model_dump()` に含まれる）。変わったのは **`config.yaml` に書いても効かない**ことだけで、古い `config.yaml` に `max_conditioning_images: 5` が残っていても `extra='ignore'` で捨てられ、**クライアントへ知らせる値と、サーバーが実際に弾く値とが原理的にズレない**。以前はこの 2 つが別々の場所にあり、`config.yaml` を書き換えても上限は変わらないのに知らせる値だけが変わる、という罠になっていた。ひな型 `config.yaml.example` からはこのキーの行を削除してある。**廃止キーの警告機構（`DEPRECATED_MODEL_KEYS`）はここへ広げていない**——無視した結果が正しい値になるので実害が無く、規則を 1 つ増やすだけになるためである。
+
+**範囲の鍵は配信されるだけで、サーバーの検査には効かない**（2026-10-02 明記。鍵の追加や型の変更ではなく、既に配信されている鍵の性質の説明である）。上の表の `max_width` / `max_height` / `max_num_frames` のほか、`limits` は V2V 継続の `v2v_context_frames_min` / `max`（と `_default`）、素材（末尾）の `end_context_frames_min` / `max`（と `_default`）、撮り直しの窓の `retake_window_min_frames` / `max_frames` も `GET /config` で配信する。これらの値はクライアントの事前検査と画面の範囲に使われる（Gradio は `gradio_ui/validation.py` の V2V の検査と `gradio_ui/handlers.py` の連結の幅・高さの検査、操作パネルは幅・高さ・フレーム数・V2V・撮り直しの窓の下限）。サーバー側の検査の正本は別にあり、`config.yaml` の値を読まない——**V2V と素材（末尾）は `config.py::LimitsConfig` の既定値**（`api/models.py` の `_LIMITS_DEFAULTS = LimitsConfig()`）、**幅・高さ・フレーム数は `api/models.py` の `Field` の固定値**、**撮り直しの窓は `chain_math` の定数と式**（`RETAKE_WINDOW_MIN_PX`・`retake_max_window_px`）で行う。したがって `config.yaml` でこれらの鍵を書き換えても変わるのは配信値だけで、サーバーが受け付ける範囲は変わらない（範囲を広げる向き〔上限を上げる・下限を下げる〕に書くと、画面は通すがサーバーは 422 を返す。狭める向きなら画面で選べる範囲が狭まるだけである）。範囲そのものを変えるときは、上記の正本（V2V・素材（末尾）なら `config.py` の既定値）を変える。
 
 `spill_free_frames`（キーは `"WxH"` 生成サイズ文字列）は、API が 481f まで受理する一方でこの値を超えると shared メモリへ溢れて低速化する（OOM はしない）という境界を、クライアント UI の警告用に配る。**マップの中身は 2026-08-31 に判定規則 v3 で再測定してあり、数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記（実体は `config.yaml` の `limits.spill_free_frames`）である**——本書へは写さない。当初の実測経緯は `Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6（同 §8.4 末尾に再測定の追記あり）。
 
@@ -1616,7 +1620,7 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 
 ### 9.4 low_vram_mode と高VRAM検証
 
-`low_vram_mode=true` が Phase 1 の既定（16GB 環境前提）。`low_vram_mode=false` は高VRAM/クラウド環境向けの**任意検証**であり、16GB での成功は保証しない。**16GB で `low_vram_mode=false` が失敗しても Phase 1 の失敗ではない**（README §7）。`allow_disable_low_vram: true`（config）は無効化を許容するフラグに過ぎない。
+`low_vram_mode=true` が Phase 1 の既定（16GB 環境前提）。`low_vram_mode=false` は高VRAM/クラウド環境向けの**任意検証**であり、16GB での成功は保証しない。**16GB で `low_vram_mode=false` が失敗しても Phase 1 の失敗ではない**（README §7）。
 
 ---
 
@@ -1686,11 +1690,8 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | キー | 実値 | 説明 |
 |-----|------|------|
 | `checkpoint_name` | `"ltx-2.3-22b-distilled-1.1"` | チェックポイント名（表示用） |
-| `text_encoder` | `"google/gemma-3-12b-it-qat-q4_0-unquantized"` | テキストエンコーダ識別子（表示用） |
 | `pipeline_type` | `"distilled"` | `pipeline_type` プロパティの元 |
 | `auto_load_on_generate` | `true` | 初回 generate で自動ロード |
-| `reload_interval` | `0` | 再ロード間隔（0=無効） |
-| `ltx_repo_dir` | `"./vendor/LTX-2"` | reference-only（上流クローン） |
 | `backend` | `"auto"` | `auto` \| `mock` \| `real`（auto: GPU+モデル有→real、無→mock） |
 | `manifest_dir` | `"./scripts/manifests"` | **ベースモデル記述子の置き場**（2026-08-20 新設）。`schema: 2`＋`engine_family` を持つ JSON がベースモデル 1 件に対応する（§4.3・§5.1・§6.9） |
 | `models_dir` | `"./models"` | **モデル置き場のルート**（2026-08-20 新設）。記述子に書かれたパスはすべてここからの相対 |
@@ -1721,14 +1722,11 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `dit_cpu_load` | `true` | 内部専用。DiT を CPU 構築し非ブロックのみ GPU へ（ロード時 ~16.9GB スパイク除去）。`LTX_DIT_CPU_LOAD` で worker へ |
 | `vae_tiling` | `true` | VAE タイリング |
 | `attention_tiling` | `false` | Phase 2+ 用。Phase 1 は無効 |
-| `attention_tile_size` | `null` | 同上 |
 | `block_swap` | `true` | ブロックスワップ |
 | `block_swap_blocks_on_gpu` | `8` | GPU 常駐ブロック数（内部 knob、status 非出力） |
 | `vae_spatial_tile_size` | `512` | real engine の VAE 空間タイルサイズ（0=engine 既定） |
 | `vae_temporal_tile_size` | `64` | real engine の VAE 時間タイルサイズ |
 | `use_component_files` | `true` | 単体 component ファイル経路を使う（`LTX_COMPONENT_FILES`）。commit 枯渇クラッシュ回避に必須 |
-| `allow_disable_low_vram` | `true` | 高 VRAM 環境向け任意検証用（16GB 成功は非保証） |
-
 > `block_swap` は現行 config.yaml で `true`。status の `vram_optimization.block_swap` はこの値をそのまま反映する。
 
 ### 11.4 generation_presets
@@ -1768,8 +1766,6 @@ Gradio / API の初期値。
 | `dir` | `"./uploads"` | アップロード保存先 |
 | `max_image_size_mb` | `20` | 画像最大サイズ（超過で UPLOAD_TOO_LARGE） |
 | `allowed_image_extensions` | `[".png", ".jpg", ".jpeg", ".webp"]` | 対応拡張子 |
-| `normalize_to_png` | `true` | PNG 正規化（EXIF orientation 反映・RGB 変換） |
-
 ### 11.7 limits
 §6.7 の表と同一（`max_width=4096`, `max_height=4096`, `max_num_frames=481`, `max_conditioning_images=10`（**`config.yaml` からは設定できない算出値。§6.7 参照**）, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`, `comfort_budgets`, `single_comfort_token_budget=44880`, `chain_comfort_token_budget=40000`）。**`spill_free_frames` と `comfort_budgets` の中身は本書へ書き写さない**——実体は、`spill_free_frames` は `config.yaml`（git 追跡外。リポジトリで確認するときは配布元の `config.yaml.example`。`config.py` の既定は空の辞書で、鍵が無ければ配信されない）、`comfort_budgets` は `config.py` のコード既定（`config.yaml` には書かない。書けば上書きはできる）。説明の正本は `Docs/COMFORT_LIMIT_TABLE.md`（線の表＝§1.1、レガシー表＝§付記）である。
 
@@ -1777,7 +1773,6 @@ Gradio / API の初期値。
 | キー | 実値 | 説明 |
 |-----|------|------|
 | `dir` | `"./outputs"` | 出力先 |
-| `format` | `"mp4"` | 出力形式 |
 | `save_metadata_json` | `true` | metadata.json を書くか |
 | `keep_raw_frames` | `false` | 生フレーム保持 |
 

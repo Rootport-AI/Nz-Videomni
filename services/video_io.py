@@ -1254,7 +1254,12 @@ def join_v2v(
     - Duration: ``acrossfade`` shrinks the summed stream by ``d``; because A ends
       at the junction and B's first ``d`` seconds are the pre-junction overlap,
       the output audio length works out to ``source_audio + continuation_audio``
-      — matching the hard-concatenated video. Asserted within a small tolerance.
+      — matching the hard-concatenated video. What is checked afterwards is
+      narrower: the video frame count must equal source + continuation exactly,
+      and the container duration (ffprobe ``format=duration``, i.e. the longest
+      stream, normally the video) must be within ±0.15 s of the two inputs'
+      container durations summed. No audio stream length is probed, so an
+      output whose audio alone comes out short is NOT detected.
 
     Handle mode requires both inputs to carry audio (``with_audio``); otherwise it
     falls back to the default video-only behavior. When ``handle_audio`` is None
@@ -1457,8 +1462,10 @@ def join_v2v(
         raise FFmpegError(f"ffmpeg join_v2v failed (code {proc.returncode}): {proc.stderr[-2000:]}")
 
     if use_handle:
-        # A/V duration sanity: acrossfade output = source_audio + continuation_audio
-        # which should match the hard-concatenated video (source_video + cont_video).
+        # Length check (limited): the video frame count is compared exactly, and
+        # the container duration (``format=duration`` = the longest stream,
+        # normally the video) within ±0.15 s. The audio stream's own length is
+        # not probed, so audio that alone comes out short passes unnoticed.
         out_v_frames = frame_count(out)
         expected_frames = frame_count(source) + frame_count(continuation)
         if out_v_frames != expected_frames:

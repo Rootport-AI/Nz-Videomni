@@ -36,8 +36,8 @@ What :func:`verify` checks
      * ``ModelRegistry`` still takes keyword-only ``cache_weights`` /
        ``cache_models`` (``Ltx25DiffusionStage``'s ``cache_weights`` default
        rides on it).
-     * ``QuantizationPolicy`` still has exactly the four fields the policy is
-       built from.
+     * ``QuantizationPolicy`` still has exactly its four fields; the policy is
+       built from three of them (``model_configurator`` stays at its default).
      * ``SDOps`` still has ``allowed_keys`` + ``with_additional_allowed_keys``
        (the connector drop depends on it) and ``ModuleOps`` its 3 fields.
      * ``create_meta_model`` still takes ``(configurator, metadata, module_ops)``.

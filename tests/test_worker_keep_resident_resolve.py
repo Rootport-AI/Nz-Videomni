@@ -161,3 +161,58 @@ def test_load_with_both_transformer_sources_raises(monkeypatch):
     with pytest.raises(RuntimeError, match="exactly one transformer source"):
         worker._do_load(msg)
     assert worker._PIPE is None
+
+
+# ── a failed arm reports "on->off" (§1-55) ───────────────────────────────────
+
+
+class _ArmFailsPipe:
+    """Guards all satisfied, but the registry swap raises -- the way a ledger
+    missing a builder attribute does. ``generate`` arms keep_resident exactly as
+    the real entry points do, through the REAL ``_set_keep_resident_job``,
+    which swallows the failure and leaves ``_keep_resident_enabled`` False."""
+
+    _transformer_format = "gguf"
+    _gguf_per_layer_quant = True
+    _dit_cpu_load = True
+
+    def __init__(self) -> None:
+        self._keep_resident_enabled = False
+
+    def _swap_registry(self, enabled):
+        raise AssertionError("keep_resident: ModelLedger is missing builder attribute(s)")
+
+    def generate(self, **kwargs):
+        worker.LTXFastVideoPipeline._set_keep_resident_job(self, kwargs["keep_resident"])
+        with open(kwargs["output_path"], "wb") as fh:
+            fh.write(b"\x00" * 32)
+
+
+def test_a_failed_arm_reports_on_to_off(monkeypatch, tmp_path):
+    import torch
+
+    pipe = _ArmFailsPipe()
+    events: list[dict] = []
+    monkeypatch.setattr(worker, "_PIPE", pipe)
+    monkeypatch.setattr(worker, "_log", lambda msg: None)
+    monkeypatch.setattr(worker, "_log_job_start_vram", lambda: None)
+    monkeypatch.setattr(worker, "_peak_vram_allocated_mb", lambda: 0)
+    monkeypatch.setattr(worker, "_peak_vram_reserved_mb", lambda: 0)
+    monkeypatch.setattr(worker, "_attention_used", lambda a, b: "sdpa")
+    monkeypatch.setattr(worker, "_block_swap_prefetch_used", lambda: "on")
+    monkeypatch.setattr(worker, "_fused_gguf_dequant_kernel_used", lambda: "off")
+    monkeypatch.setattr(worker, "_vae_mode_used", lambda: "off")
+    monkeypatch.setattr(worker, "_emit", lambda event, **f: events.append({"event": event, **f}))
+    monkeypatch.setattr(torch.cuda, "reset_peak_memory_stats", lambda *a, **k: None)
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda *a, **k: None)
+
+    worker._do_generate({
+        "prompt": "p", "seed": 1, "width": 64, "height": 64, "num_frames": 9,
+        "frame_rate": 24.0, "num_steps": 8,
+        "output_path": str(tmp_path / "out.mp4"),
+        "keep_resident": True, "block_swap_prefetch": True,
+    })
+
+    assert pipe._keep_resident_enabled is False
+    done = [e for e in events if e["event"] == "done"][0]
+    assert done["keep_resident_used"] == "on->off"

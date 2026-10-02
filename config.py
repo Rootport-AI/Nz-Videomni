@@ -18,7 +18,12 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field, computed_field
 
-from chain_math import CHAIN_COMFORT_TOKEN_BUDGET, STAGE2_V_TILE, px_from_v_latent
+from chain_math import (
+    CHAIN_COMFORT_TOKEN_BUDGET,
+    RETAKE_WINDOW_MIN_PX,
+    STAGE2_V_TILE,
+    px_from_v_latent,
+)
 
 logger = logging.getLogger("ltx.config")
 
@@ -73,16 +78,13 @@ class ServerConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    checkpoint_name: str = "ltx-2.3-22b-distilled"
-    text_encoder: str = "google/gemma-3-12b-it-qat-q4_0-unquantized"
+    checkpoint_name: str = "ltx-2.3-22b-distilled-1.1"
     pipeline_type: str = "distilled"
     auto_load_on_generate: bool = True
-    reload_interval: int = 0
 
     # Runtime selection. ``backend`` is read by services/engines/ltx/adapter.py
     # (its module docstring has the auto / mock / real rules) and by the mock
     # checks in api/generate.py and api/generate_chain.py.
-    ltx_repo_dir: str = "./vendor/LTX-2"  # reference only (upstream LTX-2 clone).
     backend: str = "auto"  # "auto" | "mock" | "real"
 
     # There is no checkpoint-path setting: the worker payload's
@@ -188,21 +190,22 @@ class VramConfig(BaseModel):
     dit_cpu_load: bool = True
     vae_tiling: bool = True
     attention_tiling: bool = False
-    attention_tile_size: int | None = None
     block_swap: bool = False
     block_swap_blocks_on_gpu: int | None = None
     # VAE tiling sizes for the real GGUF engine (0 -> engine default, proven to
     # fit 16GB at small resolutions). Consumed by the subprocess worker.
     vae_spatial_tile_size: int = 0
     vae_temporal_tile_size: int = 0
-    allow_disable_low_vram: bool = True
     # Re-source the video VAE and audio VAE/vocoder from the base model's
     # standalone component files instead of the monolithic checkpoint; with
     # the text-projection file present, the text encoder's projection is read
     # from that file and its connectors from the transformer file as well.
     # Read by the LTX 2.3 worker via LTX_COMPONENT_FILES
-    # (services/engines/ltx/adapter.py). Off by default.
-    use_component_files: bool = False
+    # (services/engines/ltx/adapter.py). On by default, the same as the shipped
+    # config.yaml.example. Off is not a working configuration: the adapter
+    # always sends checkpoint_path="" and no LTX 2.3 monolith ships, so with
+    # it off the VAE / audio builders are left with no file to load from.
+    use_component_files: bool = True
 
 
 class CropOutputPreset(BaseModel):
@@ -236,7 +239,6 @@ class UploadConfig(BaseModel):
     allowed_image_extensions: list[str] = Field(
         default_factory=lambda: [".png", ".jpg", ".jpeg", ".webp"]
     )
-    normalize_to_png: bool = True
     # Video upload (POST /upload/video): the IC-LoRA reference and the other
     # videos the services resolve (see services/video_upload_store.py). Stored
     # as received under uploads/videos/{video_id}/ unless a trim window or a
@@ -426,7 +428,9 @@ class LimitsConfig(BaseModel):
     # (ChainLayout.end_tile_bands is the per-tile freeze plan), so no window
     # geometry bounds it. 136 == 17 latent frames ~= 5.67 s at 24 fps is simply
     # the edge of the measured region, kept so nobody ships an unvalidated one.
-    # Raising it is a config edit plus a real-run quality gate, and it applies
+    # Raising it is an edit to this default (api/models.py validates against
+    # LimitsConfig(), not config.yaml, which only changes the value /config
+    # publishes) plus a real-run quality gate, and it applies
     # to every stage-2 window preset alike, so a client can trust
     # end_context_frames_max unconditionally (unlike retake_window_max_frames,
     # which really is preset-dependent). The geometry truth stays in chain_math.
@@ -449,7 +453,7 @@ class LimitsConfig(BaseModel):
     # trusting retake_window_max_frames unconditionally. The floor (73) is
     # preset-independent — it is a quality bound, not a geometric one. The
     # geometry truth stays in chain_math.
-    retake_window_min_frames: int = 73
+    retake_window_min_frames: int = RETAKE_WINDOW_MIN_PX
     retake_window_max_frames: int = px_from_v_latent(STAGE2_V_TILE)
     # Comfortable attention-token ceiling for ONE stage-2 window of a chain,
     # published so a client can draw its resolution guides from a served number
@@ -512,7 +516,6 @@ class LimitsConfig(BaseModel):
 
 class OutputConfig(BaseModel):
     dir: str = "./outputs"
-    format: str = "mp4"
     save_metadata_json: bool = True
     keep_raw_frames: bool = False
 

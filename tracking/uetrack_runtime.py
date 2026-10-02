@@ -86,7 +86,6 @@ _BASE_CFG = {
             "XAVIER_INIT": True,             # yaml
         },
         "TASK_DECODER": {
-            "NUM_CHANNELS": 256,             # yaml
             "FEATURE_TYPE": "average",       # yaml
         },
     },

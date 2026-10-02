@@ -126,8 +126,8 @@ def test_top_bar_load_unload_buttons_removed():
     button_values = {c.value for c in demo.blocks.values() if isinstance(c, gr.Button)}
     # The Refresh button stays; the top-bar Load/Unload buttons are gone.
     assert en["btn_refresh"] in button_values
-    assert en["btn_load_model"] not in button_values
-    assert en["btn_unload_model"] not in button_values
+    assert "Load model" not in button_values
+    assert "Unload model" not in button_values
 
 
 def test_chain_mode_radio_is_none_v2v_only():
@@ -1454,3 +1454,78 @@ def test_vae_mode_default_omitted_from_batch_payload(tmp_path):
     started, _ = runner.start(snap, rows, api, sync=True)
     assert started is True
     assert "vae_mode" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# §1-65: the batch branch of dispatch() checks width/height ÷64 before the
+# batch starts, with the Generate tab's msg_bad_dimension and zero API calls.
+# --------------------------------------------------------------------------- #
+def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
+    from gradio_ui.manifest import STAT_WAITING, BatchRow
+
+    demo = _demo()
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={})
+
+    demo.api._client = httpx.Client(transport=httpx.MockTransport(handler))
+    dep = next(d for d in demo.fns.values()
+               if getattr(d.fn, "__name__", "") == "dispatch")
+    rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
+    # The 41 scalar positionals in ui.py's dispatch() order (no keyframe tail).
+    args = [
+        "prompt <lora:x:1.0>", "",          # prompt_v, negative_v
+        500, 320, False, 0, 0,              # width..crop_h (width not ÷64)
+        49, 24.0, -1,                       # num_frames, frame_rate, seed
+        "none", 1.0, 1.0, 1.0, None, {},    # adapter..config
+        "en", 1.0, 60.0, None,              # lang, poll x2, gen_a2v_audio
+        True, rows, "C:/wavs",              # batch_enable, rows, wav_dir
+        "same", "", "add", "", True,        # out_mode..chunked_upsample
+        False, 11.0, 2.5, 0.25,             # nag_enabled, scale, tau, alpha
+        "nag", 1.0, "sdpa", False,          # method, vsf, attention, prefetch
+        False, False, "default", False,     # keep_resident..keep_res_embeds
+        False,                              # embed_mp4_metadata
+    ]
+    assert len(args) == 41
+    out = list(dep.fn(*args))
+    assert out == [(LABELS["en"]["msg_bad_dimension"], "", None)]
+    assert calls["n"] == 0  # not even list_loras for the <lora:> token
+
+
+# --------------------------------------------------------------------------- #
+# §1-66: the comfort-limit and high-quality-mode warnings follow the UI
+# language -- the four wirings pass lang_state as their last input.
+# --------------------------------------------------------------------------- #
+def test_preset_spill_and_qmode_wirings_end_with_lang_state():
+    from gradio_ui.presets import apply_preset, compute_spill_warning
+
+    demo = _demo()
+    dispatch_dep = next(d for d in demo.fns.values()
+                        if getattr(d.fn, "__name__", "") == "dispatch")
+    lang_state = list(dispatch_dep.inputs)[16]   # dispatch()'s lang_v
+    assert isinstance(lang_state, gr.State)
+
+    deps = [d for d in demo.fns.values()
+            if d.fn is apply_preset or d.fn is compute_spill_warning
+            or getattr(d.fn, "__name__", "") == "on_qmode_change"]
+    # preset.change + 3 x (width/height/num_frames).change + qmode + chain_qmode
+    assert len([d for d in deps if d.fn is apply_preset]) == 1
+    assert len([d for d in deps if d.fn is compute_spill_warning]) == 3
+    assert len([d for d in deps
+                if getattr(d.fn, "__name__", "") == "on_qmode_change"]) == 2
+    for d in deps:
+        assert list(d.inputs)[-1]._id == lang_state._id
+
+
+def test_on_qmode_change_warns_in_the_ui_language(monkeypatch):
+    demo = _demo()
+    dep = next(d for d in demo.fns.values()
+               if getattr(d.fn, "__name__", "") == "on_qmode_change")
+    shown = []
+    monkeypatch.setattr(gr, "Warning", lambda msg, *a, **k: shown.append(msg))
+    upd = dep.fn("two_stage_hq", "ja")
+    assert shown == [LABELS["ja"]["warn_hq_unsupported"]]
+    assert LABELS["ja"]["warn_hq_unsupported"] != LABELS["en"]["warn_hq_unsupported"]
+    assert upd["value"] == "distilled"

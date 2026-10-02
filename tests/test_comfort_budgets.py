@@ -18,7 +18,7 @@ from pathlib import Path
 
 import yaml
 
-from config import PROJECT_ROOT, AppConfig, load_config
+from config import PROJECT_ROOT, AppConfig, LimitsConfig, load_config
 
 LTX_REQUIRES = {
     "attention_backend": "sage",
@@ -173,3 +173,18 @@ def test_config_yaml_example_spill_free_frames_matches_the_2026_08_31_recalibrat
         "1920x1088": 161,
         "2560x1472": 81,
     }
+
+
+def test_config_yaml_example_leaves_the_two_comfort_scalars_to_config_py():
+    """``config.yaml.example`` keeps ``chain_comfort_token_budget`` and
+    ``single_comfort_token_budget`` as commented-out examples only: a copied
+    config.yaml that wrote them would freeze the values and stop future
+    default changes from reaching the install (台帳 §1-72)."""
+    example_path = PROJECT_ROOT / "config.yaml.example"
+    raw = yaml.safe_load(example_path.read_text(encoding="utf-8"))
+    assert "chain_comfort_token_budget" not in raw["limits"]
+    assert "single_comfort_token_budget" not in raw["limits"]
+    published = load_config(example_path).limits
+    defaults = LimitsConfig()
+    assert published.chain_comfort_token_budget == defaults.chain_comfort_token_budget
+    assert published.single_comfort_token_budget == defaults.single_comfort_token_budget

@@ -127,7 +127,7 @@ job N+1 builds. It is logged at INFO for that reason.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Iterator
+from typing import Callable
 
 import torch
 
@@ -587,13 +587,3 @@ class NegPromptService:
                     "positive and negative contexts would reach attention at "
                     "different representation stages. Refusing."
                 )
-
-
-def cross_attention_modules(transformer: torch.nn.Module) -> Iterator[tuple[Any, str]]:
-    """Public alias for the borrowed private traversal, for the selfcheck.
-
-    Exists so :mod:`engine25.neg_selfcheck25` (and a future reader) has one
-    obvious name to reach for instead of importing 2.3's underscore-prefixed
-    function a second time.
-    """
-    return _cross_attn_modules(transformer)

@@ -1823,10 +1823,11 @@ class _RealBackend:
         # SELECTION_FIELDS and the descriptor's category set meaningful — a
         # category missing from the mapping cannot reach the worker at all.
         # Component-file re-sourcing (video/audio VAE) rides the same route:
-        # with ``vram.use_component_files`` on (the shipped config.yaml.example
-        # sets it on; ``VramConfig`` in config.py only supplies the fallback
-        # when the key is absent), the standalone files replace the monolith,
-        # so they are load-bearing and always validated for existence.
+        # with ``vram.use_component_files`` on (both the ``VramConfig`` default
+        # in config.py and the shipped config.yaml.example set it on; off does
+        # not work, since checkpoint_path is always ""), the standalone files
+        # replace the monolith, so they are load-bearing and always validated
+        # for existence.
         swapped = {
             field: (
                 str(selection[category])

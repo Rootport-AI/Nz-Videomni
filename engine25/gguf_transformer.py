@@ -475,12 +475,11 @@ def build_quantization_policy() -> QuantizationPolicy:
     -- it copies neither ``allowed_keys`` nor anything else, so contributing
     sd_ops here would silently re-admit the 258 EmbeddingsProcessor tensors.
 
-    ``model_configurator`` names the same ``LTXModelConfigurator`` the builder
-    is given. Upstream reads a policy's configurator in
-    ``DiffusionStage.from_checkpoint``, and this policy never reaches that
-    method (:meth:`Ltx25DiffusionStage.from_gguf` constructs the stage
-    directly), so the builder's ``model_class_configurator`` is what decides
-    the transformer class.
+    ``model_configurator`` is left at its ``None`` default. Upstream reads a
+    policy's configurator only in ``DiffusionStage.from_checkpoint``, and this
+    policy never reaches that method (:meth:`Ltx25DiffusionStage.from_gguf`
+    constructs the stage directly), so the builder's
+    ``model_class_configurator`` is what decides the transformer class.
     """
     ggml_op = ModuleOps(
         name="ltx25_ggml_per_layer_dequant",
@@ -490,7 +489,6 @@ def build_quantization_policy() -> QuantizationPolicy:
     return QuantizationPolicy(
         sd_ops=None,
         module_ops=(ggml_op,),
-        model_configurator=LTXModelConfigurator,
         fuse_rule=bf16_fuse_rule,
     )
 
@@ -920,7 +918,6 @@ class Ltx25DiffusionStage(DiffusionStage):
         quantization = QuantizationPolicy(
             sd_ops=None,
             module_ops=(_make_quant_module_ops(layout.layers),),
-            model_configurator=LTXModelConfigurator,
             fuse_rule=bf16_fuse_rule,
         )
         builder = Ltx25CpuModelBuilder(
@@ -1189,12 +1186,10 @@ class Ltx25DiffusionStage(DiffusionStage):
         build path wants :meth:`_unpatch_block_swap` instead, which is this
         method's forward-restoring half with every tensor operation removed.
 
-        Deliberately NOT ``BlockSwapService.uninstall``: that one ends with
-        ``block.to(self.device)`` for all 48 blocks, i.e. exactly the 14.7GB
-        GPU residency this engine exists to avoid. Of the rest of what it does,
-        restoring ``forward``, dropping the marker and tearing down the prefetch
-        engine are reproduced here; dropping the service's reference to the
-        transformer and releasing its pinned staging pool are not.
+        ``BlockSwapService`` has no uninstall of its own; this method restores
+        ``forward``, drops the marker and tears down the prefetch engine. The
+        blocks stay on CPU: moving all 48 back to the GPU would be exactly the
+        14.7GB GPU residency this engine exists to avoid.
         """
         # Read the markers BEFORE stripping them: which blocks were patched is
         # what decides which ones get moved back to CPU.

@@ -829,3 +829,42 @@ def test_stale_config_max_conditioning_images_is_ignored():
 
     limits = LimitsConfig.model_validate({"max_conditioning_images": 5})
     assert limits.max_conditioning_images == MAX_CONDITIONING_IMAGES
+
+
+def test_config_yaml_context_frame_caps_change_only_the_published_value(tmp_path):
+    """config.yaml の V2V・素材（末尾）の上限は配信値だけを変え、サーバーの検査は
+    config.py の既定値（api/models.py の _LIMITS_DEFAULTS）で行う（台帳 §1-34）。
+    """
+    import pytest
+    import yaml
+
+    from api.models import EndSourceSpec, SourceVideoSpec
+    from config import LimitsConfig, load_config
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        yaml.safe_dump({"limits": {"end_context_frames_max": 144, "v2v_context_frames_max": 153}}),
+        encoding="utf-8",
+    )
+    cfg = load_config(cfg_path)
+    # The published values follow config.yaml ...
+    assert cfg.limits.end_context_frames_max == 144
+    assert cfg.limits.v2v_context_frames_max == 153
+    # ... while the server-side checks keep the config.py defaults as the cap.
+    defaults = LimitsConfig()
+    with pytest.raises(ValueError, match=f"<= {defaults.end_context_frames_max}"):
+        EndSourceSpec(video_id="vid", context_frames=144)
+    with pytest.raises(ValueError, match=f"<= {defaults.v2v_context_frames_max}"):
+        SourceVideoSpec(video_id="vid", context_frames=153)
+
+
+def test_defaults_without_config_yaml_match_the_shipped_example(tmp_path):
+    """config.yaml が無いときの既定値が配布値と同じであること（台帳 §1-67）。
+    use_component_files が偽だと LTX 2.3 の real の読み込みで VAE／音声の読み込み元が
+    無くなる（アダプタは checkpoint_path="" を固定で送る）。
+    """
+    from config import load_config
+
+    cfg = load_config(tmp_path / "no-such-config.yaml")
+    assert cfg.vram.use_component_files is True
+    assert cfg.model.checkpoint_name == "ltx-2.3-22b-distilled-1.1"

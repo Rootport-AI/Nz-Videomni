@@ -2415,7 +2415,12 @@ def run_chain(
         torch.cuda.empty_cache()
 
     wall = time.time() - t0
-    peak = round(torch.cuda.max_memory_allocated(device) / 1e6, 1)
+    # The per-segment reference encode resets the CUDA peak counters; take the
+    # max with the peak it carried from before each reset (fast_video_pipeline's
+    # ``_pre_reset_peak_allocated``) so this is the whole chain's peak.
+    peak = round(
+        max(torch.cuda.max_memory_allocated(device), pipe._pre_reset_peak_allocated) / 1e6, 1
+    )
     meta = layout.to_dict()
     meta.update({
         "n_clips": n,

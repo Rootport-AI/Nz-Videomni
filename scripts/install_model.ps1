@@ -70,12 +70,6 @@ function Write-Skip([string] $Message) { Write-Host ('  [済み] ' + $Message) -
 function Write-Warn([string] $Message) { Write-Host ('  [注意] ' + $Message) -ForegroundColor Yellow }
 function Write-Bad([string] $Message)  { Write-Host ('  [失敗] ' + $Message) -ForegroundColor Red }
 
-function Format-Size([long] $Bytes) {
-    if ($Bytes -ge 1GB) { return ('{0:N1} GB' -f ($Bytes / 1GB)) }
-    if ($Bytes -ge 1MB) { return ('{0:N0} MB' -f ($Bytes / 1MB)) }
-    return ("$Bytes B")
-}
-
 # ---------------------------------------------------------------------------
 # 記述子から、画面に出すための情報だけを取り出す
 #
@@ -167,6 +161,7 @@ function Test-SetupDone {
         'uv（道具）'             = Join-Path $ProjectRoot 'tools\uv\uv.exe'
         'アプリ用 Python 環境'   = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
         'エンジン用 Python 環境' = Join-Path $ProjectRoot '.venv-engine\Scripts\python.exe'
+        'LTX 2.5 エンジン用 Python 環境' = Join-Path $ProjectRoot '.venv-engine-ltx25\Scripts\python.exe'
     }
     $missing = @()
     foreach ($k in $needed.Keys) {
@@ -208,7 +203,7 @@ function Test-SetupDone {
     Write-Host ''
     Write-Info ('setup.bat の場所: ' + (Join-Path $ProjectRoot 'setup.bat'))
     Write-Info 'setup.bat をダブルクリックして、終わるのを待ってから、もう一度このバッチを実行してください。'
-    Write-Info '（フォルダごと移動したり名前を変えたりした直後にこの案内が出た場合は、.venv と .venv-engine のフォルダを削除してから setup.bat を実行してください。setup.bat は環境が揃っていると見なすと作り直さないためです。）'
+    Write-Info '（フォルダごと移動したり名前を変えたりした直後にこの案内が出た場合は、.venv・.venv-engine・.venv-engine-ltx25 のフォルダを削除してから setup.bat を実行してください。setup.bat は環境が揃っていると見なすと作り直さないためです。）'
     Write-Host ''
     return $false
 }

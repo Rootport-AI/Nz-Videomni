@@ -216,6 +216,33 @@ def test_purge_terminal_jobs_skips_active_deletes_terminal_and_continues_past_a_
     assert result["dry_run"] is False
 
 
+def test_purge_terminal_jobs_continues_past_a_read_timeout():
+    """§1-68: BackendClient passes httpx.ReadTimeout through unconverted (D5);
+    the purge loop records it as that job's failure and keeps going."""
+    delete_calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json=_purge_fixture_records())
+        assert request.method == "DELETE"
+        job_id = request.url.path.rsplit("/", 1)[-1]
+        delete_calls.append(job_id)
+        if job_id == "failed-boom":
+            raise httpx.ReadTimeout("simulated timeout", request=request)
+        return httpx.Response(200, json={"job_id": job_id, "deleted": True})
+
+    set_client(_client_for_handler(handler))
+
+    result = anyio.run(jobs.purge_terminal_jobs, False)
+
+    assert set(delete_calls) == {"completed-ok", "failed-boom", "cancelled-ok"}
+    assert result["attempted"] == 3
+    assert result["deleted"] == 2
+    assert [f["job_id"] for f in result["failed"]] == ["failed-boom"]
+    assert "simulated timeout" in result["failed"][0]["error"]
+    assert result["dry_run"] is False
+
+
 def test_purge_terminal_jobs_dry_run_issues_zero_deletes():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET", "dry_run must not DELETE anything"

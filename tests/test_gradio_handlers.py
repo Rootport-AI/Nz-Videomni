@@ -1191,6 +1191,33 @@ def test_generate_a2v_short_wav_rejected_zero_calls(tmp_path):
     assert "5.04" in out[0][0] and "2.00" in out[0][0]
 
 
+def test_generate_a2v_precheck_uses_snapped_fps(tmp_path):
+    """§1-64: the A2V length precheck snaps fps with _snap_frame_rate, the same
+    rounding as the frame_rate the chain payload sends. 97 frames, 3.32s wav
+    (round(3.32 * 25) = 83 audio latents): 29.4 fps would need 82 (passes) but
+    the request carries 29, which needs 84 -- so a direct call at 29.4 must be
+    rejected with zero API calls."""
+    aud = _real_wav(tmp_path / "edge.wav", 3.32)
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"job_id": "x"})
+
+    api = _make_client(handler)
+    generate = make_generate_handler(api)
+    out = list(generate(
+        "prompt", "", _kf_args(),
+        512, 320, False, 0, 0, 97, 29.4, -1,
+        src_audio=aud,
+    ))
+    assert calls["n"] == 0  # no upload_audio, no generate_chain
+    assert len(out) == 1
+    assert out[0][1] == "" and out[0][2] is None
+    # Message computed from the snapped 29 fps: need 84 / 25 = 3.36s.
+    assert "29.0 fps" in out[0][0] and "3.36" in out[0][0] and "3.32" in out[0][0]
+
+
 def test_generate_a2v_long_wav_passes_precheck_and_uploads(tmp_path):
     """A2V length precheck: a wav at least as long as the timeline sails through
     the precheck and proceeds to upload + /generate/chain. 6s audio vs. the same

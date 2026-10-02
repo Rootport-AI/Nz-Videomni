@@ -1,4 +1,7 @@
-"""REST client — the ONLY place /api/v1/* paths + auth headers live."""
+"""REST client — the ONLY place the UI's own /api/v1/* requests + auth
+headers live. (The Style LoRA gallery's thumbnail URL, fetched by the
+browser without auth headers, is built in ``adapters.build_style_gallery``.)
+"""
 
 from __future__ import annotations
 
@@ -60,9 +63,10 @@ class ApiClient:
         return r.json()
 
     def list_loras(self) -> list[dict]:
-        """GET /loras -> the LoRA list (each item: name, kind, has_thumbnail,
-        exists, source). The server rescans on every call, so a freshly
-        dropped-in file shows up without a restart."""
+        """GET /loras -> the LoRA list (each item is a
+        ``services.lora_registry.LoraEntryInfo.as_dict()`` row). The server
+        rescans on every call, so a freshly dropped-in file shows up without a
+        restart."""
         r = self.client.get(self._url("/api/v1/loras"), headers=self.headers, timeout=10)
         r.raise_for_status()
         return r.json().get("loras", [])
@@ -75,15 +79,14 @@ class ApiClient:
         return r.json()
 
     def lora_thumbnail_url(self, name: str) -> str:
-        """The absolute URL of a LoRA's thumbnail (GET /loras/{name}/thumbnail).
-        Used by the Style-LoRA gallery — the browser fetches it directly from
-        the same server the UI is mounted on."""
+        """The absolute URL of a LoRA's thumbnail (GET /loras/{name}/thumbnail)."""
         return self._url(f"/api/v1/loras/{name}/thumbnail")
 
     def delete_job(self, job_id: str) -> dict:
         """DELETE /jobs/{id}. The server cancels the job if it is still active
-        (``{"cancel_requested": True, ...}``) or drops it + its output dir if it
-        is terminal (``{"deleted": True, ...}``). Returns the parsed envelope."""
+        (``{"cancelled": True, ...}`` for a queued job, ``{"cancel_requested":
+        True, ...}`` for a running one) or drops it + its output dir if it is
+        terminal (``{"deleted": True, ...}``). Returns the parsed envelope."""
         r = self.client.delete(self._url(f"/api/v1/jobs/{job_id}"),
                                headers=self.headers, timeout=30)
         r.raise_for_status()
@@ -97,13 +100,13 @@ class ApiClient:
         return r.json()
 
     def load_pipeline_models(self, models: dict, base_model: str | None = None) -> dict:
-        """POST /pipeline/load with a ``models`` selection block (additive S2
-        extension: category -> registered NAME). A swap restarts the engine
-        worker and can take minutes, so reuse the generous load timeout.
+        """POST /pipeline/load with a ``models`` selection block (category ->
+        registered NAME). A swap restarts the engine worker and can take
+        minutes, so reuse the generous load timeout.
 
         ``base_model`` (multi-engine axis) is added to the body ONLY when the
-        caller passes one, so the pre-multi-engine request stays byte-identical
-        for every caller that does not know about base models."""
+        caller passes one, so a caller that does not know about base models
+        sends a body without the ``base_model`` key."""
         body: dict = {"models": models}
         if base_model is not None:
             body["base_model"] = base_model
@@ -128,10 +131,12 @@ class ApiClient:
         return r.json()["image_id"]
 
     def upload_video(self, path: str) -> str:
-        # Reference-video upload (POST /upload/video) for the IC-LoRA control
-        # adapters. Videos can be large (up to 200MB), so use a longer timeout
-        # than image uploads. Returns the server's ``video_id`` (passed to
-        # /generate as ``reference_video_id``).
+        # Video upload (POST /upload/video): the IC-LoRA control adapters'
+        # reference video and the Clip Chain V2V source video. Videos can be
+        # large (the server caps them at ``upload.max_video_size_mb``), so
+        # use a longer timeout than image uploads. Returns the server's
+        # ``video_id`` (sent as ``reference_video_id`` or as
+        # ``source_video.video_id``).
         with open(path, "rb") as fh:
             files = {"file": (Path(path).name, fh.read())}
         r = self.client.post(self._url("/api/v1/upload/video"), files=files,
@@ -141,9 +146,9 @@ class ApiClient:
 
     def upload_audio(self, path: str) -> str:
         # Source-audio upload (POST /upload/audio) for A2V (audio-driven
-        # generation). Audio caps at 50MB (server default), so a 120s timeout
-        # is plenty. Returns the server's ``audio_id`` (passed to
-        # /generate/chain as ``source_audio.audio_id``).
+        # generation). The server caps audio at ``upload.max_audio_size_mb``,
+        # so a 120s timeout is plenty. Returns the server's ``audio_id``
+        # (passed to /generate/chain as ``source_audio.audio_id``).
         with open(path, "rb") as fh:
             files = {"file": (Path(path).name, fh.read())}
         r = self.client.post(self._url("/api/v1/upload/audio"), files=files,

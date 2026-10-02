@@ -1,9 +1,9 @@
 """System-level tools: backend reachability, config, and pipeline/model
-management (6 tools total, per the approved plan's module list).
+management (6 tools total).
 
-Note: ``reload_loras`` was cut per the plan's review item 6 -- ``GET /loras``
-already rescans on every call (``api/loras.py``), so a separate reload tool
-would be redundant.
+Note: there is no ``reload_loras`` tool -- ``GET /loras`` already rescans on
+every call (``api/loras.py``), so a separate reload tool would be redundant
+(``Docs/MCP_SERVER_DESIGN.md`` §4).
 """
 
 from __future__ import annotations
@@ -57,7 +57,8 @@ async def backend_status() -> dict[str, Any]:
 async def get_config() -> dict[str, Any]:
     """バックエンドの実効設定を取得します（GET /config）。
 
-    解像度・フレーム数の上限、アップロード可能な拡張子、V2V/A2Vの範囲など、
+    解像度・フレーム数の上限、アップロード可能な拡張子とサイズ、
+    ``source_video_context_frames`` / ``end_source_context_frames`` に渡せる範囲など、
     他のツールを呼ぶ前に確認しておくと良い情報が含まれます。
 
     Returns:
@@ -106,7 +107,8 @@ async def load_pipeline(
 ) -> dict[str, Any]:
     """パイプライン（推論モデル一式）を読み込みます（POST /pipeline/load）。
 
-    ジョブ実行中は 409 JOB_BUSY になります（同時1ジョブ制約）。読み込みには
+    ``models`` か ``base_model`` を指定したときは、ジョブ実行中なら 409 JOB_BUSY
+    になります（同時1ジョブ制約）。読み込みには
     数十秒〜数分かかることがあるため、``wait_sec``（既定45秒、5〜45秒にクランプ）
     だけ応答を待ち、それでも終わらない場合はタイムアウトを検出して
     ``finished: false`` を返します（エラーにはしません -- バックエンド側の処理
@@ -139,7 +141,7 @@ async def load_pipeline(
             / models / base_model）に ``finished: true`` を加えたもの。
             ``base_model`` と ``models`` は ``models`` か ``base_model`` の
             いずれかを指定したときだけ応答に載ります（引数なしの読み込みの
-            応答形は従来どおり3キーのままです）。
+            応答は pipeline_loaded / pipeline_type / state の3キーです）。
     """
     client = get_client()
     wait_sec = max(_WAIT_SEC_MIN, min(_WAIT_SEC_MAX, wait_sec))

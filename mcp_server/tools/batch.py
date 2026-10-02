@@ -1,9 +1,10 @@
-"""バッチA2V計画ツール（1本、W6）。
+"""バッチA2V計画ツール（1本）。
 
 ``plan_a2v_batch`` はHTTPを一切使わない純ローカル計画ツールです ―― wavフォルダ
 を走査して行ごとの提案フレーム数等を返すだけで、アップロードやジョブ投入は
 一切行いません（部品＋エージェントループ方式。長時間ブロックする複合ツールは
-作らない、計画の設計方針）。実際の生成は ``next_steps`` の案内に従い、行ごとに
+作らない、``Docs/MCP_SERVER_DESIGN.md`` §2 の D4 と同じ考え方）。実際の生成は
+``next_steps`` の案内に従い、行ごとに
 ``upload_audio`` → ``submit_chain`` → ``wait_for_job`` を直列で繰り返してください。
 """
 
@@ -23,7 +24,8 @@ _NEXT_STEPS = (
     "(1) skip_reason が付いている行はスキップする。 "
     "(2) upload_audio(wav_path) で audio_id を得る。 "
     "(3) submit_chain(prompt=..., clips=[{\"num_frames\": suggested_num_frames}], "
-    "source_audio_id=audio_id, chunked_upsample=True)（image_path がある行は "
+    "source_audio_id=audio_id, chunked_upsample=True, "
+    "stage2_window=\"full_length\")（image_path がある行は "
     "先に upload_image して clips[0].conditioning_images に渡す）でジョブを投げる。 "
     "(4) wait_for_job(job_id) が completed になるまで繰り返す。 "
     "(5) save_job_video(job_id, dest_dir) で保存する。 "
@@ -39,9 +41,10 @@ async def plan_a2v_batch(
 ) -> dict[str, Any]:
     """A2Vバッチの実行計画を立てます（wavフォルダを走査するだけ、HTTP不使用）。
 
-    パネルの「Batch A2V」タブと同じ走査規約です: 音声拡張子（wav/mp3/m4a/aac/
-    flac/ogg）を候補にし、マニフェストファイル自身は除外、更新日時（mtime）
-    昇順に並べます。ただし **wav以外はフレーム数を測定できません**
+    Gradio の Web 画面（``/ui``）の Generate タブにある「Batch A2V」と同じ
+    走査規約です（規約の正本は ``Docs/BATCH_A2V_CSV_SPEC.md`` §6）: 音声拡張子
+    （wav/mp3/m4a/aac/flac/ogg）を候補にし、マニフェストファイル自身は除外、
+    更新日時（mtime）昇順に並べます。ただし **wav以外はフレーム数を測定できません**
     （stdlib の ``wave`` モジュールしか使わないため、mp3/m4a等は長さを読めず、
     ``skip_reason="wav-only-alpha"`` の可視Skip行になります――生成できない
     という意味ではなく、このツールが事前に長さを提案できないだけです。それ
@@ -60,7 +63,8 @@ async def plan_a2v_batch(
         image_dir: 同stem画像を探すローカルフォルダの絶対パス（省略可）。
         max_frames: 1クリップの最大フレーム数（既定481）。実効上限は
             ``min(max_frames, 481)`` ―― サーバーのハード上限481より大きい値を
-            渡しても481へ内部クランプされます。
+            渡しても481へ内部クランプされます（481 はサーバーの ``num_frames``
+            の上限で、正本は ``api/models.py`` の ``Field``）。
 
     Returns:
         fps, wav_dir, rows（index/wav_path/filename/duration_seconds/

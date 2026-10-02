@@ -15,7 +15,7 @@ default.
 
 A feature with no control here is simply absent from the table rather than
 listed with an empty tuple — ``two_stage_hq`` (the quality radio already falls
-back to distilled) is a name a live backend publishes today that this UI has
+back to distilled) is a name a live backend publishes that this UI has
 nothing to close.
 Unknown names are ignored for the same reason the frontend ignores
 them: a build of this UI is older than the server it talks to more often than

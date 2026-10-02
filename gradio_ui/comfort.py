@@ -1,4 +1,4 @@
-"""Stage-2 window dropdown for the Clip Chain tab (§3-165): the window names,
+"""Stage-2 window dropdown for the Clip Chain tab: the window names,
 the chain comfort budget that applies to the current engine + acceleration
 settings, and the option labels built from it.
 
@@ -27,7 +27,7 @@ import chain_math
 
 from .i18n import L, _DEFAULT_LANG
 
-#: The selectable windows, in table order (standard, high_resolution, w25..w61).
+#: The selectable windows, in ``chain_math.STAGE2_WINDOW_PRESETS`` table order.
 STAGE2_WINDOW_CHOICES: tuple[str, ...] = tuple(
     name for name in chain_math.STAGE2_WINDOW_PRESETS
     if name != chain_math.STAGE2_WINDOW_FULL_LENGTH
@@ -94,11 +94,12 @@ def resolve_chain_budget(limits: dict | None, engine_family: str | None,
     these EFFECTIVE acceleration fields (:func:`effective_acceleration_fields`).
 
     ``limits.comfort_budgets[engine_family].rows`` is scanned top-down and the
-    first row whose ``requires`` all match gives ``chain_budget`` (40,000 if
-    that number is unusable). No table, an unknown engine (``""`` — before the
-    first ``GET /models``), an engine without a profile, or no matching row
-    all fall back to ``limits.chain_comfort_token_budget`` (40,000 if that is
-    unusable too)."""
+    first row whose ``requires`` all match gives ``chain_budget``
+    (``chain_math.CHAIN_COMFORT_TOKEN_BUDGET`` if that number is unusable). No
+    table, an unknown engine (``""`` — before the first ``GET /models``), an
+    engine without a profile, or no matching row all fall back to
+    ``limits.chain_comfort_token_budget`` (``CHAIN_COMFORT_TOKEN_BUDGET`` again
+    if that is unusable too)."""
     limits = limits or {}
     scalar = _usable_budget(limits.get("chain_comfort_token_budget"),
                             chain_math.CHAIN_COMFORT_TOKEN_BUDGET)
@@ -168,7 +169,8 @@ def stage2_window_option_label(window: str, template: str, engine_label: str,
 def build_stage2_window_choices(lang: str = _DEFAULT_LANG, engine_label: str = "",
                                 budget: int | None = None) -> list[tuple[str, str]]:
     """Dropdown ``choices`` ``[(label, window_name), ...]`` over
-    :data:`STAGE2_WINDOW_CHOICES`. ``budget=None`` -> the 40,000 default."""
+    :data:`STAGE2_WINDOW_CHOICES`. ``budget=None`` ->
+    ``chain_math.CHAIN_COMFORT_TOKEN_BUDGET``."""
     if budget is None:
         budget = chain_math.CHAIN_COMFORT_TOKEN_BUDGET
     template = L("stage2_window_option", lang)

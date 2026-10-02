@@ -2,7 +2,7 @@
 .venv/
 .venv-engine/
 # LTX 2.5 engine interpreter. A SECOND engine venv, not a replacement: the two
-# stacks need incompatible transformers majors (4.57 vs 5.x), so they cannot
+# stacks need incompatible transformers majors (4.x vs 5.x), so they cannot
 # share one interpreter. Built by scripts/install_ltx.ps1 (Ensure-EngineVenv).
 .venv-engine-ltx25/
 # Utility-AI interpreter (object tracking / UETrack). A THIRD venv, built only
@@ -40,10 +40,9 @@ models/**
 # These are installed locally by scripts/install_ltx.ps1.
 # ---------------------------------------------------------------------------
 
-# The engine is now first-party (project-root ./engine, git-tracked); the
-# low-VRAM fork tree was removed in Stage 2b, so no vendor negation is needed.
-# Everything under vendor/ stays ignored. The official LTX-2 clone
-# (vendor/LTX-2) is a re-cloneable upstream reference kept out of the repo.
+# The engine is first-party (project-root ./engine, git-tracked), so no vendor
+# negation is needed. Everything under vendor/ is ignored. The official LTX-2
+# clone (vendor/LTX-2) is a re-cloneable upstream reference kept out of the repo.
 # Engine provenance: engine/VENDOR_NOTICE.md.
 vendor/*
 LTX-2/
@@ -60,7 +59,8 @@ LTX-2/
 *.tar
 *.zip
 
-# HuggingFace / uv / torch caches redirected into the project (install_ltx.ps1)
+# HuggingFace / uv caches inside the project (install_ltx.ps1 points HF_HOME at
+# hf_home/ and UV_CACHE_DIR at .uv_cache/), plus other local cache directories
 .hf_cache/
 .cache/
 hf_home/
@@ -70,7 +70,7 @@ hf_home/
 uv.lock
 
 # ---------------------------------------------------------------------------
-# Local setup artifacts — created by setup.bat, never committed
+# Local per-machine artifacts — never committed
 # ---------------------------------------------------------------------------
 
 # User-edited configuration. Tracking it would make every `git pull` stop on a

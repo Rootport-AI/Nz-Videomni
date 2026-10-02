@@ -6,10 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 
-# Phase 1: FastAPI side dependencies ONLY.
+# FastAPI side dependencies ONLY (the app venv .venv).
 # torch / ltx-pipelines are intentionally NOT listed here.
-# The official LTX-2.3 stack is installed separately (see README / spec 2.5)
-# and invoked only from services/ltx_runner.py.
+# The engine stacks (LTX 2.3 and LTX 2.5) are installed separately into their
+# own venvs by scripts/install_ltx.ps1 (see README) and run as worker
+# processes started by the engine adapters under services/engines/.
 dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",

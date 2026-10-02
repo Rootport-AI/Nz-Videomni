@@ -12,13 +12,14 @@
     ここでは次の順番で処理する。
 
       1. 二重起動ガード（logs/.setup.lock を setup.bat と共有する）
-      2. 記録の開始（logs/install_<ID>_<日時>.log）
-      3. 記述子の読み込み（表示名・ファイル数・おおよその容量）
+      2. 記述子の読み込み（表示名・ファイル数・おおよその容量）
+      3. 記録の開始（logs/install_<ID>_<日時>.log）
       4. setup.bat が済んでいるかの確認（済んでいなければ、ここで止める）
       5. 空き容量の確認（警告のみ）
       6. これから何が起きるかの説明
       7. tools/ を PATH の先頭へ（このプロセスの中だけ）
-      8. scripts/install_ltx.ps1 の実行（重みの取得のみ。Python 環境は作らない）
+      8. scripts/install_ltx.ps1 の実行（重みの取得。setup.bat が作った Python 環境には
+         触れない。物体追尾（UETrack）では専用の .venv-utils を作る）
       9. 終了案内
 
     このファイルは UTF-8（BOM 付き）で保存すること。Windows PowerShell 5.1 は
@@ -147,8 +148,8 @@ function Get-BaseModelPlan {
         OptIn       = [bool] $found.opt_in
         FileCount   = $count
         MinBytes    = $bytes
-        # 実物は記述子の min（公式サイズの 4〜10%下）より必ず大きい。1.15 倍は
-        # その差と、取得中の一時ファイルの分をまとめて見込んだ安全側の目安。
+        # 実物は記述子の min（公式サイズより意図して小さく置いた値）より必ず大きい。
+        # 1.15 倍はその差と、取得中の一時ファイルの分をまとめて見込んだ安全側の目安。
         NeedGB      = [Math]::Ceiling(($bytes * 1.15) / 1GB)
     }
 }
@@ -157,8 +158,9 @@ function Get-BaseModelPlan {
 # setup.bat が済んでいるか
 #
 # 済んでいなければ、ここで止めて setup.bat へ案内する。このスクリプトは
-# Python 環境を作らない（作ると「重みを足したいだけ」の操作が、いま動いている
-# LTX 2.3 の実行環境を書き換えてしまう）。
+# setup.bat が作った Python 環境に触れない（触れると「重みを足したいだけ」の操作が、
+# 動いている LTX 2.3 の実行環境を書き換えてしまう）。物体追尾（UETrack）の
+# .venv-utils は例外で、install_ltx.ps1 が作る。
 # ---------------------------------------------------------------------------
 function Test-SetupDone {
     $needed = [ordered]@{
@@ -198,7 +200,7 @@ function Test-SetupDone {
     Write-Host ''
     Write-Bad '先に setup.bat を実行してください。'
     Write-Host ''
-    Write-Info 'このバッチは、追加のモデルファイルを取ってくるだけのものです。'
+    Write-Info 'このバッチは、追加のモデルファイルを取ってくるものです（物体追尾では専用の Python 環境も作ります）。'
     Write-Info 'Python 環境とダウンロード道具は setup.bat が用意します。まだ揃っていません。'
     Write-Host ''
     Write-Info '足りないもの、または動かないもの:'
@@ -372,7 +374,9 @@ try {
             # 出力には一切手を加えない（Tee-Object などを挟むと hf の進捗バーが消える）。
             #
             # -BaseModel: この実行で取得し、検証の表に出す記述子を1つに絞る。
-            # -SkipVenv:  Python 環境は setup.bat が作ったものをそのまま使う。
+            # -SkipVenv:  setup.bat が作った Python 環境（.venv・.venv-engine・
+            #             .venv-engine-ltx25）には手を加えない。UETrack の .venv-utils は
+            #             -SkipVenv があっても install_ltx.ps1 が作る。
             # -SkipMigrate: 古いフォルダ構成の移動と config.yaml の書き換えは
             #               setup.bat の仕事なので、ここでは触らない。
             & $installScript -BaseModel $plan.Id -SkipVenv -SkipMigrate

@@ -5,14 +5,16 @@ shared by:
   * engine/pipeline/chain_pipeline.py  (the torch orchestration — uses this to
     lay out stage-1 segments, per-join audio overlaps, and the always-tiled
     stage-2 windows so the engine and the app agree byte-for-byte on geometry),
-  * services/ltx_runner.py _MockBackend  (synthesises a single mp4 of the right
-    total length + the same junction indices, GPU-free),
+  * engine25/chain25.py                (the LTX 2.5 engine's counterpart, laid
+    out from the same functions),
+  * services/engines/ltx/adapter.py _MockBackend  (synthesises a single mp4 of
+    the right total length + the same junction indices, GPU-free),
   * services/pipeline_manager.py         (metadata.json junction frames),
   * api/models.py                        (total-length validation).
 
-ZERO heavy deps (no torch / no ltx_core) so it imports in BOTH the app venv
-(.venv, torch-less) and the engine venv (.venv-engine). The latent-frame math is
-a faithful pure-Python replica of the installed wheel:
+ZERO heavy deps (no torch / no ltx_core) so it imports in the app venv (.venv,
+torch-less) as well as in the engine venvs (.venv-engine, .venv-engine-ltx25).
+The latent-frame math is a faithful pure-Python replica of the installed wheel:
 
   * video latent frames for P pixel frames:  (P - 1) // 8 + 1
       (ltx_core.types.VideoLatentShape.from_pixel_shape, temporal scale 8, causal +1)
@@ -22,7 +24,8 @@ a faithful pure-Python replica of the installed wheel:
       where 25.0 = sample_rate/hop_length/audio_latent_downsample_factor
       = 16000/160/4  (ltx_core.types.AudioLatentShape.from_duration).
 
-Architecture (validated by outputs/phase3_clip_concat_spike/s1+s2 spikes):
+Architecture (validated by the clip-concatenation GPU spikes — VERIFICATION_LOG
+§19.4):
   per-segment STAGE 1 (half-res) with video+audio latent tail carry+freeze
     -> assemble ONE continuous stage-1 AV latent (linear crossfade at overlaps;
        per-join audio K_a chosen so the assembled audio lands EXACTLY on the
@@ -45,18 +48,19 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 # ``(v_tile, v_adv)`` per selectable stage-2 window; the overlap ("のり代") is
 # always the derived ``kt_v = v_tile - v_adv``.
 #
-#   "standard"        (22, 18) -> kt_v 4.  The S2-spike default, unchanged since
-#       Phase 3 WP4. Each tile restarts local temporal RoPE positions at 0;
-#       advance 18 -> 4-frame overlap between consecutive stage-2 tiles.
-#   "high_resolution" (19, 12) -> kt_v 7.  Opt-in only (§3-57 sweep + follow-up,
-#       owner decision 2026-08-09). A 19-frame window costs ~14% fewer attention
-#       tokens per tile, which keeps high resolutions (>= ~1216x1664) inside the
-#       comfortable budget below instead of spilling; the wider 7-frame overlap
-#       is what the follow-up run added to suppress the "morphing" the bare
-#       19/4 window showed on owner review. It advances less per tile, so a
-#       chain of the same length gets MORE seams — hence opt-in, not default.
-#       See Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §1 and
-#       outputs/stage2_window_sweep/SWEEP_RESULTS.md.
+#   "standard"        (22, 18) -> kt_v 4.  The default (STAGE2_WINDOW_DEFAULT;
+#       where 22 comes from: Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §1). Each tile
+#       restarts local temporal RoPE positions at 0; advance 18 -> 4-frame
+#       overlap between consecutive stage-2 tiles.
+#   "high_resolution" (19, 12) -> kt_v 7.  Opt-in only (window sweep + follow-up,
+#       owner decision — VERIFICATION_LOG §53). A 19-frame window costs ~14%
+#       fewer attention tokens per tile, which keeps high resolutions
+#       (>= ~1216x1664) inside the comfortable budget below instead of
+#       spilling; the wider 7-frame overlap is what the follow-up run added to
+#       suppress the "morphing" the bare 19/4 window showed on owner review. It
+#       advances less per tile, so a chain of the same length gets MORE seams —
+#       hence opt-in, not default. See Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §1
+#       and VERIFICATION_LOG §53.
 #   "full_length"     (61, 61) -> kt_v 0, i.e. NO のり代 and no seam at all.
 #       61 latent frames == 481 pixel frames == the hard per-clip ceiling
 #       (``ChainClip.num_frames <= 481``), so on a ONE-clip chain f_total can
@@ -64,30 +68,31 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 #       whole timeline. That makes stage-2 here exactly what plain ``POST
 #       /generate`` does — one refine pass over everything — which is the point:
 #       the Single/Batch a2v (audio-to-video) flow IS a one-clip chain, so this
-#       window makes its stage-2 equivalent to the single-shot one (§1-19). It
-#       is for that flow only: api/models.py enforces exactly 1 clip plus a
-#       source_audio before it can be selected.
-#   "w25" .. "w61"    (v, v - 4) -> kt_v 4.  The wider-window ladder (§3-165,
-#       owner decision 2026-09-24): windows 25..61 in steps of 3, each keeping
-#       the standard 4-frame overlap, so the advance v - 4 is always a multiple
-#       of 3 (the rule below). A wider window crosses fewer tile seams for the
-#       same timeline at the cost of a heavier tile (the comfort budget below is
-#       per tile, so the comfortable resolution shrinks as v grows). Unlike
-#       "full_length", "w61" is a normal multi-tile window (no clip-count or
-#       source_audio restriction). RoPE: w61 is 481 px frames = ~20s at 24fps,
-#       i.e. it reaches the trained ceiling — see
-#       Docs/CHAIN_STAGE2_RESEARCH_NOTES.md for the details.
+#       window makes its stage-2 equivalent to the single-shot one
+#       (VERIFICATION_LOG §58). It is for that flow only: api/models.py enforces
+#       exactly 1 clip plus a source_audio before it can be selected.
+#   "w25" .. "w61"    (v, v - 4) -> kt_v 4.  The wider-window ladder (owner
+#       decision — VERIFICATION_LOG §116): windows 25..61 in steps of 3, each
+#       keeping the standard 4-frame overlap, so the advance v - 4 is always a
+#       multiple of 3 (the rule below). A wider window crosses fewer tile seams
+#       for the same timeline at the cost of a heavier tile (the comfort budget
+#       below is per tile, so the comfortable resolution shrinks as v grows).
+#       Unlike "full_length", "w61" is a normal multi-tile window (no clip-count
+#       or source_audio restriction). RoPE: w61 is 481 px frames = ~20s at
+#       24fps, i.e. it reaches the trained ceiling — see
+#       Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §1 for the details.
 #
 # The advance of a preset that can produce TWO OR MORE tiles (kt_v > 0) MUST be
 # a multiple of 3: that is what keeps the 24fps video/audio advance rounding
 # exact ACROSS A TILE SEAM. "full_length" is exempt because it cannot have a
 # seam — it degenerates to one tile, so it never enters the ``n_tiles > 1``
-# audio-reassembly checks below, and ``kt_a`` / ``audio_adv`` are read by
-# chain_pipeline.py only from its ``i >= 1`` tile branch (and from ``i *
-# audio_adv``, which is 0 for the lone tile i=0). Its ``kt_a`` is in fact
-# NEGATIVE at 24fps (audio_adv=508 vs a_len_full=501 -> kt_a=-7; the value is
-# fps-dependent) and that is inert for exactly those reasons. Any NEW preset
-# with kt_v > 0 must still honour the multiple-of-3 rule.
+# audio-reassembly checks below; the engines (chain_pipeline.py, chain25.py)
+# read ``kt_a`` only in their ``i >= 1`` tile branches, and ``audio_adv`` enters
+# the layout as the audio tile start ``i * audio_adv``, which is 0 for the lone
+# tile i=0. Its ``kt_a`` is in fact NEGATIVE at 24fps (audio_adv=508 vs
+# a_len_full=501 -> kt_a=-7; the value is fps-dependent) and that is inert for
+# exactly those reasons. Any NEW preset with kt_v > 0 must still honour the
+# multiple-of-3 rule.
 STAGE2_WINDOW_PRESETS: dict[str, tuple[int, int]] = {
     "standard": (22, 18),
     "high_resolution": (19, 12),
@@ -128,8 +133,9 @@ STAGE2_KT_V = STAGE2_V_TILE - STAGE2_V_ADV   # 4
 def resolve_stage2_window(name: str | None) -> tuple[int, int]:
     """Resolve a stage-2 window preset NAME to its ``(v_tile, v_adv)``.
 
-    ``None`` / ``""`` -> the default preset (so every caller that simply has no
-    opinion produces byte-identical geometry to before this knob existed). An
+    ``None`` / ``""`` -> the default preset (:data:`STAGE2_WINDOW_DEFAULT`, the
+    window ``compute_chain_layout``'s default arguments are bound to), so a
+    caller that simply has no opinion gets the default geometry. An
     unknown name raises ValueError: the window changes the OUTPUT, so a typo
     must fail loudly rather than silently fall back to the default.
     """
@@ -143,12 +149,12 @@ def resolve_stage2_window(name: str | None) -> tuple[int, int]:
         ) from exc
 
 
-# ── Comfortable per-tile attention-token budget (§1-14) ──────────────────────
+# ── Comfortable per-tile attention-token budget ──────────────────────────────
 # ONE stage-2 tile attends over ``(width/32) * (height/32) * v_tile`` latent
 # tokens (32 = the video VAE's spatial compression factor). Past roughly this
 # many tokens the attention working set stops fitting the comfortable VRAM
-# envelope and the run starts paying for it — measured on the §3-57 spill arm
-# (outputs/stage2_window_sweep/SWEEP_RESULTS.md §2b): 44,880 tokens cost
+# envelope and the run starts paying for it — measured on the stage-2 window
+# sweep's spill arm (VERIFICATION_LOG §53.6): 44,880 tokens cost
 # +1,277MB peak VRAM and +27% wall clock against 38,760 at the same resolution;
 # 47,840 cost +2,309MB and +32% against 36,800. 40,000 sits between the clean
 # and spilling measurements of both pairs.
@@ -170,7 +176,7 @@ def chain_window_tokens(width: int, height: int, v_tile: int) -> int:
     return (width // 32) * (height // 32) * v_tile
 
 
-# ── Comfortable stage-1 attention-token budget with a reference (§1-15) ──────
+# ── Comfortable stage-1 attention-token budget with a reference ──────────────
 # The sibling of CHAIN_COMFORT_TOKEN_BUDGET above, on a DIFFERENT axis: that one
 # bounds ONE stage-2 tile, this one bounds ONE stage-1 segment. Stage 1 runs at
 # HALF resolution and denoises a whole clip in a single pass (no tiling), so
@@ -178,12 +184,14 @@ def chain_window_tokens(width: int, height: int, v_tile: int) -> int:
 # patchified alongside the clip and ADDS tokens to that same single pass, which
 # is what makes stage 1 bind first on a referenced chain.
 #
-# 25,000 is PROVISIONAL, derived from the two measured statements in
+# 25,000 is derived from the two measured statements in
 # Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §6: at 1152x1536 a referenced clip tops out
 # around 361 frames (= 24,840 tokens by the formula below at scale 2), and
 # keeping 481 frames requires dropping to roughly 328 stage-1 patches
-# (= 25,010 tokens). Both land just either side of 25,000. Calibrate it on the
-# real-hardware gate (plan G4) and update this constant with the measured knee.
+# (= 25,010 tokens). Both land just either side of 25,000. The real-hardware
+# calibration (VERIFICATION_LOG §57.6) found no knee in stage 1 itself — the
+# knee it found was the reference VAE encode (see
+# REFERENCE_ENCODE_TILE_TOKEN_BUDGET below) — so this value stands.
 CHAIN_STAGE1_COMFORT_TOKEN_BUDGET = 25_000
 
 
@@ -200,8 +208,9 @@ def chain_stage1_tokens(
 
     ``ref_scale`` is the adapter's ``reference_downscale_factor`` (``None`` = no
     IC-LoRA reference on this segment). A reference is patchified from its OWN
-    shape (``engine/pipeline/reference_video_cond.py``) and appended to the same
-    attention sequence, so it adds ``ref_spatial * v_latent`` tokens on top:
+    shape (the installed wheel's
+    ``ltx_core.conditioning.types.reference_video_cond``) and appended to the
+    same attention sequence, so it adds ``ref_spatial * v_latent`` tokens on top:
     ``scale=2`` (the union-control adapters) contributes a quarter of the spatial
     patches, ``scale=1`` (deblur) contributes exactly as many as the clip itself
     — i.e. it doubles the segment.
@@ -223,12 +232,11 @@ def chain_stage1_tokens(
     return tokens
 
 
-# ── Reference-video VAE-encode tile threshold (§3-76) ────────────────────────
+# ── Reference-video VAE-encode tile threshold ────────────────────────────────
 # NOT A KNOB: there is no config key, no API field, and no UI control for this
-# threshold. The reference video's own length is the only switch — exactly the
-# same pattern as ``UPSAMPLE_CHUNK_FRAMES``/``UPSAMPLE_HALO_FRAMES`` above,
-# which pick chunked vs. one-shot upsampling purely from the assembled
-# timeline's length.
+# threshold. What sends a reference to the tiled encode is the adapter's
+# factor (factor-1 / deblur references are tiled whatever their length) and,
+# for the others, the reference video's own token count against this line.
 #
 # The reference's own latent token count (the tokens its VAE encode would
 # attend over) is the yardstick:
@@ -239,15 +247,15 @@ def chain_stage1_tokens(
 # (with v == v_latent_frames(F)) — so ``25_000 // 5 == 5_000`` cuts the SAME
 # job set as the Chained screen's stage-1 comfort banner
 # (:data:`CHAIN_STAGE1_COMFORT_TOKEN_BUDGET` above). At 1152x1536: 361 pixel
-# frames -> 4,968 (below the line, one-shot — byte-identical to already
-# shipped output); 369 pixel frames -> 5,076 (above the line, tiled).
+# frames -> 4,968 (below the line, one-shot); 369 pixel frames -> 5,076 (above
+# the line, tiled).
 #
 # This is a DIFFERENT knee from the spill-onset point (reference ~2,940
 # tokens, reserved-memory measured, ~217 frames at 1152x1536): the light
 # spill in the 217-361 frame band that the banner stays silent about is a
-# KNOWN, ACCEPTED gap — the owner's 2026-09-05 decision (§3-76) prioritises
-# byte-identical output over closing it, and leaves that band spilling on
-# purpose.
+# KNOWN, ACCEPTED gap — the owner's decision (VERIFICATION_LOG §101.2)
+# prioritises keeping that band on the untiled one-shot encode over closing
+# it, and leaves that band spilling on purpose.
 #
 # This constant does NOT track CHAIN_STAGE1_COMFORT_TOKEN_BUDGET
 # automatically: if that comfort line is ever recalibrated, this one stays
@@ -261,7 +269,7 @@ def reference_encode_tokens(ref_width: int, ref_height: int, pixel_frames: int) 
     ``(ref_width // 32) * (ref_height // 32) * v_latent_frames(pixel_frames)``.
     Compare against :data:`REFERENCE_ENCODE_TILE_TOKEN_BUDGET` to decide
     whether the reference is VAE-encoded in one shot or in temporal tiles
-    (§3-76).
+    (VERIFICATION_LOG §101).
     """
     return (ref_width // 32) * (ref_height // 32) * v_latent_frames(pixel_frames)
 
@@ -272,11 +280,11 @@ def stage2_max_context_px(v_tile: int) -> int:
     The variant-B hard-freeze covers stage-2 TILE 0 only, so the frozen head
     must fit inside it — but a head that fills it EXACTLY (``n_ctx_v ==
     v_tile``) leaves tile 0 100% frozen, an untested degenerate. This is the
-    ceiling for ``n_ctx_v <= v_tile - 1``. E.g. 161 for "standard" (above
-    ``config.limits.v2v_context_frames_max`` = 145, so it never binds there)
-    and 137 for "high_resolution" (below 145, so it DOES bind — see
+    ceiling for ``n_ctx_v <= v_tile - 1``. E.g. 161 for "standard" (above the
+    default ``config.limits.v2v_context_frames_max``, so it never binds there)
+    and 137 for "high_resolution" (below that cap, so it DOES bind — see
     ``api/models.py``'s GenerateChainRequest cross-validation); every wider
-    "w*" window is above 145 too.
+    "w*" window is above the cap too.
     """
     return px_from_v_latent(v_tile - 1)
 
@@ -288,15 +296,17 @@ def stage2_max_context_px(v_tile: int) -> int:
 # many stage-2 tiles as it likes, because the band lives at the very END of the
 # timeline and therefore always intersects a tile on that tile's own tail — the
 # one place a hard freeze is already the validated shape (see
-# :func:`compute_chain_layout`'s ``end_tile_bands``). The wording below is the
-# INTERNAL-SEGMENT mode's (two or more clips, the historical design); the
-# current default for one clip is ``in_window``, where the band is the clip's
-# own tail — the two geometries are laid out side by side in
-# :func:`compute_chain_layout`'s docstring. The published ceiling of 136 pixel
-# frames (``config.limits.end_context_frames_max``) is therefore an OPERATIONAL
+# :func:`compute_chain_layout`'s ``end_tile_bands``). The "internal segment"
+# wording below is the ``internal_segment`` mode's (the band appended as its
+# own stage-1 segment, reachable only through ``end_source_mode_override``);
+# the modes a request lands in (``in_window`` for one clip, ``bridge`` /
+# ``reverse`` for two or more) are laid out side by side in
+# :func:`compute_chain_layout`'s docstring. The published ceiling
+# (``config.limits.end_context_frames_max``) is therefore an OPERATIONAL
 # cap — the longest band the real-hardware gate has actually looked at, and one
-# internal segment of at most 20 latent frames — not a geometric one, and it no
-# longer varies per stage-2 window.
+# internal segment of ``kv + n_end_v`` latent frames — not a geometric one,
+# and it does not vary per stage-2 window
+# (Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §10).
 
 
 # ── Retake (temporal inpainting) window bounds ───────────────────────────────
@@ -312,9 +322,10 @@ def stage2_max_context_px(v_tile: int) -> int:
 # window by the glue bands, not by leaving tile space over.
 #
 # The floor is a quality bound, not a geometric one: below ~73 px frames the
-# free middle left between the 25/24 default glue bands stops being enough
-# material to regenerate anything meaningful (owner decision 2026-08-09,
-# PENDING_TASKS.md §1-17).
+# free middle left between the default glue bands (``RetakeSpec.head_px`` /
+# ``tail_px`` in api/models.py) stops being enough material to regenerate
+# anything meaningful (owner decision; the knee measurements are
+# VERIFICATION_LOG §55.13).
 RETAKE_WINDOW_MIN_PX = 73
 
 
@@ -329,9 +340,10 @@ def retake_max_window_px(v_tile: int) -> int:
     return px_from_v_latent(v_tile)
 
 
-# Default continuity params (new semantics: overlap_frames == K_v LATENT frames).
-DEFAULT_OVERLAP_FRAMES = 3       # K_v (video latent overlap), S1-validated
-DEFAULT_OVERLAP_STRENGTH = 0.5   # stage-1 carry overlap strength, S1-validated
+# Default continuity params (overlap_frames == K_v, in video LATENT frames),
+# both validated in VERIFICATION_LOG §19.4.
+DEFAULT_OVERLAP_FRAMES = 3       # K_v (video latent overlap)
+DEFAULT_OVERLAP_STRENGTH = 0.5   # stage-1 carry overlap strength
 
 # ── Chunked spatial-upsample layout (video-latent domain) ────────────────────
 # The whole-timeline stage-1 -> stage-2 spatial upsample is memory-bound on the
@@ -452,9 +464,9 @@ class ChainLayout:
     # A chain in the end source's INTERNAL-SEGMENT mode runs ONE MORE stage-1
     # segment than the user asked for: the layout appends an internal band
     # segment after the last clip (see ``compute_chain_layout``). In the
-    # IN-WINDOW and REVERSE modes it does not — the band is the last clip's own
-    # tail — so the segments are the clips exactly, as on a chain with no end
-    # source at all. ``seg_frames`` is that full segment list and
+    # IN-WINDOW, REVERSE and BRIDGE modes it does not — the band is the last
+    # clip's own tail — so the segments are the clips exactly, as on a chain
+    # with no end source at all. ``seg_frames`` is that full segment list and
     # EVERYTHING below is derived from it — seg_latent / seg_audio / f_total /
     # total_px / a_total / ka_list / the stage-2 tiles / the junctions.
     # ``clip_frames`` above stays the request's own echo and never grows an
@@ -470,11 +482,11 @@ class ChainLayout:
 
     # ── stage-1 SCHEDULE: the three tables that decouple "which segment" from
     # "when it is generated" and "where its frozen ends come from" ────────────
-    # The engine's stage-1 loop used to run ``for i in range(n_seg)``, where the
-    # index meant FOUR things at once: the timeline position, the generation
-    # order, the direction of the dependency and the seed. These tables split the
-    # middle two out; the timeline position and the seed stay the index itself,
-    # so seeds, prompts and metadata are unaffected by their existence.
+    # A bare ``for i in range(n_seg)`` stage-1 loop would make the index mean
+    # FOUR things at once: the timeline position, the generation order, the
+    # direction of the dependency and the seed. These tables split the middle
+    # two out; the timeline position and the seed stay the index itself, so
+    # seeds, prompts and metadata are unaffected by their existence.
     #
     #   * ``seg_generation_order`` — the timeline indices in the order stage 1
     #     must produce them. A permutation of ``range(n_seg)``.
@@ -485,10 +497,10 @@ class ChainLayout:
     #
     # On every mode but ``reverse`` — ``in_window``, ``bridge``,
     # ``internal_segment`` and every chain with no end source at all — these are
-    # exactly what the old loop did: ``[0..n_seg)``, ``[None, 0, 1, ...]`` and
-    # all-None. That equivalence is what makes their introduction a no-op on
-    # every path validated before them, and what lets ``bridge`` reuse the
-    # forward schedule unchanged.
+    # the plain forward schedule: ``[0..n_seg)``, ``[None, 0, 1, ...]`` and
+    # all-None, i.e. ascending order with each head carried from the previous
+    # segment and no tail dependency. That is what lets ``bridge`` share the
+    # forward schedule with a chain that has no end source.
     seg_generation_order: list[int]
     seg_head_source: list[int | None]
     seg_tail_source: list[int | None]
@@ -508,9 +520,11 @@ class ChainLayout:
     duration_sec: float = 0.0
 
     # ── video-to-video continuation (source head) geometry ───────────────────
-    # Populated ONLY when ``compute_chain_layout`` is called with
-    # ``source_context_px`` (a source video's tail is frozen as the head of
-    # clip-0). All None/0 for a normal chain (source-less path unchanged).
+    # Populated from ``source_context_px`` when ``compute_chain_layout`` is
+    # called with it (a source video's tail is frozen as the head of clip-0).
+    # On a chain without one the fields below are None/0 except
+    # ``new_frames_px``, which is then simply ``total_px``, and ``to_dict``
+    # omits the ``v2v`` sub-dict.
     source_context_px: int | None = None   # frozen context pixel-frame span
     n_ctx_v: int = 0                        # frozen video-latent head frames
     n_ctx_a: int = 0                        # frozen audio-latent head frames
@@ -523,10 +537,10 @@ class ChainLayout:
 
     # ── retake (temporal inpainting) geometry ────────────────────────────────
     # PRIMARY DATA ONLY — deliberately just the two inputs. Every derived number
-    # (n_head_v / n_tail_v / n_head_a / n_tail_a / free_middle) is recomputed by
-    # a pure function inside :meth:`to_dict` rather than stored here, so there is
-    # exactly ONE definition of each and no way for a stored copy to drift out of
-    # step with the function the engine calls. Both None on every non-retake
+    # (n_head_v / n_tail_v / n_head_a / n_tail_a / free_middle_px) is recomputed
+    # by a pure function inside :meth:`to_dict` rather than stored here, so there
+    # is exactly ONE definition of each and no way for a stored copy to drift out
+    # of step with the function the engine calls. Both None on every non-retake
     # chain (the ``retake`` sub-dict is then absent from ``to_dict``).
     retake_window_px: int | None = None      # == clip_frames[0] (the whole window)
     retake_glue_px: tuple[int, int] | None = None   # (head_px, tail_px)
@@ -545,7 +559,9 @@ class ChainLayout:
     # those two disagree, and only the scan keeps the band from reaching back
     # into freely generated material.
     #
-    # THE AUDIO IS ALWAYS HARD-FROZEN, IN STAGE 1 AS WELL AS STAGE 2:
+    # THE AUDIO IS ALWAYS HARD-FROZEN, IN STAGE 1 AS WELL AS STAGE 2, when the
+    # material carries an audio track (a still, or a video without one, has
+    # none, and the tail's audio is generated freely):
     # ``EndSourceSpec.strength`` is a VIDEO-only knob (mask ``1 - strength`` on
     # the video tail, ``0.0`` on the audio tail — see
     # :func:`freeze_mask_values`), so a soft-strength job still lands on the
@@ -577,12 +593,12 @@ class ChainLayout:
     #     tail by the band — so the transition between the two worlds happens
     #     inside that one clip. No seam is ever generated backwards, which is
     #     what distinguishes it from ``reverse``.
-    #   * ``"internal_segment"`` — the historical two-or-more-clips design: the
-    #     band gets a stage-1 segment of its own appended after the last clip and
-    #     the delivered length grows by exactly the band. NO LONGER REACHABLE
-    #     FROM THE API (``reverse`` replaced it); kept whole, and reachable from
-    #     ``compute_chain_layout``'s ``end_source_mode_override``, so the rollback
-    #     is one line and the geometry stays under test.
+    #   * ``"internal_segment"`` — the band gets a stage-1 segment of its own
+    #     appended after the last clip and the delivered length grows by
+    #     exactly the band. NOT REACHABLE FROM THE API: only
+    #     ``compute_chain_layout``'s ``end_source_mode_override`` selects it,
+    #     which keeps the geometry under test and keeps a rollback to it a
+    #     one-line change.
     end_source_mode: str | None = None
     # 0-based pixel index of the LAST NEWLY GENERATED frame — i.e. the last
     # frame before the frozen band — on the UNTRIMMED timeline. The
@@ -605,9 +621,9 @@ class ChainLayout:
     # ``internal_segment`` mode: ``kv`` latent frames of carry-over from the
     # last clip plus the ``n_end_v`` band latents, i.e. ``end_segment_latent ==
     # kv + n_end_v`` and ``end_segment_px == px_from_v_latent(end_segment_latent)``
-    # (== ``seg_frames[-1]``). BOTH ARE 0 IN ``in_window`` MODE — there is no
-    # extra segment there — which is the cheapest machine-checkable statement of
-    # which mode a finished job ran in.
+    # (== ``seg_frames[-1]``). BOTH ARE 0 IN EVERY OTHER MODE — there is no
+    # extra segment there — so a nonzero value marks an ``internal_segment``
+    # job (``end_source_mode`` names the mode outright).
     end_segment_px: int = 0
     end_segment_latent: int = 0
     # Stage-2 hard-freeze plan, ONE ENTRY PER TILE, in tile order: ``(t, off)``
@@ -713,8 +729,8 @@ class ChainLayout:
                 # The stage-1 schedule, so a finished job can be checked against
                 # the order it was supposed to run in ([n-1 .. 0] under
                 # ``reverse``, ascending everywhere else — ``bridge`` included).
-                # Published under the end-source key only: a chain without one is
-                # byte-unchanged.
+                # Published under the end-source key only: a chain without one
+                # carries no ``generation_order`` key.
                 "generation_order": self.seg_generation_order,
                 "end_source_junction_px": self.end_source_junction_px,
                 # Frames the caller must CUT from (or synthesise for) the
@@ -754,7 +770,6 @@ def compute_chain_layout(
 ) -> ChainLayout:
     """Resolve the full chain geometry from clip pixel-frame counts + fps + K_v.
 
-    Faithful generalisation of the S2 spike (reduces to it for uniform clips).
     Raises ValueError on geometrically impossible inputs (surfaced by the API
     validator / engine before any GPU work).
 
@@ -779,7 +794,8 @@ def compute_chain_layout(
     cannot disagree. All the geometric rejections live here (window bounds and
     8n+1 grid, head 8n+1 / tail multiple-of-8, a free middle in BOTH the video
     and the audio latent domains, and the ``n_tiles == 1`` invariant the both-side
-    freeze was validated under). ``None`` -> byte-identical to before.
+    freeze was validated under). ``None`` -> no retake geometry: the retake
+    fields stay None and ``to_dict`` has no ``retake`` sub-dict.
 
     ``end_context_px`` (end source, mutually exclusive with ``retake_glue_px``):
     the mirror of ``source_context_px`` at the far end — the first
@@ -789,7 +805,8 @@ def compute_chain_layout(
     pixel frames because a tail band is counted back from the end in whole
     groups of 8 and never reaches the lone keyframe latent
     (:func:`v_tail_latents`) — the head grid's 8n+1 does not apply here.
-    ``None`` -> byte-identical to before.
+    ``None`` -> no end-source geometry: the end-source fields stay None / 0 /
+    empty and ``to_dict`` has no ``end_source`` sub-dict.
 
     THE END-SOURCE MODE IS CHOSEN BY THE CLIP COUNT AND THE PRESENCE OF A START
     SOURCE — one clip -> ``"in_window"``; two or more WITH a ``source_context_px``
@@ -798,8 +815,8 @@ def compute_chain_layout(
     the ``+1`` primer, ``end_tile_bands``, the stage-2 freeze — is common to
     every mode, and so is the output-length promise: the band is always the LAST
     CLIP'S OWN TAIL, so ``total_px == clips_total_px``. A fourth mode,
-    ``"internal_segment"``, is the historical two-or-more-clips design and is no
-    longer reachable from the API; see ``end_source_mode_override`` below.
+    ``"internal_segment"`` (the band as an appended segment of its own), is
+    not reachable from the API; see ``end_source_mode_override`` below.
 
     MODE "in_window" — EXACTLY ONE CLIP. The band is the clip's OWN last
     ``n_end_v`` latents: nothing is appended, ``seg_frames == clip_frames``,
@@ -835,8 +852,8 @@ def compute_chain_layout(
     One rejection belongs to this mode and ``bridge`` (below): the LAST clip must
     be long enough that ``kv + n_end_v`` does not eat all of it — otherwise the
     reverse carry would hand the previous segment frozen material rather than
-    newly generated content. A ``source_context_px`` (start source) can no longer
-    reach this mode at all: the natural rule sends that pair to ``bridge``, and
+    newly generated content. A ``source_context_px`` (start source) does not
+    reach this mode: the natural rule sends that pair to ``bridge``, and
     an assert below states why the override must not force it back here (clip 0
     frozen at both ends — its head by the start source, its tail by the reverse
     のり代 — is a shape nothing has run).
@@ -848,7 +865,7 @@ def compute_chain_layout(
     source, hence the name — it bridges the two.
 
     THE GEOMETRY AND THE THREE SCHEDULE TABLES ARE EXACTLY A FORWARD CHAIN'S,
-    i.e. what every path without an end source has always produced: ascending
+    i.e. what every path without an end source produces: ascending
     ``seg_generation_order``, ``seg_head_source == [None, 0, 1, ...]``,
     ``seg_tail_source`` all-None, nothing appended (``total_px ==
     clips_total_px``). What is NEW is only where the frozen material lands: the
@@ -865,40 +882,40 @@ def compute_chain_layout(
     backwards would then meet the start source at a seam produced last — the
     weakest joint there is (a seam generated backwards carries no music and is
     structurally rough at the boundary; Docs/CHAIN_STAGE2_RESEARCH_NOTES.md
-    §11 and §3-92). Forwards makes no such joint: every seam is an ordinary
+    §11). Forwards makes no such joint: every seam is an ordinary
     forward carry and only the LAST clip has to reconcile the two worlds.
 
     WHAT THE USER PAYS FOR THAT is inside the last clip: if the start and end
     material are far apart in content, the last clip's free middle is where the
-    crossfade or the morph shows up. That is ACCEPTED BEHAVIOUR (owner ruling
-    2026-09-07), not a defect — the mode is for material that is already
+    crossfade or the morph shows up. That is ACCEPTED BEHAVIOUR (owner
+    ruling), not a defect — the mode is for material that is already
     similar. The rejection below is the only guarantee made: the last clip must
     have free latents BETWEEN its two frozen ends.
 
-    MODE "internal_segment" — THE HISTORICAL TWO-OR-MORE-CLIPS DESIGN, NO LONGER
-    REACHABLE FROM THE API. THE BAND IS AN INTERNAL SEGMENT, NOT A BITE OUT OF
-    THE LAST CLIP. This function appends ONE segment
-    of its own — ``kv`` latents of carry-over from the last clip plus the
-    ``n_end_v`` band latents, at most 20 latent frames all told — to
-    ``seg_frames``, and derives every downstream number from there. Three
-    consequences worth stating, because they are the reason that design was
-    chosen (they hold in this mode only):
+    MODE "internal_segment" — A TWO-OR-MORE-CLIPS DESIGN, REACHABLE ONLY
+    THROUGH ``end_source_mode_override`` (NOT FROM THE API). THE BAND IS AN
+    INTERNAL SEGMENT, NOT A BITE OUT OF THE LAST CLIP. This function appends
+    ONE segment of its own — ``kv`` latents of carry-over from the last clip
+    plus the ``n_end_v`` band latents (``end_segment_latent == kv + n_end_v``)
+    — to ``seg_frames``, and derives every downstream number from there. Three
+    consequences worth stating (they hold in this mode only):
 
       * the user's clips mean what they say (they are the NEW material) and the
         delivered length grows by exactly the band: ``total_px ==
         clips_total_px + end_context_px``, asserted below;
-      * no clip is ever required to be "long enough to hold the band", so the
-        stage-1 length rejection this function used to raise is GONE — with the
-        band in its own segment that check would be true of every request;
-      * a one-shot stage-1 pass longer than the 481-frame per-clip ceiling can
-        no longer arise from an end source, since the extra length arrives as
-        its own short segment rather than as a longer final clip.
+      * no clip is ever required to be "long enough to hold the band", so this
+        mode has no stage-1 length rejection — with the band in its own segment
+        that check would be true of every request;
+      * a one-shot stage-1 pass longer than the per-clip ceiling (``num_frames``
+        of ``ChainClip`` in ``api/models.py``) cannot arise from the end
+        source, since the extra length arrives as its own short segment rather
+        than as a longer final clip.
 
     ``end_source_mode_override`` FORCES A MODE INSTEAD OF DERIVING IT, AND EXISTS
     FOR TESTS AND FOR THE ROLLBACK ONLY. It is deliberately NOT plumbed through
     the API, the engine or the mock: no request can select a mode, which is what
     keeps "the inputs decide" a single rule rather than a negotiable one. Its two
-    uses are (a) keeping the ``internal_segment`` geometry — now API-unreachable
+    uses are (a) keeping the ``internal_segment`` geometry — API-unreachable
     — under test rather than letting dead code rot, and (b) making the rollback
     the one-line change of the decision below. ``None`` (every production caller)
     -> the derived mode. ``"bridge"`` is deliberately ABSENT from the accepted
@@ -909,26 +926,27 @@ def compute_chain_layout(
     THE BAND MAY SPAN SEVERAL STAGE-2 TILES (every mode). It sits at the very END of the
     timeline, so its intersection with any tile is necessarily that tile's own
     TAIL — the shape retake already validated — and a tile the band swallows
-    whole is simply fully frozen (its audio is still refined). ``end_tile_bands``
-    below is the single source of truth for what each tile writes; the engine
-    must not re-derive it. There is consequently no per-window ceiling here at
-    all: ``config.limits.end_context_frames_max`` (136) is an operational cap on
-    territory the real-hardware gate has looked at, not a geometric bound.
+    whole is simply fully frozen. ``end_tile_bands`` below is the single source
+    of truth for what each tile writes; the engine must not re-derive it. There
+    is consequently no per-window ceiling here at all:
+    ``config.limits.end_context_frames_max`` is an operational cap on the range
+    measured on real hardware (Docs/CHAIN_STAGE2_RESEARCH_NOTES.md §10), not a
+    geometric bound.
 
     ``kv >= 2`` IS REQUIRED with an end source, EXCEPT IN ``reverse`` AND
     ``bridge`` MODES. In ``internal_segment`` mode the reason is concrete: the
     extra segment consumes one more join's worth of the audio overlap budget
     (``sum_ka`` below), and at ``kv == 1`` that budget is already so thin that
     the existing "degenerate audio overlap" rejection fires at the higher frame
-    rates. An exhaustive sweep (275,400 clip/fps/window combinations) puts
-    every such failure at ``kv == 1`` and none at ``kv >= 2``, so a single
-    extra condition below buys the whole family a clear message instead of a
-    confusing one.
+    rates. An exhaustive sweep (275,400 clip/fps/window combinations;
+    VERIFICATION_LOG §60.3) puts every such failure at ``kv == 1`` and none at
+    ``kv >= 2``, so a single extra condition below buys the whole family a
+    clear message instead of a confusing one.
 
     ``reverse`` AND ``bridge`` ARE EXEMPT BECAUSE THAT REASON DOES NOT SURVIVE
     THEM: neither appends a segment, so ``n_join == n_clips - 1`` and their
     consumption of the audio budget is EXACTLY that of a chain with no end
-    source — a chain that has always accepted ``kv == 1``. The exemption is not
+    source — a chain that accepts ``kv == 1``. The exemption is not
     a relaxation of the safety net either: the raw ``sum_ka < n_join`` rejection
     below still stands and is what actually refuses the thin combinations. And
     ``kv == 1`` is not a corner under ``reverse`` but the mode's INTENDED value —
@@ -947,15 +965,16 @@ def compute_chain_layout(
     one-clip chain has no join at all, so ``kv`` never reaches the audio budget —
     and the rule is DELIBERATELY KEPT ANYWAY. Two grounds, both conservative
     rather than geometric: widening the accepted range is a behaviour change
-    nothing in this work needs, and it is the mode whose band is carved out of a
+    nothing calls for, and it is the mode whose band is carved out of a
     single clip's latents, where a wider carry is not a cost anyone asked to pay.
     Revisit only with a reason to widen the range.
 
-    A ZERO-のり代 window (``v_adv == v_tile``, i.e. ``kt_v == 0`` — currently only
-    the "full_length" preset) is SINGLE-TILE ONLY: with no overlap between tiles
-    there is nothing to hard-freeze and blend at a seam, so a timeline long
-    enough to need a second tile raises ValueError below. That guard is what
-    keeps "full_length" honest no matter which caller resolved the preset.
+    A ZERO-のり代 window (``v_adv == v_tile``, i.e. ``kt_v == 0`` — among the
+    ``STAGE2_WINDOW_PRESETS``, only "full_length") is SINGLE-TILE ONLY: with no
+    overlap between tiles there is nothing to hard-freeze and blend at a seam,
+    so a timeline long enough to need a second tile raises ValueError below.
+    That guard is what keeps "full_length" honest no matter which caller
+    resolved the preset.
     """
     n_clips = len(clip_frames)
     if n_clips < 1:
@@ -1096,9 +1115,8 @@ def compute_chain_layout(
         if kv < 2 and end_source_mode not in ("reverse", "bridge"):
             raise ValueError(
                 f"end_context_px ({end_context_px}) needs overlap_frames "
-                f"(K_v) >= 2; got {kv}. An end source runs one extra stage-1 "
-                "segment for the band, and every join spends part of the audio "
-                "overlap budget (sum_ka): with a 1-latent のり代 that budget is "
+                f"(K_v) >= 2; got {kv}. An end source band spends part of the "
+                "audio overlap budget (sum_ka): with a 1-latent のり代 that budget is "
                 "already exhausted at the higher frame rates, so the chain "
                 "would be refused for 'degenerate audio overlap' instead. "
                 "Raise overlap_frames to 2 or more."
@@ -1173,8 +1191,8 @@ def compute_chain_layout(
     # Delivered pixel frames: everything the decode produces, minus the head a
     # V2V continuation trims off the front (``trim_px`` is 0 otherwise, so this
     # is simply ``total_px``). NOT ``clip_frames[0] - source_context_px``, which
-    # was only ever right for a ONE-clip continuation and under-reported every
-    # longer one. Note the name is now slightly narrower than the meaning: with
+    # is right only for a ONE-clip continuation and under-reports every longer
+    # one. Note the name is slightly narrower than the meaning: with
     # an end source the delivered mp4 also contains the frozen band, which is
     # not "new" material — it is still delivered, and the mock's output length,
     # the app's prediction and the join arithmetic all want this number.
@@ -1215,7 +1233,9 @@ def compute_chain_layout(
     # run out, and the two multi-clip modes get their own version of the same
     # question ("has the LAST clip anything free left?") a few lines below —
     # asked against ``clip_latent[-1]`` rather than against the whole timeline.
-    # Video latents only: the audio of an end source is not frozen.
+    # Video latents only: the end source's audio band (frozen as well when the
+    # material carries an audio track) is kept clear of a start source's audio
+    # head by an assert further down (``n_ctx_a + n_end_a < a_total``).
     #
     # NOT AN ASSERT: a request can reach this (a short clip with a long band),
     # and without the rejection the engine's ``retake_tail_token_range`` raises
@@ -1270,13 +1290,13 @@ def compute_chain_layout(
     # ── end source: ``reverse`` never carries a START source ─────────────────
     # A start source and an end source on ONE clip is the interpolation case
     # (``in_window``; the free-latent check above is what guards it). On a CHAIN
-    # the same pair now selects ``bridge`` — generated forwards, with only the
-    # LAST clip conditioned on both sides — so the natural rule can no longer
-    # produce ``reverse`` here. What it would mean is still untested: clip 0
+    # the same pair selects ``bridge`` — generated forwards, with only the
+    # LAST clip conditioned on both sides — so the natural rule never
+    # produces ``reverse`` here. What it would mean is untested: clip 0
     # frozen at BOTH ends (its head by the start source, its tail by the reverse
     # のり代), a shape nothing has run and no check above defends. Only
     # ``end_source_mode_override="reverse"`` can reach it, hence an assert with
-    # its reason rather than the 422 this used to be.
+    # its reason rather than a 422.
     assert not (end_source_mode == "reverse" and source_context_px is not None), (
         "end_source_mode_override='reverse' with a source_video (start source) "
         f"on {n_clips} clips: generated last-to-first, clip 0 would be frozen at "
@@ -1332,7 +1352,8 @@ def compute_chain_layout(
     # A user-facing ValueError, NOT an assert: api/models.py rejects the
     # combination first (422), but the preset NAME reaches this function from
     # other, non-API paths too — the Gradio precheck/label helpers
-    # (gradio_ui/validation.py:44, gradio_ui/presets.py:260,309) take it as a
+    # (gradio_ui/validation.py check_chain_total, gradio_ui/presets.py
+    # compute_chain_duration_label / _chain_preset_total_warning) take it as a
     # plain argument — so a well-behaved exception (which the API layer turns
     # into a 422 anyway) is the right shape, not an internal invariant crash.
     if kt_v == 0 and n_tiles > 1:
@@ -1353,9 +1374,9 @@ def compute_chain_layout(
 
     # audio tiles, time-aligned to the video advance.
     # RESOLVED BEFORE THE END-SOURCE BANDS BELOW because the band's AUDIO plan
-    # needs ``a_tiles``; the block is moved WHOLE, reassembly check included, and
-    # depends on nothing but ``v_tiles`` / ``f_total`` / ``fps``, all of which are
-    # already final here.
+    # needs ``a_tiles``; this block, reassembly check included, depends on
+    # nothing but the stage-2 window (``v_tile`` / ``v_adv``), ``v_tiles``,
+    # ``a_total`` and ``fps``, all of which are already final here.
     audio_adv = round(v_adv * VIDEO_TIME_FACTOR / float(fps) * AUDIO_LATENTS_PER_SEC)
     a_len_full = a_frames_for_px(px_from_v_latent(v_tile), fps)
     kt_a = a_len_full - audio_adv
@@ -1387,8 +1408,9 @@ def compute_chain_layout(
     # because it sits at the very END of the timeline every tile that reaches it
     # reaches it on that TILE'S OWN TAIL — a trailing hard freeze, which is the
     # shape both retake and the stage-2 seam blend were validated under. A tile
-    # the band swallows whole ends up fully frozen; that is admissible (its
-    # audio is still refined) and merely wasteful.
+    # the band swallows whole ends up fully frozen (the audio band covers that
+    # tile too, so its audio is frozen as well when the material's audio
+    # covers the band); that is admissible and merely wasteful.
     #
     # ``tail_tile_bands`` states the arithmetic (and the two clamps) once; the
     # VIDEO and AUDIO grids just hand it their own tiles. The two results are
@@ -1418,8 +1440,8 @@ def compute_chain_layout(
         # not overlap. ``ka_list[-1]`` is that head in all three multi-segment
         # directions: the のり代 the previous segment takes back out of it under
         # ``reverse``, the ORDINARY FORWARD CARRY frozen INTO it under
-        # ``bridge``, the forward carry into the appended band segment under the
-        # legacy mode.
+        # ``bridge``, the forward carry into the appended band segment under
+        # ``internal_segment``.
         #
         # The mode decides whether the inequality is strict. In the three
         # reachable modes the last segment is a USER CLIP with free audio left
@@ -1458,10 +1480,10 @@ def compute_chain_layout(
         # the reachable grid is 4 latents.
         assert n_ctx_a + n_end_a < a_total, (n_ctx_a, n_end_a, a_total)
         # The last frame of NEW material, stated from the tail — the same
-        # expression in both modes. In ``internal_segment`` mode the band's own
+        # expression in every mode. In ``internal_segment`` mode the band's own
         # segment starts right after it, so the index is ALSO the last segment
-        # seam; in ``in_window`` mode there is no seam there at all. Both are
-        # checked once the junctions are known, below.
+        # seam; in the other modes there is no seam there at all. All of them
+        # are checked once the junctions are known, below.
         end_source_junction_px = total_px - end_context_px - 1
 
     # ── junctions (0-based last-frame-of-segment; boundary J / J+1) ───────────
@@ -1489,14 +1511,14 @@ def compute_chain_layout(
     # also land at or after whatever that source trims off the front — the same
     # statement the one-clip arm below makes, and the only place a start source
     # and the band are related to each other. (It is trivially true under
-    # ``reverse``, where ``trim_px`` is 0: the assert just above this block
-    # rules a start source out there.)
+    # ``reverse``, where ``trim_px`` is 0: the "``reverse`` never carries a
+    # START source" assert above rules a start source out there.)
     #
     # ``in_window``: there is deliberately NO seam — the band is not joined on,
     # which is the mode's whole reason to exist — so the segment list must be
     # seamless and the junction must merely be a real interior index of the
-    # timeline, at or after whatever a start source trims off the front (the W1
-    # check above is what guarantees that last part).
+    # timeline, at or after whatever a start source trims off the front (the
+    # ``in_window`` free-latent check above is what guarantees that last part).
     if end_source_junction_px is not None:
         if end_source_mode == "internal_segment":
             assert segment_seam_junctions[-1] == end_source_junction_px, (
@@ -1539,13 +1561,13 @@ def compute_chain_layout(
     # ── the stage-1 schedule: generation order + the two dependency tables ────
     # Pure functions of the mode and the segment count, deliberately written as
     # ONE two-branch expression rather than as per-mode special cases: everything
-    # that is not ``reverse`` gets exactly what the engine's old
-    # ``for i in range(n_seg)`` loop did — ascending order, each segment's head
-    # carried from the previous one, no tail dependency at all. That is what
-    # makes these tables inert on every path that existed before them, and it is
-    # ALSO the whole of ``bridge``: that mode is the forward tables plus a band
-    # frozen at the far end, so it lands in this ``else`` arm by design and its
-    # tables are indistinguishable from a chain with no end source at all.
+    # that is not ``reverse`` gets the plain forward schedule — ascending order,
+    # each segment's head carried from the previous one, no tail dependency at
+    # all. On every non-``reverse`` path the tables therefore describe a plain
+    # ``for i in range(n_seg)`` loop, and that is ALSO the whole of ``bridge``:
+    # that mode is the forward tables plus a band frozen at the far end, so it
+    # lands in this ``else`` arm by design and its tables are indistinguishable
+    # from a chain with no end source at all.
     #
     # ``reverse`` mirrors it end for end: descending order, no head dependency
     # (every head is free — the timeline's first clip is the only one whose head
@@ -1637,7 +1659,8 @@ def compute_chain_layout(
 # freezes). Both are pure functions of the same geometry ``compute_chain_layout``
 # resolves — ``audio_latents_required`` recomputes a_total from the same three
 # lines, ``audio_segment_windows`` reads a resolved layout — so app and engine
-# agree byte-for-byte. They cover 1..24 clips: with several clips the uploaded
+# agree byte-for-byte. Neither caps the clip count (api/models.py's
+# ``GenerateChainRequest.clips`` does): with several clips the uploaded
 # audio is still ONE track over the whole assembled timeline, and each stage-1
 # segment freezes its own window on it.
 def audio_latents_required(
@@ -1657,7 +1680,7 @@ def audio_latents_required(
     the clip lengths, fps and K_v — never on the stage-2 window (``v_tile`` /
     ``v_adv``) — so this function has NO business running the layout's stage-2
     audio-tile reassembly check. Routing it through ``compute_chain_layout``
-    used to drag that window-dependent check into the A2V length PREFLIGHT,
+    would drag that window-dependent check into the A2V length PREFLIGHT,
     where a config the request's own window accepts could still raise here and
     surface as a 500 (measured: a single 321-frame clip @ 23.976fps, which the
     DEFAULT window rejects and ``high_resolution`` accepts). The stage-2
@@ -1690,7 +1713,7 @@ def audio_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
     so segment ``i`` starts at ``sum(seg_audio[:i]) - sum(ka_list[:i])`` and the
     last window ends exactly at ``a_total``. For a single clip this reduces to
     ``[(0, a_total)]``. Pure function of a resolved :class:`ChainLayout`, and
-    clip-count agnostic — this is what long A2V (2..24 clips) rides on.
+    clip-count agnostic — this is what long A2V (two or more clips) rides on.
     """
     windows: list[tuple[int, int]] = []
     start = 0
@@ -1705,10 +1728,10 @@ def video_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
     """Per stage-1 segment ``(start_px, len_px)`` window on the GLOBAL reference
     timeline.
 
-    The clip-wise IC-LoRA reference (§1-15) is ONE long uploaded video laid over
-    the assembled chain timeline; this says which pixel-frame slice of it belongs
-    to stage-1 segment ``i``. Segment ``i`` begins at global stage-1 latent
-    ``s_i = sum(seg_latent[:i]) - i * kv`` (the same accumulation
+    The clip-wise IC-LoRA reference (VERIFICATION_LOG §57) is ONE long uploaded
+    video laid over the assembled chain timeline; this says which pixel-frame
+    slice of it belongs to stage-1 segment ``i``. Segment ``i`` begins at global
+    stage-1 latent ``s_i = sum(seg_latent[:i]) - i * kv`` (the same accumulation
     ``segment_seam_junctions`` uses, one K_v earlier — that one reports the first
     NEW latent, i.e. ``s_i + kv``). The video VAE is CAUSAL: latent 0 covers
     pixel 0 alone and latent ``f >= 1`` covers pixels ``8f-7 .. 8f``, so a
@@ -1739,7 +1762,8 @@ def video_segment_windows(layout: ChainLayout) -> list[tuple[int, int]]:
     reduces to ``[(0, clip_frames[0])]``, identical to the single-clip
     ``/generate`` path. With 8n+1 clip lengths the last window ends exactly at
     ``total_px - 1``, i.e. the windows need exactly ``total_px`` reference frames.
-    Pure function of a resolved :class:`ChainLayout`, clip-count agnostic (1..24).
+    Pure function of a resolved :class:`ChainLayout`, clip-count agnostic (any
+    clip count ``GenerateChainRequest.clips`` accepts).
     """
     windows: list[tuple[int, int]] = []
     for i, clip_px in enumerate(layout.clip_frames):
@@ -1793,15 +1817,16 @@ def freeze_mask_values(
     for an ordinary carry-over seam, ``0.0`` for a hard freeze.
 
     Three independent overrides, all defaulting to ``None`` = "same as
-    ``mask_value``", so every pre-override call site is bit-identical:
+    ``mask_value``", so a call site that passes ``mask_value`` alone gets that
+    one value on all four bands:
 
     * ``tail_mask_value`` — the retake two-sided freeze; splits HEAD from TAIL.
     * ``audio_mask_value`` — long A2V; splits VIDEO from AUDIO. The uploaded
       audio window must be hard-frozen (0.0) while the video seam keeps carrying
       over at the user's ``overlap_strength``. Collapsing the two into one
-      ``mask_value=0.0`` (what pre-long-A2V A2V did, harmlessly, because a
-      single clip freezes no video head at all) would weld every segment seam
-      shut from clip 2 onward and discard ``overlap_strength`` without a word.
+      ``mask_value=0.0`` is harmless for a single clip (it freezes no video head
+      at all) but would weld every segment seam shut from clip 2 onward and
+      discard ``overlap_strength`` without a word.
     * ``audio_tail_mask_value`` — the end source's frozen band; splits the TAIL
       itself BY MODALITY. The material's audio is ALWAYS hard-frozen (0.0) while
       the video tail honours the user's ``strength`` as ``1 - strength``, and
@@ -1836,7 +1861,7 @@ def freeze_mask_values(
 #
 # RESIDUAL UNCERTAINTY, recorded on purpose (VERIFICATION_LOG §55.6): what is
 # verified is the PATCHIFIER's declared support, NOT that the audio VAE ENCODER
-# actually responds over that same span. The alignment probe (``runs/align/``)
+# actually responds over that same span. The alignment probe recorded there
 # came back INDETERMINATE — all 7 probes missed both the naive and the causal
 # prediction by 1-3 frames. Do not write "the causal model was confirmed".
 # The scanning rule below is chosen precisely so that swapping

@@ -5,7 +5,8 @@
 # no uv.lock for either. Rebuild reference: engine25/engine25-venv-pyproject.toml.
 #
 # WHY A SECOND ENGINE VENV EXISTS AT ALL: official LTX-2 v1.2.0 needs
-# transformers 5.x (Gemma 4) and the 2.3 engine is pinned to transformers 4.57.6.
+# transformers 5.x (Gemma 4) and the 2.3 engine is pinned to transformers 4.x
+# (exact pin: engine/venv-engine.freeze.txt).
 # One interpreter cannot hold both, so .venv-engine and .venv-engine-ltx25 are
 # built side by side and never import each other's packages.
 #
@@ -16,6 +17,7 @@
 # exact-installed equivalent (name==version).
 # Interpreter: CPython 3.12.9  (.venv-engine-ltx25/Scripts/python.exe)
 # Captured: 2026-08-21
+# Some rows below were added or removed by hand after the capture (git history has the details).
 #
 # NOTE: two distributions are git direct-url installs (NOT PyPI); their lines
 # below are bare 'name==version' pins, so the exact source rev is recorded here
@@ -36,18 +38,17 @@
 #
 # NOTE: opencv-python-headless and torchvision are the engine/preprocess
 # dependencies (cv2 does every canny/dwpose/depth frame op; torchvision is used
-# only by the VDA depth wrapper's Compose), added 2026-08-24 so the 2.5 engine
-# can build IC-LoRA control videos with the same code the 2.3 engine runs.
+# only by the VDA depth wrapper's Compose), so the 2.5 engine can build IC-LoRA
+# control videos with the same code the 2.3 engine runs.
 # cv2 4.13.0.92 was verified ABI-compatible with this venv's numpy 2.5.2.
 #
 # NOTE: no diffusers and no natten here, and that is deliberate -- see the
 # header of engine25/engine25-venv-pyproject.toml for the reason each one is
-# out. TWO packages used to be on that list and no longer are:
-#   triton-windows  added 2026-08-24, because the 2.5 engine runs the same fused
-#                   GGUF K-quant dequantisation kernels the 2.3 engine does
+# out. Two packages are deliberately IN, and why:
+#   triton-windows  the 2.5 engine runs the same fused GGUF K-quant
+#                   dequantisation kernels the 2.3 engine does
 #                   (engine/gguf/dequant_triton.py), and those need Triton.
-#   sageattention   added 2026-08-25 (Acceleration third wave), because
-#                   `attention_backend: "sage"` is now a per-job option on the
+#   sageattention   `attention_backend: "sage"` is a per-job option on the
 #                   2.5 engine too -- engine/transformer/sage_attention_service.py
 #                   is shared by both engines, so this venv needs the wheel it
 #                   imports. Its line below is BARE (name==version), like the

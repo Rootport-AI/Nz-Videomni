@@ -15087,3 +15087,225 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 3. `engine/fp8/__pycache__/` にソースの無い古いキャッシュが残っています（`sft_quant/` へ移転後の残骸。コメントの問題ではありません）。
 
 候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 138. ★コード内コメントの現行化・第 6 区域 `gradio_ui/`（バックエンド同梱の Gradio 検証 UI・14 ファイル）＝ 636 ブロック中 271 を現行化（コメントのみ・動作は不変）＋利用者に見える文言 6 グループ（UI 文言 4 組・バッチの検査の失敗理由・CSS のコメント）＋台帳 §1-64〜§1-66 と §1-58 の追記（2026-10-01〜02）
+
+**要約**: `engine/`（§135〜§137）に続く第 6 区域です。`gradio_ui/` は最初期コミット（2026-06-25）から存在する単一ファイル `gradio_ui.py` を 2026-07-04 にパッケージ化したもので、オーナーの見立て（古いコメントが多く残っているはず）どおり、古いままの割合は 43%とこれまでの区域で最高でした（engine/ A（§135）の 38%を超えています）。14 ファイル・8,775 行・636 ブロックのうち 271 ブロック（事実が古いもの 151・導入時期の記録だけのもの 120）を書き換え、コードは変わっていないことを構文木とトークン列で確かめました。利用者に見える文言は、この区域で初めて UI の文言（`i18n.py` の英日の辞書の値）が対象になり、オーナーが文面を決めた 6 グループ（10 箇所）を反映しました。台帳 §1-64〜§1-66 を起票し §1-58 に追記しました。VERIFICATION_LOG 側の訂正はありません。
+
+**目的**: 骨格は §135〜§137 と同じです（関数・メソッドの境目で区域を切り、Opus が全件を判定し、別の Opus が検算し、さらに別の Opus が揃えます）。判定担当への指示（v7）に `gradio_ui/` に固有の注意を足しました。
+1. 文字列リテラル（`i18n.py` の辞書の値・`label=`・`gr.Markdown`・整形したエラー文言）は判定しない。
+2. Gradio の版に依存する記述は、「verified on gradio 6.19.0」のような検証時点の版の来歴は残し（固定先 `pyproject.toml` の `[project.dependencies]` が範囲指定のため版が意味を持つ）、コンパイル後の資産のハッシュ付きファイル名（`Index-BAOWiMqV.js` など）と Gradio 内部の行番号（`queueing.py 898-973`）は関数名・コンポーネント名・ハッシュ抜きのファイル名で指す。
+3. 節番号の系統（ダッシュ付き `§N-M` は台帳の番号で (a-hist)、裁定の根拠として要るものは VERIFICATION_LOG の記録の節〔§3-165→§116・§3-164→§115・§3-66〔旧 §3-50〕→§52・§3-137〔旧 §1-25〕と §3-138〔旧 §4-29〕→§85・§3-80〔旧 §1-19〕→§58・§3-74〔旧 §1-16〕→§56・§3-71/§3-72→§91〕に、ピリオド付き `§N.M` はワークオーダー文書の節、「spec ch.12」は仕様書 §12）。
+4. 段階名 S1〜S6・WP2/3・「v1」は (a-hist)。
+5. 操作パネル（WebView2 フロントエンド）との対応は `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/` で実在を確かめる（旧リポジトリ `_frozen_` は見ない）。「future frontends (AviUtl2, …)」は AviUtl2 の操作パネルが実在する今は (c)。
+6. `gradio_ui/` に専用のモックモードは無く、テストは `ApiClient` に `httpx.MockTransport` を注入する（バックエンド側の `model.backend: "mock"` とは別物）。
+7. `/config` 不達時の静的フォールバックは死に枝（§49.4）。
+
+**対象**: `gradio_ui/` の 14 ファイル（`ui.py` 2,620 行・`handlers.py` 1,848・`i18n.py` 1,128・`batch.py` 925・`manifest.py` 526・`presets.py` 452・`adapters.py` 227・`comfort.py` 221・`api_client.py` 208・`styles.py` 206・`formatting.py` 143・`__init__.py` 123・`validation.py` 86・`feature_scope.py` 62）・8,775 行・636 ブロック（コメント 479・docstring 125・行末コメント 32）です。起点コミットは `e0c77b3`（§137 のコミット）です。第三者由来のコードはありません。
+
+**方法**:
+1. **抜き出し・区域分け**: 19 区域へ切りました（`i18n.py` の辞書リテラル 1,126 行は文の境目で分けられないので、R11 をブロック番号で R11a／R11b の 2 体に分けました）。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 20 体を走らせました。
+3. **検算（Opus 6 体・V1〜V6）**: 360 ブロック（change 全件＋keep の抜き取り）を確かめました。確認済み 346・異論 6・一部だけ直した 6・見逃し 2 でした（ほかに同型の取り残しを 3 件足しました）。検算 V2 が「A2V の長さの事前検査は fps の丸めで 422 に当たりうる」を `chain_math.audio_latents_required` の総当たりで確定しました。
+4. **統合**: 行範囲・`old_lines` の一致・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 45 件を直し（`replace_new_lines` 36・判定で現行のままだった同型のブロックへの `add` 9）、残存語 65 行のうち 4 行を直して 61 行は理由つきで残しました。続く再検算 90 件で新しい誤りはありませんでした。
+6. **オーナーの了承・適用**: 了承のうえ 271 件の差し替えを適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**:
+
+最終の判定（636 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 151 |
+| 導入時期の記録だけ | 120 |
+| 現行のまま | 365 |
+| 保留 | 0 |
+
+古いままの割合は 43%で、これまでの区域で最高でした（A（§135）の 38%を超えています）。
+
+**区域をまたぐ揃えの裁定**（この区域で決めたもので、次の区域にも適用します）: 文書の指し方は英語コメントで `VERIFICATION_LOG §N` に揃えました（`Docs/VERIFICATION_LOG.md §N` の形も揃えています）。CSV の契約（列・判定規約・実効上限）の正本は `Docs/BATCH_A2V_CSV_SPEC.md` としました（`BATCH_A2V_WORKORDER.md` は冒頭の注記で本文を作成時点の記録と断り、CSV の正本を CSV_SPEC に譲っています。コメントが WORKORDER の節を指していたものは CSV_SPEC の節に揃えました）。既定値の向きは値を書かず `*_DEFAULT` の定数を指す書き方にしました（「same rule against `KEEP_RESIDENT_DEFAULT` (direction: see its definition)」の形です）。「ADDITIVE」は 2 つの意味を見分けました（「additive, conditional」＝既定と違うときだけキーを足すという送り方の規則は残し、「(ADDITIVE, keyword)」「additive extension」のような後から足した拡張という来歴の札は落としました）。「frozen」は凍結された REST API を指すものだけ残しました（「frozen generate」「i18n.py is frozen」「batch.py, which is frozen」「frozen Generate-tab A2V send」は落としました）。作業項目の番号「F3」「F4」「F5」「Feature 1／3」「機能1／3」「案A」は段階名と同じ扱いです（(a-hist)）。
+
+**当初から誤っていた主張の訂正の例**: GH-012（A2V の長さの事前検査「cannot turn a passing precheck into a 422」。fps を整数に丸めると必要な音声潜在フレーム数が増えるので当たりえます）、GH-050（「1s / 60min poll defaults」。`_resolve_poll` のフォールバックは 120 分です）、GH-055（「empty slots are skipped」。画像やフレーム位置が欠けた有効な枠は拒否されます）、GH-030（`attention_backend` が「always LAST」。後に 6 キー続きます）、GU-059（「8 FIXED clip slots」。`CHAIN_MAX_CLIPS` は 24 です）、GU-041・GU-004（「i18n.py is frozen」「batch.py, which is frozen」。どちらも以後も改修されています）、GS-001・GN-001（「`gr.Blocks(css=...)` で注入」。実際は `build_ui` の `gr.HTML("<style>…")` で、`mount_gradio_app` が `blocks.css` を上書きするためです）、GN-001（タブは 4 つではなく 6 つ・モジュール一覧に `comfort` が無い・言語切替はサーバ側の `switch_language` です）、GH-002・GU-061（モードのラジオは none／v2v の 2 択で A2V はありません）、GA-013（ベースモデルが無いとき `active` は空ではなく `"default"` です）、GK-009（`delete_job` の戻りは待機中が `cancelled`・走行中が `cancel_requested` です）、GM-019（`read_manifest` は途中で例外が起きるとそこまでの行を返します）、GM-032（マージの 4 規則は WORKORDER ではなく CSV_SPEC §6 です）、GU-034（否定プロンプトが効くのは NAG だけではなく VSF もです）、GU-026（LTX 2.5 の `two_stage_hq` を断るのは `REJECT_TABLE` と `CHAIN_REJECT_TABLE` です）。Gradio の実物（`.venv` の 6.19.0）で確かめた記述もあります: `Queue.process_events` が接続の切れたイベントを捨てる箇所、`BaseForm-*.css`・`Index-*.js`・`Textbox-*.css` の実在、`gr.Warning` はイベントの外では `warnings.warn` に落ちること、`Number(precision=0).preprocess` は int か None を返すことです。
+
+**証明**: 14 ファイルとも、コメントと docstring 以外のトークン列の差は、オーナーが文面を決めた文字列 10 件（下の外部文言）だけでした（文字列に触れていない 11 ファイルは docstring を除いた構文木が起点 `e0c77b3` と一致しました）。改行コードは CRLF でした（`gradio_ui/styles.py` は作業コピーが LF でしたが、`core.autocrlf=true` のため blob は変わりません）。
+
+**テスト**: `.venv` で `tests/test_gradio_*.py` 11 本＋`tests/test_stage2_window.py`＋`tests/test_mcp_batch_planning.py` の 13 ファイルを実行し、750 件合格・7 件スキップでした（`-q` を付けずに実行しました。`pyproject.toml` の `addopts="-q"` と重なると件数が出ないためです）。すべてオフラインです（`httpx.MockTransport`／`TestClient`＋mock バックエンド）。下の敵対的レビューの台帳の訂正を反映した最終状態で監督が再実行した結果も、同じ 13 ファイル 750 件合格・7 件スキップでした。
+
+**外部文言 6 グループ（10 箇所。オーナー決定）**:
+1. `i18n.py` の `v2v_cap_mode`（英日）: 「V2V and A2V cannot be combined — pick one mode」／「V2VとA2Vは同時に使えません…」→「A2V (audio-to-video) for Clip Chain is available in the AviUtl2 control panel; this screen offers V2V only」／「Clip ChainのA2V（音声から動画）はAviUtl2の操作パネルで使えます。この画面ではV2Vだけです」（モードのラジオに A2V はありません）。
+2. `i18n.py` の `style_note`（英日）: 追記先「Generate タブのプロンプト」→「タブの上のプロンプト欄」、トークン「<lora:name:1.0>」→「<lora:name:1.0:1.0>」、「数値」→「最初の数値」。
+3. `i18n.py` の `info_chain_preset`（英日）: 列挙から「フレームレート／frame rate」を外しました（`apply_chain_preset` の出力に fps はありません）。
+4. `i18n.py` の `warn_hq_unsupported`（英日）: 「not yet supported by the backend」／「まだバックエンドが対応していません」→「not available on this backend」／「このバックエンドでは使えません」。
+5. `batch.py` の `_validate` の失敗理由: 「no shared image is set」→「no shared keyframe at frame 0 is set」。
+6. `styles.py` の `CUSTOM_CSS` の中の CSS コメント: 「Owner feedback (2026-07)」→「Owner feedback」。
+旧文面を固定しているテストはありませんでした（Grep で確認）。
+
+**台帳**: §1-64（Gradio の A2V の音声の長さの事前検査が丸める前の fps で計算されること。画面の fps 欄は整数なので実害は直接呼び出しだけです）・§1-65（バッチ A2V に幅・高さの ÷64 の事前検査が無く、全行がアップロード後に 422 で失敗すること）・§1-66（`preset.change` が言語を渡さず、快適上限の警告が英語で固定されること）を起票しました。§1-58（使われていないコード）に `ApiClient.lora_thumbnail_url`（呼び出し 0 件。ギャラリーは `build_style_gallery` が同じパスを自前で組みます）と `i18n.py` の `LABELS` の参照されないキーを追記しました（`a2v_mode_a2v`・`a2v_guide`・`a2v_cap_panel` は意図して残したもの、`btn_load_model`・`btn_unload_model`・`msg_coming` は理由がコードにありません）。
+
+**文書の訂正**: なし。台帳番号の置き換え先として引いた VERIFICATION_LOG の節（§44.7・§51・§52・§56・§57・§58・§85・§91・§115・§116）は検算が見出しと中身で確かめ、食い違いはありませんでした。`Docs/BATCH_A2V_WORKORDER.md` の §2.9・§4.3・§4.5 は今のコードと合いませんが、同書は冒頭の注記で本文を作成時点の記録と断っているので訂正していません。
+
+**敵対的レビュー**（Opus・(b)／(c) 全件＋(a) 全件＋キーの並び＋既定値の定数＋Gradio の実物＋UI 文言＋台帳）: コメントと docstring の新しい文に事実の誤りはありませんでした。
+- **直すべき 2 件（どちらも台帳の記述。全件採用）**: §1-58 の追記の「引かれないキー 6 つ」は 10 個が正しいです（`lbl_apikey`・`msg_generate_error`・`msg_upload_done`・`batch_image_shared` も定義以外に出てきません。監督が Grep で確認しました）。§1-66 は現象が狭く（言語を渡さない経路は `preset.change` のほかに、幅・高さ・フレーム数の `.change` リスナーと `on_qmode_change` の `gr.Warning(L("warn_hq_unsupported"))` にもあります。今回直した日本語の警告文は画面に出ません）、題名・現象・選択肢を 3 経路に広げました。
+- **注意 1 件**: 台帳が出典に引く §138 は、本節を同じコミットで書くことで解消しました。
+- **参考 6 件（不採用）**: `qmode_hq` のラベル「backend support pending」は台帳 §4-28 で保留中の事実と矛盾しないのでオーナー判断に委ねます。`styles.py` の作業コピーの改行コード、`_STAGE_LABEL_KEYS` のコメントの範囲、±ボタンのコメントの 24・23 は構造上の事実として残す裁定済みです。`compute_spill_warnings` の CSV_SPEC §6 の引き方は CSV_SPEC §6・§3.2 で裏づけられます。`style_note` の「最初の数値」は音声の重みに触れていませんが、画面の動きと矛盾しません。
+
+**費用の目安**（Opus のトークン、概算）: 事実の一覧表 約 35 万・判定 約 330 万・検算 約 120 万・揃え 約 33 万・レビュー 約 28 万・反映と修正 約 10 万でした。合計約 555 万となり、計画の見込み（約 450 万）を超えました（`ui.py`・`handlers.py` の古さと、検算の総当たりが要因です）。
+
+**申し送り**（次の区域へ）:
+1. 残る区域は `mcp_server/`・`scripts/`・`config.py`・`chain_math.py`・`main.py` などです（オーナー判断）。`mcp_server/` には「S4 2026-08-01」「v1の既知の制限」と、`over_frame_limit` の docstring（0 の扱いが操作パネルと違う）があります。
+2. `chain_math.py` の `resolve_stage2_window` の docstring に「byte-identical … before this knob existed」、zero-overlap 窓のコメントが `gradio_ui/validation.py:44`・`gradio_ui/presets.py:260,309` と行番号で指しています（今回の差し替えで行がずれました）。
+3. `api/models_registry.py` の「Purely ADDITIVE」は api の回で残った来歴の札です。
+4. テストの docstring・コメント（`tests/test_gradio_ui.py`・`test_gradio_v2v_a2v.py`・`test_gradio_handlers.py`）に台帳番号・S6・ADDITIVE・「案A」が残り、`test_gradio_v2v_a2v.py` の「ui.py's click inputs stop at vsf_scale」は不正確です（テストは対象外）。
+5. 操作パネル側 `webui/src/shell/tokenBudget.ts`・`accelerationSettings.ts` のコメントに日付と台帳番号があります（対象外）。
+6. `Docs/BATCH_A2V_CSV_SPEC.md` §3 の「算出式自体の正本は `chain_math.py`」は、8n+1 の式そのものが `manifest.raw_frame_count`・`handlers.suggest_frames_for_audio` にある点で言い方が不正確です（文書側）。
+7. 判定指示書に「F1〜F5・Feature N・機能N・案A は段階名」「ADDITIVE は来歴の札なら (a-hist)」「frozen は凍結 API 以外は落とす」「CSV の契約は CSV_SPEC を指す」を書き足します（v7.1）。
+8. 棚卸しの担当が旧リポジトリ `_frozen_Nz-LTX23-frontend-AviUtl2` を見て「`featureScope.ts` が無い」と誤報しました。フロントエンドの実在確認は `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/` で行います。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 139. ★コード内コメントの現行化・第 7 区域「残りの Python」（`chain_math.py`・`config.py`・`sft_quant_format.py`・`main.py`・`mcp_server/` 15 ファイル・`tracking/` 自作 5 ファイル・`scripts/trim_uetrack_checkpoint.py`＝25 ファイル）＝ 473 ブロック中 150 を現行化（内部 134＋AI エージェントに見える公開 docstring 16・コメントのみ・動作は不変）＋ MCP の `INSTRUCTIONS` の書き直し＋利用者に見える文言 6 グループ＋台帳 §1-67〜§1-69 と §1-58 の追記＋ `Docs/MCP_SERVER_DESIGN.md` §9 の訂正＋ `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §10 への訂正行（2026-10-02）
+
+**要約**: `gradio_ui/`（§138）に続く第 7 区域として、テスト・第三者コード・操作パネル・保管スクリプト・PowerShell・YAML を除いた**残りの Python 25 ファイルをまとめて 1 回**で行いました。これで Python の自作の本体コードは全区域が完了しました。25 ファイル・7,725 行・473 ブロックのうち 150 ブロック（事実が古いもの 105・導入時期の記録だけのもの 45）を書き換え、コードは変わっていないことを構文木とトークン列で確かめました。古いままの割合は 32%です。**この区域で新しい扱いを 1 つ決めました**: MCP のツール説明文（`mcp_server/tools/*.py` の 23 本の公開 docstring。FastMCP がそのまま AI エージェントに渡します）と、同じく AI に見える `params.py` のクラス docstring 3 本（JSON Schema の `description` に載ります）・`scripts/trim_uetrack_checkpoint.py` のモジュール docstring（`--help` の文面）の計 27 本は、判定担当が他の docstring と同じ基準で判定して新しい文面の案を作り、一覧の第 4 節に全文を載せてオーナーが決める（従来の「書き換えず一覧に載せる」の拡張）扱いにしました。27 本のうち 16 本を直し、11 本は現行のままでした。`server.py` の `INSTRUCTIONS`（サーバー全体の説明・文字列定数）は事実の一覧表の C 節で古い点を列挙し、オーナー了承のうえ Opus が書き直しました（143 行→153 行）。
+
+**目的**: 骨格は §135〜§138 と同じです。判定担当への指示（v8）に固有の注意を足しました。
+1. 公開 docstring は同じ基準で判定し jsonl に `external: true` を付ける（統合後に `split_external.py` で分ける）。
+2. 節番号の系統が 7 つある（台帳／VERIFICATION_LOG／`CHAIN_STAGE2_RESEARCH_NOTES.md`／`COMFORT_LIMIT_TABLE.md`／`MULTI_ENGINE_DESIGN.md`／`OBJECT_TRACKING_DESIGN.md`／`PRUNAVAED_WORKORDER.md`・仕様書）。
+3. git 追跡外の参照先 `outputs/stage2_window_sweep/SWEEP_RESULTS.md` は追跡される記録（VERIFICATION_LOG §53.6）に置き換える。
+4. `chain_math.py` の「frozen」は固定ヘッド／テイルの専門用語で残す。
+5. `config.py` は既定値の正本（定義のそばの値は残す）。
+6. `sft_quant_format.py` の needle（`tests/test_sft_quant_format.py::test_module_is_torch_free` がソースに `import torch`・`import numpy`・`import safetensors`・`mmap` が無いことを検査する）を `merge_changes.py` の機械検査に追加する。
+7. `mcp_server/batch_planning.py` は `gradio_ui` の写しなので第 6 区域の新しい文に揃える。
+8. `tracking/` は `.venv-utils`（CPU 版 torch）で動く。
+
+**対象**: 25 ファイル・7,725 行・473 ブロック（コメント 211・docstring 163・行末コメント 99）です。起点コミットは `25a0e13`（§138 のコミット）です。`tracking/vendor/uetrack/` は第三者コードで対象外です。差し替えが入ったのは 22 ファイル（`tracking/__init__.py`・`mcp_server/__init__.py`・`mcp_server/tools/__init__.py` は変更なし。`mcp_server/server.py` は `INSTRUCTIONS` だけ）です。
+
+**方法**:
+1. **抜き出し・区域分け**: 19 区域へ切りました（R18 と R19 は 1 体で判定しました）。公開 docstring の一覧は `list_mcp_public.py` が `register(mcp)` の `mcp.tool(...)` の呼び出しから機械的に作り、`mark_public.py` が区域ファイルの該当ブロックに印を付けました。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 18 体を走らせました。
+3. **検算（Opus 5 体・V1〜V5）**: 257 ブロック（change 全件＋公開 docstring の keep 全件＋keep の抜き取り）を確かめました。確認済み 250・異論 6・一部だけ直した 0・見逃し 1 でした。保留 1 件（`params.py` の「制御系アダプタは必ず `loras[0]` に置く」）は検算 2 体が独立にコードで否定して解決しました。
+4. **統合**: 行範囲・`old_lines` の一致・needle・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 17 件を直し（`replace_new_lines` 16・`add` 1）、残存語 68 行は理由つきで残し、再検算 41 件で新しい誤りは 0 でした。
+6. **オーナーの了承・適用**: 了承のうえ 150 件を適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**:
+
+最終の判定（473 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 105 |
+| 導入時期の記録だけ | 45 |
+| 現行のまま | 323 |
+| 保留 | 0 |
+
+古いままの割合は 32%です。
+
+**この区域で決めた扱い**: 公開 docstring（AI エージェントに渡る）は判定して案を作り、第 4 節で全文を見せてオーナーが決めます。文書の指し方は非公開のコメントでは `VERIFICATION_LOG §N`、公開 docstring ではファイルを開けるよう `Docs/VERIFICATION_LOG.md §N` にしました。計画番号 D-n は `Docs/MCP_SERVER_DESIGN.md §2` に実在するので、根拠として引くものは「§2 の D-n」の形にしました。モジュール docstring のツール本数はそのファイルの `register` の定義のそばの値として残しました。docstring の中のファイル参照はリポジトリ直下からの相対にしました。公開 docstring の実測値は AI が引数を決めるのに要るので数を残し、記録の節を添えました。
+
+**当初から誤っていた主張の訂正の例**: `chain_math.py` の「End source の音声は凍結されない」（CM-087。実際は素材に音声トラックがあれば映像の帯と同じタイルの音声も凍結されます。検算 V1 と揃えが総当たりで確認しました。CM-072・CM-096 の「(its audio is still refined)」も同じです）、`internal_segment` を「2 クリップ以上のモード」（CM-017。実際は `end_source_mode_override` からしか選べません）、参照先 `engine/pipeline/reference_video_cond.py`（CM-013。実在するのは上流 `ltx_core.conditioning.types.reference_video_cond` です）、`config.py` の「`default` は固定の既定パスのフィールドから注入」（CFG-014。実際は記述子の `default_file` です）・「`model.component_*_path`」（CFG-020。非推奨の鍵です。部品ファイルは `LTX_COMPONENT_FILES` で渡します）・快適予算の戻り先（CFG-023／025／037。Chained は `chain_comfort_token_budget` です）、`main.py` の「uvicorn の access log は既定のまま」（MN-002。実際は 4 本のフィルタを付けます）・「spec 12.4」（存在しない節です）、`mcp_server/client.py` の「double-load race」（MC-004。サーバが 409 `PIPELINE_LOADING` で断ります）、`tracking/uetrack_runtime.py` の「~13M params」（TR-005。配布ファイルは 26,784,694 です）・`task_index` が読まれる（TR-041。読まれません）、`scripts/trim_uetrack_checkpoint.py` の「`interface_text_proj.*` は網が宣言するがアーカイブに無い」（STC-001。vendored の網が作らないので捨てる側です）。公開 docstring では: `vae_mode` の「LTX 2.5 では指定自体が 422」（既定以外の値だけです）・`clips[].num_frames` の「必須」（既定 49 です）・`reference_video_id` の「1 クリップ限定」（1〜24 です）・画角拡張の「control 系をちょうど 1 本」（本数は数えません）・「制御系アダプタは必ず `loras[0]`」（並び順に依存する処理は API・サービス・エンジンのどこにも無く、MCP 自身が `in-outpainting` を末尾に足しています）・`job_status` の戻り（`JobResponse` の 16 フィールドです）・`load_pipeline` の `JOB_BUSY` は `models`／`base_model` を渡したときだけです・`get_mp4_info` のループバック限定はこの読み出しだけです・`upload_video` の実測は `max_frames` が 1 以上のときです。
+
+**証明**: 22 ファイル＋`mcp_server/server.py` で、コメントと docstring 以外のトークン列の差は、オーナーが決めた文字列 10 件（`INSTRUCTIONS` 1・下の 6 グループの 9 箇所）だけでした（文字列に触れていないファイルは docstring を除いた構文木が起点 `25a0e13` と一致しました）。`sft_quant_format.py` に needle の 4 文字列はありません。改行コードは元の形式のままです（`mcp_server/` の 9 ファイルは元から LF でした。`core.autocrlf=true` のため blob は変わりません）。
+
+**テスト**（GPU・実バックエンド・ネットワークに触れない）: アプリ `.venv` の全件 2,873 passed・54 skipped でした（`tests/test_mcp_registration.py::test_backend_status_structured_content_not_wrapped_and_reachable_false` の 1 件は実バックエンド稼働中に落ちる既知のもの〔CLOSED §3-89〕なので `--deselect` しました。`-q` は付けていません）。`.venv-engine` の `test_retake_math.py`・`test_sft_quant_sft_reader.py`・`test_sft_quant_loader_service.py` は 72 passed でした。`.venv-utils` の `test_tracking_runtime_smoke.py` は 4 passed でした。文字列の変更後に 3 環境とも再実行し、同じ結果でした。
+
+**外部文言（オーナー決定）**:
+(A) 公開 docstring 16 本（`ConditioningImageArg`・`LoraArg`・`ChainClipArg`・`plan_a2v_batch`・`submit_generate`〔225→234 行〕・`submit_chain`〔272→279 行〕・`job_status`・`cancel_job`・`join_job`・`get_mp4_info`・`get_config`・`load_pipeline`・`upload_image`・`upload_video`・`upload_audio`・`trim_uetrack_checkpoint.py` のモジュール docstring）。
+(B) `INSTRUCTIONS`: 日付入りの変更履歴 7 箇所・段階名「Phase 1 の制約」・時点依存の語を落として現在形にし、数え方を「retake_* の 5 引数」「outpaint_* の 6 引数」にし、重複を削除し、実測値（約 2 倍・約 1.10 倍・約 7.7GiB・4.66GiB）は性質の言い方にして数値は各ツールの説明に任せ、`stage2_window`・`chunked_upsample`・`embed_mp4_metadata`＋`get_mp4_info`・`plan_a2v_batch`・Inpainting が MCP に無いことの案内を足しました（143 行→153 行）。
+(C) その他 6 件: `submit_chain` の `ToolError`「V2V継続とA2Vはv1では併用できません」→「併用できません」、`trim_uetrack_checkpoint.py` の出力「(expected: the CLIP text seam)」→「(expected: none)」、`main.py` の旧名「LTX-AviUtl2-Bridge」→「Nz-Videomni backend」（`FastAPI(title=)`・`/` の `service`・argparse の description・`main.py` と `config.py` の docstring 1 行目。`gradio_ui/ui.py` の画面タイトルと見出し、それを固定する `tests/test_gradio_ui.py` はオーナー判断待ちで触っていません）、`main.py` の `config.yaml` 不在の警告の 2 行目「お試し表示に切り替わることがあります」→「既定値では IC-LoRA の一覧やプリセットが空のままです」、`mcp_server/tools/batch.py` の `_NEXT_STEPS` に `stage2_window="full_length"` を追加（Gradio の A2V と同じ窓です）、`chain_math.py` の `kv < 2` の `ValueError` 文言を「An end source band spends part of the audio overlap budget」に短縮（届くのは `in_window` だけで、旧文は API から届かない `internal_segment` の理由でした）。旧文面を固定しているテストはありませんでした。
+
+**台帳**: §1-67（`use_component_files` の既定 False のまま LTX 2.3 を real で読み込むと VAE／音声の読み込み元が無くなる疑い。`checkpoint_name` の既定も `config.yaml.example`・仕様書 §11 と違います）・§1-68（MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` で止まる）・§1-69（バッチ A2V の計画の写しと本家の挙動の差 3 点）を起票しました。§1-58 に `ModelConfig.ltx_repo_dir`・`reload_interval`（読まれません）と `tracking/uetrack_runtime.py` の `TASK_DECODER.NUM_CHANNELS`（読まれません）を追記しました。
+
+**文書の訂正 3 件**:
+1. `config.py` の既定値と `config.yaml.example`・仕様書 §11.2／§11.3 の値が逆な件は、台帳 §1-67 の中で既定の向きを決めます（文書は直していません）。
+2. `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §10 の「音声はそのタイルでも精練される」は音声の凍結より前の記述なので、記録文書と同じ扱いで本節に訂正を書き、該当段落に訂正の 1 行を添えました。
+3. `Docs/MCP_SERVER_DESIGN.md` §9 の「1 対 1 で写経」と長さを取る関数の写し元（`gradio_ui/manifest.py::_wav_duration_seconds`）は設計書なので本文を直しました（INPAINTING_DESIGN §7.3 の前例と同じです）。
+
+**敵対的レビュー**（Opus・(b)／(c) 全件＋(a) 全件＋公開 docstring 16 本を 1 引数ずつ `api/models.py` と突き合わせ＋`INSTRUCTIONS` の全文をツールの実物と突き合わせ＋音声の凍結の主張を両エンジンのコードと計算で確認＋台帳と設計書）: 最初の担当はサブエージェントを 3 体起動して API の利用上限に当たり途中で止まったため、1 体で読み直しました。
+- **直すべき 2 件（全件採用）**: `INSTRUCTIONS` の「pipeline の読み込み（load_pipeline）も同様にジョブ実行中はできません」は、引数なしの読み込みは `pm.load()` を呼ぶだけで `JOB_BUSY` にならない（`api/pipeline.py`）ので、「`models` か `base_model` を渡す読み込み」に限定しました。`chain_math.py` の `resolve_stage2_window` 付近のコメント「one internal segment of at most 20 latent frames」は、区画の長さが `kv + n_end_v`（`overlap_frames` は最大 8）なので最大 25 になります。CM-072 で同じ主張を消していたので、このブロックの取り残しでした。式で書く形に直しました。
+- **注意 3 件（2 件採用）**: `INSTRUCTIONS` の「in-outpainting という制御系 LoRA が 1 本だけ必要」を、`submit_generate` の docstring（本数は数えない）と同じ言い方に揃えました。台帳 §1-68 の選択肢 A（`_request` でタイムアウトも `ToolError` に包む）は、`load_pipeline`・`join_job` が素通しの `httpx.ReadTimeout` を自分で受けて `finished: false` を返す設計（`Docs/MCP_SERVER_DESIGN.md §2` の D5）と両立しないので、その条件を書き足しました。3 件目（台帳が引く §139 が無い）は本節を同じコミットで書くことで解消しました。
+- **参考 4 件（不採用）**: `config.py` の 1 行の長さなど言い回しの範囲でした。
+
+**費用の目安**（Opus のトークン、概算）: 事実の一覧表 約 41 万・判定 約 300 万・検算 約 118 万・揃え 約 32 万・レビュー 約 35 万（止まった 1 回分を含めると約 50 万）・反映と修正 約 25 万でした。合計約 560 万となり、計画の見込み（約 600 万）の範囲内でした。
+
+**申し送り**（次へ）:
+1. Python の自作の本体コードは全区域が完了しました。残るのは道具が Python 専用のため別扱いにした `scripts/*.ps1`（PowerShell 4 本・約 3,000 行・コメント約 880 行。`install_ltx.ps1` は版の固定先の正本です）と `config.yaml.example` の YAML コメント（Phase B／C・「loras 要求は全て拒否」・「46GB モノリス」・日付が残っています）です。やるなら「`#` コメントだけを抜き出し、コメント以外の文字列が一致することで証明する」小さな道具が要ります（オーナー判断）。
+2. `gradio_ui/ui.py` の画面タイトルと見出し「LTX-AviUtl2-Bridge」（`gr.Blocks(title=)`・`gr.Markdown("# …")`）と、それを固定する `tests/test_gradio_ui.py` の `assert "LTX-AviUtl2-Bridge" in r.text` が残っています（オーナー判断待ち）。
+3. 他の区域に残った同型: `engine/pipeline/fast_video_pipeline.py` の「VERIFICATION_LOG §57.6 G4」（関門名）と「46GB monolith」2 箇所、`api/models.py` の `UploadVideoResponse.trimmed` の「Additive」、操作パネル `webui/src/lora/controlLoras.ts` の `combineLoras` の「engine reads … off `loras[0]`」（同じ誤りです）、`shell/comfortTable.ts`・`modes/chained/useChainForm.ts`・`chainUtils.ts` の日付と台帳番号（フロントエンドは対象外です）。
+4. 第三者コード `tracking/vendor/uetrack/uetrack.py` の NZ 注記「missing keys」は unexpected 側が正しいです（vendored なので触りません）。
+5. 判定指示書に「『必ず〜に置け』のような要件の主張は、その要件を読む関数まで追って確かめる」「定数の正本の場所（`api/models.py` か `config.py` か）を確かめる」を書き足します（v8.1）。
+
+**追補（2026-10-02・同日の続き）**: 申し送り (2) の Gradio 画面の旧名は、オーナー指示で同日に直しました。`gradio_ui/ui.py` の `gr.Blocks(title=)` と見出し `gr.Markdown("# …")` を製品名「Nz-Videomni」に（画面の見出しなので API の名乗り「Nz-Videomni backend」の「backend」は付けない）、`gradio_ui/styles.py` の `CUSTOM_CSS` の中の CSS コメント「the AviUtl2-Bridge accent」を「the Nz-Videomni accent」に、それを固定する `tests/test_gradio_ui.py` の `assert "LTX-AviUtl2-Bridge" in r.text` を「Nz-Videomni」に変えました（差分は 3 ファイル・4 行。Gradio 系テスト 111 件合格）。敵対的レビュー（Opus）の指摘: 直すべき 0／注意 3（新しい assert は Gradio が HTML に埋め込む config の title と CSS コメントでも通るので見出しだけの撤去は検知できない〔テストの設計の判断として参考に留める〕／旧名はほかに `pyproject.toml` のパッケージ名 `ltx-aviutl2-bridge`（画面には出ない。変えると `uv.lock` が作り直される）と過去の画面モック `Docs/mockups/GUI_V2V_A2V_MOCK.html` に残る〔オーナー判断〕／本節の申し送りを「済み」にする＝この追補）。操作パネル・他のテストが画面タイトル・見出し・`/` の `service` に依存していないこと、README の見出し「# Nz-Videomni」と仕様書の「Nz-Videomni バックエンド」に矛盾しないことをレビューが確かめました。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 140. ★コード内コメントの現行化・第 8 区域「Python 以外の自作ファイル」（PowerShell 5 本・`config.yaml.example`・TOML 4 本・freeze 3 本・`requirements.txt`・`.gitignore`・bat 4 本＝19 ファイル）＝ 271 ブロック中 89 を現行化（内部 64＋利用者が読む説明 25・コメントのみ・動作は不変）＋実行時の文言 6 箇所＋`config.py` の注記 1 件＋台帳 §1-70〜§1-75 の起票と §1-34・§1-58 の追記（2026-10-02）
+
+**要約**: §139 で Python の自作の本体コードが全区域完了したのに続き、道具が Python 専用のため別扱いにしていた **Python 以外の自作ファイル 19 本をまとめて 1 回**で行った。これで自作の本体コードのコメント現行化は、Python と Python 以外の両方が完了。19 ファイル・4,093 行・271 ブロックのうち 89 ブロック（事実が古いもの 66・導入時期の記録だけのもの 23）を書き換え、コードは変わっていないことを言語ごとの方法で確かめた。古いままの割合は 33%。**道具を新しく作った**: PowerShell は Windows PowerShell 5.1 の構文解析器（`System.Management.Automation.Language.Parser`）の Comment トークンでコメントを抜き出す（正規表現では git URL の `#subdirectory=`・他ファイルへ書き出す `"# …"` の文字列・正規表現の文字クラス `[^\s#]` を誤検出する）。YAML・TOML・テキストは行ベース、bat は `rem` 行。証明は PowerShell＝コメントと改行を除いたトークン列の一致＋構文エラー 0、YAML＝`yaml.safe_load` の結果とコメントを除いた行の一致、TOML＝`tomllib` の結果とコメントを除いた行の一致、テキスト・bat＝コメントを除いた行の一致。加えて BOM の有無・改行コードの種類（適用前の作業ツリーで数えた表が基準。`core.autocrlf=true` の環境では `git show` の blob が LF に正規化されているので基準にできない）・文字集合（BOM 無しの `.ps1` 2 本・TOML・freeze・bat は新しく書く行を ASCII のみに。PowerShell 5.1 は BOM 無しのファイルを ANSI として読むため、`install_ltx.ps1` の既存の `§` 13 箇所は実際に化けて表示されていた）・needle（`tests/test_base_model_contract.py` が `install_ltx.ps1` の本文を正規表現 `\$DeprecatedModelKeys = @\((.*?)\)` で読み最初の一致を使うので、この並びをコメントに書かない）・`#Requires` 不在・YAML の行末コメントの `␣#`。**利用者が読む説明の扱い**: `config.yaml.example` の全コメント（利用者が `config.yaml` に複製して編集するときに読む）・`install_ltx.ps1` 冒頭の comment-based help（`Get-Help` が表示する）・`requirements.txt` の 3 つは、§139 の MCP の公開 docstring と同じく判定して案を作り、一覧の第 4 節に全文を載せてオーナーが決めた（25 件すべて案のとおり）。
+
+**目的**: 骨格は §135〜§139 と同じ。判定担当への指示（v9）に固有の注意を足した。
+1. 言語ごとのコメント記法を保つ（`#`・`<# … #>`・`rem`。`#Requires` は指示行でコメントではない。comment-based help のキーワード行は構造として保つ）。
+2. 文字集合（上記）。
+3. 日付入りの決定ログ「2026-MM-DD に X を削除」は (a-hist) で日付と削除済みのものを落とし今の設計の理由を現在形で残す。X が今も存在するかは事実の一覧表 B-7（30 件）で照合（「削除した」型 11 件はすべて今も不在）。
+4. 版の固定の正本は `install_ltx.ps1` の `$engineDirectPins`・`$ltx25DirectPins`・`$ltx25UvArgs`・`$DeprecatedModelKeys`・`$required` と各 `*-venv-pyproject.toml`（定義のそばの値は残す。離れた書き写しは (b)）。freeze の SHA・URL・METHOD・「Captured:」の行は固定した版の記録として残す。
+5. `config.yaml.example` の既定値・上限・挙動の主張は `config.py` の定義と読み手（サーバーの検査・操作パネル・Gradio・MCP）で裏取り。台帳 §1-58 に起票済みの未使用の設定項目のコメントは触らない（読み手 0 件で未起票の項目も同じ扱いで §1-58 に足す）。
+6. ASCII のみのファイルでは `§` を使わず `VERIFICATION_LOG section N` と書く。
+
+**対象**: 19 ファイル・4,093 行・271 ブロック（`install_ltx.ps1` 105・`setup.ps1` 24・`install_model.ps1` 24・`build_xformers.ps1` 18・`run.ps1` 10・`config.yaml.example` 42・TOML 4 本 16・freeze 3 本 3・`requirements.txt` 2・`.gitignore` 19・bat 4 本 8）。起点コミットは `72c355c`（§139 追補のコミット）。差し替えが入ったのは 14 ファイル（bat 4 本と `tracking/utils-venv-pyproject.toml` は変更なし）。`scripts/manifests/*.json`（JSON はコメント不可。注記欄はデータ）・`models/**/put_*_here.txt`（利用者向けの案内文書）・`pyproject.toml` の `[project]` の値（`uv.lock` が作り直されるためオーナー裁定で触らない）は対象外。
+
+**方法**:
+1. 新しい道具（`comment-audit/tools/`、git 管理外）: `ps_tokens.ps1`（Parser を呼ぶ補助。`ParseFile` は BOM 無しのファイルを既定のコードページで読むので、ファイルを明示的に UTF-8 で読んで `ParseInput` に渡す）・`extract_nonpy.py`・`nonpy_boundaries.py`（関数定義・`# ----` の横線・`Write-Step`・YAML のトップレベル鍵・TOML の `[table]` を区域の境界候補に）・`build_regions.py --boundaries`・`merge_changes.py --lang nonpy --needle-file`・`prove_nonpy.py --newline-table`・`mark_user_facing.py`。既定の Python 経路は不変（第 7 区域のデータで回帰）。
+2. 10 区域へ切り、判定は Opus・区域ごと・読み取りのみ（10 体）。
+3. 検算は Opus 4 体（V1〜V4）で 157 ブロック（change 全件＋利用者が読む説明の keep 全件＋keep の抜き取り）。確認済み 152・異論 5・一部だけ直した 0・見逃し 0。保留 1 件（CYE-019 `allow_disable_low_vram`）は「読み手 0 件の設定項目は台帳 §1-58 に足す」で解決。
+4. 統合（行範囲・`old_lines` の一致・言語ごとの検査・文字集合・needle・残存語は全部 OK）。
+5. 揃え・再検算: Opus 1 体が 13 件を直し（検算由来 5・揃え由来 8。`replace_new_lines` 10・`add` 3）、再検算で判定と検算の両方をすり抜けていた誤りを 2 件見つけた（下記）。残存語 30 行は「それでも」の意味の still・版の表記 `v1.2.0`・残すと決めた「Captured:」で理由つきで残した。
+6. オーナーの了承（内部 64 件・利用者が読む説明 25 件・実行時の文言 6 箇所・判断事項 3 点・台帳・文書の食い違い、すべて案のとおり）のうえ 89 件を適用。
+7. 証明とレビューは下記。
+
+**結果**:
+
+最終の判定（271 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 66 |
+| 導入時期の記録だけ | 23 |
+| 現行のまま | 182 |
+| 保留 | 0 |
+
+古いままの割合は33%です。手がかりの的中率は55%、印の無いブロックの見逃しは15件（古い89件の17%）でした。
+
+**この区域で決めた扱い**: 利用者が読む説明 3 つ（`config.yaml.example`・`install_ltx.ps1` の help・`requirements.txt`）は判定して案を作り第 4 節で全文を見せてオーナーが決める／freeze の SHA・URL・METHOD・「Captured:」は固定した版の記録として残す（「定義位置の値は対象外」の例）／「official LTX-2 v1.2.0」は SHA の別名で古くならない／ASCII のみのファイルでは `§` を `section` に／変える文が無いブロックに残る `§` 2 箇所（PIL-021・PIL-022）もオーナー裁定で ASCII 化／`build_xformers.ps1` の help の `.PREREQUISITES` は comment-based help の正式なキーワードではなく `Get-Help` が help 全体を認識しなかったので、段落を `.NOTES` に移した（オーナー裁定）／freeze 3 本のコメント変更は `Get-EngineStateHash` がコメント込みでハッシュするため次回の `setup.bat`（`.venv-utils` は `install-UETrack.bat`）で該当する仮想環境の貼り直しが 1 回起きる（できる環境は同じ）ことを承知のうえで反映（オーナー裁定。改善は台帳 §1-74）。
+
+**当初から誤っていた主張の訂正の例**: `install_ltx.ps1` の help「GGUF recipe is the ONLY real path」（PIL-001。記述子の transformer 区分は `.safetensors` も受け付け、読み込めるのは量子化済み fp8／int8）・「schema must be 1」（PIL-018。1 または 2）・「mirrors the $env: block in run.ps1」（PIL-009。`run.ps1` は `UV_CACHE_DIR`・`HF_HOME` を設定しない）・「NO -Force anywhere in migration」（PIL-042。`Remove-Item -Force`・`Copy-Item -Force` がある）・「the new layout is SHORTER」（PIL-044。移動先のほうが長いものがある）・「3 git packages + 1 direct-URL wheel／4 bare lines」（PIL-073。2.3 だけの数。2.5 は 5 個・`.venv-utils` は 0）・「`$ltx25UvArgs` は BOTH uv stages に効く」（PIL-079。(a) 段だけ）・「`INSTALLED_PATHS.txt` の `key` は asset 名かカテゴリ名」（PIL-100。ラベルで、サーバーは読まない）・「the engine code does not import xformers」の限定（PIL-082・PBX-001。自作コードは import しないが、`.venv-engine` の上流 ltx-core の `attention.py` は xformers を読み込めれば既定の attention で使う。2.5 の ltx-core には参照が無い。揃えの再検算で確定）・`install_model.ps1` の「Python 環境は作らない」（PIM-001・009・020。UETrack では `.venv-utils` を作る）・手順 2 と 3 の順（PIM-001）・`build_xformers.ps1` の「CUDA 12.9 does NOT support」（PBX-006。既定は 12.8）・「Verify torch 2.9.1 + CUDA 12.8」（PBX-001・009。表示するだけで照合しない）・`requirements.txt` の「両方が最上位の `services` を持つ」（RQ-001。エンジン venv に `services` は無い。実際の理由は transformers のメジャー版 4.x／5.x の衝突）・`config.yaml.example` の「`backend: auto` は GPU＋モデル有→real」（CYE-005。GPU の有無は見ない）・「ic_loras が無ければ loras 要求は全て拒否」（CYE-007。`lora_dir` を走査した分も通る）・「Phase 1 では無効」（CYE-016。`block_swap: true` と矛盾）・「LTX 2.5 は常に小単体ファイルから読む」（CYE-018。2.5 のエンジンはこの設定を読まない）・「`generation_defaults` は既定値」（CYE-025。読むのは操作パネルだけ）・「参照動画は再エンコードせず保存」（CYE-027。窓か `max_frames` の指定があれば切り出す）・「上限の値はクライアントの入力範囲に使われる」（CYE-039。配信されるだけでサーバーの検査には効かず、`end_context_frames_*` を読むクライアントも無い）・快適上限の戻り先（CYE-041・042。クライアントは `comfort_budgets` の表の行を先に使い、単独の値は合う行が無いときの戻り先）・`run.ps1` の「config.yaml が無いとお試し表示に落ちる」（PRN-004。起きるのは IC-LoRA の一覧とプリセットが空になること）・`.gitignore` の「HuggingFace / uv / torch caches」（GIT-011。設定するのは `HF_HOME` と `UV_CACHE_DIR` だけ）・`setup.ps1` の「黙ってスキップ」（PSU-015。`Write-Warn` を 1 行出す）・`install_model.ps1` の「公式サイズの 4〜10% 下」（PIM-008。記述子に約 11% 下の行がある）。台帳番号の行き先の誤り（「PENDING_TASKS.md 3-25」→ CLOSED §3-52〔記録は §40〕・「3-26」→ CLOSED §3-53・「§1-17」→ CLOSED §3-73〔記録は §55〕・「spec 2.5」→ 仕様書 §2.3〜§2.4）。
+
+**証明**: 14 ファイルで、コメント以外の差は、オーナーが決めた実行時の文字列 13 トークン（`build_xformers.ps1` 8・`install_ltx.ps1` 3・`setup.ps1` 1・`install_model.ps1` 1）だけ（文字列に触れていない 10 ファイルは言語ごとの検査が起点 `72c355c` と一致）。`config.py` は docstring を除いた構文木が一致。BOM 付き 3 本（`setup.ps1`・`install_model.ps1`・`run.ps1`）の BOM は保たれ、改行コードは元の種類のまま（`build_xformers.ps1`・`run.ps1` は LF、他は CRLF。混在なし）。`install_ltx.ps1` と `build_xformers.ps1` の非 ASCII バイトは 0（起点は 26 と 12）。
+
+**テスト**（GPU・実バックエンド・ネットワークに触れない）: アプリ `.venv` の全件 2,873 passed・54 skipped（既知の 1 件を `--deselect`。`-q` は付けない）。`.venv-engine`・`.venv-utils` は Python に触れていない（`config.py` の変更はコメントだけ）ので不要。`.ps1`・`.bat` は実行しない（構文解析のみ）。
+
+**外部文言（オーナー決定）**:
+(A) 利用者が読む説明 25 件（`config.yaml.example` 23・`install_ltx.ps1` の help〔110 行→111 行〕・`requirements.txt`）。
+(B) 実行時の文言 6 箇所: `build_xformers.ps1` 末尾の `Write-Host`「the installed attention backend is PyTorch SDPA on every GPU」→「the default attention backend is PyTorch SDPA (sageattention can be selected per job)」／同「the backend code does not import xformers, so installing it has NO effect on generation today」→「the project's own code never imports xformers, but the LTX 2.5 engine's upstream ltx-core picks it up when it is importable and uses it for the default attention path. The LTX 2.5 engine does not reference it.」／同 `throw` 3 箇所の em dash → `--`（BOM 無しのため化けていた）／`install_ltx.ps1` が `INSTALLED_PATHS.txt` に書く見出し「GGUF + component-file recipe」を落とし「The 46GB monolith」→「The bf16 monolith」（大きさは文書間で 43GB／46GB に割れる）／`setup.ps1`「既定値のまま進みます（生成が「お試し表示」になることがあります）。」→「（IC-LoRA の一覧とプリセットが空になります）。」／`install_model.ps1`「追加のモデルファイルを取ってくるだけのものです。」→「取ってくるものです（物体追尾では専用の Python 環境も作ります）。」。旧文面を固定しているテストは無かった。据え置き（参考）: `build_xformers.ps1` の `throw` の torch の版の書き写し・`install_model.ps1` の「次の 1 手順だけです」・`setup.ps1` の「約 33 GB」。
+
+**台帳**: §1-70（Step 7 の検証表に `.venv-engine-ltx25` の python が無い・`-SkipVenv` の警告は `.venv-engine` だけ）・§1-71（`build_xformers.ps1` の CUDA 探索が `CUDA_PATH_V12_8` 固定で版を照合しない）・§1-72（`config.yaml.example` に `chain_comfort_token_budget`・`single_comfort_token_budget` の値の行があり、複製した利用者の `config.yaml` に入る）・§1-73（`run.ps1` の二重起動の判定が `server.port` を読まない）・§1-74（`Get-EngineStateHash` がコメント込みでハッシュ）・§1-75（`.gitignore` の死にパターン 3 件と `wheels/` の抜け）を起票。§1-34 に `limits` の他の項目（`width`／`height`／`num_frames` は `api/models.py` の `Field` の直書き、`retake_window_*` は `chain_math` の定数・関数で検査）を追記。§1-58 に読み手 0 件の設定項目 5 つ（`vram.allow_disable_low_vram`・`vram.attention_tile_size`・`model.text_encoder`・`upload.normalize_to_png`・`output.format`）と `install_model.ps1` の未使用の `Format-Size` を追記。
+
+**文書の訂正 2 件**:
+1. モノリスの大きさ（43GB／46GB）は実寸を確かめられないので、この区域の新しい文では数字を落とした（`config.yaml.example` 2 箇所・help・`INSTALLED_PATHS.txt` の見出し）。Python 側の 2 箇所（`services/engines/ltx/adapter.py`・`engine/pipeline/fast_video_pipeline.py`）は記録のみ。
+2. `config.py` の `LimitsConfig.chain_comfort_token_budget` の注記「Lower it on a smaller GPU / raise it on a larger one to move the client's guides」は、クライアントが `comfort_budgets` の表の行を先に使う今は成り立たないので、オーナー了承のうえ同じ回で直した（コメントのみ。既定の表の LTX 2.3 の行は 5 トグル全 on の 1 行だけなので、トグルが 1 つでも off なら Chained と Retake の目安線はこの値から引かれる。目安線を動かすときは両方を見直す）。
+
+**敵対的レビュー**（Opus 1 体・サブエージェント起動なし・(b)／(c) 全件＋(a) 全件＋利用者が読む説明 25 件を `config.py` と読み手で突き合わせ＋xformers の主張を上流 ltx-core で確認＋help 2 本を `Get-Help` で確認〔scratchpad に写した help 部分だけ〕＋PowerShell 5 本のトークン差分・YAML・TOML・needle・文字コード・台帳）: コメント本体の差分に事実の誤りは無し。
+- **直すべき 4 件（3 件採用・1 件は本節を同じコミットで書くことで解消）**: いずれも台帳の記述——§1-70 の「現象」と「影響」（仮想環境の作成に失敗したときはインストーラが途中で止まり検証表まで進まない。表が MISSING を出せないのは `install-LTX25.bat` で `.venv-engine-ltx25` がもともと無いときだけで、そのとき LTX 2.5 は `backend: auto` で黙ってお試し表示に落ちる）／§1-71 の「Step 1（Selecting CUDA Toolkit の直後）」（Step 1 は CUDA の選択より前）／§1-73 の「起動自体は通常どおり進む」（2 枚目は uvicorn がポートの bind に失敗して `exit 1` になり、`run.ps1` が異常終了の案内を出す）／台帳が引く §140 が無い（本節）。
+- **注意 5 件（3 件採用・2 件不採用）**: 採用＝freeze 2 本で来歴を落とした結果「Captured: <日付>」が全行その日の採取と読めるので「採取の後に手で足した・消した行がある（git の履歴）」の 1 行を足した／`config.yaml.example` の CYE-002「本番経路は GGUF 量子化トランスフォーマー」を help の「GGUF または量子化済み fp8／int8 の safetensors」と揃えた／`setup.ps1` の文言「IC-LoRA の一覧」→「IC-LoRA の登録」（Gradio は `ic_loras` が空でも既知の 5 名の固定の一覧を出すため）。不採用＝2.3 で削除した 19 件の名前が文書から消えた（基準どおり git の履歴に委ねる。VERIFICATION_LOG §40.1 が 10 件を名指し）／freeze のコメント変更で次回の `setup.bat` に貼り直しが起きる（オーナー了承済み・台帳 §1-74）。
+- **参考 8 件（不採用）**: 言い回しの範囲。
+
+**費用の目安**（Opus・Sonnet のトークン、概算）: Opus＝事実の一覧表 約 34 万・判定 約 166 万・検算 約 77 万・揃え 約 21 万・反映 約 7 万・レビュー 約 28 万・指摘の反映 約 10 万、合計約 345 万（計画の見込み 300〜350 万の範囲内）。Sonnet＝道具 約 39 万・辞書 約 29 万・台帳 約 16 万・記録 約 15 万、合計約 100 万（見込み 60〜80 万を上回った。新しい道具 5 本と PowerShell の文字コードの落とし穴の調査が重かった）。
+
+**申し送り**（次へ）:
+1. 自作の本体コードのコメント現行化は、Python（§130〜§139）と Python 以外（本節）の両方が完了。残るのは記録のみの箇所: Python 側のモノリスの大きさ 2 箇所、操作パネル `webui/src/shell/useBaseModels.ts` の「§3-97 P7」、`pyproject.toml` の `[project]` の値（オーナー裁定で保留）、`engine/engine-venv-pyproject.toml` の `name = "ltx-desktop-backend"`（値）。
+2. freeze 3 本のコメントを直したので、次に `setup.bat` を走らせるとエンジン仮想環境 2 本の貼り直しが 1 回起きる（`.venv-utils` は次の `install-UETrack.bat`）。台帳 §1-74 を直せば以後は起きない。
+3. `build_xformers.ps1`・`run.ps1` は LF のみで、`.gitattributes` は `*.bat` にだけ `eol=crlf` を固定し `.ps1` には何も固定していない。`core.autocrlf=true` の環境で git がこの 2 本を書き出すと CRLF に変わりうる（git の警告「LF will be replaced by CRLF」）。挙動には影響しないが、改行の比較は作業ツリーの実物で行う。
+4. 判定の基準に足すとよい点（検算担当の意見）: 配信値の説明は鍵ごとに「サーバーの検査・操作パネル・Gradio・MCP」の読み手を分けて確かめる／`old_lines` から残す語（「旧方式」「従来の」）も見直す対象／freeze の記録行は (b) の例外として明記。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。

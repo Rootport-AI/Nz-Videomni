@@ -3,9 +3,10 @@
 ``job_status`` / ``list_jobs`` / ``wait_for_job`` / ``cancel_job`` /
 ``delete_job`` / ``purge_terminal_jobs`` / ``join_job``。
 
-状態ガードの方針（計画D9）: ``cancel_job`` / ``delete_job`` は呼ぶ前に必ず
-GETで現在の状態を確認し、意図と食い違う場合はエラーにする（1エンドポイント
-2動作の ``DELETE /jobs/{id}`` を暗黙に踏ませない）。
+状態ガードの方針（``Docs/MCP_SERVER_DESIGN.md`` §2 の D9）: ``cancel_job`` /
+``delete_job`` は呼ぶ前に必ずGETで現在の状態を確認し、意図と食い違う場合は
+エラーにする（1エンドポイント2動作の ``DELETE /jobs/{id}`` を暗黙に
+踏ませない）。
 """
 
 from __future__ import annotations
@@ -56,9 +57,9 @@ async def job_status(job_id: str) -> dict[str, Any]:
         job_id: submit_generate / submit_chain が返した job_id。
 
     Returns:
-        JobResponse相当のフィールド一式（status, progress, stage, clip,
-        clip_count, is_v2v, joined, created_at, started_at, completed_at,
-        error, request, result）。
+        ``api/models.py`` の ``JobResponse`` のフィールド一式（job_id, status,
+        progress, current_step, total_steps, stage, clip, clip_count, is_v2v,
+        joined, created_at, started_at, completed_at, error, request, result）。
     """
     client = get_client()
     return await client.get_json(f"/jobs/{job_id}")
@@ -153,7 +154,7 @@ async def cancel_job(job_id: str) -> dict[str, Any]:
     ``delete_job`` を使ってください。
 
     queued（未着手）のジョブは即座にキャンセルされます。running（実行中）の
-    ジョブはベストエフォートです -- Phase 1では推論を中断できないため、
+    ジョブはベストエフォートです -- 実行中の推論は途中で中断できないため、
     ``cancel_requested`` フラグが立つだけで、実際に停止する保証はありません。
 
     Args:
@@ -244,8 +245,8 @@ async def join_job(
 ) -> dict[str, Any]:
     """V2V継続ジョブの音声を元動画に繋ぎ直します（POST /jobs/{job_id}/join）。
 
-    V2V（``submit_chain`` の ``source_video`` を使ったジョブ）専用です。
-    それ以外のジョブ（単発生成・A2V・source_videoなしのチェーン）に対して
+    V2V（``submit_chain`` の ``source_video_id`` を使ったジョブ）専用です。
+    それ以外のジョブ（単発生成・A2V・source_video_id なしのチェーン）に対して
     呼ぶとエラーになります（``job_status`` の ``is_v2v`` で事前に確認できます）。
 
     GPU不要（ffmpegのみ）で、他のジョブと並行して実行できます。応答が
@@ -256,7 +257,8 @@ async def join_job(
     Args:
         job_id: V2Vジョブのjob_id。
         audio_smoothing: True（既定）ならクロスフェード、False なら単純結合。
-        handle_crossfade_ms: クロスフェード長（ミリ秒、0〜2000）。
+        handle_crossfade_ms: クロスフェード長（ミリ秒、0〜2000。範囲は
+            ``api/models.py`` の ``JoinRequest`` が正本）。
         source_tail_seconds: 元動画の末尾から何秒だけ残して繋ぐか（0で全長）。
         wait_sec: 応答を待つ秒数（5〜45にクランプ）。
 

@@ -20,7 +20,7 @@ nothing here may assume text mode or newline translation.
 WHY A BINARY PIPE AND NOT base64/JSON ARRAYS
 --------------------------------------------
 A 1080p RGBA frame is 8.3 MB. base64 would add ~10 ms of encode+decode per
-frame against a ~25 ms inference (measured 2026-09-11) -- a 40% tax on the
+frame against a ~25 ms inference (measured) -- a 40% tax on the
 whole loop to buy nothing. If a binary pipe ever proves unworkable on some
 Windows configuration, base64 can be reintroduced INSIDE THIS MODULE alone: no
 caller looks at the bytes on the wire.
@@ -185,10 +185,10 @@ def read_message(stream: BinaryIO, on_noise=None) -> tuple[dict[str, Any], bytes
 
     Lines that do not start with :data:`PREFIX` are skipped, with the raw line
     handed to ``on_noise`` when one is given. This is the same tolerance the LTX
-    adapter has (``services/engines/ltx/adapter.py:1607``) and for the same
-    reason: a library on the other side may print to stdout, and a stray banner
-    must not look like a dead worker. A skipped line can never carry a payload,
-    so skipping cannot desynchronise the stream.
+    adapter's reader has (``_read_event`` in ``services/engines/ltx/adapter.py``)
+    and for the same reason: a library on the other side may print to stdout,
+    and a stray banner must not look like a dead worker. A skipped line can
+    never carry a payload, so skipping cannot desynchronise the stream.
 
     Raises :class:`ProtocolEOF` at a clean end of stream and
     :class:`ProtocolError` for anything malformed.

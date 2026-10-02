@@ -9,8 +9,9 @@ public surface is three calls:
     (x, y, w, h), score = tracker.track(next_frame_rgb)
 
 `frame_rgb` is an HxWx3 uint8 numpy array in RGB order (NOT BGR: upstream's
-evaluation loader hands the model RGB, and the normalisation constants below are
-ImageNet's, which are stated in RGB order).
+evaluation loader hands the model RGB, and the normalisation constants in
+tracking/vendor/uetrack/preprocess.py are ImageNet's, which are stated in RGB
+order).
 
 WHAT IS FIXED HERE AND WHY
 --------------------------
@@ -27,9 +28,10 @@ box the model looks). Template size 112, search size 224, TEMPLATE_FACTOR 2.0
 and the Hanning window are internal, per the owner's ruling.
 
 MULTI_MODAL_LANGUAGE is pinned False: the CLIP text branch is not vendored, and
-tracking by a text description is not a feature of this project. Its weights are
-therefore absent from the state dict this module loads -- `initialize()` passes
-`text_src=None`, which upstream's encoder already handles.
+tracking by a text description is not a feature of this project. Its weights
+therefore have no place in the network this module builds (the distributed
+checkpoint omits them) -- `initialize()` passes `text_src=None`, which
+upstream's encoder already handles.
 
 MULTI_MODAL_VISION stays True. It is not a "second modality" here: the tracker's
 patch embedding has 6 input channels because it was trained to take RGB plus a
@@ -60,13 +62,14 @@ BASE_SEARCH_FACTOR = 4.0
 
 # Every value transcribed from experiments/uetrack/uetrack_base.yaml, falling back
 # to lib/config/uetrack/config.py for keys the yaml does not override (marked
-# "default"). Keys upstream reads only on the training or CLIP paths are omitted;
-# the ones that remain are exactly what build_uetrack_inference() dereferences.
+# "default"). Keys upstream reads only on the training or CLIP paths are omitted.
+# Most of what remains is read by build_uetrack_inference(); the TEST block and
+# DATA.MULTI_MODAL_VISION are read by Tracker below.
 _BASE_CFG = {
     "MODEL": {
         "TASK_NUM": 5,                       # yaml MODEL.TASK_NUM
         "ENCODER": {
-            "TYPE": "fastitpnt_layer6",      # yaml -- the 6-layer student, ~13M params
+            "TYPE": "fastitpnt_layer6",      # yaml -- the 6-layer student
             "STRIDE": 16,                    # yaml
             "PRETRAIN_TYPE": "",             # yaml (empty: no ImageNet backbone to load)
             "PATCHEMBED_INIT": "halfcopy",   # yaml
@@ -135,7 +138,7 @@ class _UpstreamStubFinder:
 
     Needed only to read the OFFICIAL .tar. That archive is a training snapshot,
     so besides the tensors it pickles five upstream objects BY REFERENCE --
-    measured on uetrack_base.tar (2026-09-11):
+    measured on uetrack_base.tar:
 
         easydict.EasyDict                       (the yacs/easydict config)
         lib.train.admin.settings.Settings       (the run's settings object)
@@ -243,7 +246,8 @@ class Tracker:
 
         # None = "no task hint". Upstream picks a task index per BENCHMARK
         # (LaSOT/GOT10k -> 0, TNL2K -> 1, DepthTrack -> 2, ...); there is no
-        # benchmark here, and the encoder treats None as "add no task token".
+        # benchmark here, and the vendored encoder passes task_index through
+        # without reading it.
         self.task_index_batch = None
         self.text_src = None
         self.template_list = []

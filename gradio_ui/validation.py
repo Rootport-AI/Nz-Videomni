@@ -1,4 +1,4 @@
-"""Clip-chain total-timeline precheck (S5). Mirrors the SAME arithmetic the API
+"""Clip-chain total-timeline precheck. Mirrors the SAME arithmetic the API
 validator uses (api/models.py GenerateChainRequest.validate_chain_constraints):
 it delegates to the shared pure-Python ``chain_math.compute_chain_layout`` and
 compares against MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481 (= 11544), so the GUI and
@@ -19,16 +19,16 @@ MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481  # 11544; mirrors api/models.py
 
 def check_chain_total(clip_frames, fps, overlap_frames, lang: str = _DEFAULT_LANG,
                       source_context_px=None, stage2_window=None):
-    """``source_context_px`` (ADDITIVE, V2V): forwarded to
+    """``source_context_px`` (V2V): forwarded to
     ``compute_chain_layout`` so a V2V chain's precheck runs the same frozen-head
     geometry the server does (incl. the stage-2 tile-fit invariant raise, which
-    surfaces here as the localized geometry message). ``None`` keeps the
-    pre-V2V arithmetic byte-identical.
+    surfaces here as the localized geometry message). ``None`` runs the
+    geometry with no frozen source-video head.
 
-    ``stage2_window`` (ADDITIVE): the stage-2 window preset NAME the request will
-    carry. ``None`` -> the default preset, i.e. exactly the geometry this
-    function computed before the knob existed. The Clip Chain tab's window
-    dropdown (§3-165) passes its value here, so the precheck runs the same
+    ``stage2_window``: the stage-2 window preset NAME the request will
+    carry. ``None`` -> the default preset (``chain_math.resolve_stage2_window``
+    falls back to ``chain_math.STAGE2_WINDOW_DEFAULT``). The Clip Chain tab's
+    window dropdown passes its value here, so the precheck runs the same
     geometry the server will — the two must agree byte-for-byte (that is this
     module's entire reason to exist).
 

@@ -1,10 +1,12 @@
-"""Configuration loading for LTX-AviUtl2-Bridge.
+"""Configuration loading for the Nz-Videomni backend.
 
 Reads ``config.yaml`` into typed Pydantic models. This is the single source of
-truth for server, model, VRAM, upload, limits and output settings (spec ch.11).
+truth for server, model, VRAM, upload, limits and output settings (spec §11).
 
-CLI overrides (``--listen``, ``--port``, ``--api-key``, ``--allow-all-cors``)
-are applied in ``main.py`` on top of the loaded ``ServerConfig``.
+CLI overrides (``--port``, ``--api-key``, ``--allow-all-cors``,
+``--te-offload``, ``--dit-cpu-load``) are applied in ``main.py``'s
+``build_app`` on top of the loaded config; ``--listen`` picks the bind
+host there without changing ``ServerConfig``.
 """
 
 from __future__ import annotations
@@ -23,12 +25,12 @@ logger = logging.getLogger("ltx.config")
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 
-#: ``model:`` keys that USED to hold a fixed default weight path and were moved
-#: into the base-model descriptors (``scripts/manifests/*.json``, see
-#: :mod:`services.base_models`) by the multi-engine foundation (§3-97 P3b).
+#: ``model:`` keys that no longer exist: the fixed default weight paths they
+#: held live in the base-model descriptors (``scripts/manifests/*.json``, see
+#: :mod:`services.base_models`).
 #: Pydantic ignores unknown keys, so an old ``config.yaml`` still loads — but it
 #: would load with its values SILENTLY IGNORED, which is exactly the kind of
-#: quiet mismatch that made a stale path demote the backend to mock before. So
+#: quiet mismatch that can let a stale path demote the backend to mock. So
 #: :func:`load_config` names each survivor once, at WARNING.
 #:
 #: ``scripts/install_ltx.ps1`` carries the same list (``$DeprecatedModelKeys``)
@@ -49,13 +51,13 @@ DEPRECATED_MODEL_KEYS: tuple[str, ...] = (
 
 
 class IcLoraEntry(BaseModel):
-    """Dict-value form of an ``ic_loras`` registry entry (Phase C).
+    """Dict-value form of an ``ic_loras`` registry entry.
 
     Adds a ``preprocess`` kind alongside the safetensors ``path`` so one
     adapter file (e.g. the Union-Control LoRA) can be exposed under several
     logical names that each imply a different raw-video -> control-signal
-    conversion in the engine worker. Plain string registry values (Phase B)
-    remain valid and are equivalent to ``preprocess="none"``.
+    conversion in the engine worker. Plain string registry values are also
+    valid and are equivalent to ``preprocess="none"``.
     """
 
     path: str
@@ -77,64 +79,58 @@ class ModelConfig(BaseModel):
     auto_load_on_generate: bool = True
     reload_interval: int = 0
 
-    # Step 7 (real LTX) runtime paths. Populated by scripts/install_ltx.ps1 and
-    # consumed only by services/ltx_runner.py. None until the model is installed.
+    # Runtime selection. ``backend`` is read by services/engines/ltx/adapter.py
+    # (its module docstring has the auto / mock / real rules) and by the mock
+    # checks in api/generate.py and api/generate_chain.py.
     ltx_repo_dir: str = "./vendor/LTX-2"  # reference only (upstream LTX-2 clone).
     backend: str = "auto"  # "auto" | "mock" | "real"
 
-    # NOTE (2026-07-28, PENDING_TASKS.md 3-26): there used to be a
-    # `checkpoint_path: str | None = None` field here, pointing at the 43GB
-    # monolith physically deleted in Stage 3. It was removed after confirming it
-    # is genuinely inert config: services/ltx_runner.py always sent the worker
-    # payload's checkpoint_path as "" whenever this field was unset (its only
-    # real-world state, since nothing in config.yaml ever set it to a live
-    # path), and DistilledPipeline never opens that string -- it only requires
-    # it to be a non-None str so ModelLedger.build_model_builders()
-    # (ltx_pipelines/utils/model_ledger.py) populates the lazy builder objects
-    # that engine/pipeline/fast_video_pipeline.py's GGUF/component re-sourcing
-    # later overwrites via dataclasses.replace(). The engine adapter now
-    # hardcodes that same "" directly (see its _build_load_payload), so the
-    # worker payload is byte-identical to before with no config knob needed.
+    # There is no checkpoint-path setting: the worker payload's
+    # ``checkpoint_path`` is a hardcoded "" in the engine adapter's
+    # ``_build_load_payload`` (services/engines/ltx/adapter.py), which explains
+    # why the pipeline needs the string but never opens it.
 
-    # WHERE THE FIXED DEFAULT WEIGHT PATHS WENT (§3-97 P3b): the eight fields
-    # that used to spell out the transformer / GGUF Gemma / VAE / text-projection
-    # / spatial-upsampler / tokenizer paths live in the BASE-MODEL DESCRIPTORS
-    # (scripts/manifests/*.json -> services/base_models.py) now, as
-    # ``categories[].default_file`` and ``assets``. A weight path is a property
-    # of a base model, not of this server, so a second base model is a new JSON
-    # file rather than a second set of config keys. See DEPRECATED_MODEL_KEYS
-    # above for what a leftover key in an old config.yaml does (nothing, loudly).
-    # Only the two DIRECTORIES below (manifest_dir / models_dir) stay here.
+    # Fixed default weight paths are not config keys: the transformer / GGUF
+    # Gemma / VAE / text-projection / spatial-upsampler / tokenizer paths live in
+    # the BASE-MODEL DESCRIPTORS (scripts/manifests/*.json ->
+    # services/base_models.py), as ``categories[].default_file`` and ``assets``.
+    # A weight path is a property of a base model, not of this server, so a
+    # second base model is a new JSON file rather than a second set of config
+    # keys. See DEPRECATED_MODEL_KEYS above for what a leftover key in an old
+    # config.yaml does (nothing, loudly). The config side keeps the two
+    # DIRECTORIES below (manifest_dir / models_dir).
 
-    # First-party engine package (project root ./engine). ltx_runner launches
-    # `python -m engine.worker` with this on PYTHONPATH.
+    # First-party engine package (project root ./engine). services/engines/ltx/
+    # adapter.py checks for worker.py here, then launches
+    # `python -m engine.worker` from the project root (PYTHONPATH = project root).
     engine_dir: str = "./engine"
     # Interpreter that runs the first-party engine worker (torch + cu128 + ltx_core
-    # / ltx_pipelines + gguf). The dedicated ./.venv-engine, relocated out of the
-    # (now-deleted) fork tree in Stage 2b. Separate from the app's torch-free
-    # ./.venv. Dependency snapshot: engine/venv-engine.freeze.txt.
+    # / ltx_pipelines + gguf). The dedicated ./.venv-engine, separate from the
+    # app's torch-free ./.venv. Dependency snapshot: engine/venv-engine.freeze.txt.
     engine_python: str = "./.venv-engine/Scripts/python.exe"
-    # Interpreter for the LTX 2.5 worker (§3-98). A SECOND venv, not a second
-    # setting for the same one: .venv-engine-ltx25 holds official LTX-2 v1.2.0 +
-    # transformers 5.x, which cannot coexist with 2.3's transformers 4.57 in one
-    # environment — that incompatibility is the whole reason the 2.5 engine is a
-    # separate process tree. ``engine_dir`` has no 2.5 twin because the engine25
-    # package location is fixed (it ships in this repository); only the
-    # interpreter is an installation detail an operator may have to point
-    # elsewhere. Consumed by services/engines/ltx25/adapter.py.
+    # Interpreter for the LTX 2.5 worker. A SECOND venv, not a second
+    # setting for the same one: .venv-engine-ltx25 holds the official LTX-2
+    # packages and a transformers major version that cannot coexist with 2.3's
+    # in one environment (pins: engine25/venv-engine-ltx25.freeze.txt vs.
+    # engine/venv-engine.freeze.txt) — that incompatibility is the whole reason
+    # the 2.5 engine is a separate process tree. ``engine_dir`` has no 2.5 twin
+    # because the engine25 package location is fixed (it ships in this
+    # repository); only the interpreter is an installation detail an operator
+    # may have to point elsewhere. Consumed by services/engines/ltx25/adapter.py.
     engine_python_ltx25: str = "./.venv-engine-ltx25/Scripts/python.exe"
     gguf_per_layer_quant: bool = True
 
-    # IC-LoRA adapter registry (Phase B, extended Phase C). Maps a server-side
-    # adapter NAME (what the API accepts in GenerateRequest.loras[].name — never
-    # a filesystem path) to either a bare safetensors path (string, legacy Phase B
-    # form, implies preprocess="none") or an IcLoraEntry (Phase C: path +
-    # preprocess kind, for control adapters like Union-Control that need a raw
-    # reference video converted to a control signal before use). Absent/empty
-    # section -> any loras request is rejected (fail loud, no silent skip).
+    # IC-LoRA adapter registry. Maps a server-side adapter NAME (what the API
+    # accepts in GenerateRequest.loras[].name — never a filesystem path) to
+    # either a bare safetensors path (string form, implies preprocess="none") or
+    # an IcLoraEntry (path + preprocess kind, for control adapters like
+    # Union-Control that need a raw reference video converted to a control
+    # signal before use). An unknown name is rejected (fail loud, no silent
+    # skip); with this section absent/empty and no files in lora_dir, every
+    # loras request is rejected.
     ic_loras: dict[str, str | IcLoraEntry] = Field(default_factory=dict)
 
-    # Style / character LoRA directory (S1). A drop-in folder scanned by
+    # Style / character LoRA directory. A drop-in folder scanned by
     # services.lora_registry.LoraRegistry: every ``*.safetensors`` here is
     # exposed under its filename stem as an additional selectable adapter WITHOUT
     # a config edit (mirrors the model-registry directory scan). config.model.ic_loras
@@ -146,15 +142,14 @@ class ModelConfig(BaseModel):
     # scan entries (fresh checkout tolerated).
     lora_dir: str = "./models/LTX23/StyleLoRA"
 
-    # Model-management registries (additive, Docs/MODEL_MANAGEMENT_DESIGN.md).
+    # Model-management registries (Docs/MODEL_MANAGEMENT_DESIGN.md).
     # Category-scoped NAME -> path maps mirroring ic_loras: a server-side model
     # NAME (what GET /models lists and POST /pipeline/load accepts in its
     # optional ``models`` block — never a filesystem path) to a project-relative
     # (or absolute) weight file. Absent/empty sections are the norm:
     # services/model_registry.py always injects a "default" entry per category
-    # from the fixed default-path fields above (so the default combination stays
-    # byte-identical), and directory scanning discovers additional files in the
-    # existing layout without any config edit.
+    # from the base-model descriptor's ``default_file``, and directory scanning
+    # discovers additional files in the existing layout without any config edit.
     transformers: dict[str, str] = Field(default_factory=dict)
     text_encoders: dict[str, str] = Field(default_factory=dict)
     video_vaes: dict[str, str] = Field(default_factory=dict)
@@ -167,7 +162,7 @@ class ModelConfig(BaseModel):
     # Named models_dir (not checkpoint_dir): it is the directory the installer
     # populates, not a single checkpoint. Both are directories, not weight
     # files, and both stay in config: the installer and the server must agree
-    # on WHERE to look, while WHAT to look for moved into the descriptors.
+    # on WHERE to look, while WHAT to look for is declared by the descriptors.
     manifest_dir: str = "./scripts/manifests"
     models_dir: str = "./models"
 
@@ -201,9 +196,12 @@ class VramConfig(BaseModel):
     vae_spatial_tile_size: int = 0
     vae_temporal_tile_size: int = 0
     allow_disable_low_vram: bool = True
-    # Phase 1 gate: re-source VIDEO VAE + AUDIO VAE/vocoder from standalone
-    # component files (model.component_*_path) instead of the 46GB monolith.
-    # Off by default; flip to True to exercise the component-file path.
+    # Re-source the video VAE and audio VAE/vocoder from the base model's
+    # standalone component files instead of the monolithic checkpoint; with
+    # the text-projection file present, the text encoder's projection is read
+    # from that file and its connectors from the transformer file as well.
+    # Read by the LTX 2.3 worker via LTX_COMPONENT_FILES
+    # (services/engines/ltx/adapter.py). Off by default.
     use_component_files: bool = False
 
 
@@ -239,9 +237,11 @@ class UploadConfig(BaseModel):
         default_factory=lambda: [".png", ".jpg", ".jpeg", ".webp"]
     )
     normalize_to_png: bool = True
-    # Reference-video upload (Phase B, POST /upload/video). Stored as-is (no
-    # re-encode) under uploads/videos/{video_id}/; the engine's ffmpeg-based
-    # video IO reads these containers.
+    # Video upload (POST /upload/video): the IC-LoRA reference and the other
+    # videos the services resolve (see services/video_upload_store.py). Stored
+    # as received under uploads/videos/{video_id}/ unless a trim window or a
+    # max_frames ceiling cuts it (VideoUploadStore.save); the engine's
+    # ffmpeg-based video IO reads these containers.
     max_video_size_mb: int = 200
     allowed_video_extensions: list[str] = Field(
         default_factory=lambda: [".mp4", ".mov", ".webm", ".mkv"]
@@ -257,8 +257,7 @@ class UploadConfig(BaseModel):
 
 
 class ComfortRow(BaseModel):
-    """One comfort-budget row for a single engine family (comfort table,
-    2026-08-31 recalibration).
+    """One comfort-budget row for a single engine family.
 
     ``requires`` is written in SERVER vocabulary — the same request field
     names a ``/generate`` acceleration toggle uses (``attention_backend``,
@@ -266,8 +265,9 @@ class ComfortRow(BaseModel):
     ``vae_mode``, ...) — so a client builds its own "effective acceleration"
     dict in the same vocabulary and compares it key-for-key. A profile's
     ``rows`` are tried top-down; the FIRST row whose ``requires`` fully
-    matches wins. No row matches -> the client falls back to the legacy
-    ``spill_free_frames`` table (today's behavior for everyone), so a family
+    matches wins. No row matches -> the client falls back to the scalar keys
+    outside this table (``spill_free_frames`` for a single request; the
+    WebUI's Chained screen keeps ``chain_comfort_token_budget``), so a family
     with no rows at all, or none that match, is never left without a number.
     """
 
@@ -292,8 +292,8 @@ class EngineComfortProfile(BaseModel):
     for this family — a fixed per-family line that deliberately does NOT
     vary with the acceleration configuration, and NOT a general rule:
     keeping the all-on-measured line for every configuration is a
-    per-family ruling for the two families below (J1, 2026-09-05 —
-    Docs/VERIFICATION_LOG.md §98.11 / Docs/COMFORT_LIMIT_TABLE.md §9.2),
+    per-family ruling for the two families below (J1 —
+    VERIFICATION_LOG §98.11 / Docs/COMFORT_LIMIT_TABLE.md §9.2),
     so when a new family is added, LEAVE THIS ``None`` until that family
     has been calibrated and has received its own ruling ("do not copy the
     precedent" is part of J1). ``None`` means "no line": the client draws
@@ -309,10 +309,8 @@ class EngineComfortProfile(BaseModel):
 
 
 def _default_comfort_budgets() -> dict[str, EngineComfortProfile]:
-    """Comfort-budget table calibrated 2026-08-31 (real-device run, 37 jobs +
-    1 submission failure; primary record
-    ``outputs/comfort-calib-2026-08-31/RESULTS.md``; single source of truth
-    for every number here: Docs/COMFORT_LIMIT_TABLE.md).
+    """Default comfort-budget table (single source of truth for every number
+    here: Docs/COMFORT_LIMIT_TABLE.md).
 
     "ltx" (LTX 2.3) INTENTIONALLY HAS NO EMPTY-``requires`` ROW. With the
     default (non-pruned) VAE decoder, LTX 2.3's comfort boundary is NOT
@@ -322,21 +320,22 @@ def _default_comfort_budgets() -> dict[str, EngineComfortProfile]:
     above it except under the one fully-accelerated row below (pruned VAE
     decoder included, where the boundary IS monotone). DO NOT "fix" this by
     adding a default row for LTX 2.3 — a client with no matching row is
-    expected to fall back to the legacy ``spill_free_frames`` table, which
-    stays calibrated for the default configuration precisely because this
-    row does not cover it.
+    expected to fall back to the scalar keys outside this table; for a single
+    request that is the ``spill_free_frames`` table, which stays calibrated
+    for the default configuration precisely because this row does not cover
+    it.
 
     "ltx25" (LTX 2.5) has no such boundary — VRAM is identical across every
     acceleration combination measured — so its one row has empty
     ``requires`` (always matches) and reuses the same 44,880 ceiling for
-    both Single and Chained (Chained's legacy 40,000 was a 2.3 measurement
-    carried over; 2.5 gets its own number here).
+    both Single and Chained (LTX 2.3's Chained budget,
+    ``CHAIN_COMFORT_TOKEN_BUDGET``, is a 2.3 measurement; 2.5 has its own
+    number here).
 
-    ``outpaint_budget`` (§3-135, 2026-09-05): the Outpainting lines from
-    the 2026-09-05 all-on recalibration (primary record
-    ``outputs/comfort-calib-2026-09-05/``). This field is only the
-    delivery path for the two families that already have a ruling; the
-    numbers' home is Docs/COMFORT_LIMIT_TABLE.md §9.
+    ``outpaint_budget``: the Outpainting lines from the all-on calibration.
+    This field is only the delivery path for the two families that already
+    have a ruling (VERIFICATION_LOG §98.11); the numbers' home is
+    Docs/COMFORT_LIMIT_TABLE.md §9.
     """
     return {
         "ltx": EngineComfortProfile(
@@ -353,11 +352,11 @@ def _default_comfort_budgets() -> dict[str, EngineComfortProfile]:
                     chain_budget=CHAIN_COMFORT_TOKEN_BUDGET,
                 )
             ],
-            outpaint_budget=42240,  # Docs/COMFORT_LIMIT_TABLE.md §9 (2026-09-05 all-on run)
+            outpaint_budget=42240,  # Docs/COMFORT_LIMIT_TABLE.md §9 (all-on run)
         ),
         "ltx25": EngineComfortProfile(
             rows=[ComfortRow(requires={}, single_budget=44880, chain_budget=44880)],
-            outpaint_budget=46080,  # Docs/COMFORT_LIMIT_TABLE.md §9 (2026-09-05 all-on run)
+            outpaint_budget=46080,  # Docs/COMFORT_LIMIT_TABLE.md §9 (all-on run)
         ),
     }
 
@@ -386,15 +385,15 @@ class LimitsConfig(BaseModel):
     conditioning_keyframe_grid_offset: int = 1
     phase1_max_concurrent_jobs: int = 1
     low_vram_disabled_required: bool = False
-    # 解像度別 spill-free フレーム数（16GB 実測, §8.4）。API は 481f まで受けるが、
+    # 解像度別 spill-free フレーム数（16GB 実測, Docs/RESOLUTION_DURATION_CAPABILITY.md §8.4）。API は 481f まで受けるが、
     # これを超えると shared へ溢れ ~2-4x 低速化（OOM せず）→ クライアント UI で警告する。
     # キーは "WxH" 生成サイズ文字列（client が引きやすい形式）。
     spill_free_frames: dict[str, int] = Field(default_factory=dict)
     # V2V continuation (POST /generate/chain source_video.context_frames). Bounds
     # advertised via /config so a UI can build the control. context_frames is 8n+1;
-    # the 145 max is a conservative v1 cap (keeps the frozen head inside one
-    # stage-2 tile — see api.models.SourceVideoSpec). Defaulted so an old
-    # config.yaml (without these keys) still parses (spill_free_frames precedent).
+    # the 145 max is a conservative cap (keeps the frozen head inside one
+    # stage-2 tile — see api.models.SourceVideoSpec). Defaulted so a
+    # config.yaml without these keys parses.
     v2v_context_frames_default: int = 73
     v2v_context_frames_min: int = 25
     v2v_context_frames_max: int = 145
@@ -412,27 +411,25 @@ class LimitsConfig(BaseModel):
     # last-to-first towards it. TWO OR MORE *with* a source_video -> "bridge":
     # the clips are generated forwards as usual and only the LAST one is
     # conditioned at both ends (のり代 at its head, the band at its tail), so the
-    # chain fills the span between the two uploads. (The historical
-    # "internal_segment" geometry, which appended the band and grew the output by
-    # it, is no longer reachable from the API.)
+    # chain fills the span between the two uploads. (chain_math also keeps an
+    # "internal_segment" geometry, which appends the band and grows the output
+    # by it; the API never selects it.)
     #
     # THE DEFAULT 72 IS THE CONTRACT'S DEFAULT, NOT A RECOMMENDED VALUE. The
     # real-run comparison settled on an 8-frame anchor (a longer band spends the
     # window re-rendering the material and costs the generator its invention),
     # and the frontend always sends context_frames=8 explicitly. Sources of
-    # truth: Docs/VERIFICATION_LOG.md §61 and api.models.EndSourceSpec.
+    # truth: VERIFICATION_LOG §61 and api.models.EndSourceSpec.
     #
     # 136 IS THE OPERATIONAL CEILING ON THE AUTOMATIC BAND LENGTH, NOT A
     # GEOMETRIC LIMIT. The band may span as many stage-2 tiles as it needs
     # (ChainLayout.end_tile_bands is the per-tile freeze plan), so no window
-    # geometry bounds it any more — the old "8*(v_adv-1), 88 under
-    # high_resolution" rule and its per-request 422 are both gone. 136 == 17
-    # latent frames ~= 5.67 s at 24 fps is simply the edge of the measured
-    # region, kept so nobody ships an unvalidated one. Raising it is a config
-    # edit plus a real-run quality gate, and it applies to every stage-2 window
-    # preset alike, so a client can now trust end_context_frames_max
-    # unconditionally (unlike retake_window_max_frames, which really is
-    # preset-dependent). The geometry truth stays in chain_math.
+    # geometry bounds it. 136 == 17 latent frames ~= 5.67 s at 24 fps is simply
+    # the edge of the measured region, kept so nobody ships an unvalidated one.
+    # Raising it is a config edit plus a real-run quality gate, and it applies
+    # to every stage-2 window preset alike, so a client can trust
+    # end_context_frames_max unconditionally (unlike retake_window_max_frames,
+    # which really is preset-dependent). The geometry truth stays in chain_math.
     end_context_frames_default: int = 72
     end_context_frames_min: int = 8
     end_context_frames_max: int = 136
@@ -460,9 +457,14 @@ class LimitsConfig(BaseModel):
     # consults this — no request is rejected, clamped or altered by it — which
     # is why it lives here rather than in any validation path. The default
     # mirrors chain_math.CHAIN_COMFORT_TOKEN_BUDGET, the single source of truth
-    # (a token is (width//32) * (height//32) per window latent frame). Lower it
-    # on a smaller GPU / raise it on a larger one to move the client's guides;
-    # the geometry itself does not change.
+    # (a token is (width//32) * (height//32) per window latent frame).
+    # The clients (the WebUI's shell/comfortTable.ts resolveComfortRow and
+    # gradio_ui/comfort.py resolve_chain_budget) use a matching comfort_budgets
+    # row (below) first; this value is only the fallback when no row matches.
+    # The default table's LTX 2.3 profile has a single all-five-toggles-on row,
+    # so with even one acceleration toggle off the Chained and Retake guides
+    # come from this value. To move the guides, revisit both comfort_budgets
+    # and this value; the geometry itself does not change.
     chain_comfort_token_budget: int = CHAIN_COMFORT_TOKEN_BUDGET
     # Comfortable attention-token ceiling for ONE Create (single-shot
     # `/generate`) request. A single request refines its whole clip in ONE
@@ -471,14 +473,13 @@ class LimitsConfig(BaseModel):
     # are separate axes with separate calibrated values, never to be confused.
     # PURELY CLIENT ADVICE, same discipline as chain_comfort_token_budget: the
     # server never consults this — no request is rejected, clamped or altered
-    # by it. Published only so the WebUI's Create screen can draw a smart,
-    # resolution-exact comfort marker instead of its coarse 5-key
-    # spill_free_frames lookup; the client only switches to this derivation
+    # by it. The WebUI's Create screen reads it when the server publishes no
+    # comfort_budgets table (below) or the engine family is not known yet:
+    # it then draws a smart, resolution-exact comfort marker from this value
     # while all five acceleration toggles (sage, block_swap_prefetch,
-    # keep_resident, fused_gguf_dequant_kernel, vae_mode=prune_vaed) are on —
-    # with even one off it falls back to spill_free_frames instead.
-    # Literal (no chain_math constant to mirror): calibrated 2026-08-18 from a
-    # 4-stage/21-job real-device run across 3 resolutions x both orientations.
+    # keep_resident, fused_gguf_dequant_kernel, vae_mode=prune_vaed) are on,
+    # and falls back to its coarse 5-key spill_free_frames lookup with even
+    # one off. Literal (no chain_math constant to mirror).
     # The token formula is the same as chain_comfort_token_budget's:
     # (width//32) * (height//32) * latent frame count. 44,880 is the largest
     # common comfortable value, anchored at M2 = 1920x1088, 169 frames
@@ -492,12 +493,12 @@ class LimitsConfig(BaseModel):
     # the server never consults this — no request is rejected, clamped or
     # altered by it. It exists so a client looks up {requires, single_budget,
     # chain_budget} rows per engine family instead of hard-coding "all five
-    # acceleration toggles on" the way it does today, and so a future engine
-    # or toggle needs only a new row/family here, not a client code change.
+    # acceleration toggles on", and so a future engine or toggle needs only
+    # a new row/family here, not a client code change.
     # NOT written to config.yaml (code default only — an operator CAN still
     # override it there like any other field) and carries no validator; a
-    # client with no matching row is responsible for falling back to
-    # spill_free_frames, exactly as it does today. See
+    # client with no matching row is responsible for falling back to the
+    # scalar keys (spill_free_frames, chain_comfort_token_budget). See
     # _default_comfort_budgets for the default table and its rationale, and
     # Docs/COMFORT_LIMIT_TABLE.md for the calibration.
     # A yaml override REPLACES the whole table (no per-family/per-field
@@ -517,11 +518,11 @@ class OutputConfig(BaseModel):
 
 
 class TrackingConfig(BaseModel):
-    """Object tracking (§3-54) — the utility-AI module, NOT a base model.
+    """Object tracking — the utility-AI module, NOT a base model.
 
     FOUR KEYS, AND THAT IS THE WHOLE SECTION. Everything else about tracking is
-    a module constant in ``services/tracking_manager.py`` (the 60s idle expiry,
-    the 64 MB frame ceiling) or a plugin-side setting the server never sees (the
+    a module constant in ``services/tracking_manager.py`` (``IDLE_TIMEOUT_S``,
+    ``MAX_FRAME_BYTES``) or a plugin-side setting the server never sees (the
     lost threshold, smoothing, keyframe stride). A knob here would be a promise
     to support every value of it.
 
@@ -563,7 +564,7 @@ class AppConfig(BaseModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     tracking: TrackingConfig = Field(default_factory=TrackingConfig)
 
-    # Server RUNTIME STATE file (§3-97 P5, services/runtime_state.py): the last
+    # Server RUNTIME STATE file (services/runtime_state.py): the last
     # active base model + per-base category selection, so a restart resumes the
     # combination the operator had chosen. Top level rather than inside a
     # section because it belongs to no one subsystem — and it is a CACHE, not a

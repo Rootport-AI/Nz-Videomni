@@ -5,16 +5,16 @@ One :class:`BackendClient` instance lives for the MCP server process
 never construct a client themselves). Its ``httpx.AsyncClient`` is built lazily
 on first use so importing this module never opens a socket.
 
-Error translation (plan D7): every non-2xx response is translated to a single
-``mcp.server.fastmcp.exceptions.ToolError`` carrying ``"CODE: message —
-detail"`` from the backend's ``{"error": {code, message, detail}}`` envelope
-(``api/errors.py``). A transport-level failure (backend not running) becomes a
-``ToolError`` telling the user to run ``run.bat`` -- EXCEPT ``httpx.ReadTimeout``,
-which passes through UNTRANSLATED: ``/pipeline/load`` and
-``/jobs/{id}/join`` keep running server-side after the client socket times out
-(plan D5), so callers that care (``tools/system.py::load_pipeline`` etc.) catch
-``httpx.ReadTimeout`` themselves and report a ``finished: false`` status
-instead of a hard error.
+Error translation (``Docs/MCP_SERVER_DESIGN.md`` §2 D7): every non-2xx
+response is translated to a single ``mcp.server.fastmcp.exceptions.ToolError``
+carrying ``"CODE: message — detail"`` from the backend's
+``{"error": {code, message, detail}}`` envelope (``api/errors.py``). A
+transport-level failure (backend not running) becomes a ``ToolError`` telling
+the user to run ``run.bat`` -- EXCEPT ``httpx.ReadTimeout``, which passes
+through UNTRANSLATED: ``/pipeline/load`` and ``/jobs/{id}/join`` keep running
+server-side after the client socket times out (same document, D5), so callers
+that care (``tools/system.py::load_pipeline`` etc.) catch ``httpx.ReadTimeout``
+themselves and report a ``finished: false`` status instead of a hard error.
 """
 
 from __future__ import annotations
@@ -46,9 +46,10 @@ class BackendClient:
         self._transport = transport
         self._http: httpx.AsyncClient | None = None
         # Set/cleared by tools/system.py::load_pipeline around its POST
-        # /pipeline/load call. Guards against a second agent turn issuing a
-        # concurrent load while the first is still in flight (pipeline_manager
-        # has a real double-load race -- see the plan's "重要な事実" section).
+        # /pipeline/load call, so a second agent turn issued while the first
+        # load is in flight gets an ``in_flight`` answer instead of a second
+        # POST (the backend itself answers an overlapping load with 409
+        # ``PIPELINE_LOADING``).
         self.pipeline_load_in_flight: bool = False
 
     @property
@@ -65,8 +66,8 @@ class BackendClient:
 
     @property
     def upload(self) -> Any:
-        """The local ``config.yaml`` ``upload:`` section (W2 tools/uploads.py
-        precheck source -- see Settings.upload's docstring note)."""
+        """The local ``config.yaml`` ``upload:`` section (the precheck source
+        for tools/uploads.py -- see the comment on ``Settings.upload``)."""
         return self._settings.upload
 
     def _ensure_http(self) -> httpx.AsyncClient:
@@ -93,7 +94,7 @@ class BackendClient:
         try:
             resp = await http.request(method, API_PREFIX + path, **kwargs)
         except httpx.ReadTimeout:
-            raise  # deliberately untranslated -- see module docstring / plan D5
+            raise  # deliberately untranslated (module docstring; Docs/MCP_SERVER_DESIGN.md §2 D5)
         except httpx.RequestError as exc:
             raise self._unreachable_error(exc) from exc
         return self._parse_response(resp)
@@ -121,9 +122,8 @@ class BackendClient:
         # ``params`` is the QUERY string, not the multipart body: POST
         # /upload/video declares trim_start_sec / trim_duration_sec / max_frames
         # as ``Query(...)`` (api/uploads.py), so they must ride on the URL. Sent
-        # only when a caller actually passes one, so an ordinary upload's
-        # request line is byte-identical to what it was before this parameter
-        # existed.
+        # only when a caller actually passes one, so an upload without
+        # ``params`` carries no query string at all.
         kwargs: dict[str, Any] = {"files": files, "data": data}
         if params is not None:
             kwargs["params"] = params

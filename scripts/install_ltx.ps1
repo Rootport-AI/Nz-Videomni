@@ -1,61 +1,71 @@
 <#
 .SYNOPSIS
-    Full, idempotent clean installer for the LTX-2.3 video-gen backend.
-    Brings a fresh Windows box (git + uv + ffmpeg + NVIDIA driver already present)
-    to a runnable state, and is SAFE TO RE-RUN on an already-installed machine
-    (every step guards on existing artifacts and prints SKIP).
+    Full, idempotent clean installer for the Nz-Videomni backend (LTX 2.3 and
+    LTX 2.5 engines).
+    Brings a fresh Windows box (git + uv on PATH; a missing ffmpeg / ffprobe is
+    only a warning; the NVIDIA driver is not checked) to a runnable state, and
+    is SAFE TO RE-RUN on an already-installed machine (every step is
+    idempotent; the steps that create things guard on existing artifacts and
+    print SKIP).
 
-    Everything stays inside the project directory (env isolation, spec 2.5):
-    uv-managed Python, uv cache, and the HuggingFace cache all live under the
-    project root; we never touch the system Python and never set persistent
-    system env vars (all env vars below are process-scoped only).
+    Everything stays inside the project directory (env isolation,
+    Videomni_Backend_Specification.md section 2.3-2.4): uv-managed Python, uv
+    cache, and the HuggingFace cache all live under the project root (unless
+    UV_CACHE_DIR / HF_HOME are already set); we never touch the system Python
+    and never set persistent system env vars (all env vars below are
+    process-scoped only).
 
 .DESCRIPTION
-    Steps (each skip-guarded / idempotent):
+    Steps (each idempotent; most are skip-guarded):
       0. Load + validate scripts/manifests/*.json  (the single source of truth
          for downloads, the on-disk layout, migration, the verification table
          and models/INSTALLED_PATHS.txt).
       1. Prereqs (git, uv; ffmpeg + ffprobe warn) + process-scoped env isolation.
-      2. Migrate an existing pre-2026-08 models/ tree to the base-model-first
-         layout, rewrite config.yaml's model paths to match, and delete the
-         retired model.* key lines config.py no longer honours (they would
-         otherwise log a WARNING on every server start).
+      2. Migrate an existing models/ tree in the old layout to the
+         base-model-first layout, rewrite config.yaml's model paths to match,
+         and delete the retired model.* key lines config.py does not honour
+         (they would otherwise log a WARNING on every server start).
       3. uv-managed Python 3.12.
       4. App venv  .venv        (torch-FREE; `uv sync` of root pyproject.toml).
       5. Engine venvs .venv-engine (LTX 2.3) and .venv-engine-ltx25 (LTX 2.5),
-         both torch 2.9.1+cu128 stacks, built by one shared Ensure-EngineVenv.
-         Two venvs, not one: the 2.5 stack needs transformers 5.x (Gemma 4) and
-         the 2.3 stack is pinned to 4.57.6, so they cannot share an interpreter.
-         DEFAULT = deterministic FREEZE path (reproduces the VALIDATED stacks all
-         verification ran on). Re-applied automatically whenever a pinned
-         dependency set changes, so "git pull, then re-run this" actually
-         updates the venvs.
-      6. Model downloads (~31GB) via .venv-engine's huggingface_hub (run as a
-         module, never the hf.exe trampoline), driven entirely by the
-         manifests: staged into models\.dl\ and then remapped into place.
+         both CUDA torch stacks, plus the CPU-only .venv-utils when -BaseModel
+         selects UETrack -- all built by one shared Ensure-EngineVenv.
+         Two engine venvs, not one: the 2.5 stack needs transformers 5.x
+         (Gemma 4) and the 2.3 stack stays on transformers 4.x, so they cannot
+         share an interpreter (exact versions: the *.freeze.txt files).
+         Each venv is built from its freeze file plus its direct pins, if any
+         (deterministic; reproduces the VALIDATED stacks all verification ran
+         on). Re-applied automatically whenever that pinned dependency set
+         changes, so "git pull, then re-run this" actually updates the venvs.
+      6. Model downloads for the -BaseModel selection via .venv-engine's
+         huggingface_hub (run as a module, never the hf.exe trampoline), driven
+         entirely by the manifests: staged into models\.dl\ and then remapped
+         into place.
       7. Verification table (PASS/MISSING) + regenerate models/INSTALLED_PATHS.txt,
          both generated from the manifests' `files` arrays.
       8. Optional -RunSmoke.
 
-    The GGUF + component-file recipe is the ONLY supported real path. It never
-    opens the old 46GB monolith (ltx-2.3-22b-distilled-1.1.safetensors) or the
-    22.7GB QAT Gemma dir -- both were physically deleted; this installer never
-    downloads them. The monolith path is not configurable at all any more
-    (config.yaml's checkpoint_path key was removed 2026-07-28, PENDING_TASKS.md
-    3-26, once confirmed dead): the worker payload's checkpoint_path field is
-    now a hardcoded "" in services/ltx_runner.py.
+    The real path loads split component files (a GGUF or quantized (fp8 /
+    int8) safetensors transformer plus separate VAE / audio / text-encoder
+    files). It never opens the single-file monolith
+    (ltx-2.3-22b-distilled-1.1.safetensors) or the QAT Gemma dir, and this
+    installer never downloads them. The monolith path
+    is not configurable: config.py has no checkpoint_path key, and the worker
+    payload's checkpoint_path field is a hardcoded "" in
+    services/engines/ltx/adapter.py (_build_load_payload).
 
 .NOTES
-    LAYOUT + GUARD DOCTRINE (2026-08-19 rewrite)
-    --------------------------------------------
+    LAYOUT + GUARD DOCTRINE
+    -----------------------
     models/ is BASE-MODEL-FIRST:  models/<BaseModel>/<Category>/...
     (models/LTX23/Weights, models/LTX23/TextEncoder, models/Preprocessors/DWPose,
     ...). The folder IS the declaration -- where a file sits says which base model
     it belongs to, so nothing has to fingerprint weights.
 
-    Every guard in this script is now PER EXPECTED FILE (manifest `files[]`, each
-    with its own `min`), never a per-directory recursive total. The old
-    directory-total guards are gone, and with them two whole classes of bug:
+    Every guard in this script is PER EXPECTED FILE (manifest `files[]`, each
+    with its own `min`), never a per-directory recursive total (the one
+    `kind:"dir"` row sums only the files directly inside it). A directory-total
+    guard would bring two whole classes of bug:
 
       * A directory total cannot decide "present" when two different repos feed
         the SAME directory. models/LTX23/TextEncoder is filled by BOTH
@@ -65,41 +75,32 @@
         other one throws, making a fresh install fail 100% of the time.
       * A directory total is inflated by files the user brought themselves
         (self-converted GGUFs in Weights/, LoRAs in StyleLoRA/), which can hide a
-        missing OFFICIAL file forever. The old script documented that as an
-        accepted, unfixable limitation for models/ltx-2.3-gguf/. Per-file guards
-        make it structurally impossible: an official file that is absent is
-        always downloaded, and a user file never affects any verdict.
+        missing OFFICIAL file forever. Per-file guards make it structurally
+        impossible: an official file that is absent is always downloaded, and a
+        user file never affects any verdict.
 
-    Consequently there is NO LONGER any constraint on how directories are
-    arranged relative to each other. The old "each repo needs its OWN sibling
-    check directory, never a child" rule (models/preprocessors-vda deliberately
-    kept a SIBLING of models/preprocessors, IC-LoRA deblur/in-outpainting kept
-    out of models/ltx-2.3-ic-lora/) existed ONLY to keep recursive size sums from
-    masking each other. It is void: the new layout nests all four IC-LoRA
-    adapters under models/LTX23/IC-LoRA/ and both preprocessors under
+    Consequently there is no constraint on how directories are arranged
+    relative to each other (no repo needs its OWN sibling check directory to
+    keep recursive size sums from masking each other): the layout nests every
+    IC-LoRA adapter under models/LTX23/IC-LoRA/ and the preprocessors under
     models/Preprocessors/, and nothing can mask anything.
 
     ATTENTION BACKEND (no GPU-specific knob)
     ----------------------------------------
-    PyTorch SDPA remains the attention backend on EVERY arch (Ada / Ampere /
+    PyTorch SDPA is the default attention backend on EVERY arch (Ada / Ampere /
     Hopper / Blackwell) and is always installed and always usable. xformers and
     flash-attn are never installed by this script -- SDPA is the baseline the
     code always falls back to, and on Blackwell adding flash-attn can jam it.
-    sageattention was historically an exception (a declared-but-unused
-    engine-venv dependency, pure dead weight since nothing imported it) --
-    removed in the 2026-07-28 dependency cleanup (PENDING_TASKS.md 3-25; see
-    engine/venv-engine.freeze.txt). It is back as of 2026-07-31: the
+    sageattention (prebuilt wheel) and triton-windows (its runtime JIT
+    dependency) are installed into BOTH engine venvs by default, because the
     Acceleration feature's SageAttentionService (engine/transformer/
-    sage_attention_service.py) is now a real consumer, so sageattention 2.2.0
-    (prebuilt wheel, cu128/torch2.9.1) and triton-windows (its runtime JIT
-    dependency) are installed by default -- see $engineDirectPins below and
-    engine/venv-engine.freeze.txt. As of 2026-08-25 the SAME wheel is installed
-    into the LTX 2.5 venv as well ($ltx25DirectPins +
-    engine25/venv-engine-ltx25.freeze.txt): sage is a per-job backend on BOTH
-    engines now, not a 2.3-only one. SDPA stays the default at generation time;
-    sage is opt-in per job via `attention_backend`. Blackwell needs an R570+
-    driver. Because nothing here is arch-dependent, this installer does not
-    detect or take a GPU architecture at all.
+    sage_attention_service.py) uses them on both engines: the wheel comes from
+    $engineDirectPins / $ltx25DirectPins, triton-windows from
+    engine/venv-engine.freeze.txt / engine25/venv-engine-ltx25.freeze.txt.
+    SDPA stays the default at generation time; sage is opt-in per job via
+    `attention_backend`. Blackwell needs an R570+ driver. Because nothing here
+    is arch-dependent, this installer does not detect or take a GPU
+    architecture at all.
 
 .EXAMPLE
     ./scripts/install_ltx.ps1                       # full install
@@ -114,7 +115,7 @@ param(
     # After install, run the mock, GPU-free smoke test.
     [switch] $RunSmoke,
     # Clone upstream Lightricks/LTX-2 into vendor/LTX-2 as REFERENCE ONLY (no venv
-    # is ever built there). Off by default -- the old clone+sync-in-fork flow is gone.
+    # is ever built there). Off by default.
     [switch] $CloneUpstreamReference,
     # Convenience skips.
     [switch] $SkipModels,
@@ -133,10 +134,10 @@ param(
     # Which manifests this RUN actually downloads and lists in the verification
     # table, selected by the 'id' field of scripts/manifests/*.json. The default
     # is exactly the set setup.bat ships -- the app plus the try-it-out LTX 2.3
-    # plus the shared preprocessors (owner's ruling 2026-08-23,
-    # Docs/MULTI_ENGINE_DESIGN.md §6.2). Any further base model is added by its
-    # own install-<ID>.bat, which passes its id here. Loading, validation and the
-    # migrate merge always cover EVERY manifest regardless of this switch.
+    # plus the shared preprocessors (owner's ruling; Docs/MULTI_ENGINE_DESIGN.md
+    # section 6.2). Any further base model is added by its own install-<ID>.bat,
+    # which passes its id here. Loading, validation and the migrate merge always
+    # cover EVERY manifest regardless of this switch.
     [string[]] $BaseModel = @('LTX23', 'Preprocessors')
 )
 
@@ -145,9 +146,9 @@ $ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
 Set-Location $ProjectRoot
 
 # ----------------------------------------------------------------------------
-# Env isolation (process-scoped only; mirrors the $env: block in run.ps1 -- no
-# line numbers, they go stale). Keep the
-# uv-managed interpreter, uv download cache and HuggingFace cache in-project.
+# Env isolation (process-scoped only). Keep the uv-managed interpreter, uv
+# download cache and HuggingFace cache in-project. run.ps1 sets the same
+# UV_PYTHON_INSTALL_DIR; it does not set UV_CACHE_DIR or HF_HOME.
 # ----------------------------------------------------------------------------
 $env:UV_PYTHON_INSTALL_DIR = "$ProjectRoot\.python"
 if (-not $env:UV_CACHE_DIR) { $env:UV_CACHE_DIR = "$ProjectRoot\.uv_cache" }
@@ -255,22 +256,25 @@ function Resolve-MapTarget {
 # 0) Manifests: load + validate.
 #
 #    scripts/manifests/*.json is the ONE place that knows the layout. Each file
-#    declares, for one base model (or the shared preprocessor set):
+#    declares, for one base model or one shared asset set (e.g. the
+#    preprocessors):
 #      downloads[] : name / repo / include globs / map[] / files[]
-#      migrate[]   : from -> to, for an existing pre-2026-08 tree
+#      migrate[]   : from -> to, for an existing tree in the old layout
+#    and a base-model descriptor (schema 2, 'engine_family' present) also
+#    carries display_name / categories / assets / default_selection.
 #    `files[]` is the single source of truth used THREE times over -- as the
 #    pre-download guard, as the post-download re-check, and as the step 7
-#    verification table + INSTALLED_PATHS.txt. Adding a base model later
-#    (LTX 2.5, Wan 2.x, ...) is a new JSON file and no change here.
+#    verification table + INSTALLED_PATHS.txt. Adding another base model
+#    (Wan 2.x, ...) is a new JSON file and no change to this loader.
 #
 #    Files are processed in FILENAME order, so the numeric prefixes
 #    (00-, 10-, ...) fix the order deterministically.
 #
 #    Validation is fail-loud and runs on EVERY invocation, before anything else
-#    can act on a bad table: schema must be 1, every path must be relative and
-#    inside models/, and every `files[].path` must live under one of that same
-#    download's `map[].to` -- otherwise the remap would drop the file somewhere
-#    the guard never looks and the install would loop forever.
+#    can act on a bad table: schema must be 1 or 2, every path must be relative
+#    and inside models/, and every `files[].path` must live under one of that
+#    same download's `map[].to` -- otherwise the remap would drop the file
+#    somewhere the guard never looks and the install would loop forever.
 # ----------------------------------------------------------------------------
 function Import-ModelManifests {
     param([Parameter(Mandatory)] [string] $Dir)
@@ -308,13 +312,13 @@ function Test-ManifestShape {
     if ($Manifest.id -notmatch '^[A-Za-z0-9._-]+$') {
         throw "Manifest ${Name}: 'id' must be a plain filename-safe token (it names the staging directory)."
     }
-    # schema 1 keeps the original strict rule (a schema-1 manifest with no
+    # schema 1 requires a non-empty 'downloads' (a schema-1 manifest with no
     # downloads is almost certainly a mistake). schema 2 base-model descriptors
     # are allowed an empty (or absent) 'downloads' -- a descriptor whose weights
     # are not distributed through this installer yet still needs to validate and
     # load so its 'categories'/'default_selection' are visible to the registry,
     # even though this run has nothing to fetch for it
-    # (S-2 / F2, MULTI_ENGINE_DESIGN.md §4.3).
+    # (MULTI_ENGINE_DESIGN.md section 4.3).
     if ($Manifest.schema -eq 1 -and -not $Manifest.downloads) {
         throw "Manifest ${Name}: missing 'downloads'."
     }
@@ -356,7 +360,7 @@ function Test-ManifestShape {
     # A manifest that carries 'engine_family' is a BASE MODEL descriptor (as
     # opposed to a shared-asset manifest like 00-preprocessors.json, which has
     # no engine_family and is validated by the rules above only). See
-    # MULTI_ENGINE_DESIGN.md §4.2/§4.3.
+    # MULTI_ENGINE_DESIGN.md section 4.2 / section 4.3.
     if ($Manifest.engine_family) {
         Test-BaseModelShape -Manifest $Manifest -Name $Name
     }
@@ -364,7 +368,7 @@ function Test-ManifestShape {
 
 # Validates the fields that ONLY a base-model descriptor (schema 2,
 # 'engine_family' present) carries: display_name / engine_family / categories /
-# assets / default_selection (MULTI_ENGINE_DESIGN.md §4.3). Called from
+# assets / default_selection (MULTI_ENGINE_DESIGN.md section 4.3). Called from
 # Test-ManifestShape, never standalone, so $Manifest has already passed the
 # schema/id/downloads/migrate checks above.
 function Test-BaseModelShape {
@@ -448,8 +452,9 @@ $Manifests = Import-ModelManifests -Dir $ManifestDir
 
 # One line summarising the base models (schema 2, 'engine_family' present)
 # this run knows about -- the ones that will populate the header dropdown
-# (MULTI_ENGINE_DESIGN.md §1/§4.2). Shared-asset manifests (00-preprocessors,
-# no engine_family) are counted in $Manifests.Count above but not listed here.
+# (MULTI_ENGINE_DESIGN.md section 1 / section 4.2). Manifests with no
+# engine_family (00-preprocessors, ...) are counted in $Manifests.Count below
+# but not listed here.
 $BaseModelNames = @($Manifests | Where-Object { $_.Data.engine_family } | ForEach-Object { $_.Data.display_name })
 Write-Ok "base models: $($BaseModelNames -join ', ')"
 
@@ -506,13 +511,13 @@ Write-Ok "-BaseModel: downloads + verification limited to $($foundIds -join ', '
 # ----------------------------------------------------------------------------
 # 1) Prerequisites
 #
-#    NOTE (deliberate behaviour change, 2026-07): this step no longer probes
-#    nvidia-smi and no longer aborts when no NVIDIA GPU can be seen. The old
-#    probe existed only to pick an attention backend, and there is nothing left
-#    to pick (SDPA on every arch). Neither the venvs nor the model downloads
-#    care about the GPU -- it is first needed at generation time -- so install
-#    now succeeds on a box with no driver / no nvidia-smi (e.g. a build agent),
-#    and a wrong or missing GPU surfaces when you actually run the engine.
+#    This step does not probe nvidia-smi and does not abort when no NVIDIA GPU
+#    can be seen. The packages installed here are the same on every GPU arch,
+#    so there is no attention backend to pick at install time. Neither the
+#    venvs nor the model downloads care about the GPU -- it is first needed at
+#    generation time -- so install succeeds on a box with no driver / no
+#    nvidia-smi (e.g. a build agent), and a wrong or missing GPU surfaces when
+#    you actually run the engine.
 # ----------------------------------------------------------------------------
 Write-Step "Checking prerequisites"
 Require-Cmd git
@@ -540,8 +545,8 @@ Write-Host "HF_HOME: $env:HF_HOME"
 #    Design (all four points are load-bearing):
 #
 #    (a) NOTHING MOVES UNTIL EVERY PRE-FLIGHT GUARD PASSES. The plan is built
-#        with zero side effects, then checked (same volume, no reparse points,
-#        no destination collisions), then printed, then executed. A 74GB tree
+#        with zero side effects, then printed, then checked (same volume, no
+#        reparse points, no destination collisions), then executed. A 74GB tree
 #        must never be left half-moved because the 40th file hit a surprise.
 #
 #    (b) MOVE, NEVER OVERWRITE. Move-Item runs WITHOUT -Force here. A
@@ -695,8 +700,8 @@ function Test-MigrationSafety {
         throw "models/ contains junction(s)/symlink(s): $names. Migration refuses to run because a move across them can silently become a multi-hour copy onto another volume. Resolve them (or re-run with -SkipMigrate and move the files by hand) first."
     }
 
-    # Destination collisions. NO -Force anywhere in migration, so an existing
-    # destination is a hard stop: whatever is there is not ours to overwrite.
+    # Destination collisions. Move-Item never gets -Force in migration, so an
+    # existing destination is a hard stop: whatever is there is not ours to overwrite.
     $collide = @()
     foreach ($m in $Moves) {
         if (Test-Path -LiteralPath $m.Dst) { $collide += "$($m.Rel) -> $($m.Target)" }
@@ -713,7 +718,8 @@ function Test-MigrationSafety {
     }
 
     # MAX_PATH. Not fatal (this project is normally installed near a drive root
-    # and the new layout is SHORTER than the old one), but worth saying out loud.
+    # and the destinations are not much longer than their sources), but worth
+    # saying out loud.
     foreach ($m in $Moves) {
         if ($m.Dst.Length -gt 250) {
             Write-Warning "Destination path is $($m.Dst.Length) characters, close to the classic 260-character limit: $($m.Dst)"
@@ -724,9 +730,10 @@ function Test-MigrationSafety {
 # Bottom-up removal of directories the migration emptied. -Recurse is NEVER used
 # here (it would delete a directory that still holds something we failed to
 # move); only genuinely empty directories go, deepest first, and only inside the
-# legacy source roots. The single -Recurse in this script is the .cache drop,
-# which runs before this and is what makes those roots empty in the first place. Any directory that is a destination -- or an ancestor of one --
-# is protected outright.
+# legacy source roots and their ancestors below models/. The single -Recurse
+# deletion in the migration is the .cache drop, which runs before this and is
+# what makes those roots empty in the first place. Any directory that is a
+# destination -- or an ancestor of one -- is protected outright.
 function Remove-EmptyLegacyDirs {
     param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Migrate)
 
@@ -772,13 +779,12 @@ function Remove-EmptyLegacyDirs {
 # ----------------------------------------------------------------------------
 # config.yaml follow-up.
 #
-# WHY THIS IS NOT OPTIONAL: the six ic_loras entries (and lora_dir) exist ONLY
-# in config.yaml. If they still point at the emptied legacy directories after a
-# migration, picking an adapter 404s. The weight paths that used to be here too
-# (spatial_upsampler_path, gemma_root, ...) moved into the base-model
-# descriptors in §3-97 P3b and are migrated by the descriptor's own `migrate`
-# table instead, but rewriting the surviving config paths is still done in the
-# same breath as the move.
+# WHY THIS IS NOT OPTIONAL: the ic_loras entries (and lora_dir, when the user
+# sets it) exist ONLY in config.yaml. If they still point at the emptied legacy
+# directories after a migration, picking an adapter 404s. The weight paths
+# (spatial_upsampler_path, gemma_root, ...) live in the base-model descriptors
+# and are migrated by the descriptor's own `migrate` table instead; the config
+# paths that remain are rewritten in the same breath as the move.
 #
 # Scope discipline: a config.yaml.bak is written first; only path tokens that
 # start with models/ AND match the migrate table are touched; comments are left
@@ -788,8 +794,8 @@ function Remove-EmptyLegacyDirs {
 # The one other config edit is the deprecated-key sweep below.
 # ----------------------------------------------------------------------------
 
-# The model.* keys config.py stopped honouring in the §3-97 P3b move of the
-# weight paths into the base-model descriptors. MUST stay identical to
+# The model.* keys config.py ignores because the weight paths live in the
+# base-model descriptors. MUST stay identical to
 # config.py's DEPRECATED_MODEL_KEYS. A config.yaml that still carries one boots
 # fine and generates fine -- the value is simply ignored -- but config.py logs
 # one WARNING per leftover key on EVERY start, which is exactly the noise a
@@ -1093,7 +1099,7 @@ if ($py312) {
 }
 
 # ----------------------------------------------------------------------------
-# 4) App venv .venv  (torch-FREE; plain `uv sync` of root pyproject.toml)
+# 4) App venv .venv  (torch-FREE; `uv sync --extra dev` of root pyproject.toml)
 # ----------------------------------------------------------------------------
 $appPy = "$ProjectRoot\.venv\Scripts\python.exe"
 if ($SkipVenv) {
@@ -1111,15 +1117,14 @@ if ($SkipVenv) {
     # `uv sync` is cheap+idempotent, so run it every time to reconcile the app deps
     # with the root pyproject.toml (this is the torch-free FastAPI/Gradio side).
     #
-    # --extra dev is ALWAYS passed (2026-07-28 owner decision, PENDING_TASKS.md
-    # 3-26, option (a)): `uv sync` treats the venv as authoritative for exactly
-    # the extras it is told to sync, so a plain `uv sync` doesn't just skip the
-    # `dev` optional-dependency group (pytest / iniconfig / pluggy) -- it PRUNES
-    # it back out if it was ever installed. That silently deletes pytest on every
-    # re-run of this step, which is exactly the trap that bit the 2026-07-28
-    # NAG work (recovered only by a manual `uv sync --extra dev`). Always
-    # including it costs a few MB and keeps "git pull, re-run setup" from ever
-    # breaking `pytest` again -- worth it over saving that space for end users.
+    # --extra dev is ALWAYS passed (owner decision; VERIFICATION_LOG section 40):
+    # `uv sync` treats the venv as authoritative for exactly the extras it is
+    # told to sync, so a plain `uv sync` doesn't just skip the `dev`
+    # optional-dependency group (pytest / iniconfig / pluggy) -- it PRUNES it
+    # back out if it was ever installed. That would silently delete pytest on
+    # every re-run of this step. Always including it costs a few MB and keeps
+    # "git pull, re-run setup" from breaking `pytest` -- worth it over saving
+    # that space for end users.
     Write-Do "uv sync --extra dev  (root pyproject.toml, app deps + dev extra)"
     uv sync --extra dev
     if ($LASTEXITCODE -ne 0) { throw "uv sync --extra dev (app venv) failed." }
@@ -1130,17 +1135,17 @@ if ($SkipVenv) {
 # 5) Engine venvs  (torch cu128 stacks)
 #
 #    TWO of them, built by ONE shared Ensure-EngineVenv:
-#      .venv-engine        LTX 2.3 -- transformers 4.57.6, sageattention, diffusers
+#      .venv-engine        LTX 2.3 -- transformers 4.x, sageattention, diffusers
 #      .venv-engine-ltx25  LTX 2.5 -- transformers 5.x (Gemma 4), official LTX-2
-#                                     v1.2.0, sageattention, no diffusers
-#    They are siblings, not versions of each other: transformers 4.57 and 5.x
+#                                     packages, sageattention, no diffusers
+#    They are siblings, not versions of each other: transformers 4.x and 5.x
 #    cannot coexist in one interpreter, so each engine gets its own. Neither
 #    worker can import the other's stack, which is exactly the isolation the
 #    multi-engine design relies on.
 #
 #    There is NO committed uv.lock -> we must NEVER use `uv sync --frozen`.
-#    DEFAULT = deterministic FREEZE path: reproduces the VALIDATED torch
-#    2.9.1+cu128 stacks (engine/venv-engine.freeze.txt and
+#    Every engine venv takes the deterministic FREEZE path: it reproduces the
+#    VALIDATED torch cu128 stacks (engine/venv-engine.freeze.txt and
 #    engine25/venv-engine-ltx25.freeze.txt) that every verification run in this
 #    project used. The installer has no fresh-resolve mode: the matching
 #    *-venv-pyproject.toml is the hand-run recipe for building a NEW stack when
@@ -1152,7 +1157,7 @@ if ($SkipVenv) {
 #    such ordering constraint -- it is built right after, for symmetry and so one
 #    installer run leaves both engines runnable.
 #
-#    RE-SYNC (2026-07): this step no longer skips merely because a venv exists.
+#    RE-SYNC: this step does not skip merely because a venv exists.
 #    A `git pull` can move a freeze file or the pinned revs below, and the
 #    documented update flow is "git pull, then re-run the installer" -- which
 #    only works if the freeze is re-applied when the pinned set changes. The
@@ -1183,11 +1188,11 @@ $engineStateFile = "$ProjectRoot\.venv-engine\.nz-engine-state"
 # time, not at install time). `%2B` is the URL-encoded form of `+` inside the
 # wheel filename's local version segment (`2.2.0+cu128torch2.9.1.post6`) --
 # keep this string SINGLE-quoted so PowerShell does not try to interpolate it.
-# Re-added 2026-07-31 (see .NOTES above and D4 in the Acceleration plan): this
-# is the only supported source for sageattention -- engine-venv-pyproject.toml
-# deliberately does NOT list it (see that file's header comment), because that
-# file resolves an unvalidated newer torch this ABI-pinned wheel is not built
-# against -- the installer applies the freeze, and only the freeze.
+# This is the only supported source for sageattention in this venv (see .NOTES
+# above) -- engine-venv-pyproject.toml deliberately does NOT list it (see that
+# file's header comment), because that file resolves an unvalidated newer torch
+# this ABI-pinned wheel is not built against -- the installer applies the
+# freeze, and only the freeze.
 $engineDirectPins = @(
     "diffusers @ git+https://github.com/huggingface/diffusers.git@01de02e8b4f2cc91df4f3e91cb6535ebcbeb490c"
     "ltx-core @ git+https://github.com/Lightricks/LTX-2.git@00dc53d3f81c405932f9f16d9c57557de411e702#subdirectory=packages/ltx-core"
@@ -1221,11 +1226,10 @@ $ltx25StateFile = "$ProjectRoot\.venv-engine-ltx25\.nz-engine-state"
 # sageattention is the SAME wheel URL as the 2.3 array above -- byte for byte
 # the same string, deliberately, because it is the same wheel: cp310-abi3
 # (one build serves every CPython >= 3.10, so the 2.5 venv's 3.12 is covered)
-# against the same torch 2.9.1+cu128 both stacks pin. Added 2026-08-25 for the
-# Acceleration third wave, which opens `attention_backend: "sage"` on the 2.5
-# engine; before that the 2.5 venv had no sageattention at all. Its runtime JIT
-# dependency, triton-windows, was already here (it arrived 2026-08-24 for the
-# fused GGUF dequantisation kernels), so nothing else had to change.
+# against the same torch 2.9.1+cu128 both stacks pin. It is here so the 2.5
+# engine can run `attention_backend: "sage"`. Its runtime JIT dependency,
+# triton-windows, needs no direct pin: it is a plain line of the 2.5 freeze
+# (the fused GGUF dequantisation kernels use it too).
 # `%2B` is the URL-encoded `+` of the wheel's local version segment -- keep the
 # line SINGLE-quoted here too, or PowerShell will try to interpolate it.
 $ltx25DirectPins = @(
@@ -1279,8 +1283,7 @@ $utilsStateFile = "$ProjectRoot\.venv-utils\.nz-engine-state"
 # $DirectPins is OPTIONAL (default @()) for the pin-less .venv-utils stack, whose
 # whole dependency set lives in its freeze file. An empty array joins to the empty
 # string, so the payload stays deterministic ("<body>`n`n") and a venv with no pins
-# still gets a stable marker. Passing a non-empty array reproduces the old
-# behaviour byte for byte.
+# still gets a stable marker.
 function Get-EngineStateHash {
     param(
         [Parameter(Mandatory)] [string]   $FreezeFile,
@@ -1299,28 +1302,26 @@ function Get-EngineStateHash {
 
 # The 2-stage deterministic freeze apply, called by BOTH the create path and the
 # re-sync path (never inline a second copy of this).
-#  (a) install the 3 git packages + 1 direct-URL wheel at their pinned refs (see
-#      $engineDirectPins).
+#  (a) install the direct-reference pins ($DirectPins: $engineDirectPins or
+#      $ltx25DirectPins) at their pinned refs.
 #  (b) install the remaining pinned wheels from a TEMP copy of the freeze that has
-#      those 4 bare lines removed (already installed in (a); left in place uv
+#      those pins' bare lines removed (already installed in (a); left in place uv
 #      would fetch some other PyPI build of the same version -- and for
 #      sageattention there IS no PyPI build at all).
-# The cu128 --index and --index-strategy in (b) are BOTH load-bearing: without
-# them uv resolves CPU-only torch/torchaudio wheels (known uv bug for the
-# platform-marker-less torchaudio source).
+# The --index ($IndexUrl) and --index-strategy in (b) are BOTH load-bearing: for
+# the cu128 stacks, without them uv resolves CPU-only torch/torchaudio wheels
+# (known uv bug for the platform-marker-less torchaudio source).
 #
 # $DirectPinArgs / $DirectPinsLabel exist for the LTX 2.5 stack, whose stage (a)
-# needs the cu128 index and --no-sources (see $ltx25UvArgs). Their DEFAULTS
-# reproduce the 2.3 call byte for byte, so the 2.3 path is unchanged by their
-# existence.
+# needs the cu128 index and --no-sources (see $ltx25UvArgs). Their defaults are
+# the 2.3 values (the 2.3 call passes neither).
 #
 # $DirectPins is OPTIONAL (default @()): the .venv-utils stack has no git pins and
 # no direct-URL wheels at all, so stage (a) -- and with it the freeze filter that
-# only exists to undo stage (a) -- is skipped entirely for it. $IndexUrl replaces
-# what used to be a hardcoded cu128 URL on stage (b); .venv-utils needs the CPU
-# index instead. Both defaults reproduce the previous behaviour byte for byte,
-# message text included (the index LABEL is the URL's last segment, which is
-# "cu128" for the default and "cpu" for the utility venv).
+# only exists to undo stage (a) -- is skipped entirely for it. $IndexUrl is the
+# wheel index for stage (b): cu128 by default, the CPU index for .venv-utils. The
+# index LABEL in the progress message is the URL's last segment ("cu128" for the
+# default and "cpu" for the utility venv).
 function Invoke-EngineFreezeApply {
     param(
         [Parameter(Mandatory)] [string]   $EnginePython,
@@ -1339,9 +1340,9 @@ function Invoke-EngineFreezeApply {
 
         # Distribution names taken from the pins themselves, so this filter cannot
         # drift out of sync with the list above. The split covers BOTH pin shapes:
-        # "name @ <url>" (all four 2.3 pins) and a bare "name==version" (the 2.5
-        # torch/torchaudio pins) -- taking only the leading distribution name in
-        # either case. For the 2.3 pins the result is the same string it always was.
+        # "name @ <url>" (the git pins and the sageattention wheel) and a bare
+        # "name==version" (the 2.5 torch/torchaudio pins) -- taking only the leading
+        # distribution name in either case.
         $directNames = $DirectPins | ForEach-Object { [regex]::Escape((($_ -split '[\s=<>~!;\[]')[0])) }
         $gitLineRe = "^(" + ($directNames -join "|") + ")=="
     }
@@ -1367,10 +1368,9 @@ function Invoke-EngineFreezeApply {
 }
 
 # One engine venv, start to finish: the -SkipVenv / freeze two-way, the
-# create-vs-re-sync decision, and the state marker. Called once
-# per engine (2.3, then 2.5) -- this used to be inline, and inlining it a second
-# time for the 2.5 stack would have meant two copies of the marker logic that
-# drift apart on the first fix.
+# create-vs-re-sync decision, and the state marker. Called once per venv (2.3,
+# then 2.5, then .venv-utils when UETrack is selected) -- one shared function,
+# so the marker logic has a single copy that cannot drift apart between stacks.
 #
 # $Label is the venv's directory name relative to $ProjectRoot (the cwd this
 # script pins at startup) and is the human name in every message; $VenvPath is
@@ -1380,8 +1380,8 @@ function Invoke-EngineFreezeApply {
 # $DirectPinArgs carries the per-engine uv flag differences (see $ltx25UvArgs);
 # its default reproduces the 2.3 behaviour exactly.
 #
-# Three more optional knobs, all defaulting to the previous behaviour:
-#   $DirectPins    now optional (the .venv-utils stack has none -- see
+# Further optional knobs:
+#   $DirectPins    optional (the .venv-utils stack has none -- see
 #                  Invoke-EngineFreezeApply).
 #   $IndexUrl      the wheel index stage (b) resolves from (cu128 / cpu).
 #   $IgnoreSkipVenv lifts the -SkipVenv early return for a venv that setup.bat
@@ -1452,8 +1452,8 @@ Ensure-EngineVenv -VenvPath "$ProjectRoot\.venv-engine" -PythonPath $enginePy `
     -StateFile $engineStateFile -FreezeFile $freezeSrc `
     -DirectPins $engineDirectPins -Label ".venv-engine"
 
-# LTX 2.5 -- the sibling stack. Same machinery, different pins and (per the
-# M2 correction) the extra --no-sources / cu128-index flags on BOTH uv stages.
+# LTX 2.5 -- the sibling stack. Same machinery, different pins, and the extra
+# --no-sources / cu128-index flags on stage (a) (see $ltx25UvArgs).
 Ensure-EngineVenv -VenvPath $ltx25Venv -PythonPath $ltx25Py `
     -StateFile $ltx25StateFile -FreezeFile $ltx25FreezeSrc `
     -DirectPins $ltx25DirectPins -Label ".venv-engine-ltx25" `
@@ -1468,7 +1468,7 @@ Ensure-EngineVenv -VenvPath $ltx25Venv -PythonPath $ltx25Py `
 #  (1) It is built only when THIS RUN's -BaseModel selects a descriptor that
 #      needs it. setup.bat never asks for UETrack, so a normal install never
 #      pays for a second torch download; install-UETrack.bat is the only caller
-#      that turns this on (owner's ruling 2026-09-11: opt-in, so the whole
+#      that turns this on (owner's ruling: opt-in, so the whole
 #      feature can be withdrawn by deleting one HuggingFace repo).
 #  (2) It ignores -SkipVenv (-IgnoreSkipVenv). -SkipVenv means "do not disturb
 #      the venvs setup.bat built", and install-UETrack.bat passes it for exactly
@@ -1496,46 +1496,46 @@ if ($foundIds -contains 'UETrack') {
 # sys.path so the module resolves exactly as the trampoline did.
 # .venv-engine ONLY -- no other venv: their huggingface_hub versions break the
 # single "--include + many patterns" form built below.
-# Why, and the measurements: PENDING_TASKS_CLOSED.md §3-148 / VERIFICATION_LOG.md §112.
+# Why, and the measurements: VERIFICATION_LOG.md section 112.
 
 # ----------------------------------------------------------------------------
 # Attention backend: nothing EXTRA to install here, on any GPU.
 #
 # PyTorch SDPA is the always-available backend on every architecture, and this
-# step (still) does not install anything for it -- not on any arch, not
-# optionally. (Historically this step could pick up a prebuilt xformers wheel
-# out of wheels/; that path was removed because such a wheel is compiled for
-# ONE compute capability and installs cleanly on machines it cannot run on. If
-# you want to experiment with xformers, build and install it by hand -- see
-# scripts/build_xformers.ps1 -- and note the engine code does not import it.)
+# step does not install anything for it -- not on any arch, not optionally.
+# (This step does not pick up a prebuilt xformers wheel either: such a wheel is
+# compiled for ONE compute capability and installs cleanly on machines it cannot
+# run on. If you want to experiment with xformers, build and install it by hand
+# -- see scripts/build_xformers.ps1 -- and note that installing it is not inert:
+# the project's own engine code does not import it, but the 2.3 engine's
+# ltx-core in .venv-engine uses xformers for its default attention whenever
+# xformers is importable, so the 2.3 engine's sdpa jobs would then run on
+# xformers.)
 #
 # sageattention, the optional second backend, is NOT installed here either --
 # it is a pinned wheel in the $engineDirectPins / $ltx25DirectPins arrays above
 # (step 5), alongside triton-windows (its runtime JIT dependency, in both engine
 # freezes) which bundles its own TinyCC/ptxas and needs no Visual Studio on the
-# end-user machine. It was removed as dead weight in the 2026-07-28 cleanup
-# (PENDING_TASKS.md 3-25) and came back 2026-07-31 once the Acceleration
-# feature's SageAttentionService gave it a real consumer. SDPA remains the
-# default at generation time; sage is opt-in per job.
+# end-user machine. Its consumer is the Acceleration feature's
+# SageAttentionService (engine/transformer/sage_attention_service.py). SDPA is
+# the default at generation time; sage is opt-in per job.
 #
-# sageattention is NOT a 2.3-only package any more either: as of 2026-08-25 the
-# SAME wheel URL is pinned for BOTH venvs (Acceleration third wave, which opens
-# `attention_backend: "sage"` on the 2.5 engine). One wheel serves both because
+# The SAME sageattention wheel URL is pinned for BOTH engine venvs (the 2.5
+# engine accepts `attention_backend: "sage"` too). One wheel serves both because
 # it is cp310-abi3 -- a single build for every CPython >= 3.10, so .venv-engine's
 # 3.12 and .venv-engine-ltx25's 3.12 take the identical file -- and because both
-# stacks pin the identical torch 2.9.1+cu128 the wheel's ABI tag names. The two
+# stacks pin the same torch build the wheel's local version names. The two
 # venvs still never import each other's packages; they simply install the same
 # artefact from the same URL.
 #
-# triton-windows is NOT a 2.3-only package any more: as of 2026-08-24 it is
-# pinned in BOTH engine freezes (engine/venv-engine.freeze.txt and
-# engine25/venv-engine-ltx25.freeze.txt, same 3.5.1.post24). In the 2.5 venv it
-# arrived for a reason unrelated to sage -- it is the runtime JIT for the fused
+# triton-windows is pinned in BOTH engine freezes (engine/venv-engine.freeze.txt
+# and engine25/venv-engine-ltx25.freeze.txt, same version). In the 2.5 venv it
+# also serves a purpose unrelated to sage -- it is the runtime JIT for the fused
 # GGUF K-quant dequantisation kernels (engine/gguf/dequant_triton_kernels.py),
 # which the 2.5 transformer and text-encoder paths share with the 2.3 engine --
-# and it now serves sage's JIT there as well, exactly as it does in .venv-engine.
-# No installer CODE change was needed for that: the freeze is applied verbatim
-# and the state-hash marker re-applies it on the next run.
+# and it serves sage's JIT there as well, exactly as it does in .venv-engine.
+# Adding a package to a freeze needs no installer CODE change: the freeze is
+# applied verbatim and the state-hash marker re-applies it on the next run.
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------
@@ -1556,7 +1556,7 @@ if ($CloneUpstreamReference) {
 }
 
 # ----------------------------------------------------------------------------
-# 6) Model downloads (~31GB) via the engine venv's huggingface_hub (run as a
+# 6) Model downloads via the engine venv's huggingface_hub (run as a
 #    module, never the hf.exe trampoline), driven by the manifests. Everything
 #    comes from self-hosted repos that are PUBLIC and NON-GATED, so no
 #    HuggingFace account, login or token is involved anywhere.
@@ -1564,18 +1564,18 @@ if ($CloneUpstreamReference) {
 #    Per download entry:
 #      guard  -- every `files[]` row must exist and be at least its own `min`.
 #                All rows pass => SKIP. This is a PER-FILE test; see the guard
-#                doctrine in .NOTES for why directory totals are gone.
+#                doctrine in .NOTES for why it is not a directory total.
 #      stage  -- fetch into models\.dl\<manifest-id>-<n>\ (same volume as
 #                models/, inside .gitignore's models/** block). Downloading
-#                straight into the final tree is not possible any more: the
-#                repos still ship the OLD directory names, so their contents
-#                have to be remapped, and a staging area is what makes that a
-#                pure rename instead of a merge into live user data.
+#                straight into the final tree is not possible: the repos'
+#                directory names differ from the models/ layout, so their
+#                contents have to be remapped, and a staging area is what makes
+#                that a pure rename instead of a merge into live user data.
 #      remap  -- move each staged file to map[]'s destination.
 #      verify -- re-test the same `files[]` rows; throw if anything is short.
 #      clean  -- only after all of the above succeeds is the staging directory
 #                removed. On failure it is LEFT IN PLACE so the next run resumes
-#                the HuggingFace download instead of re-fetching 17GB.
+#                the HuggingFace download instead of re-fetching it from scratch.
 #
 #   FORCE ASYMMETRY -- READ BEFORE CHANGING EITHER SIDE.
 #   The remap below moves with -Force; the step 2 migration moves WITHOUT it.
@@ -1588,22 +1588,23 @@ if ($CloneUpstreamReference) {
 #       does not exist in any repo). Overwriting there destroys unrecoverable
 #       data, so a collision must stop the install instead.
 #
-#   NOTE (argparse nargs gotcha, carried over from the old script): `hf download
+#   NOTE (argparse nargs gotcha): `hf download
 #   --include` is nargs="*". Repeating the flag (--include A --include B) makes
 #   argparse keep only the LAST group and silently drop earlier files. So we build
 #   ONE "--include" followed by all patterns.
 #
-#   WARNING (huggingface_hub version dependency, verified 2026-07-26): the single-
-#   flag form above is correct ONLY for huggingface_hub 0.36.2, the engine venv's
-#   current pin. On 1.20.1 it flips: one --include with multiple patterns warns
+#   WARNING (huggingface_hub version dependency): the single-flag form above
+#   was verified correct on huggingface_hub 0.36.2 (engine/venv-engine.freeze.txt
+#   holds the engine venv's pin). On 1.20.1 it flips: one --include with
+#   multiple patterns warns
 #   "Ignoring --include since filenames have been explicitly set." and silently
 #   drops files (spatial upscaler went missing in testing). If that venv's
 #   huggingface_hub is ever upgraded, switch this to repeated --include flags.
-#   The per-file guard below does catch the resulting short download, and since
-#   2026-09-04 the error it throws carries a "Maintainer note" that points back
-#   at this comment -- the two are one hint in two halves.
+#   The per-file guard below does catch the resulting short download, and the
+#   error it throws carries a "Maintainer note" that points back at this
+#   comment -- the two are one hint in two halves.
 #
-#   NOTE (glob semantics, verified live against both repos): --include matches with
+#   NOTE (glob semantics, verified live): --include matches with
 #   Python fnmatch against the repo-relative path, and `*` DOES cross '/'. So
 #   "ltx-2.3-components/*" reaches the nested vae/ and text_encoders/ files two
 #   levels down. Just as importantly, the repo-root card files (LICENSE /
@@ -1638,8 +1639,8 @@ if ($SkipModels) {
     Write-Step "Model downloads"
     Write-Skip "-SkipModels given"
 } else {
-    # No total size in this heading: what a run fetches now depends on
-    # -BaseModel, and the manifests' `min` values are deliberately 4-10% under
+    # No total size in this heading: what a run fetches depends on
+    # -BaseModel, and the manifests' `min` values are deliberately below
     # the official sizes, so any number computed here would be wrong. The
     # per-batch estimate is printed by scripts/setup.ps1 / scripts/install_model.ps1.
     Write-Step "Model downloads (public repos, no token needed)"
@@ -1674,8 +1675,8 @@ if ($SkipModels) {
             # fetch, so one reset TLS handshake kills the process. Resumable
             # .incomplete files under $stage\.cache mean a retry never re-downloads
             # finished bytes. The count is fixed on purpose: an installer that never
-            # gives up is worse than one that stops with a message (owner decision,
-            # 2026-08-30). Exit codes carry no information (the CLI maps every
+            # gives up is worse than one that stops with a message (owner
+            # decision). Exit codes carry no information (the CLI maps every
             # uncaught exception to 1), so every non-zero exit is retried alike.
             $retryWaits  = @(5, 10, 20, 40)          # seconds before attempt 2..5
             $maxAttempts = $retryWaits.Count + 1
@@ -1743,20 +1744,21 @@ if ($SkipModels) {
 #
 #    The model rows come STRAIGHT from the manifests' `files[]` -- the same
 #    array that guards the downloads in step 6. There is no second list to keep
-#    in sync any more: a file is guarded, verified and published in
+#    in sync: a file is guarded, verified and published in
 #    INSTALLED_PATHS.txt from one declaration.
 #
 #    Three rows are the script's own, because they are not models:
 #      engine_python / app_python  -- the two interpreters
 #      engine worker.py            -- the engine entry point
-#    They match what the engine adapter's LTXRunner._real_available() and
-#    _RealBackend._require_path() demand (referenced by FUNCTION NAME only --
-#    line numbers here went stale once already); every OTHER row comes from the
-#    base-model descriptor, which is where those file paths now live (§3-97
-#    P3b) -- _real_available() reads the same categories/assets this table is
-#    generated from. The 46GB monolith is not gated:
-#    it is no longer a config option at all (checkpoint_path was removed from
-#    config.yaml 2026-07-28, PENDING_TASKS.md 3-26).
+#    engine_python and engine worker.py match what the engine adapter's
+#    LTXRunner._real_available() and _RealBackend._require_path() demand
+#    (referenced by FUNCTION NAME only, not by line number); app_python is the
+#    interpreter the app itself runs in. Apart from these and the two
+#    object-tracking rows below, every row comes from the manifests -- for the
+#    LTX weights that is the base-model descriptor, which is where those file
+#    paths live; _real_available() reads the same descriptor's
+#    categories/assets. The monolith checkpoint is not gated: it is not a
+#    config option at all (config.py has no checkpoint_path key).
 #
 #    The IC-LoRA / preprocessor rows are a deliberate widening: _real_available()
 #    does not look at them (their absence downgrades no backend to mock), but
@@ -1764,8 +1766,8 @@ if ($SkipModels) {
 #    gradio_ui/adapters.py falls back to the same names even when nothing is
 #    registered. A missing file there is invisible until a user picks the adapter
 #    and gets a 404 -- which is exactly the failure this table converts into an
-#    up-front, named MISSING. Because the guards are now per-file, a MISSING here
-#    is ALWAYS cleared by re-running: the guard for that one file cannot be
+#    up-front, named MISSING. Because the guards are per-file, a MISSING here
+#    is cleared by re-running: the guard for that one file cannot be
 #    satisfied by anything else, so the download runs.
 # ----------------------------------------------------------------------------
 Write-Step "Verification (required load-bearing artifacts)"
@@ -1832,16 +1834,16 @@ foreach ($row in $rows) {
 # Regenerate models/INSTALLED_PATHS.txt from the SAME manifest rows: every
 # `files[]` entry that carries a `key` is a path the SERVER resolves by name --
 # a base-model descriptor `categories[].default_file` or `assets` entry (the
-# `key` is that asset key / category, not a config.yaml key any more: the fixed
-# default paths left config.yaml in §3-97 P3b).
+# server finds it through the descriptor, not through this `key`; `key` is only
+# the label written into this file and is not a config.yaml key).
 # ----------------------------------------------------------------------------
 #
-# This list and the table above no longer answer the same question, so do not
+# This list and the table above answer different questions, so do not
 # expect them to match row for row: the table is narrowed by -BaseModel and
 # judges each file against its `min`, while this list covers every manifest and
 # only asks whether the file exists.
 #
-# This one list is NOT narrowed by -BaseModel (owner's ruling, 2026-08-30): the
+# This one list is NOT narrowed by -BaseModel (owner's ruling): the
 # file describes what is on this disk, so it must not shrink just because the
 # batch that happened to run last was only responsible for one base model.
 # Instead each row is kept only when the file is really there, using the same
@@ -1869,9 +1871,9 @@ $sb = New-Object System.Text.StringBuilder
 [void] $sb.AppendLine("# Regenerated by scripts/install_ltx.ps1 at $stamp")
 [void] $sb.AppendLine("# layout: base-model-first (models/<BaseModel>/<Category>)")
 [void] $sb.AppendLine("# Generated from scripts/manifests/*.json -- the same rows that guard the")
-[void] $sb.AppendLine("# downloads and drive the verification table. GGUF + component-file recipe")
-[void] $sb.AppendLine("# (matches the base-model descriptor: scripts/manifests/*.json -> categories/assets).")
-[void] $sb.AppendLine("# The 46GB monolith and the 22.7GB QAT Gemma")
+[void] $sb.AppendLine("# downloads and drive the verification table (one row per asset of each")
+[void] $sb.AppendLine("# base-model descriptor: scripts/manifests/*.json -> categories/assets).")
+[void] $sb.AppendLine("# The bf16 monolith and the QAT Gemma")
 [void] $sb.AppendLine("# are intentionally absent (deleted; never re-downloaded).")
 foreach ($pr in $pathRows) {
     [void] $sb.AppendLine(("  {0}: {1}""{2}""" -f $pr.Key, (' ' * ($keyWidth - $pr.Key.Length)), $pr.Value))
@@ -1900,10 +1902,9 @@ Write-Ok "All required artifacts present."
 if ($RunSmoke) {
     Write-Step "Smoke test (mock, GPU-free)"
     if (-not (Test-Path $appPy)) { throw "App venv python not found for smoke test: $appPy" }
-    # No extra `uv sync --extra dev` needed here (2026-07-28): step 4 now always
-    # syncs with --extra dev, so pytest / iniconfig / pluggy are already present
-    # by the time this branch runs. The special-case re-sync that used to live
-    # here was made redundant by that step-4 change and has been removed.
+    # No extra `uv sync --extra dev` needed here: step 4 syncs the app venv with
+    # --extra dev, so pytest / iniconfig / pluggy are already present by the
+    # time this branch runs.
     & $appPy -m pytest -q tests/test_smoke.py
     if ($LASTEXITCODE -ne 0) { throw "Smoke test failed." }
     Write-Ok "Smoke test passed."

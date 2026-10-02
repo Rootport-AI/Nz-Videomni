@@ -1,7 +1,8 @@
 """Generate + Clip-Chain flows, factored out for unit testing (mock transport).
-Both yield ``(progress_text, job_id, video_path)`` tuples and share the SAME 1s
-poll loop (``_poll_job_until_done``), so /generate and /generate/chain get
-byte-identical progress/complete/fail handling.
+Both yield ``(progress_text, job_id, video_path)`` tuples and share the SAME
+poll loop (``_poll_job_until_done``, at the Settings poll interval), so
+/generate and /generate/chain get byte-identical progress/complete/fail
+handling.
 """
 
 from __future__ import annotations
@@ -23,8 +24,10 @@ from .formatting import format_api_error
 from .i18n import L, _DEFAULT_LANG
 from .validation import check_chain_total, check_v2v_context
 
-# Clip-chain generation modes (the mode Radio's stable values). V2V and A2V are
-# mutually exclusive by construction — ONE radio, one value (mirrors the API's
+# Clip-chain generation modes (stable values of the chain handler's ``mode``;
+# the mode Radio offers only MODE_NONE / MODE_V2V, since A2V lives on the
+# Generate tab, which builds its own payload). V2V and A2V are mutually
+# exclusive by construction — ONE mode value (mirrors the API's
 # source_video x source_audio 422 without ever being able to trigger it).
 MODE_NONE = "none"
 MODE_V2V = "v2v"
@@ -32,21 +35,19 @@ MODE_A2V = "a2v"
 
 # A2V source-audio precheck fallbacks used when /config is unavailable (mirrors
 # config.py UploadConfig.allowed_audio_extensions / max_audio_size_mb). Kept
-# here — not in adapters.py (owned by another work stream) — since only the
-# chain flow consumes them.
+# here since only the chain flow consumes them.
 _FALLBACK_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
 _FALLBACK_MAX_AUDIO_MB = 50
 
-# Acceleration: block-swap prefetch checkbox default. S4 (2026-08-01) flips
-# this to True — the real-device gate (bit-exact output + VRAM headroom, G1-G7)
-# passed and the owner confirmed "gate green -> default on". Every default=
-# below (this module, ui.py, batch.py) reads from here so there is exactly one
-# place to change. Mirrors the server's own GenerateRequest/GenerateChainRequest
-# default flip (api/models.py) — the two must move together, since this
-# constant also anchors the "send explicitly only when it differs from the
-# default" payload discipline below (S4 also flipped that discipline: it used
-# to be "send only when True", which would have silently gone inert now that
-# True is the default — an explicit False must now be the one that's sent).
+# Acceleration: block-swap prefetch checkbox default. Default-on was approved
+# by the owner after the real-device gate (bit-exact output + VRAM headroom)
+# passed (VERIFICATION_LOG §44.7). Every default= below (this module, ui.py,
+# batch.py) reads from here so there is exactly one place to change. Mirrors
+# the server's own GenerateRequest/GenerateChainRequest default
+# (api/models.py) — the two must move together, since this constant also
+# anchors the "send explicitly only when it differs from the default"
+# payload discipline below (with a True default, an explicit False is the
+# value that has to be sent).
 BLOCK_SWAP_PREFETCH_DEFAULT = True
 
 # Acceleration: keep-resident (cross-job CPU-skeleton cache) checkbox default.
@@ -63,29 +64,30 @@ KEEP_RESIDENT_DEFAULT = False
 # Mirrors api/models.py's KEEP_RESIDENT_EMBEDDINGS_DEFAULT for the same reason
 # as the constants above (this module talks to the backend purely over HTTP, so
 # it does not import from api/) -- **change the canonical constant in
-# api/models.py, this mirror and the MCP import site in one move**. Same
-# direction as KEEP_RESIDENT_DEFAULT: the server default is off, so the "send
-# only when it differs from the default" discipline below emits the key only
-# when the box is CHECKED. The control itself is independent of every other
-# acceleration switch (no prefetch / keep_resident precondition), and LTX 2.3
-# has no such component at all -- it names the field in its
-# ``unsupported_features``, which is what hides the checkbox and writes it back
-# to this default (gradio_ui/feature_scope.py).
+# api/models.py and this mirror in one move** (the MCP tools import the
+# canonical constant itself). Same direction as KEEP_RESIDENT_DEFAULT: the
+# server default is off, so the "send only when it differs from the default"
+# discipline below emits the key only when the box is CHECKED. The control
+# itself is independent of every other acceleration switch (no prefetch /
+# keep_resident precondition), and LTX 2.3 has no such component at all -- it
+# names the field in its ``unsupported_features``, which is what hides the
+# checkbox and writes it back to this default (gradio_ui/feature_scope.py).
 KEEP_RESIDENT_EMBEDDINGS_DEFAULT = False
 
 # Acceleration: fused GGUF dequantization kernel (Triton, Q4_K/Q5_K/Q6_K)
 # checkbox default. Mirrors api/models.py's FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
-# for the same reason as the two constants above (this module talks to the
+# for the same reason as the constants above (this module talks to the
 # backend purely over HTTP, so it does not import from api/) — **change the
-# canonical constant in api/models.py, this mirror and the MCP import site in
-# one move**. Same direction as block_swap_prefetch (server default ON since
-# 2026-08-04, after real-device gates G1-G8 passed and the owner approved the
-# flip), so the "send only when it differs from the default" discipline below
-# emits the key only when the box is UNCHECKED.
+# canonical constant in api/models.py and this mirror in one move** (the MCP
+# tools import the canonical constant itself). Same direction as
+# block_swap_prefetch (server default ON; the owner approved the flip after
+# the real-device gates passed, VERIFICATION_LOG §51), so the "send only when
+# it differs from the default" discipline below emits the key only when the
+# box is UNCHECKED.
 FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True
 
 # Output: write the generation conditions (the same JSON as metadata.json) into
-# the finished output.mp4 / joined.mp4 as the ``comment`` tag (§3-164). Mirrors
+# the finished output.mp4 / joined.mp4 as the ``comment`` tag. Mirrors
 # the server default of GenerateRequest/GenerateChainRequest.embed_mp4_metadata
 # (api/models.py) for the same reason as the constants above (this module talks
 # to the backend purely over HTTP, so it does not import from api/). Same
@@ -105,7 +107,7 @@ def _wav_duration_seconds(path) -> float | None:
     seconds needed BEFORE any API call. A ``None`` result means "cannot measure
     here" and the caller defers to the server's ffprobe preflight — so mp3/m4a/…
     (which the stdlib cannot decode) and malformed wavs still reach the server
-    unchanged, matching the pre-precheck behaviour."""
+    unchanged and are judged there."""
     if not path or Path(str(path)).suffix.lower() != ".wav":
         return None
     try:
@@ -140,12 +142,12 @@ def _snap_frame_rate(value: float) -> float:
     substituting a default here would swallow that 422 and fire a GPU job on an
     argument the caller never meant.
 
-    **Why integers at all (台帳 §3-71 / §3-72).** A non-integer fps on a
+    **Why integers at all (VERIFICATION_LOG §91).** A non-integer fps on a
     generation request breaks two things downstream: the chain flow's stage-2
     audio tile re-assembly check accumulates rounding error and rejects ordinary
-    clip lists with a 422 (§3-71 — ``[257, 257]`` at 29.97 is the headline case,
+    clip lists with a 422 (``[257, 257]`` at 29.97 is the headline case,
     fine at 24 or 30), and the mp4 writer truncates fps to an integer so a 29.97
-    request drifts further out of audio sync the longer it runs (§3-72). The
+    request drifts further out of audio sync the longer it runs. The
     server-side fix reaches deep into frozen code, so every CLIENT entry point
     snaps instead.
 
@@ -173,9 +175,11 @@ def _snap_frame_rate(value: float) -> float:
     Known limitation on that direct path: the A2V length precheck
     (:func:`make_generate_handler`) and the live chain estimate still read the
     RAW fps, so a caller who passes 29.97 straight in can see a message computed
-    from 29.97 while the request carries 30. The divergence only ever leans safe
-    — the higher rate needs no more audio latents than the message quoted, so it
-    cannot turn a passing precheck into a 422.
+    from 29.97 while the request carries 30. The divergence leans safe when the
+    snap rounds UP (the higher rate needs no more audio latents than the message
+    quoted) but not when it rounds DOWN: 29.4 is sent as 29, which needs more
+    audio latents than the precheck measured, so a passing precheck can still
+    meet the server's 422.
     """
     if not math.isfinite(value) or value < 1.0 or value > 60.0:
         return value
@@ -185,7 +189,7 @@ def _snap_frame_rate(value: float) -> float:
 # MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def suggest_frames_for_audio(dur: float, fps) -> int:
     """Suggest a ``Frames`` value (8n+1) that fits ``dur`` seconds of audio at
-    ``fps`` (auto-adjust the Generate-tab A2V audio attach, feature 1).
+    ``fps`` (auto-adjust the Generate-tab A2V audio attach).
 
     Starts from the largest 8n+1 frame count the duration covers
     (``((floor(dur*fps) - 1) // 8) * 8 + 1``), then verifies it against the
@@ -221,7 +225,7 @@ def suggest_frames_for_audio(dur: float, fps) -> int:
 
 def a2v_audio_change_handler(path, frame_rate, lang: str = _DEFAULT_LANG):
     """``.change`` handler for the Generate-tab A2V audio ``gr.File``
-    (feature 1: wav-only auto Frames adjustment).
+    (wav-only auto Frames adjustment).
 
     A ``.wav`` attach ALWAYS overwrites ``num_frames`` (regardless of its
     current value) with :func:`suggest_frames_for_audio`'s result and surfaces
@@ -237,8 +241,8 @@ def a2v_audio_change_handler(path, frame_rate, lang: str = _DEFAULT_LANG):
     return gr.update(value=nf)
 
 
-# F3: JobResponse.stage -> localized phase-label key. Unknown / absent stages
-# show no label (older backends and the mock milestones never send one).
+# JobResponse.stage -> localized phase-label key. Unknown / absent stages
+# show no label (the mock backend's milestone calls never send one).
 _STAGE_LABEL_KEYS = {
     "encode": "stage_encoding",
     "stage1": "stage_denoise_s1",
@@ -251,12 +255,12 @@ _STAGE_LABEL_KEYS = {
 
 
 def _format_running_progress(job: dict, lang: str) -> str:
-    """Progress line for a running job (F3, display-only).
+    """Progress line for a running job (display-only).
 
     * step/total known -> the classic "Generating… 42% (step 3/8)";
     * unknown -> percent only (never the literal "step None/None");
     * a recognized ``stage`` appends its localized phase label;
-    * chain clip position (``clip``/``clip_count``, additive JobResponse
+    * chain clip position (``clip``/``clip_count``, JobResponse
       fields) appends "clip n/N" so a chain job shows which clip it is on —
       the n -> n+1 change IS the "clip n done, clip n+1 started" signal.
     """
@@ -284,10 +288,9 @@ QUEUED_WARN_SECONDS = 30
 
 
 # --------------------------------------------------------------------------- #
-# Shared 1s poll loop (factored out of the generate flow so /generate and
-# /generate/chain reuse the SAME progress/complete/fail handling). Yields
-# (progress_text, job_id, video_path) tuples; behaviour is byte-identical to the
-# original inline loop in make_generate_handler.
+# Shared poll loop: /generate and /generate/chain reuse the SAME
+# progress/complete/fail handling. Yields (progress_text, job_id, video_path)
+# tuples.
 # --------------------------------------------------------------------------- #
 def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
                          interval: float = 1.0, timeout_s: float = 7200.0):
@@ -326,7 +329,7 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
             except Exception:
                 video = None
             done_text = L("msg_completed", lang).format(job_id=job_id)
-            # Chain jobs report their clip total (additive JobResponse field);
+            # Chain jobs report their clip total (JobResponse.clip_count);
             # say so on completion — "all N clips processed" answers the
             # "did every clip actually get generated?" doubt at a glance.
             clip_count = job.get("clip_count")
@@ -342,8 +345,8 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
 
 
 # --------------------------------------------------------------------------- #
-# Prompt-embedded style/character LoRA tokens: ``<lora:name:weight:audio_weight>``
-# (S2). The video weight is optional (default 1.0) and the ``lora`` keyword is
+# Prompt-embedded style/character LoRA tokens: ``<lora:name:weight:audio_weight>``.
+# The video weight is optional (default 1.0) and the ``lora`` keyword is
 # case-insensitive (``<LORA:...>`` allowed). Nothing is invented client-side —
 # the weight range mirrors the server's ``0 < strength <= 2.0`` rule; out-of-
 # range weights are clamped into [MIN, MAX] (MIN reuses the Generate-tab
@@ -356,7 +359,8 @@ def _poll_job_until_done(api: ApiClient, job_id: str, lang: str = _DEFAULT_LANG,
 # (``audio_strength``, range [0.0, 2.0] — the 0.05 video floor does NOT apply
 # here since 0 is a valid "mute the audio-side delta" value). When the group is
 # absent no ``audio_strength`` key is added to the parsed dict at all, so the
-# HTTP body stays byte-identical to the pre-audio-strength behaviour (G-BC).
+# HTTP body carries no ``audio_strength`` key (G-BC,
+# Docs/LORA_AUDIO_STRENGTH_WORKORDER.md §6).
 # Out-of-range audio weights are clamped the same non-fatal way as the video
 # weight. NOTE: ``<lora:name::0>`` (empty video-strength slot) is NOT
 # supported — the middle ``:`` has nothing to match against the video-weight
@@ -396,8 +400,8 @@ def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
     * ``loras`` — ``[{"name", "strength"}]`` in first-seen order, deduped
       last-wins by resolved name. When the token carries a third (audio)
       numeric group the dict also gets an ``"audio_strength"`` key; when the
-      group is absent no such key is added at all, so the payload stays byte-
-      identical to the pre-audio-strength behaviour (G-BC);
+      group is absent no such key is added at all, so the payload carries no
+      ``audio_strength`` key (G-BC, Docs/LORA_AUDIO_STRENGTH_WORKORDER.md §6);
     * ``error`` — a localized message (unknown token name) meaning "abort the
       send with zero generate/upload calls", else ``None``. Weight-range clamps
       (both video and audio) are non-fatal: they fire a ``gr.Warning`` toast and
@@ -462,11 +466,11 @@ def parse_prompt_loras(prompt, known_names, lang: str = _DEFAULT_LANG):
 
 def _combine_generate_loras(use_adapter, adapter, adapter_strength, prompt_loras):
     """Merge the Generate tab's two LoRA sources into the single ``loras`` payload
-    list: the reference-video CONTROL adapter from the dropdown (S4) first, then
-    the prompt-embedded ``<lora:...>`` style/character adapters (S2) in prompt
+    list: the reference-video CONTROL adapter from the dropdown first, then
+    the prompt-embedded ``<lora:...>`` style/character adapters in prompt
     order, deduped last-wins by name (:func:`_merge_loras`). Returns ``[]`` when
     neither is present, so the caller adds the ``loras`` key ONLY when non-empty
-    and the no-lora path stays byte-identical.
+    and the no-lora body carries no ``loras`` key.
 
     Shared by ``POST /generate`` and the A2V ``POST /generate/chain`` path so both
     build ``loras`` identically. A2V passes the same ``use_adapter``/``adapter``/
@@ -512,75 +516,72 @@ def build_a2v_chain_payload(
     chunked_upsample: bool | None = None,
     embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT,
 ):
-    """Assemble the A2V ``POST /generate/chain`` body (案A): a single ChainClip
+    """Assemble the A2V ``POST /generate/chain`` body: a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
     distilled quality contract, ``overlap_frames=3``/``overlap_strength=0.5``,
     ``source_audio.audio_id`` and the ``stage2_window``. A pure function
     (primitives + ID strings in, dict out) with NO Gradio / gr.* / ApiClient
-    dependency, so the batch runner can build the byte-identical payload off the
-    UI thread.
+    dependency, so the batch runner can build the same payload as the
+    Generate tab off the UI thread.
 
-    ``stage2_window`` is ALWAYS ``"full_length"`` here (§1-19): a2v is a one-clip
-    chain, and 61 latent frames == 481 pixel frames == the per-clip ceiling, so
+    ``stage2_window`` is ALWAYS ``"full_length"`` here (VERIFICATION_LOG §58):
+    a2v is a one-clip chain, and the ``full_length`` window in
+    ``chain_math.STAGE2_WINDOW_PRESETS`` spans the per-clip frame ceiling, so
     that window degenerates to a single stage-2 tile and the refine pass covers
     the whole timeline exactly like plain ``POST /generate``. Unlike every
     optional key below, this one is NOT the API's default ("standard"), so it is
-    unconditional and always present — the a2v body is deliberately no longer
-    byte-identical to the pre-§1-19 one, and the exact-match tests in
+    unconditional and always present — the exact-match tests in
     tests/test_gradio_handlers.py carry it.
 
     Optional keys reproduce the Generate-tab A2V branch exactly: ``conditioning_images``
     only when non-empty, ``loras`` only when the combined list is non-empty, and
-    ``reference_video_id`` (+ the S3 ``conditioning_attention_strength`` /
+    ``reference_video_id`` (+ the ``conditioning_attention_strength`` /
     ``reference_video_strength`` keys, each only below 1.0) only when an adapter is
-    used -- so a token-free, adapter-free request stays byte-identical to before.
+    used -- so a token-free, adapter-free request carries none of these keys.
     NAG (non-CFG Negative) keys are ADDITIVE too: only added when ``nag_enabled``
-    is true, appended after the base keys, so the default (NAG off) payload stays byte-identical
-    to the pre-NAG contract the key-order tests lock in. ``neg_method``/
+    is true, appended after the base keys, so the default (NAG off) payload carries
+    no NAG keys and keeps the key order the key-order tests lock in. ``neg_method``/
     ``vsf_scale`` are appended right after the four nag_* keys
     (still inside the same ``if nag_enabled:`` block, regardless of which
     method is actually selected) so the key-order contract stays simple.
     ``attention_backend`` follows the same discipline one step further out: the
-    key is emitted ONLY when it differs from the ``"sdpa"`` default, and always
-    LAST (after the NAG/VSF block), so every pre-Acceleration payload -- and the
-    exact-match/key-order tests locked on it -- stay byte-identical.
+    key is emitted ONLY when it differs from the ``"sdpa"`` default, right
+    after the NAG/VSF block, so a request that keeps the default carries no
+    such key and the exact-match/key-order tests locked on it hold.
     ``block_swap_prefetch`` follows immediately after ``attention_backend``,
-    same "differs from default" discipline (S4, 2026-08-01: the API's own
-    default flipped to True, so the constant this compares against —
-    ``BLOCK_SWAP_PREFETCH_DEFAULT`` — flipped too): emitted ONLY when it
-    differs from that default, so a request that never touches the checkbox
-    stays byte-identical to the pre-prefetch contract EITHER WAY. Sending only
-    when True would have silently broken on this flip: an explicit "off" would
-    have gone unsent and the server's new True default would have turned it
-    back on behind the caller's back.
+    same "differs from default" discipline against
+    ``BLOCK_SWAP_PREFETCH_DEFAULT`` (which mirrors the API's own default):
+    emitted ONLY when it differs from that default, so a request that never
+    touches the checkbox carries no such key whichever way the default points.
+    Sending only when True would break under a True default: an explicit
+    "off" would go unsent and the server's default would turn it back on
+    behind the caller's back.
     ``keep_resident`` is appended after it under the SAME "differs from the
-    default" rule -- but since its default is off, that rule emits the key only
-    when the box is CHECKED (the mirror image of block_swap_prefetch; do not
-    read the two tests as one pattern).
+    default" rule, against ``KEEP_RESIDENT_DEFAULT`` -- which box state rides
+    follows that constant's own direction (see its definition), not
+    block_swap_prefetch's; do not read the two tests as one pattern.
     ``fused_gguf_dequant_kernel`` is appended after ``keep_resident`` under
-    the same rule, with the same direction as block_swap_prefetch since
-    2026-08-04 (§51 flipped the server default to on -> the key rides only
-    on an UNCHECKED box).
-    ``vae_mode`` (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as
-    §3-50 at the time) is appended after it, same "differs from
-    the default" rule. Its default ("default") never changes (owner ruling
-    0-11: no later default-flip step for this one, unlike the toggles above),
-    so the key rides only when the pruned decoder ("prune_vaed") is chosen.
-    ``keep_resident_embeddings`` is appended after it, LAST, same "differs from
-    the default" rule and the same direction as ``keep_resident`` (default off
-    -> the key rides only on a CHECKED box). It is independent of every other
+    the same rule, against ``FUSED_GGUF_DEQUANT_KERNEL_DEFAULT`` (direction:
+    see its definition; the default flip is recorded in VERIFICATION_LOG §51).
+    ``vae_mode`` (PrunaVAED, VERIFICATION_LOG §52) is appended after it, same
+    "differs from the default" rule. Its default ("default") never changes
+    (owner ruling 0-11, Docs/PRUNAVAED_WORKORDER.md §0: no later default-flip
+    step for this one, unlike the toggles above), so the key rides only when
+    the pruned decoder ("prune_vaed") is chosen.
+    ``keep_resident_embeddings`` is appended after it, same "differs from
+    the default" rule, against ``KEEP_RESIDENT_EMBEDDINGS_DEFAULT``
+    (direction: see its definition). It is independent of every other
     switch here, and on a base model that lists it in ``unsupported_features``
     the UI hides the control and writes it back to the default, so the key
     cannot ride into a 422.
-    ``embed_mp4_metadata`` (§3-164, the Settings-tab Output checkbox) is
-    appended after it, LAST, same "differs from the default" rule with the
-    same direction as block_swap_prefetch (default on -> the key rides only on
-    an UNCHECKED box).
+    ``embed_mp4_metadata`` (the Settings-tab Output checkbox, VERIFICATION_LOG
+    §115) is appended after it, LAST, same "differs from the default" rule,
+    against ``EMBED_MP4_METADATA_DEFAULT`` (direction: see its definition).
 
     ``chunked_upsample`` is the ONE key here that is neither unconditional nor
     "differs from the default": it is TRI-STATE. ``None`` (the default) emits
     nothing at all, so the Generate tab's a2v branch — which does not offer the
-    option — and every caller that predates it stay byte-identical; a real
+    option — and every caller that does not pass it send no such key; a real
     bool emits the key explicitly with that value, mirroring the plugin's
     ``buildA2vChainPayload.ts``, which always sends it because omitting it
     silently reverts to the slow one-pass upsample. The key's POSITION is fixed
@@ -598,9 +599,9 @@ def build_a2v_chain_payload(
         "width": int(width),
         "height": int(height),
         "crop_output": crop_output,
-        # fps is snapped to a whole number here (§3-71 / §3-72 — see
-        # _snap_frame_rate). float() stays on the INSIDE: callers may hand this
-        # helper a string straight off a Gradio field.
+        # fps is snapped to a whole number here (see _snap_frame_rate for why).
+        # float() stays on the INSIDE: callers may hand this helper a string
+        # straight off a Gradio field.
         "frame_rate": _snap_frame_rate(float(frame_rate)),
         "num_inference_steps": 8,
         "guidance_scale": 1.0,
@@ -625,8 +626,9 @@ def build_a2v_chain_payload(
             chain_payload["conditioning_attention_strength"] = float(control_adherence)
         if float(reference_strength) < 1.0:
             chain_payload["reference_video_strength"] = float(reference_strength)
-    # NAG (additive): keys appended only when enabled so the default payload —
-    # and the key-order contract tests locked on it — stay byte-identical.
+    # NAG (additive): keys appended only when enabled so the default payload
+    # carries none of the NAG keys and keeps the key order the key-order
+    # contract tests lock in.
     if nag_enabled:
         chain_payload["nag_enabled"] = True
         chain_payload["nag_scale"] = float(nag_scale)
@@ -640,33 +642,35 @@ def build_a2v_chain_payload(
     if attention_backend != "sdpa":
         chain_payload["attention_backend"] = attention_backend
     # Block-swap prefetch (additive, conditional): sent ONLY when it differs
-    # from BLOCK_SWAP_PREFETCH_DEFAULT (S4: the server's own default is now
-    # True), appended after attention_backend so the default payload keeps its
-    # frozen key order.
+    # from BLOCK_SWAP_PREFETCH_DEFAULT (which mirrors the server's own
+    # default), appended after attention_backend so the default payload keeps
+    # its frozen key order.
     if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
         chain_payload["block_swap_prefetch"] = bool(block_swap_prefetch)
-    # keep-resident (additive, conditional): same rule. Default off -> the key
-    # appears only when the box is checked.
+    # keep-resident (additive, conditional): same rule against
+    # KEEP_RESIDENT_DEFAULT (direction: see its definition).
     if keep_resident != KEEP_RESIDENT_DEFAULT:
         chain_payload["keep_resident"] = bool(keep_resident)
-    # fused GGUF dequantization kernel (additive, conditional): same rule,
-    # appended after keep_resident. Default ON since 2026-08-04 -> the key
-    # rides only on an UNCHECKED box.
+    # fused GGUF dequantization kernel (additive, conditional): same rule
+    # against FUSED_GGUF_DEQUANT_KERNEL_DEFAULT (direction: see its
+    # definition), appended after keep_resident.
     if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
         chain_payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
     # vae_mode (additive, conditional): appended after fused_gguf_dequant_kernel,
-    # same rule. Default "default" never changes (owner ruling 0-11), so the
-    # key rides only when the pruned decoder is selected.
+    # same rule. Default "default" never changes (owner ruling 0-11,
+    # Docs/PRUNAVAED_WORKORDER.md §0), so the key rides only when the pruned
+    # decoder is selected.
     if vae_mode != "default":
         chain_payload["vae_mode"] = vae_mode
-    # keep-resident embeddings (additive, conditional): appended last, same
-    # rule. Default off -> the key appears only when the box is checked, and a
-    # base model that does not support it never reaches here with True (the
-    # control is hidden and reset, see gradio_ui/feature_scope.py).
+    # keep-resident embeddings (additive, conditional): appended after vae_mode,
+    # same rule against KEEP_RESIDENT_EMBEDDINGS_DEFAULT (direction: see its
+    # definition), and a base model that does not support it never reaches
+    # here with a non-default value (the control is hidden and reset, see
+    # gradio_ui/feature_scope.py).
     if keep_resident_embeddings != KEEP_RESIDENT_EMBEDDINGS_DEFAULT:
         chain_payload["keep_resident_embeddings"] = bool(keep_resident_embeddings)
     # mp4 metadata embedding (additive, conditional): appended last, same
-    # rule. Default on -> the key rides only on an UNCHECKED box.
+    # rule against EMBED_MP4_METADATA_DEFAULT (direction: see its definition).
     if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
         chain_payload["embed_mp4_metadata"] = bool(embed_mp4_metadata)
     return chain_payload
@@ -674,7 +678,7 @@ def build_a2v_chain_payload(
 
 # --------------------------------------------------------------------------- #
 # Generate flow, factored out for unit testing (mock transport). Yields
-# (progress_text, job_id, video_path) tuples, matching the previous behaviour.
+# (progress_text, job_id, video_path) tuples.
 # --------------------------------------------------------------------------- #
 def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
     default_lang = lang
@@ -688,46 +692,47 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  src_audio=None,
                  nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
                  neg_method="nag", vsf_scale=1.5,
-                 # Acceleration (ADDITIVE, last): the Settings-tab attention
-                 # selector. ui.py's dispatch() passes it as a KEYWORD, so this
-                 # stays at the very end and no positional call site shifts.
+                 # Acceleration (keyword): the Settings-tab attention
+                 # selector. ui.py's dispatch() passes it as a KEYWORD, so it
+                 # sits after every positional parameter and no positional call
+                 # site shifts.
                  attention_backend="sdpa",
-                 # Acceleration (ADDITIVE, last): the Settings-tab block-swap
+                 # Acceleration (keyword): the Settings-tab block-swap
                  # prefetch checkbox. Same discipline as attention_backend --
                  # keyword-only from ui.py's dispatch(), appended after it.
                  block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
-                 # Acceleration (ADDITIVE, last): the Settings-tab keep-resident
+                 # Acceleration (keyword): the Settings-tab keep-resident
                  # checkbox. Same discipline again -- keyword-only from ui.py's
                  # dispatch(), appended after block_swap_prefetch.
                  keep_resident=KEEP_RESIDENT_DEFAULT,
-                 # Acceleration (ADDITIVE, last): the Settings-tab fused GGUF
+                 # Acceleration (keyword): the Settings-tab fused GGUF
                  # dequantization kernel checkbox. Same discipline again --
                  # keyword-only from ui.py's dispatch(), appended after
                  # keep_resident.
                  fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
-                 # Acceleration (ADDITIVE, last): the Settings-tab VAE radio
-                 # (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed as
-                 # §3-50 at the time). Same discipline again -- keyword-only
-                 # from ui.py's dispatch(), appended after
+                 # Acceleration (keyword): the Settings-tab VAE radio
+                 # (PrunaVAED, VERIFICATION_LOG §52). Same discipline
+                 # again -- keyword-only from ui.py's dispatch(), appended after
                  # fused_gguf_dequant_kernel.
                  vae_mode="default",
-                 # Acceleration (ADDITIVE, last): the Settings-tab
-                 # keep-resident-embeddings checkbox (LTX 2.5). Same discipline
+                 # Acceleration (keyword): the Settings-tab
+                 # keep-resident-embeddings checkbox (hidden on a base model
+                 # that lists it in unsupported_features). Same discipline
                  # again -- keyword-only from ui.py's dispatch(), appended after
                  # vae_mode.
                  keep_resident_embeddings=KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
-                 # Output (ADDITIVE, last): the Settings-tab "write generation
-                 # conditions into the mp4" checkbox (§3-164). Same discipline
-                 # -- keyword-only from ui.py's dispatch(), appended after
-                 # keep_resident_embeddings.
+                 # Output (keyword, last): the Settings-tab "write generation
+                 # conditions into the mp4" checkbox (VERIFICATION_LOG §115).
+                 # Same discipline -- keyword-only from ui.py's dispatch(),
+                 # appended after keep_resident_embeddings.
                  embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT):
         # Runtime language + polling cadence come from Settings-tab gr.State
-        # inputs (S6). They are optional so the pre-S6 call signature (and every
-        # existing test) keeps working with the build-time default language and
-        # the 1s / 60min poll defaults.
-        # ``src_audio`` (A2V, case A) is the LAST positional arg -- a gr.File
-        # value (path str or None). Wiring the audio input component into
-        # ``inputs=[...]`` is owned by another work stream.
+        # inputs. They are optional, so a call that omits them (e.g. a unit
+        # test) falls back to the build-time default language and
+        # _resolve_poll's fallback cadence.
+        # ``src_audio`` (A2V) is the LAST positional arg -- a gr.File
+        # value (path str or None) that ui.py's dispatch() passes from the
+        # Generate tab's A2V audio input.
         lang = ui_lang or default_lang
         interval, timeout_s = _resolve_poll(poll_interval, poll_timeout_min)
         if not prompt or not prompt.strip():
@@ -741,10 +746,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             yield _precheck_reject(L("nag_msg_negative_required", lang)), "", None
             return
 
-        # 0) width/height (÷64) + num_frames (8n+1, [9, 481]) precheck, moved
-        # over from the chain handler's identical rule (:468-470 / :533) so a
-        # violating Generate-tab request never reaches the API either. Zero
-        # API calls on violation -- same _precheck_reject discipline as chain.
+        # 0) width/height (÷64) + num_frames (8n+1, [9, 481]) precheck, the
+        # same rule as make_chain_handler's dimension and per-clip frame
+        # prechecks, so a violating Generate-tab request never reaches the API
+        # either. Zero API calls on violation -- same _precheck_reject
+        # discipline as chain.
         try:
             w_i, h_i = int(width), int(height)
         except (TypeError, ValueError):
@@ -762,18 +768,17 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             yield _precheck_reject(L("msg_chain_bad_frames", lang).format(n=1)), "", None
             return
 
-        # 0b) A2V (案A): a src_audio upload routes this SAME handler to
+        # 0b) A2V: a src_audio upload routes this SAME handler to
         # POST /generate/chain as a single-clip chain carrying a frozen
         # source_audio latent, instead of POST /generate. A2V+LoRA is allowed:
-        # style/character IC-LoRAs (prompt <lora:...> tokens) AND a
-        # reference-video CONTROL adapter (the dropdown above =
-        # canny/pose/upscaler) are both wired into the chain payload below
-        # (``loras`` + ``reference_video_id`` / S3 strength keys) and applied
-        # to the clip. A control adapter's reference_video_id is now accepted on
-        # any chain clip count (1..24), so this always-single-clip handler needs
-        # no clip-count reasoning here anymore -- the only remaining server-side
-        # clip-count restriction is depth-preprocess adapters on >1 clip, moot
-        # for this handler's single ChainClip.
+        # style/character LoRAs (prompt <lora:...> tokens) AND a
+        # reference-video CONTROL adapter (the adapter dropdown) are both wired
+        # into the chain payload below (``loras`` + ``reference_video_id`` /
+        # reference-strength keys) and applied to the clip. The server accepts a
+        # control adapter's reference_video_id on any chain clip count, so this
+        # always-single-clip handler needs no clip-count reasoning here; the
+        # server's clip-count restrictions (e.g. a depth-preprocess adapter on
+        # >1 clip) are moot for this handler's single ChainClip.
         use_audio = bool(src_audio)
         if use_audio:
             # Length precheck (wav only): the server rejects audio that
@@ -804,9 +809,10 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # 1) keyframe slots (I2V multi-keyframe conditioning). ``kf_slots`` is a
         # list of (enabled, image_path, frame_idx, strength) tuples in slot
         # order -- how many the caller sends is the UI's business, not this
-        # handler's; disabled or empty slots are skipped. Pre-validate ALL
-        # enabled slots before any upload starts, so a bad slot never leaves
-        # earlier slots uploaded.
+        # handler's; disabled slots are skipped, and an enabled slot without an
+        # image or a valid frame index is rejected. Pre-validate ALL enabled
+        # slots before any upload starts, so a bad slot never leaves earlier
+        # slots uploaded.
         to_upload: list[tuple[str, int, float]] = []
         for slot_n, (enabled, image_path, frame_idx, strength) in enumerate(kf_slots or [], start=1):
             if not enabled:
@@ -819,7 +825,7 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 return
             to_upload.append((image_path, int(frame_idx), float(strength)))
 
-        # 1b) IC-LoRA reference-video control (S4). Validate the adapter's
+        # 1b) IC-LoRA reference-video control. Validate the adapter's
         # reference video BEFORE any upload happens, so a violation costs zero
         # API calls. Prechecks in order: (a) video present, (b) extension
         # allowed, (c) size within limit, (d) width/height divisible by 128
@@ -851,11 +857,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 yield L("msg_ref_resolution", lang), "", None
                 return
 
-        # 1c) prompt-embedded <lora:name:weight> tokens (S2). Resolved + stripped
+        # 1c) prompt-embedded <lora:name:weight> tokens. Resolved + stripped
         # here — BEFORE any upload — so an unknown token name aborts the send
         # with zero generate/upload calls (matches the precheck discipline). The
         # GET /loras name lookup runs only when a token is actually present, so a
-        # token-free prompt performs no extra call and stays byte-identical.
+        # token-free prompt performs no extra call and is sent unchanged.
         send_prompt = prompt
         prompt_loras: list[dict] = []
         if _LORA_TOKEN_RE.search(prompt or ""):
@@ -893,17 +899,17 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
 
-        # 2) start generation. Quality is locked to distilled in S1 (steps/cfg
+        # 2) start generation. Quality is locked to distilled (steps/cfg
         # fixed); the payload keeps the frozen contract.
         crop_output = None
         if crop_enabled and int(crop_w) > 0 and int(crop_h) > 0:
             crop_output = {"width": int(crop_w), "height": int(crop_h)}
 
-        # --- A2V (案A): upload the audio, then POST /generate/chain with a
+        # --- A2V: upload the audio, then POST /generate/chain with a
         # single ChainClip carrying this same request's num_frames + any
         # collected keyframe conditioning, and source_audio.audio_id. Mirrors
-        # make_chain_handler's A2V branch (:640-646, :699-700) but with only
-        # ONE clip (this handler has no per-clip slots). ---
+        # make_chain_handler's A2V branch (its audio upload and source_audio
+        # key) but with only ONE clip (this handler has no per-clip slots). ---
         if use_audio:
             yield L("a2v_msg_uploading", lang), "", None
             try:
@@ -911,12 +917,12 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             except Exception as exc:
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
-            # A2V+LoRA (ADDITIVE): wire the prompt <lora:...> style/character
-            # adapters AND the reference-video CONTROL adapter (S4 dropdown)
+            # A2V+LoRA: wire the prompt <lora:...> style/character
+            # adapters AND the reference-video CONTROL adapter (adapter dropdown)
             # into the chain payload's ``loras`` -- same builder as the single
             # /generate path. The key is added ONLY when non-empty, so a
-            # token-free, adapter-free A2V request stays byte-identical to
-            # before. Payload assembly (including the S3 optional-below-1.0 send
+            # token-free, adapter-free A2V request carries no ``loras`` key.
+            # Payload assembly (including the optional-below-1.0 send
             # discipline for the reference strengths) lives in the pure
             # build_a2v_chain_payload so the batch runner emits the same body.
             a2v_loras = _combine_generate_loras(
@@ -978,9 +984,9 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             "height": int(height),
             "crop_output": crop_output,
             "num_frames": int(num_frames),
-            # fps is snapped to a whole number here (§3-71 / §3-72 — see
-            # _snap_frame_rate). float() stays on the INSIDE: this handler is
-            # called with string fps in tests and from Gradio fields.
+            # fps is snapped to a whole number here (see _snap_frame_rate and
+            # VERIFICATION_LOG §91). float() stays on the INSIDE: this
+            # handler is called with string fps in tests and from Gradio fields.
             "frame_rate": _snap_frame_rate(float(frame_rate)),
             "num_inference_steps": 8,
             "guidance_scale": 1.0,
@@ -988,29 +994,29 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             "pipeline": "distilled",
             "conditioning_images": conditioning,
         }
-        # loras: combine the adapter-dropdown control LoRA (IC-LoRA, S4) with the
-        # prompt <lora:...> style/character LoRAs (S2). Adapter first, then prompt
+        # loras: combine the adapter-dropdown control LoRA (IC-LoRA) with the
+        # prompt <lora:...> style/character LoRAs. Adapter first, then prompt
         # order; deduped last-wins by name. The "loras" key is added ONLY when the
-        # merged list is non-empty, and reference_video_id (+ the S3 strength
-        # keys) only when an adapter is selected — so the request stays
-        # byte-identical to the pre-S2/S4 payload on the no-adapter/no-token path
-        # (no keys) AND on the adapter-only path (single-entry list, same order).
+        # merged list is non-empty, and reference_video_id (+ the reference
+        # strength keys) only when an adapter is selected — so the
+        # no-adapter/no-token request carries none of these keys, and the
+        # adapter-only request carries a single-entry ``loras`` list.
         merged_loras = _combine_generate_loras(
             use_adapter, adapter, adapter_strength, prompt_loras)
         if merged_loras:
             payload["loras"] = merged_loras
         if use_adapter:
             payload["reference_video_id"] = reference_video_id
-            # S3: control-adherence + reference-strength are optional server-side
+            # control-adherence + reference-strength are optional server-side
             # (default 1.0). Send each key ONLY when the slider is below 1.0 so
-            # the default op stays byte-identical to the pre-S3 request.
+            # a request left at the default carries neither key.
             if float(control_adherence) < 1.0:
                 payload["conditioning_attention_strength"] = float(control_adherence)
             if float(reference_strength) < 1.0:
                 payload["reference_video_strength"] = float(reference_strength)
         # NAG (additive): keys appended only when enabled, mirroring
-        # build_a2v_chain_payload's discipline, so the NAG-off request stays
-        # byte-identical to the pre-NAG payload.
+        # build_a2v_chain_payload's discipline, so a NAG-off request carries
+        # none of the NAG keys.
         if nag_enabled:
             payload["nag_enabled"] = True
             payload["nag_scale"] = float(nag_scale)
@@ -1019,45 +1025,44 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             payload["neg_method"] = neg_method
             payload["vsf_scale"] = float(vsf_scale)
         # Acceleration (additive, conditional): appended AFTER the NAG/VSF block
-        # and only for a non-default backend, so the sdpa request stays
-        # byte-identical to the pre-Acceleration payload.
+        # and only for a non-default backend, so an sdpa request carries no
+        # attention_backend key.
         if attention_backend != "sdpa":
             payload["attention_backend"] = attention_backend
         # Block-swap prefetch (additive, conditional): appended right after
         # attention_backend, only when it differs from BLOCK_SWAP_PREFETCH_DEFAULT
-        # (S4: the API's own default is now True), so a request that never
-        # touches the checkbox stays byte-identical to the default payload
-        # EITHER WAY. Sending only when True would silently re-enable the
-        # feature for a caller who explicitly turned it off, now that the
-        # server's own default has flipped to True.
+        # (the mirror of the API's own default), so a request that never
+        # touches the checkbox carries no block_swap_prefetch key whichever
+        # way that default points. Sending only when checked would silently
+        # drop an explicit uncheck whenever the server's own default is on.
         if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
             payload["block_swap_prefetch"] = bool(block_swap_prefetch)
         # keep-resident (additive, conditional): appended right after
         # block_swap_prefetch, only when it differs from KEEP_RESIDENT_DEFAULT.
-        # That default is OFF, so in practice the key rides only on a checked
-        # box -- the mirror image of the line above, despite the identical shape.
+        # Despite the identical shape, which box state rides follows that
+        # constant's own direction (see its definition), not the line above's.
         if keep_resident != KEEP_RESIDENT_DEFAULT:
             payload["keep_resident"] = bool(keep_resident)
         # fused GGUF dequantization kernel (additive, conditional): appended
-        # after keep_resident, same rule; its default is ON since 2026-08-04,
-        # so the key rides only on an UNCHECKED box (the same direction as
-        # block_swap_prefetch).
+        # after keep_resident, same rule against
+        # FUSED_GGUF_DEQUANT_KERNEL_DEFAULT (direction: see its definition).
         if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
             payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
         # vae_mode (additive, conditional): appended after
         # fused_gguf_dequant_kernel, same rule. Default "default" never
-        # changes (owner ruling 0-11), so the key rides only when the pruned
-        # decoder (PrunaVAED, "prune_vaed") is selected.
+        # changes (owner ruling 0-11, Docs/PRUNAVAED_WORKORDER.md §0), so the
+        # key rides only when the pruned decoder (PrunaVAED, "prune_vaed") is
+        # selected.
         if vae_mode != "default":
             payload["vae_mode"] = vae_mode
-        # keep-resident embeddings (additive, conditional): appended last, same
-        # rule and the same direction as keep_resident (default off -> the key
-        # rides only on a checked box).
+        # keep-resident embeddings (additive, conditional): appended after
+        # vae_mode, same rule against KEEP_RESIDENT_EMBEDDINGS_DEFAULT
+        # (direction: see its definition).
         if keep_resident_embeddings != KEEP_RESIDENT_EMBEDDINGS_DEFAULT:
             payload["keep_resident_embeddings"] = bool(keep_resident_embeddings)
         # mp4 metadata embedding (additive, conditional): appended last, same
-        # rule and the same direction as block_swap_prefetch (default on ->
-        # the key rides only on an unchecked box).
+        # rule against EMBED_MP4_METADATA_DEFAULT (direction: see its
+        # definition).
         if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
             payload["embed_mp4_metadata"] = bool(embed_mp4_metadata)
         try:
@@ -1087,11 +1092,12 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 
 
 def _precheck_reject(message: str) -> str:
-    """Surface a chain-precheck rejection as a Gradio toast (``gr.Warning``) in
-    ADDITION to the ``chain_progress`` textbox line. The textbox alone proved
-    too easy to miss -- a real user read the silent early-return as "the button
-    does nothing" and kept clicking. Returns ``message`` unchanged so call
-    sites stay one-liners: ``yield _precheck_reject(...), "", None``.
+    """Surface a precheck rejection (Generate and Clip Chain flows) as a Gradio
+    toast (``gr.Warning``) in ADDITION to the progress textbox line. The
+    textbox alone proved too easy to miss -- a real user read the silent
+    early-return as "the button does nothing" and kept clicking. Returns
+    ``message`` unchanged so call sites stay one-liners:
+    ``yield _precheck_reject(...), "", None``.
 
     ``gr.Warning`` is gradio's non-raising notification API: inside a queued
     event it renders the yellow toast modal; outside one (unit tests) it
@@ -1103,7 +1109,7 @@ def _precheck_reject(message: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Clip-chain flow (S5), factored out for unit testing (mock transport). Mirrors
+# Clip-chain flow, factored out for unit testing (mock transport). Mirrors
 # make_generate_handler: prechecks (zero API calls on violation) -> optional
 # clip-0 start-image upload -> POST /generate/chain -> shared poll loop. The 24
 # FIXED clip slots are flattened into positional args; only slot 1 carries a
@@ -1143,7 +1149,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        config=None, ui_lang=None, poll_interval=None,
                        poll_timeout_min=None,
                        mode=MODE_NONE, src_video=None, context_frames=73,
-                       # ADDITIVE: bound to ui.py's chain_chunked_upsample input
+                       # Bound to ui.py's chain_chunked_upsample input
                        # (appended after v2v_context); MUST stay before src_audio,
                        # which the inputs list does not pass. Positional-order
                        # contract with ui.py's chain_generate_btn.click inputs=[...]
@@ -1154,52 +1160,55 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        nag_enabled=False, nag_scale=11.0, nag_tau=2.5, nag_alpha=0.25,
                        neg_method="nag", vsf_scale=1.5,
                        src_audio=None,
-                       # Acceleration (ADDITIVE, last): ``src_audio`` keeps its
+                       # Acceleration (keyword): ``src_audio`` keeps its
                        # place as the last POSITIONAL param (the only caller that
                        # fills it is tests/test_gradio_v2v_a2v.py's _chain_args),
                        # so the attention selector goes AFTER it and ui.py's
                        # chain_dispatch forwards it as a KEYWORD.
                        attention_backend="sdpa",
-                       # Acceleration (ADDITIVE, last): the block-swap prefetch
+                       # Acceleration (keyword): the block-swap prefetch
                        # checkbox, same discipline -- appended after
                        # attention_backend, forwarded as a KEYWORD by ui.py's
                        # chain_dispatch.
                        block_swap_prefetch=BLOCK_SWAP_PREFETCH_DEFAULT,
-                       # Acceleration (ADDITIVE, last): the keep-resident
+                       # Acceleration (keyword): the keep-resident
                        # checkbox, appended after block_swap_prefetch and
                        # forwarded as a KEYWORD by ui.py's chain_dispatch.
                        keep_resident=KEEP_RESIDENT_DEFAULT,
-                       # Acceleration (ADDITIVE, last): the fused GGUF
+                       # Acceleration (keyword): the fused GGUF
                        # dequantization kernel checkbox, appended after
                        # keep_resident and forwarded as a KEYWORD by ui.py's
                        # chain_dispatch.
                        fused_gguf_dequant_kernel=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
-                       # Acceleration (ADDITIVE, last): the VAE radio
-                       # (PrunaVAED, Docs/PENDING_TASKS_CLOSED.md §3-66, filed
-                       # as §3-50 at the time), appended after
-                       # fused_gguf_dequant_kernel and forwarded as a KEYWORD
-                       # by ui.py's chain_dispatch.
+                       # Acceleration (keyword): the VAE radio
+                       # (PrunaVAED, VERIFICATION_LOG §52), appended
+                       # after fused_gguf_dequant_kernel and forwarded as a
+                       # KEYWORD by ui.py's chain_dispatch.
                        vae_mode="default",
-                       # Acceleration (ADDITIVE, last): the
-                       # keep-resident-embeddings checkbox (LTX 2.5), appended
+                       # Acceleration (keyword): the
+                       # keep-resident-embeddings checkbox (hidden on a base
+                       # model that lists it in unsupported_features), appended
                        # after vae_mode and forwarded as a KEYWORD by ui.py's
                        # chain_dispatch.
                        keep_resident_embeddings=KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
-                       # Output (ADDITIVE, last): the "write generation
-                       # conditions into the mp4" checkbox (§3-164), appended
-                       # after keep_resident_embeddings and forwarded as a
-                       # KEYWORD by ui.py's chain_dispatch.
+                       # Output (keyword): the "write generation
+                       # conditions into the mp4" checkbox
+                       # (VERIFICATION_LOG §115), appended after
+                       # keep_resident_embeddings and forwarded as a KEYWORD by
+                       # ui.py's chain_dispatch.
                        embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT,
-                       # Stage-2 window (ADDITIVE, last, §3-165): the chain
-                       # tab's window dropdown, forwarded as a KEYWORD by
-                       # ui.py's chain_dispatch. ``None`` / the default
-                       # ("standard") keeps the key off the payload.
+                       # Stage-2 window (keyword, last; VERIFICATION_LOG §116):
+                       # the chain tab's window dropdown, forwarded as a
+                       # KEYWORD by ui.py's chain_dispatch. ``None`` / the
+                       # default ("standard") keeps the key off the payload.
                        stage2_window=None):
-        # Runtime language + poll cadence from Settings (S6); optional so the
-        # pre-S6 signature and existing tests are unchanged.
-        # V2V/A2V (ADDITIVE): ``mode`` + the mode's source input are appended
-        # after the S6 params so every pre-existing positional call keeps its
-        # meaning; the defaults reproduce the pre-V2V payload byte-for-byte.
+        # Runtime language + poll cadence from Settings; optional so callers
+        # that stop at ``config`` keep working (None -> the factory's language
+        # and _resolve_poll's fallbacks).
+        # V2V/A2V: ``mode`` + the mode's source input come after the
+        # Settings params so earlier positional args keep their meaning; at the
+        # defaults (mode=MODE_NONE) the payload carries no source_video /
+        # source_audio key.
         lang = ui_lang or default_lang
         interval, timeout_s = _resolve_poll(poll_interval, poll_timeout_min)
         mode = mode if mode in (MODE_V2V, MODE_A2V) else MODE_NONE
@@ -1245,10 +1254,12 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             # Snap at the PARSE point, not just before the payload: every later
             # check has to see the same number the request will carry. In
             # particular the chain-total precheck below (check_chain_total ->
-            # compute_chain_layout, the very arithmetic behind §3-71's 422)
-            # would otherwise reject an ordinary 29.97 clip list locally, before
-            # the rounding at the payload could have saved it. float() stays on
-            # the INSIDE: fps arrives as a string from the Gradio field.
+            # compute_chain_layout, the arithmetic behind the server's 422 for
+            # non-integer fps, VERIFICATION_LOG §91) would otherwise
+            # reject an ordinary 29.97 clip list locally, before the rounding at
+            # the payload could have saved it. float() stays on the INSIDE so a
+            # missing or non-numeric value lands in the except below (the Gradio
+            # field is ``gr.Number(precision=0)``, which delivers an int or None).
             fps = _snap_frame_rate(float(frame_rate))
         except (TypeError, ValueError):
             yield _precheck_reject(L("msg_fps_range", lang)), "", None
@@ -1289,9 +1300,10 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 
         # Clip-count floor: plain chain needs 2-24, V2V allows 1-24 (the frozen
         # source tail IS the prior segment). A2V is capped at 1 HERE ONLY — the
-        # API's "exactly 1 clip" guard was lifted for long A2V (§1-16), but this
-        # GUI has no per-clip audio timeline to show, so long A2V stays with the
-        # AviUtl2 front end and Gradio keeps offering the single-clip form.
+        # API accepts multi-clip A2V (long A2V, VERIFICATION_LOG §56),
+        # but this GUI has no per-clip audio timeline to show, so long A2V stays
+        # with the AviUtl2 front end and Gradio keeps offering the single-clip
+        # form.
         if mode == MODE_V2V:
             if not (1 <= len(enabled) <= 24):
                 yield _precheck_reject(L("v2v_msg_clip_count", lang)), "", None
@@ -1394,17 +1406,17 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             return
 
         # --- prompt-embedded <lora:...> tokens from the SHARED prompt (chain
-        # LoRA, ADDITIVE). Clip chaining now wires style/character IC-LoRAs into
-        # GenerateChainRequest.loras; the strengths apply UNIFORMLY across the
-        # whole chain (every clip, every stage — no per-clip strengths in v1).
-        # Resolved + stripped here BEFORE any upload, so an unknown token name
-        # aborts with zero upload/generate calls (mirrors the Generate tab's 1c
-        # block). Only the SHARED prompt is scanned — per-clip prompts are left as
-        # authored (out of scope). GET /loras runs ONLY when a token is present,
-        # so a token-free prompt makes no extra call and the payload is
-        # byte-identical. This Chained-tab handler has no reference-video field of
-        # its own (multi-clip chains now accept one via the API, but this UI does
-        # not yet offer the upload), so a reference-video CONTROL token
+        # LoRA). They resolve into GenerateChainRequest.loras, whose
+        # strengths apply UNIFORMLY across the whole chain (every clip, every
+        # stage — no per-clip strengths). Resolved + stripped here BEFORE any
+        # upload, so an unknown token name aborts with zero upload/generate calls
+        # (mirrors the Generate tab's 1c block). Only the SHARED prompt is
+        # scanned — per-clip prompts are left as authored (out of scope).
+        # GET /loras runs ONLY when a token is present, so a token-free prompt
+        # makes no extra call and its payload carries no ``loras`` key. This
+        # Chained-tab handler has no reference-video field of its own (the API
+        # accepts GenerateChainRequest.reference_video_id on chains, but this
+        # tab offers no upload for it), so a reference-video CONTROL token
         # (canny/pose/upscaler/depth) is left to the server's 422 (rendered via
         # format_api_error): LORA_REQUIRES_REFERENCE, or LORA_DEPTH_CHAIN_UNSUPPORTED
         # for a depth token on a >1-clip chain. ---
@@ -1489,13 +1501,13 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             "chunked_upsample": bool(chunked_upsample),
             "clips": clips_payload,
         }
-        # ADDITIVE chain LoRA: the SHARED prompt's <lora:...> style/character
+        # Chain LoRA: the SHARED prompt's <lora:...> style/character
         # adapters, applied uniformly across the chain. Key added ONLY when
-        # non-empty, so a token-free chain stays byte-identical to before.
+        # non-empty, so a token-free chain payload carries no ``loras`` key.
         if chain_loras:
             payload["loras"] = chain_loras
-        # ADDITIVE source keys: only present in their mode, so a mode="none"
-        # request stays byte-identical to the pre-V2V payload (frozen-API
+        # Source keys: only present in their mode, so a mode="none"
+        # request carries neither source_video nor source_audio (frozen-API
         # discipline mirrored client-side).
         if mode == MODE_V2V:
             payload["source_video"] = {
@@ -1507,7 +1519,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 
         # NAG (additive): keys appended only when enabled, mirroring
         # build_a2v_chain_payload's discipline, so the NAG-off chain payload
-        # stays byte-identical to the pre-NAG contract.
+        # carries none of the NAG/VSF keys.
         if nag_enabled:
             payload["nag_enabled"] = True
             payload["nag_scale"] = float(nag_scale)
@@ -1524,39 +1536,39 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # Block-swap prefetch (additive, conditional): appended right after
         # attention_backend, only when it differs from BLOCK_SWAP_PREFETCH_DEFAULT,
         # mirroring the single-generate path and build_a2v_chain_payload (see
-        # there for why "only when True" is unsafe now that the server's own
-        # default is True).
+        # there for why "only when True" is unsafe when the server's own
+        # default is on).
         if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
             payload["block_swap_prefetch"] = bool(block_swap_prefetch)
-        # keep-resident (additive, conditional): same rule (the default is off,
-        # so the key rides only on a checked box).
+        # keep-resident (additive, conditional): same rule, against
+        # KEEP_RESIDENT_DEFAULT.
         if keep_resident != KEEP_RESIDENT_DEFAULT:
             payload["keep_resident"] = bool(keep_resident)
         # fused GGUF dequantization kernel (additive, conditional): appended
-        # after keep_resident, same rule but the OPPOSITE direction from
-        # keep_resident since 2026-08-04 (default on -> emitted only when
-        # unchecked).
+        # after keep_resident, same rule, against
+        # FUSED_GGUF_DEQUANT_KERNEL_DEFAULT.
         if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
             payload["fused_gguf_dequant_kernel"] = bool(fused_gguf_dequant_kernel)
         # vae_mode (additive, conditional): appended after
         # fused_gguf_dequant_kernel, same rule. Default "default" never
-        # changes (owner ruling 0-11), so the key rides only when the pruned
-        # decoder (PrunaVAED, "prune_vaed") is selected.
+        # changes (owner ruling 0-11, Docs/PRUNAVAED_WORKORDER.md §0), so the
+        # key rides only when the pruned decoder (PrunaVAED, "prune_vaed") is
+        # selected.
         if vae_mode != "default":
             payload["vae_mode"] = vae_mode
-        # keep-resident embeddings (additive, conditional): appended last, same
-        # rule and the same direction as keep_resident (default off -> the key
-        # rides only on a checked box).
+        # keep-resident embeddings (additive, conditional): appended after
+        # vae_mode, same rule, against KEEP_RESIDENT_EMBEDDINGS_DEFAULT.
         if keep_resident_embeddings != KEEP_RESIDENT_EMBEDDINGS_DEFAULT:
             payload["keep_resident_embeddings"] = bool(keep_resident_embeddings)
-        # mp4 metadata embedding (additive, conditional): appended last, same
-        # rule and the same direction as block_swap_prefetch (default on ->
-        # the key rides only on an unchecked box).
+        # mp4 metadata embedding (additive, conditional): appended after
+        # keep_resident_embeddings, same rule, against
+        # EMBED_MP4_METADATA_DEFAULT.
         if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
             payload["embed_mp4_metadata"] = bool(embed_mp4_metadata)
-        # Stage-2 window (additive, conditional, §3-165): appended last and
-        # omitted at the default, like the WebUI (chainUtils.ts), so a chain
-        # that never touches the dropdown stays byte-identical to before.
+        # Stage-2 window (additive, conditional; VERIFICATION_LOG §116):
+        # appended last and omitted at the default, like the WebUI
+        # (chainUtils.ts), so a chain that never touches the dropdown carries
+        # no stage2_window key.
         import chain_math   # function-local, like the other helpers here
         if stage2_window and stage2_window != chain_math.STAGE2_WINDOW_DEFAULT:
             payload["stage2_window"] = stage2_window
@@ -1593,9 +1605,9 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 # generation generator. Yields (message, joined_video_path) pairs.
 #
 # Per the approved UI decision the checkbox is a two-way switch — "create the
-# smoothed joined version" (default ON) vs "don't" — so the GUI only ever calls
-# the server's default smoothed join (audio_smoothing=true); the API's
-# hard-concat variant is never sent from here.
+# smoothed joined version" vs "don't" — so the GUI only ever calls the
+# server's default smoothed join (``audio_smoothing`` left at its JoinRequest
+# default); the API's hard-concat variant is never sent from here.
 # --------------------------------------------------------------------------- #
 def make_join_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
     default_lang = lang
@@ -1610,9 +1622,9 @@ def make_join_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             yield L("v2v_msg_join_disabled", lang), None
             return
 
-        # F5: the crossfade-length Dropdown (150/300/500 ms) rides along as
-        # JoinRequest.handle_crossfade_ms; None / junk falls back to the server
-        # default (300 ms) by simply omitting the field.
+        # The crossfade-length Dropdown (``v2v_crossfade`` in ui.py) rides along
+        # as JoinRequest.handle_crossfade_ms; None / junk falls back to the
+        # server default (that field's default) by simply omitting the field.
         payload: dict = {}
         try:
             if crossfade_ms is not None:
@@ -1647,7 +1659,7 @@ def make_join_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
 
 
 # --------------------------------------------------------------------------- #
-# Settings-tab helpers (S6).
+# Settings-tab helpers.
 # --------------------------------------------------------------------------- #
 def _resolve_poll(poll_interval, poll_timeout_min):
     """Resolve the (interval_s, timeout_s) pair from the Settings gr.Number
@@ -1673,16 +1685,15 @@ _FINISHED_STATES = ("completed", "failed", "cancelled")
 
 
 # --------------------------------------------------------------------------- #
-# Settings tab: /config fetch + automatic retry (bug fix). A page load used to
-# perform exactly ONE /config fetch and silently swallow any failure into
-# ``{}`` -- if that single fetch raced server startup or hit a transient
-# error, the Settings-tab spill-free table (and preset/adapter choices) stayed
-# empty FOREVER with no error and no retry, indistinguishable from "still
-# loading". These two module-level helpers (mirroring ``delete_finished_jobs``
-# above: take the ApiClient explicitly, no Gradio runtime needed) are shared by
-# ui.py's page-load handler, the manual Refresh button, and a one-shot
-# gr.Timer armed after a failed page load, so all three share IDENTICAL
-# failure semantics.
+# Settings tab: /config fetch + automatic retry. A failed fetch comes back as
+# a warning instead of being swallowed into ``{}``: a single fetch that raced
+# server startup or hit a transient error would otherwise leave the
+# Settings-tab spill-free table (and preset/adapter choices) empty with no
+# error and no retry, indistinguishable from "still loading". These two
+# module-level helpers (mirroring ``delete_finished_jobs`` below: take the
+# ApiClient explicitly, no Gradio runtime needed) are shared by ui.py's
+# page-load handler, the manual Refresh button, and the gr.Timer armed after
+# a failed page load, so all three share IDENTICAL failure semantics.
 # --------------------------------------------------------------------------- #
 
 # Automatic retry attempts (via the Settings-tab gr.Timer) before giving up and
@@ -1751,9 +1762,9 @@ def delete_finished_jobs(api: ApiClient, lang: str = _DEFAULT_LANG) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Model management (Settings tab "Models" section, S3). Standalone handlers —
-# the shared generate/chain flows and _poll_job_until_done above are untouched
-# (model load is a synchronous POST, not a polled job).
+# Model management (Settings tab "Models" section). Standalone handlers,
+# separate from the shared generate/chain flows and _poll_job_until_done
+# above (model load is a synchronous POST, not a polled job).
 # --------------------------------------------------------------------------- #
 
 def fetch_models_safe(api: ApiClient, lang: str = _DEFAULT_LANG) -> tuple[dict | None, str | None]:
@@ -1807,7 +1818,7 @@ def load_selected_models(api: ApiClient, transformer: str | None, text_encoder: 
 
 
 # --------------------------------------------------------------------------- #
-# MP4 Info tab (§3-164): read the generation conditions back out of an mp4's
+# MP4 Info tab: read the generation conditions back out of an mp4's
 # ``comment`` tag via POST /utils/mp4-info. The gr.File component hands over a
 # server-local path (Gradio's upload cache), which is what the loopback-only
 # endpoint expects.

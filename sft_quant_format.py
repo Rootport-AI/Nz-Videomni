@@ -1,4 +1,4 @@
-"""Quantized safetensors transformer: header reader + acceptance check (§3-167, §3-168).
+"""Quantized safetensors transformer: header reader + acceptance check.
 
 SINGLE SOURCE OF TRUTH for "which quantized (fp8 / int8) safetensors
 transformer does this product accept, and how is each layer stored", shared by:
@@ -7,15 +7,15 @@ transformer does this product accept, and how is each layer stored", shared by:
   * engine/sft_quant/ and engine25/ (engine side; the same refusal fails the
     load loudly, and :data:`SCHEME_TABLE` drives the auxiliary tensors).
 
-ZERO heavy deps (no torch / numpy / safetensors) so it imports in BOTH the app
-venv (.venv) and the engine venv (.venv-engine) — the ``chain_math.py``
-precedent. It reads only the JSON header and the few-dozen-byte
+ZERO heavy deps (no torch / numpy / safetensors) so it imports in the app venv
+(.venv) and in both engine venvs (.venv-engine, .venv-engine-ltx25), as
+``chain_math.py`` does. It reads only the JSON header and the few-dozen-byte
 ``comfy_quant`` tensors; the multi-GB weight body is never read and the file is
 never memory-mapped (Windows commit-charge constraint).
 
 Criterion (owner): a file a typical ComfyUI workflow runs must run here when
 dropped in. The canonical statement of the rules is
-Docs/VERIFICATION_LOG.md §121.3; the code below implements it and does not
+VERIFICATION_LOG §121.3; the code below implements it and does not
 restate it.
 """
 
@@ -346,8 +346,9 @@ def _read_range(fh, header: Header, key: str) -> bytes:
 def parse_metadata(header: Header) -> dict:
     """``__metadata__`` with each value JSON-parsed when it is valid JSON, else the raw string.
 
-    Same shape as ltx_core 1.2's ``SafetensorsModelStateDictLoader.metadata``
-    (``ltx_core/loader/sft_loader.py``), without opening the file again.
+    Same shape as ``SafetensorsModelStateDictLoader.metadata`` of the ltx_core
+    pinned for the LTX 2.5 engine (``ltx_core/loader/sft_loader.py``), without
+    opening the file again.
     """
     parsed: dict = {}
     for key, value in header.metadata.items():
@@ -451,7 +452,7 @@ def inspect(path, *, expected_blocks: int = 48) -> Layout:
 def layer_schemes(path, header: Header, prefix: str) -> dict[str, str]:
     """Prefixed Linear name (".weight" removed) -> scheme, for every quantized layer.
 
-    Top-down (§121.3 ④):
+    Top-down (VERIFICATION_LOG §121.3 ④):
       A  global dtype / placement checks, key by key;
       B  keys grouped into layer (all but the last segment) and leaf (the last);
       C  markers resolved per layer (``__metadata__._quantization_metadata.layers``
@@ -589,7 +590,7 @@ def _resolve_markers(path, header: Header, groups: dict[str, dict[str, str]]) ->
     Mirrors ComfyUI (``utils.convert_old_quants`` writes each metadata entry
     over ``<layer>.comfy_quant``; ``ops`` flattens ``params``). Unknown keys and
     ``full_precision_matrix_mult`` are ignored. An unreadable
-    ``_quantization_metadata`` is ignored as a whole (as before).
+    ``_quantization_metadata`` is ignored as a whole.
     """
     resolved: dict[str, tuple] = {}
     for layer, conf in _metadata_layers(header.metadata.get("_quantization_metadata")).items():

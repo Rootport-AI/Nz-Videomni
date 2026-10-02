@@ -17,8 +17,11 @@ The selection rule is deliberately mechanical: take
 keys it declares. Nothing is named by hand here, so this script cannot drift away
 from the vendored model -- if tracking/vendor/uetrack ever grows or loses a
 tensor, the output follows on the next run. Keys the network wants but the
-checkpoint does not have are reported, not invented (see tracking/VENDOR_NOTICE.md
-for why `interface_text_proj.*` is expected to be among them).
+checkpoint does not have are reported, not invented; against the official
+checkpoint none are expected (Docs/VERIFICATION_LOG.md §104.3). The CLIP seam
+`interface_text_proj.*` is the other way round: the vendored network builds it
+only when a text encoder exists, and this port never builds one, so those keys
+stay in the archive and are dropped with the rest (see tracking/VENDOR_NOTICE.md).
 
 Run this on the `.venv-utils` interpreter: it imports the vendored tracker, which
 needs torch. The output file is NOT committed -- it is uploaded to the project's
@@ -93,7 +96,7 @@ def main() -> int:
     if missing:
         print("")
         print(f"missing: {len(missing)} name(s) the network declares but the archive "
-              f"does not carry (expected: the CLIP text seam)")
+              f"does not carry (expected: none)")
         for name in missing:
             print(f"         ? {name}")
 

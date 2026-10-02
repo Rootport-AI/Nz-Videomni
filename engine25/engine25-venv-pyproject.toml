@@ -9,14 +9,15 @@ requires-python = ">=3.12"
 # This file is the LTX 2.5 sibling of engine/engine-venv-pyproject.toml. The two
 # stacks CANNOT share one interpreter: official LTX-2 v1.2.0 requires
 # transformers 5.x (Gemma 4), while the 2.3 engine is pinned to transformers
-# 4.57.6 -- one venv cannot hold both. So .venv-engine (2.3) and
-# .venv-engine-ltx25 (2.5) are built side by side and never touch each other.
+# 4.x (see engine/engine-venv-pyproject.toml) -- one venv cannot hold both. So
+# .venv-engine (2.3) and .venv-engine-ltx25 (2.5) are built side by side and
+# never touch each other.
 #
-# HOW THIS RESOLVES -- READ BEFORE EDITING (the "M2 correction")
+# HOW THIS RESOLVES -- READ BEFORE EDITING
 #
 # The 2.3 file expresses its pinned torch via `[[tool.uv.index]] cu128` +
 # `[tool.uv.sources] torch/torchaudio = { index = "pytorch-cu128" }`. That
-# pattern was TRIED here first and does NOT work for this dependency set: the
+# pattern does NOT work for this dependency set: the
 # official LTX-2 git packages carry their own uv index configuration (cu132),
 # and the two collide during resolution. The verified recipe is instead:
 #
@@ -35,23 +36,21 @@ requires-python = ">=3.12"
 # then pulls a matching torch and silently defeats the 2.9.1 pin.
 #
 # The result of resolving this file is frozen in
-# engine25/venv-engine-ltx25.freeze.txt, and THAT freeze is what
-# scripts/install_ltx.ps1 (Ensure-EngineVenv) applies for real users -- the
-# freeze and nothing else.
+# engine25/venv-engine-ltx25.freeze.txt, and THAT freeze, together with the
+# direct pins in $ltx25DirectPins, is what scripts/install_ltx.ps1
+# (Ensure-EngineVenv) applies for real users -- this file is not read.
 #
-# NOTHING READS THIS FILE AUTOMATICALLY: the -ResolveLatest flag that used to
-# consume it was deleted on 2026-09-02 because it had never worked
-# (Docs/PENDING_TASKS_CLOSED.md 3-104). The file is kept as the dependency SPEC
+# NOTHING READS THIS FILE AUTOMATICALLY. The file is kept as the dependency SPEC
 # for the next torch update, to be applied BY HAND: copy it into an empty
-# scratch directory, renamed `pyproject.toml` (uv reads only that exact name --
-# which is why the old flag always failed), then
+# scratch directory, renamed `pyproject.toml` (uv reads only that exact name),
+# then
 #   uv pip install --python <repo>\.venv-engine-ltx25\Scripts\python.exe
 #       --no-sources --index https://download.pytorch.org/whl/cu128
 #       --index-strategy unsafe-best-match <that scratch directory>
 # validate the result, and regenerate the freeze (its header documents how).
 #
-# sageattention IS installed in this venv (2026-08-25, Acceleration third wave:
-# `attention_backend: "sage"` is a per-job option on the 2.5 engine now) but is
+# sageattention IS installed in this venv (`attention_backend: "sage"` is a
+# per-job option on the 2.5 engine) but is
 # DELIBERATELY NOT LISTED in `dependencies` below -- exactly the same discipline
 # engine/engine-venv-pyproject.toml keeps for the 2.3 stack. The only supported
 # source is the direct wheel URL pinned in scripts/install_ltx.ps1's
@@ -66,15 +65,15 @@ requires-python = ">=3.12"
 #
 # DELIBERATELY ABSENT (do not add without a plan change):
 #   diffusers      -- 2.3-only dependency; the 2.5 pipeline does not use it.
-#   natten         -- only the diffusion-decoder VAE wants it; v1 uses Conv VAE.
-# triton-windows was on that list until 2026-08-24 ("nothing imports it here").
-# It is a real dependency now: the 2.5 engine fuses its GGUF K-quant
+#   natten         -- only the diffusion-decoder VAE wants it; the shipped
+#                     video VAE is the Conv VAE (scripts/manifests/20-ltx25.json).
+# triton-windows is NOT on that list: the 2.5 engine fuses its GGUF K-quant
 # dequantisation on Triton too (engine/gguf/dequant_triton.py is shared with the
 # 2.3 engine and sits on the 2.5 transformer AND text-encoder paths), so the
 # wheel has an importer here exactly as it does in .venv-engine.
 # openimageio is NOT listed either, but for the opposite reason: it is a hard
 # transitive requirement of `ltx_pipelines.distilled` and a real Windows wheel
-# exists (3.1.16.0, cp312, win_amd64), so it arrives on its own.
+# exists (cp312, win_amd64; version in the freeze), so it arrives on its own.
 # ---------------------------------------------------------------------------
 dependencies = [
     "torch==2.9.1+cu128",
@@ -86,15 +85,16 @@ dependencies = [
     # Gemma 4 support landed in transformers 5.8. The upper bound is the
     # validated ceiling (5.14.1 is what this stack resolved and was frozen at).
     "transformers>=5.8,<5.15",
-    # GGUF reader for the Q4 transformer + Q4/Q6 text encoder.
+    # GGUF reader for the GGUF transformer and text-encoder files.
     "gguf>=0.10.0",
-    # The 4 non-quantized weights (VAEs + spatial upscaler) stay safetensors.
+    # The non-quantized weights (VAEs + spatial upscaler) stay safetensors.
     "safetensors>=0.7.0",
     # engine/preprocess: cv2 does every canny/dwpose/depth frame operation, and
     # torchvision is imported in exactly one place (the VDA depth wrapper's
-    # Compose). Added 2026-08-24 so the 2.5 engine builds IC-LoRA control videos
-    # with the same code the 2.3 engine runs; cv2 4.13.0.92 is ABI-compatible
-    # with this stack's numpy 2.5.2 (verified). torchvision carries the exact
+    # Compose). They are here so the 2.5 engine builds IC-LoRA control videos
+    # with the same code the 2.3 engine runs; the frozen cv2 is ABI-compatible
+    # with this stack's frozen numpy (verified; versions in
+    # engine25/venv-engine-ltx25.freeze.txt). torchvision carries the exact
     # `+cu128` local version for the same reason torch/torchaudio do above --
     # an unpinned torchvision drags a matching newer torch in behind it.
     "opencv-python-headless>=4.8.0",
@@ -102,8 +102,8 @@ dependencies = [
     # Runtime JIT for the fused GGUF dequantisation kernels
     # (engine/gguf/dequant_triton_kernels.py). Version left unbound here, the
     # same convention this file uses for every non-torch dependency: the exact
-    # pin (triton-windows==3.5.1.post24, identical to the 2.3 venv's) lives in
-    # engine25/venv-engine-ltx25.freeze.txt, which is the DEFAULT install path.
+    # pin (the same version as the 2.3 venv's) lives in
+    # engine25/venv-engine-ltx25.freeze.txt, which is what the installer applies.
     # The wheel bundles its own TinyCC/ptxas, so no Visual Studio is needed.
     "triton-windows",
 ]

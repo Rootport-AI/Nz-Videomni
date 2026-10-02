@@ -1,6 +1,6 @@
-"""i18n label table. English is the default; Japanese entries are ported from the
-previous UI + the approved mockup. Labels are plain text (Gradio labels do not
-render HTML), so hints that were <span> in the mockup are folded into the text.
+"""i18n label table. English is the default. Labels are plain text (Gradio
+labels do not render HTML), so hints are folded into the label text rather
+than written as markup.
 """
 
 from __future__ import annotations
@@ -32,11 +32,11 @@ LABELS: dict[str, dict[str, str]] = {
         "tab_jobs": "Jobs",
         "tab_mp4info": "MP4 Info",
         "tab_settings": "Settings",
-        # --- MP4 Info tab (§3-164) ---
+        # --- MP4 Info tab ---
         "mp4info_lbl_file": "mp4 file",
         "mp4info_lbl_text": "Metadata (Generation conditions)",
         "mp4info_not_found": "No generation conditions were found.",
-        # --- Settings: Output (§3-164) ---
+        # --- Settings: Output ---
         "output_section_title": "Metadata output",
         "output_lbl_embed_mp4_metadata": ("Write generation conditions into the "
                                           "generated mp4 as metadata"),
@@ -48,7 +48,7 @@ LABELS: dict[str, dict[str, str]] = {
         # --- header ---
         "app_subtitle": "Verification UI — thin client over the frozen REST API (/api/v1/*).",
         "msg_coming": "Coming in a later slice.",
-        # --- generate: left column ---
+        # --- shared prompt / negative prompt (above the tabs) ---
         "lbl_prompt": "Prompt (single generation & clip-chain shared base)",
         "ph_prompt": "A bustling downtown at dusk; crowds weave through the alleys as neon signs flicker on — like a scene from a movie trailer",
         "lbl_negative": "Negative prompt",
@@ -101,10 +101,6 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_vae": "VAE",
         "accel_info_vae": ("PrunaVAED is a pruned decoder that speeds up video "
                            "reconstruction. Output quality may be slightly reduced."),
-        # accel_info_unimplemented was removed on 2026-08-05 (PRUNAVAED_
-        # WORKORDER.md §6.1, STEP 7): the VAE radio was the last control using
-        # it, and it now carries accel_info_vae above. Acceleration has no mock
-        # controls left, so the "not implemented yet" line has no owner.
         "accel_lbl_prefetch": "Block-swap prefetch",
         "accel_info_prefetch": ("Hides the CPU<->GPU weight-transfer time behind the "
                                 "computation (block swap only). The output is "
@@ -112,9 +108,8 @@ LABELS: dict[str, dict[str, str]] = {
                                 "changes. Roughly 10-13% faster; no effect when block "
                                 "swap is disabled."),
         "accel_lbl_keep_resident": "Keep the model skeleton resident (cross-job cache)",
-        # 文面はオーナー指定（2026-08-06、実機ゲート合格後）。実測の
-        # 「約70秒→約10秒」とビット一致の但し書きは読み手には雑音なので落とし、
-        # メモリ常駐量を推奨要件のすぐ横に置いた。WebUI 側の
+        # 文面はオーナー指定。実測の短縮幅とビット一致の但し書きは読み手には
+        # 雑音なので落とし、メモリ常駐量を推奨要件のすぐ横に置いた。WebUI 側の
         # `accelKeepResidentNote` と同内容に揃えてある。
         "accel_info_keep_resident": ("64GB or more of memory recommended (it uses about "
                                      "20GB of main memory while resident; about 8GB on "
@@ -140,7 +135,7 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
-        "warn_hq_unsupported": "High-quality mode is not yet supported by the backend.",
+        "warn_hq_unsupported": "High-quality mode is not available on this backend.",
         "lbl_preset": "Preset",
         "hint_preset": "Fetched automatically from the server /config",
         "lbl_width": "Width (multiple of 64)",
@@ -156,7 +151,7 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_seed": "Seed (-1 = random)",
         "warn_spill_limit": ("Exceeds the comfortable limit for {res} ({limit} frames): "
                               "generation still works but is much slower."),
-        # --- generate: keyframe accordion (S3) ---
+        # --- generate: keyframe accordion ---
         "lbl_kf_accordion": "Keyframe images (I2V conditioning, up to 10)",
         "lbl_kf_use": "Use",
         "lbl_kf_image": "Keyframe image",
@@ -167,7 +162,7 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_kf_missing_image": "Slot {n}: enabled but no image selected.",
         "msg_kf_negative_frame": "Slot {n}: frame position must be 0 or greater.",
         "msg_uploading_keyframe": "Uploading keyframe {i}/{n}…",
-        # --- generate: reference-video control (IC-LoRA) accordion (S4) ---
+        # --- generate: reference-video control (IC-LoRA) accordion ---
         "lbl_iclora_accordion": "Reference-video control (IC-LoRA)",
         "lbl_adapter": "Control adapter",
         "adapter_none": "None",
@@ -198,7 +193,7 @@ LABELS: dict[str, dict[str, str]] = {
                                "downscaling."),
         # --- generate: right column ---
         "btn_generate": "Generate",
-        # Feature 3: shown on generate_btn / chain_generate_btn while a
+        # Shown on generate_btn / chain_generate_btn while a
         # generation is in flight (button disabled for the duration).
         "btn_generating": "Generating...",
         "lbl_progress": "Progress",
@@ -213,7 +208,7 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_generate_failed": "generate failed: {err}",
         "msg_job_started": "Job started ({mode}): {job_id}",
         "msg_generating": "Generating… {pct:.0%} (step {step}/{total})",
-        # F3: step-less variant (never print "step None/None") + phase labels
+        # Step-less variant (never print "step None/None") + phase labels
         # appended when the backend reports one.
         "msg_generating_pct": "Generating… {pct:.0%}",
         "stage_encoding": "Encoding",
@@ -234,16 +229,16 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_queued": "Queued — waiting for the worker… ({secs}s)",
         "msg_queued_stuck": ("Still queued after {secs}s. If it stays stuck, cancel it "
                              "from the Jobs tab and try again."),
-        # --- generate: reference-video flow messages (S4) ---
+        # --- generate: reference-video flow messages ---
         "msg_ref_video_required": "Please select a reference video for the control adapter.",
         "msg_ref_bad_extension": "Reference video type not allowed. Allowed: {exts}",
         "msg_ref_too_large": "Reference video exceeds the {limit} MB limit.",
         "msg_ref_resolution": ("Reference-video jobs require width and height divisible by 128 "
                                "(e.g. 1280×768). Adjust the size and retry."),
         "msg_uploading_ref": "Uploading reference video…",
-        # --- shared API error-envelope hints (S4), one line each, actionable ---
+        # --- shared API error-envelope hints, one line each, actionable ---
         "apierr_JOB_BUSY": "Another job is already running. Wait for it to finish, then retry.",
-        # MP4 Info tab (§3-164, POST /utils/mp4-info)
+        # MP4 Info tab (POST /utils/mp4-info)
         "apierr_MEDIA_NOT_FOUND": "The file was not found on the server.",
         "apierr_MEDIA_UNREADABLE": "This video file could not be read.",
         "apierr_LOCAL_ONLY": "This operation is available only from the same PC as the server.",
@@ -265,11 +260,11 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_GENERATION_FAILED": "Generation failed on the server. Check the server logs.",
         "apierr_UNAUTHORIZED": "Authentication failed. Check the API key.",
         "apierr_VALIDATION_ERROR": "The request was rejected by validation. See the details below.",
-        # --- clip chain tab (S5) ---
+        # --- clip chain tab ---
         "lbl_chain_preset": "Preset",
-        "info_chain_preset": ("Automatically fills in the resolution, frame rate, and the "
+        "info_chain_preset": ("Automatically fills in the resolution and the "
                               "recommended (comfortable-limit) frame count for each clip."),
-        # Stage-2 window dropdown (§3-165). The option template's numbers are
+        # Stage-2 window dropdown. The option template's numbers are
         # computed by gradio_ui/comfort.py (same wording as the WebUI's
         # stage2Window.optionTemplate); {engine} is /models display_name.
         "lbl_stage2_window": "Stage-2 (upscale pass) clip length",
@@ -293,14 +288,14 @@ LABELS: dict[str, dict[str, str]] = {
         "clip13": "Clip 13", "clip14": "Clip 14", "clip15": "Clip 15", "clip16": "Clip 16",
         "clip17": "Clip 17", "clip18": "Clip 18", "clip19": "Clip 19", "clip20": "Clip 20",
         "clip21": "Clip 21", "clip22": "Clip 22", "clip23": "Clip 23", "clip24": "Clip 24",
-        # Live chain-duration readout under the "Clip list" heading (S: 24-slot
-        # expansion). Not label-registered (dynamic Markdown, like batch_maxdur);
+        # Live chain-duration readout under the "Clip list" heading. Not
+        # label-registered (dynamic Markdown, like batch_maxdur_md);
         # re-formatted on its own lang_dd.change listener.
         "chain_est": "**Estimated total:** ≈ {sec}s ({frames}f)",
         "chain_est_over": "**Estimated total:** ≈ {sec}s ({frames}f) — exceeds max {maxf}f",
         "chain_est_none": "—",
         "btn_concat": "Generate chain",
-        # --- clip chain: flow / precheck messages (S5) ---
+        # --- clip chain: flow / precheck messages ---
         "msg_bad_dimension": "Width and height must be multiples of 64.",
         "msg_size_limit": "Width/height exceed the server limit ({maxw}×{maxh}).",
         "msg_crop_range": "Crop size must be at least 32 and not exceed the generation size.",
@@ -315,17 +310,19 @@ LABELS: dict[str, dict[str, str]] = {
                                     "length ({max} frames)."),
         "msg_chain_geometry": "The chain geometry is invalid: {err}",
         "msg_chain_started": "Chain job started ({n} clips): {job_id}",
-        # --- clip chain: generation mode (none / V2V / A2V) ---
+        # --- clip chain: generation mode (the radio offers none / V2V;
+        # a2v_mode_a2v is not among its choices) ---
         "v2v_mode_label": "Generation mode",
         "v2v_mode_none": "None (normal clip chain)",
         "v2v_mode_v2v": "V2V continuation — generate a continuation of an uploaded video",
         "a2v_mode_a2v": "A2V audio-driven — match the video (lip movement) to uploaded audio",
-        "v2v_cap_mode": ("V2V and A2V cannot be combined — pick one mode. "
+        "v2v_cap_mode": ("A2V (audio-to-video) for Clip Chain is available in the AviUtl2 control "
+                         "panel; this screen offers V2V only. "
                          "\"None\" is the ordinary 2-24 clip chain."),
         # --- clip chain: V2V panel ---
         "v2v_lbl_video": "Source video (mp4/mov/webm/mkv, max 200 MB)",
         "v2v_lbl_context": "Context frames (source tail to continue from, 8n+1)",
-        # F4: usage guide (same rank as a2v_guide).
+        # Usage guide shown in the V2V panel.
         "v2v_guide": ("**Getting good results with V2V**\n\n"
                       "This feature reads the tail end of the video you upload — the stretch set "
                       "by the context frame count — and generates what comes next, both picture "
@@ -346,7 +343,7 @@ LABELS: dict[str, dict[str, str]] = {
                           "(total frames - context frames) / 24 seconds "
                           "(e.g. 225 total frames with 73 context frames is about 6.3s)."),
         "v2v_chk_join": "Also create a version joined to the source video (crossfade the audio seam)",
-        # F5: crossfade length selector for the joined version.
+        # Crossfade length selector for the joined version.
         "v2v_lbl_crossfade": "Audio crossfade length at the join (ms)",
         "v2v_cap_join": ("In addition to the video of the newly generated portion alone, this also "
                          "exports a combined version joined to your original clip, with the audio "
@@ -371,7 +368,9 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_msg_joining": "Creating the joined version (server-side)…",
         "v2v_msg_join_done": "Joined version created ({mode}): {job_id}",
         "v2v_msg_join_failed": "Failed to create the joined version: {err}",
-        # --- clip chain: A2V panel ---
+        # --- A2V audio: a2v_lbl_audio labels the audio field of the Generate
+        # tab's Audio-to-Video accordion. The Clip Chain tab has no A2V panel;
+        # a2v_guide / a2v_cap_panel are not referenced by the UI ---
         "a2v_lbl_audio": "Source audio (wav/mp3/m4a/aac/flac/ogg, max 50 MB)",
         "a2v_guide": ("**Getting good results with A2V**\n\n"
                       "This feature generates video with mouth movements matched to the audio you "
@@ -392,7 +391,8 @@ LABELS: dict[str, dict[str, str]] = {
                           "must be at least as long as the video — shorter audio is rejected. Your "
                           "uploaded audio is kept as-is in the output. To drive several chained "
                           "clips with one audio track, use the AviUtl2 plug-in window."),
-        # --- clip chain: A2V flow messages ---
+        # --- A2V flow messages (the Generate-tab A2V flow and the chain
+        # handler's A2V branch) ---
         "a2v_msg_audio_required": "Please select a source audio file for A2V.",
         "a2v_msg_bad_extension": "Audio type not allowed. Allowed: {exts}",
         "a2v_msg_too_large": "Audio exceeds the {limit} MB limit.",
@@ -407,7 +407,7 @@ LABELS: dict[str, dict[str, str]] = {
         "a2v_msg_too_short": ("The audio is too short. This setting ({frames} frames @ {fps} fps "
                               "= {video:.2f}s) needs at least {need:.2f}s of audio, but the "
                               "attached file is {have:.2f}s. Use longer audio or reduce the frames."),
-        # Feature 1: fired when attaching a .wav to the Generate-tab A2V audio
+        # Fired when attaching a .wav to the Generate-tab A2V audio
         # field auto-adjusts Frames to fit its measured duration.
         "a2v_msg_frames_adjusted": "Frames adjusted to {frames} to fit the {dur:.2f}s audio.",
         # --- generate: audio-to-video accordion (single generation) ---
@@ -438,7 +438,7 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_theme": "Theme",
         "opt_dark": "Dark",
         "opt_light": "Light",
-        # --- jobs tab (S6) ---
+        # --- jobs tab ---
         "btn_jobs_refresh": "Refresh list",
         "col_job_id": "Job ID",
         "col_status": "Status",
@@ -456,7 +456,7 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_job_cancel_requested": "Cancel requested: {job_id}",
         "msg_job_deleted": "Deleted: {job_id}",
         "msg_job_action_failed": "Operation failed: {err}",
-        # --- settings tab (S6) ---
+        # --- settings tab ---
         "h_conn": "Connection",
         "lbl_base_url": "base_url",
         "lbl_apikey": "API key",
@@ -486,8 +486,8 @@ LABELS: dict[str, dict[str, str]] = {
         # category dropdowns — LTX 2.3 / LTX 2.5 etc.
         "model_base_label": "Base model",
         # "checkpoint", not the internal component name, and no engine name on
-        # the text encoder (owner ruling 2026-08-20 — same wording as the
-        # AviUtl2 WebUI's `webui/src/i18n/strings.ts`).
+        # the text encoder (owner ruling — same wording as the AviUtl2 WebUI's
+        # `webui/src/i18n/strings.ts`).
         "model_cat_transformer": "Video model (checkpoint)",
         "model_cat_text_encoder": "Text encoder",
         "model_cat_video_vae": "Video VAE",
@@ -510,12 +510,13 @@ LABELS: dict[str, dict[str, str]] = {
                                       "or pick another model."),
         "apierr_MODEL_INCOMPATIBLE": ("The selected file is not a valid model for that "
                                       "slot. Pick another model."),
-        # --- style / character LoRA tab (S2) ---
+        # --- style / character LoRA tab ---
         "tab_style_lora": "Style LoRA",
         "style_gallery_label": "Style / character LoRAs",
         "style_reload_btn": "Reload LoRA list",
-        "style_note": ("Click a LoRA below to append a <lora:name:1.0> token to the Generate "
-                       "tab's prompt. Adjust the weight by editing the number in the prompt "
+        "style_note": ("Click a LoRA below to append a <lora:name:1.0:1.0> token to the prompt "
+                       "box above the tabs. Adjust the weight by editing the first number in the "
+                       "prompt "
                        "(0–2.0; 1.0 = the strength the LoRA was trained for). Control LoRAs "
                        "(canny / pose / upscaler) are not shown here — use them as before from "
                        "the reference-video adapter field on the Generate tab."),
@@ -524,7 +525,7 @@ LABELS: dict[str, dict[str, str]] = {
                               "{controls} control)."),
         "style_reload_failed": "Failed to reload LoRAs: {err}",
         "style_list_failed": "Failed to load the LoRA list: {err}",
-        # --- prompt-embedded <lora:...> messages (S2) ---
+        # --- prompt-embedded <lora:...> messages ---
         "lora_msg_unknown": ("Unknown LoRA name(s) in the prompt: {names}. Remove or fix the "
                              "<lora:...> token(s) and retry."),
         "lora_warn_weight_clamp": ("LoRA <{name}> weight {given} is out of range (0–2.0); "
@@ -622,11 +623,11 @@ LABELS: dict[str, dict[str, str]] = {
         "tab_jobs": "ジョブ",
         "tab_mp4info": "mp4 情報",
         "tab_settings": "設定",
-        # --- mp4 情報タブ（§3-164） ---
+        # --- mp4 情報タブ ---
         "mp4info_lbl_file": "mp4 ファイル",
         "mp4info_lbl_text": "メタデータ（生成条件）",
         "mp4info_not_found": "生成条件のメタデータが見つかりませんでした",
-        # --- 設定: 出力（§3-164） ---
+        # --- 設定: 出力 ---
         "output_section_title": "メタデータ出力",
         "output_lbl_embed_mp4_metadata": "生成したmp4に生成条件をメタデータとして書き込む",
         "output_info_embed_mp4_metadata": ("metadata.json と同じ内容を output.mp4／"
@@ -636,7 +637,7 @@ LABELS: dict[str, dict[str, str]] = {
         # --- header ---
         "app_subtitle": "検証用UI — 凍結REST API (/api/v1/*) の薄いクライアント。",
         "msg_coming": "後のスライスで実装予定。",
-        # --- generate: left column ---
+        # --- shared prompt / negative prompt (above the tabs) ---
         "lbl_prompt": "プロンプト(単発生成・クリップ連結の共通ベース)",
         "ph_prompt": "夕暮れの賑やかな下町、行き交う人々、ネオンが灯りはじめる路地。映画のワンシーンのように——",
         "lbl_negative": "ネガティブプロンプト",
@@ -685,10 +686,6 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_vae": "VAE（潜在表現と映像を相互変換する部品）",
         "accel_info_vae": ("枝刈り版（PrunaVAED）を選ぶと映像の復元が速くなります。"
                            "出力品質がわずかに低下する可能性があります。"),
-        # accel_info_unimplemented は 2026-08-05 に削除した（PRUNAVAED_
-        # WORKORDER.md §6.1 の STEP 7）。最後の利用者だった VAE ラジオが
-        # accel_info_vae へ移り、Acceleration からモックが1件も無くなったため、
-        # 「まだ実装されていません」という説明文の持ち主が居なくなった。
         "accel_lbl_prefetch": "ブロック入れ替えの先読み",
         "accel_info_prefetch": ("重みをCPUとGPUのあいだで運ぶ時間を、計算の裏に隠します"
                                 "（ブロック入れ替えを使っているときだけ効きます）。"
@@ -713,7 +710,7 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",
-        "warn_hq_unsupported": "高品質モードはまだバックエンドが対応していません。",
+        "warn_hq_unsupported": "高品質モードはこのバックエンドでは使えません。",
         "lbl_preset": "プリセット",
         "hint_preset": "サーバの /config から自動取得",
         "lbl_width": "幅 (64の倍数)",
@@ -728,7 +725,7 @@ LABELS: dict[str, dict[str, str]] = {
         "cap_lock": "8 / 1.0 に固定 (distilled)",
         "lbl_seed": "シード (-1 = ランダム)",
         "warn_spill_limit": "解像度 {res} の快適上限 ({limit} フレーム) を超えています: 生成は可能ですが大幅に低速化します。",
-        # --- generate: keyframe accordion (S3) ---
+        # --- generate: keyframe accordion ---
         "lbl_kf_accordion": "キーフレーム画像 (I2V条件付け・最大10枚)",
         "lbl_kf_use": "使用",
         "lbl_kf_image": "キーフレーム画像",
@@ -739,7 +736,7 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_kf_missing_image": "スロット{n}: 有効ですが画像が選択されていません。",
         "msg_kf_negative_frame": "スロット{n}: フレーム位置は0以上にしてください。",
         "msg_uploading_keyframe": "キーフレームをアップロード中… {i}/{n}",
-        # --- generate: reference-video control (IC-LoRA) accordion (S4) ---
+        # --- generate: reference-video control (IC-LoRA) accordion ---
         "lbl_iclora_accordion": "参照動画による制御 (IC-LoRA)",
         "lbl_adapter": "制御アダプタ",
         "adapter_none": "なし",
@@ -769,7 +766,7 @@ LABELS: dict[str, dict[str, str]] = {
                                "条件付けに使われます。"),
         # --- generate: right column ---
         "btn_generate": "生成",
-        # 機能3: generate_btn / chain_generate_btnの生成中に表示（ボタンは無効化）。
+        # generate_btn / chain_generate_btnの生成中に表示（ボタンは無効化）。
         "btn_generating": "生成中…",
         "lbl_progress": "進捗",
         "lbl_jobid": "ジョブID",
@@ -783,7 +780,7 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_generate_failed": "generate 失敗: {err}",
         "msg_job_started": "ジョブ開始 ({mode}): {job_id}",
         "msg_generating": "生成中… {pct:.0%} (step {step}/{total})",
-        # F3: step情報なしの表示("step None/None"を出さない)+ 工程名ラベル。
+        # step情報なしの表示("step None/None"を出さない)+ 工程名ラベル。
         "msg_generating_pct": "生成中… {pct:.0%}",
         "stage_encoding": "エンコード中",
         "stage_denoise_s1": "デノイズ中 (stage 1)",
@@ -802,16 +799,16 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_queued": "順番待ち — ワーカーの空きを待っています…（{secs}秒）",
         "msg_queued_stuck": ("{secs}秒たっても順番待ちのままです。"
                              "止まったままの場合は、Jobsタブからキャンセルして再試行してください。"),
-        # --- generate: reference-video flow messages (S4) ---
+        # --- generate: reference-video flow messages ---
         "msg_ref_video_required": "制御アダプタ用の参照動画を選択してください。",
         "msg_ref_bad_extension": "参照動画の形式が許可されていません。許可形式: {exts}",
         "msg_ref_too_large": "参照動画が上限 {limit} MB を超えています。",
         "msg_ref_resolution": ("参照動画を使う場合、幅と高さは128の倍数にしてください"
                                "(例: 1280×768)。サイズを調整して再試行してください。"),
         "msg_uploading_ref": "参照動画をアップロード中…",
-        # --- shared API error-envelope hints (S4), one line each, actionable ---
+        # --- shared API error-envelope hints, one line each, actionable ---
         "apierr_JOB_BUSY": "別のジョブが実行中です。終了を待ってから再試行してください。",
-        # mp4 情報タブ（§3-164、POST /utils/mp4-info）
+        # mp4 情報タブ（POST /utils/mp4-info）
         "apierr_MEDIA_NOT_FOUND": "サーバー上にそのファイルが見つかりませんでした",
         "apierr_MEDIA_UNREADABLE": "この動画ファイルを読めませんでした",
         "apierr_LOCAL_ONLY": "この操作はサーバーと同じ PC からだけ使えます",
@@ -829,9 +826,9 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_GENERATION_FAILED": "サーバ側で生成に失敗しました。サーバのログを確認してください。",
         "apierr_UNAUTHORIZED": "認証に失敗しました。APIキーを確認してください。",
         "apierr_VALIDATION_ERROR": "リクエストが検証で拒否されました。詳細は以下を参照してください。",
-        # --- clip chain tab (S5) ---
+        # --- clip chain tab ---
         "lbl_chain_preset": "プリセット",
-        "info_chain_preset": "解像度・フレームレート・各クリップの推奨フレーム数（快適上限）を自動入力します。",
+        "info_chain_preset": "解像度・各クリップの推奨フレーム数（快適上限）を自動入力します。",
         "lbl_stage2_window": "Stage-2（アップスケール工程）のクリップ長",
         "info_stage2_window": ("クリップ長が長いほど継ぎ目が減りますが、1回あたりの負荷が増えます。"
                                "ラベルの目安解像度を超えるとVRAM溢れで遅くなることがあります。"),
@@ -853,13 +850,13 @@ LABELS: dict[str, dict[str, str]] = {
         "clip13": "クリップ13", "clip14": "クリップ14", "clip15": "クリップ15", "clip16": "クリップ16",
         "clip17": "クリップ17", "clip18": "クリップ18", "clip19": "クリップ19", "clip20": "クリップ20",
         "clip21": "クリップ21", "clip22": "クリップ22", "clip23": "クリップ23", "clip24": "クリップ24",
-        # 「Clip list」見出し直下の連結推計尺の表示（24枠化）。ラベル登録せず、
+        # 「Clip list」見出し直下の連結推計尺の表示。ラベル登録せず、
         # 専用の lang_dd.change リスナーで再フォーマットする。
         "chain_est": "**推計合計:** 約 {sec}秒 ({frames}f)",
         "chain_est_over": "**推計合計:** 約 {sec}秒 ({frames}f) — 上限 {maxf}f を超過",
         "chain_est_none": "—",
         "btn_concat": "連結生成",
-        # --- clip chain: flow / precheck messages (S5) ---
+        # --- clip chain: flow / precheck messages ---
         "msg_bad_dimension": "幅と高さは64の倍数にしてください。",
         "msg_size_limit": "幅/高さがサーバの上限 ({maxw}×{maxh}) を超えています。",
         "msg_crop_range": "クロップサイズは32以上かつ生成サイズ以下にしてください。",
@@ -871,16 +868,17 @@ LABELS: dict[str, dict[str, str]] = {
         "warn_chain_preset_total": "クリップ合計 ({total} フレーム) がチェーンの最大長 ({max} フレーム) を超えています。",
         "msg_chain_geometry": "連結ジオメトリが不正です: {err}",
         "msg_chain_started": "連結ジョブ開始 ({n} クリップ): {job_id}",
-        # --- clip chain: generation mode (none / V2V / A2V) ---
+        # --- clip chain: generation mode (the radio offers none / V2V;
+        # a2v_mode_a2v is not among its choices) ---
         "v2v_mode_label": "生成モード",
         "v2v_mode_none": "なし（通常のクリップ連結）",
         "v2v_mode_v2v": "V2V継続 — アップロード動画の続きを生成",
         "a2v_mode_a2v": "A2V音声駆動 — アップロード音声に口の動きを合わせる",
-        "v2v_cap_mode": "V2VとA2Vは同時に使えません。どちらか一方を選んでください。「なし」は従来どおりの2〜24クリップ連結です。",
+        "v2v_cap_mode": "Clip ChainのA2V（音声から動画）はAviUtl2の操作パネルで使えます。この画面ではV2Vだけです。「なし」は従来どおりの2〜24クリップ連結です。",
         # --- clip chain: V2V panel ---
         "v2v_lbl_video": "元動画 (mp4/mov/webm/mkv・最大200MB)",
         "v2v_lbl_context": "参照フレーム数 (元動画の末尾から続きの手がかりにする長さ・8n+1)",
-        # F4: 使いこなしガイド (a2v_guideと同格)。
+        # V2V パネルの使いこなしガイド。
         "v2v_guide": ("**V2Vを使いこなすには**\n\n"
                       "この機能は、アップロードした元動画の末尾（参照フレーム数で指定した長さの区間）を"
                       "モデルに読み取らせ、その続きの映像と音声を生成します。"
@@ -898,7 +896,7 @@ LABELS: dict[str, dict[str, str]] = {
                           "（総フレーム数−参照フレーム数）÷24秒になります"
                           "（例: 総225フレーム・参照73フレームなら約6.3秒）。"),
         "v2v_chk_join": "元動画と結合した完成版も作る（音声の継ぎ目をクロスフェード）",
-        # F5: 結合版のクロスフェード長セレクタ。
+        # 結合版のクロスフェード長セレクタ。
         "v2v_lbl_crossfade": "結合部の音声クロスフェード長 (ms)",
         "v2v_cap_join": ("新しく生成した部分だけの動画に加えて、元動画とつないだ完成版も書き出します。"
                          "つなぎ目の音の段差はクロスフェードで滑らかにします。"
@@ -919,7 +917,9 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_msg_joining": "結合版を作成中（サーバー側処理）…",
         "v2v_msg_join_done": "結合版を作成しました ({mode}): {job_id}",
         "v2v_msg_join_failed": "結合版の作成に失敗しました: {err}",
-        # --- clip chain: A2V panel ---
+        # --- A2V audio: a2v_lbl_audio labels the audio field of the Generate
+        # tab's Audio-to-Video accordion. The Clip Chain tab has no A2V panel;
+        # a2v_guide / a2v_cap_panel are not referenced by the UI ---
         "a2v_lbl_audio": "元音声 (wav/mp3/m4a/aac/flac/ogg・最大50MB)",
         "a2v_guide": ("**A2Vを使いこなすには**\n\n"
                       "この機能は、アップロードした音声に口の動きを合わせて動画を生成します。"
@@ -938,7 +938,8 @@ LABELS: dict[str, dict[str, str]] = {
                           "音声は動画の長さ以上必要で、短い音声は拒否されます。"
                           "出力にはアップロードした音声がそのまま入ります。"
                           "1本の音声で連結した複数クリップを駆動したい場合は、AviUtl2プラグインの画面を使ってください。"),
-        # --- clip chain: A2V flow messages ---
+        # --- A2V flow messages (the Generate-tab A2V flow and the chain
+        # handler's A2V branch) ---
         "a2v_msg_audio_required": "A2Vに使う元音声を選択してください。",
         "a2v_msg_bad_extension": "音声の形式が許可されていません。許可形式: {exts}",
         "a2v_msg_too_large": "音声が上限 {limit} MB を超えています。",
@@ -951,7 +952,7 @@ LABELS: dict[str, dict[str, str]] = {
         "a2v_msg_too_short": ("音声が短すぎます。この設定（{frames}フレーム / {fps}fps = {video:.2f}秒）には "
                               "{need:.2f}秒以上の音声が必要ですが、添付は {have:.2f}秒です。"
                               "長い音声を使うか、フレーム数を減らしてください。"),
-        # 機能1: Generateタブの音声(A2V)欄にwavを添付すると、測定した長さに合わせて
+        # Generateタブの音声(A2V)欄にwavを添付すると、測定した長さに合わせて
         # Framesを自動調整したときに表示。
         "a2v_msg_frames_adjusted": "音声{dur:.2f}秒に合わせてFramesを{frames}に調整しました",
         # --- generate: audio-to-video accordion (single generation) ---
@@ -974,7 +975,7 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_theme": "テーマ",
         "opt_dark": "ダーク",
         "opt_light": "ライト",
-        # --- jobs tab (S6) ---
+        # --- jobs tab ---
         "btn_jobs_refresh": "一覧を更新",
         "col_job_id": "ジョブID",
         "col_status": "状態",
@@ -992,7 +993,7 @@ LABELS: dict[str, dict[str, str]] = {
         "msg_job_cancel_requested": "キャンセルを要求しました: {job_id}",
         "msg_job_deleted": "削除しました: {job_id}",
         "msg_job_action_failed": "操作に失敗しました: {err}",
-        # --- settings tab (S6) ---
+        # --- settings tab ---
         "h_conn": "接続情報",
         "lbl_base_url": "base_url",
         "lbl_apikey": "APIキー",
@@ -1035,12 +1036,12 @@ LABELS: dict[str, dict[str, str]] = {
         "apierr_MODEL_NOT_FOUND": "不明なモデル名です。モデル一覧を更新して選び直してください。",
         "apierr_MODEL_FILE_MISSING": "モデルファイルがディスク上に見つかりません。再ダウンロードするか別のモデルを選んでください。",
         "apierr_MODEL_INCOMPATIBLE": "選択したファイルはこの用途のモデルとして不正です。別のモデルを選んでください。",
-        # --- style / character LoRA tab (S2) ---
+        # --- style / character LoRA tab ---
         "tab_style_lora": "画風LoRA",
         "style_gallery_label": "画風・キャラクターLoRA",
         "style_reload_btn": "LoRA一覧を再読込",
-        "style_note": ("下のLoRAをクリックすると、Generateタブのプロンプト末尾に <lora:名前:1.0> が"
-                       "追加されます。重みはプロンプト内の数値を書き換えて調整します"
+        "style_note": ("下のLoRAをクリックすると、タブの上のプロンプト欄の末尾に <lora:名前:1.0:1.0> が"
+                       "追加されます。重みはプロンプト内の最初の数値を書き換えて調整します"
                        "（0〜2.0・1.0=そのLoRAが学習時に想定した強さ）。"
                        "canny／pose／アップスケーラなどの制御LoRAはここには表示されません。"
                        "従来どおりGenerateタブの参照動画アダプタ欄から使ってください。"),
@@ -1048,7 +1049,7 @@ LABELS: dict[str, dict[str, str]] = {
         "style_reload_done": "LoRAを再読込しました: 合計{total}件（画風{styles}件・制御{controls}件）。",
         "style_reload_failed": "LoRAの再読込に失敗しました: {err}",
         "style_list_failed": "LoRA一覧の取得に失敗しました: {err}",
-        # --- prompt-embedded <lora:...> messages (S2) ---
+        # --- prompt-embedded <lora:...> messages ---
         "lora_msg_unknown": ("プロンプト内に未知のLoRA名があります: {names}。"
                              "<lora:...> の記述を修正するか削除して再試行してください。"),
         "lora_warn_weight_clamp": ("LoRA <{name}> の重み {given} が範囲外（0〜2.0）です。"

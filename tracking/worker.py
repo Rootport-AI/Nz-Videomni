@@ -8,8 +8,8 @@ and talked to over stdin/stdout with the framing in :mod:`tracking.protocol`.
 One process serves every tracking session for the life of the server: the model
 is loaded once, and a new session is just another ``init``.
 
-THE SHAPE OF THE LOOP IS ``engine/worker.py``'s (:1279-1335), on purpose
------------------------------------------------------------------------
+THE SHAPE OF THE LOOP IS ``engine/worker.py``'s ``main()``, on purpose
+----------------------------------------------------------------------
 Same four rules, so an operator who has debugged one worker has debugged both:
 
 * before ``load``, every op except ``load``/``shutdown`` is ignored (logged);
@@ -57,7 +57,7 @@ from tracking.protocol import (
 )
 
 #: The one tracker this process owns. Never more than one: the API allows a
-#: single session at a time (see the design document's session lifetime rules).
+#: single session at a time (see ``Docs/OBJECT_TRACKING_DESIGN.md`` §4.4).
 _TRACKER = None
 #: Frame size of the CURRENT session, taken from ``init``. ``track`` carries no
 #: size of its own -- the parent has already checked every frame's byte length

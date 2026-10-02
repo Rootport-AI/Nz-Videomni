@@ -489,7 +489,7 @@ V2V結合(元動画+続きを1本化、音声クロスフェード付き)。**�
 
 | フィールド | 型/既定 | 制約・意味 |
 |---|---|---|
-| `mask_video_id` | str(必須) | `POST /upload/video`で上げたマスク動画の識別子。**白(輝度128以上)が「描き替える画素」**。解像度は対象動画の実寸と**完全一致**、枚数は`num_frames`と**完全一致**でなければならない(`INPAINT_MASK_RESOLUTION_MISMATCH`／`INPAINT_MASK_FRAME_MISMATCH`)。**マスクは引き伸ばされない** |
+| `mask_video_id` | str(必須) | `POST /upload/video`で上げたマスク動画の識別子。**白（赤チャンネルの値 128 以上。灰色のマスクでは明るさと同じ）が「描き替える画素」**。解像度は対象動画の実寸と**完全一致**、枚数は`num_frames`と**完全一致**でなければならない(`INPAINT_MASK_RESOLUTION_MISMATCH`／`INPAINT_MASK_FRAME_MISMATCH`)。**マスクは引き伸ばされない** |
 | `window_start_sec` | float `0.0` | 描き替える窓の開始位置。**対象動画（アップロード後のファイル）自身の時間軸**で数える秒で、タイムライン上のリボンを頭側でトリムして上げたときは、その切り出し開始秒を呼び出し側が引いてから送る。**窓の長さは`GenerateRequest.num_frames`が持つ**——撮り直し(`RetakeSpec`)と同じく、長さを2箇所に書かない |
 | `blend_dilation_stage1` | int `5` | 2段のブレンド（ラプラシアンピラミッド合成）の膨張段数。範囲は`OutpaintSpec`と同じ`0..15` |
 | `blend_dilation_stage2` | int `2` | 同上・仕上げ段。**見えるなじみ幅（「のりしろ」）を決めているのはこちら**で、実測はおよそ`stage2 × キャンバス（素材寸を128の倍数へ切り上げた値）の長辺 ÷ 64 ＋ 18px`（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §105.3）。画角拡張がstage 1で決まるのとは事情が違う |

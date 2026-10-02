@@ -278,10 +278,6 @@ class PinnedStagingPool:
         )
         return buffers
 
-    def release(self) -> None:
-        self._buffers = []
-        self._nbytes = 0
-
 
 def _enumerate_slots(block: nn.Module) -> Iterator[tuple[nn.Module, str, bool, torch.Tensor]]:
     """Every tensor the block owns, with the module and attribute that own it.

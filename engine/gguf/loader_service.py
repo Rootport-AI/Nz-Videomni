@@ -65,7 +65,8 @@ def _dequantize_tensor(
 
     Thin wrapper over the per-tensor kernel in quant_service. Float types
     (F32/F16/BF16) are reinterpreted, reshaped and cast; the quantized types
-    (Q8_0/Q4_K/Q6_K/…) go through quant_service's per-type kernels.
+    (Q8_0/Q4_K/Q5_K/Q6_K) go through quant_service's per-type kernels, and any
+    type outside ``SUPPORTED_GGML_TYPES`` raises ValueError (failing the load).
     The output dtype is ``dtype`` (bf16 by default).
     """
     # dequantize_ggml_tensor expects a FLAT (1-D) input — its production caller
@@ -164,11 +165,7 @@ class GGUFStateDictLoader:
 
             raw_data = torch.from_numpy(tensor.data.copy())
 
-            try:
-                weight = _dequantize_tensor(raw_data, ggml_type, shape, self.target_dtype)
-            except Exception as exc:
-                logger.warning("Failed to dequantize %s (%s) — skipping", name, exc)
-                continue
+            weight = _dequantize_tensor(raw_data, ggml_type, shape, self.target_dtype)
 
             # Move to target device if not CPU.
             if device.type != "cpu":

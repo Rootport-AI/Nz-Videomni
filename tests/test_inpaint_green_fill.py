@@ -8,8 +8,9 @@ ffmpeg actually wrote:
   on that triple and the engine's de-green replaces pixels by value, so a
   two-unit drift leaves a green haze in the delivered video;
 * everything OUTSIDE the mask is the source, byte for byte;
-* the mask is BINARISED at 128 before the merge, so a soft H.264 edge does not
-  become a ring of half-green pixels;
+* the mask is BINARISED on its red channel at 128 before the merge (the
+  engines' rule), so a soft H.264 edge does not become a ring of half-green
+  pixels;
 * the frame count is MEASURED, because this ffmpeg's ``maskedmerge`` has no
   ``shortest`` option (see the function's own docstring) and a short mask would
   otherwise be padded by repetition and pass unnoticed.
@@ -60,8 +61,9 @@ def _write_source(path, *, width=SRC_W, height=SRC_H, frames=FRAMES) -> None:
 
 
 def _write_mask(path, *, frames=FRAMES, width=SRC_W, height=SRC_H, lossy=True,
-                rect=RECT, moving=False) -> None:
-    """A white rectangle on black, encoded the way the plugin's writer would.
+                rect=RECT, moving=False, color=(255, 255, 255)) -> None:
+    """A rectangle of ``color`` (white unless asked) on black, encoded the way
+    the plugin's writer would.
 
     Written as a PNG sequence rather than through ``drawbox`` so the moving case
     is exact: this ffmpeg's ``drawbox`` has no frame-number variable, and driving
@@ -77,7 +79,7 @@ def _write_mask(path, *, frames=FRAMES, width=SRC_W, height=SRC_H, lossy=True,
         img = Image.new("RGB", (width, height), (0, 0, 0))
         shift = i if moving else 0
         ImageDraw.Draw(img).rectangle(
-            [x0 + shift, y0, x1 - 1 + shift, y1 - 1], fill=(255, 255, 255)
+            [x0 + shift, y0, x1 - 1 + shift, y1 - 1], fill=color
         )
         img.save(stage / f"{i:06d}.png")
 
@@ -211,8 +213,10 @@ def test_a_moving_mask_moves_the_green(tmp_path):
                                           (128, True), (200, True), (255, True)])
 def test_the_mask_is_binarised_at_128(tmp_path, level, masked):
     """A FLAT mask at one grey level: below 128 nothing is painted, at or above
-    128 everything is. The same rule ``decode_mask_video`` applies on the other
-    side of the worker pipe."""
+    128 everything is. On a grey mask the red channel the filter reads is the
+    brightness, so this is also the engines' rule (red >= 128 in
+    ``decode_mask_video`` / ``_decode_mask_u8``) on the other side of the
+    worker pipe; a coloured mask is pinned by the test below."""
     src, mask = tmp_path / "src.mp4", tmp_path / f"flat{level}.mp4"
     _write_source(src)
     _write_flat(mask, level=level)
@@ -227,6 +231,34 @@ def test_the_mask_is_binarised_at_128(tmp_path, level, masked):
         # counting green pixels would be measuring the fixture, not the filter.
         source = _rgb(src, SRC_W, SRC_H)[:FRAMES].astype(int)
         assert np.abs(inner.astype(int) - source).max() == 0
+
+
+@has_ffmpeg
+@pytest.mark.parametrize("color,masked", [
+    ((0x8C, 0x00, 0x00), True),   # dark red: red 140 >= 128, brightness ~42
+    ((0x00, 0xFF, 0x00), False),  # green: red 0, brightness ~150
+    ((0xC8, 0xC8, 0xC8), True),   # grey 200: red and brightness agree
+])
+def test_a_coloured_mask_is_binarised_on_its_red_channel(tmp_path, color, masked):
+    """台帳 §1-54: the canvas must paint exactly where the engines will blend.
+    Both engines threshold the mask's RED channel at 128, so this filter does
+    too — a dark red rectangle is painted although it is dark, a bright green
+    one is not although it is bright. The mask goes through yuv420p H.264 like
+    the plugin's, so only the rectangle's interior is checked (the edge is
+    where 4:2:0 chroma smears)."""
+    src, mask = tmp_path / "src.mp4", tmp_path / "mask.mp4"
+    _write_source(src)
+    _write_mask(mask, lossy=True, color=color)
+    out, _ = _fill(tmp_path, src, mask)
+
+    x0, y0, x1, y1 = RECT
+    m = 8  # stay clear of the soft edge
+    inner = _rgb(out, CANVAS_W, CANVAS_H)[:, y0 + m:y1 - m, x0 + m:x1 - m, :]
+    if masked:
+        assert (inner == np.array(GREEN, dtype=np.uint8)).all()
+    else:
+        source = _rgb(src, SRC_W, SRC_H)[:FRAMES, y0 + m:y1 - m, x0 + m:x1 - m, :]
+        assert np.abs(inner.astype(int) - source.astype(int)).max() == 0
 
 
 @has_ffmpeg
@@ -294,7 +326,7 @@ def test_framesync_really_does_pad_a_short_input(tmp_path):
     graph = (
         f"[0:v]setpts=N/({FPS}*TB),format=rgb24,split[s][t];"
         f"[t]lutrgb=r=102:g=255:b=0[g];"
-        f"[1:v]setpts=N/({FPS}*TB),format=gray,"
+        f"[1:v]setpts=N/({FPS}*TB),format=rgb24,extractplanes=r,"
         f"lut=y='if(gte(val,128),255,0)',format=rgb24[m];"
         f"[s][g][m]maskedmerge[o]"
     )

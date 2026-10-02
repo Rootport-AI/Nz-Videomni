@@ -528,9 +528,11 @@ class BatchRunner:
     def request_stop(self) -> None:
         """Ask for a graceful stop: set ``stop_event`` (so no further rows are
         submitted) and best-effort cancel the in-flight job. A queued job
-        cancels immediately (-> ``cancelled``, the row returns to Waiting); a
-        running job may only be flagged and can still run to completion. Any
-        error from the cancel is swallowed."""
+        cancels immediately; a running job is flagged, runs to the end of its
+        generation and then ends ``cancelled`` (its result is not handed out,
+        though the file stays in ``outputs/<job_id>/``). Either way the row
+        returns to Waiting (a generation that itself errors still ends
+        Failed). Any error from the cancel is swallowed."""
         self.stop_event.set()
         with self._lock:
             if self._state == STATE_RUNNING:

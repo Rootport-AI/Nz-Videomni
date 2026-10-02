@@ -2248,9 +2248,12 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         #     slice below is anchored at ``a_total`` and not at ``avail``:
         #     there is no correct narrower band, only a misplaced one.)
         #   * the same shortfall with ``regenerate_audio=False`` -> a WARNING
-        #     and the audio freeze is dropped altogether (``retake_had_audio``
-        #     becomes False). The delivered audio is the original waveform,
-        #     so the latents it would have frozen are discarded anyway.
+        #     and the audio freeze is dropped altogether (``rt_a`` stays None,
+        #     so the band counts are zeroed below). ``retake_had_audio`` keeps
+        #     saying the window HAD an audio track, so the metadata's
+        #     ``source_had_audio`` stays true while ``audio_frozen`` is false.
+        #     The delivered audio is the original waveform, so the latents it
+        #     would have frozen are discarded anyway.
         #   * the window has NO audio track -> continue with no audio freeze,
         #     recorded in the metadata rather than raised. A silent clip is a
         #     legitimate thing to retake.
@@ -2273,17 +2276,16 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
                         "(the delivered audio is the original waveform).",
                         avail, a_win,
                     )
-                    retake_had_audio = False
                 else:
                     rt_a = encoded_a[:, :, :a_win].detach().clone()
                 del encoded_a
                 cleanup_memory()
-            if not retake_had_audio:
+            if rt_a is None:
                 # Nothing to freeze -> the glue bands are video-only. NOT an
-                # error (the third arm of the adjudication above); the metadata
-                # says so, and zeroing the two counts here is what makes every
-                # audio slice below inert rather than each of them re-testing
-                # the condition.
+                # error (the second and third arms of the adjudication above);
+                # the metadata says so (``audio_frozen``), and zeroing the two
+                # counts here is what makes every audio slice below inert
+                # rather than each of them re-testing the condition.
                 n_head_a = n_tail_a = 0
 
         # ── the END SOURCE's adjudication: SILENT fallbacks, never errors ──────

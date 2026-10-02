@@ -1101,9 +1101,12 @@ class PipelineManager:
         separately generated clips. Junction pixel-frame indices (segment seams
         AND stage-2 tile seams) are recorded in metadata for the review harness.
 
-        Cancellation: the chain is one atomic worker op, so cancel is honored
-        at the job boundary (before dispatch) — matching that a single generate is
-        also not interruptible mid-run.
+        Cancellation is best-effort, the same as a single generate (run_job):
+        the chain is one atomic worker op and is not interrupted mid-run, but if
+        cancel was requested by the time it finishes, the job ends ``cancelled``
+        (its result is not handed out, though the file stays in
+        ``outputs/<job_id>/``). A cancel that arrives while the job is still
+        queued is handled by ``start_job`` and the job never dispatches.
         """
         chain = job.chain_request
         assert chain is not None, "run_chain_job requires job.chain_request"
@@ -1135,14 +1138,6 @@ class PipelineManager:
         )
 
         try:
-            if job.cancel_requested:
-                job.status = JobStatus.cancelled
-                job.progress = 1.0
-                job.completed_at = now_iso()
-                self.state = self.STATE_READY
-                logger.info("Chain job %s cancelled before dispatch", job.job_id)
-                return
-
             if not self.runner.loaded:
                 if not self.config.model.auto_load_on_generate:
                     raise pipeline_load_failed(detail="auto_load_on_generate is disabled")
@@ -1403,8 +1398,11 @@ class PipelineManager:
                 metadata_path=f"outputs/{job.job_id}/metadata.json",
             )
 
-            job.status = JobStatus.completed
-            job.result = result
+            if job.cancel_requested:
+                job.status = JobStatus.cancelled
+            else:
+                job.status = JobStatus.completed
+                job.result = result
             job.progress = 1.0
             job.completed_at = now_iso()
             self.state = self.STATE_READY

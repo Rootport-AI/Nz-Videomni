@@ -15237,4 +15237,6 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 4. 第三者コード `tracking/vendor/uetrack/uetrack.py` の NZ 注記「missing keys」は unexpected 側が正しいです（vendored なので触りません）。
 5. 判定指示書に「『必ず〜に置け』のような要件の主張は、その要件を読む関数まで追って確かめる」「定数の正本の場所（`api/models.py` か `config.py` か）を確かめる」を書き足します（v8.1）。
 
+**追補（2026-10-02・同日の続き）**: 申し送り (2) の Gradio 画面の旧名は、オーナー指示で同日に直しました。`gradio_ui/ui.py` の `gr.Blocks(title=)` と見出し `gr.Markdown("# …")` を製品名「Nz-Videomni」に（画面の見出しなので API の名乗り「Nz-Videomni backend」の「backend」は付けない）、`gradio_ui/styles.py` の `CUSTOM_CSS` の中の CSS コメント「the AviUtl2-Bridge accent」を「the Nz-Videomni accent」に、それを固定する `tests/test_gradio_ui.py` の `assert "LTX-AviUtl2-Bridge" in r.text` を「Nz-Videomni」に変えました（差分は 3 ファイル・4 行。Gradio 系テスト 111 件合格）。敵対的レビュー（Opus）の指摘: 直すべき 0／注意 3（新しい assert は Gradio が HTML に埋め込む config の title と CSS コメントでも通るので見出しだけの撤去は検知できない〔テストの設計の判断として参考に留める〕／旧名はほかに `pyproject.toml` のパッケージ名 `ltx-aviutl2-bridge`（画面には出ない。変えると `uv.lock` が作り直される）と過去の画面モック `Docs/mockups/GUI_V2V_A2V_MOCK.html` に残る〔オーナー判断〕／本節の申し送りを「済み」にする＝この追補）。操作パネル・他のテストが画面タイトル・見出し・`/` の `service` に依存していないこと、README の見出し「# Nz-Videomni」と仕様書の「Nz-Videomni バックエンド」に矛盾しないことをレビューが確かめました。
+
 候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。

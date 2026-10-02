@@ -64,7 +64,7 @@ def test_ui_mounts_and_serves_html(gradio_client):
     r = gradio_client.get("/ui")
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
-    assert "LTX-AviUtl2-Bridge" in r.text
+    assert "Nz-Videomni" in r.text
 
 
 def test_ui_config_endpoint(gradio_client):

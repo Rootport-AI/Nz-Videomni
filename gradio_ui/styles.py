@@ -179,7 +179,7 @@ body.dark .base-url-box input {
     color: var(--body-text-color-subdued);
     margin: var(--size-2) 0 var(--size-1) 0;
 }
-/* Duration readout: the AviUtl2-Bridge accent (blue-violet), sized close to the
+/* Duration readout: the Nz-Videomni accent (blue-violet), sized close to the
    input text so it reads as a value rather than an oversized banner. */
 .duration-line,
 .duration-line p {

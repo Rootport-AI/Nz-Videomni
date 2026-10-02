@@ -370,7 +370,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             return gr.update(interactive=True, value=L(label_key, lang))
         return _restore
 
-    with gr.Blocks(title="LTX-AviUtl2-Bridge") as demo:
+    with gr.Blocks(title="Nz-Videomni") as demo:
         # CUSTOM_CSS wiring. NOTE: gr.Blocks(css=...) is deprecated in Gradio 6
         # AND, because the app is mounted via gr.mount_gradio_app() (main.py)
         # rather than launched, mount_gradio_app unconditionally overwrites
@@ -392,7 +392,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         config_retry_state = gr.State(0)
         config_retry_timer = gr.Timer(3.0, active=False)
 
-        gr.Markdown("# LTX-AviUtl2-Bridge")
+        gr.Markdown("# Nz-Videomni")
         reg(gr.Markdown(L("app_subtitle")), "app_subtitle", "value")
 
         # ---- top common bar (always visible) ----

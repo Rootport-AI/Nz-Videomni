@@ -285,7 +285,7 @@ class GemmaGGUFQuantStateDictLoader:
         # The original SafetensorsModelStateDictLoader from the text_encoder_builder.
         self._base_loader = base_loader
         # ── Component files ──────────────────────────────────────────────────────
-        # When set, the 46GB monolith is NOT in the builder's model_path (it is
+        # When set, the bf16 monolith is NOT in the builder's model_path (it is
         # replaced by the standalone text-projection file, which supplies the 4
         # `text_embedding_projection.*aggregate_embed.*` survivors). The monolith's
         # OTHER survivors — the 258 `model.diffusion_model.{video,audio}_embeddings_
@@ -1192,7 +1192,7 @@ class GemmaGGUFQuantLoaderService:
         self.gemma_tokenizer_root = gemma_tokenizer_root
         # ── Component files: both must be set to enable the monolith drop ──
         # component_text_projection_path: standalone bf16 file with the 4 aggregate_
-        #   embed survivors; replaces the 46GB monolith as the text-encoder base path.
+        #   embed survivors; replaces the bf16 monolith as the text-encoder base path.
         # connector_gguf_path: the LTX transformer file (GGUF or quantized
         #   safetensors) that carries the 258 connector tensors we inject (Option A,
         #   VERIFICATION_LOG §9.5). When either is None, the loader keeps the
@@ -1297,7 +1297,7 @@ class GemmaGGUFQuantLoaderService:
 
         builder = model_ledger.text_encoder_builder
 
-        # ── Component-files mode (drop the 46GB monolith) ─────────────────────────
+        # ── Component-files mode (drop the bf16 monolith) ─────────────────────────
         # Our rebuilt builder.model_path is a single entry (checkpoint_path=MONOLITH,)
         # — no Gemma qat shards (the Gemma LM weights come from the GGUF; the
         # text-only Gemma3ForCausalLM has no vision_tower / multi_modal_projector at

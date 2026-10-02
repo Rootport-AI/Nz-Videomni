@@ -829,7 +829,7 @@ class LTXRunner:
         that asks for the pruned decoder downgrades to the stock one, so its
         absence must not demote the whole server to mock.
 
-        The GGUF + component-file recipe never opens the 43GB monolith. The
+        The GGUF + component-file recipe never opens the bf16 monolith. The
         worker payload's ``checkpoint_path`` field is a hardcoded ``""`` (see
         ``_build_load_payload``) — the wheel's lazy builders receive it but the
         GGUF/component installs replace every loader — so there is no path here

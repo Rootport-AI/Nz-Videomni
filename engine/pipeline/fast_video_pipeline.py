@@ -254,7 +254,7 @@ class LTXFastVideoPipeline:
         self._default_vae_builder: object | None = None
 
         # ── Fail-fast: this GGUF + component-file path must NOT silently fall
-        # back to the 43GB monolith / 22.7GB QAT Gemma. Assert the load-bearing
+        # back to the bf16 monolith / the QAT Gemma. Assert the load-bearing
         # standalone sources are all present BEFORE constructing DistilledPipeline
         # (whose lazy builders would otherwise glob the monolith on build()).
         _required = {
@@ -336,7 +336,7 @@ class LTXFastVideoPipeline:
         )
 
         # ── Re-source VIDEO VAE + AUDIO VAE/vocoder from standalone component files ──
-        # Drop the 46GB monolith for the VAE/audio builders by re-pointing
+        # Drop the bf16 monolith for the VAE/audio builders by re-pointing
         # their model_path to small standalone files. Runs BEFORE the
         # transformer (GGUF / quantized safetensors) and Gemma GGUF installs.
         # Gated on use_component_files + both VAE paths present.
@@ -361,7 +361,7 @@ class LTXFastVideoPipeline:
         if gguf_gemma_path:
             # When component files are enabled (and the connector GGUF +
             # projection file are present), re-source the Gemma text encoder's
-            # non-Gemma monolith survivors off standalone files so the 46GB monolith
+            # non-Gemma monolith survivors off standalone files so the bf16 monolith
             # is not opened by ANY builder: aggregate_embed from the projection
             # file (replaces the monolith in model_path) and the 258 connectors
             # injected from the transformer file (GGUF or quantized (fp8 / int8) safetensors). Both
@@ -688,7 +688,7 @@ class LTXFastVideoPipeline:
         the builders here are no longer the wheel's originals: the install group
         above has rewritten ``model_path`` / ``model_loader`` / ``model_sd_ops``
         / ``module_ops`` on them. Rebuilding would silently throw all of that
-        away (46GB monolith back in the path, GGUF loaders gone); ``replace``
+        away (bf16 monolith back in the path, GGUF loaders gone); ``replace``
         preserves every other field by construction.
 
         No closure captures the registry: the block-swap / NAG / sage wrappers
@@ -865,7 +865,7 @@ class LTXFastVideoPipeline:
     def _install_component_sources(self, video_vae_path: str, audio_vae_path: str) -> None:
         """Re-point the VAE/audio builders at standalone component files.
 
-        Replaces the 46GB monolith as the weight source for the video VAE
+        Replaces the bf16 monolith as the weight source for the video VAE
         (decoder/encoder) and the audio VAE (decoder/encoder) + vocoder, leaving
         the transformer and text encoder untouched (the text projection is
         re-sourced separately, by ``_install_gemma_gguf``).

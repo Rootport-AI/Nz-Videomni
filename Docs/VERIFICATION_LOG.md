@@ -15293,6 +15293,9 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 
 **文書の訂正 2 件**:
 1. モノリスの大きさ（43GB／46GB）は実寸を確かめられないので、この区域の新しい文では数字を落とした（`config.yaml.example` 2 箇所・help・`INSTALLED_PATHS.txt` の見出し）。Python 側の 2 箇所（`services/engines/ltx/adapter.py`・`engine/pipeline/fast_video_pipeline.py`）は記録のみ。
+
+> **訂正（§140 追補）**: 「実寸を確かめられない」は不正確。実測値は `Videomni_Backend_Specification.md` §5.2 の表記注記（591 行）と用語表（2153 行）にあり、46,139,885,414 B＝46.1 GB（10 進）＝42.97 GiB（2 進）で、「43GB」と「46GB」は同じ 1 ファイルを指す。数字を落とした判断は「正本 1 箇所」の原則によるもので、そのまま。Python 側は 2 箇所ではなく 3 ファイル 9 行（追補で修正）。詳細は §140 追補。
+
 2. `config.py` の `LimitsConfig.chain_comfort_token_budget` の注記「Lower it on a smaller GPU / raise it on a larger one to move the client's guides」は、クライアントが `comfort_budgets` の表の行を先に使う今は成り立たないので、オーナー了承のうえ同じ回で直した（コメントのみ。既定の表の LTX 2.3 の行は 5 トグル全 on の 1 行だけなので、トグルが 1 つでも off なら Chained と Retake の目安線はこの値から引かれる。目安線を動かすときは両方を見直す）。
 
 **敵対的レビュー**（Opus 1 体・サブエージェント起動なし・(b)／(c) 全件＋(a) 全件＋利用者が読む説明 25 件を `config.py` と読み手で突き合わせ＋xformers の主張を上流 ltx-core で確認＋help 2 本を `Get-Help` で確認〔scratchpad に写した help 部分だけ〕＋PowerShell 5 本のトークン差分・YAML・TOML・needle・文字コード・台帳）: コメント本体の差分に事実の誤りは無し。
@@ -15309,3 +15312,19 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 4. 判定の基準に足すとよい点（検算担当の意見）: 配信値の説明は鍵ごとに「サーバーの検査・操作パネル・Gradio・MCP」の読み手を分けて確かめる／`old_lines` から残す語（「旧方式」「従来の」）も見直す対象／freeze の記録行は (b) の例外として明記。
 
 候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+### 140.1 追補: Python 側のモノリスの大きさの数字を落とす（3 ファイル 9 行・2026-10-02）
+
+**対象**: §140 の申し送りで「記録のみ」とした Python 側のモノリス（一体型の checkpoint `ltx-2.3-22b-distilled-1.1.safetensors`。本番経路では読み込まない）の大きさの記述。実際は 2 箇所ではなく **3 ファイル 9 行**（`services/engines/ltx/adapter.py` の `_real_available` の docstring 1・`engine/pipeline/fast_video_pipeline.py` 5〔うち docstring 2〕・`engine/gemma/gguf_quant_service.py` 3）。オーナーの指示で同じ回に直した（操作パネルの「§3-97 P7」と `pyproject.toml` の `[project]` の値は現状維持がオーナー裁定）。
+
+**直し方**: 数字（43GB／46GB・22.7GB）を落とし「the bf16 monolith」「the QAT Gemma」に揃えた（第 8 区域の `INSTALLED_PATHS.txt` の見出しと同じ言い方。`install_ltx.ps1` の help は「the single-file monolith」）。「46GB」「43GB」と「bf16」は同じ 4 文字なので行の長さと罫線の幅は変わらない。テスト `tests/test_pipeline_vae_mode_swap.py`・`tests/test_registry_swap.py` の中の数字は対象外で据え置き。
+
+**根拠（bf16）**: 仕様書 §5.2 の実測値 46,139,885,414 B は 22B 規模を 2 バイトで持つ大きさと合う／モノリスから取り出した部品ファイルの名前が `_bf16`（記述子 `scripts/manifests/10-ltx23.json`）で、部品化の前後でビット単位まで一致した記録（VERIFICATION_LOG 695 行付近）／`gguf_quant_service.py` の既存コメントが「the monolith stored these bf16」と書いている。ファイル自体は削除済みで dtype の記録は直接読めない（一部のテンソルだけ fp32 の可能性は消せないが、総称として成り立つ）。
+
+**証明**: 3 ファイルとも docstring を除いた構文木とコメントを除いたトークン列が HEAD `04c3f5e` と一致、改行は CRLF のまま、`grep` で「43GB」「46GB」「22.7GB」は自作 Python に 0 件。
+
+**テスト**: アプリ `.venv` 全件と `.venv-engine` の 3 ファイル。アプリ `.venv` 全件 2,873 passed・54 skipped（既知の 1 件を `--deselect`）、`.venv-engine` の `test_retake_math.py`・`test_sft_quant_sft_reader.py`・`test_sft_quant_loader_service.py` 72 passed。
+
+**敵対的レビュー（Opus）**: 直すべき 0・注意 2（「bf16」は正しいがファイルを直接見て確かめたわけではない〔上の根拠で判断〕／§140 の「実寸を確かめられない」は不正確〔上の訂正行で解消〕）・参考 3（文として成り立つ・言い方は揃い数字が残るのはテストだけ・近くの「24GB bf16 Gemma」とは「non-Gemma」の明示で取り違えない）。
+
+**費用**: Opus 約 14 万（反映 5 万・レビュー 9 万）・Sonnet 約 10 万（記録）。

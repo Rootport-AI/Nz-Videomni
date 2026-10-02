@@ -1,17 +1,17 @@
-"""出力ファイルの実パス解決（純関数、W5）。
+"""出力ファイルの実パス解決（純関数）。
 
 出力実パスの正本は ``config.output_dir/{job_id}/output.mp4``
 （``api/jobs.py``）・``joined.mp4``（``services/join_manager.py``）―― どちらも
 サーバーの ``GET /jobs/{id}`` レスポンス（``JobResponse`` / ``JobResult``）には
-含まれない（``JobResult.output_path`` は相対ハードコードで信用できない、計画の
-「重要な事実」節参照）。よってこのモジュールはHTTPレスポンスを一切見ず、
-``mcp_server.client.BackendClient.output_dir``（= ``Settings.output_dir`` =
+含まれない（``JobResult.output_path`` は相対ハードコードで信用できない、
+``Docs/MCP_SERVER_DESIGN.md`` §7 参照）。よってこのモジュールはHTTPレスポンスを
+一切見ず、``mcp_server.client.BackendClient.output_dir``（= ``Settings.output_dir`` =
 ローカル ``config.load_config().output_dir``）だけを入力に取る。
 
 ``job_output_path`` / ``job_joined_path`` は純粋なパス組み立てのみ（I/O無し）。
 ``unique_dest`` だけがファイルシステムを読む（``Path.exists``）ため、呼び出し側
 （``tools/outputs.py``）は必ず ``anyio.to_thread.run_sync`` 経由で呼ぶこと
-（計画D3、ブロッキングI/Oはスレッドへ）。
+（``Docs/MCP_SERVER_DESIGN.md`` §2 の D3、ブロッキングI/Oはスレッドへ）。
 """
 
 from __future__ import annotations

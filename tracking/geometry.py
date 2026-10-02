@@ -35,7 +35,8 @@ __all__ = [
 ]
 
 #: The wire format is raw RGBA -- red, green, blue, alpha, one byte each. Fixed
-#: by what AviUtl2's scene renderer hands the plugin; see the API contract.
+#: by what AviUtl2's scene renderer hands the plugin; see the API contract in
+#: ``Docs/OBJECT_TRACKING_DESIGN.md`` §4.2.
 BYTES_PER_PIXEL = 4
 
 

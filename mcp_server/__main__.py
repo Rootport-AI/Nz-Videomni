@@ -7,9 +7,8 @@ the package. This is deliberate, not defensive dead code: the generated
 MCP client (Claude Code, etc.) may launch the process from an arbitrary
 working directory -- e.g. the owner's dev machine opens the PARENT folder as
 the workspace, not this repo root. Without this fixup, ``import config`` and
-``import mcp_server.*`` would fail depending on cwd/PYTHONPATH, which a
-production review flagged as the top blocking risk (see the approved plan,
-review item 1).
+``import mcp_server.*`` would fail depending on cwd/PYTHONPATH (see
+``Docs/MCP_SERVER_DESIGN.md`` §3).
 
 NEVER print() here or anywhere else under ``mcp_server/``: stdio carries
 JSON-RPC on stdout, and any stray byte on that stream corrupts every message

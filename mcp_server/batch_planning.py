@@ -1,17 +1,20 @@
-"""バッチA2V計画のための純ローカルロジック（HTTP不使用、W6）。
+"""バッチA2V計画のための純ローカルロジック（HTTP不使用）。
 
 このモジュールは ``gradio_ui`` を一切 import しない ―― ``gradio_ui`` パッケージ
 は ``__init__.py`` 経由で最終的に ``gradio`` を import してしまう
-（重い・stdout汚染リスクがある、計画D2/敵対的レビュー事実5）。代わりに以下の
-2ファイルのロジックを1対1で写経する:
+（重い・stdout汚染リスクがある。``Docs/MCP_SERVER_DESIGN.md`` §2 の D2）。代わりに以下の
+2ファイルのロジックを写経する:
 
-* ``gradio_ui/handlers.py`` の ``_wav_duration_seconds`` / ``suggest_frames_for_audio``
-  （フレーム数提案の正本 ―― stdlib ``wave`` で長さを取得し、
-  ``chain_math.audio_latents_required`` と突き合わせて8刻みで縮める）。
-* ``gradio_ui/manifest.py`` の ``scan_wav_folder`` 走査規約（全音声拡張子を
-  候補にし、manifest/autosave/*.tmp を除外、mtime昇順、非wav・読めないwavは
-  可視Skip行 ``skip_reason="wav-only-alpha"``、実効上限（``min(max_frames,
-  481)``）超は ``"over-cap"``）。
+* ``gradio_ui/handlers.py`` の ``suggest_frames_for_audio``
+  （フレーム数提案の正本 ―― ``chain_math.audio_latents_required`` と
+  突き合わせて8刻みで縮める）。
+* ``gradio_ui/manifest.py`` の ``_wav_duration_seconds``（stdlib ``wave`` で
+  長さを取得する）・``raw_frame_count``・``over_frame_limit`` と
+  ``scan_wav_folder`` 走査規約（全音声拡張子を候補にし、manifest/autosave/*.tmp
+  を除外、mtime昇順、非wav・読めないwavは可視Skip行
+  ``skip_reason="wav-only-alpha"``、実効上限（``min(max_frames,
+  _DEFAULT_MAX_FRAMES)``）超は ``"over-cap"``。理由コードと上限の規約の正本は
+  ``Docs/BATCH_A2V_CSV_SPEC.md``）。
 
 写経ロジックの乖離を防ぐため、``tests/test_mcp_batch_planning.py`` が本家
 （``gradio_ui.handlers.suggest_frames_for_audio``）との総当たりパリティで
@@ -19,14 +22,14 @@
 テストの3点を必ず同時に更新すること。**
 
 wav以外のファイルは stdlib ``wave`` で長さを測定できないため、走査結果では
-可視のSkip行（``skip_reason="wav-only-alpha"``）になります（v1の既知の制限、
-パネルの Batch A2V と同じ）。
+可視のSkip行（``skip_reason="wav-only-alpha"``）になります（既知の制限で、
+Gradio の Generate タブの Batch A2V と同じ）。
 
 画像フォルダの同stemマッチング（``plan_rows`` の ``image_dir`` 引数）は
-MCP専用の追加規約です ―― パネルの Batch A2V は行ごとに手動でドロップダウンから
+MCP専用の追加規約です ―― Gradio の Batch A2V は行ごとに手動でドロップダウンから
 画像を選ぶ方式（``gradio_ui/ui.py::batch_image_choices``）で、自動の
 同stemマッチングに相当する既存ロジックは存在しません。エージェントが非対話で
-計画を立てられるよう、ここで新設しています。
+計画を立てられるよう、ここに置いています。
 """
 
 from __future__ import annotations
@@ -36,7 +39,8 @@ import wave
 from pathlib import Path
 from typing import Any
 
-# gradio_ui/manifest.py の同名定数と同一（写経 -- 変更時は両方更新）。
+# gradio_ui/manifest.py の MANIFEST_NAME / AUTOSAVE_NAME / ALLOWED_AUDIO_EXTENSIONS
+# と同じ値（写経 -- 変更時は両方更新）。
 _MANIFEST_NAME = "batch_a2v_manifest.csv"
 _AUTOSAVE_NAME = "batch_a2v_manifest.autosave.csv"
 _ALLOWED_AUDIO_EXTENSIONS = (".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg")
@@ -49,7 +53,7 @@ _DEFAULT_MAX_FRAMES = 481
 
 
 # --------------------------------------------------------------------------- #
-# フレーム数提案（gradio_ui/handlers.py 写経）
+# wav の長さとフレーム数の算術（gradio_ui/handlers.py・gradio_ui/manifest.py 写経）
 # --------------------------------------------------------------------------- #
 def _wav_duration_seconds(path: Path) -> float | None:
     """.wav の長さ（秒）を stdlib ``wave`` で取得する。読めない/不正なら None。
@@ -78,15 +82,18 @@ def _resolve_fps(fps: Any) -> float:
 
 
 def raw_frame_count(dur: float, fps: Any) -> int:
-    """``gradio_ui/manifest.py::raw_frame_count`` の写経（未クランプの8n+1）。"""
+    """``gradio_ui/manifest.py::raw_frame_count`` と同じ式（未クランプの8n+1）。
+    ただし fps は :func:`_resolve_fps` を通す（manifest 版は ``float(fps)`` を
+    そのまま使う）ので、fps が空・0・数値でないときの結果は manifest 版と異なる。"""
     return ((math.floor(dur * _resolve_fps(fps)) - 1) // 8) * 8 + 1
 
 
 def over_frame_limit(dur: float, fps: Any, max_frames: int = _DEFAULT_MAX_FRAMES) -> bool:
-    """``gradio_ui/manifest.py::over_frame_limit`` の写経。実効上限は
-    ``min(max_frames, 481)``（WebView2フロントエンドの ``Math.min(cap, 481)``
-    と同型）。未指定/0の ``max_frames``（空欄相当）はハード上限へフォールバック
-    する。"""
+    """``gradio_ui/manifest.py::over_frame_limit`` と同じ判定（fps の扱いは
+    :func:`raw_frame_count` を参照）。実効上限は ``min(max_frames,
+    _DEFAULT_MAX_FRAMES)``（WebView2フロントエンド
+    ``webui/src/modes/batch/manifestMerge.ts`` と同じ上限）。未指定/0の
+    ``max_frames``（空欄相当）はハード上限へフォールバックする。"""
     cap = min(int(max_frames or _DEFAULT_MAX_FRAMES), _DEFAULT_MAX_FRAMES)
     return raw_frame_count(dur, fps) > cap
 
@@ -145,7 +152,8 @@ def _index_images_by_stem(image_dir: Path) -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# 走査（gradio_ui/manifest.py::scan_wav_folder の規約を1対1で再現）
+# 走査（gradio_ui/manifest.py::scan_wav_folder と同じ走査規約。行は辞書で返し、
+# 画像フォルダの同stemマッチングを足す）
 # --------------------------------------------------------------------------- #
 def plan_rows(
     wav_dir: Path | str,
@@ -160,7 +168,7 @@ def plan_rows(
     全音声拡張子（``_ALLOWED_AUDIO_EXTENSIONS``）を候補にし、manifestファイル
     自身とautosave・``*.tmp`` は除外、mtime昇順。非wav・読めないwavは
     ``skip_reason="wav-only-alpha"`` の可視Skip行（除外はしない）。実効上限
-    （``min(max_frames, 481)``）超は ``skip_reason="over-cap"``。それ以外は
+    （``min(max_frames, _DEFAULT_MAX_FRAMES)``）超は ``skip_reason="over-cap"``。それ以外は
     ``suggest_frames_for_audio`` でフレーム数を提案する。
     """
     wav_dir = Path(wav_dir)

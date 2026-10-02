@@ -32,12 +32,13 @@ class Settings:
     base_url: str  # e.g. "http://127.0.0.1:18620" -- WITHOUT the /api/v1 prefix
     api_key: str | None
     output_dir: Path
-    # W2: local pre-check source for tools/uploads.py (extension + size gate) --
-    # read straight from config.yaml's ``upload:`` section so the MCP-side
-    # precheck can never drift from the server's own allow-list (services/
-    # {upload,video_upload,audio_upload}_store.py), which stays the actual
-    # authority (a 400 UPLOAD_INVALID_TYPE / UPLOAD_TOO_LARGE from the server
-    # is still possible if config.yaml changes between precheck and POST).
+    # Local pre-check source for tools/uploads.py (extension + size gate) --
+    # read from config.yaml's ``upload:`` section, the same section the
+    # server's own stores (services/{upload,video_upload,audio_upload}_store.py)
+    # read, so the MCP side adds no rule of its own. The server stays the actual
+    # authority: each process reads config.yaml once at start, so a 400
+    # UPLOAD_INVALID_TYPE / UPLOAD_TOO_LARGE is still possible when config.yaml
+    # was edited and only one of the two processes was restarted.
     upload: UploadConfig = field(default_factory=UploadConfig)
 
 

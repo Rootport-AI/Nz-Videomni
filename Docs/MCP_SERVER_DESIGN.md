@@ -91,10 +91,10 @@ MCPの `stdio` トランスポート（本サーバーが使っている接続�
 
 ## 9. 写経（`batch_planning.py`）のパリティテスト方針
 
-`plan_a2v_batch` ツールは、パネルの Batch A2V 機能（`gradio_ui/manifest.py::scan_wav_folder`・`gradio_ui/handlers.py::suggest_frames_for_audio`）と同じ規約でフォルダを走査する必要がある。しかし `gradio_ui` パッケージは `__init__.py` 経由で重い `gradio` を import してしまう（起動コスト・stdout汚染リスク）ため、`mcp_server/` から直接importすることを避け、代わりに **`mcp_server/batch_planning.py` へロジックを1対1で写経**した。
+`plan_a2v_batch` ツールは、パネルの Batch A2V 機能（`gradio_ui/manifest.py::scan_wav_folder`・`gradio_ui/handlers.py::suggest_frames_for_audio`）と同じ規約でフォルダを走査する必要がある。しかし `gradio_ui` パッケージは `__init__.py` 経由で重い `gradio` を import してしまう（起動コスト・stdout汚染リスク）ため、`mcp_server/` から直接importすることを避け、代わりに **`mcp_server/batch_planning.py` へロジックを写経**した（ただし `raw_frame_count` は fps が 0・None・数値でないときの扱いが `manifest.py` 版と違い、`over_frame_limit` の `max_frames=0` の扱いは操作パネルと違う。台帳 `PENDING_TASKS.md` §1-69）。
 
 写経元は2箇所:
-- `gradio_ui/handlers.py::suggest_frames_for_audio`（フレーム数提案。stdlib `wave` で長さを取得し、`chain_math.audio_latents_required` と突き合わせて8刻みで縮める）。
+- `gradio_ui/handlers.py::suggest_frames_for_audio`（フレーム数提案。長さは `gradio_ui/manifest.py::_wav_duration_seconds` の写しが stdlib `wave` で取得し、`chain_math.audio_latents_required` と突き合わせて8刻みで縮める）。
 - `gradio_ui/manifest.py::scan_wav_folder` の走査規約（全音声拡張子を候補にし、`manifest`/`autosave`/`*.tmp` を除外、mtime昇順、非wav・読めないwavは可視Skip行 `skip_reason="wav-only-alpha"`、実効上限 `min(max_frames, 481)` 超は `"over-cap"`）。理由コードと上限の規約の正本は [`BATCH_A2V_CSV_SPEC.md`](BATCH_A2V_CSV_SPEC.md)。
 
 写経の乖離を防ぐため、`tests/test_mcp_batch_planning.py` が本家 `gradio_ui.handlers.suggest_frames_for_audio` との**総当たりパリティテスト**（多数の秒数・fps値の組み合わせで両実装の出力を突き合わせる）で固定している。さらに写経元の2ファイル（`gradio_ui/handlers.py` / `gradio_ui/manifest.py`）側にも「MCPサーバー側に写経あり・変更時は両方＋パリティテストを更新」というコメントを追加してあり、将来どちらかを変更する開発者が反対側の存在に気づける設計にした。

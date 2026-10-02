@@ -15164,3 +15164,77 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 8. 棚卸しの担当が旧リポジトリ `_frozen_Nz-LTX23-frontend-AviUtl2` を見て「`featureScope.ts` が無い」と誤報しました。フロントエンドの実在確認は `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/` で行います。
 
 候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 139. ★コード内コメントの現行化・第 7 区域「残りの Python」（`chain_math.py`・`config.py`・`sft_quant_format.py`・`main.py`・`mcp_server/` 15 ファイル・`tracking/` 自作 5 ファイル・`scripts/trim_uetrack_checkpoint.py`＝25 ファイル）＝ 473 ブロック中 150 を現行化（内部 134＋AI エージェントに見える公開 docstring 16・コメントのみ・動作は不変）＋ MCP の `INSTRUCTIONS` の書き直し＋利用者に見える文言 6 グループ＋台帳 §1-67〜§1-69 と §1-58 の追記＋ `Docs/MCP_SERVER_DESIGN.md` §9 の訂正＋ `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §10 への訂正行（2026-10-02）
+
+**要約**: `gradio_ui/`（§138）に続く第 7 区域として、テスト・第三者コード・操作パネル・保管スクリプト・PowerShell・YAML を除いた**残りの Python 25 ファイルをまとめて 1 回**で行いました。これで Python の自作の本体コードは全区域が完了しました。25 ファイル・7,725 行・473 ブロックのうち 150 ブロック（事実が古いもの 105・導入時期の記録だけのもの 45）を書き換え、コードは変わっていないことを構文木とトークン列で確かめました。古いままの割合は 32%です。**この区域で新しい扱いを 1 つ決めました**: MCP のツール説明文（`mcp_server/tools/*.py` の 23 本の公開 docstring。FastMCP がそのまま AI エージェントに渡します）と、同じく AI に見える `params.py` のクラス docstring 3 本（JSON Schema の `description` に載ります）・`scripts/trim_uetrack_checkpoint.py` のモジュール docstring（`--help` の文面）の計 27 本は、判定担当が他の docstring と同じ基準で判定して新しい文面の案を作り、一覧の第 4 節に全文を載せてオーナーが決める（従来の「書き換えず一覧に載せる」の拡張）扱いにしました。27 本のうち 16 本を直し、11 本は現行のままでした。`server.py` の `INSTRUCTIONS`（サーバー全体の説明・文字列定数）は事実の一覧表の C 節で古い点を列挙し、オーナー了承のうえ Opus が書き直しました（143 行→153 行）。
+
+**目的**: 骨格は §135〜§138 と同じです。判定担当への指示（v8）に固有の注意を足しました。
+1. 公開 docstring は同じ基準で判定し jsonl に `external: true` を付ける（統合後に `split_external.py` で分ける）。
+2. 節番号の系統が 7 つある（台帳／VERIFICATION_LOG／`CHAIN_STAGE2_RESEARCH_NOTES.md`／`COMFORT_LIMIT_TABLE.md`／`MULTI_ENGINE_DESIGN.md`／`OBJECT_TRACKING_DESIGN.md`／`PRUNAVAED_WORKORDER.md`・仕様書）。
+3. git 追跡外の参照先 `outputs/stage2_window_sweep/SWEEP_RESULTS.md` は追跡される記録（VERIFICATION_LOG §53.6）に置き換える。
+4. `chain_math.py` の「frozen」は固定ヘッド／テイルの専門用語で残す。
+5. `config.py` は既定値の正本（定義のそばの値は残す）。
+6. `sft_quant_format.py` の needle（`tests/test_sft_quant_format.py::test_module_is_torch_free` がソースに `import torch`・`import numpy`・`import safetensors`・`mmap` が無いことを検査する）を `merge_changes.py` の機械検査に追加する。
+7. `mcp_server/batch_planning.py` は `gradio_ui` の写しなので第 6 区域の新しい文に揃える。
+8. `tracking/` は `.venv-utils`（CPU 版 torch）で動く。
+
+**対象**: 25 ファイル・7,725 行・473 ブロック（コメント 211・docstring 163・行末コメント 99）です。起点コミットは `25a0e13`（§138 のコミット）です。`tracking/vendor/uetrack/` は第三者コードで対象外です。差し替えが入ったのは 22 ファイル（`tracking/__init__.py`・`mcp_server/__init__.py`・`mcp_server/tools/__init__.py` は変更なし。`mcp_server/server.py` は `INSTRUCTIONS` だけ）です。
+
+**方法**:
+1. **抜き出し・区域分け**: 19 区域へ切りました（R18 と R19 は 1 体で判定しました）。公開 docstring の一覧は `list_mcp_public.py` が `register(mcp)` の `mcp.tool(...)` の呼び出しから機械的に作り、`mark_public.py` が区域ファイルの該当ブロックに印を付けました。
+2. **判定（Opus・区域ごと・読み取りのみ・2 波）**: 18 体を走らせました。
+3. **検算（Opus 5 体・V1〜V5）**: 257 ブロック（change 全件＋公開 docstring の keep 全件＋keep の抜き取り）を確かめました。確認済み 250・異論 6・一部だけ直した 0・見逃し 1 でした。保留 1 件（`params.py` の「制御系アダプタは必ず `loras[0]` に置く」）は検算 2 体が独立にコードで否定して解決しました。
+4. **統合**: 行範囲・`old_lines` の一致・needle・構文木・トークン列・残存語の機械検査は全部 OK でした。
+5. **揃え・再検算**: Opus 1 体が 17 件を直し（`replace_new_lines` 16・`add` 1）、残存語 68 行は理由つきで残し、再検算 41 件で新しい誤りは 0 でした。
+6. **オーナーの了承・適用**: 了承のうえ 150 件を適用しました。
+7. **証明とレビュー**: 下記のとおりです。
+
+**結果**:
+
+最終の判定（473 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 105 |
+| 導入時期の記録だけ | 45 |
+| 現行のまま | 323 |
+| 保留 | 0 |
+
+古いままの割合は 32%です。
+
+**この区域で決めた扱い**: 公開 docstring（AI エージェントに渡る）は判定して案を作り、第 4 節で全文を見せてオーナーが決めます。文書の指し方は非公開のコメントでは `VERIFICATION_LOG §N`、公開 docstring ではファイルを開けるよう `Docs/VERIFICATION_LOG.md §N` にしました。計画番号 D-n は `Docs/MCP_SERVER_DESIGN.md §2` に実在するので、根拠として引くものは「§2 の D-n」の形にしました。モジュール docstring のツール本数はそのファイルの `register` の定義のそばの値として残しました。docstring の中のファイル参照はリポジトリ直下からの相対にしました。公開 docstring の実測値は AI が引数を決めるのに要るので数を残し、記録の節を添えました。
+
+**当初から誤っていた主張の訂正の例**: `chain_math.py` の「End source の音声は凍結されない」（CM-087。実際は素材に音声トラックがあれば映像の帯と同じタイルの音声も凍結されます。検算 V1 と揃えが総当たりで確認しました。CM-072・CM-096 の「(its audio is still refined)」も同じです）、`internal_segment` を「2 クリップ以上のモード」（CM-017。実際は `end_source_mode_override` からしか選べません）、参照先 `engine/pipeline/reference_video_cond.py`（CM-013。実在するのは上流 `ltx_core.conditioning.types.reference_video_cond` です）、`config.py` の「`default` は固定の既定パスのフィールドから注入」（CFG-014。実際は記述子の `default_file` です）・「`model.component_*_path`」（CFG-020。非推奨の鍵です。部品ファイルは `LTX_COMPONENT_FILES` で渡します）・快適予算の戻り先（CFG-023／025／037。Chained は `chain_comfort_token_budget` です）、`main.py` の「uvicorn の access log は既定のまま」（MN-002。実際は 4 本のフィルタを付けます）・「spec 12.4」（存在しない節です）、`mcp_server/client.py` の「double-load race」（MC-004。サーバが 409 `PIPELINE_LOADING` で断ります）、`tracking/uetrack_runtime.py` の「~13M params」（TR-005。配布ファイルは 26,784,694 です）・`task_index` が読まれる（TR-041。読まれません）、`scripts/trim_uetrack_checkpoint.py` の「`interface_text_proj.*` は網が宣言するがアーカイブに無い」（STC-001。vendored の網が作らないので捨てる側です）。公開 docstring では: `vae_mode` の「LTX 2.5 では指定自体が 422」（既定以外の値だけです）・`clips[].num_frames` の「必須」（既定 49 です）・`reference_video_id` の「1 クリップ限定」（1〜24 です）・画角拡張の「control 系をちょうど 1 本」（本数は数えません）・「制御系アダプタは必ず `loras[0]`」（並び順に依存する処理は API・サービス・エンジンのどこにも無く、MCP 自身が `in-outpainting` を末尾に足しています）・`job_status` の戻り（`JobResponse` の 16 フィールドです）・`load_pipeline` の `JOB_BUSY` は `models`／`base_model` を渡したときだけです・`get_mp4_info` のループバック限定はこの読み出しだけです・`upload_video` の実測は `max_frames` が 1 以上のときです。
+
+**証明**: 22 ファイル＋`mcp_server/server.py` で、コメントと docstring 以外のトークン列の差は、オーナーが決めた文字列 10 件（`INSTRUCTIONS` 1・下の 6 グループの 9 箇所）だけでした（文字列に触れていないファイルは docstring を除いた構文木が起点 `25a0e13` と一致しました）。`sft_quant_format.py` に needle の 4 文字列はありません。改行コードは元の形式のままです（`mcp_server/` の 9 ファイルは元から LF でした。`core.autocrlf=true` のため blob は変わりません）。
+
+**テスト**（GPU・実バックエンド・ネットワークに触れない）: アプリ `.venv` の全件 2,873 passed・54 skipped でした（`tests/test_mcp_registration.py::test_backend_status_structured_content_not_wrapped_and_reachable_false` の 1 件は実バックエンド稼働中に落ちる既知のもの〔CLOSED §3-89〕なので `--deselect` しました。`-q` は付けていません）。`.venv-engine` の `test_retake_math.py`・`test_sft_quant_sft_reader.py`・`test_sft_quant_loader_service.py` は 72 passed でした。`.venv-utils` の `test_tracking_runtime_smoke.py` は 4 passed でした。文字列の変更後に 3 環境とも再実行し、同じ結果でした。
+
+**外部文言（オーナー決定）**:
+(A) 公開 docstring 16 本（`ConditioningImageArg`・`LoraArg`・`ChainClipArg`・`plan_a2v_batch`・`submit_generate`〔225→234 行〕・`submit_chain`〔272→279 行〕・`job_status`・`cancel_job`・`join_job`・`get_mp4_info`・`get_config`・`load_pipeline`・`upload_image`・`upload_video`・`upload_audio`・`trim_uetrack_checkpoint.py` のモジュール docstring）。
+(B) `INSTRUCTIONS`: 日付入りの変更履歴 7 箇所・段階名「Phase 1 の制約」・時点依存の語を落として現在形にし、数え方を「retake_* の 5 引数」「outpaint_* の 6 引数」にし、重複を削除し、実測値（約 2 倍・約 1.10 倍・約 7.7GiB・4.66GiB）は性質の言い方にして数値は各ツールの説明に任せ、`stage2_window`・`chunked_upsample`・`embed_mp4_metadata`＋`get_mp4_info`・`plan_a2v_batch`・Inpainting が MCP に無いことの案内を足しました（143 行→153 行）。
+(C) その他 6 件: `submit_chain` の `ToolError`「V2V継続とA2Vはv1では併用できません」→「併用できません」、`trim_uetrack_checkpoint.py` の出力「(expected: the CLIP text seam)」→「(expected: none)」、`main.py` の旧名「LTX-AviUtl2-Bridge」→「Nz-Videomni backend」（`FastAPI(title=)`・`/` の `service`・argparse の description・`main.py` と `config.py` の docstring 1 行目。`gradio_ui/ui.py` の画面タイトルと見出し、それを固定する `tests/test_gradio_ui.py` はオーナー判断待ちで触っていません）、`main.py` の `config.yaml` 不在の警告の 2 行目「お試し表示に切り替わることがあります」→「既定値では IC-LoRA の一覧やプリセットが空のままです」、`mcp_server/tools/batch.py` の `_NEXT_STEPS` に `stage2_window="full_length"` を追加（Gradio の A2V と同じ窓です）、`chain_math.py` の `kv < 2` の `ValueError` 文言を「An end source band spends part of the audio overlap budget」に短縮（届くのは `in_window` だけで、旧文は API から届かない `internal_segment` の理由でした）。旧文面を固定しているテストはありませんでした。
+
+**台帳**: §1-67（`use_component_files` の既定 False のまま LTX 2.3 を real で読み込むと VAE／音声の読み込み元が無くなる疑い。`checkpoint_name` の既定も `config.yaml.example`・仕様書 §11 と違います）・§1-68（MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` で止まる）・§1-69（バッチ A2V の計画の写しと本家の挙動の差 3 点）を起票しました。§1-58 に `ModelConfig.ltx_repo_dir`・`reload_interval`（読まれません）と `tracking/uetrack_runtime.py` の `TASK_DECODER.NUM_CHANNELS`（読まれません）を追記しました。
+
+**文書の訂正 3 件**:
+1. `config.py` の既定値と `config.yaml.example`・仕様書 §11.2／§11.3 の値が逆な件は、台帳 §1-67 の中で既定の向きを決めます（文書は直していません）。
+2. `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` §10 の「音声はそのタイルでも精練される」は音声の凍結より前の記述なので、記録文書と同じ扱いで本節に訂正を書き、該当段落に訂正の 1 行を添えました。
+3. `Docs/MCP_SERVER_DESIGN.md` §9 の「1 対 1 で写経」と長さを取る関数の写し元（`gradio_ui/manifest.py::_wav_duration_seconds`）は設計書なので本文を直しました（INPAINTING_DESIGN §7.3 の前例と同じです）。
+
+**敵対的レビュー**（Opus・(b)／(c) 全件＋(a) 全件＋公開 docstring 16 本を 1 引数ずつ `api/models.py` と突き合わせ＋`INSTRUCTIONS` の全文をツールの実物と突き合わせ＋音声の凍結の主張を両エンジンのコードと計算で確認＋台帳と設計書）: 最初の担当はサブエージェントを 3 体起動して API の利用上限に当たり途中で止まったため、1 体で読み直しました。
+- **直すべき 2 件（全件採用）**: `INSTRUCTIONS` の「pipeline の読み込み（load_pipeline）も同様にジョブ実行中はできません」は、引数なしの読み込みは `pm.load()` を呼ぶだけで `JOB_BUSY` にならない（`api/pipeline.py`）ので、「`models` か `base_model` を渡す読み込み」に限定しました。`chain_math.py` の `resolve_stage2_window` 付近のコメント「one internal segment of at most 20 latent frames」は、区画の長さが `kv + n_end_v`（`overlap_frames` は最大 8）なので最大 25 になります。CM-072 で同じ主張を消していたので、このブロックの取り残しでした。式で書く形に直しました。
+- **注意 3 件（2 件採用）**: `INSTRUCTIONS` の「in-outpainting という制御系 LoRA が 1 本だけ必要」を、`submit_generate` の docstring（本数は数えない）と同じ言い方に揃えました。台帳 §1-68 の選択肢 A（`_request` でタイムアウトも `ToolError` に包む）は、`load_pipeline`・`join_job` が素通しの `httpx.ReadTimeout` を自分で受けて `finished: false` を返す設計（`Docs/MCP_SERVER_DESIGN.md §2` の D5）と両立しないので、その条件を書き足しました。3 件目（台帳が引く §139 が無い）は本節を同じコミットで書くことで解消しました。
+- **参考 4 件（不採用）**: `config.py` の 1 行の長さなど言い回しの範囲でした。
+
+**費用の目安**（Opus のトークン、概算）: 事実の一覧表 約 41 万・判定 約 300 万・検算 約 118 万・揃え 約 32 万・レビュー 約 35 万（止まった 1 回分を含めると約 50 万）・反映と修正 約 25 万でした。合計約 560 万となり、計画の見込み（約 600 万）の範囲内でした。
+
+**申し送り**（次へ）:
+1. Python の自作の本体コードは全区域が完了しました。残るのは道具が Python 専用のため別扱いにした `scripts/*.ps1`（PowerShell 4 本・約 3,000 行・コメント約 880 行。`install_ltx.ps1` は版の固定先の正本です）と `config.yaml.example` の YAML コメント（Phase B／C・「loras 要求は全て拒否」・「46GB モノリス」・日付が残っています）です。やるなら「`#` コメントだけを抜き出し、コメント以外の文字列が一致することで証明する」小さな道具が要ります（オーナー判断）。
+2. `gradio_ui/ui.py` の画面タイトルと見出し「LTX-AviUtl2-Bridge」（`gr.Blocks(title=)`・`gr.Markdown("# …")`）と、それを固定する `tests/test_gradio_ui.py` の `assert "LTX-AviUtl2-Bridge" in r.text` が残っています（オーナー判断待ち）。
+3. 他の区域に残った同型: `engine/pipeline/fast_video_pipeline.py` の「VERIFICATION_LOG §57.6 G4」（関門名）と「46GB monolith」2 箇所、`api/models.py` の `UploadVideoResponse.trimmed` の「Additive」、操作パネル `webui/src/lora/controlLoras.ts` の `combineLoras` の「engine reads … off `loras[0]`」（同じ誤りです）、`shell/comfortTable.ts`・`modes/chained/useChainForm.ts`・`chainUtils.ts` の日付と台帳番号（フロントエンドは対象外です）。
+4. 第三者コード `tracking/vendor/uetrack/uetrack.py` の NZ 注記「missing keys」は unexpected 側が正しいです（vendored なので触りません）。
+5. 判定指示書に「『必ず〜に置け』のような要件の主張は、その要件を読む関数まで追って確かめる」「定数の正本の場所（`api/models.py` か `config.py` か）を確かめる」を書き足します（v8.1）。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。

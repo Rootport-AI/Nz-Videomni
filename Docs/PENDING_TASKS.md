@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-01（§1「近日中の改修項目」に §1-64〜§1-66〔Gradio の A2V の音声の長さの事前検査が丸める前の fps で計算している／バッチ A2V に幅・高さの ÷64 の事前検査が無い／Gradio の快適上限の警告と高品質モードの警告が言語を渡さず英語固定〕を起票し、§1-58「使われていないコード」に `gradio_ui/api_client.py` の `ApiClient.lora_thumbnail_url`・`gradio_ui/i18n.py` の `LABELS` のうち参照されないキー10個の2件を追記したうえ、§1 冒頭の案内を §1-66 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-61〜§1-63〔GGUF の純 torch の逆量子化で 8 つの型が誤った値を返すか止まる／`GGUFStateDictLoader.load` の鍵の付け替えが死んだコードで bf16 の経路では読み込みのたびに警告が出る／画角拡張（Outpainting）の `MIN_INNER_SIDE` がキャンバスと半径に応じた下限になっていない〕を起票し、§1-58「使われていないコード」に `build_gguf_loader_service`・`GGUFLoaderService.uninstall`・`_make_depth_processor` の関数内 import の3件を追記したうえ、§1 冒頭の案内を §1-63 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-59〜§1-60〔Gemma の GGUF 量子化サービスの `_read_target_vocab_from_header` の名前と型が本体に合わない／`embed_cpu_offload` が `install` で固定され通らない枝が残る〕を起票し、§1-58「使われていないコード」に `BlockSwapService.uninstall`・`build_block_swap_service`・`_load_gguf_connectors` の引数 `target_device` の3件を追記したうえ、§1 冒頭の案内を §1-60 まで含む記述に更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-02（§1「近日中の改修項目」に §1-67〜§1-69〔`use_component_files` の既定 False のまま LTX 2.3 を real で読み込むと VAE／音声の読み込み元が無くなる疑い／MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` で止まる／バッチ A2V の計画の写し（MCP）と本家（Gradio・操作パネル）の挙動の差〕を起票し、§1-58「使われていないコード」に `config.py` の `ModelConfig.ltx_repo_dir`・`reload_interval`・`tracking/uetrack_runtime.py` の `_BASE_CFG` の2件を追記したうえ、§1 冒頭の案内を §1-69 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-64〜§1-66〔Gradio の A2V の音声の長さの事前検査が丸める前の fps で計算している／バッチ A2V に幅・高さの ÷64 の事前検査が無い／Gradio の快適上限の警告と高品質モードの警告が言語を渡さず英語固定〕を起票し、§1-58「使われていないコード」に `gradio_ui/api_client.py` の `ApiClient.lora_thumbnail_url`・`gradio_ui/i18n.py` の `LABELS` のうち参照されないキー10個の2件を追記したうえ、§1 冒頭の案内を §1-66 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-61〜§1-63〔GGUF の純 torch の逆量子化で 8 つの型が誤った値を返すか止まる／`GGUFStateDictLoader.load` の鍵の付け替えが死んだコードで bf16 の経路では読み込みのたびに警告が出る／画角拡張（Outpainting）の `MIN_INNER_SIDE` がキャンバスと半径に応じた下限になっていない〕を起票し、§1-58「使われていないコード」に `build_gguf_loader_service`・`GGUFLoaderService.uninstall`・`_make_depth_processor` の関数内 import の3件を追記したうえ、§1 冒頭の案内を §1-63 まで含む記述に更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58・§1-59・§1-60・§1-61・§1-62・§1-63・§1-64・§1-65・§1-66 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58・§1-59・§1-60・§1-61・§1-62・§1-63・§1-64・§1-65・§1-66・§1-67・§1-68・§1-69 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -304,11 +304,13 @@
   - `engine/preprocess/driver.py` の `_make_depth_processor` の関数内 import（パッケージの `__init__` が `depth` を即時に import するため遅延の効果が無い。重い `vda` の import は `_ensure_loaded` の中で遅延のまま。害は無い）。
   - `gradio_ui/api_client.py` の `ApiClient.lora_thumbnail_url`（呼び出し元なし。導入コミット `591d4be` 以来）。Style LoRA のギャラリーは `gradio_ui/adapters.py` の `build_style_gallery` が `/api/v1/loras/{name}/thumbnail` のパスを自前で組んでおり、同じパスが2箇所にある（どちらかに寄せる）。
   - `gradio_ui/i18n.py` の `LABELS` のうち、どこからも引かれないキー10個。`a2v_mode_a2v`・`a2v_guide`・`a2v_cap_panel` は `gradio_ui/ui.py` の注記のとおり Clip Chain の A2V の入口を画面から外したときに意図して残したもの。`btn_load_model`・`btn_unload_model`・`msg_coming` は残す理由がコードに無い（`tests/test_gradio_ui.py` は `btn_load_model` が上部バーに無いことを固定しているだけ）。`lbl_apikey`・`msg_generate_error`・`msg_upload_done`・`batch_image_shared` の4つも同じく引かれない。
+  - `config.py` の `ModelConfig.ltx_repo_dir`・`reload_interval`（どのコードからも読まれない。`/config` の応答に載るだけ）。
+  - `tracking/uetrack_runtime.py` の `_BASE_CFG` の `MODEL.TASK_DECODER.NUM_CHANNELS`（どこからも読まれない。値は vendored 側の既定と同じ256で無害）。
 - **影響**: 無い（未使用のコードが残っているだけ）。
 - **選択肢**（オーナー判断・優劣はつけない）: 項目ごとに消すか残すかを決める。
 - **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135・§136・§137・§138（申し送り）。
-- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）、`engine/transformer/block_swap_service.py`（`BlockSwapService.uninstall`・`build_block_swap_service`）、`engine/gemma/gguf_quant_service.py`（`_load_gguf_connectors`）、`engine/gguf/loader_service.py`（`build_gguf_loader_service`・`GGUFLoaderService.uninstall`）、`engine/preprocess/driver.py`（`_make_depth_processor`）、`gradio_ui/api_client.py`（`ApiClient.lora_thumbnail_url`）、`gradio_ui/adapters.py`（`build_style_gallery`）、`gradio_ui/i18n.py`（`LABELS`）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135・§136・§137・§138・§139（申し送り）。
+- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）、`engine/transformer/block_swap_service.py`（`BlockSwapService.uninstall`・`build_block_swap_service`）、`engine/gemma/gguf_quant_service.py`（`_load_gguf_connectors`）、`engine/gguf/loader_service.py`（`build_gguf_loader_service`・`GGUFLoaderService.uninstall`）、`engine/preprocess/driver.py`（`_make_depth_processor`）、`gradio_ui/api_client.py`（`ApiClient.lora_thumbnail_url`）、`gradio_ui/adapters.py`（`build_style_gallery`）、`gradio_ui/i18n.py`（`LABELS`）、`config.py`（`ModelConfig.ltx_repo_dir`・`reload_interval`）、`tracking/uetrack_runtime.py`（`_BASE_CFG`）。
 
 ### 1-59. `_read_target_vocab_from_header` の名前と型が本体に合わない（起票：2026-10-01）
 
@@ -401,6 +403,40 @@
 - **着手**: 着手時は go／no-go の検討から始める。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §138。
 - **関連ファイル**: `gradio_ui/ui.py`（`preset.change` の配線・幅／高さ／フレーム数の `.change` の配線・`on_qmode_change`）、`gradio_ui/presets.py`（`apply_preset`・`compute_spill_warning`）、`gradio_ui/i18n.py`（`warn_hq_unsupported`・`warn_spill_limit`）。
+
+### 1-67. `use_component_files` の既定 False のまま LTX 2.3 を real で読み込むと、VAE／音声の読み込み元が無くなる疑い（起票：2026-10-02）
+
+- **現象**: `config.py` の `VramConfig.use_component_files` の既定は False だが、配布の `config.yaml.example` と仕様書 `Videomni_Backend_Specification.md` §11.3 は `true`。LTX 2.3 のアダプタ `services/engines/ltx/adapter.py` の `_build_load_payload` は `checkpoint_path` に常に `""` を渡し、VAE／音声のビルダーを部品ファイルへ付け替えるのは `use_component_files` が真のときだけ（`engine/pipeline/fast_video_pipeline.py`）。`_real_available` はこの鍵を見ないので、`config.yaml` が無い（または鍵が欠けた）環境で LTX 2.3 を real で読み込むと、mock に落ちずに読み込みで失敗する疑いが強い（コメント現行化の検算がコードで確認。実行では確かめていない）。同じく `ModelConfig.checkpoint_name` の既定（`"ltx-2.3-22b-distilled"`）も example と仕様書 §11.2（`-1.1` 付き）と違う。
+- **影響**: `config.yaml.example` を写した環境では起きない。既定値で起動した環境だけ。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 既定を配布の値（`use_component_files=True`・`checkpoint_name` は `-1.1` 付き）に揃える。
+  - B: `_real_available` でこの鍵も見て mock に落とす。
+  - C: `main.py` の `config.yaml` 不在の警告にこの鍵のことを書く。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139（コメント現行化 第 7 区域の検算の申し送り）。
+- **関連ファイル**: `config.py`（`VramConfig`・`ModelConfig`）、`config.yaml.example`、`services/engines/ltx/adapter.py`（`_build_load_payload`・`_real_available`）、`engine/pipeline/fast_video_pipeline.py`、`main.py`（`build_app` の警告）。
+
+### 1-68. MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` で止まる（起票：2026-10-02）
+
+- **現象**: `mcp_server/tools/jobs.py` の `purge_terminal_jobs` は、個別の削除の失敗として `ToolError` だけを受けて続行する。しかし `mcp_server/client.py` の `BackendClient._request` は `httpx.ReadTimeout` を `ToolError` に変換せずそのまま投げ直すので、DELETE の1件が読み取りタイムアウトになると一括削除がそこで止まる。ツールの説明文（AI エージェントに渡る）の「個別の削除が失敗しても処理を止めず」が成り立たない場合がある。
+- **影響**: DELETE は軽い処理なので起きにくい。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `_request` でタイムアウト（`httpx.TimeoutException`）も `ToolError` に包む（ただし `load_pipeline`・`join_job` は素通しの `httpx.ReadTimeout` を自分で受けて `finished: false` を返す設計〔[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §2 の D5〕なので、包むなら `purge_terminal_jobs` の経路だけにするか、2 ツール側も合わせて直す）。
+  - B: `purge_terminal_jobs` で `httpx.TimeoutException` も個別の失敗として受ける。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139。
+- **関連ファイル**: `mcp_server/tools/jobs.py`（`purge_terminal_jobs`）、`mcp_server/client.py`（`_request`）。
+
+### 1-69. バッチ A2V の計画の写し（MCP）と本家（Gradio・操作パネル）の挙動の差（起票：2026-10-02）
+
+- **現象**: `mcp_server/batch_planning.py` は `gradio_ui/manifest.py`・`handlers.py` の写しだが、3点で挙動が違う。(a) `raw_frame_count` は fps を `_resolve_fps` に通す（0・None・数値でないときは24.0）が、写し元 `manifest.raw_frame_count` は `float(fps)` をそのまま使う。(b) `over_frame_limit` の `max_frames=0` は MCP と Gradio が481（`MAX_FRAMES`）に戻すが、操作パネルの `webui/src/modes/batch/manifestMerge.ts` は `??` で0のまま使う（全行が over-cap）。(c) パリティテスト `tests/test_mcp_batch_planning.py` が本家と総当たりで比べるのは `suggest_frames_for_audio` だけで、`raw_frame_count`・`over_frame_limit` の写しは比べていない。
+- **影響**: 正常な入力（fps が正の数・`max_frames` が1以上）では3実装とも同じ。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 0と数値でない fps の扱いを決めて3実装を揃える。
+  - B: パリティテストを `raw_frame_count`・`over_frame_limit` にも広げる。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139。[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §9。
+- **関連ファイル**: `mcp_server/batch_planning.py`、`gradio_ui/manifest.py`（`raw_frame_count`・`over_frame_limit`）、`tests/test_mcp_batch_planning.py`、操作パネルの `webui/src/modes/batch/manifestMerge.ts`。
 
 ---
 

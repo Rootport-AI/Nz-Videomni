@@ -1,9 +1,9 @@
-"""LTX-AviUtl2-Bridge — FastAPI entrypoint (spec 3 / 4 / 12.4).
+"""Nz-Videomni backend — FastAPI entrypoint (spec §3 / §4 / §12).
 
 Boots the FastAPI app, applies CLI overrides, registers the API router under
 /api/v1, mounts the Gradio test UI at /ui, and configures CORS + logging.
 
-Environment isolation (spec 2.5): this process never touches the system Python.
+Environment isolation (spec §2.3): this process never touches the system Python.
 Run it via ``run.ps1`` or the project venv's interpreter.
 """
 
@@ -46,16 +46,17 @@ def configure_logging(log_dir: Path) -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=handlers,
     )
-    # S0: the Gradio test UI polls GET /jobs/{id} once per second via an httpx
+    # The Gradio test UI polls GET /jobs/{id} once per second via an httpx
     # client (gradio_ui/handlers.py::_poll_job_until_done). httpx/httpcore log
     # every request at INFO ("HTTP Request: GET ... 200 OK"), and because those
     # loggers propagate to the root logger configured above, that one line per
     # second floods BOTH the console and server.log — drowning the meaningful
     # job/progress/VRAM lines (historically ~69% of server.log). Raise their
     # threshold to WARNING so routine polling is silent while genuine transport
-    # errors still surface. uvicorn's access log is left at its default (it is a
+    # errors still surface. uvicorn's access log is not touched here (it is a
     # separate logger with its own handler and far lower volume — one line per
-    # request, not the httpx "HTTP Request:" echo).
+    # request, not the httpx "HTTP Request:" echo; build_uvicorn_log_config
+    # filters its polling lines).
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
@@ -65,8 +66,8 @@ class JobPollingAccessFilter(logging.Filter):
 
     The Gradio UI polls ``GET /api/v1/jobs/{job_id}`` once per second while a
     job runs; with uvicorn's default access log that is one console line per
-    second for minutes (the "access-log flood" from the G3 gate). This filter
-    suppresses exactly that traffic and nothing else:
+    second for minutes (the "access-log flood", VERIFICATION_LOG §26.2). This
+    filter suppresses exactly that traffic and nothing else:
 
     * only ``GET`` (POST /generate, DELETE /jobs/... always show),
     * only the job-status resource itself — subpaths like
@@ -241,15 +242,16 @@ def build_uvicorn_log_config() -> dict:
 def suppress_starlette_422_deprecation() -> None:
     """Mute Starlette's ``HTTP_422_UNPROCESSABLE_ENTITY`` deprecation warning.
 
-    Gradio 6.19's queue-join route (``gradio/routes.py`` ~L1402) still reads
-    ``starlette.status.HTTP_422_UNPROCESSABLE_ENTITY`` when building its
-    status-code map, and Starlette emits a :class:`StarletteDeprecationWarning`
-    ("'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use ...") on every such
-    access — a console warning the owner cannot act on (it is inside Gradio, not
-    this project's code). Suppress *only* that one warning: the filter is scoped
-    by both the exact message regex and the Starlette warning category, so no
-    other DeprecationWarning is affected. Falls back to a message-only filter if
-    the category import ever changes upstream.
+    Gradio 6.19's queue-join route (``queue_join_helper`` in
+    ``gradio/routes.py``) reads ``starlette.status.HTTP_422_UNPROCESSABLE_ENTITY``
+    when building its status-code map, and Starlette emits a
+    :class:`StarletteDeprecationWarning` ("'HTTP_422_UNPROCESSABLE_ENTITY' is
+    deprecated. Use ...") on every such access — a console warning the owner
+    cannot act on (it is inside Gradio, not this project's code). Suppress
+    *only* that one warning: the filter is scoped by both the exact message
+    regex and the Starlette warning category, so no other DeprecationWarning
+    is affected. Falls back to a message-only filter if the category import
+    ever changes upstream.
     """
     try:
         from starlette.exceptions import StarletteDeprecationWarning
@@ -268,16 +270,16 @@ def suppress_starlette_422_deprecation() -> None:
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Startup/shutdown for the app (FastAPI's lifespan, not the retired
+    """Startup/shutdown for the app (FastAPI's lifespan, not the deprecated
     ``@app.on_event`` hooks, which emit a DeprecationWarning on every boot).
 
     Gradio's ``mount_gradio_app`` wraps whatever ``lifespan_context`` the app
     already has (gradio/routes.py::mount_gradio_app), so this still runs first
-    and the queue startup second — the same order the event hooks gave.
+    and the queue startup second.
     """
     # Starlette runs sync endpoints (and BackgroundTasks) on anyio's default
-    # worker-thread pool, whose default cap is 40. With the real backend now
-    # off on its own daemon threads, this pool only serves the many small
+    # worker-thread pool, whose default cap is 40. With the real backend off
+    # on its own daemon threads, this pool only serves the many small
     # sync handlers (polling GET /jobs, self-issued POSTs, video fetches);
     # raise the ceiling to 200 so a burst of those never queues behind a
     # saturated pool and appears to hang.
@@ -307,22 +309,22 @@ def build_app(args: argparse.Namespace) -> FastAPI:
 
     configure_logging(config.log_dir)
 
-    # Last line of defence (plan Phase 5-1): load_config() falls back to the
-    # code defaults WITHOUT raising when config.yaml is absent, and those
-    # defaults differ enough from the real file (empty ic_loras/presets, no
-    # engine venv path) that the backend can silently drop to MOCK. Say so,
-    # once, in Japanese.
+    # Last line of defence: load_config() falls back to the code defaults
+    # WITHOUT raising when config.yaml is absent, and those defaults differ
+    # from the shipped config.yaml.example (empty ic_loras and
+    # generation_presets, for one), so the server boots without the operator's
+    # settings. Say so, once, in English and Japanese.
     _config_path = Path(args.config) if args.config else DEFAULT_CONFIG_PATH
     if not _config_path.exists():
         logger.warning(
             "config.yaml not found (%s): running on built-in defaults. "
             "設定ファイル config.yaml が見つかりません。既定値で起動します"
-            "（このままだと動画生成がお試し表示に切り替わることがあります）。"
+            "（既定値では IC-LoRA の一覧やプリセットが空のままです）。"
             "config.yaml.example をコピーして config.yaml を作ってから起動し直してください。",
             _config_path,
         )
 
-    app = FastAPI(title="LTX-AviUtl2-Bridge", version="0.4.0", lifespan=_lifespan)
+    app = FastAPI(title="Nz-Videomni backend", version="0.4.0", lifespan=_lifespan)
 
     runtime = RuntimeInfo(
         host=host,
@@ -332,7 +334,7 @@ def build_app(args: argparse.Namespace) -> FastAPI:
     )
     app.state.context = build_context(config, runtime)
 
-    # CORS (spec 3.1 / 3.2)
+    # CORS (spec §3.1 / §3.2)
     if config.server.allow_all_cors:
         app.add_middleware(
             CORSMiddleware,
@@ -395,9 +397,9 @@ def mount_gradio(app: FastAPI, runtime: RuntimeInfo) -> bool:
 
         base_url = f"http://127.0.0.1:{runtime.port}"
         blocks = build_ui(base_url, api_key=runtime.api_key)
-        # Dark theme is the default (spec: Settings->Theme switches to light).
+        # Dark theme is the default (spec §12.2: Settings->Theme switches to light).
         # gr.Blocks(js=) is deprecated in gradio 6, so the startup js is passed
-        # at the mount site (mount_gradio_app accepts js=; routes.py ~L2472).
+        # at the mount site (gradio's routes.mount_gradio_app accepts js=).
         gr.mount_gradio_app(
             app, blocks, path="/ui",
             js="() => { document.body.classList.add('dark'); }",
@@ -423,7 +425,7 @@ def register_root_route(app: FastAPI, *, ui_mounted: bool) -> None:
 
         @app.get("/", include_in_schema=False)
         async def _root() -> JSONResponse:
-            return JSONResponse({"service": "LTX-AviUtl2-Bridge", "ui": None, "docs": "/docs"})
+            return JSONResponse({"service": "Nz-Videomni backend", "ui": None, "docs": "/docs"})
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def _favicon() -> Response:
@@ -442,7 +444,7 @@ def local_ip() -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="LTX-AviUtl2-Bridge backend")
+    parser = argparse.ArgumentParser(description="Nz-Videomni backend")
     parser.add_argument("--listen", action="store_true", help="bind 0.0.0.0 (home LAN)")
     parser.add_argument("--port", type=int, default=None, help="override server port")
     parser.add_argument("--api-key", type=str, default=None, help="require Bearer api-key")
@@ -497,8 +499,8 @@ def main() -> None:
         host=runtime.host,
         port=runtime.port,
         log_level="info",
-        # F1 (G3 feedback): uvicorn defaults + a filter that mutes the 1-line/s
-        # GET /api/v1/jobs/{id} 200 polling flood (see JobPollingAccessFilter).
+        # uvicorn defaults + the access-log filters that mute the polling and
+        # Gradio-internal request lines (see build_uvicorn_log_config).
         log_config=build_uvicorn_log_config(),
     )
 

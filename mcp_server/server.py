@@ -29,26 +29,28 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   load_pipeline(base_model="LTX25") のように id を渡します。切り替えは
   ワーカーの載せ替えを伴い数秒〜十数秒かかるので、backend_status の
   status.state が ready になったことを確認してから生成を投げてください。
-  切り替え直後の1本目の生成はキャッシュが冷えていて通常の約2倍かかります
+  切り替え直後の1本目の生成はキャッシュが冷えていて遅くなります
   （wait_for_job がタイムアウトしても失敗ではないので呼び直してください）。
+  この説明では速さとメモリの実測値を書きません。数値は各ツールの説明
+  （load_pipeline / submit_generate / submit_chain）を見てください。
   LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）だけです
   （422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
-  は 2026-08-30 から LTX 2.5 でも使えます——negative_prompt / nag_scale /
-  nag_tau / nag_alpha / neg_method / vsf_scale も同時に効くようになりました。
+  は LTX 2.5 でも使えます（negative_prompt / nag_scale / nag_tau / nag_alpha /
+  neg_method / vsf_scale も効きます）。
   ただし nag_alpha=0 にしても「NAG なし」とビット単位で同じ絵にはならないので、
   無効化したいときは nag_enabled を false にしてください。
-  keep_resident（モデル骨格の常駐）は 2026-08-25 から LTX 2.5 でも使えます
-  （既定 off のまま。ただし LTX 2.3 とは常駐する中身が違い、2.5 が抱えるのは
-  テキストエンコーダの重みだけで約7.7GiBです）。
+  keep_resident（モデル骨格の常駐）は LTX 2.5 でも使えます
+  （既定 off。ただし LTX 2.3 とは常駐する中身が違い、2.5 が抱えるのは
+  テキストエンコーダの重みだけです。常駐ぶんのメモリを多く使います）。
   keep_resident_embeddings（埋め込み処理器の常駐）は LTX 2.5 専用です
-  （既定 off。実測4.66GiB。keep_resident とは別のスイッチで、両方 on にすると
-  メモリ増分は加算されます）。これだけは向きが逆で、LTX 2.3 を選んでいるとき
-  に true を送ると 422 FEATURE_UNSUPPORTED になります——「LTX 2.5 で使えない
-  機能」ではなく「LTX 2.3 で使えない機能」の1つ目です。
-  attention_backend（SageAttention）も 2026-08-25 から LTX 2.5 で使えます
-  （既定 "sdpa" のまま）。ただしこれは他の高速化と違い、"sage" にすると
+  （既定 off。常駐ぶんのメインメモリを多く使います。keep_resident とは別の
+  スイッチで、両方 on にするとメモリ増分は加算されます）。LTX 2.3 を選んで
+  いるときに true を送ると 422 FEATURE_UNSUPPORTED になります（LTX 2.3 の
+  側で使えない機能です）。
+  attention_backend（SageAttention）も LTX 2.5 で使えます
+  （既定 "sdpa"）。ただしこれは他の高速化と違い、"sage" にすると
   同じシードでも生成結果の細部が変わります。速さは動画の大きさに強く依存し、
-  1280x768 の連結生成で約1.10倍、512x320 級では効かないか、かえって遅く
+  大きい動画ほど効きます。小さい動画では効かないか、かえって遅く
   なることがあります。sageattention が入っていない環境では 422 にはならず
   自動的に "sdpa" へ降格して完走します（この降格の規律は 2.3 と同じです）。
   loras（スタイルLoRA・制御系IC-LoRA）と reference_video_id、および
@@ -56,26 +58,35 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   使えます。submit_chain は連結生成そのものに加えて
   source_video_id（V2V継続）と source_audio_id（A2V。複数クリップにまたがる
   長尺A2Vも含みます）、loras と reference_video_id（複数クリップにまたがる
-  長尺IC-LoRAも含みます）が使えます。end_source_video_id /
-  end_source_image_id（素材（末尾））も 2026-08-26 から LTX 2.5 で使えます
-  ——この日に撮り直し（Retake）と素材（末尾）が開通し、submit_chain が
-  投げられるモードは LTX 2.5 でも全部通るようになりました。submit_chain で
-  まだ使えないのは vae_mode の1つだけです（keep_resident・attention_backend・
-  nag_enabled は submit_chain でも使えます。nag_enabled は 2026-08-30 から
-  LTX 2.5 でも使えるようになりました）。keep_resident_embeddings は
+  長尺IC-LoRAも含みます）が使えます。submit_chain のモードは、撮り直し
+  （Retake）と end_source_video_id / end_source_image_id（素材（末尾））を
+  含めて LTX 2.5 でもすべて使えます。submit_chain で LTX 2.5 では使えないのは
+  vae_mode（既定値以外）だけです（keep_resident・attention_backend・
+  nag_enabled は submit_chain でも使えます）。keep_resident_embeddings は
   submit_chain でも LTX 2.5 専用で、LTX 2.3 では 422 になります。
-  撮り直し（Retake）も 2026-09-01 から submit_chain の引数として使えます
-  （retake_video_id ほか5引数。LTX 2.3 / LTX 2.5 のどちらでも使えます）。
-  同じ日に、画角拡張（Outpainting）も submit_generate の引数として使える
-  ようになりました（outpaint_pad_* ほか6引数）。どちらも下の専用の節を
+  撮り直し（Retake）は submit_chain の引数（retake_* の 5 引数）、画角拡張
+  （Outpainting）は submit_generate の引数（outpaint_* の 6 引数）で、
+  どちらも LTX 2.3 / LTX 2.5 のどちらでも使えます。下の専用の節を
   読んでください。
+  ほかに知っておくとよい引数とツール（詳細は各ツールの説明）:
+  submit_chain の stage2_window は Stage-2 の窓の名前です
+  （chain_math.STAGE2_WINDOW_PRESETS の名前から選ぶ。既定は standard）。
+  submit_chain の chunked_upsample は既定 on のチャンク化アップサンプル
+  です（説明は submit_chain の説明の「その他」）。
+  submit_generate / submit_chain の embed_mp4_metadata は既定 on で、
+  生成条件を mp4 に埋め込みます。埋め込んだ内容は get_mp4_info で読めます。
+  plan_a2v_batch はフォルダの wav を走査して1行ずつの計画を返すだけで、
+  アップロードとジョブ投入は行いません（返ってきた手順に沿って
+  upload_audio と submit_chain を呼んでください）。
+  Inpainting は API（GenerateRequest.inpaint）にはありますが、MCP の
+  ツールにはありません。
 
 ■ 同時実行は1ジョブまで
-  バックエンドは Phase 1 の制約として、生成ジョブを同時に1本しか実行できません。
+  バックエンドは生成ジョブを同時に1本しか実行しません。
   ジョブが進行中に新しい submit_generate / submit_chain を呼ぶと 409 JOB_BUSY
   エラーになります。先に job_status か wait_for_job で完了を確認してから次を
-  投げてください。pipeline の読み込み（load_pipeline）も同様にジョブ実行中は
-  できません。
+  投げてください。pipeline の読み込み（load_pipeline）も、models か base_model
+  を渡すとき（ベースモデルや部品の入れ替え）は同様にジョブ実行中はできません。
 
 ■ 基本の流れは「投げて→待つ」（submit + poll）
   生成は時間がかかるため、submit_generate / submit_chain はジョブを登録して
@@ -95,10 +106,10 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   **2件以上で source_video を併用しないときは逆順Chained**（最後のクリップから
   順に生成し、各クリップは
   1つ後ろのクリップの冒頭を自分の末尾として引き継ぎます。**受理されますが
-  推奨外**——実機ゲート後のオーナー目視・試聴で、クリップの境目・末尾（錨直前）に
-  映像のモーフや音楽の不統一といった品質劣化が出ることを確認しており、これは
-  仕様として許容しています）になります。出力の長さはどちらの場合もクリップの
-  合計であって、素材の分だけ伸びることはありません。品質を重視して複数クリップを
+  推奨外**——クリップの境目・末尾（錨直前）に映像のモーフや音楽の不統一と
+  いった品質劣化が出ることがあり、これは仕様として許容しています）になります。
+  出力の長さはどちらの場合もクリップの合計であって、素材の分だけ伸びることは
+  ありません。品質を重視して複数クリップを
   終端付きで繋ぎたい場合は、end_source をクリップ1件ずつ使い、生成物を次の
   素材にして過去へ遡って生成する手動リレー（AviUtl2タイムライン側で組み合わせる）
   が実用的な回避策です。
@@ -113,9 +124,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   不自然なモーフが起きますが、これは仕様として許容しています。
   **なおこの組み合わせは実験的な機能で、最後のクリップを長くすると映像がほぼ
   静止する時間が出ることがあります。**
-  クリップ1件のときは従来どおり窓内モード（冒頭と末尾の間を補間）です。
 
-■ 撮り直し（Retake）— submit_chain の retake_video_id ほか5引数
+■ 撮り直し（Retake）— submit_chain の retake_* の 5 引数
   既に手元にある動画の「まん中」だけを作り直す機能です（時間方向の
   inpainting）。retake_video_id（upload_video で取得）と
   retake_window_start_sec（作り直す窓の開始秒）を指定すると、サーバーが
@@ -137,7 +147,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   source_video_id / source_audio_id / reference_video_id / end_source_* /
   clips[0].conditioning_images とはすべて排他です。
 
-■ 画角拡張（Outpainting）— submit_generate の outpaint_pad_* ほか6引数
+■ 画角拡張（Outpainting）— submit_generate の outpaint_* の 6 引数
   手元の動画の外側を描き足して画角を広げる機能です。
   outpaint_pad_left / _right / _top / _bottom（px）のいずれかを0より大きく
   すると有効になり、4辺すべて0なら通常の生成のままです。
@@ -149,7 +159,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   一致・残す領域は縦横とも256px以上・元動画のフレーム数が num_frames 以上。
   reference_video_id（広げる対象の元動画）が必須で、conditioning_images と
   crop_width/crop_height とは排他です。
-  **in-outpainting という制御系LoRAが1本だけ必要で、submit_generate が自動で
+  **in-outpainting という制御系LoRAが必要で、submit_generate が自動で
   loras へ追加します**（既に同名を入れていれば何もしません）。
   **in-outpainting が導入されていない環境では404になる**ので、事前に
   list_loras で存在を確認してください。

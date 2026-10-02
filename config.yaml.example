@@ -33,13 +33,10 @@ model:
   # ここに古い gguf_transformer_path / gemma_root などが残っていても、
   # 起動時に警告が出るだけで値は使われません（削除して構いません）。
   checkpoint_name: "ltx-2.3-22b-distilled-1.1"
-  text_encoder: "google/gemma-3-12b-it-qat-q4_0-unquantized"
   pipeline_type: "distilled"
   auto_load_on_generate: true
-  reload_interval: 0
 
-  # ランタイムパス。相対パス（PROJECT_ROOT基準でconfig._absが絶対化）。
-  ltx_repo_dir: "./vendor/LTX-2"   # reference only（上流LTX-2クローン）。
+  # ランタイムの選択。
   backend: "auto"                  # auto | mock | real（auto: エンジン環境と必要なモデルファイルが揃えば real, 欠ければ mock。GPU の有無は見ない）
 
   # ベースモデル記述子の置き場と、モデル置き場のルート。記述子の中のパスは
@@ -94,11 +91,10 @@ vram:
   dit_cpu_load: true              # transformer を CPU 構築し非ブロックのみ GPU へ。ロード時 GPU スパイク ~16.9GB を除去。
   vae_tiling: true
 
-  # attention_tiling / attention_tile_size / block_swap は worker へは渡らない
-  # （attention_tiling と block_swap は GET /status の表示用）。実際の block swap は
+  # attention_tiling / block_swap は worker へは渡らない
+  # （どちらも GET /status の表示用）。実際の block swap は
   # block_swap_blocks_on_gpu（GPU に残すブロック数）が決める。
   attention_tiling: false
-  attention_tile_size: null
   block_swap: true
   block_swap_blocks_on_gpu: 8
   # VAE tiling sizes for the real GGUF engine（720p を 16GB に収めるため）。
@@ -116,9 +112,6 @@ vram:
   #   keep_resident・既定 false。正本は api.models の KEEP_RESIDENT_DEFAULT）。
   #   Docs/VERIFICATION_LOG.md §48。
   use_component_files: true
-
-  # 高VRAM環境向けの任意検証用。16GBでの成功は保証しない。
-  allow_disable_low_vram: true
 
 # 生成サイズ(width/height)は必ず64の倍数(two-stage distilled)。最終表示サイズは crop_output で。
 generation_presets:
@@ -179,7 +172,6 @@ upload:
   dir: "./uploads"
   max_image_size_mb: 20
   allowed_image_extensions: [".png", ".jpg", ".jpeg", ".webp"]
-  normalize_to_png: true
   # 参照動画アップロード（POST /upload/video）。受け取ったまま保存する（切り出しの窓や
   # max_frames の上限が指定されたときだけ切り出す）。
   max_video_size_mb: 200
@@ -269,6 +261,5 @@ limits:
 
 output:
   dir: "./outputs"
-  format: "mp4"
   save_metadata_json: true
   keep_raw_frames: false

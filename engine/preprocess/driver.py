@@ -19,25 +19,10 @@ import cv2
 
 from engine.preprocess.base import FrameProcessor, VideoProcessor
 from engine.preprocess.canny import CannyProcessor
+from engine.preprocess.depth import DepthProcessor
 from engine.preprocess.dwpose import DwposeProcessor
 
 Processor = FrameProcessor | VideoProcessor
-
-
-def _make_depth_processor() -> VideoProcessor:
-    """Factory for the depth processor (``DepthProcessor``).
-
-    The heavy part of depth, the vendored Video-Depth-Anything tree
-    (torchvision + the DINOv2 stack), is imported inside
-    ``DepthProcessor._ensure_loaded`` on the first depth job, so a canny/pose
-    job does not pay for it and an import failure there does not take
-    canny/pose down with it. The import of ``engine.preprocess.depth`` below
-    is not where that deferral happens: the package ``__init__`` imports it
-    eagerly, and its top level needs only cv2, numpy and torch.
-    """
-    from engine.preprocess.depth import DepthProcessor
-
-    return DepthProcessor()
 
 
 # Kind -> zero-arg factory. Canny is stateless; DWPose holds TorchScript models
@@ -46,7 +31,7 @@ def _make_depth_processor() -> VideoProcessor:
 _FACTORIES: dict[str, Callable[[], Processor]] = {
     "canny": CannyProcessor,
     "dwpose": DwposeProcessor,
-    "depth": _make_depth_processor,
+    "depth": DepthProcessor,
 }
 
 # Process-level instance cache: a stateless Canny is cheap; DWPose and Depth

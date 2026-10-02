@@ -1552,7 +1552,7 @@ if ($CloneUpstreamReference) {
         git clone https://github.com/Lightricks/LTX-2.git $vendorDir
         if ($LASTEXITCODE -ne 0) { throw "vendor/LTX-2 clone failed." }
     }
-    Write-Host "  (reference only: config.model.ltx_repo_dir points here; no venv built)"
+    Write-Host "  (reference only; no venv built)"
 }
 
 # ----------------------------------------------------------------------------

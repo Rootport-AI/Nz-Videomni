@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 import os
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Final
 
 import torch
 
@@ -241,6 +241,16 @@ class LTXFastVideoPipeline:
         self._keep_resident_enabled = False
         self._keep_resident_registry: object | None = None
 
+        # ── job VRAM peaks seen before a mid-job counter reset ───────────────
+        # ``_reference_conditioning_from_pixels`` resets the CUDA peak counters
+        # to measure the reference encode on its own, which would erase the
+        # job's earlier peak from ``max_memory_allocated``/``max_memory_reserved``.
+        # It records the largest pre-reset values here (bytes); every job entry
+        # point zeroes them, and worker.py / chain_pipeline.run_chain report
+        # ``max(counter, carried value)``.
+        self._pre_reset_peak_allocated = 0
+        self._pre_reset_peak_reserved = 0
+
         # ── PrunaVAED（枝刈り映像VAEデコーダ）state ─────────────────────────────
         # ジョブ単位のトグル。``_set_vae_mode_job`` が毎ジョブ必ず明示設定する
         # ので、prefetch/sage のような finally 側のリセットは**持たない**
@@ -289,12 +299,6 @@ class LTXFastVideoPipeline:
         self._gguf_per_layer_quant = gguf_per_layer_quant
         self._vae_spatial_tile_size = vae_spatial_tile_size
         self._vae_temporal_tile_size = vae_temporal_tile_size
-        # Component-file paths. __init__ passes the local arguments on directly:
-        # the two VAE paths to _install_component_sources, the text projection
-        # path to the Gemma install below.
-        self._component_video_vae_path = component_video_vae_path
-        self._component_audio_vae_path = component_audio_vae_path
-        self._component_text_projection_path = component_text_projection_path
         # PrunaVAED（枝刈り版の映像VAEデコーダ、約690MB）の置き場所。空文字＝
         # 未設定で、その場合 vae_mode="prune_vaed" のジョブは既定デコーダへ降格
         # する。存在確認は**ここでは行わない**（ジョブ単位で行う。
@@ -1372,12 +1376,21 @@ class LTXFastVideoPipeline:
                 _mb = 1024 * 1024
                 # The reset below clears BOTH per-job counters worker.py reports
                 # (peak_vram_mb from max_memory_allocated, peak_vram_reserved_mb
-                # from max_memory_reserved), so carry the job-so-far peaks into
-                # the log line rather than losing them. The VRAM gates read the
-                # reference-encode numbers from THIS log line, not from the job
-                # metadata.
-                _prior_peak = torch.cuda.max_memory_allocated() // _mb
-                _prior_peak_reserved = torch.cuda.max_memory_reserved() // _mb
+                # from max_memory_reserved). The job-so-far peaks are kept in
+                # two places: the pipeline's ``_pre_reset_peak_*`` (the largest
+                # seen before any reset this job; the job's reported peaks take
+                # the max with it) and the log line below (this interval's
+                # starting point, for reading the reference encode on its own).
+                _prior_alloc_b = torch.cuda.max_memory_allocated()
+                _prior_reserved_b = torch.cuda.max_memory_reserved()
+                self._pre_reset_peak_allocated = max(
+                    self._pre_reset_peak_allocated, _prior_alloc_b
+                )
+                self._pre_reset_peak_reserved = max(
+                    self._pre_reset_peak_reserved, _prior_reserved_b
+                )
+                _prior_peak = _prior_alloc_b // _mb
+                _prior_peak_reserved = _prior_reserved_b // _mb
                 torch.cuda.reset_peak_memory_stats()
                 _alloc_before = torch.cuda.memory_allocated() // _mb
                 _reserved_before = torch.cuda.memory_reserved() // _mb
@@ -1870,6 +1883,8 @@ class LTXFastVideoPipeline:
         # raise, and it must not do so with the sage request already armed but
         # the try/finally not yet entered.
         self._set_sage_job(attention_backend)
+        # Job start for the carried pre-reset VRAM peaks (see __init__).
+        self._pre_reset_peak_allocated = self._pre_reset_peak_reserved = 0
         # Block-swap prefetch, armed alongside sage for the same reason (no
         # ordering constraint, and its reset lives in the finally below).
         self._set_block_swap_prefetch_job(block_swap_prefetch)
@@ -2068,6 +2083,8 @@ class LTXFastVideoPipeline:
         from engine.pipeline.chain_pipeline import run_chain
 
         self._set_sage_job(attention_backend)
+        # Job start for the carried pre-reset VRAM peaks (see __init__).
+        self._pre_reset_peak_allocated = self._pre_reset_peak_reserved = 0
         self._set_block_swap_prefetch_job(block_swap_prefetch)
         self._set_fused_dequant_job(fused_gguf_dequant_kernel)
         if keep_resident is not None:
@@ -2153,6 +2170,8 @@ class LTXFastVideoPipeline:
         from engine.pipeline.outpaint_pipeline import run_outpaint
 
         self._set_sage_job(attention_backend)
+        # Job start for the carried pre-reset VRAM peaks (see __init__).
+        self._pre_reset_peak_allocated = self._pre_reset_peak_reserved = 0
         self._set_block_swap_prefetch_job(block_swap_prefetch)
         self._set_fused_dequant_job(fused_gguf_dequant_kernel)
         if keep_resident is not None:
@@ -2238,6 +2257,8 @@ class LTXFastVideoPipeline:
         from engine.pipeline.inpaint_pipeline import run_inpaint
 
         self._set_sage_job(attention_backend)
+        # Job start for the carried pre-reset VRAM peaks (see __init__).
+        self._pre_reset_peak_allocated = self._pre_reset_peak_reserved = 0
         self._set_block_swap_prefetch_job(block_swap_prefetch)
         self._set_fused_dequant_job(fused_gguf_dequant_kernel)
         if keep_resident is not None:
@@ -2296,19 +2317,3 @@ class LTXFastVideoPipeline:
         finally:
             if os.path.exists(output_path):
                 os.unlink(output_path)
-
-    def compile_transformer(self) -> None:
-        # NOT compatible with NAG/VSF: this caches ONE compiled transformer
-        # instance and replaces ledger.transformer with a lambda that returns it
-        # forever, which defeats the per-job install (NAG's/VSF's install() must
-        # re-run against a FRESH transformer every job, since attn2/audio_attn2
-        # are patched per-job based on that job's NagState). Nothing calls this
-        # method, so it is left as-is rather than reworked to cooperate with
-        # per-job NAG/VSF install.
-        transformer = self.pipeline.model_ledger.transformer()
-
-        compiled = cast(
-            torch.nn.Module,
-            torch.compile(transformer, mode="reduce-overhead", fullgraph=False),
-        )
-        setattr(self.pipeline.model_ledger, "transformer", lambda: compiled)

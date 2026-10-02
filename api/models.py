@@ -39,9 +39,14 @@ _LIMITS_DEFAULTS = LimitsConfig()
 # The Laplacian-pyramid blend dilates its mask AFTER shrinking it to a 64px long
 # side, so a radius of r pixels there costs ``r * canvas_long_side / 64`` real
 # pixels — about 150px at a 1920px canvas with the official r=5. That dilation
-# grows the *generated* region inward, so a keep rectangle smaller than roughly
-# twice that is entirely replaced by generated content and the "keep" promise
-# becomes a lie. 256 is the flat floor that stops the pathological case.
+# grows the *generated* region inward from every padded side, so a keep
+# rectangle can be replaced by generated content even at 256: with bands on
+# both the left and the right, a 256-wide keep rectangle on a 1920-wide canvas
+# keeps 0 of its 256 columns at the stage-1 default r=5 (120 at the stage-2
+# default r=2; 96 at r=5 on a 1024-wide canvas; 0 at r=2 on a 4096-wide one).
+# 256 is therefore a flat floor that only stops the pathological case (a keep
+# rectangle of a few dozen pixels); it is NOT a bound derived from the canvas
+# size and the radius, and it does not guarantee that the kept pixels survive.
 #
 # ``engine/outpaint/canvas.py`` carries the same number as a defence-in-depth
 # check. It is duplicated rather than shared because the app venv and the engine

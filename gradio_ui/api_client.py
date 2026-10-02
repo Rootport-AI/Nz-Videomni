@@ -78,10 +78,6 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
-    def lora_thumbnail_url(self, name: str) -> str:
-        """The absolute URL of a LoRA's thumbnail (GET /loras/{name}/thumbnail)."""
-        return self._url(f"/api/v1/loras/{name}/thumbnail")
-
     def delete_job(self, job_id: str) -> dict:
         """DELETE /jobs/{id}. The server cancels the job if it is still active
         (``{"cancelled": True, ...}`` for a queued job, ``{"cancel_requested":

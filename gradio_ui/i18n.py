@@ -11,8 +11,6 @@ LABELS: dict[str, dict[str, str]] = {
     "en": {
         # --- top common bar ---
         "btn_refresh": "Refresh",
-        "btn_load_model": "Load model",
-        "btn_unload_model": "Unload model",
         # --- status line words ---
         "st_pipeline": "Pipeline",
         "st_loaded": "loaded",
@@ -47,7 +45,6 @@ LABELS: dict[str, dict[str, str]] = {
                                            "default."),
         # --- header ---
         "app_subtitle": "Verification UI — thin client over the frozen REST API (/api/v1/*).",
-        "msg_coming": "Coming in a later slice.",
         # --- shared prompt / negative prompt (above the tabs) ---
         "lbl_prompt": "Prompt (single generation & clip-chain shared base)",
         "ph_prompt": "A bustling downtown at dusk; crowds weave through the alleys as neon signs flicker on — like a scene from a movie trailer",
@@ -201,10 +198,8 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_result": "Result",
         # --- generate: flow messages ---
         "msg_prompt_required": "Please enter a prompt.",
-        "msg_upload_done": "Image uploaded: {image_id}",
         "msg_upload_failed": "Upload failed: {err}",
         "msg_job_busy": "Another job is already running (409).",
-        "msg_generate_error": "generate error {code}: {text}",
         "msg_generate_failed": "generate failed: {err}",
         "msg_job_started": "Job started ({mode}): {job_id}",
         "msg_generating": "Generating… {pct:.0%} (step {step}/{total})",
@@ -310,12 +305,10 @@ LABELS: dict[str, dict[str, str]] = {
                                     "length ({max} frames)."),
         "msg_chain_geometry": "The chain geometry is invalid: {err}",
         "msg_chain_started": "Chain job started ({n} clips): {job_id}",
-        # --- clip chain: generation mode (the radio offers none / V2V;
-        # a2v_mode_a2v is not among its choices) ---
+        # --- clip chain: generation mode (the radio offers none / V2V) ---
         "v2v_mode_label": "Generation mode",
         "v2v_mode_none": "None (normal clip chain)",
         "v2v_mode_v2v": "V2V continuation — generate a continuation of an uploaded video",
-        "a2v_mode_a2v": "A2V audio-driven — match the video (lip movement) to uploaded audio",
         "v2v_cap_mode": ("A2V (audio-to-video) for Clip Chain is available in the AviUtl2 control "
                          "panel; this screen offers V2V only. "
                          "\"None\" is the ordinary 2-24 clip chain."),
@@ -369,28 +362,8 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_msg_join_done": "Joined version created ({mode}): {job_id}",
         "v2v_msg_join_failed": "Failed to create the joined version: {err}",
         # --- A2V audio: a2v_lbl_audio labels the audio field of the Generate
-        # tab's Audio-to-Video accordion. The Clip Chain tab has no A2V panel;
-        # a2v_guide / a2v_cap_panel are not referenced by the UI ---
+        # tab's Audio-to-Video accordion ---
         "a2v_lbl_audio": "Source audio (wav/mp3/m4a/aac/flac/ogg, max 50 MB)",
-        "a2v_guide": ("**Getting good results with A2V**\n\n"
-                      "This feature generates video with mouth movements matched to the audio you "
-                      "upload. It works best with a close-up of a single speaker in a composition "
-                      "with limited movement — in that setting the lip movements line up almost "
-                      "exactly with the audio. In busier scenes, or when the subject moves around "
-                      "within a wide shot, the match tends to weaken. If the result isn't "
-                      "convincing, try simplifying the composition first. Setting a start image on "
-                      "clip 1 is an effective way to pin the close-up composition.\n\n"
-                      "Prompt example (close-up, single speaker):\n\n"
-                      "`Cinematic trailer shot, extreme close-up of a weathered detective speaking "
-                      "directly to camera in a dim office, warm lamplight raking across his face, "
-                      "shallow depth of field, subtle head movement, lips articulating each word "
-                      "clearly, tense and intimate mood, film grain, 35mm.`\n\n"
-                      "Clear speech works best, and clips somewhat longer than 5-6 seconds tend "
-                      "to be more stable."),
-        "a2v_cap_panel": ("A2V here uses ONE clip (the audio drives that whole clip). The audio "
-                          "must be at least as long as the video — shorter audio is rejected. Your "
-                          "uploaded audio is kept as-is in the output. To drive several chained "
-                          "clips with one audio track, use the AviUtl2 plug-in window."),
         # --- A2V flow messages (the Generate-tab A2V flow and the chain
         # handler's A2V branch) ---
         "a2v_msg_audio_required": "Please select a source audio file for A2V.",
@@ -459,7 +432,6 @@ LABELS: dict[str, dict[str, str]] = {
         # --- settings tab ---
         "h_conn": "Connection",
         "lbl_base_url": "base_url",
-        "lbl_apikey": "API key",
         "badge_set": "Configured",
         "badge_unset": "Not set",
         "h_behavior": "Behavior",
@@ -557,7 +529,6 @@ LABELS: dict[str, dict[str, str]] = {
                               "also the batch's skip limit: a wav needing more "
                               "frames than this is skipped."),
         "batch_row_image": "Image for this row",
-        "batch_image_shared": "Shared",
         "batch_copy_common": "Copy common prompt to this row",
         "batch_regen_row": "Regenerate this row",
         "batch_col_queue": "#",
@@ -602,8 +573,6 @@ LABELS: dict[str, dict[str, str]] = {
     "ja": {
         # --- top common bar ---
         "btn_refresh": "状態更新",
-        "btn_load_model": "モデル読込",
-        "btn_unload_model": "モデル解放",
         # --- status line words ---
         "st_pipeline": "パイプライン",
         "st_loaded": "読込済",
@@ -636,7 +605,6 @@ LABELS: dict[str, dict[str, str]] = {
                                            "再エンコードすると消えます。既定はオンです。"),
         # --- header ---
         "app_subtitle": "検証用UI — 凍結REST API (/api/v1/*) の薄いクライアント。",
-        "msg_coming": "後のスライスで実装予定。",
         # --- shared prompt / negative prompt (above the tabs) ---
         "lbl_prompt": "プロンプト(単発生成・クリップ連結の共通ベース)",
         "ph_prompt": "夕暮れの賑やかな下町、行き交う人々、ネオンが灯りはじめる路地。映画のワンシーンのように——",
@@ -773,10 +741,8 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_result": "結果",
         # --- generate: flow messages ---
         "msg_prompt_required": "プロンプトを入力してください。",
-        "msg_upload_done": "画像アップロード完了: {image_id}",
         "msg_upload_failed": "アップロード失敗: {err}",
         "msg_job_busy": "別のジョブが実行中です (409)。",
-        "msg_generate_error": "generate エラー {code}: {text}",
         "msg_generate_failed": "generate 失敗: {err}",
         "msg_job_started": "ジョブ開始 ({mode}): {job_id}",
         "msg_generating": "生成中… {pct:.0%} (step {step}/{total})",
@@ -868,12 +834,10 @@ LABELS: dict[str, dict[str, str]] = {
         "warn_chain_preset_total": "クリップ合計 ({total} フレーム) がチェーンの最大長 ({max} フレーム) を超えています。",
         "msg_chain_geometry": "連結ジオメトリが不正です: {err}",
         "msg_chain_started": "連結ジョブ開始 ({n} クリップ): {job_id}",
-        # --- clip chain: generation mode (the radio offers none / V2V;
-        # a2v_mode_a2v is not among its choices) ---
+        # --- clip chain: generation mode (the radio offers none / V2V) ---
         "v2v_mode_label": "生成モード",
         "v2v_mode_none": "なし（通常のクリップ連結）",
         "v2v_mode_v2v": "V2V継続 — アップロード動画の続きを生成",
-        "a2v_mode_a2v": "A2V音声駆動 — アップロード音声に口の動きを合わせる",
         "v2v_cap_mode": "Clip ChainのA2V（音声から動画）はAviUtl2の操作パネルで使えます。この画面ではV2Vだけです。「なし」は従来どおりの2〜24クリップ連結です。",
         # --- clip chain: V2V panel ---
         "v2v_lbl_video": "元動画 (mp4/mov/webm/mkv・最大200MB)",
@@ -918,26 +882,8 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_msg_join_done": "結合版を作成しました ({mode}): {job_id}",
         "v2v_msg_join_failed": "結合版の作成に失敗しました: {err}",
         # --- A2V audio: a2v_lbl_audio labels the audio field of the Generate
-        # tab's Audio-to-Video accordion. The Clip Chain tab has no A2V panel;
-        # a2v_guide / a2v_cap_panel are not referenced by the UI ---
+        # tab's Audio-to-Video accordion ---
         "a2v_lbl_audio": "元音声 (wav/mp3/m4a/aac/flac/ogg・最大50MB)",
-        "a2v_guide": ("**A2Vを使いこなすには**\n\n"
-                      "この機能は、アップロードした音声に口の動きを合わせて動画を生成します。"
-                      "もっとも効果を発揮するのは、顔のクローズアップ・単一話者・動きが控えめな構図です。"
-                      "この条件なら、口の動きが音声とほぼぴったり一致します。"
-                      "反対に、大勢が行き交う賑やかなシーンや、人物が広い画角の中を動き回る構図では、口の一致は弱くなりがちです。"
-                      "うまくいかないときは、まず構図をシンプルに寄せてみてください。"
-                      "クリップ1に開始画像を指定してクローズアップ構図を固定するのも効果的です。\n\n"
-                      "プロンプト例（クローズアップ・単一話者）:\n\n"
-                      "`Cinematic trailer shot, extreme close-up of a weathered detective speaking "
-                      "directly to camera in a dim office, warm lamplight raking across his face, "
-                      "shallow depth of field, subtle head movement, lips articulating each word "
-                      "clearly, tense and intimate mood, film grain, 35mm.`\n\n"
-                      "音声は明瞭な発話を、動画の尺は5〜6秒よりやや長めにすると安定しやすくなります。"),
-        "a2v_cap_panel": ("この画面のA2Vはクリップを1個だけ使います（1本の音声がそのクリップ全体を駆動します）。"
-                          "音声は動画の長さ以上必要で、短い音声は拒否されます。"
-                          "出力にはアップロードした音声がそのまま入ります。"
-                          "1本の音声で連結した複数クリップを駆動したい場合は、AviUtl2プラグインの画面を使ってください。"),
         # --- A2V flow messages (the Generate-tab A2V flow and the chain
         # handler's A2V branch) ---
         "a2v_msg_audio_required": "A2Vに使う元音声を選択してください。",
@@ -996,7 +942,6 @@ LABELS: dict[str, dict[str, str]] = {
         # --- settings tab ---
         "h_conn": "接続情報",
         "lbl_base_url": "base_url",
-        "lbl_apikey": "APIキー",
         "badge_set": "設定済み",
         "badge_unset": "未設定",
         "h_behavior": "動作設定",
@@ -1079,7 +1024,6 @@ LABELS: dict[str, dict[str, str]] = {
                               "この値はバッチの除外上限も兼ねており、"
                               "これを超えるフレーム数が必要なwavは除外されます。"),
         "batch_row_image": "この行の画像",
-        "batch_image_shared": "Shared",
         "batch_copy_common": "共通プロンプトをこの行へコピー",
         "batch_regen_row": "この行を再生成",
         "batch_col_queue": "#",

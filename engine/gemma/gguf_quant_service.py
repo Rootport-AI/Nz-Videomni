@@ -177,7 +177,7 @@ _LTX_LM_PREFIX = "model.model."
 # the multimodal build; lm_head is not nested under the language model in either.
 _LTX_LM_HEAD_KEY = "model.lm_head.weight"
 
-def _read_target_vocab_from_header() -> int | None:
+def _ltx_gemma_vocab_size() -> int:
     """Return the padded (target) Gemma vocab size — the wheel config constant.
 
     The LTX Gemma3 meta model sizes embed_tokens (and the tied lm_head) to the
@@ -344,14 +344,13 @@ class GemmaGGUFQuantStateDictLoader:
         # padded vocab (262208 = 262144 + 64 padding-token rows), but the GGUF ships
         # only the real 262144 rows. We must zero-pad the GGUF embedding up to this
         # target, or load_state_dict raises a size mismatch. This value comes from
-        # GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size (see _read_target_vocab_from_
-        # header) — the same size the meta model is built with.
-        target_vocab: int | None = _read_target_vocab_from_header()
-        if target_vocab is not None:
-            logger.info(
-                "Gemma GGUF merge: target (padded) vocab size from Gemma config = %d",
-                target_vocab,
-            )
+        # GEMMA3_CONFIG_FOR_LTX.text_config.vocab_size (see _ltx_gemma_vocab_size)
+        # — the same size the meta model is built with.
+        target_vocab = _ltx_gemma_vocab_size()
+        logger.info(
+            "Gemma GGUF merge: target (padded) vocab size from Gemma config = %d",
+            target_vocab,
+        )
 
         # ── 1. Base bf16 LTX-side weights, LTX-remapped ──────────────────────────
         # Load the BASE safetensors on CPU regardless of the requested target_device;
@@ -377,7 +376,7 @@ class GemmaGGUFQuantStateDictLoader:
         # GGUF-Gemma overlay so the connectors ride the same code path as the kept
         # safetensors survivors.
         if self._connector_gguf_path is not None:
-            injected = self._load_gguf_connectors(cpu_device)
+            injected = self._load_gguf_connectors()
             n_inj = len(injected)
             # Guard: the injected connector keys must be DISJOINT from the base (the
             # monolith was dropped, so the base must not already carry them).
@@ -476,7 +475,7 @@ class GemmaGGUFQuantStateDictLoader:
         )
 
     def _load_gguf_gemma(
-        self, target_device: torch.device, target_vocab: int | None = None
+        self, target_device: torch.device, target_vocab: int
     ) -> dict[str, torch.Tensor]:
         """Read the GGUF and return Gemma weights keyed for the LTX text encoder.
 
@@ -577,7 +576,7 @@ class GemmaGGUFQuantStateDictLoader:
                 # safe (confirmed: forward cosine vs bf16 = 1.0009 with this padding).
                 # Without it, load_state_dict raises a size mismatch on embed_tokens /
                 # the tied lm_head. Done on CPU (cheap) before the single GPU move.
-                if target_vocab is not None and deq.shape[0] < target_vocab:
+                if deq.shape[0] < target_vocab:
                     pad_rows = target_vocab - deq.shape[0]
                     pad = torch.zeros(
                         (pad_rows, deq.shape[1]),
@@ -640,9 +639,7 @@ class GemmaGGUFQuantStateDictLoader:
         return out
 
 
-    def _load_gguf_connectors(
-        self, target_device: torch.device
-    ) -> dict[str, torch.Tensor]:
+    def _load_gguf_connectors(self) -> dict[str, torch.Tensor]:
         """Read the 258 embeddings-connector tensors from the LTX transformer file.
 
         The transformer file is the GGUF (bare ``{video,audio}_embeddings_connector.*``

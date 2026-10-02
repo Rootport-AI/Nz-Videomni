@@ -82,10 +82,14 @@ def test_acceleration_status_truth_table(client):
 
 
 def test_block_swap_prefetch_available_truth_table(client):
-    # PipelineManager._block_swap_prefetch_available (backend §44) mirrors the
-    # REAL gate (services/ltx_runner.py's ``block_swap_blocks_on_gpu or 8``
-    # expression), NOT the display-only low_vram.block_swap bool -- that bool
-    # is never read on the real path and would make this field lie by default.
+    # PipelineManager._block_swap_prefetch_available (backend §44; spec §6.5b)
+    # is computed from the SETTING low_vram.block_swap_blocks_on_gpu with the
+    # same ``block_swap_blocks_on_gpu or 8`` expression as the load payload
+    # (services/engines/ltx/adapter.py), NOT from the display-only
+    # low_vram.block_swap bool -- that bool is never read on the real path and
+    # would make this field lie by default. It does not reflect the engine's
+    # actual state (every block resident on GPU, or block swap failing to
+    # install); a job's block_swap_prefetch_used reports that.
     pm = client.app_context.pipeline_manager
     runner = pm.runner
 
@@ -105,10 +109,11 @@ def test_block_swap_prefetch_available_truth_table(client):
     assert pm.acceleration_status_block()["block_swap_prefetch_available"] is True
 
     # (4) real + 0 -> the ``or 8`` expression treats 0 as falsy too (same quirk
-    # as the real worker-payload formula at services/ltx_runner.py's
+    # as the real worker-payload formula at services/engines/ltx/adapter.py's
     # ``block_swap_blocks_on_gpu or 8``), so it ALSO falls back to 8 -> True.
-    # This mirrors the real gate exactly rather than a "nicer" 0-means-off
-    # reading, by design (§8.5): the two must never disagree.
+    # This follows the payload's expression exactly rather than a "nicer"
+    # 0-means-off reading, by design (§8.5): the field and the value the load
+    # payload sends must never disagree about the setting.
     pm.low_vram.block_swap_blocks_on_gpu = 0
     assert pm.acceleration_status_block()["block_swap_prefetch_available"] is True
 

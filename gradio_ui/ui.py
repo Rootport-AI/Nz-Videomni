@@ -823,7 +823,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
                         # A2V has no entry point on this tab: it runs from the Generate
                         # tab's Audio-to-Video accordion. The chain handler's A2V branch
-                        # (MODE_A2V) and its i18n keys remain, unreachable from here.
+                        # (MODE_A2V) remains, unreachable from here.
 
                         # Shared prompt lives in the draft box above the tabs
                         # (it is the common base for every clip). Negative

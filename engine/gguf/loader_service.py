@@ -19,7 +19,6 @@ Usage:
         gguf_path="/path/to/ltx2_transformer_Q4_K_M.gguf",
     )
     service.install(model_ledger)   # replaces transformer_builder loader
-    service.uninstall(model_ledger) # restores safetensors loader
 """
 
 from __future__ import annotations
@@ -178,24 +177,9 @@ class GGUFStateDictLoader:
             state_dict[name] = weight
             total_params += weight.numel()
 
-        # Try sd_ops key remapping if provided. The pinned ltx_core (see
-        # scripts/install_ltx.ps1) has no
-        # ``ltx_core.loader.sd_ops.apply_sd_ops``, so the import below fails
-        # and the except branch keeps the raw GGUF keys
-        # (GGUFQuantStateDictLoader.load skips the remap for this reason).
-        if sd_ops is not None:
-            try:
-                wrapped = StateDict(
-                    sd=state_dict,
-                    device=device,
-                    size=sum(t.numel() * t.element_size() for t in state_dict.values()),
-                    dtype={t.dtype for t in state_dict.values()},
-                )
-                from ltx_core.loader.sd_ops import apply_sd_ops
-                wrapped = apply_sd_ops(wrapped, sd_ops)
-                state_dict = wrapped.sd
-            except Exception as exc:
-                logger.warning("sd_ops application failed: %s — using raw keys", exc)
+        # NOTE: key remapping is intentionally not applied (``sd_ops`` is
+        # ignored), as in GGUFQuantStateDictLoader.load: the raw GGUF keys are
+        # used directly.
 
         logger.info(
             "GGUF load complete: %d tensors, %.1fM params from %s",
@@ -323,7 +307,6 @@ class GGUFLoaderService:
         self, gguf_path: str, ic_loras: list[IcLoraEntry] | None = None
     ) -> None:
         self.gguf_path = gguf_path
-        self._original_loader: Any = None
         # IC-LoRA (path, strength, audio_strength) entries forwarded to the
         # GGUFStateDictLoader for in-place fuse. Empty by default → no fuse.
         self.ic_loras: list[IcLoraEntry] = list(ic_loras or [])
@@ -340,7 +323,6 @@ class GGUFLoaderService:
         from dataclasses import replace as dc_replace
 
         builder = model_ledger.transformer_builder
-        self._original_loader = builder.model_loader
 
         gguf_loader = GGUFStateDictLoader(
             gguf_path=self.gguf_path,
@@ -356,24 +338,3 @@ class GGUFLoaderService:
             "GGUFLoaderService installed: transformer will load from %s",
             Path(self.gguf_path).name,
         )
-
-    def uninstall(self, model_ledger: Any) -> None:
-        """Restore original safetensors loader."""
-        if self._original_loader is None:
-            return
-        if not hasattr(model_ledger, "transformer_builder"):
-            return
-
-        from dataclasses import replace as dc_replace
-        builder = model_ledger.transformer_builder
-        new_builder = dc_replace(builder, model_loader=self._original_loader)
-        model_ledger.transformer_builder = new_builder
-        self._original_loader = None
-        logger.info("GGUFLoaderService uninstalled")
-
-
-def build_gguf_loader_service(gguf_path: str) -> GGUFLoaderService | None:
-    """Factory: returns None if no GGUF path configured."""
-    if not gguf_path:
-        return None
-    return GGUFLoaderService(gguf_path=gguf_path)

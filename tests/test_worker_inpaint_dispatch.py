@@ -40,6 +40,11 @@ class _RecordingPipe:
     """Records which entry point was called, with which keyword arguments, and
     writes the output file the worker checks for afterwards."""
 
+    # The pipeline's carried pre-reset VRAM peaks (bytes), which the worker
+    # reads for ``peak_vram_mb`` / ``peak_vram_reserved_mb``.
+    _pre_reset_peak_allocated = 0
+    _pre_reset_peak_reserved = 0
+
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
 
@@ -256,3 +261,81 @@ def test_a_plain_done_event_carries_neither_key(harness):
     worker._do_generate(_msg(tmp_path))
     done = [e for e in events if e["event"] == "done"][0]
     assert "inpaint" not in done and "outpaint" not in done
+
+
+# ── 4. the job's VRAM peaks survive the reference encode's reset (§1-56) ─────
+_MIB = 1024 * 1024
+_REAL_PEAK_RESERVED_MB = worker._peak_vram_reserved_mb
+
+
+class _ReferenceEncodingPipe(_RecordingPipe):
+    """A plain job whose generate does what a job with an IC-LoRA reference
+    does mid-job: run the REAL ``_reference_conditioning_from_pixels``, whose
+    ``_accel`` branch resets the CUDA peak counters."""
+
+    _ic_attention_strength = 1.0
+
+    def __init__(self, counters: dict) -> None:
+        super().__init__()
+        self.counters = counters
+
+    def generate(self, **kwargs):
+        from engine.pipeline.fast_video_pipeline import LTXFastVideoPipeline
+
+        # The job's work before the encode peaks high...
+        self.counters.update(alloc=9000 * _MIB, reserved=10000 * _MIB)
+
+        class _Encoder:
+            def modules(self):  # makes ``_accel`` true; no Conv3d to relayout
+                return iter(())
+
+            def tiled_encode(self, video, tiling_config=None):
+                return torch.zeros(1, 128, 1, 2, 2)
+
+        LTXFastVideoPipeline._reference_conditioning_from_pixels(
+            self,
+            torch.zeros(1, 3, 9, 16, 16),
+            cond_kwargs={
+                "video_encoder": _Encoder(),
+                "device": "cuda",
+                "tiling_config": None,
+            },
+            scale=1,  # factor 1 always takes the tiled branch: no ``.to(cuda)``
+            strength=1.0,
+        )
+        # ...and everything after the encode's reset stays lower.
+        self.counters.update(alloc=1000 * _MIB, reserved=1500 * _MIB)
+        return super().generate(**kwargs)
+
+
+def test_the_done_peaks_include_the_peak_before_the_reference_encode_reset(
+    harness, monkeypatch
+):
+    """Before the encode the job peaked at 9000/10000 MiB; after the encode's
+    reset the counters only reach 1000/1500 MiB. ``done`` must report the
+    former."""
+    _pipe, events, tmp_path = harness
+    counters = {"alloc": 0, "reserved": 0}
+    pipe = _ReferenceEncodingPipe(counters)
+    monkeypatch.setattr(worker, "_PIPE", pipe)
+    monkeypatch.setattr(worker, "_peak_vram_reserved_mb", _REAL_PEAK_RESERVED_MB)
+
+    def _reset(*a, **k):
+        counters.update(alloc=0, reserved=0)
+
+    monkeypatch.setattr(torch.cuda, "reset_peak_memory_stats", _reset)
+    monkeypatch.setattr(torch.cuda, "max_memory_allocated", lambda *a, **k: counters["alloc"])
+    monkeypatch.setattr(torch.cuda, "max_memory_reserved", lambda *a, **k: counters["reserved"])
+    monkeypatch.setattr(torch.cuda, "memory_allocated", lambda *a, **k: 0)
+    monkeypatch.setattr(torch.cuda, "memory_reserved", lambda *a, **k: 0)
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda *a, **k: None)
+
+    worker._do_generate(_msg(tmp_path))
+
+    assert (pipe._pre_reset_peak_allocated, pipe._pre_reset_peak_reserved) == (
+        9000 * _MIB,
+        10000 * _MIB,
+    ), "the encode's _accel branch must have run and recorded the pre-reset peaks"
+    done = [e for e in events if e["event"] == "done"][0]
+    assert done["peak_vram_mb"] == 9000
+    assert done["peak_vram_reserved_mb"] == 10000

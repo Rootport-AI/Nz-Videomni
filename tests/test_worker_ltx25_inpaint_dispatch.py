@@ -123,7 +123,13 @@ INPAINT_BLOCK = {
     "canvas_height": CANVAS_H,
     "mask_proof": {"decoded_frames": FRAMES, "white_ratio": 0.04, "dilated_ratio": 0.09},
 }
-LTX25_BLOCK = {"stage1_sampler": "ancestral", "marker": "ltx25"}
+#: ``phases`` mirrors the real ``outpaint25._ltx25_block``, which carries the
+#: phase ledger: it is the only copy the ``done`` event sends.
+LTX25_BLOCK = {
+    "stage1_sampler": "ancestral",
+    "marker": "ltx25",
+    "phases": {"21_stage1_denoise": {"seconds": 1.0}},
+}
 
 
 @pytest.fixture()
@@ -402,7 +408,8 @@ def test_the_done_event_still_reports_the_nine_generation_facts(harness):
     assert done["size_bytes"] == 1024
     assert done["seconds"] == 12.5
     assert done["rss_peak_gib"] == 12.0
-    assert done["phases"] == {"21_stage1_denoise": {"seconds": 1.0}}
+    assert done["ltx25"]["phases"] == {"21_stage1_denoise": {"seconds": 1.0}}
+    assert "phases" not in done
     assert done["peak_vram_mb"] == worker._gib_to_mb(9.0)
     assert done["peak_vram_reserved_mb"] == worker._gib_to_mb(10.0)
     assert done["vae_mode_used"] == "conv"

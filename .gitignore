@@ -24,8 +24,6 @@ uploads/*
 !uploads/.gitkeep
 logs/*
 !logs/.gitkeep
-# 過去のデバッグ生ログ。旧パスの写り込みがあり、追跡する価値がない。
-logs_diag/
 # models/ はベースモデル優先レイアウト(2階層以上)。models/* だと2階層目以降の
 # ファイルが無視から漏れず追跡されてしまう罠があるため、階層全体を無視した上で
 # ディレクトリ自体(!models/**/)を再包含している。これが無いとgitが配下を走査せず、
@@ -45,7 +43,6 @@ models/**
 # clone (vendor/LTX-2) is a re-cloneable upstream reference kept out of the repo.
 # Engine provenance: engine/VENDOR_NOTICE.md.
 vendor/*
-LTX-2/
 
 # Model weights / large binary artifacts (safety net regardless of location)
 *.safetensors
@@ -58,10 +55,11 @@ LTX-2/
 *.npz
 *.tar
 *.zip
+# Wheels built by scripts/build_xformers.ps1
+*.whl
 
 # HuggingFace / uv caches inside the project (install_ltx.ps1 points HF_HOME at
 # hf_home/ and UV_CACHE_DIR at .uv_cache/), plus other local cache directories
-.hf_cache/
 .cache/
 hf_home/
 .uv_cache/

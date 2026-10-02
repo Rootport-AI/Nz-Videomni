@@ -15328,3 +15328,75 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 **敵対的レビュー（Opus）**: 直すべき 0・注意 2（「bf16」は正しいがファイルを直接見て確かめたわけではない〔上の根拠で判断〕／§140 の「実寸を確かめられない」は不正確〔上の訂正行で解消〕）・参考 3（文として成り立つ・言い方は揃い数字が残るのはテストだけ・近くの「24GB bf16 Gemma」とは「non-Gemma」の明示で取り違えない）。
 
 **費用**: Opus 約 14 万（反映 5 万・レビュー 9 万）・Sonnet 約 10 万（記録）。
+
+## 141. ★台帳 §1 の消化・第 1 弾「裏取り（44 件）＋ A 引き算 ＋ B 報告と記録の整合」＝ 45 件を裏取り（確定 36・判断のみ 5・誤報 1・実機 1・G 2）、CLOSED 15 件（3-170〜3-184）・§2 へ 2 件・§1-76 起票・未使用コード約 1,000 行の削除・設定 7 項目の削除・報告の整合 4 件（2026-10-02）
+
+**要約**: コード内コメントの現行化（§130〜§140）の副産物として台帳 `Docs/PENDING_TASKS.md` §1 に起票された疑い 44 件（既存の §1-31・§1-33 を含む §1-34〜§1-75）と、その場で見つかった書き写し 1 件（`config.py` の `retake_window_min_frames` が `chain_math.RETAKE_WINDOW_MIN_PX` の値を二重に持っていた）の計 45 件を裏取り（再現テストか読解で事実を確かめること）した。状態は確定 36・判断のみ 5・誤報 1（§1-39）・実機が要る 1（§1-40。第 6 弾 G 候補）・判断のみで第 6 弾送り 2（§1-31・§1-33）で、再現できた項目はすべて台帳どおりに再現した。オーナーの了承（裏取りの表 `triage.md` は「全部推奨どおり」で承認）に基づき、害の無い未使用コード・設定項目の削除（A）と、見える値・ログ・文書を実態に合わせる整合（B）を実施し、確かめた結果問題が無かった項目と合わせて計 15 件を `Docs/PENDING_TASKS_CLOSED.md` へ CLOSED §3-170〜§3-184 として移した。未使用コード約 1,000 行（Pydantic の型・パイプラインの死んだ代入・ログの警告枝など）と設定 7 項目を削除し、報告と記録の整合は 4 件（仕様書の訂正・ログの鍵名の訂正・docstring の訂正）。実機でなければ決着しない §1-43・§1-56 は台帳の新設 §2 へ移し、敵対的レビューで見つかった新しい未使用候補 2 件（`sync_device`・`PinnedStagingPool.release()`）を §1-76 として起票した。
+
+**目的**: オーナーと合意した 6 段階（第 1 弾: 裏取り＋A 引き算＋B 報告と記録の整合／第 2 弾: D Gradio・MCP・バッチ＋C 設定と配信値／第 3 弾: E インストーラと起動／第 4 弾: F1 エンジンの挙動で単体テストで決着／第 5 弾: F2 実機が要るもの＋第 1 弾の実機確認／第 6 弾: G 単独の大きなテーマ）のうち、本節は第 1 弾を実施する。裏取りは項目ごとに「再現テスト（scratchpad に使い捨てのテストを書いて確かめる。リポジトリは変えない）」か「読解」のどちらかで行い、状態を確定・誤報・実機が要る・判断のみの 4 区分に振り分けた。A・B は裏取りで確定した項目のうち、害の無い削除（A）と、見える値・ログ・文書を実態に合わせる整合（B）に絞った。
+
+**対象**: `Nz-Videomni` リポジトリ（バックエンド。dev、起点 HEAD `d174bce`）。操作パネル（フロントエンド）・`tests/` の設計・第三者コードは対象外（テストは、消したコードを参照している箇所だけ、了承のうえ最小限に直す）。担当は A-1（エンジンの引き算・12 ファイル）・A-2（アプリ側・設定・スクリプトの引き算・12 ファイル）・B（報告と記録の整合・10 ファイル）で、レビュー後の修正が 4 件（`engine/worker.py` の docstring の限定・`engine25/worker.py` の単発ログの `ic_attn=`・`tests/test_smoke.py` のコメント・仕様書 §6.6）。
+
+**方法**:
+1. 裏取り（Opus 3 体・並行・読み取りのみ）: 44 件＋未起票 1 件を領域で 3 つ（T1 アプリ側・T2 エンジン側・T3 スクリプト・設定・その他）に分け、項目ごとに状態・根拠・推奨の選択肢・弾の割り当て・作業量・検証方法を表にした。
+2. 了承ゲート 1: 3 表を統合した `triage.md` をオーナーに提示し、「全部推奨どおり」で承認を得た。
+3. 実装（Opus 3 体・ファイルが重ならないよう分担・並行）: A-1・A-2・B を実施（B は A-1 と同じファイルを触る箇所があるため A-1 完了後に着手）。
+4. 証明とテスト（監督）: 差分の読み合わせと、GPU 生成に触れない範囲での全件テスト。
+5. 敵対的レビュー（Opus 1 体・サブエージェント起動なし）→ 2 フィルタ（過剰設計の棄却・独立裏取り）で採否 → 指摘を反映。
+6. 台帳（`PENDING_TASKS.md`・`PENDING_TASKS_CLOSED.md`）と記録（本節）を整えた。
+7. 了承ゲート 2（差分と検証結果の報告）→ コミット（main への merge はオーナー指示）。
+
+**結果**:
+
+裏取りの状態の内訳（45 件）:
+
+| 状態 | 件数 |
+|---|---:|
+| 確定 | 36 |
+| 判断のみ | 5 |
+| 誤報 | 1 |
+| 実機が要る | 1 |
+| 判断のみ（第 6 弾 G） | 2 |
+| 合計 | 45 |
+
+第 1 弾で処理したもの:
+
+| 区分 | 内容 |
+|---|---|
+| 削除 | `engine25/neg_prompt25.py` の `cross_attention_modules`（§1-49）／`QuantizationPolicy(model_configurator=…)` の 2 引数（§1-50）／`_read_target_vocab_from_header` の通らない分岐（§1-59）／`apply_sd_ops` の試み（§1-62）／`.gitignore` の死にパターン 3 つ（§1-75）／§1-58 の 14 箇条（`engine/api_types.py` の `ImageConditioningInput` 以外の TypedDict・Pydantic 群・`engine/lora_types.py`・`compile_transformer`・`default_guiders`・`DistilledNativePipeline`・`_component_*_path` の代入 3 行・`BlockSwapService.uninstall`・`build_block_swap_service`・`_load_gguf_connectors` の引数 `target_device`・`build_gguf_loader_service`・`GGUFLoaderService.uninstall`・`_make_depth_processor` の関数内 import・`config.py` の未使用 7 項目・`lora_thumbnail_url`・`i18n.LABELS` の 10 キー・`tracking` の `NUM_CHANNELS` 誤参照・`Format-Size`。`_keep_res_reason` は閉じるのみで削除せず） |
+| 参照化 | `config.py` の `retake_window_min_frames` を `chain_math.RETAKE_WINDOW_MIN_PX` への参照に変更（未起票の 1 件。独立に起票せず §1-57 の箇条として記録） |
+| 文書のみの訂正 | §1-35（仕様書 §6.5b の 3 箇所）・§1-38（`join_v2v` の docstring）・§1-63（`canvas.py`・`api/models.py` の注記）・レビュー後の仕様書 §6.6・`tests/test_smoke.py` のコメント 2 箇所 |
+| テストの追加・修正 | §1-43（`done["phases"]` の参照先をテスト側で 1 行移動）・§1-55（新規 `test_a_failed_arm_reports_on_to_off`）・§1-56（新規の単体テスト 1 本）・§1-58-h（`tests/test_sft_quant_loader_service.py` 3 行）・LABELS（`tests/test_gradio_ui.py` 2 行） |
+
+ほか、§1-44 はログの鍵名 1 行だけ実態に合わせた（2.5 の単発ログの `attn=` を `ic_attn=` に改名。連結は本節より前に改名済み）。確かめた結果そのまま閉じた項目は §1-39・44・45・48・57・58-f の 6 件。CLOSED は上記の処理を合わせた §3-170〜§3-184（§1-35・38・39・44・45・48・49・50・55・57・58・59・62・63・75 の順）。§1-43・§1-56 は A を適用済みだが実機未確認のため台帳の新設 §2 へ移した。
+
+弾の割り当ての変更（台帳には書かず、本節と記憶に残す）:
+
+| 番号 | 当初 | 変更後 | 理由 |
+|---|---|---|---|
+| §1-36 | F2 | F1 | mock と `conftest` の `client` で再現できた（推奨 A は凍結 API 契約の変更を伴うため第 4 弾でも単独の計画が要る） |
+| §1-37 | F2 | F1 | mock で再現できた |
+| §1-51 | F2 | F1 | 偽物で再現できた |
+| §1-52 | F2 | F1 | 偽物で再現できた |
+| §1-67 | F2 | C | 設定の既定値の話（4 つのビルダーが `model_path=''` から到達） |
+| §1-60 (4) | A | C | `use_component_files` の既定 `False` から到達する経路。§1-67 と同じ判断 |
+| §1-38 | F1 | B | 直すのが docstring だけで第 1 弾内で処理済み |
+| §1-63 | F1 | B | 直すのが文書だけで第 1 弾内で処理済み |
+
+**裁定と新事実**: 了承ゲート 1 でオーナーは `triage.md` の提案を「全部推奨どおり」で承認した（§1-58 の箇条ごとの可否・テスト修正を伴う 2 件〔§1-58-h・LABELS〕の可否・`config.py` の 7 項目の削除・`install_ltx.ps1` の外部文言の新しい文面「(reference only; no venv built)」を含む）。§1-60 (1)〜(3)（`embed_cpu_offload` の固定と通らない枝）は読解では安全に消せるが、テストの無い GPU 経路（Gemma GGUF の読み込み）のため、第 5 弾の実機確認とセットで扱うことにした。裏取りで台帳の記述の誤りが 13 点見つかり、主なものは次のとおり。§1-61 の `_GGML_IQ4_XS = 22` は型番号の取り違え（IQ4_XS は 23、22 は IQ2_S）。§1-63 は既定の 1920 幅・半径 5 でも 256 幅の内側が全部食われる（台帳の「極端な組み合わせだけ」は過小）。§1-43 は単発の `done` も最上位の `phases` を二重に積む（台帳は連結だけの問題としていた）。§1-48 の画角拡張の `outpaint` ブロックは `metadata.json` に載らない（台帳の記述が誤り）。§1-40 の w61・481 フレームは VERIFICATION_LOG §116.7 で 1 回完走している（台帳の「測られていない」は誤り。予約ピークと 1280×768 は未測のまま）。§1-39 は誤報（`CATEGORIES` の import は記述を入れたコミット時点でも 3 ファイルで、台帳が後から「テストを除く」数え方を持ち込んでいた）。閉じる項目は CLOSED に正しい事実を書き、残る項目（§1-34・36・37・40・41・51・52・60・61・66・67・68・70）は台帳本文を訂正した。台帳外の提案 3 件（`build_xformers.ps1` をまるごと消す・bf16 経路〔`gguf_per_layer_quant=False`〕そのものを消す・§1-73 の別案〔`main.py` 側で bind 失敗を終了コードで返す〕）は今回は実施せず、それぞれ第 3 弾・第 6 弾 G・第 3 弾へ送った。
+
+**証明**: 敵対的レビュー（Opus 1 体）が `git grep -w` で消した名前を作業ツリー全体（`Docs/VERIFICATION_LOG.md`・`Docs/PENDING_TASKS*.md` を除く）から探し、台帳以外に残っている参照は無いことを確認した。`config.py` の 7 項目は削除後も `config.yaml.example` の `yaml.safe_load`→`AppConfig.model_validate` が成功し（`extra='ignore'` のため黙って無視）、`GET /api/v1/config` の応答から消えることも確認した。§1-56 は、ピークのリセットが 4 つの入口の直後にしか起きず、`_reference_conditioning_from_pixels` が `max(持ち越し, 新しい値)` で記録するため、連結で区間ごとに呼ばれても最大値が保たれることを確認した。§1-55 は `_swap_registry` が成功時にしか `_keep_resident_enabled` を進めないこと、`_set_keep_resident_job` が失敗を握りつぶすだけでフラグを進めないことを確認した。§1-43 は最上位の `phases` を読む箇所がアプリ側に 0 件であることを確認した。全変更ファイルの改行は作業ツリーで CRLF のみ（LF だけの行は 0）であることを Python でバイト数を数えて確認し、`install_model.ps1` の BOM は保たれ、`install_ltx.ps1` の非 ASCII バイトは 0 のままだった。
+
+**テスト**（GPU・実バックエンド・ネットワークに触れない）: アプリ `.venv` 全件 2,873 passed・54 skipped（既知の 1 件を `--deselect`）。`.venv-engine` 20 ファイル（§102.5 の 14＋§105.5 の 2＋`test_worker_inpaint_dispatch`＋`test_sft_quant_*` 4〔うち `test_sft_quant_loader_service` は引数削除に合わせて 3 行修正〕）426 passed（回帰テスト 2 本を含む）。`.venv-engine-ltx25` 7 ファイル（ランナー `Docs/Outputs-archive/start-end-bridge-2026-09-07/implA_engine_runner/run_ltx25_pytest.py` 経由）146 passed。`.venv-utils` の `test_tracking_runtime_smoke.py` 4 passed。レビュー後の修正の再実行: `.venv-engine` 22 passed・`.venv` の `test_smoke` 29 passed。PowerShell 2 本（`install_model.ps1`・`install_ltx.ps1`）は構文解析でエラー 0、`install_model.ps1` は BOM 付き CRLF のまま、`install_ltx.ps1` は ASCII のみ。全変更ファイルの改行は CRLF のまま。
+
+**台帳**: CLOSED §3-170〜§3-184（§1-35・38・39・44・45・48・49・50・55・57・58・59・62・63・75 の順）。§2 へ §1-43・§1-56 を移した。§1-76 を起票（敵対的レビューが見つけた新しい未使用候補のうち、`engine/pipeline/utils.py` の `sync_device` と `engine/transformer/block_swap_prefetch.py` の `PinnedStagingPool.release()`。同じ参考で指摘された `device_supports_fp8` は `fast_video_pipeline.py` で使用中のため起票しなかった）。残る項目（§1-34・36・37・40・41・51・52・60・61・66・67・68・70）の記述を訂正した。
+
+**文書**: 仕様書 `Videomni_Backend_Specification.md` v0.5.77（§5.5・§6.5b・§6.6・§9.4・§11）。台帳 §4-2 の 1 文。`Docs/PENDING_TASKS.md` は上記の台帳の更新（3 行目「最終更新」と 5 行目の番号一覧を含む）。
+
+**敵対的レビュー**（Opus 1 体・サブエージェント起動なし）: 消したものが未使用か（動的な参照も含む）・残った import の整合・仕様書と台帳の記述の正しさ・テストの固定の変更が妥当かを確かめた。結論は直すべき 1 件・注意 6 件・参考 7 件。直すべき 1 件は `engine/worker.py` のモジュール docstring（§1-56 の追記）が「ジョブ全体のピーク」と言い切りすぎている点（`run_chain`・`run_outpaint`・`run_inpaint` は自分の先頭でもピークをリセットし、その前に worker が走らせる前処理〔連結の制御信号など〕のピークを持ち越さない経路が残る）で、本節までに文を事実に合わせて狭めた。注意のうち 3 件を採用: `engine25/worker.py` の単発ログの `attn=` を `ic_attn=` に改名・`tests/test_smoke.py` のコメントを仕様書 §6.5b の新しい定義に合わせて訂正・仕様書 §6.6 の `keep_resident_used` の "on->off" の理由に arm（`_set_keep_resident_job`）の失敗を追記。注意 1 件（§141 が無い）は本節を書くことで解消。注意 1 件（操作パネル側 `Docs/API_REFERENCE.md`・`webui/src/bridge/mockBridge.ts` に消した設定の写しが残る。読み手 0・対象外）は記録のみ。注意 1 件（§1-56 の連結側の経路にテストが無い）は第 5 弾の実機確認へ申し送った。参考 7 件のうち、新しい未使用候補の `device_supports_fp8` は使用中と判明したため不採用（上記の台帳のとおり）、`sync_device`・`PinnedStagingPool.release()` は §1-76 に起票、残りは言い回しの範囲で不採用。
+
+**費用の目安**（Opus・Sonnet のトークン、概算）: Opus＝裏取り 約 87 万（3 体）・実装 約 52 万（3 体）・レビュー 約 26 万・指摘の反映 約 9 万、合計約 175 万（計画の見込み 215 万の範囲内）。Sonnet＝台帳と記録 約 40 万（見込み 45 万）。
+
+**申し送り**（次へ）: 第 2 弾以降の順と各項目の推奨は `triage.md` 第 5 節のとおり。第 5 弾で実機確認する点は §1-43・§1-56（連結の経路も）・§1-55（これまでは偽物での再現のみ）・§1-60 (1)〜(3)。操作パネル側の文書とモックに消した設定の写しが 2 箇所残る（記録のみ・対象外）。2.5 の単発ログの `attn=` を `ic_attn=` に揃えたが、参照の取り付けの行（`chain25.py`・`inpaint25.py`・`outpaint25.py`・`pipeline25.py`）の `attn=` は文脈から意味が読めるため据え置き。`build_xformers.ps1` をまるごと消す判断は第 3 弾。bf16 経路（`gguf_per_layer_quant=False`）そのものを消す判断は第 6 弾 G 候補。
+
+裏取りの表と道具はリポジトリの外（`ledger-work/stage1/`。git 管理外）に置いています。

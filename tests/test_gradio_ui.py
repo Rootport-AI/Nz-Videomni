@@ -126,8 +126,8 @@ def test_top_bar_load_unload_buttons_removed():
     button_values = {c.value for c in demo.blocks.values() if isinstance(c, gr.Button)}
     # The Refresh button stays; the top-bar Load/Unload buttons are gone.
     assert en["btn_refresh"] in button_values
-    assert en["btn_load_model"] not in button_values
-    assert en["btn_unload_model"] not in button_values
+    assert "Load model" not in button_values
+    assert "Unload model" not in button_values
 
 
 def test_chain_mode_radio_is_none_v2v_only():

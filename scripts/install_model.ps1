@@ -70,12 +70,6 @@ function Write-Skip([string] $Message) { Write-Host ('  [済み] ' + $Message) -
 function Write-Warn([string] $Message) { Write-Host ('  [注意] ' + $Message) -ForegroundColor Yellow }
 function Write-Bad([string] $Message)  { Write-Host ('  [失敗] ' + $Message) -ForegroundColor Red }
 
-function Format-Size([long] $Bytes) {
-    if ($Bytes -ge 1GB) { return ('{0:N1} GB' -f ($Bytes / 1GB)) }
-    if ($Bytes -ge 1MB) { return ('{0:N0} MB' -f ($Bytes / 1MB)) }
-    return ("$Bytes B")
-}
-
 # ---------------------------------------------------------------------------
 # 記述子から、画面に出すための情報だけを取り出す
 #

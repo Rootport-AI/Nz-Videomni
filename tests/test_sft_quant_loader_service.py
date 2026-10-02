@@ -249,7 +249,7 @@ def test_gemma_connectors_via_fp8_safetensors(tmp_path):
     loader = GemmaGGUFQuantStateDictLoader.__new__(GemmaGGUFQuantStateDictLoader)
     loader._connector_gguf_path = str(path)
     loader._connector_sd_ops = None
-    out = loader._load_gguf_connectors(torch.device("cpu"))
+    out = loader._load_gguf_connectors()
     assert set(out) == {p + "video_embeddings_connector.w", p + "audio_embeddings_connector.b"}
     assert all(t.dtype == torch.bfloat16 for t in out.values())
     assert torch.equal(out[p + "video_embeddings_connector.w"], v)
@@ -257,7 +257,7 @@ def test_gemma_connectors_via_fp8_safetensors(tmp_path):
 
     loader._connector_gguf_path = str(tmp_path / "t.bin")
     with pytest.raises(RuntimeError, match="expected a .gguf or .safetensors"):
-        loader._load_gguf_connectors(torch.device("cpu"))
+        loader._load_gguf_connectors()
 
 
 def test_gemma_connectors_from_bare_fp8_safetensors(tmp_path):
@@ -280,7 +280,7 @@ def test_gemma_connectors_from_bare_fp8_safetensors(tmp_path):
     loader = GemmaGGUFQuantStateDictLoader.__new__(GemmaGGUFQuantStateDictLoader)
     loader._connector_gguf_path = str(path)
     loader._connector_sd_ops = None
-    out = loader._load_gguf_connectors(torch.device("cpu"))
+    out = loader._load_gguf_connectors()
     key = "model.diffusion_model.video_embeddings_connector.w.weight"
     assert set(out) == {key}
     assert torch.equal(out[key], (w.to(torch.float32) * 0.5).to(torch.bfloat16))

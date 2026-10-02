@@ -22,9 +22,9 @@ server:
   log_dir: "./logs"
 
 model:
-  # 本番経路は GGUF 量子化トランスフォーマー + 小単体 component ファイル
-  # （VAE / audio / text-projection）+ GGUF Gemma。43GB モノリスと QAT Gemma の
-  # 実読み込みは廃止済み。
+  # 本番経路は量子化トランスフォーマー（GGUF、または fp8／int8 の safetensors）
+  # + 小単体 component ファイル（VAE / audio / text-projection）+ GGUF Gemma。
+  # モノリス（一体型の checkpoint）と QAT Gemma は読み込まない。
   #
   # 【重要】既定の重みファイルのパスは、ここではなく「ベースモデル記述子」
   # （scripts/manifests/*.json）が正本です。トランスフォーマー・GGUF Gemma・
@@ -40,7 +40,7 @@ model:
 
   # ランタイムパス。相対パス（PROJECT_ROOT基準でconfig._absが絶対化）。
   ltx_repo_dir: "./vendor/LTX-2"   # reference only（上流LTX-2クローン）。
-  backend: "auto"                  # auto | mock | real（auto: GPU+モデル有→real, 無→mock）
+  backend: "auto"                  # auto | mock | real（auto: エンジン環境と必要なモデルファイルが揃えば real, 欠ければ mock。GPU の有無は見ない）
 
   # ベースモデル記述子の置き場と、モデル置き場のルート。記述子の中のパスは
   # すべて models_dir からの相対で書かれている（この2つだけが「どこを見るか」
@@ -48,13 +48,14 @@ model:
   manifest_dir: "./scripts/manifests"
   models_dir: "./models"
 
-  # IC-LoRA アダプタ登録（Phase B、Phase C で拡張）。API の GenerateRequest.loras[].name は
-  # ここに登録された「名前」で解決する（生パスは受けない）。セクション不在＝loras 要求は
-  # 全て拒否（fail loud）。
+  # IC-LoRA アダプタ登録。API の GenerateRequest.loras[].name は
+  # ここに登録された「名前」で解決する（生パスは受けない）。model.lora_dir に置いた
+  # .safetensors もファイル名（拡張子なし）の名前で選べる。ここにも lora_dir にも
+  # 1 つも無いときは loras 要求を全て拒否（fail loud）。
   ic_loras:
-    # 後方互換: 文字列値 = preprocess none（Phase B のまま動く）
+    # 文字列値 = preprocess none（参照動画を前処理せずに渡す）
     pixel-spatial-upscaler-x2: "./models/LTX23/IC-LoRA/pixel-spatial-upscaler/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors"
-    # Phase C: 同一 Union-Control ファイルを2つの論理名で公開し preprocess で切替
+    # 同一 Union-Control ファイルを複数の論理名で公開し preprocess で切替
     canny-control:
       path: "./models/LTX23/IC-LoRA/union-control/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"
       preprocess: canny
@@ -66,8 +67,7 @@ model:
       preprocess: depth
     # 前処理不要の制御アダプタ（ぼけた参照動画をそのまま渡す）＝文字列形式
     deblur: "./models/LTX23/IC-LoRA/deblur/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors"
-    # Outpainting（画面の描き足し, ``Docs/PENDING_TASKS_CLOSED.md`` §3-70（起票
-    # 当時は§1-13））。公式 In-Outpainting IC-LoRA。
+    # Outpainting（画面の描き足し）。公式 In-Outpainting IC-LoRA。
     # 参照として渡すのは「緑で外周を塗ったキャンバス動画」で、これを canny や
     # depth に変換してはいけない（緑は前処理の対象ではなくセンチネル）ため、
     # preprocess を持たない文字列形式で登録する。ヘッダに
@@ -75,7 +75,7 @@ model:
     in-outpainting: "./models/LTX23/IC-LoRA/in-outpainting/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors"
 
 vram:
-  # Phase 1 から有効。主要開発環境がVRAM 16GBであるため。
+  # 主要開発環境が VRAM 16GB であるため有効にしている。
   low_vram_mode: true
   low_vram_profile: "16gb_safe"
 
@@ -94,7 +94,9 @@ vram:
   dit_cpu_load: true              # transformer を CPU 構築し非ブロックのみ GPU へ。ロード時 GPU スパイク ~16.9GB を除去。
   vae_tiling: true
 
-  # Phase 2 以降の高度な独自最適化。Phase 1 では無効。
+  # attention_tiling / attention_tile_size / block_swap は worker へは渡らない
+  # （attention_tiling と block_swap は GET /status の表示用）。実際の block swap は
+  # block_swap_blocks_on_gpu（GPU に残すブロック数）が決める。
   attention_tiling: false
   attention_tile_size: null
   block_swap: true
@@ -105,11 +107,14 @@ vram:
   vae_spatial_tile_size: 512
   vae_temporal_tile_size: 64
 
-  # Path B: VAE/audio/text-projection を 46GB モノリスでなく小単体ファイルから読む。
+  # VAE/audio/text-projection をモノリス（一体型の checkpoint）でなく小単体ファイルから
+  # 読む（LTX 2.3 の設定。LTX 2.5 のエンジンはこの設定を読まない）。
   # keep_resident=0（ジョブ毎再materialize）でも commit を束縛し、マルチジョブ連続
-  # 生成の commit 枯渇 native crash を防ぐ（§9.6 / §8）。720p+連続生成の両立に必須。
-  # ※keep_resident は 2026-08-03 から per-job フィールド化（POST /generate・
-  #   /generate/chain の keep_resident・既定 false）。Docs/VERIFICATION_LOG.md §48。
+  # 生成の commit 枯渇 native crash を防ぐ（Docs/VERIFICATION_LOG.md §9.6 / §8）。
+  # 720p+連続生成の両立に必須。
+  # ※keep_resident はジョブごとのフィールド（POST /generate・/generate/chain の
+  #   keep_resident・既定 false。正本は api.models の KEEP_RESIDENT_DEFAULT）。
+  #   Docs/VERIFICATION_LOG.md §48。
   use_component_files: true
 
   # 高VRAM環境向けの任意検証用。16GBでの成功は保証しない。
@@ -133,31 +138,32 @@ generation_presets:
     crop_output:
       width: 960
       height: 540
-    num_frames: 481 # G4でわずかな共有メモリ使用を観測したが、ログ確認により速度低下しない無害なベースライン（RESOLUTION_DURATION_CAPABILITY.md §8.2）と確定し481へ復帰（2026-07-20）
+    num_frames: 481 # わずかな共有メモリ使用は速度低下しない無害なベースライン（Docs/RESOLUTION_DURATION_CAPABILITY.md §8.2）のため 481
   standard_720p:
     width: 1280
     height: 768
     crop_output:
       width: 1280
       height: 720
-    num_frames: 361 # 賢い快適上限マーカー（single_comfort_token_budget=44880）の算出値に引き上げ（2026-08-19）。旧値は当時のlimits.spill_free_frames["1280x768"]と一致していたが、式ベースの正確な値に更新（同表は2026-08-31に再測定され値が変わった・下記参照）
+    num_frames: 361 # 賢い快適上限マーカー（limits.single_comfort_token_budget）の算出値
   FHD_1080p:
     width: 1920
     height: 1088
     crop_output:
       width: 1920
       height: 1080
-    num_frames: 169 # 賢い快適上限マーカー算出値（2026-08-19）
+    num_frames: 169 # 賢い快適上限マーカー算出値
   WQHD_1440p:
     width: 2560
     height: 1472
     crop_output:
       width: 2560
       height: 1440
-    num_frames: 89 # 賢い快適上限マーカー算出値（2026-08-19）
+    num_frames: 89 # 賢い快適上限マーカー算出値
 
 generation_defaults:
-  # Gradio/API の初期値。standard_720p プリセットと完全一致させる。width/height は64の倍数。
+  # 操作パネル（WebUI）のフォームの初期値（Gradio と API の既定値には効かない）。
+  # standard_720p プリセットと幅・高さ・尺を一致させる。width/height は64の倍数。
   width: 1280
   height: 768
   crop_output: null   # 既定OFF。プリセット選択時はプリセットの値が適用される。
@@ -174,7 +180,8 @@ upload:
   max_image_size_mb: 20
   allowed_image_extensions: [".png", ".jpg", ".jpeg", ".webp"]
   normalize_to_png: true
-  # 参照動画アップロード（Phase B, POST /upload/video）。再エンコードせず保存。
+  # 参照動画アップロード（POST /upload/video）。受け取ったまま保存する（切り出しの窓や
+  # max_frames の上限が指定されたときだけ切り出す）。
   max_video_size_mb: 200
   allowed_video_extensions: [".mp4", ".mov", ".webm", ".mkv"]
   # 音声アップロード（A2V, POST /upload/audio）。再エンコードせず保存。コーデック
@@ -185,7 +192,7 @@ upload:
 limits:
   max_width: 4096
   max_height: 4096
-  max_num_frames: 481        # 20s@24fps(481=8×60+1)。溢れ/低速/非実用はクライアント警告に委ねる（§8.4/§8.6）。
+  max_num_frames: 481        # 20s@24fps(481=8×60+1)。溢れ/低速/非実用はクライアント警告に委ねる（Docs/RESOLUTION_DURATION_CAPABILITY.md §8.4/§8.6）。
   # /config で公開：キーフレームのlatent-frame-startグリッド。frame_idx 0=先頭フレーム
   # (latent-replace)。それ以外は offset + multiple*n = 8n+1 (1,9,17,…) にスナップ。
   # サーバー snap: (f-1)//8*8+1 を範囲クランプ。
@@ -193,15 +200,15 @@ limits:
   conditioning_keyframe_grid_offset: 1
   phase1_max_concurrent_jobs: 1
   low_vram_disabled_required: false
-  # 2026-08-31 再測定（判定規則v3・LTX 2.3 既定構成）。正本は Docs/COMFORT_LIMIT_TABLE.md
+  # LTX 2.3 の既定構成での実測（判定規則v3）。正本は Docs/COMFORT_LIMIT_TABLE.md
   spill_free_frames:         # 当初の実測は RESOLUTION_DURATION_CAPABILITY §8.4。超えると shared へ溢れ~2-4x低速(OOMせず)→UIで警告
     "512x320": 481           # minimal（20s@24fps 上限）
-    "960x576": 481           # small（G4でわずかな共有メモリ使用を観測したが、ログ確認により速度低下しない無害なベースライン（§8.2）と確定し481へ復帰、2026-07-20）
+    "960x576": 481           # small（わずかな共有メモリ使用は速度低下しない無害なベースライン（Docs/RESOLUTION_DURATION_CAPABILITY.md §8.2）のため 481）
     "1280x768": 273          # 720p（実用快適上限）
     "1920x1088": 161         # 1080p（20s は非実用~40分→720p生成+外部upscale 推奨）
     "2560x1472": 81          # 1440p
   # V2V 継続（POST /generate/chain の source_video.context_frames）。/config で公開。
-  # context_frames は 8n+1。max=145 は保守的な v1 上限（凍結ヘッドを stage-2 の
+  # context_frames は 8n+1。max=145 は保守的な上限（凍結ヘッドを stage-2 の
   # 1タイル内に収める。api.models.SourceVideoSpec 参照）。
   v2v_context_frames_default: 73
   v2v_context_frames_min: 25
@@ -210,7 +217,7 @@ limits:
   # 2 本以上で素材（冒頭）が無ければ逆順Chained（reverse）、素材（冒頭）があれば
   # ブリッジモード（bridge。全クリップ正順・最終クリップだけ両側条件付け）。どちらも
   # 末尾の凍結フレームは最終クリップ自身の末尾にあり、出力の尺は変わらない。
-  # 旧方式（internal_segment）はAPIから到達不能。クリップ 1 本なら in_window＝
+  # internal_segment（帯を足して出力を伸ばす方式）はAPIから到達不能。クリップ 1 本なら in_window＝
   # 末尾の凍結フレームはクリップの内側にあり出力の尺は変わらない。既定の 72 は契約上の
   # 既定値であって推奨値ではない。実機比較の結論は錨 8 フレームで、フロントエンドは常に 8 を
   # 明示送信する。正本は Docs/VERIFICATION_LOG.md §61・§63・§64・§102 と api.models.EndSourceSpec。
@@ -219,37 +226,41 @@ limits:
   # 136 は自動決定される凍結フレーム数の上限であって、幾何の上限ではない。136 = 17 潜在
   # フレーム ≒ 24fps で 5.67 秒。末尾の凍結フレームは 3 モードとも最終クリップ自身の末尾に
   # あり、stage-2 の潜在クリップを何個またいでもよいため（凍結計画の正本は chain_math の
-  # end_tile_bands）、潜在クリップごとの上限（旧 high_resolution = 88）は撤廃した。
+  # end_tile_bands）、潜在クリップごとの上限は無い。
   # 136 は未計測領域を避けるための運用上限で、stage-2 のどのプリセットでも同じ値。
-  # 引き上げるときは設定変更に加えて実機での
-  # 品質確認が要る。既定 72 は契約上の既定値で、フロントエンドは常に 8 を送る。
+  # サーバの範囲検査は config.py の LimitsConfig の既定値で行い、ここの値は /config で
+  # 配信されるだけ（サーバの検査には効かない）。引き上げるときは config.py の変更に
+  # 加えて実機での品質確認が要る。既定 72 は契約上の既定値で、フロントエンドは常に 8 を送る。
   end_context_frames_default: 72
   end_context_frames_min: 8
   end_context_frames_max: 136
-  # §1-17 Retake の窓長（POST /generate/chain の clips[0].num_frames）。/config で公開。
-  # いずれも 8n+1。169 = stage-2 の 1 窓に収まる最大（standard 窓 v_tile=22）で、
-  # high_resolution 窓（v_tile=19）では実上限が 145 へ下がる（サーバが 422 で拒否）。
-  # 2026-09-25 から Stage-2 の窓は w25〜w61 の 13 段が加わり（正本は chain_math.py の
-  # STAGE2_WINDOW_PRESETS と Docs/COMFORT_LIMIT_TABLE.md 第12節）、Retake の上限は
-  # 窓の式 8×潜在フレーム数−7 だけで決まる（最大 481）。操作パネルはこの配信値を
-  # 読まなくなった（型と既定値は配信値の写しとして残っている）。
+  # Retake の窓長（POST /generate/chain の clips[0].num_frames）。/config で公開。
+  # いずれも 8n+1。169 = stage-2 の 1 窓に収まる最大（standard 窓 v_tile=22）。
+  # 上限は選んだ Stage-2 の窓で決まり、窓の式 8×潜在フレーム数−7 で求まる
+  # （high_resolution 窓 v_tile=19 なら 145。窓の一覧の正本は chain_math.py の
+  # STAGE2_WINDOW_PRESETS と Docs/COMFORT_LIMIT_TABLE.md 第12節）。サーバはこの式で
+  # 範囲を検査し、範囲外は 422 で拒否する。操作パネルは上限の配信値を読まず、同じ式で
+  # 上限を求める（型と既定値は配信値の写しとして残っている）。
   retake_window_min_frames: 73
   retake_window_max_frames: 169
-  # 快適な stage-2 1 窓あたりの注意トークン上限。/config で公開し、クライアントが
-  # 解像度スライダーの目安線を引くために使う。サーバはこの値で何も判定しない
-  # （拒否も丸めもしない）純粋な助言値。トークン = (幅//32) × (高さ//32) × 窓の潜在フレーム数。
-  # VRAM 容量に応じて上下してよい（小さい GPU なら下げ、大きい GPU なら上げる）。
+  # 快適な stage-2 1 窓あたりの注意トークン上限。/config で公開する。サーバはこの値で
+  # 何も判定しない（拒否も丸めもしない）純粋な助言値。トークン = (幅//32) × (高さ//32) × 窓の潜在フレーム数。
+  # クライアントは目安線を、まず limits.comfort_budgets（エンジンごとの表。既定の表は
+  # config.py の _default_comfort_budgets）からエンジンと高速化設定に合う行を引き、合う行が
+  # 無いとき（表が無い・エンジンが未確定・LTX 2.3 で 5 つの高速化トグルの一部が off など）に
+  # この値へ戻る。目安線を VRAM 容量に合わせて動かすときは、この値と comfort_budgets の
+  # 両方を見直す（comfort_budgets は config.yaml に書くと表全体が置き換わる）。
   chain_comfort_token_budget: 40000
   # Create（単発 `/generate`）1 発が快適に収まる注意トークン上限。/config で公開。
   # chain_comfort_token_budget とは別軸（1 発は stage-2 タイル分割なしで全体を
   # 1 パスで精製するため、ワークロードが異なる）。サーバはこの値で何も判定しない
   # 純粋な助言値。式は同じ: トークン = (幅//32) × (高さ//32) × 潜在フレーム数。
-  # WebUI の Create 画面は、5 つの高速化トグル（sage・block_swap_prefetch・
-  # keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed）が全て on の
-  # ときだけこの値から賢いマーカーを算出し、1 つでも off なら従来の
-  # spill_free_frames へフォールバックする。44,880 は 2026-08-18 の4段階・21
-  # ジョブ実機検証（3解像度×縦横）で較正された最大の共通快適値。正本は
-  # Docs/COMFORT_LIMIT_TABLE.md。
+  # WebUI の Create 画面がこの値を使うのは、limits.comfort_budgets の表が配信されて
+  # いないとき、またはエンジンが未確定のとき。そのときは 5 つの高速化トグル（sage・
+  # block_swap_prefetch・keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed）
+  # が全て on ならこの値から賢いマーカーを算出し、1 つでも off なら
+  # spill_free_frames へフォールバックする。44,880 は実機検証で較正された
+  # 最大の共通快適値。正本は Docs/COMFORT_LIMIT_TABLE.md。
   #
   # 注意: このコメントは example のみに書く。実運用 config.yaml には追記しない
   # ——chain_comfort_token_budget も実運用 yaml には無く Pydantic 既定値のまま

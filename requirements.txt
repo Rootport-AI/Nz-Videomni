@@ -7,17 +7,20 @@
 #     python -m venv .venv
 #     .venv\Scripts\pip install -r requirements.txt
 #
-# NOTE: The LTX inference stack (torch 2.9.1+cu128, ltx-core, ltx-pipelines,
-# and the rest of the GPU side) is NOT listed here, and is NOT installed into
-# this venv at all. It lives in a SEPARATE engine venv (./.venv-engine), pinned
-# by engine/venv-engine.freeze.txt and applied by scripts/install_ltx.ps1,
-# because:
+# NOTE: The LTX inference stack (torch, ltx-core, ltx-pipelines, and the rest
+# of the GPU side) is NOT listed here, and is NOT installed into this venv at
+# all. It lives in SEPARATE engine venvs (./.venv-engine for LTX 2.3 and
+# ./.venv-engine-ltx25 for LTX 2.5), pinned by engine/venv-engine.freeze.txt
+# and engine25/venv-engine-ltx25.freeze.txt and applied by
+# scripts/install_ltx.ps1, because:
 #   - torch must come from the PyTorch cu128 wheel index (not PyPI), and
-#   - the two stacks cannot share one interpreter (both ship a top-level
-#     `services` package).
-# Attention backend: PyTorch SDPA on EVERY GPU architecture. Neither xformers
-# nor flash-attn is installed or imported; there is no per-architecture branch
-# and no `xformers` extra (pyproject.toml declares only the `dev` extra).
+#   - the engine stacks pin their own torch / transformers versions (the 2.3
+#     and 2.5 stacks even need different transformers major versions), so
+#     they are kept out of this torch-free app venv and apart from each other.
+# Attention backend: PyTorch SDPA by default; SageAttention (installed into
+# the engine venvs by scripts/install_ltx.ps1) can be chosen per job.
+# Neither xformers nor flash-attn is installed; there is no per-architecture
+# branch and no `xformers` extra (pyproject.toml declares only the `dev` extra).
 # See README "1. セットアップの詳細".
 # =============================================================================
 

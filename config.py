@@ -457,9 +457,14 @@ class LimitsConfig(BaseModel):
     # consults this — no request is rejected, clamped or altered by it — which
     # is why it lives here rather than in any validation path. The default
     # mirrors chain_math.CHAIN_COMFORT_TOKEN_BUDGET, the single source of truth
-    # (a token is (width//32) * (height//32) per window latent frame). Lower it
-    # on a smaller GPU / raise it on a larger one to move the client's guides;
-    # the geometry itself does not change.
+    # (a token is (width//32) * (height//32) per window latent frame).
+    # The clients (the WebUI's shell/comfortTable.ts resolveComfortRow and
+    # gradio_ui/comfort.py resolve_chain_budget) use a matching comfort_budgets
+    # row (below) first; this value is only the fallback when no row matches.
+    # The default table's LTX 2.3 profile has a single all-five-toggles-on row,
+    # so with even one acceleration toggle off the Chained and Retake guides
+    # come from this value. To move the guides, revisit both comfort_budgets
+    # and this value; the geometry itself does not change.
     chain_comfort_token_budget: int = CHAIN_COMFORT_TOKEN_BUDGET
     # Comfortable attention-token ceiling for ONE Create (single-shot
     # `/generate`) request. A single request refines its whole clip in ONE

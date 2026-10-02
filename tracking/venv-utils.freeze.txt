@@ -8,8 +8,7 @@
 #
 # METHOD: `uv pip freeze --python .venv-utils/Scripts/python.exe`, verbatim, with
 # this header prepended. (`uv pip freeze` works on a uv-built venv that has no
-# pip installed, which is why the two engine freezes had to enumerate dist-info
-# by hand back in 2026-07 -- uv has grown the command since.)
+# pip installed.)
 # Interpreter: CPython 3.12.9  (.venv-utils/Scripts/python.exe)
 # Resolved from: https://download.pytorch.org/whl/cpu  (--index-strategy unsafe-best-match)
 # Captured: 2026-09-11

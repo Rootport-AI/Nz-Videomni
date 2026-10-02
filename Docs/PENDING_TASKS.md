@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-02（§1「近日中の改修項目」に §1-67〜§1-69〔`use_component_files` の既定 False のまま LTX 2.3 を real で読み込むと VAE／音声の読み込み元が無くなる疑い／MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` で止まる／バッチ A2V の計画の写し（MCP）と本家（Gradio・操作パネル）の挙動の差〕を起票し、§1-58「使われていないコード」に `config.py` の `ModelConfig.ltx_repo_dir`・`reload_interval`・`tracking/uetrack_runtime.py` の `_BASE_CFG` の2件を追記したうえ、§1 冒頭の案内を §1-69 まで含む記述に更新。前回 2026-10-01: §1「近日中の改修項目」に §1-64〜§1-66〔Gradio の A2V の音声の長さの事前検査が丸める前の fps で計算している／バッチ A2V に幅・高さの ÷64 の事前検査が無い／Gradio の快適上限の警告と高品質モードの警告が言語を渡さず英語固定〕を起票し、§1-58「使われていないコード」に `gradio_ui/api_client.py` の `ApiClient.lora_thumbnail_url`・`gradio_ui/i18n.py` の `LABELS` のうち参照されないキー10個の2件を追記したうえ、§1 冒頭の案内を §1-66 まで含む記述に更新。前々回 2026-10-01: §1「近日中の改修項目」に §1-61〜§1-63〔GGUF の純 torch の逆量子化で 8 つの型が誤った値を返すか止まる／`GGUFStateDictLoader.load` の鍵の付け替えが死んだコードで bf16 の経路では読み込みのたびに警告が出る／画角拡張（Outpainting）の `MIN_INNER_SIDE` がキャンバスと半径に応じた下限になっていない〕を起票し、§1-58「使われていないコード」に `build_gguf_loader_service`・`GGUFLoaderService.uninstall`・`_make_depth_processor` の関数内 import の3件を追記したうえ、§1 冒頭の案内を §1-63 まで含む記述に更新。）
+- 作成: 2026-07-15／最終更新: 2026-10-02（§1「近日中の改修項目」に §1-70〜§1-75〔`install_ltx.ps1` Step 7 の検証表に `.venv-engine-ltx25` の python が無い／`build_xformers.ps1` の CUDA 探索が `-CudaVersion` と食い違う／`config.yaml.example` の comfort token budget の値の行が実運用 yaml にも入る／`run.ps1` の二重起動判定が `server.port` を読まない／`Get-EngineStateHash` がコメントを含む freeze の全文をハッシュする／`.gitignore` の死にパターンと抜け〕を起票し、§1-34 に `limits` の他の項目（`max_width`・`max_height`・`max_num_frames`・`retake_window_*`）でも同型の論点があることを、§1-58 に読み手0件の設定項目5つと `install_model.ps1` の `Format-Size` 未使用を追記したうえ、§1 冒頭の案内を §1-75 まで含む記述に更新。前回 2026-10-02: §1「近日中の改修項目」に §1-67〜§1-69〔`use_component_files` の既定 False のまま LTX 2.3 を real で読み込むと VAE／音声の読み込み元が無くなる疑い／MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` で止まる／バッチ A2V の計画の写し（MCP）と本家（Gradio・操作パネル）の挙動の差〕を起票し、§1-58「使われていないコード」に `config.py` の `ModelConfig.ltx_repo_dir`・`reload_interval`・`tracking/uetrack_runtime.py` の `_BASE_CFG` の2件を追記したうえ、§1 冒頭の案内を §1-69 まで含む記述に更新。）
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58・§1-59・§1-60・§1-61・§1-62・§1-63・§1-64・§1-65・§1-66・§1-67・§1-68・§1-69 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-34・§1-35・§1-36・§1-37・§1-38・§1-39・§1-40・§1-41・§1-42・§1-43・§1-44・§1-45・§1-46・§1-47・§1-48・§1-49・§1-50・§1-51・§1-52・§1-53・§1-54・§1-55・§1-56・§1-57・§1-58・§1-59・§1-60・§1-61・§1-62・§1-63・§1-64・§1-65・§1-66・§1-67・§1-68・§1-69・§1-70・§1-71・§1-72・§1-73・§1-74・§1-75 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は該当項目が無いので削除してある。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -36,11 +36,12 @@
 - **現象**: `api/models.py` の `SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source` は、上限 `cf_max` をモジュール定数 `_LIMITS_DEFAULTS = LimitsConfig()`（`config.py` の既定値。`config.yaml` を読まない）から取る。一方 `GET /config`（`api/status.py` の `get_config`）は `load_config` が `config.yaml` から読んだ値を配り、Gradio の事前検査（`gradio_ui/validation.py` の `check_v2v_context`）は `/config` の `limits.v2v_context_frames_max` を上限に使う。`config.yaml.example` の `v2v_context_frames_max`（145）・`end_context_frames_max`（136）は `config.py` の既定値と同じなので、配布状態では食い違いが表面化しない。
 - **影響**: 利用者が `config.yaml` のこの 2 行を変えたときだけ発生する。上げた場合は画面の事前検査は通すがサーバーは 422 で弾く（文言は「上限は `config.py` の `LimitsConfig`」）。下げた場合は画面は止めるが、API を直接叩く経路（MCP・curl）ではサーバーが `config.py` の既定値まで受け付ける。クラッシュ・データ破損は無い。
 - **文書との食い違い**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §60.2、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §10「136は運用上限であって幾何上限ではない」は、いずれも「`end_context_frames_max` の引き上げは `config.yaml` の1行と実機の品質確認で足りる」と書くが、サーバー側の検証がその設定を読まないため実装ではそうならない。
+- **他の `limits` 項目にも同じ論点がある**（2026-10-02 追記）: `GenerateRequest`等の `width`・`height`・`num_frames` は `api/models.py` の各 `Field(..., ge=…, le=…)` に直書きの値（例: `width: int = Field(512, ge=256, le=4096)`）で検査しており、`config.limits.max_width`・`max_height`・`max_num_frames`（`GET /config` が配信する値）は検査の側では一切読まない。`retake_window_min_frames`・`retake_window_max_frames` も、`/config` では「標準プリセットの参考値」として配信されるだけで、実際の上限は `RetakeSpec` のdocstringが明記するとおり `chain_math.RETAKE_WINDOW_MIN_PX`・`chain_math.retake_max_window_px(v_tile)` という別の定数・関数で検査される。いずれも `config.yaml` でこれらの値を変えてもサーバーの検査は変わらない。
 - **選択肢**（オーナー判断・優劣はつけない）:
   - A: 検証が読み込んだ設定を見るようにする（`_LIMITS_DEFAULTS` を起動時に `config.limits` で差し替えられる形にする。凍結ゾーンの `api/models.py` に触れるので計画→敵対的レビュー→承認の通常手順を通す）。
   - B: 「この2行は画面の目安であり、サーバー側の上限は `config.py` で決まる」と定義し直し、上記2文書の「`config.yaml` の1行で引き上げられる」という記述を訂正する（コードは変えない）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §131「申し送り」3.（コメント現行化の `api/` 区域で検出、2026-10-01 起票）。
-- **関連ファイル**: `api/models.py`（`_LIMITS_DEFAULTS`・`SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source`）、`config.py`（`LimitsConfig`）、`config.yaml.example`、`gradio_ui/validation.py`（`check_v2v_context`）、`api/status.py`（`get_config`）。
+- **関連ファイル**: `api/models.py`（`_LIMITS_DEFAULTS`・`SourceVideoSpec.validate_context_frames`・`EndSourceSpec.validate_end_source`・`width`/`height`/`num_frames` の `Field`・`RetakeSpec`）、`config.py`（`LimitsConfig`）、`config.yaml.example`、`gradio_ui/validation.py`（`check_v2v_context`）、`api/status.py`（`get_config`）、`chain_math.py`（`RETAKE_WINDOW_MIN_PX`・`retake_max_window_px`）。
 
 ### 1-35. block swap の状態報告の整合（起票：2026-10-01）
 
@@ -306,11 +307,13 @@
   - `gradio_ui/i18n.py` の `LABELS` のうち、どこからも引かれないキー10個。`a2v_mode_a2v`・`a2v_guide`・`a2v_cap_panel` は `gradio_ui/ui.py` の注記のとおり Clip Chain の A2V の入口を画面から外したときに意図して残したもの。`btn_load_model`・`btn_unload_model`・`msg_coming` は残す理由がコードに無い（`tests/test_gradio_ui.py` は `btn_load_model` が上部バーに無いことを固定しているだけ）。`lbl_apikey`・`msg_generate_error`・`msg_upload_done`・`batch_image_shared` の4つも同じく引かれない。
   - `config.py` の `ModelConfig.ltx_repo_dir`・`reload_interval`（どのコードからも読まれない。`/config` の応答に載るだけ）。
   - `tracking/uetrack_runtime.py` の `_BASE_CFG` の `MODEL.TASK_DECODER.NUM_CHANNELS`（どこからも読まれない。値は vendored 側の既定と同じ256で無害）。
+  - `config.py` の `VramConfig.allow_disable_low_vram`・`VramConfig.attention_tile_size`・`ModelConfig.text_encoder`・`UploadConfig.normalize_to_png`（画像は常に `input.png` に保存されるため、この設定の値に関わらず保存先は変わらない）・`OutputConfig.format`（2026-10-02 追記。いずれも `/config` の応答に載るだけで、Grepで確かめた限り操作パネル `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src`・`gradio_ui/`・`mcp_server/` のどこにも読み手が無い。`gradio_ui/handlers.py`・`gradio_ui/adapters.py`・`mcp_server/tools/system.py` にある `text_encoder` はモデル選択（`transformer`/`text_encoder`/`video_vae`/`audio` のカテゴリ名・`ModelLedger.text_encoder()`）であり、この設定項目とは別物）。
+  - `scripts/install_model.ps1` の `Format-Size`（`setup.ps1`・`install_ltx.ps1` にある同名関数の体裁を写した副産物。関数定義だけで、同スクリプト内のどこからも呼ばれない。2026-10-02 追記）。
 - **影響**: 無い（未使用のコードが残っているだけ）。
 - **選択肢**（オーナー判断・優劣はつけない）: 項目ごとに消すか残すかを決める。
 - **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135・§136・§137・§138・§139（申し送り）。
-- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）、`engine/transformer/block_swap_service.py`（`BlockSwapService.uninstall`・`build_block_swap_service`）、`engine/gemma/gguf_quant_service.py`（`_load_gguf_connectors`）、`engine/gguf/loader_service.py`（`build_gguf_loader_service`・`GGUFLoaderService.uninstall`）、`engine/preprocess/driver.py`（`_make_depth_processor`）、`gradio_ui/api_client.py`（`ApiClient.lora_thumbnail_url`）、`gradio_ui/adapters.py`（`build_style_gallery`）、`gradio_ui/i18n.py`（`LABELS`）、`config.py`（`ModelConfig.ltx_repo_dir`・`reload_interval`）、`tracking/uetrack_runtime.py`（`_BASE_CFG`）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135・§136・§137・§138・§139・§140（申し送り）。
+- **関連ファイル**: `engine/api_types.py`、`engine/lora_types.py`、`engine/pipeline/fast_video_pipeline.py`（`compile_transformer`・`_component_video_vae_path`等）、`engine/pipeline/common.py`（`default_guiders`・`DistilledNativePipeline`）、`engine/worker.py`（`_do_generate`・`_do_generate_chain`・`_keep_res_reason`）、`engine/transformer/block_swap_service.py`（`BlockSwapService.uninstall`・`build_block_swap_service`）、`engine/gemma/gguf_quant_service.py`（`_load_gguf_connectors`）、`engine/gguf/loader_service.py`（`build_gguf_loader_service`・`GGUFLoaderService.uninstall`）、`engine/preprocess/driver.py`（`_make_depth_processor`）、`gradio_ui/api_client.py`（`ApiClient.lora_thumbnail_url`）、`gradio_ui/adapters.py`（`build_style_gallery`）、`gradio_ui/i18n.py`（`LABELS`）、`config.py`（`ModelConfig.ltx_repo_dir`・`reload_interval`・`VramConfig.allow_disable_low_vram`・`VramConfig.attention_tile_size`・`ModelConfig.text_encoder`・`UploadConfig.normalize_to_png`・`OutputConfig.format`）、`tracking/uetrack_runtime.py`（`_BASE_CFG`）、`scripts/install_model.ps1`（`Format-Size`）。
 
 ### 1-59. `_read_target_vocab_from_header` の名前と型が本体に合わない（起票：2026-10-01）
 
@@ -437,6 +440,76 @@
 - **着手**: 着手時は go／no-go の検討から始める。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §139。[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §9。
 - **関連ファイル**: `mcp_server/batch_planning.py`、`gradio_ui/manifest.py`（`raw_frame_count`・`over_frame_limit`）、`tests/test_mcp_batch_planning.py`、操作パネルの `webui/src/modes/batch/manifestMerge.ts`。
+
+### 1-70. `install_ltx.ps1` Step 7 の検証表に `.venv-engine-ltx25` の python が無い（起票：2026-10-02）
+
+- **現象**: `scripts/install_ltx.ps1` の検証表（Step 7）を作る `$required` 配列は、固定の3行（`engine_python`＝`.venv-engine/Scripts/python.exe`、`app_python`＝`.venv/Scripts/python.exe`、`engine worker.py`）とUETrack選択時の2行だけを持ち、`.venv-engine-ltx25/Scripts/python.exe`（変数 `$ltx25Py`）を検証表の行に加えない。ただし `setup.bat` の通常の実行では、Step 5 で `.venv-engine-ltx25` の作成やインストールに失敗するとその場で throw して止まる（`$ErrorActionPreference = "Stop"`）ので、検証表までは進まない。表がこの venv の欠けを MISSING にできないことが実際に効くのは、`-SkipVenv` 付きで呼ばれて Step 5 を飛ばし、しかも `.venv-engine-ltx25` がもともと無い場合で、具体的には `install-LTX25.bat`（`scripts/install_model.ps1` が `install_ltx.ps1` を `-BaseModel LTX25 -SkipVenv -SkipMigrate` で呼ぶ）である。たとえば `setup.bat` が `.venv-engine`（先に作る）を作った後、`.venv-engine-ltx25` の段で止まった環境で `install-LTX25.bat` を実行すると、この状態になる。その手前で `install_model.ps1` の `Test-SetupDone` が確かめるのも `tools\uv\uv.exe`・`.venv`・`.venv-engine` の3つだけで、`.venv-engine-ltx25` は見ない。あわせて、`-SkipVenv` のときの案内（`if ($SkipVenv -and -not (Test-Path $enginePy)) { Write-Warning … }`）も `$enginePy`（`.venv-engine` 側）だけを見ており、しかも検証表に MISSING があるときの分岐の中にしか無いので、このケースでは出ない。
+- **影響**: LTX 2.5 のモデルファイルがそろっていれば、検証表は全行 PASS で終わる。ところがサーバーは既定の `backend: auto` のとき、実行可否の判定（`services/engines/ltx/adapter.py` の `_real_available`。LTX 2.5 では `model.engine_python_ltx25` を見る）で engine の python が無いので、LTX 2.5 を黙ってお試し表示（mock）に落とす。理由はサーバーログの警告（`real backend unavailable — … missing: …`）に出るだけで、画面の上では生成が動いているように見える（同じ docstring が「silent-mock-demotion trap」と呼ぶ挙動）。`backend: real` のときは LTX 2.5 の読み込みが RuntimeError で失敗する。クラッシュ・データ破損は無い。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 検証表に `.venv-engine-ltx25` のpython行を足す。
+  - B: `-SkipVenv` 時の案内の判定を `$enginePy`・`$ltx25Py` の両方に広げる（案内は検証表に MISSING があるときの分岐の中にあるので、A と組み合わせないと表示されない）。
+  - C: `install_model.ps1` の `Test-SetupDone` で、LTX 2.5 を入れるときは `.venv-engine-ltx25` も確かめる。
+  - D: 現状維持。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
+- **関連ファイル**: `scripts/install_ltx.ps1`（`$required`・`$enginePy`・`$ltx25Py`・`-SkipVenv` 時の案内・`Ensure-EngineVenv` の `-SkipVenv` の分岐）、`scripts/install_model.ps1`（`Test-SetupDone`・`install_ltx.ps1` の呼び出し）、`services/engines/ltx/adapter.py`（`_select_backend`・`_real_available`）。
+
+### 1-71. `build_xformers.ps1` のCUDA探索が `-CudaVersion` と食い違う（起票：2026-10-02）
+
+- **現象**: `scripts/build_xformers.ps1` のCUDAツールキット探索は、最優先で固定の環境変数名 `$env:CUDA_PATH_V12_8` を見るため、`-CudaVersion` に12.8以外を渡しても `$env:CUDA_PATH_V12_8` が存在すればそちらが優先され、指定した版は使われない。次点の `$env:CUDA_PATH` も版を確かめずにそのまま採用する。`-CudaVersion` が実際に効くのは、どちらの環境変数も無いときのフォールバック（`C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v$CudaVersion`）だけである。CUDAを選ぶ段（画面の見出し「Selecting CUDA Toolkit」、コード上のコメントは 2a）は、選んだnvccの `nvcc --version` の release 行を表示するだけで、その版が `-CudaVersion` や torchのcu128（その前の段「Checking engine venv」〔コメント上の 1〕が表示する）と一致するかは照合しない。
+- **影響**: 複数のCUDA版をインストールした環境で `-CudaVersion` を明示的に変えたときだけ発生する。意図と違う版のnvccでビルドされても気づきにくい。クラッシュ・データ破損は無い（このスクリプトは手動実行のxformersビルド補助）。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `$env:CUDA_PATH_V12_8` の優先を `-CudaVersion` の値に応じた環境変数名に一般化する、または採用前に版を確かめる。
+  - B: CUDAを選ぶ段（2a）の後に、選んだnvccの版が `-CudaVersion`・torchのcu128と一致するかの照合を足す。
+  - C: 現状維持。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
+- **関連ファイル**: `scripts/build_xformers.ps1`（CUDA探索ブロック〔2a〕・`-CudaVersion`・2a の `nvcc --version` の表示・1 の torch の表示）。
+
+### 1-72. `config.yaml.example` の comfort token budget の値の行が、複製した `config.yaml` にもそのまま入る（起票：2026-10-02）
+
+- **現象**: `config.yaml.example` の `limits` 節は `chain_comfort_token_budget: 40000` と `single_comfort_token_budget: 44880` を、コメントではない実際の設定行として持つ。直前の注記は「このコメントはexampleのみに書く。実運用config.yamlには追記しない——`chain_comfort_token_budget`も実運用yamlには無くPydantic既定値のまま配信されている前例に倣う（yamlに書くと将来の定数調整が実機に届かなくなる）」と書き、この2つの値が `config.yaml` に「書かれない」運用を前提にしている。しかし `config.yaml.example` を複製して `config.yaml` を作る通常の導入手順では、この2行もそのままコピーされるため、値そのものが最初から利用者の `config.yaml` に入ってしまう。
+- **影響**: `config.py` の既定値（`LimitsConfig.chain_comfort_token_budget`・`single_comfort_token_budget`）を将来調整しても、example由来の `config.yaml` を使っている利用者には届かない。快適上限の目安線の表示がずれるだけで、クラッシュ・データ破損は無い。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 2行をコメントアウトした例示（値は書くがyamlとしては無効）に変える。
+  - B: 値の行は残し、注記を「example限定」ではなく「複製した場合もこの値が有効になる」という現状に合わせて書き直す。
+  - C: 現状維持（値の行を残すかはコード側の判断）。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
+- **関連ファイル**: `config.yaml.example`（`limits` 節）、`config.py`（`LimitsConfig.chain_comfort_token_budget`・`single_comfort_token_budget`）。
+
+### 1-73. `run.ps1` の二重起動判定が `config.yaml` の `server.port` を読まない（起票：2026-10-02）
+
+- **現象**: `run.ps1` の二重起動判定は `--port` 引数（または `--port=N` 形式）だけを読み、無指定なら固定で18620を使う（`if ($port -le 0) { $port = 18620 }`）。`config.yaml` の `server.port`（`ServerConfig.port`）でポートを変えている利用者が `--port` を付けずに `run.bat` を2回起動した場合、判定は実際の待受ポートではなく18620を見るため、2枚目の起動を検出できない。
+- **影響**: `config.yaml` でポートを変えた利用者だけに発生する。2枚目は判定をすり抜けて `main.py` に進み、アプリの組み立て（`build_app`）と startup を一度走らせた後、uvicorn がポートの bind に失敗してエラーをログに出し、`exit 1` で終わる。すると `run.ps1` が異常終了の案内（「サーバーが異常終了しました。…git pull の直後なら setup.bat を再実行してください。」）を出すので、この判定が防ぐはずの誤誘導がそのまま起きる。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: `run.ps1` が `config.yaml` の `server.port` も読んで判定に使う。
+  - B: 現状維持し、「`--port` を省略する利用者は `config.yaml` でポートを変えない」ことを前提とする。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
+- **関連ファイル**: `run.ps1`（二重起動の判定・異常終了の案内）、`main.py`（`uvicorn.run` の `port=runtime.port`）、`config.py`（`ServerConfig.port`）。
+
+### 1-74. `Get-EngineStateHash` がコメント行を含む freeze の全文をハッシュする（起票：2026-10-02）
+
+- **現象**: `scripts/install_ltx.ps1` の `Get-EngineStateHash` は、freezeファイルの全文（改行コードだけCRLFをLFに揃える）を読んでSHA256を取る。コメント行も本文に含まれるため、freezeファイルの説明コメントだけを書き直しても、本体の依存関係（パッケージ名・版）が変わっていなくてもハッシュが変わり、次に `setup.bat`（`.venv-utils` が対象のときは次の `install-UETrack.bat`）を実行したときに該当する仮想環境の貼り直し（re-sync）が1回起きる。
+- **影響**: この回（コメント現行化 第8区域）でfreeze 3本（`engine/venv-engine.freeze.txt`・`engine25/venv-engine-ltx25.freeze.txt`・`tracking/venv-utils.freeze.txt`）のコメントを直したため、次回1回この貼り直しが起きる（環境は同じになる・時間がかかるだけ）。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: コメント行（`#` 始まりの行・行末コメント）を除いてからハッシュする。
+  - B: 現状維持（コメントの変更頻度は低いため許容する）。
+- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
+- **関連ファイル**: `scripts/install_ltx.ps1`（`Get-EngineStateHash`）、`engine/venv-engine.freeze.txt`、`engine25/venv-engine-ltx25.freeze.txt`、`tracking/venv-utils.freeze.txt`。
+
+### 1-75. `.gitignore` の死にパターンと抜け（起票：2026-10-02）
+
+- **現象**: `.gitignore` の `logs_diag/`・`.hf_cache/`・`LTX-2/` はいずれも対象が存在しない（`logs_diag/` はローカルに無い・`.hf_cache/` を設定するコードが0件・`LTX-2/` はルートに存在せず `vendor/LTX-2` は `vendor/*` で既に無視されている）。逆に `scripts/build_xformers.ps1` の既定の出力先 `wheels/`（`*.whl`）は `.gitignore` に無いパターンで、ビルドすると大きなwheelファイルが未追跡ファイルとして現れる。
+- **影響**: 軽微。死にパターンは実害が無く、`wheels/` の抜けは `build_xformers.ps1` を実行した利用者が `git status` で気づく程度。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 死にパターン3つを削り、`wheels/` を足す。
+  - B: 現状維持。
+- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §140（コメント現行化 第8区域の検算の申し送り）。
+- **関連ファイル**: `.gitignore`、`scripts/build_xformers.ps1`（`$OutDir` 既定値 `"wheels"`）。
 
 ---
 

@@ -15,7 +15,7 @@
       6. config.yaml が無ければ config.yaml.example から複製
       7. tools/ を PATH の先頭へ（このプロセスの中だけ）
       8. scripts/install_ltx.ps1 の実行（Python 環境とモデルの取得）
-      9. 終了案内
+      9. 終了案内（成功時は .mcp.json も作る）
 
     このファイルは UTF-8（BOM 付き）で保存すること。Windows PowerShell 5.1 は
     BOM の無い UTF-8 を ANSI として読むため、BOM を落とすと日本語が化ける。
@@ -99,12 +99,11 @@ function New-StagingDir {
 # 事前チェック（すべて警告のみ。ここで処理を止めない）
 # ---------------------------------------------------------------------------
 function Test-FreeSpace {
-    # 必要容量の表記は README のハードウェア要件表（正本）と揃えること。
-    # 2026-08-31 実測に基づく。正本は README ハードウェア要件表。
+    # 必要容量の表記（実測に基づく）は README のハードウェア要件表（正本）と揃えること。
     # setup.bat（このスクリプト）は install_ltx.ps1 を -BaseModel 指定なしで呼ぶため、
     # 常に既定の LTX23,Preprocessors のみを導入する（LTX25 はここでは選べない）。
-    # LTX 2.5 の追加分（約 30GB）は install-LTX25.bat（scripts/install_model.ps1）の
-    # 側で別途しきい値を持つため、ここでは base 分の 50GB のみを見る。
+    # LTX 2.5 の追加分は install-LTX25.bat（scripts/install_model.ps1）の側で
+    # 記述子の min から別途しきい値を求めるため、ここでは base 分の 50GB のみを見る。
     $needGB = 50
     try {
         $qualifier = Split-Path -Qualifier $ProjectRoot          # 例: "S:"
@@ -220,7 +219,7 @@ function Install-Ffmpeg {
         $unpack = Join-Path $stage 'unpack'
         Write-Info '展開中…（少し時間がかかります）'
         Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force
-        # 展開後のフォルダ名にはバージョンが入る（ffmpeg-8.1.2-essentials_build など）。
+        # 展開後のフォルダ名にはバージョンが入る（ffmpeg-<版>-essentials_build など）。
         # 決め打ちにできないので、実行ファイルを探して場所を割り出す。
         $found = Get-ChildItem -LiteralPath $unpack -Recurse -File -Filter 'ffmpeg.exe' | Select-Object -First 1
         if (-not $found) { throw 'ダウンロードした ffmpeg の書庫に ffmpeg.exe が入っていませんでした。' }
@@ -259,8 +258,8 @@ function Test-Tools {
 # 絶対パスで書き出す。$CLAUDE_PROJECT_DIR のような相対解決に頼ると、開発機で
 # 親フォルダをワークスペースとして開いた場合や、エンドユーザーがセットアップ前
 # （.venv が無い状態）でクライアントを設定した場合に壊れる。.venv\Scripts\
-# python.exe が実際に存在することを確認してから書き出す（無ければ、まだ
-# セットアップの途中ということなので黙ってスキップする）。
+# python.exe が実際に存在することを確認してから書き出す（無ければ、
+# セットアップの途中ということなので、注意を 1 行出して書き出さない）。
 # ---------------------------------------------------------------------------
 function New-McpJson {
     $mcpJsonPath = Join-Path $ProjectRoot '.mcp.json'
@@ -299,9 +298,9 @@ function Show-InstallFailureHelp {
     Write-Info ('ウイルス対策ソフトが原因のときは tools フォルダ（' + $ToolsDir + '）を除外設定に追加して再実行してください。')
 
     # 導入スクリプトの点検は「フォルダの合計サイズ」ではなく「1 個ずつのファイル」を
-    # 見るようになった（2026-08-19）。そのため回復手順も「フォルダごと削除」ではなく
+    # 見る。そのため回復手順も「フォルダごと削除」ではなく
     # 「欠けている 1 ファイルだけ削除」で足りる。フォルダごとの削除を案内すると、
-    # 利用者自身の資産（下記）を巻き添えにするので、もう案内しない。
+    # 利用者自身の資産（下記）を巻き添えにするので、案内しない。
     Write-Host ''
     Write-Host ('-' * 74) -ForegroundColor Yellow
     Write-Warn ('models\LTX23 をフォルダごと削除しないでください: ' + (Join-Path $ProjectRoot 'models\LTX23'))
@@ -393,7 +392,7 @@ try {
         Write-Good 'config.yaml.example から config.yaml を作りました。'
     } else {
         Write-Warn 'config.yaml も config.yaml.example も見つかりません。'
-        Write-Info '既定値のまま進みます（生成が「お試し表示」になることがあります）。'
+        Write-Info '既定値のまま進みます（IC-LoRA の登録とプリセットが空になります）。'
     }
 
     # tools/ をこのプロセスの PATH の先頭へ。ここから先の uv / ffmpeg / ffprobe は

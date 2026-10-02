@@ -15240,3 +15240,72 @@ w4a8 の LoRA 有無差（15.3 dB）・REDGraft 混在の LoRA 有無差（18.4 
 **追補（2026-10-02・同日の続き）**: 申し送り (2) の Gradio 画面の旧名は、オーナー指示で同日に直しました。`gradio_ui/ui.py` の `gr.Blocks(title=)` と見出し `gr.Markdown("# …")` を製品名「Nz-Videomni」に（画面の見出しなので API の名乗り「Nz-Videomni backend」の「backend」は付けない）、`gradio_ui/styles.py` の `CUSTOM_CSS` の中の CSS コメント「the AviUtl2-Bridge accent」を「the Nz-Videomni accent」に、それを固定する `tests/test_gradio_ui.py` の `assert "LTX-AviUtl2-Bridge" in r.text` を「Nz-Videomni」に変えました（差分は 3 ファイル・4 行。Gradio 系テスト 111 件合格）。敵対的レビュー（Opus）の指摘: 直すべき 0／注意 3（新しい assert は Gradio が HTML に埋め込む config の title と CSS コメントでも通るので見出しだけの撤去は検知できない〔テストの設計の判断として参考に留める〕／旧名はほかに `pyproject.toml` のパッケージ名 `ltx-aviutl2-bridge`（画面には出ない。変えると `uv.lock` が作り直される）と過去の画面モック `Docs/mockups/GUI_V2V_A2V_MOCK.html` に残る〔オーナー判断〕／本節の申し送りを「済み」にする＝この追補）。操作パネル・他のテストが画面タイトル・見出し・`/` の `service` に依存していないこと、README の見出し「# Nz-Videomni」と仕様書の「Nz-Videomni バックエンド」に矛盾しないことをレビューが確かめました。
 
 候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。
+
+## 140. ★コード内コメントの現行化・第 8 区域「Python 以外の自作ファイル」（PowerShell 5 本・`config.yaml.example`・TOML 4 本・freeze 3 本・`requirements.txt`・`.gitignore`・bat 4 本＝19 ファイル）＝ 271 ブロック中 89 を現行化（内部 64＋利用者が読む説明 25・コメントのみ・動作は不変）＋実行時の文言 6 箇所＋`config.py` の注記 1 件＋台帳 §1-70〜§1-75 の起票と §1-34・§1-58 の追記（2026-10-02）
+
+**要約**: §139 で Python の自作の本体コードが全区域完了したのに続き、道具が Python 専用のため別扱いにしていた **Python 以外の自作ファイル 19 本をまとめて 1 回**で行った。これで自作の本体コードのコメント現行化は、Python と Python 以外の両方が完了。19 ファイル・4,093 行・271 ブロックのうち 89 ブロック（事実が古いもの 66・導入時期の記録だけのもの 23）を書き換え、コードは変わっていないことを言語ごとの方法で確かめた。古いままの割合は 33%。**道具を新しく作った**: PowerShell は Windows PowerShell 5.1 の構文解析器（`System.Management.Automation.Language.Parser`）の Comment トークンでコメントを抜き出す（正規表現では git URL の `#subdirectory=`・他ファイルへ書き出す `"# …"` の文字列・正規表現の文字クラス `[^\s#]` を誤検出する）。YAML・TOML・テキストは行ベース、bat は `rem` 行。証明は PowerShell＝コメントと改行を除いたトークン列の一致＋構文エラー 0、YAML＝`yaml.safe_load` の結果とコメントを除いた行の一致、TOML＝`tomllib` の結果とコメントを除いた行の一致、テキスト・bat＝コメントを除いた行の一致。加えて BOM の有無・改行コードの種類（適用前の作業ツリーで数えた表が基準。`core.autocrlf=true` の環境では `git show` の blob が LF に正規化されているので基準にできない）・文字集合（BOM 無しの `.ps1` 2 本・TOML・freeze・bat は新しく書く行を ASCII のみに。PowerShell 5.1 は BOM 無しのファイルを ANSI として読むため、`install_ltx.ps1` の既存の `§` 13 箇所は実際に化けて表示されていた）・needle（`tests/test_base_model_contract.py` が `install_ltx.ps1` の本文を正規表現 `\$DeprecatedModelKeys = @\((.*?)\)` で読み最初の一致を使うので、この並びをコメントに書かない）・`#Requires` 不在・YAML の行末コメントの `␣#`。**利用者が読む説明の扱い**: `config.yaml.example` の全コメント（利用者が `config.yaml` に複製して編集するときに読む）・`install_ltx.ps1` 冒頭の comment-based help（`Get-Help` が表示する）・`requirements.txt` の 3 つは、§139 の MCP の公開 docstring と同じく判定して案を作り、一覧の第 4 節に全文を載せてオーナーが決めた（25 件すべて案のとおり）。
+
+**目的**: 骨格は §135〜§139 と同じ。判定担当への指示（v9）に固有の注意を足した。
+1. 言語ごとのコメント記法を保つ（`#`・`<# … #>`・`rem`。`#Requires` は指示行でコメントではない。comment-based help のキーワード行は構造として保つ）。
+2. 文字集合（上記）。
+3. 日付入りの決定ログ「2026-MM-DD に X を削除」は (a-hist) で日付と削除済みのものを落とし今の設計の理由を現在形で残す。X が今も存在するかは事実の一覧表 B-7（30 件）で照合（「削除した」型 11 件はすべて今も不在）。
+4. 版の固定の正本は `install_ltx.ps1` の `$engineDirectPins`・`$ltx25DirectPins`・`$ltx25UvArgs`・`$DeprecatedModelKeys`・`$required` と各 `*-venv-pyproject.toml`（定義のそばの値は残す。離れた書き写しは (b)）。freeze の SHA・URL・METHOD・「Captured:」の行は固定した版の記録として残す。
+5. `config.yaml.example` の既定値・上限・挙動の主張は `config.py` の定義と読み手（サーバーの検査・操作パネル・Gradio・MCP）で裏取り。台帳 §1-58 に起票済みの未使用の設定項目のコメントは触らない（読み手 0 件で未起票の項目も同じ扱いで §1-58 に足す）。
+6. ASCII のみのファイルでは `§` を使わず `VERIFICATION_LOG section N` と書く。
+
+**対象**: 19 ファイル・4,093 行・271 ブロック（`install_ltx.ps1` 105・`setup.ps1` 24・`install_model.ps1` 24・`build_xformers.ps1` 18・`run.ps1` 10・`config.yaml.example` 42・TOML 4 本 16・freeze 3 本 3・`requirements.txt` 2・`.gitignore` 19・bat 4 本 8）。起点コミットは `72c355c`（§139 追補のコミット）。差し替えが入ったのは 14 ファイル（bat 4 本と `tracking/utils-venv-pyproject.toml` は変更なし）。`scripts/manifests/*.json`（JSON はコメント不可。注記欄はデータ）・`models/**/put_*_here.txt`（利用者向けの案内文書）・`pyproject.toml` の `[project]` の値（`uv.lock` が作り直されるためオーナー裁定で触らない）は対象外。
+
+**方法**:
+1. 新しい道具（`comment-audit/tools/`、git 管理外）: `ps_tokens.ps1`（Parser を呼ぶ補助。`ParseFile` は BOM 無しのファイルを既定のコードページで読むので、ファイルを明示的に UTF-8 で読んで `ParseInput` に渡す）・`extract_nonpy.py`・`nonpy_boundaries.py`（関数定義・`# ----` の横線・`Write-Step`・YAML のトップレベル鍵・TOML の `[table]` を区域の境界候補に）・`build_regions.py --boundaries`・`merge_changes.py --lang nonpy --needle-file`・`prove_nonpy.py --newline-table`・`mark_user_facing.py`。既定の Python 経路は不変（第 7 区域のデータで回帰）。
+2. 10 区域へ切り、判定は Opus・区域ごと・読み取りのみ（10 体）。
+3. 検算は Opus 4 体（V1〜V4）で 157 ブロック（change 全件＋利用者が読む説明の keep 全件＋keep の抜き取り）。確認済み 152・異論 5・一部だけ直した 0・見逃し 0。保留 1 件（CYE-019 `allow_disable_low_vram`）は「読み手 0 件の設定項目は台帳 §1-58 に足す」で解決。
+4. 統合（行範囲・`old_lines` の一致・言語ごとの検査・文字集合・needle・残存語は全部 OK）。
+5. 揃え・再検算: Opus 1 体が 13 件を直し（検算由来 5・揃え由来 8。`replace_new_lines` 10・`add` 3）、再検算で判定と検算の両方をすり抜けていた誤りを 2 件見つけた（下記）。残存語 30 行は「それでも」の意味の still・版の表記 `v1.2.0`・残すと決めた「Captured:」で理由つきで残した。
+6. オーナーの了承（内部 64 件・利用者が読む説明 25 件・実行時の文言 6 箇所・判断事項 3 点・台帳・文書の食い違い、すべて案のとおり）のうえ 89 件を適用。
+7. 証明とレビューは下記。
+
+**結果**:
+
+最終の判定（271 ブロック）:
+
+| 区分 | ブロック数 |
+|---|---:|
+| 事実が古い | 66 |
+| 導入時期の記録だけ | 23 |
+| 現行のまま | 182 |
+| 保留 | 0 |
+
+古いままの割合は33%です。手がかりの的中率は55%、印の無いブロックの見逃しは15件（古い89件の17%）でした。
+
+**この区域で決めた扱い**: 利用者が読む説明 3 つ（`config.yaml.example`・`install_ltx.ps1` の help・`requirements.txt`）は判定して案を作り第 4 節で全文を見せてオーナーが決める／freeze の SHA・URL・METHOD・「Captured:」は固定した版の記録として残す（「定義位置の値は対象外」の例）／「official LTX-2 v1.2.0」は SHA の別名で古くならない／ASCII のみのファイルでは `§` を `section` に／変える文が無いブロックに残る `§` 2 箇所（PIL-021・PIL-022）もオーナー裁定で ASCII 化／`build_xformers.ps1` の help の `.PREREQUISITES` は comment-based help の正式なキーワードではなく `Get-Help` が help 全体を認識しなかったので、段落を `.NOTES` に移した（オーナー裁定）／freeze 3 本のコメント変更は `Get-EngineStateHash` がコメント込みでハッシュするため次回の `setup.bat`（`.venv-utils` は `install-UETrack.bat`）で該当する仮想環境の貼り直しが 1 回起きる（できる環境は同じ）ことを承知のうえで反映（オーナー裁定。改善は台帳 §1-74）。
+
+**当初から誤っていた主張の訂正の例**: `install_ltx.ps1` の help「GGUF recipe is the ONLY real path」（PIL-001。記述子の transformer 区分は `.safetensors` も受け付け、読み込めるのは量子化済み fp8／int8）・「schema must be 1」（PIL-018。1 または 2）・「mirrors the $env: block in run.ps1」（PIL-009。`run.ps1` は `UV_CACHE_DIR`・`HF_HOME` を設定しない）・「NO -Force anywhere in migration」（PIL-042。`Remove-Item -Force`・`Copy-Item -Force` がある）・「the new layout is SHORTER」（PIL-044。移動先のほうが長いものがある）・「3 git packages + 1 direct-URL wheel／4 bare lines」（PIL-073。2.3 だけの数。2.5 は 5 個・`.venv-utils` は 0）・「`$ltx25UvArgs` は BOTH uv stages に効く」（PIL-079。(a) 段だけ）・「`INSTALLED_PATHS.txt` の `key` は asset 名かカテゴリ名」（PIL-100。ラベルで、サーバーは読まない）・「the engine code does not import xformers」の限定（PIL-082・PBX-001。自作コードは import しないが、`.venv-engine` の上流 ltx-core の `attention.py` は xformers を読み込めれば既定の attention で使う。2.5 の ltx-core には参照が無い。揃えの再検算で確定）・`install_model.ps1` の「Python 環境は作らない」（PIM-001・009・020。UETrack では `.venv-utils` を作る）・手順 2 と 3 の順（PIM-001）・`build_xformers.ps1` の「CUDA 12.9 does NOT support」（PBX-006。既定は 12.8）・「Verify torch 2.9.1 + CUDA 12.8」（PBX-001・009。表示するだけで照合しない）・`requirements.txt` の「両方が最上位の `services` を持つ」（RQ-001。エンジン venv に `services` は無い。実際の理由は transformers のメジャー版 4.x／5.x の衝突）・`config.yaml.example` の「`backend: auto` は GPU＋モデル有→real」（CYE-005。GPU の有無は見ない）・「ic_loras が無ければ loras 要求は全て拒否」（CYE-007。`lora_dir` を走査した分も通る）・「Phase 1 では無効」（CYE-016。`block_swap: true` と矛盾）・「LTX 2.5 は常に小単体ファイルから読む」（CYE-018。2.5 のエンジンはこの設定を読まない）・「`generation_defaults` は既定値」（CYE-025。読むのは操作パネルだけ）・「参照動画は再エンコードせず保存」（CYE-027。窓か `max_frames` の指定があれば切り出す）・「上限の値はクライアントの入力範囲に使われる」（CYE-039。配信されるだけでサーバーの検査には効かず、`end_context_frames_*` を読むクライアントも無い）・快適上限の戻り先（CYE-041・042。クライアントは `comfort_budgets` の表の行を先に使い、単独の値は合う行が無いときの戻り先）・`run.ps1` の「config.yaml が無いとお試し表示に落ちる」（PRN-004。起きるのは IC-LoRA の一覧とプリセットが空になること）・`.gitignore` の「HuggingFace / uv / torch caches」（GIT-011。設定するのは `HF_HOME` と `UV_CACHE_DIR` だけ）・`setup.ps1` の「黙ってスキップ」（PSU-015。`Write-Warn` を 1 行出す）・`install_model.ps1` の「公式サイズの 4〜10% 下」（PIM-008。記述子に約 11% 下の行がある）。台帳番号の行き先の誤り（「PENDING_TASKS.md 3-25」→ CLOSED §3-52〔記録は §40〕・「3-26」→ CLOSED §3-53・「§1-17」→ CLOSED §3-73〔記録は §55〕・「spec 2.5」→ 仕様書 §2.3〜§2.4）。
+
+**証明**: 14 ファイルで、コメント以外の差は、オーナーが決めた実行時の文字列 13 トークン（`build_xformers.ps1` 8・`install_ltx.ps1` 3・`setup.ps1` 1・`install_model.ps1` 1）だけ（文字列に触れていない 10 ファイルは言語ごとの検査が起点 `72c355c` と一致）。`config.py` は docstring を除いた構文木が一致。BOM 付き 3 本（`setup.ps1`・`install_model.ps1`・`run.ps1`）の BOM は保たれ、改行コードは元の種類のまま（`build_xformers.ps1`・`run.ps1` は LF、他は CRLF。混在なし）。`install_ltx.ps1` と `build_xformers.ps1` の非 ASCII バイトは 0（起点は 26 と 12）。
+
+**テスト**（GPU・実バックエンド・ネットワークに触れない）: アプリ `.venv` の全件 2,873 passed・54 skipped（既知の 1 件を `--deselect`。`-q` は付けない）。`.venv-engine`・`.venv-utils` は Python に触れていない（`config.py` の変更はコメントだけ）ので不要。`.ps1`・`.bat` は実行しない（構文解析のみ）。
+
+**外部文言（オーナー決定）**:
+(A) 利用者が読む説明 25 件（`config.yaml.example` 23・`install_ltx.ps1` の help〔110 行→111 行〕・`requirements.txt`）。
+(B) 実行時の文言 6 箇所: `build_xformers.ps1` 末尾の `Write-Host`「the installed attention backend is PyTorch SDPA on every GPU」→「the default attention backend is PyTorch SDPA (sageattention can be selected per job)」／同「the backend code does not import xformers, so installing it has NO effect on generation today」→「the project's own code never imports xformers, but the LTX 2.5 engine's upstream ltx-core picks it up when it is importable and uses it for the default attention path. The LTX 2.5 engine does not reference it.」／同 `throw` 3 箇所の em dash → `--`（BOM 無しのため化けていた）／`install_ltx.ps1` が `INSTALLED_PATHS.txt` に書く見出し「GGUF + component-file recipe」を落とし「The 46GB monolith」→「The bf16 monolith」（大きさは文書間で 43GB／46GB に割れる）／`setup.ps1`「既定値のまま進みます（生成が「お試し表示」になることがあります）。」→「（IC-LoRA の一覧とプリセットが空になります）。」／`install_model.ps1`「追加のモデルファイルを取ってくるだけのものです。」→「取ってくるものです（物体追尾では専用の Python 環境も作ります）。」。旧文面を固定しているテストは無かった。据え置き（参考）: `build_xformers.ps1` の `throw` の torch の版の書き写し・`install_model.ps1` の「次の 1 手順だけです」・`setup.ps1` の「約 33 GB」。
+
+**台帳**: §1-70（Step 7 の検証表に `.venv-engine-ltx25` の python が無い・`-SkipVenv` の警告は `.venv-engine` だけ）・§1-71（`build_xformers.ps1` の CUDA 探索が `CUDA_PATH_V12_8` 固定で版を照合しない）・§1-72（`config.yaml.example` に `chain_comfort_token_budget`・`single_comfort_token_budget` の値の行があり、複製した利用者の `config.yaml` に入る）・§1-73（`run.ps1` の二重起動の判定が `server.port` を読まない）・§1-74（`Get-EngineStateHash` がコメント込みでハッシュ）・§1-75（`.gitignore` の死にパターン 3 件と `wheels/` の抜け）を起票。§1-34 に `limits` の他の項目（`width`／`height`／`num_frames` は `api/models.py` の `Field` の直書き、`retake_window_*` は `chain_math` の定数・関数で検査）を追記。§1-58 に読み手 0 件の設定項目 5 つ（`vram.allow_disable_low_vram`・`vram.attention_tile_size`・`model.text_encoder`・`upload.normalize_to_png`・`output.format`）と `install_model.ps1` の未使用の `Format-Size` を追記。
+
+**文書の訂正 2 件**:
+1. モノリスの大きさ（43GB／46GB）は実寸を確かめられないので、この区域の新しい文では数字を落とした（`config.yaml.example` 2 箇所・help・`INSTALLED_PATHS.txt` の見出し）。Python 側の 2 箇所（`services/engines/ltx/adapter.py`・`engine/pipeline/fast_video_pipeline.py`）は記録のみ。
+2. `config.py` の `LimitsConfig.chain_comfort_token_budget` の注記「Lower it on a smaller GPU / raise it on a larger one to move the client's guides」は、クライアントが `comfort_budgets` の表の行を先に使う今は成り立たないので、オーナー了承のうえ同じ回で直した（コメントのみ。既定の表の LTX 2.3 の行は 5 トグル全 on の 1 行だけなので、トグルが 1 つでも off なら Chained と Retake の目安線はこの値から引かれる。目安線を動かすときは両方を見直す）。
+
+**敵対的レビュー**（Opus 1 体・サブエージェント起動なし・(b)／(c) 全件＋(a) 全件＋利用者が読む説明 25 件を `config.py` と読み手で突き合わせ＋xformers の主張を上流 ltx-core で確認＋help 2 本を `Get-Help` で確認〔scratchpad に写した help 部分だけ〕＋PowerShell 5 本のトークン差分・YAML・TOML・needle・文字コード・台帳）: コメント本体の差分に事実の誤りは無し。
+- **直すべき 4 件（3 件採用・1 件は本節を同じコミットで書くことで解消）**: いずれも台帳の記述——§1-70 の「現象」と「影響」（仮想環境の作成に失敗したときはインストーラが途中で止まり検証表まで進まない。表が MISSING を出せないのは `install-LTX25.bat` で `.venv-engine-ltx25` がもともと無いときだけで、そのとき LTX 2.5 は `backend: auto` で黙ってお試し表示に落ちる）／§1-71 の「Step 1（Selecting CUDA Toolkit の直後）」（Step 1 は CUDA の選択より前）／§1-73 の「起動自体は通常どおり進む」（2 枚目は uvicorn がポートの bind に失敗して `exit 1` になり、`run.ps1` が異常終了の案内を出す）／台帳が引く §140 が無い（本節）。
+- **注意 5 件（3 件採用・2 件不採用）**: 採用＝freeze 2 本で来歴を落とした結果「Captured: <日付>」が全行その日の採取と読めるので「採取の後に手で足した・消した行がある（git の履歴）」の 1 行を足した／`config.yaml.example` の CYE-002「本番経路は GGUF 量子化トランスフォーマー」を help の「GGUF または量子化済み fp8／int8 の safetensors」と揃えた／`setup.ps1` の文言「IC-LoRA の一覧」→「IC-LoRA の登録」（Gradio は `ic_loras` が空でも既知の 5 名の固定の一覧を出すため）。不採用＝2.3 で削除した 19 件の名前が文書から消えた（基準どおり git の履歴に委ねる。VERIFICATION_LOG §40.1 が 10 件を名指し）／freeze のコメント変更で次回の `setup.bat` に貼り直しが起きる（オーナー了承済み・台帳 §1-74）。
+- **参考 8 件（不採用）**: 言い回しの範囲。
+
+**費用の目安**（Opus・Sonnet のトークン、概算）: Opus＝事実の一覧表 約 34 万・判定 約 166 万・検算 約 77 万・揃え 約 21 万・反映 約 7 万・レビュー 約 28 万・指摘の反映 約 10 万、合計約 345 万（計画の見込み 300〜350 万の範囲内）。Sonnet＝道具 約 39 万・辞書 約 29 万・台帳 約 16 万・記録 約 15 万、合計約 100 万（見込み 60〜80 万を上回った。新しい道具 5 本と PowerShell の文字コードの落とし穴の調査が重かった）。
+
+**申し送り**（次へ）:
+1. 自作の本体コードのコメント現行化は、Python（§130〜§139）と Python 以外（本節）の両方が完了。残るのは記録のみの箇所: Python 側のモノリスの大きさ 2 箇所、操作パネル `webui/src/shell/useBaseModels.ts` の「§3-97 P7」、`pyproject.toml` の `[project]` の値（オーナー裁定で保留）、`engine/engine-venv-pyproject.toml` の `name = "ltx-desktop-backend"`（値）。
+2. freeze 3 本のコメントを直したので、次に `setup.bat` を走らせるとエンジン仮想環境 2 本の貼り直しが 1 回起きる（`.venv-utils` は次の `install-UETrack.bat`）。台帳 §1-74 を直せば以後は起きない。
+3. `build_xformers.ps1`・`run.ps1` は LF のみで、`.gitattributes` は `*.bat` にだけ `eol=crlf` を固定し `.ps1` には何も固定していない。`core.autocrlf=true` の環境で git がこの 2 本を書き出すと CRLF に変わりうる（git の警告「LF will be replaced by CRLF」）。挙動には影響しないが、改行の比較は作業ツリーの実物で行う。
+4. 判定の基準に足すとよい点（検算担当の意見）: 配信値の説明は鍵ごとに「サーバーの検査・操作パネル・Gradio・MCP」の読み手を分けて確かめる／`old_lines` から残す語（「旧方式」「従来の」）も見直す対象／freeze の記録行は (b) の例外として明記。
+
+候補の一覧と道具はリポジトリの外（`comment-audit/`。git 管理外）に置いています。

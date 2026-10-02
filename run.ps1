@@ -4,7 +4,7 @@
 # .python / .venv / main.py を探しているため、scripts\ などへ移すと
 # すべて 1 階層ずれて動かなくなる。
 #
-# 環境の分離方針（仕様 2.5）:
+# 環境の分離方針:
 #   - Python の実行ファイルを含め、すべてこのプロジェクトの中に置く。
 #   - システムの Python には触れない。環境変数も永続化しない。
 #   - 以下の環境変数はこのプロセスの中だけで有効。
@@ -41,7 +41,8 @@ if (Test-Path $toolsUvDir) { $pathPrefix += "$toolsUvDir;" }
 if (Test-Path $toolsFfBin) { $pathPrefix += "$toolsFfBin;" }
 if ($pathPrefix) { $env:PATH = $pathPrefix + $env:PATH }
 
-# 設定ファイルが無いと、既定値のまま起動して「お試し表示」に落ちることがある。
+# 設定ファイルが無いと、コードの既定値のまま起動する（IC-LoRA の一覧やプリセットが
+# 空になるなど、config.yaml.example とは違う設定になる）。
 # Test-Path 1 回だけの軽い確認にとどめる。
 $configPath = "$PSScriptRoot\config.yaml"
 if (-not (Test-Path $configPath)) {

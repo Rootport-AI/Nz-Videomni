@@ -1,8 +1,8 @@
 # Dependency snapshot of .venv-engine (first-party engine worker interpreter).
 #
-# WHY: the fork tree that held uv.lock was deleted in Stage 2b, so this file
-# is the reproducibility record for the known-good engine venv (Critic C).
-# Rebuild reference: engine/engine-venv-pyproject.toml (the resolved lock is gone).
+# WHY: this file is the reproducibility record for the known-good engine venv,
+# and scripts/install_ltx.ps1 applies it (together with $engineDirectPins).
+# Rebuild reference: engine/engine-venv-pyproject.toml.
 #
 # METHOD: generated via importlib.metadata (enumerating installed *.dist-info in
 # .venv-engine/Lib/site-packages). `pip` and `uv` are BOTH absent from this
@@ -10,6 +10,7 @@
 # dist-info enumeration is the exact-installed equivalent (name==version).
 # Interpreter: CPython 3.12.9  (.venv-engine/Scripts/python.exe)
 # Captured: 2026-07-01
+# Some rows below were added or removed by hand after the capture (git history has the details).
 #
 # NOTE: three distributions are git direct-url installs (NOT PyPI); their
 # lines below are bare 'name==version' pins, so the exact source revs are
@@ -18,42 +19,28 @@
 #   ltx-core: git+https://github.com/Lightricks/LTX-2.git#subdirectory=packages/ltx-core @ 00dc53d3f81c405932f9f16d9c57557de411e702
 #   ltx-pipelines: git+https://github.com/Lightricks/LTX-2.git#subdirectory=packages/ltx-pipelines @ 00dc53d3f81c405932f9f16d9c57557de411e702
 #
-# 2026-07-31 re-addition: a FOURTH distribution, sageattention, is also a bare
-# 'name==version' pin below for the same reason (no matching PyPI build), but
-# via a direct WHEEL URL, not git:
+# A FOURTH distribution, sageattention, is also a bare 'name==version' pin
+# below for the same reason (no matching PyPI build), but via a direct WHEEL
+# URL, not git:
 #   sageattention: https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu128torch2.9.1.post6-cp310-abi3-win_amd64.whl
-# See scripts/install_ltx.ps1's $engineDirectPins for the authoritative pin.
+# See scripts/install_ltx.ps1's $engineDirectPins for the authoritative pins.
+# The installer installs those four from $engineDirectPins first and filters
+# their lines (by name, `$gitLineRe`) out of the plain `-r freeze` install.
+# triton-windows is a NORMAL line (real PyPI package) and installs straight
+# from this freeze like everything else. sageattention and triton-windows both
+# have real importers (engine/transformer/sage_attention_service.py;
+# engine/gguf/dequant_triton_kernels.py and sageattention's runtime JIT).
 #
-# 2026-07-28 cleanup (PENDING_TASKS.md §3-25): removed 19 entries -- the 10
-# fork-era (4ea5c4b) leftovers with zero importers (annotated-doc, fastapi,
-# ftfy, ImageIO, imageio-ffmpeg, peft, pynvml, sageattention, triton-windows,
-# uvicorn; consumer code deleted in d0d3df5) PLUS 9 transitive orphans that
-# became unreachable once those 10 were removed (starlette + click +
-# httptools + python-dotenv + watchfiles + websockets, pulled in only by
-# fastapi/uvicorn[standard]; wcwidth, pulled in only by ftfy; nvidia-ml-py,
-# pulled in only by pynvml). Orphan status was verified against every
-# remaining package's Requires-Dist (importlib.metadata METADATA) -- see the
-# Wave B1 report for the full reverse-dependency table. sentencepiece and
-# protobuf are deliberately KEPT (Gemma tokenizer fallback concern, owner
-# decision).
+# sentencepiece and protobuf are deliberately KEPT (Gemma tokenizer fallback
+# concern, owner decision; VERIFICATION_LOG section 40.1).
 #
-# 2026-07-31 (Acceleration feature, D4/STEP 5): sageattention and
-# triton-windows are RE-ADDED, two of the 19 above. This time each has a real
-# importer -- engine/transformer/sage_attention_service.py -- so this is not a
-# repeat of the fork-era dead-weight mistake. sageattention==2.2.0+... below is
-# a BARE line (no matching PyPI build exists for this wheel): it is installed
-# from the direct wheel URL pinned in scripts/install_ltx.ps1's
-# $engineDirectPins, same mechanism as the diffusers/ltx-core/ltx-pipelines git
-# pins, and that bare line is what lets `$gitLineRe`-style filtering exclude it
-# from the plain `-r freeze` install. triton-windows is a NORMAL line (real
-# PyPI package) and installs straight from this freeze like everything else.
-#
-# 2026-08-30 (PENDING_TASKS_CLOSED.md §3-128): hf-xet==1.6.0 is ADDED. It does
+# hf-xet is pinned on purpose. It does
 # NOT arrive on its own: huggingface_hub 0.36.2 guards its hf-xet requirement
 # with `platform_machine == "x86_64" or "amd64" or "arm64" or "aarch64"`,
 # environment markers compare case-SENSITIVELY, and Windows reports "AMD64" --
 # so that guard is False here and this freeze is the ONLY install path for the
-# Xet transfer backend. Pinning it keeps every machine on the same version.
+# Xet transfer backend. Pinning it keeps every machine on the same version
+# (VERIFICATION_LOG section 82.8).
 #
 accelerate==1.12.0
 annotated-types==0.7.0

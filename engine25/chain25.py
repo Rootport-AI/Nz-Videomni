@@ -1029,6 +1029,11 @@ def _encode_source_heads(
 #: frames), a fact the §78.2 ceiling run could not separate out because it
 #: measured an encode and a decode together.
 #:
+#: Retake windows past 169 frames (217..481, reachable with the wider stage-2
+#: windows; measured with w61) were measured later at 1280x768 -- the
+#: encode-interval reserved peak stays at 13,958..13,980 MiB regardless of
+#: window length: VERIFICATION_LOG §145.
+#:
 #: NOT a knob: it is a property of this engine's VAE and of how large a window
 #: the app lets a user retake. No request field reaches it.
 RETAKE_ENCODE_TILE_AREA_BUDGET = 448 * 384
@@ -1085,12 +1090,14 @@ def _retake_encode_tiling(tiling_config: Any, *, scale_factors: Any, video_shape
     handed -- so an illegal pair fails here, in a sentence, rather than deep
     inside ``prepare_tiles_for_encoding``.
 
-    The isinstance check is a live guard, not a formality: a DIFFUSION video
-    VAE, which a user can select in place of the shipped CONV one, makes
-    ``tiling_config_for_vae`` take its memory-aware branch and return a
-    different config type, and silently encoding a whole window with AUTO's
-    tiles is exactly the spill this function exists to avoid. Loud is the only
-    safe setting.
+    The isinstance check guards the upstream contract, not the VAE kind:
+    ``ltx_pipelines/utils/helpers.py``'s ``tiling_config_for_vae`` returns a
+    ``TileSizeConfig`` on BOTH branches (CONV: ``TileSizeConfig.from_long_side``;
+    DIFFUSION: ``recommended_decode_tiling_config``, which builds one), so a
+    diffusion video VAE passes it too and gets the same area budget. It fires
+    only if upstream returns a ``TileCountConfig`` (the other half of its
+    ``TilingConfig``) or ``None``; silently encoding a whole window with AUTO's
+    tiles is exactly the spill this function exists to avoid, so it stays loud.
 
     THE END SOURCE SHARES THIS, and the name is the only thing about it that
     says "retake". The budget is a property of THIS VAE and of how much

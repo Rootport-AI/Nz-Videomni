@@ -326,8 +326,7 @@ async def submit_generate(
             （実測の記録は ``Docs/VERIFICATION_LOG.md`` §48）。
             ``attention_backend`` と違い**生成結果は変わりません**（同一シードで
             ビット単位で同一）。offに戻すとキャッシュを解放し、再度onにすると
-            作り直しで50〜70秒を1回だけ払い直します。GGUF の transformer を
-            ``gguf_per_layer_quant=0`` で読み込んだ構成ではエラーになり、
+            作り直しで50〜70秒を1回だけ払い直します。
             ``dit_cpu_load=0`` または ``block_swap_prefetch=false``
             との併用では自動的にoffへ降格します（メインメモリ二重化の回避）。
             実際に効いたかはジョブ完了後のメタデータの ``keep_resident_used``

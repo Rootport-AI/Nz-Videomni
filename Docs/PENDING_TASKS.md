@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-03（第5弾: CLOSED 3-207〜3-209・§2削除・§1-40訂正・§1-78起票）。前回 2026-10-03: 第4弾: CLOSED 3-197〜3-206・§1-52の更新・§1-77起票。
+- 作成: 2026-07-15／最終更新: 2026-10-03（第6弾: CLOSED 3-210〜3-214・§1-41は§4-42へ・§3-53に候補追加）。前回 2026-10-03: 第5弾: CLOSED 3-207〜3-209・§2削除・§1-40訂正・§1-78起票。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-40・§1-41・§1-52・§1-77・§1-78 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -21,72 +21,7 @@
 - **判断材料**: 反映できる実測は LTX 2.5 の fp8（快適側の上端 38,304〜39,424・幾何差は潜在 1 コマ未満で単一の値で表せる）と Q6_K の 2 件（同 第10節＝REDGraft 2.5 は解像度で割れる・第11節＝Sulphur 2.3 は線は動かないが w46 に孤立した溢れ）。LTX 2.3 の fp8 は全 on を測り切れていない（第13.2節）。第12.4節（Sulphur-2 Q6_K の w46）と第13.4節（fp8 の w46）の溢れは、種別ごとの行で吸収する（オーナー裁定 2026-09-27）。種別の数は絞る（規則は単純に・例外を増やさない）。`config.yaml` の表ごと上書きを残すか 1 本に絞るかは設計時に決める。パネル側の手書き例外（`comfortDisplayTable.ts` の Q6_K 3 点）はこの表に吸収する。fp8 の 2 列（2.5 の固定の線・2.3 の 1 点。フロントエンド `Docs/DEVLOG.md` §126）も吸収する。**int8 系（`int8_tensorwise`・`asym_w4a8_int8`）の較正値の材料は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14.5節です**（較正は完了。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169）。
 - **進め方**: int8 系の行の材料は第14.5節です。fp8／Q6_K の行だけ先行して進めるかはオーナー判断です。
 - **出典**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第10.4・11.4・12.4・13・14節、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §119.5・§121.12、`config.py` の `_default_comfort_budgets()`・`services/base_models.py`・`services/model_registry.py`（`GET /models`）、`webui/src/shell/comfortTable.ts`・`comfortDisplayTable.ts`、`gradio_ui/comfort.py`、`tests/test_comfort_budgets.py`（キー集合の固定）。
-
-### 1-33. int8 ウェイトの ConvRot の高速化（起票：2026-09-27）
-
-- **目的**: ConvRot 形式（アダマール回転を重みに焼き込んだ int8。コミュニティの LTX int8 の主流で、公式 2.5 の int8 と REDGraft の int8 部分もこれです）の transformer で、forward（推論の1回の順伝播）ごとに重みの回転を元に戻す計算（重み全体への行列積・LTX 2.3 で1 forward 約9.5兆演算・解像度に依存しない固定分）が生成時間に加わっています。**現状の精度を落とさずに**この時間を減らします。ゴールは「ComfyUI と同等以上の体験」です（ComfyUI は入力側を回転して int8 の行列積を使うため速いですが精度は低い側です。こちらは fp32 で復元してから bf16 で計算する精度優先の方式で、この方針は変えません）。
-- **着手の順序**: (1) **Go／No-go の判断から**始めます。材料は[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14.4節（数値の正本は一次記録 `outputs/comfort-calib-2026-09-27/RESULTS.md` の表5）です。低い解像度での実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.4 の G8 にあります。(2) Go なら、着手時に**高速化の選択肢を改めて洗い出して比較**し、方法を決めます（最有力候補は高速アダマール変換——行列が4×4の小行列の組み合わせで作られている構造を使い、1要素あたりの演算を約512回から約16回に減らす方法です。fp32のまま同じ数式なので精度は不変です。他の候補も検討します）。(3) 通常の手順（計画→敵対的レビュー→承認→実装）で進めます。
-- **検証の物差し**: 復元値が変換ツールの NumPy 実装と一致すること（§121 の G1 と同じ突き合わせ）・fp8 と int8 の既存の実機出力がストリーム MD5 で不変であること（回転しない方式のため）・生成時間の比が改善すること（交互の比較）。
-- **触らないもの**: 復元の方針（forward ごとに bf16 へ戻す）・判定規則・UI・API。
-- **正本**: 復元の設計は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.2、コードは `engine/sft_quant/dequant.py`。
-- **着手**: 上の (1) の Go／No-go の判断からです（C-4 較正は完了・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169）。
-
-### 1-40. 撮り直し（Retake）の窓のタイル予算が広い Stage-2 窓で未計測（起票：2026-10-01）
-
-- **現象**: `engine25/chain25.py` の `RETAKE_ENCODE_TILE_AREA_BUDGET`（撮り直しの窓を符号化するときの空間タイルの面積上限・448×384）は、実測が撮り直しの窓 73・121・169 フレーム（`standard` のStage-2 窓で許される上限）までしかない。一方 `chain_math.py` の `retake_max_window_px(v_tile)` は、より広い Stage-2 窓（`stage2_window="w61"`）を選ぶと撮り直しの窓を `8 * v_tile - 7` で計算し、481 フレームまで許す。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.5 の2つ目の表では、同じタイル設定のまま 121→169 フレームで予約ピークが 8,182→13,926 MB に増えている。LTX 2.5 の 169 超は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145 で 8 点（169〜481・1280×768・w61）を実測済み——符号化区間の予約ピークは 13,958〜13,980 MiB でほぼ一定、481 でも装置の 16,376 MiB に収まる。ジョブ全体のピークは 361 以上で stage-2 の退避に埋もれる。
-- **影響**: 広い Stage-2 窓を選んだ上で長い撮り直しの窓を指定したときだけ発生する。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 広い窓での撮り直しを実測し、タイル予算を較正し直す。
-  - B: 予算を窓の長さに応じて段階化する。
-  - C: 撮り直しの窓の上限を `standard` 相当（169フレーム）に戻す。
-- **着手**: 残るのは A／B／C の選択（オーナー判断）。材料は §145。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.5・§133（申し送り）。
-- **関連ファイル**: `engine25/chain25.py`（`RETAKE_ENCODE_TILE_AREA_BUDGET`・`_retake_encode_tiling`）、`chain_math.py`（`retake_max_window_px`・`resolve_stage2_window`）。
-
-### 1-41. 拡散 VAE を置いたときの復号タイルの決め方（起票：2026-10-01）
-
-- **現象**: `engine25/chain25.py` の `run_chain` は、連結生成全体の復号タイルを `ensure_tiling_config(AUTO_TILING, ...)` の1回の呼び出しで、モデルを何も組み立てる前に決める。配布の既定である Conv 版の映像 VAE では、`AUTO_TILING` は縦横比だけを見る分岐を通るため空き VRAM を読まず無害だが、利用者が拡散 VAE のファイルを置いた場合（`video_vae_kind == "diff"`）は空き VRAM を読む分岐を通る。この呼び出し位置はモデルを何も組んでいない、空き VRAM が最も楽観的に見える時点であり、コード自身のコメントがこの位置の危うさを明記している。同じファイルの `_retake_encode_tiling` の docstring にも関連する誤りがある——拡散 VAE を使っていても `TileSizeConfig` の型検査は通ってしまうため、撮り直しの窓の符号化には畳み込み版と同じ 448×384 の面積予算がそのまま掛かる。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 拡散 VAE のときだけ、モデルを組み終えた後の空き VRAM でタイルを決め直す。
-  - B: 現状を許容し、拡散 VAE では保守的な固定タイルへ倒す（具体策: 上流の `ensure_tiling_config` の `free_bytes=` に固定値を渡す）。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
-- **関連ファイル**: `engine25/chain25.py`（`run_chain` の `tiling_config = ensure_tiling_config(...)`・`_retake_encode_tiling`）。
-
-### 1-52. GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性（起票：2026-10-01）
-
-- **現象**: `engine/pipeline/fast_video_pipeline.py` の `_install_gguf` は `gguf_per_layer_quant=False` のとき `GGUFLoaderService(gguf_path=gguf_path, ic_loras=ic_loras)` を組み立てる。ここへ渡る `ic_loras` はパイプライン作成時点の値（`__init__` 冒頭の `_set_ic_job` が張った固定リスト）で、ワーカー（`engine/worker.py`）はパイプライン作成時に IC-LoRA を渡さないため常に空になる。一方 `generate()`／`generate_chain()` がジョブごとに呼ぶ `_set_ic_job` は `self._ic_loras` を書き換えるだけで、`per_layer_quant=True` の経路（`GGUFQuantLoaderService` に `ic_loras_provider=lambda: self._ic_loras` を渡し、フォワード時に毎回読み直す）と違い、`GGUFLoaderService` 側にはジョブごとの値を読み直す仕組みが無い。
-- **影響**: `model.gguf_per_layer_quant` を偽にした構成でのみ発生しうる。偽物で再現済み——ジョブで指定した IC-LoRA が読み手（`GGUFLoaderService`）に届かないことを確認した。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: `GGUFLoaderService` にも per-job の読み直し（`ic_loras_provider` 相当）を足す。
-  - B: 実機で確かめたうえで、問題が無ければ現状を維持する。
-  - C: bf16 経路（`gguf_per_layer_quant=False`）そのものを消す。
-- **着手**: 第6弾（G）で bf16 経路（`gguf_per_layer_quant=false`）そのものを消すかどうかの判断と一緒に扱う（オーナー決定 2026-10-03。A を先に入れると G で消す場合に無駄になるため）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
-- **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`_install_gguf`・`_set_ic_job`・`_ic_loras`）、`engine/gguf/loader_service.py`（`GGUFLoaderService`）、`engine/gguf/quant_service.py`（`GGUFQuantLoaderService`）。
-
-### 1-77. 操作パネルの解放ボタンが、モデルの読み込み中に押すと固定文言「パイプラインの解放に失敗しました。」を出す（起票：2026-10-03）
-
-- **現象**: サーバーは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-206 で読み込み中の `POST /pipeline/unload` に 409 `PIPELINE_LOADING`（detail は日本語の案内）を返すが、操作パネル `webui/src/shell/useDangerZone.ts`（82〜90 行付近）は `JOB_BUSY` だけを特別扱いし、それ以外は `DangerZonePanel.tsx`（46〜48 行付近）で汎用の `strings.settings.unloadError` の固定文言（「パイプラインの解放に失敗しました。」）になる（画面は固まらず、再試行もしない）。load 側は `useBaseModels.ts` で `PIPELINE_LOADING` を「読み込み中」として扱っている。モック `bridge/mockBridge.ts` の `handlePipelineUnload`（1408〜1416 行付近）は `JOB_BUSY` しか返さない。
-- **影響**: 表示だけ（画面が固まる・クラッシュするなどの実害は無い）。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 読み込み中は解放ボタンを押せなくする（`/status` の `state` を見る）。
-  - B: `useDangerZone.ts` で `PIPELINE_LOADING` を `JOB_BUSY` と同様に扱い「読み込み中です」の文言を出す（モックも 409 を返すように）。
-  - C: 現状を許容し文言だけ直す。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144（第4弾 Part 2 の敵対的レビュー）。
-- **関連ファイル**: `webui/src/shell/useDangerZone.ts`、`DangerZonePanel.tsx`、`useBaseModels.ts`、`bridge/mockBridge.ts`（`handlePipelineUnload`）、`i18n/strings.ts`。
-
-### 1-78. `fast_video_pipeline.py` の `if gguf_gemma_path:` は常に真（起票：2026-10-03）
-
-- **現象**: `engine/pipeline/fast_video_pipeline.py` の `if gguf_gemma_path:` は、fail-fast の検査が `gguf_gemma_path` を必須にしているため常に真になる。
-- **影響**: 無い。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 条件を外し、`gguf_gemma_path` が常に真であることを前提にしたコードへ整理する。
-  - B: 現状を維持する。
-- **着手**: 着手時は go／no-go の検討から始める（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-207 と同じ性質の小さな引き算）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145（§1-60 の実装時の敵対的レビューで検出。G8 の比較を濁さないよう今回は残した）。
-- **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`__init__` の Gemma の取り付け）。
+- **棚卸し**: 読み取り専用の棚卸し済み（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146。原本 `ledger-work/stage6/inventory_1-31.md`〔git 管理外〕）。設計・実装は第 7 弾。
 
 ---
 
@@ -104,6 +39,7 @@
   - **映像VAEデコードは決着済み**（PrunaVAED＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-66。短縮幅の正本はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §52.8）。**ただし既定OFFの選択制**なので、既定のジョブの分母は縮んでいない点に注意。
   - **残る最大の候補は動画エンコード（x264）である。** 「デコードが速くなってもエンコード側が律速になる」という懸念は実測では顕在化しなかった（同§3-66のG6）ため、**エンコード側には手つかずの余地が残っている**という読みになる。
     - **着手の入口（2026-09-03調査）**: エンコードの実体は固定ホイール`ltx_pipelines/utils/media_io.py`の`encode_video`（呼び出し口は`engine/pipeline/common.py`の`encode_video_output`）。PyAV＋libx264で**preset/crf未指定＝x264既定のまま**・デコードと同一スレッドで交互実行＝**並行化なし**。改修するならラッパーの中身を自前実装へ差し替える確立パターン。**NVENC（h264_nvenc）はGPUの専用エンコーダASICで動くためCUDA演算と競合せず、CPUエンコード比で数倍高速になることも珍しくない。**
+- **int8 ConvRot の回転の整数化**（`torch._int_mm`・20〜40 行・1080p 単発で 3〜4.6 秒）——候補の詳細は[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) (8)。元は §1-33（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-214）。
 - **候補一覧の正本**: バックエンド[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)。
 - **状態**: 将来の改修項目（着手はオーナー判断待ち）。
 
@@ -533,6 +469,17 @@
 - **概要**: 連結生成の拡大工程（Stage-1のあとStage-2の前に、連結した潜在表現を空間方向へ2倍に引き伸ばす1回きりの工程。ノイズ除去はしない）は、時間方向に32フレーム＋のり代18のチャンクへ分けて処理している（リクエスト項目`chunked_upsample`。APIの既定はオフ、Gradio検証UIと操作パネルの既定はオン）。**Stage-2を潜在22フレームの窓で処理する仕組みとは別の機構である。** LTX 2.5ではVRAM消費がトークン数に線形なので、総尺が約20万トークン以内（1280×768で約69秒・1920×1088で約32秒）の連結なら、一括で拡大しても溢れない。これを根拠に、短い連結に限って一括拡大へ切り替える案があった。
 - **何が塞いでいるか**: ①得られるのは拡大工程の数秒以下の短縮だけである。②無条件に一括へ戻すと連結の総尺に上限が生まれ、「連結生成は長さが柔軟」という棲み分け原則（[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §7）と衝突する。③上限を超えたときだけチャンク化へ自動で戻す条件つきにしても、チャンク化経路は3次元畳み込みのメモリ配置（`channels_last_3d`）を変えるため一括と出力が一致せず、尺が上限をまたいだ瞬間に出力の性質が静かに変わる隠れた切替になる。「規則は単純に、例外を増やさない」という設計方針に反する。**オーナー裁定（2026-09-09）: 実装しない。**
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71.4・§71.5・§72.2(d)・§72.6、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 11節、`CHUNKED_UPSAMPLE_WORKORDER.md`、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §7（棲み分け原則）。
+
+### 4-42. 拡散 VAE を置いたときの復号タイルの決め方（起票：2026-10-01）
+
+**利用者が拡散 VAE のファイルを置く前提が立ったとき** → `engine25/chain25.py` の `run_chain` が連結生成全体の復号タイルを `ensure_tiling_config(AUTO_TILING, ...)` の1回の呼び出しで、モデルを何も組み立てる前に決めている件（配布の既定である Conv 版の映像VAEでは縦横比だけを見る分岐を通るため無害だが、拡散VAE〔`video_vae_kind == "diff"`〕を置いた場合は空きVRAMを読む分岐を通り、この呼び出し位置はモデルを何も組んでいない・空きVRAMが最も楽観的に見える時点である）に対処するかどうかを判断する。
+
+- **何が塞いでいるか**: 配布物に拡散VAEが無いため、当面は着手しない。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 拡散VAEのときだけ、モデルを組み終えた後の空きVRAMでタイルを決め直す。
+  - B: 現状を許容し、拡散VAEでは保守的な固定タイルへ倒す（具体策: 上流の `ensure_tiling_config` の `free_bytes=` に固定値を渡す）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）・§146（`_retake_encode_tiling` の docstring の誤り〔拡散VAEでも型検査を通る〕は第6弾で訂正済み）。
+- **関連ファイル**: `engine25/chain25.py`（`run_chain` の `tiling_config = ensure_tiling_config(...)`・`_retake_encode_tiling`）。
 
 ---
 

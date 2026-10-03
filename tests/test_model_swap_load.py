@@ -80,7 +80,6 @@ GOLDEN_PAYLOAD_KEYS = [
     # exist (a job asking for it downgrades instead) and is NOT swappable
     # through the model registry.
     "component_video_vae_pruned_path",
-    "gguf_per_layer_quant",
     "block_swap_blocks_on_gpu",
     "vae_spatial_tile_size",
     "vae_temporal_tile_size",
@@ -182,7 +181,6 @@ def _golden(cfg: AppConfig, gemma_root, paths) -> dict:
                 / "models/LTX23/VAE/prunavaed/PrunaVAED-decoder-bf16.safetensors"
             ).resolve()
         ),
-        "gguf_per_layer_quant": True,
         "block_swap_blocks_on_gpu": 8,  # low_vram default None -> `or 8`
         "vae_spatial_tile_size": 0,
         "vae_temporal_tile_size": 0,

@@ -42,7 +42,5 @@ def test_transformer_gguf_install_failure_is_raised_without_lora(tmp_path):
         pipeline=types.SimpleNamespace(model_ledger=types.SimpleNamespace()),
     )
     with pytest.raises(FileNotFoundError, match="missing.gguf"):
-        LTXFastVideoPipeline._install_gguf(
-            fake_self, str(tmp_path / "missing.gguf"), per_layer_quant=True, ic_loras=[],
-        )
+        LTXFastVideoPipeline._install_gguf(fake_self, str(tmp_path / "missing.gguf"))
     assert not hasattr(fake_self, "_gguf_service")

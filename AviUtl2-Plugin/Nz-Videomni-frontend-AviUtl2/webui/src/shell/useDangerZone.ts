@@ -17,6 +17,10 @@ export type PipelineUnloadState =
    * torn down right now (mirrors `useModels`'s `ModelsLoadState` "busy"
    * branch for the sibling `/pipeline/load` action). */
   | { status: "busy" }
+  /** 409 PIPELINE_LOADING — the server is still loading a model, so the
+   * pipeline cannot be released until that load finishes. Distinct from
+   * `loading`, which means "our unload request is in flight". */
+  | { status: "pipelineLoading" }
   | { status: "error"; code: string; message: string };
 
 export type JobsPurgeState =
@@ -81,6 +85,10 @@ export function useDangerZone(deps: UseDangerZoneDeps = {}): UseDangerZoneResult
         if (!mountedRef.current) return;
         if (err instanceof BackendApiError && err.code === "JOB_BUSY") {
           setUnload({ status: "busy" });
+          return;
+        }
+        if (err instanceof BackendApiError && err.code === "PIPELINE_LOADING") {
+          setUnload({ status: "pipelineLoading" });
           return;
         }
         const { code, message } =

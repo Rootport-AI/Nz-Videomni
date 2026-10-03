@@ -38,6 +38,17 @@ describe("useDangerZone", () => {
     await waitFor(() => expect(result.current.unload.status).toBe("busy"));
   });
 
+  it("unloadPipeline() surfaces a dedicated pipelineLoading state for 409 PIPELINE_LOADING (台帳 §1-77 B)", async () => {
+    const apiClient = createApiClient(createMockBridge({ delayMs: 0, pipelineLoading: true }));
+    const { result } = renderHook(() => useDangerZone({ apiClient }));
+
+    act(() => {
+      result.current.unloadPipeline();
+    });
+
+    await waitFor(() => expect(result.current.unload.status).toBe("pipelineLoading"));
+  });
+
   it("purgeTerminalJobs() deletes only terminal jobs, skips a failing delete, and counts successes", async () => {
     // runningPollCount: 0 means any job reports "completed" after its second
     // poll (deriveJobFields: pollCount<=1 -> "queued", else terminal) — used

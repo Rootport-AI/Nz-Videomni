@@ -120,7 +120,6 @@ class ModelConfig(BaseModel):
     # repository); only the interpreter is an installation detail an operator
     # may have to point elsewhere. Consumed by services/engines/ltx25/adapter.py.
     engine_python_ltx25: str = "./.venv-engine-ltx25/Scripts/python.exe"
-    gguf_per_layer_quant: bool = True
 
     # IC-LoRA adapter registry. Maps a server-side adapter NAME (what the API
     # accepts in GenerateRequest.loras[].name — never a filesystem path) to

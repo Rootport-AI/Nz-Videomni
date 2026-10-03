@@ -43,6 +43,9 @@ export function DangerZonePanel({ apiClient }: DangerZonePanelProps) {
   } else if (dangerZone.unload.status === "busy") {
     unloadMessage = strings.settings.unloadBusy;
     unloadIsError = true;
+  } else if (dangerZone.unload.status === "pipelineLoading") {
+    unloadMessage = strings.settings.unloadLoading;
+    unloadIsError = true;
   } else if (dangerZone.unload.status === "error") {
     unloadMessage = strings.settings.unloadError;
     unloadIsError = true;

@@ -1868,7 +1868,6 @@ class _RealBackend:
             "component_audio_vae_path": swapped["component_audio_vae_path"],
             "component_text_projection_path": component_text_projection_path,
             "component_video_vae_pruned_path": component_video_vae_pruned_path,
-            "gguf_per_layer_quant": bool(model.gguf_per_layer_quant),
             "block_swap_blocks_on_gpu": self.low_vram.block_swap_blocks_on_gpu or 8,
             "vae_spatial_tile_size": int(self.low_vram.vae_spatial_tile_size),
             "vae_temporal_tile_size": int(self.low_vram.vae_temporal_tile_size),

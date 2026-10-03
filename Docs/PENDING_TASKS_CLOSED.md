@@ -2522,7 +2522,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: テスト1本（`tests/test_validation.py::test_defaults_without_config_yaml_match_the_shipped_example`）——`config.yaml`が存在しないパスで`load_config`を呼び、既定が`use_component_files=True`・`checkpoint_name="ltx-2.3-22b-distilled-1.1"`になることを確認した。敵対的レビューで`use_component_files`を読む箇所は`_build_child_env`の`LTX_COMPONENT_FILES`だけ、`checkpoint_name`を読む箇所はモックのログと`_base_model_name`の予備値だけと確認済み（既定変更の副作用は無い）。アプリ`.venv`全件2884 passed・54 skipped。
 - **クローズ理由**: 選択肢Aの実装が完了した。
 - **状態**: dev（第2弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142）。
-- **残課題**: 読み込み元が欠落したときの失敗の仕方（読み込みのどの段で落ちるか）は実機未確認（CPUでは`ModelLedger(checkpoint_path="")`の4つのビルダーが`model_path=''`になることまで確認済み）。`connector_gguf_path=None`の経路の鍵と偽の経路の撤去は[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-60 (1)〜(3)と一緒に別途扱う（テストの無いGPU経路。実機1本とセット）。
+- **残課題**: 読み込み元が欠落したときの失敗の仕方（読み込みのどの段で落ちるか）は実機未確認（CPUでは`ModelLedger(checkpoint_path="")`の4つのビルダーが`model_path=''`になることまで確認済み）。`connector_gguf_path=None`の経路の鍵と偽の経路の撤去は本書**§3-207**で解消した（テストの無いGPU経路だったため、実機1本の前後比較とセットで行った。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145）。
 - **正本・出典**: `config.py`（`VramConfig.use_component_files`・`ModelConfig.checkpoint_name`）、`Videomni_Backend_Specification.md` §5.5（v0.5.78）、`services/engines/ltx/adapter.py`、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §142。
 
 ### 3-190. MCP の `purge_terminal_jobs` が `httpx.ReadTimeout` でも個別の失敗として受けて続行するよう修正（起票：2026-10-02、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-68 からクローズ）
@@ -2610,8 +2610,8 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: 新規テスト3件（`tests/test_chain_job_cancel.py`）——dispatch後の取り消しで `cancelled`・dispatch前の取り消しでも最後まで走って `cancelled`・通常終了は `completed`。敵対的レビューで、分岐の順序が `run_job`（`_write_chain_metadata` と `JobResult` の後）と同じであること、下流（`batchRunner.ts`・`gradio_ui/batch.py`・`batchI2vLongRunner.ts`）が `cancelled` をWaitingに戻すことを確認済み。アプリ`.venv`全件2,891 passed・61 skipped。
 - **クローズ理由**: 選択肢Aの実装が完了した。
 - **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
-- **残課題**: 無し。
-- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`services/pipeline_manager.py`（`run_job`・`run_chain_job`）、`gradio_ui/batch.py`・操作パネル `batchRunner.ts`（docstring）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §7.2。
+- **残課題**: 無し。**実機確認（第5弾・2026-10-03）**: LTX 2.3 の連結ジョブ（`[49, 49]`・512×320）を実行中に `cancel_job` を送り、最後まで生成してから `cancelled`・`result: null` になることを確認した。注記: 出力の `metadata.json` の `status` は `completed` のまま（メタデータは判定の前に書かれる。単発も同じ）、MCP の `get_job_video_path` は `exists: true` と注意書きを返す（REST の `/video` とは別経路）。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144・§145、`services/pipeline_manager.py`（`run_job`・`run_chain_job`）、`gradio_ui/batch.py`・操作パネル `batchRunner.ts`（docstring）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §7.2。
 
 ### 3-198. 読み込み後の未知の `op` に `error` イベントを返す（読み込み前は不変）（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-42 からクローズ）
 
@@ -2687,8 +2687,8 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: 新規テスト（`tests/test_gguf_dequant_reference.py`）——Q8_0・Q4_K・Q5_K・Q6_Kがgguf-py参照実装と完全一致・対応外は例外。敵対的レビューで`SUPPORTED_GGML_TYPES`の番号をgguf-py 0.18.0の`GGMLQuantizationType`と全数照合（IQ4_XS=23・IQ2_S=22も確認）、消した6関数・10定数のコード参照が0件であることを確認済み。`models\`のGGUF7本の型を実測し、配布のGGUFと量子化テンソルは対応する型（＋I8のGemmaテキスト資産。sd_opsで落とすため無害）だけであることを確認。`.venv-engine` 625 passed。
 - **クローズ理由**: 選択肢Bの実装が完了した。
 - **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
-- **残課題**: 無し。
-- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`engine/gguf/quant_service.py`（`dequantize_ggml_tensor`・`SUPPORTED_GGML_TYPES`）、`engine/gguf/loader_service.py`（`GGUFQuantStateDictLoader.load`）、`README.md` 351行（v0.5.80）。
+- **残課題**: 無し。**実機の判断（第5弾・2026-10-03）**: 対応外の型のGGUFを実機で確かめることは行わない——対応外の型を作るにはオーナーのモデルフォルダへ偽のGGUFを置くことになるため（単体テストで既に決着済み）。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144・§145、`engine/gguf/quant_service.py`（`dequantize_ggml_tensor`・`SUPPORTED_GGML_TYPES`）、`engine/gguf/loader_service.py`（`GGUFQuantStateDictLoader.load`）、`README.md` 351行（v0.5.80）。
 
 ### 3-205. 使われていないコード（第2次・追加2件＋型別名13個）の削除（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-76 からクローズ）
 
@@ -2709,5 +2709,39 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: 既存テスト`test_base_model_axis.py::test_unload_is_the_way_out_of_a_stuck_loading_state`を`test_unload_while_loading_is_409`に反転。新規7件（`tests/test_pipeline_unload_guard.py`）——読み込み中のunloadが409で状態は`loading`のまま／読み込みが終われば`ready`／HTTPでも同じ／BaseExceptionでも`load`・`reload`とも`unloaded`に戻り`runner.unload()`が呼ばれ、続くloadが実際に`runner.load`を呼ぶ／reloadのベースモデルが元に戻る／通常の`Exception`は従来どおり`PIPELINE_LOAD_FAILED`・`unloaded`・後始末1回。敵対的レビューで、読み込みを途中で止めたスレッドによる実測（「読み込み中の解放は必ず409」）、新規テストがHEADの写しで5件落ちること（不変の挙動を見張る2件は通る）、契約文書7箇所が同じ規則かの照合を実施済み。アプリ`.venv`全件2,898 passed・61 skipped。
 - **クローズ理由**: 選択肢A（オーナー決定）の実装が完了した。
 - **状態**: dev（第4弾Part 2のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
-- **残課題**: 操作パネルの解放ボタンが、読み込み中に押すと固定文言「パイプラインの解放に失敗しました。」を出す（固まらず再試行もしないが、「待てば済む」場面を「失敗」と伝えてしまう。[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-77として新規起票）。GPUを要する実機の二重操作（読み込み中に解放ボタンを押す）の確認は第5弾。
-- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`services/pipeline_manager.py`（`load`・`reload`・`unload`・`_reject_while_loading`）、仕様書§6.1・§6.8・§6.9(d)(f)（v0.5.81）、`Docs/MULTI_ENGINE_DESIGN.md`、操作パネル`API_REFERENCE.md`、`api/errors.py`、`mcp_server/tools/system.py`。
+- **残課題**: 操作パネルの解放ボタンが、読み込み中に押すと固定文言「パイプラインの解放に失敗しました。」を出す（固まらず再試行もしないが、「待てば済む」場面を「失敗」と伝えてしまう。[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-77として新規起票）。GPUを要する実機の二重操作（読み込み中に解放ボタンを押す）の確認は第5弾。**実機確認（第5弾・2026-10-03）**: 読み込み中の`unload`はMCPでは`PIPELINE_LOADING`のToolError、curlでは409`PIPELINE_LOADING`になり、読み込みは`ready`で完走することを確認した。409は`server.log`に出ない（アクセスログ無し）。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144・§145、`services/pipeline_manager.py`（`load`・`reload`・`unload`・`_reject_while_loading`）、仕様書§6.1・§6.8・§6.9(d)(f)（v0.5.81）、`Docs/MULTI_ENGINE_DESIGN.md`、操作パネル`API_REFERENCE.md`、`api/errors.py`、`mcp_server/tools/system.py`。
+
+### 3-207. `embed_cpu_offload` の固定化で通らない枝3つと、`vram.use_component_files` の鍵・偽の経路を削除（選択肢A）（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-60 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-60（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §136「申し送り」）から起票された項目。
+- **到達条件**: `engine/gemma/gguf_quant_service.py` の `GemmaGGUFQuantLoaderService.install` が `embed_cpu_offload=True` を固定で渡すため通らない枝 (1)〜(3)（「4. Overlay」の lm_head の結び直し・`_load_gguf_gemma` の埋め込みを GPU へ移す枝・`_patch_gemma_skip_full_logits`）と、設定 `vram.use_component_files` の鍵と偽（`false`）の経路 (4) を、選択肢A（固定値の前提で外し、通らない枝を消す）で解消すること。**達成した。**
+- **何が完了したか**: (1)〜(3): `embed_cpu_offload` の旗と、「4. Overlay」の lm_head の結び直し（唯一の利用者だった定数 `_LTX_LM_HEAD_KEY` も道連れに削除）・`_load_gguf_gemma` の GPU へ移す枝・`_patch_gemma_skip_full_logits`（関数ごと。`_install_cpu_embed_offload` が同じ `forward` を丸ごと差し替えるため効いていなかった）を削除した。3b の条件は `if embed_key in gguf_sd:` に縮小し（中の「CPU へ移す」2行も不要になったため削除）、keep_resident のキャッシュ HIT 時の守りは `elif gemma_loader_ref.embed_cpu_offload: raise` から `else: raise` に変え、例外の文面も「the loader holds no CPU token embedding (held_embed_cpu is None)」の趣旨に書き直した。前から未使用だった `import types` も削除した。(4): `config.py`・`config.yaml.example` から `use_component_files` を削除し、アダプタの `LTX_COMPONENT_FILES` 環境変数と `engine/worker.py` の受け取りを削除した。`fast_video_pipeline.py` は部品ファイルを無条件に使う形にし、`gguf_quant_service.py` の `connector_gguf_path=None`／`component_mode` の経路（モノリスを `model_path` に残したままの偽の経路）を無条件化した（モノリスの守り `mp_tuple[0] != mono` は、`_build_shardless_text_encoder_builder` が `checkpoint_path` に仮の値を置くため残した）。`connector_gguf_path`・`component_text_projection_path`・`connector_sd_ops` は必須引数にした。古い `config.yaml` の `use_component_files: true`／`false` は `extra='ignore'` で警告なく読み飛ばされる（v0.5.77 の7項目の削除と同じ扱い）。`GET /api/v1/config` の応答から `vram.use_component_files` が消える。仕様書v0.5.82（§5.5・§9.2・§11.3の表・用語集・§0.1・改訂履歴）と `Docs/MODEL_MANAGEMENT_DESIGN.md:42` を実態に合わせた。
+- **どの物差しで通ったか**: 新規・変更テスト3件（`tests/test_validation.py`・`tests/test_ltx25_adapter.py`・`tests/test_pipeline_gguf_install_fail_loud.py`）。敵対的レビュー（Opus）が到達不能の根拠4点を独立に裏取り——小さな `Gemma3ForCausalLM`（語彙64・2層）をCPUで作り、旧版（包み→差し替え）と新版（差し替えだけ）のlogits・隠れ状態がビット一致、一時yamlに`use_component_files: true`／`false`を書いても警告なく読み飛ばされ`model_dump()`にも出ないことを実測、必須引数化した3箇所の呼び出しがすべてキーワード指定であることを`git grep`で確認、`git grep`で消した名前（`embed_cpu_offload`・`use_component_files`・`LTX_COMPONENT_FILES`・`component_mode`・`_patch_gemma_skip_full_logits`・`_LTX_LM_HEAD_KEY`）がコード・設定・テスト・設計書に0件（残るのは仕様書の「削除した」という注記のみ）。テストはアプリ`.venv`全件2,898 passed・61 skipped、`.venv-engine`の`engine`を使う25ファイル366 passed（失敗0）、`.venv-engine-ltx25`の`test_ltx25_adapter`171 passed。**実機**: 消す前（HEAD・G1）と消した後（サーバー再起動後・G8）に同条件のT2V（LTX 2.3・512×320×49・seed 12345・sdpa・Q4_K_M）を1本ずつ流し、映像ストリームMD5 `c9da075e7758f29ab3d2e02423da98e8`・音声ストリームMD5 `cbc2a850fc8b704bc1ea3b9cbb2ab1b4`が完全一致（ファイル全体のSHA-256はjob_idの埋め込みで異なる）。`peak_vram_mb` 8,442／`peak_vram_reserved_mb` 8,972も同じ。消したpatchのログ行は再起動後に出ていない。
+- **クローズ理由**: 選択肢Aの実装が完了し、実機の前後比較でも出力が一致した。
+- **状態**: dev（第 5 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145）。
+- **残課題**: `fast_video_pipeline.py` の `if gguf_gemma_path:` も常に真（fail-fastの検査が`gguf_gemma_path`を必須にしている）だが、G8の比較（出力が変わらないことの確認）を濁さないよう今回は残した → [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-78として新規起票。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145、`engine/gemma/gguf_quant_service.py`（`GemmaGGUFQuantLoaderService.install`・`GemmaGGUFQuantStateDictLoader.load`・`_load_gguf_gemma`）、`engine/pipeline/fast_video_pipeline.py`、`config.py`、`services/engines/ltx/adapter.py`、仕様書v0.5.82。
+
+### 3-208. LTX 2.5 の `done` イベントから最上位 `phases` を除去（起票：2026-10-01、実装：2026-10-02、実機合格・クローズ：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1〔元 §1-43〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1（元 §1-43。同書側は欠番）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133「申し送り」、2026-10-01起票）から起票された項目。
+- **到達条件**: LTX 2.5の単発・連結ジョブの`done`イベントが最上位にも`phases`を二重に積んでいた食い違いを解消し、単発は`done.ltx25.phases`・連結は`done.chain.ltx25.phases`にのみ段階の表を持つこと。**達成した**（実装は2026-10-02・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **実機で確認した内容**: `done`イベントはどこにも保存されない（`_read_event`がJSONに変えて返すだけ）ため、2.5の`python -m engine25.worker --selftest-generate`／`--selftest-chain`で直接見た（G6）。単発のレポートは`done`の最上位キーに`event`・`seed_used`・…・`ltx25`のみで`phases`は無く、`done.ltx25.phases`に`10a_te_build`〜`40_job_end`の表がある。連結のレポートも`done`最上位に`phases`は無く（`done.chain`の直下にも無い）、`done.chain.ltx25.phases`に段階の表がある。あわせてMCP経由で2.5の連結`[49,49]`・512×320の`metadata.json`（G7）を確認し、最上位`phases`は無く、最上位`ltx25.phases`がある（`chain.ltx25`ではない——台帳が書いていた「`chain.ltx25.phases`」はメタデータでは最上位`ltx25`だった）ことを確認した。オーナーが10-03に流した2.5単発（`outputs/cf17cf78-…/metadata.json`・1280×768×49）も同じ形。
+- **どの物差しで通ったか**: 選択肢Aの実装時（§141）に新規テスト（`done["phases"]`の参照先を1行移動）で固定済み。今回は実機（G6・G7）で`done`とmetadata.jsonの実物を直接見て、上記の形を確認した。
+- **クローズ理由**: 実装は済んでおり、実機確認も合格した。
+- **状態**: dev（第 5 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145、`services/pipeline_manager.py`（`run_job`・`run_chain_job`。最上位に`phases`を書かない）、`engine25/worker.py`（`--selftest-generate`・`--selftest-chain`）。
+
+### 3-209. VRAM ピークに参照 encode より前の値を反映（起票：2026-10-01、実装：2026-10-02、実機合格・クローズ：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-2〔元 §1-56〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-2（元 §1-56。同書側は欠番）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135「申し送り」、2026-10-01起票）から起票された項目。
+- **到達条件**: LTX 2.3のIC-LoRA参照動画つき単発・連結ジョブで、`peak_vram_mb`／`peak_vram_reserved_mb`のリセットにより参照encodeより前のピークが落ちる食い違いを解消し、参照encodeより前のピークを含むこと。**達成した**（実装は2026-10-02・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
+- **実機で確認した内容**: `canny-control`のIC-LoRA（`union-control-ref0.5.safetensors`）＋参照動画（`w2_src_640x384_73f.mp4`）で768×512×49の単発（G2）と連結`[49,49]`（G3）を実行した。ログ「job peak before this interval: allocated 8,441 / reserved 8,906 MiB」（テキストエンコーダ付近のピーク）に対し、`metadata.json`の`vram_optimization.peak_vram_mb` 8,441・`peak_vram_reserved_mb` 8,906（連結は8,441／10,232）＝前のピークを含んでいる（参照符号化の区間ピークは約2,200 MiBなので、含めなければ最終値はもっと小さくなるはずで、効果が数字で見える）。
+- **台帳の記述の誤り（このクローズで判明）**: §2-2が判定の基準に書いていた連結の`chain.vram_peak_mb`は、`metadata.json`にもワーカーログにも出ない（`_write_chain_metadata`が写さない。2.3側`chain_pipeline.py`が内部で持つ値は10進MBで単位も違う）。実際に判定に使えるのは`metadata.json`の`vram_optimization.peak_vram_mb`／`peak_vram_reserved_mb`（MiB）と、ログの「job peak before this interval」の行。
+- **どの物差しで通ったか**: 選択肢Aの実装時（§141）に新規単体テスト1本で、ピークのリセットが4つの入口の直後にしか起きず`_reference_conditioning_from_pixels`が`max(持ち越し, 新しい値)`で記録することを固定済み。今回は実機（G2・G3）でログとmetadata.jsonの数字を突き合わせて確認した。
+- **クローズ理由**: 実装は済んでおり、実機確認も合格した。
+- **状態**: dev（第 5 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145）。
+- **残課題（引き継ぎ）**: `run_chain`／`run_outpaint`／`run_inpaint`先頭のリセットは持ち越さない（G3の連結2番目のセグメントの「before」は4,136／4,628 MiBで、1番目の8,441／8,906より小さく、持ち越されていないことを実機で確認した。連結の前処理〔深度・ポーズ〕のピークも含まない）。連結の経路には自動テストが無い（単体テストは単発の経路のみ）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145、`engine/pipeline/fast_video_pipeline.py`（`_reference_conditioning_from_pixels`。「job peak before this interval」のログ行）、`services/pipeline_manager.py`（`_write_chain_metadata`）、`engine/pipeline/chain_pipeline.py`（`vram_peak_mb`の内部値・10進MB）。

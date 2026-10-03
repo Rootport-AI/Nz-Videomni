@@ -13169,6 +13169,9 @@ LTX 2.5・公式 `default`（線 44,880）:
 5. Retake で w61 を選ぶと窓の上限が 481 になり、生成が完走する（一括アップサンプルの VRAM を観察する）。
    - **機械確認: 完走しました。** REST を直接呼びました（MCP の `submit_chain` には `stage2_window` 引数が無いため）。素材は較正の a_w61 の出力（1152×576・705 フレーム）で、開始 1.0 秒・撮り直しの窓 481 フレーム・`stage2_window=w61`・`chunked_upsample` は送らず一括アップサンプルです。結果は completed で、所要 330.2 秒、`peak_vram_mb` は 12,169、`metadata.json` の `chain.stage2_window` は `w61` でした。出力は目視用に `outputs/0a15b0f4-20e1-41f4-90c5-4b830f90dc5a/output.mp4` に残してあります。
    - 目視: 合格です。
+
+> **訂正（§145）**: この 1 本（ジョブ `0a15b0f4`）は LTX 2.3（Sulphur-2 Q6_K）で走ったもので、`peak_vram_reserved_mb` は 13,140 MiB だった。LTX 2.5 の w61 の撮り直しの実測は §145 が初めて。詳細は §145。
+
 6. 48fps で奇数段を選ぶと、音声つきなら操作パネルの整合検査で、音声なしならサーバーの 422 で止まる（24fps では止まらない）。
    - **音声なし**: 操作パネルに音声なしで生成する手段が無く、コンソールも表示されないため確かめられませんでした。レアケースとして合格扱いです。
    - **音声つき**: 48fps で奇数段を試すと、1 回は止まりました。その後 w31 や w37 に変えると完走しました。出力は `outputs/f06f7f56-1c11-4249-b497-b029ec238982/`（w31・121 フレーム×2・タイル 1 枚）と `outputs/2f192448-7e2a-40d8-9c37-38c50975157c/`（w37・201 フレーム×2・タイル 2 枚）です。
@@ -15566,3 +15569,69 @@ CLOSED は `Docs/PENDING_TASKS_CLOSED.md` §3-197〜§3-206（§1-37・42・46�
 **申し送り**（次へ）: (1) 第 5 弾 F2（実機・GPU 使用前に毎回了承）: 台帳 §2-1（§1-43）・§2-2（§1-56）の実機確認、§1-60 (1)〜(3) と `use_component_files` の鍵・偽の経路の撤去、§1-40 の計測。あわせて今回の変更の実機確認の候補: 対応外の型の GGUF を置いたときのエラーの見え方（§1-61）、読み込み中に解放・再読み込みを押したときの操作パネルの表示（§1-36／§1-77）、バッチ A2V の停止で実行中の行が Waiting に戻ること（§1-37）。(2) 第 6 弾 G: §1-31・33・40・41 に加えて §1-52（bf16 経路 `gguf_per_layer_quant=false` を消すかどうかと一緒に）。(3) 記録のみ: 読み込み中の解放が事実上の「読み込み中止」として働いていた挙動は §1-36 で無くなった（今後は最長 600 秒の時間切れで失敗に戻る）／`PipelineManager` で見張りの外で `state` を書く既存の 3 経路（実行前に取り消されたジョブ・ボディ無しの load・同じ選択の load）は HEAD からあり今回と無関係（review_part2.md の参考）／2.5 の GGUF 読み込み器は型の早期検査を持たない（Gemma GGUF に I8 型のテンソルが 5 本実在し、sd_ops で落とす前に検査すると壊れるため置かない）。
 
 裏取りの表・再現スクリプトの写し・自己試験の報告はリポジトリの外（`ledger-work/stage4/`。git 管理外）に置いています。
+
+## 145. ★台帳 §1 の消化・第 5 弾「F2 実機が要るもの」＝ 実機確認 6 点（§2-1・§2-2・§1-37・§1-36）すべて合格・§1-60 の撤去（選択肢 A）を消す前後のストリーム MD5 一致で裏づけ・§1-40 の実測 8 点（LTX 2.5・1280×768・w61・169〜481）・CLOSED 3 件（3-207〜3-209）・§1-78 起票・仕様書 v0.5.82（2026-10-03）
+
+**要約**: 台帳 `Docs/PENDING_TASKS.md` §1 の消化・第 5 弾として、計画 `radiant-wondering-melody.md`（オーナー決定: §1-40 の実測は 8 点・real のバックエンドはオーナーが `run.bat` で起動・§1-77 は今回は触らず据え置き）に基づき、「F2 実機が要るもの」を処理した。工程 1 では Opus 実機担当（V1）が、オーナーが起こした real のバックエンド（HEAD `295d707`・09:53 起動）に REST／MCP で G1（基準）〜G7 を投入し、台帳 §2-1（元 §1-43）・§2-2（元 §1-56）・§1-37・§1-36 の実機確認 6 点をすべて合格と判定した。続けて、Opus（U1）が §1-60（選択肢 A——`embed_cpu_offload` の旗と通らない枝 (1)〜(3)、設定 `vram.use_component_files` の鍵と偽の経路 (4) の撤去）を実装する一方、Opus 実機担当（V2）は変更前と同じサーバー（LTX 2.5 のワーカーは編集中のファイルを読まないため影響を受けない）で §1-40（G9・8 点）を計測した。敵対的レビュー（Opus・サブエージェント起動なし）を経て反映した後、オーナーがサーバーを再起動（11:28・§1-60 を反映）し、G8 で撤去前後の映像・音声ストリーム MD5 が完全に一致することを確かめた。台帳は CLOSED 3 件（3-207〜3-209）、§2 を節ごと削除、§1-40 の本文を訂正、新規に §1-78 を起票し、§1 は 7 件になった。仕様書は v0.5.82。
+
+**目的**: 第 1〜4 弾（main merge `e8a91c0`）に続き、GPU（実機）でしか決着しないものを処理する: 台帳 §2-1・§2-2 の実機確認、§1-60 の撤去と前後比較、§1-40 の計測、第 4 弾からの実機確認の持ち越し（§1-37・§1-36）。§1-61（対応外の型の GGUF）は、オーナーのモデルフォルダに偽の GGUF を置く必要があるため実機では行わず、単体テストでの決着（第 4 弾・CLOSED §3-204）のまま記録する。
+
+**対象**: `Nz-Videomni` リポジトリ（バックエンド。dev）。起点 HEAD `295d707`（main `e8a91c0` と同内容）。本節の時点では作業ツリーの未コミットの差分（13 ファイル・+187／−317）として存在する: `Docs/MODEL_MANAGEMENT_DESIGN.md`・`Videomni_Backend_Specification.md`・`config.py`・`config.yaml.example`・`engine/gemma/gguf_quant_service.py`・`engine/pipeline/fast_video_pipeline.py`・`engine/worker.py`・`main.py`・`services/engines/ltx/adapter.py`・`services/engines/ltx25/adapter.py`・`tests/test_ltx25_adapter.py`・`tests/test_pipeline_gguf_install_fail_loud.py`・`tests/test_validation.py`。
+
+**方法**:
+1. 準備: オーナーが `run.bat` で real のバックエンド（HEAD `295d707`）を起動（09:53）。
+2. 工程 1（Opus 実機担当 V1）: REST／MCP（自前の stdio クライアント）で G1（基準）→G2→G3→G4→G5→G6→G7 の順に投入し、`ledger-work/stage5/part1/` に metadata・ログ抜粋・MD5 を写して `verify_part1.md` に判定した。
+3. 工程 2（Opus U1・G1 の後）と §1-40 の計測（Opus 実機担当 V2）を並行で実施: U1 が §1-60（選択肢 A）を実装する間、V2 は同じ（変更前の）サーバーで G9（§1-40・LTX 2.5・8 点・10:09〜11:12）を投入した——LTX 2.5 のワーカーは U1 が編集中の LTX 2.3／共通部分のファイルを読まないため、計測に影響は無い。
+4. 工程 3: 敵対的レビュー（Opus 1 体・サブエージェント起動なし）→ 2 フィルタ（過剰設計の棄却・独立裏取り）で採否 → 指摘を反映 → オーナーがサーバーを再起動（11:28・§1-60 を反映）→ G8 を実行し、G1 とストリーム MD5・`peak_vram_mb`／`peak_vram_reserved_mb` を比較。
+5. テスト（監督・担当・レビューが実行）と報告 `ledger-work/stage5/report.md` の作成（了承ゲート 2）。
+6. 台帳（`PENDING_TASKS.md`・`PENDING_TASKS_CLOSED.md`。別担当が並行で更新）と記録（本節）を整えた。
+
+**結果**:
+
+工程 1（G1〜G7）の判定はすべて合格:
+
+| # | 対象 | 判定 | 根拠 |
+|---|---|---|---|
+| G2 | §2-2 単発（2.3・768×512×49・canny-control＋参照 `w2_src_640x384_73f.mp4`・job `e15358fb`） | 合格 | ログ「job peak before this interval: allocated 8,441 / reserved 8,906 MiB」。符号化区間のピークは allocated 2,046／reserved 2,214 MiB。`metadata.json` の `peak_vram_mb` 8,441・`peak_vram_reserved_mb` 8,906（前のピークを含む＝修正の効果が数字で見える） |
+| G3 | §2-2 連結（`[49,49]`・同条件・job `f8d7f13d`） | 合格 | 同じ判定式。`peak_vram_mb` 8,441・予約 10,232。2 番目のセグメントの「job peak before」は 4,136／4,628（1 番目の 8,441／8,906 より小さく、セグメント間で持ち越されない。最終値には影響なし） |
+| G6 | §2-1 `done` を直接見る（2.5 selftest・単発 48.5 秒・連結 43.0 秒） | 合格 | `done` に最上位 `phases` 無し。単発は `done.ltx25.phases`、連結は `done.chain.ltx25.phases` に段階の表 |
+| G7 | §2-1 連結の `metadata.json`（2.5・`[49,49]`・512×320・job `cef59bb9`） | 合格 | 最上位 `phases` 無し・最上位 `ltx25.phases` 有り（`chain.ltx25` ではない） |
+| G4 | §1-37（2.3 連結 `[49,49]`・512×320 を実行中に `cancel_job`・job `cfd417b3`） | 合格 | 最後まで生成してから `cancelled`・`result: null`。注記: 出力の `metadata.json` の `status` は `completed` のまま（メタデータは判定の前に書かれる。単発も同じ）。MCP の `get_job_video_path` は断らず `exists: true` と注意書きを返す |
+| G5 | §1-36（読み込み中の `unload_pipeline`） | 合格 | MCP は `PIPELINE_LOADING` の `ToolError`、`curl` は 409。読み込みは `ready` で完走。409 は `server.log` に出ない（アクセスログ無し） |
+
+基準 G1（`52f8e482`・2.3・T2V・512×320×49・24fps・seed 12345・sdpa・keep_resident off・既定 Q4_K_M）: 所要 62.8 秒（待ち込み 70.1 秒）、映像 MD5 `c9da075e7758f29ab3d2e02423da98e8`、音声 MD5 `cbc2a850fc8b704bc1ea3b9cbb2ab1b4`、`peak_vram_mb` 8,442・`peak_vram_reserved_mb` 8,972。
+
+**§1-60 の撤去（選択肢 A）**: `engine/gemma/gguf_quant_service.py` から `embed_cpu_offload` の旗、「4. Overlay」の lm_head の結び直し（と唯一の利用者が消えた定数 `_LTX_LM_HEAD_KEY`）、`_load_gguf_gemma` の GPU へ移す枝、`_patch_gemma_skip_full_logits`（関数ごと）、未使用の `import types`（HEAD の時点から）を削除した。3b の条件は `if embed_key in gguf_sd:` に縮小し、キャッシュ HIT 時の守りは `else: raise`（文面から旗の名前を外した）。`config.py`・`config.yaml.example` から `use_component_files` を削除し、アダプタの `LTX_COMPONENT_FILES` 環境変数、`fast_video_pipeline.py` の分岐（常に部品ファイル）、`gguf_quant_service.py` の `connector_gguf_path=None`／`component_mode` の経路を無条件化した（モノリスの守り `mp_tuple[0] != mono` は残した）。`connector_gguf_path`・`component_text_projection_path`・`connector_sd_ops` を必須引数にし、テスト 3 箇所が追随した。撤去前後の比較は、オーナーの再起動後に G8（`d1e4db0d-0036-442d-bc87-f71cb80b9a7a`・70.1 秒）を G1 と同条件で実行し、**映像 MD5・音声 MD5 とも G1 と完全一致**（SHA-256 は `f0fb5e45…` で G1 の `0e6770bf…` と異なるが、job_id の埋め込みによる想定どおりの差）、`peak_vram_mb` 8,442・予約 8,972 も同じであることで裏づけた。削除した `_patch_gemma_skip_full_logits` のログ行（「defaulted Gemma forward logits_to_keep=1」）は、再起動後の `logs/ltx_worker.log` に出ていない（最後の出現は再起動前の 10:00:35）。
+
+**§1-40 の実測（G9・8 点・LTX 2.5・1280×768・w61・開始 0 秒・seed 12345・LoRA 無し・素材 `outputs/ltx25-window-sweep/runs/1280x768_f481/output.mp4`〔481 f〕）**: 8 本とも 1 回で completed。タイルは全窓で 80/24・448×384（全解像度・半解像度とも同じ設定）。
+
+| 窓 | 所要〔秒〕 | 符号化区間の確保〔MiB〕 | 符号化区間の予約〔MiB〕 | 符号化〔秒〕 | stage-2 区間の予約〔GiB〕 | ジョブ `peak_vram_mb`／予約 |
+|---:|---:|---:|---:|---:|---:|---|
+| 169 | 124 | 7,530 | 13,962 | 24.2 | 8.27 | 7,530／13,962 |
+| 217 | 154 | 7,535 | 13,960 | 32.1 | 9.77 | 8,800／13,960 |
+| 265 | 234 | 7,536 | 13,964 | 74.4 | 11.29 | 10,193／13,964 |
+| 313 | 321 | 7,537 | 13,958 | 47.3 | 12.67 | 11,571／13,958 |
+| 361 | 284 | 7,538 | 13,970 | 56.3 | 14.26 | 12,964／14,602 |
+| 409 | 435 | 7,540 | 13,964 | 59.4 | 15.81 | 14,341／16,186 |
+| 457 | 525 | 7,544 | 13,978 | 68.8 | 17.38 | 15,737／17,800 |
+| 481 | 551 | 7,543 | 13,980 | 70.9 | 18.16 | 16,422／18,594 |
+
+結論は事実だけ: **481 の符号化区間の予約ピークは 13,980 MiB で、装置の 16,376 MiB に収まる。** 窓を伸ばしても符号化区間の予約は 13,958〜13,980 MiB でほぼ一定（差 18 MiB。時間タイルが 80/24 のまま枚数だけ増える）。符号化の秒は窓とともに伸びる（265 だけ 74.4 秒で 313 より長い）。ジョブ全体の予約ピークは 361 以上で stage-2 区間の値に埋もれ、457・481 では stage-2 区間の予約（17,800・18,594 MiB）が装置容量（16,376 MiB）を超えて共有メモリにはみ出したが完走した。169 は §78.5 の rt169 と整合する（確保 +10・予約 +36・ジョブ予約 −2 MiB。符号化の秒 24.2 対 17.0 の差は、今回の区間が半解像度の符号化とフレームの読み込みを含むためと推測）。予算の変更・段階化・上限の変更はここでは判断しない（台帳 §1-40 の A／B／C はオーナー判断）。
+
+**裁定と新事実**: **台帳の記述の誤り 2 点**を本節で記録する。(1) §2-2 の連結の基準として台帳が挙げていた `chain.vram_peak_mb` は `metadata.json` にもログにも出ない。判定は `vram_optimization.peak_vram_mb`／`peak_vram_reserved_mb`（MiB・ログの「job peak before」の行と同じ値）で行う。(2) §1-40 で台帳が「§116.7 の 5 で w61・481・1152×576 が 1 回完走した」としていた記録は、実際には **LTX 2.3**（Sulphur-2 Q6_K・ジョブ `0a15b0f4`・`peak_vram_reserved_mb` 13,140）のものであり、**LTX 2.5 の 169 超の実測は本節が初めて**である（§116.7 の 5 に訂正の 1 行を添えた）。副作用として、`load_pipeline(base_model="LTX23")` は設計どおり（`api/pipeline.py:111-117`）ベースモデルの切り替え時に前の選択を持ち越さず既定（Q4_K_M の `default`）にするため、G1〜G5・G8 はこの `default` で実行された（両方とも同条件なので比較は成立する）。工程の終わりに `load_pipeline(base_model="LTX23", models={"transformer":"sulphur_distil_fp8mixed"})` で元の選択に戻し、`load_pipeline(base_model="LTX25")`→`unload_pipeline` でサーバーを `unloaded` の状態に戻した。`config.yaml` は不変、`outputs/` にジョブ 13 本分の出力が残る。記録のみの事実: G4 で取り消したジョブの `outputs/<job_id>/metadata.json` の `status` は `completed` のままで、MCP の `get_job_video_path` も単発と同じく `exists: true` と注意書きを返す（実害は無い）。§2-2 の連結はセグメント間でピークを持ち越さない（既知の残課題のまま）。§78.5 の表は半解像度の符号化タイルを「448×320」と書くが、今回のワーカーログは窓ごとに 1 行だけで、コード（`engine25/chain25.py:1184-1200`）は 1 つのタイル設定（448×384）を全解像度・半解像度の両方の符号化に渡している（事実。食い違いの理由は確かめていない）。
+
+**証明**: 実機確認の根拠は上表の metadata・ログ行・MD5（`ledger-work/stage5/part1/`）。§1-60 の撤去前後比較は、映像・音声のストリーム MD5 一致（ファイル全体の SHA-256 は job_id の埋め込みにより意図的に異なる）と `peak_vram_mb`／`peak_vram_reserved_mb` の一致で裏づけた。§1-40 の実測は `ledger-work/stage5/retake-w61/RESULTS.md`（`metadata.json` の写し 8 本・ワーカーログ抜粋）が正本。敵対的レビューの裏取りは、小さな Gemma を CPU で作っての logits／隠れ状態のビット一致実験、一時 yaml での `use_component_files` の読み飛ばし実験、`git grep` による到達箇所の確認（下記「敵対的レビュー」）。改行は変更した 13 ファイルとも作業ツリーで CRLF のまま・BOM 無し（レビューが Python でバイトを数えて確認）。
+
+**テスト**（監督・担当・レビューが実行。GPU・real のバックエンドは工程 1・G8・G9 のみ使用）: アプリ `.venv` 全件 **2,898 passed・61 skipped**／`.venv-engine` 11 種 **366 passed**（レビューは `engine` を使う 25 ファイルで失敗 0）／`.venv-engine-ltx25` `test_ltx25_adapter` **171 passed**。変更した 13 ファイルの改行は CRLF のまま。
+
+**台帳**: `Docs/PENDING_TASKS_CLOSED.md` に CLOSED **3-207**（§1-60）・**3-208**（§2-1・元 §1-43）・**3-209**（§2-2・元 §1-56）の 3 件を追加し、§3-197（§1-37）・§3-206（§1-36）・§3-204（§1-61）の残課題に本節の実機での決着（§1-61 は実機では行わず単体テストでの決着のまま、という事実を含む）を追記した。`Docs/PENDING_TASKS.md` の §2 は §2-1・§2-2 とも決着したため節ごと削除した。§1-40 の本文は「§116.7 の 5 で 1 回完走した」という誤りを訂正し、本節（§145）の実測結果を正本として参照する形に改め、残るのは A／B／C の選択であることを書いた。新規に **§1-78**（`if gguf_gemma_path:` は常に真。消すかどうかは別の機会に判断）を起票した。これで台帳 §1 は 7 件（§1-31・33・40・41・52・77・78）になった。
+
+**文書**: 仕様書 `Videomni_Backend_Specification.md` v0.5.82（§5.5・§9.2・§11.3 の表から `vram.use_component_files` を削除・用語集・改訂履歴・§0.1 の版欄）。`Docs/MODEL_MANAGEMENT_DESIGN.md`（本文と古い行番号参照 2 箇所を関数名に）。`config.yaml.example`（`use_component_files` の鍵と説明の段落を削除）。作業記録 `Docs/PRUNAVAED_WORKORDER.md`・`Docs/RESOLUTION_DURATION_CAPABILITY.md`・`Docs/SCALEUP_16GB_RESEARCH.md`・`Docs/HANDOFF_ARCHIVE.md` の 4 本には `use_component_files` の記述が残るが、当時の作業記録・測定条件であるため本文は触らない（記録のみ）。
+
+**敵対的レビュー**（Opus 1 体・サブエージェント起動なし・§1-60 の差分）: **直すべき 0・注意 1・参考 7**。注意 1＝改訂履歴 v0.5.82 が本節（§145）を指していたが、本節が未作成だったこと（本節の追加で解消）。採用 2 件: 未使用の `import types`（HEAD の時点から）の削除、`Docs/MODEL_MANAGEMENT_DESIGN.md` の古い行番号参照 2 箇所を関数名に。据え置き 4 点: 仕様書 §5.5・§9.2 の「2026-10-03 に削除した」という注記は、既存の前例 3 件（`ltx_repo_dir` 等）に揃えて本文に残す／`if gguf_gemma_path:`（常に真。fail-fast が別に保証している）は G8 の比較を濁さないよう今回は残し、新規に §1-78 として起票する／作業記録 4 本の `use_component_files` の記述は本文を触らない／回帰テストは足さない（`_build_child_env` はワーカーが `os.environ` を引き継ぐため、「環境変数が無いこと」を断言するテストは開発者のシェルで偽の失敗になる）。裏取り: 到達不能の根拠 4 点（lm_head の結び直し・GPU へ移す枝・`_patch_gemma_skip_full_logits`・部品ファイルの経路）を独立に確認し、小さな Gemma を CPU で作って旧版（包み→差し替え）と新版（差し替えだけ）の logits と隠れ状態が、`logits_to_keep` の既定（1）でも明示的な 0 でもビット一致すること、`use_component_files: true`／`false` を書いた一時 yaml が警告なしで読み飛ばされ `model_dump()` にも出ないこと、必須引数化は呼び出しがすべてキーワード指定で安全であることを実測で確かめた。
+
+**費用の目安**（Opus・Sonnet のトークン、概算）: Opus 約 125 万（計画前の棚卸し 3 体 約 49 万・実機担当 V1 約 15 万・実装 U1 約 20 万・レビュー 約 21 万・反映 約 5 万・実機担当 V2 約 13 万。見込み〔棚卸しを除き 115 万〕に対し実装・レビュー・実機は約 74 万で範囲内）。Sonnet＝台帳と記録 約 42 万（台帳 23・記録 19。見込み 40 万とほぼ同じ）。本節を含む）。GPU 実測 約 1 時間 50 分（§1-40 の 8 本はジョブだけで 2,628 秒・冷却込み約 63 分）。
+
+**申し送り**（次へ）: (1) 第 6 弾 G: §1-31・33・40（A／B／C の選択。材料は本節の表）・41・52（bf16 経路の削除判断と一緒に）。§1-77（操作パネルの解放ボタンの表示）と §1-78（`if gguf_gemma_path:`）は小さい別件。(2) 記録のみ: `load_pipeline(base_model=…)` はベースモデルを切り替えると前の選択を持ち越さない（設計どおり。MCP で検証するときは `models=` を明示するか、終わりに元へ戻す）。取り消したジョブの `metadata.json` の `status` は `completed` のまま・MCP の `get_job_video_path` は `exists: true` と注意書きを返す（単発も同じ。実害は無い）。§2-2 の連結はセグメント間でピークを持ち越さない（既知の残課題のまま）。§78.5 の表の半解像度「448×320」に対し、今回のワーカーログはタイル設定の行が窓ごとに 1 行だけで、コードは 1 つのタイル設定（448×384）を半解像度と全解像度の両方に渡している（事実。食い違いの理由は確かめていない）。
+
+実機の原本（判定表・metadata・MD5・計測の表）はリポジトリの外（`ledger-work/stage5/`。git 管理外）に置いています。

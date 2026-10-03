@@ -859,12 +859,8 @@ def test_config_yaml_context_frame_caps_change_only_the_published_value(tmp_path
 
 
 def test_defaults_without_config_yaml_match_the_shipped_example(tmp_path):
-    """config.yaml が無いときの既定値が配布値と同じであること（台帳 §1-67）。
-    use_component_files が偽だと LTX 2.3 の real の読み込みで VAE／音声の読み込み元が
-    無くなる（アダプタは checkpoint_path="" を固定で送る）。
-    """
+    """config.yaml が無いときの既定値が配布値と同じであること（台帳 §1-67）。"""
     from config import load_config
 
     cfg = load_config(tmp_path / "no-such-config.yaml")
-    assert cfg.vram.use_component_files is True
     assert cfg.model.checkpoint_name == "ltx-2.3-22b-distilled-1.1"

@@ -87,7 +87,6 @@ class LTXFastVideoPipeline:
         vae_temporal_tile_size: int = 0,
         gguf_gemma_path: str = "",
         keep_resident_weights: bool = False,
-        use_component_files: bool = False,
         component_video_vae_path: str = "",
         component_audio_vae_path: str = "",
         component_text_projection_path: str = "",
@@ -114,7 +113,6 @@ class LTXFastVideoPipeline:
             vae_temporal_tile_size=vae_temporal_tile_size,
             gguf_gemma_path=gguf_gemma_path,
             keep_resident_weights=keep_resident_weights,
-            use_component_files=use_component_files,
             component_video_vae_path=component_video_vae_path,
             component_audio_vae_path=component_audio_vae_path,
             component_text_projection_path=component_text_projection_path,
@@ -142,7 +140,6 @@ class LTXFastVideoPipeline:
         vae_temporal_tile_size: int = 0,
         gguf_gemma_path: str = "",
         keep_resident_weights: bool = False,
-        use_component_files: bool = False,
         component_video_vae_path: str = "",
         component_audio_vae_path: str = "",
         component_text_projection_path: str = "",
@@ -343,9 +340,8 @@ class LTXFastVideoPipeline:
         # Drop the bf16 monolith for the VAE/audio builders by re-pointing
         # their model_path to small standalone files. Runs BEFORE the
         # transformer (GGUF / quantized safetensors) and Gemma GGUF installs.
-        # Gated on use_component_files + both VAE paths present.
-        if use_component_files and component_video_vae_path and component_audio_vae_path:
-            self._install_component_sources(component_video_vae_path, component_audio_vae_path)
+        # Both VAE paths are guaranteed by the fail-fast check above.
+        self._install_component_sources(component_video_vae_path, component_audio_vae_path)
 
         # ── Install GGUF loader (replaces transformer weights source) ──
         if gguf_transformer_path:
@@ -364,29 +360,17 @@ class LTXFastVideoPipeline:
         # GGUF keeps Gemma quantized in VRAM (~7.3GB Q4_K_M) with per-layer dequant —
         # fits the 16GB card. This is the only text-encoder path.
         if gguf_gemma_path:
-            # When component files are enabled (and the connector GGUF +
-            # projection file are present), re-source the Gemma text encoder's
-            # non-Gemma monolith survivors off standalone files so the bf16 monolith
-            # is not opened by ANY builder: aggregate_embed from the projection
-            # file (replaces the monolith in model_path) and the 258 connectors
-            # injected from the transformer file (GGUF or quantized (fp8 / int8) safetensors). Both
-            # must be present to enable the drop; otherwise the text encoder keeps
-            # the monolith (checkpoint_path) in its model_path.
-            _transformer_file = gguf_transformer_path or safetensors_transformer_path
-            _gemma_component = (
-                use_component_files
-                and component_text_projection_path
-                and _transformer_file
-            )
+            # Re-source the Gemma text encoder's non-Gemma monolith survivors off
+            # standalone files so the bf16 monolith is not opened by ANY builder:
+            # aggregate_embed from the projection file (replaces the monolith in
+            # model_path) and the 258 connectors injected from the transformer file
+            # (GGUF or quantized (fp8 / int8) safetensors). Both are guaranteed by the
+            # fail-fast check above.
             self._install_gemma_gguf(
                 gguf_gemma_path,
+                component_text_projection_path=component_text_projection_path,
+                connector_gguf_path=gguf_transformer_path or safetensors_transformer_path,
                 gemma_tokenizer_root=self._gemma_tokenizer_root,
-                component_text_projection_path=(
-                    component_text_projection_path if _gemma_component else None
-                ),
-                connector_gguf_path=(
-                    _transformer_file if _gemma_component else None
-                ),
                 te_offload=self._te_offload_text_encoder,
             )
 
@@ -436,10 +420,9 @@ class LTXFastVideoPipeline:
         # 枝刈り側はジョブ毎にここから ``dataclasses.replace`` で作る（保持
         # しない＝同期ずれの余地を作らない。Docs/PRUNAVAED_WORKORDER.md §4.3）。
         #
-        # **位置が load-bearing**: ``_install_component_sources()`` の直後では
-        # なく、ここ（無条件位置）に置く。前者は ``use_component_files=True``
-        # の構成でしか走らないので、直後に置くと単一ファイル構成のサーバーで
-        # 枝刈りビルダーが作られない。上の ``_swap_registry(True)`` より**後**
+        # **位置が load-bearing**: 映像VAEの部品ファイルへの付け替え
+        # （``_install_component_sources()``）の後で撮るので、控えるのは部品
+        # ファイルを指すビルダーになる。上の ``_swap_registry(True)`` より**後**
         # なのも意図的で、ここで撮ったスナップショットの ``registry`` は撮った
         # 時点のもので固定される——だからこそ ``_set_vae_mode_job`` は代入の
         # たびに ``registry=ledger.registry`` を注入し直す
@@ -1024,9 +1007,9 @@ class LTXFastVideoPipeline:
     def _install_gemma_gguf(
         self,
         gguf_path: str,
+        component_text_projection_path: str,
+        connector_gguf_path: str,
         gemma_tokenizer_root: str | None = None,
-        component_text_projection_path: str | None = None,
-        connector_gguf_path: str | None = None,
         te_offload: bool = True,
     ) -> None:
         """Load the Gemma-3 text encoder from a quantized GGUF, per-layer dequant.
@@ -1037,10 +1020,9 @@ class LTXFastVideoPipeline:
         Linear dequantizes its weight on-the-fly during the forward pass and frees
         the temporary bf16 tensor after the matmul. The LTX-side feature extractor
         and embedding connectors are not in the Gemma GGUF: they are loaded from
-        the distilled checkpoint — or, when ``component_text_projection_path`` and
-        ``connector_gguf_path`` are both given, from the projection file and the
-        transformer file — and merged with the GGUF Gemma weights by
-        GemmaGGUFQuantStateDictLoader.
+        the projection file (``component_text_projection_path``) and the
+        transformer file (``connector_gguf_path``) and merged with the GGUF Gemma
+        weights by GemmaGGUFQuantStateDictLoader.
 
         Mirrors _install_gguf but targets text_encoder_builder instead of
         transformer_builder. A failure here fails the load (the exception is not
@@ -1055,21 +1037,19 @@ class LTXFastVideoPipeline:
         from engine.gemma.gguf_quant_service import GemmaGGUFQuantLoaderService
         service = GemmaGGUFQuantLoaderService(
             gguf_path=gguf_path,
-            gemma_tokenizer_root=gemma_tokenizer_root,
             component_text_projection_path=component_text_projection_path,
             connector_gguf_path=connector_gguf_path,
+            gemma_tokenizer_root=gemma_tokenizer_root,
             layer_offload=te_offload,
         )
         service.install(self.pipeline.model_ledger)
-        if component_text_projection_path and connector_gguf_path:
-            import logging
-            logging.getLogger(__name__).info(
-                "Gemma component-files active: monolith dropped from text encoder "
-                "(aggregate_embed <- %s ; connectors <- %s)",
-                component_text_projection_path, connector_gguf_path,
-            )
-        self._gemma_gguf_service = service
         import logging
+        logging.getLogger(__name__).info(
+            "Gemma component-files active: monolith dropped from text encoder "
+            "(aggregate_embed <- %s ; connectors <- %s)",
+            component_text_projection_path, connector_gguf_path,
+        )
+        self._gemma_gguf_service = service
         logging.getLogger(__name__).info(
             "Gemma GGUF per-layer quant installed: Gemma stays compressed "
             "(decoder layers in VRAM, or streamed from CPU when "

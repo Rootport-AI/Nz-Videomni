@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.81**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 版 | **v0.5.82**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-10-03**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -130,6 +130,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.79 | 2026-10-03 | **§2.5・§3.3 の二重起動ガードの主体を `run.ps1` から `main.py` に改めた**——`main.py` が起動直前に実効ポートへ bind を試し、使用中なら案内して終了コード 3（`EXIT_PORT_IN_USE`）で終わり、`run.ps1` は終了コード 3 を「すでに起動しています」の案内に変えて 0 で終わる（ポートの正本を `main.py` 1 箇所に。`run.ps1` は `config.yaml` の `server.port` を読んでいなかった）。**§4.4 のツリー図と §5.4 から `scripts/build_xformers.ps1` を削除した**（スクリプトそのものを削除した。xformers は同梱せず、ビルドの道具も置かない）。**§2.5 のエンジン venv の判定ハッシュの説明を実装に合わせた**——freeze ファイルはコメント行と空行を除いた `名前==版` の行だけをハッシュに入れる（コメントだけの変更では貼り直しが起きない）。連結する直接指定は「3 つの git リビジョン」ではなく `$engineDirectPins`（git 3 件と wheel 1 件）／`$ltx25DirectPins`（5 件）である。凍結 API 契約〔§6〕の変更は無い。記録は `Docs/VERIFICATION_LOG.md` §143。 |
 | v0.5.80 | 2026-10-03 | **台帳 §1 の第 4 弾（エンジンとアプリの挙動の修正）を反映した**。**§1-37**: 連結ジョブ（`run_chain_job`）も単発と同じく、生成の終了時に取り消しが要求されていれば `cancelled` で終わるようにした（§7.2 は元から単発と連結を分けずにそう書いており、コードを仕様へ合わせた）。**§1-54**: マスクの二値化を赤チャンネルの値 128 以上に揃えた——キャンバスを塗る `fill_mask_green_mp4` は輝度（`format=gray`）で二値化しており、エンジン（`decode_mask_video`・`_decode_mask_u8`）の赤チャンネルの規則と、灰色でないマスクで食い違っていた。§6.2 の `mask_video_id` の行を直した。**§1-46**: 撮り直しの `source_had_audio` を「窓に音声トラックがあったか」に確定し（符号化が窓の長さに足りないときも `true` のまま）、§6.2 の補足の括弧書きを外して `audio_frozen` と独立であることを書いた。**§1-51**: Gemma と transformer の GGUF の取り付けの失敗を、黙って続行せず `load` の失敗にした。**§1-61**: 対応外の型の GGUF テンソルをゼロで埋めず例外にした（対応する型は Q8_0・Q4_K・Q5_K・Q6_K と F16・BF16・F32）。**§1-42**: ワーカーが読み込み後に未知の op を受けたら `error` を返すようにした。**§1-47**: 自己試験に install の実行回数とラウンド数の突き合わせを足した。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードの変更は無い。記録は `Docs/VERIFICATION_LOG.md` §144。 |
 | v0.5.81 | 2026-10-03 | **台帳 §1-36: 読み込み中の `POST /pipeline/unload` にも 409 `PIPELINE_LOADING` を置いた（凍結 API 契約〔§6〕の変更・オーナー決定）**。読み込みの本体（ワーカーの起動と待ち）はロックの外で走るため、読み込み中の unload が状態を `unloaded` に戻すと、2 度目のロードが 409 の見張りをすり抜けてワーカーの構築が重なっていた。これまで unload を見張りの外に置いていたのは「読み込みが異常終了して `loading` に張り付いたときの唯一の復帰路」としてだったが、`PipelineManager.load`／`reload` の状態の復帰を `finally` にし（状態がまだ `loading` なら、失敗したロードと同じ後始末——ベースモデルの巻き戻し・途中まで立ち上がったワーカーの停止・`unloaded`——をする。成功の `ready`、通常の失敗の後始末による `unloaded` には手を出さない）、張り付く経路そのものを無くした。読み込み中は load・reload・unload のどれも 409、という 1 つの規則になる。**§6.1 の表と補足**・**§6.8 のエラーコード表**・**§6.9(d)・(f)** を更新した。記録は `Docs/VERIFICATION_LOG.md` §144。 |
+| v0.5.82 | 2026-10-03 | **台帳 §1-60: `embed_cpu_offload` の旗と、それで通らなくなっていた枝 3 つ、設定 `vram.use_component_files` の鍵と偽（`false`）の経路を撤去した（挙動不変の引き算）**。`engine/gemma/gguf_quant_service.py` では、Gemma のトークン埋め込みを常に CPU 側に留める前提で旗を外し、lm_head を結び直す枝・埋め込みを GPU へ移す枝・`logits_to_keep=1` を既定にする包み（同じ forward を `_install_cpu_embed_offload` が丸ごと差し替えるため効いていなかった。ログが 1 行減る）を消した。部品ファイル（映像 VAE・音声 VAE／ボコーダ・テキスト射影と、transformer のファイルからのコネクタの注入）は常に使い、モノリスを `model_path` に残す経路と環境変数 `LTX_COMPONENT_FILES` を消した。**`GET /api/v1/config` の応答から `vram.use_component_files` が消える**。古い `config.yaml` に残った行は `extra='ignore'` で黙って無視される（警告は出ない）。**§5.5**・**§9.2**（本文と `ltx25` の注記）・**§11.3 の表**・**付録B の用語表（component-files）**を更新した。記録は `Docs/VERIFICATION_LOG.md` §145。 |
 
 ### 0.2 スコープ
 
@@ -616,7 +617,7 @@ LTX の text encoder（`GemmaTextEncoder.precompute`）は `language_model` の 
 
 ### 5.5 reference-only パスの位置づけ
 
-`checkpoint_name` / `pipeline_type` は config に残るが、GGUF + component 経路の重みの読み込みには使われない（§11.2）。かつて同じく config に残っていた `ltx_repo_dir`（`vendor/LTX-2` 上流クローンを指す reference-only のパス）・`text_encoder`・`reload_interval` は、どのコードからも読まれていなかったため 2026-10-02 に `config.py` から削除した。`checkpoint_path`（43GB モノリスへの旧参照パス）は2026-07-28に`config.model`から削除済みで、現在は`services/engines/ltx/adapter.py`が worker payload へ直値の`""`をハードコードして渡すのみ（`DistilledPipeline` 構築のシグネチャを満たすためだけで存在チェック無し）。`fast_video_pipeline.py` の fail-fast 検査は、build 前に 4 つのパス（`component_video_vae_path`・`component_audio_vae_path`・`component_text_projection_path`・`gguf_gemma_path`）と transformer のパスが空でないことだけを確かめ、`use_component_files` は見ない。`use_component_files` が偽だと部品ファイルへの付け替えだけが飛ばされ、VAE／音声の読み込み元に `model_path=""` が残って読み込みで失敗する（モノリスは配布されない）。そのため偽は動かない構成であり、`config.py` の既定値も配布ひな型 `config.yaml.example` も `true` である。
+`checkpoint_name` / `pipeline_type` は config に残るが、GGUF + component 経路の重みの読み込みには使われない（§11.2）。かつて同じく config に残っていた `ltx_repo_dir`（`vendor/LTX-2` 上流クローンを指す reference-only のパス）・`text_encoder`・`reload_interval` は、どのコードからも読まれていなかったため 2026-10-02 に `config.py` から削除した。`checkpoint_path`（43GB モノリスへの旧参照パス）は2026-07-28に`config.model`から削除済みで、現在は`services/engines/ltx/adapter.py`が worker payload へ直値の`""`をハードコードして渡すのみ（`DistilledPipeline` 構築のシグネチャを満たすためだけで存在チェック無し）。`fast_video_pipeline.py` の fail-fast 検査は、build 前に 4 つのパス（`component_video_vae_path`・`component_audio_vae_path`・`component_text_projection_path`・`gguf_gemma_path`）と transformer のパスが空でないことを確かめる。部品ファイルへの付け替え（映像 VAE・音声 VAE／ボコーダ・テキスト射影）と、コネクタを transformer のファイルから注入することは常に行われ、それを切り替える設定も環境変数も無い（モノリスは配布されない）。かつての設定 `vram.use_component_files` と環境変数 `LTX_COMPONENT_FILES` は 2026-10-03 に削除した（偽は動かない構成だったため）。古い `config.yaml` に残った `use_component_files` の行は Pydantic の `extra='ignore'` で黙って無視される。
 
 ---
 
@@ -1602,7 +1603,7 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 本番 worker 起動時、`services/engines/ltx/adapter.py` は以下の env を子プロセスに設定する（**エンジン系統 `ltx`＝LTX 2.3 の話である**。`ltx25` については本節末尾の注記を参照）:
 
 - `LTX_KEEP_RESIDENT` は **2026-08-02 に撤去済み**（この env はもう設定されないし、設定しても読まれない）。モデル骨格のジョブ間常駐は、環境変数ではなく `POST /generate`・`POST /generate/chain` の per-job フィールド（ジョブごとのリクエスト項目）`keep_resident`（既定 `false`）で指定する。§6.2 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §48 を参照。
-- `LTX_COMPONENT_FILES=1`（`config.vram.use_component_files=true` に連動 / comp=1）。
+- 部品ファイルの経路（component-files・comp=1）は常に使われ、それを切り替える環境変数は無い（かつて設定していた `LTX_COMPONENT_FILES` は 2026-10-03 に撤去した。ワーカーはもう読まない）。
 - `LTX_TE_OFFLOAD=1` / `LTX_DIT_CPU_LOAD=1`（既定 ON、`--no-te-offload` / `--no-dit-cpu-load` で無効化）。
 - `TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1`（プロセス衛生。加えて `PYTHONPATH=<project_root>`）。**かつてここに `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` を設定する行があったが、2026-09-02 に削除した**（§2.4 の注記を参照）。Windows の PyTorch はこの指定を拒否して従来型のキャッシュアロケータのまま動くため、**削除しても挙動は1ビットも変わらない**——「16GB を成立させている設定」ではなかった。以前は「LTX 2.3 は凍結中なので行そのものは残す」としていたが、効かない設定を残す理由が無いという裁定で、LTX 2.5 側（2026-08-24 に削除済み）と揃えた。
 
@@ -1610,7 +1611,7 @@ LTX 2.3 の two-stage distilled は生成サイズが **64 の倍数**でなけ�
 
 > **上段の keep=1 に関する記述は 2026-06-30 時点の判断である（2026-08-02 追記）。** その後 Gemma レイヤーオフロード導入後の構成で再検証し、native crash の原因だったデバイス移動の不具合を修正したうえで、`keep_resident` を per-job フィールドとして製品化した（既定は引き続き off）。現在の正しい理解は「本番既定は off のまま・利用者がジョブ単位で on にできる・on 時はメモリ 64GB 以上を推奨」であり、詳細は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §47・§48 を正本とする。
 
-> **エンジン系統 `ltx25`（LTX 2.5）の worker には `LTX_*` を1つも渡さない【2026-08-22】**: `services/engines/ltx25/adapter.py` の `_build_child_env` が設定するのは、プロセス衛生の 3 つ——`TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1` / `PYTHONPATH=<project_root>`——**だけ**である（**2026-08-24 に 4 つから 3 つへ減った**。`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` を設定していた行を削除した。Windows ではこの指定が PyTorch に拒否されるため、削除しても挙動は1ビットも変わらない＝もともと効いていなかった。§2.4 の表を参照）。上段の `LTX_COMPONENT_FILES` / `LTX_TE_OFFLOAD` / `LTX_DIT_CPU_LOAD` はいずれも `engine/` の中のコードパスの名前で、`engine25/` はそれらを1つも読まない（独自のオフロードと block-swap 機構を持つ）。渡しても効かないうえ、ログ上は「設定されている」ように見えて誤解を招くため、意図的に渡していない。2.5 側の相当物（`blocks_on_gpu` / `te_layers_on_gpu` / `cache_weights`）は環境変数ではなく**ロードペイロード**に載る（プロトコル上で見えるほうがよいため。§6.10(e)）。
+> **エンジン系統 `ltx25`（LTX 2.5）の worker には `LTX_*` を1つも渡さない【2026-08-22】**: `services/engines/ltx25/adapter.py` の `_build_child_env` が設定するのは、プロセス衛生の 3 つ——`TORCH_COMPILE_DISABLE=1` / `PYTHONUNBUFFERED=1` / `PYTHONPATH=<project_root>`——**だけ**である（**2026-08-24 に 4 つから 3 つへ減った**。`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` を設定していた行を削除した。Windows ではこの指定が PyTorch に拒否されるため、削除しても挙動は1ビットも変わらない＝もともと効いていなかった。§2.4 の表を参照）。上段の `LTX_TE_OFFLOAD` / `LTX_DIT_CPU_LOAD` はいずれも `engine/` の中のコードパスの名前で、`engine25/` はそれらを1つも読まない（独自のオフロードと block-swap 機構を持つ）。渡しても効かないうえ、ログ上は「設定されている」ように見えて誤解を招くため、意図的に渡していない。2.5 側の相当物（`blocks_on_gpu` / `te_layers_on_gpu` / `cache_weights`）は環境変数ではなく**ロードペイロード**に載る（プロトコル上で見えるほうがよいため。§6.10(e)）。
 
 ### 9.3 表示専用フィールド（worker へ非伝播）
 
@@ -1728,7 +1729,6 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `block_swap_blocks_on_gpu` | `8` | GPU 常駐ブロック数（内部 knob、status 非出力） |
 | `vae_spatial_tile_size` | `512` | real engine の VAE 空間タイルサイズ（0=engine 既定） |
 | `vae_temporal_tile_size` | `64` | real engine の VAE 時間タイルサイズ |
-| `use_component_files` | `true` | 単体 component ファイル経路を使う（`LTX_COMPONENT_FILES`）。commit 枯渇クラッシュ回避に必須 |
 > `block_swap` は現行 config.yaml で `true`。status の `vram_optimization.block_swap` はこの値をそのまま反映する。
 
 ### 11.4 generation_presets
@@ -2146,7 +2146,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | **block-swap** | transformer のブロックを GPU 常駐（既定 8）とし残りを退避、重み VRAM を削る手法。 |
 | **te-offload**（`--te-offload`） | Gemma text-encoder を逐次 per-layer で CPU オフロードし encode ピーク VRAM を下げる（既定 ON・§9）。 |
 | **dit-cpu-load**（`--dit-cpu-load`） | DiT(transformer) を CPU で構築しブロックのみ GPU へストリーム。ロード時の ~16.9GB GPU スパイクを除去（既定 ON・§9）。 |
-| **component-files** | VAE / audio / text-projection を 46GB モノリスでなく小単体 safetensors から読む経路（`use_component_files: true`）。マルチジョブの commit 枯渇を防ぐ。 |
+| **component-files** | VAE / audio / text-projection を 46GB モノリスでなく小単体 safetensors から読む経路（常にこの経路で、切り替える設定は無い）。マルチジョブの commit 枯渇を防ぐ。 |
 | **43GB モノリス / 46GB モノリス** | **同一の 1 ファイル** `ltx-2.3-22b-distilled-1.1.safetensors`（実測 46,139,885,414 B＝46.1GB＝42.97GiB）。本書は箇所により両方の表記を使うが指すものは同じで、どちらも誤りではない（§5.2 の表記注記・`README.md` §1 の削除済みブロック注記）。物理削除済で、旧参照パス`checkpoint_path`も2026-07-28に`config.model`から削除済み（現在は`services/engines/ltx/adapter.py`がworker payloadへ直値`""`をハードコード）。 |
 | **spill / spill-free** | 生成が dedicated 16GB を超えて system RAM（shared）へ溢れること。溢れると ~2-4x 低速化（OOM はしない）。溢れない上限が spill-free frames。 |
 | **commit** | Windows の仮想メモリ予約（物理 RAM + ページファイル）。ディスク使用量ではない。連続生成で枯渇すると native crash しうる（component-files で束縛）。 |

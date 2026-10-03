@@ -442,11 +442,9 @@ def _do_load(msg: dict) -> None:
         # (VERIFICATION_LOG §12.1). Default ON when the env var is ABSENT;
         # LTX_DIT_CPU_LOAD=0 builds on the GPU and then evicts the blocks.
         dit_cpu_load=(os.environ.get("LTX_DIT_CPU_LOAD", "1") == "1"),
-        # Component files (gate via LTX_COMPONENT_FILES, default OFF): re-source
-        # VIDEO VAE + AUDIO VAE/vocoder from standalone files, and hand the text
-        # projection path to the Gemma install (see
-        # LTXFastVideoPipeline.__init__).
-        use_component_files=(os.environ.get("LTX_COMPONENT_FILES", "0") == "1"),
+        # Component files (always used): re-source VIDEO VAE + AUDIO VAE/vocoder
+        # from standalone files, and hand the text projection path to the Gemma
+        # install (see LTXFastVideoPipeline.__init__).
         component_video_vae_path=msg.get("component_video_vae_path", ""),
         component_audio_vae_path=msg.get("component_audio_vae_path", ""),
         component_text_projection_path=msg.get("component_text_projection_path", ""),

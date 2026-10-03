@@ -1,9 +1,9 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-03（第4弾: CLOSED 3-197〜3-206・§1-52の更新・§1-77起票）。前回 2026-10-03: 第3弾: CLOSED 3-193〜3-196。
+- 作成: 2026-07-15／最終更新: 2026-10-03（第5弾: CLOSED 3-207〜3-209・§2削除・§1-40訂正・§1-78起票）。前回 2026-10-03: 第4弾: CLOSED 3-197〜3-206・§1-52の更新・§1-77起票。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-40・§1-41・§1-52・§1-60・§1-77 が立っている。**
-  2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**2026-10-02に §2-1・§2-2 として立て直した（元は §1-43・§1-56）。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-40・§1-41・§1-52・§1-77・§1-78 が立っている。**
+  2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
 - **完了してクローズした項目は本書に残さず、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移す。** 本書の「3.」と同書の「3.」は別物なので、**参照するときは番号だけで書かず、必ずファイル名を添えること**。
@@ -33,13 +33,13 @@
 
 ### 1-40. 撮り直し（Retake）の窓のタイル予算が広い Stage-2 窓で未計測（起票：2026-10-01）
 
-- **現象**: `engine25/chain25.py` の `RETAKE_ENCODE_TILE_AREA_BUDGET`（撮り直しの窓を符号化するときの空間タイルの面積上限・448×384）は、実測が撮り直しの窓 73・121・169 フレーム（`standard` のStage-2 窓で許される上限）までしかない。一方 `chain_math.py` の `retake_max_window_px(v_tile)` は、より広い Stage-2 窓（`stage2_window="w61"`）を選ぶと撮り直しの窓を `8 * v_tile - 7` で計算し、481 フレームまで許す。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.5 の2つ目の表では、同じタイル設定のまま 121→169 フレームで予約ピークが 8,182→13,926 MB に増えている。**この先481フレームまで伸ばしたときに16 GiBのカードへ収まるかどうかは、全くの未測ではない**——w61・481フレーム・1152×576の撮り直しは[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.7の5で1回完走している（`peak_vram_mb` 12,169）。ただし予約ピーク（`peak_vram_reserved_mb`）の記録と、1280×768での実測は無い。
+- **現象**: `engine25/chain25.py` の `RETAKE_ENCODE_TILE_AREA_BUDGET`（撮り直しの窓を符号化するときの空間タイルの面積上限・448×384）は、実測が撮り直しの窓 73・121・169 フレーム（`standard` のStage-2 窓で許される上限）までしかない。一方 `chain_math.py` の `retake_max_window_px(v_tile)` は、より広い Stage-2 窓（`stage2_window="w61"`）を選ぶと撮り直しの窓を `8 * v_tile - 7` で計算し、481 フレームまで許す。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.5 の2つ目の表では、同じタイル設定のまま 121→169 フレームで予約ピークが 8,182→13,926 MB に増えている。LTX 2.5 の 169 超は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145 で 8 点（169〜481・1280×768・w61）を実測済み——符号化区間の予約ピークは 13,958〜13,980 MiB でほぼ一定、481 でも装置の 16,376 MiB に収まる。ジョブ全体のピークは 361 以上で stage-2 の退避に埋もれる。
 - **影響**: 広い Stage-2 窓を選んだ上で長い撮り直しの窓を指定したときだけ発生する。
 - **選択肢**（オーナー判断・優劣はつけない）:
   - A: 広い窓での撮り直しを実測し、タイル予算を較正し直す。
   - B: 予算を窓の長さに応じて段階化する。
   - C: 撮り直しの窓の上限を `standard` 相当（169フレーム）に戻す。
-- **着手**: 着手時は go／no-go の検討から始める。
+- **着手**: 残るのは A／B／C の選択（オーナー判断）。材料は §145。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.5・§133（申し送り）。
 - **関連ファイル**: `engine25/chain25.py`（`RETAKE_ENCODE_TILE_AREA_BUDGET`・`_retake_encode_tiling`）、`chain_math.py`（`retake_max_window_px`・`resolve_stage2_window`）。
 
@@ -65,21 +65,6 @@
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
 - **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`_install_gguf`・`_set_ic_job`・`_ic_loras`）、`engine/gguf/loader_service.py`（`GGUFLoaderService`）、`engine/gguf/quant_service.py`（`GGUFQuantLoaderService`）。
 
-### 1-60. `embed_cpu_offload` が `install` で固定され、通らない枝が残る（起票：2026-10-01）
-
-- **現象**: `engine/gemma/gguf_quant_service.py` の `GemmaGGUFQuantLoaderService.install` は `GemmaGGUFQuantStateDictLoader` を組み立てるとき `embed_cpu_offload=True` を固定で渡す。このため次の枝が製品の経路では通らない。
-  - `load` の「4. Overlay」にある、lm_headをembed_tokensへ結び直す枝（`embed_key in merged and _LTX_LM_HEAD_KEY not in merged`）。`embed_cpu_offload=True` のときは直前でGGUF側のembed_tokensを `gguf_sd` から取り除き済みのため、この条件は常に偽になる（結び直しは別途 `_install_cpu_embed_offload` がCPU上で行う）。
-  - `_load_gguf_gemma` にある、埋め込みをGPUへ移す枝（`target_device.type != "cpu" and not self.embed_cpu_offload`）。
-  - `_patch_gemma_skip_full_logits` が包む `Gemma3ForCausalLM.forward`（`GemmaTextEncoder.model.forward`）も、ビルド後に `_install_cpu_embed_offload` が同じ `forward` を丸ごと `_cpu_embed_forward` へ差し替えるため実質効いていない。ただし `_cpu_embed_forward` 自身が引数 `logits_to_keep` の既定を1に持つため、結果（最後のトークンだけlogitsを計算する）は同じになる。
-  - あわせて、`connector_gguf_path=None` の経路（`component_text_projection_path`・`connector_gguf_path` のどちらかが無いときに通る、モノリスを `model_path` に残したままの経路）も、モノリス（`ltx-2.3-22b-distilled-1.1.safetensors`）が物理削除済み（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §13.3）のため実際には動かない。アダプタは `checkpoint_path` に固定で空文字を入れる（`services/engines/ltx/adapter.py` の `checkpoint_path = ""`）。**この(4)は設定 `vram.use_component_files` から到達する設定上の判断である。`config.py` の既定が `True` になったため、既定からはこの経路に到達しない——明示的に `config.yaml` へ `use_component_files: false` を書いた場合だけ残る（`config.yaml.example` に「`false` は動かない構成」と注記済み）。(1)〜(3) のようなコード上だけで閉じた到達不能とは性質が違う。**
-- **影響**: 無い（通らない枝が残っているだけで、動作には影響しない）。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: `embed_cpu_offload` を固定値の前提で外し、通らない枝を消す。
-  - B: 引数を残し、現状を維持する。
-- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。**(1)〜(3) はテストの無い GPU 経路（Gemma GGUF の読み込み）なので、消した後に実機で1本流して出力が変わらないことを確かめるのが安全である。(4) の鍵（`use_component_files`）と偽の経路を撤去する場合も、同じ実機1本の確認とまとめて行う。**
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §136（申し送り）。
-- **関連ファイル**: `engine/gemma/gguf_quant_service.py`（`GemmaGGUFQuantLoaderService.install`・`GemmaGGUFQuantStateDictLoader.load`・`_load_gguf_gemma`・`_patch_gemma_skip_full_logits`・`_install_cpu_embed_offload`）。
-
 ### 1-77. 操作パネルの解放ボタンが、モデルの読み込み中に押すと固定文言「パイプラインの解放に失敗しました。」を出す（起票：2026-10-03）
 
 - **現象**: サーバーは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-206 で読み込み中の `POST /pipeline/unload` に 409 `PIPELINE_LOADING`（detail は日本語の案内）を返すが、操作パネル `webui/src/shell/useDangerZone.ts`（82〜90 行付近）は `JOB_BUSY` だけを特別扱いし、それ以外は `DangerZonePanel.tsx`（46〜48 行付近）で汎用の `strings.settings.unloadError` の固定文言（「パイプラインの解放に失敗しました。」）になる（画面は固まらず、再試行もしない）。load 側は `useBaseModels.ts` で `PIPELINE_LOADING` を「読み込み中」として扱っている。モック `bridge/mockBridge.ts` の `handlePipelineUnload`（1408〜1416 行付近）は `JOB_BUSY` しか返さない。
@@ -92,27 +77,16 @@
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144（第4弾 Part 2 の敵対的レビュー）。
 - **関連ファイル**: `webui/src/shell/useDangerZone.ts`、`DangerZonePanel.tsx`、`useBaseModels.ts`、`bridge/mockBridge.ts`（`handlePipelineUnload`）、`i18n/strings.ts`。
 
----
+### 1-78. `fast_video_pipeline.py` の `if gguf_gemma_path:` は常に真（起票：2026-10-03）
 
-## 2. 実装済み・ユーザーのテスト待ち
-
-実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。全項目が合格して空になったら、本節は見出しごと削除する。
-
-### 2-1. LTX 2.5 の `done` イベントから最上位 `phases` を除去（元は §1-43）
-
-実装済み。実機での確認待ち。
-
-- [ ] LTX 2.5 の単発ジョブを生成し、`done` イベントに最上位の `phases` キーが無く `ltx25.phases` にのみ段階ごとの表があること、`metadata.json` の形に変化が無いことを確認する → 変化が無ければ合格。
-- [ ] LTX 2.5 の連結（Chained）ジョブを生成し、同様に `done` に最上位の `phases` が無く `chain.ltx25.phases` にのみ表があること、`metadata.json` の形に変化が無いことを確認する → 変化が無ければ合格。
-
-### 2-2. VRAM ピークに参照 encode より前の値を反映（元は §1-56）
-
-実装済み。実機での確認待ち。
-
-- [ ] IC-LoRA の参照動画つき単発ジョブを生成し、`metadata.json` の `peak_vram_mb`／`peak_vram_reserved_mb` が参照 encode より前のピークを含んでいること（生成ログの「job peak before this interval」の行と突き合わせる）を確認する → 一致すれば合格。
-- [ ] IC-LoRA の参照動画つき連結（Chained）ジョブを生成し、同様に `chain.vram_peak_mb` が参照 encode より前のピークを含んでいることを確認する → 一致すれば合格。
-
-**残課題**: `run_chain`／`run_outpaint`／`run_inpaint` の先頭のリセットは持ち越していない（連結ジョブの前処理〔深度・ポーズ〕のピークは含まない）。連結の経路には自動テストが無い（単体テストは単発の経路のみ）。
+- **現象**: `engine/pipeline/fast_video_pipeline.py` の `if gguf_gemma_path:` は、fail-fast の検査が `gguf_gemma_path` を必須にしているため常に真になる。
+- **影響**: 無い。
+- **選択肢**（オーナー判断・優劣はつけない）:
+  - A: 条件を外し、`gguf_gemma_path` が常に真であることを前提にしたコードへ整理する。
+  - B: 現状を維持する。
+- **着手**: 着手時は go／no-go の検討から始める（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-207 と同じ性質の小さな引き算）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145（§1-60 の実装時の敵対的レビューで検出。G8 の比較を濁さないよう今回は残した）。
+- **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`__init__` の Gemma の取り付け）。
 
 ---
 

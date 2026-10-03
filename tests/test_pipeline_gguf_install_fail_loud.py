@@ -26,7 +26,13 @@ def test_gemma_gguf_install_failure_is_raised(monkeypatch):
     monkeypatch.setattr(gemma_gqs.GemmaGGUFQuantLoaderService, "install", _boom)
     fake_self = types.SimpleNamespace(pipeline=types.SimpleNamespace(model_ledger=types.SimpleNamespace()))
     with pytest.raises(RuntimeError, match="corrupt gemma gguf"):
-        LTXFastVideoPipeline._install_gemma_gguf(fake_self, "missing.gguf", gemma_tokenizer_root=None)
+        LTXFastVideoPipeline._install_gemma_gguf(
+            fake_self,
+            "missing.gguf",
+            component_text_projection_path="missing-projection.safetensors",
+            connector_gguf_path="missing-transformer.gguf",
+            gemma_tokenizer_root=None,
+        )
     assert not hasattr(fake_self, "_gemma_gguf_service")
 
 

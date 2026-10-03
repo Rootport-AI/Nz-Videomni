@@ -32,15 +32,15 @@
 
 ### コンポーネント（VAE/音声）の実配線 — カテゴリ設計の根拠
 
-`engine/pipeline/fast_video_pipeline.py:292-376 _install_component_sources` を精読した結果:
+`engine/pipeline/fast_video_pipeline.py` の `LTXFastVideoPipeline._install_component_sources`（`__init__` から無条件に呼ばれる）を精読した結果:
 
 - **video_vae** = `component_video_vae_path`（1ファイル `LTX23_video_vae_bf16.safetensors`）→ `vae_decoder_builder` + `vae_encoder_builder` の両方を再ソース。
 - **audio 系** = `component_audio_vae_path`（1ファイル `LTX23_audio_vae_bf16.safetensors`）→ `audio_decoder_builder` + `audio_encoder_builder` + **`vocoder_builder`** の**3つすべて**が同一ファイルから来る。
 
 → **確定: 「音声 VAE + vocoder」は単一ファイル＝単一エントリ**として1カテゴリ `audio` に括る。ワークオーダーが言う「音声 VAE＋vocoder（別重み）」は物理的に1ファイルなのでドロップダウン1個で正しい。
 
-- コンポーネント経路は `vram.use_component_files` で gate。`config.yaml:82` で `true`（=comp=1 既定）なので **video_vae/audio の差し替えは既定で有効**。
-- text projection（`component_text_projection_path`）は Phase 2 の connector で、transformer GGUF と結合（`fast_video_pipeline.py:225-238`）。**独立に差し替えられない**ため今回のドロップダウン対象外（§9 決定事項3）。
+- コンポーネント経路（部品ファイルからの読み込み）は常に使われ、切り替える設定は無い。したがって **video_vae/audio の差し替えは常に有効**。
+- text projection（`component_text_projection_path`）は Phase 2 の connector で、transformer GGUF と結合（`LTXFastVideoPipeline._install_gemma_gguf`。`LTXFastVideoPipeline.__init__` から projection ファイルと transformer ファイルの両方を渡して呼ばれる）。**独立に差し替えられない**ため今回のドロップダウン対象外（§9 決定事項3）。
 
 ### 4カテゴリと payload フィールドの対応（確定）
 

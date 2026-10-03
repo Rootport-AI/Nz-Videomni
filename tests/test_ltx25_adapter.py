@@ -3268,7 +3268,7 @@ def test_child_env_carries_no_2_3_engine_knobs(ltx25_paths, tmp_path):
     ltx23_env = ltx23._RealBackend(cfg, build_low_vram_settings(cfg), descriptor)._build_child_env(
         tmp_path
     )
-    assert {"LTX_COMPONENT_FILES", "LTX_TE_OFFLOAD", "LTX_DIT_CPU_LOAD"} <= set(ltx23_env)
+    assert {"LTX_TE_OFFLOAD", "LTX_DIT_CPU_LOAD"} <= set(ltx23_env)
 
 
 def test_sage_availability_delegates_to_the_base_probe_on_the_2_5_venv(tmp_path):

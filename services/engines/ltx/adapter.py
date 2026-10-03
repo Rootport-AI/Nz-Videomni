@@ -1823,11 +1823,9 @@ class _RealBackend:
         # SELECTION_FIELDS and the descriptor's category set meaningful — a
         # category missing from the mapping cannot reach the worker at all.
         # Component-file re-sourcing (video/audio VAE) rides the same route:
-        # with ``vram.use_component_files`` on (both the ``VramConfig`` default
-        # in config.py and the shipped config.yaml.example set it on; off does
-        # not work, since checkpoint_path is always ""), the standalone files
-        # replace the monolith, so they are load-bearing and always validated
-        # for existence.
+        # the standalone files always replace the monolith (checkpoint_path is
+        # always ""), so they are load-bearing and always validated for
+        # existence.
         swapped = {
             field: (
                 str(selection[category])
@@ -1864,7 +1862,8 @@ class _RealBackend:
             "upsampler_path": upsampler_path,
             "gguf_transformer_path": swapped["gguf_transformer_path"],
             "gguf_gemma_path": swapped["gguf_gemma_path"],
-            # Component-file paths (gated by the LTX_COMPONENT_FILES env).
+            # Component-file paths (always used; the pipeline build fails when
+            # the video/audio VAE or text-projection path is empty).
             "component_video_vae_path": swapped["component_video_vae_path"],
             "component_audio_vae_path": swapped["component_audio_vae_path"],
             "component_text_projection_path": component_text_projection_path,
@@ -1905,8 +1904,6 @@ class _RealBackend:
         env["PYTHONUNBUFFERED"] = "1"
         env.pop("PYTHONPATH", None)
         env["PYTHONPATH"] = str(project_root)
-        # Component-file gate: the worker reads LTX_COMPONENT_FILES.
-        env["LTX_COMPONENT_FILES"] = "1" if bool(self.config.vram.use_component_files) else "0"
         # Keep-resident weights are a PER-JOB request field
         # (``GenerateRequest.keep_resident``) carried on the generate payload,
         # not an env var, so there is exactly one source of truth and the

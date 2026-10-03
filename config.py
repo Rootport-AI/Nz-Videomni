@@ -196,16 +196,6 @@ class VramConfig(BaseModel):
     # fit 16GB at small resolutions). Consumed by the subprocess worker.
     vae_spatial_tile_size: int = 0
     vae_temporal_tile_size: int = 0
-    # Re-source the video VAE and audio VAE/vocoder from the base model's
-    # standalone component files instead of the monolithic checkpoint; with
-    # the text-projection file present, the text encoder's projection is read
-    # from that file and its connectors from the transformer file as well.
-    # Read by the LTX 2.3 worker via LTX_COMPONENT_FILES
-    # (services/engines/ltx/adapter.py). On by default, the same as the shipped
-    # config.yaml.example. Off is not a working configuration: the adapter
-    # always sends checkpoint_path="" and no LTX 2.3 monolith ships, so with
-    # it off the VAE / audio builders are left with no file to load from.
-    use_component_files: bool = True
 
 
 class CropOutputPreset(BaseModel):

@@ -103,17 +103,6 @@ vram:
   vae_spatial_tile_size: 512
   vae_temporal_tile_size: 64
 
-  # VAE/audio/text-projection をモノリス（一体型の checkpoint）でなく小単体ファイルから
-  # 読む（LTX 2.3 の設定。LTX 2.5 のエンジンはこの設定を読まない）。
-  # keep_resident=0（ジョブ毎再materialize）でも commit を束縛し、マルチジョブ連続
-  # 生成の commit 枯渇 native crash を防ぐ（Docs/VERIFICATION_LOG.md §9.6 / §8）。
-  # 720p+連続生成の両立に必須。
-  # ※keep_resident はジョブごとのフィールド（POST /generate・/generate/chain の
-  #   keep_resident・既定 false。正本は api.models の KEEP_RESIDENT_DEFAULT）。
-  #   Docs/VERIFICATION_LOG.md §48。
-  # false は動かない構成（LTX 2.3 のモノリスは配布されず、アダプタは常に空のパスを送る）。
-  use_component_files: true
-
 # 生成サイズ(width/height)は必ず64の倍数(two-stage distilled)。最終表示サイズは crop_output で。
 generation_presets:
   smoke_test:

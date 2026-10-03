@@ -625,7 +625,7 @@ class _RealBackend25(_RealBackend):
         """The engine25 worker's environment — deliberately MINIMAL.
 
         NONE of the 2.3 worker's ``LTX_*`` variables are set here. Each of them
-        (``LTX_COMPONENT_FILES``, ``LTX_TE_OFFLOAD``, ``LTX_DIT_CPU_LOAD``) names
+        (``LTX_TE_OFFLOAD``, ``LTX_DIT_CPU_LOAD``) names
         a code path inside ``engine/``; engine25 has its own offload and
         block-swap mechanics and reads none of them, so passing them would be
         decoration at best and a misleading log at worst. The 2.5 equivalents

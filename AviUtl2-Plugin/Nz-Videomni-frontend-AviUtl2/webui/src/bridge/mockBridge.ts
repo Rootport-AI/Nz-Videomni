@@ -934,6 +934,12 @@ export interface MockBridgeOptions {
    * (`MASK_BUSY`/`MASK_SEED_INVALID`/`MASK_FAILED`) each have their own
    * sentence in the panel, and everything else has to reach the generic one. */
   renderMaskVideoError?: string;
+  /** 台帳 §1-77 B: when true, this fixture server behaves as if it were still
+   * loading a model, so `POST /pipeline/unload` answers 409
+   * `PIPELINE_LOADING` (after the `JOB_BUSY` check). `handlePipelineLoad`
+   * finishes synchronously, so this flag is the only way to reproduce that
+   * state. Defaults to false. */
+  pipelineLoading?: boolean;
 }
 
 /** Contract v5 default `timeline.getSelection` snapshot — a single selected
@@ -1401,10 +1407,13 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
   /** `POST /pipeline/unload` fixture (N4 "danger zone"). Reuses
    * `handlePipelineLoad`'s active-job guard verbatim — unloading out from
    * under a running job would be just as unsafe as swapping models under it
-   * — and otherwise always reports the engine as torn down. Deliberately
-   * stateless beyond that guard (no persisted "is it actually loaded right
-   * now" flag exists in this fixture store, mirroring `handlePipelineLoad`'s
-   * own bodyless-path simplicity). */
+   * — then, when {@link MockBridgeOptions.pipelineLoading} is set, answers
+   * 409 `PIPELINE_LOADING` with the server's own message/detail (台帳 §1-77
+   * B), and otherwise always reports the engine as torn down. Stateless
+   * beyond those two guards (no persisted "is it actually loaded right now"
+   * flag exists in this fixture store — the loading state comes only from
+   * the option, mirroring `handlePipelineLoad`'s own bodyless-path
+   * simplicity). */
   function handlePipelineUnload(): ResultOf<"backend.request"> {
     if (activeJobId) {
       const active = jobs.get(activeJobId);
@@ -1414,6 +1423,19 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
           body: { error: { code: "JOB_BUSY", message: "cannot unload the pipeline while a job is running" } },
         };
       }
+    }
+
+    if (options.pipelineLoading) {
+      return {
+        status: 409,
+        body: {
+          error: {
+            code: "PIPELINE_LOADING",
+            message: "The pipeline is already loading (モデルの読み込み中です)",
+            detail: "現在モデルを読み込んでいます。完了までお待ちください。",
+          },
+        },
+      };
     }
 
     return { status: 200, body: { pipeline_loaded: false, state: "unloaded" } };

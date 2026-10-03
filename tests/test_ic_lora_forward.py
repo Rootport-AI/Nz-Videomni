@@ -3,8 +3,8 @@
 These exercise the per-layer-quant forward path (``ggml_linear_forward``) and the
 attach/detach machinery (``engine.gguf.ic_lora_common``) with synthetic tensors —
 no GPU, no real model. The delta formula is asserted byte-equal to the reference
-``matmul(B.float()*strength, A.float())`` (the same formula the bf16 fuse path
-uses, gate G2), and the no-LoRA path is asserted byte-identical to today (gate G1).
+``matmul(B.float()*strength, A.float())`` (gate G2), and the no-LoRA path is
+asserted byte-identical to today (gate G1).
 
 The full ``attach_ic_loras`` resolution test loads a tiny safetensors through the
 wheel's ``SafetensorsStateDictLoader`` + rename map, so it is skipped when the LTX

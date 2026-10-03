@@ -1,8 +1,7 @@
 """Per-layer GGUF quantization service.
 
-Unlike GGUFLoaderService (which dequantizes everything at load time → full BF16 VRAM),
-this service keeps transformer weights compressed in VRAM and dequantizes one layer at
-a time during the forward pass.
+This service keeps transformer weights compressed in VRAM (never dequantized whole at
+load time) and dequantizes one layer at a time during the forward pass.
 
 VRAM comparison for LTX-2.3 (22B parameters):
   BF16 (2 bytes/param):  ~44 GB VRAM
@@ -16,8 +15,8 @@ state dict is read, before the transformer is built.
 
 At inference: +1 layer BF16 (~100-200 MB peak overhead, freed after each matmul).
 
-Integration: identical install() interface to GGUFLoaderService — just swap in
-GGUFQuantLoaderService and per-layer dequant is enabled automatically.
+Integration: the pipeline's ``_install_gguf`` builds a GGUFQuantLoaderService and
+calls install(model_ledger); per-layer dequant is then enabled automatically.
 
 Mechanism:
 1. module_ops mutator converts nn.Linear.weight from parameter to meta buffer.
@@ -501,9 +500,8 @@ def _patch_linear_for_ggml_dequant(m: torch.nn.Linear) -> None:
         # (`specs` is None/empty) the forward is the plain no-LoRA path (dequant
         # + linear, or linear on a float weight); the only extra cost is this
         # attribute read and a skipped branch (VERIFICATION_LOG §21.3). When
-        # attached, the delta is computed in fp32 and cast ONCE; on the quantised
-        # branch this matches the bf16-fuse formula
-        # (`GGUFStateDictLoader._fuse_ic_loras`) exactly (VERIFICATION_LOG §21.4).
+        # attached, the delta (strength * B @ A) is computed in fp32 and cast ONCE
+        # onto the per-call dequant tensor (VERIFICATION_LOG §21.4).
         specs = getattr(self, _IC_LORA_SPECS_ATTR, None)
         if isinstance(w, GGMLQuantizedTensor):
             # Raw uint8 bytes (1D flat) live in the underlying storage.
@@ -571,7 +569,7 @@ def _make_ggml_quant_module_ops():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Service — same install() interface as GGUFLoaderService
+# Service — installs the per-layer loader into the ModelLedger
 # ──────────────────────────────────────────────────────────────────────────────
 
 class GGUFQuantLoaderService:
@@ -581,7 +579,7 @@ class GGUFQuantLoaderService:
     Each Linear layer dequantises its weight at forward() time and immediately frees
     the temporary BF16 tensor after the matmul.
 
-    Usage (drop-in replacement for GGUFLoaderService):
+    Usage:
         service = GGUFQuantLoaderService(gguf_path)
         service.install(model_ledger)
     """

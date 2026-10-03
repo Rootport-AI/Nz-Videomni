@@ -1,12 +1,11 @@
 """Worker-side resolution of the per-job ``keep_resident`` flag (§48).
 
 Covers ``engine.worker._resolve_keep_resident`` and its ``done``-event
-companion ``_keep_resident_used``: the missing-key default, the three guards
-(G-A fail-loud / G-B + G-C auto-off), and the used-string each case reports.
+companion ``_keep_resident_used``: the missing-key default, the two guards
+(G-B + G-C auto-off), and the used-string each case reports.
 
-``_PIPE`` is monkeypatched to a ``SimpleNamespace`` carrying just the three
-attributes the guards read (``_transformer_format`` / ``_gguf_per_layer_quant`` /
-``_dit_cpu_load``) — the
+``_PIPE`` is monkeypatched to a ``SimpleNamespace`` carrying just the one
+attribute the guards read (``_dit_cpu_load``) — the
 resolver never builds or touches a real pipeline, which is exactly why these
 guards can be pinned without a GPU or any weights.
 
@@ -28,17 +27,8 @@ pytest.importorskip("ltx_core")
 from engine import worker  # noqa: E402
 
 
-def _pipe(
-    *,
-    per_layer_quant: bool = True,
-    dit_cpu_load: bool = True,
-    transformer_format: str = "gguf",
-):
-    return types.SimpleNamespace(
-        _transformer_format=transformer_format,
-        _gguf_per_layer_quant=per_layer_quant,
-        _dit_cpu_load=dit_cpu_load,
-    )
+def _pipe(*, dit_cpu_load: bool = True):
+    return types.SimpleNamespace(_dit_cpu_load=dit_cpu_load)
 
 
 @pytest.fixture
@@ -70,37 +60,6 @@ def test_explicit_false_resolves_off(monkeypatch):
 
 
 def test_on_with_every_guard_satisfied(healthy_pipe):
-    msg = {"keep_resident": True}
-    assert worker._resolve_keep_resident(msg, True) == (True, None)
-    assert worker._keep_resident_used(msg, True) == "on"
-
-
-# ── G-A: bf16 fused-LoRA path -> fail loud ───────────────────────────────────
-
-
-def test_g_a_per_layer_quant_off_raises(monkeypatch):
-    # Correctness, not speed: the bf16 path's in-place weight.add_() would be
-    # written into the persistent cache, so every later job silently inherits
-    # this job's LoRA. Auto-off would hide a wrong-output risk behind a knob
-    # nobody reads -> RuntimeError instead.
-    monkeypatch.setattr(worker, "_PIPE", _pipe(per_layer_quant=False))
-    with pytest.raises(RuntimeError, match="gguf_per_layer_quant"):
-        worker._resolve_keep_resident({"keep_resident": True}, True)
-
-
-def test_g_a_does_not_fire_when_keep_resident_is_off(monkeypatch):
-    # The guard is on the ON path only -- a bf16-path job that never asks for
-    # keep_resident must still run.
-    monkeypatch.setattr(worker, "_PIPE", _pipe(per_layer_quant=False))
-    assert worker._resolve_keep_resident({}, True) == (False, None)
-
-
-def test_g_a_does_not_fire_for_fp8_transformer(monkeypatch):
-    # §3-167: the fp8 forward adds LoRA deltas out of place, so the per-layer
-    # flag (a GGUF-only notion) must not block keep_resident there.
-    monkeypatch.setattr(
-        worker, "_PIPE", _pipe(per_layer_quant=False, transformer_format="safetensors")
-    )
     msg = {"keep_resident": True}
     assert worker._resolve_keep_resident(msg, True) == (True, None)
     assert worker._keep_resident_used(msg, True) == "on"
@@ -172,8 +131,6 @@ class _ArmFailsPipe:
     the real entry points do, through the REAL ``_set_keep_resident_job``,
     which swallows the failure and leaves ``_keep_resident_enabled`` False."""
 
-    _transformer_format = "gguf"
-    _gguf_per_layer_quant = True
     _dit_cpu_load = True
 
     def __init__(self) -> None:

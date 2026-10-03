@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BackendApiError, createApiClient } from "../api/client";
 import { FALLBACK_APP_CONFIG } from "../modes/single/defaultConfig";
 import { createMockBridge, MOCK_CONFIG_BODY } from "./mockBridge";
 import { BridgeError } from "./types";
@@ -769,6 +770,32 @@ describe("POST /pipeline/load — base model switch", () => {
     const { error } = result.body as { error: { code: string; message: string } };
     expect(error.code).toBe("MODEL_FILE_MISSING");
     expect(error.message).toContain("'text_encoder/default'");
+  });
+});
+
+// 台帳 §1-77 B: the `pipelineLoading` option models a server that is still
+// loading a model — `POST /pipeline/unload` then answers 409 PIPELINE_LOADING,
+// but a running job's JOB_BUSY still wins (it is checked first).
+describe("POST /pipeline/unload — pipelineLoading option (§1-77)", () => {
+  it("answers 409 PIPELINE_LOADING while the fixture server is loading a model", async () => {
+    const client = createApiClient(createMockBridge({ delayMs: 0, pipelineLoading: true }));
+    const err = await client.unloadPipeline().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(BackendApiError);
+    expect((err as BackendApiError).code).toBe("PIPELINE_LOADING");
+  });
+
+  it("still answers JOB_BUSY first when a generation job is running", async () => {
+    const client = createApiClient(createMockBridge({ delayMs: 0, pipelineLoading: true }));
+    await client.generate({ prompt: "busy check", width: 512, height: 320, num_frames: 49, frame_rate: 24, seed: 1 });
+    const err = await client.unloadPipeline().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(BackendApiError);
+    expect((err as BackendApiError).code).toBe("JOB_BUSY");
   });
 });
 

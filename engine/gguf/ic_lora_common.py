@@ -1,13 +1,10 @@
-"""Shared IC-LoRA plumbing for the load-time fuse and the forward-time paths.
+"""Shared IC-LoRA plumbing for the forward-time paths.
 
-IC-LoRA adapters are applied in two ways:
-
-  * bf16 full-dequant path (``GGUFStateDictLoader._fuse_ic_loras``) — fuses the
-    delta in-place into the full BF16 state-dict at load time.
-  * forward-time paths (``quant_service.ggml_linear_forward`` for GGUF,
-    ``engine.sft_quant.quant_service._quant_linear_forward`` for quantized
-    safetensors) — keep the weights compressed in VRAM and add the delta AT
-    FORWARD TIME onto the per-call dequantised weight.
+IC-LoRA adapters are applied at FORWARD TIME by both transformer paths
+(``quant_service.ggml_linear_forward`` for the per-layer GGUF path,
+``engine.sft_quant.quant_service._quant_linear_forward`` for quantized
+safetensors): the weights stay compressed in VRAM and the delta is added onto
+the per-call dequantised weight. The stored weights are never written.
 
 Both need the SAME front half: load the LoRA safetensors through the wheel's
 ``SafetensorsStateDictLoader`` with ``LTXV_LORA_COMFY_RENAMING_MAP`` (which strips
@@ -17,20 +14,19 @@ kohya-named file, ``<prefix>.lora_down.weight`` / ``<prefix>.lora_up.weight``
 with its ``<prefix>.alpha`` folded into B — and shape-check. That reusable front
 half lives here in :func:`load_ic_lora_pairs`.
 
-The forward-time paths additionally need to attach the A/B factors to the
-target ``nn.Linear`` instances so they ride ``block.to(device)`` during
-block-swap — see :func:`attach_ic_loras` / :func:`detach_ic_loras`.
+They also need to attach the A/B factors to the target ``nn.Linear``
+instances so they ride ``block.to(device)`` during block-swap — see
+:func:`attach_ic_loras` / :func:`detach_ic_loras`.
 
-DELTA FORMULA (shared by the load-time fuse and the GGUF forward on a quantized
-weight; VERIFICATION_LOG §21.4, gate G2, matched their outputs byte for byte):
+DELTA FORMULA (the GGUF forward on a quantized weight; VERIFICATION_LOG §21.4):
     delta = torch.matmul(B.float() * strength, A.float())          # fp32 matmul
     weight_bf16 += delta.to(weight_bf16.dtype)                     # single cast, in-place add
-The GGUF forward recomputes this every call onto the transient dequant tensor;
-the load-time path does it once onto the persisted BF16 weight. Same math, same
-operation order — do not "optimise" it (a bf16 intermediate or a different
-strength fold would break that match). The float-weight branch of the GGUF
-forward and the safetensors forward add the delta out of place instead, so the
-stored weight is never written.
+The GGUF forward recomputes this every call onto the transient dequant tensor,
+so the in-place add never touches the compressed bytes. Keep the math and the
+operation order as they are — a bf16 intermediate or a different strength fold
+would change the output. The float-weight branch of the GGUF forward and the
+safetensors forward add the delta out of place instead, so the stored weight is
+never written.
 """
 
 from __future__ import annotations
@@ -319,7 +315,7 @@ def attach_ic_loras(
             module = modules_by_name.get(prefix)
             if not isinstance(module, nn.Linear):
                 # Prefix has no Linear counterpart (e.g. non-target key). Skip —
-                # counted via the 0-resolved WARN below, mirroring the bf16 path.
+                # counted via the 0-resolved WARN below.
                 continue
             n_resolved += 1
             out_features = module.out_features

@@ -82,7 +82,6 @@ class LTXFastVideoPipeline:
         block_swap_blocks_on_gpu: int = 0,
         use_fp8_transformer: bool = False,
         gguf_transformer_path: str = "",
-        gguf_per_layer_quant: bool = True,
         vae_spatial_tile_size: int = 0,
         vae_temporal_tile_size: int = 0,
         gguf_gemma_path: str = "",
@@ -108,7 +107,6 @@ class LTXFastVideoPipeline:
             block_swap_blocks_on_gpu=block_swap_blocks_on_gpu,
             use_fp8_transformer=use_fp8_transformer,
             gguf_transformer_path=gguf_transformer_path,
-            gguf_per_layer_quant=gguf_per_layer_quant,
             vae_spatial_tile_size=vae_spatial_tile_size,
             vae_temporal_tile_size=vae_temporal_tile_size,
             gguf_gemma_path=gguf_gemma_path,
@@ -135,7 +133,6 @@ class LTXFastVideoPipeline:
         block_swap_blocks_on_gpu: int = 0,
         use_fp8_transformer: bool = False,
         gguf_transformer_path: str = "",
-        gguf_per_layer_quant: bool = True,
         vae_spatial_tile_size: int = 0,
         vae_temporal_tile_size: int = 0,
         gguf_gemma_path: str = "",
@@ -157,11 +154,10 @@ class LTXFastVideoPipeline:
 
         # ── IC-LoRA state (all inert by default) ──────────────────────────────
         # ic_loras: (safetensors_path, strength, audio_strength) LoRAs applied
-        #   to the base transformer. The GGUF bf16 path
-        #   (gguf_per_layer_quant=False) fuses the create-time LoRAs into the
-        #   full BF16 state-dict at load; the GGUF per-layer-quant path
-        #   (GGUFQuantLoaderService + ggml_linear_forward) and the quantized
-        #   safetensors path add them at FORWARD time. audio_strength is None
+        #   to the base transformer. Both transformer paths -- the GGUF
+        #   per-layer-quant path (GGUFQuantLoaderService + ggml_linear_forward)
+        #   and the quantized safetensors path -- add them at FORWARD time,
+        #   reading the live job's list on every build. audio_strength is None
         #   unless the caller opts in (see
         #   engine.gguf.ic_lora_common.IcLoraEntry).
         # ic_reference: (reference_video_path, strength) appended as a
@@ -285,15 +281,11 @@ class LTXFastVideoPipeline:
                 f"got both gguf_transformer_path={gguf_transformer_path!r} and "
                 f"safetensors_transformer_path={safetensors_transformer_path!r}"
             )
-        # Which transformer path this pipeline was built with ("gguf" | "safetensors").
-        # Read by the worker's keep_resident guard.
-        self._transformer_format = "safetensors" if safetensors_transformer_path else "gguf"
 
         # Transformer device defaults to primary device if not set.
         self._transformer_device = transformer_device or device
         self._block_swap_blocks_on_gpu = block_swap_blocks_on_gpu
         self._gguf_transformer_path = gguf_transformer_path
-        self._gguf_per_layer_quant = gguf_per_layer_quant
         self._vae_spatial_tile_size = vae_spatial_tile_size
         self._vae_temporal_tile_size = vae_temporal_tile_size
         # PrunaVAED（枝刈り版の映像VAEデコーダ、約690MB）の置き場所。空文字＝
@@ -345,11 +337,7 @@ class LTXFastVideoPipeline:
 
         # ── Install GGUF loader (replaces transformer weights source) ──
         if gguf_transformer_path:
-            self._install_gguf(
-                gguf_transformer_path,
-                per_layer_quant=gguf_per_layer_quant,
-                ic_loras=self._ic_loras,
-            )
+            self._install_gguf(gguf_transformer_path)
         # ── quantized (fp8 / int8) safetensors transformer. NOT wrapped in try/except
         # (the GGUF installs are not either): a rejected or broken file must fail
         # the load, never fall back.
@@ -359,20 +347,20 @@ class LTXFastVideoPipeline:
         # ── Install Gemma GGUF text encoder (keep 24GB bf16 Gemma compressed on GPU) ──
         # GGUF keeps Gemma quantized in VRAM (~7.3GB Q4_K_M) with per-layer dequant —
         # fits the 16GB card. This is the only text-encoder path.
-        if gguf_gemma_path:
-            # Re-source the Gemma text encoder's non-Gemma monolith survivors off
-            # standalone files so the bf16 monolith is not opened by ANY builder:
-            # aggregate_embed from the projection file (replaces the monolith in
-            # model_path) and the 258 connectors injected from the transformer file
-            # (GGUF or quantized (fp8 / int8) safetensors). Both are guaranteed by the
-            # fail-fast check above.
-            self._install_gemma_gguf(
-                gguf_gemma_path,
-                component_text_projection_path=component_text_projection_path,
-                connector_gguf_path=gguf_transformer_path or safetensors_transformer_path,
-                gemma_tokenizer_root=self._gemma_tokenizer_root,
-                te_offload=self._te_offload_text_encoder,
-            )
+        # Re-source the Gemma text encoder's non-Gemma monolith survivors off
+        # standalone files so the bf16 monolith is not opened by ANY builder:
+        # aggregate_embed from the projection file (replaces the monolith in
+        # model_path) and the 258 connectors injected from the transformer file
+        # (GGUF or quantized (fp8 / int8) safetensors). The fail-fast check above
+        # guarantees all three sources (gguf_gemma_path, the projection file and
+        # one transformer file), so no guard is needed here.
+        self._install_gemma_gguf(
+            gguf_gemma_path,
+            component_text_projection_path=component_text_projection_path,
+            connector_gguf_path=gguf_transformer_path or safetensors_transformer_path,
+            gemma_tokenizer_root=self._gemma_tokenizer_root,
+            te_offload=self._te_offload_text_encoder,
+        )
 
         # ── Install block swapping ──
         if block_swap_blocks_on_gpu > 0:
@@ -937,47 +925,29 @@ class LTXFastVideoPipeline:
             video_vae_path, audio_vae_path,
         )
 
-    def _install_gguf(
-        self,
-        gguf_path: str,
-        per_layer_quant: bool = True,
-        ic_loras: list[IcLoraEntry] | None = None,
-    ) -> None:
+    def _install_gguf(self, gguf_path: str) -> None:
         # NOT wrapped in try/except: a failed install must fail the load. There
         # is nothing to fall back to — in production ``checkpoint_path`` is
         # empty, so no safetensors transformer build exists.
-        ic_loras = list(ic_loras or [])
-        if per_layer_quant:
-            # The per-layer-quant path applies IC-LoRA at FORWARD
-            # time (ggml_linear_forward adds the fp32 delta onto the fresh
-            # per-call dequant tensor). We hand the service a provider that
-            # returns the CURRENT job's adapters (self._ic_loras), read on
-            # every transformer build — so LoRAs can change per generate()
-            # without mutating any compressed/cached bytes.
-            from engine.gguf.quant_service import GGUFQuantLoaderService
-            service = GGUFQuantLoaderService(
-                gguf_path=gguf_path,
-                ic_loras_provider=lambda: self._ic_loras,
-            )
-            service.install(self.pipeline.model_ledger)
-            self._gguf_service = service
-            import logging
-            logging.getLogger(__name__).info(
-                "GGUF per-layer quant installed: weights stay compressed "
-                "(in VRAM, or on the CPU side under block swap) (%s); IC-LoRA "
-                "applied at forward time (per-job)", gguf_path
-            )
-        else:
-            from engine.gguf.loader_service import GGUFLoaderService
-            service = GGUFLoaderService(gguf_path=gguf_path, ic_loras=ic_loras)
-            service.install(self.pipeline.model_ledger)
-            self._gguf_service = service
-            import logging
-            logging.getLogger(__name__).info(
-                "GGUF load-time dequant installed (full BF16 in VRAM): %s%s",
-                gguf_path,
-                f" + {len(ic_loras)} IC-LoRA(s)" if ic_loras else "",
-            )
+        # The per-layer-quant path applies IC-LoRA at FORWARD
+        # time (ggml_linear_forward adds the fp32 delta onto the fresh
+        # per-call dequant tensor). We hand the service a provider that
+        # returns the CURRENT job's adapters (self._ic_loras), read on
+        # every transformer build — so LoRAs can change per generate()
+        # without mutating any compressed/cached bytes.
+        from engine.gguf.quant_service import GGUFQuantLoaderService
+        service = GGUFQuantLoaderService(
+            gguf_path=gguf_path,
+            ic_loras_provider=lambda: self._ic_loras,
+        )
+        service.install(self.pipeline.model_ledger)
+        self._gguf_service = service
+        import logging
+        logging.getLogger(__name__).info(
+            "GGUF per-layer quant installed: weights stay compressed "
+            "(in VRAM, or on the CPU side under block swap) (%s); IC-LoRA "
+            "applied at forward time (per-job)", gguf_path
+        )
 
     def _install_safetensors(self, path: str) -> None:
         """Install a quantized (fp8 / int8) safetensors transformer.
@@ -1072,9 +1042,9 @@ class LTXFastVideoPipeline:
             # kernels: unlike sage/prefetch — whose per-job request has to be
             # re-applied to each freshly built service instance — that state
             # lives in dequant_triton's MODULE globals, which the transformer
-            # rebuild does not touch. The GGUF weights are dequantized DURING
-            # this build, i.e. after _set_fused_dequant_job armed the flag at
-            # the entry point, so the build itself is already covered.)
+            # rebuild does not touch. The GGUF weights are dequantized in the
+            # forward passes, i.e. after _set_fused_dequant_job armed the flag
+            # at the entry point, so they are already covered.)
             # Wrap model_ledger.transformer() persistently so block swap is
             # re-installed on every build (model_ledger never caches the model).
             original_transformer = self.pipeline.model_ledger.transformer
@@ -1857,8 +1827,8 @@ class LTXFastVideoPipeline:
         # Fused Triton GGUF dequantization, armed alongside prefetch for the same
         # reason (no ordering constraint, and its reset lives in the finally
         # below). Must be armed BEFORE the try, because the GGUF dequantization
-        # it governs (at the transformer build, or in the forward passes on the
-        # per-layer-quant path) happens inside it.
+        # it governs (in the forward passes on the per-layer-quant path) happens
+        # inside it.
         self._set_fused_dequant_job(fused_gguf_dequant_kernel)
         # keep_resident: ``None`` = 触らない（現在の状態を維持）。ワーカーは
         # 常に明示的な bool を渡すが、outputs/ 配下のスパイクスクリプトは

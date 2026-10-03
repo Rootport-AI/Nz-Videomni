@@ -15635,3 +15635,165 @@ CLOSED は `Docs/PENDING_TASKS_CLOSED.md` §3-197〜§3-206（§1-37・42・46�
 **申し送り**（次へ）: (1) 第 6 弾 G: §1-31・33・40（A／B／C の選択。材料は本節の表）・41・52（bf16 経路の削除判断と一緒に）。§1-77（操作パネルの解放ボタンの表示）と §1-78（`if gguf_gemma_path:`）は小さい別件。(2) 記録のみ: `load_pipeline(base_model=…)` はベースモデルを切り替えると前の選択を持ち越さない（設計どおり。MCP で検証するときは `models=` を明示するか、終わりに元へ戻す）。取り消したジョブの `metadata.json` の `status` は `completed` のまま・MCP の `get_job_video_path` は `exists: true` と注意書きを返す（単発も同じ。実害は無い）。§2-2 の連結はセグメント間でピークを持ち越さない（既知の残課題のまま）。§78.5 の表の半解像度「448×320」に対し、今回のワーカーログはタイル設定の行が窓ごとに 1 行だけで、コードは 1 つのタイル設定（448×384）を半解像度と全解像度の両方に渡している（事実。食い違いの理由は確かめていない）。
 
 実機の原本（判定表・metadata・MD5・計測の表）はリポジトリの外（`ledger-work/stage5/`。git 管理外）に置いています。
+
+## 146. ★台帳 §1 の消化・第 6 弾「G 単独テーマ」＝ §1-52 bf16 経路の削除（選択肢 C・消す前後のストリーム MD5 一致）・§1-78・§1-40（コード不変で決着）・§1-41（§4 へ・docstring 訂正）・§1-77（操作パネル B・デプロイ・目視合格）・§1-31 の棚卸し（第 7 弾の材料）・§1-33 の棚卸しと No-go（候補は §3-53 へ）・CLOSED 5 件（3-210〜3-214）・仕様書 v0.5.83（2026-10-03）
+
+**要約**: 台帳 `Docs/PENDING_TASKS.md` §1 の消化・第 6 弾として、計画 `radiant-wondering-melody.md`（オーナー決定: §1-52 は選択肢 C・§1-77 は選択肢 B・§1-40 はコード不変で閉じる・§1-41 は §4 へ・§1-31 と §1-33 は棚卸しまで）に基づき、GPU 実機の同時使用を要さない「G 単独テーマ」を処理した。工程 1 ではファイルの重ならない範囲で並行 4 体の Opus が作業し、U1（バックエンド）が §1-52（bf16 経路 `gguf_per_layer_quant=False` の全削除）・§1-78（`if gguf_gemma_path:` の引き算）・§1-40（`chain25.py` のコメントへ §145 への誘導 1 行）・§1-41（`_retake_encode_tiling` の docstring 訂正）を実装し、U2（操作パネル）が §1-77（選択肢 B・`pipelineLoading` 状態の追加）を実装した。並行して I1 が台帳 §1-31（快適上限のマニフェスト一本化）、I2 が台帳 §1-33（int8 ConvRot の高速化）の読み取り専用の棚卸しを行い、GPU もコードの変更も行わずに判断材料をまとめた。工程 2 の敵対的レビュー（Opus 1 体・サブエージェント起動なし・U1＋U2 の差分）は直すべき 2・注意 1・参考 6 と判定し、採用 4 件（コメント 2 箇所・§1-40 の段落の言い回し・`client.ts` の行の折り返し）を反映した。工程 3 ではオーナーが `run.bat` でサーバーを起こし直し（13:22・新コード）、§1-52 の実機確認（job `d9da7260…`）で、第 5 弾 G1 と映像・音声のストリーム MD5 が完全に一致することを確かめ、続けて監督が `build.ps1`→`deploy.ps1` で操作パネルをビルド・デプロイし、実機と配布用の両方の aux2 に新しい日本語文言「モデルの読み込み中はパイプラインを解放できません」が入っていることを `grep -a` で確認、オーナーが目視で合格と判定した（2026-10-03）。工程 4 では §1-33 の Go／No-go をオーナーが I2 の棚卸しの表を見て判断し、**No-go（単独テーマとしては閉じる）**とした。理由は int8 ConvRot の固定分（回転の計算にかかる余分な時間）が生成全体の 3〜4% で、fp8 との体験差が小さいため。高速化候補のうち唯一「小さく・精度を落とさず」成り立つ候補 B（整数のまま回転してから倍率を掛ける）は、台帳 §3-53（ConvRot 高速化の候補の親項目）の下に 1 行、`Docs/ACCELERATION_RESEARCH_NOTES.md` の未着手の候補 (8) として記録した。台帳は CLOSED 5 件（3-210〜3-214）、§1-41 を §4 へ移し、§1-31 だけが台帳 §1 に残った（棚卸し済み・設計と実装は第 7 弾）。仕様書は v0.5.83。
+
+**目的**: 第 1〜5 弾（main merge `db4b631`）に続き、台帳 §1 の残り 7 件（§1-31・33・40・41・52・77・78）のうち、GPU 実機を必要とせず単独で決着できる項目（§1-52・§1-78・§1-40・§1-41・§1-77）と、第 7 弾（§1-31 の設計）・将来（§1-33 の Go／No-go 後）の材料となる読み取り専用の棚卸し 2 件（§1-31・§1-33）を処理する。
+
+**対象**: `Nz-Videomni` リポジトリ（dev）。起点 HEAD `5e22356`（main `db4b631` と同内容）。本節の時点では作業ツリーの未コミットの差分（25 ファイル・+223／−555）として存在する: `Videomni_Backend_Specification.md`・`Docs/MULTI_ENGINE_DESIGN.md`・`config.py`・`engine/gguf/ic_lora_common.py`・`engine/gguf/loader_service.py`（削除）・`engine/gguf/quant_service.py`・`engine/pipeline/fast_video_pipeline.py`・`engine/worker.py`・`engine25/chain25.py`・`engine25/pipeline25.py`・`mcp_server/tools/generate.py`・`services/engines/ltx/adapter.py`・`tests/test_ic_lora_forward.py`・`tests/test_model_swap_load.py`・`tests/test_pipeline_gguf_install_fail_loud.py`・`tests/test_worker_keep_resident_resolve.py`・`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md`・`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md`・`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/api/client.ts`・`webui/src/bridge/mockBridge.ts`・`webui/src/bridge/mockBridge.test.ts`・`webui/src/i18n/strings.ts`・`webui/src/shell/DangerZonePanel.tsx`・`webui/src/shell/useDangerZone.ts`・`webui/src/shell/useDangerZone.test.ts`。ほかに配布用 `AviUtl2-Plugin/NzVideomni.aux2`（バイナリ。`build.ps1`→`deploy.ps1` のデプロイで更新。記憶の規則どおりオーナーの手動コミットに委ねる）。I1・I2 の棚卸しは `ledger-work/stage6/inventory_1-31.md`（313 行）・`inventory_1-33.md`（174 行）に読み取り専用の成果物として置いた（git 管理外）。
+
+**方法**:
+1. オーナー決定（計画表）に基づき、工程 1 を並行 4 体（Opus・ファイルの重ならない範囲）で実施: U1（バックエンド: §1-52 C・§1-78・§1-40 の誘導 1 行・§1-41 の docstring）、U2（操作パネル: §1-77 B）、I1（§1-31 の棚卸し・読み取り専用）、I2（§1-33 の棚卸し・読み取り専用）。
+2. 工程 2: 証明とテスト（監督）→ 敵対的レビュー（Opus 1 体・サブエージェント起動なし・U1＋U2 の差分）→ 2 フィルタ（過剰設計の棄却・独立裏取り）で採否 → 指摘を反映。
+3. 工程 3: オーナーが `run.bat` でサーバーを起こし直し（13:22・新コード）→ §1-52 の実機確認 1 本（第 5 弾 G1 と同条件）→ 監督が `scripts\build.ps1`→`scripts\deploy.ps1` で操作パネルをビルド・デプロイ（実機 `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2` と配布用 `AviUtl2-Plugin\NzVideomni.aux2`）→ 両 aux2 を新しい文言で `grep -a` → オーナーの目視（2026-10-03・合格）。
+4. 工程 4: §1-33 の Go／No-go をオーナーが I2 の棚卸しの表を見て判断 → **No-go**（単独テーマとしては閉じる）。§1-31 は I1 の棚卸しの成果を本節に写し、台帳 §1 に残す（設計は第 7 弾）。
+5. 工程 5: 了承ゲート 2 — 報告 `ledger-work/stage6/report.md` の作成。
+6. 工程 6: 台帳（別担当が並行で更新）と本節（Sonnet による記録）の作成。
+
+**結果**:
+
+U1（バックエンド）の実装: **§1-52（選択肢 C）**＝bf16 経路（`gguf_per_layer_quant=False`）を全削除した。`engine/gguf/loader_service.py`（336 行）をファイルごと削除（import 元は `fast_video_pipeline.py:971` の 1 箇所だけ）。`fast_video_pipeline.py` の `create`／`__init__` の引数・コメント（bf16 融合の説明→per-layer と量子化 safetensors はフォワード時に逆量子化する、に書き換え）・`_transformer_format`（読む側は worker の G-A だけだったため消す）・`_gguf_per_layer_quant`・`_install_gguf`（`per_layer_quant` 判定を消し `GGUFQuantLoaderService(gguf_path=…, ic_loras_provider=lambda: self._ic_loras)` だけ残る形に 1 段戻す）、`engine/worker.py` の keep_resident G-A ガード（「Three guards」→「Two guards」・判定と raise を削除）、`config.py` の鍵、アダプタのペイロード、`mcp_server/tools/generate.py` の docstring、`quant_service.py`／`ic_lora_common.py` のコメント計 7 箇所、テスト 4 ファイル（G-A の 3 本を削除・ゴールデンの鍵の位置）を変更した。`GET /config` から `model.gguf_per_layer_quant` が消える（古い `config.yaml` の鍵は `extra='ignore'` で黙って無視される。`DEPRECATED_MODEL_KEYS` には足していない）。**§1-78**＝`fast_video_pipeline.py:362` の `if gguf_gemma_path:`（fail-fast の検査 :267-281 で `gguf_gemma_path` が必須になっているため常に真）を消し 13 行を 1 段戻した。**§1-40**＝コード不変。`engine25/chain25.py` のコメントの表の直後（:1030 の後）に、169 コマを超える撮り直しの窓（217〜481。より広い stage-2 窓で届く・w61 で計測）の実測は §145、という段落を追加して閉じた。**§1-41**＝`_retake_encode_tiling` の docstring を上流の事実（`ltx_pipelines/utils/helpers.py:75-116` の Conv 分岐・拡散分岐ともに `TileSizeConfig` を返し、拡散 VAE でも同じ面積予算が掛かる）に訂正した。コードと `run_chain` のコメント（:1987-1999）は不変で、台帳 §4 へ移す判断と矛盾しない。
+
+U2（操作パネル）の実装: **§1-77（選択肢 B）**＝状態 `pipelineLoading`（既存の `loading`＝解放リクエスト送信中とは別）を `useDangerZone.ts` に追加し、`JOB_BUSY` の判定の直後に `PIPELINE_LOADING` の分岐、文言 `unloadLoading`（英「The server is still loading a model. Wait for it to finish, then try again.」／日「モデルの読み込み中はパイプラインを解放できません。完了してからもう一度お試しください。」）、モック `mockBridge.ts` に旗 `pipelineLoading?: boolean` と 409（サーバーと同じ message／detail）、テスト 3 件（`useDangerZone.test.ts` に 1 件・mockBridge に 2 件）、`client.ts:126-129` のコメント、`Docs/DEVLOG.md` §128 を追加した。`pipelineLoading` の新状態は `DangerZonePanel.tsx:35` のボタン無効化条件（`unload.status === "loading"`）には関わらない。
+
+**§1-52 の実機確認（bf16 経路削除前後の一致）**: オーナーがサーバーを起こし直した後（13:22）、第 5 弾 G1 と同条件（LTX 2.3・T2V・512×320×49・24fps・seed 12345・sdpa・keep_resident off・既定 Q4_K_M）で 1 本投入した。job `d9da7260-37ae-4c78-97be-e5d40d16521a`（開始 2026-10-03T04:23:24Z・完了 04:24:25Z・70.1 秒）の結果は、**映像 MD5 `c9da075e7758f29ab3d2e02423da98e8`・音声 MD5 `cbc2a850fc8b704bc1ea3b9cbb2ab1b4` とも G1 と完全一致**、`peak_vram_mb` 8,442・`peak_vram_reserved_mb` 8,972 も G1（§145）と同じ値だった。SHA-256 はジョブ ID の埋め込みにより意図的に異なる。終わりに LTX23 の選択を `sulphur_distil_fp8mixed` に戻し、LTX25 を読み込んでから `unload_pipeline` でサーバーを解放した。
+
+**§1-77 のビルド・デプロイ・目視の確認**: 監督が `scripts\build.ps1`（`npm run build:single`→CMake/Ninja/MSVC）→`scripts\deploy.ps1` を実行し、実機 `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2` と配布用 `AviUtl2-Plugin\NzVideomni.aux2` の両方に、新しい日本語文言「モデルの読み込み中はパイプラインを解放できません」が入っていることを `grep -a` で確認した。**オーナーの目視: 合格（2026-10-03）**。配布用 aux2 のバイナリのコミットは記憶の規則どおりオーナーの手動コミットに委ねる。
+
+**§1-31 の棚卸し（快適上限のマニフェスト一本化・第 7 弾の設計材料。原本 `ledger-work/stage6/inventory_1-31.md` は git 管理外のため、以下が正本）**:
+
+(1) 配信する側（サーバー）。`config.py` の `ComfortRow`（:251-268。`requires` は `dict[str, str | bool]`・`single_budget: int`・`chain_budget: int`。docstring「the FIRST row whose requires fully matches wins」）と `EngineComfortProfile`（:271-300。`spatial_factor=32`・`temporal_factor=8`・`rows`・`outpaint_budget: int | None`）。既定の表（`_default_comfort_budgets()`・:303-353）は系統 2 本だけ: `"ltx"`（LTX 2.3。行 1 本・`requires` に 5 項目〔attention_backend=sage・block_swap_prefetch・keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed〕・`single_budget=44880`・`chain_budget=40000`・`outpaint_budget=42240`。docstring「INTENTIONALLY HAS NO EMPTY-requires ROW」）、`"ltx25"`（LTX 2.5。空の `requires` の行 1 本・`single_budget=chain_budget=44880`・`outpaint_budget=46080`）。**表の鍵はエンジン系統の id（`FAMILY_BY_ID`）で、ベースモデルの id でも重みの種別でもない。種別を表す次元は無い。** 単位はトークン＝`(幅//32)×(高さ//32)×潜在フレーム数`（:477-478）。関係する `LimitsConfig` の鍵: `spill_free_frames`（コードの既定は空の辞書。実機では `config.yaml` の `limits.spill_free_frames`〔1280x768=273・1920x1088=161・2560x1472=81・512x320=960x576=481〕からだけ来る）・`chain_comfort_token_budget`（既定 40,000）・`single_comfort_token_budget`（既定 44,880）。すべて助言値（原文「the server never consults this」:450-451・:487-488）。`config.yaml` で上書きできるが、**表はまるごと置き換わる**（「no per-family/per-field merge」:498-499。`tests/test_comfort_budgets.py:115-160` で固定）。実機の `config.yaml` には書かれていない（`spill_free_frames` の 1 箇所だけ）。`GET /config`（`api/status.py:58-61`）は設定全体を `model_dump()` でそのまま返す。`GET /models`（`api/models_registry.py:72-133`）は `base_models[]` に `id`・`engine_family`・カテゴリのブロックを持つが、**1 件のエントリ（`ModelEntryInfo.as_dict`）に重みの種別の欄は無い**（`name`・`path`・`is_default`・`exists`・`source`〔"config"|"scan"〕だけ）。マニフェスト（`scripts/manifests/10-ltx23.json`・`20-ltx25.json`）は `id`・`engine_family`・`categories`・`assets`・`default_selection` を持つが、読む側 `services/base_models.py::_parse_descriptor`（:163-208）は**知らない鍵を黙って無視する**（厳格な検査ではない。`downloads`／`migrate` も「deliberately NOT parsed」）。`config.py` は記述子を読まない（`manifest_dir` のパスだけ持つ・:168・:586-588）ため、**今の `LimitsConfig` の既定値はマニフェストを参照できない**。`scripts/install_ltx.ps1` も同じ JSON を読むが、知らない鍵は検査も拒否もしない。
+
+(2) 受け手。操作パネルは `useBaseModels.ts:258-260` で `GET /models` の `engine_family` から系統を取り、`shell/comfortTable.ts:146-190` の `resolveComfortRow(limits, engineFamily, acceleration, sageAvailable)` が `requires` の全鍵が一致する最初の行を上から探す（`matchesRequires`:98-107。「a row that demands a key this WebUI version does not know about never matches」）。一致しなければ呼び手は `spill_free_frames`（Create）か `chain_comfort_token_budget`（Chained）へ落ちる。表が無いか系統が未確定なら互換用の行 `COMPAT_SHIM_REQUIRES`（5 項目すべて on）を使う。照合に使う 6 欄（`accelerationSettings.ts:522-534` の `effectiveAccelerationFields`）は `attention_backend`・`block_swap_prefetch`・`keep_resident`（prefetch が切れていれば実効値は false に畳み込まれる）・`fused_gguf_dequant_kernel`・`vae_mode`・`keep_resident_embeddings`。**重みの種別はここにも無い。** `resolveComfortRow` の呼び出しは 8 箇所（`AppShell.tsx:903`・`SingleScreen.tsx:429`・`useGenerationForm.ts:690`・`useChainForm.ts:2449`・`useRetakeForm.ts:380`・`prefillSeed.ts:385`・`comfortDisplayTable.ts:182,198`）。outpaint は別経路（`outpaintBudget.ts:36`）。表の写しが 2 箇所: `defaultConfig.ts:57,95-117`（オフライン既定）・`mockBridge.ts:132-164`（モック。コメントに「中身のズレはテストでは捕まらない」）。Gradio（`gradio_ui/comfort.py`）は `effective_acceleration_fields`（操作パネルの写し）と `resolve_chain_budget`（**連結生成の予算だけ**。単発の予算・outpaint は読まない。**手書きの例外も無い**）。MCP は `GET /config`・`GET /models` を中継するだけで、快適上限の値を自分では使わない（Grep 0 件）。
+
+(3) 較正の結論の表と配信値との差（出典 `Docs/COMFORT_LIMIT_TABLE.md` §10〜14。式は上記 (1) のトークン式。潜在フレーム数＝(コマ数−1)/8+1。解像度ごとのマス目: 1920×1088=2,040・1280×768=960・896×1152=1,008）。
+
+LTX 2.5（配信値は単発・連結とも 44,880・加速設定によらない）:
+
+| 種別 | 加速設定 | ワークロード／解像度 | 2 回とも快適だった上端 | 溢れた下端 | 配信値 44,880 との差 |
+|---|---|---|---:|---:|---|
+| 公式 GGUF（`default`） | 全 on | 単発・連結 | 44,880（線の根拠） | — | 0 |
+| REDGraft Q6_K GGUF | 既定 | 単発 1280×768 | 44,160（361 コマ） | 45,120（369） | −720 |
+| 同上 | 既定 | 単発 1920×1088 | 42,840（161） | 44,880（169） | −2,040 |
+| 同上 | 既定 | 単発 896×1152 | 40,320（313） | 45,360（353）※間の 44,352 は割れ | −4,560 |
+| 同上 | 既定 | 連結 窓 22 | 43,648 | 44,880 | −1,232 |
+| 同上 | 全 on | 単発 3 点再測 | 解像度で割れる（単一の線では表せない） | — | — |
+| fp8（`-fp8_e4m3fn`） | 全 on | 単発 1920×1088 | 38,760（145） | 40,800（153） | −6,120（線比 86%） |
+| 同上 | 全 on | 単発 1280×768 | 38,400（313） | — | −6,480 |
+| 同上 | 全 on | 単発 896×1152 | 38,304（297） | 40,320（313） | −6,576 |
+| 同上 | 全 on | 連結 窓 22 | 39,424 | 40,832 | −5,456 |
+| fp8_scaled（C-4 対照） | 全 on | 単発 1920×1088 | 38,760（145） | 40,800（153） | −6,120（前回と同じ段） |
+| REDGraft 混在 safetensors | 全 on | 単発 1920×1088 | 38,760（145） | 40,800（153） | −6,120 |
+| 同上 | 全 on | 単発 1280×768 | 38,400（313） | 41,280（337） | −6,480 |
+| int8 ConvRot（公式複製） | 全 on | 単発 1920×1088 | 38,760（145） | 40,800（153） | −6,120 |
+
+LTX 2.5 のその他の種別（int8 tensorwise 単体・w4a8 単体・Q5／Q8 等）は未測定。連結を測ったのは公式 GGUF・REDGraft Q6_K・fp8_e4m3fn のみで、int8 系の連結は測っていない。
+
+LTX 2.3（配信値は全 on の行だけで単発 44,880・連結 40,000。全 on 以外は `spill_free_frames`）:
+
+| 種別 | 加速設定 | ワークロード／解像度 | 2 回とも快適だった上端 | 溢れた下端 | 配信値との差 |
+|---|---|---|---:|---:|---|
+| 公式 Q4_K_M GGUF | 全 on | 単発・連結 | 44,880／40,000（線の根拠） | — | 0 |
+| Sulphur-2 Q4_K_M（対照） | 全 on | 単発 1920×1088 169 コマ | 2 回で割れた | — | 線上の余裕は薄い |
+| 同上 | 全 on | 単発 1280×768 361 コマ | 2 回快適 | — | — |
+| 同上 | 全 on | 連結 w46 1216×704 | 快適（線比 96%） | — | — |
+| Sulphur-2 Q6_K | 全 on | 単発 1920×1088 | 44,880（169・線そのもの） | 48,960（185） | 0（線は動かない） |
+| 同上 | 全 on | 単発 1280×768／768×1280 | 45,120／46,080 快適 | **44,160（361）が 4 回溢れた（孤立した溢れ）** | 線の内側に溢れる点がある |
+| 同上 | 全 on | 連結 窓 22 | 40,832・44,880 快適 | — | 連結の線より上でも快適 |
+| 同上 | 全 on | 連結 w46 1216×704（線比 96%） | — | 2 回とも溢れ | 線の内側で破れる |
+| fp8（`sulphur_distil_fp8mixed`） | 全 on | 単発 1920×1088 161 コマ | — | 1 回溢れ | 全 on の境界は未確定 |
+| 同上 | 既定 | 単発 1920×1088 | 32,640（121） | 34,680（129） | 診断値 |
+| silveroxides int8（回転なし） | 既定 | 単発 1920×1088 | 32,640（121） | 34,680（129） | fp8mixed と同じ段 |
+| Kijai int8 ConvRot | 既定 | 単発 1920×1088 | 36,720（137）以上 | 未測定 | 真の境界は測らない（オーナー裁定 2026-09-28） |
+| w4a8 | 全 on | 単発 1920×1088 | 44,880（169・線上） | — | 0（線まで成立） |
+
+LTX 2.3 の fp8／int8 系の**全 on の境界は未測定**。outpaint は種別ごとの較正が無い（公式重みの全 on の値のみ）。
+
+計算で分かったこと: 配信値 44,880 から出す 1280×768 のマーカーは `floor(44880/960)=46` 潜在フレーム → **361 コマ**になる。これは Sulphur-2 Q6_K の孤立した溢れの点そのもの（44,160）である。
+
+(4) サーバーが重みの種別を知る経路。判定規則はリポジトリ直下の `sft_quant_format.py`（644 行。docstring「SINGLE SOURCE OF TRUTH」「canonical statement ... VERIFICATION_LOG §121.3」）。`SCHEME_TABLE`（:132-138）は `fp8`・`fp8_scaled`・`int8`・`int8_convrot`・`w4a8` の 5 方式。`inspect(path)`（:387-449）は層ごとに方式が分かる `Layout` を返す（重い依存無し・アプリ venv でも import できる）。しかし呼び出し元 `services/model_registry.py::precheck_model_file`（:118-182）は**方式を捨てて** `{"general.architecture","model_version"}` だけ返す。呼ばれるのは `POST /pipeline/load`（`api/pipeline.py:132-137`）だけで、**同じベースモデルで `"default"` を選んだときは事前検査自体を飛ばす**（:121-125）。GGUF は `services/gguf_kv.py::read_gguf_kv` が KV の 2 鍵（`general.architecture`・`model_version`）しか読まず、テンソル情報は読まない（「tensor_count -- unused」）。2.3 のワーカーは `_transformer_format`（`engine/worker.py:746`）で GGUF／safetensors を区別するだけで、方式はログに出すだけ（`fast_video_pipeline.py:973`）。アダプタ（`services/engines/ltx/adapter.py:1876-1886`）は拡張子だけで分ける。**ワーカーの `ready`／`done` に種別の欄は無い**（2.3: `engine/worker.py:136-139,1123-1140`。2.5: `engine25/worker.py:1076-,1499-`）。指示書が挙げる `_transformer_file` という名前は `*.py` に存在しない（Grep 0 件）。**結論: 今はサーバーが種別を名乗る経路が無い。**
+
+(5) 照合の鍵と手書きの例外。手書きの例外は `shell/comfortDisplayTable.ts` の 3 定数（Settings 表示専用）: `LTX25_Q6_FRAMES`（:70-74。`{1280x768:361, 1920x1088:161, 896x1152:313}`。コメント「サーバーは transformer の量子化を知らないので、この 3 点を配る経路が無い」）・`LTX25_FP8_SINGLE_BUDGET=38760`（:79）・`LTX_FP8_DEFAULT_FRAMES`（:84-86。`{1920x1088:121}`）。列は `ltx-default`・`ltx-fp8-default`・`ltx-all-on`・`ltx25`・`ltx25-q6`・`ltx25-fp8`（:91-112）。**どのモデル名でも判定しておらず、系統と固定値だけで決まる**。手書きの値は**Create・Chained・Retake・Outpainting のマーカーには効かない**（`resolveComfortRow` だけを使うため）。つまり今の製品では、fp8／int8／Q6_K を選んでもマーカーは公式 GGUF の線のまま出る（楽観側）。Gradio・MCP に手書きの例外は無い。
+
+(6) 設計の分かれ道（事実の列挙。判断はしない）。(a) 種別と較正結果の対応 — 同じ段に揃う組と 1 つの値で表せない組は上記 (3) のとおり。(b) 正本の置き場 — マニフェスト（`services/base_models.py`。鍵はベースモデルの id）か `config.py`（鍵は系統の id。今の表）に足すか。`config.yaml` の「表ごと置き換え」を残すかも分かれ道。(c) API の追加 — `GET /models` の `ModelEntryInfo` か `base_models[]`／トップレベルに種別を足す（ADDITIVE 方針）。(d) 操作パネル・Gradio の変更範囲 — `effectiveAccelerationFields`・`resolveComfortRow`（呼び出し 8 箇所）・`comfortDisplayTable.ts` の手書き 3 定数・2 箇所の写し（`defaultConfig.ts`・`mockBridge.ts`）。`featureScope.ts` には触れない。(e) テスト — `tests/test_comfort_budgets.py`（系統の集合・行の数と値・yaml 置き換えを固定）・`tests/test_models_endpoint_compat.py`・操作パネル `comfortTable.test.ts`・`comfortDisplayTable.test.ts` ほか。(f) 文書 — `Docs/COMFORT_LIMIT_TABLE.md` §1.1・§10〜§14 冒頭の「配信値は未変更」、仕様書 §6.7・`GET /models` の契約節、`Docs/API_REFERENCE.md` §3.2・§3.5、`Docs/DEVLOG.md` §126。
+
+確かめられなかったこと: GGUF の `general.file_type` KV の有無・値／Sulphur-2・REDGraft Q6_K のテンソル型の内訳／`Docs/DEVLOG.md` §126 の中身／一次記録 `outputs/comfort-calib-*/RESULTS*.md` の全点の表／`VERIFICATION_LOG.md` §121.3 の本文（コードと docstring だけで確かめた）／2.5 の `done` の `ltx25` ブロックの全鍵／起動時の自動読み込みが `precheck_model_file` を通るか／`_transformer_file` という名前（Grep 0 件。別箇所の可能性）。
+
+**§1-33 の棚卸し（int8 ConvRot の高速化・Go／No-go の材料。原本 `ledger-work/stage6/inventory_1-33.md` は git 管理外のため、以下が正本）**:
+
+(1) 実装の現在地。回転行列は 4×4 の小行列（`_H4`。「symmetric, -1 on the anti-diagonal — not the Sylvester H4」）から `torch.kron` で 256×256 まで作る H=(H4⊗H4⊗H4⊗H4)/16（`engine/sft_quant/dequant.py:50-80`。device ごとにキャッシュ）。int8_convrot の復元（:102-110）は int8→fp32→×行ごとの倍率（fp32）→256 列ごとに 256×256 の行列積（fp32）→bf16。w4a8（:111-134）も最後に同じ行列積で回転する。TF32 は使っていない（`allow_tf32` 等 Grep 0 件）。呼ばれる場所は `quant_service.py:274-293` の `_quant_linear_forward` で、**量子化 Linear の forward のたびに**呼ばれる。**キャッシュは無い**（復元結果は保持しない。保持するのは 256×256 の H だけ）。LTX 2.5 も同じ経路（`engine25/gguf_transformer.py:113-119`。`fuse_rule=bf16_fuse_rule` を足す以外は同一）。connector の回転は CPU で読み込み時に 1 回だけ（`load_connector_bf16`。回数は未追跡）。**1 forward あたりの層数**: Kijai 2.3・LTX 2.5 公式複製とも I8 Linear 1,344 層・計 18.522 G 要素（形の内訳: 2048×2048×576・2048×4096×144・4096×4096×384・2048×8192／4096×2048／4096×16384／8192×2048／16384×4096 が各 48）。connector は 2.013 G 要素。REDGraft は int8_convrot 10.263 G＋w4a8 8.259 G＝合計 18.522 G（w4a8 も回転するため）。**1 ジョブあたりの forward 数**: 蒸留スケジュール stage-1 8 段・stage-2 3 段で、単発 1 本＝11 forward×1,344 層＝14,784 回の復元。**演算量**: 18.522e9×256 積和×2＝**9.48e12 演算／forward**（台帳の「約 9.5 兆演算」と一致）。GGUF 側には既に同じ型の融合カーネル（`engine/gguf/dequant_triton.py`・`dequant_triton_kernels.py`）があり、eager 約 1.96 秒/forward→融合後は交互 7 本で中央値 **25.28 秒短縮（約 17.5%）**・SHA 全一致。ConvRot にも同じ型は書けそうだが（推測）、**ビット一致の安全網をそのまま移せるかは回転の計算方法で決まる**（fp32 の足し合わせ順序が eager=cuBLAS と違えばビット不一致。整数で足せば一致させられる）。
+
+(2) 実測の表（出典 `outputs/comfort-calib-2026-09-27/RESULTS.md` 表 5。2 回走らせた点は平均）:
+
+| 比較（1920×1088） | 点 | fp8 側窓秒 | int8 側窓秒 | 差 | log stage2 秒差 | fp8 側生成秒 | int8 側生成秒 | 生成秒差 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 2.5 全 on: int8 ConvRot vs fp8 | 89 コマ | 25.17 | 26.00 | +0.83 | +1.2 | 85.51 | 89.33 | **+3.82** |
+| 同上 | 145 コマ（快適×2） | 43.04 | 43.86 | +0.82 | +1.25 | 134.03 | 138.09 | **+4.06** |
+| 2.3 既定: Kijai ConvRot vs fp8 | 89 コマ | 38.29 | 39.07 | +0.78 | +1.1 | 167.84 | 163.38 | −4.46 |
+| 2.3 既定: silveroxides int8（回転なし）vs fp8 | 89 コマ | 38.29 | 38.24 | −0.05 | −0.2 | 167.84 | 171.88 | +4.04 |
+| 同上 | 121 コマ（快適×2） | 57.95 | 57.955 | ≈0 | ≈0 | 219.10 | 215.02 | −4.08 |
+| 参考 2.5 全 on: REDGraft 混在 vs fp8 | 89 コマ | 25.17 | 26.89 | +1.72 | +2.6 | 85.51 | 94.27 | +8.76 |
+| 同上 | 145 コマ | 43.04 | 44.185 | +1.15 | +1.75 | 134.03 | 142.69 | +8.66 |
+
+揺れ: 同じ点の 1 回目／2 回目の差は窓の秒で最大 1.6%、生成秒で最大 2.7%。**LTX 2.3 の生成秒の差は回転なしの対照でも ±4 秒動くため、2.3 既定構成からは固定分を読み取れない**（窓の秒・log stage2 秒の差だけが使える）。
+
+低解像度（512×320×49f・単発・各 1 回。出典 `VERIFICATION_LOG.md` §121.4 G8 ほか）:
+
+| ファイル | 種別 | 単発生成秒 | 比較相手 |
+|---|---|---:|---|
+| Kijai 2.3 | int8_convrot | 60.33 | fp8 57.81（×1.04）／Q4_K_M 59.19 |
+| silveroxides 2.3 | int8（回転なし） | 53.26 | Q4_K_M 59.36 |
+| JoaoZaokk 2.3 | w4a8（回転あり） | 60.64 | Q4_K_M 59.88 |
+| 2.5 公式複製 | int8_convrot | 54.29 | fp8 48.09（×1.13）／2.5 公式 GGUF 45.15 |
+| REDGraft 2.5 | int8_convrot＋w4a8 | 49.79 | 同重み Q6_K 52.69 |
+
+低解像度の単発は読み込みの影響が混ざる（同じファイルの keep_resident 1 本目 63.41 秒・2 本目 25.75 秒）ため、この表の比は桁の目安としてしか使えない。
+
+**固定分の計算**: 1 forward あたり＝第 2 段階の差÷3（stage-2 は 3 forward）。窓の秒から 0.28／0.27／0.26 秒、log stage2 秒から 0.40／0.42／0.37 秒→**約 0.26〜0.42 秒／forward**（89 コマと 145 コマで差がほぼ変わらず、解像度非依存の記述と合う）。1 ジョブ（11 forward）あたり**約 2.9〜4.6 秒**。割合＝生成秒差÷int8 側生成秒: 2.5 全 on 89 コマ＝4.3%・145 コマ＝2.9%・低解像度 (a) 2.3＝4.2%（1 回のみ）・低解像度 (d) 2.5＝11.4%（1 回のみ。4.6 秒を超え、読み込み等が混ざる可能性〔推測〕）。理論値（GPU 公称 FP32 約 44 TFLOPS・帯域約 672 GB/s。リポジトリ外の値で推測扱い）との照合: 9.48 TFLOP を実効 25〜35 TFLOPS で回すと 0.27〜0.38 秒、読み書き 148 GB だけで約 0.22 秒。実測の 0.26〜0.42 秒と同じ桁。
+
+(3) CPU 上の精度実験（scratchpad の `acc.py`。乱数 int8 の層 [2048, 4096]・float64 の参照との比較）:
+
+| 計算方法 | fp32 の最大誤差（相対） | bf16 丸め後 float64 参照と違う要素 | bf16 で現行と違う要素 |
+|---|---:|---:|---:|
+| A 現行（fp32 の 256×256 行列積・CPU） | 7.6e-7 | 6,435 / 8,388,608 | 0 |
+| B 整数で正確に回転してから倍率 | 3.7e-8 | **0** | 6,435 |
+| C 4×4 を 4 回（基数 4 高速アダマール・fp32） | 1.3e-7 | 4,557 | 6,549 |
+
+どの高速化でも出力の bf16 ビットは現行から変わる（約 0.08% の要素）。誤差は現行以下か同じ。`torch._int_mm`（int8×int8→int32、torch 2.9.1）は CPU で ±1 の 256×256 行列積の結果が正確な値と一致した（事実）。
+
+(4) 候補の一覧。**何もしない**＝変更 0。**A 高速アダマール（eager・fp32）**＝規模小（10〜20 行）だが段ごとの読み書きが増え速くならない見込み（推測）。**B 整数のまま回転してから倍率（`torch._int_mm`）**＝規模小（20〜40 行。`dequant.py` の int8_convrot と w4a8 の 2 分岐）。固定分（3〜4.6 秒・2.9〜4.3%）をほぼ全部消せる見込み。精度は CPU 実験で float64 の参照と bf16 が完全一致（現行より誤差小）。リスクは `_int_mm` の形の制約と GPU 世代（Ampere／Ada）の動作未確認。**C Triton 融合**＝GGUF と同型。見込みは 1 forward で 0.5〜0.65 秒、単発 6〜7 秒（固定分より大きい。fp8 と共通の eager 復元分も消えるため）。規模大（GGUF の実績で約 250＋330＋760 行＋配線）。**D bf16 キャッシュ**＝transformer 全体を bf16 にすると 37.0 GB（int8 のままは 18.5 GB）。CPU 側は RAM ＋約 17 GiB（コミット 96% 前後の見込みで較正の入口の門 88%・G8 の門 95% を超える）、GPU 常駐ブロックだけなら ＋3.1 GB VRAM で短縮は 0.5〜0.8 秒にとどまる。**外す候補 ComfyUI 方式**（入力側回転・int8 の行列積）＝活性値の量子化で丸めが 2 回入り精度が下がる＝方針違反（台帳 §1-33・§121.1 裁定 1）。
+
+判断材料の表:
+
+| 候補 | 短縮の見込み | 工数 | 精度リスク | VRAM／RAM リスク | 保守リスク |
+|---|---|---|---|---|---|
+| 何もしない | 0。fp8 比 1080p 全 on ×1.03〜1.05 | 0 | 現状維持 | 現状維持 | 0 |
+| A 高速アダマール | ほぼ 0 か逆に遅化 | 小 | 誤差は現行以下・ビット変化 0.05〜0.08% | 段ごとに一時領域 | 小 |
+| B 整数で回転 | 固定分のほぼ全部（3〜4.6 秒・2.9〜4.3%） | 小 | float64 参照と完全一致・ビット変化あり | 現行と同水準 | 小（形の制約・GPU 世代確認） |
+| C Triton 融合 | 1 forward 0.5〜0.65 秒・単発 6〜7 秒 | 大 | 整数で足せば B 同等 | 最小 | 大（triton 版・JIT・整列変種） |
+| D bf16 キャッシュ | CPU 側は損失大・GPU 常駐ブロックのみ 0.5〜0.8 秒 | 中 | 変わらない | CPU ＋17 GiB／GPU ＋3 GB | 中 |
+| （外す）ComfyUI 方式 | ― | ― | 精度低下＝方針違反 | ― | ― |
+
+監督の見立て（判断はオーナー）: 固定分は生成全体の 3〜4% で fp8 との体験差は小さい。やるなら候補 B だけが「小さく・精度を落とさず」成り立つが、得られるのは 1080p 単発で 3〜4.6 秒。
+
+確かめられなかったこと: GPU 上で各方式を実測していない（禁止事項。帯域と演算量からの見積もりのみ）／GPU の cuBLAS と各候補の bf16 不一致の実測が無い／`torch._int_mm` の Windows・CUDA（Ada 4070 Ti SUPER・Ampere 3080 mobile）での動作・速さは未確認／connector の CPU 復元の時間と回数は記録に無い／1080p での Q4_K_M・w4a8 と fp8 の対になる生成時間は無い／LTX 2.3 全 on での ConvRot の比は未測定／低解像度 (d) の ×1.13 が固定分見積もりを超える理由は未切り分け／ComfyUI 側の実測生成時間はリポジトリに無い／GPU 公称値はリポジトリ外の値（推測扱い）。
+
+**裁定と新事実**: オーナー裁定（2026-10-03）: **§1-33 は No-go（単独テーマとしては閉じる）**。理由は固定分が生成全体の 3〜4% で fp8 との体験差が小さいこと。候補 B は単独では起票せず、台帳 §3-53（ConvRot 高速化の候補の親項目）の下へ候補 B の 1 行を追記し、`Docs/ACCELERATION_RESEARCH_NOTES.md` に未着手の候補 (8) として、no-go 6 件と並べて記録する。新事実: 敵対的レビューで、`Docs/PENDING_TASKS_CLOSED.md:2691` が以前から誤っていること（「`engine/gguf/loader_service.py`（`GGUFQuantStateDictLoader.load`）」と書いているが、このクラスは実際には `quant_service.py` にある）が見つかった。本節の bf16 経路削除でファイルが消えたことで、この誤りが目立つようになった。訂正は台帳担当（別担当）の作業で、本節の編集範囲（`Docs/VERIFICATION_LOG.md` のみ）には含まない。
+
+**証明**: §1-52 の実機確認は job `d9da7260-37ae-4c78-97be-e5d40d16521a`（開始 2026-10-03T04:23:24Z・完了 04:24:25Z）の metadata・MD5（`ledger-work/stage6/verify_1-52/`）で、映像 MD5 `c9da075e7758f29ab3d2e02423da98e8`・音声 MD5 `cbc2a850fc8b704bc1ea3b9cbb2ab1b4` が第 5 弾 G1 と完全一致、`peak_vram_mb` 8,442・`peak_vram_reserved_mb` 8,972 も同じ値であることで裏づけた（SHA-256 は job_id の埋め込みにより意図的に異なる）。§1-77 のビルド・デプロイ確認は、`build.ps1`→`deploy.ps1` 後に実機・配布用の両 aux2 を新しい日本語文言で `grep -a` し、オーナーが目視で合格と判定したことで裏づけた。I1・I2 の棚卸しはコードの読み取りと scratchpad 上の CPU 実験（safetensors ヘッダの読み取りによる回転対象の要素数の集計・乱数層での回転方式ごとの誤差比較）だけで行い、GPU・git の書き込み・テスト実行は行っていない。敵対的レビューの裏取りは、消した 7 つの名前（`gguf_per_layer_quant`・`per_layer_quant`・`GGUFLoaderService`・`GGUFStateDictLoader`・`loader_service`・`_transformer_format`・`_gguf_per_layer_quant`）の `git grep` 0 件、`_install_gguf` の最終形が HEAD の per-layer 分岐と字句まで同一であること、`GET /config` から鍵が消えることの実測、新しいテストが HEAD の写しで落ちることの確認、コメントだけの 4 ファイル（`chain25.py`・`quant_service.py`・`ic_lora_common.py`・`mcp_server/tools/generate.py`）の docstring を除いた AST が HEAD と同じであることで行った。改行は Python でバイトを数えて、変更した 25 ファイルがすべて元のまま（CRLF のみ。`tests/test_ic_lora_forward.py` は元から 1〜336 行 CRLF・337〜579 行 LF の混在で、行数〔579〕・混在の境目とも不変）であることを確認した。
+
+**テスト**（監督・担当・レビューが実行。GPU・real のバックエンドは §1-52 の実機確認 1 本だけに使用）: アプリ `.venv` 全件 **2,898 passed・61 skipped**／`.venv-engine` 23＋5 ファイル **622 passed**（G-A の 3 本が消えた分だけ減）／`.venv-engine-ltx25` 9＋2 で **233 passed**／操作パネル `npm run typecheck` 0・`npm run lint` 0（既存の警告 31 は触っていないファイル）・vitest **149 ファイル 3,061 件合格**（新規 3 件を含む）。変更した 25 ファイルの改行は CRLF のまま。
+
+**台帳**: `Docs/PENDING_TASKS_CLOSED.md` に CLOSED **3-210**（§1-52）・**3-211**（§1-78）・**3-212**（§1-40）・**3-213**（§1-77）・**3-214**（§1-33・No-go）の 5 件を追加した。§1-41 は台帳 §4（スコープ外）へ移した（番号は台帳担当が決める）。§1-31 は `Docs/PENDING_TASKS.md` に残した（棚卸し済み・設計と実装は第 7 弾。材料は本節）。§3-53 に int8 ConvRot 高速化の候補 B を 1 行追記し、`Docs/ACCELERATION_RESEARCH_NOTES.md` に未着手の候補 (8) と no-go 6 件を追加した。これで台帳 §1 は**1 件（§1-31）**になった。
+
+**文書**: 仕様書 `Videomni_Backend_Specification.md` v0.5.83（§0.1・改訂履歴・§4.2 の load op の表・§6.2 の keep_resident・§11.2 の表から `gguf_per_layer_quant`／bf16 経路の記述を削除）。`Docs/MULTI_ENGINE_DESIGN.md`（`loader_service.py` の `metadata()` への言及を `quant_service.py` の `GGUFQuantStateDictLoader` へ訂正）。操作パネル `Docs/API_REFERENCE.md`（`model.gguf_per_layer_quant` の削除・`PIPELINE_LOADING` 関連の追記）・`Docs/DEVLOG.md` §128（`pipelineLoading` 状態の新設）。`config.py` から `gguf_per_layer_quant` の鍵を削除。
+
+**敵対的レビュー**（Opus 1 体・サブエージェント起動なし・U1＋U2 の差分。`.venv` 全件と `.venv-engine` 13 ファイルと `webui/` の 3 検査を実行・新しいテストが HEAD の写しで落ちることを確認・`GET /config` から鍵が消えることを実測・コメントだけの 4 ファイルは docstring を除いた AST が HEAD と同じ）: **直すべき 2・注意 1・参考 6**。直すべき 2＝消した bf16 経路を前提にしたコメント（`fast_video_pipeline.py:1045-1047` の「dequantized DURING this build」→フォワード時に逆量子化する、に訂正／`engine25/pipeline25.py:869-875` の「three internal guards（one fails the job when the GGUF fused-LoRA path…）」→「two internal guards」に訂正）。注意 1＝§1-40 の段落（`engine25/chain25.py:1032-1034`）の「the wider stage-2 windows」という言い回しが、§145 が stage-2 を w61 に固定したうえでの撮り直しの窓の長さ（169〜481）を測ったことと紛れる表現だったため、「reachable with the wider stage-2 windows; measured with w61」に訂正した。参考 6＝(1) `JOB_BUSY` が先のテストは順序を逆にした変異で落ちる（新しい挙動を固定しているのは残り 2 本）、(2) 英日の文言は直訳でない（計画どおり）、(3) `client.ts:128-129` の長い行（lint の警告にはならない）、(4) 記録文書（作業記録 7 本）の bf16 経路・`loader_service.py` への言及は方針どおり本文を触らない（うち `Docs/PENDING_TASKS_CLOSED.md:2691` の以前からの誤りは上記「裁定と新事実」のとおり）、(5) `tests/test_ic_lora_forward.py` の改行（1〜336 行 CRLF・337〜579 行 LF。HEAD と同じ 579 行で混在の境目は不変）、(6) 稼働中のサーバー（再起動前）は `GET /config` に古い `model.gguf_per_layer_quant` を返す（再起動で解消）。採用 4（直すべき 2・注意 1・`client.ts` の折り返し）。本体の差分は正しく最小で退化無し: `_install_gguf` の最終形は HEAD の per-layer 分岐と字句まで同じ、消した 7 つの名前は 0 件、`_resolve_keep_resident` の戻り値と G-B→G-C の順は不変、§1-78 の条件は fail-fast で常に真、§1-41 の docstring は上流の事実（Conv・拡散とも `TileSizeConfig` を返す）と合う、§1-77 の新しい状態はボタン無効化に関わらず `JOB_BUSY` が先でモックの message・detail はサーバーと一字一句同じ。
+
+**費用の目安**（Opus・Sonnet のトークン、概算）: Opus 約 125 万（計画前の棚卸し 2 体 約 23 万・U1 約 16 万・U2 約 11 万・I1 約 25 万・I2 約 18 万・レビュー 約 22 万・反映 約 6 万。見込み 150 万の範囲内）。Sonnet＝台帳と記録 約 41 万（台帳 21・記録 20。見込み 45 万の範囲内）。監督が後で実測値を差し込む）。GPU 約 1 分＋ビルド数分。
+
+**申し送り**（次へ）: (1) 第 7 弾＝§1-31 の設計のディスカッション→計画（材料は本節の棚卸し）。(2) §3-53 の候補 (8)（ConvRot の整数化・候補 B）は小粒最適化の順番待ち。(3) 配布用 `AviUtl2-Plugin/NzVideomni.aux2` のバイナリのコミットはオーナーに委ねる。(4) 記録のみ: `load_pipeline(base_model=…)` の選択の持ち越し無しは第 5 弾と同じ挙動（§1-52 の実機確認でも同条件〔`default`〕で比較が成立している）。`tests/test_ic_lora_forward.py` は元から CRLF/LF 混在で数（境目）は不変。
+
+棚卸しの原本・実機の MD5・レビューはリポジトリの外（`ledger-work/stage6/`。git 管理外）に置いています。本節が §1-31・§1-33 の棚卸しの正本です。

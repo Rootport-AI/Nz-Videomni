@@ -125,8 +125,9 @@ export interface ApiClient {
   ): Promise<PipelineLoadResponse>;
   /** N4 "danger zone": `POST /pipeline/unload` — tears down the loaded engine
    * without loading a replacement, freeing its VRAM. Same active-job guard as
-   * `loadPipeline` (409 `JOB_BUSY` while a generation job is running); no
-   * body, no extended timeout (mirrors `reloadLoras`'s minimal shape). */
+   * `loadPipeline` (409 `JOB_BUSY` while a generation job is running), and
+   * 409 `PIPELINE_LOADING` while a model is loading; no body, no extended
+   * timeout (mirrors `reloadLoras`'s minimal shape). */
   unloadPipeline(): Promise<PipelineUnloadResponse>;
   /** §3-164: `POST /utils/mp4-info` — reads a local video's `comment` tag
    * (the generation conditions the backend wrote into it). `path` is an

@@ -17,7 +17,7 @@ run on this Windows + 16GB box):
 
 Protocol (one JSON object per line; parent -> worker):
   {"op": "load", checkpoint_path, gemma_root, upsampler_path,
-   gguf_transformer_path, gguf_gemma_path, gguf_per_layer_quant,
+   gguf_transformer_path, gguf_gemma_path,
    block_swap_blocks_on_gpu, vae_spatial_tile_size, vae_temporal_tile_size,
    # safetensors_transformer_path (optional): a quantized safetensors
    # transformer, sent with gguf_transformer_path emptied (both set is fatal):
@@ -421,7 +421,6 @@ def _do_load(msg: dict) -> None:
         gguf_transformer_path=gguf_t,
         safetensors_transformer_path=st,
         gguf_gemma_path=msg["gguf_gemma_path"],
-        gguf_per_layer_quant=bool(msg["gguf_per_layer_quant"]),
         vae_spatial_tile_size=int(msg["vae_spatial_tile_size"]),
         vae_temporal_tile_size=int(msg["vae_temporal_tile_size"]),
         # Keep-resident weights (StateDictRegistry) are a PER-JOB setting
@@ -699,18 +698,7 @@ def _resolve_keep_resident(msg: dict, bs_prefetch: bool) -> tuple[bool, str | No
     (VERIFICATION_LOG §48.6 records its size) the first time a job resolves to
     False after a job that resolved to True.
 
-    Three guards, all on the ON path only (an OFF job is never blocked):
-
-    **G-A GGUF transformer with ``gguf_per_layer_quant=False`` -> RuntimeError
-    (fail loud).** The bf16 fused path (engine/gguf/loader_service.py) applies
-    IC-LoRA by ``weight.add_()`` — an IN-PLACE mutation of the state dict. With
-    a persistent registry that mutation is written straight into the cached
-    tensors, so every later job silently inherits the LoRA. This is a
-    CORRECTNESS problem, not a speed one, hence the different regime from the
-    two guards below. No API field turns per-layer quant off (the load
-    payload's ``gguf_per_layer_quant`` comes from the config's
-    ``model.gguf_per_layer_quant``), so this guard is the breakwater for a
-    config that does.
+    Two guards, both on the ON path only (an OFF job is never blocked):
 
     **G-B ``dit_cpu_load=False`` -> warn + auto-off.** Not a VRAM issue (the
     VERIFICATION_LOG §47.3 G8 measurement showed peak VRAM unchanged within
@@ -741,17 +729,6 @@ def _resolve_keep_resident(msg: dict, bs_prefetch: bool) -> tuple[bool, str | No
     assert _PIPE is not None  # only reachable from a post-load generate op
     # 直接属性アクセス（getattrの既定値ではなく）：属性が消えたらガードが
     # 黙って素通りになるより AttributeError で落ちるほうがよい。
-    # The quantized (fp8 / int8) safetensors transformer's forward is always out of place (engine/sft_quant), so
-    # only the GGUF bf16 fused path can contaminate the cache.
-    if _PIPE._transformer_format == "gguf" and not _PIPE._gguf_per_layer_quant:
-        raise RuntimeError(
-            "worker: keep_resident=1 is not allowed with "
-            "gguf_per_layer_quant=0 - the bf16 fused-LoRA path mutates the "
-            "state dict in place, which would permanently contaminate the "
-            "cross-job weight cache (every later job would silently inherit "
-            "this job's LoRA). Load the model with per-layer quant, or run "
-            "this job with keep_resident off."
-        )
     # ASCII only in these two WARNINGs, deliberately: STDERR on a Japanese
     # Windows is cp932 + backslashreplace, and these lines are exactly what an
     # operator reads when asking "why does my metadata say on->off?".
@@ -964,8 +941,8 @@ def _do_generate(msg: dict) -> None:
     # Block-swap prefetch (speed only, output bit-identical): absent -> False.
     bs_prefetch = _resolve_block_swap_prefetch(msg)
     # Cross-job CPU-skeleton cache (preprocessing speed only, output
-    # bit-identical): absent -> False. May raise (G-A) or auto-off (G-B/G-C)
-    # — see _resolve_keep_resident.
+    # bit-identical): absent -> False. May auto-off (G-B/G-C) — see
+    # _resolve_keep_resident.
     keep_res, _keep_res_reason = _resolve_keep_resident(msg, bs_prefetch)
     # Fused Triton GGUF dequantization (speed only, output bit-identical):
     # absent -> False.
@@ -1290,8 +1267,8 @@ def _do_generate_chain(msg: dict) -> None:
     attention, attn_degraded = _resolve_attention(msg)
     # Block-swap prefetch (speed only, output bit-identical): absent -> False.
     bs_prefetch = _resolve_block_swap_prefetch(msg)
-    # Cross-job CPU-skeleton cache: absent -> False; may raise (G-A) or
-    # auto-off (G-B/G-C). Same helper as the single-generate path.
+    # Cross-job CPU-skeleton cache: absent -> False; may auto-off (G-B/G-C).
+    # Same helper as the single-generate path.
     keep_res, _keep_res_reason = _resolve_keep_resident(msg, bs_prefetch)
     # Fused Triton GGUF dequantization (speed only, output bit-identical):
     # absent -> False. Same helper as the single-generate path.

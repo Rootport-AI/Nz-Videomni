@@ -2690,6 +2690,8 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **残課題**: 無し。**実機の判断（第5弾・2026-10-03）**: 対応外の型のGGUFを実機で確かめることは行わない——対応外の型を作るにはオーナーのモデルフォルダへ偽のGGUFを置くことになるため（単体テストで既に決着済み）。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145。
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144・§145、`engine/gguf/quant_service.py`（`dequantize_ggml_tensor`・`SUPPORTED_GGML_TYPES`）、`engine/gguf/loader_service.py`（`GGUFQuantStateDictLoader.load`）、`README.md` 351行（v0.5.80）。
 
+> **訂正（§146）**: bf16 経路と `engine/gguf/loader_service.py` は §3-210 で削除した。
+
 ### 3-205. 使われていないコード（第2次・追加2件＋型別名13個）の削除（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-76 からクローズ）
 
 - **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-76（**同書側は欠番**）。第1次の棚卸し（§3-180）の敵対的レビューで見つかった追加の未使用候補2件（同§3-180「残課題」の参照はここへ付け替え済み）。
@@ -2745,3 +2747,58 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev（第 5 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145）。
 - **残課題（引き継ぎ）**: `run_chain`／`run_outpaint`／`run_inpaint`先頭のリセットは持ち越さない（G3の連結2番目のセグメントの「before」は4,136／4,628 MiBで、1番目の8,441／8,906より小さく、持ち越されていないことを実機で確認した。連結の前処理〔深度・ポーズ〕のピークも含まない）。連結の経路には自動テストが無い（単体テストは単発の経路のみ）。
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145、`engine/pipeline/fast_video_pipeline.py`（`_reference_conditioning_from_pixels`。「job peak before this interval」のログ行）、`services/pipeline_manager.py`（`_write_chain_metadata`）、`engine/pipeline/chain_pipeline.py`（`vram_peak_mb`の内部値・10進MB）。
+
+### 3-210. GGUF の bf16 経路（`gguf_per_layer_quant=False`）を削除（選択肢C）（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-52 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-52（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）から起票された項目（GGUFの bf16 経路でジョブ単位の IC-LoRA が融合されない可能性）。
+- **到達条件**: bf16 経路（`gguf_per_layer_quant=False`）に、per-job の読み直しを足す（A）・現状維持（B）・経路そのものを消す（C）のいずれかを選ぶこと。**選択肢C（オーナー裁定 2026-10-03）で解消した**——この経路は量子化済みの値を bf16 に戻すだけで本物の bf16 ではなく、将来の VRAM リッチ機には「bf16 safetensors を読む」を別テーマとして起票するのが筋という理由による。
+- **何が完了したか**: `engine/gguf/loader_service.py`（336行）をファイルごと削除した（import していた`fast_video_pipeline.py`の1箇所も削除）。`fast_video_pipeline.py`の`_install_gguf`・`_transformer_format`・`_gguf_per_layer_quant`と、bf16融合を前提にしたコメント（「per-layerと量子化safetensorsはフォワード時に足す」という実態に書き換え）を削除・整理し、残る per-layer 経路の`_install_gguf`は削除前の枝（`GGUFQuantLoaderService(gguf_path=…, ic_loras_provider=lambda: self._ic_loras)`）と字句まで同じにした。`engine/worker.py`の keep_resident G-A ガード（「Three guards」→「Two guards」、G-Aの判定とraise、`msg["gguf_per_layer_quant"]`の読み取り）を削除した。`config.py`の鍵、`services/engines/ltx/adapter.py`のペイロード、`mcp_server/tools/generate.py`の docstring、`engine/gguf/quant_service.py`・`engine/gguf/ic_lora_common.py`のコメントも実態に合わせた。仕様書v0.5.83（§4.2・§6.2・§11.2の表・改訂履歴）、`API_REFERENCE.md`、`MULTI_ENGINE_DESIGN.md`も揃えた。`GET /api/v1/config`から`model.gguf_per_layer_quant`が消える（古い`config.yaml`の鍵は`extra='ignore'`で黙って無視）。テスト4本（`tests/test_worker_keep_resident_resolve.py`・`tests/test_model_swap_load.py`・`tests/test_pipeline_gguf_install_fail_loud.py`・`tests/test_ic_lora_forward.py`）を実態に合わせた。
+- **どの物差しで通ったか**: 敵対的レビュー（Opus）で、`_install_gguf`の最終形が削除前のper-layerの枝と字句まで同じであること、消した名前（`gguf_per_layer_quant`・`per_layer_quant`・`GGUFLoaderService`・`GGUFStateDictLoader`・`loader_service`・`_transformer_format`・`_gguf_per_layer_quant`）の参照がコード・設定・テスト・設計書に0件であること、`GET /config`の変化を実測で確認済み。アプリ`.venv`全件2,898 passed・61 skipped、`.venv-engine` 622 passed（G-Aの3本が消えた分だけ減）、`.venv-engine-ltx25` 233 passed。**実機**: サーバー起こし直し後に第5弾G1と同条件のT2V（LTX 2.3・512×320×49・seed 12345・sdpa・Q4_K_M）を1本流し、映像ストリームMD5 `c9da075e7758f29ab3d2e02423da98e8`・音声ストリームMD5 `cbc2a850fc8b704bc1ea3b9cbb2ab1b4`がG1と完全一致、`peak_vram_mb` 8,442／`peak_vram_reserved_mb` 8,972も同じ。
+- **クローズ理由**: 選択肢C（オーナー裁定）の実装が完了し、実機の前後比較でも出力が一致した。
+- **状態**: dev（第 6 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146）。
+- **残課題**: `fast_video_pipeline.py`の`if gguf_gemma_path:`（常に真）の引き算は本書§3-211で別途処理した。将来のVRAMリッチ機向けの「bf16 safetensorsを読む」は別テーマとして起票する（未起票）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146、`engine/pipeline/fast_video_pipeline.py`（`_install_gguf`）、`engine/worker.py`（`_resolve_keep_resident`）、`config.py`、`services/engines/ltx/adapter.py`、`mcp_server/tools/generate.py`、仕様書v0.5.83。
+
+### 3-211. `fast_video_pipeline.py` の `if gguf_gemma_path:`（常に真）を外す（起票：2026-10-03、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-78 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-78（**同書側は欠番**）。本書§3-207の実装時の敵対的レビュー（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145）で検出し、G8の比較を濁さないよう§1-60では残した小さな引き算。
+- **到達条件**: fail-fastの検査が`gguf_gemma_path`を必須にしているため常に真になる`if gguf_gemma_path:`を外し、`gguf_gemma_path`が常に真であることを前提にしたコードへ整理すること（選択肢A）。**達成した。**
+- **何が完了したか**: `fast_video_pipeline.py`の`if gguf_gemma_path:`（`else`無し）を削除し、中の13行を1段戻した。「Both are guaranteed by the fail-fast check above.」というコメントも`gguf_gemma_path`を含めた記述に書き直した。
+- **どの物差しで通ったか**: 敵対的レビュー（Opus）で、fail-fastの検査（`_required`に`gguf_gemma_path`を入れて空ならraise）が常に真であること、インデントを戻した13行の文と順序がHEADと同じであることを確認済み。§3-210と同じテストで回帰なし。
+- **クローズ理由**: 選択肢Aの引き算が完了した。
+- **状態**: dev（第 6 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146、`engine/pipeline/fast_video_pipeline.py`（`__init__`のGemmaの取り付け）。
+
+### 3-212. 撮り直し（Retake）窓のタイル予算——広い Stage-2 窓の実測で A／B／C いずれも不要と判明、コードは不変で決着（起票：2026-10-01、クローズ：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-40 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-40（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）から起票された項目。
+- **到達条件**: 広いStage-2窓（`stage2_window="w61"`）での長い撮り直しの窓（169フレーム超）について、タイル予算の較正（A）・段階化（B）・撮り直しの窓の上限を戻す（C）のいずれかを選ぶこと（オーナー判断）。**コードは変えずに決着した（オーナー裁定 2026-10-03）。**
+- **何が完了したか**: §145の実測8点（169〜481フレーム・1280×768・w61）で、符号化区間の予約ピークは窓の長さによらず13,958〜13,980 MiBでほぼ一定、481でも装置の16,376 MiBに収まることが確定した。これによりA（較正し直す）もC（上限を戻す）も不要と判明し、実測値が一定だったためB（段階化）も不要という判断になった。`engine25/chain25.py`の`RETAKE_ENCODE_TILE_AREA_BUDGET`のコメントの表の直後に「217〜481（stage-2をw61に固定した撮り直しの窓）の実測は§145」の段落を足した（敵対的レビューの指摘により、「撮り直しの窓」と「Stage-2の窓」を混同しない言い回しに修正済み）。stage-2の退避（361フレーム以上）は快適線の問題であり、本項が扱う撮り直しの符号化予算とは別である。
+- **どの物差しで通ったか**: §145の実測8点（1280×768・w61）が[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)の表と一致することを確認。敵対的レビューで、追加した段落が撮り直しの窓とStage-2窓を混同していない言い回しであることを確認済み。コード自体は不変（差分はコメントのみ、AST一致）。
+- **クローズ理由**: 実測によりA・B・Cのいずれも不要と判明し、コードを変えずに決着した。
+- **状態**: dev（第 6 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §145・§146、`engine25/chain25.py`（`RETAKE_ENCODE_TILE_AREA_BUDGET`・`_retake_encode_tiling`）。
+
+### 3-213. 操作パネルの解放ボタンにモデル読み込み中専用の文言（選択肢B）（起票：2026-10-03、実装：2026-10-03、オーナー目視合格・クローズ：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-77 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-77（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144（第4弾Part 2の敵対的レビュー）から起票された項目。
+- **到達条件**: 操作パネルの解放ボタンが、モデルの読み込み中に押すと汎用の固定文言「パイプラインの解放に失敗しました。」を出していた食い違いを、選択肢B（`useDangerZone.ts`で`PIPELINE_LOADING`を`JOB_BUSY`と同様に扱い「読み込み中です」の文言を出す。モックも409を返す）で解消すること。**達成した。**
+- **何が完了したか**: `useDangerZone.ts`に新しい状態`pipelineLoading`（既存の`loading`＝解放リクエスト送信中とは別）を足し、`JOB_BUSY`の判定の直後に`PIPELINE_LOADING`の分岐を置いた（サーバーの判定順＝`JOB_BUSY`が先、と同じ）。`DangerZonePanel.tsx`は`pipelineLoading`を`strings.settings.unloadLoading`（英"The server is still loading a model. Wait for it to finish, then try again."／日「モデルの読み込み中はパイプラインを解放できません。完了してからもう一度お試しください。」）で赤表示する。`bridge/mockBridge.ts`に旗`pipelineLoading`を足し、`JOB_BUSY`の判定の後に409`PIPELINE_LOADING`（message・detailはサーバーと同じ文字列）を返すようにした。`client.ts`のコメントも実態に合わせた。テスト3件（`useDangerZone.test.ts`1件・mockBridgeのテスト2件）。操作パネル`Docs/DEVLOG.md`§128を新設。
+- **どの物差しで通ったか**: `npm run typecheck` 0・`npm run lint` 0（既存の警告31は未変更ファイル）・`npx vitest run --exclude "**/backend.integration.test.ts"` 3,061件合格（新規3件を含む）。敵対的レビュー（Opus）で、`pipelineLoading`がボタンの無効化条件に関わらないこと・`JOB_BUSY`が先に判定されサーバーと同じ順であること・モックのmessage・detailがサーバーの文字列と一字一句同じであること・英日の文言がそろい`ja: Strings`の型検査も通ることを確認済み。`scripts/build.ps1`→`scripts/deploy.ps1`で実機と配布用の2つのaux2に新しい日本語文言を`grep -a`で確認。**オーナー目視: 合格（2026-10-03）**（AviUtl2を起動し設定画面でモデルの読み込みを開始、読み込み中に「パイプラインを解放」→「今すぐ解放」で新しい文言が赤で出て固まらないこと、読み込み後は「解放しました」になることを確認）。
+- **クローズ理由**: 選択肢Bの実装が完了し、オーナーの目視にも合格した。
+- **状態**: dev（第 6 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146、`webui/src/shell/useDangerZone.ts`、`DangerZonePanel.tsx`、`bridge/mockBridge.ts`（`handlePipelineUnload`）、`i18n/strings.ts`、操作パネル`Docs/DEVLOG.md`§128。
+
+### 3-214. int8 ConvRot の高速化（単独テーマとしては No-go・候補は §3-53 へ移設）（起票：2026-09-27、棚卸し・クローズ：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-33 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-33（**同書側は欠番**）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.4・[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14.4節のGo／No-go判断待ちから起票された項目。
+- **到達条件**: ConvRot形式のint8 transformerで、forwardごとに重みの回転を元に戻す計算（固定分）が生成時間に加わっている件を、Go／No-goの判断から始め、Goなら高速化の選択肢を洗い出して方法を決めること。**No-go（単独テーマとしては閉じる。オーナー裁定 2026-10-03）で決着した。**
+- **何が完了したか**: 棚卸し（§146）で、ConvRotの固定分は1080p・全onのLTX 2.5で生成全体の+3.8〜4.1秒（2.9〜4.3%）・1 forward 0.26〜0.42秒と小さく、fp8との体験差が小さいという結論に至った。候補のうち成り立つのはB（整数のまま回転してから倍率を掛ける・`torch._int_mm`・20〜40行・Triton不要・CPU実験でfloat64の参照とbf16が一致）だけで、固定分をほぼ消せる見込みだが得られるのは単発3〜4.6秒。A（高速アダマールのeager実装）は速くならない見込み、C（Triton融合）は約1,300行の規模、D（bf16キャッシュ）はRAM／VRAMで割に合わない、ComfyUI方式は精度低下で方針違反。どの方式でもConvRotの出力のbf16が約0.08%の要素で変わる。**候補Bは[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-53「生成時間の小粒最適化の積み上げ」の下位項目として[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)の未着手の候補(8)に移した**（オーナー裁定）。
+- **どの物差しで通ったか**: 棚卸し（Opus・読み取りのみ）が実装（`engine/sft_quant/dequant.py`のConvRot復元）と実測（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14.4節、`outputs/comfort-calib-2026-09-27/RESULTS.md`表5、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.4のG8）を突き合わせ、高速化候補A〜DとComfyUI方式を見積もりつきで列挙した。判断はオーナーとのディスカッションで決定した。
+- **クローズ理由**: Go／No-goの判断がNo-go（単独テーマとしては閉じる）で確定し、再着手の材料は候補(8)として研究ノートへ移した。
+- **状態**: dev（第 6 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146）。
+- **残課題**: `torch._int_mm`の実機動作・速さは未確認。再訪条件は[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)の未着手の候補(8)を参照。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14.4節、[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)（未着手の候補(8)・検討済み・no-go 6）、`engine/sft_quant/dequant.py`。

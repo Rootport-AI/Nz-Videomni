@@ -93,7 +93,7 @@
 
 `gguf_kv.py` を独立モジュールにしてあるのは責務が別だからである——`model_registry.py` は「名前をパスへ解決する」役、`gguf_kv.py` は「ファイルの先頭を読んで辞書を返す」役で、後者はモデル管理の概念を一切知らない。おかげで単体テスト（`tests/test_gguf_kv.py`）が合成バイト列だけで完結し、実重みファイルを必要としない。
 
-**パーサは自前である。** アプリ側の仮想環境（`.venv`）には GGUF パーサ用の `gguf` パッケージが入っておらず、入れると「アプリ venv は torch 無し」という前提（§5.3）が壊れる。読みたいのは文字列型のKVが2個だけなので、汎用パーサは要らない。なお `engine/gguf/loader_service.py` の `metadata()` は KV から埋め込みconfig JSON（`config` / `ltx.config` / `general.config`）を取り出すだけで、系統の判別には関与しない。
+**パーサは自前である。** アプリ側の仮想環境（`.venv`）には GGUF パーサ用の `gguf` パッケージが入っておらず、入れると「アプリ venv は torch 無し」という前提（§5.3）が壊れる。読みたいのは文字列型のKVが2個だけなので、汎用パーサは要らない。なお `engine/gguf/quant_service.py` の `GGUFQuantStateDictLoader.metadata` は KV から埋め込みconfig JSON（`config` / `ltx.config` / `general.config`）を取り出すだけで、系統の判別には関与しない。
 
 ### 2.4 規約（契約）としての保証 【オーナー裁定】
 

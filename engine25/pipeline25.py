@@ -868,11 +868,11 @@ IGNORED_FIELDS: dict[str, str] = {
 #
 # NAME SHARED WITH 2.3, IMPLEMENTATION NOT. 2.3's ``keep_resident`` retains the
 # skeletons of every sub-model behind a two-argument call that returns a tuple
-# and carries three internal guards (one fails the job when the GGUF fused-LoRA
-# path would mutate the retained weights in place, two degrade the request to
-# off). Each of these is one registry holding one state dict, with no
-# degradation path at all -- neither 2.5 component takes a LoRA and both are
-# loaded with ``assign=True``, so nothing mutates the retained tensors in place.
+# and carries two internal guards (both degrade the request to off when
+# main-memory copies would double up). Each of these is one registry holding
+# one state dict, with no degradation path at all -- neither 2.5 component
+# takes a LoRA and both are loaded with ``assign=True``, so nothing mutates the
+# retained tensors in place.
 # The CONTRACT is 2.3's verbatim (absent key means off, no end-of-job reset, an
 # echo on ``done``); the code behind it is unrelated.
 

@@ -1,0 +1,91 @@
+--- ../comfort-calib-2026-09-27/calib.py	2026-09-25 00:17:55.217871100 +0900
++++ calib.py	2026-10-03 15:19:40.643224100 +0900
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python
+ # -*- coding: utf-8 -*-
+-r"""VRAM comfort-limit calibration harness (2026-09-04, 2nd campaign).
++r"""VRAM comfort-limit calibration harness (2026-09-04, 2nd campaign; copy for the 2026-10-03 P1 campaign).
+ 
+ Copied from outputs/comfort-calib-2026-08-31/calib.py and extended for
+ §3-133 (reference-conditioned single shot) and §3-134 (canvas extension /
+@@ -396,35 +396,10 @@
+                               shell_pid=args.pid,
+                               python_pids=child_python_pids(int(args.pid)) if args.pid else None)
+         return cmd_server_status(args)
+-    # NOTE: this spawn needs a shell that is NOT sandboxed. A sandboxed parent
+-    # (e.g. an agent's default Bash tool) kills the detached child immediately
+-    # and server_console.log stays empty -- start it from a normal PowerShell
+-    # instead, then re-run `server start --pid <shell pid>` to register it.
+-    fh = open(SERVER_CONSOLE, "a", encoding="utf-8", errors="replace")
+-    proc = subprocess.Popen(
+-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(RUN_PS1)],
+-        cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT,
+-        creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+-    )
+-    PID_FILE.write_text(str(proc.pid), encoding="ascii")
+-    say("spawned run.ps1 (shell pid %d); waiting for GET /status ..." % proc.pid)
+-    deadline = time.time() + float(args.timeout)
+-    status = None
+-    while time.time() < deadline:
+-        if port_open():
+-            code, status = api("GET", "/status", timeout=30)
+-            if code == 200 and status and status.get("server") == "running":
+-                break
+-        time.sleep(1.0)
+-    if status is None or status.get("server") != "running":
+-        say("ERROR: server did not become reachable in time")
+-        return 1
+-    kids = child_python_pids(proc.pid)
+-    say("server up. shell pid=%d python child pid(s)=%s state=%s base_model=%s"
+-        % (proc.pid, kids, status.get("state"), status.get("base_model")))
+-    record_original_state(status, shell_pid=proc.pid, python_pids=kids)
+-    print(json.dumps(status, indent=2, ensure_ascii=False))
+-    return 0
++    # 2026-10-03 (P1 campaign): this bench NEVER starts the server.  The
++    # supervisor starts it with `python main.py`; if the port is closed this is
++    # an error, never a run.ps1 spawn.
++    raise SystemExit("server is not listening; start it yourself")
+ 
+ 
+ def cmd_server_status(args) -> int:
+--- ../comfort-calib-2026-09-27/drive2.sh	2026-09-27 02:44:34.804092600 +0900
++++ drive2.sh	2026-10-03 15:19:33.845835700 +0900
+@@ -2,13 +2,13 @@
+ # Per-point driver: runs one plan file (one point) at a time; after each point, checks the commit peak
+ # recorded during that point; if the peak reached 95% of the limit, stops and does not start the next.
+ # usage: drive2.sh <log> <plan.json> [<plan.json> ...]
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-09-27" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03" || exit 2
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ LOG="$1"; shift
+-CSV="S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-09-27/commit_log.csv"
++CSV="S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03/commit_log.csv"
+ PY="../../.venv/Scripts/python.exe"
+ say(){ echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+-queue_empty(){ curl -s -m 10 http://127.0.0.1:18620/api/v1/status | python -c "import sys,json; q=json.load(sys.stdin)['queue']; sys.exit(0 if q['pending']==0 and q['running']==0 else 1)"; }
++queue_empty(){ curl -s -m 10 http://127.0.0.1:18620/api/v1/status | "$PY" -c "import sys,json; q=json.load(sys.stdin)['queue']; sys.exit(0 if q['pending']==0 and q['running']==0 else 1)"; }
+ first=1
+ for plan in "$@"; do
+   if [ $first -eq 0 ]; then say "cool-down 150 s before $plan"; sleep 150; fi
+--- ../comfort-calib-2026-09-27/commit_table.py	2026-09-27 02:44:42.821705600 +0900
++++ commit_table.py	2026-10-03 15:19:33.809221600 +0900
+@@ -2,7 +2,7 @@
+ """Table 5 helper: per-point commit peak (from the drivers' 'done ... peak=' lines) joined with the
+ rule-v3 verdict from runs/<label>/run.json. Read-only. Usage: python commit_table.py > commit_table.md"""
+ import glob, io, json, re, os, sys
+-D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-09-27"
++D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03"
+ rows = {}
+ for log in sorted(glob.glob(os.path.join(D, "drive*.log"))):
+     for line in io.open(log, encoding="utf-8", errors="replace"):
+--- ../comfort-calib-2026-09-27/digest.py	2026-09-27 02:44:43.868925200 +0900
++++ digest.py	2026-10-03 15:19:33.814614800 +0900
+@@ -2,7 +2,7 @@
+ """Digest for the docs agent: one row per run (manifest order): label, base, transformer used, accel (from used),
+ geometry, stage2 tokens, rule-v3 verdict, stage2/restore deltas, used-check, commit peak (from driver logs). Read-only."""
+ import glob, io, json, os, re
+-D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-09-27"
++D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03"
+ peaks = {}
+ for log in glob.glob(os.path.join(D, "drive*.log")):
+     for line in io.open(log, encoding="utf-8", errors="replace"):

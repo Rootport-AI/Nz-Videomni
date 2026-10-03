@@ -9,7 +9,10 @@ VRAM comparison for LTX-2.3 (22B parameters):
   Q8_0 (1.06 bytes):     ~23 GB VRAM
   Q6_K (0.82 bytes):     ~18 GB VRAM
   Q4_K_M (0.56 bytes):   ~12 GB VRAM
-  Q2_K (0.33 bytes):     ~7  GB VRAM
+
+Supported tensor types: ``SUPPORTED_GGML_TYPES`` (F32/F16/BF16 and Q8_0, Q4_K,
+Q5_K, Q6_K). A GGUF holding any other type is refused with a ValueError when its
+state dict is read, before the transformer is built.
 
 At inference: +1 layer BF16 (~100-200 MB peak overhead, freed after each matmul).
 
@@ -21,7 +24,7 @@ Mechanism:
    This sidesteps PyTorch's "float-only parameter" restriction for quantized tensors.
 2. GGUFQuantStateDictLoader.load():
    - Float-type GGUF tensors (BF16/F16/F32): converted to bfloat16 with correct shape.
-   - Quantized tensors (Q8_0, etc.): wrapped in GGMLQuantizedTensor which stores raw
+   - Quantized tensors (Q8_0/Q4_K/Q5_K/Q6_K): wrapped in GGMLQuantizedTensor which stores raw
      uint8 bytes but reports the float shape via @property shape override. This passes
      load_state_dict's shape check (shape matches the meta buffer) and assigns the
      GGMLQuantizedTensor directly as the buffer value.
@@ -56,31 +59,40 @@ logger = logging.getLogger(__name__)
 
 _GGML_F32   = 0
 _GGML_F16   = 1
-_GGML_Q4_0  = 2
-_GGML_Q4_1  = 3
-_GGML_Q5_0  = 6
-_GGML_Q5_1  = 7
 _GGML_Q8_0  = 8
-_GGML_Q8_1  = 9
-_GGML_Q2_K  = 10
-_GGML_Q3_K  = 11
 _GGML_Q4_K  = 12
 _GGML_Q5_K  = 13
 _GGML_Q6_K  = 14
-_GGML_Q8_K  = 15
-_GGML_IQ4_NL = 20
-_GGML_IQ4_XS = 22
 _GGML_BF16  = 30
 
-# The three K-quant types the fused Triton kernels cover. Everything else keeps
-# the eager path unconditionally — Q4_K/Q5_K/Q6_K are 100% of the quantised
-# tensors in the shipped DiT and Gemma GGUFs, so the remaining types are not
-# worth a kernel each.
+# The ONE list of tensor types this engine can read; every other type is refused
+# (``dequantize_ggml_tensor`` and ``GGUFQuantStateDictLoader.load`` both read it).
+SUPPORTED_GGML_TYPES = {
+    _GGML_F32: "F32",
+    _GGML_F16: "F16",
+    _GGML_BF16: "BF16",
+    _GGML_Q8_0: "Q8_0",
+    _GGML_Q4_K: "Q4_K",
+    _GGML_Q5_K: "Q5_K",
+    _GGML_Q6_K: "Q6_K",
+}
+
+
+def _unsupported_type_message(ggml_type: int) -> str:
+    supported = ", ".join(f"{name}({t})" for t, name in SUPPORTED_GGML_TYPES.items())
+    return f"unsupported GGML tensor type {ggml_type}; supported types: {supported}"
+
+# The three K-quant types the fused Triton kernels cover. Q8_0 keeps the eager
+# path unconditionally — Q4_K/Q5_K/Q6_K are 100% of the quantised tensors in the
+# shipped DiT and Gemma GGUFs, so Q8_0 is not worth a kernel.
 _TRITON_TYPES = (_GGML_Q4_K, _GGML_Q5_K, _GGML_Q6_K)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Per-type dequantisation (pure PyTorch, runs on CPU or CUDA; Q4_K/Q5_K/Q6_K
-# (``_TRITON_TYPES``) can be routed to the fused Triton kernels in dequant_triton)
+# (``_TRITON_TYPES``) can be routed to the fused Triton kernels in dequant_triton).
+# Only the types in ``SUPPORTED_GGML_TYPES``; each matches gguf-py's
+# ``gguf.quants`` exactly (tests/test_gguf_dequant_reference.py). Any other type
+# raises ValueError.
 # Based on city96/ComfyUI-GGUF/dequant.py — standalone, no C++ kernels
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -96,6 +108,8 @@ def dequantize_ggml_tensor(
     ggml_type: GGML quantisation type constant.
     original_shape: (out_features, in_features) — the unquantised shape.
     out_dtype: target dtype for the returned tensor.
+
+    Raises ValueError for a type outside ``SUPPORTED_GGML_TYPES``.
     """
     if ggml_type == _GGML_F32:
         return raw.view(torch.float32).view(original_shape).to(out_dtype)
@@ -105,16 +119,6 @@ def dequantize_ggml_tensor(
         return raw.view(torch.bfloat16).view(original_shape).to(out_dtype)
     if ggml_type == _GGML_Q8_0:
         return _dequant_q8_0(raw, original_shape, out_dtype)
-    if ggml_type == _GGML_Q4_0:
-        return _dequant_q4_0(raw, original_shape, out_dtype)
-    if ggml_type == _GGML_Q4_1:
-        return _dequant_q4_1(raw, original_shape, out_dtype)
-    if ggml_type in (_GGML_Q5_0, _GGML_Q5_1):
-        return _dequant_q5(raw, original_shape, out_dtype, ggml_type)
-    if ggml_type == _GGML_Q2_K:
-        return _dequant_q2_k(raw, original_shape, out_dtype)
-    if ggml_type == _GGML_Q3_K:
-        return _dequant_q3_k(raw, original_shape, out_dtype)
     # Fused Triton dequant — opt-in per job, and a pure accelerator: it returns
     # None for every failure mode (no Triton, kernel raised, first-call
     # bit-exactness check failed) after latching itself off for the rest of the
@@ -139,14 +143,8 @@ def dequantize_ggml_tensor(
         return _dequant_q5_k(raw, original_shape, out_dtype)
     if ggml_type == _GGML_Q6_K:
         return _dequant_q6_k(raw, original_shape, out_dtype)
-    if ggml_type in (_GGML_IQ4_NL, _GGML_IQ4_XS):
-        return _dequant_iq4(raw, original_shape, out_dtype, ggml_type)
 
-    logger.warning("Unsupported GGML type %d — returning zero tensor", ggml_type)
-    n = 1
-    for s in original_shape:
-        n *= s
-    return torch.zeros(n, dtype=out_dtype, device=raw.device).reshape(original_shape)
+    raise ValueError(_unsupported_type_message(ggml_type))
 
 
 def _n_elems(shape: tuple[int, ...]) -> int:
@@ -165,162 +163,6 @@ def _dequant_q8_0(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
     scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n_blocks, 1)
     qs = blocks[:, 2:].view(torch.int8).to(torch.float32)                       # (n_blocks, 32)
     out = (qs * scale).reshape(-1)
-    ne = _n_elems(shape)
-    return out[:ne].reshape(shape).to(dtype)
-
-
-def _dequant_q4_0(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype) -> torch.Tensor:
-    """Q4_0: 18 bytes per block — 2-byte fp16 scale + 16 bytes of packed 4-bit ints."""
-    BLOCK = 18
-    data = raw.view(torch.uint8)
-    n_blocks = data.numel() // BLOCK
-    blocks = data.reshape(n_blocks, BLOCK)
-    scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
-    raw_q = blocks[:, 2:].to(torch.int32)                                        # (n, 16)
-    lo = (raw_q & 0x0F).to(torch.float32) - 8                                   # lower nibbles
-    hi = ((raw_q >> 4) & 0x0F).to(torch.float32) - 8                            # upper nibbles
-    qs = torch.stack([lo, hi], dim=2).reshape(n_blocks, 32)                     # (n, 32)
-    out = (qs * scale[:, None]).reshape(-1)
-    ne = _n_elems(shape)
-    return out[:ne].reshape(shape).to(dtype)
-
-
-def _dequant_q4_1(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype) -> torch.Tensor:
-    """Q4_1: 20 bytes per block — scale (fp16) + min (fp16) + 16 bytes packed 4-bit."""
-    BLOCK = 20
-    data = raw.view(torch.uint8)
-    n_blocks = data.numel() // BLOCK
-    blocks = data.reshape(n_blocks, BLOCK)
-    scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
-    bias  = blocks[:, 2:4].reshape(-1, 2).view(torch.float16).to(torch.float32) # (n, 1)
-    raw_q = blocks[:, 4:].to(torch.int32)
-    lo = (raw_q & 0x0F).to(torch.float32)
-    hi = ((raw_q >> 4) & 0x0F).to(torch.float32)
-    qs = torch.stack([lo, hi], dim=2).reshape(n_blocks, 32)
-    out = (qs * scale[:, None] + bias[:, None]).reshape(-1)
-    ne = _n_elems(shape)
-    return out[:ne].reshape(shape).to(dtype)
-
-
-def _dequant_q5(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype, ggml_type: int) -> torch.Tensor:
-    """Q5_0 / Q5_1: Q4_0/Q4_1-style nibble unpacking plus the 5th bit from qh."""
-    if ggml_type == _GGML_Q5_0:
-        # Q5_0 block: 22 bytes = 2 scale + 4 high-bits + 16 low-bits
-        BLOCK = 22
-        data = raw.view(torch.uint8)
-        n_blocks = data.numel() // BLOCK
-        blocks = data.reshape(n_blocks, BLOCK)
-        scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)
-        qh = blocks[:, 2:6].to(torch.int32)
-        ql = blocks[:, 6:].to(torch.int32)
-        lo = (ql & 0x0F).to(torch.float32)
-        hi = ((ql >> 4) & 0x0F).to(torch.float32)
-        qs = torch.stack([lo, hi], dim=2).reshape(n_blocks, 32)
-        # Add 5th bit from qh
-        for i in range(32):
-            bit = (qh[:, i // 8] >> (i % 8)) & 1
-            qs[:, i] += bit.to(torch.float32) * 16
-        qs -= 16  # centre around 0
-        out = (qs * scale[:, None]).reshape(-1)
-    else:
-        # Q5_1 — 24 bytes block
-        BLOCK = 24
-        data = raw.view(torch.uint8)
-        n_blocks = data.numel() // BLOCK
-        blocks = data.reshape(n_blocks, BLOCK)
-        scale = blocks[:, :2].reshape(-1, 2).view(torch.float16).to(torch.float32)
-        bias  = blocks[:, 2:4].reshape(-1, 2).view(torch.float16).to(torch.float32)
-        qh = blocks[:, 4:8].to(torch.int32)
-        ql = blocks[:, 8:].to(torch.int32)
-        lo = (ql & 0x0F).to(torch.float32)
-        hi = ((ql >> 4) & 0x0F).to(torch.float32)
-        qs = torch.stack([lo, hi], dim=2).reshape(n_blocks, 32)
-        for i in range(32):
-            bit = (qh[:, i // 8] >> (i % 8)) & 1
-            qs[:, i] += bit.to(torch.float32) * 16
-        out = (qs * scale[:, None] + bias[:, None]).reshape(-1)
-
-    ne = _n_elems(shape)
-    return out[:ne].reshape(shape).to(dtype)
-
-
-def _dequant_q2_k(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype) -> torch.Tensor:
-    """Q2_K: super-blocks of 256 weights.
-    Block layout (84 bytes):
-      scales (16 bytes, 4-bit each) + qs (64 bytes, 2-bit each) + d (fp16) + dmin (fp16)
-    """
-    BLOCK = 84  # 16 scale bytes + 64 quant bytes + 2 d + 2 dmin
-    data = raw.view(torch.uint8)
-    n_blocks = data.numel() // BLOCK
-    blocks = data.reshape(n_blocks, BLOCK)
-
-    # d and dmin (fp16) at offsets 80, 82
-    d    = blocks[:, 80:82].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
-    dmin = blocks[:, 82:84].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
-
-    # Sub-block scales: 16 bytes, 2 scales per byte (4-bit each), 16 sub-blocks total
-    sc_raw = blocks[:, :16].to(torch.int32)  # (n, 16)
-    sc = (sc_raw & 0x0F).to(torch.float32)   # lower nibble: scale
-    mn = ((sc_raw >> 4) & 0x0F).to(torch.float32)  # upper nibble: min
-
-    # Quants: 64 bytes = 256 2-bit values
-    ql = blocks[:, 16:80].to(torch.int32)  # (n, 64)
-    q0 = (ql & 0x03).to(torch.float32)
-    q1 = ((ql >> 2) & 0x03).to(torch.float32)
-    q2 = ((ql >> 4) & 0x03).to(torch.float32)
-    q3 = ((ql >> 6) & 0x03).to(torch.float32)
-    qs = torch.stack([q0, q1, q2, q3], dim=2).reshape(n_blocks, 256)  # (n, 256)
-
-    # Each group of 16 quants uses the same sub-block scale/min
-    sc_rep = sc.repeat_interleave(16, dim=1)   # (n, 256)
-    mn_rep = mn.repeat_interleave(16, dim=1)   # (n, 256)
-    out = (d[:, None] * sc_rep * qs - dmin[:, None] * mn_rep).reshape(-1)
-
-    ne = _n_elems(shape)
-    return out[:ne].reshape(shape).to(dtype)
-
-
-def _dequant_q3_k(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype) -> torch.Tensor:
-    """Q3_K: 110-byte blocks, 256 weights.
-    Layout: ql (32 bytes 2-bit low) + qh (16 bytes 1-bit high) + scales (12 bytes 6-bit) + d (fp16)
-    """
-    BLOCK = 110
-    data = raw.view(torch.uint8)
-    n_blocks = data.numel() // BLOCK
-    blocks = data.reshape(n_blocks, BLOCK)
-
-    d = blocks[:, 108:110].reshape(-1, 2).view(torch.float16).to(torch.float32)  # (n, 1)
-
-    # Low 2 bits
-    ql = blocks[:, :32].to(torch.int32)  # (n, 32)
-    q0 = (ql & 0x03).to(torch.float32)
-    q1 = ((ql >> 2) & 0x03).to(torch.float32)
-    q2 = ((ql >> 4) & 0x03).to(torch.float32)
-    q3 = ((ql >> 6) & 0x03).to(torch.float32)
-    qs = torch.stack([q0, q1, q2, q3], dim=2).reshape(n_blocks, 128)
-
-    # High 1 bit from qh (16 bytes = 128 bits)
-    qh = blocks[:, 32:48].to(torch.int32)  # (n, 16)
-    for i in range(128):
-        bit = (qh[:, i // 8] >> (i % 8)) & 1
-        qs[:, i] += bit.to(torch.float32) * 4
-
-    # 6-bit scales: 12 bytes cover 16 sub-blocks
-    sc_raw = blocks[:, 48:60].to(torch.int32)  # (n, 12)
-    # Simplified: use first 16 values, clamp to 6 bits
-    sc = torch.zeros(n_blocks, 16, dtype=torch.float32, device=raw.device)
-    for i in range(8):
-        sc[:, i * 2]     = (sc_raw[:, i * 3] & 0x3F).to(torch.float32)
-        sc[:, i * 2 + 1] = ((sc_raw[:, i * 3] >> 6) | ((sc_raw[:, i * 3 + 1] & 0x0F) << 2)).to(torch.float32)
-    sc -= 32  # centre
-
-    sc_rep = sc.repeat_interleave(16, dim=1)  # (n, 256) — but qs only has 128; use first
-    out = (d[:, None] * sc_rep[:, :128] * qs).reshape(-1)
-
-    # Q3_K has 256 weights per block — need to replicate once more
-    # Simple doubling for the second half (same quants, same scales shifted)
-    out = out.repeat(2)[:n_blocks * 256].reshape(n_blocks * 256)
-
     ne = _n_elems(shape)
     return out[:ne].reshape(shape).to(dtype)
 
@@ -443,16 +285,6 @@ def _dequant_q6_k(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype)
     return out.reshape(-1)[:ne].reshape(shape).to(dtype)
 
 
-def _dequant_iq4(raw: torch.Tensor, shape: tuple[int, ...], dtype: torch.dtype, ggml_type: int) -> torch.Tensor:
-    """IQ4_NL / IQ4_XS: lookup-table based 4-bit quant.
-    Routed to the Q4_0 kernel instead of a lookup-table implementation, which
-    does not reproduce either format: IQ4_NL maps each nibble through a
-    non-linear table rather than Q4_0's (q - 8) * d, and IQ4_XS packs 256
-    weights into 136-byte blocks that the 18-byte Q4_0 layout misreads.
-    """
-    return _dequant_q4_0(raw, shape, dtype)
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # GGMLQuantizedTensor — tensor subclass that stores raw uint8 GGUF bytes but
 # reports the dequantised float shape via @property override.
@@ -530,7 +362,7 @@ class GGUFQuantStateDictLoader:
     Float-type tensors (BF16/F16/F32): converted to bfloat16 with the correct
     float shape — these load via load_state_dict normally.
 
-    Quantised tensors (Q8_0, Q4_K, etc.): wrapped in GGMLQuantizedTensor which
+    Quantised tensors (Q8_0/Q4_K/Q5_K/Q6_K): wrapped in GGMLQuantizedTensor which
     stores raw uint8 bytes but reports the float shape. The module_ops mutator
     registers Linear.weight as a buffer (not a parameter) so that the uint8
     dtype is accepted by load_state_dict(assign=True).
@@ -571,6 +403,7 @@ class GGUFQuantStateDictLoader:
 
         Float-type entries → bfloat16 tensors with correct float shape.
         Quantised entries → GGMLQuantizedTensor (uint8 bytes, float shape).
+        A tensor of a type outside ``SUPPORTED_GGML_TYPES`` → ValueError.
         """
         from ltx_core.loader.single_gpu_model_builder import StateDict
         import gguf as gguf_lib
@@ -590,6 +423,13 @@ class GGUFQuantStateDictLoader:
         for tensor in reader.tensors:
             name = tensor.name
             ggml_type = tensor.tensor_type.value
+            # Refuse an unsupported type here, before the bytes are copied and
+            # the (heavy) transformer build runs — not at the first forward.
+            if ggml_type not in SUPPORTED_GGML_TYPES:
+                raise ValueError(
+                    f"{self.gguf_path}: tensor {name!r}: "
+                    f"{_unsupported_type_message(ggml_type)}"
+                )
             # GGUF stores shape in reversed order (column-major)
             float_shape = tuple(reversed(tensor.shape.tolist()))
 

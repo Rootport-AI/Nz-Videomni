@@ -139,6 +139,7 @@ other logging goes to STDERR.
           "peak_vram_reserved_mb":...}
           (+ "outpaint" or "inpaint" on those jobs, "chain" on generate_chain)
   @@LTX@@{"event":"error","detail":...}
+          (also the reply to an unknown op after load; before load it is ignored)
 
 ``ready.sage_available`` is this process's SageAttention probe (see
 engine/transformer/sage_attention_service.probe_sage); the app publishes it as
@@ -390,8 +391,9 @@ def _do_load(msg: dict) -> None:
     # is fully guarded and cached, so this cannot fail the load, and doing it
     # first means the answer is already known no matter which branch below emits
     # ``ready``. The early-return branch is unreachable from ``main`` (a second
-    # "load" after a successful one falls through to its unknown-op branch), but
-    # it must carry the same field.
+    # "load" after a successful one reaches its unknown-op branch and gets an
+    # ``error`` reply; the adapter sends "load" only once per process), but it
+    # must carry the same field.
     sage_available = probe_sage()
     if _PIPE is not None:
         _emit("ready", sage_available=sage_available)
@@ -1445,7 +1447,8 @@ def main() -> None:
             continue
         if op == "shutdown":
             _shutdown()
-        _log(f"ignoring unknown op={op!r}")
+        _log(f"unknown op={op!r} -- answered with an error event")
+        _emit("error", detail=f"unknown op {op!r}")
 
     # EOF on stdin -> graceful shutdown.
     _shutdown()

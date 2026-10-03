@@ -269,13 +269,16 @@ def fill_mask_green_mp4(
       IC-LoRA was trained on the exact triple, and the engine's de-green step
       replaces pixels by value, so a two-unit drift would leave a green haze in
       the delivered video;
-    * ``format=gray`` plus a binarising ``lut`` at 128 BEFORE the merge.
-      ``maskedmerge`` is a LINEAR blend, so H.264's soft mask edge (the plugin
-      writes the mask through Media Foundation, and 4:2:0 chroma plus deblocking
-      always leave a grey ring) would otherwise produce a ring of HALF-green
-      pixels — exactly the values that survive both the sentinel test and the
-      de-green. 128 is the same threshold ``engine.pipeline.common.
-      decode_mask_video`` applies on the other side of the pipe;
+    * ``format=rgb24,extractplanes=r`` plus a binarising ``lut`` at 128 BEFORE
+      the merge: the mask's RED channel is taken and every value >= 128 becomes
+      white. ``maskedmerge`` is a LINEAR blend, so H.264's soft mask edge (the
+      plugin writes the mask through Media Foundation, and 4:2:0 chroma plus
+      deblocking always leave a grey ring) would otherwise produce a ring of
+      HALF-green pixels — exactly the values that survive both the sentinel test
+      and the de-green. Red >= 128 is the same rule the engines apply on the
+      other side of the pipe (``engine.pipeline.common.decode_mask_video`` for
+      LTX 2.3, ``engine25.inpaint25._decode_mask_u8`` for LTX 2.5); on a grey
+      mask (R=G=B) it is the same as thresholding the brightness;
     * the encode is lossless RGB (``libx264rgb -crf 0``, ``ffv1`` for builds
       without it), for the reason :func:`pad_green_mp4` documents at length;
     * ``-an``: the audio never travels through this file. The engine reads the
@@ -327,7 +330,7 @@ def fill_mask_green_mp4(
     graph = (
         f"[0:v]setpts=N/({frame_rate}*TB),format=rgb24,split[src][t];"
         f"[t]lutrgb=r={r}:g={g}:b={b}[grn];"
-        f"[1:v]setpts=N/({frame_rate}*TB),format=gray,"
+        f"[1:v]setpts=N/({frame_rate}*TB),format=rgb24,extractplanes=r,"
         f"lut=y='if(gte(val,128),255,0)',format=rgb24[mk];"
         f"[src][grn][mk]maskedmerge,"
         f"pad={canvas_width}:{canvas_height}:{pad_left}:{pad_top}"

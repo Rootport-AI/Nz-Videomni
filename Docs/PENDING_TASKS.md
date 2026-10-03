@@ -1,8 +1,8 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-03（第3弾: CLOSED 3-193〜3-196）。前回 2026-10-02: 第2弾: CLOSED 3-185〜3-192・§1-60の更新。
+- 作成: 2026-07-15／最終更新: 2026-10-03（第4弾: CLOSED 3-197〜3-206・§1-52の更新・§1-77起票）。前回 2026-10-03: 第3弾: CLOSED 3-193〜3-196。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-36・§1-37・§1-40・§1-41・§1-42・§1-46・§1-47・§1-51・§1-52・§1-53・§1-54・§1-60・§1-61・§1-76 が立っている。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は §1-31・§1-33・§1-40・§1-41・§1-52・§1-60・§1-77 が立っている。**
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**2026-10-02に §2-1・§2-2 として立て直した（元は §1-43・§1-56）。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
@@ -31,29 +31,6 @@
 - **正本**: 復元の設計は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.2、コードは `engine/sft_quant/dequant.py`。
 - **着手**: 上の (1) の Go／No-go の判断からです（C-4 較正は完了・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-169）。
 
-### 1-36. 読み込みの最中の `unload` で 409 の見張りが開く（起票：2026-10-01）
-
-- **現象**: `services/pipeline_manager.py` の `PipelineManager.load`／`reload` は冒頭の区間でだけロックを取り、`self.runner.load(...)`（ワーカーの起動と読み込みの待ち）はロックの外で走る。その間に `unload` が来ると、ロックを取って `runner.unload()` を呼んだ後に `state` を `STATE_UNLOADED` に戻す。ワーカー構築前（`_proc` がまだ無い時点）に `unload` が来た場合は `runner.unload()` は何もせず読み込みはそのまま続いて最後に `state` を `STATE_READY` にするが、その間 `state` が `unloaded` になっているため、2 度目の `load` が `_reject_while_loading`（409 の見張り）を素通りし、ワーカーの構築が重なり得る。`_proc` がある時点で `unload` が来た場合は `shutdown`・`terminate` で読み込み側の `_read_event` が失敗し、`_cleanup_after_error` を経て `pipeline_load_failed` になる。mock と `conftest` の `client` で再現済み——読み込み中に `unload` を呼ぶと、2 度目の `load` が素通りしワーカーの構築が 2 本重なることを確認した。
-- **影響**: 利用者が読み込み中に解放ボタンを押した場合だけ発生する。クラッシュ・データ破損は無い。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: `unload` にも読み込み中の見張りを置く（**凍結 API 契約の変更**——`/pipeline/unload` に 409 `PIPELINE_LOADING` が加わる。`load`／`reload` の状態の復帰を `finally` にする前提が要る）。
-  - B: 読み込み中に来た `unload` を、読み込みの完了（成功／失敗）まで待たせる。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」（コメント現行化で検出、2026-10-01 起票）。
-- **関連ファイル**: `services/pipeline_manager.py`（`PipelineManager.load`・`reload`・`unload`・`_reject_while_loading`）、`services/engines/ltx/adapter.py`（`_RealBackend.unload`・`_proc`）。
-
-### 1-37. 連結ジョブの取り消しが結果に反映されない（起票：2026-10-01）
-
-- **現象**: `services/pipeline_manager.py` の `PipelineManager.run_chain_job` は `start_job` の直後に一度だけ `job.cancel_requested` を見て、真ならその場で `cancelled` にして戻る。生成の開始後に `cancel_requested` が立っても、それを見る箇所が無いため `completed` のまま終わる。単発の `PipelineManager.run_job` は生成後にも `job.cancel_requested` を見て `cancelled` にする分岐を持つ。mock で再現済み（連結は `completed`・単発は `cancelled` になる）。
-- **文書との食い違い**: [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §7.2 は「生成が終わったとき `cancel_requested` が立っていれば最終ステータスを `cancelled` にする」と、単発と連結を分けずに書いている。
-- **影響**: バッチ A2V を停止したとき、実行中の行が `cancelled` から `Waiting` へ戻る（i2v は既にそう）。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: コードを仕様書に合わせる（`run_chain_job` の生成後にも `cancel_requested` の確認を足す。`start_job` 直後の確認を生成後へ「移動」するだけで済む）。
-  - B: 仕様書に「連結ジョブは dispatch 後の取り消しを結果へ反映しない（常に completed で終わる）」と明記する。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」（コメント現行化で検出、2026-10-01 起票）。
-- **関連ファイル**: `services/pipeline_manager.py`（`PipelineManager.run_job`・`run_chain_job`）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §7.2。
-
 ### 1-40. 撮り直し（Retake）の窓のタイル予算が広い Stage-2 窓で未計測（起票：2026-10-01）
 
 - **現象**: `engine25/chain25.py` の `RETAKE_ENCODE_TILE_AREA_BUDGET`（撮り直しの窓を符号化するときの空間タイルの面積上限・448×384）は、実測が撮り直しの窓 73・121・169 フレーム（`standard` のStage-2 窓で許される上限）までしかない。一方 `chain_math.py` の `retake_max_window_px(v_tile)` は、より広い Stage-2 窓（`stage2_window="w61"`）を選ぶと撮り直しの窓を `8 * v_tile - 7` で計算し、481 フレームまで許す。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §78.5 の2つ目の表では、同じタイル設定のまま 121→169 フレームで予約ピークが 8,182→13,926 MB に増えている。**この先481フレームまで伸ばしたときに16 GiBのカードへ収まるかどうかは、全くの未測ではない**——w61・481フレーム・1152×576の撮り直しは[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §116.7の5で1回完走している（`peak_vram_mb` 12,169）。ただし予約ピーク（`peak_vram_reserved_mb`）の記録と、1280×768での実測は無い。
@@ -76,50 +53,6 @@
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
 - **関連ファイル**: `engine25/chain25.py`（`run_chain` の `tiling_config = ensure_tiling_config(...)`・`_retake_encode_tiling`）。
 
-### 1-42. ワーカーが未知の op に応答しない（起票：2026-10-01）
-
-- **現象**: `engine25/worker.py` の `main` の、読み込み完了後のサービスループは、既知でない `op`（ワーカーへ送る操作の種別を示す文字列）を `_log` で記録するだけで、どのイベントも送り返さない（LTX 2.3 の `engine/worker.py` の `main` も同じ作り）。現在アダプタ（`services/engines/ltx25/adapter.py` の `_RealBackend25`。基底は `services/engines/ltx/adapter.py` の `_RealBackend`）が送る `op` は `load`／`generate`／`generate_chain`／`shutdown` の4つだけなので実際には起きないが、もし未知の `op` が送られれば、応答を待つ側（`_RealBackend._read_worker_events`）はいつまでも次の行を待ち続けることになる。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 未知の `op` には `error` イベントを返すようにする。
-  - B: 現状を許容し、「未知の op には応答しない」という仕様をコード上に明記する。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
-- **関連ファイル**: `engine25/worker.py`（`main`）、`engine/worker.py`（`main`）、`services/engines/ltx/adapter.py`（`_RealBackend._read_worker_events`）、`services/engines/ltx25/adapter.py`（`_RealBackend25`）。
-
-### 1-46. 撮り直し（Retake）の `source_had_audio` が、音声があったのに `false` になる場合がある（起票：2026-10-01）
-
-- **現象**: `engine25/chain25.py` の Retake（撮り直し）の窓の音声の取り込みでは、窓に音声トラックがあっても、符号化した音声潜在が窓の長さ（`a_total`）に足りず `regenerate_audio=False` のとき、警告ログを出したうえで `retake_had_audio` を `False` に書き換え、続く `if not retake_had_audio:` で凍結する先頭・末尾の音声潜在数（`n_head_a`・`n_tail_a`）を0にする。`metadata.json` の `retake` ブロックの `source_had_audio` は `bool(retake_had_audio)` をそのまま書き写すので、この場合「窓に音声トラックは実際にあった」のに `false` になる。同じ代入のすぐ上のコメントは「`source_had_audio` と `audio_frozen` は別物で、`regenerate_audio=False` と短い符号化の組み合わせでは両者が分かれる（窓は音声を持ちながら凍結された帯は無い、という状態になりうる）」という意図を述べているが、実際には `source_had_audio` 自体も `false` になるため、この意図どおりには動いていない。LTX 2.3 側の `engine/pipeline/chain_pipeline.py` の `_encode_retake_window` も同じ作りで、同じ食い違いを持つ。
-- **影響**: `regenerate_audio=false` で、窓の音声の符号化が窓の長さに足りないとき（珍しい状況）だけ発生する。メタデータの `source_had_audio` の値が実際と違う値になるだけで、生成物（映像・音声）には影響しない。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 「音声トラックがあったか」と「実際に凍結したか」を別の変数で持ち、`source_had_audio` はこの場合も `true` のままにする。
-  - B: 現状の値（この場合は `false`）を契約として文書に書く。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）。
-- **関連ファイル**: `engine25/chain25.py`（Retake の音声の取り込み・`retake_had_audio`・`n_head_a`・`n_tail_a`）、`engine/pipeline/chain_pipeline.py`（`_encode_retake_window`。LTX 2.3 側も同じ作り）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2「チェーンの retake（撮り直し）の音声の補足」。
-
-### 1-47. 自己試験の `prefetch_used` が「install の飛ばし」を検出できない可能性（起票：2026-10-01）
-
-- **現象**: `engine25/gguf_transformer.py` の `_selftest` は、各ラウンドの `round_report["prefetch_used"]` を `BlockSwapService.last_prefetch_used`（`engine/transformer/block_swap_service.py`）から読んで記録する。この値を "off" に戻しているのは `install()` の冒頭（`self.last_prefetch_used = "off"`）だけで、ビルドの先頭で呼ばれる `teardown_prefetch()` 自体はこの値を戻さない。もし `ensure_block_swap_installed` が（ブロックに前のビルドの印が残っていることを理由に）`install()` を飛ばしたラウンドがあれば、`last_prefetch_used` は前のラウンドの値（"on"）をそのまま読んでしまい、ラウンドごとの判定 `prefetch_every_round_engaged` も、ジョブ全体の判定 `block_swap_prefetch_verdict` も "on" のまま変わらないと見られる（`_prefetch_builds` の集計自体が「install を飛ばしたビルド」を数えないため）。
-- **影響**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §75.4(b)「3ラウンド連続・全ラウンドでエコー"on"」は、この欄を「1プロセスにつき1回きり」問題が起きていないことの直接証拠として引用しているが、上の経路が実際には起きていないことまでを確かめた記録ではない。実行して確かめてはいない。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: `teardown_prefetch()` でも `last_prefetch_used` を "off" に戻す。
-  - B: 自己試験が `install()` の実際の呼び出し回数を別の変数で数え、ラウンド数と突き合わせる。
-  - C: 現状を維持し、§75.4(b) を「install が飛ばされていないこと」まで証明する記録ではない点を文書に注記する。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §75.4(b)・§134（申し送り）。
-- **関連ファイル**: `engine25/gguf_transformer.py`（`_selftest`・`ensure_block_swap_installed`・`block_swap_prefetch_verdict`）、`engine/transformer/block_swap_service.py`（`install`・`teardown_prefetch`・`last_prefetch_used`）。
-
-### 1-51. Gemma の GGUF の取り付けに失敗しても読み込みが成功扱いになる（起票：2026-10-01）
-
-- **現象**: `engine/pipeline/fast_video_pipeline.py` の `_install_gemma_gguf` は、例外を捕まえると「falling back to stock GPU text encoder」と警告ログを出すだけで `load` を続行する。ところが `__init__` が `DistilledPipeline(..., gemma_root=None)` で作るため、戻り先であるはずの「素のGPUテキストエンコーダ」は実在しない。同じ型の食い違いが `_install_gguf` の非LoRA時の失敗（「falling back to safetensors」ログ）にもあり、本番では `services/engines/ltx/adapter.py` の `_RealBackend._build_load_payload` が `checkpoint_path` を常に `""`（ハードコード）で送るため、戻り先の safetensors 経路も存在しない。
-- **影響**: どちらも通常は起きない（GGUFファイルが壊れている・欠けているなど稀な場合のみ）。発生すると `load` 自体は成功と報告されるが、最初の生成ジョブでテキストエンコーダ（または transformer）が無い状態で落ちる。偽物で再現済み——取り付けを失敗させても `_install_gemma_gguf`／`_install_gguf` は正常に戻り、最初の生成で落ちることを確認した。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 取り付けの失敗を `load` 自体の失敗にする（例外を外へ出す）。
-  - B: ログに「戻り先が存在しない」旨を明記し、現状の動作（最初のジョブで失敗する）を契約として文書に書く。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
-- **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`_install_gemma_gguf`・`_install_gguf`）、`services/engines/ltx/adapter.py`（`_RealBackend._build_load_payload`・`checkpoint_path`）。
-
 ### 1-52. GGUF の bf16 経路でジョブ単位の IC-LoRA が融合されない可能性（起票：2026-10-01）
 
 - **現象**: `engine/pipeline/fast_video_pipeline.py` の `_install_gguf` は `gguf_per_layer_quant=False` のとき `GGUFLoaderService(gguf_path=gguf_path, ic_loras=ic_loras)` を組み立てる。ここへ渡る `ic_loras` はパイプライン作成時点の値（`__init__` 冒頭の `_set_ic_job` が張った固定リスト）で、ワーカー（`engine/worker.py`）はパイプライン作成時に IC-LoRA を渡さないため常に空になる。一方 `generate()`／`generate_chain()` がジョブごとに呼ぶ `_set_ic_job` は `self._ic_loras` を書き換えるだけで、`per_layer_quant=True` の経路（`GGUFQuantLoaderService` に `ic_loras_provider=lambda: self._ic_loras` を渡し、フォワード時に毎回読み直す）と違い、`GGUFLoaderService` 側にはジョブごとの値を読み直す仕組みが無い。
@@ -128,30 +61,9 @@
   - A: `GGUFLoaderService` にも per-job の読み直し（`ic_loras_provider` 相当）を足す。
   - B: 実機で確かめたうえで、問題が無ければ現状を維持する。
   - C: bf16 経路（`gguf_per_layer_quant=False`）そのものを消す。
-- **着手**: 着手時は go／no-go の検討から始める。
+- **着手**: 第6弾（G）で bf16 経路（`gguf_per_layer_quant=false`）そのものを消すかどうかの判断と一緒に扱う（オーナー決定 2026-10-03。A を先に入れると G で消す場合に無駄になるため）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
 - **関連ファイル**: `engine/pipeline/fast_video_pipeline.py`（`_install_gguf`・`_set_ic_job`・`_ic_loras`）、`engine/gguf/loader_service.py`（`GGUFLoaderService`）、`engine/gguf/quant_service.py`（`GGUFQuantLoaderService`）。
-
-### 1-53. V2V の頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製しない（起票：2026-10-01）
-
-- **現象**: `engine/pipeline/chain_pipeline.py` の `_encode_end_source`・`_encode_retake_window`・A2V の各音声符号化は、符号化前に波形のチャンネル数が1かどうかを見てステレオへ複製する（`wf.repeat(1, 2, 1)`。コメントは「音声VAEの `conv_in` はステレオ専用（weight `[128,2,3,3]`）」と明記）。ところが `_encode_source_heads` の音声符号化はこの分岐を持たず、デコードした波形をそのまま音声VAEの符号化に渡す。
-- **影響**: モノラル音声を持つ素材を V2V の頭（連結の先頭）に使ったときに発生する。音声VAEの符号化器がステレオ入力専用であることは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §25.2 の G0 スパイクで実測済みで、上流の `encode_audio` はチャンネル数を揃えないため、ジョブが符号化の段で失敗する見込みが高い（実機でモノラルの元動画を流した記録は無い）。この抜けは §73.1 の 4（LTX 2.5 への移植時の記録）にも書かれている。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: `_encode_source_heads` にも同じ複製を足す。
-- **着手**: 着手時は go／no-go の検討から始める（まず実機確認）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §25.2・§73.1・§135（申し送り）。
-- **関連ファイル**: `engine/pipeline/chain_pipeline.py`（`_encode_source_heads`・`_encode_end_source`・`_encode_retake_window`）。
-
-### 1-54. マスクの二値化の基準が2箇所で違う（起票：2026-10-01）
-
-- **現象**: `engine/pipeline/common.py` の `decode_mask_video`（`engine/pipeline/inpaint_pipeline.py` がこれを import して使う）と `engine25/inpaint25.py` の `_decode_mask_u8` は、どちらもRGBの赤チャンネル（`f[0, :, :, 0]`）をしきい値128で二値化する。一方 `services/video_io.py` の `fill_mask_green_mp4` は、ffmpegの `format=gray`（輝度）を経てからしきい値128のlutを掛ける。灰色でないマスク（R=G=Bでない）では、この2つの基準が異なって二値化しうる。
-- **影響**: マスクがRGBで純粋な灰色（R=G=B）でない場合だけ発生する。緑で塗る範囲（`fill_mask_green_mp4`側）と、ブレンド・復元に使うマスク（`decode_mask_video`側）がずれるおそれがある。
-- **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 片側をもう片方の基準（赤チャンネルまたは輝度）に揃える。
-  - B: 現状を許容し、「マスクは灰色で渡すこと」を契約として明記する。
-- **着手**: 着手時は go／no-go の検討から始める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135（申し送り）。
-- **関連ファイル**: `engine/pipeline/common.py`（`decode_mask_video`）、`engine25/inpaint25.py`（`_decode_mask_u8`）、`services/video_io.py`（`fill_mask_green_mp4`）、`engine/pipeline/inpaint_pipeline.py`。
 
 ### 1-60. `embed_cpu_offload` が `install` で固定され、通らない枝が残る（起票：2026-10-01）
 
@@ -168,28 +80,17 @@
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §136（申し送り）。
 - **関連ファイル**: `engine/gemma/gguf_quant_service.py`（`GemmaGGUFQuantLoaderService.install`・`GemmaGGUFQuantStateDictLoader.load`・`_load_gguf_gemma`・`_patch_gemma_skip_full_logits`・`_install_cpu_embed_offload`）。
 
-### 1-61. GGUF の純 torch の逆量子化で 8 つの型が誤った値を返すか止まる（起票：2026-10-01）
+### 1-77. 操作パネルの解放ボタンが、モデルの読み込み中に押すと固定文言「パイプラインの解放に失敗しました。」を出す（起票：2026-10-03）
 
-- **現象**: `engine/gguf/quant_service.py` の `_dequant_q4_0`・`_dequant_q4_1`・`_dequant_q5`・`_dequant_q2_k`・`_dequant_q3_k`・`_dequant_iq4` を、`.venv-engine` の `torch` と参照実装 `gguf.quants`（gguf-py）を比べて検算したところ（コメント現行化の検算で確定）、8つの型で誤った値を返すか止まることが分かった。Q4_0・Q4_1・Q5_0・Q5_1・Q2_K はスケール（`d`・`dmin`）の `[:, None]` で中間テンソルが (n, n, …) に広がり（実寸ではメモリ不足で止まる。小さなブロック数では黙って誤った値を返す）、ニブルや2ビット値の並べ方も参照と違う。Q3_K は必ず `IndexError` で止まる。IQ4_NL は非線形の表を通らない。**台帳の記述の訂正**: `_GGML_IQ4_XS = 22` は型番号の取り違えである——gguf-py では 22 は IQ2_S、IQ4_XS は 23 であり、ブロックの大きさ（136 バイト）が Q4_0 の 18 バイトと合わずほとんどの形で reshape の段で止まるのは本物の IQ4_XS ではなく IQ2_S である。本物の IQ4_XS（23番）は対応表に無い型として扱われ、`dequantize_ggml_tensor` が警告つきでゼロのテンソルを返す。Q8_0・Q4_K・Q5_K・Q6_K は参照と完全一致する。あわせて、bf16 経路の `GGUFStateDictLoader.load` は、逆量子化に失敗したテンソルを「Failed to dequantize … skipping」という警告だけで飛ばし、そのテンソルを欠いたまま読み込みを続ける。
-- **影響**: **製品の経路では通らない**。Triton の融合カーネルが受け持つのは Q4_K・Q5_K・Q6_K で、配布の GGUF と `models\` の量子化テンソルもこの3型だけである。利用者が自分で置いた GGUF（Q3_K_M・Q4_0 など）を使ったときだけ当たる。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §1.1 のバグ #3／#4 と同じ型の誤りが、直されなかった型に残っている。なお、対応表に無い型（Q8_1・Q8_K・IQ2／IQ3 系など）は、`dequantize_ggml_tensor` が警告を出してゼロのテンソルを返す（止まらずに重みがゼロになる）。
+- **現象**: サーバーは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-206 で読み込み中の `POST /pipeline/unload` に 409 `PIPELINE_LOADING`（detail は日本語の案内）を返すが、操作パネル `webui/src/shell/useDangerZone.ts`（82〜90 行付近）は `JOB_BUSY` だけを特別扱いし、それ以外は `DangerZonePanel.tsx`（46〜48 行付近）で汎用の `strings.settings.unloadError` の固定文言（「パイプラインの解放に失敗しました。」）になる（画面は固まらず、再試行もしない）。load 側は `useBaseModels.ts` で `PIPELINE_LOADING` を「読み込み中」として扱っている。モック `bridge/mockBridge.ts` の `handlePipelineUnload`（1408〜1416 行付近）は `JOB_BUSY` しか返さない。
+- **影響**: 表示だけ（画面が固まる・クラッシュするなどの実害は無い）。
 - **選択肢**（オーナー判断・優劣はつけない）:
-  - A: 参照実装（gguf-py の `gguf.quants`）の写しに置き換える。
-  - B: 対応外の型（対応表に無い型を含む）として読み込み時に明示的に断る（直すなら bf16 経路の `GGUFStateDictLoader.load` が警告だけで飛ばす枝も同じく例外に揃える）。
-- **着手**: 着手時は go／no-go の検討から始める。コード側を直すときは、同ファイルの Q3_K の関数（`_dequant_q3_k`）の中の3つのコメント（今の意図を述べている）と、他の型の「今のコードが返す形」の注記も合わせて見直す。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §137（コメント現行化 engine/ 第3回の検算の申し送り）。
-- **関連ファイル**: `engine/gguf/quant_service.py`（`_dequant_q4_0`・`_dequant_q4_1`・`_dequant_q5`・`_dequant_q2_k`・`_dequant_q3_k`・`_dequant_iq4`）、`engine/gguf/loader_service.py`（`GGUFStateDictLoader.load`）。
-
-### 1-76. 使われていないコード（第2次）（起票：2026-10-02）
-
-- **現象**: 第1次の棚卸し（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-180）で削除したコードが、別の未使用箇所を生んでいた。次がリポジトリ全体をGrepしても呼び出し元が無い。
-  - `engine/pipeline/utils.py` の `sync_device`（唯一の呼び出し元は、今回削除した `DistilledNativePipeline` だけだった）。
-  - `engine/transformer/block_swap_prefetch.py` の `PinnedStagingPool.release()`（唯一の呼び出し元は、今回削除した `BlockSwapService.uninstall` だけだった。`block_swap_prefetch_selfcheck.py` も呼ばない）。
-  - なお同じ `engine/pipeline/utils.py` の `device_supports_fp8` は未使用ではない——`fast_video_pipeline.py` でimportされ、`use_fp8 = use_fp8_transformer or device_supports_fp8(device)` で使われている。
-- **影響**: 無い（未使用のコードが残っているだけ）。
-- **選択肢**（オーナー判断・優劣はつけない）: 項目ごとに消すか残すかを決める。
-- **着手**: 着手時は go／no-go の検討から始める（影響が無いため軽い）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141（第1弾の敵対的レビューで `git grep` により確認）。
-- **関連ファイル**: `engine/pipeline/utils.py`（`sync_device`・`device_supports_fp8`）、`engine/transformer/block_swap_prefetch.py`（`PinnedStagingPool.release`）。
+  - A: 読み込み中は解放ボタンを押せなくする（`/status` の `state` を見る）。
+  - B: `useDangerZone.ts` で `PIPELINE_LOADING` を `JOB_BUSY` と同様に扱い「読み込み中です」の文言を出す（モックも 409 を返すように）。
+  - C: 現状を許容し文言だけ直す。
+- **着手**: 着手時は go／no-go の検討から始める。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144（第4弾 Part 2 の敵対的レビュー）。
+- **関連ファイル**: `webui/src/shell/useDangerZone.ts`、`DangerZonePanel.tsx`、`useBaseModels.ts`、`bridge/mockBridge.ts`（`handlePipelineUnload`）、`i18n/strings.ts`。
 
 ---
 

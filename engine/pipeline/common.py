@@ -204,9 +204,9 @@ def decode_mask_video(
     frame, with C == 3 even for a grey source (it goes through
     ``frame.to_rgb()``), so the RED channel is taken and the other two are
     dropped: for a genuinely grey mask all three are equal. (The ``lut`` in
-    ``video_io.fill_mask_green_mp4`` thresholds the mask after ``format=gray``,
-    i.e. on luma rather than on red, so for a mask that is not grey the two
-    sides can binarise differently.) The frames are NOT put through
+    ``video_io.fill_mask_green_mp4`` thresholds the same red channel, taken
+    with ``extractplanes=r``, so a mask that is not grey binarises the same
+    way on both sides.) The frames are NOT put through
     ``resize_and_center_crop`` the way ``_load_canvas_pixels_u8`` puts the canvas
     — that helper's whole job is to make a video fit a target size, which is
     exactly what must not happen here.

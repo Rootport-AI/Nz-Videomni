@@ -348,7 +348,7 @@ backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行い�
 
 選択は UI の「Models」設定タブのドロップダウン、または API `GET /models`（登録名の一覧確認）→ `POST /pipeline/load`（body `{"models": {"transformer": "<登録名>"}}`）で行います。選択が現在ロード中のものと異なる場合のみワーカーが再構築されます。
 
-GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字列）が埋め込まれていること、(2) テンソル名が LTX ネイティブの生キーであること、(3) `embeddings_connector` 層が非量子化（F32/BF16）であること。これらを満たさない外部配布 GGUF はロードに失敗します（条件を満たすのは QuantStack 製、および自家製変換ツール `Nz-GGUF-Converter-LTX23` の出力）。量子化タイプは既定の Q4_K_M に加え Q6_K / Q8_0 等にも対応します。
+GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字列）が埋め込まれていること、(2) テンソル名が LTX ネイティブの生キーであること、(3) `embeddings_connector` 層が非量子化（F32/BF16）であること。これらを満たさない外部配布 GGUF はロードに失敗します（条件を満たすのは QuantStack 製、および自家製変換ツール `Nz-GGUF-Converter-LTX23` の出力）。量子化タイプは既定の Q4_K_M に加え Q6_K / Q8_0 にも対応します。読める量子化テンソルの型は Q4_K・Q5_K・Q6_K・Q8_0 の 4 つ（ほかに量子化されていない F16・BF16・F32 の層）で、それ以外の型（Q4_0・Q5_0・Q2_K・Q3_K・IQ 系など）を含む GGUF は、最初の生成でエラーになります（読めない層をゼロで埋めて続けることはしません）。
 
 **fp8／int8 safetensors（LTX 2.3・LTX 2.5）**: CivitAI などで配布されている量子化 transformer の `.safetensors` も、**変換せずに `models/LTX23/Weights/`（LTX 2.5 なら `models/LTX25/Weights/`）へ置くだけで**、GGUF と同じドロップダウンに並びます。登録名の決まり方・選び方・API は上の GGUF と同じです。対応するのは fp8（重みを 8 ビットの浮動小数点で持つ形式）に加え、ComfyUI（画像・動画生成の定番 UI）が標準で読む 2 つの int8（8 ビットの整数）形式——`int8_tensorwise`（層ごとに倍率をスカラーか行ごとに持つ int8。多くはアダマール回転という前処理＝ConvRot を伴う）と `asym_w4a8_int8`（4 ビットの重みをコードブックで復元する方式）——です。**LTX 2.5 は Lightricks 公式が fp8 を配っていない**ので、fp8 で使えるのはコミュニティが変換したファイルです。
 

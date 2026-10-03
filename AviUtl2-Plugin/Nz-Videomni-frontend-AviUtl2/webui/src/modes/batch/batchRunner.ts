@@ -284,10 +284,13 @@ export class BatchRunner {
   /** Requests a graceful stop (spec §4's "explicit stop" rule): no further
    * rows are submitted after the one currently in flight, and a best-effort
    * `DELETE /jobs/{id}` is sent for that row. A queued job cancels
-   * immediately — the next poll sees `status:"cancelled"` and rewinds the
-   * row to `Waiting` for a clean resume; a running job may finish anyway
-   * (`Done`/`Failed`). Any DELETE failure is swallowed (best-effort, mirrors
-   * `batch.py`'s `request_stop`). No-op while idle. */
+   * immediately; a running job is flagged, runs to the end of its generation
+   * and then ends `status:"cancelled"` (its result is not handed out, though
+   * the file stays in `outputs/<job_id>/`). Either way the poll sees
+   * `cancelled` and rewinds the row to `Waiting` for a clean
+   * resume (a generation that itself errors still ends `Failed`). Any DELETE
+   * failure is swallowed (best-effort, mirrors `batch.py`'s `request_stop`).
+   * No-op while idle. */
   stop(): void {
     this.stopRequested = true;
     if (this._state === "running") this._state = "stopping";

@@ -1397,19 +1397,24 @@ def _selftest(  # noqa: PLR0913, PLR0915
 
         vram.reset()
         started = time.perf_counter()
+        builds_before = stage._prefetch_builds
         transformer = stage._build_transformer()
         build_seconds = time.perf_counter() - started
         vram.record(f"{index:02d}a_build", build_seconds)
         round_report["build_seconds"] = round(build_seconds, 2)
         round_report["num_blocks"] = int(transformer.num_blocks)
         # THE point of this selftest for block-swap prefetch (VERIFICATION_LOG
-        # §75.4 (b)): install() runs once per BUILD and resets this to "off"
-        # before deciding; a round that skipped install() would keep the
-        # previous round's value, so this catches a skipped install -- the
-        # failure the marker-stripping fixes -- only on the first round.
+        # §75.4 (b)). ``prefetch_used`` is the value the install() inside THIS
+        # round's build decided (install() resets it to "off" before deciding).
+        # It cannot see a SKIPPED install -- the failure the marker-stripping
+        # fixes -- because a round that skipped install() would simply keep the
+        # previous round's value. ``install_ran`` catches the skip itself: it is
+        # how much this build moved ``_prefetch_builds``, which only an install
+        # that actually ran on the swap path increments (0 or 1).
         round_report["prefetch_used"] = (
             stage._swap_service.last_prefetch_used if stage._swap_service is not None else "off"
         )
+        round_report["install_ran"] = stage._prefetch_builds - builds_before
 
         # Idempotency + uninstall are checked on the LAST round only: they need a
         # live model, and the uninstall leaves the blocks unusable for a forward.
@@ -1476,6 +1481,19 @@ def _selftest(  # noqa: PLR0913, PLR0915
     )
     report["checks"]["prefetch_verdict_matches_request"] = report["prefetch_verdict"] == (
         "on" if block_swap_prefetch else "off"
+    )
+    # Only rounds that took the swap path can be held to ``install_ran == 1``:
+    # with no swap service (``blocks_on_gpu == 0``) nothing installs, and a
+    # full-residency build calls ``install()`` directly, outside the tally.
+    # Independent of the prefetch request: the swap install runs (and is
+    # counted) whether or not prefetch was asked for. ``None`` = no round
+    # applies (``main`` fails only on ``False``).
+    swap_rounds = [
+        entry for entry in report["rounds"]
+        if stage._swap_service is not None and blocks_on_gpu < entry["num_blocks"]
+    ]
+    report["checks"]["install_ran_every_round"] = (
+        all(entry["install_ran"] == 1 for entry in swap_rounds) if swap_rounds else None
     )
     report["checks"]["rebuild_faster_than_first_build"] = (
         len(builds) < 2 or max(builds[1:]) < builds[0]

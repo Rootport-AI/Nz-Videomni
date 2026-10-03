@@ -354,8 +354,9 @@ class LTXFastVideoPipeline:
                 per_layer_quant=gguf_per_layer_quant,
                 ic_loras=self._ic_loras,
             )
-        # ── quantized (fp8 / int8) safetensors transformer. NOT wrapped in try/except:
-        # a rejected or broken file must fail the load, never fall back.
+        # ── quantized (fp8 / int8) safetensors transformer. NOT wrapped in try/except
+        # (the GGUF installs are not either): a rejected or broken file must fail
+        # the load, never fall back.
         if safetensors_transformer_path:
             self._install_safetensors(safetensors_transformer_path)
 
@@ -959,50 +960,40 @@ class LTXFastVideoPipeline:
         per_layer_quant: bool = True,
         ic_loras: list[IcLoraEntry] | None = None,
     ) -> None:
+        # NOT wrapped in try/except: a failed install must fail the load. There
+        # is nothing to fall back to — in production ``checkpoint_path`` is
+        # empty, so no safetensors transformer build exists.
         ic_loras = list(ic_loras or [])
-        try:
-            if per_layer_quant:
-                # The per-layer-quant path applies IC-LoRA at FORWARD
-                # time (ggml_linear_forward adds the fp32 delta onto the fresh
-                # per-call dequant tensor). We hand the service a provider that
-                # returns the CURRENT job's adapters (self._ic_loras), read on
-                # every transformer build — so LoRAs can change per generate()
-                # without mutating any compressed/cached bytes.
-                from engine.gguf.quant_service import GGUFQuantLoaderService
-                service = GGUFQuantLoaderService(
-                    gguf_path=gguf_path,
-                    ic_loras_provider=lambda: self._ic_loras,
-                )
-                service.install(self.pipeline.model_ledger)
-                self._gguf_service = service
-                import logging
-                logging.getLogger(__name__).info(
-                    "GGUF per-layer quant installed: weights stay compressed "
-                    "(in VRAM, or on the CPU side under block swap) (%s); IC-LoRA "
-                    "applied at forward time (per-job)", gguf_path
-                )
-            else:
-                from engine.gguf.loader_service import GGUFLoaderService
-                service = GGUFLoaderService(gguf_path=gguf_path, ic_loras=ic_loras)
-                service.install(self.pipeline.model_ledger)
-                self._gguf_service = service
-                import logging
-                logging.getLogger(__name__).info(
-                    "GGUF load-time dequant installed (full BF16 in VRAM): %s%s",
-                    gguf_path,
-                    f" + {len(ic_loras)} IC-LoRA(s)" if ic_loras else "",
-                )
-        except Exception as exc:
-            # Fail-loud when LoRAs were requested: a silent safetensors fallback
-            # would produce a plausible-but-wrong (no-LoRA) result. With no
-            # LoRAs, only log a warning and continue (in production
-            # ``checkpoint_path`` is empty, so there is no safetensors build
-            # to fall back to).
-            if ic_loras:
-                raise
+        if per_layer_quant:
+            # The per-layer-quant path applies IC-LoRA at FORWARD
+            # time (ggml_linear_forward adds the fp32 delta onto the fresh
+            # per-call dequant tensor). We hand the service a provider that
+            # returns the CURRENT job's adapters (self._ic_loras), read on
+            # every transformer build — so LoRAs can change per generate()
+            # without mutating any compressed/cached bytes.
+            from engine.gguf.quant_service import GGUFQuantLoaderService
+            service = GGUFQuantLoaderService(
+                gguf_path=gguf_path,
+                ic_loras_provider=lambda: self._ic_loras,
+            )
+            service.install(self.pipeline.model_ledger)
+            self._gguf_service = service
             import logging
-            logging.getLogger(__name__).warning(
-                "GGUF install failed (%s) — falling back to safetensors", exc
+            logging.getLogger(__name__).info(
+                "GGUF per-layer quant installed: weights stay compressed "
+                "(in VRAM, or on the CPU side under block swap) (%s); IC-LoRA "
+                "applied at forward time (per-job)", gguf_path
+            )
+        else:
+            from engine.gguf.loader_service import GGUFLoaderService
+            service = GGUFLoaderService(gguf_path=gguf_path, ic_loras=ic_loras)
+            service.install(self.pipeline.model_ledger)
+            self._gguf_service = service
+            import logging
+            logging.getLogger(__name__).info(
+                "GGUF load-time dequant installed (full BF16 in VRAM): %s%s",
+                gguf_path,
+                f" + {len(ic_loras)} IC-LoRA(s)" if ic_loras else "",
             )
 
     def _install_safetensors(self, path: str) -> None:
@@ -1052,45 +1043,39 @@ class LTXFastVideoPipeline:
         GemmaGGUFQuantStateDictLoader.
 
         Mirrors _install_gguf but targets text_encoder_builder instead of
-        transformer_builder. On failure it only logs a warning: there is no stock
-        GPU text encoder to fall back to, because DistilledPipeline is built with
-        gemma_root=None (see below).
+        transformer_builder. A failure here fails the load (the exception is not
+        caught): there is no stock GPU text encoder to fall back to, because
+        DistilledPipeline is built with gemma_root=None (see below).
 
         ``gemma_tokenizer_root`` is the (tokenizer-only) gemma_root dir. Because we
         build DistilledPipeline with gemma_root=None, the wheel does not create
         the text_encoder_builder; the service rebuilds it (shards excluded) and needs
         this dir to load the tokenizer/processor module_ops.
         """
-        try:
-            from engine.gemma.gguf_quant_service import GemmaGGUFQuantLoaderService
-            service = GemmaGGUFQuantLoaderService(
-                gguf_path=gguf_path,
-                gemma_tokenizer_root=gemma_tokenizer_root,
-                component_text_projection_path=component_text_projection_path,
-                connector_gguf_path=connector_gguf_path,
-                layer_offload=te_offload,
-            )
-            service.install(self.pipeline.model_ledger)
-            if component_text_projection_path and connector_gguf_path:
-                import logging
-                logging.getLogger(__name__).info(
-                    "Gemma component-files active: monolith dropped from text encoder "
-                    "(aggregate_embed <- %s ; connectors <- %s)",
-                    component_text_projection_path, connector_gguf_path,
-                )
-            self._gemma_gguf_service = service
+        from engine.gemma.gguf_quant_service import GemmaGGUFQuantLoaderService
+        service = GemmaGGUFQuantLoaderService(
+            gguf_path=gguf_path,
+            gemma_tokenizer_root=gemma_tokenizer_root,
+            component_text_projection_path=component_text_projection_path,
+            connector_gguf_path=connector_gguf_path,
+            layer_offload=te_offload,
+        )
+        service.install(self.pipeline.model_ledger)
+        if component_text_projection_path and connector_gguf_path:
             import logging
             logging.getLogger(__name__).info(
-                "Gemma GGUF per-layer quant installed: Gemma stays compressed "
-                "(decoder layers in VRAM, or streamed from CPU when "
-                "LTX_TE_OFFLOAD is on) (%s)",
-                gguf_path,
+                "Gemma component-files active: monolith dropped from text encoder "
+                "(aggregate_embed <- %s ; connectors <- %s)",
+                component_text_projection_path, connector_gguf_path,
             )
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(
-                "Gemma GGUF install failed (%s) — falling back to stock GPU text encoder", exc
-            )
+        self._gemma_gguf_service = service
+        import logging
+        logging.getLogger(__name__).info(
+            "Gemma GGUF per-layer quant installed: Gemma stays compressed "
+            "(decoder layers in VRAM, or streamed from CPU when "
+            "LTX_TE_OFFLOAD is on) (%s)",
+            gguf_path,
+        )
 
     def _install_block_swap(self, blocks_on_gpu: int) -> None:
         try:
@@ -1146,11 +1131,12 @@ class LTXFastVideoPipeline:
         its cross-attention modules NAG-patched (a no-op patch when the current
         job didn't request NAG — see NagService.install()).
 
-        Deliberately NO try/except, unlike _install_block_swap and _install_gguf
-        above: those swallow install failures and fall back to an unpatched/
-        unaccelerated path because their features are pure speed/VRAM
-        optimizations where "worked, but slower" beats "job failed". NAG affects
-        the actual generated output (a negative prompt the user explicitly
+        Deliberately NO try/except, unlike _install_block_swap above: that one
+        swallows install failures and builds without block swap, so the whole
+        transformer goes onto the GPU — the cost is more VRAM (an OOM is
+        possible on a 16 GB card), not speed. Block swap is a pure VRAM
+        optimization, so "a job that may still fit" beats "job failed". NAG
+        affects the actual generated output (a negative prompt the user explicitly
         turned on), so a silent fallback here would produce a plausible-looking
         video that quietly ignored the negative prompt — worse than an error.
         Any failure inside NagService.install() (including its own fail-loud

@@ -619,12 +619,14 @@ def _encode_source_heads(
     had_audio = src_audio is not None
     if had_audio:
         audio_encoder = ledger.audio_encoder()
-        # decode_audio_from_file always returns Audio(waveform=(1,channels,samples))
-        # (ltx_pipelines.utils.media_io.decode_audio_from_file docstring + impl:
-        # the final `.unsqueeze(0)` always yields a 3-D tensor) — no 2-D case to
-        # normalise here.
+        wf = src_audio.waveform                    # (1, channels, samples)
+        # The audio VAE encoder's conv_in is stereo-only (weight [128,2,3,3]),
+        # so a mono track must be duplicated — the same normalisation the A2V,
+        # end-source and retake paths do.
+        if wf.shape[1] == 1:
+            wf = wf.repeat(1, 2, 1)
         enc = vae_encode_audio(
-            Audio(waveform=src_audio.waveform.to(DTYPE), sampling_rate=src_audio.sampling_rate),
+            Audio(waveform=wf.to(DTYPE), sampling_rate=src_audio.sampling_rate),
             audio_encoder, None,
         )
         avail = enc.shape[2]
@@ -637,7 +639,7 @@ def _encode_source_heads(
                 avail, n_ctx_a, freeze_ka,
             )
         src_head_a = enc[:, :, :freeze_ka, :].detach().clone()
-        del audio_encoder, enc
+        del audio_encoder, enc, wf
         cleanup_memory()
     return src_head_v_half, src_head_v_full, src_head_a, freeze_ka, had_audio
 
@@ -832,15 +834,19 @@ def _encode_retake_window(
 
     AUDIO ADJUDICATION (owner decision, recorded in spec §6.2's note on the
     chain ``retake`` audio):
-      * window HAS audio but encodes to fewer than ``a_total`` latent frames ->
-        HARD FAIL. A short encode puts the tail glue at the wrong index and
-        would silently invalidate the freeze; that is worse than a failed job.
+      * window HAS audio but encodes to fewer than ``a_total`` latent frames
+        with ``regenerate_audio=True`` -> HARD FAIL (``ValueError``). A short
+        encode puts the tail glue at the wrong index and would silently
+        invalidate the freeze; that is worse than a failed job.
       * window has NO audio -> continue with no audio freeze at all
-        (``had_audio=False``), recorded in the metadata rather than raised.
+        (``had_audio=False``, ``rt_a=None``), recorded in the metadata rather
+        than raised.
       * ``regenerate_audio=False`` -> the underrun hard-fail does NOT apply: a
         short encode logs a warning and drops the audio freeze altogether
-        (``had_audio=False``). The delivered audio is the original waveform,
-        so the latents it would have frozen are discarded anyway.
+        (``rt_a=None``, so there is no frozen audio band) while ``had_audio``
+        stays True — the window did have audio, and ``orig_wf`` keeps it. The
+        delivered audio is the original waveform, so the latents it would have
+        frozen are discarded anyway.
     """
     from ltx_core.model.audio_vae import encode_audio as vae_encode_audio
     from ltx_core.types import Audio
@@ -907,7 +913,6 @@ def _encode_retake_window(
                 "(the delivered audio is the original waveform).",
                 avail, a_win,
             )
-            had_audio = False
         else:
             rt_a = enc[:, :, :a_win, :].detach().clone()
         del audio_encoder, enc
@@ -1370,10 +1375,12 @@ def run_chain(
             video_encoder=video_encoder, tiling_cfg=tiling_cfg,
             ledger=ledger, device=device,
         )
-        if not retake_had_audio:
-            # No audio to freeze -> the glue bands are video-only (recorded in
-            # the metadata; NOT an error — owner decision, recorded in spec
-            # §6.2's note on the chain ``retake`` audio).
+        if rt_a is None:
+            # No audio latents to freeze (the window has no audio, or a short
+            # encode under regenerate_audio=False) -> the glue bands are
+            # video-only (recorded in the metadata; NOT an error — owner
+            # decision, recorded in spec §6.2's note on the chain ``retake``
+            # audio).
             n_head_a = n_tail_a = 0
         gc.collect()
         torch.cuda.empty_cache()

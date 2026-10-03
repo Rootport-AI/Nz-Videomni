@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.79**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 版 | **v0.5.81**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-10-03**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -128,6 +128,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.77 | 2026-10-02 | **§11 から、どのコードからも読まれていなかった設定 7 項目を削除した**（`model.ltx_repo_dir`・`model.reload_interval`・`model.text_encoder`・`vram.allow_disable_low_vram`・`vram.attention_tile_size`・`upload.normalize_to_png`・`output.format`）。`config.py`・`config.yaml.example` から消したのに合わせ、§11.2・§11.3・§11.6・§11.8 の行と、§5.5・§9.4 の言及を直した。`GET /api/v1/config`（`AppConfig.model_dump()`）の応答からもこれらのキーが消える。古い `config.yaml` に残った行は Pydantic の `extra='ignore'` で黙って無視される（警告は出ない）。**§6.5b の `block_swap_prefetch_available` の意味を定め直した**——「実際に効く構成かどうか」「判定式は実ゲートと完全同一」という言い切りをやめ、設定値（`block_swap_blocks_on_gpu`）から算出した利用可否であり、全ブロック常駐や組み込みの失敗は反映しないこと、実際に効いたかは `metadata.json` の `block_swap_prefetch_used` で見ることを書いた。コードの場所は行番号ではなく関数名で指すようにした（値そのものと算出式は変えていない）。§6.6 の `keep_resident_used` の行に、常駐の切り替え（arm）が失敗したときも `"on->off"` になることを足した。記録は `Docs/VERIFICATION_LOG.md` §141。 |
 | v0.5.78 | 2026-10-02 | **§6.7 に、`limits` の範囲の鍵（幅・高さ・フレーム数、V2V 継続の `v2v_context_frames_*`、素材（末尾）の `end_context_frames_*`、撮り直しの窓の `retake_window_min_frames` / `max_frames`）は配信されるだけでサーバーの検査には効かないことと、検査の正本（`config.py::LimitsConfig` の既定値・`api/models.py` の `Field` の固定値・`chain_math` の定数と式）を書いた**（文書のみ。凍結 API 契約〔§6〕の鍵・型・既定・応答形は変えていない。既に配信されている鍵の性質の説明である）。**§5.5 の「fail-fast アサートが component ソースの揃いを要求するので、モノリスへ黙って戻ることは無い」を実態に直した**——fail-fast は 4 つのパスと transformer のパスが空でないことだけを確かめ、`use_component_files` は見ない。偽なら付け替えだけが飛ばされ、読み込み元が空のまま読み込みで失敗する。あわせて `config.py` の既定値を配布値に揃えた（`vram.use_component_files` を `false`→`true`、`model.checkpoint_name` を `"ltx-2.3-22b-distilled"`→`"ltx-2.3-22b-distilled-1.1"`。§11.2・§11.3 は既に配布値なので変更なし）。`config.yaml` を置かずに起動したときの `GET /api/v1/config` の `vram.use_component_files`・`model.checkpoint_name` がこの値になる。記録は `Docs/VERIFICATION_LOG.md` §142。 |
 | v0.5.79 | 2026-10-03 | **§2.5・§3.3 の二重起動ガードの主体を `run.ps1` から `main.py` に改めた**——`main.py` が起動直前に実効ポートへ bind を試し、使用中なら案内して終了コード 3（`EXIT_PORT_IN_USE`）で終わり、`run.ps1` は終了コード 3 を「すでに起動しています」の案内に変えて 0 で終わる（ポートの正本を `main.py` 1 箇所に。`run.ps1` は `config.yaml` の `server.port` を読んでいなかった）。**§4.4 のツリー図と §5.4 から `scripts/build_xformers.ps1` を削除した**（スクリプトそのものを削除した。xformers は同梱せず、ビルドの道具も置かない）。**§2.5 のエンジン venv の判定ハッシュの説明を実装に合わせた**——freeze ファイルはコメント行と空行を除いた `名前==版` の行だけをハッシュに入れる（コメントだけの変更では貼り直しが起きない）。連結する直接指定は「3 つの git リビジョン」ではなく `$engineDirectPins`（git 3 件と wheel 1 件）／`$ltx25DirectPins`（5 件）である。凍結 API 契約〔§6〕の変更は無い。記録は `Docs/VERIFICATION_LOG.md` §143。 |
+| v0.5.80 | 2026-10-03 | **台帳 §1 の第 4 弾（エンジンとアプリの挙動の修正）を反映した**。**§1-37**: 連結ジョブ（`run_chain_job`）も単発と同じく、生成の終了時に取り消しが要求されていれば `cancelled` で終わるようにした（§7.2 は元から単発と連結を分けずにそう書いており、コードを仕様へ合わせた）。**§1-54**: マスクの二値化を赤チャンネルの値 128 以上に揃えた——キャンバスを塗る `fill_mask_green_mp4` は輝度（`format=gray`）で二値化しており、エンジン（`decode_mask_video`・`_decode_mask_u8`）の赤チャンネルの規則と、灰色でないマスクで食い違っていた。§6.2 の `mask_video_id` の行を直した。**§1-46**: 撮り直しの `source_had_audio` を「窓に音声トラックがあったか」に確定し（符号化が窓の長さに足りないときも `true` のまま）、§6.2 の補足の括弧書きを外して `audio_frozen` と独立であることを書いた。**§1-51**: Gemma と transformer の GGUF の取り付けの失敗を、黙って続行せず `load` の失敗にした。**§1-61**: 対応外の型の GGUF テンソルをゼロで埋めず例外にした（対応する型は Q8_0・Q4_K・Q5_K・Q6_K と F16・BF16・F32）。**§1-42**: ワーカーが読み込み後に未知の op を受けたら `error` を返すようにした。**§1-47**: 自己試験に install の実行回数とラウンド数の突き合わせを足した。凍結 API 契約〔§6〕のフィールド・型・既定・応答形・エラーコードの変更は無い。記録は `Docs/VERIFICATION_LOG.md` §144。 |
+| v0.5.81 | 2026-10-03 | **台帳 §1-36: 読み込み中の `POST /pipeline/unload` にも 409 `PIPELINE_LOADING` を置いた（凍結 API 契約〔§6〕の変更・オーナー決定）**。読み込みの本体（ワーカーの起動と待ち）はロックの外で走るため、読み込み中の unload が状態を `unloaded` に戻すと、2 度目のロードが 409 の見張りをすり抜けてワーカーの構築が重なっていた。これまで unload を見張りの外に置いていたのは「読み込みが異常終了して `loading` に張り付いたときの唯一の復帰路」としてだったが、`PipelineManager.load`／`reload` の状態の復帰を `finally` にし（状態がまだ `loading` なら、失敗したロードと同じ後始末——ベースモデルの巻き戻し・途中まで立ち上がったワーカーの停止・`unloaded`——をする。成功の `ready`、通常の失敗の後始末による `unloaded` には手を出さない）、張り付く経路そのものを無くした。読み込み中は load・reload・unload のどれも 409、という 1 つの規則になる。**§6.1 の表と補足**・**§6.8 のエラーコード表**・**§6.9(d)・(f)** を更新した。記録は `Docs/VERIFICATION_LOG.md` §144。 |
 
 ### 0.2 スコープ
 
@@ -633,7 +635,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | GET | `/api/v1/status` | サーバー状態・GPU 情報・パイプライン状態・VRAM 最適化・キュー | 不要 | 200 |
 | GET | `/api/v1/config` | 現在の実効設定（`AppConfig.model_dump()`）を返す | 不要 | 200 |
 | POST | `/api/v1/pipeline/load` | パイプラインを明示ロード（任意ボディで**ベースモデル**とカテゴリ別モデルを選択可＝§6.9） | 要 | 200 / 404(MODEL_NOT_FOUND) / 409(JOB_BUSY, **PIPELINE_LOADING**) / 422(MODEL_FILE_MISSING, MODEL_INCOMPATIBLE) / 503(PIPELINE_LOAD_FAILED) |
-| POST | `/api/v1/pipeline/unload` | パイプラインをアンロード | 要 | 200 / 409(JOB_BUSY) |
+| POST | `/api/v1/pipeline/unload` | パイプラインをアンロード | 要 | 200 / 409(JOB_BUSY, **PIPELINE_LOADING**) |
 | POST | `/api/v1/upload/image` | 最小 I2V 用画像をアップロードし `image_id` を返す | 要 | 200 / 400(UPLOAD_INVALID_TYPE, UPLOAD_TOO_LARGE) |
 | POST | `/api/v1/generate` | 生成ジョブを開始し job_id を返す | 要 | **202** / 404(IMAGE_NOT_FOUND) / 409(JOB_BUSY, **PIPELINE_LOADING**) / 422(VALIDATION_ERROR, **FEATURE_UNSUPPORTED**) |
 | GET | `/api/v1/jobs` | メモリ上のジョブ一覧を返す | 不要 | 200 |
@@ -649,7 +651,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 - 認証が必要なのは `require_auth` 依存を持つ経路: `pipeline/load`, `pipeline/unload`, `upload/image`, **`upload/video`**, **`upload/audio`**, `generate`, **`generate/chain`**, `jobs/{job_id}/join`, `DELETE /jobs/{job_id}`, 物体追尾の `/utils/track/*`（§4.7）, `utils/mp4-info`。このうち `upload/video` / `upload/audio` / `generate/chain` / `/utils/track/*` は本表に未掲載の ADDITIVE エンドポイントで、掲載済みの経路と同じ `require_auth` を持つ。`status` / `config` / `jobs` 系 GET（`jobs/{job_id}/joined` を含む）と `GET /models` / `GET /loras`、さらに `POST /loras/reload` と `GET /loras/{name}/thumbnail`（`api/loras.py` のどちらにも `require_auth` が無い）は認証不要。
 - api_key 設定時に Bearer 不一致/欠落 → `401 UNAUTHORIZED`。
 - `POST /generate` は投入時にまず `conditioning_images` の各 `image_id` の実在を検証（`upload_store.path_for` が `IMAGE_NOT_FOUND`=404 を送出）、次に単一ジョブガードで 409。
-- `POST /pipeline/unload` は実行中ジョブがあると `409 JOB_BUSY`（detail="cannot unload while a job is running"）。**`PIPELINE_LOADING`（409）は unload には置いていない**——ロード中に張り付いた状態から抜ける唯一の復帰路として温存してある（§6.9(f)）。
+- `POST /pipeline/unload` は実行中ジョブがあると `409 JOB_BUSY`（detail="cannot unload while a job is running"）。**ロード中は `409 PIPELINE_LOADING`**——load・内部の reload と同じ見張りを unload も通る（2026-10-03〜。`load`／`reload` は `finally` で状態を `loading` に残さないので、ロード中に張り付く経路は無い。§6.9(f)）。
 - `GET /models`（`api/models_registry.py::list_models`）も本表に未掲載の ADDITIVE エンドポイントで、認証不要。カテゴリ別（transformer / text_encoder / video_vae / audio）に選択可能なモデル名を返す。**2026-08-20 に `active_base_model` と `base_models[]` を加算して 3 層構造になった**（従来の `categories` ブロックはキー・順序・値とも温存）。詳細は §6.9(c)。
 - `POST /upload/video`（`api/uploads.py::upload_video`）も本表に未掲載の ADDITIVE エンドポイント（Phase B の IC-LoRA 参照動画／V2V 継続元アップロード）で、**2026-07-30 に任意のクエリ引数 `trim_start_sec` / `trim_duration_sec`（いずれも `float | None`、既定 `None`）を加算した**——アップロードした動画のうち `[trim_start_sec, trim_start_sec + trim_duration_sec)` の区間だけを残してサーバー側で切り出す（フロントエンドのタイムライン上でリボンが元動画の一部しか占めていないときに、その範囲だけを冒頭クリップにするための機能）。作法は `source_tail_seconds` と同じ「凍結表外エンドポイントへの追加専用拡張」で、**2引数とも未指定なら旧リクエストとバイト単位で同一**（`services/video_upload_store.py` の切り出し経路そのものが走らず、受信バイト列がそのまま保存される）。`Query()` に `ge=`／`le=` を意図的に付けておらず、**片方だけ指定・NaN／inf・負の開始・0以下の尺・ffmpeg 失敗はすべて 422 や 500 にせず「トリムせずそのまま保存」へ穏当に劣化する**（本引数の加算で新しいエラー応答が生まれないことを保証する設計）。レスポンス `UploadVideoResponse` には `trimmed`（bool, 既定 `False`, `2026-07-30追加`——2引数が指定され、かつ切り出しが実際に成功したときだけ `True`）を加算した。**この2引数は V2V 継続元だけでなく IC-LoRA 参照動画（`reference_video_id`）のアップロードにも同じクエリのまま使われる**（`2026-08-01`——フロントエンドが同じ判定関数で両方の経路にトリムを適用するようになったため。バックエンドは両者を区別せず、`POST /upload/video` は1本のままである）。実装・機械検証・実機ゲートの記録は `Docs/VERIFICATION_LOG.md` §42。**2026-08-11 に任意のクエリ引数 `max_frames`（int \| None、既定 `None`）を追加**——`MAX_CHAIN_TOTAL_PIXEL_FRAMES` を超える参照動画の先頭を切り詰める引数（長尺IC-LoRA用）。**2026-08-16 にレスポンス `UploadVideoResponse` へ `frame_count`／`fps`（いずれも int/float \| None）を追加**——素材（末尾）の帯長をクライアント側で自動決定するための実測値。
 - `POST /jobs/{job_id}/join`・`GET /jobs/{job_id}/joined` は V2V（video-to-video 継続）専用の ADDITIVE エンドポイントで、V2V 継続機能そのものの実装時（§24）に新設され、**2026-07-21 に凍結の限定解除（オーナー承認・コミット `d22706e`）でリクエスト/レスポンスが拡張された**。リクエスト `JoinRequest` は `audio_smoothing`（bool, 既定 `true`＝クロスフェード）・`handle_crossfade_ms`（int, 既定 `300`, `0`〜`2000`）・`source_tail_seconds`（float, 既定 `5.0`, `2026-07-21追加`——結合前にソース動画の末尾 `N` 秒だけを残す tail-keep トリム。`0` はソースを全長のまま結合）。レスポンス `JoinResponse` は `job_id`・`joined_path`（結合後 mp4 のパス）・`join_mode`・`source_normalized`・`source_lufs`・`continuation_lufs_before`・`fade_ms_applied`・`handle_crossfade_ms_applied`・`handle_context_seconds`・`loudness_matched`・`trimmed_source_seconds`（float, `2026-07-21追加`——tail-keep で削られた秒数。挿入位置計算に使う）・`source_fps`（float \| null, `2026-07-21追加`——ソースの実測fps）を返す。ボディ省略（またはPOST時ボディ無し）は既定値でのスムーズ結合になる。
@@ -759,7 +761,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 > - **窓に音声があり、符号化した音声潜在が窓の長さ（`a_total` 潜在フレーム）に足りず、`regenerate_audio=true` のとき＝ジョブを失敗にする**。短い符号化は尾側ののりしろを誤った潜在の位置に置き、凍結を黙って無効にしてしまう。それよりは失敗のほうがよい。
 > - **同じ不足で `regenerate_audio=false` のとき＝警告をログに出すだけで続行し、音声の凍結はしない**。このとき届く音声は窓の元の波形をそのまま多重化（mux）したものなので、短い符号化が影響するのは捨てられる潜在だけである。
 > - **窓に音声トラックが無いとき＝音声の凍結なしで続行する（エラーにしない）**。無音のクリップを撮り直すのは正当な使い方である。なお `regenerate_audio=false` は音声トラックの無い素材を受付時に 422 で断るので（`services/pipeline_manager.py` の `PipelineManager.preflight_retake_window`。アップロードした素材に音声ストリームがあるかを `video_io.has_audio_stream` で見る。エラーは `RETAKE_WINDOW_OUT_OF_RANGE`）、この場合に至るのは `regenerate_audio=true` のときである。
-> - **判定と記録の所在**: 判定はエンジン側（LTX 2.3 は `engine/pipeline/chain_pipeline.py` の `_encode_retake_window`、LTX 2.5 は `engine25/chain25.py` の Retake の窓の音声の処理）が行い、結果はチェーンの `metadata.json` のトップレベルの `retake` ブロック（`services/pipeline_manager.py::_write_chain_metadata`）に出る。音声の凍結を実際に行ったかは `audio_frozen`、元の波形を多重化したかは `muxed_original_waveform` で読む。`source_had_audio` は窓に音声トラックがあったかを表す（`regenerate_audio=false` で符号化が足りなかったときに今の実装が書く値は、[`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §1-46 で扱う）。
+> - **判定と記録の所在**: 判定はエンジン側（LTX 2.3 は `engine/pipeline/chain_pipeline.py` の `_encode_retake_window`、LTX 2.5 は `engine25/chain25.py` の Retake の窓の音声の処理）が行い、結果はチェーンの `metadata.json` のトップレベルの `retake` ブロック（`services/pipeline_manager.py::_write_chain_metadata`）に出る。音声の凍結を実際に行ったかは `audio_frozen`、元の波形を多重化したかは `muxed_original_waveform` で読む。`source_had_audio` は窓に音声トラックがあったかを表す。`audio_frozen` は実際に凍結した帯があるかを表し、両者は独立している（`regenerate_audio=false` で符号化が足りなかったときは、`source_had_audio` が `true` のまま `audio_frozen` が `false` になる）。
 
 > **チェーンのプロンプトの効き方（Stage-1 と Stage-2）の補足（2026-09-28追加）**: `GenerateChainRequest` の `prompt`（全体共通のプロンプト）と `clips[].prompt`（クリップ別のプロンプト）が、生成のどの段でどう効くかを定める。**本項がこの挙動の正本**で、他の文書はここを指す。LTX 2.3・LTX 2.5 のどちらのエンジン系統でも同じである。
 >
@@ -817,7 +819,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 **InpaintSpec**（`GenerateRequest.inpaint`。2026-09-15追加・Inpainting）
 | フィールド | 型 | デフォルト | 制約 |
 |-----------|----|-----------|------|
-| `mask_video_id` | str | （必須） | `min_length=1`。`POST /upload/video` が返す ID。**白（明るさ 128 以上）が描き替える領域**で、二値化は受信側で 2 回（キャンバスを塗る ffmpeg のフィルタグラフと、エンジンがブレンド用にマスクを復号するとき）同じしきい値で行う。**マスクは引き伸ばさない**——解像度は素材の実寸と完全一致でなければならず、枚数も `num_frames` と完全一致でなければならない（違反は 422。§6.8） |
+| `mask_video_id` | str | （必須） | `min_length=1`。`POST /upload/video` が返す ID。**白（赤チャンネルの値 128 以上。灰色のマスクでは明るさと同じ）が描き替える領域**で、二値化は受信側で 2 回（キャンバスを塗る ffmpeg のフィルタグラフ `fill_mask_green_mp4` と、エンジンがブレンド用にマスクを復号するとき——LTX 2.3 の `decode_mask_video`・LTX 2.5 の `_decode_mask_u8`）同じ規則で行う。**マスクは引き伸ばさない**——解像度は素材の実寸と完全一致でなければならず、枚数も `num_frames` と完全一致でなければならない（違反は 422。§6.8） |
 | `window_start_sec` | float | `0.0` | `ge=0.0`。**素材自身の時間軸**での窓の開始秒（AviUtl2 のリボンが素材の途中から始まる場合、その切り出し起点はクライアントが差し引いてから渡す）。窓の長さは `GenerateRequest.num_frames` で、**長さの定義を二重に持たない**（撮り直しと同じ 2 値の規約） |
 | `blend_dilation_stage1` | int | `5` | `ge=0, le=15`。ラプラシアンピラミッドのブレンド膨張（stage-1・半解像度後）。`OutpaintSpec` と同じ範囲・同じ既定 |
 | `blend_dilation_stage2` | int | `2` | `ge=0, le=15`。同（stage-2・フル解像度後）。**最終的に「マスクの外側で描き替わる帯の幅」を決めるのはこちらだけ**である（stage-1 の膨張は stage-2 のブレンドが上書きする）。操作パネルは 2 つとも整数欄として見せ、常に両方を送る |
@@ -1189,7 +1191,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `JOB_NOT_FOUND` | 404 | ジョブ未存在 / video 実体なし |
 | `VIDEO_NOT_READY` | 409 | ジョブが completed 前に video 要求 |
 | `PIPELINE_LOAD_FAILED` | 503 | パイプラインロード失敗 |
-| `PIPELINE_LOADING` | 409 | すでにロード中のパイプラインに対して重ねてロードを要求した（**2026-08-20 新設**。`POST /pipeline/load` と内部の reload のほか、**2026-08-31 から `POST /generate` と `POST /generate/chain` もジョブを作る前に同じコードで断る**〔`PipelineManager.reject_if_loading()`〕。`POST /pipeline/unload` にはあえて置いていない＝`loading` に張り付いたときの唯一の復帰路として温存。§6.9(f)） |
+| `PIPELINE_LOADING` | 409 | すでにロード中のパイプラインに対して重ねてロードを要求した（**2026-08-20 新設**。`POST /pipeline/load` と内部の reload のほか、**2026-08-31 から `POST /generate` と `POST /generate/chain` もジョブを作る前に同じコードで断る**〔`PipelineManager.reject_if_loading()`〕。**2026-10-03 から `POST /pipeline/unload` も同じコードで断る**〔`load`／`reload` は `finally` で状態を `loading` に残さないので、張り付きから抜ける出口を残しておく必要が無くなった〕。§6.9(f)） |
 | `FEATURE_UNSUPPORTED` | 422 | 選択中のベースモデルのエンジンが持っていない機能を要求した（**2026-08-22 新設**。**2026-09-03 から、これを出すのは両方の系統である**——長らく LTX 2.5＝エンジン系統 `ltx25` だけが出していたが、`keep_resident_embeddings` は LTX 2.5 にしか無い部品を名指しするため、**LTX 2.3＝エンジン系統 `ltx` も 1 件だけ宣言を持つようになった**〔§6.10(b)・(c)〕。ジョブを作る前に、他のどの検証よりも先に判定する。`detail` に該当フィールド名または機能名が入る。§6.10） |
 | `GPU_OOM` | 503 | 生成中の CUDA OOM |
 | `GENERATION_FAILED` | 503 | 生成中の非 OOM 例外 |
@@ -1287,7 +1289,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 #### (d) `POST /pipeline/unload` — 不変
 
-応答は `{"pipeline_loaded", "state"}` のままで、加算も削除も無い。
+応答は `{"pipeline_loaded", "state"}` のままで、加算も削除も無い（2026-10-03 から、ロード中は 409 `PIPELINE_LOADING` になる。(f)）。
 
 #### (e) `metadata.json` — `models` ブロックを加算
 
@@ -1309,9 +1311,9 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 | code | HTTP | 送出条件 |
 |------|:---:|---------|
-| `PIPELINE_LOADING` | 409 | `state == "loading"` のときに重ねてロード（または内部の reload）を要求した。**2026-08-31 から `POST /generate` / `POST /generate/chain` も、ジョブを作る前に同じコードで断る**（`PipelineManager.reject_if_loading()` を単一ジョブガードの直前で呼ぶ。従来はジョブが `202` で作られたあと `run_job` 内で `GENERATION_FAILED` として失敗していた） |
+| `PIPELINE_LOADING` | 409 | `state == "loading"` のときに重ねてロード（または内部の reload）を要求した。**2026-10-03 から `POST /pipeline/unload` も同じコードで断る**（下記）。**2026-08-31 から `POST /generate` / `POST /generate/chain` も、ジョブを作る前に同じコードで断る**（`PipelineManager.reject_if_loading()` を単一ジョブガードの直前で呼ぶ。従来はジョブが `202` で作られたあと `run_job` 内で `GENERATION_FAILED` として失敗していた） |
 
-メッセージは `"The pipeline is already loading (モデルの読み込み中です)"`。**`POST /pipeline/unload` にはこのガードを置いていない**——`loading` に張り付いた状態から抜ける唯一の手段として unload を温存するためで、これは意図した非対称である。
+メッセージは `"The pipeline is already loading (モデルの読み込み中です)"`。**2026-10-03 から `POST /pipeline/unload` もこのガードを通る**（読み込み中は load・reload・unload のどれも 409、という 1 つの規則）。以前は、読み込みが異常終了して `loading` に張り付いた状態から抜ける手段として unload だけを見張りの外に置いていたが、その非対称は 2 つの理由でやめた。①読み込みの本体はロックの外で走るので、読み込み中の unload が状態を `unloaded` に戻すと、2 度目のロードがこの見張りをすり抜けてワーカーの構築が重なる。②`load`／`reload` は `finally` で、状態がまだ `loading` なら、失敗したロードと同じ後始末（ベースモデルの巻き戻し・途中まで立ち上がったワーカーの停止・`unloaded`）をする（成功なら `ready`、通常の失敗なら後始末で `unloaded` になった後なので、何もしない）。`except Exception` を通らない終わり方（`KeyboardInterrupt` など）でも張り付かないので、抜け道は要らない。
 
 #### (g) サーバー実行時状態（`state.json`）との関係
 

@@ -421,6 +421,18 @@ class PipelineManager:
             self._cleanup_after_error()
             logger.exception("Pipeline load failed")
             raise pipeline_load_failed(detail=str(exc)) from exc
+        finally:
+            # Success leaves READY and a failure leaves UNLOADED (via
+            # ``_cleanup_after_error``); only an exit ``except Exception``
+            # cannot see — a BaseException such as KeyboardInterrupt or
+            # SystemExit — still finds LOADING here. Give it the same cleanup
+            # as ``except Exception``: roll the base model back, stop a
+            # half-started worker and end UNLOADED. Never leave LOADING behind:
+            # every load/reload/unload answers 409 while the state says
+            # "loading", so a stuck LOADING would lock the pipeline for good.
+            if self.state == self.STATE_LOADING:
+                self._restore_base_model(rollback)
+                self._cleanup_after_error()
         if active_names:
             self.active_models = dict(active_names)
         self._active_selection_paths = dict(selection)
@@ -454,6 +466,7 @@ class PipelineManager:
         try:
             rollback = self._apply_base_model(base_model)
             self.runner.load(selection=selection or None)
+            self.state = self.STATE_READY
         except Exception as exc:
             self._restore_base_model(rollback)
             self.state = self.STATE_ERROR
@@ -466,21 +479,27 @@ class PipelineManager:
                     "to recover."
                 )
             ) from exc
+        finally:
+            # Same exit rule as :meth:`load`: the same cleanup as
+            # ``except Exception``, never leave LOADING behind.
+            if self.state == self.STATE_LOADING:
+                self._restore_base_model(rollback)
+                self._cleanup_after_error()
         self.active_models = dict(active_names)
         self._active_selection_paths = dict(selection)
-        self.state = self.STATE_READY
         self._remember()
 
     def unload(self) -> None:
-        # NO ``_reject_while_loading()`` HERE, DELIBERATELY. A load that dies
-        # in a way ``except Exception`` cannot see — a BaseException, a killed
-        # thread — leaves ``state`` stuck at "loading", and the 409 guard would
-        # then reject every load/reload forever. Unload is the one door kept
-        # unlocked so the operator can always get back to a clean ``unloaded``
-        # state without restarting the server. It takes the same lock, but
-        # ``load``/``reload`` build the worker outside that lock, so an unload
-        # can land in the middle of a real in-flight load.
+        # One rule for the whole lifecycle: while a load is in flight, every
+        # load/reload/unload is a 409 PIPELINE_LOADING. ``load``/``reload``
+        # build the worker OUTSIDE the lock, so without this guard an unload
+        # could land mid-load, flip the state to "unloaded" and let a second
+        # load slip past the 409 into a second, overlapping worker build. No
+        # escape hatch is needed: ``load``/``reload`` always leave LOADING in
+        # their ``finally`` (with the same cleanup as a failed load), so the
+        # state cannot get stuck there.
         with self._lock:
+            self._reject_while_loading()
             self.runner.unload()
             self.state = self.STATE_UNLOADED
 
@@ -497,12 +516,16 @@ class PipelineManager:
     def _reject_while_loading(self) -> None:
         """409 if a load is already in flight. CALLED ONLY UNDER ``_lock``.
 
-        A model load takes minutes and runs OUTSIDE the lock (holding it for
-        the whole load would block ``unload`` and the ``reject_if_loading``
-        check in front of generation), so the in-flight window is wide and a
-        second load arriving inside it is ordinary — a double-click on the
-        frontend's Load button. Letting it through would start a second
-        worker build on top of the first.
+        The one guard every lifecycle call goes through — ``load``,
+        ``reload`` and ``unload`` here, and the ``reject_if_loading`` check
+        in front of generation. A model load takes minutes and runs OUTSIDE
+        the lock (holding it for the whole load would make every one of those
+        callers block for minutes instead of answering), so the in-flight
+        window is wide and a second call arriving inside it is ordinary — a
+        double-click on the frontend's Load button, or Unload pressed while
+        loading. Letting a load through would start a second worker build on
+        top of the first; letting an unload through would reopen this guard
+        for exactly that second load.
         """
         if self.state == self.STATE_LOADING:
             raise pipeline_loading(
@@ -1101,9 +1124,12 @@ class PipelineManager:
         separately generated clips. Junction pixel-frame indices (segment seams
         AND stage-2 tile seams) are recorded in metadata for the review harness.
 
-        Cancellation: the chain is one atomic worker op, so cancel is honored
-        at the job boundary (before dispatch) — matching that a single generate is
-        also not interruptible mid-run.
+        Cancellation is best-effort, the same as a single generate (run_job):
+        the chain is one atomic worker op and is not interrupted mid-run, but if
+        cancel was requested by the time it finishes, the job ends ``cancelled``
+        (its result is not handed out, though the file stays in
+        ``outputs/<job_id>/``). A cancel that arrives while the job is still
+        queued is handled by ``start_job`` and the job never dispatches.
         """
         chain = job.chain_request
         assert chain is not None, "run_chain_job requires job.chain_request"
@@ -1135,14 +1161,6 @@ class PipelineManager:
         )
 
         try:
-            if job.cancel_requested:
-                job.status = JobStatus.cancelled
-                job.progress = 1.0
-                job.completed_at = now_iso()
-                self.state = self.STATE_READY
-                logger.info("Chain job %s cancelled before dispatch", job.job_id)
-                return
-
             if not self.runner.loaded:
                 if not self.config.model.auto_load_on_generate:
                     raise pipeline_load_failed(detail="auto_load_on_generate is disabled")
@@ -1403,8 +1421,11 @@ class PipelineManager:
                 metadata_path=f"outputs/{job.job_id}/metadata.json",
             )
 
-            job.status = JobStatus.completed
-            job.result = result
+            if job.cancel_requested:
+                job.status = JobStatus.cancelled
+            else:
+                job.status = JobStatus.completed
+                job.result = result
             job.progress = 1.0
             job.completed_at = now_iso()
             self.state = self.STATE_READY

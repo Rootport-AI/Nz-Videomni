@@ -528,7 +528,7 @@ def pipeline_load_failed(detail: str | None = None) -> APIError:
 
 
 def pipeline_loading(detail: str | None = None) -> APIError:
-    """A load/reload arrived while one is already in flight.
+    """A load, reload or unload arrived while a load is already in flight.
 
     409, the same "you are asking at the wrong moment" family as
     :func:`job_busy` — nothing is wrong with the request, it just has to wait.

@@ -339,15 +339,15 @@ def test_a_swap_while_loading_is_409(client23):
     assert r.json()["error"]["code"] == "PIPELINE_LOADING"
 
 
-def test_unload_is_the_way_out_of_a_stuck_loading_state(client23):
-    """DELIBERATELY not behind the 409: a load that dies where ``except
-    Exception`` cannot see it would otherwise lock the server out of loading
-    for good."""
+def test_unload_while_loading_is_409(client23):
+    """Unload goes through the same guard as load/reload (§1-36): letting it
+    through mid-load would flip the state to "unloaded" and reopen the 409
+    for a second, overlapping load. The state is left alone."""
     _pin_loading(client23)
     r = client23.post("/api/v1/pipeline/unload")
-    assert r.status_code == 200
-    assert r.json()["state"] == "unloaded"
-    assert client23.post("/api/v1/pipeline/load").status_code == 200
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "PIPELINE_LOADING"
+    assert client23.app_context.pipeline_manager.state == "loading"
 
 
 def test_auto_load_during_a_load_fails_the_job_readably(client23):

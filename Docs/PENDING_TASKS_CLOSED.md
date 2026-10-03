@@ -2423,7 +2423,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: `git grep -w` で作業ツリー全体（`Docs/VERIFICATION_LOG.md`・`Docs/PENDING_TASKS*.md`除く。`scripts/`・`Docs/Outputs-archive/`・操作パネル `webui/src` を含む）を検索し、消した名前の参照が0件であることを確認した（敵対的レビュー項目1）。AST比較でこの差分により新たに未使用になったimportが0件であることを確認した。`config.yaml.example` を `yaml.safe_load`→`AppConfig.model_validate` で検証し、7項目を足した辞書でも検証が通り `model_dump()` には出ないこと（Pydanticの既定 `extra='ignore'`）を確認した（敵対的レビュー項目2）。`.venv-engine`・`.venv-engine-ltx25`・`.venv`・`.venv-utils` の各venvで関係モジュールのimportが成功することを確認した。実重みのスモーク5件はNUM_CHANNELS削除後も合格した。
 - **クローズ理由**: 棚卸しの対象をすべて処理し終えた。
 - **状態**: dev（第1弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §141）。
-- **残課題**: 無し（参考として見つかった追加の未使用候補2件は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-76 として新規起票した）。
+- **残課題**: 無し（参考として見つかった追加の未使用候補2件は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-76 として新規起票した → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-205 としてクローズ済み）。
 - **正本・出典**: 各ファイルは上記のとおり。[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §0.1（v0.5.77）・§5.5・§9.4・§11。
 
 ### 3-181. `_read_target_vocab_from_header` を `_ltx_gemma_vocab_size` に改名（int・分岐削除）（起票：2026-10-01、実装：2026-10-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-59 からクローズ）
@@ -2601,3 +2601,113 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev（第3弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143）。
 - **残課題**: 全環境で次回1回の貼り直しが起きる（merge後にオーナーが手で `setup.bat` を1回実行して確認）。
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §143、`scripts/install_ltx.ps1`（`Get-EngineStateHash`）、`README.md` 315行、`Videomni_Backend_Specification.md` §2.5（v0.5.79）。
+
+### 3-197. 連結ジョブの取り消し（`cancel_requested`）を単発と同じ形で結果に反映（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-37 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-37（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」、2026-10-01起票）から起票された項目。
+- **到達条件**: `PipelineManager.run_chain_job` が生成の開始後に `cancel_requested` が立っても結果に反映されない食い違い（単発の `run_job` は反映する）を、選択肢A（コードを仕様書に合わせる）で解消すること。**達成した。**
+- **何が完了したか**: `services/pipeline_manager.py` の `run_chain_job` で、`start_job` 直後にあった届かない事前確認（`JobStore.start_job` が同じ条件で先に `False` を返すため実際には届かなかった）を削除し、生成後の分岐を単発 `run_job`（`cancel_requested` なら `cancelled`・`result` 無し、それ以外は `completed`）と同じ形に揃えた。[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §7.2 は単発と連結を区別せず「`cancelled` にする」とだけ書いているため、仕様書側の変更は不要だった。**影響**: バッチA2Vを停止したとき、実行中だった連結の行は生成を最後まで走らせてから `cancelled` になり Waiting に戻る（出力ファイルは `outputs/<job_id>/` に残るが、`completed` 以外のジョブとして配られない点はi2vと同じ）。`gradio_ui/batch.py`・操作パネル `batchRunner.ts` の `stop` 近傍のdocstring（コメントのみ）を、この実態に合わせて書き直した。
+- **どの物差しで通ったか**: 新規テスト3件（`tests/test_chain_job_cancel.py`）——dispatch後の取り消しで `cancelled`・dispatch前の取り消しでも最後まで走って `cancelled`・通常終了は `completed`。敵対的レビューで、分岐の順序が `run_job`（`_write_chain_metadata` と `JobResult` の後）と同じであること、下流（`batchRunner.ts`・`gradio_ui/batch.py`・`batchI2vLongRunner.ts`）が `cancelled` をWaitingに戻すことを確認済み。アプリ`.venv`全件2,891 passed・61 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`services/pipeline_manager.py`（`run_job`・`run_chain_job`）、`gradio_ui/batch.py`・操作パネル `batchRunner.ts`（docstring）、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §7.2。
+
+### 3-198. 読み込み後の未知の `op` に `error` イベントを返す（読み込み前は不変）（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-42 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-42（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133「申し送り」）から起票された項目。
+- **到達条件**: 両ワーカーが未知の `op` に応答しない（応答を待つ側がいつまでも次の行を待ち続ける見込みがある）食い違いを、選択肢A（未知の `op` には `error` イベントを返す）で解消すること。**達成した。**
+- **何が完了したか**: 両ワーカー（`engine/worker.py`・`engine25/worker.py`）の、読み込み完了後のサービスループで、未知の `op` に `_emit("error", detail=f"unknown op {op!r}")` を返すようにした（`_log` によるログ記録は残す）。アダプタ（`services/engines/ltx/adapter.py`・`services/engines/ltx25/adapter.py`）は `error` イベントを `RuntimeError(detail)` に変えてジョブを `failed` にするが、プロセス自体は生きたまま続く。**読み込み前の未知の `op` は今までどおり `_log` して捨てる**（読み込み前に `error` を返すと、アダプタがそれを次の `load` の応答として読み、load失敗扱いでワーカーをkillしてしまうため）。コメントと両ワーカー冒頭のdocstring（プロトコル一覧）を実態に合わせて書き直した。物体追尾のワーカー（`tracking/worker.py`）は別プロトコルのため対象外。
+- **どの物差しで通ったか**: 新規テスト2ファイル（`tests/test_worker_unknown_op.py`・`tests/test_worker_ltx25_unknown_op.py`）——読み込み後の未知opで `error` が1件・読み込み前の未知opは0件。敵対的レビューで、アダプタが読み込み後に送る `op` は `load`／`generate`／`generate_chain`／`shutdown` の4つだけで、今回追加した `error` が通常経路で誤発火しないことを確認済み。`.venv-engine` 625 passed／`.venv-engine-ltx25` 233 passed（新規分を含む）。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`engine/worker.py`・`engine25/worker.py`（`main`）、`services/engines/ltx/adapter.py`・`services/engines/ltx25/adapter.py`。
+
+### 3-199. Retakeの`source_had_audio`を「窓に音声トラックがあったか」に確定し`audio_frozen`と独立にする（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-46 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-46（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133「申し送り」）から起票された項目。
+- **到達条件**: `regenerate_audio=False` かつ窓の音声符号化が窓の長さ（`a_total`）に足りないとき、`metadata.json` の `source_had_audio` が「窓に音声トラックは実際にあった」のに `false` になる食い違いを、選択肢A（「音声トラックがあったか」と「実際に凍結したか」を別の変数で持つ）で解消すること。**達成した。**
+- **何が完了したか**: 両エンジン（`engine/pipeline/chain_pipeline.py`の`_encode_retake_window`・`engine25/chain25.py`）で `had_audio`／`retake_had_audio` の書き換えを削除し、先頭・末尾の凍結音声潜在数（`n_head_a`・`n_tail_a`）を0にする判定を `if rt_a is None:` に変更した（書き換えの削除だけでは、`rt_a` を添字で使う箇所（`rt_a[:, :, :n_head_a]` 等）が `None` の添字アクセスで落ちるため、判定の変更が必須だった）。`rt_a[` を添字で使う全箇所が、両エンジンとも `rt_a is None`（または同値の条件）のときに走らない経路にあることを確認した。`source_had_audio` は仕様書§6.2補足（762行の古い括弧書きを外し763行を追加）どおり「窓に音声トラックがあったか」に確定し、`audio_frozen`（帯の有無）とは独立になった。モック（`services/engines/ltx/adapter.py:1377`）は変更前から選択肢Aの意味で動いていた。**純粋関数への切り出しはしない**（2行の変更に新しい構造を足さない方針）。
+- **どの物差しで通ったか**: 新規テスト（2.3側・`tests/test_chain_retake_audio.py`）——短い符号化＋`regenerate_audio=False` で `had_audio` が `True` のまま・`rt_a is None`、`regenerate_audio=True` なら `ValueError`、音声なし素材なら `had_audio` が `False`。2.5側は単体テストで通せないため、敵対的レビューが `rt_a[` の全参照を読解で確認した。`.venv-engine` 625 passed。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: §1-46の`run_chain`側の分岐（`rt_a is None`の判定そのもの）は単体テストで固定されていない（敵対的レビューの参考G。2.3・2.5とも読解で確認済みにとどまる）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`engine/pipeline/chain_pipeline.py`（`_encode_retake_window`）、`engine25/chain25.py`、[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2補足（v0.5.80）。
+
+### 3-200. 自己試験に`install_ran`／`install_ran_every_round`を追加し、GPUで1回実行してSELFTEST OK（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-47 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-47（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §75.4(b)・§134「申し送り」）から起票された項目。
+- **到達条件**: `engine25/gguf_transformer.py` の `_selftest` の `prefetch_used` が「installの飛ばし」を検出できない可能性を、選択肢B（オーナー決定。自己試験にinstall回数の突き合わせを足す）で解消すること。**達成した。**
+- **何が完了したか**: `_selftest` に、各ラウンドの `install_ran`（`_prefetch_builds` の増分。0／1）と、`checks.install_ran_every_round`（ブロックスワップが効くラウンド＝`stage._swap_service is not None and blocks_on_gpu < num_blocks` だけを数え、該当ラウンドが無ければ `None`）を足した。選択肢A（`teardown_prefetch()` で `last_prefetch_used` を"off"に戻す）は、2.5側の判定の順序では"on->off"を"off"にしてしまうため採らなかった。コメントを実態に書き直した。**GPUで自己試験を1回実行し SELFTEST OK**（`LTX-2.5-22B-distilled-transformer.gguf`・`--block-swap-prefetch on`・3ラウンド・320×192・25フレーム・既定`--blocks-on-gpu 8`・約20秒・ピーク予約4.5 GiB）——3ラウンドとも `install_ran: 1`・`prefetch_used: "on"`・`install_ran_every_round: true`、既存の判定10個もすべて合格。結果は `ledger-work/stage4/selftest_1-47.json`（git管理外）。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §75.4(b)には §144 からの訂正行を添えた（「3ラウンド連続でエコー"on"」という従来の記録は、installが飛ばされていないことまでを証明したものではなかったため）。
+- **どの物差しで通ったか**: 新規テスト（`tests/test_ltx25_prefetch_builds_count.py`）——飛ばしたinstallは数えないこと・`last_prefetch_used`だけでは捕まえられないことを固定。上記のGPU自己試験。`.venv-engine-ltx25` 233 passed。
+- **クローズ理由**: 選択肢B（オーナー決定）の実装が完了し、GPUでの自己試験もSELFTEST OKだった。
+- **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144・§75.4(b)（訂正行）、`engine25/gguf_transformer.py`（`_selftest`）、`ledger-work/stage4/selftest_1-47.json`（git管理外）。
+
+### 3-201. Gemma／GGUF transformerの取り付け失敗を`load`の失敗にする（try/exceptを撤去）（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-51 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-51（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135「申し送り」）から起票された項目。
+- **到達条件**: Gemma・GGUF transformerの取り付けに失敗しても読み込みが成功扱いになり、戻り先（素のGPUテキストエンコーダ／safetensors経路）が本番では実在しない食い違いを、選択肢A（取り付けの失敗を`load`自体の失敗にする）で解消すること。**達成した。**
+- **何が完了したか**: `engine/pipeline/fast_video_pipeline.py` の `_install_gemma_gguf`・`_install_gguf` の try/except を外し、取り付けの失敗を例外として外へ出すようにした（戻り先の「素のGPUテキストエンコーダ」は`gemma_root=None`、「safetensors」は`checkpoint_path=""`で、本番ではどちらも実在しないため）。ワーカー側の変更は不要——`main`は既存どおり`_do_load`の例外を`error`＋終了コード1にする。**bf16経路の分岐の構造は変更していない**（§1-52の判断を先取りしない）。あわせて、敵対的レビューの指摘により `_install_nag` のdocstring（ブロックスワップ失敗時を「遅くなる」と説明していた誤り——実際はVRAMが増えることで、「unaccelerated」「slower」は事実と違っていた）も訂正した。
+- **どの物差しで通ったか**: 新規テスト2件（`tests/test_pipeline_gguf_install_fail_loud.py`）——Gemma側は`GemmaGGUFQuantLoaderService.install`を例外に、transformer側は存在しないGGUFパスで、どちらも`load`自体が失敗することを確認。`.venv-engine` 625 passed。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`engine/pipeline/fast_video_pipeline.py`（`_install_gemma_gguf`・`_install_gguf`・`_install_nag`）。
+
+### 3-202. `_encode_source_heads`にモノラル→ステレオの複製を追加（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-53 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-53（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §25.2・§73.1・§135「申し送り」）から起票された項目。
+- **到達条件**: V2Vの頭（`_encode_source_heads`）だけがモノラル音声をステレオに複製せず、音声VAEの符号化器（ステレオ専用）に渡ると失敗する見込みが高い食い違いを、選択肢A（同じ複製を足す）で解消すること。**達成した。**
+- **何が完了したか**: `engine/pipeline/chain_pipeline.py` の `_encode_source_heads`（618〜629行）に、`_encode_end_source`（765〜769行）・A2V・retakeの各音声符号化と同型の複製（`if wf.shape[1] == 1: wf = wf.repeat(1, 2, 1)`）を足した。LTX 2.5は `_load_audio_stereo` を通るため対象外。
+- **どの物差しで通ったか**: 新規テスト1件（`tests/test_chain_source_head_mono.py`）——`cleanup_memory`を差し替えた形で`_encode_source_heads`を通し、`vae_encode_audio`に渡る波形が2チャンネルであることを確認。`.venv-engine` 625 passed。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: 実機でモノラル素材をV2Vの頭に流した記録は無い（単体テストで経路を固定したのみ）。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`engine/pipeline/chain_pipeline.py`（`_encode_source_heads`・`_encode_end_source`）。
+
+### 3-203. マスクの二値化の基準を赤チャンネル（≥128）に統一（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-54 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-54（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §135「申し送り」）から起票された項目。
+- **到達条件**: `services/video_io.py` の `fill_mask_green_mp4`（輝度基準）と、エンジン2本の `decode_mask_video`・`_decode_mask_u8`（赤チャンネル基準）でマスクの二値化の基準が違う食い違いを、選択肢A（アプリ側をエンジン側＝赤チャンネルに揃える）で解消すること。**達成した。**
+- **何が完了したか**: `services/video_io.py` の `fill_mask_green_mp4` のffmpegグラフを `format=gray,lut=…` から `format=rgb24,extractplanes=r,lut=y='if(gte(val,128),255,0)',format=rgb24`（赤チャンネル≥128で二値化）に変更し、エンジン2本（`engine/pipeline/common.py`の`decode_mask_video`・`engine25/inpaint25.py`の`_decode_mask_u8`）と同じ規則に揃えた（灰色のマスク＝R=G=Bでは、従来の輝度基準と結果は変わらない）。仕様書821行・`Docs/INPAINTING_DESIGN.md` 299／518行・操作パネル `API_REFERENCE.md` 492行（敵対的レビューで見つかった「輝度128以上」の古い記述）を同じ規則に訂正した。
+- **どの物差しで通ったか**: 色つきマスクの回帰テスト3件——4色の帯でエンジン側との食い違い画素が8,192→**0**（純色12色でも一致）。ffmpegの新グラフを純色12色で実測し、復号後の赤チャンネル≥128の規則どおりに二値化されることを確認（この機械のffmpeg `2025-02-02-git-957eb2323a-full_build`で実測）。縁の画素はffmpegとPyAVのYUV→RGB変換の差で1〜2値ずれうる（純色の面では0）ことを記録。アプリ`.venv`全件2,891 passed・61 skipped。
+- **クローズ理由**: 選択肢Aの実装が完了した。
+- **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`services/video_io.py`（`fill_mask_green_mp4`）、`engine/pipeline/common.py`（`decode_mask_video`）、`engine25/inpaint25.py`（`_decode_mask_u8`）、`Docs/INPAINTING_DESIGN.md`、操作パネル`API_REFERENCE.md`（v0.5.80）。
+
+### 3-204. GGUFの誤った逆量子化6関数を削除し、対応外の型は例外に（`SUPPORTED_GGML_TYPES`）（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-61 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-61（**同書側は欠番**）。コメント現行化（`engine/` 第3回の検算）で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §137）から起票された項目。
+- **到達条件**: `engine/gguf/quant_service.py` の純torch逆量子化で8つの型（Q4_0・Q4_1・Q5_0/Q5_1・Q2_K・Q3_K・IQ4_NL・取り違えたIQ4_XS＝実際は型番号22のIQ2_S）が誤った値を返すか止まる件を、選択肢B（対応外の型として読み込み時に明示的に断る）で解消すること。**達成した。**
+- **何が完了したか**: 誤った逆量子化6関数（`_dequant_q4_0`・`_dequant_q4_1`・`_dequant_q5`・`_dequant_q2_k`・`_dequant_q3_k`・`_dequant_iq4`）と型定数10個（`_GGML_IQ4_XS = 22`の取り違えを含む）を削除した（−242行）。対応する型を定数1つ`SUPPORTED_GGML_TYPES`（F32・F16・BF16・Q8_0・Q4_K・Q5_K・Q6_K。番号はgguf-pyと一致）にまとめ、`dequantize_ggml_tensor`は対応外の型で`ValueError`（ゼロのテンソルを返さない）にした。LTX 2.3の`GGUFQuantStateDictLoader.load`は型を読んだ時点で止める（重いビルドの前）。LTX 2.5は最初のforwardで例外になる（**早期検査は置かない**——敵対的レビューの実測により、2.5のGemma GGUFにI8型のテンソルが実在し、`build_text_encoder_sd_ops`で落とす前に型検査を置くとGemmaの読み込みが壊れるため）。bf16経路の`loader_service.py`「Failed to dequantize … skipping」という握りつぶしも例外にした。選択肢A（参照実装gguf-pyの写しに置き換え）は、per-layer経路が毎forwardでGPU上で逆量子化するため採らなかった。`README.md` 351行は、敵対的レビューの指摘（「読み込み時に断られる」は実態と不一致——2.3は`load`は通り最初の生成で落ち、2.5は最初のforwardで落ちる）を受け、「対応外の型の生成は最初の生成でエラーになる」という実態に訂正した。
+- **どの物差しで通ったか**: 新規テスト（`tests/test_gguf_dequant_reference.py`）——Q8_0・Q4_K・Q5_K・Q6_Kがgguf-py参照実装と完全一致・対応外は例外。敵対的レビューで`SUPPORTED_GGML_TYPES`の番号をgguf-py 0.18.0の`GGMLQuantizationType`と全数照合（IQ4_XS=23・IQ2_S=22も確認）、消した6関数・10定数のコード参照が0件であることを確認済み。`models\`のGGUF7本の型を実測し、配布のGGUFと量子化テンソルは対応する型（＋I8のGemmaテキスト資産。sd_opsで落とすため無害）だけであることを確認。`.venv-engine` 625 passed。
+- **クローズ理由**: 選択肢Bの実装が完了した。
+- **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`engine/gguf/quant_service.py`（`dequantize_ggml_tensor`・`SUPPORTED_GGML_TYPES`）、`engine/gguf/loader_service.py`（`GGUFQuantStateDictLoader.load`）、`README.md` 351行（v0.5.80）。
+
+### 3-205. 使われていないコード（第2次・追加2件＋型別名13個）の削除（起票：2026-10-02、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-76 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-76（**同書側は欠番**）。第1次の棚卸し（§3-180）の敵対的レビューで見つかった追加の未使用候補2件（同§3-180「残課題」の参照はここへ付け替え済み）。
+- **到達条件**: `engine/pipeline/utils.py`の`sync_device`・`engine/transformer/block_swap_prefetch.py`の`PinnedStagingPool.release()`について、項目ごとに消すか残すか決めて処理すること。**達成した。**
+- **何が完了したか**: `sync_device`・`PinnedStagingPool.release()`を削除した。あわせて、同じ`utils.py`で外から参照されない型別名13個（`JSONScalar`・`JSONValue`・`RequestFieldValue`・`RequestData`・`PromptInput`・`TensorType`・`PILImageType`・`FrameArray`・`TensorOrNone`・`LatentStateLike`・`VideoCaptureLike`・`VideoWriterLike`・`ImagePipelineOutputLike`）と使われなくなったimport7個、`empty_device_cache`（敵対的レビューで参照0件を確認。§1-76と同じ性質の補助関数として追加で削除）も削除した（−73行）。外から使う`AudioOrNone`・`TilingConfigType`・`device_supports_fp8`は残した。
+- **どの物差しで通ったか**: 消した名前すべてについて`git grep`で参照0件を確認。AST比較で新たに未使用になったimportが0件であることを確認。`.venv-engine` 625 passed。
+- **クローズ理由**: 対象を全件処理し終えた。
+- **状態**: dev `e7ef70e`（第4弾Part 1のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: 無し。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`engine/pipeline/utils.py`、`engine/transformer/block_swap_prefetch.py`（`PinnedStagingPool`）。
+
+### 3-206. 読み込み中の`unload`にも409`PIPELINE_LOADING`（`load`／`reload`の状態復帰を`finally`に）（起票：2026-10-01、実装：2026-10-03）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-36 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-36（**同書側は欠番**）。コメント現行化で検出した申し送り（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §132「申し送り」）から起票された項目。
+- **到達条件**: 読み込みの最中に来た`unload`で409の見張りが開いておらず、2度目の`load`が`_reject_while_loading`を素通りしてワーカーの構築が重なりうる食い違いを、選択肢A（オーナー決定。**凍結API契約の変更**——`unload`にも読み込み中の409`PIPELINE_LOADING`を置き、`load`／`reload`の状態の復帰を`finally`にする）で解消すること。**達成した。**
+- **何が完了したか**: `services/pipeline_manager.py`の`unload`に`_reject_while_loading()`を足し、読み込み中は409`PIPELINE_LOADING`を返すようにした。`load`／`reload`に`finally`（状態がまだ`loading`なら、失敗したロードと同じ後始末＝`_restore_base_model`＋`_cleanup_after_error`＝ベースモデルの巻き戻し・途中まで立ち上がったワーカーの停止・`unloaded`）を足し、「`loading`に張り付いたときの唯一の復帰路」という理由で`unload`を見張りの外に置いていた古いコメント（「NO `_reject_while_loading()` HERE, DELIBERATELY」「唯一の復帰路」）を書き直した。選択肢B（読み込み完了まで待たせる）は、呼び手の時間切れ（Gradio 60秒・操作パネル・MCP）とぶつかるため採らなかった。これで「読み込み中はload・reload・unloadのどれも409」という1つの規則になった。契約文書7箇所（仕様書v0.5.81の§6.1表637行・補足654行、§6.8エラーコード表1194行、§6.9(d)1293行、§6.9(f)1316／1319行、`Docs/MULTI_ENGINE_DESIGN.md:499`、操作パネル`API_REFERENCE.md`97・198行＋冒頭の最終更新と履歴、`api/errors.py:531`、`mcp_server/tools/system.py:198-199`）を同じ規則に揃えた。**敵対的レビューの実測で見つかった不具合と反映**: 当初案（`finally`が状態だけ戻す形）だと、BaseExceptionの後に途中まで立ち上がったワーカーが残り、次のloadが読み込み無しで`ready`になってしまう（reloadではベースモデルも戻らない）ことが実験で確かめられたため、`finally`の中身を既存の後始末2行（`_restore_base_model`＋`_cleanup_after_error`）に替えて解消した（新しい状態・Event・待ち合わせは足していない）。**失われる挙動**: 以前は読み込み中の解放が事実上の「読み込み中止」だったが、今後の手段は「待つ」か「サーバー再起動」のみになり、待つ場合は最長600秒（`_LOAD_TIMEOUT_S`）で時間切れに戻る。
+- **どの物差しで通ったか**: 既存テスト`test_base_model_axis.py::test_unload_is_the_way_out_of_a_stuck_loading_state`を`test_unload_while_loading_is_409`に反転。新規7件（`tests/test_pipeline_unload_guard.py`）——読み込み中のunloadが409で状態は`loading`のまま／読み込みが終われば`ready`／HTTPでも同じ／BaseExceptionでも`load`・`reload`とも`unloaded`に戻り`runner.unload()`が呼ばれ、続くloadが実際に`runner.load`を呼ぶ／reloadのベースモデルが元に戻る／通常の`Exception`は従来どおり`PIPELINE_LOAD_FAILED`・`unloaded`・後始末1回。敵対的レビューで、読み込みを途中で止めたスレッドによる実測（「読み込み中の解放は必ず409」）、新規テストがHEADの写しで5件落ちること（不変の挙動を見張る2件は通る）、契約文書7箇所が同じ規則かの照合を実施済み。アプリ`.venv`全件2,898 passed・61 skipped。
+- **クローズ理由**: 選択肢A（オーナー決定）の実装が完了した。
+- **状態**: dev（第4弾Part 2のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144）。
+- **残課題**: 操作パネルの解放ボタンが、読み込み中に押すと固定文言「パイプラインの解放に失敗しました。」を出す（固まらず再試行もしないが、「待てば済む」場面を「失敗」と伝えてしまう。[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-77として新規起票）。GPUを要する実機の二重操作（読み込み中に解放ボタンを押す）の確認は第5弾。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §144、`services/pipeline_manager.py`（`load`・`reload`・`unload`・`_reject_while_loading`）、仕様書§6.1・§6.8・§6.9(d)(f)（v0.5.81）、`Docs/MULTI_ENGINE_DESIGN.md`、操作パネル`API_REFERENCE.md`、`api/errors.py`、`mcp_server/tools/system.py`。

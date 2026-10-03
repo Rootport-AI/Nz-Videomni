@@ -142,7 +142,7 @@ logging goes to STDERR.
           "outer_index":1,"outer_total":2}   <- chain only: which clip/tile
   @@LTX@@{"event":"done","seed_used":...,"peak_vram_mb":...,
           "vae_mode_used":"conv","ltx25":{...},...}
-  @@LTX@@{"event":"error","detail":...}
+  @@LTX@@{"event":"error","detail":...}   <- also the reply to an unknown op after load
 
 ``progress`` stage names are the 2.3 worker's names on purpose (``encode`` /
 ``stage1_denoise`` / ``stage2_denoise`` / ``decode``): the app-side receipt loop
@@ -1607,8 +1607,10 @@ def main() -> None:
                 sys.exit(1)
             continue
 
-        # Serving loop (post-load). An unknown op is logged and skipped; no
-        # event answers it.
+        # Serving loop (post-load). An unknown op is answered with an ``error``
+        # event, so a caller waiting for the reply is not left hanging; the
+        # process stays alive. (Before load an unknown op is only logged: an
+        # ``error`` there would be read as the reply to the next ``load``.)
         if op == "shutdown":
             _shutdown()
         if op == "generate":
@@ -1631,7 +1633,8 @@ def main() -> None:
                 _log("CHAIN_FAILED")
                 _emit("error", detail=_detail(exc))
             continue
-        _log(f"ignoring unknown op={op!r}")
+        _log(f"unknown op={op!r} -- answered with an error event")
+        _emit("error", detail=f"unknown op {op!r}")
 
     # EOF on stdin -> graceful shutdown.
     _shutdown()

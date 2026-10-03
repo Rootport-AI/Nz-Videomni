@@ -7644,6 +7644,8 @@ B7の接合位置J=47では、音声RMS比が 0.2側・0.8側とも **8.5066** �
 | (f) VRAM | ジョブ全体の差は (c)(d) とも 0MB、fused 併用でも +36MB。位相単位の最悪値は LoRA 有りの stage-2 で +226MB（いずれも許容の +400MB 以内） |
 | (g) 併用1本 | エコー両方 `"on"`・SHA は (c) の on 側と一致・**36.05秒（両 off 比 51.7%短縮）** |
 
+> **訂正（§144）**: この欄の「エコー `"on"`」は各ラウンドの `prefetch_used`（ラウンド内の `install()` が決めた値）で、`install()` が飛ばされたラウンドでは前のラウンドの値が残るため、「install が飛ばされていないこと」までを証明した記録ではなかった。§144（台帳 §1-47）で自己試験に `install_ran`（`_prefetch_builds` の増分）と `install_ran_every_round` を足し、GPU で 3 ラウンドとも install が走ったことを確かめた。
+
 **C15（新設の自己診断）が見ているもの**: LTX 2.5 は量子化テンソルに独自の派生クラスを使っているため、**受け皿を作り直すときに元の型を取り戻せないと、量子化の目印が消えて過去の不具合がそのまま再発する**。C15 は検査の中で定義した派生クラスを実際に往復させ、型・量子化の種別・見かけの形がすべて保たれることを確かめる。
 
 ### 75.5 ゲートG3（アプリ側の開通）
@@ -15510,3 +15512,57 @@ CLOSED は `Docs/PENDING_TASKS_CLOSED.md` §3-193〜§3-196（§1-70・71・73�
 いずれも合格。
 
 **留意**: 台帳 §2-1（§1-43・keep_resident のログ行）と §2-2（§1-56・VRAM ピークの数字）は、ログや数字を見る確認なのでこの 3 点では決着せず、予定どおり第 5 弾に残る。
+
+## 144. ★台帳 §1 の消化・第 4 弾「F1 エンジンの挙動（単体テストで決着）」＝ 10 件（§1-37・42・46・47・51・53・54・61・76 ＋ §1-36〔凍結 API 契約の変更・Part 2〕）を処理・§1-52 は第 6 弾 G へ・CLOSED 10 件（3-197〜3-206）・§1-77 起票・仕様書 v0.5.80→v0.5.81・GPU 自己試験 1 回（2026-10-03）
+
+**要約**: 台帳 `Docs/PENDING_TASKS.md` §1 の消化・第 4 弾として、計画 `radiant-wondering-melody.md`（オーナー承認済み。計画前の 3 問の決定: §1-36 は選択 A・§1-52 は第 6 弾 G へ送る・§1-47 は選択 B で GPU 自己試験 1 回を本計画の承認をもって了承済みとして扱う）に基づき、「F1 エンジンの挙動（単体テストで決着）」10 件を Part 1（§1-37・42・46・47・51・53・54・61・76 の 9 件）と Part 2（§1-36。凍結 API 契約の変更のため単独の実装単位・単独コミット）の 2 回に分けて処理した。Part 1 は Opus 3 体（U1 アプリ側＋文書・U2 LTX 2.3 エンジン・U3 LTX 2.5 エンジン）が重ならないファイルで並行実装し、いずれも第 1 弾の裏取り `ledger-work/stage1/triage_engine.md`・`triage_app.md` で確定済みの選択（A／B）どおりに処理した。§1-47（選択 B）では `engine25/gguf_transformer.py` の自己試験 `_selftest` に各ラウンドの `install_ran`（`_prefetch_builds` の増分）と `checks.install_ran_every_round` を足し、GPU で自己試験を 1 回実行して SELFTEST OK を確認した。Part 2（選択 A）は `services/pipeline_manager.py` の `unload` に読み込み中の 409（`PIPELINE_LOADING`）を足し、`load`／`reload` の状態の復帰を `finally` に一本化した。敵対的レビュー（Opus 1 体・いずれもサブエージェント起動なし）は、Part 1 が直すべき 1・注意 3・参考 6 のうち採用 6 件、Part 2 が直すべき 0・注意 3・参考 6 のうち採用 2 件（うち 1 件は `finally` の中身を既存の後始末に差し替える実質的な修正）。残る注意 1 件は操作パネルの解放ボタンの固定文言に関する新規の疑いとして §1-77 に起票した。CLOSED は `Docs/PENDING_TASKS_CLOSED.md` §3-197〜§3-206 の 10 件、§1-52 は第 6 弾 G へ送り、台帳 §1 は 7 件（§1-31・33・40・41・52・60・77）になった。仕様書は v0.5.80（Part 1）→ v0.5.81（Part 2）に進めた。
+
+**目的**: オーナーと合意した 6 段階（第 1 弾: 裏取り＋A 引き算＋B 報告と記録の整合／第 2 弾: D Gradio・MCP・バッチ＋C 設定と配信値／第 3 弾: E インストーラと起動／**第 4 弾: F1 エンジンの挙動で単体テストで決着**／第 5 弾: F2 実機が要るもの＋第 1 弾の実機確認／第 6 弾: G 単独の大きなテーマ。§141〜§143 に記載）のうち、本節は第 4 弾を実施する。対象の 10 件は、いずれも偽物（偽の self・`sys.modules` の差し替え・stdin の差し替え等）に差し替えれば仕組みが決定的に再現でき単体テストで決着する項目に絞った。GPU・実バックエンド・ネットワークは §1-47 の自己試験 1 回を除き使わない。バックエンド凍結の例外は §1-36（API 契約の変更）1 件に限り、操作パネル側のコードは触らない。
+
+**対象**: `Nz-Videomni` リポジトリ（バックエンド。dev）。Part 1 は起点 HEAD `15aadb5` → コミット `e7ef70e`（29 ファイル・+886／−464）で、担当 U1 が `services/pipeline_manager.py`（§1-37）・`services/video_io.py`（§1-54）・`gradio_ui/batch.py`・`batchRunner.ts` の docstring・仕様書・`README.md`・`Docs/INPAINTING_DESIGN.md`、担当 U2 が LTX 2.3 エンジン（`engine/worker.py`・`engine/pipeline/chain_pipeline.py`・`fast_video_pipeline.py`・`engine/gguf/quant_service.py`・`loader_service.py`・`engine/pipeline/utils.py`・`block_swap_prefetch.py`・`common.py`）、担当 U3 が LTX 2.5 エンジン（`engine25/worker.py`・`engine25/chain25.py`・`engine25/gguf_transformer.py`・`engine25/inpaint25.py`）を持った。Part 2 は起点 HEAD `e7ef70e`、作業ツリーの未コミット差分（7 ファイル・+60／−34＋新規 `tests/test_pipeline_unload_guard.py`）で、`services/pipeline_manager.py`・契約文書 7 箇所（仕様書・`Docs/MULTI_ENGINE_DESIGN.md`・操作パネル `API_REFERENCE.md`・`api/errors.py`・`mcp_server/tools/system.py`）を対象にした。操作パネル本体のコード・`tests/` の設計・第三者コードは両 Part とも対象外。
+
+**方法**:
+1. 準備（監督）: 第 1 弾の再現スクリプト 8 本を `ledger-work/stage4/repro/` へ写し、回帰テストのひな形に転用した。
+2. 実装（Part 1: Opus 3 体・並行／Part 2: Opus 1 体・Part 1 のコミット後に開始）: 裏取りと計画 `radiant-wondering-melody.md` の選択どおりに直し、固定テストを足した。
+3. 証明とテスト（監督）: 差分の読み合わせ、`.venv`／`.venv-engine`／`.venv-engine-ltx25` の全件実行、新規テストを HEAD の写しで走らせて新しい挙動を固定する型であることを確認。
+4. 敵対的レビュー（Opus 1 体・サブエージェント起動なし。Part ごとに実施）→ 2 フィルタ（過剰設計の棄却・独立裏取り）で採否 → 指摘を反映。
+5. §1-47 の自己試験を GPU で 1 回実行（監督。本計画の承認をもってオーナー了承済みとして扱う）。
+6. 台帳（`PENDING_TASKS.md`・`PENDING_TASKS_CLOSED.md`。別担当が並行で更新）と記録（本節）を整えた。
+7. 了承ゲート（Part 1・Part 2 それぞれ差分と検証結果の報告）。main へのマージはオーナー指示で保留。
+
+**結果**:
+
+10 件の処理内容:
+
+| 番号 | 選択 | 内容 |
+|---|---|---|
+| §1-37 | A | `run_chain_job` の届かない事前確認（`start_job` 直後）を削除し、生成後の分岐を単発 `run_job` と同じ形（`cancel_requested` なら `cancelled`・`result` 無し）に。docstring と `gradio_ui/batch.py`・`batchRunner.ts` の docstring（コメントのみ）を実態に。仕様書 §7.2 は変更不要。テスト 3 本 |
+| §1-42 | A | 両ワーカー（`engine/worker.py`・`engine25/worker.py`）の読み込み後の未知の op に `_emit("error", detail="unknown op …")`。読み込み前は不変（`error` を出すと次の `load` の応答として読まれてしまうため）。docstring とコメントを実態に。テスト 2 ファイル（4＋4） |
+| §1-46 | A | 両エンジンで `had_audio`／`retake_had_audio` の書き換えを削除し、帯を 0 にする判定を `rt_a is None` に。`source_had_audio` は「窓に音声トラックがあったか」に確定（仕様書 §6.2 補足・763 行）。テスト 1 本 |
+| §1-47 | B | `_selftest` に各ラウンドの `install_ran`（`_prefetch_builds` の増分）と `checks.install_ran_every_round` を追加。テスト 1 本。**GPU 自己試験 1 回: SELFTEST OK** |
+| §1-51 | A | `_install_gemma_gguf`・`_install_gguf` の try/except を外し、取り付けの失敗を load の失敗に。bf16 分岐の構造は不変。テスト 2 本 |
+| §1-53 | A | `_encode_source_heads` にモノラル→ステレオの複製（`_encode_end_source` と同型）。テスト 1 本 |
+| §1-54 | A | `services/video_io.py` のマスクのグラフを `format=rgb24,extractplanes=r`（赤チャンネル ≥128）に。エンジン 2 本の括弧書き・仕様書 821 行・`INPAINTING_DESIGN.md` 299／518・操作パネル `API_REFERENCE.md` 492 を同じ規則に。色つきマスクの回帰 3 件。4 色の帯でエンジン側との食い違い画素 8,192→**0**／16,384 |
+| §1-61 | B | `engine/gguf/quant_service.py` の誤った 6 関数・振り分け・定数 10 個を削除（−242 行）。対応する型は定数 1 つ `SUPPORTED_GGML_TYPES`（F32・F16・BF16・Q8_0・Q4_K・Q5_K・Q6_K。番号は gguf-py と一致）に集約。対応外は `ValueError`（ゼロを返さない）。2.3 は `GGUFQuantStateDictLoader.load` で型を読んだ直後に止める（重いビルドの前）。`loader_service.py` の「skipping」の握りつぶしも例外に。README 351 行。テスト（参照実装 gguf-py と完全一致・対応外は例外） |
+| §1-76 | 削除 | `sync_device`・`PinnedStagingPool.release()`・`utils.py` の未使用の型別名 13 個と import 7 個・`empty_device_cache`（レビューで参照 0 件を確認）を削除（−73 行） |
+| §1-36 | A（Part 2） | `unload` がロック直後に `_reject_while_loading()` を通る（読み込み中は 409 `PIPELINE_LOADING`）。`load`／`reload` に `finally` を足し、状態がまだ `loading` なら失敗したロードと同じ後始末（`_restore_base_model`＋`_cleanup_after_error`）をする。成功の `ready`・通常の失敗の後始末には手を出さない。契約文書 7 箇所を同じ規則に。新規テスト 7 件 |
+
+CLOSED は `Docs/PENDING_TASKS_CLOSED.md` §3-197〜§3-206（§1-37・42・46・47・51・53・54・61・76・36 の順）の 10 件。§1-52 は第 6 弾 G へ送り、台帳の「着手」行を更新した。文書は仕様書 v0.5.80（Part 1）→ v0.5.81（Part 2）に進めた。
+
+**裁定と新事実**: §1-47 は、オーナーの指摘どおり GPU・GGUF がいずれも手元にあり、「今回の弾では実行できない」は工程上の規則（F1 は GPU を使わない）であって機材の不足ではなかったため、計画の承認をもって自己試験 1 回の GPU 使用を了承済みとして扱った（生成ジョブではなく診断。所要約 20 秒）。自己試験（`python -m engine25.gguf_transformer --selftest LTX-2.5-22B-distilled-transformer.gguf --block-swap-prefetch on --rounds 3`。GPU は RTX 4070 Ti SUPER）は 3 ラウンドとも `install_ran: 1`・`prefetch_used: "on"`（build 秒数 11.33→0.29→0.31 秒・forward 3.09→1.61→1.61 秒）、`checks.install_ran_every_round: true` を含む既存 10 個の判定もすべて合格、`SELFTEST OK`。§1-36 は凍結 API 契約の変更にあたるため、Part 1 とは別の単独の実装単位・単独コミットとして扱った（オーナー決定）。敵対的レビューは、`finally` が状態だけ `unloaded` に戻す形では、BaseException の後に途中まで立ち上がったワーカー（`_RealBackend._proc`）が残り、次の load が `runner.loaded` で早期 return して読み込み無しに `ready` になる（`reload` ならベースモデルも戻らない）ことを実測し、`finally` の中身を既存の後始末（`_restore_base_model`＋`_cleanup_after_error`）に差し替えて解消した（新しい状態は足していない）。また、操作パネルは読み込み中に解放を押すと固定文言「パイプラインの解放に失敗しました。」を出す（固まらない・再試行もしない）ことが判明し、計画に書いた「サーバーの日本語メッセージが出る」という見立ては誤りだったと確定したため、別件として §1-77 に起票した。§1-52（bf16 経路 `gguf_per_layer_quant=false` を消すかどうかの判断）は、コードを触らず第 6 弾 G で §1-31・33・40・41 と合わせて判断することにした。記録のみの事実 3 点: (1) 読み込み中の解放が事実上の「読み込み中止」として働いていた挙動は §1-36 で無くなった（今後は最長 600 秒の時間切れで失敗に戻る）。(2) `PipelineManager` で見張りの外で `state` を書く既存の 3 経路（実行前に取り消されたジョブ・ボディ無しの load・同じ選択の load）は HEAD からあり今回と無関係。(3) 2.5 の GGUF 読み込み器は型の早期検査を持たない（Gemma GGUF に I8 型のテンソルが 5 本実在し、`sd_ops` で落とす前に検査すると壊れるため置かない）。
+
+**証明**: 敵対的レビュー（Opus 1 体・Part ごとに実施。いずれもサブエージェント起動なし）は、Part 1 で新規テストが HEAD（本節の変更前のコード）の写しで落ちること（2.3 の 17 件・2.5・連結の取り消し・色つきマスクの新しい挙動を固定する型であること）を実測し、ffmpeg の新グラフを純色 12 色で実測し、`SUPPORTED_GGML_TYPES` の番号を gguf-py と照合した。Part 2 では、読み込みを途中で止めたスレッドで「読み込み中の解放は必ず 409」を実測し、新規テスト 7 件が HEAD の写しで落ちること（5 件落ち・不変の挙動を見張る 2 件は通る）を確認し、契約文書 7 箇所が同じ規則を書いているかを照合した。§1-47 の GPU 自己試験は `ledger-work/stage4/selftest_1-47.json` に記録し、`peak_allocated_gib: 4.317`（`fits_in_16gib: true`）・既存の判定 10 個（`swap_second_install_was_noop`・`prefetch_every_round_engaged`・`prefetch_verdict_matches_request`・`rebuild_faster_than_first_build` 等）もすべて `true` であることを確認した。全変更ファイルの改行は作業ツリーで CRLF のまま・BOM なし（監督が Python でバイトを数えて確認。Part 1 は 29 ファイル、Part 2 は 8 ファイル）であり、仕様書の版欄（§0.1）と改訂履歴の最終行は Part 1 で v0.5.80、Part 2 で v0.5.81 に一致した。
+
+**テスト**（GPU・実バックエンド・ネットワークは §1-47 の自己試験 1 回を除き不使用。監督が実行）: Part 1 はアプリ `.venv` 全件 **2,891 passed・61 skipped**（第 3 弾 2,885／54 → 新規 +6・エンジン用の新規テスト 7 ファイルはアプリ側で skip）／`.venv-engine` 23 ファイル＋新規 5 **625 passed**（`CUDA_VISIBLE_DEVICES` は触らない。`-1` にすると `engine/worker.py` の import で落ちるため）／`.venv-engine-ltx25` 9 ファイル＋新規 2 **233 passed**（runner 経由・`CUDA_VISIBLE_DEVICES=-1`。空文字は Windows で落ちる）。レビュー反映後の再実行も同じ件数。Part 2 はアプリ `.venv` 全件 **2,898 passed・61 skipped**（Part 1 の 2,891 passed から新規 7 件分増）。エンジン側の仮想環境は Part 2 で触っていない（`services/`・文書だけ）ため実行していない。§1-47 の GPU 自己試験は上記「証明」のとおり 1 回・`SELFTEST OK`。
+
+**台帳**: CLOSED §3-197〜§3-206（§1-37・42・46・47・51・53・54・61・76・36 の順。別担当が台帳本体と並行で更新）。§1-52 の「着手」行を第 6 弾 G（§1-31・33・40・41 と合わせて bf16 経路を消すかどうかの判断）へ更新した。新規起票 §1-77（操作パネルの解放ボタンが読み込み中に固定文言「パイプラインの解放に失敗しました。」を出す。読み込み中は解放ボタンを押せなくする、または `PIPELINE_LOADING` を load と同じく扱う案を検討）。これで台帳 §1 は 7 件（§1-31・33・40・41・52・60・77）になった。
+
+**文書**: 仕様書 `Videomni_Backend_Specification.md` v0.5.80（Part 1。§0.1 の版欄・改訂履歴・§6.2 補足 763 行・マスクの規則 821 行）→ v0.5.81（Part 2。§0.1・改訂履歴・§6.1 の表 637 行と補足 654 行・§6.8 エラーコード表 1194 行・§6.9(d) 1293 行・§6.9(f) 1316／1319 行）。`Docs/INPAINTING_DESIGN.md` 299／518 行。`README.md` 351 行（対応する GGUF 型の列挙・「読み込み時に断られる」→「最初の生成でエラー」）。`Docs/MULTI_ENGINE_DESIGN.md` 499 行。操作パネル `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md`（97・198・492 行・冒頭の最終更新と履歴）。`batchRunner.ts` の docstring（コメントのみ・ビルド不要）。`api/errors.py`・`mcp_server/tools/system.py` の docstring。
+
+**敵対的レビュー**（Opus 1 体・サブエージェント起動なし・Part ごとに実施）: Part 1（新規テストが HEAD の写しで落ちることの実測・ffmpeg 純色 12 色の実測・`SUPPORTED_GGML_TYPES` の gguf-py 照合）の結論は**直すべき 1・注意 3・参考 6**。採用 6: README「読み込み時に断られる」→「最初の生成でエラー」（2.3 は最初のジョブの組み立て、2.5 は最初の forward）／`_install_nag` の docstring（ブロックスワップ失敗時を「遅くなる」と書いていた→実際は VRAM が増える）／操作パネル `API_REFERENCE.md:492` の「輝度 128」の写し／`empty_device_cache`（参照 0 件）の削除／両ワーカーのログ文言「ignoring unknown op」→「unknown op … answered with an error event」／docstring の「出力は捨てられる」→「結果は配られない（ファイルは `outputs/<job_id>/` に残る）」。据え置き 4: 2.5 の早期検査は置かない／2.5 の `rt_a` は読解で全参照を確認（単体テスト無し）／事前確認の削除の影響範囲は `start_job` 直後の数行だけ／§144 の参照は本節で解消。Part 2（読み込みを途中で止めたスレッドでの実測・契約文書 7 箇所の照合）の結論は**直すべき 0・注意 3・参考 6**。採用 2: `finally` の中身を既存の後始末に差し替え（上記「裁定と新事実」）／操作パネル `API_REFERENCE.md` の最終更新と履歴の更新。起票 1: 操作パネルの固定文言（§1-77）。参考 6 は記録のみ（上記「裁定と新事実」の記録のみの事実 3 点を含む。操作パネルのモックの unload は `JOB_BUSY` しか返さない点も）。
+
+**費用の目安**（Opus・Sonnet のトークン、概算）: Opus＝計画段階の棚卸し 3 体 約 45 万＋Part 1 実装 3 体 約 46 万・レビュー 約 28 万・反映 約 8 万（Part 1 の実装・レビュー・反映は約 82 万で見込み 88 万の範囲内）＋Part 2 実装 約 12 万・レビュー 約 16 万・反映 約 20 万（見込み 28 万を約 21 万超過。反映でテストの作り直しとベースモデルの巻き戻しのテスト新設が加わったため）、合計約 176 万。Sonnet＝台帳と記録 約 35 万（台帳 21・記録 14。見込み 45 万の範囲内）。
+
+**申し送り**（次へ）: (1) 第 5 弾 F2（実機・GPU 使用前に毎回了承）: 台帳 §2-1（§1-43）・§2-2（§1-56）の実機確認、§1-60 (1)〜(3) と `use_component_files` の鍵・偽の経路の撤去、§1-40 の計測。あわせて今回の変更の実機確認の候補: 対応外の型の GGUF を置いたときのエラーの見え方（§1-61）、読み込み中に解放・再読み込みを押したときの操作パネルの表示（§1-36／§1-77）、バッチ A2V の停止で実行中の行が Waiting に戻ること（§1-37）。(2) 第 6 弾 G: §1-31・33・40・41 に加えて §1-52（bf16 経路 `gguf_per_layer_quant=false` を消すかどうかと一緒に）。(3) 記録のみ: 読み込み中の解放が事実上の「読み込み中止」として働いていた挙動は §1-36 で無くなった（今後は最長 600 秒の時間切れで失敗に戻る）／`PipelineManager` で見張りの外で `state` を書く既存の 3 経路（実行前に取り消されたジョブ・ボディ無しの load・同じ選択の load）は HEAD からあり今回と無関係（review_part2.md の参考）／2.5 の GGUF 読み込み器は型の早期検査を持たない（Gemma GGUF に I8 型のテンソルが 5 本実在し、sd_ops で落とす前に検査すると壊れるため置かない）。
+
+裏取りの表・再現スクリプトの写し・自己試験の報告はリポジトリの外（`ledger-work/stage4/`。git 管理外）に置いています。

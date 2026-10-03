@@ -194,6 +194,8 @@ async def unload_pipeline() -> dict[str, Any]:
     """パイプラインをメモリから解放します（POST /pipeline/unload）。
 
     ジョブ実行中は 409 JOB_BUSY になります（同時1ジョブ制約）。
+    モデルの読み込み中は 409 PIPELINE_LOADING になります（読み込みが
+    終わってから呼び直してください）。
 
     選択中のベースモデルは解放後も保持されます（次に load_pipeline を
     ``base_model`` なしで呼べば、同じベースモデルが読み込まれます）。

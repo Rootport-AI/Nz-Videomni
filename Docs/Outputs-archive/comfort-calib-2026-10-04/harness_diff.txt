@@ -1,0 +1,123 @@
+--- ../comfort-calib-2026-10-03/calib.py	2026-10-03 15:19:40.643224100 +0900
++++ calib.py	2026-10-05 20:46:48.981037100 +0900
+@@ -2288,6 +2288,10 @@
+         if total > MAX_CHAIN_TOTAL_PIXEL_FRAMES:
+             errors.append("chain total %d pixel frames exceeds the product cap %d"
+                           % (total, MAX_CHAIN_TOTAL_PIXEL_FRAMES))
++        if point.get("chunked_upsample") is not True:
++            errors.append("chain point must set chunked_upsample=true (the user default; the harness/API default is false)")
++        if point.get("stage2_window") != "standard":
++            warnings.append("chain point uses stage2_window=%r, not the user default standard (W5: w46 is measured on purpose)" % point.get("stage2_window"))
+         # so the row's geometry string reads as the timeline, not as "0f"
+         frames = total
+     else:
+--- ../comfort-calib-2026-10-03/mk.sh	2026-10-03 15:24:26.552204200 +0900
++++ mk.sh	2026-10-04 02:09:19.698660300 +0900
+@@ -1,15 +1,16 @@
+ #!/bin/bash
+-# helper: mk.sh <label> <base> <accel> <W> <H> <frames|-> [baseline|FIRST] [chain clips...]
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03" || exit 2
++# helper: mk.sh <label> <LTX23|LTX25> <transformer> <allon|default> <W> <H> <frames|-> <baseline label|FIRST> [chain clip frames...]
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ PY="../../.venv/Scripts/python.exe"
+-label=$1; base=$2; accel=$3; W=$4; H=$5; F=$6; bl=$7; shift 7
++label=$1; base=$2; tr=$3; accel=$4; W=$5; H=$6; F=$7; bl=$8; shift 8
+ if [ "$bl" = FIRST ]; then BL=(--baseline-first); else BL=(--baseline "$bl"); fi
+ if [ "$F" = "-" ]; then
+-  K=(--kind chain --sizes ${W}x${H} --clips "$@" --stage2-window standard)
++  K=(--kind chain --sizes ${W}x${H} --clips "$@" --stage2-window standard --chunked-upsample)
+ else
+   K=(--width $W --height $H --frames $F)
+ fi
+-"$PY" mkplan.py --out "p_${label}.json" --label "$label" --base-model $base --transformer default --accel $accel "${K[@]}" "${BL[@]}" --tier P1 --purpose "P1 $label" || exit 1
++"$PY" mkplan.py --out "p_${label}.json" --label "$label" --base-model $base --transformer "$tr" --accel $accel "${K[@]}" "${BL[@]}" --tier P2 --purpose "P2 $label" || exit 1
+ "$PY" calib.py preflight --plan "plans/p_${label}.json" > "preflight_${label}_output.txt" 2>&1; rc=$?
+ tail -3 "preflight_${label}_output.txt"; echo preflight_rc=$rc
++echo $rc > "preflight_${label}.rc"
+--- ../comfort-calib-2026-10-03/rp.sh	2026-10-03 15:24:34.723414400 +0900
++++ rp.sh	2026-10-04 02:09:19.698660300 +0900
+@@ -1,5 +1,6 @@
+ #!/bin/bash
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
++[ "$(cat "preflight_$1.rc" 2>/dev/null)" = 0 ] || { echo "ABORT: preflight rc != 0 for $1"; exit 5; }
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ arm=${1%%_*}
+ bash drive2.sh "drive2_${arm}.log" "plans/p_$1.json"
+--- ../comfort-calib-2026-10-03/drive2.sh	2026-10-03 15:19:33.845835700 +0900
++++ drive2.sh	2026-10-04 02:09:19.699171900 +0900
+@@ -2,10 +2,10 @@
+ # Per-point driver: runs one plan file (one point) at a time; after each point, checks the commit peak
+ # recorded during that point; if the peak reached 95% of the limit, stops and does not start the next.
+ # usage: drive2.sh <log> <plan.json> [<plan.json> ...]
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ LOG="$1"; shift
+-CSV="S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03/commit_log.csv"
++CSV="S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04/commit_log.csv"
+ PY="../../.venv/Scripts/python.exe"
+ say(){ echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+ queue_empty(){ curl -s -m 10 http://127.0.0.1:18620/api/v1/status | "$PY" -c "import sys,json; q=json.load(sys.stdin)['queue']; sys.exit(0 if q['pending']==0 and q['running']==0 else 1)"; }
+@@ -16,6 +16,8 @@
+   for i in $(seq 1 120); do queue_empty && break; sleep 10; done
+   queue_empty || { say "ABORT: queue not empty before $plan"; exit 3; }
+   start=$(date '+%Y-%m-%d %H:%M:%S')
++  age=$(( $(date +%s) - $(date -d "$(tail -1 "$CSV" | cut -d, -f1)" +%s) ))
++  [ "$age" -le 10 ] || { say "ABORT: commit monitor stale (${age}s) before $plan"; exit 6; }
+   say "run $plan (commit now $(tail -1 "$CSV" | awk -F, '{print $4}')%)"
+   "$PY" calib.py run --plan "$plan" --job-timeout 3600 --cooldown 150 >> "run_$(basename "$plan" .json)_output.txt" 2>&1
+   rc=$?
+--- ../comfort-calib-2026-10-03/cool.sh	2026-10-03 15:32:50.653871300 +0900
++++ cool.sh	2026-10-04 02:09:19.699171900 +0900
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ # wait until 150 s after the last "done" line of any drive2 log
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
+ last=$(grep -h "\] done " drive2_*.log | sort | tail -1 | sed 's/^\[\([^]]*\)\].*/\1/')
+ t=$(( $(date -d "$last" +%s) + 150 ))
+ until [ "$(date +%s)" -ge "$t" ]; do sleep 3; done
+--- ../comfort-calib-2026-10-03/wait.sh	2026-10-03 16:18:30.980492600 +0900
++++ wait.sh	2026-10-04 02:09:19.699171900 +0900
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ # wait (max 570 s) for rp_<label>.txt to show the summary line
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
+ f="rp_$1.txt"; t=$(( $(date +%s) + 570 ))
+ until { grep -q "^$1 \|ABORT\|STOP\|Traceback" "$f" 2>/dev/null; } || [ "$(date +%s)" -ge "$t" ]; do sleep 5; done
+ cat "$f"; tail -1 commit_log.csv
+--- ../comfort-calib-2026-10-03/commit_table.py	2026-10-03 15:19:33.809221600 +0900
++++ commit_table.py	2026-10-04 02:09:19.699171900 +0900
+@@ -2,7 +2,7 @@
+ """Table 5 helper: per-point commit peak (from the drivers' 'done ... peak=' lines) joined with the
+ rule-v3 verdict from runs/<label>/run.json. Read-only. Usage: python commit_table.py > commit_table.md"""
+ import glob, io, json, re, os, sys
+-D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03"
++D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04"
+ rows = {}
+ for log in sorted(glob.glob(os.path.join(D, "drive*.log"))):
+     for line in io.open(log, encoding="utf-8", errors="replace"):
+--- ../comfort-calib-2026-10-03/digest.py	2026-10-03 15:19:33.814614800 +0900
++++ digest.py	2026-10-04 02:09:19.699671900 +0900
+@@ -2,7 +2,7 @@
+ """Digest for the docs agent: one row per run (manifest order): label, base, transformer used, accel (from used),
+ geometry, stage2 tokens, rule-v3 verdict, stage2/restore deltas, used-check, commit peak (from driver logs). Read-only."""
+ import glob, io, json, os, re
+-D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-03"
++D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04"
+ peaks = {}
+ for log in glob.glob(os.path.join(D, "drive*.log")):
+     for line in io.open(log, encoding="utf-8", errors="replace"):
+--- ../comfort-calib-2026-10-03/sum.py	2026-10-03 15:24:34.697883500 +0900
++++ sum.py	2026-10-04 02:09:36.690965100 +0900
+@@ -2,6 +2,7 @@
+ for lab in sys.argv[1:]:
+     r=json.load(open('runs/%s/run.json'%lab,encoding='utf-8'))
+     v=r.get('v3prime') or {}
++    rq=r.get('request_sent') or {}; print('   cu=',rq.get('chunked_upsample'),'s2w=',rq.get('stage2_window'),'stage2_s=',(r.get('stage2') or {}).get('seconds'),'wall_s=',(r.get('wall') or {}).get('seconds'),'gap_mid_s=',((v.get('windows') or {}).get('s23_gap_mid') or {}).get('seconds'))
+     print(lab, r.get('status'), 'v3=',r.get('verdict_v3prime'), 'wall=%.0fs'%((r.get('wall') or {}).get('seconds') or 0), 'used_ok=',(r.get('used_matches_request') or {}).get('ok'), (r.get('used_matches_request') or {}).get('mismatches'), 'err=',r.get('error'))
+     for n,w in (v.get('windows') or {}).items():
+         if isinstance(w,dict):

@@ -2802,3 +2802,18 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev（第 6 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146）。
 - **残課題**: `torch._int_mm`の実機動作・速さは未確認。再訪条件は[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)の未着手の候補(8)を参照。
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §146、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第14.4節、[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)（未着手の候補(8)・検討済み・no-go 6）、`engine/sft_quant/dequant.py`。
+
+### 3-215. 快適上限の計測・第 2 回（連結のやり直し〔分割アップサンプルあり〕＋重い種別＋Q6_K）（起票：2026-10-03、計測・クローズ：2026-10-05）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-79 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-79（**同書側は欠番**）。第 7 弾の計測 P1（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 15 節・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §147）が、連結を利用者の既定と違う条件（`chunked_upsample=false`）で測って無効にしたため、残りの計測として起票された項目。
+- **到達条件**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31 の表（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 15.4 節）の空きセルを、2 回一致の材料で埋めること。
+- **何が完了したか**: 2026-10-05 に 84 本を測り（失敗 0・`used_matches_request` は全点一致・連結 36 本はすべて `chunked_upsample=true`・コミット最大 71.0%＝101.66 GiB／143.26 GiB。ページファイルをオーナーが S: 64 GiB 固定に変更）、第 15.4 節の空きセルをすべて埋めた。要点は次のとおり（数値の正本は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 16.4 節）。
+  - **連結（`chunked_upsample=true`）**: LTX 2.3 標準は 42,240（第 15 節の false より 1 段上。`s23_gap_mid` の退避が消えた）、LTX 2.5 標準は 46,376（false より 1 段下。2048×1088 が割れ）、LTX 2.3 重い（fp8mixed）は 32,384、LTX 2.3 Q6_K は 40,832、LTX 2.5 重いは 39,424、LTX 2.5 Q6_K は 43,648。
+  - **単発**: LTX 2.3 重い（fp8mixed）全 on は 32,640（121 コマ。既定構成の診断値と同じ段）、LTX 2.3 Q6_K は 43,200（1280×768・353 コマ）、LTX 2.5 重いは 38,760（既定構成と全 on・REDGraft と fp8 で同じ境界）、LTX 2.5 Q6_K は 43,344。
+  - **オーナー裁定（2026-10-05）**: (1) LTX 2.5 Q6_K の単発は 43,344（2026-09-14 の全 on の 361 コマの割れを溢れに数える。今回の 361 コマは快適×2 だが delta が +243／+287 で閾値の際）。(2) LTX 2.5 重いは単発 38,760・連結 39,424 のまま（配信表の行は単発と連結を別の値で持つ）。(3) LTX 2.3 Q6_K の連結は 40,832（既知の溢れ点だった 2026-09-25 の w46・38,456 は窓と `chunked_upsample` の両方が違うため外す。補足計測は自動許可の判定に拒否されて 0 本で中止）。
+  - 配信値（`config.py`）・コード・仕様書は変えていない（仕様書は v0.5.83 据え置き）。
+- **どの物差しで通ったか**: 規則 v3′（第 15.5 節）・2 回一致・独立裏取り（Opus・読み取りのみ。表 84 本をすべて一次記録から再現・基準点の取り違え 0・`chunked_upsample=true` の全点確認・手順の逸脱 0）・生成時間の集計（Opus。判定には使わない材料。第 16.6 節）。
+- **クローズ理由**: 全セルの材料が揃った。配信値への反映・種別の判定・Settings の注記は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31 の設計で行う。
+- **状態**: dev（第 8 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §148）。
+- **残課題**: 無し（反映は §1-31）。留保は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 16.7 節（LTX 2.3 Q6_K の連結を w46・`chunked_upsample=true` で測り直す点は未計測）。
+- **正本・出典**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 16 節、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §148、`outputs/comfort-calib-2026-10-04/`（複写 [`Outputs-archive/comfort-calib-2026-10-04/`](Outputs-archive/comfort-calib-2026-10-04/)）。

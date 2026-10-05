@@ -17,8 +17,9 @@ The rules' source of truth is Docs/COMFORT_LIMIT_TABLE.md §1. In short:
   scheme. The 8-bit schemes (fp8, fp8_scaled, int8, int8_convrot) are summed
   and compared with ``w4a8``: the larger side wins, a tie goes to ``"8bit"``.
   No quantized layer at all (bf16) -> ``inspect`` refuses -> ``None``.
-* A file that cannot be read or parsed -> ``None`` (the client then falls
-  back to the compatibility values, exactly as before this table existed).
+* A file that cannot be read or parsed -> ``None``. The operation panel and
+  Gradio then leave the class key out of the match, so no row matches: single
+  falls back to ``spill_free_frames``, chain to ``chain_comfort_token_budget``.
 
 Pure functions plus one small cache; no heavy dependencies (the app venv stays
 torch-free).

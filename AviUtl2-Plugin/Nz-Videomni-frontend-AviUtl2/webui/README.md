@@ -44,8 +44,8 @@ It runs both:
 Which one is used is decided automatically at startup (see
 [Bridge architecture](#bridge-architecture) below).
 
-Current generation defaults are 1280×768, 361 frames (raised from 257 on
-2026-08-19, see `Docs/DEVLOG.md` §85), `crop_output`
+Current generation defaults are 1280×768, 345 frames (lowered from 361 on
+2026-10-06, see `Docs/DEVLOG.md` §129), `crop_output`
 1280×720 (matches the backend's `standard_720p` preset). The generation
 size cap is 4096; resolutions above 1440p are not covered by the
 spill-free-frames OOM warning (see `Docs/DEVLOG.md` §24.8/§22.3).

@@ -27,8 +27,8 @@ name and `package.ini`).
 
 - **T2V** (text-to-video) and **I2V** (image-to-video, with a keyframe
   conditioning panel).
-- **Defaults**: 1280×768, 361 frames (raised from 257 on 2026-08-19, see
-  `Docs/DEVLOG.md` §85), `crop_output` 1280×720 — matches the
+- **Defaults**: 1280×768, 345 frames (lowered from 361 on 2026-10-06 to fit
+  the LTX 2.3 4-bit comfort line, see `Docs/DEVLOG.md` §129), `crop_output` 1280×720 — matches the
   backend's `standard_720p` preset (`config.yaml`'s `generation_defaults`,
   see `Docs/DEVLOG.md` §24.8). The generation size cap is 4096
   (`config.yaml`'s `limits.max_width`/`max_height`); resolutions above 1440p
@@ -117,7 +117,8 @@ name and `package.ini`).
   neighbour onto its own tail; output length is still the clip total either
   way. `overlap_frames >= 2` remains required only for window-internal mode
   (one clip); reverse Chained and bridge mode are both waived, and reverse
-  Chained additionally defaults to 1. A mild warning appears when a
+  Chained additionally defaults to 1 (or 2 when 1 would exhaust the audio
+  overlap budget, e.g. the default 345×2 clips at 24 fps). A mild warning appears when a
   single clip (window-internal mode) outgrows one stage-2 tile (169 frames on
   `standard`, 145 on `high_resolution`; in general 8×window−7, up to 481
   on `w61`, where the warning never fires), because the anchor and the frames

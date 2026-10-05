@@ -5,7 +5,7 @@ import { resolveOutpaintComfortBudget } from "./outpaintBudget";
 
 /** The served limits, with `comfort_budgets` overridable per test. The base is
  * `FALLBACK_APP_CONFIG.limits`, which mirrors the backend's own default table
- * (`config.py`'s `_default_comfort_budgets`). Same helper shape as
+ * (the `comfort` block of `scripts/manifests/*.json`, §1-31). Same helper shape as
  * `comfortTable.test.ts`. */
 function limitsWith(overrides: Partial<AppLimits> = {}): AppLimits {
   return { ...FALLBACK_APP_CONFIG.limits, ...overrides };

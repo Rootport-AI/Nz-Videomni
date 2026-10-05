@@ -749,16 +749,47 @@ describe("SettingsPanel", () => {
     expect(screen.queryByText("Comfort-limit guide")).not.toBeInTheDocument();
   });
 
-  it("shows the comfort-limit table, its scroll wrapper and the 2.5 Q6 column for an engine that has one", async () => {
+  it("shows the comfort-limit table, its scroll wrapper and one column per weight class for an engine that has one", async () => {
     const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
     const { container } = renderPanel(bridge, vi.fn(), vi.fn(), undefined, "ltx25");
 
     await screen.findByDisplayValue("http://127.0.0.1:18620");
     expect(await screen.findByText("Comfort-limit guide")).toBeInTheDocument();
     expect(container.querySelector(".comfort-table-scroll")).not.toBeNull();
-    expect(screen.getByRole("columnheader", { name: "2.5 Q6" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "2.5 fp8" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "2.3 fp8 (default)" })).toBeInTheDocument();
+    // §1-31: the resolution header, the 2.3 default table, then 2 families ×
+    // 3 weight classes — in that order.
+    expect(screen.getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
+      "Resolution",
+      "2.3 4-bit default",
+      "2.3 4-bit all on",
+      "2.3 8-bit",
+      "2.3 Q6_K all on",
+      "2.5 4-bit",
+      "2.5 8-bit",
+      "2.5 Q6_K",
+    ]);
+    // The old hand-written fp8 / Q6 columns are gone.
+    expect(screen.queryByRole("columnheader", { name: "2.5 fp8" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "2.3 fp8 (default)" })).not.toBeInTheDocument();
+    // The hint above the table (owner wording 2026-10-06).
+    expect(
+      screen.getByText(
+        "A rough guide to the frame counts that avoid the slowdown caused by VRAM overflow (see COMFORT_LIMIT_TABLE.md for details).",
+      ),
+    ).toBeInTheDocument();
+    // The 1280x768 row: 2.3 default 273, then the served lines (the mock
+    // mirrors the fallback table).
+    const row = screen.getByRole("cell", { name: "1280x768" }).closest("tr");
+    expect(Array.from(row?.querySelectorAll("td") ?? []).map((td) => td.textContent)).toEqual([
+      "1280x768",
+      "273",
+      "345",
+      "265",
+      "353",
+      "377",
+      "313",
+      "353",
+    ]);
   });
 
   it("closing calls onClose", async () => {

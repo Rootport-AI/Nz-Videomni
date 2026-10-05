@@ -48,53 +48,110 @@ function limitsWithoutTable(overrides: Partial<AppLimits> = {}): AppLimits {
 
 describe("resolveComfortRow", () => {
   describe("the served table (ltx / ltx25)", () => {
-    it("matches the ltx row when all five toggles are effectively on", () => {
-      const row = resolveComfortRow(limitsWith(), "ltx", allOn(), true);
+    it("matches the ltx 4bit row when the class is 4bit and all five toggles are effectively on", () => {
+      const row = resolveComfortRow(limitsWith(), "ltx", allOn(), true, "4bit");
       expect(row).toEqual({
-        singleBudget: 44880,
-        chainBudget: 40000,
+        singleBudget: 42840,
+        chainBudget: 42240,
         spatialFactor: 32,
         temporalFactor: 8,
         rowIndex: 0,
       });
     });
 
-    it("returns null for ltx with the default (all-off) acceleration — the LEGACY table is correct there", () => {
+    it("returns null for ltx 4bit with the default (all-off) acceleration — the LEGACY table is correct there", () => {
       // Not a bug: LTX 2.3's default configuration deliberately has no row,
       // because its comfort boundary is non-monotone in token count.
-      expect(resolveComfortRow(limitsWith(), "ltx", ACCELERATION_DEFAULTS, true)).toBeNull();
+      expect(resolveComfortRow(limitsWith(), "ltx", ACCELERATION_DEFAULTS, true, "4bit")).toBeNull();
     });
 
-    it("returns null for ltx with any single toggle off", () => {
-      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ attentionBackend: "sdpa" }), true)).toBeNull();
-      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ blockSwapPrefetch: false }), true)).toBeNull();
-      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ keepResident: false }), true)).toBeNull();
-      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ fusedGgufDequantKernel: false }), true)).toBeNull();
-      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ vaeMode: "default" }), true)).toBeNull();
+    it("returns null for ltx 4bit with any single toggle off", () => {
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ attentionBackend: "sdpa" }), true, "4bit")).toBeNull();
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ blockSwapPrefetch: false }), true, "4bit")).toBeNull();
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ keepResident: false }), true, "4bit")).toBeNull();
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ fusedGgufDequantKernel: false }), true, "4bit")).toBeNull();
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ vaeMode: "default" }), true, "4bit")).toBeNull();
     });
 
     it("treats unknown sage availability (null) as satisfying the row, an explicit false as not", () => {
-      expect(resolveComfortRow(limitsWith(), "ltx", allOn(), null)?.rowIndex).toBe(0);
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn(), null, "4bit")?.rowIndex).toBe(0);
       // The server would silently run sdpa for this job.
-      expect(resolveComfortRow(limitsWith(), "ltx", allOn(), false)).toBeNull();
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn(), false, "4bit")).toBeNull();
     });
 
     it("reads keep_resident as the EFFECTIVE value it is handed, not a stored choice", () => {
       // `AppShell` folds keepResident down before this ever runs (§1-10); the
       // folded-down object must stop matching the row.
-      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ keepResident: false }), true)).toBeNull();
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ keepResident: false }), true, "4bit")).toBeNull();
     });
 
-    it("matches the ltx25 row under ANY acceleration configuration (requires: {})", () => {
+    it("matches the ltx q6k row only with all five toggles on", () => {
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn(), true, "q6k")).toEqual({
+        singleBudget: 43200,
+        chainBudget: 40832,
+        spatialFactor: 32,
+        temporalFactor: 8,
+        rowIndex: 2,
+      });
+      expect(resolveComfortRow(limitsWith(), "ltx", ACCELERATION_DEFAULTS, true, "q6k")).toBeNull();
+    });
+
+    it("matches the ltx 8bit row whatever the acceleration settings are (its requires is the class alone)", () => {
       for (const acceleration of [ACCELERATION_DEFAULTS, allOn(), allOn({ vaeMode: "default" })]) {
-        expect(resolveComfortRow(limitsWith(), "ltx25", acceleration, false)).toEqual({
-          singleBudget: 44880,
-          chainBudget: 44880,
+        expect(resolveComfortRow(limitsWith(), "ltx", acceleration, false, "8bit")).toEqual({
+          singleBudget: 32640,
+          chainBudget: 32384,
           spatialFactor: 32,
           temporalFactor: 8,
-          rowIndex: 0,
+          rowIndex: 1,
         });
       }
+    });
+
+    it("matches each ltx25 row by weight class alone, under ANY acceleration configuration", () => {
+      const expected = {
+        "4bit": { singleBudget: 46920, chainBudget: 46376, rowIndex: 0 },
+        "8bit": { singleBudget: 38760, chainBudget: 39424, rowIndex: 1 },
+        q6k: { singleBudget: 43344, chainBudget: 43648, rowIndex: 2 },
+      } as const;
+      for (const [weightClass, want] of Object.entries(expected)) {
+        for (const acceleration of [ACCELERATION_DEFAULTS, allOn(), allOn({ vaeMode: "default" })]) {
+          expect(resolveComfortRow(limitsWith(), "ltx25", acceleration, false, weightClass)).toEqual({
+            ...want,
+            spatialFactor: 32,
+            temporalFactor: 8,
+          });
+        }
+      }
+    });
+
+    it("matches no typed row while the weight class is unknown (`\"\"` or omitted) — the caller falls back", () => {
+      // Every served row carries `weight_class`, so a match without one in the
+      // field bag misses them all: the legacy `spill_free_frames` table (Create)
+      // or the scalar key (Chained) applies, exactly like an unmatched config.
+      for (const family of ["ltx", "ltx25"]) {
+        expect(resolveComfortRow(limitsWith(), family, allOn(), true, "")).toBeNull();
+        expect(resolveComfortRow(limitsWith(), family, allOn(), true)).toBeNull();
+      }
+    });
+
+    it("matches no row for a weight class the table does not list", () => {
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn(), true, "q8")).toBeNull();
+      expect(resolveComfortRow(limitsWith(), "ltx25", allOn(), true, "q8")).toBeNull();
+    });
+
+    it("still matches a class-free row when the weight class is known (an extra field never blocks a row)", () => {
+      const limits = limitsWith({
+        comfort_budgets: {
+          ltx: {
+            spatial_factor: 32,
+            temporal_factor: 8,
+            rows: [{ requires: {}, single_budget: 30000, chain_budget: 31000 }],
+          },
+        },
+      });
+      expect(resolveComfortRow(limits, "ltx", allOn(), true, "8bit")?.rowIndex).toBe(0);
+      expect(resolveComfortRow(limits, "ltx", allOn(), true, "")?.rowIndex).toBe(0);
     });
 
     it("returns null for an engine family the table has no profile for", () => {
@@ -260,6 +317,11 @@ describe("resolveComfortRow", () => {
       expect(resolveComfortRow(limitsWith(), undefined, allOn(), true)?.rowIndex).toBe(-1);
       // ...and the shim's all-on rule still applies with one toggle off.
       expect(resolveComfortRow(limitsWith(), "", allOn({ vaeMode: "default" }), true)).toBeNull();
+      // The weight class takes no part in the shim (§1-31): a known class does
+      // not move it, and the 8bit class does not make an all-off config match.
+      expect(resolveComfortRow(limitsWith(), "", allOn(), true, "8bit")?.rowIndex).toBe(-1);
+      expect(resolveComfortRow(limitsWithoutTable(), "ltx", allOn(), true, "8bit")?.rowIndex).toBe(-1);
+      expect(resolveComfortRow(limitsWith(), "", ACCELERATION_DEFAULTS, true, "8bit")).toBeNull();
     });
 
     it("falls back to the mirrored constants when the legacy scalar keys are unusable too", () => {

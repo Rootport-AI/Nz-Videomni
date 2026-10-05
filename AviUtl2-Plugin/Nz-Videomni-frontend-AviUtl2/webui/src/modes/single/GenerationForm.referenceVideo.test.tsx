@@ -179,10 +179,10 @@ describe("GenerationForm — ReferenceVideoSection (IC-LoRA card redesign)", () 
     );
   });
 
-  it("shows the soft IC-LoRA spill warning when the generated duration exceeds the reference (15.0s > 2.0s)", async () => {
+  it("shows the soft IC-LoRA spill warning when the generated duration exceeds the reference (14.4s > 2.0s)", async () => {
     const user = userEvent.setup();
-    // Default duration is 361 frames @ 24fps = 15.0s (raised 2026-08-19 to the
-    // SMART comfort ceiling — see `comfortTable.comfortFramesForBudget`); a 2.0s
+    // Default duration is 345 frames @ 24fps = 14.4s (§1-31: the 2.3 4bit
+    // all-on line — see `comfortTable.comfortFramesForBudget`); a 2.0s
     // reference is shorter, so the spill warning must show. The dropped
     // (unseeded) wav sets A2V without a measured duration, so numFrames stays
     // at its default.
@@ -194,7 +194,7 @@ describe("GenerationForm — ReferenceVideoSection (IC-LoRA card redesign)", () 
     fireEvent.drop(a2vCard(container), { dataTransfer: { files: [new File([], "track.wav")] } });
 
     await waitFor(() =>
-      expect(screen.getByText(/generated duration \(15\.0s\) is longer than the reference video \(2\.0s\)/i)).toBeInTheDocument(),
+      expect(screen.getByText(/generated duration \(14\.4s\) is longer than the reference video \(2\.0s\)/i)).toBeInTheDocument(),
     );
   });
 

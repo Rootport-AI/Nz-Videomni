@@ -29,6 +29,7 @@ from gradio_ui.comfort import (
     stage2_window_choices_for,
     stage2_window_option_label,
     status_availability,
+    weight_class_from_models,
 )
 from gradio_ui.handlers import make_chain_handler
 from gradio_ui.i18n import LABELS
@@ -39,27 +40,70 @@ _BASE = "http://127.0.0.1:8000"
 _ORDER = ["standard", "high_resolution", "w25", "w28", "w31", "w34", "w37",
           "w40", "w43", "w46", "w49", "w52", "w55", "w58", "w61"]
 
-# Recommended 16:9 size per window at the two served budgets (grid 64).
+# Recommended 16:9 size per window at the 40,000 fallback, the former LTX 2.5
+# budget 44,880 (the table of Docs/COMFORT_LIMIT_TABLE.md section 12.2) and the
+# six served chain budgets (grid 64; section 1.1).
 # Source: the WebUI's chainComfortSize16x9 (shell/tokenBudget.ts) re-computed
-# in node for all 30 points (2026-09-25) -- NOT this module's own output. The
-# w25/w46/w61 rows (and standard/high_resolution at 40,000) are also the ones
+# in node for every point (40,000 / 44,880: 2026-09-25; the six served
+# budgets: 2026-10-06) -- NOT this module's own output. The w25/w46/w61 rows
+# (and standard/high_resolution at 40,000) are also the ones
 # tokenBudget.test.ts pins.
 _SIZES = {
     40000: {
-        "standard": (1792, 1024), "high_resolution": (1920, 1088),
-        "w25": (1664, 960), "w28": (1600, 896), "w31": (1472, 896),
-        "w34": (1408, 832), "w37": (1344, 768), "w40": (1344, 704),
-        "w43": (1280, 704), "w46": (1216, 704), "w49": (1216, 640),
-        "w52": (1152, 640), "w55": (1088, 640), "w58": (1088, 640),
-        "w61": (1088, 576),
+        "standard": (1792, 1024), "high_resolution": (1920, 1088), "w25": (1664, 960),
+        "w28": (1600, 896), "w31": (1472, 896), "w34": (1408, 832),
+        "w37": (1344, 768), "w40": (1344, 704), "w43": (1280, 704),
+        "w46": (1216, 704), "w49": (1216, 640), "w52": (1152, 640),
+        "w55": (1088, 640), "w58": (1088, 640), "w61": (1088, 576),
     },
     44880: {
-        "standard": (1920, 1088), "high_resolution": (2048, 1152),
-        "w25": (1792, 1024), "w28": (1664, 960), "w31": (1600, 896),
-        "w34": (1536, 832), "w37": (1472, 832), "w40": (1408, 768),
-        "w43": (1344, 768), "w46": (1280, 768), "w49": (1280, 704),
-        "w52": (1216, 704), "w55": (1216, 640), "w58": (1152, 640),
-        "w61": (1152, 640),
+        "standard": (1920, 1088), "high_resolution": (2048, 1152), "w25": (1792, 1024),
+        "w28": (1664, 960), "w31": (1600, 896), "w34": (1536, 832),
+        "w37": (1472, 832), "w40": (1408, 768), "w43": (1344, 768),
+        "w46": (1280, 768), "w49": (1280, 704), "w52": (1216, 704),
+        "w55": (1216, 640), "w58": (1152, 640), "w61": (1152, 640),
+    },
+    32384: {
+        "standard": (1600, 896), "high_resolution": (1728, 960), "w25": (1472, 896),
+        "w28": (1408, 832), "w31": (1344, 768), "w34": (1280, 704),
+        "w37": (1216, 704), "w40": (1152, 704), "w43": (1152, 640),
+        "w46": (1088, 640), "w49": (1088, 576), "w52": (1024, 576),
+        "w55": (1024, 576), "w58": (960, 576), "w61": (960, 512),
+    },
+    42240: {
+        "standard": (1856, 1024), "high_resolution": (1984, 1088), "w25": (1728, 960),
+        "w28": (1600, 960), "w31": (1536, 896), "w34": (1472, 832),
+        "w37": (1408, 768), "w40": (1344, 768), "w43": (1280, 768),
+        "w46": (1280, 704), "w49": (1216, 704), "w52": (1152, 704),
+        "w55": (1152, 640), "w58": (1088, 640), "w61": (1088, 640),
+    },
+    40832: {
+        "standard": (1792, 1024), "high_resolution": (1920, 1088), "w25": (1664, 960),
+        "w28": (1600, 896), "w31": (1536, 832), "w34": (1472, 832),
+        "w37": (1408, 768), "w40": (1344, 768), "w43": (1280, 704),
+        "w46": (1216, 704), "w49": (1216, 640), "w52": (1152, 640),
+        "w55": (1152, 640), "w58": (1088, 640), "w61": (1088, 576),
+    },
+    46376: {
+        "standard": (1920, 1088), "high_resolution": (2048, 1216), "w25": (1792, 1024),
+        "w28": (1728, 960), "w31": (1600, 896), "w34": (1536, 896),
+        "w37": (1472, 832), "w40": (1408, 832), "w43": (1344, 768),
+        "w46": (1344, 768), "w49": (1280, 704), "w52": (1216, 704),
+        "w55": (1216, 704), "w58": (1152, 704), "w61": (1152, 640),
+    },
+    39424: {
+        "standard": (1792, 1024), "high_resolution": (1920, 1088), "w25": (1664, 960),
+        "w28": (1600, 896), "w31": (1472, 832), "w34": (1408, 832),
+        "w37": (1344, 768), "w40": (1280, 768), "w43": (1280, 704),
+        "w46": (1216, 704), "w49": (1152, 704), "w52": (1152, 640),
+        "w55": (1088, 640), "w58": (1088, 576), "w61": (1024, 640),
+    },
+    43648: {
+        "standard": (1856, 1088), "high_resolution": (1984, 1152), "w25": (1728, 1024),
+        "w28": (1664, 896), "w31": (1600, 896), "w34": (1472, 832),
+        "w37": (1408, 832), "w40": (1408, 768), "w43": (1344, 768),
+        "w46": (1280, 704), "w49": (1216, 704), "w52": (1216, 704),
+        "w55": (1152, 704), "w58": (1152, 640), "w61": (1088, 640),
     },
 }
 
@@ -69,24 +113,44 @@ _LTX_ALL_ON = {
     "vae_mode": "prune_vaed",
 }
 
-# The shape config.py serves (only the fields the resolver reads). The ltx row
-# carries a DISTINCT chain budget so a match can be told from the fallback.
+# A copy of the served table (the manifests' ``comfort`` blocks,
+# scripts/manifests/10-ltx23.json / 20-ltx25.json; Docs/COMFORT_LIMIT_TABLE.md
+# section 1.1) -- only the fields the resolver reads. Every row names a weight
+# class; the ltx 4bit and q6k rows also need all five acceleration settings on.
 _LIMITS = {
     "chain_comfort_token_budget": 40000,
     "comfort_budgets": {
-        "ltx": {"rows": [{"requires": dict(_LTX_ALL_ON), "single_budget": 44880,
-                          "chain_budget": 41000}]},
-        "ltx25": {"rows": [{"requires": {}, "single_budget": 44880,
-                            "chain_budget": 44880}]},
+        "ltx": {"rows": [
+            {"requires": {"weight_class": "4bit", **_LTX_ALL_ON},
+             "single_budget": 42840, "chain_budget": 42240},
+            {"requires": {"weight_class": "8bit"},
+             "single_budget": 32640, "chain_budget": 32384},
+            {"requires": {"weight_class": "q6k", **_LTX_ALL_ON},
+             "single_budget": 43200, "chain_budget": 40832},
+        ]},
+        "ltx25": {"rows": [
+            {"requires": {"weight_class": "4bit"},
+             "single_budget": 46920, "chain_budget": 46376},
+            {"requires": {"weight_class": "8bit"},
+             "single_budget": 38760, "chain_budget": 39424},
+            {"requires": {"weight_class": "q6k"},
+             "single_budget": 43344, "chain_budget": 43648},
+        ]},
     },
 }
 
 
 def _fields(attention="sage", prefetch=True, keep=True, fused=True,
-            vae="prune_vaed", kre=False, sage=None, prefetch_avail=None):
-    return effective_acceleration_fields(attention, prefetch, keep, fused, vae, kre,
-                                         sage_available=sage,
-                                         prefetch_available=prefetch_avail)
+            vae="prune_vaed", kre=False, sage=None, prefetch_avail=None,
+            weight_class=None):
+    """The match fields as stage2_window_choices_for builds them: the six
+    effective acceleration settings, plus ``weight_class`` when it is known."""
+    fields = effective_acceleration_fields(attention, prefetch, keep, fused, vae, kre,
+                                           sage_available=sage,
+                                           prefetch_available=prefetch_avail)
+    if weight_class:
+        fields["weight_class"] = weight_class
+    return fields
 
 
 # --------------------------------------------------------------------------- #
@@ -117,13 +181,13 @@ def test_dropdown_is_built_with_15_choices_and_standard_default():
 # --------------------------------------------------------------------------- #
 # Recommended size + label (must equal the WebUI)
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("budget", [40000, 44880])
+@pytest.mark.parametrize("budget", sorted(_SIZES))
 @pytest.mark.parametrize("window", _ORDER)
 def test_recommended_size_matches_the_webui(budget, window):
     assert chain_comfort_size_16x9(window, budget) == _SIZES[budget][window]
 
 
-@pytest.mark.parametrize("budget", [40000, 44880])
+@pytest.mark.parametrize("budget", sorted(_SIZES))
 @pytest.mark.parametrize("window", _ORDER)
 def test_label_matches_the_webui_template(budget, window):
     w, h = _SIZES[budget][window]
@@ -139,12 +203,14 @@ def test_label_matches_the_webui_template(budget, window):
 def test_label_representative_values():
     en = LABELS["en"]["stage2_window_option"]
     ja = LABELS["ja"]["stage2_window_option"]
-    assert stage2_window_option_label("w46", ja, "LTX 2.5", 44880) == "46f（LTX 2.5 1280×768）"
+    assert stage2_window_option_label("w46", ja, "LTX 2.5", 46376) == "46f（LTX 2.5 1344×768）"
     assert stage2_window_option_label("w46", en, "LTX 2.3", 40000) == "46f (LTX 2.3 1216×704)"
+    assert stage2_window_option_label("w46", en, "LTX 2.3", 32384) == "46f (LTX 2.3 1088×640)"
     assert stage2_window_option_label("w61", en, "LTX 2.3", 40000) == "61f (LTX 2.3 1088×576)"
-    assert stage2_window_option_label("w61", en, "LTX 2.5", 44880) == "61f (LTX 2.5 1152×640)"
+    assert stage2_window_option_label("w61", en, "LTX 2.5", 46376) == "61f (LTX 2.5 1152×640)"
     assert stage2_window_option_label("standard", en, "LTX 2.3", 40000) == "22f (LTX 2.3 1792×1024)"
-    assert stage2_window_option_label("standard", en, "LTX 2.5", 44880) == "22f (LTX 2.5 1920×1088)"
+    assert stage2_window_option_label("standard", en, "LTX 2.3", 42240) == "22f (LTX 2.3 1856×1024)"
+    assert stage2_window_option_label("standard", en, "LTX 2.5", 46376) == "22f (LTX 2.5 1920×1088)"
 
 
 def test_label_without_engine_drops_the_engine_placeholder():
@@ -164,14 +230,38 @@ def test_label_is_frames_only_when_no_size_fits():
 # Budget resolution (comfortTable.resolveComfortRow + the ?? fallback)
 # --------------------------------------------------------------------------- #
 def test_budget_first_matching_row():
-    assert resolve_chain_budget(_LIMITS, "ltx", _fields()) == 41000
-    assert resolve_chain_budget(_LIMITS, "ltx25", _fields(attention="sdpa")) == 44880
+    # ltx: 4bit and q6k need all five on; 8bit matches on the weight class alone.
+    assert resolve_chain_budget(_LIMITS, "ltx", _fields(weight_class="4bit")) == 42240
+    assert resolve_chain_budget(_LIMITS, "ltx", _fields(weight_class="q6k")) == 40832
+    assert resolve_chain_budget(_LIMITS, "ltx", _fields(weight_class="8bit")) == 32384
+    assert resolve_chain_budget(
+        _LIMITS, "ltx", _fields(attention="sdpa", vae="default", weight_class="8bit")) == 32384
+    # ltx25: every row is the weight class alone.
+    for weight_class, budget in (("4bit", 46376), ("8bit", 39424), ("q6k", 43648)):
+        assert resolve_chain_budget(
+            _LIMITS, "ltx25", _fields(attention="sdpa", weight_class=weight_class)) == budget
 
 
 def test_budget_no_matching_row_falls_back_to_scalar():
-    assert resolve_chain_budget(_LIMITS, "ltx", _fields(vae="default")) == 40000
+    # ltx 4bit / q6k with an acceleration setting off: no row (the default
+    # configuration has no row) -> the scalar.
+    assert resolve_chain_budget(
+        _LIMITS, "ltx", _fields(vae="default", weight_class="4bit")) == 40000
+    assert resolve_chain_budget(
+        _LIMITS, "ltx", _fields(vae="default", weight_class="q6k")) == 40000
     limits = dict(_LIMITS, chain_comfort_token_budget=38000)
-    assert resolve_chain_budget(limits, "ltx", _fields(vae="default")) == 38000
+    assert resolve_chain_budget(
+        limits, "ltx", _fields(vae="default", weight_class="4bit")) == 38000
+
+
+def test_budget_unknown_weight_class_falls_back_to_scalar():
+    # No weight class in the match fields (the server could not tell, or an
+    # older server): every row names one, so none matches -- even all-on.
+    for family in ("ltx", "ltx25"):
+        assert resolve_chain_budget(_LIMITS, family, _fields()) == 40000
+        assert resolve_chain_budget(_LIMITS, family, _fields(attention="sdpa")) == 40000
+    # An unknown weight class name does not match either.
+    assert resolve_chain_budget(_LIMITS, "ltx25", _fields(weight_class="q8")) == 40000
 
 
 def test_budget_unknown_engine_or_no_table_falls_back_to_scalar():
@@ -192,17 +282,21 @@ def test_budget_unusable_numbers_fall_back_to_40000():
 def test_budget_sage_availability_is_folded_in():
     # sage chosen but the server says it is not installed -> runs as sdpa ->
     # the all-on row no longer matches.
-    assert resolve_chain_budget(_LIMITS, "ltx", _fields(sage=False)) == 40000
+    assert resolve_chain_budget(
+        _LIMITS, "ltx", _fields(sage=False, weight_class="4bit")) == 40000
     # unknown (no /status yet) counts as available.
-    assert resolve_chain_budget(_LIMITS, "ltx", _fields(sage=None)) == 41000
-    assert resolve_chain_budget(_LIMITS, "ltx", _fields(sage=True)) == 41000
+    assert resolve_chain_budget(
+        _LIMITS, "ltx", _fields(sage=None, weight_class="4bit")) == 42240
+    assert resolve_chain_budget(
+        _LIMITS, "ltx", _fields(sage=True, weight_class="4bit")) == 42240
 
 
 def test_keep_resident_is_folded_off_without_prefetch():
     assert _fields(prefetch=False)["keep_resident"] is False
     assert _fields(prefetch_avail=False)["keep_resident"] is False
     assert _fields(prefetch_avail=None)["keep_resident"] is True
-    assert resolve_chain_budget(_LIMITS, "ltx", _fields(prefetch_avail=False)) == 40000
+    assert resolve_chain_budget(
+        _LIMITS, "ltx", _fields(prefetch_avail=False, weight_class="4bit")) == 40000
 
 
 def test_engine_and_status_readers():
@@ -218,21 +312,52 @@ def test_engine_and_status_readers():
     assert status_availability({}) == (None, None)
 
 
-def test_choices_for_follow_engine_and_acceleration():
-    config = {"limits": _LIMITS}
+def test_weight_class_reader():
+    models = {"active_base_model": "LTX23", "base_models": [
+        {"id": "LTX23", "engine_family": "ltx", "transformer_weight_class": "8bit"},
+        {"id": "LTX25", "engine_family": "ltx25", "transformer_weight_class": None},
+    ]}
+    # The active base model's value.
+    assert weight_class_from_models(models) == "8bit"
+    # null from the server (could not tell) -> "".
+    assert weight_class_from_models(dict(models, active_base_model="LTX25")) == ""
+    # No entry for the active base model / no active base / no response -> "".
+    assert weight_class_from_models(dict(models, active_base_model="LTX99")) == ""
+    assert weight_class_from_models(dict(models, active_base_model="")) == ""
+    assert weight_class_from_models({}) == ""
+    assert weight_class_from_models(None) == ""
+    # An older server without the field -> "".
+    assert weight_class_from_models({"active_base_model": "LTX23", "base_models": [
+        {"id": "LTX23", "engine_family": "ltx"}]}) == ""
+
+
+def _labels(lang, state, *accel):
+    return dict((v, lab) for lab, v in stage2_window_choices_for(
+        lang, {"limits": _LIMITS}, state, *accel))
+
+
+def test_choices_for_follow_engine_weight_class_and_acceleration():
+    all_on = ("sage", True, True, True, "prune_vaed", False)
+    default = ("sdpa", True, False, True, "default", False)
     ltx25 = {"engine_family": "ltx25", "engine_label": "LTX 2.5"}
     ltx = {"engine_family": "ltx", "engine_label": "LTX 2.3"}
-    labels = dict((v, lab) for lab, v in stage2_window_choices_for(
-        "ja", config, ltx25, "sdpa", True, False, True, "default", False))
-    assert labels["w46"] == "46f（LTX 2.5 1280×768）"
-    # LTX 2.3 with everything on -> the (test) row's 41,000; with the default
-    # VAE -> the 40,000 scalar.
-    config_real = {"limits": dict(_LIMITS, comfort_budgets={
-        "ltx": {"rows": [{"requires": dict(_LTX_ALL_ON), "chain_budget": 40000}]}})}
-    labels = dict((v, lab) for lab, v in stage2_window_choices_for(
-        "en", config_real, ltx, "sage", True, True, True, "prune_vaed", False))
-    assert labels["w46"] == "46f (LTX 2.3 1216×704)"
-    assert labels["w61"] == "61f (LTX 2.3 1088×576)"
+    # LTX 2.5 4bit (46,376) with the default configuration.
+    labels = _labels("ja", dict(ltx25, weight_class="4bit"), *default)
+    assert labels["w46"] == "46f（LTX 2.5 1344×768）"
+    # LTX 2.3 4bit all-on -> 42,240; 8bit -> 32,384 whatever the settings.
+    labels = _labels("en", dict(ltx, weight_class="4bit"), *all_on)
+    assert labels["w46"] == "46f (LTX 2.3 1280×704)"
+    assert labels["w61"] == "61f (LTX 2.3 1088×640)"
+    labels = _labels("en", dict(ltx, weight_class="8bit"), *default)
+    assert labels["w46"] == "46f (LTX 2.3 1088×640)"
+    # LTX 2.3 4bit with the default VAE, or no weight class at all -> the
+    # 40,000 scalar.
+    for state, accel in ((dict(ltx, weight_class="4bit"), default),
+                         (dict(ltx, weight_class=""), all_on),
+                         (ltx, all_on)):
+        labels = _labels("en", state, *accel)
+        assert labels["w46"] == "46f (LTX 2.3 1216×704)"
+        assert labels["w61"] == "61f (LTX 2.3 1088×576)"
 
 
 # --------------------------------------------------------------------------- #
@@ -406,16 +531,19 @@ def test_labels_are_rebuilt_on_engine_config_accel_and_language_changes():
     assert list(relabel[0].outputs) == [dd]
     assert len(relabel[0].targets) == 9
     upd = demo.relabel_stage2_window(
-        "ja", {"limits": _LIMITS}, {"engine_family": "ltx25", "engine_label": "LTX 2.5"},
+        "ja", {"limits": _LIMITS},
+        {"engine_family": "ltx25", "engine_label": "LTX 2.5", "weight_class": "4bit"},
         "sdpa", True, False, True, "default", False)
-    assert dict((v, lab) for lab, v in upd["choices"])["w46"] == "46f（LTX 2.5 1280×768）"
+    assert dict((v, lab) for lab, v in upd["choices"])["w46"] == "46f（LTX 2.5 1344×768）"
 
 
 def test_refresh_model_dropdowns_fills_the_engine_state():
     demo = build_ui(_BASE, api_key=None)
     models = {"active_base_model": "LTX25", "base_models": [
-        {"id": "LTX23", "engine_family": "ltx", "display_name": "LTX 2.3", "active": False},
-        {"id": "LTX25", "engine_family": "ltx25", "display_name": "LTX 2.5", "active": True},
+        {"id": "LTX23", "engine_family": "ltx", "display_name": "LTX 2.3", "active": False,
+         "transformer_weight_class": None},
+        {"id": "LTX25", "engine_family": "ltx25", "display_name": "LTX 2.5", "active": True,
+         "transformer_weight_class": "8bit"},
     ]}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -428,4 +556,5 @@ def test_refresh_model_dropdowns_fills_the_engine_state():
     updates = demo.refresh_model_dropdowns("en", warn=False)
     state = updates[5]   # base + 4 categories, then the engine State
     assert state == {"engine_family": "ltx25", "engine_label": "LTX 2.5",
+                     "weight_class": "8bit",
                      "sage_available": False, "prefetch_available": True}

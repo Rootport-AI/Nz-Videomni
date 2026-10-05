@@ -6,7 +6,9 @@ Every rule here is a port of the WebUI, so the two GUIs show the same label for
 the same inputs (tests/test_gradio_stage2_window.py pins the numbers):
 
 * the effective acceleration fields -> ``shell/accelerationSettings.ts``
-  (``effectiveAcceleration`` + ``effectiveAccelerationFields``);
+  (``effectiveAcceleration`` + ``effectiveAccelerationFields``), plus the
+  active transformer's ``weight_class`` when it is known (``resolveComfortRow``'s
+  ``weightClass`` argument);
 * the budget -> ``shell/comfortTable.ts`` ``resolveComfortRow`` followed by the
   ``?? resolveChainComfortBudget(limits.chain_comfort_token_budget)`` fallback
   in ``modes/chained/useChainForm.ts``;
@@ -192,6 +194,24 @@ def engine_info_from_models(models_json: dict | None) -> tuple[str, str]:
     return "", ""
 
 
+def weight_class_from_models(models_json: dict | None) -> str:
+    """The ``transformer_weight_class`` (``"4bit"`` / ``"8bit"`` / ``"q6k"``)
+    of the ACTIVE base model from a ``GET /models`` response — what a
+    ``comfort_budgets`` row's ``requires.weight_class`` is matched against.
+    ``""`` when it cannot be told (no active base, no such entry, ``null``
+    from the server, an older server without the field): rows that name a
+    weight class then never match and the scalar fallback applies."""
+    root = models_json or {}
+    active = root.get("active_base_model") or ""
+    if not active:
+        return ""
+    for entry in root.get("base_models") or []:
+        if isinstance(entry, dict) and entry.get("id") == active:
+            value = entry.get("transformer_weight_class")
+            return value if isinstance(value, str) else ""
+    return ""
+
+
 def status_availability(status_json: dict | None) -> tuple[bool | None, bool | None]:
     """``(sage_available, block_swap_prefetch_available)`` from a ``GET
     /status`` body; ``None`` for a missing / non-bool flag (= unknown)."""
@@ -208,9 +228,11 @@ def stage2_window_choices_for(lang, config, engine_state, attention_backend,
                               keep_resident_embeddings) -> list[tuple[str, str]]:
     """The whole chain from the Gradio inputs to the dropdown ``choices``:
     ``engine_state`` is the tab's ``{"engine_family", "engine_label",
-    "sage_available", "prefetch_available"}`` State (filled from ``GET
-    /models`` + ``GET /status``), ``config`` the ``/config`` dict and the six
-    acceleration values are the Settings tab's controls."""
+    "weight_class", "sage_available", "prefetch_available"}`` State (filled
+    from ``GET /models`` + ``GET /status``), ``config`` the ``/config`` dict
+    and the six acceleration values are the Settings tab's controls. A known
+    ``weight_class`` joins the match fields; an empty one is left out, so a
+    row that names a weight class does not match (the WebUI's rule)."""
     state = engine_state or {}
     fields = effective_acceleration_fields(
         attention_backend, block_swap_prefetch, keep_resident,
@@ -218,6 +240,9 @@ def stage2_window_choices_for(lang, config, engine_state, attention_backend,
         sage_available=state.get("sage_available"),
         prefetch_available=state.get("prefetch_available"),
     )
+    weight_class = state.get("weight_class") or ""
+    if weight_class:
+        fields["weight_class"] = weight_class
     budget = resolve_chain_budget((config or {}).get("limits"),
                                   state.get("engine_family") or "", fields)
     return build_stage2_window_choices(lang, state.get("engine_label") or "", budget)

@@ -88,6 +88,11 @@ export interface SingleScreenProps {
    * the user then sees). Omitted/`""` ⇒ "engine unknown" ⇒ the compatibility
    * shim, so every direct-render test that predates it keeps compiling. */
   engineFamily?: string | undefined;
+  /** §1-31: the LOADED transformer's weight class
+   * (`useBaseModels().activeWeightClass`), threaded down the same road as
+   * {@link engineFamily} to every `resolveComfortRow` call this screen makes.
+   * Omitted/`""` ⇒ unknown ⇒ no `weight_class` in the match. */
+  weightClass?: string | undefined;
   /** §3-98 P5: Batch A2V submits `POST /generate/chain`, which the loaded base
    * model's engine may not support (LTX 2.5 v1 refuses the whole chain family
    * with 422 `FEATURE_UNSUPPORTED`). `true` greys the panel's controls the same
@@ -116,6 +121,7 @@ export function SingleScreen({
   acceleration,
   sageAvailable,
   engineFamily,
+  weightClass,
   batchUnavailable,
 }: SingleScreenProps) {
   const strings = useStrings();
@@ -142,6 +148,7 @@ export function SingleScreen({
       acceleration={acceleration}
       sageAvailable={sageAvailable}
       engineFamily={engineFamily}
+      weightClass={weightClass}
       batchUnavailable={batchUnavailable}
     />
   );
@@ -163,6 +170,7 @@ interface SingleScreenBodyProps {
   acceleration?: AccelerationSettings | undefined;
   sageAvailable?: boolean | null | undefined;
   engineFamily?: string | undefined;
+  weightClass?: string | undefined;
   batchUnavailable?: boolean | undefined;
 }
 
@@ -182,6 +190,7 @@ function SingleScreenBody({
   acceleration,
   sageAvailable,
   engineFamily,
+  weightClass,
   batchUnavailable = false,
 }: SingleScreenBodyProps) {
   const strings = useStrings();
@@ -284,9 +293,10 @@ function SingleScreenBody({
             engineFamily,
             acceleration,
             sageAvailable,
+            weightClass,
           })
         : null,
-    [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable],
+    [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass],
   );
   const derived = seed?.derived ?? null;
   const prefillFrameRate = seed?.frameRate;
@@ -323,7 +333,17 @@ function SingleScreenBody({
   const form = useGenerationForm(
     config,
     prompt,
-    { nativeBridge, controlLora, setControlLora, controlLoraNames, nag, acceleration, sageAvailable, engineFamily },
+    {
+      nativeBridge,
+      controlLora,
+      setControlLora,
+      controlLoraNames,
+      nag,
+      acceleration,
+      sageAvailable,
+      engineFamily,
+      weightClass,
+    },
     {
       ...(derived
         ? {
@@ -426,7 +446,7 @@ function SingleScreenBody({
           // a caller that does not thread the Settings state cannot say what
           // would effectively run, so it keeps the legacy ceiling.
           const comfortRow = acceleration
-            ? resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null)
+            ? resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null, weightClass)
             : null;
           const smartCeiling =
             comfortRow

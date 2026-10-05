@@ -2169,21 +2169,24 @@ export const en = {
      * fed by a single `useConfig()` call (`GET /config`,
      * Docs/API_REFERENCE.md §3.2). */
     configLoading: "Loading configuration…",
-    /** The comfort-limit guide (§3-163). Column headers are model names, so
-     * they read the same in both dictionaries — this also covers the
-     * quantisation suffix on the 2.3 all-on header. The SHAPE of the table
-     * (which rows, which columns) is `shell/comfortDisplayTable.ts` — these
-     * are only its labels. */
+    /** The comfort-limit guide (§3-163; one column per base model × weight
+     * class since §1-31). The weight-class names read "4-bit / 8-bit / Q6_K"
+     * here and "4bit / 8bit / Q6_K" in Japanese (owner decision). "all on" on
+     * a header is a declaration: it names the condition the served row
+     * carries, so a manifest change to that condition must change the header
+     * too. The SHAPE of the table (which rows, which columns) is
+     * `shell/comfortDisplayTable.ts` — these are only its labels. */
     comfortSectionTitle: "Comfort-limit guide",
     comfortHint:
-      "A guide to the frame count per resolution that avoids VRAM overflow and keeps generation from slowing down 2-4x (single generation). The 2.5 fp8 column extends a line through the three measured resolutions (1280×768, 1920×1088, 896×1152) to the other rows by formula. The 2.3 fp8 column is a single measured point at 1920×1088 (server-default acceleration; all-on not measured).",
+      "A rough guide to the frame counts that avoid the slowdown caused by VRAM overflow (see COMFORT_LIMIT_TABLE.md for details).",
     comfortResolutionHeader: "Resolution",
-    comfortColumnLtxDefault: "2.3 default",
-    comfortColumnLtxFp8Default: "2.3 fp8 (default)",
-    comfortColumnLtxAllOn: "2.3 all-on (Q4, Q6)",
-    comfortColumnLtx25: "2.5",
-    comfortColumnLtx25Q6: "2.5 Q6",
-    comfortColumnLtx25Fp8: "2.5 fp8",
+    comfortColumnLtxDefault: "2.3 4-bit default",
+    comfortColumnLtx4bit: "2.3 4-bit all on",
+    comfortColumnLtx8bit: "2.3 8-bit",
+    comfortColumnLtxQ6k: "2.3 Q6_K all on",
+    comfortColumnLtx25_4bit: "2.5 4-bit",
+    comfortColumnLtx25_8bit: "2.5 8-bit",
+    comfortColumnLtx25Q6k: "2.5 Q6_K",
     /** The empty cell. A dedicated key rather than a literal in the panel:
      * the em dash is copy, and a font that renders it badly is a translation
      * problem, not a code change. */
@@ -3408,14 +3411,15 @@ export const ja: Strings = {
     configLoading: "設定を読み込み中…",
     comfortSectionTitle: "快適上限の目安",
     comfortHint:
-      "各解像度で、VRAM溢れが起きずに生成が2～4倍遅くならないフレーム数の目安です（単発生成）。2.5 fp8 の列は、実測した 3 解像度（1280×768・1920×1088・896×1152）を通る線から式で他の解像度へ延ばした目安です。2.3 fp8 の列は 1920×1088 だけの実測（加速の設定はサーバー既定。全 on は未計測）です。",
+      "VRAM溢れによる生成速度の低下が起こらないフレーム数の目安です（※詳細はCOMFORT_LIMIT_TABLE.md）",
     comfortResolutionHeader: "解像度",
-    comfortColumnLtxDefault: "2.3 既定",
-    comfortColumnLtxFp8Default: "2.3 fp8（既定）",
-    comfortColumnLtxAllOn: "2.3 全on(Q4, Q6)",
-    comfortColumnLtx25: "2.5",
-    comfortColumnLtx25Q6: "2.5 Q6",
-    comfortColumnLtx25Fp8: "2.5 fp8",
+    comfortColumnLtxDefault: "2.3 4bit 既定",
+    comfortColumnLtx4bit: "2.3 4bit 全on",
+    comfortColumnLtx8bit: "2.3 8bit",
+    comfortColumnLtxQ6k: "2.3 Q6_K 全on",
+    comfortColumnLtx25_4bit: "2.5 4bit",
+    comfortColumnLtx25_8bit: "2.5 8bit",
+    comfortColumnLtx25Q6k: "2.5 Q6_K",
     comfortDash: "—",
     rawConfigSectionTitle: "生の /config",
     rawConfigFallbackNote: "サーバーに接続できなかったため、内蔵のフォールバック設定を表示しています。",

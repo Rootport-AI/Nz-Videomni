@@ -214,6 +214,19 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     [nativeBridge, trackPipelineLoad],
   );
   const baseModels = useBaseModels(baseModelDeps);
+  // §1-31: re-read `GET /models` whenever a pipeline load we started finishes
+  // (`pipelineLoading` true→false), so `activeWeightClass` follows a
+  // transformer swapped in Settings' Models panel — that load does not go
+  // through `switchBaseModel`. Both issuers (the Models panel and the header
+  // dropdown) run through `trackPipelineLoad`, so this one edge catches both;
+  // a header switch therefore refetches twice, which is harmless.
+  const { refresh: refreshBaseModels } = baseModels;
+  const wasPipelineLoadingRef = useRef(pipelineLoading);
+  useEffect(() => {
+    const wasLoading = wasPipelineLoadingRef.current;
+    wasPipelineLoadingRef.current = pipelineLoading;
+    if (wasLoading && !pipelineLoading) void refreshBaseModels();
+  }, [pipelineLoading, refreshBaseModels]);
   // §3-98 P5: the mode tabs the LOADED base model's engine cannot run.
   // Read here rather than beside the bounce effect further down because there
   // are TWO readers: that effect (a mode whose tab just went grey must not stay
@@ -900,7 +913,13 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // `resolveComfortRow` lookup on it.
     const cursorItemComfortRow =
       (intent === "text-to-video" || intent === "image-from-frame") && publishedForKeepState
-        ? resolveComfortRow(config.limits, baseModels.activeEngineFamily, accelerationControls.acceleration, sageAvail)
+        ? resolveComfortRow(
+            config.limits,
+            baseModels.activeEngineFamily,
+            accelerationControls.acceleration,
+            sageAvail,
+            baseModels.activeWeightClass,
+          )
         : null;
     const cursorItemSmartCeiling =
       cursorItemComfortRow && publishedForKeepState
@@ -1174,10 +1193,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         // 2026-08-31: the same three inputs Create's own comfort marker reads,
         // so a reserved provisional's ribbon is the length the remounted form
         // will show. `SingleScreen`'s own `resolvePrefillSeed` call is handed
-        // the identical trio — the two must never disagree (R-4).
+        // the identical trio — the two must never disagree (R-4). §1-31 adds
+        // the weight class to both calls likewise.
         engineFamily: baseModels.activeEngineFamily,
         acceleration: accelerationControls.acceleration,
         sageAvailable: sageAvail,
+        weightClass: baseModels.activeWeightClass,
       });
       numFrames = seed.numFrames ?? config.generation_defaults.num_frames;
       genFps = seed.frameRate ?? config.generation_defaults.frame_rate;
@@ -1327,6 +1348,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // `boolean | null` for sage rather than the `/status` body itself, so the
     // 2-second poll's fresh object never re-creates this callback.
     baseModels.activeEngineFamily,
+    // §1-31: the weight class picks the comfort row beside the engine family.
+    baseModels.activeWeightClass,
     accelerationControls.acceleration,
     sageAvail,
     // Step 0. A memo in `useBaseModels` keyed on the ACTIVE base model's
@@ -1566,6 +1589,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               /* 2026-08-31: the loaded engine keys the served comfort-budget
                  table, so Create's comfort marker follows the base model. */
               engineFamily={baseModels.activeEngineFamily}
+              /* §1-31: the loaded transformer's weight class picks the row
+                 beside the engine family. */
+              weightClass={baseModels.activeWeightClass}
               /* §3-98 P5 (M4): the Batch A2V section lives on this screen but
                  submits chain jobs, so it follows the engine's feature scope
                  rather than Create's own. */
@@ -1592,6 +1618,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  LTX 2.5. */
               sageAvailable={sageAvail}
               engineFamily={baseModels.activeEngineFamily}
+              weightClass={baseModels.activeWeightClass}
               /* §3-165: the stage-2 window dropdown names the loaded engine. */
               engineLabel={activeEngineLabel}
               /* §3-102: the four material panels the loaded engine's feature
@@ -1629,6 +1656,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  快適上限 warning threshold, the same way it keys Create's and
                  Chained's comfort markers above. */
               engineFamily={baseModels.activeEngineFamily}
+              /* §1-31: Retake's stage-2 window labels read the comfort row by
+                 weight class too (Outpainting's line does not). */
+              weightClass={baseModels.activeWeightClass}
               /* §3-165: the Retake stage-2 window labels read the same comfort
                  row Chained's do, and name the loaded engine. */
               sageAvailable={sageAvail}

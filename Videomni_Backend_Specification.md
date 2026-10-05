@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.83**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-10-03**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.84**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-10-06**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -132,6 +132,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.81 | 2026-10-03 | **台帳 §1-36: 読み込み中の `POST /pipeline/unload` にも 409 `PIPELINE_LOADING` を置いた（凍結 API 契約〔§6〕の変更・オーナー決定）**。読み込みの本体（ワーカーの起動と待ち）はロックの外で走るため、読み込み中の unload が状態を `unloaded` に戻すと、2 度目のロードが 409 の見張りをすり抜けてワーカーの構築が重なっていた。これまで unload を見張りの外に置いていたのは「読み込みが異常終了して `loading` に張り付いたときの唯一の復帰路」としてだったが、`PipelineManager.load`／`reload` の状態の復帰を `finally` にし（状態がまだ `loading` なら、失敗したロードと同じ後始末——ベースモデルの巻き戻し・途中まで立ち上がったワーカーの停止・`unloaded`——をする。成功の `ready`、通常の失敗の後始末による `unloaded` には手を出さない）、張り付く経路そのものを無くした。読み込み中は load・reload・unload のどれも 409、という 1 つの規則になる。**§6.1 の表と補足**・**§6.8 のエラーコード表**・**§6.9(d)・(f)** を更新した。記録は `Docs/VERIFICATION_LOG.md` §144。 |
 | v0.5.82 | 2026-10-03 | **台帳 §1-60: `embed_cpu_offload` の旗と、それで通らなくなっていた枝 3 つ、設定 `vram.use_component_files` の鍵と偽（`false`）の経路を撤去した（挙動不変の引き算）**。`engine/gemma/gguf_quant_service.py` では、Gemma のトークン埋め込みを常に CPU 側に留める前提で旗を外し、lm_head を結び直す枝・埋め込みを GPU へ移す枝・`logits_to_keep=1` を既定にする包み（同じ forward を `_install_cpu_embed_offload` が丸ごと差し替えるため効いていなかった。ログが 1 行減る）を消した。部品ファイル（映像 VAE・音声 VAE／ボコーダ・テキスト射影と、transformer のファイルからのコネクタの注入）は常に使い、モノリスを `model_path` に残す経路と環境変数 `LTX_COMPONENT_FILES` を消した。**`GET /api/v1/config` の応答から `vram.use_component_files` が消える**。古い `config.yaml` に残った行は `extra='ignore'` で黙って無視される（警告は出ない）。**§5.5**・**§9.2**（本文と `ltx25` の注記）・**§11.3 の表**・**付録B の用語表（component-files）**を更新した。記録は `Docs/VERIFICATION_LOG.md` §145。 |
 | v0.5.83 | 2026-10-03 | **台帳 §1-52: GGUF の bf16 経路（`model.gguf_per_layer_quant=false`）をまるごと撤去した（オーナー裁定）**。GGUF の transformer は常に逐次レイヤー量子化（per-layer）経路で読む。`engine/gguf/loader_service.py` を削除し、load の要求から鍵 `gguf_per_layer_quant` を外し、`keep_resident` の併用制限のうち bf16 経路でジョブを止める検査を消した。**`GET /api/v1/config` の応答から `model.gguf_per_layer_quant` が消える**。古い `config.yaml` に残った行は `extra='ignore'` で黙って無視される（警告は出ない）。**§1-78**: `fast_video_pipeline.py` の常に真だった `if gguf_gemma_path:` を外した（挙動不変）。**§1-41**: `engine25/chain25.py` の `_retake_encode_tiling` の docstring を訂正した（拡散 VAE でも型検査は通る）。**§4.2 の表（load）**・**§6.2 の `keep_resident`**・**§11.2 の表**を更新した。記録は `Docs/VERIFICATION_LOG.md` §146。 |
+| v0.5.84 | 2026-10-06 | **台帳 §1-31: 快適上限の表（`limits.comfort_budgets`）の正本をベースモデルの記述子（`scripts/manifests/*.json`）の `comfort` へ移し、行に重みの種別を足した（凍結 API 契約〔§6〕への加算。既存の鍵は 1 つも消していない）**。**§6.7**（正本は記述子のトップレベルの `comfort`・`config.yaml` では上書きできない〔書くと WARNING を出して無視する〕・行の種別の鍵 `requires.weight_class`〔`"4bit"`／`"8bit"`／`"q6k"`。全行に必須で、種別なしの汎用行や他の値・同じ系統の記述子が 2 本とも `comfort` を持つことは起動時のエラー〕・LTX 2.3 は 4bit と Q6_K が全 on の行だけで 8bit は条件なし、LTX 2.5 は 3 行とも条件なし。あわせて「表が配信されていればクライアントは互換の 2 鍵を使わない」という誤った説明を「一致する行が無いときの落ち先」に直した）／**§6.9(c)**（`base_models[].transformer_weight_class` を加算。値が入るのは有効なベースモデルだけで、選択中の transformer のヘッダから判定する。`entries[]` の形は不変）／**§11.4・§11.5**（プリセット `standard_720p`／`FHD_1080p`／`WQHD_1440p` を 361／169／89 → **345／161／81**、`generation_defaults.num_frames` を 361 → **345**。LTX 2.3 の 4bit・全 on の単発の線 42,840 に収まる値）／**§11.7・§10.2・§0.3 の地図**（表の実体と正本の参照先を `config.py` のコード既定から記述子へ、`Docs/COMFORT_LIMIT_TABLE.md` §1.1 から §1 へ）。互換値 `single_comfort_token_budget`（44880）・`chain_comfort_token_budget`（40000）は値を据え置いた。上の v0.5.46 の行の「§1.1・§6・§7」などの参照は当時の記録なのでそのまま残してある。線の値と分類の規則の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1、計測は同書の第 15・16 節。 |
 
 ### 0.2 スコープ
 
@@ -161,7 +162,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/ACCELERATION_RESEARCH_NOTES.md` | 生成高速化の候補整理と採否判断 |
 | `Docs/VSF_README_NOTES.md` | 非CFGネガティブプロンプト（NAG／VSF）の**使い分けの正本**（どちらを選ぶか・つまみの目安・LTX 2.5 での実測）。README §5 と §7.1 はここを指している |
 | `Docs/RESOLUTION_DURATION_CAPABILITY.md` | 解像度×尺の能力（spill-free 閾値・生成時間・den2 推定式・UI 含意）の正本 |
-| `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限の正本。**線の表（`limits.comfort_budgets`）は §1.1、レガシー表 `spill_free_frames` の値は §付記、逆算式は §1.3。** 互換値の2鍵（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値もここが正本 |
+| `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限の正本。**線の表（`limits.comfort_budgets`。値の実体はベースモデルの記述子の `comfort`）と重みの種別の分類の規則は §1、レガシー表 `spill_free_frames` の値は §付記、逆算式は §1.3。** 互換値の2鍵（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値もここが正本 |
 | `Docs/OBJECT_TRACKING_DESIGN.md` | **物体追尾（ユーティリティAIモジュール）の設計正本**（利用の流れ・操作パネルの2つの入口〔右クリックと開始ボタン〕・責務の分担・API 契約・プラグイン側の処理・ワーカーとプロトコル・設定 `tracking:`・重みと導入・他機能との関係）。本書 §4.7 はその位置づけを示すだけで、契約と設定の中身は同書が正本である |
 | `Docs/INPAINTING_DESIGN.md` | **Inpainting（マスクによる部分再生成）の設計正本**（利用の流れ・責務の分担・マスク受け渡し契約〔§6〕・窓の規則・ブレンドと脱緑の仕組み・LTX 2.5 が断る理由）。**マスク受け渡し契約の正本は同書 §6 である**——台帳の応用先（`PENDING_TASKS.md` §4-8(C)・§4-25）はそちらを参照するだけで契約を作り直さない |
 | `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |
@@ -1133,8 +1134,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `phase1_max_concurrent_jobs` | `1` | 単一ジョブ |
 | `low_vram_disabled_required` | `false` | status に反映 |
 | `spill_free_frames` | 生成サイズ文字列 → フレーム数のマップ | 解像度別「溢れない」フレーム数（クライアント UI 警告用）。**値は書き写さない**——実体は `config.yaml`、説明の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記 |
-| `comfort_budgets` | エンジン系統ごとの表 | **快適上限マーカーの線の配信テーブル（2026-08-31追加）。下記参照** |
-| `single_comfort_token_budget` | `44880` | 単発 `/generate` 1発が快適に収まる注意トークン上限（2026-08-18追加）。**表を持たない古いサーバー向けの互換値**。下記参照 |
+| `comfort_budgets` | エンジン系統ごとの表 | **快適上限マーカーの線の配信テーブル（2026-08-31追加。2026-10-06 から正本はベースモデルの記述子〔マニフェスト〕の `comfort`）。下記参照** |
+| `single_comfort_token_budget` | `44880` | 単発 `/generate` 1発が快適に収まる注意トークン上限（2026-08-18追加）。**互換値**（表を知らないクライアントと、一致する行が無いときの落ち先）。下記参照 |
 
 **`max_conditioning_images`**（2026-09-08 改）は、`limits` の中でただ 1 つ **`config.yaml` から設定できない項目**である。`LimitsConfig` はこの名前を入力フィールドとしては持たず、`config.py` の定数 `MAX_CONDITIONING_IMAGES`（現在 10）をそのまま返す **computed field（pydantic の読み取り専用の算出項目）**として持つ。`GET /config` が返す JSON の形は従来と変わらない（`model_dump()` に含まれる）。変わったのは **`config.yaml` に書いても効かない**ことだけで、古い `config.yaml` に `max_conditioning_images: 5` が残っていても `extra='ignore'` で捨てられ、**クライアントへ知らせる値と、サーバーが実際に弾く値とが原理的にズレない**。以前はこの 2 つが別々の場所にあり、`config.yaml` を書き換えても上限は変わらないのに知らせる値だけが変わる、という罠になっていた。ひな型 `config.yaml.example` からはこのキーの行を削除してある。**廃止キーの警告機構（`DEPRECATED_MODEL_KEYS`）はここへ広げていない**——無視した結果が正しい値になるので実害が無く、規則を 1 つ増やすだけになるためである。
 
@@ -1142,9 +1143,15 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 `spill_free_frames`（キーは `"WxH"` 生成サイズ文字列）は、API が 481f まで受理する一方でこの値を超えると shared メモリへ溢れて低速化する（OOM はしない）という境界を、クライアント UI の警告用に配る。**マップの中身は 2026-08-31 に判定規則 v3 で再測定してあり、数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記（実体は `config.yaml` の `limits.spill_free_frames`）である**——本書へは写さない。当初の実測経緯は `Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6（同 §8.4 末尾に再測定の追記あり）。
 
-**`comfort_budgets`**（2026-08-31追加）は「快適上限マーカーの線を、エンジン系統〔ベースモデルの世代〕ごとに配信する表」である。系統ごとに行の並びを持ち、各行は `requires`（リクエストのフィールド名と同じ語彙で書いた条件）と単発生成・連結生成それぞれの予算を持つ。**クライアントは上から順に照合し、全鍵が一致した最初の行を採る。一致する行が無いときは `spill_free_frames` へ落ちる——これは異常ではなく設計どおりの正常系である。** **`ltx`（LTX 2.3）は既定構成に当たる行を意図的に持っていない**ので、`requires` が空の行を足してはならない（足すと退避が起きる領域まで快適と表示する）。**行の並びと予算、および行を置かない理由の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1.1・§6・§7**、較正の記録は `Docs/VERIFICATION_LOG.md` §84 である。サーバーはこの表で一切の判定をしない（拒否も丸めもしない）——助言専用の公開値である。
+**`comfort_budgets`**（2026-08-31追加）は「快適上限マーカーの線を、エンジン系統〔ベースモデルの世代〕ごとに配信する表」である。系統ごとに行の並びを持ち、各行は `requires`（条件）と単発生成・連結生成それぞれの予算を持つ。**クライアントは上から順に照合し、全鍵が一致した最初の行を採る。一致する行が無いときは `spill_free_frames`（連結は `chain_comfort_token_budget`）へ落ちる——これは異常ではなく設計どおりの正常系である。**
 
-**`single_comfort_token_budget`**（既定 `44880`、2026-08-18追加）と **`chain_comfort_token_budget`**（既定 `40000`）は、**`comfort_budgets` を持たない古いサーバー向けの互換値として残置している2鍵**である。トークン数＝`(幅÷32) × (高さ÷32) × 潜在フレーム数`という式は表と共通だが、単発は stage-2 タイル分割なしで全体を1パスで精製するため、1回の仕上げ工程分の予算であるチェーン側とはワークロードが異なる（**別の物理条件から出た別の鍵**である）。**表が配信されている場合、クライアントはこの2鍵を使わない。** サーバーはどちらの値でも一切の判定をしない。較正の正本は `Docs/COMFORT_LIMIT_TABLE.md`。
+- **正本はベースモデルの記述子（`scripts/manifests/*.json`）のトップレベルの `comfort`** である（2026-10-06、台帳 §1-31）。形は `{"spatial_factor", "temporal_factor", "outpaint_budget", "rows": [{"requires", "single_budget", "chain_budget"}, …]}`。起動時に `api/context.py` の `build_comfort_budgets` が型を検査して系統ごとに束ね、この欄へ入れる。`GET /config` の形は従来と同じである。
+- **`config.yaml` では上書きできない。** `limits.comfort_budgets` を書いても、読み込み時に WARNING を 1 回出して捨てる（`config.py` の `load_config`）。コードの既定は空の表 `{}` である。
+- **`requires.weight_class`**（`"4bit"`／`"8bit"`／`"q6k"`）は重みの種別の鍵で、**リクエストのフィールドではない**——クライアントは §6.9(c) の `base_models[].transformer_weight_class` から取って照合材料に足す。他の鍵（`attention_backend` など）はリクエストのフィールド名と同じ語彙である。**全行に `weight_class` が必須**で、種別なしの汎用行や上の 3 値以外の値は起動時のエラーになる。同じ系統の記述子が 2 本とも `comfort` を持つのも起動時のエラーである。
+- **`ltx`（LTX 2.3）は、4bit と Q6_K は全 on（5 つの加速設定がすべて有効）の行だけを持ち、8bit は条件なしの行を持つ**。4bit と Q6_K の既定構成に当たる行は意図的に置かない（`spill_free_frames` へ落ちる）。`ltx25`（LTX 2.5）の 3 行は条件なし（`weight_class` だけ）である。
+- **行の並びと予算、および行を置かない理由の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1**、較正の記録は `Docs/VERIFICATION_LOG.md` §84 と同書の第 15・16 節である。サーバーはこの表で一切の判定をしない（拒否も丸めもしない）——助言専用の公開値である。
+
+**`single_comfort_token_budget`**（既定 `44880`、2026-08-18追加）と **`chain_comfort_token_budget`**（既定 `40000`）は、**互換値として残置している2鍵**である（表を知らない古いクライアントと、表のどの行にも一致しないときの落ち先）。トークン数＝`(幅÷32) × (高さ÷32) × 潜在フレーム数`という式は表と共通だが、単発は stage-2 タイル分割なしで全体を1パスで精製するため、1回の仕上げ工程分の予算であるチェーン側とはワークロードが異なる（**別の物理条件から出た別の鍵**である）。**表が配信されていても、一致する行が無いときは連結の窓の予算としてこの値が使われる**（単発は `spill_free_frames` へ落ちる）。値は据え置いている。サーバーはどちらの値でも一切の判定をしない。較正の正本は `Docs/COMFORT_LIMIT_TABLE.md`。
 
 ### 6.8 エラーコード
 
@@ -1279,15 +1286,18 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
       "present": true,            // 1つ以上実在する（部分導入）
       "missing_categories": [],
       "category_order": ["transformer", "text_encoder", "video_vae", "audio"],  // 加算
+      "transformer_weight_class": "4bit",  // 加算（2026-10-06）。"4bit"｜"8bit"｜"q6k"｜null
       "categories": { "...": "そのベースモデル自身の3層リスト" }
     }
   ]
 }
 ```
 
-**トップレベルの `categories` ブロックはキー・順序・値とも従来のまま**で、意味も従来どおり「アクティブなベースモデルのカテゴリ一覧」である（ベースモデルが 1 つしかなかった時代も同じ意味だった）。旧来の形しか知らないクライアント（`gradio_ui/adapters.py` など）は無改修で動く。**量子化 safetensors（fp8 は 2026-09-25〜、int8 系は 2026-09-26〜）の transformer が並ぶようになっても `entries[]` の形 `{name, path, is_default, exists, source}` は変わらない**——形式を示す欄は足していない。拡張子で分かるのは GGUF か safetensors かまでで、fp8／int8 の種別を示す欄は無い（名乗らせるのは台帳 §1-31 の予定）。`installed` / `present` / `missing_categories` は、未導入のベースモデルを「選べるが導入案内を出す」形で見せるための材料である。
+**トップレベルの `categories` ブロックはキー・順序・値とも従来のまま**で、意味も従来どおり「アクティブなベースモデルのカテゴリ一覧」である（ベースモデルが 1 つしかなかった時代も同じ意味だった）。旧来の形しか知らないクライアント（`gradio_ui/adapters.py` など）は無改修で動く。**量子化 safetensors（fp8 は 2026-09-25〜、int8 系は 2026-09-26〜）の transformer が並ぶようになっても `entries[]` の形 `{name, path, is_default, exists, source}` は変わらない**——形式を示す欄は足していない（重みの種別は下の `transformer_weight_class` で、ベースモデルの要素の側に出す）。`installed` / `present` / `missing_categories` は、未導入のベースモデルを「選べるが導入案内を出す」形で見せるための材料である。
 
 **`category_order`（配列）は `base_models[]` の各要素に必ず入る**（`api/models_registry.py::list_models` が常に出力する）。中身はそのベースモデルの記述子（`scripts/manifests/<base>.json`）の `categories` のキー宣言順そのもので、表示順の正本はこの配列である——JSON オブジェクトのキー順は転送の途中で保たれる保証が無いため、順序は**値として運ぶ**という決めにしてある。画面のモデル選択欄はこれを読み、交換頻度の高い順（動画モデル → テキストエンコーダ → 動画 VAE → 音声モデル）に並べる。
+
+**`transformer_weight_class`**（2026-10-06 加算、台帳 §1-31）は `base_models[]` の各要素に必ず入り、選択中の transformer の重みの種別を `"4bit"`／`"8bit"`／`"q6k"`／`null` で名乗る。クライアントはこれを §6.7 の `comfort_budgets` の行の `requires.weight_class` と照合する。**値が入るのは有効なベースモデル（`active: true`）だけ**で、その選択（`categories.transformer.active`）が指す実ファイルのヘッダから判定する（`services/weight_class.py`。本体は読まず、ファイルの大きさと更新時刻を鍵にキャッシュする）。**有効でないベースモデル・判定できないファイル（Q8_0・F16・bf16・壊れたファイル）・無いファイル・解決できない名前は `null`** である（`null` のときクライアントは表の種別つきの行に一致せず、互換値と `spill_free_frames` へ落ちる）。分類の規則の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1。**`entries[]` の形は変わらない。**
 
 #### (d) `POST /pipeline/unload` — 不変
 
@@ -1657,7 +1667,7 @@ VRAM が溢れ始めない最長尺は解像度別に異なり、`GET /api/v1/co
 
 > **【2026-08-31 追記】上表の値は当時の実測であり、現行値ではない。** レガシー表 `spill_free_frames` は 2026-08-31 に判定規則 v3（同じ解像度の基準点と比べた共有GPUメモリの持続的な上昇だけで線を引く方式）で測り直しており、**現行値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §付記**（実体は `config.yaml`）、境界の根拠は同 §4.8、較正の記録は `Docs/VERIFICATION_LOG.md` §84 である。上表は当時の記録として残す。
 
-**線をどこに引くかは、いまはエンジン系統〔ベースモデルの世代〕ごとの配信テーブル `limits.comfort_budgets`（§6.7・§11.7）で決まる。** 上表が代表するレガシー表 `spill_free_frames` は、**そのテーブルに一致する行が無いときのフォールバック**という位置づけである。**LTX 2.3 の既定構成は意図的にテーブルへ行を持たないので、この経路を通るのが正しい。** 旧来の2鍵（`single_comfort_token_budget` / `chain_comfort_token_budget`）は表を持たない古いサーバー向けの互換値として残置してある。線と表の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1.1・§6・§7。
+**線をどこに引くかは、いまはエンジン系統〔ベースモデルの世代〕ごとの配信テーブル `limits.comfort_budgets`（§6.7・§11.7）で決まる。** 上表が代表するレガシー表 `spill_free_frames` は、**そのテーブルに一致する行が無いときのフォールバック**という位置づけである。**LTX 2.3 の 4bit と Q6_K の既定構成は意図的にテーブルへ行を持たないので、この経路を通るのが正しい**（重みの種別が分からないときも同じ）。旧来の2鍵（`single_comfort_token_budget` / `chain_comfort_token_budget`）は互換値（表を知らないクライアントと、一致する行が無いときの落ち先）として残置してある。線と表の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1。
 
 ### 10.3 1080p 長尺は非実用 → 720p 生成 + 外部アップスケール推奨
 
@@ -1739,11 +1749,11 @@ LTX-2.3 の **native joint audio** は 16GB 実機で正常動作する（VERIFI
 | `smoke_test` | 384 | 256 | null | 17 |
 | `minimal` | 512 | 320 | null | 481 |
 | `small` | 960 | 576 | `{960, 540}` | 481 |
-| `standard_720p` | 1280 | 768 | `{1280, 720}` | 361 |
-| `FHD_1080p` | 1920 | 1088 | `{1920, 1080}` | 169 |
-| `WQHD_1440p` | 2560 | 1472 | `{2560, 1440}` | 89 |
+| `standard_720p` | 1280 | 768 | `{1280, 720}` | 345 |
+| `FHD_1080p` | 1920 | 1088 | `{1920, 1080}` | 161 |
+| `WQHD_1440p` | 2560 | 1472 | `{2560, 1440}` | 81 |
 
-> `standard_720p` / `FHD_1080p` / `WQHD_1440p` の num_frames は、2026-08-19に`single_comfort_token_budget`（44,880・全高速化on時の快適上限線）の逆算式で引き上げた値である（当時の旧値は`limits.spill_free_frames`〔§11.7〕の解像度別快適上限と一致していたが、**現在はプリセットと`spill_free_frames`は別々の数値である**——後者は 2026-08-31 に判定規則 v3 で再測定されており、値の正本はバックエンド`Docs/COMFORT_LIMIT_TABLE.md` §付記である。線そのものの配信形も同日にエンジン系統ごとの表`limits.comfort_budgets`へ移った〔同 §1.1〕）。
+> `standard_720p` / `FHD_1080p` / `WQHD_1440p` の num_frames は、**2026-10-06 に 361／169／89 から 345／161／81 へ下げた**（台帳 §1-31。LTX 2.3 の 4bit・全 on の単発の線 42,840 に収まる最大のコマ数。線の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1）。`generation_defaults.num_frames`（§11.5）も同日に 361 → 345 とした。以下はそれ以前の経緯である——2026-08-19に`single_comfort_token_budget`（44,880・全高速化on時の快適上限線）の逆算式で引き上げた値である（当時の旧値は`limits.spill_free_frames`〔§11.7〕の解像度別快適上限と一致していたが、**現在はプリセットと`spill_free_frames`は別々の数値である**——後者は 2026-08-31 に判定規則 v3 で再測定されており、値の正本はバックエンド`Docs/COMFORT_LIMIT_TABLE.md` §付記である。線そのものの配信形も同日にエンジン系統ごとの表`limits.comfort_budgets`へ移った〔同 §1.1〕）。
 
 ### 11.5 generation_defaults
 Gradio / API の初期値。
@@ -1752,7 +1762,7 @@ Gradio / API の初期値。
 | `width` | `1280` |
 | `height` | `768` |
 | `crop_output` | `null` |
-| `num_frames` | `361` |
+| `num_frames` | `345` |
 | `frame_rate` | `24.0` |
 | `num_inference_steps` | `8` |
 | `guidance_scale` | `1.0` |
@@ -1769,7 +1779,7 @@ Gradio / API の初期値。
 | `max_image_size_mb` | `20` | 画像最大サイズ（超過で UPLOAD_TOO_LARGE） |
 | `allowed_image_extensions` | `[".png", ".jpg", ".jpeg", ".webp"]` | 対応拡張子 |
 ### 11.7 limits
-§6.7 の表と同一（`max_width=4096`, `max_height=4096`, `max_num_frames=481`, `max_conditioning_images=10`（**`config.yaml` からは設定できない算出値。§6.7 参照**）, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`, `comfort_budgets`, `single_comfort_token_budget=44880`, `chain_comfort_token_budget=40000`）。**`spill_free_frames` と `comfort_budgets` の中身は本書へ書き写さない**——実体は、`spill_free_frames` は `config.yaml`（git 追跡外。リポジトリで確認するときは配布元の `config.yaml.example`。`config.py` の既定は空の辞書で、鍵が無ければ配信されない）、`comfort_budgets` は `config.py` のコード既定（`config.yaml` には書かない。書けば上書きはできる）。説明の正本は `Docs/COMFORT_LIMIT_TABLE.md`（線の表＝§1.1、レガシー表＝§付記）である。
+§6.7 の表と同一（`max_width=4096`, `max_height=4096`, `max_num_frames=481`, `max_conditioning_images=10`（**`config.yaml` からは設定できない算出値。§6.7 参照**）, `phase1_max_concurrent_jobs=1`, `low_vram_disabled_required=false`, `spill_free_frames`, `comfort_budgets`, `single_comfort_token_budget=44880`, `chain_comfort_token_budget=40000`）。**`spill_free_frames` と `comfort_budgets` の中身は本書へ書き写さない**——実体は、`spill_free_frames` は `config.yaml`（git 追跡外。リポジトリで確認するときは配布元の `config.yaml.example`。`config.py` の既定は空の辞書で、鍵が無ければ配信されない）、`comfort_budgets` はベースモデルの記述子（`scripts/manifests/*.json`）の `comfort`（`config.yaml` では上書きできない。書くと WARNING を出して無視する。§6.7）。説明の正本は `Docs/COMFORT_LIMIT_TABLE.md`（線の表＝§1、レガシー表＝§付記）である。
 
 ### 11.8 output
 | キー | 実値 | 説明 |

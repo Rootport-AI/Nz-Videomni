@@ -42,6 +42,17 @@
     "audio": "default"
   },
 
+  "comfort": {
+    "spatial_factor": 32,
+    "temporal_factor": 8,
+    "outpaint_budget": 46080,
+    "rows": [
+      { "requires": { "weight_class": "4bit" }, "single_budget": 46920, "chain_budget": 46376 },
+      { "requires": { "weight_class": "8bit" }, "single_budget": 38760, "chain_budget": 39424 },
+      { "requires": { "weight_class": "q6k" }, "single_budget": 43344, "chain_budget": 43648 }
+    ]
+  },
+
   "downloads": [
     {
       "name": "LTX 2.5 weights + VAE + upscaler (4 files)",

@@ -10,8 +10,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from pydantic import ValidationError
+
 from api.errors import APIError
-from config import AppConfig
+from config import AppConfig, EngineComfortProfile
 from services.audio_upload_store import AudioUploadStore
 from services.base_models import BaseModelDescriptor, load_base_models
 from services.job_store import JobStore
@@ -23,6 +25,7 @@ from services.runtime_state import RuntimeState
 from services.tracking_manager import TrackingManager
 from services.upload_store import UploadStore
 from services.video_upload_store import VideoUploadStore
+from services.weight_class import WEIGHT_CLASSES
 
 logger = logging.getLogger("ltx.state")
 
@@ -63,6 +66,9 @@ class AppContext:
 
     def __post_init__(self) -> None:
         self.base_models = load_base_models(self.config.manifest_dir)
+        # The comfort-limit table's source of truth is the descriptors'
+        # ``comfort`` block; GET /config serves this field unchanged.
+        self.config.limits.comfort_budgets = build_comfort_budgets(self.base_models)
         self.runtime_state = RuntimeState.load(self.config.state_path)
         self.upload_store = UploadStore(self.config)
         self.video_upload_store = VideoUploadStore(self.config)
@@ -173,6 +179,46 @@ class AppContext:
                 first,
             )
         return first
+
+
+def build_comfort_budgets(
+    base_models: dict[str, BaseModelDescriptor],
+) -> dict[str, EngineComfortProfile]:
+    """``limits.comfort_budgets`` built from the descriptors' ``comfort`` blocks.
+
+    Keyed by ``engine_family``. A descriptor without ``comfort`` contributes
+    nothing. FAIL LOUD AT STARTUP (a manifest is a shipped artifact): a block
+    that does not validate as :class:`EngineComfortProfile`, a row whose
+    ``requires.weight_class`` is missing or not one of ``WEIGHT_CLASSES``, or
+    two descriptors of the same family both carrying ``comfort`` raise
+    :class:`RuntimeError`.
+    """
+    budgets: dict[str, EngineComfortProfile] = {}
+    for base_id, descriptor in base_models.items():
+        if descriptor.comfort is None:
+            continue
+        try:
+            profile = EngineComfortProfile.model_validate(descriptor.comfort)
+        except ValidationError as exc:
+            raise RuntimeError(
+                f"base-model descriptor {base_id}: comfort: {exc}"
+            ) from exc
+        for index, row in enumerate(profile.rows):
+            weight_class = row.requires.get("weight_class")
+            if weight_class not in WEIGHT_CLASSES:
+                raise RuntimeError(
+                    f"base-model descriptor {base_id}: comfort: "
+                    f"rows[{index}].requires.weight_class must be one of "
+                    f"{list(WEIGHT_CLASSES)} (got {weight_class!r})"
+                )
+        family = descriptor.engine_family
+        if family in budgets:
+            raise RuntimeError(
+                f"base-model descriptor {base_id}: comfort: engine family "
+                f"'{family}' already has a comfort table from another descriptor"
+            )
+        budgets[family] = profile
+    return budgets
 
 
 def build_context(config: AppConfig, runtime: RuntimeInfo) -> AppContext:

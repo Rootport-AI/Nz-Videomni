@@ -44,18 +44,18 @@ describe("useChainForm", () => {
   describe("initial.numFrames (W8 right-click DURATION seed)", () => {
     it("seeds ONLY clip 0's DURATION from initial.numFrames; the padding clip keeps the config default", () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
-      // 481 (a comfort ceiling) differs from the config default (361).
+      // 481 (a comfort ceiling) differs from the config default (345).
       const { result } = renderHook(() => useChainForm(FALLBACK_APP_CONFIG, "x", { nativeBridge: mockBridge }, { numFrames: 481 }));
       expect(result.current.clips).toHaveLength(2);
       expect(result.current.clips[0]?.numFrames).toBe(481);
-      // The second (padding) clip is untouched — the config default (361).
-      expect(result.current.clips[1]?.numFrames).toBe(361);
+      // The second (padding) clip is untouched — the config default (345).
+      expect(result.current.clips[1]?.numFrames).toBe(345);
     });
 
     it("keeps clip 0 at the config default when initial.numFrames is omitted", () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
       const { result } = renderHook(() => useChainForm(FALLBACK_APP_CONFIG, "x", { nativeBridge: mockBridge }, {}));
-      expect(result.current.clips[0]?.numFrames).toBe(361);
+      expect(result.current.clips[0]?.numFrames).toBe(345);
     });
   });
 
@@ -1057,7 +1057,7 @@ describe("useChainForm", () => {
         await result.current.attachAudioByPath("C:\\audio\\track.mp3", "track.mp3");
       });
 
-      expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([361, 361]);
+      expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([345, 345]);
       expect(result.current.isDirty).toBe(true);
     });
 
@@ -1722,8 +1722,8 @@ describe("useChainForm", () => {
       expect(result.current.clips[0]?.intact).toBe(false);
 
       // Putting the ORIGINAL length back does not un-touch the card.
-      act(() => result.current.setClipNumFrames(id, 361));
-      expect(result.current.clips[0]?.numFrames).toBe(361);
+      act(() => result.current.setClipNumFrames(id, 345));
+      expect(result.current.clips[0]?.numFrames).toBe(345);
       expect(result.current.clips[0]?.intact).toBe(false);
     });
 
@@ -1732,11 +1732,11 @@ describe("useChainForm", () => {
       const id = result.current.clips[0]?.id;
       if (!id) throw new Error("expected a clip");
 
-      act(() => result.current.setClipNumFrames(id, 361));
+      act(() => result.current.setClipNumFrames(id, 345));
       expect(result.current.clips[0]?.intact).toBe(true);
-      // 362 snaps back to 361 — the APPLIED value is unchanged, so is the flag.
-      act(() => result.current.setClipNumFrames(id, 362));
-      expect(result.current.clips[0]?.numFrames).toBe(361);
+      // 346 snaps back to 345 — the APPLIED value is unchanged, so is the flag.
+      act(() => result.current.setClipNumFrames(id, 346));
+      expect(result.current.clips[0]?.numFrames).toBe(345);
       expect(result.current.clips[0]?.intact).toBe(true);
     });
 
@@ -1942,7 +1942,7 @@ describe("useChainForm", () => {
       await attachAudio(result, { knownDurationSec: 5 }); // well below the 2-clip floor
       await waitFor(() => expect(result.current.audioFitEvent?.outcome).toBe("cannotFit"));
       expect(result.current.clips.map((clip) => clip.id)).toEqual(ids);
-      expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([361, 361]);
+      expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([345, 345]);
     });
 
     it("reports cappedAtMaxClips with the leftover tail at the 24-card ceiling", async () => {
@@ -2928,7 +2928,9 @@ describe("useChainForm", () => {
       });
 
       it("never fires on a 2+-clip chain even at kv=1 — the server's own reverse-mode exemption", async () => {
-        const { result } = setupEnd();
+        // 257f clips: the 345f default (§1-31) trips the separate
+        // `endSourceAudioOverlapBudget` gate at kv=1, which is not this test.
+        const { result } = setupEnd(STANDARD_CLIP_CONFIG);
         await attachEndVideo(result); // stays at the default 2 clips
         // 2.6(e)'s transition effect already nudged this to 1 on attach.
         expect(result.current.overlapFrames).toBe(1);
@@ -2958,8 +2960,32 @@ describe("useChainForm", () => {
         expect(result.current.canAddClip).toBe(true);
       });
 
-      it("a default 2-clip [257,257] chain at 24fps validates end-to-end", async () => {
+      // §1-31 owner ruling (2026-10-06): entering reverse mode lowers the
+      // seam-blend width to 1 only when 1 passes the audio-overlap check;
+      // the 345-frame default fails at 1, so it lands on 2 instead.
+      it("the default [345,345] chain at 24fps lands on overlap 2 and validates", async () => {
         const { result } = setupEnd();
+        await attachEndVideo(result);
+        expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([345, 345]);
+        expect(result.current.overlapFrames).toBe(2);
+        expect(result.current.validityReasons).not.toContain("endSourceAudioOverlapBudget");
+        expect(result.current.isValid).toBe(true);
+      });
+
+      it("a [361,361] chain at 24fps still lands on overlap 1 (1 passes the audio-overlap check)", async () => {
+        const config: AppConfig = {
+          ...FALLBACK_APP_CONFIG,
+          generation_defaults: { ...FALLBACK_APP_CONFIG.generation_defaults, num_frames: 361 },
+        };
+        const { result } = setupEnd(config);
+        await attachEndVideo(result);
+        expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([361, 361]);
+        expect(result.current.overlapFrames).toBe(1);
+        expect(result.current.isValid).toBe(true);
+      });
+
+      it("a default 2-clip [257,257] chain at 24fps validates end-to-end", async () => {
+        const { result } = setupEnd(STANDARD_CLIP_CONFIG);
         await attachEndVideo(result);
         expect(result.current.clips).toHaveLength(2);
         expect(result.current.isValid).toBe(true);
@@ -2972,12 +2998,15 @@ describe("useChainForm", () => {
     // のりしろ既定値1 (2.6(e)): the SYMMETRIC one-shot nudge on the "素材（末尾）
     // x 2+ clips" transition, and its undo.
     describe("the overlapFrames transition effect", () => {
-      it("nudges to 1 on entering 素材（末尾）x 2+ clips, and restores the default on the clear-edge", async () => {
+      // §1-31 owner ruling (2026-10-06): the nudge lands on 1 only when 1
+      // passes `endSourceAudioOverlapOk`; the default [345,345] at 24fps does
+      // not, so these default-config cases land on 2.
+      it("nudges down on entering 素材（末尾）x 2+ clips, and restores the default on the clear-edge", async () => {
         const { result } = setupEnd();
         expect(result.current.overlapFrames).toBe(DEFAULT_OVERLAP_FRAMES);
 
         await attachEndVideo(result); // stays at the default 2 clips
-        expect(result.current.overlapFrames).toBe(1);
+        expect(result.current.overlapFrames).toBe(2);
 
         act(() => result.current.clearEndSource());
         expect(result.current.overlapFrames).toBe(DEFAULT_OVERLAP_FRAMES);
@@ -2986,7 +3015,7 @@ describe("useChainForm", () => {
       it("also restores on the OTHER exit edge — dropping back to 1 clip", async () => {
         const { result } = setupEnd();
         await attachEndVideo(result);
-        expect(result.current.overlapFrames).toBe(1);
+        expect(result.current.overlapFrames).toBe(2);
 
         makeSingleClip(result);
         expect(result.current.overlapFrames).toBe(DEFAULT_OVERLAP_FRAMES);
@@ -2995,7 +3024,7 @@ describe("useChainForm", () => {
       it("does not fight a value the user dials in mid-state", async () => {
         const { result } = setupEnd();
         await attachEndVideo(result);
-        expect(result.current.overlapFrames).toBe(1);
+        expect(result.current.overlapFrames).toBe(2);
 
         act(() => result.current.setOverlapFrames(5));
         expect(result.current.overlapFrames).toBe(5);
@@ -3021,7 +3050,7 @@ describe("useChainForm", () => {
       it("restores the default when a START source joins, and nudges back on its removal", async () => {
         const { result } = setupEnd();
         await attachEndVideo(result); // stays at the default 2 clips
-        expect(result.current.overlapFrames).toBe(1);
+        expect(result.current.overlapFrames).toBe(2);
         expect(result.current.isReverseEndSource).toBe(true);
 
         act(() => {
@@ -3033,7 +3062,7 @@ describe("useChainForm", () => {
 
         act(() => result.current.clearSource());
         expect(result.current.isReverseEndSource).toBe(true);
-        expect(result.current.overlapFrames).toBe(1);
+        expect(result.current.overlapFrames).toBe(2);
       });
 
       // §3-90, the ref initialiser: the effect's baseline (`useRef`) and the
@@ -3082,10 +3111,12 @@ describe("useChainForm", () => {
         const { result } = setupEnd(STANDARD_CLIP_CONFIG);
         act(() => result.current.setFrameRate(30));
         await attachEndVideo(result);
-        // 2.6(e)'s transition effect already nudged this to 1 on attach — the
-        // exact failing width for this geometry (chainUtils.test.ts's own
-        // worked example).
-        expect(result.current.overlapFrames).toBe(1);
+        // 2.6(e)'s transition effect does NOT land on 1 here (§1-31 owner
+        // ruling 2026-10-06): 1 is the exact failing width for this geometry
+        // (chainUtils.test.ts's own worked example), so it lands on 2. Dial 1
+        // in by hand to see the gate.
+        expect(result.current.overlapFrames).toBe(2);
+        act(() => result.current.setOverlapFrames(1));
         expect(result.current.validityReasons).toContain("endSourceAudioOverlapBudget");
         expect(result.current.isValid).toBe(false);
 
@@ -3216,7 +3247,7 @@ describe("useChainForm", () => {
     // "never a validityReason" treatment.
     describe("the multi-clip quality warning", () => {
       it("fires once a 2nd clip exists alongside an attached end source", async () => {
-        const { result } = setupEnd();
+        const { result } = setupEnd(STANDARD_CLIP_CONFIG);
         await attachEndVideo(result); // default chain is [257, 257] — 2 clips
         expect(result.current.clips).toHaveLength(2);
         expect(result.current.endSourceMultiClipQualityWarning).toBe(true);
@@ -3659,9 +3690,9 @@ describe("useChainForm", () => {
     // EXACTLY 44,880 tokens (floor(1920/32)*floor(1088/32)*22 = 60*34*22):
     // over the `ltx` engine's 40,000 budget (no served row for LTX 2.3's
     // default acceleration, so it falls to `chain_comfort_token_budget`) but
-    // not over `ltx25`'s unconditional 44,880 row — see
-    // `shell/comfortTable.test.ts`'s own `resolveComfortRow` coverage for the
-    // same two numbers.
+    // not over `ltx25`'s 4bit row (46,376, keyed on the weight class alone
+    // since §1-31) — see `shell/comfortTable.test.ts`'s own
+    // `resolveComfortRow` coverage for the served rows.
     it("stays at the 40,000 budget for engine family 'ltx'", () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
       const { result } = renderHook(() =>
@@ -3674,10 +3705,10 @@ describe("useChainForm", () => {
       expect(result.current.chainWindowOverBudget).toBe(true);
     });
 
-    it("resolves the budget to 44,880 for engine family 'ltx25', clearing the same over-budget flag", () => {
+    it("resolves the budget to 46,376 for engine family 'ltx25' (4bit), clearing the same over-budget flag", () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
       const { result } = renderHook(() =>
-        useChainForm(FALLBACK_APP_CONFIG, "x", { nativeBridge: mockBridge, engineFamily: "ltx25" }),
+        useChainForm(FALLBACK_APP_CONFIG, "x", { nativeBridge: mockBridge, engineFamily: "ltx25", weightClass: "4bit" }),
       );
       act(() => {
         result.current.setWidth(1920, false);

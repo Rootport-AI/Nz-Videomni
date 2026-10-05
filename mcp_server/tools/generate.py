@@ -724,7 +724,8 @@ async def submit_chain(
         で、クリップ1本＋``source_audio_id`` が必須です（撮り直しとは排他）。
       * 窓が広いほど継ぎ目が減りますが、1窓あたりのトークン数が増えてVRAMの
         快適上限に近づきます。窓ごとの目安解像度はMCPからは取れません
-        （WebUIのラベルか ``Docs/COMFORT_LIMIT_TABLE.md`` §12 を参照）。
+        （WebUIのラベルか ``Docs/COMFORT_LIMIT_TABLE.md`` 第 1 節〔種別
+        ごとの線〕を参照）。
       * 撮り直しの窓長上限は ``8×潜在フレーム数−7``（standard 169・
         high_resolution 145・w61 481）で、``source_video_context_frames``
         の上限も窓で変わります（high_resolution では137）。

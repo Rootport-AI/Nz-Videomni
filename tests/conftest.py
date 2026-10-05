@@ -216,6 +216,34 @@ def write_gguf_with_kv(path: Path, **kv: str) -> Path:
     return path
 
 
+def write_gguf_with_tensors(
+    path: Path, tensors: dict[str, tuple[int, int]], **kv: str
+) -> Path:
+    """A parsable GGUF header with string KV entries AND a tensor-info table.
+
+    ``tensors`` maps name -> (n_dims, ggml type), the same shape
+    ``services.gguf_kv.read_gguf_tensor_types`` returns. Every dimension is
+    written as 1 and every offset as 0; no tensor data follows (only the
+    header is ever read by the weight-class ruling).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    kv_body = b"".join(
+        _gguf_string(key) + struct.pack("<I", 8) + _gguf_string(value)
+        for key, value in kv.items()
+    )
+    tensor_body = b"".join(
+        _gguf_string(name)
+        + struct.pack("<I", n_dims)
+        + struct.pack("<Q", 1) * n_dims
+        + struct.pack("<IQ", ggml_type, 0)
+        for name, (n_dims, ggml_type) in tensors.items()
+    )
+    path.write_bytes(
+        b"GGUF" + struct.pack("<IQQ", 3, len(tensors), len(kv)) + kv_body + tensor_body
+    )
+    return path
+
+
 @pytest.fixture()
 def two_family_client(tmp_path):
     """LTX 2.3 (engine_family=ltx) and LTX 2.5 (engine_family=ltx25), both

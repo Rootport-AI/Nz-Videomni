@@ -74,6 +74,11 @@ export interface EditScreenProps {
    * row whose CHAIN budget sizes the Retake stage-2 window labels (the same
    * three inputs `ChainedScreen` passes to `useChainForm`). Omitted ⇒ `null`. */
   sageAvailable?: boolean | null | undefined;
+  /** §1-31: the LOADED transformer's weight class
+   * (`useBaseModels().activeWeightClass`), passed beside {@link engineFamily}
+   * to `useRetakeForm` only — Outpainting's line (`shell/outpaintBudget.ts`)
+   * is not split by weight class. Omitted/`""` ⇒ unknown. */
+  weightClass?: string | undefined;
   /** §3-165: the LOADED base model's display name (`/models`
    * `base_models[].display_name`), printed in the Retake stage-2 window labels.
    * Omitted ⇒ `""`. */
@@ -160,6 +165,7 @@ export function EditScreen({
   engineFamily,
   acceleration,
   sageAvailable,
+  weightClass,
   engineLabel,
 }: EditScreenProps = {}) {
   const strings = useStrings();
@@ -243,6 +249,7 @@ export function EditScreen({
     acceleration,
     engineFamily,
     sageAvailable,
+    weightClass,
     engineLabel,
   });
   const retakeReasonMessages = useMemo(() => buildRetakeReasonMessages(strings), [strings]);

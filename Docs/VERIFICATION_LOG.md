@@ -15948,3 +15948,77 @@ LTX 2.3 の fp8／int8 系の**全 on の境界は未測定**。outpaint は種�
 **申し送り**（次へ）: (1) 第 9 弾＝§1-31 の設計（プランモード）。材料は第 16 節。論点は、連結の線の規則（v3′／退避／時間。2.3 の Q6_K・fp8mixed は時間に出ない）・単発と連結の別の値・閾値際の点の扱い・`chunked_upsample=true` で U が割れやすいこと・種別はヘッダで判定して `GET /models` に載せる構想。(2) 較正台の `mk.sh` の変換器名の固定は 10-04 の複製で直したが、`outputs/comfort-calib-2026-10-03/mk.sh` は元のまま。次に複製するときは 10-04 を起点にする。(3) 自動許可の判定で較正台の登録コマンドが拒否されうる。登録と `luid` は監督が打つ段取りを計画に書く。(4) `chunked_upsample=true` での w46（2.3 Q6_K 連結）は未計測。必要になれば §1-31 の設計の中で扱う。
 
 一次記録はリポジトリの外（`outputs/comfort-calib-2026-10-04/`。git 管理外）で、文書の写しは `Docs/Outputs-archive/comfort-calib-2026-10-04/`、裏取り・時間集計・指示書は `ledger-work/stage8/`（git 管理外）に置いています。本節が第 8 弾の記録の正本です。
+
+## 149. ★台帳 §1 の消化・第 9 弾「§1-31 快適上限のマニフェスト一本化」＝ 快適上限の表の正本をマニフェストの comfort へ（行に重みの種別 4bit／8bit／q6k・値は第 16.4 節の最終形・config.py の表と yaml の上書きを削除）・サーバーが transformer の種別をヘッダで判定し GET /models で名乗る・操作パネルと Gradio は照合に 1 項目追加・Settings の手書き例外を削除・末尾素材の自動調整を「のりしろ 1 で通らなければ 2」に・プリセット 345／161／81・仕様書 v0.5.84・CLOSED 3-216（§1 は空）・機械のゲート 3 系統合格・敵対的レビュー直すべき 0・配置と実機 API 確認（2026-10-06）
+
+**要約**: 台帳 `Docs/PENDING_TASKS.md` §1 の消化・第 9 弾として、§1-31（快適上限のマニフェスト一本化）を実装した。快適上限の表の正本を、台帳の表題どおりマニフェスト（`scripts/manifests/10-ltx23.json`・`20-ltx25.json`）のトップの `comfort` に移し、行の `requires` に重みの種別 `weight_class`（`4bit`／`8bit`／`q6k`）を入れた。値は第 8 弾（§148）の最終形（COMFORT_LIMIT_TABLE 第 16.4 節）である。`config.py` の `_default_comfort_budgets` を削除し、`config.yaml` の `comfort_budgets` による上書きは読み捨てて WARNING にした。サーバーは transformer の重みのヘッダ（safetensors の層の方式・GGUF のテンソルの型）から種別を判定し、`GET /models` の `base_models[].transformer_weight_class` で名乗る。操作パネルと Gradio は、行の照合に種別を 1 項目足した。Settings の表は手書きの例外定数 3 つと fp8 列を削除して 7 列を配信行から描く。プリセットは 345／161／81 に下げた。敵対的レビューの注意 1（既定の尺 345・24fps の 2 クリップ連結に素材〔末尾〕を付けると生成ボタンが止まる）は、オーナー裁定で、のりしろの自動調整を「1 で通らなければ 2」に変えて今回のコミットに含めた。仕様書は v0.5.84。機械のゲートは 3 系統とも合格、差分の敵対的レビューは直すべき 0、`build.ps1`→`deploy.ps1` と実機 API（`GET /models`・`GET /config`）も確認した。台帳は §1-31 を CLOSED **3-216** へ移し、これで台帳 §1 は空になった（節ごと削除）。オーナーの実機の目視は本節の執筆時点では未実施で、結果は「追補 149.1」として足す。
+
+**目的**: §148 の申し送り (1) のとおり、§1-31 の設計（プランモード）と実装を行う。快適上限の表は、`config.py` の表・`config.yaml` の上書き・操作パネルの手書き定数・Settings の fp8 列に写しが分かれていて、種別（重みの量子化の違い）ごとの線を持てなかった。これを、マニフェストの 1 箇所を正本に、サーバーが重みから種別を判定して行を選ぶ形に一本化する。§148 の第 16 節の最終形（単発／連結）をそのまま行の値にする。
+
+**対象**: `Nz-Videomni` リポジトリ（dev・起点 HEAD `540d4af`。本節の執筆時点では未コミットの差分）。実装は 3 担当（Opus。U1 バックエンド・U2 操作パネル・U3 Gradio・MCP・文書）が並行で行い、エスカレーション（設計への疑問による停止）は 0 件。計画は `C:\Users\phenotype nezu\.claude\plans\radiant-wondering-melody.md`。
+
+**方法**:
+1. **計画（10-06）**。棚卸し（Opus 3 体。バックエンド／操作パネル／Gradio・MCP・文書）→設計（Opus）→敵対的レビュー（Opus）をプランモードで行った。敵対的レビューは直すべき 5・注意 10・参考 6 で、採用し、不採用は 1 件（`extra="forbid"` の追加）だけ。オーナーの決定: (a) 正本はマニフェスト（台帳の表題どおり）、(b) プリセットを 345／161／81 に下げる（2.3 の 4bit の線 42,840 では旧値 361／169／89 の 3 つとも超えるため）、(c) 種別の表示名は「4bit／8bit／Q6_K」（en「4-bit／8-bit／Q6_K」）・内部名は `4bit`／`8bit`／`q6k`、(d) 実装担当にエスカレーション権を与える（設計に疑問があれば止めて報告する。設計変更は禁止。値から決まるテストの更新は範囲内）。
+2. **U1（バックエンド）**: マニフェスト 2 本に `comfort`（係数・`outpaint_budget`・`rows[]`）を追加した。2.3 の 4bit と Q6_K の行は全 on の 5 鍵つき、8bit の行と 2.5 の 3 行は種別だけを要求する。`services/base_models.py` に `comfort` 欄を足し、`api/context.py` に `build_comfort_budgets` を新設して、起動時に `limits.comfort_budgets` へ流し込む（綴りの誤り・系統の重複・dict でない `comfort` は `RuntimeError` で起動を止める）。`config.py` は `_default_comfort_budgets` を削除し、`_drop_comfort_budgets_override` で yaml の `comfort_budgets` を読み捨てて WARNING にした（互換値 44,880／40,000 は据え置き）。新規 `services/weight_class.py` が種別を判定する。safetensors は `inspect().layers` の方式の多数派（8bit 方式対 w4a8。同数は 8bit）、GGUF は `transformer_blocks` の 2 次元 `.weight` の型の多数派（Q4_K→4bit・Q6_K→q6k）、それ以外は null で、`(path, size, mtime_ns)` の `lru_cache` を持つ。`services/gguf_kv.py` に `read_gguf_tensor_types` を足した（`read_gguf_kv` は不変）。`api/models_registry.py` は `base_models[].transformer_weight_class` を返す（有効なベースモデルだけ。`entries[]` とトップの鍵は不変）。
+3. **U2（操作パネル）**: `api/types.ts`・`useBaseModels.ts`（`weightClass`・`activeWeightClass`）・`AppShell.tsx`（`pipelineLoading` の立ち下がりで `GET /models` を取り直す・`weightClass` の配線・`resolvePrefillSeed` の呼び手 2 箇所）・`comfortTable.ts`（`resolveComfortRow` に第 5 引数。`""` は不明で照合の材料に足さない）・呼び出し側 7 ファイル・`comfortDisplayTable.ts`（7 列に。手書き定数 3 つと fp8 列を削除）・`strings.ts`（古い鍵 5 本を削除・新しい 6 本・注記 `comfortHint`）・`defaultConfig.ts`／`mockBridge.ts`（行・プリセット 345／161／81・既定 345・モックの `GET /models`）・新規 `AppShell.weightClass.test.tsx`・`API_REFERENCE.md`・`DEVLOG.md` §129。
+4. **U3（Gradio・MCP・文書）**: `gradio_ui/comfort.py`（`weight_class_from_models`・照合に 1 項目）・`ui.py`（`_chain_engine_state`）・`tests/test_gradio_stage2_window.py`・MCP の docstring 3 箇所・`config.yaml.example`・`README.md`（:359-360 と §8）・`Docs/COMFORT_LIMIT_TABLE.md`（第 1 節 1.1〜1.5 の書き換え・第 2〜3 節の注記・第 6・7・9 節の本文・12.2・付記・第 10〜16 節の帯に更新行・末尾の追記）。
+5. **U2 追補（オーナー裁定 10-06）**: `useChainForm.ts` の逆順モード（素材〔末尾〕を付けたとき）に入る効果 1 箇所で、のりしろを `endSourceAudioOverlapOk(clip の尺, frameRate, 1) ? 1 : 2` で決める（2 でも偽なら 2 のまま。既存の案内に任せる）。単クリップの床 `endSourceNeedsOverlap` と、抜けるときの既定値への戻しは不変。
+6. **差分の敵対的レビュー**（Opus 1 体・読み取り＋テスト実行）と、**機械のゲート・配置・実機 API**（監督）を行った。結果は下記。
+
+**結果**:
+
+| 項目 | 結果 |
+|---|---|
+| 重み 12 本の分類（U1 が事前確認・レビューが独立に再計算） | 期待の表とすべて一致。w4a8＝w4a8 1,344 層のみ→4bit／REDGraft 混在＝int8_convrot 831＋w4a8 513→8bit／Sulphur Q6_K と REDGraft Q6_K＝Q6_K 1,632→q6k／公式 Q4_K_M と 10Eros＝Q4_K 1,242・Q6_K 322・Q5_K 68→4bit／2.5 公式＝Q4_K 1,632→4bit／fp8mixed＝fp8_scaled 1,232→8bit／int8mixedtensorwise＝int8 1,232→8bit／int8_convrot 2 本＝1,344→8bit／uncensored fp8＝fp8_scaled 1,344→8bit。判定は 1 本 0.04 秒以下 |
+| `GET /models`（実機・読み込みなし） | LTX23（有効・`sulphur_distil_fp8mixed`）→`8bit`、LTX25（有効でない）→null。エントリの鍵とトップの鍵は不変 |
+| `GET /config`（実機） | `ltx` 3 行（4bit 42,840／42,240〔requires 6 鍵〕・8bit 32,640／32,384〔1 鍵〕・q6k 43,200／40,832〔6 鍵〕）・outpaint 42,240。`ltx25` 3 行（4bit 46,920／46,376・8bit 38,760／39,424・q6k 43,344／43,648〔各 1 鍵〕）・outpaint 46,080。互換値 44,880／40,000。起動ログに WARNING なし |
+| 配置（aux2 の 3 か所） | 実機・配布用・ビルド成果物が同一。初回 SHA-256 先頭 `5C6BADDABFE197B2`、追補後の再ビルド・再配置で `9C510CC34749942B`（いずれも 1,462,784 バイト。後者は新しい注記の文を含む） |
+
+**裁定と新事実**:
+
+(1) **注意 1 の裁定（既定の尺の連結に素材〔末尾〕を付けると生成ボタンが止まる）**。レビューが見つけた事実: 既定の尺 345・24fps の 2 クリップ連結に素材（末尾）を付けると、のりしろが自動で 1 に下がり、音声の余り（`sum_ka`）が 0 になって生成ボタンが止まる。これは `chain_math` の既存の制約の写しで、24fps・のりしろ 1 では 24 コマおきの尺（…321・345・369…）が該当する。361 は 24fps では該当しないが、23.976／50／60fps では以前から該当する。壊れた要求は送られず、既存の案内（「のりしろの幅を上げてください」）が出て、のりしろを 2 にすれば 1 操作で回復する。監督は当初、受け入れて台帳に 1 行起票する案を推奨したが、**オーナー裁定は、自動調整を「のりしろ 1 で通らなければ 2」に変える（今回のコミットに含める）**。テストは 2 本追加（[345,345]・24fps でのりしろ 2 になり `isValid` が真／[361,361] は 1 のまま）、既存 5 本の期待値を更新した。
+(2) **列見出しと注記の文言（外部文言・オーナー決定）**。列見出しは「2.3 4bit 既定」（en「2.3 4-bit default」）を含む 7 本。注記 `comfortHint` は ja「VRAM溢れによる生成速度の低下が起こらないフレーム数の目安です（※詳細はCOMFORT_LIMIT_TABLE.md）」・en「A rough guide to the frame counts that avoid the slowdown caused by VRAM overflow (see COMFORT_LIMIT_TABLE.md for details).」。
+(3) **新事実（古いものとの組み合わせ）**。古いサーバーに新しいパネルをつなぐと、Settings の 8bit の列にも互換値が出る（一時的・設計どおり）。古いパネルや Gradio は `weight_class` を知らないので互換値へ落ちる（安全側）。
+(4) **留保（計測が無い点）**。2.5 の純粋な w4a8 は分類上 4bit だが未計測（COMFORT_LIMIT_TABLE 第 1.4 節の留保に 1 行を足した）。2.3 Q6_K の連結 40,832 は留保つき（w46・`chunked_upsample=true` 未計測。§148 (5)）。2.5 Q6_K は既定構成を未照合。`outpaint_budget` は種別別でない。
+(5) **実機の設定**。実機の `config.yaml` の `generation_defaults.num_frames` は 361 のままである（オーナーが 345 に直す）。起動ログに WARNING は出なかった（実機の `config.yaml` に `comfort_budgets` は無い）。
+(6) **記録のみ**: 自動許可の判定による拒否は、本弾では 0 件だった。
+
+**証明**:
+- **機械のゲート 3 系統**（監督）: `.venv` 全件（指定の 1 件を除外）で収集 3,149・**3,121 合格・28 スキップ・失敗 0**。webui `npm run typecheck` はエラー 0、`npm run lint` はエラー 0・警告 31（従来どおり）。webui vitest は 150 ファイル・3,075 件合格（着手前は 149 ファイル・3,061 件）、U2 追補後は **3,077 件**合格。
+- **変異テスト**（レビュー）: 4 通り（safetensors の同数の扱い・起動時の検査・キャッシュの鍵・yaml の読み捨て）で、狙ったテストがすべて赤くなった。操作パネル側の変異テストは行っていない（レビューはリポジトリを編集できないため。再取得のテストと `""` の扱いのテストはコードを読んで確かめた）。
+- **実機 12 本の再計算**（レビュー）: U1 の分類と一致。壊れたファイル 600 本でも例外 0。判定は 1 本 0.04 秒以下、キャッシュ後は 0.3 ミリ秒以下。
+- **配置**: `build.ps1` 成功（約 10 秒・埋め込み）→`deploy.ps1` 成功（AviUtl2 は閉じた状態）。追補後に再ビルド・再配置し、aux2 の 3 か所が同一であることを確かめた（上の結果の表）。
+- **実機 API**: サーバーを `Start-Process` で起こし（モデルの読み込みなし・GPU 不使用）、`GET /models` と `GET /config` を確かめた（上の結果の表）。確認後にサーバーは停止済み。
+- **オーナー目視**: 本節の執筆時点では未実施。期待値（1280×768・コマ数）は、2.3 8bit **265**・2.3 4bit 全 on **345**・2.3 4bit 既定構成 **273**（`spill_free_frames`）・2.3 Q6_K 全 on **353**／2.5 8bit **313**・2.5 4bit **377**・2.5 Q6_K **353**。確認項目は、(a) Settings の表が 7 列＋注記で、2.3 8bit の列が 265／121／57 相当 (b) 現在の選択（LTX23 fp8mixed）で Create・Chained のマーカーが 8bit の線に下がる (c) ModelsPanel で transformer を Q4_K_M に替えた直後にマーカーが 4bit の線へ追従 (d) Gradio の連結の窓ラベル (e) `config.yaml` を 345／161／81・345 に直した後のプリセット。結果は追補 149.1（全項目合格）。
+
+**テスト**: U1 が `test_comfort_budgets.py` を作り直し（20 件）、新規 `test_weight_class.py`（28 件）・`test_models_weight_class.py`（5 件）を足し、`conftest.py` に `write_gguf_with_tensors` を足した。古い `test_retake_api.py:330-343` は削除した。U3 は `tests/test_gradio_stage2_window.py` を更新した。U2 は新規 `AppShell.weightClass.test.tsx` を足し、追補で 2 本を加えて既存 5 本の期待値を更新した。ゲートの数は「証明」のとおり（本節の執筆担当はテストを実行していない）。
+
+**台帳**（別担当）: `Docs/PENDING_TASKS.md` の §1-31 を `Docs/PENDING_TASKS_CLOSED.md` の **3-216** へ移した。**台帳 §1 は空になり、節ごと削除した**。§3 に 1 件を起票した（列見出し「全on」は宣言）。
+
+**文書**: 仕様書 `Videomni_Backend_Specification.md` v0.5.84（§0.1・§6.7・§6.9(c)・§11.4・§11.5・§11.7・§0.3・§10.2。v0.5.46 の履歴行は当時の記録として残した）。`Docs/COMFORT_LIMIT_TABLE.md`（第 1 節の書き換えほか、上の方法 4）と第 1.4 節の留保 1 行（別担当）。`config.yaml.example`・`README.md`（:359-360・§8）。操作パネルの `API_REFERENCE.md`（§5.2 に追補）・`DEVLOG.md` §129（追補つき）。
+
+**敵対的レビュー**（Opus 1 体・差分・読み取り＋テスト実行）: **直すべき 0・注意 1・参考 6**。注意 1＝裁定 (1)（のりしろの自動調整。オーナー裁定で採用）。参考 6＝(a) 第 10〜15 節の更新行（害なし）、(b) 注記の仮文面から旧冒頭文が消えた（裁定 (2) の新文面で確定）、(c) 2.5 の純粋な w4a8 は未計測（第 1.4 節の留保に 1 行）、(d) 古いサーバーでは 8bit 列にも互換値が出る（一時的・設計どおり）、(e) 先回り計算の呼び手は 3 箇所（連結の画面も）だが結果は不変、(f) 変異テストと実機 12 本の再計算は一致。なお U2 追補の再レビューは、監督が後でこの節に足す。計画段階の敵対的レビュー（直すべき 5・注意 10・参考 6）は、不採用 1（`extra="forbid"`）を除き設計に反映済み。 追補の再確認（同じレビュー担当・追補の 6 ファイル）: **直すべき 0・注意 0・参考 2**（任意のテスト追加 2 件〔30fps×257 の組で `isValid` を直接見る／尺を変えて付け直す流れ〕は見送り）。該当ファイルの vitest 4 ファイル 446 件合格・サーバー側 `chain_math` でも [345,345]・24fps・のりしろ 2 が通ることを確認。逆順モードの出入り・素材の差し替え・clamp・依存配列との矛盾は無い。
+
+**費用の目安**（Opus のトークン、概算）: Opus 約 185 万（棚卸し 3 体 約 55 万・設計 約 15 万・計画レビュー 約 24 万・U1 約 21 万・U2 約 34 万・U3 約 20 万・差分レビュー 約 27 万）＋U2 追補 約 2 万＋追補の再レビュー（監督が後で差し込む）。Sonnet は台帳と記録（監督が後で差し込む）。GPU は使っていない。
+
+**申し送り**（次へ）: (1) 台帳 §1 は空。次のテーマはオーナーが §3・§4 から決める。(2) 必要になれば計測を起票する点: 2.3 Q6_K の連結 40,832 は留保つき（w46・`chunked_upsample=true` 未計測）、2.5 Q6_K は既定構成を未照合、2.5 の純粋な w4a8 は未計測、`outpaint_budget` は種別別でない。(3) 古いパネル・Gradio は `weight_class` を知らないので互換値へ落ちる（安全側）。古いサーバーに新しいパネルをつなぐと、Settings の種別の列に互換値が出る（一時的）。(4) 較正台（`outputs/comfort-calib-*/mkplan.py`）のコメントに `_default_comfort_budgets` の名前が残る（過去の記録のまま）。(5) 配布用 `AviUtl2-Plugin/NzVideomni.aux2` のバイナリはオーナーの手動コミット。(6) 実機の `config.yaml` の `generation_defaults.num_frames` はオーナーが 345 に直す。(7) 記録のみ: 自動許可の判定による拒否は本弾では 0 件。
+
+設計の棚卸し・指示書・レビュー・報告はリポジトリの外（`ledger-work/stage9/`。git 管理外）に置いています。本節が第 9 弾の記録の正本です。
+
+
+### 149.1 追補: オーナーの目視は全項目合格（Settings の表・8bit の線・transformer 切り替えの追従・末尾素材の自動調整・Gradio の窓ラベル・プリセット 345／161／81・2026-10-06）
+
+**対象**: §149 の「オーナー目視」の結果。追補後の aux2（SHA-256 先頭 `9C510CC34749942B`）を実機に配置し、実機の `config.yaml` の 4 箇所（`generation_presets` の `standard_720p`・`FHD_1080p`・`WQHD_1440p` の `num_frames` を 345／161／81、`generation_defaults.num_frames` を 345）を**オーナーの指示で監督が書き換えた**あと（書き換え前の写しは `ledger-work/stage9/config.yaml.before-2026-10-06`・git 管理外。改行 CRLF 不変・行末のコメントは据え置き）、オーナーが `run.bat` でサーバーを起こして確認した。
+
+**結果**: オーナーの報告は次のとおり（原文の趣旨を保つ）。期待値は 1280×768 のコマ数。
+
+| 項目 | 期待 | 結果 |
+|---|---|---|
+| Settings の快適上限の表 | 7 列（2.3 4bit 既定・2.3 4bit 全on・2.3 8bit・2.3 Q6_K 全on・2.5 4bit・2.5 8bit・2.5 Q6_K）と新しい注記。2.3 8bit の列が 265／121／57 相当 | **合格** |
+| Create・Chained のマーカー（選択 LTX23 `sulphur_distil_fp8mixed`） | 8bit の線（単発 265 コマ・連結の窓ラベルは 32,384 から） | **合格** |
+| ModelsPanel で transformer を Q4_K_M に替えた直後 | マーカーが 4bit の線（全 on 345・既定構成 273）に追従 | **合格** |
+| Chained に素材（末尾）を付ける（既定 345×2・24fps） | のりしろが自動で 2 になり、生成ボタンが止まらない | **合格** |
+| Gradio の連結の窓ラベル | 配信行の連結予算から（2.3 8bit 32,384 など） | **合格** |
+| プリセット | 345／161／81 | **合格** |
+
+**裁定**: 第 9 弾の了承の門 2 を通過。直した点は無い。本追補をもって §1-31（CLOSED 3-216）の実機確認は完了。

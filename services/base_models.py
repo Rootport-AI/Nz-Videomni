@@ -21,6 +21,12 @@ What this module reads from a descriptor:
 ``default_selection``
     Category -> registered NAME (or the ``"default"`` sentinel) for the initial
     selection when this base model is picked.
+``comfort``
+    The comfort-limit table of this base model (the single source of truth for
+    ``limits.comfort_budgets``; Docs/COMFORT_LIMIT_TABLE.md §1). Kept here as
+    the raw JSON object -- only "is it an object" is checked. Its shape and
+    values are validated by pydantic in ``api/context.py``
+    (``build_comfort_budgets``), so this module stays pydantic-free.
 
 The installer's ``downloads`` / ``migrate`` blocks are deliberately NOT parsed:
 they belong to ``scripts/install_ltx.ps1`` and nothing on the Python side has
@@ -88,6 +94,9 @@ class BaseModelDescriptor:
     assets: dict[str, str] = field(default_factory=dict)
     #: Category -> registered NAME / ``"default"`` sentinel.
     default_selection: dict[str, str] = field(default_factory=dict)
+    #: Raw ``comfort`` object (or ``None`` when absent). The type check lives
+    #: in ``api/context.py`` (pydantic ``EngineComfortProfile``).
+    comfort: dict | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -198,6 +207,10 @@ def _parse_descriptor(source: str, raw: dict) -> BaseModelDescriptor:
             )
         default_selection[key] = value
 
+    comfort = raw.get("comfort")
+    if comfort is not None and not isinstance(comfort, dict):
+        raise _fail(source, "'comfort' must be an object when present")
+
     return BaseModelDescriptor(
         id=identifier,
         display_name=display_name,
@@ -205,6 +218,7 @@ def _parse_descriptor(source: str, raw: dict) -> BaseModelDescriptor:
         categories=categories,
         assets=assets,
         default_selection=default_selection,
+        comfort=comfort,
     )
 
 

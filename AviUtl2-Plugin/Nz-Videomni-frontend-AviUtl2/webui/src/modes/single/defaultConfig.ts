@@ -21,26 +21,26 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
       width: 1280,
       height: 768,
       crop_output: { width: 1280, height: 720 },
-      num_frames: 361,
+      num_frames: 345,
     },
     FHD_1080p: {
       width: 1920,
       height: 1088,
       crop_output: { width: 1920, height: 1080 },
-      num_frames: 169,
+      num_frames: 161,
     },
     WQHD_1440p: {
       width: 2560,
       height: 1472,
       crop_output: { width: 2560, height: 1440 },
-      num_frames: 89,
+      num_frames: 81,
     },
   },
   generation_defaults: {
     width: 1280,
     height: 768,
     crop_output: null,
-    num_frames: 361,
+    num_frames: 345,
     frame_rate: 24.0,
     seed: -1,
   },
@@ -74,15 +74,19 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
     end_context_frames_max: 136,
     chain_comfort_token_budget: 40000,
     single_comfort_token_budget: 44880,
-    // 快適上限マーカーの配信テーブル（2026-08-31）。正本は
-    // `Nz-Videomni/config.py` の `_default_comfort_budgets()`；ここはオフライン
-    // フォールバック用のミラーで、`bridge/mockBridge.ts` の
-    // `MOCK_CONFIG_BODY.limits.comfort_budgets` と同内容でなければならない。
+    // 快適上限マーカーの配信テーブル（2026-08-31。重みの種別の次元は第 9 弾
+    // §1-31・2026-10-06）。正本はバックエンドのマニフェスト
+    // `scripts/manifests/10-ltx23.json`・`20-ltx25.json` の `comfort`（値の根拠は
+    // `Docs/COMFORT_LIMIT_TABLE.md` 第1節）；ここはオフラインフォールバック用の
+    // ミラーで、`bridge/mockBridge.ts` の `MOCK_CONFIG_BODY.limits.comfort_budgets`
+    // と同内容でなければならない。どの行も `requires.weight_class` を持つ
+    // （種別が分からないあいだはどの行にも一致しない）。
     //
-    // ⚠ `ltx` に `requires: {}` の行が無いのは意図。LTX 2.3 の既定構成は
+    // ⚠ `ltx` の 4bit と Q6_K に既定構成の行が無いのは意図。LTX 2.3 の既定構成は
     // 快適境界がトークン数に対して単調でなく（境界がデコードのチャンク数増分
     // 7→8／4→5／2→3 と一致）、1本のトークン線で表せないので、そこは上の
     // `spill_free_frames` が正である。「既定行を足せば全構成で賢くなる」は誤り。
+    // 8bit 行は全on＝既定構成と実測済みなので条件が種別だけ。
     //
     // BE↔FE の数値一致は**自動では突き合わされない** —— バックエンドの
     // `tests/test_comfort_budgets.py` と、フロントの
@@ -99,14 +103,28 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
         rows: [
           {
             requires: {
+              weight_class: "4bit",
               attention_backend: "sage",
               block_swap_prefetch: true,
               keep_resident: true,
               fused_gguf_dequant_kernel: true,
               vae_mode: "prune_vaed",
             },
-            single_budget: 44880,
-            chain_budget: 40000,
+            single_budget: 42840,
+            chain_budget: 42240,
+          },
+          { requires: { weight_class: "8bit" }, single_budget: 32640, chain_budget: 32384 },
+          {
+            requires: {
+              weight_class: "q6k",
+              attention_backend: "sage",
+              block_swap_prefetch: true,
+              keep_resident: true,
+              fused_gguf_dequant_kernel: true,
+              vae_mode: "prune_vaed",
+            },
+            single_budget: 43200,
+            chain_budget: 40832,
           },
         ],
         outpaint_budget: 42240,
@@ -114,7 +132,11 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
       ltx25: {
         spatial_factor: 32,
         temporal_factor: 8,
-        rows: [{ requires: {}, single_budget: 44880, chain_budget: 44880 }],
+        rows: [
+          { requires: { weight_class: "4bit" }, single_budget: 46920, chain_budget: 46376 },
+          { requires: { weight_class: "8bit" }, single_budget: 38760, chain_budget: 39424 },
+          { requires: { weight_class: "q6k" }, single_budget: 43344, chain_budget: 43648 },
+        ],
         outpaint_budget: 46080,
       },
     },

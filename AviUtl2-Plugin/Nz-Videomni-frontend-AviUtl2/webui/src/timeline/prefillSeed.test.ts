@@ -585,7 +585,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
     embedMp4Metadata: true,
   } as const;
 
-  function smartSeed(intent: string, selection: Selection, engineFamily = "ltx") {
+  function smartSeed(intent: string, selection: Selection, engineFamily = "ltx", weightClass = "4bit") {
     return resolvePrefillSeed({
       intent,
       selection,
@@ -595,15 +595,24 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
       engineFamily,
       acceleration: FULL_ACCELERATION,
       sageAvailable: true,
+      weightClass,
     });
   }
 
-  it("#4 image-to-video seeds the SMART 361 at 1280x768 with all five toggles on (ltx)", () => {
+  it("#4 image-to-video seeds the SMART 345 at 1280x768 with all five toggles on (ltx 4bit)", () => {
     // Same input as the legacy case above, which seeds 273 — the acceleration
-    // trio is the only difference.
+    // trio (plus the weight class, §1-31) is the only difference.
     const selection = makeSelection({ mediaWidth: 1280, mediaHeight: 768 });
     expect(seed("image-to-video", selection).numFrames).toBe(273);
-    expect(smartSeed("image-to-video", selection).numFrames).toBe(361);
+    expect(smartSeed("image-to-video", selection).numFrames).toBe(345);
+  });
+
+  it("#4 follows the weight class (§1-31): 8bit 265, q6k 353, unknown falls back to the legacy 273", () => {
+    const selection = makeSelection({ mediaWidth: 1280, mediaHeight: 768 });
+    expect(smartSeed("image-to-video", selection, "ltx", "8bit").numFrames).toBe(265);
+    expect(smartSeed("image-to-video", selection, "ltx", "q6k").numFrames).toBe(353);
+    expect(smartSeed("image-to-video", selection, "ltx", "").numFrames).toBe(273);
+    expect(smartSeed("image-to-video", selection, "ltx25", "8bit").numFrames).toBe(313);
   });
 
   it("#4 stays on the legacy table for LTX 2.3's default configuration, and goes smart on LTX 2.5", () => {
@@ -627,9 +636,10 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
         engineFamily,
         acceleration: defaults,
         sageAvailable: true,
+        weightClass: "4bit",
       }).numFrames;
     expect(withDefaults("ltx")).toBe(273);
-    expect(withDefaults("ltx25")).toBe(361);
+    expect(withDefaults("ltx25")).toBe(377);
   });
 
   it("Chain-系 intents keep the legacy ceiling even with the trio threaded", () => {
@@ -648,6 +658,6 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
       { rate: 24, scale: 1 },
     );
     expect(seed("reference-video", selection).numFrames).toBe(273);
-    expect(smartSeed("reference-video", selection).numFrames).toBe(361);
+    expect(smartSeed("reference-video", selection).numFrames).toBe(345);
   });
 });

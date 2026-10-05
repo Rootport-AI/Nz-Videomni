@@ -1690,8 +1690,9 @@ describe("App / right-click routing -> prefill", () => {
       //
       // #5 lands every card on `nextAddPosition`, i.e. the midpoint between the
       // rightmost pin and the last frame, so plain repeats halve the remaining
-      // tail each time and run out of grid room at 7 cards (numFrames=361 ->
-      // 0, 177, 265, 313, 337, 345, 353) — well before the 10-item cap. So after
+      // tail each time and run out of grid room after a handful of cards (7 at
+      // the 361-frame default of the time: 0, 177, 265, 313, 337, 345, 353) —
+      // well before the 10-item cap. So after
       // each append we pull the NEW card (always the rightmost, hence the last
       // FRAME input in DOM order — the panel renders cards sorted ascending)
       // back onto a low 8n+1 grid slot (1, 9, 17, ...). That frees the whole
@@ -2291,15 +2292,16 @@ describe("App / right-click routing -> prefill", () => {
   );
 
   it(
-    "#4 imageToVideo seeds DURATION to the SMART per-resolution ceiling when acceleration is all-on (1280x768 -> 361, not the legacy 273)",
+    "#4 imageToVideo seeds DURATION to the SMART per-resolution ceiling when acceleration is all-on (1280x768 -> 345, not the legacy 273)",
     async () => {
       // Post-review fix A-1 (2026-08-31): end-to-end wiring check for
       // `shell/comfortTable.ts`'s `resolveComfortRow`/`comfortFramesForBudget`
       // reaching the right-click DURATION seed through
       // `AppShell`/`resolvePrefillSeed`. All five Acceleration toggles on ->
-      // the served `ltx` row matches -> the comfort budget widens from the
+      // the served `ltx` 4bit row matches (the mock `GET /models` names the
+      // active transformer 4bit, §1-31) -> the comfort budget widens from the
       // legacy table's 273 (nearest-area lookup at 1280x768) to the smart
-      // per-resolution ceiling's 361 (comfortFramesForBudget(1280, 768, 44880,
+      // per-resolution ceiling's 345 (comfortFramesForBudget(1280, 768, 42840,
       // ...) — same anchor `shell/comfortTable.test.ts` pins).
       resetProvisionalReservation();
       pinAllOnAcceleration();
@@ -2316,7 +2318,7 @@ describe("App / right-click routing -> prefill", () => {
           expect(within(panel()).getAllByDisplayValue("1280").length).toBeGreaterThan(0);
           expect(
             (within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value,
-          ).toBe("361");
+          ).toBe("345");
         },
         { timeout: 5_000 },
       );
@@ -2405,8 +2407,8 @@ describe("App / right-click routing -> prefill", () => {
       const widthInput = within(panel()).getByRole("slider", { name: /width/i }) as HTMLInputElement;
       fireEvent.change(widthInput, { target: { value: "512" } });
       expect(widthInput.value).toBe("512");
-      // DURATION starts at the config default (361).
-      expect((within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value).toBe("361");
+      // DURATION starts at the config default (345).
+      expect((within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value).toBe("345");
 
       act(() => {
         bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "textToVideoHere", selection: layerSelection(4, 360) });
@@ -2424,7 +2426,7 @@ describe("App / right-click routing -> prefill", () => {
       );
       expect((within(panel()).getByRole("slider", { name: /width/i }) as HTMLInputElement).value).toBe("512");
 
-      // The provisional reservation uses the SAME length (481), not the old 361.
+      // The provisional reservation uses the SAME length (481), not the old 345.
       await waitFor(
         () => {
           expect(requestSpy).toHaveBeenCalledWith(
@@ -2451,7 +2453,7 @@ describe("App / right-click routing -> prefill", () => {
       // value — see DEVLOG.md §41.1a).
       const widthInput = within(panel()).getByRole("slider", { name: /width/i }) as HTMLInputElement;
       fireEvent.change(widthInput, { target: { value: "512" } });
-      expect((within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value).toBe("361");
+      expect((within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value).toBe("345");
 
       act(() => {
         bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageFromCurrentFrame", selection: layerSelection(4, 360) });

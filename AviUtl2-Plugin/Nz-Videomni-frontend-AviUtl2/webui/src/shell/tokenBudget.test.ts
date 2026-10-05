@@ -86,8 +86,10 @@ describe("tokenBudget", () => {
     });
 
     it("gives the §3-165 ladder its recommended pairs at both served budgets", () => {
-      // 40,000 = the LTX 2.3 all-on row / fallback; 44,880 = the LTX 2.5 row
-      // (config.py comfort_budgets). Same values as COMFORT_LIMIT_TABLE §12.
+      // 40,000 / 44,880 = the two budgets the ladder was laid out at
+      // (COMFORT_LIMIT_TABLE §12): the compatibility scalar and the LTX 2.5
+      // row of that time. Pure arithmetic pins now — the served rows live in
+      // the backend manifests' `comfort` block since §1-31.
       expect(chainComfortSize16x9("w25", 40_000)).toEqual({ width: 1664, height: 960 });
       expect(chainComfortSize16x9("w46", 40_000)).toEqual({ width: 1216, height: 704 });
       expect(chainComfortSize16x9("w61", 40_000)).toEqual({ width: 1088, height: 576 });

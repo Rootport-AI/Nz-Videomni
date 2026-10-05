@@ -8,11 +8,14 @@ completely wrong file) BEFORE a worker process is ever started. The app venv
 stays torch-free, §5.3), so this module reads just enough of the GGUF binary
 format by hand -- there is no dependency on any GGUF library.
 
-Deliberately narrow scope: this is NOT a general GGUF reader. It reads ONLY
-the header's KV section (magic / version / tensor_count / kv_count, then each
-KV entry in file order) and stops as soon as every requested key has been
-found -- tensor metadata and tensor data (the multi-gigabyte bulk of the file)
-are never touched. GGUF value types 0-12 (see ``_SCALAR_FORMATS`` /
+Deliberately narrow scope: this is NOT a general GGUF reader.
+:func:`read_gguf_kv` reads ONLY the header's KV section (magic / version /
+tensor_count / kv_count, then each KV entry in file order) and stops as soon
+as every requested key has been found. :func:`read_gguf_tensor_types` skips
+the KV section and reads the tensor-info table that follows it (name, number
+of dimensions, ggml type) -- used to tell a transformer's weight class
+(services/weight_class.py). Tensor data (the multi-gigabyte bulk of the file)
+is never touched by either. GGUF value types 0-12 (see ``_SCALAR_FORMATS`` /
 ``_TYPE_STRING`` / ``_TYPE_ARRAY`` below) are understood; anything else, or
 any structural inconsistency (bad magic, unsupported version, truncation, an
 oversized count) raises :class:`GgufParseError`.
@@ -61,11 +64,14 @@ _TYPE_ARRAY = 9
 
 # Sanity ceilings. These bound how much a single call can
 # be made to read/allocate even when handed a hostile or corrupted file --
-# real GGUFs from Nz-GGUF-Converter-LTX23 stay far under all four.
+# real GGUFs from Nz-GGUF-Converter-LTX23 stay far under all of them.
 _MAX_KV_COUNT = 4096
 _MAX_KEY_LEN = 1024
 _MAX_STRING_LEN = 8 * 1024 * 1024
 _MAX_ARRAY_LEN = 1 << 24
+_MAX_TENSOR_COUNT = 1 << 16
+#: GGUF caps a tensor at 4 dimensions (GGML_MAX_DIMS).
+_MAX_TENSOR_DIMS = 4
 
 
 def _read_exact(f, n: int) -> bytes:
@@ -212,3 +218,59 @@ def read_gguf_kv(path: Path, wanted: set[str]) -> dict[str, str]:
                 found[key] = value if isinstance(value, str) else str(value)
 
     return found
+
+
+def read_gguf_tensor_types(path: Path) -> dict[str, tuple[int, int]]:
+    """Read the tensor-info table: tensor name -> (number of dimensions, ggml type).
+
+    Skips every KV entry (values are never captured), then reads
+    ``tensor_count`` tensor-info records (name, n_dims u32, each dimension
+    u64, ggml type u32, data offset u64). The tensor data itself is never
+    read. ``read_gguf_kv`` above is deliberately left untouched (it guards the
+    load path); this function reads the same preamble on its own.
+
+    Raises :class:`GgufParseError` on any structural problem: bad magic, an
+    unsupported version, truncation, a KV value type this parser does not
+    understand, a count over this module's sanity limits, or a tensor with
+    more than 4 dimensions.
+    """
+    types: dict[str, tuple[int, int]] = {}
+    with open(path, "rb") as f:
+        magic = _read_exact(f, 4)
+        if magic != _MAGIC:
+            raise GgufParseError(f"bad magic {magic!r} (expected {_MAGIC!r})")
+        version = _read_u32(f)
+        if version not in _SUPPORTED_VERSIONS:
+            raise GgufParseError(
+                f"unsupported GGUF version {version} (expected 2 or 3)"
+            )
+        tensor_count = _read_u64(f)
+        if tensor_count > _MAX_TENSOR_COUNT:
+            raise GgufParseError(
+                f"tensor_count {tensor_count} exceeds the {_MAX_TENSOR_COUNT} limit"
+            )
+        kv_count = _read_u64(f)
+        if kv_count > _MAX_KV_COUNT:
+            raise GgufParseError(
+                f"kv_count {kv_count} exceeds the {_MAX_KV_COUNT} limit"
+            )
+
+        for _ in range(kv_count):
+            _read_string(f, _MAX_KEY_LEN)
+            _read_value(f, _read_u32(f), False)
+
+        for _ in range(tensor_count):
+            name = _read_string(f, _MAX_KEY_LEN)
+            n_dims = _read_u32(f)
+            if n_dims > _MAX_TENSOR_DIMS:
+                raise GgufParseError(
+                    f"tensor {name!r} has {n_dims} dimensions "
+                    f"(at most {_MAX_TENSOR_DIMS} are allowed)"
+                )
+            for _ in range(n_dims):
+                _read_u64(f)
+            ggml_type = _read_u32(f)
+            _read_u64(f)  # data offset -- the data itself is never read
+            types[name] = (n_dims, ggml_type)
+
+    return types

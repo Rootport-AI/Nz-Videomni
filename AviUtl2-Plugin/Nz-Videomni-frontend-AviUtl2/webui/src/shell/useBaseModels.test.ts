@@ -305,6 +305,67 @@ describe("useBaseModels", () => {
     expect(result.current.activeEngineFamily).toBe("ltx25");
   });
 
+  // ── §1-31: activeWeightClass (the comfort row's `weight_class` key) ─────────
+
+  it("activeWeightClass reads the ACTIVE base model's transformer_weight_class, and folds null into \"\"", async () => {
+    const { result } = await renderReady(createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "full" })));
+    // The mock names only the active base model's class (the real endpoint's
+    // contract); the other one is `null`, which reads as "unknown".
+    expect(result.current.options.map((o) => o.weightClass)).toEqual(["4bit", ""]);
+    expect(result.current.activeWeightClass).toBe("4bit");
+
+    await act(async () => {
+      await result.current.switchBaseModel("LTX25");
+    });
+    // After the switch the refetched list names LTX 2.5 as the active one.
+    expect(result.current.options.map((o) => o.weightClass)).toEqual(["", "4bit"]);
+    expect(result.current.activeWeightClass).toBe("4bit");
+  });
+
+  it("activeWeightClass is \"\" on a backend that does not publish the field, and before GET /models lands", async () => {
+    const real = createApiClient(createMockBridge({ delayMs: 0 }));
+    const apiClient: ApiClient = {
+      ...real,
+      getModels: async () => {
+        const models = await real.getModels();
+        return {
+          ...models,
+          base_models: (models.base_models ?? []).map(({ transformer_weight_class: _drop, ...rest }) => rest),
+        };
+      },
+    };
+    const view = renderHook(() => useBaseModels({ apiClient }));
+    // Before the first response: unknown.
+    expect(view.result.current.activeWeightClass).toBe("");
+    await waitFor(() => expect(view.result.current.options.length).toBeGreaterThan(0));
+    expect(view.result.current.activeWeightClass).toBe("");
+  });
+
+  it("refresh() picks up a weight class that changed without a base-model switch (a transformer swap)", async () => {
+    const real = createApiClient(createMockBridge({ delayMs: 0 }));
+    let served = "4bit";
+    const apiClient: ApiClient = {
+      ...real,
+      getModels: async () => {
+        const models = await real.getModels();
+        return {
+          ...models,
+          base_models: (models.base_models ?? []).map((b) =>
+            b.active ? { ...b, transformer_weight_class: served } : b,
+          ),
+        };
+      },
+    };
+    const { result } = await renderReady(apiClient);
+    expect(result.current.activeWeightClass).toBe("4bit");
+
+    served = "8bit";
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.activeWeightClass).toBe("8bit");
+  });
+
   it("switching to a restricted base model moves the restrictions with it", async () => {
     // THE RESTRICTION IS SYNTHETIC (`withExtraUnsupportedFeatures`), and since
     // the Outpainting increment it has to be: LTX 2.5's real list no longer

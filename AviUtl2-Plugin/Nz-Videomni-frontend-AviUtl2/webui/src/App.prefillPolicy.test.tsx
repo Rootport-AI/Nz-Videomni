@@ -239,7 +239,7 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
   );
 
   it(
-    "② size=project with acceleration all-on: DURATION is RE-derived at the project's own resolution using the SMART ceiling (1280x768 -> 361, not the legacy 273)",
+    "② size=project with acceleration all-on: DURATION is RE-derived at the project's own resolution using the SMART ceiling (1280x768 -> 345, not the legacy 273)",
     async () => {
       // Post-review fix A-1 (2026-08-31): `SingleScreen.tsx`'s size=project
       // mount effect must recompute the smart ceiling at the OVERWRITTEN
@@ -262,7 +262,8 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
       // The project's resolution (1280x768) differs from the material
       // (832x640) so the overwrite is observable, and is itself the
       // `spill_free_frames` legacy table's key with the widest gap to the
-      // smart value (273 vs. 361).
+      // smart value (273 vs. 345 — the 2.3 4bit all-on line, since the mock
+      // `GET /models` names the active transformer 4bit, §1-31).
       const bridge = await renderReady({ delayMs: 0, editInfo: { width: 1280, height: 768, rate: 24, scale: 1 } });
 
       act(() => {
@@ -275,7 +276,7 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
           expect(within(panel()).getAllByDisplayValue("768").length).toBeGreaterThan(0);
           expect(
             (within(panel()).getByRole("slider", { name: /duration/i }) as HTMLInputElement).value,
-          ).toBe("361");
+          ).toBe("345");
         },
         { timeout: 5_000 },
       );

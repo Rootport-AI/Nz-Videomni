@@ -72,26 +72,26 @@ export const MOCK_CONFIG_BODY = {
       width: 1280,
       height: 768,
       crop_output: { width: 1280, height: 720 },
-      num_frames: 361,
+      num_frames: 345,
     },
     FHD_1080p: {
       width: 1920,
       height: 1088,
       crop_output: { width: 1920, height: 1080 },
-      num_frames: 169,
+      num_frames: 161,
     },
     WQHD_1440p: {
       width: 2560,
       height: 1472,
       crop_output: { width: 2560, height: 1440 },
-      num_frames: 89,
+      num_frames: 81,
     },
   },
   generation_defaults: {
     width: 1280,
     height: 768,
     crop_output: null,
-    num_frames: 361,
+    num_frames: 345,
     frame_rate: 24.0,
     num_inference_steps: 8,
     guidance_scale: 1.0,
@@ -134,8 +134,9 @@ export const MOCK_CONFIG_BODY = {
     // 快適上限マーカーの配信テーブル（2026-08-31）。`FALLBACK_APP_CONFIG.limits`
     // (`modes/single/defaultConfig.ts`) と**同内容**であること —— 下のパリティ
     // テストは片方向包含（fallback の全鍵がここにある）しか見ないので、中身の
-    // ズレはテストでは捕まらない。`ltx` に requires 空の行が無いのは意図
-    // （理由は defaultConfig.ts 側のコメント）。`outpaint_budget`（§3-135）の
+    // ズレはテストでは捕まらない（写しの一致は `mockBridge.test.ts` の別テストが
+    // 見る）。正本はバックエンドのマニフェストの `comfort`（§1-31）。`ltx` に
+    // 既定構成の行が無いのは意図（理由は defaultConfig.ts 側のコメント）。`outpaint_budget`（§3-135）の
     // 位置づけと、BE↔FE の数値一致が自動突き合わせされない件も同じコメント。
     comfort_budgets: {
       ltx: {
@@ -144,14 +145,28 @@ export const MOCK_CONFIG_BODY = {
         rows: [
           {
             requires: {
+              weight_class: "4bit",
               attention_backend: "sage",
               block_swap_prefetch: true,
               keep_resident: true,
               fused_gguf_dequant_kernel: true,
               vae_mode: "prune_vaed",
             },
-            single_budget: 44880,
-            chain_budget: 40000,
+            single_budget: 42840,
+            chain_budget: 42240,
+          },
+          { requires: { weight_class: "8bit" }, single_budget: 32640, chain_budget: 32384 },
+          {
+            requires: {
+              weight_class: "q6k",
+              attention_backend: "sage",
+              block_swap_prefetch: true,
+              keep_resident: true,
+              fused_gguf_dequant_kernel: true,
+              vae_mode: "prune_vaed",
+            },
+            single_budget: 43200,
+            chain_budget: 40832,
           },
         ],
         outpaint_budget: 42240,
@@ -159,7 +174,11 @@ export const MOCK_CONFIG_BODY = {
       ltx25: {
         spatial_factor: 32,
         temporal_factor: 8,
-        rows: [{ requires: {}, single_budget: 44880, chain_budget: 44880 }],
+        rows: [
+          { requires: { weight_class: "4bit" }, single_budget: 46920, chain_budget: 46376 },
+          { requires: { weight_class: "8bit" }, single_budget: 38760, chain_budget: 39424 },
+          { requires: { weight_class: "q6k" }, single_budget: 43344, chain_budget: 43648 },
+        ],
         outpaint_budget: 46080,
       },
     },
@@ -1235,6 +1254,10 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         id: base.id,
         display_name: base.display_name,
         engine_family: base.engine_family,
+        // §1-31: the selected transformer's weight class — only the ACTIVE
+        // base model carries one, exactly like the real endpoint (every other
+        // entry is `null`). The fixture's transformers are all Q4_K GGUFs.
+        transformer_weight_class: isActive ? "4bit" : null,
         active: isActive,
         installed: missing.length === 0,
         present: missing.length < MOCK_MODEL_CATEGORIES.length,

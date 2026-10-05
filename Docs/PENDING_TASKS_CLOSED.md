@@ -2817,3 +2817,19 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev（第 8 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §148）。
 - **残課題**: 無し（反映は §1-31）。留保は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 16.7 節（LTX 2.3 Q6_K の連結を w46・`chunked_upsample=true` で測り直す点は未計測）。
 - **正本・出典**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 16 節、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §148、`outputs/comfort-calib-2026-10-04/`（複写 [`Outputs-archive/comfort-calib-2026-10-04/`](Outputs-archive/comfort-calib-2026-10-04/)）。
+
+### 3-216. 快適上限のマニフェスト一本化（重みの種別ごとの行・ヘッダ判定・配信値の更新・プリセット 345／161／81）（起票：2026-09-26、実装・クローズ：2026-10-06）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-31（**同書側は削除済み**）。快適上限の線を `config.py` の既定値と手書きの例外から、ベースモデルごとのマニフェストへ移して正本を 1 箇所にし、読み込んだ重みの種別ごとに線を引く項目。
+- **到達条件**: 快適上限の正本をマニフェスト一本にし、重みの種別（4bit／8bit／Q6_K）をサーバーがファイルのヘッダから判定して配信行の照合に使うこと。配信値を [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 1.1 節の値に更新すること。
+- **何が完了したか**:
+  - **正本の一本化**: マニフェスト `scripts/manifests/10-ltx23.json`・`20-ltx25.json` の `comfort`（行の `requires.weight_class`＝`4bit`／`8bit`／`q6k`）が正本になった。`config.py` の表は削除し、`config.yaml` の `comfort_budgets` は読み捨てて WARNING を出す。
+  - **種別の判定**: サーバーがヘッダで判定し（`services/weight_class.py`・`services/gguf_kv.py` の `read_gguf_tensor_types`）、`GET /models` の `base_models[].transformer_weight_class`（有効なベースモデルだけ）で名乗る。操作パネル・Gradio は行の照合に `weight_class` を 1 項目足した。
+  - **配信値の更新**（数値の正本は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 1.1 節）: 単発／連結。LTX 2.3 は 4bit 42,840／42,240（全 on）・8bit 32,640／32,384（無条件）・Q6_K 43,200／40,832（全 on）。LTX 2.5 は 4bit 46,920／46,376・8bit 38,760／39,424・Q6_K 43,344／43,648（無条件）。画角拡張（outpaint）は 42,240／46,080。互換値 44,880／40,000 は据え置き。
+  - **Settings**: 手書きの例外（Q6_K 3 点・fp8 2 列）を削除し、7 列を配信行から描く。プリセットは 345／161／81・既定 345。
+  - **オーナー裁定（2026-10-06）**: (1) 素材（末尾）を付けたときの自動調整を「のりしろ 1 で音声の余りが 0 になるなら 2 にする」に変更（今回のコミットに含める）。(2) Settings の列見出しを「2.3 4bit 既定」（en「2.3 4-bit default」）にする。(3) 注記 `comfortHint` を ja「VRAM溢れによる生成速度の低下が起こらないフレーム数の目安です（※詳細はCOMFORT_LIMIT_TABLE.md）」・en「A rough guide to the frame counts that avoid the slowdown caused by VRAM overflow (see COMFORT_LIMIT_TABLE.md for details).」にする。
+- **どの物差しで通ったか**: 機械のゲート 3 系統（`.venv` 3,121 合格・28 スキップ・失敗 0／webui typecheck 0・lint 0〔警告 31 は従来どおり〕・vitest 150 ファイル 3,077 件）。敵対的レビュー（Opus）は直すべき 0・注意 1・参考 6。変異テスト 4 通りはすべて赤。実機 12 本の分類が一致。配置は追補後の再ビルドで 3 つの aux2 が同一（SHA-256 先頭 `9C510CC34749942B`）。実機 API は LTX23（`sulphur_distil_fp8mixed`）→`8bit`・LTX25（有効でない）→null・表は 2 系統 × 3 行。オーナー目視: 全項目合格（Settings の表・8bit の線・transformer 切り替えの追従・末尾素材の自動調整・Gradio の窓ラベル・プリセット。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §149.1・2026-10-06）。
+- **クローズ理由**: マニフェスト一本化・種別判定・配信値の更新・Settings の表の描き直しが実装され、機械のゲートと独立レビューを通った。
+- **状態**: dev（第 9 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §149）。
+- **残課題**: LTX 2.3 Q6_K の連結 40,832 は留保（w46・`chunked_upsample=true` 未計測）。LTX 2.5 Q6_K は既定構成を未照合。LTX 2.5 の純粋な w4a8 は未計測。`outpaint_budget` は種別別でない。Settings の列見出し「全on」は宣言（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-217）。
+- **正本・出典**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 1 節、仕様書 §6.7／§6.9(c)、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §149。

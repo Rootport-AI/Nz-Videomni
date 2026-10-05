@@ -856,7 +856,12 @@ export interface AppLimits {
 export interface ComfortRow {
   /** サーバ語彙（リクエストのフィールド名）で書かれた適用条件。空 `{}` は
    * 「無条件」＝どの高速化設定でもこの行が当たる。フロントが知らない鍵を
-   * 要求する行は**不一致**として扱われる（安全側）。 */
+   * 要求する行は**不一致**として扱われる（安全側）。
+   *
+   * 鍵 `weight_class`（`"4bit"`／`"8bit"`／`"q6k"`）は重みファイルの種別で、
+   * 照合材料は `GET /models` の {@link BaseModelBlock.transformer_weight_class}
+   * （第 9 弾・§1-31。配信される行はすべてこの鍵を持つ）——種別が分からない
+   * あいだは材料に入らないので、種別つきの行は不一致＝落ち先へ進む。 */
   requires: Record<string, string | boolean>;
   /** Create（単発 `/generate`）1 発分の快適トークン予算。 */
   single_budget: number;
@@ -1027,6 +1032,20 @@ export interface BaseModelBlock {
    * `shell/comfortTable.ts`'s `resolveComfortRow` treats as "engine unknown"
    * (→ the compatibility shim, i.e. today's behaviour). */
   engine_family: string;
+  /** The weight class of the transformer file this base model has SELECTED
+   * (§1-31, 2026-10-06): `"4bit"` (Q4_K GGUF, w4a8), `"8bit"` (fp8,
+   * fp8_scaled, int8, int8_convrot — mixed files count as 8bit), `"q6k"`
+   * (Q6_K GGUF), or `null` when the server could not tell (Q8_0, bf16, an
+   * unreadable file). The server judges it from the file's header.
+   *
+   * Only the ACTIVE base model carries a value; every other entry is `null`.
+   * It is the `weight_class` key a served {@link ComfortRow.requires} is
+   * matched against — read it through `shell/useBaseModels.ts`'s
+   * `activeWeightClass`, which folds `null`/absent into `""` ("unknown": the
+   * matcher then adds no `weight_class` and every typed row misses).
+   *
+   * Optional: a backend older than §1-31 omits the field. */
+  transformer_weight_class?: string | null;
   active: boolean;
   installed: boolean;
   present: boolean;

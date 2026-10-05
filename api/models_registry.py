@@ -29,7 +29,12 @@ two-layer shape and describes the ACTIVE base model. Alongside it:
     descriptor's declaration order as an ARRAY — see below) and
     ``unsupported_features`` (feature names that base model's engine cannot
     run, straight from that engine adapter's own ``UNSUPPORTED_FEATURES``;
-    see Docs/MULTI_ENGINE_DESIGN.md §5.6).
+    see Docs/MULTI_ENGINE_DESIGN.md §5.6), and ``transformer_weight_class``
+    (``"4bit"``/``"8bit"``/``"q6k"``/``null``: the weight class of the
+    selected transformer file, the key a client matches against
+    ``limits.comfort_budgets`` rows' ``requires.weight_class``). Only the
+    ACTIVE base model gets a value; every other one, and any file that cannot
+    be classified, is ``null``.
 
 CATEGORY ORDER IS CARRIED BY AN ARRAY, NOT BY OBJECT KEY ORDER. Both
 ``categories`` blocks are emitted in declaration order and Python dicts keep
@@ -51,8 +56,10 @@ from fastapi import APIRouter, Depends
 
 from api.context import AppContext
 from api.deps import get_context
+from api.errors import APIError
 from services import engines
 from services.model_registry import CATEGORIES, DEFAULT_NAME, ModelRegistry
+from services.weight_class import classify_transformer
 
 router = APIRouter()
 
@@ -67,6 +74,22 @@ def _category_block(
             e.as_dict() for e in registry.entries(category, base_model=base_model)
         ],
     }
+
+
+def _transformer_weight_class(
+    registry: ModelRegistry, base_id: str, selection: dict[str, str]
+) -> str | None:
+    """Weight class of the transformer ``selection`` names for ``base_id``.
+
+    ``None`` when the name does not resolve (unknown name, missing file, no
+    transformer category) or the file cannot be classified.
+    """
+    name = selection.get("transformer", DEFAULT_NAME)
+    try:
+        path = registry.resolve("transformer", name, base_model=base_id)
+    except APIError:
+        return None
+    return classify_transformer(path)
 
 
 @router.get("/models")
@@ -113,6 +136,15 @@ def list_models(context: AppContext = Depends(get_context)) -> dict:
                 # single source of truth for it: scripts/manifests/<base>.json's
                 # `categories` key order, nothing else.
                 "category_order": list(descriptor.categories),
+                # Weight class of the selected transformer (see the module
+                # docstring). Only the active base model has a selection the
+                # server actually holds; the others stay null rather than
+                # guessing from their default file.
+                "transformer_weight_class": (
+                    _transformer_weight_class(registry, base_id, base_active)
+                    if is_active
+                    else None
+                ),
                 "categories": {
                     category: _category_block(registry, category, base_id, base_active)
                     for category in descriptor.categories

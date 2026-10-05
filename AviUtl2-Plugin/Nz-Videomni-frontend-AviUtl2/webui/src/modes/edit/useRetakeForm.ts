@@ -130,6 +130,9 @@ export interface UseRetakeFormDeps {
    * 配信のスカラー予算へ退避する。 */
   engineFamily?: string | undefined;
   sageAvailable?: boolean | null | undefined;
+  /** §1-31: 読み込み中の transformer の重みの種別（`useBaseModels().activeWeightClass`）。
+   * `engineFamily` と並べて `resolveComfortRow` に渡す。省略・`""` は「不明」。 */
+  weightClass?: string | undefined;
   /** §3-165: 読み込み中のベースモデルの表示名（`/models` の
    * `base_models[].display_name`、例「LTX 2.5」）。ラベルに出すだけ。省略時は `""`。 */
   engineLabel?: string | undefined;
@@ -268,7 +271,7 @@ export interface UseRetakeFormResult {
  *    そのまま持ち越される導線で、「素材の差し替え」ではない。
  */
 export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult {
-  const { nativeBridge, initialIntent, acceleration, engineFamily } = deps;
+  const { nativeBridge, initialIntent, acceleration, engineFamily, weightClass } = deps;
   const sageAvailable = deps.sageAvailable ?? null;
   const engineLabel = deps.engineLabel ?? "";
   const config = deps.config ?? FALLBACK_APP_CONFIG;
@@ -377,8 +380,9 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
   // §3-165: ラベルの目安解像度の予算。`useChainForm` と同じ 2 行（配信テーブルの
   // 行 → 無ければ配信スカラー → 無ければ 40,000）。
   const comfortRow = useMemo(
-    () => resolveComfortRow(config.limits, engineFamily, acceleration ?? ACCELERATION_DEFAULTS, sageAvailable),
-    [config.limits, engineFamily, acceleration, sageAvailable],
+    () =>
+      resolveComfortRow(config.limits, engineFamily, acceleration ?? ACCELERATION_DEFAULTS, sageAvailable, weightClass),
+    [config.limits, engineFamily, acceleration, sageAvailable, weightClass],
   );
   const comfortBudget = comfortRow?.chainBudget ?? resolveChainComfortBudget(config.limits.chain_comfort_token_budget);
   const stage2WindowLabel = useCallback(

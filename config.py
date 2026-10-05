@@ -260,6 +260,13 @@ class ComfortRow(BaseModel):
     outside this table (``spill_free_frames`` for a single request; the
     WebUI's Chained screen keeps ``chain_comfort_token_budget``), so a family
     with no rows at all, or none that match, is never left without a number.
+
+    ``requires.weight_class`` (``"4bit"``/``"8bit"``/``"q6k"``) is the one key
+    that is NOT a request field: the client takes it from
+    ``GET /models``'s ``base_models[].transformer_weight_class`` (the class of
+    the selected transformer file). Every shipped row carries it. The rows
+    themselves live in the base-model manifests' ``comfort`` block
+    (``scripts/manifests/*.json``; Docs/COMFORT_LIMIT_TABLE.md §1).
     """
 
     requires: dict[str, str | bool] = Field(default_factory=dict)
@@ -283,7 +290,7 @@ class EngineComfortProfile(BaseModel):
     for this family — a fixed per-family line that deliberately does NOT
     vary with the acceleration configuration, and NOT a general rule:
     keeping the all-on-measured line for every configuration is a
-    per-family ruling for the two families below (J1 —
+    per-family ruling for the two shipped families (J1 —
     VERIFICATION_LOG §98.11 / Docs/COMFORT_LIMIT_TABLE.md §9.2),
     so when a new family is added, LEAVE THIS ``None`` until that family
     has been calibrated and has received its own ruling ("do not copy the
@@ -291,65 +298,16 @@ class EngineComfortProfile(BaseModel):
     no outpaint comfort warning at all. Advisory-only like ``rows`` — the
     server never validates a request against it. Single source of truth
     for the numbers: Docs/COMFORT_LIMIT_TABLE.md §9.
+
+    The profiles are not defined in code: each base-model manifest's
+    ``comfort`` block (``scripts/manifests/*.json``) is validated against this
+    model at startup by ``api/context.py``'s ``build_comfort_budgets``.
     """
 
     spatial_factor: int = 32
     temporal_factor: int = 8
     rows: list[ComfortRow] = Field(default_factory=list)
     outpaint_budget: int | None = None
-
-
-def _default_comfort_budgets() -> dict[str, EngineComfortProfile]:
-    """Default comfort-budget table (single source of truth for every number
-    here: Docs/COMFORT_LIMIT_TABLE.md).
-
-    "ltx" (LTX 2.3) INTENTIONALLY HAS NO EMPTY-``requires`` ROW. With the
-    default (non-pruned) VAE decoder, LTX 2.3's comfort boundary is NOT
-    monotone in tokens — it coincides with the decode chunk-count increments
-    (7->8 / 4->5 / 2->3 at 720p/1080p/1440p) rather than a clean token
-    ceiling, so there is no single number that is safe below it and unsafe
-    above it except under the one fully-accelerated row below (pruned VAE
-    decoder included, where the boundary IS monotone). DO NOT "fix" this by
-    adding a default row for LTX 2.3 — a client with no matching row is
-    expected to fall back to the scalar keys outside this table; for a single
-    request that is the ``spill_free_frames`` table, which stays calibrated
-    for the default configuration precisely because this row does not cover
-    it.
-
-    "ltx25" (LTX 2.5) has no such boundary — VRAM is identical across every
-    acceleration combination measured — so its one row has empty
-    ``requires`` (always matches) and reuses the same 44,880 ceiling for
-    both Single and Chained (LTX 2.3's Chained budget,
-    ``CHAIN_COMFORT_TOKEN_BUDGET``, is a 2.3 measurement; 2.5 has its own
-    number here).
-
-    ``outpaint_budget``: the Outpainting lines from the all-on calibration.
-    This field is only the delivery path for the two families that already
-    have a ruling (VERIFICATION_LOG §98.11); the numbers' home is
-    Docs/COMFORT_LIMIT_TABLE.md §9.
-    """
-    return {
-        "ltx": EngineComfortProfile(
-            rows=[
-                ComfortRow(
-                    requires={
-                        "attention_backend": "sage",
-                        "block_swap_prefetch": True,
-                        "keep_resident": True,
-                        "fused_gguf_dequant_kernel": True,
-                        "vae_mode": "prune_vaed",
-                    },
-                    single_budget=44880,
-                    chain_budget=CHAIN_COMFORT_TOKEN_BUDGET,
-                )
-            ],
-            outpaint_budget=42240,  # Docs/COMFORT_LIMIT_TABLE.md §9 (all-on run)
-        ),
-        "ltx25": EngineComfortProfile(
-            rows=[ComfortRow(requires={}, single_budget=44880, chain_budget=44880)],
-            outpaint_budget=46080,  # Docs/COMFORT_LIMIT_TABLE.md §9 (all-on run)
-        ),
-    }
 
 
 # キーフレーム画像（conditioning_images）の枚数上限。設定項目ではなく契約定数で、
@@ -444,63 +402,27 @@ class LimitsConfig(BaseModel):
     # geometry truth stays in chain_math.
     retake_window_min_frames: int = RETAKE_WINDOW_MIN_PX
     retake_window_max_frames: int = px_from_v_latent(STAGE2_V_TILE)
-    # Comfortable attention-token ceiling for ONE stage-2 window of a chain,
-    # published so a client can draw its resolution guides from a served number
-    # instead of hard-coding one. PURELY CLIENT ADVICE: the server never
-    # consults this — no request is rejected, clamped or altered by it — which
-    # is why it lives here rather than in any validation path. The default
-    # mirrors chain_math.CHAIN_COMFORT_TOKEN_BUDGET, the single source of truth
-    # (a token is (width//32) * (height//32) per window latent frame).
-    # The clients (the WebUI's shell/comfortTable.ts resolveComfortRow and
-    # gradio_ui/comfort.py resolve_chain_budget) use a matching comfort_budgets
-    # row (below) first; this value is only the fallback when no row matches.
-    # The default table's LTX 2.3 profile has a single all-five-toggles-on row,
-    # so with even one acceleration toggle off the Chained and Retake guides
-    # come from this value. To move the guides, revisit both comfort_budgets
-    # and this value; the geometry itself does not change.
+    # Compatibility values (for clients that do not know the comfort_budgets
+    # table below, and the fall-back when no row of that table matches).
+    # PURELY CLIENT ADVICE: the server never consults either — no request is
+    # rejected, clamped or altered by them. A token is
+    # (width//32) * (height//32) * latent frame count.
+    #
+    # chain_comfort_token_budget: one stage-2 window of a chain. The default
+    # mirrors chain_math.CHAIN_COMFORT_TOKEN_BUDGET.
     chain_comfort_token_budget: int = CHAIN_COMFORT_TOKEN_BUDGET
-    # Comfortable attention-token ceiling for ONE Create (single-shot
-    # `/generate`) request. A single request refines its whole clip in ONE
-    # pass (no stage-2 tiling), which is a DIFFERENT workload from
-    # chain_comfort_token_budget above (one chain stage-2 window) — the two
-    # are separate axes with separate calibrated values, never to be confused.
-    # PURELY CLIENT ADVICE, same discipline as chain_comfort_token_budget: the
-    # server never consults this — no request is rejected, clamped or altered
-    # by it. The WebUI's Create screen reads it when the server publishes no
-    # comfort_budgets table (below) or the engine family is not known yet:
-    # it then draws a smart, resolution-exact comfort marker from this value
-    # while all five acceleration toggles (sage, block_swap_prefetch,
-    # keep_resident, fused_gguf_dequant_kernel, vae_mode=prune_vaed) are on,
-    # and falls back to its coarse 5-key spill_free_frames lookup with even
-    # one off. Literal (no chain_math constant to mirror).
-    # The token formula is the same as chain_comfort_token_budget's:
-    # (width//32) * (height//32) * latent frame count. 44,880 is the largest
-    # common comfortable value, anchored at M2 = 1920x1088, 169 frames
-    # (exactly 44,880 tokens). Source of truth and the full derivation table:
-    # Docs/COMFORT_LIMIT_TABLE.md.
+    # single_comfort_token_budget: one Create (single-shot `/generate`)
+    # request — a different workload from a chain window, never to be
+    # confused with it. Literal (no chain_math constant to mirror).
     single_comfort_token_budget: int = 44880
-    # Server-side comfort-budget TABLE, keyed by engine family id
-    # (services.engines.FAMILY_BY_ID: "ltx"/"ltx25"), superseding the single
-    # fixed value above for clients that understand it. Same advisory
-    # discipline as chain_comfort_token_budget/single_comfort_token_budget:
-    # the server never consults this — no request is rejected, clamped or
-    # altered by it. It exists so a client looks up {requires, single_budget,
-    # chain_budget} rows per engine family instead of hard-coding "all five
-    # acceleration toggles on", and so a future engine or toggle needs only
-    # a new row/family here, not a client code change.
-    # NOT written to config.yaml (code default only — an operator CAN still
-    # override it there like any other field) and carries no validator; a
-    # client with no matching row is responsible for falling back to the
-    # scalar keys (spill_free_frames, chain_comfort_token_budget). See
-    # _default_comfort_budgets for the default table and its rationale, and
-    # Docs/COMFORT_LIMIT_TABLE.md for the calibration.
-    # A yaml override REPLACES the whole table (no per-family/per-field
-    # merge — pinned by tests/test_comfort_budgets.py), so an override that
-    # omits ``outpaint_budget`` silently drops the outpaint line (``None`` =
-    # the client draws no outpaint comfort warning).
-    comfort_budgets: dict[str, EngineComfortProfile] = Field(
-        default_factory=_default_comfort_budgets
-    )
+    # Comfort-budget TABLE, keyed by engine family id
+    # (services.engines.FAMILY_BY_ID: "ltx"/"ltx25"). Advisory only, like the
+    # two values above. Its source of truth is the base-model manifests'
+    # ``comfort`` block (scripts/manifests/*.json); ``AppContext`` fills this
+    # field at startup (api/context.py build_comfort_budgets). It can NOT be
+    # overridden from config.yaml: load_config drops a ``comfort_budgets`` key
+    # there with a WARNING. Calibration: Docs/COMFORT_LIMIT_TABLE.md §1.
+    comfort_budgets: dict[str, EngineComfortProfile] = Field(default_factory=dict)
 
 
 class OutputConfig(BaseModel):
@@ -608,7 +530,27 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     with cfg_path.open("r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh) or {}
     _warn_deprecated_model_keys(raw)
+    _drop_comfort_budgets_override(raw)
     return AppConfig.model_validate(raw)
+
+
+def _drop_comfort_budgets_override(raw: Any) -> None:
+    """Drop ``limits.comfort_budgets`` from ``config.yaml``, with one WARNING.
+
+    The table's source of truth is the base-model manifests' ``comfort`` block
+    and ``AppContext`` overwrites the field at startup anyway, so a yaml value
+    could never take effect. Dropping it here (rather than letting it be
+    silently replaced later) names the ignored key on screen, the same way
+    :func:`_warn_deprecated_model_keys` does for the moved ``model:`` keys.
+    """
+    limits = raw.get("limits") if isinstance(raw, dict) else None
+    if not isinstance(limits, dict) or "comfort_budgets" not in limits:
+        return
+    limits.pop("comfort_budgets")
+    logger.warning(
+        "config.yaml の limits.comfort_budgets は廃止され、記述子(scripts/manifests)"
+        "の comfort へ移りました。値は無視されます。"
+    )
 
 
 def _warn_deprecated_model_keys(raw: Any) -> None:

@@ -8,9 +8,10 @@
  * が「この表の値をここ以外へ書き写さないこと」と明記している。写しを作らずに
  * 表を出す方法は、配信値を描き続けることだけである。
  *
- * 唯一の例外が `static` 列＝**較正済みだが製品が配っていない**実測点で、配信値が
- * 存在しない以上ここに置くほかない。出典は定数のコメントに残す。
- * `fixedBudget` 列の線も同じ扱い（較正済みで未配信の線。台帳 §1-31 で配信に移す）。
+ * 第 9 弾（台帳 §1-31・2026-10-06）で例外が無くなった: 以前は配信されていない
+ * 実測点・線（2.5 Q6・2.5 fp8・2.3 fp8 既定）をここに直書きしていたが、配信行が
+ * 重みの種別（`requires.weight_class`）を持つようになったので、どの列も配信行
+ * から引く。行が無い列は「—」。
  *
  * 換算式はここには無い: `budget` 列は `shell/comfortTable.ts` の
  * `comfortFramesForBudget` をそのまま呼ぶ。Create の快適上限マーカーと**同じ関数**
@@ -31,20 +32,16 @@ type ComfortTextKey = {
 
 /** 1列ぶんの数字がどこから来るか。
  *
- *  - `legacy` ＝ レガシー表 `limits.spill_free_frames` の実測値そのまま。
- *  - `budget` ＝ その系統の「全on」条件に一致する配信行（{@link resolveComfortRow}
- *    が選ぶ）のトークン予算から換算した線。
- *  - `static` ＝ 較正済みだが配信されていない実測点（{@link LTX25_Q6_FRAMES}）。
- *  - `fixedBudget` ＝ 較正済みだが配信されていない線（{@link LTX25_FP8_SINGLE_BUDGET}）を、
- *    その系統の配信行の係数で換算したもの。
+ *  - `legacy` ＝ レガシー表 `limits.spill_free_frames` の実測値そのまま
+ *    （2.3 の既定構成。1本の線で表せないので配信行を持たない）。
+ *  - `budget` ＝ その系統・その重みの種別の「全on」条件に一致する配信行
+ *    （{@link resolveComfortRow} が選ぶ）のトークン予算から換算した線。
  *
- * どれも「その解像度の答えが無い」を `null`（表示は「—」）で返す。無い理由は列に
- * よって違う（測っていない／その系統に線が無い）が、読み手に見せる区別ではない。 */
+ * どちらも「その解像度の答えが無い」を `null`（表示は「—」）で返す。無い理由は列に
+ * よって違う（測っていない／その系統・種別に行が無い）が、読み手に見せる区別ではない。 */
 export type ComfortColumnSource =
   | { readonly kind: "legacy" }
-  | { readonly kind: "budget"; readonly engineFamily: string }
-  | { readonly kind: "static"; readonly frames: Readonly<Record<string, number>> }
-  | { readonly kind: "fixedBudget"; readonly engineFamily: string; readonly singleBudget: number };
+  | { readonly kind: "budget"; readonly engineFamily: string; readonly weightClass: string };
 
 export interface ComfortDisplayColumn {
   /** React の `key` と、テストが列を名指しするための識別子。画面には出ない。 */
@@ -62,32 +59,10 @@ export interface ComfortDisplayTable {
   readonly columns: readonly ComfortDisplayColumn[];
 }
 
-/** 「2.5 Q6」列の実測点。出典はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §10。
- *
- * 配信されるまでの暫定として直書きしてよい数字である（fp8 の 2 列も同じ扱い・台帳
- * §1-31 で配信に移す）——サーバーは transformer の量子化を知らないので、この3点を
- * 配る経路が無い。載っていない解像度は測っていない＝「—」。 */
-const LTX25_Q6_FRAMES: Readonly<Record<string, number>> = {
-  "1280x768": 361,
-  "1920x1088": 161,
-  "896x1152": 313,
-};
-
-/** 「2.5 fp8」列の線（単発・全on のトークン予算）。出典はバックエンドの
- * `Docs/COMFORT_LIMIT_TABLE.md` 第13節——実測 3 点 1280×768 313／1920×1088 145／
- * 896×1152 297 を式で再現する線。台帳 §1-31 で配信に移すまでの暫定。 */
-const LTX25_FP8_SINGLE_BUDGET = 38760;
-
-/** 「2.3 fp8（既定）」列の実測点。出典はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md`
- * 第13節——サーバー既定構成の 1 点。既定構成は 1 本の線で表せない（第8節・
- * `comfortTable.ts` の配信行を置かない判断）ので、他の解像度へは延ばさない。 */
-const LTX_FP8_DEFAULT_FRAMES: Readonly<Record<string, number>> = {
-  "1920x1088": 121,
-};
-
 /** LTX 系の表。行は縦横比の違う6サイズで、`spill_free_frames` に無い
  * `896x1152` も含む（`legacy` 列だけが「—」になる、という**列ごとに答えが違う**
- * ことがそのまま見える並び）。 */
+ * ことがそのまま見える並び）。列は 2.3 の既定構成（`legacy`）と、系統 2 つ ×
+ * 重みの種別 3 つ（4bit／8bit／Q6_K）の `budget` 列。 */
 const LTX_TABLE: ComfortDisplayTable = {
   id: "LTX",
   // rows は表自体の形の一部——配信される `spill_free_frames` のキーであっても
@@ -96,17 +71,34 @@ const LTX_TABLE: ComfortDisplayTable = {
   columns: [
     { id: "ltx-default", labelKey: "comfortColumnLtxDefault", source: { kind: "legacy" } },
     {
-      id: "ltx-fp8-default",
-      labelKey: "comfortColumnLtxFp8Default",
-      source: { kind: "static", frames: LTX_FP8_DEFAULT_FRAMES },
+      id: "ltx-4bit",
+      labelKey: "comfortColumnLtx4bit",
+      source: { kind: "budget", engineFamily: "ltx", weightClass: "4bit" },
     },
-    { id: "ltx-all-on", labelKey: "comfortColumnLtxAllOn", source: { kind: "budget", engineFamily: "ltx" } },
-    { id: "ltx25", labelKey: "comfortColumnLtx25", source: { kind: "budget", engineFamily: "ltx25" } },
-    { id: "ltx25-q6", labelKey: "comfortColumnLtx25Q6", source: { kind: "static", frames: LTX25_Q6_FRAMES } },
     {
-      id: "ltx25-fp8",
-      labelKey: "comfortColumnLtx25Fp8",
-      source: { kind: "fixedBudget", engineFamily: "ltx25", singleBudget: LTX25_FP8_SINGLE_BUDGET },
+      id: "ltx-8bit",
+      labelKey: "comfortColumnLtx8bit",
+      source: { kind: "budget", engineFamily: "ltx", weightClass: "8bit" },
+    },
+    {
+      id: "ltx-q6k",
+      labelKey: "comfortColumnLtxQ6k",
+      source: { kind: "budget", engineFamily: "ltx", weightClass: "q6k" },
+    },
+    {
+      id: "ltx25-4bit",
+      labelKey: "comfortColumnLtx25_4bit",
+      source: { kind: "budget", engineFamily: "ltx25", weightClass: "4bit" },
+    },
+    {
+      id: "ltx25-8bit",
+      labelKey: "comfortColumnLtx25_8bit",
+      source: { kind: "budget", engineFamily: "ltx25", weightClass: "8bit" },
+    },
+    {
+      id: "ltx25-q6k",
+      labelKey: "comfortColumnLtx25Q6k",
+      source: { kind: "budget", engineFamily: "ltx25", weightClass: "q6k" },
     },
   ],
 };
@@ -139,8 +131,9 @@ export function comfortDisplayTableFor(engineFamily: string): ComfortDisplayTabl
   return COMFORT_DISPLAY_TABLES[id] ?? null;
 }
 
-/** 「全on」列の条件——5つの高速化トグルすべてが on の構成。`ltx` はその全on行に、
- * `ltx25` は無条件行に一致する。選定は必ず {@link resolveComfortRow} を通す
+/** 「全on」列の条件——5つの高速化トグルすべてが on の構成。列の系統・種別の
+ * 配信行が全on の条件つき（2.3 の 4bit／Q6_K）でも無条件（2.3 の 8bit・2.5 の
+ * 3 行）でも、この構成なら一致する。選定は必ず {@link resolveComfortRow} を通す
  * （`api/types.ts` が生の `rows` を自前で走査することを禁じており、正規化は
  * そこに1箇所だけある）。`keepResidentEmbeddings` はどの行の `requires` にも
  * 現れない鍵なので一致判定に関与せず、サーバ既定のままでよい。 */
@@ -164,7 +157,7 @@ const ALL_ON_ACCELERATION: AccelerationSettings = {
  * 係数は {@link resolveComfortRow} が正規化した `spatialFactor`/`temporalFactor`
  * を使う。
  *
- * 行は必ず `"<w>x<h>"` なので分解は1回で済ませ、4分岐が同じ幅・高さを見る。
+ * 行は必ず `"<w>x<h>"` なので分解は1回で済ませる。
  */
 export function resolveComfortCell(
   limits: AppLimits,
@@ -179,28 +172,18 @@ export function resolveComfortCell(
     case "legacy":
       return limits.spill_free_frames[resolutionKey] ?? null;
     case "budget": {
-      const resolved = resolveComfortRow(limits, column.source.engineFamily, ALL_ON_ACCELERATION, true);
+      const resolved = resolveComfortRow(
+        limits,
+        column.source.engineFamily,
+        ALL_ON_ACCELERATION,
+        true,
+        column.source.weightClass,
+      );
       if (!resolved) return null;
       return comfortFramesForBudget(
         width,
         height,
         resolved.singleBudget,
-        MIN_NUM_FRAMES,
-        limits.max_num_frames,
-        resolved.spatialFactor,
-        resolved.temporalFactor,
-      );
-    }
-    case "static":
-      return column.source.frames[resolutionKey] ?? null;
-    case "fixedBudget": {
-      // `budget` と同じ行から係数だけを借り、線は列の固定値を使う。
-      const resolved = resolveComfortRow(limits, column.source.engineFamily, ALL_ON_ACCELERATION, true);
-      if (!resolved) return null;
-      return comfortFramesForBudget(
-        width,
-        height,
-        column.source.singleBudget,
         MIN_NUM_FRAMES,
         limits.max_num_frames,
         resolved.spatialFactor,

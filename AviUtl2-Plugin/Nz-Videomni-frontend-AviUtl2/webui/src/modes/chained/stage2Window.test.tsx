@@ -184,18 +184,34 @@ describe("useChainForm — stage2WindowLabel (§3-165)", () => {
     expect(result.current.stage2WindowLabel("w61", template)).toBe("61f (LTX 2.3 1088×576)");
   });
 
-  it("follows the engine's served chain budget (LTX 2.5 = 44,880)", () => {
+  it("follows the engine's served chain budget for the weight class (LTX 2.5 4bit = 46,376)", () => {
     const mockBridge = createMockBridge({ delayMs: 0 });
     const { result } = renderHook(() =>
       useChainForm(FALLBACK_APP_CONFIG, "p", {
         nativeBridge: mockBridge,
         engineFamily: "ltx25",
+        weightClass: "4bit",
         engineLabel: "LTX 2.5",
       }),
     );
     expect(result.current.stage2WindowLabel("standard", template)).toBe("22f (LTX 2.5 1920×1088)");
-    expect(result.current.stage2WindowLabel("w46", template)).toBe("46f (LTX 2.5 1280×768)");
+    expect(result.current.stage2WindowLabel("w46", template)).toBe("46f (LTX 2.5 1344×768)");
     expect(result.current.stage2WindowLabel("w61", template)).toBe("61f (LTX 2.5 1152×640)");
+  });
+
+  it("drops to the 8bit line on LTX 2.3 (32,384), whatever the acceleration settings (§1-31)", () => {
+    const mockBridge = createMockBridge({ delayMs: 0 });
+    const { result } = renderHook(() =>
+      useChainForm(FALLBACK_APP_CONFIG, "p", {
+        nativeBridge: mockBridge,
+        engineFamily: "ltx",
+        weightClass: "8bit",
+        engineLabel: "LTX 2.3",
+      }),
+    );
+    expect(result.current.stage2WindowLabel("standard", template)).toBe("22f (LTX 2.3 1600×896)");
+    expect(result.current.stage2WindowLabel("w46", template)).toBe("46f (LTX 2.3 1088×640)");
+    expect(result.current.stage2WindowLabel("w61", template)).toBe("61f (LTX 2.3 960×512)");
   });
 
   it("moves onto the 128 grid while a reference video is active (§1-15)", async () => {

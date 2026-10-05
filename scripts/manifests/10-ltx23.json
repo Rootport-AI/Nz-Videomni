@@ -44,6 +44,17 @@
     "audio": "default"
   },
 
+  "comfort": {
+    "spatial_factor": 32,
+    "temporal_factor": 8,
+    "outpaint_budget": 42240,
+    "rows": [
+      { "requires": { "weight_class": "4bit", "attention_backend": "sage", "block_swap_prefetch": true, "keep_resident": true, "fused_gguf_dequant_kernel": true, "vae_mode": "prune_vaed" }, "single_budget": 42840, "chain_budget": 42240 },
+      { "requires": { "weight_class": "8bit" }, "single_budget": 32640, "chain_budget": 32384 },
+      { "requires": { "weight_class": "q6k", "attention_backend": "sage", "block_swap_prefetch": true, "keep_resident": true, "fused_gguf_dequant_kernel": true, "vae_mode": "prune_vaed" }, "single_budget": 43200, "chain_budget": 40832 }
+    ]
+  },
+
   "downloads": [
     {
       "name": "LTX-2.3 weights + IC-LoRA (7 files)",

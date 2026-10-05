@@ -57,7 +57,7 @@ describe("useGenerationForm", () => {
     expect(result.current.values).toMatchObject({
       width: 1280,
       height: 768,
-      numFrames: 361,
+      numFrames: 345,
       frameRate: 24,
       seed: -1,
     });
@@ -69,7 +69,7 @@ describe("useGenerationForm", () => {
   // the DURATION policy engine — the fourth `initial` arg's `numFrames`.
   describe("initial.numFrames (W8 right-click DURATION seed)", () => {
     it("seeds the initial DURATION from initial.numFrames instead of the config default (raise)", () => {
-      // 512x320's comfort ceiling (481) is ABOVE the config default (361) — the
+      // 512x320's comfort ceiling (481) is ABOVE the config default (345) — the
       // seed raises DURATION, not just lowers it.
       const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "", {}, { numFrames: 481 }));
       expect(result.current.values.numFrames).toBe(481);
@@ -90,7 +90,7 @@ describe("useGenerationForm", () => {
 
     it("keeps the config default when initial.numFrames is omitted (normal tab-opened form)", () => {
       const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "", {}, {}));
-      expect(result.current.values.numFrames).toBe(361);
+      expect(result.current.values.numFrames).toBe(345);
     });
   });
 
@@ -183,7 +183,7 @@ describe("useGenerationForm", () => {
       // generation_defaults.crop_output is null by default (2026-08-18: crop
       // OFF by default; a preset selection still carries its own crop_output),
       // so the field is absent from the request entirely.
-      num_frames: 361,
+      num_frames: 345,
       frame_rate: 24,
       seed: -1,
     });
@@ -527,7 +527,7 @@ describe("useGenerationForm", () => {
 
       act(() => result.current.applyPreset("standard_720p"));
 
-      expect(result.current.values).toMatchObject({ width: 1280, height: 768, numFrames: 361 });
+      expect(result.current.values).toMatchObject({ width: 1280, height: 768, numFrames: 345 });
     });
 
     it("reflects the preset's own crop_output (N1, Gradio-faithful)", () => {
@@ -597,10 +597,10 @@ describe("useGenerationForm", () => {
       resolveSpillFreeFrames(FALLBACK_APP_CONFIG.limits.spill_free_frames, 1280, 768),
     );
     expect(result.current.spillThresholdFrames).toBe(273);
-    // Preset num_frames (361, raised 2026-08-19 to the SMART comfort ceiling —
-    // see `comfortTable.comfortFramesForBudget`) now itself sits ABOVE the
-    // coarse spill_free_frames threshold (273, re-measured 2026-08-31); the two
-    // are no longer expected to coincide the way they did before the raise.
+    // Preset num_frames (345 since §1-31 — the 2.3 4bit all-on line, see
+    // `comfortTable.comfortFramesForBudget`) itself sits ABOVE the coarse
+    // spill_free_frames threshold (273, re-measured 2026-08-31); the two are
+    // not expected to coincide.
     expect(result.current.isOverSpillThreshold).toBe(true);
 
     act(() => result.current.setNumFrames(273)); // exactly at threshold: not over
@@ -629,9 +629,13 @@ describe("useGenerationForm", () => {
       embedMp4Metadata: true,
     };
 
-    /** LTX 2.3's engine family — the id whose only served row is the all-on
-     * one above (its DEFAULT configuration deliberately has no row). */
+    /** LTX 2.3's engine family — its 4bit row is the all-on one above (its
+     * DEFAULT configuration deliberately has no row). */
     const LTX = "ltx";
+    /** The weight class (§1-31) every served row is keyed on. The tests below
+     * are about the acceleration match, so they pin the 4bit class, whose 2.3
+     * row is the conditional all-on one. */
+    const FOUR_BIT = "4bit";
 
     it("switches to the smart per-resolution ceiling when all five toggles are on, and follows resolution changes", () => {
       const { result } = renderHook(() =>
@@ -639,24 +643,25 @@ describe("useGenerationForm", () => {
           acceleration: FULL_ACCELERATION,
           sageAvailable: true,
           engineFamily: LTX,
+          weightClass: FOUR_BIT,
         }),
       );
 
       // Default 1280x768.
       expect(result.current.isComfortMarkerSmart).toBe(true);
-      expect(result.current.spillThresholdFrames).toBe(361);
+      expect(result.current.spillThresholdFrames).toBe(345);
 
       act(() => {
         result.current.setWidth(1920);
         result.current.setHeight(1088);
       });
-      expect(result.current.spillThresholdFrames).toBe(169);
+      expect(result.current.spillThresholdFrames).toBe(161);
 
       act(() => {
         result.current.setWidth(2560);
         result.current.setHeight(1472);
       });
-      expect(result.current.spillThresholdFrames).toBe(89);
+      expect(result.current.spillThresholdFrames).toBe(81);
     });
 
     it("falls back to the coarse spill_free_frames marker the instant even one toggle is off", () => {
@@ -666,6 +671,7 @@ describe("useGenerationForm", () => {
           acceleration: oneOff,
           sageAvailable: true,
           engineFamily: LTX,
+          weightClass: FOUR_BIT,
         }),
       );
       expect(result.current.isComfortMarkerSmart).toBe(false);
@@ -684,22 +690,53 @@ describe("useGenerationForm", () => {
           acceleration: ACCELERATION_DEFAULTS,
           sageAvailable: true,
           engineFamily: LTX,
+          weightClass: FOUR_BIT,
         }),
       );
       expect(result.current.isComfortMarkerSmart).toBe(false);
       expect(result.current.spillThresholdFrames).toBe(273);
     });
 
-    it("is smart on LTX 2.5 even with every toggle off — its served row is unconditional", () => {
+    it("is smart on LTX 2.5 even with every toggle off — its served rows need the weight class alone", () => {
       const { result } = renderHook(() =>
         useGenerationForm(FALLBACK_APP_CONFIG, "x", {
           acceleration: ACCELERATION_DEFAULTS,
           sageAvailable: false,
           engineFamily: "ltx25",
+          weightClass: FOUR_BIT,
         }),
       );
       expect(result.current.isComfortMarkerSmart).toBe(true);
-      expect(result.current.spillThresholdFrames).toBe(361);
+      expect(result.current.spillThresholdFrames).toBe(377);
+    });
+
+    it("follows the weight class (§1-31): LTX 2.3 8bit is smart even with every toggle off, at its own lower line", () => {
+      const { result } = renderHook(() =>
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: ACCELERATION_DEFAULTS,
+          sageAvailable: true,
+          engineFamily: LTX,
+          weightClass: "8bit",
+        }),
+      );
+      expect(result.current.isComfortMarkerSmart).toBe(true);
+      expect(result.current.spillThresholdFrames).toBe(265);
+    });
+
+    it("falls back to the legacy table while the weight class is unknown, even with all five toggles on", () => {
+      // `""` is what `activeWeightClass` reports for a server that could not
+      // tell (or one older than §1-31): no row matches, so the marker shows the
+      // measured `spill_free_frames` value.
+      const { result } = renderHook(() =>
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
+          acceleration: FULL_ACCELERATION,
+          sageAvailable: true,
+          engineFamily: LTX,
+          weightClass: "",
+        }),
+      );
+      expect(result.current.isComfortMarkerSmart).toBe(false);
+      expect(result.current.spillThresholdFrames).toBe(273);
     });
 
     it("treats an explicit sageAvailable=false as sage not really running (falls back), and null as unknown (stays smart)", () => {
@@ -708,6 +745,7 @@ describe("useGenerationForm", () => {
           acceleration: FULL_ACCELERATION,
           sageAvailable: false,
           engineFamily: LTX,
+          weightClass: FOUR_BIT,
         }),
       );
       expect(withFalse.current.isComfortMarkerSmart).toBe(false);
@@ -718,10 +756,11 @@ describe("useGenerationForm", () => {
           acceleration: FULL_ACCELERATION,
           sageAvailable: null,
           engineFamily: LTX,
+          weightClass: FOUR_BIT,
         }),
       );
       expect(withNull.current.isComfortMarkerSmart).toBe(true);
-      expect(withNull.current.spillThresholdFrames).toBe(361);
+      expect(withNull.current.spillThresholdFrames).toBe(345);
     });
 
     it("falls to the compatibility shim on a backend that publishes no comfort_budgets table at all", () => {
@@ -765,6 +804,7 @@ describe("useGenerationForm", () => {
           acceleration: FULL_ACCELERATION,
           sageAvailable: true,
           engineFamily: LTX,
+          weightClass: FOUR_BIT,
         }),
       );
       act(() => {
@@ -778,42 +818,37 @@ describe("useGenerationForm", () => {
       expect(result.current.spillThresholdFrames).toBe(481);
     });
 
-    it("moves isOverSpillThreshold's boundary to the smart 361/369 line instead of the fallback 273", () => {
+    it("moves isOverSpillThreshold's boundary to the smart 345/353 line instead of the fallback 273", () => {
       const { result } = renderHook(() =>
         useGenerationForm(FALLBACK_APP_CONFIG, "x", {
           acceleration: FULL_ACCELERATION,
           sageAvailable: true,
           engineFamily: LTX,
+          weightClass: FOUR_BIT,
         }),
       );
-      act(() => result.current.setNumFrames(361));
+      act(() => result.current.setNumFrames(345));
       expect(result.current.isOverSpillThreshold).toBe(false);
-      act(() => result.current.setNumFrames(369));
+      act(() => result.current.setNumFrames(353));
       expect(result.current.isOverSpillThreshold).toBe(true);
     });
 
     it("regression: reads the matched row's SINGLE budget, not its chain budget", () => {
-      // Misreading the CHAIN budget (40,000) here would compute 321 at
-      // 1280x768 instead of 361 — a mistake TypeScript's structural typing
-      // cannot catch (both are plain `number` fields on the same row), so this
-      // has to be an explicit runtime assertion.
-      const config: AppConfig = {
-        ...FALLBACK_APP_CONFIG,
-        limits: {
-          ...FALLBACK_APP_CONFIG.limits,
-          single_comfort_token_budget: 44880,
-          chain_comfort_token_budget: 40000,
-        },
-      };
+      // The served LTX 2.3 8bit row: single 32,640, chain 32,384. Misreading
+      // the CHAIN budget here would compute 257 at 1280x768 instead of 265 — a
+      // mistake TypeScript's structural typing cannot catch (both are plain
+      // `number` fields on the same row), so this has to be an explicit runtime
+      // assertion.
       const { result } = renderHook(() =>
-        useGenerationForm(config, "x", {
+        useGenerationForm(FALLBACK_APP_CONFIG, "x", {
           acceleration: FULL_ACCELERATION,
           sageAvailable: true,
           engineFamily: LTX,
+          weightClass: "8bit",
         }),
       );
-      expect(result.current.spillThresholdFrames).toBe(361);
-      expect(result.current.spillThresholdFrames).not.toBe(321);
+      expect(result.current.spillThresholdFrames).toBe(265);
+      expect(result.current.spillThresholdFrames).not.toBe(257);
     });
   });
 
@@ -1143,16 +1178,17 @@ describe("useGenerationForm", () => {
       expect(legacy.current.isComfortMarkerSmart).toBe(false);
       expect(legacy.current.values.numFrames).toBe(273);
 
-      // Smart branch: LTX 2.5's served row is unconditional, so the same wav
-      // auto-adjusts to the smart 361 instead — matching what the marker shows.
-      const { result: smart } = setupA2V(30, "a music video", { engineFamily: "ltx25" });
+      // Smart branch: LTX 2.5's served rows need the weight class alone, so the
+      // same wav auto-adjusts to the smart 377 (4bit) instead — matching what
+      // the marker shows.
+      const { result: smart } = setupA2V(30, "a music video", { engineFamily: "ltx25", weightClass: "4bit" });
       act(() => {
         void smart.current.sourceAudio.pick();
       });
       await waitFor(() => expect(smart.current.sourceAudio.state.status).toBe("ready"));
       await waitFor(() => expect(smart.current.values.numFrames).toBe(smart.current.spillThresholdFrames));
       expect(smart.current.isComfortMarkerSmart).toBe(true);
-      expect(smart.current.values.numFrames).toBe(361);
+      expect(smart.current.values.numFrames).toBe(377);
     });
 
     // W4 (#7 trim追従): an audio-to-video right-click prefill uploads the WHOLE

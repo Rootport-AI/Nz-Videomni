@@ -237,6 +237,12 @@ export interface ResolvePrefillSeedArgs {
   engineFamily?: string | undefined;
   acceleration?: AccelerationSettings | undefined;
   sageAvailable?: boolean | null | undefined;
+  /** The loaded transformer's weight class (`useBaseModels().activeWeightClass`,
+   * §1-31), passed straight to `resolveComfortRow` beside
+   * {@link engineFamily}. Optional; omitted or `""` = unknown (no
+   * `weight_class` in the match). Both callers (`AppShell` and
+   * `SingleScreen`) must hand in the same value (R-4). */
+  weightClass?: string | undefined;
 }
 
 export interface PrefillSeed {
@@ -281,7 +287,8 @@ export interface PrefillSeed {
  * config default.
  */
 export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
-  const { intent, selection, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable } = args;
+  const { intent, selection, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass } =
+    args;
   // Both IC-LoRA intents seed on the 128 grid. 台帳§1-15 W4 (2026-08-11): the
   // Chain-targeted one MUST be here — its material lands in Chain's reference
   // slot, which flips `useChainForm`'s size grid from 64 to 128 the moment the
@@ -382,7 +389,13 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   const smartCeiling =
     targetModeForIntent(intent) === "single" && acceleration
       ? (() => {
-          const row = resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null);
+          const row = resolveComfortRow(
+            config.limits,
+            engineFamily,
+            acceleration,
+            sageAvailable ?? null,
+            weightClass,
+          );
           return row
             ? comfortFramesForBudget(
                 derived.width,

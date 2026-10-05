@@ -1635,7 +1635,7 @@ def test_the_published_list_matches_what_the_endpoints_actually_refuse(two_famil
 
 def test_the_legacy_response_shape_is_untouched(two_family_client):
     """2.3運用の既存クライアント(gradio_ui/adapters.py)から見えている範囲は
-    一切変わっていない。増えたのは base_models[] の中のキー1つだけである。"""
+    一切変わっていない。増えたのは base_models[] の中のキーだけである。"""
     body = two_family_client.get("/api/v1/models").json()
     assert set(body) == {"categories", "active_base_model", "base_models"}
     for block in body["categories"].values():

@@ -619,28 +619,79 @@ describe("MOCK_CONFIG_BODY.limits <-> FALLBACK_APP_CONFIG.limits parity (B-1)", 
   // 2026-08-31: the one-directional key check above cannot see a CONTENT drift
   // inside `comfort_budgets`, and that block is a nested structure both
   // fixtures now carry. This pins the two FRONTEND mirrors against each other
-  // (both engine families, both budget values, both `requires` shapes) — it
-  // does NOT pin against the backend's own `_default_comfort_budgets()`; that
-  // parity is checked manually, or by the backend's own tests, not from here.
+  // (both engine families, every budget value, every `requires` shape) — it
+  // does NOT pin against the backend's own table (since §1-31 the `comfort`
+  // block of `scripts/manifests/10-ltx23.json`・`20-ltx25.json`); that parity
+  // is checked manually, or by the backend's own tests, not from here.
   it("both fixtures publish an identical comfort_budgets block", () => {
     expect(FALLBACK_APP_CONFIG.limits.comfort_budgets).toEqual(MOCK_CONFIG_BODY.limits.comfort_budgets);
   });
 
-  it("the ltx row requires exactly the five all-on acceleration fields, and ltx25 requires nothing", () => {
-    // ⚠ `ltx`'s single row is CONDITIONAL on purpose: LTX 2.3's default
+  it("ltx: the 4bit and q6k rows require the class plus the five all-on fields, the 8bit row the class alone", () => {
+    // ⚠ `ltx`'s 4bit and q6k rows are CONDITIONAL on purpose: LTX 2.3's default
     // configuration has no smart line at all (its comfort boundary tracks the
     // VAE decoder's chunk-count steps, not the token count), so it falls to
-    // `spill_free_frames`. A `requires: {}` row here would be a regression,
-    // not an improvement — hence the exact key-set assertion.
-    const ltxRow = MOCK_CONFIG_BODY.limits.comfort_budgets.ltx.rows[0];
-    expect(Object.keys(ltxRow?.requires ?? {}).sort()).toEqual([
+    // `spill_free_frames`. A class-only row there would be a regression, not
+    // an improvement — hence the exact key-set assertion. The 8bit row was
+    // measured with all-on equal to the default configuration (§1-31), so its
+    // condition is the weight class alone.
+    const rows = MOCK_CONFIG_BODY.limits.comfort_budgets.ltx.rows;
+    expect(rows).toHaveLength(3);
+    const allOnKeys = [
       "attention_backend",
       "block_swap_prefetch",
       "fused_gguf_dequant_kernel",
       "keep_resident",
       "vae_mode",
+      "weight_class",
+    ];
+    expect(Object.keys(rows[0]?.requires ?? {}).sort()).toEqual(allOnKeys);
+    expect(rows[0]?.requires.weight_class).toBe("4bit");
+    expect(rows[1]?.requires).toEqual({ weight_class: "8bit" });
+    expect(Object.keys(rows[2]?.requires ?? {}).sort()).toEqual(allOnKeys);
+    expect(rows[2]?.requires.weight_class).toBe("q6k");
+    expect(rows.map((row) => [row.single_budget, row.chain_budget])).toEqual([
+      [42840, 42240],
+      [32640, 32384],
+      [43200, 40832],
     ]);
-    expect(MOCK_CONFIG_BODY.limits.comfort_budgets.ltx25.rows[0]?.requires).toEqual({});
+    expect(MOCK_CONFIG_BODY.limits.comfort_budgets.ltx.outpaint_budget).toBe(42240);
+  });
+
+  it("ltx25: three rows that require the weight class alone", () => {
+    const profile = MOCK_CONFIG_BODY.limits.comfort_budgets.ltx25;
+    expect(profile.rows.map((row) => row.requires)).toEqual([
+      { weight_class: "4bit" },
+      { weight_class: "8bit" },
+      { weight_class: "q6k" },
+    ]);
+    expect(profile.rows.map((row) => [row.single_budget, row.chain_budget])).toEqual([
+      [46920, 46376],
+      [38760, 39424],
+      [43344, 43648],
+    ]);
+    expect(profile.outpaint_budget).toBe(46080);
+  });
+});
+
+// §1-31: `GET /models` names the ACTIVE base model's transformer weight class
+// (every other base model says `null`) — the key the comfort rows above are
+// matched against. Same "mock mirrors the real contract" discipline.
+describe("GET /models — transformer_weight_class (§1-31)", () => {
+  it("carries the class on the active base model only", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    const result = (await bridge.request("backend.request", {
+      method: "GET",
+      path: "/api/v1/models",
+    })) as {
+      status: number;
+      body: { base_models: { id: string; active: boolean; transformer_weight_class?: string | null }[] };
+    };
+    expect(result.status).toBe(200);
+    for (const base of result.body.base_models) {
+      expect(base.transformer_weight_class, base.id).toBe(base.active ? "4bit" : null);
+    }
+    expect(result.body.base_models.some((b) => b.active)).toBe(true);
   });
 });
 

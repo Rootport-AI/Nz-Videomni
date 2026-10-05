@@ -1,26 +1,33 @@
-"""Comfort-budget table (``LimitsConfig.comfort_budgets``), 2026-08-31.
+"""Comfort-budget table (``limits.comfort_budgets``), §1-31 (2026-10-06).
 
-Pins the default table's shape and the one intentional asymmetry in it: "ltx"
-(LTX 2.3) carries no empty-``requires`` row because its default (non-pruned
-VAE decoder) configuration's comfort boundary is NOT monotone in tokens (see
-``config._default_comfort_budgets`` docstring and Docs/COMFORT_LIMIT_TABLE.md
-§4.8 for the calibration itself). A client with no matching row is expected
-to fall back to the legacy ``spill_free_frames`` table instead, so "ltx"
-getting a default row here would be a regression, not a fix.
+The table's source of truth is the base-model manifests' ``comfort`` block
+(``scripts/manifests/*.json``), validated and keyed by engine family at
+startup (``api/context.py`` ``build_comfort_budgets``). ``config.yaml`` can no
+longer override it: ``load_config`` drops the key with a WARNING.
 
-No validators are added (the file has none; the frontend normalizes), so
-these tests only pin the DEFAULT shape plus a plain yaml-override smoke test.
+Pins the SHIPPED rows (Docs/COMFORT_LIMIT_TABLE.md §1): every row carries
+``requires.weight_class``; LTX 2.3's 4bit and Q6_K rows exist only for the
+all-five-toggles-on configuration (the default configuration falls back to
+``spill_free_frames``), its 8bit row and all LTX 2.5 rows are unconditional.
 """
 
 from __future__ import annotations
 
+import copy
+import logging
 from pathlib import Path
 
+import pytest
 import yaml
+from fastapi.testclient import TestClient
 
-from config import PROJECT_ROOT, AppConfig, LimitsConfig, load_config
+import main
+from api.context import build_comfort_budgets
+from config import PROJECT_ROOT, LimitsConfig, load_config
+from conftest import _make_args, base_model_descriptor, build_model_layout
+from services.base_models import load_base_models
 
-LTX_REQUIRES = {
+ALL_ON = {
     "attention_backend": "sage",
     "block_swap_prefetch": True,
     "keep_resident": True,
@@ -28,136 +35,204 @@ LTX_REQUIRES = {
     "vae_mode": "prune_vaed",
 }
 
+#: A minimal valid comfort block for synthetic descriptors.
+COMFORT = {
+    "spatial_factor": 32,
+    "temporal_factor": 8,
+    "outpaint_budget": 1000,
+    "rows": [
+        {
+            "requires": {"weight_class": "8bit", "keep_resident": True},
+            "single_budget": 300,
+            "chain_budget": 200,
+        },
+    ],
+}
 
-def _default_budgets():
-    return AppConfig().limits.comfort_budgets
+
+def _shipped():
+    return build_comfort_budgets(load_base_models(PROJECT_ROOT / "scripts" / "manifests"))
+
+
+def _rows(profile) -> list[tuple[dict, int, int]]:
+    return [(row.requires, row.single_budget, row.chain_budget) for row in profile.rows]
+
+
+# --- the shipped table --------------------------------------------------------- #
 
 
 def test_family_id_set_matches_engine_registry():
     """The table's keys are exactly the engine family ids
-    (services.engines.FAMILY_BY_ID), no more and no less.
-
-    ``services.engines`` is cheap to import here: it only holds id ->
-    (module path, class name) string tables and imports each adapter
-    lazily (see the module's own docstring), so this doesn't drag in the
-    ~2000-line LTX adapters or their PIL/chain_math/api.models chain."""
+    (services.engines.FAMILY_BY_ID), no more and no less."""
     from services.engines import FAMILY_BY_ID
 
-    assert set(_default_budgets()) == set(FAMILY_BY_ID)
+    assert set(_shipped()) == set(FAMILY_BY_ID)
 
 
-def test_ltx_has_exactly_one_row_with_the_five_calibrated_requires():
-    ltx = _default_budgets()["ltx"]
-    assert len(ltx.rows) == 1
-    row = ltx.rows[0]
-    assert row.requires == LTX_REQUIRES
-    assert (row.single_budget, row.chain_budget) == (44880, 40000)
+def test_ltx_rows():
+    """LTX 2.3: 4bit and Q6_K only for all-on, 8bit unconditional
+    (Docs/COMFORT_LIMIT_TABLE.md §1)."""
+    assert _rows(_shipped()["ltx"]) == [
+        ({"weight_class": "4bit", **ALL_ON}, 42840, 42240),
+        ({"weight_class": "8bit"}, 32640, 32384),
+        ({"weight_class": "q6k", **ALL_ON}, 43200, 40832),
+    ]
 
 
-def test_ltx_has_no_empty_requires_row():
-    """The deliberate asymmetry: LTX 2.3's default configuration has no safe
-    token ceiling (see module docstring), so it must NOT get a catch-all row.
-    A future edit adding one here would silently make the marker "smart" for
-    the non-monotone default configuration, which is the exact regression
-    this table's design forbids."""
-    ltx = _default_budgets()["ltx"]
-    assert not any(row.requires == {} for row in ltx.rows)
+def test_ltx_has_no_class_less_row_and_no_default_configuration_row():
+    """LTX 2.3's default configuration has no token line (its boundary follows
+    the VAE decode chunk count, Docs/COMFORT_LIMIT_TABLE.md §4.8): it must fall
+    back to ``spill_free_frames``. So no row without a weight class, and the
+    4bit/Q6_K rows carry the five all-on keys."""
+    for requires, _single, _chain in _rows(_shipped()["ltx"]):
+        assert "weight_class" in requires
+        if requires["weight_class"] in ("4bit", "q6k"):
+            assert {k: requires.get(k) for k in ALL_ON} == ALL_ON
 
 
-def test_ltx25_has_one_unconditional_row():
-    ltx25 = _default_budgets()["ltx25"]
-    assert len(ltx25.rows) == 1
-    row = ltx25.rows[0]
-    assert row.requires == {}
-    assert (row.single_budget, row.chain_budget) == (44880, 44880)
+def test_ltx25_rows_carry_only_the_weight_class():
+    assert _rows(_shipped()["ltx25"]) == [
+        ({"weight_class": "4bit"}, 46920, 46376),
+        ({"weight_class": "8bit"}, 38760, 39424),
+        ({"weight_class": "q6k"}, 43344, 43648),
+    ]
 
 
 def test_both_families_use_the_default_token_factors():
-    budgets = _default_budgets()
+    budgets = _shipped()
     for family_id in ("ltx", "ltx25"):
         profile = budgets[family_id]
-        assert profile.spatial_factor == 32
-        assert profile.temporal_factor == 8
+        assert (profile.spatial_factor, profile.temporal_factor) == (32, 8)
 
 
-def test_default_profiles_publish_the_2026_09_05_outpaint_budgets():
-    """§3-135: the Outpainting (Edit tab) comfort-token lines from the
-    2026-09-05 all-on recalibration (Docs/COMFORT_LIMIT_TABLE.md §9) --
-    ltx=42,240 (unchanged from the prior calibration), ltx25=46,080 (the one
-    line that moved)."""
-    budgets = _default_budgets()
+def test_outpaint_budgets_are_per_family():
+    """Docs/COMFORT_LIMIT_TABLE.md §9: one line per family, not per weight class."""
+    budgets = _shipped()
     assert budgets["ltx"].outpaint_budget == 42240
     assert budgets["ltx25"].outpaint_budget == 46080
 
 
 def test_comfort_rows_do_not_carry_an_outpaint_budget_of_their_own():
-    """J1 (2026-09-05, Docs/VERIFICATION_LOG.md §98.11): the outpaint line is
-    a fixed per-family value, not a per-row one -- it must not ride along on
-    ``ComfortRow`` (which is keyed by acceleration ``requires``), only on the
-    profile itself."""
-    budgets = _default_budgets()
-    for family_id in ("ltx", "ltx25"):
-        for row in budgets[family_id].rows:
+    """J1 (Docs/VERIFICATION_LOG.md §98.11): the outpaint line is a fixed
+    per-family value on the profile, never on a row."""
+    for profile in _shipped().values():
+        for row in profile.rows:
             assert not hasattr(row, "outpaint_budget")
 
 
 def test_engine_comfort_profile_defaults_outpaint_budget_to_none():
-    """An uncalibrated family (no ruling yet) must default to ``None`` --
-    "no line": the client draws no outpaint comfort warning at all, and a
-    future family must NOT inherit the two calibrated families' numbers (see
-    ``EngineComfortProfile.outpaint_budget`` docstring, J1's "do not copy the
-    precedent")."""
+    """An uncalibrated family must default to ``None`` ("no line")."""
     from config import EngineComfortProfile
 
     assert EngineComfortProfile().outpaint_budget is None
 
 
-def test_yaml_can_override_the_comfort_budgets_table(tmp_path: Path):
-    """``config.yaml`` overriding ``limits.comfort_budgets`` replaces the
-    whole table (no per-row merge) -- same overwrite discipline as every
-    other dict-valued limits field (see spill_free_frames tests).
+# --- config.yaml can no longer override it ------------------------------------ #
 
-    ``requires`` is written as real YAML (a quoted string plus a boolean,
-    not a Python literal pasted into a dict) so this also pins that
-    ``keep_resident``'s ``bool`` survives yaml -> pydantic -> ``model_dump``
-    (the JSON wire shape) as an actual bool, not ``1``/``"True"``/etc."""
+
+def test_code_default_is_empty():
+    assert LimitsConfig().comfort_budgets == {}
+
+
+def test_yaml_comfort_budgets_is_ignored_with_a_warning(tmp_path: Path, caplog):
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(
         yaml.safe_dump(
             {
                 "limits": {
+                    "max_width": 1280,
                     "comfort_budgets": {
-                        "ltx": {
-                            "spatial_factor": 16,
-                            "temporal_factor": 4,
-                            "rows": [
-                                {
-                                    "requires": {
-                                        "attention_backend": "sage",
-                                        "keep_resident": True,
-                                    },
-                                    "single_budget": 1000,
-                                    "chain_budget": 500,
-                                }
-                            ],
-                        }
-                    }
+                        "ltx": {"rows": [{"requires": {}, "single_budget": 1, "chain_budget": 1}]}
+                    },
                 }
             }
         ),
         encoding="utf-8",
     )
-    cfg = load_config(cfg_path)
-    assert set(cfg.limits.comfort_budgets) == {"ltx"}
-    ltx = cfg.limits.comfort_budgets["ltx"]
-    assert (ltx.spatial_factor, ltx.temporal_factor) == (16, 4)
-    assert len(ltx.rows) == 1
-    assert (ltx.rows[0].single_budget, ltx.rows[0].chain_budget) == (1000, 500)
-    req = ltx.rows[0].requires
-    assert req["attention_backend"] == "sage"
-    assert req["keep_resident"] is True
-    dumped = cfg.model_dump()["limits"]["comfort_budgets"]["ltx"]["rows"][0]["requires"]
-    assert dumped["keep_resident"] is True
+    with caplog.at_level(logging.WARNING, logger="ltx.config"):
+        cfg = load_config(cfg_path)
+    assert cfg.limits.comfort_budgets == {}
+    assert cfg.limits.max_width == 1280  # the rest of limits still applies
+    warnings = [r for r in caplog.records if "comfort_budgets" in r.getMessage()]
+    assert len(warnings) == 1
+    assert warnings[0].levelno == logging.WARNING
+
+
+# --- startup: descriptors -> GET /config -------------------------------------- #
+
+
+def _boot(tmp_path: Path, descriptors: list[dict]):
+    cfg = {
+        "server": {"log_dir": (tmp_path / "logs").as_posix()},
+        "model": {"backend": "mock", **build_model_layout(tmp_path, descriptors)},
+        "output": {"dir": (tmp_path / "outputs").as_posix()},
+        "upload": {"dir": (tmp_path / "uploads").as_posix()},
+        "state_file": (tmp_path / "state.json").as_posix(),
+        "tracking": {"backend": "mock"},
+    }
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return main.build_app(_make_args(cfg_path.as_posix()))
+
+
+def _with_comfort(comfort, base_id: str = "LTX23") -> dict:
+    descriptor = base_model_descriptor(base_id)
+    descriptor["comfort"] = comfort
+    return descriptor
+
+
+def test_hermetic_client_serves_an_empty_table(client):
+    """conftest's descriptor carries no ``comfort``: the table is ``{}``."""
+    assert client.get("/api/v1/config").json()["limits"]["comfort_budgets"] == {}
+
+
+def test_descriptor_comfort_reaches_get_config(tmp_path: Path):
+    app = _boot(tmp_path, [_with_comfort(COMFORT)])
+    with TestClient(app) as c:
+        limits = c.get("/api/v1/config").json()["limits"]
+    assert limits["comfort_budgets"] == {"ltx": COMFORT}
+    # a bool survives JSON -> pydantic -> model_dump as a real bool
+    assert limits["comfort_budgets"]["ltx"]["rows"][0]["requires"]["keep_resident"] is True
+    # the compatibility values keep flowing unchanged
+    assert limits["chain_comfort_token_budget"] == 40000
+    assert limits["single_comfort_token_budget"] == 44880
+
+
+@pytest.mark.parametrize(
+    "weight_class",
+    ["4-bit", "fp8", None],
+    ids=["misspelled", "unknown", "missing"],
+)
+def test_bad_weight_class_fails_startup(tmp_path: Path, weight_class):
+    comfort = copy.deepcopy(COMFORT)
+    requires = comfort["rows"][0]["requires"]
+    if weight_class is None:
+        del requires["weight_class"]
+    else:
+        requires["weight_class"] = weight_class
+    with pytest.raises(RuntimeError, match="weight_class"):
+        _boot(tmp_path, [_with_comfort(comfort)])
+
+
+def test_invalid_comfort_shape_fails_startup(tmp_path: Path):
+    comfort = copy.deepcopy(COMFORT)
+    comfort["rows"][0]["single_budget"] = "lots"
+    with pytest.raises(RuntimeError, match="LTX23: comfort"):
+        _boot(tmp_path, [_with_comfort(comfort)])
+
+
+def test_comfort_that_is_not_an_object_fails_startup(tmp_path: Path):
+    with pytest.raises(RuntimeError, match="'comfort' must be an object"):
+        _boot(tmp_path, [_with_comfort([1, 2])])
+
+
+def test_two_descriptors_of_one_family_with_comfort_fail_startup(tmp_path: Path):
+    descriptors = [_with_comfort(COMFORT), _with_comfort(COMFORT, base_id="LTX23B")]
+    with pytest.raises(RuntimeError, match="'ltx' already has a comfort table"):
+        _boot(tmp_path, descriptors)
+
+
+# --- config.yaml.example ------------------------------------------------------- #
 
 
 def test_config_yaml_example_spill_free_frames_matches_the_2026_08_31_recalibration():

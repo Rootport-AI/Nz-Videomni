@@ -63,7 +63,10 @@ async def get_config() -> dict[str, Any]:
 
     Returns:
         設定オブジェクト全体（server / model / vram / limits / upload / output
-        などのセクション）。
+        などのセクション）。``limits.comfort_budgets`` は快適上限（VRAM が
+        共有メモリへ溢れない目安）の助言値で、行は重みの種別
+        ``weight_class`` で分かれます。読み方と経緯は
+        ``Docs/COMFORT_LIMIT_TABLE.md`` 第 1 節。
     """
     client = get_client()
     return await client.get_json("/config")
@@ -91,8 +94,12 @@ async def list_models() -> dict[str, Any]:
             ``installed``（全カテゴリの既定ファイルが揃っているか）、
             ``missing_categories``（欠けているカテゴリ名のリスト）、
             ``unsupported_features``（そのベースモデルの推論エンジンが実行
-            できない機能名のリスト）。ほかに ``engine_family`` / ``present``
-            / ``category_order`` / ``categories`` を含みます。
+            できない機能名のリスト）、``transformer_weight_class``（有効な
+            ベースモデルで選択中の transformer の重みの種別 ``4bit`` /
+            ``8bit`` / ``q6k`` / null。快適上限の行の照合に使う。
+            ``Docs/COMFORT_LIMIT_TABLE.md`` 第 1 節参照）。ほかに
+            ``engine_family`` / ``present`` / ``category_order`` /
+            ``categories`` を含みます。
             ``unsupported_features`` に載っている機能を submit_generate /
             submit_chain で使うと 422 FEATURE_UNSUPPORTED になります。
     """

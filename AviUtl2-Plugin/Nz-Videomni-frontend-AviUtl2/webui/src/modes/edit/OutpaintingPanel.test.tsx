@@ -458,7 +458,7 @@ describe("OutpaintingPanel", () => {
     const tick = document.getElementById("outpaint-spill-tick");
     expect(tick?.querySelector("option")?.getAttribute("value")).toBe("273");
 
-    // 既定値は 361（2026-08-19、賢い快適上限マーカーの算出値に引き上げ）で、
+    // 既定値は 345（台帳 §1-31・2.3 4bit 全on の線に収めた値）で、
     // この行の快適上限 273 を既に超えているため、警告は最初から出る。
     expect(panel.getByText(/may slow down/i)).toBeInTheDocument();
     // ちょうど上限 (273) に下げれば超えていない扱いになり、警告は消える。
@@ -479,8 +479,8 @@ describe("OutpaintingPanel", () => {
   // いうオーナー裁定で、以前の据え置き 40,000 は概念ごと廃止された。
   it("draws no comfort warning while the engine family is unknown, however heavy the geometry", async () => {
     const user = userEvent.setup();
-    // 1920x1088 のまま（パッド 0）・既定の 361 コマ = 2040 マス × 潜在 46 コマ =
-    // 93,840 トークン。かつての据え置き 40,000 も、ltx の 42,240 も、ltx25 の
+    // 1920x1088 のまま（パッド 0）・既定の 345 コマ = 2040 マス × 潜在 44 コマ =
+    // 89,760 トークン。かつての据え置き 40,000 も、ltx の 42,240 も、ltx25 の
     // 46,080 も遥かに超える幾何である。
     const { bridge } = createPanelBridge({ media: { durationSec: 30, width: 1920, height: 1088 } });
     const panel = renderPanel(bridge);
@@ -488,7 +488,7 @@ describe("OutpaintingPanel", () => {
 
     // 前提の確認: キャンバスも尺も本当にその値になっている。
     expect(panel.getByText(/generating at 1920 x 1088 px/i)).toBeInTheDocument();
-    expect(sliderValue(panel, /duration/i)).toBe("361");
+    expect(sliderValue(panel, /duration/i)).toBe("345");
 
     // 快適超過の警告は出ない。文言は `edit.comfortWarning`（「units of work」を
     // 含む唯一のバナー）で、上のテストが見ている `edit.spillWarning`

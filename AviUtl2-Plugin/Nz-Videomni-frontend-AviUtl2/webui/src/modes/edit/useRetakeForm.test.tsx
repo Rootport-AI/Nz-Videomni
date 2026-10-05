@@ -244,11 +244,23 @@ describe("useRetakeForm — 窓", () => {
       useRetakeForm({ nativeBridge, initialIntent: makeIntent(), engineLabel: "LTX 2.3" }),
     );
     expect(unknown.result.current.stage2WindowLabel("w46", template)).toBe("46f（LTX 2.3 1216×704）");
+    // §1-31: 行は重みの種別で引く（LTX 2.5 4bit の連結 46,376）。
     const ltx25 = renderHook(() =>
+      useRetakeForm({
+        nativeBridge,
+        initialIntent: makeIntent(),
+        engineFamily: "ltx25",
+        weightClass: "4bit",
+        engineLabel: "LTX 2.5",
+      }),
+    );
+    expect(ltx25.result.current.stage2WindowLabel("w46", template)).toBe("46f（LTX 2.5 1344×768）");
+    expect(ltx25.result.current.stage2WindowLabel("w61", template)).toBe("61f（LTX 2.5 1152×640）");
+    // 種別が不明なら行に当たらず、配信のスカラー予算（40,000）へ退避する。
+    const unknownClass = renderHook(() =>
       useRetakeForm({ nativeBridge, initialIntent: makeIntent(), engineFamily: "ltx25", engineLabel: "LTX 2.5" }),
     );
-    expect(ltx25.result.current.stage2WindowLabel("w46", template)).toBe("46f（LTX 2.5 1280×768）");
-    expect(ltx25.result.current.stage2WindowLabel("w61", template)).toBe("61f（LTX 2.5 1152×640）");
+    expect(unknownClass.result.current.stage2WindowLabel("w46", template)).toBe("46f（LTX 2.5 1216×704）");
   });
 
   // §1-19 (2026-08-11): 型レベルの露出防止ガード。バックエンドは

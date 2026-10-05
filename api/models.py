@@ -1192,7 +1192,8 @@ class GenerateChainRequest(BaseModel):
     # fewer attention tokens per tile but gets MORE seams (owner decision); the
     # "w25".."w61" ladder (named for the window length) gets FEWER seams at the
     # cost of a heavier tile against the comfortable per-tile budget (the chain
-    # budgets in config.py's comfort_budgets).
+    # budgets in the comfort_budgets table, served from the base-model
+    # manifests' ``comfort`` block).
     #
     # Named for the geometry, NOT for a duration: the window's advance is a
     # LATENT-frame count, so its wall-clock length depends on frame_rate. The UI

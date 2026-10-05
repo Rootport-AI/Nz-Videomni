@@ -146,6 +146,13 @@ export interface UseGenerationFormDeps {
    * compatibility shim — i.e. exactly the pre-2026-08-31 behaviour, with no
    * startup flicker. */
   engineFamily?: string | undefined;
+  /** §1-31: the LOADED transformer's weight class
+   * (`useBaseModels().activeWeightClass` — `"4bit"`, `"8bit"`, `"q6k"`),
+   * matched against the served rows' `requires.weight_class` beside
+   * {@link engineFamily}. Omitted/`""` = unknown: no `weight_class` joins the
+   * match, so a typed row misses and the marker falls back to the legacy
+   * table. */
+  weightClass?: string | undefined;
 }
 
 function noopSetControlLora(): void {
@@ -458,6 +465,8 @@ export function useGenerationForm(
   // "engine unknown" case `resolveComfortRow` answers with its compatibility
   // shim, so an omitted dep reproduces the pre-table behaviour exactly.
   const engineFamily = deps.engineFamily;
+  // §1-31: the weight class joins the match beside the engine family.
+  const weightClass = deps.weightClass;
 
   const setControlLoraStrength = useCallback(
     (raw: number) => {
@@ -687,8 +696,8 @@ export function useGenerationForm(
   // auto-adjust effect reads `spillThresholdFrames` and would otherwise see it
   // in its temporal dead zone.
   const comfortRow = useMemo(
-    () => resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable),
-    [config.limits, engineFamily, acceleration, sageAvailable],
+    () => resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable, weightClass),
+    [config.limits, engineFamily, acceleration, sageAvailable, weightClass],
   );
   const smartComfortFrames = comfortRow
     ? comfortFramesForBudget(

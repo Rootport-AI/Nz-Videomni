@@ -22,7 +22,7 @@
 
 import type { AppLimits } from "../api/types";
 import { clamp } from "../modes/single/paramUtils";
-import type { AccelerationRequestFields, AccelerationSettings } from "./accelerationSettings";
+import type { AccelerationSettings } from "./accelerationSettings";
 import { effectiveAccelerationFields } from "./accelerationSettings";
 import { CHAIN_COMFORT_TOKEN_BUDGET, resolveChainComfortBudget } from "./tokenBudget";
 
@@ -31,13 +31,13 @@ import { CHAIN_COMFORT_TOKEN_BUDGET, resolveChainComfortBudget } from "./tokenBu
  * served scalar key produced a usable budget — see
  * {@link resolveSingleComfortBudget}.
  *
- * Calibrated 2026-08-18 from a 4-stage/21-job real-device run across 3
- * resolutions x both orientations, ALL FIVE Acceleration toggles on. 44,880 is
- * the largest common comfortable value, anchored at M2 = 1920x1088, 169
- * frames (exactly 44,880 tokens by {@link comfortFramesForBudget}'s own formula
- * run in reverse). Re-confirmed 2026-08-31 at two points, and adopted
- * unconditionally by LTX 2.5 (which is comfortable at the same line whatever
- * the acceleration settings are). */
+ * A COMPATIBILITY value (§1-31, 2026-10-06): it only matters for a server that
+ * publishes no `comfort_budgets` table, and for the moment before
+ * `GET /models` has told us the engine family. The real lines live in the
+ * served table, one row per base model × weight class (the backend's
+ * `scripts/manifests/*.json` `comfort` block, `Docs/COMFORT_LIMIT_TABLE.md`
+ * section 1). The number itself is the 2026-08-18 calibration (all five
+ * Acceleration toggles on, anchored at 1920x1088 / 169 frames), kept as is. */
 export const SINGLE_COMFORT_TOKEN_BUDGET = 44880;
 
 /** The served `config.limits.single_comfort_token_budget`, or the mirrored
@@ -97,11 +97,10 @@ export interface ResolvedComfortRow {
  * `spill_free_frames` table). */
 function matchesRequires(
   requires: Record<string, string | boolean>,
-  fields: Required<AccelerationRequestFields>,
+  fields: Readonly<Record<string, string | boolean | undefined>>,
 ): boolean {
-  const bag: Record<string, string | boolean | undefined> = fields;
   for (const [key, want] of Object.entries(requires)) {
-    if (bag[key] !== want) return false;
+    if (fields[key] !== want) return false;
   }
   return true;
 }
@@ -142,14 +141,26 @@ function usableBudget(published: number | undefined, fallback: number): number {
  * `effectiveAccelerationFields`). The field bag is built ONCE here rather than
  * by the caller, precisely so it never ends up in a React dependency array
  * (it is a fresh object every call — R-9).
+ *
+ * `weightClass` (§1-31) is the loaded transformer's weight class
+ * (`useBaseModels`' `activeWeightClass` — `"4bit"`, `"8bit"`, `"q6k"`). When
+ * known it joins the field bag as `weight_class`, the key every served row
+ * carries; when unknown (`""`/omitted) it is left out, so every typed row
+ * misses and the caller falls back exactly as for an unmatched configuration.
+ * The compatibility shim (step 1) never looks at it.
  */
 export function resolveComfortRow(
   limits: AppLimits,
   engineFamily: string | undefined,
   acceleration: AccelerationSettings,
   sageAvailable: boolean | null,
+  weightClass?: string,
 ): ResolvedComfortRow | null {
-  const fields = effectiveAccelerationFields(acceleration, sageAvailable);
+  const accelerationFields = effectiveAccelerationFields(acceleration, sageAvailable);
+  const fields: Readonly<Record<string, string | boolean | undefined>> =
+    weightClass === undefined || weightClass === ""
+      ? accelerationFields
+      : { ...accelerationFields, weight_class: weightClass };
   const table = limits.comfort_budgets;
 
   if (!table || engineFamily === undefined || engineFamily === "") {

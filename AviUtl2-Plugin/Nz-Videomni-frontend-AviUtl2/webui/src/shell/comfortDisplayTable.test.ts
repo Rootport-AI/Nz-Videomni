@@ -3,18 +3,19 @@ import type { AppLimits } from "../api/types";
 import { FALLBACK_APP_CONFIG } from "../modes/single/defaultConfig";
 import type { ComfortDisplayColumn } from "./comfortDisplayTable";
 import { comfortDisplayTableFor, resolveComfortCell } from "./comfortDisplayTable";
+import * as comfortDisplayTableModule from "./comfortDisplayTable";
 
 /** The served limits, overridable per test. The base is
  * `FALLBACK_APP_CONFIG.limits`, which mirrors the backend's own defaults —
- * `spill_free_frames` for the legacy column and `comfort_budgets` (single
- * budget 44,880, factors 32/8) for the derived ones. Same helper shape as
- * `comfortTable.test.ts` and `outpaintBudget.test.ts`. */
+ * `spill_free_frames` for the legacy column and `comfort_budgets` (one row per
+ * base model × weight class since §1-31, factors 32/8) for the derived ones.
+ * Same helper shape as `comfortTable.test.ts` and `outpaintBudget.test.ts`. */
 function limitsWith(overrides: Partial<AppLimits> = {}): AppLimits {
   return { ...FALLBACK_APP_CONFIG.limits, ...overrides };
 }
 
 /** A column of each source kind, built here rather than plucked out of the
- * shipped table, so the four branches of `resolveComfortCell` are exercised
+ * shipped table, so both branches of `resolveComfortCell` are exercised
  * independently of which columns the LTX table happens to carry. */
 const LEGACY_COLUMN: ComfortDisplayColumn = {
   id: "test-legacy",
@@ -23,14 +24,16 @@ const LEGACY_COLUMN: ComfortDisplayColumn = {
 };
 const BUDGET_COLUMN: ComfortDisplayColumn = {
   id: "test-budget",
-  labelKey: "comfortColumnLtxAllOn",
-  source: { kind: "budget", engineFamily: "ltx" },
+  labelKey: "comfortColumnLtx4bit",
+  source: { kind: "budget", engineFamily: "ltx", weightClass: "4bit" },
 };
-const STATIC_COLUMN: ComfortDisplayColumn = {
-  id: "test-static",
-  labelKey: "comfortColumnLtx25Q6",
-  source: { kind: "static", frames: { "1280x768": 361 } },
-};
+
+/** The shipped column with this id (the test fails loudly when it is gone). */
+function shippedColumn(id: string): ComfortDisplayColumn {
+  const column = comfortDisplayTableFor("ltx")?.columns.find((c) => c.id === id);
+  if (!column) throw new Error(`no shipped column ${id}`);
+  return column;
+}
 
 describe("comfortDisplayTableFor", () => {
   it("gives both LTX families the same table", () => {
@@ -58,46 +61,45 @@ describe("resolveComfortCell", () => {
     expect(resolveComfortCell(limitsWith(), "896x1152", LEGACY_COLUMN)).toBeNull();
   });
 
-  it("derives a `budget` column from the served row at the calibrated anchors", () => {
-    // The closed-form inverse of the token formula at the served 44,880 with
-    // factors 32/8 — the same three anchors `comfortTable.test.ts` pins
-    // `comfortFramesForBudget` itself with, reached here through the served
-    // row rather than through literals.
+  it("derives a `budget` column from the served row of its family AND weight class", () => {
+    // The closed-form inverse of the token formula at the served 4bit line
+    // 42,840 with factors 32/8, reached through the served row.
     const limits = limitsWith();
-    expect(limits.comfort_budgets?.ltx?.rows[0]?.single_budget).toBe(44880);
-    expect(resolveComfortCell(limits, "1280x768", BUDGET_COLUMN)).toBe(361);
-    expect(resolveComfortCell(limits, "1920x1088", BUDGET_COLUMN)).toBe(169);
-    expect(resolveComfortCell(limits, "2560x1472", BUDGET_COLUMN)).toBe(89);
-    expect(resolveComfortCell(limits, "896x1152", BUDGET_COLUMN)).toBe(345);
+    expect(limits.comfort_budgets?.ltx?.rows[0]?.single_budget).toBe(42840);
+    expect(resolveComfortCell(limits, "1280x768", BUDGET_COLUMN)).toBe(345);
+    expect(resolveComfortCell(limits, "1920x1088", BUDGET_COLUMN)).toBe(161);
+    expect(resolveComfortCell(limits, "2560x1472", BUDGET_COLUMN)).toBe(81);
   });
 
   it("selects the row by its `requires` condition, not by position", () => {
-    // A first row under a DIFFERENT condition (sdpa, not the all-on one the
-    // column resolves against) must not win just because it is rows[0] — the
-    // all-on row further down the list is the one that has to match.
+    // Earlier rows under a DIFFERENT condition (sdpa, or another weight class)
+    // must not win just because they come first — the all-on 4bit row further
+    // down the list is the one that has to match.
     const limits = limitsWith({
       comfort_budgets: {
         ltx: {
           spatial_factor: 32,
           temporal_factor: 8,
           rows: [
-            { requires: { attention_backend: "sdpa" }, single_budget: 10000, chain_budget: 10000 },
+            { requires: { weight_class: "4bit", attention_backend: "sdpa" }, single_budget: 10000, chain_budget: 10000 },
+            { requires: { weight_class: "8bit" }, single_budget: 11000, chain_budget: 11000 },
             {
               requires: {
+                weight_class: "4bit",
                 attention_backend: "sage",
                 block_swap_prefetch: true,
                 keep_resident: true,
                 fused_gguf_dequant_kernel: true,
                 vae_mode: "prune_vaed",
               },
-              single_budget: 44880,
-              chain_budget: 40000,
+              single_budget: 42840,
+              chain_budget: 42240,
             },
           ],
         },
       },
     });
-    expect(resolveComfortCell(limits, "1280x768", BUDGET_COLUMN)).toBe(361);
+    expect(resolveComfortCell(limits, "1280x768", BUDGET_COLUMN)).toBe(345);
   });
 
   it("clamps a `budget` column to the served frame ceiling", () => {
@@ -120,9 +122,17 @@ describe("resolveComfortCell", () => {
     expect(resolveComfortCell(limits, "1280x768", BUDGET_COLUMN)).toBeNull();
   });
 
-  it("reads a `static` column's own points, and gives `null` for anything it does not carry", () => {
-    expect(resolveComfortCell(limitsWith(), "1280x768", STATIC_COLUMN)).toBe(361);
-    expect(resolveComfortCell(limitsWith(), "2560x1472", STATIC_COLUMN)).toBeNull();
+  it("gives `null` for a `budget` column when no row carries its weight class", () => {
+    const limits = limitsWith({
+      comfort_budgets: {
+        ltx: {
+          spatial_factor: 32,
+          temporal_factor: 8,
+          rows: [{ requires: { weight_class: "8bit" }, single_budget: 32640, chain_budget: 32384 }],
+        },
+      },
+    });
+    expect(resolveComfortCell(limits, "1280x768", BUDGET_COLUMN)).toBeNull();
   });
 });
 
@@ -143,71 +153,70 @@ describe("the LTX table as it ships", () => {
     }
   });
 
-  it("carries the calibrated `2.5 Q6` points and leaves the rest of that column empty", () => {
-    // 数値の正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §10。
-    const table = comfortDisplayTableFor("ltx25");
-    const column = table?.columns.find((c) => c.id === "ltx25-q6");
-    expect(column).toBeDefined();
-    if (!column) return;
+  it("carries seven columns: the 2.3 default table, then 2 families × 3 weight classes", () => {
+    const columns = comfortDisplayTableFor("ltx")?.columns ?? [];
+    expect(columns.map((c) => c.id)).toEqual([
+      "ltx-default",
+      "ltx-4bit",
+      "ltx-8bit",
+      "ltx-q6k",
+      "ltx25-4bit",
+      "ltx25-8bit",
+      "ltx25-q6k",
+    ]);
+    expect(columns.map((c) => c.source)).toEqual([
+      { kind: "legacy" },
+      { kind: "budget", engineFamily: "ltx", weightClass: "4bit" },
+      { kind: "budget", engineFamily: "ltx", weightClass: "8bit" },
+      { kind: "budget", engineFamily: "ltx", weightClass: "q6k" },
+      { kind: "budget", engineFamily: "ltx25", weightClass: "4bit" },
+      { kind: "budget", engineFamily: "ltx25", weightClass: "8bit" },
+      { kind: "budget", engineFamily: "ltx25", weightClass: "q6k" },
+    ]);
+  });
+
+  it("no longer exports any hand-written measured points or lines (§1-31: every number is served)", () => {
+    // The three constants that used to live here (`LTX25_Q6_FRAMES`,
+    // `LTX25_FP8_SINGLE_BUDGET`, `LTX_FP8_DEFAULT_FRAMES`) and the `static` /
+    // `fixedBudget` column kinds are gone.
+    expect(Object.keys(comfortDisplayTableModule).sort()).toEqual([
+      "COMFORT_DISPLAY_TABLES",
+      "COMFORT_TABLE_BY_ENGINE_FAMILY",
+      "comfortDisplayTableFor",
+      "resolveComfortCell",
+    ]);
+  });
+
+  it("converts each served line at 1280x768 (the owner's visual-check table)", () => {
     const limits = limitsWith();
-    expect(resolveComfortCell(limits, "1280x768", column)).toBe(361);
-    expect(resolveComfortCell(limits, "1920x1088", column)).toBe(161);
-    expect(resolveComfortCell(limits, "896x1152", column)).toBe(313);
-    expect(resolveComfortCell(limits, "512x320", column)).toBeNull();
-    expect(resolveComfortCell(limits, "960x576", column)).toBeNull();
-    expect(resolveComfortCell(limits, "2560x1472", column)).toBeNull();
+    expect(resolveComfortCell(limits, "1280x768", shippedColumn("ltx-8bit"))).toBe(265);
+    expect(resolveComfortCell(limits, "1280x768", shippedColumn("ltx-4bit"))).toBe(345);
+    expect(resolveComfortCell(limits, "1280x768", shippedColumn("ltx-q6k"))).toBe(353);
+    expect(resolveComfortCell(limits, "1280x768", shippedColumn("ltx25-8bit"))).toBe(313);
+    expect(resolveComfortCell(limits, "1280x768", shippedColumn("ltx25-4bit"))).toBe(377);
+    expect(resolveComfortCell(limits, "1280x768", shippedColumn("ltx25-q6k"))).toBe(353);
+    // The 2.3 default column is the measured table, not a line.
+    expect(resolveComfortCell(limits, "1280x768", shippedColumn("ltx-default"))).toBe(273);
   });
 
-  it("carries six columns, including the two fp8 ones", () => {
-    const ids = comfortDisplayTableFor("ltx")?.columns.map((c) => c.id) ?? [];
-    expect(ids).toHaveLength(6);
-    expect(ids).toContain("ltx-fp8-default");
-    expect(ids).toContain("ltx25-fp8");
-  });
-
-  it("extends the `2.5 fp8` line to every row, reproducing the three measured points", () => {
-    // 数値の正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` 第13節。
-    const column = comfortDisplayTableFor("ltx25")?.columns.find((c) => c.id === "ltx25-fp8");
-    expect(column).toBeDefined();
-    if (!column) return;
-    const limits = limitsWith();
-    expect(resolveComfortCell(limits, "1280x768", column)).toBe(313);
-    expect(resolveComfortCell(limits, "1920x1088", column)).toBe(145);
-    expect(resolveComfortCell(limits, "896x1152", column)).toBe(297);
-    expect(resolveComfortCell(limits, "2560x1472", column)).toBe(73);
-    expect(resolveComfortCell(limits, "512x320", column)).toBe(limits.max_num_frames);
-    expect(resolveComfortCell(limits, "960x576", column)).toBe(limits.max_num_frames);
-  });
-
-  it("carries the single `2.3 fp8 (default)` point and leaves the rest of that column empty", () => {
+  it("extends every weight-class line to every row (no hand-written gaps any more)", () => {
     const table = comfortDisplayTableFor("ltx");
-    const column = table?.columns.find((c) => c.id === "ltx-fp8-default");
-    expect(column).toBeDefined();
-    if (!table || !column) return;
+    if (!table) throw new Error("no table");
     const limits = limitsWith();
-    expect(resolveComfortCell(limits, "1920x1088", column)).toBe(121);
-    const others = table.rows.filter((r) => r !== "1920x1088");
-    expect(others).toHaveLength(5);
-    for (const resolution of others) {
-      expect(resolveComfortCell(limits, resolution, column)).toBeNull();
+    for (const column of table.columns.filter((c) => c.source.kind === "budget")) {
+      for (const resolution of table.rows) {
+        expect(resolveComfortCell(limits, resolution, column)).not.toBeNull();
+      }
     }
+    // Two spot checks off the 1280x768 row: 1920x1088 on the 8bit lines.
+    expect(resolveComfortCell(limits, "1920x1088", shippedColumn("ltx-8bit"))).toBe(121);
+    expect(resolveComfortCell(limits, "1920x1088", shippedColumn("ltx25-8bit"))).toBe(145);
   });
 
-  it("gives `null` for the `2.5 fp8` column when its family is not in the served table", () => {
-    const column = comfortDisplayTableFor("ltx25")?.columns.find((c) => c.id === "ltx25-fp8");
-    expect(column).toBeDefined();
-    if (!column) return;
+  it("gives `null` for every weight-class column when its family is not in the served table", () => {
     const limits = limitsWith({ comfort_budgets: {} });
-    expect(resolveComfortCell(limits, "1280x768", column)).toBeNull();
-  });
-
-  it("gives `null` for the `2.5 fp8` column when its family's profile has no rows", () => {
-    const column = comfortDisplayTableFor("ltx25")?.columns.find((c) => c.id === "ltx25-fp8");
-    expect(column).toBeDefined();
-    if (!column) return;
-    const limits = limitsWith({
-      comfort_budgets: { ltx25: { spatial_factor: 32, temporal_factor: 8, rows: [] } },
-    });
-    expect(resolveComfortCell(limits, "1280x768", column)).toBeNull();
+    for (const id of ["ltx-4bit", "ltx-8bit", "ltx-q6k", "ltx25-4bit", "ltx25-8bit", "ltx25-q6k"]) {
+      expect(resolveComfortCell(limits, "1280x768", shippedColumn(id))).toBeNull();
+    }
   });
 });

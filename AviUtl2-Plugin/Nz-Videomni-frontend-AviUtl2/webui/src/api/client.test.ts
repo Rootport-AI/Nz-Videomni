@@ -28,7 +28,7 @@ describe("api/client", () => {
 
     const config = await client.getConfig();
 
-    expect(config.generation_defaults).toMatchObject({ width: 1280, height: 768, num_frames: 361 });
+    expect(config.generation_defaults).toMatchObject({ width: 1280, height: 768, num_frames: 345 });
     expect(config.generation_presets.smoke_test).toMatchObject({ width: 384, height: 256, num_frames: 17 });
     expect(config.limits.max_num_frames).toBe(481);
     expect(config.upload.allowed_image_extensions).toContain(".png");

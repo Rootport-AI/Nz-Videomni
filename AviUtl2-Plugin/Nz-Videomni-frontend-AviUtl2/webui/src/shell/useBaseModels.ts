@@ -52,6 +52,15 @@ export interface BaseModelOption {
    * key, which `shell/comfortTable.ts` reads as "engine unknown" and answers
    * with its compatibility shim. */
   engineFamily: string;
+  /** The weight class of the transformer this base model has selected
+   * (`BaseModelBlock.transformer_weight_class` — `"4bit"`, `"8bit"`, `"q6k"`;
+   * §1-31, 2026-10-06), the `weight_class` key a served comfort row's
+   * `requires` is matched against. `""` when the server sent `null` (could not
+   * tell, or this is not the active base model) or omitted the field (a
+   * backend older than §1-31) — `shell/comfortTable.ts` reads `""` as
+   * "unknown" and adds no `weight_class` to its match, so every typed row
+   * misses and the legacy fallbacks apply. */
+  weightClass: string;
 }
 
 /** What a switch attempt settled on. Returned by
@@ -135,6 +144,16 @@ export interface UseBaseModelsResult {
    * which `shell/comfortTable.ts` reads as "engine unknown" → the
    * compatibility shim, i.e. no startup flicker. */
   activeEngineFamily: string;
+  /** The LOADED base model's transformer weight class (§1-31) — see
+   * {@link BaseModelOption.weightClass}. Read off `active` for the same reason
+   * {@link activeEngineFamily} is, and threaded down beside it to every
+   * `resolveComfortRow` caller. `""` = unknown.
+   *
+   * Changing ONLY the transformer file (Settings' Models panel) does not go
+   * through {@link switchBaseModel}, so the shell re-runs {@link refresh}
+   * whenever a pipeline load finishes (`AppShell`, on `pipelineLoading`'s
+   * true→false edge) to pick the new class up. */
+  activeWeightClass: string;
   /** The mode tabs {@link unsupportedFeatures} makes unreachable — the shell
    * greys these and bounces out of one if it is the current mode. */
   disabledModes: AppMode[];
@@ -159,6 +178,9 @@ function toOption(block: BaseModelBlock): BaseModelOption {
     // entirely, and `""` is exactly the "engine unknown" value
     // `shell/comfortTable.ts` handles with its compatibility shim.
     engineFamily: block.engine_family ?? "",
+    // `null` (the server could not tell, or a non-active base model) and an
+    // absent field (a backend older than §1-31) both mean "unknown".
+    weightClass: block.transformer_weight_class ?? "",
   };
 }
 
@@ -259,6 +281,10 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     () => options.find((o) => o.id === active)?.engineFamily ?? "",
     [options, active],
   );
+  const activeWeightClass = useMemo(
+    () => options.find((o) => o.id === active)?.weightClass ?? "",
+    [options, active],
+  );
   const disabledModes = useMemo(
     () => disabledModesFor(unsupportedFeatures),
     [unsupportedFeatures],
@@ -270,6 +296,7 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     active,
     unsupportedFeatures,
     activeEngineFamily,
+    activeWeightClass,
     disabledModes,
     switchBaseModel,
     refresh,

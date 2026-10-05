@@ -94,6 +94,7 @@ from .comfort import (
     engine_info_from_models,
     stage2_window_choices_for,
     status_availability,
+    weight_class_from_models,
 )
 
 
@@ -919,8 +920,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                             info=L("info_stage2_window"),
                         ), "lbl_stage2_window")
                         reg(chain_stage2_window, "info_stage2_window", "info")
-                        # {"engine_family", "engine_label", "sage_available",
-                        #  "prefetch_available"} of the ACTIVE base model.
+                        # {"engine_family", "engine_label", "weight_class",
+                        #  "sage_available", "prefetch_available"} of the
+                        #  ACTIVE base model.
                         chain_engine_state = gr.State({})
 
                         # clip list: CHAIN_MAX_CLIPS fixed slots (the first
@@ -2397,7 +2399,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         def _chain_engine_state(models_json):
             """The Clip Chain tab's engine State: the ACTIVE base
-            model's engine family + display name from /models, plus sage /
+            model's engine family + display name + transformer weight class
+            from /models, plus sage /
             prefetch availability from /status (``None`` = unknown, e.g. the
             status fetch failed — counted as available, like the WebUI)."""
             family, label = engine_info_from_models(models_json)
@@ -2408,6 +2411,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             sage, prefetch = status_availability(
                 status_json if isinstance(status_json, dict) else None)
             return {"engine_family": family, "engine_label": label,
+                    "weight_class": weight_class_from_models(models_json),
                     "sage_available": sage, "prefetch_available": prefetch}
 
         def refresh_model_dropdowns(lang, warn: bool = True):

@@ -158,6 +158,11 @@ export interface UseChainFormDeps {
    * `shell/comfortTable.ts`'s compatibility shim, so every pre-existing unit
    * test keeps its current budget. */
   engineFamily?: string | undefined;
+  /** §1-31: the LOADED transformer's weight class
+   * (`useBaseModels().activeWeightClass`), matched against the served rows'
+   * `requires.weight_class` beside {@link engineFamily}. Omitted/`""` =
+   * unknown: a typed row misses and the scalar budget applies. */
+  weightClass?: string | undefined;
   /** §3-165: the LOADED base model's display name (`/models`
    * `base_models[].display_name`, e.g. "LTX 2.5"), owned by `shell/AppShell.tsx`
    * alongside {@link engineFamily}. Only printed in the stage-2 window
@@ -1138,6 +1143,7 @@ export function useChainForm(
   // shim — i.e. the pre-table budget.
   const sageAvailable = deps.sageAvailable ?? null;
   const engineFamily = deps.engineFamily;
+  const weightClass = deps.weightClass;
   const engineLabel = deps.engineLabel ?? "";
 
   // ── §1-15 参照動画: declared FIRST because the width/height grid depends on
@@ -2259,13 +2265,29 @@ export function useChainForm(
   // so this fires exactly once per transition rather than fighting the user
   // every render — a value dialed in mid-state (`overlapFrames` is
   // deliberately NOT a dep here) survives untouched.
+  //
+  // §1-31 owner ruling (2026-10-06): ENTERING reverse mode drops to 1 only
+  // when 1 passes the multi-clip audio-overlap check
+  // (`endSourceAudioOverlapOk`, the same test `endSourceAudioOverlapBudget`
+  // reads below); otherwise it drops to 2 — the 345-frame default chain at
+  // 24fps fails at 1. If 2 fails too it stays at 2 and the existing
+  // "raise the seam-blend width" reason takes over. `reverseEntryOverlap` is
+  // a dep only so the effect sees the current clips; the ref guard keeps
+  // every non-transition run a no-op.
+  const reverseEntryOverlap = endSourceAudioOverlapOk(
+    clips.map((clip) => clip.numFrames),
+    common.frameRate,
+    1,
+  )
+    ? 1
+    : 2;
   const wasReverseEndSource = useRef(isReverseEndSource);
   useEffect(() => {
     if (isReverseEndSource !== wasReverseEndSource.current) {
       wasReverseEndSource.current = isReverseEndSource;
-      setOverlapFrames(isReverseEndSource ? 1 : DEFAULT_OVERLAP_FRAMES);
+      setOverlapFrames(isReverseEndSource ? reverseEntryOverlap : DEFAULT_OVERLAP_FRAMES);
     }
-  }, [isReverseEndSource, setOverlapFrames]);
+  }, [isReverseEndSource, reverseEntryOverlap, setOverlapFrames]);
 
   const firstClipNumFrames = clips[0]?.numFrames ?? 0;
   const contextFramesValid = isContextFramesValid(
@@ -2446,8 +2468,8 @@ export function useChainForm(
   // `useGenerationForm.ts`'s own `comfortRow` uses, for consistency across the
   // two hooks that call `resolveComfortRow`.
   const comfortRow = useMemo(
-    () => resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable),
-    [config.limits, engineFamily, acceleration, sageAvailable],
+    () => resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable, weightClass),
+    [config.limits, engineFamily, acceleration, sageAvailable, weightClass],
   );
   const comfortBudget = comfortRow?.chainBudget ?? resolveChainComfortBudget(config.limits.chain_comfort_token_budget);
   const chainWindowOverBudget = isChainWindowOverBudget(common.width, common.height, stage2Window, comfortBudget);

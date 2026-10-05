@@ -128,21 +128,21 @@ generation_presets:
     crop_output:
       width: 1280
       height: 720
-    num_frames: 361 # 賢い快適上限マーカー（limits.single_comfort_token_budget）の算出値
+    num_frames: 345 # 2.3 4bit の線 42,840 に収まる値（Docs/COMFORT_LIMIT_TABLE.md 第 1 節）
   FHD_1080p:
     width: 1920
     height: 1088
     crop_output:
       width: 1920
       height: 1080
-    num_frames: 169 # 賢い快適上限マーカー算出値
+    num_frames: 161 # 2.3 4bit の線 42,840 に収まる値（Docs/COMFORT_LIMIT_TABLE.md 第 1 節）
   WQHD_1440p:
     width: 2560
     height: 1472
     crop_output:
       width: 2560
       height: 1440
-    num_frames: 89 # 賢い快適上限マーカー算出値
+    num_frames: 81 # 2.3 4bit の線 42,840 に収まる値（Docs/COMFORT_LIMIT_TABLE.md 第 1 節）
 
 generation_defaults:
   # 操作パネル（WebUI）のフォームの初期値（Gradio と API の既定値には効かない）。
@@ -150,7 +150,7 @@ generation_defaults:
   width: 1280
   height: 768
   crop_output: null   # 既定OFF。プリセット選択時はプリセットの値が適用される。
-  num_frames: 361
+  num_frames: 345
   frame_rate: 24.0
   num_inference_steps: 8
   guidance_scale: 1.0
@@ -235,13 +235,15 @@ limits:
   retake_window_max_frames: 169
   # 快適な stage-2 1 窓あたりの注意トークン上限。/config で公開する。サーバはこの値で
   # 何も判定しない（拒否も丸めもしない）純粋な助言値。トークン = (幅//32) × (高さ//32) × 窓の潜在フレーム数。
-  # クライアントは目安線を、まず limits.comfort_budgets（エンジンごとの表。既定の表は
-  # config.py の _default_comfort_budgets）からエンジンと高速化設定に合う行を引き、合う行が
-  # 無いとき（表が無い・エンジンが未確定・LTX 2.3 で 5 つの高速化トグルの一部が off など）に
-  # この値へ戻る。この鍵は書かなければ config.py の既定値（chain_math の
-  # CHAIN_COMFORT_TOKEN_BUDGET＝40000）が配信され、書くとその値で固定される（将来の定数
-  # 調整が届かなくなる）ので、下の行は例示としてコメントアウトしてある。目安線を動かす
-  # ときは comfort_budgets も見直す（comfort_budgets も config.yaml に書くと表全体が置き換わる）。
+  # クライアントは目安線を、まず limits.comfort_budgets（ベースモデルごとの表）から
+  # エンジン・重みの種別（4bit／8bit／Q6_K）・高速化設定に合う行を引き、合う行が無いとき
+  # （表が無い・エンジンや種別が未確定・LTX 2.3 の 4bit／Q6_K で 5 つの高速化トグルの一部が
+  # off など）にこの値へ戻る（互換値）。comfort_budgets の正本はマニフェスト
+  # （scripts/manifests/*.json の comfort）。ここ（config.yaml）に comfort_budgets を書いても
+  # 無視され、起動時に WARNING が出る。値と経緯は Docs/COMFORT_LIMIT_TABLE.md 第 1 節。
+  # この鍵は書かなければ config.py の既定値（chain_math の CHAIN_COMFORT_TOKEN_BUDGET＝40000）が
+  # 配信され、書くとその値で固定される（将来の定数調整が届かなくなる）ので、下の行は例示として
+  # コメントアウトしてある。
   # chain_comfort_token_budget: 40000
   # Create（単発 `/generate`）1 発が快適に収まる注意トークン上限。/config で公開。
   # chain_comfort_token_budget とは別軸（1 発は stage-2 タイル分割なしで全体を
@@ -251,8 +253,10 @@ limits:
   # いないとき、またはエンジンが未確定のとき。そのときは 5 つの高速化トグル（sage・
   # block_swap_prefetch・keep_resident・fused_gguf_dequant_kernel・vae_mode=prune_vaed）
   # が全て on ならこの値から賢いマーカーを算出し、1 つでも off なら
-  # spill_free_frames へフォールバックする。44,880 は実機検証で較正された
-  # 最大の共通快適値。正本は Docs/COMFORT_LIMIT_TABLE.md。
+  # spill_free_frames へフォールバックする。44,880 は重みの種別を区別していなかった
+  # ころの旧配信値で、いまは表を知らない古いクライアントと起動直後の一瞬だけに使われる
+  # 互換値。現在の線は種別ごとの表（正本はマニフェストの comfort、読み方は
+  # Docs/COMFORT_LIMIT_TABLE.md 第 1 節）。
   #
   # 注意: この鍵も書かなければ config.py の既定値（44880）が配信され、書くとその値で
   # 固定される（将来の定数調整が実機に届かなくなる）。chain_comfort_token_budget と同じく、

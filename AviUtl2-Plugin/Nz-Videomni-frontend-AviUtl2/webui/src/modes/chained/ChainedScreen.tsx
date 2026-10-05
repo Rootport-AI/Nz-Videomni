@@ -114,6 +114,11 @@ export interface ChainedScreenProps {
    * shim in `shell/comfortTable.ts`, i.e. the pre-table behaviour, so every
    * direct-render test that predates it keeps compiling. */
   engineFamily?: string | undefined;
+  /** §1-31: the LOADED transformer's weight class
+   * (`useBaseModels().activeWeightClass`), passed beside
+   * {@link engineFamily} to `useChainForm`'s `resolveComfortRow`.
+   * Omitted/`""` ⇒ unknown. */
+  weightClass?: string | undefined;
   /** §3-165: the LOADED base model's display name (`/models`
    * `base_models[].display_name`), printed in the stage-2 window dropdown's
    * labels. Omitted ⇒ `""`. */
@@ -162,6 +167,7 @@ export function ChainedScreen({
   acceleration,
   sageAvailable,
   engineFamily,
+  weightClass,
   engineLabel,
   v2vUnavailable,
   a2vUnavailable,
@@ -192,6 +198,7 @@ export function ChainedScreen({
       acceleration={acceleration}
       sageAvailable={sageAvailable}
       engineFamily={engineFamily}
+      weightClass={weightClass}
       engineLabel={engineLabel}
       v2vUnavailable={v2vUnavailable}
       a2vUnavailable={a2vUnavailable}
@@ -217,6 +224,7 @@ interface ChainedScreenBodyProps {
   acceleration?: AccelerationSettings | undefined;
   sageAvailable?: boolean | null | undefined;
   engineFamily?: string | undefined;
+  weightClass?: string | undefined;
   engineLabel?: string | undefined;
   v2vUnavailable?: boolean | undefined;
   a2vUnavailable?: boolean | undefined;
@@ -240,6 +248,7 @@ function ChainedScreenBody({
   acceleration,
   sageAvailable,
   engineFamily,
+  weightClass,
   engineLabel,
   v2vUnavailable = false,
   a2vUnavailable = false,
@@ -360,7 +369,17 @@ function ChainedScreenBody({
   const form = useChainForm(
     config,
     prompt,
-    { nativeBridge, controlLoraNames, depthLoraNames, nag, acceleration, sageAvailable, engineFamily, engineLabel },
+    {
+      nativeBridge,
+      controlLoraNames,
+      depthLoraNames,
+      nag,
+      acceleration,
+      sageAvailable,
+      engineFamily,
+      weightClass,
+      engineLabel,
+    },
     initialCommon,
   );
 

@@ -137,7 +137,7 @@ describe("App / W3 ⬇ insert the latest generation result here (insertLatestRes
     window.localStorage.clear();
     resetProvisionalReservation();
     mockDownloadAndInsert.mockReset();
-    mockDownloadAndInsert.mockResolvedValue({ layer: 0, frame: 0, filePath: "C:/out.mp4" });
+    mockDownloadAndInsert.mockResolvedValue({ layer: 0, frame: 0, filePath: "C:/out.mp4", usedFallback: false });
   });
   afterEach(() => {
     window.localStorage.clear();
@@ -208,6 +208,22 @@ describe("App / W3 ⬇ insert the latest generation result here (insertLatestRes
 
       await screen.findByText(/could not determine the insert position/i, undefined, { timeout: 5_000 });
       expect(mockDownloadAndInsert).not.toHaveBeenCalled();
+    },
+    15_000,
+  );
+
+  it(
+    "shows the frontmost-layer note (1-based) beside the success toast when the cursor insert retreated",
+    async () => {
+      mockDownloadAndInsert.mockResolvedValueOnce({ layer: 11, frame: 360, filePath: "C:/out.mp4", usedFallback: true });
+      const bridge = await renderShell([makeJob("job-done", "completed", "2026-07-22T00:05:00Z")]);
+      await waitForJobCount(1);
+
+      emit(bridge, layerSelection(4, 360));
+
+      // The success toast still fires; the note area adds the retreat notice.
+      await screen.findByText(/inserted the latest generation result/i, undefined, { timeout: 5_000 });
+      expect(await screen.findByText(/frontmost layer 12/i, undefined, { timeout: 5_000 })).toBeInTheDocument();
     },
     15_000,
   );

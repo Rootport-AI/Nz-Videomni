@@ -117,6 +117,9 @@ struct InsertMediaResult {
     Status status = Status::kInsertFailed;
     int layer = 0;  // resolved layer actually used
     int frame = 0;  // resolved frame actually used
+    // True when the create at the resolved layer/frame returned null (overlap)
+    // and the provider retried once on layer_max+1; `layer` is then that layer.
+    bool used_fallback = false;
 };
 
 using InsertMediaProvider = std::function<InsertMediaResult(const InsertMediaParams&)>;
@@ -394,8 +397,8 @@ using DeleteProvisionalProvider = std::function<bool(const DeleteProvisionalRequ
 // (get_media_info -> ProjectFramesForSeconds, exactly like InsertMediaEditProc).
 // When no marker is found, bridge_core does NOT call this provider at all - it
 // falls back to the plain insert_media provider (current selection / cursor,
-// real length), i.e. behaviour identical to timeline.insertMedia (owner
-// decision: normal-generation 🎞 must stay unchanged).
+// real length), i.e. behaviour identical to timeline.insertMedia, including
+// its one retreat to layer_max+1 when the cursor slot is occupied.
 //
 // Deliberately NO HasRoomForLength pre-check (unlike insertProvisional /
 // updateReservation): the marker we are deleting occupies the very slot we then

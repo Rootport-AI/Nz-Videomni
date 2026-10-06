@@ -49,7 +49,7 @@ export async function downloadAndInsertVideo(
   jobId: string,
   onPhase?: (phase: DownloadAndInsertPhase) => void,
   options: DownloadAndInsertOptions = {},
-): Promise<{ layer: number; frame: number; filePath: string }> {
+): Promise<{ layer: number; frame: number; filePath: string; usedFallback: boolean }> {
   let filePath: string;
   if (options.knownFilePath !== undefined) {
     // Re-insert of an already-downloaded clip: skip the download so we never
@@ -80,7 +80,7 @@ export async function downloadAndInsertVideo(
       layer: options.plainInsertAt.layer,
       frame: options.plainInsertAt.frame,
     });
-    return { layer: result.layer, frame: result.frame, filePath };
+    return { layer: result.layer, frame: result.frame, filePath, usedFallback: result.usedFallback };
   }
 
   // The V2V *joined* insert must NEVER replace a job's provisional marker
@@ -95,11 +95,11 @@ export async function downloadAndInsertVideo(
         ? { filePath, layer: options.position.layer, frame: options.position.frame }
         : { filePath },
     );
-    return { layer: result.layer, frame: result.frame, filePath };
+    return { layer: result.layer, frame: result.frame, filePath, usedFallback: result.usedFallback };
   }
 
-  const { layer, frame } = await insertForJob(nativeBridge, jobId, filePath);
-  return { layer, frame, filePath };
+  const { layer, frame, usedFallback } = await insertForJob(nativeBridge, jobId, filePath);
+  return { layer, frame, filePath, usedFallback };
 }
 
 /**
@@ -108,12 +108,13 @@ export async function downloadAndInsertVideo(
  * provisional marker in place (`mode:"replaced"`) or, when no marker remains,
  * inserts exactly like the plain `insertMedia` (`mode:"inserted"`). This
  * subsumes the old "insertMedia + deleteProvisionalByJob" two-call sequence.
+ * `usedFallback` drops the replace path's retreat here, so the notice fires only for a cursor insert.
  */
 export async function insertForJob(
   nativeBridge: NativeBridge,
   jobId: string,
   filePath: string,
-): Promise<{ layer: number; frame: number }> {
+): Promise<{ layer: number; frame: number; usedFallback: boolean }> {
   const result = await nativeBridge.request("timeline.insertMediaForJob", { jobId, filePath });
   // On any success (replaced OR inserted), sync-release the reservation seat
   // for this job if it is still tracked (adversarial-review Med 7). After a
@@ -124,5 +125,9 @@ export async function insertForJob(
   // the normal (already-settled) path is unaffected. This only touches the
   // in-memory seat state — it issues no bridge call and edits nothing.
   releaseIfSettled(jobId);
-  return { layer: result.layer, frame: result.frame };
+  return {
+    layer: result.layer,
+    frame: result.frame,
+    usedFallback: result.mode === "inserted" && result.usedFallback,
+  };
 }

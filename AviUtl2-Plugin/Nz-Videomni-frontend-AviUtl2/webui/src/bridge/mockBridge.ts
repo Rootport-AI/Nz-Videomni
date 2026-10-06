@@ -1888,6 +1888,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
       inserted: true,
       layer: params.layer ?? 1,
       frame: params.frame ?? 0,
+      usedFallback: false,
     };
   }
 
@@ -1897,8 +1898,9 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
    * placeholder's slot (the marker disappears from `scanProvisionals`, and the
    * video lands where it was). When absent, behave like `insertMedia`
    * (`mode:"inserted"`, cursor fallback layer 1 / frame 0). `usedFallback` is
-   * always false in the mock: the marker-slot collision -> `layer_max+1` retreat
-   * is a real-device-only path with no timeline geometry to model here. The
+   * always false in the mock (here and in `insertMedia`): the collision ->
+   * `layer_max+1` retreat (marker slot or cursor slot) is a real-device-only
+   * path with no timeline geometry to model here. The
    * `provisionals` Map is declared lower down (function hoisting keeps this
    * closure valid). */
   async function handleInsertMediaForJob(

@@ -196,9 +196,49 @@ TEST_CASE("insertMedia success echoes resolved layer/frame") {
     CHECK(j["result"]["inserted"] == true);
     CHECK(j["result"]["layer"] == 2);
     CHECK(j["result"]["frame"] == 100);
+    CHECK(j["result"]["usedFallback"] == false);
     CHECK(captured.file_path == "C:\\tmp\\a.mp4");
     CHECK(captured.has_layer == true);
     CHECK(captured.has_frame == true);
+}
+
+TEST_CASE("timeline.insertMedia reports usedFallback when insert_media fell back") {
+    RequestContext ctx = AvailableCtx();
+    ctx.insert_media = [](const InsertMediaParams&) -> InsertMediaResult {
+        InsertMediaResult r;
+        r.status = InsertMediaResult::Status::kOk;
+        r.layer = 12;  // landed on the layer_max+1 retreat
+        r.frame = 99;
+        r.used_fallback = true;
+        return r;
+    };
+    const std::string resp = HandleRequestJson(
+        R"({"id": 6, "method": "timeline.insertMedia",
+            "params": {"filePath": "C:\\tmp\\a.mp4"}})",
+        ctx);
+    const json j = json::parse(resp);
+    REQUIRE(j["ok"] == true);
+    CHECK(j["result"]["layer"] == 12);
+    CHECK(j["result"]["usedFallback"] == true);
+}
+
+TEST_CASE("timeline.insertMedia reports usedFallback false when no fallback happened") {
+    RequestContext ctx = AvailableCtx();
+    ctx.insert_media = [](const InsertMediaParams&) -> InsertMediaResult {
+        InsertMediaResult r;
+        r.status = InsertMediaResult::Status::kOk;
+        r.layer = 3;
+        r.frame = 99;
+        return r;
+    };
+    const std::string resp = HandleRequestJson(
+        R"({"id": 6, "method": "timeline.insertMedia",
+            "params": {"filePath": "C:\\tmp\\a.mp4"}})",
+        ctx);
+    const json j = json::parse(resp);
+    REQUIRE(j["ok"] == true);
+    CHECK(j["result"]["layer"] == 3);
+    CHECK(j["result"]["usedFallback"] == false);
 }
 
 TEST_CASE("insertMedia falls back to cursor position when layer/frame omitted") {
@@ -216,6 +256,7 @@ TEST_CASE("insertMedia falls back to cursor position when layer/frame omitted") 
     // Provider's cursor fallback values.
     CHECK(j["result"]["layer"] == 7);
     CHECK(j["result"]["frame"] == 99);
+    CHECK(j["result"]["usedFallback"] == false);
 }
 
 TEST_CASE("insertMedia maps provider statuses to error codes") {
@@ -2063,6 +2104,29 @@ TEST_CASE("insertMediaForJob falls back to a plain insert when no marker is foun
     CHECK(captured.file_path == "C:\\out.mp4");
     CHECK(captured.has_layer == false);
     CHECK(captured.has_frame == false);
+}
+
+TEST_CASE("insertMediaForJob reports usedFallback on the insert path when insert_media fell back") {
+    RequestContext ctx = AvailableCtx();
+    // No provisional objects on the timeline -> the not-found (insert) branch.
+    ctx.scan_objects = []() { return std::vector<ScannedObject>{}; };
+    ctx.insert_media = [](const InsertMediaParams&) -> InsertMediaResult {
+        InsertMediaResult r;
+        r.status = InsertMediaResult::Status::kOk;
+        r.layer = 12;  // landed on the layer_max+1 retreat
+        r.frame = 99;
+        r.used_fallback = true;
+        return r;
+    };
+    const std::string resp = HandleRequestJson(
+        R"({"id": 75, "method": "timeline.insertMediaForJob",
+            "params": {"jobId": "absent", "filePath": "C:\\out.mp4"}})",
+        ctx);
+    const json j = json::parse(resp);
+    REQUIRE(j["ok"] == true);
+    CHECK(j["result"]["mode"] == "inserted");
+    CHECK(j["result"]["layer"] == 12);
+    CHECK(j["result"]["usedFallback"] == true);
 }
 
 TEST_CASE("insertMediaForJob maps a not-found insert failure to its error code") {

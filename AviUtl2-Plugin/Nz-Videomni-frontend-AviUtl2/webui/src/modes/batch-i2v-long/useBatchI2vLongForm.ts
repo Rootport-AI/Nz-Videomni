@@ -211,9 +211,11 @@ export interface UseBatchI2vLongFormResult {
   // --- Guards ---
   /** This panel's own block reasons, in a stable display order. */
   blockReasons: I2vLongBlockReason[];
-  /** The Chain form's own `validityReasons`, passed through untouched (minus
-   * the source-video codes while `sourceVideoAttached` is already saying it
-   * better). Empty while the Chain form is valid. */
+  /** The Chain form's own `validityReasons`, passed through untouched —
+   * minus the material codes (source video / audio / reference / end) while
+   * the matching `*Attached` reason is already saying it better, and always
+   * minus `promptEmpty`, which this panel replaces with its own per-row
+   * judgement. Empty while the Chain form is valid. */
   chainBlockReasons: string[];
   /** `queue` numbers of the runnable rows whose COMPOSED prompt is empty —
    * the rows behind a `promptEmpty` reason. Empty otherwise. Surfaced so the
@@ -510,10 +512,13 @@ export function useBatchI2vLongForm(
   // The Chain form's own gates, expanded verbatim rather than collapsed into a
   // single "chain settings are invalid" line. The source-video codes are
   // dropped while `sourceVideoAttached` is showing, since that line already
-  // says the same thing far more precisely.
+  // says the same thing far more precisely. `promptEmpty` (an empty main
+  // prompt) is always dropped: this panel judges emptiness itself, per row,
+  // on the composed prompt (its own `promptEmpty`), so a row's Additional
+  // prompt can stand in for an empty main prompt.
   const chainBlockReasons = useMemo<string[]>(() => {
     if (chain.isValid) return [];
-    let reasons = [...chain.validityReasons];
+    let reasons = chain.validityReasons.filter((code) => code !== "promptEmpty");
     if (sourceVideoAttached) reasons = reasons.filter((code) => !CHAIN_SOURCE_REASON_CODES.includes(code));
     // §1-16 長尺A2V: same rule, same reason — `sourceAudioAttached` already says
     // "remove the audio", so expanding the Chain form's audio gates underneath

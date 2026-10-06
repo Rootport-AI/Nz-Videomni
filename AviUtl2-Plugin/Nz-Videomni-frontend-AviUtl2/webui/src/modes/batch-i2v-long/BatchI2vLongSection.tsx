@@ -57,7 +57,9 @@ export function BatchI2vLongSection({ config, chain, serverBusy, nativeBridge }:
   // The block-reason list merges this panel's own codes with the Chain screen's
   // `validityReasons`, rendered through the SAME `GenerateReasonsNote` +
   // Chain wording the Generate button uses — so "why can't I start?" reads
-  // identically in both places.
+  // identically in both places. Exceptions (see `chainBlockReasons`' doc): the
+  // material codes are dropped while the matching `*Attached` reason shows,
+  // and `promptEmpty` always (replaced by the hook's own per-row check).
   const reasonMessages: Record<string, string> = {
     ...buildChainReasonMessages(strings, {
       minFramesForOverlap: chain.minFramesForOverlap,

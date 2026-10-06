@@ -464,6 +464,95 @@ describe("useBatchForm", () => {
     expect(result.current.canStart).toBe(true);
   });
 
+  // --- 空のまま送られる行のゲート（promptEmptyQueues） ------------------------
+
+  /** a2v の 2 行（a.wav・b.wav）をスキャンし、Shared 画像を 1 枚 ready にする。 */
+  async function scanTwoA2vRows(prompt: string, files = [
+    { name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 },
+    { name: "b.wav", sizeBytes: 100, mtimeMs: 2000, durationSec: 1.0 },
+  ]) {
+    const fs = wavFolder(files);
+    const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: WAV_DIR });
+    const rendered = renderBatchForm(bridge, { prompt });
+    const { result } = rendered;
+    await act(async () => {
+      await result.current.pickWavDir();
+    });
+    await act(async () => {
+      await result.current.scan();
+    });
+    act(() => {
+      void result.current.keyframes.addFromCapture();
+    });
+    await waitFor(() => expect(result.current.keyframes.items[0]?.status).toBe("ready"));
+    return rendered;
+  }
+
+  it("promptEmptyQueues: プロンプトが空でも、全行に追加プロンプトがあれば開始できる（add・replace）", async () => {
+    const { result } = await scanTwoA2vRows("");
+    expect(result.current.promptEmptyQueues).toEqual([1, 2]);
+    expect(result.current.canStart).toBe(false);
+
+    act(() => result.current.setRowPromptLocal(0, "a dog"));
+    act(() => result.current.setRowPromptLocal(1, "a cat"));
+    expect(result.current.promptEmptyQueues).toEqual([]);
+    expect(result.current.canStart).toBe(true);
+
+    act(() => result.current.setPromptMode("replace"));
+    expect(result.current.promptEmptyQueues).toEqual([]);
+    expect(result.current.canStart).toBe(true);
+  });
+
+  it("promptEmptyQueues: プロンプトが空で 1 行だけ空なら開始できず、その行の queue が並ぶ", async () => {
+    const { result } = await scanTwoA2vRows("");
+    act(() => result.current.setRowPromptLocal(0, "a dog"));
+    expect(result.current.promptEmptyQueues).toEqual([2]);
+    expect(result.current.canStart).toBe(false);
+  });
+
+  it("promptEmptyQueues: プロンプトがあれば、追加プロンプトが空でも開始できる（replace でもフォールバック）", async () => {
+    const { result } = await scanTwoA2vRows("a prompt");
+    expect(result.current.promptEmptyQueues).toEqual([]);
+    expect(result.current.canStart).toBe(true);
+
+    act(() => result.current.setPromptMode("replace"));
+    expect(result.current.promptEmptyQueues).toEqual([]);
+    expect(result.current.canStart).toBe(true);
+  });
+
+  it("promptEmptyQueues: プロンプトが <lora:> タグだけなら、追加プロンプトが空の行は空と数える", async () => {
+    const { result } = await scanTwoA2vRows("<lora:x:0.8>");
+    expect(result.current.promptEmptyQueues).toEqual([1, 2]);
+    expect(result.current.canStart).toBe(false);
+  });
+
+  it("promptEmptyQueues: 行が <lora:> タグだけなら、add では開始できるが replace では空と数える", async () => {
+    const { result } = await scanTwoA2vRows("a prompt");
+    act(() => result.current.setRowPromptLocal(0, "<lora:x:0.8>"));
+    // add: 「a prompt <lora:x:0.8>」→ タグ除去後も本文が残る。
+    expect(result.current.promptEmptyQueues).toEqual([]);
+    expect(result.current.canStart).toBe(true);
+
+    // replace: 行の「<lora:x:0.8>」だけが送られ、タグ除去後は空になる。
+    act(() => result.current.setPromptMode("replace"));
+    expect(result.current.promptEmptyQueues).toEqual([1]);
+    expect(result.current.canStart).toBe(false);
+  });
+
+  it("promptEmptyQueues: 実行対象でない行（Skip。Done と同じく runnableRows の外）は数えない", async () => {
+    // Done の行はこのフックからは実走行（1 秒刻みのジョブ監視）なしに作れないため、
+    // 同じく `runnableRows` から外れる Skip の行（wav 以外の音声）で代用する。
+    const { result } = await scanTwoA2vRows("", [
+      { name: "skipme.mp3", sizeBytes: 100, mtimeMs: 1000, durationSec: 3.0 },
+      { name: "b.wav", sizeBytes: 100, mtimeMs: 2000, durationSec: 1.0 },
+    ]);
+    const waitingIndex = result.current.rows.findIndex((r) => r.stat === "Waiting");
+    expect(result.current.rows.map((r) => r.stat).sort()).toEqual(["Skip", "Waiting"]);
+    act(() => result.current.setRowPromptLocal(waitingIndex, "a dog"));
+    expect(result.current.promptEmptyQueues).toEqual([]);
+    expect(result.current.canStart).toBe(true);
+  });
+
   it("Shared spec (2026-07-18): a ready image at ANY slider position clears the start gate", async () => {
     const fs = wavFolder([{ name: "a.wav", sizeBytes: 100, mtimeMs: 1000, durationSec: 1.0 }]);
     const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: WAV_DIR });
@@ -1751,7 +1840,7 @@ describe("useBatchForm", () => {
     }
 
     /** 画像フォルダだけを手入力で確定し、スキャンする（＝i2vモードの最小状態）。 */
-    async function scanImagesOnly(bridge: NativeBridge, opts: { config?: AppConfig; gen?: BatchGenerationValues } = {}) {
+    async function scanImagesOnly(bridge: NativeBridge, opts: { config?: AppConfig; gen?: BatchGenerationValues; prompt?: string } = {}) {
       const rendered = renderBatchForm(bridge, opts);
       await act(async () => {
         await rendered.result.current.setImgDir(I2V_IMG_DIR);
@@ -1948,6 +2037,22 @@ describe("useBatchForm", () => {
         await result.current.setImgDir("");
       });
       expect(result.current.canStart).toBe(false);
+    });
+
+    it("promptEmptyQueues: i2v でもプロンプトが空なら、追加プロンプトが空の行が開始を塞ぐ", async () => {
+      const bridge = createMockBridge({ delayMs: 0, fs: imageFolder() });
+      const { result } = await scanImagesOnly(bridge, { prompt: "" });
+
+      const queues = result.current.rows.map((r) => r.queue);
+      expect(queues.length).toBeGreaterThan(0);
+      expect(result.current.promptEmptyQueues).toEqual(queues);
+      expect(result.current.canStart).toBe(false);
+
+      result.current.rows.forEach((_, i) => {
+        act(() => result.current.setRowPromptLocal(i, `row ${i}`));
+      });
+      expect(result.current.promptEmptyQueues).toEqual([]);
+      expect(result.current.canStart).toBe(true);
     });
 
     it("canStart: DURATIONが8n+1から外れるとi2vだけ止まる（a2vは自前で刻むので止まらない）", async () => {

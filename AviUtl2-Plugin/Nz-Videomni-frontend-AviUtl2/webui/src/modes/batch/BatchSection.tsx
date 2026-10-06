@@ -240,6 +240,12 @@ export function BatchSection({
             fits the current generation size the explanation has to be Create's
             own wording, borrowed exactly like `nagNegativeEmpty` above. */}
         {form.cropInvalid && <p className="warning-banner">{strings.single.generateReasons.cropInvalid}</p>}
+        {/* The same "no row is sent with an empty prompt" rule Batch i2v-long
+            applies — named by row. Hidden during this panel's own run, like
+            `jobActive` below. Before a scan there are no rows, so no line. */}
+        {form.promptEmptyQueues.length > 0 && form.runnerState === "idle" && (
+          <p className="warning-banner">{t.promptEmptyRows(formatQueues(form.promptEmptyQueues))}</p>
+        )}
         {/* §1-7 相互ロック: the Chain screen's Batch i2v-long is running, so the
             shared run lock (`shell/runLock.ts`) is held by it. Blocks Start —
             shown as its own line so the disabled button is explained. */}
@@ -297,6 +303,13 @@ interface FolderRowProps {
   onCommit: (value: string) => void;
   /** Secondary hint line under the row (none/auto guidance). */
   hint?: string | null;
+}
+
+/** Renders a row-number list for the empty-prompt line — `#` prefixed and
+ * capped at 10 entries. A copy of `BatchI2vLongSection.tsx`'s helper. */
+function formatQueues(queues: number[], limit = 10): string {
+  const shown = queues.slice(0, limit).map((q) => `#${q}`).join(", ");
+  return queues.length > limit ? `${shown}, …(+${queues.length - limit})` : shown;
 }
 
 /** One "label + hand-typable text input + 📁 picker (+ optional clear)" folder

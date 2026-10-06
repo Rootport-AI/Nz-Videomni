@@ -23,12 +23,16 @@
  *   `_plan_rejudgement`) now lives in the CALLER, not here: `useBatchForm`'s
  *   `start()` runs `rejudgeRows` over its row list at the current fps, with
  *   the skip cap = min(Single tab's DURATION, 481) (commit 9324f05), and
- *   hands this runner the already-re-judged rows. The image/prompt "foolproof"
- *   preflight (`batch.py`'s `_validate`) is still NOT implemented anywhere —
- *   an invalid row (e.g. an empty composed prompt) simply fails at the backend
- *   and is caught by this module's own per-row try/catch, landing on
- *   `Failed` with the server's error message. The "one bad row never kills
- *   the batch" invariant already covers that without a separate preflight.
+ *   hands this runner the already-re-judged rows. Both checks of Gradio
+ *   `batch.py`'s "foolproof" preflight (`_validate`) live in `useBatchForm`'s
+ *   `canStart`, not here: the Shared image as `sharedKeyframeMissing`, and
+ *   rows that would be sent with an empty prompt as `promptEmptyQueues`. The
+ *   latter is looser than Gradio (which, in add mode, stops on an empty main
+ *   prompt outright): a row's Additional prompt can make up for an empty main
+ *   prompt. Any other bad image (e.g. a corrupt file) simply fails at the
+ *   backend and is caught by this module's own per-row try/catch, landing on
+ *   `Failed` with the server's error message — the "one bad row never kills
+ *   the batch" invariant covers that without a separate preflight.
  * - N7 (PENDING §6): the `image` column's `Shared` sentinel (the Generate
  *   tab's common i2v keyframe(s)) IS now resolved — {@link resolveConditioning}
  *   uses `start()`'s `sharedConditioningImages` snapshot (already resolved to

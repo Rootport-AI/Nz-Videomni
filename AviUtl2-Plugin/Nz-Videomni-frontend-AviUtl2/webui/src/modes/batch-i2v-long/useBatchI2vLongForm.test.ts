@@ -479,6 +479,63 @@ describe("useBatchI2vLongForm", () => {
     expect(result.current.blockReasons).not.toContain("promptEmpty");
   });
 
+  // --- Chain 画面の promptEmpty の間引き（バッチ開始ゲートの 1 規則化） ---------
+
+  it("Chain のメインプロンプトが空でも、全行に追加プロンプトがあれば開始できる（add・replace）", async () => {
+    const fs = imgFolder([png("a.png"), png("b.png")]);
+    const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: IMG_DIR });
+    const chain = makeChain({ prompt: "", isValid: false, validityReasons: ["promptEmpty"] });
+    const { result } = renderForm(bridge, { chain });
+    await scanned(result);
+
+    act(() => result.current.setRowPromptLocal(0, "a dog"));
+    act(() => result.current.setRowPromptLocal(1, "a cat"));
+    expect(result.current.chainBlockReasons).toEqual([]);
+    expect(result.current.blockReasons).not.toContain("promptEmpty");
+    expect(result.current.canStart).toBe(true);
+
+    act(() => result.current.setPromptMode("replace"));
+    expect(result.current.chainBlockReasons).toEqual([]);
+    expect(result.current.blockReasons).not.toContain("promptEmpty");
+    expect(result.current.canStart).toBe(true);
+  });
+
+  it("Chain のメインプロンプトが空で 1 行だけ埋めると、空の行が promptEmpty で塞ぐ", async () => {
+    const fs = imgFolder([png("a.png"), png("b.png")]);
+    const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: IMG_DIR });
+    const chain = makeChain({ prompt: "", isValid: false, validityReasons: ["promptEmpty"] });
+    const { result } = renderForm(bridge, { chain });
+    await scanned(result);
+
+    act(() => result.current.setRowPromptLocal(0, "a dog"));
+    expect(result.current.chainBlockReasons).toEqual([]);
+    expect(result.current.promptEmptyQueues).toEqual([2]);
+    expect(result.current.blockReasons).toContain("promptEmpty");
+    expect(result.current.canStart).toBe(false);
+  });
+
+  it("Chain の promptEmpty 以外の理由は間引かずにそのまま残る", async () => {
+    const fs = imgFolder([png("a.png"), png("b.png")]);
+    const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: IMG_DIR });
+    const chain = makeChain({ prompt: "", isValid: false, validityReasons: ["promptEmpty", "cropInvalid"] });
+    const { result } = renderForm(bridge, { chain });
+    await scanned(result);
+
+    act(() => result.current.setRowPromptLocal(0, "a dog"));
+    act(() => result.current.setRowPromptLocal(1, "a cat"));
+    expect(result.current.chainBlockReasons).toEqual(["cropInvalid"]);
+    expect(result.current.canStart).toBe(false);
+  });
+
+  it("スキャン前に Chain のプロンプトが空なら、promptEmpty は自前の 1 つだけ出る", () => {
+    const bridge = createMockBridge({ delayMs: 0, fs: imgFolder([]) });
+    const chain = makeChain({ prompt: "", isValid: false, validityReasons: ["promptEmpty"] });
+    const { result } = renderForm(bridge, { chain });
+
+    expect(result.current.chainBlockReasons).toEqual([]);
+    expect(result.current.blockReasons.filter((code) => code === "promptEmpty")).toEqual(["promptEmpty"]);
+  });
+
   it("promptTooLongは合成後2000字で通り、2001字で立つ（境界・行単位）", async () => {
     const fs = imgFolder([png("a.png"), png("b.png")]);
     const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: IMG_DIR });

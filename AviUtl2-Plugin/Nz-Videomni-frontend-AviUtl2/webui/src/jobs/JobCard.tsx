@@ -18,6 +18,7 @@ import {
   subscribeInserted,
 } from "../timeline/provisionalReservation";
 import { jobSeed } from "./seedUtils";
+import { useOptionalShowNote } from "../shell/NoteArea";
 
 export interface JobCardProps {
   job: JobResponse;
@@ -99,6 +100,7 @@ export function JobCard({
   autoOpenPreview = false,
 }: JobCardProps) {
   const strings = useStrings();
+  const showNote = useOptionalShowNote();
   const STATUS_LABELS = statusLabels(strings);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [insertState, setInsertState] = useState<LocalInsertState>("idle");
@@ -220,7 +222,7 @@ export function JobCard({
           // remove the continuation's provisional marker and free the recorded
           // source location now that the joined clip has landed.
           const position = await resolveJoinedInsertPosition(nativeBridge, job.job_id, joinedInfo);
-          await downloadAndInsertVideo(
+          const result = await downloadAndInsertVideo(
             nativeBridge,
             job.job_id,
             (phase) => setInsertState(phase),
@@ -234,6 +236,7 @@ export function JobCard({
             });
           releaseSourceLocation(job.job_id);
           setInsertState("done");
+          if (result.usedFallback) showNote?.("warning", strings.notes.insertedOnFrontmostLayer(result.layer + 1));
         } else {
           const result = await downloadAndInsertVideo(
             nativeBridge,
@@ -243,13 +246,14 @@ export function JobCard({
           );
           rememberedPathRef.current = result.filePath;
           setInsertState("done");
+          if (result.usedFallback) showNote?.("warning", strings.notes.insertedOnFrontmostLayer(result.layer + 1));
         }
       } catch (err) {
         setInsertState("error");
         setInsertError(err instanceof Error ? err.message : String(err));
       }
     })();
-  }, [job.job_id, nativeBridge, showingJoined, joinedInfo]);
+  }, [job.job_id, nativeBridge, showingJoined, joinedInfo, showNote, strings]);
 
   const isNonTerminal = job.status === "queued" || job.status === "running";
   const isTerminal = !isNonTerminal;

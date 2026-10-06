@@ -1100,6 +1100,10 @@ export const en = {
      * `blockReasons.jobActive` states. The KEY keeps its original name (it is
      * the block-reason code the form pushes); only the copy covers both. */
     jobActive: "The server is busy: another job is running, or a model is being loaded. Only one runs at a time — wait for it to finish before starting the batch.",
+    /** Runnable rows whose composed prompt (Create prompt + the row's
+     * Additional prompt, `<lora:>` tags stripped) is empty. Blocks Start. */
+    promptEmptyRows: (queues: string): string =>
+      `These rows would be sent with an empty prompt: ${queues}. Write a prompt on the Create form above, or in each row's Additional prompt column.`,
     /** §3-98 P5: the loaded base model's engine declares a feature the panel
      * needs as unsupported. Disables the whole panel; engine-neutral wording,
      * since which feature is missing is not something the user can act on. */
@@ -2260,6 +2264,14 @@ export const en = {
       PIPELINE_LOAD_FAILED: "Failed to load the model pipeline. Check the server's VRAM and logs, then retry.",
     },
   },
+  /** §1-80 Repeat count: the Single / Chained Generate bar's "run the same
+   * conditions N times in a row" field and its Stop button. `countLabel` is
+   * deliberately identical in en and ja (owner decision). */
+  repeatRun: {
+    countLabel: "Repeat count",
+    stopButton: (left: number): string => `Stop (${left} left)`,
+    settingsChangedToast: "Generation settings changed. They will apply from the next run.",
+  },
 };
 
 /** Structural shape both dictionaries must satisfy — every leaf in `ja` must
@@ -2836,6 +2848,8 @@ export const ja: Strings = {
     icLoraActiveWarning: "「作る」フォームで参照動画（IC-LoRA）が有効なため、バッチはその128グリッドの解像度を使用します。",
     lockedByOther: "クリップチェーン画面でバッチi2v-longが実行中です。バッチは同時に1つしか実行できません。終わるまで待つか、そちらで停止してください。",
     jobActive: "サーバーが処理中です（ほかの生成が実行中か、モデルを読み込み中です）。同時に1つしか動かせないため、終わるまで待ってから開始してください。",
+    promptEmptyRows: (queues: string): string =>
+      `プロンプトが空のまま送信される行があります: ${queues}。上の「作る」フォームのプロンプトか、その行の追加プロンプト欄に入力してください。`,
     unavailableOnBaseModel: "このベースモデルではバッチパネルを使えません。使うには、上のベースモデルを切り替えてください。",
     skipReasons: {
       "wav-only-alpha": "wav形式でないか、長さを読み取れませんでした",
@@ -3470,6 +3484,11 @@ export const ja: Strings = {
       MODEL_INCOMPATIBLE: "選択したファイルはこの用途のモデルとして不正です。別のモデルを選んでください。",
       PIPELINE_LOAD_FAILED: "モデルパイプラインの読み込みに失敗しました。サーバのVRAM/ログを確認して再試行してください。",
     },
+  },
+  repeatRun: {
+    countLabel: "Repeat count",
+    stopButton: (left: number): string => `停止（残り ${left} 回）`,
+    settingsChangedToast: "生成条件が変更されました。次の生成から反映されます。",
   },
 };
 

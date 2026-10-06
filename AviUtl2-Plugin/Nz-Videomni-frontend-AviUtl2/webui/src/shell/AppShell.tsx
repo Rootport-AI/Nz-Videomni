@@ -810,10 +810,11 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         return;
       }
       try {
-        await downloadAndInsertVideo(bridge, latest.job_id, undefined, {
+        const result = await downloadAndInsertVideo(bridge, latest.job_id, undefined, {
           plainInsertAt: { layer: cursorLayer, frame: cursorFrame },
         });
         toasts.push({ kind: "success", message: strings.menuInsert.insertedLatest });
+        if (result.usedFallback) showNote("warning", strings.notes.insertedOnFrontmostLayer(result.layer + 1));
       } catch {
         toasts.push({ kind: "warning", message: strings.menuInsert.insertLatestFailed });
       }

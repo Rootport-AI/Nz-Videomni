@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import type { AppConfig, CropOutput } from "../../api/types";
 import { bridge as defaultBridge, BridgeError } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
+import { parseLoraPrompt } from "../../lora/loraTags";
 import { isNagNegativeEmpty, NAG_OFF } from "../../shell/nagSettings";
 import {
   ACCELERATION_DEFAULTS,
@@ -21,6 +22,7 @@ import { MIN_HEIGHT, MIN_NUM_FRAMES, MIN_WIDTH } from "../single/defaultConfig";
 import { isDimensionOnGrid, isNumFramesOnGrid } from "../single/paramUtils";
 import type { UseKeyframesResult } from "../single/useKeyframes";
 import type { BatchRunnerSettings, BatchRunnerState } from "./batchRunner";
+import { composeRowPrompt } from "./buildA2vChainPayload";
 import { IMAGE_SHARED, rejudgeI2vRows, rejudgeRows, scanImagesToBatchRows, scanModeFor, scanToRows } from "./manifestMerge";
 import type { BatchMode, BatchRow, ScannedFile } from "./manifestMerge";
 import type { RunBatchParams } from "./useBatchRunner";
@@ -209,6 +211,12 @@ export interface UseBatchFormResult {
    * `scanToRows`/`rejudgeRows`, which always land on the grid. Blocks
    * `canStart`; surfaced standalone so `BatchSection` can show the reason. */
   numFramesOffGrid: boolean;
+  /** `queue` numbers of the runnable rows (Waiting / Failed / Generating)
+   * whose prompt would be sent empty — judged on the same string the runner
+   * sends: the Create prompt composed with the row's Additional prompt
+   * (`composeRowPrompt`), with `<lora:>` tags stripped (`parseLoraPrompt`).
+   * Blocks `canStart`; surfaced so `BatchSection` can name the rows. */
+  promptEmptyQueues: number[];
 
   // Rows / scan (spec §6).
   rows: BatchRow[];
@@ -1017,6 +1025,16 @@ export function useBatchForm(
     generationValues.height,
   );
 
+  // The same "no row is sent with an empty prompt" rule Batch i2v-long
+  // applies, on the exact string `batchRunner.processRow` sends.
+  const promptEmptyQueues = useMemo(
+    () =>
+      runnableRows
+        .filter((r) => parseLoraPrompt(composeRowPrompt(prompt, r.prompt, own.promptMode)).strippedPrompt.trim().length === 0)
+        .map((r) => r.queue),
+    [runnableRows, prompt, own.promptMode],
+  );
+
   const canStart =
     foldersReady(scannedMode, wavDir, imgDir) &&
     framesReady(scannedMode, numFramesOnGrid) &&
@@ -1033,6 +1051,7 @@ export function useBatchForm(
     !nagInvalid &&
     !cropInvalid &&
     resolutionValid &&
+    promptEmptyQueues.length === 0 &&
     runnableRows.length > 0;
 
   return {
@@ -1058,6 +1077,7 @@ export function useBatchForm(
     nagInvalid,
     cropInvalid,
     numFramesOffGrid,
+    promptEmptyQueues,
     rows,
     isScanning,
     scanError,

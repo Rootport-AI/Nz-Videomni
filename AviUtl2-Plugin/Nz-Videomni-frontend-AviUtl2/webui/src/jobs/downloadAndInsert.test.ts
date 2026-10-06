@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../bridge";
 import { createMockBridge } from "../bridge/mockBridge";
-import { downloadAndInsertVideo } from "./downloadAndInsert";
+import { downloadAndInsertVideo, insertForJob } from "./downloadAndInsert";
 import {
   getReservationPhase,
   reconcileFromTimeline,
@@ -16,7 +16,7 @@ function stubBridge() {
     if (method === "backend.downloadVideo") return Promise.resolve({ filePath: "C:/dl/out.mp4", sizeBytes: 123 });
     if (method === "timeline.insertMediaForJob")
       return Promise.resolve({ ok: true, mode: "replaced", layer: 2, frame: 5, usedFallback: false });
-    if (method === "timeline.insertMedia") return Promise.resolve({ inserted: true, layer: 2, frame: 5 });
+    if (method === "timeline.insertMedia") return Promise.resolve({ inserted: true, layer: 2, frame: 5, usedFallback: false });
     return Promise.resolve({});
   });
   const bridge = { request, requestWithFiles: vi.fn(), on: vi.fn(() => () => {}) } as unknown as NativeBridge;
@@ -42,7 +42,7 @@ describe("downloadAndInsertVideo", () => {
     expect(request.mock.calls.filter((c) => c[0] === "timeline.insertMediaForJob")).toHaveLength(1);
     expect(request.mock.calls.some((c) => c[0] === "timeline.insertMedia")).toBe(false);
     expect(request.mock.calls.some((c) => c[0] === "timeline.deleteProvisionalByJob")).toBe(false);
-    expect(result).toEqual({ layer: 2, frame: 5, filePath: "C:/dl/out.mp4" });
+    expect(result).toEqual({ layer: 2, frame: 5, filePath: "C:/dl/out.mp4", usedFallback: false });
   });
 
   it("joined path does NOT pass reuseIfPresent AND inserts via the plain insertMedia (never insertMediaForJob, Med 6)", async () => {
@@ -75,7 +75,7 @@ describe("downloadAndInsertVideo", () => {
     // provisional object sitting at the cursor is left intact.
     expect(request.mock.calls.some((c) => c[0] === "timeline.insertMediaForJob")).toBe(false);
     expect(request.mock.calls.some((c) => c[0] === "timeline.deleteProvisionalByJob")).toBe(false);
-    expect(result).toEqual({ layer: 2, frame: 5, filePath: "C:/dl/out.mp4" });
+    expect(result).toEqual({ layer: 2, frame: 5, filePath: "C:/dl/out.mp4", usedFallback: false });
   });
 
   it("knownFilePath skips backend.downloadVideo entirely and inserts the given path via insertMediaForJob", async () => {
@@ -86,7 +86,7 @@ describe("downloadAndInsertVideo", () => {
 
     expect(request.mock.calls.filter((c) => c[0] === "backend.downloadVideo")).toHaveLength(0);
     expect(paramsFor(request, "timeline.insertMediaForJob")).toEqual({ jobId: "job-3", filePath: "C:/kept/prev.mp4" });
-    expect(result).toEqual({ layer: 2, frame: 5, filePath: "C:/kept/prev.mp4" });
+    expect(result).toEqual({ layer: 2, frame: 5, filePath: "C:/kept/prev.mp4", usedFallback: false });
     // No "downloading" phase when the download is skipped — straight to inserting.
     expect(onPhase).not.toHaveBeenCalledWith("downloading");
     expect(onPhase).toHaveBeenCalledWith("inserting");
@@ -127,6 +127,49 @@ describe("downloadAndInsertVideo", () => {
     const bridge = { request, requestWithFiles: vi.fn(), on: vi.fn(() => () => {}) } as unknown as NativeBridge;
 
     await expect(downloadAndInsertVideo(bridge, "job-6")).rejects.toThrow("NO_EDIT_HANDLE");
+  });
+});
+
+/** A bridge whose `insertMediaForJob` / `insertMedia` return the given result. */
+function bridgeReturning(method: string, result: unknown) {
+  const request = vi.fn((m: string) => {
+    if (m === "backend.downloadVideo") return Promise.resolve({ filePath: "C:/dl/out.mp4", sizeBytes: 1 });
+    if (m === method) return Promise.resolve(result);
+    return Promise.resolve({});
+  });
+  return { request, requestWithFiles: vi.fn(), on: vi.fn(() => () => {}) } as unknown as NativeBridge;
+}
+
+describe("usedFallback (cursor insert collided -> layer_max+1 retreat)", () => {
+  it("insertForJob reports usedFallback for a mode:\"inserted\" retreat", async () => {
+    resetProvisionalReservation();
+    const bridge = bridgeReturning("timeline.insertMediaForJob", {
+      ok: true,
+      mode: "inserted",
+      layer: 11,
+      frame: 5,
+      usedFallback: true,
+    });
+    expect(await insertForJob(bridge, "job-fb", "C:/dl/out.mp4")).toEqual({ layer: 11, frame: 5, usedFallback: true });
+  });
+
+  it("insertForJob drops the replace path's retreat (mode:\"replaced\" + usedFallback:true -> false)", async () => {
+    resetProvisionalReservation();
+    const bridge = bridgeReturning("timeline.insertMediaForJob", {
+      ok: true,
+      mode: "replaced",
+      layer: 11,
+      frame: 5,
+      usedFallback: true,
+    });
+    expect(await insertForJob(bridge, "job-fb", "C:/dl/out.mp4")).toEqual({ layer: 11, frame: 5, usedFallback: false });
+  });
+
+  it("plainInsertAt (W3) passes through insertMedia's usedFallback", async () => {
+    resetProvisionalReservation();
+    const bridge = bridgeReturning("timeline.insertMedia", { inserted: true, layer: 9, frame: 360, usedFallback: true });
+    const result = await downloadAndInsertVideo(bridge, "job-w3", undefined, { plainInsertAt: { layer: 4, frame: 360 } });
+    expect(result).toEqual({ layer: 9, frame: 360, filePath: "C:/dl/out.mp4", usedFallback: true });
   });
 });
 

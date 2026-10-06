@@ -274,8 +274,8 @@ export interface BridgeParamsMap {
    *  - found -> the finished media at `filePath` REPLACES it in place (same
    *    layer/frame, media's real length, one undo step) — `mode: "replaced"`;
    *  - not found -> native inserts exactly like `timeline.insertMedia` (current
-   *    selection layer / cursor frame / real length) so normal-generation 🎞
-   *    behavior is unchanged — `mode: "inserted"`.
+   *    selection layer / cursor frame / real length, including its one
+   *    `layer_max+1` retreat when that slot is occupied) — `mode: "inserted"`.
    * See the result's `mode`/`usedFallback`. Subsumes the old two-call
    * `insertMedia` + `deleteProvisionalByJob` sequence in one atomic native call. */
   "timeline.insertMediaForJob": {
@@ -615,13 +615,18 @@ export interface BridgeResultMap {
     inserted: true;
     layer: number;
     frame: number;
+    /** True when the create at the requested (or cursor) slot collided with an
+     * existing object and native retried once on `layer_max+1`; `layer` is then
+     * that frontmost layer. */
+    usedFallback: boolean;
   };
   /** Result of the replace-insert (🎞 "place & replace"). `mode:"replaced"` when
    * a provisional marker for `jobId` was found and the media swapped into its
    * slot; `"inserted"` when no marker was found and the media was inserted with
    * the plain `timeline.insertMedia` behavior. `layer`/`frame` are where the
-   * media landed. `usedFallback` is true only when a `replaced` create collided
-   * at the marker slot and native retried on `layer_max+1`. */
+   * media landed. `usedFallback` is true when the create collided (at the marker
+   * slot for `replaced`, at the cursor slot for `inserted`) and native retried
+   * on `layer_max+1`. */
   "timeline.insertMediaForJob": {
     ok: boolean;
     mode: "replaced" | "inserted";

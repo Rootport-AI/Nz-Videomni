@@ -9,6 +9,8 @@ import { LanguageProvider } from "../i18n/LanguageContext";
 import { recordSourceLocation, resetSourceLocationMap } from "../timeline/sourceLocationMap";
 import { markJobInserted, resetProvisionalReservation } from "../timeline/provisionalReservation";
 import { JobCard } from "./JobCard";
+import { ShowNoteProvider } from "../shell/NoteArea";
+import type { ShowNote } from "../shell/NoteArea";
 import type { JobCardProps } from "./JobCard";
 
 /** A native bridge stub for the Insert flow. `downloadVideo` returns a fake
@@ -23,7 +25,7 @@ function stubBridge({ failDownload = false }: { failDownload?: boolean } = {}) {
     // The per-clip 🎞 insert now goes through the single replace-insert RPC.
     if (method === "timeline.insertMediaForJob")
       return Promise.resolve({ ok: true, mode: "replaced", layer: 1, frame: 0, usedFallback: false });
-    if (method === "timeline.insertMedia") return Promise.resolve({ layer: 1, frame: 0 });
+    if (method === "timeline.insertMedia") return Promise.resolve({ inserted: true, layer: 1, frame: 0, usedFallback: false });
     return Promise.resolve({});
   });
   const bridge = { request, requestWithFiles: vi.fn(), on: vi.fn(() => () => {}) } as unknown as NativeBridge;
@@ -569,5 +571,65 @@ describe("JobCard Y3 W2 shared ✅ (non-symmetric: manual stays local, W2 shares
     act(() => markJobInserted("job-abcdef12", "C:/w2-out.mp4"));
     expect(screen.queryByRole("button", { name: /^inserted$/i })).toBeNull();
     expect(insertBtn).toHaveTextContent("⏳");
+  });
+});
+
+describe("JobCard 🎞 cursor-insert fallback note (layer_max+1 retreat)", () => {
+  beforeEach(() => {
+    resetProvisionalReservation();
+  });
+
+  /** A bridge whose replace-insert returns `mode:"inserted"` at layer 11 with the
+   * given `usedFallback`. */
+  function fallbackBridge(usedFallback: boolean) {
+    const request = vi.fn((method: string) => {
+      if (method === "backend.downloadVideo") return Promise.resolve({ filePath: "C:/tmp/out.mp4" });
+      if (method === "timeline.insertMediaForJob")
+        return Promise.resolve({ ok: true, mode: "inserted", layer: 11, frame: 0, usedFallback });
+      return Promise.resolve({});
+    });
+    return { request, requestWithFiles: vi.fn(), on: vi.fn(() => () => {}) } as unknown as NativeBridge;
+  }
+
+  function renderWithNote(bridge: NativeBridge, showNote: ShowNote) {
+    return render(
+      <LanguageProvider>
+        <ShowNoteProvider showNote={showNote}>
+          <JobCard
+            job={completedJob()}
+            baseUrl="http://127.0.0.1:18620"
+            isCancelling={false}
+            isDeleting={false}
+            onCancel={noop}
+            onDelete={noop}
+            nativeBridge={bridge}
+          />
+        </ShowNoteProvider>
+      </LanguageProvider>,
+    );
+  }
+
+  it("shows the frontmost-layer warning note (1-based layer) when the insert retreated", async () => {
+    const showNote = vi.fn<ShowNote>();
+    renderWithNote(fallbackBridge(true), showNote);
+    fireEvent.click(screen.getByRole("button", { name: /^insert$/i }));
+    await screen.findByRole("button", { name: /^inserted$/i });
+    expect(showNote).toHaveBeenCalledTimes(1);
+    expect(showNote).toHaveBeenCalledWith("warning", expect.stringMatching(/frontmost layer 12/));
+  });
+
+  it("shows no note when the insert did not retreat", async () => {
+    const showNote = vi.fn<ShowNote>();
+    renderWithNote(fallbackBridge(false), showNote);
+    fireEvent.click(screen.getByRole("button", { name: /^insert$/i }));
+    await screen.findByRole("button", { name: /^inserted$/i });
+    expect(showNote).not.toHaveBeenCalled();
+  });
+
+  it("does not throw without a ShowNoteProvider (the insert still completes)", async () => {
+    renderCard({ job: completedJob(), nativeBridge: fallbackBridge(true) });
+    fireEvent.click(screen.getByRole("button", { name: /^insert$/i }));
+    const inserted = await screen.findByRole("button", { name: /^inserted$/i });
+    expect(inserted).toHaveTextContent("✅");
   });
 });

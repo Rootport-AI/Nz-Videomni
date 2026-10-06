@@ -46,6 +46,14 @@ export function useShowNote(): ShowNote {
   return ctx;
 }
 
+/** Non-throwing variant: `null` outside a `ShowNoteProvider`. Exists because
+ * `JobCard.test.tsx` / `joinVisibility.test.tsx` render `JobCard` under only a
+ * `LanguageProvider`, so `JobCard` cannot use the throwing `useShowNote`. */
+// eslint-disable-next-line react/only-export-components -- optional twin of useShowNote; must not throw without a provider (JobCard tests)
+export function useOptionalShowNote(): ShowNote | null {
+  return useContext(ShowNoteContext);
+}
+
 export interface NoteAreaProps {
   /** The single note to show, or `null` to render nothing. */
   note: AppNote | null;

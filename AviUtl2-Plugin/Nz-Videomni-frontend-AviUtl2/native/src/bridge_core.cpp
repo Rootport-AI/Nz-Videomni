@@ -173,6 +173,7 @@ std::string HandleRequestJson(const std::string& request_json,
                 result["inserted"] = true;
                 result["layer"] = r.layer;
                 result["frame"] = r.frame;
+                result["usedFallback"] = r.used_fallback;
                 return MakeSuccessResponse(id, std::move(result));
             }
             case InsertMediaResult::Status::kFileNotFound:
@@ -229,13 +230,14 @@ std::string HandleRequestJson(const std::string& request_json,
             result["mode"] = "replaced";
             result["layer"] = outcome.layer;
             result["frame"] = outcome.frame;
-            // usedFallback is true only when the marker-slot create collided and
-            // the provider retried on layer_max+1 (never true on the insert path).
+            // usedFallback is true when the marker-slot create collided and the
+            // provider retried on layer_max+1. The insert path below reports the
+            // same flag when its cursor-position create collided and retreated.
             result["usedFallback"] = outcome.used_fallback;
             return MakeSuccessResponse(id, std::move(result));
         }
-        // Not found -> behave EXACTLY like timeline.insertMedia (owner decision,
-        // case 1: normal-generation 🎞 is unchanged). Reuse the same insert_media
+        // Not found -> behave EXACTLY like timeline.insertMedia, including its one
+        // retreat to layer_max+1 when the slot is occupied. Reuse the same insert_media
         // provider with no explicit layer/frame so it uses the current selection
         // layer / cursor frame and the media's real length.
         InsertMediaParams ip;
@@ -249,7 +251,7 @@ std::string HandleRequestJson(const std::string& request_json,
                 result["mode"] = "inserted";
                 result["layer"] = ir.layer;
                 result["frame"] = ir.frame;
-                result["usedFallback"] = false;
+                result["usedFallback"] = ir.used_fallback;
                 return MakeSuccessResponse(id, std::move(result));
             }
             case InsertMediaResult::Status::kFileNotFound:

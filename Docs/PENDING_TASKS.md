@@ -1,13 +1,33 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-06（第9弾: CLOSED 3-216・§1 の節を削除・§3 に 2 件〔3-217・3-218〕）。前回 2026-10-05: 第8弾: CLOSED 3-215・§1-31 に第 16 節の参照。
+- 作成: 2026-07-15／最終更新: 2026-10-06（§2-3・§2-4 を CLOSED 3-219〜3-221 へ移し §2 の節を削除）。前回 2026-10-06: §1-84 を §2-4 へ移す〔§1 側は欠番〕。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
-  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
+  1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
 - **完了してクローズした項目は本書に残さず、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移す。** 本書の「3.」と同書の「3.」は別物なので、**参照するときは番号だけで書かず、必ずファイル名を添えること**。
 - **旧番号（旧§3-xx・旧§4-xx等）の読み替えと欠番の対応は、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭の「『旧』ラベルの定義と本書の成り立ち」を参照。**
+
+---
+
+## 1. 近日中の改修項目
+
+実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
+
+### 1-82. 操作パネルの既存テストの不安定（`App.nag.test.tsx` の 2 件・`JobsContext.test.tsx` の 1 件）（起票：2026-10-06）
+
+- **概要**: 操作パネルのテスト `webui/src/App.nag.test.tsx` の 2 件（"bridge capture — NAG on …" と "bridge capture — VSF method selected …"）が、ときどき落ちる。前のテストが送ったジョブが、アプリ全体で共有されるモックの中でまだ実行中のことがあり、「生成」ボタンが "Busy…" になっていて見つからないため。モックのジョブの進み具合は既定 2 秒のポーリングで決まるのでタイミング次第で、Repeat count（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-219）の改修の前後とも 20 回中 4〜5 回落ちる（この改修とは無関係の既存の不具合）。
+  - もう 1 件、`webui/src/jobs/JobsContext.test.tsx` の "cancelJob marks the job as cancelling until it settles into cancelled, then clears" が、テスト全体の実行では 3 回中 1 回落ち、このファイル単独では 5 回とも通る。Repeat count の改修では触っていないファイルで、原因は未調査（`App.nag.test.tsx` の共有モックの持ち越しとは別の理由の可能性がある）。
+- **直し方の候補**: `App.nag.test.tsx` は、`afterEach` で共有モックのジョブを `listJobs` で終わりまで進める後片付けを足す（`webui/src/modes/single/SingleScreen.repeat.test.tsx` で採った方法）。`JobsContext.test.tsx` は原因の特定から。
+- **範囲**: テストのみ（製品コードは不変）。
+
+### 1-83. LTX AlphaGen の実装（起票：2026-10-06）
+
+- **概要**: Lightricks の「LTX AlphaGen」（Beta。手元の RGB 動画から、同じ大きさ・同じフレーム数の白黒のアルファマット動画を返す LTX 2.5 用の IC-LoRA。透過動画を新しく作る機能ではない）を本製品に取り込む。事前調査の正本は [`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md)（2026-10-06）。
+- **着手の順序**: **まず go／no-go を決める簡易なテスト（同ノート 5.3 節・8.2 節の「ゲート 0」）から始める。** ①LoRA を取得してヘッダに参照の縮小率（`reference_downscale_factor`）があるかを確かめる、②既存の LTX 2.5 の IC-LoRA 経路のまま 1〜2 本流して、2 段目を経たマットが使い物になるかを見る、③16GB 級の GPU での VRAM と所要時間を測る。GPU を使う実験は毎回オーナーの了承を得てから行う。結果が no-go なら本項は §3 か §4 へ移す。
+- **go の場合の設計の論点**（同ノート 6・7 節）: AviUtl2 への渡し方（案 A＝マット動画を渡して AviUtl2 側の既定の道具で当てる／案 B＝バックエンドで合成して透過つき動画を置く）、空プロンプトの受け付け、2 段目を飛ばして原寸で出す経路、寸法の制約（参照つきは 128 の倍数限定）、劣化しない出力形式、快適上限の計測。設計はプランモードと敵対的レビューを経てオーナーの了承を得る。
+- **範囲**: バックエンド（LTX 2.5 エンジン・API）と操作パネルの両方に及ぶ見込み。Gradio 画面は未定。
 
 ---
 
@@ -42,7 +62,7 @@
 バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能。2026-09-15からi2vモードも同じパネルに乗る。正本は`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md`）にα版として実装していない機能のうち、現在も残っているのは次の3点。出典: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
 
 - **バッチでの参照動画**: IC-LoRA用の参照動画系フィールド（Gradio原典`batch.py`の`use_adapter`／`ref_video_path`／`control_adherence`／`reference_strength`）に相当する設定がバッチ経路に無い（`webui/src/modes/batch/batchRunner.ts`の実装ノートに「No reference-video (control IC-LoRA) adapter support」と明記）。
-- **開始前の一括妥当性検証（preflight）**: Gradio原典の`_validate`相当にあたる、画像/プロンプトのfoolproof preflightは未実装。
+- **開始前の一括妥当性検証（preflight）**: 画像不良（ファイル破損など）の事前検査が無く、バックエンドで失敗してその行だけが Failed になる（Shared キーフレームの有無と空のプロンプトは開始条件で止まる。正本はフロントエンド `BATCH_A2V_I2V_MODE.md` §2.8）。
 - **行ごとのAdd／Replace切替**: プロンプトと追加プロンプトの合成方式（Add＝連結／Replace＝行で置き換え）は、現状バッチ全体で1つの設定（`promptMode`）であり、行ごとには切り替えられない。
 
 なお本節の項目は、オーナー方針（Gradio同梱UIとのパリティは最終的に全項目を実装対象とする）のもとでは、いずれ実装側へ戻る前提である（[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)）。

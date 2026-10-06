@@ -34,8 +34,11 @@ import { MIN_NUM_FRAMES } from "../single/defaultConfig";
 import { GenerateButtonBar } from "../single/GenerateButtonBar";
 import { GenerateReasonsNote } from "../single/GenerateReasonsNote";
 import { PresetDropdown } from "../single/PresetDropdown";
+import { RepeatCountField } from "../single/RepeatCountField";
+import { submissionFingerprint } from "../single/repeatRun";
 import { useGenerationSubmit } from "../single/useGeneration";
 import { useConfig } from "../single/useConfig";
+import { useRepeatRun, useRepeatRunDriver } from "../single/useRepeatRun";
 import { BatchI2vLongSection } from "../batch-i2v-long/BatchI2vLongSection";
 import { ChainAudioPanel } from "./ChainAudioPanel";
 import { ChainEndSourcePanel } from "./ChainEndSourcePanel";
@@ -257,6 +260,11 @@ function ChainedScreenBody({
 }: ChainedScreenBodyProps) {
   const strings = useStrings();
   const jobsCtx = useJobsContext();
+  // §1-80 Repeat count: run state at the top of the body so `onSubmitted`/
+  // `onFailed` can reach it; the completion driver is wired after
+  // `handleGenerate` (see `useRepeatRunDriver` further down).
+  const repeat = useRepeatRun("chained");
+  const { noteSubmitted: noteRepeatSubmitted, stop: stopRepeat } = repeat;
 
   // I12 (§5-3 用途a): `bindToJob` needs the confirmed length/fps + display text,
   // but `form`/`prompt` are read below this callback, so `onSubmitted` reads the
@@ -267,6 +275,9 @@ function ChainedScreenBody({
   // the submit hook holds `submitting` until this resolves (MN-6).
   const onSubmitted = useCallback(
     async (jobId: string) => {
+      // §1-80: record the job a repeat waits on BEFORE the refresh (no-op
+      // unless runs remain, so a single Generate is unchanged).
+      noteRepeatSubmitted(jobId);
       await jobsCtx.refresh();
       onJobSubmitted(jobId);
       // I12 §5-3 用途a: hand a waiting #1/#6 reservation off to this real job.
@@ -291,7 +302,7 @@ function ChainedScreenBody({
       }
       if (reservedPendingId !== null) rekeySourceLocation(reservedPendingId, jobId);
     },
-    [jobsCtx, onJobSubmitted, nativeBridge],
+    [jobsCtx, onJobSubmitted, nativeBridge, noteRepeatSubmitted],
   );
   // X2(a): a synchronous submit failure (422/busy) never reaches `onSubmitted`,
   // so a #1/#6/#12 right-click reservation would stay `reserved` forever and
@@ -301,9 +312,11 @@ function ChainedScreenBody({
   // `sourceLocationMap` pending-key residue is harmless (never re-keyed to a
   // real job, ignored by everything) so it is deliberately left uncleaned.
   const onFailed = useCallback(async () => {
+    // §1-80: a rejected submit (409/422/transport) ends a repeat run.
+    stopRepeat();
     const bridge = nativeBridge ?? defaultBridge;
     await rollbackReservedPlacement(bridge);
-  }, [nativeBridge]);
+  }, [nativeBridge, stopRepeat]);
   const { submitState, submitChain } = useGenerationSubmit({ onSubmitted, onFailed });
   // Derive the initial common resolution from the routed selection. Computed
   // once — the body remounts via `key` on a new intent — and handed to the
@@ -847,6 +860,27 @@ function ChainedScreenBody({
     }
   }, [form, submitChain, nativeBridge, strings]);
 
+  // §1-80 Repeat count driver: once the awaited job completes, send the next
+  // run with the panel's values at that moment (same `handleGenerate`). The
+  // settings fingerprint is the very request `handleGenerate` sends.
+  const buildRequest = form.buildRequest;
+  const getRequestFingerprint = useCallback(() => submissionFingerprint(buildRequest()), [buildRequest]);
+  const sendRepeat = useCallback(() => void handleGenerate(), [handleGenerate]);
+  const pushToast = toasts.push;
+  const onRepeatSettingsChanged = useCallback(
+    () => pushToast({ kind: "warning", message: strings.repeatRun.settingsChangedToast }),
+    [pushToast, strings],
+  );
+  useRepeatRunDriver(repeat, {
+    jobs: jobsCtx.jobs,
+    submitPhase: submitState.phase,
+    canSubmit: form.isValid,
+    getFingerprint: getRequestFingerprint,
+    send: sendRepeat,
+    onSettingsChanged: onRepeatSettingsChanged,
+  });
+  const repeating = repeat.remaining > 0;
+
   const generateLabel = submitting
     ? strings.chained.generatingButton
     : serverBusy
@@ -1152,9 +1186,21 @@ function ChainedScreenBody({
 
       <div className="generation-column">
         <GenerateButtonBar
-          label={generateLabel}
-          disabled={submitting || serverBusy || !form.isValid}
-          onGenerate={() => void handleGenerate()}
+          label={repeating ? strings.repeatRun.stopButton(repeat.remaining) : generateLabel}
+          disabled={repeating ? false : submitting || serverBusy || !form.isValid}
+          onGenerate={
+            repeating
+              ? repeat.stop
+              : () => repeat.start({ send: sendRepeat, fingerprint: getRequestFingerprint() })
+          }
+          belowButton={
+            <RepeatCountField
+              value={repeat.countText}
+              onChange={repeat.setCountText}
+              onBlur={repeat.commitCountText}
+              disabled={repeating}
+            />
+          }
           hint={`${strings.chained.totalFramesLabel(form.totalFrames, MAX_CHAIN_TOTAL_FRAMES)} — ${form.estimateLabel}`}
         />
         <GenerateReasonsNote reasons={form.validityReasons} messages={generateReasonMessages} />

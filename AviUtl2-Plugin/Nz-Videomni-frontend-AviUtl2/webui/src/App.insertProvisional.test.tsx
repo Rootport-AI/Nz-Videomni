@@ -123,7 +123,7 @@ describe("App / W2 ⬇ insert this generated result now (insertProvisionalResult
     window.localStorage.clear();
     resetProvisionalReservation();
     mockDownloadAndInsert.mockReset();
-    mockDownloadAndInsert.mockResolvedValue({ layer: 0, frame: 0, filePath: "C:/out.mp4" });
+    mockDownloadAndInsert.mockResolvedValue({ layer: 0, frame: 0, filePath: "C:/out.mp4", usedFallback: false });
   });
   afterEach(() => {
     window.localStorage.clear();

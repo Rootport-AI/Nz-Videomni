@@ -52,6 +52,7 @@ struct InsertContext {
     int layer = 0;
     int frame = 0;
     bool ran = false;
+    bool used_fallback = false;
 };
 
 // Create one media object at layer/frame - the single funnel every live media
@@ -192,6 +193,20 @@ void InsertMediaEditProc(void* param, EDIT_SECTION* edit) {
     // duration instead of the host's default add-position guess) and the
     // "audio present" flag both live in CreateMediaObject.
     ctx->object = CreateMediaObject(edit, ctx->in->file_path, layer, frame);
+    if (ctx->object == nullptr && edit->info != nullptr) {
+        // Same rule as ReplaceMediaForJobEditProc: a null create (overlap) is retried ONCE
+        // on the guaranteed-empty layer_max+1, same frame, same real length, inside this
+        // one edit section (one undo step).
+        const int retreat = edit->info->layer_max + 1;
+        LogWarn(L"timeline.insertMedia: create at layer " + std::to_wstring(layer) + L", frame " +
+                std::to_wstring(frame) + L" returned null - retrying on layer_max+1 (" +
+                std::to_wstring(retreat) + L")");
+        ctx->object = CreateMediaObject(edit, ctx->in->file_path, retreat, frame);
+        if (ctx->object != nullptr) {
+            ctx->layer = retreat;
+            ctx->used_fallback = true;
+        }
+    }
 }
 
 // True if a file exists on disk (a plain file or directory; used to give the
@@ -3757,10 +3772,12 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
             return r;
         }
         LogInfo(std::wstring(L"timeline.insertMedia: inserted at layer ") +
-                std::to_wstring(ic.layer) + L", frame " + std::to_wstring(ic.frame));
+                std::to_wstring(ic.layer) + L", frame " + std::to_wstring(ic.frame) +
+                (ic.used_fallback ? L" (fallback: layer_max+1)" : L""));
         r.status = InsertMediaResult::Status::kOk;
         r.layer = ic.layer;
         r.frame = ic.frame;
+        r.used_fallback = ic.used_fallback;
         return r;
     };
 

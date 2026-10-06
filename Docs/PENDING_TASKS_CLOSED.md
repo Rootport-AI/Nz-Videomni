@@ -39,6 +39,7 @@
   - **2026-09-16には、§1へ直接起票していたバッチパネルのi2vモード追加（同書§1-30）が実機ゲートG1〜G12全合格・オーナー受容でクローズし、これが「1. 近日中の改修項目」に残っていた最後の項目だったため、同じ方針でふたたび節ごと削除した**（記録は本書**§3-152**。**同書§3-151**〔本テーマの後継、LTX 2.5での実機確認〕が既に使われていたため、クローズ時点で空いている次の番号として3-152を採った）。**同書§1-30は欠番である。**（同書§3-151 は本書 §3-151 として 2026-09-16 にクローズ済み）
   - 同書 §4-14〔バッチA2VパネルのCrop欄が未露出〕は 2026-09-16 に本書 §3-153 としてクローズし、同書側は欠番（裸の `4-14` は本書 `3-39. 旧§4-14` と衝突するため 3-153 を採った）。
   - **2026-09-17〜18 の2つのバッチでできた欠番（本節の日付より後の追記）**——同書**§3-148**〔導入スクリプトの`hf.exe`〕は本書**§3-148**へ（**§3起源の項目は同じ番号のまま移す規定どおり**。本書**3-156**は計画段階でこの受け皿として仮に充てていた番号で、欠番のまま使われていない——理由は同項の「出自」に書いた）、同書**§3-146**〔キーフレームの「追加」規則の見直し〕は本書**§3-146**へ（同じ規定どおり。オーナー裁定「据え置き」でのクローズである）、同書**§4-17**〔ブリッジ契約のタイムラインRPC群が契約書に未収録という文書債務〕は本書**§3-157**へ、同書**§4-15**〔Gradio側バッチの`chunked_upsample`〕は本書**§3-160**へ、同書**§4-6の⑤**〔Gradioが`unsupported_features`を読まない〕は本書**§3-161**へ、同書**§4-6の⑥**〔GradioのSettingsに埋め込み処理器の常駐が無い〕は本書**§3-162**へ移した。**同書§3-148・§3-146・§4-17・§4-15はいずれも欠番で、§4-6は①〜④を抱えて生きている**（⑤・⑥は箇条ごと削除した——クローズした項目の説明を台帳に残さないという規定どおりである。**末尾の2項目だったので①〜④の番号は動かない**。他の文書に残る「§4-6の⑤」への言及には、本書§3-161を指す追記が添えてある）。同書**§3-1**の1箇条〔行ごとの`<lora:>`タグ〕は本書**§3-159**へ移したが、**同項そのものは残る3点を抱えて生きている**（箇条だけを削除し、導入文の件数を直した）。あわせて、台帳に番号を持たないオーナー注文2件を本書**§3-158**〔READMEのタブの節〕・**§3-163**〔Settingsの快適上限の表〕としてクローズした。**同書§4-36の1箇条〔縮退時の警告文にホストの版名「(beta52)」が入っていること〕だけは、本書にクローズの節を立てずに箇条を削除した**（同項そのものは仮オブジェクトの完了時自動置換として生きているため。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §112.7とフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §122である）。
+  - **2026-10-06 に 3 件、§1 から §2 を経てクローズした（本節の日付より後の追記）**——同書**§1-80**（Repeat count）と同書**§1-81**（バッチの開始ゲートの 1 規則化）は実装完了で同書**§2-3**へ上がり、オーナーの目視 G1〜G12 全合格で本書**3-219**・**3-220**へ移した。同書**§1-84**（「🎞」のカーソル位置への挿入の退避）は実装完了で同書**§2-4**へ上がり、目視 G1〜G4 全合格で本書**3-221**へ移した（§1 から来た項目なので番号は持ち込まず、同書 §3-217・§3-218 が生きているため、その次の 3-219 から採った。なお同書 §2-3・§2-4 は 2026-09-03 にも使われており〔本書 §3-114・§3-88〕、日をまたいで二度使われている——番号だけでたどらず日付と内容で判別すること）。**同書§1-80・§1-81・§1-84・§2-3・§2-4はいずれも欠番で、§2 は空になったため節ごと削除した。**
 
 ## 「旧」ラベルの定義と本書の成り立ち
 
@@ -2833,3 +2834,36 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev（第 9 弾のコミット。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §149）。
 - **残課題**: LTX 2.3 Q6_K の連結 40,832 は留保（w46・`chunked_upsample=true` 未計測）。LTX 2.5 Q6_K は既定構成を未照合。LTX 2.5 の純粋な w4a8 は未計測。`outpaint_budget` は種別別でない。Settings の列見出し「全on」は宣言（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-217）。
 - **正本・出典**: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 1 節、仕様書 §6.7／§6.9(c)、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §149。
+
+### 3-219. 操作パネルの Single・Chained タブに「Repeat count」（同じ条件の生成を指定回数だけ自動で繰り返す）（起票：2026-10-06、実装：2026-10-06、オーナー目視合格・クローズ：2026-10-06）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-3〔元 §1-80〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-80→実装完了で同書 §2-3 へ（**同書側の §1-80・§2-3 はいずれも欠番**）。
+- **到達条件**: Single・Chained タブの「生成」ボタンの直下に回数欄を置き、同じ条件の生成を指定回数だけ自動で繰り返せること。製品の考え方「同時に走る生成は 1 本」を崩さないこと。**達成した。**
+- **何が完了したか**: 「生成」ボタンの直下に `Repeat count: [1]`（日英とも同じ表示・1〜99）を足した。回数ぶん、自分のジョブの完了をきっかけに、その時点の操作パネルの値で同じ送信処理をもう一度呼ぶ（予約でもキューでもない）。残りがある間はボタンが「停止（残り N 回）」になる。失敗・キャンセル・送信の拒否・フォームの不正で残りを打ち切り、送る内容が変わったときは送信の間に 1 度だけトーストで知らせる。右クリックで画面が作り直されると繰り返しは終わる。Edit タブとバッチには付けていない。挙動と設計判断の正本は操作パネル[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §130。コードはコミット `f12330f`。
+- **どの物差しで通ったか**: `npm run typecheck` 0・`npm run lint` エラー 0（警告 31 は従来どおり）・`npx vitest run --exclude "**/backend.integration.test.ts"` 3,088→3,128 件（+40）。計画はプランモードと敵対的レビュー（Critical 0・Major 5・Minor 9）、コードの敵対的レビューは Critical 0・Major 0・Minor 4 で、すべて反映した。aux2 は `scripts/build.ps1`→`scripts/deploy.ps1` で実機と配布用の写しに配置した（同一）。**オーナー目視: G1〜G10 全合格（2026-10-06。操作パネル[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.24）。**
+- **クローズ理由**: 実装が完了し、オーナーの目視に全項目合格した。
+- **状態**: dev（コード `f12330f`。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §150）。バックエンドと Gradio 画面は不変。
+- **残課題**: 無し。作業中に見つけた既存テストの不安定は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-82 に起票した（本項とは無関係）。
+- **正本・出典**: 操作パネル[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §130、[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.24、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §150、`webui/src/modes/single/repeatRun.ts`・`useRepeatRun.ts`・`RepeatCountField.tsx`。
+
+### 3-220. 操作パネルのバッチ開始ゲートを「空のまま送られる行が無ければ開始できる」の 1 規則にそろえる（起票：2026-10-06、実装：2026-10-06、オーナー目視合格・クローズ：2026-10-06）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-3〔元 §1-81〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-81→実装完了で同書 §2-3 へ（**同書側の §1-81・§2-3 はいずれも欠番**）。
+- **到達条件**: バッチの開始可否を、プロンプトが空のまま送られる行が無いかどうかの 1 規則で決めること。**達成した。**
+- **何が完了したか**: Chained タブのバッチ i2v-long は、Chain 画面由来の理由 `promptEmpty`（メインプロンプトが空）を開始の判定から外し、行単位の判定だけで開始できるようにした。Single タブの a2v／i2v バッチには、送る本文（合成後・`<lora:>` タグを除いた後）が空になる行を数える行単位の検査 `promptEmptyQueues` を足し、警告帯と開始ボタンにつないだ。規則の正本は操作パネル[`BATCH_I2V_WORKORDER.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_I2V_WORKORDER.md) §6.1（i2v-long）と[`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md) §2.8（a2v／i2v。Gradio 画面との規則の差も同節）。コードはコミット `3a20b1b`、文書は `a1b50ca`（あわせて [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-1 の事前検査の行を事実に合わせた）。
+- **どの物差しで通ったか**: `npm run typecheck` 0・`npm run lint` エラー 0（警告 31 は従来どおり）・vitest 3,077→3,088 件（+11）。計画は 3-219 と同じプランモードと敵対的レビュー、コードの敵対的レビューは Critical 0・Major 0・Minor 3 で、すべて反映した。aux2 は 3-219 と同じビルドで配置した。**オーナー目視: G11・G12 全合格（2026-10-06。操作パネル[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.24）。**
+- **クローズ理由**: 実装が完了し、オーナーの目視に全項目合格した。
+- **状態**: dev（コード `3a20b1b`・文書 `a1b50ca`。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §150）。バックエンドと Gradio 画面は不変。
+- **残課題**: 無し。
+- **正本・出典**: 操作パネル[`BATCH_I2V_WORKORDER.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_I2V_WORKORDER.md) §6.1、[`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md) §2.8、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §130.1、[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.24、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §150。
+
+### 3-221. 「🎞」のカーソル位置への挿入に、重なったときの退避を足す（起票：2026-10-06、実装：2026-10-06、オーナー目視合格・クローズ：2026-10-06）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-4〔元 §1-84〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-84→実装完了で同書 §2-4 へ（**同書側の §1-84・§2-4 はいずれも欠番**）。3-219 のオーナー目視（G9）の際に見つかった隣接の不具合で、3-219 による退行ではない。カーソル位置への挿入の経路にだけ退避が無かったのが原因で、プラグインのログで 2026-09-05・09-15・10-06 に同じ形の失敗を確かめた。
+- **到達条件**: ジョブ一覧の「🎞」で、仮オブジェクトに結び付いていない完了ジョブをカーソル位置へ入れるとき、既存オブジェクトと重なっても ⚠️ にならずに入ること。「⚠️ を押したら 🎞 に戻すだけ」の仕様は変えないこと（オーナー決定）。**達成した。**
+- **何が完了したか**: ネイティブの `InsertMediaEditProc` に、置換経路と同じ「生成が null なら `layer_max+1`・同じフレームで 1 回だけ再試行」を足した（同じ編集セクションの中なので取り消しは 1 回）。`timeline.insertMedia` の応答に `usedFallback` を足した（ブリッジ契約 v14）。退避したときは既存の注記「カーソル位置に既存オブジェクトがあったため、最前面のレイヤーNに挿入しました。」を注記欄に出し、知らせるのは新しくオブジェクトを置く挿入（応答が `inserted`）のときだけにした（仮オブジェクトの置換の退避は従来どおり無通知）。レイヤーメニューの「⬇ 最新の生成結果をここに挿入」と結合した動画の挿入も同じ関数を通るので同じく退避する。挙動と設計判断の正本は操作パネル[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §131、契約は[`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) v14。コードはコミット `dc83afe`、文書は `3848eb6`（あわせて[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) §5-10 に追記）。
+- **どの物差しで通ったか**: ネイティブの単体テスト 384→387 件（失敗 0）・`npm run typecheck` 0・`npm run lint` エラー 0（警告 31 は従来どおり）・vitest 3,128→3,135 件（+7）。追補計画はプランモードと敵対的レビュー（Critical 0・Major 3・Minor 7）、コードの敵対的レビューは Critical 0・Major 0・Minor 3 で、すべて反映した。aux2 は `scripts/build.ps1 -RunTests`→`scripts/deploy.ps1` で実機と配布用の写しに配置した（同一）。**オーナー目視: G1〜G4 全合格（2026-10-06。操作パネル[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.25）。**
+- **クローズ理由**: 実装が完了し、オーナーの目視に全項目合格した。
+- **状態**: dev（コード `dc83afe`・文書 `3848eb6`。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §150）。バックエンドと Gradio 画面は不変。
+- **残課題**: 無し（`layer_max+1` がレイヤーの上限を超えるときは従来どおり ⚠️ になる、などの既知の許容は操作パネル[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §131.4）。
+- **正本・出典**: 操作パネル[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §131、[`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.7・§4.25.4・§4.25.7・§8、[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) §5-10、[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.25、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §150、`native/src/bridge.cpp`（`InsertMediaEditProc`）、`webui/src/jobs/downloadAndInsert.ts`。

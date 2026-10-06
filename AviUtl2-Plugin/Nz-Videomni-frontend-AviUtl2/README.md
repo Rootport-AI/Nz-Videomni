@@ -195,7 +195,10 @@ the Chain screen no longer carries its own copy of either.)
   deadline. There is no separate job lane or
   reservation queue: because the backend runs one job at a time and rejects a
   second with HTTP 409, the Generate button simply disables itself ("Busy…")
-  while a job is running rather than queueing/reserving. A completion toast can
+  while a job is running rather than queueing/reserving. (With Repeat count > 1
+  it instead shows an enabled "Stop (N left)" until the last run; each repeat is
+  submitted only after the previous job completes — still no queue.) A
+  completion toast can
   be clicked to scroll to its job (switching from Library to Create if needed).
 - **NAG (Negative Prompt) accordion**: a single collapsible "Negative Prompt"
   section directly under the prompt bar, outside all three mode screens —
@@ -233,7 +236,7 @@ the Chain screen no longer carries its own copy of either.)
 - **Connection settings**: the backend base URL is a persisted runtime
   setting (`settings.get` / `settings.set`, `%LOCALAPPDATA%\NzVideomni\
   settings.json`), not compiled in.
-- **Native bridge contract v8**: beyond the request/response envelope and
+- **Native bridge contract v14**: beyond the request/response envelope and
   `ping` / `getEditInfo` / `backend.request` / `backend.downloadVideo` /
   `backend.uploadFile` / `timeline.*`, v6 added `ui.pickFolder`,
   `fs.listFiles`, `fs.probeAudioDuration`, and a `destDir` / `fileName` /
@@ -251,7 +254,9 @@ the Chain screen no longer carries its own copy of either.)
   manifest (2026-07-18, batch A2V went stateless — see `Docs/DEVLOG.md` §26).
   v8 adds the right-click-redesign RPCs (`timeline.getSelection` extensions,
   `timeline.insertProvisional`, `timeline.insertMediaForJob`, etc.) — see
-  `Docs/BRIDGE_CONTRACT.md` §4.14.1.
+  `Docs/BRIDGE_CONTRACT.md` §4.14.1. v9–v14: see `Docs/BRIDGE_CONTRACT.md` §8
+  (v14 adds `usedFallback` to `timeline.insertMedia` and the one `layer_max+1`
+  retreat).
   See `Docs/BRIDGE_CONTRACT.md` for the full method/error reference.
 - **`.au2pkg.zip` packaging**: `scripts/package.ps1` bundles the
   single-file-embedded `NzVideomni.aux2` plus `Language/*.aul2` (and

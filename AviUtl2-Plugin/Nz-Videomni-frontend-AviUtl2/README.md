@@ -84,6 +84,10 @@ name and `package.ini`).
   right-click menu routes to the appropriate panel (Create/Chain/Library) with
   the mode, intent and a derived resolution pre-filled; the user still
   reviews/adjusts and submits from the panel (no direct-to-queue shortcut).
+- **Repeat count** (below the Generate button, 1–99, default 1) runs the same
+  settings N times in a row: each time the previous run completes, the panel
+  submits again with its current values; with seed -1 every run gets a fresh
+  random seed.
 
 ### Chain screen
 
@@ -164,6 +168,8 @@ name and `package.ini`).
   auto-migrate a manually-typed control-LoRA tag into a panel: if one is
   detected in the prompt, a warning banner appears and Generate is disabled
   until it is removed (via the chip's × button).
+- **Repeat count** below the Generate button works the same as on the Create
+  screen (N runs in a row, one after another).
 
 (Both A2V and the IC-LoRA reference video now live on the Create screen only;
 the Chain screen no longer carries its own copy of either.)

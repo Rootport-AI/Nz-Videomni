@@ -84,10 +84,10 @@ name and `package.ini`).
   right-click menu routes to the appropriate panel (Create/Chain/Library) with
   the mode, intent and a derived resolution pre-filled; the user still
   reviews/adjusts and submits from the panel (no direct-to-queue shortcut).
-- **Repeat count** (below the Generate button, 1–99, default 1) runs the same
-  settings N times in a row: each time the previous run completes, the panel
-  submits again with its current values; with seed -1 every run gets a fresh
-  random seed.
+- **Repeat count** (below the Generate button, 1–99, default 1) runs Generate
+  N times in a row: each time the previous run completes, the panel submits
+  again with its current values (edits made meanwhile apply from the next
+  run); with seed -1 every run gets a fresh random seed.
 
 ### Chain screen
 

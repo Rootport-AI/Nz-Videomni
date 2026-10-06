@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-06（§2 を立て直し §2-3 を置く・§1-82 を起票）。前回 2026-10-06: §1 を立て直し §1-80・§1-81 を起票。
+- 作成: 2026-07-15／最終更新: 2026-10-06（§1-80・§1-81 を §2-3 へ移す〔§1 側は欠番〕・§1-82 を起票）。前回 2026-10-06: §1 を立て直し §1-80・§1-81 を起票。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -15,24 +15,10 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-### 1-80. 操作パネルの「生成」ボタン直下に「Repeat count」欄（同じ条件で指定回数の生成を自動で繰り返す）（起票：2026-10-06）
+### 1-82. 操作パネルの既存テストの不安定（`App.nag.test.tsx` の 2 件・`JobsContext.test.tsx` の 1 件）（起票：2026-10-06）
 
-- **概要**: Single・Chained タブの「生成」ボタン直下に `Repeat count: [1]`（既定 1・上限 99・日英とも同じ表示）を足し、その回数ぶん「生成」を自動で押し直す。2 本目以降はその時点の操作パネルの値で送る（シードが -1 なら毎回別の乱数、固定値なら同じシード）。残りの送信がある間は「生成」ボタンが「停止（残り N 回）」に変わり、押すと残りを取り消す（走っているジョブは最後まで走る）。自分のジョブの失敗・キャンセル・送信の拒否で残りを打ち切る。実行中に生成条件が変わったら「生成条件が変更されました。次の生成から反映されます。」のトーストで知らせる。右クリックで素材を操作パネルへ送って画面が作り直されると繰り返しは終わる（回数欄の値は残る）。対象は Single・Chained のみ（Edit の 3 区画とバッチは対象外）。
-- **範囲**: 操作パネル（webui）のみ。バックエンド・Gradio 画面・API は不変。
-- **完了条件**: 機械の門（型検査・vitest・lint）合格 → aux2 のビルドと配置 → オーナーの実機目視（`REAL_BACKEND_CHECKLIST.md` §4.24）全合格。
-- **状態**: 実装済み・`dev` に積み済み。目視待ちは §2-3。
-
-### 1-81. バッチの開始ゲートを「空のまま送られる行が無ければ開始できる」の 1 規則にそろえる（起票：2026-10-06）
-
-- **概要**: Chained タブ下部のバッチ i2v-long は、Chain 画面の「生成」ボタン用の判定理由 `promptEmpty`（メインプロンプト空）がそのまま流れ込むため、表の追加プロンプトが全部埋まっていても開始できない。この理由だけを間引く（行単位の判定＝合成後のプロンプトが空になる実行対象行があれば開始不可、は残す）。Create タブ下部の a2v／i2v バッチにはプロンプトの検査が無く、空の行はバックエンドで拒否されて Failed になるため、同じ行単位の検査（実際に送る本文＝`<lora:>` タグ除去後が空の実行対象行があれば開始不可。警告帯で行番号を示す）を足す。
-- **範囲**: 操作パネル（webui）のみ。Gradio 画面の判定表（`BATCH_A2V_WORKORDER.md`）とバックエンドは不変。
-- **完了条件**: 機械の門合格 → 配置 → オーナーの実機目視（同 §4.24）全合格。
-- **状態**: 実装済み・`dev` に積み済み。目視待ちは §2-3。
-
-### 1-82. 操作パネルのたまに落ちる既存テスト 2 件（`App.nag.test.tsx`・`JobsContext.test.tsx`）（起票：2026-10-06）
-
-- **概要**: 操作パネルのテスト `webui/src/App.nag.test.tsx` の 2 件（"bridge capture — NAG on …" と "bridge capture — VSF method selected …"）が、ときどき落ちる。前のテストが送ったジョブが、アプリ全体で共有されるモックの中でまだ実行中のことがあり、「生成」ボタンが "Busy…" になっていて見つからないため。モックのジョブの進み具合は既定 2 秒のポーリングで決まるのでタイミング次第で、§1-80 の改修の前後とも 20 回中 4〜5 回落ちる（§1-80 とは無関係の既存の不具合）。
-  - もう 1 件、`webui/src/jobs/JobsContext.test.tsx` の "cancelJob marks the job as cancelling until it settles into cancelled, then clears" が、テスト全体の実行では 3 回中 1 回落ち、このファイル単独では 5 回とも通る。§1-80 で触っていないファイルで、原因は未調査（`App.nag.test.tsx` の共有モックの持ち越しとは別の理由の可能性がある）。
+- **概要**: 操作パネルのテスト `webui/src/App.nag.test.tsx` の 2 件（"bridge capture — NAG on …" と "bridge capture — VSF method selected …"）が、ときどき落ちる。前のテストが送ったジョブが、アプリ全体で共有されるモックの中でまだ実行中のことがあり、「生成」ボタンが "Busy…" になっていて見つからないため。モックのジョブの進み具合は既定 2 秒のポーリングで決まるのでタイミング次第で、Repeat count（元 §1-80）の改修の前後とも 20 回中 4〜5 回落ちる（この改修とは無関係の既存の不具合）。
+  - もう 1 件、`webui/src/jobs/JobsContext.test.tsx` の "cancelJob marks the job as cancelling until it settles into cancelled, then clears" が、テスト全体の実行では 3 回中 1 回落ち、このファイル単独では 5 回とも通る。Repeat count の改修では触っていないファイルで、原因は未調査（`App.nag.test.tsx` の共有モックの持ち越しとは別の理由の可能性がある）。
 - **直し方の候補**: `App.nag.test.tsx` は、`afterEach` で共有モックのジョブを `listJobs` で終わりまで進める後片付けを足す（`webui/src/modes/single/SingleScreen.repeat.test.tsx` で採った方法）。`JobsContext.test.tsx` は原因の特定から。
 - **範囲**: テストのみ（製品コードは不変）。
 
@@ -42,12 +28,12 @@
 
 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。全項目が合格して空になったら、本節は見出しごと削除する。
 
-### 2-3. 操作パネル改修 2 件（§1-80・§1-81）の実機目視
+### 2-3. 操作パネル改修 2 件（元 §1-80・§1-81）の実機目視
 
-実装済み。実機での確認待ち。確認項目の正本はフロントエンド[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.24（本書には書き写さない）。
+実装済み。実機での確認待ち。1 件目は Repeat count（Single・Chained タブの「生成」ボタン直下の回数欄で、同じ条件の生成を指定回数だけ自動で繰り返す）、2 件目はバッチの開始ゲートを「プロンプトが空のまま送られる行が無ければ開始できる」の 1 規則にそろえた改修である。詳細はフロントエンド[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §130、バッチの開始条件の正本は同[`BATCH_I2V_WORKORDER.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_I2V_WORKORDER.md) §6.1・[`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md) §2.8。確認項目の正本はフロントエンド[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.24（本書には書き写さない）。
 
-- [ ] Repeat count（Single・Chained の「生成」ボタン直下の回数欄）: 同 §4.24 の G1〜G10 を順に操作する → すべて合格なら §1-80 をクローズ。
-- [ ] バッチの開始ゲート（Chained タブのバッチ i2v-long・Create タブの a2v／i2v バッチ）: 同 §4.24 の G11・G12 を操作する → 両方合格なら §1-81 をクローズ。
+- [ ] Repeat count（Single・Chained の「生成」ボタン直下の回数欄）: 同 §4.24 の G1〜G10 を順に操作する → すべて合格ならクローズ。
+- [ ] バッチの開始ゲート（Chained タブのバッチ i2v-long・Single タブの a2v／i2v バッチ）: 同 §4.24 の G11・G12 を操作する → 両方合格ならクローズ。
 
 ---
 
@@ -82,7 +68,7 @@
 バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能。2026-09-15からi2vモードも同じパネルに乗る。正本は`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md`）にα版として実装していない機能のうち、現在も残っているのは次の3点。出典: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
 
 - **バッチでの参照動画**: IC-LoRA用の参照動画系フィールド（Gradio原典`batch.py`の`use_adapter`／`ref_video_path`／`control_adherence`／`reference_strength`）に相当する設定がバッチ経路に無い（`webui/src/modes/batch/batchRunner.ts`の実装ノートに「No reference-video (control IC-LoRA) adapter support」と明記）。
-- **開始前の一括妥当性検証（preflight）**: Gradio原典の`_validate`の2判定は、どちらも開始可否（`canStart`）に入っている——画像側（Sharedキーフレームの有無）は以前から`sharedKeyframeMissing`、プロンプト側は`promptEmptyQueues`（§1-81）。それ以外の画像不良（ファイル破損など）の事前検査は無く、バックエンドで失敗してその行だけがFailedになる。
+- **開始前の一括妥当性検証（preflight）**: 画像不良（ファイル破損など）の事前検査が無く、バックエンドで失敗してその行だけが Failed になる（Shared キーフレームの有無と空のプロンプトは開始条件で止まる。正本はフロントエンド `BATCH_A2V_I2V_MODE.md` §2.8）。
 - **行ごとのAdd／Replace切替**: プロンプトと追加プロンプトの合成方式（Add＝連結／Replace＝行で置き換え）は、現状バッチ全体で1つの設定（`promptMode`）であり、行ごとには切り替えられない。
 
 なお本節の項目は、オーナー方針（Gradio同梱UIとのパリティは最終的に全項目を実装対象とする）のもとでは、いずれ実装側へ戻る前提である（[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)）。

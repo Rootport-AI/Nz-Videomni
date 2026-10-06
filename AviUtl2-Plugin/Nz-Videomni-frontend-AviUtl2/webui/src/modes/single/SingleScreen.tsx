@@ -954,7 +954,10 @@ function SingleScreenBody({
 
   // MJ-1: the form is only frozen while a submit is in flight; an occupied
   // server (`serverBusy` — a running job, or a model load) leaves the form
-  // editable and blocks the Generate button alone.
+  // editable and blocks the Generate button alone. (This applies only while no
+  // Repeat count run is active — while a run has remaining sends, the button is
+  // an always-enabled Stop, and the automatic resend does not wait for
+  // serverBusy: a 409 ends the run instead.)
   const submitting = submitState.phase === "submitting";
   const serverBusy = jobsCtx.serverBusy;
 
@@ -1002,6 +1005,9 @@ function SingleScreenBody({
   // The Generate button's own disabled/label logic (`.generation-column`,
   // above the ledger). `serverBusy` blocks only this button (label
   // `busyButton`); everything else is a genuine "can't submit yet" guard.
+  // (This applies only while no Repeat count run is active — while a run has
+  // remaining sends, the button is an always-enabled Stop, and the automatic
+  // resend does not wait for serverBusy: a 409 ends the run instead.)
   const generateDisabled =
     submitting ||
     serverBusy ||

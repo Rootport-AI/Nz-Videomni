@@ -42,8 +42,9 @@ export interface UseGenerationSubmitDeps {
    * `begin` catch BEFORE the `mountedRef` guard — it cleans up module-level
    * reservation state, so it must run even if the screen unmounted mid-submit
    * (a tab switch while submitting) so the seat can never linger. A plain
-   * panel-origin Generate (no reservation waiting) makes this a no-op in the
-   * caller. */
+   * panel-origin Generate (no reservation waiting) makes the reservation
+   * rollback a no-op in the caller (the caller also ends any active Repeat
+   * count run here). */
   onFailed?: () => void | Promise<void>;
 }
 

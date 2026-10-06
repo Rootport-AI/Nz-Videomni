@@ -6,7 +6,7 @@
 
 - 作成: 2026-09-15
 - 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-152（起票時は[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-30）。LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済みです（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。
-- 状態: 完結。実機ゲートG1〜G12は2026-09-15に全項目合格し、オーナーが受容してクローズしました（検証の記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108が正本）。§2.11（D13）は実機ゲートG1〜G4に合格してクローズしました（CLOSED §3-153）。
+- 状態: 完結。実機ゲートG1〜G12は2026-09-15に全項目合格し、オーナーが受容してクローズしました（検証の記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108が正本）。§2.11（D13）は実機ゲートG1〜G4に合格してクローズしました（CLOSED §3-153）。§2.8 のプロンプトの条件は 2026-10-06 に追加しました（CLOSED §3-220。[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.24 G12 合格）。
 
 **用語**: 本書では「**i2v**（画像1枚から動画を作るモード）」「**a2v**（音声から口パク動画を作るモード）」という略称をそのまま使います。どちらもこのアプリが以前から持っている生成モードの呼び名で、i2vはImage-to-Video、a2vはAudio-to-Videoの略です。
 
@@ -160,7 +160,7 @@ i2v行は`POST /api/v1/generate`（単発生成と同じエンドポイント）
 - **バッチパネルにクロップの欄はありません。** Create画面の「出力をクロップ」の設定（チェックと幅・高さ）を、NAGやAccelerationと同じように黙って継承します。走行開始（`start()`）の瞬間に他の設定と一緒に凍結され、開始後にCreate画面の欄を触っても走行中のバッチには影響しません。
 - **a2v・i2vのどちらのモードにも効きます。** a2v（`POST /generate/chain`）はクロップがOFFのときも従来どおり`crop_output: null`を明示して送り、i2v（`POST /generate`）はONのときだけ`crop_output`を`height`の直後に載せ、OFFならキーごと省略します。サーバーにとってこの2つは等価です（`crop_output`の既定は「無し」）。見え方が違うのは、i2vの送信本文がCreate画面の単発生成（`toGenerateRequest`）とバイト単位で一致することをテストで固定しているためです。
 - **Create画面のクロップが不正（生成サイズ超・空欄・32未満など）だと、バッチは開始できません。** 判定はCreate・Chainと同じ`isCropOutputValid`で、文言もCreate画面の「クロップサイズが生成サイズよりも大きいか、もしくは空欄です。」を借ります。2026-09-16からクロップ欄は自由入力なので、範囲外や空欄を直接打った場合も、クロップを設定したあとに生成サイズを縮めた場合も、同じゲートに掛かります。
-- **Chain画面のバッチi2v-longは対象外です。** こちらはChain画面の送信本文をテンプレートとして丸ごと継承する作りで、クロップも、開始ゲート（Chain画面の`validityReasons`をそのまま`chainBlockReasons`として出す）も、以前から効いています。
+- **Chain画面のバッチi2v-longは対象外です。** こちらはChain画面の送信本文をテンプレートとして丸ごと継承する作りで、クロップも、開始ゲート（Chain画面の`validityReasons`から`promptEmpty`と素材系のコードを除いたものを`chainBlockReasons`として出す。正本は[`BATCH_I2V_WORKORDER.md`](BATCH_I2V_WORKORDER.md) §6.1）も、以前から効いています。
 
 ## 3. 意図的に入れなかったもの
 

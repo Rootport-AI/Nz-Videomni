@@ -15,11 +15,14 @@ import type { LorasState } from "../modes/inventory/useLoras";
  */
 
 /** The panel's current selection: `null` = "none" (the dropdown's first
- * option). A single control LoRA at a time — the backend rejects more than
- * one via `lora_preprocess_conflict` (422), and it reads
- * `reference_downscale_factor`/preprocess config off the FIRST `loras[]`
- * entry, so "single, always-first" is a structural requirement, not just a
- * UI simplification. */
+ * option). A single control LoRA at a time is a UI decision (one reference
+ * video carries one control signal), not a backend limit: two control LoRAs of
+ * the same preprocess kind and the same `reference_downscale_factor` pass the
+ * backend. What the backend does reject: two or more different non-`"none"`
+ * preprocess kinds (`lora_preprocess_conflict`, 422), and mismatched
+ * `reference_downscale_factor`s (an engine error). Putting it first only
+ * mirrors Gradio's `_combine_generate_loras`; the engine does not read
+ * `loras[0]` by position. */
 export interface ControlLoraSelection {
   name: string;
   strength: number;
@@ -168,9 +171,10 @@ export function dedupeLoraSpecs(specs: readonly LoraSpec[]): LoraSpec[] {
 /** Assembles the final `loras[]` sent to the backend from the panel's
  * `controlLora` selection plus the prompt's own STYLE `<lora:...>` tags —
  * pure mirror of Gradio's own merge (`gradio_ui/handlers.py`'s
- * `_combine_generate_loras`): the control LoRA goes first (the engine reads
- * `reference_downscale_factor`/preprocess config off `loras[0]`, so its
- * position is a hard requirement, not cosmetic), the prompt's tags follow in
+ * `_combine_generate_loras`): the control LoRA goes first (ordering only
+ * mirrors Gradio's merge — the engine does not read
+ * `reference_downscale_factor`/preprocess config off `loras[0]` by position),
+ * the prompt's tags follow in
  * their existing order, and any name collision is resolved by
  * {@link dedupeLoraSpecs} — so a style tag that happens to share a name with
  * the selected control LoRA doesn't produce two `loras[]` entries for the same

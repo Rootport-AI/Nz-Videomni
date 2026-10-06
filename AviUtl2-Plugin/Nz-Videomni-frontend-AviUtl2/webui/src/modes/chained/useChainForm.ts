@@ -2547,8 +2547,8 @@ export function useChainForm(
   // ── §1-15 参照動画: the cross-field gates ──────────────────────────────────
   // The final `loras[]` this form would send: Chain's own control selection
   // first, the prompt's STYLE tags after, deduped by name (`combineLoras`,
-  // `lora/controlLoras.ts` — the control adapter's leading position is a hard
-  // engine requirement, not cosmetic). Computed here, not only in
+  // `lora/controlLoras.ts` — ordering only mirrors Gradio's merge; the engine
+  // does not read `loras[0]` by position). Computed here, not only in
   // `buildRequest`, so the gates below react live. Create's `mergedLoras`
   // verbatim.
   const mergedLoras = useMemo(() => combineLoras(controlLora, parsedPrompt.loras), [controlLora, parsedPrompt]);

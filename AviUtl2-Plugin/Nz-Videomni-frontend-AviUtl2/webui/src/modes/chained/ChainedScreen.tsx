@@ -790,7 +790,10 @@ function ChainedScreenBody({
 
   // MJ-1: the form is only frozen mid-submit; an occupied server (a running
   // job, or a model load) blocks the Generate button alone (`serverBusy`),
-  // leaving fields editable.
+  // leaving fields editable. (This applies only while no Repeat count run is
+  // active — while a run has remaining sends, the button is an always-enabled
+  // Stop, and the automatic resend does not wait for serverBusy: a 409 ends the
+  // run instead.)
   const submitting = submitState.phase === "submitting";
   const serverBusy = jobsCtx.serverBusy;
   const disabled = submitting;

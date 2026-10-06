@@ -1785,13 +1785,14 @@ export const en = {
     },
   },
   /** Shared note area (RIGHTCLICK_REDESIGN_SPEC.md §6): persistent, single-seat
-   * right-click feedback shown above the operation panel. I5 seeds only the
-   * fallback-insert note; the mismatch guidance (I6) and receipt notes (I7)
-   * add their copy under this namespace next. Layer/frame numbers in note copy
+   * right-click and job-card insert feedback shown above the operation panel:
+   * the fallback-insert note, the mismatch guidance (I6) and the receipt notes
+   * (I7), among others, live under this namespace. Layer/frame numbers in note copy
    * are always shown +1 (1-based) to match AviUtl2's UI (§6-3). */
   notes: {
-    /** §5-4 fallback notice: the cursor spot was occupied, so the provisional
-     * was placed on the guaranteed-free frontmost layer instead. `layerNumber`
+    /** §5-4 fallback notice: the target slot was occupied, so the provisional
+     * — or a newly inserted finished clip (🎞 / joined / W3) — was placed on the
+     * frontmost layer instead. `layerNumber`
      * arrives already +1'd (1-based) by the caller. */
     insertedOnFrontmostLayer: (layerNumber: number): string =>
       `There was an object at the cursor, so it was inserted on the frontmost layer ${layerNumber}.`,

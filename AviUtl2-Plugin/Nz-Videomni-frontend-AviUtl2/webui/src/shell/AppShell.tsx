@@ -744,7 +744,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // the SAME replace-insert the panel's 🎞 button does (`downloadAndInsertVideo`
     // with no `plainInsertAt` → `insertForJob`, which replaces the marker in
     // place). This is an early-return channel: no mode switch, no reservation, no
-    // provisional placement — feedback is a toast (not a note), matching the job
+    // provisional placement — feedback is a toast (not a note — W2 does not
+    // surface a retreat), matching the job
     // ledger's own settle toasts. The job is resolved out of the mirrored ledger
     // by the object's `NzVideomni#<jobId>` name (the `menuInvoked` snapshot already
     // carries `objectName`, so `needsSelection` is false and nothing is re-queried).
@@ -794,7 +795,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // recently completed generation result at the right-click position as a
     // PLAIN insert (`downloadAndInsertVideo`'s `plainInsertAt`), which bypasses
     // the replace-RPC so any provisional at the cursor is left untouched. Also an
-    // early-return channel (no mode switch, no reservation): toast feedback only.
+    // early-return channel (no mode switch, no reservation): toast feedback, plus
+    // the frontmost-layer note when the insert retreated (usedFallback).
     if (action === "insertLatestResultHere") {
       const latest = latestCompletedJob(jobsRef.current);
       if (latest === null) {

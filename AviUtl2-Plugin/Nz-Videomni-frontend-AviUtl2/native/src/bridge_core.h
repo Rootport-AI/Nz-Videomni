@@ -373,9 +373,10 @@ using UpdateReservationProvider =
 
 // --- timeline.deleteProvisionalByJob (spec 5-10) ----------------------------
 //
-// Deletes the still-present provisional placeholder for a job id, as the
-// cleanup tied to the user's explicit successful timeline.insertMedia (the panel
-// 🎞 button). Only the FIRST match is removed (duplicates are left as harmless
+// Deletes the still-present provisional placeholder for a job id. The normal
+// 🎞 insert no longer uses it (it goes through timeline.insertMediaForJob); the
+// webui calls it only for the joined-clip cleanup (JobCard) and the reservation
+// rollback (provisionalReservation). Only the FIRST match is removed (duplicates are left as harmless
 // orphan text); a missing placeholder is a no-op success (idempotent). Runs the
 // SDK delete_object in one edit section (one undo step) after bridge_core has
 // located the placeholder via ctx.scan_objects + FindProvisionalIndex.
@@ -472,8 +473,10 @@ struct RequestContext {
     // delete-old + create-new provisional re-placement for
     // timeline.updateProvisionalReservation.
     UpdateReservationProvider update_reservation;
-    // I13 (appended at the end): the delete of the ✅ provisional placeholder on
-    // a successful 🎞 insert (timeline.deleteProvisionalByJob, spec 5-10).
+    // I13 (appended at the end): the delete of a job's provisional placeholder
+    // (timeline.deleteProvisionalByJob, spec 5-10) - used by the webui only for
+    // the joined-clip cleanup and the reservation rollback; the normal 🎞 insert
+    // goes through timeline.insertMediaForJob.
     DeleteProvisionalProvider delete_provisional;
     // Replace-insert (appended at the end): the atomic delete-placeholder +
     // create-media-at-the-marker EditProc for timeline.insertMediaForJob's

@@ -3762,8 +3762,11 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
             return r;
         }
         if (ic.object == nullptr) {
-            // Every create attempt failed - the alias path AND the legacy
-            // create_object_from_media_file fallback (see CreateMediaObject).
+            // Every create attempt failed - at the requested slot AND (when edit
+            // info is available) the one layer_max+1 retreat, each through the
+            // alias path and the legacy
+            // fallback (see CreateMediaObject). ic.layer is the originally
+            // requested layer.
             LogWarn(std::wstring(L"timeline.insertMedia: media object creation failed "
                                  L"(layer ") +
                     std::to_wstring(ic.layer) + L", frame " + std::to_wstring(ic.frame) +
@@ -3947,7 +3950,8 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
         }
         return out;
     };
-    // --- I13: timeline.deleteProvisionalByJob (✅ marker cleanup on 🎞 insert) -
+    // --- I13: timeline.deleteProvisionalByJob (joined-clip cleanup and
+    // reservation rollback; the normal 🎞 insert uses insertMediaForJob) ------
     ctx.delete_provisional = [handle](const DeleteProvisionalRequest& r) -> bool {
         if (handle == nullptr || handle->call_edit_section_param == nullptr) {
             return false;

@@ -23,7 +23,10 @@ the batch i2v-long panel on the Chained screen makes one long clip chain per
 image) and a job ledger (a table of all jobs shown
 next to the Generate button; there
 is no separate job lane or reservation queue — the backend runs one job at a
-time, so the Generate button just disables itself while one is running). The
+time, so the Generate button just disables itself while one is running; with
+Repeat count > 1 it instead shows an enabled "Stop (N left)" until the last
+run, and each repeat is submitted only after the previous job completes — still
+no queue). The
 tab bar also has a live **Toolbox** tab with its own sub-tab row — **Tracking**
 (object tracking: it makes a timeline partial filter's box follow a moving
 subject — see `../../../Docs/OBJECT_TRACKING_DESIGN.md`) and **mp4 info** (drop

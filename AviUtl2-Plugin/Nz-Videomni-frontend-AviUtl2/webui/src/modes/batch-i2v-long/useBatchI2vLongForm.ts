@@ -79,10 +79,11 @@ const ROWS_ELIGIBLE_FOR_RESET: ReadonlySet<I2vLongRow["stat"]> = new Set(["Done"
  * (`strings.batchI2vLong.blockReasons`) — an opaque "cannot start" would leave
  * an unattended overnight run undiagnosable.
  *
- * The Chain form's OWN failures are not in this union: they are surfaced
- * verbatim as {@link UseBatchI2vLongFormResult.chainBlockReasons}
- * (`ChainValidityReason` codes), so the batch never re-judges — and never
- * drifts from — the Chain screen's own gates.
+ * The Chain form's OWN failures are not in this union: they are surfaced as
+ * {@link UseBatchI2vLongFormResult.chainBlockReasons} (`ChainValidityReason`
+ * codes) — verbatim except `promptEmpty` (always re-judged here per row on the
+ * composed prompt) and the material codes while their `*Attached` reason
+ * shows. Otherwise the batch never re-judges the Chain screen's gates.
  */
 export type I2vLongBlockReason =
   | "imgDirMissing"

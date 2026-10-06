@@ -55,11 +55,15 @@ export interface ChainSnapshotSource {
    * source-less chain needs at least 2 clips) and for detecting per-clip
    * prompt overrides, which batch prompts deliberately do NOT rewrite. */
   clips: readonly { readonly prompt: string }[];
-  /** The Chain form's own Generate gate; batch Start requires it too. */
+  /** The Chain form's own Generate gate. Batch Start does NOT require it
+   * directly: it requires the batch's filtered `chainBlockReasons` to be empty
+   * (`promptEmpty` is always dropped and re-judged per row; the material codes
+   * are dropped while their `*Attached` reason shows). */
   isValid: boolean;
-  /** The structured breakdown behind `isValid`, expanded one-by-one in the
-   * batch's block-reason list (an opaque "chain settings are invalid" would
-   * leave the user with no way to find out why Start is disabled). */
+  /** The structured breakdown behind `isValid`, expanded one-by-one (except
+   * `promptEmpty` and the material codes) in the batch's block-reason list (an
+   * opaque "chain settings are invalid" would leave the user with no way to
+   * find out why Start is disabled). */
   validityReasons: readonly string[];
   /** Predicted output length per image, for the `chainSummary` readout. */
   outputFrames: number;

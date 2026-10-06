@@ -419,7 +419,9 @@ std::string HandleRequestJson(const std::string& request_json,
             return MakeSuccessResponse(id, std::move(result));
         }
         // insertedReserved: the placeholder is gone; insert the finished video at
-        // the reserved position via the existing insert_media provider.
+        // the reserved position via the existing insert_media provider (which
+        // retreats once to layer_max+1 if the slot is occupied; ir.layer then
+        // reflects the retreat).
         InsertMediaParams ip;
         ip.file_path = p.video_file_path;
         ip.has_layer = true;

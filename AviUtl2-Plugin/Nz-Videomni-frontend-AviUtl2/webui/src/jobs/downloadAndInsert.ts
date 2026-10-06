@@ -38,11 +38,12 @@ export interface DownloadAndInsertOptions {
 
 /**
  * The two-step "hand a completed job's mp4 to the AviUtl2 timeline" flow
- * (`backend.downloadVideo` -> `timeline.insertMedia`, Docs/API_REFERENCE.md
- * §3.16 / SDK_REFERENCE.md §7). Shared by both the Create screen's own
- * result panel (`modes/single/useGeneration.ts`) and the job rail's
- * per-card "Insert" button (`jobs/JobCard.tsx`), so the bridge call
- * sequence lives in exactly one place.
+ * (`backend.downloadVideo` -> `timeline.insertMediaForJob` on the main path;
+ * the joined clip and W3's `plainInsertAt` use the plain `timeline.insertMedia`
+ * instead — Docs/API_REFERENCE.md §3.16 / SDK_REFERENCE.md §7). Shared by the
+ * job rail's per-card 🎞 button (`jobs/JobCard.tsx`) and the right-click
+ * W2 / W3 channels (`shell/AppShell.tsx`), so the bridge call sequence lives in
+ * exactly one place.
  */
 export async function downloadAndInsertVideo(
   nativeBridge: NativeBridge,
@@ -86,7 +87,8 @@ export async function downloadAndInsertVideo(
   // The V2V *joined* insert must NEVER replace a job's provisional marker
   // (adversarial-review Med 6): the joined clip is a distinct, longer artifact
   // that does not belong in any single per-clip reservation's slot. Route it
-  // through the plain `insertMedia` (append at the cursor), so the replace-insert
+  // through the plain `insertMedia` (at `options.position` — layerMax+1 — when
+  // given, otherwise at the cursor), so the replace-insert
   // can never swap a joined result into a provisional placeholder.
   if (options.joined) {
     const result = await nativeBridge.request(
@@ -108,7 +110,10 @@ export async function downloadAndInsertVideo(
  * provisional marker in place (`mode:"replaced"`) or, when no marker remains,
  * inserts exactly like the plain `insertMedia` (`mode:"inserted"`). This
  * subsumes the old "insertMedia + deleteProvisionalByJob" two-call sequence.
- * `usedFallback` drops the replace path's retreat here, so the notice fires only for a cursor insert.
+ * `usedFallback` is reported only for `mode:"inserted"` (a newly placed object);
+ * the replace path's retreat is dropped here so a provisional swap stays silent.
+ * Callers decide whether to show the note (JobCard 🎞 / joined and W3 do; W2
+ * does not).
  */
 export async function insertForJob(
   nativeBridge: NativeBridge,

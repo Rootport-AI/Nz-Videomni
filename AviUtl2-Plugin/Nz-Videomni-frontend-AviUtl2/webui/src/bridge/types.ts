@@ -94,7 +94,10 @@
  * It subsumes the old two-call `insertMedia` + `deleteProvisionalByJob` sequence
  * on the per-clip insert path. `timeline.insertMedia` stays for the V2V *joined*
  * insert (which must never replace a per-clip marker) and
- * `timeline.deleteProvisionalByJob` stays for the legacy rollback path.
+ * `timeline.deleteProvisionalByJob` stays for two uses only: the joined-clip
+ * cleanup (JobCard) and the reservation rollback (provisionalReservation). The
+ * normal 🎞 insert goes through `timeline.insertMediaForJob` (the old
+ * `REPLACE_INSERT_ENABLED` switch has been removed).
  *
  * v9 (media-info probe) adds `fs.probeMediaInfo`: a best-effort, synchronous
  * probe of a single local media file's duration/resolution, for the IC-LoRA /
@@ -260,7 +263,9 @@ export interface BridgeParamsMap {
    * Still current for the V2V *joined* insert path (`downloadAndInsert` with
    * `joined: true`): the joined clip is a distinct, longer artifact that must
    * NOT replace any single per-clip reservation's provisional marker, so it is
-   * appended at the cursor via this method rather than through
+   * inserted via this method (at the caller's `position` — layerMax+1 — when
+   * given, otherwise at the cursor; W3's `plainInsertAt` likewise passes an
+   * explicit layer/frame) rather than through
    * `timeline.insertMediaForJob`. The per-clip / reservation-backed 🎞 insert
    * goes through `timeline.insertMediaForJob` instead. */
   "timeline.insertMedia": {
@@ -437,7 +442,9 @@ export interface BridgeParamsMap {
    * finished video at `videoFilePath`. `mode:"replaced"` when the placeholder
    * was still present and swapped in place; `"insertedReserved"` when the
    * placeholder was gone (e.g. user deleted it) and the video was inserted at
-   * the originally reserved layer/frame instead. */
+   * the originally reserved layer/frame instead (or, if that slot is occupied,
+   * on layer_max+1 — the insert path's one retreat; `layer` reports where it
+   * landed and there is no usedFallback flag here). */
   "timeline.resolveProvisional": {
     jobId: string;
     videoFilePath: string;
@@ -457,9 +464,11 @@ export interface BridgeParamsMap {
    * longer known to the WebUI ("orphans"), so they can be cleaned up. Takes
    * no parameters. */
   "timeline.scanProvisionals": Record<string, never>;
-  /** I13 (right-click redesign spec §5-10). Deletes the still-present ✅
-   * provisional placeholder for `jobId` — the cleanup tied to the user's
-   * explicit successful 🎞 insert (`timeline.insertMedia`). Only the first
+  /** I13 (right-click redesign spec §5-10). Deletes the still-present
+   * provisional placeholder for `jobId`. The normal 🎞 insert no longer uses it
+   * (it goes through `timeline.insertMediaForJob`); the webui calls it only for
+   * the joined-clip cleanup (JobCard) and the reservation rollback
+   * (provisionalReservation). Only the first
    * match is removed; a missing placeholder is a no-op success (idempotent),
    * so `deleted` reports whether anything was actually removed. Never removes a
    * ❌ failed marker: a 🎞 insert is only possible for a *completed* job while

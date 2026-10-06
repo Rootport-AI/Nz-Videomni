@@ -2264,6 +2264,14 @@ export const en = {
       PIPELINE_LOAD_FAILED: "Failed to load the model pipeline. Check the server's VRAM and logs, then retry.",
     },
   },
+  /** §1-80 Repeat count: the Single / Chained Generate bar's "run the same
+   * conditions N times in a row" field and its Stop button. `countLabel` is
+   * deliberately identical in en and ja (owner decision). */
+  repeatRun: {
+    countLabel: "Repeat count",
+    stopButton: (left: number): string => `Stop (${left} left)`,
+    settingsChangedToast: "Generation settings changed. They will apply from the next run.",
+  },
 };
 
 /** Structural shape both dictionaries must satisfy — every leaf in `ja` must
@@ -3476,6 +3484,11 @@ export const ja: Strings = {
       MODEL_INCOMPATIBLE: "選択したファイルはこの用途のモデルとして不正です。別のモデルを選んでください。",
       PIPELINE_LOAD_FAILED: "モデルパイプラインの読み込みに失敗しました。サーバのVRAM/ログを確認して再試行してください。",
     },
+  },
+  repeatRun: {
+    countLabel: "Repeat count",
+    stopButton: (left: number): string => `停止（残り ${left} 回）`,
+    settingsChangedToast: "生成条件が変更されました。次の生成から反映されます。",
   },
 };
 

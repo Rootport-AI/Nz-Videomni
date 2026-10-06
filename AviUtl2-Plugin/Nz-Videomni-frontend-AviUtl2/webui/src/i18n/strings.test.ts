@@ -114,6 +114,19 @@ describe("i18n dictionaries (en/ja)", () => {
     expect(ja.common.dismissNotification).not.toBe(en.common.dismissNotification);
   });
 
+  // §1-80 Repeat count: the field label is the same string in both languages
+  // (owner decision), while the Stop button is translated.
+  it("repeatRun.countLabel is identical in en and ja", () => {
+    expect(ja.repeatRun.countLabel).toBe(en.repeatRun.countLabel);
+    expect(en.repeatRun.countLabel).toBe("Repeat count");
+  });
+
+  it("repeatRun.stopButton interpolates the remaining count in both languages", () => {
+    expect(en.repeatRun.stopButton(3)).toContain("3");
+    expect(ja.repeatRun.stopButton(3)).toContain("3");
+    expect(ja.repeatRun.stopButton(3)).not.toBe(en.repeatRun.stopButton(3));
+  });
+
   it("DICTIONARIES exposes both languages, and DEFAULT_LANG is 'en'", () => {
     expect(DICTIONARIES.en).toBe(en);
     expect(DICTIONARIES.ja).toBe(ja);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type { AppConfig } from "../../api/types";
+import type { AppConfig, GenerateChainRequest, GenerateRequest } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
@@ -27,6 +27,8 @@ import { findOverflowFrameIdxs, nextAddPosition, placeableSlotCount } from "./ke
 import { KeyframeShrinkModal } from "./KeyframeShrinkModal";
 import { GenerateButtonBar } from "./GenerateButtonBar";
 import { GenerateReasonsNote } from "./GenerateReasonsNote";
+import { RepeatCountField } from "./RepeatCountField";
+import { submissionFingerprint } from "./repeatRun";
 import { GenerationForm } from "./GenerationForm";
 import { snapFrameRate, snapNumFrames } from "./paramUtils";
 import { useConfig } from "./useConfig";
@@ -34,6 +36,7 @@ import { useDurationShrinkGuard } from "./useDurationShrinkGuard";
 import { useGenerationSubmit } from "./useGeneration";
 import { useGenerationForm } from "./useGenerationForm";
 import { useKeyframes } from "./useKeyframes";
+import { useRepeatRun, useRepeatRunDriver } from "./useRepeatRun";
 import "./SingleScreen.css";
 
 export interface SingleScreenProps {
@@ -197,6 +200,11 @@ function SingleScreenBody({
   const toasts = useToasts();
   const jobsCtx = useJobsContext();
   const showNote = useShowNote();
+  // §1-80 Repeat count: the run state lives here (top of the body) so
+  // `onSubmitted`/`onFailed` below can reach it; the completion driver is
+  // wired after `handleGenerate` (see `useRepeatRunDriver` further down).
+  const repeat = useRepeatRun("single");
+  const { noteSubmitted: noteRepeatSubmitted, stop: stopRepeat } = repeat;
 
   // I4 (✨ minimal binding): `bindToJob` needs the confirmed length/fps and a
   // display text, but `form`/`prompt` are declared below this callback, so we
@@ -208,6 +216,9 @@ function SingleScreenBody({
   // holds `submitting` until this resolves.
   const onSubmitted = useCallback(
     async (jobId: string) => {
+      // §1-80: record the job a repeat waits on BEFORE the refresh (no-op
+      // unless runs remain, so a single Generate is unchanged).
+      noteRepeatSubmitted(jobId);
       await jobsCtx.refresh();
       onJobSubmitted(jobId);
       // I4: hand the reserved provisional (if any) off to this real job
@@ -224,7 +235,7 @@ function SingleScreenBody({
         // stays where it is and the user can retry from the timeline.
       }
     },
-    [jobsCtx, onJobSubmitted, nativeBridge],
+    [jobsCtx, onJobSubmitted, nativeBridge, noteRepeatSubmitted],
   );
   // X2(a): a synchronous submit failure (422/busy) never reaches `onSubmitted`,
   // so a ✨/📷/#4/#5 right-click reservation would stay `reserved` forever and
@@ -233,9 +244,11 @@ function SingleScreenBody({
   // actually waiting (phase "reserved"), so a plain panel-origin Generate leaves
   // the seat untouched; it never touches a bound (`generating`) real job.
   const onFailed = useCallback(async () => {
+    // §1-80: a rejected submit (409/422/transport) ends a repeat run.
+    stopRepeat();
     const bridge = nativeBridge ?? defaultBridge;
     await rollbackReservedPlacement(bridge);
-  }, [nativeBridge]);
+  }, [nativeBridge, stopRepeat]);
   const { submitState, submit, submitChain } = useGenerationSubmit({ onSubmitted, onFailed });
 
   const isICLora = initialIntent?.intent === "reference-video";
@@ -945,21 +958,32 @@ function SingleScreenBody({
   const submitting = submitState.phase === "submitting";
   const serverBusy = jobsCtx.serverBusy;
 
+  // Group3 item11: an attached source audio switches submission to
+  // `POST /generate/chain` (the distilled A2V fast path), carrying Create's
+  // I2V keyframes on the single clip. Otherwise this is the usual T2V/I2V
+  // `/generate` call. §1-80: assembled in one function so the submission and
+  // the Repeat count settings fingerprint come from the very same values.
+  const { isA2v, buildA2vRequest, toGenerateRequest } = form;
+  const conditioningImages = keyframes.conditioningImages;
+  const buildSubmission = useCallback(():
+    | { kind: "chain"; body: GenerateChainRequest }
+    | { kind: "generate"; body: GenerateRequest } => {
+    if (isA2v) return { kind: "chain", body: buildA2vRequest(conditioningImages) };
+    const request = toGenerateRequest();
+    return {
+      kind: "generate",
+      body: conditioningImages.length > 0 ? { ...request, conditioning_images: conditioningImages } : request,
+    };
+  }, [isA2v, buildA2vRequest, toGenerateRequest, conditioningImages]);
+  const getSubmissionFingerprint = useCallback(() => submissionFingerprint(buildSubmission()), [buildSubmission]);
+
   const handleGenerate = () => {
-    // Group3 item11: an attached source audio switches submission to
-    // `POST /generate/chain` (the distilled A2V fast path), carrying Create's
-    // I2V keyframes on the single clip. Otherwise this is the usual T2V/I2V
-    // `/generate` call.
-    if (form.isA2v) {
-      submitChain(form.buildA2vRequest(keyframes.conditioningImages));
+    const submission = buildSubmission();
+    if (submission.kind === "chain") {
+      submitChain(submission.body);
       return;
     }
-    const request = form.toGenerateRequest();
-    submit(
-      keyframes.conditioningImages.length > 0
-        ? { ...request, conditioning_images: keyframes.conditioningImages }
-        : request,
-    );
+    submit(submission.body);
   };
 
   // Group3 item11: `useGenerationForm` never touches the toast system (keeps it
@@ -1025,6 +1049,23 @@ function SingleScreenBody({
     ...(form.isICLora && form.referenceVideo.state.status !== "ready" ? ["referenceNotReady"] : []),
     ...(hasOverflowKeyframes ? ["overflowKeyframes"] : []),
   ];
+
+  // §1-80 Repeat count driver: once the awaited job completes, send the next
+  // run with the panel's values at that moment (same `handleGenerate`).
+  const pushToast = toasts.push;
+  const onRepeatSettingsChanged = useCallback(
+    () => pushToast({ kind: "warning", message: strings.repeatRun.settingsChangedToast }),
+    [pushToast, strings],
+  );
+  useRepeatRunDriver(repeat, {
+    jobs: jobsCtx.jobs,
+    submitPhase: submitState.phase,
+    canSubmit: generateReasonCodes.length === 0,
+    getFingerprint: getSubmissionFingerprint,
+    send: handleGenerate,
+    onSettingsChanged: onRepeatSettingsChanged,
+  });
+  const repeating = repeat.remaining > 0;
   const generateReasonMessages: Record<string, string> = {
     promptEmpty: strings.single.generateReasons.promptEmpty,
     dimensionsOffGrid: strings.single.generateReasons.dimensionsOffGrid,
@@ -1096,9 +1137,21 @@ function SingleScreenBody({
         />
         <div className="generation-column">
           <GenerateButtonBar
-            label={generateLabel}
-            disabled={generateDisabled}
-            onGenerate={handleGenerate}
+            label={repeating ? strings.repeatRun.stopButton(repeat.remaining) : generateLabel}
+            disabled={repeating ? false : generateDisabled}
+            onGenerate={
+              repeating
+                ? repeat.stop
+                : () => repeat.start({ send: handleGenerate, fingerprint: getSubmissionFingerprint() })
+            }
+            belowButton={
+              <RepeatCountField
+                value={repeat.countText}
+                onChange={repeat.setCountText}
+                onBlur={repeat.commitCountText}
+                disabled={repeating}
+              />
+            }
             hint={form.estimateLabel}
           />
           {/* W7: the out-of-range keyframe hint is now one of these reasons — the

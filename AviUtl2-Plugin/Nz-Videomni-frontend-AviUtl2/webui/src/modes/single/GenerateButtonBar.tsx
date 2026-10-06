@@ -9,6 +9,10 @@ export interface GenerateButtonBarProps {
    * brief §5) — e.g. `useGenerationForm`'s `estimateLabel`. Omitted entirely
    * (no empty `<span>`) when the caller has nothing to show. */
   hint?: ReactNode;
+  /** §1-80: rendered between the button and `hint` (Single / Chained put the
+   * Repeat count field here). Omitted → nothing is rendered, so callers that
+   * don't pass it (Edit) keep the exact same DOM. */
+  belowButton?: ReactNode;
 }
 
 /** Shared Generate button + estimate-hint bar: the top section of the
@@ -25,12 +29,13 @@ export interface GenerateButtonBarProps {
  * `white-space: nowrap` hint next to a flexed button overflowed its card at
  * that width. Stacking removes the width contention — the button is always
  * full width, and the hint wraps freely underneath it. */
-export function GenerateButtonBar({ label, disabled, onGenerate, hint }: GenerateButtonBarProps) {
+export function GenerateButtonBar({ label, disabled, onGenerate, hint, belowButton }: GenerateButtonBarProps) {
   return (
     <div className="generate-bar">
       <button type="button" className="primary-button generate-button" disabled={disabled} onClick={onGenerate}>
         {label}
       </button>
+      {belowButton}
       {hint !== undefined && <span className="field-hint generate-bar-hint">{hint}</span>}
     </div>
   );

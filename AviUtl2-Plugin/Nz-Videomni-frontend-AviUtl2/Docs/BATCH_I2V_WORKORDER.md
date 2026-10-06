@@ -124,13 +124,13 @@
 | `noRunnableRows` | 行はあるが全部`Done`（`Waiting`/`Failed`/`Generating`が1件もない） |
 | `sourceVideoAttached` | Chain画面がV2Vモード（§2-3の排他。テンプレート側でも`source_video`を落とすが二重で止める） |
 | `clipsTooFew` | クリップが2本未満（素のchainの下限） |
-| `promptEmpty` | **合成後のプロンプトが空白のみの実行対象行がある**（＝プロンプトが空で、その行のプロンプトも空）。スキャン前は行が無いのでプロンプトだけで判定する。理由の文言は、行が判明していれば`#1, #2`のように**行番号を並べる**（10件超は`…(+N)`で省略） |
+| `promptEmpty` | **合成後のプロンプトが空白のみの実行対象行がある**（＝プロンプトが空で、その行のプロンプトも空）。スキャン前は行が無いのでプロンプトだけで判定する。**Chain画面のプロンプトが空でも、全行の追加プロンプトが埋まっていれば開始できる**（Chain画面由来の`promptEmpty`は展開しない。下記）。理由の文言は、行が判明していれば`#1, #2`のように**行番号を並べる**（10件超は`…(+N)`で省略） |
 | `promptTooLong` | **合成後のプロンプトが2000字超の実行対象行がある**（サーバー側の`max_length=2000`。Chain画面のPromptBar自身は`maxLength`で守っているが、追加プロンプトはその外側で文字を足すので**行ごとに合成後を再検査する**）。こちらも行番号を出す |
 | `unknownLoraTag` | テンプレートの`loras[]`に、サーバーに登録の無い名前がある（`<lora:typo>`は全行を404にするので事前に止める。**LoRA一覧が読み込み中／取得失敗のときはこのガードを通す**——一時的な`GET /loras`失敗で夜間バッチ全体を止めるほうが害が大きい） |
 | `jobActive` | 単発生成など別のジョブが走っている |
 | `lockedByOther` | もう一方のバッチ（Create画面のバッチA2V）が共有ロックを握っている（§6.3） |
 
-これに加えて、**Chain画面自身の`validityReasons`を潰さずそのまま展開する**（`chainBlockReasons`）。「chainの設定が不正です」の1行に丸めると、ユーザーは何を直せばいいか分からない。ただし`sourceVideoAttached`が出ているあいだは、それと同じことを言っているソース動画系のコードだけ間引く。
+これに加えて、**Chain画面自身の`validityReasons`を潰さずそのまま展開する**（`chainBlockReasons`）。「chainの設定が不正です」の1行に丸めると、ユーザーは何を直せばいいか分からない。例外は2つある。①素材4系統（ソース動画・音声・末尾素材・参照動画）のコードは、対応する`*Attached`理由（`sourceVideoAttached`など）が出ているあいだだけ間引く——同じことをより正確に言っている行がすでにあるため（間引くコードの正本は`webui/src/modes/chained/generateReasonMessages.ts`の`CHAIN_SOURCE_REASON_CODES`／`CHAIN_AUDIO_REASON_CODES`／`CHAIN_END_SOURCE_REASON_CODES`／`CHAIN_REFERENCE_REASON_CODES`）。②Chain画面の`promptEmpty`（Chain画面のプロンプトが空）は常に展開しない——本パネルは上表の行単位の`promptEmpty`（合成後の判定）に置き換えており、行の追加プロンプトで空のプロンプトを補えるため。
 
 ### 6.2 ブロックしない注意（非ブロック）
 

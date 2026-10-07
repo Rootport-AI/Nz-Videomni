@@ -2015,3 +2015,191 @@ def test_embed_mp4_metadata_argument_default_matches_the_server():
         assert prop["default"] is EMBED_MP4_METADATA_DEFAULT
     assert GenerateRequest.model_fields["embed_mp4_metadata"].default is EMBED_MP4_METADATA_DEFAULT
     assert GenerateChainRequest.model_fields["embed_mp4_metadata"].default is EMBED_MP4_METADATA_DEFAULT
+
+
+# ------------------------------------------------------------ submit_alpha_gen
+#
+# Alpha Gen (台帳 §1-83 第 1 弾). The server-side world with the ``alpha-gen``
+# adapter registered and LTX 2.5 active is built by tests/test_generate_alpha_api.py
+# (``_build``); it is reused here rather than copied.
+
+
+def _capture_alpha_body(**kwargs) -> tuple[str, dict]:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
+        )
+
+    set_client(_client_for_handler(handler))
+    result = anyio.run(
+        functools.partial(
+            generate.submit_alpha_gen,
+            kwargs.pop("reference_video_id", "vid"),
+            kwargs.pop("num_frames", 9),
+            kwargs.pop("frame_rate", 24),
+            **kwargs,
+        )
+    )
+    assert result == {
+        "job_id": "j1",
+        "status": "queued",
+        "created_at": "2026-01-01T00:00:00Z",
+        "next": "wait_for_job(job_id) を呼ぶ",
+    }
+    return captured["path"], captured["body"]
+
+
+def test_submit_alpha_gen_payload_contract_defaults_only():
+    path, body = _capture_alpha_body()
+    assert path == "/api/v1/generate/alpha"
+    assert body == {
+        "reference_video_id": "vid",
+        "num_frames": 9,
+        "frame_rate": 24,
+        "window_start_sec": 0.0,
+        "seed": -1,
+        "light_mode": False,
+    }
+
+
+def test_submit_alpha_gen_pass_through_sent_only_when_not_default():
+    from api.models import (
+        BLOCK_SWAP_PREFETCH_DEFAULT,
+        FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+        KEEP_RESIDENT_DEFAULT,
+        KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+    )
+
+    _, body = _capture_alpha_body(
+        attention_backend="sage",
+        block_swap_prefetch=not BLOCK_SWAP_PREFETCH_DEFAULT,
+        fused_gguf_dequant_kernel=not FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+        keep_resident=not KEEP_RESIDENT_DEFAULT,
+        keep_resident_embeddings=not KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+        light_mode=True,
+        window_start_sec=1.5,
+        seed=42,
+    )
+    assert body["attention_backend"] == "sage"
+    assert body["block_swap_prefetch"] is (not BLOCK_SWAP_PREFETCH_DEFAULT)
+    assert body["fused_gguf_dequant_kernel"] is (not FUSED_GGUF_DEQUANT_KERNEL_DEFAULT)
+    assert body["keep_resident"] is (not KEEP_RESIDENT_DEFAULT)
+    assert body["keep_resident_embeddings"] is (not KEEP_RESIDENT_EMBEDDINGS_DEFAULT)
+    assert body["light_mode"] is True
+    assert body["window_start_sec"] == 1.5
+    assert body["seed"] == 42
+
+
+def test_submit_alpha_gen_argument_defaults_match_the_server():
+    from api.models import AlphaGenRequest
+
+    async def _run():
+        return await build_server().list_tools()
+
+    tool = next(t for t in anyio.run(_run) if t.name == "submit_alpha_gen")
+    props = tool.inputSchema["properties"]
+    for name in (
+        "window_start_sec", "seed", "light_mode", "attention_backend",
+        "block_swap_prefetch", "fused_gguf_dequant_kernel", "keep_resident",
+        "keep_resident_embeddings",
+    ):
+        assert props[name]["default"] == AlphaGenRequest.model_fields[name].default, name
+    assert set(tool.inputSchema.get("required", [])) == {
+        "reference_video_id", "num_frames", "frame_rate",
+    }
+
+
+def test_submit_alpha_gen_on_ltx23_surfaces_feature_unsupported(mcp_app):
+    app, output_dir = mcp_app
+    set_client(_client_for_app(app, output_dir))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(generate.submit_alpha_gen, "no-such-upload", 9, 24)
+
+    assert "FEATURE_UNSUPPORTED" in str(exc_info.value)
+
+
+@pytest.mark.skipif(
+    __import__("shutil").which("ffmpeg") is None or __import__("shutil").which("ffprobe") is None,
+    reason="Alpha Gen measures the source and builds/finalizes with ffmpeg",
+)
+def test_submit_alpha_gen_runs_to_matte_via_asgi(tmp_path):
+    """upload -> submit_alpha_gen -> (mock completes) -> get_job_matte_path ->
+    save_job_video(which="matte"), through the real app on ASGITransport."""
+    from fastapi.testclient import TestClient
+
+    from mcp_server.tools import outputs
+    from test_generate_alpha_api import _build, _write_source
+
+    app = _build(tmp_path)
+    output_dir = tmp_path / "outputs"
+    with TestClient(app) as tc:
+        loaded = tc.post("/api/v1/pipeline/load", json={"base_model": "LTX25"})
+        assert loaded.status_code == 200, loaded.text
+        src = tmp_path / "src.mkv"
+        _write_source(src, 320, 256)
+        with src.open("rb") as fh:
+            up = tc.post("/api/v1/upload/video", files={"file": (src.name, fh, "video/x-matroska")})
+        assert up.status_code == 200, up.text
+        vid = up.json()["video_id"]
+
+        set_client(_client_for_app(app, output_dir))
+        submitted = anyio.run(generate.submit_alpha_gen, vid, 9, 24)
+        job_id = submitted["job_id"]
+        assert submitted["status"] == "queued"
+
+        status = anyio.run(jobs.job_status, job_id)
+        assert status["status"] == "completed", status
+
+        matte = anyio.run(outputs.get_job_matte_path, job_id)
+        assert matte["exists"] is True
+        assert matte["matte"] is True
+        assert matte["status"] == "completed"
+        assert "note" not in matte
+        assert Path(matte["path"]) == output_dir / job_id / "matte.mkv"
+
+        dest = tmp_path / "saved"
+        saved = anyio.run(
+            functools.partial(outputs.save_job_video, job_id, str(dest), which="matte")
+        )
+        assert Path(saved["saved_path"]) == dest / f"{job_id}_matte.mkv"
+        assert Path(saved["source_path"]) == output_dir / job_id / "matte.mkv"
+        assert saved["size_bytes"] > 0
+
+
+def test_get_job_matte_path_not_completed_has_note(tmp_path):
+    from mcp_server.tools import outputs
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/jobs/j1"
+        return httpx.Response(200, json={"job_id": "j1", "status": "running", "matte": False})
+
+    settings = Settings(base_url="http://testserver", api_key=None, output_dir=tmp_path)
+    set_client(BackendClient(settings, transport=httpx.MockTransport(handler)))
+
+    result = anyio.run(outputs.get_job_matte_path, "j1")
+    assert result["path"] == str(tmp_path / "j1" / "matte.mkv")
+    assert result["exists"] is False
+    assert result["size_bytes"] is None
+    assert result["matte"] is False
+    assert "note" in result
+
+
+def test_save_job_video_which_matte_missing_source_raises(tmp_path):
+    from mcp_server.tools import outputs
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
+
+    settings = Settings(base_url="http://testserver", api_key=None, output_dir=tmp_path)
+    set_client(BackendClient(settings, transport=httpx.MockTransport(handler)))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(
+            functools.partial(outputs.save_job_video, "j1", str(tmp_path / "d"), which="matte")
+        )
+    assert "VIDEO_NOT_FOUND" in str(exc_info.value)

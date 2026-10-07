@@ -1,6 +1,6 @@
-"""出力動画の実パス取得・ローカル保存・生成条件の読み出しツール（4本）。
+"""出力動画の実パス取得・ローカル保存・生成条件の読み出しツール（5本）。
 
-``get_job_video_path`` / ``get_joined_video_path`` は ``GET /jobs/{id}`` で
+``get_job_video_path`` / ``get_joined_video_path`` / ``get_job_matte_path`` は ``GET /jobs/{id}`` で
 状態だけを確認し、実パスは常に ``mcp_server.client.BackendClient.output_dir``
 （ローカル ``config.yaml`` 由来）から ``mcp_server.paths`` で組み立てる ――
 レスポンスの ``result.output_path`` は相対ハードコードで信用できないため
@@ -27,7 +27,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
 from mcp_server.client import get_client
-from mcp_server.paths import job_joined_path, job_output_path, unique_dest
+from mcp_server.paths import job_joined_path, job_matte_path, job_output_path, unique_dest
 
 
 async def _stat_if_exists(path: Path) -> tuple[bool, int | None]:
@@ -113,21 +113,60 @@ async def get_joined_video_path(job_id: str) -> dict[str, Any]:
     return result
 
 
+async def get_job_matte_path(job_id: str) -> dict[str, Any]:
+    """Alpha Gen ジョブの合成用マット（``matte.mkv``）のローカル絶対パスを返します。
+
+    ``get_job_video_path`` と同じ流儀ですが、``submit_alpha_gen`` のジョブが
+    ``output.mp4``（確認用の H.264）と並べて書く ``matte.mkv``（劣化しない
+    FFV1 の灰色マット。白＝不透明・黒＝透明。元動画と同じ寸法）を対象に
+    します。あわせて ``GET /jobs/{job_id}`` の ``matte`` フラグ（マットが
+    あるか）も返します。
+
+    Args:
+        job_id: submit_alpha_gen が返した job_id。
+
+    Returns:
+        path, exists, size_bytes, status に加えて matte（bool）。status が
+        completed でない場合のみ note が付与されます。
+    """
+    client = get_client()
+    job = await client.get_json(f"/jobs/{job_id}")
+    status = job.get("status")
+
+    path = job_matte_path(client.output_dir, job_id)
+    exists, size_bytes = await _stat_if_exists(path)
+
+    result: dict[str, Any] = {
+        "path": str(path),
+        "exists": exists,
+        "size_bytes": size_bytes,
+        "status": status,
+        "matte": job.get("matte"),
+    }
+    if status != "completed":
+        result["note"] = (
+            f"ジョブがまだ completed ではありません（status={status}）。"
+            "マットはまだ存在しない可能性があります。"
+        )
+    return result
+
+
 async def save_job_video(
     job_id: str,
     dest_dir: str,
     filename: str | None = None,
     no_clobber: bool = True,
-    which: Literal["output", "joined"] = "output",
+    which: Literal["output", "joined", "matte"] = "output",
 ) -> dict[str, Any]:
     """出力動画をローカルの任意フォルダへコピーします（バックエンドへは問い合わせません）。
 
     ``which="output"`` なら ``output.mp4``（既定ファイル名 ``{job_id}.mp4``）、
     ``which="joined"`` なら ``joined.mp4``（既定ファイル名
-    ``{job_id}_joined.mp4``）をコピーします――どちらも
-    ``api/jobs.py`` の ``FileResponse`` が付けるダウンロードファイル名と同じ
-    命名です。コピー元が存在しない場合（ジョブ未完了 / join未実行など）は
-    例外になります。
+    ``{job_id}_joined.mp4``）、``which="matte"`` なら Alpha Gen の
+    ``matte.mkv``（既定ファイル名 ``{job_id}_matte.mkv``）をコピーします――
+    いずれも ``api/jobs.py`` の ``FileResponse`` が付けるダウンロードファイル名と
+    同じ命名です。コピー元が存在しない場合（ジョブ未完了 / join未実行 /
+    Alpha Gen 以外のジョブなど）は例外になります。
 
     Args:
         job_id: 対象ジョブの job_id。
@@ -135,7 +174,8 @@ async def save_job_video(
         filename: 保存ファイル名（省略時は既定ファイル名）。
         no_clobber: True（既定）なら同名ファイルがあった場合 ``_2`` ``_3`` ...
             と連番を振って衝突を避けます。False なら上書きします。
-        which: "output"（通常の生成結果）か "joined"（V2V結合結果）。
+        which: "output"（通常の生成結果）か "joined"（V2V結合結果）か
+            "matte"（Alpha Gen の合成用マット）。
 
     Returns:
         saved_path: 実際に保存された絶対パス。
@@ -150,8 +190,14 @@ async def save_job_video(
     elif which == "joined":
         source_path = job_joined_path(client.output_dir, job_id)
         default_filename = f"{job_id}_joined.mp4"
+    elif which == "matte":
+        source_path = job_matte_path(client.output_dir, job_id)
+        default_filename = f"{job_id}_matte.mkv"
     else:
-        raise ToolError(f"INVALID_WHICH: which は 'output' か 'joined' である必要があります（{which!r}）")
+        raise ToolError(
+            "INVALID_WHICH: which は 'output' か 'joined' か 'matte' である必要があります"
+            f"（{which!r}）"
+        )
 
     source_exists = await anyio.to_thread.run_sync(source_path.exists)
     if not source_exists:
@@ -210,5 +256,6 @@ async def get_mp4_info(path: str) -> dict[str, Any]:
 def register(mcp: FastMCP) -> None:
     mcp.tool()(get_job_video_path)
     mcp.tool()(get_joined_video_path)
+    mcp.tool()(get_job_matte_path)
     mcp.tool()(save_job_video)
     mcp.tool()(get_mp4_info)

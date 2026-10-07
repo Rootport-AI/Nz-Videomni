@@ -19,8 +19,9 @@ import mcp.shared.memory as mcp_memory
 from mcp_server.client import set_client
 from mcp_server.server import build_server
 
-# Final total (system 6 + uploads 3 + generate 2 + jobs 7 + outputs 4 +
-# batch 1 = 23; outputs gained get_mp4_info with 台帳 §3-164). This is the one
+# Final total (system 6 + uploads 3 + generate 3 + jobs 7 + outputs 5 +
+# batch 1 = 25; outputs gained get_mp4_info with 台帳 §3-164, and Alpha Gen
+# (台帳 §1-83) added submit_alpha_gen and get_job_matte_path). This is the one
 # place the running total lives.
 EXPECTED_TOOLS = {
     "backend_status",
@@ -34,6 +35,7 @@ EXPECTED_TOOLS = {
     "upload_audio",
     "submit_generate",
     "submit_chain",
+    "submit_alpha_gen",
     "job_status",
     "list_jobs",
     "wait_for_job",
@@ -43,6 +45,7 @@ EXPECTED_TOOLS = {
     "join_job",
     "get_job_video_path",
     "get_joined_video_path",
+    "get_job_matte_path",
     "save_job_video",
     "get_mp4_info",
     "plan_a2v_batch",

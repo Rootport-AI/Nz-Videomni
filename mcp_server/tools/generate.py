@@ -1,4 +1,5 @@
-"""単発生成＋チェーン生成ツール（``submit_generate`` / ``submit_chain``、2本）。
+"""単発生成＋チェーン生成＋Alpha Gen ツール（``submit_generate`` / ``submit_chain`` /
+``submit_alpha_gen``、3本）。
 
 ``api/models.py`` の ``GenerateRequest`` の表面をほぼそのまま公開するが、隠し
 フィールド（``pipeline`` / ``num_inference_steps`` / ``guidance_scale`` /
@@ -62,6 +63,7 @@ from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
 
 _SUBMIT_TIMEOUT = 30.0
 _CHAIN_SUBMIT_TIMEOUT = 30.0
+_ALPHA_SUBMIT_TIMEOUT = 30.0
 
 # 画角拡張（outpainting）の既定値。正本は
 # ``api/models.py`` の ``OutpaintSpec``（stage1=5 / stage2=2）と、操作パネル側の
@@ -1032,6 +1034,96 @@ async def submit_chain(
     }
 
 
+async def submit_alpha_gen(
+    reference_video_id: str,
+    num_frames: int,
+    frame_rate: int,
+    window_start_sec: float = 0.0,
+    seed: int = -1,
+    light_mode: bool = False,
+    attention_backend: Literal["sdpa", "sage"] = "sdpa",
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT,
+    fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT,
+    keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+) -> dict[str, Any]:
+    """動画から白黒のアルファマット動画を作るジョブを登録します（POST /generate/alpha）。
+
+    **LTX 2.5 専用**です。LTX 2.3 を選んでいるときは 422
+    FEATURE_UNSUPPORTED になります（``load_pipeline(base_model="LTX25")`` で
+    切り替えてください）。白＝不透明・黒＝透明・灰＝半透明のマットを、
+    元動画と同じ寸法・同じフレーム数で返します。
+
+    プロンプト・LoRA・強さはサーバーが固定します（プロンプトは空、
+    ``alpha-gen`` という IC-LoRA を強さ 1.0 で使います）。**``alpha-gen`` が
+    バックエンドに登録されていない環境では 404 LORA_NOT_FOUND になる**ので、
+    事前に ``list_loras`` で存在を確認してください。
+
+    元動画は ``upload_video`` で取得した ``reference_video_id`` で渡します。
+    サーバーが元動画の寸法を測り、``window_start_sec`` から ``num_frames``
+    フレームを ``frame_rate`` で切り出し、快適上限に収まる大きさまで縦横比を
+    保って縮小し（必要なときだけ）、生成後に元の寸法へ戻します。元動画の
+    縦横はどちらも偶数・256px 以上が必要です。
+
+    既定は **1 段原寸モード**（``light_mode=False``）。``light_mode=True`` に
+    すると既存の 2 段の経路（軽量モード）で生成します。
+
+    出力は 2 本です。``get_job_video_path`` で得られる ``output.mp4``
+    （確認用の H.264）と、``get_job_matte_path`` で得られる ``matte.mkv``
+    （合成用の劣化しない灰色マット。FFV1）。``save_job_video(which="matte")``
+    でマットをコピーできます。同時に実行できるジョブは1本だけです
+    （進行中なら 409 JOB_BUSY）。このツールは登録だけを行うので、結果は
+    ``wait_for_job`` で待ってください。
+
+    Args:
+        reference_video_id: マットを作る元動画（``upload_video`` の video_id）。
+        num_frames: フレーム数。8n+1 で 9〜145。
+        frame_rate: fps（整数、1〜60）。素材の fps と違えば変換して切り出します。
+        window_start_sec: 元動画のどこから切り出すか（秒、既定 0）。
+        seed: 乱数シード（-1 でランダム）。
+        light_mode: True で軽量モード（2 段の経路）。既定 False（1 段原寸）。
+        attention_backend / block_swap_prefetch / fused_gguf_dequant_kernel /
+        keep_resident / keep_resident_embeddings: ``submit_generate`` の同名の
+            引数と同じ意味・同じ既定です（他のジョブと同じ設定を同じ意味で
+            受けるだけ。既定のままなら送信しません）。
+
+    Returns:
+        job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
+    """
+    payload: dict[str, Any] = {
+        "reference_video_id": reference_video_id,
+        "num_frames": num_frames,
+        "frame_rate": frame_rate,
+        "window_start_sec": window_start_sec,
+        "seed": seed,
+        "light_mode": light_mode,
+    }
+    # The pass-through Acceleration / residency fields follow submit_generate's
+    # rule: sent ONLY when they differ from the server's own default constant.
+    if attention_backend != "sdpa":
+        payload["attention_backend"] = attention_backend
+    if block_swap_prefetch != BLOCK_SWAP_PREFETCH_DEFAULT:
+        payload["block_swap_prefetch"] = block_swap_prefetch
+    if fused_gguf_dequant_kernel != FUSED_GGUF_DEQUANT_KERNEL_DEFAULT:
+        payload["fused_gguf_dequant_kernel"] = fused_gguf_dequant_kernel
+    if keep_resident != KEEP_RESIDENT_DEFAULT:
+        payload["keep_resident"] = keep_resident
+    if keep_resident_embeddings != KEEP_RESIDENT_EMBEDDINGS_DEFAULT:
+        payload["keep_resident_embeddings"] = keep_resident_embeddings
+
+    client = get_client()
+    result = await client.post_json(
+        "/generate/alpha", json=payload, timeout=_ALPHA_SUBMIT_TIMEOUT
+    )
+    return {
+        "job_id": result.get("job_id"),
+        "status": result.get("status"),
+        "created_at": result.get("created_at"),
+        "next": "wait_for_job(job_id) を呼ぶ",
+    }
+
+
 def register(mcp: FastMCP) -> None:
     mcp.tool()(submit_generate)
     mcp.tool()(submit_chain)
+    mcp.tool()(submit_alpha_gen)

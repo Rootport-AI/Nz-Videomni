@@ -962,6 +962,8 @@ def _encode_reference_conditionings(
     ic_attention_strength: float,
     device: torch.device,
     vram: Any,
+    full_resolution: bool = False,
+    require_frames: bool = False,
 ) -> tuple[list[ConditioningItem], int]:
     """``(conditioning_items, reference_frames)`` for the IC-LoRA reference.
 
@@ -969,6 +971,17 @@ def _encode_reference_conditionings(
     half of them divided by the adapter's declared factor, which is the stage-1
     frame. Extracted so "a missing reference means generate without one, never
     an error" is stated once for both drivers.
+
+    Two keyword switches exist for :func:`engine25.alphagen25.run_alpha_gen`,
+    which shares this encode rather than copying it; both default to the
+    in/outpainting behaviour, which they leave untouched:
+
+    * ``full_resolution=True`` reads the reference at ``height`` / ``width``
+      themselves (divided by the factor) instead of half of them -- AlphaGen's
+      one-stage mode runs its only stage at the full size;
+    * ``require_frames=True`` turns "the reference yielded no frames" into a
+      ``ValueError`` instead of the "generate without one" fallback -- a matte
+      with no reference is meaningless, so there is nothing to fall back to.
     """
     conds_ref: list[ConditioningItem] = []
     reference_frames = 0
@@ -978,8 +991,15 @@ def _encode_reference_conditionings(
         # adapter's declared factor. The in/outpainting IC-LoRA declares 1,
         # so the green canvas is read at exactly half the canvas -- which is
         # what makes the model see the pad bands where it will generate them.
+        #
+        # ``full_resolution`` (AlphaGen's one-stage mode) skips the halving:
+        # its single stage IS the full-size frame.
+        if full_resolution:
+            cond_h, cond_w = height, width
+        else:
+            cond_h, cond_w = height // 2, width // 2
         scale, ref_h, ref_w = reference_pixel_dims(
-            reference_factor, height // 2, width // 2
+            reference_factor, cond_h, cond_w
         )
 
         def _encode_reference(encoder: Any) -> tuple[list[ConditioningItem], int]:
@@ -987,6 +1007,11 @@ def _encode_reference_conditionings(
                 str(ref_path), height=ref_h, width=ref_w,
                 frame_cap=int(num_frames), device=device,
             )
+            if pixels is None and require_frames:
+                raise ValueError(
+                    f"the reference {ref_path} yielded no frames, and this job "
+                    "cannot run without one"
+                )
             if pixels is None:
                 # "A missing reference means generate without one", never an
                 # error -- the owner's standing rule. It would be a very bad

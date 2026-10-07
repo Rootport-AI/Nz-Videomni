@@ -272,6 +272,11 @@ class ComfortRow(BaseModel):
     requires: dict[str, str | bool] = Field(default_factory=dict)
     single_budget: int
     chain_budget: int
+    # AlphaGen（POST /generate/alpha）の 1 段原寸モードの快適上限トークン。
+    # 暫定。ゲート 0（VERIFICATION_LOG §151）の 4bit の線の半分を種別ごとに当てた値
+    # （単発の線のちょうど半分）。較正は後日。既存方針（未較正なら None＝線なし）
+    # に対するオーナー裁定（2026-10-07）。None は「線なし」（LTX 2.3 の行など）。
+    alpha_gen_budget: int | None = None
 
 
 class EngineComfortProfile(BaseModel):

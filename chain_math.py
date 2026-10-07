@@ -448,6 +448,49 @@ def a_frames_for_px(pixel_frames: int, fps: float) -> int:
     return round(pixel_frames / float(fps) * AUDIO_LATENTS_PER_SEC)
 
 
+def ceil64(x: int) -> int:
+    """Round ``x`` UP to a multiple of 64 (the Alpha Gen canvas rule)."""
+    return -(-x // 64) * 64
+
+
+def alpha_gen_geometry(
+    src_w: int, src_h: int, num_frames: int, budget: int | None
+) -> tuple[int, int, int, int]:
+    """Working size and padded canvas for one AlphaGen job.
+
+    Returns ``(work_w, work_h, canvas_w, canvas_h)``. The canvas is the
+    working size rounded UP to a multiple of 64 (a scale-1 reference only
+    needs 64; the 128 rule is for scale-2 IC-LoRAs), padded on the right and
+    bottom. ``budget`` is compared against the CANVAS tokens
+    ``(cw/32)*(ch/32)*v_latent_frames(num_frames)``:
+
+      1. the source size fits (or ``budget`` is None) -> no shrink;
+      2. otherwise the even width ``w`` steps down by 2 from the source
+         width, ``h = 2*int(w*H/W/2 + 0.5)`` keeps the aspect ratio, and the
+         first ``(w, h)`` whose canvas fits wins.
+
+    Raises ``ValueError`` when not even a 2-px-wide working size fits.
+    """
+    lat = v_latent_frames(num_frames)
+
+    def tokens(cw: int, ch: int) -> int:
+        return (cw // 32) * (ch // 32) * lat
+
+    if budget is None or tokens(ceil64(src_w), ceil64(src_h)) <= budget:
+        return src_w, src_h, ceil64(src_w), ceil64(src_h)
+    w = src_w - (src_w % 2)
+    while w >= 2:
+        h = max(2, 2 * int(w * src_h / src_w / 2 + 0.5))
+        cw, ch = ceil64(w), ceil64(h)
+        if tokens(cw, ch) <= budget:
+            return w, h, cw, ch
+        w -= 2
+    raise ValueError(
+        f"alpha_gen_geometry: no working size fits budget {budget} "
+        f"({src_w}x{src_h}x{num_frames}f)"
+    )
+
+
 @dataclass
 class ChainLayout:
     """Fully-resolved geometry for one chain (all deterministic from inputs)."""

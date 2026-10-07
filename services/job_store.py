@@ -76,6 +76,12 @@ class JobRecord:
             output_dir is not None
             and (output_dir / self.job_id / "joined.mp4").exists()
         )
+        # Alpha Gen: the lossless grey matte a POST /generate/alpha job writes
+        # next to its output.mp4. Same file-existence rule as ``joined``.
+        matte = (
+            output_dir is not None
+            and (output_dir / self.job_id / "matte.mkv").exists()
+        )
         return JobResponse(
             job_id=self.job_id,
             status=self.status,
@@ -87,6 +93,7 @@ class JobRecord:
             clip_count=self.clip_count,
             is_v2v=is_v2v,
             joined=joined,
+            matte=matte,
             created_at=self.created_at,
             started_at=self.started_at,
             completed_at=self.completed_at,

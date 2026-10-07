@@ -76,10 +76,13 @@ def _category_block(
     }
 
 
-def _transformer_weight_class(
+def transformer_weight_class(
     registry: ModelRegistry, base_id: str, selection: dict[str, str]
 ) -> str | None:
     """Weight class of the transformer ``selection`` names for ``base_id``.
+
+    Public: ``api/generate_alpha.py`` uses it too, to pick the comfort row the
+    Alpha Gen budget comes from (the same class this endpoint reports).
 
     ``None`` when the name does not resolve (unknown name, missing file, no
     transformer category) or the file cannot be classified.
@@ -141,7 +144,7 @@ def list_models(context: AppContext = Depends(get_context)) -> dict:
                 # server actually holds; the others stay null rather than
                 # guessing from their default file.
                 "transformer_weight_class": (
-                    _transformer_weight_class(registry, base_id, base_active)
+                    transformer_weight_class(registry, base_id, base_active)
                     if is_active
                     else None
                 ),

@@ -815,6 +815,111 @@ class PipelineManager:
                     fill["codec"], fill["written_frames"],
                 )
 
+            # Alpha Gen (POST /generate/alpha builds this request; LTX 2.5
+            # only). Cut the window, scale it to the working size the endpoint
+            # fitted under the comfort budget, pad it black to the canvas on the
+            # right/bottom, and hand THAT to the runner as the reference video --
+            # the same path substitution the outpaint/inpaint blocks above use,
+            # and for the same reason both intermediates land next to the output
+            # (STORAGE_POLICY.md reserves uploads/ for material the user may
+            # delete). The window and the reference are kept as the record of
+            # what went in; the window is also what a later compositing step
+            # reads.
+            alpha_provenance = None
+            alpha_source_size = None
+            if job.request.alpha_gen is not None:
+                ag = job.request.alpha_gen
+                window_path = output_dir / "_alpha_window.mp4"
+                cut = video_io.cut_window_mp4(
+                    reference_video_path,
+                    window_path,
+                    float(ag.window_start_sec),
+                    job.request.num_frames,
+                    job.request.frame_rate,
+                )
+                # The SOURCE size is measured on the cut window, not on the
+                # upload: the window is what the matte is delivered against, so
+                # its actual orientation is the one that has to match.
+                source_size = video_io.probe_resolution(window_path)
+                if source_size is None:
+                    raise generation_failed(
+                        job_id=job.job_id,
+                        detail=f"could not probe the resolution of {window_path}",
+                    )
+                # Rotation metadata is not supported (phase 1). ffmpeg applies a
+                # display rotation when it cuts the window, while the endpoint
+                # measured the upload's stored width/height; a rotated upload
+                # therefore comes out with its sides swapped, and scaling it to
+                # the working size would squash it. The endpoint's orientation
+                # is the working size's (the aspect is kept); only a square
+                # working size leaves it open, and then the upload is measured
+                # again.
+                if ag.working_width != ag.working_height:
+                    measured = (ag.working_width, ag.working_height)
+                else:
+                    measured = video_io.probe_resolution(reference_video_path)
+                if measured is not None and (
+                    (measured[0] - measured[1]) * (source_size[0] - source_size[1]) < 0
+                ):
+                    raise generation_failed(
+                        job_id=job.job_id,
+                        detail=(
+                            "回転情報つきの素材は未対応です（第 1 弾）。"
+                            "縦横が入れ替わった動画を書き出してから入力してください。"
+                        ),
+                    )
+                alpha_source_size = source_size
+                work_w, work_h = ag.working_width, ag.working_height
+                alpha_reference = output_dir / "alpha_reference.mp4"
+                video_io.pad_green_mp4(
+                    window_path,
+                    alpha_reference,
+                    canvas_width=job.request.width,
+                    canvas_height=job.request.height,
+                    pad_left=0,
+                    pad_top=0,
+                    frame_rate=job.request.frame_rate,
+                    num_frames=job.request.num_frames,
+                    scale=(work_w, work_h),
+                    color="black",
+                )
+                reference_video_path = alpha_reference
+                canvas_tokens = (
+                    (job.request.width // 32)
+                    * (job.request.height // 32)
+                    * chain_math.v_latent_frames(job.request.num_frames)
+                )
+                alpha_provenance = {
+                    "mode": "one_stage" if ag.one_stage else "light",
+                    "source_video_id": job.request.reference_video_id,
+                    "source_width": source_size[0],
+                    "source_height": source_size[1],
+                    "source_fps": cut["source_fps"],
+                    "resampled": cut["resampled"],
+                    "window_start_sec": float(ag.window_start_sec),
+                    "window_start_frame": cut["start_frame"],
+                    "window_written_frames": cut["written_frames"],
+                    "working_width": work_w,
+                    "working_height": work_h,
+                    "canvas_width": job.request.width,
+                    "canvas_height": job.request.height,
+                    "pad_right": job.request.width - work_w,
+                    "pad_bottom": job.request.height - work_h,
+                    "scale": round(work_w / source_size[0], 6),
+                    "budget_tokens": ag.budget_tokens,
+                    "canvas_tokens": canvas_tokens,
+                }
+                logger.info(
+                    "Job %s alpha_gen mode=%s window %.3fs +%df (start_frame=%d, "
+                    "resampled=%s) source %dx%d -> working %dx%d -> canvas %dx%d "
+                    "(tokens=%d, budget=%s)",
+                    job.job_id, alpha_provenance["mode"], float(ag.window_start_sec),
+                    job.request.num_frames, cut["start_frame"], cut["resampled"],
+                    source_size[0], source_size[1], work_w, work_h,
+                    job.request.width, job.request.height,
+                    canvas_tokens, ag.budget_tokens,
+                )
+
             # Console job-info line (owner requirement): base weight file + LoRAs
             # (name + strength, and the audio strength when one is set) + prompt,
             # so LoRA application is visible from the uvicorn console (the
@@ -851,14 +956,41 @@ class PipelineManager:
                 inpaint_mask_path=inpaint_mask_path,
             )
 
+            # Alpha Gen post-process: the engine wrote the padded CANVAS. Crop
+            # the pad off, stretch back to the source size, and write the two
+            # deliverables (output.mp4 preview + matte.mkv) in one ffmpeg run.
+            # The engine's canvas file is crf 0 and large, so it is deleted;
+            # the window and the reference stay as the record.
+            if alpha_provenance is not None:
+                engine_mp4 = output_dir / "_alpha_engine.mp4"
+                outcome.output_path.replace(engine_mp4)
+                try:
+                    finalized = video_io.finalize_alpha_matte(
+                        engine_mp4,
+                        crop=(alpha_provenance["working_width"], alpha_provenance["working_height"]),
+                        target=alpha_source_size,
+                        preview_mp4=output_dir / "output.mp4",
+                        matte_mkv=output_dir / "matte.mkv",
+                    )
+                except Exception:
+                    # No half-written deliverables and no large crf-0 canvas
+                    # left behind on a failed post-process.
+                    for leftover in ("matte.mkv", "output.mp4", "_alpha_engine.mp4"):
+                        (output_dir / leftover).unlink(missing_ok=True)
+                    raise
+                engine_mp4.unlink(missing_ok=True)
+                alpha_provenance["matte"] = "matte.mkv"
+                alpha_provenance["matte_codec"] = finalized["matte_codec"]
+
             elapsed = time.time() - started
             result = self._finalize(
                 job,
                 outcome,
                 output_dir,
                 elapsed,
-                inpaint_source_size=inpaint_source_size,
+                delivered_size=inpaint_source_size or alpha_source_size,
                 inpaint_provenance=inpaint_provenance,
+                alpha_provenance=alpha_provenance,
             )
 
             if job.cancel_requested:
@@ -1051,6 +1183,29 @@ class PipelineManager:
         assumed already resolved (the endpoint 404s first), and so is the mask
         (the endpoint checks its resolution and frame count before calling this).
         """
+        detail = self._window_fit_detail(
+            source_video_id, inpaint.window_start_sec, window_frames, request_frame_rate
+        )
+        if detail is not None:
+            raise inpaint_window_out_of_range(detail=detail)
+
+    def _window_fit_detail(
+        self,
+        source_video_id: str,
+        window_start_sec: float,
+        window_frames: int,
+        request_frame_rate: float,
+    ) -> str | None:
+        """Does the window ``[window_start_sec, +window_frames)`` fit the upload
+        once resampled to ``request_frame_rate``? ``None`` = it fits; otherwise
+        the human-readable reason.
+
+        Shared by inpainting (:meth:`preflight_inpaint_window`) and Alpha Gen
+        (``api/generate_alpha.py``); each caller wraps the reason in its OWN
+        error code. The effective-frame estimate is the one
+        :meth:`preflight_source_video` uses, with ``video_io.cut_window_mp4``'s
+        MEASURED frame count as the frame-exact backstop when the job runs.
+        """
         src_path = self.video_upload_store.path_for(source_video_id)
         n_src = video_io.frame_count(src_path)
         src_fps = video_io.probe_fps(src_path)
@@ -1058,15 +1213,14 @@ class PipelineManager:
             effective = int(round(n_src * float(request_frame_rate) / src_fps))
         else:
             effective = n_src
-        start_frame = round(float(inpaint.window_start_sec) * float(request_frame_rate))
+        start_frame = round(float(window_start_sec) * float(request_frame_rate))
         if start_frame + window_frames > effective:
-            raise inpaint_window_out_of_range(
-                detail=(
-                    f"window starts at frame {start_frame} and needs "
-                    f"{window_frames} frames, but the source has {n_src} frames "
-                    f"@ {src_fps} fps (~{effective} @ {request_frame_rate} fps)"
-                )
+            return (
+                f"window starts at frame {start_frame} and needs "
+                f"{window_frames} frames, but the source has {n_src} frames "
+                f"@ {src_fps} fps (~{effective} @ {request_frame_rate} fps)"
             )
+        return None
 
     # --------------------------------------------------- A2V source preflight
 
@@ -1636,17 +1790,19 @@ class PipelineManager:
         output_dir: Path,
         elapsed: float,
         *,
-        inpaint_source_size: tuple[int, int] | None = None,
+        delivered_size: tuple[int, int] | None = None,
         inpaint_provenance: dict | None = None,
+        alpha_provenance: dict | None = None,
     ) -> JobResult:
         req = job.request
-        if inpaint_source_size is not None:
-            # Inpainting: ``width``/``height`` are the CANVAS, and the engine
-            # crops the green pad bands off again before the encode, so the
+        if delivered_size is not None:
+            # Inpainting / Alpha Gen: ``width``/``height`` are the CANVAS, and
+            # the pad bands are cut off again before delivery (by the engine
+            # for inpainting, by the app's post-process for Alpha Gen), so the
             # delivered mp4 is at the SOURCE's own resolution. Reporting the
             # canvas here would put a size in the job result and in
             # metadata.json that no file on disk actually has.
-            res_w, res_h = inpaint_source_size
+            res_w, res_h = delivered_size
         elif req.crop_output is not None:
             res_w, res_h = req.crop_output.width, req.crop_output.height
         else:
@@ -1666,6 +1822,7 @@ class PipelineManager:
                 file_size=file_size,
                 elapsed=elapsed,
                 inpaint_provenance=inpaint_provenance,
+                alpha_provenance=alpha_provenance,
             )
 
         return JobResult(
@@ -1681,7 +1838,7 @@ class PipelineManager:
 
     def _write_metadata(
         self, *, job, outcome, metadata_path, resolution, duration, file_size, elapsed,
-        inpaint_provenance=None,
+        inpaint_provenance=None, alpha_provenance=None,
     ) -> None:
         req = job.request
         metadata = {
@@ -1789,6 +1946,13 @@ class PipelineManager:
                 **(outcome.inpaint or {}),
                 **(inpaint_provenance or {}),
             }
+        # Alpha Gen (additive): only present on a POST /generate/alpha job. The
+        # app's own record of the source, window, working size, canvas and the
+        # two deliverables (the engine reports no alpha block). NOTE:
+        # ``generation_mode`` above says "t2v" for these jobs (it only looks at
+        # conditioning images); ``alpha_gen.mode`` is the authoritative mode.
+        if alpha_provenance is not None:
+            metadata["alpha_gen"] = alpha_provenance
         # Store-relative paths (no absolute local path in the recipe). Applied
         # here, after every optional block has been added.
         metadata = relativize_recipe_paths(

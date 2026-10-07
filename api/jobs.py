@@ -1,5 +1,6 @@
-"""Job endpoints: list / get / video / cancel-delete (spec §6.1 / §7) and the
-ADDITIVE V2V join pair (POST /jobs/{id}/join, GET /jobs/{id}/joined)."""
+"""Job endpoints: list / get / video / cancel-delete (spec §6.1 / §7), the
+ADDITIVE V2V join pair (POST /jobs/{id}/join, GET /jobs/{id}/joined) and the
+ADDITIVE Alpha Gen matte download (GET /jobs/{id}/matte)."""
 
 from __future__ import annotations
 
@@ -45,6 +46,27 @@ def get_job_video(job_id: str, context: AppContext = Depends(get_context)) -> Fi
         video_path,
         media_type="video/mp4",
         filename=f"{job_id}.mp4",
+    )
+
+
+@router.get("/jobs/{job_id}/matte")
+def get_job_matte(job_id: str, context: AppContext = Depends(get_context)) -> FileResponse:
+    """Download the lossless grey matte (``matte.mkv``, FFV1 gray, full range)
+    a POST /generate/alpha job writes next to its ``output.mp4``. Mirrors
+    GET /jobs/{id}/video: unknown job or no matte on disk -> 404, not yet
+    completed -> 409 VIDEO_NOT_READY."""
+    record = context.job_store.get(job_id)
+    if record is None:
+        raise job_not_found(job_id)
+    if record.status != JobStatus.completed:
+        raise video_not_ready(job_id)
+    matte_path = context.config.output_dir / job_id / "matte.mkv"
+    if not matte_path.exists():
+        raise job_not_found(job_id)
+    return FileResponse(
+        matte_path,
+        media_type="video/x-matroska",
+        filename=f"{job_id}_matte.mkv",
     )
 
 

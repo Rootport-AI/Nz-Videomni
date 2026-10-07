@@ -129,6 +129,7 @@
   - エンジンは、参照動画を使うときにヘッダで縮小率を宣言した LoRA が 1 本も無ければ、`config.yaml` に登録してあっても例外で止まる（`engine25/reference25.py:141-149`。`pipeline25.generate` から必ず呼ばれる `engine25/pipeline25.py:1636`）。
   - さらに `config.yaml` で control 種別にするには `preprocess` を `"none"` 以外にする必要がある。選べるのは `"none"`・`"canny"`・`"dwpose"`・`"depth"` だけ（`config.py:69`・`services/lora_registry.py:288`）なので、登録すると参照動画がエッジ・骨格・深度の絵に前処理されてしまう。
   - **ヘッダに縮小率が無ければ、エンジン側の判定と、登録の選択肢（「前処理なしの control」）の両方に小さな手当てが要る。** ヘッダにあれば手当ては不要。
+  > **追記（2026-10-07・§151）**: 現物のヘッダに `reference_downscale_factor`＝1 があり、D の手当ては不要だった（`VERIFICATION_LOG.md` §151）。
 - **E. 出力が劣化する形式（H.264・色を間引く形式）だけ。**
   - エンジンは `encode_video` を呼んで書き出す（`engine25/pipeline25.py:1707-1713`）。libx264・yuv420p・crf 19 の実体は、エンジン用の仮想環境（venv）に入った公式部品 `ltx_pipelines/utils/media_io/encode.py`（`crf: int = 19` の引数がある）。
   - 劣化しない書き出しは、アプリ側の入力加工用 `services/video_io.py` の `libx264rgb -crf 0` と ffv1 だけ（`:145-231`・`:234-383`）。

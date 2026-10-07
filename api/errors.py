@@ -500,6 +500,37 @@ def inpaint_lora_invalid(names: list[str]) -> APIError:
     )
 
 
+def alpha_gen_invalid(detail: str) -> APIError:
+    """Alpha Gen（RGB 動画から白黒のマット動画を作る。LTX 2.5 専用）: 要求を
+    この素材・この窓・この寸法では組み立てられない。素材の寸法が測れない／辺が
+    奇数／辺が小さすぎる、窓が素材に収まらない、作業寸法かキャンバスが
+    ``GenerateRequest`` の範囲を外れる、そして ``POST /generate`` に内部用の
+    ``alpha_gen`` ブロックが付いてきた場合をまとめてこの 1 つの符号で断る。
+    利用者が直す先は ``detail`` が名指しする。"""
+    return APIError(
+        "ALPHA_GEN_INVALID",
+        "the alpha matte request cannot be built from this input",
+        422,
+        detail=detail,
+    )
+
+
+#: LTX 2.3 で ``POST /generate/alpha`` を断るときの ``detail``。符号は既存の
+#: ``FEATURE_UNSUPPORTED``（:func:`alpha_gen_unsupported` が組み立てる）。
+ALPHA_GEN_LTX23_DETAIL = (
+    "LTX 2.3 は Alpha Gen に対応していません。"
+    "ベースモデルに「LTX 2.5」を選んでください。"
+)
+
+
+def alpha_gen_unsupported() -> APIError:
+    """``POST /generate/alpha`` 向けの 422 ``FEATURE_UNSUPPORTED``。有効な
+    ベースモデルの ``unsupported_features`` に ``alpha_gen`` があるとき
+    （＝LTX 2.3）に使う。文言だけをこのエンドポイント向けにした
+    :func:`feature_unsupported` で、新しい符号は作らない。"""
+    return feature_unsupported("alpha_gen", detail=ALPHA_GEN_LTX23_DETAIL)
+
+
 def reference_resolution_invalid(width: int, height: int) -> APIError:
     """The reference video is consumed on the VAE's 64-grid, at the size set by
     the control adapter's ``reference_downscale_factor`` metadata. Under a

@@ -120,15 +120,91 @@ LTX_ARCHITECTURE = "ltxv"
 #: that test only while ``KEEP_RESIDENT_EMBEDDINGS_DEFAULT`` (api/models.py) is
 #: falsy.
 #:
-#: ONE ROW, AND THE TABLE IS DELIBERATELY THIN BECAUSE OF IT: adding a second
-#: row means bringing the 2.5 adapter's exhaustive classification audit over
-#: with it in the SAME change (tests/test_ltx25_adapter.py §3b — every schema
-#: field in exactly one of four tables), because from two rows on, "what does
-#: this engine do with field X" stops being answerable by reading one tuple.
+#: TWO ROWS NOW, AND THE AUDIT CAME WITH THE SECOND ONE, as this comment used
+#: to promise: from two rows on, "what does this engine do with field X" stops
+#: being answerable by reading one tuple, so every ``GenerateRequest`` field now
+#: has exactly one home in this table, :data:`IGNORED_FIELDS`,
+#: :data:`HONOURED_FIELDS` or :data:`GOVERNED_FIELDS` — the 2.5 adapter's
+#: four-way classification, held against ``GenerateRequest.model_fields`` by
+#: tests/test_ltx_adapter_audit.py.
+#:
+#: The second row is ``alpha_gen`` (Alpha Gen, RGB video -> grey matte): the
+#: ``alpha-gen`` IC-LoRA is trained for LTX 2.5, and the single full-size stage
+#: it runs on is an engine25 driver. Same direction as the first row — a 2.5
+#: thing 2.3 has to say no to — and the same predicate discipline: the field's
+#: default is ``None``, so "is not None" IS "differs from the default".
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("keep_resident_embeddings", "keep_resident_embeddings",
      lambda r: r.keep_resident_embeddings),
+    ("alpha_gen", "alpha_gen", lambda r: r.alpha_gen is not None),
 )
+
+#: The ignore half of the four-way classification: fields 2.3's
+#: :meth:`_RealBackend.generate` never forwards to the worker, with the reason.
+#: DECLARATIVE ONLY — unlike the 2.5 adapter's table, nothing logs these (adding
+#: a log line would change a shipped engine's behaviour for an audit's sake).
+#: The schema pins only the default case: ``pipeline="distilled"`` forces
+#: ``guidance_scale == 1.0`` in ``GenerateRequest.validate_ltx_constraints``.
+#: ``pipeline="two_stage_hq"`` (with any guidance_scale) passes validation and
+#: is then silently ignored by 2.3.
+IGNORED_FIELDS: dict[str, str] = {
+    "guidance_scale": (
+        "never sent to the worker; the distilled pipeline runs without "
+        "classifier-free guidance"
+    ),
+    "pipeline": (
+        "never sent to the worker; the pipeline kind comes from config "
+        "(model.pipeline_type), not from the request"
+    ),
+}
+
+#: Fields 2.3 ACTS ON. Most are plain ``request.<field>`` reads in
+#: :meth:`_RealBackend.generate`'s payload builder; ``loras`` /
+#: ``reference_video_id`` arrive as the orchestrator-resolved ``lora_paths`` /
+#: ``reference_video_path`` keyword arguments; ``crop_output`` and
+#: ``embed_mp4_metadata`` are app-side post-processing of the finished mp4
+#: (``crop_output`` inside ``generate``, the recipe embed in
+#: ``PipelineManager._embed_recipe``).
+HONOURED_FIELDS: frozenset[str] = frozenset(
+    {
+        "prompt",
+        "width",
+        "height",
+        "num_frames",
+        "frame_rate",
+        "seed",
+        # Rides the payload as ``num_steps``.
+        "num_inference_steps",
+        "conditioning_images",
+        "crop_output",
+        "embed_mp4_metadata",
+        "loras",
+        "reference_video_id",
+        "conditioning_attention_strength",
+        "reference_video_strength",
+        "attention_backend",
+        "block_swap_prefetch",
+        "keep_resident",
+        "fused_gguf_dequant_kernel",
+        "vae_mode",
+        "outpaint",
+        "inpaint",
+        # The non-CFG negative prompt (NAG / VSF), one feature in seven fields.
+        "nag_enabled",
+        "negative_prompt",
+        "nag_scale",
+        "nag_tau",
+        "nag_alpha",
+        "neg_method",
+        "vsf_scale",
+    }
+)
+
+#: ``field -> the field that governs it``: sub-parameters inert unless a
+#: refused governor is non-default. Empty, and KEPT empty rather than absent for
+#: the reason the 2.5 adapter keeps its own: the audit reads it by name, and the
+#: next sub-parameter behind a 422 needs an obvious place to go.
+GOVERNED_FIELDS: dict[str, str] = {}
 
 #: The chain schema's own table, same shape and same discipline as
 #: :data:`REJECT_TABLE`. A SECOND table rather than a reuse of the first, for

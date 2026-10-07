@@ -308,4 +308,9 @@ def test_base_model_switch_and_listing_survive_the_round_trip(two_family_client,
     # ``keep_resident_embeddings`` names a component only 2.5's pipeline has, so
     # 2.3 is the engine that has to refuse it. An empty list here again would
     # mean an MCP client could turn the knob on while 2.3 is active.
-    assert by_id["LTX23"]["unsupported_features"] == ["keep_resident_embeddings"]
+    # LTX AlphaGen 第 1 弾 added the second, same direction: ``alpha_gen`` (the
+    # matte IC-LoRA is trained for 2.5). Order is the REJECT_TABLE's.
+    assert by_id["LTX23"]["unsupported_features"] == [
+        "keep_resident_embeddings",
+        "alpha_gen",
+    ]

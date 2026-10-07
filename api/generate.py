@@ -10,6 +10,7 @@ from api.context import AppContext
 from api.deps import get_context, require_auth
 from api.errors import (
     APIError,
+    alpha_gen_invalid,
     inpaint_lora_invalid,
     inpaint_mask_frame_mismatch,
     inpaint_mask_not_found,
@@ -76,6 +77,13 @@ def generate(
     # engines. A DEFAULT request passes on both: every predicate in those
     # tables tests "differs from the default" — deliberately, not by luck.
     engines.reject_unsupported(context.pipeline_manager.active_engine_family, request)
+
+    # Alpha Gen's block is INTERNAL: only POST /generate/alpha builds it (from a
+    # source it has measured itself), so a /generate that carries one is refused
+    # rather than trusted. Placed right after the engine scope so LTX 2.3 still
+    # answers FEATURE_UNSUPPORTED first.
+    if request.alpha_gen is not None:
+        raise alpha_gen_invalid("alpha_gen is set by POST /generate/alpha only")
 
     # Validate conditioning images exist up front.
     for ci in request.conditioning_images:

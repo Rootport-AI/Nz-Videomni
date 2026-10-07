@@ -70,6 +70,11 @@ model:
     # preprocess を持たない文字列形式で登録する。ヘッダに
     # reference_downscale_factor=1 があるので registry が control に自動分類する。
     in-outpainting: "./models/LTX23/IC-LoRA/in-outpainting/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors"
+    # Alpha Gen（RGB 動画から白黒のマット動画を作る）。LTX 2.5 専用。
+    # POST /generate/alpha が内部で使う（プロンプト・強さはサーバーが固定する）。
+    # 操作パネルと Gradio の一覧には出ない。参照は前処理しないので文字列形式で
+    # 登録する。配布方法は台帳 §1-87。
+    alpha-gen: "./models/LTX25/IC-LoRA/alpha-gen/ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors"
 
 vram:
   # 主要開発環境が VRAM 16GB であるため有効にしている。

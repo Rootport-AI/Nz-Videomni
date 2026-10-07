@@ -17,10 +17,12 @@ import json
 import httpx
 
 from gradio_ui.adapters import (
+    ADAPTER_NONE,
     MODEL_CATEGORIES,
     MODEL_DEFAULT,
     active_base_model,
     active_unsupported_features,
+    build_adapter_choices,
     build_base_model_choices,
     build_model_choices,
     model_active_value,
@@ -505,3 +507,20 @@ def test_refresh_failure_leaves_every_output_untouched():
     # engine State, §3-165; a bare update leaves a State as it is).
     assert len(updates) == 1 + len(MODEL_CATEGORIES) + 1 + len(GATED_CONTROLS)
     assert all("value" not in u and "visible" not in u for u in updates)
+
+
+def test_adapter_choices_hide_alpha_gen():
+    """``alpha-gen`` is used internally by POST /generate/alpha only: it never
+    becomes a Gradio adapter choice, while every other registered name is
+    listed as before."""
+    cfg = {
+        "model": {
+            "ic_loras": {
+                "canny-control": "./a.safetensors",
+                "alpha-gen": "./b.safetensors",
+                "my-custom": "./c.safetensors",
+            }
+        }
+    }
+    values = [value for _label, value in build_adapter_choices(cfg)]
+    assert values == [ADAPTER_NONE, "canny-control", "my-custom"]

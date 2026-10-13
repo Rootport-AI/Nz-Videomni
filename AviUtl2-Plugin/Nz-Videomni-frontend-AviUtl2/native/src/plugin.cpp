@@ -408,6 +408,12 @@ NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_TrackObject,       "trackObject")
 // Either order works; the WebUI keeps both in its own store until Generate.
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_InpaintPartialFilter, "inpaintPartialFilter")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_InpaintVideo,      "inpaintVideo")
+// Alpha Gen (ledger 1-85, stage 2 of ALPHAGEN_DESIGN.md): makes a black-and-white
+// matte video from the selected video. An ordinary Video entry, so it sits in the
+// Video block directly under inpaintVideo; the WebUI opens the Edit tab's Alpha Gen
+// sub-tab and refuses objects that do not map 1:1 onto their source file
+// (menuSelection.ts holds that rule).
+NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_AlphaGenVideo,     "alphaGenVideo")
 
 // Layer right-click menu actions (5 items; see SPEC 3-6). The final item (W3,
 // insertLatestResultHere) inserts the latest completed generation result at the
@@ -479,6 +485,11 @@ struct TimelineMenuItem {
 // action / fallback triple is byte-identical, so the WebUI's routing table
 // (timeline/menuRouting.ts) and the translation keys in
 // Language/*.NzVideomni.aul2 are untouched.
+//
+// Alpha Gen (ledger 1-85, 19 items, 2026-10-13): alphaGenVideo is a new Video
+// entry and sits at the end of the Video block, directly under inpaintVideo
+// (so the Video block now has nine entries). Its name_key is new, so both
+// Language/*.NzVideomni.aul2 files gained one line for it.
 const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3AC Video: continue this video (v2v)",                             "extendVideo",       &OnMenu_ExtendVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: generate using this video as reference (IC-LoRA)",      "referenceVideo",    &OnMenu_ReferenceVideo },
@@ -488,6 +499,7 @@ const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3AC Video: expand this video's canvas (Outpainting)",              "outpaintVideo",     &OnMenu_OutpaintVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: redo the selected range (Retake)",                      "retakeRange",       &OnMenu_RetakeRange },
     { L"Nz-Videomni\\\U0001F3AC Video: inpaint this video",                                    "inpaintVideo",      &OnMenu_InpaintVideo },
+    { L"Nz-Videomni\\\U0001F3AC Video: make an alpha matte (Alpha Gen)",                       "alphaGenVideo",     &OnMenu_AlphaGenVideo },
     { L"Nz-Videomni\\\U0001F5BC Image: generate a video from this image (i2v)",                "imageToVideo",      &OnMenu_ImageToVideo },
     { L"Nz-Videomni\\\U0001F5BC Image: add this image as a keyframe",                          "addImageKeyframe",  &OnMenu_AddImageKeyframe },
     { L"Nz-Videomni\\\U0001F5BC Image: generate a long video from this image (i2v Clip Chain)", "imageToClipChain", &OnMenu_ImageToClipChain },

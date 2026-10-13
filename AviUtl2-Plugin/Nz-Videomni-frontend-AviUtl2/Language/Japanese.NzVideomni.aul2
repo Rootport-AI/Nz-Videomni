@@ -32,3 +32,4 @@ Nz-Videomni\📷 Generate a long video from the current frame (i2v Clip Chain)=N
 Nz-Videomni\⬇ Insert the latest generation result here=Nz-Videomni\⬇ 最新の生成結果をここに挿入
 Nz-Videomni\🖌 Inpainting: use this partial filter as the mask=Nz-Videomni\🖌 Inpainting: この部分フィルタをマスクに使う
 Nz-Videomni\🎬 Video: inpaint this video=Nz-Videomni\🎬 Video: この動画をInpaintingする
+Nz-Videomni\🎬 Video: make an alpha matte (Alpha Gen)=Nz-Videomni\🎬 Video: 透過用マットを作る (Alpha Gen)

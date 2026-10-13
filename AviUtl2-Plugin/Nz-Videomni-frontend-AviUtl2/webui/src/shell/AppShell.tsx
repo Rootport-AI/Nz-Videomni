@@ -661,6 +661,19 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       return;
     }
 
+    // ── Alpha Gen 第 2 弾: Step 0 refuses a route whose whole MODE is grey; the
+    // Alpha Gen sub-tab can be grey while Edit itself stays live (LTX 2.3), so
+    // its right-click is refused here in the same §4 shape — a note and nothing
+    // else. Computed in place rather than read from `editSubTabs` below: that
+    // const is declared after this callback is created.
+    if (
+      action === "alphaGenVideo" &&
+      editSubTabsDisabledFor(baseModels.unsupportedFeatures).alphaGen
+    ) {
+      showNote("warning", strings.edit.unavailableOnBaseModel.alphaGen);
+      return;
+    }
+
     // ── §3-54 物体追尾 (trackObject): the Toolbox tab's tracking panel. An
     // early-return channel, and the FIRST route that is not a generation origin
     // at all — it edits the object the user already has (keyframes onto the
@@ -1362,6 +1375,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // for exactly that reason), and taking it as one is what keeps a refused
     // route from being decided by a stale list.
     disabledModes,
+    // Alpha Gen 第 2 弾: the sub-tab refusal above reads the loaded base model's
+    // feature list (the same memo `disabledModes` is derived from).
+    baseModels.unsupportedFeatures,
     // §3-54: the 追尾 early return delegates to the shared start function, so
     // the whole function is taken as the dependency rather than the flags it
     // reads. It is itself a `useCallback` over `trackingAvailable`, so a route

@@ -366,6 +366,12 @@ export interface DurationFieldProps {
    * `spillWarningText` as a mild warning banner. */
   isOverSpillThreshold?: boolean;
   spillWarningText?: string;
+  /** The `<datalist>` id the tick is drawn from. Every screen is always
+   * mounted, so a second panel that reused Create's fixed `"spill-tick"` would
+   * have its slider point at CREATE's tick — a panel with a line of its own
+   * passes its own id (Alpha Gen 第 2 弾). Omitted = `"spill-tick"`, which is
+   * what Create and Chain have always used. */
+  tickId?: string;
 }
 
 /** Duration (`num_frames`) range+number pair, following `SizeFields`'
@@ -388,8 +394,9 @@ export function DurationField({
   spillThresholdFrames,
   isOverSpillThreshold,
   spillWarningText,
+  tickId,
 }: DurationFieldProps) {
-  const spillTickId = "spill-tick";
+  const spillTickId = tickId ?? "spill-tick";
   // Duplicate commits (e.g. a keyup immediately followed by blur) are left
   // unfiltered on purpose — the receiver is expected to treat `onCommit` as
   // idempotent, and de-duping here would add state for no real benefit.

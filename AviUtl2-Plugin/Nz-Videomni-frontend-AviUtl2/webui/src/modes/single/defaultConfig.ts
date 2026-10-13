@@ -133,9 +133,11 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
         spatial_factor: 32,
         temporal_factor: 8,
         rows: [
-          { requires: { weight_class: "4bit" }, single_budget: 46920, chain_budget: 46376 },
-          { requires: { weight_class: "8bit" }, single_budget: 38760, chain_budget: 39424 },
-          { requires: { weight_class: "q6k" }, single_budget: 43344, chain_budget: 43648 },
+          // `alpha_gen_budget`（Alpha Gen 第 1 弾・暫定値）は単発の線のちょうど半分。
+          // 正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §9.5。
+          { requires: { weight_class: "4bit" }, single_budget: 46920, chain_budget: 46376, alpha_gen_budget: 23460 },
+          { requires: { weight_class: "8bit" }, single_budget: 38760, chain_budget: 39424, alpha_gen_budget: 19380 },
+          { requires: { weight_class: "q6k" }, single_budget: 43344, chain_budget: 43648, alpha_gen_budget: 21672 },
         ],
         outpaint_budget: 46080,
       },

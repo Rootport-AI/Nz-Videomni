@@ -75,6 +75,8 @@ const EXPECTED: Array<{
   // Generate time, not at right-click time (D8).
   { action: "inpaintPartialFilter", targetMode: "edit", intent: "inpaint-mask", needsSelection: true, requiredKind: "partialFilter", placement: null },
   { action: "inpaintVideo", targetMode: "edit", intent: "inpaint-target", needsSelection: true, requiredKind: "video", placement: null },
+  // Alpha Gen 第 2 弾 (2026-10-13), 右クリック #24: shaped like `outpaintVideo`.
+  { action: "alphaGenVideo", targetMode: "edit", intent: "alpha-gen", needsSelection: true, requiredKind: "video", placement: null },
 ];
 
 describe("routeMenuAction", () => {
@@ -105,12 +107,13 @@ describe("routeMenuAction", () => {
     expect(knownMenuActions().sort()).toEqual(EXPECTED.map((e) => e.action).sort());
   });
 
-  it("exposes exactly the twenty-three actions (18 object + 5 layer)", () => {
+  it("exposes exactly the twenty-four actions (19 object + 5 layer)", () => {
     // 素材（末尾）(2026-08-15) added the 15th object item, `endWithThis`;
     // §3-54 (2026-09-11) added the 16th, `trackObject` (右クリック #21);
     // §3-55 (2026-09-14) added the 17th and 18th together,
-    // `inpaintPartialFilter`/`inpaintVideo` (右クリック #22/#23).
-    expect(knownMenuActions()).toHaveLength(23);
+    // `inpaintPartialFilter`/`inpaintVideo` (右クリック #22/#23);
+    // Alpha Gen 第 2 弾 (2026-10-13) added the 19th, `alphaGenVideo` (#24).
+    expect(knownMenuActions()).toHaveLength(24);
   });
 });
 
@@ -163,6 +166,8 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       // selected video — both are object commands.
       "inpaintPartialFilter",
       "inpaintVideo",
+      // Alpha Gen 第 2 弾: acts on the selected video.
+      "alphaGenVideo",
     ]) {
       expect(MENU_ROUTING_TABLE[action]?.needsSelection).toBe(true);
     }
@@ -218,6 +223,8 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       // one of the two objects earns the ordinary mismatch note.
       inpaintPartialFilter: "partialFilter",
       inpaintVideo: "video",
+      // Alpha Gen 第 2 弾: the source of the matte is a video.
+      alphaGenVideo: "video",
     };
     for (const [action, kind] of Object.entries(objectKinds)) {
       expect(MENU_ROUTING_TABLE[action]?.requiredKind).toBe(kind);
@@ -264,6 +271,8 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       // target's layer), which is why two right-clicks cannot reserve twice.
       inpaintPartialFilter: null,
       inpaintVideo: null,
+      // Alpha Gen 第 2 弾: like Outpainting, nothing is reserved at right-click.
+      alphaGenVideo: null,
     };
     for (const [action, placement] of Object.entries(placements)) {
       expect(MENU_ROUTING_TABLE[action]?.placement).toBe(placement);

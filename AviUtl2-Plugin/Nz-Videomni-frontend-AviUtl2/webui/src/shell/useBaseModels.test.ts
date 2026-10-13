@@ -237,7 +237,9 @@ describe("useBaseModels", () => {
     // belongs to a component only LTX 2.5 has, so for the first time it is the
     // OLDER engine that publishes a refusal — and it greys/hides nothing but a
     // Settings row, which is why the ordinary case is still untouched here.
-    expect(result.current.options[0]?.unsupportedFeatures).toEqual(["keep_resident_embeddings"]);
+    // Alpha Gen (2026-10-07) added a second name, `alpha_gen` (the alpha-gen
+    // IC-LoRA is a 2.5 adapter). It greys one Edit sub-tab — still not a mode.
+    expect(result.current.options[0]?.unsupportedFeatures).toEqual(["keep_resident_embeddings", "alpha_gen"]);
     // §3-102: `chain` is no longer among them — LTX 2.5 chains now — and its
     // second stage took `v2v` and `a2v` with it. The End-source increment took
     // the LAST chain-family name, `end_source`, and the Outpainting increment
@@ -252,9 +254,9 @@ describe("useBaseModels", () => {
     // …and one POSITIVE assertion, so this stays a test that the list travels
     // at all rather than a list of things that are absent from an empty array.
     expect(result.current.options[1]?.unsupportedFeatures).toContain("two_stage_hq");
-    // LTX 2.3 is what is loaded, so nothing is disabled — its one declared name
-    // (§3-114) hides a Settings row, not a mode.
-    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings"]);
+    // LTX 2.3 is what is loaded, so no MODE is disabled — its two declared
+    // names hide a Settings row (§3-114) and grey a sub-tab (Alpha Gen).
+    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings", "alpha_gen"]);
     expect(result.current.disabledModes).toEqual([]);
   });
 
@@ -390,7 +392,7 @@ describe("useBaseModels", () => {
     // §3-114: LTX 2.3's own one name is the starting list here. What matters
     // for this test is that it is not `retake` — the switch below is what has
     // to move `retake` in, and 2.3's `keep_resident_embeddings` out.
-    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings"]);
+    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings", "alpha_gen"]);
 
     await act(async () => {
       await result.current.switchBaseModel("LTX25");
@@ -398,6 +400,8 @@ describe("useBaseModels", () => {
 
     expect(result.current.unsupportedFeatures).toContain("retake");
     expect(result.current.unsupportedFeatures).not.toContain("keep_resident_embeddings");
+    // Alpha Gen: 2.3's second name leaves with it — the alpha-gen IC-LoRA runs on 2.5.
+    expect(result.current.unsupportedFeatures).not.toContain("alpha_gen");
     // The engine's OWN list travelled too, and what it no longer contains is
     // the point of this increment: `outpaint` left it, so the 画角拡張 sub-tab
     // below is expected FALSE where it used to be true.
@@ -421,6 +425,7 @@ describe("useBaseModels", () => {
       retake: true,
       outpainting: false,
       inpainting: false,
+      alphaGen: false,
     });
 
     // …and back. A restriction that never lifts is not a restriction, it is a
@@ -429,10 +434,13 @@ describe("useBaseModels", () => {
       await result.current.switchBaseModel("LTX23");
     });
     expect(result.current.disabledModes).toEqual([]);
+    // Alpha Gen 第 2 弾: back on 2.3, its own `alpha_gen` greys the Alpha Gen
+    // sub-tab — the one Edit sub-tab 2.3 cannot run.
     expect(editSubTabsDisabledFor(result.current.unsupportedFeatures)).toEqual({
       retake: false,
       outpainting: false,
       inpainting: false,
+      alphaGen: true,
     });
   });
 

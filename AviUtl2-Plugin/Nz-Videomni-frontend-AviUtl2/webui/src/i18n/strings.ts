@@ -113,6 +113,7 @@ export const en = {
       retake: "Retake",
       outpainting: "Outpainting",
       inpainting: "Inpainting",
+      alphaGen: "Alpha Gen",
     },
     /** The tooltip on a sub-tab the LOADED base model's engine cannot run, one
      * line per sub-tab — the same shape `chained.unavailableOnBaseModel` uses
@@ -132,6 +133,10 @@ export const en = {
         "Outpainting is not available on the selected base model. Switch the base model in the header to use it.",
       inpainting:
         "Inpainting is not available on the selected base model. Switch the base model in the header to use it.",
+      /** Alpha Gen 第 2 弾. Like the three above it names no base model — which
+       * one runs it is the server's fact, not this sentence's. */
+      alphaGen:
+        "Alpha Gen is not available on the selected base model. Switch the base model in the header to use it.",
     },
     retake: {
       heading: "Retake",
@@ -485,6 +490,47 @@ export const en = {
          * ribbon at all (owner decision D3: 収まらなければ生成不可). */
         windowNotCovered: "This window does not fit inside the video. Reduce the number of frames.",
         maskRendering: "Waiting for the mask render to finish.",
+      },
+    },
+    /** Alpha Gen 第 2 弾 (2026-10-13): the matte panel (`modes/edit/AlphaGenPanel.tsx`).
+     * The design is the backend's `Docs/ALPHAGEN_DESIGN.md` §9. */
+    alphaGen: {
+      heading: "Alpha Gen (matte)",
+      summary: "Makes a black-and-white matte video from a video. White = keep, black = transparent.",
+      sourceHeading: "Source video",
+      dropHint: "Drop a video here, or right-click a video on the timeline to send it.",
+      sourceThumbAlt: "Video attached",
+      chooseButton: "Choose source video",
+      changeButton: "Change source video",
+      clearButton: "Clear source video",
+      /** The source's frame rate, display only: the matte keeps it unchanged. */
+      fpsLabel: "Source fps",
+      fpsUnknown: "Unknown",
+      /** Where the matte starts. A right-click sends the object's 再生位置; a
+       * drop or 📁 starts at the head of the file. */
+      startFromPlayback: (seconds: string): string =>
+        `From ${seconds}s into the source (the playback position)`,
+      startFromHead: "From the start of the video",
+      framesLabel: "Frames",
+      framesRecommend: "Recommended: 121 frames or fewer",
+      secondsText: (seconds: string): string => `About ${seconds}s`,
+      /** Under the slider, only while the comfort line is drawn. */
+      comfortHint:
+        "Up to this line the matte is made at full size. Beyond it, it is made smaller and scaled back to the original size.",
+      lightModeLabel: "Light mode (faster, but the edges are less accurate)",
+      lightModeSmallWarning: "On videos smaller than 1280*768, background removal becomes less accurate.",
+      oversizeNote: "Above 1920*1088, the background transparency becomes less accurate.",
+      /** Toast: the frame count was cut down to what the source actually has. */
+      framesAdjusted: "The frame count was adjusted automatically.",
+      uploadFailed: "The video could not be uploaded.",
+      generateButton: "Make matte",
+      generatingButton: "Submitting…",
+      uploadingButton: "Uploading…",
+      /** Why Generate is greyed (`GenerateReasonsNote`). */
+      reasons: {
+        sourceMissing: "Choose a source video.",
+        sourceTooShort: "The video is too short (at least 9 frames are needed).",
+        uploading: "Waiting for the video upload to finish.",
       },
     },
     /** Shared by every placeholder panel under Edit. */
@@ -1848,6 +1894,10 @@ export const en = {
      * judgement that actually raises it. */
     rangeTooShort: (requiredFrames: number): string =>
       `The selected range is too short. Please select at least ${requiredFrames} frames.`,
+    /** Alpha Gen 第 2 弾: the right-clicked video does not play its source 1:1
+     * (`timeline/sourceTrim.ts`'s `oneToOneSkipReason`). */
+    alphaGenNotOneToOne:
+      "Only videos at 100% playback speed, with no midpoints and no looping, are supported.",
     /** I7 §5-6: a ⏳生成中 provisional already holds the single reservation seat,
      * so a new generation reservation is refused (busy-guard). */
     reservationBusy:
@@ -2342,6 +2392,7 @@ export const ja: Strings = {
       retake: "Retake",
       outpainting: "Outpainting",
       inpainting: "Inpainting",
+      alphaGen: "Alpha Gen",
     },
     unavailableOnBaseModel: {
       retake:
@@ -2350,6 +2401,8 @@ export const ja: Strings = {
         "Outpainting（画角拡張）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
       inpainting:
         "Inpainting（マスクによる部分再生成）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
+      alphaGen:
+        "Alpha Gen（マット作成）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
     },
     retake: {
       heading: "Retake（リテイク：撮り直し）",
@@ -2564,6 +2617,37 @@ export const ja: Strings = {
           `部分フィルタの解像度（＝プロジェクトの解像度）と対象動画の解像度を一致させてください。（※部分フィルタ＝${filterWidth}*${filterHeight}px、対象動画＝${targetWidth}*${targetHeight}pxで不一致）`,
         windowNotCovered: "この長さの窓は対象の動画に収まりません。フレーム数を減らしてください。",
         maskRendering: "マスクの描画が終わるのを待っています。",
+      },
+    },
+    alphaGen: {
+      heading: "Alpha Gen（透過用マットの作成）",
+      summary: "動画から、背景を抜くための白黒のマット動画を作ります。白＝残す・黒＝透明。",
+      sourceHeading: "入力動画",
+      dropHint: "動画をここへドロップするか、タイムラインの動画を右クリックして送ってください。",
+      sourceThumbAlt: "動画を設定済み",
+      chooseButton: "元になる動画を選ぶ",
+      changeButton: "元になる動画を選び直す",
+      clearButton: "元になる動画を外す",
+      fpsLabel: "元動画の fps",
+      fpsUnknown: "不明",
+      startFromPlayback: (seconds: string): string => `元動画の ${seconds} 秒（再生位置）から`,
+      startFromHead: "動画の冒頭から",
+      framesLabel: "フレーム数",
+      framesRecommend: "推奨：121フレーム以下",
+      secondsText: (seconds: string): string => `約 ${seconds} 秒`,
+      comfortHint: "この線までは原寸で生成します。超えると縮小して生成し、元の寸法へ戻します。",
+      lightModeLabel: "軽量モード（速いが、輪郭の精度は落ちる）",
+      lightModeSmallWarning: "1280*768未満の小さな動画では、背景除去の精度が悪化します。",
+      oversizeNote: "1920*1088を超えるサイズでは、背景透過の精度が下がります",
+      framesAdjusted: "フレーム数が自動調整されました",
+      uploadFailed: "動画をアップロードできませんでした。",
+      generateButton: "マットを作成",
+      generatingButton: "送信中…",
+      uploadingButton: "アップロード中…",
+      reasons: {
+        sourceMissing: "入力動画を選んでください。",
+        sourceTooShort: "動画が短すぎます（9フレーム以上が必要です）。",
+        uploading: "動画のアップロードが終わるのを待っています。",
       },
     },
     comingSoon: "この機能はまだ準備中です。ここは画面の枠だけを先に用意したもので、操作できる項目はまだありません。",
@@ -3292,6 +3376,7 @@ export const ja: Strings = {
       "先にタイムライン上で撮り直したい範囲を選択してから、もう一度実行してください。",
     rangeTooShort: (requiredFrames: number): string =>
       `選択された範囲が短すぎます。${requiredFrames}フレーム以上を選択してください。`,
+    alphaGenNotOneToOne: "再生速度100％・中間点なし・ループなしの動画のみに対応しています",
     reservationBusy:
       "前の生成が完了するまで、新しい生成予約はできません。完了後にもう一度お試しください。",
     modeUnsupportedByBaseModel:

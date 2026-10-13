@@ -533,6 +533,8 @@ describe("formatMenuGuardNote", () => {
     // union member are proven before W3 wires the fps-dependent judgement.
     { noteKind: "rangeNotSelected" },
     { noteKind: "rangeTooShort", requiredFrames: 25 },
+    // Alpha Gen 第 2 弾.
+    { noteKind: "alphaGenNotOneToOne" },
   ];
 
   it("renders a non-empty message for every note kind, in both languages", () => {
@@ -614,6 +616,60 @@ describe("guardMenuSelection: range guard (W0)", () => {
       ok: false,
       note: { noteKind: "typeMismatch", selected: "audio", required: "video" },
     });
+  });
+});
+
+describe("guardMenuSelection — (f) Alpha Gen は 1 対 1 の動画だけ（Alpha Gen 第 2 弾）", () => {
+  const withItem = (fields: Partial<SelectionItem>): TimelineSelection =>
+    makeSelection({ selected: [{ ...makeItem(EFFECT_NAME_VIDEO), ...fields }] });
+
+  it("再生速度 50% は断る", () => {
+    expect(guardMenuSelection(route("alphaGenVideo"), withItem({ playbackSpeed: 0.5 }))).toEqual({
+      ok: false,
+      note: { noteKind: "alphaGenNotOneToOne" },
+    });
+  });
+
+  it("ループ再生は断る", () => {
+    expect(guardMenuSelection(route("alphaGenVideo"), withItem({ loopPlay: true }))).toEqual({
+      ok: false,
+      note: { noteKind: "alphaGenNotOneToOne" },
+    });
+  });
+
+  it("中間点で区間が 2 つ以上なら断る", () => {
+    expect(guardMenuSelection(route("alphaGenVideo"), withItem({ sectionCount: 2 }))).toEqual({
+      ok: false,
+      note: { noteKind: "alphaGenNotOneToOne" },
+    });
+  });
+
+  it("1 対 1 の動画は通す（再生位置がずれていても）", () => {
+    const sel = withItem({
+      playbackSpeed: 1,
+      loopPlay: false,
+      sectionCount: 1,
+      hasPlaybackRange: true,
+      playbackStartSec: 2.5,
+      playbackEndSec: 10,
+    });
+    expect(guardMenuSelection(route("alphaGenVideo"), sel)).toEqual({ ok: true });
+  });
+
+  it("値が報告されていない（古いプラグイン）なら通す", () => {
+    expect(guardMenuSelection(route("alphaGenVideo"), withItem({}))).toEqual({ ok: true });
+  });
+
+  it("種別の不一致が先に出る（画像は typeMismatch）", () => {
+    const sel = makeSelection({ selected: [{ ...makeItem(EFFECT_NAME_IMAGE), loopPlay: true }] });
+    expect(guardMenuSelection(route("alphaGenVideo"), sel)).toEqual({
+      ok: false,
+      note: { noteKind: "typeMismatch", selected: "image", required: "video" },
+    });
+  });
+
+  it("他の動画系の項目には効かない（Outpaint はループでも通す）", () => {
+    expect(guardMenuSelection(route("outpaintVideo"), withItem({ loopPlay: true }))).toEqual({ ok: true });
   });
 });
 

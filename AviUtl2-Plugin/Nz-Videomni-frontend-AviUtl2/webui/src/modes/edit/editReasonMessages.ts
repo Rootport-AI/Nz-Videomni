@@ -144,3 +144,17 @@ export function buildInpaintReasonMessages(
     maskRendering: t.maskRendering,
   };
 }
+
+/**
+ * Alpha Gen 第 2 弾 版。上の 3 つと同じ形（strings を受けて `code -> 一文` の表を
+ * 返すだけ）で、同じ `GenerateReasonsNote` が描く。`useAlphaGenForm` の
+ * `validityReasons` の 3 コードに 1 行ずつ。
+ */
+export function buildAlphaGenReasonMessages(strings: Strings): Record<string, string> {
+  const t = strings.edit.alphaGen.reasons;
+  return {
+    sourceMissing: t.sourceMissing,
+    sourceTooShort: t.sourceTooShort,
+    uploading: t.uploading,
+  };
+}

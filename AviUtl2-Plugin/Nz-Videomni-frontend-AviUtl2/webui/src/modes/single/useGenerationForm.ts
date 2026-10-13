@@ -580,7 +580,9 @@ export function useGenerationForm(
       if (a2vSeedMaxFrames !== undefined && a2vSeedCapPathRef.current === null) {
         a2vSeedCapPathRef.current = filePath;
       }
-      return sourceAudio.uploadPath(filePath, fileName);
+      // `uploadPath` resolves with the upload's outcome since Alpha Gen 第 2 弾;
+      // this attach path only ever needed the settle, so the value is dropped.
+      return sourceAudio.uploadPath(filePath, fileName).then(() => undefined);
     },
     [sourceAudio, a2vSeedMaxFrames],
   );

@@ -442,7 +442,8 @@ describe("App / Edit-系 right-click on a base model that cannot run Edit", () =
     const bridge = withExtraUnsupportedFeatures(
       createMockBridge({ delayMs: 0, ...AS_LTX25 }),
       "LTX25",
-      ["retake", "outpaint", "inpaint"],
+      // Alpha Gen 第 2 弾: the fourth sub-tab's name too, or Edit stays live.
+      ["retake", "outpaint", "inpaint", "alpha_gen"],
     );
     render(<AppShell nativeBridge={bridge} />);
     await screen.findByRole("button", { name: /^(generate|busy…)$/i }, { timeout: 5_000 });
@@ -542,6 +543,85 @@ describe("App / Edit-系 right-click on a base model that cannot run Edit", () =
       await waitFor(() => {
         expect(spy.mock.calls.some(([m]) => m === "timeline.insertProvisional")).toBe(true);
       });
+    },
+    20_000,
+  );
+});
+
+// Alpha Gen 第 2 弾 (2026-10-13): right-click #24 `alphaGenVideo`. Shaped like
+// `outpaintVideo` (Edit, no reservation), with two refusals of its own: the
+// sub-tab is grey on LTX 2.3 (the tab itself stays live), and an object that
+// does not play its source 1:1 is refused by the selection guard.
+describe("App / Alpha Gen right-click (alphaGenVideo)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    resetProvisionalReservation();
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  async function renderOnLtx25Plain() {
+    const bridge = createMockBridge({ delayMs: 0, ...AS_LTX25 });
+    render(<AppShell nativeBridge={bridge} />);
+    await screen.findByRole("button", { name: /^(generate|busy…)$/i }, { timeout: 5_000 });
+    const select = (await screen.findByRole("combobox", { name: /base model/i })) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("LTX23"));
+    await userEvent.setup().selectOptions(select, "LTX25");
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    return bridge;
+  }
+
+  it(
+    "on LTX 2.3 the grey sub-tab refuses the route: note shown, no tab switch",
+    async () => {
+      const bridge = await renderShell();
+      emit(bridge, "alphaGenVideo", videoSelection());
+
+      await screen.findByText(/Alpha Gen is not available on the selected base model/i, undefined, {
+        timeout: 5_000,
+      });
+      expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.queryByRole("tab", { name: "Outpainting" })).not.toBeInTheDocument();
+    },
+    20_000,
+  );
+
+  it(
+    "on LTX 2.5 it opens Edit on the Alpha Gen sub-tab, starting at the playback position",
+    async () => {
+      const bridge = await renderOnLtx25Plain();
+      const spy = vi.spyOn(bridge, "request");
+      const selection = videoSelection();
+      emit(bridge, "alphaGenVideo", {
+        ...selection,
+        selected: [{ ...selection.selected[0]!, hasPlaybackRange: true, playbackStartSec: 1.5, playbackEndSec: 5 }],
+      });
+
+      const visible = await waitForEditPanel();
+      await waitFor(() =>
+        expect(within(visible).getByRole("tab", { name: "Alpha Gen" })).toHaveAttribute("aria-selected", "true"),
+      );
+      expect(within(visible).getByText("From 1.5s into the source (the playback position)")).toBeInTheDocument();
+      // placement null: nothing reserved, and nothing uploaded until Generate.
+      expect(spy.mock.calls.find(([m]) => m === "timeline.insertProvisional")).toBeUndefined();
+      expect(spy.mock.calls.find(([m]) => m === "backend.uploadFile")).toBeUndefined();
+    },
+    20_000,
+  );
+
+  it(
+    "refuses an object that does not play its source 1:1 (loop) with the guard note",
+    async () => {
+      const bridge = await renderOnLtx25Plain();
+      const selection = videoSelection();
+      emit(bridge, "alphaGenVideo", {
+        ...selection,
+        selected: [{ ...selection.selected[0]!, loopPlay: true }],
+      });
+
+      await screen.findByText(/Only videos at 100% playback speed/i, undefined, { timeout: 5_000 });
+      expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
     },
     20_000,
   );

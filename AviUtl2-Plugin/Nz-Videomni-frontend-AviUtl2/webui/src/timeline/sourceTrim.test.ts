@@ -3,6 +3,7 @@ import {
   PLAYBACK_SPEED_NEUTRAL,
   decideSourceTrim,
   formatTrimSeconds,
+  oneToOneSkipReason,
   playbackStartSec,
   trimQuery,
 } from "./sourceTrim";
@@ -328,6 +329,29 @@ describe("decideSourceTrim — the trim itself", () => {
     const decision = decideSourceTrim(item, SEL_30FPS);
     expect(decision.trim).toBe(true);
     if (decision.trim) expect(decision.startSec).toBe(0);
+  });
+});
+
+describe("oneToOneSkipReason（Alpha Gen 第 2 弾で 3 か所の共通部品に）", () => {
+  it("1 対 1（速度 1.0・ループなし・区間 1 つ）なら undefined", () => {
+    expect(oneToOneSkipReason(withPlayback({ playbackSpeed: 1, loopPlay: false, sectionCount: 1 }))).toBeUndefined();
+  });
+
+  it("値が報告されていない（古いプラグイン）なら undefined —— 保守的な既定", () => {
+    expect(oneToOneSkipReason(makeItem())).toBeUndefined();
+  });
+
+  it("速度・ループ・区間の順で最初の理由を返す", () => {
+    expect(oneToOneSkipReason(withPlayback({ playbackSpeed: 0.5, loopPlay: true, sectionCount: 2 }))).toBe(
+      "nonNeutralSpeed",
+    );
+    expect(oneToOneSkipReason(withPlayback({ loopPlay: true, sectionCount: 2 }))).toBe("loopEnabled");
+    expect(oneToOneSkipReason(withPlayback({ sectionCount: 2 }))).toBe("multipleSections");
+  });
+
+  it("速度は許容差つきで比べる（100.00 / 100 の丸め屑は 1 対 1）", () => {
+    expect(oneToOneSkipReason(withPlayback({ playbackSpeed: PLAYBACK_SPEED_NEUTRAL + 1e-9 }))).toBeUndefined();
+    expect(oneToOneSkipReason(withPlayback({ playbackSpeed: 1.01 }))).toBe("nonNeutralSpeed");
   });
 });
 

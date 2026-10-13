@@ -4,6 +4,7 @@ import type { ApiClient } from "../../api/client";
 import { EditSubTabs } from "./EditSubTabs";
 import type { EditSubMode } from "./EditSubTabs";
 import type { EditSubTabsDisabled } from "../../shell/featureScope";
+import { AlphaGenPanel } from "./AlphaGenPanel";
 import { InpaintingPanel } from "./InpaintingPanel";
 import { OutpaintingPanel } from "./OutpaintingPanel";
 import { RetakePanel } from "./RetakePanel";
@@ -23,11 +24,13 @@ import { useConfig } from "../single/useConfig";
 import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
 import { useGenerationSubmit } from "../single/useGeneration";
 import {
+  buildAlphaGenReasonMessages,
   buildInpaintReasonMessages,
   buildOutpaintReasonMessages,
   buildRetakeReasonMessages,
 } from "./editReasonMessages";
 import { OUTPAINT_LORA_NAME } from "../../lora/controlLoras";
+import { useAlphaGenForm } from "./useAlphaGenForm";
 import { useInpaintForm } from "./useInpaintForm";
 import { useOutpaintForm } from "./useOutpaintForm";
 import { useRetakeForm } from "./useRetakeForm";
@@ -136,7 +139,7 @@ export interface EditScreenProps {
  * Retake sub-tab (there is nothing to generate there yet). */
 /** サブタブの並び順（画面の並びと同じ）。{@link fallbackSubMode} が
  * 「最初に生きているタブ」を選ぶときの唯一の順序表。 */
-const SUB_TAB_ORDER: readonly EditSubMode[] = ["retake", "outpainting", "inpainting"];
+const SUB_TAB_ORDER: readonly EditSubMode[] = ["retake", "outpainting", "inpainting", "alphaGen"];
 
 /**
  * 行き先のサブタブが灰色だったときの逃げ先 —— **並び順で最初に生きているもの**。
@@ -161,7 +164,7 @@ export function EditScreen({
   highlightedJobId = null,
   nativeBridge,
   onJobSubmitted,
-  subTabsDisabled = { retake: false, outpainting: false, inpainting: false },
+  subTabsDisabled = { retake: false, outpainting: false, inpainting: false, alphaGen: false },
   engineFamily,
   acceleration,
   sageAvailable,
@@ -192,6 +195,12 @@ export function EditScreen({
     // まとめてある。
     if (initialIntent?.intent === "inpaint-mask" || initialIntent?.intent === "inpaint-target") {
       return subTabsDisabled.inpainting ? fallbackSubMode(subTabsDisabled, "inpainting") : "inpainting";
+    }
+    // Alpha Gen 第 2 弾: the right-click #24 (`alphaGenVideo`). `AppShell`
+    // refuses that route while the sub-tab is grey, so the fallback is only
+    // the same last-resort net as the other three.
+    if (initialIntent?.intent === "alpha-gen") {
+      return subTabsDisabled.alphaGen ? fallbackSubMode(subTabsDisabled, "alphaGen") : "alphaGen";
     }
     return subTabsDisabled.retake ? fallbackSubMode(subTabsDisabled, "retake") : "retake";
   });
@@ -410,6 +419,28 @@ export function EditScreen({
     ],
   );
 
+  // ── Alpha Gen 第 2 弾 ────────────────────────────────────────────────────
+  // 席を取らない流れ（右クリックの表は `placement: null`）なので、送信
+  // インスタンスは bind/rollback を持たない専用のものにする。アップロードは
+  // Generate の時点で `prepareRequest` の中で行う（`submitAlpha`）。
+  const ta = strings.edit.alphaGen;
+  const alphaGenForm = useAlphaGenForm({
+    nativeBridge,
+    initialIntent,
+    config,
+    engineFamily,
+    acceleration,
+    sageAvailable,
+    weightClass,
+    onAdjusted: () => toasts.push({ kind: "warning", message: ta.framesAdjusted }),
+  });
+  const { submitState: alphaGenSubmitState, submitAlpha } = useGenerationSubmit({
+    apiClient: client,
+    onSubmitted: (jobId: string) => onJobSubmitted?.(jobId),
+  });
+  const alphaGenSubmitting = alphaGenSubmitState.phase === "submitting";
+  const alphaGenReasonMessages = useMemo(() => buildAlphaGenReasonMessages(strings), [strings]);
+
   /**
    * 右クリックが来たらサブタブを Inpainting へ寄せる（敵対的レビュー M2/M3）。
    *
@@ -430,6 +461,22 @@ export function EditScreen({
     if (subTabsDisabled.inpainting) return;
     setSubMode("inpainting");
   }, [inpaintSubTabRequest, subTabsDisabled.inpainting]);
+
+  /**
+   * 表示中のサブタブが、ベースモデルの切り替えで灰色になったら移す（Alpha Gen
+   * 第 2 弾の敵対的レビュー）。`AppShell` がモード単位で行っている戻し
+   * （§3-98 P5）のサブタブ版で、行き先は初期値と同じ `fallbackSubMode`
+   * （並び順で最初に生きているもの）。これが無いと、Alpha Gen を開いたまま
+   * LTX 2.3 へ切り替えたとき、タブは灰色なのにパネルと生成ボタンが残る。
+   * 依存は真偽値そのもの（`subTabsDisabled` の同一性ではなく）にしてある。
+   */
+  const { retake: retakeOff, outpainting: outpaintOff, inpainting: inpaintOff, alphaGen: alphaGenOff } =
+    subTabsDisabled;
+  useEffect(() => {
+    const disabled = { retake: retakeOff, outpainting: outpaintOff, inpainting: inpaintOff, alphaGen: alphaGenOff };
+    if (!disabled[subMode]) return;
+    setSubMode(fallbackSubMode(disabled, subMode));
+  }, [subMode, retakeOff, outpaintOff, inpaintOff, alphaGenOff]);
 
   /**
    * Generate 押下時の順序（実装計画 §7.5-12）:
@@ -506,6 +553,9 @@ export function EditScreen({
           <div className="edit-subpanel" hidden={subMode !== "inpainting"}>
             <InpaintingPanel form={inpaintForm} disabled={inpaintSubmitting} />
           </div>
+          <div className="edit-subpanel" hidden={subMode !== "alphaGen"}>
+            <AlphaGenPanel form={alphaGenForm} disabled={alphaGenSubmitting} nativeBridge={nativeBridge} />
+          </div>
         </div>
         <div className="generation-column">
           {/* Retake は右クリック由来のスナップショットがあるときだけ生成群を出す
@@ -574,6 +624,30 @@ export function EditScreen({
                 </div>
               )}
               <GenerateReasonsNote reasons={inpaintForm.validityReasons} messages={inpaintReasonMessages} />
+            </>
+          )}
+          {subMode === "alphaGen" && (
+            <>
+              <GenerateButtonBar
+                label={
+                  alphaGenForm.uploading
+                    ? ta.uploadingButton
+                    : alphaGenSubmitting
+                      ? ta.generatingButton
+                      : serverBusy
+                        ? strings.single.busyButton
+                        : ta.generateButton
+                }
+                disabled={alphaGenSubmitting || serverBusy || !alphaGenForm.isValid}
+                onGenerate={() => submitAlpha(alphaGenForm.prepareRequest)}
+              />
+              {alphaGenSubmitState.phase === "error" && (
+                <div className="card card-error">
+                  <p className="error-code">{alphaGenSubmitState.code}</p>
+                  <p>{alphaGenSubmitState.message}</p>
+                </div>
+              )}
+              <GenerateReasonsNote reasons={alphaGenForm.validityReasons} messages={alphaGenReasonMessages} />
             </>
           )}
           <JobLedger baseUrl={baseUrl} highlightedJobId={highlightedJobId} nativeBridge={nativeBridge} />

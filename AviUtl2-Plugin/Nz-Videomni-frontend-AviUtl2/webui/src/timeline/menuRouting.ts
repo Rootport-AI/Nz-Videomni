@@ -25,7 +25,8 @@
  * `currentFrameToClipChain`, `insertLatestResultHere` for the layer menu),
  * plus `trackObject` (§3-54 物体追尾, 2026-09-11 — the object menu's #21) and
  * the pair `inpaintPartialFilter`/`inpaintVideo` (§3-55 Inpainting,
- * 2026-09-14 — the object menu's #22/#23)
+ * 2026-09-14 — the object menu's #22/#23) and `alphaGenVideo` (Alpha Gen
+ * 第 2 弾, 2026-10-13 — the object menu's #24)
  * directly from its context-menu items (`kObjectMenuItems`/`kLayerMenuItems`),
  * so this table's job is routing exactly those. An action with no table entry
  * routes to `null` (the hook no-ops), so an unknown/new native identifier can
@@ -425,6 +426,16 @@ export const MENU_ROUTING_TABLE: Readonly<Record<string, MenuRouteInfo>> = {
    * the sibling row above for why the pair is shaped this way. */
   inpaintVideo: {
     targetMode: "edit", intent: "inpaint-target", needsSelection: true,
+    requiredKind: "video", placement: null,
+  },
+  /** Alpha Gen 第 2 弾 (2026-10-13), 右クリック #24: Edit画面 Alpha Gen サブタブ.
+   * Hand the selected video over as the source of a matte, starting from its
+   * 再生位置. Shaped exactly like `outpaintVideo`: a video is required, and
+   * `placement: null` because the seat is not taken at right-click time (the
+   * matte is laid out by the job card later). `guardMenuSelection` refuses an
+   * object that does not play its source 1:1 (`alphaGenNotOneToOne`). */
+  alphaGenVideo: {
+    targetMode: "edit", intent: "alpha-gen", needsSelection: true,
     requiredKind: "video", placement: null,
   },
 };

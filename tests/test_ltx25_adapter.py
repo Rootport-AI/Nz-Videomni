@@ -2290,7 +2290,7 @@ def _capturing_backend(captured: list[dict]) -> ltx25._RealBackend25:
         out.write_bytes(b"\x00" * 16)
 
     be._send = _send  # type: ignore[attr-defined]
-    be._read_worker_events = lambda cb, chain, prefix: {  # type: ignore[attr-defined]
+    be._read_worker_events = lambda cb, chain, prefix, **kw: {  # type: ignore[attr-defined]
         "event": "done",
         "seed_used": 4242,
         "peak_vram_mb": 7000,
@@ -2925,7 +2925,7 @@ def test_generate_outcome_relays_the_inpaint_block(tmp_path, monkeypatch):
         "canvas_height": 384,
         "mask_proof": {"decoded_frames": 25, "white_ratio": 0.04, "dilated_ratio": 0.09},
     }
-    be._read_worker_events = lambda cb, chain, prefix: {  # type: ignore[attr-defined]
+    be._read_worker_events = lambda cb, chain, prefix, **kw: {  # type: ignore[attr-defined]
         **base,
         "inpaint": block,
     }
@@ -2997,6 +2997,38 @@ def test_generate_payload_carries_alpha_gen_only_for_the_single_stage(tmp_path):
     assert list(plain) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
 
 
+def test_generate_reads_events_with_one_stage_only_for_the_single_stage(tmp_path):
+    """Alpha Gen 第 2 弾 (progress bar). The single full-size stage has no
+    Stage-2 band, so the event loop is told ``one_stage=True`` and fills the
+    bar up to 0.90 with Stage-1 steps. Only that mode: the light mode is the
+    ordinary two-stage generate, and so is every other job."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    base = be._read_worker_events(None, False, "generate")  # type: ignore[attr-defined]
+    seen: list[object] = []
+
+    def _read(cb, chain, prefix, **kw):
+        seen.append(kw.get("one_stage"))
+        return base
+
+    be._read_worker_events = _read  # type: ignore[attr-defined]
+    ref = tmp_path / "alpha_reference.mp4"
+    be.generate(
+        _request(**REQUEST_ACCEPTED_ALPHA_GEN["one_stage"], seed=1),
+        tmp_path / "one",
+        lora_paths=[],
+        reference_video_path=ref,
+    )
+    be.generate(
+        _request(**REQUEST_ACCEPTED_ALPHA_GEN["light"], seed=1),
+        tmp_path / "light",
+        lora_paths=[],
+        reference_video_path=ref,
+    )
+    be.generate(_request(seed=1), tmp_path / "plain")
+    assert seen == [True, False, False]
+
+
 def test_generate_outcome_relays_a_sage_echo_verbatim(tmp_path):
     """THE POSITIVE DIRECTION (高速化第3弾). Every "sdpa" assertion in this file
     would also pass against the hard-coded ``attention_used="sdpa"`` the adapter
@@ -3007,7 +3039,7 @@ def test_generate_outcome_relays_a_sage_echo_verbatim(tmp_path):
         captured: list[dict] = []
         be = _capturing_backend(captured)
         base = be._read_worker_events(None, False, "generate")  # type: ignore[attr-defined]
-        be._read_worker_events = lambda cb, chain, prefix, e=echoed: {  # type: ignore[attr-defined]
+        be._read_worker_events = lambda cb, chain, prefix, e=echoed, **kw: {  # type: ignore[attr-defined]
             **base,
             "attention_used": e,
         }
@@ -3023,7 +3055,7 @@ def test_generate_outcome_relays_a_degrade_verbatim(tmp_path):
     back mid-job says so, and the adapter must not tidy that into "on"."""
     captured: list[dict] = []
     be = _capturing_backend(captured)
-    be._read_worker_events = lambda cb, chain, prefix: {  # type: ignore[attr-defined]
+    be._read_worker_events = lambda cb, chain, prefix, **kw: {  # type: ignore[attr-defined]
         "event": "done",
         "seed_used": 4242,
         "peak_vram_mb": 7000,
@@ -3040,7 +3072,7 @@ def test_generate_outcome_leaves_the_echoes_none_when_the_worker_is_silent(tmp_p
     metadata.json shows as null rather than inventing an "off"."""
     captured: list[dict] = []
     be = _capturing_backend(captured)
-    be._read_worker_events = lambda cb, chain, prefix: {  # type: ignore[attr-defined]
+    be._read_worker_events = lambda cb, chain, prefix, **kw: {  # type: ignore[attr-defined]
         "event": "done",
         "seed_used": 4242,
         "peak_vram_mb": 7000,

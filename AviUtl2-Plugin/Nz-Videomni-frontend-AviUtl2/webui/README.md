@@ -13,7 +13,9 @@ chunked upsampling), **Edit** (video-editing tools, with its own sub-tab row —
 timeline **partial filter**; runs on both LTX 2.3 and LTX 2.5; shipped
 2026-09-15, design canon `../../../Docs/INPAINTING_DESIGN.md`, completion
 records `../../../Docs/PENDING_TASKS_CLOSED.md` §3-55-02 and, for LTX 2.5,
-§3-150)), and **Inventory**
+§3-150) and **Alpha Gen** (makes a black-and-white matte video from a video, at
+the source's own fps; LTX 2.5 only, greyed on LTX 2.3; design canon
+`../../../Docs/ALPHAGEN_DESIGN.md` §9)), and **Inventory**
 (job history, downloads, and
 a LoRA browser — model management lives in the settings panel's `ModelsPanel`,
 not here) — plus two batch panels (both stateless and folder-scan-driven, with
@@ -115,8 +117,8 @@ webui/
       batch/            # Batch panel (Single screen): folder scan, in-memory row list
                         #   (stateless), batch runner
       batch-i2v-long/   # Batch i2v-long panel (Chained screen): one long clip chain per image
-      edit/             # Edit screen: EditSubTabs + the Retake, Outpainting and
-                        #   Inpainting panels
+      edit/             # Edit screen: EditSubTabs + the Retake, Outpainting,
+                        #   Inpainting and Alpha Gen panels
       inventory/        # Inventory screen: job history, LoRA browser
                         #   (model management lives in shell/ModelsPanel, not here)
       toolbox/          # Toolbox screen: ToolboxSubTabs + Tracking (ObjectTrackingSection)

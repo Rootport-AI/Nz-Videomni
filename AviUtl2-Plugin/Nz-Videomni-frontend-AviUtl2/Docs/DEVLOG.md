@@ -4993,3 +4993,51 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - コードはコミット `dc83afe` です。機械ゲート: ネイティブの単体テスト 384→387 件（失敗 0）・型検査 0・vitest 155 ファイル／3128→3135 件（+7）・lint 警告 31（不変。`useOptionalShowNote` に出る `react/only-export-components` は、理由を書いた抑止コメントで対処）。
 - aux2 は `scripts/build.ps1 -RunTests`（ネイティブの単体テスト 387 件・失敗 0）→ `scripts/deploy.ps1` でビルドと配置を済ませました。実機の `data\Plugin\NzVideomni\NzVideomni.aux2` と配布用の写し `AviUtl2-Plugin/NzVideomni.aux2` は同一（SHA256 は `2A34E72B…` で始まる）で、埋め込みに `usedFallback` の文字列があることを確かめました。配布用の写しのコミットはオーナーが手動で行います。
 - オーナーの実機目視は G1〜G4 全合格（2026-10-06。[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.25）。台帳はクローズ済みです（バックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-221）。
+
+## 132. Edit タブに「Alpha Gen」サブタブを足した — 元動画の fps のまま・窓だけを生成ボタンの時点で上げる（バックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-85。Alpha Gen 第 2 弾。2026-10-13）
+
+### 132.1 結論
+
+- **Edit タブの 4 つ目のサブタブとして「Alpha Gen」（動画から、背景を抜くための白黒のマット動画を作る機能）を足しました。** 並びは Retake／Outpainting／Inpainting／Alpha Gen で、末尾です。設計の正本はバックエンド [`ALPHAGEN_DESIGN.md`](../../../Docs/ALPHAGEN_DESIGN.md) §9 です。
+- **入力動画の入口は 3 つです。** タイムラインの動画を右クリックして「🎬 Video: 透過用マットを作る (Alpha Gen)」で送る（再生位置から）、パネルへドラッグ＆ドロップする（冒頭から）、📁 で選ぶ（冒頭から）。どの入口でも、元動画の寸法・長さ・fps を `fs.probeMediaInfo` の 1 本で読みます（ブリッジ契約 v15 で結果に `fps` が加わりました）。
+- **fps 欄は表示だけです。** マットは元動画の fps のまま作られ、変換はしません（設計書 §9.2・§23）。fps が読めない素材（mkv など）は「不明」と出し、生成は止めません。
+- **フレーム数のスライダーは 9〜145・8 刻み・初期値 81 です。** 秒数（フレーム数÷fps）と、快適上限の線（「この線までは原寸で生成します。超えると縮小して生成し、元の寸法へ戻します。」）を添えます。軽量モード（速いが輪郭の精度は落ちる）のチェックボックスと、寸法の注意 2 種（1920*1088 を超える・軽量モードで 1280*768 未満）があります。注意はどちらも生成を止めず、チェックボックスも無効にしません。
+- **LTX 2.3 では Alpha Gen のサブタブが灰色になります。** ツールチップの文言は他の 3 つと同じ書式で、ベースモデル名は書きません。右クリックで送っても注記を出して止まり、画面は動きません。
+- **1 対 1 でないオブジェクト（再生速度が 100% でない・ループ再生・中間点で区間が 2 つ以上）は、右クリックの時点で断ります。** 注記は「再生速度100％・中間点なし・ループなしの動画のみに対応しています」です。
+- 後処理（マットの配置や透過の合成）は第 3 弾です。ジョブカードの 🎞 は今のままです。
+
+### 132.2 何を変えたか
+
+- **新設**: `modes/edit/useAlphaGenForm.ts`（フォームの状態と、生成ボタンの時点で窓を上げて本文を組む `prepareRequest`）と `modes/edit/AlphaGenPanel.tsx`（パネルの描画）。テストは `useAlphaGenForm.test.tsx` と `EditScreen.alphaGen.test.tsx` の 2 本です。
+- **右クリック**: `timeline/menuRouting.ts` の表に `alphaGenVideo`（Edit・intent `alpha-gen`・動画が必須・席を取らない）を 1 行足しました。Outpainting の行と同じ形です。1 対 1 の判定は `timeline/menuSelection.ts` の `guardMenuSelection` に action 別の分岐を 1 つ足し、注記の種類 `alphaGenNotOneToOne` を加えました。判定の本体は `timeline/sourceTrim.ts` に新設した `oneToOneSkipReason` で、`decideSourceTrim` と Retake の全長リボンの再判定（`retakeWindow.ts`）もこれを呼ぶ形に直しました（順序と定数は今までどおり）。
+- **サブタブの灰色化**: `shell/featureScope.ts` にサーバーの機能名 `alpha_gen` → サブタブ `alphaGen` の対応を 1 行足し、Edit タブそのものが閉じる条件を「4 つのサブタブがすべて閉じたとき」にしました。`AppShell.handleRoute` には「`alphaGenVideo` かつサブタブが灰色なら注記で止める」分岐を 1 つ足しました。
+- **送信**: `api/client.ts` に `generateAlpha`（`POST /generate/alpha`）、`modes/single/useGeneration.ts` に `submitAlpha` を足しました。`submitAlpha` は本文ではなく「本文を作る手順」を受け取り、手順の中のアップロードが終わったあとに画面が作り直されていたら送りません。
+- **部品の加算**: `useSourceUpload.uploadPath` が、アップロードの結果（`video_id`・`trimmed`・`frame_count`）を返すようになりました（今までの呼び出し元は戻り値を使っていないので挙動は不変）。`DurationField` に省略可の `tickId` を足しました（既定は今までの `"spill-tick"`）。`resolveComfortRow` の戻り値に `alphaGenBudget` が加わりました。
+- **LoRA の一覧**: `alpha-gen` を Create／Chain の制御 LoRA の一覧から隠す名簿に足しました（サーバーが Alpha Gen の中で固定で使うため）。
+- **模擬（`bridge/mockBridge.ts`）**: LTX 2.3 の `unsupported_features` に `alpha_gen`、LTX 2.5 の快適上限の行に `alpha_gen_budget`、`fs.probeMediaInfo` の `fps`（`probeMediaInfoFps` で指定）、`POST /generate/alpha`（2.3 なら 422・本文の検査のあと、サーバーと同じ内部の要求を組んで既存の単発生成の模擬に渡す）を足しました。
+
+### 132.3 なぜこの形か
+
+- **アップロードは生成ボタンの時点で、窓だけを上げます。** 入口で丸ごと上げると、短いマットのために長い動画が `uploads/` に溜まります。窓の時間が決まるとき（fps と長さが両方読めたとき）、開始が 0 より後なら `trim_start_sec`・`trim_duration_sec`（コマ数＋1 の余裕を fps で割った秒）・`max_frames`（コマ数＋1）を付けます。開始が 0 なら `max_frames` だけです——サーバーは開始の無い `trim_duration_sec` を無視する（`services/video_upload_store.py` の `_trim_window`）ので、送っても意味がないためです。`max_frames` は上限であると同時に、サーバーに実際のコマ数を測ってもらう合図でもあります。
+- **窓の時間が決まらないときは、何も付けずに丸ごと上げ、`window_start_sec` に再生位置を渡します。** `max_frames` だけを付けると、サーバーは先頭から切るので再生位置が失われるためです（`services/video_upload_store.py`）。
+- **トリムが効かなかったとき（`trimmed` が偽）は、元のファイルの上で再生位置から切ります。** 開始 0 のときは、素材が コマ数＋1 より長ければサーバーが `max_frames` で先頭から切って `trimmed` を真で返し、短ければそのまま保存して偽を返します。どちらでも上げたファイルの先頭が窓の先頭なので、`window_start_sec` は 0 になります。
+- **コマ数の切り下げは 2 段です。** 先に、読めた長さから使えるコマ数を見積もって 8n+1 に切り下げ、アップロードの応答の `frame_count`（サーバーの実測）があればそれでもう一度切り下げます。要求より減ったときだけ、スライダーを減らした値に合わせて「フレーム数が自動調整されました」のトーストを 1 回出します。8n+1 への切り下げは Retake の `snapRetakeWindowFrames`、秒の書式は `formatTrimSeconds` を使い、写しを作っていません。
+- **快適上限の線は、サーバーが縮小を判断するのと同じ計算です。** 予算は通常 `alpha_gen_budget`、軽量モードでは同じ行の単発の予算です。寸法は 64 の倍数へ切り上げたキャンバスで数え、倍率はサーバー配信の値を使います。行が無い・予算が無い・寸法が分からないときは線を出しません。9 コマでも縮小されてしまう寸法（頭打ち前の値が 9 未満）も線を出しません——その線は「原寸」と言えないからです。そのため `comfortFramesForBudget` には下限 1 を渡し、9 未満かどうかを見えるようにしています。
+- **datalist の id を専用にしました。** 画面はすべて常時マウントなので、Create の固定の `"spill-tick"` を共有すると、Alpha Gen のスライダーが Create の線を指してしまいます（Outpaint が専用の id を持つのと同じ理由）。
+- **`handleRoute` の灰色判定は、分岐の中でその場で求めます。** `editSubTabs` の定数は `handleRoute` より後で宣言されるので、参照すると描画が落ちます。依存配列には `baseModels.unsupportedFeatures` を足しました。
+- **本文に `frame_rate` はありません。** fps はサーバーが元動画から測ります（台帳 §1-88）。高速化の設定は、`AlphaGenRequest` が受け取る 5 つ（`attention_backend`・`block_swap_prefetch`・`keep_resident`・`keep_resident_embeddings`・`fused_gguf_dequant_kernel`）だけを素通しし、`seed` は常に -1 です。
+- **送信インスタンスは Alpha Gen 専用です。** 右クリックで席を取らない流れなので、Retake／Inpainting の予約の後始末を持つインスタンスとは分けました。
+
+### 132.4 引っかかりやすい点（既知の許容）
+
+- **生成ボタンを押すたびに同じ窓を上げ直します。** `uploads/` に同じ切り出しが増えますが、一時置き場なので許容しています。
+- **トリムしてのアップロードは再エンコードです**（既存の右クリックのトリムと同じ）。
+- **fps が読めない素材では、秒数も線も出ません。** 短すぎればサーバーが 422 を返し、エラーカードに出ます。
+- **アップロード後の実測でも 9 コマに届かなかったときは、送らずに「動画が短すぎます」を出します。**
+- **生成中でなくても、表示中のサブタブがベースモデルの切り替えで灰色になったら、並び順で最初に使えるサブタブへ移ります。** Alpha Gen を開いたまま LTX 2.3 へ切り替えたとき、タブは灰色なのにパネルと生成ボタンが残って押せてしまう（押すとアップロード後に 422）のを防ぐためで、`AppShell` がモード単位で行っている戻し（§3-98 P5）のサブタブ版です（敵対的レビューの指摘）。
+- 📁 のファイル選択ダイアログを閉じたとき（キャンセル）は、今の入力動画をそのまま残します。
+
+### 132.5 状態
+
+- 機械ゲート: 型検査 0・lint 警告 31（既存のものだけ・新しい警告なし）・vitest 157 ファイル／3190 件（失敗 0）。
+- コミット、`build.ps1`→`deploy.ps1` での配置、実機の確認（バックエンド台帳の G-S1〜S3）とオーナーの目視（[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.26）は、これからです。

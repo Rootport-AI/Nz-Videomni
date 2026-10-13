@@ -50,7 +50,8 @@ Protocol (one JSON object per line; parent -> worker):
       config change and not a code change. A failure here is fatal: ``error``
       + exit 1, which is what the app's load-failure path expects.
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
-   output_path, [images], loras, reference_video, [outpaint], [inpaint]}
+   output_path, [images], loras, reference_video, [outpaint], [inpaint],
+   [alpha_gen]}
       One two-stage generation, mp4 written by this process to ``output_path``.
       ``images`` empty/absent -> T2V; entries -> I2V. Fields named in
       ``pipeline25.IGNORED_FIELDS`` may ride along; each one present is logged
@@ -76,6 +77,10 @@ Protocol (one JSON object per line; parent -> worker):
       ``inpaint`` is the inpaint job's additive block (canvas geometry, the cut
       window and the mask video); its PRESENCE routes the op to
       :mod:`engine25.inpaint25`, and it never rides with ``outpaint``.
+      ``alpha_gen`` = {mode: "one_stage"} is AlphaGen's one-stage full-size
+      block; its PRESENCE routes the op to :mod:`engine25.alphagen25` (stage 1
+      at the full canvas size, no stage 2). It never rides with ``outpaint``
+      or ``inpaint``, and its ``done`` reply is the plain generation's shape.
       The ``done`` reply adds ``vae_mode_used`` (which VAE decoder this
       checkpoint built -- "diff" or "conv"; a load-time fact) and ``ltx25``
       (encode_fps/video_chunks/tiling/size_bytes/phases -- deliberately no
@@ -774,9 +779,16 @@ def _do_generate(msg: dict) -> None:
     # would be fighting over one reference video and one output file. 2.3's
     # worker says it in the same words at the same place.
     inpaint = msg.get("inpaint")
-    assert not (outpaint is not None and inpaint is not None), (
-        "outpaint and inpaint are mutually exclusive; the API schema rejects the "
-        "combination before a job is created"
+
+    # AlphaGen's one-stage full-size mode. The same additive contract again: the
+    # adapter puts ``{"mode": "one_stage"}`` on the payload only for that mode
+    # (the light mode is a plain two-stage generation and sends no block), so its
+    # presence routes the op to the one-stage driver below. It carries no
+    # geometry: the canvas is the request's own ``width``/``height``.
+    alpha = msg.get("alpha_gen")
+    assert sum(block is not None for block in (outpaint, inpaint, alpha)) <= 1, (
+        "outpaint, inpaint and alpha_gen are mutually exclusive; the API schema "
+        "rejects the combination before a job is created"
     )
 
     # The five acceleration knobs. All are ABSENT-MEANS-OFF, and all are armed
@@ -816,6 +828,7 @@ def _do_generate(msg: dict) -> None:
         # tell a MASKED job from a plain one, and the canvas both features send
         # arrives as ``ic_reference=yes`` either way.
         f"inpaint={'yes' if inpaint else 'no'} "
+        f"alpha={(alpha.get('mode') or 'unknown') if alpha is not None else 'none'} "
         f"preprocess={_preprocess_kind(msg)} ic_attn={attn_strength:.3f} "
         # What was ASKED for. What was GOT is the pair of echo keys on the done
         # event below, which can differ ("on->off").
@@ -978,6 +991,31 @@ def _do_generate(msg: dict) -> None:
                 # Reported through pipeline25's own ``_log_ignored``, so an
                 # outpaint job's log names the dropped knobs in the same words a
                 # plain one's does.
+                ignored=ignored,
+                progress=_emit_progress,
+            )
+        elif alpha is not None:
+            # AlphaGen, one-stage full-size. ``ic_reference`` above is the
+            # app-built, canvas-sized reference video, and the canvas is the
+            # request's own ``width``/``height`` (multiples of 64). Imported
+            # HERE for the same reason as the two branches above. The result is
+            # a plain ``GenerationResult``, so the ``done`` event below is the
+            # plain generation's shape (no ``extra``, ``ltx25`` built fresh).
+            from engine25.alphagen25 import run_alpha_gen  # noqa: PLC0415
+
+            result = run_alpha_gen(
+                _PIPE,
+                prompt=str(msg["prompt"]),
+                seed=seed,
+                width=int(msg["width"]),
+                height=int(msg["height"]),
+                num_frames=int(msg["num_frames"]),
+                frame_rate=float(msg["frame_rate"]),
+                output_path=str(msg["output_path"]),
+                # Passed on EVERY job, ``[]`` included: see :func:`_ic_loras`.
+                ic_loras=ic_loras,
+                ic_reference=ic_reference,
+                ic_attention_strength=attn_strength,
                 ignored=ignored,
                 progress=_emit_progress,
             )

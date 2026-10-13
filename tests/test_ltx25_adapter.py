@@ -423,6 +423,38 @@ REQUEST_ACCEPTED_INPAINT: dict[str, dict] = {
     },
 }
 
+#: What LTX AlphaGen 第 1 弾 turned on: ``alpha_gen``, the internal block
+#: ``POST /generate/alpha`` fills. Like ``keep_resident_embeddings`` it was BORN
+#: honoured here and never sat in :data:`REQUEST_OVERRIDES`; the refusal it
+#: creates is LTX 2.3's (tests/test_ltx_adapter_audit.py).
+#:
+#: THE COMPANIONS TRAVEL WITH IT: the schema couples the block to a reference
+#: video (the clip whose matte is made) and a reference video to a LoRA, and
+#: requires ``width``/``height`` to be the working size rounded up to 64 — here
+#: the working size already IS on the 64-grid, so the canvas equals it.
+#: Two rows: the default single full-size stage and the light mode, because
+#: the payload tells them apart and the ruling must let both through.
+REQUEST_ACCEPTED_ALPHA_GEN: dict[str, dict] = {
+    "one_stage": {
+        "alpha_gen": {"working_width": 512, "working_height": 384},
+        "reference_video_id": "vid-123",
+        "loras": _LORAS,
+        "width": 512,
+        "height": 384,
+    },
+    "light": {
+        "alpha_gen": {
+            "working_width": 512,
+            "working_height": 384,
+            "one_stage": False,
+        },
+        "reference_video_id": "vid-123",
+        "loras": _LORAS,
+        "width": 512,
+        "height": 384,
+    },
+}
+
 
 def test_reject_table_names_only_real_request_fields():
     fields = set(GenerateRequest.model_fields)
@@ -707,6 +739,32 @@ def test_inpaint_is_honoured_and_says_so_in_every_table():
         "two_stage_hq",
         "prune_vaed",
     }
+
+
+@pytest.mark.parametrize("case", list(REQUEST_ACCEPTED_ALPHA_GEN))
+def test_alpha_gen_is_accepted(case):
+    """LTX AlphaGen 第 1 弾: the whole coupled combination (block, reference
+    video, LoRA, 64-grid canvas) passes this engine's ruling in both modes."""
+    ltx25.reject_unsupported(_request(**REQUEST_ACCEPTED_ALPHA_GEN[case]))  # no raise
+
+
+def test_alpha_gen_is_honoured_and_says_so_in_every_table():
+    """Unlisted and honoured are different promises, and the difference is the
+    whole job here: a field dropped from every table would stop nothing and the
+    worker would run a plain two-stage generate where a single full-size matte
+    stage was asked for. Honoured, therefore not refused / ignored / governed —
+    and NOT published by this engine (it is LTX 2.3 that publishes it), with
+    this engine's published list still at its two engine-level names."""
+    assert "alpha_gen" in ltx25.HONOURED_FIELDS
+    assert "alpha_gen" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
+    assert "alpha_gen" not in ltx25.IGNORED_FIELDS
+    assert "alpha_gen" not in ltx25.GOVERNED_FIELDS
+    assert "alpha_gen" not in ltx25.UNSUPPORTED_FEATURES
+    assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 2
+    # The needle the generic honoured-read audit below also relies on, named
+    # here so a reader of this feature's tests sees it.
+    assert "request.alpha_gen" in inspect.getsource(ltx25._RealBackend25.generate)
 
 
 def test_unsupported_features_is_both_reject_tables_without_chain_itself():
@@ -2892,6 +2950,51 @@ def test_generate_outcome_leaves_inpaint_none_on_a_plain_job(tmp_path):
     captured: list[dict] = []
     outcome = _capturing_backend(captured).generate(_request(), tmp_path / "out")
     assert outcome.inpaint is None
+
+
+def test_generate_payload_carries_alpha_gen_only_for_the_single_stage(tmp_path):
+    """LTX AlphaGen 第 1 弾. The ``alpha_gen`` key is the worker's switch to the
+    single full-size stage, so it must ride for that mode and for NOTHING else:
+
+    * one_stage: ``{"mode": "one_stage"}``, appended last (no existing key moves);
+    * light mode: NO key — the light mode IS the plain two-stage generate with
+      the reference attached, so its payload equals a plain reference job's;
+    * a plain generate: no key, the golden key order untouched."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    ref = tmp_path / "alpha_reference.mp4"
+    common = {"seed": 123}
+
+    be.generate(
+        _request(**REQUEST_ACCEPTED_ALPHA_GEN["one_stage"], **common),
+        tmp_path / "one",
+        lora_paths=[],
+        reference_video_path=ref,
+    )
+    be.generate(
+        _request(**REQUEST_ACCEPTED_ALPHA_GEN["light"], **common),
+        tmp_path / "light",
+        lora_paths=[],
+        reference_video_path=ref,
+    )
+    plain_reference = {
+        k: v for k, v in REQUEST_ACCEPTED_ALPHA_GEN["light"].items() if k != "alpha_gen"
+    }
+    be.generate(
+        _request(**plain_reference, **common),
+        tmp_path / "plain_ref",
+        lora_paths=[],
+        reference_video_path=ref,
+    )
+    be.generate(_request(**common), tmp_path / "plain")
+
+    one, light, plain_ref, plain = captured
+    assert one["alpha_gen"] == {"mode": "one_stage"}
+    assert list(one) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25 + ["alpha_gen"]
+    assert "alpha_gen" not in light
+    assert light == plain_ref | {"output_path": light["output_path"]}
+    assert "alpha_gen" not in plain
+    assert list(plain) == GOLDEN_GENERATE_KEYS_25 + GOLDEN_ACCEL_KEYS_25
 
 
 def test_generate_outcome_relays_a_sage_echo_verbatim(tmp_path):

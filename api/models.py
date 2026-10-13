@@ -22,8 +22,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
+from chain_math import ceil64
 from config import LimitsConfig, MAX_CONDITIONING_IMAGES
 
 # Pydantic-declared DEFAULTS only (no config.yaml file I/O) — the single place
@@ -343,6 +344,76 @@ class InpaintSpec(BaseModel):
     blend_dilation_stage2: int = Field(2, ge=0, le=15)
 
 
+class AlphaGenSpec(BaseModel):
+    """Alpha Gen (RGB video -> grey alpha-matte video, LTX 2.5 only): the
+    INTERNAL block ``POST /generate/alpha`` fills on the ``GenerateRequest`` it
+    builds. Design canon: ``Docs/ALPHAGEN_DESIGN.md``.
+
+    GEOMETRY CONTRACT. ``GenerateRequest.width`` / ``height`` are the CANVAS:
+    the working size below rounded UP to a multiple of 64 (a factor-1 reference
+    needs only the 64-grid). The scaled source sits at the canvas' top-left and
+    the right/bottom bands are black, cut off again before the matte is
+    stretched back to the source's own size.
+
+    **No file path and no source size here, deliberately** — the same rule as
+    :class:`InpaintSpec`: the uploaded file is the single source of truth for
+    its own size, and a request field cannot make the server read an arbitrary
+    path.
+    """
+
+    # Where the window starts on the SOURCE MATERIAL's own timeline.
+    window_start_sec: float = Field(0.0, ge=0.0)
+    # True = the default single full-size stage (Stage-2 skipped); False = the
+    # light mode, i.e. the existing two-stage path with the reference attached.
+    one_stage: bool = True
+    # The size the source is scaled to before padding (aspect kept, even sides).
+    working_width: int = Field(..., ge=2)
+    working_height: int = Field(..., ge=2)
+    # The comfort budget (tokens) the working size was fitted under. None =
+    # there is no budget (the family has no comfort value), so the source
+    # was not scaled down.
+    budget_tokens: int | None = None
+
+
+class AlphaGenRequest(BaseModel):
+    """Body of ``POST /generate/alpha`` — the thin public face of Alpha Gen.
+
+    The user touches only the input video, the frame count, the fps, the seed
+    and the light-mode switch; the prompt, the LoRA and its strengths are fixed
+    by the server. The server measures the source, cuts the window, decides the
+    working size and canvas, and builds the internal ``GenerateRequest`` (with
+    :class:`AlphaGenSpec` in ``alpha_gen``).
+
+    PASS-THROUGH FIELDS. The acceleration / residency fields below are copied
+    from :class:`GenerateRequest` with the SAME names, types and defaults and
+    are forwarded verbatim. They are not new knobs: on LTX 2.5 an absent
+    ``keep_resident`` / ``keep_resident_embeddings`` key is the RELEASE request
+    (``services/engines/ltx25/adapter.py``), so a matte job built from defaults
+    would silently drop a user's residency setting.
+    """
+
+    reference_video_id: str = Field(..., min_length=1)
+    window_start_sec: float = Field(0.0, ge=0.0)
+    num_frames: int = Field(..., ge=9, le=145)
+    frame_rate: int = Field(..., ge=1, le=60)
+    seed: int = -1
+    light_mode: bool = False
+
+    # ── pass-through (GenerateRequest's own fields, same name/type/default) ──
+    attention_backend: Literal["sdpa", "sage"] = "sdpa"
+    block_swap_prefetch: bool = BLOCK_SWAP_PREFETCH_DEFAULT
+    keep_resident: bool = KEEP_RESIDENT_DEFAULT
+    keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT
+    fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+
+    @field_validator("num_frames")
+    @classmethod
+    def validate_num_frames(cls, value: int) -> int:
+        if (value - 1) % 8 != 0:
+            raise ValueError("num_frames must be 8n+1 (9-145)")
+        return value
+
+
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2000)
     negative_prompt: str = Field("", max_length=2000)
@@ -545,6 +616,13 @@ class GenerateRequest(BaseModel):
     # ``inpaint`` key. See InpaintSpec for the geometry contract.
     inpaint: InpaintSpec | None = None
 
+    # Alpha Gen (ADDITIVE/optional, LTX 2.5 only). An INTERNAL block: only
+    # ``POST /generate/alpha`` fills it, on the request it builds itself; a
+    # ``POST /generate`` that carries it is refused with 422 ALPHA_GEN_INVALID.
+    # ``None`` ⇒ the worker payload carries no ``alpha_gen`` key. See
+    # AlphaGenSpec for the geometry contract.
+    alpha_gen: AlphaGenSpec | None = None
+
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
         if self.width % 64 != 0:
@@ -667,6 +745,25 @@ class GenerateRequest(BaseModel):
                 raise ValueError(
                     f"inpaint height must be a multiple of {INPAINT_CANVAS_MULTIPLE} "
                     "(it is the canvas: the source's height rounded up)"
+                )
+
+        # ── Alpha Gen ─────────────────────────────────────────────────────────
+        # Shape-only rules; measuring the source and fitting the window happen
+        # at POST /generate/alpha, which is the only producer of this block.
+        if self.alpha_gen is not None:
+            ag = self.alpha_gen
+            if not self.reference_video_id:
+                raise ValueError(
+                    "alpha_gen requires reference_video_id (the video whose "
+                    "matte is being generated)"
+                )
+            if (self.width, self.height) != (
+                ceil64(ag.working_width),
+                ceil64(ag.working_height),
+            ):
+                raise ValueError(
+                    "alpha_gen width/height must equal the working size rounded "
+                    "up to a multiple of 64 (it is the canvas)"
                 )
         return self
 
@@ -1790,6 +1887,11 @@ class JobResponse(BaseModel):
     # deleted); it is False unless the responder resolved the output dir.
     is_v2v: bool = False
     joined: bool = False
+    # Alpha Gen (ADDITIVE): ``matte`` reports whether a ``matte.mkv`` (the
+    # lossless grey matte written by POST /generate/alpha jobs) currently exists
+    # next to the job output; it is False unless the responder resolved the
+    # output dir.
+    matte: bool = False
     created_at: str
     started_at: str | None
     completed_at: str | None

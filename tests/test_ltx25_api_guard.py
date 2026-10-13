@@ -61,6 +61,7 @@ from test_ltx25_adapter import (  # noqa: E402
     CHAIN_ACCEPTED_SAGE,
     CHAIN_ACCEPTED_SOURCES,
     CHAIN_OVERRIDES,
+    REQUEST_ACCEPTED_ALPHA_GEN,
     REQUEST_ACCEPTED_INPAINT,
     REQUEST_ACCEPTED_KEEP_RESIDENT,
     REQUEST_ACCEPTED_KEEP_RESIDENT_EMBEDDINGS,
@@ -472,6 +473,28 @@ def test_ltx25_no_longer_refuses_inpaint(two_family_client, case):
     )
     if r.status_code >= 400:
         assert r.json().get("error", {}).get("code") != "FEATURE_UNSUPPORTED", r.text
+
+
+@pytest.mark.parametrize("case", sorted(REQUEST_ACCEPTED_ALPHA_GEN))
+def test_generate_refuses_the_internal_alpha_gen_block_on_ltx25(two_family_client, case):
+    """LTX AlphaGen 第 1 弾。``alpha_gen`` は ``POST /generate/alpha`` だけが
+    組み立てる内部ブロックなので、``/generate`` に付いてきたら 2.5 でも
+    422 ``ALPHA_GEN_INVALID`` で断る（素材を測ったのはそのエンドポイントで、
+    外から渡された寸法は信用しない）。
+
+    このフィクスチャには参照動画もアダプタも登録が無いが、404 ではなく
+    この 422 になる——検査の位置が ``reject_unsupported`` の直後、素材と
+    LoRA の照会より前だからである。ジョブも作られない。"""
+    _activate(two_family_client, "LTX25")
+    before = _job_count(two_family_client)
+    r = two_family_client.post(
+        "/api/v1/generate", json={**BASE_REQUEST, **REQUEST_ACCEPTED_ALPHA_GEN[case]}
+    )
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "ALPHA_GEN_INVALID"
+    assert error["detail"] == "alpha_gen is set by POST /generate/alpha only"
+    assert _job_count(two_family_client) == before
 
 
 def test_the_reject_table_and_this_suite_cover_the_same_fields():
@@ -1581,7 +1604,12 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     # 2.3側は§3-114まで空だった。いまは**1件**だけ載る——
     # keep_resident_embeddings は LTX 2.5 にしか無い部品のつまみなので、
     # 非対応を宣言するのは2.3の側になる（この一覧の向きが初めて逆になった件）。
-    assert by_id["LTX23"]["unsupported_features"] == ["keep_resident_embeddings"]
+    # LTX AlphaGen 第 1 弾で**2件目** ``alpha_gen`` が同じ向きで加わった
+    # （マット用の IC-LoRA は 2.5 用）。順序は REJECT_TABLE の順。
+    assert by_id["LTX23"]["unsupported_features"] == [
+        "keep_resident_embeddings",
+        "alpha_gen",
+    ]
     features = by_id["LTX25"]["unsupported_features"]
     # Retake段で ``retake`` が外れた——残っていればEditタブの「撮り直し」
     # サブタブも、タイムラインの右クリックからそこへ入る導線も灰色のままに

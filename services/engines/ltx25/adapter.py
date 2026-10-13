@@ -257,6 +257,11 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         # Listed next to ``outpaint`` because the two are one mechanism seen
         # from two sides — the same IC-LoRA, the same canvas, the same blend.
         "inpaint",
+        # Alpha Gen (RGB video -> grey matte). Its block is internal: only
+        # POST /generate/alpha fills it. The single full-size stage rides the
+        # payload as ``alpha_gen``; the light mode rides no key at all (it IS
+        # the plain two-stage generate with the reference attached).
+        "alpha_gen",
         # The non-CFG negative prompt (NAG / VSF), seven fields that travel as
         # one feature: the switch, the prompt, the method, and the two methods'
         # knobs. They are listed together rather than sorted in because that is
@@ -965,6 +970,16 @@ class _RealBackend25(_RealBackend):
                 "blend_dilation_stage1": ip.blend_dilation_stage1,
                 "blend_dilation_stage2": ip.blend_dilation_stage2,
             }
+        # Alpha Gen, appended after the inpaint block so no existing key order
+        # moves. The key rides ONLY for the single full-size stage, and its
+        # presence is the switch that routes the worker to
+        # ``engine25.alphagen25.run_alpha_gen``. The light mode carries NO key:
+        # it is the plain two-stage generate with the reference attached, so its
+        # payload is byte-for-byte a plain reference job's. Everything else the
+        # engine needs (canvas, reference, LoRA) already rides above; the padding
+        # is cut off app-side after the job.
+        if request.alpha_gen is not None and request.alpha_gen.one_stage:
+            payload["alpha_gen"] = {"mode": "one_stage"}
         # The non-CFG negative prompt (NAG / VSF), appended after the blocks
         # above so no existing key order moves. ADDITIVE — the block rides only
         # when the request actually enabled it, so a job without it carries no

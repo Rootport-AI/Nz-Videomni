@@ -8,7 +8,7 @@
 一切見ず、``mcp_server.client.BackendClient.output_dir``（= ``Settings.output_dir`` =
 ローカル ``config.load_config().output_dir``）だけを入力に取る。
 
-``job_output_path`` / ``job_joined_path`` は純粋なパス組み立てのみ（I/O無し）。
+``job_output_path`` / ``job_joined_path`` / ``job_matte_path`` は純粋なパス組み立てのみ（I/O無し）。
 ``unique_dest`` だけがファイルシステムを読む（``Path.exists``）ため、呼び出し側
 （``tools/outputs.py``）は必ず ``anyio.to_thread.run_sync`` 経由で呼ぶこと
 （``Docs/MCP_SERVER_DESIGN.md`` §2 の D3、ブロッキングI/Oはスレッドへ）。
@@ -27,6 +27,11 @@ def job_output_path(output_dir: Path | str, job_id: str) -> Path:
 def job_joined_path(output_dir: Path | str, job_id: str) -> Path:
     """V2V join済み動画パス（``output_dir/{job_id}/joined.mp4``）。"""
     return Path(output_dir) / job_id / "joined.mp4"
+
+
+def job_matte_path(output_dir: Path | str, job_id: str) -> Path:
+    """Alpha Gen の合成用マット（``output_dir/{job_id}/matte.mkv``。FFV1・gray）。"""
+    return Path(output_dir) / job_id / "matte.mkv"
 
 
 def unique_dest(dest_dir: Path | str, filename: str) -> Path:

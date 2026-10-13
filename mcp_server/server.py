@@ -80,6 +80,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   upload_audio と submit_chain を呼んでください）。
   Inpainting は API（GenerateRequest.inpaint）にはありますが、MCP の
   ツールにはありません。
+  Alpha Gen（動画から白黒のマット動画を作る）は submit_alpha_gen です
+  （LTX 2.5 専用。下の専用の節を読んでください）。
 
 ■ 同時実行は1ジョブまで
   バックエンドは生成ジョブを同時に1本しか実行しません。
@@ -168,6 +170,21 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   確認してください。
   outpaint_blend_dilation_stage1（なじみ幅の段数、既定5）は stage 2 が5:2の
   比で自動追従するので、指定するのは stage 1 だけです。
+
+■ Alpha Gen（アルファマット生成）— submit_alpha_gen
+  手元の動画から、同じ寸法・同じフレーム数の白黒のマット動画（白＝不透明・
+  黒＝透明・灰＝半透明）を作る機能です。**LTX 2.5 専用**で、LTX 2.3 を
+  選んでいるときは 422 FEATURE_UNSUPPORTED になります。
+  upload_video で元動画を上げ、その video_id と num_frames（8n+1・9〜145）・
+  frame_rate（整数）を渡します。プロンプトと LoRA はサーバーが固定します。
+  **alpha-gen という IC-LoRA の登録が必要**で、無ければ 404 になるので、
+  事前に list_loras で確認してください。
+  既定は 1 段原寸モードです（light_mode=true で既存の 2 段の経路＝軽量
+  モード）。サーバーが快適上限に収まる大きさまで縮小して生成し、元の寸法へ
+  戻して返します。
+  出力は同じジョブフォルダの 2 本です: output.mp4（確認用の H.264。
+  get_job_video_path）と matte.mkv（合成用の劣化しない灰色マット。
+  get_job_matte_path・save_job_video(which="matte")）。
 
 ■ AviUtl2 のタイムライン連携は対象外
   このツール群はバックエンドの生成・ジョブ管理・バッチ計画のみを扱います。

@@ -98,6 +98,21 @@ def test_ltx25_rows_carry_only_the_weight_class():
     ]
 
 
+def test_alpha_gen_budgets():
+    """AlphaGen (POST /generate/alpha) one-stage line: provisional, exactly half
+    of each LTX 2.5 row's single line (gate 0, VERIFICATION_LOG §151; owner
+    ruling 2026-10-07). LTX 2.3 has no AlphaGen, so its rows carry None."""
+    budgets = _shipped()
+    assert [(r.requires, r.alpha_gen_budget) for r in budgets["ltx25"].rows] == [
+        ({"weight_class": "4bit"}, 23460),
+        ({"weight_class": "8bit"}, 19380),
+        ({"weight_class": "q6k"}, 21672),
+    ]
+    for row in budgets["ltx25"].rows:
+        assert row.alpha_gen_budget * 2 == row.single_budget
+    assert [r.alpha_gen_budget for r in budgets["ltx"].rows] == [None, None, None]
+
+
 def test_both_families_use_the_default_token_factors():
     budgets = _shipped()
     for family_id in ("ltx", "ltx25"):
@@ -190,7 +205,10 @@ def test_descriptor_comfort_reaches_get_config(tmp_path: Path):
     app = _boot(tmp_path, [_with_comfort(COMFORT)])
     with TestClient(app) as c:
         limits = c.get("/api/v1/config").json()["limits"]
-    assert limits["comfort_budgets"] == {"ltx": COMFORT}
+    # model_dump fills the optional row key the synthetic block leaves out
+    expected = copy.deepcopy(COMFORT)
+    expected["rows"][0]["alpha_gen_budget"] = None
+    assert limits["comfort_budgets"] == {"ltx": expected}
     # a bool survives JSON -> pydantic -> model_dump as a real bool
     assert limits["comfort_budgets"]["ltx"]["rows"][0]["requires"]["keep_resident"] is True
     # the compatibility values keep flowing unchanged

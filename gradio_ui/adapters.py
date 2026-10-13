@@ -28,6 +28,15 @@ ADAPTER_FRIENDLY: dict[str, str] = {
 _FALLBACK_VIDEO_EXTS = [".mp4", ".mov", ".webm", ".mkv"]
 _FALLBACK_MAX_VIDEO_MB = 200
 
+#: Registered IC-LoRA names that are never offered as an adapter choice.
+#: ``alpha-gen`` is used internally by ``POST /generate/alpha`` only (the
+#: Gradio UI has no AlphaGen screen). Gradio runs in its own process and does
+#: not import the service layer, so the name is written here. The operation
+#: panel hides it with ``UI_HIDDEN_CONTROL_LORA_NAMES``
+#: (webui/src/lora/controlLoras.ts); the server has no reserved-name mechanism
+#: (AlphaGen phase-1 plan, section 11, review finding 5).
+HIDDEN_ADAPTER_NAMES = frozenset({"alpha-gen"})
+
 
 def build_adapter_choices(config: dict | None, lang: str = _DEFAULT_LANG) -> list[tuple[str, str]]:
     """Build the adapter Dropdown ``choices`` (list of (label, value)).
@@ -36,13 +45,17 @@ def build_adapter_choices(config: dict | None, lang: str = _DEFAULT_LANG) -> lis
     come from the fetched /config ``model.ic_loras`` keys (value == key); each
     key gets a friendly label when known, else is shown verbatim. Falls back to
     the static known adapters (:data:`ADAPTER_FRIENDLY`) when the server config
-    has no ic_loras.
+    has no ic_loras. Names in :data:`HIDDEN_ADAPTER_NAMES` are never listed.
     """
     none_choice = (L("adapter_none", lang), ADAPTER_NONE)
     ic_loras = ((config or {}).get("model") or {}).get("ic_loras") or {}
     if not ic_loras:
         return [none_choice] + [(label, key) for key, label in ADAPTER_FRIENDLY.items()]
-    return [none_choice] + [(ADAPTER_FRIENDLY.get(key, key), key) for key in ic_loras]
+    return [none_choice] + [
+        (ADAPTER_FRIENDLY.get(key, key), key)
+        for key in ic_loras
+        if key not in HIDDEN_ADAPTER_NAMES
+    ]
 
 
 # --------------------------------------------------------------------------- #

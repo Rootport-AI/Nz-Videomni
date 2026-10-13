@@ -152,6 +152,8 @@ def pad_green_mp4(
     pad_top: int,
     frame_rate: float,
     num_frames: int,
+    scale: tuple[int, int] | None = None,
+    color: str = OUTPAINT_GREEN_HEX,
 ) -> Path:
     """Place ``input_path`` inside a green canvas and write a LOSSLESS, video-only
     MP4 with EXACTLY ``num_frames`` frames at ``frame_rate`` fps.
@@ -183,8 +185,17 @@ def pad_green_mp4(
       container" failure that ``-c:a copy`` hits on PCM/Vorbis/FLAC audio inside
       a user-supplied container.
 
-    The source is NOT resized: the caller has already verified that its
-    resolution equals the keep rectangle (canvas minus pads).
+    By default the source is NOT resized: the caller has already verified that
+    its resolution equals the keep rectangle (canvas minus pads).
+
+    Two keyword arguments let AlphaGen reuse this step for its reference
+    (``POST /generate/alpha``); leaving both out keeps the outpainting command
+    byte-for-byte unchanged:
+
+    * ``scale=(w, h)`` resizes the source to ``w``x``h`` (bicubic) before the
+      pad, so a source larger than the comfort budget becomes the working size.
+    * ``color`` is the pad colour (any ffmpeg colour). AlphaGen pads with
+      ``"black"``; the default is the outpainting sentinel green.
     """
     exe = ffmpeg_path()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -199,10 +210,14 @@ def pad_green_mp4(
     # (101, 253, 0) instead of (102, 255, 0) (measured). The IC-LoRA was trained
     # on the exact colour, so the chain is forced into RGB before the pad is
     # painted and stays there through the lossless encode.
+    scale_filter = (
+        f"scale={int(scale[0])}:{int(scale[1])}:flags=bicubic," if scale is not None else ""
+    )
     vf = (
         f"fps={frame_rate},"
+        f"{scale_filter}"
         f"format=rgb24,"
-        f"pad={canvas_width}:{canvas_height}:{pad_left}:{pad_top}:color={OUTPAINT_GREEN_HEX},"
+        f"pad={canvas_width}:{canvas_height}:{pad_left}:{pad_top}:color={color},"
         f"tpad=stop=-1:stop_mode=clone"
     )
 
@@ -229,6 +244,62 @@ def pad_green_mp4(
                 f"ffv1 code {fallback.returncode}): {fallback.stderr[-2000:]}"
             )
     return output_path
+
+
+def finalize_alpha_matte(
+    engine_mp4: Path,
+    *,
+    crop: tuple[int, int],
+    target: tuple[int, int],
+    preview_mp4: Path,
+    matte_mkv: Path,
+) -> dict[str, Any]:
+    """Turn the AlphaGen engine output into the two delivered files in ONE ffmpeg run.
+
+    ``engine_mp4`` is the padded canvas the engine wrote (the matte sits in the
+    top-left ``crop`` = working size; the right/bottom pad is dropped here).
+    The cropped picture is split and resized to ``target`` (the source size):
+
+    * ``matte_mkv`` -- the compositing matte: FFV1 ``gray`` at FULL range. The
+      official ``encode_video`` writes BT.709 limited-range yuv420p (luma
+      16-235), so ``in_range=tv:out_range=pc`` stretches black/white back to
+      0/255. Lossless from here on (the engine side is already quantised to the
+      limited range).
+    * ``preview_mp4`` -- an ordinary H.264 yuv420p preview (crf 18, faststart).
+
+    Both are video-only (``-an``). Returns a small summary for the job metadata.
+    Raises :class:`FFmpegError` on failure.
+    """
+    exe = ffmpeg_path()
+    cw, ch = int(crop[0]), int(crop[1])
+    tw, th = int(target[0]), int(target[1])
+    preview_mp4.parent.mkdir(parents=True, exist_ok=True)
+    matte_mkv.parent.mkdir(parents=True, exist_ok=True)
+    graph = (
+        f"[0:v]crop={cw}:{ch}:0:0,split=2[a][b];"
+        f"[a]scale={tw}:{th}:flags=bicubic:in_range=tv:out_range=pc,format=gray[m];"
+        f"[b]scale={tw}:{th}:flags=bicubic,format=yuv420p[p]"
+    )
+    cmd = [
+        exe, "-y",
+        "-i", str(engine_mp4),
+        "-filter_complex", graph,
+        "-map", "[m]", "-c:v", "ffv1", "-level", "3", "-pix_fmt", "gray", "-an",
+        str(matte_mkv),
+        "-map", "[p]", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart", "-an",
+        str(preview_mp4),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(
+            f"ffmpeg alpha-matte finalize failed (code {proc.returncode}): {proc.stderr[-2000:]}"
+        )
+    return {
+        "matte_codec": "ffv1/gray",
+        "crop": [cw, ch],
+        "target": [tw, th],
+    }
 
 
 def fill_mask_green_mp4(

@@ -892,7 +892,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 }
 ```
 
-### ツール一覧（23個）
+### ツール一覧（25個）
 
 | ツール | 説明 |
 |---|---|
@@ -907,6 +907,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `upload_audio` | ローカルの音声ファイルをアップロードする（A2V用） |
 | `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`）。`attention_backend` ほか生成の高速化6項目に加え、**画角拡張（Outpainting）の6引数**も指定できる |
 | `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。同じく生成の高速化6項目に加え、**撮り直し（Retake）の5引数**と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる |
+| `submit_alpha_gen` | Alpha Gen（動画から白黒のマット動画を作る）のジョブを登録する（`POST /generate/alpha`）。**LTX 2.5 専用**。1 段原寸モードが既定で、`light_mode` で軽量モード（既存の 2 段の経路）になる |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |
 | `list_jobs` | 全ジョブの一覧を要約付きで取得する |
 | `wait_for_job` | ジョブが終端状態になるまで待つ（最大45秒でタイムアウト） |
@@ -916,7 +917,8 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `join_job` | V2V継続ジョブの音声を元動画に繋ぎ直す |
 | `get_job_video_path` | ジョブの出力動画（`output.mp4`）のローカル絶対パスを返す |
 | `get_joined_video_path` | join済み動画（`joined.mp4`）のローカル絶対パスを返す |
-| `save_job_video` | 出力動画をローカルの任意フォルダへコピーする |
+| `get_job_matte_path` | Alpha Gen のジョブのマット（`matte.mkv`）のローカル絶対パスを返す |
+| `save_job_video` | 出力動画をローカルの任意フォルダへコピーする（`which="matte"` で Alpha Gen のマット `matte.mkv` をコピー） |
 | `get_mp4_info` | 動画ファイルに書き込まれた生成条件（`comment` タグ）を読み出す（`POST /utils/mp4-info`）。このアプリが生成した `output.mp4`／`joined.mp4` なら `metadata.json` と同じ JSON が返る。パスは MCP サーバーを動かしているマシン上のもの |
 | `plan_a2v_batch` | A2Vバッチの実行計画を立てる（音声フォルダを走査するだけ、HTTP不使用） |
 

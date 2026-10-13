@@ -982,6 +982,7 @@ struct ProbeMediaInfoCtx {
     double duration_sec = 0.0;
     int width = 0;
     int height = 0;
+    double fps = 0.0;  // contract v15: raw Media Foundation fps, 0 = unknown
 };
 void ProbeMediaInfoEditProc(void* param, EDIT_SECTION* edit) {
     auto* c = static_cast<ProbeMediaInfoCtx*>(param);
@@ -997,6 +998,19 @@ void ProbeMediaInfoEditProc(void* param, EDIT_SECTION* edit) {
         c->duration_sec = info.total_time;
         c->width = info.width;
         c->height = info.height;
+        // Contract v15: the video's frame rate, read with the same
+        // ProbeMediaFps as v11's getSelection mediaFps (UI thread, inside
+        // call_edit_section_param - the same premise as v11). Only for a video
+        // (a video track and a non-zero length), so Media Foundation is never
+        // opened for an image or an audio file. A failed probe is a normal
+        // outcome (.mkv / .webm have no Media Foundation source): fps stays 0
+        // and the error string is discarded without logging.
+        if (info.video_track_num > 0 && info.total_time > 0) {
+            double fps = 0.0;
+            if (ProbeMediaFps(wide, &fps, nullptr)) {
+                c->fps = fps;
+            }
+        }
     }
 }
 
@@ -3800,7 +3814,8 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
         }
         return snap;
     };
-    // fs.probeMediaInfo: best-effort media duration / resolution probe. Any
+    // fs.probeMediaInfo: best-effort media duration / resolution / fps (v15)
+    // probe. Any
     // failure (no edit handle, no call_edit_section_param, callback didn't run,
     // or get_media_info returned false) resolves an unavailable snapshot, which
     // bridge_core reports as the all-zero success result - this method never
@@ -3818,6 +3833,7 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
             out.duration_sec = c.duration_sec;
             out.width = c.width;
             out.height = c.height;
+            out.fps = c.fps;
         }
         return out;
     };

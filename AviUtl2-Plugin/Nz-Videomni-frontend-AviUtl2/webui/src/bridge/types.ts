@@ -204,6 +204,14 @@
  * The three v13 error codes (`MASK_BUSY`, `MASK_SEED_INVALID`, `MASK_FAILED`)
  * mirror tracking's own trio. `MASK_BUSY` in particular is the SHARED slot
  * tracking's `TRACK_BUSY` guards: one timeline job at a time, whichever kind.
+ *
+ * v15 (Alpha Gen 第 2 弾, 2026-10-13) adds ONE result field: `fs.probeMediaInfo`
+ * now also reports `fps`, the video's frame rate read by the same Media
+ * Foundation probe v11's `mediaFps` uses. Same contract as `mediaFps`: the RAW
+ * rate (`29.97…`, never pre-snapped), non-nullable, `0` = "unknown" (not a
+ * video, or the probe failed — mkv/webm commonly land here). Declared OPTIONAL
+ * for the usual single reason: an older native build does not emit it, and the
+ * WebUI reads a missing value as `0`.
  */
 
 /** Every RPC method the contract defines. */
@@ -836,6 +844,10 @@ export interface BridgeResultMap {
     durationSec: number;
     width: number;
     height: number;
+    /** Contract v15. The video's frame rate, RAW as Media Foundation reports it
+     * (`29.97…`, not snapped). `0` = unknown (not a video / probe failed);
+     * absent from an older native build — read it as `0`. */
+    fps?: number;
   };
   /** Contract v7. One entry per dropped file that resolved to a real local
    * path (in AdditionalObjects order); a drop native couldn't resolve at all

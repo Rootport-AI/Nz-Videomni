@@ -16308,3 +16308,71 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
   - 合成動画: `outputs/alphagen-gate0/phase1-frames/G*_composite_green.mp4`（G1〜G4。元動画にマットを当ててグリーンバックに合成したもの）。
   - 切り出した窓 `_alpha_window.mp4` は PCM 音声入りの MP4 のため、AviUtl2 では開けませんでした。中間ファイルで、AviUtl2 で開くためのものではありません。
 - **これで第 1 弾は完結しました。** 台帳の項目は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224 としてクローズしました（オーナーの裁定で dev を main に merge します）。
+
+## 153. ★台帳 §2-1「Alpha Gen 第 2 弾＝操作パネル」＋ §2-2「出力ファイルの fps を元動画の正確な値で書く追補（§1-88・案 C）」＋ 1 段原寸の進捗バー＝実装・機械ゲート 4 環境 失敗 0・差分の敵対的レビュー 3 層（Critical 0・Major 3・Minor 14）・監督の実機ゲート 3 点合格・オーナーの目視は未実施（2026-10-13）
+
+### 153.1 結論
+
+- **Alpha Gen の第 2 弾（操作パネル）と、第 1 弾の追補 §1-88（案 C）と、1 段原寸の進捗バーを、承認済みの計画どおりに実装し、機械ゲート 4 環境は失敗 0、監督の実機ゲート 3 点は合格しました。** 利用者は、タイムラインの動画を右クリック→「🎬 Video: 透過用マットを作る (Alpha Gen)」で Edit タブの「Alpha Gen」サブタブに送り（ドロップと「元になる動画を選ぶ」も可）、フレーム数を決めて「マットを作成」を押すだけで、白黒のマット動画が出来ます。fps は元動画のまま（変換なし）で、fps 欄は表示だけです。
+- **§1-88（案 C）**: `POST /generate/alpha` から `frame_rate` を取り去り、サーバーが ffprobe で元動画の fps を測って、窓の切り出しも出力 2 本も元の正確な fps のまま通します。29.97fps の素材で通しで確かめ、`output.mp4` と `matte.mkv` の平均 fps は `30000/1001`・コマ数は要求どおりでした（153.4）。
+- **進捗バー**: 1 段原寸のジョブは完了前に 0.90 まで単調に進みます（第 1 弾では 0.50 で止まって見えた）。
+- **可変フレームレート（VFR）の素材は非対応**です。差分レビューと実機ゲートの両方で「窓の切り出しでコマ数が合わず失敗する」ことを実測しました。計画 11 節 6 番の決めどおり今回は手当てせず、制限として設計書 §3 に書き、受付で断る案を台帳 §3-225 に起票しました。
+- **オーナーの目視は未実施です。** 項目はフロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26 の G1〜G12（台帳 §2-1・§2-2）。合成素材 4 本を `outputs/alphagen-stage2/` に置きました（153.4）。
+- 設計の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)（§3 に fps の規則と VFR の制限・§9 に第 2 弾の決定事項）、契約は仕様書 §6.3b（v0.5.87）とフロントエンド `BRIDGE_CONTRACT.md`（v15）、設計上の判断はフロントエンド `DEVLOG.md` §132、計画は `C:\Users\phenotype nezu\.claude\plans\imperative-painting-galaxy.md`（1〜11 節。計画段階の敵対的レビュー 13 件は全部採用）です。
+
+### 153.2 実装
+
+**dev の 9 コミット**（製品コード・テスト・文書で 67 ファイル＋配布用 aux2）。担当は Opus 3 体の並行（バックエンド／ネイティブ／操作パネル 1 体）で、コミットは監督が行いました。
+
+| コミット | 中身 |
+|---|---|
+| `f19571e` | §1-88 案 C: `frame_rate` 削除・`probe_fps_rational`・`AlphaGenSpec.source_fps`／`output_fps`・`finalize_alpha_matte` の `setpts` と `-r`・MCP・テスト |
+| `64f7e7d` | 進捗バー: `_progress_frac`／`_read_worker_events` の `one_stage`（LTX 2.5 の `generate` からだけ） |
+| `a07ac5f` | §1-88 の文書（仕様書 v0.5.87・設計書・MCP 設計書 D26・API_REFERENCE §5.5） |
+| `e07b186` | 契約 v15: `fs.probeMediaInfo` の結果に `fps`（ネイティブ・テスト・`bridge/types.ts`・BRIDGE_CONTRACT） |
+| `234a918` | メニュー項目 `alphaGenVideo`（`plugin.cpp`・Language 2 言語・RIGHTCLICK_REDESIGN_SPEC §3-4 #24） |
+| `8767845` | 操作パネル: Alpha Gen サブタブと下回り（新設 4 ファイル・既存テストの現行化） |
+| `1a7c6ce` | フロントエンドの文書（DEVLOG §132・CHECKLIST §4.26・webui README） |
+| `31dbead` | 配布用 aux2（`M\AviUtl2-Plugin\NzVideomni.aux2`） |
+| （本節） | 検証記録 §153・台帳（§1-85・§1-88→§2-1・§2-2・§3-225）・DEVLOG §132.5 の状態 |
+
+### 153.3 機械ゲートと差分の敵対的レビュー
+
+| 門 | 内容 | 結果 |
+|---|---|---|
+| G-M1 | ネイティブ `scripts\build.ps1 -RunTests`（Web UI 埋め込みあり） | 387 件合格・失敗 0・スキップ 6（アサーション 1,970） |
+| G-M2 | `npm run typecheck` | エラー 0 |
+| G-M3 | `npm run lint` | 終了コード 0・警告 31（改修前と同数・新規 0） |
+| G-M4 | `npx vitest run --exclude "**/backend.integration.test.ts"` | 157 ファイル 3,193 件中 3,192 合格・1 失敗。失敗は `App.nag.test.tsx` の「bridge capture — NAG on」＝台帳 §1-82 の既知の不安定で、単独の再実行では 8 件全部合格（本改修とは無関係） |
+| G-M5 | アプリ venv の pytest 全件（既知の 1 件を除外・`PATH` の先頭に `tools\ffmpeg\bin`） | 3,227 件合格・63 件スキップ（torch 不在などの既存分）・失敗 0。`engine25/` は不変なので eng25 の venv は回していない |
+| G-M6 | 層ごとの差分の敵対的レビュー（Opus） | 下記 |
+| G-M7 | `build.ps1`→`deploy.ps1` | 実機・配布用の写し・ビルド出力の 3 か所の SHA256 が一致（`9989e2ef…`）。Language 2 本も配置 |
+
+- 注意: pytest は `pyproject.toml` の `addopts = "-q"` に `-q` を重ねると集計行が出ない（`-o addopts=""` で回し直して数字を取った）。29.97fps の実ファイルのテスト 3 本は `@has_ffmpeg` 付きで、`PATH` に ffmpeg が無いと黙ってスキップされる。
+- **差分レビュー（3 層）**: Critical 0・Major 3・Minor 14。採否は「過剰設計か」「独立に裏取りできたか」の 2 つのふるい。
+  - ネイティブ（Major 1・Minor 4）: 採用 4＝RIGHTCLICK_REDESIGN_SPEC の改訂履歴の重複（第 27 版へ）・`bridge_core.h` の説明 2 か所・検証していないことを名乗る新設テスト 1 件の削除。見送り 1＝静止画と音声で fps が 0 になる確認を目視に足す案（Alpha Gen の入口は動画だけで、他の画面は fps を使わないため観測できない）。
+  - バックエンド（Major 1・Minor 4）: Major＝VFR 素材が実行時に失敗する（合成素材で実測。計画の決めどおり文書化と起票で受ける）。採用 4＝`finalize_alpha_matte` の docstring（出力 fps がエンジンの fps と約 1.6 倍以上離れると末尾に 1 コマ増える実測。今の丸めでは起きない）・`duration_seconds` のずれの事実を設計書 §3.5 の 1 か所に一本化・「1 回測り」の訂正・G-M5 の `PATH` の注記。見送り 2＝finalize 後のコマ数検査のコード・各コマの md5 比較のテスト（任意）。レビューで裏が取れた点: `output_fps=None` の命令は改修前と完全一致・時刻の打ち直しで 145 コマの md5 が全部一致・30000/1001 の素材の窓は開始 0 秒でも 3.37 秒でも要求どおりのコマ数。
+  - 操作パネル（Major 1・Minor 6）: Major＝Alpha Gen を表示したまま LTX 2.3 に切り替えるとタブは灰色になるのにパネルと生成ボタンが生きたままになる（出荷中のエンジンがサブタブを灰色にするのは今回が初めてで、サブタブ単位の戻し処理が無かった）→ `EditScreen` に戻しの effect 1 本と試験 1 本。採用 4＝開始 0 のとき使われない `trim_duration_sec` を外す・DEVLOG の不正確な 1 文・試験の古い説明文・欠けていた試験 2 本。見送り 2＝互換用の代わりの行で軽量モードの線が出る件（Create も同じ行で線を出すので例外を増やさない）・模擬が通す入力の緩さ（操作パネルは送らない）。
+
+### 153.4 実機ゲート（監督）
+
+- **G-S1 メニュー項目の登録**: 配置後に AviUtl2 を起動し `plugin.log` を読むと `register_object_menu_param: registered 19 item(s)`（同日の前回までの起動は 18）・`register_layer_menu_param: registered 5 item(s)`。確認後に AviUtl2 を閉じた。
+- **G-S2 元動画の fps のまま（29.97fps）**: `run.ps1` で実サーバーを起動（選択中のベースモデルは LTX 2.3 だったので `POST /pipeline/load` で LTX 2.5〔`redgraftLTX25Fast2K_ltx25RedgraftNSFW`〕へ切り替え・25 秒）。合成素材 `src_2997.mp4`（1280×768・75 コマ・`30000/1001`。灰色の背景を赤い四角が動く）を丸ごと上げ、`POST /generate/alpha` に `num_frames=49`・`light_mode=false`・`frame_rate` なしで送った。
+  - ジョブ `e8e51269-…`: 完了まで 147 秒。`metadata.alpha_gen`: `source_fps` 29.97002997・`output_fps` `"30000/1001"`・`resampled` 偽・`window_written_frames` 49・原寸（1280×768・`scale` 1.0・`canvas_tokens` 6,720・`budget_tokens` 19,380＝8bit の行）。`metadata.output`: `frame_rate` 30.0（内部要求の整数）・`duration_seconds` 1.633（整数 fps での値。設計書 §3.5）。
+  - ffprobe: `output.mp4`（h264）も `matte.mkv`（ffv1 gray）も `avg_frame_rate` が `30000/1001`・49 コマ。
+  - **VFR の合成素材** `src_vfr.mp4`（前半 30fps・後半 15fps・平均 `600/29`・60 コマ）を丸ごと上げて 49 コマを要求→ 1 秒で失敗: `GENERATION_FAILED: cut_window_mp4 wrote 47 frames but 49 were requested (start_frame=0, fps=20.689…, resampled=False)`。GPU は使われず、受付は通る（平均 fps で数えるため）。レビュー担当の合成素材（30→24fps・145 コマ要求で 134 コマ）と同じ症状。
+- **G-S3 進捗バー**: 上のジョブを 1 秒間隔で見て、`progress` は 12 回変化・単調増加・完了前の最大値 0.90・`stage1_denoise` の範囲 0.165〜0.90（0.06 の最初の点は 1 秒間隔で取りこぼし）。
+- **片づけ**: サーバーを停止し、`state.json` を退避したもの（LTX 2.3 が選択）に戻した。`config.yaml` は触っていない。目視用の合成素材 4 本（`src_2997.mp4`・`src_24.mp4`・`src_2997.mkv`・`src_vfr.mp4`）は `outputs/alphagen-stage2/`（git 管理外）に残した。
+
+### 153.5 観察と申し送り
+
+- オーナーの LTX 2.5 の選択（`redgraftLTX25Fast2K_ltx25RedgraftNSFW`）は `transformer_weight_class` が 8bit で、Alpha Gen の予算は 19,380 トークン（8bit の行）が使われた。§3-223（較正）の材料。
+- 受付で ffprobe が 2 回（`probe_fps_rational` と `_window_fit_detail` 内の `probe_fps`）、実行時に 1 回走る。時間は ffprobe 1 回分で、共有の関数の引数を増やさないほうを取った。
+- Media Foundation は mkv を開けないので、操作パネルの fps 欄は mkv で「不明」になる（想定どおり。生成はでき、サーバーが測る）。
+- ネイティブ担当の検証で `build\ninja-release\NzVideomni.aux2` が一時的に Web UI 埋め込みなし版になるが、配置前に通常の `build.ps1` で作り直した（`deploy.ps1` は埋め込みなし版を拒むので誤配置はしない）。
+- 生成ボタンを押すたびに窓を上げ直すので `uploads/` に同じ切り出しが増える（一時置き場なので許容。DEVLOG §132）。
+
+### 153.6 片づけと残るもの
+
+- **オーナーの目視**: CHECKLIST §4.26 の G1〜G12。合格したら台帳 §2-1・§2-2 を `PENDING_TASKS_CLOSED.md` へ移し、dev を main へ `--no-ff` で merge して push する。
+- 次: 第 3 弾＝出口（台帳 §1-86: 🎞 で RGBA を配置・💾・🪣）→ LoRA ウェイトの配布（§1-87）。研究課題は §3-222（直接入力）・§3-223（較正）・§3-225（VFR の受付時の拒否）。

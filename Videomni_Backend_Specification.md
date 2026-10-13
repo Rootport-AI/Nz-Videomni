@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.86**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 版 | **v0.5.87**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-10-07**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -135,6 +135,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.84 | 2026-10-06 | **台帳 §1-31: 快適上限の表（`limits.comfort_budgets`）の正本をベースモデルの記述子（`scripts/manifests/*.json`）の `comfort` へ移し、行に重みの種別を足した（凍結 API 契約〔§6〕への加算。既存の鍵は 1 つも消していない）**。**§6.7**（正本は記述子のトップレベルの `comfort`・`config.yaml` では上書きできない〔書くと WARNING を出して無視する〕・行の種別の鍵 `requires.weight_class`〔`"4bit"`／`"8bit"`／`"q6k"`。全行に必須で、種別なしの汎用行や他の値・同じ系統の記述子が 2 本とも `comfort` を持つことは起動時のエラー〕・LTX 2.3 は 4bit と Q6_K が全 on の行だけで 8bit は条件なし、LTX 2.5 は 3 行とも条件なし。あわせて「表が配信されていればクライアントは互換の 2 鍵を使わない」という誤った説明を「一致する行が無いときの落ち先」に直した）／**§6.9(c)**（`base_models[].transformer_weight_class` を加算。値が入るのは有効なベースモデルだけで、選択中の transformer のヘッダから判定する。`entries[]` の形は不変）／**§11.4・§11.5**（プリセット `standard_720p`／`FHD_1080p`／`WQHD_1440p` を 361／169／89 → **345／161／81**、`generation_defaults.num_frames` を 361 → **345**。LTX 2.3 の 4bit・全 on の単発の線 42,840 に収まる値）／**§11.7・§10.2・§0.3 の地図**（表の実体と正本の参照先を `config.py` のコード既定から記述子へ、`Docs/COMFORT_LIMIT_TABLE.md` §1.1 から §1 へ）。互換値 `single_comfort_token_budget`（44880）・`chain_comfort_token_budget`（40000）は値を据え置いた。上の v0.5.46 の行の「§1.1・§6・§7」などの参照は当時の記録なのでそのまま残してある。線の値と分類の規則の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1、計測は同書の第 15・16 節。 |
 | v0.5.85 | 2026-10-06 | **§6.7・§10.2 の互換値の説明と §11.5 の `generation_defaults` の説明を訂正した（文書のみ）**。互換値: 単発は一致する行が無ければ `spill_free_frames` へ落ち、`single_comfort_token_budget`（44,880）を使うのは表が無いときと系統が未確定のときだけ（落ち先を兼ねるのは連結の `chain_comfort_token_budget` だけ）。`generation_defaults`: 操作パネルのフォームの初期値で、Gradio と API には効かない（あわせて §11.5 の注記をコードの既定 512／288／49 と雛形の違いに直した）。§6.7・§6.9(c)・§11.4 の台帳 §1-31 への参照を `Docs/PENDING_TASKS_CLOSED.md` §3-216 に付け替えた（第 9 弾の文書の現行化・`Docs/VERIFICATION_LOG.md` §149）。 |
 | v0.5.86 | 2026-10-07 | **Alpha Gen（LTX 2.5 用の IC-LoRA「LTX AlphaGen」で、普通の動画から同じ大きさ・同じフレーム数の白黒のマット動画を作る機能。LTX 2.5 専用）の第 1 弾＝バックエンドを反映（加算のみ。既存フィールドの意味・型・既定・応答形はいずれも変わらず、`alpha_gen` を含まない要求の扱いは 1 バイトも変わらない）**。**§6.1**（`POST /generate/alpha` と `GET /jobs/{job_id}/matte` の 2 行を加算）／**§6.2**（`GenerateRequest` に内部ブロック `alpha_gen` を加算し、凍結制約へ「`alpha_gen` が指定されているときだけの 2 検査」を 14 番として追加。`POST /generate` に付いてきたら 422 `ALPHA_GEN_INVALID`）／**§6.3**（`JobResponse.matte` を加算）／**§6.3b＝新設**（`AlphaGenRequest`〔6 フィールド＋高速化・常駐の素通しの項目〕と `AlphaGenSpec`〔サーバーだけが埋める 5 フィールド〕・応答・`GET /jobs/{job_id}/matte`）／**§6.6**（`metadata.json` に `alpha_gen` ブロックを加算。`generation_mode` は `"t2v"` のままで、`alpha_gen.mode` が正であることを注記）／**§6.7**（`comfort_budgets` の行に `alpha_gen_budget` を加算。値は暫定でオーナー裁定）／**§6.8**（エラーコード `ALPHA_GEN_INVALID` を追加。LTX 2.3 で断るときの `FEATURE_UNSUPPORTED` の文言を追記）／**§6.10**（LTX 2.3 の `unsupported_features` が 1 件 → 2 件〔`alpha_gen`〕・LTX 2.5 の 4 分類は全 32 件で動作 28・LTX 2.3 の側にも 4 分類の監査を持ち込んだ）／**§11.2**（`model.ic_loras` に `alpha-gen` を加え、操作パネルと Gradio の一覧には出さないことを明記）。設計の正本は `Docs/ALPHAGEN_DESIGN.md`、ゲート 0 の記録は `Docs/VERIFICATION_LOG.md` §151、台帳は `Docs/PENDING_TASKS.md` §1-83。 |
+| v0.5.87 | 2026-10-13 | **Alpha Gen の第 1 弾の追補（台帳 §1-88）: マットを元動画の fps のまま作る（凍結 API 契約〔§6〕の変更・オーナー裁定）**。**§6.3b**（`AlphaGenRequest.frame_rate` を削除。サーバーが元動画の fps を ffprobe で測り、窓の切り出しと参照の作成はその fps で行い、エンジンには丸めた整数を渡す。出力 2 本は元動画と同じ正確な fps で書く。検査 b・d を現行化し、fps が測れない／丸めて 1〜60 を外れる元動画は 422 `ALPHA_GEN_INVALID`。古いクライアントが `frame_rate` を送っても無視して 202。`AlphaGenSpec` に `source_fps`・`output_fps` を加算）／**§6.6**（`alpha_gen` ブロックに `output_fps` を加算。`output.frame_rate` と `duration_seconds` は整数の fps のままであることを注記）／**§6.8**（`ALPHA_GEN_INVALID` の条件に fps の 2 つを追記）。理由は `Docs/ALPHAGEN_DESIGN.md` 第 2 部 §23。あわせて 1 段原寸モードの進捗の対応表を直した（同 §9.5。API の形は不変）。 |
 
 ### 0.2 スコープ
 
@@ -904,22 +905,23 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | `reference_video_id` | str | （必須） | `min_length=1`。`POST /upload/video` が返す ID（マットを作る対象の動画） |
 | `window_start_sec` | float | `0.0` | `ge=0.0`。素材自身の時間軸での窓の開始秒 |
 | `num_frames` | int | （必須） | `ge=9, le=145`。**8n+1 必須**（違反の文言は `"num_frames must be 8n+1 (9-145)"`） |
-| `frame_rate` | int | （必須） | `ge=1, le=60`。**整数**（小数は 422） |
 | `seed` | int | `-1` | — |
 | `light_mode` | bool | `false` | `true` なら軽量モード（既存の 2 段経路を参照つきで流す）。`false` は 1 段原寸モード（Stage-2 を飛ばし、Stage-1 を原寸・参照つきで 1 回だけ走らせる） |
 
+> **fps の項目は無い**（v0.5.87 で `frame_rate` を削除）。マットは元動画の fps のまま作る——サーバーが元動画の fps を ffprobe で測り（生の分数の文字列と値。例 `"30000/1001"`）、窓の切り出しと参照の作成はその fps で行い（変換しない）、エンジンには MCP・Gradio と同じ規則（`floor(x+0.5)`）で丸めた整数を内部の `frame_rate` として渡し、出来た `output.mp4` と `matte.mkv` は元動画と同じ正確な fps で書く（処理の正本は `Docs/ALPHAGEN_DESIGN.md` §3、理由は同 §23）。可変フレームレートの素材は非対応（同 §3）。**古いクライアントが `frame_rate` を送ってきても、知らない鍵として無視して受け付ける（202）**。
+
 > **素通しの項目**: `attention_backend`・`block_swap_prefetch`・`keep_resident`・`keep_resident_embeddings`・`fused_gguf_dequant_kernel` を、**`GenerateRequest`（§6.2）と同じ名前・同じ型・同じ既定**で受け、内部の `GenerateRequest` にそのまま写す。Alpha Gen 用の新しいつまみではない。LTX 2.5 では常駐の鍵が無いこと自体が「解放してよい」という指示なので（§6.10(d)）、これを受けないと Alpha Gen のジョブのたびに利用者の常駐が外れるためである。
 
-> **固定する値**: サーバーは本文から内部の `GenerateRequest` を組み立てる——`prompt=" "`（空白 1 文字。公式はプロンプト空）・`loras=[{"name": "alpha-gen", "strength": 1.0}]`・`reference_video_id`（アップロードの ID のまま。実行時に参照動画のパスだけを、サーバーが作った参照 `alpha_reference.mp4` へ差し替える）・参照の強さ 1.0・`width`/`height`＝キャンバス・`num_frames`・`frame_rate`・`seed`・素通しの項目・`alpha_gen`（下記）。プロンプト・LoRA・強さを利用者が変える手段は無い。その後は `/generate` と同じジョブの仕組み（単一ジョブガード・`run_job`）に乗る。
+> **固定する値**: サーバーは本文から内部の `GenerateRequest` を組み立てる——`prompt=" "`（空白 1 文字。公式はプロンプト空）・`loras=[{"name": "alpha-gen", "strength": 1.0}]`・`reference_video_id`（アップロードの ID のまま。実行時に参照動画のパスだけを、サーバーが作った参照 `alpha_reference.mp4` へ差し替える）・参照の強さ 1.0・`width`/`height`＝キャンバス・`num_frames`・`frame_rate`（元動画の fps を丸めた整数）・`seed`・素通しの項目・`alpha_gen`（下記）。プロンプト・LoRA・強さを利用者が変える手段は無い。その後は `/generate` と同じジョブの仕組み（単一ジョブガード・`run_job`）に乗る。
 
 **応答**: 成功時は **202 Accepted** で `GenerateResponse`（`job_id`・`status="queued"`・`created_at`）を返す。エラーは次のとおり（判定の順の正本は `Docs/ALPHAGEN_DESIGN.md` §4.3）。
 
 | 順 | 条件 | 応答 |
 |---|---|---|
 | a | LTX 2.3 の判定: 有効なベースモデルが Alpha Gen を持たない | 422 `FEATURE_UNSUPPORTED`（**本文の形の検査を除き最初**。文言は §6.8） |
-| b | 本文の形の誤り | 422 `VALIDATION_ERROR` |
+| b | 本文の形の誤り（8n+1 でない・145 超など） | 422 `VALIDATION_ERROR` |
 | c | 参照と LoRA: 参照動画が無い／`alpha-gen` が未登録・ファイルが無い | 404 `REFERENCE_VIDEO_NOT_FOUND`／`LORA_NOT_FOUND`。`alpha-gen` の登録が control・前処理なしでなければ 422 `ALPHA_GEN_INVALID` |
-| d | 元寸: 素材が測れない・辺が奇数・辺が 256 画素未満 | 422 `ALPHA_GEN_INVALID` |
+| d | 元寸と fps: 素材の寸法が測れない・辺が奇数・辺が 256 画素未満／fps が測れない・丸めた整数が 1〜60 を外れる | 422 `ALPHA_GEN_INVALID` |
 | e | 窓: 窓が素材に収まらない | 422 `ALPHA_GEN_INVALID` |
 | f | 寸法の範囲: 作業寸法かキャンバスが `GenerateRequest` の範囲（幅 256〜4096・高さ 128〜4096）を外れる | 422 `ALPHA_GEN_INVALID` |
 | g | 内部要求: 組み立てた内部の `GenerateRequest` が検証に落ちる | 422 `ALPHA_GEN_INVALID` |
@@ -936,6 +938,8 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | `working_width` | int | （必須） | `ge=2`。作業寸法（元の動画を縦横比を保って予算に収まるまで縮めた幅。縮めなければ元の幅） |
 | `working_height` | int | （必須） | `ge=2`。同じく高さ |
 | `budget_tokens` | int \| null | `null` | 作業寸法を決めるのに使った予算（トークン）。`null`＝予算を当てていない |
+| `source_fps` | float \| null | `null` | `gt=0`。**v0.5.87 加算**。受付で測った元動画の fps の値。窓の切り出しと参照の作成に使う |
+| `output_fps` | str \| null | `null` | **v0.5.87 加算**。同じ fps の ffprobe の生の文字列（例 `"30000/1001"`）。出力 2 本をこの fps で書く。受付は 2 つとも必ず埋め、どちらかが空のジョブは実行の最初で `generation_failed` になる |
 
 > **ファイルのパスと元の寸法は持たせていない**——`InpaintSpec` と同じ規則で、元のファイルが寸法の正本であり、要求のフィールドからサーバーに任意のパスを読ませないためである。元の寸法はサーバーが切り出した窓を測って決める。キャンバスの余白は右と下（黒）で、出来たマットは余白を切り落として元の寸法へ引き伸ばしてから配信する。
 
@@ -1136,7 +1140,7 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | `models` | dict（**2026-08-20追加**。どのベースモデルの、どの重みファイルで生成したかの記録＝`{"base_model": "<記述子id>", "selection": {カテゴリ: {"name": 登録名, "file": 実ファイル名}}}`。`_write_metadata`（単発）と `_write_chain_metadata`（チェーン）の**両方**に出る。`selection` の 4 カテゴリは常に揃い、`"default"` のままのカテゴリも記述子の `default_file` の実ファイル名を記録するため、既定が将来差し替わっても過去の出力を再現できる。詳細は §6.9(e)） |
 | `ltx25` | dict（**2026-09-02追加（台帳 §3-131）。エンジン系統 `ltx25`（LTX 2.5）の単発生成・画角拡張ジョブにのみ加算で出現**——LTX 2.3・mock backend ではキーごと現れない。共通コアは5キー＝`encode_fps` / `video_chunks` / `tiling` / `size_bytes` / `phases`。**単発生成**はこの5キーのみ。**画角拡張**は同じ5キーに `stage1_sampler` / `stage1_eta` / `stage2_sampler` / `stage2_noise_scale` / `stage2_seed` / `stage2_audio_init_policy` / `reference_frames` / `reference_downscale_factor` / `reference_attention_strength` / `pixel_chunk_frames` / `vram` / `intentional_differences` を加えた計17キー（ワーカーの `outpaint.ltx25` と同一の dict オブジェクトを最上位へそのまま再送したもの——2つのコピーではない）。**連結生成はこのキーを持たない**——同じ情報は代わりに `chain.ltx25`（12キー＝`stage1_sampler` / `stage1_eta` / `stage2_sampler` / `clear_keyframes_on_carry` / `chunked_upsample` / `stage2_window` / `encode_fps` / `video_chunks` / `tiling` / `size_bytes` / `vram` / `phases`）に出る（`chain` ブロックが既に運ぶため、最上位へ二重には積まない）。**意図的に含めないもの**: 単発の `sampler`（モジュール定数で `ready.sampler` / `LOAD_OK` に既出のため情報量ゼロ）、セグメント単位の `keyframes_mask` 実効値（ジョブ全体で1つの `clear_keyframes_on_carry` の中継のみ）。**単位注記**: `ltx25.vram`（画角拡張・連結とも）のサブキーは GiB 建て（`peak_allocated_gib` 等）——上表の `vram_optimization.peak_vram_mb` / `peak_vram_reserved_mb` は MiB 建て（`_gib_to_mb` = ×1024）、連結メタの内部 `vram_peak_mb`（ログのみ）は十進 MB 建てで、3つとも別の単位である（`Docs/VERIFICATION_LOG.md` §72.8(3)・§87）。詳細は台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-131） |
 | `inpaint` | dict（**2026-09-15追加（Inpainting）。`inpaint` を指定したジョブにのみ加算で出現**——それ以外のジョブではキーごと現れない。**2 つの出どころの合成**で、エンジン側＝キャンバスと素材の幾何・`blend_dilation_stage1`/`stage2`・音声の記録・`mask_proof`〔復号したマスクの枚数・白い画素の割合・膨張後の割合の 3 つ。**モックは動画ファイルを開かないので書けない値**＝実エンジンが実際にマスクを読んだ証拠である〕、アプリ側＝来歴〔`source_video_id` / `mask_video_id` / `source_fps` / `mask_fps` / `resampled` / `window_start_sec` / `window_start_frame` / `window_written_frames` / `window_has_audio` / `canvas_frames` / `canvas_codec`〕。**合成はアプリ側の来歴が後勝ち**だが、素材の幅・高さはアプリ側が持たない——同じ事実を 2 人が書くと食い違いが見えなくなるためである。撮り直しの `retake` ブロックと同じ二源の形）。**エンジン側の中身は系統によって厚みが違う**——LTX 2.5（`ltx25`）では画角拡張と同じ音声の記録（音声の凍結の証明・音声の分岐・元の素材に音声があったかどうか）と、外側の復元の VRAM のピーク `restore_peak_vram_mb` が加わる（2026-09-15。`Docs/VERIFICATION_LOG.md` §107）。**アプリ側の来歴 11 キーと `mask_proof` は両系統で同じである。** |
-| `alpha_gen` | dict（**2026-10-07追加（Alpha Gen）。`POST /generate/alpha` のジョブにのみ加算で出現**——それ以外のジョブではキーごと現れない。アプリ側が書く来歴で、鍵は `mode`（`"one_stage"`／`"light"`）・`source_video_id`・`source_width`/`source_height`（切り出した窓を測った元の寸法）・`source_fps`・`resampled`・`window_start_sec`/`window_start_frame`・`window_written_frames`・`working_width`/`working_height`・`canvas_width`/`canvas_height`・`pad_right`/`pad_bottom`・`scale`・`budget_tokens`・`canvas_tokens`・`matte`（`"matte.mkv"`）・`matte_codec`（`"ffv1/gray"`）。`output.resolution` は元の寸法である。1 段原寸モードで走ったことは `ltx25.phases` に `22_*`〔Stage-2〕が無いことで確かめられる。設計の正本は `Docs/ALPHAGEN_DESIGN.md` §4.5） |
+| `alpha_gen` | dict（**2026-10-07追加（Alpha Gen）。`POST /generate/alpha` のジョブにのみ加算で出現**——それ以外のジョブではキーごと現れない。アプリ側が書く来歴で、鍵は `mode`（`"one_stage"`／`"light"`）・`source_video_id`・`source_width`/`source_height`（切り出した窓を測った元の寸法）・`source_fps`・`output_fps`（**v0.5.87 加算**。出力 2 本を書いた fps の生の文字列）・`resampled`（元動画の fps で切るので常に偽）・`window_start_sec`/`window_start_frame`・`window_written_frames`・`working_width`/`working_height`・`canvas_width`/`canvas_height`・`pad_right`/`pad_bottom`・`scale`・`budget_tokens`・`canvas_tokens`・`matte`（`"matte.mkv"`）・`matte_codec`（`"ffv1/gray"`）。`output.resolution` は元の寸法である。`output.frame_rate` と `output.duration_seconds` の扱いは `Docs/ALPHAGEN_DESIGN.md` §3.5 を参照。1 段原寸モードで走ったことは `ltx25.phases` に `22_*`〔Stage-2〕が無いことで確かめられる。設計の正本は `Docs/ALPHAGEN_DESIGN.md` §4.5） |
 | `environment` | `{python, torch, cuda, gpu, platform}` |
 
 `vram_optimization`（metadata 版、`metadata_block`）の 6 キー — status 版とは**別集合**である点に注意:
@@ -1259,7 +1263,7 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | `INPAINT_MASK_FRAME_MISMATCH` | 422 | マスク動画の枚数が `num_frames` と違う。**足りない場合を ffmpeg に任せると最終フレームが繰り返されて枚数だけ揃い**、窓の後半が「何も描き替えない」まま静かに通るため、GPU 作業の前に拒否する |
 | `INPAINT_WINDOW_OUT_OF_RANGE` | 422 | 要求された窓（`window_start_sec` ＋ `num_frames`）が素材に収まらない（撮り直しの `RETAKE_WINDOW_OUT_OF_RANGE` の鏡） |
 | `INPAINT_LORA_INVALID` | 422 | 制御アダプタが 1 本ではない。**実際に出るのは 2 本以上のときだけ**である——0 本の要求は既存の `REFERENCE_REQUIRES_CONTROL_LORA` が先に断る |
-| `ALPHA_GEN_INVALID` | 422 | Alpha Gen（**2026-10-07 新設**。§6.3b）。`POST /generate/alpha` の要求を、この素材・この窓・この寸法では組み立てられない——素材の寸法が測れない／辺が奇数（出力の yuv420p の都合）／辺が 256 画素未満（Inpainting の `INPAINT_MIN_SOURCE_SIDE` の流用）／窓が素材に収まらない／作業寸法かキャンバスが `GenerateRequest` の範囲を外れる（内部の検証に落ちて 500 になるのを防ぐ）／組み立てた内部の要求がそれでも検証に落ちる／`alpha-gen` が control・前処理なしで登録されていない。**`POST /generate` に内部ブロック `alpha_gen` が付いてきたときも同じコードで断る**（`detail` は `"alpha_gen is set by POST /generate/alpha only"`）。何が悪いかは `detail` が名指しする |
+| `ALPHA_GEN_INVALID` | 422 | Alpha Gen（**2026-10-07 新設**。§6.3b）。`POST /generate/alpha` の要求を、この素材・この窓・この寸法では組み立てられない——素材の寸法が測れない／辺が奇数（出力の yuv420p の都合）／辺が 256 画素未満（Inpainting の `INPAINT_MIN_SOURCE_SIDE` の流用）／素材の fps が測れない・整数に丸めて 1〜60 を外れる（v0.5.87 追記）／窓が素材に収まらない／作業寸法かキャンバスが `GenerateRequest` の範囲を外れる（内部の検証に落ちて 500 になるのを防ぐ）／組み立てた内部の要求がそれでも検証に落ちる／`alpha-gen` が control・前処理なしで登録されていない。**`POST /generate` に内部ブロック `alpha_gen` が付いてきたときも同じコードで断る**（`detail` は `"alpha_gen is set by POST /generate/alpha only"`）。何が悪いかは `detail` が名指しする |
 | `JOB_NOT_FOUND` | 404 | ジョブ未存在 / video 実体なし |
 | `VIDEO_NOT_READY` | 409 | ジョブが completed 前に video 要求 |
 | `PIPELINE_LOAD_FAILED` | 503 | パイプラインロード失敗 |

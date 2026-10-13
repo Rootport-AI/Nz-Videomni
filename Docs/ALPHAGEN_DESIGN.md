@@ -6,7 +6,7 @@
 
 - 作成: 2026-10-07
 - 対象の台帳項目: 第 1 弾（バックエンド）の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224 です。第 2 弾（操作パネル）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-85、第 3 弾（出口）は同 §1-86、LoRA ウェイトの配布は同 §1-87、第 1 弾の追補（出力ファイルの fps を元動画の正確な値で書く）は同 §1-88 です
-- 状態: **第 1 弾は完結（main merge 済み）。第 2 弾は未着手**（第 3 弾も未着手。決まっている事項は本書 §9・§10 に収めてあります）
+- 状態: **第 1 弾は完結（main merge 済み）。第 2 弾は実装中**（第 1 弾の追補 §1-88 と進捗バーの手当てを含む。第 3 弾は未着手。決まっている事項は本書 §9・§10 に収めてあります）
 
 **本書には現在の設計だけを現在形で書きます。** 第 1 部「決まったこと」は、実装を担当する人が第 1 部だけを読めば着手できることを目標に書いてあります。第 2 部「なぜそう決めたか」は、一度否決した案を再提案しないための記録です。決定の時系列は残しません（それは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の役割です）。
 
@@ -54,9 +54,10 @@
 | 入力動画 | — | アップロード済みの動画の ID |
 | 窓の開始秒 | 0 以上 | 素材自身の時間軸での開始位置。既定 0 |
 | フレーム数 | 9〜145・8n+1（8 の倍数＋1） | 窓の長さ。**推奨は 121 フレーム以下**（ゲート 0 で 1920×1088×121f の 1 段原寸が実用外だったため） |
-| fps | 整数 1〜60 | 窓をこの fps で切り出す。小数の fps は受け付けない |
 | seed | 整数（-1 は乱数） | 生成の種 |
 | 軽量モード | 真偽 | 既定は偽（1 段原寸モード） |
+
+**fps は利用者が決めません。** マットは元動画の fps のまま作ります（§3 の 1 番。理由は第 2 部 §23）。
 
 あわせて、他のジョブと同じ高速化・常駐の設定（`attention_backend`・`keep_resident`・`keep_resident_embeddings` など）を**同じ名前・同じ意味で**受け取ります（§4.1）。これは Alpha Gen 用の新しいつまみではありません。
 
@@ -72,11 +73,13 @@
 
 `POST /generate/alpha` を受けたサーバーは、次の順に処理します。生成そのもの（4 番）は既存のジョブの仕組み（`create_if_idle`→`run_job`）にそのまま乗ります。
 
-1. **窓の切り出し。** アップロードされた動画から、開始秒とフレーム数で窓を切り出し、要求の fps へ変換して `_alpha_window.mp4` に書きます（正確なフレーム数・音声つき。`services/video_io.py` の `cut_window_mp4`）。この窓は第 3 弾の合成の元にもなります。
+1. **窓の切り出し。** アップロードされた動画から、開始秒とフレーム数で窓を切り出し、`_alpha_window.mp4` に書きます（正確なフレーム数・音声つき。`services/video_io.py` の `cut_window_mp4`）。**fps は変換しません。** 受付の検査（§4.3 の d）で、元動画の fps を ffprobe（ffmpeg 付属の情報表示ツール）で測り、生の分数の文字列（例 `30000/1001`）と値を得ます（`probe_fps_rational`）。窓の切り出しと参照の作成はこの値で行い、エンジンには既存の規則（MCP・Gradio と同じ四捨五入 `floor(x+0.5)`）で丸めた整数の fps を内部の要求の `frame_rate` として渡します。丸めた整数が 1〜60 を外れる元動画は受け付けません。出来たマットは後処理（§3.4）で元動画と同じ正確な fps に戻します。この窓は第 3 弾の合成の元にもなります。
 2. **元の寸法の測定。** 元の寸法は**切り出した窓を測って**決めます（アップロード元のファイルではなく）。受付の検査（§4.3 の d）で測ったアップロード元の寸法と比べ、窓の縦横が入れ替わっていたら（回転の情報を持つ素材）、ジョブを失敗にします（§11）。
 3. **作業寸法とキャンバスの決定**（§3.1）。
 4. **参照の作成**（§3.2）と**生成**（§3.3）。
 5. **後処理**（§3.4）と**記録**（§3.5）。
+
+**可変フレームレート（VFR）の素材は非対応です。** 受付（窓の判定）は平均の fps で数えるので通りますが、実行時の窓の切り出し（`cut_window_mp4` の固定フレームレートでの書き出し）でコマ数が要求と合わず、`FFmpegError` でジョブが失敗します。元動画の fps のまま扱う規則（1 番）の帰結で、可変フレームレートの素材は AviUtl2 のコマの並べ方と 1 対 1 に対応づけられないため、手当てはしません。固定フレームレートに変換してから使ってください。再現: ffmpeg で前半 30fps・後半 24fps の合成素材（`avg_frame_rate` が `9000/349`・`r_frame_rate` が `30/1`）を作って 145 コマを要求すると、開始 0 秒で 134 コマしか書けずに失敗します。
 
 ### 3.1 作業寸法とキャンバス
 
@@ -125,9 +128,10 @@
 
 エンジンが書いた `output.mp4` を `_alpha_engine.mp4` に改名し、`services/video_io.py` の `finalize_alpha_matte` が **1 回の ffmpeg** で次を行います。
 
-1. 余白を切り落とす（`crop=作業幅:作業高さ:0:0`）。
-2. 元の寸法へ引き伸ばす（bicubic）。
-3. 2 本に分けて書く:
+1. 時刻を元動画の fps で打ち直す（`setpts=N/(output_fps)/TB`。N 番目のコマを N÷fps 秒に置くので、コマの増減はありません）。
+2. 余白を切り落とす（`crop=作業幅:作業高さ:0:0`）。
+3. 元の寸法へ引き伸ばす（bicubic）。
+4. 2 本に分けて書く（どちらも `-r output_fps` で、元動画と同じ正確な fps）:
    - `matte.mkv`: 制限範囲（明るさ 16〜235）から全範囲（0〜255）へ伸ばし、gray にして FFV1（`-level 3`）で書く。
    - `output.mp4`: yuv420p の H.264（`-crf 18`・`+faststart`）で書く。
 
@@ -135,7 +139,7 @@
 
 ### 3.5 記録
 
-`metadata.json` に `alpha_gen` ブロックが加わります（鍵は §4.5）。配信の寸法（`output.resolution`）は元の寸法です。
+`metadata.json` に `alpha_gen` ブロックが加わります（鍵は §4.5）。配信の寸法（`output.resolution`）は元の寸法です。`output.frame_rate` はエンジンが走った整数の fps のままで、`output.duration_seconds` もその fps で計算されるため、29.97fps のような元動画では実ファイルの長さとわずかに違います。正確な fps は `alpha_gen.output_fps` から求めてください。
 
 ## 4. API 契約
 
@@ -152,13 +156,14 @@
 | `reference_video_id` | str | （必須） | 1 文字以上。`POST /upload/video` が返す ID |
 | `window_start_sec` | float | `0.0` | 0 以上 |
 | `num_frames` | int | （必須） | 9〜145・8n+1 |
-| `frame_rate` | int | （必須） | 1〜60（整数） |
 | `seed` | int | `-1` | — |
 | `light_mode` | bool | `false` | 真なら軽量モード |
 
+**fps の項目はありません**（§3 の 1 番）。古いクライアントが `frame_rate` を送ってきても、知らない鍵として無視し、受け付けます（202）。
+
 **素通しの項目**: `GenerateRequest` と同じ名前・同じ型・同じ既定の高速化・常駐の項目（`attention_backend`・`block_swap_prefetch`・`keep_resident`・`keep_resident_embeddings`・`fused_gguf_dequant_kernel`）を受け、内部の `GenerateRequest` にそのまま写します。LTX 2.5 では常駐の鍵が無いこと自体が「常駐を解放してよい」という指示なので、これを受けないと Alpha Gen のジョブのたびに利用者の常駐が外れてしまうためです。
 
-サーバーは本文から次の内部の `GenerateRequest` を組み立てます: `prompt=" "`・`loras=[alpha-gen 強さ 1.0]`・`reference_video_id`（アップロードの ID のまま。実行時にパスだけ `alpha_reference.mp4` へ差し替える）・`width`/`height`＝キャンバス・`num_frames`・`frame_rate`・`seed`・素通しの項目・`alpha_gen=AlphaGenSpec`。
+サーバーは本文から次の内部の `GenerateRequest` を組み立てます: `prompt=" "`・`loras=[alpha-gen 強さ 1.0]`・`reference_video_id`（アップロードの ID のまま。実行時にパスだけ `alpha_reference.mp4` へ差し替える）・`width`/`height`＝キャンバス・`num_frames`・`frame_rate`（元動画の fps を丸めた整数）・`seed`・素通しの項目・`alpha_gen=AlphaGenSpec`。
 
 ### 4.2 内部ブロック `GenerateRequest.alpha_gen`
 
@@ -170,8 +175,11 @@
 | `one_stage` | bool | `true` | 真＝1 段原寸モード、偽＝軽量モード |
 | `working_width` / `working_height` | int | （必須・2 以上） | 作業寸法 |
 | `budget_tokens` | int \| null | `null` | 作業寸法を決めるのに使った予算 |
+| `source_fps` | float \| null | `null` | 元動画の fps の値（受付で測る。0 より大きい） |
+| `output_fps` | str \| null | `null` | 同じ fps の生の分数の文字列（例 `"30000/1001"`）。後処理がこの値で書く |
 
 - **ファイルのパスと元の寸法は持たせません**（第 2 部 §13）。
+- `source_fps`・`output_fps` は受付が必ず埋めます。どちらかが空のジョブは、実行の最初で失敗にします（`generation_failed`）。
 - 形の検査（`validate_ltx_constraints`）は 2 つです: `reference_video_id` が必須／`width`・`height` が作業寸法を 64 の倍数へ切り上げた値と一致すること。
 - **`POST /generate` にこのブロックが付いてきたら 422 `ALPHA_GEN_INVALID`** で断ります（第 2 部 §19）。検査の位置はエンジンの対応範囲の判定（`reject_unsupported`）の直後です。
 
@@ -182,10 +190,10 @@
 | 順 | 条件 | 応答 |
 |---|---|---|
 | a | LTX 2.3 の判定: 有効なベースモデルの `unsupported_features` に `alpha_gen` がある | 422 `FEATURE_UNSUPPORTED`。文言は「LTX 2.3 は Alpha Gen に対応していません。ベースモデルに「LTX 2.5」を選んでください。」 |
-| b | 本文の形が誤り（8n+1 でない・145 超・小数の fps など） | 422 `VALIDATION_ERROR`（8n+1 の文言は "num_frames must be 8n+1 (9-145)"） |
+| b | 本文の形が誤り（8n+1 でない・145 超など） | 422 `VALIDATION_ERROR`（8n+1 の文言は "num_frames must be 8n+1 (9-145)"） |
 | c | 参照と LoRA: 参照動画が無い／`alpha-gen` が未登録・ファイルが無い | 404 `REFERENCE_VIDEO_NOT_FOUND`／`LORA_NOT_FOUND`。`alpha-gen` の登録が control・前処理なしでなければ 422 `ALPHA_GEN_INVALID`（§7） |
-| d | 元寸: 元の動画が測れない・辺が奇数・辺が 256 画素未満 | 422 `ALPHA_GEN_INVALID` |
-| e | 窓: 窓が素材に収まらない | 422 `ALPHA_GEN_INVALID`（Inpainting と同じ書式の説明） |
+| d | 元寸と fps: 元の動画の寸法が測れない・辺が奇数・辺が 256 画素未満／fps が測れない・丸めた整数が 1〜60 を外れる | 422 `ALPHA_GEN_INVALID` |
+| e | 窓: 窓が素材に収まらない（元動画の fps で数える） | 422 `ALPHA_GEN_INVALID`（Inpainting と同じ書式の説明） |
 | f | 寸法の範囲: 作業寸法かキャンバスが `GenerateRequest` の範囲（幅 256〜4096・高さ 128〜4096）を外れる | 422 `ALPHA_GEN_INVALID` |
 | g | 内部要求: 組み立てた内部の `GenerateRequest` が検証に落ちる | 422 `ALPHA_GEN_INVALID`（"internal request rejected: …"） |
 | h | 409: モデルの読み込み中／別のジョブの実行中 | 既存の 409（`PIPELINE_LOADING`／`JOB_BUSY`） |
@@ -212,8 +220,9 @@ Alpha Gen のジョブにだけ現れます。
 | `mode` | `"one_stage"` または `"light"` |
 | `source_video_id` | 入力動画の ID |
 | `source_width` / `source_height` | 元の寸法（切り出した窓を測った値） |
-| `source_fps` | 素材の fps |
-| `resampled` | fps を変換したか |
+| `source_fps` | 素材の fps（窓の切り出しで測った値） |
+| `output_fps` | 出力 2 本を書いた fps（生の分数の文字列。例 `"30000/1001"`） |
+| `resampled` | fps を変換したか（元動画の fps で切るので常に偽） |
 | `window_start_sec` / `window_start_frame` | 窓の開始 |
 | `window_written_frames` | 窓に書いたフレーム数 |
 | `working_width` / `working_height` | 作業寸法 |
@@ -279,7 +288,7 @@ Alpha Gen のジョブにだけ現れます。
 
 | ツール | 中身 |
 |---|---|
-| `submit_alpha_gen` | `POST /generate/alpha` を送る。引数は `reference_video_id`・`num_frames`・`frame_rate`・`window_start_sec`（既定 0.0）・`seed`（既定 -1）・`light_mode`（既定 false）と素通しの項目。ファイルのパスの引数は付けない（既存の submit 系と同じく ID だけ） |
+| `submit_alpha_gen` | `POST /generate/alpha` を送る。引数は `reference_video_id`・`num_frames`・`window_start_sec`（既定 0.0）・`seed`（既定 -1）・`light_mode`（既定 false）と素通しの項目。ファイルのパスの引数は付けない（既存の submit 系と同じく ID だけ）。fps の引数も無い（§3 の 1 番） |
 | `get_job_matte_path` | ジョブの `matte.mkv` のパスを返す |
 | `save_job_video(which="matte")` | 既存のツールの `which` に `"matte"` を足す（`"output"`・`"joined"`・`"matte"`） |
 
@@ -303,7 +312,7 @@ Alpha Gen のジョブにだけ現れます。
 - **fps 欄は元動画の fps を表示するだけ**で、編集できません。
 - **切り出しの開始は、右クリック送付なら再生位置（元動画の時刻）、ドラッグ＆ドロップなら動画の冒頭**で、そこからスライダーの分のコマ数です。
 - **フレーム数はスライダー**です。8n+1 刻み・最大 145・初期値 81。説明に「推奨：121フレーム以下」と書き、秒数も表示します。**秒数はコマ数÷元動画の fps** です。
-- **29.97fps のような整数でない元動画**は、エンジンには既存の規則で丸めた整数の fps を渡し、出来た `output.mp4` と `matte.mkv` は元動画と同じ正確な fps（例 30000/1001）で書きます。この手当ては第 1 弾の追補（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-88）で行います。
+- **29.97fps のような整数でない元動画**も、出来た `output.mp4` と `matte.mkv` は元動画と同じ正確な fps（例 30000/1001）になります（サーバー側の仕組みは §3 の 1 番と §3.4。第 1 弾の追補＝台帳 §1-88）。
 - **快適上限マーカー**（そのあたりから生成が重くなるという目安の線。§6 の予算から引く）は解像度に応じて動きますが、**スライダーの位置は動かしません**（助言だけで、値を勝手に変えない）。
 
 ### 9.3 注意書き（2 つ）
@@ -341,7 +350,7 @@ Alpha Gen のジョブにだけ現れます。
 
 - **画面側の隠し名簿**: `UI_HIDDEN_CONTROL_LORA_NAMES` に `alpha-gen` を足します（§7）。
 - **模擬サーバーの写し**: 操作パネルの模擬サーバー（`webui/src/bridge/mockBridge.ts`）の `MOCK_UNSUPPORTED_FEATURES` は本物の `unsupported_features` の写しなので、LTX 2.3 の側に `alpha_gen` を足します。
-- **進捗バーの対応表**: 単発生成の対応表では Stage-1 が 0.06〜0.50 に当たるため、1 段原寸モードはデコードのあいだ 50％で止まって見えます（`services/engines/ltx/adapter.py`）。対応表をどうするかは第 2 弾で判断します。
+- **進捗バーの対応表（決着）**: 単発生成の対応表では Stage-1 が 0.06〜0.50 に当たり、1 段原寸モードはデコードのあいだ 50％で止まって見えていました。1 段原寸モードのときだけ、Stage-1 の刻みを 0.06〜0.90 に当てます（`services/engines/ltx/adapter.py` の `_progress_frac` と `_read_worker_events` の `one_stage`。渡すのは LTX 2.5 の `generate` だけ）。軽量モードと他のジョブは今までどおりです。
 - **高速化の鍵の送り方**: 他のジョブと同じく、Settings の高速化・常駐の設定を `POST /generate/alpha` の素通しの項目として送ります（§4.1）。
 
 ## 10. 第 3 弾（出口）の決定事項

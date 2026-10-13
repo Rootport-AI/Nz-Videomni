@@ -2040,7 +2040,6 @@ def _capture_alpha_body(**kwargs) -> tuple[str, dict]:
             generate.submit_alpha_gen,
             kwargs.pop("reference_video_id", "vid"),
             kwargs.pop("num_frames", 9),
-            kwargs.pop("frame_rate", 24),
             **kwargs,
         )
     )
@@ -2059,11 +2058,13 @@ def test_submit_alpha_gen_payload_contract_defaults_only():
     assert body == {
         "reference_video_id": "vid",
         "num_frames": 9,
-        "frame_rate": 24,
         "window_start_sec": 0.0,
         "seed": -1,
         "light_mode": False,
     }
+    # No fps travels: the server measures the source and keeps its fps
+    # (Docs/ALPHAGEN_DESIGN.md §9.2 / §23).
+    assert "frame_rate" not in body
 
 
 def test_submit_alpha_gen_pass_through_sent_only_when_not_default():
@@ -2109,8 +2110,9 @@ def test_submit_alpha_gen_argument_defaults_match_the_server():
     ):
         assert props[name]["default"] == AlphaGenRequest.model_fields[name].default, name
     assert set(tool.inputSchema.get("required", [])) == {
-        "reference_video_id", "num_frames", "frame_rate",
+        "reference_video_id", "num_frames",
     }
+    assert "frame_rate" not in props
 
 
 def test_submit_alpha_gen_on_ltx23_surfaces_feature_unsupported(mcp_app):
@@ -2118,7 +2120,7 @@ def test_submit_alpha_gen_on_ltx23_surfaces_feature_unsupported(mcp_app):
     set_client(_client_for_app(app, output_dir))
 
     with pytest.raises(ToolError) as exc_info:
-        anyio.run(generate.submit_alpha_gen, "no-such-upload", 9, 24)
+        anyio.run(generate.submit_alpha_gen, "no-such-upload", 9)
 
     assert "FEATURE_UNSUPPORTED" in str(exc_info.value)
 
@@ -2148,7 +2150,7 @@ def test_submit_alpha_gen_runs_to_matte_via_asgi(tmp_path):
         vid = up.json()["video_id"]
 
         set_client(_client_for_app(app, output_dir))
-        submitted = anyio.run(generate.submit_alpha_gen, vid, 9, 24)
+        submitted = anyio.run(generate.submit_alpha_gen, vid, 9)
         job_id = submitted["job_id"]
         assert submitted["status"] == "queued"
 

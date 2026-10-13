@@ -373,16 +373,27 @@ class AlphaGenSpec(BaseModel):
     # there is no budget (the family has no comfort value), so the source
     # was not scaled down.
     budget_tokens: int | None = None
+    # The source's own frame rate, measured by the endpoint with ffprobe (the
+    # client never sends it). The window is cut and padded at this rate, so
+    # there is no fps conversion (Docs/ALPHAGEN_DESIGN.md §9.2 / §23).
+    # ``GenerateRequest.frame_rate`` carries the rounded integer the engine
+    # runs with; this is the exact value. None only on a spec built by hand.
+    source_fps: float | None = Field(None, gt=0)
+    # The same rate as ffprobe's own rational string (e.g. "30000/1001"): the
+    # deliverables are re-timed and written at exactly this rate, so a matte
+    # lines up frame for frame with its source.
+    output_fps: str | None = None
 
 
 class AlphaGenRequest(BaseModel):
     """Body of ``POST /generate/alpha`` — the thin public face of Alpha Gen.
 
-    The user touches only the input video, the frame count, the fps, the seed
-    and the light-mode switch; the prompt, the LoRA and its strengths are fixed
-    by the server. The server measures the source, cuts the window, decides the
-    working size and canvas, and builds the internal ``GenerateRequest`` (with
-    :class:`AlphaGenSpec` in ``alpha_gen``).
+    The user touches only the input video, the frame count, the seed and the
+    light-mode switch; the prompt, the LoRA and its strengths are fixed by the
+    server. The fps is not a field: the matte keeps the source's own fps, which
+    the server measures. The server measures the source, cuts the window,
+    decides the working size and canvas, and builds the internal
+    ``GenerateRequest`` (with :class:`AlphaGenSpec` in ``alpha_gen``).
 
     PASS-THROUGH FIELDS. The acceleration / residency fields below are copied
     from :class:`GenerateRequest` with the SAME names, types and defaults and
@@ -395,7 +406,6 @@ class AlphaGenRequest(BaseModel):
     reference_video_id: str = Field(..., min_length=1)
     window_start_sec: float = Field(0.0, ge=0.0)
     num_frames: int = Field(..., ge=9, le=145)
-    frame_rate: int = Field(..., ge=1, le=60)
     seed: int = -1
     light_mode: bool = False
 

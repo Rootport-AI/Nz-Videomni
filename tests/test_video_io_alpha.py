@@ -178,6 +178,119 @@ def test_finalize_failure_raises_ffmpeg_error(tmp_path):
         )
 
 
+class _Done:
+    returncode = 0
+    stderr = ""
+    stdout = ""
+
+
+def _spy_finalize(tmp_path, monkeypatch, **kw) -> list[str]:
+    seen: list[list[str]] = []
+
+    def fake_run(cmd, **_kw):
+        seen.append(list(cmd))
+        return _Done()
+
+    monkeypatch.setattr(video_io, "ffmpeg_path", lambda: "ffmpeg")
+    monkeypatch.setattr(video_io.subprocess, "run", fake_run)
+    video_io.finalize_alpha_matte(
+        tmp_path / "e.mp4", crop=(160, 96), target=(320, 192),
+        preview_mp4=tmp_path / "output.mp4", matte_mkv=tmp_path / "matte.mkv", **kw,
+    )
+    assert len(seen) == 1
+    return seen[0]
+
+
+_FINALIZE_GRAPH = (
+    "[0:v]crop=160:96:0:0,split=2[a][b];"
+    "[a]scale=320:192:flags=bicubic:in_range=tv:out_range=pc,format=gray[m];"
+    "[b]scale=320:192:flags=bicubic,format=yuv420p[p]"
+)
+
+
+def test_finalize_without_output_fps_keeps_the_phase1_command(tmp_path, monkeypatch):
+    """Leaving ``output_fps`` out builds exactly the 第 1 弾 command."""
+    cmd = _spy_finalize(tmp_path, monkeypatch)
+    assert cmd == [
+        "ffmpeg", "-y",
+        "-i", str(tmp_path / "e.mp4"),
+        "-filter_complex", _FINALIZE_GRAPH,
+        "-map", "[m]", "-c:v", "ffv1", "-level", "3", "-pix_fmt", "gray", "-an",
+        str(tmp_path / "matte.mkv"),
+        "-map", "[p]", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart", "-an",
+        str(tmp_path / "output.mp4"),
+    ]
+
+
+def test_finalize_with_output_fps_retimes_and_writes_both_at_that_rate(tmp_path, monkeypatch):
+    """§1-88: the frames are re-timed first (frame N at N / rate) and both
+    outputs are written at the source's exact rational rate."""
+    cmd = _spy_finalize(tmp_path, monkeypatch, output_fps="30000/1001")
+    graph = cmd[cmd.index("-filter_complex") + 1]
+    assert graph == "[0:v]setpts=N/(30000/1001)/TB," + _FINALIZE_GRAPH[len("[0:v]"):]
+    matte_at = cmd.index(str(tmp_path / "matte.mkv"))
+    preview_at = cmd.index(str(tmp_path / "output.mp4"))
+    assert cmd[matte_at - 2 : matte_at] == ["-r", "30000/1001"]
+    assert cmd[preview_at - 2 : preview_at] == ["-r", "30000/1001"]
+    assert cmd.count("-r") == 2
+
+
+@has_ffmpeg
+def test_finalize_with_output_fps_writes_ntsc_rate_and_keeps_frames(tmp_path):
+    """The engine canvas is at an integer rate (24 here); with
+    ``output_fps="30000/1001"`` the preview reports exactly 30000/1001, the
+    matte is within 1e-3 of it, and no frame is dropped or repeated."""
+    engine = tmp_path / "_alpha_engine.mp4"
+    _write_engine_canvas(engine)
+    preview = tmp_path / "output.mp4"
+    matte = tmp_path / "matte.mkv"
+    video_io.finalize_alpha_matte(
+        engine, crop=(WORK_W, WORK_H), target=(SRC_W, SRC_H),
+        preview_mp4=preview, matte_mkv=matte, output_fps="30000/1001",
+    )
+    assert video_io.probe_fps_rational(preview) == ("30000/1001", 30000 / 1001)
+    assert abs(video_io.probe_fps(matte) - 30000 / 1001) < 1e-3
+    assert video_io.frame_count(preview) == FRAMES
+    assert video_io.frame_count(matte) == FRAMES
+
+
+# --- probe_fps_rational ----------------------------------------------------------- #
+
+
+@has_ffmpeg
+def test_probe_fps_rational_returns_the_raw_string_and_value(tmp_path):
+    src = tmp_path / "ntsc.mp4"
+    subprocess.run(
+        [
+            _ffmpeg(), "-y", "-v", "error",
+            "-f", "lavfi", "-i", f"color=c=white:size={SRC_W}x{SRC_H}:rate=30000/1001:duration=1",
+            "-frames:v", str(FRAMES),
+            "-c:v", "libx264rgb", "-pix_fmt", "rgb24", "-crf", "0",
+            str(src),
+        ],
+        check=True, capture_output=True,
+    )
+    assert video_io.probe_fps_rational(src) == ("30000/1001", 30000 / 1001)
+    # probe_fps is the value half, unchanged.
+    assert video_io.probe_fps(src) == 30000 / 1001
+
+
+def test_probe_fps_rational_falls_back_to_r_frame_rate(tmp_path, monkeypatch):
+    class _Probe(_Done):
+        stdout = json.dumps({"streams": [{"avg_frame_rate": "0/0", "r_frame_rate": "25/1"}]})
+
+    monkeypatch.setattr(video_io.shutil, "which", lambda _n: "ffprobe")
+    monkeypatch.setattr(video_io.subprocess, "run", lambda *_a, **_k: _Probe())
+    assert video_io.probe_fps_rational(tmp_path / "x.mp4") == ("25/1", 25.0)
+
+
+def test_probe_fps_rational_is_none_without_ffprobe(tmp_path, monkeypatch):
+    monkeypatch.setattr(video_io.shutil, "which", lambda _n: None)
+    assert video_io.probe_fps_rational(tmp_path / "x.mp4") is None
+    assert video_io.probe_fps(tmp_path / "x.mp4") is None
+
+
 # --- pad_green_mp4: scale / color ----------------------------------------------- #
 
 

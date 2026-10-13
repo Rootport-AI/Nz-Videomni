@@ -166,7 +166,7 @@ def _upload_source(client, width: int, height: int, frames: int = FRAMES) -> str
 
 
 def _body(video_id: str, **overrides) -> dict:
-    body = {"reference_video_id": video_id, "num_frames": FRAMES, "frame_rate": FPS, "seed": 7}
+    body = {"reference_video_id": video_id, "num_frames": FRAMES, "seed": 7}
     body.update(overrides)
     return body
 
@@ -220,8 +220,8 @@ def test_generate_with_alpha_gen_block_is_refused(alpha_client):
 
 @pytest.mark.parametrize(
     "override",
-    [{"num_frames": 10}, {"num_frames": 153}, {"frame_rate": 23.5}],
-    ids=["not-8n+1", "over-145", "fractional-fps"],
+    [{"num_frames": 10}, {"num_frames": 153}],
+    ids=["not-8n+1", "over-145"],
 )
 def test_body_shape_is_422(alpha_client, override):
     r = alpha_client.post("/api/v1/generate/alpha", json=_body("vid", **override))
@@ -342,6 +342,8 @@ def test_accepted_builds_internal_request_and_finishes(alpha_client):
         "working_width": 480,
         "working_height": 384,
         "budget_tokens": 400,
+        "source_fps": float(FPS),
+        "output_fps": f"{FPS}/1",
     }
     # pass-through, verbatim
     assert req["attention_backend"] == "sage"
@@ -364,12 +366,14 @@ def test_accepted_builds_internal_request_and_finishes(alpha_client):
     ag = meta["alpha_gen"]
     assert set(ag) == {
         "mode", "source_video_id", "source_width", "source_height", "source_fps",
-        "resampled", "window_start_sec", "window_start_frame",
+        "output_fps", "resampled", "window_start_sec", "window_start_frame",
         "window_written_frames", "working_width", "working_height",
         "canvas_width", "canvas_height", "pad_right", "pad_bottom", "scale",
         "budget_tokens", "canvas_tokens", "matte", "matte_codec",
     }
     assert ag["mode"] == "one_stage"
+    assert ag["resampled"] is False
+    assert ag["output_fps"] == f"{FPS}/1"
     assert (ag["source_width"], ag["source_height"]) == (640, 512)
     assert (ag["pad_right"], ag["pad_bottom"]) == (32, 0)
     assert ag["scale"] == 0.75
@@ -420,6 +424,95 @@ def test_known_weight_class_picks_its_row(alpha_client, monkeypatch, weight_clas
     ag = job["request"]["alpha_gen"]
     assert ag["budget_tokens"] == budget
     assert (ag["working_width"], ag["working_height"]) == (640, 512)
+
+
+# ──────────────────── §1-88: the source's own fps, no conversion ─────────────
+
+
+def _upload_mp4_at(client, rate: str, frames: int = FRAMES, size=(320, 256)) -> str:
+    """Upload an MP4 written at ``rate`` (an ffmpeg rate string such as
+    "30000/1001"). Lossless RGB, the manners of tests/test_inpaint_green_fill.py."""
+    src = client.tmp_path / f"src_{rate.replace('/', '_')}_{frames}.mp4"
+    subprocess.run(
+        [
+            shutil.which("ffmpeg"), "-y", "-v", "error",
+            "-f", "lavfi",
+            "-i", f"testsrc=size={size[0]}x{size[1]}:rate={rate}:duration=2",
+            "-frames:v", str(frames),
+            "-c:v", "libx264rgb", "-pix_fmt", "rgb24", "-crf", "0",
+            str(src),
+        ],
+        check=True, capture_output=True,
+    )
+    with src.open("rb") as fh:
+        resp = client.post("/api/v1/upload/video", files={"file": (src.name, fh, "video/mp4")})
+    assert resp.status_code == 200, resp.text
+    return resp.json()["video_id"]
+
+
+@has_ffmpeg
+def test_ntsc_source_keeps_its_own_fps(alpha_client):
+    """A 29.97 (30000/1001) source: the window is cut without resampling, the
+    engine runs at the rounded integer (30), and both deliverables come back at
+    exactly the source's rate with the same frame count — the matte lines up
+    with its source frame for frame (Docs/ALPHAGEN_DESIGN.md §23)."""
+    vid = _upload_mp4_at(alpha_client, "30000/1001")
+    r = alpha_client.post("/api/v1/generate/alpha", json=_body(vid))
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = alpha_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+
+    req = job["request"]
+    assert req["frame_rate"] == 30
+    assert req["alpha_gen"]["output_fps"] == "30000/1001"
+    assert abs(req["alpha_gen"]["source_fps"] - 30000 / 1001) < 1e-9
+
+    out = alpha_client.tmp_path / "outputs" / job_id
+    meta = json.loads((out / "metadata.json").read_text(encoding="utf-8"))
+    ag = meta["alpha_gen"]
+    assert ag["resampled"] is False
+    assert ag["output_fps"] == "30000/1001"
+    assert video_io.probe_fps_rational(out / "output.mp4")[0] == "30000/1001"
+    assert abs(video_io.probe_fps(out / "matte.mkv") - 30000 / 1001) < 1e-3
+    assert video_io.frame_count(out / "output.mp4") == FRAMES
+    assert video_io.frame_count(out / "matte.mkv") == FRAMES
+
+
+@has_ffmpeg
+def test_source_over_60_fps_is_422(alpha_client):
+    vid = _upload_mp4_at(alpha_client, "120")
+    before = _job_count(alpha_client)
+    r = alpha_client.post("/api/v1/generate/alpha", json=_body(vid))
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "ALPHA_GEN_INVALID"
+    assert "1-60 fps" in r.json()["error"]["detail"]
+    assert _job_count(alpha_client) == before
+
+
+@has_ffmpeg
+def test_unmeasurable_fps_is_422(alpha_client, monkeypatch):
+    import api.generate_alpha as generate_alpha
+
+    vid = _upload_source(alpha_client, 320, 256)
+    monkeypatch.setattr(generate_alpha.video_io, "probe_fps_rational", lambda _p: None)
+    r = alpha_client.post("/api/v1/generate/alpha", json=_body(vid))
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "ALPHA_GEN_INVALID"
+    assert "frame rate" in r.json()["error"]["detail"]
+
+
+@has_ffmpeg
+def test_an_older_client_sending_frame_rate_is_still_accepted(alpha_client):
+    """``frame_rate`` left the body (§1-88). A client that still sends it is
+    not refused (pydantic ignores unknown keys) and its value is NOT used: the
+    job runs at the source's own fps."""
+    vid = _upload_source(alpha_client, 320, 256)
+    r = alpha_client.post("/api/v1/generate/alpha", json=_body(vid, frame_rate=12))
+    assert r.status_code == 202, r.text
+    job = alpha_client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    assert job["status"] == "completed", job
+    assert job["request"]["frame_rate"] == FPS
 
 
 # ───────────────────────────── GET /jobs/{id}/matte ─────────────────────────

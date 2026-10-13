@@ -253,6 +253,7 @@ def finalize_alpha_matte(
     target: tuple[int, int],
     preview_mp4: Path,
     matte_mkv: Path,
+    output_fps: str | None = None,
 ) -> dict[str, Any]:
     """Turn the AlphaGen engine output into the two delivered files in ONE ffmpeg run.
 
@@ -269,14 +270,27 @@ def finalize_alpha_matte(
 
     Both are video-only (``-an``). Returns a small summary for the job metadata.
     Raises :class:`FFmpegError` on failure.
+
+    ``output_fps`` (an ffmpeg rate string such as ``"30000/1001"``) re-times the
+    frames and writes both files at exactly that rate. The engine wrote the
+    canvas at the rounded integer fps it runs with; the matte has to come back
+    at the SOURCE's own rate so it lines up with the source frame for frame
+    (Docs/ALPHAGEN_DESIGN.md §23). Frame N gets the time N / output_fps, so no
+    frame is dropped or repeated. None keeps the engine's timing unchanged.
+    This assumes ``output_fps`` is close to the integer fps the engine was
+    given (``floor(x + 0.5)`` of it): far apart (about 1.6x or more,
+    measured), the ``-r`` resampling adds one frame at the end. The current
+    rounding rule never produces such a ratio.
     """
     exe = ffmpeg_path()
     cw, ch = int(crop[0]), int(crop[1])
     tw, th = int(target[0]), int(target[1])
     preview_mp4.parent.mkdir(parents=True, exist_ok=True)
     matte_mkv.parent.mkdir(parents=True, exist_ok=True)
+    retime = f"setpts=N/({output_fps})/TB," if output_fps is not None else ""
+    rate = ["-r", output_fps] if output_fps is not None else []
     graph = (
-        f"[0:v]crop={cw}:{ch}:0:0,split=2[a][b];"
+        f"[0:v]{retime}crop={cw}:{ch}:0:0,split=2[a][b];"
         f"[a]scale={tw}:{th}:flags=bicubic:in_range=tv:out_range=pc,format=gray[m];"
         f"[b]scale={tw}:{th}:flags=bicubic,format=yuv420p[p]"
     )
@@ -285,9 +299,11 @@ def finalize_alpha_matte(
         "-i", str(engine_mp4),
         "-filter_complex", graph,
         "-map", "[m]", "-c:v", "ffv1", "-level", "3", "-pix_fmt", "gray", "-an",
+        *rate,
         str(matte_mkv),
         "-map", "[p]", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p",
         "-movflags", "+faststart", "-an",
+        *rate,
         str(preview_mp4),
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -503,7 +519,22 @@ def probe_fps(path: Path) -> float | None:
 
     Uses ``avg_frame_rate`` (a ``num/den`` rational) which reflects the real
     decoded cadence better than ``r_frame_rate`` for VFR sources. Returns None
-    when ffprobe is missing or the value is unavailable/degenerate.
+    when ffprobe is missing or the value is unavailable/degenerate. The value
+    half of :func:`probe_fps_rational`.
+    """
+    probed = probe_fps_rational(path)
+    return None if probed is None else probed[1]
+
+
+def probe_fps_rational(path: Path) -> tuple[str, float] | None:
+    """Return ``(rational, value)`` for the first video stream's frame rate in
+    ONE ffprobe run: ffprobe's own string (e.g. ``"30000/1001"``) and its value.
+
+    The string is what Alpha Gen hands back to ffmpeg (``-r`` / ``setpts``) so
+    the matte is written at exactly the source's rate, with no float round
+    trip. Same choice as :func:`probe_fps`: ``avg_frame_rate`` first, then
+    ``r_frame_rate``. None when ffprobe is missing or both are
+    unavailable/degenerate.
     """
     exe = shutil.which("ffprobe")
     if not exe:
@@ -537,8 +568,8 @@ def probe_fps(path: Path) -> float | None:
                 den_f = float(den)
                 if den_f == 0:
                     continue
-                return float(num) / den_f
-            return float(val)
+                return val, float(num) / den_f
+            return val, float(val)
         except Exception:
             continue
     return None

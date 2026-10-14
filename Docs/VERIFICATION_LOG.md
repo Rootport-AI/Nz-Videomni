@@ -16492,5 +16492,5 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 ### 154.10 オーナーの再確認 全合格（2026-10-14）と第 2 弾の完結
 
 - 再確認③（説明文が無く、線より下では注意が出ず、超えると軽量 OFF は Create の文・ON は縮小の文）と⑥（軽量 OFF で快適上限を超えるフレーム数を `src_2048x1152.mp4` で生成し、通常より長い時間をかけて完走）が合格。①②④⑤は 154.7 のとおり合格。これで §4.26 は全項目合格。
-- **第 2 弾（操作パネル）は完結。** 台帳 §2-1 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-227 へ移し、dev を main へ `--no-ff` で merge して push した（merge のコミットは本節の後に記す）。
+- **第 2 弾（操作パネル）は完結。** 台帳 §2-1 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-227 へ移し、dev を main へ `--no-ff` で merge して push した（merge の記録は git の履歴）。
 - 次: 第 3 弾＝出口（台帳 §1-86）→ LoRA ウェイトの配布（§1-87）。研究課題は §3-222・§3-223（8bit の線の較正）・§3-225（VFR の受付時の拒否）。

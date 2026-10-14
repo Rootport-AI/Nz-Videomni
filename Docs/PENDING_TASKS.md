@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-14（§2-1〔元 §1-85・Alpha Gen 第 2 弾〕と §2-2〔元 §1-88〕を目視合格で CLOSED 3-227・3-226 へ移し、§2 は空になったので節ごと削除）。
+- 作成: 2026-07-15／最終更新: 2026-10-15（文書とコメントの現行化＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §155・§1-89 と §3-228 を起票。閉じた項目の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)）。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
@@ -14,6 +14,8 @@
 ## 1. 近日中の改修項目
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
+
+**次に着手するのは §1-86（Alpha Gen 第 3 弾）。** §1-82 と §1-89 は小さな修正なので随時（§1-86 の前に片づけてよい）、§1-87 は §1-86 の後。
 
 ### 1-82. 操作パネルの既存テストの不安定（`App.nag.test.tsx` の 2 件・`JobsContext.test.tsx` の 1 件）（起票：2026-10-06）
 
@@ -35,6 +37,14 @@
 - **概要**: `alpha-gen` の LoRA ファイル（約 1.3GB）を利用者がどう入手するかを決める。第 3 弾（§1-86）の完成後に改めて検討する。
 - **論点**: ①オーナーの Hugging Face での再配布が、ライセンス（LTX-2.x Community License）上許されるか。②インストーラのマニフェストに取得の行を足すか。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §11、[`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md) 1.7 節。
+
+### 1-89. Inpainting のフレーム数スライダーの目盛り（快適上限の線）が Create の線を指す（起票：2026-10-14）
+
+- **概要**: `webui/src/modes/edit/InpaintingPanel.tsx` の `DurationField` は `tickId` を渡さず既定の `"spill-tick"` を使うが、Create（`GenerationForm.tsx`）も同じ id の `<datalist>` を描く。全画面が常時マウントで DOM 上は Create が先にあるため、Inpainting のつまみの目盛り（`list="spill-tick"`）は Create の現在の線の位置に出る。線を超えたときの注意は Inpainting が自前で判定しているので、狂うのは目盛りの位置だけ。Outpainting（`OUTPAINT_SPILL_TICK_ID`）と Alpha Gen（`ALPHA_GEN_TICK_ID`）は専用の id で回避済み。
+- **再現条件**: Inpainting で元動画の寸法が分かり、配信の Outpainting 用予算がある系統（`comfortFrames` が null でない）。コードの読み合わせで裏取り済み・実機では未確認。
+- **直し方の候補**: Inpainting にも専用の `tickId` を渡す（1 行）。
+- **範囲**: 操作パネルのみ。
+- **出典**: 2026-10-14 のコメント点検（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §155）。
 
 ---
 
@@ -69,6 +79,12 @@
 - **範囲**: バックエンド（`api/generate_alpha.py`）と、操作パネルの文言。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153（差分レビューと実機ゲート G-S2 の実測）。
 - **状態**: 将来の改修項目（着手はオーナー判断待ち。AviUtl2 のコマの並べ方と 1 対 1 に対応づけられない以上、正しい手当ては「固定フレームレートに変換してから使う」の案内）。
+
+#### 3-228. Alpha Gen: 回転情報（rotation メタデータ）つき素材の寸法の測り方（起票：2026-10-14）
+
+- **概要**: 第 1 弾では、回転情報つきの素材（スマートフォンの縦動画など）は作業寸法と実際の向きが食い違うので、ジョブを `generation_failed` で止めている（`services/pipeline_manager.py` の `run_job` の Alpha Gen 分岐。切り出した窓の縦横が、受付で測ったアップロード元の縦横と入れ替わっていたら失敗にする判定）。回転を考えて寸法を測り、回転した向きのまま扱えるようにする。
+- **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §11、フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.5。
+- **状態**: 将来の改修項目（着手時期未定）。
 
 ### 研究課題（上の改修項目より優先度が下）
 

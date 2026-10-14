@@ -8,6 +8,7 @@
 - 判断はオーナーが行う。本書は「事実」「選択肢」「監督の推奨とその理由」を分けて書く。監督の推奨には見出しか文頭に「監督の推奨」と明記する。
 - 台帳（[`PENDING_TASKS.md`](PENDING_TASKS.md)）への起票は未実施。AlphaGen・マット生成・1 段生成に関する起票は台帳にも文書にも無い。
   > **訂正（2026-10-06）**: 同日中に台帳 §1-83「LTX AlphaGen の実装」として起票した（コミット `88def3a`。ゲート 0 から着手）。
+  > **更新（2026-10-14）**: 第 1 弾は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224、第 2 弾は同 3-227 で完結した。設計の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)。
 - 調査の内訳: 公式の一次情報／コミュニティと周辺の動向／本製品の LTX 2.5 エンジンのコード棚卸し／AviUtl2 側の受け皿の棚卸し、の 4 系統。
 - 本書内では「公式」「実測（第三者）」「コードで確認」「推測」「未確認」を区別して記す。出典は URL か「ファイルパス:行番号」で添え、一覧は付録 A にまとめる。
 - コードの場所: `api/`・`engine25/`・`services/` などのサーバー側は `Nz-Videomni/` を起点とする。`native/src/...`（AviUtl2 のプラグイン）と `webui/src/...`（操作パネル）は `Nz-Videomni/AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/` を起点とする（操作パネルの `useGenerationForm.ts` は `webui/src/modes/single/useGenerationForm.ts`）。

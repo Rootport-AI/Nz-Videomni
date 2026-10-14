@@ -357,31 +357,32 @@ export interface DurationFieldProps {
   onCommit?: (value: number, snap: boolean) => void;
   /** Ready-to-render "N frames ≈ X.Xs @ fps" hint (`paramUtils.formatDurationHint`). */
   hint: string;
-  /** Create-only: the comfortable `num_frames` ceiling for the current
-   * width/height (`spillUtils.resolveSpillFreeFrames`), rendered as a tick on
-   * the slider via a `<datalist>`. `null`/omitted hides the tick entirely —
-   * Chain's per-clip duration has no equivalent threshold. */
+  /** The comfortable `num_frames` ceiling the caller computed (Create's comfort
+   * marker, and the Edit panels that draw a line of their own), rendered as a
+   * tick on the slider via a `<datalist>`. `null`/omitted hides the tick
+   * entirely — Chain's per-clip duration has no equivalent threshold. */
   spillThresholdFrames?: number | null;
-  /** Create-only: `true` once `value` exceeds `spillThresholdFrames` — shows
-   * `spillWarningText` as a mild warning banner. */
+  /** `true` once `value` exceeds `spillThresholdFrames` — shows
+   * `spillWarningText` as a mild warning banner. Callers that draw their own
+   * banner leave it out. */
   isOverSpillThreshold?: boolean;
   spillWarningText?: string;
   /** The `<datalist>` id the tick is drawn from. Every screen is always
    * mounted, so a second panel that reused Create's fixed `"spill-tick"` would
    * have its slider point at CREATE's tick — a panel with a line of its own
-   * passes its own id (Alpha Gen 第 2 弾). Omitted = `"spill-tick"`, which is
-   * what Create and Chain have always used. */
+   * passes its own id (Alpha Gen 第 2 弾). Omitted = `"spill-tick"`, Create's
+   * id (every caller that does not pass one gets it). */
   tickId?: string;
 }
 
 /** Duration (`num_frames`) range+number pair, following `SizeFields`'
  * "range+number both editable, `isStepEvent` snaps stepper/slider input while
  * free typing passes through untouched" pattern. Shared by Create
- * (`GenerationForm.tsx`, one instance for `values.numFrames`) and Chain
- * (`ClipCard.tsx`, one instance per clip) — the optional spill-threshold
- * datalist tick + warning banner are Create-only (Chain's per-clip duration
- * has no such threshold), so they're plain optional props rather than a
- * second component. */
+ * (`GenerationForm.tsx`, one instance for `values.numFrames`), Chain
+ * (`ClipCard.tsx`, one instance per clip), Inpainting and Alpha Gen — the
+ * optional spill-threshold datalist tick + warning banner are used only by
+ * the callers that have a threshold (Chain's per-clip duration has none), so
+ * they're plain optional props rather than a second component. */
 export function DurationField({
   label,
   value,

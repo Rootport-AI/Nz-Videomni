@@ -225,8 +225,8 @@ class LTXFastVideoPipeline:
         # ── keep_resident（ジョブ間のCPU骨格キャッシュ）state ──────────────────
         # 上の NAG・sage・prefetch・fused dequant と決定的に違うのは**ジョブ終了時に
         # リセットしない**点。残ること自体が機能（次のジョブで再利用されるのが
-        # 目的）なので、``generate()``/``generate_chain()`` の finally には
-        # 対応するリセットが無い。この非対称は意図的。
+        # 目的）なので、``_set_keep_resident_job`` を呼ぶ各ジョブ入口の finally
+        # には対応するリセットが無い。この非対称は意図的。
         # ``_keep_resident_enabled`` は「いま ledger に非Dummy registry が
         # 刺さっているか」、``_keep_resident_registry`` は保持している
         # StateDictRegistry 実体（OFF で clear() され、再ONで同じ実体を空から
@@ -344,9 +344,11 @@ class LTXFastVideoPipeline:
         if safetensors_transformer_path:
             self._install_safetensors(safetensors_transformer_path)
 
-        # ── Install Gemma GGUF text encoder (keep 24GB bf16 Gemma compressed on GPU) ──
-        # GGUF keeps Gemma quantized in VRAM (~7.3GB Q4_K_M) with per-layer dequant —
-        # fits the 16GB card. This is the only text-encoder path.
+        # ── Install Gemma GGUF text encoder (keep 24GB bf16 Gemma compressed) ──
+        # GGUF keeps Gemma quantized (~7.3GB Q4_K_M) with per-layer dequant — in
+        # VRAM, or, with the TE per-layer offload (``te_offload_text_encoder``,
+        # on by default), on the CPU and streamed to the GPU layer by layer — so
+        # it fits the 16GB card. This is the only text-encoder path.
         # Re-source the Gemma text encoder's non-Gemma monolith survivors off
         # standalone files so the bf16 monolith is not opened by ANY builder:
         # aggregate_embed from the projection file (replaces the monolith in
@@ -389,8 +391,8 @@ class LTXFastVideoPipeline:
         # ビット一致は VERIFICATION_LOG §47.3）。
         #
         # ここは**create時の初期値**を張るだけの入口で、本番の切り替えは
-        # ``generate()``/``generate_chain()`` の ``keep_resident=`` 引数
-        # →``_set_keep_resident_job`` が担う。実装を1本にするため、create時も
+        # ``_set_keep_resident_job`` を呼ぶ各ジョブ入口（``generate*()`` の
+        # ``keep_resident=`` 引数）が担う。実装を1本にするため、create時も
         # ジョブ時とまったく同じ ``_swap_registry`` を通す。``_swap_registry`` は
         # frozen dataclass の ``dataclasses.replace(registry=...)`` なので、
         # install群が書き換えた model_path / model_loader / model_sd_ops /
@@ -1118,7 +1120,7 @@ class LTXFastVideoPipeline:
         when the current job didn't request it (SageAttentionService.install()
         returns 0 immediately, having touched nothing).
 
-        No try/except here, unlike _install_block_swap/_install_gguf: this method
+        No try/except here, unlike _install_block_swap: this method
         only stores a closure, it cannot fail. The failures that DO matter
         (missing wheel, unhappy kernel) are handled inside the service, which
         degrades to sdpa and records that as ``attention_used="sage->sdpa"`` —

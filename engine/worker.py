@@ -914,7 +914,8 @@ def _do_generate(msg: dict) -> None:
         for i in msg.get("images", [])
     ]
 
-    # IC-LoRA (forward-time weight patch on the per-layer-quant path).
+    # IC-LoRA (forward-time weight patch, applied on both transformer paths:
+    # the GGUF per-layer-quant one and the quantized safetensors one).
     # ``ic_loras`` is always passed EXPLICITLY (even []): an explicit empty list is
     # the authoritative "no LoRA this job" -> clean detach, so a no-LoRA job after a
     # LoRA job is byte-identical to base (Docs/VERIFICATION_LOG.md §21.5).

@@ -246,7 +246,8 @@ export interface UseGenerationFormResult {
    * `comfortFramesForBudget` derives from that row's token budget — it moves
    * smoothly with every 64px step instead of jumping between five measured
    * points. When no row applies (LTX 2.3's DEFAULT configuration
-   * deliberately has none), or the smart derivation itself returns `null` (a
+   * deliberately has none for the 4bit and Q6_K weight classes; the 8bit row
+   * matches on weight class alone), or the smart derivation itself returns `null` (a
    * hand-typed 0/blank width), this falls back to the coarse 5-key
    * nearest-area lookup (Docs/API_REFERENCE.md §3.2 `spill_free_frames`, see
    * `spillUtils.resolveSpillFreeFrames`). `null` only when even THAT lookup
@@ -687,7 +688,8 @@ export function useGenerationForm(
   // acceleration configuration, or `null` when none applies — see
   // `shell/comfortTable.ts`'s `resolveComfortRow` for the compatibility shim,
   // the sage 3-value handling, and why `null` is a normal outcome (LTX 2.3's
-  // default configuration deliberately has no row).
+  // default configuration deliberately has no row for 4bit and Q6_K; the 8bit
+  // row matches on weight class alone).
   //
   // `acceleration` must already be the EFFECTIVE object, and it is: this
   // hook's `acceleration` local is `deps.acceleration`, which `AppShell`

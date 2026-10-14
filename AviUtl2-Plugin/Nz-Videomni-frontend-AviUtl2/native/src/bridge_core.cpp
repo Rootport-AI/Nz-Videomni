@@ -190,7 +190,7 @@ std::string HandleRequestJson(const std::string& request_json,
         }
     }
 
-    // --- timeline.insertMediaForJob (replace-insert 🎞) ---------------------
+    // --- timeline.insertMediaForJob (replace-insert, film-strip U+1F39E) ------
     if (method == "timeline.insertMediaForJob") {
         InsertMediaForJobParams p;
         std::string err;
@@ -1011,8 +1011,8 @@ std::vector<PickFileFilterEntry> PickFileFilter(const std::string& kind) {
         entries.push_back({"Audio files (*.wav;*.mp3;*.m4a;*.aac;*.flac;*.ogg)",
                            "*.wav;*.mp3;*.m4a;*.aac;*.flac;*.ogg"});
     } else if (kind == "imageOrVideo") {
-        // Chain's unified source-input picker (task brief "Chainのソース入力欄
-        // 一本化"): a combined filter leads so both image and video files show
+        // Chain's unified source-input picker (task brief "unify Chain's source
+        // input field"): a combined filter leads so both image and video files show
         // by default, followed by single-type filters for anyone who wants to
         // narrow it, same extension lists as "image"/"video" above.
         entries.push_back({"Image/Video files (*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.mov;*.webm;*.mkv)",

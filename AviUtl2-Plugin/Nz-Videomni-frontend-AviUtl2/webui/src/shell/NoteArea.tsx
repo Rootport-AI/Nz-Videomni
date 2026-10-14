@@ -6,14 +6,14 @@ import { useStrings } from "../i18n/LanguageContext";
  * The shared "note area" (RIGHTCLICK_REDESIGN_SPEC.md §6-1): a single, always-
  * visible slot at the top of the operation panel that carries every right-click
  * feedback message (fallback-insert notices, mismatch guidance, receipt notes,
- * audio-extraction progress, …). Unlike the transient `Toasts` stack it does
+ * audio-extraction progress, …) and the job card's insert notes. Unlike the transient `Toasts` stack it does
  * NOT auto-dismiss — it stays until the user closes it with the × button or a
  * newer note replaces it. Only one note is ever shown at a time (§6-1: "次の
  * 通知が来たら前の通知を置き換える / 同時に複数は積まない"), so the state is a
  * single `AppNote | null` owned by `AppShell` rather than a queue.
  *
- * I5 scope: this is the container + the fallback-insert note only. The mismatch
- * guidance (I6) and receipt notes (I7) reuse this same area via `useShowNote`.
+ * I5 built the container + the fallback-insert note; the other notes reuse this
+ * same area via `useShowNote` (or `useOptionalShowNote`).
  */
 
 /** Note severity — drives a light tonal distinction only (§6-1), reusing the

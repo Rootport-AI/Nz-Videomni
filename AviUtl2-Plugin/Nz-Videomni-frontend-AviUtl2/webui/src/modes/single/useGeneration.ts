@@ -58,7 +58,8 @@ export interface UseGenerationSubmitResult {
    * a PREPARE step rather than a body, because the body is only known after
    * the source window has been uploaded (`useAlphaGenForm.prepareRequest`):
    * the state is `submitting` from the click on, and when `prepare` resolves
-   * `null` (the upload failed — the form shows why) nothing is sent and the
+   * `null` (the upload failed, or the source turned out too short — the form
+   * shows why) nothing is sent and the
    * state returns to `idle`. If the screen was rebuilt while `prepare` was
    * running (a right-click remount), the old instance sends nothing — the
    * same `mountedRef` guard every other path here uses. */

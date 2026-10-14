@@ -1,7 +1,8 @@
 // bridge_core.h - WebView2-independent JSON-RPC dispatch logic.
 //
 // This module contains the pure request-parsing, validation and dispatch logic
-// for the Web UI <-> native bridge (RPC contract v2). It has no dependency on
+// for the Web UI <-> native bridge (the contract is Docs/BRIDGE_CONTRACT.md).
+// It has no dependency on
 // WebView2, WinHTTP or any Win32 UI type, so it can be unit-tested in isolation
 // with doctest. HTTP transport and AviUtl2 SDK calls are injected through
 // std::function providers, so they can be mocked in tests.
@@ -15,25 +16,20 @@
 //     {"id": <number>, "ok": false, "error": {"code": <string>,
 //                                              "message": <string>}}
 //
-// Synchronous methods (handled here, returning a response string directly):
-//   ping, getEditInfo, backend.getBaseUrl, timeline.insertMedia,
-//   settings.get, settings.set (contract v4: persistent connection settings,
-//   see settings.h for the SettingsStore backing these two), and contract
-//   v7's ui.resolveDroppedFiles (pure in-memory work, no I/O - see its own
-//   section below for the params.__droppedPaths reserved-key discipline).
-// Asynchronous methods (backend.request, backend.downloadVideo,
-// backend.uploadFile, timeline.captureFrame, and contract v6's
-// fs.listFiles / fs.probeAudioDuration) are NOT handled by HandleRequestJson: the bridge
+// Synchronous methods are handled here, returning a response string directly;
+// they are listed in Docs/BRIDGE_CONTRACT.md section 3 (settings.get/set are
+// backed by settings.h's SettingsStore; ui.resolveDroppedFiles is pure
+// in-memory work - see its own section below for the params.__droppedPaths
+// reserved-key discipline).
+// Asynchronous methods (also listed in Docs/BRIDGE_CONTRACT.md section 3) are
+// NOT handled by HandleRequestJson: the bridge
 // validates their params with the ParseXxx helpers below, performs the HTTP /
 // render / file I/O work off the UI thread, and formats the response with
 // MakeSuccessResponse / MakeErrorResponse. ui.pickFolder (contract v6) is also
 // dispatched directly by the bridge (mirrors ui.pickFile: modal dialog on the
 // UI thread), not by HandleRequestJson.
 //
-// Error codes: BAD_REQUEST, UNKNOWN_METHOD, NO_EDIT_HANDLE, FILE_NOT_FOUND,
-// INSERT_FAILED, BACKEND_UNREACHABLE, BACKEND_TIMEOUT, DOWNLOAD_FAILED,
-// CAPTURE_FAILED, CANCELLED, DIALOG_FAILED, THUMBNAIL_FAILED (contract v3:
-// timeline.captureFrame, backend.uploadFile, ui.pickFile, ui.makeThumbnail).
+// The error codes are listed in Docs/BRIDGE_CONTRACT.md section 5.
 //
 // All comments are ASCII/English so this translation unit compiles cleanly
 // under any default code page.
@@ -376,7 +372,7 @@ using UpdateReservationProvider =
 // --- timeline.deleteProvisionalByJob (spec 5-10) ----------------------------
 //
 // Deletes the still-present provisional placeholder for a job id. The normal
-// 🎞 insert no longer uses it (it goes through timeline.insertMediaForJob); the
+// film-strip (U+1F39E) insert no longer uses it (it goes through timeline.insertMediaForJob); the
 // webui calls it only for the joined-clip cleanup (JobCard) and the reservation
 // rollback (provisionalReservation). Only the FIRST match is removed (duplicates are left as harmless
 // orphan text); a missing placeholder is a no-op success (idempotent). Runs the
@@ -391,7 +387,7 @@ using DeleteProvisionalProvider = std::function<bool(const DeleteProvisionalRequ
 
 // --- timeline.insertMediaForJob (replace-insert) ----------------------------
 //
-// The "place & replace" 🎞 insert tied to a job's provisional marker. When a
+// The "place & replace" film-strip (U+1F39E) insert tied to a job's provisional marker. When a
 // still-present provisional placeholder for job_id is found (ctx.scan_objects +
 // FindProvisionalIndex, EXACT job-id match across all layers - never the
 // position fallback), the finished media REPLACES it in place: the provider's
@@ -440,7 +436,8 @@ using ReplaceMediaForJobProvider =
 // --- fs.probeMediaInfo (synchronous) ----------------------------------------
 //
 // A best-effort probe of a media file's real duration / resolution via the SDK's
-// get_media_info (inside a call_edit_section_param callback). This NEVER fails
+// get_media_info (inside a call_edit_section_param callback), plus a video's
+// fps via ProbeMediaFps (v15). This NEVER fails
 // from the caller's point of view: a missing edit handle, an unavailable
 // get_media_info, an unsupported/unreadable file, or an unset provider all
 // resolve to an all-zero success result ({durationSec:0,width:0,height:0,fps:0})
@@ -482,7 +479,7 @@ struct RequestContext {
     UpdateReservationProvider update_reservation;
     // I13 (appended at the end): the delete of a job's provisional placeholder
     // (timeline.deleteProvisionalByJob, spec 5-10) - used by the webui only for
-    // the joined-clip cleanup and the reservation rollback; the normal 🎞 insert
+    // the joined-clip cleanup and the reservation rollback; the normal film-strip insert
     // goes through timeline.insertMediaForJob.
     DeleteProvisionalProvider delete_provisional;
     // Replace-insert (appended at the end): the atomic delete-placeholder +
@@ -496,8 +493,8 @@ struct RequestContext {
 };
 
 // Parse a UTF-8 JSON request and return the UTF-8 JSON response for the
-// synchronous methods (ping, getEditInfo, backend.getBaseUrl,
-// timeline.insertMedia). Never throws.
+// synchronous methods (listed in Docs/BRIDGE_CONTRACT.md section 3). Never
+// throws.
 //
 // - Malformed JSON / missing method -> BAD_REQUEST (id null when unknown).
 // - Unknown method -> UNKNOWN_METHOD. Note the async backend.* methods are
@@ -705,8 +702,8 @@ struct PickFileFilterEntry {
 };
 
 // Validate params of ui.pickFile. Requires a 'kind' of image/video/audio/
-// imageOrVideo — the last is Chain's unified source-input picker (task brief
-// "Chainのソース入力欄一本化"), whose caller routes the picked file to the
+// imageOrVideo - the last is Chain's unified source-input picker (task brief
+// "unify Chain's source input field"), whose caller routes the picked file to the
 // image or video flow by extension after the fact instead of picking a kind
 // up front.
 // Returns false + *err_message on failure (mapped to BAD_REQUEST by the bridge).

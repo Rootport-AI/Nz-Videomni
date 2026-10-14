@@ -85,15 +85,16 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
 
 ■ 同時実行は1ジョブまで
   バックエンドは生成ジョブを同時に1本しか実行しません。
-  ジョブが進行中に新しい submit_generate / submit_chain を呼ぶと 409 JOB_BUSY
+  ジョブが進行中に新しい submit_generate / submit_chain / submit_alpha_gen を
+  呼ぶと 409 JOB_BUSY
   エラーになります。先に job_status か wait_for_job で完了を確認してから次を
   投げてください。pipeline の読み込み（load_pipeline）も、models か base_model
   を渡すとき（ベースモデルや部品の入れ替え）は同様にジョブ実行中はできません。
 
 ■ 基本の流れは「投げて→待つ」（submit + poll）
-  生成は時間がかかるため、submit_generate / submit_chain はジョブを登録して
-  すぐ job_id を返すだけです。結果は wait_for_job（または job_status を繰り
-  返し呼ぶ）で確認してください。wait_for_job はタイムアウトしてもエラーには
+  生成は時間がかかるため、submit_generate / submit_chain / submit_alpha_gen は
+  ジョブを登録してすぐ job_id を返すだけです。結果は wait_for_job（または
+  job_status を繰り返し呼ぶ）で確認してください。wait_for_job はタイムアウトしてもエラーには
   せず、その時点の進捗を timed_out フラグ付きで返します。
 
 ■ 動画はローカルの絶対パスで返る
@@ -177,7 +178,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   選んでいるときは 422 FEATURE_UNSUPPORTED になります。
   upload_video で元動画を上げ、その video_id と num_frames（8n+1・9〜145）を
   渡します。fps は渡しません（元動画の fps のまま・変換なしで、マットも同じ
-  fps で書き出します）。プロンプトと LoRA はサーバーが固定します。
+  fps で書き出します。固定フレームレートの素材に限ります）。プロンプトと
+  LoRA はサーバーが固定します。
   **alpha-gen という IC-LoRA の登録が必要**で、無ければ 404 になるので、
   事前に list_loras で確認してください。
   既定は 1 段原寸モードで、縮小はしません（快適上限を超えると遅くなる

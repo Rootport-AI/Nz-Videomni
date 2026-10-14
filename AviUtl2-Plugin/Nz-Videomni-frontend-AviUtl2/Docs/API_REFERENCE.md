@@ -653,12 +653,12 @@ Alpha Gen は、普通の動画から同じ大きさ・同じフレーム数の�
 - **プロンプト・LoRA・強さは送らない**(サーバーが固定する: プロンプト空・`alpha-gen`強さ1.0・参照の強さ1.0)。幅・高さも送らない——サーバーが元の動画を測って寸法を決める。**1段原寸モード(既定)は快適上限と無関係に原寸で生成する**(快適上限を超えると遅くなるだけ)。**軽量モードだけ**、単発の快適上限の予算(§3.2の行の`single_budget`)に収まるまで縮めて生成し、元の寸法へ戻して返す。
 - 成功: **202** + `{job_id, status:"queued", created_at}`。その後は`/generate`と同じく`GET /jobs/{id}`でポーリングする。
 - エラー(判定の順): LTX 2.3`422 FEATURE_UNSUPPORTED`／参照動画が無い`404 REFERENCE_VIDEO_NOT_FOUND`／`alpha-gen`が未登録・ファイル無し`404 LORA_NOT_FOUND`(control・前処理なしで登録されていなければ`422 ALPHA_GEN_INVALID`)／元の寸法・fps・窓・寸法の範囲・組み立てた内部の要求の問題`422 ALPHA_GEN_INVALID`(§2)／読み込み中`409 PIPELINE_LOADING`／実行中`409 JOB_BUSY`。**本文の形の検査(`422 VALIDATION_ERROR`)はこれらより前に走る**ので、LTX 2.3でも形が崩れた本文には`VALIDATION_ERROR`が先に返る(`/generate`と同じ)。
-- **回転の情報を持つ素材**(スマートフォンの縦動画など)で、切り出した窓の縦横が元の寸法と入れ替わっていると、受付は通ってもジョブが`GENERATION_FAILED`で失敗する(回転を考えた寸法の測り方は今後の課題)。
+- **回転の情報を持つ素材**(スマートフォンの縦動画など)で、切り出した窓の縦横が元の寸法と入れ替わっていると、受付は通ってもジョブが`GENERATION_FAILED`で失敗する(回転を考えた寸法の測り方はバックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-228)。
 - **出力は2本**: `output.mp4`(プレビュー用のH.264・元の寸法・音声なし。`GET /jobs/{id}/video`)と`matte.mkv`(合成用の劣化しない灰色のマット。FFV1・元の寸法・音声なし)。
 - **`GET /jobs/{job_id}/matte`**(`api/jobs.py`)— 認証不要: `matte.mkv`をバイナリ(`video/x-matroska`、`filename={job_id}_matte.mkv`)で返す。未完了なら`409 VIDEO_NOT_READY`、マットが無ければ`404`。`GET /jobs/{id}/video`と同じ形。
 - **`JobResponse.matte: bool`**: `outputs/{id}/matte.mkv`が存在するか(§6)。
 - `metadata.json`には`alpha_gen`ブロック(`mode`＝`"one_stage"`／`"light"`、元の寸法・作業寸法・キャンバス・出力のfps`output_fps`など)が載る。`result.duration_seconds`と`request.frame_rate`の扱いはバックエンド[`ALPHAGEN_DESIGN.md`](../../../Docs/ALPHAGEN_DESIGN.md) §3.5を参照。`generation_mode`は`"t2v"`のままなので、Alpha Genかどうかは`alpha_gen.mode`で判定すること。
-- **`alpha-gen`は`GET /loras`・`GET /config`の`model.ic_loras`に名前が出る**(サーバー側に予約名の仕組みは無い)。LoRAの一覧に出さないのは画面側の役目で、`webui/src/lora/controlLoras.ts`の`UI_HIDDEN_CONTROL_LORA_NAMES`に足す(Alpha Gen 第2弾)。
+- **`alpha-gen`は`GET /loras`・`GET /config`の`model.ic_loras`に名前が出る**(サーバー側に予約名の仕組みは無い)。LoRAの一覧に出さないのは画面側の役目で、Alpha Gen 第2弾で`webui/src/lora/controlLoras.ts`の`UI_HIDDEN_CONTROL_LORA_NAMES`に足した。
 
 ## 6. JobResponse(進捗・結果スキーマ)
 

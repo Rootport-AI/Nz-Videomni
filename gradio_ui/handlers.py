@@ -172,10 +172,12 @@ def _snap_frame_rate(value: float) -> float:
     for direct (non-UI) handler calls — tests, and anything driving these
     functions programmatically.
 
-    Known limitation on that direct path: the live chain estimate
-    (``presets.py``'s ``fps_v = float(fps) if fps else 24.0``) still reads the
-    RAW fps, so a caller who passes 29.97 straight in can see an estimate
-    computed from 29.97 while the request carries 30.
+    Known limitation on that direct path: the live chain estimates
+    (``presets.py``'s ``fps_v = float(fps) if fps else 24.0``) and the
+    audio-driven frame-count suggestion (:func:`a2v_audio_change_handler` ->
+    :func:`suggest_frames_for_audio`, via :func:`_resolve_fps`) still read the
+    RAW fps, so a caller who passes 29.97 straight in can see an estimate or a
+    suggestion computed from 29.97 while the request carries 30.
     """
     if not math.isfinite(value) or value < 1.0 or value > 60.0:
         return value

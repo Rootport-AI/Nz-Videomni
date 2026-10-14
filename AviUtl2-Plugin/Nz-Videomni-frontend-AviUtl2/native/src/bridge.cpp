@@ -1,4 +1,5 @@
-// bridge.cpp - implementation of the WebView2 <-> RPC-core bridge (contract v2).
+// bridge.cpp - implementation of the WebView2 <-> RPC-core bridge (the
+// contract is Docs/BRIDGE_CONTRACT.md).
 // ASCII-only source.
 #include "bridge.h"
 
@@ -29,7 +30,7 @@
 #include "fs_util.h"    // MatchesAnyExtension, MakeNumberedName, ExtensionLower, JoinPath (v6)
 #include "http_client.h"
 #include "log.h"
-#include "media_fps_probe.h"  // ProbeMediaFps (contract v11: getSelection mediaFps)
+#include "media_fps_probe.h"  // ProbeMediaFps (v11 getSelection mediaFps, v15 fs.probeMediaInfo fps)
 #include "mf_mp4_writer.h"  // Mp4Writer for timeline.cutoutRange (I7/I9)
 #include "settings.h"
 #include "strconv.h"
@@ -1325,7 +1326,7 @@ void UpdateObjectTextEditProc(void* param, EDIT_SECTION* edit) {
 }
 
 // --- timeline.deleteProvisionalByJob (I13, spec 5-10) ----------------------
-// Delete the ✅ placeholder for a job in one edit section (one undo step). The
+// Delete the check-mark (U+2705) placeholder for a job in one edit section (one undo step). The
 // object is re-found by exact job-id match on the layer bridge_core located it
 // on (via ctx.scan_objects + FindProvisionalIndex), reusing the same
 // FindObjectByJob machinery as resolve/updateText. A missing object is a no-op
@@ -3971,7 +3972,8 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
         return out;
     };
     // --- I13: timeline.deleteProvisionalByJob (joined-clip cleanup and
-    // reservation rollback; the normal 🎞 insert uses insertMediaForJob) ------
+    // reservation rollback; the normal film-strip (U+1F39E) insert uses
+    // insertMediaForJob) ------
     ctx.delete_provisional = [handle](const DeleteProvisionalRequest& r) -> bool {
         if (handle == nullptr || handle->call_edit_section_param == nullptr) {
             return false;
@@ -3987,7 +3989,8 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
             handle->call_edit_section_param(&c, &DeleteProvisionalByJobEditProc);
         return ran && c.deleted;
     };
-    // --- Replace-insert (place-and-replace 🎞): timeline.insertMediaForJob's
+    // --- Replace-insert (place-and-replace film-strip (U+1F39E) insert):
+    // timeline.insertMediaForJob's
     // "found a marker" branch. The "not found" branch reuses ctx.insert_media.
     ctx.replace_media_for_job =
         [handle](const ReplaceMediaForJobRequest& r) -> ReplaceMediaForJobOutcome {

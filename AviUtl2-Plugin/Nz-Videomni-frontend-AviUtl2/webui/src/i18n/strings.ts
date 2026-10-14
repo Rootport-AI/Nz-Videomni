@@ -96,13 +96,14 @@ export const en = {
     unsupportedByBaseModel: "Not available on the selected base model. Switch the base model in the header to use this tab.",
   },
   /** Edit mode (2026-08-09): the tab was promoted from a disabled mock to a
-   * real one, and now hosts its own sub-tab row (Retake / Outpainting /
-   * Inpainting). Outpainting is a real panel (`Docs/PENDING_TASKS_CLOSED.md`
+   * real one, and now hosts its own sub-tab row (`subTabs` below).
+   * Outpainting is a real panel (`Docs/PENDING_TASKS_CLOSED.md`
    * §3-70, filed as §1-13 at the time); Retake became one with §1-17, and
    * Inpainting — the last disabled mock under this tab — became one with
-   * §3-55 (2026-09-14). All three are real panels now.
-   * None of the three has a prompt field of its own — they read the shared
-   * `promptBar` above the tabs, exactly as Create/Chain do. The sub-tab LABELS are
+   * §3-55 (2026-09-14). Every sub-tab is a real panel now.
+   * None of them has a prompt field of its own — the ones that take a prompt
+   * read the shared `promptBar` above the tabs, exactly as Create/Chain do
+   * (Alpha Gen takes none: the server fixes it). The sub-tab LABELS are
    * deliberately identical in en/ja, matching the `modes.*` main-tab labels
    * (owner decision, 2026-08 tab rename); only the prose below is translated.
    * Groundwork for `Docs/PENDING_TASKS_CLOSED.md` §3-70 (Outpainting, filed as
@@ -118,14 +119,14 @@ export const en = {
     /** The tooltip on a sub-tab the LOADED base model's engine cannot run, one
      * line per sub-tab — the same shape `chained.unavailableOnBaseModel` uses
      * for its material panels, and for the same reason: the Edit TAB is live
-     * here (the engine can run the OTHER sub-tab), so a generic "unsupported"
-     * would leave the user guessing which half is out of scope.
+     * here (the engine can run another sub-tab), so a generic "unsupported"
+     * would leave the user guessing which part is out of scope.
      *
      * 2026-09-14 (§3-55): Inpainting has a line of its own now. It used to be
      * the one sub-tab with NO tooltip, because "not built yet" was true of it
      * on every base model and its own absence of a panel already said so; with
      * the panel built, the only reason it can grey is the same one the other
-     * two grey for, so it gets the same treatment. */
+     * sub-tabs grey for, so it gets the same treatment. */
     unavailableOnBaseModel: {
       retake:
         "Retake is not available on the selected base model. Switch the base model in the header to use it.",
@@ -1406,8 +1407,9 @@ export const en = {
      * (`useGenerationForm`'s `isComfortMarkerSmart`) rather than the coarse
      * `spill_free_frames` fallback — the "2-4x" figure above was measured
      * against LTX 2.3's DEFAULT configuration, and does not hold in the
-     * configurations where a smart line can be drawn at all (LTX 2.5
-     * unconditionally, LTX 2.3 only with every acceleration toggle on — see
+     * configurations where a smart line can be drawn at all (LTX 2.5 on any
+     * acceleration settings; LTX 2.3 with every acceleration toggle on for
+     * 4bit / Q6_K, on any settings for 8bit — see
      * `shell/comfortTable.ts`'s `resolveComfortRow`). Named with a `Smart`
      * suffix specifically to avoid two unrelated existing keys: `single.size.
      * comfortMarkerTitle` (the Chained screen's resolution-slider guide
@@ -3099,7 +3101,7 @@ export const ja: Strings = {
     // 賢い快適上限マーカー（2026-08-18）: マーカー自体が賢い解像度別上限
     // （`useGenerationForm` の `isComfortMarkerSmart`）のときは上の
     // `spillWarning` の代わりにこちらを出す——「2〜4倍」はLTX 2.3の既定構成の
-    // 実測であり、賢い線を引ける構成（LTX 2.5は無条件・LTX 2.3は加速全オンのみ
+    // 実測であり、賢い線を引ける構成（LTX 2.5は加速設定によらず・LTX 2.3は4bit／Q6_Kなら加速全オン、8bitなら加速設定によらず
     // ——`shell/comfortTable.ts` の `resolveComfortRow` 参照）では成り立たないため。
     // キー名に `Smart` を付けたのは、別機能の既存キー2つと混同しないため:
     // `single.size.comfortMarkerTitle`（Chained画面の解像度スライダー用ガイドの

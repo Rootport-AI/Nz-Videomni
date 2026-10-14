@@ -502,10 +502,11 @@ def inpaint_lora_invalid(names: list[str]) -> APIError:
 
 def alpha_gen_invalid(detail: str) -> APIError:
     """Alpha Gen（RGB 動画から白黒のマット動画を作る。LTX 2.5 専用）: 要求を
-    この素材・この窓・この寸法では組み立てられない。素材の寸法が測れない／辺が
-    奇数／辺が小さすぎる、窓が素材に収まらない、作業寸法かキャンバスが
-    ``GenerateRequest`` の範囲を外れる、そして ``POST /generate`` に内部用の
-    ``alpha_gen`` ブロックが付いてきた場合をまとめてこの 1 つの符号で断る。
+    この素材・この窓・この寸法では組み立てられない。例: 素材の寸法や fps が
+    測れない、窓が素材に収まらない、作業寸法かキャンバスが ``GenerateRequest``
+    の範囲を外れる、``POST /generate`` に内部用の ``alpha_gen`` ブロックが
+    付いてきた。こうした場合をまとめてこの 1 つの符号で断る（どの検査で断るかは
+    api/generate_alpha.py の検査の順を参照）。
     利用者が直す先は ``detail`` が名指しする。"""
     return APIError(
         "ALPHA_GEN_INVALID",
@@ -559,7 +560,9 @@ def pipeline_load_failed(detail: str | None = None) -> APIError:
 
 
 def pipeline_loading(detail: str | None = None) -> APIError:
-    """A load, reload or unload arrived while a load is already in flight.
+    """A load, reload or unload arrived while a load is already in flight (a
+    generation request gets it too, through
+    ``PipelineManager.reject_if_loading``).
 
     409, the same "you are asking at the wrong moment" family as
     :func:`job_busy` — nothing is wrong with the request, it just has to wait.

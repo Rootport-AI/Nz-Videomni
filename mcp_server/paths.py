@@ -20,7 +20,7 @@ from pathlib import Path
 
 
 def job_output_path(output_dir: Path | str, job_id: str) -> Path:
-    """1本生成/チェーン共通の出力動画パス（``output_dir/{job_id}/output.mp4``）。"""
+    """1本生成/チェーン/Alpha Gen 共通の出力動画パス（``output_dir/{job_id}/output.mp4``）。"""
     return Path(output_dir) / job_id / "output.mp4"
 
 

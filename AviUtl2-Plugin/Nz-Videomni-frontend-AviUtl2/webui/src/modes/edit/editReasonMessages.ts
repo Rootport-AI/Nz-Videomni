@@ -1,5 +1,5 @@
 /**
- * Edit タブ（Outpainting）の「なぜ生成ボタンが押せないのか」文言マップ。
+ * Edit タブの各サブタブの「なぜ生成ボタンが押せないのか」文言マップ。
  *
  * Deliberately the same shape as `modes/chained/generateReasonMessages.ts`'s
  * `buildChainReasonMessages(strings, opts) -> Record<string, string>`: the

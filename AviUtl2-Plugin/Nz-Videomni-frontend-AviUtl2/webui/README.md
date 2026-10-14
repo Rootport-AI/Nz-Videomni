@@ -15,7 +15,8 @@ timeline **partial filter**; runs on both LTX 2.3 and LTX 2.5; shipped
 records `../../../Docs/PENDING_TASKS_CLOSED.md` §3-55-02 and, for LTX 2.5,
 §3-150) and **Alpha Gen** (makes a black-and-white matte video from a video, at
 the source's own fps; LTX 2.5 only, greyed on LTX 2.3; design canon
-`../../../Docs/ALPHAGEN_DESIGN.md` §9)), and **Inventory**
+`../../../Docs/ALPHAGEN_DESIGN.md` §9, completion record
+`../../../Docs/PENDING_TASKS_CLOSED.md` §3-227)), and **Inventory**
 (job history, downloads, and
 a LoRA browser — model management lives in the settings panel's `ModelsPanel`,
 not here) — plus two batch panels (both stateless and folder-scan-driven, with

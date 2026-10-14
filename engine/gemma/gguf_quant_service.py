@@ -11,10 +11,12 @@ The Gemma transformer alone is ~24 GB in bf16, which overflows our 16 GB card
 (and forces a ~17 GB WDDM spillover into shared system RAM, making text encoding
 crawl; VERIFICATION_LOG §2.4).
 
-This service instead keeps the Gemma transformer weights *compressed* in VRAM
-(loaded from a single Q4_K_M GGUF, ~7.3 GB) and dequantizes one Linear layer at a
-time during the forward pass — the exact mechanism already proven for the LTX
-transformer in `engine.gguf.quant_service`, applied here to Gemma's nn.Linears.
+This service instead keeps the Gemma transformer weights *compressed* (loaded
+from a single Q4_K_M GGUF, ~7.3 GB) — in VRAM, or on the CPU and streamed to the
+GPU one window at a time when ``layer_offload`` is set — and dequantizes one
+Linear layer at a time during the forward pass — the exact mechanism already
+proven for the LTX transformer in `engine.gguf.quant_service`, applied here to
+Gemma's nn.Linears.
 
 VRAM comparison for Gemma-3-12b:
   bf16 (2 bytes/param):  ~24 GB VRAM
@@ -551,7 +553,8 @@ class GemmaGGUFQuantStateDictLoader:
                 # does its lookup on CPU (_install_cpu_embed_offload). This removes
                 # the ~19 GB GPU transient without changing the numerics (the dequant
                 # kernel + the -1/padding logic are byte-identical; only the device
-                # of the work differs). Norms stay on device.
+                # of the work differs). The norms, by contrast, go to their
+                # ``key_device`` (the branch above).
                 cpu = torch.device("cpu")
                 deq = _dequant_to_bf16(raw_flat, ggml_type, float_shape, cpu)
                 # zero-pad the GGUF vocab (262144) up to the LTX meta model's padded

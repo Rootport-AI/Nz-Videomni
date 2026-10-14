@@ -1,10 +1,10 @@
 //----------------------------------------------------------------------------------
-//  Nz-Videomni - AviUtl2 general-purpose (.aux2) plugin, milestone M1.
+//  Nz-Videomni - AviUtl2 general-purpose (.aux2) plugin.
 //
 //  A dockable window client that hosts a WebView2 control. The Web UI is served
 //  from the "webui" folder shipped next to this DLL through the virtual host
 //  https://app.nzvideomni.local/index.html, and talks to native code over a
-//  postMessage-based JSON-RPC bridge (contract v1: ping, getEditInfo).
+//  postMessage-based JSON-RPC bridge (the contract is Docs/BRIDGE_CONTRACT.md).
 //
 //  If WebView2 cannot start (runtime missing) or the webui folder is absent,
 //  a STATIC fallback label shows the error and the plugin stays alive.
@@ -360,8 +360,9 @@ void OnMenuInvokedParam(void* param) {
 #define NZVIDEOMNI_MENU_FALLBACK_FN(fn, action_id) \
     void fn(EDIT_SECTION* edit) { EmitMenuInvoked(action_id, edit); }
 
-// Object right-click menu actions (right-click redesign, 15 items; see
-// Docs/RIGHTCLICK_REDESIGN_SPEC.md 3-4 and the 7-1 old/new mapping). The
+// Object right-click menu actions (right-click redesign; the kObjectMenuItems
+// table below is the list of record, see Docs/BRIDGE_CONTRACT.md section 4.14
+// and Docs/RIGHTCLICK_REDESIGN_SPEC.md 3-4 / the 7-1 old/new mapping). The
 // insertProvisionalResult item (W2) is the down-arrow quick-insert: when the
 // right-clicked object is a Nz-Videomni provisional whose job is already complete,
 // the WebUI runs the same replace-insert the panel's film-strip button does.
@@ -408,7 +409,8 @@ NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_TrackObject,       "trackObject")
 // Either order works; the WebUI keeps both in its own store until Generate.
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_InpaintPartialFilter, "inpaintPartialFilter")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_InpaintVideo,      "inpaintVideo")
-// Alpha Gen (ledger 1-85, stage 2 of ALPHAGEN_DESIGN.md): makes a black-and-white
+// Alpha Gen (ledger 1-85, closed as PENDING_TASKS_CLOSED 3-227; stage 2 of
+// ALPHAGEN_DESIGN.md): makes a black-and-white
 // matte video from the selected video. An ordinary Video entry, so it sits in the
 // Video block directly under inpaintVideo; the WebUI opens the Edit tab's Alpha Gen
 // sub-tab and refuses objects that do not map 1:1 onto their source file
@@ -443,14 +445,17 @@ struct TimelineMenuItem {
 // submenu. The display keys are translated through Language/*.NzVideomni.aul2.
 // Emoji codepoints (all pre-2020, safe on older Windows glyph sets): U+1F3AC
 // clapper, U+1F5BC framed picture, U+1F3B5 musical note, U+1F4DD memo,
-// U+2728 sparkles, U+1F4F7 camera, U+2B07 down arrow (W2/W3 quick-insert).
+// U+2728 sparkles, U+1F4F7 camera, U+2B07 down arrow (W2/W3 quick-insert),
+// U+1F3AF direct hit (object tracking), U+1F58C paintbrush (Inpainting).
 //
 // ORDER (owner, 2026-08-09): the host renders the submenu in exactly this
-// array order, so the array IS the menu order. The eight Video entries come
+// array order, so the array IS the menu order - the table below is the order
+// of record (see Docs/BRIDGE_CONTRACT.md section 4.14). The Video entries come
 // first as one block - Outpainting, Retake and (2026-09-14) Inpainting's video
 // entry were appended at the end when they were added and have since been
-// moved up into it - then the three Image entries, then the two audio entries,
-// text, and the quick-insert. ONLY the order was changed: every name_key /
+// moved up into it - followed by the Image entries, the audio entries, text,
+// and the quick-insert (the paragraphs below record the later placements).
+// ONLY the order was changed: every name_key /
 // action / fallback triple is byte-identical to before, so the WebUI's routing
 // table (timeline/menuRouting.ts) and the translation keys in
 // Language/*.NzVideomni.aul2 are untouched. (Keep this comment ASCII - see the
@@ -471,7 +476,8 @@ struct TimelineMenuItem {
 // pulled from the user's reach.
 //
 // Object tracking (section 3-54, 16 items): trackObject is appended at the end
-// - it is the only entry that acts on a partial filter rather than on media.
+// - at the time it was the only entry that acted on a partial filter rather
+// than on media.
 //
 // Inpainting (PENDING_TASKS_CLOSED.md section 3-55-02, 18 items): the feature
 // needs TWO entries (owner
@@ -486,9 +492,10 @@ struct TimelineMenuItem {
 // (timeline/menuRouting.ts) and the translation keys in
 // Language/*.NzVideomni.aul2 are untouched.
 //
-// Alpha Gen (ledger 1-85, 19 items, 2026-10-13): alphaGenVideo is a new Video
-// entry and sits at the end of the Video block, directly under inpaintVideo
-// (so the Video block now has nine entries). Its name_key is new, so both
+// Alpha Gen (ledger 1-85, closed as PENDING_TASKS_CLOSED 3-227; 19 items,
+// 2026-10-13): alphaGenVideo is a new Video
+// entry and sits at the end of the Video block, directly under inpaintVideo.
+// Its name_key is new, so both
 // Language/*.NzVideomni.aul2 files gained one line for it.
 const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3AC Video: continue this video (v2v)",                             "extendVideo",       &OnMenu_ExtendVideo },
@@ -732,7 +739,7 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     // REALDEVICE-VERIFY: register_object_menu[_param] / register_layer_menu[_param] /
     // register_project_load_handler are populated by AviUtl2 and fire as documented
     // (confirmed on beta52 in 2026-07; register_project_load_handler re-confirmed on the
-    // current host on 2026-09-04: VERIFICATION_LOG §97) (right-click menus on object /
+    // current host on 2026-09-04: VERIFICATION_LOG section 97) (right-click menus on object /
     // empty layer; project load+init), and every alpha item below actually appears/fires
     // under the "Nz-Videomni" submenu.
     RegisterTimelineMenu(host, kObjectMenuItems,

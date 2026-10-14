@@ -355,8 +355,9 @@ class AlphaGenSpec(BaseModel):
     right/bottom bands are black, cut off again before the matte is written at
     the source's own size. Only light mode shrinks the source (to fit the
     single comfort budget) and stretches the matte back; the default
-    one-stage run keeps the source size (``budget_tokens`` None, ``scale``
-    1.0 — beyond the comfort line it is only slower; owner ruling 2026-10-14,
+    one-stage run keeps the source size (``budget_tokens`` None, and
+    metadata.json's ``alpha_gen.scale`` 1.0 — beyond the comfort line it is
+    only slower; owner ruling 2026-10-14,
     Docs/ALPHAGEN_DESIGN.md §24).
 
     **No file path and no source size here, deliberately** — the same rule as
@@ -394,8 +395,9 @@ class AlphaGenSpec(BaseModel):
 class AlphaGenRequest(BaseModel):
     """Body of ``POST /generate/alpha`` — the thin public face of Alpha Gen.
 
-    The user touches only the input video, the frame count, the seed and the
-    light-mode switch; the prompt, the LoRA and its strengths are fixed by the
+    The user touches only the input video, the window start, the frame count,
+    the seed and the light-mode switch; the prompt, the LoRA and its
+    strengths are fixed by the
     server. The fps is not a field: the matte keeps the source's own fps, which
     the server measures. The server measures the source, cuts the window,
     decides the working size and canvas, and builds the internal

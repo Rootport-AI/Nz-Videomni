@@ -1,6 +1,7 @@
 // media_fps_probe.h - read a video file's native frame rate with Media
 // Foundation (bridge contract v11 / section 3-13: timeline.getSelection's
-// mediaFps, which feeds the right-click prefill "match the material" fps axis).
+// mediaFps, which feeds the right-click prefill "match the material" fps axis;
+// and contract v15: fs.probeMediaInfo's fps).
 //
 // --- What it reads -----------------------------------------------------------
 // An IMFSourceReader is opened over the file and the FIRST VIDEO STREAM's

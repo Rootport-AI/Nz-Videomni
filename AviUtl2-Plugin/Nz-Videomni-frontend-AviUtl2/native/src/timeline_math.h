@@ -42,7 +42,7 @@ inline constexpr int kMaxChainTotalPixelFrames = 8 * 481;  // 3848 (sanity cap)
 // vid2vid frozen context head must fit inside stage-2 tile 0, i.e.
 // v_latent_frames(source_context_px) <= kStage2VTile.
 //
-// NOTE (§1-14/§3-57, 2026-08-09): 22 is the "standard" stage-2 window, which is
+// NOTE (section 1-14/section 3-57, 2026-08-09): 22 is the "standard" stage-2 window, which is
 // still the server default and the only geometry this plugin can produce. The
 // WebUI may now opt a chain into the narrower "high_resolution" window
 // (GenerateChainRequest.stage2_window -> chain_math.STAGE2_WINDOW_PRESETS =
@@ -52,7 +52,7 @@ inline constexpr int kMaxChainTotalPixelFrames = 8 * 481;  // 3848 (sanity cap)
 // 422s past it either way. Do NOT make this constant track that setting: the
 // plugin has no window control, and 22 is the correct bound for everything it
 // itself emits.
-// NOTE (§1-19, 2026-08-12): a third preset "full_length" (61,61) also exists in
+// NOTE (section 1-19, 2026-08-12): a third preset "full_length" (61,61) also exists in
 // chain_math.STAGE2_WINDOW_PRESETS now. It is a fixed value used only by
 // Single/Batch's a2v request builders (one clip, whole-length stage-2, no
 // tiling); the plugin does not know about it and this constant does not track

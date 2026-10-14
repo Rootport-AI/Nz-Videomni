@@ -5069,6 +5069,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 ### 133.4 状態
 
+- オーナーの再確認①〜⑥は 2026-10-14 に全合格し、第 2 弾はクローズした（バックエンド `PENDING_TASKS_CLOSED.md` §3-227）。
 - 機械ゲート: 型検査 0・lint 警告 31（不変）・vitest 157 ファイル／3194 件（失敗 0。説明文を帯に替えた後は 3196 件）。オーナーの再確認は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.26 の再確認項目で行います。
 
 ### 133.5 mkv の fps（監督の追記・契約の中の修正）

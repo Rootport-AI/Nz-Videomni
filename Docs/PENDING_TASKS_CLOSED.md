@@ -2894,3 +2894,19 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev（`f19571e`〔コード・テスト・MCP〕・`a07ac5f`〔文書〕。§153.2）。main への merge は第 2 弾（§2-1）の再確認の合格後にまとめて行う。
 - **残課題**: VFR 素材の受付時の拒否（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-225）。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §3・§23、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b（v0.5.87）、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153、目視 同 §153.7、第 1 弾の目視での発見 同 §152.7。
+
+### 3-227. Alpha Gen 第 2 弾＝操作パネル（Edit→Alpha Gen サブタブ・右クリック・契約 v15 の fps・進捗バー）（起票：2026-10-07、実装：2026-10-13、オーナー目視合格・クローズ：2026-10-14）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1〔元 §1-85〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-85 → §2-1（**同書側は欠番**）。第 1 弾（3-224）の `POST /generate/alpha` を AviUtl2 の操作パネルから使えるようにする弾。
+- **到達条件**: Edit タブの「Alpha Gen」サブタブから、右クリック・ドロップ・ファイル選択の 3 つの入口で動画を入れ、フレーム数を決めて「マットを作成」を押すだけでマットが出来、元動画と同じ位置・長さでコマがずれないこと。**達成した。**
+- **何が完了したか**:
+  - **サブタブと入口 3 つ**: 右クリック「🎬 Video: 背景透過（Alpha Gen）」はオブジェクトの再生位置から、ドロップと「元になる動画を選ぶ」は冒頭から。1 対 1 でないオブジェクト（再生速度≠100%・ループ・中間点 2 つ以上）は右クリックで断る。LTX 2.3 ではサブタブが灰色（「Alpha Gen（背景透過）は、LTX 2.5専用の機能です。」。表示中に切り替えたら Retake へ戻す）。
+  - **fps は元動画のまま（変換なし）**: fps 欄は表示のみ（契約 v15 で `fs.probeMediaInfo` が fps を返す。mkv／webm は Windows の Media Foundation が半分の値を返すため規則で「不明」にし、サーバーが測る）。生成ボタンの時点で窓だけをアップロードし、短い素材は `frame_count` で切り下げてトーストで知らせる。
+  - **快適上限の線**: 軽量モード OFF＝`alpha_gen_budget` の目安の線・ON＝単発の線。線を超えたときだけ Create と同じ仕組みで注意の帯（OFF は Create の文・ON は縮小の文）。**縮小して元の寸法へ戻すのは軽量モード ON のときだけ。OFF は快適上限と無関係に原寸で生成**（オーナー裁定 2026-10-14「快適上限は情報であって制約ではない」。理由の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §24）。
+  - **進捗バー**: 1 段原寸のジョブは 0.06〜0.90 に写す。
+  - 後処理カード（🎞・💾・🪣）は第 3 弾（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86）。
+- **どの物差しで通ったか**: 機械ゲート 4 環境で失敗 0（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153.3・§154.3・§154.8）。差分の敵対的レビューは計画段階 13 件＋実装後 3 層＋手直し後 2 層＋表示の再指示 1 本で、裏取りできたものは全部採用。監督の実機ゲート（§153.4・§154.4: 29.97fps の素材でコマ数不変・進捗 0.90・軽量 OFF で線の 1.11 倍を原寸で完走 18 分 20 秒・ON は縮小）。オーナーの目視（フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26: 初回 G1・G3〜G12 合格・G2 の mkv 不合格→手直し後の再確認①〜⑥ 全合格・2026-10-14）。
+- **クローズ理由**: 到達条件を機械・実機・目視で満たした。目視で出た手直し（文言 3 点・縮小は軽量モードだけ・mkv の fps・線の説明文を帯に）も同日に実装して再確認に合格した。
+- **状態**: dev（第 2 弾 `f19571e`〜`9d795df`・手直し `edac306`〜`c4ad1f0`）。main への merge は監督が行う。
+- **残課題**: 出口（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86）・LoRA ウェイトの配布（同 §1-87）・直接入力（同 §3-222）・快適上限の較正（同 §3-223。8bit の線は既定の操作でも超えるので価値が高い）・VFR の受付時の拒否（同 §3-225）・`DurationField` の型コメント「Create-only」の現行化（次にそのファイルを触るとき）。
+- **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)（§3・§9・§23・§24）、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b（v0.5.88）、プラグインの契約 フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md)（v15）、設計上の判断 フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §132・§133、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153・§154。

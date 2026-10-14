@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.87**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-10-07**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.88**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-10-14**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -136,6 +136,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.85 | 2026-10-06 | **§6.7・§10.2 の互換値の説明と §11.5 の `generation_defaults` の説明を訂正した（文書のみ）**。互換値: 単発は一致する行が無ければ `spill_free_frames` へ落ち、`single_comfort_token_budget`（44,880）を使うのは表が無いときと系統が未確定のときだけ（落ち先を兼ねるのは連結の `chain_comfort_token_budget` だけ）。`generation_defaults`: 操作パネルのフォームの初期値で、Gradio と API には効かない（あわせて §11.5 の注記をコードの既定 512／288／49 と雛形の違いに直した）。§6.7・§6.9(c)・§11.4 の台帳 §1-31 への参照を `Docs/PENDING_TASKS_CLOSED.md` §3-216 に付け替えた（第 9 弾の文書の現行化・`Docs/VERIFICATION_LOG.md` §149）。 |
 | v0.5.86 | 2026-10-07 | **Alpha Gen（LTX 2.5 用の IC-LoRA「LTX AlphaGen」で、普通の動画から同じ大きさ・同じフレーム数の白黒のマット動画を作る機能。LTX 2.5 専用）の第 1 弾＝バックエンドを反映（加算のみ。既存フィールドの意味・型・既定・応答形はいずれも変わらず、`alpha_gen` を含まない要求の扱いは 1 バイトも変わらない）**。**§6.1**（`POST /generate/alpha` と `GET /jobs/{job_id}/matte` の 2 行を加算）／**§6.2**（`GenerateRequest` に内部ブロック `alpha_gen` を加算し、凍結制約へ「`alpha_gen` が指定されているときだけの 2 検査」を 14 番として追加。`POST /generate` に付いてきたら 422 `ALPHA_GEN_INVALID`）／**§6.3**（`JobResponse.matte` を加算）／**§6.3b＝新設**（`AlphaGenRequest`〔6 フィールド＋高速化・常駐の素通しの項目〕と `AlphaGenSpec`〔サーバーだけが埋める 5 フィールド〕・応答・`GET /jobs/{job_id}/matte`）／**§6.6**（`metadata.json` に `alpha_gen` ブロックを加算。`generation_mode` は `"t2v"` のままで、`alpha_gen.mode` が正であることを注記）／**§6.7**（`comfort_budgets` の行に `alpha_gen_budget` を加算。値は暫定でオーナー裁定）／**§6.8**（エラーコード `ALPHA_GEN_INVALID` を追加。LTX 2.3 で断るときの `FEATURE_UNSUPPORTED` の文言を追記）／**§6.10**（LTX 2.3 の `unsupported_features` が 1 件 → 2 件〔`alpha_gen`〕・LTX 2.5 の 4 分類は全 32 件で動作 28・LTX 2.3 の側にも 4 分類の監査を持ち込んだ）／**§11.2**（`model.ic_loras` に `alpha-gen` を加え、操作パネルと Gradio の一覧には出さないことを明記）。設計の正本は `Docs/ALPHAGEN_DESIGN.md`、ゲート 0 の記録は `Docs/VERIFICATION_LOG.md` §151、台帳は `Docs/PENDING_TASKS.md` §1-83。 |
 | v0.5.87 | 2026-10-13 | **Alpha Gen の第 1 弾の追補（台帳 §1-88）: マットを元動画の fps のまま作る（凍結 API 契約〔§6〕の変更・オーナー裁定）**。**§6.3b**（`AlphaGenRequest.frame_rate` を削除。サーバーが元動画の fps を ffprobe で測り、窓の切り出しと参照の作成はその fps で行い、エンジンには丸めた整数を渡す。出力 2 本は元動画と同じ正確な fps で書く。検査 b・d を現行化し、fps が測れない／丸めて 1〜60 を外れる元動画は 422 `ALPHA_GEN_INVALID`。古いクライアントが `frame_rate` を送っても無視して 202。`AlphaGenSpec` に `source_fps`・`output_fps` を加算）／**§6.6**（`alpha_gen` ブロックに `output_fps` を加算。`output.frame_rate` と `duration_seconds` は整数の fps のままであることを注記）／**§6.8**（`ALPHA_GEN_INVALID` の条件に fps の 2 つを追記）。理由は `Docs/ALPHAGEN_DESIGN.md` 第 2 部 §23。あわせて 1 段原寸モードの進捗の対応表を直した（同 §9.5。API の形は不変）。 |
+| v0.5.88 | 2026-10-14 | **Alpha Gen: 縮小は軽量モードだけにした（オーナー裁定。API のフィールド・型・既定・応答形は不変で、変わるのは 1 段原寸モードの作業寸法の決め方）**。1 段原寸モード（`light_mode=false`・既定）は快適上限と無関係に原寸で生成し（64 の倍数への黒の余白だけ）、`AlphaGenSpec.budget_tokens` と `metadata.alpha_gen.budget_tokens` は `null`・`scale` は 1.0 になる。軽量モードは従来どおり `single_budget` に収まるまで縮めて元の寸法へ戻す。`alpha_gen_budget` はサーバーが読まなくなり、操作パネルの線の位置だけに使う助言専用の値になった。**§6.3b**（`light_mode`・固定する値・検査 f・`working_width`・`budget_tokens`・引き伸ばしの注記）／**§6.6**（`alpha_gen` の `scale`・`budget_tokens`）／**§6.7**（`alpha_gen_budget` と例外の段落）。理由は `Docs/ALPHAGEN_DESIGN.md` 第 2 部 §24。 |
 
 ### 0.2 スコープ
 
@@ -906,13 +907,13 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | `window_start_sec` | float | `0.0` | `ge=0.0`。素材自身の時間軸での窓の開始秒 |
 | `num_frames` | int | （必須） | `ge=9, le=145`。**8n+1 必須**（違反の文言は `"num_frames must be 8n+1 (9-145)"`） |
 | `seed` | int | `-1` | — |
-| `light_mode` | bool | `false` | `true` なら軽量モード（既存の 2 段経路を参照つきで流す）。`false` は 1 段原寸モード（Stage-2 を飛ばし、Stage-1 を原寸・参照つきで 1 回だけ走らせる） |
+| `light_mode` | bool | `false` | `true` なら軽量モード（既存の 2 段経路を参照つきで流す。単発の快適上限〔`single_budget`〕に収まるまで縮めて生成し、元の寸法へ戻す）。`false` は 1 段原寸モード（Stage-2 を飛ばし、Stage-1 を原寸・参照つきで 1 回だけ走らせる。**快適上限と無関係に縮めない**——超えると遅くなるだけ。v0.5.88） |
 
 > **fps の項目は無い**（v0.5.87 で `frame_rate` を削除）。マットは元動画の fps のまま作る——サーバーが元動画の fps を ffprobe で測り（生の分数の文字列と値。例 `"30000/1001"`）、窓の切り出しと参照の作成はその fps で行い（変換しない）、エンジンには MCP・Gradio と同じ規則（`floor(x+0.5)`）で丸めた整数を内部の `frame_rate` として渡し、出来た `output.mp4` と `matte.mkv` は元動画と同じ正確な fps で書く（処理の正本は `Docs/ALPHAGEN_DESIGN.md` §3、理由は同 §23）。可変フレームレートの素材は非対応（同 §3）。**古いクライアントが `frame_rate` を送ってきても、知らない鍵として無視して受け付ける（202）**。
 
 > **素通しの項目**: `attention_backend`・`block_swap_prefetch`・`keep_resident`・`keep_resident_embeddings`・`fused_gguf_dequant_kernel` を、**`GenerateRequest`（§6.2）と同じ名前・同じ型・同じ既定**で受け、内部の `GenerateRequest` にそのまま写す。Alpha Gen 用の新しいつまみではない。LTX 2.5 では常駐の鍵が無いこと自体が「解放してよい」という指示なので（§6.10(d)）、これを受けないと Alpha Gen のジョブのたびに利用者の常駐が外れるためである。
 
-> **固定する値**: サーバーは本文から内部の `GenerateRequest` を組み立てる——`prompt=" "`（空白 1 文字。公式はプロンプト空）・`loras=[{"name": "alpha-gen", "strength": 1.0}]`・`reference_video_id`（アップロードの ID のまま。実行時に参照動画のパスだけを、サーバーが作った参照 `alpha_reference.mp4` へ差し替える）・参照の強さ 1.0・`width`/`height`＝キャンバス・`num_frames`・`frame_rate`（元動画の fps を丸めた整数）・`seed`・素通しの項目・`alpha_gen`（下記）。プロンプト・LoRA・強さを利用者が変える手段は無い。その後は `/generate` と同じジョブの仕組み（単一ジョブガード・`run_job`）に乗る。
+> **固定する値**: サーバーは本文から内部の `GenerateRequest` を組み立てる——`prompt=" "`（空白 1 文字。公式はプロンプト空）・`loras=[{"name": "alpha-gen", "strength": 1.0}]`・`reference_video_id`（アップロードの ID のまま。実行時に参照動画のパスだけを、サーバーが作った参照 `alpha_reference.mp4` へ差し替える）・参照の強さ 1.0・`width`/`height`＝キャンバス（作業寸法を 64 の倍数へ切り上げた寸法。1 段原寸モードでは作業寸法＝元の寸法）・`num_frames`・`frame_rate`（元動画の fps を丸めた整数）・`seed`・素通しの項目・`alpha_gen`（下記）。プロンプト・LoRA・強さを利用者が変える手段は無い。その後は `/generate` と同じジョブの仕組み（単一ジョブガード・`run_job`）に乗る。
 
 **応答**: 成功時は **202 Accepted** で `GenerateResponse`（`job_id`・`status="queued"`・`created_at`）を返す。エラーは次のとおり（判定の順の正本は `Docs/ALPHAGEN_DESIGN.md` §4.3）。
 
@@ -923,7 +924,7 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | c | 参照と LoRA: 参照動画が無い／`alpha-gen` が未登録・ファイルが無い | 404 `REFERENCE_VIDEO_NOT_FOUND`／`LORA_NOT_FOUND`。`alpha-gen` の登録が control・前処理なしでなければ 422 `ALPHA_GEN_INVALID` |
 | d | 元寸と fps: 素材の寸法が測れない・辺が奇数・辺が 256 画素未満／fps が測れない・丸めた整数が 1〜60 を外れる | 422 `ALPHA_GEN_INVALID` |
 | e | 窓: 窓が素材に収まらない | 422 `ALPHA_GEN_INVALID` |
-| f | 寸法の範囲: 作業寸法かキャンバスが `GenerateRequest` の範囲（幅 256〜4096・高さ 128〜4096）を外れる | 422 `ALPHA_GEN_INVALID` |
+| f | 寸法の範囲（両モード）: 作業寸法かキャンバスが `GenerateRequest` の範囲（幅 256〜4096・高さ 128〜4096）を外れる。軽量モードでは、その前に作業寸法を単発の快適上限の予算に収める | 422 `ALPHA_GEN_INVALID` |
 | g | 内部要求: 組み立てた内部の `GenerateRequest` が検証に落ちる | 422 `ALPHA_GEN_INVALID` |
 | h | 409: 読み込み中／実行中 | 409 `PIPELINE_LOADING`／`JOB_BUSY` |
 | i | `/generate` 側の拒否: `POST /generate` に `alpha_gen` が付いてきた | 422 `ALPHA_GEN_INVALID`（§6.2） |
@@ -935,13 +936,13 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 |-----------|----|-----------|------|
 | `window_start_sec` | float | `0.0` | `ge=0.0` |
 | `one_stage` | bool | `true` | `true`＝1 段原寸モード、`false`＝軽量モード |
-| `working_width` | int | （必須） | `ge=2`。作業寸法（元の動画を縦横比を保って予算に収まるまで縮めた幅。縮めなければ元の幅） |
+| `working_width` | int | （必須） | `ge=2`。作業寸法の幅（1 段原寸モードでは元の幅。軽量モードでは、元の動画を縦横比を保って予算に収まるまで縮めた幅で、縮めなければ元の幅） |
 | `working_height` | int | （必須） | `ge=2`。同じく高さ |
-| `budget_tokens` | int \| null | `null` | 作業寸法を決めるのに使った予算（トークン）。`null`＝予算を当てていない |
+| `budget_tokens` | int \| null | `null` | 軽量モードで作業寸法を決めるのに使った予算（トークン。行の `single_budget`）。`null`＝縮めていない（1 段原寸モードでは常に `null`。v0.5.88） |
 | `source_fps` | float \| null | `null` | `gt=0`。**v0.5.87 加算**。受付で測った元動画の fps の値。窓の切り出しと参照の作成に使う |
 | `output_fps` | str \| null | `null` | **v0.5.87 加算**。同じ fps の ffprobe の生の文字列（例 `"30000/1001"`）。出力 2 本をこの fps で書く。受付は 2 つとも必ず埋め、どちらかが空のジョブは実行の最初で `generation_failed` になる |
 
-> **ファイルのパスと元の寸法は持たせていない**——`InpaintSpec` と同じ規則で、元のファイルが寸法の正本であり、要求のフィールドからサーバーに任意のパスを読ませないためである。元の寸法はサーバーが切り出した窓を測って決める。キャンバスの余白は右と下（黒）で、出来たマットは余白を切り落として元の寸法へ引き伸ばしてから配信する。
+> **ファイルのパスと元の寸法は持たせていない**——`InpaintSpec` と同じ規則で、元のファイルが寸法の正本であり、要求のフィールドからサーバーに任意のパスを読ませないためである。元の寸法はサーバーが切り出した窓を測って決める。キャンバスの余白は右と下（黒）で、出来たマットは余白を切り落として元の寸法で配信する（軽量モードで縮めたときは元の寸法へ引き伸ばしてから。縮めていなければ寸法は変わらない）。
 
 > **ワーカーへの受け渡し（参考・API 契約ではない）**: 1 段原寸モードのときだけ、ペイロードに `alpha_gen: {"mode": "one_stage"}` が載り、ワーカーは `engine25/alphagen25.py` の駆動部へ振り分ける。軽量モードでは鍵が載らず、既存の 2 段経路がそのまま走る。
 
@@ -1140,7 +1141,7 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | `models` | dict（**2026-08-20追加**。どのベースモデルの、どの重みファイルで生成したかの記録＝`{"base_model": "<記述子id>", "selection": {カテゴリ: {"name": 登録名, "file": 実ファイル名}}}`。`_write_metadata`（単発）と `_write_chain_metadata`（チェーン）の**両方**に出る。`selection` の 4 カテゴリは常に揃い、`"default"` のままのカテゴリも記述子の `default_file` の実ファイル名を記録するため、既定が将来差し替わっても過去の出力を再現できる。詳細は §6.9(e)） |
 | `ltx25` | dict（**2026-09-02追加（台帳 §3-131）。エンジン系統 `ltx25`（LTX 2.5）の単発生成・画角拡張ジョブにのみ加算で出現**——LTX 2.3・mock backend ではキーごと現れない。共通コアは5キー＝`encode_fps` / `video_chunks` / `tiling` / `size_bytes` / `phases`。**単発生成**はこの5キーのみ。**画角拡張**は同じ5キーに `stage1_sampler` / `stage1_eta` / `stage2_sampler` / `stage2_noise_scale` / `stage2_seed` / `stage2_audio_init_policy` / `reference_frames` / `reference_downscale_factor` / `reference_attention_strength` / `pixel_chunk_frames` / `vram` / `intentional_differences` を加えた計17キー（ワーカーの `outpaint.ltx25` と同一の dict オブジェクトを最上位へそのまま再送したもの——2つのコピーではない）。**連結生成はこのキーを持たない**——同じ情報は代わりに `chain.ltx25`（12キー＝`stage1_sampler` / `stage1_eta` / `stage2_sampler` / `clear_keyframes_on_carry` / `chunked_upsample` / `stage2_window` / `encode_fps` / `video_chunks` / `tiling` / `size_bytes` / `vram` / `phases`）に出る（`chain` ブロックが既に運ぶため、最上位へ二重には積まない）。**意図的に含めないもの**: 単発の `sampler`（モジュール定数で `ready.sampler` / `LOAD_OK` に既出のため情報量ゼロ）、セグメント単位の `keyframes_mask` 実効値（ジョブ全体で1つの `clear_keyframes_on_carry` の中継のみ）。**単位注記**: `ltx25.vram`（画角拡張・連結とも）のサブキーは GiB 建て（`peak_allocated_gib` 等）——上表の `vram_optimization.peak_vram_mb` / `peak_vram_reserved_mb` は MiB 建て（`_gib_to_mb` = ×1024）、連結メタの内部 `vram_peak_mb`（ログのみ）は十進 MB 建てで、3つとも別の単位である（`Docs/VERIFICATION_LOG.md` §72.8(3)・§87）。詳細は台帳 `Docs/PENDING_TASKS_CLOSED.md` §3-131） |
 | `inpaint` | dict（**2026-09-15追加（Inpainting）。`inpaint` を指定したジョブにのみ加算で出現**——それ以外のジョブではキーごと現れない。**2 つの出どころの合成**で、エンジン側＝キャンバスと素材の幾何・`blend_dilation_stage1`/`stage2`・音声の記録・`mask_proof`〔復号したマスクの枚数・白い画素の割合・膨張後の割合の 3 つ。**モックは動画ファイルを開かないので書けない値**＝実エンジンが実際にマスクを読んだ証拠である〕、アプリ側＝来歴〔`source_video_id` / `mask_video_id` / `source_fps` / `mask_fps` / `resampled` / `window_start_sec` / `window_start_frame` / `window_written_frames` / `window_has_audio` / `canvas_frames` / `canvas_codec`〕。**合成はアプリ側の来歴が後勝ち**だが、素材の幅・高さはアプリ側が持たない——同じ事実を 2 人が書くと食い違いが見えなくなるためである。撮り直しの `retake` ブロックと同じ二源の形）。**エンジン側の中身は系統によって厚みが違う**——LTX 2.5（`ltx25`）では画角拡張と同じ音声の記録（音声の凍結の証明・音声の分岐・元の素材に音声があったかどうか）と、外側の復元の VRAM のピーク `restore_peak_vram_mb` が加わる（2026-09-15。`Docs/VERIFICATION_LOG.md` §107）。**アプリ側の来歴 11 キーと `mask_proof` は両系統で同じである。** |
-| `alpha_gen` | dict（**2026-10-07追加（Alpha Gen）。`POST /generate/alpha` のジョブにのみ加算で出現**——それ以外のジョブではキーごと現れない。アプリ側が書く来歴で、鍵は `mode`（`"one_stage"`／`"light"`）・`source_video_id`・`source_width`/`source_height`（切り出した窓を測った元の寸法）・`source_fps`・`output_fps`（**v0.5.87 加算**。出力 2 本を書いた fps の生の文字列）・`resampled`（元動画の fps で切るので常に偽）・`window_start_sec`/`window_start_frame`・`window_written_frames`・`working_width`/`working_height`・`canvas_width`/`canvas_height`・`pad_right`/`pad_bottom`・`scale`・`budget_tokens`・`canvas_tokens`・`matte`（`"matte.mkv"`）・`matte_codec`（`"ffv1/gray"`）。`output.resolution` は元の寸法である。`output.frame_rate` と `output.duration_seconds` の扱いは `Docs/ALPHAGEN_DESIGN.md` §3.5 を参照。1 段原寸モードで走ったことは `ltx25.phases` に `22_*`〔Stage-2〕が無いことで確かめられる。設計の正本は `Docs/ALPHAGEN_DESIGN.md` §4.5） |
+| `alpha_gen` | dict（**2026-10-07追加（Alpha Gen）。`POST /generate/alpha` のジョブにのみ加算で出現**——それ以外のジョブではキーごと現れない。アプリ側が書く来歴で、鍵は `mode`（`"one_stage"`／`"light"`）・`source_video_id`・`source_width`/`source_height`（切り出した窓を測った元の寸法）・`source_fps`・`output_fps`（**v0.5.87 加算**。出力 2 本を書いた fps の生の文字列）・`resampled`（元動画の fps で切るので常に偽）・`window_start_sec`/`window_start_frame`・`window_written_frames`・`working_width`/`working_height`・`canvas_width`/`canvas_height`・`pad_right`/`pad_bottom`・`scale`（縮めていなければ 1.0）・`budget_tokens`（軽量モードで使った予算。1 段原寸モードでは `null`。v0.5.88）・`canvas_tokens`・`matte`（`"matte.mkv"`）・`matte_codec`（`"ffv1/gray"`）。`output.resolution` は元の寸法である。`output.frame_rate` と `output.duration_seconds` の扱いは `Docs/ALPHAGEN_DESIGN.md` §3.5 を参照。1 段原寸モードで走ったことは `ltx25.phases` に `22_*`〔Stage-2〕が無いことで確かめられる。設計の正本は `Docs/ALPHAGEN_DESIGN.md` §4.5） |
 | `environment` | `{python, torch, cuda, gpu, platform}` |
 
 `vram_optimization`（metadata 版、`metadata_block`）の 6 キー — status 版とは**別集合**である点に注意:
@@ -1214,8 +1215,8 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 - **`config.yaml` では上書きできない。** `limits.comfort_budgets` を書いても、読み込み時に WARNING を 1 回出して捨てる（`config.py` の `load_config`）。コードの既定は空の表 `{}` である。
 - **`requires.weight_class`**（`"4bit"`／`"8bit"`／`"q6k"`）は重みの種別の鍵で、**リクエストのフィールドではない**——クライアントは §6.9(c) の `base_models[].transformer_weight_class` から取って照合材料に足す。他の鍵（`attention_backend` など）はリクエストのフィールド名と同じ語彙である。**全行に `weight_class` が必須**で、種別なしの汎用行や上の 3 値以外の値は起動時のエラーになる。同じ系統の記述子が 2 本とも `comfort` を持つのも起動時のエラーである。
 - **`ltx`（LTX 2.3）は、4bit と Q6_K は全 on（5 つの加速設定がすべて有効）の行だけを持ち、8bit は条件なしの行を持つ**。4bit と Q6_K の既定構成に当たる行は意図的に置かない（`spill_free_frames` へ落ちる）。`ltx25`（LTX 2.5）の 3 行は条件なし（`weight_class` だけ）である。
-- **`alpha_gen_budget`**（2026-10-07追加・`int | null`・既定 `null`）は、行ごとの **Alpha Gen の 1 段原寸モードの予算**（§6.3b）である。サーバーはこの予算に収まるまで元の動画を縮めてキャンバスを決める（**`POST /generate/alpha` は `alpha_gen_budget`（軽量モードは `single_budget`）で作業寸法を決める**——ほかの予算と違って助言専用ではない。予算や縦横比によっては 422 になる。予算に当てるのはキャンバス〔生成側〕のトークン）。値は `ltx25` の 3 行が種別ごとの単発の線のちょうど半分（4bit 23,460・8bit 19,380・Q6_K 21,672）、`ltx` の行は鍵を持たない（`null`）。**暫定値である**——「較正の済んでいない値は `null`＝線なし」という方針（`Docs/COMFORT_LIMIT_TABLE.md` §9.4）に対し、オーナー裁定で置いた（較正は `Docs/PENDING_TASKS.md` §3-223）。数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §9.5。軽量モードは同じ行の `single_budget` を使う。重みの種別が判らない、または一致する行が無いときは各行の値の最小を使う。
-- **行の並びと予算、および行を置かない理由の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1**、較正の記録は `Docs/VERIFICATION_LOG.md` §84 と `Docs/COMFORT_LIMIT_TABLE.md` 第 15・16 節である。サーバーはこの表で一切の判定をしない（拒否も丸めもしない）——助言専用の公開値である。**ただし例外として、`POST /generate/alpha` は `alpha_gen_budget`（軽量モードは `single_budget`）で作業寸法を決める**（上記。予算や縦横比によっては 422 になる）。
+- **`alpha_gen_budget`**（2026-10-07追加・`int | null`・既定 `null`）は、行ごとの **Alpha Gen の 1 段原寸モードの線**（§6.3b）である。**助言専用で、サーバーは読まない**（v0.5.88）——操作パネルが快適上限マーカーの位置に使うだけで、1 段原寸モードは線を超えても縮めない（遅くなるだけ。理由は `Docs/ALPHAGEN_DESIGN.md` 第 2 部 §24）。線に当てるのはキャンバス〔生成側〕のトークン。値は `ltx25` の 3 行が種別ごとの単発の線のちょうど半分、`ltx` の行は鍵を持たない（`null`）。**暫定値である**——「較正の済んでいない値は `null`＝線なし」という方針（`Docs/COMFORT_LIMIT_TABLE.md` §9.4）の例外として置いた（経緯と理由は `Docs/ALPHAGEN_DESIGN.md` 第 2 部 §24 を参照。較正は `Docs/PENDING_TASKS.md` §3-223）。数値の正本は `Docs/COMFORT_LIMIT_TABLE.md` §9.5。**軽量モードは同じ行の `single_budget` を、作業寸法を縮める予算として使う**（重みの種別が判らない、または一致する行が無いときは各行の値の最小。予算や縦横比によっては 422 になる）。
+- **行の並びと予算、および行を置かない理由の正本は `Docs/COMFORT_LIMIT_TABLE.md` §1**、較正の記録は `Docs/VERIFICATION_LOG.md` §84 と `Docs/COMFORT_LIMIT_TABLE.md` 第 15・16 節である。サーバーはこの表で一切の判定をしない（拒否も丸めもしない）——助言専用の公開値である。**ただし例外として、`POST /generate/alpha` の軽量モードは `single_budget` で作業寸法を決める**（上記。予算や縦横比によっては 422 になる）。`alpha_gen_budget` はほかの予算と同じく助言専用である。
 
 **`single_comfort_token_budget`**（既定 `44880`、2026-08-18追加）と **`chain_comfort_token_budget`**（既定 `40000`）は、**互換値として残置している2鍵**である（表を知らない古いクライアント向け。表のどの行にも一致しないときの落ち先を兼ねるのは連結の `chain_comfort_token_budget` だけで、単発は `spill_free_frames` へ落ちる）。トークン数＝`(幅÷32) × (高さ÷32) × 潜在フレーム数`という式は表と共通だが、単発は stage-2 タイル分割なしで全体を1パスで精製するため、1回の仕上げ工程分の予算であるチェーン側とはワークロードが異なる（**別の物理条件から出た別の鍵**である）。**表が配信されていても、一致する行が無いときは連結の窓の予算としてこの値が使われる**（単発は `spill_free_frames` へ落ちる）。値は据え置いている。サーバーはどちらの値でも一切の判定をしない。較正の正本は `Docs/COMFORT_LIMIT_TABLE.md`。
 

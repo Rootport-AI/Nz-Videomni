@@ -31,9 +31,10 @@ import { CHAIN_COMFORT_TOKEN_BUDGET, resolveChainComfortBudget } from "./tokenBu
  * served scalar key produced a usable budget — see
  * {@link resolveSingleComfortBudget}.
  *
- * A COMPATIBILITY value (§1-31, 2026-10-06): it only matters for a server that
- * publishes no `comfort_budgets` table, and for the moment before
- * `GET /models` has told us the engine family. The real lines live in the
+ * A COMPATIBILITY value (§1-31, 2026-10-06): it matters for a server that
+ * publishes no `comfort_budgets` table, for the moment before `GET /models`
+ * has told us the engine family, and as the per-field fallback when a matched
+ * row's `single_budget` is unusable (see {@link resolveComfortRow}). The real lines live in the
  * served table, one row per base model × weight class (the backend's
  * `scripts/manifests/*.json` `comfort` block, `Docs/COMFORT_LIMIT_TABLE.md`
  * section 1). The number itself is the 2026-08-18 calibration (all five
@@ -133,12 +134,15 @@ function usableAlphaGenBudget(published: number | null | undefined): number | nu
  * `shell/tokenBudget.resolveChainComfortBudget` for Chained).
  *
  * **`null` is a normal, expected outcome, not an error.** LTX 2.3's DEFAULT
- * configuration deliberately has no row: its plain VAE decoder makes the
- * comfortable boundary non-monotone in token count (the boundaries line up
- * with the decoder's chunk-count steps 7→8 / 4→5 / 2→3), so no single token
- * line can describe it and the five measured `spill_free_frames` points are
- * the truth there. Adding a `requires: {}` row to `ltx` to "make every
- * configuration smart" would be wrong.
+ * configuration deliberately has no row for the 4bit and Q6_K weight classes:
+ * its plain VAE decoder makes the comfortable boundary non-monotone in token
+ * count (the boundaries line up with the decoder's chunk-count steps
+ * 7→8 / 4→5 / 2→3), so no single token line can describe it and the five
+ * measured `spill_free_frames` points are the truth there. (The 8bit row's
+ * `requires` names only the weight class, so an 8bit transformer matches it
+ * on any acceleration settings, the default ones included.) Adding a
+ * `requires: {}` row to `ltx` to "make every configuration smart" would be
+ * wrong.
  *
  * Order of resolution:
  *  1. No served table at all, OR `engineFamily` unknown (`undefined`/`""` —

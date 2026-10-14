@@ -58,29 +58,31 @@ export interface EditScreenProps {
    * エンジンが実行できない**もの（`shell/featureScope.ts` の
    * `editSubTabsDisabledFor`）。`AppShell` が確定済みの真偽値として渡すので、
    * この画面もパネルもフィーチャ名を一切知らない（`ChainedScreen` が
-   * `chainPanels` を受け取るのと同じ作法）。省略時はどちらも有効。 */
+   * `chainPanels` を受け取るのと同じ作法）。省略時はすべて有効。 */
   subTabsDisabled?: EditSubTabsDisabled | undefined;
   /** §3-134 (2026-09-04): the LOADED base model's engine family
-   * (`useBaseModels().activeEngineFamily`), passed straight through to
-   * `useOutpaintForm`, where it picks the 快適上限 warning's token budget out of
-   * the SERVED table (`shell/outpaintBudget.ts`, §3-135). Create/Chain take the
+   * (`useBaseModels().activeEngineFamily`), passed straight through to the
+   * sub-tab form hooks — in `useOutpaintForm` it picks the 快適上限 warning's
+   * token budget out of the SERVED table (`shell/outpaintBudget.ts`, §3-135). Create/Chain take the
    * very same prop for their own comfort markers. Omitted/`""` ⇒ "engine
    * unknown" ⇒ **no line, hence no warning**, so every direct-render test that
    * predates it keeps compiling. */
   engineFamily?: string | undefined;
   /** §1-27 (2026-09-05): Settings' shared acceleration choice, owned by
    * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
-   * Threaded to both `useOutpaintForm` and `useRetakeForm`. */
+   * Threaded to every sub-tab's form hook. */
   acceleration?: AccelerationSettings | undefined;
   /** §3-165: whether the server reports SageAttention as installed — with
    * {@link engineFamily} and {@link acceleration} it picks the served comfort
    * row whose CHAIN budget sizes the Retake stage-2 window labels (the same
-   * three inputs `ChainedScreen` passes to `useChainForm`). Omitted ⇒ `null`. */
+   * three inputs `ChainedScreen` passes to `useChainForm`) and the row Alpha
+   * Gen's line comes from. Omitted ⇒ `null`. */
   sageAvailable?: boolean | null | undefined;
   /** §1-31: the LOADED transformer's weight class
    * (`useBaseModels().activeWeightClass`), passed beside {@link engineFamily}
-   * to `useRetakeForm` only — Outpainting's line (`shell/outpaintBudget.ts`)
-   * is not split by weight class. Omitted/`""` ⇒ unknown. */
+   * to the hooks that read a comfort row (`useRetakeForm`, `useAlphaGenForm`)
+   * — Outpainting's line (`shell/outpaintBudget.ts`) is not split by weight
+   * class. Omitted/`""` ⇒ unknown. */
   weightClass?: string | undefined;
   /** §3-165: the LOADED base model's display name (`/models`
    * `base_models[].display_name`), printed in the Retake stage-2 window labels.
@@ -117,7 +119,6 @@ export interface EditScreenProps {
  * takes the result as a prop. That is precisely how `SingleScreen` owns
  * `useGenerationForm` and hands it to `GenerationForm`, and how `ChainedScreen`
  * owns `useChainForm`: the screen owns the state, the form component draws it.
- * When Retake grows a real body it will own its hook here the same way.
  *
  * The sub-tab selection is plain `useState` — deliberately NOT lifted to
  * `AppShell`. W0 (共通スパイン) made Edit a right-click destination, so a route
@@ -127,7 +128,7 @@ export interface EditScreenProps {
  * state. The selection survives a main-tab switch anyway, since `AppShell`
  * keeps every mode screen mounted and merely hides the inactive ones.
  *
- * Both sub-panels stay mounted and are hidden with the plain `hidden` attribute
+ * Every sub-panel stays mounted and is hidden with the plain `hidden` attribute
  * (the UA's `[hidden] { display: none }`), mirroring `AppShell`'s own
  * always-mounted arrangement so a panel's form state survives a sub-tab switch.
  * They carry NO `role="tabpanel"` on purpose — see `EditSubTabs`'s doc comment.
@@ -135,8 +136,8 @@ export interface EditScreenProps {
  * The job ledger is the shared `jobs/JobLedger`, the very same component Create
  * and Chain mount, fed by the same app-wide `JobsProvider` poll. It sits
  * OUTSIDE the sub-tab switch, so it is there whichever sub-tab is showing;
- * only the Generate group above it belongs to Outpainting and is dropped on the
- * Retake sub-tab (there is nothing to generate there yet). */
+ * only the Generate group above it follows the sub-tab (each sub-tab draws its
+ * own; Retake's appears only with a right-click snapshot). */
 /** サブタブの並び順（画面の並びと同じ）。{@link fallbackSubMode} が
  * 「最初に生きているタブ」を選ぶときの唯一の順序表。 */
 const SUB_TAB_ORDER: readonly EditSubMode[] = ["retake", "outpainting", "inpainting", "alphaGen"];
@@ -148,7 +149,7 @@ const SUB_TAB_ORDER: readonly EditSubMode[] = ["retake", "outpainting", "inpaint
  * Inpainting が実体化して 3 つになったので、「もう片方」では答えが決まらない。
  * ここを 1 本の純関数にしておけば、4 つ目が来ても規則は増えない。
  *
- * 全部が灰色ならこの関数へは到達しない: 3 つ**すべて**が閉じたときだけ
+ * 全部が灰色ならこの関数へは到達しない: `mode.edit` が挙げるサブタブが**すべて**閉じたときだけ
  * `disabledModesFor` が Edit タブごと落とすので、この画面はマウントされて
  * いない（`shell/featureScope.ts` の `CONTAINER_TARGETS`）。それでも最後の
  * 保険として、見つからなければ要求されたタブをそのまま返す。
@@ -174,18 +175,19 @@ export function EditScreen({
   const strings = useStrings();
   // Consumed EXACTLY ONCE, in the lazy initializer: `AppShell` bumps
   // `remountTokens.edit` on every Edit-系 route, so a fresh right-click arrives
-  // as a fresh mount and re-runs this. Only `"outpaint"` steers away from the
-  // default; `"retake"` and every other/absent intent land on Retake, which is
-  // also the screen's plain default.
+  // as a fresh mount and re-runs this. Each sub-tab's own intents steer to it
+  // (the branches below); `"retake"` and every other/absent intent land on
+  // Retake, which is also the screen's plain default.
   //
   // §3-98 P5 / §3-102 のフォールバック: 行き先のサブタブが**そのベースモデルで
-  // 灰色**なら、もう片方へ回す —— 灰色のタブを選択状態にすると、押せないタブの
-  // 下に生成群が出てしまう（`subMode` が生成群の出し分けそのものだから）。
+  // 灰色**なら、`fallbackSubMode`（並び順で最初に生きているもの）へ回す ——
+  // 灰色のタブを選択状態にすると、押せないタブの下に生成群が出てしまう
+  // （`subMode` が生成群の出し分けそのものだから）。
   //
-  // 両方が無効な場合はここへ到達しない: 2つのサブタブが**両方**閉じたときだけ
-  // `disabledModesFor` が Edit タブごと落とすので、この画面はそもそも
-  // マウントされていない（`shell/featureScope.ts` の `CONTAINER_TARGETS`）。
-  // なので下の2本の三項は「片方は必ず有効」を前提にしてよい。
+  // 全部が無効な場合はここへ到達しない: `mode.edit` が挙げるサブタブが**すべて**
+  // 閉じたときだけ `disabledModesFor` が Edit タブごと落とすので、この画面は
+  // そもそもマウントされていない（`shell/featureScope.ts` の `CONTAINER_TARGETS`）。
+  // なので下の三項は「生きているサブタブが必ず 1 つはある」を前提にしてよい。
   const [subMode, setSubMode] = useState<EditSubMode>(() => {
     if (initialIntent?.intent === "outpaint") {
       return subTabsDisabled.outpainting ? fallbackSubMode(subTabsDisabled, "outpainting") : "outpainting";
@@ -198,7 +200,7 @@ export function EditScreen({
     }
     // Alpha Gen 第 2 弾: the right-click #24 (`alphaGenVideo`). `AppShell`
     // refuses that route while the sub-tab is grey, so the fallback is only
-    // the same last-resort net as the other three.
+    // the same last-resort net as the other sub-tabs.
     if (initialIntent?.intent === "alpha-gen") {
       return subTabsDisabled.alphaGen ? fallbackSubMode(subTabsDisabled, "alphaGen") : "alphaGen";
     }

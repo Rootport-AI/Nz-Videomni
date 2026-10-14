@@ -135,8 +135,9 @@ export const MOCK_CONFIG_BODY = {
     // (`modes/single/defaultConfig.ts`) と**同内容**であること —— 下のパリティ
     // テストは片方向包含（fallback の全鍵がここにある）しか見ないので、中身の
     // ズレはテストでは捕まらない（写しの一致は `mockBridge.test.ts` の別テストが
-    // 見る）。正本はバックエンドのマニフェストの `comfort`（§1-31）。`ltx` に
-    // 既定構成の行が無いのは意図（理由は defaultConfig.ts 側のコメント）。`outpaint_budget`（§3-135）の
+    // 見る）。正本はバックエンドのマニフェストの `comfort`（§1-31）。`ltx` の
+    // 4bit と Q6_K に既定構成の行が無いのは意図で、8bit 行は種別だけで一致する
+    // （理由は defaultConfig.ts 側のコメント）。`outpaint_budget`（§3-135）の
     // 位置づけと、BE↔FE の数値一致が自動突き合わせされない件も同じコメント。
     comfort_budgets: {
       ltx: {

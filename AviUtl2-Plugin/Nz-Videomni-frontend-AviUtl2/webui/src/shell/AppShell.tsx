@@ -920,7 +920,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // remount Create), so the SMART ceiling is resolved here the same way that
     // function does it — off the LIVE published width/height, which is exactly
     // the geometry Create's own marker is reading at that moment. No matching
-    // row (LTX 2.3's default configuration, an older backend) leaves the field
+    // row (LTX 2.3's default configuration on 4bit / Q6_K, an older backend) leaves the field
     // off entirely and `computeTargetNumFrames` does its legacy lookup.
     //
     // Gated on the SAME intent check `cursorItemCeilingNumFrames` below uses
@@ -1490,16 +1490,17 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const chainPanels = chainPanelsDisabledFor(baseModels.unsupportedFeatures);
 
   // Same arrangement one level down inside Edit: the tab survives as long as
-  // ONE of Retake/Outpainting runs here (`shell/featureScope.ts`'s
-  // `CONTAINER_TARGETS` — `mode.edit` closes only once BOTH sub-tabs have),
-  // so the sub-tab that does NOT has to grey on its own. `EditScreen` receives
+  // ONE of its sub-tabs runs here (`shell/featureScope.ts`'s
+  // `CONTAINER_TARGETS` — `mode.edit` closes only once EVERY sub-tab its
+  // `whenAll` names has), so a sub-tab that cannot run has to grey on its own. `EditScreen` receives
   // finished booleans and never reasons about engines itself.
   const editSubTabs = editSubTabsDisabledFor(baseModels.unsupportedFeatures);
 
   const singleIntent = pendingIntent?.targetMode === "single" ? pendingIntent : undefined;
   const chainedIntent = pendingIntent?.targetMode === "chained" ? pendingIntent : undefined;
   // W0 (2026-08-09): same one-shot hand-off as the two above — Edit is now a
-  // right-click destination (`outpaintVideo`/`retakeRange`).
+  // right-click destination (every `MENU_ROUTING_TABLE` entry whose
+  // `targetMode` is `"edit"`).
   const editIntent = pendingIntent?.targetMode === "edit" ? pendingIntent : undefined;
 
   return (
@@ -1671,15 +1672,18 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  acceleration onto their requests — Edit was missing this
                  wire, so its jobs always ran the server default config. */
               acceleration={accelerationControls.acceleration}
-              /* §3-134 (2026-09-04): the loaded engine picks Outpainting's
-                 快適上限 warning threshold, the same way it keys Create's and
-                 Chained's comfort markers above. */
+              /* §3-134 (2026-09-04): the loaded engine picks the Edit
+                 sub-tabs' 快適上限 lines (Outpainting's warning threshold among
+                 them), the same way it keys Create's and Chained's comfort
+                 markers above. */
               engineFamily={baseModels.activeEngineFamily}
-              /* §1-31: Retake's stage-2 window labels read the comfort row by
-                 weight class too (Outpainting's line does not). */
+              /* §1-31: the comfort rows Retake's stage-2 window labels and
+                 Alpha Gen's line read are matched by weight class too
+                 (Outpainting's line is not). */
               weightClass={baseModels.activeWeightClass}
               /* §3-165: the Retake stage-2 window labels read the same comfort
-                 row Chained's do, and name the loaded engine. */
+                 row Chained's do, and name the loaded engine; Alpha Gen's line
+                 reads its row through the same inputs. */
               sageAvailable={sageAvail}
               engineLabel={activeEngineLabel}
             />

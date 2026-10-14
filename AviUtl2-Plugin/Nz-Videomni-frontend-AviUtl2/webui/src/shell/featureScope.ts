@@ -139,11 +139,11 @@ const FEATURE_UI_BY_NAME: ReadonlyMap<string, FeatureUiEntry> = new Map(Object.e
  * CONTAIN is closed.
  *
  * The Edit tab is the only one today: it hosts Retake, Outpainting and — since
- * §3-55 (2026-09-14) — Inpainting, so it survives as long as ONE of the three is
- * runnable; a base model that could outpaint but not retake would still have a
+ * §3-55 (2026-09-14) — Inpainting, so it survives as long as ONE of its
+ * sub-tabs is runnable; a base model that could outpaint but not retake would still have a
  * use for the tab. Inpainting joined this list on the day it stopped being a
  * disabled mock: a mock closes nothing, but a real sub-tab keeps the tab alive
- * on its own. Alpha Gen (2026-10-13) joined the same way, making it four.
+ * on its own. Alpha Gen (2026-10-13) joined the same way.
  * Chained needs no entry here because `chain` names it directly.
  *
  * Invariant: SINGLE-PASS evaluation — a `whenAll` must never name another

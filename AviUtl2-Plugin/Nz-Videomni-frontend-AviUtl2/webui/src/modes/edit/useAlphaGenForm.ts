@@ -44,7 +44,8 @@ export interface AlphaGenSource {
 }
 
 /** `fs.probeMediaInfo`'s answer for the source (contract v15). Every field is
- * `0` when unknown — `fps` included (an mkv commonly has none). */
+ * `0` when unknown — `fps` included (always `0` for Matroska mkv/webm/mk3d,
+ * by native's rule). */
 export interface AlphaGenMediaInfo {
   durationSec: number;
   width: number;

@@ -2460,10 +2460,11 @@ export function useChainForm(
   // does not send it at all, and the offline fallback config.
   //
   // 2026-08-31: the served TABLE takes precedence when it has a row for this
-  // engine + acceleration configuration — that is what widens LTX 2.5's guide
-  // line (40,000 -> 44,880). With no matching row (LTX 2.3's default
-  // configuration, an older backend, or before `GET /models` lands) this falls
-  // back to the scalar key exactly as before.
+  // engine + weight class + acceleration configuration — the row's
+  // `chain_budget` is then the line. With no matching row (LTX 2.3's default
+  // configuration on a 4bit or Q6_K transformer, an unknown weight class, an
+  // older backend, or before `GET /models` lands) this falls back to the
+  // scalar key exactly as before.
   // D tidy (2026-08-31): memoized with the SAME deps style
   // `useGenerationForm.ts`'s own `comfortRow` uses, for consistency across the
   // two hooks that call `resolveComfortRow`.

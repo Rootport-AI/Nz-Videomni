@@ -33,7 +33,7 @@ type ComfortTextKey = {
 /** 1列ぶんの数字がどこから来るか。
  *
  *  - `legacy` ＝ レガシー表 `limits.spill_free_frames` の実測値そのまま
- *    （2.3 の既定構成。1本の線で表せないので配信行を持たない）。
+ *    （2.3 の 4bit の既定構成。1本の線で表せないので配信行を持たない）。
  *  - `budget` ＝ その系統・その重みの種別の「全on」条件に一致する配信行
  *    （{@link resolveComfortRow} が選ぶ）のトークン予算から換算した線。
  *
@@ -61,8 +61,8 @@ export interface ComfortDisplayTable {
 
 /** LTX 系の表。行は縦横比の違う6サイズで、`spill_free_frames` に無い
  * `896x1152` も含む（`legacy` 列だけが「—」になる、という**列ごとに答えが違う**
- * ことがそのまま見える並び）。列は 2.3 の既定構成（`legacy`）と、系統 2 つ ×
- * 重みの種別 3 つ（4bit／8bit／Q6_K）の `budget` 列。 */
+ * ことがそのまま見える並び）。列は 2.3 の 4bit の既定構成（`legacy`）と、
+ * 配信表の系統と重みの種別の組ごとの `budget` 列。 */
 const LTX_TABLE: ComfortDisplayTable = {
   id: "LTX",
   // rows は表自体の形の一部——配信される `spill_free_frames` のキーであっても

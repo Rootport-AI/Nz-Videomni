@@ -203,7 +203,8 @@ async def save_job_video(
     if not source_exists:
         raise ToolError(
             f"VIDEO_NOT_FOUND: {source_path} が見つかりません "
-            f"(which={which}、ジョブが未完了か join未実行の可能性があります)"
+            f"(which={which}、ジョブが未完了・join 未実行・または matte は Alpha Gen のジョブにしか無い、"
+            "のいずれかの可能性があります)"
         )
 
     dest_dir_path = Path(dest_dir)

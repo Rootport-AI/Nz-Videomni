@@ -790,7 +790,7 @@ class Ltx25PromptEncoder(PromptEncoder):
 
 
 def validate_geometry(width: int, height: int, num_frames: int) -> None:
-    """Reject a geometry the two-stage pipeline cannot run.
+    """Reject a geometry the pipeline cannot run (one-stage or two-stage).
 
     The app validates the same three rules at the API boundary
     (``api/models.py``), so this is the worker-side backstop for a payload that
@@ -800,8 +800,8 @@ def validate_geometry(width: int, height: int, num_frames: int) -> None:
     """
     if width % RESOLUTION_DIVISOR or height % RESOLUTION_DIVISOR:
         raise Ltx25PipelineError(
-            f"{width}x{height} is not a multiple of {RESOLUTION_DIVISOR}. The two-stage pipeline "
-            f"runs stage 1 at half resolution, so both sides must divide by {RESOLUTION_DIVISOR}."
+            f"{width}x{height} is not a multiple of {RESOLUTION_DIVISOR}. The pipeline works on a "
+            f"{RESOLUTION_DIVISOR}-pixel grid, so both sides must divide by {RESOLUTION_DIVISOR}."
         )
     if width <= 0 or height <= 0:
         raise Ltx25PipelineError(f"width and height must be positive, got {width}x{height}")

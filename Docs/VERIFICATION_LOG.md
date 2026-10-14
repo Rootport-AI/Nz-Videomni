@@ -16543,3 +16543,4 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 | （本節） | §155・台帳の最終更新 |
 
 - 残るもの: 台帳 §1-89（Inpainting の目盛り。1 行の修正・随時）・§3-228（回転情報つき素材）・`mcp_server/tools/outputs.py` の `VIDEO_NOT_FOUND` の文言（`which="matte"` で Alpha Gen 以外を指した場合に触れていない。利用者に見える文言なのでオーナー判断）・`engine25/pipeline25.py` の `validate_geometry` の例外文（1 段の AlphaGen でも「2 段…半分の解像度」と言う。同じくオーナー判断）。
+> **更新（2026-10-15）**: 文言 2 点はオーナー裁定で監督案どおりに直した（dev `2aa3a5c`。理由の候補を 1 つ足す／64 ピクセルの格子という 1 段でも 2 段でも成り立つ理由に。テスト: アプリ venv 136 件・エンジン venv 77 件 合格）。

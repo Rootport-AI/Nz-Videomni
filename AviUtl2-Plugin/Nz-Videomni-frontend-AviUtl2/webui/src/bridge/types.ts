@@ -136,8 +136,10 @@
  * `MF_MT_FRAME_RATE`). It is the RAW rate the container reports (`29.97`, not
  * pre-snapped to `30`) — the same non-nullable, `0` = "unknown" contract as
  * `mediaWidth`/`mediaHeight` above, so `mediaFps` is never `null`, only absent
- * (older build) or `0` (probe failed, or an unsupported container — mkv/webm
- * commonly land here, and that is a NORMAL outcome, not an error). Integer
+ * (older build) or `0` (probe failed — a NORMAL outcome, not an error).
+ * Matroska (mkv/webm/mk3d) is always `0` by rule (2026-10-14): Windows' Matroska
+ * source opens it but reports HALF the real rate (29.97 -> 14.985), so native
+ * refuses it by extension before Media Foundation is opened. Integer
  * snapping (`29.97` -> `30`, `23.976` -> `24`) is deliberately NOT native's
  * job: it happens on the WebUI side, via `modes/single/paramUtils.ts`'s
  * `snapFrameRate` (§3-71/§3-72's one source of truth for the rounding rule),
@@ -209,7 +211,8 @@
  * now also reports `fps`, the video's frame rate read by the same Media
  * Foundation probe v11's `mediaFps` uses. Same contract as `mediaFps`: the RAW
  * rate (`29.97…`, never pre-snapped), non-nullable, `0` = "unknown" (not a
- * video, or the probe failed — mkv/webm commonly land here). Declared OPTIONAL
+ * video, or the probe failed — and always for Matroska mkv/webm/mk3d, by the
+ * same rule as `mediaFps`, since Windows reports half its rate). Declared OPTIONAL
  * for the usual single reason: an older native build does not emit it, and the
  * WebUI reads a missing value as `0`.
  */
@@ -749,8 +752,9 @@ export interface BridgeResultMap {
       /** Contract v11 (§3-13): the object's material framerate, probed via
        * Media Foundation. RAW (unsnapped) — `29.97` stays `29.97`, never
        * pre-rounded to `30`. Non-nullable, `0` = "unknown" (the same contract
-       * as `mediaWidth`/`mediaHeight`); a failed probe (mkv/webm are the
-       * common case) is a normal `0`, not an error. Optional only because an
+       * as `mediaWidth`/`mediaHeight`); a failed probe is a normal `0`, not
+       * an error, and Matroska (mkv/webm/mk3d) is always `0` by rule, since
+       * Windows' Matroska source reports half the real rate. Optional only because an
        * older native build does not emit it. Integer snapping happens on the
        * WebUI side, in `modes/single/paramUtils.ts`'s `snapFrameRate`, not
        * here. */

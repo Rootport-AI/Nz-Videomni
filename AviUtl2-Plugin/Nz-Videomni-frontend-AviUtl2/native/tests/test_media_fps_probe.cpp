@@ -110,9 +110,10 @@ TEST_CASE("ProbeMediaFps reads the frame rate back from a real mp4") {
 }
 
 TEST_CASE("ProbeMediaFps fails cleanly when the file cannot be opened") {
-    // A missing file stands in for the whole "no probe" family, which also
-    // covers .mkv / .webm on a stock Windows (Media Foundation ships no demuxer
-    // for them) - a NORMAL outcome the bridge answers with mediaFps 0.
+    // A missing file stands in for the "Media Foundation cannot open it" family
+    // - a NORMAL outcome the bridge answers with mediaFps 0. (Matroska is NOT
+    // in this family any more: Windows does open it, and the Matroska rule
+    // below answers it before Media Foundation is reached.)
     const std::wstring missing = TempProbePath(L"no_such_file.mp4");
     ::DeleteFileW(missing.c_str());
 
@@ -130,4 +131,34 @@ TEST_CASE("ProbeMediaFps fails cleanly when the file cannot be opened") {
     // err may be null - the plugin passes nullptr, since a failed probe is an
     // expected outcome it deliberately does not log.
     CHECK_FALSE(nzvideomni::ProbeMediaFps(missing, &fps, nullptr));
+}
+
+TEST_CASE("ProbeMediaFps reports a Matroska file as unknown by rule") {
+    // Windows' Matroska source declares HALF the real rate (29.97 -> 14.985,
+    // see media_fps_probe.h), so .mkv / .webm / .mk3d are refused by extension,
+    // in any case, before Media Foundation is opened. A missing file fails too,
+    // so the REASON string is what proves the Matroska rule (and not the
+    // missing file) made the probe fail.
+    const std::string matroska_reason =
+        "Matroska: Media Foundation's MKV source misreports the frame rate; treated as unknown";
+    const wchar_t* names[] = {L"clip.mkv", L"clip.webm", L"CLIP.MKV", L"clip.Mk3d"};
+    for (const wchar_t* name : names) {
+        const std::wstring path = TempProbePath(name);
+        double fps = -1.0;
+        std::string err;
+        CHECK_FALSE(nzvideomni::ProbeMediaFps(path, &fps, &err));
+        CHECK(err == matroska_reason);
+        CHECK(fps == -1.0);  // *fps_out is left untouched on failure
+    }
+
+    // Only the file's own extension counts: a dot in a directory name, or an
+    // mkv-looking name with another extension, is not Matroska (these fail for
+    // the ordinary "cannot open" reason instead).
+    const wchar_t* others[] = {L"dir.mkv\\clip", L"clip.mkv.mp4"};
+    for (const wchar_t* name : others) {
+        double fps = -1.0;
+        std::string err;
+        CHECK_FALSE(nzvideomni::ProbeMediaFps(TempProbePath(name), &fps, &err));
+        CHECK(err != matroska_reason);
+    }
 }

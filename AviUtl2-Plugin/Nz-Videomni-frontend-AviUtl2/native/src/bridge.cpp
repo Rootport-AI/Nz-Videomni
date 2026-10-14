@@ -927,8 +927,10 @@ void GetSelectionEditProc(void* param, EDIT_SECTION* edit) {
                 if (!path.empty()) {
                     double fps = 0.0;
                     // The error string is discarded on purpose: a failed probe
-                    // is a normal outcome (a .mkv / .webm has no Media
-                    // Foundation source), and media_fps then stays 0 so the
+                    // is a normal outcome (a Matroska file - .mkv / .webm /
+                    // .mk3d - is unknown by rule because Windows' Matroska
+                    // source reports half the real rate; see
+                    // media_fps_probe.h), and media_fps then stays 0 so the
                     // webui falls back to the project fps.
                     if (ProbeMediaFps(Utf8ToWide(path), &fps, nullptr)) {
                         item.media_fps = fps;
@@ -1003,8 +1005,10 @@ void ProbeMediaInfoEditProc(void* param, EDIT_SECTION* edit) {
         // call_edit_section_param - the same premise as v11). Only for a video
         // (a video track and a non-zero length), so Media Foundation is never
         // opened for an image or an audio file. A failed probe is a normal
-        // outcome (.mkv / .webm have no Media Foundation source): fps stays 0
-        // and the error string is discarded without logging.
+        // outcome (a Matroska file - .mkv / .webm / .mk3d - is unknown by rule,
+        // since Windows' Matroska source reports half the real rate; see
+        // media_fps_probe.h): fps stays 0 and the error string is discarded
+        // without logging.
         if (info.video_track_num > 0 && info.total_time > 0) {
             double fps = 0.0;
             if (ProbeMediaFps(wide, &fps, nullptr)) {

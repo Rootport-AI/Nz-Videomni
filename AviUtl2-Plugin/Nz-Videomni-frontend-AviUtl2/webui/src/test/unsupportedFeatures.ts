@@ -10,10 +10,11 @@ import type { NativeBridge } from "../bridge/types";
  * (`AppShell.handleRoute`) can only be
  * exercised end to end while SOME base model in the fixture actually declares
  * enough limitations to take a whole tab down — and the fixture's LTX 2.5 keeps
- * declaring fewer of them, one increment at a time. Edit needs BOTH `retake`
- * and `outpaint` refused before its tab greys, and since the Retake increment
- * LTX 2.5 refuses only `outpaint`, so the tab is live and there is nothing left
- * in the fixture world that disables a mode.
+ * declaring fewer of them, one increment at a time. Edit needs EVERY sub-tab's
+ * feature refused before its tab greys (`retake`, `outpaint`, `inpaint` and,
+ * since Alpha Gen 第 2 弾, `alpha_gen`), and LTX 2.5 refuses none of them, so
+ * the tab is live and there is nothing left in the fixture world that disables
+ * a mode.
  *
  * Pinning those tests to whatever LTX 2.5 happens to declare this month is what
  * made them need rewriting at every increment. This wraps the fixture instead:

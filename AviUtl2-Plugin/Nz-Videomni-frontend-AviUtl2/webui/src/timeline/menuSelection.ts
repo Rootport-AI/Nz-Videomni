@@ -3,7 +3,7 @@ import type { MaterialKind, MenuRequiredKind, MenuRoute } from "./menuRouting";
 import { RETAKE_WINDOW_MIN_PX } from "./retakeWindow";
 import { selectionRangeFrames } from "./selectionRange";
 import { END_SOURCE_MIN_FRAMES } from "./tailAlign";
-import { decideSourceTrim } from "./sourceTrim";
+import { decideSourceTrim, oneToOneSkipReason } from "./sourceTrim";
 import type { en } from "../i18n/strings";
 
 /**
@@ -278,7 +278,11 @@ export type MenuGuardNote =
    * judgement and only the variant + copy are pinned here. This union is the
    * single point W2 and W3 both extend, so fixing its shape up front is what
    * keeps the two streams from colliding on it. */
-  | { noteKind: "rangeTooShort"; requiredFrames: number };
+  | { noteKind: "rangeTooShort"; requiredFrames: number }
+  /** Alpha Gen 第 2 弾 (2026-10-13): the selected video does not play its source
+   * 1:1 (再生速度≠100%・ループ・中間点 2 つ以上 — `oneToOneSkipReason`), so the
+   * matte made from the source could not be laid back over the object. */
+  | { noteKind: "alphaGenNotOneToOne" };
 
 /** The unified guard result: a discriminated union so a successful guard
  * carries nothing and a failed one carries exactly the note to display. */
@@ -445,6 +449,15 @@ export function guardMenuSelection(route: MenuRoute, selection: TimelineSelectio
     }
   }
 
+  // (f) Alpha Gen 第 2 弾: the matte is made from the SOURCE file and laid back
+  // over the object, which only lines up when the object plays its source 1:1.
+  // An unreported value passes (the same conservative default as
+  // `decideSourceTrim`); the three checks are `oneToOneSkipReason`'s, shared
+  // with the trim decision and Retake.
+  if (route.action === "alphaGenVideo" && item && oneToOneSkipReason(item) !== undefined) {
+    return { ok: false, note: { noteKind: "alphaGenNotOneToOne" } };
+  }
+
   return { ok: true };
 }
 
@@ -554,5 +567,7 @@ export function formatMenuGuardNote(note: MenuGuardNote, notes: NotesStrings): s
       return notes.rangeNotSelected;
     case "rangeTooShort":
       return notes.rangeTooShort(note.requiredFrames);
+    case "alphaGenNotOneToOne":
+      return notes.alphaGenNotOneToOne;
   }
 }

@@ -80,6 +80,23 @@ bool EnsureMediaFoundation() {
     return g_mf_started;
 }
 
+// True when `path` ends in an extension the Windows Matroska source is
+// registered for with video (.mkv / .webm / .mk3d), compared case-insensitively.
+// The extension is taken with rfind(L'.') - not PathFindExtensionW, since shlwapi
+// is not linked into the test executable. A dot inside a directory name is not
+// mistaken for one: the dot must come after the last path separator.
+bool HasMatroskaExtension(const std::wstring& path) {
+    const std::wstring::size_type dot = path.rfind(L'.');
+    if (dot == std::wstring::npos) return false;
+    const std::wstring::size_type sep = path.find_last_of(L"\\/");
+    if (sep != std::wstring::npos && sep > dot) return false;
+    std::wstring ext = path.substr(dot);
+    for (wchar_t& c : ext) {
+        if (c >= L'A' && c <= L'Z') c = static_cast<wchar_t>(c - L'A' + L'a');
+    }
+    return ext == L".mkv" || ext == L".webm" || ext == L".mk3d";
+}
+
 }  // namespace
 
 double FpsFromRatio(std::uint32_t num, std::uint32_t den) {
@@ -101,6 +118,11 @@ bool ProbeMediaFps(const std::wstring& path, double* fps_out, std::string* err) 
     if (path.empty()) {
         return fail("empty path");
     }
+    // Windows' Matroska source declares half the real rate (see the header), so
+    // a Matroska file is "unknown" by rule and Media Foundation is not opened.
+    if (HasMatroskaExtension(path)) {
+        return fail("Matroska: Media Foundation's MKV source misreports the frame rate; treated as unknown");
+    }
 
     ComScope com;
     if (!com.ok()) {
@@ -115,8 +137,8 @@ bool ProbeMediaFps(const std::wstring& path, double* fps_out, std::string* err) 
     ComPtr<IMFSourceReader> reader;
     HRESULT hr = ::MFCreateSourceReaderFromURL(path.c_str(), nullptr, reader.put());
     if (FAILED(hr) || !reader) {
-        // The common, EXPECTED failure: no installed MF source handles this
-        // container (.mkv / .webm), or the file is missing / unreadable.
+        // An EXPECTED failure: the file is missing / unreadable, or no installed
+        // MF source handles its container. (Matroska never gets here.)
         return fail("MFCreateSourceReaderFromURL failed");
     }
 

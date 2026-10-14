@@ -1037,7 +1037,6 @@ async def submit_chain(
 async def submit_alpha_gen(
     reference_video_id: str,
     num_frames: int,
-    frame_rate: int,
     window_start_sec: float = 0.0,
     seed: int = -1,
     light_mode: bool = False,
@@ -1060,13 +1059,18 @@ async def submit_alpha_gen(
     事前に ``list_loras`` で存在を確認してください。
 
     元動画は ``upload_video`` で取得した ``reference_video_id`` で渡します。
-    サーバーが元動画の寸法を測り、``window_start_sec`` から ``num_frames``
-    フレームを ``frame_rate`` で切り出し、快適上限に収まる大きさまで縦横比を
-    保って縮小し（必要なときだけ）、生成後に元の寸法へ戻します。元動画の
-    縦横はどちらも偶数・256px 以上が必要です。
+    サーバーが元動画の寸法と fps を測り、``window_start_sec`` から
+    ``num_frames`` フレームを**元動画の fps のまま（変換なし）**切り出して
+    生成します。マットも元動画と同じ fps で書き出すので、
+    元動画とコマがずれません。fps を指定する引数はありません。元動画の
+    縦横はどちらも偶数・256px 以上・4096px 以下、fps は整数に丸めて 1〜60 が
+    必要です。
 
-    既定は **1 段原寸モード**（``light_mode=False``）。``light_mode=True`` に
-    すると既存の 2 段の経路（軽量モード）で生成します。
+    既定は **1 段原寸モード**（``light_mode=False``）で、縮小はしません。
+    快適上限を超えると遅くなるだけです（速く作りたいときは ``num_frames`` を
+    減らすか、解像度の小さい元動画を渡してください）。``light_mode=True`` にすると既存の
+    2 段の経路（軽量モード）で生成し、単発の快適上限に収まるまで縦横比を
+    保って縮小して、生成後に元の寸法へ戻します。
 
     出力は 2 本です。``get_job_video_path`` で得られる ``output.mp4``
     （確認用の H.264）と、``get_job_matte_path`` で得られる ``matte.mkv``
@@ -1078,7 +1082,6 @@ async def submit_alpha_gen(
     Args:
         reference_video_id: マットを作る元動画（``upload_video`` の video_id）。
         num_frames: フレーム数。8n+1 で 9〜145。
-        frame_rate: fps（整数、1〜60）。素材の fps と違えば変換して切り出します。
         window_start_sec: 元動画のどこから切り出すか（秒、既定 0）。
         seed: 乱数シード（-1 でランダム）。
         light_mode: True で軽量モード（2 段の経路）。既定 False（1 段原寸）。
@@ -1093,7 +1096,6 @@ async def submit_alpha_gen(
     payload: dict[str, Any] = {
         "reference_video_id": reference_video_id,
         "num_frames": num_frames,
-        "frame_rate": frame_rate,
         "window_start_sec": window_start_sec,
         "seed": seed,
         "light_mode": light_mode,

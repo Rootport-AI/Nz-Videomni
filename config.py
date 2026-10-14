@@ -272,7 +272,9 @@ class ComfortRow(BaseModel):
     requires: dict[str, str | bool] = Field(default_factory=dict)
     single_budget: int
     chain_budget: int
-    # AlphaGen（POST /generate/alpha）の 1 段原寸モードの快適上限トークン。
+    # AlphaGen（POST /generate/alpha）の 1 段原寸モード（軽量モード OFF）の快適上限トークン。
+    # サーバーはこの値を読まない（OFF は縮小せず原寸で生成する。オーナー裁定 2026-10-14・
+    # Docs/ALPHAGEN_DESIGN.md §24）。操作パネルが OFF の線の位置に使うだけ（台帳 §3-223 の較正対象）。
     # 暫定。ゲート 0（VERIFICATION_LOG §151）の 4bit の線の半分を種別ごとに当てた値
     # （単発の線のちょうど半分）。較正は後日。既存方針（未較正なら None＝線なし）
     # に対するオーナー裁定（2026-10-07）。None は「線なし」（LTX 2.3 の行など）。

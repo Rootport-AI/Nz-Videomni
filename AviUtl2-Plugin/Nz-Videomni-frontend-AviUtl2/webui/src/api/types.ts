@@ -272,6 +272,30 @@ export interface GenerateAcceptedResponse {
   created_at: string;
 }
 
+/** Body of `POST /generate/alpha` (Alpha Gen, LTX 2.5 only — the server's
+ * `AlphaGenRequest`). The user touches only the source, the frame count and
+ * the light-mode switch; the prompt, the LoRA, the canvas and the fps are the
+ * server's (the matte keeps the source's own fps, which the server measures,
+ * so there is no `frame_rate` here). The acceleration fields are the
+ * `GenerateRequest` ones of the same name, passed through so a matte job keeps
+ * the user's residency / acceleration settings. Answered with
+ * {@link GenerateAcceptedResponse} (202). */
+export interface AlphaGenRequestBody {
+  reference_video_id: string;
+  /** Where the window starts, in seconds on the UPLOADED file's own time axis
+   * (0 when the upload was already trimmed to the window). */
+  window_start_sec: number;
+  /** 8n+1 in [9, 145]. */
+  num_frames: number;
+  seed: number;
+  light_mode: boolean;
+  attention_backend?: "sdpa" | "sage";
+  block_swap_prefetch?: boolean;
+  keep_resident?: boolean;
+  keep_resident_embeddings?: boolean;
+  fused_gguf_dequant_kernel?: boolean;
+}
+
 /** One clip in a `/generate/chain` request (Docs/API_REFERENCE.md §5.2
  * `ChainClip`, `api/models.py:204-216`). `prompt` overrides the chain-wide
  * common prompt for this clip only when present (omitted/empty means "use
@@ -867,6 +891,10 @@ export interface ComfortRow {
   single_budget: number;
   /** Chained の stage-2 1 窓分の快適トークン予算。 */
   chain_budget: number;
+  /** Alpha Gen（Edit タブ・1 段原寸）の快適トークン予算。軽量モードでは使わず
+   * {@link single_budget} が効く。`null`／欠落 ＝ この行には Alpha Gen の線が無い
+   * （操作パネルは線を出さない）。 */
+  alpha_gen_budget?: number | null;
 }
 
 /** 1つのエンジン系統ぶんの快適予算プロファイル（{@link AppLimits.comfort_budgets}

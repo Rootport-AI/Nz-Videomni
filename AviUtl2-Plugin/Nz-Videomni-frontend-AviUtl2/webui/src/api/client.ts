@@ -18,6 +18,7 @@
 import { bridge as defaultBridge, BridgeError } from "../bridge";
 import type { NativeBridge } from "../bridge";
 import type {
+  AlphaGenRequestBody,
   AppConfig,
   BackendErrorEnvelope,
   DeleteJobResponse,
@@ -91,6 +92,10 @@ export interface ApiClient {
   /** M6: `POST /generate/chain` — clip chaining / V2V continuation / A2V
    * (Docs/API_REFERENCE.md §3.13/§5.2). */
   generateChain(request: GenerateChainRequest): Promise<GenerateChainAcceptedResponse>;
+  /** Alpha Gen 第 2 弾: `POST /generate/alpha` — a matte from a video
+   * (Docs/API_REFERENCE.md §5.5). LTX 2.5 only; LTX 2.3 answers 422
+   * `FEATURE_UNSUPPORTED`. */
+  generateAlpha(request: AlphaGenRequestBody): Promise<GenerateAcceptedResponse>;
   getJob(jobId: string): Promise<JobResponse>;
   listJobs(): Promise<JobResponse[]>;
   deleteJob(jobId: string): Promise<DeleteJobResponse>;
@@ -174,6 +179,7 @@ export function createApiClient(nativeBridge: NativeBridge): ApiClient {
     getConfig: () => call<AppConfig>("GET", "/config"),
     generate: (request) => call<GenerateAcceptedResponse>("POST", "/generate", { body: request }),
     generateChain: (request) => call<GenerateChainAcceptedResponse>("POST", "/generate/chain", { body: request }),
+    generateAlpha: (request) => call<GenerateAcceptedResponse>("POST", "/generate/alpha", { body: request }),
     getJob: (jobId) => call<JobResponse>("GET", `/jobs/${encodeURIComponent(jobId)}`),
     listJobs: () => call<JobResponse[]>("GET", "/jobs"),
     deleteJob: (jobId) => call<DeleteJobResponse>("DELETE", `/jobs/${encodeURIComponent(jobId)}`),

@@ -101,6 +101,42 @@ export type SourceTrimSkipReason =
    * original name (it predates the probe) so no caller has to churn. */
   | "unknownPlaybackPosition";
 
+/** The three {@link SourceTrimSkipReason}s that say "this object does not map
+ * the timeline 1:1 onto its source" — the subset {@link oneToOneSkipReason}
+ * can return. */
+export type OneToOneSkipReason = "nonNeutralSpeed" | "loopEnabled" | "multipleSections";
+
+/**
+ * Does this object play its source 1:1 (再生速度 100%・ループなし・中間点なし)?
+ * Returns the first reason it does not, or `undefined` when it does. Pure.
+ *
+ * The single home of the three checks, in the order and with the constants
+ * {@link decideSourceTrim} has always used: `decideSourceTrim` itself, the
+ * Retake window's full-length re-check (`retakeWindow.ts`) and the Alpha Gen
+ * right-click guard (`menuSelection.guardMenuSelection`) all call this, so the
+ * three can never drift apart.
+ *
+ * An UNREPORTED value (older native, un-probed build) is not a reason — the
+ * same conservative default as before: the overwhelming majority of objects
+ * are 1:1, and refusing on "unknown" would refuse them all.
+ *
+ * Native normalizes 再生速度 to a 1.0 scale (the raw item is a percentage
+ * string), so the speed is compared against 1.0 with a tolerance rather than
+ * exactly: a value that went through "100.00" / 100 need not be bit-identical
+ * to 1.
+ */
+export function oneToOneSkipReason(item: TrimSelectionItem): OneToOneSkipReason | undefined {
+  if (
+    item.playbackSpeed !== undefined &&
+    Math.abs(item.playbackSpeed - PLAYBACK_SPEED_NEUTRAL) > PLAYBACK_SPEED_EPSILON
+  ) {
+    return "nonNeutralSpeed";
+  }
+  if (item.loopPlay === true) return "loopEnabled";
+  if (item.sectionCount !== undefined && item.sectionCount >= 2) return "multipleSections";
+  return undefined;
+}
+
 /** The decision: either "upload the whole file" (with the reason why) or "cut
  * `[startSec, startSec + durationSec)` out of the source first". */
 export type SourceTrimDecision =
@@ -180,27 +216,12 @@ export function decideSourceTrim(
     return { trim: false, reason: "spanCoversWholeMedia" };
   }
 
-  // A reported, non-neutral 再生速度 breaks the 1:1 timeline<->source mapping.
-  // An UNREPORTED speed (older native, or an un-probed build) is not a skip — the overwhelming
-  // majority of objects are at 1.0, and the full-file fallback is still one step
-  // away at `unknownPlaybackPosition` anyway.
-  // Native normalizes 再生速度 to a 1.0 scale (the raw item is a percentage
-  // string), so compare against 1.0 with a tolerance rather than exactly: a
-  // value that went through "100.00" / 100 need not be bit-identical to 1.
-  if (
-    item.playbackSpeed !== undefined &&
-    Math.abs(item.playbackSpeed - PLAYBACK_SPEED_NEUTRAL) > PLAYBACK_SPEED_EPSILON
-  ) {
-    return { trim: false, reason: "nonNeutralSpeed" };
-  }
-
-  if (item.loopPlay === true) {
-    return { trim: false, reason: "loopEnabled" };
-  }
-
-  if (item.sectionCount !== undefined && item.sectionCount >= 2) {
-    return { trim: false, reason: "multipleSections" };
-  }
+  // A reported, non-neutral 再生速度, ループ再生 or 2+ sections (中間点) each
+  // break the 1:1 timeline<->source mapping. An UNREPORTED value is not a skip —
+  // the full-file fallback is still one step away at `unknownPlaybackPosition`
+  // anyway. The three checks live in `oneToOneSkipReason` (same order).
+  const notOneToOne = oneToOneSkipReason(item);
+  if (notOneToOne !== undefined) return { trim: false, reason: notOneToOne };
 
   if (item.hasPlaybackRange !== true) {
     return { trim: false, reason: "unknownPlaybackPosition" };

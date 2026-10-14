@@ -38,6 +38,7 @@ export type UiTarget =
   | "editSubTab.retake"
   | "editSubTab.outpainting"
   | "editSubTab.inpainting"
+  | "editSubTab.alphaGen"
   | "createSection.batchA2v"
   | "settingsRow.vae"
   | "settingsRow.keepResidentEmbeddings";
@@ -84,6 +85,9 @@ interface FeatureUiEntry {
  *    so all three rows are currently dormant. THE ROWS STAY REGARDLESS — this
  *    table is a translation, not a list of today's limitations, and a name
  *    nobody publishes closes nothing (see `disabledUiTargets`).
+ *  - **alpha_gen** is the fourth Edit sub-tab (Alpha Gen 第 2 弾, 2026-10-13).
+ *    Unlike the three above it is LIVE: LTX 2.3 publishes it, because the
+ *    alpha-gen IC-LoRA exists for LTX 2.5 only.
  *  - **prune_vaed / keep_resident_embeddings** are Settings rows rather than
  *    generation surfaces, and both carry a `resets` because their choice is
  *    persisted in `localStorage`. Their SCOPES point in opposite directions:
@@ -107,6 +111,7 @@ export const FEATURE_UI = {
   retake: { disables: ["editSubTab.retake"] },
   outpaint: { disables: ["editSubTab.outpainting"] },
   inpaint: { disables: ["editSubTab.inpainting"] },
+  alpha_gen: { disables: ["editSubTab.alphaGen"] },
   v2v: { disables: ["chainPanel.v2v"] },
   a2v: { disables: ["chainPanel.a2v", "createSection.batchA2v"] },
   end_source: { disables: ["chainPanel.endSource"] },
@@ -138,7 +143,8 @@ const FEATURE_UI_BY_NAME: ReadonlyMap<string, FeatureUiEntry> = new Map(Object.e
  * runnable; a base model that could outpaint but not retake would still have a
  * use for the tab. Inpainting joined this list on the day it stopped being a
  * disabled mock: a mock closes nothing, but a real sub-tab keeps the tab alive
- * on its own. Chained needs no entry here because `chain` names it directly.
+ * on its own. Alpha Gen (2026-10-13) joined the same way, making it four.
+ * Chained needs no entry here because `chain` names it directly.
  *
  * Invariant: SINGLE-PASS evaluation — a `whenAll` must never name another
  * container target, or the answer would depend on the order of this array.
@@ -147,7 +153,12 @@ const FEATURE_UI_BY_NAME: ReadonlyMap<string, FeatureUiEntry> = new Map(Object.e
 const CONTAINER_TARGETS: ReadonlyArray<{ target: UiTarget; whenAll: readonly UiTarget[] }> = [
   {
     target: "mode.edit",
-    whenAll: ["editSubTab.retake", "editSubTab.outpainting", "editSubTab.inpainting"],
+    whenAll: [
+      "editSubTab.retake",
+      "editSubTab.outpainting",
+      "editSubTab.inpainting",
+      "editSubTab.alphaGen",
+    ],
   },
 ];
 
@@ -251,7 +262,7 @@ export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): 
   };
 }
 
-/** The three Edit-screen sub-tabs an engine's feature scope can take down
+/** The four Edit-screen sub-tabs an engine's feature scope can take down
  * individually, keyed the way `EditScreen`'s `subTabsDisabled` prop is.
  *
  * `inpainting` joined on 2026-09-14 (§3-55): until that day Inpainting was a
@@ -266,13 +277,15 @@ export interface EditSubTabsDisabled {
   outpainting: boolean;
   /** `InpaintingPanel` — マスクによる部分再生成 (`inpaint`). */
   inpainting: boolean;
+  /** `AlphaGenPanel` — 透過用マットの作成 (`alpha_gen`). LTX 2.3 publishes it. */
+  alphaGen: boolean;
 }
 
 /**
  * Which of {@link EditSubTabsDisabled}'s sub-tabs `unsupportedFeatures` makes
- * unusable — three `false`s for the ordinary case.
+ * unusable — four `false`s for the ordinary case.
  *
- * All three `true` at once is possible here, but the caller never sees it: that
+ * All four `true` at once is possible here, but the caller never sees it: that
  * is exactly the condition {@link CONTAINER_TARGETS} closes `mode.edit` on, so
  * the screen this feeds is not mounted at all. Answering honestly anyway keeps
  * this a plain reading of the table rather than a special case.
@@ -283,6 +296,7 @@ export function editSubTabsDisabledFor(unsupportedFeatures: readonly string[]): 
     retake: disabled.has("editSubTab.retake"),
     outpainting: disabled.has("editSubTab.outpainting"),
     inpainting: disabled.has("editSubTab.inpainting"),
+    alphaGen: disabled.has("editSubTab.alphaGen"),
   };
 }
 

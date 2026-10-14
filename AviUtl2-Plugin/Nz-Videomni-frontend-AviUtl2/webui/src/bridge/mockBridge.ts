@@ -175,9 +175,11 @@ export const MOCK_CONFIG_BODY = {
         spatial_factor: 32,
         temporal_factor: 8,
         rows: [
-          { requires: { weight_class: "4bit" }, single_budget: 46920, chain_budget: 46376 },
-          { requires: { weight_class: "8bit" }, single_budget: 38760, chain_budget: 39424 },
-          { requires: { weight_class: "q6k" }, single_budget: 43344, chain_budget: 43648 },
+          // `alpha_gen_budget`（Alpha Gen 第 1 弾・暫定値）は単発の線のちょうど半分。
+          // 正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §9.5。
+          { requires: { weight_class: "4bit" }, single_budget: 46920, chain_budget: 46376, alpha_gen_budget: 23460 },
+          { requires: { weight_class: "8bit" }, single_budget: 38760, chain_budget: 39424, alpha_gen_budget: 19380 },
+          { requires: { weight_class: "q6k" }, single_budget: 43344, chain_budget: 43648, alpha_gen_budget: 21672 },
         ],
         outpaint_budget: 46080,
       },
@@ -360,6 +362,12 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // model declares, so every other request 2.3 has ever served still sails
     // through untouched.
     "keep_resident_embeddings",
+    // Alpha Gen (2026-10-07): the SECOND name, in the server's own order
+    // (`services/engines/ltx/adapter.py`'s REJECT_TABLE). The `alpha-gen`
+    // IC-LoRA is an LTX 2.5 adapter, so 2.3 refuses `POST /generate/alpha`
+    // — and publishing the name is what greys the Edit tab's Alpha Gen
+    // sub-tab while 2.3 is loaded (`shell/featureScope.ts`).
+    "alpha_gen",
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -895,6 +903,9 @@ export interface MockBridgeOptions {
   probeMediaInfoDurationSec?: number;
   probeMediaInfoWidth?: number;
   probeMediaInfoHeight?: number;
+  /** Contract v15: the `fps` `fs.probeMediaInfo` resolves with (the raw rate,
+   * e.g. `29.97`). Omitted -> `0`, native's "unknown". */
+  probeMediaInfoFps?: number;
   /** Contract v7: when true, `requestWithFiles(..., "ui.resolveDroppedFiles", ...)`
    * rejects instead of resolving (simulates the native drop-resolution round
    * trip failing — `useFileDrop`'s `dnd.resolveFailed` error path). Resolving
@@ -1565,6 +1576,71 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     return { status: 202, body: { job_id: id, status: "queued", created_at: record.createdAt } };
   }
 
+  /** Alpha Gen 第 2 弾: `POST /generate/alpha` fixture (Docs/API_REFERENCE.md
+   * §5.5). The checks run in the server's order, as far as a fixture without a
+   * real file can follow it: engine scope first (LTX 2.3 → 422
+   * `FEATURE_UNSUPPORTED`, the server's `alpha_gen_unsupported` envelope), then
+   * the body (`reference_video_id` present, `num_frames` 8n+1 in [9, 145] →
+   * 422 `VALIDATION_ERROR`). It then builds the SAME internal request the
+   * server builds — the one-space prompt, the pinned `alpha-gen` LoRA at 1.0,
+   * a 64-grid canvas (from the probe options when given) — and hands it to
+   * {@link handleGenerate}, which needs a prompt and runs the shared busy
+   * check and job bookkeeping. The fps comes from the probe options too
+   * (rounded like the server's `floor(x + 0.5)`); the server measures it. */
+  function handleGenerateAlpha(body: object | undefined): ResultOf<"backend.request"> {
+    if ((MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("alpha_gen")) {
+      return {
+        status: 422,
+        body: {
+          error: {
+            code: "FEATURE_UNSUPPORTED",
+            message: "'alpha_gen' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
+            detail: "LTX 2.3 は Alpha Gen に対応していません。ベースモデルに「LTX 2.5」を選んでください。",
+          },
+        },
+      };
+    }
+    const req = (body ?? {}) as Record<string, unknown>;
+    const referenceId = req.reference_video_id;
+    if (typeof referenceId !== "string" || referenceId.length < 1) {
+      return validationError("reference_video_id", "String should have at least 1 character");
+    }
+    const numFrames = req.num_frames;
+    if (typeof numFrames !== "number" || (numFrames - 1) % 8 !== 0 || numFrames < 9 || numFrames > 145) {
+      return validationError("num_frames", "num_frames must be 8n+1 (9-145)");
+    }
+    const ceil64 = (side: number): number => Math.ceil(side / 64) * 64;
+    const width = (options.probeMediaInfoWidth ?? 0) > 0 ? ceil64(options.probeMediaInfoWidth ?? 0) : 1280;
+    const height = (options.probeMediaInfoHeight ?? 0) > 0 ? ceil64(options.probeMediaInfoHeight ?? 0) : 768;
+    const fps = options.probeMediaInfoFps ?? 0;
+    const passThrough = Object.fromEntries(
+      [
+        "attention_backend",
+        "block_swap_prefetch",
+        "keep_resident",
+        "keep_resident_embeddings",
+        "fused_gguf_dequant_kernel",
+      ]
+        .filter((key) => key in req)
+        .map((key) => [key, req[key]]),
+    );
+    return handleGenerate({
+      prompt: " ",
+      loras: [{ name: "alpha-gen", strength: 1.0 }],
+      reference_video_id: referenceId,
+      width,
+      height,
+      num_frames: numFrames,
+      frame_rate: fps > 0 ? Math.floor(fps + 0.5) : 24,
+      seed: typeof req.seed === "number" ? req.seed : -1,
+      ...passThrough,
+      alpha_gen: {
+        window_start_sec: typeof req.window_start_sec === "number" ? req.window_start_sec : 0,
+        one_stage: req.light_mode !== true,
+      },
+    });
+  }
+
   /** M6: `POST /generate/chain` fixture (Docs/API_REFERENCE.md §3.13). Keeps
    * validation intentionally light (prompt + clip-count shape only) — the
    * WebUI's own client-side validation (`modes/chained/chainUtils.ts`) is what
@@ -1817,6 +1893,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     if (method === "GET" && path === "/api/v1/config") return handleConfig();
     if (method === "POST" && path === "/api/v1/generate") return handleGenerate(body);
     if (method === "POST" && path === "/api/v1/generate/chain") return handleGenerateChain(body);
+    if (method === "POST" && path === "/api/v1/generate/alpha") return handleGenerateAlpha(body);
     if (method === "GET" && path === "/api/v1/jobs") return handleListJobs();
     if (method === "GET" && path === "/api/v1/loras") return handleLoras();
     if (method === "POST" && path === "/api/v1/loras/reload") return handleLorasReload();
@@ -2407,6 +2484,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
       durationSec: options.probeMediaInfoDurationSec ?? 0,
       width: options.probeMediaInfoWidth ?? 0,
       height: options.probeMediaInfoHeight ?? 0,
+      fps: options.probeMediaInfoFps ?? 0,
     };
   }
 

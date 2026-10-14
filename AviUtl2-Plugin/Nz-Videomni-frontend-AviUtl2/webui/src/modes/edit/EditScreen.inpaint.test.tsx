@@ -181,7 +181,7 @@ const CONFIG_BODY = {
 function renderInpaint(
   intent: GenerationPrefill | null = intentFor("inpaint-mask"),
   options: BridgeOptions = {},
-  subTabsDisabled?: { retake: boolean; outpainting: boolean; inpainting: boolean },
+  subTabsDisabled?: { retake: boolean; outpainting: boolean; inpainting: boolean; alphaGen: boolean },
 ) {
   const nativeBridge = createBridge(options);
   const onJobSubmitted = vi.fn();
@@ -255,7 +255,7 @@ describe("EditScreen — Inpainting サブタブの昇格と振り分け", () =>
     // 仕組み(灰色のサブタブへは入らず、並び順で最初に生きているタブへ逃げる)の
     // 固定であり、次のエンジンで必要になる。
     seedBothSlots();
-    renderInpaint(intentFor("inpaint-mask"), {}, { retake: false, outpainting: false, inpainting: true });
+    renderInpaint(intentFor("inpaint-mask"), {}, { retake: false, outpainting: false, inpainting: true, alphaGen: false });
     expect(screen.getByRole("tab", { name: "Retake" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: /^inpainting/i, hidden: true })).not.toBeVisible();
   });

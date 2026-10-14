@@ -80,6 +80,12 @@ export interface ResolvedComfortRow {
   singleBudget: number;
   /** Chained stage-2 window token budget for this configuration. */
   chainBudget: number;
+  /** Alpha Gen (Edit tab, one-stage full-size) token budget for this
+   * configuration, or `null` when the row publishes none (the compatibility
+   * shim never does). Unlike the two above there is no mirrored constant to
+   * fall back to: a row without the value draws no line (a row with a
+   * provisional value draws it as a guide; calibration is ledger §3-223). */
+  alphaGenBudget: number | null;
   /** The engine's spatial compression factor (32 unless a future engine
    * publishes something else). */
   spatialFactor: number;
@@ -110,6 +116,13 @@ function matchesRequires(
  * applied per FIELD so one bad number never discards an otherwise good row. */
 function usableBudget(published: number | undefined, fallback: number): number {
   return typeof published === "number" && Number.isFinite(published) && published > 0 ? published : fallback;
+}
+
+/** A served Alpha Gen budget, or `null` when it is not a positive finite
+ * number — the same per-field guard as {@link usableBudget}, minus the
+ * fallback constant (see {@link ResolvedComfortRow.alphaGenBudget}). */
+function usableAlphaGenBudget(published: number | null | undefined): number | null {
+  return typeof published === "number" && Number.isFinite(published) && published > 0 ? published : null;
 }
 
 /**
@@ -168,6 +181,7 @@ export function resolveComfortRow(
     return {
       singleBudget: resolveSingleComfortBudget(limits.single_comfort_token_budget),
       chainBudget: resolveChainComfortBudget(limits.chain_comfort_token_budget),
+      alphaGenBudget: null,
       spatialFactor: DEFAULT_SPATIAL_FACTOR,
       temporalFactor: DEFAULT_TEMPORAL_FACTOR,
       rowIndex: -1,
@@ -187,6 +201,7 @@ export function resolveComfortRow(
     return {
       singleBudget: usableBudget(row.single_budget, SINGLE_COMFORT_TOKEN_BUDGET),
       chainBudget: usableBudget(row.chain_budget, CHAIN_COMFORT_TOKEN_BUDGET),
+      alphaGenBudget: usableAlphaGenBudget(row.alpha_gen_budget),
       // A nonsensical factor is normalised to the default rather than rejected
       // (there is no `tf <= 0` special case any more — an invalid factor is
       // simply treated as "the engine didn't say", per the owner's decision).

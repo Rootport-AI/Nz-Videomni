@@ -16308,3 +16308,189 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
   - 合成動画: `outputs/alphagen-gate0/phase1-frames/G*_composite_green.mp4`（G1〜G4。元動画にマットを当ててグリーンバックに合成したもの）。
   - 切り出した窓 `_alpha_window.mp4` は PCM 音声入りの MP4 のため、AviUtl2 では開けませんでした。中間ファイルで、AviUtl2 で開くためのものではありません。
 - **これで第 1 弾は完結しました。** 台帳の項目は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224 としてクローズしました（オーナーの裁定で dev を main に merge します）。
+
+## 153. ★台帳 §2-1「Alpha Gen 第 2 弾＝操作パネル」＋ §2-2「出力ファイルの fps を元動画の正確な値で書く追補（§1-88・案 C）」＋ 1 段原寸の進捗バー＝実装・機械ゲート 4 環境 失敗 0・差分の敵対的レビュー 3 層（Critical 0・Major 3・Minor 14）・監督の実機ゲート 3 点合格・オーナーの目視は未実施（2026-10-13）
+
+### 153.1 結論
+
+- **Alpha Gen の第 2 弾（操作パネル）と、第 1 弾の追補 §1-88（案 C）と、1 段原寸の進捗バーを、承認済みの計画どおりに実装し、機械ゲート 4 環境は失敗 0、監督の実機ゲート 3 点は合格しました。** 利用者は、タイムラインの動画を右クリック→「🎬 Video: 透過用マットを作る (Alpha Gen)」で Edit タブの「Alpha Gen」サブタブに送り（ドロップと「元になる動画を選ぶ」も可）、フレーム数を決めて「マットを作成」を押すだけで、白黒のマット動画が出来ます。fps は元動画のまま（変換なし）で、fps 欄は表示だけです。
+> **訂正（§153.7・§154）**: メニュー項目の日本語名は、オーナーの目視後に「🎬 Video: 背景透過（Alpha Gen）」に変えた。また「快適上限を超えると縮小して元の寸法へ戻す」挙動は軽量モード ON のときだけになり、OFF は原寸で生成する。
+- **§1-88（案 C）**: `POST /generate/alpha` から `frame_rate` を取り去り、サーバーが ffprobe で元動画の fps を測って、窓の切り出しも出力 2 本も元の正確な fps のまま通します。29.97fps の素材で通しで確かめ、`output.mp4` と `matte.mkv` の平均 fps は `30000/1001`・コマ数は要求どおりでした（153.4）。
+- **進捗バー**: 1 段原寸のジョブは完了前に 0.90 まで単調に進みます（第 1 弾では 0.50 で止まって見えた）。
+- **可変フレームレート（VFR）の素材は非対応**です。差分レビューと実機ゲートの両方で「窓の切り出しでコマ数が合わず失敗する」ことを実測しました。計画 11 節 6 番の決めどおり今回は手当てせず、制限として設計書 §3 に書き、受付で断る案を台帳 §3-225 に起票しました。
+- **オーナーの目視は未実施です。** 項目はフロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26 の G1〜G12（台帳 §2-1・§2-2）。合成素材 4 本を `outputs/alphagen-stage2/` に置きました（153.4）。
+- 設計の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)（§3 に fps の規則と VFR の制限・§9 に第 2 弾の決定事項）、契約は仕様書 §6.3b（v0.5.87）とフロントエンド `BRIDGE_CONTRACT.md`（v15）、設計上の判断はフロントエンド `DEVLOG.md` §132、計画は `C:\Users\phenotype nezu\.claude\plans\imperative-painting-galaxy.md`（1〜11 節。計画段階の敵対的レビュー 13 件は全部採用）です。
+
+### 153.2 実装
+
+**dev の 9 コミット**（製品コード・テスト・文書で 67 ファイル＋配布用 aux2）。担当は Opus 3 体の並行（バックエンド／ネイティブ／操作パネル 1 体）で、コミットは監督が行いました。
+
+| コミット | 中身 |
+|---|---|
+| `f19571e` | §1-88 案 C: `frame_rate` 削除・`probe_fps_rational`・`AlphaGenSpec.source_fps`／`output_fps`・`finalize_alpha_matte` の `setpts` と `-r`・MCP・テスト |
+| `64f7e7d` | 進捗バー: `_progress_frac`／`_read_worker_events` の `one_stage`（LTX 2.5 の `generate` からだけ） |
+| `a07ac5f` | §1-88 の文書（仕様書 v0.5.87・設計書・MCP 設計書 D26・API_REFERENCE §5.5） |
+| `e07b186` | 契約 v15: `fs.probeMediaInfo` の結果に `fps`（ネイティブ・テスト・`bridge/types.ts`・BRIDGE_CONTRACT） |
+| `234a918` | メニュー項目 `alphaGenVideo`（`plugin.cpp`・Language 2 言語・RIGHTCLICK_REDESIGN_SPEC §3-4 #24） |
+| `8767845` | 操作パネル: Alpha Gen サブタブと下回り（新設 4 ファイル・既存テストの現行化） |
+| `1a7c6ce` | フロントエンドの文書（DEVLOG §132・CHECKLIST §4.26・webui README） |
+| `31dbead` | 配布用 aux2（`M\AviUtl2-Plugin\NzVideomni.aux2`） |
+| （本節） | 検証記録 §153・台帳（§1-85・§1-88→§2-1・§2-2・§3-225）・DEVLOG §132.5 の状態 |
+
+### 153.3 機械ゲートと差分の敵対的レビュー
+
+| 門 | 内容 | 結果 |
+|---|---|---|
+| G-M1 | ネイティブ `scripts\build.ps1 -RunTests`（Web UI 埋め込みあり） | 387 件合格・失敗 0・スキップ 6（アサーション 1,970） |
+| G-M2 | `npm run typecheck` | エラー 0 |
+| G-M3 | `npm run lint` | 終了コード 0・警告 31（改修前と同数・新規 0） |
+| G-M4 | `npx vitest run --exclude "**/backend.integration.test.ts"` | 157 ファイル 3,193 件中 3,192 合格・1 失敗。失敗は `App.nag.test.tsx` の「bridge capture — NAG on」＝台帳 §1-82 の既知の不安定で、単独の再実行では 8 件全部合格（本改修とは無関係） |
+| G-M5 | アプリ venv の pytest 全件（既知の 1 件を除外・`PATH` の先頭に `tools\ffmpeg\bin`） | 3,227 件合格・63 件スキップ（torch 不在などの既存分）・失敗 0。`engine25/` は不変なので eng25 の venv は回していない |
+| G-M6 | 層ごとの差分の敵対的レビュー（Opus） | 下記 |
+| G-M7 | `build.ps1`→`deploy.ps1` | 実機・配布用の写し・ビルド出力の 3 か所の SHA256 が一致（`9989e2ef…`）。Language 2 本も配置 |
+
+- 注意: pytest は `pyproject.toml` の `addopts = "-q"` に `-q` を重ねると集計行が出ない（`-o addopts=""` で回し直して数字を取った）。29.97fps の実ファイルのテスト 3 本は `@has_ffmpeg` 付きで、`PATH` に ffmpeg が無いと黙ってスキップされる。
+- **差分レビュー（3 層）**: Critical 0・Major 3・Minor 14。採否は「過剰設計か」「独立に裏取りできたか」の 2 つのふるい。
+  - ネイティブ（Major 1・Minor 4）: 採用 4＝RIGHTCLICK_REDESIGN_SPEC の改訂履歴の重複（第 27 版へ）・`bridge_core.h` の説明 2 か所・検証していないことを名乗る新設テスト 1 件の削除。見送り 1＝静止画と音声で fps が 0 になる確認を目視に足す案（Alpha Gen の入口は動画だけで、他の画面は fps を使わないため観測できない）。
+  - バックエンド（Major 1・Minor 4）: Major＝VFR 素材が実行時に失敗する（合成素材で実測。計画の決めどおり文書化と起票で受ける）。採用 4＝`finalize_alpha_matte` の docstring（出力 fps がエンジンの fps と約 1.6 倍以上離れると末尾に 1 コマ増える実測。今の丸めでは起きない）・`duration_seconds` のずれの事実を設計書 §3.5 の 1 か所に一本化・「1 回測り」の訂正・G-M5 の `PATH` の注記。見送り 2＝finalize 後のコマ数検査のコード・各コマの md5 比較のテスト（任意）。レビューで裏が取れた点: `output_fps=None` の命令は改修前と完全一致・時刻の打ち直しで 145 コマの md5 が全部一致・30000/1001 の素材の窓は開始 0 秒でも 3.37 秒でも要求どおりのコマ数。
+  - 操作パネル（Major 1・Minor 6）: Major＝Alpha Gen を表示したまま LTX 2.3 に切り替えるとタブは灰色になるのにパネルと生成ボタンが生きたままになる（出荷中のエンジンがサブタブを灰色にするのは今回が初めてで、サブタブ単位の戻し処理が無かった）→ `EditScreen` に戻しの effect 1 本と試験 1 本。採用 4＝開始 0 のとき使われない `trim_duration_sec` を外す・DEVLOG の不正確な 1 文・試験の古い説明文・欠けていた試験 2 本。見送り 2＝互換用の代わりの行で軽量モードの線が出る件（Create も同じ行で線を出すので例外を増やさない）・模擬が通す入力の緩さ（操作パネルは送らない）。
+
+### 153.4 実機ゲート（監督）
+
+- **G-S1 メニュー項目の登録**: 配置後に AviUtl2 を起動し `plugin.log` を読むと `register_object_menu_param: registered 19 item(s)`（同日の前回までの起動は 18）・`register_layer_menu_param: registered 5 item(s)`。確認後に AviUtl2 を閉じた。
+- **G-S2 元動画の fps のまま（29.97fps）**: `run.ps1` で実サーバーを起動（選択中のベースモデルは LTX 2.3 だったので `POST /pipeline/load` で LTX 2.5〔`redgraftLTX25Fast2K_ltx25RedgraftNSFW`〕へ切り替え・25 秒）。合成素材 `src_2997.mp4`（1280×768・75 コマ・`30000/1001`。灰色の背景を赤い四角が動く）を丸ごと上げ、`POST /generate/alpha` に `num_frames=49`・`light_mode=false`・`frame_rate` なしで送った。
+  - ジョブ `e8e51269-…`: 完了まで 147 秒。`metadata.alpha_gen`: `source_fps` 29.97002997・`output_fps` `"30000/1001"`・`resampled` 偽・`window_written_frames` 49・原寸（1280×768・`scale` 1.0・`canvas_tokens` 6,720・`budget_tokens` 19,380＝8bit の行）。`metadata.output`: `frame_rate` 30.0（内部要求の整数）・`duration_seconds` 1.633（整数 fps での値。設計書 §3.5）。
+  - ffprobe: `output.mp4`（h264）も `matte.mkv`（ffv1 gray）も `avg_frame_rate` が `30000/1001`・49 コマ。
+  - **VFR の合成素材** `src_vfr.mp4`（前半 30fps・後半 15fps・平均 `600/29`・60 コマ）を丸ごと上げて 49 コマを要求→ 1 秒で失敗: `GENERATION_FAILED: cut_window_mp4 wrote 47 frames but 49 were requested (start_frame=0, fps=20.689…, resampled=False)`。GPU は使われず、受付は通る（平均 fps で数えるため）。レビュー担当の合成素材（30→24fps・145 コマ要求で 134 コマ）と同じ症状。
+- **G-S3 進捗バー**: 上のジョブを 1 秒間隔で見て、`progress` は 12 回変化・単調増加・完了前の最大値 0.90・`stage1_denoise` の範囲 0.165〜0.90（0.06 の最初の点は 1 秒間隔で取りこぼし）。
+- **片づけ**: サーバーを停止し、`state.json` を退避したもの（LTX 2.3 が選択）に戻した。`config.yaml` は触っていない。目視用の合成素材 4 本（`src_2997.mp4`・`src_24.mp4`・`src_2997.mkv`・`src_vfr.mp4`）は `outputs/alphagen-stage2/`（git 管理外）に残した。
+
+### 153.5 観察と申し送り
+
+- オーナーの LTX 2.5 の選択（`redgraftLTX25Fast2K_ltx25RedgraftNSFW`）は `transformer_weight_class` が 8bit で、Alpha Gen の予算は 19,380 トークン（8bit の行）が使われた。§3-223（較正）の材料。
+- 受付で ffprobe が 2 回（`probe_fps_rational` と `_window_fit_detail` 内の `probe_fps`）、実行時に 1 回走る。時間は ffprobe 1 回分で、共有の関数の引数を増やさないほうを取った。
+- Media Foundation は mkv を開けないので、操作パネルの fps 欄は mkv で「不明」になる（想定どおり。生成はでき、サーバーが測る）。
+> **訂正（§153.7・§154）**: Windows 11 の Media Foundation は mkv を開く（`mfmkvsrcsnk.dll`）。ただし fps を半分の値で返したため、オーナーの目視 G2 で mkv が「14.985」と出た。手当ては §154。
+- ネイティブ担当の検証で `build\ninja-release\NzVideomni.aux2` が一時的に Web UI 埋め込みなし版になるが、配置前に通常の `build.ps1` で作り直した（`deploy.ps1` は埋め込みなし版を拒むので誤配置はしない）。
+- 生成ボタンを押すたびに窓を上げ直すので `uploads/` に同じ切り出しが増える（一時置き場なので許容。DEVLOG §132）。
+
+### 153.6 片づけと残るもの
+
+- **オーナーの目視**: CHECKLIST §4.26 の G1〜G12。合格したら台帳 §2-1・§2-2 を `PENDING_TASKS_CLOSED.md` へ移し、dev を main へ `--no-ff` で merge して push する。
+- 次: 第 3 弾＝出口（台帳 §1-86: 🎞 で RGBA を配置・💾・🪣）→ LoRA ウェイトの配布（§1-87）。研究課題は §3-222（直接入力）・§3-223（較正）・§3-225（VFR の受付時の拒否）。
+
+### 153.7 オーナーの目視（2026-10-14）
+
+- **結果**: G1・G3〜G12 合格。G2 は mp4 の 2 本（29.97・24）は合格、**mkv は「不明」の想定が「14.985」（正しい 29.97 のちょうど半分）と出て不合格**。記録は CHECKLIST §4.26。G4（29.97fps の素材でマットのコマがずれない）の合格で、§2-2（§1-88 の追補）の目視は済んだ（CLOSED 3-226）。
+- **G2 の原因（読み取りの範囲。実測は §154 の段階 0）**: 関数 `ProbeMediaFps`（`native/src/media_fps_probe.cpp`）は Media Foundation の native media type の `MF_MT_FRAME_RATE` をそのまま返すだけで、半分にする処理は無い。mkv の中身（`DefaultDuration` 33,366,666ns・SPS の `time_scale/num_units_in_tick`＝60000/1001）は正しい。設計の前提「Media Foundation は mkv を開けない」が誤りで、Windows 11 には `.mkv`／`.webm` 用の「MKV Byte Stream Handler」（`mfmkvsrcsnk.dll`）が登録されており、その Matroska ソースが半分の値を宣言していると考えられる。同じ関数を使う契約 v11 の右クリック `mediaFps` も mkv で同じ値を返すので、「Fps policy」が素材のとき 15fps で事前入力される既存の不具合がここで表に出た（`timeline/prefillSeed.ts:344-360`）。
+- **オーナーの裁定（4 点）**:
+  1. 文言: メニュー項目「🎬 Video: 透過用マットを作る (Alpha Gen)」→「🎬 Video: 背景透過（Alpha Gen）」。
+  2. 文言: 灰色時「Alpha Gen（マット作成）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。」→「Alpha Gen（背景透過）は、LTX 2.5専用の機能です。」（ベースモデル名を書く例外）。
+  3. 文言: 軽量モードの警告「1280*768未満の小さな動画では、背景除去の精度が悪化します。」→「軽量モードでは、小さな動画（1280*768未満）の背景除去の精度が悪化します。」
+  4. **設計の差し戻し**: 「快適上限を超えたら縮小して生成し元の寸法へ戻す」は誤り。快適上限を超えても生成は遅くなるだけで結果は（原則として）正しく、「遅くてもよいから高精度で」という需要がある。長い動画を快適に作りたいなら利用者が元動画を小さく切ればよい。勝手な縮小は利用者の選択肢を奪う。→ 縮小は**軽量モード ON のときだけ**。OFF は快適上限と無関係に**原寸**で生成する。理由の正本は設計書 §24（§154 で新設）。
+- **次**: 手直しの計画（`C:/Users/phenotype nezu/.claude/plans/imperative-painting-galaxy.md`・敵対的レビュー 13 件全採用）を承認のうえ実装（§154）。台帳 §2-1 は再確認項目を書き直して残す。main への merge は再確認の合格後。
+
+## 154. ★Alpha Gen 第 2 弾の目視後の手直し＝文言 3 点・設計の差し戻し「縮小は軽量モードだけ」・mkv の fps（Media Foundation の Matroska ソースが半分の値を返す）を実装・機械ゲート 4 環境 失敗 0・差分の敵対的レビュー 2 層（Critical 0・Major 2・Minor 11）・実機ゲート 2 点合格・オーナーの再確認は未実施（2026-10-14）
+
+### 154.1 結論
+
+- **オーナー目視（§153.7）で出た手直し 4 点を、承認済みの計画どおり実装しました。** 機械ゲート 4 環境は失敗 0、実機ゲート 2 点は合格です。配置と配布用 aux2 の更新も済んでいます。
+- **設計の差し戻し**: 「快適上限を超えたら縮小して元の寸法へ戻す」は**軽量モード ON のときだけ**になりました。OFF（既定・1 段原寸）は快適上限と無関係に原寸で生成します。実機で、線の 1.11 倍（1536×896×121 コマ）を OFF で送ると縮小せずに完走し（所要 18 分 20 秒）、ON で単発の線を超える 2048×1152×145 コマを送ると 1920×1080 に縮んで元の寸法で返りました（154.4）。
+- **mkv の fps**: 段階 0 の実測で、Windows の Media Foundation の Matroska ソース（`mfmkvsrcsnk.dll`）は mkv／webm の fps を**コーデックによらず本来の半分**で返すと分かりました（1 コマの長さを 2 倍に見た値。mp4／mov は正しい。別の属性に正しい値は無い）。手当ては「拡張子が `.mkv`／`.webm`／`.mk3d` なら Media Foundation を開かずに不明（0）を返す」の 1 条件で、契約 v11 の右クリック `mediaFps`（15fps で事前入力される既存の不具合）と v15 の `probeMediaInfo.fps` の両方が同時に直りました。契約の版は据え置き（0＝不明の契約の中の修正）。
+- **文言 3 点**: メニュー「🎬 Video: 背景透過（Alpha Gen）」／灰色時「Alpha Gen（背景透過）は、LTX 2.5専用の機能です。」（ベースモデル名を書く例外。規則のコメントに裁定を残した）／軽量モードの警告「軽量モードでは、小さな動画（1280*768未満）の背景除去の精度が悪化します。」。快適上限の線の説明文は軽量モードの ON・OFF で切り替える（OFF＝「大幅に遅くなることがあります（線は目安）」・ON＝「超えると縮小して元の寸法へ戻します」）。
+- **オーナーの再確認は未実施です。** 項目はフロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26 の再確認①〜⑥（台帳 §2-1）。
+- 設計の正本: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §3（作業寸法）・§24（快適上限は情報であって制約ではない＝理由の正本）、仕様書 v0.5.88、フロントエンド `BRIDGE_CONTRACT.md`（§4.13・§4.22・§8 の注記）、`DEVLOG.md` §133。計画は `C:/Users/phenotype nezu/.claude/plans/imperative-painting-galaxy.md`（計画段階の敵対的レビュー 13 件は全部採用）。
+
+### 154.2 実装
+
+**dev の 8 コミット**（担当は Opus 3 体の並行＝バックエンド／ネイティブ〔段階 0 の実測から〕／操作パネル。コミットは監督）:
+
+| コミット | 中身 |
+|---|---|
+| `edac306` | 記録: CHECKLIST §4.26 の結果・§153.7・§2-2（§1-88）を CLOSED 3-226 へ |
+| `cee56ee` | 操作パネルの文言とヒント（灰色時・軽量モードの警告・線の説明をモードで切り替え・試験・DEVLOG §132 の現行化と §133） |
+| `b8a4508` | メニュー項目の日本語名（Language ja・RIGHTCLICK_REDESIGN_SPEC §3-4 #24・第 28 版） |
+| `550f35b` | mkv の fps（`ProbeMediaFps` の Matroska の判定・試験・コメントの現行化・BRIDGE_CONTRACT・`bridge/types.ts`） |
+| `62894b0` | 配布用 aux2 |
+| `8810923` | 縮小は軽量モードだけ（`light_mode_budget()`・OFF は予算 None・MCP の案内・コメント・テスト） |
+| `7a6da16` | 設計変更の文書（設計書 §3／§4／§6／§9／§16／§22／§24・仕様書 v0.5.88・COMFORT §9.5・API_REFERENCE） |
+| （本節） | §154・DEVLOG §133.5（mkv）・台帳（§2-1 の再確認項目・§3-223・§1-82）・CHECKLIST の再確認項目と一覧表 |
+
+### 154.3 機械ゲートと差分の敵対的レビュー
+
+| 門 | 内容 | 結果 |
+|---|---|---|
+| G-M1 | ネイティブ `scripts\build.ps1 -RunTests`（Web UI 埋め込みあり） | 388 件合格・失敗 0・スキップ 6（アサーション 1,986） |
+| G-M2 | `npm run typecheck` | エラー 0 |
+| G-M3 | `npm run lint` | 終了コード 0・警告 31（不変） |
+| G-M4 | `npx vitest run --exclude "**/backend.integration.test.ts"` | 157 ファイル 3,194 件中 3,193 合格・1 失敗。失敗は `modes/toolbox/ObjectTrackingSection.test.tsx` の「calls timeline.cancelTracking when Stop is pressed」で、単独では 3 回とも合格・担当の実行では全件合格＝本改修と無関係の不安定（台帳 §1-82 に追記） |
+| G-M5 | アプリ venv の pytest 全件（`PATH` 先頭に `tools\ffmpeg\bin`・`-o addopts=""`・既知の 1 件を除外） | 3,230 件合格・63 件スキップ（既存分）・失敗 0 |
+| G-M6 | 差分の敵対的レビュー（Opus・2 層） | 下記 |
+| G-M7 | `build.ps1`→`deploy.ps1` | 実機・配布用の写し・ビルド出力の 3 か所の SHA256 が一致（`cbf56ded…`）。Language 2 本も配置 |
+
+- **差分レビュー**: Critical 0・Major 2・Minor 11。採用 13・棄却 0（2 つのふるい: 過剰設計か／独立に裏取りできたか）。
+  - ネイティブ＋操作パネル（Major 1・Minor 4）: Major＝試験の文字列 `L"dir.mkv\clip"` の `\c` が C++ のエスケープとして無効で（C4129）、「フォルダ名に点がある場合は対象外」の分岐を一度も通っていなかった（ビルド済み exe の UTF-16 検索で裏取り）→ `\\c` に。Minor＝古い理由が残るコメント 2 か所・契約書の見出しの mk3d・行の折り返し。未確認 2 点（末尾が点のパス・拡張子を mp4 に偽装した mkv）は実害が考えにくく対応なし。
+  - バックエンド（Major 1・Minor 7）: Major＝MCP の案内「元動画を短く切って渡してください」はサーバーが窓で切る仕組みと合わない（全長は負荷に無関係）→「`num_frames` を減らすか、解像度の小さい元動画を」。Minor＝新設テストが旧コードでも通る（ON も送って見分ける）・縮小前提のコメント 2 か所・死んだ条件の引き算・API_REFERENCE の最終更新と文言・「オーナー確認済み」の言い回しを実際（10-07 の裁定と 10-14 の計画承認）に合わせ理由の正本を §24 に一本化・例の表に値の正本の 1 句・OFF でも範囲検査が効く試験と MCP の「4096 以下」。
+  - レビューで裏が取れた点: `light_mode_budget()` の行の選び方は改名前と同じ／OFF で 3840×2160・4096×2160 は形の検査を通り 4096 超は 422／設計書 §3.1 の例の値は `alpha_gen_geometry` の再計算と全件一致／§24 の数字の出典（§151.3 B4・API の 4096・§4-34）は実在。
+
+### 154.4 実機ゲート（監督）
+
+- **段階 0（mkv の fps の実測）**: スクラッチ領域に `media_fps_probe.cpp` をリンクした印字プログラムを作り、`src_2997.mp4` から作った 12 本を測った（`MF_MT_FRAME_RATE` は約分前の値）。
+
+| 素材 | ffprobe の avg | `ProbeMediaFps`（修正前） | `MF_MT_FRAME_RATE` |
+|---|---|---|---|
+| a 元の `src_2997.mkv`（h264・B フレームあり） | 30000/1001 | 14.985022 | 1498502247/100000000 |
+| b 元の `src_2997.mp4`（対照） | 30000/1001 | 29.970030 | 30000/1001 |
+| c mp4 を `-c copy` で mkv へ | 30000/1001 | 14.985022 | 同 a |
+| d libx264 `-bf 0`（B フレームなし）の mkv | 30000/1001 | 14.985022 | 同 a |
+| e1／e2 SPS の時刻情報を 30000/1001・120000/1001 に書き換えた mkv | 30000/1001 | 14.985022 | 同 a |
+| f 30fps の mkv／g 24fps の mkv | 30/1／24/1 | 15.000015／12.000005 | 1500001500／1200000480 ÷10^8 |
+| h ffv1 gray の mkv（`matte.mkv` と同じ形） | 30000/1001 | false（native video media type なし） | ― |
+| i vp9 の webm | 30000/1001 | 14.985022 | 同 a |
+| j `-c copy` の mov／k `-c copy` の mp4／l 時刻情報を書き換えた mp4 | 30000/1001 | 29.970030 | 30000/1001 |
+
+  - 半分の値はコンテナが宣言する 1 コマの長さ（33,366,666ns）を 2 倍に見た値と一致し、B フレームの並べ替えや h264 の時刻情報の誤読ではない（時刻情報を書き換えても変わらない）。`MF_MT_FRAME_RATE_RANGE_MAX/MIN` とインターレース種別はすべて未設定で、別の 1 属性で直す道（計画の分岐 (a)）は無い→分岐 (b)。
+  - レジストリ `ByteStreamHandlers` で Matroska の部品に登録されている拡張子: `.mkv`・`.webm`・`.mk3d`・`.mka`・`.mks`・`.weba`（32bit 側も同じ）。動画でない `.mka`／`.mks`／`.weba` は v15 が `video_track_num` で先に弾き、v11 は動画オブジェクトの分岐の中だけなので、判定は `.mkv`・`.webm`・`.mk3d` の 3 つ。
+  - 修正後の関数をつないだ印字プログラムで、a と i は Matroska 用の理由で false、b と j は 29.970030 のまま。
+  - 印字プログラムの置き場所: スクラッチ領域 `mfprobe\`（`probe_main.cpp`・`build.bat`・素材 `media\`・結果 `out_*.txt`）。git 管理外。
+- **G-S4 設計変更**（`run.ps1` で実サーバー。LTX 2.5 は `POST /pipeline/load` で REDGraft〔8bit・`alpha_gen_budget` 19,380・`single_budget` 38,760〕へ切り替え）:
+  - **(a) 軽量 OFF・線の 1.11 倍**: 合成素材 `src_1536x896.mp4`（1536×896・30fps・135 コマ）で 121 コマ→ ジョブ `9fc12005-…` 完走・**所要 1,100 秒（18 分 20 秒）**。`metadata.alpha_gen`: `mode` one_stage・`working` 1536×896（＝元寸）・`canvas` 1536×896・`scale` 1.0・`budget_tokens` null・`canvas_tokens` 21,504。出力 2 本とも 1536×896・121 コマ・30/1。進捗は 0.165→0.90 まで単調。30 分の打ち切りにはかからなかった。
+  - **(b) 軽量 ON・単発の線を超える**: `src_2048x1152.mp4`（2048×1152・30fps・150 コマ）で 145 コマ→ ジョブ `64a94d31-…` 完走・323 秒。`working` 1920×1080・`canvas` 1920×1088（`pad_bottom` 8）・`scale` 0.9375・`budget_tokens` 38,760・`canvas_tokens` 38,760。出力 2 本とも元の 2048×1152・145 コマ。
+- **G-S5 mkv**: 上の段階 0 の表と、単体テスト（4 拡張子が false・理由の文字列・フォルダ名の点は対象外）。
+- **片づけ**: サーバーを停止し、`state.json` を退避したもの（LTX 2.3 が選択）に戻した。`config.yaml` は触っていない。合成素材は `outputs/alphagen-stage2/` に 6 本（`src_2997.mp4`・`src_24.mp4`・`src_2997.mkv`・`src_vfr.mp4`・`src_1536x896.mp4`・`src_2048x1152.mp4`。git 管理外）。
+
+### 154.5 観察と申し送り
+
+- **OFF で線を超えたときの遅さの最初の実測**: 8bit の行で線の 1.11 倍（21,504 トークン）が 18 分 20 秒。§152.4 の線の下（1280×768×121 コマ＝18,240 トークン・0.94 倍）は 292 秒だったので、約 1.2 倍のトークンで約 3.8 倍の時間。既定の操作（FHD×81 コマ＝22,440 トークン・1.16 倍）も線を超えるので、8bit の線の較正（台帳 §3-223）の価値は高い。
+- 契約 v11 の右クリック `mediaFps` は、mkv をタイムラインに置いた場合これまで 15fps 前後の誤った値で事前入力されていた（「Fps policy」が素材のとき）。今回の修正でプロジェクトの fps に戻る。実機での右クリックの再現は行っていない（関数が同じなので単体テストと段階 0 の実測で足りると判断）。
+- `_alpha_window.mp4` と `alpha_reference.mp4` は中間ファイルで、完了後も `outputs/<job>/` に残る（第 1 弾から同じ）。
+
+### 154.6 片づけと残るもの
+
+- **オーナーの再確認**: CHECKLIST §4.26 の再確認①〜⑥。合格したら台帳 §2-1 を `PENDING_TASKS_CLOSED.md` へ移し、dev を main へ `--no-ff` で merge して push する。
+- 次: 第 3 弾＝出口（台帳 §1-86）→ LoRA ウェイトの配布（§1-87）。研究課題は §3-222・§3-223（8bit の線）・§3-225（VFR の受付時の拒否）。
+
+### 154.7 オーナーの再確認（2026-10-14）と表示の再指示
+
+- **結果**: 再確認①（mkv の fps が「不明」）・②（メニュー名）・④（軽量モードの警告）・⑤（灰色時の文言）は合格。③と⑥は未実施。
+- **表示の再指示**: スライダーの下の説明文「この線を超えると、生成が大幅に遅くなることがあります（線は目安です。縮小はせず、原寸のまま生成します）。」は「この線」が何を指すか分からないので削除し、Single タブ（Create）と同じく**快適上限マーカーを超えたときだけ**「VRAM溢れにより生成が遅くなる可能性があります。」を出す。
+- **監督の決定**: 軽量モード ON の説明文（「軽量モードでは、この線までは…」）も同じ「この線」の問題があるので削除し、同じ仕組み（`DurationField` の超えたときの帯。Create と同じ部品）で文面だけ「軽量モードでは、この条件は縮小して生成し、元の寸法へ戻します。」にする。説明文は 2 本とも無くなり、注意は 1 つの帯に一本化される。OFF の文面は Create の文字列をそのまま参照する（複製しない）。実装と門は 154.8。
+
+### 154.8 表示の再指示の実装（説明文を削除し、線を超えたときだけ注意）
+
+- **実装**（dev `0b5ed0c`）: `useAlphaGenForm` に `isOverComfort`（線があり、つまみが線より上）を 1 つ足し、`AlphaGenPanel` は説明文を消して `DurationField` の既存の帯（Create と同じ部品・同じ「超えたときだけ」の条件）に `isOverSpillThreshold`／`spillWarningText` を渡す。文面は軽量モード OFF では Create の `single.comfortWarningSmart` をそのまま参照、ON では新しい鍵 `lightModeShrinkWarning`。説明文の鍵 2 本は削除（引き算）。試験: 線より下では帯なし・超えると OFF は Create の文・ON は縮小の文・説明文は出ない（1920×1080 の線 81 コマ／2560×1440 の線 OFF 41 コマ・ON 89 コマを `comfortFramesForBudget` で検算）。
+- **機械ゲート**: typecheck 0／lint 警告 31（不変）／vitest 157 ファイル 3,196 件合格・失敗 0／ネイティブ（埋め込みありビルド）388 件合格。
+- **差分の敵対的レビュー**（Opus）: 実装・試験・設計書 §9.2 は問題なし。採用 1＝DEVLOG §132.1 に残った旧い説明文への訂正行。見送り 2＝§133 を書き換えた形（書いている途中の節なので可）・`DurationField` の型コメント「Create-only」が実態（Alpha Gen も帯を使う）と合わない点（範囲外。次にこのファイルを触るときに直す）。
+- **配置**: ビルド出力は `c7baf2f5…`。`deploy.ps1` はオーナーの AviUtl2 が起動中（PID 36816）のため配置を拒んだ。配置と配布用 aux2 の更新は、AviUtl2 を閉じてから行う（154.9 に追記）。
+- **オーナーの再確認**: CHECKLIST §4.26 の再確認③（書き直し後）と⑥。
+
+### 154.9 配置（2026-10-14・オーナーが AviUtl2 を閉じた後）
+
+- `deploy.ps1` で実機（`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\`）と配布用の写し（`AviUtl2-Plugin\NzVideomni.aux2`）に配置し、Language 2 本も配置した。3 か所の SHA256 は `c7baf2f5…` で一致（ビルド出力と同じ）。配布用 aux2 のコミットは dev `5a9a5e1`。
+- これで表示の再指示まで含めた第 2 弾の手直しは、オーナーの再確認③と⑥を残して完了。
+
+### 154.10 オーナーの再確認 全合格（2026-10-14）と第 2 弾の完結
+
+- 再確認③（説明文が無く、線より下では注意が出ず、超えると軽量 OFF は Create の文・ON は縮小の文）と⑥（軽量 OFF で快適上限を超えるフレーム数を `src_2048x1152.mp4` で生成し、通常より長い時間をかけて完走）が合格。①②④⑤は 154.7 のとおり合格。これで §4.26 は全項目合格。
+- **第 2 弾（操作パネル）は完結。** 台帳 §2-1 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-227 へ移し、dev を main へ `--no-ff` で merge して push した（merge の記録は git の履歴）。
+- 次: 第 3 弾＝出口（台帳 §1-86）→ LoRA ウェイトの配布（§1-87）。研究課題は §3-222・§3-223（8bit の線の較正）・§3-225（VFR の受付時の拒否）。

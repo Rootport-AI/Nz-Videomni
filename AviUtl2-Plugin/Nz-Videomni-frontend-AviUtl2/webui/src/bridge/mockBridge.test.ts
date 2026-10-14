@@ -671,6 +671,77 @@ describe("MOCK_CONFIG_BODY.limits <-> FALLBACK_APP_CONFIG.limits parity (B-1)", 
       [43344, 43648],
     ]);
     expect(profile.outpaint_budget).toBe(46080);
+    // Alpha Gen (第 1 弾・暫定値): half of each row's single line; the ltx rows
+    // carry none (`null` = no line). Mirrors `scripts/manifests/20-ltx25.json`.
+    expect(profile.rows.map((row) => row.alpha_gen_budget)).toEqual([23460, 19380, 21672]);
+    expect(MOCK_CONFIG_BODY.limits.comfort_budgets.ltx.rows.every((row) => !("alpha_gen_budget" in row))).toBe(true);
+  });
+});
+
+// Alpha Gen 第 2 弾: contract v15's `fps` on `fs.probeMediaInfo`.
+describe("fs.probeMediaInfo — fps (contract v15)", () => {
+  it("answers 0 (unknown) by default and the raw rate when one is given", async () => {
+    const plain = await createMockBridge({ delayMs: 0 }).request("fs.probeMediaInfo", { filePath: "C:\v.mp4" });
+    expect(plain.fps).toBe(0);
+    const ntsc = await createMockBridge({ delayMs: 0, probeMediaInfoFps: 29.97 }).request("fs.probeMediaInfo", {
+      filePath: "C:\v.mp4",
+    });
+    expect(ntsc.fps).toBe(29.97);
+  });
+});
+
+// Alpha Gen 第 2 弾: `POST /generate/alpha` (Docs/API_REFERENCE.md §5.5).
+describe("POST /generate/alpha", () => {
+  const BODY = { reference_video_id: "mock-video-1", window_start_sec: 0, num_frames: 81, seed: -1, light_mode: false };
+
+  async function postAlpha(bridge: ReturnType<typeof createMockBridge>, body: object) {
+    return bridge.request("backend.request", { method: "POST", path: "/api/v1/generate/alpha", body });
+  }
+
+  async function ltx25Bridge(options: Parameters<typeof createMockBridge>[0] = {}) {
+    const bridge = createMockBridge({ delayMs: 0, ltx25Install: "full", ...options });
+    const loaded = await bridge.request("backend.request", {
+      method: "POST",
+      path: "/api/v1/pipeline/load",
+      body: { base_model: "LTX25" },
+    });
+    expect(loaded.status).toBe(200);
+    return bridge;
+  }
+
+  it("refuses LTX 2.3 with the server's FEATURE_UNSUPPORTED envelope (alpha_gen)", async () => {
+    const result = await postAlpha(createMockBridge({ delayMs: 0 }), BODY);
+    expect(result.status).toBe(422);
+    const error = (result.body as { error: { code: string; message: string } }).error;
+    expect(error.code).toBe("FEATURE_UNSUPPORTED");
+    expect(error.message).toContain("'alpha_gen'");
+  });
+
+  it("accepts on LTX 2.5 with a 202 and records the server's internal request", async () => {
+    const bridge = await ltx25Bridge({ probeMediaInfoWidth: 1000, probeMediaInfoHeight: 540, probeMediaInfoFps: 29.97 });
+    const result = await postAlpha(bridge, BODY);
+    expect(result.status).toBe(202);
+    const jobId = (result.body as { job_id: string }).job_id;
+    const job = await bridge.request("backend.request", { method: "GET", path: `/api/v1/jobs/${jobId}` });
+    // The job echo is the fixture's whitelisted per-clip request, so only the
+    // fields it carries are pinned here: the one-space prompt, the pinned LoRA,
+    // the 64-grid canvas and the fps rounded the server's way.
+    const request = (job.body as { request: Record<string, unknown> }).request;
+    expect(request).toMatchObject({
+      prompt: " ",
+      loras: [{ name: "alpha-gen", strength: 1.0 }],
+      width: 1024,
+      height: 576,
+      num_frames: 81,
+      frame_rate: 30,
+    });
+  });
+
+  it("refuses a missing upload id and an off-grid / out-of-range frame count", async () => {
+    const bridge = await ltx25Bridge();
+    expect((await postAlpha(bridge, { ...BODY, reference_video_id: "" })).status).toBe(422);
+    expect((await postAlpha(bridge, { ...BODY, num_frames: 80 })).status).toBe(422);
+    expect((await postAlpha(bridge, { ...BODY, num_frames: 153 })).status).toBe(422);
   });
 });
 
@@ -724,8 +795,12 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // embeddings processor, a component 2.3's pipeline does not have, so 2.3 is
     // the engine that refuses it — the first field it has ever refused, and the
     // first time this mechanism has pointed at the OLDER engine.
+    // Alpha Gen (2026-10-07): the second name, in the server's own order
+    // (`services/engines/ltx/adapter.py`'s REJECT_TABLE) — the alpha-gen
+    // IC-LoRA is an LTX 2.5 adapter.
     expect(body.base_models.find((b) => b.id === "LTX23")?.unsupported_features).toEqual([
       "keep_resident_embeddings",
+      "alpha_gen",
     ]);
   });
 

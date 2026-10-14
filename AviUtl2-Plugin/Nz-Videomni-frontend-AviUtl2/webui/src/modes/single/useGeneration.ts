@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BridgeError } from "../../bridge";
 import { apiClient as defaultApiClient, BackendApiError } from "../../api/client";
 import type { ApiClient } from "../../api/client";
-import type { GenerateChainRequest, GenerateRequest } from "../../api/types";
+import type { AlphaGenRequestBody, GenerateChainRequest, GenerateRequest } from "../../api/types";
 
 /** Submit-only lifecycle (U-R1): the backend runs a single job at a time with
  * no queue, and the job list itself is now owned by the job ledger
@@ -54,6 +54,15 @@ export interface UseGenerationSubmitResult {
   /** Same lifecycle as `submit`, but through `POST /generate/chain`
    * (Docs/API_REFERENCE.md §3.13) — Chain mode and Create's A2V fast path. */
   submitChain: (request: GenerateChainRequest) => void;
+  /** Alpha Gen 第 2 弾: same lifecycle, through `POST /generate/alpha`. Takes
+   * a PREPARE step rather than a body, because the body is only known after
+   * the source window has been uploaded (`useAlphaGenForm.prepareRequest`):
+   * the state is `submitting` from the click on, and when `prepare` resolves
+   * `null` (the upload failed — the form shows why) nothing is sent and the
+   * state returns to `idle`. If the screen was rebuilt while `prepare` was
+   * running (a right-click remount), the old instance sends nothing — the
+   * same `mountedRef` guard every other path here uses. */
+  submitAlpha: (prepare: () => Promise<AlphaGenRequestBody | null>) => void;
   reset: () => void;
 }
 
@@ -87,12 +96,19 @@ export function useGenerationSubmit(deps: UseGenerationSubmitDeps = {}): UseGene
     onFailedRef.current = deps.onFailed;
   }, [deps.onFailed]);
 
-  const begin = useCallback((fire: () => Promise<{ job_id: string }>) => {
+  // `fire` may resolve `null` for "nothing was sent" (only `submitAlpha`'s
+  // prepare step does) — that is neither a success nor a failure, so the
+  // state just goes back to `idle`.
+  const begin = useCallback((fire: () => Promise<{ job_id: string } | null>) => {
     setSubmitState({ phase: "submitting" });
     void (async () => {
       let jobId: string;
       try {
         const accepted = await fire();
+        if (accepted === null) {
+          if (mountedRef.current) setSubmitState({ phase: "idle" });
+          return;
+        }
         jobId = accepted.job_id;
       } catch (err) {
         // X2(a): roll back a stranded right-click reservation FIRST — before the
@@ -132,7 +148,20 @@ export function useGenerationSubmit(deps: UseGenerationSubmitDeps = {}): UseGene
     [begin, client],
   );
 
+  const submitAlpha = useCallback(
+    (prepare: () => Promise<AlphaGenRequestBody | null>) =>
+      begin(async () => {
+        const body = await prepare();
+        // The upload is awaited inside `prepare`, so the screen may have been
+        // rebuilt meanwhile: a stale instance must not send (the same
+        // `mountedRef` rule `begin` applies to its own state updates).
+        if (body === null || !mountedRef.current) return null;
+        return client.generateAlpha(body);
+      }),
+    [begin, client],
+  );
+
   const reset = useCallback(() => setSubmitState({ phase: "idle" }), []);
 
-  return { submitState, submit, submitChain, reset };
+  return { submitState, submit, submitChain, submitAlpha, reset };
 }

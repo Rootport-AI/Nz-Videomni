@@ -817,7 +817,8 @@ class PipelineManager:
 
             # Alpha Gen (POST /generate/alpha builds this request; LTX 2.5
             # only). Cut the window, scale it to the working size the endpoint
-            # fitted under the comfort budget, pad it black to the canvas on the
+            # chose (the source size, or in light mode the size fitted under
+            # the single comfort budget), pad it black to the canvas on the
             # right/bottom, and hand THAT to the runner as the reference video --
             # the same path substitution the outpaint/inpaint blocks above use,
             # and for the same reason both intermediates land next to the output
@@ -829,13 +830,22 @@ class PipelineManager:
             alpha_source_size = None
             if job.request.alpha_gen is not None:
                 ag = job.request.alpha_gen
+                # The source's own fps, measured by the endpoint. The window is
+                # cut and padded at it (no conversion) and the deliverables are
+                # written at it; job.request.frame_rate is only the integer the
+                # engine runs with (Docs/ALPHAGEN_DESIGN.md §23).
+                if ag.source_fps is None or ag.output_fps is None:
+                    raise generation_failed(
+                        job_id=job.job_id,
+                        detail="alpha_gen is missing the source fps (source_fps / output_fps)",
+                    )
                 window_path = output_dir / "_alpha_window.mp4"
                 cut = video_io.cut_window_mp4(
                     reference_video_path,
                     window_path,
                     float(ag.window_start_sec),
                     job.request.num_frames,
-                    job.request.frame_rate,
+                    ag.source_fps,
                 )
                 # The SOURCE size is measured on the cut window, not on the
                 # upload: the window is what the matte is delivered against, so
@@ -878,7 +888,7 @@ class PipelineManager:
                     canvas_height=job.request.height,
                     pad_left=0,
                     pad_top=0,
-                    frame_rate=job.request.frame_rate,
+                    frame_rate=cut["source_fps"],
                     num_frames=job.request.num_frames,
                     scale=(work_w, work_h),
                     color="black",
@@ -895,6 +905,7 @@ class PipelineManager:
                     "source_width": source_size[0],
                     "source_height": source_size[1],
                     "source_fps": cut["source_fps"],
+                    "output_fps": ag.output_fps,
                     "resampled": cut["resampled"],
                     "window_start_sec": float(ag.window_start_sec),
                     "window_start_frame": cut["start_frame"],
@@ -971,6 +982,7 @@ class PipelineManager:
                         target=alpha_source_size,
                         preview_mp4=output_dir / "output.mp4",
                         matte_mkv=output_dir / "matte.mkv",
+                        output_fps=alpha_provenance["output_fps"],
                     )
                 except Exception:
                     # No half-written deliverables and no large crf-0 canvas

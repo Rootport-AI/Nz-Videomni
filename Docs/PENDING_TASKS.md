@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-13（§1-85 の fps の規則を更新・§1-88 を新設）。
+- 作成: 2026-07-15／最終更新: 2026-10-14（§2-1〔元 §1-85・Alpha Gen 第 2 弾〕と §2-2〔元 §1-88〕を目視合格で CLOSED 3-227・3-226 へ移し、§2 は空になったので節ごと削除）。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
@@ -20,20 +20,14 @@
 - **概要**: 操作パネルのテスト `webui/src/App.nag.test.tsx` の 2 件（"bridge capture — NAG on …" と "bridge capture — VSF method selected …"）が、ときどき落ちる。前のテストが送ったジョブが、アプリ全体で共有されるモックの中でまだ実行中のことがあり、「生成」ボタンが "Busy…" になっていて見つからないため。モックのジョブの進み具合は既定 2 秒のポーリングで決まるのでタイミング次第で、Repeat count（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-219）の改修の前後とも 20 回中 4〜5 回落ちる（この改修とは無関係の既存の不具合）。
   - もう 1 件、`webui/src/jobs/JobsContext.test.tsx` の "cancelJob marks the job as cancelling until it settles into cancelled, then clears" が、テスト全体の実行では 3 回中 1 回落ち、このファイル単独では 5 回とも通る。Repeat count の改修では触っていないファイルで、原因は未調査（`App.nag.test.tsx` の共有モックの持ち越しとは別の理由の可能性がある）。
 - **直し方の候補**: `App.nag.test.tsx` は、`afterEach` で共有モックのジョブを `listJobs` で終わりまで進める後片付けを足す（`webui/src/modes/single/SingleScreen.repeat.test.tsx` で採った方法）。`JobsContext.test.tsx` は原因の特定から。
+- **追記（2026-10-14）**: `webui/src/modes/toolbox/ObjectTrackingSection.test.tsx` の "calls timeline.cancelTracking when Stop is pressed" も、全件の実行で 1 回落ち、単独では 3 回とも合格した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §154.3）。同型の不安定として本項に含める。
 - **範囲**: テストのみ（製品コードは不変）。
-
-### 1-85. Alpha Gen 第 2 弾＝操作パネル（Edit→Alpha Gen サブタブ）（起票：2026-10-07）
-
-- **概要**: Edit タブに「Alpha Gen」サブタブを置き、Alpha Gen 第 1 弾の `POST /generate/alpha` を画面から使えるようにする（入力欄はドラッグ＆ドロップと右クリック送付・fps 欄は元動画の fps の表示のみ・フレーム数スライダー・注意書き 2 つ・後処理カード）。決定事項は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §9。
-- **fps の規則**: マットは元動画ファイルの fps のまま変換せずに作り（右クリック送付もドラッグ＆ドロップも同じ）、タイムラインには元動画と同じ位置に置く。切り出しは再生位置（元動画の時刻）からスライダー分のコマ数、秒数の表示はコマ数÷元動画の fps。理由は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) 第 2 部 §23。
-- **一緒に行うこと**: 画面側の隠し名簿 `UI_HIDDEN_CONTROL_LORA_NAMES` に `alpha-gen` を足す／模擬サーバーの `MOCK_UNSUPPORTED_FEATURES` の LTX 2.3 に `alpha_gen` を足す／進捗バーの対応表（1 段原寸モードはデコード中に 50％で止まって見える）の扱いを決める／高速化の鍵を他のジョブと同じく送る。
-- **範囲**: 操作パネル（`webui/`）とプラグイン。
 
 ### 1-86. Alpha Gen 第 3 弾＝出口（🎞・💾・🪣）（起票：2026-10-07）
 
 - **概要**: マットから透過つきの動画を作り、タイムラインへ置く（🎞）・保存する（💾）、クロマキー用に一色で塗った動画を見せる（🪣）。🎞 と 💾 は ProRes 4444 の MOV 1 本を共用する。決定事項は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10。
 - **最初の関門**: L-SMASH Works（r1281）で、設定 `colorspace=0` のまま ProRes 4444 の MOV が透過つきで読めるかを AviUtl2 の実機で確かめる。
-- **着手の条件**: §1-85 の完了。
+- **着手の条件**: 第 2 弾（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-227）の完了。**満たした（2026-10-14）。**
 - **範囲**: バックエンド（合成）・操作パネル・プラグイン（挿入経路にある拡張子 `.mp4` の決め打ち 3 箇所）。
 
 ### 1-87. Alpha Gen の LoRA ウェイトの配布（起票：2026-10-07）
@@ -41,13 +35,6 @@
 - **概要**: `alpha-gen` の LoRA ファイル（約 1.3GB）を利用者がどう入手するかを決める。第 3 弾（§1-86）の完成後に改めて検討する。
 - **論点**: ①オーナーの Hugging Face での再配布が、ライセンス（LTX-2.x Community License）上許されるか。②インストーラのマニフェストに取得の行を足すか。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §11、[`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md) 1.7 節。
-
-### 1-88. Alpha Gen 第 1 弾の追補: 出力ファイルの fps を元動画の正確な値で書く（29.97fps など）（起票：2026-10-13）
-
-- **概要**: 29.97fps（30000/1001）のような整数でない元動画では、エンジンへは既存の規則で丸めた整数の fps を渡したままでよいが、出来た `output.mp4` と `matte.mkv` の fps は元動画と同じ正確な値で書く。第 2 弾の「マットは元動画の fps のまま」の規則（§1-85）で、元動画とマットのコマの 1 対 1 を保つため。
-- **直し方の候補**: `finalize_alpha_matte`（`services/video_io.py`）に出力 fps の引数を足し、`run_job` が窓の元 fps を渡す（小さな変更の見込み）。
-- **範囲**: バックエンドのみ。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §152.7、[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §9.2。
 
 ---
 
@@ -74,6 +61,14 @@
 - **概要**: 物体追尾は1フレームごとに枠の形状を決めるため、動画によってはマスクの縁が痙攣するようにちらつく。直前の形状から滑らかに変化させる方法を研究する。
 - **出典**: オーナー発案（Inpainting実機ゲート中の観察）。
 - **状態**: 将来の研究課題（着手時期未定）。
+
+#### 3-225. Alpha Gen: 可変フレームレート（VFR）の素材を受付の時点で断る（起票：2026-10-13）
+
+- **概要**: Alpha Gen は元動画の fps のまま変換せずに扱うため、可変フレームレートの素材では受付（窓の判定は平均の fps で数える）は通るが、実行時の窓の切り出しでコマ数が合わず失敗する（制限の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §3）。利用者には実行後の失敗ではなく、受付の時点で 422 と分かる文言で断るほうが親切。
+- **直し方の候補**: 受付で ffprobe の `avg_frame_rate` と `r_frame_rate` が一致しなければ 422（mp4 の VFR はこれで見分けられる。webm の VFR は両方とも同じ値を返すので見分けられず、完全ではない）。
+- **範囲**: バックエンド（`api/generate_alpha.py`）と、操作パネルの文言。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153（差分レビューと実機ゲート G-S2 の実測）。
+- **状態**: 将来の改修項目（着手はオーナー判断待ち。AviUtl2 のコマの並べ方と 1 対 1 に対応づけられない以上、正しい手当ては「固定フレームレートに変換してから使う」の案内）。
 
 ### 研究課題（上の改修項目より優先度が下）
 
@@ -228,7 +223,7 @@
 
 #### 3-223. Alpha Gen の快適上限の較正（Q6_K・8bit を含む）（起票：2026-10-07）
 
-- **概要**: Alpha Gen の 1 段原寸モードの予算 `alpha_gen_budget` は暫定値で、種別ごとの単発の線の半分（4bit 23,460・Q6_K 21,672・8bit 19,380）を置いている。ゲート 0 で測ったのは 4bit（Q4_K_M）だけなので、Q6_K・8bit を含めて較正する。
+- **概要**: 操作パネルの Alpha Gen で軽量モード OFF のときに引く快適上限の線の値 `alpha_gen_budget` は暫定値で、種別ごとの単発の線の半分を置いている（値の正本は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5）。サーバーはこの値で縮小しなくなった（縮小は軽量モード ON のときだけ。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153.7）ので、この値の役目は「ここを超えると遅くなる」という目安の線だけになった。ゲート 0 で測ったのは 4bit（Q4_K_M）だけなので、Q6_K・8bit を含めて較正する。既定の操作（FHD・81 コマ・8bit）でも線を超える（[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §24）ため、8bit の線は特に測る価値が高い。
 - **判断材料**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151（負荷は生成側＋参照側の合計トークンで効くという見立て）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §6・§16。
 - **状態**: 将来の研究課題（着手時期未定）。

@@ -147,8 +147,9 @@ describe("AppShell — base-model feature scope", () => {
     // injected. The names are added to the published list rather than the test
     // being re-pointed at a different tab every time the engine grows. What is
     // under test is the BOUNCE, not today's feature list (that is
-    // `bridge/mockBridge.test.ts`'s job).
-    const { select } = await renderApp(AS_LTX25, ["retake", "outpaint", "inpaint"]);
+    // `bridge/mockBridge.test.ts`'s job). Alpha Gen 第 2 弾 made it four
+    // sub-modes, so `alpha_gen` is injected too (2.5 runs it).
+    const { select } = await renderApp(AS_LTX25, ["retake", "outpaint", "inpaint", "alpha_gen"]);
     const user = userEvent.setup();
 
     await user.click(tab("Edit"));

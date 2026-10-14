@@ -19,6 +19,7 @@ import logging
 import pytest
 
 from engine import progress_shim
+from services.engines.ltx.adapter import _progress_frac
 from services.ltx_runner import _RealBackend
 
 
@@ -123,6 +124,48 @@ def test_single_generate_loop_accepts_step_progress_and_returns_done():
     fracs = [c[2] for c in calls]
     assert fracs == sorted(fracs)  # monotone
     assert fracs[-1] <= 0.85 < 0.90  # stays below the post-done 0.90 milestone
+
+
+def test_one_stage_generate_fills_the_bar_to_090_with_stage1_steps():
+    """Alpha Gen's single full-size stage has no Stage-2 band: with
+    ``one_stage=True`` the eight Stage-1 steps run 0.06 -> 0.90 (8/8 lands on
+    the post-done 0.90 milestone) instead of stopping at 0.50."""
+    events = [
+        {"event": "progress", "stage": "encode", "index": 0, "total": 1},
+        *[
+            {"event": "progress", "stage": "stage1_denoise", "index": i, "total": 8}
+            for i in range(1, 9)
+        ],
+        {"event": "done", "seed_used": 1, "peak_vram_mb": 1000},
+    ]
+    calls: list[tuple] = []
+    be = _backend_with_events(events)
+
+    result = be._read_worker_events(
+        lambda step, total, frac, stage=None: calls.append((step, total, frac, stage)),
+        chain=False,
+        prefix="generate",
+        one_stage=True,
+    )
+
+    assert result["event"] == "done"
+    fracs = [c[2] for c in calls]
+    assert fracs == sorted(fracs)  # monotone
+    assert len(set(fracs[1:])) == 8  # every step moves the bar
+    assert fracs[0] == 0.06
+    assert fracs[-1] == pytest.approx(0.90)
+    # A stage this map does not know keeps the last fraction (None).
+    assert _progress_frac("decode", 1, 1, None, None, chain=False, one_stage=True) is None
+
+
+def test_two_stage_generate_bands_are_unchanged_by_one_stage_default():
+    """The ordinary two-stage generate (and Alpha Gen's light mode) keeps its
+    bands: Stage 1 ends at 0.50, Stage 2 at 0.85."""
+    assert _progress_frac("stage1_denoise", 8, 8, None, None, chain=False) == pytest.approx(0.50)
+    assert _progress_frac(
+        "stage1_denoise", 8, 8, None, None, chain=False, one_stage=False
+    ) == pytest.approx(0.50)
+    assert _progress_frac("stage2_denoise", 3, 3, None, None, chain=False) == pytest.approx(0.85)
 
 
 def test_single_generate_loop_returns_error_terminal():

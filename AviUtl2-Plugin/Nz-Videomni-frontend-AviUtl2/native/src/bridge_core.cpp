@@ -1868,6 +1868,8 @@ json MakeMediaInfoResult(const MediaInfoSnapshot& snap) {
     result["durationSec"] = snap.available ? snap.duration_sec : 0.0;
     result["width"] = snap.available ? snap.width : 0;
     result["height"] = snap.available ? snap.height : 0;
+    // Contract v15 (appended): the raw Media Foundation frame rate, 0 = unknown.
+    result["fps"] = snap.available ? snap.fps : 0.0;
     return result;
 }
 

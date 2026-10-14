@@ -67,6 +67,21 @@ export interface UseSourceUploadDeps {
   initial?: { id: string; fileName: string; filePath: string } | null | undefined;
 }
 
+/** What {@link UseSourceUploadResult.uploadPath} resolves with when the upload
+ * succeeded and is still the current one — the same three facts the state
+ * records, handed back directly so a caller that uploads AT SUBMIT TIME (Alpha
+ * Gen 第 2 弾) can build its request without waiting for a re-render. Field
+ * names mirror the `/upload/video` response body. */
+export interface SourceUploadOutcome {
+  /** The uploaded id (`video_id`, or `audio_id` for an audio slot). */
+  video_id: string;
+  /** `true` only when the server reported the range trim as applied. */
+  trimmed: boolean;
+  /** The server's measured frame count, or `null` when it did not measure
+   * (normalised exactly like {@link SourceUploadState.frames}). */
+  frame_count: number | null;
+}
+
 export interface UseSourceUploadResult {
   state: SourceUploadState;
   /** Opens the native file picker for `kind`, then uploads whatever was
@@ -90,8 +105,16 @@ export interface UseSourceUploadResult {
    * byte-identical to before: the key is spread away, never sent as
    * `undefined`. Passing one whose keys include a TRIM key additionally arms
    * the {@link SourceUploadState.trimFailed} check on the response; a
-   * non-trim query (`max_frames`) does not. */
-  uploadPath: (filePath: string, fileName: string, query?: Record<string, string>) => Promise<void>;
+   * non-trim query (`max_frames`) does not.
+   *
+   * Resolves with a {@link SourceUploadOutcome} on success, `null` when the
+   * upload failed (the state carries the error) or was superseded. Callers
+   * that only watch the state ignore it, as every caller did before. */
+  uploadPath: (
+    filePath: string,
+    fileName: string,
+    query?: Record<string, string>,
+  ) => Promise<SourceUploadOutcome | null>;
   clear: () => void;
 }
 
@@ -191,7 +214,11 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
   const generationRef = useRef(0);
 
   const uploadPath = useCallback(
-    async (filePath: string, fileName: string, query?: Record<string, string>) => {
+    async (
+      filePath: string,
+      fileName: string,
+      query?: Record<string, string>,
+    ): Promise<SourceUploadOutcome | null> => {
       generationRef.current += 1;
       const generation = generationRef.current;
       setState({
@@ -215,7 +242,7 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
           filePath,
           ...(query ? { query } : {}),
         });
-        if (generationRef.current !== generation) return; // superseded — discard
+        if (generationRef.current !== generation) return null; // superseded — discard
         const idField = idFieldFor(kind);
         const id =
           status >= 200 && status < 300 && body && typeof (body as Record<string, unknown>)[idField] === "string"
@@ -228,6 +255,10 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
           // Generate instead of continuing from the wrong footage.
           const videoBody = body as UploadVideoResponseBody;
           const trimFailed = requestedTrim(query) && videoBody.trimmed !== true;
+          // 素材（末尾）v2: additive, and normalised to `null` for every
+          // response that does not carry a real measurement (an audio upload,
+          // an older backend, a plain upload the server did not probe).
+          const frames = measuredNumber(videoBody.frame_count);
           setState({
             status: "ready",
             fileName,
@@ -235,12 +266,10 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
             id,
             errorCode: null,
             trimFailed,
-            // 素材（末尾）v2: additive, and normalised to `null` for every
-            // response that does not carry a real measurement (an audio upload,
-            // an older backend, a plain upload the server did not probe).
-            frames: measuredNumber(videoBody.frame_count),
+            frames,
             fps: measuredNumber(videoBody.fps),
           });
+          return { video_id: id, trimmed: videoBody.trimmed === true, frame_count: frames };
         } else {
           const errorEnvelope = body as { error?: { code?: string } } | null;
           setState({
@@ -253,9 +282,10 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
             frames: null,
             fps: null,
           });
+          return null;
         }
       } catch (err) {
-        if (generationRef.current !== generation) return; // superseded — discard
+        if (generationRef.current !== generation) return null; // superseded — discard
         setState({
           status: "error",
           fileName,
@@ -266,6 +296,7 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
           frames: null,
           fps: null,
         });
+        return null;
       }
     },
     [nativeBridge, kind],

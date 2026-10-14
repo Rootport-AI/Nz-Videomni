@@ -2745,10 +2745,13 @@ TEST_CASE("MakeMediaInfoResult reports all-zero for an unavailable snapshot") {
     snap.duration_sec = 9.0;  // should be ignored because available == false
     snap.width = 1920;
     snap.height = 1080;
+    snap.fps = 29.97;  // contract v15: also ignored because available == false
     const json r = nzvideomni::MakeMediaInfoResult(snap);
     CHECK(r["durationSec"] == 0.0);
     CHECK(r["width"] == 0);
     CHECK(r["height"] == 0);
+    REQUIRE(r.contains("fps"));
+    CHECK(r["fps"] == 0.0);
 }
 
 TEST_CASE("MakeMediaInfoResult passes through the probed values when available") {
@@ -2757,10 +2760,12 @@ TEST_CASE("MakeMediaInfoResult passes through the probed values when available")
     snap.duration_sec = 4.5;
     snap.width = 1280;
     snap.height = 720;
+    snap.fps = 30000.0 / 1001.0;  // contract v15: the raw value, not rounded
     const json r = nzvideomni::MakeMediaInfoResult(snap);
     CHECK(r["durationSec"] == 4.5);
     CHECK(r["width"] == 1280);
     CHECK(r["height"] == 720);
+    CHECK(r["fps"].get<double>() == doctest::Approx(29.97002997));
 }
 
 TEST_CASE("fs.probeMediaInfo succeeds with an all-zero result when no provider is set") {
@@ -2774,6 +2779,8 @@ TEST_CASE("fs.probeMediaInfo succeeds with an all-zero result when no provider i
     CHECK(r["durationSec"] == 0.0);
     CHECK(r["width"] == 0);
     CHECK(r["height"] == 0);
+    REQUIRE(r.contains("fps"));  // contract v15: all four keys are 0
+    CHECK(r["fps"] == 0.0);
 }
 
 TEST_CASE("fs.probeMediaInfo passes a provider's values through and forwards the path") {
@@ -2787,6 +2794,7 @@ TEST_CASE("fs.probeMediaInfo passes a provider's values through and forwards the
         snap.duration_sec = 12.5;
         snap.width = 3840;
         snap.height = 2160;
+        snap.fps = 23.976;  // contract v15
         return snap;
     };
     const std::string resp = HandleRequestJson(
@@ -2799,6 +2807,7 @@ TEST_CASE("fs.probeMediaInfo passes a provider's values through and forwards the
     CHECK(r["durationSec"] == 12.5);
     CHECK(r["width"] == 3840);
     CHECK(r["height"] == 2160);
+    CHECK(r["fps"].get<double>() == doctest::Approx(23.976));
 }
 
 TEST_CASE("fs.probeMediaInfo rejects a missing/empty filePath as BAD_REQUEST") {

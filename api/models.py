@@ -351,9 +351,13 @@ class AlphaGenSpec(BaseModel):
 
     GEOMETRY CONTRACT. ``GenerateRequest.width`` / ``height`` are the CANVAS:
     the working size below rounded UP to a multiple of 64 (a factor-1 reference
-    needs only the 64-grid). The scaled source sits at the canvas' top-left and
-    the right/bottom bands are black, cut off again before the matte is
-    stretched back to the source's own size.
+    needs only the 64-grid). The source sits at the canvas' top-left and the
+    right/bottom bands are black, cut off again before the matte is written at
+    the source's own size. Only light mode shrinks the source (to fit the
+    single comfort budget) and stretches the matte back; the default
+    one-stage run keeps the source size (``budget_tokens`` None, ``scale``
+    1.0 — beyond the comfort line it is only slower; owner ruling 2026-10-14,
+    Docs/ALPHAGEN_DESIGN.md §24).
 
     **No file path and no source size here, deliberately** — the same rule as
     :class:`InpaintSpec`: the uploaded file is the single source of truth for
@@ -366,23 +370,36 @@ class AlphaGenSpec(BaseModel):
     # True = the default single full-size stage (Stage-2 skipped); False = the
     # light mode, i.e. the existing two-stage path with the reference attached.
     one_stage: bool = True
-    # The size the source is scaled to before padding (aspect kept, even sides).
+    # The size the source is scaled to before padding (aspect kept, even
+    # sides). Equal to the source size unless light mode shrank it.
     working_width: int = Field(..., ge=2)
     working_height: int = Field(..., ge=2)
-    # The comfort budget (tokens) the working size was fitted under. None =
-    # there is no budget (the family has no comfort value), so the source
-    # was not scaled down.
+    # The light-mode comfort budget (tokens; the row's ``single_budget``) the
+    # working size was fitted under. None = the source was not scaled down:
+    # always in the default one-stage run, and in light mode when the family
+    # has no comfort value.
     budget_tokens: int | None = None
+    # The source's own frame rate, measured by the endpoint with ffprobe (the
+    # client never sends it). The window is cut and padded at this rate, so
+    # there is no fps conversion (Docs/ALPHAGEN_DESIGN.md §9.2 / §23).
+    # ``GenerateRequest.frame_rate`` carries the rounded integer the engine
+    # runs with; this is the exact value. None only on a spec built by hand.
+    source_fps: float | None = Field(None, gt=0)
+    # The same rate as ffprobe's own rational string (e.g. "30000/1001"): the
+    # deliverables are re-timed and written at exactly this rate, so a matte
+    # lines up frame for frame with its source.
+    output_fps: str | None = None
 
 
 class AlphaGenRequest(BaseModel):
     """Body of ``POST /generate/alpha`` — the thin public face of Alpha Gen.
 
-    The user touches only the input video, the frame count, the fps, the seed
-    and the light-mode switch; the prompt, the LoRA and its strengths are fixed
-    by the server. The server measures the source, cuts the window, decides the
-    working size and canvas, and builds the internal ``GenerateRequest`` (with
-    :class:`AlphaGenSpec` in ``alpha_gen``).
+    The user touches only the input video, the frame count, the seed and the
+    light-mode switch; the prompt, the LoRA and its strengths are fixed by the
+    server. The fps is not a field: the matte keeps the source's own fps, which
+    the server measures. The server measures the source, cuts the window,
+    decides the working size and canvas, and builds the internal
+    ``GenerateRequest`` (with :class:`AlphaGenSpec` in ``alpha_gen``).
 
     PASS-THROUGH FIELDS. The acceleration / residency fields below are copied
     from :class:`GenerateRequest` with the SAME names, types and defaults and
@@ -395,7 +412,6 @@ class AlphaGenRequest(BaseModel):
     reference_video_id: str = Field(..., min_length=1)
     window_start_sec: float = Field(0.0, ge=0.0)
     num_frames: int = Field(..., ge=9, le=145)
-    frame_rate: int = Field(..., ge=1, le=60)
     seed: int = -1
     light_mode: bool = False
 

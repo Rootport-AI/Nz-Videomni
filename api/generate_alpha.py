@@ -15,13 +15,21 @@ then the source, the window and the geometry:
   (a) the active engine lists ``alpha_gen`` in ``unsupported_features``
       -> 422 FEATURE_UNSUPPORTED (this endpoint's own wording), BEFORE the
       source is measured;
-  (b) the body's shape (8n+1, <= 145, integer fps) — pydantic;
+  (b) the body's shape (8n+1, <= 145) — pydantic. There is no fps field: the
+      matte keeps the source's own fps (Docs/ALPHAGEN_DESIGN.md §9.2 / §23),
+      and a ``frame_rate`` key an older client still sends is ignored;
   (c) the reference upload (404 REFERENCE_VIDEO_NOT_FOUND) and the ``alpha-gen``
       adapter (404 LORA_NOT_FOUND; registered as anything but a control
       adapter without preprocess -> 422 ALPHA_GEN_INVALID);
   (d) the source's size: measurable, even sides, >= INPAINT_MIN_SOURCE_SIDE;
+      then its frame rate: measurable, and 1-60 once rounded to the integer
+      the engine runs with;
   (e) the window fits the material;
-  (f) the working size / canvas fit the GenerateRequest bounds;
+  (f) in light mode the working size fits the single comfort budget (the
+      only case the matte is made smaller and scaled back; the default
+      one-stage full-size run is never shrunk — over the comfort line it is
+      only slower). In both modes the working size / canvas fit the
+      GenerateRequest bounds;
   (g) the internal GenerateRequest is built (a rejection -> 422);
   (h) the loading / job-busy guards (409);
   (i) on the ``/generate`` side, a public body carrying ``alpha_gen`` is
@@ -29,6 +37,8 @@ then the source, the window and the geometry:
 """
 
 from __future__ import annotations
+
+import math
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 
@@ -82,25 +92,27 @@ def _requested_value(request: AlphaGenRequest, key: str):
     return _MISSING
 
 
-def alpha_gen_budget(context: AppContext, family: str, request: AlphaGenRequest) -> int | None:
-    """The comfort budget (tokens) the Alpha Gen canvas is fitted under.
+def light_mode_budget(context: AppContext, family: str, request: AlphaGenRequest) -> int | None:
+    """The comfort budget (tokens) a LIGHT-MODE Alpha Gen canvas is fitted
+    under. Only light mode shrinks (owner ruling 2026-10-14,
+    Docs/ALPHAGEN_DESIGN.md §24); the caller does not ask for a budget when
+    light mode is off.
 
     The row is picked by the existing rule (``config.ComfortRow``: rows are
     tried top-down and the FIRST row whose ``requires`` keys ALL match wins),
     with ``weight_class`` taken from the selected transformer — the same class
-    ``GET /models`` reports. From that row: ``single_budget`` in light mode
-    (the ordinary two-stage path), ``alpha_gen_budget`` otherwise.
+    ``GET /models`` reports. From that row: ``single_budget`` (light mode runs
+    the ordinary two-stage path).
 
     EXCEPTION (written down in Docs/ALPHAGEN_DESIGN.md): when the weight class
     cannot be determined — or no row matches — the SMALLEST value across the
     rows is used, so an unclassifiable file never gets a larger canvas than
     any known class would. ``None`` (no shrink) when the family has no comfort
-    rows or none of them carries a value.
+    rows.
     """
     profile = context.config.limits.comfort_budgets.get(family)
     if profile is None or not profile.rows:
         return None
-    key = "single_budget" if request.light_mode else "alpha_gen_budget"
 
     pm = context.pipeline_manager
     weight_class = transformer_weight_class(
@@ -119,10 +131,9 @@ def alpha_gen_budget(context: AppContext, family: str, request: AlphaGenRequest)
                     matched = False
                     break
             if matched:
-                return getattr(row, key)
+                return row.single_budget
 
-    values = [getattr(row, key) for row in profile.rows if getattr(row, key) is not None]
-    return min(values) if values else None
+    return min(row.single_budget for row in profile.rows)
 
 
 @router.post(
@@ -174,19 +185,40 @@ def generate_alpha(
             f"{INPAINT_MIN_SOURCE_SIDE}px"
         )
 
+    # (d) continued: the source's own frame rate. The window is cut and the
+    # matte written at THIS rate (no conversion); the engine runs at the
+    # integer it rounds to, with the same rounding the MCP tools and Gradio
+    # use (floor(x + 0.5)). GenerateRequest accepts 1-60 fps, so a source
+    # outside that is refused here rather than as a 500.
+    fps_info = video_io.probe_fps_rational(source_path)
+    if fps_info is None:
+        raise alpha_gen_invalid(
+            f"could not measure the frame rate of upload {request.reference_video_id}"
+        )
+    output_fps, source_fps = fps_info
+    engine_fps = math.floor(source_fps + 0.5)
+    if not 1 <= engine_fps <= 60:
+        raise alpha_gen_invalid(
+            f"the source is {source_fps:g} fps; Alpha Gen accepts 1-60 fps"
+        )
+
     # (e) The window has to fit the material (the rule inpainting uses, shared
     # through the pipeline manager; this endpoint wraps it in its own code).
+    # Asked at the source's own fps, so no resampling enters the estimate.
     detail = context.pipeline_manager._window_fit_detail(
         request.reference_video_id,
         request.window_start_sec,
         request.num_frames,
-        request.frame_rate,
+        source_fps,
     )
     if detail is not None:
         raise alpha_gen_invalid(detail)
 
-    # (f) Working size and canvas under the comfort budget.
-    budget = alpha_gen_budget(context, family, request)
+    # (f) Light mode fits the working size under the single comfort budget;
+    # the default one-stage run keeps the source size (budget None = no
+    # shrink — beyond the comfort line it is only slower). The bounds check
+    # below applies to both modes.
+    budget = light_mode_budget(context, family, request) if request.light_mode else None
     try:
         work_w, work_h, canvas_w, canvas_h = chain_math.alpha_gen_geometry(
             src_w, src_h, request.num_frames, budget
@@ -199,7 +231,7 @@ def generate_alpha(
             and _HEIGHT_RANGE[0] <= h <= _HEIGHT_RANGE[1]
         ):
             raise alpha_gen_invalid(
-                f"the {label} {w}x{h} (source {src_w}x{src_h}, budget {budget}) is "
+                f"the {label} {w}x{h} (source {src_w}x{src_h}) is "
                 f"outside {_WIDTH_RANGE[0]}-{_WIDTH_RANGE[1]} x "
                 f"{_HEIGHT_RANGE[0]}-{_HEIGHT_RANGE[1]}"
             )
@@ -216,7 +248,7 @@ def generate_alpha(
             width=canvas_w,
             height=canvas_h,
             num_frames=request.num_frames,
-            frame_rate=float(request.frame_rate),
+            frame_rate=float(engine_fps),
             seed=request.seed,
             attention_backend=request.attention_backend,
             block_swap_prefetch=request.block_swap_prefetch,
@@ -229,6 +261,8 @@ def generate_alpha(
                 working_width=work_w,
                 working_height=work_h,
                 budget_tokens=budget,
+                source_fps=source_fps,
+                output_fps=output_fps,
             ),
         )
     except ValueError as exc:  # pydantic.ValidationError is a ValueError

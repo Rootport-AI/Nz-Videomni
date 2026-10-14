@@ -41,6 +41,13 @@ export interface ControlLoraSelection {
  */
 export const OUTPAINT_LORA_NAME = "in-outpainting";
 
+/** The Alpha Gen IC-LoRA's server-side name (Alpha Gen 第 2 弾). The panel
+ * never sends it — `POST /generate/alpha` pins it server-side — so the only
+ * reason it is named here is {@link UI_HIDDEN_CONTROL_LORA_NAMES}: picked from
+ * Create/Chain's generic dropdown it would make a request that is not a matte
+ * job at all. */
+export const ALPHA_GEN_LORA_NAME = "alpha-gen";
+
 /**
  * Control-LoRA names that exist server-side and are real, selectable
  * `loras[]` entries — but must NOT appear in the Create/Chain control-LoRA
@@ -54,12 +61,17 @@ export const OUTPAINT_LORA_NAME = "in-outpainting";
  * — see `strings.ts`'s `chainReferenceControlLoraDepthBlocked` and
  * `resolveDepthLoraNames`'s own doc comment): they have no dedicated place of
  * their own, so removing them from the list would leave no way to reach them
- * at all. `in-outpainting` does, so it is the one name excluded here instead.
+ * at all. `in-outpainting` does, so it is excluded here instead — and so is
+ * `alpha-gen` (Alpha Gen 第 2 弾), whose dedicated place is the Edit tab's
+ * Alpha Gen panel (the server pins it there).
  *
  * Deliberately NOT used by {@link resolveControlLoraNames} itself — see that
  * function's doc comment for why the raw (unfiltered) set must stay raw.
  */
-export const UI_HIDDEN_CONTROL_LORA_NAMES: ReadonlySet<string> = new Set([OUTPAINT_LORA_NAME]);
+export const UI_HIDDEN_CONTROL_LORA_NAMES: ReadonlySet<string> = new Set([
+  OUTPAINT_LORA_NAME,
+  ALPHA_GEN_LORA_NAME,
+]);
 
 /**
  * Narrows a control-LoRA name set down to the ones a dropdown should actually

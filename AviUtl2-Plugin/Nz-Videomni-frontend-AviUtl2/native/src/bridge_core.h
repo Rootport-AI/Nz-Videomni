@@ -196,9 +196,11 @@ struct SelectionItem {
     // NTSC clip reports 29.97..., and the snap-to-integer policy lives in the
     // webui's prefill layer. Like media_width/media_height this is NOT nullable
     // in the JSON - 0 means "unknown" (no file path, a non-video object, a
-    // container Media Foundation cannot open such as .mkv/.webm, or a media
-    // type with no declared frame rate). 0 can never be a legitimate frame
-    // rate, so no separate "was it really read" flag is needed.
+    // Matroska file - .mkv/.webm/.mk3d, which Windows' Matroska source reports
+    // at half the real rate, so it is unknown by rule - a file Media
+    // Foundation cannot open, or a media type with no declared frame rate). 0
+    // can never be a legitimate frame rate, so no separate "was it really
+    // read" flag is needed.
     double media_fps = 0.0;
     // --- contract v10 (source trim, section 1-6) ---------------------------
     // The window of the BACKING FILE this object plays, from AviUtl2's
@@ -441,13 +443,18 @@ using ReplaceMediaForJobProvider =
 // get_media_info (inside a call_edit_section_param callback). This NEVER fails
 // from the caller's point of view: a missing edit handle, an unavailable
 // get_media_info, an unsupported/unreadable file, or an unset provider all
-// resolve to an all-zero success result ({durationSec:0,width:0,height:0}) - the
-// webui treats 0 as "unknown". Only param validation (filePath) can error.
+// resolve to an all-zero success result ({durationSec:0,width:0,height:0,fps:0})
+// - the webui treats 0 as "unknown". Only param validation (filePath) can error.
 struct MediaInfoSnapshot {
     bool available = false;   // false -> emit an all-zero result
     double duration_sec = 0.0;
     int width = 0;
     int height = 0;
+    // Contract v15: the video's frame rate as Media Foundation reports it (the
+    // raw value, e.g. 29.97002997 - not rounded). Read with the same
+    // ProbeMediaFps as v11's mediaFps, and only for a video; 0 = unknown / not a
+    // video / the probe failed.
+    double fps = 0.0;
 };
 
 // Probes a file's media info (UTF-8 path). Returns an unavailable snapshot on
@@ -483,7 +490,7 @@ struct RequestContext {
     // "found a marker" branch. The "not found" branch reuses insert_media above.
     ReplaceMediaForJobProvider replace_media_for_job;
     // fs.probeMediaInfo (appended at the end): best-effort media duration /
-    // resolution probe. Unset -> fs.probeMediaInfo still succeeds with an
+    // resolution / fps (contract v15) probe. Unset -> fs.probeMediaInfo still succeeds with an
     // all-zero result (see MediaInfoProvider / fs.probeMediaInfo below).
     MediaInfoProvider probe_media_info;
 };
@@ -1098,7 +1105,9 @@ bool ParseProbeAudioDuration(const json_t& params, ProbeAudioDurationRequest* ou
 // Unlike fs.probeAudioDuration this IS dispatched synchronously by
 // HandleRequestJson (the SDK get_media_info call is cheap and already runs on
 // the UI thread via call_edit_section_param, so no async worker hand-off is
-// needed - it mirrors timeline.getSelection). The probe never errors: any
+// needed - it mirrors timeline.getSelection). Since contract v15 a video also
+// gets one Media Foundation header read for its fps - the same cost as v11's
+// getSelection mediaFps. The probe never errors: any
 // failure resolves the all-zero result (MediaInfoSnapshot::available == false).
 // ---------------------------------------------------------------------------
 
@@ -1113,8 +1122,8 @@ bool ParseProbeMediaInfo(const json_t& params, ProbeMediaInfoRequest* out,
 
 // Build the JSON result object for fs.probeMediaInfo from a snapshot. When the
 // snapshot is unavailable, every field is emitted as 0
-// ({durationSec:0,width:0,height:0}); otherwise the probed values are passed
-// through verbatim.
+// ({durationSec:0,width:0,height:0,fps:0}); otherwise the probed values are
+// passed through verbatim.
 json_t MakeMediaInfoResult(const MediaInfoSnapshot& snap);
 
 // ---------------------------------------------------------------------------

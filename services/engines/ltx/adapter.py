@@ -436,6 +436,7 @@ def _progress_frac(
     outer_total: int | None,
     *,
     chain: bool,
+    one_stage: bool = False,
 ) -> float | None:
     """Map one worker progress event to the coarse job fraction (0..1).
 
@@ -445,6 +446,10 @@ def _progress_frac(
     fraction moves every denoise step. Returns None for unknown stages (the
     caller keeps the last fraction — an unknown stage must never yank the bar
     around).
+
+    ``one_stage`` (single generate only): the job runs Stage 1 alone at full
+    size (Alpha Gen's default), so there is no Stage-2 band to leave room for
+    and ``stage1_denoise`` fills 0.06..0.90 instead of 0.06..0.50.
     """
     step = done / total if total > 0 else 0.0
     if outer_total:
@@ -473,7 +478,7 @@ def _progress_frac(
     if stage == "encode":
         return 0.06
     if stage == "stage1_denoise":
-        return 0.06 + 0.44 * step
+        return 0.06 + (0.84 if one_stage else 0.44) * step
     if stage == "stage2_denoise":
         return 0.50 + 0.35 * step
     return None
@@ -2693,6 +2698,7 @@ class _RealBackend:
         *,
         chain: bool,
         prefix: str,
+        one_stage: bool = False,
     ) -> dict:
         """Shared event-receipt loop for ``generate`` and ``generate_chain``.
 
@@ -2714,6 +2720,9 @@ class _RealBackend:
           against the last emitted value), and unknown stages never move it;
         * a rate-limited INFO line per stage keeps the console readable
           (worker-measured it/s preferred when present).
+
+        ``one_stage`` is passed through to :func:`_progress_frac` (a single
+        full-size stage; only the LTX 2.5 adapter sets it, for Alpha Gen).
         """
         stage_state: dict[str, dict] = {}
         last_frac = 0.0
@@ -2738,7 +2747,10 @@ class _RealBackend:
                 label = f"{label} [{int(outer_index) + 1}/{int(outer_total)}]"
             _log_stage_progress(prefix, label, unit, done, total, stage_state, key, it_s=it_s)
 
-            frac = _progress_frac(stage, done, total, outer_index, outer_total, chain=chain)
+            frac = _progress_frac(
+                stage, done, total, outer_index, outer_total,
+                chain=chain, one_stage=one_stage,
+            )
             if frac is None:
                 frac = last_frac
             frac = max(last_frac, min(1.0, frac))

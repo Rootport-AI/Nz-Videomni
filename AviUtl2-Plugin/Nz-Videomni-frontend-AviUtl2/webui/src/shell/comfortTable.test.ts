@@ -53,6 +53,7 @@ describe("resolveComfortRow", () => {
       expect(row).toEqual({
         singleBudget: 42840,
         chainBudget: 42240,
+        alphaGenBudget: null,
         spatialFactor: 32,
         temporalFactor: 8,
         rowIndex: 0,
@@ -89,6 +90,7 @@ describe("resolveComfortRow", () => {
       expect(resolveComfortRow(limitsWith(), "ltx", allOn(), true, "q6k")).toEqual({
         singleBudget: 43200,
         chainBudget: 40832,
+        alphaGenBudget: null,
         spatialFactor: 32,
         temporalFactor: 8,
         rowIndex: 2,
@@ -101,6 +103,7 @@ describe("resolveComfortRow", () => {
         expect(resolveComfortRow(limitsWith(), "ltx", acceleration, false, "8bit")).toEqual({
           singleBudget: 32640,
           chainBudget: 32384,
+          alphaGenBudget: null,
           spatialFactor: 32,
           temporalFactor: 8,
           rowIndex: 1,
@@ -110,9 +113,10 @@ describe("resolveComfortRow", () => {
 
     it("matches each ltx25 row by weight class alone, under ANY acceleration configuration", () => {
       const expected = {
-        "4bit": { singleBudget: 46920, chainBudget: 46376, rowIndex: 0 },
-        "8bit": { singleBudget: 38760, chainBudget: 39424, rowIndex: 1 },
-        q6k: { singleBudget: 43344, chainBudget: 43648, rowIndex: 2 },
+        // `alphaGenBudget` (Alpha Gen): the ltx25 rows carry one; the ltx rows do not.
+        "4bit": { singleBudget: 46920, chainBudget: 46376, alphaGenBudget: 23460, rowIndex: 0 },
+        "8bit": { singleBudget: 38760, chainBudget: 39424, alphaGenBudget: 19380, rowIndex: 1 },
+        q6k: { singleBudget: 43344, chainBudget: 43648, alphaGenBudget: 21672, rowIndex: 2 },
       } as const;
       for (const [weightClass, want] of Object.entries(expected)) {
         for (const acceleration of [ACCELERATION_DEFAULTS, allOn(), allOn({ vaeMode: "default" })]) {
@@ -123,6 +127,31 @@ describe("resolveComfortRow", () => {
           });
         }
       }
+    });
+
+    it("reads alpha_gen_budget as `null` unless it is a positive finite number (no fallback constant)", () => {
+      const withAlpha = (alpha_gen_budget: number | null | undefined) =>
+        limitsWith({
+          comfort_budgets: {
+            ltx25: {
+              spatial_factor: 32,
+              temporal_factor: 8,
+              rows: [
+                {
+                  requires: {},
+                  single_budget: 40000,
+                  chain_budget: 40000,
+                  ...(alpha_gen_budget !== undefined ? { alpha_gen_budget } : {}),
+                },
+              ],
+            },
+          },
+        });
+      expect(resolveComfortRow(withAlpha(20000), "ltx25", allOn(), true)?.alphaGenBudget).toBe(20000);
+      expect(resolveComfortRow(withAlpha(null), "ltx25", allOn(), true)?.alphaGenBudget).toBeNull();
+      expect(resolveComfortRow(withAlpha(undefined), "ltx25", allOn(), true)?.alphaGenBudget).toBeNull();
+      expect(resolveComfortRow(withAlpha(0), "ltx25", allOn(), true)?.alphaGenBudget).toBeNull();
+      expect(resolveComfortRow(withAlpha(Number.NaN), "ltx25", allOn(), true)?.alphaGenBudget).toBeNull();
     });
 
     it("matches no typed row while the weight class is unknown (`\"\"` or omitted) — the caller falls back", () => {
@@ -184,6 +213,7 @@ describe("resolveComfortRow", () => {
       expect(resolveComfortRow(withLine, "ltx", allOn(), true)).toEqual({
         singleBudget: 30000,
         chainBudget: 31000,
+        alphaGenBudget: null,
         spatialFactor: 32,
         temporalFactor: 8,
         rowIndex: 0,
@@ -298,6 +328,7 @@ describe("resolveComfortRow", () => {
       expect(row).toEqual({
         singleBudget: 44880,
         chainBudget: 40000,
+        alphaGenBudget: null,
         spatialFactor: 32,
         temporalFactor: 8,
         rowIndex: -1,

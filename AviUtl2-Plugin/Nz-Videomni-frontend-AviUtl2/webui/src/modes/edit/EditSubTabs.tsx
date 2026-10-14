@@ -9,8 +9,10 @@ import type { EditSubTabsDisabled } from "../../shell/featureScope";
  * panel appeared behind it — exactly the promotion `shell/ModeTabs.tsx` made
  * for Toolbox on 2026-09-11 (and this file made for Edit itself on
  * 2026-08-09). With it, `MockSubTabId` and the two-armed `EditSubTabSpec`
- * union are gone: there is no mock left under Edit to keep them for. */
-export type EditSubMode = "retake" | "outpainting" | "inpainting";
+ * union are gone: there is no mock left under Edit to keep them for.
+ *
+ * `"alphaGen"` joined at the END on 2026-10-13 (Alpha Gen 第 2 弾). */
+export type EditSubMode = "retake" | "outpainting" | "inpainting" | "alphaGen";
 
 /** One sub-tab's spec. A plain interface again (it was a disabled-discriminated
  * union while a mock id existed): every id here has a panel, and `disabled`
@@ -28,12 +30,12 @@ export interface EditSubTabsProps {
    * エンジンが実行できない**もの（`shell/featureScope.ts` の
    * `editSubTabsDisabledFor`）。`ModeTabs` の `disabledModes` と同じ考え方で、
    * この部品はベースモデルを一切知らない —— 渡された真偽値を描くだけ。
-   * 省略時は3つとも有効（＝この機能が存在しなかった頃と一字も変わらない）。 */
+   * 省略時は4つとも有効（＝この機能が存在しなかった頃と一字も変わらない）。 */
   disabled?: EditSubTabsDisabled;
 }
 
 /** Edit タブ配下のサブタブ列（2026-08-09 新設）。並びは Retake / Outpainting /
- * Inpainting。無効タブは `<button disabled>` を描くだけで **onClick ハンドラ
+ * Inpainting / Alpha Gen。無効タブは `<button disabled>` を描くだけで **onClick ハンドラ
  * 自体を付与しない**（`ModeTabs.tsx` の作法）。
  *
  * 2026-09-14（台帳 §3-55）に Inpainting が実体化したので、**灰色になる理由は
@@ -56,6 +58,7 @@ export function EditSubTabs({ mode, onChange, disabled }: EditSubTabsProps) {
     ...(disabled?.retake ? { retake: unavailable.retake } : {}),
     ...(disabled?.outpainting ? { outpainting: unavailable.outpainting } : {}),
     ...(disabled?.inpainting ? { inpainting: unavailable.inpainting } : {}),
+    ...(disabled?.alphaGen ? { alphaGen: unavailable.alphaGen } : {}),
   };
   const tabs: EditSubTabSpec[] = [
     { id: "retake", label: strings.edit.subTabs.retake, disabled: disabled?.retake ?? false },
@@ -68,6 +71,11 @@ export function EditSubTabs({ mode, onChange, disabled }: EditSubTabsProps) {
       id: "inpainting",
       label: strings.edit.subTabs.inpainting,
       disabled: disabled?.inpainting ?? false,
+    },
+    {
+      id: "alphaGen",
+      label: strings.edit.subTabs.alphaGen,
+      disabled: disabled?.alphaGen ?? false,
     },
   ];
 

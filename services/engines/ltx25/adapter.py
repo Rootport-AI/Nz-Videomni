@@ -1017,7 +1017,14 @@ class _RealBackend25(_RealBackend):
                 self._send(payload)
             except Exception as exc:
                 raise RuntimeError("LTX 2.5 worker died: " + self._stderr_tail()) from exc
-            event = self._read_worker_events(progress_callback, chain=False, prefix="generate")
+            # Alpha Gen's default runs Stage 1 alone at full size, so its
+            # denoise steps fill the bar up to 0.90 (light mode is two-stage).
+            event = self._read_worker_events(
+                progress_callback,
+                chain=False,
+                prefix="generate",
+                one_stage=request.alpha_gen is not None and request.alpha_gen.one_stage,
+            )
 
         kind = event.get("event")
         if kind == "error":

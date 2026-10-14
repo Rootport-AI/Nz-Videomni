@@ -23,6 +23,7 @@ describe("FEATURE_UI (the declaration table)", () => {
     expect(Object.keys(FEATURE_UI).sort()).toEqual(
       [
         "a2v",
+        "alpha_gen",
         "chain",
         "end_source",
         "inpaint",
@@ -65,20 +66,24 @@ describe("disabledUiTargets", () => {
     expect(disabledUiTargets(["chain"]).has("mode.edit")).toBe(false);
   });
 
-  it("closes the Edit tab only once ALL THREE of its sub-tabs have", () => {
+  it("closes the Edit tab only once ALL FOUR of its sub-tabs have", () => {
     // §3-55 (2026-09-14): Inpainting joined the container's `whenAll` the day
     // it stopped being a mock. A mock closes nothing — a real sub-tab keeps the
     // tab alive on its own — so `retake` + `outpaint` alone no longer settle
     // the tab. Since §3-150 (2026-09-15) no shipped engine publishes any of the
     // three, so the names below are a MECHANISM fixture rather than any
     // engine's list: what is pinned is the rule, which the next engine will
-    // need.
+    // need. Alpha Gen 第 2 弾 (2026-10-13) made it four: `alpha_gen` IS
+    // published (by LTX 2.3), and 2.3 keeps the tab because the other three run.
     expect(disabledUiTargets(["retake"]).has("mode.edit")).toBe(false);
     expect(disabledUiTargets(["outpaint"]).has("mode.edit")).toBe(false);
     expect(disabledUiTargets(["inpaint"]).has("mode.edit")).toBe(false);
+    expect(disabledUiTargets(["alpha_gen"]).has("mode.edit")).toBe(false);
     expect(disabledUiTargets(["retake", "outpaint"]).has("mode.edit")).toBe(false);
-    expect(disabledUiTargets(["retake", "outpaint", "inpaint"]).has("mode.edit")).toBe(true);
-    expect(targets(["retake", "outpaint", "inpaint"])).toEqual([
+    expect(disabledUiTargets(["retake", "outpaint", "inpaint"]).has("mode.edit")).toBe(false);
+    expect(disabledUiTargets(["retake", "outpaint", "inpaint", "alpha_gen"]).has("mode.edit")).toBe(true);
+    expect(targets(["retake", "outpaint", "inpaint", "alpha_gen"])).toEqual([
+      "editSubTab.alphaGen",
       "editSubTab.inpainting",
       "editSubTab.outpainting",
       "editSubTab.retake",
@@ -148,18 +153,20 @@ describe("disabledModesFor", () => {
   });
 
   it("Edit survives while ONE of its panels is runnable", () => {
-    // The tab hosts Retake, Outpainting and (since §3-55) Inpainting; losing
-    // one — or two — is not losing the tab.
+    // The tab hosts Retake, Outpainting, (since §3-55) Inpainting and (since
+    // Alpha Gen 第 2 弾) Alpha Gen; losing one — or three — is not losing the tab.
     expect(disabledModesFor(["retake"])).toEqual([]);
     expect(disabledModesFor(["outpaint"])).toEqual([]);
     expect(disabledModesFor(["inpaint"])).toEqual([]);
+    expect(disabledModesFor(["alpha_gen"])).toEqual([]);
     expect(disabledModesFor(["retake", "outpaint"])).toEqual([]);
-    expect(disabledModesFor(["retake", "outpaint", "inpaint"])).toEqual(["edit"]);
+    expect(disabledModesFor(["retake", "outpaint", "inpaint"])).toEqual([]);
+    expect(disabledModesFor(["retake", "outpaint", "inpaint", "alpha_gen"])).toEqual(["edit"]);
   });
 
   it("never disables Single or Inventory, whatever the server sends", () => {
     const everything = [
-      "chain", "retake", "end_source", "v2v", "a2v", "two_stage_hq", "outpaint", "inpaint",
+      "chain", "retake", "end_source", "v2v", "a2v", "two_stage_hq", "outpaint", "inpaint", "alpha_gen",
       "loras", "reference_video", "nag", "prune_vaed", "sage_attention", "keep_resident",
     ];
     expect(disabledModesFor(everything)).toEqual(["chained", "edit"]);
@@ -245,58 +252,73 @@ describe("editSubTabsDisabledFor", () => {
   // is the single most likely thing to get wrong here.
   const TABLE: ReadonlyArray<{
     unsupported: readonly string[];
-    expected: { retake: boolean; outpainting: boolean; inpainting: boolean };
+    expected: { retake: boolean; outpainting: boolean; inpainting: boolean; alphaGen: boolean };
     why: string;
   }> = [
     {
       unsupported: [],
-      expected: { retake: false, outpainting: false, inpainting: false },
-      why: "LTX 2.3 / an older backend",
+      expected: { retake: false, outpainting: false, inpainting: false, alphaGen: false },
+      why: "an older backend",
     },
     {
       unsupported: ["retake"],
-      expected: { retake: true, outpainting: false, inpainting: false },
+      expected: { retake: true, outpainting: false, inpainting: false, alphaGen: false },
       why: "Retake only",
     },
     {
       unsupported: ["outpaint"],
-      expected: { retake: false, outpainting: true, inpainting: false },
+      expected: { retake: false, outpainting: true, inpainting: false, alphaGen: false },
       why: "Outpainting only",
     },
     {
       unsupported: ["inpaint"],
-      expected: { retake: false, outpainting: false, inpainting: true },
+      expected: { retake: false, outpainting: false, inpainting: true, alphaGen: false },
       why: "Inpainting only — §3-55's own name",
     },
     {
+      unsupported: ["alpha_gen"],
+      expected: { retake: false, outpainting: false, inpainting: false, alphaGen: true },
+      why: "Alpha Gen only — Alpha Gen 第 2 弾's own name",
+    },
+    {
+      unsupported: ["keep_resident_embeddings", "alpha_gen"],
+      expected: { retake: false, outpainting: false, inpainting: false, alphaGen: true },
+      why: "LTX 2.3's list TODAY — the alpha-gen IC-LoRA is an LTX 2.5 adapter",
+    },
+    {
       unsupported: ["retake", "outpaint", "inpaint"],
-      expected: { retake: true, outpainting: true, inpainting: true },
-      why: "all three — the Edit tab itself is gone at this point",
+      expected: { retake: true, outpainting: true, inpainting: true, alphaGen: false },
+      why: "three of four — Alpha Gen alone keeps the Edit tab",
+    },
+    {
+      unsupported: ["retake", "outpaint", "inpaint", "alpha_gen"],
+      expected: { retake: true, outpainting: true, inpainting: true, alphaGen: true },
+      why: "all four — the Edit tab itself is gone at this point",
     },
     {
       unsupported: ["retake", "end_source", "two_stage_hq", "outpaint", "nag", "prune_vaed"],
-      expected: { retake: true, outpainting: true, inpainting: false },
+      expected: { retake: true, outpainting: true, inpainting: false, alphaGen: false },
       why: "LTX 2.5's list as it stood before the Retake/End source 開通",
     },
     {
       unsupported: ["two_stage_hq", "outpaint", "nag", "prune_vaed"],
-      expected: { retake: false, outpainting: true, inpainting: false },
+      expected: { retake: false, outpainting: true, inpainting: false, alphaGen: false },
       why: "…and after it: `retake` and `end_source` had left, `outpaint` had not",
     },
     {
       unsupported: ["two_stage_hq", "prune_vaed", "inpaint"],
-      expected: { retake: false, outpainting: false, inpainting: true },
+      expected: { retake: false, outpainting: false, inpainting: true, alphaGen: false },
       why: "LTX 2.5's list for the fortnight §3-55 put ONE mode name on it — kept as the MECHANISM case now that no engine publishes it",
     },
     {
       unsupported: ["two_stage_hq", "prune_vaed"],
-      expected: { retake: false, outpainting: false, inpainting: false },
+      expected: { retake: false, outpainting: false, inpainting: false, alphaGen: false },
       why: "LTX 2.5's list TODAY — §3-150 built the 2.5 inpaint driver and took `inpaint` off again, so NO sub-tab greys on either engine",
     },
   ];
 
   for (const { unsupported, expected, why } of TABLE) {
-    it(`[${unsupported.join(", ")}] -> retake:${expected.retake} outpainting:${expected.outpainting} inpainting:${expected.inpainting} (${why})`, () => {
+    it(`[${unsupported.join(", ")}] -> retake:${expected.retake} outpainting:${expected.outpainting} inpainting:${expected.inpainting} alphaGen:${expected.alphaGen} (${why})`, () => {
       expect(editSubTabsDisabledFor(unsupported)).toEqual(expected);
     });
   }
@@ -309,12 +331,21 @@ describe("editSubTabsDisabledFor", () => {
       retake: false,
       outpainting: false,
       inpainting: false,
+      alphaGen: false,
     });
     // §3-55: the same trap one row down — the server publishes `inpaint`.
     expect(editSubTabsDisabledFor(["inpainting"])).toEqual({
       retake: false,
       outpainting: false,
       inpainting: false,
+      alphaGen: false,
+    });
+    // Alpha Gen 第 2 弾: and again — the server publishes `alpha_gen`.
+    expect(editSubTabsDisabledFor(["alphaGen"])).toEqual({
+      retake: false,
+      outpainting: false,
+      inpainting: false,
+      alphaGen: false,
     });
   });
 
@@ -323,6 +354,7 @@ describe("editSubTabsDisabledFor", () => {
       retake: true,
       outpainting: false,
       inpainting: false,
+      alphaGen: false,
     });
   });
 
@@ -335,6 +367,7 @@ describe("editSubTabsDisabledFor", () => {
       retake: false,
       outpainting: false,
       inpainting: false,
+      alphaGen: false,
     });
   });
 });

@@ -31,10 +31,9 @@ import type { TimelineSelection } from "./menuSelection";
 import { normalizeSelectionRange } from "./selectionRange";
 import type { TimelineFrameRange } from "./selectionRange";
 import {
-  PLAYBACK_SPEED_EPSILON,
-  PLAYBACK_SPEED_NEUTRAL,
   decideSourceTrim,
   formatTrimSeconds,
+  oneToOneSkipReason,
 } from "./sourceTrim";
 import type { SourceTrimSkipReason, TrimSelectionItem } from "./sourceTrim";
 
@@ -188,7 +187,7 @@ export type RetakeRangeResult =
  * ### 全長リボンでは残り 3 種を**自分でやり直す**（敵対的レビュー指摘 2026-08-09）
  *
  * `decideSourceTrim` は `spanCoversWholeMedia` を**再生速度・ループ・中間点より
- * 先に**判定して即 return する（`sourceTrim.ts` の 176-207 行）。つまり全長リボンでは
+ * 先に**判定して即 return する（`sourceTrim.ts` の `decideSourceTrim`）。つまり全長リボンでは
  * その 3 つのチェックに**到達しない**。上の除外を素通しにすると、たとえば
  * 「0〜0.5 秒をループ再生して 2 秒のリボンを埋めている全長オブジェクト」が
  * 無条件に通り、1.5 秒地点を選んだつもりが素材の 1.5 秒（実際に映っているのは
@@ -285,19 +284,13 @@ export function mapRangeToMaterialSec(
  * ケース）について、その early return が**追い越してしまった**残りのチェックを
  * やり直す。弾くべきなら理由を、通してよければ `undefined` を返す。
  *
- * 順序としきい値は `decideSourceTrim`（`sourceTrim.ts` 183-207 行）と同一。
- * 定数（`PLAYBACK_SPEED_NEUTRAL` / `PLAYBACK_SPEED_EPSILON`）も import して
- * 使っており、値をここへ写してはいない —— 片方だけ直る事故を避けるため。
+ * 再生速度・ループ・中間点の 3 つは `decideSourceTrim` と同じ関数
+ * `oneToOneSkipReason`（`sourceTrim.ts`）を呼ぶ —— 順序もしきい値も写しを持たず、
+ * 片方だけ直る事故が起きない。
  */
 function fullLengthRibbonSkipReason(item: TrimSelectionItem): SourceTrimSkipReason | undefined {
-  if (
-    item.playbackSpeed !== undefined &&
-    Math.abs(item.playbackSpeed - PLAYBACK_SPEED_NEUTRAL) > PLAYBACK_SPEED_EPSILON
-  ) {
-    return "nonNeutralSpeed";
-  }
-  if (item.loopPlay === true) return "loopEnabled";
-  if (item.sectionCount !== undefined && item.sectionCount >= 2) return "multipleSections";
+  const notOneToOne = oneToOneSkipReason(item);
+  if (notOneToOne !== undefined) return notOneToOne;
   // 再生開始が 0 でない全長リボン（R4）。ここだけは `spanCoversWholeMedia` の
   // 名前のまま返す —— 呼び出し側にこの理由が届くのはこのケースだけなので、
   // 文言は「再生位置がずらされている」の意味で書いてよい。

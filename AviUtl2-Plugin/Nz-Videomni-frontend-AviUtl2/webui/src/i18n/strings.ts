@@ -514,13 +514,9 @@ export const en = {
       framesLabel: "Frames",
       framesRecommend: "Recommended: 121 frames or fewer",
       secondsText: (seconds: string): string => `About ${seconds}s`,
-      /** Under the slider, only while the comfort line is drawn. Light mode
-       * off: the line is only a guide (the server never shrinks). */
-      comfortHintFull:
-        "Beyond this line generation can become much slower (the line is a guide; the matte is still made at full size, nothing is shrunk).",
-      /** Same place, light mode on: the server shrinks beyond the line. */
-      comfortHintLight:
-        "In light mode the matte is made at full size up to this line; beyond it, it is made smaller and scaled back to the original size.",
+      /** Under the slider, only past the comfort line with light mode on (the
+       * server shrinks there). Light mode off uses `single.comfortWarningSmart`. */
+      lightModeShrinkWarning: "In light mode this setting is made smaller and scaled back to the original size.",
       lightModeLabel: "Light mode (faster, but the edges are less accurate)",
       lightModeSmallWarning: "In light mode, background removal is less accurate on small videos (under 1280*768).",
       oversizeNote: "Above 1920*1088, the background transparency becomes less accurate.",
@@ -2638,9 +2634,7 @@ export const ja: Strings = {
       framesLabel: "フレーム数",
       framesRecommend: "推奨：121フレーム以下",
       secondsText: (seconds: string): string => `約 ${seconds} 秒`,
-      comfortHintFull:
-        "この線を超えると、生成が大幅に遅くなることがあります（線は目安です。縮小はせず、原寸のまま生成します）。",
-      comfortHintLight: "軽量モードでは、この線までは原寸で生成し、超えると縮小して生成して元の寸法へ戻します。",
+      lightModeShrinkWarning: "軽量モードでは、この条件は縮小して生成し、元の寸法へ戻します。",
       lightModeLabel: "軽量モード（速いが、輪郭の精度は落ちる）",
       lightModeSmallWarning: "軽量モードでは、小さな動画（1280*768未満）の背景除去の精度が悪化します。",
       oversizeNote: "1920*1088を超えるサイズでは、背景透過の精度が下がります",

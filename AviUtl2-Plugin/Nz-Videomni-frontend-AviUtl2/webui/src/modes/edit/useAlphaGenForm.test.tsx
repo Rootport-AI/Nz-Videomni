@@ -206,10 +206,23 @@ describe("useAlphaGenForm — 快適上限の線", () => {
     expect(result.current.comfortFrames).toBe(145);
   });
 
-  it("行が無い（重みの種別が不明）なら線を出さない", async () => {
+  it("isOverComfort は線を超えたときだけ true（線の上ちょうどは false）", async () => {
+    const { result } = renderForm({ initialIntent: intent(), ...LTX25_4BIT });
+    await waitMeasured(result);
+    // 既定 81 コマ＝線 81 の上ちょうど。
+    expect(result.current.isOverComfort).toBe(false);
+    act(() => result.current.setNumFrames(89, true));
+    expect(result.current.isOverComfort).toBe(true);
+    act(() => result.current.setNumFrames(73, true));
+    expect(result.current.isOverComfort).toBe(false);
+  });
+
+  it("行が無い（重みの種別が不明）なら線を出さない（isOverComfort も false）", async () => {
     const { result } = renderForm({ initialIntent: intent(), engineFamily: "ltx25", weightClass: "" });
     await waitMeasured(result);
     expect(result.current.comfortFrames).toBeNull();
+    act(() => result.current.setNumFrames(145, true));
+    expect(result.current.isOverComfort).toBe(false);
   });
 
   it("行に alpha_gen_budget が無い（LTX 2.3 の行）なら線を出さない", async () => {

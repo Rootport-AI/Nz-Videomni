@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "../../bridge/mockBridge";
@@ -165,26 +165,69 @@ describe("EditScreen — Alpha Gen サブタブ", () => {
     expect(screen.getByRole("checkbox", { name: t.lightModeLabel })).not.toBeDisabled();
   });
 
-  it("線の下の説明は軽量モードのチェックで切り替わる（OFF は目安・ON は縮小）", async () => {
-    const user = userEvent.setup();
-    // LTX 2.5・4bit の行（組み込みの既定）: 1920x1080 → 原寸の予算で 81 コマの線。
-    const bridge = createMockBridge({ delayMs: 0, ...MEDIA });
+  /** Alpha Gen's frame slider, once the comfort line is drawn on it. */
+  async function comfortSlider(): Promise<HTMLInputElement> {
+    return waitFor(() => {
+      const slider = document.querySelector<HTMLInputElement>('input[type="range"][list="alpha-gen-comfort-tick"]');
+      if (slider === null) throw new Error("no comfort line yet");
+      return slider;
+    });
+  }
+
+  function renderWithComfortRow(width: number, height: number) {
+    const bridge = createMockBridge({
+      delayMs: 0,
+      ...MEDIA,
+      probeMediaInfoWidth: width,
+      probeMediaInfoHeight: height,
+    });
     render(
       <LanguageProvider>
         <ToastProvider>
-          <EditScreen initialIntent={alphaGenIntent()} nativeBridge={bridge} engineFamily="ltx25" weightClass="4bit" />
+          <EditScreen
+            initialIntent={alphaGenIntent(makeItem({ mediaWidth: width, mediaHeight: height }))}
+            nativeBridge={bridge}
+            engineFamily="ltx25"
+            weightClass="4bit"
+          />
         </ToastProvider>
       </LanguageProvider>,
     );
-    expect(await screen.findByText(t.comfortHintFull)).toBeInTheDocument();
-    expect(screen.queryByText(t.comfortHintLight)).not.toBeInTheDocument();
+  }
+
+  it("線を超えたときだけ注意を出す（軽量モード OFF は Create と同じ文・線の説明文は無い）", async () => {
+    // LTX 2.5・4bit の行（組み込みの既定）: 1920x1080 → 原寸の予算で 81 コマの線（既定も 81）。
+    renderWithComfortRow(1920, 1080);
+    const slider = await comfortSlider();
+    expect(screen.queryByText(en.single.comfortWarningSmart)).not.toBeInTheDocument();
+    expect(screen.queryByText(t.lightModeShrinkWarning)).not.toBeInTheDocument();
+    expect(screen.queryByText(/this line/i)).not.toBeInTheDocument();
+
+    fireEvent.change(slider, { target: { value: "89" } });
+    expect(screen.getByText(en.single.comfortWarningSmart)).toBeInTheDocument();
+    expect(screen.queryByText(t.lightModeShrinkWarning)).not.toBeInTheDocument();
+
+    fireEvent.change(slider, { target: { value: "81" } });
+    expect(screen.queryByText(en.single.comfortWarningSmart)).not.toBeInTheDocument();
+  });
+
+  it("軽量モード ON で線を超えると、縮小して元の寸法へ戻すという注意に変わる", async () => {
+    const user = userEvent.setup();
+    // 2560x1440 → キャンバス 2560x1472 → 80x46 = 3680 マス。原寸の予算 23460 →
+    // 6 潜在 = 41 コマ・軽量（単発の予算 46920）→ 12 潜在 = 89 コマ。
+    renderWithComfortRow(2560, 1440);
+    await comfortSlider();
+    // 既定 81 > 41: OFF は Create と同じ文。
+    expect(await screen.findByText(en.single.comfortWarningSmart)).toBeInTheDocument();
 
     await user.click(screen.getByRole("checkbox", { name: t.lightModeLabel }));
-    expect(screen.getByText(t.comfortHintLight)).toBeInTheDocument();
-    expect(screen.queryByText(t.comfortHintFull)).not.toBeInTheDocument();
+    // 81 は ON の線 89 の下: 注意は出ない。
+    expect(screen.queryByText(en.single.comfortWarningSmart)).not.toBeInTheDocument();
+    expect(screen.queryByText(t.lightModeShrinkWarning)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("checkbox", { name: t.lightModeLabel }));
-    expect(screen.getByText(t.comfortHintFull)).toBeInTheDocument();
+    fireEvent.change(await comfortSlider(), { target: { value: "97" } });
+    expect(screen.getByText(t.lightModeShrinkWarning)).toBeInTheDocument();
+    expect(screen.queryByText(en.single.comfortWarningSmart)).not.toBeInTheDocument();
   });
 
   it("fps が読めない素材は「不明」と出す", async () => {

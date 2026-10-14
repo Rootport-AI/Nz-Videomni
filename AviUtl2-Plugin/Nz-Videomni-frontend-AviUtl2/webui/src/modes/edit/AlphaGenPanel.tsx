@@ -60,11 +60,12 @@ export function AlphaGenPanel({ form, disabled, nativeBridge }: AlphaGenPanelPro
         onCommit={(value) => form.setNumFrames(value, true)}
         hint={hint}
         spillThresholdFrames={form.comfortFrames}
+        isOverSpillThreshold={form.isOverComfort}
+        // Past the line only. Light mode off: Create's own words (the source is
+        // kept at full size, so it may get slower). On: the server shrinks.
+        spillWarningText={form.lightMode ? t.lightModeShrinkWarning : strings.single.comfortWarningSmart}
         tickId={ALPHA_GEN_TICK_ID}
       />
-      {form.comfortFrames !== null && (
-        <p className="field-hint">{form.lightMode ? t.comfortHintLight : t.comfortHintFull}</p>
-      )}
 
       <label className="field field-inline">
         <input

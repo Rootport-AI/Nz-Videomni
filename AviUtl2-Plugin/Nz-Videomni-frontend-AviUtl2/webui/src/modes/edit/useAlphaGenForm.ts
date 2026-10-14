@@ -97,6 +97,8 @@ export interface UseAlphaGenFormResult {
   /** The comfort line on the slider, or `null` for no line (no row, no budget,
    * size unknown, or the line would fall below the slider's 9-frame minimum). */
   comfortFrames: number | null;
+  /** The frame count is past the comfort line (always `false` with no line). */
+  isOverComfort: boolean;
   /** The source is larger than 1920*1088 (a note, never a block). */
   aboveOfficialMax: boolean;
   /** Light mode on a source smaller than 1280*768 (a note; the checkbox stays). */
@@ -257,6 +259,8 @@ export function useAlphaGenForm(deps: UseAlphaGenFormDeps = {}): UseAlphaGenForm
         )
       : null;
   const comfortFrames = rawComfortFrames !== null && rawComfortFrames >= ALPHA_GEN_MIN_FRAMES ? rawComfortFrames : null;
+  // Past the line: the warning under the slider (Create's `DurationField` banner).
+  const isOverComfort = comfortFrames !== null && numFrames > comfortFrames;
 
   const aboveOfficialMax = known && (mediaInfo.width > OFFICIAL_MAX_WIDTH || mediaInfo.height > OFFICIAL_MAX_HEIGHT);
   const belowLightFloor =
@@ -365,6 +369,7 @@ export function useAlphaGenForm(deps: UseAlphaGenFormDeps = {}): UseAlphaGenForm
     lightMode,
     setLightMode,
     comfortFrames,
+    isOverComfort,
     aboveOfficialMax,
     belowLightFloor,
     uploading,

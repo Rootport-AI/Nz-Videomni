@@ -2,7 +2,8 @@
 
 What this is
 ------------
-The engine half of the "one-stage full-size" AlphaGen mode (台帳 §1-83; the
+The engine half of the "one-stage full-size" AlphaGen mode (台帳 §1-83, now
+``Docs/PENDING_TASKS_CLOSED.md`` 3-224; the
 gate that justified it is ``Docs/VERIFICATION_LOG.md`` §151). AlphaGen is an
 IC-LoRA (``alpha-gen``) that reads an RGB reference video and generates the
 matte for it -- white opaque, black transparent, grey in between -- at the

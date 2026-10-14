@@ -1,7 +1,8 @@
 """Per-layer GGUF quantization service.
 
-This service keeps transformer weights compressed in VRAM (never dequantized whole at
-load time) and dequantizes one layer at a time during the forward pass.
+This service keeps transformer weights compressed (never dequantized whole at load
+time) — in VRAM, or on the CPU side for the blocks block swap has evicted — and
+dequantizes one layer at a time during the forward pass.
 
 VRAM comparison for LTX-2.3 (22B parameters):
   BF16 (2 bytes/param):  ~44 GB VRAM
@@ -575,7 +576,8 @@ def _make_ggml_quant_module_ops():
 class GGUFQuantLoaderService:
     """Per-layer GGUF dequantisation service.
 
-    Keeps transformer weights compressed in VRAM (uint8 bytes in GGMLQuantizedTensor).
+    Keeps transformer weights compressed (uint8 bytes in GGMLQuantizedTensor) — in
+    VRAM, or on the CPU side for the blocks block swap has evicted.
     Each Linear layer dequantises its weight at forward() time and immediately frees
     the temporary BF16 tensor after the matmul.
 

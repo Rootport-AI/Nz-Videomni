@@ -171,8 +171,10 @@ def reference_pixel_dims(scale: int | None, cond_height: int, cond_width: int) -
     """``(scale, ref_height, ref_width)``: the size the reference is decoded at.
 
     ``cond_height`` / ``cond_width`` are the dimensions of the CONDITIONING being
-    built -- stage 1's half-resolution pair on every path that uses this, which is
-    every path (stage 2 gets no reference).
+    built -- stage 1's half-resolution pair on the two-stage paths, and the full
+    canvas on AlphaGen's one-stage path (``engine25.alphagen25``, through
+    ``outpaint25._encode_reference_conditionings(full_resolution=True)``). Stage
+    2 gets no reference.
 
     Transcribed from 2.3's ``LTXFastVideoPipeline._reference_pixel_dims``
     (``engine/pipeline/fast_video_pipeline.py``). The divisibility guard

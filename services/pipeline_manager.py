@@ -824,8 +824,8 @@ class PipelineManager:
             # and for the same reason both intermediates land next to the output
             # (STORAGE_POLICY.md reserves uploads/ for material the user may
             # delete). The window and the reference are kept as the record of
-            # what went in; the window is also what a later compositing step
-            # reads.
+            # what went in. Nothing reads the window yet; a later compositing
+            # step (the planned third phase) is meant to read it.
             alpha_provenance = None
             alpha_source_size = None
             if job.request.alpha_gen is not None:
@@ -970,8 +970,9 @@ class PipelineManager:
             # Alpha Gen post-process: the engine wrote the padded CANVAS. Crop
             # the pad off, stretch back to the source size, and write the two
             # deliverables (output.mp4 preview + matte.mkv) in one ffmpeg run.
-            # The engine's canvas file is crf 0 and large, so it is deleted;
-            # the window and the reference stay as the record.
+            # The engine's canvas file is deleted (in the one-stage mode it is
+            # crf 0 and large; light mode's is the plain path's ordinary
+            # encode); the window and the reference stay as the record.
             if alpha_provenance is not None:
                 engine_mp4 = output_dir / "_alpha_engine.mp4"
                 outcome.output_path.replace(engine_mp4)
@@ -985,8 +986,9 @@ class PipelineManager:
                         output_fps=alpha_provenance["output_fps"],
                     )
                 except Exception:
-                    # No half-written deliverables and no large crf-0 canvas
-                    # left behind on a failed post-process.
+                    # No half-written deliverables and no engine canvas (large
+                    # crf 0 in the one-stage mode) left behind on a failed
+                    # post-process.
                     for leftover in ("matte.mkv", "output.mp4", "_alpha_engine.mp4"):
                         (output_dir / leftover).unlink(missing_ok=True)
                     raise

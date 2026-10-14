@@ -84,7 +84,7 @@ class ModelConfig(BaseModel):
 
     # Runtime selection. ``backend`` is read by services/engines/ltx/adapter.py
     # (its module docstring has the auto / mock / real rules) and by the mock
-    # checks in api/generate.py and api/generate_chain.py.
+    # checks in api/generate.py, api/generate_chain.py and api/generate_alpha.py.
     backend: str = "auto"  # "auto" | "mock" | "real"
 
     # There is no checkpoint-path setting: the worker payload's
@@ -275,9 +275,10 @@ class ComfortRow(BaseModel):
     # AlphaGen（POST /generate/alpha）の 1 段原寸モード（軽量モード OFF）の快適上限トークン。
     # サーバーはこの値を読まない（OFF は縮小せず原寸で生成する。オーナー裁定 2026-10-14・
     # Docs/ALPHAGEN_DESIGN.md §24）。操作パネルが OFF の線の位置に使うだけ（台帳 §3-223 の較正対象）。
-    # 暫定。ゲート 0（VERIFICATION_LOG §151）の 4bit の線の半分を種別ごとに当てた値
-    # （単発の線のちょうど半分）。較正は後日。既存方針（未較正なら None＝線なし）
-    # に対するオーナー裁定（2026-10-07）。None は「線なし」（LTX 2.3 の行など）。
+    # 暫定。ゲート 0（VERIFICATION_LOG §151）で 4bit について決めた「単発の線の半分」を
+    # 種別ごとに当てた値（各行の値は、その行の種別の single_budget のちょうど半分）。
+    # 較正は後日。既存方針（未較正なら None＝線なし）に対するオーナー裁定（2026-10-07）。
+    # None は「線なし」（LTX 2.3 の行など）。
     alpha_gen_budget: int | None = None
 
 
@@ -302,9 +303,11 @@ class EngineComfortProfile(BaseModel):
     so when a new family is added, LEAVE THIS ``None`` until that family
     has been calibrated and has received its own ruling ("do not copy the
     precedent" is part of J1). ``None`` means "no line": the client draws
-    no outpaint comfort warning at all. Advisory-only like ``rows`` — the
-    server never validates a request against it. Single source of truth
-    for the numbers: Docs/COMFORT_LIMIT_TABLE.md §9.
+    no outpaint comfort warning at all. Advisory-only — the server never
+    validates a request against it (unlike ``rows``, which the server also
+    reads for Alpha Gen's light-mode shrink; see
+    ``LimitsConfig.comfort_budgets``). Single source of truth for the
+    numbers: Docs/COMFORT_LIMIT_TABLE.md §9.
 
     The profiles are not defined in code: each base-model manifest's
     ``comfort`` block (``scripts/manifests/*.json``) is validated against this
@@ -423,8 +426,11 @@ class LimitsConfig(BaseModel):
     # confused with it. Literal (no chain_math constant to mirror).
     single_comfort_token_budget: int = 44880
     # Comfort-budget TABLE, keyed by engine family id
-    # (services.engines.FAMILY_BY_ID: "ltx"/"ltx25"). Advisory only, like the
-    # two values above. Its source of truth is the base-model manifests'
+    # (services.engines.FAMILY_BY_ID: "ltx"/"ltx25"). Advisory for the
+    # clients, like the two values above, with ONE server-side reader: Alpha
+    # Gen's light mode fits its working size under a row's ``single_budget``
+    # (api/generate_alpha.py ``light_mode_budget``). No other request is
+    # rejected, clamped or altered by it. Its source of truth is the base-model manifests'
     # ``comfort`` block (scripts/manifests/*.json); ``AppContext`` fills this
     # field at startup (api/context.py build_comfort_budgets). It can NOT be
     # overridden from config.yaml: load_config drops a ``comfort_budgets`` key

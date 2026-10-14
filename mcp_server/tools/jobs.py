@@ -54,12 +54,12 @@ async def job_status(job_id: str) -> dict[str, Any]:
     使ってください。一覧で概要だけ見たい場合は ``list_jobs`` を使ってください。
 
     Args:
-        job_id: submit_generate / submit_chain が返した job_id。
+        job_id: submit_generate / submit_chain / submit_alpha_gen が返した job_id。
 
     Returns:
-        ``api/models.py`` の ``JobResponse`` のフィールド一式（job_id, status,
-        progress, current_step, total_steps, stage, clip, clip_count, is_v2v,
-        joined, created_at, started_at, completed_at, error, request, result）。
+        ``api/models.py`` の ``JobResponse`` のフィールド一式（フィールドの正本は
+        そちら。V2V の結合が済んだかを示す ``joined``、Alpha Gen のマットが
+        あるかを示す ``matte`` なども含みます）。
     """
     client = get_client()
     return await client.get_json(f"/jobs/{job_id}")
@@ -154,8 +154,10 @@ async def cancel_job(job_id: str) -> dict[str, Any]:
     ``delete_job`` を使ってください。
 
     queued（未着手）のジョブは即座にキャンセルされます。running（実行中）の
-    ジョブはベストエフォートです -- 実行中の推論は途中で中断できないため、
-    ``cancel_requested`` フラグが立つだけで、実際に停止する保証はありません。
+    ジョブは途中では止まりません -- ``cancel_requested`` フラグが立ち、生成を
+    最後まで走らせたあと ``cancelled`` で終わります（結果は渡されませんが、
+    ファイルは出力フォルダに残ります。生成そのものがエラーになった場合は
+    ``failed`` です）。
 
     Args:
         job_id: キャンセルしたいジョブのID。
@@ -175,8 +177,8 @@ async def cancel_job(job_id: str) -> dict[str, Any]:
     result = await client.delete_json(f"/jobs/{job_id}")
     result["note"] = (
         "queued だったジョブは即座にキャンセルされます。running だったジョブは"
-        "ベストエフォート（cancel_requested フラグのみ）で、実際に停止する保証は"
-        "ありません。"
+        "途中では止まらず、生成を最後まで走らせたあと cancelled で終わります"
+        "（結果は渡されません）。"
     )
     return result
 

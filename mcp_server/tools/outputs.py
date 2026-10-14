@@ -47,7 +47,7 @@ async def get_job_video_path(job_id: str) -> dict[str, Any]:
     （ファイルが物理的に存在するかどうかは常に実際にチェックします）。
 
     Args:
-        job_id: submit_generate / submit_chain が返した job_id。
+        job_id: submit_generate / submit_chain / submit_alpha_gen が返した job_id。
 
     Returns:
         path: 動画の絶対パス（存在するかどうかに関わらず組み立てられる）。

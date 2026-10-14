@@ -15,9 +15,12 @@ then the source, the window and the geometry:
   (a) the active engine lists ``alpha_gen`` in ``unsupported_features``
       -> 422 FEATURE_UNSUPPORTED (this endpoint's own wording), BEFORE the
       source is measured;
-  (b) the body's shape (8n+1, <= 145) — pydantic. There is no fps field: the
-      matte keeps the source's own fps (Docs/ALPHAGEN_DESIGN.md §9.2 / §23),
-      and a ``frame_rate`` key an older client still sends is ignored;
+  (b) the body's shape (8n+1, <= 145) — pydantic. FastAPI validates the
+      body BEFORE this handler runs, so in practice this comes before (a): a
+      malformed body is a validation 422 even on LTX 2.3. There is no fps
+      field: the matte keeps the source's own fps (Docs/ALPHAGEN_DESIGN.md
+      §9.2 / §23), and a ``frame_rate`` key an older client still sends is
+      ignored;
   (c) the reference upload (404 REFERENCE_VIDEO_NOT_FOUND) and the ``alpha-gen``
       adapter (404 LORA_NOT_FOUND; registered as anything but a control
       adapter without preprocess -> 422 ALPHA_GEN_INVALID);

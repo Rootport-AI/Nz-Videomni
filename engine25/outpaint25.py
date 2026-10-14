@@ -944,7 +944,8 @@ def _phase_peak_mb(phases: dict[str, dict[str, Any]], name: str) -> float | None
 # ---------------------------------------------------------------------------
 #
 # All three are shared with the inpaint driver, which calls them rather than
-# carrying a second copy of a measured path or of a user-visible contract. The
+# carrying a second copy of a measured path or of a user-visible contract (the
+# reference encode is also called by :mod:`engine25.alphagen25`). The
 # ``vram.reset()`` / ``vram.record()`` pair that times the re-encode sits at
 # each call site; the reference encode is timed inside ``reference25`` under
 # ``REFERENCE_ENCODE_PHASE``.
@@ -967,10 +968,11 @@ def _encode_reference_conditionings(
 ) -> tuple[list[ConditioningItem], int]:
     """``(conditioning_items, reference_frames)`` for the IC-LoRA reference.
 
-    ``height`` / ``width`` are the CANVAS dimensions; the reference is read at
-    half of them divided by the adapter's declared factor, which is the stage-1
-    frame. Extracted so "a missing reference means generate without one, never
-    an error" is stated once for both drivers.
+    ``height`` / ``width`` are the CANVAS dimensions; by default the reference
+    is read at half of them divided by the adapter's declared factor, which is
+    the stage-1 frame (``full_resolution`` below changes that). Extracted so "a
+    missing reference means generate without one, never an error" is stated
+    once for the in/outpainting drivers.
 
     Two keyword switches exist for :func:`engine25.alphagen25.run_alpha_gen`,
     which shares this encode rather than copying it; both default to the

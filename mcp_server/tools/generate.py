@@ -30,7 +30,8 @@ VERIFICATION_LOG §52。公開はオーナー裁定で、``Docs/PRUNAVAED_WORKOR
 （``RetakeSpec`` / ``OutpaintSpec``）で、MCPは引数をネストへ詰め替えて送る
 （``Docs/MCP_SERVER_DESIGN.md`` §2 の D19・D20、記録は VERIFICATION_LOG §86）。
 
-両ツールは ``embed_mp4_metadata``（既定は ``EMBED_MP4_METADATA_DEFAULT``。既定と
+``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
+``EMBED_MP4_METADATA_DEFAULT``。既定と
 違うときだけ送る）を持ち、読み出しは ``outputs`` の ``get_mp4_info`` が担う
 （同書 §2 の D24、記録は VERIFICATION_LOG §115）。
 
@@ -1061,9 +1062,10 @@ async def submit_alpha_gen(
     元動画は ``upload_video`` で取得した ``reference_video_id`` で渡します。
     サーバーが元動画の寸法と fps を測り、``window_start_sec`` から
     ``num_frames`` フレームを**元動画の fps のまま（変換なし）**切り出して
-    生成します。マットも元動画と同じ fps で書き出すので、
-    元動画とコマがずれません。fps を指定する引数はありません。元動画の
-    縦横はどちらも偶数・256px 以上・4096px 以下、fps は整数に丸めて 1〜60 が
+    生成します。マットも元動画と同じ fps で書き出すので、固定フレームレートの
+    素材なら元動画とコマがずれません（可変フレームレートの素材は対象外です）。
+    fps を指定する引数はありません。元動画の縦横はどちらも偶数・256px 以上
+    （1 段原寸モードではさらに 4096px 以下）、fps は整数に丸めて 1〜60 が
     必要です。
 
     既定は **1 段原寸モード**（``light_mode=False``）で、縮小はしません。

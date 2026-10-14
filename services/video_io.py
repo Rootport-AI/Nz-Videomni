@@ -280,8 +280,9 @@ def finalize_alpha_matte(
     frame is dropped or repeated. None keeps the engine's timing unchanged.
     This assumes ``output_fps`` is close to the integer fps the engine was
     given (``floor(x + 0.5)`` of it): far apart (about 1.6x or more,
-    measured), the ``-r`` resampling adds one frame at the end. The current
-    rounding rule never produces such a ratio.
+    measured), the ``-r`` resampling adds one frame at the end. Under the
+    endpoint's rounding rule (``floor(x + 0.5)`` in api/generate_alpha.py)
+    only a very slow source, below about 0.62 fps, reaches such a ratio.
     """
     exe = ffmpeg_path()
     cw, ch = int(crop[0]), int(crop[1])

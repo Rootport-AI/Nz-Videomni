@@ -52,7 +52,8 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    output_path, [images], loras, reference_video, [outpaint], [inpaint],
    [alpha_gen]}
-      One two-stage generation, mp4 written by this process to ``output_path``.
+      One generation, mp4 written by this process to ``output_path``: two-stage
+      for a plain, outpaint or inpaint job, one-stage for an ``alpha_gen`` job.
       ``images`` empty/absent -> T2V; entries -> I2V. Fields named in
       ``pipeline25.IGNORED_FIELDS`` may ride along; each one present is logged
       as ignored and dropped. ``crop_output`` is NOT
@@ -85,7 +86,7 @@ Protocol (one JSON object per line; parent -> worker):
       checkpoint built -- "diff" or "conv"; a load-time fact) and ``ltx25``
       (encode_fps/video_chunks/tiling/size_bytes/phases -- deliberately no
       ``sampler``, that is already ``ready.sampler``) to EVERY generate job,
-      plain, outpaint or inpaint. On an outpaint job it ALSO adds
+      plain, outpaint, inpaint or alpha_gen. On an outpaint job it ALSO adds
       ``outpaint``: the job's metadata dict (geometry, blend, sigmas, the audio
       freeze proof, and its own nested ``ltx25`` sub-dict, a superset of the
       plain one -- the SAME dict object as the top-level ``ltx25`` key, not a
@@ -788,7 +789,8 @@ def _do_generate(msg: dict) -> None:
     alpha = msg.get("alpha_gen")
     assert sum(block is not None for block in (outpaint, inpaint, alpha)) <= 1, (
         "outpaint, inpaint and alpha_gen are mutually exclusive; the API schema "
-        "rejects the combination before a job is created"
+        "rejects outpaint+inpaint, and alpha_gen is built only by POST "
+        "/generate/alpha, which never adds outpaint or inpaint"
     )
 
     # The five acceleration knobs. All are ABSENT-MEANS-OFF, and all are armed
@@ -1076,7 +1078,7 @@ def _do_generate(msg: dict) -> None:
         extra = {"inpaint": result.metadata["inpaint"]}
 
     # ``ltx25``, a SECOND and SEPARATE ``done`` key, present on EVERY generate
-    # job (plain, outpaint or inpaint), unlike ``extra`` above. Its content
+    # job (plain, outpaint, inpaint or alpha_gen), unlike ``extra`` above. Its content
     # DOES reach metadata.json -- ``services/engines/ltx25/adapter.py`` lifts it
     # onto ``GenerationOutcome.ltx25`` and ``services/pipeline_manager.py``
     # writes it in verbatim when present.
@@ -1084,8 +1086,10 @@ def _do_generate(msg: dict) -> None:
     # ``result.metadata`` (the same dict that just went into ``extra``), so an
     # outpaint job reuses it rather than building a second, possibly-drifting
     # copy -- the app reads the TOP-LEVEL key only, never ``outpaint.ltx25``,
-    # but the two are one and the same object here. A plain generation has no
-    # such dict to reuse, so it is built fresh from the same fields the
+    # but the two are one and the same object here. A plain generation -- and
+    # an alpha_gen job, whose ``run_alpha_gen`` returns a plain
+    # ``GenerationResult`` -- has no such dict to reuse, so it is built fresh
+    # from the same fields the
     # ``done`` event below already reports (deliberately NO ``sampler`` -- a
     # constant already on ``ready.sampler``/LOAD_OK -- and no
     # ``stage1_eta``/``stage2_sampler``/``vram``, which only a two-stage

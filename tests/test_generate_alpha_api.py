@@ -8,9 +8,15 @@ files and skip without ffmpeg on PATH (put ``tools\\ffmpeg\\bin`` first).
 The fixture is ``two_family_client``'s world (LTX 2.3 + LTX 2.5, mock) plus
 two things that world lacks: the ``alpha-gen`` adapter registered in
 ``model.ic_loras``, and a ``comfort`` block on the LTX 2.5 descriptor so the
-budget path (row selection -> shrink) is exercised. The stub transformer has
-no tensors, so its weight class is unknown and the endpoint takes the
-SMALLEST value across the rows (the documented exception).
+light-mode budget's row selection is exercised. The stub transformer has no
+tensors, so its weight class is unknown and the endpoint takes the SMALLEST
+value across the rows (the documented exception).
+
+Only light mode shrinks (owner ruling 2026-10-14, Docs/ALPHAGEN_DESIGN.md
+§24): the default one-stage run keeps the source size whatever the comfort
+values say. The ``single_budget`` values below are far above the test
+sizes, so a test that needs light mode to shrink injects a small budget by
+replacing ``generate_alpha.light_mode_budget``.
 """
 
 from __future__ import annotations
@@ -40,9 +46,9 @@ ALPHA_LORA = "alpha-gen"
 FPS = 24
 FRAMES = 9
 
-# Smallest row wins (unknown weight class): alpha 400, single 100000.
-# 640x512x9f -> canvas tokens 20*16*2 = 640 > 400 -> working 480x384,
-# canvas 512x384 (16*12*2 = 384). Light mode (single 100000) -> no shrink.
+# Smallest row wins (unknown weight class): single 100000, so light mode does
+# not shrink 640x512x9f (20*16*2 = 640 tokens). ``alpha_gen_budget`` is only
+# the operation panel's line; the server never reads it.
 COMFORT = {
     "spatial_factor": 32,
     "temporal_factor": 8,
@@ -73,12 +79,12 @@ def _control_safetensors(path: Path, factor: str = "1") -> None:
     path.write_bytes(struct.pack("<Q", len(blob)) + blob + b"\x00" * 4)
 
 
-def _build(tmp_path: Path, *, register_lora: bool = True):
+def _build(tmp_path: Path, *, register_lora: bool = True, comfort: dict = COMFORT):
     ltx23 = base_model_descriptor()
     ltx25 = base_model_descriptor("LTX25")
     ltx25["display_name"] = "LTX 2.5"
     ltx25["engine_family"] = "ltx25"
-    ltx25["comfort"] = COMFORT
+    ltx25["comfort"] = comfort
 
     fragment = build_model_layout(tmp_path, [ltx23, ltx25])
     models_dir = tmp_path / "models"
@@ -274,13 +280,18 @@ def test_window_out_of_range(alpha_client):
 
 
 @has_ffmpeg
-def test_working_size_outside_request_bounds(alpha_client):
-    """256x256 x 145f (19 latents): canvas tokens 8*8*19 = 1216 > 400, and the
-    first fitting working size is 128x128 (16*19 = 304) -- below
-    GenerateRequest's 256 width floor -> 422 rather than a 500 from the
-    internal request."""
+def test_working_size_outside_request_bounds(alpha_client, monkeypatch):
+    """Light mode with an injected budget of 400: 256x256 x 145f (19
+    latents) is 8*8*19 = 1216 tokens > 400, and the first fitting working
+    size is 128x128 (16*19 = 304) -- below GenerateRequest's 256 width floor
+    -> 422 rather than a 500 from the internal request."""
+    import api.generate_alpha as generate_alpha
+
+    monkeypatch.setattr(generate_alpha, "light_mode_budget", lambda *a, **k: 400)
     vid = _upload_source(alpha_client, 256, 256, frames=145)
-    r = alpha_client.post("/api/v1/generate/alpha", json=_body(vid, num_frames=145))
+    r = alpha_client.post(
+        "/api/v1/generate/alpha", json=_body(vid, num_frames=145, light_mode=True)
+    )
     assert r.status_code == 422, r.text
     assert r.json()["error"]["code"] == "ALPHA_GEN_INVALID"
     assert "outside" in r.json()["error"]["detail"]
@@ -307,9 +318,10 @@ def _probe(path: Path):
 
 @has_ffmpeg
 def test_accepted_builds_internal_request_and_finishes(alpha_client):
-    """640x512 -> working 480x384 / canvas 512x384 under the smallest alpha
-    budget (400). The job runs to completion on the mock backend; both
-    deliverables come back at the SOURCE size."""
+    """The default one-stage run is never shrunk: 640x512 -> working =
+    canvas = 640x512 (already on the 64-grid), no budget. The job runs to
+    completion on the mock backend; both deliverables come back at the
+    SOURCE size."""
     vid = _upload_source(alpha_client, 640, 512)
     r = alpha_client.post(
         "/api/v1/generate/alpha",
@@ -332,16 +344,16 @@ def test_accepted_builds_internal_request_and_finishes(alpha_client):
     assert req["prompt"] == " "
     assert req["loras"] == [{"name": ALPHA_LORA, "strength": 1.0, "audio_strength": None}]
     assert req["reference_video_id"] == vid
-    assert (req["width"], req["height"]) == (512, 384)
+    assert (req["width"], req["height"]) == (640, 512)
     assert req["num_frames"] == FRAMES
     assert req["frame_rate"] == FPS
     assert req["seed"] == 7
     assert req["alpha_gen"] == {
         "window_start_sec": 0.0,
         "one_stage": True,
-        "working_width": 480,
-        "working_height": 384,
-        "budget_tokens": 400,
+        "working_width": 640,
+        "working_height": 512,
+        "budget_tokens": None,
         "source_fps": float(FPS),
         "output_fps": f"{FPS}/1",
     }
@@ -357,7 +369,7 @@ def test_accepted_builds_internal_request_and_finishes(alpha_client):
     assert _probe(out / "matte.mkv") == ((640, 512), FRAMES)
     assert not (out / "_alpha_engine.mp4").exists()
     assert (out / "_alpha_window.mp4").exists()
-    assert _probe(out / "alpha_reference.mp4") == ((512, 384), FRAMES)
+    assert _probe(out / "alpha_reference.mp4") == ((640, 512), FRAMES)
 
     assert job["matte"] is True
     assert job["result"]["resolution"] == "640x512"
@@ -375,9 +387,12 @@ def test_accepted_builds_internal_request_and_finishes(alpha_client):
     assert ag["resampled"] is False
     assert ag["output_fps"] == f"{FPS}/1"
     assert (ag["source_width"], ag["source_height"]) == (640, 512)
-    assert (ag["pad_right"], ag["pad_bottom"]) == (32, 0)
-    assert ag["scale"] == 0.75
-    assert ag["canvas_tokens"] == 384
+    assert (ag["working_width"], ag["working_height"]) == (640, 512)
+    assert (ag["canvas_width"], ag["canvas_height"]) == (640, 512)
+    assert (ag["pad_right"], ag["pad_bottom"]) == (0, 0)
+    assert ag["scale"] == 1.0
+    assert ag["budget_tokens"] is None
+    assert ag["canvas_tokens"] == 640
     assert ag["matte"] == "matte.mkv"
     assert ag["matte_codec"] == "ffv1/gray"
 
@@ -385,6 +400,90 @@ def test_accepted_builds_internal_request_and_finishes(alpha_client):
     assert m.status_code == 200
     assert m.headers["content-type"] == "video/x-matroska"
     assert f"{job_id}_matte.mkv" in m.headers["content-disposition"]
+
+
+@has_ffmpeg
+def test_light_mode_shrinks_under_its_budget_and_scales_back(alpha_client, monkeypatch):
+    """Light mode with an injected budget of 400: 640x512x9f (640 tokens)
+    -> working 480x384, canvas 512x384 (16*12*2 = 384 tokens). The matte
+    still comes back at the SOURCE size."""
+    import api.generate_alpha as generate_alpha
+
+    monkeypatch.setattr(generate_alpha, "light_mode_budget", lambda *a, **k: 400)
+    vid = _upload_source(alpha_client, 640, 512)
+    r = alpha_client.post("/api/v1/generate/alpha", json=_body(vid, light_mode=True))
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = alpha_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+    req = job["request"]
+    assert (req["width"], req["height"]) == (512, 384)
+    assert req["alpha_gen"]["one_stage"] is False
+    assert (req["alpha_gen"]["working_width"], req["alpha_gen"]["working_height"]) == (480, 384)
+    assert req["alpha_gen"]["budget_tokens"] == 400
+
+    out = alpha_client.tmp_path / "outputs" / job_id
+    assert _probe(out / "output.mp4") == ((640, 512), FRAMES)
+    assert _probe(out / "matte.mkv") == ((640, 512), FRAMES)
+    assert _probe(out / "alpha_reference.mp4") == ((512, 384), FRAMES)
+
+    ag = json.loads((out / "metadata.json").read_text(encoding="utf-8"))["alpha_gen"]
+    assert ag["mode"] == "light"
+    assert (ag["pad_right"], ag["pad_bottom"]) == (32, 0)
+    assert ag["scale"] == 0.75
+    assert ag["budget_tokens"] == 400
+    assert ag["canvas_tokens"] == 384
+
+
+@has_ffmpeg
+def test_full_size_ignores_the_comfort_values(tmp_path):
+    """A row without ``alpha_gen_budget`` (the shape of the LTX 2.3 rows), and
+    a ``single_budget`` small enough that light mode shrinks: on the same app
+    the default one-stage run is accepted and keeps the source size, while
+    light mode uses that budget (OFF ignores it, ON uses it)."""
+    comfort = {
+        "spatial_factor": 32,
+        "temporal_factor": 8,
+        "rows": [
+            {"requires": {"weight_class": "4bit"}, "single_budget": 400,
+             "chain_budget": 400},
+        ],
+    }
+    app = _build(tmp_path, comfort=comfort)
+    with TestClient(app) as c:
+        c.app_context = app.state.context  # type: ignore[attr-defined]
+        c.tmp_path = tmp_path  # type: ignore[attr-defined]
+        _activate_25(c)
+        vid = _upload_source(c, 640, 512)
+        r = c.post("/api/v1/generate/alpha", json=_body(vid))
+        assert r.status_code == 202, r.text
+        job = c.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+        ag = job["request"]["alpha_gen"]
+        assert ag["one_stage"] is True
+        assert (ag["working_width"], ag["working_height"]) == (640, 512)
+        assert ag["budget_tokens"] is None
+
+        r = c.post("/api/v1/generate/alpha", json=_body(vid, light_mode=True))
+        assert r.status_code == 202, r.text
+        job = c.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+        ag = job["request"]["alpha_gen"]
+        assert ag["one_stage"] is False
+        assert ag["budget_tokens"] == 400
+        assert (ag["working_width"], ag["working_height"]) == (480, 384)
+
+
+@has_ffmpeg
+def test_full_size_still_checks_the_request_bounds(alpha_client):
+    """The default one-stage run does not shrink, so a source wider than
+    GenerateRequest's 4096 is refused by the bounds check (f) as a 422,
+    not passed on to fail as a 500."""
+    vid = _upload_source(alpha_client, 4098, 256)
+    before = _job_count(alpha_client)
+    r = alpha_client.post("/api/v1/generate/alpha", json=_body(vid))
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "ALPHA_GEN_INVALID"
+    assert "outside" in r.json()["error"]["detail"]
+    assert _job_count(alpha_client) == before
 
 
 @has_ffmpeg
@@ -405,15 +504,16 @@ def test_light_mode_uses_single_budget(alpha_client):
 @has_ffmpeg
 @pytest.mark.parametrize(
     "weight_class,light_mode,budget",
-    [("4bit", False, 900), ("4bit", True, 100000), ("8bit", True, 200000)],
-    ids=["4bit-alpha", "4bit-light", "8bit-light"],
+    [("4bit", False, None), ("4bit", True, 100000), ("8bit", True, 200000)],
+    ids=["4bit-full-size", "4bit-light", "8bit-light"],
 )
 def test_known_weight_class_picks_its_row(alpha_client, monkeypatch, weight_class, light_mode, budget):
-    """With the weight class known, the matching row is used (not the
-    smallest-value fallback): ``alpha_gen_budget`` by default,
-    ``single_budget`` in light mode. 640x512x9f is 640 tokens, under every
-    value here, so the working size stays the source size. (4bit-light equals
-    the fallback's value; 8bit-light is the case that tells them apart.)"""
+    """With the weight class known, light mode uses the matching row's
+    ``single_budget`` (not the smallest-value fallback); the default
+    one-stage run has no budget at all (None). 640x512x9f is 640 tokens,
+    under every value here, so the working size stays the source size.
+    (4bit-light equals the fallback's value; 8bit-light is the case that
+    tells them apart.)"""
     import api.generate_alpha as generate_alpha
 
     monkeypatch.setattr(generate_alpha, "transformer_weight_class", lambda *_a: weight_class)

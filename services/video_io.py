@@ -193,7 +193,8 @@ def pad_green_mp4(
     byte-for-byte unchanged:
 
     * ``scale=(w, h)`` resizes the source to ``w``x``h`` (bicubic) before the
-      pad, so a source larger than the comfort budget becomes the working size.
+      pad, so in light mode a source over the single comfort budget is scaled
+      to the working size.
     * ``color`` is the pad colour (any ffmpeg colour). AlphaGen pads with
       ``"black"``; the default is the outpainting sentinel green.
     """

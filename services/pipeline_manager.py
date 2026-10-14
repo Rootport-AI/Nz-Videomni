@@ -817,7 +817,8 @@ class PipelineManager:
 
             # Alpha Gen (POST /generate/alpha builds this request; LTX 2.5
             # only). Cut the window, scale it to the working size the endpoint
-            # fitted under the comfort budget, pad it black to the canvas on the
+            # chose (the source size, or in light mode the size fitted under
+            # the single comfort budget), pad it black to the canvas on the
             # right/bottom, and hand THAT to the runner as the reference video --
             # the same path substitution the outpaint/inpaint blocks above use,
             # and for the same reason both intermediates land next to the output

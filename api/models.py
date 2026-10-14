@@ -351,9 +351,13 @@ class AlphaGenSpec(BaseModel):
 
     GEOMETRY CONTRACT. ``GenerateRequest.width`` / ``height`` are the CANVAS:
     the working size below rounded UP to a multiple of 64 (a factor-1 reference
-    needs only the 64-grid). The scaled source sits at the canvas' top-left and
-    the right/bottom bands are black, cut off again before the matte is
-    stretched back to the source's own size.
+    needs only the 64-grid). The source sits at the canvas' top-left and the
+    right/bottom bands are black, cut off again before the matte is written at
+    the source's own size. Only light mode shrinks the source (to fit the
+    single comfort budget) and stretches the matte back; the default
+    one-stage run keeps the source size (``budget_tokens`` None, ``scale``
+    1.0 — beyond the comfort line it is only slower; owner ruling 2026-10-14,
+    Docs/ALPHAGEN_DESIGN.md §24).
 
     **No file path and no source size here, deliberately** — the same rule as
     :class:`InpaintSpec`: the uploaded file is the single source of truth for
@@ -366,12 +370,14 @@ class AlphaGenSpec(BaseModel):
     # True = the default single full-size stage (Stage-2 skipped); False = the
     # light mode, i.e. the existing two-stage path with the reference attached.
     one_stage: bool = True
-    # The size the source is scaled to before padding (aspect kept, even sides).
+    # The size the source is scaled to before padding (aspect kept, even
+    # sides). Equal to the source size unless light mode shrank it.
     working_width: int = Field(..., ge=2)
     working_height: int = Field(..., ge=2)
-    # The comfort budget (tokens) the working size was fitted under. None =
-    # there is no budget (the family has no comfort value), so the source
-    # was not scaled down.
+    # The light-mode comfort budget (tokens; the row's ``single_budget``) the
+    # working size was fitted under. None = the source was not scaled down:
+    # always in the default one-stage run, and in light mode when the family
+    # has no comfort value.
     budget_tokens: int | None = None
     # The source's own frame rate, measured by the endpoint with ffprobe (the
     # client never sends it). The window is cut and padded at this rate, so

@@ -82,7 +82,8 @@ def transformer_weight_class(
     """Weight class of the transformer ``selection`` names for ``base_id``.
 
     Public: ``api/generate_alpha.py`` uses it too, to pick the comfort row the
-    Alpha Gen budget comes from (the same class this endpoint reports).
+    light-mode Alpha Gen budget comes from (the same class this endpoint
+    reports).
 
     ``None`` when the name does not resolve (unknown name, missing file, no
     transformer category) or the file cannot be classified.

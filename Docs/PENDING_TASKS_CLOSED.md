@@ -2883,3 +2883,14 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev（コード・文書 `80290fa`〜`3db575f` の 9 件、記録 `5a5a34a`）。main への merge は監督が行う（オーナー裁定 2026-10-13）。
 - **残課題**: 操作パネル（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-85）・出口（同 §1-86）・LoRA ウェイトの配布（同 §1-87）・出力ファイルの fps を元動画の正確な値で書く追補（同 §1-88）・自前の入力プラグイン（同 §3-222）・快適上限の較正（同 §3-223）。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b、ゲート 0 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §152、事前調査 [`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md)。
+
+### 3-226. Alpha Gen 第 1 弾の追補: 出力ファイルの fps を元動画の正確な値で書く（29.97fps など・案 C）（起票：2026-10-13、実装：2026-10-13、オーナー目視合格・クローズ：2026-10-14）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-2〔元 §1-88〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-88 → §2-2（**同書側は欠番**）。第 1 弾（3-224）の目視 G5 で見つかった、fps 変換による 1 コマのずれを根本から無くす追補。
+- **到達条件**: 29.97fps（30000/1001）のような整数でない元動画で、出来た `output.mp4` と `matte.mkv` の fps が元動画と同じ正確な値になり、元動画とマットのコマが 1 対 1 で並ぶこと。**達成した。**
+- **何が完了したか（案 C）**: `POST /api/v1/generate/alpha` から `frame_rate` を取り去り、サーバーが ffprobe で元動画の fps を測って、窓の切り出し（`cut_window_mp4`・`pad_green_mp4`）も出力 2 本（`finalize_alpha_matte` が時刻を打ち直し `-r` を付ける）も元動画の正確な fps のまま通す。エンジンには従来どおり整数に丸めた値を渡す。MCP の `submit_alpha_gen` も `frame_rate` なし。古いクライアントが `frame_rate` を送っても無視して受理する。可変フレームレート（VFR）の素材は非対応（制限の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §3・受付で断る案は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-225）。
+- **どの物差しで通ったか**: 機械ゲート（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153.3）・監督の実機ゲート G-S2（同 §153.4: 29.97fps の素材で `output_fps` が `30000/1001`・`resampled` 偽・出力 2 本とも要求どおりのコマ数）・オーナーの目視 §4.26 G4（2026-10-14 合格: 元動画と並べてコマ送りしても 1 コマのずれやちらつきが無い）。
+- **クローズ理由**: 到達条件を機械・実機・目視で満たした。
+- **状態**: dev（`f19571e`〔コード・テスト・MCP〕・`a07ac5f`〔文書〕。§153.2）。main への merge は第 2 弾（§2-1）の再確認の合格後にまとめて行う。
+- **残課題**: VFR 素材の受付時の拒否（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-225）。
+- **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §3・§23、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b（v0.5.87）、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153、目視 同 §153.7、第 1 弾の目視での発見 同 §152.7。

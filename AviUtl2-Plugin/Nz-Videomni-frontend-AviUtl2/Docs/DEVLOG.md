@@ -5069,3 +5069,9 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 133.4 状態
 
 - 機械ゲート: 型検査 0・lint 警告 31（不変）・vitest 157 ファイル／3194 件（失敗 0）。オーナーの再確認は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.26 の再確認項目で行います。
+
+### 133.5 mkv の fps（監督の追記・契約の中の修正）
+
+- オーナーの目視 G2 で、mkv の fps 欄が「不明」ではなく 14.985（正しい 29.97 の半分）と出た。原因は Windows の Media Foundation の Matroska ソース（`mfmkvsrcsnk.dll`）が、mkv／webm の fps をコーデックによらず本来の半分（コンテナが宣言する 1 コマの長さを 2 倍に見た値）で返すこと。実測の表と根拠はバックエンド `Docs/VERIFICATION_LOG.md` §154.4。設計の前提「Media Foundation は mkv を開けない」は誤りだった。
+- 手当て: `ProbeMediaFps`（`native/src/media_fps_probe.cpp`）は、拡張子が `.mkv`／`.webm`／`.mk3d` なら Media Foundation を開かずに「不明」を返す。判定は 1 条件で、契約 v11 の右クリック `mediaFps`（mkv で 15fps 前後に事前入力されていた既存の不具合）と v15 の `probeMediaInfo.fps` の両方が同時に直る。契約の版は上げない（0＝不明の契約の中の修正。[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.13・§4.22・§8 の注記）。
+- Alpha Gen では mkv は「不明」になり、秒数と線は出ず、窓の時間が決まらないので丸ごとアップロードしてサーバーが fps を測る（§132.3 の既存の経路）。

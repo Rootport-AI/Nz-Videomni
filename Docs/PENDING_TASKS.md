@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-14（§2-2〔元 §1-88〕を目視合格で CLOSED 3-226 へ・§2-1 は目視後の手直しを待つ）。
+- 作成: 2026-07-15／最終更新: 2026-10-14（§2-2〔元 §1-88〕を目視合格で CLOSED 3-226 へ・§2-1 を目視後の手直し〔文言 3 点・縮小は軽量モードだけ・mkv の fps〕の再確認待ちに書き直し・§3-223 の概要を現行化・§1-82 に不安定なテスト 1 件を追記）。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
@@ -20,6 +20,7 @@
 - **概要**: 操作パネルのテスト `webui/src/App.nag.test.tsx` の 2 件（"bridge capture — NAG on …" と "bridge capture — VSF method selected …"）が、ときどき落ちる。前のテストが送ったジョブが、アプリ全体で共有されるモックの中でまだ実行中のことがあり、「生成」ボタンが "Busy…" になっていて見つからないため。モックのジョブの進み具合は既定 2 秒のポーリングで決まるのでタイミング次第で、Repeat count（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-219）の改修の前後とも 20 回中 4〜5 回落ちる（この改修とは無関係の既存の不具合）。
   - もう 1 件、`webui/src/jobs/JobsContext.test.tsx` の "cancelJob marks the job as cancelling until it settles into cancelled, then clears" が、テスト全体の実行では 3 回中 1 回落ち、このファイル単独では 5 回とも通る。Repeat count の改修では触っていないファイルで、原因は未調査（`App.nag.test.tsx` の共有モックの持ち越しとは別の理由の可能性がある）。
 - **直し方の候補**: `App.nag.test.tsx` は、`afterEach` で共有モックのジョブを `listJobs` で終わりまで進める後片付けを足す（`webui/src/modes/single/SingleScreen.repeat.test.tsx` で採った方法）。`JobsContext.test.tsx` は原因の特定から。
+- **追記（2026-10-14）**: `webui/src/modes/toolbox/ObjectTrackingSection.test.tsx` の "calls timeline.cancelTracking when Stop is pressed" も、全件の実行で 1 回落ち、単独では 3 回とも合格した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §154.3）。同型の不安定として本項に含める。
 - **範囲**: テストのみ（製品コードは不変）。
 
 ### 1-86. Alpha Gen 第 3 弾＝出口（🎞・💾・🪣）（起票：2026-10-07）
@@ -43,10 +44,10 @@
 
 ### 2-1. Alpha Gen 第 2 弾＝操作パネル（Edit→Alpha Gen サブタブ）（起票：2026-10-07〔元 §1-85〕、実装：2026-10-13）
 
-- **何を変えたか**: Edit タブに「Alpha Gen」サブタブを置き、第 1 弾の `POST /generate/alpha` を画面から使えるようにした。入口は 3 つ（タイムラインの動画の右クリック「🎬 Video: 透過用マットを作る (Alpha Gen)」＝オブジェクトの再生位置から・ドロップと「元になる動画を選ぶ」＝冒頭から）。fps 欄は元動画の fps の表示のみ（プラグインの契約 v15 で `fs.probeMediaInfo` が fps を返す）。フレーム数は 9〜145 の 8n+1・初期 81・快適上限の線（`alpha_gen_budget`。軽量モードは単発の線）。生成ボタンの時点で窓だけをアップロードし、短い素材は `frame_count` で切り下げてトーストで知らせる。1 対 1 でないオブジェクト（再生速度≠100%・ループ・中間点 2 つ以上）は右クリックで断る。LTX 2.3 ではサブタブが灰色（表示中に切り替えたら Retake へ戻す）。1 段原寸のジョブの進捗バーは 0.06〜0.90 に写す。後処理カード（🎞・💾・🪣）は §1-86。決定事項の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §9。
-- **オーナー実機目視ゲート**: フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26 の G1〜G12（項目はそちらが正本）。
-  - [ ] §4.26 の G1〜G12 がすべて合格。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153、フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §132。
+- **何を変えたか**: Edit タブに「Alpha Gen」サブタブを置き、第 1 弾の `POST /generate/alpha` を画面から使えるようにした。入口は 3 つ（タイムラインの動画の右クリック「🎬 Video: 背景透過（Alpha Gen）」＝オブジェクトの再生位置から・ドロップと「元になる動画を選ぶ」＝冒頭から）。fps 欄は元動画の fps の表示のみ（プラグインの契約 v15 で `fs.probeMediaInfo` が fps を返す）。フレーム数は 9〜145 の 8n+1・初期 81・快適上限の線（軽量モード OFF＝`alpha_gen_budget` の目安の線・ON＝単発の線。縮小して元の寸法へ戻すのは軽量モード ON のときだけで、OFF は線を超えても原寸で生成する〔オーナー裁定 2026-10-14〕）。生成ボタンの時点で窓だけをアップロードし、短い素材は `frame_count` で切り下げてトーストで知らせる。1 対 1 でないオブジェクト（再生速度≠100%・ループ・中間点 2 つ以上）は右クリックで断る。LTX 2.3 ではサブタブが灰色（表示中に切り替えたら Retake へ戻す）。1 段原寸のジョブの進捗バーは 0.06〜0.90 に写す。後処理カード（🎞・💾・🪣）は §1-86。決定事項の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §9。
+- **オーナー実機目視ゲート**: フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26（項目はそちらが正本）。G1・G3〜G12 は 2026-10-14 に合格。G2 の mkv は不合格で、文言 3 点と設計の差し戻しとともに手直しした（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153.7・§154）。
+  - [ ] §4.26 の再確認①〜⑥がすべて合格。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153・§154、フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §132・§133。
 
 ---
 
@@ -235,7 +236,7 @@
 
 #### 3-223. Alpha Gen の快適上限の較正（Q6_K・8bit を含む）（起票：2026-10-07）
 
-- **概要**: Alpha Gen の 1 段原寸モードの予算 `alpha_gen_budget` は暫定値で、種別ごとの単発の線の半分（4bit 23,460・Q6_K 21,672・8bit 19,380）を置いている。ゲート 0 で測ったのは 4bit（Q4_K_M）だけなので、Q6_K・8bit を含めて較正する。
+- **概要**: 操作パネルの Alpha Gen で軽量モード OFF のときに引く快適上限の線の値 `alpha_gen_budget` は暫定値で、種別ごとの単発の線の半分を置いている（値の正本は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5）。サーバーはこの値で縮小しなくなった（縮小は軽量モード ON のときだけ。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153.7）ので、この値の役目は「ここを超えると遅くなる」という目安の線だけになった。ゲート 0 で測ったのは 4bit（Q4_K_M）だけなので、Q6_K・8bit を含めて較正する。既定の操作（FHD・81 コマ・8bit）でも線を超える（[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §24）ため、8bit の線は特に測る価値が高い。
 - **判断材料**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151（負荷は生成側＋参照側の合計トークンで効くという見立て）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §6・§16。
 - **状態**: 将来の研究課題（着手時期未定）。

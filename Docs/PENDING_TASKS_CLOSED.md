@@ -2875,13 +2875,17 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **到達条件**: 専用の API に動画を送ると、同じ寸法・同じフレーム数のマットが返ること。API と MCP から使えて、LTX 2.3 では 422 で断ること。**達成した。**
 - **何が完了したか**:
   - **`POST /api/v1/generate/alpha`**: 入力動画・フレーム数（9〜145・8n+1）・整数の fps・seed・軽量モードだけを受け、プロンプト・LoRA・強さはサーバーが固定する。LTX 2.3 では 422 `FEATURE_UNSUPPORTED`。
+    > **訂正（3-226）**: `frame_rate` は 3-226 で API から削除した。サーバーが元動画の fps を測る。
   - **1 段原寸モード**（既定）: Stage-2 を飛ばし、Stage-1 を原寸・参照つきで 1 回だけ走らせる（`engine25/alphagen25.py`）。軽量モードは既存の 2 段経路。サーバーが元の寸法を測り、快適上限の暫定の予算（`alpha_gen_budget`）に収まるまで縮めて生成し、元の寸法へ戻す。
+    > **訂正（3-227・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §154）**: 縮めるのは軽量モード ON のときだけ。1 段原寸は縮めない。
   - **マットの出力**: プレビュー用の `output.mp4`（H.264）と、劣化しない `matte.mkv`（FFV1・gray・全範囲）の 2 本。`GET /api/v1/jobs/{job_id}/matte` で取得できる。
   - **MCP**: `submit_alpha_gen`・`get_job_matte_path`・`save_job_video(which="matte")` など（ツールは 25 本）。
 - **どの物差しで通ったか**: 機械ゲート 3 環境で失敗 0（アプリの venv 3,215 合格・LTX 2.5 エンジン 292 合格・LTX 2.3 エンジン 1,161 合格）。差分の敵対的レビューは Critical 0・Major 1・Minor 12 で、採用 12・棄却 1。実機ゲート G1〜G10 すべて合格。**オーナー目視（2026-10-13）: 1 段原寸（G1〜G3）は驚くほど綺麗にシルエットが抜け、フレームのずれもなし。軽量モード（G4）は輪郭がガタつく（設計上の想定どおり）。24→30fps 変換（G5）はシルエットは遜色ないが 1 フレームのずれでちらつく箇所があり、原因は比べ方（AviUtl2 と ffmpeg の fps 変換の食い違い）と判断した**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §152.7）。
 - **クローズ理由**: 実装が完了し、機械ゲート・実機ゲート・オーナーの目視に合格した。G5 の観察は、第 2 弾の fps の規則を「元動画の fps のまま変換しない」に変えるオーナー裁定（2026-10-13）で手当てした。
 - **状態**: dev（コード・文書 `80290fa`〜`3db575f` の 9 件、記録 `5a5a34a`）。main への merge は監督が行う（オーナー裁定 2026-10-13）。
+> **更新（2026-10-14）**: main merge 済み（`2113c63`）。
 - **残課題**: 操作パネル（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-85）・出口（同 §1-86）・LoRA ウェイトの配布（同 §1-87）・出力ファイルの fps を元動画の正確な値で書く追補（同 §1-88）・自前の入力プラグイン（同 §3-222）・快適上限の較正（同 §3-223）。
+  > **更新（2026-10-14）**: §1-85 は 3-227・§1-88 は 3-226 でクローズ。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b、ゲート 0 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §152、事前調査 [`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md)。
 
 ### 3-226. Alpha Gen 第 1 弾の追補: 出力ファイルの fps を元動画の正確な値で書く（29.97fps など・案 C）（起票：2026-10-13、実装：2026-10-13、オーナー目視合格・クローズ：2026-10-14）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-2〔元 §1-88〕からクローズ）
@@ -2892,6 +2896,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: 機械ゲート（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153.3）・監督の実機ゲート G-S2（同 §153.4: 29.97fps の素材で `output_fps` が `30000/1001`・`resampled` 偽・出力 2 本とも要求どおりのコマ数）・オーナーの目視 §4.26 G4（2026-10-14 合格: 元動画と並べてコマ送りしても 1 コマのずれやちらつきが無い）。
 - **クローズ理由**: 到達条件を機械・実機・目視で満たした。
 - **状態**: dev（`f19571e`〔コード・テスト・MCP〕・`a07ac5f`〔文書〕。§153.2）。main への merge は第 2 弾（§2-1）の再確認の合格後にまとめて行う。
+  > **更新（2026-10-14）**: main merge 済み（`015893b`）。
 - **残課題**: VFR 素材の受付時の拒否（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-225）。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §3・§23、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b（v0.5.87）、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153、目視 同 §153.7、第 1 弾の目視での発見 同 §152.7。
 
@@ -2908,5 +2913,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: 機械ゲート 4 環境で失敗 0（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153.3・§154.3・§154.8）。差分の敵対的レビューは計画段階 13 件＋実装後 3 層＋手直し後 2 層＋表示の再指示 1 本で、裏取りできたものは全部採用。監督の実機ゲート（§153.4・§154.4: 29.97fps の素材でコマ数不変・進捗 0.90・軽量 OFF で線の 1.11 倍を原寸で完走 18 分 20 秒・ON は縮小）。オーナーの目視（フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26: 初回 G1・G3〜G12 合格・G2 の mkv 不合格→手直し後の再確認①〜⑥ 全合格・2026-10-14）。
 - **クローズ理由**: 到達条件を機械・実機・目視で満たした。目視で出た手直し（文言 3 点・縮小は軽量モードだけ・mkv の fps・線の説明文を帯に）も同日に実装して再確認に合格した。
 - **状態**: dev（第 2 弾 `f19571e`〜`9d795df`・手直し `edac306`〜`c4ad1f0`）。main への merge は監督が行う。
+  > **更新（2026-10-14）**: main merge 済み（`015893b`）。
 - **残課題**: 出口（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86）・LoRA ウェイトの配布（同 §1-87）・直接入力（同 §3-222）・快適上限の較正（同 §3-223。8bit の線は既定の操作でも超えるので価値が高い）・VFR の受付時の拒否（同 §3-225）・`DurationField` の型コメント「Create-only」の現行化（次にそのファイルを触るとき）。
+  > **更新（2026-10-14）**: 同日のコメント点検で現行化した。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)（§3・§9・§23・§24）、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b（v0.5.88）、プラグインの契約 フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md)（v15）、設計上の判断 フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §132・§133、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153・§154。

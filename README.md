@@ -455,6 +455,16 @@ models/
 
 設計の詳細は [`Docs/INPAINTING_DESIGN.md`](Docs/INPAINTING_DESIGN.md) が正本です。
 
+### Alpha Gen（動画から透過用の白黒マット動画を作る）
+
+**普通の動画から、同じ大きさ・同じフレーム数の白黒のマット動画（白＝不透明・黒＝透明・灰＝半透明を明るさで表した動画）を作る機能です。LTX 2.5 専用です。** いまはマットを作るところまでで、マットを使って背景を抜いた動画をタイムラインへ置く・保存する出口は次の第 3 弾で作ります（台帳 [`Docs/PENDING_TASKS.md`](Docs/PENDING_TASKS.md) §1-86）。
+
+**使い方**: 操作パネルの Edit タブの「Alpha Gen」サブタブで元動画を渡し、生成します。渡し方は 3 つで、タイムラインの動画を右クリックして「🎬 Video: 背景透過（Alpha Gen）」を選ぶ（再生位置から）・パネルへドラッグ＆ドロップする（冒頭から）・📁 でファイルを選ぶ（冒頭から）のどれかです。マットは元動画の fps のまま作ります。
+
+**使う LoRA**: Lightricks の Alpha Gen 用 IC-LoRA を、`config.yaml` の `model.ic_loras` の `alpha-gen` が指す場所に置きます（置き場所と書き方の正本は [`config.yaml.example`](config.yaml.example) の `alpha-gen` の行）。LoRA の配布方法は未決です（台帳 §1-87）。
+
+設計の詳細は [`Docs/ALPHAGEN_DESIGN.md`](Docs/ALPHAGEN_DESIGN.md) が正本です。
+
 ---
 
 ## 2. 起動
@@ -548,7 +558,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 - **Single**: 動画を1本ずつ作るタブです。テキスト・画像・音声から作る基本の生成に加えて、途中の絵を指定するキーフレームと、フォルダの中身をまとめて流すバッチ（音声フォルダから作る a2v モードと、画像フォルダから作る i2v モード）がここにあります。「生成」ボタンの下の **Repeat count** に回数を入れると、同じ条件で指定の回数だけ生成を自動で繰り返します（シードが -1 なら毎回別の乱数になります。途中で設定を変えると次の回から反映されます）。
 - **Chained**: クリップをつないで長い動画を作るタブです。素材（冒頭）に動画を置いて続きを作る V2V と、素材（末尾）もここにあります。「生成」ボタンの下の **Repeat count** は Single と同じ働きです。
   - **プロンプトの効き方**: クリップに個別のプロンプトを書くと、そのクリップでは共通のプロンプトの代わりにそれだけが使われます（2つを足し合わせることはありません）。個別のプロンプトが効くのは動きや場面を作る最初の工程で、そのあとの高解像度の仕上げの工程（Stage-2）は、動画全体を1番目のクリップで使われるプロンプト（個別のプロンプトが無ければ共通のプロンプト）だけで仕上げます。そのため、場面の移り変わりはクリップごとのプロンプトで指示し、全体に効かせたい画風や質感は共通のプロンプトに書いて、1番目のクリップには個別のプロンプトを書かないのが確実です（詳しい仕組みは [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.2）。
-- **Edit**: できあがった動画に手を入れるタブで、**Retake**（選んだ区間の撮り直し）・**Outpainting**（画角拡張）・**Inpainting**（部分フィルタの枠の内側だけを描き替える）の3つのサブタブに分かれます。入口は動画や部分フィルタの右クリックが中心です（§1「Inpainting」。設計の正本は [`Docs/INPAINTING_DESIGN.md`](Docs/INPAINTING_DESIGN.md)）。
+- **Edit**: できあがった動画に手を入れるタブで、**Retake**（選んだ区間の撮り直し）・**Outpainting**（画角拡張）・**Inpainting**（部分フィルタの枠の内側だけを描き替える）・**Alpha Gen**（動画から透過用の白黒マット動画を作る。LTX 2.5 専用）のサブタブに分かれます。入口は動画や部分フィルタの右クリックが中心です（§1「Inpainting」「Alpha Gen」。設計の正本は [`Docs/INPAINTING_DESIGN.md`](Docs/INPAINTING_DESIGN.md) と [`Docs/ALPHAGEN_DESIGN.md`](Docs/ALPHAGEN_DESIGN.md)）。
 - **Inventory**: 上がスタイル LoRA の棚、下が生成済みジョブの一覧です。棚のカードを押すとプロンプト欄へその LoRA のタグが入り、一覧の `🎞` ボタンで完成した動画をタイムラインへ送れます。
 
 **Settings（上端の ⚙ ボタンで開く設定画面）** には、次の項目も並びます。
@@ -892,7 +902,9 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 }
 ```
 
-### ツール一覧（25個）
+### ツール一覧
+
+ツールの本数の正本は [`Docs/MCP_SERVER_DESIGN.md`](Docs/MCP_SERVER_DESIGN.md) §8 です。
 
 | ツール | 説明 |
 |---|---|

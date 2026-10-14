@@ -16483,3 +16483,8 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - **差分の敵対的レビュー**（Opus）: 実装・試験・設計書 §9.2 は問題なし。採用 1＝DEVLOG §132.1 に残った旧い説明文への訂正行。見送り 2＝§133 を書き換えた形（書いている途中の節なので可）・`DurationField` の型コメント「Create-only」が実態（Alpha Gen も帯を使う）と合わない点（範囲外。次にこのファイルを触るときに直す）。
 - **配置**: ビルド出力は `c7baf2f5…`。`deploy.ps1` はオーナーの AviUtl2 が起動中（PID 36816）のため配置を拒んだ。配置と配布用 aux2 の更新は、AviUtl2 を閉じてから行う（154.9 に追記）。
 - **オーナーの再確認**: CHECKLIST §4.26 の再確認③（書き直し後）と⑥。
+
+### 154.9 配置（2026-10-14・オーナーが AviUtl2 を閉じた後）
+
+- `deploy.ps1` で実機（`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\`）と配布用の写し（`AviUtl2-Plugin\NzVideomni.aux2`）に配置し、Language 2 本も配置した。3 か所の SHA256 は `c7baf2f5…` で一致（ビルド出力と同じ）。配布用 aux2 のコミットは dev `5a9a5e1`。
+- これで表示の再指示まで含めた第 2 弾の手直しは、オーナーの再確認③と⑥を残して完了。

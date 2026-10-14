@@ -272,6 +272,7 @@
 - **Inpainting（マスクによる部分再生成）**: `POST /generate`の`inpaint`（[`API_REFERENCE.md`](API_REFERENCE.md) §5.1）を使う唯一の画面がEditタブの「Inpainting」サブタブである。Gradio＝該当UI無し（`gradio_ui/`に`inpaint`の文字列が1つも無い）。**理由は、マスクの出どころがタイムラインの部分フィルタだからである**——利用者が置いた部分フィルタの枠をAviUtl2本体に描かせてマスク動画にする仕組みで（[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.24）、タイムラインもプラグインのブリッジも持たないGradioには同じ入力が作れない。機能全体の正本はバックエンド[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)、クローズ記録は同[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-55-02。
 - **画角拡張（Outpainting）と物体追尾も同じ立場である**（Gradio＝いずれも該当UI無し）。画角拡張は`POST /generate`の`outpaint`、物体追尾は`/utils/track/*`（[`API_REFERENCE.md`](API_REFERENCE.md) §3.20〜§3.22）を使い、どちらも操作の起点がタイムラインのオブジェクトである。
 - **バッチパネルのi2vモード（2026-09-16追記）**: 音声フォルダを指定せず画像フォルダだけを指定すると、画像1枚につき`POST /generate`で動画を1本作るモード。Gradioのバッチは音声フォルダ必須のCSVマニフェスト方式で、画像フォルダだけで動くモードを持たない——**Gradio側に対応する画面が無い**。設計正本は[`BATCH_A2V_I2V_MODE.md`](BATCH_A2V_I2V_MODE.md) §1、クローズ記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-152。
+- **Alpha Gen（動画から背景透過用の白黒のマット動画を作る機能。2026-10-14追記）**: `POST /generate/alpha`（[`API_REFERENCE.md`](API_REFERENCE.md) §5.5）を使う画面は、EditタブのAlpha Genサブタブだけである。Gradio＝該当UI無し。Gradio側で行うのは、LoRAの一覧から`alpha-gen`を除くことだけと設計で決めている（正本はバックエンド[`ALPHAGEN_DESIGN.md`](../../../Docs/ALPHAGEN_DESIGN.md) §11、クローズ記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-227）。
 
 ### 推奨実装順（段階と依存マップ）
 

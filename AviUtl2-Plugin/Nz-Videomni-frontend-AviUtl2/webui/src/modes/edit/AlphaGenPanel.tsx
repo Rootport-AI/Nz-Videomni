@@ -62,7 +62,9 @@ export function AlphaGenPanel({ form, disabled, nativeBridge }: AlphaGenPanelPro
         spillThresholdFrames={form.comfortFrames}
         tickId={ALPHA_GEN_TICK_ID}
       />
-      {form.comfortFrames !== null && <p className="field-hint">{t.comfortHint}</p>}
+      {form.comfortFrames !== null && (
+        <p className="field-hint">{form.lightMode ? t.comfortHintLight : t.comfortHintFull}</p>
+      )}
 
       <label className="field field-inline">
         <input

@@ -95,7 +95,7 @@ export interface UseAlphaGenFormResult {
   setLightMode: (value: boolean) => void;
 
   /** The comfort line on the slider, or `null` for no line (no row, no budget,
-   * size unknown, or even 9 frames would already be shrunk). */
+   * size unknown, or the line would fall below the slider's 9-frame minimum). */
   comfortFrames: number | null;
   /** The source is larger than 1920*1088 (a note, never a block). */
   aboveOfficialMax: boolean;
@@ -241,8 +241,9 @@ export function useAlphaGenForm(deps: UseAlphaGenFormDeps = {}): UseAlphaGenForm
   const known = mediaInfo.width > 0 && mediaInfo.height > 0;
   const budget = comfortRow === null ? null : lightMode ? comfortRow.singleBudget : comfortRow.alphaGenBudget;
   // The server measures the CANVAS (the source padded onto the 64 grid). The
-  // lower clamp is 1, not 9, so that "even 9 frames would be shrunk" stays
-  // visible here and becomes "no line": 9 shrunk frames are not "full size".
+  // lower clamp is 1, not 9, so that a line below 9 frames stays visible here
+  // and becomes "no line": a line outside the slider's range (9-145) is not
+  // drawn.
   const rawComfortFrames =
     known && comfortRow !== null && budget !== null
       ? comfortFramesForBudget(

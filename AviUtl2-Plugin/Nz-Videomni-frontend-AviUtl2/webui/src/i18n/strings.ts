@@ -133,10 +133,10 @@ export const en = {
         "Outpainting is not available on the selected base model. Switch the base model in the header to use it.",
       inpainting:
         "Inpainting is not available on the selected base model. Switch the base model in the header to use it.",
-      /** Alpha Gen 第 2 弾. Like the three above it names no base model — which
-       * one runs it is the server's fact, not this sentence's. */
-      alphaGen:
-        "Alpha Gen is not available on the selected base model. Switch the base model in the header to use it.",
+      /** Alpha Gen 第 2 弾. The three above name no base model — which one runs
+       * them is the server's fact, not the sentence's. alphaGen is the exception:
+       * its LoRA is LTX 2.5-only, a fixed fact (owner ruling 2026-10-14). */
+      alphaGen: "Alpha Gen (background transparency) is available only on LTX 2.5.",
     },
     retake: {
       heading: "Retake",
@@ -514,11 +514,15 @@ export const en = {
       framesLabel: "Frames",
       framesRecommend: "Recommended: 121 frames or fewer",
       secondsText: (seconds: string): string => `About ${seconds}s`,
-      /** Under the slider, only while the comfort line is drawn. */
-      comfortHint:
-        "Up to this line the matte is made at full size. Beyond it, it is made smaller and scaled back to the original size.",
+      /** Under the slider, only while the comfort line is drawn. Light mode
+       * off: the line is only a guide (the server never shrinks). */
+      comfortHintFull:
+        "Beyond this line generation can become much slower (the line is a guide; the matte is still made at full size, nothing is shrunk).",
+      /** Same place, light mode on: the server shrinks beyond the line. */
+      comfortHintLight:
+        "In light mode the matte is made at full size up to this line; beyond it, it is made smaller and scaled back to the original size.",
       lightModeLabel: "Light mode (faster, but the edges are less accurate)",
-      lightModeSmallWarning: "On videos smaller than 1280*768, background removal becomes less accurate.",
+      lightModeSmallWarning: "In light mode, background removal is less accurate on small videos (under 1280*768).",
       oversizeNote: "Above 1920*1088, the background transparency becomes less accurate.",
       /** Toast: the frame count was cut down to what the source actually has. */
       framesAdjusted: "The frame count was adjusted automatically.",
@@ -2401,8 +2405,7 @@ export const ja: Strings = {
         "Outpainting（画角拡張）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
       inpainting:
         "Inpainting（マスクによる部分再生成）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
-      alphaGen:
-        "Alpha Gen（マット作成）は、選択中のベースモデルでは使えません。使うには、上のベースモデルを切り替えてください。",
+      alphaGen: "Alpha Gen（背景透過）は、LTX 2.5専用の機能です。",
     },
     retake: {
       heading: "Retake（リテイク：撮り直し）",
@@ -2635,9 +2638,11 @@ export const ja: Strings = {
       framesLabel: "フレーム数",
       framesRecommend: "推奨：121フレーム以下",
       secondsText: (seconds: string): string => `約 ${seconds} 秒`,
-      comfortHint: "この線までは原寸で生成します。超えると縮小して生成し、元の寸法へ戻します。",
+      comfortHintFull:
+        "この線を超えると、生成が大幅に遅くなることがあります（線は目安です。縮小はせず、原寸のまま生成します）。",
+      comfortHintLight: "軽量モードでは、この線までは原寸で生成し、超えると縮小して生成して元の寸法へ戻します。",
       lightModeLabel: "軽量モード（速いが、輪郭の精度は落ちる）",
-      lightModeSmallWarning: "1280*768未満の小さな動画では、背景除去の精度が悪化します。",
+      lightModeSmallWarning: "軽量モードでは、小さな動画（1280*768未満）の背景除去の精度が悪化します。",
       oversizeNote: "1920*1088を超えるサイズでは、背景透過の精度が下がります",
       framesAdjusted: "フレーム数が自動調整されました",
       uploadFailed: "動画をアップロードできませんでした。",

@@ -218,7 +218,7 @@ describe("useAlphaGenForm — 快適上限の線", () => {
     expect(result.current.comfortFrames).toBeNull();
   });
 
-  it("頭打ち前の値が 9 未満（9 コマでも縮小される）なら線を出さない", async () => {
+  it("頭打ち前の値が 9 未満（つまみの範囲に無い）なら線を出さない", async () => {
     const { result } = renderForm(
       { initialIntent: intent(), ...LTX25_4BIT },
       { media: { durationSec: 10, width: 4096, height: 4096, fps: 30 } },

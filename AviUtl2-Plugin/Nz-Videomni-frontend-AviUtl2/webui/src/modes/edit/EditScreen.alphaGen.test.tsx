@@ -122,11 +122,11 @@ describe("EditScreen — Alpha Gen サブタブ", () => {
     expect(screen.getByText(t.reasons.sourceMissing)).toBeInTheDocument();
   });
 
-  it("灰色（LTX 2.3）なら押せず、ベースモデル名を書かない理由をツールチップに出す", () => {
+  it("灰色（LTX 2.3）なら押せず、LTX 2.5 専用である旨をツールチップに出す", () => {
     renderEdit({ subTabsDisabled: { retake: false, outpainting: false, inpainting: false, alphaGen: true } });
     expect(alphaTab()).toBeDisabled();
     expect(alphaTab()).toHaveAttribute("title", en.edit.unavailableOnBaseModel.alphaGen);
-    expect(en.edit.unavailableOnBaseModel.alphaGen).not.toMatch(/LTX/);
+    expect(en.edit.unavailableOnBaseModel.alphaGen).toMatch(/LTX 2\.5/);
   });
 
   it("灰色のときに右クリックが届いても Alpha Gen へは入らない", () => {
@@ -163,6 +163,28 @@ describe("EditScreen — Alpha Gen サブタブ", () => {
     expect(screen.getByText(t.startFromPlayback("2.5"))).toBeInTheDocument();
     // 軽量モードのチェックは押せる（警告は出しても無効化しない）。
     expect(screen.getByRole("checkbox", { name: t.lightModeLabel })).not.toBeDisabled();
+  });
+
+  it("線の下の説明は軽量モードのチェックで切り替わる（OFF は目安・ON は縮小）", async () => {
+    const user = userEvent.setup();
+    // LTX 2.5・4bit の行（組み込みの既定）: 1920x1080 → 原寸の予算で 81 コマの線。
+    const bridge = createMockBridge({ delayMs: 0, ...MEDIA });
+    render(
+      <LanguageProvider>
+        <ToastProvider>
+          <EditScreen initialIntent={alphaGenIntent()} nativeBridge={bridge} engineFamily="ltx25" weightClass="4bit" />
+        </ToastProvider>
+      </LanguageProvider>,
+    );
+    expect(await screen.findByText(t.comfortHintFull)).toBeInTheDocument();
+    expect(screen.queryByText(t.comfortHintLight)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: t.lightModeLabel }));
+    expect(screen.getByText(t.comfortHintLight)).toBeInTheDocument();
+    expect(screen.queryByText(t.comfortHintFull)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: t.lightModeLabel }));
+    expect(screen.getByText(t.comfortHintFull)).toBeInTheDocument();
   });
 
   it("fps が読めない素材は「不明」と出す", async () => {

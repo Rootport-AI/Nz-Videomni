@@ -578,7 +578,7 @@ describe("App / Alpha Gen right-click (alphaGenVideo)", () => {
       const bridge = await renderShell();
       emit(bridge, "alphaGenVideo", videoSelection());
 
-      await screen.findByText(/Alpha Gen is not available on the selected base model/i, undefined, {
+      await screen.findByText(/Alpha Gen \(background transparency\) is available only on LTX 2\.5/i, undefined, {
         timeout: 5_000,
       });
       expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");

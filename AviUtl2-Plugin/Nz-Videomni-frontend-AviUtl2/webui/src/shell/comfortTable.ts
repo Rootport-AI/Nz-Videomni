@@ -83,7 +83,8 @@ export interface ResolvedComfortRow {
   /** Alpha Gen (Edit tab, one-stage full-size) token budget for this
    * configuration, or `null` when the row publishes none (the compatibility
    * shim never does). Unlike the two above there is no mirrored constant to
-   * fall back to: an uncalibrated line is no line at all. */
+   * fall back to: a row without the value draws no line (a row with a
+   * provisional value draws it as a guide; calibration is ledger §3-223). */
   alphaGenBudget: number | null;
   /** The engine's spatial compression factor (32 unless a future engine
    * publishes something else). */

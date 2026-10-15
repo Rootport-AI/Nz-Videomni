@@ -81,7 +81,9 @@
    * Runaway page height when the job list is huge is instead capped by
    * `.job-ledger-body`'s `flex: 1 1 0` (jobs.css), which keeps the ledger's
    * own content out of this column's intrinsic height so the row's height
-   * always follows the left form. Do NOT reintroduce a `max-height` on this
+   * always follows the left form (with a floor set by `.single-layout`'s
+   * `min-height` in SingleScreen.css: when the left form is shorter than that,
+   * the row takes the floor height instead). Do NOT reintroduce a `max-height` on this
    * column (or anything else on the stretch path from `.single-layout` down
    * to `.job-ledger-body`) — that has broken the 同丈 layout twice before.
    * `min-height: 0` lets the inner `.job-ledger-body` shrink and scroll

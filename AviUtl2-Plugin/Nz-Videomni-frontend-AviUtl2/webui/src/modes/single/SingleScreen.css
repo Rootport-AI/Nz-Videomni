@@ -10,6 +10,14 @@
   justify-content: space-between;
   gap: 20px;
   width: 100%;
+  /* The right column (and the job ledger inside it) is as tall as the left
+   * form (grid stretch), so on screens with a short form (Edit's Alpha Gen,
+   * Retake while idle) the ledger got too short to show the card band. A
+   * floor on the container lets the row grow through the default
+   * `align-content` (stretch) without the mid-chain `max-height` that
+   * `formAccordion.css` / `jobs.css` forbid. Initial value; tuned on the
+   * real panel. */
+  min-height: 70vh;
 }
 
 /* Container query (not a window-width media query) against the `mode-body`
@@ -24,6 +32,8 @@
 @container mode-body (max-width: 680px) {
   .single-layout {
     grid-template-columns: 1fr;
+    /* Stacked, the floor would stretch both rows and leave blank space. */
+    min-height: 0;
   }
 }
 

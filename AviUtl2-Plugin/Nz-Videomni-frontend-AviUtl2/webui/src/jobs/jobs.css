@@ -8,7 +8,9 @@
   min-width: 0;
   /* Fill the generation column's remaining height below its heading so the
    * ledger card ends flush with the left form (grid `stretch`, now that
-   * `.single-layout` dropped `align-items: start`). `min-height: 0` lets the
+   * `.single-layout` dropped `align-items: start`) -- or, more precisely, with
+   * the taller of the left form and `.single-layout`'s `min-height` floor
+   * (SingleScreen.css). `min-height: 0` lets the
    * scrolling body inside actually shrink. */
   flex: 1 1 auto;
   min-height: 0;

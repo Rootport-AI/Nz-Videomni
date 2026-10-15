@@ -223,6 +223,8 @@ const char* TransportCode(TransportError e) {
     switch (e) {
         case TransportError::kTimeout:
             return "BACKEND_TIMEOUT";
+        case TransportError::kDestinationFileFailed:
+            return "DOWNLOAD_FAILED";
         case TransportError::kUnreachable:
         default:
             return "BACKEND_UNREACHABLE";
@@ -319,7 +321,7 @@ bool ClaimNoClobberPath(const std::wstring& dir, const std::string& desired_name
         }
         const DWORD e = ::GetLastError();
         if (e != ERROR_FILE_EXISTS) {
-            *err_message = "Could not claim destination file name (winhttp error " +
+            *err_message = "Could not claim destination file name (Windows error " +
                            std::to_string(e) + ")";
             return false;
         }
@@ -3185,8 +3187,9 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
                 }
                 out = MakeErrorResponse(id, TransportCode(result.transport),
                                         result.transport_message);
-                LogWarn(std::wstring(L"downloadVideo transport error: ") +
-                        Utf8ToWide(TransportCode(result.transport)));
+                LogWarn(std::wstring(L"downloadVideo failed: ") +
+                        Utf8ToWide(TransportCode(result.transport)) + L" - " +
+                        Utf8ToWide(result.transport_message));
             } else if (result.status != 200) {
                 if (!claimed.empty()) {
                     ::DeleteFileW(claimed.c_str());

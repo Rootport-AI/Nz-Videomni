@@ -1061,9 +1061,10 @@ export type KnownBridgeErrorCode =
   | "BAD_REQUEST"
   | "UNKNOWN_METHOD"
   | "NO_EDIT_HANDLE"
-  /** `backend.request`/`backend.uploadFile` transport failures only — a
-   * reachable backend that answers with an HTTP error status is a normal
-   * (non-throwing) result. */
+  /** `backend.request`/`backend.uploadFile`/`backend.downloadVideo` transport
+   * failures only. For `backend.request`/`backend.uploadFile` an HTTP error
+   * status is a normal (non-throwing) result; for `backend.downloadVideo` a
+   * non-200 status is `DOWNLOAD_FAILED`. */
   | "BACKEND_UNREACHABLE"
   | "BACKEND_TIMEOUT"
   | "DOWNLOAD_FAILED"

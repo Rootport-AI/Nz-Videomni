@@ -164,7 +164,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 - result: `{ filePath: string, sizeBytes: number }`
 - 保存先: `%LOCALAPPDATA%\NzVideomni\downloads\<jobId>.mp4`(`joined:true`なら`<jobId>_joined.mp4`。v16の`kind`ごとの名前は下記)。
 - タイムアウト: 既定 **300秒**(`kDefaultDownloadTimeoutMs`、`timeoutMs`オーバーライド不可 — `backend.request`のみが対応)。
-- エラー: `BAD_REQUEST`、`BACKEND_UNREACHABLE`、`BACKEND_TIMEOUT`、`DOWNLOAD_FAILED`(HTTP 200以外)。
+- エラー: `BAD_REQUEST`、`BACKEND_UNREACHABLE`、`BACKEND_TIMEOUT`、`DOWNLOAD_FAILED`(HTTP 200以外・`noClobber`の保存名を確保できない・保存先のファイルを開けない／書けない(Windowsのエラー番号を文に添える)。2026-10-15の分類の変更は§8の注記)。
 - **contract v6での拡張(§4.20に詳細)**: `destDir?: string` / `fileName?: string` / `noClobber?: boolean`の3つが追加された。全て省略可能で、省略時はv6以前と完全に同じ挙動(上記の保存先固定パス)になる後方互換の拡張。
 - **contract v16での拡張(2026-10-15、Alpha Genの出口)**: `kind?`と`color?`の2つが加わった。どちらも省略すればv15と同じ挙動になる。
   - `kind`: 取りに行く動画。省略時(または`null`)は`joined`から決める(`joined:true`なら`"joined"`、それ以外は`"output"`)。4つの値と、取りに行く先(`/api/v1`の後ろ)・既定の保存名の対応は次のとおり。
@@ -747,7 +747,7 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 | `NO_EDIT_HANDLE` | 編集ハンドル未取得/取得直後で使用不可 | `getEditInfo`, `timeline.insertMedia`, `timeline.captureFrame`, `timeline.getSelection`(v5), `timeline.cutoutRange`(v5・§4.25.1), `timeline.extractAudio`(v5・§4.25.2), `timeline.resolveProvisional`(v5・§4.25.4), `timeline.insertMediaForJob`(v8・§4.25.7), `timeline.trackObject`(v12・§4.23), `timeline.renderMaskVideo`(v13・§4.24) |
 | `BACKEND_UNREACHABLE` | 接続不可・切断等のトランスポート失敗(HTTPステータスを伴う応答はここに含まれない)。**通信をしないメソッドがHTTPワーカープール未初期化の入口ガードとしてこの符号を使うこともある**(§4.25.1) | `backend.request`, `backend.downloadVideo`, `backend.uploadFile`, `timeline.cutoutRange`(v5・入口ガードのみ), `timeline.extractAudio`(v5・入口ガードのみ), `timeline.trackObject`(v12・入口ガードのみ), `timeline.renderMaskVideo`(v13・入口ガードのみ) |
 | `BACKEND_TIMEOUT` | WinHTTPタイムアウト | 同上 |
-| `DOWNLOAD_FAILED` | ダウンロードHTTPステータスが200以外 | `backend.downloadVideo` |
+| `DOWNLOAD_FAILED` | ダウンロードHTTPステータスが200以外・`noClobber`の保存名を確保できない・保存先のファイルを開けない／書けない(Windowsのエラー番号を文に添える。2026-10-15の分類の変更は§8の注記) | `backend.downloadVideo` |
 | `FILE_NOT_FOUND` | 送信前のローカルファイル存在チェック失敗 | `timeline.insertMedia`, `backend.uploadFile`, `ui.makeThumbnail`, `timeline.resolveProvisional`(v5・§4.25.4), `timeline.insertMediaForJob`(v8・§4.25.7)。**後ろ2つは挿入経路が`timeline.insertMedia`の失敗種別をそのまま外へ出したものである** |
 | `INSERT_FAILED` | メディアオブジェクトの生成に失敗(§3-140以降は**エイリアス経路と`create_object_from_media_file`の両方が`nullptr`**を返したとき。v14以降の`timeline.insertMedia`(と`timeline.insertMediaForJob`の挿入経路)は`layer_max+1`への再試行も失敗したとき。メッセージは経路中立な`media object creation failed …`) | `timeline.insertMedia`, `timeline.insertMediaForJob` |
 | `CAPTURE_FAILED` | レンダリング/PNGエンコードの失敗(`NO_EDIT_HANDLE`除外後) | `timeline.captureFrame` |
@@ -828,6 +828,7 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 | v16 | Alpha Genの出口(2026-10-15) | `backend.downloadVideo`のparamsへ`kind`(`"output"`／`"joined"`／`"rgba"`／`"chroma"`)と`color`(英小文字のみ)を追加(§4.4)。`rgba`は`/jobs/<jobId>/alpha/rgba`を`<jobId>_rgba.mov`へ、`chroma`は`/jobs/<jobId>/alpha/chroma/<color>`を`<jobId>_chroma_<color>.mp4`へ落とす。`kind`の既定は`joined`から決まるので、両方とも省略すればv15と同じ挙動になる。新規メソッド・新規エラーコードは無く、拒否は既存の`BAD_REQUEST`(4つ以外の`kind`・`chroma`で`color`が無い・`color`に英小文字以外・`joined:true`と`"joined"`以外の`kind`の組)。`timeline.insertMedia`は拡張子を見ないので`.mov`もそのまま置ける(§4.7の注記)。実装は`bridge_core.h/.cpp`の`ParseDownloadVideo`・`DownloadVideoPath`・`DownloadFileName`だけで、`bridge.cpp`の本体は変えていない。決定事項の正本はバックエンド[`ALPHAGEN_DESIGN.md`](../../../Docs/ALPHAGEN_DESIGN.md) §10。 |
 
 - **注記(2026-10-14、版は上げない)**: Matroska(mkv/webm/mk3d)の`mediaFps`(v11)と`fps`(v15)は規則で`0`になった。Windowsのmkv用の部品がfpsを本来の半分で返すと実測で分かったためで、`0`＝不明の契約の中の修正である(§4.13・§4.22)。上の表のv11の行の「mkv/webmでの取得失敗は正常系」は当時の理解のまま残している。
+- **注記(2026-10-15、版は上げない)**: `backend.downloadVideo`で、それまで`BACKEND_UNREACHABLE`に分類していた「保存先のファイルを開けない／書けない」を`DOWNLOAD_FAILED`に改めた(通信の失敗ではないため)。params・result・符号の集合は不変で、1つの失敗の分類が変わっただけである(§4.4・§5)。
 
 ## 9. `types.ts` と `bridge_core.h`/`.cpp` の相違点
 

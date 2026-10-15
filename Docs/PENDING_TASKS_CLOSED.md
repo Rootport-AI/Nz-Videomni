@@ -2934,3 +2934,13 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   > **更新（2026-10-15）**: main merge 済み（`01850f3`）。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10・第 2 部 §25、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3c（v0.5.89）、ブリッジ契約 フロントエンド `BRIDGE_CONTRACT.md` v16、設計の経緯と関門 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156、実装と門 同 §157、設計上の判断 フロントエンド `DEVLOG.md` §134・§135。
 - **残課題**: LoRA ウェイトの配布（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87）・MCP の出口（同 §3-229）・WebView2 の遷移の防御と再読み込み（同 §3-230）・直接入力（同 §3-222）・快適上限の較正（同 §3-223）・VFR（同 §3-225）・回転情報（同 §3-228）。
+
+### 3-232. ダウンロード失敗の符号と文言（保存先のファイルを開けない／書けない失敗を `DOWNLOAD_FAILED` に・「winhttp error」を「Windows error」に）（起票・実装・クローズ：2026-10-15）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-90 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-90（**同書側は欠番**）。§2 を経由せず §1 から直接クローズした。第 3 弾クローズ後のコメント点検（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §158）で見つかった、プラグインのネイティブ側 `backend.downloadVideo` の失敗時の 2 点。
+- **到達条件**: 保存先のファイルを開けない／書けない失敗が通信の失敗（`BACKEND_UNREACHABLE`）ではなく `DOWNLOAD_FAILED` として返り、文に Windows のエラー番号が付くこと。`noClobber` の保存名の確保の失敗の文が「winhttp」と言わないこと。**達成した。**
+- **何が完了したか**: `TransportError::kDestinationFileFailed` を足し、`DownloadSync` の開けない／書けないの 2 か所で返して `TransportCode` が `DOWNLOAD_FAILED` に写す。`plugin.log` の行は「downloadVideo failed: <符号> - <文>」。「winhttp error」→「Windows error」。契約 `BRIDGE_CONTRACT.md` §4.4・§5 の定義と §8 直後の注記（版は上げない）。統合テスト 1 件（保存先を共有なしで開いたまま落とす）。
+- **どの物差しで通ったか**: 計画と差分の敵対的レビュー（全採用）・`build.ps1 -RunTests` 失敗 0・統合テスト 1 件を実サーバーで合格・配置（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159）。オーナーの目視の節は作らない（失敗経路の文の末尾と符号だけが変わる）。
+- **状態**: dev `dcb7924`・`63fc2de`・`f05dbc4`。main への merge は監督が行う（`--no-ff`）。
+- **正本・出典**: 契約 フロントエンド `BRIDGE_CONTRACT.md` §4.4・§5・§8 直後の注記、設計上の判断 フロントエンド `DEVLOG.md` §136、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159。
+- **残課題**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-91（`backend.uploadFile` の同じ型のずれ）。

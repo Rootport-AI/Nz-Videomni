@@ -5149,3 +5149,26 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - オーナーの再確認①②待ち（[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.27）。
 
 > **更新（2026-10-15）**: 再確認①②は合格し（`💾` の遷移の失敗は `WebErrorStatus=9`＝CONNECTION_ABORTED と実機で判明。70vh はそのまま）、第 3 弾はクローズした（バックエンド `PENDING_TASKS_CLOSED.md` §3-231・`VERIFICATION_LOG.md` §157.8）。
+
+## 136. ダウンロードの失敗の符号と文言 — 保存先が開けない／書けない失敗を `DOWNLOAD_FAILED` に・「winhttp error」を「Windows error」に（バックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-90。2026-10-15）
+
+### 136.1 結論
+
+- **`backend.downloadVideo` で保存先のファイルを開けない・書けないとき、符号は `BACKEND_UNREACHABLE` ではなく `DOWNLOAD_FAILED` になりました。** 文には Windows のエラー番号が付きます（例: 「Could not open destination file (Windows error 32)」）。
+- **`noClobber` の保存名を確保できないときの文は「(winhttp error N)」から「(Windows error N)」になりました。** 番号は Windows のファイル操作のもので、通信部品 WinHTTP とは無関係だったためです。
+
+### 136.2 原因
+
+- `native/src/http_client.cpp` の `DownloadSync` は、保存先を開けない・書けない失敗を通信の失敗と同じ `TransportError::kUnreachable` で返し、`bridge.cpp` の `TransportCode` がそれを `BACKEND_UNREACHABLE`（契約では「接続不可・切断」）に写していました。カードの文は実態どおりでも、`plugin.log` の符号と契約の意味が食い違い、調べる人がサーバーの障害と誤解します（典型は Join の 🎞 で、AviUtl2 が開いたままの `<ジョブ ID>_joined.mp4` へ上書きする場合〔コードの読み合わせによる。実機では未確認〕と、ディスク不足）。
+
+### 136.3 何を変えたか
+
+- **ネイティブ**: `TransportError` に `kDestinationFileFailed`（保存先の失敗。通信の失敗ではない）を足し、`DownloadSync` の 2 か所（`CreateFileW` の失敗・書き込みの失敗）がこれを返します。番号は `CloseHandle`／`DeleteFileW` より前に取ります。書き込みが成功して量だけ足りない場合は番号が意味を持たないので付けません。`TransportCode` はこれを `DOWNLOAD_FAILED` に写します。既存の符号に寄せたのは、操作パネルが 🎞 の失敗を符号で分岐せずカードに文を出すだけで、新しい符号を足す理由が無いためです。WinHTTP のエラーの分類（`ClassifyError`・`TransportDetail`）は触っていません。
+- **ログ**: `downloadVideo` の失敗の行は「downloadVideo failed: <符号> - <文>」の形になりました（通信の失敗でも同じ形）。以前は「transport error: <符号>」だけで番号が残りませんでした。
+- **契約**: 版は上げません（params・result・符号の集合は不変で、1 つの失敗の分類が変わるだけ）。[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §8 の表の直後に注記を置き、§4.4・§5 の `DOWNLOAD_FAILED` の説明を直しました。
+- **テスト**: 統合テストに、共有なしで開いたままのファイルを保存先にすると `kDestinationFileFailed` と「Windows error 32」が返る 1 件を足しました（`GET /status` を読むだけでジョブは作らない）。
+- 数（テストの件数など）と門の詳細は書き写さず、正本のバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §159 を参照してください。
+
+### 136.4 状態
+
+- 実装済み。`backend.uploadFile` で元ファイルが開けないときも `BACKEND_UNREACHABLE` になる同じ型のずれは、今回は直さずバックエンド台帳 §1-91 に起票しました。

@@ -16683,3 +16683,24 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 | （本節） | §158・台帳の最終更新 |
 
 - 残るもの: `bridge.cpp` の "(winhttp error N)"（実際は `CreateFileW` の `GetLastError`。利用者に見える文字列なのでオーナー判断）／`http_client.cpp` で保存先を開けないときに `BACKEND_UNREACHABLE` になる挙動（コメントではなく挙動。小さな直しの候補）／`recordSourceLocation` の引数名 `pendingId`（ジョブ id も受ける。次にそのファイルを触るとき）。
+
+## 159. ★ダウンロード失敗の符号と文言の手直し（台帳 §1-90 → CLOSED 3-232）＝保存先のファイルを開けない／書けない失敗を `BACKEND_UNREACHABLE` から `DOWNLOAD_FAILED` へ・「winhttp error」を「Windows error」へ（2026-10-15）
+
+### 159.1 結論
+
+- **プラグインのネイティブ側 `backend.downloadVideo`（サーバーから動画を落とす処理）の失敗時の 2 点を直した。** 挙動の変更は失敗の経路だけで、正常系は変わらない。コミットは dev `dcb7924`（符号の分類＋統合テスト＋文言。同じ `bridge.cpp` を触るので 1 コミット）・`63fc2de`（契約文書と DEVLOG §136）・`f05dbc4`（配布用 aux2）・本節。
+- **点 1（文言）**: `noClobber` の保存名を確保できなかったときの文「Could not claim destination file name (winhttp error N)」の「winhttp」を「Windows」に。N は Windows のファイル操作のエラー番号で、通信部品 WinHTTP とは無関係だった。
+- **点 2（分類）**: 保存先のファイルを作成・上書きで開けない（典型は Join の 🎞 で、前回置いた `<ジョブ ID>_joined.mp4` を AviUtl2 が開いたまま同じ名前に上書きする場合）、または書き込みの途中で失敗した（ディスク不足はこちら）とき、`DownloadSync` は通信の失敗 `kUnreachable` を返し、ブリッジが `BACKEND_UNREACHABLE`（契約では「接続不可・切断」）に分類していた。`TransportError` に `kDestinationFileFailed` を足して `DOWNLOAD_FAILED` に写し、文に Windows のエラー番号を添え（「Could not open destination file (Windows error 32)」）、`plugin.log` の行も「downloadVideo failed: <符号> - <文>」に改めた。操作パネルは 🎞 の失敗の符号で分岐せず、カードにはネイティブの英語の文をそのまま出すので、画面側の変更は無い。
+- **契約**: params・result・符号の集合は不変なので版は上げず（v16 のまま）、`BRIDGE_CONTRACT.md` §8 の版の表の直後に日付つきの注記を置き、§4.4 と §5 の `DOWNLOAD_FAILED` の定義を「HTTP 200 以外・`noClobber` の保存名を確保できない・保存先を開けない／書けない」に改めた（2 つ目は以前から `DOWNLOAD_FAILED` だったのに契約に書かれていなかった）。
+- **オーナー裁定（2026-10-15）**: 点 1 は「winhttp」→「Windows」、点 2 は「保存先が開けない」を通信の失敗と分けて既存の符号 `DOWNLOAD_FAILED` に寄せる。Join の 🎞 を毎回新しい名前にして衝突そのものを無くす案は含めない。`backend.uploadFile` の同じ型のずれ（元ファイルが開けないと `BACKEND_UNREACHABLE`）は台帳 §1-91 に起票。
+
+### 159.2 やり方と門
+
+- 計画（プランモード）の敵対的レビュー（Opus・Critical 0・Major 1・Minor 5・全採用）: Major＝書き込み中の失敗も `kUnreachable` のままだった→列挙値を `kDestinationFileFailed` にして開けない／書けないの両方を覆い、`GetLastError` は `CloseHandle` の前に取る。Minor＝契約の表は §5・注記の置き場所は §8 の直後（前例）・`noClobber` の確保の失敗の記述・ログの見出しと番号・「見た目は変わらない」の言い過ぎ・文脈の訳の誤り。
+- 差分の敵対的レビュー: Opus・Critical 0・Major 0・Minor 2・全採用（`types.ts` の `BACKEND_UNREACHABLE` のコメントを request／uploadFile と downloadVideo で書き分け・DEVLOG §136.2 の Join の例に「実機では未確認」）。差分は計画どおりで、過剰な分岐は無かった。
+- 機械ゲート: `build.ps1 -RunTests`（埋め込み。397 件合格・失敗 0・警告 0・C4819 0・`native/src`・`native/tests` の非 ASCII 0）／統合テスト 1 件（`-ts=integration -tc="*destination*"`。実サーバーの `GET /status` を保存先のファイルを共有なしで開いたまま落とし、`kDestinationFileFailed`・`status 0`・文に "Windows error 32"）合格／`deploy.ps1` で実機と配布用の 2 か所。
+- 単体テストは `TransportCode`（`bridge.cpp`・WebView2 依存）を覆えないので、写しは読み合わせとレビューで確かめた。オーナーの目視の節は作らない（失敗経路の文の末尾と符号だけが変わる）。
+
+### 159.3 残るもの
+
+- 台帳 §1-91（`backend.uploadFile` の元ファイルが開けないときの符号）。Join の 🎞 の同名上書きの衝突そのもの（毎回新しい名前にする案）は裁定で含めず、起票もしていない（必要になればオーナー判断）。

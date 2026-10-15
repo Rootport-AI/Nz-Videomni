@@ -19,7 +19,8 @@ TEST_CASE("ascii round-trips unchanged") {
 }
 
 TEST_CASE("utf-8 japanese round-trips") {
-    // "こんにちは" encoded as explicit UTF-8 bytes (no source-encoding reliance).
+    // The 5-char Japanese greeting encoded as explicit UTF-8 bytes (no
+    // source-encoding reliance).
     const std::string utf8 =
         "\xE3\x81\x93\xE3\x82\x93\xE3\x81\xAB\xE3\x81\xA1\xE3\x81\xAF";
     const std::wstring wide = Utf8ToWide(utf8);

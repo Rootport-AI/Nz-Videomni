@@ -3115,11 +3115,12 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
         }
         std::string url = CurrentBaseUrl() + kBackendApiPrefix + DownloadVideoPath(dreq);
 
-        // Contract v6: destDir/fileName/noClobber, all optional and additive.
-        // Omitting all three reproduces the exact pre-v6 destination
-        // (AppDataDir()\downloads\<jobId>[_joined].mp4) and pre-v6
-        // overwrite-in-place behavior - see ClaimNoClobberPath's comment for how
-        // noClobber claims a free name without ever opening an existing file.
+        // Contract v6: destDir/fileName/noClobber/reuseIfPresent, all optional
+        // and additive. destDir/fileName absent -> AppDataDir()\downloads\ +
+        // DownloadFileName(dreq) (the name follows 'kind', contract v16 - see
+        // bridge_core.h). Omitting every v6 param keeps the pre-v6 destination
+        // and overwrite-in-place behavior - see ClaimNoClobberPath's comment for
+        // how noClobber claims a free name without ever opening an existing file.
         const std::wstring dest_dir = dreq.has_dest_dir ? Utf8ToWide(dreq.dest_dir)
                                                         : (AppDataDir() + L"\\downloads");
         const std::string dest_name =
@@ -3147,7 +3148,10 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
                 claimed = dest;
             } else {
                 dest = dest_dir + L"\\" + Utf8ToWide(dest_name);
-                // reuseIfPresent: a completed job's clip is immutable, so if the
+                // reuseIfPresent is meant for the immutable per-clip output (kind
+                // 'output'); the current WebUI does not send it for
+                // joined/rgba/chroma (rgba/chroma use noClobber, contract 4.4)
+                // and native does not enforce that. When set and the
                 // destination already exists non-empty, skip the download rather
                 // than re-open it with CREATE_ALWAYS|share=0 (which fails with a
                 // shared-write violation while AviUtl2 still holds the file from

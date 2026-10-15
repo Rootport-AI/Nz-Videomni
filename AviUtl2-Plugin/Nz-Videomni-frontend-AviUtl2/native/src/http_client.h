@@ -9,9 +9,10 @@
 //   * RequestAsync  - GET/POST(JSON)/DELETE, response body buffered in memory.
 //   * DownloadAsync - GET streamed straight to a file on disk.
 //
-// Synchronous variants (RequestSync / DownloadSync) run on the calling thread
-// and exist mainly so the behaviour can be exercised directly by integration
-// tests against a live backend.
+// Synchronous variants (RequestSync / DownloadSync) run on the calling thread.
+// The production bridge calls them from inside its own Post() jobs (e.g.
+// backend.downloadVideo uses DownloadSync, object tracking uses RequestSync);
+// the integration tests also call them directly against a live backend.
 //
 // All strings crossing this boundary are UTF-8, except the on-disk destination
 // path which is a native wide (UTF-16) path.

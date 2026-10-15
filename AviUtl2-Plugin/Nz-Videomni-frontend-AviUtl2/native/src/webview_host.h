@@ -9,9 +9,11 @@
 //   * Forward WebView2 web messages to a supplied handler and post the
 //     handler's JSON response back to the page.
 //   * Track the parent's client rect (WM_SIZE) so the control fills the window.
-//   * On any failure (missing webui/index.html, environment creation error),
-//     show an error string in a fallback STATIC label and keep the plugin
-//     alive.
+//   * On an initialization failure (missing webui/index.html, environment or
+//     controller creation error) or a failed first page load, show an error
+//     string in a fallback STATIC label and keep the plugin alive. Navigation
+//     completions after the first successful load are only logged (a
+//     navigation that turned into a download reports as a failure).
 //
 // All methods must be called on the UI thread that owns the parent window.
 // ASCII-only source.
@@ -42,8 +44,9 @@ public:
     // "undefined key" behaviour of translate() itself).
     using Translator = std::function<std::wstring(const std::wstring&)>;
 
-    // Invoked (on the UI thread) once the first navigation to the Web UI
-    // completes: true on success (fallback_label has been hidden), false on
+    // Invoked (on the UI thread) on every navigation completion until the
+    // first page load succeeds (normally exactly once), and never after that
+    // success: true on success (fallback_label has been hidden), false on
     // failure (fallback_label is showing the error). Optional; set via
     // SetReadyHandler before Initialize() so the callback is armed in time
     // for the async NavigationCompleted event.
@@ -63,8 +66,8 @@ public:
     bool Initialize(HWND parent, HWND fallback_label, MessageHandler handler,
                     Translator translate = Translator());
 
-    // Set the handler invoked when the first navigation completes (see
-    // ReadyHandler above). Call before Initialize().
+    // Set the handler invoked on navigation completions until the first page
+    // load succeeds (see ReadyHandler above). Call before Initialize().
     void SetReadyHandler(ReadyHandler handler);
 
     // Resize the WebView2 controller to the given client rectangle.

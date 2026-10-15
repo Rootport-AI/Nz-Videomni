@@ -12,7 +12,8 @@
 // SDK. They exist so the bridge can (a) pin a created object's length to exactly
 // the generated video - by writing the INCLUSIVE frame range the header wants
 // (NormalizeAliasObjectFrameHeader), (b) repoint a video
-// object at the downloaded mp4 (PatchAliasReplaceVideoFilePath), (c) drop a
+// object at the downloaded mp4 (PatchAliasReplaceVideoFilePath - a tested
+// helper the bridge does not currently call), (c) drop a
 // provisional "generating..." text placeholder (BuildProvisionalTextAlias), and
 // (d) place a finished media file as a VIDEO OBJECT (BuildMediaObjectAlias) -
 // the drag-and-drop-equivalent alias that carries the "audio present" flag.

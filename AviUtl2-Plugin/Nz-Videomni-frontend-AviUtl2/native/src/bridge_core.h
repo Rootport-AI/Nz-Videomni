@@ -281,7 +281,9 @@ struct ReplaceObjectRequest {
     std::string job_id;           // re-find key (exact alias match)
     int layer = 0;                // found position (from the scan)
     int frame = 0;
-    std::string video_file_path;  // UTF-8 absolute path of the finished mp4
+    // UTF-8 absolute path of the finished media (mp4 or mov; the insert path
+    // does not check the extension).
+    std::string video_file_path;
     int length_frames = 0;
 };
 using ReplaceObjectProvider = std::function<bool(const ReplaceObjectRequest&)>;
@@ -616,13 +618,16 @@ struct DownloadVideoRequest {
 // (boolean) with the same rules. Contract v16: optional 'kind' (one of
 // "output"/"joined"/"rgba"/"chroma"; defaults from 'joined') and 'color'
 // (non-empty [a-z]+, required when kind is "chroma"); joined=true together
-// with a kind other than "joined" is a parse failure. null counts as absent.
+// with a kind other than "joined" is a parse failure. null counts as absent
+// for every optional param except 'joined' (null there is rejected: must be a
+// boolean).
 // Returns false + *err_message on failure.
 bool ParseDownloadVideo(const json_t& params, DownloadVideoRequest* out,
                         std::string* err_message);
 
 // Relative video path for a download request by kind: "/jobs/<id>/video",
-// ".../joined", ".../alpha/rgba" or ".../alpha/chroma/<color>". Combine with kBackendApiPrefix and the base URL to form the URL.
+// ".../joined", ".../alpha/rgba" or ".../alpha/chroma/<color>". Combine with
+// kBackendApiPrefix and the base URL to form the URL.
 std::string DownloadVideoPath(const DownloadVideoRequest& req);
 
 // Bare download file name by kind: "<jobId>.mp4", "<jobId>_joined.mp4",

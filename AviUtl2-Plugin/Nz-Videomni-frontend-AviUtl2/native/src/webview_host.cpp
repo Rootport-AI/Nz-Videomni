@@ -473,7 +473,8 @@ bool WebViewHost::Initialize(HWND parent, HWND fallback_label,
                                     }).Get(),
                                 &impl_->message_token);
 
-                            // Judge only the first page load: on success hide the
+                            // Judge completions until the first page load
+                            // succeeds: on success hide the
                             // fallback label (instead of relying on implicit
                             // Z-order), on failure re-show it with a localized
                             // error, and forward the result to any caller-supplied

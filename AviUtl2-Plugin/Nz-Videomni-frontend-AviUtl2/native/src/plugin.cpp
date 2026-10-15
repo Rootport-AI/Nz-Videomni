@@ -657,8 +657,9 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
         return;
     }
 
-    // Fallback status label filling the client area. Hidden behind the WebView2
-    // control on success; brought forward (with an error message) on failure.
+    // Fallback status label filling the client area. WebViewHost hides it
+    // (SW_HIDE) once the first page load succeeds, and shows it with an error
+    // message on an initialization failure or a failed first page load.
     RECT client = {};
     ::GetClientRect(hwnd, &client);
     g_status_label = ::CreateWindowExW(
@@ -704,7 +705,7 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
         }
     });
 
-    // Log the NavigationCompleted outcome (success/failure). Visibility of the
+    // Log the first page load's outcome (success/failure). Visibility of the
     // fallback label vs. the WebView2 control is handled entirely inside
     // WebViewHost; this callback only logs, per the plan.
     g_webview_host.SetReadyHandler([](bool success) {

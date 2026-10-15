@@ -1,4 +1,4 @@
-// test_bridge_core.cpp - unit tests for the RPC dispatch logic (contract v2).
+// test_bridge_core.cpp - unit tests for the RPC dispatch logic (contract since v2).
 #include "doctest.h"
 
 #include <string>
@@ -2055,7 +2055,7 @@ TEST_CASE("deleteProvisionalByJob with a missing jobId yields BAD_REQUEST") {
     CHECK(j["error"]["code"] == "BAD_REQUEST");
 }
 
-// --- timeline.insertMediaForJob (replace-insert 🎞) --------------------------
+// --- timeline.insertMediaForJob (replace-insert, film-strip U+1F39E) --------
 
 TEST_CASE("ParseInsertMediaForJob accepts jobId+filePath and rejects missing/empty/non-string") {
     nzvideomni::InsertMediaForJobParams out;

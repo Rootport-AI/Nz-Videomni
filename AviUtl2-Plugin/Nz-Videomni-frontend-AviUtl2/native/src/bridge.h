@@ -1,18 +1,15 @@
-// bridge.h - connects the WebView2 message channel to the RPC core (contract v2).
+// bridge.h - connects the WebView2 message channel to the RPC core
+// (contract since v2).
 //
 // The Bridge turns an incoming web message (UTF-8 JSON) into a response
-// (UTF-8 JSON). Synchronous methods (ping, getEditInfo, backend.getBaseUrl,
-// timeline.insertMedia, settings.get, settings.set) are answered inline and
-// returned from HandleMessage. Asynchronous methods (backend.request,
-// backend.downloadVideo, backend.uploadFile, timeline.captureFrame,
-// timeline.cutoutRange, timeline.extractAudio, and contract v6's
-// fs.listFiles / fs.probeAudioDuration) are dispatched to the HTTP worker pool; HandleMessage
-// returns an empty string and, when the worker finishes, the response is
-// delivered through the ResponsePoster supplied to Initialize() (which is
-// expected to marshal onto the UI thread and call PostWebMessageAsJson).
-// ui.pickFile / ui.pickFolder (contract v6) are handled inline like the
-// synchronous methods, but show a modal Win32 dialog on the UI thread instead
-// of consulting the pure RPC core.
+// (UTF-8 JSON). The method list and the sync/async split are in
+// Docs/BRIDGE_CONTRACT.md section 3. Synchronous methods are answered inline
+// and returned from HandleMessage. Asynchronous methods are dispatched to the
+// HTTP worker pool; HandleMessage returns an empty string and, when the worker
+// finishes, the response is delivered through the ResponsePoster supplied to
+// Initialize() (which is expected to marshal onto the UI thread and call
+// PostWebMessageAsJson). Methods that show a modal Win32 dialog are handled
+// inline on the UI thread instead of consulting the pure RPC core.
 //
 // The backend base URL used by backend.request / backend.downloadVideo /
 // backend.uploadFile / backend.getBaseUrl is read from the persistent

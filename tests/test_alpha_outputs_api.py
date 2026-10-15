@@ -1,4 +1,4 @@
-"""Alpha Gen exit (第 3 弾, 台帳 §1-86) -- POST /jobs/{id}/alpha/rgba | chroma,
+"""Alpha Gen exit (第 3 弾, CLOSED 3-231) -- POST /jobs/{id}/alpha/rgba | chroma,
 GET /jobs/{id}/alpha/rgba | preview | chroma/{color} and ``JobResponse.alpha``.
 
 Mock backend, no GPU, real ffmpeg (skipped without it on PATH; put

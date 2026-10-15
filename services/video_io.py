@@ -2,8 +2,8 @@
 
 This module is the app layer's single place that shells out to ffmpeg: it
 applies the optional centered crop to ``output.mp4``, encodes the mock
-backend's PIL frames, cuts, pads, joins and probes mp4 files, and writes
-``metadata.json``.
+backend's PIL frames, cuts, pads, joins, composites (Alpha Gen exit) and probes
+mp4 files, and writes ``metadata.json``.
 """
 
 from __future__ import annotations
@@ -958,7 +958,8 @@ def cut_window_mp4(
 ) -> dict:
     """Write to ``out`` EXACTLY ``num_frames`` frames of ``src`` starting at
     ``window_start_sec``, at ``fps`` — the frame-exact window the engine
-    consumes (the retake window, the Inpainting window, a video end source).
+    consumes (the retake window, the Inpainting window, a video end source,
+    the Alpha Gen window).
 
     A third cutter next to :func:`cut_tail_mp4` and :func:`cut_range_mp4` because
     its CONTRACT is different from both, not just its arguments:
@@ -981,7 +982,8 @@ def cut_window_mp4(
     shows up in the deliverable. Audio is written as PCM when the
     container/build accepts it (``pcm_s16le``), falling back to AAC 192k, for
     the same reason: a lossy intermediate would be baked into the frozen audio
-    latents.
+    latents. For Alpha Gen the exit composites this very window, so the crf
+    (and its 4:2:0 chroma) here is also the ceiling on the exit's outputs.
 
     Returns ``{source_fps, resampled, total_frames, start_frame, written_frames,
     has_audio}`` where ``written_frames`` is MEASURED, not predicted. Raises

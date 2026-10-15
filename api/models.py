@@ -1923,8 +1923,9 @@ class AlphaOutputResponse(BaseModel):
 class AlphaOutputsInfo(BaseModel):
     """``JobResponse.alpha``: which Alpha Gen exit outputs exist now and the
     thresholds they were made with. An entry is present only when BOTH the
-    record (``alpha_outputs.json``) and the file itself exist. ``chroma`` is
-    keyed by colour name (one file per colour)."""
+    record (``alpha_outputs.json``) has it and its file(s) exist (the rule
+    lives in ``services.alpha_outputs_record.existing``). ``chroma`` is keyed
+    by colour name (one file per colour)."""
 
     rgba: AlphaThresholds | None = None
     chroma: dict[str, AlphaThresholds] = Field(default_factory=dict)

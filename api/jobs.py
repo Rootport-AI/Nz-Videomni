@@ -176,7 +176,7 @@ def get_alpha_chroma(
 ) -> FileResponse:
     """Download ``chroma_<color>.mp4`` (404 ALPHA_OUTPUT_NOT_READY before a
     successful POST /jobs/{id}/alpha/chroma with that colour; a name outside
-    the eight colours is 422)."""
+    ``ALPHA_CHROMA_COLORS`` is 422)."""
     path = context.alpha_output_manager.chroma_path(job_id, color)
     return FileResponse(
         path,

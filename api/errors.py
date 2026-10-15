@@ -185,8 +185,9 @@ def joined_not_ready(job_id: str) -> APIError:
 
 
 def job_not_alpha(job_id: str, detail: str | None = None) -> APIError:
-    """Alpha Gen exit: the target job is not an Alpha Gen job (its metadata has
-    no ``alpha_gen`` block), so there is no window + matte pair to composite.
+    """Alpha Gen exit: the target job is not an Alpha Gen job (no readable
+    metadata.json, or no ``alpha_gen`` block / ``output_fps`` in it), so there
+    is no window + matte pair to composite.
     Rejected up front (422), like :func:`job_not_joinable`."""
     return APIError(
         "JOB_NOT_ALPHA",
@@ -212,8 +213,9 @@ def alpha_output_not_ready(job_id: str, detail: str | None = None) -> APIError:
 
 
 def alpha_output_failed(job_id: str | None = None, detail: str | None = None) -> APIError:
-    """Alpha Gen exit: the server-side ffmpeg composite (or moving its result
-    into place) failed. Mirrors :func:`join_failed` (503) with its own code."""
+    """Alpha Gen exit: the server-side ffmpeg composite (or writing
+    ``alpha_outputs.json`` / moving the result into place) failed. Mirrors
+    :func:`join_failed` (503) with its own code."""
     return APIError(
         "ALPHA_OUTPUT_FAILED", "Alpha Gen output failed", 503, job_id=job_id, detail=detail
     )

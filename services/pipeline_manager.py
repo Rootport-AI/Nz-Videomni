@@ -823,9 +823,10 @@ class PipelineManager:
             # the same path substitution the outpaint/inpaint blocks above use,
             # and for the same reason both intermediates land next to the output
             # (STORAGE_POLICY.md reserves uploads/ for material the user may
-            # delete). The window and the reference are kept as the record of
-            # what went in. Nothing reads the window yet; a later compositing
-            # step (the planned third phase) is meant to read it.
+            # delete). Both are kept there. The window is also the material of
+            # the Alpha Gen exit (services/alpha_output_manager.py composites it
+            # with matte.mkv; without it POST /jobs/{id}/alpha/* answers 404 as
+            # JOB_NOT_FOUND), so it must not be cleaned up.
             alpha_provenance = None
             alpha_source_size = None
             if job.request.alpha_gen is not None:
@@ -972,7 +973,8 @@ class PipelineManager:
             # deliverables (output.mp4 preview + matte.mkv) in one ffmpeg run.
             # The engine's canvas file is deleted (in the one-stage mode it is
             # crf 0 and large; light mode's is the plain path's ordinary
-            # encode); the window and the reference stay as the record.
+            # encode); the window (the exit's compositing material) and the
+            # reference stay.
             if alpha_provenance is not None:
                 engine_mp4 = output_dir / "_alpha_engine.mp4"
                 outcome.output_path.replace(engine_mp4)

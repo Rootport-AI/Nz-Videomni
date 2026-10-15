@@ -1,10 +1,14 @@
-"""AlphaGen pre/post-processing in ``services.video_io`` (AlphaGen phase 1).
+"""AlphaGen pre/post-processing and the exit's compositing in ``services.video_io``.
 
 * ``finalize_alpha_matte`` -- crop the pad off the engine canvas, resize to the
   source size, and write ``matte.mkv`` (FFV1 gray, FULL range) plus the H.264
   preview ``output.mp4`` in one ffmpeg run. The input here is written the way the
   official ``encode_video`` writes it: limited-range yuv420p H.264 (luma 16-235),
   so the 0/255 round trip proves the tv->pc stretch.
+* ``finalize_alpha_matte(output_fps=...)`` -- the frames are re-timed and both
+  outputs written at the source's exact rational rate; leaving it out keeps the
+  original command. ``probe_fps_rational`` -- ffprobe's own rate string and its
+  value (``avg_frame_rate``, then ``r_frame_rate``; None without ffprobe).
 * ``pad_green_mp4`` -- the new ``scale``/``color`` keywords, and that leaving
   them out keeps the outpainting command unchanged.
 * ``compose_alpha_rgba`` / ``compose_alpha_chroma`` (第 3 弾 出口) -- the

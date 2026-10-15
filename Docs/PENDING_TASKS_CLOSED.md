@@ -2942,5 +2942,6 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **何が完了したか**: `TransportError::kDestinationFileFailed` を足し、`DownloadSync` の開けない／書けないの 2 か所で返して `TransportCode` が `DOWNLOAD_FAILED` に写す。`plugin.log` の行は「downloadVideo failed: <符号> - <文>」。「winhttp error」→「Windows error」。契約 `BRIDGE_CONTRACT.md` §4.4・§5 の定義と §8 直後の注記（版は上げない）。統合テスト 1 件（保存先を共有なしで開いたまま落とす）。
 - **どの物差しで通ったか**: 計画と差分の敵対的レビュー（全採用）・`build.ps1 -RunTests` 失敗 0・統合テスト 1 件を実サーバーで合格・配置（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159）。オーナーの目視の節は作らない（失敗経路の文の末尾と符号だけが変わる）。
 - **状態**: dev `dcb7924`・`63fc2de`・`f05dbc4`。main への merge は監督が行う（`--no-ff`）。
+  > **更新（2026-10-16）**: main merge 済み（`b3cb85f`）。
 - **正本・出典**: 契約 フロントエンド `BRIDGE_CONTRACT.md` §4.4・§5・§8 直後の注記、設計上の判断 フロントエンド `DEVLOG.md` §136、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159。
 - **残課題**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-91（`backend.uploadFile` の同じ型のずれ）。

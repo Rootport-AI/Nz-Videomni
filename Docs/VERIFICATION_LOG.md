@@ -16684,11 +16684,14 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 
 - 残るもの: `bridge.cpp` の "(winhttp error N)"（実際は `CreateFileW` の `GetLastError`。利用者に見える文字列なのでオーナー判断）／`http_client.cpp` で保存先を開けないときに `BACKEND_UNREACHABLE` になる挙動（コメントではなく挙動。小さな直しの候補）／`recordSourceLocation` の引数名 `pendingId`（ジョブ id も受ける。次にそのファイルを触るとき）。
 
+> **更新（2026-10-16）**: 前の 2 つ（"(winhttp error N)" と保存先を開けないときの `BACKEND_UNREACHABLE`）は §159（CLOSED 3-232）で直した。残るのは `pendingId` だけ。
+
 ## 159. ★ダウンロード失敗の符号と文言の手直し（台帳 §1-90 → CLOSED 3-232）＝保存先のファイルを開けない／書けない失敗を `BACKEND_UNREACHABLE` から `DOWNLOAD_FAILED` へ・「winhttp error」を「Windows error」へ（2026-10-15）
 
 ### 159.1 結論
 
 - **プラグインのネイティブ側 `backend.downloadVideo`（サーバーから動画を落とす処理）の失敗時の 2 点を直した。** 挙動の変更は失敗の経路だけで、正常系は変わらない。コミットは dev `dcb7924`（符号の分類＋統合テスト＋文言。同じ `bridge.cpp` を触るので 1 コミット）・`63fc2de`（契約文書と DEVLOG §136）・`f05dbc4`（配布用 aux2）・本節。
+  > **更新（2026-10-16）**: main merge 済み（`b3cb85f`）。
 - **点 1（文言）**: `noClobber` の保存名を確保できなかったときの文「Could not claim destination file name (winhttp error N)」の「winhttp」を「Windows」に。N は Windows のファイル操作のエラー番号で、通信部品 WinHTTP とは無関係だった。
 - **点 2（分類）**: 保存先のファイルを作成・上書きで開けない（典型は Join の 🎞 で、前回置いた `<ジョブ ID>_joined.mp4` を AviUtl2 が開いたまま同じ名前に上書きする場合）、または書き込みの途中で失敗した（ディスク不足はこちら）とき、`DownloadSync` は通信の失敗 `kUnreachable` を返し、ブリッジが `BACKEND_UNREACHABLE`（契約では「接続不可・切断」）に分類していた。`TransportError` に `kDestinationFileFailed` を足して `DOWNLOAD_FAILED` に写し、文に Windows のエラー番号を添え（「Could not open destination file (Windows error 32)」）、`plugin.log` の行も「downloadVideo failed: <符号> - <文>」に改めた。操作パネルは 🎞 の失敗の符号で分岐せず、カードにはネイティブの英語の文をそのまま出すので、画面側の変更は無い。
 - **契約**: params・result・符号の集合は不変なので版は上げず（v16 のまま）、`BRIDGE_CONTRACT.md` §8 の版の表の直後に日付つきの注記を置き、§4.4 と §5 の `DOWNLOAD_FAILED` の定義を「HTTP 200 以外・`noClobber` の保存名を確保できない・保存先を開けない／書けない」に改めた（2 つ目は以前から `DOWNLOAD_FAILED` だったのに契約に書かれていなかった）。

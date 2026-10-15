@@ -16,7 +16,13 @@ records `../../../Docs/PENDING_TASKS_CLOSED.md` §3-55-02 and, for LTX 2.5,
 §3-150) and **Alpha Gen** (makes a black-and-white matte video from a video, at
 the source's own fps; LTX 2.5 only, greyed on LTX 2.3; design canon
 `../../../Docs/ALPHAGEN_DESIGN.md` §9, completion record
-`../../../Docs/PENDING_TASKS_CLOSED.md` §3-227)), and **Inventory**
+`../../../Docs/PENDING_TASKS_CLOSED.md` §3-227; a completed Alpha Gen job's
+card then offers ✂ (the source made transparent with the matte — a ProRes 4444
+MOV, previewed over a checkerboard), 🪣 (the background filled with one of eight
+colors, for chroma keying), 💾 (download the MOV), 🔁 (back to the matte) and a
+two-thumb threshold slider, and its 🎞 places whatever the card shows — at the
+right-clicked source object's start frame on a new layer when that is known,
+see `../../../Docs/ALPHAGEN_DESIGN.md` §10 and `../Docs/DEVLOG.md` §134)), and **Inventory**
 (job history, downloads, and
 a LoRA browser — model management lives in the settings panel's `ModelsPanel`,
 not here) — plus two batch panels (both stateless and folder-scan-driven, with
@@ -110,7 +116,7 @@ webui/
       strings.ts       # All UI copy, en/ja dictionaries (see below)
       strings.test.ts  # Enforces en/ja key parity
       LanguageContext.tsx
-    jobs/              # Job ledger: polling, JobsContext, JobLedger/JobCard, join/insert
+    jobs/              # Job ledger: polling, JobsContext, JobLedger/JobCard, join, Alpha Gen exits, insert
     lora/              # LoRA selection helpers shared by Single/Chained
     modes/
       single/          # Single screen: T2V/I2V, keyframes, audio attach, LoRAs

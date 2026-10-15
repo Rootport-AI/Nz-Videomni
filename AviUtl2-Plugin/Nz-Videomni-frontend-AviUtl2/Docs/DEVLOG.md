@@ -5080,3 +5080,44 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 手当て: `ProbeMediaFps`（`native/src/media_fps_probe.cpp`）は、拡張子が `.mkv`／`.webm`／`.mk3d` なら Media Foundation を開かずに「不明」を返す。判定は 1 条件で、契約 v11 の右クリック `mediaFps`（mkv で 15fps 前後に事前入力されていた既存の不具合）と v15 の `probeMediaInfo.fps` の両方が同時に直る。契約の版は上げない（0＝不明の契約の中の修正。[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.13・§4.22・§8 の注記）。
 - Alpha Gen では mkv は「不明」になり、秒数と線は出ず、窓の時間が決まらないので丸ごとアップロードしてサーバーが fps を測る（§132.3 の既存の経路）。
 > **訂正**: 線は寸法から引くので出る。消えるのは秒数だけ（`useAlphaGenForm.ts`）。
+
+## 134. Alpha Gen の完了ジョブのカードに「出口」を足した — ✂🪣色💾🔁 と閾値のスライダー・🎞 は表示中のものを置く（バックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-86。Alpha Gen 第 3 弾。2026-10-15）
+
+### 134.1 結論
+
+- **Alpha Gen の完了ジョブのカードにだけ、ボタンの列「✂ ｜ 🪣 色 ｜ 💾 🔁」と、閾値のスライダー（つまみ 2 つ）・数値入力欄 2 つを出すようにしました。** 設計の正本はバックエンド [`ALPHAGEN_DESIGN.md`](../../../Docs/ALPHAGEN_DESIGN.md) §10 です。通常のジョブのカードには何も出ません。
+- **✂** は、元動画をマットで透かした「背景透過動画」（ProRes 4444 の MOV）をサーバーに作らせ、プレビューを市松模様の背景に重ねた mp4 に切り替えます。**🪣** は、`色`（white／red／yellow／green／aqua／blue／magenta／black。既定は green）で背景を塗りつぶした動画（クロマキー用）に切り替えます。**💾** は MOV を WebView2 の既定のダウンロードで落とし、表示を透過済みに切り替えます。**🔁** はマットの表示に戻します。どのボタンにも、マウスを重ねると短い説明が出ます。
+- **閾値**は「透過の閾値（この値以下は完全に透明）」と「不透過の閾値（この値以上は完全に不透明）」の 2 つで、既定は 7 と 248 です。スライダーのつまみは交差せず、数値入力欄は透過の閾値が 0〜不透過の閾値、不透過の閾値が透過の閾値〜255 の範囲に収まります（同じ値は白黒の二値化として許します）。閾値と色を変えただけでは何も作りません。
+- **黄色い帯は 2 種類です。** 透過済みの表示中は「背景透過動画（MOV）は💾でダウンロードできます。」、表示中の合成に使った閾値と今のつまみの値が違うときは「マスクの閾値設定が変更されました。」です。後者は、作り直すか、つまみを元の値に戻すと消えます。
+- **🎞 は表示中のものを置きます**（マットなら今までどおりマット、透過済みなら MOV、塗りつぶしならその mp4）。右クリックから作ったジョブは、元のオブジェクトの開始フレームと同じ位置の新しいレイヤー（最前面のレイヤーの 1 つ上）に、表示によらず置きます。ドラッグ＆ドロップや 📁 から作ったジョブ、操作パネルを立ち上げ直した後のジョブは、カーソル位置に置きます（重なったら最前面のレイヤーへ退避する §131 の仕組みのまま）。表示を切り替えると、挿入済みの印 ✅ は 🎞 に戻ります。
+- **作成中**（押してから成果物ができるまで）は、5 つ（✂・🪣・色・💾・🔁）と 🎞 を押せなくし「作成中…」を出します。🎞 の処理中は、表示を変える 4 つ（✂・🪣・💾・🔁）を押せなくします。**失敗**したときは、カードに赤い 1 行（`コード: メッセージ`）を出し、表示は元のままです。
+- 表示・閾値・色はカードごとの状態で、保存しません。カードを作り直すと、マットの表示と既定値から始まります。
+
+### 134.2 設計の判断
+
+- **Join と同じ分担にしました。** 新設の `jobs/AlphaControls.tsx` がボタン・閾値・色・POST・表示の状態を持ち、表示が変わるたびに `onViewChange(view, shown)` でカードへ知らせます。プレビューの `<video>` と、その URL の組み立てと、🎞 の分岐はカード（`jobs/JobCard.tsx`）だけが持ちます（`JoinControls` と同じ形）。
+- **成果物の有無と使い回しの判定はサーバーに任せました。** ✂ と 🪣 は毎回 POST し、同じ閾値（と色）の成果物がすでにあればサーバーが作らずに `reused: true` で返します。画面側が「何もしない」と決めるのは、透過済みの表示で今の閾値が表示中の合成と同じときの ✂ と、同じ色・同じ閾値の塗りつぶしの表示での 🪣 の 2 つだけです（設計書 §10.3）。
+- **💾 も毎回 POST してからダウンロードします。** MOV がすでにあるかどうかの判定はサーバー（`reused`）だけが持ちます。画面側の記録（ポーリングで届く `JobResponse.alpha` や、同じジョブのもう 1 枚のカードの表示）は古くなることがあり、古い閾値の MOV を落としかねないためです。使い回しの応答は数ミリ秒で返るので、ブラウザがクリックを利用者の操作として扱う時間（Chromium では 5 秒）に収まります。作成を待つ場合を含め、WebView2 で既定どおりに落ちるかは実機で確かめます（設計の計画の目視 G5）。
+- **ダウンロードは一時的な `<a href>` の `click()` です。** `download` 属性は付けていません。ページと API は別のオリジンで、属性が効かないためです。ダウンロードになるのは、サーバーが付ける `Content-Disposition: attachment` によります。
+- **「マスクの閾値設定が変更されました。」の帯は旗を持たず、値の差で決めます。** つまみを元の値に戻したときにも確実に消えるためです。
+- **プレビューと 💾 の URL には、閾値を `?v=<透過>-<不透過>` として付けます**（サーバーは読み捨てます）。閾値を変えて作り直したファイルは同じ URL なので、ブラウザが古いものを出さないようにするためです。✂ と 🪣 で合成の表示に切り替えたときは、プレビューを自動で開きます（Join の結合と同じ）。
+- **透過つき動画と塗りつぶし動画の 🎞 のダウンロードは、毎回新しい名前（`_2`、`_3`…。ブリッジ契約 v6 の `noClobber`）で行います。** 閾値を変えて作り直したファイルを、AviUtl2 が開いたままの同じ名前に上書きしようとすると失敗するためです。マットは変わらないので、今までどおり既存のダウンロードを使い回します（`reuseIfPresent`）。Alpha Gen のジョブでは、再挿入のときに前回のファイルを覚えておく仕組み（`rememberedPathRef`）は使いません。ほかのジョブの経路は変えていません。取りに行く先と保存名はブリッジ契約 v16 の `kind`（`rgba`／`chroma`）と `color` で選びます（`{id}_rgba.mov`・`{id}_chroma_{色}.mp4`）。
+- **右クリック由来の位置は、Join が使う `timeline/sourceLocationMap.ts`（プロセス内だけの記録）に、送信した時点でジョブ ID をキーに記録します。** 🎞 のたびに読むだけで、消しません（何度でも同じ位置に置けるように）。置き方は W3 の「位置つきの単純な挿入」（`plainInsertAt`）をそのまま使い、レイヤーは `getEditInfo` の `layerMax + 1` です。`getEditInfo` が読めなければカーソル位置に落ちます。
+- **つまみ 2 つのスライダーは、新しい小さな部品 `jobs/ThresholdRange.tsx` にしました。** Retake の `RangeBand` は秒数・8 刻み・窓の平行移動を固定で持ち、つまみが重なると動かせなくなるためです。中身は `<input type="range">` 2 本を重ねたもので、キーボード操作はブラウザの標準のままです。重なったときに動かせなくならないよう、範囲の上半分では左のつまみを上に重ねます（255 で 2 つが重なっても左を引き戻せる）。
+- **色の 16 進の値はサーバーの 1 か所だけが持ちます。** 画面側の `jobs/alphaColors.ts` は 8 色の名前の並びだけで、表示名も名前のままです。
+
+### 134.3 何を変えたか
+
+- **新設**: `jobs/AlphaControls.tsx`・`jobs/ThresholdRange.tsx`・`jobs/alphaColors.ts`（見た目は `jobs/jobs.css` に追記）。テストは `jobs/AlphaControls.test.tsx`・`jobs/ThresholdRange.test.tsx`・`jobs/JobCard.alpha.test.tsx` の 3 本です。💾 の試験は `HTMLAnchorElement.prototype.click` を差し替えて確かめます（jsdom は画面の遷移を持たないため）。
+- **API**: `api/types.ts` に `AlphaThresholds`・`AlphaChromaColor`・`AlphaChromaRequestBody`・`AlphaOutputResponse`・`AlphaOutputsInfo` と `JobResponse.alpha`（省略可。`null` は Alpha Gen のジョブではない）を足しました。`api/client.ts` に `exportAlphaRgba`（`POST /jobs/{id}/alpha/rgba`）と `exportAlphaChroma`（`POST /jobs/{id}/alpha/chroma`）を足しました。どちらも `joinJob` と同じく同期の呼び出しで、待ち時間の上限は 120 秒です。
+- **カード**: `jobs/JobCard.tsx` に `AlphaControls` を `JoinControls` の下に置き、表示に応じたプレビューの URL・🎞 の分岐（種類・色・新しい名前・位置）・表示が変わったときの ✅ の戻し（共有の挿入済みの印も `clearJobInserted` で消す）・作成中の 🎞 の無効化を足しました。
+- **ダウンロードと挿入**: `jobs/downloadAndInsert.ts` の選択肢に `kind`・`color`・`noClobber` を足し、`backend.downloadVideo` へそのまま渡します（`noClobber` のときは `reuseIfPresent` を送りません）。結合した動画（`joined`）の経路と、選択肢を何も渡さない今までの呼び出しは変えていません。
+- **右クリックの位置**: `modes/edit/useAlphaGenForm.ts` の入力動画（`source`）に、右クリック由来のときだけ `location`（`selected[0]` の `layer`・`frameStart`・`frameEnd` と、上位の `rate`・`scale`）を持たせました。今までは受け取って捨てていた値です。`modes/edit/EditScreen.tsx` は Alpha Gen の送信が通った時点で、右クリック由来なら `recordSourceLocation(jobId, …)` を呼びます。
+- **模擬のブリッジ**: `bridge/mockBridge.ts` に、POST の 2 本（閾値と色を検査して記録し、同じなら `reused: true`）・GET の 3 本（作る前は 404 `ALPHA_OUTPUT_NOT_READY`、作った後は模擬の動画のバイト列）・`JobResponse.alpha`（Alpha Gen のジョブが完了してからだけ。ほかは `null`）・`backend.downloadVideo` の `kind`／`color`（保存名 `{id}_rgba.mov`・`{id}_chroma_{色}.mp4`。作る前は失敗）を足しました。ffmpeg の失敗を模す選択肢 `failAlphaOutput`（503 `ALPHA_OUTPUT_FAILED`）も足しました。
+- **文言**: `i18n/strings.ts` に `jobs.alpha.*`（英語と日本語）を足しました。
+- **既存のテストの追随**: `downloadAndInsert.test.ts`（選択肢の受け渡し 3 本）・`mockBridge.test.ts`（出口の経路 9 本）・`useAlphaGenForm.test.tsx`（右クリックの `location` の保持と、ドロップ・📁 には無いこと）・`EditScreen.alphaGen.test.tsx`（右クリック由来なら送信時に記録・📁 由来は記録しない、の 2 本）。
+
+### 134.4 状態
+
+- 機械ゲート: 型検査 0・lint 警告 31（不変）・vitest 160 ファイル／3243 件（失敗 0）。
+- オーナーの目視は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.27 で行います（特に 💾 が WebView2 の既定のダウンロードで落ちるか、1 回目と 2 回連続の両方）。

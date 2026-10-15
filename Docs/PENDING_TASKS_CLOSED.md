@@ -2917,3 +2917,19 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **残課題**: 出口（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86）・LoRA ウェイトの配布（同 §1-87）・直接入力（同 §3-222）・快適上限の較正（同 §3-223。8bit の線は既定の操作でも超えるので価値が高い）・VFR の受付時の拒否（同 §3-225）・`DurationField` の型コメント「Create-only」の現行化（次にそのファイルを触るとき）。
   > **更新（2026-10-14）**: 同日のコメント点検で現行化した。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)（§3・§9・§23・§24）、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b（v0.5.88）、プラグインの契約 フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md)（v15）、設計上の判断 フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §132・§133、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153・§154。
+
+### 3-231. Alpha Gen 第 3 弾＝出口（ジョブカードの ✂・🪣・色・💾・🔁 と閾値スライダー・ProRes 4444 の MOV・市松プレビュー・塗りつぶし mp4・ブリッジ契約 v16）（起票：2026-10-07、実装：2026-10-15、オーナー目視合格・クローズ：2026-10-15）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1〔元 §1-86〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86 → §2-1（**同書側は欠番**）。第 1 弾（3-224）・第 2 弾（3-227）で作れるようになったマットを、利用者が「元動画が透けた状態でタイムラインに置ける」ようにする弾。
+- **到達条件**: Alpha Gen の完了ジョブのカードから、透過つき動画を作ってタイムラインへ置く・保存する、クロマキー用の塗りつぶし動画を作って置く、の 3 つの出口が動き、開発機の入力プラグイン L-SMASH Works（r1281・`colorspace=0`）で透過つきに読めること。**達成した。**
+- **何が完了したか**:
+  - **サーバーの出口 API 5 本**（仕様書 v0.5.89 §6.3c）: `POST /jobs/{id}/alpha/rgba`・`/alpha/chroma` が元動画の窓と `matte.mkv` から成果物を作り、`GET …/alpha/rgba`（ProRes 4444 の MOV・アルファ 16bit・音声 PCM）・`/alpha/preview`（市松模様のプレビュー mp4）・`/alpha/chroma/{color}`（8 色の塗りつぶし mp4。色はファイル名と `comment` タグに）が返す。閾値（透過の閾値 L 以下を 0・不透過の閾値 R 以上を 255・間は直線・L＝R は二値）はマットに当ててから合成し、`matte.mkv` は生のまま。成果物は `outputs/<job>/` に置いて使い回す（透過つきは 1 本・塗りつぶしは色ごとに 1 本。記録は `alpha_outputs.json`。記録とファイルの実在が揃うときだけ「ある」）。`JobResponse.alpha` が有無と閾値を返す。
+  - **ジョブカード**（設計書 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10）: `✂`（透過つき動画を作って市松プレビューに切り替え）・`🪣` と `色`（塗りつぶし）・`💾`（MOV のダウンロード。常にサーバーへ問い合わせてから WebView2 の既定のダウンロード）・`🔁`（マットに戻す）・閾値のスライダー（つまみ 2 つ・既定 7／248・連動する数値入力 2 つ）。3 状態（マット／透過済み／塗りつぶし）で 🎞 は表示中のものを置き、右クリック由来のジョブは元オブジェクトの開始フレームの新しいレイヤー、それ以外はカーソル位置。黄色い帯 2 種（透過済みの案内・閾値の差）。
+  - **ブリッジ契約 v16**: `backend.downloadVideo` に `kind`（output／joined／rgba／chroma）と `color` を加算。`.mov` は挿入の経路（拡張子の検査なし）をそのまま通る。
+  - **目視後の手直し**: WebView2 ホストの `NavigationCompleted` は初回の読み込みだけを判定し、以後の遷移（`💾` のダウンロードに化けた遷移＝`CONNECTION_ABORTED`）ではフォールバックのラベルを出さない。2 列グリッド `.single-layout` に最低の高さ `70vh`（3 画面共通）。
+  - 透けの手当てを固定値でなく利用者が探索できるスライダーにした理由は設計書 第 2 部 §25（オーナー裁定）。
+- **どの物差しで通ったか**: 機械ゲート 5 環境で失敗 0（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §157.3・§157.7）。敵対的レビューは計画 1 本（Critical 1・Major 6・Minor 16・棄却 1）＋実装後 2 本（バックエンド Major 1・Minor 9／操作パネル＋ネイティブ Minor 8）＋手直しの計画と差分 2 本（Major 1・Minor 8・全採用）。監督の実機ゲート G-S1／G-S2（manager 直叩き。閾値の写像・使い回し・色ごと・整列。§157.4）・G-S3（`plugin.log`。§157.8）。オーナーの目視（フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.27: 初回 G1〜G4・G6〜G13 合格・G5 不合格→手直し後の再確認①②合格。§157.6・§157.8）。
+- **クローズ理由**: 到達条件を機械・実機・目視で満たした。目視で出た不合格（`💾` で操作パネルが白くなる＝ホスト側の元からの欠陥）と要望（一覧の高さ）も同日に直して再確認に合格した。
+- **状態**: dev（第 3 弾 `b5d223c`〜`1d4ebff`・手直し `25cdce4`〜`f69a623`・クローズの記録は本節のコミット）。main への merge は監督が行う（`--no-ff`）。
+- **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10・第 2 部 §25、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3c（v0.5.89）、ブリッジ契約 フロントエンド `BRIDGE_CONTRACT.md` v16、設計の経緯と関門 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156、実装と門 同 §157、設計上の判断 フロントエンド `DEVLOG.md` §134・§135。
+- **残課題**: LoRA ウェイトの配布（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87）・MCP の出口（同 §3-229）・WebView2 の遷移の防御と再読み込み（同 §3-230）・直接入力（同 §3-222）・快適上限の較正（同 §3-223）・VFR（同 §3-225）・回転情報（同 §3-228）。

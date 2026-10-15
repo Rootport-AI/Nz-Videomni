@@ -20,7 +20,7 @@ display size (e.g. 960x540) is obtained via ``crop_output``.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -1846,6 +1846,90 @@ class JoinResponse(BaseModel):
     source_fps: float | None = None
 
 
+# Alpha Gen exit (第 3 弾): the fill colours of the chroma-key video, name ->
+# hex. The ONE place the hex values live (the operation panel only knows the
+# names). The list and its order are Docs/ALPHAGEN_DESIGN.md §10.2; the names
+# match the presets of AviUtl2's ``data\Default\default.palette``.
+ALPHA_CHROMA_COLORS: dict[str, str] = {
+    "white": "FFFFFF",
+    "red": "FF0000",
+    "yellow": "FFFF00",
+    "green": "00FF00",
+    "aqua": "00FFFF",
+    "blue": "0000FF",
+    "magenta": "FF00FF",
+    "black": "000000",
+}
+AlphaChromaColor = Literal[
+    "white", "red", "yellow", "green", "aqua", "blue", "magenta", "black"
+]
+if set(get_args(AlphaChromaColor)) != set(ALPHA_CHROMA_COLORS):
+    raise RuntimeError("AlphaChromaColor and ALPHA_CHROMA_COLORS name different colours")
+
+
+class AlphaThresholds(BaseModel):
+    """The matte levels the Alpha Gen exit applies before compositing
+    (Docs/ALPHAGEN_DESIGN.md §10.1): matte values at or below
+    ``transparent_threshold`` become 0, at or above ``opaque_threshold`` 255,
+    and the values between are stretched linearly. Equal thresholds turn the
+    matte into black and white (``>= opaque`` is 255); 0 / 255 leaves it
+    unchanged. ``matte.mkv`` itself is never modified."""
+
+    transparent_threshold: int = Field(7, ge=0, le=255)
+    opaque_threshold: int = Field(248, ge=0, le=255)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "AlphaThresholds":
+        if self.transparent_threshold > self.opaque_threshold:
+            raise ValueError(
+                "transparent_threshold must be <= opaque_threshold "
+                f"(got {self.transparent_threshold} > {self.opaque_threshold})"
+            )
+        return self
+
+
+class AlphaRgbaRequest(AlphaThresholds):
+    """POST /jobs/{job_id}/alpha/rgba body (optional; ``{}`` or none uses the
+    default thresholds). Makes the transparent ProRes 4444 MOV and its
+    checkerboard preview, or reuses them when they were made with the same
+    thresholds."""
+
+
+class AlphaChromaRequest(AlphaThresholds):
+    """POST /jobs/{job_id}/alpha/chroma body. ``color`` is required (one of
+    :data:`ALPHA_CHROMA_COLORS`). Makes the chroma-key mp4 of that colour, or
+    reuses it when it was made with the same thresholds."""
+
+    color: AlphaChromaColor
+
+
+class AlphaOutputResponse(BaseModel):
+    """POST /jobs/{job_id}/alpha/rgba | chroma result (synchronous 200).
+
+    ``path`` is store-relative (``outputs/<job>/rgba.mov`` or
+    ``outputs/<job>/chroma_<color>.mp4``). ``reused`` is True when the file
+    already existed with the same thresholds (and colour) and nothing was made.
+    ``color`` is None for ``rgba``."""
+
+    job_id: str
+    kind: Literal["rgba", "chroma"]
+    color: AlphaChromaColor | None = None
+    transparent_threshold: int
+    opaque_threshold: int
+    path: str
+    reused: bool
+
+
+class AlphaOutputsInfo(BaseModel):
+    """``JobResponse.alpha``: which Alpha Gen exit outputs exist now and the
+    thresholds they were made with. An entry is present only when BOTH the
+    record (``alpha_outputs.json``) and the file itself exist. ``chroma`` is
+    keyed by colour name (one file per colour)."""
+
+    rgba: AlphaThresholds | None = None
+    chroma: dict[str, AlphaThresholds] = Field(default_factory=dict)
+
+
 class JobStatus(str, Enum):
     queued = "queued"
     running = "running"
@@ -1910,6 +1994,11 @@ class JobResponse(BaseModel):
     # next to the job output; it is False unless the responder resolved the
     # output dir.
     matte: bool = False
+    # Alpha Gen exit (ADDITIVE): None unless ``matte.mkv`` exists (i.e. not an
+    # Alpha Gen job, or the responder did not resolve the output dir).
+    # Otherwise the exit outputs that exist now and their thresholds (see
+    # AlphaOutputsInfo; ``{"rgba": null, "chroma": {}}`` before any was made).
+    alpha: AlphaOutputsInfo | None = None
     created_at: str
     started_at: str | None
     completed_at: str | None

@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from api.errors import APIError
 from config import AppConfig, EngineComfortProfile
+from services.alpha_output_manager import AlphaOutputManager
 from services.audio_upload_store import AudioUploadStore
 from services.base_models import BaseModelDescriptor, load_base_models
 from services.job_store import JobStore
@@ -58,6 +59,8 @@ class AppContext:
     model_registry: ModelRegistry = field(init=False)
     pipeline_manager: PipelineManager = field(init=False)
     join_manager: JoinManager = field(init=False)
+    #: Alpha Gen exit (POST /jobs/{id}/alpha/rgba | chroma). ffmpeg only.
+    alpha_output_manager: AlphaOutputManager = field(init=False)
     #: Object tracking. Built unconditionally and STARTS NOTHING — the
     #: utility worker is spawned by the first tracking session, never at boot,
     #: so a server nobody tracks on pays nothing and a machine without
@@ -76,6 +79,7 @@ class AppContext:
         self.join_manager = JoinManager(
             self.config, self.job_store, self.video_upload_store
         )
+        self.alpha_output_manager = AlphaOutputManager(self.config, self.job_store)
         self.lora_registry = LoraRegistry(self.config)
         self.model_registry = ModelRegistry(self.config, base_models=self.base_models)
         active_base = self._restore_active_base_model()

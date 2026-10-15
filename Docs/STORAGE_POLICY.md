@@ -29,6 +29,7 @@
 
 - `outputs/{job_id}/` に `output.mp4`・`metadata.json`（設定で有効時）・V2V結合後は`joined.mp4`。job_idはジョブ作成時に発行されるUUID。
 - **（2026-10-07〜）Alpha Gen（動画からマットを作る機能）のジョブは、`output.mp4`（プレビュー用）に加えて、合成用の劣化しない灰色のマット`matte.mkv`（FFV1・元の寸法）を同じジョブのディレクトリに書く。** こちらも成果物である（`GET /jobs/{job_id}/matte`で取り出せる）。設計の正本は[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)。
+- **（2026-10-15〜）Alpha Genの出口（第3弾）の成果物も同じジョブのディレクトリに書く。** 透過つきの動画`rgba.mov`（ProRes 4444）とその市松模様のプレビュー`alpha_preview.mp4`、色で塗りつぶした動画`chroma_<色>.mp4`は**成果物である**。それらを作った閾値と色を書いた`alpha_outputs.json`は、成果物ではなく**ジョブと一緒に残る記録**である（中間物でもない）。利用者がボタンを押したときに作り、同じ条件なら使い回し、条件を変えると上書きする。何本残るか・使い回しの条件は[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3cが正本（決定事項は[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10）。`DELETE /jobs/{job_id}`でジョブのディレクトリごと一緒に消える。
 - **（2026-09-24〜）`output.mp4`と`joined.mp4`は、既定で`metadata.json`と同じ生成条件をmp4の中（`comment`タグ）にも持つ。** 書き込みの条件・止め方・`file_size_bytes`の扱いなどの規則は[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.6が正本。
 - **撮り直し・画角拡張・Inpainting・Alpha Genは、途中で作った窓とキャンバスをそのジョブのディレクトリに残す**（`_retake_window.mp4`／`outpaint_canvas.mp4`／`_inpaint_window.mp4`／`inpaint_canvas.mp4`／`_alpha_window.mp4`／`alpha_reference.mp4`）。「何を入れたらこれが出たか」を後から確かめるための証拠であり、**uploads/へは書かない**——あちらは利用者がいつ消してもよい領域だからである（§0）。ジョブを消せば一緒に消える。**例外としてAlpha Genのエンジンが書く中間の`_alpha_engine.mp4`は、`matte.mkv`と`output.mp4`を書き終えたら削除する**（無劣化で大きく、窓と参照があれば「何を入れたらこれが出たか」は確かめられるため）。
 - `DELETE /jobs/{job_id}`（終了済みジョブのみ）が`outputs/{job_id}`を削除する。これが唯一のディスク削除API。

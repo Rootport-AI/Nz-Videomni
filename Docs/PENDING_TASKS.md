@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-15（文書とコメントの現行化＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §155・§1-89 と §3-228 を起票。閉じた項目の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)）。
+- 作成: 2026-07-15／最終更新: 2026-10-15（§1-86 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231・§2 は空になり節ごと削除・§3-229 と §3-230 を起票）。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
@@ -15,7 +15,7 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-**次に着手するのは §1-86（Alpha Gen 第 3 弾）。** §1-82 と §1-89 は小さな修正なので随時（§1-86 の前に片づけてよい）、§1-87 は §1-86 の後。
+**§1-86（Alpha Gen 第 3 弾）は完了（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231）。** 残りは §1-82 と §1-89（小さな修正・随時）と §1-87（LoRA の配布）。次に着手するテーマはオーナーが決める。
 
 ### 1-82. 操作パネルの既存テストの不安定（`App.nag.test.tsx` の 2 件・`JobsContext.test.tsx` の 1 件）（起票：2026-10-06）
 
@@ -24,13 +24,6 @@
 - **直し方の候補**: `App.nag.test.tsx` は、`afterEach` で共有モックのジョブを `listJobs` で終わりまで進める後片付けを足す（`webui/src/modes/single/SingleScreen.repeat.test.tsx` で採った方法）。`JobsContext.test.tsx` は原因の特定から。
 - **追記（2026-10-14）**: `webui/src/modes/toolbox/ObjectTrackingSection.test.tsx` の "calls timeline.cancelTracking when Stop is pressed" も、全件の実行で 1 回落ち、単独では 3 回とも合格した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §154.3）。同型の不安定として本項に含める。
 - **範囲**: テストのみ（製品コードは不変）。
-
-### 1-86. Alpha Gen 第 3 弾＝出口（🎞・💾・🪣）（起票：2026-10-07）
-
-- **概要**: マットから透過つきの動画を作り、タイムラインへ置く（🎞）・保存する（💾）、クロマキー用に一色で塗った動画を見せる（🪣）。🎞 と 💾 は ProRes 4444 の MOV 1 本を共用する。決定事項は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10。
-- **最初の関門**: L-SMASH Works（r1281）で、設定 `colorspace=0` のまま ProRes 4444 の MOV が透過つきで読めるかを AviUtl2 の実機で確かめる。
-- **着手の条件**: 第 2 弾（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-227）の完了。**満たした（2026-10-14）。**
-- **範囲**: バックエンド（合成）・操作パネル・プラグイン（挿入経路にある拡張子 `.mp4` の決め打ち 3 箇所）。
 
 ### 1-87. Alpha Gen の LoRA ウェイトの配布（起票：2026-10-07）
 
@@ -243,6 +236,18 @@
 - **判断材料**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151（負荷は生成側＋参照側の合計トークンで効くという見立て）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §6・§16。
 - **状態**: 将来の研究課題（着手時期未定）。
+
+#### 3-229. MCP に Alpha Gen の出口（透過つき動画・塗りつぶし動画の作成と取得）を足す（起票：2026-10-15）
+
+- **概要**: 第 3 弾（§1-86）は操作パネルの出口だけを作り、MCP には足していない。AI エージェントからも透過つき動画（ProRes 4444 の MOV）と塗りつぶし動画を作って取り出せるように、`save_job_video` の `which` に `rgba`／`chroma`（＋色）を足し、作成を頼むツール（`export_alpha_rgba`・`export_alpha_chroma`）を足す。ツールを足すときは `tests/test_mcp_registration.py` の `EXPECTED_TOOLS`・README の表・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §8 をそろえる。
+- **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10、第 3 弾の計画の敵対的レビュー（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §157）。
+- **状態**: 将来の改修項目（第 3 弾の完了後）。
+
+#### 3-230. 操作パネルの WebView2 で、初回より後のトップレベル遷移の防御と失敗時の再読み込み（起票：2026-10-15）
+
+- **概要**: ホスト（`webview_host.cpp`）には `NavigationStarting` が無く、初回の読み込みより後にトップレベルの遷移が起きると、成功すればページ自体が置き換わり（操作パネルが消える）、ダウンロード以外の理由で失敗すれば Chromium のエラーページで止まる（どちらも再読み込みの経路が無い）。いまこの遷移を起こすのは `💾`（透過つき動画のダウンロード。遷移がダウンロードに化けるのでページは残る）だけで、実害は無い。直すなら「初回以外の遷移は取り消す、ただしバックエンドの origin へのダウンロードは通す」と「失敗したら `index.html` へ戻す」の 2 点。
+- **出典**: 第 3 弾の目視 G5 の手直し（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §157.7）。
+- **状態**: 将来の改修項目。
 
 ---
 

@@ -598,6 +598,14 @@ struct DownloadVideoRequest {
     // returned. Immutable per-clip outputs only (see the WebUI contract);
     // ignored under no_clobber, which already never overwrites.
     bool reuse_if_present = false;
+    // Contract v16: which of the job's videos to fetch - one of "output",
+    // "joined", "rgba", "chroma". Defaults from 'joined' when params omit
+    // 'kind' ("joined" when joined=true, else "output"); after a successful
+    // parse, joined == (kind == "joined").
+    std::string kind = "output";
+    // Contract v16: fill color name for kind "chroma" ([a-z]+; it becomes a
+    // URL path segment and part of the file name). Empty for other kinds.
+    std::string color;
 };
 
 // Validate params of backend.downloadVideo. Rejects a job id containing path
@@ -605,15 +613,20 @@ struct DownloadVideoRequest {
 // string), 'fileName' (non-empty string) and 'noClobber' (boolean); a present
 // but wrongly-typed/empty value is a parse failure, an absent one leaves the
 // corresponding has_* flag false. Also accepts optional 'reuseIfPresent'
-// (boolean) with the same rules. Returns false + *err_message on failure.
+// (boolean) with the same rules. Contract v16: optional 'kind' (one of
+// "output"/"joined"/"rgba"/"chroma"; defaults from 'joined') and 'color'
+// (non-empty [a-z]+, required when kind is "chroma"); joined=true together
+// with a kind other than "joined" is a parse failure. null counts as absent.
+// Returns false + *err_message on failure.
 bool ParseDownloadVideo(const json_t& params, DownloadVideoRequest* out,
                         std::string* err_message);
 
-// Relative video path for a download request, e.g. "/jobs/<id>/video" or
-// ".../joined". Combine with kBackendApiPrefix and the base URL to form the URL.
+// Relative video path for a download request by kind: "/jobs/<id>/video",
+// ".../joined", ".../alpha/rgba" or ".../alpha/chroma/<color>". Combine with kBackendApiPrefix and the base URL to form the URL.
 std::string DownloadVideoPath(const DownloadVideoRequest& req);
 
-// Bare download file name, e.g. "<jobId>.mp4" or "<jobId>_joined.mp4".
+// Bare download file name by kind: "<jobId>.mp4", "<jobId>_joined.mp4",
+// "<jobId>_rgba.mov" or "<jobId>_chroma_<color>.mp4".
 std::string DownloadFileName(const DownloadVideoRequest& req);
 
 // ---------------------------------------------------------------------------

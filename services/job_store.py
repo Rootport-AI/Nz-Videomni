@@ -16,17 +16,31 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from api.models import (
+    AlphaOutputsInfo,
+    AlphaThresholds,
     GenerateChainRequest,
     GenerateRequest,
     JobResponse,
     JobResult,
     JobStatus,
 )
+from services import alpha_outputs_record
 
 
 def now_iso() -> str:
     """UTC timestamp like ``2026-06-25T12:00:00Z`` (spec examples)."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _thresholds_model(
+    thresholds: alpha_outputs_record.AlphaThresholds | None,
+) -> AlphaThresholds | None:
+    if thresholds is None:
+        return None
+    return AlphaThresholds(
+        transparent_threshold=thresholds.transparent,
+        opaque_threshold=thresholds.opaque,
+    )
 
 
 class JobRecord:
@@ -82,6 +96,17 @@ class JobRecord:
             output_dir is not None
             and (output_dir / self.job_id / "matte.mkv").exists()
         )
+        # Alpha Gen exit: only a job with a matte has one. An output counts
+        # when both its record entry and its file exist (alpha_outputs_record).
+        alpha = None
+        if matte:
+            outputs = alpha_outputs_record.existing(output_dir / self.job_id)
+            alpha = AlphaOutputsInfo(
+                rgba=_thresholds_model(outputs.rgba),
+                chroma={
+                    color: _thresholds_model(t) for color, t in outputs.chroma.items()
+                },
+            )
         return JobResponse(
             job_id=self.job_id,
             status=self.status,
@@ -94,6 +119,7 @@ class JobRecord:
             is_v2v=is_v2v,
             joined=joined,
             matte=matte,
+            alpha=alpha,
             created_at=self.created_at,
             started_at=self.started_at,
             completed_at=self.completed_at,

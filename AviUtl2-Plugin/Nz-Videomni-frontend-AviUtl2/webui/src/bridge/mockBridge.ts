@@ -541,7 +541,32 @@ interface MockJobRecord {
    * check for `joined.mp4` — drives `JobResponse.joined` and the
    * `GET /jobs/{id}/joined` 200-vs-404 route. */
   joinedAt: string | null;
+  /** Alpha Gen 第 3 弾: set (empty) only for a `POST /generate/alpha` job, and
+   * filled by `POST /jobs/{id}/alpha/rgba | chroma` with the thresholds each
+   * output was made with. Stands in for the real server's `alpha_outputs.json`
+   * plus the files' existence — drives `JobResponse.alpha`, `reused`, the
+   * three `GET .../alpha/...` routes' 200-vs-404 and `backend.downloadVideo`'s
+   * `kind: "rgba" | "chroma"`. `undefined` = not an Alpha Gen job. */
+  alphaOutputs?: MockAlphaOutputs;
 }
+
+interface MockAlphaThresholds {
+  transparent_threshold: number;
+  opaque_threshold: number;
+}
+
+interface MockAlphaOutputs {
+  rgba: MockAlphaThresholds | null;
+  chroma: Record<string, MockAlphaThresholds>;
+}
+
+/** The eight fill colors `POST /jobs/{id}/alpha/chroma` accepts (names only —
+ * the mock never paints anything). */
+const MOCK_ALPHA_CHROMA_COLORS = ["white", "red", "yellow", "green", "aqua", "blue", "magenta", "black"];
+
+/** A few bytes standing in for an mp4 / MOV body on the `GET .../alpha/...`
+ * routes (the start of an `ftyp` box). */
+const MOCK_VIDEO_BYTES = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112]);
 
 interface DerivedJobFields {
   status: MockJobStatus;
@@ -729,6 +754,17 @@ function jobResponseBody(job: MockJobRecord, fields: DerivedJobFields, runningPo
     clip_count: clipFields.clip_count,
     is_v2v: job.isV2V,
     joined: job.joinedAt != null,
+    // Alpha Gen 第 3 弾: like the real server, only once the matte exists
+    // (the job completed) and only for an Alpha Gen job; `null` otherwise.
+    alpha:
+      job.alphaOutputs !== undefined && fields.status === "completed"
+        ? {
+            rgba: job.alphaOutputs.rgba === null ? null : { ...job.alphaOutputs.rgba },
+            chroma: Object.fromEntries(
+              Object.entries(job.alphaOutputs.chroma).map(([color, t]) => [color, { ...t }]),
+            ),
+          }
+        : null,
     created_at: job.createdAt,
     started_at: fields.status === "queued" ? null : job.createdAt,
     completed_at: fields.status === "completed" || fields.status === "failed" || fields.status === "cancelled" ? nowIso() : null,
@@ -921,6 +957,10 @@ export interface MockBridgeOptions {
   /** V2V Join: the `source_fps` `POST /jobs/{id}/join` returns (default 24,
    * matching the previous fixed response). `null` models an unprobeable source. */
   joinSourceFps?: number | null;
+  /** Alpha Gen 第 3 弾: when true, `POST /jobs/{id}/alpha/rgba | chroma`
+   * answers 503 `ALPHA_OUTPUT_FAILED` (the server's ffmpeg failing) and records
+   * nothing. */
+  failAlphaOutput?: boolean;
   /** Multi-engine (§3-97 P7): how much of the `LTX25` base model this fixture
    * server has on disk, which decides what picking it in the header dropdown
    * does. `"full"` (default) → a complete install, and the load succeeds.
@@ -1625,7 +1665,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         .filter((key) => key in req)
         .map((key) => [key, req[key]]),
     );
-    return handleGenerate({
+    const accepted = handleGenerate({
       prompt: " ",
       loras: [{ name: "alpha-gen", strength: 1.0 }],
       reference_video_id: referenceId,
@@ -1640,6 +1680,114 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         one_stage: req.light_mode !== true,
       },
     });
+    // Alpha Gen 第 3 弾: mark the new record as an Alpha Gen job (no exit
+    // outputs yet).
+    const acceptedId = (accepted.body as { job_id?: unknown } | null)?.job_id;
+    const created = accepted.status === 202 && typeof acceptedId === "string" ? jobs.get(acceptedId) : undefined;
+    if (created) created.alphaOutputs = { rgba: null, chroma: {} };
+    return accepted;
+  }
+
+  /** Alpha Gen 第 3 弾: the checks `POST /jobs/{id}/alpha/rgba | chroma` and
+   * the three `GET .../alpha/...` routes share — unknown job 404, not an Alpha
+   * Gen job 422 `JOB_NOT_ALPHA`, not completed 409 `VIDEO_NOT_READY`. Returns
+   * the record's outputs, or the error response. */
+  function alphaOutputsOrError(jobId: string): { outputs: MockAlphaOutputs } | { error: ResultOf<"backend.request"> } {
+    const job = jobs.get(jobId);
+    if (!job) return { error: jobNotFound(jobId) };
+    if (job.alphaOutputs === undefined) {
+      return {
+        error: {
+          status: 422,
+          body: { error: { code: "JOB_NOT_ALPHA", message: "job is not an Alpha Gen job (nothing to composite)" } },
+        },
+      };
+    }
+    if (deriveJobFields(job.pollCount, runningPolls, job.forcedTerminal).status !== "completed") {
+      return { error: { status: 409, body: { error: { code: "VIDEO_NOT_READY", message: "Video is not ready yet" } } } };
+    }
+    return { outputs: job.alphaOutputs };
+  }
+
+  /** Alpha Gen 第 3 弾: `POST /jobs/{id}/alpha/rgba | chroma` fixture
+   * (Docs/ALPHAGEN_DESIGN.md §10). Validates the thresholds the way
+   * `AlphaThresholds` does (integers 0-255, transparent <= opaque; defaults
+   * 7 / 248) and the color against the eight names, then records them —
+   * `reused: true` when the same thresholds (and color) were already recorded,
+   * as the server reuses the file. `failAlphaOutput` → 503. */
+  function handleAlphaOutput(
+    kind: "rgba" | "chroma",
+    jobId: string,
+    body: object | undefined,
+  ): ResultOf<"backend.request"> {
+    const found = alphaOutputsOrError(jobId);
+    if ("error" in found) return found.error;
+    const { outputs } = found;
+    const req = (body ?? {}) as Record<string, unknown>;
+    const transparent = req.transparent_threshold ?? 7;
+    const opaque = req.opaque_threshold ?? 248;
+    if (typeof transparent !== "number" || !Number.isInteger(transparent) || transparent < 0 || transparent > 255) {
+      return validationError("transparent_threshold", "Input should be an integer between 0 and 255");
+    }
+    if (typeof opaque !== "number" || !Number.isInteger(opaque) || opaque < 0 || opaque > 255) {
+      return validationError("opaque_threshold", "Input should be an integer between 0 and 255");
+    }
+    if (transparent > opaque) {
+      return validationError("transparent_threshold", "transparent_threshold must be <= opaque_threshold");
+    }
+    const thresholds: MockAlphaThresholds = { transparent_threshold: transparent, opaque_threshold: opaque };
+    let color: string | null = null;
+    if (kind === "chroma") {
+      if (typeof req.color !== "string" || !MOCK_ALPHA_CHROMA_COLORS.includes(req.color)) {
+        return validationError("color", "Input should be one of the eight color names");
+      }
+      color = req.color;
+    }
+    if (options.failAlphaOutput) {
+      return {
+        status: 503,
+        body: { error: { code: "ALPHA_OUTPUT_FAILED", message: "Alpha Gen output failed", detail: "mock: ffmpeg failed" } },
+      };
+    }
+    const previous = color === null ? outputs.rgba : outputs.chroma[color];
+    const reused =
+      previous != null &&
+      previous.transparent_threshold === thresholds.transparent_threshold &&
+      previous.opaque_threshold === thresholds.opaque_threshold;
+    if (color === null) outputs.rgba = thresholds;
+    else outputs.chroma[color] = thresholds;
+    return {
+      status: 200,
+      body: {
+        job_id: jobId,
+        kind,
+        color,
+        ...thresholds,
+        path: color === null ? `outputs/${jobId}/rgba.mov` : `outputs/${jobId}/chroma_${color}.mp4`,
+        reused,
+      },
+    };
+  }
+
+  /** Alpha Gen 第 3 弾: `GET /jobs/{id}/alpha/rgba | preview | chroma/{color}`
+   * fixture. 200 with {@link MOCK_VIDEO_BYTES} once the output was made (the
+   * preview is made with the MOV), else 404 `ALPHA_OUTPUT_NOT_READY`. */
+  function handleGetAlphaOutput(jobId: string, color: string | null): ResultOf<"backend.request"> {
+    const found = alphaOutputsOrError(jobId);
+    if ("error" in found) return found.error;
+    const made = color === null ? found.outputs.rgba !== null : found.outputs.chroma[color] !== undefined;
+    if (!made) {
+      return {
+        status: 404,
+        body: {
+          error: {
+            code: "ALPHA_OUTPUT_NOT_READY",
+            message: "alpha output has not been created yet (POST /jobs/{job_id}/alpha/rgba or /alpha/chroma first)",
+          },
+        },
+      };
+    }
+    return { status: 200, body: MOCK_VIDEO_BYTES };
   }
 
   /** M6: `POST /generate/chain` fixture (Docs/API_REFERENCE.md §3.13). Keeps
@@ -1879,6 +2027,8 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
   const JOB_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)$/;
   const JOB_JOIN_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)\/join$/;
   const JOB_JOINED_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)\/joined$/;
+  const JOB_ALPHA_MAKE_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)\/alpha\/(?<kind>rgba|chroma)$/;
+  const JOB_ALPHA_FILE_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)\/alpha\/(?:rgba|preview|chroma\/(?<color>[^/]+))$/;
 
   async function handleBackendRequest(params: ParamsOf<"backend.request">): Promise<ResultOf<"backend.request">> {
     if (options.backendUnreachable) {
@@ -1909,6 +2059,13 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     const joinedId = JOB_JOINED_PATH.exec(path)?.groups?.id;
     if (joinedId && method === "GET") return handleGetJoined(joinedId);
 
+    const alphaMake = JOB_ALPHA_MAKE_PATH.exec(path)?.groups;
+    if (alphaMake?.id && method === "POST") {
+      return handleAlphaOutput(alphaMake.kind === "chroma" ? "chroma" : "rgba", alphaMake.id, body);
+    }
+    const alphaFile = JOB_ALPHA_FILE_PATH.exec(path)?.groups;
+    if (alphaFile?.id && method === "GET") return handleGetAlphaOutput(alphaFile.id, alphaFile.color ?? null);
+
     const jobId = JOB_PATH.exec(path)?.groups?.id;
     if (jobId && method === "GET") return handleGetJob(jobId);
     if (jobId && method === "DELETE") return handleDeleteJob(jobId);
@@ -1931,11 +2088,39 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         `Mock bridge: job "${params.jobId}" is not completed (status=${fields.status})`,
       );
     }
-    const suffix = params.joined ? "joined" : "output";
+    // Contract v16: `kind` (defaulting from `joined`) and `color`, checked the
+    // way native's `ParseDownloadVideo` does.
+    const kind = params.kind ?? (params.joined ? "joined" : "output");
+    if (params.joined === true && kind !== "joined") {
+      throw new BridgeError("BAD_REQUEST", "Mock bridge: joined:true conflicts with kind");
+    }
+    const color = params.color ?? "";
+    if (kind === "chroma" && color === "") {
+      throw new BridgeError("BAD_REQUEST", "Mock bridge: kind chroma needs a color");
+    }
+    // Checked whatever the kind (only used by chroma), like native.
+    if (params.color !== undefined && !/^[a-z]+$/.test(params.color)) {
+      throw new BridgeError("BAD_REQUEST", "Mock bridge: color must be [a-z]+");
+    }
+    // The server answers 404 for an Alpha Gen output not made yet; native
+    // reports that as a failed download.
+    if (
+      (kind === "rgba" && job.alphaOutputs?.rgba == null) ||
+      (kind === "chroma" && job.alphaOutputs?.chroma[color] === undefined)
+    ) {
+      throw new BridgeError("DOWNLOAD_FAILED", `Mock bridge: ${kind} output of "${params.jobId}" has not been made`);
+    }
+    const suffix = kind === "joined" ? "joined" : "output";
     // Contract v6: destDir/fileName/noClobber. Omitting all three reproduces
     // the exact pre-v6 path/behavior.
     const destDir = params.destDir ?? "C:\\Users\\mock\\AppData\\Local\\Temp\\Nz-Videomni";
-    const desiredName = params.fileName ?? `${job.id}-${suffix}.mp4`;
+    const defaultName =
+      kind === "rgba"
+        ? `${job.id}_rgba.mov`
+        : kind === "chroma"
+          ? `${job.id}_chroma_${color}.mp4`
+          : `${job.id}-${suffix}.mp4`;
+    const desiredName = params.fileName ?? defaultName;
     const sizeBytes = 4_096 + 512;
     const entries = mockFs.folders.get(destDir) ?? [];
     const finalName = params.noClobber ? dedupeFileName(entries, desiredName) : desiredName;

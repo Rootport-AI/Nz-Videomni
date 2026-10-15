@@ -609,6 +609,51 @@ export interface JoinResponse {
   source_fps: number | null;
 }
 
+/** Alpha Gen 第 3 弾（出口）: the fill colors `POST /jobs/{id}/alpha/chroma`
+ * accepts (`AlphaChromaColor`, `api/models.py`). The hex values live on the
+ * server only (Docs/ALPHAGEN_DESIGN.md §10.2); `jobs/alphaColors.ts` holds the
+ * order the dropdown shows them in. */
+export type AlphaChromaColor = "white" | "red" | "yellow" | "green" | "aqua" | "blue" | "magenta" | "black";
+
+/** The matte levels the Alpha Gen exits apply before compositing
+ * (`AlphaThresholds`, `api/models.py`; Docs/ALPHAGEN_DESIGN.md §10.1): at or
+ * below `transparent_threshold` -> 0, at or above `opaque_threshold` -> 255,
+ * linear in between. Both 0..255 integers with transparent <= opaque; the
+ * server defaults are 7 / 248. Also the body of `POST /jobs/{id}/alpha/rgba`
+ * (every field optional there). */
+export interface AlphaThresholds {
+  transparent_threshold: number;
+  opaque_threshold: number;
+}
+
+/** `POST /jobs/{id}/alpha/chroma`'s body (`AlphaChromaRequest`). */
+export interface AlphaChromaRequestBody extends AlphaThresholds {
+  color: AlphaChromaColor;
+}
+
+/** `POST /jobs/{id}/alpha/rgba | chroma`'s synchronous 200
+ * (`AlphaOutputResponse`, `api/models.py`). `reused` is true when the file
+ * already existed with the same thresholds (and color) and nothing was made;
+ * `color` is `null` for `rgba`. `path` is store-relative. */
+export interface AlphaOutputResponse {
+  job_id: string;
+  kind: "rgba" | "chroma";
+  color: string | null;
+  transparent_threshold: number;
+  opaque_threshold: number;
+  path: string;
+  reused: boolean;
+}
+
+/** `JobResponse.alpha` (`AlphaOutputsInfo`): the Alpha Gen exit outputs that
+ * exist now and the thresholds each was made with. An entry is present only
+ * when both the server's record and the file exist; `chroma` is keyed by
+ * color name (one file per color). */
+export interface AlphaOutputsInfo {
+  rgba: AlphaThresholds | null;
+  chroma: Record<string, AlphaThresholds>;
+}
+
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface JobResult {
@@ -647,6 +692,12 @@ export interface JobResponse {
    * has run and not been deleted); `false` otherwise (`JobResponse.joined`,
    * file-existence based, `services/job_store.py`). */
   joined: boolean;
+  /** Alpha Gen 第 3 弾: `null` (or absent, from an older server) when the job
+   * is not an Alpha Gen job (no `matte.mkv` next to its output); otherwise the
+   * exit outputs that exist now (`{rgba: null, chroma: {}}` before any was
+   * made). The gate for the job card's ✂🪣💾🔁 controls
+   * (`jobs/AlphaControls.tsx`; `JobResponse.alpha`, `services/job_store.py`). */
+  alpha?: AlphaOutputsInfo | null;
   /** Echoed per-clip `GenerateRequest` (`to_clip_request` server-side): the
    * fields of {@link GenerateRequest} plus the server-only ones
    * (negative_prompt/num_inference_steps/guidance_scale/pipeline) the WebUI

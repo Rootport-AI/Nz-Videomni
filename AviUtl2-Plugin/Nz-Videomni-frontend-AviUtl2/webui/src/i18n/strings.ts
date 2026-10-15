@@ -1364,6 +1364,24 @@ export const en = {
       `Keeping the project and generated-video frame rates aligned is recommended (project ${projectFps} / video ${videoFps}).`,
     insertJoined: "Insert joined video",
     genericFailure: "Generation failed.",
+    /** Alpha Gen 第 3 弾（出口）: the ✂🪣色💾🔁 row and the threshold slider on
+     * an Alpha Gen job's card (`jobs/AlphaControls.tsx`,
+     * Docs/ALPHAGEN_DESIGN.md §10.2 / §10.3). The color names are shown as
+     * they are (white / red / …). */
+    alpha: {
+      cut: "Make the transparent video (ProRes 4444)",
+      bucket: "Make a chroma-key video filled with the chosen color",
+      colorLabel: "Color",
+      download: "Download the transparent video (MOV)",
+      reset: "Back to the matte",
+      busy: "Making…",
+      downloadHint: "The transparent video (MOV) can be downloaded with 💾.",
+      thresholdsChanged: "The mask threshold settings were changed.",
+      transparentThreshold: "Transparent threshold",
+      transparentThresholdTitle: "At or below this value is fully transparent",
+      opaqueThreshold: "Opaque threshold",
+      opaqueThresholdTitle: "At or above this value is fully opaque",
+    },
   },
   /** W2/W3 (⬇ right-click quick-insert): toasts for the two right-click
    * "insert a generated result" commands. W2 (`insertProvisionalResult`) inserts
@@ -3079,6 +3097,20 @@ export const ja: Strings = {
       `プロジェクトと生成動画のfpsは揃えることを推奨します（project ${projectFps} / video ${videoFps}）。`,
     insertJoined: "結合済み動画を挿入",
     genericFailure: "生成に失敗しました。",
+    alpha: {
+      cut: "背景透過動画（ProRes 4444）を作る",
+      bucket: "選んだ色で背景を塗りつぶした動画を作る（クロマキー用）",
+      colorLabel: "色",
+      download: "背景透過動画（MOV）をダウンロード",
+      reset: "マットの表示に戻す",
+      busy: "作成中…",
+      downloadHint: "背景透過動画（MOV）は💾でダウンロードできます。",
+      thresholdsChanged: "マスクの閾値設定が変更されました。",
+      transparentThreshold: "透過の閾値",
+      transparentThresholdTitle: "この値以下は完全に透明",
+      opaqueThreshold: "不透過の閾値",
+      opaqueThresholdTitle: "この値以上は完全に不透明",
+    },
   },
   menuInsert: {
     notProvisional: "Nz-Videomniの予約オブジェクトを右クリックしてください。",

@@ -809,19 +809,84 @@ bool ParseDownloadVideo(const json& params, DownloadVideoRequest* out,
         }
         out->reuse_if_present = params["reuseIfPresent"].get<bool>();
     }
+
+    // Contract v16: kind / color. Absent (or null) kind defaults from joined,
+    // so a pre-v16 caller gets the exact pre-v16 path and name.
+    std::string kind = joined ? "joined" : "output";
+    if (params.contains("kind") && !params["kind"].is_null()) {
+        if (!params["kind"].is_string()) {
+            *err_message = "backend.downloadVideo 'kind' must be a string";
+            return false;
+        }
+        kind = params["kind"].get<std::string>();
+        if (kind != "output" && kind != "joined" && kind != "rgba" && kind != "chroma") {
+            *err_message =
+                "backend.downloadVideo 'kind' must be one of output, joined, rgba, chroma";
+            return false;
+        }
+        if (joined && kind != "joined") {
+            *err_message = "backend.downloadVideo 'joined': true conflicts with 'kind'";
+            return false;
+        }
+    }
+    std::string color;
+    if (params.contains("color") && !params["color"].is_null()) {
+        if (!params["color"].is_string() || params["color"].get<std::string>().empty()) {
+            *err_message = "backend.downloadVideo 'color' must be a non-empty string";
+            return false;
+        }
+        color = params["color"].get<std::string>();
+        for (const char c : color) {
+            if (c < 'a' || c > 'z') {
+                *err_message =
+                    "backend.downloadVideo 'color' must contain lowercase letters a-z only";
+                return false;
+            }
+        }
+    }
+    if (kind == "chroma" && color.empty()) {
+        *err_message = "backend.downloadVideo kind 'chroma' requires 'color'";
+        return false;
+    }
+    out->kind = kind;
+    out->joined = (kind == "joined");
+    if (kind == "chroma") {
+        out->color = std::move(color);
+    } else {
+        out->color.clear();
+    }
     return true;
 }
 
 std::string DownloadVideoPath(const DownloadVideoRequest& req) {
     std::string path = "/jobs/";
     path += req.job_id;
-    path += req.joined ? "/joined" : "/video";
+    if (req.kind == "joined") {
+        path += "/joined";
+    } else if (req.kind == "rgba") {
+        path += "/alpha/rgba";
+    } else if (req.kind == "chroma") {
+        path += "/alpha/chroma/";
+        path += req.color;
+    } else {
+        path += "/video";
+    }
     return path;
 }
 
 std::string DownloadFileName(const DownloadVideoRequest& req) {
     std::string name = req.job_id;
-    name += req.joined ? "_joined.mp4" : ".mp4";
+    if (req.kind == "joined") {
+        name += "_joined.mp4";
+    } else if (req.kind == "rgba") {
+        name += "_rgba.mov";
+    } else if (req.kind == "chroma") {
+        name += "_chroma_";
+        name += req.color;
+        name += ".mp4";
+    } else {
+        name += ".mp4";
+    }
     return name;
 }
 

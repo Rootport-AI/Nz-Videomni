@@ -78,6 +78,40 @@ describe("downloadAndInsertVideo", () => {
     expect(result).toEqual({ layer: 2, frame: 5, filePath: "C:/dl/out.mp4", usedFallback: false });
   });
 
+  it("Alpha Gen 第 3 弾: kind/color/noClobber reach backend.downloadVideo (no reuseIfPresent) and plainInsertAt still positions", async () => {
+    resetProvisionalReservation();
+    const { bridge, request } = stubBridge();
+    await downloadAndInsertVideo(bridge, "job-a", undefined, {
+      kind: "chroma",
+      color: "blue",
+      noClobber: true,
+      plainInsertAt: { layer: 7, frame: 120 },
+    });
+    expect(paramsFor(request, "backend.downloadVideo")).toEqual({
+      jobId: "job-a",
+      kind: "chroma",
+      color: "blue",
+      noClobber: true,
+    });
+    expect(paramsFor(request, "timeline.insertMedia")).toEqual({ filePath: "C:/dl/out.mp4", layer: 7, frame: 120 });
+    expect(request.mock.calls.some((c) => c[0] === "timeline.insertMediaForJob")).toBe(false);
+  });
+
+  it("Alpha Gen 第 3 弾: rgba without a position downloads under a fresh name and goes through insertMediaForJob", async () => {
+    resetProvisionalReservation();
+    const { bridge, request } = stubBridge();
+    await downloadAndInsertVideo(bridge, "job-b", undefined, { kind: "rgba", noClobber: true });
+    expect(paramsFor(request, "backend.downloadVideo")).toEqual({ jobId: "job-b", kind: "rgba", noClobber: true });
+    expect(paramsFor(request, "timeline.insertMediaForJob")).toEqual({ jobId: "job-b", filePath: "C:/dl/out.mp4" });
+  });
+
+  it("Alpha Gen 第 3 弾: the matte (noClobber alone) sends no kind", async () => {
+    resetProvisionalReservation();
+    const { bridge, request } = stubBridge();
+    await downloadAndInsertVideo(bridge, "job-c", undefined, { noClobber: true });
+    expect(paramsFor(request, "backend.downloadVideo")).toEqual({ jobId: "job-c", noClobber: true });
+  });
+
   it("knownFilePath skips backend.downloadVideo entirely and inserts the given path via insertMediaForJob", async () => {
     resetProvisionalReservation();
     const { bridge, request } = stubBridge();

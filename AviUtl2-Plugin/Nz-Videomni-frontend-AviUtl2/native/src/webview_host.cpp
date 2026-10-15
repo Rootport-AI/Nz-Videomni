@@ -36,6 +36,7 @@ struct WebViewHost::Impl {
     EventRegistrationToken navigation_token = {};
     std::string embedded_html;  // non-empty -> serve UI from this DLL resource
     bool com_initialized = false;
+    bool panel_ready = false;  // the first page load has succeeded
 };
 
 namespace {
@@ -472,31 +473,59 @@ bool WebViewHost::Initialize(HWND parent, HWND fallback_label,
                                     }).Get(),
                                 &impl_->message_token);
 
-                            // Hide the fallback label once the first navigation
-                            // actually succeeds (instead of relying on implicit
-                            // Z-order), and re-show it with a localized error if
-                            // navigation fails. Either way, forward the result to
-                            // any caller-supplied ReadyHandler for logging.
+                            // Judge only the first page load: on success hide the
+                            // fallback label (instead of relying on implicit
+                            // Z-order), on failure re-show it with a localized
+                            // error, and forward the result to any caller-supplied
+                            // ReadyHandler for logging. Once the panel is ready,
+                            // later navigation completions (e.g. a navigation that
+                            // turned into a download -- WebView2 reports a
+                            // navigation to `Content-Disposition: attachment` as
+                            // IsSuccess=false) are only logged and never touch the
+                            // label.
                             impl_->webview->add_NavigationCompleted(
                                 Callback<ICoreWebView2NavigationCompletedEventHandler>(
                                     [this](ICoreWebView2*,
                                            ICoreWebView2NavigationCompletedEventArgs*
                                                args) -> HRESULT {
                                         BOOL success = FALSE;
+                                        COREWEBVIEW2_WEB_ERROR_STATUS status =
+                                            COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
                                         if (args != nullptr) {
                                             args->get_IsSuccess(&success);
+                                            args->get_WebErrorStatus(&status);
+                                        }
+                                        const std::wstring status_text =
+                                            L"WebErrorStatus=" +
+                                            std::to_wstring(static_cast<int>(status));
+                                        if (impl_->panel_ready) {
+                                            if (success) {
+                                                LogInfo(L"WebViewHost: navigation "
+                                                        L"completed successfully after "
+                                                        L"the panel was ready");
+                                            } else {
+                                                LogInfo(L"WebViewHost: navigation "
+                                                        L"completed with failure after "
+                                                        L"the panel was ready; fallback "
+                                                        L"not shown (" + status_text +
+                                                        L"; the page is still live if "
+                                                        L"this was a download)");
+                                            }
+                                            return S_OK;
                                         }
                                         if (success) {
                                             if (fallback_label_ != nullptr) {
                                                 ::ShowWindow(fallback_label_, SW_HIDE);
                                             }
+                                            impl_->panel_ready = true;
                                             LogInfo(L"WebViewHost: navigation completed "
                                                     L"successfully; fallback label hidden");
                                         } else {
                                             ShowFallback(Translate(
                                                 L"The Web UI failed to load."));
                                             LogError(L"WebViewHost: navigation completed "
-                                                     L"with failure");
+                                                     L"with failure (" + status_text +
+                                                     L")");
                                         }
                                         if (on_ready_) {
                                             on_ready_(success != FALSE);

@@ -1,6 +1,7 @@
 """Job endpoints: list / get / video / cancel-delete (spec §6.1 / §7), the
 ADDITIVE V2V join pair (POST /jobs/{id}/join, GET /jobs/{id}/joined) and the
-ADDITIVE Alpha Gen matte download (GET /jobs/{id}/matte)."""
+ADDITIVE Alpha Gen matte download (GET /jobs/{id}/matte) and the ADDITIVE
+Alpha Gen exit (POST /jobs/{id}/alpha/rgba | chroma and their downloads)."""
 
 from __future__ import annotations
 
@@ -12,7 +13,16 @@ from fastapi.responses import FileResponse
 from api.context import AppContext
 from api.deps import get_context, require_auth
 from api.errors import job_not_found, video_not_ready
-from api.models import JobResponse, JobStatus, JoinRequest, JoinResponse
+from api.models import (
+    AlphaChromaColor,
+    AlphaChromaRequest,
+    AlphaOutputResponse,
+    AlphaRgbaRequest,
+    JobResponse,
+    JobStatus,
+    JoinRequest,
+    JoinResponse,
+)
 
 router = APIRouter()
 
@@ -96,6 +106,82 @@ def get_job_joined(job_id: str, context: AppContext = Depends(get_context)) -> F
         path,
         media_type="video/mp4",
         filename=f"{job_id}_joined.mp4",
+    )
+
+
+@router.post(
+    "/jobs/{job_id}/alpha/rgba",
+    response_model=AlphaOutputResponse,
+    dependencies=[Depends(require_auth)],
+)
+def make_alpha_rgba(
+    job_id: str,
+    request: AlphaRgbaRequest | None = Body(default=None),
+    context: AppContext = Depends(get_context),
+) -> AlphaOutputResponse:
+    """Alpha Gen exit (ADDITIVE endpoint): window + levelled matte ->
+    ``rgba.mov`` (ProRes 4444) and ``alpha_preview.mp4`` (checkerboard).
+    Synchronous 200 -- ffmpeg only, no GPU, independent of the single-job
+    guard. Reused (``reused: true``) when both exist with the same thresholds.
+    The body is optional; ``{}`` (or none) uses the default thresholds."""
+    return context.alpha_output_manager.rgba(job_id, request or AlphaRgbaRequest())
+
+
+@router.post(
+    "/jobs/{job_id}/alpha/chroma",
+    response_model=AlphaOutputResponse,
+    dependencies=[Depends(require_auth)],
+)
+def make_alpha_chroma(
+    job_id: str,
+    request: AlphaChromaRequest,
+    context: AppContext = Depends(get_context),
+) -> AlphaOutputResponse:
+    """Alpha Gen exit (ADDITIVE endpoint): window + levelled matte over a solid
+    colour -> ``chroma_<color>.mp4``. Synchronous 200 like the rgba route; one
+    file per colour, reused when it exists with the same thresholds. ``color``
+    is required."""
+    return context.alpha_output_manager.chroma(job_id, request)
+
+
+@router.get("/jobs/{job_id}/alpha/rgba")
+def get_alpha_rgba(job_id: str, context: AppContext = Depends(get_context)) -> FileResponse:
+    """Download ``rgba.mov`` (404 ALPHA_OUTPUT_NOT_READY before a successful
+    POST /jobs/{id}/alpha/rgba). Mirrors GET /jobs/{id}/joined."""
+    path = context.alpha_output_manager.rgba_path(job_id)
+    return FileResponse(
+        path,
+        media_type="video/quicktime",
+        filename=f"{job_id}_rgba.mov",
+    )
+
+
+@router.get("/jobs/{job_id}/alpha/preview")
+def get_alpha_preview(job_id: str, context: AppContext = Depends(get_context)) -> FileResponse:
+    """Download ``alpha_preview.mp4``, the checkerboard preview made with
+    ``rgba.mov`` (404 ALPHA_OUTPUT_NOT_READY before it exists)."""
+    path = context.alpha_output_manager.preview_path(job_id)
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename=f"{job_id}_alpha_preview.mp4",
+    )
+
+
+@router.get("/jobs/{job_id}/alpha/chroma/{color}")
+def get_alpha_chroma(
+    job_id: str,
+    color: AlphaChromaColor,
+    context: AppContext = Depends(get_context),
+) -> FileResponse:
+    """Download ``chroma_<color>.mp4`` (404 ALPHA_OUTPUT_NOT_READY before a
+    successful POST /jobs/{id}/alpha/chroma with that colour; a name outside
+    the eight colours is 422)."""
+    path = context.alpha_output_manager.chroma_path(job_id, color)
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename=f"{job_id}_chroma_{color}.mp4",
     )
 
 

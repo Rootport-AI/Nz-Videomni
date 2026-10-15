@@ -745,6 +745,174 @@ describe("POST /generate/alpha", () => {
   });
 });
 
+// Alpha Gen 第 3 弾（出口）: the five routes and `JobResponse.alpha`, as the
+// real server answers them (Docs/ALPHAGEN_DESIGN.md §10; `api/jobs.py`).
+describe("Alpha Gen exits (/jobs/{id}/alpha/...)", () => {
+  type Bridge = ReturnType<typeof createMockBridge>;
+
+  async function req(bridge: Bridge, method: "GET" | "POST", path: string, body?: object) {
+    return bridge.request("backend.request", { method, path, ...(body ? { body } : {}) });
+  }
+
+  /** A completed `POST /generate/alpha` job on an LTX 2.5 fixture. */
+  async function completedAlphaJob(options: Parameters<typeof createMockBridge>[0] = {}) {
+    const bridge = createMockBridge({ delayMs: 0, ltx25Install: "full", ...options });
+    await req(bridge, "POST", "/api/v1/pipeline/load", { base_model: "LTX25" });
+    const accepted = await req(bridge, "POST", "/api/v1/generate/alpha", {
+      reference_video_id: "mock-video-1",
+      window_start_sec: 0,
+      num_frames: 81,
+      seed: -1,
+      light_mode: false,
+    });
+    const jobId = (accepted.body as { job_id: string }).job_id;
+    let job: Record<string, unknown> = {};
+    for (let i = 0; i < 20; i += 1) {
+      job = (await req(bridge, "GET", `/api/v1/jobs/${jobId}`)).body as Record<string, unknown>;
+      if (job.status === "completed") break;
+    }
+    expect(job.status).toBe("completed");
+    return { bridge, jobId, job };
+  }
+
+  it("JobResponse.alpha is {rgba:null, chroma:{}} for a completed Alpha Gen job and null for any other job", async () => {
+    const { bridge, job } = await completedAlphaJob();
+    expect(job.alpha).toEqual({ rgba: null, chroma: {} });
+    const plain = await req(bridge, "POST", "/api/v1/generate", { prompt: "a cat", width: 512, height: 320, num_frames: 17 });
+    const plainId = (plain.body as { job_id: string }).job_id;
+    const plainJob = (await req(bridge, "GET", `/api/v1/jobs/${plainId}`)).body as Record<string, unknown>;
+    expect(plainJob.alpha).toBeNull();
+  });
+
+  it("POST rgba records the thresholds (defaults 7/248), answers reused:false then reused:true, and shows in JobResponse.alpha", async () => {
+    const { bridge, jobId } = await completedAlphaJob();
+    const first = await req(bridge, "POST", `/api/v1/jobs/${jobId}/alpha/rgba`, {});
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({
+      job_id: jobId,
+      kind: "rgba",
+      color: null,
+      transparent_threshold: 7,
+      opaque_threshold: 248,
+      path: `outputs/${jobId}/rgba.mov`,
+      reused: false,
+    });
+    const second = await req(bridge, "POST", `/api/v1/jobs/${jobId}/alpha/rgba`, {
+      transparent_threshold: 7,
+      opaque_threshold: 248,
+    });
+    expect((second.body as { reused: boolean }).reused).toBe(true);
+    const changed = await req(bridge, "POST", `/api/v1/jobs/${jobId}/alpha/rgba`, {
+      transparent_threshold: 20,
+      opaque_threshold: 20,
+    });
+    expect((changed.body as { reused: boolean }).reused).toBe(false);
+    const job = (await req(bridge, "GET", `/api/v1/jobs/${jobId}`)).body as Record<string, unknown>;
+    expect(job.alpha).toEqual({ rgba: { transparent_threshold: 20, opaque_threshold: 20 }, chroma: {} });
+  });
+
+  it("POST chroma is kept per color; the same color with other thresholds is made again", async () => {
+    const { bridge, jobId } = await completedAlphaJob();
+    const green = await req(bridge, "POST", `/api/v1/jobs/${jobId}/alpha/chroma`, { color: "green" });
+    expect(green.body).toMatchObject({ kind: "chroma", color: "green", path: `outputs/${jobId}/chroma_green.mp4`, reused: false });
+    await req(bridge, "POST", `/api/v1/jobs/${jobId}/alpha/chroma`, { color: "blue", transparent_threshold: 0, opaque_threshold: 255 });
+    const again = await req(bridge, "POST", `/api/v1/jobs/${jobId}/alpha/chroma`, {
+      color: "green",
+      transparent_threshold: 10,
+      opaque_threshold: 240,
+    });
+    expect((again.body as { reused: boolean }).reused).toBe(false);
+    const job = (await req(bridge, "GET", `/api/v1/jobs/${jobId}`)).body as Record<string, unknown>;
+    expect(job.alpha).toEqual({
+      rgba: null,
+      chroma: {
+        green: { transparent_threshold: 10, opaque_threshold: 240 },
+        blue: { transparent_threshold: 0, opaque_threshold: 255 },
+      },
+    });
+  });
+
+  it("refuses bad thresholds / colors (422), a non-Alpha Gen job (422 JOB_NOT_ALPHA) and an unknown job (404)", async () => {
+    const { bridge, jobId } = await completedAlphaJob();
+    const base = `/api/v1/jobs/${jobId}/alpha`;
+    expect((await req(bridge, "POST", `${base}/rgba`, { transparent_threshold: 200, opaque_threshold: 100 })).status).toBe(422);
+    expect((await req(bridge, "POST", `${base}/rgba`, { opaque_threshold: 256 })).status).toBe(422);
+    expect((await req(bridge, "POST", `${base}/rgba`, { transparent_threshold: 1.5 })).status).toBe(422);
+    expect((await req(bridge, "POST", `${base}/chroma`, { color: "purple" })).status).toBe(422);
+    expect((await req(bridge, "POST", `${base}/chroma`, {})).status).toBe(422);
+    const plain = await req(bridge, "POST", "/api/v1/generate", { prompt: "a cat", width: 512, height: 320, num_frames: 17 });
+    const plainId = (plain.body as { job_id: string }).job_id;
+    const notAlpha = await req(bridge, "POST", `/api/v1/jobs/${plainId}/alpha/rgba`, {});
+    expect(notAlpha.status).toBe(422);
+    expect((notAlpha.body as { error: { code: string } }).error.code).toBe("JOB_NOT_ALPHA");
+    expect((await req(bridge, "POST", "/api/v1/jobs/nope/alpha/rgba", {})).status).toBe(404);
+  });
+
+  it("failAlphaOutput answers 503 ALPHA_OUTPUT_FAILED and records nothing", async () => {
+    const { bridge, jobId } = await completedAlphaJob({ failAlphaOutput: true });
+    const result = await req(bridge, "POST", `/api/v1/jobs/${jobId}/alpha/rgba`, {});
+    expect(result.status).toBe(503);
+    expect((result.body as { error: { code: string } }).error.code).toBe("ALPHA_OUTPUT_FAILED");
+    const job = (await req(bridge, "GET", `/api/v1/jobs/${jobId}`)).body as Record<string, unknown>;
+    expect(job.alpha).toEqual({ rgba: null, chroma: {} });
+  });
+
+  it("the three GET routes are 404 ALPHA_OUTPUT_NOT_READY until made, then 200 with bytes", async () => {
+    const { bridge, jobId } = await completedAlphaJob();
+    const base = `/api/v1/jobs/${jobId}/alpha`;
+    for (const path of [`${base}/rgba`, `${base}/preview`, `${base}/chroma/green`]) {
+      const before = await req(bridge, "GET", path);
+      expect(before.status, path).toBe(404);
+      expect((before.body as { error: { code: string } }).error.code).toBe("ALPHA_OUTPUT_NOT_READY");
+    }
+    await req(bridge, "POST", `${base}/rgba`, {});
+    await req(bridge, "POST", `${base}/chroma`, { color: "green" });
+    for (const path of [`${base}/rgba`, `${base}/preview`, `${base}/chroma/green`]) {
+      const after = await req(bridge, "GET", path);
+      expect(after.status, path).toBe(200);
+      expect(after.body).toBeInstanceOf(Uint8Array);
+    }
+    expect((await req(bridge, "GET", `${base}/chroma/blue`)).status).toBe(404);
+  });
+
+  it("backend.downloadVideo kind rgba / chroma: _rgba.mov and _chroma_<color>.mp4, _2 with noClobber, refused before made", async () => {
+    const { bridge, jobId } = await completedAlphaJob();
+    await expect(bridge.request("backend.downloadVideo", { jobId, kind: "rgba" })).rejects.toMatchObject({
+      code: "DOWNLOAD_FAILED",
+    });
+    await req(bridge, "POST", `/api/v1/jobs/${jobId}/alpha/rgba`, {});
+    await req(bridge, "POST", `/api/v1/jobs/${jobId}/alpha/chroma`, { color: "green" });
+    const rgba1 = await bridge.request("backend.downloadVideo", { jobId, kind: "rgba", noClobber: true });
+    const rgba2 = await bridge.request("backend.downloadVideo", { jobId, kind: "rgba", noClobber: true });
+    expect(rgba1.filePath.endsWith(`${jobId}_rgba.mov`)).toBe(true);
+    expect(rgba2.filePath.endsWith(`${jobId}_rgba_2.mov`)).toBe(true);
+    const chroma = await bridge.request("backend.downloadVideo", { jobId, kind: "chroma", color: "green", noClobber: true });
+    expect(chroma.filePath.endsWith(`${jobId}_chroma_green.mp4`)).toBe(true);
+    await expect(bridge.request("backend.downloadVideo", { jobId, kind: "chroma" })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
+    await expect(bridge.request("backend.downloadVideo", { jobId, joined: true, kind: "rgba" })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
+  });
+
+  it("backend.downloadVideo kind joined alone takes the joined name (as native does)", async () => {
+    const { bridge, jobId } = await completedAlphaJob();
+    const result = await bridge.request("backend.downloadVideo", { jobId, kind: "joined" });
+    expect(result.filePath.endsWith(`${jobId}-joined.mp4`)).toBe(true);
+  });
+
+  it("backend.downloadVideo checks color as [a-z]+ whatever the kind", async () => {
+    const { bridge, jobId } = await completedAlphaJob();
+    await expect(bridge.request("backend.downloadVideo", { jobId, color: "Green" })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
+    // A well-formed color on a non-chroma kind is accepted (and not used).
+    const ok = await bridge.request("backend.downloadVideo", { jobId, color: "green" });
+    expect(ok.filePath.endsWith(`${jobId}-output.mp4`)).toBe(true);
+  });
+});
+
 // §1-31: `GET /models` names the ACTIVE base model's transformer weight class
 // (every other base model says `null`) — the key the comfort rows above are
 // matched against. Same "mock mirrors the real contract" discipline.

@@ -9,6 +9,7 @@ import { ToastProvider } from "../../shell/ToastContext";
 import { Toasts } from "../../shell/Toasts";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import type { SelectionItem } from "../../timeline/menuSelection";
+import { getSourceLocation, resetSourceLocationMap } from "../../timeline/sourceLocationMap";
 import { EditScreen } from "./EditScreen";
 
 /**
@@ -273,6 +274,51 @@ describe("EditScreen — Alpha Gen サブタブ", () => {
       seed: -1,
       light_mode: false,
     });
+  });
+
+  it("第 3 弾: 右クリック由来なら送信時に元のオブジェクトの位置をジョブへ記録する", async () => {
+    resetSourceLocationMap();
+    const user = userEvent.setup();
+    const bridge = createMockBridge({ delayMs: 0, ltx25Install: "full", ...MEDIA });
+    await bridge.request("backend.request", {
+      method: "POST",
+      path: "/api/v1/pipeline/load",
+      body: { base_model: "LTX25" },
+    });
+    const { onJobSubmitted } = renderEdit({ intent: alphaGenIntent(makeItem({ layer: 4, frameStart: 120, frameEnd: 419 })), bridge });
+    await screen.findByText(`${t.fpsLabel}: 29.97`);
+
+    await user.click(generateButton());
+    await waitFor(() => expect(onJobSubmitted).toHaveBeenCalledTimes(1));
+    const jobId = onJobSubmitted.mock.calls[0]![0] as string;
+    expect(getSourceLocation(jobId)).toEqual({
+      layer: 4,
+      frameStart: 120,
+      frameEnd: 419,
+      filePath: FILE,
+      rate: 30,
+      scale: 1,
+    });
+  });
+
+  it("第 3 弾: 📁 で選んだ素材（右クリック由来でない）は位置を記録しない", async () => {
+    resetSourceLocationMap();
+    const user = userEvent.setup();
+    const bridge = createMockBridge({ delayMs: 0, ltx25Install: "full", ...MEDIA });
+    await bridge.request("backend.request", {
+      method: "POST",
+      path: "/api/v1/pipeline/load",
+      body: { base_model: "LTX25" },
+    });
+    const { onJobSubmitted } = renderEdit({ bridge });
+    await user.click(alphaTab());
+    await user.click(screen.getByRole("button", { name: t.chooseButton }));
+    await screen.findByText(`${t.fpsLabel}: 29.97`);
+
+    await user.click(generateButton());
+    await waitFor(() => expect(onJobSubmitted).toHaveBeenCalledTimes(1));
+    const jobId = onJobSubmitted.mock.calls[0]![0] as string;
+    expect(getSourceLocation(jobId)).toBeNull();
   });
 
   it("LTX 2.3 のサーバーが断ったら（422）エラーカードに出す", async () => {

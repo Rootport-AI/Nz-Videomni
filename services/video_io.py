@@ -320,6 +320,163 @@ def finalize_alpha_matte(
     }
 
 
+# Alpha Gen exit (第 3 弾, Docs/ALPHAGEN_DESIGN.md §10.1): the width of the
+# checkerboard preview, and the checkerboard itself (16 px squares, two greys).
+ALPHA_PREVIEW_WIDTH = 640
+_ALPHA_CHECKER = (
+    "geq=lum='if(eq(mod(floor(X/16)+floor(Y/16),2),0),200,140)':cb=128:cr=128"
+)
+
+
+def alpha_preview_size(source_size: tuple[int, int]) -> tuple[int, int]:
+    """The checkerboard preview's size: 640 wide, the height from the source's
+    aspect ratio rounded to an even number (yuv420p needs even sides)."""
+    sw, sh = int(source_size[0]), int(source_size[1])
+    height = max(2, round(ALPHA_PREVIEW_WIDTH * sh / sw / 2) * 2)
+    return ALPHA_PREVIEW_WIDTH, height
+
+
+def _alpha_levels(transparent: int, opaque: int) -> str:
+    """The matte levels as a filter fragment (leading comma), or "" for none.
+
+    ``transparent`` < ``opaque``: at or below ``transparent`` -> 0, at or above
+    ``opaque`` -> 255, linear between. Equal: black and white (``>= opaque``
+    is 255). 0 / 255: no change, so no filter. ``lutyuv`` works on the gray
+    plane as is (measured: 7->0, 8->1, 128->128, 250->255 at 7 / 248).
+    """
+    if not 0 <= transparent <= opaque <= 255:
+        raise ValueError(
+            f"alpha thresholds must satisfy 0 <= transparent <= opaque <= 255 "
+            f"(got {transparent}, {opaque})"
+        )
+    if transparent == 0 and opaque == 255:
+        return ""
+    if transparent == opaque:
+        expr = f"if(gte(val,{opaque}),255,0)"
+    else:
+        expr = f"clip((val-{transparent})*255/({opaque}-{transparent}),0,255)"
+    return f",lutyuv=y='{expr}',format=gray"
+
+
+def _alpha_merge_graph(transparent: int, opaque: int, fps: str) -> str:
+    """The shared front of both composites: window [0:v] + levelled matte [1:v]
+    -> alphamerge. Both inputs are re-timed to frame N at N / ``fps`` first,
+    the same way :func:`finalize_alpha_matte` wrote the matte (the window was
+    cut at the float value of the same rate), so the pair lines up frame for
+    frame. The graph ends at the alphamerge output (no label)."""
+    retime = f"setpts=N/({fps})/TB"
+    return (
+        f"[0:v]{retime}[w];"
+        f"[1:v]{retime},format=gray{_alpha_levels(transparent, opaque)}[a];"
+        f"[w][a]alphamerge"
+    )
+
+
+def compose_alpha_rgba(
+    window_mp4: Path,
+    matte_mkv: Path,
+    *,
+    transparent: int,
+    opaque: int,
+    fps: str,
+    rgba_mov: Path,
+    preview_mp4: Path,
+) -> None:
+    """Write the transparent video and its preview in ONE ffmpeg run.
+
+    The matte gets the levels (:func:`_alpha_levels`) and becomes the alpha of
+    the window (``_alpha_window.mp4``):
+
+    * ``rgba_mov`` -- ProRes 4444 (``yuva444p10le``, 16-bit alpha) in MOV, the
+      window's audio as PCM. ffprobe reports the result as ``yuva444p12le``.
+    * ``preview_mp4`` -- the same picture over a grey checkerboard at
+      :func:`alpha_preview_size` of the window's size (measured here, like
+      :func:`compose_alpha_chroma`), H.264 crf 20, the window's audio as AAC
+      192k, faststart.
+
+    ``fps`` is the rate string of ``metadata.alpha_gen.output_fps`` (e.g.
+    ``"30000/1001"``); both outputs are written at exactly that rate. A window
+    without audio gives video-only files (``-map 0:a?``). Raises
+    :class:`FFmpegError` on failure (an unprobeable window included).
+    """
+    exe = ffmpeg_path()
+    size = probe_resolution(window_mp4)
+    if size is None:
+        raise FFmpegError(f"compose_alpha_rgba: could not probe the size of {window_mp4}")
+    pw, ph = alpha_preview_size(size)
+    rgba_mov.parent.mkdir(parents=True, exist_ok=True)
+    preview_mp4.parent.mkdir(parents=True, exist_ok=True)
+    graph = (
+        f"{_alpha_merge_graph(transparent, opaque, fps)},split[f1][f2];"
+        f"[f1]format=yuva444p10le[rgba];"
+        f"[f2]scale={pw}:{ph}[fs];"
+        f"[2:v][fs]overlay=shortest=1,format=yuv420p[prev]"
+    )
+    cmd = [
+        exe, "-y",
+        "-i", str(window_mp4),
+        "-i", str(matte_mkv),
+        "-f", "lavfi", "-i", f"nullsrc=s={pw}x{ph}:r={fps},{_ALPHA_CHECKER}",
+        "-filter_complex", graph,
+        "-map", "[rgba]", "-map", "0:a?",
+        "-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
+        "-alpha_bits", "16", "-c:a", "pcm_s16le", "-r", fps,
+        str(rgba_mov),
+        "-map", "[prev]", "-map", "0:a?",
+        "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-r", fps,
+        str(preview_mp4),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(
+            f"ffmpeg alpha rgba compose failed (code {proc.returncode}): {proc.stderr[-2000:]}"
+        )
+
+
+def compose_alpha_chroma(
+    window_mp4: Path,
+    matte_mkv: Path,
+    *,
+    color_hex: str,
+    transparent: int,
+    opaque: int,
+    fps: str,
+    out_mp4: Path,
+) -> None:
+    """Write the chroma-key video: the levelled-matte composite of the window
+    over a solid ``color_hex`` background (``"00FF00"``, no ``#``) at the
+    window's own size. H.264 crf 18 yuv420p, the window's audio as AAC 192k,
+    faststart, at exactly ``fps`` (as :func:`compose_alpha_rgba`). Raises
+    :class:`FFmpegError` on failure (an unprobeable window included).
+    """
+    exe = ffmpeg_path()
+    size = probe_resolution(window_mp4)
+    if size is None:
+        raise FFmpegError(f"compose_alpha_chroma: could not probe the size of {window_mp4}")
+    out_mp4.parent.mkdir(parents=True, exist_ok=True)
+    graph = (
+        f"{_alpha_merge_graph(transparent, opaque, fps)}[fg];"
+        f"[2:v][fg]overlay=shortest=1,format=yuv420p[out]"
+    )
+    cmd = [
+        exe, "-y",
+        "-i", str(window_mp4),
+        "-i", str(matte_mkv),
+        "-f", "lavfi", "-i", f"color=c=0x{color_hex}:s={size[0]}x{size[1]}:r={fps}",
+        "-filter_complex", graph,
+        "-map", "[out]", "-map", "0:a?",
+        "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-r", fps,
+        str(out_mp4),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise FFmpegError(
+            f"ffmpeg alpha chroma compose failed (code {proc.returncode}): {proc.stderr[-2000:]}"
+        )
+
+
 def fill_mask_green_mp4(
     source: Path,
     mask: Path,

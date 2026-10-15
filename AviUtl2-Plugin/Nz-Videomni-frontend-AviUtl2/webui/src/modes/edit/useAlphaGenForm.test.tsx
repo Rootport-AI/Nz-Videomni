@@ -119,11 +119,14 @@ async function waitMeasured(result: { current: ReturnType<typeof useAlphaGenForm
 describe("useAlphaGenForm — 入口と開始秒", () => {
   it("右クリックは再生位置から（右クリックの intent が alpha-gen のときだけ）", async () => {
     const { result, request } = renderForm({ initialIntent: intent() });
+    // 第 3 弾: 元のオブジェクトの位置（selected[0]）と上位の rate/scale も持つ
+    // （送信時に EditScreen がジョブへ記録し、カードの 🎞 が使う）。
     expect(result.current.source).toEqual({
       filePath: FILE,
       fileName: "dance.mp4",
       startSec: 2.5,
       origin: "rightClick",
+      location: { layer: 2, frameStart: 0, frameEnd: 299, rate: 30, scale: 1 },
     });
     // 入口ではアップロードしない（生成ボタンの時点で窓だけを上げる）。
     await waitMeasured(result);
@@ -145,10 +148,13 @@ describe("useAlphaGenForm — 入口と開始秒", () => {
     const { result } = renderForm({ initialIntent: intent() });
     act(() => result.current.attachDropped("C:\\videos\\drop.mp4", "drop.mp4"));
     expect(result.current.source).toMatchObject({ startSec: 0, origin: "drop", fileName: "drop.mp4" });
+    // ドロップと 📁 にはタイムライン上の位置が無い（🎞 はカーソル位置へ）。
+    expect(result.current.source?.location).toBeUndefined();
     await act(async () => {
       await result.current.pick();
     });
     expect(result.current.source).toMatchObject({ startSec: 0, origin: "pick", fileName: "picked.mp4" });
+    expect(result.current.source?.location).toBeUndefined();
   });
 });
 

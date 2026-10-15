@@ -215,6 +215,12 @@
  * same rule as `mediaFps`, since Windows reports half its rate). Declared OPTIONAL
  * for the usual single reason: an older native build does not emit it, and the
  * WebUI reads a missing value as `0`.
+ *
+ * v16 (Alpha Gen exits, 2026-10-15) adds two optional params to
+ * `backend.downloadVideo`: `kind` (`output` | `joined` | `rgba` | `chroma`)
+ * picks which of a job's videos to fetch, and `color` names the fill color
+ * for `chroma`. Omitting both keeps the exact v15 behavior (`kind` defaults
+ * from `joined`).
  */
 
 /** Every RPC method the contract defines. */
@@ -267,6 +273,23 @@ export interface BridgeParamsMap {
      * output changes with the crossfade setting and must always be refetched.
      * Ignored together with `noClobber` (which already never overwrites). */
     reuseIfPresent?: boolean;
+    /** Contract v16: which of the job's videos to fetch.
+     *  - `output`: `/jobs/<id>/video`, saved as `<id>.mp4`.
+     *  - `joined`: `/jobs/<id>/joined`, saved as `<id>_joined.mp4`.
+     *  - `rgba`: `/jobs/<id>/alpha/rgba`, saved as `<id>_rgba.mov`
+     *    (Alpha Gen: ProRes 4444 with alpha).
+     *  - `chroma`: `/jobs/<id>/alpha/chroma/<color>`, saved as
+     *    `<id>_chroma_<color>.mp4` (Alpha Gen: background filled with a color).
+     * When omitted, defaults from `joined` (`joined: true` -> `joined`,
+     * otherwise `output`). `joined: true` together with a `kind` other than
+     * `"joined"` is rejected with `BAD_REQUEST`. */
+    kind?: "output" | "joined" | "rgba" | "chroma";
+    /** Contract v16: the fill color name for `kind: "chroma"` (required
+     * there; not used by the other kinds, but still validated when
+     * present). Lowercase ASCII letters only
+     * (`[a-z]+`, e.g. `green`) since it becomes part of the URL path and the
+     * file name; anything else is rejected with `BAD_REQUEST`. */
+    color?: string;
   };
   /** Inserts a local media file into the current AviUtl2 timeline at the given
    * layer/frame (or the current selection layer / cursor frame when omitted).

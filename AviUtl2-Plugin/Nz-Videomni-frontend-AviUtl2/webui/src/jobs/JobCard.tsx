@@ -7,6 +7,9 @@ import type { JobResponse, JobStatus } from "../api/types";
 import { useStrings } from "../i18n/LanguageContext";
 import type { Strings } from "../i18n/LanguageContext";
 import { downloadAndInsertVideo } from "./downloadAndInsert";
+import type { DownloadAndInsertOptions } from "./downloadAndInsert";
+import { AlphaControls } from "./AlphaControls";
+import type { AlphaShown, AlphaView } from "./AlphaControls";
 import { JoinControls } from "./JoinControls";
 import type { JoinedInfo } from "./JoinControls";
 import { editInfoFps, joinedInsertFrame } from "./fpsConvert";
@@ -84,6 +87,29 @@ async function resolveJoinedInsertPosition(
   }
 }
 
+/**
+ * Alpha Gen 第 3 弾: where 🎞 drops an Alpha Gen job's output, whatever the
+ * view (Docs/ALPHAGEN_DESIGN.md §10.3). A right-click job (its source object's
+ * location recorded at submit, `EditScreen`) lands at that object's start
+ * frame on a fresh layer (`getEditInfo.layerMax + 1`) as a plain positioned
+ * insert; `undefined` — no location (a drop / 📁 job, or the panel was
+ * reloaded) or `getEditInfo` failed — leaves the usual cursor insert. The
+ * location is NOT released, so the job can be placed again and again.
+ */
+async function resolveAlphaInsertPosition(
+  nativeBridge: NativeBridge,
+  jobId: string,
+): Promise<{ layer: number; frame: number } | undefined> {
+  const loc = getSourceLocation(jobId);
+  if (loc === null) return undefined;
+  try {
+    const info = await nativeBridge.request("getEditInfo", {});
+    return { layer: info.layerMax + 1, frame: loc.frameStart };
+  } catch {
+    return undefined;
+  }
+}
+
 /** One job's card in the always-on job rail (task brief §2). Status badge,
  * progress+stage while running, a lightweight play-to-expand preview once
  * completed, and Insert/Cancel/Delete actions scoped to the states they're
@@ -119,6 +145,18 @@ export function JobCard({
   const handleJoinedStateChange = useCallback((showing: boolean, info: JoinedInfo | null) => {
     setShowingJoined(showing);
     setJoinedInfo(info);
+  }, []);
+
+  // Alpha Gen 第 3 弾: the same split for an Alpha Gen job — `AlphaControls`
+  // owns ✂🪣💾🔁 and reports what is shown; this card builds the preview URL
+  // and inserts the shown output on 🎞.
+  const isAlphaJob = job.alpha != null;
+  const [alphaView, setAlphaView] = useState<AlphaView>("matte");
+  const [alphaShown, setAlphaShown] = useState<AlphaShown | null>(null);
+  const [alphaBusy, setAlphaBusy] = useState(false);
+  const handleAlphaViewChange = useCallback((view: AlphaView, shown: AlphaShown | null) => {
+    setAlphaView(view);
+    setAlphaShown(shown);
   }, []);
 
   // MJ-4 (fixed): force the preview open only the moment an auto-open job is
@@ -216,7 +254,32 @@ export function JobCard({
     setInsertState("downloading");
     void (async () => {
       try {
-        if (showingJoined) {
+        if (isAlphaJob) {
+          // Alpha Gen 第 3 弾: insert what is shown — the matte, the
+          // transparent MOV or the fill. The MOV and the fill go under a fresh
+          // name every time (`noClobber`), so one made again can still be
+          // downloaded while AviUtl2 holds the old file open; the matte never
+          // changes, so it is reused (`reuseIfPresent`, chosen by
+          // `downloadAndInsertVideo` when neither is passed). No remembered
+          // path here. Position: see `resolveAlphaInsertPosition`.
+          const position = await resolveAlphaInsertPosition(nativeBridge, job.job_id);
+          const options: DownloadAndInsertOptions = {
+            ...(alphaView !== "matte" ? { noClobber: true } : {}),
+            ...(alphaView === "rgba" ? { kind: "rgba" as const } : {}),
+            ...(alphaView === "chroma" && alphaShown?.color != null
+              ? { kind: "chroma" as const, color: alphaShown.color }
+              : {}),
+            ...(position !== undefined ? { plainInsertAt: position } : {}),
+          };
+          const result = await downloadAndInsertVideo(
+            nativeBridge,
+            job.job_id,
+            (phase) => setInsertState(phase),
+            options,
+          );
+          setInsertState("done");
+          if (result.usedFallback) showNote?.("warning", strings.notes.insertedOnFrontmostLayer(result.layer + 1));
+        } else if (showingJoined) {
           // I6 Join: insert the *joined* clip at the source tail − trim length,
           // frontmost layer (position-less when it can't be resolved), then
           // remove the continuation's provisional marker and free the recorded
@@ -253,7 +316,25 @@ export function JobCard({
         setInsertError(err instanceof Error ? err.message : String(err));
       }
     })();
-  }, [job.job_id, nativeBridge, showingJoined, joinedInfo, showNote, strings]);
+  }, [job.job_id, nativeBridge, isAlphaJob, alphaView, alphaShown, showingJoined, joinedInfo, showNote, strings]);
+
+  // Alpha Gen 第 3 弾: a new view (or a composite made again) puts ✅/⚠️ back
+  // to 🎞 — the mark belonged to what was shown before (§10.3). The view cannot
+  // change mid-insert (`insertBusy` locks the four buttons). Switching to a
+  // composite also opens the preview, so the result of ✂ / 🪣 is seen.
+  const alphaKey =
+    alphaView === "matte" || alphaShown === null
+      ? "matte"
+      : `${alphaView}:${alphaShown.color ?? ""}:${alphaShown.thresholds.transparent_threshold}-${alphaShown.thresholds.opaque_threshold}`;
+  const prevAlphaKeyRef = useRef(alphaKey);
+  useEffect(() => {
+    if (prevAlphaKeyRef.current === alphaKey) return;
+    prevAlphaKeyRef.current = alphaKey;
+    setInsertState("idle");
+    setInsertError(null);
+    clearJobInserted(job.job_id);
+    if (alphaKey !== "matte") setPreviewOpen(true);
+  }, [alphaKey, job.job_id]);
 
   const isNonTerminal = job.status === "queued" || job.status === "running";
   const isTerminal = !isNonTerminal;
@@ -261,7 +342,17 @@ export function JobCard({
   const videoSrc = baseUrl && job.result ? `${baseUrl}${job.result.video_url}` : null;
   // I6 Join: the single preview swaps to the joined mp4 while the joined view is
   // active; otherwise it shows the job's own clip (unchanged behavior).
-  const activeVideoSrc = showingJoined ? joinedVideoUrl : videoSrc;
+  // Alpha Gen 第 3 弾: the transparent view shows the checkerboard preview and
+  // the fill view the fill itself. The thresholds ride along as a query (the
+  // server ignores it) so a composite made again under the same URL is never
+  // played from the old cache.
+  const alphaVideoSrc =
+    baseUrl && alphaShown !== null && alphaView !== "matte"
+      ? alphaView === "rgba"
+        ? `${baseUrl}/api/v1/jobs/${job.job_id}/alpha/preview?v=${alphaShown.thresholds.transparent_threshold}-${alphaShown.thresholds.opaque_threshold}`
+        : `${baseUrl}/api/v1/jobs/${job.job_id}/alpha/chroma/${alphaShown.color ?? ""}?v=${alphaShown.thresholds.transparent_threshold}-${alphaShown.thresholds.opaque_threshold}`
+      : null;
+  const activeVideoSrc = showingJoined ? joinedVideoUrl : (alphaVideoSrc ?? videoSrc);
 
   // Insert button appearance per state (③ Insert✅-cycle + error). The
   // accessible name comes solely from `aria-label` (the emoji sits in an
@@ -292,7 +383,9 @@ export function JobCard({
           ? "⚠️"
           : "🎞️";
   const insertTitle = insertState === "error" ? (insertError ?? insertLabel) : insertLabel;
-  const insertDisabled = insertState === "downloading" || insertState === "inserting";
+  const insertBusy = insertState === "downloading" || insertState === "inserting";
+  // Alpha Gen 第 3 弾: 🎞 also waits while ✂ / 🪣 / 💾 is making an output.
+  const insertDisabled = insertBusy || alphaBusy;
   const onInsertClick =
     insertState === "done" || insertState === "error"
       ? () => {
@@ -415,6 +508,15 @@ export function JobCard({
         nativeBridge={nativeBridge}
         onJoinedStateChange={handleJoinedStateChange}
         unjoinToken={unjoinToken}
+      />
+
+      <AlphaControls
+        job={job}
+        baseUrl={baseUrl}
+        apiClient={apiClient}
+        insertBusy={insertBusy}
+        onViewChange={handleAlphaViewChange}
+        onBusyChange={setAlphaBusy}
       />
 
       {insertState === "error" && insertError && <p className="hint field-hint-error">{insertError}</p>}

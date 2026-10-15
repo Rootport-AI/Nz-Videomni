@@ -35,12 +35,29 @@ const CANVAS_GRID = 64;
  * start at the head of the file (設計書 §9.2). */
 export type AlphaGenSourceOrigin = "rightClick" | "drop" | "pick";
 
+/** Where a right-clicked source object sits on the timeline, with the
+ * project's rate/scale at that moment (`timeline.getSelection`'s
+ * `selected[0]` and top-level `rate` / `scale`). Alpha Gen 第 3 弾: recorded
+ * against the job at submit (`EditScreen` → `recordSourceLocation`) so the
+ * card's 🎞 can drop the output at the object's start frame
+ * (Docs/ALPHAGEN_DESIGN.md §10.3). */
+export interface AlphaGenSourceLocation {
+  layer: number;
+  frameStart: number;
+  /** Inclusive, like `getSelection`'s `frameEnd`. */
+  frameEnd: number;
+  rate: number;
+  scale: number;
+}
+
 export interface AlphaGenSource {
   filePath: string;
   fileName: string;
   /** Seconds on the source's own time axis where the matte starts. */
   startSec: number;
   origin: AlphaGenSourceOrigin;
+  /** Only for `origin: "rightClick"`; a drop / 📁 has no timeline position. */
+  location?: AlphaGenSourceLocation;
 }
 
 /** `fs.probeMediaInfo`'s answer for the source (contract v15). Every field is
@@ -193,7 +210,14 @@ export function useAlphaGenForm(deps: UseAlphaGenFormDeps = {}): UseAlphaGenForm
     // The 再生位置 is on the source's own time axis in seconds (`sourceTrim.ts`),
     // so it is the window start as it stands. No reported range = the head.
     const startSec = item.hasPlaybackRange === true ? Math.max(0, item.playbackStartSec ?? 0) : 0;
-    setSource({ filePath, fileName: fileNameFromPath(filePath), startSec, origin: "rightClick" });
+    const { rate, scale } = initialIntent.selection;
+    setSource({
+      filePath,
+      fileName: fileNameFromPath(filePath),
+      startSec,
+      origin: "rightClick",
+      location: { layer: item.layer, frameStart: item.frameStart, frameEnd: item.frameEnd, rate, scale },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount consume
   }, []);
 

@@ -34,6 +34,20 @@ export interface DownloadAndInsertOptions {
    * reservation. Mutually exclusive with `joined`/`knownFilePath` in practice
    * (the W3 layer command always downloads a plain completed clip). */
   plainInsertAt?: { layer: number; frame: number };
+  /** Alpha Gen 第 3 弾: which composite to download instead of the job's own
+   * clip (the matte) — `rgba` (the ProRes 4444 MOV) or `chroma` (the fill of
+   * {@link color}). Passed straight to `backend.downloadVideo`'s `kind`
+   * (contract v16). Not used together with `joined`. */
+  kind?: "rgba" | "chroma";
+  /** Alpha Gen 第 3 弾: the fill color for `kind: "chroma"`. */
+  color?: string;
+  /** Alpha Gen 第 3 弾: download under a new name (`_2`, `_3`, …) when the
+   * file is already there (`backend.downloadVideo`'s `noClobber`, contract
+   * v6). An Alpha Gen output is made again whenever the thresholds change, and
+   * AviUtl2 may still hold the earlier download open, so it is never written
+   * over — nor reused (`reuseIfPresent` is not sent). Not used together with
+   * `joined`. */
+  noClobber?: boolean;
 }
 
 /**
@@ -64,7 +78,16 @@ export async function downloadAndInsertVideo(
     // never pass `reuseIfPresent` there.
     const download = await nativeBridge.request(
       "backend.downloadVideo",
-      options.joined ? { jobId, joined: true } : { jobId, reuseIfPresent: true },
+      options.joined
+        ? { jobId, joined: true }
+        : options.noClobber === true || options.kind !== undefined
+          ? {
+              jobId,
+              ...(options.kind !== undefined ? { kind: options.kind } : {}),
+              ...(options.color !== undefined ? { color: options.color } : {}),
+              ...(options.noClobber === true ? { noClobber: true } : { reuseIfPresent: true }),
+            }
+          : { jobId, reuseIfPresent: true },
     );
     filePath = download.filePath;
   }

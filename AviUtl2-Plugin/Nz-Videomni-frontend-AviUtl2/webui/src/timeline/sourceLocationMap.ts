@@ -14,6 +14,10 @@
  * new `pending-…` id), so the memo follows the seat instead of being stranded
  * under the retired id.
  *
+ * Alpha Gen 第 3 弾 records here too, at submit (`EditScreen`'s `onSubmitted`,
+ * keyed by the job id), and the card's 🎞 reads it on every insert. Unlike
+ * Join it is never released, so the output can be placed again and again.
+ *
  * Deliberately in-memory only (one `Map`, module-level, like
  * `provisionalReservation`'s reservation seat): a project reload wipes it, and
  * that is the DESIGN — a job whose source location is unknown (reloaded, or a
@@ -65,8 +69,8 @@ export function rekeySourceLocation(pendingId: string, jobId: string): void {
 }
 
 /** The source location recorded for `jobId`, or `null` when none is known
- * (reloaded, manual v2v, or already released) — the caller then degrades to a
- * position-less joined insert. */
+ * (reloaded, manual v2v / a dropped or picked source, or already released) —
+ * the caller then falls back to its insert without that position. */
 export function getSourceLocation(jobId: string): SourceLocation | null {
   return sourceLocations.get(jobId) ?? null;
 }

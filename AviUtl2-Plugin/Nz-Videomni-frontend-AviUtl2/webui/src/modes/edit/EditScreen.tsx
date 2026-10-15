@@ -17,6 +17,7 @@ import { JobLedger } from "../../jobs/JobLedger";
 import { useJobsContext } from "../../jobs/JobsContext";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import { bindToJob, reservePlacement, rollbackReservedPlacement } from "../../timeline/provisionalReservation";
+import { recordSourceLocation } from "../../timeline/sourceLocationMap";
 import { useInpaintSlots } from "../../timeline/inpaintSlots";
 import { GenerateButtonBar } from "../single/GenerateButtonBar";
 import { GenerateReasonsNote } from "../single/GenerateReasonsNote";
@@ -436,9 +437,21 @@ export function EditScreen({
     weightClass,
     onAdjusted: () => toasts.push({ kind: "warning", message: ta.framesAdjusted }),
   });
+  // Alpha Gen 第 3 弾: a right-clicked source's timeline position is kept
+  // against the new job, for the card's 🎞 (`JobCard`; 設計書 §10.3). Read
+  // through a ref so the submit callback sees the source the request was
+  // built from. In memory only: a reloaded panel falls back to the cursor.
+  const alphaGenSourceRef = useRef(alphaGenForm.source);
+  alphaGenSourceRef.current = alphaGenForm.source;
   const { submitState: alphaGenSubmitState, submitAlpha } = useGenerationSubmit({
     apiClient: client,
-    onSubmitted: (jobId: string) => onJobSubmitted?.(jobId),
+    onSubmitted: (jobId: string) => {
+      const src = alphaGenSourceRef.current;
+      if (src?.origin === "rightClick" && src.location !== undefined) {
+        recordSourceLocation(jobId, { ...src.location, filePath: src.filePath });
+      }
+      onJobSubmitted?.(jobId);
+    },
   });
   const alphaGenSubmitting = alphaGenSubmitState.phase === "submitting";
   const alphaGenReasonMessages = useMemo(() => buildAlphaGenReasonMessages(strings), [strings]);

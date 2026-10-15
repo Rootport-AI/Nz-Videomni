@@ -18,7 +18,10 @@
 import { bridge as defaultBridge, BridgeError } from "../bridge";
 import type { NativeBridge } from "../bridge";
 import type {
+  AlphaChromaRequestBody,
   AlphaGenRequestBody,
+  AlphaOutputResponse,
+  AlphaThresholds,
   AppConfig,
   BackendErrorEnvelope,
   DeleteJobResponse,
@@ -105,6 +108,16 @@ export interface ApiClient {
    * backend-side processing can legitimately outlast native's default
    * WinHTTP timeout. */
   joinJob(jobId: string, body?: JoinRequestBody): Promise<JoinResponse>;
+  /** Alpha Gen 第 3 弾: `POST /jobs/{id}/alpha/rgba` — makes (or reuses, when
+   * made with the same thresholds) the transparent ProRes 4444 MOV and its
+   * checkerboard preview (Docs/ALPHAGEN_DESIGN.md §10). Synchronous like
+   * `joinJob`, with the same `timeoutMs: 120_000`. An omitted body uses the
+   * server's default thresholds (7 / 248). */
+  exportAlphaRgba(jobId: string, body?: Partial<AlphaThresholds>): Promise<AlphaOutputResponse>;
+  /** Alpha Gen 第 3 弾: `POST /jobs/{id}/alpha/chroma` — makes (or reuses, when
+   * made with the same thresholds) the mp4 with the background filled with
+   * `body.color`. Same timeout as {@link exportAlphaRgba}. */
+  exportAlphaChroma(jobId: string, body: AlphaChromaRequestBody): Promise<AlphaOutputResponse>;
   getLoras(): Promise<LorasListResponse>;
   reloadLoras(): Promise<LorasReloadResponse>;
   /** Model management (S1): `GET /models` (Docs/API_REFERENCE.md §3.5) — the
@@ -185,6 +198,16 @@ export function createApiClient(nativeBridge: NativeBridge): ApiClient {
     deleteJob: (jobId) => call<DeleteJobResponse>("DELETE", `/jobs/${encodeURIComponent(jobId)}`),
     joinJob: (jobId, body) =>
       call<JoinResponse>("POST", `/jobs/${encodeURIComponent(jobId)}/join`, { body: body ?? {}, timeoutMs: 120_000 }),
+    exportAlphaRgba: (jobId, body) =>
+      call<AlphaOutputResponse>("POST", `/jobs/${encodeURIComponent(jobId)}/alpha/rgba`, {
+        body: body ?? {},
+        timeoutMs: 120_000,
+      }),
+    exportAlphaChroma: (jobId, body) =>
+      call<AlphaOutputResponse>("POST", `/jobs/${encodeURIComponent(jobId)}/alpha/chroma`, {
+        body,
+        timeoutMs: 120_000,
+      }),
     getLoras: () => call<LorasListResponse>("GET", "/loras"),
     reloadLoras: () => call<LorasReloadResponse>("POST", "/loras/reload"),
     getModels: () => call<ModelsResponse>("GET", "/models"),

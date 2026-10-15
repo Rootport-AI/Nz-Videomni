@@ -7,7 +7,7 @@
 - **2026-09-06追記**: 「品質負債」節の実バックエンド通し確認の項目を現実に合わせて解消した。実バックエンド通し確認は2026-08-05に`Docs/REAL_BACKEND_CHECKLIST.md`§4.1〜§4.13が全項目合格済みであり、版数も2026-09-06に1.0.0へ統一（rc卒業）した。詳細は本文「品質負債」節を参照。
 - **2026-09-01追記**: 上記2026-08-12の逆方向差分（バッチA2Vのスキップ判定）を**解消した**。Gradio側もスキップの実効上限をフロントエンドと同じ規約にし、理由コードも`over-cap`へ一本化している。詳細は本文「8-gに関する2件目の逆方向の差分」を参照。
 - **2026-08-12追記**: バッチA2Vのスキップ判定の逆方向差分（フロントエンド`over-cap`／Gradio`over-481f`固定）をもう1件追記した。詳細は本文「8-gに関する2件目の逆方向の差分」を参照。
-- **2026-07-28追記**: NAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）のフロントエンドパリティを実装した（バックエンドコミット2ae497b対応）。詳細は台帳一本化方針（本書末尾）に従い台帳と[`DEVLOG.md`](DEVLOG.md)の該当節に譲り、本書には記さない。※起票当時の受け皿は`PENDING_TASKS.md`の§2-1・§2-2・§4-1だったが、**NAGは2026-07-28〜29に全項目合格してクローズしたため、現在の参照先は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-51・§3-54である**（§2-1は2026-08-10、§2-2は2026-08-11に節ごと削除された）。
+- **2026-07-28追記**: NAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）のフロントエンドパリティを実装した（バックエンドコミット2ae497b対応）。詳細は台帳一本化方針（本書末尾）に従い台帳と[`DEVLOG.md`](DEVLOG.md)の該当節に譲り、本書には記さない。※起票当時の受け皿は`PENDING_TASKS.md`の§2-1・§2-2・§4-1だったが、**NAGは2026-07-28〜29に全項目合格してクローズしたため、現在の参照先は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-51・§3-54である**（§2-1は2026-08-10、§2-2は2026-08-11に節ごと削除された）。
 - **2026-07-15更新**: バックエンド側リポジトリ（`Nz-Videomni`）に、フロントエンド追随作業全体を統括する正本 [`Docs/FRONTEND_CATCHUP_WORKORDER.md`](../../../Docs/FRONTEND_CATCHUP_WORKORDER.md) が新設されました。**作業全体の優先順位・着手手順は今後そちらに従ってください。** 本書（`WEBVIEW2_PARITY_BACKLOG.md`）はその併読資料という位置づけに変わり、「Gradio GUIとのUIパリティ観点の詳細」（バックエンドGUIとフロントエンドの機能差分の一覧）を引き続き担います。あわせて、2026-07-11以降にバックエンドで発生したAPI契約（サーバーとクライアントの間で取り決めているリクエスト・レスポンスの形）の変更を新設の§8として追記しました。
 - **2026-07-15追記（グループ1完了）**: `FRONTEND_CATCHUP_WORKORDER.md`のグループ1（APIコントラクト追随・§8-a〜§8-fに対応）を実装完了しました。§8-e（ジョブポーリング120分化）のみ、調査のうえ「対応不要」と判定しています（フロントエンドのジョブ監視はそもそも打ち切りのデッドラインを持たない非同期ポーリング構造のため）。§8-d（chain参照動画対応・α版）も任意扱いでしたが本セッションで対応しました。詳細は§8の各項目、およびフロントエンド`Docs/DEVLOG.md`§8を参照してください。
 - **2026-07-15追記（グループ2完了）**: `FRONTEND_CATCHUP_WORKORDER.md`のグループ2（機能パリティ・項目7〜10）を実装完了しました。バッチA2V「就寝中一括生成」（項目7、§8-g参照）、モデル管理UI（項目8、#5）、Chain画面のプリセットドロップダウン（項目9、#4）、wav長→Frames自動調整・事前チェック（項目10、#2）の4項目すべてに対応しています。あわせて、バッチA2Vとwav長自動調整のために新設したブリッジ契約v6（`ui.pickFolder`／`fs.*`）のnative（C++側）実装も本セッションで完了しました。詳細はフロントエンド`Docs/DEVLOG.md`§9、`Docs/BRIDGE_CONTRACT.md`を参照してください。
@@ -272,7 +272,7 @@
 - **Inpainting（マスクによる部分再生成）**: `POST /generate`の`inpaint`（[`API_REFERENCE.md`](API_REFERENCE.md) §5.1）を使う唯一の画面がEditタブの「Inpainting」サブタブである。Gradio＝該当UI無し（`gradio_ui/`に`inpaint`の文字列が1つも無い）。**理由は、マスクの出どころがタイムラインの部分フィルタだからである**——利用者が置いた部分フィルタの枠をAviUtl2本体に描かせてマスク動画にする仕組みで（[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.24）、タイムラインもプラグインのブリッジも持たないGradioには同じ入力が作れない。機能全体の正本はバックエンド[`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md)、クローズ記録は同[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-55-02。
 - **画角拡張（Outpainting）と物体追尾も同じ立場である**（Gradio＝いずれも該当UI無し）。画角拡張は`POST /generate`の`outpaint`、物体追尾は`/utils/track/*`（[`API_REFERENCE.md`](API_REFERENCE.md) §3.20〜§3.22）を使い、どちらも操作の起点がタイムラインのオブジェクトである。
 - **バッチパネルのi2vモード（2026-09-16追記）**: 音声フォルダを指定せず画像フォルダだけを指定すると、画像1枚につき`POST /generate`で動画を1本作るモード。Gradioのバッチは音声フォルダ必須のCSVマニフェスト方式で、画像フォルダだけで動くモードを持たない——**Gradio側に対応する画面が無い**。設計正本は[`BATCH_A2V_I2V_MODE.md`](BATCH_A2V_I2V_MODE.md) §1、クローズ記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-152。
-- **Alpha Gen（動画から背景透過用の白黒のマット動画を作る機能。2026-10-14追記）**: `POST /generate/alpha`（[`API_REFERENCE.md`](API_REFERENCE.md) §5.5）を使う画面は、EditタブのAlpha Genサブタブだけである。Gradio＝該当UI無し。Gradio側で行うのは、LoRAの一覧から`alpha-gen`を除くことだけと設計で決めている（正本はバックエンド[`ALPHAGEN_DESIGN.md`](../../../Docs/ALPHAGEN_DESIGN.md) §11、クローズ記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-227）。
+- **Alpha Gen（動画から背景透過用の白黒のマット動画を作る機能。2026-10-14追記）**: `POST /generate/alpha`（[`API_REFERENCE.md`](API_REFERENCE.md) §5.5）を使う画面は、EditタブのAlpha Genサブタブだけである。Gradio＝該当UI無し。Gradio側で行うのは、LoRAの一覧から`alpha-gen`を除くことだけと設計で決めている（正本はバックエンド[`ALPHAGEN_DESIGN.md`](../../../Docs/ALPHAGEN_DESIGN.md) §11、クローズ記録は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-227）。（2026-10-15追記）出口（`/jobs/{id}/alpha/*`。[`API_REFERENCE.md`](API_REFERENCE.md) §3.18a〜e）を使うのはジョブカードだけで、Gradioに該当する画面は無い。
 
 ### 推奨実装順（段階と依存マップ）
 
@@ -354,7 +354,7 @@
 
 ## 以後の将来項目の管理について（2026-07-27追記）
 
-**本書に記録した未実装差分のうち、いま生きている将来項目の管理は[`PENDING_TASKS.md`](PENDING_TASKS.md)へ一本化しました。以後は同書で追跡します。** 上のN1〜N13の生死表と各追記（実装完了の履歴）は、当時の判断と経緯を残す歴史記録としてそのままにしています。
+**本書に記録した未実装差分のうち、いま生きている将来項目の管理は[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md)へ一本化しました。以後は同書で追跡します。** 上のN1〜N13の生死表と各追記（実装完了の履歴）は、当時の判断と経緯を残す歴史記録としてそのままにしています。
 
 - N9（ポーリング間隔・タイムアウトのユーザー設定欄）＝[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-49（2026-07-28にクローズ・移設）。
 - N12（品質モード`two_stage_hq`ラジオ）＝同書§4-28（2026-08-04に§3-2から降格）。

@@ -683,7 +683,7 @@ Alpha Gen は、普通の動画から同じ大きさ・同じフレーム数の�
 - 成功: **202** + `{job_id, status:"queued", created_at}`。その後は`/generate`と同じく`GET /jobs/{id}`でポーリングする。
 - エラー(判定の順): LTX 2.3`422 FEATURE_UNSUPPORTED`／参照動画が無い`404 REFERENCE_VIDEO_NOT_FOUND`／`alpha-gen`が未登録・ファイル無し`404 LORA_NOT_FOUND`(control・前処理なしで登録されていなければ`422 ALPHA_GEN_INVALID`)／元の寸法・fps・窓・寸法の範囲・組み立てた内部の要求の問題`422 ALPHA_GEN_INVALID`(§2)／読み込み中`409 PIPELINE_LOADING`／実行中`409 JOB_BUSY`。**本文の形の検査(`422 VALIDATION_ERROR`)はこれらより前に走る**ので、LTX 2.3でも形が崩れた本文には`VALIDATION_ERROR`が先に返る(`/generate`と同じ)。
 - **回転の情報を持つ素材**(スマートフォンの縦動画など)で、切り出した窓の縦横が元の寸法と入れ替わっていると、受付は通ってもジョブが`GENERATION_FAILED`で失敗する(回転を考えた寸法の測り方はバックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-228)。
-- **出力は2本**: `output.mp4`(プレビュー用のH.264・元の寸法・音声なし。`GET /jobs/{id}/video`)と`matte.mkv`(合成用の劣化しない灰色のマット。FFV1・元の寸法・音声なし)。
+- **出力は2本**: `output.mp4`(プレビュー用のH.264・元の寸法・音声なし。`GET /jobs/{id}/video`)と`matte.mkv`(合成用の劣化しない灰色のマット。FFV1・元の寸法・音声なし)。完了後に作れる出口の成果物(透過つきのMOV・塗りつぶし動画)は§3.18a〜§3.18e。
 - **`GET /jobs/{job_id}/matte`**(`api/jobs.py`)— 認証不要: `matte.mkv`をバイナリ(`video/x-matroska`、`filename={job_id}_matte.mkv`)で返す。未完了なら`409 VIDEO_NOT_READY`、マットが無ければ`404`。`GET /jobs/{id}/video`と同じ形。
 - **`JobResponse.matte: bool`**: `outputs/{id}/matte.mkv`が存在するか(§6)。
 - `metadata.json`には`alpha_gen`ブロック(`mode`＝`"one_stage"`／`"light"`、元の寸法・作業寸法・キャンバス・出力のfps`output_fps`など)が載る。`result.duration_seconds`と`request.frame_rate`の扱いはバックエンド[`ALPHAGEN_DESIGN.md`](../../../Docs/ALPHAGEN_DESIGN.md) §3.5を参照。`generation_mode`は`"t2v"`のままなので、Alpha Genかどうかは`alpha_gen.mode`で判定すること。
@@ -701,6 +701,8 @@ Alpha Gen は、普通の動画から同じ大きさ・同じフレーム数の�
   "stage": "stage1_denoise",
   "clip": 2, "clip_count": 4,
   "is_v2v": false, "joined": false,
+  "matte": false,
+  "alpha": null,
   "created_at": "2026-06-25T12:00:00Z",
   "started_at": "...", "completed_at": "...",
   "error": "GENERATION_FAILED: ... (detail)",

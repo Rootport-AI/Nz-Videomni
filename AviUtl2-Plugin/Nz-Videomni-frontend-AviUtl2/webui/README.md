@@ -1,7 +1,8 @@
 # Nz-Videomni WebUI
 
 React + TypeScript + Vite frontend for the Nz-Videomni AviUtl2 plugin. It's a
-single-page app with four modes — **Single** (T2V/I2V generation, including
+single-page app with five tabs (left to right: Toolbox, Single, Chained,
+Edit, Inventory) — **Single** (T2V/I2V generation, including
 IC-LoRA reference-video conditioning and an audio attach section for
 single-shot audio-to-video, plus keyframes and style/control LoRA selection),
 **Chained** (multi-clip chains with presets, per-clip LoRAs, and optional
@@ -22,7 +23,8 @@ MOV, previewed over a checkerboard), 🪣 (the background filled with one of eig
 colors, for chroma keying), 💾 (download the MOV), 🔁 (back to the matte) and a
 two-thumb threshold slider, and its 🎞 places whatever the card shows — at the
 right-clicked source object's start frame on a new layer when that is known,
-see `../../../Docs/ALPHAGEN_DESIGN.md` §10 and `../Docs/DEVLOG.md` §134)), and **Inventory**
+see `../../../Docs/ALPHAGEN_DESIGN.md` §10 and `../Docs/DEVLOG.md` §134, completion
+record `../../../Docs/PENDING_TASKS_CLOSED.md` §3-231)), and **Inventory**
 (job history, downloads, and
 a LoRA browser — model management lives in the settings panel's `ModelsPanel`,
 not here) — plus two batch panels (both stateless and folder-scan-driven, with
@@ -36,7 +38,7 @@ time, so the Generate button just disables itself while one is running; with
 Repeat count > 1 it instead shows an enabled "Stop (N left)" until the last
 run, and each repeat is submitted only after the previous job completes — still
 no queue). The
-tab bar also has a live **Toolbox** tab with its own sub-tab row — **Tracking**
+fifth, leftmost tab is the live **Toolbox** tab with its own sub-tab row — **Tracking**
 (object tracking: it makes a timeline partial filter's box follow a moving
 subject — see `../../../Docs/OBJECT_TRACKING_DESIGN.md`) and **mp4 info** (drop
 or pick a video and it shows the generation conditions the backend embedded in

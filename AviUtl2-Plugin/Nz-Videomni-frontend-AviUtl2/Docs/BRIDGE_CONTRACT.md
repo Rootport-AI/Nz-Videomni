@@ -158,7 +158,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 
 ### 4.4 `backend.downloadVideo`
 
-完成ジョブのmp4をネイティブ側にダウンロードし、ローカルパスを返す。
+完成ジョブの動画(mp4。v16の`kind:"rgba"`ではMOV)をネイティブ側にダウンロードし、ローカルパスを返す。
 
 - params: `{ jobId: string, joined?: boolean, kind?: "output" | "joined" | "rgba" | "chroma", color?: string }`。`jobId`に`/`・`\`・`..`が含まれると`BAD_REQUEST`。`kind`と`color`はcontract v16(下記の拡張注記)。
 - result: `{ filePath: string, sizeBytes: number }`

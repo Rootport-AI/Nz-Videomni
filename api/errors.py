@@ -184,6 +184,41 @@ def joined_not_ready(job_id: str) -> APIError:
     )
 
 
+def job_not_alpha(job_id: str, detail: str | None = None) -> APIError:
+    """Alpha Gen exit: the target job is not an Alpha Gen job (its metadata has
+    no ``alpha_gen`` block), so there is no window + matte pair to composite.
+    Rejected up front (422), like :func:`job_not_joinable`."""
+    return APIError(
+        "JOB_NOT_ALPHA",
+        "job is not an Alpha Gen job (nothing to composite)",
+        422,
+        job_id=job_id,
+        detail=detail,
+    )
+
+
+def alpha_output_not_ready(job_id: str, detail: str | None = None) -> APIError:
+    """Alpha Gen exit: GET /jobs/{id}/alpha/rgba | preview | chroma/{color} was
+    called before a successful POST /jobs/{id}/alpha/rgba | chroma produced
+    that file. Mirrors :func:`joined_not_ready` (404)."""
+    return APIError(
+        "ALPHA_OUTPUT_NOT_READY",
+        "alpha output has not been created yet "
+        "(POST /jobs/{job_id}/alpha/rgba or /alpha/chroma first)",
+        404,
+        job_id=job_id,
+        detail=detail,
+    )
+
+
+def alpha_output_failed(job_id: str | None = None, detail: str | None = None) -> APIError:
+    """Alpha Gen exit: the server-side ffmpeg composite (or moving its result
+    into place) failed. Mirrors :func:`join_failed` (503) with its own code."""
+    return APIError(
+        "ALPHA_OUTPUT_FAILED", "Alpha Gen output failed", 503, job_id=job_id, detail=detail
+    )
+
+
 def lora_not_found(name: str, detail: str | None = None) -> APIError:
     return APIError("LORA_NOT_FOUND", f"unknown IC-LoRA adapter name: {name}", 404, detail=detail)
 

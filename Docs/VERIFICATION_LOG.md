@@ -16633,3 +16633,11 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - **機械ゲート（全部合格）**: `build.ps1 -RunTests`（埋め込み。397 件合格・警告 0・C4819 0・`native/src` の非 ASCII 0 バイト）／`npm run typecheck` 0／`npm run lint` 警告 31（不変）／`npx vitest run src/modes src/jobs` 全合格／`deploy.ps1` で実機と配布用の 2 か所（AviUtl2 は閉じた状態。実サーバーは触っていないので目視用のジョブ 2 本は残っている）。
 - **コミット（dev）**: `25cdce4`（ネイティブ）・`08f6204`（CSS）・（本節＝記録: DEVLOG §135・CHECKLIST §4.27 の結果と再確認①②・§157.6〜157.7・台帳 §2-1 と §3-230）・（配布用 aux2）。
 - **残り**: オーナーの再確認①②（CHECKLIST §4.27 末尾）。合格なら §1-86 を CLOSED へ・設計書 §10「完結」・README の「次の第 3 弾で」を現行化・main merge。
+
+### 157.8 手直し後の再確認①②の結果（オーナー・2026-10-15）＝合格・クローズ
+
+- **再確認①（`💾`）合格**: MOV の無い 2 本目のジョブで `💾` を押すと、MOV が Windows の「ダウンロード」フォルダに落ち、操作パネルは白くならず、表示が透過済みに切り替わった。もう 1 回押しても同じ。`plugin.log` には押すたびに `WebViewHost: navigation completed with failure after the panel was ready; fallback not shown (WebErrorStatus=9; the page is still live if this was a download)` の情報の行が残った（22:07〜22:08 に 3 回）。**`WebErrorStatus=9` は `COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED`** で、§157.7 で「文書では確かめられなかった」とした「ダウンロードに化けた遷移は CONNECTION_ABORTED で失敗として返る」が実機で裏づけられた。
+- **再確認②（一覧の高さ）合格**: Edit→Alpha Gen と Retake の待機状態で一覧が Single／Chained と遜色ない長さになり、黄色い帯がページをスクロールせずに見えた。Single／Chained はフォームが長い状態では見た目が変わらず、短い状態では両列が同じ高さで揃った。Edit は左のカードが短いまま右だけ伸び、Chained はフォームが短いとバッチの区画が下に押された（意図どおり）。狭めて 1 列になっても余計な空白は出なかった。**70vh はそのまま。**
+- **G-S3（🎞 が `*_rgba.mov` を落として置く）**: `plugin.log` の `downloadVideo done: … -> …\downloads\<id>_rgba.mov`（21:02）と `…_rgba_2.mov`（21:09・21:11。同名があるときの連番）の行で確認。
+- **クローズ**: §1-86 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231 へ。設計書 §10 の状態を「完結」に、README の Alpha Gen の節（「出口は次の第 3 弾で」）を現行化、フロントエンド DEVLOG §134.4・§135.4 に更新行。main への merge は本節のコミットの直後に監督が行う（`--no-ff`）。
+- **残課題**: LoRA の配布（§1-87）・MCP の出口（§3-229）・遷移の防御と再読み込み（§3-230）・直接入力（§3-222）・快適上限の較正（§3-223）・VFR（§3-225）・回転情報（§3-228）。

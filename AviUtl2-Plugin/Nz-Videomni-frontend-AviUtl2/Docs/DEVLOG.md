@@ -5122,6 +5122,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 機械ゲート: 型検査 0・lint 警告 31（不変）・vitest 160 ファイル／3243 件（失敗 0）。
 - オーナーの目視は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.27 で行います（特に 💾 が WebView2 の既定のダウンロードで落ちるか、1 回目と 2 回連続の両方）。
 
+> **更新（2026-10-15）**: 目視は G5（💾）以外合格。G5 はファイルは落ちるが操作パネルが白くなり、ホスト側の手直し（§135）の後の再確認で合格。第 3 弾はクローズした（バックエンド `PENDING_TASKS_CLOSED.md` §3-231）。
+
 ## 135. Alpha Gen 第 3 弾の目視後の手直し — 💾 で操作パネルが白くなる（ホストの判定）・2 列グリッドの最低の高さ（バックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1。2026-10-15）
 
 ### 135.1 結論
@@ -5145,3 +5147,5 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 135.4 状態
 
 - オーナーの再確認①②待ち（[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.27）。
+
+> **更新（2026-10-15）**: 再確認①②は合格し（`💾` の遷移の失敗は `WebErrorStatus=9`＝CONNECTION_ABORTED と実機で判明。70vh はそのまま）、第 3 弾はクローズした（バックエンド `PENDING_TASKS_CLOSED.md` §3-231・`VERIFICATION_LOG.md` §157.8）。

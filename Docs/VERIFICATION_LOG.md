@@ -16640,4 +16640,46 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - **再確認②（一覧の高さ）合格**: Edit→Alpha Gen と Retake の待機状態で一覧が Single／Chained と遜色ない長さになり、黄色い帯がページをスクロールせずに見えた。Single／Chained はフォームが長い状態では見た目が変わらず、短い状態では両列が同じ高さで揃った。Edit は左のカードが短いまま右だけ伸び、Chained はフォームが短いとバッチの区画が下に押された（意図どおり）。狭めて 1 列になっても余計な空白は出なかった。**70vh はそのまま。**
 - **G-S3（🎞 が `*_rgba.mov` を落として置く）**: `plugin.log` の `downloadVideo done: … -> …\downloads\<id>_rgba.mov`（21:02）と `…_rgba_2.mov`（21:09・21:11。同名があるときの連番）の行で確認。
 - **クローズ**: §1-86 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231 へ。設計書 §10 の状態を「完結」に、README の Alpha Gen の節（「出口は次の第 3 弾で」）を現行化、フロントエンド DEVLOG §134.4・§135.4 に更新行。main への merge は本節のコミットの直後に監督が行う（`--no-ff`）。
+  > **更新（2026-10-15）**: main merge 済み（`01850f3`）。
 - **残課題**: LoRA の配布（§1-87）・MCP の出口（§3-229）・遷移の防御と再読み込み（§3-230）・直接入力（§3-222）・快適上限の較正（§3-223）・VFR（§3-225）・回転情報（§3-228）。
+
+## 158. ★第 3 弾のクローズ後の文書とコード内コメントの現行化（オーナー指示 2026-10-15「次のセッションの担当者が混乱する更新漏れや矛盾を探し、実装とずれたコメントも点検する」）＝棚卸し 4 体・直し 5 体・敵対的レビュー 3 本・機械ゲート 3 環境 失敗 0・main で作業（2026-10-15）
+
+### 158.1 結論
+
+- **前回の全面点検（§155・main merge `fab9603`）以降に入った Alpha Gen 第 3 弾（出口）と手直し（CLOSED 3-231・main merge `01850f3`）に伴う失効を、文書 13 本とコード 29 ファイル（Python 7・操作パネル 12・ネイティブ 10）で現行化した。** 挙動の変更は無い（Python は docstring を除いた構文木の一致、操作パネルはコメントを除いたトークンの一致、ネイティブは差分の走査と非 ASCII 0 で担保）。利用者に見える文言は変えていない。オーナー指示により main で作業し、dev は main に揃えた。
+- 文書で最も重かったのは 4 種類: 閉じた §1-86 を生きた参照として指したままの箇所（設計書・台帳 §1-87／§3-222／§3-229・MCP 設計書 D26・CHECKLIST の見出し）／完了で失効した前向きの記述（設計書 §10.1「手当てします」・§21「先に試す」）／版の書き写しの古さ（R の README が契約 v15・CHECKLIST の帯が §4.26 まで）／入口の地図の抜け（仕様書 §0.3 と設計書の関連文書の表に第 3 弾の正本が無い）。あわせて設計書 §10.3 の 🎞 の置く位置を実装どおり（`layerMax + 1` の新しいレイヤー・`getEditInfo` が読めなければカーソル位置）に改め、R の README の古い画面名の機能一覧（Create／Chain／Library）を今の画面構成（Toolbox・Single・Chained・Edit・Inventory）に置き換えた。
+- コードで最も重かったのは `services/pipeline_manager.py` の「窓（`_alpha_window.mp4`）はまだ誰も読まない・第 3 弾が読む予定」で、信じて後片付けで消すと出口が 404 で壊れる。ほかは、ホストの責務の説明（`webview_host.h`）・`plainInsertAt` と `sourceLocationMap` の「W3／Join 専用」の前提・ダウンロードの既定の名前「.mp4」・同丈レイアウトの説明に `min-height` が無い、など。
+- 正本: 台帳 `PENDING_TASKS.md`（入口）・設計書 `ALPHAGEN_DESIGN.md` §10・仕様書 §6.3c・フロントエンド `BRIDGE_CONTRACT.md` v16・`DEVLOG.md` §134〜§135。
+
+### 158.2 やり方
+
+- 棚卸し（読み取りのみ・Opus 4 体）: 文書（入口→正本→記録の順。高 0・中 11・低 13）／Python（高 1・中 1・低 7）／操作パネル（高 0・中 4・低 13）／ネイティブ（高 0・中 3・低 9＋テストの非 ASCII 2 行）。
+- 採否（監督）: 識別子の変更になるもの（テスト関数の改名・`recordSourceLocation` の引数名 `pendingId`）と利用者に見える文字列（`bridge.cpp` の "(winhttp error N)"）は c。記録文書の見出し・仕様書の改訂履歴・M の README の API 抜粋の表も c。残りは全部採用。R の README の機能一覧は「各画面 1 行＋正本への参照」に。
+- 直し（Opus 5 体・並行）: ネイティブ／Python／操作パネル／M 文書／R 文書。R の `RIGHTCLICK_REDESIGN_SPEC.md`・`WEBVIEW2_PARITY_BACKLOG.md` に以前からあった台帳へのリンク切れ（`../../../Docs/` 抜け）も機械的に置換した。
+- 敵対的レビュー（Opus 3 本・採用分は全部反映）: ネイティブ＋Python（Minor 2＋好みの範囲 3。弾の番号の書き写し・`reuseIfPresent` の言い過ぎ・crf の注記に 4:2:0・規則の写しを参照に・404 のコード名）／操作パネル（Minor 5。位置を取るのは右クリック時・「mp4」「job rail」「Create/Chain」の直し損ね・`@container` の列挙・括弧の列挙を縮める）／文書（Minor 8・全採用。設計書 §8 の参照の書き分けと §4.6 の「今回は」・参照の節に §6.3c・仕様書の改訂履歴を v0.5.88 の前例と同じ「文言の現行化」の行に・台帳 §1-87 の歴史・MCP 設計書の「訂正」→「更新」・R の README の Chained に A2V／IC-LoRA と NAG の対象・CHECKLIST §4.27 の見出しの表記・PARITY_BACKLOG の追記に日付・webui README のタブの数え方）。
+- 教訓: 直した段落の中に古い言い回し（「job rail」「Create/Chain」「mp4」）が残りやすい。直すときは段落全体を読み直す／一覧を足して伸ばさず、「every action」のように数えない言い方にする／弾の番号（第 N 弾）はコードの説明に書かない。
+
+### 158.3 機械ゲート
+
+| 門 | 結果 |
+|---|---|
+| アプリ venv の pytest 全件（`PATH` 先頭に `tools\ffmpeg\bin`・`-o addopts=""`・サーバー未起動が前提の既知の 1 件を除外） | 3,274 件合格・63 件スキップ・失敗 0 |
+| `npm run typecheck`／`npm run lint` | エラー 0／警告 31（不変） |
+| `npx vitest run --exclude "**/backend.integration.test.ts"` | 160 ファイル・3,246 件 全合格 |
+| ネイティブ `build.ps1 -RunTests -NoEmbedWebui` | 397 件合格・失敗 0・警告 0・C4819 0（`native/src`・`native/tests` の非 ASCII 0 バイト） |
+
+- 配置: コメントと文書だけの変更なので、aux2 の再配置は行っていない（配布用 aux2 `f69a623` と挙動は同じ）。
+
+### 158.4 コミット（main）
+
+| コミット | 中身 |
+|---|---|
+| `7e597dd` | コメント Python 7 ファイル |
+| `51e5774` | コメント 操作パネル 12 ファイル |
+| `d69beb7` | コメント ネイティブ 10 ファイル |
+| `d3e5e27` | 文書 M 側（設計書・台帳・仕様書・MCP 設計書と調査ノートの訂正行・CLOSED の更新行） |
+| `09d4a72` | 文書 R 側（README・CHECKLIST・webui README・API_REFERENCE・BRIDGE_CONTRACT・PARITY_BACKLOG・RIGHTCLICK とリンク切れの置換） |
+| （本節） | §158・台帳の最終更新 |
+
+- 残るもの: `bridge.cpp` の "(winhttp error N)"（実際は `CreateFileW` の `GetLastError`。利用者に見える文字列なのでオーナー判断）／`http_client.cpp` で保存先を開けないときに `BACKEND_UNREACHABLE` になる挙動（コメントではなく挙動。小さな直しの候補）／`recordSourceLocation` の引数名 `pendingId`（ジョブ id も受ける。次にそのファイルを触るとき）。

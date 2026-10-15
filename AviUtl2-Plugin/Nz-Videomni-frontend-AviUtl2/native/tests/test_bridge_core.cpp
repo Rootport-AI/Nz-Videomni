@@ -537,6 +537,130 @@ TEST_CASE("ParseDownloadVideo rejects a wrong-typed reuseIfPresent") {
         json::parse(R"({"jobId": "j", "reuseIfPresent": "yes"})"), &out, &err));
 }
 
+// --- backend.downloadVideo contract v16 extension (kind/color) ---------------
+
+TEST_CASE("ParseDownloadVideo defaults kind from joined when kind is absent or null") {
+    DownloadVideoRequest out;
+    std::string err;
+    CHECK(nzvideomni::ParseDownloadVideo(json::parse(R"({"jobId": "j"})"), &out, &err));
+    CHECK(out.kind == "output");
+    CHECK(out.color.empty());
+    CHECK(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "joined": true})"), &out, &err));
+    CHECK(out.kind == "joined");
+    CHECK(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "joined": false, "kind": null})"), &out, &err));
+    CHECK(out.kind == "output");
+    CHECK(out.joined == false);
+}
+
+TEST_CASE("ParseDownloadVideo kind=output and kind=joined map to the legacy path/name") {
+    DownloadVideoRequest out;
+    std::string err;
+    CHECK(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": "output"})"), &out, &err));
+    CHECK(out.joined == false);
+    CHECK(nzvideomni::DownloadVideoPath(out) == "/jobs/j/video");
+    CHECK(nzvideomni::DownloadFileName(out) == "j.mp4");
+    CHECK(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": "joined"})"), &out, &err));
+    CHECK(out.joined == true);
+    CHECK(nzvideomni::DownloadVideoPath(out) == "/jobs/j/joined");
+    CHECK(nzvideomni::DownloadFileName(out) == "j_joined.mp4");
+    CHECK(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "joined": true, "kind": "joined"})"), &out, &err));
+    CHECK(out.kind == "joined");
+}
+
+TEST_CASE("ParseDownloadVideo kind=rgba fetches the alpha MOV") {
+    DownloadVideoRequest out;
+    std::string err;
+    CHECK(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "abc-123", "kind": "rgba", "noClobber": true})"), &out,
+        &err));
+    CHECK(out.kind == "rgba");
+    CHECK(out.joined == false);
+    CHECK(out.no_clobber == true);
+    CHECK(nzvideomni::DownloadVideoPath(out) == "/jobs/abc-123/alpha/rgba");
+    CHECK(nzvideomni::DownloadFileName(out) == "abc-123_rgba.mov");
+}
+
+TEST_CASE("ParseDownloadVideo kind=chroma uses color in path and name") {
+    DownloadVideoRequest out;
+    std::string err;
+    CHECK(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "abc-123", "kind": "chroma", "color": "green"})"), &out,
+        &err));
+    CHECK(out.kind == "chroma");
+    CHECK(out.color == "green");
+    CHECK(nzvideomni::DownloadVideoPath(out) == "/jobs/abc-123/alpha/chroma/green");
+    CHECK(nzvideomni::DownloadFileName(out) == "abc-123_chroma_green.mp4");
+}
+
+TEST_CASE("ParseDownloadVideo drops color for kinds other than chroma") {
+    DownloadVideoRequest out;
+    std::string err;
+    CHECK(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": "rgba", "color": "blue"})"), &out, &err));
+    CHECK(out.color.empty());
+    CHECK(nzvideomni::DownloadFileName(out) == "j_rgba.mov");
+}
+
+TEST_CASE("ParseDownloadVideo rejects an unknown or wrong-typed kind") {
+    DownloadVideoRequest out;
+    std::string err;
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": "matte"})"), &out, &err));
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": "RGBA"})"), &out, &err));
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": ""})"), &out, &err));
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": 1})"), &out, &err));
+}
+
+TEST_CASE("ParseDownloadVideo rejects joined=true with a kind other than joined") {
+    DownloadVideoRequest out;
+    std::string err;
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "joined": true, "kind": "output"})"), &out, &err));
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "joined": true, "kind": "rgba"})"), &out, &err));
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "joined": true, "kind": "chroma",
+                        "color": "green"})"),
+        &out, &err));
+}
+
+TEST_CASE("ParseDownloadVideo requires color for kind=chroma") {
+    DownloadVideoRequest out;
+    std::string err;
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": "chroma"})"), &out, &err));
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": "chroma", "color": null})"), &out, &err));
+    CHECK_FALSE(nzvideomni::ParseDownloadVideo(
+        json::parse(R"({"jobId": "j", "kind": "chroma", "color": ""})"), &out, &err));
+}
+
+TEST_CASE("ParseDownloadVideo rejects a color outside [a-z]+") {
+    DownloadVideoRequest out;
+    std::string err;
+    const char* const bads[] = {
+        R"({"jobId": "j", "kind": "chroma", "color": "Green"})",
+        R"({"jobId": "j", "kind": "chroma", "color": "../x"})",
+        R"({"jobId": "j", "kind": "chroma", "color": "a/b"})",
+        R"({"jobId": "j", "kind": "chroma", "color": "00ff00"})",
+        R"({"jobId": "j", "kind": "chroma", "color": "dark green"})",
+        R"({"jobId": "j", "kind": "chroma", "color": 1})",
+        R"({"jobId": "j", "kind": "rgba", "color": "Blue"})",
+    };
+    for (const char* bad : bads) {
+        CAPTURE(bad);
+        CHECK_FALSE(nzvideomni::ParseDownloadVideo(json::parse(bad), &out, &err));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // backend.uploadFile parsing / content-type / multipart framing
 // ---------------------------------------------------------------------------

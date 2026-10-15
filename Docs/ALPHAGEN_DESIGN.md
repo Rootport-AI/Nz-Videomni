@@ -238,6 +238,16 @@ Alpha Gen のジョブにだけ現れます。
 
 **`generation_mode` は既存の規則のまま `"t2v"` になります**（画像の条件が無いため）。Alpha Gen のジョブかどうか・どちらのモードかは、`metadata.alpha_gen.mode` を正としてください。`generation_mode` に新しい値は足しません。
 
+### 4.6 出口の API（第 3 弾）
+
+決定事項（§10）を API にしたものです。**要求・応答・既定値・エラーコード・使い回しの条件の正本は仕様書 §6.3c** です。ここには置き場所だけを書きます。
+
+- 経路: `POST /api/v1/jobs/{job_id}/alpha/rgba`・`POST /api/v1/jobs/{job_id}/alpha/chroma`（作る）と、`GET /api/v1/jobs/{job_id}/alpha/rgba`・`/alpha/preview`・`/alpha/chroma/{color}`（取る）。`api/jobs.py`。
+- 作る処理: `services/alpha_output_manager.py`（ffmpeg の命令は `services/video_io.py` の `compose_alpha_rgba`・`compose_alpha_chroma`）。
+- 記録 `alpha_outputs.json` の読み書き: `services/alpha_outputs_record.py`（`JobResponse.alpha` もここを読む）。
+- 色の名前と値: §10.2 の表が正本で、コードでは `api/models.py` の `ALPHA_CHROMA_COLORS` の 1 か所。
+- MCP には今回は出口を足していません（台帳 §3-229）。
+
 ## 5. エンジン（`engine25/alphagen25.py`）
 
 1 段原寸モードは、新しいファイル `engine25/alphagen25.py` の `run_alpha_gen` が担います。手本は `engine25/inpaint25.py` の `run_inpaint` で、公式の `DistilledPipeline.__call__` を使わず、部品を直接呼びます。参照が無ければ `AlphaGenError` を出します（参照の無いマットは意味が無いため）。

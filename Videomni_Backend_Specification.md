@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.88**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-10-14**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.89**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-10-15**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -138,6 +138,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.87 | 2026-10-13 | **Alpha Gen の第 1 弾の追補（台帳 §1-88）: マットを元動画の fps のまま作る（凍結 API 契約〔§6〕の変更・オーナー裁定）**。**§6.3b**（`AlphaGenRequest.frame_rate` を削除。サーバーが元動画の fps を ffprobe で測り、窓の切り出しと参照の作成はその fps で行い、エンジンには丸めた整数を渡す。出力 2 本は元動画と同じ正確な fps で書く。検査 b・d を現行化し、fps が測れない／丸めて 1〜60 を外れる元動画は 422 `ALPHA_GEN_INVALID`。古いクライアントが `frame_rate` を送っても無視して 202。`AlphaGenSpec` に `source_fps`・`output_fps` を加算）／**§6.6**（`alpha_gen` ブロックに `output_fps` を加算。`output.frame_rate` と `duration_seconds` は整数の fps のままであることを注記）／**§6.8**（`ALPHA_GEN_INVALID` の条件に fps の 2 つを追記）。理由は `Docs/ALPHAGEN_DESIGN.md` 第 2 部 §23。あわせて 1 段原寸モードの進捗の対応表を直した（同 §9.5。API の形は不変）。 |
 | v0.5.88 | 2026-10-14 | **Alpha Gen: 縮小は軽量モードだけにした（オーナー裁定。API のフィールド・型・既定・応答形は不変で、変わるのは 1 段原寸モードの作業寸法の決め方）**。1 段原寸モード（`light_mode=false`・既定）は快適上限と無関係に原寸で生成し（64 の倍数への黒の余白だけ）、`AlphaGenSpec.budget_tokens` と `metadata.alpha_gen.budget_tokens` は `null`・`scale` は 1.0 になる。軽量モードは従来どおり `single_budget` に収まるまで縮めて元の寸法へ戻す。`alpha_gen_budget` はサーバーが読まなくなり、操作パネルの線の位置だけに使う助言専用の値になった。**§6.3b**（`light_mode`・固定する値・検査 f・`working_width`・`budget_tokens`・引き伸ばしの注記）／**§6.6**（`alpha_gen` の `scale`・`budget_tokens`）／**§6.7**（`alpha_gen_budget` と例外の段落）。理由は `Docs/ALPHAGEN_DESIGN.md` 第 2 部 §24。 |
 | v0.5.88（文言の現行化） | 2026-10-14 | **文言の現行化（版は上げない。API・挙動は不変）**。§6.8 の `GENERATION_FAILED` の回転情報つき素材の注記を、台帳 `Docs/PENDING_TASKS.md` §3-228 への参照にした。§6.10 (b) の操作パネルの模擬サーバーの写しを、第 2 弾（`Docs/PENDING_TASKS_CLOSED.md` 3-227）で合わせた完了形にした。 |
+| v0.5.89 | 2026-10-15 | **Alpha Gen の第 3 弾＝出口を反映（加算のみ。既存フィールドの意味・型・既定・応答形はいずれも変わらない）**。完了した Alpha Gen のジョブから、元動画の窓とマットを合成して 3 種の成果物（透過つきの ProRes 4444 の MOV・市松模様のプレビュー・色で塗りつぶした動画）を押したときに作り、閾値と色が同じなら使い回す。**§6.1**（`POST /jobs/{job_id}/alpha/rgba`・`POST /jobs/{job_id}/alpha/chroma`・`GET /jobs/{job_id}/alpha/rgba`・`GET /jobs/{job_id}/alpha/preview`・`GET /jobs/{job_id}/alpha/chroma/{color}` の 5 行を加算）／**§6.3**（`JobResponse.alpha` を加算）／**§6.3c＝新設**（要求と応答・使い回しの条件・閾値の規則・検査の順）／**§6.8**（`JOB_NOT_ALPHA`・`ALPHA_OUTPUT_NOT_READY`・`ALPHA_OUTPUT_FAILED` を追加）／**§8.1**（`rgba.mov`・`alpha_preview.mp4`・`chroma_<色>.mp4`・`alpha_outputs.json`。あわせて図に載っていなかった第 1 弾の `matte.mkv`・`_alpha_window.mp4`・`alpha_reference.mp4` も載せた）。決定事項の正本は `Docs/ALPHAGEN_DESIGN.md` §10、台帳は `Docs/PENDING_TASKS.md` §1-86。 |
 
 ### 0.2 スコープ
 
@@ -653,12 +654,17 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | POST | `/api/v1/jobs/{job_id}/join` | 完了済みV2Vジョブの継続動画（`output.mp4`）をアップロード元のソース動画へサーバー側で結合し `joined.mp4` を生成（ffmpegのみ・GPU不要・単一ジョブガードから独立） | 要 | 200 / 404(JOB_NOT_FOUND, SOURCE_VIDEO_NOT_FOUND) / 409(VIDEO_NOT_READY) / 422(VALIDATION_ERROR, JOB_NOT_JOINABLE) / 503(JOIN_FAILED) |
 | GET | `/api/v1/jobs/{job_id}/joined` | 結合済み動画（`joined.mp4`）を返す | 不要 | 200 / 404(JOB_NOT_FOUND, JOINED_NOT_READY) |
 | GET | `/api/v1/jobs/{job_id}/matte` | Alpha Gen のジョブのマット（`matte.mkv`・`video/x-matroska`）を返す（**2026-10-07 加算**。§6.3b） | 不要 | 200 / 404(JOB_NOT_FOUND) / 409(VIDEO_NOT_READY) |
+| POST | `/api/v1/jobs/{job_id}/alpha/rgba` | Alpha Gen のジョブから透過つきの動画（`rgba.mov`・ProRes 4444）と市松模様のプレビュー（`alpha_preview.mp4`）を作る。同じ閾値で作ったものがあれば使い回す（**2026-10-15 加算**。§6.3c。ffmpeg のみ・GPU 不要・単一ジョブガードから独立） | 要 | 200 / 404(JOB_NOT_FOUND) / 409(VIDEO_NOT_READY) / 422(VALIDATION_ERROR, JOB_NOT_ALPHA) / 503(ALPHA_OUTPUT_FAILED) |
+| POST | `/api/v1/jobs/{job_id}/alpha/chroma` | Alpha Gen のジョブから、背景を指定の色で塗りつぶした動画（`chroma_<色>.mp4`）を作る。同じ色・同じ閾値で作ったものがあれば使い回す（**2026-10-15 加算**。§6.3c） | 要 | 200 / 404(JOB_NOT_FOUND) / 409(VIDEO_NOT_READY) / 422(VALIDATION_ERROR, JOB_NOT_ALPHA) / 503(ALPHA_OUTPUT_FAILED) |
+| GET | `/api/v1/jobs/{job_id}/alpha/rgba` | 透過つきの動画（`rgba.mov`・`video/quicktime`）を返す（**2026-10-15 加算**。§6.3c） | 不要 | 200 / 404(JOB_NOT_FOUND, ALPHA_OUTPUT_NOT_READY) |
+| GET | `/api/v1/jobs/{job_id}/alpha/preview` | 市松模様のプレビュー（`alpha_preview.mp4`・`video/mp4`）を返す（**2026-10-15 加算**。§6.3c） | 不要 | 200 / 404(JOB_NOT_FOUND, ALPHA_OUTPUT_NOT_READY) |
+| GET | `/api/v1/jobs/{job_id}/alpha/chroma/{color}` | 塗りつぶした動画（`chroma_<色>.mp4`・`video/mp4`）を返す（**2026-10-15 加算**。§6.3c） | 不要 | 200 / 404(JOB_NOT_FOUND, ALPHA_OUTPUT_NOT_READY) / 422(VALIDATION_ERROR) |
 | DELETE | `/api/v1/jobs/{job_id}` | 実行中はキャンセル要求、終了済みは結果削除 | 要 | 200 / 404(JOB_NOT_FOUND) |
 | POST | `/api/v1/utils/mp4-info` | サーバーを動かしている PC 上の動画ファイルのパスを受け取り、コンテナの `comment` タグを返す（**2026-09-24 加算**。§6.6 の埋め込みの読み出し口。ffprobe で読むだけで、ジョブは作らない） | 要 | 200 / 403(LOCAL_ONLY) / 404(MEDIA_NOT_FOUND) / 422(MEDIA_UNREADABLE, VALIDATION_ERROR) |
 
 補足（実装どおり）:
 - `POST /generate` は成功時 **202 Accepted**（`status_code=202`）。レスポンス `status` は `queued`。
-- 認証が必要なのは `require_auth` 依存を持つ経路: `pipeline/load`, `pipeline/unload`, `upload/image`, **`upload/video`**, **`upload/audio`**, `generate`, **`generate/chain`**, **`generate/alpha`**, `jobs/{job_id}/join`, `DELETE /jobs/{job_id}`, 物体追尾の `/utils/track/*`（§4.7）, `utils/mp4-info`。このうち `upload/video` / `upload/audio` / `generate/chain` / `/utils/track/*` は本表に未掲載の ADDITIVE エンドポイントで、掲載済みの経路と同じ `require_auth` を持つ。`status` / `config` / `jobs` 系 GET（`jobs/{job_id}/joined`・`jobs/{job_id}/matte` を含む）と `GET /models` / `GET /loras`、さらに `POST /loras/reload` と `GET /loras/{name}/thumbnail`（`api/loras.py` のどちらにも `require_auth` が無い）は認証不要。
+- 認証が必要なのは `require_auth` 依存を持つ経路: `pipeline/load`, `pipeline/unload`, `upload/image`, **`upload/video`**, **`upload/audio`**, `generate`, **`generate/chain`**, **`generate/alpha`**, `jobs/{job_id}/join`, **`jobs/{job_id}/alpha/rgba`・`jobs/{job_id}/alpha/chroma`（POST）**, `DELETE /jobs/{job_id}`, 物体追尾の `/utils/track/*`（§4.7）, `utils/mp4-info`。このうち `upload/video` / `upload/audio` / `generate/chain` / `/utils/track/*` は本表に未掲載の ADDITIVE エンドポイントで、掲載済みの経路と同じ `require_auth` を持つ。`status` / `config` / `jobs` 系 GET（`jobs/{job_id}/joined`・`jobs/{job_id}/matte`・`jobs/{job_id}/alpha/*` の GET を含む）と `GET /models` / `GET /loras`、さらに `POST /loras/reload` と `GET /loras/{name}/thumbnail`（`api/loras.py` のどちらにも `require_auth` が無い）は認証不要。
 - api_key 設定時に Bearer 不一致/欠落 → `401 UNAUTHORIZED`。
 - `POST /generate` は投入時にまず `conditioning_images` の各 `image_id` の実在を検証（`upload_store.path_for` が `IMAGE_NOT_FOUND`=404 を送出）、次に単一ジョブガードで 409。
 - `POST /pipeline/unload` は実行中ジョブがあると `409 JOB_BUSY`（detail="cannot unload while a job is running"）。**ロード中は `409 PIPELINE_LOADING`**——load・内部の reload と同じ見張りを unload も通る（2026-10-03〜。`load`／`reload` は `finally` で状態を `loading` に残さないので、ロード中に張り付く経路は無い。§6.9(f)）。
@@ -886,6 +892,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `is_v2v` | bool |
 | `joined` | bool |
 | `matte` | bool |
+| `alpha` | AlphaOutputsInfo \| null |
 | `created_at` | str |
 | `started_at` | str \| null |
 | `completed_at` | str \| null |
@@ -896,6 +903,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 > `is_v2v` / `joined` は**2026-07-21追加（V2V Join復活・コミット `d22706e`）**。`is_v2v` は `chain_request` に `source_video` があるV2Vジョブ（＝ `POST /jobs/{job_id}/join` の対象になり得るジョブ）かどうか、`joined` はサーバー側の連結済み動画 `outputs/{job_id}/joined.mp4` が現存するか（＝ join 実行済みで未削除か）を表す。
 
 > `matte` は**2026-10-07追加（Alpha Gen）**。`outputs/{job_id}/matte.mkv`（Alpha Gen のジョブが書く劣化しない灰色のマット）が現存するかを表す。`joined` と同じ形で、ファイルの有無だけを見る（§6.3b）。
+
+> `alpha` は**2026-10-15追加（Alpha Gen の出口）**。`matte.mkv` が無いジョブ（Alpha Gen のジョブでない）では `null`。ある場合は、出口の成果物のうち今あるものと、それを作った閾値を返す（形は §6.3c の `AlphaOutputsInfo`。まだ何も作っていなければ `{"rgba": null, "chroma": {}}`）。画面側はこれで Alpha Gen のジョブを見分け、操作パネルを立ち上げ直しても使い回せるかを判定できる。
 
 ### 6.3b Alpha Gen（`POST /generate/alpha`）のスキーマ（2026-10-07 加算）
 
@@ -948,6 +957,70 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 > **ワーカーへの受け渡し（参考・API 契約ではない）**: 1 段原寸モードのときだけ、ペイロードに `alpha_gen: {"mode": "one_stage"}` が載り、ワーカーは `engine25/alphagen25.py` の駆動部へ振り分ける。軽量モードでは鍵が載らず、既存の 2 段経路がそのまま走る。
 
 **`GET /jobs/{job_id}/matte`**（認証不要）は、`GET /jobs/{job_id}/video` と同じ形で、Alpha Gen のジョブのマット `outputs/{job_id}/matte.mkv`（FFV1・gray・全範囲・元の寸法・音声なし）を返す（`video/x-matroska`・ファイル名 `{job_id}_matte.mkv`）。ジョブが完了していなければ 409 `VIDEO_NOT_READY`、マットが無ければ 404。同じジョブの `output.mp4`（`GET /jobs/{job_id}/video`）はプレビュー用の H.264 で、元の寸法・音声なしである。
+
+### 6.3c Alpha Gen の出口（`POST /jobs/{job_id}/alpha/*`）のスキーマ（2026-10-15 加算）
+
+完了した Alpha Gen のジョブ（§6.3b）から、元動画の窓（`_alpha_window.mp4`。音声つき）とマット（`matte.mkv`）を合成して、次の成果物を作る。押したとき（要求が来たとき）に作り、ジョブの置き場 `outputs/{job_id}/` に置いて使い回す。`POST /jobs/{job_id}/join` と同じく**同期の 200**で、ffmpeg だけを使い（GPU 不要）、単一ジョブガードから独立している。**決定事項の正本は `Docs/ALPHAGEN_DESIGN.md` §10**。
+
+| 成果物 | 作る要求 | 形式 | 音声 |
+|---|---|---|---|
+| `rgba.mov` | `POST .../alpha/rgba` | ProRes 4444（`prores_ks`・`yuva444p10le`・アルファ 16bit。ffprobe は `yuva444p12le` と報告する）の MOV | 窓の音声を PCM（`pcm_s16le`）で |
+| `alpha_preview.mp4` | 同上（同じ ffmpeg の 1 回で一緒に作る） | 灰色の市松模様（16 画素の升目）に重ねた H.264（crf 20・yuv420p・faststart）。幅 640・高さは縦横比から偶数に丸める | 窓の音声を AAC 192k で |
+| `chroma_<色>.mp4` | `POST .../alpha/chroma` | 背景を指定の色で塗った H.264（crf 18・yuv420p・faststart）。元の寸法 | 窓の音声を AAC 192k で |
+
+どれも元動画と同じ正確な fps（`metadata.alpha_gen.output_fps`）・同じフレーム数で書く。窓に音声が無ければ音声なしになる。
+
+**AlphaThresholds**（閾値。2 つの要求の共通部分）
+| フィールド | 型 | デフォルト | 制約 |
+|-----------|----|-----------|------|
+| `transparent_threshold` | int | `7` | `ge=0, le=255`。透過の閾値（この値以下は完全に透明） |
+| `opaque_threshold` | int | `248` | `ge=0, le=255`。不透過の閾値（この値以上は完全に不透明） |
+
+> `transparent_threshold` ≤ `opaque_threshold` でなければ 422 `VALIDATION_ERROR`。
+
+> **閾値の規則（レベル補正）**: 合成の前にマットへ当てる。透過の閾値 L 以下を 0、不透過の閾値 R 以上を 255、その間を直線で伸ばす（`lutyuv=y='clip((val-L)*255/(R-L),0,255)'`）。L＝R のときは「R 以上を 255、未満を 0」の白黒二値化。L＝0・R＝255 は無変換（フィルタを付けない）。`matte.mkv` 自体は書き換えない。
+
+**`POST /jobs/{job_id}/alpha/rgba`** の本文 `AlphaRgbaRequest` は `AlphaThresholds` そのもの。本文は省略でき、`{}`（または本文なし）は既定の閾値になる。
+
+**`POST /jobs/{job_id}/alpha/chroma`** の本文 `AlphaChromaRequest` は `AlphaThresholds` に次の 1 つを足したもの。
+
+| フィールド | 型 | デフォルト | 制約 |
+|-----------|----|-----------|------|
+| `color` | str | （必須） | 8 色の名前のどれか（white・red・yellow・green・aqua・blue・magenta・black）。名前と色の値の表は `Docs/ALPHAGEN_DESIGN.md` §10.2 が正本（サーバーの実装では `api/models.py` の `ALPHA_CHROMA_COLORS` の 1 か所）。それ以外は 422 `VALIDATION_ERROR` |
+
+**応答 `AlphaOutputResponse`**（2 つの POST で共通）
+| フィールド | 型 | 意味 |
+|-----------|----|------|
+| `job_id` | str | — |
+| `kind` | `"rgba"` \| `"chroma"` | どちらを作ったか |
+| `color` | str \| null | 塗りつぶしの色の名前（`rgba` では `null`） |
+| `transparent_threshold` / `opaque_threshold` | int | 使った閾値 |
+| `path` | str | 置き場からの相対パス（`outputs/{job_id}/rgba.mov`・`outputs/{job_id}/chroma_green.mp4` など） |
+| `reused` | bool | 作らずに既存のものを返したとき `true` |
+
+**AlphaOutputsInfo**（`JobResponse.alpha`。§6.3）
+| フィールド | 型 | 意味 |
+|-----------|----|------|
+| `rgba` | AlphaThresholds \| null | `rgba.mov` とプレビューがあればそれを作った閾値。無ければ `null` |
+| `chroma` | dict[str, AlphaThresholds] | 色の名前ごとに、今ある塗りつぶし動画とそれを作った閾値 |
+
+> **使い回しの条件**: 透過つきの動画とプレビューは「同じ閾値」、塗りつぶし動画は「同じ色かつ同じ閾値」のときだけ使い回し（`reused: true`・ファイルは書き換えない）、違えば作り直して上書きする。残るのは**透過つきの動画とそのプレビューが 1 組・塗りつぶし動画が色ごとに 1 本**である。作った閾値と色はジョブの置き場の記録 `alpha_outputs.json` に書き、**記録とファイルの両方があるときだけ「ある」とみなす**（ファイルだけ消えていれば作り直す。`JobResponse.alpha` も同じ判定）。作り直すときは、記録の該当項目を先に消し、一時名で書いてから置き換え、最後に記録を書く。同じジョブへの同時の要求は順番に処理する。
+
+> **メタデータ**: 塗りつぶし動画は、コンテナの `comment` タグに `metadata.json` と同じ JSON に `alpha_output`（`kind`・`color`・`transparent_threshold`・`opaque_threshold`）を足したものを持つ（`POST /jobs/{job_id}/join` と同じく、元のジョブが `embed_mp4_metadata: false` なら書かない。書けなくても失敗にしない）。`rgba.mov` とプレビューには書かない。
+
+> **`metadata.json` が必要**: 出口はジョブの `metadata.json`（`alpha_gen.output_fps` と生成条件）を読むので、`output.save_metadata_json: false` で作ったジョブでは 422 `JOB_NOT_ALPHA` になる。
+
+> **検査の順**（ffmpeg を走らせる前にすべて判定する）: ① ジョブが無い → 404 `JOB_NOT_FOUND`／② 完了していない → 409 `VIDEO_NOT_READY`／③ `metadata.json` が無い・読めない・`alpha_gen` ブロックか `output_fps` が無い → 422 `JOB_NOT_ALPHA`／④ `_alpha_window.mp4` か `matte.mkv` が無い → 404 `JOB_NOT_FOUND`。合成（ffmpeg）や置き換え（`os.replace`。再生中のファイルを置き換えられないときなど）が失敗したら 503 `ALPHA_OUTPUT_FAILED`（`detail` は ffmpeg の出力の末尾）。失敗したとき、前のファイルがそのまま残ることはあるが、記録からは消えているので、次の要求で作り直される。
+
+**取得の 3 本**（認証不要）は `GET /jobs/{job_id}/joined` と同じ形で、ファイルが無ければ 404 `ALPHA_OUTPUT_NOT_READY`（ジョブが無ければ 404 `JOB_NOT_FOUND`）。
+
+| パス | 返すもの | `Content-Type` | ファイル名 |
+|---|---|---|---|
+| `GET /jobs/{job_id}/alpha/rgba` | `rgba.mov` | `video/quicktime` | `{job_id}_rgba.mov` |
+| `GET /jobs/{job_id}/alpha/preview` | `alpha_preview.mp4` | `video/mp4` | `{job_id}_alpha_preview.mp4` |
+| `GET /jobs/{job_id}/alpha/chroma/{color}` | `chroma_<color>.mp4`（`color` が 8 色の名前でなければ 422） | `video/mp4` | `{job_id}_chroma_{color}.mp4` |
+
+> 成果物と記録は `DELETE /jobs/{job_id}` でジョブの置き場ごと消える。MCP のツールは今回は無い（台帳 `Docs/PENDING_TASKS.md` §3-229）。
 
 ### 6.4 代表的な Req/Res 例（JSON）
 
@@ -1247,6 +1320,9 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | `JOB_NOT_JOINABLE` | 422 | `POST /jobs/{id}/join` の対象が V2V 継続ジョブではない（metadata に `v2v` ブロックが無い） |
 | `JOIN_FAILED` | 503 | サーバー側 ffmpeg の結合（正規化・クロスフェード・連結）が失敗 |
 | `JOINED_NOT_READY` | 404 | `joined.mp4` の生成前に `GET /jobs/{id}/joined` を呼んだ |
+| `JOB_NOT_ALPHA` | 422 | Alpha Gen の出口（**2026-10-15 新設**。§6.3c）。`POST /jobs/{id}/alpha/rgba`・`/alpha/chroma` の対象が Alpha Gen のジョブではない（`metadata.json` が無い・読めない・`alpha_gen` ブロックが無い） |
+| `ALPHA_OUTPUT_NOT_READY` | 404 | Alpha Gen の出口（**2026-10-15 新設**）。成果物を作る前に `GET /jobs/{id}/alpha/rgba`・`/alpha/preview`・`/alpha/chroma/{color}` を呼んだ |
+| `ALPHA_OUTPUT_FAILED` | 503 | Alpha Gen の出口（**2026-10-15 新設**）。サーバー側の ffmpeg の合成、または出来たファイルの置き換えが失敗 |
 | `LORA_NOT_FOUND` | 404 | 未登録の IC-LoRA アダプタ名 |
 | `MODEL_NOT_FOUND` | 404 | 未登録のモデル名（またはカテゴリ不明）。生パスは受けない |
 | `MODEL_FILE_MISSING` | 422 | 登録名は在るが重みファイルがディスク上に無い |
@@ -1637,14 +1713,22 @@ outputs/
 └── {job_id}/
     ├── output.mp4               # H.264 / yuv420p。音声ありジョブは AAC を mux。comment タグに metadata.json と同じ JSON（既定）
     ├── metadata.json            # 生成メタデータ（save_metadata_json: true のとき）
+    ├── matte.mkv                # Alpha Gen ジョブ: 合成用の劣化しない灰色のマット（FFV1・元の寸法。成果物）
     ├── joined.mp4               # V2V 継続ジョブを POST /jobs/{id}/join で結合したとき。comment タグに元ジョブの記録（既定）
+    ├── rgba.mov                 # Alpha Gen の出口: POST /jobs/{id}/alpha/rgba で作る透過つきの動画（ProRes 4444）
+    ├── alpha_preview.mp4        # 同上と一緒に作る市松模様のプレビュー（幅 640）
+    ├── chroma_<色>.mp4          # Alpha Gen の出口: POST /jobs/{id}/alpha/chroma で作る塗りつぶし動画（色ごとに 1 本）。comment タグに元ジョブの記録と色・閾値（既定）
+    ├── alpha_outputs.json       # Alpha Gen の出口の記録（上の 3 種を作った閾値と色。§6.3c）
     ├── _retake_window.mp4       # 撮り直しジョブ: 素材から切り出した窓
     ├── outpaint_canvas.mp4      # 画角拡張ジョブ: 緑で塗ったキャンバス（可逆符号化）
     ├── _inpaint_window.mp4      # Inpainting ジョブ: 素材から切り出した窓（crf 12）
-    └── inpaint_canvas.mp4       # Inpainting ジョブ: マスクの白い領域を緑で塗ったキャンバス（可逆符号化）
+    ├── inpaint_canvas.mp4       # Inpainting ジョブ: マスクの白い領域を緑で塗ったキャンバス（可逆符号化）
+    ├── _alpha_window.mp4        # Alpha Gen ジョブ: 素材から切り出した窓（音声つき。中間ファイル〔証拠として残す〕・出口の合成の材料）
+    └── alpha_reference.mp4      # Alpha Gen ジョブ: 窓を作業寸法にして黒で余白を足した参照（中間ファイル〔証拠として残す〕）
 ```
 
-- **窓とキャンバスの中間物は、そのジョブの置き場に意図的に残す**（撮り直し・画角拡張・Inpainting の 4 ファイル。**`uploads/` へは書かない**——あちらは利用者がいつ消してもよいキャッシュだからである。`Docs/STORAGE_POLICY.md` §0・§1）。「何を入れたらこれが出たか」を後から確かめるための証拠であり、`DELETE /jobs/{job_id}` でジョブごと消える。
+- **窓とキャンバスの中間物は、そのジョブの置き場に意図的に残す**（撮り直し・画角拡張・Inpainting・Alpha Gen。どれが中間物かの正本は `Docs/STORAGE_POLICY.md` §1。**`uploads/` へは書かない**——あちらは利用者がいつ消してもよいキャッシュだからである。`Docs/STORAGE_POLICY.md` §0・§1）。「何を入れたらこれが出たか」を後から確かめるための証拠であり、`DELETE /jobs/{job_id}` でジョブごと消える。
+- **Alpha Gen の出口の `rgba.mov`・`alpha_preview.mp4`・`chroma_<色>.mp4` は成果物、`alpha_outputs.json` はジョブと一緒に残る記録である**（どちらも中間物ではない）。押したときに作り、同じ条件なら使い回し、条件を変えると上書きする（何本残るかと使い回しの条件は §6.3c）。
 - ジョブ履歴は in-memory（サーバー再起動で消える）。一方 `outputs/{job_id}/metadata.json` はディスクに残る。
 - **`output.mp4` と `joined.mp4` は、既定で `metadata.json` と同じ JSON をコンテナの `comment` タグに持つ**（要求の `embed_mp4_metadata` で止められる。中間ファイルには書かない。規則は §6.6 冒頭の注記が正本）。結合は元動画のグローバルタグを引き継がない（`-map_metadata -1`）ので、`joined.mp4` のタグは「元ジョブの記録」か「無し」のどちらかである。
 - `metadata.json` のスキーマ自体は **§6.6** を正本とする（本章では重複させない）。`peak_vram_mb` は `metadata.json` の `vram_optimization` ブロック、または `logs/ltx_worker.log` の `GENERATED_OK peak_vram_mb=` から取得できる（jobs API 応答には含まれない）。

@@ -58,7 +58,7 @@
   padding: 0 16px 16px;
 }
 
-/* The Create/Chain screens' right-hand generation panel: ONE card holding
+/* The Create/Chain/Edit screens' right-hand generation panel: ONE card holding
  * `GenerateButtonBar` on top and the job ledger (`jobs/JobLedger.tsx`, fed by
  * `jobs/JobsContext.tsx`'s `GET /jobs` poll) below it (mirroring the Gradio
  * UI's right column: generate button → progress → job → video stacked in a

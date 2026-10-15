@@ -25,19 +25,21 @@ export interface DownloadAndInsertOptions {
    * back to the position-less joined insert (native's cursor placement). Only
    * meaningful together with `joined`. */
   position?: { layer: number; frame: number };
-  /** W3 (⬇ "insert the latest generation result here"): insert the downloaded
-   * clip as a PLAIN positioned `timeline.insertMedia` at this layer/frame,
-   * bypassing the per-clip replace-RPC (`insertForJob`) entirely. Because it
-   * never goes through the replace path, a provisional reservation object at the
-   * cursor is left in place — this is an ADDITIVE insert (the latest result
-   * dropped at the right-click spot), not the fulfillment of a specific job's
-   * reservation. Mutually exclusive with `joined`/`knownFilePath` in practice
-   * (the W3 layer command always downloads a plain completed clip). */
+  /** Insert the downloaded clip as a PLAIN positioned `timeline.insertMedia`
+   * at this layer/frame, bypassing the per-clip replace-RPC (`insertForJob`)
+   * entirely. Used by W3 (the layer menu's ⬇ "insert the latest generation
+   * result here") and by an Alpha Gen job's 🎞 when the right-clicked source
+   * location is known (`JobCard`'s `resolveAlphaInsertPosition`; may come
+   * together with `kind`/`color`/`noClobber`). Because it never goes through
+   * the replace path, a provisional reservation object at the cursor is left in
+   * place — this is an ADDITIVE insert, not the fulfillment of a specific job's
+   * reservation. Not used together with `joined`/`knownFilePath`. */
   plainInsertAt?: { layer: number; frame: number };
   /** Alpha Gen 第 3 弾: which composite to download instead of the job's own
    * clip (the matte) — `rgba` (the ProRes 4444 MOV) or `chroma` (the fill of
    * {@link color}). Passed straight to `backend.downloadVideo`'s `kind`
-   * (contract v16). Not used together with `joined`. */
+   * (contract v16). Pair with `noClobber` — without it the request carries
+   * `reuseIfPresent`. Not used together with `joined`. */
   kind?: "rgba" | "chroma";
   /** Alpha Gen 第 3 弾: the fill color for `kind: "chroma"`. */
   color?: string;
@@ -51,11 +53,12 @@ export interface DownloadAndInsertOptions {
 }
 
 /**
- * The two-step "hand a completed job's mp4 to the AviUtl2 timeline" flow
+ * The two-step "hand a completed job's video to the AviUtl2 timeline" flow
  * (`backend.downloadVideo` -> `timeline.insertMediaForJob` on the main path;
- * the joined clip and W3's `plainInsertAt` use the plain `timeline.insertMedia`
+ * the joined clip and `plainInsertAt` — W3, and an Alpha Gen 🎞 whose source
+ * location is known — use the plain `timeline.insertMedia`
  * instead — Docs/API_REFERENCE.md §3.16 / SDK_REFERENCE.md §7). Shared by the
- * job rail's per-card 🎞 button (`jobs/JobCard.tsx`) and the right-click
+ * job ledger's per-card 🎞 (`jobs/JobCard.tsx`) and the right-click
  * W2 / W3 channels (`shell/AppShell.tsx`), so the bridge call sequence lives in
  * exactly one place.
  */
@@ -75,7 +78,8 @@ export async function downloadAndInsertVideo(
     // The plain per-clip path is immutable, so let native reuse an existing
     // download instead of re-writing over a possibly-open file. The `joined`
     // output changes with the crossfade setting, so it must always refetch —
-    // never pass `reuseIfPresent` there.
+    // never pass `reuseIfPresent` there. `noClobber` (Alpha Gen's MOV / fill)
+    // never reuses: it always writes a free name.
     const download = await nativeBridge.request(
       "backend.downloadVideo",
       options.joined
@@ -94,10 +98,10 @@ export async function downloadAndInsertVideo(
 
   onPhase?.("inserting");
 
-  // W3 (⬇ layer quick-insert): a PLAIN positioned insert that never touches any
+  // W3 / Alpha Gen: a PLAIN positioned insert that never touches any
   // provisional marker. It does NOT go through `insertForJob`'s replace-RPC, so
-  // a reservation object sitting at the cursor is left intact — the layer-menu
-  // ⬇ is an additive "drop the latest result here", not a job fulfillment.
+  // a reservation object sitting at the cursor is left intact — an additive
+  // "drop the result here", not a job fulfillment.
   if (options.plainInsertAt) {
     const result = await nativeBridge.request("timeline.insertMedia", {
       filePath,

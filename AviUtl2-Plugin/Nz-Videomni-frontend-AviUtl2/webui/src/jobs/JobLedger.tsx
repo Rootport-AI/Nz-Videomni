@@ -12,7 +12,7 @@ export interface JobLedgerProps {
    * preview auto-expanded (U-R1 MJ-4, the replacement for the old
    * `GenerationPanel`'s "show the finished result big" moment). */
   highlightedJobId: string | null;
-  /** Passed through from Create/Chain (which hold the shell's injected bridge,
+  /** Passed through from Create/Chain/Edit (which hold the shell's injected bridge,
    * `undefined` in production) straight to each `JobCard` — U-R1 MN-2: the
    * app-wide singleton fallback lives in exactly one place (`JobCard`'s default
    * param), not repeated here the way the old `JobRail` did. */
@@ -20,13 +20,13 @@ export interface JobLedgerProps {
 }
 
 /** The always-on job ledger (U-R1): every job the backend knows about, newest
- * first, as `JobCard`s (Cancel/Delete/Insert/Join/progress all built in). It
+ * first, as `JobCard`s (every action built in). It
  * replaces the old right-hand `JobRail` sidebar and the per-Create
  * `GenerationPanel` at once — the single generation panel now stacks the
  * Generate button, a submit-error row, and this ledger, so there is nothing to
  * the right of the panel (the owner's core requirement). Always expanded — the
- * rail's narrow-width collapse mechanism is gone; `jobs.css` instead caps the
- * body height so the list scrolls in place. */
+ * rail's narrow-width collapse mechanism is gone; `jobs.css` instead keeps the
+ * body out of the column's intrinsic height so the list scrolls in place. */
 export function JobLedger({ baseUrl, highlightedJobId, nativeBridge }: JobLedgerProps) {
   const strings = useStrings();
   const { jobs, cancellingIds, deletingIds, cancelJob, deleteJob } = useJobsContext();

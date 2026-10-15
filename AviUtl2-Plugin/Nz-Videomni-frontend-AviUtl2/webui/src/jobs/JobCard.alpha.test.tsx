@@ -12,7 +12,8 @@ import { JobCard } from "./JobCard";
 /**
  * Alpha Gen 第 3 弾（出口）: what `JobCard` does with `AlphaControls`' view —
  * the preview URL, and 🎞 inserting what is shown (Docs/ALPHAGEN_DESIGN.md
- * §10.3): the kind / color, always under a fresh name, at the right-clicked
+ * §10.3): the kind / color — the transparent MOV and the fill under a fresh
+ * name (`noClobber`), the matte reused (`reuseIfPresent`) — at the right-clicked
  * object's start frame on a new layer when that location is known (whatever
  * the view), at the cursor otherwise.
  */
@@ -164,7 +165,7 @@ describe("JobCard × AlphaControls — the preview", () => {
     const field = screen.getByRole("spinbutton", { name: new RegExp(t.opaqueThreshold) });
     fireEvent.change(field, { target: { value: "200" } });
     fireEvent.blur(field);
-    // Only the slider moved: the preview still shows what was made.
+    // Only the thresholds changed: the preview still shows what was made.
     expect(videoSrc()).toContain("?v=7-248");
     fireEvent.click(cut());
     await waitFor(() => expect(videoSrc()).toBe(`${BASE}/api/v1/jobs/${JOB_ID}/alpha/preview?v=7-200`));

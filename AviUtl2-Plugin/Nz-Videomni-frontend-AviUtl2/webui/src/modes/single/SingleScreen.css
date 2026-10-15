@@ -15,14 +15,14 @@
    * Retake while idle) the ledger got too short to show the card band. A
    * floor on the container lets the row grow through the default
    * `align-content` (stretch) without the mid-chain `max-height` that
-   * `formAccordion.css` / `jobs.css` forbid. Initial value; tuned on the
-   * real panel. */
+   * `formAccordion.css` / `jobs.css` forbid. Kept at 70vh after the owner's
+   * re-check (backend VERIFICATION_LOG section 157.8). */
   min-height: 70vh;
 }
 
 /* Container query (not a window-width media query) against the `mode-body`
  * container named on `AppShell.css`'s `.app-mode-body` (this element's
- * parent) — the job rail can squeeze this column down well before the
+ * parent) — a docked/narrow panel can squeeze this column down well before the
  * window itself is narrow, so window width alone doesn't reliably signal
  * "not enough room" here. Paired with `styles/formAccordion.css`'s matching
  * `@container` on `.generation-column`, which lifts the whole generation
@@ -40,7 +40,7 @@
 /* M7b (task brief §5: "狭幅（~360px）… CSSを点検・修正"): below this, the
  * two-up width/height row (`SizeFields` in `CommonGenerationFields.tsx`) gets
  * cramped enough to be worth stacking instead of squeezing side by side —
- * applies to both Create and Chain, which share these classes verbatim. (The
+ * applies to Create/Chain/Edit, which share these classes verbatim. (The
  * keyframe card's own narrow-width stacking now lives in `KeyframeCard.css`.) */
 @media (max-width: 420px) {
   .field-row {

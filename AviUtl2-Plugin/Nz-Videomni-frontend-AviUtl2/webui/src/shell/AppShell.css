@@ -168,7 +168,7 @@
 }
 
 /* U-R1: single column — the always-on job rail is gone (the ledger now lives
- * inside Create/Chain's generation panel), so the mode body spans the full
+ * inside each generation screen's panel), so the mode body spans the full
  * width with nothing to its right. */
 .app-body {
   flex: 1;
@@ -181,10 +181,7 @@
 }
 
 /* `container-type: inline-size` turns this into the query container for
- * `.single-layout`/`.generation-column`'s `@container` breakpoints (see
- * `SingleScreen.css`/`styles/formAccordion.css`) — the job rail
- * (`.app-body`'s `minmax(240px, 320px)` column, below) can squeeze this
- * element well before the window itself is narrow, so those breakpoints
+ * the `@container mode-body` rules — those rules
  * need the actual available width here rather than a window-width media
  * query. Containment is safe: this element's own width comes from the
  * `.app-body` grid track (`minmax(0, 1fr)`), not from its content, so
@@ -194,8 +191,8 @@
  * introduces its own container.
  *
  * U-R1: with the rail gone, this element's width is now the full window, so
- * the 680px `@container` breakpoints (`.single-layout`/`.generation-column`/
- * `.job-ledger`) only fire on a genuinely narrow window or docked panel —
+ * the 680px `@container mode-body` rules only fire on a genuinely narrow
+ * window or docked panel —
  * their intended trigger. */
 .app-mode-body {
   min-width: 0;

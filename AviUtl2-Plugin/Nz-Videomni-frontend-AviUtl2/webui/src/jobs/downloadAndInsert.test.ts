@@ -105,7 +105,7 @@ describe("downloadAndInsertVideo", () => {
     expect(paramsFor(request, "timeline.insertMediaForJob")).toEqual({ jobId: "job-b", filePath: "C:/dl/out.mp4" });
   });
 
-  it("Alpha Gen 第 3 弾: the matte (noClobber alone) sends no kind", async () => {
+  it("Alpha Gen 第 3 弾: noClobber alone (no kind) sends no kind and no reuseIfPresent", async () => {
     resetProvisionalReservation();
     const { bridge, request } = stubBridge();
     await downloadAndInsertVideo(bridge, "job-c", undefined, { noClobber: true });

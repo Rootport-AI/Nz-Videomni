@@ -1,6 +1,6 @@
-/* U-R1: the always-on job ledger inside Create/Chain's generation panel
- * (replaces the old right-hand `.job-rail`). Always expanded — the body just
- * scrolls in place once it outgrows its capped height. */
+/* U-R1: the always-on job ledger inside each generation screen's panel
+ * (Create/Chain/Edit; replaces the old right-hand `.job-rail`). Always
+ * expanded — the body just scrolls in place. */
 .job-ledger {
   display: flex;
   flex-direction: column;
@@ -26,7 +26,8 @@
 .job-ledger-body {
   overflow-y: auto;
   /* Height model: the 同丈 (same-height) match with the left form comes
-   * entirely from `.single-layout`'s grid `stretch` (formAccordion.css) —
+   * from `.single-layout`'s grid `stretch` and its `min-height` floor
+   * (SingleScreen.css; explained in formAccordion.css) —
    * nothing in this file sets a height to make that happen. What this file IS
    * responsible for is stopping a huge job list from inflating the page:
    * `flex: 1 1 0` uses a zero flex-basis so this body's own content (however

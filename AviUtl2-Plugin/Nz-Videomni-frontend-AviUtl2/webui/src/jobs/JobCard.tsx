@@ -181,9 +181,10 @@ export function JobCard({
   // file AviUtl2 may still hold open from the first insert fails with a
   // shared-write violation ("Could not open destination file"). Deliberately
   // NOT cleared on reset: clearing it would resurrect that re-download and
-  // reintroduce the bug. Used ONLY on the plain (non-joined) path — the joined
-  // output changes with the crossfade setting and must always be refetched, so
-  // the joined branch never reads or writes this.
+  // reintroduce the bug. Used ONLY on the plain path (neither joined nor Alpha
+  // Gen) — the joined output changes with the crossfade setting and must always
+  // be refetched, and Alpha Gen picks its own download, so neither branch reads
+  // or writes this.
   const rememberedPathRef = useRef<string | null>(null);
 
   // I6 Join: the joined-preview `<video>` (moved here from `JoinControls`) and
@@ -364,8 +365,9 @@ export function JobCard({
   // (🎞️) without touching the native bridge, so the emoji cycles 🎞️ → ⏳ →
   // ✅/⚠️ → 🎞️ and the *next* 🎞️ click is what re-inserts. (⚠️'s `title` still
   // surfaces the failure message on hover; `aria-label` stays "Insert".) The
-  // reset does NOT clear `rememberedPathRef`, so that re-insert reuses the
-  // already-downloaded file instead of re-downloading over a possibly-open one.
+  // reset does NOT clear `rememberedPathRef`, so that re-insert (plain path
+  // only — neither joined nor Alpha Gen) reuses the already-downloaded file
+  // instead of re-downloading over a possibly-open one.
   const insertLabel =
     insertState === "downloading"
       ? strings.jobs.downloading

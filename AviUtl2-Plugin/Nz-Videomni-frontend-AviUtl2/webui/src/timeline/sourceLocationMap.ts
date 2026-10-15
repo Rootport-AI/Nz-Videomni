@@ -22,13 +22,15 @@
  * `provisionalReservation`'s reservation seat): a project reload wipes it, and
  * that is the DESIGN — a job whose source location is unknown (reloaded, or a
  * plain Chain-screen manual v2v that never went through the right-click) simply
- * degrades to a position-less joined insert (the pre-existing behavior). No
+ * degrades to the caller's position-less insert (Join: the cursor-placed
+ * joined insert; Alpha Gen: the cursor insert). No
  * persistence is attempted; the map is a best-effort convenience, never a
  * correctness dependency.
  */
 
 /** Where the v2v SOURCE object sat on the timeline when the continuation was
- * reserved, plus the project rate/scale captured at that moment (for the
+ * reserved (for Alpha Gen, at the right-click; recorded under the job id at
+ * submit), plus the project rate/scale captured at that moment (for the
  * frame<->seconds conversion the joined-insert position needs). */
 export interface SourceLocation {
   layer: number;
@@ -44,11 +46,13 @@ export interface SourceLocation {
 }
 
 /** The single volatile store. Keyed first by the reservation's `pending-…` id,
- * then re-keyed to the real job id at Generate-time hand-off. */
+ * then re-keyed to the real job id at Generate-time hand-off (Alpha Gen
+ * records straight under the job id). */
 let sourceLocations = new Map<string, SourceLocation>();
 
-/** Record the source object's location under a reservation's `pending-…` id.
- * Overwrites any existing entry for the same key. Note a moved reservation does
+/** Record the source object's location under the given key — a reservation's
+ * `pending-…` id (Join; re-keyed at hand-off) or, for Alpha Gen, the job id
+ * itself at submit. Overwrites any existing entry for the same key. Note a moved reservation does
  * NOT reuse its key: `provisionalReservation`'s `reservePlacement` mints a fresh
  * `newPendingId()` on every move and carries the memo across with
  * `rekeySourceLocation`, so the entry ends up under the NEW pending id (a

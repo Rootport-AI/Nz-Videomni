@@ -896,7 +896,7 @@ describe("Alpha Gen exits (/jobs/{id}/alpha/...)", () => {
     });
   });
 
-  it("backend.downloadVideo kind joined alone takes the joined name (as native does)", async () => {
+  it("backend.downloadVideo kind joined alone picks the joined file, as native does (the mock keeps its own `-joined` name)", async () => {
     const { bridge, jobId } = await completedAlphaJob();
     const result = await bridge.request("backend.downloadVideo", { jobId, kind: "joined" });
     expect(result.filePath.endsWith(`${jobId}-joined.mp4`)).toBe(true);

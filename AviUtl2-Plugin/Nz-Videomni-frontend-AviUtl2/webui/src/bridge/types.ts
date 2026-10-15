@@ -243,7 +243,8 @@ export interface BridgeParamsMap {
      * default WinHTTP timeout. Omitted -> native's default. */
     timeoutMs?: number;
   };
-  /** Downloads a completed job's mp4 to a native temp/cache location and
+  /** Downloads a completed job's video (mp4, or the Alpha Gen MOV for
+   * `kind: "rgba"`) to a native temp/cache location and
    * returns the local file path, ready for `timeline.insertMedia`.
    *
    * Contract v6 adds three optional, backward-compatible params for the
@@ -257,7 +258,7 @@ export interface BridgeParamsMap {
      * cache location. Missing parent folders are created. */
     destDir?: string;
     /** Contract v6: desired file name (including extension) instead of
-     * native's default `<jobId>[_joined].mp4` naming. */
+     * native's default naming (by `kind` since v16; see below). */
     fileName?: string;
     /** Contract v6: when true, never overwrite an existing file at the
      * resolved path — append `_2`, `_3`, ... to the name's stem instead until
@@ -299,7 +300,8 @@ export interface BridgeParamsMap {
    * NOT replace any single per-clip reservation's provisional marker, so it is
    * inserted via this method (at the caller's `position` — layerMax+1 — when
    * given, otherwise at the cursor; W3's `plainInsertAt` likewise passes an
-   * explicit layer/frame) rather than through
+   * explicit layer/frame, as does an Alpha Gen job's 🎞 when its source
+   * location is known) rather than through
    * `timeline.insertMediaForJob`. The per-clip / reservation-backed 🎞 insert
    * goes through `timeline.insertMediaForJob` instead. */
   "timeline.insertMedia": {

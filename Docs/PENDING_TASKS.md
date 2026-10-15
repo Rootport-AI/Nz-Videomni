@@ -15,7 +15,7 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-**§1-86（Alpha Gen 第 3 弾）は完了（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231）。** 残りは §1-82 と §1-89（小さな修正・随時）と §1-87（LoRA の配布）。次に着手するテーマはオーナーが決める。
+**残りは §1-82 と §1-89（小さな修正・随時）と §1-87（LoRA の配布）。次に着手するテーマはオーナーが決める。**
 
 ### 1-82. 操作パネルの既存テストの不安定（`App.nag.test.tsx` の 2 件・`JobsContext.test.tsx` の 1 件）（起票：2026-10-06）
 
@@ -27,7 +27,7 @@
 
 ### 1-87. Alpha Gen の LoRA ウェイトの配布（起票：2026-10-07）
 
-- **概要**: `alpha-gen` の LoRA ファイル（約 1.3GB）を利用者がどう入手するかを決める。第 3 弾（§1-86）の完成後に改めて検討する。
+- **概要**: `alpha-gen` の LoRA ファイル（約 1.3GB）を利用者がどう入手するかを決める。配布方法を決めれば着手できる（前提の第 1〜3 弾はそろっている）。
 - **論点**: ①オーナーの Hugging Face での再配布が、ライセンス（LTX-2.x Community License）上許されるか。②インストーラのマニフェストに取得の行を足すか。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §11、[`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md) 1.7 節。
 
@@ -226,7 +226,7 @@
 #### 3-222. エンコードなしの直接入力（自前の入力プラグイン）（起票：2026-10-07）
 
 - **概要**: 透過つきの動画を、エンコードせずに AviUtl2 へ直接渡す自前の入力プラグインを作る。`register_input_plugin` は aux2 から呼べ（SDK の `plugin2.h`）、RGBA32・PA64・HF64 を受けられる。
-- **判断材料**: Alpha Gen 第 3 弾（§1-86）は、既存の L-SMASH Works で ProRes 4444 を読む方法を先に試す。透過が出ないとき、またはエンコードの時間が問題になったときに取り上げる。
+- **判断材料**: L-SMASH Works（r1281）は ProRes 4444 の MOV を透過つきで読めると確かめた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156）。読めない環境が出たとき、またはエンコードの時間が問題になったときに取り上げる。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10・§21。
 - **状態**: 将来の研究課題（着手時期未定）。
 
@@ -239,9 +239,9 @@
 
 #### 3-229. MCP に Alpha Gen の出口（透過つき動画・塗りつぶし動画の作成と取得）を足す（起票：2026-10-15）
 
-- **概要**: 第 3 弾（§1-86）は操作パネルの出口だけを作り、MCP には足していない。AI エージェントからも透過つき動画（ProRes 4444 の MOV）と塗りつぶし動画を作って取り出せるように、`save_job_video` の `which` に `rgba`／`chroma`（＋色）を足し、作成を頼むツール（`export_alpha_rgba`・`export_alpha_chroma`）を足す。ツールを足すときは `tests/test_mcp_registration.py` の `EXPECTED_TOOLS`・README の表・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §8 をそろえる。
+- **概要**: Alpha Gen の出口（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231）は操作パネルにだけあり、MCP には無い。AI エージェントからも透過つき動画（ProRes 4444 の MOV）と塗りつぶし動画を作って取り出せるように、`save_job_video` の `which` に `rgba`／`chroma`（＋色）を足し、作成を頼むツール（`export_alpha_rgba`・`export_alpha_chroma`）を足す。ツールを足すときは `tests/test_mcp_registration.py` の `EXPECTED_TOOLS`・README の表・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §8 をそろえる。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10、第 3 弾の計画の敵対的レビュー（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §157）。
-- **状態**: 将来の改修項目（第 3 弾の完了後）。
+- **状態**: 将来の改修項目（着手はオーナー判断）。
 
 #### 3-230. 操作パネルの WebView2 で、初回より後のトップレベル遷移の防御と失敗時の再読み込み（起票：2026-10-15）
 

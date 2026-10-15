@@ -139,6 +139,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.88 | 2026-10-14 | **Alpha Gen: 縮小は軽量モードだけにした（オーナー裁定。API のフィールド・型・既定・応答形は不変で、変わるのは 1 段原寸モードの作業寸法の決め方）**。1 段原寸モード（`light_mode=false`・既定）は快適上限と無関係に原寸で生成し（64 の倍数への黒の余白だけ）、`AlphaGenSpec.budget_tokens` と `metadata.alpha_gen.budget_tokens` は `null`・`scale` は 1.0 になる。軽量モードは従来どおり `single_budget` に収まるまで縮めて元の寸法へ戻す。`alpha_gen_budget` はサーバーが読まなくなり、操作パネルの線の位置だけに使う助言専用の値になった。**§6.3b**（`light_mode`・固定する値・検査 f・`working_width`・`budget_tokens`・引き伸ばしの注記）／**§6.6**（`alpha_gen` の `scale`・`budget_tokens`）／**§6.7**（`alpha_gen_budget` と例外の段落）。理由は `Docs/ALPHAGEN_DESIGN.md` 第 2 部 §24。 |
 | v0.5.88（文言の現行化） | 2026-10-14 | **文言の現行化（版は上げない。API・挙動は不変）**。§6.8 の `GENERATION_FAILED` の回転情報つき素材の注記を、台帳 `Docs/PENDING_TASKS.md` §3-228 への参照にした。§6.10 (b) の操作パネルの模擬サーバーの写しを、第 2 弾（`Docs/PENDING_TASKS_CLOSED.md` 3-227）で合わせた完了形にした。 |
 | v0.5.89 | 2026-10-15 | **Alpha Gen の第 3 弾＝出口を反映（加算のみ。既存フィールドの意味・型・既定・応答形はいずれも変わらない）**。完了した Alpha Gen のジョブから、元動画の窓とマットを合成して 3 種の成果物（透過つきの ProRes 4444 の MOV・市松模様のプレビュー・色で塗りつぶした動画）を押したときに作り、閾値と色が同じなら使い回す。**§6.1**（`POST /jobs/{job_id}/alpha/rgba`・`POST /jobs/{job_id}/alpha/chroma`・`GET /jobs/{job_id}/alpha/rgba`・`GET /jobs/{job_id}/alpha/preview`・`GET /jobs/{job_id}/alpha/chroma/{color}` の 5 行を加算）／**§6.3**（`JobResponse.alpha` を加算）／**§6.3c＝新設**（要求と応答・使い回しの条件・閾値の規則・検査の順）／**§6.8**（`JOB_NOT_ALPHA`・`ALPHA_OUTPUT_NOT_READY`・`ALPHA_OUTPUT_FAILED` を追加）／**§8.1**（`rgba.mov`・`alpha_preview.mp4`・`chroma_<色>.mp4`・`alpha_outputs.json`。あわせて図に載っていなかった第 1 弾の `matte.mkv`・`_alpha_window.mp4`・`alpha_reference.mp4` も載せた）。決定事項の正本は `Docs/ALPHAGEN_DESIGN.md` §10、台帳は `Docs/PENDING_TASKS.md` §1-86。 |
+| v0.5.89（文言の現行化） | 2026-10-15 | **文言の現行化（版は上げない。API・挙動は不変）**。§0.3 の SSOT 地図に `Docs/ALPHAGEN_DESIGN.md` の行を足した。§6.8 の `JOB_NOT_ALPHA` の条件に「`output_fps` が無い」を足した（§6.3c の検査の順 ③ に合わせた）。上の v0.5.89 の行の台帳 §1-86 は、現在 `Docs/PENDING_TASKS_CLOSED.md` 3-231。 |
 
 ### 0.2 スコープ
 
@@ -171,6 +172,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | `Docs/COMFORT_LIMIT_TABLE.md` | 快適上限の正本。**線の表（`limits.comfort_budgets`。値の実体はベースモデルの記述子の `comfort`）と重みの種別の分類の規則は §1、レガシー表 `spill_free_frames` の値は §付記、逆算式は §1.3。** 互換値の2鍵（`single_comfort_token_budget`／`chain_comfort_token_budget`）の較正値もここが正本 |
 | `Docs/OBJECT_TRACKING_DESIGN.md` | **物体追尾（ユーティリティAIモジュール）の設計正本**（利用の流れ・操作パネルの2つの入口〔右クリックと開始ボタン〕・責務の分担・API 契約・プラグイン側の処理・ワーカーとプロトコル・設定 `tracking:`・重みと導入・他機能との関係）。本書 §4.7 はその位置づけを示すだけで、契約と設定の中身は同書が正本である |
 | `Docs/INPAINTING_DESIGN.md` | **Inpainting（マスクによる部分再生成）の設計正本**（利用の流れ・責務の分担・マスク受け渡し契約〔§6〕・窓の規則・ブレンドと脱緑の仕組み・LTX 2.5 が断る理由）。**マスク受け渡し契約の正本は同書 §6 である**——台帳の応用先（`PENDING_TASKS.md` §4-8(C)・§4-25）はそちらを参照するだけで契約を作り直さない |
+| `Docs/ALPHAGEN_DESIGN.md` | **Alpha Gen（動画から透過用の白黒マット動画を作る）の設計正本**（利用の流れ・1 段原寸と軽量モード・出口の決定事項〔§10〕・判断の理由〔第 2 部〕） |
 | `Docs/STORAGE_POLICY.md` | 保存領域（`outputs/` / `uploads/`）の方針と実構造。「Outputs は宝物、Uploads は事実上の一時ファイル置き場」という設計原則・ID の紐づき・ディスク整理ルールの正本 |
 | `Docs/PENDING_TASKS.md` | **プロジェクト全体の課題台帳**（バックエンド・フロントエンド共通）。「次に何をすべきか」の正本。完了記録は `Docs/PENDING_TASKS_CLOSED.md` |
 | `Docs/CHAIN_STAGE2_RESEARCH_NOTES.md` | クリップ連結（Clip Chain）の内部構造と Stage-2 固定窓アーキテクチャの設計正本 |
@@ -1320,7 +1322,7 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | `JOB_NOT_JOINABLE` | 422 | `POST /jobs/{id}/join` の対象が V2V 継続ジョブではない（metadata に `v2v` ブロックが無い） |
 | `JOIN_FAILED` | 503 | サーバー側 ffmpeg の結合（正規化・クロスフェード・連結）が失敗 |
 | `JOINED_NOT_READY` | 404 | `joined.mp4` の生成前に `GET /jobs/{id}/joined` を呼んだ |
-| `JOB_NOT_ALPHA` | 422 | Alpha Gen の出口（**2026-10-15 新設**。§6.3c）。`POST /jobs/{id}/alpha/rgba`・`/alpha/chroma` の対象が Alpha Gen のジョブではない（`metadata.json` が無い・読めない・`alpha_gen` ブロックが無い） |
+| `JOB_NOT_ALPHA` | 422 | Alpha Gen の出口（**2026-10-15 新設**。§6.3c）。`POST /jobs/{id}/alpha/rgba`・`/alpha/chroma` の対象が Alpha Gen のジョブではない（`metadata.json` が無い・読めない・`alpha_gen` ブロックか `output_fps` が無い） |
 | `ALPHA_OUTPUT_NOT_READY` | 404 | Alpha Gen の出口（**2026-10-15 新設**）。成果物を作る前に `GET /jobs/{id}/alpha/rgba`・`/alpha/preview`・`/alpha/chroma/{color}` を呼んだ |
 | `ALPHA_OUTPUT_FAILED` | 503 | Alpha Gen の出口（**2026-10-15 新設**）。サーバー側の ffmpeg の合成、または出来たファイルの置き換えが失敗 |
 | `LORA_NOT_FOUND` | 404 | 未登録の IC-LoRA アダプタ名 |

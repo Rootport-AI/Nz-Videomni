@@ -2931,5 +2931,6 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **どの物差しで通ったか**: 機械ゲート 5 環境で失敗 0（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §157.3・§157.7）。敵対的レビューは計画 1 本（Critical 1・Major 6・Minor 16・棄却 1）＋実装後 2 本（バックエンド Major 1・Minor 9／操作パネル＋ネイティブ Minor 8）＋手直しの計画と差分 2 本（Major 1・Minor 8・全採用）。監督の実機ゲート G-S1／G-S2（manager 直叩き。閾値の写像・使い回し・色ごと・整列。§157.4）・G-S3（`plugin.log`。§157.8）。オーナーの目視（フロントエンド [`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.27: 初回 G1〜G4・G6〜G13 合格・G5 不合格→手直し後の再確認①②合格。§157.6・§157.8）。
 - **クローズ理由**: 到達条件を機械・実機・目視で満たした。目視で出た不合格（`💾` で操作パネルが白くなる＝ホスト側の元からの欠陥）と要望（一覧の高さ）も同日に直して再確認に合格した。
 - **状態**: dev（第 3 弾 `b5d223c`〜`1d4ebff`・手直し `25cdce4`〜`f69a623`・クローズの記録は本節のコミット）。main への merge は監督が行う（`--no-ff`）。
+  > **更新（2026-10-15）**: main merge 済み（`01850f3`）。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10・第 2 部 §25、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3c（v0.5.89）、ブリッジ契約 フロントエンド `BRIDGE_CONTRACT.md` v16、設計の経緯と関門 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156、実装と門 同 §157、設計上の判断 フロントエンド `DEVLOG.md` §134・§135。
 - **残課題**: LoRA ウェイトの配布（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87）・MCP の出口（同 §3-229）・WebView2 の遷移の防御と再読み込み（同 §3-230）・直接入力（同 §3-222）・快適上限の較正（同 §3-223）・VFR（同 §3-225）・回転情報（同 §3-228）。

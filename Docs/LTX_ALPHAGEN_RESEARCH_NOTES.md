@@ -9,6 +9,7 @@
 - 台帳（[`PENDING_TASKS.md`](PENDING_TASKS.md)）への起票は未実施。AlphaGen・マット生成・1 段生成に関する起票は台帳にも文書にも無い。
   > **訂正（2026-10-06）**: 同日中に台帳 §1-83「LTX AlphaGen の実装」として起票した（コミット `88def3a`。ゲート 0 から着手）。
   > **更新（2026-10-14）**: 第 1 弾は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224、第 2 弾は同 3-227 で完結した。設計の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)。
+  > **更新（2026-10-15）**: 第 3 弾（出口）は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231 で完結した。
 - 調査の内訳: 公式の一次情報／コミュニティと周辺の動向／本製品の LTX 2.5 エンジンのコード棚卸し／AviUtl2 側の受け皿の棚卸し、の 4 系統。
 - 本書内では「公式」「実測（第三者）」「コードで確認」「推測」「未確認」を区別して記す。出典は URL か「ファイルパス:行番号」で添え、一覧は付録 A にまとめる。
 - コードの場所: `api/`・`engine25/`・`services/` などのサーバー側は `Nz-Videomni/` を起点とする。`native/src/...`（AviUtl2 のプラグイン）と `webui/src/...`（操作パネル）は `Nz-Videomni/AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/` を起点とする（操作パネルの `useGenerationForm.ts` は `webui/src/modes/single/useGenerationForm.ts`）。
@@ -202,6 +203,7 @@
 - AviUtl2 本体だけで読めるのは AVI・WAV・BMP・PNG・JPG・GIF（`aviutl2.txt:50-52`・`:384`・`:390-392`。最新の v2.1.12 も同じ＝公式サイトによる・手元では未確認）。Media Foundation 経由の読み込み部品は削除済み（`:785`）なので、mp4 などは入力プラグイン頼みになる。
 - 開発機の入力プラグインは L-SMASH Works（Mr-Ojii 版 `lwinput.aui2`）。透過つきの 8bit 形式は RGBA32bit で、ProRes 4444 などは PA64（透明度を掛け合わせ済みの 16bit）で AviUtl2 に渡す作り（https://github.com/Mr-Ojii/L-SMASH-Works/tree/master/AviUtl2 の `video_output.c`）。
 - ProRes 4444 の MOV・UtVideo RGBA の AVI・qtrle・FFV1・APNG（いずれも透明度を持てる動画形式。付録 C）は透過つきで読める見込み（**実機未確認**）。
+  > **訂正（2026-10-15）**: ProRes 4444 は L-SMASH Works r1281 で透過つきに読めると確かめた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156）。受け取る側の `.mp4` の決め打ちは、取得経路の新設とブリッジ契約 v16 で解消した（[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10.1）。
 - WebM（VP9 の透過つき）は、標準の VP9 の読み取り部品が透明度を捨てるため、L-SMASH の「Preferred decoders」に `libvpx-vp9` を指定する必要がありそう（未確認）。
 - 本製品がタイムラインに置く経路は「動画ファイル」＋「映像再生」のエイリアス（`native/src/alias_util.cpp:594-648`。`ファイル=` にパス、`音声付き=1`）。
   - 拡張子の検査は無い（`is_support_media_file` は未使用）。`.mov`／`.avi` でも L-SMASH が読めれば同じ経路を通る見込み。

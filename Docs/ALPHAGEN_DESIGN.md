@@ -5,7 +5,7 @@
 **生きた文書（Alpha Gen 機能の設計正本）。** Lightricks が公開した LTX 2.5 用の IC-LoRA「LTX AlphaGen」を使い、利用者の手元の普通の RGB 動画から、同じ大きさ・同じフレーム数の白黒の**マット**動画を作る機能を記述します。マットとは、白＝不透明・黒＝透明・灰＝半透明を明るさで表した動画で、元の動画に当てると背景が抜けます。**IC-LoRA**（参照動画つき LoRA）は、参照として渡した動画を条件にして生成を導く追加部品です。
 
 - 作成: 2026-10-07
-- 対象の台帳項目: 第 1 弾（バックエンド）の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224 です。第 2 弾（操作パネル）の完了記録は同 3-227、第 1 弾の追補（出力ファイルの fps を元動画の正確な値で書く）の完了記録は同 3-226 です。第 3 弾（出口）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86、LoRA ウェイトの配布は同 §1-87 です
+- 対象の台帳項目: 第 1 弾（バックエンド）の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224 です。第 2 弾（操作パネル）の完了記録は同 3-227、第 1 弾の追補（出力ファイルの fps を元動画の正確な値で書く）の完了記録は同 3-226 です。第 3 弾（出口）の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231 です。LoRA ウェイトの配布は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87 です
 - 状態: **第 1 弾は完結（CLOSED 3-224）。第 2 弾は完結（CLOSED 3-227・main merge 済み 2026-10-14）。第 3 弾は完結（CLOSED 3-231・main merge 2026-10-15。経緯は VERIFICATION_LOG §156・実装と門は §157）**（決まっている事項は本書 §9・§10 に収めてあります）
 
 **本書には現在の設計だけを現在形で書きます。** 第 1 部「決まったこと」は、実装を担当する人が第 1 部だけを読めば着手できることを目標に書いてあります。第 2 部「なぜそう決めたか」は、一度否決した案を再提案しないための記録です。決定の時系列は残しません（それは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の役割です）。
@@ -15,11 +15,13 @@
 | 文書 | 関係 |
 |------|------|
 | [`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md) | 事前調査ノート。公式の仕様・ライセンス・AviUtl2 側の受け皿の棚卸しはここにあり、本書には書き写さない |
-| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151〜§154 | **§151 はゲート 0（go／no-go の簡易テスト）の記録。** 1 段原寸相当の負荷の実測・2 段経路でマットが出る条件・LoRA のヘッダの中身はここが正本。**§152 は第 1 弾の実装と検証の記録**（オーナーの目視は §152.7）。**§153 は第 2 弾（操作パネル）と第 1 弾の追補の実装と検証、§154 は第 2 弾の目視後の手直しとオーナーの再確認の記録** |
+| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151〜§157 | **§151 はゲート 0（go／no-go の簡易テスト）の記録。** 1 段原寸相当の負荷の実測・2 段経路でマットが出る条件・LoRA のヘッダの中身はここが正本。**§152 は第 1 弾の実装と検証の記録**（オーナーの目視は §152.7）。**§153 は第 2 弾（操作パネル）と第 1 弾の追補の実装と検証、§154 は第 2 弾の目視後の手直しとオーナーの再確認の記録。§156 は第 3 弾の設計の確定と関門、§157 は第 3 弾の実装・目視・手直しの記録** |
 | [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6 | API 契約の正本。本書 §4 は設計の説明で、フィールドの型・既定・エラーコードは仕様書が正本 |
 | [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9 | 快適上限の正本。Alpha Gen の 1 段原寸モードの暫定の線もここに置く（本書 §6） |
-| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。§1-86・§1-87（第 2 弾は CLOSED 3-227・追補は CLOSED 3-226）、§3-222（自前の入力プラグイン）、§3-223（快適上限の較正）。第 1 弾の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224 |
-| [`STORAGE_POLICY.md`](STORAGE_POLICY.md) | 保存領域の設計原則。本機能はジョブのフォルダに中間物と `matte.mkv` を書くので適用対象 |
+| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。§1-87（LoRA の配布）・§3-222（自前の入力プラグイン）・§3-223（快適上限の較正）・§3-229（MCP の出口）・§3-230（操作パネルの WebView2 の遷移の防御）。完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾） |
+| [`STORAGE_POLICY.md`](STORAGE_POLICY.md) | 保存領域の設計原則。本機能はジョブのフォルダに中間物と `matte.mkv`、出口の成果物（`rgba.mov`・`alpha_preview.mp4`・`chroma_<色>.mp4`）と記録 `alpha_outputs.json` を書くので適用対象 |
+| フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.4（v16）／[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §3.18a〜e・§5.5 | ブリッジ契約（操作パネルとプラグインの間の取り決め）と API の利用者向けの解説 |
+| フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §134・§135／[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26・§4.27 | 画面側の設計判断と目視の手順 |
 | [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) | 前例。窓の切り出し・「元ファイルが寸法の正本」という規則・アプリ側の後処理は Inpainting と同じ形 |
 
 ---
@@ -246,7 +248,7 @@ Alpha Gen のジョブにだけ現れます。
 - 作る処理: `services/alpha_output_manager.py`（ffmpeg の命令は `services/video_io.py` の `compose_alpha_rgba`・`compose_alpha_chroma`）。
 - 記録 `alpha_outputs.json` の読み書き: `services/alpha_outputs_record.py`（`JobResponse.alpha` もここを読む）。
 - 色の名前と値: §10.2 の表が正本で、コードでは `api/models.py` の `ALPHA_CHROMA_COLORS` の 1 か所。
-- MCP には今回は出口を足していません（台帳 §3-229）。
+- MCP には出口を足していません（台帳 §3-229）。
 
 ## 5. エンジン（`engine25/alphagen25.py`）
 
@@ -307,6 +309,8 @@ Alpha Gen のジョブにだけ現れます。
 
 流れは `upload_video` → `submit_alpha_gen` → `wait_for_job` → `get_job_matte_path`（または `save_job_video(which="matte")`）です。
 
+出口（透過つき動画・塗りつぶし動画）のツールは MCP にはありません（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-229。本書 §4.6）。
+
 ## 9. 第 2 弾（操作パネル）の決定事項
 
 第 2 弾の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-227 です。次の事項が決まっています。
@@ -349,7 +353,7 @@ Alpha Gen のジョブにだけ現れます。
 
 ## 10. 第 3 弾（出口）の決定事項
 
-第 3 弾は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86 です。次の事項は 2026-10-15 に確定しました（経緯と関門の結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156）。
+第 3 弾の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231 です。次の事項は 2026-10-15 に確定しました（経緯と関門の結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156）。
 
 ### 10.1 方式と成果物
 
@@ -360,12 +364,12 @@ Alpha Gen のジョブにだけ現れます。
 |---|---|---|
 | 透過つき動画 | ProRes 4444 の MOV（アルファ 16bit） | 窓の音声を PCM で |
 | 透過済みのプレビュー | 市松模様の背景に重ねた H.264 の mp4（幅 640） | 窓の音声を AAC で |
-| 塗りつぶし動画（クロマキー用） | 背景を指定の色で塗った H.264 の mp4。ファイル名に色の名前（例 `chroma_green.mp4`）・mp4 のメタデータにも色（§3-164 の仕組み） | 窓の音声を AAC で |
+| 塗りつぶし動画（クロマキー用） | 背景を指定の色で塗った H.264 の mp4。ファイル名に色の名前（例 `chroma_green.mp4`）・mp4 のメタデータにも色（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-164 の仕組み） | 窓の音声を AAC で |
 
 - **関門は合格**: 開発機の入力プラグイン L-SMASH Works（r1281・設定 `colorspace=0`）は ProRes 4444 の MOV を透過つきで読み、縁取りは出ず、音声も入ります（§156）。無圧縮の RGBA の AVI は既定にしません。読めない環境での代替は、必要になったときに改めて検討します。
 - **閾値（レベル補正）**: 合成のときにマットへ「透過の閾値 L 以下を 0、不透過の閾値 R 以上を 255、間は直線で伸ばす」変換を当てます。既定は L＝7・R＝248。L＝R のときは「R 以上を 255、未満を 0」の白黒二値化です。L＝0・R＝255 は無変換。`matte.mkv` と、マット状態のプレビューには当てません（生のまま）。
 - **使い回しの条件**: 透過つき動画と透過済みのプレビューは「同じ閾値」、塗りつぶし動画は「同じ色かつ同じ閾値」のときだけ使い回し、違えば作り直して上書きします（透過つき動画とそのプレビューは 1 本・塗りつぶし動画は色ごとに 1 本を残す）。サーバーは成果物ごとの閾値と色を記録し、`JobResponse` で返します（操作パネルを立ち上げ直しても判定できるように）。
-- **挿入の経路にある拡張子 `.mp4` の決め打ち（受け取る側）を手当てします**（場所は調査ノート [`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md) 3.2 節）。
+- **挿入の経路の拡張子 `.mp4` の決め打ち**は、取得経路の新設（仕様書 §6.3c）とブリッジ契約 v16 の `kind`（フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.4）で解消しました。挿入は拡張子を見ません（同 §4.7）。
 - **自前の入力プラグイン**（エンコードせずに直接 AviUtl2 へ渡す方式）は台帳 §3-222 の研究課題です（第 2 部 §21）。
 
 ### 10.2 ジョブカードの部品（右コラムのジョブ一覧・Alpha Gen の完了ジョブにだけ出す）
@@ -399,7 +403,7 @@ Alpha Gen のジョブにだけ現れます。
 - **`🪣`**: 表示がマットか透過済みか、今の `色` と違う色（または違う閾値）の塗りつぶしで、今の `色`・閾値の塗りつぶし動画がまだ無ければ作って表示する。すでにあればそれを表示する。同じ色・同じ閾値の表示で押しても何もしない。
 - **`💾`**: 今の閾値の透過つき動画がまだ無ければ作ってからダウンロードし、あればそれをダウンロードする。いずれも表示を透過済みに切り替える。ダウンロードは WebView2 の既定のダウンロード（大きさの上限は設けない）。
 - **`🔁`**: 表示をマットに戻す（Join の「結合をやめる」に相当）。
-- **`🎞`**: 表示中のものを置く。表示を切り替えたら、挿入済みの印（✅）は 🎞 に戻す。置く位置は、ドラッグ＆ドロップや「元になる動画を選ぶ」由来のジョブはカーソル位置（置けなければカーソル位置の最前面のレイヤー）、右クリック由来のジョブは元のオブジェクトの開始フレームと同じ位置の空きレイヤー（🎞 の退避の仕組みを流用）。右クリック時の位置は操作パネルを開いている間だけ覚え、立ち上げ直した後はカーソル位置に落ちます（Join と同じ退避）。
+- **`🎞`**: 表示中のものを置く。表示を切り替えたら、挿入済みの印（✅）は 🎞 に戻す。置く位置は、ドラッグ＆ドロップや「元になる動画を選ぶ」由来のジョブはカーソル位置（置けなければカーソル位置の最前面のレイヤー）、右クリック由来のジョブは、元のオブジェクトの開始フレームに、最前面の 1 つ上の新しいレイヤー（`getEditInfo` の `layerMax + 1`）で置く（位置つきの単純な挿入。`getEditInfo` が読めなければカーソル位置）。右クリック時の位置は操作パネルを開いている間だけ覚え、立ち上げ直した後はカーソル位置に落ちます（Join と同じ退避）。
 - **作成中**（押してから成果物ができるまで）: カードの 5 つのボタンと 🎞 を無効にし「作成中…」を出す。
 - **失敗**: ffmpeg が失敗したら、カードに赤い 1 行（🎞 の失敗と同じ場所）で知らせ、表示は元のまま。
 - **黄色い帯（注意文）**: 透過済みの表示中は「背景透過動画（MOV）は💾でダウンロードできます。」。今のつまみの値が、表示中の合成に使った閾値と違うときは「マスクの閾値設定が変更されました。」（再合成するか、つまみを戻せば消える。表示の旗は持たない）。
@@ -415,7 +419,7 @@ Alpha Gen のジョブにだけ現れます。
 - 操作パネルの画面（第 2 弾。§9）。模擬サーバーの写しの更新・画面側の隠し名簿・進捗バーの対応表も第 2 弾です。
 - 透過つきの動画・クロマキーの動画の作成とタイムラインへの挿入（第 3 弾。§10）。
 - Gradio 画面（対象外。一覧から `alpha-gen` を除くだけ）。
-- LoRA ウェイトの配布（第 3 弾の完成後に検討。台帳 §1-87）。
+- LoRA ウェイトの配布（台帳 §1-87）。
 - 快適上限の較正（台帳 §3-223。第 1 弾は暫定値）。
 - LTX 2.3 への対応（LoRA が LTX 2.5 用のため）。
 - 回転情報つきの素材（スマートフォンの縦動画など）: 窓と元寸の縦横が入れ替わっていたら失敗にします（§3 の 2 番）。回転を考えた寸法の測り方は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-228 です。
@@ -465,7 +469,7 @@ Inpainting の前例と同じです。**元のファイルが寸法の正本**�
 
 ## 21. 自前の入力プラグインを初版で採らなかった理由
 
-AviUtl2 に透過つきの動画をエンコードせずに直接渡すには、自前の入力プラグインを作る方法があります（`register_input_plugin` は aux2 から呼べ、RGBA32・PA64・HF64 を受けられます）。しかし初版では、既にある L-SMASH Works で ProRes 4444 の MOV を読む方法を先に試します。新しいプラグインを作るより変更が小さく、本製品がタイムラインに動画を置く今の経路（動画ファイルのオブジェクト）をそのまま使えるためです。L-SMASH で透過が出ない場合や、エンコードの時間が問題になる場合に、台帳 §3-222 の研究課題として取り上げます。
+AviUtl2 に透過つきの動画をエンコードせずに直接渡すには、自前の入力プラグインを作る方法があります（`register_input_plugin` は aux2 から呼べ、RGBA32・PA64・HF64 を受けられます）。しかし初版では、既にある L-SMASH Works で ProRes 4444 の MOV を読む方法を先に試します。新しいプラグインを作るより変更が小さく、本製品がタイムラインに動画を置く今の経路（動画ファイルのオブジェクト）をそのまま使えるためです。L-SMASH で透過が出ない場合や、エンコードの時間が問題になる場合に、台帳 §3-222 の研究課題として取り上げます。関門で透過つきに読めると確かめました（§10.1・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156）。
 
 ## 22. 軽量モードを残す理由
 
@@ -509,6 +513,7 @@ AviUtl2 に透過つきの動画をエンコードせずに直接渡すには、
 - 事前調査: [`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md)
 - ゲート 0: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151
 - 第 1 弾の実装と検証: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §152（オーナーの目視は §152.7）
-- API 契約: [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6（Alpha Gen は §6.3b）
+- 第 2 弾・第 3 弾の実装と検証: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153・§154（第 2 弾）、§156・§157（第 3 弾）
+- API 契約: [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6（Alpha Gen は §6.3b・出口は §6.3c）
 - 快適上限: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5
-- 台帳: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86・§1-87（第 2 弾は CLOSED 3-227・追補は CLOSED 3-226）・§3-222・§3-223、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）
+- 台帳: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87・§3-222・§3-223・§3-229・§3-230、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾）

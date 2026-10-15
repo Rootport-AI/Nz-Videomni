@@ -47,6 +47,9 @@ UrlParts CrackUrl(const std::wstring& url);
 // Transport-level error classification. kNone means the HTTP exchange itself
 // completed (an HTTP status was received); a non-zero HTTP status is not a
 // transport error and is reported through HttpResponse::status.
+// kDestinationFileFailed is not a network failure: it is a local
+// destination-file failure in DownloadSync, carried in the same field and
+// mapped to DOWNLOAD_FAILED by TransportCode (bridge.cpp).
 enum class TransportError {
     kNone = 0,
     kUnreachable,  // connect/resolve/connection reset -> BACKEND_UNREACHABLE

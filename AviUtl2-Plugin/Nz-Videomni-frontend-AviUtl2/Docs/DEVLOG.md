@@ -5172,3 +5172,5 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 136.4 状態
 
 - 実装済み。`backend.uploadFile` で元ファイルが開けないときも `BACKEND_UNREACHABLE` になる同じ型のずれは、今回は直さずバックエンド台帳 §1-91 に起票しました。
+
+> **更新（2026-10-16）**: バックエンド [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-232 でクローズ・main merge `b3cb85f`。

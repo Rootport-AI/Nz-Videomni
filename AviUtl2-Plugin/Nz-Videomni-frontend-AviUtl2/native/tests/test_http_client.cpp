@@ -195,4 +195,24 @@ TEST_CASE("downloading a non-existent job reports a non-200 and writes no file")
     CHECK(::GetFileAttributesW(dest.c_str()) == INVALID_FILE_ATTRIBUTES);
 }
 
+// Reads GET /status only (no job, no GPU). Holding the destination open with
+// share mode 0 makes DownloadSync's CREATE_ALWAYS fail with
+// ERROR_SHARING_VIOLATION (32), which must be reported as a destination-file
+// failure, not as BACKEND_UNREACHABLE.
+TEST_CASE("a destination file that cannot be opened reports kDestinationFileFailed and no file") {
+    nzvideomni::HttpClient client;
+    const std::wstring dest = TempMp4Path(L"locked_destination.mp4");
+    HANDLE holder = ::CreateFileW(dest.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                                  FILE_ATTRIBUTE_NORMAL, nullptr);
+    REQUIRE(holder != INVALID_HANDLE_VALUE);
+    const nzvideomni::DownloadResult dl = client.DownloadSync(
+        ApiBase() + "/status", dest, nzvideomni::kDefaultDownloadTimeoutMs);
+    ::CloseHandle(holder);
+    ::DeleteFileW(dest.c_str());
+    REQUIRE(dl.transport == nzvideomni::TransportError::kDestinationFileFailed);
+    CHECK(dl.status == 0);
+    CHECK(dl.file_path.empty());
+    CHECK(dl.transport_message.find("Windows error 32") != std::string::npos);
+}
+
 }  // TEST_SUITE("integration")

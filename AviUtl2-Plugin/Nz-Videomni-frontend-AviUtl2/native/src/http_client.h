@@ -51,6 +51,7 @@ enum class TransportError {
     kNone = 0,
     kUnreachable,  // connect/resolve/connection reset -> BACKEND_UNREACHABLE
     kTimeout,      // WinHTTP timed out               -> BACKEND_TIMEOUT
+    kDestinationFileFailed,  // destination file open/write failed (not network) -> DOWNLOAD_FAILED
 };
 
 // Result of a buffered request.

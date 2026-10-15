@@ -448,8 +448,10 @@ DownloadResult HttpClient::DownloadSync(const std::string& url,
     HANDLE file = ::CreateFileW(dest_path.c_str(), GENERIC_WRITE, 0, nullptr,
                                 CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
-        result.transport = TransportError::kUnreachable;  // treated as failure upstream
-        result.transport_message = "Could not open destination file";
+        const DWORD open_err = ::GetLastError();
+        result.transport = TransportError::kDestinationFileFailed;
+        result.transport_message = "Could not open destination file (Windows error " +
+                                   std::to_string(static_cast<unsigned long>(open_err)) + ")";
         result.status = 0;
         result.file_path.clear();
         return result;
@@ -488,11 +490,21 @@ DownloadResult HttpClient::DownloadSync(const std::string& url,
             break;
         }
         DWORD written = 0;
-        if (!::WriteFile(file, chunk.data(), read, &written, nullptr) || written != read) {
+        const BOOL write_ok = ::WriteFile(file, chunk.data(), read, &written, nullptr);
+        if (!write_ok || written != read) {
+            // Take the error code before CloseHandle/DeleteFileW can overwrite it.
+            const DWORD write_err = write_ok ? 0 : ::GetLastError();
             ::CloseHandle(file);
             ::DeleteFileW(dest_path.c_str());
-            result.transport = TransportError::kUnreachable;
-            result.transport_message = "Could not write destination file";
+            result.transport = TransportError::kDestinationFileFailed;
+            if (!write_ok) {
+                result.transport_message = "Could not write destination file (Windows error " +
+                                           std::to_string(static_cast<unsigned long>(write_err)) +
+                                           ")";
+            } else {
+                // WriteFile succeeded but wrote short: no error code to report.
+                result.transport_message = "Could not write destination file";
+            }
             result.status = 0;
             result.size_bytes = 0;
             result.file_path.clear();

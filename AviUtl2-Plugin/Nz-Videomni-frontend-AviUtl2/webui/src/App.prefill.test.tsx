@@ -1010,7 +1010,10 @@ describe("App / right-click routing -> prefill", () => {
         () => expect(within(panel()).getByText(/i2v \(1 keyframe\)/i)).toBeInTheDocument(),
         { timeout: 5_000 },
       );
-      expect(screen.getByText(/appended the image to a keyframe: a\.png/i)).toBeInTheDocument();
+      await waitFor(
+        () => expect(screen.getByText(/appended the image to a keyframe: a\.png/i)).toBeInTheDocument(),
+        { timeout: 5_000 },
+      );
       // Switched to Create, and the edited width survives (no remount).
       expect(screen.getByRole("tab", { name: /^single$/i })).toHaveAttribute("aria-selected", "true");
       expect((within(panel()).getByRole("slider", { name: /width/i }) as HTMLInputElement).value).toBe("896");

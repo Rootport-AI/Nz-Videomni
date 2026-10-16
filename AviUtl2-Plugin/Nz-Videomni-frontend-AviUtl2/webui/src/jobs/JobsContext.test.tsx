@@ -133,7 +133,9 @@ describe("JobsContext", () => {
   }, 10_000);
 
   it("cancelJob marks the job as cancelling until it settles into cancelled, then clears", async () => {
-    const { apiClient, wrapper } = setup(3);
+    // A job that completes before the cancel lands is deleted by the mock, not
+    // marked cancelled, so keep it running long enough (~1s) for the cancel to arrive.
+    const { apiClient, wrapper } = setup(50);
     const accepted = await apiClient.generate(REQUEST);
 
     const { result } = renderHook(() => useJobsContext(), { wrapper });

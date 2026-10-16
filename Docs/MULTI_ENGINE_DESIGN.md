@@ -19,6 +19,7 @@
 | [`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) | LTX 2.5 の事前調査（**参考資料**。設計の正本ではない） |
 | [`MODEL_MANAGEMENT_DESIGN.md`](MODEL_MANAGEMENT_DESIGN.md) | **凍結文書**。Settings のモデル選択ドロップダウン（4カテゴリ）を作ったときの設計記録。本書はその上に**ベースモデル**という軸を足す |
 | [`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) | クリップ連結の設計正本。エンジンごとに異なるフレーム規約が影響する範囲の参照先 |
+| [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) | 3 例目のエンジン＝MiniMax H3 の事前調査（**参考資料**）。作業の入口は [`PENDING_TASKS.md`](PENDING_TASKS.md) の MiniMax H3 の項目、オーナーの裁定は同ノート §10 |
 
 ---
 

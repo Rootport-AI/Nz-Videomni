@@ -10,6 +10,7 @@
   > **訂正（2026-10-06）**: 同日中に台帳 §1-83「LTX AlphaGen の実装」として起票した（コミット `88def3a`。ゲート 0 から着手）。
   > **更新（2026-10-14）**: 第 1 弾は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224、第 2 弾は同 3-227 で完結した。設計の正本は [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)。
   > **更新（2026-10-15）**: 第 3 弾（出口）は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231 で完結した。
+  > **更新（2026-10-17）**: LoRA の配布は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235 で完結した（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）。
 - 調査の内訳: 公式の一次情報／コミュニティと周辺の動向／本製品の LTX 2.5 エンジンのコード棚卸し／AviUtl2 側の受け皿の棚卸し、の 4 系統。
 - 本書内では「公式」「実測（第三者）」「コードで確認」「推測」「未確認」を区別して記す。出典は URL か「ファイルパス:行番号」で添え、一覧は付録 A にまとめる。
 - コードの場所: `api/`・`engine25/`・`services/` などのサーバー側は `Nz-Videomni/` を起点とする。`native/src/...`（AviUtl2 のプラグイン）と `webui/src/...`（操作パネル）は `Nz-Videomni/AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/` を起点とする（操作パネルの `useGenerationForm.ts` は `webui/src/modes/single/useGenerationForm.ts`）。
@@ -43,6 +44,7 @@
 
 - 増える部品は LoRA 1 本だけ: `ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors`（約 1.31GB・学習 25,000 ステップ。容量の出典は https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Alpha-Gen/tree/main ）。VAE（映像の圧縮・復元部品）も transformer（生成の本体）も構造は変わらない。
 - Hugging Face では、連絡先の共有に同意してログインしないと取得できない配布（gated＝利用条件つき公開）。
+  > **訂正（2026-10-17）**: 上流の配布は gated のままだが、本製品では `install-LTX25.bat` が再ホスト先 `Rootport/Nz-LTX25-weights` から取得するので、利用者のログインは不要（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235）。
 - ベースは LTX-2.5-22B。モデルカードは **distilled 版**（蒸留版＝少ない手順で生成できるよう学習し直した版）を推奨している。
 - **LTX 2.3 用は無い。**
 
@@ -83,6 +85,7 @@
 
 - 重みは LTX-2.x Community License（2026-08-11 発効）。年間売上 1,000 万ドル以上の事業者は有償契約が要り、派生物は同じライセンスになる。
 - これは既存の LTX 2.5 の重みと同じライセンス。本製品は重みを再配布せず利用者が自分で取得する運用なので、新しい障害は小さい（推測）。
+  > **訂正（2026-10-17）**: 本製品は LTX 2.5 の本体を 2026-08-23 から `Rootport/Nz-LTX25-weights` に再ホストしており、Alpha Gen の LoRA も 2026-10-16 から同じ場所に無改変で置き、`install-LTX25.bat` が取得する（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235）。ライセンスの読みは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161.1。
 - 出典: https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x
 
 ### 1.8 量子化との相性（推測）

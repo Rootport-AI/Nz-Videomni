@@ -15,10 +15,10 @@
 | 文書 | 関係 |
 |------|------|
 | [`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md) | 事前調査ノート。公式の仕様・ライセンス・AviUtl2 側の受け皿の棚卸しはここにあり、本書には書き写さない |
-| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151〜§157 | **§151 はゲート 0（go／no-go の簡易テスト）の記録。** 1 段原寸相当の負荷の実測・2 段経路でマットが出る条件・LoRA のヘッダの中身はここが正本。**§152 は第 1 弾の実装と検証の記録**（オーナーの目視は §152.7）。**§153 は第 2 弾（操作パネル）と第 1 弾の追補の実装と検証、§154 は第 2 弾の目視後の手直しとオーナーの再確認の記録。§156 は第 3 弾の設計の確定と関門、§157 は第 3 弾の実装・目視・手直しの記録** |
+| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151〜§157・§161 | **§151 はゲート 0（go／no-go の簡易テスト）の記録。** 1 段原寸相当の負荷の実測・2 段経路でマットが出る条件・LoRA のヘッダの中身はここが正本。**§152 は第 1 弾の実装と検証の記録**（オーナーの目視は §152.7）。**§153 は第 2 弾（操作パネル）と第 1 弾の追補の実装と検証、§154 は第 2 弾の目視後の手直しとオーナーの再確認の記録。§156 は第 3 弾の設計の確定と関門、§157 は第 3 弾の実装・目視・手直しの記録。§161 は LoRA の配布の記録** |
 | [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6 | API 契約の正本。本書 §4 は設計の説明で、フィールドの型・既定・エラーコードは仕様書が正本 |
 | [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9 | 快適上限の正本。Alpha Gen の 1 段原寸モードの暫定の線もここに置く（本書 §6） |
-| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。§3-222（自前の入力プラグイン）・§3-223（快適上限の較正）・§3-229（MCP の出口）・§3-230（操作パネルの WebView2 の遷移の防御）。完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾）・3-235（LoRA の配布） |
+| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。§3-222（自前の入力プラグイン）・§3-223（快適上限の較正）・§3-225（VFR の素材を受付の時点で断る）・§3-228（回転情報つき素材の寸法の測り方）・§3-229（MCP の出口）・§3-230（操作パネルの WebView2 の遷移の防御）。完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾）・3-235（LoRA の配布） |
 | [`STORAGE_POLICY.md`](STORAGE_POLICY.md) | 保存領域の設計原則。本機能はジョブのフォルダに中間物と `matte.mkv`、出口の成果物（`rgba.mov`・`alpha_preview.mp4`・`chroma_<色>.mp4`）と記録 `alpha_outputs.json` を書くので適用対象 |
 | フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.4（v16）／[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §3.18a〜e・§5.5 | ブリッジ契約（操作パネルとプラグインの間の取り決め）と API の利用者向けの解説 |
 | フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §134・§135／[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26・§4.27 | 画面側の設計判断と目視の手順 |
@@ -514,6 +514,7 @@ AviUtl2 に透過つきの動画をエンコードせずに直接渡すには、
 - ゲート 0: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151
 - 第 1 弾の実装と検証: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §152（オーナーの目視は §152.7）
 - 第 2 弾・第 3 弾の実装と検証: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153・§154（第 2 弾）、§156・§157（第 3 弾）
+- LoRA の配布: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161
 - API 契約: [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6（Alpha Gen は §6.3b・出口は §6.3c）
 - 快適上限: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5
-- 台帳: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-222・§3-223・§3-229・§3-230、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾）・3-235（LoRA の配布）
+- 台帳: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-222・§3-223・§3-225・§3-228・§3-229・§3-230、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾）・3-235（LoRA の配布）

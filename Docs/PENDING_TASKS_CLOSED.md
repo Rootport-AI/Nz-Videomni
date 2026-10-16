@@ -2886,6 +2886,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 > **更新（2026-10-14）**: main merge 済み（`2113c63`）。
 - **残課題**: 操作パネル（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-85）・出口（同 §1-86）・LoRA ウェイトの配布（同 §1-87）・出力ファイルの fps を元動画の正確な値で書く追補（同 §1-88）・自前の入力プラグイン（同 §3-222）・快適上限の較正（同 §3-223）。
   > **更新（2026-10-14）**: §1-85 は 3-227・§1-88 は 3-226 でクローズ。
+  > **更新（2026-10-17）**: §1-86 は 3-231・§1-87 は 3-235 でクローズ。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b、ゲート 0 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §152、事前調査 [`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md)。
 
 ### 3-226. Alpha Gen 第 1 弾の追補: 出力ファイルの fps を元動画の正確な値で書く（29.97fps など・案 C）（起票：2026-10-13、実装：2026-10-13、オーナー目視合格・クローズ：2026-10-14）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-2〔元 §1-88〕からクローズ）
@@ -2916,6 +2917,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   > **更新（2026-10-14）**: main merge 済み（`015893b`）。
 - **残課題**: 出口（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86）・LoRA ウェイトの配布（同 §1-87）・直接入力（同 §3-222）・快適上限の較正（同 §3-223。8bit の線は既定の操作でも超えるので価値が高い）・VFR の受付時の拒否（同 §3-225）・`DurationField` の型コメント「Create-only」の現行化（次にそのファイルを触るとき）。
   > **更新（2026-10-14）**: 同日のコメント点検で現行化した。
+  > **更新（2026-10-17）**: §1-86 は 3-231・§1-87 は 3-235 でクローズ。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)（§3・§9・§23・§24）、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b（v0.5.88）、プラグインの契約 フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md)（v15）、設計上の判断 フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §132・§133、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153・§154。
 
 ### 3-231. Alpha Gen 第 3 弾＝出口（ジョブカードの ✂・🪣・色・💾・🔁 と閾値スライダー・ProRes 4444 の MOV・市松プレビュー・塗りつぶし mp4・ブリッジ契約 v16）（起票：2026-10-07、実装：2026-10-15、オーナー目視合格・クローズ：2026-10-15）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1〔元 §1-86〕からクローズ）
@@ -2934,6 +2936,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   > **更新（2026-10-15）**: main merge 済み（`01850f3`）。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10・第 2 部 §25、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3c（v0.5.89）、ブリッジ契約 フロントエンド `BRIDGE_CONTRACT.md` v16、設計の経緯と関門 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156、実装と門 同 §157、設計上の判断 フロントエンド `DEVLOG.md` §134・§135。
 - **残課題**: LoRA ウェイトの配布（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87）・MCP の出口（同 §3-229）・WebView2 の遷移の防御と再読み込み（同 §3-230）・直接入力（同 §3-222）・快適上限の較正（同 §3-223）・VFR（同 §3-225）・回転情報（同 §3-228）。
+  > **更新（2026-10-17）**: §1-87 は 3-235 でクローズ。
 
 ### 3-232. ダウンロード失敗の符号と文言（保存先のファイルを開けない／書けない失敗を `DOWNLOAD_FAILED` に・「winhttp error」を「Windows error」に）（起票・実装・クローズ：2026-10-15）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-90 からクローズ）
 
@@ -2966,6 +2969,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev `6fc841c`。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
 - **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §139、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160。
 - **残課題**: 同じ全件実行で対象外の 1 件が落ちた → [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92。
+  > **更新（2026-10-17）**: §1-92 は 3-236 でクローズ。
 
 ### 3-235. Alpha Gen の LoRA ウェイトの配布（`Rootport/Nz-LTX25-weights` の `IC-LoRA/alpha-gen/` に追加・`install-LTX25.bat` が取得）（起票：2026-10-07、実装・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87 からクローズ）
 
@@ -2986,6 +2990,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev `e70a0d0`（テストの直し）。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
 - **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §140、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162。
 - **残課題**: 同じ全件実行で対象外の 2 件が 1 回ずつ落ちた → [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に起票予定（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.4）。
+  > **更新（2026-10-17）**: 2 件は §1-94 として起票した後、オーナー裁定で [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-238 に吸収した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163）。
 
 ### 3-237. Inpainting のフレーム数スライダーの目盛りが Create の線を指す件（専用の datalist id）（起票：2026-10-14、実装：2026-10-16、オーナー目視合格・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1〔元 §1-89〕からクローズ）
 

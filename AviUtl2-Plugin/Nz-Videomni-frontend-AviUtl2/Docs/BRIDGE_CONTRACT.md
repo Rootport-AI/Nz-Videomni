@@ -184,7 +184,7 @@ LTX23バックエンドREST APIを1回プロキシする(WinHTTP、CORS回避)�
 - result: `{ status: number, body: object | null }`(`backend.request`と同じ「4xx/5xxも正常結果」規約)
 - 内部: `UploadPath(kind)` = `/upload/<kind>`、`kBackendApiPrefix`と結合。`Content-Type`は拡張子から推定(`ContentTypeForExtension`: png/jpg/jpeg/webp/mp4/mov/webm/mkv/wav/mp3/m4a/aac/flac/ogg、それ以外は`application/octet-stream`)。
 - タイムアウト: 既定 **120秒**(`kUploadTimeoutMs`、`backend.request`と異なりオーバーライド不可)。
-- エラー: `BAD_REQUEST`、`FILE_NOT_FOUND`(送信前にネイティブ側で`GetFileAttributesW`チェック)、`BACKEND_UNREACHABLE`、`BACKEND_TIMEOUT`。
+- エラー: `BAD_REQUEST`、`FILE_NOT_FOUND`(送信前のローカルファイルの確認に失敗＝存在しない(`GetFileAttributesW`)・読み取りで開けない・大きさが取れない・読めない(Windowsのエラー番号を文に添える)。2026-10-16の分類の変更は§8の注記)、`BACKEND_UNREACHABLE`、`BACKEND_TIMEOUT`。
 
 **contract v10での拡張(2026-07-30、V2Vリボン範囲トリム)**
 
@@ -748,7 +748,7 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 | `BACKEND_UNREACHABLE` | 接続不可・切断等のトランスポート失敗(HTTPステータスを伴う応答はここに含まれない)。**通信をしないメソッドがHTTPワーカープール未初期化の入口ガードとしてこの符号を使うこともある**(§4.25.1) | `backend.request`, `backend.downloadVideo`, `backend.uploadFile`, `timeline.cutoutRange`(v5・入口ガードのみ), `timeline.extractAudio`(v5・入口ガードのみ), `timeline.trackObject`(v12・入口ガードのみ), `timeline.renderMaskVideo`(v13・入口ガードのみ) |
 | `BACKEND_TIMEOUT` | WinHTTPタイムアウト | 同上 |
 | `DOWNLOAD_FAILED` | ダウンロードHTTPステータスが200以外・`noClobber`の保存名を確保できない・保存先のファイルを開けない／書けない(Windowsのエラー番号を文に添える。2026-10-15の分類の変更は§8の注記) | `backend.downloadVideo` |
-| `FILE_NOT_FOUND` | 送信前のローカルファイル存在チェック失敗 | `timeline.insertMedia`, `backend.uploadFile`, `ui.makeThumbnail`, `timeline.resolveProvisional`(v5・§4.25.4), `timeline.insertMediaForJob`(v8・§4.25.7)。**後ろ2つは挿入経路が`timeline.insertMedia`の失敗種別をそのまま外へ出したものである** |
+| `FILE_NOT_FOUND` | 送信前のローカルファイルの確認に失敗。`backend.uploadFile`では存在しないに加えて読み取りで開けない／大きさが取れない／読めないも含む(§4.5)。ほかのメソッドは存在チェックのみ | `timeline.insertMedia`, `backend.uploadFile`, `ui.makeThumbnail`, `timeline.resolveProvisional`(v5・§4.25.4), `timeline.insertMediaForJob`(v8・§4.25.7)。**後ろ2つは挿入経路が`timeline.insertMedia`の失敗種別をそのまま外へ出したものである** |
 | `INSERT_FAILED` | メディアオブジェクトの生成に失敗(§3-140以降は**エイリアス経路と`create_object_from_media_file`の両方が`nullptr`**を返したとき。v14以降の`timeline.insertMedia`(と`timeline.insertMediaForJob`の挿入経路)は`layer_max+1`への再試行も失敗したとき。メッセージは経路中立な`media object creation failed …`) | `timeline.insertMedia`, `timeline.insertMediaForJob` |
 | `CAPTURE_FAILED` | レンダリング/PNGエンコードの失敗(`NO_EDIT_HANDLE`除外後) | `timeline.captureFrame` |
 | `CANCELLED` | ユーザーがファイル選択/フォルダ選択をキャンセル(UIではエラー非表示) | `ui.pickFile`, `ui.pickFolder`(v6・§4.15) |
@@ -829,6 +829,7 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 
 - **注記(2026-10-14、版は上げない)**: Matroska(mkv/webm/mk3d)の`mediaFps`(v11)と`fps`(v15)は規則で`0`になった。Windowsのmkv用の部品がfpsを本来の半分で返すと実測で分かったためで、`0`＝不明の契約の中の修正である(§4.13・§4.22)。上の表のv11の行の「mkv/webmでの取得失敗は正常系」は当時の理解のまま残している。
 - **注記(2026-10-15、版は上げない)**: `backend.downloadVideo`で、それまで`BACKEND_UNREACHABLE`に分類していた「保存先のファイルを開けない／書けない」を`DOWNLOAD_FAILED`に改めた(通信の失敗ではないため)。params・result・符号の集合は不変で、1つの失敗の分類が変わっただけである(§4.4・§5)。
+- **注記(2026-10-16、版は上げない)**: `backend.uploadFile`で、それまで`BACKEND_UNREACHABLE`に分類していた「元ファイルを読み取りで開けない／大きさが取れない／読めない」を`FILE_NOT_FOUND`に改めた(通信の失敗ではないため)。params・result・符号の集合は不変で、失敗の分類が変わっただけである(§4.5・§5)。
 
 ## 9. `types.ts` と `bridge_core.h`/`.cpp` の相違点
 

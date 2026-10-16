@@ -496,6 +496,7 @@ describe("EditScreen — Inpainting の Generate", () => {
     // スライダーがその datalist を参照していなければ、目盛りは描かれない。
     const slider = within(panel).getAllByRole("slider")[0] as HTMLInputElement;
     expect(slider.getAttribute("list")).toBe(panel.querySelector("datalist")!.id);
+    expect(slider.getAttribute("list")).toBe("inpaint-comfort-tick");
   });
 
   it("shows the three prompt notes the spike settled on, in order", () => {

@@ -361,7 +361,7 @@ GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字
 - **`config.yaml` の `dit_cpu_load` は有効（既定の `true`）のままにしてください。** 無効にすると量子化された transformer を GPU 上で組むことになり必ずメモリが溢れるため、読み込みの時点でエラーにしています。
 - **実機での確認**: LTX 2.3・LTX 2.5 の実在の int8 系の配布物（REDGraft の混在を含む）で、単発・スタイル LoRA・IC-LoRA・Chained・keep_resident の生成を確かめ、オーナーの目視でも合格しています（記録は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121）。確認したのは 5 本です（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121.4）。それ以外の配布物は、標準形式なら通る設計ですが未検証です。
 
-**LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur`）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所はベースモデルで分かれていません**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。
+**LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` / `in-outpainting`、LTX 2.5 の `alpha-gen`〔`install-LTX25.bat` が取得〕）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所はベースモデルで分かれていません**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。
 
 `models/LTX23/StyleLoRA/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、`POST /loras/reload` で明示再スキャン）。生成時は API の `loras: [{"name": ..., "strength": ...}]`、または Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します（強度は 0.05〜2、0は不可）。**指定した値がそのまま効きます（ComfyUI と同じ数え方です）。** 音声側の適用強度だけを映像側と別に指定したい場合は `<lora:名前:映像の強度:音声の強度>` の第3引数（0〜2。音声側だけ 0＝適用しない、を指定できる）を使います。省略時は音声側も映像側の値に追従します（詳細は [`Docs/LORA_AUDIO_STRENGTH_WORKORDER.md`](Docs/LORA_AUDIO_STRENGTH_WORKORDER.md)）。
 
@@ -390,7 +390,8 @@ models/
     ├─ TextEncoder/          Gemma 4 の GGUF（tokenizer は GGUF の中に入っています）
     ├─ VAE/                  映像 VAE（畳み込みデコーダ版）・音声 VAE
     │   └─ diffvae/          拡散デコーダ版の映像 VAE（現在は使いません・退避先）
-    └─ Upscaler/             空間アップスケーラ
+    ├─ Upscaler/             空間アップスケーラ
+    └─ IC-LoRA/              alpha-gen（Alpha Gen 用。install-LTX25.bat が置く）
 ```
 
 **LTX 2.5 の重みは、設計上 `setup.bat` の取得対象ではありません**（上の約33GBには含まれません）。`setup.bat` は Nz-Videomni 本体のインストーラで、「最初にお試しいただくAI」として LTX 2.3 だけを一緒に導入します。**別のベースモデルは、そのモデル専用のバッチファイルをダブルクリックして導入します**（下の「LTX 2.5 を追加する」）。
@@ -403,15 +404,15 @@ models/
 
 **先に `setup.bat` を済ませてください。** `install-LTX25.bat` は重みファイルを取ってくるだけのもので、Python 環境とダウンロード道具は `setup.bat` が用意します（済んでいないときは、その場でそう案内して止まります）。
 
-準備ができたら、**リポジトリ直下の `install-LTX25.bat` をダブルクリックしてください。** 下表の 5 ファイルが `models/LTX25/<カテゴリ>/` へ自動で置かれ、そのあと `run.bat` で画面を開き直せば、ヘッダーのベースモデル一覧から「LTX 2.5」を選べるようになります（**画面を開いたままだと未導入のままに見えます**——一覧は画面を開いたときにしか読み直さないためです）。
+準備ができたら、**リポジトリ直下の `install-LTX25.bat` をダブルクリックしてください。** 下表の 6 ファイルが `models/LTX25/` の下の各フォルダへ自動で置かれ、そのあと `run.bat` で画面を開き直せば、ヘッダーのベースモデル一覧から「LTX 2.5」を選べるようになります（**画面を開いたままだと未導入のままに見えます**——一覧は画面を開いたときにしか読み直さないためです）。
 
-- **ダウンロードの量はおよそ 25 GB**（必要な空き容量として上の「ハードウェア要件の詳細」に載せている約 30GB は、これに安全側の余裕を足した値）で、回線によっては1〜2時間かかります。途中でスリープしない設定にしておくと確実です（**バッチ自身も実行前に必要な空き容量を表示します**）。
+- **ダウンロードの量はおよそ 26 GB**（必要な空き容量として上の「ハードウェア要件の詳細」に載せている約 30GB は、これに安全側の余裕を足した値）で、回線によっては1〜2時間かかります。途中でスリープしない設定にしておくと確実です（**バッチ自身も実行前に必要な空き容量を表示します**）。
 - **揃っているファイルは取り直しません。** 途中で失敗しても、もう一度ダブルクリックすれば続きから再開します。`setup.bat` と続けて実行しても二重取得は起きません。
 - 実行の記録は `logs\install_LTX25_<日時>.log` に残ります。うまくいかないときは、この記録を見てください。
 - 検証に失敗したときは、**足りない 1 ファイルだけを消して**もう一度実行してください。`models\LTX25` をフォルダごと消さないでください（ご自身で置いた LoRA などが同居している場合、再取得できません）。
 - **この導線は、まっさらな別のパソコンで、実際のダウンロードから生成まで通しで検証済みです。**
 
-**LTX 2.5 が探すファイルは 5 本です**（記述子 `scripts/manifests/20-ltx25.json` が宣言している既定のファイル名。すべて `models/` からの相対パスです）。**下表はバッチが置く場所の内訳で、手で置きたい場合の対応表も兼ねています**——バッチを使わずに下記の公開リポジトリから手でダウンロードし、同じ場所へ同じファイル名で置いても、そのまま「導入済み」になります。ファイルごとの正確なサイズと SHA-256 は [`Docs/LTX25_RESEARCH_NOTES.md`](Docs/LTX25_RESEARCH_NOTES.md) 10節にあります。
+**LTX 2.5 のために取得して検証するファイルは 6 本です**（記述子 `scripts/manifests/20-ltx25.json` に載っているファイル。すべて `models/` からの相対パスです）。**下表はバッチが置く場所の内訳で、手で置きたい場合の対応表も兼ねています**——バッチを使わずに下記の公開リポジトリから手でダウンロードし、同じ場所へ同じファイル名で置いても、そのまま「導入済み」になります。ファイルごとの正確なサイズと SHA-256 は [`Docs/LTX25_RESEARCH_NOTES.md`](Docs/LTX25_RESEARCH_NOTES.md) 10節にあります。
 
 | 役割 | 期待するパスとファイル名 | 取得元リポジトリ |
 |------|--------------------------|------------------|
@@ -420,8 +421,9 @@ models/
 | 映像 VAE（畳み込みデコーダ版） | `LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors` | [`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) |
 | 音声 VAE | `LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors` | [`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) |
 | 空間アップスケーラ | `LTX25/Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors` | [`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) |
+| Alpha Gen 用 IC-LoRA | `LTX25/IC-LoRA/alpha-gen/ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors` | [`Rootport/Nz-LTX25-weights`](https://huggingface.co/Rootport/Nz-LTX25-weights) |
 
-**どちらのリポジトリも Public かつ非 Gated** なので、HuggingFace のアカウントもアクセストークンも要りません。リポジトリ内のフォルダ名（`Weights/` ・ `TextEncoder/` ・ `VAE/` ・ `Upscaler/`）は上表のフォルダ名とそのまま対応しているので、ダウンロードしたファイルを同じ名前のフォルダへ入れるだけで済みます。テキストエンコーダだけリポジトリが分かれているのは、基になったモデル（Gemma 4）のライセンスが異なるためです。各フォルダには `put_〇〇_here.txt` という案内ファイルが1つ入っていて、ファイル名がそのまま「ここに置ける形式」の掲示になっています（この案内ファイル自体はモデルの読み込み対象になりません）。
+**どちらのリポジトリも Public かつ非 Gated** なので、HuggingFace のアカウントもアクセストークンも要りません。リポジトリ内のフォルダ名（`Weights/` ・ `TextEncoder/` ・ `VAE/` ・ `Upscaler/` ・ `IC-LoRA/`）は上表のフォルダ名とそのまま対応しているので、ダウンロードしたファイルを同じ名前のフォルダへ入れるだけで済みます。テキストエンコーダだけリポジトリが分かれているのは、基になったモデル（Gemma 4）のライセンスが異なるためです。各フォルダには `put_〇〇_here.txt` という案内ファイルが1つ入っていて、ファイル名がそのまま「ここに置ける形式」の掲示になっています（この案内ファイル自体はモデルの読み込み対象になりません）。
 
 > **`install-LTX25.bat` を実行するまで、LTX 2.5 は「選べるが未導入」として画面に出ます。** LTX 2.3 だけを使うぶんには何の影響もありません。テキストエンコーダのトークナイザは GGUF の中に入っているので別途置く必要はありません。**隣にできる `*.assets.safetensors` は、バックエンドが初回のモデル読み込み時に GGUF の中身から自動で作るもの**なので、ダウンロードする必要はありませんし、消しても次回に作り直されます。
 
@@ -461,7 +463,15 @@ models/
 
 **使い方**: 操作パネルの Edit タブの「Alpha Gen」サブタブで元動画を渡し、生成します。渡し方は 3 つで、タイムラインの動画を右クリックして「🎬 Video: 背景透過（Alpha Gen）」を選ぶ（再生位置から）・パネルへドラッグ＆ドロップする（冒頭から）・📁 でファイルを選ぶ（冒頭から）のどれかです。マットは元動画の fps のまま作ります。
 
-**使う LoRA**: Lightricks の Alpha Gen 用 IC-LoRA を、`config.yaml` の `model.ic_loras` の `alpha-gen` が指す場所に置きます（置き場所と書き方の正本は [`config.yaml.example`](config.yaml.example) の `alpha-gen` の行）。LoRA の配布方法は未決です（台帳 §1-87）。
+**使う LoRA**: Lightricks の Alpha Gen 用 IC-LoRA を、`config.yaml` の `model.ic_loras` の `alpha-gen` が指す場所に置きます（置き場所と書き方の正本は [`config.yaml.example`](config.yaml.example) の `alpha-gen` の行）。LoRA は `install-LTX25.bat` が他の LTX 2.5 のファイルと一緒に `models/LTX25/IC-LoRA/alpha-gen/` へ置きます（取得元は `Rootport/Nz-LTX25-weights`）。すでに LTX 2.5 を導入済みの方は、`install-LTX25.bat` をもう一度ダブルクリックすると、この LoRA だけを取りに行きます。
+
+**`config.yaml` に `alpha-gen` の行が無い場合**（`config.yaml` の `model.ic_loras` の中に `alpha-gen:` の行が見当たらないとき。`config.yaml` が 2026-10-13 より前に作られた方がこれに当たります）、LoRA が置かれていても、Alpha Gen の生成は `LORA_NOT_FOUND`（known adapters: […]）という 404 で止まります。`setup.bat` や `run.bat` を実行し直しても、既にある `config.yaml` には行を足しません。次のどちらかで直してください。
+
+1. `config.yaml` の `model.ic_loras:` の中に、他の行と同じ字下げで次の 1 行を足す。
+   `alpha-gen: "./models/LTX25/IC-LoRA/alpha-gen/ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors"`
+
+   足したら、サーバー（`run.bat` の窓）を閉じて `run.bat` で起動し直してください。
+2. サーバーを閉じ、`config.yaml` を別の名前に変えてから `run.bat` を起動し直す（`config.yaml.example` から作り直されます。ご自身で書き換えた設定があれば、古いファイルから手で戻してください）。
 
 設計の詳細は [`Docs/ALPHAGEN_DESIGN.md`](Docs/ALPHAGEN_DESIGN.md) が正本です。
 

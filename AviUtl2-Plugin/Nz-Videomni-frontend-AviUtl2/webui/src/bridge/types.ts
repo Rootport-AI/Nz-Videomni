@@ -336,7 +336,8 @@ export interface BridgeParamsMap {
    * for the given `kind` (`/upload/image|video|audio`) via native WinHTTP,
    * bypassing WebView2 CORS restrictions (contract v3, M4). Mirrors
    * `backend.request`'s result shape: any HTTP status the backend returns is
-   * a normal (non-throwing) result — only transport-level failures reject. */
+   * a normal (non-throwing) result — only bridge errors reject (codes:
+   * BRIDGE_CONTRACT §4.5). */
   "backend.uploadFile": {
     kind: "image" | "video" | "audio";
     filePath: string;
@@ -690,7 +691,8 @@ export interface BridgeResultMap {
   };
   "backend.uploadFile": {
     /** HTTP status returned by the backend. 4xx/5xx are a normal (non-error)
-     * result here — only transport-level failures reject the promise. */
+     * result here — only bridge errors reject the promise (codes:
+     * BRIDGE_CONTRACT §4.5). */
     status: number;
     /** The endpoint's JSON body, verbatim. Deliberately left as the opaque
      * `object` (callers narrow the one field they need — `video_id`,

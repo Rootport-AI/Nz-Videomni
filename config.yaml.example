@@ -73,7 +73,7 @@ model:
     # Alpha Gen（RGB 動画から白黒のマット動画を作る）。LTX 2.5 専用。
     # POST /generate/alpha が内部で使う（プロンプト・強さはサーバーが固定する）。
     # 操作パネルと Gradio の一覧には出ない。参照は前処理しないので文字列形式で
-    # 登録する。配布方法は台帳 §1-87。
+    # 登録する。ファイルは install-LTX25.bat が置く（取得元 Rootport/Nz-LTX25-weights）。
     alpha-gen: "./models/LTX25/IC-LoRA/alpha-gen/ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors"
 
 vram:

@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-15（§1-86 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231・§3-229 と §3-230 を起票・文書とコメントの現行化＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §158・§1-90 を起票して同日に 3-232 でクローズ・§1-91 を起票）。
+- 作成: 2026-07-15／最終更新: 2026-10-17（§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票・§1-92 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162）・§1-94 を起票・§2-1〔元 §1-89〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237・§3-238（テストコードの整理と不安定の一掃）を起票し §1-94 を吸収・運用規則に不安定なテストの扱いを追記・§3-238 に状態と順位の注記（2026-10-17）。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
@@ -15,36 +15,14 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-**残りは §1-82 と §1-89 と §1-91（小さな修正・随時）と §1-87（LoRA の配布）。次に着手するテーマはオーナーが決める。**
+**残りは §1-93（MiniMax H3 対応・α版。計画は別のセッション）。次に着手するテーマはオーナーが決める。**
 
-### 1-82. 操作パネルの既存テストの不安定（`App.nag.test.tsx` の 2 件・`JobsContext.test.tsx` の 1 件）（起票：2026-10-06）
+### 1-93. MiniMax H3 対応・α版（公式 FL2VA 枝刈り int8 ConvRot を 16GB で動かす）（起票：2026-10-16）
 
-- **概要**: 操作パネルのテスト `webui/src/App.nag.test.tsx` の 2 件（"bridge capture — NAG on …" と "bridge capture — VSF method selected …"）が、ときどき落ちる。前のテストが送ったジョブが、アプリ全体で共有されるモックの中でまだ実行中のことがあり、「生成」ボタンが "Busy…" になっていて見つからないため。モックのジョブの進み具合は既定 2 秒のポーリングで決まるのでタイミング次第で、Repeat count（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-219）の改修の前後とも 20 回中 4〜5 回落ちる（この改修とは無関係の既存の不具合）。
-  - もう 1 件、`webui/src/jobs/JobsContext.test.tsx` の "cancelJob marks the job as cancelling until it settles into cancelled, then clears" が、テスト全体の実行では 3 回中 1 回落ち、このファイル単独では 5 回とも通る。Repeat count の改修では触っていないファイルで、原因は未調査（`App.nag.test.tsx` の共有モックの持ち越しとは別の理由の可能性がある）。
-- **直し方の候補**: `App.nag.test.tsx` は、`afterEach` で共有モックのジョブを `listJobs` で終わりまで進める後片付けを足す（`webui/src/modes/single/SingleScreen.repeat.test.tsx` で採った方法）。`JobsContext.test.tsx` は原因の特定から。
-- **追記（2026-10-14）**: `webui/src/modes/toolbox/ObjectTrackingSection.test.tsx` の "calls timeline.cancelTracking when Stop is pressed" も、全件の実行で 1 回落ち、単独では 3 回とも合格した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §154.3）。同型の不安定として本項に含める。
-- **範囲**: テストのみ（製品コードは不変）。
-
-### 1-87. Alpha Gen の LoRA ウェイトの配布（起票：2026-10-07）
-
-- **概要**: `alpha-gen` の LoRA ファイル（約 1.3GB）を利用者がどう入手するかを決める。配布方法を決めれば着手できる（前提の第 1〜3 弾はそろっている）。
-- **論点**: ①オーナーの Hugging Face での再配布が、ライセンス（LTX-2.x Community License）上許されるか。②インストーラのマニフェストに取得の行を足すか。
-- **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §11、[`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md) 1.7 節。
-
-### 1-89. Inpainting のフレーム数スライダーの目盛り（快適上限の線）が Create の線を指す（起票：2026-10-14）
-
-- **概要**: `webui/src/modes/edit/InpaintingPanel.tsx` の `DurationField` は `tickId` を渡さず既定の `"spill-tick"` を使うが、Create（`GenerationForm.tsx`）も同じ id の `<datalist>` を描く。全画面が常時マウントで DOM 上は Create が先にあるため、Inpainting のつまみの目盛り（`list="spill-tick"`）は Create の現在の線の位置に出る。線を超えたときの注意は Inpainting が自前で判定しているので、狂うのは目盛りの位置だけ。Outpainting（`OUTPAINT_SPILL_TICK_ID`）と Alpha Gen（`ALPHA_GEN_TICK_ID`）は専用の id で回避済み。
-- **再現条件**: Inpainting で元動画の寸法が分かり、配信の Outpainting 用予算がある系統（`comfortFrames` が null でない）。コードの読み合わせで裏取り済み・実機では未確認。
-- **直し方の候補**: Inpainting にも専用の `tickId` を渡す（1 行）。
-- **範囲**: 操作パネルのみ。
-- **出典**: 2026-10-14 のコメント点検（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §155）。
-
-### 1-91. `backend.uploadFile` で元ファイルが開けないときの符号が `BACKEND_UNREACHABLE` になる（起票：2026-10-15）
-
-- **概要**: プラグインのネイティブ側 `backend.uploadFile`（元動画や音声をサーバーへ上げる処理）は、送る前に `GetFileAttributesW` で存在を確かめた後、元ファイルを読み取りで開けなかったとき（他のプロセスが開いたまま、など）に通信の失敗 `BACKEND_UNREACHABLE`（契約では「接続不可・切断」）として返す（`native/src/http_client.cpp` の "Could not open upload source file"）。ダウンロード側の同じ型のずれは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-232 で `DOWNLOAD_FAILED` に寄せた。
-- **直し方の候補**: 3-232 と同じ形で、通信の失敗と分けた符号（既存の `FILE_NOT_FOUND` を広げるか、新しい符号を契約に加算するか）に寄せる。符号の選び方はオーナー判断。
-- **範囲**: ネイティブ＋契約文書。操作パネルの変更は符号の選び方次第。
-- **出典**: 3-232 の計画の敵対的レビュー（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159）。
+- **概要**: 第 3 のベースモデルとして MiniMax H3（映像と音声を同時に作る 33B のモデル）を足す。α版の範囲は公式系 FL2VA の枝刈り int8 ConvRot 1 本と int8 ConvRot のテキストエンコーダで、16GB の VRAM で動かすこと。解像度と尺は快適上限の計測で決める。利用者が CivitAI などから落としたファイルを置くだけで動くことを理想とする（裁定 6）。ヘッダの揺れ（[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §13.3）を α版でどこまで吸収するかは計画のセッションで決める。
+- **裁定と前提**: 裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-09-06 と 2026-10-16）。範囲のメモは同 §13.8。前提の工事＝フレーム規約 17n+5・24fps 固定・4〜15 秒の系統別制約（同 §9）と、専用の仮想環境（torch は LTX と揃えない）。
+- **入口**: 計画はプランモードで別のセッションで行う。GPU を使う実測は毎回オーナーの了承を得る。
+- **出典**: 同ノート §13・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §9。
 
 ---
 
@@ -85,6 +63,15 @@
 - **概要**: 第 1 弾では、回転情報つきの素材（スマートフォンの縦動画など）は作業寸法と実際の向きが食い違うので、ジョブを `generation_failed` で止めている（`services/pipeline_manager.py` の `run_job` の Alpha Gen 分岐。切り出した窓の縦横が、受付で測ったアップロード元の縦横と入れ替わっていたら失敗にする判定）。回転を考えて寸法を測り、回転した向きのまま扱えるようにする。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §11、フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.5。
 - **状態**: 将来の改修項目（着手時期未定）。
+
+#### 3-238. 操作パネルのテストコードの整理と不安定なテストの一掃（起票：2026-10-16）
+
+- **概要**: 操作パネル（`webui`）のテストコードは製品コードより多く、同じ振る舞いを複数の層で重ねて確かめている箇所が多い。全件を繰り返し走らせるたびに、時間の隙間やモックの持ち越しに頼るテストが 1〜2 件ずつ新たに落ちる。**オーナー裁定（2026-10-16）: 不安定なテストは製品の不具合ではないので §1 に個別には起票せず本項に集める。不要なテストコードを減らす作業を、不安定の修正より優先する。**（この優先は本項の中での順序であり、§1 や他の §3 の項目との順位は変えない。） 数と履歴は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163。
+- **吸収した項目**: 旧 §1-94 の 2 件（`webui/src/App.prefill.test.tsx` の "videoAudioToVideo … (#3)" と `webui/src/modes/chained/SourceInputPanel.test.tsx` の "dropping a video switches to v2v mode …"。全件実行 20 回でそれぞれ 1 回落ちた。同 §162.4）。今後に見つかる同型の不安定も本項に追記する。
+- **進め方の候補**: 棚卸し（区域・層ごとの件数と所要・確かめている内容・不安定の履歴・重複）→ 削除の基準の確定（オーナー裁定）→ 層ごとに削減 → 全件の繰り返しで確認。基準の候補は同 §163.4。件数を目安に削らず、基準に照らして 1 件ずつ判断する（敵対的レビューで足したテストが退行を捕まえた例があるため）。
+- **状態**: 未着手（最初の一手は棚卸し）。
+- **範囲**: テストとモックのみ（製品コードは不変）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163（実測と裁定）・§160.5・§162.4（不安定の記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236（直した前例）。
 
 ### 研究課題（上の改修項目より優先度が下）
 
@@ -564,6 +551,7 @@
 節の分け方と各節の意味は**冒頭の「位置づけ」に一本化**してある（本節では繰り返さない）。個々の項目の正本は各出典ドキュメント（`DEVLOG.md`・`API_REFERENCE.md`・`TIMELINE_ALPHA_REQUIREMENTS.md`・`REAL_BACKEND_CHECKLIST.md`・`WEBVIEW2_PARITY_BACKLOG.md`、およびバックエンド`Docs/`の各文書等）にあり、本書はそれを優先度順に一覧するための派生的な台帳である。運用は次のとおり。
 
 - 新たな未着手タスクが判明した場合は、出典を明記のうえ「1. 近日中の改修項目」「3. 将来の研究課題」「4. スコープ外」のいずれかへ追記する。**該当する節が無い場合は、冒頭の「位置づけ」の書式で節を立て直してから追記する。** §3と§4の線引きは、**前提が変われば着手しうるもの＝§3／当面は着手しないと判断済みのもの＝§4**とする。§3の内部はさらに「改修項目（先）＞研究課題（後）」に分かれる（オーナー指定の階層）。
+- **操作パネルの既存テストの不安定（時間の隙間やモックの持ち越しに頼るテストが全件実行で落ちる型）は、製品の不具合ではないので §1 に個別には起票せず、§3-238「操作パネルのテストコードの整理と不安定なテストの一掃」に追記する**（オーナー裁定 2026-10-16）。
 - **§4「スコープ外」の項目には「何が塞いでいるか」を必ず書く。** 前提が変わったかどうかを、あとから読んだ人が判定できるようにするため。**再訪の条件がはっきりしているものは、条件を行頭に置いて書く**（§3-30〜§3-38の書式）。
 - **1項目は「見出し＋本文2〜4行＋出典」を上限の目安にする。** 詳細は正本の文書へ置き、台帳は「次に何をすべきか」が読み取れる密度に保つ。**判断材料が他文書に無いときは、先に出典側（研究ノート等）へ書いてから本書を参照に切り替える**——縮約で記録が消えてよいわけではない。
 - **本書には歴史的経緯を書かない**（オーナー決定・全節に適用）。**本書に載せてよいのは「これから何をするか」「そのための判断材料」「本台帳の運用規則」の3つだけ**であり、「過去に何があったか」は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)の責任である。本書はオーナーやAIエージェントが「次に何をすべきか」を確認するために読む場所であり、歴史はノイズになる。旧番号の欠番はそのままでよい。

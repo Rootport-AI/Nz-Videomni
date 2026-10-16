@@ -7,6 +7,11 @@ import { formatDurationHint } from "../single/paramUtils";
 import { BLEND_DILATION_MAX, BLEND_DILATION_MIN, featherWidthPx } from "./outpaintGeometry";
 import type { UseInpaintFormResult } from "./useInpaintForm";
 
+/** フレーム数スライダーの快適上限マーカーに使う `<datalist>` の専用 id。
+ * 全画面が常時マウントなので、Create の `"spill-tick"` を使い回すと目盛りが
+ * Create の線を指してしまう（`DurationField` の `tickId`）。 */
+const INPAINT_TICK_ID = "inpaint-comfort-tick";
+
 export interface InpaintingPanelProps {
   /** Inpainting フォーム一式。所有者は `EditScreen`（Generate ボタンが生成列に
    * あるため）—— `RetakePanel`/`OutpaintingPanel` と同じ分担。 */
@@ -145,6 +150,7 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
         onCommit={(value) => form.commitNumFrames(value)}
         hint={formatDurationHint(form.numFrames, form.frameRate)}
         {...(form.comfortFrames !== null ? { spillThresholdFrames: form.comfortFrames } : {})}
+        tickId={INPAINT_TICK_ID}
       />
       {form.isOverComfortBudget && (
         <p className="warning-banner warning-banner-mild">{t.comfortWarning(form.comfortTokens)}</p>

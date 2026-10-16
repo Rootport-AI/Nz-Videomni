@@ -3,7 +3,7 @@
   "id": "LTX25",
   "display_name": "LTX 2.5",
   "engine_family": "ltx25",
-  "_note": "downloads は install-LTX25.bat 専用。scripts/install_ltx.ps1 の -BaseModel の既定値は LTX23,Preprocessors なので、setup.bat からの実行はここに到達しない(取得も検証もしない。Docs/MULTI_ENGINE_DESIGN.md §6.2)。§3-98 Phase 4で四カテゴリとアップスケーラの実ファイル名を確定させた。video_vaeの既定は畳み込みデコーダ版(conv)で、拡散デコーダ版は LTX25/VAE/diffvae/ へ退避してあり配布対象外(VAEのscanは非再帰なので自動認識されない)。テキストエンコーダのtokenizer/processorメタデータはGGUFの中に入っており、engine25/assets_export.py が初回ロード時にGGUFの隣へ *.assets.safetensors を書き出す(自動生成物なので配布対象外)。LTX 2.3の gemma_root / text_projection にあたる資産は2.5には存在しない。",
+  "_note": "downloads は install-LTX25.bat 専用。scripts/install_ltx.ps1 の -BaseModel の既定値は LTX23,Preprocessors なので、setup.bat からの実行はここに到達しない(取得も検証もしない。Docs/MULTI_ENGINE_DESIGN.md §6.2)。§3-98 Phase 4で四カテゴリとアップスケーラの実ファイル名を確定させた。video_vaeの既定は畳み込みデコーダ版(conv)で、拡散デコーダ版は LTX25/VAE/diffvae/ へ退避してあり配布対象外(VAEのscanは非再帰なので自動認識されない)。テキストエンコーダのtokenizer/processorメタデータはGGUFの中に入っており、engine25/assets_export.py が初回ロード時にGGUFの隣へ *.assets.safetensors を書き出す(自動生成物なので配布対象外)。LTX 2.3の gemma_root / text_projection にあたる資産は2.5には存在しない。IC-LoRA/alpha-gen はカテゴリに属さない取得専用の行で、登録は config.yaml の model.ic_loras(Docs/ALPHAGEN_DESIGN.md §7)。ファイル単位の既得判定のため downloads の独立した項目にしてある(1 番目の項目に足すと、導入済みの人の再実行で項目全体を取り直す)。",
 
   "categories": {
     "transformer": {
@@ -108,6 +108,20 @@
           "label": "gguf_gemma4",
           "key": "text_encoder",
           "_min": "公式9,231,374,624Bの1ファイル(約4%下)。隣の*.assets.safetensorsは自動生成物で配布対象外"
+        }
+      ]
+    },
+    {
+      "name": "IC-LoRA Alpha Gen for LTX 2.5 (1 file)",
+      "repo": "Rootport/Nz-LTX25-weights",
+      "include": ["IC-LoRA/*"],
+      "map": [ { "from": "IC-LoRA", "to": "LTX25/IC-LoRA" } ],
+      "files": [
+        {
+          "path": "LTX25/IC-LoRA/alpha-gen/ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors",
+          "min": 1250000000,
+          "label": "ic_lora alpha-gen",
+          "_min": "公式1,308,787,472Bの1ファイル(約4.5%下)。config.yaml の ic_loras の alpha-gen が指す。カテゴリには属さない(Docs/ALPHAGEN_DESIGN.md §7)"
         }
       ]
     }

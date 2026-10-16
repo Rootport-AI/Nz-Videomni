@@ -16500,6 +16500,7 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - 再確認③（説明文が無く、線より下では注意が出ず、超えると軽量 OFF は Create の文・ON は縮小の文）と⑥（軽量 OFF で快適上限を超えるフレーム数を `src_2048x1152.mp4` で生成し、通常より長い時間をかけて完走）が合格。①②④⑤は 154.7 のとおり合格。これで §4.26 は全項目合格。
 - **第 2 弾（操作パネル）は完結。** 台帳 §2-1 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-227 へ移し、dev を main へ `--no-ff` で merge して push した（merge の記録は git の履歴）。
 - 次: 第 3 弾＝出口（台帳 §1-86）→ LoRA ウェイトの配布（§1-87）。研究課題は §3-222・§3-223（8bit の線の較正）・§3-225（VFR の受付時の拒否）。
+  > **更新（2026-10-17）**: §1-86 は §157（CLOSED 3-231）、§1-87 は §161（CLOSED 3-235）で解消。
 
 ## 155. ★文書とコード内コメントの現行化（オーナー指示 2026-10-14「新しいセッションの担当者が混乱する更新漏れや矛盾を探し、実装とずれたコメントも点検する」）＝棚卸し 4 体・直し 5 体・新しい担当者の視点の敵対的レビュー（Major 2・Minor 10 全採用）・機械ゲート 3 環境 失敗 0（2026-10-14〜15）
 
@@ -16544,6 +16545,7 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 
 - 残るもの: 台帳 §1-89（Inpainting の目盛り。1 行の修正・随時）・§3-228（回転情報つき素材）・`mcp_server/tools/outputs.py` の `VIDEO_NOT_FOUND` の文言（`which="matte"` で Alpha Gen 以外を指した場合に触れていない。利用者に見える文言なのでオーナー判断）・`engine25/pipeline25.py` の `validate_geometry` の例外文（1 段の AlphaGen でも「2 段…半分の解像度」と言う。同じくオーナー判断）。
 > **更新（2026-10-15）**: 文言 2 点はオーナー裁定で監督案どおりに直した（dev `2aa3a5c`。理由の候補を 1 つ足す／64 ピクセルの格子という 1 段でも 2 段でも成り立つ理由に。テスト: アプリ venv 136 件・エンジン venv 77 件 合格）。
+> **更新（2026-10-17）**: §1-89 は §160.3／§160.7（CLOSED 3-237）で解消。
 
 ## 156. ★Alpha Gen 第 3 弾（出口）の設計の確定＝UI/UX の裁定 11 点とボタン案（✂🪣色💾🔁）・閾値スライダー・関門（ProRes 4444 が L-SMASH Works で透過つきに読める）合格・車体の透けの原因の実測（2026-10-15）
 
@@ -16642,6 +16644,7 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - **クローズ**: §1-86 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231 へ。設計書 §10 の状態を「完結」に、README の Alpha Gen の節（「出口は次の第 3 弾で」）を現行化、フロントエンド DEVLOG §134.4・§135.4 に更新行。main への merge は本節のコミットの直後に監督が行う（`--no-ff`）。
   > **更新（2026-10-15）**: main merge 済み（`01850f3`）。
 - **残課題**: LoRA の配布（§1-87）・MCP の出口（§3-229）・遷移の防御と再読み込み（§3-230）・直接入力（§3-222）・快適上限の較正（§3-223）・VFR（§3-225）・回転情報（§3-228）。
+  > **更新（2026-10-17）**: §1-87 は §161（CLOSED 3-235）で解消。
 
 ## 158. ★第 3 弾のクローズ後の文書とコード内コメントの現行化（オーナー指示 2026-10-15「次のセッションの担当者が混乱する更新漏れや矛盾を探し、実装とずれたコメントも点検する」）＝棚卸し 4 体・直し 5 体・敵対的レビュー 3 本・機械ゲート 3 環境 失敗 0・main で作業（2026-10-15）
 
@@ -16707,3 +16710,257 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 ### 159.3 残るもの
 
 - 台帳 §1-91（`backend.uploadFile` の元ファイルが開けないときの符号）。Join の 🎞 の同名上書きの衝突そのもの（毎回新しい名前にする案）は裁定で含めず、起票もしていない（必要になればオーナー判断）。
+  > **更新（2026-10-16）**: §1-91 は §160（CLOSED 3-233）で解消。
+
+## 160. ★小さな不具合 3 件（台帳 §1-91・§1-89・§1-82）＝アップロードの元ファイルの失敗を `BACKEND_UNREACHABLE` から `FILE_NOT_FOUND` へ・Inpainting の目盛りに専用の id・操作パネルの不安定なテスト 4 件の原因を確かめて直す（2026-10-16）
+
+### 160.1 結論
+
+- **§1-91（`backend.uploadFile` の符号）を直した → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233。** 元ファイルを開けない・大きさが取れない・読めない失敗は、通信の失敗 `BACKEND_UNREACHABLE` ではなく既存の符号 `FILE_NOT_FOUND` になり、文に Windows のエラー番号が付く。挙動の変更は失敗の経路だけで、正常系は変わらない。画面の表示が変わる点は §160.2。
+- **§1-89（Inpainting のフレーム数スライダーの目盛り）を直した → 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1 でオーナーの目視待ち。** 実機では未確認。
+  > **更新（2026-10-17）**: 目視は合格（§160.7・CLOSED 3-237）。
+- **§1-82（操作パネルの不安定なテスト）を直した → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234。** テストだけの変更で、製品コードは変わらない。4 件それぞれの原因を推定し、うち 2 件は一時的に値を変えて決定的に再現して確かめた。全件実行の繰り返しで対象は全部合格したが、対象外の 1 件が 1 回落ちたので台帳 §1-92 に起票した（§160.5）。
+- **コミット**: dev `dd601eb`（§1-91 のネイティブ＋テスト 1 件。`http_client.h`・`http_client.cpp`・`bridge.cpp`・`test_http_client.cpp`）・`2b88232`（§1-91 の契約。`BRIDGE_CONTRACT.md` §4.5・§5・§8 直後の注記）・`bc1c616`（§1-89 の目盛りの id＋テスト 1 行）・`6fc841c`（§1-82 のテスト 4 ファイル）・`1f39906`（配布用 aux2。§1-91 と §1-89 の両方を含む）。記録（本節・CLOSED・台帳・DEVLOG）のコミットは監督が積む。main への merge はオーナーの合図待ち。
+
+### 160.2 §1-91: アップロードの元ファイルの失敗の符号
+
+- **やったこと**: プラグインのネイティブ側 `UploadFileSync`（`native/src/http_client.cpp`）は、元ファイルを開けない（`CreateFileW` の失敗）・大きさが取れない（`GetFileSizeEx` の失敗）・送信中に読めない（`ReadFile` の失敗）の 3 か所で通信の失敗 `kUnreachable` を返していた。`ReadFile` の失敗は Windows のエラー番号を捨てて `ERROR_READ_FAULT` に決め打ちし、文は "upload write failed (winhttp error 30)" になっていた。`TransportError::kSourceFileFailed`（元ファイルの失敗。通信の失敗ではない）を足して 3 か所で返し、`bridge.cpp` の `TransportCode` が既存の `FILE_NOT_FOUND` に写す。文は "Could not open／size／read upload source file (Windows error N)"。番号は `CloseHandle` の前に取る。`plugin.log` の行は「backend.uploadFile failed: <符号> - <文>」で、§159 の `downloadVideo` と同じ形。
+- **テスト**: 単体テスト 1 件（`native/tests/test_http_client.cpp`。元ファイルを共有なしで開いたまま `UploadFileSync` を呼ぶと `kSourceFileFailed`・status 0・文に "Windows error 32"）。ファイルを開く処理は接続より前にあるのでサーバーが要らず、統合テストではなく無印のスイートに置いた（`build.ps1 -RunTests` で毎回走る）。同ファイル冒頭のコメントも現行化した。大きさが取れない経路と読めない経路はテストで起こせないので、読み合わせと差分レビューで確かめた。
+- **契約**: [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.5・§5 の `FILE_NOT_FOUND` の定義を「存在しない・読み取りで開けない・大きさが取れない・読めない」に広げ、§8 の版の表の直後に 2026-10-16 の注記を置いた。params・result・符号の集合は不変なので版は上げない。
+- **画面の表示が変わる点**: アップロード欄とキーフレームのカードは符号だけを出すので、他のプロセスが開いたままのファイルでは `BACKEND_UNREACHABLE` の代わりに `FILE_NOT_FOUND` と表示される。バッチの表は「符号: 文」を出すので Windows のエラー番号も見える。`plugin.log` にも残る。操作パネルの型定義 `types.ts` は触らない（JSDoc に書き足すと契約の写しが増えるため）。
+- **範囲外**: 送信中に元ファイルの長さが変わった場合、`ReadFile` は失敗せず `Content-Length`（送ると宣言した長さ）とずれて、通信の失敗として出る。
+- **オーナー裁定（2026-10-16）**: A 案（監督の推奨を承認）＝既存の `FILE_NOT_FOUND` を広げ、新しい符号は足さない・版は上げない・文に Windows のエラー番号を添える・`ReadFile` の途中の失敗も含める。
+
+### 160.3 §1-89: Inpainting のフレーム数スライダーの目盛り
+
+- **やったこと**: `webui/src/modes/edit/InpaintingPanel.tsx` に非 export の定数 `INPAINT_TICK_ID = "inpaint-comfort-tick"` を置き、`DurationField` の `tickId` に渡した（Alpha Gen の `ALPHA_GEN_TICK_ID` と同じ形・6 行の追加）。これで Inpainting のつまみの目盛り（快適上限の線を示す `<datalist>`）の id が、Create の `"spill-tick"` と別になる。`EditScreen.inpaint.test.tsx` の既存のケースに、つまみの `list` がその id であることの確認を 1 行足した。`CommonGenerationFields.tsx` のコメントは変更後も偽にならないので触らない。
+- **オーナーの目視へ**: jsdom（ブラウザを模した試験環境）の単体テストでは、Create と同時に描いたときの id の重複を再現できない（`EditScreen` 単体では Create を描かない）。目で見える要素なので、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1 のオーナー目視 1 行へ移した。合格したら CLOSED へ移す。
+
+> **更新（2026-10-16）**: オーナーの目視で合格（160.7・CLOSED 3-237）。
+
+### 160.4 §1-82: 操作パネルの不安定なテスト
+
+- **調査**: バックエンドが止まっていることを確かめて全件実行を 10 回。`App.nag.test.tsx` の "NAG on" が 10 回中 5 回落ち（"VSF" は 0 回）、`JobsContext.test.tsx` の cancelJob と `ObjectTrackingSection.test.tsx` の Stop は 0 回だった。新たに `App.prefill.test.tsx` の "#5 (count 0) appends the image as the 1st keyframe…" が 10 回中 1 回落ち、オーナー裁定で §1-82 に含めた。ファイルをまたいだ持ち越しは起きない（vitest 4.1.10 の既定＝forks・isolate=true・ワーカー 23）。
+- **原因と直し**:
+  1. **`App.nag.test.tsx`**: 同じファイルの中の持ち越し。前のケースが送ったジョブが共有モックに残り、既定 2 秒のポーリングで約 4 秒「生成」が Busy のままになる。`renderReady` はジョブ一覧の初期値が空なので待ちにならない。→ `afterEach` に `vi.restoreAllMocks()` と `drainJobs()`（`SingleScreen.repeat.test.tsx` の前例）。
+  2. **`JobsContext.test.tsx`**: 実行中の窓が問い合わせ 3 回分（20 ms × 3）しかなく、取り消しが届く前にジョブが完了すると、モックは cancelled にせずジョブを削除するので `cancellingIds` が消えない。→ `setup(50)`（窓を約 17 倍＝約 1 秒に）。
+  3. **`ObjectTrackingSection.test.tsx`**: `waitFor` は成功した後に `setTimeout(0)` を 1 回待つ（`@testing-library/react` 16.3.2 `dist/pure.js:91-98`）。その間に 40 ms のモックのタイマーが先に発火して、Stop が無効に確定する窓がある。→ 同期の `expect(stop).toBeEnabled()` と `fireEvent.click(stop)` に（描画からクリックまで `await` 無し）。
+  4. **`App.prefill.test.tsx` #5**: 知らせが出る前に `getByText` で探していた。→ `waitFor`（5 秒）。
+- **推定の確認**: (2) は一時的に `setup(1)` にすると `:147` の `waitFor`（8 秒）で落ち、(3) は一時的に `delayMs: 0` にすると `:286` で `cancelTracking` が送られずに落ちた（画面は "Tracked 120 frames…"）。どちらも推定どおりの落ち方を決定的に再現した。一時的な値は戻した。
+
+### 160.5 やり方と門
+
+- **調査**: 調査担当 3 体（Opus 2・Sonnet 1・読み取り専用）。
+- **計画の敵対的レビュー 2 本（Opus）**:
+  - 第 A 部（§1-91・§1-89）: Critical 0・Major 3・Minor 7。Major＝「エラー番号は `plugin.log` にだけ残る」は誤り（バッチの表に出る）・`build.ps1` も webui を組むので §1-82 の全件実行 20 回の後に回す・§1-89 は目で見える要素があるので §2 の目視へ。Minor 7 のうち 6 を採用し、更新行 3 つを省く提案だけ棄却した。
+  - 第 B 部（§1-82）: Critical 0・Major 1・Minor 3。Major＝`waitFor` の `setTimeout(0)`（採用）。Minor＝推定を決定的に再現して確かめる（採用）。
+- **差分の敵対的レビュー 1 本（Opus）**: Critical 0・Major 1・Minor 3。Major＝DEVLOG が未着（記録担当がまとめて書く段取りどおり）。Minor のうちコメントの言い回し 1 語を採用。
+- **機械ゲート（担当 Sonnet）**:
+  - 操作パネル: `npm run typecheck` 合格・`npm run lint` 警告 31 件（基準どおり）・`EditScreen.inpaint.test.tsx` 19 件合格。
+  - **全件実行 20 回**（`npx vitest run --exclude src/api/backend.integration.test.ts`・バックエンド停止を確認・3,246 件・1 回約 50 秒）: 対象 5 件は 20 回とも合格。**8 回目に対象外の 1 件が落ちた**: `src/App.trackRoute.test.tsx` "App / §3-54 物体追尾 right-click routing > does NOT remount on a second 追尾 right-click while a run is going — it shows guidance and leaves the run alone"（"Unable to find an element with the text: /61 \/ 241 frames/"・5.6 秒）。推定: 負荷で追尾の進捗表示が間に合わず、待ちの上限を超えた。今回の差分が触ったファイルではない。→ 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92 に起票。
+  - ネイティブ `build.ps1 -RunTests`（webui を含む）: 終了コード 0・warning 0・C4819 0・`test cases: 398 | 398 passed | 0 failed | 7 skipped`（397→398）・`native\src`／`native\tests` の非 ASCII 0。`-tc="*upload source*"` で実行 1 件・合格 1 件。
+  - 配置: `deploy.ps1` で実機（`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2`）と配布用（`AviUtl2-Plugin\NzVideomni.aux2`）へ。配布用 aux2 に `inpaint-comfort-tick` と `Could not open upload source file (Windows error` の両方が埋め込まれていることを確かめた。
+- ログは監督の作業領域（`scratchpad\gate-2026-10-16\`。git 管理外）。
+- オーナーの目視の節は §1-89 だけ（台帳 §2-1）。§1-91 は失敗経路の符号と文だけが変わるので、3-232 と同じく目視の節を作らない。
+
+### 160.6 残るもの
+
+- §1-89 のオーナー目視（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1）。
+
+> **更新（2026-10-16）**: §2-1 の目視は合格（160.7・CLOSED 3-237）。
+
+- 新しい不安定なテスト 1 件（同 §1-92）。
+
+> **更新（2026-10-16）**: §1-92 は §162（CLOSED 3-236）で解消。
+
+- main への merge はオーナーの合図待ち。
+
+### 160.7 オーナーの目視（§2-1・2026-10-16）
+
+- 実機の AviUtl2 と実バックエンドで、Inpainting に動画を読み込んだところ、フレーム数のつまみの目盛りが Single（Create）タブとは違う位置に現れた。オーナーの判定は「合格扱いでいいと思う」→ **合格**。
+- 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1（元 §1-89）を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237 へ移した（§2 は節ごと削除）。実装は dev `bc1c616`・配布用 aux2 は `1f39906`。main への merge はオーナーの合図待ち。
+
+## 161. ★Alpha Gen の LoRA ウェイトの配布（台帳 §1-87 → CLOSED 3-235）＝`Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` を追加し `install-LTX25.bat` の 3 番目の取得項目に（2026-10-16）
+
+### 161.1 結論
+
+- **Alpha Gen が使う LoRA 1 本を、オーナーの Hugging Face の既存リポジトリ `Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` として無改変で置き、`install-LTX25.bat` が自動で `models/LTX25/IC-LoRA/alpha-gen/` へ置くようにした → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235。** コードは変えていない（記述子 1 本・案内ファイル 1 本・文書・再ホストの台帳とカードだけ）。
+- **ファイル**: `ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors`・1,308,787,472 バイト・SHA-256 `d9e143f979e0756f0c83d772e6a8890f4c6b933db1f7d93fc06e25c179f3fd36`。上流は `Lightricks/LTX-2.5-22b-IC-LoRA-Alpha-Gen`（commit `6184df14b1b560bf9b6447d3ee126bd7e4a88513`）で、値は上流の LFS の値と一致する。公開側の commit は `5b797711fe9c4a05b557c59b76079689bdc4960c`。
+- **記述子**: `scripts/manifests/20-ltx25.json` の `downloads` の 3 番目の独立した項目（`include` `IC-LoRA/*`・`map` `IC-LoRA`→`LTX25/IC-LoRA`・`min` 1,250,000,000・`label` `ic_lora alpha-gen`）。1 番目の項目に足さなかったのは、インストーラが項目ごとに「`files` が全部 `min` 以上なら SKIP」で動くためで、足すと導入済みの人の再実行で 1 番目の項目全体（約 18.9GB）を取り直す。`key` は付けない（`key` は `models/INSTALLED_PATHS.txt` に書く行の印で、LTX 2.3 の IC-LoRA の行にも無い）。
+- **数値**: `min` の合計は 26,850,000,000 B で、`install_model.ps1` が表示する必要空き容量は 29GB（ceil(×1.15÷2^30)。以前は 28）。公式サイズの合計は 28,091,747,774 B＝26.16GiB で、`README.md` のダウンロード量を「およそ 25 GB」から「およそ 26 GB」にした。ハードウェア要件の「追加で約 30GB」は変えていない（29 は 30 を超えず、同じ値を書き写した箇所と食い違わせないため）。
+- **オーナー裁定（2026-10-16）**: ①置き場所は既存の `Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` を足す（新規リポジトリは作らない）。②`install-LTX25.bat` で必ず取得する（任意導入のバッチにしない）。③台帳 3 文書はこのセッションで更新してよい。④`config.yaml` に `alpha-gen` の登録行が無い既存の利用者は、コードで手当てせず `README.md` に手順 2 つ（1 行足す／`config.yaml` を退避して `run.bat` で作り直す。どちらもサーバーの起動し直しを含む）を書く。SNS での案内はオーナーが行う。
+- **ライセンス**: LTX-2.x Community License（2026-08-11 版）第 3 条で、無改変の再配布が条件つきで許される。LoRA は第 1.5 条 (i)・第 3.5 条（LoRA adapters を名指し）により派生物として扱い、同リポジトリの NOTICE.md 第 5 節（譲渡の通知）の対象に入れた。独立確認（Opus・WEB 検索つき）で監督の読みと食い違いは無かった。Hugging Face の規約に、gated（利用条件への同意が要る設定）の中身の再公開を禁じる条項は見つからず、Lightricks がミラーについて述べたものも見つからなかった。第三者による公式 IC-LoRA の再ホストの例は見つからなかった（オーナー自身の LTX 2.3 側の前例はある）。残留リスクは 2026-08-23 の本体の再ホストと同じで、新しいものは無い。safetensors のヘッダにライセンス文が埋め込まれている。
+- **LICENSE の写し**: GitHub の `LICENSE-2_x` は、手元の写し（2026-08-23）から連絡先のメールアドレスだけが変わっている（`ltxv-licensing@lightricks.com`→`licensing@ltx.io`・版の日付は同じ）。差し替えると同じ写しを持つ `Nz-Gemma4-12B-LTX25` 側と食い違うので、今回は差し替えなかった（揃えるときは両方を一緒に）。
+
+### 161.2 やり方と門
+
+- **計画の敵対的レビュー（Opus）**: Critical 0・Major 3・Minor 8・全採用。Major＝端から端の試験の合格条件を「`INSTALLED_PATHS.txt` に行が増える」から「日時の行以外は変わらない」に直す（`key` を付けないため）・必要空き容量は 29 で、ハードウェア要件の約 30GB は変えない・仕様書と設計書の現行化の漏れ。
+- **差分の敵対的レビュー（Opus）**: Critical 0・Major 3・Minor 5・全採用。要点＝`README.md` の手順にサーバーの起動し直しを明記する（登録は起動時に一度だけ読む）・LoRA を「カテゴリ」と呼ばない書き方にする・404 の符号名 `LORA_NOT_FOUND` を添える・補足の条件を「`config.yaml` が 2026-10-13 より前に作られた」にする。
+- **アップロード**: 2026-10-16 13:30 頃（日本時間）。担当（サブエージェント）の実行は Claude Code の自動判定が「外部への公開」として拒否したので、オーナーの明示の許可のもとで監督が実行した。LICENSE と重み 4 本は「No files have been modified since last commit」で読み飛ばされ、NOTICE.md（commit `3cab4fdf`）・README.md（commit `036580f0`）・LoRA（commit `5b797711`）を送った。全体で約 100 秒（LoRA は 9.5 秒・約 132 MB/s）。
+- **遠隔の検証**: `30_verify_remote.ps1` はこのセッションでは自動判定に拒否されたので、同じ確認を公開 API で行った。`?blobs=true` で台帳の 5 本すべての大きさと LFS の SHA-256 が一致・認証なしの HEAD（resolve の URL・リダイレクトを追う）が 200 で `content-length` 1,308,787,472・公開中の NOTICE.md（25,141 B）と README.md（8,112 B）は手元と同一・gated=False・private=False。`10_verify_local.ps1` は実行していない（リポジトリを絞れず約 100GB のハッシュを取る上に、台帳の `Rootport/Nz-Sulphur2` の Q4_K_M が手元に無い）。
+- **記述子の検査**: `install_ltx.ps1 -BaseModel LTX25 -SkipVenv -SkipMigrate -SkipModels`（`tools\uv` を PATH に足して起動）。4 本の記述子の形の検査が通り、「Model downloads」は `-SkipModels given` で SKIP、検証表 9 行（固定 3 行＋LTX 2.5 の 6 行）がすべて PASS（`ic_lora alpha-gen` 1.22 GB を含む）・終了コード 0。
+- **端から端の取得試験**（開発機・2026-10-16 13:33:13〜13:34:54）: 開発機の LoRA を同じフォルダで `.bak` に改名し、`install_model.ps1 -BaseModel LTX25`（`install-LTX25.bat` の中身）を実行した。
+  - 既存の 2 項目は「SKIP … (16.35 GB already present)」（本体 4 本）・「SKIP … (8.60 GB already present)」（Gemma 4）で、3 番目の項目だけが「missing: … (0 B < 1.16 GB)」として取得された。
+  - 所要時間 101.3 秒、うちダウンロード 99.13 秒（約 13.2 MB/s）。画面の必要空き容量の表示は「約 29 GB」、取得するファイルは「6 個」。
+  - 検証表 9 行がすべて PASS・終了コード 0。置かれたファイルは 1,308,787,472 B で、SHA-256 は上の値と一致。
+  - `models/INSTALLED_PATHS.txt` の違いは日時の行だけ。`models/.dl/` は残っていない。
+  - 記録は `logs\install_LTX25_20261016_133313.log`。合格を確かめてから `.bak` を削除した（同じハッシュのため）。実サーバーと AviUtl2 は止めていない。
+- pytest は対象外（記述子の `downloads` を読むテストは無い）。オーナーの目視の節は作らない（実機で確かめる要素が無い）。
+
+### 161.3 残るもの
+
+- オーナーの SNS での案内（`config.yaml` に `alpha-gen` の行が無い利用者向け。`README.md`「Alpha Gen」の手順を指す）。
+- `Nz-HF-Rehost/verify_local_result.json` は更新していない（`10_verify_local.ps1` を実行していないため）。
+- LTX 2.3 側の NOTICE に In-Outpainting の記載が無い既存の漏れ（今回の範囲外。必要ならオーナー判断で起票）。
+- `Nz-HF-Rehost/README.md` の完了状況の表に LTX 2.5 の 2 リポジトリが無い既知のずれ（今回は LoRA の追加の段落だけを足し、表は作り直していない）。
+- クローズの番号は当初 3-233／§160 を予定していたが、並行セッションが先に使ったため 3-235／§161 にした。
+- main への merge はオーナーの合図待ち。
+
+## 162. ★操作パネルの不安定なテスト 1 件（台帳 §1-92 → CLOSED 3-236）＝`App.trackRoute.test.tsx` の追尾の 2 回目の右クリックのケース・進捗の知らせを送る前に追尾の要求を待つ（2026-10-16）
+
+### 162.1 結論
+
+- **§1-92（`webui/src/App.trackRoute.test.tsx` の "does NOT remount on a second 追尾 right-click while a run is going — it shows guidance and leaves the run alone"）を直した → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236。** テストだけの変更で、製品コードは変わらない。§160 のゲート（全件実行 20 回）の 8 回目に 1 回落ちて §1-92 に起票したもので、オーナー指示「簡単なら今直す」（2026-10-16）で同じセッションで扱った。
+- 原因は、テストが進捗の知らせを送る時点が早すぎて、受け手がまだ "running" でないと知らせを捨てること（§162.2）。直しは、知らせを送る前に追尾の要求（`timeline.trackObject`）が届いたのを待つ 4 行（§162.3）。
+- 全件実行 20 回で対象は 20 回とも合格した。ただし対象外の 2 件が 1 回ずつ落ちたので、台帳 §1 に新しい項目として起票する（§162.4・§162.5）。
+- dev `e70a0d0`（テストの直し）。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
+
+### 162.2 原因と推定の確認
+
+- **仕組み（コードの読み取り）**: このケースは `timeline.trackObject` を決着しない Promise に差し替え、進捗の知らせ（index 61／total 241）をテスト自身が 1 回だけ送る。受け手の `useObjectTracking`（`webui/src/modes/toolbox/useObjectTracking.ts`）は、"running" になる前に届いた進捗の知らせを捨てる（`:158`。始まる前の知らせや別のパネルの知らせを表示しないための意図した仕様）。"running" になるのは追尾を始める useEffect の `enterPhase("running")`（`:204`）で、その直後の同じ同期区間で `request("timeline.trackObject")`（`:207`）を送る。テストは見出し「Object tracking」が見えた時点で知らせを送っていたが、見出しが見えても useEffect が走り終わった保証は無い。一度捨てられた知らせは二度と来ないので、待ちの上限を延ばす直しは効かない。製品コードの欠陥ではない。
+- **推定の部分**: 「負荷が高いと描画と useEffect が別の手番に割れる」という細部は推定で、確かめていない。
+- **推定の確認（担当 T2）**: 知らせの送信を一時的に見出しの待ちの前へ移して単体で実行すると、対象のケースが `:356`（修正前の行番号）の `findByText(/61 \/ 241 frames/)` で同じメッセージのまま 5,506 ms で落ちた（全件実行での失敗＝5.6 秒と一致）。この確認で分かるのは「始まる前の知らせは捨てられ、待ちを延ばしても戻らない」ことだけ。一時的な変更は戻した。
+
+### 162.3 直し
+
+- `await waitForToolboxPanel();` の直後に `await waitFor(() => expect(trackCalls).toBe(1));` を英語のコメント 3 行つきで足した（4 行）。同じファイルの前例（`:166-174`・`:200-204`＝見出しの後に `waitFor` で `trackObject` の要求を待つ）にそろえた形で、`waitFor` の上限は前例と同じ既定の 1 秒。
+- これで足りる理由: `enterPhase` は `phaseRef.current` を同期で書く（`:138-141`）ので、要求を観測した時点で "running" が確定している。要求の Promise は決着しないので、以後 "running" から変わる経路は無い。
+
+### 162.4 やり方と門
+
+- **調査**: 調査担当 1 体（Opus・読み取り専用・単体 5 回合格）。
+- **計画の敵対的レビュー 1 本（Opus）**: Critical 0・Major 1・Minor 5・全採用。Major＝並行セッションが §1-87 を先にクローズして §161・3-235 を使ったので、番号を §162・3-236 にする。Minor＝行番号・前例にそろえる・コメントは英語で上限は既定・推定の確認で分かる範囲を言い過ぎない・20 回は「悪くなっていない」の確認。
+- **差分の敵対的レビュー 1 本（Opus）**: Critical 0・Major 0・Minor 0。追加の 4 行は計画と 1 字ずつ一致・CRLF を維持。
+- **機械ゲート（担当 Sonnet）**:
+  - `npm run typecheck` 合格・`npm run lint` 警告 31 件（基準どおり）・単体実行 5 回合格（対象のケース 577〜590 ms）。
+  - **全件実行 20 回**（`npx vitest run --exclude src/api/backend.integration.test.ts`・バックエンド停止を確認・3,246 件・1 回 49〜54 秒）: 対象の 1 件は 20 回とも合格。§160 で直した 5 件（`App.nag` 2 件・`JobsContext`・`ObjectTrackingSection`・`App.prefill` #5）も 20 回とも合格。
+  - **対象外の 2 件が 1 回ずつ落ちた**（どちらも今回の差分が触ったファイルではない）:
+    1. 第 4 回: `src/App.prefill.test.tsx` "videoAudioToVideo extracts the video's audio (mix, inclusive frame range) and loads the wav into the source-audio slot (#3)"（"Unable to find an element with the text: /extracting audio/i"・5,299 ms）。推定: 音声を抽出している間だけ出る表示を待ちそこねた。
+    2. 第 16 回: `src/modes/chained/SourceInputPanel.test.tsx` "SourceInputPanel > drag-and-drop (contract v7) > dropping a video switches to v2v mode and shows the CONTEXT FRAMES slider"（`toBeEnabled()` の失敗・16 ms）。推定: ドロップの直後、有効になる前のボタンを見た。
+  - 上の 2 件は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に新しい項目として起票する（番号は監督が台帳を書くときに確定する）。
+- **20 回のゲートの位置づけ**: 修正前の再現率が 1/20 なら、直っていなくても 20 回通る確率は約 36% なので、20 回は「悪くなっていない」ことの確認にとどまる。直った根拠は、構造上の理由（捨てられる前に待つ。§162.3）と推定の確認（§162.2）が担う。
+- ログは監督の作業領域（git 管理外）。オーナーの目視の節は作らない（テストだけの変更）。
+
+### 162.5 残るもの
+
+- 新しい不安定なテスト 2 件（§162.4。台帳 §1 に起票予定）。
+  > **更新（2026-10-16）**: 2 件は §1-94 として起票した後、オーナー裁定で §3-238（操作パネルのテストコードの整理と不安定なテストの一掃）に吸収した（§163）。
+- 台帳の更新と記録のコミットは監督が行う。main への merge はオーナーの合図待ち。
+
+## 163. ★操作パネルのテストコードの量の実測とオーナー裁定（§3-238 の起票の材料）（2026-10-16）
+
+### 163.1 裁定
+
+オーナー裁定（2026-10-16）は次の 3 点。
+
+- 不安定なテストはテストコードの欠陥であって、製品の不具合ではない。今後は台帳 §1 に毎回起票せず、§3 に「テストコードの整理と不安定なテストの一掃」というテーマを 1 つ起票する（→ [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-238）。
+- 「現状ではテストコードが増えすぎて冗長になっていると感じる。不具合の修正よりも、不要なテストコードを減らしていく作業のほうが優先度が高い」。
+- §1-94（不安定なテスト 2 件・§162.4）は §3-238 に吸収する。
+
+### 163.2 実測
+
+監督が 2026-10-16 に `webui/src` 配下で数えた。
+
+**全体**
+
+| 区分 | 量 |
+|---|---|
+| テストコード | 161 ファイル・56,694 行・3,246 件 |
+| 製品コード | 47,890 行 |
+| モックと試験の支え | 3,055 行 |
+
+- テストの件数は `npx vitest run` の全件（統合テスト `backend.integration.test.ts` を除く）。全件実行 1 回は約 50 秒（23 ワーカー）。
+- 製品コードはテストとモックを除く `*.ts`／`*.tsx`。モックと試験の支えは `bridge/mockBridge.ts` と `test/*.ts`。
+
+**大きいテストファイル**
+
+| ファイル | 行数 |
+|---|---|
+| `modes/chained/useChainForm.test.ts` | 3,828 |
+| `App.prefill.test.tsx` | 2,799 |
+| `modes/batch/useBatchForm.test.ts` | 2,159 |
+| `modes/single/useGenerationForm.test.ts` | 1,799 |
+| `bridge/mockBridge.test.ts` | 1,358 |
+
+**区域ごとの件数**（`it(` の数）
+
+| 区域 | 件数 |
+|---|---|
+| modes/chained | 583 |
+| modes/single | 433 |
+| shell | 399 |
+| modes/edit | 321 |
+| modes/batch | 212 |
+| src 直下（App.*.test.tsx） | 158 |
+| bridge | 155 |
+| modes/batch-i2v-long | 155 |
+| jobs | 136 |
+| modes/toolbox | 46 |
+| api | 23 |
+
+### 163.3 不安定の履歴と傾向
+
+- 2026-10-06〜16 に見つかった不安定なテスト: §1-82 の 4 件（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234）・§1-92 の 1 件（同 3-236）・§1-94 の 2 件（§162.4。§3-238 に吸収）。
+- 全件を 20 回回すたびに、別の 1〜2 件が新たに落ちる傾向がある（§160.5・§162.4）。
+- 落ちるのは画面やアプリ層の、時間の隙間やモックの持ち越しに頼るテストに集中している。
+
+### 163.4 進め方と基準の候補
+
+監督の提案で、計画ではなく判断材料。判断は着手時にオーナーが行う。
+
+- **進め方の候補**: ①棚卸し（区域・層ごとの件数と所要・何を確かめているか・不安定の履歴・同じ振る舞いを複数の層＝フックの単体／画面の結合／アプリ全体の経路で重ねている箇所）→ ②削除の基準の確定（オーナー裁定）→ ③層ごとに削減 → ④全件の繰り返しで確認。
+- **削除の基準の候補**:
+  - (a) 同じ振る舞いを複数の層で重ねているものは 1 層に寄せる。
+  - (b) モックの内部や時間の隙間に頼るテストは書き直すか外す（不安定の一掃はここに含まれる）。
+  - (c) 後の裁定で置き換わった古い仕様を確かめているテストは外す。
+- **注意**: 敵対的レビューで足したテストが実際に退行を捕まえた例があるので、件数を目安に削らず、基準に照らして 1 件ずつ判断する。
+
+## 164. ★小さな不具合 4 件・LoRA の配布・MiniMax H3 の起票の後の文書とコード内コメントの現行化（オーナー指示 2026-10-17「ドキュメント類とコード内コメントを最新に・新しいセッションの担当エージェントを混乱させる更新漏れや矛盾を探す」）＝棚卸し 4 体・直し 3 体・敵対的レビュー 1 本・機械ゲート 失敗 0（2026-10-17）
+
+### 164.1 結論
+
+- **前回の点検（§158・main merge `f764ce1`）以降の 15 コミットで変わった事実 7 点に伴う失効を、コード内コメント 7 件と文書 16 件で現行化し、敵対的レビューの採用 9 件を足した。** 挙動の変更は無い（§164.3）。利用者に見える文言は変えていない。
+- 対象の事実: §1-91（アップロードの元ファイルの失敗を `FILE_NOT_FOUND` に）・§1-89（Inpainting の目盛り）・§1-82／§1-92（不安定なテストの直し）・§3-238（テストコードの整理の起票と §1-94 の吸収）・§1-87（LoRA の配布）・§1-93（MiniMax H3 の起票）・台帳の状態。
+- コード内コメント 7 件: ネイティブ 3（`bridge.cpp` の `FileExists` の説明を、呼び出し元ごとの符号と `backend.uploadFile` の後からの `FILE_NOT_FOUND` に合わせた・`http_client.h` の `kUnreachable` と `transport_message` の説明を元ファイルの失敗の追加に合わせた）／操作パネル 3（`bridge/types.ts` の JSDoc 2 か所と `timeline/cutoutAndUpload.ts` の「transport の失敗だけが reject」を「ブリッジのエラーが reject」に。符号は契約 §4.5 を参照）／PowerShell 1（`scripts/install_ltx.ps1` の IC-LoRA の置き場所をベースモデルごとの `models/<BaseModel>/IC-LoRA/` に）。
+- 文書 16 件: 研究ノートの訂正 3・CLOSED の更新行 5・本書の更新行 4・フロントエンド `DEVLOG.md` 2・`BRIDGE_CONTRACT.md` の冒頭・`ALPHAGEN_DESIGN.md`・`MULTI_ENGINE_DESIGN.md`・台帳の運用規則（不安定なテストは §1 に個別に起票せず §3-238 に追記する）。
+- レビューの採用 9 件: `FileExists` のコメント・台帳 §3-238 の順位の注記と状態の行・DEVLOG §137.3 のパスの訂正行・DEVLOG §140.1／CLOSED 3-236／本書 §162.5 の更新行を「§1-94 として起票した後に吸収」に・`MULTI_ENGINE_DESIGN.md` から項目番号を外す・DEVLOG と台帳の「最終更新」。
+- コミットは監督が dev に積み、main への merge は同日に行う。
+
+### 164.2 やり方
+
+- 棚卸し（読み取りのみ・Opus 4 体）: 文書（高 2・中 5・低 9）／Python（低 1）／操作パネル（低 3）／ネイティブ（低 3・非 ASCII 0）。
+- 直し 2 体（コード・文書）。
+- 敵対的レビュー（Opus 1 本・「次のセッションの担当者」の視点）: Critical 0・Major 1・Minor 10。
+  - 採用 8: B-1 §3-238 の優先は項の中の順序であって台帳全体の順位ではないという注記・A-1 `FileExists` の呼び出し元 5 か所に合わない説明・A-3 DEVLOG §137.3 のパスの誤り（`api/types.ts`→`bridge/types.ts`）の訂正行・A-4 更新行の文体と「最終更新」の日付・B-2 設計書に台帳の項目番号を書かない規則・B-3 §1-94 を経て吸収した事実・B-5 §3-238 に状態の行・B-6 解消済みの「記録のコミットは監督が積む」は main merge の更新行でまとめて片づける（§164.5）。
+  - 棄却 3: A-2 `types.ts` の `backend.request` 側の言い回し（契約 §4.3 と同じ表記なので揃っている）・B-7 契約の `BACKEND_UNREACHABLE` の「接続不可・切断等」（以前からの表現で、今回の変更が生んだずれではない）・B-4 §3-229／§3-230 の置き場所（以前からの構成で、動かすならオーナー判断）。
+- 直し 1 体（採用分の反映と本節）。
+
+### 164.3 挙動不変の証明と機械ゲート
+
+- TypeScript: コメントを除いたトークン列が変更の前後で完全一致（`types.ts` 1,946・`cutoutAndUpload.ts` 240）。
+- C++: 変更行がコメントだけであることを差分で確認。`native/src`・`native/tests` の 50 ファイルで非 ASCII 0 バイト。
+- PowerShell: `ParseInput` でコメント以外のトークン 8,622 が一致（`ParseFile` は使わない）。
+- `npm run typecheck` 合格・`npm run lint` 警告 31 件（基準どおり）。
+- ネイティブ `build.ps1 -SkipWebuiBuild -RunTests`: 398 件合格・失敗 0・警告 0・C4819 0（A-1 の直しの後にもう 1 回走らせた）。
+- Python は無変更なので pytest は走らせていない。配布用 aux2 はコメントだけの変更なので作り直さない。
+
+### 164.4 据え置きと申し送り
+
+- `backend.request` のログの行「transport error: <符号>」だけが古い形のまま（利用者が読むログなのでオーナー判断）。
+- `types.ts` の `backend.request` と `BACKEND_UNREACHABLE` の JSDoc の「transport-level failures only」、契約 §4.3／§5 の「接続不可・切断等」は据え置き（§164.2 の棄却 A-2・B-7）。
+- 台帳 §3-229／§3-230 の置き場所はオーナー判断（棄却 B-4）。
+- 次の番号: CLOSED 3-239・本書 §165・フロントエンド DEVLOG §141（§3-238 が生きているので 3-238 は使えない）。
+
+### 164.5 コミット
+
+- 監督が dev に積み、main へ `--no-ff` で merge する。ハッシュは merge の後の更新行で書く（B-6 の解消済みの「記録のコミットは監督が積む」もそのときに片づける）。

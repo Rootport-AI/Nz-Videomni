@@ -37,7 +37,7 @@ export interface ExtractAudioAndUploadResult {
  *
  * Note (same two-channel contract as `api/client.ts`): a reachable backend
  * that answers with an HTTP error status is a *normal* resolved result here
- * (inspect `upload.status`); only bridge transport failures reject.
+ * (inspect `upload.status`); only bridge errors reject.
  */
 export async function cutoutRangeAndUpload(
   nativeBridge: NativeBridge,

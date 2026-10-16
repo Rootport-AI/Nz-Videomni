@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
+import { apiClient } from "./api/client";
 import { bridge } from "./bridge";
 import {
   DEFAULT_NEGATIVE_PROMPT,
@@ -28,6 +29,14 @@ async function renderReady() {
   await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
 }
 
+/** Advance the shared mock backend until no job is queued/running. */
+async function drainJobs(): Promise<void> {
+  for (let i = 0; i < 50; i += 1) {
+    const jobs = await apiClient.listJobs();
+    if (jobs.every((j) => j.status !== "queued" && j.status !== "running")) return;
+  }
+}
+
 async function openNagAccordion(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByText(/^negative prompt$/i, { selector: "summary" }));
 }
@@ -36,8 +45,10 @@ describe("App / NAG shared negative-prompt accordion", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });
-  afterEach(() => {
+  afterEach(async () => {
     window.localStorage.clear();
+    vi.restoreAllMocks();
+    await drainJobs();
   });
 
   it(

@@ -2886,6 +2886,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 > **更新（2026-10-14）**: main merge 済み（`2113c63`）。
 - **残課題**: 操作パネル（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-85）・出口（同 §1-86）・LoRA ウェイトの配布（同 §1-87）・出力ファイルの fps を元動画の正確な値で書く追補（同 §1-88）・自前の入力プラグイン（同 §3-222）・快適上限の較正（同 §3-223）。
   > **更新（2026-10-14）**: §1-85 は 3-227・§1-88 は 3-226 でクローズ。
+  > **更新（2026-10-17）**: §1-86 は 3-231・§1-87 は 3-235 でクローズ。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b、ゲート 0 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §152、事前調査 [`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md)。
 
 ### 3-226. Alpha Gen 第 1 弾の追補: 出力ファイルの fps を元動画の正確な値で書く（29.97fps など・案 C）（起票：2026-10-13、実装：2026-10-13、オーナー目視合格・クローズ：2026-10-14）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-2〔元 §1-88〕からクローズ）
@@ -2916,6 +2917,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   > **更新（2026-10-14）**: main merge 済み（`015893b`）。
 - **残課題**: 出口（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-86）・LoRA ウェイトの配布（同 §1-87）・直接入力（同 §3-222）・快適上限の較正（同 §3-223。8bit の線は既定の操作でも超えるので価値が高い）・VFR の受付時の拒否（同 §3-225）・`DurationField` の型コメント「Create-only」の現行化（次にそのファイルを触るとき）。
   > **更新（2026-10-14）**: 同日のコメント点検で現行化した。
+  > **更新（2026-10-17）**: §1-86 は 3-231・§1-87 は 3-235 でクローズ。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)（§3・§9・§23・§24）、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3b（v0.5.88）、プラグインの契約 フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md)（v15）、設計上の判断 フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §132・§133、実装と検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153・§154。
 
 ### 3-231. Alpha Gen 第 3 弾＝出口（ジョブカードの ✂・🪣・色・💾・🔁 と閾値スライダー・ProRes 4444 の MOV・市松プレビュー・塗りつぶし mp4・ブリッジ契約 v16）（起票：2026-10-07、実装：2026-10-15、オーナー目視合格・クローズ：2026-10-15）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1〔元 §1-86〕からクローズ）
@@ -2934,6 +2936,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   > **更新（2026-10-15）**: main merge 済み（`01850f3`）。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10・第 2 部 §25、API 契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3c（v0.5.89）、ブリッジ契約 フロントエンド `BRIDGE_CONTRACT.md` v16、設計の経緯と関門 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §156、実装と門 同 §157、設計上の判断 フロントエンド `DEVLOG.md` §134・§135。
 - **残課題**: LoRA ウェイトの配布（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87）・MCP の出口（同 §3-229）・WebView2 の遷移の防御と再読み込み（同 §3-230）・直接入力（同 §3-222）・快適上限の較正（同 §3-223）・VFR（同 §3-225）・回転情報（同 §3-228）。
+  > **更新（2026-10-17）**: §1-87 は 3-235 でクローズ。
 
 ### 3-232. ダウンロード失敗の符号と文言（保存先のファイルを開けない／書けない失敗を `DOWNLOAD_FAILED` に・「winhttp error」を「Windows error」に）（起票・実装・クローズ：2026-10-15）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-90 からクローズ）
 
@@ -2945,3 +2948,56 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   > **更新（2026-10-16）**: main merge 済み（`b3cb85f`）。
 - **正本・出典**: 契約 フロントエンド `BRIDGE_CONTRACT.md` §4.4・§5・§8 直後の注記、設計上の判断 フロントエンド `DEVLOG.md` §136、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159。
 - **残課題**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-91（`backend.uploadFile` の同じ型のずれ）。
+  > **更新（2026-10-16）**: §1-91 は 3-233 で解消。
+
+### 3-233. アップロードの元ファイルの失敗の符号（元ファイルを開けない／大きさが取れない／読めない失敗を `BACKEND_UNREACHABLE` から `FILE_NOT_FOUND` に・文に Windows のエラー番号）（起票：2026-10-15、実装・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-91 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-91（**同書側は欠番**）。§2 を経由せず §1 から直接クローズした。3-232 の計画の敵対的レビュー（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159）で見つかった、プラグインのネイティブ側 `backend.uploadFile` の同じ型のずれ。
+- **到達条件**: 元ファイルを開けない／大きさが取れない／送信中に読めない失敗が、通信の失敗（`BACKEND_UNREACHABLE`）ではなく `FILE_NOT_FOUND` として返り、文に Windows のエラー番号が付くこと。**達成した。**
+- **何が完了したか**: `TransportError::kSourceFileFailed` を足し、`UploadFileSync` の 3 か所（`CreateFileW`・`GetFileSizeEx`・`ReadFile` の失敗）で返して `TransportCode` が `FILE_NOT_FOUND` に写す。文は "Could not open／size／read upload source file (Windows error N)"、`plugin.log` の行は「backend.uploadFile failed: <符号> - <文>」。契約 `BRIDGE_CONTRACT.md` §4.5・§5 の定義と §8 直後の注記（版は上げない）。単体テスト 1 件（元ファイルを共有なしで開いたまま送る。サーバー不要）。アップロード欄とキーフレームのカードの表示は `BACKEND_UNREACHABLE` から `FILE_NOT_FOUND` に変わる（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.2）。オーナー裁定（2026-10-16）は A 案＝既存の符号を広げる・新しい符号は足さない。
+- **どの物差しで通ったか**: 計画と差分の敵対的レビュー・`build.ps1 -RunTests` 失敗 0・単体テスト 1 件の合格・配置（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.5）。オーナーの目視の節は作らない（失敗経路の符号と文だけが変わる。3-232 と同じ扱い）。
+- **状態**: dev `dd601eb`（ネイティブ＋テスト）・`2b88232`（契約）・`1f39906`（配布用 aux2）。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
+- **正本・出典**: 契約 フロントエンド `BRIDGE_CONTRACT.md` §4.5・§5・§8 直後の注記、設計上の判断 フロントエンド `DEVLOG.md` §137、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160。
+- **残課題**: なし（送信中に元ファイルの長さが変わる場合は範囲外。§160.2）。
+
+### 3-234. 操作パネルの不安定なテスト（`App.nag.test.tsx`・`JobsContext.test.tsx`・`ObjectTrackingSection.test.tsx`・`App.prefill.test.tsx`）（起票：2026-10-06、クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-82 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-82（**同書側は欠番**）。§2 を経由せず §1 から直接クローズした（テストだけの変更で、実機で確かめる要素が無い。同書の運用規則の例外）。調査で新たに見つかった `App.prefill.test.tsx` の 1 件は、オーナー裁定で本項に含めた。
+- **到達条件**: 対象のテストが落ちる原因を確かめて直し、全件実行の繰り返しで対象が落ちないこと。**達成した。**
+- **何が完了したか**: `App.nag.test.tsx`＝同じファイルの中で前のケースのジョブが共有モックに残る → `afterEach` で後片付け。`JobsContext.test.tsx`＝取り消しが届く前にジョブが完了しうる短い窓 → 窓を広げる。`ObjectTrackingSection.test.tsx`＝`waitFor` の成功後の 1 拍の間に Stop が無効になる → 描画からクリックまでを同期に。`App.prefill.test.tsx` #5＝知らせが出る前に探していた → `waitFor`。製品コードは変わらない。原因と直しの詳細は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.4。
+- **どの物差しで通ったか**: 計画の敵対的レビュー（第 B 部）と差分の敵対的レビュー、推定のうち 2 件を一時的に値を変えて決定的に再現した確認（§160.4）、全件実行の繰り返しで対象は全部合格（§160.5）。
+- **状態**: dev `6fc841c`。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
+- **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §139、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160。
+- **残課題**: 同じ全件実行で対象外の 1 件が落ちた → [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92。
+  > **更新（2026-10-17）**: §1-92 は 3-236 でクローズ。
+
+### 3-235. Alpha Gen の LoRA ウェイトの配布（`Rootport/Nz-LTX25-weights` の `IC-LoRA/alpha-gen/` に追加・`install-LTX25.bat` が取得）（起票：2026-10-07、実装・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87（**同書側は欠番**）。§2 を経由せず §1 から直接クローズした（実機で確かめる要素が無く、公開 API と端から端の取得試験で検証できる。同書の運用規則の例外）。Alpha Gen の第 1〜3 弾（3-224・3-226・3-227・3-231）の後に残っていた、LoRA ファイルを利用者がどう入手するかの 1 点。
+- **到達条件**: `install-LTX25.bat` が LoRA を自動で置くこと・LTX 2.5 を導入済みの人の再実行では LoRA だけを取ること・`config.yaml` に `alpha-gen` の登録行が無い利用者への案内があること。**達成した。**
+- **何が完了したか**: オーナーの Hugging Face の既存リポジトリ `Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` として無改変で追加し、同リポジトリのカード（NOTICE.md・README.md）を更新した（再ホストの台帳とカードは `Nz-HF-Rehost/`）。記述子 `scripts/manifests/20-ltx25.json` の `downloads` に 3 番目の独立した項目を足し（`key` なし）、案内ファイル `models/LTX25/IC-LoRA/alpha-gen/put_IC-LoRA_safetensors_here.txt` を置いた。`README.md`（「LTX 2.5 を追加する」・「Alpha Gen」・「models フォルダの構成」）に取得の説明と、`config.yaml` に `alpha-gen` の行が無い場合の手順 2 つを書いた。`config.yaml.example`・`Videomni_Backend_Specification.md`（v0.5.90。§5.1b・§11.2）・[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)・[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10 節・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D26 を現行化した。サーバー・操作パネル・インストーラのスクリプトのコードは変えていない。
+- **どの物差しで通ったか**: 計画と差分の敵対的レビュー（全採用）・公開 API による遠隔の検証・記述子の検査・端から端の取得試験（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161.2）。オーナーの目視の節は作らない。
+- **状態**: dev `6b74823`（記述子・案内ファイル・README・config.yaml.example）・`11b50b6`（仕様書・設計書・研究ノート・MCP 設計書）・記録のコミットはこの次。main への merge はオーナーの合図待ち。
+- **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §7、利用者向けの手順 `README.md`「Alpha Gen」、取得の定義 `scripts/manifests/20-ltx25.json`、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161。
+- **残課題**: オーナーの SNS での案内（`config.yaml` に `alpha-gen` の行が無い利用者向け。`README.md`「Alpha Gen」の手順を指す）・`Nz-HF-Rehost/verify_local_result.json` は更新していない・LTX 2.3 側の NOTICE に In-Outpainting の記載が無い既存の漏れ（今回の範囲外。必要ならオーナー判断で起票）。詳細は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161.3。
+
+### 3-236. 操作パネルの不安定なテスト（`App.trackRoute.test.tsx` の追尾の 2 回目の右クリックのケース）（起票・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92（**同書側は欠番**）。§2 を経由せず §1 から直接クローズした（テストだけの変更で、実機で確かめる要素が無い。同書の運用規則の例外）。3-234（§1-82）のゲートの全件実行で対象外として 1 回落ちたもので、オーナー指示「簡単なら今直す」（2026-10-16）で同じセッションで扱った。
+- **到達条件**: 対象のテストが落ちる原因を確かめて直し、全件実行の繰り返しで対象が落ちないこと。**達成した。**
+- **何が完了したか**: `webui/src/App.trackRoute.test.tsx` の "does NOT remount on a second 追尾 right-click while a run is going — it shows guidance and leaves the run alone"。テストが進捗の知らせを送る時点が早すぎ、受け手の `useObjectTracking` がまだ "running" でないため知らせを捨てていた（始まる前の知らせを表示しないための意図した仕様で、製品コードの欠陥ではない）→ 知らせを送る前に追尾の要求が届いたのを `waitFor` で待つ（同じファイルの前例にそろえた形）。製品コードは変わらない。原因と直しの詳細は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.2・§162.3。
+- **どの物差しで通ったか**: 計画と差分の敵対的レビュー、一時的に知らせを送る時点を早めて同じ落ち方を再現した推定の確認、全件実行の繰り返しで対象は全部合格（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.2・§162.4）。
+- **状態**: dev `e70a0d0`（テストの直し）。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
+- **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §140、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162。
+- **残課題**: 同じ全件実行で対象外の 2 件が 1 回ずつ落ちた → [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に起票予定（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.4）。
+  > **更新（2026-10-17）**: 2 件は §1-94 として起票した後、オーナー裁定で [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-238 に吸収した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163）。
+
+### 3-237. Inpainting のフレーム数スライダーの目盛りが Create の線を指す件（専用の datalist id）（起票：2026-10-14、実装：2026-10-16、オーナー目視合格・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1〔元 §1-89〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-89 → §2-1（**同書側は欠番**）。
+- **到達条件**: Inpainting のフレーム数のつまみの目盛りが Inpainting 自身の線の位置に出て、Create のつまみの目盛りとは別であること。**達成した。**
+- **何が完了したか**: `webui/src/modes/edit/InpaintingPanel.tsx` で、つまみの目盛り（快適上限の線を示す `<datalist>`）に専用の id `inpaint-comfort-tick` を渡し、Create の id と分けた（Alpha Gen と同じ形）。`EditScreen.inpaint.test.tsx` に、つまみがその id を指すことの確認を 1 行足した。
+- **どの物差しで通ったか**: 機械ゲート（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.3・§160.5）と、実機 AviUtl2＋実バックエンドでのオーナーの目視（同 §160.7）。
+- **状態**: dev `bc1c616`・配布用 aux2 `1f39906`。main への merge はオーナーの合図待ち。
+- **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §138、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.3・§160.7。
+- **残課題**: なし。

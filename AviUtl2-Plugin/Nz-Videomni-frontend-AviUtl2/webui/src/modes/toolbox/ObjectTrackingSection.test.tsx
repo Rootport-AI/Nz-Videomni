@@ -278,10 +278,10 @@ describe("ObjectTrackingSection — a run", () => {
     });
     const spy = vi.spyOn(bridge, "request");
     const stop = screen.getByRole("button", { name: /stop/i });
-    await waitFor(() => {
-      expect(stop).toBeEnabled();
-    });
-    await userEvent.click(stop);
+    // Synchronous check + `fireEvent.click`, no `await` before the click: `waitFor` waits a
+    // `setTimeout(0)` after success, which can let the 40ms mock timer finish the run and disable Stop first.
+    expect(stop).toBeEnabled();
+    fireEvent.click(stop);
     await waitFor(() => {
       expect(spy.mock.calls.some(([m]) => m === "timeline.cancelTracking")).toBe(true);
     });

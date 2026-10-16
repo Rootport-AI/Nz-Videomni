@@ -343,6 +343,8 @@ transformer側のGGUFの所在も再掲しておく。`output\LTX-2.5-22B-distil
 | `VAE/ltx-2.5-audio-vae-bf16.safetensors` | 364,866,540 | `c52733d37f6a7fb7949c3dc0fb468c6cb2169e4d836983a73babb9f0d54837a5` |
 | `Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors` | 995,778,752 | `eb5a71fe4068ee87ccdb1c3aa635e547ca76bd2d30ae20ae889f2c325c0677e8` |
 
+> **2026-10-16追記（上の本文は当時のまま）**: `Rootport/Nz-LTX25-weights`に`IC-LoRA/alpha-gen/ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors`（1,308,787,472バイト・SHA-256 `d9e143f979e0756f0c83d772e6a8890f4c6b933db1f7d93fc06e25c179f3fd36`）を追加した。Alpha Gen用のIC-LoRAで、`install-LTX25.bat`が取得する。記録は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161。
+
 **`Rootport/Nz-Gemma4-12B-LTX25`**（LTX専用ファインチューン版Gemma 4のテキストエンコーダー）
 
 | path_in_repo | サイズ（バイト） | SHA-256 |

@@ -6,6 +6,10 @@
 
 - マルチエンジン機構（ドロップダウンによるベースモデル切り替え）の設計正本は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)である。MiniMax H3固有の設計正本は本書執筆時点では未執筆であり、執筆後に本書と記述が食い違った場合は設計正本を採ること。
 - 台帳（[`PENDING_TASKS.md`](PENDING_TASKS.md)）への起票は未実施（設計段で行う）。
+
+  > **更新（2026-10-16）**: 起票済み（§1-93）。
+
+- 2026-10-16 に鮮度の確認と裁定の更新を行った。更新内容は §13、裁定の更新は §10 の追記にある。§1〜§9 の本文は 2026-09-06 時点のままで、古くなった箇所には訂正の引用を添えてある。
 - 調査の内訳: WEB調査4本（公式情報・ComfyUI事例・配布地域制限・実装ベース比較）＋配布ファイルのヘッダ実測（GGUF 13本・safetensors 7本をHTTP Rangeリクエストで部分取得して解析）＋当リポジトリの受け皿の棚卸し。数値・状況はすべて2026-09-06時点のものである。
 - 本書内では「一次資料で確認済み」「実測」「二次情報」「推測」を区別して記す。
 
@@ -17,9 +21,13 @@ MiniMax H3の追加は実現可能である。VRAM 16GBでの動作は、diffuse
 
 有望な経路は「**コミュニティ配布のpruned GGUF Q4（DiT本体約11.6GB・VRAM常駐可）を、manifestから直接ダウンロードし、DiffSynth-Studioの実装を土台に専用ワーカーへ移植する**」形である。事前に懸念されていた「K量子化の罠」（Q4_K_M表記の実体がQ4_0である疑い）は、狙っているpruned版についてはヘッダ実測で**否定**された。
 
+> **訂正（2026-10-16）**: 2026-10-16 のオーナー裁定で、DiT 重みの第一候補は枝刈り GGUF Q4 から**公式系 FL2VA の枝刈り int8 ConvRot**（Comfy-Org 配布）に変わった。コミュニティ配布の主流も枝刈り int8 ConvRot の safetensors（約 20.97GB）に移っている。DiffSynth-Studio はこの形式を comfy-kitchen 経由で直読みできる。詳細は §10 の追記と §13。
+
 一方で、前提となる工事が1つ判明した。コミュニティGGUFはKVメタデータ（`general.architecture`／`model_version`）が全滅しており（偽装・欠落）、既存の2キー契約では系統判別ができない。**テンソル名の指紋による判別への契約拡張が必須**になる。
 
 最大の未解決課題はテキストエンコーダ（Qwen3-VL-32B）の載せ方で、3案（§8）の実測比較が必要である。
+
+> **訂正（2026-10-16）**: 裁定 8 により、まず Comfy-Org の int8 ConvRot 27.14GB で動かす。3 案は将来の選択肢（§8 の訂正を参照）。
 
 ---
 
@@ -34,6 +42,8 @@ MiniMax H3の追加は実現可能である。VRAM 16GBでの動作は、diffuse
 | 最大の特徴 | **映像と音声（32kHzステレオ。台詞・劇伴・効果音・環境音）を、1本のパックされたシーケンスとして同一トランスフォーマで同時にデノイズする** |
 | 蒸留 | **ガイダンス蒸留済み**。negative promptもguidance_scaleも存在せず、1ステップ=1フォワードパス |
 | スケジューラ | rectified-flow Euler。映像用shift=12.0と音声用shift=3.0の**2本立て**を1回のトランスフォーマ呼び出しの中で進める |
+
+> **訂正（2026-10-16）**: 「ガイダンス蒸留済み」は要確認になった。ComfyUI の issue #15563 の再現グラフは cfg 4、PinkCherry の メタデータ は `guidance_scale 4.0` だった（二次情報。真偽は未確認）。詳細は §13.9。
 
 公開されていないもの（重要）: 公式が「強く推奨」する前処理 **H3-Context-IR**（長大な文脈を4Kトークンに蒸留するキャプショニング系）と、2K化モジュール **H3-Regenerate-2K** は未公開。**ローカル実行は短辺768px止まりで、ホストAPI版とは品質差がある。**
 
@@ -73,6 +83,8 @@ DiT: Abiray/MiniMax-H3-Pruned-GGUF の FL2VA Q4_K_M   11.56GB（VRAM常駐可）
 合計                                                  おおむね30GB台
 ```
 
+> **訂正（2026-10-16）**: 上の構成は GGUF Q4_K_M が前提だった。コミュニティ配布の主流は枝刈り int8 ConvRot の safetensors 20.97GB と、公式の w6a8 15.98GB／w4a8 約 12.5GB に移った。公式リポジトリ（Comfy-Org）には枝刈り fp8_scaled と w6a8 も加わっている。2026-10-16 の裁定で、DiT は公式系 FL2VA の枝刈り int8 ConvRot、テキストエンコーダは int8 ConvRot 27.14GB に変更した（§10 の追記）。詳細は §13.2・§13.3。
+
 ## §4 ライセンスと配布方針
 
 **MiniMax H3 Community License Agreement**（Apache 2.0ではない。一次資料で確認済み）:
@@ -101,6 +113,8 @@ DiT: Abiray/MiniMax-H3-Pruned-GGUF の FL2VA Q4_K_M   11.56GB（VRAM常駐可）
 
 **注意: Ada世代（RTX 4070 Ti SUPER級）とAmpere 16GB級の一次実測は、調査時点で世の中に存在しない。** 開発機・サブマシンでの初回実測は当プロジェクトが自前で行うことになる。
 
+> **訂正（2026-10-16）**: 16GB の Ada 世代（RTX 4060 Ti 16GB・4080・4070 Ti SUPER）の第三者による実測が出てきた。Ampere 16GB はまだ見つからない。詳細は §13.5。
+
 ### 世代別の量子化カーネル対応
 
 | 形式 | Blackwell | Ada (sm_89) | Ampere (sm_86) |
@@ -116,7 +130,11 @@ DiT: Abiray/MiniMax-H3-Pruned-GGUF の FL2VA Q4_K_M   11.56GB（VRAM常駐可）
 
 - **ページロックメモリの無効化が必須**: ComfyUIは待機中の重みをページロックされたシステムRAM（スワップ不可領域）に置くため、RAM 31GB機でOOM killの実例。`--disable-pinned-memory`相当でホストRAM消費が29.9GB→7.5GBに落ちた実測あり。自前ワーカーの設計でも同じ罠を踏まないこと。
 - **Windows固有**: ComfyUI issue #15488（未修正）——RAM 64GBが見える状態＋comfy-kitchen量子化ストリーミングの組み合わせでGPUがPCIeバスから消える（TDR）。回避策はOSから見えるRAMを32GBに制限するか、ストリーミングを使わないこと。**当プロジェクトはcomfy-kitchenを使わずDiT常駐方式を狙うため、この問題の発生条件自体を避ける方向**（推測を含む）。
+
+  > **訂正（2026-10-16）**: ComfyUI issue #15488 は 2026-10-16 の時点で 404 になっている。また 2026-10-16 の裁定で int8 ConvRot を採ったため、comfy-kitchen を使う可能性が出てきた（使うかどうかは計画のセッションで決める）。詳細は §13.4。
 - int8ストリーミング構成では1生成あたり**ディスク読み270GiB**の実測あり（NVMe必須）。DiTがVRAM常駐できるpruned Q4構成なら毎ステップのストリーミングが不要になり、この負荷はロード時に限られる見込み（推測）。
+
+  > **訂正（2026-10-16）**: 裁定 6 の int8 ConvRot 版（20.97GB）は 16GB の VRAM に常駐できないので、この前提は成り立たない。ブロック転送が前提になる（§13.7）。
 - H3の**バンディング（縞状の色むら）報告はVAEのタイル処理のアルゴリズム問題**（ComfyUI issue #15416。「dtype非依存＝精度でなくアルゴリズム」と分析されている）であり、量子化由来ではない。VAEタイリングを自前実装する際の要注意点。
 
 ## §6 量子化配布物の実物検分（ヘッダ実測）
@@ -150,10 +168,16 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 ### その他の実測事実
 
 - **FL2VAとRef2VAはヘッダで区別できない**（532本のテンソル名・形状・サイズが完全一致）。manifest側でファイル名を固定して縛るしかない。配布元ごとにファイル命名もバラバラ。
+
+  > **訂正（2026-10-16）**: テンソル名と形状が同じことは今も正しい。ただし重みのデータは違うことが確定した（ファイルの sha256 が異なる）。公式品は `adaln_t_table` の値（32KB）で区別できる。さらに FL2VA と Ref2VA を混ぜた Hybrid が普及したため、「FL2VA か Ref2VA かの 2 値で区別する」前提そのものが崩れている。詳細は §13.2・§13.3。
 - テキストエンコーダのGGUF（joeygambino Q4_K_M=19.8GB）は素のllama.cpp製（`'qwen3vl'`、本物のQ4_K+Q6_K混合、トークナイザ完備）。ただし**64層フルのQwen3-VL-32Bで、H3が使う50層に対し14層分の死荷重つき**。
 - Comfy-Org公式repackのsafetensorsは、`__metadata__`（configつき）が非pruned bf16版にしか無く、pruned系は空。safetensors直読みでもテンソル名指紋が必要。int8_convrot版は`comfy_quant`独自記述子＋回転量子化（ConvRot）で、直読みには逆回転の自前実装が要る。
+
+  > **訂正（2026-10-16）**: 3 点を訂正する。①`__metadata__` は非枝刈り int8 ConvRot 版にも config つきで入っている。テキストエンコーダ int8 版と映像 VAE int8 版にもそれぞれ専用のメタデータがある。空なのは枝刈り版だけ（実測）。②`comfy_quant` は独自記述子ではなく、ComfyUI の `QUANTIZATION.md` で公開された仕様である。groupsize 256 と 64 が 1 ファイル内で混在しうる。③「逆回転の自前実装が要る」は半分だけ正しい。行列積の経路では活性化のほうをアダマール回転すれば済み、逆回転が要るのは bf16 に逆量子化するときだけ（推測。comfy-kitchen の実装と同じ考え方）。詳細は §13.2・§13.4。
 - GGUFローダー事情: city96/ComfyUI-GGUF本家は2026-01以降実質停止でH3**非対応**（issue #471オープンのまま）。読めるのはleejetフォーク等。ComfyUI本体はGGUF非対応（ネイティブ対応はsafetensors経路のみ）。
 - 品質情報: Q4量子化のH3固有の統制された品質比較は**存在しない**（唯一の定量報告は本人が撤回）。先行実装からの落とし穴情報として「**`adaln_t_table`はF32のまま保つこと。F16化すると1ステップ目でクラッシュする**」という報告あり。
+
+  > **訂正（2026-10-16）**: `adaln_t_table` を BF16 で保存した配布物（Eros beta4）が流通している。ComfyUI は F32 のバッファに読み込んでいる。「F32 厳守」は保存時の dtype ではなく、計算時の dtype についての注意と読むべきである（推測）。詳細は §13.3。
 
 ## §7 実装ベース3候補の比較
 
@@ -167,11 +191,15 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 | 省VRAM機構 | group offload（ホストRAM約75GB前提） | 動的オフロード（コアと不可分） | `AutoTorchModule`（4段のdtype/device指定＋ディスクオフロード。約25KBで切り出しやすい） |
 | torch要件 | ≥2.6 | 2.7以上（最適化パスはcu130必須） | **≥2.0** |
 
+> **訂正（2026-10-16）**: 表の「C: DiffSynth-Studio の GGUF 欄（非対応。NF4/FP8/INT8 のみ）」について。DiffSynth-Studio は 2026-08-20（#1620）の時点で、Comfy-Org の int8 ConvRot（枝刈り版を含む）と Comfy 版テキストエンコーダを comfy-kitchen 経由で直読みできていた（9 月の調査の見落とし）。また diffusers に単一ファイル読み込みが入った（2026-10-01）が、枝刈り版は明示的に拒否する。詳細は §13.4。
+
 **推奨はC（DiffSynth-Studio）**。pruned形式を読める唯一の非GPL実装であり、テキストエンコーダを50層だけ構築し、コード量最小・オフロード自己完結・torch要件が緩い。弱点のGGUF非対応は、当プロジェクトが既に持つ融合GGUF逆量子化カーネルの文化と接続して埋める（`adaln_t_table`のF32厳守に注意）。
 
 - **A（diffusers）はMiniMax公式が指名するリファレンス実装**なので、検証ゲートの数値オラクル（正解データ源）として使う。
 - **B（ComfyUI）とKJNodesはGPL-3.0のため、コードの移植は行わない**。仕様理解のための読解に限る（特にテキストエンコーダのトークナイズ規約とテンソル名指紋の実装は仕様書として価値が高い）。
 - torch整合: 既存2エンジンはtorch 2.9.1+cu128（freeze実測）。DiffSynth要件（≥2.0）を満たし、**「全エンジンでtorchを揃える」方針は維持できる**。Qwen3-VLはtransformers 4.57.0以降（既存venvは4.57.6/5.14.1でいずれも充足）。
+
+  > **訂正（2026-10-16）**: 2026-10-16 の裁定 11 で、「全エンジンで torch を揃える」方針は H3 には適用しないことになった。H3 の仮想環境は、comfy-kitchen の CUDA 拡張が効く torch の版を選ぶ（CUDA ランタイム 13.0 以上・ドライバ R580 以上が要る）。torch 2.9.1+cu128 のままでは CUDA 拡張が使えない。そのため次の行の SageAttention も「既存と同一 wheel」とは限らなくなる（§13.9）。詳細は §13.4。
 - ComfyUIの16GB実測が使うSageAttention 2.2.0は既存2エンジンと同一wheelで、当プロジェクトに導入済み。
 
 ## §8 テキストエンコーダの載せ方（未裁定・3案）
@@ -186,6 +214,8 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 
 次段で実測比較して決める（§11）。
 
+> **訂正（2026-10-16）**: 裁定 8 により、まず Comfy-Org の int8 ConvRot 版 27.14GB（50 層に切り詰め済み。視覚塔と埋め込みは bf16）で動かすことを目指す。上の 3 案は将来の選択肢として残す。中身の実測は §13.2。
+
 ## §9 当プロジェクトの受け皿との噛み合わせ（棚卸し結果の要約）
 
 詳細は[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md)の該当節を参照。ここでは結論のみ記す。
@@ -195,6 +225,8 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 - H3は**3例目**であり、同設計書§5.2が予告する「汎用EngineRunnerとアダプタ分割の要否を再判断するタイミング」に当たる。
 - `comfort_budgets`（快適上限の配信テーブル）は、新系統は較正が済むまで行を持たせず、`outpaint_budget`は`None`のまま（裁定J1「前例をコピーしない」、`config.py`のコメントに明記済み）。
 - ガイダンス蒸留済み（negative promptなし）・音声同時生成という性質は、UI表示テーブル（`featureScope.ts`）とエンジン別制約の設計に反映が必要。
+
+  > **訂正（2026-10-16）**: 「ガイダンス蒸留済み」は要確認（§13.9）。それ以外の本節の記述（特にフレーム規約 `17n+5` が本丸であること）は今も有効である（§13.7）。
 - mockバックエンドはLTXの出力形式・窓計算を模しているため`ltx`アダプタ内にあり、真に別規約のH3では改めて判断が必要（同設計書§9.1の注記どおり）。
 
 ## §10 オーナー裁定の記録（2026-09-06）
@@ -207,7 +239,21 @@ H3固有の設計正本が未執筆のため、暫定的に本書へ記録する
 4. DiT重みの第一候補は**pruned GGUF Q4**。考慮すべきはモデルの性能・精度。
 5. 推論エンジンはまずSingle用のみを作る。インストーラーを先に作る（インストール作業の検証が事実上不要になるため）。
 
+### 2026-10-16 の裁定（追記）
+
+オーナーが外部の α版ガイド（別のエージェントとの議論の結果。§13.8）を読んだうえで下した裁定である。**9 月の裁定 4（DiT 重みの第一候補は枝刈り GGUF Q4）は取り下げ、裁定 6 で置き換える。9 月の裁定 2（再ホストしない）は維持する**（裁定 7）。9 月の裁定 1・3・5 は変更しない（今回の裁定と矛盾しないため維持とみなす。監督の判断）。
+
+6. 重みの形式は **int8 ConvRot**。利用者が CivitAI などから落としてフォルダに置くだけで動かせることが理想。理由: ファインチューンが大量に出回っており、コミュニティの主流が int8 ConvRot だから（§13.3）。置くだけで動かしたい（オーナーの言葉の趣旨）。
+7. 配布方針は**公開リポジトリから直接ダウンロード**。再ホストはしない（9 月の裁定 2 を維持）。外部ガイド §18 の「Nz-Videomni 用の Hugging Face リポジトリから取得する」は採らない。理由: 9 月の裁定 2 と同じ（ライセンスの地域条項）。
+8. テキストエンコーダは、まず **int8 ConvRot 27.14GB** で動かすことを目指す。nvfp4 や bf16 は将来の拡張とする。
+9. 動画の尺は「**快適上限を測る**」方針に揃える。外部ガイドの 1344×768・345 フレームは正式目標にしない。理由: 既存のエンジンと同じく、実測で上限を決める方針に揃えるため。
+10. **LoRA は後回し**。理由: Turbo LoRA（少ないステップ数で生成するための蒸留 LoRA）への対応は Style LoRA（画風などを足す LoRA）への対応とほぼ同じ仕組みになるはずなので、α版に載せるより Style LoRA に対応するときに一緒に進める。
+11. H3 の仮想環境は、**torch の版を LTX に揃えなくてよい**。comfy-kitchen の CUDA 拡張が効く版を選ぶ（§13.4）。利用者側の条件（ドライバ R580 以上と、ディスクの増加）は README に書く。
+12. 計画と実装は別のセッションで行う。2026-10-16 のセッションは、台帳の起票・鮮度の確認・文書の更新までとする。
+
 ## §11 未検証事項と次段の調査候補
+
+> **更新（2026-10-16）**: 各項目の進み具合と新しい項目は §13.9。
 
 - テキストエンコーダ3案（§8）の実測比較（品質・実VRAM/RAM・速度）。**GPUを使う実測は着手前に毎回オーナーの了承を得る**。
 - 量子化の実際の出力品質（本調査はヘッダの型分布とサイズ計算まで。生成品質は一切測っていない）。
@@ -239,3 +285,249 @@ H3固有の設計正本が未執筆のため、暫定的に本書へ記録する
 二次情報（補助的に使用）:
 
 - [ComfyUI Wiki（community quants等の各記事）](https://comfyui-wiki.com/) / [SD.Next Wiki: MiniMax](https://github.com/vladmandic/sdnext/wiki/MiniMax) / [Hugging Faceフォーラム: Quantisation RAM/VRAM](https://discuss.huggingface.co/t/minimax-h3-quantisation-ram-vram/178461) / note.com実践記事（RTX 5070 Ti、2026-08-07）
+
+## §13 2026-10-16 の更新（鮮度の確認と本製品の現物との照合）
+
+2026-10-16 に、調査担当 2 体（公式と周辺の鮮度・コミュニティのファインチューン）が調べ直し、監督が本製品の現物と突き合わせた結果の記録である。§1〜§9 の本文は書き換えず、古くなった箇所には訂正の引用を添えて本節を指している。
+
+### 13.1 要旨（9 月から変わった点）
+
+- 裁定が変わった。DiT は枝刈り GGUF Q4 から**公式系 FL2VA の枝刈り int8 ConvRot** へ、テキストエンコーダは **int8 ConvRot 27.14GB** へ（§10 の追記）。
+- コミュニティ配布の主流は**枝刈り＋int8 ConvRot の safetensors（約 20.97GB）**になった。GGUF は少数派で、残っている（13.3）。
+- Comfy-Org の int8 ConvRot は DiT・テキストエンコーダ・映像 VAE の 3 本とも同じ量子化記述子で、記述子は ComfyUI の `QUANTIZATION.md` で公開された仕様である（13.2）。
+- コミュニティ版はヘッダの書き方が 8 点で揺れており、「置くだけで動く」にはその吸収が要る（13.3）。
+- DiffSynth-Studio は 2026-08-20 の時点で、Comfy-Org の枝刈り int8 ConvRot を comfy-kitchen 経由で直読みしていた（9 月の見落とし）。diffusers には単一ファイル読み込みが入ったが、枝刈り版は拒否する（13.4）。
+- comfy-kitchen の CUDA 拡張は CUDA ランタイム 13.0 以上・ドライバ R580 以上が要る。cu129 から torch 2.13+cu130 にして 2.17 倍速くなった第三者の実測がある（torch の版も変わっている）。本製品の torch 2.9.1+cu128 はこの条件に当たる（13.4・13.5）。
+- 16GB の Ada 世代の第三者の実測が出てきた。Ampere 16GB はまだ見つからない（13.5）。
+- FL2VA と Ref2VA の重みは、ヘッダが同じでもデータが違うことが確定した（13.2）。
+- MiniMax 公式の重み・ライセンス・推奨設定には更新がない（13.6）。
+
+### 13.2 Comfy-Org の int8 ConvRot 形式の実測
+
+2026-10-16 に `https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/` の下の各ファイルのヘッダだけを HTTP Range で取得して解析した（実測）。`comfy_quant` テンソルの中身（JSON のバイト列）は全件読んだ。
+
+**DiT 枝刈り版 `minimax_h3_fl2va_pruned_int8_convrot`（テンソル 932 本・`__metadata__` なし）**
+
+- テンソル名に接頭辞はない。`blocks.{0..49}.{attn.qkv_proj, attn.out_proj, attn.q_norm, attn.k_norm, mlp.fc1, mlp.fc2, norm1, norm2, adaln_proj.linear}`、`token_refiner.blocks.{0,1}.*`、`token_refiner.final_norm`、`condition_proj`、`video_patch_proj`、`audio_patch_proj`、`final_layer.{norm, adaln_proj.linear, video_out, audio_out}`、`rope.inv_freq`、`adaln_t_table`。
+- 量子化されているのは、本体 50 ブロックの qkv_proj [21504,5376]・out_proj [5376,7168]・fc1 [28672,5376]・fc2 [5376,14336] の **200 本だけ**（I8＋`weight_scale` F32 [N,1]＋`comfy_quant` U8 [72]）。token_refiner の 2 ブロックは bf16 のまま（約 1.54GB）。patch_proj と final out は F32、condition_proj と token_refiner は BF16。
+- 200 本すべての記述子が `{"format":"int8_tensorwise","convrot":true,"convrot_groupsize":256}`。名前は「tensorwise（テンソル単位）」だが、実際の重みスケールは出力チャネルごと（`weight_scale` の形状は `[出力次元, 1]`）。
+- dtype の内訳は BF16 220・F32 210・I8 200・U8 200・F16 102。容量は blocks の I8 が 19.27GB、refiner の BF16 が 1.54GB。
+- 枝刈りの印は `adaln_t_table` F32 [1025,8] と、`blocks.N.adaln_proj.linear.weight` **F16** [96768,8]（bias も F16）。`time_embedder.*` はない。
+- Ref2VA 枝刈り int8 版のヘッダは FL2VA 版とバイト単位で同じ。ただし sha256（HF tree API の lfs oid）は異なり、重みのデータは違うことが確定した。公式の枝刈り版は FL2VA と Ref2VA で `adaln_t_table` の値（32KB）が違う（SHA1 不一致。bf16 版と int8 版では同じ値）ので、公式品どうしはこの値で区別できる。
+
+**DiT 非枝刈り版 `minimax_h3_fl2va_int8_convrot`（テンソル 1035 本）**
+
+- `__metadata__.config` があり、`hidden_size 5376, num_layers 50, token_refiner_num_layers 2, heads 56×128, ffn 14336, latents_dim 24, audio_latents_dim 32, patch_size [1,2,2], text_dim 5120, time_embed_dim 2688, adaln_out_features 96768` が入っている。
+- AdaLN 射影 [96768,2688] も I8 だが、記述子は `convrot_groupsize: 64`（2688 は 256 で割り切れないため）。groupsize 256 と 64 が 1 ファイル内で混在する。`time_embedder.proj_in/out` は F32。
+
+**テキストエンコーダ `qwen3vl_32b_minimax_h3_int8_convrot`（テンソル 1602 本）**
+
+- `__metadata__.minimax_h3_te = {"num_hidden_layers":50,"output":"unnormalized_hidden_after_layer_50"}`。ファイルの時点で 50 層に切り詰め済み。
+- `model.layers.0〜49` の q/k/v/o・gate/up/down の 350 本が I8（groupsize 256・合計 24.38GB）。
+- 量子化から外れているのは次の 3 つ: `model.embed_tokens` bf16 [151936,5120]（1.56GB）／視覚塔 `visual.*`（27 ブロック・merger・deepstack_merger 3 本・patch_embed・pos_embed。すべて bf16、計 1.19GB）／ノルム類。
+- `lm_head` と `model.norm` は入っていない。
+
+**映像 VAE `minimax_h3_video_vae_int8_convrot`**
+
+- int8 になっているのは、ViT 型デコーダの 36 ブロック（to_qkv・to_out・ff.w1・ff.w2 の 144 本）だけ。エンコーダの 3D 畳み込みは F16。
+- メタデータに `vae_ratio 16, vae_ratio_t 4, vae_clip_length 17, vae_token_drop 3, z_channels 24`。
+
+**参考: `pruned_w6a8`**
+
+- 記述子が `{"format":"w6a8_int8","group_size":32,"convrot":true,...}` の 201 本と、int8_tensorwise の 8 本（6bit を I8 に詰めたもの＋`weight_s_channel`/`weight_s_rel` F8_E4M3）。
+
+**§6 の「直読みには逆回転の自前実装が要る」について**: 半分だけ正しい（推測）。行列積の経路では、活性化のほうを読み込み時にアダマール回転すれば済む。逆回転が要るのは bf16 に逆量子化するときだけで、13.4 の comfy-kitchen の実装と同じである。
+
+### 13.3 コミュニティ配布の実態
+
+**人気の H3 系モデル（CivitAI と CivitAI Red。数値は 2026-10-16 時点）**
+
+出典は CivitAI API（`https://civitai.com/api/v1/models/<ID>`、一覧は `…/api/v1/models?baseModels=MiniMax%20H3&sort=Most%20Downloaded&nsfw=true&types=Checkpoint`）。RedCraft のダウンロード数はページ全体の合計。表の「Hybrid」は、FL2VA と Ref2VA の重みを混ぜて 1 本にしたもの（下の「Hybrid の実態」）。「Turbo」は少ないステップ数で生成するための蒸留を統合したもの。「VSA」は Video Sparse Attention の略とみられ、注意の計算を間引いて速くする派生実装を指す（推測。`to_gate_compress` というテンソルを持つ）。
+
+| モデル（ID）・作者 | DL／👍 | 種別 | 配布形式（最新版の主なもの） | 枝刈り | 系統 | サイズ | 推奨設定ほか | ライセンス表記 |
+|---|---|---|---|---|---|---|---|---|
+| DaSiWa MiniMax H3（2877206）Darksidewalker | 58,406／1,718 | マージ・Hybrid・Turbo 版あり | int8 ConvRot（per_row）＋int4（2 種） | 枝刈り（ヘッダ実測） | Hybrid（「REF2VA + FL2VA compatible」） | 20.97GB／12.5・16.8GB | 非 Turbo は 20〜25 ステップ・shift 映像 10〜12／音声 3〜5。Turbo は 4 か 8 ステップ。作者の workflow を使う | H3 Community License を明記（§III・§IV を引用）。ファイルの メタデータ にもライセンス名と量子化道具を記載 |
+| H3 Eros Max（2851079）tenstrip（Red） | 49,959／2,024 | マージ（参照差分を全ブロックに適用・Viggle・Turbo 統合・LoRA 混合） | int8 ConvRot（per_row・一部ブロックは bf16）＋bf16 | 枝刈り | 参照型＋T2V | 21.7GB／40.2GB | 8〜12 ステップ・shift 10/3・FastH3 の雛形。VSA 推奨。「小さいカードには向かない」 | 「H3 community license の条項が適用」（beta2） |
+| Minimax H3 INT8/INT6/INT4 ConvRot（2830065）tsolful | 47,295／2,132 | 量子化のみ | int8 ConvRot・W6A8・AsymW4A8 | 枝刈り | FL2VA／REF2VA の別版 | 20.97／15.98／12.5GB | W4A8 は ComfyUI v0.31 以降。I/O・変調・埋め込み・出力ヘッドは BF16 のまま | NOTICE なし |
+| PinkCherry MiniMax H3 Hybrid（2838593）sexgod1979（Red） | 13,653／559 | フルファインチューン。v1.8 は Hybrid | int8 ConvRot＋bf16。旧版は fp16／bf16 の非枝刈り | 枝刈り（「adaln を rank16 に」） | v1.8 は Hybrid、v1.5 以前は FL2VA | 21.06GB／40.3GB | Euler/simple・lightx2v Turbo で 12 ステップ、なしで 30 ステップ・0.7MP 以上 | NOTICE なし |
+| MiniMax H3（2821932）CivitaiOfficial | 12,853／1,124 | 公式の転載 | bf16・int8・nvfp4 ほか | 両方 | 両方 | — | — | — |
+| RedCraft Hybrid H3（958009）AiMetatron（Red） | ページ全体 379k | H3 で下書きし、LTX 2.5 で 2K に上げる 2 段の仕組み | H3 は int8（枝刈り版） | 枝刈り | FL2V Lightning（記載） | 21.98GB ほか | H3 は約 6 ステップ。LTX 側は 8＋3 ステップ。16GB 以上 | H3 Community License と LTX-2.x License を併記 |
+| MiniMax H3 Remix（2879272）FX_FeiHou | 8,277／316 | 2 本の H3 を組み替え＋LoRA を固定融合 | bf16（非枝刈り）・int8 ConvRot（34.0GB＝非枝刈り） | 非枝刈り | 不明 | 66.2／34.0GB | 8〜12 ステップ・res_multistep・Turbo LoRA 0.75。専用ノード Easy-H3 | 旧 int8 は壊れていて「再ダウンロードを」と告知 |
+| MiniMax H3 SparseRef15 Hybrid（2900456）Aki7777777 | 8,019／355 | Hybrid（FL2VA 土台。散らばった 15 ブロックの AdaLN が Ref2VA。LoRA のマージなし） | int8 ConvRot・Partial-INT8（AdaLN と時間条件は FP32）・int4・bf16 | 枝刈り | Hybrid | 20.97／12.5／40.3GB | 推奨値の記載なし。LoRA は FL2VA 用を使う | NOTICE なし |
+| 10eros_Max_Int8_ref2va（2868392）Stuubzzz（Red） | 4,968／205 | 量子化と強度の焼き込み | int8 ConvRot | 枝刈り | Ref2VA | 20.97GB | — | — |
+| MiniMax H3 INT4 ConvRot（2830162）MM744 | 4,448／115 | 量子化 | int4 | 両方 | 両方 | 11.3／17.9GB | — | — |
+| H3 Eros MAX GGUF（2902153） | 2,134／76 | GGUF 化 | Q8_0／Q6_K／Q5_0 | 両方 | — | 16〜37GB | — | — |
+| PinkCherry fl2va v1_final（2938352）extraltodeus | 1,581／71 | Turbo 統合 | int8 ConvRot | 枝刈り | FL2VA | 20.97GB | — | — |
+| Base MinimaxH3 Turbo Merge 8-Step（2951893）Felldude | 1,274／52 | Turbo 統合 | int8・nvfp4・mxfp8・bf16 | 両方 | 両方 | 20.95GB ほか | 8 ステップ。「ConvRot のグループサイズは 64（公式は 256）」 | 派生物の作成を禁止 |
+| MINIMAX-H3-hybrid-int8（2930277）mystifying | 659／56 | Hybrid（B25〜49 を REF2VA に） | int8 ConvRot | 枝刈り | Hybrid | 20.97GB | — | 転載品（作者は hoidhxd） |
+| MiniMax H3 QuantFunc A4W4（2977438） | 403／10 | 量子化と Turbo | int4（SVDQuant）。専用ノードが要る | — | FL2VA 4 ステップ／REF2VA 8 ステップ | 12.1GB | — | NOTICE の再配布義務を明記 |
+
+- ライセンスの表示: NOTICE を明示して付けているのは QuantFunc だけだった。DaSiWa は本文に条項を引用している。残りの大半は CivitAI の権限欄だけ。QuantFunc と AiAngel の説明文に「H3 Community License は EU・英国・韓国・米国を標準の許諾から除外」という記述がある。
+
+**配布形式の分布**
+
+- 上位 30 本の集計（事実）: safetensors の int8 が 22 本、bf16 が 8 本、fp8 が 6 本、GGUF が 6 本、int4 が 5 本、nvfp4 が 4 本。bf16 だけを配る作品は見つからなかった。GGUF は少数派だが、10 月にも新版が出ている（Eros MAX GGUF 10-10）ので、廃れてはいない。
+- ヘッダを実測した int8 ファイル 14 本（公式 3・コミュニティ 11）は、すべて `int8_tensorwise`＋`convrot:true` だった（実測）。ただし中身の揺れは大きい。
+
+**ヘッダの揺れ 8 点（本製品のローダが吸収すべきもの）**
+
+1. 接頭辞: 無しと `model.diffusion_model.` の 2 通り（Singularity と Cobijada が後者）。
+2. `comfy_quant` に余分なキーが付く（`per_row`／`per_channel`／`orig_dtype`。DaSiWa は `orig_dtype`・`per_row`、Eros beta6 は `per_row`、MATLOWAI は `per_channel`）。`convrot_groupsize` は 256 と 64 が 1 ファイル内で混在する。
+3. 量子化を `comfy_quant` ではなく旧式の `__metadata__._quantization_metadata` で記述する版がある（Cobijada と FastH3。道具名は「Star Ultimate Model Converter」）。
+4. 量子化から外す層が配布物ごとに違う。4〜5 ブロックを bf16 で残す版（Eros beta6 は 4 ブロック）、token_refiner・condition_proj・final_layer まで int8 にする版（Eros beta6）がある。
+5. AdaLN の dtype が F16／F32／BF16 で揺れる（DaSiWa は AdaLN と patch_proj が BF16、PinkCherry は AdaLN が F32）。`adaln_t_table` に BF16 の版がある（Eros beta4）。
+6. 枝刈りの形が揺れる。ランクは 8 と 16、格子は 1025 と 4097（PinkCherry v1.5 は rank16・格子 4097。v1.8 は メタデータ が rank16 なのにテンソルは [1025,8]）。
+7. 想定外の追加テンソル: `adaln_basis`／`adaln_mean`（MATLOWAI）／`blocks.N.attn.to_gate_compress.weight`（VSA）／`h3.*` の U32 キー。
+8. `__metadata__` は無い・config 付き・学習ログ付きの 3 通り。
+
+ヘッダの取得は、Hugging Face 上の同一ファイル（CivitAI と同じバイト数）から HTTP Range で行った。**CivitAI からの直接取得は 401 で拒否された。** また CivitAI の「fp」欄は当てにならない（Eros beta5 の「fp8」は w4a8、tsolful の W6A8 は「int8」表示）。
+
+**変換の道具**: dasiwa-quant-station・Star Ultimate Model Converter・h3ddle の `convert-turbo-package.py`・PinkCherry の自前ツール（`int8_convrot_mse_clip` を記録）・Kijai（tsolful の int4）。量子化の書式は ComfyUI の `QUANTIZATION.md` で公開仕様である（https://github.com/Comfy-Org/ComfyUI/blob/master/QUANTIZATION.md ）。
+
+**Hybrid の実態**
+
+- 作り方（事実）: 重みの再学習はなく、テンソル単位で差し替えている。解説記事の説明は「FL2VA を土台に、後段ブロックの `adaln_proj` だけを Ref2VA から取る」。既定は 25〜49 で、30〜49 は画質寄り、15〜49 は参照寄り（https://comfyui-wiki.com/en/news/2026-08-11-minimax-h3-fl2va-ref2va-hybrid ）。読み込み時に合成する独自ノードが ComfyUI_MinimaxH3HybridLoader（https://github.com/scottmudge/ComfyUI_MinimaxH3HybridLoader ）。合成済みファイルの例は sandpies（メタデータ に `hybrid_preset: block_range_adaln_25-49`）と mystifying／hoidhxd（B25〜49）。
+- 別方式もある: xmarre と MATLOWAI は Ref2VA の差分をランク 1024 で融合、SparseRef15 は 15 ブロックの AdaLN を差し替え、Eros は参照差分を全ブロックに適用、XUELUO は 25〜49 層をマージ、PulpCut は差し替え用 AdaLN だけを独自の補助ファイル（`h3.hybrid_adaln.*`）に入れている。45〜49 だけにするべきだという異論もある。
+- 推論への影響（事実）: ComfyUI 本体のモデルコードは FL2VA／Ref2VA を同じ構造として扱う。違いは列の並びで、FL2VA は `[text|cond rows|audio|video]`、Ref2VA は `[text|reference blocks|audio|video]`。参照入力は `MiniMaxH3ReferenceToVideo` 側で組む（`comfy/ldm/minimax/model.py` の冒頭コメント・Issue #15563 の再現グラフ）。したがって FL2VA 用のローダで Hybrid を読んでも、読み込みは成功する。参照経路を使うかどうかは条件付けの組み方で決まる。FL2VA ローダで読んで不具合が出たという報告は見つからなかった。
+- Hybrid 独自ノードの不具合報告: 非枝刈り int8 で画面がちらつく（#5）、w4a8 ではキーの集合が違って合成できない（#2）、bf16 でアクセス違反（#9）、細部が膨らむ（#11）。
+- 事実: 公式の枝刈り版は FL2VA と Ref2VA で `adaln_t_table` の値が違う（SHA1 不一致。bf16 版と int8 版では同じ値）。
+- 推測: 枝刈り版同士で `adaln_proj` を差し替えると rank8 の基底がずれる可能性がある。DaSiWa の Hybrid は独自の `adaln_t_table` を持つので、密な重みで合成してから枝刈りし直したとみられる。
+
+**Turbo 統合版**
+
+- 上位 30 本のうち約 9 本が Turbo 統合版を持つ。DaSiWa（4／8 ステップ）・Eros（8＋4 を融合）・Felldude（8 ステップ）・extraltodeus・Heptagram・RedCraft（Lightning）・QuantFunc・molbal（GGUF）。Hugging Face には MATLOWAI（約 55 万 DL）・PulpCut・10Eros 8stepTURBO もある。
+- safetensors で配られているものはすべて int8 ConvRot（一部 int4／nvfp4 を併置）で、「置くだけ」の対象になり得る。
+- 推奨 shift はばらつく（映像 6〜12、Heptagram は 6〜16）。値はモデルごとに既定を持たせる必要がある（推測）。
+
+### 13.4 実装ベースと周辺の現状
+
+**diffusers（Apache-2.0）**
+
+- 単一ファイル読み込みが入った（PR #14839、2026-10-01 マージ）。Comfy-Org の bf16 版を対象にしている。判別キーは `token_refiner.blocks.0.attn.qkv_proj.weight`。変換表は blocks→transformer_blocks、qkv の分割（Comfy 系は `[q;k;v]` の積み重ね、MiniMax 公式の分割ファイルはヘッドごとの交互配置）、fc1 の `[gate;value]` を `[value;gate]` に並べ替え。**`adaln_t_table` があると ValueError で拒否する**（枝刈りは非対応のまま）。`comfy_quant`／`weight_scale` を扱う処理もない。
+- 「partitions」は、transformer の 2 つのチェックポイント（`transformer/`＝t2va・fl2va、`transformer_ref/`＝ref2va）を指す。
+- attention は `dispatch_attention_fn` に mask なしで渡される。そのため `flash`/`_flash_3_hub`/`sage`/`sage_hub`/`_sage_qk_int8_pv_fp16_cuda` などの全バックエンドが使える。
+- 尺の上限: 15 秒ちょうど（362 フレーム）を通す PR #14742 はマージされずに自動で閉じた。現在の diffusers で作れる最長は **345 フレーム（14.375 秒）**。
+- 低 VRAM レシピの組み合わせ（torchao int8 v2 ＋ group offload の `use_stream=True` ＋ `low_cpu_mem_usage`）は、pin_memory で落ちる。issue #14433 は未解決。また diffusers の低 VRAM の手順は 24〜32GB 向けで、16GB は想定されていない（監督の査定）。
+- 推測: Comfy 形式の int8 ConvRot を diffusers で読むには、int8 Linear の差し替え（DiffSynth の `ComfyKitchenLinear` と同じ形）か bf16 への逆量子化、枝刈り用の時刻埋め込みの差し替え、qkv・fc1 の並べ替えの 3 つが必要になる。
+
+**DiffSynth-Studio（Apache-2.0）**
+
+- 例 `examples/minimax_h3/model_inference_low_vram/MiniMax-H3-Int8-ConvRot-Pruned-FL2VA.py` がある（#1620、2026-08-20）。Comfy-Org の `minimax_h3_fl2va_pruned_int8_convrot` と `qwen3vl_32b_minimax_h3_int8_convrot` をそのまま指定している。VAE は MiniMax 公式のものを使い、ディスクオフロード・`vram_limit`・832×480・124 フレーム・50 ステップ。
+- 仕組み: `diffsynth/core/quant/backends/comfy_kitchen.py` が `comfy_quant` の印を読み、comfy-kitchen の `QuantizedTensor` を載せた Linear を組み立てる（comfy-kitchen は optional-deps の `quant`）。`diffsynth/models/minimax_h3_dit_comfy.py`（3KB）は、枝刈り版の時刻埋め込みを `adaln_t_table` の線形補間で再現する。`MiniMaxH3TextEncoderComfyOrgStateDictConverter` が Comfy 形式の名前を Qwen3-VL の名前に写す。
+- attention は今も区間ごとの Python ループ（`_sdpa_varlen_attention`）。10 月の追加は VDN（ハイブリッド attention）対応（#1743、2026-10-13）。
+
+**comfy-kitchen（Apache-2.0、v0.2.37、2026-10-02 公開）**
+
+- `TensorWiseINT8Layout` の仕組み: 重みは保存前にグループごとのアダマール行列 H で回転してある（W·Hᵀ、H は 4×4 のクロネッカー積で作る「regular」型。サイズは 4 のべき乗に限る）。実行時は活性化に x·H をかけ、行ごとに動的に int8 化し、int8×int8 の行列積（int32 で累積）を取って、スケールを戻す。ConvRot は重み側のときだけ許され、出力チャネルごとのスケールが必須。
+- 行列積の実装は 3 段構え: eager は `torch._int_mm`（cuBLASLt）／triton カーネル／CUDA 拡張（SM≥8.0 なら CUTLASS の int8 GEMM と逆量子化の融合、駄目なら cuBLAS int8。groupsize 256 の時は回転と量子化を融合したカーネルがある）。
+- Windows x64 用の CUDA wheel があり、Windows の既定アーキテクチャは `75-virtual;80;89;120f`（sm_89 を含む）。要件は PyTorch ≥2.7・**CUDA ランタイム ≥13.0・ドライバ R580 以上**。`dependencies = []` なので単体で import できる（CUDA 拡張が読めない時は eager/triton だけで登録される）。
+- 未解決の issue #136: triton の int8 GEMM が出力位置を int32 で計算しており、m×n ≥ 2³¹ で不正メモリアクセスになる（H3 の高解像度×長尺で発生）。
+- 推測: torch 2.9.1+cu128 の環境では CUDA 拡張が使えず、eager 経路（`torch._int_mm`）になって数倍遅くなる見込み。
+
+**ComfyUI 本体（GPL-3.0。コードは移植せず、仕様書として読むだけ。§7 の方針どおり）**
+
+- PyTorch の CUDA 版が 13 未満（`torch.version.cuda < 13`）だと comfy-kitchen の CUDA バックエンドを無効にし、triton も既定で無効にする（`comfy/quant_ops.py`）。
+- ヘッダの揺れの吸収方法（コードで確認）: 判定は `video_patch_proj`＋`audio_patch_proj` があれば H3。層数・幅・ヘッド数はすべて形状から読み、`adaln_t_table` の形状から格子数とランクを取る（rank16 も通る）。`to_gate_compress` があれば VSA 版。`__metadata__["config"]` があれば上書き（`comfy/model_detection.py`）。接頭辞は剥がす（`unet_prefix_from_state_dict`）。旧式の量子化記述 `_quantization_metadata` や `scaled_fp8` は変換する（`convert_old_quants`）。`comfy_quant` は `format`・`convrot`・`convrot_groupsize` だけを読み、未知のキーは無視。`params` の下に入れ子にした書き方も受け付ける。`comfy_quant` が無い層は通常の浮動小数点で読む（`comfy/ops.py`）。9 月 20 日以降 `blocks.N.attn.comfy_attention.config` という注意機構の指定が増えた（PR #16419）。つまり ComfyUI は 13.3 の揺れ 8 点を、おおむね「形状から構成を導く・知らないキーは無視する」で吸収している。
+- 不具合の事例: Remix の旧 int8 は壊れていた（作者が差し替え）／公式の bf16 版を ComfyUI v0.32 で動かすと真っ黒になるが int8 は正常（Issue #15563・未解決）／4bit パックの形状を読み誤る問題の修正提案（PR #15620）／fp16 で推論すると活性値があふれる（PR #16508）／h3ddle の `input-major-v1` 配置は独自形式。
+
+**ライセンス一覧**: comfy-kitchen Apache-2.0・comfy-quants GPL-3.0・diffusers Apache-2.0・DiffSynth-Studio Apache-2.0（ComfyUI 本体は §7 のとおり GPL-3.0）。comfy-quants GPL-3.0 は GitHub の API の license 欄・2026-10-16 確認（comfy-kitchen Apache-2.0・diffusers Apache-2.0・DiffSynth-Studio Apache-2.0 も同じ方法で確認）。
+
+### 13.5 16GB・Ada 世代の実測
+
+すべて第三者による報告で、ComfyUI・Windows のもの（二次情報。本製品での実測ではない）。
+
+- **RTX 4060 Ti 16GB**・RAM 64GB・int8 ConvRot・864×480・124 フレーム・20 ステップ: cu129 で 12 分 50 秒、torch 2.13+cu130 で 5 分 55 秒。https://note.com/tank_ai/n/nab26edd4ab96
+- **RTX 4080 16GB**・torch 2.13+cu130・FlashAttention 2.8.3・int8 ConvRot・18 ステップ: 5 秒の動画が 382〜427 秒、10 秒が 19〜22 分（1 ステップあたり約 58〜61 秒）、VRAM 約 14.6GB。解像度・RAM・起動オプションは記載なし。https://note.com/aibijyolab/n/n062ec8f871d9
+- **RTX 4080**（ComfyUI issue #15261 の報告。まとめ記事経由の孫引き）: Ref2VA・1280×736・5 秒で 690 秒、RAM 64GB。
+- **RTX 4070 Ti SUPER**（まとめ記事の中の第三者報告）・RAM 32GB・Turbo LoRA・8 ステップ・1280×720: 1 ステップあたり 47 秒。Turbo の 4 ステップでは破綻したという報告もある。https://smeltcore.com/recipes/minimax-h3-on-rtx-4070-ti-super-ada-at-16-gb-and-the-turbo-lora-question
+- 失敗例: #15628: RTX 4070 **12GB**・Windows で DynamicVRAM が初期化中に止まる／#15665: 5070 Ti 16GB で、v0.32 以降は高解像度で約 4 倍遅い／#17017（2026-10-14）: Windows で単一 GPU モードが強制される。
+- `--novram` や block swap を使った 16GB Ada の報告は見つからなかった。
+
+### 13.6 公式の更新
+
+- `MiniMaxAI/MiniMax-H3` の最終コミットは 2026-08-13 のまま。LICENSE にも QA にも変更はない。同じ組織の新しい H3 系の重みもない。GitHub `MiniMax-AI/MiniMax-H3` の最終 push は 2026-08-15。公式モデルカードの記述は現在も同じ（一次資料で確認済み）。
+- H3-Regenerate-2K は「not yet open-sourced」。Context-IR と Regenerate-2K は Open Platform の API でだけ使える。ライセンスの適用除外地域（米国・EU・英国・韓国）向けには申請フォームの記載がある。
+- 公式エコシステム索引（awesome-minimax-h3-integration、最終 2026-09-17）は、Context-IR の形式を真似るコミュニティ実装 OpenH3-IR（Apache-2.0）と、fal が後学習した重み非公開の「H3 Max」系を新しく掲載した。
+- 推奨設定（ステップ数 20・shift 12/3）にも変更の形跡はない（推測）。
+- フレーム規約と解像度（事実）: 公式モデルカードは今も 4〜15 秒・24 FPS・短辺 768。diffusers は 5〜15 秒・`17n+5` への切り上げ・32 の倍数。VAE は空間 16 倍・時間 4 倍・潜在 24ch（VAE のメタデータで再確認）。DiT は patch [1,2,2]（config で再確認）。1 トークンあたり 32px 四方に相当する。
+
+### 13.7 本製品の現物との照合
+
+外部の α版ガイド（13.8）は本製品の実装を知らずに書かれている。監督が本製品の実在する資産と突き合わせ、次の 6 点を補正した（監督の査定）。
+
+1. **int8 ConvRot の実行方式は既にある。** LTX 2.5 で使っている int8 ConvRot の読み込みが `engine/sft_quant` にある。重みは int8 のまま保持し、Linear の呼び出しごとに bf16 へ戻す方式で、外部ガイドの §9 が「最終実装にしないこと」と言う方式にあたる。W8A8 の行列積（重みも活性化も 8bit のまま掛け算する方式）は本製品に無い。α版は既存の方式で通し、W8A8 にするかどうかは計測の後で切り分ける。また既存の読み込み（`engine/sft_quant/dequant.py` の `CONVROT_GROUPSIZE = 256`）は groupsize 256 だけを受け付ける。公式の枝刈り版は全部 256 なので α版は通るが、非枝刈り版の AdaLN 射影（64）やコミュニティの 64 の配布物（13.3）は通らない。
+2. **ブロック転送は実装済み。** 1 ブロックずつ・ページロックメモリ・非同期・先読み・二重バッファの転送は、実装済みである。block swap の本体は `engine/transformer/block_swap_service.py`、先読み・ページロックメモリ・非同期転送は `engine/transformer/block_swap_prefetch.py`（LTX 2.3 と 2.5 で共通。2.5 は `engine25/gguf_transformer.py` がこれを読み込んで使う）。量子化したままブロックが載る（`block_swap_prefetch.py` の説明文と `engine/sft_quant/quant_service.py` の説明文末尾「ride block swap / prefetch」）。H3 では新しく作るのではなく、H3 のブロック構造への接続になる。
+3. **テキストエンコーダの層オフロードにも前例がある。** LTX 2.3 の `--te-offload` と LTX 2.5 の `te_layers_on_gpu`。
+4. **diffusers の低 VRAM の手順は 24〜32GB 向け**で、16GB は想定外である（13.4）。
+5. **時間の見積もりが無い。** H3 は full attention（全トークンどうしで注意を取る方式）で、外部ガイドの 1344×768・345 フレームはトークン数が 9 月の 16GB 実測の条件（§5 の 640×384・226 フレーム）の約 6 倍になる。
+6. **製品への組み込みが書かれていない。** 記述子（manifest）・`install-H3.bat`・専用の仮想環境・アダプタ・フレーム規約 17n+5・`featureScope.ts`・快適上限・Gradio と MCP。仕分けの考え方は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §9（「そのまま使い回すもの」と「エンジン系統に固有のもの」に仕分けるだけ）のとおりで、**フレーム規約 17n+5 への対応が本丸**であること（本書 §9）は今も有効である。
+
+### 13.8 α版の範囲（外部ガイドの要点と裁定後の形）
+
+**これは設計ではなく、範囲のメモである。** 設計正本は計画のセッションで書く。外部ガイドは、オーナーが 2026-10-16 に別のエージェントとの議論の結果として共有した「Nz-Videomni MiniMax H3 対応 α版 スピードガイド」で、著者は 9 月 6 日の調査と本製品の実装を知らない。ここではその要点を、§10 の 2026-10-16 の裁定（6〜12）で修正した形で記す。
+
+α版で対応するもの:
+
+- DiT は公式系 FL2VA の枝刈り int8 ConvRot（`minimax_h3_fl2va_pruned_int8_convrot.safetensors`。Comfy-Org/MiniMax-H3 の diffusion_models）1 本。
+- タスクは T2VA と FL2VA（同じ重み）。音声も生成する。
+- テキストエンコーダは int8 ConvRot 27.14GB（`qwen3vl_32b_minimax_h3_int8_convrot.safetensors`。同 text_encoders）。
+- CPU オフロードは、既存の block swap を H3 のブロック構造に接続する（13.7 の 2）。
+- 解像度と尺は快適上限の計測で決める。1344×768・345 フレームを先に固定しない（裁定 9）。
+- 置くだけで動くことを理想とする（裁定 6）。揺れ（13.3）を α版でどこまで吸収するかは計画のセッションで決める。
+- 配布は公開リポジトリから直接ダウンロードする（裁定 7）。
+
+α版では後回しにするもの:
+
+- LoRA と Turbo（裁定 10。Style LoRA に対応するときに一緒に進める）。
+- Ref2VA・Hybrid・他の形式（fp8・w6a8・GGUF・int4・nvfp4・部分 int8 などの混在精度）・1088p と 2K・sparse attention。
+
+監督が賛同した点（オーナーの裁定ではない）:
+
+- **3 段の推論**: 条件付け（テキストエンコーダで条件を作り、終わったら解放）→ ノイズ除去（DiT をブロックごとに GPU へ送る）→ デコード（DiT を解放してから VAE を載せる）。
+- **判定はヘッダで**: ファイル名やファイルサイズで判定せず、safetensors のメタデータ・テンソル名・形状・dtype・量子化の記述子で判定する。テンソルごとに dtype と量子化を持てる内部表現が望ましい。
+- **差し替えられる境界**: α版の実装は 1 種類だけでも、重みの形式・AdaLN の形（枝刈り／非枝刈り）・条件付け（FL2VA／Ref2VA／Hybrid）を後から足せる境界を残す。
+
+外部ガイドから採用しないもの:
+
+- §18 の配布方針（Nz-Videomni 用の Hugging Face リポジトリから取得する）。裁定 7 で不採用。
+- 「1344×768・345 フレームを正式目標」。裁定 9 で不採用。
+
+### 13.9 未検証事項の更新
+
+§11 の各項目の進み具合:
+
+- テキストエンコーダ 3 案（§8）の実測比較: 裁定 8 でまず int8 ConvRot 27.14GB を使うことになり、3 案は将来の選択肢に回った。
+- 量子化の実際の出力品質: 新しい一次情報はない。
+- bitsandbytes の Windows 動作: 新しい一次情報はない（③NF4 案は将来の選択肢に回った）。
+- VAE タイル処理の品質: 新しい一次情報はない。
+- Ada 世代・Ampere 世代での初回実測: Ada 世代は第三者の値が出た（13.5）。**Ampere 16GB の実測はまだ見つからない。**
+- FL2VA と Ref2VA の重み内容が異なること: 確定（ヘッダは同じ・sha256 は違う。13.2）。
+- DiffSynth の attention の差し替え: 区間ループのままなのが確定。diffusers のほうは mask なしで全バックエンドが使えるので、こちらが参考になる（13.4）。
+
+新しい項目:
+
+- **ガイダンス蒸留（negative prompt なし）の真偽**: ComfyUI の Issue #15563 の再現グラフは cfg 4、PinkCherry の メタデータ は `guidance_scale 4.0` だった。真偽は未確認。
+- **comfy-kitchen の triton の issue #136**: m×n ≥ 2³¹ で不正メモリアクセスになる。高解像度×長尺で当たるため、どの行列積の経路を使うかに関わる。
+- **SageAttention の cu130 向け wheel の有無**: H3 の仮想環境を cu130 にした場合、既存 2 エンジンと同じ wheel は使えない（推測）。有無は未確認。
+- **H3 専用の仮想環境を cu130 にしたときの利用者側の要件**: ドライバ R580 以上と、ディスクの増加（裁定 11 で README に書く）。どれだけ増えるかは未測定。
+- **枝刈り Hybrid の基底のずれ**: 枝刈り版どうしで `adaln_proj` を差し替えると rank8 の基底がずれる可能性がある（推測。13.3）。
+- **Ampere 16GB の実測なし**（上の再掲。サブマシンで自前に測ることになる）。
+
+### 13.10 出典（2026-10-16 の追加分。§12 と重なるものは省く）
+
+一次資料:
+
+- [Comfy-Org/MiniMax-H3 のファイル一式（2026-10-16 にヘッダを実測）](https://huggingface.co/Comfy-Org/MiniMax-H3/tree/main)
+- [ComfyUI `QUANTIZATION.md`（量子化の書式の公開仕様）](https://github.com/Comfy-Org/ComfyUI/blob/master/QUANTIZATION.md)
+- [ComfyUI issue #15563](https://github.com/Comfy-Org/ComfyUI/issues/15563) / [PR #15620](https://github.com/Comfy-Org/ComfyUI/pull/15620) / [PR #16508](https://github.com/Comfy-Org/ComfyUI/pull/16508) / [PR #16419](https://github.com/Comfy-Org/ComfyUI/pull/16419)
+- [diffusers PR #14839（単一ファイル読み込み）](https://github.com/huggingface/diffusers/pull/14839) / [diffusers の MiniMax-H3 文書（ソース）](https://github.com/huggingface/diffusers/blob/main/docs/source/en/api/pipelines/minimax_h3.md)
+- [comfy-kitchen（GitHub）](https://github.com/Comfy-Org/comfy-kitchen) / [comfy-kitchen（PyPI）](https://pypi.org/project/comfy-kitchen/)
+- [ComfyUI_MinimaxH3HybridLoader](https://github.com/scottmudge/ComfyUI_MinimaxH3HybridLoader)
+- CivitAI API（`https://civitai.com/api/v1/models/<ID>`。一覧は `https://civitai.com/api/v1/models?baseModels=MiniMax%20H3&sort=Most%20Downloaded&nsfw=true&types=Checkpoint`。数値は 2026-10-16 時点）
+
+二次情報:
+
+- [ComfyUI Wiki: FL2VA と Ref2VA の Hybrid](https://comfyui-wiki.com/en/news/2026-08-11-minimax-h3-fl2va-ref2va-hybrid)
+- [note: RTX 4060 Ti 16GB の実測（tank_ai）](https://note.com/tank_ai/n/nab26edd4ab96) / [note: RTX 4080 16GB の実測（aibijyolab）](https://note.com/aibijyolab/n/n062ec8f871d9)
+- [smeltcore: RTX 4070 Ti SUPER と Turbo LoRA](https://smeltcore.com/recipes/minimax-h3-on-rtx-4070-ti-super-ada-at-16-gb-and-the-turbo-lora-question)
+- ComfyUI issue #15261・#15628・#15665・#17017、comfy-kitchen issue #136、diffusers PR #14742・issue #14433、DiffSynth-Studio #1620・#1743（いずれも 13.4・13.5 で言及したもの）

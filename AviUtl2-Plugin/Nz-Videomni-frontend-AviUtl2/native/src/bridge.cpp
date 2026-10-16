@@ -210,8 +210,11 @@ void InsertMediaEditProc(void* param, EDIT_SECTION* edit) {
     }
 }
 
-// True if a file exists on disk (a plain file or directory; used to give the
-// caller a precise FILE_NOT_FOUND before touching the edit lock).
+// True if a file exists on disk (a plain file or directory). A cheap pre-check
+// before any real work: most callers map a miss to FILE_NOT_FOUND (the replace
+// paths of resolveProvisional / insertMediaForJob use their own codes), and
+// backend.uploadFile can still report FILE_NOT_FOUND later if the
+// open/size/read fails (TransportCode).
 bool FileExists(const std::string& utf8_path) {
     const std::wstring wide = Utf8ToWide(utf8_path);
     const DWORD attrs = ::GetFileAttributesW(wide.c_str());
@@ -225,6 +228,8 @@ const char* TransportCode(TransportError e) {
             return "BACKEND_TIMEOUT";
         case TransportError::kDestinationFileFailed:
             return "DOWNLOAD_FAILED";
+        case TransportError::kSourceFileFailed:
+            return "FILE_NOT_FOUND";
         case TransportError::kUnreachable:
         default:
             return "BACKEND_UNREACHABLE";
@@ -3252,8 +3257,9 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
                 if (resp.transport != TransportError::kNone) {
                     out = MakeErrorResponse(id, TransportCode(resp.transport),
                                             resp.transport_message);
-                    LogWarn(std::wstring(L"backend.uploadFile transport error: ") +
-                            Utf8ToWide(TransportCode(resp.transport)));
+                    LogWarn(std::wstring(L"backend.uploadFile failed: ") +
+                            Utf8ToWide(TransportCode(resp.transport)) + L" - " +
+                            Utf8ToWide(resp.transport_message));
                 } else {
                     out = MakeSuccessResponse(
                         id, MakeBackendRequestResult(resp.status, resp.body));

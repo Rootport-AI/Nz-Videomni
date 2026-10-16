@@ -210,8 +210,11 @@ void InsertMediaEditProc(void* param, EDIT_SECTION* edit) {
     }
 }
 
-// True if a file exists on disk (a plain file or directory; used to give the
-// caller a precise FILE_NOT_FOUND before touching the edit lock).
+// True if a file exists on disk (a plain file or directory). A cheap pre-check
+// before any real work: most callers map a miss to FILE_NOT_FOUND (the replace
+// paths of resolveProvisional / insertMediaForJob use their own codes), and
+// backend.uploadFile can still report FILE_NOT_FOUND later if the
+// open/size/read fails (TransportCode).
 bool FileExists(const std::string& utf8_path) {
     const std::wstring wide = Utf8ToWide(utf8_path);
     const DWORD attrs = ::GetFileAttributesW(wide.c_str());

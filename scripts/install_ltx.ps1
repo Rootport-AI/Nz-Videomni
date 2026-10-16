@@ -81,9 +81,9 @@
 
     Consequently there is no constraint on how directories are arranged
     relative to each other (no repo needs its OWN sibling check directory to
-    keep recursive size sums from masking each other): the layout nests every
-    IC-LoRA adapter under models/LTX23/IC-LoRA/ and the preprocessors under
-    models/Preprocessors/, and nothing can mask anything.
+    keep recursive size sums from masking each other): the layout nests each base
+    model's IC-LoRA adapters under models/<BaseModel>/IC-LoRA/ and the
+    preprocessors under models/Preprocessors/, and nothing can mask anything.
 
     ATTENTION BACKEND (no GPU-specific knob)
     ----------------------------------------

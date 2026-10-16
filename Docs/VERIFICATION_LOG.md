@@ -16761,6 +16761,9 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 
 - §1-89 のオーナー目視（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1）。
 - 新しい不安定なテスト 1 件（同 §1-92）。
+
+> **更新（2026-10-16）**: §1-92 は §162（CLOSED 3-236）で解消。
+
 - main への merge はオーナーの合図待ち。
 
 ## 161. ★Alpha Gen の LoRA ウェイトの配布（台帳 §1-87 → CLOSED 3-235）＝`Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` を追加し `install-LTX25.bat` の 3 番目の取得項目に（2026-10-16）
@@ -16798,3 +16801,43 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - `Nz-HF-Rehost/README.md` の完了状況の表に LTX 2.5 の 2 リポジトリが無い既知のずれ（今回は LoRA の追加の段落だけを足し、表は作り直していない）。
 - クローズの番号は当初 3-233／§160 を予定していたが、並行セッションが先に使ったため 3-235／§161 にした。
 - main への merge はオーナーの合図待ち。
+
+## 162. ★操作パネルの不安定なテスト 1 件（台帳 §1-92 → CLOSED 3-236）＝`App.trackRoute.test.tsx` の追尾の 2 回目の右クリックのケース・進捗の知らせを送る前に追尾の要求を待つ（2026-10-16）
+
+### 162.1 結論
+
+- **§1-92（`webui/src/App.trackRoute.test.tsx` の "does NOT remount on a second 追尾 right-click while a run is going — it shows guidance and leaves the run alone"）を直した → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236。** テストだけの変更で、製品コードは変わらない。§160 のゲート（全件実行 20 回）の 8 回目に 1 回落ちて §1-92 に起票したもので、オーナー指示「簡単なら今直す」（2026-10-16）で同じセッションで扱った。
+- 原因は、テストが進捗の知らせを送る時点が早すぎて、受け手がまだ "running" でないと知らせを捨てること（§162.2）。直しは、知らせを送る前に追尾の要求（`timeline.trackObject`）が届いたのを待つ 4 行（§162.3）。
+- 全件実行 20 回で対象は 20 回とも合格した。ただし対象外の 2 件が 1 回ずつ落ちたので、台帳 §1 に新しい項目として起票する（§162.4・§162.5）。
+- dev `e70a0d0`（テストの直し）。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
+
+### 162.2 原因と推定の確認
+
+- **仕組み（コードの読み取り）**: このケースは `timeline.trackObject` を決着しない Promise に差し替え、進捗の知らせ（index 61／total 241）をテスト自身が 1 回だけ送る。受け手の `useObjectTracking`（`webui/src/modes/toolbox/useObjectTracking.ts`）は、"running" になる前に届いた進捗の知らせを捨てる（`:158`。始まる前の知らせや別のパネルの知らせを表示しないための意図した仕様）。"running" になるのは追尾を始める useEffect の `enterPhase("running")`（`:204`）で、その直後の同じ同期区間で `request("timeline.trackObject")`（`:207`）を送る。テストは見出し「Object tracking」が見えた時点で知らせを送っていたが、見出しが見えても useEffect が走り終わった保証は無い。一度捨てられた知らせは二度と来ないので、待ちの上限を延ばす直しは効かない。製品コードの欠陥ではない。
+- **推定の部分**: 「負荷が高いと描画と useEffect が別の手番に割れる」という細部は推定で、確かめていない。
+- **推定の確認（担当 T2）**: 知らせの送信を一時的に見出しの待ちの前へ移して単体で実行すると、対象のケースが `:356`（修正前の行番号）の `findByText(/61 \/ 241 frames/)` で同じメッセージのまま 5,506 ms で落ちた（全件実行での失敗＝5.6 秒と一致）。この確認で分かるのは「始まる前の知らせは捨てられ、待ちを延ばしても戻らない」ことだけ。一時的な変更は戻した。
+
+### 162.3 直し
+
+- `await waitForToolboxPanel();` の直後に `await waitFor(() => expect(trackCalls).toBe(1));` を英語のコメント 3 行つきで足した（4 行）。同じファイルの前例（`:166-174`・`:200-204`＝見出しの後に `waitFor` で `trackObject` の要求を待つ）にそろえた形で、`waitFor` の上限は前例と同じ既定の 1 秒。
+- これで足りる理由: `enterPhase` は `phaseRef.current` を同期で書く（`:138-141`）ので、要求を観測した時点で "running" が確定している。要求の Promise は決着しないので、以後 "running" から変わる経路は無い。
+
+### 162.4 やり方と門
+
+- **調査**: 調査担当 1 体（Opus・読み取り専用・単体 5 回合格）。
+- **計画の敵対的レビュー 1 本（Opus）**: Critical 0・Major 1・Minor 5・全採用。Major＝並行セッションが §1-87 を先にクローズして §161・3-235 を使ったので、番号を §162・3-236 にする。Minor＝行番号・前例にそろえる・コメントは英語で上限は既定・推定の確認で分かる範囲を言い過ぎない・20 回は「悪くなっていない」の確認。
+- **差分の敵対的レビュー 1 本（Opus）**: Critical 0・Major 0・Minor 0。追加の 4 行は計画と 1 字ずつ一致・CRLF を維持。
+- **機械ゲート（担当 Sonnet）**:
+  - `npm run typecheck` 合格・`npm run lint` 警告 31 件（基準どおり）・単体実行 5 回合格（対象のケース 577〜590 ms）。
+  - **全件実行 20 回**（`npx vitest run --exclude src/api/backend.integration.test.ts`・バックエンド停止を確認・3,246 件・1 回 49〜54 秒）: 対象の 1 件は 20 回とも合格。§160 で直した 5 件（`App.nag` 2 件・`JobsContext`・`ObjectTrackingSection`・`App.prefill` #5）も 20 回とも合格。
+  - **対象外の 2 件が 1 回ずつ落ちた**（どちらも今回の差分が触ったファイルではない）:
+    1. 第 4 回: `src/App.prefill.test.tsx` "videoAudioToVideo extracts the video's audio (mix, inclusive frame range) and loads the wav into the source-audio slot (#3)"（"Unable to find an element with the text: /extracting audio/i"・5,299 ms）。推定: 音声を抽出している間だけ出る表示を待ちそこねた。
+    2. 第 16 回: `src/modes/chained/SourceInputPanel.test.tsx` "SourceInputPanel > drag-and-drop (contract v7) > dropping a video switches to v2v mode and shows the CONTEXT FRAMES slider"（`toBeEnabled()` の失敗・16 ms）。推定: ドロップの直後、有効になる前のボタンを見た。
+  - 上の 2 件は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に新しい項目として起票する（番号は監督が台帳を書くときに確定する）。
+- **20 回のゲートの位置づけ**: 修正前の再現率が 1/20 なら、直っていなくても 20 回通る確率は約 36% なので、20 回は「悪くなっていない」ことの確認にとどまる。直った根拠は、構造上の理由（捨てられる前に待つ。§162.3）と推定の確認（§162.2）が担う。
+- ログは監督の作業領域（git 管理外）。オーナーの目視の節は作らない（テストだけの変更）。
+
+### 162.5 残るもの
+
+- 新しい不安定なテスト 2 件（§162.4。台帳 §1 に起票予定）。
+- 台帳の更新と記録のコミットは監督が行う。main への merge はオーナーの合図待ち。

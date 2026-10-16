@@ -2976,3 +2976,13 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev `6b74823`（記述子・案内ファイル・README・config.yaml.example）・`11b50b6`（仕様書・設計書・研究ノート・MCP 設計書）・記録のコミットはこの次。main への merge はオーナーの合図待ち。
 - **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §7、利用者向けの手順 `README.md`「Alpha Gen」、取得の定義 `scripts/manifests/20-ltx25.json`、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161。
 - **残課題**: オーナーの SNS での案内（`config.yaml` に `alpha-gen` の行が無い利用者向け。`README.md`「Alpha Gen」の手順を指す）・`Nz-HF-Rehost/verify_local_result.json` は更新していない・LTX 2.3 側の NOTICE に In-Outpainting の記載が無い既存の漏れ（今回の範囲外。必要ならオーナー判断で起票）。詳細は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161.3。
+
+### 3-236. 操作パネルの不安定なテスト（`App.trackRoute.test.tsx` の追尾の 2 回目の右クリックのケース）（起票・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92（**同書側は欠番**）。§2 を経由せず §1 から直接クローズした（テストだけの変更で、実機で確かめる要素が無い。同書の運用規則の例外）。3-234（§1-82）のゲートの全件実行で対象外として 1 回落ちたもので、オーナー指示「簡単なら今直す」（2026-10-16）で同じセッションで扱った。
+- **到達条件**: 対象のテストが落ちる原因を確かめて直し、全件実行の繰り返しで対象が落ちないこと。**達成した。**
+- **何が完了したか**: `webui/src/App.trackRoute.test.tsx` の "does NOT remount on a second 追尾 right-click while a run is going — it shows guidance and leaves the run alone"。テストが進捗の知らせを送る時点が早すぎ、受け手の `useObjectTracking` がまだ "running" でないため知らせを捨てていた（始まる前の知らせを表示しないための意図した仕様で、製品コードの欠陥ではない）→ 知らせを送る前に追尾の要求が届いたのを `waitFor` で待つ（同じファイルの前例にそろえた形）。製品コードは変わらない。原因と直しの詳細は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.2・§162.3。
+- **どの物差しで通ったか**: 計画と差分の敵対的レビュー、一時的に知らせを送る時点を早めて同じ落ち方を再現した推定の確認、全件実行の繰り返しで対象は全部合格（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.2・§162.4）。
+- **状態**: dev `e70a0d0`（テストの直し）。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
+- **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §140、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162。
+- **残課題**: 同じ全件実行で対象外の 2 件が 1 回ずつ落ちた → [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に起票予定（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.4）。

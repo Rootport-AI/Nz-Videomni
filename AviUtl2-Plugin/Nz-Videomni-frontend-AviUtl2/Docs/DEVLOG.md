@@ -5246,3 +5246,23 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 139.4 状態
 
 - 実装済み・クローズ（バックエンド [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-234）。dev `6fc841c`。main への merge はオーナーの合図待ちです。
+
+## 140. 操作パネルの不安定なテストの原因と直し — `App.trackRoute` の追尾の 2 回目の右クリック（バックエンド台帳 §1-92 → [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-236。2026-10-16）
+
+### 140.1 結論
+
+- **§139 のゲートの全件実行で 1 回落ちた `App.trackRoute.test.tsx` の 1 件（"does NOT remount on a second 追尾 right-click while a run is going …"）の原因を確かめ、テストの側を直しました。製品コードは変わりません。** 全件実行を繰り返して対象は全部合格しました。ただし対象外の 2 件（`App.prefill.test.tsx` の #3・`SourceInputPanel.test.tsx` のドラッグ＆ドロップ）が 1 回ずつ落ちたので、バックエンド台帳 §1 に起票します（回数と結果はバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §162.4）。
+
+### 140.2 原因
+
+- このケースは追尾の要求 `timeline.trackObject` を決着しない Promise に差し替え、進捗の知らせをテスト自身が 1 回だけ送ります。受け手の `useObjectTracking` は、"running" になる前に届いた進捗の知らせを捨てます（始まる前の知らせや別のパネルの知らせを表示しないための意図した仕様です）。"running" になるのは追尾を始める useEffect の中で、テストは見出し「Object tracking」が見えた時点で知らせを送っていましたが、見出しが見えても useEffect が走り終わった保証はありません。一度捨てられた知らせは二度と来ないので、待ちの上限を延ばしても直りません。
+- **確認済みの部分と推定の部分**: 知らせを捨てる仕組みはコードで読み、さらに一時的に知らせを送る時点を見出しの待ちの前へ移して、全件実行での失敗と同じ落ち方を再現して確かめました（変更は戻しています）。一方、「負荷が高いと描画と useEffect が別の手番に割れる」という細部は推定です。
+
+### 140.3 何を変えたか
+
+- `App.trackRoute.test.tsx`: 見出しを待った直後に、`waitFor` で `trackObject` の要求が 1 回届いたのを待つ行を、英語のコメントつきで足しました。同じファイルの前例（見出しの後に `waitFor` で要求を待つケース）にそろえた形で、`waitFor` の上限も前例と同じ既定の値です。`enterPhase` は phase を同期で書くので、要求を観測した時点で "running" が確定しています。
+- 時間の数字や回数は書き写さず、バックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §162.2〜§162.4 を参照してください。
+
+### 140.4 状態
+
+- 実装済み・クローズ（バックエンド [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-236）。dev `e70a0d0`（テストの直し）。記録のコミットは監督が積みます。main への merge はオーナーの合図待ちです。

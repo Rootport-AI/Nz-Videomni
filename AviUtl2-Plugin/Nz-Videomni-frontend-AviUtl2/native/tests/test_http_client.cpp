@@ -6,6 +6,9 @@
 // `scripts/build.ps1 -RunTests`, which runs
 // NzVideomni_tests.exe --test-suite-exclude=integration with no live backend.
 //
+// One UploadFileSync case (a locked source file) also sits in the default
+// suite: it fails while opening the file, before any connection is made.
+//
 // Everything else here exercises real HTTP against the mock LTX23 backend
 // expected at http://127.0.0.1:18620 (kBackendBaseUrl), so it is grouped in
 // the "integration" test suite and filtered out by that same flag.
@@ -93,6 +96,26 @@ TEST_CASE("CrackUrl: no path defaults to \"/\"") {
     CHECK(parts.host == L"127.0.0.1");
     CHECK(parts.port == 18620);
     CHECK(parts.path == L"/");
+}
+
+// No server needed: UploadFileSync opens the source file before it connects.
+// Holding the source open with share mode 0 makes its GENERIC_READ open fail
+// with ERROR_SHARING_VIOLATION (32), which must be reported as a source-file
+// failure, not as BACKEND_UNREACHABLE.
+TEST_CASE("an upload source file that cannot be opened reports kSourceFileFailed (no server)") {
+    nzvideomni::HttpClient client;
+    const std::wstring src = TempMp4Path(L"locked_upload_source.mp4");
+    HANDLE holder = ::CreateFileW(src.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                                  FILE_ATTRIBUTE_NORMAL, nullptr);
+    REQUIRE(holder != INVALID_HANDLE_VALUE);
+    const nzvideomni::HttpResponse resp =
+        client.UploadFileSync(ApiBase() + "/upload/video", src, "file", "x.mp4", "video/mp4",
+                              nzvideomni::kUploadTimeoutMs);
+    ::CloseHandle(holder);
+    ::DeleteFileW(src.c_str());
+    REQUIRE(resp.transport == nzvideomni::TransportError::kSourceFileFailed);
+    CHECK(resp.status == 0);
+    CHECK(resp.transport_message.find("Windows error 32") != std::string::npos);
 }
 
 TEST_SUITE("integration") {

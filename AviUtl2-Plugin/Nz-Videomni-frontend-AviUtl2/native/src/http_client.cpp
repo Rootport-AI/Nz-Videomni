@@ -535,15 +535,20 @@ HttpResponse HttpClient::UploadFileSync(const std::string& url,
     HANDLE file = ::CreateFileW(file_path.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                 nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
-        resp.transport = TransportError::kUnreachable;
-        resp.transport_message = "Could not open upload source file";
+        const DWORD open_err = ::GetLastError();
+        resp.transport = TransportError::kSourceFileFailed;
+        resp.transport_message = "Could not open upload source file (Windows error " +
+                                 std::to_string(static_cast<unsigned long>(open_err)) + ")";
         return resp;
     }
     LARGE_INTEGER file_size = {};
     if (!::GetFileSizeEx(file, &file_size)) {
+        // Take the error code before CloseHandle can overwrite it.
+        const DWORD size_err = ::GetLastError();
         ::CloseHandle(file);
-        resp.transport = TransportError::kUnreachable;
-        resp.transport_message = "Could not size upload source file";
+        resp.transport = TransportError::kSourceFileFailed;
+        resp.transport_message = "Could not size upload source file (Windows error " +
+                                 std::to_string(static_cast<unsigned long>(size_err)) + ")";
         return resp;
     }
 
@@ -613,9 +618,15 @@ HttpResponse HttpClient::UploadFileSync(const std::string& url,
             DWORD read = 0;
             if (!::ReadFile(file, buffer.data(), static_cast<DWORD>(buffer.size()),
                             &read, nullptr)) {
-                err = ERROR_READ_FAULT;
-                write_ok = false;
-                break;
+                // A local read failure, not a network one. Take the error code
+                // before CloseHandle can overwrite it.
+                const DWORD read_err = ::GetLastError();
+                ::CloseHandle(file);
+                resp.transport = TransportError::kSourceFileFailed;
+                resp.transport_message = "Could not read upload source file (Windows error " +
+                                         std::to_string(static_cast<unsigned long>(read_err)) +
+                                         ")";
+                return resp;
             }
             if (read == 0) {
                 break;  // end of file

@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-16（§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票・§1-92 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162）・§1-94 を起票・§2-1〔元 §1-89〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237。
+- 作成: 2026-07-15／最終更新: 2026-10-16（§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票・§1-92 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162）・§1-94 を起票・§2-1〔元 §1-89〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237・§3-238（テストコードの整理と不安定の一掃）を起票し §1-94 を吸収。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
@@ -15,7 +15,7 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-**残りは §1-93（MiniMax H3 対応・α版。計画は別のセッション）と §1-94（不安定なテスト 2 件・小さな修正・随時）。次に着手するテーマはオーナーが決める。**
+**残りは §1-93（MiniMax H3 対応・α版。計画は別のセッション）。次に着手するテーマはオーナーが決める。**
 
 ### 1-93. MiniMax H3 対応・α版（公式 FL2VA 枝刈り int8 ConvRot を 16GB で動かす）（起票：2026-10-16）
 
@@ -23,13 +23,6 @@
 - **裁定と前提**: 裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-09-06 と 2026-10-16）。範囲のメモは同 §13.8。前提の工事＝フレーム規約 17n+5・24fps 固定・4〜15 秒の系統別制約（同 §9）と、専用の仮想環境（torch は LTX と揃えない）。
 - **入口**: 計画はプランモードで別のセッションで行う。GPU を使う実測は毎回オーナーの了承を得る。
 - **出典**: 同ノート §13・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §9。
-
-### 1-94. 操作パネルの既存テストの不安定（`App.prefill.test.tsx` の 1 件・`SourceInputPanel.test.tsx` の 1 件）（起票：2026-10-16）
-
-- **概要**: 操作パネルのテスト 2 件が、全件実行の繰り返し（20 回）でそれぞれ 1 回だけ落ちた。①`webui/src/App.prefill.test.tsx` の "videoAudioToVideo extracts the video's audio (mix, inclusive frame range) and loads the wav into the source-audio slot (#3)"（"Unable to find an element with the text: /extracting audio/i"・5.3 秒）。②`webui/src/modes/chained/SourceInputPanel.test.tsx` の "SourceInputPanel > drag-and-drop (contract v7) > dropping a video switches to v2v mode and shows the CONTEXT FRAMES slider"（`toBeEnabled()` の失敗・16 ミリ秒）。単独の実行では未確認。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236 の差分が触ったファイルではない。原因は未特定で、①は「音声抽出中の一瞬の表示を待つ取りこぼし」、②は「ドロップ直後に有効化される前のボタンを見た」が推定。
-- **直し方の候補**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236 と同じ進め方で、原因の特定から（推定を一時的な値の変更で決定的に再現して確かめる）。待ち時間を延ばすだけの直しは避ける。
-- **範囲**: テストのみ（製品コードは不変）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.4。
 
 ---
 
@@ -70,6 +63,14 @@
 - **概要**: 第 1 弾では、回転情報つきの素材（スマートフォンの縦動画など）は作業寸法と実際の向きが食い違うので、ジョブを `generation_failed` で止めている（`services/pipeline_manager.py` の `run_job` の Alpha Gen 分岐。切り出した窓の縦横が、受付で測ったアップロード元の縦横と入れ替わっていたら失敗にする判定）。回転を考えて寸法を測り、回転した向きのまま扱えるようにする。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §11、フロントエンド [`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §5.5。
 - **状態**: 将来の改修項目（着手時期未定）。
+
+#### 3-238. 操作パネルのテストコードの整理と不安定なテストの一掃（起票：2026-10-16）
+
+- **概要**: 操作パネル（`webui`）のテストコードは製品コードより多く、同じ振る舞いを複数の層で重ねて確かめている箇所が多い。全件を繰り返し走らせるたびに、時間の隙間やモックの持ち越しに頼るテストが 1〜2 件ずつ新たに落ちる。**オーナー裁定（2026-10-16）: 不安定なテストは製品の不具合ではないので §1 に個別には起票せず本項に集める。不要なテストコードを減らす作業を、不安定の修正より優先する。** 数と履歴は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163。
+- **吸収した項目**: 旧 §1-94 の 2 件（`webui/src/App.prefill.test.tsx` の "videoAudioToVideo … (#3)" と `webui/src/modes/chained/SourceInputPanel.test.tsx` の "dropping a video switches to v2v mode …"。全件実行 20 回でそれぞれ 1 回落ちた。同 §162.4）。今後に見つかる同型の不安定も本項に追記する。
+- **進め方の候補**: 棚卸し（区域・層ごとの件数と所要・確かめている内容・不安定の履歴・重複）→ 削除の基準の確定（オーナー裁定）→ 層ごとに削減 → 全件の繰り返しで確認。基準の候補は同 §163.4。件数を目安に削らず、基準に照らして 1 件ずつ判断する（敵対的レビューで足したテストが退行を捕まえた例があるため）。
+- **範囲**: テストとモックのみ（製品コードは不変）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163（実測と裁定）・§160.5・§162.4（不安定の記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236（直した前例）。
 
 ### 研究課題（上の改修項目より優先度が下）
 

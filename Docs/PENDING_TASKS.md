@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-16（§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票。
+- 作成: 2026-07-15／最終更新: 2026-10-16（§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票・§1-92 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162）・§1-94 を起票。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -15,14 +15,7 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-**残りは §1-92（不安定なテスト 1 件・小さな修正・随時）と §1-93（MiniMax H3 対応・α版。計画は別のセッション）。次に着手するテーマはオーナーが決める。**
-
-### 1-92. 操作パネルの既存テストの不安定（`App.trackRoute.test.tsx` の 1 件）（起票：2026-10-16）
-
-- **概要**: 操作パネルのテスト `webui/src/App.trackRoute.test.tsx` の "App / §3-54 物体追尾 right-click routing > does NOT remount on a second 追尾 right-click while a run is going — it shows guidance and leaves the run alone" が、全件実行の繰り返しのうち 1 回だけ落ちた（"Unable to find an element with the text: /61 \/ 241 frames/"・5.6 秒）。単独の実行では未確認。§1-82（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234）の差分が触ったファイルではない。原因は未特定で、「負荷で追尾の進捗表示が待ちの上限までに出なかった」は推定。
-- **直し方の候補**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234 と同じ進め方で、原因の特定から（推定を一時的な値の変更で決定的に再現して確かめる）。待ち時間を延ばすだけの直しは避ける。
-- **範囲**: テストのみ（製品コードは不変）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.5。
+**残りは §1-93（MiniMax H3 対応・α版。計画は別のセッション）と §1-94（不安定なテスト 2 件・小さな修正・随時）。次に着手するテーマはオーナーが決める。**
 
 ### 1-93. MiniMax H3 対応・α版（公式 FL2VA 枝刈り int8 ConvRot を 16GB で動かす）（起票：2026-10-16）
 
@@ -30,6 +23,13 @@
 - **裁定と前提**: 裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-09-06 と 2026-10-16）。範囲のメモは同 §13.8。前提の工事＝フレーム規約 17n+5・24fps 固定・4〜15 秒の系統別制約（同 §9）と、専用の仮想環境（torch は LTX と揃えない）。
 - **入口**: 計画はプランモードで別のセッションで行う。GPU を使う実測は毎回オーナーの了承を得る。
 - **出典**: 同ノート §13・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §9。
+
+### 1-94. 操作パネルの既存テストの不安定（`App.prefill.test.tsx` の 1 件・`SourceInputPanel.test.tsx` の 1 件）（起票：2026-10-16）
+
+- **概要**: 操作パネルのテスト 2 件が、全件実行の繰り返し（20 回）でそれぞれ 1 回だけ落ちた。①`webui/src/App.prefill.test.tsx` の "videoAudioToVideo extracts the video's audio (mix, inclusive frame range) and loads the wav into the source-audio slot (#3)"（"Unable to find an element with the text: /extracting audio/i"・5.3 秒）。②`webui/src/modes/chained/SourceInputPanel.test.tsx` の "SourceInputPanel > drag-and-drop (contract v7) > dropping a video switches to v2v mode and shows the CONTEXT FRAMES slider"（`toBeEnabled()` の失敗・16 ミリ秒）。単独の実行では未確認。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236 の差分が触ったファイルではない。原因は未特定で、①は「音声抽出中の一瞬の表示を待つ取りこぼし」、②は「ドロップ直後に有効化される前のボタンを見た」が推定。
+- **直し方の候補**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236 と同じ進め方で、原因の特定から（推定を一時的な値の変更で決定的に再現して確かめる）。待ち時間を延ばすだけの直しは避ける。
+- **範囲**: テストのみ（製品コードは不変）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.4。
 
 ---
 

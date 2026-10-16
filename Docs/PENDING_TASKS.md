@@ -1,9 +1,9 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-15（§1-86 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231・§3-229 と §3-230 を起票・文書とコメントの現行化＝[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §158・§1-90 を起票して同日に 3-232 でクローズ・§1-91 を起票）。
+- 作成: 2026-07-15／最終更新: 2026-10-16（§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
-  2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
+  2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
   3. **将来の研究課題** — 調査・検討段階の大きめのテーマ。着手時期は未定。冒頭に、オーナーが指定した階層「将来の改修項目＞将来の研究課題」に従って**改修項目のグループ**を置く。
   4. **スコープ外（さらに先の将来）** — §3よりもさらに優先度が低く、当面は着手しないと判断したもの。前提が変わったときに読み返すための置き場。
 - **完了してクローズした項目は本書に残さず、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移す。** 本書の「3.」と同書の「3.」は別物なので、**参照するときは番号だけで書かず、必ずファイル名を添えること**。
@@ -15,15 +15,7 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-**残りは §1-82 と §1-89 と §1-91（小さな修正・随時）と §1-87（LoRA の配布）。次に着手するテーマはオーナーが決める。**
-
-### 1-82. 操作パネルの既存テストの不安定（`App.nag.test.tsx` の 2 件・`JobsContext.test.tsx` の 1 件）（起票：2026-10-06）
-
-- **概要**: 操作パネルのテスト `webui/src/App.nag.test.tsx` の 2 件（"bridge capture — NAG on …" と "bridge capture — VSF method selected …"）が、ときどき落ちる。前のテストが送ったジョブが、アプリ全体で共有されるモックの中でまだ実行中のことがあり、「生成」ボタンが "Busy…" になっていて見つからないため。モックのジョブの進み具合は既定 2 秒のポーリングで決まるのでタイミング次第で、Repeat count（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-219）の改修の前後とも 20 回中 4〜5 回落ちる（この改修とは無関係の既存の不具合）。
-  - もう 1 件、`webui/src/jobs/JobsContext.test.tsx` の "cancelJob marks the job as cancelling until it settles into cancelled, then clears" が、テスト全体の実行では 3 回中 1 回落ち、このファイル単独では 5 回とも通る。Repeat count の改修では触っていないファイルで、原因は未調査（`App.nag.test.tsx` の共有モックの持ち越しとは別の理由の可能性がある）。
-- **直し方の候補**: `App.nag.test.tsx` は、`afterEach` で共有モックのジョブを `listJobs` で終わりまで進める後片付けを足す（`webui/src/modes/single/SingleScreen.repeat.test.tsx` で採った方法）。`JobsContext.test.tsx` は原因の特定から。
-- **追記（2026-10-14）**: `webui/src/modes/toolbox/ObjectTrackingSection.test.tsx` の "calls timeline.cancelTracking when Stop is pressed" も、全件の実行で 1 回落ち、単独では 3 回とも合格した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §154.3）。同型の不安定として本項に含める。
-- **範囲**: テストのみ（製品コードは不変）。
+**残りは §1-87（LoRA の配布）と §1-92（不安定なテスト 1 件・小さな修正・随時）。次に着手するテーマはオーナーが決める。**
 
 ### 1-87. Alpha Gen の LoRA ウェイトの配布（起票：2026-10-07）
 
@@ -31,20 +23,22 @@
 - **論点**: ①オーナーの Hugging Face での再配布が、ライセンス（LTX-2.x Community License）上許されるか。②インストーラのマニフェストに取得の行を足すか。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §11、[`LTX_ALPHAGEN_RESEARCH_NOTES.md`](LTX_ALPHAGEN_RESEARCH_NOTES.md) 1.7 節。
 
-### 1-89. Inpainting のフレーム数スライダーの目盛り（快適上限の線）が Create の線を指す（起票：2026-10-14）
+### 1-92. 操作パネルの既存テストの不安定（`App.trackRoute.test.tsx` の 1 件）（起票：2026-10-16）
 
-- **概要**: `webui/src/modes/edit/InpaintingPanel.tsx` の `DurationField` は `tickId` を渡さず既定の `"spill-tick"` を使うが、Create（`GenerationForm.tsx`）も同じ id の `<datalist>` を描く。全画面が常時マウントで DOM 上は Create が先にあるため、Inpainting のつまみの目盛り（`list="spill-tick"`）は Create の現在の線の位置に出る。線を超えたときの注意は Inpainting が自前で判定しているので、狂うのは目盛りの位置だけ。Outpainting（`OUTPAINT_SPILL_TICK_ID`）と Alpha Gen（`ALPHA_GEN_TICK_ID`）は専用の id で回避済み。
-- **再現条件**: Inpainting で元動画の寸法が分かり、配信の Outpainting 用予算がある系統（`comfortFrames` が null でない）。コードの読み合わせで裏取り済み・実機では未確認。
-- **直し方の候補**: Inpainting にも専用の `tickId` を渡す（1 行）。
-- **範囲**: 操作パネルのみ。
-- **出典**: 2026-10-14 のコメント点検（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §155）。
+- **概要**: 操作パネルのテスト `webui/src/App.trackRoute.test.tsx` の "App / §3-54 物体追尾 right-click routing > does NOT remount on a second 追尾 right-click while a run is going — it shows guidance and leaves the run alone" が、全件実行の繰り返しのうち 1 回だけ落ちた（"Unable to find an element with the text: /61 \/ 241 frames/"・5.6 秒）。単独の実行では未確認。§1-82（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234）の差分が触ったファイルではない。原因は未特定で、「負荷で追尾の進捗表示が待ちの上限までに出なかった」は推定。
+- **直し方の候補**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234 と同じ進め方で、原因の特定から（推定を一時的な値の変更で決定的に再現して確かめる）。待ち時間を延ばすだけの直しは避ける。
+- **範囲**: テストのみ（製品コードは不変）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.5。
 
-### 1-91. `backend.uploadFile` で元ファイルが開けないときの符号が `BACKEND_UNREACHABLE` になる（起票：2026-10-15）
+---
 
-- **概要**: プラグインのネイティブ側 `backend.uploadFile`（元動画や音声をサーバーへ上げる処理）は、送る前に `GetFileAttributesW` で存在を確かめた後、元ファイルを読み取りで開けなかったとき（他のプロセスが開いたまま、など）に通信の失敗 `BACKEND_UNREACHABLE`（契約では「接続不可・切断」）として返す（`native/src/http_client.cpp` の "Could not open upload source file"）。ダウンロード側の同じ型のずれは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-232 で `DOWNLOAD_FAILED` に寄せた。
-- **直し方の候補**: 3-232 と同じ形で、通信の失敗と分けた符号（既存の `FILE_NOT_FOUND` を広げるか、新しい符号を契約に加算するか）に寄せる。符号の選び方はオーナー判断。
-- **範囲**: ネイティブ＋契約文書。操作パネルの変更は符号の選び方次第。
-- **出典**: 3-232 の計画の敵対的レビュー（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159）。
+## 2. 実装済み・ユーザーのテスト待ち
+
+実装と機械検証（型検査・自動テスト）まで終わっていて、オーナー本人の実機・目視の確認だけが残っているもの。**各項目のチェックが全部埋まったら[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移す。**
+
+### 2-1. Inpainting のフレーム数スライダーの目盛り（元 §1-89）
+
+- [ ] Inpainting に元動画を読み込み（快適上限の線が出る条件＝元動画の寸法が分かり、配信の Outpainting 用予算がある状態）、フレーム数のつまみの目盛りが Inpainting 自身の線の位置にあり、Create のつまみの目盛りとは別の位置に出ること → 合格なら [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.3）。
 
 ---
 

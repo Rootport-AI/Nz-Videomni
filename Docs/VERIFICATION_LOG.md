@@ -16707,3 +16707,58 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 ### 159.3 残るもの
 
 - 台帳 §1-91（`backend.uploadFile` の元ファイルが開けないときの符号）。Join の 🎞 の同名上書きの衝突そのもの（毎回新しい名前にする案）は裁定で含めず、起票もしていない（必要になればオーナー判断）。
+  > **更新（2026-10-16）**: §1-91 は §160（CLOSED 3-233）で解消。
+
+## 160. ★小さな不具合 3 件（台帳 §1-91・§1-89・§1-82）＝アップロードの元ファイルの失敗を `BACKEND_UNREACHABLE` から `FILE_NOT_FOUND` へ・Inpainting の目盛りに専用の id・操作パネルの不安定なテスト 4 件の原因を確かめて直す（2026-10-16）
+
+### 160.1 結論
+
+- **§1-91（`backend.uploadFile` の符号）を直した → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233。** 元ファイルを開けない・大きさが取れない・読めない失敗は、通信の失敗 `BACKEND_UNREACHABLE` ではなく既存の符号 `FILE_NOT_FOUND` になり、文に Windows のエラー番号が付く。挙動の変更は失敗の経路だけで、正常系は変わらない。画面の表示が変わる点は §160.2。
+- **§1-89（Inpainting のフレーム数スライダーの目盛り）を直した → 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1 でオーナーの目視待ち。** 実機では未確認。
+- **§1-82（操作パネルの不安定なテスト）を直した → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234。** テストだけの変更で、製品コードは変わらない。4 件それぞれの原因を推定し、うち 2 件は一時的に値を変えて決定的に再現して確かめた。全件実行の繰り返しで対象は全部合格したが、対象外の 1 件が 1 回落ちたので台帳 §1-92 に起票した（§160.5）。
+- **コミット**: dev `dd601eb`（§1-91 のネイティブ＋テスト 1 件。`http_client.h`・`http_client.cpp`・`bridge.cpp`・`test_http_client.cpp`）・`2b88232`（§1-91 の契約。`BRIDGE_CONTRACT.md` §4.5・§5・§8 直後の注記）・`bc1c616`（§1-89 の目盛りの id＋テスト 1 行）・`6fc841c`（§1-82 のテスト 4 ファイル）・`1f39906`（配布用 aux2。§1-91 と §1-89 の両方を含む）。記録（本節・CLOSED・台帳・DEVLOG）のコミットは監督が積む。main への merge はオーナーの合図待ち。
+
+### 160.2 §1-91: アップロードの元ファイルの失敗の符号
+
+- **やったこと**: プラグインのネイティブ側 `UploadFileSync`（`native/src/http_client.cpp`）は、元ファイルを開けない（`CreateFileW` の失敗）・大きさが取れない（`GetFileSizeEx` の失敗）・送信中に読めない（`ReadFile` の失敗）の 3 か所で通信の失敗 `kUnreachable` を返していた。`ReadFile` の失敗は Windows のエラー番号を捨てて `ERROR_READ_FAULT` に決め打ちし、文は "upload write failed (winhttp error 30)" になっていた。`TransportError::kSourceFileFailed`（元ファイルの失敗。通信の失敗ではない）を足して 3 か所で返し、`bridge.cpp` の `TransportCode` が既存の `FILE_NOT_FOUND` に写す。文は "Could not open／size／read upload source file (Windows error N)"。番号は `CloseHandle` の前に取る。`plugin.log` の行は「backend.uploadFile failed: <符号> - <文>」で、§159 の `downloadVideo` と同じ形。
+- **テスト**: 単体テスト 1 件（`native/tests/test_http_client.cpp`。元ファイルを共有なしで開いたまま `UploadFileSync` を呼ぶと `kSourceFileFailed`・status 0・文に "Windows error 32"）。ファイルを開く処理は接続より前にあるのでサーバーが要らず、統合テストではなく無印のスイートに置いた（`build.ps1 -RunTests` で毎回走る）。同ファイル冒頭のコメントも現行化した。大きさが取れない経路と読めない経路はテストで起こせないので、読み合わせと差分レビューで確かめた。
+- **契約**: [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.5・§5 の `FILE_NOT_FOUND` の定義を「存在しない・読み取りで開けない・大きさが取れない・読めない」に広げ、§8 の版の表の直後に 2026-10-16 の注記を置いた。params・result・符号の集合は不変なので版は上げない。
+- **画面の表示が変わる点**: アップロード欄とキーフレームのカードは符号だけを出すので、他のプロセスが開いたままのファイルでは `BACKEND_UNREACHABLE` の代わりに `FILE_NOT_FOUND` と表示される。バッチの表は「符号: 文」を出すので Windows のエラー番号も見える。`plugin.log` にも残る。操作パネルの型定義 `types.ts` は触らない（JSDoc に書き足すと契約の写しが増えるため）。
+- **範囲外**: 送信中に元ファイルの長さが変わった場合、`ReadFile` は失敗せず `Content-Length`（送ると宣言した長さ）とずれて、通信の失敗として出る。
+- **オーナー裁定（2026-10-16）**: A 案（監督の推奨を承認）＝既存の `FILE_NOT_FOUND` を広げ、新しい符号は足さない・版は上げない・文に Windows のエラー番号を添える・`ReadFile` の途中の失敗も含める。
+
+### 160.3 §1-89: Inpainting のフレーム数スライダーの目盛り
+
+- **やったこと**: `webui/src/modes/edit/InpaintingPanel.tsx` に非 export の定数 `INPAINT_TICK_ID = "inpaint-comfort-tick"` を置き、`DurationField` の `tickId` に渡した（Alpha Gen の `ALPHA_GEN_TICK_ID` と同じ形・6 行の追加）。これで Inpainting のつまみの目盛り（快適上限の線を示す `<datalist>`）の id が、Create の `"spill-tick"` と別になる。`EditScreen.inpaint.test.tsx` の既存のケースに、つまみの `list` がその id であることの確認を 1 行足した。`CommonGenerationFields.tsx` のコメントは変更後も偽にならないので触らない。
+- **オーナーの目視へ**: jsdom（ブラウザを模した試験環境）の単体テストでは、Create と同時に描いたときの id の重複を再現できない（`EditScreen` 単体では Create を描かない）。目で見える要素なので、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1 のオーナー目視 1 行へ移した。合格したら CLOSED へ移す。
+
+### 160.4 §1-82: 操作パネルの不安定なテスト
+
+- **調査**: バックエンドが止まっていることを確かめて全件実行を 10 回。`App.nag.test.tsx` の "NAG on" が 10 回中 5 回落ち（"VSF" は 0 回）、`JobsContext.test.tsx` の cancelJob と `ObjectTrackingSection.test.tsx` の Stop は 0 回だった。新たに `App.prefill.test.tsx` の "#5 (count 0) appends the image as the 1st keyframe…" が 10 回中 1 回落ち、オーナー裁定で §1-82 に含めた。ファイルをまたいだ持ち越しは起きない（vitest 4.1.10 の既定＝forks・isolate=true・ワーカー 23）。
+- **原因と直し**:
+  1. **`App.nag.test.tsx`**: 同じファイルの中の持ち越し。前のケースが送ったジョブが共有モックに残り、既定 2 秒のポーリングで約 4 秒「生成」が Busy のままになる。`renderReady` はジョブ一覧の初期値が空なので待ちにならない。→ `afterEach` に `vi.restoreAllMocks()` と `drainJobs()`（`SingleScreen.repeat.test.tsx` の前例）。
+  2. **`JobsContext.test.tsx`**: 実行中の窓が問い合わせ 3 回分（20 ms × 3）しかなく、取り消しが届く前にジョブが完了すると、モックは cancelled にせずジョブを削除するので `cancellingIds` が消えない。→ `setup(50)`（窓を約 17 倍＝約 1 秒に）。
+  3. **`ObjectTrackingSection.test.tsx`**: `waitFor` は成功した後に `setTimeout(0)` を 1 回待つ（`@testing-library/react` 16.3.2 `dist/pure.js:91-98`）。その間に 40 ms のモックのタイマーが先に発火して、Stop が無効に確定する窓がある。→ 同期の `expect(stop).toBeEnabled()` と `fireEvent.click(stop)` に（描画からクリックまで `await` 無し）。
+  4. **`App.prefill.test.tsx` #5**: 知らせが出る前に `getByText` で探していた。→ `waitFor`（5 秒）。
+- **推定の確認**: (2) は一時的に `setup(1)` にすると `:147` の `waitFor`（8 秒）で落ち、(3) は一時的に `delayMs: 0` にすると `:286` で `cancelTracking` が送られずに落ちた（画面は "Tracked 120 frames…"）。どちらも推定どおりの落ち方を決定的に再現した。一時的な値は戻した。
+
+### 160.5 やり方と門
+
+- **調査**: 調査担当 3 体（Opus 2・Sonnet 1・読み取り専用）。
+- **計画の敵対的レビュー 2 本（Opus）**:
+  - 第 A 部（§1-91・§1-89）: Critical 0・Major 3・Minor 7。Major＝「エラー番号は `plugin.log` にだけ残る」は誤り（バッチの表に出る）・`build.ps1` も webui を組むので §1-82 の全件実行 20 回の後に回す・§1-89 は目で見える要素があるので §2 の目視へ。Minor 7 のうち 6 を採用し、更新行 3 つを省く提案だけ棄却した。
+  - 第 B 部（§1-82）: Critical 0・Major 1・Minor 3。Major＝`waitFor` の `setTimeout(0)`（採用）。Minor＝推定を決定的に再現して確かめる（採用）。
+- **差分の敵対的レビュー 1 本（Opus）**: Critical 0・Major 1・Minor 3。Major＝DEVLOG が未着（記録担当がまとめて書く段取りどおり）。Minor のうちコメントの言い回し 1 語を採用。
+- **機械ゲート（担当 Sonnet）**:
+  - 操作パネル: `npm run typecheck` 合格・`npm run lint` 警告 31 件（基準どおり）・`EditScreen.inpaint.test.tsx` 19 件合格。
+  - **全件実行 20 回**（`npx vitest run --exclude src/api/backend.integration.test.ts`・バックエンド停止を確認・3,246 件・1 回約 50 秒）: 対象 5 件は 20 回とも合格。**8 回目に対象外の 1 件が落ちた**: `src/App.trackRoute.test.tsx` "App / §3-54 物体追尾 right-click routing > does NOT remount on a second 追尾 right-click while a run is going — it shows guidance and leaves the run alone"（"Unable to find an element with the text: /61 \/ 241 frames/"・5.6 秒）。推定: 負荷で追尾の進捗表示が間に合わず、待ちの上限を超えた。今回の差分が触ったファイルではない。→ 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92 に起票。
+  - ネイティブ `build.ps1 -RunTests`（webui を含む）: 終了コード 0・warning 0・C4819 0・`test cases: 398 | 398 passed | 0 failed | 7 skipped`（397→398）・`native\src`／`native\tests` の非 ASCII 0。`-tc="*upload source*"` で実行 1 件・合格 1 件。
+  - 配置: `deploy.ps1` で実機（`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2`）と配布用（`AviUtl2-Plugin\NzVideomni.aux2`）へ。配布用 aux2 に `inpaint-comfort-tick` と `Could not open upload source file (Windows error` の両方が埋め込まれていることを確かめた。
+- ログは監督の作業領域（`scratchpad\gate-2026-10-16\`。git 管理外）。
+- オーナーの目視の節は §1-89 だけ（台帳 §2-1）。§1-91 は失敗経路の符号と文だけが変わるので、3-232 と同じく目視の節を作らない。
+
+### 160.6 残るもの
+
+- §1-89 のオーナー目視（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1）。
+- 新しい不安定なテスト 1 件（同 §1-92）。
+- main への merge はオーナーの合図待ち。

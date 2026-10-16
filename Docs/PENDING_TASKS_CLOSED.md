@@ -2945,3 +2945,24 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   > **更新（2026-10-16）**: main merge 済み（`b3cb85f`）。
 - **正本・出典**: 契約 フロントエンド `BRIDGE_CONTRACT.md` §4.4・§5・§8 直後の注記、設計上の判断 フロントエンド `DEVLOG.md` §136、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159。
 - **残課題**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-91（`backend.uploadFile` の同じ型のずれ）。
+  > **更新（2026-10-16）**: §1-91 は 3-233 で解消。
+
+### 3-233. アップロードの元ファイルの失敗の符号（元ファイルを開けない／大きさが取れない／読めない失敗を `BACKEND_UNREACHABLE` から `FILE_NOT_FOUND` に・文に Windows のエラー番号）（起票：2026-10-15、実装・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-91 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-91（**同書側は欠番**）。§2 を経由せず §1 から直接クローズした。3-232 の計画の敵対的レビュー（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §159）で見つかった、プラグインのネイティブ側 `backend.uploadFile` の同じ型のずれ。
+- **到達条件**: 元ファイルを開けない／大きさが取れない／送信中に読めない失敗が、通信の失敗（`BACKEND_UNREACHABLE`）ではなく `FILE_NOT_FOUND` として返り、文に Windows のエラー番号が付くこと。**達成した。**
+- **何が完了したか**: `TransportError::kSourceFileFailed` を足し、`UploadFileSync` の 3 か所（`CreateFileW`・`GetFileSizeEx`・`ReadFile` の失敗）で返して `TransportCode` が `FILE_NOT_FOUND` に写す。文は "Could not open／size／read upload source file (Windows error N)"、`plugin.log` の行は「backend.uploadFile failed: <符号> - <文>」。契約 `BRIDGE_CONTRACT.md` §4.5・§5 の定義と §8 直後の注記（版は上げない）。単体テスト 1 件（元ファイルを共有なしで開いたまま送る。サーバー不要）。アップロード欄とキーフレームのカードの表示は `BACKEND_UNREACHABLE` から `FILE_NOT_FOUND` に変わる（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.2）。オーナー裁定（2026-10-16）は A 案＝既存の符号を広げる・新しい符号は足さない。
+- **どの物差しで通ったか**: 計画と差分の敵対的レビュー・`build.ps1 -RunTests` 失敗 0・単体テスト 1 件の合格・配置（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.5）。オーナーの目視の節は作らない（失敗経路の符号と文だけが変わる。3-232 と同じ扱い）。
+- **状態**: dev `dd601eb`（ネイティブ＋テスト）・`2b88232`（契約）・`1f39906`（配布用 aux2）。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
+- **正本・出典**: 契約 フロントエンド `BRIDGE_CONTRACT.md` §4.5・§5・§8 直後の注記、設計上の判断 フロントエンド `DEVLOG.md` §137、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160。
+- **残課題**: なし（送信中に元ファイルの長さが変わる場合は範囲外。§160.2）。
+
+### 3-234. 操作パネルの不安定なテスト（`App.nag.test.tsx`・`JobsContext.test.tsx`・`ObjectTrackingSection.test.tsx`・`App.prefill.test.tsx`）（起票：2026-10-06、クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-82 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-82（**同書側は欠番**）。§2 を経由せず §1 から直接クローズした（テストだけの変更で、実機で確かめる要素が無い。同書の運用規則の例外）。調査で新たに見つかった `App.prefill.test.tsx` の 1 件は、オーナー裁定で本項に含めた。
+- **到達条件**: 対象のテストが落ちる原因を確かめて直し、全件実行の繰り返しで対象が落ちないこと。**達成した。**
+- **何が完了したか**: `App.nag.test.tsx`＝同じファイルの中で前のケースのジョブが共有モックに残る → `afterEach` で後片付け。`JobsContext.test.tsx`＝取り消しが届く前にジョブが完了しうる短い窓 → 窓を広げる。`ObjectTrackingSection.test.tsx`＝`waitFor` の成功後の 1 拍の間に Stop が無効になる → 描画からクリックまでを同期に。`App.prefill.test.tsx` #5＝知らせが出る前に探していた → `waitFor`。製品コードは変わらない。原因と直しの詳細は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.4。
+- **どの物差しで通ったか**: 計画の敵対的レビュー（第 B 部）と差分の敵対的レビュー、推定のうち 2 件を一時的に値を変えて決定的に再現した確認（§160.4）、全件実行の繰り返しで対象は全部合格（§160.5）。
+- **状態**: dev `6fc841c`。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
+- **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §139、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160。
+- **残課題**: 同じ全件実行で対象外の 1 件が落ちた → [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92。

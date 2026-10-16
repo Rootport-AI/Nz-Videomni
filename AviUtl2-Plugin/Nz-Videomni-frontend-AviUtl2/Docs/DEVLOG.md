@@ -5174,3 +5174,75 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 実装済み。`backend.uploadFile` で元ファイルが開けないときも `BACKEND_UNREACHABLE` になる同じ型のずれは、今回は直さずバックエンド台帳 §1-91 に起票しました。
 
 > **更新（2026-10-16）**: バックエンド [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-232 でクローズ・main merge `b3cb85f`。
+
+> **更新（2026-10-16）**: `backend.uploadFile` の同じ型のずれ（台帳 §1-91）は §137 で直した。
+
+## 137. アップロードの元ファイルの失敗の符号 — 開けない／大きさが取れない／読めない失敗を `FILE_NOT_FOUND` に（バックエンド台帳 §1-91 → [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-233。2026-10-16）
+
+### 137.1 結論
+
+- **`backend.uploadFile` で元ファイルを開けない・大きさが取れない・送信中に読めないとき、符号は `BACKEND_UNREACHABLE` ではなく `FILE_NOT_FOUND` になりました。** 文には Windows のエラー番号が付きます（例: 「Could not open upload source file (Windows error 32)」）。
+- **画面の表示が変わります。** アップロード欄とキーフレームのカードは符号だけを出すので、他のプロセスが開いたままのファイルでは `BACKEND_UNREACHABLE` の代わりに `FILE_NOT_FOUND` と表示されます。バッチの表は「符号: 文」を出すので、Windows のエラー番号も見えます。`plugin.log` にも残ります。
+
+### 137.2 原因
+
+- `native/src/http_client.cpp` の `UploadFileSync` は、元ファイルの 3 つの失敗（`CreateFileW`・`GetFileSizeEx`・送信中の `ReadFile`）を通信の失敗と同じ `TransportError::kUnreachable` で返し、`bridge.cpp` の `TransportCode` がそれを `BACKEND_UNREACHABLE`（契約では「接続不可・切断」）に写していました。`ReadFile` の失敗は番号を捨てて `ERROR_READ_FAULT` に決め打ちしていたため、文も実態と違う "upload write failed (winhttp error 30)" でした。§136 で直したダウンロード側と同じ型のずれです。
+
+### 137.3 何を変えたか
+
+- **ネイティブ**: `TransportError` に `kSourceFileFailed`（元ファイルの失敗。通信の失敗ではない）を足し、3 か所がこれを返します。番号は `CloseHandle` より前に取ります。`TransportCode` はこれを既存の `FILE_NOT_FOUND` に写します。新しい符号を足さず既存の符号を広げたのはオーナー裁定（A 案）で、送信前のローカルファイルの確認に失敗した、という意味が同じだからです。
+- **ログ**: 失敗の行は「backend.uploadFile failed: <符号> - <文>」になりました（§136 の `downloadVideo` と同じ形）。
+- **契約**: 版は上げません（params・result・符号の集合は不変）。[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.5・§5 の `FILE_NOT_FOUND` の説明を広げ、§8 の表の直後に注記を置きました。`webui/src/api/types.ts` は触っていません（JSDoc に書き足すと契約の写しが増えるため）。
+- **テスト**: 単体テストに、共有なしで開いたままのファイルを送ると `kSourceFileFailed` と「Windows error 32」が返る 1 件を足しました。ファイルを開く処理は接続より前にあるのでサーバーが要らず、`build.ps1 -RunTests` で毎回走ります。
+- 送信中に元ファイルの長さが変わる場合は範囲外です（`ReadFile` は失敗せず、通信の失敗として出ます）。
+- 数（テストの件数など）と門の詳細は書き写さず、正本のバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §160 を参照してください。
+
+### 137.4 状態
+
+- 実装済み・クローズ（バックエンド [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-233）。dev `dd601eb`・`2b88232`・`1f39906`。main への merge はオーナーの合図待ちです。
+
+## 138. Inpainting のフレーム数スライダーの目盛りに専用の id（バックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1〔元 §1-89〕。2026-10-16）
+
+### 138.1 結論
+
+- **Inpainting のフレーム数のつまみの目盛り（快適上限の線）が、Create の線ではなく Inpainting 自身の線の位置に出るようにしました。** 実機では未確認で、バックエンド台帳 §2-1 のオーナー目視を待っています。
+
+### 138.2 原因
+
+- `webui/src/modes/edit/InpaintingPanel.tsx` の `DurationField` は `tickId` を渡さず既定の `"spill-tick"` を使っていましたが、Create（`GenerationForm.tsx`）も同じ id の `<datalist>` を描きます。全画面が常時マウントで DOM 上は Create が先にあるため、Inpainting のつまみは Create の線の位置に目盛りを出していました（コードの読み合わせによる）。線を超えたときの注意は Inpainting が自前で判定しているので、狂うのは目盛りの位置だけでした。
+
+### 138.3 何を変えたか
+
+- `InpaintingPanel.tsx` に非 export の定数 `INPAINT_TICK_ID = "inpaint-comfort-tick"` を置き、`DurationField` の `tickId` に渡しました。Alpha Gen の `ALPHA_GEN_TICK_ID`・Outpainting の `OUTPAINT_SPILL_TICK_ID` と同じ形です。
+- `EditScreen.inpaint.test.tsx` の既存のケースに、つまみの `list` がその id であることの確認を 1 行足しました。jsdom の単体テストでは `EditScreen` 単体に Create が描かれないので、id の重複そのものは再現できません。目視が要るのはそのためです。
+- `CommonGenerationFields.tsx` のコメントは変更後も偽にならないので触っていません。
+
+### 138.4 状態
+
+- 実装済み・実機では未確認。dev `bc1c616`（配布用 aux2 は `1f39906`）。バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1 のオーナー目視に合格したらクローズします。記録はバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §160.3。
+
+## 139. 操作パネルの不安定なテストの原因と直し — `App.nag`・`JobsContext`・`ObjectTrackingSection`・`App.prefill`（バックエンド台帳 §1-82 → [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-234。2026-10-16）
+
+### 139.1 結論
+
+- **ときどき落ちていた操作パネルのテスト 4 件の原因を確かめ、テストの側を直しました。製品コードは変わりません。** 全件実行を繰り返して対象は全部合格しました（回数と結果はバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §160.5）。同じ全件実行で対象外の `App.trackRoute.test.tsx` の 1 件が 1 回落ちたので、バックエンド台帳 §1-92 に起票しました。
+
+### 139.2 原因
+
+- **`App.nag.test.tsx`**: 同じファイルの中の持ち越しでした。前のケースが送ったジョブが共有モックに残り、既定 2 秒のポーリングの間「生成」ボタンが Busy のままになります。`renderReady` はジョブ一覧の初期値が空なので、その待ちになりません。ファイルをまたいだ持ち越しは起きません（vitest の既定でファイルごとに分離されている）。
+- **`JobsContext.test.tsx`**: モックのジョブが実行中の窓が短く、取り消しが届く前に完了することがありました。モックは完了したジョブを cancelled にせず削除するので、`cancellingIds` が消えませんでした。
+- **`ObjectTrackingSection.test.tsx`**: `waitFor` は成功した後にもう 1 拍（`setTimeout(0)`）待ちます。その間にモックのタイマーが先に発火して、Stop が押せなくなる窓がありました。
+- **`App.prefill.test.tsx` #5**: 知らせが出る前に `getByText` で探していました。
+- このうち `JobsContext` と `ObjectTrackingSection` の推定は、一時的に値を変えて推定どおりの落ち方を決定的に再現し、確かめました（値は戻しています）。
+
+### 139.3 何を変えたか
+
+- `App.nag.test.tsx`: `afterEach` に `vi.restoreAllMocks()` と `drainJobs()`（`SingleScreen.repeat.test.tsx` の前例）。
+- `JobsContext.test.tsx`: モックの窓を広げました（`setup(50)`）。
+- `ObjectTrackingSection.test.tsx`: Stop が押せることの確認とクリックを同期にし、描画からクリックまでの間に `await` を挟まないようにしました。
+- `App.prefill.test.tsx` #5: `waitFor` で待つようにしました。
+- 時間の数字や回数は書き写さず、バックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §160.4・§160.5 を参照してください。
+
+### 139.4 状態
+
+- 実装済み・クローズ（バックエンド [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-234）。dev `6fc841c`。main への merge はオーナーの合図待ちです。

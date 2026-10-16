@@ -2966,3 +2966,13 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev `6fc841c`。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
 - **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §139、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160。
 - **残課題**: 同じ全件実行で対象外の 1 件が落ちた → [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-92。
+
+### 3-235. Alpha Gen の LoRA ウェイトの配布（`Rootport/Nz-LTX25-weights` の `IC-LoRA/alpha-gen/` に追加・`install-LTX25.bat` が取得）（起票：2026-10-07、実装・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87（**同書側は欠番**）。§2 を経由せず §1 から直接クローズした（実機で確かめる要素が無く、公開 API と端から端の取得試験で検証できる。同書の運用規則の例外）。Alpha Gen の第 1〜3 弾（3-224・3-226・3-227・3-231）の後に残っていた、LoRA ファイルを利用者がどう入手するかの 1 点。
+- **到達条件**: `install-LTX25.bat` が LoRA を自動で置くこと・LTX 2.5 を導入済みの人の再実行では LoRA だけを取ること・`config.yaml` に `alpha-gen` の登録行が無い利用者への案内があること。**達成した。**
+- **何が完了したか**: オーナーの Hugging Face の既存リポジトリ `Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` として無改変で追加し、同リポジトリのカード（NOTICE.md・README.md）を更新した（再ホストの台帳とカードは `Nz-HF-Rehost/`）。記述子 `scripts/manifests/20-ltx25.json` の `downloads` に 3 番目の独立した項目を足し（`key` なし）、案内ファイル `models/LTX25/IC-LoRA/alpha-gen/put_IC-LoRA_safetensors_here.txt` を置いた。`README.md`（「LTX 2.5 を追加する」・「Alpha Gen」・「models フォルダの構成」）に取得の説明と、`config.yaml` に `alpha-gen` の行が無い場合の手順 2 つを書いた。`config.yaml.example`・`Videomni_Backend_Specification.md`（v0.5.90。§5.1b・§11.2）・[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md)・[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 10 節・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D26 を現行化した。サーバー・操作パネル・インストーラのスクリプトのコードは変えていない。
+- **どの物差しで通ったか**: 計画と差分の敵対的レビュー（全採用）・公開 API による遠隔の検証・記述子の検査・端から端の取得試験（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161.2）。オーナーの目視の節は作らない。
+- **状態**: dev `6b74823`（記述子・案内ファイル・README・config.yaml.example）・`11b50b6`（仕様書・設計書・研究ノート・MCP 設計書）・記録のコミットはこの次。main への merge はオーナーの合図待ち。
+- **正本・出典**: 設計 [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §7、利用者向けの手順 `README.md`「Alpha Gen」、取得の定義 `scripts/manifests/20-ltx25.json`、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161。
+- **残課題**: オーナーの SNS での案内（`config.yaml` に `alpha-gen` の行が無い利用者向け。`README.md`「Alpha Gen」の手順を指す）・`Nz-HF-Rehost/verify_local_result.json` は更新していない・LTX 2.3 側の NOTICE に In-Outpainting の記載が無い既存の漏れ（今回の範囲外。必要ならオーナー判断で起票）。詳細は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161.3。

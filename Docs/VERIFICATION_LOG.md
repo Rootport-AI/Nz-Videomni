@@ -16762,3 +16762,39 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - §1-89 のオーナー目視（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1）。
 - 新しい不安定なテスト 1 件（同 §1-92）。
 - main への merge はオーナーの合図待ち。
+
+## 161. ★Alpha Gen の LoRA ウェイトの配布（台帳 §1-87 → CLOSED 3-235）＝`Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` を追加し `install-LTX25.bat` の 3 番目の取得項目に（2026-10-16）
+
+### 161.1 結論
+
+- **Alpha Gen が使う LoRA 1 本を、オーナーの Hugging Face の既存リポジトリ `Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` として無改変で置き、`install-LTX25.bat` が自動で `models/LTX25/IC-LoRA/alpha-gen/` へ置くようにした → [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235。** コードは変えていない（記述子 1 本・案内ファイル 1 本・文書・再ホストの台帳とカードだけ）。
+- **ファイル**: `ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors`・1,308,787,472 バイト・SHA-256 `d9e143f979e0756f0c83d772e6a8890f4c6b933db1f7d93fc06e25c179f3fd36`。上流は `Lightricks/LTX-2.5-22b-IC-LoRA-Alpha-Gen`（commit `6184df14b1b560bf9b6447d3ee126bd7e4a88513`）で、値は上流の LFS の値と一致する。公開側の commit は `5b797711fe9c4a05b557c59b76079689bdc4960c`。
+- **記述子**: `scripts/manifests/20-ltx25.json` の `downloads` の 3 番目の独立した項目（`include` `IC-LoRA/*`・`map` `IC-LoRA`→`LTX25/IC-LoRA`・`min` 1,250,000,000・`label` `ic_lora alpha-gen`）。1 番目の項目に足さなかったのは、インストーラが項目ごとに「`files` が全部 `min` 以上なら SKIP」で動くためで、足すと導入済みの人の再実行で 1 番目の項目全体（約 18.9GB）を取り直す。`key` は付けない（`key` は `models/INSTALLED_PATHS.txt` に書く行の印で、LTX 2.3 の IC-LoRA の行にも無い）。
+- **数値**: `min` の合計は 26,850,000,000 B で、`install_model.ps1` が表示する必要空き容量は 29GB（ceil(×1.15÷2^30)。以前は 28）。公式サイズの合計は 28,091,747,774 B＝26.16GiB で、`README.md` のダウンロード量を「およそ 25 GB」から「およそ 26 GB」にした。ハードウェア要件の「追加で約 30GB」は変えていない（29 は 30 を超えず、同じ値を書き写した箇所と食い違わせないため）。
+- **オーナー裁定（2026-10-16）**: ①置き場所は既存の `Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` を足す（新規リポジトリは作らない）。②`install-LTX25.bat` で必ず取得する（任意導入のバッチにしない）。③台帳 3 文書はこのセッションで更新してよい。④`config.yaml` に `alpha-gen` の登録行が無い既存の利用者は、コードで手当てせず `README.md` に手順 2 つ（1 行足す／`config.yaml` を退避して `run.bat` で作り直す。どちらもサーバーの起動し直しを含む）を書く。SNS での案内はオーナーが行う。
+- **ライセンス**: LTX-2.x Community License（2026-08-11 版）第 3 条で、無改変の再配布が条件つきで許される。LoRA は第 1.5 条 (i)・第 3.5 条（LoRA adapters を名指し）により派生物として扱い、同リポジトリの NOTICE.md 第 5 節（譲渡の通知）の対象に入れた。独立確認（Opus・WEB 検索つき）で監督の読みと食い違いは無かった。Hugging Face の規約に、gated（利用条件への同意が要る設定）の中身の再公開を禁じる条項は見つからず、Lightricks がミラーについて述べたものも見つからなかった。第三者による公式 IC-LoRA の再ホストの例は見つからなかった（オーナー自身の LTX 2.3 側の前例はある）。残留リスクは 2026-08-23 の本体の再ホストと同じで、新しいものは無い。safetensors のヘッダにライセンス文が埋め込まれている。
+- **LICENSE の写し**: GitHub の `LICENSE-2_x` は、手元の写し（2026-08-23）から連絡先のメールアドレスだけが変わっている（`ltxv-licensing@lightricks.com`→`licensing@ltx.io`・版の日付は同じ）。差し替えると同じ写しを持つ `Nz-Gemma4-12B-LTX25` 側と食い違うので、今回は差し替えなかった（揃えるときは両方を一緒に）。
+
+### 161.2 やり方と門
+
+- **計画の敵対的レビュー（Opus）**: Critical 0・Major 3・Minor 8・全採用。Major＝端から端の試験の合格条件を「`INSTALLED_PATHS.txt` に行が増える」から「日時の行以外は変わらない」に直す（`key` を付けないため）・必要空き容量は 29 で、ハードウェア要件の約 30GB は変えない・仕様書と設計書の現行化の漏れ。
+- **差分の敵対的レビュー（Opus）**: Critical 0・Major 3・Minor 5・全採用。要点＝`README.md` の手順にサーバーの起動し直しを明記する（登録は起動時に一度だけ読む）・LoRA を「カテゴリ」と呼ばない書き方にする・404 の符号名 `LORA_NOT_FOUND` を添える・補足の条件を「`config.yaml` が 2026-10-13 より前に作られた」にする。
+- **アップロード**: 2026-10-16 13:30 頃（日本時間）。担当（サブエージェント）の実行は Claude Code の自動判定が「外部への公開」として拒否したので、オーナーの明示の許可のもとで監督が実行した。LICENSE と重み 4 本は「No files have been modified since last commit」で読み飛ばされ、NOTICE.md（commit `3cab4fdf`）・README.md（commit `036580f0`）・LoRA（commit `5b797711`）を送った。全体で約 100 秒（LoRA は 9.5 秒・約 132 MB/s）。
+- **遠隔の検証**: `30_verify_remote.ps1` はこのセッションでは自動判定に拒否されたので、同じ確認を公開 API で行った。`?blobs=true` で台帳の 5 本すべての大きさと LFS の SHA-256 が一致・認証なしの HEAD（resolve の URL・リダイレクトを追う）が 200 で `content-length` 1,308,787,472・公開中の NOTICE.md（25,141 B）と README.md（8,112 B）は手元と同一・gated=False・private=False。`10_verify_local.ps1` は実行していない（リポジトリを絞れず約 100GB のハッシュを取る上に、台帳の `Rootport/Nz-Sulphur2` の Q4_K_M が手元に無い）。
+- **記述子の検査**: `install_ltx.ps1 -BaseModel LTX25 -SkipVenv -SkipMigrate -SkipModels`（`tools\uv` を PATH に足して起動）。4 本の記述子の形の検査が通り、「Model downloads」は `-SkipModels given` で SKIP、検証表 9 行（固定 3 行＋LTX 2.5 の 6 行）がすべて PASS（`ic_lora alpha-gen` 1.22 GB を含む）・終了コード 0。
+- **端から端の取得試験**（開発機・2026-10-16 13:33:13〜13:34:54）: 開発機の LoRA を同じフォルダで `.bak` に改名し、`install_model.ps1 -BaseModel LTX25`（`install-LTX25.bat` の中身）を実行した。
+  - 既存の 2 項目は「SKIP … (16.35 GB already present)」（本体 4 本）・「SKIP … (8.60 GB already present)」（Gemma 4）で、3 番目の項目だけが「missing: … (0 B < 1.16 GB)」として取得された。
+  - 所要時間 101.3 秒、うちダウンロード 99.13 秒（約 13.2 MB/s）。画面の必要空き容量の表示は「約 29 GB」、取得するファイルは「6 個」。
+  - 検証表 9 行がすべて PASS・終了コード 0。置かれたファイルは 1,308,787,472 B で、SHA-256 は上の値と一致。
+  - `models/INSTALLED_PATHS.txt` の違いは日時の行だけ。`models/.dl/` は残っていない。
+  - 記録は `logs\install_LTX25_20261016_133313.log`。合格を確かめてから `.bak` を削除した（同じハッシュのため）。実サーバーと AviUtl2 は止めていない。
+- pytest は対象外（記述子の `downloads` を読むテストは無い）。オーナーの目視の節は作らない（実機で確かめる要素が無い）。
+
+### 161.3 残るもの
+
+- オーナーの SNS での案内（`config.yaml` に `alpha-gen` の行が無い利用者向け。`README.md`「Alpha Gen」の手順を指す）。
+- `Nz-HF-Rehost/verify_local_result.json` は更新していない（`10_verify_local.ps1` を実行していないため）。
+- LTX 2.3 側の NOTICE に In-Outpainting の記載が無い既存の漏れ（今回の範囲外。必要ならオーナー判断で起票）。
+- `Nz-HF-Rehost/README.md` の完了状況の表に LTX 2.5 の 2 リポジトリが無い既知のずれ（今回は LoRA の追加の段落だけを足し、表は作り直していない）。
+- クローズの番号は当初 3-233／§160 を予定していたが、並行セッションが先に使ったため 3-235／§161 にした。
+- main への merge はオーナーの合図待ち。

@@ -343,6 +343,10 @@ describe("App / §3-54 物体追尾 right-click routing", () => {
 
       emit(bridge, "trackObject", partialFilterSelection());
       await waitForToolboxPanel();
+      // The heading can be on screen before the start effect has run, and
+      // `useObjectTracking` drops a progress push that lands before "running".
+      // Wait for the RPC (sent right after enterPhase) before pushing progress.
+      await waitFor(() => expect(trackCalls).toBe(1));
       // Run #1 is genuinely mid-flight: a progress push lands and is shown.
       act(() => {
         bridge.emit(TIMELINE_TRACK_PROGRESS_EVENT, {

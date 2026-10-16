@@ -5,8 +5,8 @@
 **生きた文書（Alpha Gen 機能の設計正本）。** Lightricks が公開した LTX 2.5 用の IC-LoRA「LTX AlphaGen」を使い、利用者の手元の普通の RGB 動画から、同じ大きさ・同じフレーム数の白黒の**マット**動画を作る機能を記述します。マットとは、白＝不透明・黒＝透明・灰＝半透明を明るさで表した動画で、元の動画に当てると背景が抜けます。**IC-LoRA**（参照動画つき LoRA）は、参照として渡した動画を条件にして生成を導く追加部品です。
 
 - 作成: 2026-10-07
-- 対象の台帳項目: 第 1 弾（バックエンド）の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224 です。第 2 弾（操作パネル）の完了記録は同 3-227、第 1 弾の追補（出力ファイルの fps を元動画の正確な値で書く）の完了記録は同 3-226 です。第 3 弾（出口）の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231 です。LoRA ウェイトの配布は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87 です
-- 状態: **第 1 弾は完結（CLOSED 3-224）。第 2 弾は完結（CLOSED 3-227・main merge 済み 2026-10-14）。第 3 弾は完結（CLOSED 3-231・main merge 2026-10-15。経緯は VERIFICATION_LOG §156・実装と門は §157）**（決まっている事項は本書 §9・§10 に収めてあります）
+- 対象の台帳項目: 第 1 弾（バックエンド）の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224 です。第 2 弾（操作パネル）の完了記録は同 3-227、第 1 弾の追補（出力ファイルの fps を元動画の正確な値で書く）の完了記録は同 3-226 です。第 3 弾（出口）の完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231 です。LoRA ウェイトの配布の完了記録は同 3-235 です
+- 状態: **第 1 弾は完結（CLOSED 3-224）。第 2 弾は完結（CLOSED 3-227・main merge 済み 2026-10-14）。第 3 弾は完結（CLOSED 3-231・main merge 2026-10-15。経緯は VERIFICATION_LOG §156・実装と門は §157）。LoRA の配布は完結（CLOSED 3-235・2026-10-16）**（決まっている事項は本書 §9・§10 に収めてあります）
 
 **本書には現在の設計だけを現在形で書きます。** 第 1 部「決まったこと」は、実装を担当する人が第 1 部だけを読めば着手できることを目標に書いてあります。第 2 部「なぜそう決めたか」は、一度否決した案を再提案しないための記録です。決定の時系列は残しません（それは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の役割です）。
 
@@ -18,7 +18,7 @@
 | [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151〜§157 | **§151 はゲート 0（go／no-go の簡易テスト）の記録。** 1 段原寸相当の負荷の実測・2 段経路でマットが出る条件・LoRA のヘッダの中身はここが正本。**§152 は第 1 弾の実装と検証の記録**（オーナーの目視は §152.7）。**§153 は第 2 弾（操作パネル）と第 1 弾の追補の実装と検証、§154 は第 2 弾の目視後の手直しとオーナーの再確認の記録。§156 は第 3 弾の設計の確定と関門、§157 は第 3 弾の実装・目視・手直しの記録** |
 | [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6 | API 契約の正本。本書 §4 は設計の説明で、フィールドの型・既定・エラーコードは仕様書が正本 |
 | [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9 | 快適上限の正本。Alpha Gen の 1 段原寸モードの暫定の線もここに置く（本書 §6） |
-| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。§1-87（LoRA の配布）・§3-222（自前の入力プラグイン）・§3-223（快適上限の較正）・§3-229（MCP の出口）・§3-230（操作パネルの WebView2 の遷移の防御）。完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾） |
+| [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。§3-222（自前の入力プラグイン）・§3-223（快適上限の較正）・§3-229（MCP の出口）・§3-230（操作パネルの WebView2 の遷移の防御）。完了記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾）・3-235（LoRA の配布） |
 | [`STORAGE_POLICY.md`](STORAGE_POLICY.md) | 保存領域の設計原則。本機能はジョブのフォルダに中間物と `matte.mkv`、出口の成果物（`rgba.mov`・`alpha_preview.mp4`・`chroma_<色>.mp4`）と記録 `alpha_outputs.json` を書くので適用対象 |
 | フロントエンド [`BRIDGE_CONTRACT.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BRIDGE_CONTRACT.md) §4.4（v16）／[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §3.18a〜e・§5.5 | ブリッジ契約（操作パネルとプラグインの間の取り決め）と API の利用者向けの解説 |
 | フロントエンド [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §134・§135／[`REAL_BACKEND_CHECKLIST.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/REAL_BACKEND_CHECKLIST.md) §4.26・§4.27 | 画面側の設計判断と目視の手順 |
@@ -290,7 +290,7 @@ Alpha Gen のジョブにだけ現れます。
 
 ## 7. `alpha-gen` の扱い
 
-- **登録の場所**: `config.yaml` の `model.ic_loras` に文字列形式で 1 行（`models/LTX25/IC-LoRA/alpha-gen/` の LoRA ファイル）。参照を前処理しないので文字列形式です。配布用のひな型 `config.yaml.example` にも同じ行と「操作パネルと Gradio の一覧には出ない」注記を置きます。
+- **登録の場所**: `config.yaml` の `model.ic_loras` に文字列形式で 1 行（`models/LTX25/IC-LoRA/alpha-gen/` の LoRA ファイル）。参照を前処理しないので文字列形式です。配布用のひな型 `config.yaml.example` にも同じ行と「操作パネルと Gradio の一覧には出ない」注記を置きます。ファイル本体は `install-LTX25.bat` が `Rootport/Nz-LTX25-weights` から置きます（記述子 `scripts/manifests/20-ltx25.json`）。
 - **操作パネルと Gradio の LoRA の一覧には出しません。** 操作パネルは画面側の隠し名簿 `UI_HIDDEN_CONTROL_LORA_NAMES`（`webui/src/lora/controlLoras.ts`。第 2 弾で 1 語足す）、Gradio は `gradio_ui/adapters.py` の `HIDDEN_ADAPTER_NAMES` で除きます。
 - **`alpha-gen` は control・前処理なし（`preprocess` が `none`）で登録されている必要があります。** 違えば `POST /generate/alpha` は 422 で断ります（§4.3 の c）。
 - **サーバー側に予約名の仕組みはありません。** `GET /loras` と `GET /config` の `ic_loras` には `alpha-gen` が出ます（第 2 部 §20）。
@@ -419,7 +419,7 @@ Alpha Gen のジョブにだけ現れます。
 - 操作パネルの画面（第 2 弾。§9）。模擬サーバーの写しの更新・画面側の隠し名簿・進捗バーの対応表も第 2 弾です。
 - 透過つきの動画・クロマキーの動画の作成とタイムラインへの挿入（第 3 弾。§10）。
 - Gradio 画面（対象外。一覧から `alpha-gen` を除くだけ）。
-- LoRA ウェイトの配布（台帳 §1-87）。
+- LoRA ウェイトの配布（完了。`install-LTX25.bat` が置く。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235）。
 - 快適上限の較正（台帳 §3-223。第 1 弾は暫定値）。
 - LTX 2.3 への対応（LoRA が LTX 2.5 用のため）。
 - 回転情報つきの素材（スマートフォンの縦動画など）: 窓と元寸の縦横が入れ替わっていたら失敗にします（§3 の 2 番）。回転を考えた寸法の測り方は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-228 です。
@@ -516,4 +516,4 @@ AviUtl2 に透過つきの動画をエンコードせずに直接渡すには、
 - 第 2 弾・第 3 弾の実装と検証: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153・§154（第 2 弾）、§156・§157（第 3 弾）
 - API 契約: [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6（Alpha Gen は §6.3b・出口は §6.3c）
 - 快適上限: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5
-- 台帳: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-87・§3-222・§3-223・§3-229・§3-230、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾）
+- 台帳: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-222・§3-223・§3-229・§3-230、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-224（第 1 弾）・3-226（追補）・3-227（第 2 弾）・3-231（第 3 弾）・3-235（LoRA の配布）

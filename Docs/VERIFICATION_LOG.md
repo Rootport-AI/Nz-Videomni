@@ -16732,6 +16732,8 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - **やったこと**: `webui/src/modes/edit/InpaintingPanel.tsx` に非 export の定数 `INPAINT_TICK_ID = "inpaint-comfort-tick"` を置き、`DurationField` の `tickId` に渡した（Alpha Gen の `ALPHA_GEN_TICK_ID` と同じ形・6 行の追加）。これで Inpainting のつまみの目盛り（快適上限の線を示す `<datalist>`）の id が、Create の `"spill-tick"` と別になる。`EditScreen.inpaint.test.tsx` の既存のケースに、つまみの `list` がその id であることの確認を 1 行足した。`CommonGenerationFields.tsx` のコメントは変更後も偽にならないので触らない。
 - **オーナーの目視へ**: jsdom（ブラウザを模した試験環境）の単体テストでは、Create と同時に描いたときの id の重複を再現できない（`EditScreen` 単体では Create を描かない）。目で見える要素なので、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1 のオーナー目視 1 行へ移した。合格したら CLOSED へ移す。
 
+> **更新（2026-10-16）**: オーナーの目視で合格（160.7・CLOSED 3-237）。
+
 ### 160.4 §1-82: 操作パネルの不安定なテスト
 
 - **調査**: バックエンドが止まっていることを確かめて全件実行を 10 回。`App.nag.test.tsx` の "NAG on" が 10 回中 5 回落ち（"VSF" は 0 回）、`JobsContext.test.tsx` の cancelJob と `ObjectTrackingSection.test.tsx` の Stop は 0 回だった。新たに `App.prefill.test.tsx` の "#5 (count 0) appends the image as the 1st keyframe…" が 10 回中 1 回落ち、オーナー裁定で §1-82 に含めた。ファイルをまたいだ持ち越しは起きない（vitest 4.1.10 の既定＝forks・isolate=true・ワーカー 23）。
@@ -16760,11 +16762,19 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 ### 160.6 残るもの
 
 - §1-89 のオーナー目視（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1）。
+
+> **更新（2026-10-16）**: §2-1 の目視は合格（160.7・CLOSED 3-237）。
+
 - 新しい不安定なテスト 1 件（同 §1-92）。
 
 > **更新（2026-10-16）**: §1-92 は §162（CLOSED 3-236）で解消。
 
 - main への merge はオーナーの合図待ち。
+
+### 160.7 オーナーの目視（§2-1・2026-10-16）
+
+- 実機の AviUtl2 と実バックエンドで、Inpainting に動画を読み込んだところ、フレーム数のつまみの目盛りが Single（Create）タブとは違う位置に現れた。オーナーの判定は「合格扱いでいいと思う」→ **合格**。
+- 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1（元 §1-89）を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237 へ移した（§2 は節ごと削除）。実装は dev `bc1c616`・配布用 aux2 は `1f39906`。main への merge はオーナーの合図待ち。
 
 ## 161. ★Alpha Gen の LoRA ウェイトの配布（台帳 §1-87 → CLOSED 3-235）＝`Rootport/Nz-LTX25-weights` に `IC-LoRA/alpha-gen/` を追加し `install-LTX25.bat` の 3 番目の取得項目に（2026-10-16）
 

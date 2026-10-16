@@ -2986,3 +2986,13 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev `e70a0d0`（テストの直し）。記録のコミットは監督が積む。main への merge はオーナーの合図待ち。
 - **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §140、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162。
 - **残課題**: 同じ全件実行で対象外の 2 件が 1 回ずつ落ちた → [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に起票予定（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162.4）。
+
+### 3-237. Inpainting のフレーム数スライダーの目盛りが Create の線を指す件（専用の datalist id）（起票：2026-10-14、実装：2026-10-16、オーナー目視合格・クローズ：2026-10-16）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-1〔元 §1-89〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-89 → §2-1（**同書側は欠番**）。
+- **到達条件**: Inpainting のフレーム数のつまみの目盛りが Inpainting 自身の線の位置に出て、Create のつまみの目盛りとは別であること。**達成した。**
+- **何が完了したか**: `webui/src/modes/edit/InpaintingPanel.tsx` で、つまみの目盛り（快適上限の線を示す `<datalist>`）に専用の id `inpaint-comfort-tick` を渡し、Create の id と分けた（Alpha Gen と同じ形）。`EditScreen.inpaint.test.tsx` に、つまみがその id を指すことの確認を 1 行足した。
+- **どの物差しで通ったか**: 機械ゲート（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.3・§160.5）と、実機 AviUtl2＋実バックエンドでのオーナーの目視（同 §160.7）。
+- **状態**: dev `bc1c616`・配布用 aux2 `1f39906`。main への merge はオーナーの合図待ち。
+- **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §138、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.3・§160.7。
+- **残課題**: なし。

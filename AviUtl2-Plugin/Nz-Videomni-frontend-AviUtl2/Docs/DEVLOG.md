@@ -5221,6 +5221,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - 実装済み・実機では未確認。dev `bc1c616`（配布用 aux2 は `1f39906`）。バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2-1 のオーナー目視に合格したらクローズします。記録はバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §160.3。
 
+> **更新（2026-10-16）**: オーナーの目視で合格・バックエンド [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-237 でクローズ。
+
 ## 139. 操作パネルの不安定なテストの原因と直し — `App.nag`・`JobsContext`・`ObjectTrackingSection`・`App.prefill`（バックエンド台帳 §1-82 → [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-234。2026-10-16）
 
 ### 139.1 結論

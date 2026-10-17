@@ -47,6 +47,7 @@ from api.errors import feature_unsupported, model_incompatible
 from api.models import GenerateChainRequest, GenerateRequest
 from config import AppConfig
 from services import video_io
+from services.engines.ltx.request_rules import LTX_REQUEST_RULES
 from services.engines.ltx.adapter import (
     _MockBackend,
     _RealBackend,
@@ -153,6 +154,10 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
 IGNORED_FIELDS: dict[str, str] = {
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
     "num_inference_steps": "the distilled schedule has a fixed step count",
+    # MiniMax H3's schedule shifts: a concept this schedule does not have
+    # (the guidance_scale precedent above).
+    "shift_video": "the distilled schedule has no shift knob",
+    "shift_audio": "the distilled schedule has no shift knob",
 }
 
 #: Fields this engine ACTS ON. Six of them ride the generate payload verbatim
@@ -468,6 +473,10 @@ UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     feature for _field, feature, _pred in REJECT_TABLE
 )
 
+#: The numeric request rules — LTX 2.3's table, shared (8n+1, the 64 multiple,
+#: the distilled 8 steps / CFG 1.0). See services/engines/ltx/request_rules.py.
+REQUEST_RULES = LTX_REQUEST_RULES
+
 
 def reject_unsupported(request: GenerateRequest) -> None:
     """422 the first out-of-scope field of ``request``.
@@ -534,14 +543,23 @@ def _log_ignored(request, table: dict[str, str] | None = None) -> None:
     for a chain). One function for both because the RULE is identical and only
     the table differs — a second copy would be a second place to forget the
     "name only what was actually set" discipline.
+
+    A schema default of ``None`` means "the family's default"
+    (``num_inference_steps``), which ``services.engines.validate_for_family``
+    writes back before a job runs — so the family default counts as unset too
+    (:data:`REQUEST_RULES`' value); otherwise every job would name the 8 steps
+    it never chose.
     """
     fields = type(request).model_fields
+    family_defaults = {"num_inference_steps": REQUEST_RULES.default_steps}
     named = []
     for name, reason in (IGNORED_FIELDS if table is None else table).items():
         spec = fields.get(name)
         if spec is None:
             continue
         value = getattr(request, name, None)
+        if spec.default is None and value == family_defaults.get(name):
+            continue
         if value != spec.default:
             named.append(f"{name}={value!r} ({reason})")
     if named:

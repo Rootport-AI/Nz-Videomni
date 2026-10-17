@@ -270,6 +270,12 @@ def generate_alpha(
         )
     except ValueError as exc:  # pydantic.ValidationError is a ValueError
         raise alpha_gen_invalid(f"internal request rejected: {exc}") from exc
+    # The family's numeric rules, and — what matters here — the ONE place an
+    # omitted ``num_inference_steps`` becomes the family default (8 on LTX), so
+    # the job log, the runner and metadata.json see a number exactly as for
+    # POST /generate. The geometry above already satisfies the rules (8n+1
+    # frames, a 64-multiple canvas); a violation would be this endpoint's bug.
+    engines.validate_for_family(family, internal)
 
     # (h) Loading guard, then the single-job guard (409), exactly as
     # api/generate.py orders them.

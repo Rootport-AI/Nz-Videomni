@@ -284,6 +284,129 @@ def two_family_client(tmp_path):
         yield client
 
 
+# --------------------------------------------------------------------------- #
+# a third family: MiniMax H3 (第 2 弾 2b)
+#
+# The two LTX families of ``two_family_client`` plus a MiniMax H3 base model,
+# all on the mock backend. A switch to H3 prechecks every default file with the
+# H3 header inspections (services/model_registry.py ``_precheck_h3``), so its
+# transformer and text encoder have to LOOK like H3 files. The DiT is a real
+# small safetensors file; the text encoder's real widths would be 25 GB of
+# zeros, so — exactly as tests/test_h3_format.py does — its header is built in
+# memory and ``h3_format.read_header`` is pointed at it for that one path (the
+# ``comfy_quant`` bytes the inspection seeks to do live in the small file).
+# --------------------------------------------------------------------------- #
+
+H3_BASE_MODEL_ID = "MiniMaxH3"
+
+
+def h3_base_model_descriptor() -> dict:
+    """The shipped MiniMax H3 descriptor's shape (scripts/manifests/40-minimaxh3.json)."""
+    root = H3_BASE_MODEL_ID
+    return {
+        "schema": 2,
+        "id": root,
+        "display_name": "MiniMax H3",
+        "engine_family": "h3",
+        "categories": {
+            "transformer": {
+                "scan": [f"{root}/Weights"],
+                "extensions": [".safetensors"],
+                "recursive": True,
+                "default_file": f"{root}/Weights/minimax_h3_dit.safetensors",
+            },
+            "text_encoder": {
+                "scan": [f"{root}/TextEncoder"],
+                "extensions": [".safetensors"],
+                "default_file": f"{root}/TextEncoder/qwen3vl_te.safetensors",
+            },
+            "video_vae": {
+                "scan": [f"{root}/VAE"],
+                "extensions": [".safetensors"],
+                "name_hint": "video",
+                "default_file": f"{root}/VAE/minimax_h3_video_vae.safetensors",
+            },
+            "audio": {
+                "scan": [f"{root}/VAE"],
+                "extensions": [".safetensors"],
+                "name_hint": "audio",
+                "default_file": f"{root}/VAE/minimax_h3_audio_vae.safetensors",
+            },
+        },
+        "assets": {"tokenizer_dir": f"{root}/TextEncoder/qwen3vl_tokenizer"},
+        "default_selection": {c: "default" for c in TEST_DEFAULT_FILES},
+    }
+
+
+def write_h3_model_files(models_dir: Path, descriptor: dict, monkeypatch) -> None:
+    """Default files of the H3 descriptor that pass the H3 precheck."""
+    import h3_format  # noqa: PLC0415
+    from test_h3_format import _dit_tensors, _te_header, _write  # noqa: PLC0415
+
+    cats = descriptor["categories"]
+    dit = models_dir / cats["transformer"]["default_file"]
+    dit.parent.mkdir(parents=True, exist_ok=True)
+    _write(dit, _dit_tensors())
+
+    te = models_dir / cats["text_encoder"]["default_file"]
+    te.parent.mkdir(parents=True, exist_ok=True)
+    blob, te_header = _te_header(te.parent)
+    te.write_bytes(Path(blob).read_bytes())
+    real_read_header = h3_format.read_header
+
+    def read_header(path):
+        if Path(path).resolve() == te.resolve():
+            return te_header
+        return real_read_header(path)
+
+    monkeypatch.setattr(h3_format, "read_header", read_header)
+
+    for category in ("video_vae", "audio"):
+        write_model_file(models_dir / cats[category]["default_file"])
+    (models_dir / descriptor["assets"]["tokenizer_dir"]).mkdir(parents=True, exist_ok=True)
+
+
+@pytest.fixture()
+def three_family_client(tmp_path, monkeypatch):
+    """LTX 2.3, LTX 2.5 and MiniMax H3, all installed, all on the mock backend.
+    Starts on LTX 2.3; ``POST /pipeline/load {"base_model": "MiniMaxH3"}``
+    moves to H3."""
+    ltx23 = base_model_descriptor()
+    ltx25 = base_model_descriptor("LTX25")
+    ltx25["display_name"] = "LTX 2.5"
+    ltx25["engine_family"] = "ltx25"
+    h3 = h3_base_model_descriptor()
+
+    fragment = build_model_layout(tmp_path, [ltx23, ltx25, h3])
+    models_dir = tmp_path / "models"
+    for category, spec in ltx25["categories"].items():
+        target = models_dir / spec["default_file"]
+        if category == "transformer":
+            write_gguf_with_kv(target, **{"general.architecture": "ltxv", "model_version": "2.5.0"})
+        else:
+            write_model_file(target)
+    write_gguf_with_kv(
+        models_dir / ltx23["categories"]["transformer"]["default_file"],
+        **{"general.architecture": "ltxv", "model_version": "2.3.0"},
+    )
+    write_h3_model_files(models_dir, h3, monkeypatch)
+
+    cfg = {
+        "server": {"log_dir": (tmp_path / "logs").as_posix()},
+        "model": {"backend": "mock", **fragment},
+        "output": {"dir": (tmp_path / "outputs").as_posix()},
+        "upload": {"dir": (tmp_path / "uploads").as_posix()},
+        "state_file": (tmp_path / "state.json").as_posix(),
+        "tracking": {"backend": "mock"},
+    }
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    app = main.build_app(_make_args(cfg_path.as_posix()))
+    with TestClient(app) as client:
+        client.app_context = app.state.context  # type: ignore[attr-defined]
+        yield client
+
+
 @pytest.fixture()
 def mcp_app(tmp_path):
     """Same app as ``client``, for MCP tool tests that talk to it via

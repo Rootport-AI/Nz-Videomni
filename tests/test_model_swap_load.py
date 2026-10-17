@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import struct
+from pathlib import Path
 
 import pytest
 import yaml
@@ -309,6 +310,61 @@ def test_precheck_extension_category_mismatch(tmp_path):
         precheck_model_file("transformer", "weights", st, descriptor=transformer)
     assert ei.value.code == "MODEL_INCOMPATIBLE"
     assert ei.value.status_code == 422
+
+
+# --- MiniMax H3 (第 2 弾 2b): the family-aware precheck --------------------- #
+
+
+def test_precheck_h3_dit_is_judged_by_its_fingerprint(tmp_path):
+    from test_h3_format import _dit_tensors, _write
+
+    dit = _write(tmp_path / "dit.safetensors", _dit_tensors())
+    assert precheck_model_file("transformer", "dit", Path(dit), engine_family="h3") == {}
+
+
+def test_precheck_h3_refusal_is_model_incompatible_not_a_500(tmp_path):
+    """An LTX safetensors offered as the H3 transformer: ``H3FormatError`` (a
+    ValueError) becomes MODEL_INCOMPATIBLE with the inspection's reason."""
+    from test_h3_format import _write
+
+    ltx_like = _write(
+        tmp_path / "ltx.safetensors",
+        {"transformer_blocks.0.attn1.to_q.weight": ("BF16", (2, 2))},
+    )
+    with pytest.raises(APIError) as ei:
+        precheck_model_file("transformer", "ltx", Path(ltx_like), engine_family="h3")
+    assert ei.value.code == "MODEL_INCOMPATIBLE"
+    assert "LTX の DiT です" in ei.value.detail
+
+
+def test_precheck_h3_text_encoder_refusal(tmp_path):
+    from test_h3_format import _dit_tensors, _write
+
+    dit = _write(tmp_path / "dit_as_te.safetensors", _dit_tensors())
+    with pytest.raises(APIError) as ei:
+        precheck_model_file("text_encoder", "te", Path(dit), engine_family="h3")
+    assert ei.value.code == "MODEL_INCOMPATIBLE"
+    assert "embed_tokens" in ei.value.detail
+
+
+def test_precheck_h3_vaes_get_the_generic_header_check(tmp_path):
+    good = _touch(tmp_path / "minimax_h3_video_vae.safetensors", struct.pack("<Q", 2) + b"{}")
+    assert precheck_model_file("video_vae", "vae", good, engine_family="h3") == {}
+    bad = _touch(tmp_path / "minimax_h3_audio_vae.safetensors", struct.pack("<Q", 999) + b"{}")
+    with pytest.raises(APIError) as ei:
+        precheck_model_file("audio", "vae", bad, engine_family="h3")
+    assert ei.value.code == "MODEL_INCOMPATIBLE"
+
+
+def test_shipped_h3_descriptor_shape():
+    from services.base_models import load_base_models
+
+    h3 = load_base_models(AppConfig().manifest_dir)["MiniMaxH3"]
+    assert h3.engine_family == "h3"
+    assert h3.display_name == "MiniMax H3"
+    assert list(h3.categories) == ["transformer", "text_encoder", "video_vae", "audio"]
+    assert h3.assets == {"tokenizer_dir": "MiniMaxH3/TextEncoder/qwen3vl_tokenizer"}
+    assert h3.comfort is None
 
 
 def _shipped_ltx23():

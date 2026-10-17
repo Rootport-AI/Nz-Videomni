@@ -19,7 +19,7 @@ class APIError(Exception):
         status_code: int,
         *,
         job_id: str | None = None,
-        detail: str | None = None,
+        detail: str | list[dict] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -617,6 +617,29 @@ def pipeline_loading(detail: str | None = None) -> APIError:
         "The pipeline is already loading (モデルの読み込み中です)",
         409,
         detail=detail,
+    )
+
+
+def request_validation_failed(message: str) -> APIError:
+    """A request breaks a numeric rule of the ACTIVE engine family.
+
+    THE SAME 422 A PYDANTIC VALIDATOR WOULD HAVE PRODUCED, field for field —
+    ``main.py``'s ``RequestValidationError`` handler shapes those as
+    ``{"code": "VALIDATION_ERROR", "message": "Request validation failed",
+    "detail": [{"loc", "msg", "type"}]}``, and a ``ValueError`` raised in a
+    model validator arrives as ``loc ["body"]``, ``msg "Value error, <text>"``,
+    ``type "value_error"``. The family rules (``REQUEST_RULES`` in each engine
+    adapter, applied by ``services.engines.validate_for_family``) used to BE
+    such validators for LTX; they moved out of the schema because which family
+    runs a request is only known at the endpoint. Copying the shape keeps every
+    client that parses the old 422 (Gradio's ``format_api_error``, the MCP
+    server, the AviUtl2 panel) reading the same thing.
+    """
+    return APIError(
+        "VALIDATION_ERROR",
+        "Request validation failed",
+        422,
+        detail=[{"loc": ["body"], "msg": f"Value error, {message}", "type": "value_error"}],
     )
 
 

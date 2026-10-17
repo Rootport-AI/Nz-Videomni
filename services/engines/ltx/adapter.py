@@ -60,6 +60,7 @@ from api.models import (
 from config import AppConfig
 from services import gpu_info, video_io
 from services.base_models import BaseModelDescriptor, load_base_models
+from services.engines.ltx.request_rules import LTX_REQUEST_RULES
 from services.lora_registry import ResolvedLora
 from services.low_vram import LowVramSettings, safe_memory_cleanup
 
@@ -143,8 +144,10 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
 #: :meth:`_RealBackend.generate` never forwards to the worker, with the reason.
 #: DECLARATIVE ONLY — unlike the 2.5 adapter's table, nothing logs these (adding
 #: a log line would change a shipped engine's behaviour for an audit's sake).
-#: The schema pins only the default case: ``pipeline="distilled"`` forces
-#: ``guidance_scale == 1.0`` in ``GenerateRequest.validate_ltx_constraints``.
+#: Only the default case is pinned: ``pipeline="distilled"`` forces
+#: ``guidance_scale == 1.0`` in this family's ``REQUEST_RULES``
+#: (services/engines/ltx/request_rules.py), checked by
+#: ``services.engines.validate_for_family``.
 #: ``pipeline="two_stage_hq"`` (with any guidance_scale) passes validation and
 #: is then silently ignored by 2.3.
 IGNORED_FIELDS: dict[str, str] = {
@@ -156,6 +159,11 @@ IGNORED_FIELDS: dict[str, str] = {
         "never sent to the worker; the pipeline kind comes from config "
         "(model.pipeline_type), not from the request"
     ),
+    # MiniMax H3's schedule shifts (video / audio). LTX's schedule has no
+    # such knob; the guidance_scale precedent — a concept this engine does not
+    # have is ignored, not refused.
+    "shift_video": "never sent to the worker; LTX's schedule has no shift knob",
+    "shift_audio": "never sent to the worker; LTX's schedule has no shift knob",
 }
 
 #: Fields 2.3 ACTS ON. Most are plain ``request.<field>`` reads in
@@ -224,6 +232,12 @@ CHAIN_REJECT_TABLE: tuple[
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     feature for _field, feature, _pred in REJECT_TABLE
 )
+
+#: This family's numeric request rules (8n+1, the 64 multiple, the distilled
+#: 8 steps / CFG 1.0) — shared with LTX 2.5, so the table lives in its own
+#: module. Applied by ``services.engines.validate_for_family`` and published by
+#: ``GET /models`` as ``constraints``.
+REQUEST_RULES = LTX_REQUEST_RULES
 
 
 def reject_unsupported(request: GenerateRequest) -> None:
@@ -623,6 +637,12 @@ class GenerationOutcome:
     # only evidence that the mask reached the model at all. The mock backend
     # cannot fabricate it, which is the point.
     inpaint: dict | None = None
+    # MiniMax H3 only: the worker's own facts (``h3`` = phases and quant
+    # backends, plus the shifts and commit figures the adapter gathers from
+    # the top level of its ``done`` event) — relayed into metadata.json as
+    # ``metadata["h3"]``, the same route ``ltx25`` takes. None on LTX and on
+    # the mock.
+    h3: dict | None = None
 
 
 class LTXRunner:

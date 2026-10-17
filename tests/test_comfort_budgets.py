@@ -62,11 +62,15 @@ def _rows(profile) -> list[tuple[dict, int, int]]:
 
 
 def test_family_id_set_matches_engine_registry():
-    """The table's keys are exactly the engine family ids
-    (services.engines.FAMILY_BY_ID), no more and no less."""
+    """Every key of the table is an engine family id
+    (services.engines.FAMILY_BY_ID). A family may have NO table: MiniMax H3
+    ships without ``comfort`` until it is calibrated (台帳 §1-95), and the
+    screens then show no marker for it. The LTX families keep theirs."""
     from services.engines import FAMILY_BY_ID
 
-    assert set(_shipped()) == set(FAMILY_BY_ID)
+    shipped = set(_shipped())
+    assert shipped <= set(FAMILY_BY_ID)
+    assert {"ltx", "ltx25"} <= shipped
 
 
 def test_ltx_rows():

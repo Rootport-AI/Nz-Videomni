@@ -78,6 +78,17 @@ def generate(
     # tables tests "differs from the default" — deliberately, not by luck.
     engines.reject_unsupported(context.pipeline_manager.active_engine_family, request)
 
+    # ── Engine numeric rules ────────────────────────────────────────────────
+    # Right AFTER the feature scope, so a refused feature is named before a
+    # number is (LTX 2.5 with two_stage_hq AND an 8n+1 violation answers
+    # FEATURE_UNSUPPORTED). The frame grid, the spatial multiple, the fps and
+    # the step / shift ranges are the active family's (its adapter's
+    # ``REQUEST_RULES``); the 422 is shaped like pydantic's. This is also the
+    # ONE place an omitted ``num_inference_steps`` / shift becomes the family's
+    # default, so everything downstream (the job log, the runner, metadata.json)
+    # sees a number.
+    engines.validate_for_family(context.pipeline_manager.active_engine_family, request)
+
     # Alpha Gen's block is INTERNAL: only POST /generate/alpha builds it (from a
     # source it has measured itself), so a /generate that carries one is refused
     # rather than trusted. Placed right after the engine scope so LTX 2.3 still

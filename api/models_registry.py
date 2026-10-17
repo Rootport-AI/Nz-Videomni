@@ -93,7 +93,7 @@ def transformer_weight_class(
         path = registry.resolve("transformer", name, base_model=base_id)
     except APIError:
         return None
-    return classify_transformer(path)
+    return classify_transformer(path, engine_family=registry.descriptor(base_id).engine_family)
 
 
 @router.get("/models")
@@ -134,6 +134,12 @@ def list_models(context: AppContext = Depends(get_context)) -> dict:
                 "unsupported_features": list(
                     engines.unsupported_features(descriptor.engine_family)
                 ),
+                # The family's numeric request rules (frame grid, spatial
+                # multiple, fps range, and the sampling knobs or null), built
+                # from the adapter's ``REQUEST_RULES`` — the same table
+                # POST /generate enforces, so a screen that reads this is
+                # reading the rule itself. Additive, like the key above.
+                "constraints": engines.request_constraints(descriptor.engine_family),
                 # The display order, as an array (see the module docstring on
                 # why object key order is not trusted to survive transport).
                 # Built from the descriptor's declaration order, which is the

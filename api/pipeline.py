@@ -134,6 +134,7 @@ def load_pipeline(
             name,
             path,
             descriptor=descriptor.categories.get(category),
+            engine_family=descriptor.engine_family,
         )
         # The KV ruling (Docs/MULTI_ENGINE_DESIGN.md §2.1 / §2.3). ``engines.check_kv``
         # first rules on WHICH ENGINE the file belongs to — the KV is the judge,

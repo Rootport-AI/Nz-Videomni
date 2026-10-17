@@ -138,7 +138,23 @@ def test_an_unknown_engine_family_fails_loud():
 def test_the_three_family_tables_agree():
     assert set(FAMILY_IDS := set(engines.FAMILY_BY_ID)) == set(engines.FAMILY_DISPLAY)
     assert set(engines.FAMILY_BY_KV.values()) <= FAMILY_IDS
+    # MiniMax H3 is registered but has NO KV row: it has no GGUF, and its
+    # transformer is judged by the tensor-name fingerprint in the precheck.
     assert engines.FAMILY_BY_KV == {("ltxv", "2.3"): "ltx", ("ltxv", "2.5"): "ltx25"}
+    assert FAMILY_IDS == {"ltx", "ltx25", "h3"}
+    assert engines.FAMILY_DISPLAY["h3"] == "MiniMax H3"
+
+
+def test_h3_check_kv_passes_the_empty_kv_its_precheck_returns():
+    h3_descriptor = _descriptor("h3", "MiniMax H3")
+    for category in ("transformer", "text_encoder", "video_vae", "audio"):
+        engines.check_kv(h3_descriptor, category, "default", {})  # no raise
+
+
+def test_every_family_declares_request_rules():
+    for family in engines.FAMILY_BY_ID:
+        assert engines.request_rules(family) is not None, family
+        assert engines.request_constraints(family)["num_frames"]["max"] == 481
 
 
 # --------------------------------------------------------------------------- #

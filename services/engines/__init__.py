@@ -29,7 +29,7 @@ import importlib
 from types import ModuleType
 from typing import TYPE_CHECKING
 
-from api.errors import model_incompatible
+from api.errors import model_incompatible, request_validation_failed
 
 if TYPE_CHECKING:  # 実行時にはimportしない(上のdocstringの規約)
     from api.models import GenerateChainRequest, GenerateRequest
@@ -40,6 +40,12 @@ if TYPE_CHECKING:  # 実行時にはimportしない(上のdocstringの規約)
 #: KV)から読み取った事実だけで引ける表。ここに無い組み合わせは
 #: 「この配布物が知らない世代」であり、系統の照合はせず各アダプタ自身の
 #: ``check_kv`` に最終判断を委ねる(未知のminorを名乗る自作の重みなど)。
+#:
+#: MiniMax H3(``h3``)は**載せない**。H3 は GGUF を持たず、safetensors の
+#: テンソル名の指紋で判定する(``h3_format``。事前検査
+#: ``services.model_registry.precheck_model_file`` が系統ごとに呼び分ける)。
+#: H3 の事前検査は KV を返さないので、:func:`check_kv` の系統の照合は
+#: H3 では何もしない。
 FAMILY_BY_KV: dict[tuple[str, str], str] = {
     ("ltxv", "2.3"): "ltx",
     ("ltxv", "2.5"): "ltx25",
@@ -50,6 +56,7 @@ FAMILY_BY_KV: dict[tuple[str, str], str] = {
 FAMILY_BY_ID: dict[str, tuple[str, str]] = {
     "ltx": ("services.engines.ltx.adapter", "LTXRunner"),
     "ltx25": ("services.engines.ltx25.adapter", "LTX25Runner"),
+    "h3": ("services.engines.h3.adapter", "H3Runner"),
 }
 
 #: エンジン系統id -> 画面に出る名前。系統不一致の422で「どちらを選べば
@@ -58,6 +65,7 @@ FAMILY_BY_ID: dict[str, tuple[str, str]] = {
 FAMILY_DISPLAY: dict[str, str] = {
     "ltx": "LTX 2.3",
     "ltx25": "LTX 2.5",
+    "h3": "MiniMax H3",
 }
 
 
@@ -184,6 +192,49 @@ def reject_unsupported(family: str, request: GenerateRequest) -> None:
     guard = getattr(_adapter(family), "reject_unsupported", None)
     if guard is not None:
         guard(request)
+
+
+def request_rules(family: str):
+    """この系統の数値の規約表(アダプタの ``REQUEST_RULES``)。宣言なしは None。
+
+    表の型は ``services.engines.ltx.request_rules.RequestRules``。
+    """
+    return getattr(_adapter(family), "REQUEST_RULES", None)
+
+
+def request_constraints(family: str) -> dict | None:
+    """GET /models が公開する ``constraints``。規約表から機械的に作る。
+
+    **正本はアダプタの表1か所**で、操作パネル・Gradio・MCP はこれを読む。
+    表を宣言しない系統は None(「規約を公開しない」)。
+    """
+    rules = request_rules(family)
+    return None if rules is None else rules.constraints()
+
+
+def validate_for_family(family: str, request: GenerateRequest) -> None:
+    """系統の数値の規約で ``request`` を検査する(違反は 422 VALIDATION_ERROR)。
+
+    **``None`` の解決もここ1か所**。``num_inference_steps``(と H3 の shift)は
+    スキーマの既定が ``None``＝「系統の既定値」で、ここで系統の既定値を
+    要求に**書き戻す**(LTX は 8、MiniMax H3 は 20／12／3)。以後の読み手
+    (mock・ジョブ開始ログ・アダプタ・metadata.json・mp4 のレシピ)は
+    常に数値を見る。
+
+    呼ぶ場所は api/generate.py の :func:`reject_unsupported` の**後**。
+    機能の可否(FEATURE_UNSUPPORTED)が数値の違反(VALIDATION_ERROR)より
+    先に返る。422 の形は pydantic の検証の失敗と同じ
+    (``api.errors.request_validation_failed``)。
+
+    宣言していない系統は素通り(:func:`reject_unsupported` と同じ規約)。
+    """
+    rules = request_rules(family)
+    if rules is None:
+        return
+    rules.fill_defaults(request)
+    message = rules.violation(request)
+    if message is not None:
+        raise request_validation_failed(message)
 
 
 def reject_chain(family: str, request: GenerateChainRequest) -> None:

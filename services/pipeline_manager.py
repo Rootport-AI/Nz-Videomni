@@ -1949,6 +1949,11 @@ class PipelineManager:
         # generation, so a 2.3 (or mock) job carries no ``ltx25`` key.
         if outcome.ltx25 is not None:
             metadata["ltx25"] = outcome.ltx25
+        # MiniMax H3 engine facts (additive, the ``ltx25`` precedent): only
+        # present on a real H3 generation, so an LTX (or mock) job carries no
+        # ``h3`` key.
+        if outcome.h3 is not None:
+            metadata["h3"] = outcome.h3
         # Inpainting (additive): only present when an inpaint was requested, so
         # every other job carries no ``inpaint`` key.
         # The ENGINE's own block (geometry, blend settings, VRAM peaks, the

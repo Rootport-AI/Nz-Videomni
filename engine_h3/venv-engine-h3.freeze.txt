@@ -1,0 +1,85 @@
+# Dependency snapshot of .venv-engine-h3 (MiniMax H3 engine worker interpreter).
+#
+# WHY: this is the reproducibility record for the known-good MiniMax H3 engine
+# venv, the sibling of engine25/venv-engine-ltx25.freeze.txt (LTX 2.5) and
+# engine/venv-engine.freeze.txt (LTX 2.3). There is no uv.lock. Rebuild
+# reference (dependency SPEC and the reasons behind each pin):
+# engine_h3/engine_h3-venv-pyproject.toml. Design: Docs/MINIMAX_H3_DESIGN.md s10.
+#
+# WHY A THIRD ENGINE VENV, AND WHY A DIFFERENT TORCH: the int8 ConvRot matmul of
+# MiniMax H3 runs on comfy-kitchen's CUDA extension, which needs a CUDA 13 torch
+# (owner rulings 11 and 16). The two LTX venvs are torch 2.9.1+cu128 and stay
+# untouched; this venv is torch 2.13.0+cu130. Because the torch version differs,
+# uv's hard-link sharing with .uv_cache does not reduce the footprint: this venv
+# measured ~3.4 GB on disk right after the build (2026-10-17).
+#
+# METHOD: `uv pip freeze --python .venv-engine-h3/Scripts/python.exe` right after
+# the build (uv 0.6.4), then two lines normalised by hand: torch was installed
+# from a locally downloaded copy of the SAME cu130 wheel (the 1.9 GB download
+# kept timing out inside uv while 54 GB of model weights were downloading in
+# parallel), so its `torch @ file:///...` line is written as the index pin
+# `torch==2.13.0+cu130`; sageattention is a direct wheel URL (below) written as
+# `name==version`.
+# Interpreter: CPython 3.12.9  (.venv-engine-h3/Scripts/python.exe)
+# Captured: 2026-10-17
+#
+# INDEX: https://download.pytorch.org/whl/cu130 with --index-strategy
+# unsafe-best-match (the cu130 index supplies torch/torchvision; everything else
+# comes from PyPI). Requires NVIDIA driver R580+ and a Turing (sm_75) or newer
+# GPU: CUDA 13 dropped Maxwell/Pascal/Volta.
+#
+# NOTE: sageattention is NOT on PyPI. Its line below is a bare pin; the only
+# supported source is the direct wheel URL (libtorch stable ABI, "torch 2.10 and
+# higher", cu130):
+#   https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu130torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl
+# When the installer (Ensure-EngineVenv, third call; stage 3 of the H3 alpha)
+# applies this freeze, torch / torchvision / sageattention are the direct pins
+# and are filtered out of the plain `-r freeze` install, exactly as the 2.5 stack
+# does for its own direct pins.
+#
+# DELIBERATELY ABSENT: torchaudio (no cu130 Windows wheel pairs with torch 2.12+;
+# the H3 path never imports it), diffsynth (its H3 model code was ported into
+# engine_h3/ instead; `import diffsynth` drags in modelscope, pandas, ...),
+# accelerate, gguf, ltx-core / ltx-pipelines (LTX-only).
+annotated-doc==0.0.5
+anyio==4.15.1
+av==18.1.0
+certifi==2026.7.22
+click==8.5.0
+colorama==0.4.6
+comfy-kitchen==0.2.37
+einops==0.8.2
+filelock==4.2.0
+fsspec==2026.9.0
+h11==0.16.0
+hf-xet==1.7.0
+httpcore==1.0.9
+httpx==0.28.1
+huggingface-hub==1.33.0
+idna==3.20
+jinja2==3.1.6
+markdown-it-py==4.2.0
+markupsafe==3.0.4
+mdurl==0.1.2
+mpmath==1.3.0
+networkx==3.7
+numpy==2.5.4
+packaging==26.3
+pillow==13.0.0
+pygments==2.21.0
+pyyaml==6.0.3
+regex==2026.9.29
+rich==15.0.0
+safetensors==0.8.0
+sageattention==2.2.0+cu130torch2.10.0andhigher.post6
+setuptools==84.0.0
+shellingham==1.5.4
+sympy==1.14.0
+tokenizers==0.22.2
+torch==2.13.0+cu130
+torchvision==0.28.0+cu130
+tqdm==4.70.1
+transformers==5.14.1
+triton-windows==3.7.1.post27
+typer==0.27.3
+typing-extensions==4.16.0

@@ -1,0 +1,67 @@
+{"block": 0, "wiring_rel": 0.0, "quant_rel": 0.006338415249849703, "out_rel": 0.006336631337920463, "finite": true, "seconds": 0.235333300000093}
+{"block": 1, "wiring_rel": 0.0, "quant_rel": 0.009563901998185605, "out_rel": 0.00956369422473038, "finite": true, "seconds": 0.21606460000020888}
+{"block": 2, "wiring_rel": 0.0, "quant_rel": 0.026056281020816436, "out_rel": 0.026056255073865088, "finite": true, "seconds": 0.35920270000042365}
+{"block": 3, "wiring_rel": 0.0, "quant_rel": 0.024106302719508803, "out_rel": 0.024106222814725554, "finite": true, "seconds": 0.3585304999996879}
+{"block": 4, "wiring_rel": 0.0, "quant_rel": 0.01930269169206735, "out_rel": 0.019302691618673384, "finite": true, "seconds": 0.35339139999996405}
+{"block": 5, "wiring_rel": 0.0, "quant_rel": 0.02065690794039375, "out_rel": 0.020656894000266334, "finite": true, "seconds": 0.3496583999994982}
+{"block": 6, "wiring_rel": 0.0, "quant_rel": 0.02518348374134729, "out_rel": 0.025183345515302484, "finite": true, "seconds": 0.3571916000000783}
+{"block": 7, "wiring_rel": 0.0, "quant_rel": 0.021273275778333357, "out_rel": 0.021273266947176295, "finite": true, "seconds": 0.3458049000000756}
+{"block": 8, "wiring_rel": 0.0, "quant_rel": 0.02351832086437669, "out_rel": 0.02351828653894361, "finite": true, "seconds": 0.36633770000025834}
+{"block": 9, "wiring_rel": 0.0, "quant_rel": 0.021926680232282034, "out_rel": 0.021926708753323313, "finite": true, "seconds": 0.35209969999959867}
+{"block": 10, "wiring_rel": 0.0, "quant_rel": 0.02183069312621222, "out_rel": 0.021830663038611683, "finite": true, "seconds": 0.34231779999936407}
+{"block": 11, "wiring_rel": 0.0, "quant_rel": 0.02375148068925008, "out_rel": 0.023751459193940446, "finite": true, "seconds": 0.33843960000012885}
+{"block": 12, "wiring_rel": 0.0, "quant_rel": 0.020055171119367415, "out_rel": 0.02005519768785429, "finite": true, "seconds": 0.3549333999999362}
+{"block": 13, "wiring_rel": 0.0, "quant_rel": 0.026004846706674255, "out_rel": 0.02600486986218528, "finite": true, "seconds": 0.31885650000003807}
+{"block": 14, "wiring_rel": 0.0, "quant_rel": 0.021762128162715326, "out_rel": 0.021762086992908845, "finite": true, "seconds": 0.3600667999999132}
+{"block": 15, "wiring_rel": 0.0, "quant_rel": 0.021672076420800483, "out_rel": 0.021672078093133124, "finite": true, "seconds": 0.35566819999985455}
+{"block": 16, "wiring_rel": 0.0, "quant_rel": 0.022295322160644577, "out_rel": 0.022295306248361745, "finite": true, "seconds": 0.36036410000087926}
+{"block": 17, "wiring_rel": 0.0, "quant_rel": 0.024450207071388747, "out_rel": 0.02445016644226332, "finite": true, "seconds": 0.3592164000001503}
+{"block": 18, "wiring_rel": 0.0, "quant_rel": 0.027871338722064574, "out_rel": 0.027871343625852116, "finite": true, "seconds": 0.3675623999997697}
+{"block": 19, "wiring_rel": 0.0, "quant_rel": 0.031154721700252953, "out_rel": 0.031154751941780523, "finite": true, "seconds": 0.35720500000024913}
+{"block": 20, "wiring_rel": 0.0, "quant_rel": 0.03358113706744962, "out_rel": 0.033581135338974, "finite": true, "seconds": 0.35991139999987354}
+{"block": 21, "wiring_rel": 0.0, "quant_rel": 0.030062821265486313, "out_rel": 0.030062734052043173, "finite": true, "seconds": 0.3636311000000205}
+{"block": 22, "wiring_rel": 0.0, "quant_rel": 0.02578780134302493, "out_rel": 0.025787791049103014, "finite": true, "seconds": 0.3560141999996631}
+{"block": 23, "wiring_rel": 0.0, "quant_rel": 0.03493808658727626, "out_rel": 0.03493798699496175, "finite": true, "seconds": 0.34412849999989703}
+{"block": 24, "wiring_rel": 0.0, "quant_rel": 0.03641652540926655, "out_rel": 0.03641627530694515, "finite": true, "seconds": 0.37198739999985264}
+{"block": 25, "wiring_rel": 0.0, "quant_rel": 0.032084172392666754, "out_rel": 0.032084105719541, "finite": true, "seconds": 0.32389100000000326}
+{"block": 26, "wiring_rel": 0.0, "quant_rel": 0.022279219727658423, "out_rel": 0.02227920629429292, "finite": true, "seconds": 0.35628989999986516}
+{"block": 27, "wiring_rel": 0.0, "quant_rel": 0.03123784225910583, "out_rel": 0.031237938462409198, "finite": true, "seconds": 0.3626792999993995}
+{"block": 28, "wiring_rel": 0.0, "quant_rel": 0.03347471504421067, "out_rel": 0.033474781002829586, "finite": true, "seconds": 0.35859379999965313}
+{"block": 29, "wiring_rel": 0.0, "quant_rel": 0.031383936897975834, "out_rel": 0.03138398891972715, "finite": true, "seconds": 0.362566799999513}
+{"block": 30, "wiring_rel": 0.0, "quant_rel": 0.016947842304006925, "out_rel": 0.016947839399144023, "finite": true, "seconds": 0.35839369999939663}
+{"block": 31, "wiring_rel": 0.0, "quant_rel": 0.037532949401206085, "out_rel": 0.0375330867584141, "finite": true, "seconds": 0.3600128999996741}
+{"block": 32, "wiring_rel": 0.0, "quant_rel": 0.03547588682584567, "out_rel": 0.03547599386748657, "finite": true, "seconds": 0.3450654000007489}
+{"block": 33, "wiring_rel": 0.0, "quant_rel": 0.035939523518608754, "out_rel": 0.03593982593650708, "finite": true, "seconds": 0.3560013999995135}
+{"block": 34, "wiring_rel": 0.0, "quant_rel": 0.0338277875284623, "out_rel": 0.03382791371131463, "finite": true, "seconds": 0.3607294000003094}
+{"block": 35, "wiring_rel": 0.0, "quant_rel": 0.032672600034437206, "out_rel": 0.03267291300221253, "finite": true, "seconds": 0.34731730000021344}
+{"block": 36, "wiring_rel": 0.0, "quant_rel": 0.015436316094606934, "out_rel": 0.015436327822808675, "finite": true, "seconds": 0.35897819999991043}
+{"block": 37, "wiring_rel": 0.0, "quant_rel": 0.033829075865004096, "out_rel": 0.03383028750369898, "finite": true, "seconds": 0.34205389999988256}
+{"block": 38, "wiring_rel": 0.0, "quant_rel": 0.03448298628749754, "out_rel": 0.034483396409562814, "finite": true, "seconds": 0.35319239999989804}
+{"block": 39, "wiring_rel": 0.0, "quant_rel": 0.04138925147078308, "out_rel": 0.041389518235376135, "finite": true, "seconds": 0.36223379999955796}
+{"block": 40, "wiring_rel": 0.0, "quant_rel": 0.04098020536607018, "out_rel": 0.04098044132356049, "finite": true, "seconds": 0.3594597999999678}
+{"block": 41, "wiring_rel": 0.0, "quant_rel": 0.04073292151592554, "out_rel": 0.0407335136640207, "finite": true, "seconds": 0.3814230999996653}
+{"block": 42, "wiring_rel": 0.0, "quant_rel": 0.035299904061678815, "out_rel": 0.03530007190290899, "finite": true, "seconds": 0.35276149999936024}
+{"block": 43, "wiring_rel": 0.0, "quant_rel": 0.014839738380382602, "out_rel": 0.014839740269008877, "finite": true, "seconds": 0.3541156999999657}
+{"block": 44, "wiring_rel": 0.0, "quant_rel": 0.02727975749158903, "out_rel": 0.027279827744000125, "finite": true, "seconds": 0.3524956999999631}
+{"block": 45, "wiring_rel": 0.0, "quant_rel": 0.035226701327815704, "out_rel": 0.03522677963904486, "finite": true, "seconds": 0.36431939999965834}
+{"block": 46, "wiring_rel": 0.0, "quant_rel": 0.02216779501856628, "out_rel": 0.022167832162307666, "finite": true, "seconds": 0.3568345000003319}
+{"block": 47, "wiring_rel": 0.0, "quant_rel": 0.01077860335915936, "out_rel": 0.010778605259011776, "finite": true, "seconds": 0.3638400999998339}
+{"block": 48, "wiring_rel": 0.0, "quant_rel": 0.026268413090888197, "out_rel": 0.026268421954879786, "finite": true, "seconds": 0.37697100000059436}
+{"block": 49, "wiring_rel": 0.0, "quant_rel": 0.022656693124598126, "out_rel": 0.022656698175056042, "finite": true, "seconds": 0.33934969999972964}
+{
+  "A_pass": true,
+  "B_pass": true,
+  "C_pass": true,
+  "D_pass": true,
+  "E_worst": {
+    "wiring_rel_max": 0.0,
+    "wiring_rel_median": 0.0,
+    "quant_rel_max": 0.04138925147078308,
+    "quant_rel_median": 0.026030563863745346,
+    "out_rel_max": 0.041389518235376135,
+    "worst_quant_block": 39
+  },
+  "E_pass": true,
+  "pass": true,
+  "seconds": 22.285321099999237
+}

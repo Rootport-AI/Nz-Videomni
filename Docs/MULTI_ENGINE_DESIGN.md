@@ -81,6 +81,8 @@
 
 **int8 系（`int8_tensorwise`・`asym_w4a8_int8`）も同じ2段を通る（2026-09-26〜・CLOSED §3-168。LTX 2.3・LTX 2.5 とも）。** 到達条件だった REDGraft LTX 2.5（CivitAI 3250230）は独自形式ではなく、ComfyUI 標準のこの 2 形式の混在だった。判定規則は `sft_quant_format.py`（旧名 `sft_fp8_format.py`）に、復元処理は `engine/sft_quant/`（旧名 `engine/fp8/`）に、fp8 専用だった名前を量子化全般の名前へ改めたうえで実装済みである。**方式（`fp8`・`fp8_scaled`・`int8`・`int8_convrot`・`w4a8`）は `sft_quant_format.SCHEME_TABLE` の 1 表が正本で**、検査が返す `Layout.layers`（層名→方式の辞書）を両エンジンのローダがそのまま受け取り、補助テンソルの正規化と復元（`engine/sft_quant/dequant.py`）もこの表から導く。**組み込み点**は、LTX 2.3 が `engine/pipeline/fast_video_pipeline.py` の `_install_safetensors`（ワーカーが `safetensors_transformer_path` を受けたとき。キーの契約は `Videomni_Backend_Specification.md` §4.2）、LTX 2.5 が `engine25/pipeline25.py` の拡張子による振り分け（`Ltx25ProgressStage.from_safetensors`）である。改定の中身は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121 が正本である（判定規則 §121.3・設計 §121.2）。
 
+> **訂正（2026-10-17）**: H3 系統は safetensors にテンソル名の指紋で判定する（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §7）。
+
 ### 2.3 KVを読む経路
 
 読み書きの分担は3つに分かれている。**読む・拾う・裁くを1本にまとめない**のがこの設計の要点である。
@@ -110,6 +112,8 @@
 > **2026-09-26 注記**: B-2 で LTX 2.5 にも広げた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §118）。指紋の接頭辞は `model.diffusion_model.` つきと接頭辞なしの両方を自動で見分ける（§2.2 の末尾）。
 
 > **2026-09-26〜27 注記**: §3-168 で、fp8 専用だった経路を「量子化 safetensors 一般」へ一般化し、ComfyUI 標準の int8 系（`int8_tensorwise`・`asym_w4a8_int8`）にも広げた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121）。指紋・キーの読み替え方は fp8 と共通で、モジュールは `sft_quant_format.py`（旧名 `sft_fp8_format.py`）・`engine/sft_quant/`（旧名 `engine/fp8/`）へ改称した。**実機の門（G3〜G8）とオーナーの目視に合格し、2026-09-27 に完結した**（§121.4・§121.9。台帳は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-168）。
+
+> **訂正（2026-10-17）**: H3 系統は safetensors にテンソル名の指紋で判定する（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §7）。上の規約（両キーを必ず持つ）は及ばない。
 
 ### 2.5 フールプルーフは作らない。エラー品質で解決する 【オーナー裁定】
 
@@ -335,6 +339,8 @@ Wan 2.2  ──────→ wan        （将来）
 
 **方針: 全エンジンで torch のバージョンを揃える 【オーナー裁定】。** 上の利点はバージョンが一致していて初めて成立する。揃えられない依存関係が出てきた場合は、容量が実際に増えることを承知のうえでオーナー判断を仰ぐこと。
 
+> **訂正（2026-10-17）**: 上の一覧に `.venv-engine-h3`（`h3` 系統・MiniMax H3）が加わる。H3 は上の方針の例外で、torch の版を揃えない（裁定 11・16。理由は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §10）。そのため容量が増える（数字は同 §10 が指す freeze と記録簿を見る）。
+
 **前提としてよい利用者像 【オーナー裁定】**: 「同時に導入するベースモデルは2〜3種類」を前提にしてよい。全ベースモデルを同時に置ける前提での容量最適化は不要である。
 
 ### 5.4 状態の3層憲章 【オーナー裁定】
@@ -457,6 +463,8 @@ config.yaml の `lora_dir`（Style LoRA の置き場）と `ic_loras`（IC-LoRA 
 |---|---|---|
 | `ltx`（LTX 2.3） | **全経路 `torch.inference_mode()`** | 単発・連結・画角拡張のすべて |
 | `ltx25`（LTX 2.5） | **全経路 `torch.no_grad()`** | `pipeline25.generate` / `chain25.run_chain` / `outpaint25.run_outpaint` |
+
+> **訂正（2026-10-17）**: 推論モードの表に `h3`（MiniMax H3）が加わる。`engine_h3` は**全経路 `torch.no_grad()`** である（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6）。
 
 **なぜ揃っている必要があるのか。** `inference_mode` の中で**新しく確保された**テンソルは「推論テンソル」の印を帯び、**`no_grad` からその中身を書き換えようとすると `RuntimeError` になる**（逆向きは合法という非対称な規則である）。**先読み block swap のページ固定バッファのように、ジョブをまたいで生き残る受け皿を共有していると、囲みが1経路だけ違うだけで「あるジョブの直後に別のジョブが落ちる」という形の不具合になる。** 実例が §3-124 で、**画角拡張だけが `inference_mode` だったために、その直後の普通の生成が落ちていた**（機構の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) **§81**）。
 
@@ -870,6 +878,8 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 | 扱える機能の範囲 | 各アダプタの `UNSUPPORTED_FEATURES` と拒否関数 | §5.6。エンジンの事実であってエンドポイントの事情ではない |
 | 推論パイプライン一式 | `engine/`（ltx）・`engine25/`（ltx25） | モデル構造そのもの。それぞれの仮想環境側に閉じたままでよい |
 | フレーム規約の定数 | `chain_math.py` の `VIDEO_TIME_FACTOR` / `AUDIO_LATENTS_PER_SEC` | LTXの映像VAE（時間8分の1圧縮）と音声レイテント（毎秒25）の実装値。**現在の2系統はどちらも同じ規約なので隔離していない**（§7） |
+
+> **訂正（2026-10-17）**: 「推論パイプライン一式」の行に H3 の系統が加わる。`engine_h3/`（`h3` 系統）で、同じく仮想環境側に閉じる（構成は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §8）。
 
 ---
 

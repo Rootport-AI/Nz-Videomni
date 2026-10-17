@@ -1,0 +1,722 @@
+{
+  "gate": "G4-dit",
+  "weights": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+  "tolerances": {
+    "wiring": 0.01,
+    "quant": 0.05,
+    "e2e": 0.05,
+    "part": 0.01
+  },
+  "sequence": {
+    "text": 64,
+    "latent_frames": 4,
+    "grid": [
+      10,
+      10
+    ],
+    "audio_latents": 24,
+    "sigma_v": 0.9,
+    "sigma_a": 0.75
+  },
+  "backends": {
+    "ascend": {
+      "available": false,
+      "disabled": false,
+      "unavailable_reason": "torch-npu is not installed: No module named 'torch_npu'",
+      "capabilities": []
+    },
+    "cuda": {
+      "available": true,
+      "disabled": false,
+      "unavailable_reason": null,
+      "capabilities": [
+        "adaln",
+        "apply_rope",
+        "apply_rope1",
+        "apply_rope1_",
+        "apply_rope_",
+        "apply_rope_split_half",
+        "apply_rope_split_half1",
+        "apply_rope_split_half1_",
+        "apply_rope_split_half_",
+        "convrot_w4a4_linear",
+        "dequantize_convrot_w4a4_weight",
+        "dequantize_int8_convrot_weight",
+        "dequantize_int8_convrot_weight_dtype",
+        "dequantize_int8_simple",
+        "dequantize_int8_simple_dtype",
+        "dequantize_nvfp4",
+        "dequantize_per_tensor_fp8",
+        "dequantize_w4a8_int8_weight",
+        "fp16_conv3d",
+        "fp16_conv3d_out",
+        "fp16_linear",
+        "gemv_awq_w4a16",
+        "group_norm_silu_pad3d",
+        "group_norm_silu_pad3d_out",
+        "int8_linear",
+        "na3d",
+        "prepare_int4_weight_for_int8_linear",
+        "quantize_and_rotate_rowwise",
+        "quantize_convrot_w4a4_weight",
+        "quantize_int8_convrot_weight",
+        "quantize_int8_rowwise",
+        "quantize_int8_tensorwise",
+        "quantize_mxfp8",
+        "quantize_nvfp4",
+        "quantize_per_tensor_fp8",
+        "quantize_svdquant_w4a4",
+        "quantize_w4a8_int8_weight",
+        "rms_adaln",
+        "rms_rope",
+        "rms_rope1",
+        "rms_rope1_",
+        "rms_rope_",
+        "rms_rope_split_half",
+        "rms_rope_split_half1",
+        "rms_rope_split_half1_",
+        "rms_rope_split_half_",
+        "rotate_int8_convrot_weight",
+        "scaled_mm_nvfp4",
+        "scaled_mm_svdquant_w4a4",
+        "sol_attn",
+        "stochastic_rounding_fp8",
+        "w4a8_int8_linear"
+      ]
+    },
+    "hip": {
+      "available": false,
+      "disabled": false,
+      "unavailable_reason": "PyTorch ROCm/HIP runtime not available",
+      "capabilities": []
+    },
+    "triton": {
+      "available": true,
+      "disabled": true,
+      "unavailable_reason": null,
+      "capabilities": [
+        "adaln",
+        "apply_rope",
+        "apply_rope1",
+        "apply_rope1_",
+        "apply_rope_",
+        "apply_rope_split_half",
+        "apply_rope_split_half1",
+        "apply_rope_split_half1_",
+        "apply_rope_split_half_",
+        "dequantize_nvfp4",
+        "dequantize_per_tensor_fp8",
+        "int8_linear",
+        "na3d",
+        "quantize_and_rotate_rowwise",
+        "quantize_int8_rowwise",
+        "quantize_mxfp8",
+        "quantize_nvfp4",
+        "quantize_per_tensor_fp8",
+        "rms_adaln",
+        "rms_rope",
+        "rms_rope1",
+        "rms_rope1_",
+        "rms_rope_",
+        "rms_rope_split_half",
+        "rms_rope_split_half1",
+        "rms_rope_split_half1_",
+        "rms_rope_split_half_",
+        "w4a8_int8_linear"
+      ]
+    },
+    "eager": {
+      "available": true,
+      "disabled": true,
+      "unavailable_reason": null,
+      "capabilities": [
+        "adaln",
+        "apply_rope",
+        "apply_rope1",
+        "apply_rope1_",
+        "apply_rope_",
+        "apply_rope_split_half",
+        "apply_rope_split_half1",
+        "apply_rope_split_half1_",
+        "apply_rope_split_half_",
+        "convrot_w4a4_linear",
+        "dequantize_convrot_w4a4_weight",
+        "dequantize_int8_convrot_weight",
+        "dequantize_int8_convrot_weight_dtype",
+        "dequantize_int8_embedding",
+        "dequantize_int8_simple",
+        "dequantize_int8_simple_dtype",
+        "dequantize_mxfp8",
+        "dequantize_nvfp4",
+        "dequantize_per_tensor_fp8",
+        "dequantize_w4a8_int8_weight",
+        "fp16_conv3d",
+        "fp16_conv3d_out",
+        "fp16_linear",
+        "gemv_awq_w4a16",
+        "group_norm_silu_pad3d",
+        "group_norm_silu_pad3d_out",
+        "int8_linear",
+        "na3d",
+        "prepare_int4_weight_for_int8_linear",
+        "quantize_and_rotate_rowwise",
+        "quantize_convrot_w4a4_weight",
+        "quantize_int8_convrot_weight",
+        "quantize_int8_rowwise",
+        "quantize_int8_tensorwise",
+        "quantize_mxfp8",
+        "quantize_nvfp4",
+        "quantize_per_tensor_fp8",
+        "quantize_svdquant_w4a4",
+        "quantize_w4a8_int8_weight",
+        "rms_adaln",
+        "rms_rope",
+        "rms_rope1",
+        "rms_rope1_",
+        "rms_rope_",
+        "rms_rope_split_half",
+        "rms_rope_split_half1",
+        "rms_rope_split_half1_",
+        "rms_rope_split_half_",
+        "rotate_int8_convrot_weight",
+        "scaled_mm_mxfp8",
+        "scaled_mm_nvfp4",
+        "scaled_mm_svdquant_w4a4",
+        "sol_attn",
+        "stochastic_rounding_fp8",
+        "w4a8_int8_linear"
+      ]
+    }
+  },
+  "config": {
+    "prefix": "",
+    "hidden_size": 5376,
+    "num_layers": 50,
+    "token_refiner_layers": 2,
+    "num_heads": 56,
+    "head_dim": 128,
+    "ffn_hidden": 14336,
+    "text_dim": 5120,
+    "latents_dim": 24,
+    "audio_latents_dim": 32,
+    "pruned": true,
+    "adaln_grid": 1025,
+    "adaln_rank": 8,
+    "rope_inv_freq_len": 16,
+    "quant_layers": 200,
+    "unknown": []
+  },
+  "A_coords": {
+    "small_t2v": {
+      "rows": 512,
+      "shape_equal": true,
+      "exact": true,
+      "max_abs": 0.0,
+      "tags_equal": true
+    },
+    "small_i2v": {
+      "rows": 612,
+      "shape_equal": true,
+      "exact": true,
+      "max_abs": 0.0,
+      "tags_equal": true
+    },
+    "g5_t2v": {
+      "rows": 9595,
+      "shape_equal": true,
+      "exact": true,
+      "max_abs": 0.0,
+      "tags_equal": true
+    },
+    "portrait_i2v": {
+      "rows": 2785,
+      "shape_equal": true,
+      "exact": true,
+      "max_abs": 0.0,
+      "tags_equal": true
+    }
+  },
+  "A_rope": {
+    "inv_freq_file_vs_formula_max_abs": 0.0,
+    "cos_max_abs": 0.0,
+    "sin_max_abs": 0.0,
+    "table_shape": [
+      512,
+      96
+    ]
+  },
+  "A_pass": true,
+  "B_adaln": {
+    "t": [
+      0.0,
+      9.999999747378752e-05,
+      0.10000000149011612,
+      0.25,
+      0.5,
+      0.75,
+      0.9990000128746033,
+      0.9999899864196777,
+      1.0
+    ],
+    "max_abs": 0.0,
+    "exact": true
+  },
+  "B_pass": true,
+  "C_refine_text": {
+    "rel": 0.0,
+    "max_abs": 0.0,
+    "dtype": "torch.bfloat16"
+  },
+  "C_embed_rows": {
+    "exact": true,
+    "shape": [
+      512,
+      5376
+    ],
+    "dtype": "torch.bfloat16"
+  },
+  "C_final_rows": {
+    "video_rel": 3.812753394091199e-07,
+    "audio_rel": 2.2932872333928442e-07,
+    "video_shape": [
+      400,
+      96
+    ],
+    "audio_shape": [
+      48,
+      32
+    ],
+    "dtype": "torch.float32"
+  },
+  "C_pass": true,
+  "D_e2e_2blocks": {
+    "int8_layers_swapped": 8,
+    "strict_load": true,
+    "video_rel": 0.007402232831721903,
+    "audio_rel": 0.004407929363999599,
+    "video_shape": [
+      400,
+      96
+    ],
+    "audio_shape": [
+      48,
+      32
+    ],
+    "note": "oracle runs bf16 everywhere (DiffSynth's own precision, bf16 AdaLN); mine keeps the f32 islands"
+  },
+  "D_pass": true,
+  "E_blocks": [
+    {
+      "block": 0,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.006338415249849703,
+      "out_rel": 0.006336631337920463,
+      "finite": true,
+      "seconds": 0.235333300000093
+    },
+    {
+      "block": 1,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.009563901998185605,
+      "out_rel": 0.00956369422473038,
+      "finite": true,
+      "seconds": 0.21606460000020888
+    },
+    {
+      "block": 2,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.026056281020816436,
+      "out_rel": 0.026056255073865088,
+      "finite": true,
+      "seconds": 0.35920270000042365
+    },
+    {
+      "block": 3,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.024106302719508803,
+      "out_rel": 0.024106222814725554,
+      "finite": true,
+      "seconds": 0.3585304999996879
+    },
+    {
+      "block": 4,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.01930269169206735,
+      "out_rel": 0.019302691618673384,
+      "finite": true,
+      "seconds": 0.35339139999996405
+    },
+    {
+      "block": 5,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.02065690794039375,
+      "out_rel": 0.020656894000266334,
+      "finite": true,
+      "seconds": 0.3496583999994982
+    },
+    {
+      "block": 6,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.02518348374134729,
+      "out_rel": 0.025183345515302484,
+      "finite": true,
+      "seconds": 0.3571916000000783
+    },
+    {
+      "block": 7,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.021273275778333357,
+      "out_rel": 0.021273266947176295,
+      "finite": true,
+      "seconds": 0.3458049000000756
+    },
+    {
+      "block": 8,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.02351832086437669,
+      "out_rel": 0.02351828653894361,
+      "finite": true,
+      "seconds": 0.36633770000025834
+    },
+    {
+      "block": 9,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.021926680232282034,
+      "out_rel": 0.021926708753323313,
+      "finite": true,
+      "seconds": 0.35209969999959867
+    },
+    {
+      "block": 10,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.02183069312621222,
+      "out_rel": 0.021830663038611683,
+      "finite": true,
+      "seconds": 0.34231779999936407
+    },
+    {
+      "block": 11,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.02375148068925008,
+      "out_rel": 0.023751459193940446,
+      "finite": true,
+      "seconds": 0.33843960000012885
+    },
+    {
+      "block": 12,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.020055171119367415,
+      "out_rel": 0.02005519768785429,
+      "finite": true,
+      "seconds": 0.3549333999999362
+    },
+    {
+      "block": 13,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.026004846706674255,
+      "out_rel": 0.02600486986218528,
+      "finite": true,
+      "seconds": 0.31885650000003807
+    },
+    {
+      "block": 14,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.021762128162715326,
+      "out_rel": 0.021762086992908845,
+      "finite": true,
+      "seconds": 0.3600667999999132
+    },
+    {
+      "block": 15,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.021672076420800483,
+      "out_rel": 0.021672078093133124,
+      "finite": true,
+      "seconds": 0.35566819999985455
+    },
+    {
+      "block": 16,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.022295322160644577,
+      "out_rel": 0.022295306248361745,
+      "finite": true,
+      "seconds": 0.36036410000087926
+    },
+    {
+      "block": 17,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.024450207071388747,
+      "out_rel": 0.02445016644226332,
+      "finite": true,
+      "seconds": 0.3592164000001503
+    },
+    {
+      "block": 18,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.027871338722064574,
+      "out_rel": 0.027871343625852116,
+      "finite": true,
+      "seconds": 0.3675623999997697
+    },
+    {
+      "block": 19,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.031154721700252953,
+      "out_rel": 0.031154751941780523,
+      "finite": true,
+      "seconds": 0.35720500000024913
+    },
+    {
+      "block": 20,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.03358113706744962,
+      "out_rel": 0.033581135338974,
+      "finite": true,
+      "seconds": 0.35991139999987354
+    },
+    {
+      "block": 21,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.030062821265486313,
+      "out_rel": 0.030062734052043173,
+      "finite": true,
+      "seconds": 0.3636311000000205
+    },
+    {
+      "block": 22,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.02578780134302493,
+      "out_rel": 0.025787791049103014,
+      "finite": true,
+      "seconds": 0.3560141999996631
+    },
+    {
+      "block": 23,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.03493808658727626,
+      "out_rel": 0.03493798699496175,
+      "finite": true,
+      "seconds": 0.34412849999989703
+    },
+    {
+      "block": 24,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.03641652540926655,
+      "out_rel": 0.03641627530694515,
+      "finite": true,
+      "seconds": 0.37198739999985264
+    },
+    {
+      "block": 25,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.032084172392666754,
+      "out_rel": 0.032084105719541,
+      "finite": true,
+      "seconds": 0.32389100000000326
+    },
+    {
+      "block": 26,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.022279219727658423,
+      "out_rel": 0.02227920629429292,
+      "finite": true,
+      "seconds": 0.35628989999986516
+    },
+    {
+      "block": 27,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.03123784225910583,
+      "out_rel": 0.031237938462409198,
+      "finite": true,
+      "seconds": 0.3626792999993995
+    },
+    {
+      "block": 28,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.03347471504421067,
+      "out_rel": 0.033474781002829586,
+      "finite": true,
+      "seconds": 0.35859379999965313
+    },
+    {
+      "block": 29,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.031383936897975834,
+      "out_rel": 0.03138398891972715,
+      "finite": true,
+      "seconds": 0.362566799999513
+    },
+    {
+      "block": 30,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.016947842304006925,
+      "out_rel": 0.016947839399144023,
+      "finite": true,
+      "seconds": 0.35839369999939663
+    },
+    {
+      "block": 31,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.037532949401206085,
+      "out_rel": 0.0375330867584141,
+      "finite": true,
+      "seconds": 0.3600128999996741
+    },
+    {
+      "block": 32,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.03547588682584567,
+      "out_rel": 0.03547599386748657,
+      "finite": true,
+      "seconds": 0.3450654000007489
+    },
+    {
+      "block": 33,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.035939523518608754,
+      "out_rel": 0.03593982593650708,
+      "finite": true,
+      "seconds": 0.3560013999995135
+    },
+    {
+      "block": 34,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.0338277875284623,
+      "out_rel": 0.03382791371131463,
+      "finite": true,
+      "seconds": 0.3607294000003094
+    },
+    {
+      "block": 35,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.032672600034437206,
+      "out_rel": 0.03267291300221253,
+      "finite": true,
+      "seconds": 0.34731730000021344
+    },
+    {
+      "block": 36,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.015436316094606934,
+      "out_rel": 0.015436327822808675,
+      "finite": true,
+      "seconds": 0.35897819999991043
+    },
+    {
+      "block": 37,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.033829075865004096,
+      "out_rel": 0.03383028750369898,
+      "finite": true,
+      "seconds": 0.34205389999988256
+    },
+    {
+      "block": 38,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.03448298628749754,
+      "out_rel": 0.034483396409562814,
+      "finite": true,
+      "seconds": 0.35319239999989804
+    },
+    {
+      "block": 39,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.04138925147078308,
+      "out_rel": 0.041389518235376135,
+      "finite": true,
+      "seconds": 0.36223379999955796
+    },
+    {
+      "block": 40,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.04098020536607018,
+      "out_rel": 0.04098044132356049,
+      "finite": true,
+      "seconds": 0.3594597999999678
+    },
+    {
+      "block": 41,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.04073292151592554,
+      "out_rel": 0.0407335136640207,
+      "finite": true,
+      "seconds": 0.3814230999996653
+    },
+    {
+      "block": 42,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.035299904061678815,
+      "out_rel": 0.03530007190290899,
+      "finite": true,
+      "seconds": 0.35276149999936024
+    },
+    {
+      "block": 43,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.014839738380382602,
+      "out_rel": 0.014839740269008877,
+      "finite": true,
+      "seconds": 0.3541156999999657
+    },
+    {
+      "block": 44,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.02727975749158903,
+      "out_rel": 0.027279827744000125,
+      "finite": true,
+      "seconds": 0.3524956999999631
+    },
+    {
+      "block": 45,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.035226701327815704,
+      "out_rel": 0.03522677963904486,
+      "finite": true,
+      "seconds": 0.36431939999965834
+    },
+    {
+      "block": 46,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.02216779501856628,
+      "out_rel": 0.022167832162307666,
+      "finite": true,
+      "seconds": 0.3568345000003319
+    },
+    {
+      "block": 47,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.01077860335915936,
+      "out_rel": 0.010778605259011776,
+      "finite": true,
+      "seconds": 0.3638400999998339
+    },
+    {
+      "block": 48,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.026268413090888197,
+      "out_rel": 0.026268421954879786,
+      "finite": true,
+      "seconds": 0.37697100000059436
+    },
+    {
+      "block": 49,
+      "wiring_rel": 0.0,
+      "quant_rel": 0.022656693124598126,
+      "out_rel": 0.022656698175056042,
+      "finite": true,
+      "seconds": 0.33934969999972964
+    }
+  ],
+  "E_worst": {
+    "wiring_rel_max": 0.0,
+    "wiring_rel_median": 0.0,
+    "quant_rel_max": 0.04138925147078308,
+    "quant_rel_median": 0.026030563863745346,
+    "out_rel_max": 0.041389518235376135,
+    "worst_quant_block": 39
+  },
+  "E_pass": true,
+  "peak_vram_mb": 6223.68701171875,
+  "pass": true,
+  "seconds": 22.285321099999237
+}

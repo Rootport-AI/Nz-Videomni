@@ -21,7 +21,9 @@ class ConditioningImageArg(BaseModel):
     ``image_id`` は ``upload_image`` が返す ID。``crf`` はサーバー側の隠し
     フィールド（two_stage_hq専用のモック残骸。``Docs/MCP_SERVER_DESIGN.md``
     §2 の D8 で非公開）なので、ここには出さない。``frame_idx`` はサーバー側で
-    0 または 8n+1 グリッドへスナップ・クランプされる（0 なら開始フレーム扱い）。
+    0 または 8n+1 グリッドへスナップ・クランプされる（0 なら開始フレーム扱い。
+    LTX の場合）。MiniMax H3 は先頭フレーム 1 枚（``frame_idx=0``）だけを受け、
+    ``strength`` も既定の 0.8 以外は 422 FEATURE_UNSUPPORTED になる。
     """
 
     image_id: str

@@ -2,11 +2,14 @@
 ``submit_alpha_gen``、3本）。
 
 ``api/models.py`` の ``GenerateRequest`` の表面をほぼそのまま公開するが、隠し
-フィールド（``pipeline`` / ``num_inference_steps`` / ``guidance_scale`` /
-``crf``）は出さない（``Docs/MCP_SERVER_DESIGN.md`` §2 の D8）-- ``two_stage_hq``
-はエンジンが使わないモック（LTX 2.5 では 422）で、distilled パイプラインでは
-ステップ数と CFG が ``api/models.py`` の検査で固定値に縛られており、変える意味が
-ないため。一方で Acceleration 機能の引数（``GenerateRequest`` の Acceleration の
+フィールド（``pipeline`` / ``guidance_scale`` / ``crf``）は出さない
+（``Docs/MCP_SERVER_DESIGN.md`` §2 の D8）-- ``two_stage_hq`` はエンジンが使わない
+モック（LTX 2.5 では 422）で、CFG は LTX の distilled パイプラインで 1.0 に縛られ、
+MiniMax H3 には CFG そのものが無いため。``num_inference_steps`` も長く同じ理由で
+隠していたが、MiniMax H3 ではステップ数と shift（``shift_video`` /
+``shift_audio``）が利用者の選ぶ値になったので、``submit_generate`` に限り任意引数で
+公開する（既定 ``None`` は送らない＝ベースモデルの既定値。LTX では 8 以外は 422。
+連結生成は H3 では使えないので ``submit_chain`` には出さない）。一方で Acceleration 機能の引数（``GenerateRequest`` の Acceleration の
 区画）はすべて公開する（同書 §2 の D12・D22）--
 ``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）と
 ``block_swap_prefetch``（既定は ``BLOCK_SWAP_PREFETCH_DEFAULT``。先読み block swap
@@ -172,6 +175,9 @@ async def submit_generate(
     outpaint_blend_dilation_stage1: int = _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT,
     outpaint_freeze_source_audio: bool = True,
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT,
+    num_inference_steps: int | None = None,
+    shift_video: float | None = None,
+    shift_audio: float | None = None,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -213,14 +219,32 @@ async def submit_generate(
     「登録」するだけで完了を待ちません。結果は返ってきた ``job_id`` を
     ``wait_for_job`` に渡して確認してください。
 
-    サイズ・尺の制約:
-      * ``width`` / ``height`` は必ず64の倍数（two-stage distilledパイプラ
-        インの制約）。``reference_video_id`` を使う場合は128の倍数が必要
-        （制御系IC-LoRAは参照動画を半分解像度で消費するため）。
-      * 最終的な表示サイズを64の倍数以外にしたい場合は ``crop_width`` /
+    サイズ・尺の制約（**ベースモデルごとに違います**。正本は ``list_models`` の
+    ``base_models[].constraints``）:
+      * ``width`` / ``height`` は ``constraints.dimension_multiple`` の倍数。
+        LTX 2.3 / LTX 2.5 は64の倍数（two-stage distilledパイプラインの制約）、
+        MiniMax H3 は32の倍数です。``reference_video_id`` を使う場合は128の
+        倍数が必要（制御系IC-LoRAは参照動画を半分解像度で消費するため。LTX のみ）。
+      * 最終的な表示サイズを倍数以外にしたい場合は ``crop_width`` /
         ``crop_height`` を使ってください（生成後にクロップされます）。両方
         セットするか、両方省略するかのどちらかにしてください。
-      * ``num_frames`` は 8n+1（9, 17, 25, ... 481）である必要があります。
+      * ``num_frames`` は ``constraints.num_frames`` の格子
+        （``step``×n＋``offset``、``min``〜``max``）に従います。LTX は 8n+1
+        （9, 17, 25, ... 481）、MiniMax H3 は 17n+5 かつ 22 以上
+        （22, 39, 56, ...）です。
+      * ``frame_rate`` は ``constraints.frame_rate`` の ``min``〜``max``。LTX は
+        1〜60、MiniMax H3 は 24 固定です。
+      * **``num_frames`` の既定 49 は LTX の値です。MiniMax H3 で省略すると
+        17n+5 に合わず 422 VALIDATION_ERROR になる**ので、H3 では必ず指定して
+        ください。
+
+    ステップ数と shift（``constraints.sampling`` があるベースモデル＝MiniMax H3）:
+      * ``num_inference_steps`` / ``shift_video`` / ``shift_audio`` は省略
+        （``None``）すると送らず、ベースモデルの既定値になります（H3 は
+        20 / 12 / 3。範囲は ``constraints.sampling`` の各 ``min``〜``max``）。
+      * LTX（``sampling`` が null）ではステップ数は distilled の 8 に固定で、
+        8 以外を送ると 422 になります。shift は LTX には無い概念で、送っても
+        無視されます。
 
     IC-LoRA:
       * ``conditioning_images`` を1件以上指定するとI2V（画像条件付け）に
@@ -281,10 +305,14 @@ async def submit_generate(
         vsf_scale: VSFの負側V（value）への乗算係数α（既定1.5、0〜10、
             ``neg_method="vsf"`` のときのみ意味を持つ。0でも無効化にはなら
             ない）。
-        width, height: 生成解像度（64の倍数、参照動画使用時は128の倍数）。
+        width, height: 生成解像度（ベースモデルの
+            ``constraints.dimension_multiple`` の倍数に従う。LTX は 64、
+            MiniMax H3 は 32。参照動画使用時は128の倍数）。
         crop_width, crop_height: 最終出力のクロップサイズ（両方指定 or 両方
             省略）。
-        num_frames: フレーム数（8n+1、9〜481）。
+        num_frames: フレーム数（ベースモデルの ``constraints`` に従う。LTX は
+            8n+1、MiniMax H3 は 17n+5 かつ 22 以上・32 の倍数・24fps。
+            既定 49 は LTX の値で、H3 で省略すると 422 になる）。
         frame_rate: フレームレート。1〜60の範囲内なら**整数へ四捨五入して**
             送る（29.97→30、23.976→24。非整数のfpsを避ける理由の記録は
             ``Docs/VERIFICATION_LOG.md`` §91）。範囲外の値は丸めずそのまま
@@ -402,6 +430,13 @@ async def submit_generate(
             ``EMBED_MP4_METADATA_DEFAULT``。再エンコード無しの後付けで、生成結果の
             映像・音声は変わりません）。**既定のままなら送信しません。**
             書き込んだ内容は ``get_mp4_info`` で読めます。
+        num_inference_steps: ステップ数（MiniMax H3 用。省略で送らない＝
+            ベースモデルの既定値。H3 は既定 20・範囲 1〜50。LTX は 8 固定で、
+            8 以外は 422）。
+        shift_video: 映像のノイズスケジュールの shift（MiniMax H3 用。省略で
+            送らない＝既定値。H3 は既定 12・範囲 1〜20。LTX では無視）。
+        shift_audio: 音声のノイズスケジュールの shift（MiniMax H3 用。省略で
+            送らない＝既定値。H3 は既定 3・範囲 1〜20。LTX では無視）。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -438,6 +473,15 @@ async def submit_generate(
     payload["num_frames"] = num_frames
     payload["frame_rate"] = _snap_frame_rate(frame_rate)
     payload["seed"] = seed
+    # Steps / shift: sent only when given (None = the base model's own default,
+    # which the server writes back; the same "None is not sent" rule as every
+    # other optional key here).
+    if num_inference_steps is not None:
+        payload["num_inference_steps"] = num_inference_steps
+    if shift_video is not None:
+        payload["shift_video"] = shift_video
+    if shift_audio is not None:
+        payload["shift_audio"] = shift_audio
 
     if nag_enabled:
         payload["nag_enabled"] = True

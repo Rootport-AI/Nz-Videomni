@@ -631,6 +631,9 @@ def test_submit_generate_width_not_multiple_of_64_surfaces_validation_error(mcp_
 
 
 def test_submit_generate_input_schema_has_no_hidden_fields():
+    # num_inference_steps is no longer hidden on submit_generate: MiniMax H3
+    # takes it (with the two shifts) as an optional argument -- see
+    # test_submit_generate_input_schema_exposes_optional_sampling_fields.
     async def _run():
         mcp = build_server()
         return await mcp.list_tools()
@@ -638,8 +641,52 @@ def test_submit_generate_input_schema_has_no_hidden_fields():
     tools = anyio.run(_run)
     tool = next(t for t in tools if t.name == "submit_generate")
     props = set(tool.inputSchema.get("properties", {}))
-    for hidden in ("pipeline", "num_inference_steps", "guidance_scale", "crf"):
+    for hidden in ("pipeline", "guidance_scale", "crf"):
         assert hidden not in props, f"hidden field {hidden!r} leaked into submit_generate schema"
+
+
+def test_submit_generate_input_schema_exposes_optional_sampling_fields():
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "submit_generate")
+    props = tool.inputSchema.get("properties", {})
+    required = set(tool.inputSchema.get("required", []))
+    for name in ("num_inference_steps", "shift_video", "shift_audio"):
+        assert name in props, f"{name!r} missing from submit_generate schema"
+        assert name not in required
+        assert props[name].get("default") is None
+
+
+def _sampling_capture_handler(captured: dict):
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(202, json={"job_id": "j1", "status": "queued",
+                                         "created_at": "t"})
+    return handler
+
+
+def test_submit_generate_omits_sampling_fields_when_not_given():
+    captured: dict = {}
+    set_client(_client_for_handler(_sampling_capture_handler(captured)))
+    anyio.run(functools.partial(generate.submit_generate, "p"))
+    for name in ("num_inference_steps", "shift_video", "shift_audio"):
+        assert name not in captured["body"]
+
+
+def test_submit_generate_sends_sampling_fields_when_given():
+    captured: dict = {}
+    set_client(_client_for_handler(_sampling_capture_handler(captured)))
+    anyio.run(functools.partial(
+        generate.submit_generate, "p", width=640, height=384, num_frames=124,
+        num_inference_steps=20, shift_video=12.5, shift_audio=3.0))
+    body = captured["body"]
+    assert body["num_inference_steps"] == 20
+    assert body["shift_video"] == 12.5
+    assert body["shift_audio"] == 3.0
+    assert body["num_frames"] == 124
 
 
 # --------------------------------------------------------------- submit_chain

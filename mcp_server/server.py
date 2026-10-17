@@ -19,9 +19,9 @@ from mcp_server.tools import register_all
 SERVER_NAME = "nz-videomni"
 
 INSTRUCTIONS = """\
-Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作するためのツール群です。
+Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）を操作するためのツール群です。
 
-■ ベースモデル（LTX 2.3 / LTX 2.5）の切り替え
+■ ベースモデル（LTX 2.3 / LTX 2.5 / MiniMax H3）の切り替え
   バックエンドは複数のベースモデル（推論エンジンごと入れ替わる大枠）を持ち、
   一度に1つだけが選択されています。list_models の base_models[] で、導入済みか
   （installed）・現在選択中か（active）・そのベースモデルで使えない機能
@@ -33,6 +33,18 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 動画生成）を操作す�
   （wait_for_job がタイムアウトしても失敗ではないので呼び直してください）。
   この説明では速さとメモリの実測値を書きません。数値は各ツールの説明
   （load_pipeline / submit_generate / submit_chain）を見てください。
+  フレーム数・画角・fps の決まりはベースモデルごとに違います。list_models の
+  base_models[].constraints が正本です（LTX は 8n+1・64 の倍数・1〜60fps）。
+  MiniMax H3 の例: load_pipeline(base_model="MiniMaxH3") で切り替え、
+  submit_generate(prompt=..., width=640, height=384, num_frames=124,
+  frame_rate=24) のように、num_frames は 17n+5 かつ 22 以上、幅と高さは
+  32 の倍数、fps は 24 固定で指定します（num_frames の既定 49 は LTX の値
+  なので、H3 で省略すると 422 になります）。H3 では submit_generate の
+  num_inference_steps / shift_video / shift_audio（省略で既定 20 / 12 / 3）
+  が選べます。H3 は単発の T2V と、先頭フレーム 1 枚（frame_idx=0）の I2V
+  だけに対応し、submit_chain・loras・reference_video_id・nag_enabled などは
+  422 FEATURE_UNSUPPORTED になります（使えない機能は unsupported_features
+  を見てください）。
   LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）だけです
   （422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
   は LTX 2.5 でも使えます（negative_prompt / nag_scale / nag_tau / nag_alpha /

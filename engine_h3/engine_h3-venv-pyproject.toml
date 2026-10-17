@@ -1,0 +1,115 @@
+[project]
+name = "h3-engine"
+version = "1.0.0"
+description = "MiniMax H3 Video+Audio Generation Engine (separate venv from the LTX engines)"
+requires-python = ">=3.12"
+# ---------------------------------------------------------------------------
+# WHY A THIRD ENGINE VENV, AND WHY ITS torch DOES NOT MATCH THE OTHER TWO
+#
+# This file is the MiniMax H3 sibling of engine25/engine25-venv-pyproject.toml.
+# .venv-engine (LTX 2.3) and .venv-engine-ltx25 (LTX 2.5) are pinned to
+# torch 2.9.1+cu128. .venv-engine-h3 deliberately is NOT: int8 ConvRot weights
+# are executed by comfy-kitchen's CUDA extension, and that extension needs a
+# CUDA 13.x runtime (see "CUDA 13 REQUIREMENTS" below). The owner decided that
+# H3 does not have to share the other engines' torch (decisions 11 and 16 in
+# Docs/MINIMAX_H3_RESEARCH_NOTES.md section 10; design rationale in
+# Docs/MINIMAX_H3_DESIGN.md section 10). The cost is real: because the torch
+# build differs, uv's hard-link sharing with the other venvs does not apply and
+# this venv's disk usage is added in full.
+#
+# WHY THESE VERSIONS (evidence: the R1 stack investigation, 2026-10-17)
+#
+#   * torch / torchvision: comfy-kitchen's CUDA extension does NOT link against
+#     torch's DLLs (it depends only on nvcuda.dll and python3.dll and loads
+#     cublasLt64_13.dll at run time), so ANY CUDA 13.x torch works. Among those,
+#     the pinned build is the one with third-party H3 int8 ConvRot measurements
+#     and the one the SageAttention author points to together with
+#     triton-windows 3.7.x. The cu130 wheels bundle their own CUDA runtime, so
+#     no separate nvidia-* packages are pulled in.
+#   * comfy-kitchen: the latest PyPI release at the time of the investigation.
+#     It has no dependencies of its own. The venv uses only its function API
+#     (comfy_kitchen.int8_linear); the quantised-tensor wrapper types are not
+#     used, because they do not ride this project's block swap / prefetch.
+#   * triton-windows: the build that matches this torch (torch's own Linux
+#     metadata pins the matching triton). It is installed because SageAttention
+#     JIT-compiles with it. comfy-kitchen's own triton backend is NOT used: its
+#     int8 GEMM indexes the output in int32 and crashes once m*n >= 2**31
+#     (upstream issue #136). engine_h3 therefore disables the triton AND the
+#     eager backends at start-up and refuses to load unless the CUDA backend
+#     reports int8_linear (engine_h3/quant_linear.py, require_cuda_int8).
+#   * transformers: the same version the LTX 2.5 venv was frozen at. Qwen3-VL
+#     (the text encoder) needs 4.57.0 or newer; 5.x maps the old rope_scaling
+#     setting to rope_parameters itself.
+#   * safetensors: the latest, and what that transformers release requires.
+#   * einops: pinned when the video VAE was being ported, but the ported
+#     engine_h3 does NOT import einops (the rearranges became reshape/permute).
+#     Harmless, and a candidate for removal.
+#   * numpy: not listed in `dependencies` -- it arrives through transformers.
+#     engine_h3/rope.py imports it directly (the RoPE grid is built in float64
+#     with numpy), and engine/sft_quant/sft_reader.py needs it at run time
+#     (Tensor.numpy()), so it is a direct dependency in practice.
+#   * av: PyAV writes the mp4 (video + AAC audio). This is the version already
+#     proven in the LTX 2.5 venv.
+#
+# DELIBERATELY ABSENT (do not add without a plan change):
+#   torchaudio -- the cu130 Windows wheels stop at torchaudio 2.11.0, so there is
+#                 no torchaudio that pairs with torch 2.12 or newer, and no H3
+#                 code path imports it. Adding it would drag in a matching OLD
+#                 torch and silently defeat the pin below.
+#   diffsynth  -- the H3 parts were PORTED into engine_h3/ (Apache-2.0 notices
+#                 in the file headers). `import diffsynth` pulls in diffsynth's
+#                 whole core plus modelscope, pandas, peft, imageio and others.
+#   accelerate -- nothing here uses it (models are built on the meta device and
+#                 filled by engine_h3/sft_load.py).
+#   gguf       -- H3 is read from safetensors only.
+#
+# sageattention IS installed in this venv (`attention_backend: "sage"` is a
+# per-job option) but is DELIBERATELY NOT LISTED in `dependencies`, for the same
+# reason engine25/engine25-venv-pyproject.toml keeps it out: it ships no PyPI
+# build uv could resolve. The only supported source is this direct wheel
+# (libtorch stable-ABI build, usable with torch 2.10 and newer):
+#
+#   https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu130torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl
+#
+# A venv built from this file by hand therefore has no sageattention until that
+# wheel is added; the engine then falls back to sdpa. Whether the wheel runs on
+# this torch is checked once in the first milestone's self-test (the import-time
+# probe cannot catch kernel-launch failures).
+#
+# CUDA 13 REQUIREMENTS (these are user-facing requirements, README to follow)
+#
+#   * NVIDIA driver R580 or newer (the lower bound for CUDA 13.x minor-version
+#     compatibility; cu130 wheels are covered by it).
+#   * GPU: Turing (RTX 20 series, compute capability 7.5) or newer. CUDA 13
+#     removed Maxwell, Pascal and Volta, so GTX 10xx cards cannot run this venv.
+#     (comfy-kitchen's fast CUTLASS int8 path is Ampere or newer; Turing runs a
+#     different, slower kernel.)
+#
+# HOW THIS RESOLVES
+#
+# Same recipe as the other engine venvs: explicit cu130 `--index` plus
+# `--index-strategy unsafe-best-match`. torch AND torchvision must carry the
+# exact `+cu130` local version below; leaving either unpinned lets uv pick a
+# different pair.
+#
+# NOTHING READS THIS FILE AUTOMATICALLY. It is a hand-reproduction SPEC; the
+# source of truth for the installed versions is
+# engine_h3/venv-engine-h3.freeze.txt. To rebuild by hand: copy this file into an
+# empty scratch directory, renamed `pyproject.toml` (uv reads only that exact
+# name), then
+#   uv venv .venv-engine-h3 --python 3.12
+#   uv pip install --python <repo>\.venv-engine-h3\Scripts\python.exe
+#       --index https://download.pytorch.org/whl/cu130
+#       --index-strategy unsafe-best-match <that scratch directory>
+# validate the result, and regenerate the freeze.
+# ---------------------------------------------------------------------------
+dependencies = [
+    "torch==2.13.0+cu130",
+    "torchvision==0.28.0+cu130",
+    "comfy-kitchen==0.2.37",
+    "triton-windows==3.7.1.post27",
+    "transformers==5.14.1",
+    "safetensors==0.8.0",
+    "einops==0.8.2",
+    "av==18.1.0",
+]

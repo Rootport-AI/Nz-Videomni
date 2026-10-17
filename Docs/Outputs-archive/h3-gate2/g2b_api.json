@@ -1,0 +1,853 @@
+{
+  "started": "2026-10-18 08:31:48",
+  "conditions": {
+    "width": 640,
+    "height": 384,
+    "num_frames": 124,
+    "frame_rate": 24.0,
+    "seed": 42,
+    "num_inference_steps": 20,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+    "image": "C:\\Users\\phenotype nezu\\AppData\\Local\\Temp\\claude\\s--OriginalApps-12-Nz-LTX23-AviUtl2\\93b90569-6ea3-4591-8f76-72824574064d\\scratchpad\\h3\\g2b\\i2v_input_square.png"
+  },
+  "backend_status_before": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": false,
+      "pipeline_type": null,
+      "state": "unloaded",
+      "base_model": "LTX23",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0
+      }
+    }
+  },
+  "models_h3": {
+    "id": "MiniMaxH3",
+    "display_name": "MiniMax H3",
+    "engine_family": "h3",
+    "active": false,
+    "installed": true,
+    "present": true,
+    "missing_categories": [],
+    "unsupported_features": [
+      "loras",
+      "reference_video",
+      "nag",
+      "two_stage_hq",
+      "guidance_scale",
+      "outpaint",
+      "inpaint",
+      "alpha_gen",
+      "prune_vaed",
+      "keep_resident_embeddings",
+      "multi_keyframes",
+      "keyframe_strength",
+      "chain",
+      "retake"
+    ],
+    "constraints": {
+      "num_frames": {
+        "step": 17,
+        "offset": 5,
+        "min": 22,
+        "max": 481
+      },
+      "dimension_multiple": 32,
+      "frame_rate": {
+        "min": 24.0,
+        "max": 24.0
+      },
+      "sampling": {
+        "num_inference_steps": {
+          "min": 1,
+          "max": 50,
+          "step": 1,
+          "default": 20
+        },
+        "shift_video": {
+          "min": 1,
+          "max": 20,
+          "step": 0.1,
+          "default": 12
+        },
+        "shift_audio": {
+          "min": 1,
+          "max": 20,
+          "step": 0.1,
+          "default": 3
+        }
+      }
+    },
+    "category_order": [
+      "transformer",
+      "text_encoder",
+      "video_vae",
+      "audio"
+    ],
+    "transformer_weight_class": null,
+    "categories": {
+      "transformer": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      },
+      "text_encoder": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      },
+      "video_vae": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      },
+      "audio": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      }
+    }
+  },
+  "load_result": {
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled",
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "models": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "finished": true
+  },
+  "load_seconds": 8.8,
+  "backend_status_after_load": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0
+      }
+    }
+  },
+  "load_real_line_seen": true,
+  "jobs": {
+    "t2v1": {
+      "job_id": "3a3c5be9-9cd1-4021-802f-8045e4b2548b",
+      "submit_args": {
+        "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "width": 640,
+        "height": 384,
+        "num_frames": 124,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 20,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false
+      },
+      "final": {
+        "job_id": "3a3c5be9-9cd1-4021-802f-8045e4b2548b",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-10-17T23:31:58Z",
+        "started_at": "2026-10-17T23:31:58Z",
+        "completed_at": "2026-10-17T23:34:36Z",
+        "error": null,
+        "request": {
+          "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": true,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": false,
+          "width": 640,
+          "height": 384,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/3a3c5be9-9cd1-4021-802f-8045e4b2548b/video",
+          "duration_seconds": 5.167,
+          "resolution": "640x384",
+          "file_size_bytes": 854334,
+          "generation_time_seconds": 157.5,
+          "seed_used": 42,
+          "output_path": "outputs/3a3c5be9-9cd1-4021-802f-8045e4b2548b/output.mp4",
+          "metadata_path": "outputs/3a3c5be9-9cd1-4021-802f-8045e4b2548b/metadata.json"
+        }
+      },
+      "client_wall_seconds": 160.15600000000268,
+      "row": {
+        "kind": "t2v1",
+        "job_id": "3a3c5be9-9cd1-4021-802f-8045e4b2548b",
+        "backend": "minimax-h3",
+        "generation_mode": "t2v",
+        "seed_used": 42,
+        "request_steps": 20,
+        "request_shift_video": 12.0,
+        "request_shift_audio": 3.0,
+        "request_keep_resident": true,
+        "request_images": 0,
+        "done_steps": 20,
+        "done_shift_video": 12.0,
+        "done_shift_audio": 3.0,
+        "done_sampler": "euler",
+        "images_used": 0,
+        "keep_resident_used": "on",
+        "attention_used": "sdpa",
+        "block_swap_prefetch_used": "on",
+        "dit_source": "file",
+        "vae_source": "file",
+        "phase_seconds": {
+          "encode": 32.73,
+          "denoise": 110.84,
+          "decode": 13.78
+        },
+        "image_encode": null,
+        "worker_seconds": 157.5,
+        "generation_time_seconds": 157.5,
+        "client_wall_seconds": 160.2,
+        "peak_vram_mb": 6677,
+        "peak_vram_reserved_mb": 7590,
+        "rss_peak_gib": 27.36,
+        "commit_gib": 35.75,
+        "commit_peak_gib": 40.35,
+        "quant_backends": {
+          "eager": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          },
+          "cuda": {
+            "available": true,
+            "disabled": false,
+            "int8_linear": true
+          },
+          "triton": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          },
+          "hip": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          },
+          "ascend": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          }
+        },
+        "output_resolution": "640x384",
+        "output_duration_seconds": 5.167,
+        "sha256": "0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9"
+      }
+    },
+    "t2v2": {
+      "job_id": "2bdc01b4-a3ec-4ddc-a46d-25c899f022d0",
+      "submit_args": {
+        "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "width": 640,
+        "height": 384,
+        "num_frames": 124,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 20,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false
+      },
+      "final": {
+        "job_id": "2bdc01b4-a3ec-4ddc-a46d-25c899f022d0",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-10-17T23:34:38Z",
+        "started_at": "2026-10-17T23:34:38Z",
+        "completed_at": "2026-10-17T23:36:48Z",
+        "error": null,
+        "request": {
+          "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": true,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": false,
+          "width": 640,
+          "height": 384,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/2bdc01b4-a3ec-4ddc-a46d-25c899f022d0/video",
+          "duration_seconds": 5.167,
+          "resolution": "640x384",
+          "file_size_bytes": 854334,
+          "generation_time_seconds": 130.18,
+          "seed_used": 42,
+          "output_path": "outputs/2bdc01b4-a3ec-4ddc-a46d-25c899f022d0/output.mp4",
+          "metadata_path": "outputs/2bdc01b4-a3ec-4ddc-a46d-25c899f022d0/metadata.json"
+        }
+      },
+      "client_wall_seconds": 140.10899999999674,
+      "row": {
+        "kind": "t2v2",
+        "job_id": "2bdc01b4-a3ec-4ddc-a46d-25c899f022d0",
+        "backend": "minimax-h3",
+        "generation_mode": "t2v",
+        "seed_used": 42,
+        "request_steps": 20,
+        "request_shift_video": 12.0,
+        "request_shift_audio": 3.0,
+        "request_keep_resident": true,
+        "request_images": 0,
+        "done_steps": 20,
+        "done_shift_video": 12.0,
+        "done_shift_audio": 3.0,
+        "done_sampler": "euler",
+        "images_used": 0,
+        "keep_resident_used": "on",
+        "attention_used": "sdpa",
+        "block_swap_prefetch_used": "on",
+        "dit_source": "resident",
+        "vae_source": "resident",
+        "phase_seconds": {
+          "encode": 22.66,
+          "denoise": 97.94,
+          "decode": 9.4
+        },
+        "image_encode": null,
+        "worker_seconds": 130.18,
+        "generation_time_seconds": 130.18,
+        "client_wall_seconds": 140.1,
+        "peak_vram_mb": 6677,
+        "peak_vram_reserved_mb": 7590,
+        "rss_peak_gib": 28.72,
+        "commit_gib": 35.78,
+        "commit_peak_gib": 42.84,
+        "quant_backends": {
+          "eager": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          },
+          "cuda": {
+            "available": true,
+            "disabled": false,
+            "int8_linear": true
+          },
+          "triton": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          },
+          "hip": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          },
+          "ascend": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          }
+        },
+        "output_resolution": "640x384",
+        "output_duration_seconds": 5.167,
+        "sha256": "0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9"
+      }
+    },
+    "i2v": {
+      "job_id": "74b81812-c4da-4de7-b852-ba862a8db930",
+      "submit_args": {
+        "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "width": 640,
+        "height": 384,
+        "num_frames": 124,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 20,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "conditioning_images": [
+          {
+            "image_id": "634a26e4-e9f2-4859-8487-80b0d63b319a",
+            "frame_idx": 0
+          }
+        ]
+      },
+      "final": {
+        "job_id": "74b81812-c4da-4de7-b852-ba862a8db930",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-10-17T23:36:58Z",
+        "started_at": "2026-10-17T23:36:58Z",
+        "completed_at": "2026-10-17T23:39:18Z",
+        "error": null,
+        "request": {
+          "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "width": 640,
+          "height": 384,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [
+            {
+              "image_id": "634a26e4-e9f2-4859-8487-80b0d63b319a",
+              "frame_idx": 0,
+              "strength": 0.8,
+              "crf": null
+            }
+          ],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/74b81812-c4da-4de7-b852-ba862a8db930/video",
+          "duration_seconds": 5.167,
+          "resolution": "640x384",
+          "file_size_bytes": 453791,
+          "generation_time_seconds": 139.39,
+          "seed_used": 42,
+          "output_path": "outputs/74b81812-c4da-4de7-b852-ba862a8db930/output.mp4",
+          "metadata_path": "outputs/74b81812-c4da-4de7-b852-ba862a8db930/metadata.json"
+        }
+      },
+      "client_wall_seconds": 140.11000000000058,
+      "row": {
+        "kind": "i2v",
+        "job_id": "74b81812-c4da-4de7-b852-ba862a8db930",
+        "backend": "minimax-h3",
+        "generation_mode": "i2v",
+        "seed_used": 42,
+        "request_steps": 20,
+        "request_shift_video": 12.0,
+        "request_shift_audio": 3.0,
+        "request_keep_resident": false,
+        "request_images": 1,
+        "done_steps": 20,
+        "done_shift_video": 12.0,
+        "done_shift_audio": 3.0,
+        "done_sampler": "euler",
+        "images_used": 1,
+        "keep_resident_used": "off",
+        "attention_used": "sdpa",
+        "block_swap_prefetch_used": "on",
+        "dit_source": "resident",
+        "vae_source": "resident",
+        "phase_seconds": {
+          "encode": 23.33,
+          "image_encode": 0.64,
+          "denoise": 105.65,
+          "decode": 9.51
+        },
+        "image_encode": {
+          "canvas": [
+            640,
+            384
+          ],
+          "source_size": [
+            384,
+            384
+          ],
+          "vision_tokens": 240,
+          "seconds": 0.64
+        },
+        "worker_seconds": 139.39,
+        "generation_time_seconds": 139.39,
+        "client_wall_seconds": 140.1,
+        "peak_vram_mb": 6758,
+        "peak_vram_reserved_mb": 7736,
+        "rss_peak_gib": 28.72,
+        "commit_gib": 4.83,
+        "commit_peak_gib": 42.84,
+        "quant_backends": {
+          "eager": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          },
+          "cuda": {
+            "available": true,
+            "disabled": false,
+            "int8_linear": true
+          },
+          "triton": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          },
+          "hip": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          },
+          "ascend": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          }
+        },
+        "output_resolution": "640x384",
+        "output_duration_seconds": 5.167,
+        "sha256": "ea8dd0b2b00e091c2d1a3bcdd9bacb5f3007e53a8fafd2bdd69f122b6a4c80ff"
+      }
+    }
+  },
+  "upload": {
+    "image_id": "634a26e4-e9f2-4859-8487-80b0d63b319a",
+    "original_filename": "i2v_input_square.png",
+    "stored_path": "uploads/634a26e4-e9f2-4859-8487-80b0d63b319a/input.png",
+    "width": 384,
+    "height": 384,
+    "content_type": "image/png"
+  },
+  "i2v_mp4_comment_present": true,
+  "i2v_mp4_comment_has_h3": true,
+  "unload": {
+    "pipeline_loaded": false,
+    "state": "unloaded"
+  },
+  "backend_status_end": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": false,
+      "pipeline_type": null,
+      "state": "unloaded",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 3,
+        "failed": 0
+      }
+    }
+  },
+  "i2v_first_frame_vs_canvas": {
+    "psnr_db": 29.78,
+    "mse": 68.445,
+    "reference_from": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\634a26e4-e9f2-4859-8487-80b0d63b319a\\input.png",
+    "source_size": [
+      384,
+      384
+    ]
+  },
+  "verdict": {
+    "models_h3_installed": true,
+    "constraints_match_plan": true,
+    "load_ready_on_h3": true,
+    "load_real_worker": true,
+    "backend_real_all": true,
+    "h3_block_in_metadata_all": true,
+    "steps_shift_in_request_all": true,
+    "steps_shift_echoed_in_done_all": true,
+    "keep_resident_used_on_off": true,
+    "t2v1_read_from_file": true,
+    "t2v2_reads_skipped": true,
+    "t2v2_faster": true,
+    "i2v_mode_and_image_used": true,
+    "i2v_crop_path": true
+  },
+  "recorded": {
+    "t2v1_sha256_matches_0da6111c": true,
+    "t2v2_sha256_matches_0da6111c": true,
+    "t2v1_equals_t2v2": true,
+    "t2v1_sha256": "0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9",
+    "t2v2_sha256": "0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9",
+    "note_sha": "the app sends deterministic=true on load; the 2a-G4 selftest ran with deterministic=false. A mismatch is recorded, then judged by the supervisor.",
+    "i2v_psnr_db": 29.78,
+    "i2v_mp4_comment_present": true,
+    "i2v_mp4_comment_has_h3": true,
+    "seconds_t2v1_t2v2_i2v": [
+      157.5,
+      130.18,
+      139.39
+    ],
+    "dit_vae_source": [
+      [
+        "file",
+        "file"
+      ],
+      [
+        "resident",
+        "resident"
+      ],
+      [
+        "resident",
+        "resident"
+      ]
+    ],
+    "peak_vram_mb": [
+      6677,
+      6677,
+      6758
+    ],
+    "commit_peak_gib": [
+      40.35,
+      42.84,
+      42.84
+    ],
+    "commit_gib_after_job": [
+      35.75,
+      35.78,
+      4.83
+    ]
+  },
+  "finished": "2026-10-18 08:39:20"
+}

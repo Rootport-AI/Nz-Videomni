@@ -15,14 +15,14 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-**§1-93（MiniMax H3 対応・α版）は第 1 弾（ワーカーのセルフテスト）が完了し、第 2 弾（ワーカーの I2V と常駐・アダプタ・操作パネル）は実装と機械の門を終えて目視待ち（API 経由の実生成とオーナーの目視が残る）。§1-95 と §1-97 は §1-93 の α版が完結してから着手する（順序はオーナーが決める）。**
+**§1-93（MiniMax H3 対応・α版）は第 1 弾（ワーカーのセルフテスト）が完了し、第 2 弾（ワーカーの I2V と常駐・アダプタ・操作パネル）は実装と機械の門（API 経由の実生成を含む）を終えて目視待ち（オーナーの目視と main への merge が残る）。§1-95 と §1-97 は §1-93 の α版が完結してから着手する（順序はオーナーが決める）。**
 
 ### 1-93. MiniMax H3 対応・α版（公式 FL2VA 枝刈り int8 ConvRot を 16GB で動かす）（起票：2026-10-16）
 
 - **概要**: 第 3 のベースモデルとして MiniMax H3（映像と音声を同時に作る 33B のモデル）を足す。α版の範囲は公式系 FL2VA の枝刈り int8 ConvRot 1 本と int8 ConvRot のテキストエンコーダで、16GB の VRAM で動かすこと。解像度と尺の快適上限の較正は α版に含めず §1-95 で行う。α版では快適上限マーカーを非表示にする。利用者が CivitAI などから落としたファイルを置くだけで動くことを理想とする（裁定 6）。ヘッダの揺れ（[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §13.3）を α版でどこまで吸収するかは計画のセッションで決める。
 - **裁定と前提**: 裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-09-06・2026-10-16・2026-10-17）。範囲のメモは同 §13.8。前提の工事＝フレーム規約 17n+5・24fps 固定・4〜15 秒の系統別制約（同 §9）と、専用の仮想環境（torch は LTX と揃えない）。
 - **α版の完結条件**: AviUtl2 の操作パネルから T2V と I2V（先頭フレームのみ）が生成できること、`install-MiniMaxH3.bat` と README まで進むこと。第 1 弾はワーカーのセルフテストで 1 本生成する。ステップ数と shift（映像・音声）は第 1 弾では既定値で固定し、第 2 弾で操作パネルと Gradio に 3 本のスライダーとして出す（裁定 22）。末尾と中間のキーフレームは §1-97。実装の土台の修正点と論点は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の裁定 17。
-- **入口**: 第 1 弾（ワーカーのセルフテストで T2V 1 本）は完了（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165）。**第 2 弾は実装・門（2a-G1〜G5・2b-G1・2c-G1）・コードのレビュー・ビルドと配置まで完了**（記録は同 §166）。残りは、2b-G2（API 経由の実生成。バックエンドの起動がオーナーの環境で要る）と、2c-G2（オーナーの操作パネルでの目視）と、main への merge。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッションでプランモードで行う。計画とレビューは [`Outputs-archive/h3-stage2-reports-2026-10-17/`](Outputs-archive/h3-stage2-reports-2026-10-17/README.md)、裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の 23〜35。GPU を使う実測は段ごとにオーナーの了承を得る。
+- **入口**: 第 1 弾（ワーカーのセルフテストで T2V 1 本）は完了（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165）。**第 2 弾は実装・門（2a-G1〜G5・2b-G1・2b-G2・2c-G1）・コードのレビュー・ビルドと配置まで完了**（記録は同 §166）。残りは、2c-G2（オーナーの操作パネルでの目視）と、main への merge。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッションでプランモードで行う。計画とレビューは [`Outputs-archive/h3-stage2-reports-2026-10-17/`](Outputs-archive/h3-stage2-reports-2026-10-17/README.md)、裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の 23〜35。GPU を使う実測は段ごとにオーナーの了承を得る。
 - **出典**: 同ノート §13・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §9。
 
 ### 1-95. MiniMax H3 非蒸留 int8 ConvRot の快適上限の較正（起票：2026-10-17）

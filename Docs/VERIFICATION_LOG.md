@@ -17095,11 +17095,11 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 
 ### 166.1 結論
 
-- **第 2 弾の実装は終わり、ワーカー側の門（2a-G1〜G5）とバックエンド側の機械の門（2b-G1）と操作パネル側の機械の門（2c-G1）に合格した。ビルドと配置（`build.ps1`・`deploy.ps1`）も済んだ（2026-10-18 未明）。** 未了は 2 つ。API 経由の実生成（2b-G2）と、オーナーの操作パネルでの目視（2c-G2）である（§166.4・§166.5）。
+- **第 2 弾の実装は終わり、ワーカー側の門（2a-G1〜G5）とバックエンド側の機械の門（2b-G1）と操作パネル側の機械の門（2c-G1）に合格した。ビルドと配置（`build.ps1`・`deploy.ps1`）も済んだ（2026-10-18 未明）。API 経由の実生成（2b-G2）にも合格した（2026-10-18 早朝。§166.4）。** 未了は、オーナーの操作パネルでの目視（2c-G2。§166.5）だけである。
 - 作ったもの: MiniMax H3 の I2V（先頭フレームのみ。視覚塔つきのテキストエンコーダ〔TE〕と、f32 の符号化器による先頭画像の条件づけ）・常駐（`keep_resident`。DiT と VAE を次のジョブまで保持）・TE を層ごとにファイルから GPU へ直接読む方式・復号の VRAM の削減・ジョブごとの attention と先読みの切り替え・バックエンドのアダプタと系統登録と記述子と事前検査・`GET /models` の `constraints`（系統ごとの入力の制約）・ステップ数と shift（映像・音声）の 3 項目・操作パネルと Gradio の 3 本のスライダー・MCP の引数。
 - 主な数値（実測。§166.3）: TE の主メモリの山はコミット量 35.69→5.17GiB（作業セット 24.99→2.26GiB）に下がり、出力はビット一致。T2V の指紋は第 1 弾の新基準 `0da6111c…` のまま一致。1344×768・345 フレームの復号の VRAM 予約ピークは 8.01GB（線 12.8GB）。
 - LTX 2.3／2.5 の生成結果は変わらない。利用者に見える差は 3 点の加算と文言の変更だけ（§166.7）。
-- **この節の時点で、2b-G2 と 2c-G2 は未了。** 結果は後の追記で足す。main への merge は 2c-G2 の合格後にオーナーの合図で行う。
+- **この節の時点で、2c-G2 は未了。** 結果は後の追記で足す。残りは 2c-G2（オーナーの目視）と main への merge だけで、merge は 2c-G2 の合格後にオーナーの合図で行う。
 
 ### 166.2 やり方
 
@@ -17150,7 +17150,24 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 | 門 | 内容 | 結果 |
 |---|---|---|
 | 2b-G1 | アプリのテスト全件。`GET /models` に H3 と `constraints`。mock で T2V と I2V が HTTP 経由で通る。LTX の 422 の形と文言。`metadata.json` の LTX のステップ数 | 合格。監督が結合後に実行して 3,414 件通過・65 件スキップ・失敗 0。`GET /models` に H3 と `constraints` が出る。mock の T2V と I2V が HTTP 経由で通過。LTX の 422 の形と文言は一字一句一致。LTX の `metadata.json` の `num_inference_steps` は 8 のまま。実ファイル 4 本が事前検査を通過し、`_real_available` は真 |
-| 2b-G2 | API 経由の実生成（H3 を読み込み、`POST /generate` で T2V と I2V を 1 本ずつ。`metadata.json` に `h3` が入り、ステップ 20／12／3 が `done` にこだまする。常駐 on で 2 本目が速い） | **未了。** 担当のバックエンド起動が自動許可の判定で拒否されたため、同一プロセスで API を叩く方式で再試行中。結果は別の追記で足す |
+| 2b-G2 | API 経由の実生成（H3 を読み込み、`POST /generate` で T2V と I2V を 1 本ずつ。`metadata.json` に `h3` が入り、ステップ 20／12／3 が `done` にこだまする。常駐 on で 2 本目が速い） | **合格**（2026-10-18 早朝）。合否 14 項目がすべて真。詳細は下の箇条書き |
+
+- 実施: オーナーが `run.bat` でバックエンドを起動し、監督が PowerShell から台本 `run_2b_g2.py` を実行した。サブエージェントによるサーバー起動と台本の実行は自動許可の判定で拒否され、オーナーが許可の規則を設定に足した。
+- 読み込み: アプリの事前検査が実ファイル 4 本を通し、実ワーカー（mock でない）で MiniMaxH3 を読み込んだ。
+- ジョブ: T2V（常駐 on）→ T2V（常駐 on）→ I2V（正方形 384×384 の試験画像。覆う拡縮と中央切り抜きの経路）。条件は 640×384・124 フレーム・24fps・ステップ 20・shift 12／3・seed 42・sdpa。
+- 合否 14 項目（すべて真）: 実ワーカーでの読み込み／全ジョブの `backend` が real／`metadata.json` に `h3` 欄／`request` にステップと shift／`done` にステップと shift のこだま／`keep_resident_used` の on・off／1 本目は DiT と VAE をファイルから読む／2 本目は読み込み省略（`dit_vae_source` が resident）／2 本目が速い／I2V の mode と `images_used`／I2V が切り抜きの経路。
+- 秒数・メモリ:
+
+| ジョブ | 秒数 | VRAM 割り当てピーク | コミット量の山 | ジョブ後のコミット量 |
+|---|---|---|---|---|
+| T2V 1 本目 | 157.5 秒 | 6,677MiB | 40.35GiB | 35.75GiB |
+| T2V 2 本目 | 130.2 秒 | 6,677MiB | 42.84GiB | 35.78GiB |
+| I2V | 139.4 秒 | 6,758MiB | 42.84GiB | 4.83GiB（解放後） |
+
+  I2V は先読み on で、T2V より大きく遅いことはない。
+- T2V の指紋: 2 本とも `0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9` で基準と一致した（アプリは `deterministic: true` で読み込むが、結果は変わらなかった）。I2V の先頭フレームと入力画像（切り抜き後）の PSNR は 29.78dB。I2V の mp4 にはレシピ（`h3` を含む）が埋め込まれている。
+- 後片付け: 台本がパイプラインを解放した。サーバーは止めず、`state.json` も書き換えていない（選択中のベースモデルは MiniMaxH3 のまま）。
+- 結果の所在: `outputs/h3-gate2/g2b_api/`（git 管理外。JSON・mp4・metadata の写し・先頭フレーム）と、[`Outputs-archive/h3-gate2/`](Outputs-archive/h3-gate2/README.md)（git 管理。台本・試験画像・JSON・手順書の複写）。
 
 ### 166.5 2c の門の結果（操作パネル・Gradio・MCP）
 
@@ -17197,7 +17214,7 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - [`Outputs-archive/h3-gate2/`](Outputs-archive/h3-gate2/README.md)（git 管理）: 台本と JSON の複写。
 - [`Outputs-archive/h3-stage2-reports-2026-10-17/`](Outputs-archive/h3-stage2-reports-2026-10-17/README.md)（git 管理）: 計画・計画のレビュー・調査報告（R4a・R4b・R5a・R5b）・`INTERFACE2.md`。
 - 設計の正本は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md)（数値は書かず、本節を参照する）。
-- 次: 2b-G2（API 経由の実生成。バックエンドの起動がオーナー環境で要る）→ 2c-G2（オーナーの目視。§166.9）→ main への `--no-ff` の merge（オーナーの合図）。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッションでプランモード。コミットは監督が dev に積む。
+- 次: 2c-G2（オーナーの目視。§166.9）→ main への `--no-ff` の merge（オーナーの合図）。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッションでプランモード。コミットは監督が dev に積む。
 
 ### 166.9 オーナーの目視と合格
 

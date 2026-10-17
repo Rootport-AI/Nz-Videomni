@@ -1,7 +1,11 @@
 /**
  * Pure helpers enforcing the "frozen constraints" from
  * Docs/API_REFERENCE.md §5.1 that the Create form must never violate:
- * width/height are multiples of 64, num_frames is 8n+1. Kept dependency-free
+ * width/height are multiples of 64, num_frames is 8n+1 — for LTX. Since
+ * MiniMax H3 第 2 弾 (2026-10-17) the grid and the multiple are arguments
+ * (served per base model in `GET /models`' `constraints`), and every one of
+ * them defaults to the LTX value, so a caller that omits them is unchanged.
+ * Kept dependency-free
  * so they're trivially unit-testable and reusable by both the form and the
  * "Get size from AviUtl2" button.
  *
@@ -39,19 +43,46 @@ export function floorToMultiple(value: number, multiple: number, min: number, ma
   return clamp(rounded, min, max);
 }
 
-/** Snaps `raw` to the nearest valid `num_frames` value (8n+1, n >= 1),
- * clamped to [min, max]. `min`/`max` are expected to already be valid 8n+1
- * values (9 and `limits.max_num_frames`, both satisfy this in practice). */
-export function snapNumFrames(raw: number, min: number, max: number): number {
-  const minN = Math.round((min - 1) / 8);
-  const maxN = Math.round((max - 1) / 8);
-  const n = clamp(Math.round((raw - 1) / 8), minN, maxN);
-  return n * 8 + 1;
+/** The `num_frames` lattice: valid values are `step * n + offset`. LTX's is
+ * 8n+1 ({@link LTX_FRAME_GRID}); MiniMax H3's is 17n+5 (第 2 弾, served in
+ * `GET /models`' `base_models[].constraints.num_frames`). */
+export interface FrameGrid {
+  step: number;
+  offset: number;
 }
 
-/** True iff `value` already satisfies the num_frames=8n+1 constraint. */
-export function isValidNumFrames(value: number): boolean {
-  return Number.isInteger(value) && value >= 1 && (value - 1) % 8 === 0;
+/** LTX's 8n+1 lattice — the default every grid-taking helper here falls back
+ * to, so a caller that never heard of another engine (Chained, Edit, Batch)
+ * keeps calling them unchanged. */
+export const LTX_FRAME_GRID: Readonly<FrameGrid> = Object.freeze({ step: 8, offset: 1 });
+
+/** LTX's width/height multiple — the size sliders' default step. */
+export const LTX_DIMENSION_MULTIPLE = 64;
+
+/** Snaps `raw` to the nearest valid `num_frames` value (`grid.step * n +
+ * grid.offset`, LTX's 8n+1 by default), clamped to [min, max]. `min`/`max` are
+ * expected to already be on the grid (9 and `limits.max_num_frames` for LTX;
+ * 22 and 481 for MiniMax H3 — both satisfy this in practice). */
+export function snapNumFrames(raw: number, min: number, max: number, grid: FrameGrid = LTX_FRAME_GRID): number {
+  const { step, offset } = grid;
+  const minN = Math.round((min - offset) / step);
+  const maxN = Math.round((max - offset) / step);
+  const n = clamp(Math.round((raw - offset) / step), minN, maxN);
+  return n * step + offset;
+}
+
+/** True iff `value` already sits on the `num_frames` grid (LTX's 8n+1 by
+ * default). */
+export function isValidNumFrames(value: number, grid: FrameGrid = LTX_FRAME_GRID): boolean {
+  return Number.isInteger(value) && value >= grid.offset && (value - grid.offset) % grid.step === 0;
+}
+
+/** The largest value on `grid` that does not exceed `frames`, never below the
+ * grid's first non-trivial point (`step + offset`, i.e. 9 for 8n+1). The
+ * grid-generic form of `timeline/deriveDuration.ts`'s `floorToFrameGrid`. */
+export function floorToGrid(frames: number, grid: FrameGrid = LTX_FRAME_GRID): number {
+  const n = Math.max(1, Math.floor((frames - grid.offset) / grid.step));
+  return n * grid.step + grid.offset;
 }
 
 /**
@@ -177,6 +208,6 @@ export function isDimensionOnGrid(value: number, multiple: number, min: number, 
  * hardcoded here) since Create and Chain draw them from different config
  * sources (`limits.minNumFrames/maxNumFrames` vs. `MIN_CLIP_NUM_FRAMES`/
  * `MAX_CLIP_NUM_FRAMES`). */
-export function isNumFramesOnGrid(value: number, min: number, max: number): boolean {
-  return isValidNumFrames(value) && value >= min && value <= max;
+export function isNumFramesOnGrid(value: number, min: number, max: number, grid: FrameGrid = LTX_FRAME_GRID): boolean {
+  return isValidNumFrames(value, grid) && value >= min && value <= max;
 }

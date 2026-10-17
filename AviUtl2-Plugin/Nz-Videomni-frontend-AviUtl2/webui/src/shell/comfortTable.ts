@@ -219,6 +219,24 @@ export function resolveComfortRow(
   return null;
 }
 
+/** MiniMax H3 第 2 弾 (2026-10-17): true when the served
+ * `limits.comfort_budgets` table exists, the engine family is known, and the
+ * table carries NO profile for that family — the server's way of saying "this
+ * engine has no comfort line" (MiniMax H3's descriptor has no `comfort`).
+ *
+ * This is the ONLY case in which Create and its right-click seeds drop the
+ * marker altogether instead of falling back to the legacy LTX lookup
+ * (`spill_free_frames`). The other two `null`s {@link resolveComfortRow} can
+ * answer keep their fallback, deliberately: no table at all / engine unknown is
+ * an older backend or the moment before `GET /models` lands, and a profile
+ * whose rows all miss is an LTX configuration the table does not cover — both
+ * are LTX, for which the legacy table is still the truth. */
+export function comfortProfileMissing(limits: AppLimits, engineFamily: string | undefined): boolean {
+  const table = limits.comfort_budgets;
+  if (!table || engineFamily === undefined || engineFamily === "") return false;
+  return !Object.prototype.hasOwnProperty.call(table, engineFamily);
+}
+
 /** The comfortable `num_frames` ceiling at `width x height`, by inverting the
  * token formula `(width//sf) * (height//sf) * latentFrames` against `budget`,
  * then converting the resulting latent-frame count back to pixel frames

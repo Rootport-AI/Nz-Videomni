@@ -40,6 +40,10 @@ export interface DeriveParamsInput {
    * to be multiples of 128 instead of the general-mode 64
    * (Docs/TIMELINE_ALPHA_REQUIREMENTS.md §2). */
   isICLora: boolean;
+  /** The general-mode (non-IC-LoRA) multiple — the loaded base model's
+   * `constraints.dimension_multiple` (MiniMax H3 第 2 弾: 32). Omitted = 64,
+   * LTX's, so every pre-existing caller is unchanged. */
+  generalMultiple?: number | undefined;
   limits: GenerationParamLimits;
 }
 
@@ -86,8 +90,8 @@ function alignedMaxBound(max: number, multiple: number): number {
  * to that multiple first, since `max_height` is not always a clean multiple).
  */
 export function deriveGenerationParams(input: DeriveParamsInput): DerivedGenerationParams {
-  const { mediaWidth, mediaHeight, projectWidth, projectHeight, isICLora, limits } = input;
-  const multiple = isICLora ? 128 : 64;
+  const { mediaWidth, mediaHeight, projectWidth, projectHeight, isICLora, limits, generalMultiple = 64 } = input;
+  const multiple = isICLora ? 128 : generalMultiple;
   const notes: string[] = [];
 
   let rawWidth: number;

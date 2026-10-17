@@ -22,8 +22,11 @@ import { isNagNegativeEmpty, NAG_OFF, nagRequestFields } from "../../shell/nagSe
 import type { NagSettings } from "../../shell/nagSettings";
 import { accelerationRequestFields, ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
-import { comfortFramesForBudget, resolveComfortRow } from "../../shell/comfortTable";
-import { MIN_HEIGHT, MIN_NUM_FRAMES, MIN_WIDTH } from "./defaultConfig";
+import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from "../../shell/comfortTable";
+import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
+import type { SamplingConstraints } from "../../api/types";
+import { MIN_HEIGHT, MIN_WIDTH } from "./defaultConfig";
 import { estimateGenerationSeconds, formatEstimate } from "./estimateUtils";
 import {
   ceilToMultiple,
@@ -46,7 +49,9 @@ import { resolveSpillFreeFrames } from "./spillUtils";
  * multiples of 128, vs. the general-mode 64 (Docs/TIMELINE_ALPHA_REQUIREMENTS.md
  * §2). Kept identical to `deriveGenerationParams`'s `multiple` for IC-LoRA. */
 const IC_LORA_MULTIPLE = 128;
-const GENERAL_MULTIPLE = 64;
+// The general-mode multiple (LTX 64, MiniMax H3 32) is no longer a constant
+// here: it is `constraints.dimensionMultiple` (MiniMax H3 第 2 弾), read as
+// `generalMultiple` inside the hook.
 
 /** W7: the hook-owned reasons the Create Generate button is currently
  * un-submittable, one code per failing gate — the structured form of `isValid`
@@ -76,6 +81,29 @@ export interface FormValues {
   numFrames: number;
   frameRate: number;
   seed: number;
+  /** MiniMax H3 第 2 弾 (裁定 22): the three sampling sliders' values, or
+   * `null` while the loaded base model has no sampling knobs (LTX — the
+   * ordinary case). Seeded from, and reset to, `constraints.sampling.*.default`
+   * whenever the base model's rules change. */
+  sampling: SamplingValues | null;
+}
+
+/** The sampling sliders' current values (MiniMax H3 第 2 弾). */
+export interface SamplingValues {
+  numInferenceSteps: number;
+  shiftVideo: number;
+  shiftAudio: number;
+}
+
+/** The server defaults of a `constraints.sampling` block, or `null` for an
+ * engine without one. */
+function samplingDefaults(sampling: SamplingConstraints | null): SamplingValues | null {
+  if (!sampling) return null;
+  return {
+    numInferenceSteps: sampling.num_inference_steps.default,
+    shiftVideo: sampling.shift_video.default,
+    shiftAudio: sampling.shift_audio.default,
+  };
 }
 
 export interface FormLimits {
@@ -153,6 +181,24 @@ export interface UseGenerationFormDeps {
    * match, so a typed row misses and the marker falls back to the legacy
    * table. */
   weightClass?: string | undefined;
+  /** MiniMax H3 第 2 弾: the LOADED base model's numeric rules
+   * (`useBaseModels().activeConstraints`) — the frame grid and its floor, the
+   * size multiple, the fps range (a fixed rate disables the field) and the
+   * sampling sliders. Omitted (every pre-existing unit test) = the LTX rules,
+   * i.e. exactly the old constants. When it changes (a base-model switch) the
+   * form re-snaps DURATION and the size onto the new grid, pins a fixed fps,
+   * and resets the sampling sliders to the new defaults. */
+  constraints?: GenerationConstraints | undefined;
+  /** MiniMax H3 第 2 弾 (code review M-1): the loaded base model's engine
+   * cannot take a reference video (`reference_video` — Create HIDES the
+   * IC-LoRA accordion, with the control-LoRA picker inside it). While true the
+   * form reads the reference video AND the control LoRA as absent — the same
+   * shape as NAG's `effectiveNag`: nothing of them rides on a request, none of
+   * their Generate gates fire, and the 128 grid does not apply. The user's
+   * selections are not cleared, so a base model that takes them gets them
+   * back. Style `<lora:…>` tags in the prompt are untouched (the server's 422
+   * covers them). Omitted = available. */
+  referenceVideoUnavailable?: boolean | undefined;
 }
 
 function noopSetControlLora(): void {
@@ -405,6 +451,21 @@ export interface UseGenerationFormResult {
   setNumFrames: (value: number, snap?: boolean) => void;
   setFrameRate: (value: number) => void;
   setSeed: (value: number) => void;
+  /** MiniMax H3 第 2 弾: sets one sampling slider. The value is clamped into
+   * the served range (and the step count rounded to a whole number). A no-op
+   * while `values.sampling` is `null`. */
+  setSamplingValue: (key: keyof SamplingValues, value: number) => void;
+  /** The served sampling ranges (`constraints.sampling`), or `null` — what
+   * `GenerationForm` draws the three sliders from. */
+  samplingConstraints: SamplingConstraints | null;
+  /** The fixed frame rate the loaded engine runs at, or `null` when the user
+   * chooses (`constraints.frame_rate.min === max`). Disables the fps field. */
+  fixedFrameRate: number | null;
+  /** The `num_frames` lattice in force (LTX 8n+1, MiniMax H3 17n+5) — the
+   * DURATION slider's step and the preset/guard snap read it. */
+  frameGrid: GenerationConstraints["frameGrid"];
+  /** The general-mode width/height multiple in force (the size sliders' step). */
+  dimensionStep: number;
   applyPreset: (name: string) => void;
   getSizeFromAviUtl2: () => Promise<void>;
   toGenerateRequest: () => GenerateRequest;
@@ -442,7 +503,11 @@ export function useGenerationForm(
   // pre-existing unit test that omits these options gets `null` and a no-op
   // setter, i.e. "no control LoRA, ever" (this hook never introduces its own
   // fallback `useState` for it — there is exactly one owner).
-  const controlLora = deps.controlLora ?? null;
+  // Code review M-1: while the reference-video feature is closed, the control
+  // LoRA reads as "none" (see `referenceVideoUnavailable`). The ONE place it
+  // is folded; every gate and request builder below reads this local.
+  const referenceVideoUnavailable = deps.referenceVideoUnavailable ?? false;
+  const controlLora = referenceVideoUnavailable ? null : (deps.controlLora ?? null);
   const setControlLora = deps.setControlLora ?? noopSetControlLora;
   const controlLoraNames = deps.controlLoraNames ?? new Set(Object.keys(config.model?.ic_loras ?? {}));
 
@@ -468,6 +533,11 @@ export function useGenerationForm(
   const engineFamily = deps.engineFamily;
   // §1-31: the weight class joins the match beside the engine family.
   const weightClass = deps.weightClass;
+  // MiniMax H3 第 2 弾: the loaded base model's numeric rules. Omitted = LTX.
+  const rules = deps.constraints ?? LTX_GENERATION_CONSTRAINTS;
+  const frameGrid = rules.frameGrid;
+  const generalMultiple = rules.dimensionMultiple;
+  const fixedFps = fixedFrameRate(rules);
 
   const setControlLoraStrength = useCallback(
     (raw: number) => {
@@ -505,10 +575,11 @@ export function useGenerationForm(
       maxWidth: config.limits.max_width,
       minHeight: MIN_HEIGHT,
       maxHeight: config.limits.max_height,
-      minNumFrames: MIN_NUM_FRAMES,
-      maxNumFrames: config.limits.max_num_frames,
+      // MiniMax H3 第 2 弾: the engine's own floor and ceiling (LTX: 9 and the
+      // config's maximum, exactly as before).
+      ...frameLimitsFor(rules, config.limits.max_num_frames),
     }),
-    [config.limits.max_width, config.limits.max_height, config.limits.max_num_frames],
+    [config.limits.max_width, config.limits.max_height, config.limits.max_num_frames, rules],
   );
 
   const referenceVideo = useSourceUpload("video", {
@@ -517,7 +588,8 @@ export function useGenerationForm(
     // id is still valid server-side, so no re-upload.
     ...(initial.carryReferenceVideo ? { initial: initial.carryReferenceVideo } : {}),
   });
-  const referenceVideoId = referenceVideo.state.id;
+  // Code review M-1: the same fold for the reference video itself.
+  const referenceVideoId = referenceVideoUnavailable ? null : referenceVideo.state.id;
 
   // Reference-video (control IC-LoRA) strength overrides — `null` ("not set")
   // until the user opts in via the UI's enable checkbox, matching the
@@ -621,7 +693,7 @@ export function useGenerationForm(
   const active = useMemo(() => {
     if (!icLoraActive) {
       return {
-        multiple: GENERAL_MULTIPLE,
+        multiple: generalMultiple,
         minWidth: baseLimits.minWidth,
         maxWidth: baseLimits.maxWidth,
         minHeight: baseLimits.minHeight,
@@ -637,7 +709,7 @@ export function useGenerationForm(
       minHeight: ceilToMultiple(baseLimits.minHeight, IC_LORA_MULTIPLE, baseLimits.minHeight, maxHeight),
       maxHeight,
     };
-  }, [icLoraActive, baseLimits]);
+  }, [icLoraActive, baseLimits, generalMultiple]);
 
   // The limits exposed to the UI (SizeFields' input bounds) reflect the active
   // width/height grid; num_frames bounds are unaffected by IC-LoRA.
@@ -656,7 +728,7 @@ export function useGenerationForm(
     // Seed on the correct grid from the start: an IC-LoRA route already handed
     // us 128-aligned width/height via `deriveGenerationParams`, but re-round
     // here defensively so the initial state is always self-consistent.
-    const mult = seedICLora ? IC_LORA_MULTIPLE : GENERAL_MULTIPLE;
+    const mult = seedICLora ? IC_LORA_MULTIPLE : generalMultiple;
     const maxW = seedICLora
       ? floorToMultiple(config.limits.max_width, IC_LORA_MULTIPLE, 0, config.limits.max_width)
       : config.limits.max_width;
@@ -671,17 +743,47 @@ export function useGenerationForm(
       // W8: a right-click prefill can seed DURATION (comfort ceiling / material
       // length); otherwise the config default, unchanged. Re-snapped so the
       // initial state is always a valid 8n+1 value in range.
-      numFrames: snapNumFrames(initial.numFrames ?? config.generation_defaults.num_frames, MIN_NUM_FRAMES, config.limits.max_num_frames),
+      numFrames: snapNumFrames(
+        initial.numFrames ?? config.generation_defaults.num_frames,
+        baseLimits.minNumFrames,
+        baseLimits.maxNumFrames,
+        frameGrid,
+      ),
       // W7: a right-click prefill can seed fps (material policy: selection
       // rate/scale); otherwise the config default.
       // 台帳§3-71/§3-72: snapped to a whole frame rate here too, so a non-integer
       // CONFIG default can't slip past every entry point. The fallback is the
       // constant, NOT `?? config…` — chaining back to the config would let the
       // raw value through exactly when the snap rejected it.
-      frameRate: snapFrameRate(initial.frameRate ?? config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
+      // MiniMax H3 第 2 弾: an engine fixed at one rate takes it, whatever
+      // the seed said.
+      frameRate:
+        fixedFps ?? snapFrameRate(initial.frameRate ?? config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
       seed: config.generation_defaults.seed,
+      sampling: samplingDefaults(rules.sampling),
     };
   });
+
+  // MiniMax H3 第 2 弾: follow a change of the loaded base model's rules (a
+  // base-model switch while the form is mounted). Skips the first render —
+  // the lazy initializer above already used these rules — and fires only on a
+  // real change: `useBaseModels` keeps the object stable while its content is.
+  // DURATION and the size are re-snapped onto the new grid (a value valid on
+  // the old one would otherwise block Generate), a fixed fps is pinned, and the
+  // sampling sliders go back to the new base model's defaults.
+  const appliedRulesRef = useRef(rules);
+  useEffect(() => {
+    if (appliedRulesRef.current === rules) return;
+    appliedRulesRef.current = rules;
+    setValues((prev) => ({
+      ...prev,
+      width: roundToMultiple(prev.width, active.multiple, active.minWidth, active.maxWidth),
+      height: roundToMultiple(prev.height, active.multiple, active.minHeight, active.maxHeight),
+      numFrames: snapNumFrames(prev.numFrames, baseLimits.minNumFrames, baseLimits.maxNumFrames, frameGrid),
+      frameRate: fixedFps ?? prev.frameRate,
+      sampling: samplingDefaults(rules.sampling),
+    }));
+  }, [rules, active, baseLimits, frameGrid, fixedFps]);
 
   // Smart comfort marker (2026-08-31, was 2026-08-18): which comfort row the
   // SERVED table (`config.limits.comfort_budgets`) gives this engine family +
@@ -699,6 +801,12 @@ export function useGenerationForm(
   // the rest of the derived values further down, because the A2V wav
   // auto-adjust effect reads `spillThresholdFrames` and would otherwise see it
   // in its temporal dead zone.
+  //
+  // MiniMax H3 第 2 弾: an engine the served table has NO profile for has no
+  // comfort line at all — `noComfortLine` drops the marker, its warning and the
+  // A2V cap rather than falling back to the LTX `spill_free_frames` lookup
+  // (`comfortTable.comfortProfileMissing` says why only that case does).
+  const noComfortLine = comfortProfileMissing(config.limits, engineFamily);
   const comfortRow = useMemo(
     () => resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable, weightClass),
     [config.limits, engineFamily, acceleration, sageAvailable, weightClass],
@@ -717,8 +825,9 @@ export function useGenerationForm(
   // `??`, not a ternary on `comfortRow`: a matched row whose smart derivation
   // still yields `null` (a hand-typed 0/blank width) falls back to the legacy
   // lookup exactly as it did before, rather than blanking the marker.
-  const spillThresholdFrames =
-    smartComfortFrames ?? resolveSpillFreeFrames(config.limits.spill_free_frames, values.width, values.height);
+  const spillThresholdFrames = noComfortLine
+    ? null
+    : (smartComfortFrames ?? resolveSpillFreeFrames(config.limits.spill_free_frames, values.width, values.height));
   const isComfortMarkerSmart = smartComfortFrames !== null;
   const isOverSpillThreshold = spillThresholdFrames !== null && values.numFrames > spillThresholdFrames;
 
@@ -759,14 +868,14 @@ export function useGenerationForm(
   const setNumFrames = useCallback(
     (raw: number, snap = true) =>
       setValues((prev) => {
-        if (snap) return { ...prev, numFrames: snapNumFrames(raw, limits.minNumFrames, limits.maxNumFrames) };
+        if (snap) return { ...prev, numFrames: snapNumFrames(raw, limits.minNumFrames, limits.maxNumFrames, frameGrid) };
         // Free manual entry: pass through untouched (no snapping, no clamp —
         // Gradio-faithful), mirroring `setWidth`/`setHeight`. Reject only
         // non-finite input, keeping the prior value.
         if (!Number.isFinite(raw)) return prev;
         return { ...prev, numFrames: raw };
       }),
-    [limits.minNumFrames, limits.maxNumFrames],
+    [limits.minNumFrames, limits.maxNumFrames, frameGrid],
   );
 
   // 台帳§3-71/§3-72: rounds as well as clamping now — the generation only ever
@@ -776,9 +885,30 @@ export function useGenerationForm(
   // `<input type="number">` reports a cleared (or half-typed, e.g. `"29."`)
   // box as `""`, which the change handler passes on as `Number("") === 0`,
   // and 0 landed on 1 under the old `Math.min(60, Math.max(1, raw))` too.
+  // MiniMax H3 第 2 弾: a fixed rate cannot be moved (the field is disabled,
+  // but the `project` prefill overwrite still calls this setter).
   const setFrameRate = useCallback(
-    (raw: number) => setValues((prev) => ({ ...prev, frameRate: snapFrameRate(raw) ?? FRAME_RATE_MIN })),
-    [],
+    (raw: number) => setValues((prev) => ({ ...prev, frameRate: fixedFps ?? snapFrameRate(raw) ?? FRAME_RATE_MIN })),
+    [fixedFps],
+  );
+
+  // MiniMax H3 第 2 弾: one setter for the three sampling sliders, clamped into
+  // the served range. The step count is a whole number on the wire.
+  const samplingConstraints = rules.sampling;
+  const setSamplingValue = useCallback(
+    (key: keyof SamplingValues, raw: number) => {
+      if (!samplingConstraints || !Number.isFinite(raw)) return;
+      const range =
+        key === "numInferenceSteps"
+          ? samplingConstraints.num_inference_steps
+          : key === "shiftVideo"
+            ? samplingConstraints.shift_video
+            : samplingConstraints.shift_audio;
+      const clamped = clamp(raw, range.min, range.max);
+      const value = key === "numInferenceSteps" ? Math.round(clamped) : clamped;
+      setValues((prev) => (prev.sampling ? { ...prev, sampling: { ...prev.sampling, [key]: value } } : prev));
+    },
+    [samplingConstraints],
   );
 
   const setSeed = useCallback((raw: number) => setValues((prev) => ({ ...prev, seed: Math.trunc(raw) })), []);
@@ -801,14 +931,14 @@ export function useGenerationForm(
         ...prev,
         width: newWidth,
         height: newHeight,
-        numFrames: snapNumFrames(preset.num_frames, limits.minNumFrames, limits.maxNumFrames),
+        numFrames: snapNumFrames(preset.num_frames, limits.minNumFrames, limits.maxNumFrames, frameGrid),
       }));
       // N1: mirror the preset's own crop_output (Gradio-faithful) — reflect
       // it when present, or turn crop OFF (back to `null`) when the preset
       // doesn't define one, rather than leaving a stale prior crop in place.
       setCropOutput(preset.crop_output ? clampCropOutput(preset.crop_output, newWidth, newHeight) : null);
     },
-    [config.generation_presets, active, limits.minNumFrames, limits.maxNumFrames],
+    [config.generation_presets, active, limits.minNumFrames, limits.maxNumFrames, frameGrid],
   );
 
   const getSizeFromAviUtl2 = useCallback(async () => {
@@ -947,6 +1077,7 @@ export function useGenerationForm(
         suggestFramesForAudio(probe.durationSec, values.frameRate),
         limits.minNumFrames,
         limits.maxNumFrames,
+        frameGrid,
       );
       // W8: cap the wav-derived suggestion at the current resolution's comfort
       // ceiling so a long wav never auto-adjusts DURATION past the point
@@ -996,7 +1127,7 @@ export function useGenerationForm(
       // never see a duration for this upload.
       if (!settled) probedAudioIdRef.current = null;
     };
-  }, [sourceAudio.state.status, sourceAudio.state.id, sourceAudio.state.filePath, nativeBridge, values.frameRate, values.width, values.height, spillThresholdFrames, limits.minNumFrames, limits.maxNumFrames, a2vSeedMaxFrames]);
+  }, [sourceAudio.state.status, sourceAudio.state.id, sourceAudio.state.filePath, nativeBridge, values.frameRate, values.width, values.height, spillThresholdFrames, limits.minNumFrames, limits.maxNumFrames, frameGrid, a2vSeedMaxFrames]);
 
   // A2V-only: gates on whether the attached wav's MEASURED duration is long
   // enough for `values.numFrames` (`chainUtils.audioLengthPrecheck`). `null`
@@ -1021,7 +1152,7 @@ export function useGenerationForm(
   // non-8n+1 or out-of-range value must block Generate. Uses the SAME
   // min/max source `setNumFrames`'s snap path already uses
   // (`limits.minNumFrames/maxNumFrames`, unaffected by IC-LoRA).
-  const numFramesOnGrid = isNumFramesOnGrid(values.numFrames, limits.minNumFrames, limits.maxNumFrames);
+  const numFramesOnGrid = isNumFramesOnGrid(values.numFrames, limits.minNumFrames, limits.maxNumFrames, frameGrid);
 
   // `<lora:name:strength>` tags found in the prompt — parsed once here
   // (rather than only at request-build time) so the reference-video gates
@@ -1080,7 +1211,7 @@ export function useGenerationForm(
   // footage the user never selected, so block instead. The flag is only ever set
   // when a trim was actually requested (`useSourceUpload`), i.e. for a routed #2
   // right-click; the manual 📁 pick never arms it.
-  if (referenceVideo.state.trimFailed) validityReasons.push("referenceTrimFailed");
+  if (!referenceVideoUnavailable && referenceVideo.state.trimFailed) validityReasons.push("referenceTrimFailed");
   const isValid = validityReasons.length === 0;
 
   const durationHint = formatDurationHint(values.numFrames, values.frameRate);
@@ -1120,6 +1251,17 @@ export function useGenerationForm(
       num_frames: values.numFrames,
       frame_rate: values.frameRate,
       seed: values.seed,
+      // MiniMax H3 第 2 弾 (裁定 22): the three sampling values, ALWAYS while
+      // the loaded base model publishes `constraints.sampling` (one rule — the
+      // server would write its defaults back anyway) and never otherwise, so
+      // an LTX request stays byte-identical to before.
+      ...(values.sampling
+        ? {
+            num_inference_steps: values.sampling.numInferenceSteps,
+            shift_video: values.sampling.shiftVideo,
+            shift_audio: values.sampling.shiftAudio,
+          }
+        : {}),
       // NAG (2026-07-28)/VSF (2026-07-29): the additive `negative_prompt`/
       // `nag_*`/`neg_method`/`vsf_scale` set of 7, built by the single shared
       // contract function — `{}` (no keys at all)
@@ -1252,6 +1394,11 @@ export function useGenerationForm(
     setNumFrames,
     setFrameRate,
     setSeed,
+    setSamplingValue,
+    samplingConstraints,
+    fixedFrameRate: fixedFps,
+    frameGrid,
+    dimensionStep: generalMultiple,
     applyPreset,
     getSizeFromAviUtl2,
     toGenerateRequest,

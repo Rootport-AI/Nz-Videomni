@@ -12,7 +12,10 @@ import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { useToasts } from "../../shell/ToastContext";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
 import { BatchSection } from "../batch/BatchSection";
-import { comfortFramesForBudget, resolveComfortRow } from "../../shell/comfortTable";
+import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from "../../shell/comfortTable";
+import type { SingleSectionsDisabled } from "../../shell/featureScope";
+import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { computeTargetNumFrames } from "../../timeline/deriveDuration";
 import { DURATION_POLICY_BY_INTENT, materialDurationForIntent, resolvePrefillSeed } from "../../timeline/prefillSeed";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
@@ -22,7 +25,6 @@ import { bindToJob, publishFormValues, publishKeyframeCount, publishSourceSlots,
 import { subscribeCreateCommands } from "../../timeline/createLiveCommands";
 import { useShowNote } from "../../shell/NoteArea";
 import { fileNameFromPath } from "./keyframeUtils";
-import { MIN_NUM_FRAMES } from "./defaultConfig";
 import { findOverflowFrameIdxs, nextAddPosition, placeableSlotCount } from "./keyframeGrid";
 import { KeyframeShrinkModal } from "./KeyframeShrinkModal";
 import { GenerateButtonBar } from "./GenerateButtonBar";
@@ -102,6 +104,17 @@ export interface SingleScreenProps {
    * way its own runner state does — no new mechanism, just another reason.
    * Omitted ⇒ available, so every direct-render test keeps compiling. */
   batchUnavailable?: boolean | undefined;
+  /** MiniMax H3 第 2 弾: the LOADED base model's numeric rules
+   * (`useBaseModels().activeConstraints`) — Create's frame grid, size
+   * multiple, fps range and sampling sliders, threaded to `useGenerationForm`
+   * and to this screen's right-click seeds (the same value `AppShell` hands its
+   * own `resolvePrefillSeed` call, R-4). Omitted = the LTX rules, so every
+   * direct-render test keeps compiling and behaving as before. */
+  constraints?: GenerationConstraints | undefined;
+  /** MiniMax H3 第 2 弾: the parts of Create the loaded base model's engine
+   * cannot use (`featureScope.singleSectionsDisabledFor`), as finished
+   * booleans. Omitted = everything usable. */
+  sectionsUnavailable?: SingleSectionsDisabled | undefined;
 }
 
 /** The "Create" screen: T2V generation form (minus the prompt, which lives in
@@ -126,6 +139,8 @@ export function SingleScreen({
   engineFamily,
   weightClass,
   batchUnavailable,
+  constraints,
+  sectionsUnavailable,
 }: SingleScreenProps) {
   const strings = useStrings();
   const configState = useConfig();
@@ -153,6 +168,8 @@ export function SingleScreen({
       engineFamily={engineFamily}
       weightClass={weightClass}
       batchUnavailable={batchUnavailable}
+      constraints={constraints}
+      sectionsUnavailable={sectionsUnavailable}
     />
   );
 }
@@ -175,6 +192,8 @@ interface SingleScreenBodyProps {
   engineFamily?: string | undefined;
   weightClass?: string | undefined;
   batchUnavailable?: boolean | undefined;
+  constraints?: GenerationConstraints | undefined;
+  sectionsUnavailable?: SingleSectionsDisabled | undefined;
 }
 
 function SingleScreenBody({
@@ -195,6 +214,8 @@ function SingleScreenBody({
   engineFamily,
   weightClass,
   batchUnavailable = false,
+  constraints,
+  sectionsUnavailable,
 }: SingleScreenBodyProps) {
   const strings = useStrings();
   const toasts = useToasts();
@@ -307,9 +328,10 @@ function SingleScreenBody({
             acceleration,
             sageAvailable,
             weightClass,
+            constraints,
           })
         : null,
-    [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass],
+    [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass, constraints],
   );
   const derived = seed?.derived ?? null;
   const prefillFrameRate = seed?.frameRate;
@@ -356,6 +378,8 @@ function SingleScreenBody({
       sageAvailable,
       engineFamily,
       weightClass,
+      constraints,
+      referenceVideoUnavailable: sectionsUnavailable?.referenceVideo,
     },
     {
       ...(derived
@@ -444,7 +468,11 @@ function SingleScreenBody({
         // policy can't resolve a value (null) or the intent has no DURATION policy.
         const effectiveWidth = sizePolicy === "project" ? editInfo.width : form.values.width;
         const effectiveHeight = sizePolicy === "project" ? editInfo.height : form.values.height;
-        const effectiveGenFps = fpsPolicy === "project" ? projectGenFps : form.values.frameRate;
+        // MiniMax H3 第 2 弾: a fixed engine rate is what the form holds and
+        // what the request carries, whatever the `project` policy read.
+        const rules = constraints ?? LTX_GENERATION_CONSTRAINTS;
+        const effectiveGenFps =
+          fixedFrameRate(rules) ?? (fpsPolicy === "project" ? projectGenFps : form.values.frameRate);
         const policy = DURATION_POLICY_BY_INTENT[initialIntent.intent];
         if (policy) {
           const materialDurationSec = materialDurationForIntent(initialIntent.intent, initialIntent.selection);
@@ -458,17 +486,22 @@ function SingleScreenBody({
           // Gated on `acceleration` for the same reason `resolvePrefillSeed` is:
           // a caller that does not thread the Settings state cannot say what
           // would effectively run, so it keeps the legacy ceiling.
-          const comfortRow = acceleration
-            ? resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null, weightClass)
-            : null;
+          // MiniMax H3 第 2 弾: no comfort line at all for an engine the served
+          // table has no profile for — only the grid snap remains.
+          const noComfortLine = comfortProfileMissing(config.limits, engineFamily);
+          const frameLimits = frameLimitsFor(rules, config.limits.max_num_frames);
+          const comfortRow =
+            acceleration && !noComfortLine
+              ? resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null, weightClass)
+              : null;
           const smartCeiling =
             comfortRow
               ? comfortFramesForBudget(
                   effectiveWidth,
                   effectiveHeight,
                   comfortRow.singleBudget,
-                  MIN_NUM_FRAMES,
-                  config.limits.max_num_frames,
+                  frameLimits.minNumFrames,
+                  frameLimits.maxNumFrames,
                   comfortRow.spatialFactor,
                   comfortRow.temporalFactor,
                 )
@@ -477,9 +510,10 @@ function SingleScreenBody({
             policy,
             width: effectiveWidth,
             height: effectiveHeight,
-            spillFreeFrames: config.limits.spill_free_frames,
-            minNumFrames: MIN_NUM_FRAMES,
-            maxNumFrames: config.limits.max_num_frames,
+            spillFreeFrames: noComfortLine ? null : config.limits.spill_free_frames,
+            minNumFrames: frameLimits.minNumFrames,
+            maxNumFrames: frameLimits.maxNumFrames,
+            frameGrid: rules.frameGrid,
             ...(smartCeiling !== null ? { comfortCeilingFrames: smartCeiling } : {}),
             ...(materialDurationSec !== undefined ? { materialDurationSec } : {}),
             genFps: effectiveGenFps,
@@ -492,7 +526,15 @@ function SingleScreenBody({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount consume
   }, []);
-  const keyframes = useKeyframes(config, { nativeBridge });
+  // MiniMax H3 第 2 弾: an engine that takes only the first frame
+  // (`multi_keyframes`) caps the panel at one card — the add button greys once
+  // it exists. A card left from another base model is not removed; the
+  // server's 422 wording covers that case (m-18).
+  const keyframes = useKeyframes(
+    config,
+    { nativeBridge },
+    sectionsUnavailable?.keyframesMulti ? { maxItemsOverride: 1 } : {},
+  );
 
   // I9 §3-4 (#2/#4) / §6: auto-load the routed material ONCE on this remount,
   // mirroring ChainedScreen's I8 pattern. #2 `reference-video` uploads the
@@ -936,7 +978,9 @@ function SingleScreenBody({
       const preset = config.generation_presets[name];
       // Mirror exactly what `applyPreset(name)` would set: the preset's
       // num_frames run through the same snap/clamp the form uses.
-      return preset ? snapNumFrames(preset.num_frames, MIN_NUM_FRAMES, config.limits.max_num_frames) : null;
+      return preset
+        ? snapNumFrames(preset.num_frames, form.limits.minNumFrames, form.limits.maxNumFrames, form.frameGrid)
+        : null;
     },
     items: keyframes.items,
     removeKeyframe: keyframes.remove,
@@ -1008,6 +1052,11 @@ function SingleScreenBody({
   // (This applies only while no Repeat count run is active — while a run has
   // remaining sends, the button is an always-enabled Stop, and the automatic
   // resend does not wait for serverBusy: a 409 ends the run instead.)
+  // Code review M-1: the reference-video slot's upload state, ignored while the
+  // loaded base model closes the reference video (`useGenerationForm`'s
+  // `referenceVideoUnavailable` folds the rest of it).
+  const referenceUploading = form.referenceVideo.state.status === "uploading";
+  const referenceClosed = sectionsUnavailable?.referenceVideo ?? false;
   const generateDisabled =
     submitting ||
     serverBusy ||
@@ -1023,7 +1072,9 @@ function SingleScreenBody({
     // the `isICLora && !ready` gate below no longer covers this window — without
     // this the form would submit a reference-less plain T2V. Mirrors the
     // source-audio uploading gate directly above.
-    form.referenceVideo.state.status === "uploading" ||
+    // Code review M-1: not while the reference video is closed — the form then
+    // reads it as absent, so an upload into the hidden slot must not block.
+    (referenceUploading && !referenceClosed) ||
     // IC-LoRA requires a reference video before it can submit
     // (`reference_video_id` is mandatory for that flow).
     (form.isICLora && form.referenceVideo.state.status !== "ready") ||
@@ -1051,7 +1102,7 @@ function SingleScreenBody({
     // Y1: reference-video upload in flight (see the matching `generateDisabled`
     // gate) — the note tells the user to wait rather than leaving Generate
     // disabled with no reason line.
-    ...(form.referenceVideo.state.status === "uploading" ? ["referenceUploading"] : []),
+    ...(referenceUploading && !referenceClosed ? ["referenceUploading"] : []),
     ...(form.isICLora && form.referenceVideo.state.status !== "ready" ? ["referenceNotReady"] : []),
     ...(hasOverflowKeyframes ? ["overflowKeyframes"] : []),
   ];
@@ -1140,6 +1191,7 @@ function SingleScreenBody({
           nativeBridge={nativeBridge}
           autoOpenReference={autoOpenReference}
           autoOpenA2v={autoOpenA2v}
+          sectionsUnavailable={sectionsUnavailable}
         />
         <div className="generation-column">
           <GenerateButtonBar

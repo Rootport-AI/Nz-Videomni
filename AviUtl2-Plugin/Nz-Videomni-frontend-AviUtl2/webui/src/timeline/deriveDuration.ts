@@ -31,7 +31,8 @@
  * rather than re-deriving.
  */
 
-import { snapNumFrames } from "../modes/single/paramUtils";
+import { floorToGrid, LTX_FRAME_GRID, snapNumFrames } from "../modes/single/paramUtils";
+import type { FrameGrid } from "../modes/single/paramUtils";
 import { resolveSpillFreeFrames } from "../modes/single/spillUtils";
 
 /**
@@ -104,6 +105,10 @@ export interface ComputeTargetNumFramesArgs {
    * be turned into a duration, and a raw frame count would be wrong by the
    * ratio of the two rates. */
   projectFps?: number;
+  /** The `num_frames` lattice the result must land on (MiniMax H3 第 2 弾).
+   * Omitted = LTX's 8n+1, so every pre-existing caller is unchanged. Passed by
+   * Create's right-click seeds from the loaded base model's `constraints`. */
+  frameGrid?: FrameGrid | undefined;
 }
 
 /**
@@ -143,6 +148,7 @@ export function computeTargetNumFrames(args: ComputeTargetNumFramesArgs): number
     genFps,
     selectedRangeFrames,
     projectFps,
+    frameGrid = LTX_FRAME_GRID,
   } = args;
 
   if (policy === "untouched") return null;
@@ -180,17 +186,19 @@ export function computeTargetNumFrames(args: ComputeTargetNumFramesArgs): number
 
   if (policy === "comfortCeiling") {
     if (ceiling === null) return null;
-    return snapNumFrames(ceiling, minNumFrames, maxNumFrames);
+    return snapNumFrames(ceiling, minNumFrames, maxNumFrames, frameGrid);
   }
 
   // policy === "materialClampedToCeiling"
   if (materialDurationSec === undefined || genFps === undefined || genFps <= 0) return null;
 
   const rawFrames = Math.floor(materialDurationSec * genFps);
-  let target = floorToFrameGrid(rawFrames);
+  let target = floorToFrameGrid(rawFrames, frameGrid);
   if (ceiling !== null) target = Math.min(target, ceiling);
   if (target < minNumFrames) target = minNumFrames;
-  return target;
+  // Code review m-1 (MiniMax H3 第 2 弾): with no comfort line at all the
+  // ceiling above is absent, so the form's own maximum is the last cap.
+  return Math.min(target, maxNumFrames);
 }
 
 /**
@@ -207,7 +215,8 @@ export function computeTargetNumFrames(args: ComputeTargetNumFramesArgs): number
  * rather than imported, since that one is bundled with A2V-specific duration
  * math this module has no use for.
  */
-export function floorToFrameGrid(frames: number): number {
-  const n = Math.max(1, Math.floor((frames - 1) / 8));
-  return n * 8 + 1;
+export function floorToFrameGrid(frames: number, grid: FrameGrid = LTX_FRAME_GRID): number {
+  // MiniMax H3 第 2 弾: the grid is an argument now (8n+1 by default, so every
+  // existing caller is unchanged); `paramUtils.floorToGrid` is the one body.
+  return floorToGrid(frames, grid);
 }

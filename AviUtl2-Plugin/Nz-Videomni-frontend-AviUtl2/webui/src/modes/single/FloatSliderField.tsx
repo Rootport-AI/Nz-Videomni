@@ -6,6 +6,10 @@ export interface FloatSliderFieldProps {
   step: number;
   disabled: boolean;
   onChange: (value: number) => void;
+  /** MiniMax H3 第 2 弾: lay the label, range and number out on ONE row
+   * (`.field-inline`) instead of stacked. Omitted = stacked, as NAG's four
+   * sliders have always been. */
+  inline?: boolean;
 }
 
 /**
@@ -21,7 +25,7 @@ export interface FloatSliderFieldProps {
  * `ReferenceStrengthField.tsx` was, rather than folded into the already
  * 400+-line `CommonGenerationFields.tsx`.
  */
-export function FloatSliderField({ label, value, min, max, step, disabled, onChange }: FloatSliderFieldProps) {
+export function FloatSliderField({ label, value, min, max, step, disabled, onChange, inline = false }: FloatSliderFieldProps) {
   const handleChange = (raw: string) => {
     const v = Number(raw);
     if (!Number.isFinite(v)) return;
@@ -29,7 +33,7 @@ export function FloatSliderField({ label, value, min, max, step, disabled, onCha
   };
 
   return (
-    <label className="field">
+    <label className={inline ? "field field-inline" : "field"}>
       <span className="field-label">{label}</span>
       <input
         type="range"

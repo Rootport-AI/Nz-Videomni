@@ -547,6 +547,11 @@ export const en = {
    * `onBadge` is intentionally identical in both languages (owner decision). */
   nag: {
     heading: "Negative Prompt",
+    /** MiniMax H3 第 2 弾: shown inside the greyed accordion while the loaded
+     * base model's engine cannot run NAG/VSF (`nag` in its
+     * `unsupported_features`). Nothing from this panel is sent meanwhile. */
+    unavailableOnBaseModel:
+      "Negative prompts (NAG/VSF) are not available on the selected base model, so these settings are not sent. Switch the base model in the header to use them.",
     onBadge: "【🔴ON】",
     textLabel: "Negative prompt",
     enableLabel: "non-CFG Negative",
@@ -1476,6 +1481,9 @@ export const en = {
     duration: {
       label: "Duration",
       fps: "FPS",
+      /** MiniMax H3 第 2 弾: tooltip on the disabled fps field while the loaded
+       * base model runs at one fixed rate (`constraints.frame_rate`). */
+      fpsFixedTooltip: (fps: number): string => `The selected base model always generates at ${fps} fps.`,
     },
     seed: {
       label: "Seed",
@@ -1503,6 +1511,24 @@ export const en = {
       label: "CFG scale",
     },
     reservedNote: "CFG is not supported by the current backend (reserved for future use)",
+    /** MiniMax H3 第 2 弾 (裁定 22): the three sampling sliders shown in place
+     * of the CFG placeholder while the loaded base model publishes
+     * `constraints.sampling` (`CommonGenerationFields.tsx`'s `SamplingFields`). */
+    sampling: {
+      steps: "Steps",
+      shiftVideo: "Shift (video)",
+      shiftAudio: "Shift (audio)",
+    },
+    /** MiniMax H3 第 2 弾: notes for the parts of Create the loaded base
+     * model's engine cannot use (greyed, not hidden). Same shape as
+     * `chained.unavailableOnBaseModel`. */
+    unavailableOnBaseModel: {
+      sourceAudio:
+        "Generating from an audio track (A2V) is not available on the selected base model. Switch the base model in the header to attach audio.",
+      keyframesMulti:
+        "The selected base model uses only one keyframe, the first frame. Switch the base model in the header to add more.",
+      keyframeStrength: "The selected base model does not use keyframe strength.",
+    },
     keyframes: {
       label: "Keyframes (I2V)",
       /** Live "N / max" counter shown next to the keyframes heading, e.g.
@@ -2210,7 +2236,7 @@ export const en = {
      * 2026-08-06 after the real-device gate: the measured "70s -> 10s" pair
      * and the bit-identical aside were dropped as noise for the reader. */
     accelKeepResidentNote:
-      "64GB or more of memory recommended: LTX 2.3 keeps about 20GB of main memory resident, LTX 2.5 about 8GB (2.5 only keeps the part that reads the prompt). Keeps the model's CPU-side skeleton between jobs, greatly shortening the preprocessing of the second and later generations. The output does not change.",
+      "64GB or more of memory recommended: LTX 2.3 keeps about 20GB of main memory resident, LTX 2.5 about 8GB (2.5 only keeps the part that reads the prompt). MiniMax H3 keeps its DiT and VAE. Keeps the model's CPU-side skeleton between jobs, greatly shortening the preprocessing of the second and later generations. The output does not change.",
     /** Acceleration (2026-09-03, 台帳 §3-114): keep LTX 2.5's embeddings
      * processor resident between jobs. The row is HIDDEN on LTX 2.3 (which has
      * no such component and refuses the field), so the label names the engine
@@ -2677,6 +2703,8 @@ export const ja: Strings = {
   },
   nag: {
     heading: "ネガティブプロンプト",
+    unavailableOnBaseModel:
+      "選択中のベースモデルではネガティブプロンプト（NAG/VSF）を使えないため、ここの設定は送信されません。使うには、上のベースモデルを切り替えてください。",
     onBadge: "【🔴ON】",
     textLabel: "ネガティブプロンプト",
     enableLabel: "non-CFG Negative",
@@ -3161,6 +3189,7 @@ export const ja: Strings = {
     duration: {
       label: "尺",
       fps: "フレームレート（fps）",
+      fpsFixedTooltip: (fps: number): string => `選択中のベースモデルは常に${fps}fpsで生成します。`,
     },
     seed: {
       label: "シード",
@@ -3181,6 +3210,18 @@ export const ja: Strings = {
       label: "CFGスケール",
     },
     reservedNote: "CFGは現在のバックエンドでは未対応です（将来の使用のために予約されています）",
+    sampling: {
+      steps: "ステップ数",
+      shiftVideo: "Shift（映像）",
+      shiftAudio: "Shift（音声）",
+    },
+    unavailableOnBaseModel: {
+      sourceAudio:
+        "選択中のベースモデルでは、音声から動画を作る機能（A2V）は使えません。音声を付けるには、上のベースモデルを切り替えてください。",
+      keyframesMulti:
+        "選択中のベースモデルが使うキーフレームは先頭の1枚だけです。増やすには、上のベースモデルを切り替えてください。",
+      keyframeStrength: "選択中のベースモデルはキーフレームの強度を使いません。",
+    },
     keyframes: {
       label: "キーフレーム（I2V）",
       count: (count: number, max: number): string => `${count} / ${max}`,
@@ -3522,7 +3563,7 @@ export const ja: Strings = {
     accelKeepResidentOff: "OFF",
     accelKeepResidentPrefetchOffTooltip: "先読みblock swapが有効なときだけ使えます",
     accelKeepResidentNote:
-      "メモリ64GB以上を推奨（LTX 2.3では約20GB、LTX 2.5では約8GBをメインメモリに常駐で使用します。2.5で常駐するのは文章を読み取る部分だけです）。モデルのCPU側骨格をジョブ間で保持し、2回目以降の生成の前処理を大幅に短縮します。生成結果は変わりません。",
+      "メモリ64GB以上を推奨（LTX 2.3では約20GB、LTX 2.5では約8GBをメインメモリに常駐で使用します。2.5で常駐するのは文章を読み取る部分だけです）。MiniMax H3ではDiTとVAEを保持します。モデルのCPU側骨格をジョブ間で保持し、2回目以降の生成の前処理を大幅に短縮します。生成結果は変わりません。",
     accelKeepResidentEmbeddingsLabel: "Embeddings processorの常駐（LTX 2.5）",
     accelKeepResidentEmbeddingsOn: "ON",
     accelKeepResidentEmbeddingsOff: "OFF",

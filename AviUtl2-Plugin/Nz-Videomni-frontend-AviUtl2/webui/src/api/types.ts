@@ -6,9 +6,14 @@
  *
  * Deliberately excluded from `GenerateRequest`/`GenerateChainRequest`
  * (Docs/API_REFERENCE.md §7, "UIに出してはいけない機能"): `guidance_scale`,
- * `num_inference_steps`, `pipeline`. The server fills its own defaults
- * (distilled / 8 steps / CFG 1.0) when these are omitted, and the WebUI must
- * never expose controls for them. `negative_prompt` was in this list too
+ * `pipeline`. The server fills its own defaults (distilled / CFG 1.0) when
+ * these are omitted, and the WebUI must never expose controls for them.
+ * `num_inference_steps` is no longer on that list as of MiniMax H3 第 2 弾
+ * (2026-10-17, 裁定 22): LTX still never shows it (distilled, fixed at 8 —
+ * the server writes its own default back), but a base model whose
+ * `constraints.sampling` is non-null (MiniMax H3) shows the step count and
+ * the two shifts (`shift_video`/`shift_audio`) as sliders, and Create sends
+ * all three on every request to such a model. `negative_prompt` was in this list too
  * until 2026-07-28, when NAG (Normalized Attention Guidance, backend commit
  * 2ae497b) made a negative prompt actually take effect without CFG — it is
  * now allowed, but ONLY alongside `nag_enabled`/`nag_scale`/`nag_tau`/
@@ -166,6 +171,19 @@ export interface GenerateRequest {
   num_frames: number;
   frame_rate: number;
   seed: number;
+  /** MiniMax H3 第 2 弾 (裁定 22): the sampling step count. Sent ONLY while the
+   * loaded base model publishes `constraints.sampling` (and then always, so
+   * the rule stays one rule); LTX never sends it and the server fills its own
+   * default (8). Built exclusively by `useGenerationForm`'s
+   * `toGenerateRequest`. */
+  num_inference_steps?: number;
+  /** MiniMax H3 第 2 弾: the video-stream shift. Same "only while
+   * `constraints.sampling` exists, then always" rule as
+   * {@link GenerateRequest.num_inference_steps}. */
+  shift_video?: number;
+  /** MiniMax H3 第 2 弾: the audio-stream shift. Same rule as
+   * {@link GenerateRequest.shift_video}. */
+  shift_audio?: number;
   conditioning_images?: ConditioningImage[];
   loras?: LoraSpec[];
   /** IC-LoRA (A3 "reference video") conditioning source: the `video_id`
@@ -1173,7 +1191,60 @@ export interface BaseModelBlock {
    * then leave). Read the live array, never this comment; the canonical list is
    * the backend spec's 6.10(b). */
   unsupported_features?: string[];
+  /** The numeric rules this base model's engine checks a `POST /generate`
+   * against (MiniMax H3 第 2 弾, 2026-10-17 — the backend builds it from the
+   * engine adapter's own rule table, the one place those rules live). The
+   * WebUI reads it for Create's frame grid, size multiple, fps range and the
+   * sampling sliders; see `shell/generationConstraints.ts`, which also holds
+   * the LTX values used while it is absent.
+   *
+   * Optional purely defensively: a backend older than 第 2 弾 omits it, and
+   * "omitted" must read as "the LTX rules", i.e. exactly today's behaviour. */
+  constraints?: BaseModelConstraints | null;
   categories: Record<string, ModelCategoryBlock>;
+}
+
+/** `BaseModelBlock.constraints.num_frames`: valid values are
+ * `step * n + offset` within `[min, max]` (LTX: 8n+1 in [9, 481]; MiniMax H3:
+ * 17n+5 in [22, 481]). */
+export interface NumFramesConstraint {
+  step: number;
+  offset: number;
+  min: number;
+  max: number;
+}
+
+/** An inclusive `[min, max]` range. `min === max` means "fixed at this value"
+ * (MiniMax H3's `frame_rate`: 24 only) — the WebUI then disables the field and
+ * sends that value. */
+export interface RangeConstraint {
+  min: number;
+  max: number;
+}
+
+/** One sampling slider's range, slider step and server default. */
+export interface SamplingParamConstraint {
+  min: number;
+  max: number;
+  step: number;
+  default: number;
+}
+
+/** The three sampling sliders a non-distilled engine exposes (裁定 22). */
+export interface SamplingConstraints {
+  num_inference_steps: SamplingParamConstraint;
+  shift_video: SamplingParamConstraint;
+  shift_audio: SamplingParamConstraint;
+}
+
+/** `BaseModelBlock.constraints` (MiniMax H3 第 2 弾). `sampling: null` means
+ * "this engine has no user-facing sampling knobs" (LTX: distilled), and the
+ * WebUI keeps its old placeholder row. */
+export interface BaseModelConstraints {
+  num_frames: NumFramesConstraint;
+  dimension_multiple: number;
+  frame_rate: RangeConstraint;
+  sampling: SamplingConstraints | null;
 }
 
 /** `GET /models`'s response (Docs/API_REFERENCE.md §3.5,

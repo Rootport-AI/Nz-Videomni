@@ -40,6 +40,11 @@ export type UiTarget =
   | "editSubTab.inpainting"
   | "editSubTab.alphaGen"
   | "createSection.batchA2v"
+  | "createSection.referenceVideo"
+  | "createSection.a2v"
+  | "createSection.keyframesMulti"
+  | "createSection.keyframeStrength"
+  | "shell.nag"
   | "settingsRow.vae"
   | "settingsRow.keepResidentEmbeddings";
 
@@ -88,6 +93,26 @@ interface FeatureUiEntry {
  *  - **alpha_gen** is the fourth Edit sub-tab (Alpha Gen 第 2 弾, 2026-10-13).
  *    Unlike the three above it is LIVE: LTX 2.3 publishes it, because the
  *    alpha-gen IC-LoRA exists for LTX 2.5 only.
+ *  - **MiniMax H3 第 2 弾 (2026-10-17, 裁定 30)** gave Create's own sections
+ *    rows of their own, because an engine that can generate at all but not in
+ *    LTX's every way has to close parts of Single — which until then no
+ *    engine's limitation could reach:
+ *     - `reference_video` also takes Create's reference-video (IC-LoRA)
+ *       accordion — the same request field (`reference_video_id`) as Chain's
+ *       panel. Create HIDES it (IC-LoRA is LTX's own mechanism).
+ *     - `chain` also takes Create's A2V card: an attached audio turns a Create
+ *       submit into `POST /generate/chain`, so a base model that cannot chain
+ *       cannot run it either. Greyed.
+ *     - `nag` closes the shared Negative Prompt accordion. Greyed rather than
+ *       hidden, and the shell stops sending its fields at the same time
+ *       (`nagSettings.effectiveNag`) — hiding alone would strand a NAG left
+ *       enabled on another base model, 422-ing every job with no control left
+ *       to turn it off.
+ *     - `multi_keyframes` caps Create's keyframes at one (the add button greys
+ *       once a card exists); `keyframe_strength` greys each card's strength.
+ *       Both name the same request field (`conditioning_images`) from two
+ *       sides, which is why they are two names.
+ *    LTX publishes none of these four names, so none of this reaches it.
  *  - **prune_vaed / keep_resident_embeddings** are Settings rows rather than
  *    generation surfaces, and both carry a `resets` because their choice is
  *    persisted in `localStorage`. Their SCOPES point in opposite directions:
@@ -107,7 +132,7 @@ interface FeatureUiEntry {
  * through the derived mappers.
  */
 export const FEATURE_UI = {
-  chain: { disables: ["mode.chained", "createSection.batchA2v"] },
+  chain: { disables: ["mode.chained", "createSection.batchA2v", "createSection.a2v"] },
   retake: { disables: ["editSubTab.retake"] },
   outpaint: { disables: ["editSubTab.outpainting"] },
   inpaint: { disables: ["editSubTab.inpainting"] },
@@ -115,7 +140,10 @@ export const FEATURE_UI = {
   v2v: { disables: ["chainPanel.v2v"] },
   a2v: { disables: ["chainPanel.a2v", "createSection.batchA2v"] },
   end_source: { disables: ["chainPanel.endSource"] },
-  reference_video: { disables: ["chainPanel.reference"] },
+  reference_video: { disables: ["chainPanel.reference", "createSection.referenceVideo"] },
+  nag: { disables: ["shell.nag"] },
+  multi_keyframes: { disables: ["createSection.keyframesMulti"] },
+  keyframe_strength: { disables: ["createSection.keyframeStrength"] },
   prune_vaed: { disables: ["settingsRow.vae"], resets: "vaeMode" },
   keep_resident_embeddings: {
     disables: ["settingsRow.keepResidentEmbeddings"],
@@ -127,7 +155,7 @@ export const FEATURE_UI = {
 // every boundary below keeps `readonly string[]`. A build of this WebUI is
 // older than the server it talks to more often than the reverse, so an unknown
 // name is the ordinary case, not an error — and a feature with no UI target at
-// all (`two_stage_hq`, `nag`, `loras`, `sage_attention`, …) is simply absent
+// all (`two_stage_hq`, `loras`, `sage_attention`, …) is simply absent
 // from the table rather than listed with an empty `disables`.
 
 /** A `Map`, not the plain object: looking `FEATURE_UI` up with an arbitrary
@@ -326,4 +354,39 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
     vae: disabled.has("settingsRow.vae"),
     keepResidentEmbeddings: disabled.has("settingsRow.keepResidentEmbeddings"),
   };
+}
+
+/** The parts of Create (Single) an engine's feature scope can close (MiniMax
+ * H3 第 2 弾). Keyed the way `SingleScreen`'s `sectionsUnavailable` prop is.
+ * How each one closes is the screen's business (see {@link FEATURE_UI}'s
+ * notes): the reference video is hidden, the rest grey. */
+export interface SingleSectionsDisabled {
+  /** The reference-video (IC-LoRA) accordion (`reference_video`). */
+  referenceVideo: boolean;
+  /** The A2V (source audio) accordion (`chain` — an A2V submit is a chain). */
+  a2v: boolean;
+  /** Keyframes beyond the first (`multi_keyframes`). */
+  keyframesMulti: boolean;
+  /** Each keyframe card's strength (`keyframe_strength`). */
+  keyframeStrength: boolean;
+}
+
+/** Which of {@link SingleSectionsDisabled}'s parts `unsupportedFeatures`
+ * closes — four `false`s for the ordinary case (both LTX engines). */
+export function singleSectionsDisabledFor(unsupportedFeatures: readonly string[]): SingleSectionsDisabled {
+  const disabled = disabledUiTargets(unsupportedFeatures);
+  return {
+    referenceVideo: disabled.has("createSection.referenceVideo"),
+    a2v: disabled.has("createSection.a2v"),
+    keyframesMulti: disabled.has("createSection.keyframesMulti"),
+    keyframeStrength: disabled.has("createSection.keyframeStrength"),
+  };
+}
+
+/** Whether the shared Negative Prompt (NAG/VSF) accordion is closed
+ * (`nag`). The shell greys it AND stops its fields from riding on any request
+ * (`nagSettings.effectiveNag`), so a NAG left on from another base model can
+ * neither 422 a job nor be stuck on screen. `false` for the ordinary case. */
+export function nagDisabledFor(unsupportedFeatures: readonly string[]): boolean {
+  return disabledUiTargets(unsupportedFeatures).has("shell.nag");
 }

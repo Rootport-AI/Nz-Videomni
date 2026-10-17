@@ -48,7 +48,8 @@ describe("AppShell — header base-model dropdown", () => {
     const { select } = await renderApp({ ltx25Install: "partial" });
 
     const options = within(select).getAllByRole("option") as HTMLOptionElement[];
-    expect(options.map((o) => o.value)).toEqual(["LTX23", "LTX25"]);
+    // MiniMax H3 第 2 弾: the fixture server declares a third base model.
+    expect(options.map((o) => o.value)).toEqual(["LTX23", "LTX25", "MiniMaxH3"]);
     // Display names come from the server; the partial install is called out so
     // the entry's failure is predictable before it is clicked.
     expect(options[0]?.textContent).toBe("LTX 2.3");

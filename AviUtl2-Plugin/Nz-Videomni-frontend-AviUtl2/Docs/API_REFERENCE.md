@@ -734,7 +734,7 @@ Alpha Gen は、普通の動画から同じ大きさ・同じフレーム数の�
 > - ~~ネガティブプロンプト(`negative_prompt`)~~ → **2026-07-28、NAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）経由で条件付き解禁**（バックエンドコミット2ae497b）。CFGを迂回する専用の`nag_*`フィールド一式が実際にengineへ配線されたための解禁で、下のCFG/ステップ数/pipelineの禁止は変わらず有効（NAGはこれらを迂回する別経路のため）。フロント側の実装・UI詳細は`Docs/DEVLOG.md`の該当節、[`../Mock/AVIUTL2_DESIGN_BRIEF.md`](../Mock/AVIUTL2_DESIGN_BRIEF.md) §5・§11参照。**2026-07-29には方式選択が`neg_method`で解禁され、VSF（Value Sign Flip。正負のコンテキストを連結し1回のattentionで済ませつつ負側のVだけ符号反転×スケールする、NAGに続く2つ目の非CFGネガティブプロンプト手法）も選べるようになった**（`vsf_scale`、0-10、既定1.5）。フロントはNAG/VSFの方式をラジオで選び、方式に応じたスライダー(NAG: scale/tau/alpha、VSF: vsf_scale)を出し分ける。
 > - CFG/ガイダンス強度スライダー(`guidance_scale`): distilled固定1.0。**引き続き禁止**
 > - 品質モード切替(`pipeline: two_stage_hq`): 実質distilledのみ。**引き続き禁止**
-> - 生成ステップ数変更(`num_inference_steps`): 8固定。**引き続き禁止**
+> - 生成ステップ数変更(`num_inference_steps`): **LTXでは出さない（distilled で8に固定）。MiniMax H3ではステップ数と shift（`shift_video`・`shift_audio`）を出す（裁定 22、2026-10-17 第 2 弾）**。出し分けは系統名ではなく、`GET /models` の `base_models[].constraints.sampling` が `null` でないかで決める（`sampling` があるベースモデルでは3項目を毎回送り、無いベースモデルでは送らない）。経緯と画面の作りはフロント[`DEVLOG.md`](DEVLOG.md) §141。
 
 > **「表示だけで実際は効かない」罠を避けるための約束事**（過去に`fp8_transformer`が「statusには出るがworkerの挙動を変えない」状態で長く残った反省から、生成の高速化（Acceleration）の項目には次の2点を構造で担保してある）:
 >

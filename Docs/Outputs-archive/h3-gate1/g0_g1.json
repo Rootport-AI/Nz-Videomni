@@ -1,0 +1,52 @@
+{
+  "g0": {
+    "torch": "2.13.0+cu130",
+    "torchvision": "0.28.0+cu130",
+    "comfy_kitchen": "ok",
+    "transformers": "5.14.1",
+    "safetensors": "0.8.0",
+    "av": "18.1.0",
+    "einops": "0.8.2",
+    "triton": "3.7.1",
+    "sageattention": "ok",
+    "torch.version.cuda": "13.0",
+    "cuda_available": true,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "cc": "8.9",
+      "total_gib": 15.99,
+      "smem_optin": 101376
+    }
+  },
+  "g1": {
+    "cuda_available": true,
+    "cuda_unavailable_reason": null,
+    "cuda_has_int8_linear": true,
+    "cuda_capabilities_count": 52,
+    "backends": {
+      "cuda": {
+        "available": true,
+        "n_caps": 52
+      },
+      "triton": {
+        "available": true,
+        "n_caps": 28
+      },
+      "eager": {
+        "available": true,
+        "n_caps": 55
+      },
+      "hip": {
+        "available": false,
+        "n_caps": 0
+      },
+      "ascend": {
+        "available": false,
+        "n_caps": 0
+      }
+    },
+    "probe_sage": true
+  },
+  "pass_g0": true,
+  "pass_g1": true
+}

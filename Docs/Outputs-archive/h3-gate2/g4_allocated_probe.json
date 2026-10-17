@@ -1,0 +1,6 @@
+{
+  "start": 0,
+  "after_bf16_matmul_and_empty_cache": 8519680,
+  "after_clearCublasWorkspaces": 0,
+  "g4_between_jobs": 8650752
+}

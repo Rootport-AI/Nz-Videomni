@@ -1,0 +1,38 @@
+{
+  "steps": [
+    [
+      "torch+comfy_kitchen imported",
+      2.9
+    ],
+    [
+      "text_encoder module imported",
+      0.0
+    ],
+    [
+      "transformers qwen3_vl imported",
+      2.03
+    ],
+    [
+      "te.load (tokenizer + meta build)",
+      0.33
+    ],
+    [
+      "te.encode (direct read + forward)",
+      16.57
+    ],
+    [
+      "synchronize",
+      0.04
+    ],
+    [
+      "te.release",
+      0.11
+    ]
+  ],
+  "read_report": {
+    "read_gib": 24.17,
+    "read_seconds": 16.15,
+    "layers_read": 50,
+    "encode_seconds": 16.57
+  }
+}

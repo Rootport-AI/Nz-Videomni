@@ -103,7 +103,8 @@ class H3SeqLayout:
     """Row ranges of the packed sequence ``[text | cond | audio | video]``.
     T2V has an empty cond (``slice(L, L)``).
 
-    ``cond``: 第 1 弾（T2V）では未使用。座標は G4 A で照合済み、埋め込みは未検証。
+    ``cond``: the I2V key frame's rows (empty for T2V). Order and coordinates match
+    DiffSynth (gates G4 A and 2a-G3); the embedding is checked end to end only (2a-G4).
     """
 
     text: slice
@@ -483,7 +484,8 @@ class H3DiT(nn.Module):
         rounded to bf16 (diffusers aligns inputs with the f32 projection
         dtype the same way).
 
-        ``cond_rows``: 第 1 弾（T2V）では未使用。座標は G4 A で照合済み、埋め込みは未検証。
+        ``cond_rows``: the I2V condition rows (already mixed with their noise), projected
+        like video rows; ``None`` / empty for T2V. Checked end to end in gate 2a-G4.
         """
         parts = [text_refined.to(torch.bfloat16)]
         if cond_rows is not None and cond_rows.shape[0] > 0:

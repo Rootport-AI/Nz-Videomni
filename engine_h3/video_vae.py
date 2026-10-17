@@ -25,8 +25,17 @@ names and shapes, plus ``latents_mean``/``latents_std`` (F16 [24]) and an
 full float precision. The JSON is the one read here (R2 (3)-16: the F16 tensors
 are a rounded copy).
 
-Name mapping (``video_vae_key_map``) mirrors the DiffSynth converter:
-``decoder.mask_token`` is unused at inference and dropped;
+Encoder and decoder are separate models (第 2 弾 2a, review M-8, 台帳 §1-99)
+-------------------------------------------------------------------------------
+:class:`H3VideoEncoder` (``encoder`` + ``quant_conv``) and :class:`H3VideoDecoder`
+(``post_quant_conv`` + ``decoder``) are built and read from the same file on
+their own, each with only its own tensors. T2V never builds the encoder; I2V
+builds it in float32 for one key frame and drops it. The decoder keeps the
+bf16 + float32-island precision below, exactly as the former whole-VAE class
+did, so a decode is unchanged.
+
+Name mapping (``encoder_key_map`` / ``decoder_key_map``) mirrors the DiffSynth
+converter: ``decoder.mask_token`` is unused at inference and dropped;
 ``decoder.register_tokens`` and every ``*.scale1``/``*.scale2`` live inside a
 one-parameter ``WarpedTensor`` and gain a ``.weight`` suffix. Everything else
 maps 1:1.
@@ -36,7 +45,7 @@ Pixel and latent conventions (R2 F, (3)-13/14/15)
 * Pixels are ImageNet-normalised RGB over a [0, 1] base, NOT [-1, 1].
 * Latents are normalised per channel with the 24 mean/std values:
   ``encode`` returns ``(z - mean) / std``, ``decode`` takes that and applies
-  ``z * std + mean`` first.
+  ``z * std + mean`` first. Both models carry the statistics.
 * Time: 17 pixel frames per encoder clip, 3 trailing latent frames dropped per
   encode, so ``17n + 5`` frames <-> ``5n + 2`` latents. The decoder walks
   7-latent windows (5 + 2 overlap) and cross-fades the 5 overlapping pixel
@@ -54,13 +63,28 @@ Pixel and latent conventions (R2 F, (3)-13/14/15)
 
 Precision
 ---------
-The heavy work (convolutions, decoder linears, attention) runs in the module
-dtype (bfloat16 in production). The decoder's RMSNorm/LayerNorm weights,
+The decoder's heavy work (convolutions, linears, attention) runs in the module
+dtype (bfloat16 in production); the encoder runs entirely in float32 in
+production (one key frame, so the cost is small; the file is F16, so the cast
+is exact). The decoder's RMSNorm/LayerNorm weights,
 ``scale1``/``scale2``, ``x_embedder`` and ``post_quant_conv`` are kept in
 float32 and the decoder's residual stream is float32, as the reference does
 (diffusers ``_keep_in_fp32_modules`` and its "the reference normalizes in
-float32" note); they are a few MB, so this costs nothing. Inputs and outputs of
-``encode``/``decode`` are float32.
+float32" note); they are a few MB, so this costs nothing. The inputs of
+``encode``/``decode`` and the output of ``encode`` are float32; ``decode``
+returns uint8 frames (below).
+
+Decode output (VRAM)
+--------------------
+``decode`` returns CPU ``uint8 [F, H, W, 3]`` frames, not float pixels. Each
+temporal window's settled piece (after its cross-fade with the previous
+window's overlap) is un-normalised, clamped, scaled by 255, rounded and cast
+to uint8 on the GPU, then moved to the CPU on the spot; the frames are
+concatenated on the CPU. Only one window's float pieces live on the GPU at a
+time, so the decode's VRAM no longer grows with the clip (1344x768 x 345
+frames would hold ~4.3 GB of float32 pixels, twice over during the final
+concatenation). The order clamp -> x255 -> round -> uint8 is the one the
+whole-clip conversion used, so the frames are bit-identical to it.
 """
 
 from __future__ import annotations
@@ -82,17 +106,30 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 METADATA_KEY = "minimax_h3_video_vae"
 LATENT_CHANNELS = 24
 
-#: File tensors with no counterpart in the module (see the module docstring).
+#: File tensors with no counterpart in either model (see the module docstring).
 _DROPPED_KEYS = frozenset({"decoder.mask_token", "latents_mean", "latents_std"})
+_ENCODER_PREFIXES = ("encoder.", "quant_conv.")
+_DECODER_PREFIXES = ("decoder.", "post_quant_conv.")
 
 
-def video_vae_key_map(name: str) -> str | None:
-    """File tensor name -> module state_dict key (None = not loaded)."""
-    if name in _DROPPED_KEYS:
-        return None
+def _mapped(name: str) -> str:
     if name == "decoder.register_tokens" or name.endswith(".scale1") or name.endswith(".scale2"):
         return name + ".weight"
     return name
+
+
+def encoder_key_map(name: str) -> str | None:
+    """File tensor name -> :class:`H3VideoEncoder` state_dict key (None = not this model's)."""
+    if name in _DROPPED_KEYS or not name.startswith(_ENCODER_PREFIXES):
+        return None
+    return _mapped(name)
+
+
+def decoder_key_map(name: str) -> str | None:
+    """File tensor name -> :class:`H3VideoDecoder` state_dict key (None = not this model's)."""
+    if name in _DROPPED_KEYS or not name.startswith(_DECODER_PREFIXES):
+        return None
+    return _mapped(name)
 
 
 def latent_stats_from_metadata(metadata: dict, key: str, channels: int) -> tuple[list[float], list[float]]:
@@ -212,7 +249,7 @@ class ResnetBlock3D(nn.Module):
 
 
 class EncoderFCN3D(nn.Module):
-    """Causal 3D CNN encoder (pixels -> mean/logvar). 第 1 弾（T2V）では未使用・未検証（CPU の往復を 1 回試しただけ）。第 2 弾の先頭フレームで使う。"""
+    """Causal 3D CNN encoder (pixels -> mean/logvar). Used for the I2V key frame (H3VideoEncoder)."""
 
     def __init__(self, ch, ch_mult, space_down, time_down, num_res_blocks, in_channels, z_channels,
                  padding_mode="reflect"):
@@ -382,17 +419,15 @@ class ViT3DDecoder(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-class H3VideoVAE(nn.Module):
-    """See the module docstring. Build on the meta device; use :meth:`from_file`."""
+class _H3VideoVAEBase(nn.Module):
+    """What the encoder and the decoder share: the time / tile constants, the latent
+    statistics, the tiling arithmetic, and the build-from-file path. Not used on its own."""
 
-    def __init__(self, *, ch=128, ch_mult=(1, 2, 2, 4, 4, 8), space_down=(2, 2, 2, 2, 1, 1),
-                 time_down=(1, 2, 2, 1, 1, 1), num_res_blocks=2, z_channels=LATENT_CHANNELS,
-                 decoder_layers=36, decoder_heads=32, decoder_dim_head=64,
-                 clip_length=C.VAE_CLIP_LENGTH, token_drop=C.VAE_TOKEN_DROP,
-                 tile_size=256, tile_overlap_min=64):
-        # The keyword arguments exist so CPU tests can build a small decoder;
-        # production always uses the defaults (the released configuration,
-        # ``__metadata__["minimax_h3_video_vae"]["source_config"]``).
+    #: The file-name filter of the subclass (``encoder_key_map`` / ``decoder_key_map``).
+    key_map = staticmethod(lambda name: None)
+
+    def __init__(self, *, space_down, time_down, z_channels, clip_length, token_drop,
+                 tile_size, tile_overlap_min):
         super().__init__()
         self.vae_ratio = math.prod(space_down)
         self.vae_ratio_t = math.prod(time_down)
@@ -404,15 +439,6 @@ class H3VideoVAE(nn.Module):
         self.frame_overlap = max(self.token_overlap * self.vae_ratio_t - self.frame_pre_padding, 0)  # 5
         self.tile_size = tile_size
         self.tile_overlap_min = tile_overlap_min
-
-        self.encoder = EncoderFCN3D(ch, ch_mult, space_down, time_down, num_res_blocks, 3, z_channels)
-        # quant_conv: encoder side only. 第 1 弾（T2V）では未使用・未検証（CPU の往復を 1 回試しただけ）。第 2 弾の先頭フレームで使う。
-        self.quant_conv = nn.Conv3d(2 * z_channels, 2 * z_channels, 1)
-        self.post_quant_conv = nn.Conv3d(z_channels, z_channels, 1)
-        self.decoder = ViT3DDecoder(
-            patch_size=self.vae_ratio, patch_size_t=self.vae_ratio_t, in_channels=z_channels,
-            num_layers=decoder_layers, heads=decoder_heads, dim_head=decoder_dim_head,
-        )
         # Filled from __metadata__ (not the F16 tensors) by from_file; not in the state_dict.
         self.register_buffer("latents_mean", torch.zeros(z_channels, dtype=torch.float32), persistent=False)
         self.register_buffer("latents_std", torch.ones(z_channels, dtype=torch.float32), persistent=False)
@@ -420,11 +446,13 @@ class H3VideoVAE(nn.Module):
     # -- loading ----------------------------------------------------------
 
     @classmethod
-    def from_file(cls, path: str, *, device, dtype=torch.bfloat16) -> "H3VideoVAE":
-        """Build on meta, stream the Comfy-Org file in, move to ``device`` and cast to ``dtype``.
+    def from_file(cls, path: str, *, device, dtype):
+        """Build on meta, stream this model's tensors in, move to ``device`` and cast to ``dtype``.
 
+        Only the tensors :attr:`key_map` accepts are read, so the encoder never
+        reads the decoder's 4.8 GB and the decoder never reads the encoder.
         The cast happens after the move so the CPU never holds an F16 and a
-        BF16 copy of the ~4.8 GB decoder at the same time.
+        second copy of the weights at the same time.
         """
         import sft_quant_format
         from engine_h3.sft_load import load_streaming
@@ -435,18 +463,14 @@ class H3VideoVAE(nn.Module):
             model = cls()
         model.latents_mean = torch.tensor(mean, dtype=torch.float32)
         model.latents_std = torch.tensor(std, dtype=torch.float32)
-        load_streaming(model, path, header, key_map=video_vae_key_map)
+        load_streaming(model, path, header, key_map=cls.key_map)
         model.requires_grad_(False).eval()
         model.to(device=device)
         model.apply_precision(dtype)
         return model
 
     def float32_islands(self) -> list[nn.Module]:
-        """The small cast-sensitive modules kept in float32 (see "Precision")."""
-        mods: list[nn.Module] = [self.post_quant_conv, self.decoder.x_embedder, self.decoder.norm_out]
-        for block in self.decoder.transformer_blocks:
-            mods += [block.norm1, block.norm2, block.scale1, block.scale2]
-        return mods
+        return []
 
     def apply_precision(self, dtype: torch.dtype) -> None:
         """Cast each tensor ONCE to its final dtype: islands to float32, everything else to ``dtype``.
@@ -509,9 +533,9 @@ class H3VideoVAE(nn.Module):
             out_row = []
             for j, tile in enumerate(row):
                 if i > 0:
-                    tile = H3VideoVAE.blend(rows[i - 1][j], tile, y_ov[i - 1], dim=-2)
+                    tile = _H3VideoVAEBase.blend(rows[i - 1][j], tile, y_ov[i - 1], dim=-2)
                 if j > 0:
-                    tile = H3VideoVAE.blend(row[j - 1], tile, x_ov[j - 1], dim=-1)
+                    tile = _H3VideoVAEBase.blend(row[j - 1], tile, x_ov[j - 1], dim=-1)
                 if i < len(rows) - 1:
                     tile = tile[..., : -y_ov[i], :]
                 if j < len(row) - 1:
@@ -520,11 +544,41 @@ class H3VideoVAE(nn.Module):
             out_rows.append(torch.cat(out_row, dim=-1))
         return torch.cat(out_rows, dim=-2)
 
-    def _encode_clip(self, x: torch.Tensor, tiled: bool) -> torch.Tensor:
-        """Pixels (normalised, module dtype) -> float32 moments [B, 48, t, h, w] for one clip.
+    def _pixel_stats(self, device) -> tuple[torch.Tensor, torch.Tensor]:
+        mean = torch.tensor(IMAGENET_MEAN, dtype=torch.float32, device=device).view(1, 3, 1, 1, 1)
+        std = torch.tensor(IMAGENET_STD, dtype=torch.float32, device=device).view(1, 3, 1, 1, 1)
+        return mean, std
 
-        第 1 弾（T2V）では未使用・未検証（CPU の往復を 1 回試しただけ）。第 2 弾の先頭フレームで使う。
-        """
+
+class H3VideoEncoder(_H3VideoVAEBase):
+    """``encoder`` + ``quant_conv``: pixels -> normalised posterior mean. Use :meth:`from_file`."""
+
+    key_map = staticmethod(encoder_key_map)
+
+    def __init__(self, *, ch=128, ch_mult=(1, 2, 2, 4, 4, 8), space_down=(2, 2, 2, 2, 1, 1),
+                 time_down=(1, 2, 2, 1, 1, 1), num_res_blocks=2, z_channels=LATENT_CHANNELS,
+                 clip_length=C.VAE_CLIP_LENGTH, token_drop=C.VAE_TOKEN_DROP,
+                 tile_size=256, tile_overlap_min=64):
+        # The keyword arguments exist so CPU tests can build a small encoder;
+        # production always uses the defaults (the released configuration,
+        # ``__metadata__["minimax_h3_video_vae"]["source_config"]``).
+        super().__init__(space_down=space_down, time_down=time_down, z_channels=z_channels,
+                         clip_length=clip_length, token_drop=token_drop,
+                         tile_size=tile_size, tile_overlap_min=tile_overlap_min)
+        self.encoder = EncoderFCN3D(ch, ch_mult, space_down, time_down, num_res_blocks, 3, z_channels)
+        self.quant_conv = nn.Conv3d(2 * z_channels, 2 * z_channels, 1)
+
+    @classmethod
+    def from_file(cls, path: str, *, device, dtype=torch.float32) -> "H3VideoEncoder":
+        """float32 in production (plan §3.1); ``bfloat16`` only for the gate that compares with DiffSynth."""
+        return super().from_file(path, device=device, dtype=dtype)
+
+    @property
+    def compute_dtype(self) -> torch.dtype:
+        return self.encoder.conv_in.weight.dtype
+
+    def _encode_clip(self, x: torch.Tensor, tiled: bool) -> torch.Tensor:
+        """Pixels (normalised, module dtype) -> float32 moments [B, 48, t, h, w] for one clip."""
         if not tiled:
             return self.quant_conv(self.encoder(x)).float()
         y_idx, y_len, y_ov = self.split_tiles(x.shape[-2])
@@ -536,38 +590,8 @@ class H3VideoVAE(nn.Module):
         r = self.vae_ratio
         return self._stitch(rows, [o // r for o in y_ov], [o // r for o in x_ov])
 
-    def _decode_clip(self, z: torch.Tensor, tiled: bool) -> torch.Tensor:
-        """Raw latents (float32) -> float32 pixels in ImageNet space for one clip."""
-        pq = self.post_quant_conv
-        if not tiled:
-            return self.decoder(pq(z.to(pq.weight.dtype))).float()
-        r = self.vae_ratio
-        y_idx, y_len, y_ov = self.split_tiles(z.shape[-2] * r)
-        x_idx, x_len, x_ov = self.split_tiles(z.shape[-1] * r)
-        rows = []
-        for i, il in zip(y_idx, y_len):
-            row = []
-            for j, jl in zip(x_idx, x_len):
-                tile = z[..., i // r:(i + il) // r, j // r:(j + jl) // r]
-                row.append(self.decoder(pq(tile.to(pq.weight.dtype))).float())
-            rows.append(row)
-        return self._stitch(rows, y_ov, x_ov)
-
-    # -- public API -------------------------------------------------------
-
-    @property
-    def compute_dtype(self) -> torch.dtype:
-        return self.encoder.conv_in.weight.dtype
-
-    def _pixel_stats(self, device) -> tuple[torch.Tensor, torch.Tensor]:
-        mean = torch.tensor(IMAGENET_MEAN, dtype=torch.float32, device=device).view(1, 3, 1, 1, 1)
-        std = torch.tensor(IMAGENET_STD, dtype=torch.float32, device=device).view(1, 3, 1, 1, 1)
-        return mean, std
-
     def encode(self, video: torch.Tensor, *, tiled: bool = True) -> torch.Tensor:
         """[1, 3, F, H, W] float32 in [0, 1] -> normalised posterior mean [1, 24, T', H/16, W/16] float32.
-
-        第 1 弾（T2V）では未使用・未検証（CPU の往復を 1 回試しただけ）。第 2 弾の先頭フレームで使う。
 
         F = 1 (a key frame) goes through the spatial encoder alone and gives
         one latent frame; repeating it to 17 frames would give 2 latents and
@@ -598,29 +622,98 @@ class H3VideoVAE(nn.Module):
         std = self.latents_std.to(z.device).view(1, -1, 1, 1, 1)
         return (z - mean) / std
 
+
+class H3VideoDecoder(_H3VideoVAEBase):
+    """``post_quant_conv`` + ``decoder``: latents -> CPU uint8 frames. Use :meth:`from_file`."""
+
+    key_map = staticmethod(decoder_key_map)
+
+    def __init__(self, *, space_down=(2, 2, 2, 2, 1, 1), time_down=(1, 2, 2, 1, 1, 1),
+                 z_channels=LATENT_CHANNELS, decoder_layers=36, decoder_heads=32, decoder_dim_head=64,
+                 clip_length=C.VAE_CLIP_LENGTH, token_drop=C.VAE_TOKEN_DROP,
+                 tile_size=256, tile_overlap_min=64):
+        # Keyword arguments as for the encoder: small decoders for CPU tests only.
+        super().__init__(space_down=space_down, time_down=time_down, z_channels=z_channels,
+                         clip_length=clip_length, token_drop=token_drop,
+                         tile_size=tile_size, tile_overlap_min=tile_overlap_min)
+        self.post_quant_conv = nn.Conv3d(z_channels, z_channels, 1)
+        self.decoder = ViT3DDecoder(
+            patch_size=self.vae_ratio, patch_size_t=self.vae_ratio_t, in_channels=z_channels,
+            num_layers=decoder_layers, heads=decoder_heads, dim_head=decoder_dim_head,
+        )
+
+    @classmethod
+    def from_file(cls, path: str, *, device, dtype=torch.bfloat16) -> "H3VideoDecoder":
+        return super().from_file(path, device=device, dtype=dtype)
+
+    def float32_islands(self) -> list[nn.Module]:
+        """The small cast-sensitive modules kept in float32 (see "Precision")."""
+        mods: list[nn.Module] = [self.post_quant_conv, self.decoder.x_embedder, self.decoder.norm_out]
+        for block in self.decoder.transformer_blocks:
+            mods += [block.norm1, block.norm2, block.scale1, block.scale2]
+        return mods
+
+    def _decode_clip(self, z: torch.Tensor, tiled: bool) -> torch.Tensor:
+        """Raw latents (float32) -> float32 pixels in ImageNet space for one clip."""
+        pq = self.post_quant_conv
+        if not tiled:
+            return self.decoder(pq(z.to(pq.weight.dtype))).float()
+        r = self.vae_ratio
+        y_idx, y_len, y_ov = self.split_tiles(z.shape[-2] * r)
+        x_idx, x_len, x_ov = self.split_tiles(z.shape[-1] * r)
+        rows = []
+        for i, il in zip(y_idx, y_len):
+            row = []
+            for j, jl in zip(x_idx, x_len):
+                tile = z[..., i // r:(i + il) // r, j // r:(j + jl) // r]
+                row.append(self.decoder(pq(tile.to(pq.weight.dtype))).float())
+            rows.append(row)
+        return self._stitch(rows, y_ov, x_ov)
+
     def decode(self, latents: torch.Tensor, *, tiled: bool = True) -> torch.Tensor:
-        """Normalised latents [1, 24, T', h, w] float32 -> pixels [1, 3, F, 16h, 16w] float32 in [0, 1].
+        """Normalised latents [1, 24, T', h, w] float32 -> frames [F, 16h, 16w, 3] uint8 on the CPU.
 
         T' = 5n + 2 gives F = 17n + 5. T' = 1 is decoded as one chunk of copies and the
-        first real frame is returned (F = 1, ComfyUI issue #15416).
+        first real frame is returned (F = 1, ComfyUI issue #15416). Every settled
+        window piece is turned into uint8 and moved to the CPU as soon as it is
+        final (module docstring, "Decode output"), so the GPU never holds the
+        whole clip. One clip per call (batch 1), as the pipeline decodes.
         """
         if latents.ndim != 5 or latents.shape[1] != self.latents_mean.shape[0]:
             raise ValueError(f"decode: [B, 24, T', h, w] を期待しましたが {tuple(latents.shape)} でした")
+        if latents.shape[0] != 1:
+            raise ValueError(f"decode: バッチは 1 だけです（{latents.shape[0]}）")
         mean = self.latents_mean.to(latents.device).view(1, -1, 1, 1, 1)
         std = self.latents_std.to(latents.device).view(1, -1, 1, 1, 1)
         z = latents.float() * std + mean
         if z.shape[2] == 1:
             clip = self._decode_clip(z.repeat(1, 1, self.tokens_chunk_size, 1, 1), tiled)
-            pixels = clip[:, :, self.frame_pre_padding:self.frame_pre_padding + 1]
-        else:
-            pixels = self._decode_temporal(z, tiled)
+            return self._frames_uint8(clip[:, :, self.frame_pre_padding:self.frame_pre_padding + 1])
+        return self._decode_temporal(z, tiled)
+
+    def _frames_uint8(self, pixels: torch.Tensor) -> torch.Tensor:
+        """Settled pixels [1, 3, f, H, W] float32 (ImageNet space) -> [f, H, W, 3] uint8 on the CPU.
+
+        Un-normalise, clamp to [0, 1], x255, round, uint8 -- the exact order of
+        the former whole-clip conversion (the T2V fingerprint depends on it);
+        elementwise, so converting window by window changes no value. The cast
+        runs where ``pixels`` is (the GPU) so only uint8 crosses to the CPU.
+        """
         pm, ps = self._pixel_stats(pixels.device)
-        return (pixels * ps + pm).clamp_(0.0, 1.0)
+        x = (pixels * ps + pm).clamp_(0.0, 1.0)
+        x = x[0].permute(1, 2, 3, 0)
+        return (x * 255.0).round().to(torch.uint8).cpu()
 
     def _decode_temporal(self, z: torch.Tensor, tiled: bool) -> torch.Tensor:
         """Walk (5 + 2)-latent windows, drop the 3 pre-padding frames of each
         17+ frame half, cross-fade the 5 overlapping frames, and trim the frames
-        that come from repeated pad latents (when T' is not 5n + 2)."""
+        that come from repeated pad latents (when T' is not 5n + 2).
+
+        The cross-fade happens in float pixel space BEFORE a piece is converted:
+        a window's first half is final once blended with the previous overlap,
+        so it goes to the CPU as uint8 right then; the overlap half stays on the
+        GPU (float) only until the next window has blended it. Returns CPU
+        uint8 [F, H, W, 3]."""
         chunk = self.tokens_chunk_size
         chunk_frames = chunk * self.vae_ratio_t
         num_tokens = z.shape[2] + self.token_drop
@@ -642,18 +735,20 @@ class H3VideoVAE(nn.Module):
                 if j == 0:
                     if overlap is not None:
                         piece = self.blend(overlap, piece, self.frame_overlap, dim=-3)
-                    parts.append(piece)
+                    parts.append(self._frames_uint8(piece))
                 else:
                     overlap = piece
+                del piece
             del clip
         if overlap is not None:
-            parts.append(overlap)
-        out = torch.cat(parts, dim=2)
+            parts.append(self._frames_uint8(overlap))
+            del overlap
+        out = torch.cat(parts, dim=0)
         if pad_tokens:
             tail = self.clip_length % self.vae_ratio_t
             before = z.shape[2] - pad_tokens
             pad_frames = sum(
                 tail if tail and (before + k) % chunk == 0 else self.vae_ratio_t for k in range(pad_tokens)
             )
-            out = out[:, :, :-pad_frames]
+            out = out[:-pad_frames]
         return out

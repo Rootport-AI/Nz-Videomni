@@ -1,0 +1,122 @@
+{
+  "image": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-gate2\\i2v_input.png",
+  "canvas": [
+    640,
+    384
+  ],
+  "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+  "source_size": [
+    640,
+    384
+  ],
+  "ours_read": {
+    "read_gib": 25.28,
+    "read_seconds": 19.85,
+    "layers_read": 50,
+    "encode_seconds": 20.45,
+    "tokens": 289,
+    "vision_tokens": 240
+  },
+  "A_tokens": {
+    "ids_identical": true,
+    "tags_identical": true,
+    "length": 289,
+    "vision_tokens": 240,
+    "ds_vision_tokens": [
+      240
+    ]
+  },
+  "B_vision_inputs": {
+    "pixel_values_identical": true,
+    "grid_identical": true,
+    "grid": [
+      [
+        1,
+        24,
+        40
+      ]
+    ],
+    "pixel_values_shape": [
+      960,
+      1536
+    ],
+    "vision_output_identical": true,
+    "deepstack_identical": true,
+    "vision_output_shape": [
+      240,
+      5120
+    ]
+  },
+  "C_seconds_int8": 18.8,
+  "C_seconds_bf16": 25.4,
+  "C_text_encoder": {
+    "shape": [
+      289,
+      5120
+    ],
+    "wiring_bit_identical": true,
+    "wiring_max_abs": 0.0,
+    "quant_rel_all_rows": 0.017507418990135193,
+    "quant_rel_vision_rows": 0.012759698554873466,
+    "quant_rel_text_rows": 0.02147131785750389,
+    "quant_rel_last_row": 0.027351288124918938,
+    "finite": true
+  },
+  "D_vae_encode": {
+    "shape": [
+      1,
+      24,
+      1,
+      24,
+      40
+    ],
+    "bf16_vs_diffsynth_bit_identical": false,
+    "bf16_vs_diffsynth_max_abs": 0.01519465446472168,
+    "bf16_vs_diffsynth_rel": 0.001454201410524547,
+    "f32_vs_bf16_max_abs": 0.941124439239502,
+    "f32_vs_bf16_rel": 0.03033132664859295,
+    "f32_vs_diffsynth_rel": 0.030359964817762375,
+    "latent_abs_mean": 0.7701308131217957
+  },
+  "E_layout": {
+    "used_rows": 9823,
+    "cond_rows": 240,
+    "order_identical": true,
+    "adaln_tags_identical": true,
+    "rope_coords_identical_f64": true,
+    "time_numbering_identical_20_steps": true,
+    "m_per_step": [
+      2,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+    ]
+  },
+  "verdict": {
+    "A_tokens": true,
+    "B_vision": true,
+    "C_wiring_zero": true,
+    "C_quant_level": 0.017507418990135193,
+    "D_bf16_identical": false,
+    "D_bf16_max_abs": 0.01519465446472168,
+    "E_all": true
+  },
+  "seconds": 71.4,
+  "peak_vram_reserved_mb": 4712
+}

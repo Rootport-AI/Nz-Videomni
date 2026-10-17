@@ -1,0 +1,38 @@
+{
+  "latent_shape": [
+    1,
+    24,
+    102,
+    48,
+    84
+  ],
+  "output": {
+    "shape": [
+      345,
+      768,
+      1344,
+      3
+    ],
+    "dtype": "torch.uint8",
+    "device": "cpu",
+    "mean": 90.28
+  },
+  "decoder_weights_alloc_mb": 4661,
+  "after_load_reserved_mb": 4886,
+  "decode_peak_alloc_mb": 6438,
+  "decode_peak_reserved_mb": 7638,
+  "whole_peak_reserved_mb": 7638,
+  "whole_peak_reserved_gb": 8.01,
+  "line_gb": 12.8,
+  "seconds": {
+    "load": 2.6,
+    "decode": 95.7
+  },
+  "mem": {
+    "rss": 2.85,
+    "rss_peak": 7.81,
+    "commit": 12.16,
+    "commit_peak": 17.4
+  },
+  "ok": true
+}

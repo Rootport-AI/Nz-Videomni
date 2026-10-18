@@ -1,4 +1,4 @@
-r"""Run the MiniMax H3 engine tests inside .venv-engine-h3 (台帳 §1-93).
+r"""Run the MiniMax H3 engine tests inside .venv-engine-h3 (design: Docs/MINIMAX_H3_DESIGN.md; record: VERIFICATION_LOG §165-§167).
 
 The engine venv has no pytest, so the app venv's site-packages is APPENDED to
 sys.path (appended, never prepended: torch / transformers / comfy_kitchen must

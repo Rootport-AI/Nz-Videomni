@@ -12,3 +12,4 @@
 | `REVIEW_plan3.md` | 計画の敵対的レビュー（Opus。Critical 0・Major 8・Minor 11。採否は計画 §9） |
 | `REVIEW_readme3.md` | README の読み合わせレビュー（初めて H3 を足す利用者の視点。Major 2・Minor 17。全採用） |
 | `REVIEW_code3.md` | インストーラのコードレビュー（Critical 0・Major 0・Minor 7。全採用） |
+| `REVIEW_close3.md` | セッションのクローズ時の文書とコメントのレビュー（次のセッションの担当者の視点。Major 5・Minor 11。全採用） |

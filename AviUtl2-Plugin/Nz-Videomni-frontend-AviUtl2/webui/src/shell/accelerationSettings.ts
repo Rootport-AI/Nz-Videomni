@@ -9,9 +9,10 @@
  * backend §44), whether it keeps the models' CPU-side skeleton resident
  * between jobs (2026-08-02, backend §48), and whether GGUF dequantization runs
  * as one fused Triton kernel (2026-08-04, backend §51), which VAE decoder
- * reconstructs the video (2026-08-05, backend §52 — PrunaVAED), and whether
+ * reconstructs the video (2026-08-05, backend §52 — PrunaVAED), whether
  * LTX 2.5's embeddings processor stays resident between jobs (2026-09-03,
- * 台帳 §3-114). Shared by
+ * 台帳 §3-114), and whether MiniMax H3 runs its denoise in VRAM 16GB mode
+ * (2026-10-18, 台帳 §1-101). Shared by
  * Create/Chain/Batch via a
  * single `AccelerationSettings` object (D1: `AppShell` useState + props, no
  * Context — exactly the arrangement `shell/nagSettings.ts` documents and every
@@ -90,7 +91,10 @@
  *    name — the same treatment `prune_vaed` gets, just pointing the other way.
  *  - `vram16Mode` — REAL (2026-10-18, 台帳 §1-101). "VRAM 16GB mode": MiniMax
  *    H3 only. Splits the denoiser's activations into pieces so a job fits in
- *    16GB of VRAM; precision is unchanged (the target is bit-identical output).
+ *    16GB of VRAM; precision is unchanged. The target is bit-identical output:
+ *    `sdpa` is; with `sage`, 2 of the 50 blocks differ slightly (the kernel
+ *    depends on the heads per call), accepted by the owner's visual check
+ *    (ruling 53, backend VERIFICATION_LOG §169.3).
  *    Sent as `vram16_mode`; the H3 server default is `true`, so the key rides
  *    along only while it is OFF — the `fusedGgufDequantKernel` direction. The
  *    scope points the same way as `keepResidentEmbeddings`: the engines that do

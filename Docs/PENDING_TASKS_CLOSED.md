@@ -3014,5 +3014,17 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **何が完了したか**: α版完結＝第 1 弾 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165・第 2 弾 §166・第 3 弾 §167。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md)。
 - **どの物差しで通ったか**: 各弾の開発機の門、第 1・2 弾のオーナーの目視（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165.9・§166.9）、サブマシンの門 3-G3（同 §167.8。計画と違う条件で合格と判断した経緯も同所）。
 - **状態**: 第 3 弾の本体は main merge 済み（`a5802a4`）。3-G3 の後の文書の merge はオーナーの合図待ち。
+  > **訂正（2026-10-19）**: 3-G3 の後の文書も main merge 済み（`709a2fe`）。
 - **正本・出典**: 裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10、記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165〜§167。
 - **残課題**: §1-95（快適上限の較正）・§1-97（末尾と中間のキーフレーム）・§1-100・§1-101・§1-102 として [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に起票済み。
+  > **更新（2026-10-19）**: §1-101 は本書 3-240 でクローズした。
+
+### 3-240. MiniMax H3 の VRAM 16GB 最適化（VRAM 16GB mode）（起票：2026-10-18、クローズ：2026-10-18）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-101 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-101（**同書側は欠番**）。実機の門（B-G5。オーナーの操作パネルからの実行）は §1 にあるうちに済んだので、§2 への移送を省いて直接クローズした（監督判断。3-239 と同じ扱い）。
+- **到達条件**: I2V 896×1152×124 フレームで VRAM の溢れ（共有メモリへの退避）が起きず、1 ステップが正常な時間に戻ること。精度を落とす手段は使わない。**達成した。**
+- **何が完了したか**: 第 1 段（計測）＝原因の確定（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168）。第 2 段（設計・実装）＝VRAM 16GB mode（同 §169。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5）。H3 では既定 on、off も選べる。
+- **どの物差しで通ったか**: 開発機の機械の門（A-G1〜A-G6・B-G1〜B-G4。同 §169.3・§169.4）と、B-G5 のオーナーの目視（同 §169.5）。製品の条件で 1 ステップ約 203 秒が約 22 秒になり、退避はゼロ。sage の 2 ブロックの値の差は、オーナーの目視で合格し採用した（裁定 53）。
+- **状態**: dev にコミット済み（弾 A `69e62a9`・弾 B `0d0a60d`・`a08c653`。弾 C の文書は監督が積む）。main merge はオーナーの合図待ち。
+- **正本・出典**: 裁定 44〜53 は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（設計の規則 44〜47・51・53 は設計正本 §2 にも）。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168・§169。複写は [`Outputs-archive/h3-vram16-2026-10-18/`](Outputs-archive/h3-vram16-2026-10-18/README.md)。
+- **残課題**: §1-95（快適上限の較正。退避そのものの量で線を引く）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に起票済み。

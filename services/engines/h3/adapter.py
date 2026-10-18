@@ -14,7 +14,7 @@ facts that are genuinely different:
   tokenizer folder (a descriptor ``assets`` entry, like 2.3's ``gemma_root``);
 * the feature scope (the four tables below) and the numeric rules
   (:data:`REQUEST_RULES`: 17n+5 frames from 22, a 32 multiple, 24 fps fixed,
-  1..50 steps, the two shifts).
+  1..50 steps, the two shifts, and ``flag_defaults``: VRAM 16GB mode on).
 
 THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
 Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
@@ -27,7 +27,8 @@ paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
 encoder is read layer by layer straight from the file). ``generate`` carries the job, the
 conditioning ``images`` (``{path, frame_idx}``; H3 has no strength), and the
 per-job ``attention_backend`` / ``block_swap_prefetch`` (always sent: an absent
-key would mean "the load value", not "off") and ``keep_resident`` (only when
+key would mean "the load value", not "off"), ``vram16_mode`` (always sent: the
+worker's own default is off, the app's is on) and ``keep_resident`` (only when
 asked for — an absent key is the release request, the LTX contract). The
 progress stages are LTX's single-stage ones (``encode`` / ``stage1_denoise`` /
 ``decode``), read with ``one_stage=True``.
@@ -445,8 +446,9 @@ class _RealBackendH3(_RealBackend):
             # Per-job, ALWAYS sent: an absent key would mean "the load value".
             "attention_backend": request.attention_backend,
             "block_swap_prefetch": bool(request.block_swap_prefetch),
-            # validate_for_family's flag_defaults writes None back to on, so
-            # None is not expected here; if it ever arrives it still means on.
+            # The default's source of truth is REQUEST_RULES.flag_defaults
+            # (VRAM16_MODE_DEFAULT_H3), which validate_for_family writes back,
+            # so None is not expected here; if it ever arrives it still means on.
             "vram16_mode": request.vram16_mode is not False,
             "output_path": str(target),
         }

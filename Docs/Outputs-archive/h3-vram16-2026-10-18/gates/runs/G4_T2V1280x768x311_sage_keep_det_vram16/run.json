@@ -1,0 +1,950 @@
+{
+  "label": "G4_T2V1280x768x311_sage_keep_det_vram16",
+  "started": "2026-10-18 22:21:42.448",
+  "pid": 59200,
+  "args": {
+    "label": "G4_T2V1280x768x311_sage_keep_det_vram16",
+    "width": 1280,
+    "height": 768,
+    "num_frames": 311,
+    "attention_backend": "sage",
+    "blocks_on_gpu": 8,
+    "memory_fraction": null,
+    "record_history": false,
+    "history_entries": 2000000,
+    "steps": 2,
+    "seed": 42,
+    "idle_seconds": 10.0,
+    "image": null,
+    "prompt_file": null,
+    "keep_resident": true,
+    "deterministic": true,
+    "vram16": true,
+    "vram16_head_group": null,
+    "vram16_row_chunk": null,
+    "vram16_blocks": null,
+    "runs_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vram16-gates\\runs",
+    "dry_run": false,
+    "transformer": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "text_encoder": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+    "video_vae": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_audio_vae_fp32.safetensors",
+    "tokenizer_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_tokenizer"
+  },
+  "events": [
+    {
+      "t_mono": 108899.6291806,
+      "t_wall": 1792329719.823398,
+      "event": "ready",
+      "sampler": "euler",
+      "sage_available": true
+    },
+    {
+      "t_mono": 108899.6329842,
+      "t_wall": 1792329719.8269455,
+      "event": "progress",
+      "stage": "encode",
+      "index": 0,
+      "total": 3
+    },
+    {
+      "t_mono": 108901.5352991,
+      "t_wall": 1792329721.729722,
+      "event": "progress",
+      "stage": "encode",
+      "index": 1,
+      "total": 3
+    },
+    {
+      "t_mono": 108916.6645589,
+      "t_wall": 1792329736.859465,
+      "event": "progress",
+      "stage": "encode",
+      "index": 2,
+      "total": 3
+    },
+    {
+      "t_mono": 108916.8238121,
+      "t_wall": 1792329737.0181718,
+      "event": "progress",
+      "stage": "encode",
+      "index": 3,
+      "total": 3
+    },
+    {
+      "t_mono": 108929.51463,
+      "t_wall": 1792329749.7087,
+      "event": "progress",
+      "stage": "stage1_denoise",
+      "index": 0,
+      "total": 2
+    },
+    {
+      "t_mono": 109006.9807783,
+      "t_wall": 1792329827.175297,
+      "event": "progress",
+      "stage": "stage1_denoise",
+      "index": 1,
+      "total": 2
+    },
+    {
+      "t_mono": 109083.2179249,
+      "t_wall": 1792329903.412567,
+      "event": "progress",
+      "stage": "stage1_denoise",
+      "index": 2,
+      "total": 2
+    },
+    {
+      "t_mono": 109083.4352302,
+      "t_wall": 1792329903.6299915,
+      "event": "progress",
+      "stage": "decode",
+      "index": 0,
+      "total": 3
+    },
+    {
+      "t_mono": 109172.2687191,
+      "t_wall": 1792329992.463145,
+      "event": "progress",
+      "stage": "decode",
+      "index": 1,
+      "total": 3
+    },
+    {
+      "t_mono": 109173.0090524,
+      "t_wall": 1792329993.2039633,
+      "event": "progress",
+      "stage": "decode",
+      "index": 2,
+      "total": 3
+    },
+    {
+      "t_mono": 109175.9894235,
+      "t_wall": 1792329996.1834853,
+      "event": "progress",
+      "stage": "decode",
+      "index": 3,
+      "total": 3
+    },
+    {
+      "t_mono": 109176.1076549,
+      "t_wall": 1792329996.3019352,
+      "event": "done",
+      "seed_used": 42,
+      "sampler": "euler",
+      "num_inference_steps": 2,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "peak_vram_mb": 7062,
+      "peak_vram_reserved_mb": 11382,
+      "rss_peak_gib": 28.94,
+      "commit_gib": 36.39,
+      "commit_peak_gib": 43.27,
+      "seconds": 276.48,
+      "num_frames": 311,
+      "frame_rate": 24,
+      "width": 1280,
+      "height": 768,
+      "size_bytes": 2857145,
+      "attention_used": "sage",
+      "block_swap_prefetch_used": "on",
+      "keep_resident_used": "on",
+      "vram16_mode_used": "on",
+      "images_used": 0,
+      "h3": {
+        "phases": {
+          "encode": {
+            "te": {
+              "num_layers_file": 50,
+              "num_layers_built": 50,
+              "int8_linears": 350,
+              "tensors_planned": 901,
+              "vision_tensors_in_file": 351,
+              "rope": {
+                "rope_type": "default",
+                "rope_theta": 5000000.0,
+                "mrope_section": [
+                  24,
+                  20,
+                  20
+                ],
+                "mrope_interleaved": true,
+                "head_dim": 128,
+                "num_attention_heads": 64,
+                "num_key_value_heads": 8,
+                "num_hidden_layers": 50,
+                "attn_implementation": "sdpa"
+              },
+              "extra_special_tokens": {
+                "ids": {
+                  "<d>": 151669,
+                  "</d>": 151670,
+                  "<|cutoff|>": 151671,
+                  "<|lyrics_start|>": 151672,
+                  "<|lyrics_end|>": 151673,
+                  "<|caption_start|>": 151674,
+                  "<|caption_end|>": 151675
+                },
+                "added_here": false
+              },
+              "seconds": 0.34
+            },
+            "rss_after_load_gib": 0.82,
+            "commit_after_load_gib": 2.12,
+            "te_read": {
+              "read_gib": 24.17,
+              "read_seconds": 14.73,
+              "layers_read": 50,
+              "encode_seconds": 15.12,
+              "tokens": 32,
+              "vision_tokens": 0
+            },
+            "rss_after_release_gib": 1.65,
+            "commit_after_release_gib": 3.39,
+            "text_tokens": 32,
+            "seconds": 17.19,
+            "rss_end_gib": 1.65,
+            "rss_process_peak_gib": 2.27,
+            "commit_end_gib": 3.39,
+            "commit_process_peak_gib": 5.18,
+            "peak_vram_mb": 1968,
+            "peak_vram_reserved_mb": 1992
+          },
+          "denoise": {
+            "dit": {
+              "int8_linears": 200,
+              "loaded_tensors": 732,
+              "loaded_gib": 19.53,
+              "read_seconds": 11.78
+            },
+            "dit_source": "file",
+            "rss_after_load_gib": 21.05,
+            "commit_after_load_gib": 26.69,
+            "rss_after_place_gib": 21.27,
+            "commit_after_place_gib": 30.51,
+            "sequence": {
+              "text": 32,
+              "cond": 0,
+              "audio": 1036,
+              "video": 88320,
+              "total": 89388,
+              "latent_frames": 92,
+              "audio_latents": 518,
+              "grid": [
+                24,
+                40
+              ]
+            },
+            "m_per_step": [
+              1,
+              2
+            ],
+            "block_swap_prefetch_used": "on",
+            "vram16": {
+              "cap_fraction": 0.8565,
+              "cap_mib": 14025,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 1634
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 22.21,
+            "commit_after_release_gib": 28.34,
+            "seconds": 166.53,
+            "rss_end_gib": 22.21,
+            "rss_process_peak_gib": 22.21,
+            "commit_end_gib": 28.33,
+            "commit_process_peak_gib": 39.04,
+            "peak_vram_mb": 7062,
+            "peak_vram_reserved_mb": 11382
+          },
+          "decode": {
+            "vae_source": "file",
+            "audio_samples": 414400,
+            "audio_samples_decoded": 414400,
+            "frames": 311,
+            "seconds": 92.59,
+            "rss_end_gib": 28.26,
+            "rss_process_peak_gib": 28.94,
+            "commit_end_gib": 36.39,
+            "commit_process_peak_gib": 43.27,
+            "peak_vram_mb": 6383,
+            "peak_vram_reserved_mb": 7552
+          }
+        },
+        "quant_backends": {
+          "triton": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          },
+          "eager": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          },
+          "cuda": {
+            "available": true,
+            "disabled": false,
+            "int8_linear": true
+          },
+          "ascend": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          },
+          "hip": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          }
+        }
+      }
+    }
+  ],
+  "progress": [
+    {
+      "stage": "encode",
+      "index": 0,
+      "total": 3,
+      "t_mono": 108899.6329703,
+      "t_wall": 1792329719.8269455,
+      "iso": "2026-10-18 22:21:59.826"
+    },
+    {
+      "stage": "encode",
+      "index": 1,
+      "total": 3,
+      "t_mono": 108901.535283,
+      "t_wall": 1792329721.729722,
+      "iso": "2026-10-18 22:22:01.729"
+    },
+    {
+      "stage": "encode",
+      "index": 2,
+      "total": 3,
+      "t_mono": 108916.6645158,
+      "t_wall": 1792329736.859465,
+      "iso": "2026-10-18 22:22:16.859"
+    },
+    {
+      "stage": "encode",
+      "index": 3,
+      "total": 3,
+      "t_mono": 108916.82379,
+      "t_wall": 1792329737.0181718,
+      "iso": "2026-10-18 22:22:17.018"
+    },
+    {
+      "stage": "stage1_denoise",
+      "index": 0,
+      "total": 2,
+      "t_mono": 108929.5146007,
+      "t_wall": 1792329749.7087,
+      "iso": "2026-10-18 22:22:29.708"
+    },
+    {
+      "stage": "stage1_denoise",
+      "index": 1,
+      "total": 2,
+      "t_mono": 109005.5401301,
+      "t_wall": 1792329825.7348616,
+      "iso": "2026-10-18 22:23:45.734"
+    },
+    {
+      "stage": "stage1_denoise",
+      "index": 2,
+      "total": 2,
+      "t_mono": 109083.2172332,
+      "t_wall": 1792329903.412055,
+      "iso": "2026-10-18 22:25:03.412"
+    },
+    {
+      "stage": "decode",
+      "index": 0,
+      "total": 3,
+      "t_mono": 109083.435215,
+      "t_wall": 1792329903.6299915,
+      "iso": "2026-10-18 22:25:03.629"
+    },
+    {
+      "stage": "decode",
+      "index": 1,
+      "total": 3,
+      "t_mono": 109172.2686926,
+      "t_wall": 1792329992.463145,
+      "iso": "2026-10-18 22:26:32.463"
+    },
+    {
+      "stage": "decode",
+      "index": 2,
+      "total": 3,
+      "t_mono": 109173.0090099,
+      "t_wall": 1792329993.2029493,
+      "iso": "2026-10-18 22:26:33.202"
+    },
+    {
+      "stage": "decode",
+      "index": 3,
+      "total": 3,
+      "t_mono": 109175.9894034,
+      "t_wall": 1792329996.1834853,
+      "iso": "2026-10-18 22:26:36.183"
+    }
+  ],
+  "samples": {
+    "process_memory_preload": {
+      "tag": "preload",
+      "t_wall": 1792329717.246153,
+      "iso": "2026-10-18 22:21:57.246",
+      "seconds_taken": 1.39,
+      "csv": "gpu_process_memory_preload.csv",
+      "processes": 38,
+      "self_dedicated_mb": 183.3,
+      "self_shared_mb": 74.0,
+      "others_dedicated_mb": 5347.0,
+      "others_shared_mb": 73.1
+    },
+    "step1": {
+      "index": 1,
+      "t_mono_enter": 109005.5401301,
+      "t_wall_enter": 1792329825.7348616,
+      "memory_stats": {
+        "allocated_bytes.all.current": 2460211200,
+        "allocated_bytes.all.peak": 7405489664,
+        "reserved_bytes.all.current": 11932794880,
+        "reserved_bytes.all.peak": 11932794880,
+        "inactive_split_bytes.all.current": 219949056,
+        "inactive_split_bytes.all.peak": 1480192512,
+        "num_alloc_retries": 0,
+        "num_ooms": 0,
+        "num_device_alloc": 37,
+        "num_device_free": 11,
+        "allocated_mib.all.current": 2346.2,
+        "allocated_mib.all.peak": 7062.4,
+        "reserved_mib.all.current": 11380.0,
+        "reserved_mib.all.peak": 11380.0,
+        "inactive_split_mib.all.current": 209.8,
+        "inactive_split_mib.all.peak": 1411.6
+      },
+      "mem_get_info": {
+        "free_bytes": 3578028032,
+        "total_bytes": 17170956288,
+        "free_mib": 3412.3,
+        "total_mib": 16375.5,
+        "used_mib": 12963.2
+      },
+      "swap": {
+        "service": true,
+        "blocks_on_gpu": 4,
+        "last_prefetch_used": "on",
+        "prefetch_engine": true,
+        "arenas": 6,
+        "blocks": 50
+      },
+      "process_memory": {
+        "tag": "step1",
+        "t_wall": 1792329825.7348616,
+        "iso": "2026-10-18 22:23:45.734",
+        "seconds_taken": 1.44,
+        "csv": "gpu_process_memory_step1.csv",
+        "processes": 38,
+        "self_dedicated_mb": 11647.4,
+        "self_shared_mb": 1106.0,
+        "others_dedicated_mb": 5346.3,
+        "others_shared_mb": 52.9
+      },
+      "t_mono_done": 109006.9804397,
+      "t_wall_done": 1792329827.175297
+    },
+    "step2": {
+      "index": 2,
+      "t_mono_enter": 109083.2172332,
+      "t_wall_enter": 1792329903.412055,
+      "memory_stats": {
+        "allocated_bytes.all.current": 2460211200,
+        "allocated_bytes.all.peak": 7405489664,
+        "reserved_bytes.all.current": 11934892032,
+        "reserved_bytes.all.peak": 11934892032,
+        "inactive_split_bytes.all.current": 121382912,
+        "inactive_split_bytes.all.peak": 1712999424,
+        "num_alloc_retries": 0,
+        "num_ooms": 0,
+        "num_device_alloc": 38,
+        "num_device_free": 11,
+        "allocated_mib.all.current": 2346.2,
+        "allocated_mib.all.peak": 7062.4,
+        "reserved_mib.all.current": 11382.0,
+        "reserved_mib.all.peak": 11382.0,
+        "inactive_split_mib.all.current": 115.8,
+        "inactive_split_mib.all.peak": 1633.6
+      },
+      "mem_get_info": {
+        "free_bytes": 3574489088,
+        "total_bytes": 17170956288,
+        "free_mib": 3408.9,
+        "total_mib": 16375.5,
+        "used_mib": 12966.6
+      },
+      "t_mono_done": 109083.2174671,
+      "t_wall_done": 1792329903.412055
+    }
+  },
+  "error": null,
+  "paths": {
+    "transformer": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "exists": true,
+      "bytes": 20970379616
+    },
+    "text_encoder": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "exists": true,
+      "bytes": 27141342152
+    },
+    "video_vae": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_video_vae_fp16.safetensors",
+      "exists": true,
+      "bytes": 5207808496
+    },
+    "audio_vae": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_audio_vae_fp32.safetensors",
+      "exists": true,
+      "bytes": 605254808
+    },
+    "tokenizer_dir": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_tokenizer",
+      "exists": true,
+      "files": [
+        "config.json",
+        "merges.txt",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json"
+      ]
+    }
+  },
+  "luid": {
+    "chosen_luid": "luid_0x00000000_0x0000f2a9_phys_0",
+    "chosen_dedicated_mb": 674.6,
+    "candidates": [
+      {
+        "instance": "luid_0x00000000_0x0000f2a9_phys_0",
+        "mb": 674.6
+      },
+      {
+        "instance": "luid_0x00000000_0x000104d7_phys_0",
+        "mb": 0
+      },
+      {
+        "instance": "luid_0x00000000_0x00010465_phys_0",
+        "mb": 0
+      }
+    ],
+    "discovered_at": "2026-10-18 22:21:43.804",
+    "note": "この回に取り直した値の記録。次の回では使わない"
+  },
+  "monitors_started": "2026-10-18 22:21:45.826",
+  "vram16_overrides": {},
+  "idle_window": {
+    "start_wall": 1792329705.8476298,
+    "end_wall": 1792329715.8589807,
+    "start_iso": "2026-10-18 22:21:45.847",
+    "end_iso": "2026-10-18 22:21:55.858"
+  },
+  "torch": {
+    "version": "2.13.0+cu130",
+    "cuda": "13.0",
+    "device": "NVIDIA GeForce RTX 4070 Ti SUPER"
+  },
+  "sdpa_paths": {
+    "is_flash_attention_available": false,
+    "mem_efficient_sdp_enabled": true,
+    "flash_sdp_enabled": true,
+    "math_sdp_enabled": true,
+    "cudnn_sdp_enabled": true
+  },
+  "mem_info_preload": {
+    "free_bytes": 15845031936,
+    "total_bytes": 17170956288,
+    "free_mib": 15111.0,
+    "total_mib": 16375.5,
+    "used_mib": 1264.5
+  },
+  "per_process_memory_fraction": 1.0,
+  "load_msg": {
+    "op": "load",
+    "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "text_encoder_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+    "video_vae_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_audio_vae_fp32.safetensors",
+    "tokenizer_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_tokenizer",
+    "blocks_on_gpu": 8,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true,
+    "deterministic": true
+  },
+  "load_seconds": 1.18,
+  "build_report": {
+    "dit": {
+      "prefix": "",
+      "num_layers": 50,
+      "hidden_size": 5376,
+      "heads": 56,
+      "adaln_grid": 1025,
+      "adaln_rank": 8,
+      "int8_layers": 200,
+      "quant_specs": [
+        "int8_tensorwise/convrot=True/g256"
+      ],
+      "unknown": []
+    },
+    "text_encoder": {
+      "num_layers": 50,
+      "int8_layers": 350,
+      "has_visual": true,
+      "metadata": {
+        "minimax_h3_te": {
+          "num_hidden_layers": 50,
+          "output": "unnormalized_hidden_after_layer_50"
+        }
+      }
+    },
+    "video_vae_tensors": 562,
+    "audio_vae_tensors": 917,
+    "options": {
+      "blocks_on_gpu": 8,
+      "attention_backend": "sage",
+      "block_swap_prefetch": true,
+      "deterministic": true
+    },
+    "quant_backends": {
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      }
+    },
+    "device": "cuda"
+  },
+  "generate_msg": {
+    "op": "generate",
+    "prompt": "A woman in a sunlit kitchen looks up from her cup of tea and smiles. <d>[English] Good morning. The kettle is still warm.</d>",
+    "seed": 42,
+    "width": 1280,
+    "height": 768,
+    "num_frames": 311,
+    "frame_rate": 24,
+    "num_inference_steps": 2,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vram16-gates\\runs\\G4_T2V1280x768x311_sage_keep_det_vram16\\out.mp4",
+    "images": [],
+    "keep_resident": true,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true,
+    "vram16_mode": true
+  },
+  "generate_started_iso": "2026-10-18 22:21:59.823",
+  "generate_seconds": 276.48,
+  "monitors_stopped": "2026-10-18 22:26:38.704",
+  "done": {
+    "t_mono": 109176.1076549,
+    "t_wall": 1792329996.3019352,
+    "event": "done",
+    "seed_used": 42,
+    "sampler": "euler",
+    "num_inference_steps": 2,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "peak_vram_mb": 7062,
+    "peak_vram_reserved_mb": 11382,
+    "rss_peak_gib": 28.94,
+    "commit_gib": 36.39,
+    "commit_peak_gib": 43.27,
+    "seconds": 276.48,
+    "num_frames": 311,
+    "frame_rate": 24,
+    "width": 1280,
+    "height": 768,
+    "size_bytes": 2857145,
+    "attention_used": "sage",
+    "block_swap_prefetch_used": "on",
+    "keep_resident_used": "on",
+    "vram16_mode_used": "on",
+    "images_used": 0,
+    "h3": {
+      "phases": {
+        "encode": {
+          "te": {
+            "num_layers_file": 50,
+            "num_layers_built": 50,
+            "int8_linears": 350,
+            "tensors_planned": 901,
+            "vision_tensors_in_file": 351,
+            "rope": {
+              "rope_type": "default",
+              "rope_theta": 5000000.0,
+              "mrope_section": [
+                24,
+                20,
+                20
+              ],
+              "mrope_interleaved": true,
+              "head_dim": 128,
+              "num_attention_heads": 64,
+              "num_key_value_heads": 8,
+              "num_hidden_layers": 50,
+              "attn_implementation": "sdpa"
+            },
+            "extra_special_tokens": {
+              "ids": {
+                "<d>": 151669,
+                "</d>": 151670,
+                "<|cutoff|>": 151671,
+                "<|lyrics_start|>": 151672,
+                "<|lyrics_end|>": 151673,
+                "<|caption_start|>": 151674,
+                "<|caption_end|>": 151675
+              },
+              "added_here": false
+            },
+            "seconds": 0.34
+          },
+          "rss_after_load_gib": 0.82,
+          "commit_after_load_gib": 2.12,
+          "te_read": {
+            "read_gib": 24.17,
+            "read_seconds": 14.73,
+            "layers_read": 50,
+            "encode_seconds": 15.12,
+            "tokens": 32,
+            "vision_tokens": 0
+          },
+          "rss_after_release_gib": 1.65,
+          "commit_after_release_gib": 3.39,
+          "text_tokens": 32,
+          "seconds": 17.19,
+          "rss_end_gib": 1.65,
+          "rss_process_peak_gib": 2.27,
+          "commit_end_gib": 3.39,
+          "commit_process_peak_gib": 5.18,
+          "peak_vram_mb": 1968,
+          "peak_vram_reserved_mb": 1992
+        },
+        "denoise": {
+          "dit": {
+            "int8_linears": 200,
+            "loaded_tensors": 732,
+            "loaded_gib": 19.53,
+            "read_seconds": 11.78
+          },
+          "dit_source": "file",
+          "rss_after_load_gib": 21.05,
+          "commit_after_load_gib": 26.69,
+          "rss_after_place_gib": 21.27,
+          "commit_after_place_gib": 30.51,
+          "sequence": {
+            "text": 32,
+            "cond": 0,
+            "audio": 1036,
+            "video": 88320,
+            "total": 89388,
+            "latent_frames": 92,
+            "audio_latents": 518,
+            "grid": [
+              24,
+              40
+            ]
+          },
+          "m_per_step": [
+            1,
+            2
+          ],
+          "block_swap_prefetch_used": "on",
+          "vram16": {
+            "cap_fraction": 0.8565,
+            "cap_mib": 14025,
+            "blocks_on_gpu": 4,
+            "head_group": 8,
+            "row_chunk": 4096,
+            "text_modules": "cpu",
+            "num_alloc_retries": 0,
+            "num_ooms": 0,
+            "inactive_split_peak_mib": 1634
+          },
+          "dit_parked_tensors": 13,
+          "rss_after_release_gib": 22.21,
+          "commit_after_release_gib": 28.34,
+          "seconds": 166.53,
+          "rss_end_gib": 22.21,
+          "rss_process_peak_gib": 22.21,
+          "commit_end_gib": 28.33,
+          "commit_process_peak_gib": 39.04,
+          "peak_vram_mb": 7062,
+          "peak_vram_reserved_mb": 11382
+        },
+        "decode": {
+          "vae_source": "file",
+          "audio_samples": 414400,
+          "audio_samples_decoded": 414400,
+          "frames": 311,
+          "seconds": 92.59,
+          "rss_end_gib": 28.26,
+          "rss_process_peak_gib": 28.94,
+          "commit_end_gib": 36.39,
+          "commit_process_peak_gib": 43.27,
+          "peak_vram_mb": 6383,
+          "peak_vram_reserved_mb": 7552
+        }
+      },
+      "quant_backends": {
+        "triton": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        },
+        "eager": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        },
+        "cuda": {
+          "available": true,
+          "disabled": false,
+          "int8_linear": true
+        },
+        "ascend": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        },
+        "hip": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        }
+      }
+    }
+  },
+  "timing": {
+    "step2_seconds": 76.237,
+    "step1_hook_seconds": 1.44,
+    "rule": "2 ステップ目＝index 2 の時刻 − index 1 の割り込みを終えた時刻（synchronize 後）",
+    "step1_seconds_incl_prefetch_startup": 76.026,
+    "counts_step1_to_step2": {
+      "num_alloc_retries": 0,
+      "num_device_alloc": 1,
+      "num_device_free": 0,
+      "num_ooms": 0
+    },
+    "step_seconds": [
+      76.026,
+      76.237
+    ],
+    "step_seconds_rule": "index k の時刻 − index k−1 の割り込みを終えた時刻（k=1 は index 0 の時刻から。先読みの立ち上がりを含む）",
+    "counts_cumulative_by_index": [
+      {
+        "num_alloc_retries": 0,
+        "num_device_alloc": 37,
+        "num_device_free": 11,
+        "num_ooms": 0
+      },
+      {
+        "num_alloc_retries": 0,
+        "num_device_alloc": 38,
+        "num_device_free": 11,
+        "num_ooms": 0
+      }
+    ]
+  },
+  "non_torch_estimate_mib": {
+    "formula": "(total-free)@index1 - reserved@index1 - others_dedicated@preload",
+    "value": -3763.8
+  },
+  "wddm": {
+    "samples": 294,
+    "nonzero_dedicated_samples": 294,
+    "dedicated_mb_min": 674.6,
+    "dedicated_mb_max": 12336.3,
+    "shared_mb_min": 69.7,
+    "shared_mb_max": 1182.2,
+    "dt_ms_median": 1002.0,
+    "denoise_window": {
+      "samples": 153,
+      "dedicated_mb_median": 12331.9,
+      "shared_mb_median": 1169.8,
+      "dedicated_mb_max": 12336.3,
+      "shared_mb_max": 1179.3,
+      "rule": "stage1_denoise の index 0 から最後の index までの壁時計"
+    },
+    "idle": {
+      "samples": 10,
+      "dedicated_mb_median": 674.6,
+      "shared_mb_median": 69.8,
+      "dedicated_mb_max": 688.6,
+      "shared_mb_max": 73.3
+    }
+  },
+  "vram16": {
+    "vram16_mode_used": "on",
+    "record": {
+      "cap_fraction": 0.8565,
+      "cap_mib": 14025,
+      "blocks_on_gpu": 4,
+      "head_group": 8,
+      "row_chunk": 4096,
+      "text_modules": "cpu",
+      "num_alloc_retries": 0,
+      "num_ooms": 0,
+      "inactive_split_peak_mib": 1634
+    }
+  },
+  "non_torch_estimate_mib_adapter_idle": {
+    "formula": "(total-free)@index1 - reserved@index1 - wddm_dedicated_median@idle",
+    "value": 908.6
+  },
+  "effective": {
+    "build_blocks_on_gpu": 8,
+    "build_attention_backend": "sage",
+    "build_deterministic": true,
+    "keep_resident_used": "on",
+    "images_used": 0,
+    "attention_used": "sage",
+    "block_swap_prefetch_used": "on",
+    "vram16_mode_used": "on",
+    "arenas": 6,
+    "swap_blocks_on_gpu": 4,
+    "vram16_blocks_on_gpu": 4,
+    "arenas_expected": 6,
+    "per_process_memory_fraction": 1.0
+  },
+  "script_seconds": 296.27,
+  "finished": "2026-10-18 22:26:38.720"
+}

@@ -5346,3 +5346,4 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 142.4 状態
 
 - 未コミット。埋め込みのビルドと配置（`scripts/build.ps1`→`deploy.ps1`）は未実施（監督が行う）。
+  > **更新（2026-10-19）**: コミット済み（バックエンドのリポジトリの dev `0d0a60d`。新規テスト `shell/vram16Mode.paths.test.ts` だけは入り漏れて `a08c653`）。埋め込みのビルドと配置は監督が行い、オーナーの操作パネルからの確認（B-G5）に合格した（バックエンド台帳 §1-101 → CLOSED 3-240。記録はバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §169.5）。

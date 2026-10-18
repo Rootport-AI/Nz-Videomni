@@ -7,7 +7,8 @@
 # Nz-Videomni: only the Comfy-Org stacked layout and the pruned AdaLN table;
 # one unmasked attention over the whole sequence (no cu_seqlens loop); the
 # token refiner hoisted out of the step loop; explicit float32 islands;
-# tensor-only block arguments for block swap. Cross-checked against diffusers
+# tensor-only block arguments for block swap; VRAM 16GB mode's branch into
+# engine_h3/lowvram.py (台帳 §1-101). Cross-checked against diffusers
 # models/transformers/transformer_minimax_h3.py (Apache-2.0).
 """MiniMax H3 DiT (FL2VA, Comfy-Org pruned int8 ConvRot checkpoint).
 
@@ -55,7 +56,17 @@ finds) and ``H3DiTBlock.forward`` takes tensors only, positionally: the swap
 wrapper moves every argument to the GPU with ``_move_to_device``, and a
 non-tensor argument would be passed through but is a trap for a future
 caller. The attention backend is therefore a module attribute, set once per
-forward, not an argument.
+forward, not an argument -- and so is VRAM 16GB mode's plan
+(``H3DiTBlock.vram16``, a ``lowvram.Vram16Plan`` or None), set on every block
+by every ``H3DiT.forward``.
+
+VRAM 16GB mode
+--------------
+With a plan, ``H3DiTBlock.forward`` and ``H3DiT.final_rows`` hand over to
+``engine_h3.lowvram`` at their first line; the off path below that line is
+unchanged. ``H3DiT.forward`` additionally takes ``tokens_box`` so that the
+caller holds no reference to the token embedding (Docs/MINIMAX_H3_DESIGN.md
+§6.5).
 
 The model is built under ``with torch.device("meta"):``; ``swap_in_int8_linears``
 (``engine_h3.quant_linear``) then replaces the four quantized Linears of each

@@ -172,6 +172,8 @@ EMBED_MP4_METADATA_DEFAULT = True
 # （mcp_server/tools/generate.py。引数の既定は None＝送らないので値は import
 # せず、説明文に「H3 では既定 on」と書く）を1箇所に集約するため——**変えるとき
 # は正本（ここ）＋gradio_ui のミラー＋MCP の説明文の3点を同じ変更で動かすこと**。
+# 操作パネルにも同じ値の写し（webui の shell/accelerationSettings.ts の
+# VRAM16_MODE_SERVER_DEFAULT）があり、あわせて動かす。
 VRAM16_MODE_DEFAULT_H3 = True
 
 

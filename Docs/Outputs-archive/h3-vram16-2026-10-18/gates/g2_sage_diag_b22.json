@@ -1,0 +1,96 @@
+{
+  "gate": "A-G2 blocks on/off",
+  "weights": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+  "plan": {
+    "head_group": 8,
+    "row_chunk": 4096
+  },
+  "rows": [
+    {
+      "block": 22,
+      "groups": [
+        {
+          "heads": [
+            0,
+            8
+          ],
+          "q_equal": true,
+          "k_equal": true,
+          "v_equal": true,
+          "out_equal": true
+        },
+        {
+          "heads": [
+            8,
+            16
+          ],
+          "q_equal": true,
+          "k_equal": true,
+          "v_equal": true,
+          "out_equal": false,
+          "out_max_abs": 0.34375,
+          "out_rel": 0.0005642968699579001,
+          "full_inputs_sliced_then_grouped_equals_on": true
+        },
+        {
+          "heads": [
+            16,
+            24
+          ],
+          "q_equal": true,
+          "k_equal": true,
+          "v_equal": true,
+          "out_equal": true
+        },
+        {
+          "heads": [
+            24,
+            32
+          ],
+          "q_equal": true,
+          "k_equal": true,
+          "v_equal": true,
+          "out_equal": true
+        },
+        {
+          "heads": [
+            32,
+            40
+          ],
+          "q_equal": true,
+          "k_equal": true,
+          "v_equal": true,
+          "out_equal": true
+        },
+        {
+          "heads": [
+            40,
+            48
+          ],
+          "q_equal": true,
+          "k_equal": true,
+          "v_equal": true,
+          "out_equal": true
+        },
+        {
+          "heads": [
+            48,
+            56
+          ],
+          "q_equal": true,
+          "k_equal": true,
+          "v_equal": true,
+          "out_equal": true
+        }
+      ]
+    }
+  ],
+  "sequence": {
+    "text": 1046,
+    "cond": 1008,
+    "audio": 414,
+    "video": 37296,
+    "total": 39764
+  },
+  "m": 3
+}

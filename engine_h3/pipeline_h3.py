@@ -33,6 +33,12 @@ Stages (``progress`` names are the app's shared vocabulary):
    distinct values (at most 3) are numbered with ``torch.unique`` (fewer when
    values coincide, e.g. M = 1 at step 0 of a T2V job, where both sigmas are 1)
    and each row's AdaLN row is ``number * 3 + modality``.
+   VRAM 16GB mode (``vram16_mode``, ``engine_h3.lowvram``; Docs/MINIMAX_H3_DESIGN.md
+   §6.5): the activations are cut into head groups and row chunks, the
+   allocator is capped for the denoise (the cap is derived at run time from
+   ``mem_get_info``), the swap window is at most 4 blocks, and the token
+   refiner and ``condition_proj`` leave the GPU after ``refine_text`` (to the
+   CPU for a kept DiT, to meta otherwise). Off, this stage is as described above.
 3. ``decode``: the video VAE's decoder, then the audio VAE, then the mp4.
 
 I2V (Docs/MINIMAX_H3_DESIGN.md §3): the key frame is put onto the canvas
@@ -349,7 +355,8 @@ def _free_cuda() -> None:
 _VRAM16_COUNTERS = ("num_alloc_retries", "num_ooms")
 
 #: VRAM 16GB mode's message for a CUDA OOM (裁定 47). Keeps "CUDA out of memory" so
-#: the app classifies it as GPU_OOM; the advice reaches the user in ``detail``.
+#: the app classifies it as GPU_OOM; the advice rides in the error's ``detail``,
+#: which the app folds into the job's ``error`` (``GPU_OOM: ... (detail)``).
 VRAM16_OOM_MESSAGE = (
     "VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。"
     "解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください"
@@ -392,7 +399,8 @@ class H3Pipeline:
         self._dit_header = None
         self._dit_cfg = None
         #: ONE resident BlockSwapService per process, as engine25's stage keeps:
-        #: its pinned staging pool (2 x 369 MB) and transfer stream survive the
+        #: its pinned staging pool (2 slots of the largest block, 371.1 MiB each:
+        #: VERIFICATION_LOG §168.6) and transfer stream survive the
         #: per-job teardown. Rebuilding the pool every job is what the pool's
         #: own docstring warns against (block_swap_prefetch.py:234-243).
         self._swap_service = None
@@ -666,8 +674,12 @@ class H3Pipeline:
 
         Mirrors ``engine25/gguf_transformer.py:_place_transformer``: the blocks
         are skipped by module id, the service gets ``prefetch_requested`` BEFORE
-        ``install`` (which reads it), and ``hold_arenas=True`` because this
-        engine's VRAM peak is inside denoise, as LTX 2.5's is. Any wrapper a
+        ``install`` (which reads it), and ``hold_arenas=True``: the ring is
+        dropped by ``teardown_prefetch`` in ``_denoise``'s finally, before the
+        decode, so it never sits under a peak outside the denoise (off, the
+        peak is inside the denoise, as LTX 2.5's is; with VRAM 16GB mode on,
+        the decode allocates more than the denoise, VERIFICATION_LOG §169.5).
+        Any wrapper a
         kept DiT still wears is stripped first, so a job never wraps twice
         whatever the previous job's prefetch setting was.
 

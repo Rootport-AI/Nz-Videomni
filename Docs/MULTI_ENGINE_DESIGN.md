@@ -473,6 +473,8 @@ config.yaml の `lora_dir`（Style LoRA の置き場）と `ic_loras`（IC-LoRA 
 
 **注意——これはエンジンの差ではなく「重みと設定の選び方」による差である。**同じ重みをComfyUI公式ワークフローで動かした場合との違いは3点ある。(1) ComfyUIは拡散デコーダー版のVAEを使うが、本エンジンv1はConv版のまま（採否は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-33）。(2) ComfyUIはプロンプト拡張（小型のGemma 4でプロンプトを自動で書き足す機能）が既定ONだが、本エンジンはOFF。(3) Stage-2の入口sigma（ノイズの強さの初期値）はComfyUIが0.85・公式Pythonが0.909375で、本エンジンは公式Python準拠。Stage-1の8ステップぶんのsigmasはバイト一致している。目視で差が出た場合は、まず(1)(2)を疑うとよい。
 
+**MiniMax H3 の VRAM 16GB mode は本節の表の対象外である。** 数値の約束（目標はビット一致。sdpa はビット一致、sage は 50 ブロック中 2 ブロックでわずかに違い、オーナーの目視で採用＝裁定 53）は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5「数値の約束」が正本である。
+
 ---
 
 ### 5.8 推論モードの規約 — **2.3 だけが全経路 `inference_mode`、`engine25` と `engine_h3` は全経路 `no_grad`**（2026-08-30・§3-124より）
@@ -584,7 +586,7 @@ VIDEO_TIME_FACTOR = 8            # 映像VAEの時間圧縮率
 AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 ```
 
-MiniMax H3 の規則は `services/engines/h3/adapter.py` の `REQUEST_RULES` にある（値の意味は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §9）。
+MiniMax H3 の規則は `services/engines/h3/adapter.py` の `REQUEST_RULES` にある（値の意味は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §9）。規則表は数値の規約のほかに、真偽値の既定の小さな表 `flag_defaults` も持つ（スキーマの既定が `null` の真偽値を、`validate_for_family` が系統の既定へ書き戻す。H3 は `vram16_mode` を on。仕様書 §6.2b (c)）。
 
 ### 作業の順序 【オーナー裁定】
 
@@ -897,7 +899,7 @@ MiniMax H3 の規則は `services/engines/h3/adapter.py` の `REQUEST_RULES` に
 |---|---|---|
 | 読み込みペイロードの組み立て | 各アダプタの `_build_load_payload` | 項目名（`gguf_transformer_path`・`component_video_vae_path` ほか）がそのエンジンの構成そのもの。**キー集合と挿入順が契約である**（§5.2） |
 | 実バックエンド可否の判定 | 各アダプタの `_real_available` | 「そのエンジンが要るファイル一式＋エンジン用python＋ワーカー」が揃っているかという、構成に完全に固有のゲート |
-| 低VRAM制御のつまみ | LTX 2.3 は `block_swap_blocks_on_gpu`・`vae_spatial_tile_size`・`vae_temporal_tile_size` と `services/low_vram.py`、LTX 2.5 は `blocks_on_gpu`・`te_layers_on_gpu`・`cache_weights`、MiniMax H3 は `blocks_on_gpu` と、ジョブごとの `attention_backend`・`block_swap_prefetch`（テキストエンコーダは層オフロードを使わず、層ごとにファイルから直接読む） | DiT ブロック構造とVAEのタイル方式に固有で、系統ごとに機構そのものが違う |
+| 低VRAM制御のつまみ | LTX 2.3 は `block_swap_blocks_on_gpu`・`vae_spatial_tile_size`・`vae_temporal_tile_size` と `services/low_vram.py`、LTX 2.5 は `blocks_on_gpu`・`te_layers_on_gpu`・`cache_weights`、MiniMax H3 は `blocks_on_gpu` と、ジョブごとの `attention_backend`・`block_swap_prefetch`・`vram16_mode`（VRAM 16GB mode。on のジョブは常駐ブロック数を `min(blocks_on_gpu, 4)` にし、活性化を分割し、割り当て器に上限を課す。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5）（テキストエンコーダは層オフロードを使わず、層ごとにファイルから直接読む） | DiT ブロック構造とVAEのタイル方式に固有で、系統ごとに機構そのものが違う |
 | 扱える機能の範囲 | 各アダプタの `UNSUPPORTED_FEATURES` と拒否関数 | §5.6。エンジンの事実であってエンドポイントの事情ではない |
 | 推論パイプライン一式 | `engine/`（ltx）・`engine25/`（ltx25） | モデル構造そのもの。それぞれの仮想環境側に閉じたままでよい |
 | フレーム規約の定数 | `chain_math.py` の `VIDEO_TIME_FACTOR` / `AUDIO_LATENTS_PER_SEC` | LTXの映像VAE（時間8分の1圧縮）と音声レイテント（毎秒25）の実装値。**LTX の2系統はどちらも同じ規約なので、この定数は共有している。H3 の規約は `engine_h3/constants.py` と規則表が持つ**（§7） |

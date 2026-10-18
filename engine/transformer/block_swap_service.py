@@ -58,7 +58,9 @@ class BlockSwapService:
                        OFF by default, because the ring stays allocated from the
                        last denoise pass until teardown_prefetch() (the job's
                        finally on LTX 2.3): that is free for an engine whose
-                       VRAM peak is INSIDE denoise (LTX 2.5) and costs
+                       VRAM peak is INSIDE denoise (LTX 2.5) or that tears the
+                       ring down before its peak (MiniMax H3: in the denoise's
+                       finally, before the decode) and costs
                        blocks_on_gpu+1 extra arenas for one whose peak is
                        outside it (LTX 2.3). The Chain A measurement is in
                        VERIFICATION_LOG §75.7 and in ``block_swap_prefetch``'s

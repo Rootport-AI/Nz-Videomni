@@ -6,8 +6,8 @@
 
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
-- 作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の MiniMax H3 の項目（§1-93）である。件数や項目番号の一覧は本書に書かない。
-- **現在の実装範囲**: 第 1 弾（ワーカーのセルフテスト）と第 2 弾（I2V〔先頭フレーム〕・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP）が実装済みである（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165・§166）。インストーラは `install-MiniMaxH3.bat` で、仮想環境の構築と重みの取得を 1 回で行う（第 3 弾。§10）。範囲の全体は §11。
+- α版の作業は完了している（記録は台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239）。次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目（§1-95・§1-97・§1-100〜§1-102）である。
+- **現在の実装範囲**: α版（第 1〜3 弾）は完了している。第 1 弾（ワーカーのセルフテスト）・第 2 弾（I2V〔先頭フレーム〕・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP）・第 3 弾（インストーラ `install-MiniMaxH3.bat`。仮想環境の構築と重みの取得を 1 回で行う。§10）で、記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165〜§167。範囲の全体は §11。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -15,10 +15,10 @@
 
 | 文書 | 関係 |
 |------|------|
-| [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-93 | 作業の入口。弾ごとの計画と進み具合は台帳側にある |
+| [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 | 次の作業の入口（α版の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239） |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 土台。記述子（§4）・エンジンアダプタ（§5.2）・仮想環境（§5.3）・推論モード（§5.8）・写像表（§9） |
 | [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) | 調査の記録（参考資料）。**進め方の裁定**は同ノート §10。配布ファイルの実測は同 §13.2 |
-| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166） |
+| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167） |
 | `engine_h3/venv-engine-h3.freeze.txt` | 仮想環境の**版の正本**。本書は版の数字を書かない |
 | `engine_h3/engine_h3-venv-pyproject.toml` | 仮想環境を手で作り直すときの依存の仕様（なぜその版かの説明つき） |
 
@@ -57,6 +57,12 @@
 - **裁定 33 【オーナー裁定】**: 映像 VAE は符号化器と復号器に分けて組み、T2V では符号化器を読まない（§8）。
 - **裁定 34 【オーナー裁定】**: 操作パネルの Edit タブは、H3 では 4 つのサブタブ（Retake・Outpainting・Inpainting・Alpha Gen）が全部閉じるため、既存の規則によりタブごと灰色になる。裁定 30 の「グレーアウトして配置だけ決めておく」はこの形で満たす。
 - **裁定 35 【オーナー裁定】**: NAG のアコーディオンは H3 では非表示でなく灰色にし、要求に NAG の項目を載せない（非表示にすると、有効にしたまま解除できず全ジョブが 422 になるため）。IC-LoRA の参照動画のアコーディオンは非表示にする。Single の A2V カードとバッチ A2V は H3 では非表示にする（2026-10-18 の目視の所感。当初の「連結要求そのものなので `chain` で閉じる〔灰色〕」を置き換えた。いまのコードは `featureScope.ts` の `chain` の行で灰色にしており、非表示への変更は台帳 §1-100）。
+- **裁定 36 【オーナー裁定】**: ライセンスは README に明記する（名称・適用除外地域・取得者の自己責任）。インストーラは取得前に注意文とライセンスの URL を表示するだけで、同意の入力は作らない（§10）。
+- **裁定 37 【オーナー裁定】**: README で H3 を「α版」と明示し、できること・できないこと・快適上限が未較正で大きな画角では遅くなること・推奨（VRAM 16GB・主メモリ 64GB）を書く（README §7.6）。
+- **裁定 38 【オーナー裁定】**: GPU 世代の文言は正直に書く。「ドライバ R580 以上・RTX 20 以降（GTX 10 以前は動かない）。確かめたのは RTX 40 だけ。RTX 30・50 は未確認。RTX 20 は int8 が遅い経路になり SageAttention も使えず、動作も未確認」。
+  > **訂正（2026-10-18）**: 文言は裁定 43 で更新した（RTX 30 でも確認・RTX 50 は未確認・主メモリ 32GB はページファイル前提で短い生成を確認・推奨 64GB）。現在の文言は §10 と README にある。
+- **裁定 41 【オーナー裁定】**: インストーラは `MiniMaxAI/MiniMax-H3` の `LICENSE` も取得して `models/MiniMaxH3/LICENSE` に置く。本製品はモデルを再配布しないが、ライセンスは第三者へ渡すときに写しと NOTICE を求めているので、写しを手元に置く安全側の手当てである。NOTICE は作らない（§10）。
+- **裁定 43 【オーナー裁定】**: README の GPU 世代と主メモリの文言を、サブマシンの門の結果を受けて更新する（RTX 30 で確認・主メモリ 32GB はページファイル前提で短い生成を確認・推奨 64GB）。裁定 38 の文言の更新である。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -235,7 +241,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 ### セルフテスト
 
-`python -m engine_h3.worker --selftest-generate` が、`load`／`generate` を合成メッセージで直接呼んで全イベントを記録し、mp4 の SHA-256 と `done` を JSON で書く。`--image P`（先頭フレーム 1 枚）で I2V、`--keep-resident` で常駐を試せる。
+`python -m engine_h3.worker --selftest-generate` が、`load`／`generate` を合成メッセージで直接呼んで全イベントを記録し、mp4 の SHA-256 と `done` を JSON で書く。`--image P`（先頭フレーム 1 枚）で I2V、`--keep-resident` で常駐を試せる。回帰の基準の指紋 `0da6111c…` は、`--prompt` に第 1 弾の門 G5 のプロンプト（黄色いレインコートの女性の文。正確な文は `Docs/Outputs-archive/h3-gate3/g2_selftest_g5prompt.cmd`）を渡し、ほかはセルフテストの既定（640×384・124 フレーム・20 ステップ・seed 42・sdpa）で回したときのものである。既定のプロンプトのまま回すと別の指紋になり、一致しない（条件は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167）。
 
 ---
 
@@ -251,10 +257,11 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 ## 10. 仮想環境
 
-- **名前**: `.venv-engine-h3`。MULTI_ENGINE_DESIGN §5.3 の一覧に並ぶ 3 つ目のエンジン用仮想環境である。
+- **名前**: `.venv-engine-h3`。MULTI_ENGINE_DESIGN §5.3 の一覧に並ぶ、3 つ目のエンジン用仮想環境である。
 - **torch を LTX に揃えない理由【オーナー裁定：裁定 11・16】**: comfy-kitchen の CUDA 拡張は CUDA 13 系の torch で効く。拡張自体は torch の DLL にリンクしていないので、CUDA 13 系でさえあれば torch の版は問わない。そのうえで、SageAttention・triton-windows などの周辺の実績がある版を選ぶ。既存の 2 系統の torch（CUDA 12.8 系）のままでは CUDA 拡張が使えない。
-- **利用者側の条件**: NVIDIA ドライバ **R580 以上**（CUDA 13 系の下限）。GPU は **Turing（RTX 20 系）以降**（CUDA 13 で Pascal 以前が削除された）。利用者向けの書き方（確かめた世代と未確認の世代の区別、主メモリと容量）は README の「ハードウェア要件の詳細」「対応する GPU 世代」と §7.6 にある。
-- **作るのは導入バッチ**: `setup.bat` はこの仮想環境を作らない。`install-MiniMaxH3.bat` が `install_ltx.ps1` の `Ensure-EngineVenv` で作り（`-SkipVenv` を越える。物体追尾の `.venv-utils` と同じ形）、そのあと重みを取る。導入バッチの位置づけは MULTI_ENGINE_DESIGN §6.2。`setup.bat` の再実行では当て直されないので、freeze が変わったときは `install-MiniMaxH3.bat` を再実行する。
+- **利用者側の条件**: NVIDIA ドライバ **R580 以上**（CUDA 13 系の下限）。GPU は **Turing（RTX 20 系）以降**（CUDA 13 で Pascal 以前が削除された）。動作を確かめたのは Ada（RTX 4070 Ti SUPER）と Ampere（RTX 3080 Laptop 16GB）で、Blackwell（RTX 50 系）は未確認、Turing は int8 が遅い経路になり SageAttention も使えず、動作も未確認である（裁定 38・43）。主メモリの推奨は 64GB で、32GB 機はページファイル（「システム管理」）を前提に短い生成を確認している。コミット量の山が 32GB を超えるのでページファイルに頼り、遅くなる場合がある（裁定 26・43。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167）。利用者向けの書き方（確かめた世代と未確認の世代の区別、主メモリと容量）は README の「ハードウェア要件の詳細」「対応する GPU 世代」と §7.6 にある。
+- **作るのは導入バッチ**: `setup.bat` はこの仮想環境を作らない。`install-MiniMaxH3.bat` が `install_ltx.ps1` の `Ensure-EngineVenv`（H3 用の呼び出し）で作り（`-SkipVenv` を越える。物体追尾の `.venv-utils` と同じ形）、そのあと重みを取る。導入バッチの位置づけは MULTI_ENGINE_DESIGN §6.2。`setup.bat` の再実行では当て直されないので、freeze が変わったときは `install-MiniMaxH3.bat` を再実行する。
+- **ライセンスの注意【オーナー裁定：裁定 36・41】**: `install_model.ps1` は、記述子の `id` が `MiniMaxH3` のときだけ、取得の前にライセンスの注意文（名称・利用できる地域・取得者の自己責任）と本文の URL を表示する。表示するだけで、同意の入力は求めない。記述子は `MiniMaxAI/MiniMax-H3` の `LICENSE` も取得して `models/MiniMaxH3/LICENSE` に置く（検査の行の鍵は `h3_license`。サーバーは読まないが、写しを手元に置くための行なので消さない）。NOTICE は作らない。利用者向けの文面は README の「ライセンス」節である。
 - **容量が増える**: torch の版が既存の仮想環境と違うため、uv のハードリンク共有（MULTI_ENGINE_DESIGN §5.3「容量は心配しなくてよい」）が効かず、この仮想環境ぶんの数 GB がそのまま増える。実測値は freeze と記録簿を見る。必要空き容量の正本は README のハードウェア要件表である。
 - **入れないもの**: torchaudio（CUDA 13 の Windows 版が torch の新しい版と組めず、H3 の経路は使わない）、diffsynth（部品は移植した）。
 - **版の正本は `engine_h3/venv-engine-h3.freeze.txt`** である。手で作り直すときの仕様と、各版を選んだ理由は `engine_h3/engine_h3-venv-pyproject.toml` に書く。
@@ -269,14 +276,14 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 |---|---|
 | 第 1 弾（完了。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165） | 仮想環境・重みの取得・`engine_h3/` と `h3_format.py`・T2V セルフテスト 1 本・本書 |
 | 第 2 弾（完了。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166） | I2V（先頭フレーム）のセルフテスト → アダプタ・系統登録・記述子・ヘッダ判定（`h3_format.py` をアプリ側の事前検査から呼ぶ）・API の制約（17n+5・24fps 固定・32 の倍数）・API にステップ数と shift（映像・音声）の 3 項目・操作パネル（ドロップダウンは自動追随・フレーム数のスナップ・快適上限マーカーの非表示・`featureScope.ts`・ステップ数／Shift（映像）／Shift（音声）の 3 本のスライダー〔裁定 22〕）・Gradio の同じ 3 本・MCP の最小対応・テスト・常駐 |
-| 第 3 弾（開発機の門まで合格。サブマシンの門を含む記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167） | `install-MiniMaxH3.bat`（仮想環境の構築と取得を 1 回で）・`Ensure-EngineVenv` の 3 回目の呼び出し・インストーラで作った環境での freeze の取り直し・README（導入手順・要件〔ドライバ・GPU 世代・主メモリ・容量〕・α版の制限〔§7.6〕・ライセンス） |
+| 第 3 弾（完了。サブマシンの門も合格。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167） | `install-MiniMaxH3.bat`（仮想環境の構築と取得を 1 回で）・`Ensure-EngineVenv` の H3 用の呼び出し・インストーラで作った環境と freeze の照合・LICENSE の写しの取得とライセンスの注意文・README（導入手順・要件〔ドライバ・GPU 世代・主メモリ・容量〕・α版の制限〔§7.6〕・ライセンス） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限は、較正が済むまで記述子に `comfort` の行を持たせず、操作パネルのマーカーを出さない。
 
 ### 門
 
-各弾の門の内容と結果は記録簿にある（第 1 弾は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165.5、第 2 弾は同 §166.3〜§166.5・§166.9）。GPU を使う門は同時に 1 体だけ回し、クローズはオーナーの判断である。
+各弾の門の内容と結果は記録簿にある（第 1 弾は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165.5、第 2 弾は同 §166.3〜§166.5・§166.9、第 3 弾は同 §167.3・§167.4・§167.8）。GPU を使う門は同時に 1 体だけ回し、クローズはオーナーの判断である。
 
 ---
 
@@ -297,5 +304,4 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 - **性能**: 大きな画角ではノイズ除去の段で VRAM が溢れ、1 ステップが大きく遅くなる（実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9）。最適化は台帳 §1-101。遅すぎて快適上限の較正（§1-95）に支障が出るなら、LoRA（Turbo）対応の優先順位を上げる（研究ノート §10 の裁定 21）。
 - **m×n ≥ 2³¹ の CUDA 経路**: ソースの水準では限界が無いが、実測は台帳 §1-95（快適上限の較正）で行う。
-- **メインメモリ 32GB 機**: α版の対象外である（推奨は 64GB。裁定 26）。コミット量の山が 32GB を超えるので、ページファイルで動く可能性はあるが未検証である（§4。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166）。
 - **ヘッダの揺れのうち後回しにしたもの**: コミュニティ版の読み込み、非枝刈り版、groupsize の混在への対応範囲。

@@ -65,4 +65,5 @@ set PYTHONPATH=<リポジトリ直下>
 - `g0_g1.json`: G0（import の疎通・CUDA 13.0）と G1（comfy-kitchen の CUDA 経路に `int8_linear`・`probe_sage`）の結果。
 - `g4_te_compare.py`・`g4_te_result.json`: テキストエンコーダの数値照合（層 0／1／49 の int8 と bf16 版の差・層オフロード on/off のビット一致・トークン列の一致）。
 - `g5_t2v.json`（修正前の基準・2 ラウンド sha256 一致 `2a09ee8e…`）・`g5_t2v_sage.json`（sage）・`g5_t2v_after_review.json`（コードレビュー後の新基準 `0da6111c…`）・`g5_bisect_old_vae_cast.py`／`.json`（sha256 の差が映像 VAE の精度の島の型変換の順番だけに由来することの切り分け）。
+  > 訂正（2026-10-18）: 基準の指紋 `0da6111c…` の条件にはプロンプトを含める。プロンプトは第 1 弾 G5 の「黄色いレインコートの女性」の文で、セルフテストの既定のプロンプトでは指紋は `9161e030…` になる。記録簿 `Docs/VERIFICATION_LOG.md` §167.6 を見よ。
 - mp4 とログは `outputs/h3-gate1/`（git 管理外）にだけ置く。記録の正本は `Docs/VERIFICATION_LOG.md` §165。

@@ -3006,3 +3006,13 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   > **更新（2026-10-17）**: 記録のコミットは dev `87beb1d`。main merge 済み（`1cfea51`）。
 - **正本・出典**: 設計上の判断 フロントエンド `DEVLOG.md` §138、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160.3・§160.7。
 - **残課題**: なし。
+
+### 3-239. MiniMax H3 対応・α版（公式 FL2VA 枝刈り int8 ConvRot を 16GB で動かす）（起票：2026-10-16、クローズ：2026-10-18）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-93 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-93（**同書側は欠番**）。実機の門（第 1・2 弾のオーナーの目視〔[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165.9・§166.9〕とサブマシンの門〔同 §167.8〕）は §1 にあるうちに済んだので、§2 への移送を省いて直接クローズした（監督判断。運用規則の「実機で確認できる要素が無い項目」の例外ではない）。
+- **到達条件**: AviUtl2 の操作パネルから T2V と I2V（先頭フレームのみ）が生成できること、`install-MiniMaxH3.bat` と README まで進むこと。**達成した。**
+- **何が完了したか**: α版完結＝第 1 弾 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165・第 2 弾 §166・第 3 弾 §167。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md)。
+- **どの物差しで通ったか**: 各弾の開発機の門、第 1・2 弾のオーナーの目視（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165.9・§166.9）、サブマシンの門 3-G3（同 §167.8。計画と違う条件で合格と判断した経緯も同所）。
+- **状態**: 第 3 弾の本体は main merge 済み（`a5802a4`）。3-G3 の後の文書の merge はオーナーの合図待ち。
+- **正本・出典**: 裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10、記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165〜§167。
+- **残課題**: §1-95（快適上限の較正）・§1-97（末尾と中間のキーフレーム）・§1-100・§1-101・§1-102 として [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に起票済み。

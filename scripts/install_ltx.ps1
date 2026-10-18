@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Full, idempotent clean installer for the Nz-Videomni backend (LTX 2.3 and
-    LTX 2.5 engines).
+    LTX 2.5 engines; the opt-in MiniMax H3 engine when -BaseModel selects it).
     Brings a fresh Windows box (git + uv on PATH; a missing ffmpeg / ffprobe is
     only a warning; the NVIDIA driver is not checked) to a runnable state, and
     is SAFE TO RE-RUN on an already-installed machine (every step is
@@ -29,7 +29,8 @@
       4. App venv  .venv        (torch-FREE; `uv sync` of root pyproject.toml).
       5. Engine venvs .venv-engine (LTX 2.3) and .venv-engine-ltx25 (LTX 2.5),
          both CUDA torch stacks, plus the CPU-only .venv-utils when -BaseModel
-         selects UETrack -- all built by one shared Ensure-EngineVenv.
+         selects UETrack and the cu130 .venv-engine-h3 when -BaseModel selects
+         MiniMaxH3 -- all built by one shared Ensure-EngineVenv.
          Two engine venvs, not one: the 2.5 stack needs transformers 5.x
          (Gemma 4) and the 2.3 stack stays on transformers 4.x, so they cannot
          share an interpreter (exact versions: the *.freeze.txt files).
@@ -92,13 +93,16 @@
     flash-attn are never installed by this script -- SDPA is the baseline the
     code always falls back to, and on Blackwell adding flash-attn can jam it.
     sageattention (prebuilt wheel) and triton-windows (its runtime JIT
-    dependency) are installed into BOTH engine venvs by default, because the
+    dependency) are installed into BOTH LTX engine venvs by default, because the
     Acceleration feature's SageAttentionService (engine/transformer/
     sage_attention_service.py) uses them on both engines: the wheel comes from
     $engineDirectPins / $ltx25DirectPins, triton-windows from
     engine/venv-engine.freeze.txt / engine25/venv-engine-ltx25.freeze.txt.
+    The opt-in MiniMax H3 venv gets its own cu130 build of the wheel
+    ($h3DirectPins; triton-windows from engine_h3/venv-engine-h3.freeze.txt).
     SDPA stays the default at generation time; sage is opt-in per job via
-    `attention_backend`. Blackwell needs an R570+ driver. Because nothing here
+    `attention_backend`. Blackwell needs an R570+ driver for the LTX venvs;
+    the H3 venv (CUDA 13) needs R580+ on every arch. Because nothing here
     is arch-dependent, this installer does not detect or take a GPU
     architecture at all.
 
@@ -120,10 +124,11 @@ param(
     # Convenience skips.
     [switch] $SkipModels,
     # -SkipVenv means "leave the venvs setup.bat built alone" (.venv, .venv-engine,
-    # .venv-engine-ltx25). It does NOT cover .venv-utils, which setup.bat never
-    # builds: that one is created only when this run's -BaseModel selects a
-    # descriptor that needs it (UETrack), so install-UETrack.bat can pass
-    # -SkipVenv and still get its interpreter.
+    # .venv-engine-ltx25). It does NOT cover .venv-utils or .venv-engine-h3,
+    # which setup.bat never builds: each is created only when this run's
+    # -BaseModel selects the descriptor that needs it (UETrack / MiniMaxH3), so
+    # install-UETrack.bat and install-MiniMaxH3.bat can pass -SkipVenv and still
+    # get their interpreter.
     [switch] $SkipVenv,
     # Print the models/ migration plan (and the config.yaml lines that would be
     # rewritten) and exit 0 WITHOUT touching a single byte on disk.
@@ -188,10 +193,11 @@ function Get-FileSize([string] $absPath) {
     return [long] $item.Length
 }
 
-# Sum of the files DIRECTLY inside a directory (NOT recursive). The only
-# consumer is the tokenizer `kind:"dir"` manifest row, which is gated as a whole
-# because its ten files run from 35 B to 33 MB and the seven tiny ones are not
-# individually catchable. Nothing else in this script measures a directory.
+# Sum of the files DIRECTLY inside a directory (NOT recursive). The consumers
+# are the tokenizer `kind:"dir"` manifest rows (LTX 2.3's gemma_root and
+# MiniMax H3's qwen3vl_tokenizer), each gated as a whole because their files run
+# from a few hundred bytes to tens of MB and the tiny ones are not individually
+# catchable. Nothing else in this script measures a directory.
 function Get-DirectChildSize([string] $absPath) {
     if (-not (Test-Path -LiteralPath $absPath)) { return [long] 0 }
     $item = Get-Item -LiteralPath $absPath -Force
@@ -1142,6 +1148,9 @@ if ($SkipVenv) {
 #    cannot coexist in one interpreter, so each engine gets its own. Neither
 #    worker can import the other's stack, which is exactly the isolation the
 #    multi-engine design relies on.
+#    Two more venvs use the same function but are opt-in, built only when
+#    -BaseModel selects them (setup.bat never does): .venv-utils (UETrack, CPU
+#    torch) and .venv-engine-h3 (MiniMax H3, torch cu130). See their blocks.
 #
 #    There is NO committed uv.lock -> we must NEVER use `uv sync --frozen`.
 #    Every engine venv takes the deterministic FREEZE path: it reproduces the
@@ -1275,6 +1284,42 @@ $utilsPy = "$ProjectRoot\.venv-utils\Scripts\python.exe"
 $utilsFreezeSrc = "$ProjectRoot\tracking\venv-utils.freeze.txt"
 $utilsStateFile = "$ProjectRoot\.venv-utils\.nz-engine-state"
 
+# ---------------------------------------------------------------------------
+# MiniMax H3 engine venv (.venv-engine-h3). Opt-in like .venv-utils (built only
+# when -BaseModel selects MiniMaxH3), and a DIFFERENT torch from the two LTX
+# stacks: the int8 ConvRot matmul runs on comfy-kitchen's CUDA extension, which
+# needs a CUDA 13 torch, so this stack is torch 2.13.0+cu130 (needs NVIDIA
+# driver R580+; the installer does not check the GPU). Exact versions and the
+# reasons: engine_h3/venv-engine-h3.freeze.txt (applied) and
+# engine_h3/engine_h3-venv-pyproject.toml (the hand-run recipe, never applied
+# here; it is only the source of the sageattention URL below).
+# ---------------------------------------------------------------------------
+$h3Venv = "$ProjectRoot\.venv-engine-h3"
+$h3Py = "$ProjectRoot\.venv-engine-h3\Scripts\python.exe"
+$h3FreezeSrc = "$ProjectRoot\engine_h3\venv-engine-h3.freeze.txt"
+$h3StateFile = "$ProjectRoot\.venv-engine-h3\.nz-engine-state"
+
+# Same shape as $ltx25DirectPins, for the same reason: torch AND torchvision go
+# into stage (a) with their exact `+cu130` local versions, so that real resolve
+# lands on the right builds the first time (left out, uv picks some other pair
+# from the cu130 index and stage (b) has to swap it back). sageattention is the
+# cu130 libtorch stable-ABI wheel ("torch 2.10 and higher"); it declares no
+# dependencies, so it cannot drag a torch in behind the pins. `%2B` is the
+# URL-encoded `+` -- keep that line SINGLE-quoted.
+$h3DirectPins = @(
+    "torch==2.13.0+cu130"
+    "torchvision==0.28.0+cu130"
+    'sageattention @ https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu130torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl'
+)
+
+# Stage (a) flags: the cu130 index plus unsafe-best-match, as for 2.5. No
+# --no-sources: that flag exists for the official LTX-2 git packages' own index
+# tables, and this stack has no git pins.
+$h3UvArgs = @(
+    "--index", "https://download.pytorch.org/whl/cu130"
+    "--index-strategy", "unsafe-best-match"
+)
+
 # SHA-256 over the freeze file's pinned lines PLUS the direct pins. The freeze
 # file alone is NOT a sufficient input: the pinned revs/URLs are hardcoded in
 # this script, so a bump would otherwise leave the hash unchanged and never
@@ -1305,8 +1350,8 @@ function Get-EngineStateHash {
 
 # The 2-stage deterministic freeze apply, called by BOTH the create path and the
 # re-sync path (never inline a second copy of this).
-#  (a) install the direct-reference pins ($DirectPins: $engineDirectPins or
-#      $ltx25DirectPins) at their pinned refs.
+#  (a) install the direct-reference pins ($DirectPins: $engineDirectPins,
+#      $ltx25DirectPins or $h3DirectPins) at their pinned refs.
 #  (b) install the remaining pinned wheels from a TEMP copy of the freeze that has
 #      those pins' bare lines removed (already installed in (a); left in place uv
 #      would fetch some other PyPI build of the same version -- and for
@@ -1315,16 +1360,17 @@ function Get-EngineStateHash {
 # the cu128 stacks, without them uv resolves CPU-only torch/torchaudio wheels
 # (known uv bug for the platform-marker-less torchaudio source).
 #
-# $DirectPinArgs / $DirectPinsLabel exist for the LTX 2.5 stack, whose stage (a)
-# needs the cu128 index and --no-sources (see $ltx25UvArgs). Their defaults are
-# the 2.3 values (the 2.3 call passes neither).
+# $DirectPinArgs / $DirectPinsLabel exist for the stacks whose stage (a) needs
+# extra uv flags: LTX 2.5 (the cu128 index and --no-sources; see $ltx25UvArgs)
+# and MiniMax H3 (the cu130 index; see $h3UvArgs). Their defaults are the 2.3
+# values (the 2.3 call passes neither).
 #
 # $DirectPins is OPTIONAL (default @()): the .venv-utils stack has no git pins and
 # no direct-URL wheels at all, so stage (a) -- and with it the freeze filter that
 # only exists to undo stage (a) -- is skipped entirely for it. $IndexUrl is the
-# wheel index for stage (b): cu128 by default, the CPU index for .venv-utils. The
-# index LABEL in the progress message is the URL's last segment ("cu128" for the
-# default and "cpu" for the utility venv).
+# wheel index for stage (b): cu128 by default, the CPU index for .venv-utils and
+# the cu130 index for .venv-engine-h3. The index LABEL in the progress message
+# is the URL's last segment ("cu128", "cpu" or "cu130").
 function Invoke-EngineFreezeApply {
     param(
         [Parameter(Mandatory)] [string]   $EnginePython,
@@ -1372,7 +1418,8 @@ function Invoke-EngineFreezeApply {
 
 # One engine venv, start to finish: the -SkipVenv / freeze two-way, the
 # create-vs-re-sync decision, and the state marker. Called once per venv (2.3,
-# then 2.5, then .venv-utils when UETrack is selected) -- one shared function,
+# then 2.5, then .venv-utils when UETrack is selected, then .venv-engine-h3 when
+# MiniMaxH3 is selected) -- one shared function,
 # so the marker logic has a single copy that cannot drift apart between stacks.
 #
 # $Label is the venv's directory name relative to $ProjectRoot (the cwd this
@@ -1386,12 +1433,12 @@ function Invoke-EngineFreezeApply {
 # Further optional knobs:
 #   $DirectPins    optional (the .venv-utils stack has none -- see
 #                  Invoke-EngineFreezeApply).
-#   $IndexUrl      the wheel index stage (b) resolves from (cu128 / cpu).
+#   $IndexUrl      the wheel index stage (b) resolves from (cu128 / cpu / cu130).
 #   $IgnoreSkipVenv lifts the -SkipVenv early return for a venv that setup.bat
 #                  never builds. -SkipVenv means "do not touch the venvs
-#                  setup.bat made"; .venv-utils is not one of them, and
-#                  install-UETrack.bat passes -SkipVenv precisely to protect the
-#                  other three.
+#                  setup.bat made"; .venv-utils and .venv-engine-h3 are not
+#                  among them, and install-UETrack.bat / install-MiniMaxH3.bat
+#                  pass -SkipVenv precisely to protect the other three.
 # $StackLabel names the stack in the step heading, for the same reason.
 function Ensure-EngineVenv {
     param(
@@ -1491,6 +1538,29 @@ if ($foundIds -contains 'UETrack') {
         -IgnoreSkipVenv
 }
 
+# ----------------------------------------------------------------------------
+# MiniMax H3 engine venv .venv-engine-h3  (torch cu130 stack)
+#
+# Opt-in exactly like .venv-utils above, for the same two reasons: built only
+# when THIS RUN's -BaseModel selects MiniMaxH3 (install-MiniMaxH3.bat; setup.bat
+# never asks for it), and it ignores -SkipVenv because install-MiniMaxH3.bat
+# passes -SkipVenv to protect the venvs setup.bat built. Consequence: "git pull,
+# then setup.bat" does not re-apply this venv; when its freeze changes, re-run
+# install-MiniMaxH3.bat (it SKIPs when the venv already matches).
+# It is built BEFORE the weight downloads below, one after the other, so the
+# ~1.9 GB torch wheel never shares the line with the ~50 GB of weights.
+# ----------------------------------------------------------------------------
+if ($foundIds -contains 'MiniMaxH3') {
+    Ensure-EngineVenv -VenvPath $h3Venv -PythonPath $h3Py `
+        -StateFile $h3StateFile -FreezeFile $h3FreezeSrc `
+        -DirectPins $h3DirectPins -Label ".venv-engine-h3" `
+        -DirectPinArgs $h3UvArgs `
+        -DirectPinsLabel "2 torch pins + 1 wheel pin: torch / torchvision / sageattention" `
+        -IndexUrl "https://download.pytorch.org/whl/cu130" `
+        -StackLabel "torch cu130 stack" `
+        -IgnoreSkipVenv
+}
+
 # The downloader is the engine venv's huggingface_hub run as a MODULE
 # (& $enginePy -P -m huggingface_hub.cli.hf ...; $enginePy is defined at the
 # top of step 5), never the uv trampoline hf.exe: that .exe bakes in an
@@ -1519,8 +1589,10 @@ if ($foundIds -contains 'UETrack') {
 # SageAttentionService (engine/transformer/sage_attention_service.py). SDPA is
 # the default at generation time; sage is opt-in per job.
 #
-# The SAME sageattention wheel URL is pinned for BOTH engine venvs (the 2.5
-# engine accepts `attention_backend: "sage"` too). One wheel serves both because
+# The SAME sageattention wheel URL is pinned for BOTH LTX engine venvs (the 2.5
+# engine accepts `attention_backend: "sage"` too). The MiniMax H3 venv is the
+# exception: its torch is 2.13.0+cu130, so it pins a different (cu130, libtorch
+# stable-ABI) wheel in $h3DirectPins. One wheel serves both because
 # it is cp310-abi3 -- a single build for every CPython >= 3.10, so .venv-engine's
 # 3.12 and .venv-engine-ltx25's 3.12 take the identical file -- and because both
 # stacks pin the same torch build the wheel's local version names. The two
@@ -1784,6 +1856,11 @@ if ($foundIds -contains 'UETrack') {
     $required += @{ Label = "utils_python";       Rel = ".venv-utils/Scripts/python.exe"; IsDir = $false; Min = [long]0 }
     $required += @{ Label = "tracking worker.py"; Rel = "tracking/worker.py";             IsDir = $false; Min = [long]0 }
 }
+# Same for the MiniMax H3 engine (-BaseModel MiniMaxH3).
+if ($foundIds -contains 'MiniMaxH3') {
+    $required += @{ Label = "h3_python";            Rel = ".venv-engine-h3/Scripts/python.exe"; IsDir = $false; Min = [long]0 }
+    $required += @{ Label = "engine_h3 worker.py";  Rel = "engine_h3/worker.py";                IsDir = $false; Min = [long]0 }
+}
 # Model rows come from the manifests THIS run is responsible for (-BaseModel):
 # install-LTX25.bat must not report LTX 2.3 as MISSING, and setup.bat must not
 # report LTX 2.5 as MISSING. The three fixed rows above stay unconditional --
@@ -1834,7 +1911,9 @@ foreach ($row in $rows) {
 # `files[]` entry that carries a `key` is a path the SERVER resolves by name --
 # a base-model descriptor `categories[].default_file` or `assets` entry (the
 # server finds it through the descriptor, not through this `key`; `key` is only
-# the label written into this file and is not a config.yaml key).
+# the label written into this file and is not a config.yaml key). A keyed row
+# can also be a record only, which the server never reads: e.g. the local copy
+# of a license text kept next to the weights (MiniMax H3's `h3_license`).
 # ----------------------------------------------------------------------------
 #
 # This list and the table above answer different questions, so do not

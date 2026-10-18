@@ -11,8 +11,8 @@
 .venv-utils/
 # MiniMax H3 engine interpreter. A THIRD engine venv (torch cu130, not cu128):
 # comfy-kitchen's int8 CUDA kernels need a CUDA 13 torch, so it cannot share an
-# interpreter with either LTX stack. Stage 1 builds it by hand (freeze:
-# engine_h3/venv-engine-h3.freeze.txt); the installer wiring is stage 3.
+# interpreter with either LTX stack. install-MiniMaxH3.bat builds it (freeze:
+# engine_h3/venv-engine-h3.freeze.txt).
 .venv-engine-h3/
 .python/
 

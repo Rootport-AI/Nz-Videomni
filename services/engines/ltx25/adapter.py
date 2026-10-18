@@ -49,6 +49,7 @@ from config import AppConfig
 from services import video_io
 from services.engines.ltx.request_rules import LTX_REQUEST_RULES
 from services.engines.ltx.adapter import (
+    H3_ONLY_REFUSALS,
     _MockBackend,
     _RealBackend,
     GenerationOutcome,
@@ -141,6 +142,8 @@ DEFAULT_BLOCKS_ON_GPU = 8
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
+    # MiniMax H3 only (VRAM 16GB mode). None (the family default) and False pass.
+    ("vram16_mode", "vram16_mode", lambda r: r.vram16_mode is True),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
@@ -489,10 +492,13 @@ def reject_unsupported(request: GenerateRequest) -> None:
     changes nothing about the answer, only how early it arrives.
 
     First offender wins. Listing all of them would read as "fix all of these"
-    when in practice one control was left on.
+    when in practice one control was left on. A MiniMax H3 feature
+    (``H3_ONLY_REFUSALS``) gets its own message, not the "pick LTX 2.3" one.
     """
     for field, feature, is_non_default in REJECT_TABLE:
         if is_non_default(request):
+            if feature in H3_ONLY_REFUSALS:
+                raise feature_unsupported(feature, detail=H3_ONLY_REFUSALS[feature])
             raise feature_unsupported(
                 feature,
                 detail=(

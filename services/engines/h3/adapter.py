@@ -48,6 +48,7 @@ from api.models import (
     ConditioningImage,
     GenerateChainRequest,
     GenerateRequest,
+    VRAM16_MODE_DEFAULT_H3,
 )
 from config import AppConfig
 from services import video_io
@@ -136,6 +137,8 @@ REQUEST_RULES = RequestRules(
         "shift_video": SamplingRange(min=1, max=20, step=0.1, default=12),
         "shift_audio": SamplingRange(min=1, max=20, step=0.1, default=3),
     },
+    # vram16_mode's None means "this family's default" (裁定 44: on for H3).
+    flag_defaults={"vram16_mode": VRAM16_MODE_DEFAULT_H3},
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -203,6 +206,7 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "keep_resident",
         "attention_backend",
         "block_swap_prefetch",
+        "vram16_mode",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -441,6 +445,9 @@ class _RealBackendH3(_RealBackend):
             # Per-job, ALWAYS sent: an absent key would mean "the load value".
             "attention_backend": request.attention_backend,
             "block_swap_prefetch": bool(request.block_swap_prefetch),
+            # validate_for_family's flag_defaults writes None back to on, so
+            # None is not expected here; if it ever arrives it still means on.
+            "vram16_mode": request.vram16_mode is not False,
             "output_path": str(target),
         }
         # keep_resident: the LTX contract — the key rides only when True, and
@@ -488,6 +495,7 @@ class _RealBackendH3(_RealBackend):
             attention_used=event.get("attention_used"),
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
             keep_resident_used=event.get("keep_resident_used"),
+            vram16_mode_used=event.get("vram16_mode_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
             h3=_h3_block(event),
         )

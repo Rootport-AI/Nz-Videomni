@@ -1478,7 +1478,7 @@ def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
     dep = next(d for d in demo.fns.values()
                if getattr(d.fn, "__name__", "") == "dispatch")
     rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
-    # The 45 scalar positionals in ui.py's dispatch() order (no keyframe tail).
+    # The 46 scalar positionals in ui.py's dispatch() order (no keyframe tail).
     args = [
         "prompt <lora:x:1.0>", "",          # prompt_v, negative_v
         500, 320, False, 0, 0,              # width..crop_h (width not ÷64)
@@ -1488,12 +1488,13 @@ def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
         True, rows, "C:/wavs",              # batch_enable, rows, wav_dir
         "same", "", "add", "", True,        # out_mode..chunked_upsample
         {}, 8, 12.0, 3.0,                   # gen_scope, steps, shift x2
+        True,                               # accel_vram16 (single-only)
         False, 11.0, 2.5, 0.25,             # nag_enabled, scale, tau, alpha
         "nag", 1.0, "sdpa", False,          # method, vsf, attention, prefetch
         False, False, "default", False,     # keep_resident..keep_res_embeds
         False,                              # embed_mp4_metadata
     ]
-    assert len(args) == 45
+    assert len(args) == 46
     out = list(dep.fn(*args))
     assert out == [(LABELS["en"]["msg_bad_dimension"], "", None)]
     assert calls["n"] == 0  # not even list_loras for the <lora:> token
@@ -1536,3 +1537,28 @@ def test_on_qmode_change_warns_in_the_ui_language(monkeypatch):
     assert shown == [LABELS["ja"]["warn_hq_unsupported"]]
     assert LABELS["ja"]["warn_hq_unsupported"] != LABELS["en"]["warn_hq_unsupported"]
     assert upd["value"] == "distilled"
+
+
+def test_vram16_checkbox_default_hidden_and_wired_into_generate_only():
+    # MiniMax H3's VRAM 16GB mode: on by default, built INVISIBLE like the
+    # other gated control (the /models pull decides), and an input of the
+    # single Generate flow only -- placed ahead of the trailing Acceleration
+    # block that flow shares with the Chain flow, so no negative index moves.
+    from gradio_ui.handlers import VRAM16_MODE_DEFAULT_H3
+
+    demo = _demo()
+    en = LABELS["en"]
+    boxes = [c for c in demo.blocks.values()
+             if isinstance(c, gr.Checkbox) and c.label == en["accel_lbl_vram16"]]
+    assert len(boxes) == 1, "VRAM 16GB mode checkbox not found"
+    box = boxes[0]
+    assert box.value is VRAM16_MODE_DEFAULT_H3 is True
+    assert box.visible is False
+    assert box.info == en["accel_info_vram16"]
+    deps = [d for d in demo.fns.values() if box in getattr(d, "inputs", [])]
+    assert [getattr(d.fn, "__name__", "") for d in deps] == ["dispatch"]
+    shift_audio = next(c for c in demo.blocks.values()
+                       if isinstance(c, gr.Slider)
+                       and c.label == en["lbl_shift_audio"])
+    inputs = list(deps[0].inputs)
+    assert inputs[inputs.index(shift_audio) + 1] is box

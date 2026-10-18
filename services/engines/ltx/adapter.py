@@ -138,7 +138,16 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("keep_resident_embeddings", "keep_resident_embeddings",
      lambda r: r.keep_resident_embeddings),
     ("alpha_gen", "alpha_gen", lambda r: r.alpha_gen is not None),
+    # MiniMax H3 only (VRAM 16GB mode). None (the family default) and False pass.
+    ("vram16_mode", "vram16_mode", lambda r: r.vram16_mode is True),
 )
+
+#: The 422 message for a feature that belongs to neither LTX: the generic one
+#: below points at "the other LTX", which would be wrong here. Shared with the
+#: 2.5 adapter's ``reject_unsupported``.
+H3_ONLY_REFUSALS: dict[str, str] = {
+    "vram16_mode": "VRAM 16GB mode は MiniMax H3 専用です。LTX では使えません。",
+}
 
 #: The ignore half of the four-way classification: fields 2.3's
 #: :meth:`_RealBackend.generate` never forwards to the worker, with the reason.
@@ -250,10 +259,13 @@ def reject_unsupported(request: GenerateRequest) -> None:
     costs no worker round-trip and no job record.
 
     The message points the other way: it names LTX 2.5 as the base model to
-    switch TO.
+    switch TO — except for a MiniMax H3 feature (:data:`H3_ONLY_REFUSALS`),
+    which neither LTX runs.
     """
     for field, feature, is_non_default in REJECT_TABLE:
         if is_non_default(request):
+            if feature in H3_ONLY_REFUSALS:
+                raise feature_unsupported(feature, detail=H3_ONLY_REFUSALS[feature])
             raise feature_unsupported(
                 feature,
                 detail=(
@@ -611,6 +623,10 @@ class GenerationOutcome:
     # the REAL NAME of the video VAE decoder that was loaded ("conv" / "diff"),
     # not a PrunaVAED on/off echo like the 2.3 description above.
     vae_mode_used: str | None = None
+    # Acceleration, MiniMax H3 ONLY: whether the denoise ran in VRAM 16GB mode
+    # ("off" | "on"). Same relay discipline as ``block_swap_prefetch_used``.
+    # Always None on LTX (the field is refused there) and on the mock backend.
+    vram16_mode_used: str | None = None
     # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
     # peak_vram_mb (which is max_memory_allocated-based and cannot see
     # allocator-reserved-but-unallocated growth from stream-separate pools).

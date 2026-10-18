@@ -495,6 +495,25 @@ def test_refresh_shows_keep_resident_embeddings_on_an_engine_that_supports_it():
     assert "value" not in update
 
 
+def test_refresh_hides_vram16_on_ltx_and_resets_it_to_the_h3_default():
+    # Both LTX families name vram16_mode. The reset value is the H3 default
+    # (on): the handler sends the key only when the box is off, so a hidden
+    # box at its reset value puts nothing on the wire.
+    assert hidden_controls(["vram16_mode"]) == {"accel_vram16"}
+    updates = _refresh_with(_models_json_with(
+        "LTX23", ["keep_resident_embeddings", "alpha_gen", "vram16_mode"]))
+    update = _gated_update(updates, "accel_vram16")
+    assert update["visible"] is False
+    assert update["value"] == RESET_VALUES["accel_vram16"] is True
+
+
+def test_refresh_shows_vram16_on_an_engine_that_does_not_name_it():
+    updates = _refresh_with(_models_json_with("LTX25", ["two_stage_hq", "prune_vaed"]))
+    update = _gated_update(updates, "accel_vram16")
+    assert update["visible"] is True
+    assert "value" not in update
+
+
 def test_refresh_failure_leaves_every_output_untouched():
     demo = build_ui("http://127.0.0.1:8000", api_key=None)
 

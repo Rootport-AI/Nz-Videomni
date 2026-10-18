@@ -2131,6 +2131,32 @@ describe("useBatchForm", () => {
       expect(submits[0]!.body.crop_output).toEqual({ width: 384, height: 256 });
     });
 
+    // 台帳 §1-101 (2026-10-18): VRAM 16GB mode reaches Batch i2v only through
+    // the hand-written OR-list in `start()` (it is the only field moved off its
+    // default here). THE test that catches a missed entry there.
+    it("VRAM 16GB mode OFF: the /api/v1/generate row body carries vram16_mode: false", async () => {
+      const base = createMockBridge({ delayMs: 0, fs: imageFolder(["cover.jpg"]) });
+      const { wrapped, submits } = captureSubmitBridge(base);
+      const rendered = renderBatchForm(wrapped, { acceleration: { ...ACCELERATION_DEFAULTS, vram16Mode: false } });
+      await act(async () => {
+        await rendered.result.current.setImgDir(I2V_IMG_DIR);
+      });
+      await act(async () => {
+        await rendered.result.current.scan();
+      });
+      const { result } = rendered;
+
+      expect(result.current.canStart).toBe(true);
+      act(() => {
+        result.current.start();
+      });
+      await waitFor(() => expect(submits).toHaveLength(1));
+      await waitFor(() => expect(result.current.runnerState).toBe("idle"));
+
+      expect(submits[0]!.path).toBe("/api/v1/generate");
+      expect(submits[0]!.body.vram16_mode).toBe(false);
+    });
+
     it("start()はmodeを走行スナップショットへ凍結し、走行中のリマウントで復元される", async () => {
       const base = createMockBridge({ delayMs: 0, fs: imageFolder(["cover.jpg"]), holdUploads: true });
       const { wrapped } = captureSubmitBridge(base);

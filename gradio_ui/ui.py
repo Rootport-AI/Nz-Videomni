@@ -35,6 +35,7 @@ from .handlers import (
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
     KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+    VRAM16_MODE_DEFAULT_H3,
     a2v_audio_change_handler,
     delete_finished_jobs,
     fetch_config_safe,
@@ -1273,6 +1274,21 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 ), "accel_lbl_keep_resident_embeddings")
                 reg(accel_keep_resident_embeddings,
                     "accel_info_keep_resident_embeddings", "info")
+                # VRAM 16GB mode (MiniMax H3 only): gated exactly like the
+                # checkbox above -- built INVISIBLE, shown by
+                # refresh_model_dropdowns once the ACTIVE base model does not
+                # name ``vram16_mode`` in its unsupported_features (both LTX
+                # families do), hidden + reset otherwise (feature_scope.py).
+                # Wired into the SINGLE Generate flow only (H3 refuses every
+                # chain), ahead of the trailing Acceleration block shared with
+                # the Chain flow -- see dispatch() below.
+                accel_vram16 = reg(gr.Checkbox(
+                    value=VRAM16_MODE_DEFAULT_H3,
+                    label=L("accel_lbl_vram16"),
+                    info=L("accel_info_vram16"),
+                    visible=False,
+                ), "accel_lbl_vram16")
+                reg(accel_vram16, "accel_info_vram16", "info")
                 # Display name "PrunaVAED" is the product's correct name
                 # (Docs/PRUNAVAED_WORKORDER.md §6.1); the API literal value
                 # "prune_vaed" is an external contract and is not renamed.
@@ -1532,6 +1548,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
                      batch_img_dir_v, batch_chunked_upsample_v,
                      gen_scope_v, steps_v, shift_video_v, shift_audio_v,
+                     accel_vram16_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
                      accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v,
@@ -1567,7 +1584,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     embed_mp4_metadata=bool(output_embed_mp4_metadata_v),
                     constraints=scope_constraints(gen_scope_v),
                     num_inference_steps=steps_v, shift_video=shift_video_v,
-                    shift_audio=shift_audio_v)
+                    shift_audio=shift_audio_v,
+                    vram16_mode=bool(accel_vram16_v))
                 return
 
             rows = batch_rows_v or []
@@ -1738,6 +1756,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     # ``sampling``). Placed before the NAG block so the
                     # trailing order shared with the Chain flow is unchanged.
                     gen_scope_state, steps, shift_video, shift_audio,
+                    # VRAM 16GB mode (MiniMax H3, single-only): here for the
+                    # same reason as the sliders above.
+                    accel_vram16,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
@@ -2514,6 +2535,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         _gated_components = {
             "accel_vae": accel_vae,
             "accel_keep_resident_embeddings": accel_keep_resident_embeddings,
+            "accel_vram16": accel_vram16,
         }
         # chain_engine_state sits between the category dropdowns and
         # the gated controls, so the gated updates stay the TAIL.

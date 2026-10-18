@@ -31,6 +31,7 @@ from typing import Iterable
 FEATURE_UI: dict[str, tuple[str, ...]] = {
     "prune_vaed": ("accel_vae",),
     "keep_resident_embeddings": ("accel_keep_resident_embeddings",),
+    "vram16_mode": ("accel_vram16",),
 }
 
 #: The value a hidden control is reset to — the server's own default for the
@@ -41,6 +42,10 @@ FEATURE_UI: dict[str, tuple[str, ...]] = {
 RESET_VALUES: dict[str, str | bool] = {
     "accel_vae": "default",
     "accel_keep_resident_embeddings": False,
+    # Reset to the H3 default (on), not False: the handler sends the key only
+    # when the box is OFF, so a hidden box at its default puts nothing on the
+    # wire and LTX never sees vram16_mode.
+    "accel_vram16": True,
 }
 
 #: Every gated control id, in :data:`FEATURE_UI` order and deduplicated. This

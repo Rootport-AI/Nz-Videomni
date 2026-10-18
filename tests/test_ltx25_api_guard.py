@@ -45,6 +45,7 @@ import chain_math
 import main
 from api.models import GenerateChainRequest, GenerateRequest
 from services import video_io
+from services.engines.ltx import adapter as ltx23
 from services.engines.ltx25 import adapter as ltx25
 
 #: 422系フィールドの入力表は**アダプタのテストが正本**(rootdir挿入により
@@ -133,14 +134,22 @@ def test_ltx25_refuses_every_field_in_the_reject_table(two_family_client, field)
     error = r.json()["error"]
     assert error["code"] == "FEATURE_UNSUPPORTED"
     # メッセージは次の一手を言う(どの機能が・どうすれば使えるのか)。
-    assert "LTX 2.3" in error["detail"]
+    # MiniMax H3 専用の機能(vram16_mode)だけは LTX 2.3 へ誘導しない。
+    if field in ltx23.H3_ONLY_REFUSALS:
+        assert error["detail"] == ltx23.H3_ONLY_REFUSALS[field]
+    else:
+        assert "LTX 2.3" in error["detail"]
     # ジョブは作られていない。作られていたら同時1ジョブの枠を無駄に食う。
     assert _job_count(two_family_client) == before
 
 
-@pytest.mark.parametrize("field", sorted(REQUEST_OVERRIDES))
+@pytest.mark.parametrize(
+    "field", sorted(set(REQUEST_OVERRIDES) - set(ltx23.H3_ONLY_REFUSALS))
+)
 def test_ltx23_accepts_every_field_the_2_5_engine_refuses(two_family_client, field):
     """対の検証。ガードが系統を見ずに効いていたら、ここが落ちる。
+
+    MiniMax H3 専用の機能(``H3_ONLY_REFUSALS``)は両方の LTX が断るので対象外。
 
     ステータスコードそのものは問わない——``loras`` や ``reference_video_id`` は
     存在しない素材を指しているので404が正しい。見るのは「機能が無いから拒否
@@ -1606,9 +1615,12 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     # 非対応を宣言するのは2.3の側になる（この一覧の向きが初めて逆になった件）。
     # LTX AlphaGen 第 1 弾で**2件目** ``alpha_gen`` が同じ向きで加わった
     # （マット用の IC-LoRA は 2.5 用）。順序は REJECT_TABLE の順。
+    # VRAM 16GB mode で**3件目** ``vram16_mode`` が加わった（MiniMax H3 専用で、
+    # 2.5 も同じく断る）。
     assert by_id["LTX23"]["unsupported_features"] == [
         "keep_resident_embeddings",
         "alpha_gen",
+        "vram16_mode",
     ]
     features = by_id["LTX25"]["unsupported_features"]
     # Retake段で ``retake`` が外れた——残っていればEditタブの「撮り直し」
@@ -1643,7 +1655,10 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     # 入って出た唯一の名前であり、いま2.5が公開するのはエンジン側の機能名
     # 2つだけ——モード名は種類を問わず1つも無い。
     assert "inpaint" not in features
-    assert len(features) == 2
+    # VRAM 16GB mode で ``vram16_mode`` が**入った**（MiniMax H3 専用の機能で、
+    # モード名ではない）。エンジン側の機能名 2 つにこれを足した 3 件になる。
+    assert "vram16_mode" in features
+    assert len(features) == 3
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

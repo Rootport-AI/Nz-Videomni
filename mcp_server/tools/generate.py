@@ -35,6 +35,11 @@ VERIFICATION_LOG §52。公開はオーナー裁定で、``Docs/PRUNAVAED_WORKOR
 （``RetakeSpec`` / ``OutpaintSpec``）で、MCPは引数をネストへ詰め替えて送る
 （``Docs/MCP_SERVER_DESIGN.md`` §2 の D19・D20、記録は VERIFICATION_LOG §86）。
 
+``vram16_mode``（MiniMax H3 の VRAM 16GB mode）は ``submit_generate`` に限り
+任意引数で公開する（既定 ``None`` は送らない＝ベースモデルの既定値。H3 では on。
+LTX では ``True`` が 422。連結生成は H3 では使えないので ``submit_chain`` には
+出さない。``Docs/MCP_SERVER_DESIGN.md`` §2 の D28）。
+
 ``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
 ``EMBED_MP4_METADATA_DEFAULT``。既定と
 違うときだけ送る）を持ち、読み出しは ``outputs`` の ``get_mp4_info`` が担う
@@ -180,6 +185,7 @@ async def submit_generate(
     num_inference_steps: int | None = None,
     shift_video: float | None = None,
     shift_audio: float | None = None,
+    vram16_mode: bool | None = None,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -187,7 +193,8 @@ async def submit_generate(
     使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
     LTX 2.5 では、このツールで使えないのは ``vae_mode``
-    （既定値以外にした場合）だけです。**``nag_enabled``（ネガティブプロンプト。
+    （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``
+    だけです。**``nag_enabled``（ネガティブプロンプト。
     NAG と VSF）は LTX 2.5 でも使えます**（``negative_prompt``
     / ``nag_scale`` / ``nag_tau`` / ``nag_alpha`` / ``neg_method`` /
     ``vsf_scale`` も効きます）。**ただし ``nag_alpha=0`` に
@@ -444,6 +451,17 @@ async def submit_generate(
             送らない＝既定値。H3 は既定 12・範囲 1〜20。LTX では無視）。
         shift_audio: 音声のノイズスケジュールの shift（MiniMax H3 用。省略で
             送らない＝既定値。H3 は既定 3・範囲 1〜20。LTX では無視）。
+        vram16_mode: MiniMax H3 の「VRAM 16GB mode」（ノイズ除去の計算を分割して
+            VRAM 16GB に収める。精度は変えない）。**省略（``None``）すると
+            送らず、ベースモデルの既定値になります（H3 は on）。** H3 で切る
+            ときだけ ``False`` を指定してください。それでも収まらないときは
+            ジョブが failed になり、``get_job`` の ``error`` が
+            ``GPU_OOM: …`` で始まって案内（解像度かフレーム数を下げるか、
+            VRAM 16GB mode を切ってください）を含みます。
+            **LTX 2.3 / LTX 2.5 では ``True`` を送ると 422 FEATURE_UNSUPPORTED
+            になります**（``False`` と省略は通ります）。実際に効いたかは
+            ジョブ完了後のメタデータの ``vram16_mode_used``（``"off"`` /
+            ``"on"``）に記録されます。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -489,6 +507,10 @@ async def submit_generate(
         payload["shift_video"] = shift_video
     if shift_audio is not None:
         payload["shift_audio"] = shift_audio
+    # VRAM 16GB mode (MiniMax H3): the same "None is not sent" rule (None = the
+    # base model's own default, on for H3, written back by the server).
+    if vram16_mode is not None:
+        payload["vram16_mode"] = vram16_mode
 
     if nag_enabled:
         payload["nag_enabled"] = True

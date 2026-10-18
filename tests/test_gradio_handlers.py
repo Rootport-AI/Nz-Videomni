@@ -4467,3 +4467,56 @@ def test_mp4_info_transport_error_returns_exception_text():
 
     mp4_info = make_mp4_info_handler(_make_client(handler))
     assert mp4_info("/tmp/x.mp4") == "connection refused"
+
+
+# --------------------------------------------------------------------------- #
+# VRAM 16GB mode (vram16_mode): MiniMax H3 only. The server field defaults to
+# None (= the family default, on for H3); the Gradio mirror is on, so the key
+# rides only as ``false``. Single Generate flow only (H3 refuses every chain).
+# --------------------------------------------------------------------------- #
+
+
+def test_vram16_i18n_keys_present_in_both_languages():
+    from gradio_ui import LABELS
+
+    for key in ("accel_lbl_vram16", "accel_info_vram16"):
+        assert LABELS["en"][key] and LABELS["ja"][key]
+        assert LABELS["en"][key] != LABELS["ja"][key]
+    assert "MiniMax H3" in LABELS["en"]["accel_lbl_vram16"]
+    assert "MiniMax H3" in LABELS["ja"]["accel_lbl_vram16"]
+    assert LABELS["ja"]["accel_info_vram16"] == (
+        "MiniMax H3 専用。ノイズ除去の計算を分割して VRAM 16GB に収めます。精度は変えません。")
+
+
+def test_vram16_default_constant_mirrors_the_api():
+    from api.models import VRAM16_MODE_DEFAULT_H3 as API_DEFAULT
+    from gradio_ui.handlers import VRAM16_MODE_DEFAULT_H3
+
+    assert VRAM16_MODE_DEFAULT_H3 is API_DEFAULT
+    assert VRAM16_MODE_DEFAULT_H3 is True
+
+
+def _captured_generate(**kw) -> dict:
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-v16"})
+
+    generate = make_generate_handler(_make_client(handler))
+    gen = generate("A calm river", "", _kf_args(),
+                   512, 320, False, 0, 0, 49, 24.0, -1, **kw)
+    _run_until_job_started(gen)
+    return captured
+
+
+def test_generate_handler_vram16_off_sends_false_last():
+    captured = _captured_generate(vram16_mode=False)
+    assert captured["vram16_mode"] is False
+    assert list(captured.keys())[-1] == "vram16_mode"
+
+
+def test_generate_handler_vram16_default_omits_the_key():
+    assert "vram16_mode" not in _captured_generate()
+    assert "vram16_mode" not in _captured_generate(vram16_mode=True)

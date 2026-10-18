@@ -219,9 +219,12 @@ def test_unsupported_features_per_family():
     # ままこのつまみをONにできてしまい、フロントエンドは灰色にしない。
     # LTX AlphaGen 第 1 弾で 2 件目 ``alpha_gen`` が加わった（同じ向き——
     # LTX 2.5 用の IC-LoRA と engine25 の 1 段原寸の経路）。順序は REJECT_TABLE の順。
+    # VRAM 16GB mode で 3 件目 ``vram16_mode`` が加わった（MiniMax H3 専用。
+    # 2.5 も同じく断る）。
     assert engines.unsupported_features("ltx") == (
         "keep_resident_embeddings",
         "alpha_gen",
+        "vram16_mode",
     )
     features = engines.unsupported_features("ltx25")
     # 系統ごとの一覧は「その系統のアダプタが宣言したものだけ」である。それは

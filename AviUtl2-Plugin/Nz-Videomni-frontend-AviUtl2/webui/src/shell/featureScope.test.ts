@@ -36,6 +36,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "reference_video",
         "retake",
         "v2v",
+        "vram16_mode",
       ].sort(),
     );
   });
@@ -98,28 +99,36 @@ describe("disabledUiTargets", () => {
 });
 
 describe("settingsRowsHiddenFor", () => {
-  it("hides neither row for the ordinary case", () => {
-    expect(settingsRowsHiddenFor([])).toEqual({ vae: false, keepResidentEmbeddings: false });
+  it("hides no row for the ordinary case", () => {
+    expect(settingsRowsHiddenFor([])).toEqual({ vae: false, keepResidentEmbeddings: false, vram16: false });
     expect(settingsRowsHiddenFor(["chain", "retake", "two_stage_hq"])).toEqual({
       vae: false,
       keepResidentEmbeddings: false,
+      vram16: false,
     });
   });
 
   it("maps each feature name onto exactly its own row", () => {
-    expect(settingsRowsHiddenFor(["prune_vaed"])).toEqual({ vae: true, keepResidentEmbeddings: false });
+    expect(settingsRowsHiddenFor(["prune_vaed"])).toEqual({ vae: true, keepResidentEmbeddings: false, vram16: false });
     expect(settingsRowsHiddenFor(["keep_resident_embeddings"])).toEqual({
       vae: false,
       keepResidentEmbeddings: true,
+      vram16: false,
+    });
+    expect(settingsRowsHiddenFor(["vram16_mode"])).toEqual({
+      vae: false,
+      keepResidentEmbeddings: false,
+      vram16: true,
     });
   });
 
-  it("hides both when both are refused", () => {
+  it("hides all three when all three are refused", () => {
     // Not a hypothetical pairing to guard against — just the honest answer, the
     // same way `editSubTabsDisabledFor` answers two `true`s.
-    expect(settingsRowsHiddenFor(["prune_vaed", "keep_resident_embeddings"])).toEqual({
+    expect(settingsRowsHiddenFor(["prune_vaed", "keep_resident_embeddings", "vram16_mode"])).toEqual({
       vae: true,
       keepResidentEmbeddings: true,
+      vram16: true,
     });
   });
 });
@@ -133,6 +142,7 @@ describe("accelerationResetsFor", () => {
   it("names the settings field behind each hidden row", () => {
     expect(accelerationResetsFor(["prune_vaed"])).toEqual(["vaeMode"]);
     expect(accelerationResetsFor(["keep_resident_embeddings"])).toEqual(["keepResidentEmbeddings"]);
+    expect(accelerationResetsFor(["vram16_mode"])).toEqual(["vram16Mode"]);
   });
 
   it("collects both without duplicates", () => {

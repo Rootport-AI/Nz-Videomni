@@ -90,6 +90,16 @@ export interface SettingsPanelProps {
    * OTHER WAY ROUND: the embeddings processor is LTX 2.5's own component, so it
    * is LTX 2.3 that publishes the name and hides this row. */
   keepResidentEmbeddingsUnsupported: boolean;
+  /** Acceleration (2026-10-18, 台帳 §1-101): VRAM 16GB mode (MiniMax H3 only).
+   * INDEPENDENT like the fused-kernel row — no `/status` capability flag and no
+   * relationship to any other row. */
+  onVram16ModeChange: (value: boolean) => void;
+  /** 台帳 §1-101: whether the LOADED base model's engine refuses `vram16_mode`
+   * — derived by `AppShell` from `GET /models`' `unsupported_features`, never
+   * from a base-model id. Same HIDE-don't-grey treatment as
+   * {@link keepResidentEmbeddingsUnsupported}; it is LTX 2.3 / 2.5 that
+   * publish the name and hide this row. */
+  vram16Unsupported: boolean;
   /** Output (§3-164, 2026-09-24): whether finished mp4s get the generation
    * conditions written into their `comment` tag. Stored alongside the
    * acceleration choices (`acceleration.embedMp4Metadata`). */
@@ -141,6 +151,8 @@ export function SettingsPanel({
   vaeUnsupported,
   onKeepResidentEmbeddingsChange,
   keepResidentEmbeddingsUnsupported,
+  onVram16ModeChange,
+  vram16Unsupported,
   onEmbedMp4MetadataChange,
   baseModelOptions,
   baseModelValue,
@@ -568,6 +580,38 @@ export function SettingsPanel({
                 spirit as sage's: a pruned decoder is a different decoder, so
                 the output can differ slightly. */}
             {acceleration.vaeMode === "prune_vaed" && <p className="field-hint">{strings.settings.accelVaeNote}</p>}
+          </>
+        )}
+
+        {/* VRAM 16GB mode (2026-10-18, 台帳 §1-101) — MiniMax H3 only. Same
+            two-button shape as the fused-kernel row at the head of this
+            section and, like it, default ON with its note shown only while ON
+            (reassurance: precision does not change). HIDDEN OUTRIGHT on an
+            engine whose `unsupported_features` name `vram16_mode` (LTX 2.3 /
+            2.5), with row and note under the ONE condition, exactly like the
+            embeddings-resident row above. */}
+        {!vram16Unsupported && (
+          <>
+            <div className="field">
+              <span className="field-label">{strings.settings.accelVram16Label}</span>
+              <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelVram16Label}>
+                {[
+                  { on: true, label: strings.settings.accelVram16On },
+                  { on: false, label: strings.settings.accelVram16Off },
+                ].map(({ on, label }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className={`mode-tab${acceleration.vram16Mode === on ? " mode-tab--active" : ""}`}
+                    aria-pressed={acceleration.vram16Mode === on}
+                    onClick={() => onVram16ModeChange(on)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {acceleration.vram16Mode && <p className="field-hint">{strings.settings.accelVram16Note}</p>}
           </>
         )}
 

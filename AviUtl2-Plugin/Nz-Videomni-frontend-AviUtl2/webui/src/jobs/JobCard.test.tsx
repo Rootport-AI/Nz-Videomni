@@ -179,6 +179,27 @@ describe("JobCard header actions (emoji buttons)", () => {
     expect(screen.queryByRole("button", { name: /^insert$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^cancel$/i })).toBeNull();
   });
+
+  // 台帳 §1-101 (裁定 47): a VRAM 16GB mode OOM fails the job, and the advice
+  // ("lower the resolution or frame count, or turn VRAM 16GB mode off") travels
+  // in the GPU_OOM envelope's `detail`, which the server folds into `job.error`
+  // as `CODE: message (detail)` (`services/pipeline_manager.py`). The card must
+  // show that string whole — the detail is the part worth reading.
+  it("shows a GPU_OOM failure with its detail (the VRAM 16GB mode advice) intact", () => {
+    const detail =
+      "VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。" +
+      "解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください";
+    const job: JobResponse = {
+      ...completedJob(),
+      status: "failed",
+      result: null,
+      error: `GPU_OOM: CUDA out of memory during generation (${detail})`,
+    };
+    renderCard({ job });
+    const shown = screen.getByText(/^GPU_OOM:/);
+    expect(shown).toHaveTextContent(detail);
+    expect(shown).toHaveClass("field-hint-error");
+  });
 });
 
 describe("JobCard Insert cycle (③)", () => {

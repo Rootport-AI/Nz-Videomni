@@ -272,6 +272,7 @@ _LORAS = [{"name": "style-a", "strength": 1.0}]
 REQUEST_OVERRIDES: dict[str, dict] = {
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
+    "vram16_mode": {"vram16_mode": True},
 }
 
 #: The SCHEMA-REQUIRED companion for every NAG row below: ``nag_enabled`` is the
@@ -493,8 +494,18 @@ def test_every_rejected_field_raises_feature_unsupported(field):
     with pytest.raises(APIError) as ei:
         ltx25.reject_unsupported(request)
     assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
+    if expected in ltx23.H3_ONLY_REFUSALS:
+        # MiniMax H3's own feature: the message must not point at LTX 2.3.
+        assert ei.value.detail == ltx23.H3_ONLY_REFUSALS[expected]
+        assert "LTX 2.3" not in ei.value.detail
+        return
     assert expected in ei.value.detail
     assert "LTX 2.3" in ei.value.detail
+
+
+def test_vram16_mode_none_or_false_passes():
+    ltx25.reject_unsupported(_request(vram16_mode=False))  # no raise
+    ltx25.reject_unsupported(_request(vram16_mode=None))  # no raise
 
 
 def test_reject_table_covers_every_field_the_fixture_names():
@@ -608,8 +619,9 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     # reason the count is asserted at all rather than only the absences: a name
     # coming back is exactly what this catches, and there one deliberately did.
     # BACK TO TWO with 台帳 §3-150, which built the 2.5 driver and took it off
-    # again.
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 2
+    # again. THREE with VRAM 16GB mode (``vram16_mode``, MiniMax H3 only — a
+    # feature name, not a mode).
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 3
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -734,10 +746,12 @@ def test_inpaint_is_honoured_and_says_so_in_every_table():
     # ...and NOT published, or the sub-tab stays grey for a mode that runs.
     assert "inpaint" not in ltx25.UNSUPPORTED_FEATURES
     # The table is back to the two engine-level features and no mode of any
-    # kind — the state it was in before 2026-09-14.
+    # kind — the state it was in before 2026-09-14 — plus VRAM 16GB mode
+    # (MiniMax H3 only, a feature name too).
     assert {feat for _f, feat, _p in ltx25.REJECT_TABLE} == {
         "two_stage_hq",
         "prune_vaed",
+        "vram16_mode",
     }
 
 
@@ -754,14 +768,15 @@ def test_alpha_gen_is_honoured_and_says_so_in_every_table():
     worker would run a plain two-stage generate where a single full-size matte
     stage was asked for. Honoured, therefore not refused / ignored / governed —
     and NOT published by this engine (it is LTX 2.3 that publishes it), with
-    this engine's published list still at its two engine-level names."""
+    this engine's published list at its two engine-level names plus MiniMax
+    H3's ``vram16_mode``."""
     assert "alpha_gen" in ltx25.HONOURED_FIELDS
     assert "alpha_gen" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
     assert "alpha_gen" not in ltx25.IGNORED_FIELDS
     assert "alpha_gen" not in ltx25.GOVERNED_FIELDS
     assert "alpha_gen" not in ltx25.UNSUPPORTED_FEATURES
     assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 2
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 3
     # The needle the generic honoured-read audit below also relies on, named
     # here so a reader of this feature's tests sees it.
     assert "request.alpha_gen" in inspect.getsource(ltx25._RealBackend25.generate)

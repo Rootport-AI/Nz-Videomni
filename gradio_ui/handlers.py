@@ -97,6 +97,20 @@ FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True
 # the box is UNCHECKED.
 EMBED_MP4_METADATA_DEFAULT = True
 
+# Acceleration: MiniMax H3's "VRAM 16GB mode" checkbox default. Mirrors
+# api/models.py's VRAM16_MODE_DEFAULT_H3 for the same reason as the constants
+# above (this module talks to the backend purely over HTTP, so it does not
+# import from api/) -- **change the canonical constant in api/models.py and
+# this mirror in one move** (the MCP tools hold no value: their argument
+# defaults to None = not sent, and only their description says "on for H3").
+# The server field defaults to None (= the family default, ON for H3),
+# so the "send only when it differs from the default" discipline below emits
+# ``vram16_mode: false`` only when the box is UNCHECKED. Both LTX families name
+# the field in their ``unsupported_features``, which hides the checkbox and
+# writes it back to this default (gradio_ui/feature_scope.py), so an LTX job
+# never carries the key.
+VRAM16_MODE_DEFAULT_H3 = True
+
 
 # MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def _wav_duration_seconds(path) -> float | None:
@@ -731,7 +745,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # carry ``sampling``. Keyword-only from ui.py's dispatch(),
                  # appended last.
                  constraints=None,
-                 num_inference_steps=None, shift_video=None, shift_audio=None):
+                 num_inference_steps=None, shift_video=None, shift_audio=None,
+                 # Acceleration (keyword, last): the Settings-tab MiniMax H3
+                 # "VRAM 16GB mode" checkbox (hidden on LTX). Keyword-only from
+                 # ui.py's dispatch(), appended after the sampling sliders.
+                 vram16_mode=VRAM16_MODE_DEFAULT_H3):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs. They are optional, so a call that omits them (e.g. a unit
         # test) falls back to the build-time default language and
@@ -1068,6 +1086,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # definition).
         if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
             payload["embed_mp4_metadata"] = bool(embed_mp4_metadata)
+        # VRAM 16GB mode (MiniMax H3, additive, conditional): appended after the
+        # mp4 metadata key, same rule against VRAM16_MODE_DEFAULT_H3 (direction:
+        # see its definition), so the key rides only as ``false``.
+        if bool(vram16_mode) != VRAM16_MODE_DEFAULT_H3:
+            payload["vram16_mode"] = bool(vram16_mode)
         try:
             resp = api.generate(payload)
         except Exception as exc:

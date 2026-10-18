@@ -626,6 +626,7 @@ describe("useGenerationForm", () => {
       // the match, and the calibration behind these rows is the five above.
       keepResidentEmbeddings: false,
       // §3-164: the Output row, at its server default; not part of the match.
+      vram16Mode: true,
       embedMp4Metadata: true,
     };
 

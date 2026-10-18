@@ -44,6 +44,11 @@ describe("mockBridge — MiniMax H3", () => {
     );
     const ltx = blocks.find((b) => b.id === "LTX23");
     expect(ltx?.constraints).toMatchObject({ num_frames: { step: 8, offset: 1 }, sampling: null });
+    // 台帳 §1-101: VRAM 16GB mode is H3's own — H3 does NOT publish the name,
+    // both LTX engines do (which hides the Settings row there).
+    expect(h3?.unsupported_features).not.toContain("vram16_mode");
+    expect(ltx?.unsupported_features).toContain("vram16_mode");
+    expect(blocks.find((b) => b.id === "LTX25")?.unsupported_features).toContain("vram16_mode");
   });
 
   it("follows its OWN install knob, not LTX 2.5's", async () => {

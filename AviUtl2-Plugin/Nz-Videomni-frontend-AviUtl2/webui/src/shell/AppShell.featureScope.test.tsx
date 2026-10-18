@@ -586,4 +586,68 @@ describe("AppShell — base-model feature scope", () => {
 
     await waitFor(() => expect(readStoredAcceleration().keepResidentEmbeddings).toBe(false));
   });
+
+  // -- 台帳 §1-101 (2026-10-18): VRAM 16GB mode, MiniMax H3's own row ---------
+  //
+  // Scoped the same way as the embeddings-resident row above (the engines
+  // WITHOUT it publish the name), but here it is BOTH LTX engines, and the
+  // default is ON — so the write-back lands on `true`.
+
+  /** Seeds the persisted choices with VRAM 16GB mode turned OFF — the leftover
+   * a user leaves behind by turning it off while MiniMax H3 is loaded. */
+  function storeVram16Off() {
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({
+        attentionBackend: "sdpa",
+        blockSwapPrefetch: true,
+        keepResident: false,
+        fusedGgufDequantKernel: true,
+        vaeMode: "default",
+        keepResidentEmbeddings: false,
+        vram16Mode: false,
+      }),
+    );
+  }
+
+  function vram16Row() {
+    return screen.queryByRole("group", { name: /^VRAM 16GB mode$/ });
+  }
+
+  function vram16Note() {
+    return screen.queryByText(/Splits the denoising computation so the job fits in 16GB of VRAM/i);
+  }
+
+  it("hides the VRAM 16GB mode row AND its note on LTX 2.3 and 2.5, and shows both on MiniMax H3", async () => {
+    const { select } = await renderApp(AS_LTX25);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(vram16Row()).toBeNull();
+    expect(vram16Note()).toBeNull();
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    expect(vram16Row()).toBeNull();
+    expect(vram16Note()).toBeNull();
+
+    await user.selectOptions(select, "MiniMaxH3");
+    await waitFor(() => expect(select.value).toBe("MiniMaxH3"));
+    await waitFor(() => expect(vram16Row()).toBeInTheDocument());
+    // Default ON, so the note is on screen with the row.
+    expect(within(vram16Row()!).getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
+    expect(vram16Note()).toBeInTheDocument();
+    await user.click(within(vram16Row()!).getByRole("button", { name: "OFF" }));
+    await waitFor(() => expect(vram16Note()).toBeNull());
+  });
+
+  it("writes a leftover VRAM 16GB mode OFF back to the default (ON) on LTX 2.3", async () => {
+    storeVram16Off();
+    expect(readStoredAcceleration().vram16Mode).toBe(false);
+    const { select } = await renderApp(AS_LTX25);
+    // LTX 2.3 is the active base model (it publishes `vram16_mode`).
+    expect(select.value).toBe("LTX23");
+
+    await waitFor(() => expect(readStoredAcceleration().vram16Mode).toBe(true));
+  });
 });

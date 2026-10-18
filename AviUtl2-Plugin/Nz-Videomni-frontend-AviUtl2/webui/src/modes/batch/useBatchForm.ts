@@ -12,6 +12,7 @@ import {
   KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
   KEEP_RESIDENT_SERVER_DEFAULT,
   VAE_MODE_DEFAULT,
+  VRAM16_MODE_SERVER_DEFAULT,
 } from "../../shell/accelerationSettings";
 import { RUN_LOCK_OWNER_BATCH_A2V, getRunLockOwner, subscribeRunLock } from "../../shell/runLock";
 import type { NagSettings } from "../../shell/nagSettings";
@@ -865,13 +866,16 @@ export function useBatchForm(
       // field-by-field: any ONE field moved off its own server default is
       // enough to thread the whole object through. EVERY new real field must
       // be added to this OR-list too — omitting it makes the toggle work
-      // everywhere except Batch A2V.
+      // everywhere except Batch A2V. (The list feeds BOTH modes: §1-101's
+      // `vram16Mode` is here for Batch i2v's `/generate` rows — MiniMax H3
+      // cannot chain, so Batch A2V never runs on the engine that reads it.)
       ...(acceleration.attentionBackend !== ATTENTION_BACKEND_DEFAULT ||
       acceleration.blockSwapPrefetch !== BLOCK_SWAP_PREFETCH_SERVER_DEFAULT ||
       acceleration.keepResident !== KEEP_RESIDENT_SERVER_DEFAULT ||
       acceleration.fusedGgufDequantKernel !== FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT ||
       acceleration.vaeMode !== VAE_MODE_DEFAULT ||
-      acceleration.keepResidentEmbeddings !== KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT
+      acceleration.keepResidentEmbeddings !== KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT ||
+      acceleration.vram16Mode !== VRAM16_MODE_SERVER_DEFAULT
         ? { acceleration }
         : {}),
     };

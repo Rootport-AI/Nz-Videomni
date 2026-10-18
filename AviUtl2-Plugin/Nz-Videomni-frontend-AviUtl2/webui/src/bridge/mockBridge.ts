@@ -404,6 +404,11 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // — and publishing the name is what greys the Edit tab's Alpha Gen
     // sub-tab while 2.3 is loaded (`shell/featureScope.ts`).
     "alpha_gen",
+    // 台帳 §1-101 (2026-10-18): VRAM 16GB mode is MiniMax H3's own, so both
+    // LTX engines publish the name (last, in the server's REJECT_TABLE order),
+    // which hides the Settings row. No `MOCK_CHAIN_FEATURE_FIELDS` row: the
+    // chain schema has no such field.
+    "vram16_mode",
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -442,6 +447,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // which is why the two rows below it were added in the same commit.
     "two_stage_hq",
     "prune_vaed",
+    // 台帳 §1-101 (2026-10-18): VRAM 16GB mode — see the LTX23 entry above.
+    "vram16_mode",
     // 台帳 §3-55 Inpainting (2026-09-14): `inpaint` JOINED this list, and it
     // was the first MODE name to come BACK to it since `outpaint` left —
     // Inpainting shipped LTX 2.3-only in its first increment (owner decision

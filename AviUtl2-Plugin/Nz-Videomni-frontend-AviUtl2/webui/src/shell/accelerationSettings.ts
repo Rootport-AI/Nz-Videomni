@@ -9,9 +9,10 @@
  * backend §44), whether it keeps the models' CPU-side skeleton resident
  * between jobs (2026-08-02, backend §48), and whether GGUF dequantization runs
  * as one fused Triton kernel (2026-08-04, backend §51), which VAE decoder
- * reconstructs the video (2026-08-05, backend §52 — PrunaVAED), and whether
+ * reconstructs the video (2026-08-05, backend §52 — PrunaVAED), whether
  * LTX 2.5's embeddings processor stays resident between jobs (2026-09-03,
- * 台帳 §3-114). Shared by
+ * 台帳 §3-114), and whether MiniMax H3 runs its denoise in VRAM 16GB mode
+ * (2026-10-18, 台帳 §1-101). Shared by
  * Create/Chain/Batch via a
  * single `AccelerationSettings` object (D1: `AppShell` useState + props, no
  * Context — exactly the arrangement `shell/nagSettings.ts` documents and every
@@ -20,9 +21,10 @@
  * the types, the constants, the `localStorage` read/write for the chosen
  * backend, and the additive request-field contract.
  *
- * Six items exist in the UI, and ALL SIX are implemented — the fifth
+ * Seven items exist in the UI, and ALL SEVEN are implemented — the fifth
  * (`vaeMode`) was the last mock, which backend §52 turned real on 2026-08-05,
- * and the sixth (`keepResidentEmbeddings`) was born real on 2026-09-03:
+ * the sixth (`keepResidentEmbeddings`) was born real on 2026-09-03, and so was
+ * the seventh (`vram16Mode`, 2026-10-18):
  *  - `attentionBackend` — REAL. `sdpa` (PyTorch's own scaled-dot-product
  *    attention, the server default) vs. `sage` (SageAttention 2.2.0, ~1.2-1.6x
  *    faster with no extra VRAM). Sent as `attention_backend`.
@@ -87,6 +89,20 @@
  *    `keep_resident_embeddings` in `unsupported_features` and 422 a `true`. `AppShell` hides the row (and
  *    writes a leftover `true` back to `false`) on any engine that publishes the
  *    name — the same treatment `prune_vaed` gets, just pointing the other way.
+ *  - `vram16Mode` — REAL (2026-10-18, 台帳 §1-101). "VRAM 16GB mode": MiniMax
+ *    H3 only. Splits the denoiser's activations into pieces so a job fits in
+ *    16GB of VRAM; precision is unchanged. The target is bit-identical output:
+ *    `sdpa` is; with `sage`, 2 of the 50 blocks differ slightly (the kernel
+ *    depends on the heads per call), accepted by the owner's visual check
+ *    (ruling 53, backend VERIFICATION_LOG §169.3).
+ *    Sent as `vram16_mode`; the H3 server default is `true`, so the key rides
+ *    along only while it is OFF — the `fusedGgufDequantKernel` direction. The
+ *    scope points the same way as `keepResidentEmbeddings`: the engines that do
+ *    NOT have it (LTX 2.3 / 2.5) publish `vram16_mode` in
+ *    `unsupported_features` and 422 a `true`, and `AppShell` hides the row and
+ *    writes a leftover choice back to the default on any engine that publishes
+ *    the name. Not added to the chain request types: the backend's chain schema
+ *    has no such field (H3 refuses the chain endpoint outright).
  */
 import type { StatusResponse } from "../api/types";
 
@@ -141,6 +157,12 @@ export interface AccelerationSettings {
    * to `false`. The one row here whose SUPPORT points the other way: LTX 2.3
    * has no embeddings processor, so 2.3 is the engine that refuses it. */
   keepResidentEmbeddings: boolean;
+  /** REAL (2026-10-18, 台帳 §1-101): "VRAM 16GB mode" — MiniMax H3 only.
+   * Splits the denoiser's activations so the job fits in 16GB of VRAM without
+   * changing precision. Sent as `vram16_mode` — but only while OFF, since the
+   * H3 server defaults to `true`. LTX 2.3 / 2.5 publish the name in
+   * `unsupported_features`, so the row is hidden there. */
+  vram16Mode: boolean;
   /** Output setting (§3-164, 2026-09-24), not an acceleration knob — it lives
    * in this object because this is the Settings panel's per-job store (see the
    * note at the top of this file). Whether the finished output.mp4 /
@@ -212,6 +234,13 @@ export const KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT = false;
  * `enable_pnginfo`). Direction matches `fused_gguf_dequant_kernel`: the key
  * rides along only when the user turns it OFF. */
 export const EMBED_MP4_METADATA_SERVER_DEFAULT = true;
+/** Server default for `vram16_mode` as of 台帳 §1-101 (2026-10-18): `true` on
+ * MiniMax H3 (`api/models.py`'s `VRAM16_MODE_DEFAULT_H3`; the server writes it
+ * back when the key is absent). Direction matches
+ * `fused_gguf_dequant_kernel`: the key rides along only when the user turns it
+ * OFF. On LTX the row is hidden and the stored value is reset to this default,
+ * so an absent key is all an LTX request ever carries. */
+export const VRAM16_MODE_SERVER_DEFAULT = true;
 
 /** `localStorage` key every Acceleration choice is persisted under — all FIVE
  * as of 2026-08-05, when `vaeMode` stopped being a mock. The key is named for the section
@@ -236,6 +265,7 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
   vaeMode: VAE_MODE_DEFAULT,
   keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+  vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 });
 
@@ -286,6 +316,7 @@ export function withServerDefaults(
     keepResidentEmbeddings: at("keepResidentEmbeddings")
       ? ACCELERATION_DEFAULTS.keepResidentEmbeddings
       : acceleration.keepResidentEmbeddings,
+    vram16Mode: at("vram16Mode") ? ACCELERATION_DEFAULTS.vram16Mode : acceleration.vram16Mode,
     // No feature-scope row resets the Output setting, so it is carried over as is.
     embedMp4Metadata: acceleration.embedMp4Metadata,
   };
@@ -303,6 +334,8 @@ export interface StoredAcceleration {
   fusedGgufDequantKernel: boolean;
   vaeMode: VaeMode;
   keepResidentEmbeddings: boolean;
+  /** 台帳 §1-101 (2026-10-18): persisted from its first day. */
+  vram16Mode: boolean;
   /** §3-164 (2026-09-24): the Output row, persisted from its first day. */
   embedMp4Metadata: boolean;
 }
@@ -314,6 +347,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
   fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
   vaeMode: VAE_MODE_DEFAULT,
   keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+  vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 };
 
@@ -329,14 +363,14 @@ const STORED_DEFAULTS: StoredAcceleration = {
  *  3. the current JSON object `{"attentionBackend":...,
  *     "blockSwapPrefetch":...,"keepResident":...,
  *     "fusedGgufDequantKernel":...,"vaeMode":...,
- *     "keepResidentEmbeddings":...,"embedMp4Metadata":...}`
+ *     "keepResidentEmbeddings":...,"vram16Mode":...,"embedMp4Metadata":...}`
  * Any unrecognized/malformed value inside falls back to its own default —
  * same defensive posture as `ThemeContext.tsx`'s `readStoredTheme`. The
  * per-field fallback is what lets a JSON blob written by a pre-§48 build
  * (which has no `keepResident` key at all) — or a pre-§51 one (no
  * `fusedGgufDequantKernel`), or a pre-§52 one (no `vaeMode`), or a pre-§3-114
  * one (no `keepResidentEmbeddings`), or a pre-§3-164 one (no
- * `embedMp4Metadata`) — read back
+ * `embedMp4Metadata`), or a pre-§1-101 one (no `vram16Mode`) — read back
  * cleanly. EVERY field added to
  * {@link StoredAcceleration} needs its own line here: without one, the
  * whole-object write below would persist an `undefined` that reads back as
@@ -357,6 +391,7 @@ export function readStoredAcceleration(): StoredAcceleration {
       fusedGgufDequantKernel: FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
       vaeMode: VAE_MODE_DEFAULT,
       keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+      vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
   }
@@ -380,6 +415,7 @@ export function readStoredAcceleration(): StoredAcceleration {
         typeof rec.keepResidentEmbeddings === "boolean"
           ? rec.keepResidentEmbeddings
           : KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
+      vram16Mode: typeof rec.vram16Mode === "boolean" ? rec.vram16Mode : VRAM16_MODE_SERVER_DEFAULT,
       embedMp4Metadata:
         typeof rec.embedMp4Metadata === "boolean" ? rec.embedMp4Metadata : EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
@@ -485,10 +521,12 @@ export interface AccelerationRequestFields {
   fused_gguf_dequant_kernel?: boolean;
   vae_mode?: VaeMode;
   keep_resident_embeddings?: boolean;
+  /** 台帳 §1-101: `/generate` only — the chain request types do not carry it. */
+  vram16_mode?: boolean;
 }
 
 /**
- * The six acceleration settings as they would EFFECTIVELY run, expressed in
+ * The seven acceleration settings as they would EFFECTIVELY run, expressed in
  * the SERVER's own vocabulary (the request field names) — every key always
  * present, so it can be matched key-by-key against a served
  * `AppLimits.comfort_budgets` row's `requires` map (2026-08-31,
@@ -531,6 +569,7 @@ export function effectiveAccelerationFields(
     fused_gguf_dequant_kernel: acceleration.fusedGgufDequantKernel,
     vae_mode: acceleration.vaeMode,
     keep_resident_embeddings: acceleration.keepResidentEmbeddings,
+    vram16_mode: acceleration.vram16Mode,
   };
 }
 
@@ -607,6 +646,16 @@ export function accelerationRequestFields(
   // reaches this function the answer is already in it.
   if (acceleration.keepResidentEmbeddings !== KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT) {
     out.keep_resident_embeddings = acceleration.keepResidentEmbeddings;
+  }
+  // 台帳 §1-101 (2026-10-18): VRAM 16GB mode. The H3 server default is `true`,
+  // so the key only ever appears as `false` (the `fused_gguf_dequant_kernel`
+  // direction). INDEPENDENT — no capability flag, no dependency on any other
+  // row. The scope half is `AppShell`'s, exactly as for
+  // `keep_resident_embeddings` above: LTX publishes the name, the row is hidden
+  // and the stored choice is written back to the default (`true`), so an LTX
+  // request never carries the key. (LTX's reject table fires on `true` only.)
+  if (acceleration.vram16Mode !== VRAM16_MODE_SERVER_DEFAULT) {
+    out.vram16_mode = acceleration.vram16Mode;
   }
   // §3-164 (2026-09-24): the Output row. The server default is `true`, so the
   // key only ever appears as `false`. Emitted last, for the same key-order

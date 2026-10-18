@@ -1,0 +1,73 @@
+{
+  "seq": 98304,
+  "heads": 8,
+  "torch": "2.13.0+cu130",
+  "cuda": "13.0",
+  "device": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "started": "2026-10-18 16:51:38",
+  "pid": 48132,
+  "sdpa_paths": {
+    "is_flash_attention_available": false,
+    "mem_efficient_sdp_enabled": true,
+    "flash_sdp_enabled": true,
+    "math_sdp_enabled": true
+  },
+  "strides": {
+    "q": [
+      7168,
+      128,
+      7168,
+      1
+    ],
+    "k": [
+      7168,
+      128,
+      7168,
+      1
+    ],
+    "v_view": [
+      7168,
+      128,
+      21504,
+      1
+    ],
+    "v_contiguous": [
+      100663296,
+      12582912,
+      128,
+      1
+    ]
+  },
+  "int32_products": {
+    "v_row_stride_x_S": 2113929216,
+    "q_row_stride_x_S": 704643072,
+    "int32_max": 2147483647
+  },
+  "cases": {
+    "default": {
+      "forced_efficient": false,
+      "seconds": 1.473,
+      "max_abs_diff": 0.0,
+      "mean_abs_diff": 0.0,
+      "identical": true,
+      "view_finite": true,
+      "ref_finite": true,
+      "ref_abs_mean": 0.004150731489062309,
+      "first_bad_query_row": null,
+      "bad_query_rows": 0
+    },
+    "efficient_forced": {
+      "forced_efficient": true,
+      "seconds": 1.472,
+      "max_abs_diff": 0.0,
+      "mean_abs_diff": 0.0,
+      "identical": true,
+      "view_finite": true,
+      "ref_finite": true,
+      "ref_abs_mean": 0.004150731489062309,
+      "first_bad_query_row": null,
+      "bad_query_rows": 0
+    }
+  },
+  "finished": "2026-10-18 16:51:42"
+}

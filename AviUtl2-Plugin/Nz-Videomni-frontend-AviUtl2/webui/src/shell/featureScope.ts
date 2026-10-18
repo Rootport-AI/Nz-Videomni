@@ -46,7 +46,8 @@ export type UiTarget =
   | "createSection.keyframeStrength"
   | "shell.nag"
   | "settingsRow.vae"
-  | "settingsRow.keepResidentEmbeddings";
+  | "settingsRow.keepResidentEmbeddings"
+  | "settingsRow.vram16";
 
 interface FeatureUiEntry {
   /** The UI parts to close while this feature is unavailable. A disjunction —
@@ -116,6 +117,10 @@ interface FeatureUiEntry {
  *    `keep_resident_embeddings` names a component only LTX 2.5 HAS, so it is
  *    the engines without it that publish it. The table does not care — either way the row
  *    closes and the stored value goes back to the server default.
+ *  - **vram16_mode** (台帳 §1-101) is a third Settings row with a `resets`,
+ *    scoped like `keep_resident_embeddings`: it exists on MiniMax H3 only, so
+ *    LTX 2.3 / 2.5 publish the name. Its default is ON, so the write-back
+ *    lands on `true` — which is what an LTX request then omits.
  *
  * Note what is NOT here. `single` and `inventory` have no row and never will:
  * Single IS the baseline any engine must serve, and Inventory only browses
@@ -145,6 +150,7 @@ export const FEATURE_UI = {
     disables: ["settingsRow.keepResidentEmbeddings"],
     resets: "keepResidentEmbeddings",
   },
+  vram16_mode: { disables: ["settingsRow.vram16"], resets: "vram16Mode" },
 } as const satisfies Record<string, FeatureUiEntry>;
 
 // No union type over the feature NAMES (no `UiRelevantFeature` or the like):
@@ -327,10 +333,12 @@ export interface SettingsRowsHidden {
   vae: boolean;
   /** LTX 2.5's Embeddings processor 常駐 row (`keep_resident_embeddings`). */
   keepResidentEmbeddings: boolean;
+  /** MiniMax H3's VRAM 16GB mode row (`vram16_mode`). */
+  vram16: boolean;
 }
 
 /**
- * Which of {@link SettingsRowsHidden}'s rows `unsupportedFeatures` hides — two
+ * Which of {@link SettingsRowsHidden}'s rows `unsupportedFeatures` hides — three
  * `false`s for the ordinary case.
  *
  * Read off the published `unsupported_features`, never off a base-model id:
@@ -343,6 +351,7 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
   return {
     vae: disabled.has("settingsRow.vae"),
     keepResidentEmbeddings: disabled.has("settingsRow.keepResidentEmbeddings"),
+    vram16: disabled.has("settingsRow.vram16"),
   };
 }
 

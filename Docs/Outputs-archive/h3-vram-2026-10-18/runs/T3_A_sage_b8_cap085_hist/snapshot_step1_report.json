@@ -1,0 +1,1040 @@
+{
+  "action_counts": {
+    "segment_alloc": 57,
+    "alloc": 8922,
+    "free_requested": 8868,
+    "free_completed": 8868,
+    "segment_free": 22
+  },
+  "head_state": {
+    "segments": 0,
+    "reserved_mib": 0.0,
+    "allocated_mib": 0.0
+  },
+  "unwind_notes": [],
+  "peak": {
+    "trace_index": 16774,
+    "trace_entries": 26737,
+    "allocated_mib": 12893.1,
+    "reserved_mib": 13336.0,
+    "unused_reserved_mib": 442.9,
+    "segments": 35,
+    "unused_gap_classes_large_pool": {
+      "<64MiB": {
+        "count": 28,
+        "mib": 34.1
+      },
+      "64-256MiB": {
+        "count": 3,
+        "mib": 407.3
+      },
+      "256-1024MiB": {
+        "count": 0,
+        "mib": 0.0
+      },
+      "1024-2048MiB": {
+        "count": 0,
+        "mib": 0.0
+      },
+      ">2048MiB": {
+        "count": 0,
+        "mib": 0.0
+      }
+    },
+    "unused_small_pool_mib": 1.3,
+    "largest_gap_mib": 139.7,
+    "per_segment": [
+      {
+        "addr": "0x15ba000000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 2210.0,
+        "used_mib": 2209.7,
+        "unused_mib": 0.3,
+        "largest_gap_mib": 0.3,
+        "blocks": 2
+      },
+      {
+        "addr": "0x1493400000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 1106.0,
+        "used_mib": 1104.9,
+        "unused_mib": 1.1,
+        "largest_gap_mib": 1.1,
+        "blocks": 2
+      },
+      {
+        "addr": "0x152ea00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 1106.0,
+        "used_mib": 1104.9,
+        "unused_mib": 1.1,
+        "largest_gap_mib": 1.1,
+        "blocks": 2
+      },
+      {
+        "addr": "0x14fac00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 830.0,
+        "used_mib": 690.5,
+        "unused_mib": 139.5,
+        "largest_gap_mib": 138.1,
+        "blocks": 2
+      },
+      {
+        "addr": "0x1460000000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 820.0,
+        "used_mib": 690.5,
+        "unused_mib": 129.5,
+        "largest_gap_mib": 129.5,
+        "blocks": 2
+      },
+      {
+        "addr": "0x1597600000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 554.0,
+        "used_mib": 414.3,
+        "unused_mib": 139.7,
+        "largest_gap_mib": 139.7,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1644200000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 554.0,
+        "used_mib": 552.4,
+        "unused_mib": 1.6,
+        "largest_gap_mib": 1.6,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1666c00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 554.0,
+        "used_mib": 553.0,
+        "unused_mib": 1.0,
+        "largest_gap_mib": 1.0,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1350400000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x138b800000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x13a2c00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x13ba000000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x13d1400000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x13e8800000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x13ffc00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1417000000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x142e400000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1445800000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 372.0,
+        "used_mib": 371.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 1
+      },
+      {
+        "addr": "0x130b200000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 294.0,
+        "used_mib": 294.0,
+        "unused_mib": 0.0,
+        "largest_gap_mib": 0.0,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1334a00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 294.0,
+        "used_mib": 294.0,
+        "unused_mib": 0.0,
+        "largest_gap_mib": 0.0,
+        "blocks": 1
+      },
+      {
+        "addr": "0x14d8600000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 278.0,
+        "used_mib": 276.5,
+        "unused_mib": 1.5,
+        "largest_gap_mib": 1.5,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1326c00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 222.0,
+        "used_mib": 220.5,
+        "unused_mib": 1.5,
+        "largest_gap_mib": 1.5,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1372600000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 222.0,
+        "used_mib": 220.5,
+        "unused_mib": 1.5,
+        "largest_gap_mib": 1.5,
+        "blocks": 1
+      },
+      {
+        "addr": "0x131d800000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 148.0,
+        "used_mib": 147.0,
+        "unused_mib": 1.0,
+        "largest_gap_mib": 1.0,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1347000000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 148.0,
+        "used_mib": 147.0,
+        "unused_mib": 1.0,
+        "largest_gap_mib": 1.0,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1380400000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 74.0,
+        "used_mib": 73.5,
+        "unused_mib": 0.5,
+        "largest_gap_mib": 0.5,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1384e00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 74.0,
+        "used_mib": 73.5,
+        "unused_mib": 0.5,
+        "largest_gap_mib": 0.5,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1304e00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 54.0,
+        "used_mib": 52.5,
+        "unused_mib": 1.5,
+        "largest_gap_mib": 1.5,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1303a00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 20.0,
+        "used_mib": 14.2,
+        "unused_mib": 5.8,
+        "largest_gap_mib": 5.8,
+        "blocks": 4
+      },
+      {
+        "addr": "0x1389800000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 16.0,
+        "used_mib": 14.6,
+        "unused_mib": 1.4,
+        "largest_gap_mib": 1.4,
+        "blocks": 1
+      },
+      {
+        "addr": "0x145cc00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 16.0,
+        "used_mib": 14.8,
+        "unused_mib": 1.2,
+        "largest_gap_mib": 1.2,
+        "blocks": 1
+      },
+      {
+        "addr": "0x145dc00000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 16.0,
+        "used_mib": 14.8,
+        "unused_mib": 1.2,
+        "largest_gap_mib": 1.2,
+        "blocks": 1
+      },
+      {
+        "addr": "0x130a800000",
+        "stream": 0,
+        "pool": "small",
+        "reserved_mib": 2.0,
+        "used_mib": 2.0,
+        "unused_mib": 0.0,
+        "largest_gap_mib": 0.0,
+        "blocks": 8
+      },
+      {
+        "addr": "0x1367800000",
+        "stream": 0,
+        "pool": "small",
+        "reserved_mib": 2.0,
+        "used_mib": 1.1,
+        "unused_mib": 0.9,
+        "largest_gap_mib": 0.9,
+        "blocks": 3
+      },
+      {
+        "addr": "0x1367e00000",
+        "stream": 0,
+        "pool": "small",
+        "reserved_mib": 2.0,
+        "used_mib": 1.7,
+        "unused_mib": 0.3,
+        "largest_gap_mib": 0.3,
+        "blocks": 25
+      }
+    ],
+    "top20_live": [
+      {
+        "size_mib": 1657.3,
+        "addr": "0x15ba000000",
+        "stream": 0,
+        "frames": "__init__.py:2190:int8_linear <- __init__.py:1054:int8_linear <- quant_linear.py:112:forward <- dit.py:228:forward"
+      },
+      {
+        "size_mib": 553.0,
+        "addr": "0x1666c00000",
+        "stream": 0,
+        "frames": "quant.py:275:per_channel_fp8 <- core.py:763:sageattn_qk_int8_pv_fp8_cuda <- core.py:168:sageattn <- dit.py:196:_attention"
+      },
+      {
+        "size_mib": 552.4,
+        "addr": "0x152ea00000",
+        "stream": 0,
+        "frames": "rope.py:184:apply_rope <- dit.py:233:forward <- dit.py:321:forward <- block_swap_service.py:359:swapped_forward_prefetch"
+      },
+      {
+        "size_mib": 552.4,
+        "addr": "0x1621947000",
+        "stream": 0,
+        "frames": "rope.py:184:apply_rope <- dit.py:234:forward <- dit.py:321:forward <- block_swap_service.py:359:swapped_forward_prefetch"
+      },
+      {
+        "size_mib": 552.4,
+        "addr": "0x155126d000",
+        "stream": 0,
+        "frames": "dit.py:196:_attention <- dit.py:235:forward <- dit.py:321:forward <- block_swap_service.py:359:swapped_forward_prefetch"
+      },
+      {
+        "size_mib": 552.4,
+        "addr": "0x1493400000",
+        "stream": 0,
+        "frames": "dit.py:196:_attention <- dit.py:235:forward <- dit.py:321:forward <- block_swap_service.py:359:swapped_forward_prefetch"
+      },
+      {
+        "size_mib": 552.4,
+        "addr": "0x14b5c6d000",
+        "stream": 0,
+        "frames": "dit.py:196:_attention <- dit.py:235:forward <- dit.py:321:forward <- block_swap_service.py:359:swapped_forward_prefetch"
+      },
+      {
+        "size_mib": 552.4,
+        "addr": "0x1644200000",
+        "stream": 0,
+        "frames": "core.py:749:sageattn_qk_int8_pv_fp8_cuda <- core.py:168:sageattn <- dit.py:196:_attention <- dit.py:235:forward"
+      },
+      {
+        "size_mib": 414.3,
+        "addr": "0x1460000000",
+        "stream": 0,
+        "frames": "dit.py:495:embed_rows <- pipeline_h3.py:756:_denoise <- pipeline_h3.py:477:generate <- worker.py:332:_do_generate"
+      },
+      {
+        "size_mib": 414.3,
+        "addr": "0x1597600000",
+        "stream": 0,
+        "frames": "dit.py:296:_gate <- dit.py:325:forward <- block_swap_service.py:359:swapped_forward_prefetch <- dit.py:567:forward"
+      },
+      {
+        "size_mib": 414.3,
+        "addr": "0x1514a51c00",
+        "stream": 0,
+        "frames": "dit.py:288:_modulate <- dit.py:320:forward <- block_swap_service.py:359:swapped_forward_prefetch <- dit.py:567:forward"
+      },
+      {
+        "size_mib": 371.1,
+        "addr": "0x1350400000",
+        "stream": 0,
+        "frames": "block_swap_prefetch.py:405:prepare <- block_swap_service.py:321:_build_prefetch_engine <- block_swap_service.py:134:install <- pipeline_h3.py:661:_place_dit"
+      },
+      {
+        "size_mib": 371.1,
+        "addr": "0x138b800000",
+        "stream": 0,
+        "frames": "block_swap_prefetch.py:405:prepare <- block_swap_service.py:321:_build_prefetch_engine <- block_swap_service.py:134:install <- pipeline_h3.py:661:_place_dit"
+      },
+      {
+        "size_mib": 371.1,
+        "addr": "0x13a2c00000",
+        "stream": 0,
+        "frames": "block_swap_prefetch.py:405:prepare <- block_swap_service.py:321:_build_prefetch_engine <- block_swap_service.py:134:install <- pipeline_h3.py:661:_place_dit"
+      },
+      {
+        "size_mib": 371.1,
+        "addr": "0x13ba000000",
+        "stream": 0,
+        "frames": "block_swap_prefetch.py:405:prepare <- block_swap_service.py:321:_build_prefetch_engine <- block_swap_service.py:134:install <- pipeline_h3.py:661:_place_dit"
+      },
+      {
+        "size_mib": 371.1,
+        "addr": "0x13d1400000",
+        "stream": 0,
+        "frames": "block_swap_prefetch.py:405:prepare <- block_swap_service.py:321:_build_prefetch_engine <- block_swap_service.py:134:install <- pipeline_h3.py:661:_place_dit"
+      },
+      {
+        "size_mib": 371.1,
+        "addr": "0x13e8800000",
+        "stream": 0,
+        "frames": "block_swap_prefetch.py:405:prepare <- block_swap_service.py:321:_build_prefetch_engine <- block_swap_service.py:134:install <- pipeline_h3.py:661:_place_dit"
+      },
+      {
+        "size_mib": 371.1,
+        "addr": "0x13ffc00000",
+        "stream": 0,
+        "frames": "block_swap_prefetch.py:405:prepare <- block_swap_service.py:321:_build_prefetch_engine <- block_swap_service.py:134:install <- pipeline_h3.py:661:_place_dit"
+      },
+      {
+        "size_mib": 371.1,
+        "addr": "0x1417000000",
+        "stream": 0,
+        "frames": "block_swap_prefetch.py:405:prepare <- block_swap_service.py:321:_build_prefetch_engine <- block_swap_service.py:134:install <- pipeline_h3.py:661:_place_dit"
+      },
+      {
+        "size_mib": 371.1,
+        "addr": "0x142e400000",
+        "stream": 0,
+        "frames": "block_swap_prefetch.py:405:prepare <- block_swap_service.py:321:_build_prefetch_engine <- block_swap_service.py:134:install <- pipeline_h3.py:661:_place_dit"
+      }
+    ]
+  },
+  "segment_allocs": {
+    "count": 57,
+    "free_total_was_enough_count": 17,
+    "free_total_was_enough_mib": 7444.0,
+    "rule": "large プールで同じストリームの空きの合計 ≥ 要求（次の alloc の大きさ）なのに新しいセグメントを確保した",
+    "events_enough": [
+      {
+        "index": 307,
+        "segment_mib": 20.0,
+        "request_mib": 1.6,
+        "free_total_before_mib": 3.6,
+        "max_gap_before_mib": 1.0,
+        "free_total_was_enough": true,
+        "frames": "activations.py:103:forward <- modeling_qwen3_vl.py:525:forward <- modeling_qwen3_vl.py:567:forward <- modeling_layers.py:110:__call__"
+      },
+      {
+        "index": 16339,
+        "segment_mib": 20.0,
+        "request_mib": 7.4,
+        "free_total_before_mib": 17.3,
+        "max_gap_before_mib": 1.5,
+        "free_total_was_enough": true,
+        "frames": "rope.py:165:rope_tables <- pipeline_h3.py:723:_denoise <- pipeline_h3.py:477:generate <- worker.py:332:_do_generate"
+      },
+      {
+        "index": 16341,
+        "segment_mib": 16.0,
+        "request_mib": 14.8,
+        "free_total_before_mib": 29.9,
+        "max_gap_before_mib": 12.6,
+        "free_total_was_enough": true,
+        "frames": "rope.py:166:rope_tables <- pipeline_h3.py:723:_denoise <- pipeline_h3.py:477:generate <- worker.py:332:_do_generate"
+      },
+      {
+        "index": 16343,
+        "segment_mib": 16.0,
+        "request_mib": 14.8,
+        "free_total_before_mib": 31.1,
+        "max_gap_before_mib": 12.6,
+        "free_total_was_enough": true,
+        "frames": "rope.py:167:rope_tables <- pipeline_h3.py:723:_denoise <- pipeline_h3.py:477:generate <- worker.py:332:_do_generate"
+      },
+      {
+        "index": 16345,
+        "segment_mib": 16.0,
+        "request_mib": 14.8,
+        "free_total_before_mib": 32.3,
+        "max_gap_before_mib": 12.6,
+        "free_total_was_enough": true,
+        "frames": "rope.py:167:rope_tables <- pipeline_h3.py:723:_denoise <- pipeline_h3.py:477:generate <- worker.py:332:_do_generate"
+      },
+      {
+        "index": 16389,
+        "segment_mib": 20.0,
+        "request_mib": 8.5,
+        "free_total_before_mib": 33.8,
+        "max_gap_before_mib": 7.9,
+        "free_total_was_enough": true,
+        "frames": "dit.py:377:_linear_f32 <- dit.py:493:embed_rows <- pipeline_h3.py:756:_denoise <- pipeline_h3.py:477:generate"
+      },
+      {
+        "index": 16442,
+        "segment_mib": 416.0,
+        "request_mib": 414.3,
+        "free_total_before_mib": 884.1,
+        "max_gap_before_mib": 410.0,
+        "free_total_was_enough": true,
+        "frames": "dit.py:320:forward <- block_swap_service.py:359:swapped_forward_prefetch <- dit.py:567:forward <- pipeline_h3.py:757:_denoise"
+      },
+      {
+        "index": 16447,
+        "segment_mib": 830.0,
+        "request_mib": 828.6,
+        "free_total_before_mib": 885.8,
+        "max_gap_before_mib": 410.0,
+        "free_total_was_enough": true,
+        "frames": "dit.py:284:_modulate <- dit.py:320:forward <- block_swap_service.py:359:swapped_forward_prefetch <- dit.py:567:forward"
+      },
+      {
+        "index": 16449,
+        "segment_mib": 830.0,
+        "request_mib": 828.6,
+        "free_total_before_mib": 887.2,
+        "max_gap_before_mib": 410.0,
+        "free_total_was_enough": true,
+        "frames": "dit.py:287:_modulate <- dit.py:320:forward <- block_swap_service.py:359:swapped_forward_prefetch <- dit.py:567:forward"
+      },
+      {
+        "index": 16460,
+        "segment_mib": 1658.0,
+        "request_mib": 1657.3,
+        "free_total_before_mib": 2338.6,
+        "max_gap_before_mib": 830.0,
+        "free_total_was_enough": true,
+        "frames": "__init__.py:2190:int8_linear <- __init__.py:1054:int8_linear <- quant_linear.py:112:forward <- dit.py:228:forward"
+      },
+      {
+        "index": 16467,
+        "segment_mib": 554.0,
+        "request_mib": 552.4,
+        "free_total_before_mib": 1994.1,
+        "max_gap_before_mib": 416.0,
+        "free_total_was_enough": true,
+        "frames": "dit.py:230:forward <- dit.py:321:forward <- block_swap_service.py:359:swapped_forward_prefetch <- dit.py:567:forward"
+      },
+      {
+        "index": 16475,
+        "segment_mib": 554.0,
+        "request_mib": 552.4,
+        "free_total_before_mib": 1995.7,
+        "max_gap_before_mib": 416.0,
+        "free_total_was_enough": true,
+        "frames": "dit.py:231:forward <- dit.py:321:forward <- block_swap_service.py:359:swapped_forward_prefetch <- dit.py:567:forward"
+      },
+      {
+        "index": 16497,
+        "segment_mib": 554.0,
+        "request_mib": 552.4,
+        "free_total_before_mib": 2120.6,
+        "max_gap_before_mib": 416.0,
+        "free_total_was_enough": true,
+        "frames": "rope.py:184:apply_rope <- dit.py:233:forward <- dit.py:321:forward <- block_swap_service.py:359:swapped_forward_prefetch"
+      },
+      {
+        "index": 16533,
+        "segment_mib": 554.0,
+        "request_mib": 552.4,
+        "free_total_before_mib": 1998.8,
+        "max_gap_before_mib": 416.0,
+        "free_total_was_enough": true,
+        "frames": "dit.py:196:_attention <- dit.py:235:forward <- dit.py:321:forward <- block_swap_service.py:359:swapped_forward_prefetch"
+      },
+      {
+        "index": 16544,
+        "segment_mib": 554.0,
+        "request_mib": 552.4,
+        "free_total_before_mib": 1448.0,
+        "max_gap_before_mib": 416.0,
+        "free_total_was_enough": true,
+        "frames": "quant_per_thread.py:159:per_thread_int8 <- core.py:747:sageattn_qk_int8_pv_fp8_cuda <- core.py:168:sageattn <- dit.py:196:_attention"
+      },
+      {
+        "index": 16551,
+        "segment_mib": 554.0,
+        "request_mib": 553.0,
+        "free_total_before_mib": 1447.4,
+        "max_gap_before_mib": 416.0,
+        "free_total_was_enough": true,
+        "frames": "quant.py:275:per_channel_fp8 <- core.py:763:sageattn_qk_int8_pv_fp8_cuda <- core.py:168:sageattn <- dit.py:196:_attention"
+      },
+      {
+        "index": 16771,
+        "segment_mib": 278.0,
+        "request_mib": 276.5,
+        "free_total_before_mib": 440.1,
+        "max_gap_before_mib": 139.7,
+        "free_total_was_enough": true,
+        "frames": "quant.py:284:per_channel_fp8 <- core.py:763:sageattn_qk_int8_pv_fp8_cuda <- core.py:168:sageattn <- dit.py:196:_attention"
+      }
+    ]
+  },
+  "oom_events": [],
+  "at_dump": {
+    "segments": 35,
+    "reserved_mib": 13336.0,
+    "allocated_mib": 5305.2,
+    "list": [
+      {
+        "addr": "0x15ba000000",
+        "total_mib": 2210.0,
+        "allocated_mib": 0.0,
+        "active_mib": 0.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 2210.0
+      },
+      {
+        "addr": "0x1493400000",
+        "total_mib": 1106.0,
+        "allocated_mib": 0.0,
+        "active_mib": 0.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 1106.0
+      },
+      {
+        "addr": "0x152ea00000",
+        "total_mib": 1106.0,
+        "allocated_mib": 0.0,
+        "active_mib": 0.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 1106.0
+      },
+      {
+        "addr": "0x14fac00000",
+        "total_mib": 830.0,
+        "allocated_mib": 0.0,
+        "active_mib": 0.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 830.0
+      },
+      {
+        "addr": "0x1460000000",
+        "total_mib": 820.0,
+        "allocated_mib": 0.0,
+        "active_mib": 0.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 820.0
+      },
+      {
+        "addr": "0x1597600000",
+        "total_mib": 554.0,
+        "allocated_mib": 0.0,
+        "active_mib": 0.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 554.0
+      },
+      {
+        "addr": "0x1644200000",
+        "total_mib": 554.0,
+        "allocated_mib": 14.6,
+        "active_mib": 14.6,
+        "type": "large",
+        "stream": 0,
+        "blocks": 3,
+        "largest_inactive_mib": 458.2
+      },
+      {
+        "addr": "0x1666c00000",
+        "total_mib": 554.0,
+        "allocated_mib": 0.0,
+        "active_mib": 0.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 554.0
+      },
+      {
+        "addr": "0x1350400000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x138b800000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x13a2c00000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x13ba000000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x13d1400000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x13e8800000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x13ffc00000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x1417000000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x142e400000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x1445800000",
+        "total_mib": 372.0,
+        "allocated_mib": 372.0,
+        "active_mib": 372.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x130b200000",
+        "total_mib": 294.0,
+        "allocated_mib": 294.0,
+        "active_mib": 294.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x1334a00000",
+        "total_mib": 294.0,
+        "allocated_mib": 294.0,
+        "active_mib": 294.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x14d8600000",
+        "total_mib": 278.0,
+        "allocated_mib": 0.0,
+        "active_mib": 0.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 278.0
+      },
+      {
+        "addr": "0x1326c00000",
+        "total_mib": 222.0,
+        "allocated_mib": 220.5,
+        "active_mib": 220.5,
+        "type": "large",
+        "stream": 0,
+        "blocks": 2,
+        "largest_inactive_mib": 1.5
+      },
+      {
+        "addr": "0x1372600000",
+        "total_mib": 222.0,
+        "allocated_mib": 220.5,
+        "active_mib": 220.5,
+        "type": "large",
+        "stream": 0,
+        "blocks": 2,
+        "largest_inactive_mib": 1.5
+      },
+      {
+        "addr": "0x131d800000",
+        "total_mib": 148.0,
+        "allocated_mib": 148.0,
+        "active_mib": 148.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x1347000000",
+        "total_mib": 148.0,
+        "allocated_mib": 148.0,
+        "active_mib": 148.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x1380400000",
+        "total_mib": 74.0,
+        "allocated_mib": 74.0,
+        "active_mib": 74.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x1384e00000",
+        "total_mib": 74.0,
+        "allocated_mib": 74.0,
+        "active_mib": 74.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x1304e00000",
+        "total_mib": 54.0,
+        "allocated_mib": 52.5,
+        "active_mib": 52.5,
+        "type": "large",
+        "stream": 0,
+        "blocks": 2,
+        "largest_inactive_mib": 1.5
+      },
+      {
+        "addr": "0x1303a00000",
+        "total_mib": 20.0,
+        "allocated_mib": 12.1,
+        "active_mib": 12.1,
+        "type": "large",
+        "stream": 0,
+        "blocks": 4,
+        "largest_inactive_mib": 7.9
+      },
+      {
+        "addr": "0x1389800000",
+        "total_mib": 16.0,
+        "allocated_mib": 0.0,
+        "active_mib": 0.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 16.0
+      },
+      {
+        "addr": "0x145cc00000",
+        "total_mib": 16.0,
+        "allocated_mib": 14.8,
+        "active_mib": 14.8,
+        "type": "large",
+        "stream": 0,
+        "blocks": 2,
+        "largest_inactive_mib": 1.2
+      },
+      {
+        "addr": "0x145dc00000",
+        "total_mib": 16.0,
+        "allocated_mib": 14.8,
+        "active_mib": 14.8,
+        "type": "large",
+        "stream": 0,
+        "blocks": 2,
+        "largest_inactive_mib": 1.2
+      },
+      {
+        "addr": "0x130a800000",
+        "total_mib": 2.0,
+        "allocated_mib": 1.6,
+        "active_mib": 1.6,
+        "type": "small",
+        "stream": 0,
+        "blocks": 6,
+        "largest_inactive_mib": 0.4
+      },
+      {
+        "addr": "0x1367800000",
+        "total_mib": 2.0,
+        "allocated_mib": 0.2,
+        "active_mib": 0.2,
+        "type": "small",
+        "stream": 0,
+        "blocks": 2,
+        "largest_inactive_mib": 1.8
+      },
+      {
+        "addr": "0x1367e00000",
+        "total_mib": 2.0,
+        "allocated_mib": 1.7,
+        "active_mib": 1.7,
+        "type": "small",
+        "stream": 0,
+        "blocks": 27,
+        "largest_inactive_mib": 0.2
+      }
+    ]
+  }
+}

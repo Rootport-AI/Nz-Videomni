@@ -1,0 +1,188 @@
+{
+  "label": "dryrun",
+  "started": "2026-10-18 16:21:59.806",
+  "args": {
+    "label": "dryrun",
+    "width": 960,
+    "height": 1152,
+    "num_frames": 124,
+    "attention_backend": "sdpa",
+    "blocks_on_gpu": 8,
+    "memory_fraction": null,
+    "record_history": false,
+    "history_entries": 2000000,
+    "steps": 2,
+    "seed": 42,
+    "idle_seconds": 10.0,
+    "dry_run": true,
+    "transformer": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "text_encoder": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+    "video_vae": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_audio_vae_fp32.safetensors",
+    "tokenizer_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_tokenizer"
+  },
+  "checks": {
+    "model_files_exist": true,
+    "snapshot_written": true,
+    "wddm_dedicated_nonzero": true,
+    "dmon_has_rows": true
+  },
+  "paths": {
+    "transformer": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "exists": true,
+      "bytes": 20970379616
+    },
+    "text_encoder": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "exists": true,
+      "bytes": 27141342152
+    },
+    "video_vae": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_video_vae_fp16.safetensors",
+      "exists": true,
+      "bytes": 5207808496
+    },
+    "audio_vae": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_audio_vae_fp32.safetensors",
+      "exists": true,
+      "bytes": 605254808
+    },
+    "tokenizer_dir": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_tokenizer",
+      "exists": true,
+      "files": [
+        "config.json",
+        "merges.txt",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json"
+      ]
+    }
+  },
+  "luid": {
+    "chosen_luid": "luid_0x00000000_0x0000f2a9_phys_0",
+    "chosen_dedicated_mb": 1146.9,
+    "candidates": [
+      {
+        "instance": "luid_0x00000000_0x0000f2a9_phys_0",
+        "mb": 1146.9
+      },
+      {
+        "instance": "luid_0x00000000_0x000104d7_phys_0",
+        "mb": 0
+      },
+      {
+        "instance": "luid_0x00000000_0x00010465_phys_0",
+        "mb": 0
+      }
+    ],
+    "discovered_at": "2026-10-18 16:22:01.719",
+    "note": "この回に取り直した値の記録。次の回では使わない"
+  },
+  "worker_import": {
+    "module": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\worker.py",
+    "cwd_after_import": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni",
+    "out_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vram-2026-10-18\\runs\\dryrun",
+    "selftest_parser_options": [
+      "attention_backend",
+      "audio_vae",
+      "blocks_on_gpu",
+      "deterministic",
+      "height",
+      "help",
+      "image",
+      "keep_resident",
+      "num_frames",
+      "output",
+      "prefetch",
+      "prompt",
+      "report",
+      "rounds",
+      "seed",
+      "shift_audio",
+      "shift_video",
+      "steps",
+      "text_encoder",
+      "tokenizer_dir",
+      "transformer",
+      "video_vae",
+      "width"
+    ]
+  },
+  "torch": {
+    "version": "2.13.0+cu130",
+    "cuda": "13.0",
+    "device": "NVIDIA GeForce RTX 4070 Ti SUPER"
+  },
+  "sdpa_paths": {
+    "is_flash_attention_available": false,
+    "mem_efficient_sdp_enabled": true,
+    "flash_sdp_enabled": true,
+    "math_sdp_enabled": true,
+    "cudnn_sdp_enabled": true
+  },
+  "mem_info_before": {
+    "free_bytes": 15845031936,
+    "total_bytes": 17170956288,
+    "free_mib": 15111.0,
+    "total_mib": 16375.5,
+    "used_mib": 1264.5
+  },
+  "per_process_memory_fraction": 1.0,
+  "process_memory": {
+    "tag": "preload",
+    "t_wall": 1792308130.603529,
+    "iso": "2026-10-18 16:22:10.603",
+    "seconds_taken": 1.38,
+    "csv": "gpu_process_memory_preload.csv",
+    "processes": 37,
+    "self_dedicated_mb": 183.3,
+    "self_shared_mb": 74.0,
+    "others_dedicated_mb": 5292.0,
+    "others_shared_mb": 94.0
+  },
+  "memory_stats_after_alloc": {
+    "allocated_bytes.all.current": 70255104,
+    "allocated_bytes.all.peak": 70255104,
+    "reserved_bytes.all.current": 88080384,
+    "reserved_bytes.all.peak": 88080384,
+    "inactive_split_bytes.all.current": 17825280,
+    "inactive_split_bytes.all.peak": 17825280,
+    "num_alloc_retries": 0,
+    "num_ooms": 0,
+    "num_device_alloc": 2,
+    "num_device_free": 0,
+    "allocated_mib.all.current": 67.0,
+    "allocated_mib.all.peak": 67.0,
+    "reserved_mib.all.current": 84.0,
+    "reserved_mib.all.peak": 84.0,
+    "inactive_split_mib.all.current": 17.0,
+    "inactive_split_mib.all.peak": 17.0
+  },
+  "snapshot": {
+    "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vram-2026-10-18\\runs\\dryrun\\snapshot_step1.pickle",
+    "bytes": 1811
+  },
+  "wddm": {
+    "samples": 14,
+    "nonzero_dedicated_samples": 14,
+    "dedicated_mb_min": 1146.9,
+    "dedicated_mb_max": 1450.2,
+    "shared_mb_min": 94.5,
+    "shared_mb_max": 170.5,
+    "dt_ms_median": 1001.0
+  },
+  "dmon": {
+    "data_lines": 13,
+    "head": [
+      "#Date        Time         gpu     sm    mem    enc    dec    jpg    ofa  rxpci  txpci ",
+      "#YYYYMMDD    HH:MM:SS     Idx      %      %      %      %      %      %   MB/s   MB/s ",
+      " 20261018    16:22:01       0     13      4      0      0      0      0      0     47 ",
+      " 20261018    16:22:02       0      6      1      0      0      0      0      0     47 "
+    ]
+  },
+  "ok": true,
+  "finished": "2026-10-18 16:22:16.168"
+}

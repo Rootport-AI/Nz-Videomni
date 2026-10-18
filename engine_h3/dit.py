@@ -7,7 +7,8 @@
 # Nz-Videomni: only the Comfy-Org stacked layout and the pruned AdaLN table;
 # one unmasked attention over the whole sequence (no cu_seqlens loop); the
 # token refiner hoisted out of the step loop; explicit float32 islands;
-# tensor-only block arguments for block swap. Cross-checked against diffusers
+# tensor-only block arguments for block swap; VRAM 16GB mode's branch into
+# engine_h3/lowvram.py (台帳 §1-101). Cross-checked against diffusers
 # models/transformers/transformer_minimax_h3.py (Apache-2.0).
 """MiniMax H3 DiT (FL2VA, Comfy-Org pruned int8 ConvRot checkpoint).
 
@@ -55,7 +56,17 @@ finds) and ``H3DiTBlock.forward`` takes tensors only, positionally: the swap
 wrapper moves every argument to the GPU with ``_move_to_device``, and a
 non-tensor argument would be passed through but is a trap for a future
 caller. The attention backend is therefore a module attribute, set once per
-forward, not an argument.
+forward, not an argument -- and so is VRAM 16GB mode's plan
+(``H3DiTBlock.vram16``, a ``lowvram.Vram16Plan`` or None), set on every block
+by every ``H3DiT.forward``.
+
+VRAM 16GB mode
+--------------
+With a plan, ``H3DiTBlock.forward`` and ``H3DiT.final_rows`` hand over to
+``engine_h3.lowvram`` at their first line; the off path below that line is
+unchanged. ``H3DiT.forward`` additionally takes ``tokens_box`` so that the
+caller holds no reference to the token embedding (Docs/MINIMAX_H3_DESIGN.md
+§6.5).
 
 The model is built under ``with torch.device("meta"):``; ``swap_in_int8_linears``
 (``engine_h3.quant_linear``) then replaces the four quantized Linears of each
@@ -299,6 +310,9 @@ def _gate(x: torch.Tensor, gate: torch.Tensor, other: torch.Tensor, idx: torch.T
 class H3DiTBlock(nn.Module):
     """One of the 50 blocks (``minimax_h3_dit.py:214-234``)."""
 
+    #: VRAM 16GB mode: a ``lowvram.Vram16Plan`` set by ``H3DiT.forward`` (None = off).
+    vram16 = None
+
     def __init__(self, hidden: int, heads: int, head_dim: int, ffn: int, rank: int) -> None:
         super().__init__()
         self.norm1 = nn.RMSNorm(hidden, eps=_EPS, dtype=torch.bfloat16)
@@ -316,6 +330,10 @@ class H3DiTBlock(nn.Module):
         rope_sin: torch.Tensor,
     ) -> torch.Tensor:
         # Tensors only, positional: see the module docstring (block swap).
+        if self.vram16 is not None:
+            from engine_h3 import lowvram  # noqa: PLC0415
+
+            return lowvram.block_forward(self, x, t_emb, adaln_index, rope_cos, rope_sin)
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaln_proj(t_emb)
         h = _modulate(self.norm1(x), shift_msa, scale_msa, adaln_index)
         h = self.attn(h, rope_cos, rope_sin)
@@ -513,13 +531,19 @@ class H3DiT(nn.Module):
         return torch.lerp(table[i0], table[i0 + 1], w)
 
     def final_rows(
-        self, x: torch.Tensor, t_emb: torch.Tensor, time_index: torch.Tensor, layout: H3SeqLayout
+        self, x: torch.Tensor, t_emb: torch.Tensor, time_index: torch.Tensor, layout: H3SeqLayout,
+        vram16=None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Final norm + modulation + output heads, on the video and audio rows only.
 
         Every op is per row, so selecting the rows first is the reference's
         "run both heads over everything, then index_select" minus the waste.
+        ``vram16``: VRAM 16GB mode's plan (``engine_h3.lowvram``), None = off.
         """
+        if vram16 is not None:
+            from engine_h3 import lowvram  # noqa: PLC0415
+
+            return lowvram.final_rows_chunked(self, x, t_emb, time_index, layout, vram16)
         shift, scale = self.final_layer.adaln_proj(t_emb)  # [M, hidden] each, f32
         fl = self.final_layer
 
@@ -532,7 +556,7 @@ class H3DiT(nn.Module):
 
     def forward(
         self,
-        tokens: torch.Tensor,
+        tokens: torch.Tensor | None,
         *,
         layout: H3SeqLayout,
         t_unique: torch.Tensor,
@@ -541,9 +565,19 @@ class H3DiT(nn.Module):
         rope_cos: torch.Tensor,
         rope_sin: torch.Tensor,
         attention_backend: str = "sdpa",
+        vram16=None,
+        tokens_box: list | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """One model evaluation. Returns (v_video [Nv, 96], v_audio [Na, 32]) float32,
-        the data-direction velocity (x0 = x + sigma * v)."""
+        the data-direction velocity (x0 = x + sigma * v).
+
+        ``vram16``: VRAM 16GB mode's plan (``engine_h3.lowvram.Vram16Plan``), None
+        = off. ``tokens_box``: with ``tokens=None``, a one-item list holding the
+        tokens; it is emptied here, so that with ``vram16`` the embedding is freed
+        as soon as block 0 is done (the caller keeps no reference to it).
+        """
+        if tokens is None:
+            tokens = tokens_box.pop()
         s = layout.total
         if tokens.dim() != 2 or tokens.shape[0] != s or tokens.shape[1] != self.cfg.hidden_size:
             raise ValueError(f"H3DiT: tokens {list(tokens.shape)} が系列長 {s}・幅 {self.cfg.hidden_size} と合いません")
@@ -557,15 +591,18 @@ class H3DiT(nn.Module):
             raise ValueError(f"H3DiT: attention_backend は {ATTENTION_BACKENDS} のどれかです（{attention_backend!r}）")
         for block in self.blocks:
             block.attn.attention_backend = attention_backend
+            block.vram16 = vram16  # every forward, None too: a kept DiT must not carry it over
 
         t_emb = self.adaln_embed(t_unique)
         time_index = time_index.to(device=t_emb.device, dtype=torch.long)
         adaln_index = time_index * _MODALITY_NUM + modality.to(device=t_emb.device, dtype=torch.long)
 
         x = tokens.to(torch.bfloat16)
+        if vram16 is not None:
+            del tokens
         for block in self.blocks:
             x = block(x, t_emb, adaln_index, rope_cos, rope_sin)
         # Blocks may have run on the swap device; the rest of the model lives
         # with the AdaLN table.
         x = x.to(t_emb.device)
-        return self.final_rows(x, t_emb, time_index, layout)
+        return self.final_rows(x, t_emb, time_index, layout, vram16=vram16)

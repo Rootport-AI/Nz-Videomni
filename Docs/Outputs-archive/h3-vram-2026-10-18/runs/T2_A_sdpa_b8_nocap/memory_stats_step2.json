@@ -1,0 +1,32 @@
+{
+  "index": 2,
+  "t_mono_enter": 88164.9918203,
+  "t_wall_enter": 1792308985.1859748,
+  "memory_stats": {
+    "allocated_bytes.all.current": 5562914816,
+    "allocated_bytes.all.peak": 11936188928,
+    "reserved_bytes.all.current": 16049504256,
+    "reserved_bytes.all.peak": 16049504256,
+    "inactive_split_bytes.all.current": 23898112,
+    "inactive_split_bytes.all.peak": 2589604864,
+    "num_alloc_retries": 0,
+    "num_ooms": 0,
+    "num_device_alloc": 50,
+    "num_device_free": 11,
+    "allocated_mib.all.current": 5305.2,
+    "allocated_mib.all.peak": 11383.2,
+    "reserved_mib.all.current": 15306.0,
+    "reserved_mib.all.peak": 15306.0,
+    "inactive_split_mib.all.current": 22.8,
+    "inactive_split_mib.all.peak": 2469.6
+  },
+  "mem_get_info": {
+    "free_bytes": 0,
+    "total_bytes": 17170956288,
+    "free_mib": 0.0,
+    "total_mib": 16375.5,
+    "used_mib": 16375.5
+  },
+  "t_mono_done": 88164.9920165,
+  "t_wall_done": 1792308985.1859748
+}

@@ -375,7 +375,7 @@ GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字
 - **`config.yaml` の `dit_cpu_load` は有効（既定の `true`）のままにしてください。** 無効にすると量子化された transformer を GPU 上で組むことになり必ずメモリが溢れるため、読み込みの時点でエラーにしています。
 - **実機での確認**: LTX 2.3・LTX 2.5 の実在の int8 系の配布物（REDGraft の混在を含む）で、単発・スタイル LoRA・IC-LoRA・Chained・keep_resident の生成を確かめ、出来上がった動画も目で見て合格としています（記録は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121）。確認したのは 5 本です（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121.4）。それ以外の配布物は、標準形式なら通る設計ですが未検証です。
 
-**MiniMax H3 は、ここまでの規則（GGUF・fp8／int8 safetensors）の対象外です。** `models/MiniMaxH3/Weights/` の `.safetensors` も同じように一覧へ並びますが、読み込む前の検査で通るのは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけで、試してあるのも公式の配布物だけです。コミュニティ版への対応は後回しにしています（§7.6）。
+**MiniMax H3 は、ここまでの規則（GGUF・fp8／int8 safetensors）の対象外です。** `models/MiniMaxH3/Weights/` の `.safetensors` も同じように一覧へ並びますが、読み込む前の検査で通るのは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけです。主に試してあるのは公式の配布物で、コミュニティ版のうち PinkCherry Hybrid は、置いて生成できた実績があります（動作の保証はありません）。それ以外の派生版への対応は後回しにしています（§7.6）。
 
 **LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` / `in-outpainting`、LTX 2.5 の `alpha-gen`〔`install-LTX25.bat` が取得〕）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所はベースモデルで分かれていません**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。**MiniMax H3 は、スタイル LoRA にも IC-LoRA にも対応していません**（§7.6）。
 
@@ -736,7 +736,7 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ### 生成の高速化（Acceleration）
 
-生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は6つで、これは両方の UI で共通です。** **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。**どちらの UI でも、使えない行は単に表示されません。**
+生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は7つで、これは両方の UI で共通です。** **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。逆に VRAM 16GB mode は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では使えません。**どちらの UI でも、使えない行は単に表示されません。**
 
 | 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い | MiniMax H3 での扱い |
 |------|--------|------------------|------------------|---------------------|
@@ -746,6 +746,7 @@ $env:PYTHONPATH = (Get-Location).Path
 | モデル骨格の常駐（keep_resident） | On / Off | **実装済み**。既定は off | **実装済み**。既定は off | **実装済み**。既定は off（中身は §7.6） |
 | 埋め込み処理器の常駐（keep_resident_embeddings） | On / Off | **この項目はありません**。**AviUtl2 の操作パネルでも Gradio UI の Settings タブでも、この行そのものが見えません**。API へ指定すると **422** | **実装済み**。既定は off | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ指定すると **422** |
 | VAE（映像の復元処理） | Default / PrunaVAED | **実装済み**。既定は Default（＝off） | Default のみ。PrunaVAED は **422**。**AviUtl2 の操作パネルでも Gradio UI の Settings タブでも、この行そのものが見えません** | LTX 2.5 と同じく Default のみで、行は見えません。PrunaVAED は **422** |
+| VRAM 16GB mode（ノイズ除去の計算の分割） | On / Off | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は on（中身は §7.6） |
 
 **GGUF逆量子化の1カーネル化と先読み block swap を LTX 2.5 で併用したときの生成時間は、実測で 102.86 秒 → 39.28 秒＝61.8%短縮です。** 出力そのものは変わらず、**固定の検証用ジョブ17本すべてで動画のファイルが1バイトも変わっていない**ことを確認しています。残る PrunaVAED だけは LTX 2.5 で **422** で断られます——利用者が意図して on にしたときだけ付くものなので、効かないまま黙って通すより断ったほうが親切だという判断です（詳しくは §7.1 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75・§76・§77）。
 
@@ -884,7 +885,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 <a id="limit-ltx25"></a>
 ### 7.1 LTX 2.5 を選んでいるときの制限
 
-**LTX 2.5 で使えないのは、下の2つだけです。** それ以外——基本生成（テキストから動画・画像から動画）、クリップ連結（Chained）、V2V（素材（冒頭）に動画を使って続きを作る）、A2V（音声から動画。長尺・バッチを含む）、撮り直し（Retake）、素材（末尾）（End source）、スタイル LoRA・IC-LoRA（参照動画による制御。長尺を含む）、キャンバス拡張（画角拡張・Outpainting）、Inpainting（部分フィルタの枠の内側だけを描き替える）、ネガティブプロンプト（NAG／VSF）、生成の高速化6項目——は**すべて LTX 2.5 でそのまま使えます**（**このうち埋め込み処理器の常駐は LTX 2.5 専用で、逆に LTX 2.3 では使えません**。§5「[埋め込み処理器の常駐](#keep-resident-embeddings)」）。**画面で灰色になるタブやサブタブはありません。** ここに挙げた範囲は実機で検証済みです（結果は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §69.21・§72.10・§73.10・§74.12・§77.10・§78.14・§79.11・§80.10・§92）。
+**LTX 2.5 で使えないのは、下の2つだけです。** それ以外——基本生成（テキストから動画・画像から動画）、クリップ連結（Chained）、V2V（素材（冒頭）に動画を使って続きを作る）、A2V（音声から動画。長尺・バッチを含む）、撮り直し（Retake）、素材（末尾）（End source）、スタイル LoRA・IC-LoRA（参照動画による制御。長尺を含む）、キャンバス拡張（画角拡張・Outpainting）、Inpainting（部分フィルタの枠の内側だけを描き替える）、ネガティブプロンプト（NAG／VSF）、生成の高速化のうち PrunaVAED（下の表）と VRAM 16GB mode（MiniMax H3 専用）を除く5項目——は**すべて LTX 2.5 でそのまま使えます**（**このうち埋め込み処理器の常駐は LTX 2.5 専用で、逆に LTX 2.3 では使えません**。§5「[埋め込み処理器の常駐](#keep-resident-embeddings)」）。**画面で灰色になるタブやサブタブはありません。** ここに挙げた範囲は実機で検証済みです（結果は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §69.21・§72.10・§73.10・§74.12・§77.10・§78.14・§79.11・§80.10・§92）。
 
 下記は要求すると **422 で断られます**。
 
@@ -962,7 +963,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 - **テキストから動画（T2V）と、先頭フレームの画像 1 枚からの動画（I2V）**。どちらも音声つきで生成されます。I2V の画像は、縦横比を保ったまま画面を覆うように拡大縮小し、はみ出た部分を中央で切り抜いて使います。
 - **フレームレートは 24fps 固定**です。**フレーム数は 17n+5 の形**（22・39・56 … と 17 ずつ）で、22 以上 481 以下です。**縦横は 32 の倍数**です。操作パネルでは、フレーム数がこの規則に合う値へ自動でそろいます。
 - **ステップ数と shift（映像・音声）の 3 本のスライダー**で、ノイズ除去の工程数と、工程のどこにノイズの減らし方の重みを置くかを変えられます。操作パネルと Gradio UI の両方にあり、LTX を選んでいるときは表示されません。既定はステップ数 20・shift（映像）12・shift（音声）3 で、範囲はステップ数が 1〜50、shift が 1〜20 です（値の正本はサーバーが `GET /models` の `base_models[].constraints` で配るもので、ここはその写しです）。
-- **生成の高速化のうち、`sage attention`・先読み block swap・モデル骨格の常駐**（§5 の表）。`sage attention` で絵の細部が変わる注意（§5 の[注意書き](#sage-seed-note)）は MiniMax H3 でも同じです。
+- **生成の高速化のうち、`sage attention`・先読み block swap・モデル骨格の常駐・VRAM 16GB mode**（§5 の表。VRAM 16GB mode は下の「快適上限と速さ」）。`sage attention` で絵の細部が変わる注意（§5 の[注意書き](#sage-seed-note)）は MiniMax H3 でも同じです。
 
 **できないこと**——下記は要求すると **422 `FEATURE_UNSUPPORTED`** で断られます。操作パネルでは、これらの入口は灰色になるか、表示されません（Chained タブと Edit タブは、タブごと灰色になります）。
 
@@ -979,12 +980,13 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 
 断られる機能の名前の一覧は、`GET /models`（MCP なら `list_models`）の `base_models[].unsupported_features` でも確かめられます。**指定しても断らず、無視して生成を続ける項目は `fused_gguf_dequant_kernel` です**（MiniMax H3 は GGUF の重みを持たないため。既定以外の値を指定したときは `logs/server.log` に 1 行残ります）。
 
-**読み込める重みは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけです。** 試してあるのは公式の配布物だけで、コミュニティが配っている派生版（ファインチューンや別の量子化）への対応は後回しにしています。
+**読み込める重みは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけです。** 主に試してあるのは公式の配布物です。コミュニティが配っている派生版のうち PinkCherry Hybrid は、フォルダに置いて生成できた実績があります（動作の保証はありません）。別の量子化など、それ以外の派生版への対応は後回しにしています。
 
 **快適上限と速さ**
 
 - **快適上限（VRAM 16GB に収まる画角と尺の目安）はまだ測っていません。** そのため、操作パネルの快適上限マーカーは表示されません。
-- **大きな画角では、ノイズ除去の途中で VRAM が溢れ、1 ステップごとの時間が大きく延びます。** 生成時間の目安もまだ示せないので、たとえば 640×384 のような小さな画角と既定の尺から始めてください。
+- **VRAM 16GB mode が既定で on のため、大きな画角でもノイズ除去の VRAM を物理の内側に収めます。開発機の実測では、共有メモリへの退避は起きませんでした。** ただし上限が縛るのはこのアプリの分だけで、生成中にほかのアプリが VRAM を増やした場合の退避までは防げません。I2V 896×1152・124 フレーム・20 ステップで、1 ステップ約 22 秒、全体で約 9 分でした。VRAM 16GB mode を確かめたのは開発機（RTX 40 系・Ada）だけで、RTX 30 系（Ampere）では未確認です。ただし生成時間の目安はまだ示せません。初めは 640×384 のような小さな画角と既定の尺から始めてください。
+- **VRAM 16GB mode（既定 on）** は、ノイズ除去の途中のメモリを細かく分けて使い、上のような VRAM の溢れを防ぐ設定です（MiniMax H3 専用。Settings の「生成の高速化（Acceleration）」で切れます）。開発機で、配布版を操作パネルから使い、I2V 896×1152・124 フレームでも溢れずに生成できることを確認しました。メモリが足りずに失敗したときは、解像度かフレーム数を下げるか、この設定を切ってください。切ると以前の経路に戻ります（溢れて遅くなることがありますが、生成は続きます）。
 
 **メインメモリと常駐**
 
@@ -1039,8 +1041,8 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
 | `upload_audio` | ローカルの音声ファイルをアップロードする（A2V用） |
-| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`）。`attention_backend` ほか生成の高速化6項目に加え、**画角拡張（Outpainting）の6引数**も指定できる |
-| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。同じく生成の高速化6項目に加え、**撮り直し（Retake）の5引数**と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる |
+| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）に加え、**画角拡張（Outpainting）の6引数**も指定できる |
+| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（連結生成には無い項目のため）に加え、**撮り直し（Retake）の5引数**と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる |
 | `submit_alpha_gen` | Alpha Gen（動画から白黒のマット動画を作る）のジョブを登録する（`POST /generate/alpha`）。**LTX 2.5 専用**。1 段原寸モードが既定で、`light_mode` で軽量モード（既存の 2 段の経路）になる |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |
 | `list_jobs` | 全ジョブの一覧を要約付きで取得する |
@@ -1087,7 +1089,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`wait_for_job` は最大45秒でタイムアウト**します。エラーにはならず `timed_out: true` とその時点の進捗を返すので、終端状態になるまで繰り返し呼んでください。
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
-- **「生成の高速化（Acceleration）」の6項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings`）。**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。
+- **「生成の高速化（Acceleration）」の7項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings` / `vram16_mode`。`vram16_mode` は `submit_generate` だけ）。**`vram16_mode=True` は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では 422 になります。** それを除くと、**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。
 - **`submit_generate` / `submit_chain` には引数 `embed_mp4_metadata`（既定 `True`）があります。** `False` にすると、完成した mp4 に生成条件を書き込みません（§5「[生成条件を mp4 に記録する](#mp4-recipe)」）。
 
 ---

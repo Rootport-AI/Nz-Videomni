@@ -1,0 +1,3 @@
+[h3_vram 2026-10-18 16:21:59.806] label=dryrun out_dir=S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-vram-2026-10-18\runs\dryrun dry_run=True
+[h3_vram 2026-10-18 16:22:01.719] LUID: luid_0x00000000_0x0000f2a9_phys_0 (dedicated 1146.9 MB); candidates=[('luid_0x00000000_0x0000f2a9_phys_0', 1146.9), ('luid_0x00000000_0x000104d7_phys_0', 0), ('luid_0x00000000_0x00010465_phys_0', 0)]
+[h3_vram 2026-10-18 16:22:16.178] dry-run OK: checks={'model_files_exist': True, 'snapshot_written': True, 'wddm_dedicated_nonzero': True, 'dmon_has_rows': True}

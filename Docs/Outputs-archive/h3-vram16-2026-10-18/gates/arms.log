@@ -1,0 +1,36 @@
+[arm] G5a_h8_r4096_b4 idle_used_mib=791 21:11:24
+[arm] G5a_h8_r4096_b4 exit=0 21:12:20
+[arm] G5a_h14_r4096_b4 idle_used_mib=805 21:12:50
+[arm] G5a_h14_r4096_b4 exit=0 21:13:41
+[arm] G5a_h28_r4096_b4 idle_used_mib=801 21:14:11
+[note] try1 failed on the cap device bug; rerun after fix 21:14:42
+[arm] G5a_h8_r4096_b4 idle_used_mib=1140 21:15:43
+[arm] G5a_h28_r4096_b4 exit=0 21:16:32
+[arm] G5a_h8_r4096_b4 exit=0 21:18:04
+[arm] G5a_h14_r4096_b4 idle_used_mib=783 21:18:35
+[arm] G5a_h14_r4096_b4 exit=0 21:20:51
+[arm] G5a_h28_r4096_b4 idle_used_mib=789 21:21:21
+[arm] G5a_h28_r4096_b4 exit=0 21:23:36
+[note] G5a h8 rerun (first one overlapped the orphan h28) + G5b 21:24:12
+[arm] G5a_h8_r4096_b4 idle_used_mib=797 21:24:47
+[arm] G5a_h8_r4096_b4 exit=0 21:27:04
+[arm] G5b_h8_r8192_b4 idle_used_mib=797 21:27:34
+[arm] G5b_h8_r8192_b4 exit=0 21:29:51
+[arm] G5b_h8_r2048_b4 idle_used_mib=790 21:30:22
+[arm] G5b_h8_r2048_b4 exit=0 21:32:39
+[arm] G5c_I2V896_h8_r4096_b8 idle_used_mib=798 21:33:27
+[arm] G5c_I2V896_h8_r4096_b8 exit=0 21:35:44
+[arm] G5c_T2V640_h8_r4096_b4 idle_used_mib=799 21:36:15
+[arm] G5c_T2V640_h8_r4096_b4 exit=0 21:37:26
+[arm] G5c_T2V640_h8_r4096_b8 idle_used_mib=795 21:37:56
+[arm] G5c_T2V640_h8_r4096_b8 exit=0 21:39:08
+[g3] off idle_used_mib=679 22:12:04
+[g3] off exit=0 22:14:30 sha256=0da6111cdca853ce
+[g3] on idle_used_mib=676 22:15:00
+[g3] on exit=0 22:17:28 sha256=0da6111cdca853ce
+[arm] G4_F0eq_I2V896x1152x124_sage_keep_det_vram16 idle_used_mib=692 22:18:29
+[arm] G4_F0eq_I2V896x1152x124_sage_keep_det_vram16 exit=0 22:21:12
+[arm] G4_T2V1280x768x311_sage_keep_det_vram16 idle_used_mib=668 22:21:42
+[arm] G4_T2V1280x768x311_sage_keep_det_vram16 exit=0 22:26:41
+[arm] G4_T2V1920x1088x141_sage_keep_det_vram16 idle_used_mib=668 22:27:11
+[arm] G4_T2V1920x1088x141_sage_keep_det_vram16 exit=0 22:31:55

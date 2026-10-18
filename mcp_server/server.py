@@ -41,11 +41,16 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   32 の倍数、fps は 24 固定で指定します（num_frames の既定 49 は LTX の値
   なので、H3 で省略すると 422 になります）。H3 では submit_generate の
   num_inference_steps / shift_video / shift_audio（省略で既定 20 / 12 / 3）
-  が選べます。H3 は単発の T2V と、先頭フレーム 1 枚（frame_idx=0）の I2V
+  が選べます。H3 では VRAM 16GB mode（submit_generate の vram16_mode。省略で
+  既定 on。切るときだけ false）も選べ、収まらないときはジョブが failed になり、
+  get_job の error が「GPU_OOM: …」で始まって案内（解像度かフレーム数を
+  下げるか、VRAM 16GB mode を切ってください）を含みます。LTX で vram16_mode=true を送ると 422
+  FEATURE_UNSUPPORTED です。H3 は単発の T2V と、先頭フレーム 1 枚（frame_idx=0）の I2V
   だけに対応し、submit_chain・loras・reference_video_id・nag_enabled などは
   422 FEATURE_UNSUPPORTED になります（使えない機能は unsupported_features
   を見てください）。
-  LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）だけです
+  LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）と
+  vram16_mode=true だけです
   （422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
   は LTX 2.5 でも使えます（negative_prompt / nag_scale / nag_tau / nag_alpha /
   neg_method / vsf_scale も効きます）。

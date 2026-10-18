@@ -261,6 +261,17 @@ export interface GenerateRequest {
    * The backend records `keep_resident_embeddings_used` ("on"/"off" only —
    * there is no degrade path, so no `"on->off"`) in the job metadata. */
   keep_resident_embeddings?: boolean;
+  /** Acceleration (2026-10-18, 台帳 §1-101): "VRAM 16GB mode" — MiniMax H3
+   * only. Splits the denoiser's activations so the job fits in 16GB of VRAM;
+   * precision is unchanged. Built exclusively by
+   * `shell/accelerationSettings.ts`'s `accelerationRequestFields` and spread
+   * in — omitted entirely while the server default (`true`, filled in by the
+   * H3 server when absent) is selected, so this key only ever appears as
+   * `false`. LTX 2.3 / 2.5 publish `vram16_mode` in `unsupported_features` and
+   * answer a `true` with a 422. Deliberately NOT mirrored on
+   * {@link GenerateChainRequest}: the backend's chain schema has no such field
+   * (H3 refuses the chain endpoint as a whole). */
+  vram16_mode?: boolean;
   /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
    * later joined.mp4) gets the same JSON as metadata.json written into its
    * `comment` tag. Server default `true`, so `accelerationRequestFields` sends

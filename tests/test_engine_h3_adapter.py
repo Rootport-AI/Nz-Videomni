@@ -258,6 +258,18 @@ def test_h3_defaults_are_written_back():
     engines.validate_for_family("h3", req)
     assert (req.num_inference_steps, req.shift_video, req.shift_audio) == (20, 12.0, 3.0)
     assert isinstance(req.num_inference_steps, int)
+    assert req.vram16_mode is True  # 裁定 44: on by default on H3 (flag_defaults)
+
+
+def test_vram16_mode_default_is_none_and_an_explicit_false_is_kept():
+    from api.models import VRAM16_MODE_DEFAULT_H3
+
+    assert GenerateRequest.model_fields["vram16_mode"].default is None
+    assert h3.REQUEST_RULES.flag_defaults == {"vram16_mode": VRAM16_MODE_DEFAULT_H3}
+    assert "vram16_mode" not in json.dumps(engines.request_constraints("h3"))
+    req = _request(vram16_mode=False)
+    engines.validate_for_family("h3", req)
+    assert req.vram16_mode is False
 
 
 def test_ltx_defaults_are_written_back_and_shifts_stay_none():
@@ -265,6 +277,7 @@ def test_ltx_defaults_are_written_back_and_shifts_stay_none():
     engines.validate_for_family("ltx", req)
     assert req.num_inference_steps == 8
     assert req.shift_video is None and req.shift_audio is None
+    assert req.vram16_mode is None  # LTX declares no flag default
 
 
 def test_explicit_values_are_kept():
@@ -416,6 +429,7 @@ DONE_EVENT = {
     "attention_used": "sdpa",
     "block_swap_prefetch_used": "on",
     "keep_resident_used": "on",
+    "vram16_mode_used": "on",
     "images_used": 1,
     "h3": {"phases": {"encode": 1.0}, "quant_backends": ["cuda"]},
 }
@@ -458,6 +472,7 @@ GOLDEN_GENERATE_KEYS_H3 = [
     "images",
     "attention_backend",
     "block_swap_prefetch",
+    "vram16_mode",
     "output_path",
 ]
 
@@ -479,10 +494,12 @@ def test_generate_payload_t2v_golden(tmp_path):
     assert payload["images"] == []
     assert payload["attention_backend"] == "sdpa"
     assert payload["block_swap_prefetch"] is True
+    assert payload["vram16_mode"] is True  # the H3 default, sent every job
     assert "keep_resident" not in payload  # absent = the release request
     assert be.read_calls == [{"chain": False, "prefix": "generate", "one_stage": True}]
     assert outcome.backend == h3.REAL_BACKEND_H3
     assert outcome.keep_resident_used == "on"
+    assert outcome.vram16_mode_used == "on"
     assert outcome.h3 == {
         "sampler": "euler",
         "num_inference_steps": 20,
@@ -508,12 +525,14 @@ def test_generate_payload_i2v_keep_resident_and_per_job_acceleration(tmp_path):
         keep_resident=True,
         attention_backend="sage",
         block_swap_prefetch=False,
+        vram16_mode=False,
     )
     be.generate(req, tmp_path / "job", conditioning_image_paths=[image], seed=1)
     (payload,) = captured
     assert payload["images"] == [{"path": str(image), "frame_idx": 0}]  # no strength
     assert payload["attention_backend"] == "sage"
     assert payload["block_swap_prefetch"] is False  # sent, not omitted
+    assert payload["vram16_mode"] is False  # sent, not omitted
     assert list(payload)[-1] == "keep_resident" and payload["keep_resident"] is True
 
 
@@ -565,6 +584,10 @@ def test_models_lists_h3_with_constraints(three_family_client):
     assert h3_entry["category_order"] == ["transformer", "text_encoder", "video_vae", "audio"]
     assert _base(three_family_client, "LTX23")["constraints"] == LTX_CONSTRAINTS
     assert _base(three_family_client, "LTX25")["constraints"] == LTX_CONSTRAINTS
+    # VRAM 16GB mode: open on H3, closed on both LTX.
+    assert "vram16_mode" not in h3_entry["unsupported_features"]
+    assert "vram16_mode" in _base(three_family_client, "LTX23")["unsupported_features"]
+    assert "vram16_mode" in _base(three_family_client, "LTX25")["unsupported_features"]
 
 
 def test_switch_to_h3_runs_the_h3_precheck_and_weight_class_is_null(three_family_client):
@@ -593,6 +616,8 @@ def test_mock_t2v_over_http(three_family_client):
     assert meta["backend"] == h3.MOCK_BACKEND_H3
     assert meta["request"]["num_inference_steps"] == 20
     assert (meta["request"]["shift_video"], meta["request"]["shift_audio"]) == (12.0, 3.0)
+    assert meta["request"]["vram16_mode"] is True  # the H3 default, written back
+    assert meta["vram16_mode_used"] is None  # the mock reports no engine facts
     assert "h3" not in meta  # the mock reports no engine facts
 
 
@@ -734,3 +759,39 @@ def test_h3_block_reaches_metadata_json(three_family_client):
     assert r.status_code == 202, r.text
     meta = _metadata(three_family_client, r.json()["job_id"])
     assert meta["h3"] == block
+
+
+def test_vram16_oom_guidance_reaches_the_job_error_as_gpu_oom(three_family_client):
+    """裁定 47 (a): the engine's VRAM 16GB mode OOM is a RuntimeError whose text
+    carries the guidance and "CUDA out of memory"; the app's ``_is_oom`` must
+    classify it as ``GPU_OOM`` (503) and keep the guidance in the detail. The
+    exception is raised from a wrapped runner, as in the test above."""
+    from api.errors import gpu_oom
+    from api.models import JobStatus
+    from services.pipeline_manager import _is_oom
+
+    guidance = (
+        "VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。"
+        "解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください"
+    )
+    exc = RuntimeError(guidance)
+    assert _is_oom(exc)
+    err = gpu_oom(job_id="j", detail=str(exc))
+    assert (err.code, err.status_code) == ("GPU_OOM", 503)
+    assert "VRAM 16GB mode を切ってください" in err.detail
+
+    _activate(three_family_client, "MiniMaxH3")
+    pm = three_family_client.app_context.pipeline_manager
+
+    def boom(*a, **k):
+        raise RuntimeError(guidance)
+
+    pm.runner.generate = boom  # type: ignore[method-assign]
+    r = three_family_client.post(
+        "/api/v1/generate", json={"prompt": PROMPT, "width": 640, "height": 384, "num_frames": 124}
+    )
+    assert r.status_code == 202, r.text
+    job = three_family_client.app_context.job_store.get(r.json()["job_id"])
+    assert job.status == JobStatus.failed
+    assert job.error.startswith("GPU_OOM:")
+    assert "解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください" in job.error

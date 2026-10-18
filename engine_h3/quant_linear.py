@@ -120,6 +120,39 @@ class H3Int8Linear(nn.Module):
         )
         return out.reshape(*lead, self.out_features)
 
+    def forward_rows(self, x: torch.Tensor, n0: int, n1: int) -> torch.Tensor:
+        """Output features ``[n0, n1)`` only: :meth:`forward` on rows ``n0:n1`` of the weight.
+
+        For VRAM 16GB mode (``engine_h3.lowvram``: q, k and v of one head group
+        from the stacked qkv weight). The weight, scale and bias rows are cut
+        from ``self.weight`` / ``self.weight_scale`` / ``self.bias`` at EVERY
+        call and never stored: block swap rebinds those tensors' ``.data``, so
+        a kept slice would point at the previous placement. A row slice of a
+        contiguous [N, K] (and [N, 1]) tensor is a contiguous view; the
+        activation is quantized per row, so each output column is the one
+        :meth:`forward` computes (the GPU tests of tests/test_h3_engine.py, gate A-G2).
+        """
+        lead = x.shape[:-1]
+        x2d = x.reshape(-1, x.shape[-1])
+        if x2d.dtype != torch.bfloat16:
+            x2d = x2d.to(torch.bfloat16)
+        x2d = x2d.contiguous()
+        bias = self.bias
+        if bias is not None:
+            bias = bias[n0:n1]
+            if bias.dtype != torch.bfloat16:
+                bias = bias.to(torch.bfloat16)
+        out = _ck().int8_linear(
+            x2d,
+            self.weight[n0:n1],
+            self.weight_scale[n0:n1],
+            bias,
+            out_dtype=torch.bfloat16,
+            convrot=bool(self.spec.convrot),
+            convrot_groupsize=int(self.spec.convrot_groupsize),
+        )
+        return out.reshape(*lead, n1 - n0)
+
     def extra_repr(self) -> str:
         return (
             f"in_features={self.in_features}, out_features={self.out_features}, "

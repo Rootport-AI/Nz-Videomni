@@ -176,7 +176,11 @@ describe("MiniMax H3's feature names on screen", () => {
   });
 
   it("closes nothing new on either LTX engine", () => {
-    for (const list of [["keep_resident_embeddings", "alpha_gen"], ["two_stage_hq", "prune_vaed"], []]) {
+    for (const list of [
+      ["keep_resident_embeddings", "alpha_gen", "vram16_mode"],
+      ["two_stage_hq", "prune_vaed", "vram16_mode"],
+      [],
+    ]) {
       expect(singleSectionsDisabledFor(list)).toEqual({
         referenceVideo: false,
         a2v: false,

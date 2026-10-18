@@ -14,7 +14,7 @@ facts that are genuinely different:
   tokenizer folder (a descriptor ``assets`` entry, like 2.3's ``gemma_root``);
 * the feature scope (the four tables below) and the numeric rules
   (:data:`REQUEST_RULES`: 17n+5 frames from 22, a 32 multiple, 24 fps fixed,
-  1..50 steps, the two shifts).
+  1..50 steps, the two shifts, and ``flag_defaults``: VRAM 16GB mode on).
 
 THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
 Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
@@ -27,7 +27,8 @@ paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
 encoder is read layer by layer straight from the file). ``generate`` carries the job, the
 conditioning ``images`` (``{path, frame_idx}``; H3 has no strength), and the
 per-job ``attention_backend`` / ``block_swap_prefetch`` (always sent: an absent
-key would mean "the load value", not "off") and ``keep_resident`` (only when
+key would mean "the load value", not "off"), ``vram16_mode`` (always sent: the
+worker's own default is off, the app's is on) and ``keep_resident`` (only when
 asked for — an absent key is the release request, the LTX contract). The
 progress stages are LTX's single-stage ones (``encode`` / ``stage1_denoise`` /
 ``decode``), read with ``one_stage=True``.
@@ -48,6 +49,7 @@ from api.models import (
     ConditioningImage,
     GenerateChainRequest,
     GenerateRequest,
+    VRAM16_MODE_DEFAULT_H3,
 )
 from config import AppConfig
 from services import video_io
@@ -136,6 +138,8 @@ REQUEST_RULES = RequestRules(
         "shift_video": SamplingRange(min=1, max=20, step=0.1, default=12),
         "shift_audio": SamplingRange(min=1, max=20, step=0.1, default=3),
     },
+    # vram16_mode's None means "this family's default" (裁定 44: on for H3).
+    flag_defaults={"vram16_mode": VRAM16_MODE_DEFAULT_H3},
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -203,6 +207,7 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "keep_resident",
         "attention_backend",
         "block_swap_prefetch",
+        "vram16_mode",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -441,6 +446,10 @@ class _RealBackendH3(_RealBackend):
             # Per-job, ALWAYS sent: an absent key would mean "the load value".
             "attention_backend": request.attention_backend,
             "block_swap_prefetch": bool(request.block_swap_prefetch),
+            # The default's source of truth is REQUEST_RULES.flag_defaults
+            # (VRAM16_MODE_DEFAULT_H3), which validate_for_family writes back,
+            # so None is not expected here; if it ever arrives it still means on.
+            "vram16_mode": request.vram16_mode is not False,
             "output_path": str(target),
         }
         # keep_resident: the LTX contract — the key rides only when True, and
@@ -488,6 +497,7 @@ class _RealBackendH3(_RealBackend):
             attention_used=event.get("attention_used"),
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
             keep_resident_used=event.get("keep_resident_used"),
+            vram16_mode_used=event.get("vram16_mode_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
             h3=_h3_block(event),
         )

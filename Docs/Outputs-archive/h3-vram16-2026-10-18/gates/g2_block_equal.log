@@ -1,0 +1,81 @@
+{"block": 0, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.42}
+{"block": 1, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.11}
+{"block": 2, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 3, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.08}
+{"block": 4, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.13}
+{"block": 5, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.11}
+{"block": 6, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.12}
+{"block": 7, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 8, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 9, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 10, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.1}
+{"block": 11, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.12}
+{"block": 12, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 13, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 14, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 15, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.12}
+{"block": 16, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.1}
+{"block": 17, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 18, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.12}
+{"block": 19, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 20, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 21, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.1}
+{"block": 22, "sage": {"equal": false, "finite": true, "max_abs": 256.0, "rel_out": 0.00659228097488087, "rel_delta": 0.006592545742312935, "elements_differ": 115388441}, "sdpa": {"equal": true, "finite": true}, "seconds": 5.06}
+{"block": 23, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.12}
+{"block": 24, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.11}
+{"block": 25, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.11}
+{"block": 26, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.1}
+{"block": 27, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 28, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.09}
+{"block": 29, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.15}
+{"block": 30, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.08}
+{"block": 31, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.11}
+{"block": 32, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.08}
+{"block": 33, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.12}
+{"block": 34, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.1}
+{"block": 35, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.11}
+{"block": 36, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.1}
+{"block": 37, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.11}
+{"block": 38, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.13}
+{"block": 39, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.19}
+{"block": 40, "sage": {"equal": false, "finite": true, "max_abs": 1792.0, "rel_out": 0.0030670819750614436, "rel_delta": 0.0030670851576144968, "elements_differ": 6974901}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.8}
+{"block": 41, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.13}
+{"block": 42, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.15}
+{"block": 43, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.18}
+{"block": 44, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.18}
+{"block": 45, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.16}
+{"block": 46, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.16}
+{"block": 47, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.16}
+{"block": 48, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.2}
+{"block": 49, "sage": {"equal": true, "finite": true}, "sdpa": {"equal": true, "finite": true}, "seconds": 4.16}
+{
+  "plan": {
+    "head_group": 8,
+    "row_chunk": 4096
+  },
+  "sequence": {
+    "text": 1046,
+    "cond": 1008,
+    "audio": 414,
+    "video": 37296,
+    "total": 39764
+  },
+  "sage_summary": {
+    "blocks": 50,
+    "equal": 48,
+    "all_finite": true,
+    "max_abs_max": 1792.0,
+    "rel_out_max": 0.00659228097488087,
+    "rel_delta_max": 0.006592545742312935
+  },
+  "sdpa_summary": {
+    "blocks": 50,
+    "equal": 50,
+    "all_finite": true,
+    "max_abs_max": 0.0,
+    "rel_out_max": 0.0,
+    "rel_delta_max": 0.0
+  },
+  "peak_vram_mb": 9994,
+  "seconds": 209.2
+}

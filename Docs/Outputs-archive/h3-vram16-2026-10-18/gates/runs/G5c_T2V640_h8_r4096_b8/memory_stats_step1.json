@@ -1,0 +1,52 @@
+{
+  "index": 1,
+  "t_mono_enter": 106306.9887016,
+  "t_wall_enter": 1792327127.1835546,
+  "memory_stats": {
+    "allocated_bytes.all.current": 3927015424,
+    "allocated_bytes.all.peak": 5522683904,
+    "reserved_bytes.all.current": 5534384128,
+    "reserved_bytes.all.peak": 5534384128,
+    "inactive_split_bytes.all.current": 57573376,
+    "inactive_split_bytes.all.peak": 472263168,
+    "num_alloc_retries": 0,
+    "num_ooms": 0,
+    "num_device_alloc": 32,
+    "num_device_free": 8,
+    "allocated_mib.all.current": 3745.1,
+    "allocated_mib.all.peak": 5266.8,
+    "reserved_mib.all.current": 5278.0,
+    "reserved_mib.all.peak": 5278.0,
+    "inactive_split_mib.all.current": 54.9,
+    "inactive_split_mib.all.peak": 450.4
+  },
+  "mem_get_info": {
+    "free_bytes": 10222567424,
+    "total_bytes": 17170956288,
+    "free_mib": 9749.0,
+    "total_mib": 16375.5,
+    "used_mib": 6626.5
+  },
+  "swap": {
+    "service": true,
+    "blocks_on_gpu": 8,
+    "last_prefetch_used": "on",
+    "prefetch_engine": true,
+    "arenas": 10,
+    "blocks": 50
+  },
+  "process_memory": {
+    "tag": "step1",
+    "t_wall": 1792327127.1835546,
+    "iso": "2026-10-18 21:38:47.183",
+    "seconds_taken": 1.4,
+    "csv": "gpu_process_memory_step1.csv",
+    "processes": 37,
+    "self_dedicated_mb": 5547.4,
+    "self_shared_mb": 1106.0,
+    "others_dedicated_mb": 5341.3,
+    "others_shared_mb": 68.9
+  },
+  "t_mono_done": 106308.3890378,
+  "t_wall_done": 1792327128.5833972
+}

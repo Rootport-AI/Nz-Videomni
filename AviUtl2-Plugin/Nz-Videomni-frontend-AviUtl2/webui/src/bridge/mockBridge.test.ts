@@ -965,10 +965,12 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // first time this mechanism has pointed at the OLDER engine.
     // Alpha Gen (2026-10-07): the second name, in the server's own order
     // (`services/engines/ltx/adapter.py`'s REJECT_TABLE) — the alpha-gen
-    // IC-LoRA is an LTX 2.5 adapter.
+    // IC-LoRA is an LTX 2.5 adapter. 台帳 §1-101 (2026-10-18): the third,
+    // `vram16_mode` — VRAM 16GB mode is MiniMax H3's own.
     expect(body.base_models.find((b) => b.id === "LTX23")?.unsupported_features).toEqual([
       "keep_resident_embeddings",
       "alpha_gen",
+      "vram16_mode",
     ]);
   });
 
@@ -978,7 +980,8 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // The chain family (whole endpoints) and the request-field half — the two
     // halves `services/engines/ltx25/adapter.py` builds `UNSUPPORTED_FEATURES`
     // from. Spelt out rather than counted so a rename on either side shows up.
-    expect(features).toEqual(expect.arrayContaining(["two_stage_hq", "prune_vaed"]));
+    // 台帳 §1-101: `vram16_mode` joined — VRAM 16GB mode is MiniMax H3's own.
+    expect(features).toEqual(expect.arrayContaining(["two_stage_hq", "prune_vaed", "vram16_mode"]));
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
     // chains now, and its absence is what un-greys the Chained tab. §3-102
     // second stage: `v2v` and `a2v` left with it — the engine takes a source
@@ -1036,9 +1039,10 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // on greying out the Edit tab's Inpainting sub-tab for a mode that runs,
     // and nothing else in this suite would notice.
     expect(features).not.toContain("inpaint");
-    // What is left is TWO engine-level names and no mode of any kind, which is
-    // what the count says rather than only the membership above.
-    expect(features).toHaveLength(2);
+    // What is left is THREE engine-level names (台帳 §1-101 added
+    // `vram16_mode`) and no mode of any kind, which is what the count says
+    // rather than only the membership above.
+    expect(features).toHaveLength(3);
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {

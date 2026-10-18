@@ -1,0 +1,115 @@
+{
+  "action_counts": {
+    "segment_alloc": 2,
+    "alloc": 2
+  },
+  "head_state": {
+    "segments": 0,
+    "reserved_mib": 0.0,
+    "allocated_mib": 0.0
+  },
+  "unwind_notes": [],
+  "peak": {
+    "trace_index": 3,
+    "trace_entries": 4,
+    "allocated_mib": 67.0,
+    "reserved_mib": 84.0,
+    "unused_reserved_mib": 17.0,
+    "segments": 2,
+    "unused_gap_classes_large_pool": {
+      "<64MiB": {
+        "count": 1,
+        "mib": 17.0
+      },
+      "64-256MiB": {
+        "count": 0,
+        "mib": 0.0
+      },
+      "256-1024MiB": {
+        "count": 0,
+        "mib": 0.0
+      },
+      "1024-2048MiB": {
+        "count": 0,
+        "mib": 0.0
+      },
+      ">2048MiB": {
+        "count": 0,
+        "mib": 0.0
+      }
+    },
+    "unused_small_pool_mib": 0.0,
+    "largest_gap_mib": 17.0,
+    "per_segment": [
+      {
+        "addr": "0x130b200000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 64.0,
+        "used_mib": 64.0,
+        "unused_mib": 0.0,
+        "largest_gap_mib": 0.0,
+        "blocks": 1
+      },
+      {
+        "addr": "0x1303000000",
+        "stream": 0,
+        "pool": "large",
+        "reserved_mib": 20.0,
+        "used_mib": 3.0,
+        "unused_mib": 17.0,
+        "largest_gap_mib": 17.0,
+        "blocks": 1
+      }
+    ],
+    "top20_live": [
+      {
+        "size_mib": 64.0,
+        "addr": "0x130b200000",
+        "stream": 0,
+        "frames": "measure_h3_vram.py:396:dry_run <- measure_h3_vram.py:669:main <- measure_h3_vram.py:678:<module>"
+      },
+      {
+        "size_mib": 3.0,
+        "addr": "0x1303000000",
+        "stream": 0,
+        "frames": "measure_h3_vram.py:398:dry_run <- measure_h3_vram.py:669:main <- measure_h3_vram.py:678:<module>"
+      }
+    ]
+  },
+  "segment_allocs": {
+    "count": 2,
+    "free_total_was_enough_count": 0,
+    "free_total_was_enough_mib": 0,
+    "rule": "large プールで同じストリームの空きの合計 ≥ 要求（次の alloc の大きさ）なのに新しいセグメントを確保した",
+    "events_enough": []
+  },
+  "oom_events": [],
+  "at_dump": {
+    "segments": 2,
+    "reserved_mib": 84.0,
+    "allocated_mib": 67.0,
+    "list": [
+      {
+        "addr": "0x130b200000",
+        "total_mib": 64.0,
+        "allocated_mib": 64.0,
+        "active_mib": 64.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 1,
+        "largest_inactive_mib": 0.0
+      },
+      {
+        "addr": "0x1303000000",
+        "total_mib": 20.0,
+        "allocated_mib": 3.0,
+        "active_mib": 3.0,
+        "type": "large",
+        "stream": 0,
+        "blocks": 2,
+        "largest_inactive_mib": 17.0
+      }
+    ]
+  }
+}

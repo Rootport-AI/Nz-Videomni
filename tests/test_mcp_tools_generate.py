@@ -689,6 +689,35 @@ def test_submit_generate_sends_sampling_fields_when_given():
     assert body["num_frames"] == 124
 
 
+def test_submit_generate_input_schema_exposes_optional_vram16_mode():
+    # MiniMax H3's VRAM 16GB mode (D28): optional, default None (= the base
+    # model's own default, on for H3), and single-only -- submit_chain does
+    # not carry it (H3 refuses every chain).
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    gen_tool = next(t for t in tools if t.name == "submit_generate")
+    props = gen_tool.inputSchema.get("properties", {})
+    assert "vram16_mode" in props
+    assert "vram16_mode" not in set(gen_tool.inputSchema.get("required", []))
+    assert props["vram16_mode"].get("default") is None
+    chain_tool = next(t for t in tools if t.name == "submit_chain")
+    assert "vram16_mode" not in chain_tool.inputSchema.get("properties", {})
+
+
+def test_submit_generate_vram16_mode_sent_only_when_given():
+    captured: dict = {}
+    set_client(_client_for_handler(_sampling_capture_handler(captured)))
+    anyio.run(functools.partial(generate.submit_generate, "p"))
+    assert "vram16_mode" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_generate, "p", vram16_mode=False))
+    assert captured["body"]["vram16_mode"] is False
+    anyio.run(functools.partial(generate.submit_generate, "p", vram16_mode=True))
+    assert captured["body"]["vram16_mode"] is True
+
+
 # --------------------------------------------------------------- submit_chain
 
 

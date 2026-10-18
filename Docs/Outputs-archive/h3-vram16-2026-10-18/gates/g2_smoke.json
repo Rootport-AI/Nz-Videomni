@@ -1,0 +1,60 @@
+{
+  "gate": "A-G2 blocks on/off",
+  "weights": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+  "plan": {
+    "head_group": 8,
+    "row_chunk": 4096
+  },
+  "rows": [
+    {
+      "block": 0,
+      "sage": {
+        "equal": true,
+        "finite": true
+      },
+      "sdpa": {
+        "equal": true,
+        "finite": true
+      },
+      "seconds": 4.41
+    },
+    {
+      "block": 1,
+      "sage": {
+        "equal": true,
+        "finite": true
+      },
+      "sdpa": {
+        "equal": true,
+        "finite": true
+      },
+      "seconds": 4.11
+    }
+  ],
+  "sequence": {
+    "text": 1046,
+    "cond": 1008,
+    "audio": 414,
+    "video": 37296,
+    "total": 39764
+  },
+  "m": 3,
+  "sage_summary": {
+    "blocks": 2,
+    "equal": 2,
+    "all_finite": true,
+    "max_abs_max": 0.0,
+    "rel_out_max": 0.0,
+    "rel_delta_max": 0.0
+  },
+  "sdpa_summary": {
+    "blocks": 2,
+    "equal": 2,
+    "all_finite": true,
+    "max_abs_max": 0.0,
+    "rel_out_max": 0.0,
+    "rel_delta_max": 0.0
+  },
+  "peak_vram_mb": 7486,
+  "seconds": 9.7
+}

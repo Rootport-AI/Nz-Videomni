@@ -23,6 +23,10 @@ What is pinned (plan section 3.4, R2 (3)):
   * a tiny H3 DiT streamed from a synthetic file: no meta tensor left;
   * ``H3Int8Linear`` against the dequantized bf16 ``F.linear`` (GPU only,
     opt-in with ``H3_GPU_TESTS=1``);
+  * VRAM 16GB mode (``engine_h3.lowvram``, 台帳 §1-101): the equal row chunks, the
+    swap window and the allocator cap arithmetic, and the block / final layer /
+    whole forward / whole pipeline giving the off path's numbers bit for bit
+    (the int8 matmul faked in float64);
   * no ``inference_mode`` anywhere under ``engine_h3``;
   * the worker's unknown-op handling.
 """
@@ -53,10 +57,10 @@ HID, HEADS, HD, FFN, TEXT, LAT, AUD = 64, 1, 128, 48, 40, 24, 32
 INNER = HEADS * HD
 
 
-def _tiny_cfg(*, layers=2, refiner=2, grid=1025, rank=8, quant=None):
+def _tiny_cfg(*, layers=2, refiner=2, grid=1025, rank=8, quant=None, heads=HEADS):
     return h3_format.H3DiTConfig(
         prefix="", hidden_size=HID, num_layers=layers, token_refiner_layers=refiner,
-        num_heads=HEADS, head_dim=HD, ffn_hidden=FFN, text_dim=TEXT, latents_dim=LAT,
+        num_heads=heads, head_dim=HD, ffn_hidden=FFN, text_dim=TEXT, latents_dim=LAT,
         audio_latents_dim=AUD, pruned=True, adaln_grid=grid, adaln_rank=rank,
         rope_inv_freq_len=16, quant=quant or {}, unknown=(),
     )
@@ -560,8 +564,9 @@ def test_te_direct_read_with_vision_matches_the_loaded_model(tmp_path):
 _ST_DTYPES = {torch.float32: "F32", torch.bfloat16: "BF16", torch.float16: "F16", torch.int8: "I8", torch.uint8: "U8"}
 
 
-def _tiny_dit_tensors(layers: int, refiner: int, grid: int, rank: int) -> dict:
+def _tiny_dit_tensors(layers: int, refiner: int, grid: int, rank: int, heads: int = HEADS) -> dict:
     g = torch.Generator().manual_seed(0)
+    inner = heads * HD
 
     def rnd(*shape, dtype=torch.bfloat16):
         if dtype == torch.int8:
@@ -588,7 +593,7 @@ def _tiny_dit_tensors(layers: int, refiner: int, grid: int, rank: int) -> dict:
         "rope.inv_freq": 1.0 / (10000 ** (torch.arange(16, dtype=torch.float32) / 16)),
         "adaln_t_table": rnd(grid, rank, dtype=torch.float32),
     }
-    lin = {"attn.qkv_proj": (3 * INNER, HID), "attn.out_proj": (HID, INNER), "mlp.fc1": (2 * FFN, HID), "mlp.fc2": (HID, FFN)}
+    lin = {"attn.qkv_proj": (3 * inner, HID), "attn.out_proj": (HID, inner), "mlp.fc1": (2 * FFN, HID), "mlp.fc2": (HID, FFN)}
     for i in range(layers):
         h = f"blocks.{i}."
         for n, shp in lin.items():
@@ -827,12 +832,14 @@ GOLDEN_GENERATE_KEYS = [
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
+    "vram16_mode",   # VRAM 16GB mode (台帳 §1-101), at the end
 ]
 GOLDEN_DONE_KEYS = [
     "seed_used", "sampler", "num_inference_steps", "shift_video", "shift_audio",
     "peak_vram_mb", "peak_vram_reserved_mb", "rss_peak_gib", "commit_gib", "commit_peak_gib", "seconds",
     "num_frames", "frame_rate", "width", "height", "size_bytes", "attention_used",
-    "block_swap_prefetch_used", "keep_resident_used", "images_used", "h3",   # 2 keys added in stage 2 (2a)
+    "block_swap_prefetch_used", "keep_resident_used", "vram16_mode_used",   # VRAM 16GB mode (台帳 §1-101)
+    "images_used", "h3",   # 2 keys added in stage 2 (2a)
 ]
 GOLDEN_H3_KEYS = ["phases", "quant_backends"]
 
@@ -882,6 +889,7 @@ def test_golden_done_keys(monkeypatch, tmp_path):
     assert list(done["h3"]) == GOLDEN_H3_KEYS
     assert set(done["h3"]["phases"]) == {"encode", "denoise", "decode"}
     assert (done["keep_resident_used"], done["images_used"]) == ("off", 0)
+    assert done["vram16_mode_used"] == "off"   # the worker's default
 
     events = []
     monkeypatch.setattr(worker, "_PIPE", pipe)
@@ -1187,39 +1195,41 @@ def test_vision_inv_freq_matches_transformers():
         assert torch.equal(vision_inv_freq(dim), Qwen3VLVisionRotaryEmbedding(dim).inv_freq)
 
 
-def test_keep_resident_state_transitions_with_a_tiny_dit(monkeypatch, tmp_path):
+@pytest.mark.parametrize("vram16", [False, True])
+def test_keep_resident_state_transitions_with_a_tiny_dit(monkeypatch, tmp_path, vram16):
     """Review m-7 / plan §4-5: keep -> reuse -> release, through the REAL ``_denoise``
     and ``_decode`` (a tiny DiT on the CPU; the int8 matmul replaced by its
-    dequantized float form, the VAEs and the mp4 writer by stand-ins).
+    dequantized float64 form, the VAEs and the mp4 writer by stand-ins).
 
     J1 keep: the DiT is built from the file, parked on the CPU unwrapped, the
        decoder / audio VAE kept.  J2 keep: nothing is read again (same objects),
        same latents bit for bit.  J3 no key: reused, then released.
+    ``vram16`` (VRAM 16GB mode, 台帳 §1-101): the token refiner and
+    ``condition_proj`` go to the CPU in a keep job and to meta in the job
+    without the key; J4, in the OTHER mode and from the file again, gives the
+    same latents bit for bit (on == off).
     """
-    import torch.nn.functional as Fn
-
     from engine.transformer.block_swap_service import _BLOCK_SWAP_ATTR
     from engine_h3 import audio_vae as AV
     from engine_h3 import media_out as MO
     from engine_h3 import pipeline_h3 as P
+    from engine_h3 import sft_load as SL
     from engine_h3 import video_vae as VV
-    from engine_h3.quant_linear import H3Int8Linear
 
-    def int8_as_float(self, x):
-        w = self.weight.to(torch.float32) * self.weight_scale.to(torch.float32)
-        b = None if self.bias is None else self.bias.to(torch.float32)
-        return Fn.linear(x.to(torch.float32), w, b).to(x.dtype)
-
-    monkeypatch.setattr(H3Int8Linear, "forward", int8_as_float)
+    _fake_int8(monkeypatch)
     path = tmp_path / "tiny.safetensors"
     _write_sft(path, _tiny_dit_tensors(layers=3, refiner=2, grid=1025, rank=8))
     _header, cfg = h3_format.inspect_h3_dit(str(path))
     pipe = P.H3Pipeline(P.H3Paths(str(path), "te", "vv", "av", "tok"), P.H3LoadOptions(blocks_on_gpu=1),
                         device="cpu", progress=lambda *a: None, log=lambda m: None)
     pipe._dit_cfg = cfg
-    builds, decoders, avaes, latents = [], [], [], []
+    builds, decoders, avaes, latents, moved = [], [], [], [], []
     real_build = pipe._build_dit
     monkeypatch.setattr(pipe, "_build_dit", lambda entry: builds.append(1) or real_build(entry))
+    real_move, real_drop = SL.move_module_tree, SL.drop_to_meta
+    monkeypatch.setattr(SL, "move_module_tree",
+                        lambda root, device, skip: moved.append(("cpu", type(root).__name__)) or real_move(root, device, skip))
+    monkeypatch.setattr(SL, "drop_to_meta", lambda module: moved.append(("meta", type(module).__name__)) or real_drop(module))
     monkeypatch.setattr(pipe, "_encode", lambda prompt, phases, **kw: (
         torch.randn(5, TEXT, generator=torch.Generator().manual_seed(3)).to(torch.bfloat16),
         torch.ones(5, dtype=torch.long)))
@@ -1246,24 +1256,412 @@ def test_keep_resident_state_transitions_with_a_tiny_dit(monkeypatch, tmp_path):
     monkeypatch.setattr(AV.H3AudioVAE, "from_file", classmethod(lambda cls, *a, **k: avaes.append(1) or FakeAudio()))
     monkeypatch.setattr(MO, "write_mp4", lambda *a, **k: 1)
 
-    def job(keep):
+    def job(keep, mode=vram16):
+        moved.clear()
         req = P.H3GenerateRequest(prompt="p", seed=7, width=64, height=64, num_frames=22, output_path="o.mp4",
-                                  num_inference_steps=2, keep_resident=keep)
-        return pipe.generate(req)
+                                  num_inference_steps=2, keep_resident=keep, vram16_mode=mode)
+        done = pipe.generate(req)
+        assert done["vram16_mode_used"] == ("on" if mode else "off")
+        assert ("vram16" in done["h3"]["phases"]["denoise"]) == mode
+        return done
+
+    text_modules = {"H3TokenRefiner", "Linear"}   # dit.token_refiner, dit.condition_proj
+
+    def evicted(kind):
+        return {name for k, name in moved if k == kind} & text_modules
 
     d1 = job(True)
+    assert evicted("cpu") == (text_modules if vram16 else set()) and evicted("meta") == set()
     kept = dict(pipe._resident)
     assert d1["keep_resident_used"] == "on" and pipe.resident_parts == ["audio_vae", "decoder", "dit"]
     assert d1["h3"]["phases"]["denoise"]["dit_source"] == "file"
     assert all(not hasattr(b, _BLOCK_SWAP_ATTR) for b in kept["dit"].blocks)     # parked unwrapped
     assert all(t.device.type == "cpu" for t in kept["dit"].state_dict().values())
+    assert pipe._swap_service.blocks_on_gpu == 1                                  # load value 1 <= 4: kept
     d2 = job(True)
+    assert evicted("cpu") == (text_modules if vram16 else set()) and evicted("meta") == set()
     assert (len(builds), len(decoders), len(avaes)) == (1, 1, 1)                # nothing read again
     assert pipe._resident["dit"] is kept["dit"] and pipe._resident["decoder"] is kept["decoder"]
     assert d2["h3"]["phases"]["denoise"]["dit_source"] == "resident"
     assert d2["h3"]["phases"]["decode"]["vae_source"] == "resident"
     assert torch.equal(latents[0], latents[1])                                  # reuse changes nothing
     d3 = job(False)
+    assert evicted("meta") == (text_modules if vram16 else set()) and evicted("cpu") == set()
     assert d3["keep_resident_used"] == "off" and d3["h3"]["phases"]["denoise"]["dit_source"] == "resident"
     assert pipe._resident is None and torch.equal(latents[2], latents[0])
     assert len(builds) == 1
+    job(False, mode=not vram16)
+    assert len(builds) == 2 and torch.equal(latents[3], latents[0])             # on == off, bit for bit
+
+
+# --------------------------------------------------------------------------- #
+# VRAM 16GB mode (台帳 §1-101, engine_h3.lowvram): same numbers as the off path
+# --------------------------------------------------------------------------- #
+
+def _int8_linear_as_float64(x2d, weight, weight_scale, bias, *, out_dtype, convrot, convrot_groupsize):
+    """``comfy_kitchen.int8_linear`` on the CPU: the dequantized matmul in float64,
+    rounded to ``out_dtype`` once, so a row or column split cannot change the bf16
+    result through the summation order. ``convrot`` must be off (the tiny files are
+    written with ``convrot=False``)."""
+    assert not convrot
+    w = weight.to(torch.float64) * weight_scale.to(torch.float64)
+    b = None if bias is None else bias.to(torch.float64)
+    return torch.nn.functional.linear(x2d.to(torch.float64), w, b).to(out_dtype)
+
+
+def _fake_int8(monkeypatch):
+    """Fake the kernel, not the module: the REAL ``H3Int8Linear.forward`` and
+    ``forward_rows`` (slicing, casts, reshape) run on the CPU."""
+    import types
+
+    from engine_h3 import quant_linear
+
+    fake = types.SimpleNamespace(int8_linear=_int8_linear_as_float64)
+    monkeypatch.setattr(quant_linear, "_ck", lambda: fake)
+
+
+def _tiny_vram16_dit(tmp_path, heads=4, layers=2):
+    from engine_h3.dit import H3DiT
+    from engine_h3.pipeline_h3 import dit_key_map_for
+    from engine_h3.quant_linear import swap_in_int8_linears
+    from engine_h3.sft_load import load_streaming
+
+    path = tmp_path / f"tiny_h{heads}.safetensors"
+    _write_sft(path, _tiny_dit_tensors(layers=layers, refiner=1, grid=1025, rank=8, heads=heads))
+    header, cfg = h3_format.inspect_h3_dit(str(path))
+    assert cfg.num_heads == heads
+    with torch.device("meta"):
+        dit = H3DiT(cfg)
+        swap_in_int8_linears(dit, cfg.quant, bias_dtype_of=lambda n: torch.bfloat16)
+    load_streaming(dit, str(path), header, key_map=dit_key_map_for(cfg))
+    dit.normalize_dtypes()
+    return dit
+
+
+def _tiny_forward_inputs(dit, text=5, t_lat=7, gh=2, gw=2, a_lat=4):
+    """tokens [S, HID] bf16 and the forward's keyword arguments; S = 5 + 8 + 28 = 41."""
+    from engine_h3.dit import H3SeqLayout
+    from engine_h3.pipeline_h3 import modality_rows, time_rows
+    from engine_h3.rope import build_coords, rope_tables
+
+    layout = H3SeqLayout.make(text_rows=text, cond_rows=0, audio_rows=2 * a_lat, video_rows=t_lat * gh * gw)
+    coords = build_coords(text_len=text, latent_frames=t_lat, grid_h=gh, grid_w=gw, audio_latents=a_lat)
+    rope_cos, rope_sin = rope_tables(coords, dit.rope_inv_freq)
+    t_unique, time_index = time_rows(layout, 0.3, 0.6)
+    modality = modality_rows(layout, torch.ones(text, dtype=torch.long))
+    tokens = torch.randn(layout.total, HID, generator=torch.Generator().manual_seed(5)).to(torch.bfloat16)
+    return tokens, dict(layout=layout, t_unique=t_unique, time_index=time_index, modality=modality,
+                        rope_cos=rope_cos, rope_sin=rope_sin, attention_backend="sdpa")
+
+
+def test_vram16_row_chunks_are_equal():
+    from engine_h3.lowvram import row_chunks
+
+    assert row_chunks(4096, 4096) == [(0, 4096)]                 # not split
+    assert row_chunks(4097, 4096) == [(0, 2049), (2049, 4097)]   # 2 equal chunks, no 1-row sliver
+    for s, chunk in ((41, 16), (9326, 4096), (39764, 4096), (100352, 4096)):
+        chunks = row_chunks(s, chunk)
+        sizes = [r1 - r0 for r0, r1 in chunks]
+        assert chunks[0][0] == 0 and chunks[-1][1] == s
+        assert all(a[1] == b[0] for a, b in zip(chunks, chunks[1:]))
+        assert len(chunks) == math.ceil(s / chunk) and max(sizes) - min(sizes) <= 1
+    assert [r1 - r0 for r0, r1 in row_chunks(9326, 4096)] == [3109, 3109, 3108]   # selftest default prompt (S=9,326); gate A-G3b used the G5 prompt (S=9,335), also 3 chunks
+
+
+def test_vram16_blocks_on_gpu_for():
+    from engine_h3.lowvram import blocks_on_gpu_for
+
+    # Gate A-G5: no time difference between 4 and 8, so the window is 4 whatever S is.
+    assert C.VRAM16_BLOCKS_ON_GPU == 4 and not hasattr(C, "VRAM16_BLOCKS_S_THRESHOLD")
+    assert blocks_on_gpu_for(8, num_blocks=50) == 4
+    assert blocks_on_gpu_for(2, num_blocks=50) == 2       # never more than asked
+    for n in (0, -1, 50, 60):                             # the whole DiT on the GPU: kept as is
+        assert blocks_on_gpu_for(n, num_blocks=50) == n
+    assert blocks_on_gpu_for(3, num_blocks=3) == 3
+
+
+def test_vram16_derive_memory_cap():
+    from engine_h3.lowvram import derive_memory_cap
+
+    gib = 2**30
+    assert derive_memory_cap(10 * gib, 16 * gib, 1 * gib, 1 * gib) == 10 / 16
+    assert derive_memory_cap(0, 16 * gib, 0, 1 * gib) == 0.0           # clamped below
+    assert derive_memory_cap(16 * gib, 16 * gib, 4 * gib, 0) == 1.0    # clamped above
+
+
+@pytest.mark.parametrize("head_group, row_chunk", [(3, 16), (1, 7), (4, 4096), (2, 41)])
+def test_vram16_block_forward_matches_off(monkeypatch, tmp_path, head_group, row_chunk):
+    """4 heads in groups of ``head_group`` (3 = an uneven last group; 4 = one group,
+    the attention of ``H3Attention.forward`` with q, k, v projected apart), rows in
+    chunks of ``row_chunk`` (S = 41): the same bf16 block output, bit for bit."""
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit)
+    t_emb = dit.adaln_embed(kw["t_unique"])
+    adaln_index = kw["time_index"] * 3 + kw["modality"]
+    block = dit.blocks[0]
+    out_proj = block.attn.out_proj
+    seen = []   # out_proj's input: the attention output itself, before any rounding downstream
+
+    def record(x):
+        seen.append(x.clone())
+        return type(out_proj).forward(out_proj, x)
+
+    out_proj.forward = record
+    with torch.no_grad():
+        want = block(tokens, t_emb, adaln_index, kw["rope_cos"], kw["rope_sin"])
+        block.vram16 = Vram16Plan(head_group=head_group, row_chunk=row_chunk)
+        got = block(tokens, t_emb, adaln_index, kw["rope_cos"], kw["rope_sin"])
+    del out_proj.forward
+    assert len(seen) == 2 and torch.equal(seen[1], seen[0])
+    assert torch.isfinite(want.float()).all() and got.dtype == want.dtype
+    assert torch.equal(got, want)
+
+
+def test_vram16_final_rows_matches_off(tmp_path):
+    from engine_h3.lowvram import Vram16Plan
+
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit)
+    t_emb = dit.adaln_embed(kw["t_unique"])
+    with torch.no_grad():
+        want = dit.final_rows(tokens, t_emb, kw["time_index"], kw["layout"])
+        got = dit.final_rows(tokens, t_emb, kw["time_index"], kw["layout"], vram16=Vram16Plan(row_chunk=5))
+    for g, w in zip(got, want):
+        assert g.dtype == torch.float32 and torch.equal(g, w)
+
+
+def test_vram16_dit_forward_matches_off_and_frees_the_embedding(monkeypatch, tmp_path):
+    """On == off bit for bit; the box is emptied and the embedding is gone before
+    block 1 runs; an off forward afterwards clears every block's plan."""
+    import weakref
+
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path, layers=3)
+    tokens, kw = _tiny_forward_inputs(dit)
+    seen = []
+    block1 = dit.blocks[1]
+
+    def spy(*args):
+        seen.append(ref() is None)
+        return type(block1).forward(block1, *args)
+
+    with torch.no_grad():
+        want = dit(tokens, **kw)
+        box = [tokens.clone()]
+        ref = weakref.ref(box[0])
+        block1.forward = spy
+        got = dit(None, tokens_box=box, vram16=Vram16Plan(head_group=3, row_chunk=16), **kw)
+        del block1.forward
+        assert box == [] and seen == [True] and ref() is None
+        assert all(b.vram16 is not None for b in dit.blocks)
+        again = dit(tokens, **kw)
+    assert all(b.vram16 is None for b in dit.blocks)
+    for g, w, a in zip(got, want, again):
+        assert torch.isfinite(w).all() and torch.equal(g, w) and torch.equal(a, w)
+
+
+def test_vram16_off_forward_never_calls_lowvram(monkeypatch, tmp_path):
+    from engine_h3 import lowvram
+
+    def boom(*a, **k):
+        raise AssertionError("the off path must not reach engine_h3.lowvram")
+
+    monkeypatch.setattr(lowvram, "block_forward", boom)
+    monkeypatch.setattr(lowvram, "final_rows_chunked", boom)
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit)
+    with torch.no_grad():
+        dit(tokens, **kw)
+
+
+@pytest.mark.parametrize("vram16", [False, True])
+def test_vram16_cuda_oom_is_explained(monkeypatch, tmp_path, vram16):
+    """裁定 47: under VRAM 16GB mode a CUDA OOM becomes a RuntimeError that says what
+    to change (and still contains "CUDA out of memory"); off, the OOM goes out as is.
+    The mode's record is written in the finally either way."""
+    from engine_h3 import pipeline_h3 as P
+
+    pipe, dit = _tiny_pipe_and_dit(tmp_path)
+    pipe._dit_cfg = dit.cfg
+    pipe._resident = {"dit": dit, "cfg": dit.cfg}
+
+    def oom(*a, **k):
+        raise torch.OutOfMemoryError("CUDA out of memory. Tried to allocate 1.00 GiB")
+
+    monkeypatch.setattr(pipe, "_place_dit", oom)
+    req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=22, output_path="o.mp4",
+                              vram16_mode=vram16)
+    entry = {}
+    phases = P._Phases(cuda=False)
+    with pytest.raises(RuntimeError) as exc:
+        pipe._denoise(req, torch.zeros(5, TEXT, dtype=torch.bfloat16), torch.ones(5, dtype=torch.long), phases, entry)
+    if vram16:
+        assert not isinstance(exc.value, torch.OutOfMemoryError)
+        assert isinstance(exc.value.__cause__, torch.OutOfMemoryError)
+        assert str(exc.value) == P.VRAM16_OOM_MESSAGE and "CUDA out of memory" in str(exc.value)
+        assert "解像度かフレーム数" in str(exc.value) and "画角" not in str(exc.value)
+        assert entry["vram16"]["blocks_on_gpu"] == 1 and entry["vram16"]["cap_fraction"] is None
+    else:
+        assert isinstance(exc.value, torch.OutOfMemoryError)
+        assert "vram16" not in entry
+    assert pipe._resident is not None and "dit" not in pipe._resident    # a failed job lets the DiT go
+
+
+def test_worker_vram16_mode_key():
+    from engine_h3 import worker
+
+    base = {"prompt": "p", "seed": 1, "width": 640, "height": 384, "num_frames": 124, "output_path": "o.mp4"}
+    assert worker._generate_request(base).vram16_mode is False
+    assert worker._generate_request({**base, "vram16_mode": None}).vram16_mode is False
+    assert worker._generate_request({**base, "vram16_mode": True}).vram16_mode is True
+    args = worker._selftest_parser().parse_args([
+        "--transformer", "t", "--text-encoder", "te", "--video-vae", "vv", "--audio-vae", "av",
+        "--tokenizer-dir", "tok", "--output", "o.mp4", "--vram16",
+    ])
+    assert worker._selftest_generate_message(args, "o.mp4")["vram16_mode"] is True
+    assert worker._selftest_generate_message(_selftest_args(), "o.mp4")["vram16_mode"] is False
+
+
+def test_vram16_window_of_one_job_does_not_stay(tmp_path):
+    """Plan #8: the window is written to the one resident service before every
+    install, so a job's smaller window does not carry over to the next job."""
+    pipe, dit = _tiny_pipe_and_dit(tmp_path, blocks_on_gpu=2)
+    for asked, expected in ((1, 1), (None, 2)):
+        service, _used = pipe._place_dit(dit, blocks_on_gpu=asked)
+        assert service is pipe._swap_service and service.blocks_on_gpu == expected
+        service.teardown_prefetch()
+        service.release_installed()
+        pipe._park_dit(dit)
+
+
+def test_vram16_finish_lifts_the_cap_and_never_raises(monkeypatch):
+    from engine_h3 import pipeline_h3 as P
+
+    logs, fractions = [], []
+    pipe = P.H3Pipeline(P.H3Paths("t", "te", "vv", "av", "tok"), P.H3LoadOptions(),
+                        device="cpu", progress=lambda *a: None, log=logs.append)
+    stats = {"num_alloc_retries": 5, "num_ooms": 1, "inactive_split_bytes.all.peak": 3 * 2**20}
+
+    def indexed(dev):
+        # torch refuses torch.device("cuda") without an index here (found at gate A-G5)
+        assert isinstance(dev, int) or (isinstance(dev, torch.device) and dev.index is not None), dev
+        return dev
+
+    def set_fraction(f, dev=None):
+        indexed(dev)
+        fractions.append(f)
+
+    monkeypatch.setattr(torch.cuda, "set_per_process_memory_fraction", set_fraction)
+    monkeypatch.setattr(torch.cuda, "memory_stats", lambda dev=None: indexed(dev) is not None and dict(stats))
+    record = {}
+    pipe._vram16_finish(torch.device("cuda", 0), True, {"num_alloc_retries": 2, "num_ooms": 1}, record)
+    assert fractions == [1.0] and logs == []
+    assert record == {"num_alloc_retries": 3, "num_ooms": 0, "inactive_split_peak_mib": 3}
+
+    def broken(dev=None):
+        raise RuntimeError("no stats")
+
+    monkeypatch.setattr(torch.cuda, "memory_stats", broken)
+    record = {}
+    pipe._vram16_finish(torch.device("cuda", 0), True, {"num_alloc_retries": 0, "num_ooms": 0}, record)   # no raise
+    assert fractions == [1.0, 1.0] and len(logs) == 1 and "no stats" in logs[0]
+
+
+# GPU (opt-in, H3_GPU_TESTS=1; gate A-G2 / plan section 3.5): the int8 kernel's splits, and sage's k.mean.
+
+_GPU = pytest.mark.skipif(
+    not (torch.cuda.is_available() and os.environ.get("H3_GPU_TESTS") == "1"),
+    reason="GPU test: set H3_GPU_TESTS=1 (and have the supervisor's GPU permission)",
+)
+
+
+def _gpu_int8_linear(n, k, *, convrot, bias, seed=11):
+    from engine_h3.quant_linear import H3Int8Linear, require_cuda_int8
+
+    require_cuda_int8()
+    dev = torch.device("cuda")
+    g = torch.Generator().manual_seed(seed)
+    lin = H3Int8Linear(k, n, bias=bias, spec=h3_format.QuantSpec("int8_tensorwise", convrot, 256))
+    lin.weight = torch.nn.Parameter(torch.randint(-127, 128, (n, k), generator=g, dtype=torch.int8).to(dev),
+                                    requires_grad=False)
+    lin.weight_scale = (torch.rand(n, 1, generator=g) * 0.01 + 1e-3).float().to(dev)
+    if bias:
+        lin.bias = torch.nn.Parameter(torch.randn(n, generator=g).to(dev, torch.bfloat16), requires_grad=False)
+    return lin, g
+
+
+@_GPU
+@pytest.mark.parametrize("convrot", [True, False])
+@pytest.mark.parametrize("bias", [False, True])
+def test_gpu_forward_rows_join_equals_forward(convrot, bias):
+    """The qkv shape (3 x 7168 = 21504 x 5376), cut in 1024-row head groups (8 heads)."""
+    lin, g = _gpu_int8_linear(3 * 7168, 5376, convrot=convrot, bias=bias)
+    x = torch.randn(4096, 5376, generator=g).to("cuda", torch.bfloat16)
+    with torch.no_grad():
+        want = lin(x)
+        got = torch.cat([lin.forward_rows(x, n0, n0 + 1024) for n0 in range(0, 3 * 7168, 1024)], dim=1)
+    assert torch.equal(got, want)
+
+
+@_GPU
+@pytest.mark.parametrize("n, k", [(1024, 5376), (5376, 7168), (28672, 5376), (5376, 14336)])
+def test_gpu_forward_of_row_chunks_equals_forward(n, k):
+    """forward(x[r]) stacked == forward(x) for m = 8192 rows cut as 2 x 4096 and as
+    129 + the rest (the qkv group width, out_proj, fc1, fc2; ConvRot on, as the checkpoint)."""
+    lin, g = _gpu_int8_linear(n, k, convrot=True, bias=False)
+    x = torch.randn(8192, k, generator=g).to("cuda", torch.bfloat16)
+    with torch.no_grad():
+        want = lin(x)
+        for cuts in ([(0, 4096), (4096, 8192)], [(0, 129), (129, 8192)]):
+            got = torch.cat([lin(x[r0:r1]) for r0, r1 in cuts], dim=0)
+            assert torch.equal(got, want), cuts
+
+
+@_GPU
+def test_gpu_k_mean_of_a_head_group(record_property):
+    """sage subtracts ``k.mean`` over the sequence; with 8 heads instead of 56 the
+    reduction might be scheduled differently. Recorded, not asserted (ruling 46)."""
+    g = torch.Generator().manual_seed(13)
+    k = torch.randn(1, 56, 4096, 128, generator=g).to("cuda", torch.bfloat16)
+    with torch.no_grad():
+        full = k.mean(dim=2, keepdim=True)
+        diffs = []
+        for h0 in range(0, 56, 8):
+            part = k[:, h0:h0 + 8].contiguous().mean(dim=2, keepdim=True)
+            diffs.append(float((part.float() - full[:, h0:h0 + 8].float()).abs().max()))
+    worst = max(diffs)
+    record_property("k_mean_max_abs_diff", worst)
+    print(f"k.mean head groups of 8 vs 56: max abs diff {worst} (equal={worst == 0.0})")
+
+
+def test_vram16_begin_passes_an_indexed_device(monkeypatch, tmp_path):
+    """Gate A-G5 found it: the pipeline's ``torch.device("cuda")`` has no index, which
+    ``set_per_process_memory_fraction`` refuses. Every cuda call gets an integer index."""
+    from engine_h3 import pipeline_h3 as P
+
+    _pipe, dit = _tiny_pipe_and_dit(tmp_path)
+    seen = []
+
+    def check(name, ret):
+        def fn(*args):
+            dev = args[-1]
+            assert isinstance(dev, int) and not isinstance(dev, bool), (name, dev)
+            seen.append(name)
+            return ret
+        return fn
+
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: 0)
+    monkeypatch.setattr(torch.cuda, "mem_get_info", check("mem_get_info", (10 * 2**30, 16 * 2**30)))
+    monkeypatch.setattr(torch.cuda, "memory_reserved", check("memory_reserved", 2**30))
+    monkeypatch.setattr(torch.cuda, "memory_stats", check("memory_stats", {}))
+    monkeypatch.setattr(torch.cuda, "set_per_process_memory_fraction", check("set_fraction", None))
+    plan, record, counters0, cap_set, n = P.H3Pipeline._vram16_begin(torch.device("cuda"), 8, dit)
+    assert cap_set and counters0 == {"num_alloc_retries": 0, "num_ooms": 0} and n == 8   # 3-block DiT: 8 >= 3 = no swap, kept
+    assert record["cap_fraction"] == round(10 / 16, 4)
+    assert seen == ["mem_get_info", "memory_reserved", "memory_stats", "set_fraction"]

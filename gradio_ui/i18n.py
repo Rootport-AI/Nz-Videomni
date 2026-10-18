@@ -129,6 +129,12 @@ LABELS: dict[str, dict[str, str]] = {
                                                 "holds about 5GB of main memory, on top "
                                                 "of the model skeleton above. The output "
                                                 "does not change. Off by default."),
+        # VRAM 16GB mode (MiniMax H3 only; the row is hidden on LTX, whose
+        # unsupported_features name vram16_mode). Same text as the WebUI's
+        # note for the same row.
+        "accel_lbl_vram16": "VRAM 16GB mode (MiniMax H3)",
+        "accel_info_vram16": ("For MiniMax H3 only. Splits the denoising computation "
+                              "so it fits in 16GB of VRAM. Precision is not changed."),
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -685,6 +691,9 @@ LABELS: dict[str, dict[str, str]] = {
                                                 "（上のモデル骨格の常駐とは別枠で、"
                                                 "両方onにすると合算されます）。"
                                                 "生成結果は変わりません。既定はoffです。"),
+        "accel_lbl_vram16": "VRAM 16GB mode（MiniMax H3）",
+        "accel_info_vram16": ("MiniMax H3 専用。ノイズ除去の計算を分割して "
+                              "VRAM 16GB に収めます。精度は変えません。"),
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

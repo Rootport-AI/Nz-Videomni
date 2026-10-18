@@ -46,7 +46,11 @@ REQUEST_OVERRIDES_23: dict[str, dict] = {
         "width": 512,
         "height": 384,
     },
+    "vram16_mode": {"vram16_mode": True},
 }
+
+#: The refusals whose 422 does NOT point at LTX 2.5 (the feature is MiniMax H3's).
+_H3_ONLY = set(ltx23.H3_ONLY_REFUSALS)
 
 _CLASSIFICATIONS = {
     "422 (REJECT_TABLE)": lambda: {f for f, _feat, _p in ltx23.REJECT_TABLE},
@@ -132,8 +136,20 @@ def test_every_refused_field_raises_feature_unsupported_naming_ltx25(field):
     with pytest.raises(APIError) as ei:
         ltx23.reject_unsupported(request)
     assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
+    if field in _H3_ONLY:
+        assert ei.value.detail == ltx23.H3_ONLY_REFUSALS[field]
+        return
     assert field in ei.value.detail
     assert "LTX 2.5" in ei.value.detail
+
+
+def test_vram16_mode_refusal_names_h3_and_none_or_false_pass():
+    with pytest.raises(APIError) as ei:
+        ltx23.reject_unsupported(_request(vram16_mode=True))
+    assert ei.value.detail == "VRAM 16GB mode は MiniMax H3 専用です。LTX では使えません。"
+    assert "LTX 2.5" not in ei.value.detail
+    ltx23.reject_unsupported(_request(vram16_mode=False))  # no raise
+    ltx23.reject_unsupported(_request(vram16_mode=None))  # no raise
 
 
 def test_a_default_request_is_accepted():
@@ -141,7 +157,7 @@ def test_a_default_request_is_accepted():
 
 
 def test_unsupported_features_publishes_both_refusals_in_table_order():
-    assert ltx23.UNSUPPORTED_FEATURES == ("keep_resident_embeddings", "alpha_gen")
+    assert ltx23.UNSUPPORTED_FEATURES == ("keep_resident_embeddings", "alpha_gen", "vram16_mode")
     assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
 
 
@@ -164,5 +180,8 @@ def test_ltx23_refuses_over_http_before_any_lookup(two_family_client, field):
     assert r.status_code == 422, r.text
     error = r.json()["error"]
     assert error["code"] == "FEATURE_UNSUPPORTED"
-    assert "LTX 2.5" in error["detail"]
+    if field in _H3_ONLY:
+        assert "MiniMax H3 専用" in error["detail"]
+    else:
+        assert "LTX 2.5" in error["detail"]
     assert len(two_family_client.get("/api/v1/jobs").json()) == before

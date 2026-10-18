@@ -2252,6 +2252,17 @@ export const en = {
      * moment, and it is not an output warning. */
     accelKeepResidentEmbeddingsNote:
       "For LTX 2.5 only. Keeps the part that arranges the prompt's reading between jobs, shortening the preprocessing of the second and later generations. It holds about 5GB of main memory, on top of the model skeleton above. The output does not change. Off by default.",
+    /** Acceleration (2026-10-18, 台帳 §1-101): VRAM 16GB mode — MiniMax H3
+     * only. The row is HIDDEN on the engines that publish `vram16_mode` in
+     * `unsupported_features` (LTX 2.3 / 2.5). The name is the owner's (ruling
+     * 44) and stays the same in both languages. */
+    accelVram16Label: "VRAM 16GB mode",
+    accelVram16On: "ON",
+    accelVram16Off: "OFF",
+    /** Shown under the row while it is on (the default), like the fused-kernel
+     * note: reassurance, not a warning — precision does not change. */
+    accelVram16Note:
+      "For MiniMax H3 only. Splits the denoising computation so the job fits in 16GB of VRAM. Precision does not change.",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
     outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
@@ -3571,6 +3582,10 @@ export const ja: Strings = {
     accelKeepResidentEmbeddingsOff: "OFF",
     accelKeepResidentEmbeddingsNote:
       "LTX 2.5専用の項目です。文章の読み取り結果を整える部品をジョブ間で保持し、2回目以降の生成の前処理を短縮します。メインメモリを約5GB常駐で使用します（上のモデル骨格の常駐とは別枠で、両方onにすると合算されます）。生成結果は変わりません。既定はoffです。",
+    accelVram16Label: "VRAM 16GB mode",
+    accelVram16On: "ON",
+    accelVram16Off: "OFF",
+    accelVram16Note: "MiniMax H3 専用。ノイズ除去の計算を分割して VRAM 16GB に収めます。精度は変えません。",
     outputHeading: "メタデータ出力:",
     embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
     embedMp4MetadataOn: "ON",

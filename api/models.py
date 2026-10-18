@@ -163,6 +163,19 @@ FUSED_GGUF_DEQUANT_KERNEL_DEFAULT = True
 # MCP の import 元の3点を同じ変更で動かすこと**。
 EMBED_MP4_METADATA_DEFAULT = True
 
+# vram16_mode（MiniMax H3 の VRAM 16GB mode）の H3 での既定値（オーナー裁定 44:
+# H3 では既定 on・off も選べる）。スキーマの Field 既定は None（＝系統の既定）で、
+# この値は H3 アダプタの REQUEST_RULES.flag_defaults が validate_for_family で
+# 書き戻す（H3 アダプタの flag_defaults がこの定数を読む）。名前付き定数に
+# している理由は上の定数群と同じ：gradio_ui/handlers.py のミラー定数（Gradio は
+# HTTP 越しのクライアントなので import せず自前で持つ）と、MCP の説明文
+# （mcp_server/tools/generate.py。引数の既定は None＝送らないので値は import
+# せず、説明文に「H3 では既定 on」と書く）を1箇所に集約するため——**変えるとき
+# は正本（ここ）＋gradio_ui のミラー＋MCP の説明文の3点を同じ変更で動かすこと**。
+# 操作パネルにも同じ値の写し（webui の shell/accelerationSettings.ts の
+# VRAM16_MODE_SERVER_DEFAULT）があり、あわせて動かす。
+VRAM16_MODE_DEFAULT_H3 = True
+
 
 class CropOutput(BaseModel):
     width: int = Field(..., ge=32)
@@ -590,6 +603,19 @@ class GenerateRequest(BaseModel):
     # 再エンコードするとタグは消える。読み出しは POST /utils/mp4-info。
     # false のときは何も刻まない（結合でも元動画のタグを引き継がない）。
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT
+
+    # vram16_mode: MiniMax H3 の「VRAM 16GB mode」。ノイズ除去の予約と割り当てを
+    # 物理 VRAM 16GB に収める経路へ切り替える（同じワーカーの中の切り替えで、
+    # off は従来の経路に一切触れない。設計正本は Docs/MINIMAX_H3_DESIGN.md）。
+    # None ＝「選択中の系統の既定値」。H3 では validate_for_family が
+    # VRAM16_MODE_DEFAULT_H3（既定 on）を書き戻し、H3 アダプタは値を毎ジョブ送る。
+    # 【エンジン差】H3 専用の機能で、LTX 2.3／2.5 は true を 422
+    # FEATURE_UNSUPPORTED で断る（各アダプタの REJECT_TABLE）。None と false は通す。
+    # 収まらないときはジョブを OOM で失敗させる（黙って共有メモリへ退避させない）。
+    # 実際に効いたかどうかは metadata.json の vram16_mode_used で確認できる。
+    # GET /status には載せない（keep_resident と同じ規律）。連結スキーマには
+    # 置かない（H3 は連結を断る）。
+    vram16_mode: bool | None = Field(None)
 
     # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)

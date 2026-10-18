@@ -90,8 +90,10 @@ WHERE the job's VRAM peak sits:
     §75.7), for no benefit at all (2.3 shows no fragmentation growth to begin
     with).
 
-Hence ``hold_arenas`` defaults to False and ``engine25`` is the only caller that
-turns it on. This is a deliberate exception to "one behaviour for both engines":
+Hence ``hold_arenas`` defaults to False, and ``engine25`` and ``engine_h3`` are
+the callers that turn it on (MiniMax H3 calls ``teardown()`` in its denoise's
+``finally``, before the decode, so the ring never stacks under a decode-side
+peak; ``engine_h3/pipeline_h3.py`` ``_place_dit``). This is a deliberate exception to "one behaviour for both engines":
 the two engines genuinely differ in where their peak is, and the flag names that
 difference instead of hiding it.
 

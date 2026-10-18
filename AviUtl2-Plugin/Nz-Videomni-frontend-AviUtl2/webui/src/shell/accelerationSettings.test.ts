@@ -30,13 +30,14 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
     vaeMode: "prune_vaed",
     keepResidentEmbeddings: true,
     // §3-164: the Output row sharing this store, at its server default.
+    vram16Mode: true,
     embedMp4Metadata: true,
     ...overrides,
   };
 }
 
 describe("effectiveAccelerationFields", () => {
-  it("maps all six toggles onto the server's own request-field vocabulary", () => {
+  it("maps all seven toggles onto the server's own request-field vocabulary", () => {
     expect(effectiveAccelerationFields(makeAllOn(), true)).toEqual({
       attention_backend: "sage",
       block_swap_prefetch: true,
@@ -44,6 +45,7 @@ describe("effectiveAccelerationFields", () => {
       fused_gguf_dequant_kernel: true,
       vae_mode: "prune_vaed",
       keep_resident_embeddings: true,
+      vram16_mode: true,
     });
   });
 
@@ -59,6 +61,7 @@ describe("effectiveAccelerationFields", () => {
       "keep_resident",
       "keep_resident_embeddings",
       "vae_mode",
+      "vram16_mode",
     ]);
     expect(fields).toEqual({
       attention_backend: "sdpa",
@@ -67,6 +70,7 @@ describe("effectiveAccelerationFields", () => {
       fused_gguf_dequant_kernel: true,
       vae_mode: "default",
       keep_resident_embeddings: false,
+      vram16_mode: true,
     });
   });
 
@@ -90,6 +94,7 @@ describe("effectiveAccelerationFields", () => {
     expect(
       effectiveAccelerationFields(makeAllOn({ keepResidentEmbeddings: false }), true).keep_resident_embeddings,
     ).toBe(false);
+    expect(effectiveAccelerationFields(makeAllOn({ vram16Mode: false }), true).vram16_mode).toBe(false);
   });
 
   it("must be called with the EFFECTIVE settings object, not the raw stored choice", () => {
@@ -170,6 +175,57 @@ describe("withServerDefaults", () => {
     expect(after).not.toBe(before);
     expect(after.vaeMode).toBe("default");
     expect(after.keepResidentEmbeddings).toBe(ACCELERATION_DEFAULTS.keepResidentEmbeddings);
+  });
+});
+
+/** 台帳 §1-101 (2026-10-18): VRAM 16GB mode (MiniMax H3 only). Default ON, so
+ * the key rides along only as `false` — the fused-kernel direction. */
+describe("vram16Mode (§1-101)", () => {
+  it("defaults to on, matching the H3 server default", () => {
+    expect(ACCELERATION_DEFAULTS.vram16Mode).toBe(true);
+  });
+
+  it("sends nothing while on", () => {
+    expect(accelerationRequestFields(ACCELERATION_DEFAULTS)).not.toHaveProperty("vram16_mode");
+    expect(accelerationRequestFields(makeAllOn())).not.toHaveProperty("vram16_mode");
+  });
+
+  it("sends vram16_mode: false only while off", () => {
+    expect(accelerationRequestFields({ ...ACCELERATION_DEFAULTS, vram16Mode: false })).toEqual({
+      vram16_mode: false,
+    });
+  });
+
+  it("withServerDefaults writes it back to on (the feature-scope reset on LTX)", () => {
+    const after = withServerDefaults(makeAllOn({ vram16Mode: false }), ["vram16Mode"]);
+    expect(after.vram16Mode).toBe(true);
+    expect(after).toEqual(makeAllOn());
+  });
+
+  describe("localStorage round trip", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("writes and reads back an off value", () => {
+      writeStoredAcceleration({ ...ACCELERATION_DEFAULTS, vram16Mode: false });
+      expect(readStoredAcceleration().vram16Mode).toBe(false);
+    });
+
+    it("reads a JSON blob without the key (written before §1-101) as on", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ attentionBackend: "sage" }));
+      expect(readStoredAcceleration().vram16Mode).toBe(true);
+    });
+
+    it("reads the pre-2026-08-01 bare string form as on", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, "sdpa");
+      expect(readStoredAcceleration().vram16Mode).toBe(true);
+    });
+
+    it("reads a malformed value as on", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ vram16Mode: "no" }));
+      expect(readStoredAcceleration().vram16Mode).toBe(true);
+    });
   });
 });
 

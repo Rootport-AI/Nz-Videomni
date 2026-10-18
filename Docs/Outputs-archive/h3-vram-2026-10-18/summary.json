@@ -1,0 +1,747 @@
+{
+  "generated": "2026-10-18 16:55:01",
+  "units": "MiB, seconds (step 2)",
+  "shared_baseline_mib": 1237.1,
+  "arms": {
+    "T0": {
+      "label": "T0_B_sdpa_b8_nocap_hist",
+      "width": 640,
+      "height": 384,
+      "num_frames": 124,
+      "attention": "sdpa",
+      "blocks_on_gpu": 8,
+      "memory_fraction": null,
+      "record_history": true,
+      "sequence_rows": 9326,
+      "denoise_peak_allocated_mib": 6676,
+      "denoise_peak_reserved_mib": 7590,
+      "predicted_allocated_mib": 6660,
+      "predicted_reserved_mib": 7570,
+      "arenas": 10,
+      "step2_seconds": 4.797,
+      "counts_step1_to_step2": {
+        "num_alloc_retries": 0,
+        "num_device_alloc": 0,
+        "num_device_free": 0,
+        "num_ooms": 0
+      },
+      "num_alloc_retries_at_index1": 0,
+      "window_shared_median_mib": 1237.1,
+      "window_shared_max_mib": 1237.1,
+      "idle_dedicated_median_mib": 1144.1,
+      "non_torch_estimate_adapter_idle_mib": 202.4,
+      "generate_seconds": 71.52,
+      "exit_code": 0,
+      "error": null,
+      "effective_mismatch": null,
+      "snapshot_peak": {
+        "allocated_mib": 6661.2,
+        "reserved_mib": 7588.0,
+        "unused_reserved_mib": 926.8,
+        "largest_gap_mib": 192.0,
+        "gap_classes": {
+          "<64MiB": {
+            "count": 23,
+            "mib": 102.2
+          },
+          "64-256MiB": {
+            "count": 7,
+            "mib": 821.8
+          },
+          "256-1024MiB": {
+            "count": 0,
+            "mib": 0.0
+          },
+          "1024-2048MiB": {
+            "count": 0,
+            "mib": 0.0
+          },
+          ">2048MiB": {
+            "count": 0,
+            "mib": 0.0
+          }
+        },
+        "new_segment_despite_enough_free": {
+          "count": 11,
+          "mib": 2056.0
+        }
+      },
+      "window_shared_vs_baseline_mib": 0.0,
+      "pcie_step2": {
+        "rx_median_mbps": 4.0,
+        "rx_max_mbps": 450.0,
+        "tx_median_mbps": 52.0,
+        "tx_max_mbps": 61.0,
+        "samples": 5,
+        "note": "nvidia-smi dmon 1 秒刻み・参考"
+      },
+      "inactive_split_peak_mib_index2": 496.0,
+      "process_commit_peak_gib": 34.55,
+      "num_alloc_retries_through_index2": 0,
+      "window_shared_before_entry_mib": 213.1,
+      "window_shared_first_in_mib": 1237.1,
+      "window_shared_samples": 12,
+      "window_shared_vs_entry_mib": 0.0,
+      "started": "2026-10-18 16:26:25.283",
+      "finished": "2026-10-18 16:27:57.143"
+    },
+    "T1": {
+      "label": "T1_A_sage_b8_nocap_hist",
+      "width": 960,
+      "height": 1152,
+      "num_frames": 124,
+      "attention": "sage",
+      "blocks_on_gpu": 8,
+      "memory_fraction": null,
+      "record_history": true,
+      "sequence_rows": 40406,
+      "denoise_peak_allocated_mib": 12907,
+      "denoise_peak_reserved_mib": 16970,
+      "predicted_allocated_mib": 12900,
+      "predicted_reserved_mib": 17000,
+      "arenas": 10,
+      "step2_seconds": 32.61,
+      "counts_step1_to_step2": {
+        "num_alloc_retries": 0,
+        "num_device_alloc": 1,
+        "num_device_free": 0,
+        "num_ooms": 0
+      },
+      "num_alloc_retries_at_index1": 0,
+      "window_shared_median_mib": 3631.4,
+      "window_shared_max_mib": 3655.0,
+      "idle_dedicated_median_mib": 1124.8,
+      "non_torch_estimate_adapter_idle_mib": -1717.3,
+      "generate_seconds": 142.62,
+      "exit_code": 0,
+      "error": null,
+      "effective_mismatch": null,
+      "snapshot_peak": {
+        "allocated_mib": 12893.1,
+        "reserved_mib": 16968.0,
+        "unused_reserved_mib": 4074.9,
+        "largest_gap_mib": 2210.0,
+        "gap_classes": {
+          "<64MiB": {
+            "count": 31,
+            "mib": 77.0
+          },
+          "64-256MiB": {
+            "count": 3,
+            "mib": 403.0
+          },
+          "256-1024MiB": {
+            "count": 1,
+            "mib": 277.6
+          },
+          "1024-2048MiB": {
+            "count": 1,
+            "mib": 1106.0
+          },
+          ">2048MiB": {
+            "count": 1,
+            "mib": 2210.0
+          }
+        },
+        "new_segment_despite_enough_free": {
+          "count": 18,
+          "mib": 10482.0
+        }
+      },
+      "window_shared_vs_baseline_mib": 2394.3,
+      "pcie_step2": {
+        "rx_median_mbps": 451.0,
+        "rx_max_mbps": 28050.0,
+        "tx_median_mbps": 925.0,
+        "tx_max_mbps": 26803.0,
+        "samples": 31,
+        "note": "nvidia-smi dmon 1 秒刻み・参考"
+      },
+      "inactive_split_peak_mib_index2": 1936.8,
+      "process_commit_peak_gib": 43.73,
+      "num_alloc_retries_through_index2": 0,
+      "window_shared_before_entry_mib": 194.1,
+      "window_shared_first_in_mib": 1218.1,
+      "window_shared_samples": 69,
+      "window_shared_vs_entry_mib": 2413.3,
+      "started": "2026-10-18 16:30:27.236",
+      "finished": "2026-10-18 16:33:10.207"
+    },
+    "T2": {
+      "label": "T2_A_sdpa_b8_nocap",
+      "width": 960,
+      "height": 1152,
+      "num_frames": 124,
+      "attention": "sdpa",
+      "blocks_on_gpu": 8,
+      "memory_fraction": null,
+      "record_history": false,
+      "sequence_rows": 40406,
+      "denoise_peak_allocated_mib": 11383,
+      "denoise_peak_reserved_mib": 15306,
+      "predicted_allocated_mib": 11380,
+      "predicted_reserved_mib": 15300,
+      "arenas": 10,
+      "step2_seconds": 54.064,
+      "counts_step1_to_step2": {
+        "num_alloc_retries": 0,
+        "num_device_alloc": 0,
+        "num_device_free": 0,
+        "num_ooms": 0
+      },
+      "num_alloc_retries_at_index1": 0,
+      "window_shared_median_mib": 1368.0,
+      "window_shared_max_mib": 1384.5,
+      "idle_dedicated_median_mib": 946.8,
+      "non_torch_estimate_adapter_idle_mib": 122.7,
+      "generate_seconds": 181.57,
+      "exit_code": 0,
+      "error": null,
+      "effective_mismatch": null,
+      "window_shared_vs_baseline_mib": 130.9,
+      "pcie_step2": {
+        "rx_median_mbps": 556.0,
+        "rx_max_mbps": 18263.0,
+        "tx_median_mbps": 226.0,
+        "tx_max_mbps": 1993.0,
+        "samples": 52,
+        "note": "nvidia-smi dmon 1 秒刻み・参考"
+      },
+      "inactive_split_peak_mib_index2": 2469.6,
+      "process_commit_peak_gib": 42.07,
+      "num_alloc_retries_through_index2": 0,
+      "window_shared_before_entry_mib": 180.0,
+      "window_shared_first_in_mib": 1204.0,
+      "window_shared_samples": 110,
+      "window_shared_vs_entry_mib": 164.0,
+      "started": "2026-10-18 16:33:46.487",
+      "finished": "2026-10-18 16:37:08.497"
+    },
+    "T3": {
+      "label": "T3_A_sage_b8_cap085_hist",
+      "width": 960,
+      "height": 1152,
+      "num_frames": 124,
+      "attention": "sage",
+      "blocks_on_gpu": 8,
+      "memory_fraction": 0.85,
+      "record_history": true,
+      "sequence_rows": 40406,
+      "denoise_peak_allocated_mib": 12908,
+      "denoise_peak_reserved_mib": 13652,
+      "predicted_allocated_mib": 12900,
+      "predicted_reserved_mib": 13920,
+      "arenas": 10,
+      "step2_seconds": 20.757,
+      "counts_step1_to_step2": {
+        "num_alloc_retries": 1,
+        "num_device_alloc": 5,
+        "num_device_free": 5,
+        "num_ooms": 0
+      },
+      "num_alloc_retries_at_index1": 1,
+      "window_shared_median_mib": 1209.7,
+      "window_shared_max_mib": 1209.7,
+      "idle_dedicated_median_mib": 657.9,
+      "non_torch_estimate_adapter_idle_mib": 915.6,
+      "generate_seconds": 114.41,
+      "exit_code": 0,
+      "error": null,
+      "effective_mismatch": null,
+      "snapshot_peak": {
+        "allocated_mib": 12893.1,
+        "reserved_mib": 13336.0,
+        "unused_reserved_mib": 442.9,
+        "largest_gap_mib": 139.7,
+        "gap_classes": {
+          "<64MiB": {
+            "count": 28,
+            "mib": 34.1
+          },
+          "64-256MiB": {
+            "count": 3,
+            "mib": 407.3
+          },
+          "256-1024MiB": {
+            "count": 0,
+            "mib": 0.0
+          },
+          "1024-2048MiB": {
+            "count": 0,
+            "mib": 0.0
+          },
+          ">2048MiB": {
+            "count": 0,
+            "mib": 0.0
+          }
+        },
+        "new_segment_despite_enough_free": {
+          "count": 17,
+          "mib": 7444.0
+        }
+      },
+      "window_shared_vs_baseline_mib": -27.4,
+      "pcie_step2": {
+        "rx_median_mbps": 5.0,
+        "rx_max_mbps": 21803.0,
+        "tx_median_mbps": 1.0,
+        "tx_max_mbps": 1723.0,
+        "samples": 20,
+        "note": "nvidia-smi dmon 1 秒刻み・参考"
+      },
+      "inactive_split_peak_mib_index2": 2774.3,
+      "process_commit_peak_gib": 40.48,
+      "num_alloc_retries_through_index2": 2,
+      "window_shared_before_entry_mib": 185.3,
+      "window_shared_first_in_mib": 1209.3,
+      "window_shared_samples": 44,
+      "window_shared_vs_entry_mib": 0.4,
+      "started": "2026-10-18 16:37:57.770",
+      "finished": "2026-10-18 16:40:12.693"
+    },
+    "T4": {
+      "label": "T4_A_sdpa_b8_cap085",
+      "width": 960,
+      "height": 1152,
+      "num_frames": 124,
+      "attention": "sdpa",
+      "blocks_on_gpu": 8,
+      "memory_fraction": 0.85,
+      "record_history": false,
+      "sequence_rows": 40406,
+      "denoise_peak_allocated_mib": 11383,
+      "denoise_peak_reserved_mib": 13332,
+      "predicted_allocated_mib": 11380,
+      "predicted_reserved_mib": 13920,
+      "arenas": 10,
+      "step2_seconds": 52.694,
+      "counts_step1_to_step2": {
+        "num_alloc_retries": 0,
+        "num_device_alloc": 0,
+        "num_device_free": 0,
+        "num_ooms": 0
+      },
+      "num_alloc_retries_at_index1": 2,
+      "window_shared_median_mib": 1185.5,
+      "window_shared_max_mib": 1205.5,
+      "idle_dedicated_median_mib": 749.6,
+      "non_torch_estimate_adapter_idle_mib": 856.6,
+      "generate_seconds": 177.89,
+      "exit_code": 0,
+      "error": null,
+      "effective_mismatch": null,
+      "window_shared_vs_baseline_mib": -51.6,
+      "pcie_step2": {
+        "rx_median_mbps": 0.0,
+        "rx_max_mbps": 473.0,
+        "tx_median_mbps": 0.0,
+        "tx_max_mbps": 51.0,
+        "samples": 51,
+        "note": "nvidia-smi dmon 1 秒刻み・参考"
+      },
+      "inactive_split_peak_mib_index2": 2915.2,
+      "process_commit_peak_gib": 40.18,
+      "num_alloc_retries_through_index2": 2,
+      "window_shared_before_entry_mib": 181.5,
+      "window_shared_first_in_mib": 1205.5,
+      "window_shared_samples": 107,
+      "window_shared_vs_entry_mib": -20.0,
+      "started": "2026-10-18 16:41:06.674",
+      "finished": "2026-10-18 16:44:24.711"
+    },
+    "T5a": {
+      "label": "T5a_A_sage_b4_cap085",
+      "width": 960,
+      "height": 1152,
+      "num_frames": 124,
+      "attention": "sage",
+      "blocks_on_gpu": 4,
+      "memory_fraction": 0.85,
+      "record_history": false,
+      "sequence_rows": 40406,
+      "denoise_peak_allocated_mib": 11419,
+      "denoise_peak_reserved_mib": 12956,
+      "predicted_allocated_mib": 11424,
+      "predicted_reserved_mib": 12168,
+      "arenas": 6,
+      "step2_seconds": 20.714,
+      "counts_step1_to_step2": {
+        "num_alloc_retries": 0,
+        "num_device_alloc": 2,
+        "num_device_free": 0,
+        "num_ooms": 0
+      },
+      "num_alloc_retries_at_index1": 1,
+      "window_shared_median_mib": 1139.4,
+      "window_shared_max_mib": 1172.1,
+      "idle_dedicated_median_mib": 763.5,
+      "non_torch_estimate_adapter_idle_mib": 787.1,
+      "generate_seconds": 113.72,
+      "exit_code": 0,
+      "error": null,
+      "effective_mismatch": null,
+      "window_shared_vs_baseline_mib": -97.7,
+      "pcie_step2": {
+        "rx_median_mbps": 5.0,
+        "rx_max_mbps": 22301.0,
+        "tx_median_mbps": 1.0,
+        "tx_max_mbps": 1574.0,
+        "samples": 19,
+        "note": "nvidia-smi dmon 1 秒刻み・参考"
+      },
+      "inactive_split_peak_mib_index2": 2639.0,
+      "process_commit_peak_gib": 39.79,
+      "num_alloc_retries_through_index2": 1,
+      "window_shared_before_entry_mib": 115.4,
+      "window_shared_first_in_mib": 1139.4,
+      "window_shared_samples": 43,
+      "window_shared_vs_entry_mib": 0.0,
+      "started": "2026-10-18 16:45:46.486",
+      "finished": "2026-10-18 16:48:00.543",
+      "predicted_reserved_note": "T3 の実測の予約 13,652 から −1,484／−2,226 を引いた値（計画 H4 の『予約も同じ量だけ下がる』。外れ）"
+    },
+    "T5b": {
+      "label": "T5b_A_sage_b2_cap085",
+      "width": 960,
+      "height": 1152,
+      "num_frames": 124,
+      "attention": "sage",
+      "blocks_on_gpu": 2,
+      "memory_fraction": 0.85,
+      "record_history": false,
+      "sequence_rows": 40406,
+      "denoise_peak_allocated_mib": 10675,
+      "denoise_peak_reserved_mib": 13630,
+      "predicted_allocated_mib": 10682,
+      "predicted_reserved_mib": 11426,
+      "arenas": 4,
+      "step2_seconds": 20.804,
+      "counts_step1_to_step2": {
+        "num_alloc_retries": 0,
+        "num_device_alloc": 1,
+        "num_device_free": 0,
+        "num_ooms": 0
+      },
+      "num_alloc_retries_at_index1": 1,
+      "window_shared_median_mib": 1212.1,
+      "window_shared_max_mib": 1212.1,
+      "idle_dedicated_median_mib": 778.6,
+      "non_torch_estimate_adapter_idle_mib": 780.5,
+      "generate_seconds": 115.98,
+      "exit_code": 0,
+      "error": null,
+      "effective_mismatch": null,
+      "window_shared_vs_baseline_mib": -25.0,
+      "pcie_step2": {
+        "rx_median_mbps": 449.0,
+        "rx_max_mbps": 470.0,
+        "tx_median_mbps": 47.0,
+        "tx_max_mbps": 2315.0,
+        "samples": 20,
+        "note": "nvidia-smi dmon 1 秒刻み・参考"
+      },
+      "inactive_split_peak_mib_index2": 4283.1,
+      "process_commit_peak_gib": 40.45,
+      "num_alloc_retries_through_index2": 1,
+      "window_shared_before_entry_mib": 1212.1,
+      "window_shared_first_in_mib": 1212.1,
+      "window_shared_samples": 43,
+      "window_shared_vs_entry_mib": 0.0,
+      "started": "2026-10-18 16:48:52.349",
+      "finished": "2026-10-18 16:51:08.262",
+      "predicted_reserved_note": "T3 の実測の予約 13,652 から −1,484／−2,226 を引いた値（計画 H4 の『予約も同じ量だけ下がる』。外れ）"
+    },
+    "F0": {
+      "label": "F0_I2V_896x1152_sage_b8_nocap_keep_det",
+      "kind": "対照の腕（計測台の検証・オーナー指示）",
+      "task": "I2V",
+      "width": 896,
+      "height": 1152,
+      "num_frames": 124,
+      "attention": "sage",
+      "blocks_on_gpu": 8,
+      "memory_fraction": null,
+      "record_history": false,
+      "steps": 3,
+      "keep_resident": true,
+      "deterministic": true,
+      "image": "uploads/71c540dc-970b-470e-aa0e-856dce76dfdc/input.png",
+      "prompt": "オーナーの 1 回目（outputs/dc9491a2-…）と同じ日本語 47 文字",
+      "sequence": {
+        "text": 1046,
+        "cond": 1008,
+        "audio": 414,
+        "video": 37296,
+        "total": 39764,
+        "latent_frames": 37,
+        "audio_latents": 207,
+        "grid": [
+          36,
+          28
+        ]
+      },
+      "phase_peaks_mib": {
+        "encode": {
+          "allocated": 3989,
+          "reserved": 4170,
+          "seconds": 17.53
+        },
+        "image_encode": {
+          "allocated": 1064,
+          "reserved": 1450,
+          "seconds": 1.23
+        },
+        "denoise": {
+          "allocated": 12807,
+          "reserved": 16828,
+          "seconds": 454.84
+        },
+        "decode": {
+          "allocated": 6387,
+          "reserved": 7640,
+          "seconds": 41.31
+        }
+      },
+      "denoise_peak_allocated_mib": 12807,
+      "denoise_peak_reserved_mib": 16828,
+      "matches_owner_run1": true,
+      "step_seconds": [
+        32.662,
+        202.848,
+        205.169
+      ],
+      "counts_cumulative_by_index": [
+        {
+          "num_alloc_retries": 0,
+          "num_device_alloc": 148,
+          "num_device_free": 105,
+          "num_ooms": 0
+        },
+        {
+          "num_alloc_retries": 0,
+          "num_device_alloc": 148,
+          "num_device_free": 105,
+          "num_ooms": 0
+        },
+        {
+          "num_alloc_retries": 0,
+          "num_device_alloc": 148,
+          "num_device_free": 105,
+          "num_ooms": 0
+        }
+      ],
+      "inactive_split_peak_mib": {
+        "index1": 1359.3,
+        "index2": 1768.8,
+        "index3": 1768.8
+      },
+      "window_shared_median_mib": 3268.7,
+      "window_shared_max_mib": 3332.6,
+      "window_shared_vs_baseline_mib": 2031.6,
+      "window_shared_samples": 442,
+      "pcie_steps2_3": {
+        "rx_median_mbps": 27096,
+        "rx_max_mbps": 37192,
+        "tx_median_mbps": 5701,
+        "tx_max_mbps": 27450,
+        "sm_median_pct": 100
+      },
+      "prefetch_wait_on_pinned_ms": {
+        "pass1": 24706.6,
+        "pass2": 160712.4,
+        "pass3": null,
+        "sync_miss": {
+          "pass1": 1,
+          "pass2": 1
+        }
+      },
+      "process_commit_peak_gib": 44.61,
+      "rss_peak_gib": 28.58,
+      "generate_seconds": 515.1,
+      "effective": {
+        "build_blocks_on_gpu": 8,
+        "build_attention_backend": "sage",
+        "build_deterministic": true,
+        "keep_resident_used": "on",
+        "images_used": 1,
+        "attention_used": "sage",
+        "block_swap_prefetch_used": "on",
+        "arenas": 10,
+        "swap_blocks_on_gpu": 8,
+        "arenas_expected": 10,
+        "per_process_memory_fraction": 1.0
+      },
+      "effective_mismatch": null,
+      "exit_code": 0,
+      "error": null,
+      "started": "2026-10-18 18:27:32.906",
+      "finished": "2026-10-18 18:36:28.458"
+    }
+  },
+  "T6": {
+    "98304": {
+      "default": {
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "first_bad_query_row": null,
+        "seconds": 1.473,
+        "error": null
+      },
+      "efficient_forced": {
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "first_bad_query_row": null,
+        "seconds": 1.472,
+        "error": null
+      },
+      "v_row_stride_x_S": 2113929216
+    },
+    "100352": {
+      "both_default": {
+        "identical": null,
+        "max_abs_diff": null,
+        "first_bad_query_row": null,
+        "seconds": null,
+        "error": "CUDA error: an illegal memory access was encountered\nSearch for `cudaErrorIllega"
+      },
+      "both_efficient_forced": {
+        "identical": null,
+        "max_abs_diff": null,
+        "first_bad_query_row": null,
+        "seconds": null,
+        "error": "CUDA error: an illegal memory access was encountered\nSearch for `cudaErrorIllega"
+      },
+      "isolated_contiguous": {
+        "seconds": 0.771,
+        "finite": true,
+        "abs_mean": 0.004143775440752506,
+        "error": null
+      },
+      "isolated_view": {
+        "error": "CUDA error: an illegal memory access was encountered\nSearch for `cudaErrorIllega"
+      },
+      "v_row_stride_x_S": 2157969408
+    },
+    "int32_max": 2147483647
+  },
+  "hypotheses": {
+    "H1": {
+      "verdict": "支持（留保つき）",
+      "note": "溢れの主因は抱えたままの空きセグメント（T1 のピークの瞬間に使用中 0 の 2,210 と 1,106）。上限 0.85 で予約 16,970→13,652・共有は基準並み・2 ステップ目 32.6→20.8 秒・OOM なし。ただし上限の下で inactive_split が増えた（T1 1,937→T3 2,774・T5b 4,283）。より大きい画角で足りるかは未確認"
+    },
+    "H2": {
+      "verdict": "支持",
+      "note": "sage と sdpa の割り当ての差 1,524（予測 約 1,520）"
+    },
+    "H3": {
+      "verdict": "不支持",
+      "note": "溢れの無い条件で sage 20.76 秒・sdpa 52.69 秒。予測は立てておらず、オーナーの見立てが否定された"
+    },
+    "H4": {
+      "verdict": "支持（割り当ての側）",
+      "note": "割り当て −1,489／−2,233（予測 −1,484／−2,226）、時間 20.76／20.71／20.80 秒。予約の予測は外れた（上限の下では予約が削減量を表さない）"
+    },
+    "H5": {
+      "verdict": "支持",
+      "note": "S=98,304 で一致、S=100,352 で v の view だけ不正なメモリアクセス・連続版は正常。実測の境界は 98,304〜100,352 の間"
+    },
+    "s166_9": {
+      "verdict": "再現（F0）",
+      "note": "T1（T2V・履歴あり）では出なかったが、製品の条件を揃えた F0 で 2 ステップ目 202.9・3 ステップ目 205.2 秒。操作パネルからの 2 回目でも再現。条件が揃えば毎回出る。T1 の非再現は未解明（オーナー裁定で追わない）。重い症状の特徴は PCIe 受信 27GB/s の飽和と先読みの転送待ち"
+    }
+  },
+  "window_definition": "ノイズ除去の窓＝stage1_denoise の index 0〜2 の壁時計（t_wall）。PCIe＝dmon の行の時刻（整数秒）が [index 1 の t_wall_done, index 2 の t_wall_enter] の中にある行（始まりの端の秒は含めない・終わりの端の秒は区間内なら含める）",
+  "environment": {
+    "dev_commit": "709a2fe",
+    "driver": "610.88",
+    "torch": "2.13.0+cu130",
+    "sageattention": "2.2.0+cu130torch2.10.0andhigher.post6",
+    "comfy_kitchen": "0.2.37",
+    "triton_windows": "3.7.1.post27",
+    "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "driver_note": "全腕の計測の後に nvidia-smi で読んだ値（run.json には無い）"
+  },
+  "rulings": [
+    "1 時間の比較（T3 対 T4・T1 対 T3）は結論に使う（事前登録の規則からの逸脱）",
+    "2 H3 不支持",
+    "3 今後の較正の線は退避そのもの（窓の共有の中央値）で引く（F0 の再現の後も維持）",
+    "4 予約は上限の有無を添えて読み、削減量は割り当てで測る",
+    "5 torch 以外の持ち分は 123〜916 の幅",
+    "6 窓の中の共有の固定の上乗せ（約 +1,024）は推測として扱い基準を T0 の窓に置く",
+    "オーナー裁定: T1 と F0 の違い（どちらで冷たい空きが・使用中の分が退避の犠牲になるか）は未解明として追わない"
+  ],
+  "t0_matches_165_5": {
+    "value": true,
+    "t0": {
+      "allocated_mib": 6676,
+      "reserved_mib": 7590,
+      "step2_seconds": 4.8
+    },
+    "verification_log_165_5": {
+      "after_fix_sdpa_new_baseline": [
+        6677,
+        7590
+      ],
+      "before_fix_sdpa": [
+        6657,
+        7570
+      ],
+      "seconds_per_step": "約 4.8"
+    }
+  },
+  "owner_runs": {
+    "run2": {
+      "job": "c14379b2-a2c7-4870-8f4a-c8d518cfe1c6",
+      "when": "2026-10-18 18:05",
+      "path": "操作パネル（UI）",
+      "task": "I2V 896×1152×124・sage・常駐 8・keep_resident on",
+      "prompt": "英語の別の文",
+      "step_seconds": [
+        26.9,
+        168.5,
+        203.3,
+        205.0
+      ],
+      "source": "オーナーの実行のログ（監督の伝達）",
+      "task_manager": {
+        "dedicated_gb": "15.5/16.0",
+        "shared_gb": "3.3/47.8",
+        "ram_gb": "39.2/63.8",
+        "gpu_util": "尖りだけ",
+        "copy_engine": "0%"
+      }
+    },
+    "run1": {
+      "dir": "outputs/dc9491a2-…",
+      "denoise_peak_allocated_mib": 12807,
+      "denoise_peak_reserved_mib": 16828,
+      "s166_9": "1 ステップ約 210 秒（20 ステップの通しの平均）"
+    }
+  },
+  "h3_verdicts": {
+    "H1": {
+      "verdict": "支持（留保つき）",
+      "note": "溢れの主因は抱えたままの空きセグメント（T1 のピークの瞬間に使用中 0 の 2,210 と 1,106）。上限 0.85 で予約 16,970→13,652・共有は基準並み・2 ステップ目 32.6→20.8 秒・OOM なし。ただし上限の下で inactive_split が増えた（T1 1,937→T3 2,774・T5b 4,283）。より大きい画角で足りるかは未確認"
+    },
+    "H2": {
+      "verdict": "支持",
+      "note": "sage と sdpa の割り当ての差 1,524（予測 約 1,520）"
+    },
+    "H3": {
+      "verdict": "不支持",
+      "note": "溢れの無い条件で sage 20.76 秒・sdpa 52.69 秒。予測は立てておらず、オーナーの見立てが否定された"
+    },
+    "H4": {
+      "verdict": "支持（割り当ての側）",
+      "note": "割り当て −1,489／−2,233（予測 −1,484／−2,226）、時間 20.76／20.71／20.80 秒。予約の予測は外れた（上限の下では予約が削減量を表さない）"
+    },
+    "H5": {
+      "verdict": "支持",
+      "note": "S=98,304 で一致、S=100,352 で v の view だけ不正なメモリアクセス・連続版は正常。実測の境界は 98,304〜100,352 の間"
+    },
+    "s166_9": {
+      "verdict": "再現（F0）",
+      "note": "T1（T2V・履歴あり）では出なかったが、製品の条件を揃えた F0 で 2 ステップ目 202.9・3 ステップ目 205.2 秒。操作パネルからの 2 回目でも再現。条件が揃えば毎回出る。T1 の非再現は未解明（オーナー裁定で追わない）。重い症状の特徴は PCIe 受信 27GB/s の飽和と先読みの転送待ち"
+    }
+  }
+}

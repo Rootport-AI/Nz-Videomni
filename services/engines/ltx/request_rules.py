@@ -80,6 +80,10 @@ class RequestRules:
     name; ``default_steps`` is what an omitted ``num_inference_steps`` becomes.
     ``extra`` is a family-specific check that does not fit the table (LTX's
     distilled pipeline), returning the message of the first violation.
+    ``flag_defaults`` is this family's default for each boolean request field
+    whose schema default is ``None`` ("the family's default"), written back by
+    :meth:`fill_defaults`; it is not published by :meth:`constraints` (the
+    screens hold their own mirror). Empty for a family that declares none.
     """
 
     frames_step: int
@@ -92,6 +96,7 @@ class RequestRules:
     default_steps: int
     sampling: dict[str, SamplingRange] | None = None
     extra: Callable[["GenerateRequest"], str | None] | None = field(default=None, compare=False)
+    flag_defaults: dict[str, bool] = field(default_factory=dict)
 
     # ------------------------------------------------------------ publishing
 
@@ -123,6 +128,9 @@ class RequestRules:
             if getattr(request, name) is None:
                 default = knob.default
                 setattr(request, name, int(default) if name == "num_inference_steps" else float(default))
+        for name, default in self.flag_defaults.items():
+            if getattr(request, name) is None:
+                setattr(request, name, bool(default))
 
     def violation(self, request: "GenerateRequest") -> str | None:
         """The message of the first rule ``request`` breaks, or ``None``.

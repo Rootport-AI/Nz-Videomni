@@ -103,6 +103,11 @@ function Harness({
       // ordinary "supported" case, and the hiding itself is covered end-to-end
       // through the fixture server in `AppShell.featureScope.test.tsx`.
       keepResidentEmbeddingsUnsupported={false}
+      onVram16ModeChange={accelerationControls.setVram16Mode}
+      // 台帳 §1-101: hidden on an engine that publishes `vram16_mode` (LTX 2.3 /
+      // 2.5). Same "supported" case as the two rows above; the hiding is
+      // covered in `AppShell.featureScope.test.tsx`.
+      vram16Unsupported={false}
       onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
       // §3-166: the base-model dropdown is fed by `AppShell` in production;
       // these direct-render tests hand it an empty list (its placeholder). The
@@ -363,6 +368,7 @@ describe("SettingsPanel", () => {
         fusedGgufDequantKernel: true,
         vaeMode: "prune_vaed",
         keepResidentEmbeddings: false,
+        vram16Mode: true,
         embedMp4Metadata: true,
       });
     });
@@ -473,6 +479,7 @@ describe("SettingsPanel", () => {
         fusedGgufDequantKernel: true,
         vaeMode: "default",
         keepResidentEmbeddings: false,
+        vram16Mode: true,
         embedMp4Metadata: true,
       });
     });
@@ -560,6 +567,7 @@ describe("SettingsPanel", () => {
         fusedGgufDequantKernel: true,
         vaeMode: "default",
         keepResidentEmbeddings: false,
+        vram16Mode: true,
         embedMp4Metadata: true,
       });
     });
@@ -679,6 +687,7 @@ describe("SettingsPanel", () => {
         fusedGgufDequantKernel: false,
         vaeMode: "default",
         keepResidentEmbeddings: false,
+        vram16Mode: true,
         embedMp4Metadata: true,
       });
     });
@@ -690,6 +699,39 @@ describe("SettingsPanel", () => {
       expect(fused.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
     });
     expect(screen.getByText(/how the model's compressed weights are unpacked/)).toBeInTheDocument();
+  });
+
+  // 台帳 §1-101 (2026-10-18): VRAM 16GB mode. Same shape as the fused-kernel
+  // row: default ON, note only while ON, no gate, OFF persists.
+  it("VRAM 16GB mode defaults to ON with its note; selecting OFF hides the note and persists", async () => {
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    const user = userEvent.setup();
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    const vram16 = within(screen.getByRole("group", { name: "VRAM 16GB mode" }));
+    expect(vram16.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
+    expect(vram16.getByRole("button", { name: "OFF" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText(/Splits the denoising computation so the job fits in 16GB of VRAM/)).toBeInTheDocument();
+
+    await user.click(vram16.getByRole("button", { name: "OFF" }));
+    await waitFor(() => {
+      expect(vram16.getByRole("button", { name: "OFF" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(screen.queryByText(/Splits the denoising computation so the job fits in 16GB of VRAM/)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!)).toEqual({
+        attentionBackend: "sdpa",
+        blockSwapPrefetch: true,
+        keepResident: false,
+        fusedGgufDequantKernel: true,
+        vaeMode: "default",
+        keepResidentEmbeddings: false,
+        vram16Mode: false,
+        embedMp4Metadata: true,
+      });
+    });
+    expect(readStoredAcceleration().vram16Mode).toBe(false);
   });
 
   // §3-164 (2026-09-24): the Output group's one row, between Acceleration and

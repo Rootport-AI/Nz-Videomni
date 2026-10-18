@@ -1881,6 +1881,10 @@ class PipelineManager:
             # auto-downgrade (see engine/worker._resolve_keep_resident) becomes
             # visible — the real-device gate judges on this field, not on logs.
             "keep_resident_used": outcome.keep_resident_used,
+            # Acceleration, MiniMax H3 only: whether the denoise ran in VRAM
+            # 16GB mode ("off" | "on"), same relay discipline again. Always null
+            # on LTX (refused there) and on the mock backend.
+            "vram16_mode_used": outcome.vram16_mode_used,
             # Acceleration, LTX 2.5 only: whether the
             # EmbeddingsProcessor's CPU state dict actually stayed resident
             # ("off" | "on" — no degrade path, so never "on->off"). Same relay

@@ -582,6 +582,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
     fusedGgufDequantKernel: true,
     vaeMode: "prune_vaed",
     keepResidentEmbeddings: false,
+    vram16Mode: true,
     embedMp4Metadata: true,
   } as const;
 
@@ -624,6 +625,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
       fusedGgufDequantKernel: true,
       vaeMode: "default",
       keepResidentEmbeddings: false,
+      vram16Mode: true,
       embedMp4Metadata: true,
     } as const;
     const withDefaults = (engineFamily: string) =>

@@ -635,6 +635,23 @@ def test_acceleration_fields_default_values_generate():
     # -- the same "gate green -> default on" step block_swap_prefetch took.
     assert req.fused_gguf_dequant_kernel is True
     assert req.vae_mode == "default"
+    # VRAM 16GB mode (MiniMax H3 only): the schema default is None (= the
+    # family's default, written back by validate_for_family on H3 only).
+    assert req.vram16_mode is None
+
+
+def test_vram16_mode_is_single_only_and_type_checked(client):
+    from api.models import VRAM16_MODE_DEFAULT_H3, GenerateChainRequest
+
+    assert VRAM16_MODE_DEFAULT_H3 is True
+    # H3 refuses every chain, so the chain schema does not carry the field.
+    assert "vram16_mode" not in GenerateChainRequest.model_fields
+    assert GenerateChainRequest(**CHAIN_BASE).to_clip_request(0).vram16_mode is None
+    # On LTX: false (and omission) pass; a non-bool is a pydantic 422.
+    body = {**BASE, "width": 512, "height": 320, "num_frames": 49}
+    assert client.post("/api/v1/generate", json={**body, "vram16_mode": False}).status_code == 202
+    r = client.post("/api/v1/generate", json={**body, "vram16_mode": "not-a-bool"})
+    assert r.status_code == 422
 
 
 def test_acceleration_fields_default_values_chain():

@@ -74,10 +74,10 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
     end_context_frames_max: 136,
     chain_comfort_token_budget: 40000,
     single_comfort_token_budget: 44880,
-    // 快適上限マーカーの配信テーブル（2026-08-31。重みの種別の次元は第 9 弾
-    // §1-31・2026-10-06）。正本はバックエンドのマニフェスト
-    // `scripts/manifests/10-ltx23.json`・`20-ltx25.json` の `comfort`（値の根拠は
-    // `Docs/COMFORT_LIMIT_TABLE.md` 第1節）；ここはオフラインフォールバック用の
+    // 快適上限マーカーの配信テーブル。正本はバックエンドのマニフェスト
+    // `scripts/manifests/*.json` の `comfort`（値の根拠は
+    // `Docs/COMFORT_LIMIT_TABLE.md` 第1節。`comfort` の無い系統はプロファイルが
+    // 無く、マーカーを出さない＝`shell/comfortTable.ts` の `comfortProfileMissing`）；ここはオフラインフォールバック用の
     // ミラーで、`bridge/mockBridge.ts` の `MOCK_CONFIG_BODY.limits.comfort_budgets`
     // と同内容でなければならない。どの行も `requires.weight_class` を持つ
     // （種別が分からないあいだはどの行にも一致しない）。

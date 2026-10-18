@@ -84,19 +84,15 @@ interface FeatureUiEntry {
  *    SERVER's features are `outpaint`/`inpaint` (that is what a request field
  *    and a 422 say) while the sub-tabs are `outpainting`/`inpainting`; this
  *    table is exactly where that translation lives, and nothing downstream has
- *    to know either name. `inpaint` joined on 2026-09-14 (§3-55), when
- *    Inpainting stopped being a disabled mock and shipped LTX 2.3-only. NO
- *    ENGINE PUBLISHES IT TODAY: §3-150 (2026-09-15) built the LTX 2.5 driver,
- *    so all three rows are currently dormant. THE ROWS STAY REGARDLESS — this
- *    table is a translation, not a list of today's limitations, and a name
- *    nobody publishes closes nothing (see `disabledUiTargets`).
- *  - **alpha_gen** is the fourth Edit sub-tab (Alpha Gen 第 2 弾, 2026-10-13).
- *    Unlike the three above it is LIVE: LTX 2.3 publishes it, because the
- *    alpha-gen IC-LoRA exists for LTX 2.5 only.
- *  - **MiniMax H3 第 2 弾 (2026-10-17, 裁定 30)** gave Create's own sections
- *    rows of their own, because an engine that can generate at all but not in
- *    LTX's every way has to close parts of Single — which until then no
- *    engine's limitation could reach:
+ *    to know either name. Which engines publish these names is the server's
+ *    fact, not this table's: the rows are a translation, not a list of
+ *    today's limitations, and a name nobody publishes closes nothing (see
+ *    `disabledUiTargets`).
+ *  - **alpha_gen** is the Alpha Gen Edit sub-tab; an engine without the
+ *    alpha-gen IC-LoRA (it exists for LTX 2.5 only) publishes it.
+ *  - **Create's own sections** have targets of their own, because an engine
+ *    that can generate at all but not in LTX's every way has to close parts
+ *    of Single:
  *     - `reference_video` also takes Create's reference-video (IC-LoRA)
  *       accordion — the same request field (`reference_video_id`) as Chain's
  *       panel. Create HIDES it (IC-LoRA is LTX's own mechanism).
@@ -112,13 +108,13 @@ interface FeatureUiEntry {
  *       once a card exists); `keyframe_strength` greys each card's strength.
  *       Both name the same request field (`conditioning_images`) from two
  *       sides, which is why they are two names.
- *    LTX publishes none of these four names, so none of this reaches it.
+ *    LTX publishes none of these names, so none of this reaches it.
  *  - **prune_vaed / keep_resident_embeddings** are Settings rows rather than
  *    generation surfaces, and both carry a `resets` because their choice is
  *    persisted in `localStorage`. Their SCOPES point in opposite directions:
  *    an engine that publishes `prune_vaed` refuses the pruned decoder, while
  *    `keep_resident_embeddings` names a component only LTX 2.5 HAS, so it is
- *    LTX 2.3 that publishes it. The table does not care — either way the row
+ *    the engines without it that publish it. The table does not care — either way the row
  *    closes and the stored value goes back to the server default.
  *
  * Note what is NOT here. `single` and `inventory` have no row and never will:
@@ -166,12 +162,11 @@ const FEATURE_UI_BY_NAME: ReadonlyMap<string, FeatureUiEntry> = new Map(Object.e
 /** Targets no feature names directly — they close only once everything they
  * CONTAIN is closed.
  *
- * The Edit tab is the only one today: it hosts Retake, Outpainting and — since
- * §3-55 (2026-09-14) — Inpainting, so it survives as long as ONE of its
- * sub-tabs is runnable; a base model that could outpaint but not retake would still have a
- * use for the tab. Inpainting joined this list on the day it stopped being a
- * disabled mock: a mock closes nothing, but a real sub-tab keeps the tab alive
- * on its own. Alpha Gen (2026-10-13) joined the same way.
+ * The Edit tab is the only one today: it survives as long as ONE of its
+ * sub-tabs is runnable — a base model that could outpaint but not retake
+ * would still have a use for the tab. Every real sub-tab belongs in its
+ * `whenAll` (a mock closes nothing, but a real sub-tab keeps the tab alive on
+ * its own).
  * Chained needs no entry here because `chain` names it directly.
  *
  * Invariant: SINGLE-PASS evaluation — a `whenAll` must never name another
@@ -194,9 +189,9 @@ const CONTAINER_TARGETS: ReadonlyArray<{ target: UiTarget; whenAll: readonly UiT
  * Every UI part the loaded base model's `unsupported_features` closes.
  *
  * Unknown names are ignored rather than treated as suspicious — see the note
- * under {@link FEATURE_UI}. That is what makes the ordinary case (LTX 2.3, or
- * any backend older than §3-98 P5 that publishes no list at all) answer with an
- * empty set and no special-casing anywhere.
+ * under {@link FEATURE_UI}. That is what makes a backend older than §3-98 P5
+ * that publishes no list at all answer with an empty set, with no
+ * special-casing anywhere.
  */
 export function disabledUiTargets(unsupportedFeatures: readonly string[]): ReadonlySet<UiTarget> {
   const disabled = new Set<UiTarget>();
@@ -290,14 +285,8 @@ export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): 
   };
 }
 
-/** The four Edit-screen sub-tabs an engine's feature scope can take down
- * individually, keyed the way `EditScreen`'s `subTabsDisabled` prop is.
- *
- * `inpainting` joined on 2026-09-14 (§3-55): until that day Inpainting was a
- * mock with no panel behind it, disabled on EVERY base model and therefore
- * needing no feature name at all. Since §3-150 (2026-09-15) both shipped
- * engines run it, so no live backend closes this sub-tab — the mechanism is
- * kept for the next engine, and `featureScope.test.ts` keeps exercising it. */
+/** The Edit-screen sub-tabs an engine's feature scope can take down
+ * individually, keyed the way `EditScreen`'s `subTabsDisabled` prop is. */
 export interface EditSubTabsDisabled {
   /** `RetakePanel` — 撮り直し (`retake`). */
   retake: boolean;
@@ -305,18 +294,19 @@ export interface EditSubTabsDisabled {
   outpainting: boolean;
   /** `InpaintingPanel` — マスクによる部分再生成 (`inpaint`). */
   inpainting: boolean;
-  /** `AlphaGenPanel` — 透過用マットの作成 (`alpha_gen`). LTX 2.3 publishes it. */
+  /** `AlphaGenPanel` — 透過用マットの作成 (`alpha_gen`). */
   alphaGen: boolean;
 }
 
 /**
  * Which of {@link EditSubTabsDisabled}'s sub-tabs `unsupportedFeatures` makes
- * unusable — four `false`s for the ordinary case.
+ * unusable — all `false` for the ordinary case.
  *
- * All four `true` at once is possible here, but the caller never sees it: that
- * is exactly the condition {@link CONTAINER_TARGETS} closes `mode.edit` on, so
- * the screen this feeds is not mounted at all. Answering honestly anyway keeps
- * this a plain reading of the table rather than a special case.
+ * All of them `true` at once is exactly the condition
+ * {@link CONTAINER_TARGETS} closes `mode.edit` on: the screen stays mounted
+ * (every mode screen does) but the shell greys its tab and bounces out of it,
+ * so the user never sees this answer. Answering honestly anyway keeps this a
+ * plain reading of the table rather than a special case.
  */
 export function editSubTabsDisabledFor(unsupportedFeatures: readonly string[]): EditSubTabsDisabled {
   const disabled = disabledUiTargets(unsupportedFeatures);
@@ -356,8 +346,8 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
   };
 }
 
-/** The parts of Create (Single) an engine's feature scope can close (MiniMax
- * H3 第 2 弾). Keyed the way `SingleScreen`'s `sectionsUnavailable` prop is.
+/** The parts of Create (Single) an engine's feature scope can close. Keyed
+ * the way `SingleScreen`'s `sectionsUnavailable` prop is.
  * How each one closes is the screen's business (see {@link FEATURE_UI}'s
  * notes): the reference video is hidden, the rest grey. */
 export interface SingleSectionsDisabled {
@@ -372,7 +362,7 @@ export interface SingleSectionsDisabled {
 }
 
 /** Which of {@link SingleSectionsDisabled}'s parts `unsupportedFeatures`
- * closes — four `false`s for the ordinary case (both LTX engines). */
+ * closes — all `false` for the ordinary case (both LTX engines). */
 export function singleSectionsDisabledFor(unsupportedFeatures: readonly string[]): SingleSectionsDisabled {
   const disabled = disabledUiTargets(unsupportedFeatures);
   return {

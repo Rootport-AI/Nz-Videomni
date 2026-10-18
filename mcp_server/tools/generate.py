@@ -5,18 +5,20 @@
 フィールド（``pipeline`` / ``guidance_scale`` / ``crf``）は出さない
 （``Docs/MCP_SERVER_DESIGN.md`` §2 の D8）-- ``two_stage_hq`` はエンジンが使わない
 モック（LTX 2.5 では 422）で、CFG は LTX の distilled パイプラインで 1.0 に縛られ、
-MiniMax H3 には CFG そのものが無いため。``num_inference_steps`` も長く同じ理由で
-隠していたが、MiniMax H3 ではステップ数と shift（``shift_video`` /
-``shift_audio``）が利用者の選ぶ値になったので、``submit_generate`` に限り任意引数で
+MiniMax H3 には CFG そのものが無いため。``num_inference_steps`` と shift
+（``shift_video`` / ``shift_audio``）は、ステップ数が固定の LTX には意味が無いが
+MiniMax H3 では利用者の選ぶ値なので、``submit_generate`` に限り任意引数で
 公開する（既定 ``None`` は送らない＝ベースモデルの既定値。LTX では 8 以外は 422。
-連結生成は H3 では使えないので ``submit_chain`` には出さない）。一方で Acceleration 機能の引数（``GenerateRequest`` の Acceleration の
+連結生成は H3 では使えないので ``submit_chain`` には出さない）。
+一方で Acceleration 機能の引数（``GenerateRequest`` の Acceleration の
 区画）はすべて公開する（同書 §2 の D12・D22）--
 ``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）と
 ``block_swap_prefetch``（既定は ``BLOCK_SWAP_PREFETCH_DEFAULT``。先読み block swap
 で、off にすると同期スワップになる。既定の向きは実機ゲートの全合格を条件に
 オーナーが決めた。VERIFICATION_LOG §44）、``keep_resident``（既定は
 ``KEEP_RESIDENT_DEFAULT``。ジョブ間のCPU骨格キャッシュ。LTX 2.5 では常駐するの
-がテキストエンコーダだけで、同じ名前でも中身が違う。VERIFICATION_LOG §76）、
+がテキストエンコーダだけ、MiniMax H3 では DiT・映像の復号器・音声 VAE で、
+同じ名前でも中身が違う。VERIFICATION_LOG §76・設計正本 MINIMAX_H3_DESIGN §4）、
 ``keep_resident_embeddings``（既定は ``KEEP_RESIDENT_EMBEDDINGS_DEFAULT``。
 **LTX 2.5 専用**で、埋め込み処理器のジョブ間常駐。VERIFICATION_LOG §92。他の
 項目と違い、LTX 2.3 を選んでいるときに既定以外にすると422になる向きである）、

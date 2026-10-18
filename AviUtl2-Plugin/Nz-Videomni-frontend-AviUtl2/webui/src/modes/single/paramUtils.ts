@@ -1,11 +1,10 @@
 /**
- * Pure helpers enforcing the "frozen constraints" from
- * Docs/API_REFERENCE.md §5.1 that the Create form must never violate:
- * width/height are multiples of 64, num_frames is 8n+1 — for LTX. Since
- * MiniMax H3 第 2 弾 (2026-10-17) the grid and the multiple are arguments
- * (served per base model in `GET /models`' `constraints`), and every one of
- * them defaults to the LTX value, so a caller that omits them is unchanged.
- * Kept dependency-free
+ * Pure helpers enforcing the "frozen constraints" (Docs/API_REFERENCE.md
+ * §5.1) a form must never violate: the width/height multiple and the
+ * `num_frames` grid. Both are per base model (`GET /models`' `constraints`,
+ * see `shell/generationConstraints.ts`), so they are arguments here, each
+ * defaulting to the LTX value ({@link LTX_FRAME_GRID},
+ * {@link LTX_DIMENSION_MULTIPLE}). Kept dependency-free
  * so they're trivially unit-testable and reusable by both the form and the
  * "Get size from AviUtl2" button.
  *
@@ -44,8 +43,8 @@ export function floorToMultiple(value: number, multiple: number, min: number, ma
 }
 
 /** The `num_frames` lattice: valid values are `step * n + offset`. LTX's is
- * 8n+1 ({@link LTX_FRAME_GRID}); MiniMax H3's is 17n+5 (第 2 弾, served in
- * `GET /models`' `base_models[].constraints.num_frames`). */
+ * {@link LTX_FRAME_GRID}; every base model's own is served in `GET /models`'
+ * `base_models[].constraints.num_frames`. */
 export interface FrameGrid {
   step: number;
   offset: number;
@@ -61,8 +60,8 @@ export const LTX_DIMENSION_MULTIPLE = 64;
 
 /** Snaps `raw` to the nearest valid `num_frames` value (`grid.step * n +
  * grid.offset`, LTX's 8n+1 by default), clamped to [min, max]. `min`/`max` are
- * expected to already be on the grid (9 and `limits.max_num_frames` for LTX;
- * 22 and 481 for MiniMax H3 — both satisfy this in practice). */
+ * expected to already be on the grid (`shell/generationConstraints.ts`'s
+ * `frameLimitsFor` floors the ceiling onto it). */
 export function snapNumFrames(raw: number, min: number, max: number, grid: FrameGrid = LTX_FRAME_GRID): number {
   const { step, offset } = grid;
   const minN = Math.round((min - offset) / step);
@@ -135,10 +134,13 @@ export const FRAME_RATE_FALLBACK = 24;
  *
  * ⚠ **This is a UI policy, not an API constraint** — deliberately unlike the
  * width/height/`num_frames` rules this module's header describes, which are the
- * frozen `Docs/API_REFERENCE.md` §5.1 contract. The server accepts any float in
- * [1, 60]; we choose to send only whole numbers. The RANGE, on the other hand,
- * really is the server's (see {@link FRAME_RATE_MIN}), which is why out-of-range
- * input is clamped here rather than rejected.
+ * frozen `Docs/API_REFERENCE.md` §5.1 contract. The server's schema accepts any
+ * float in [1, 60] (an engine may narrow it through `constraints.frame_rate`;
+ * a fixed rate never reaches this function — see
+ * `shell/generationConstraints.ts`'s `fixedFrameRate`); we choose to send only
+ * whole numbers. The RANGE, on the other hand, really is the server's (see
+ * {@link FRAME_RATE_MIN}), which is why out-of-range input is clamped here
+ * rather than rejected.
  *
  * `Math.round` alone is deliberate: every frame rate that exists in practice
  * (29.97 → 30, 23.976 → 24, 59.94 → 60) lands on its intended integer in one
@@ -199,7 +201,8 @@ export function isDimensionOnGrid(value: number, multiple: number, min: number, 
   return Number.isInteger(value) && value % multiple === 0 && value >= min && value <= max;
 }
 
-/** True iff `value` is a valid `num_frames` (8n+1, via {@link isValidNumFrames})
+/** True iff `value` is a valid `num_frames` on `grid` (LTX's 8n+1 by default,
+ * via {@link isValidNumFrames})
  * within `[min, max]`. Used as a final send-time validation gate for
  * `num_frames` (Create's single field, and each of Chain's per-clip
  * durations) — the same "free-typed manual entry passes through unsnapped,

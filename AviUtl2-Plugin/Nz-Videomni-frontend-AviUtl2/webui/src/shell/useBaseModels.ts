@@ -9,8 +9,8 @@ import type { GenerationConstraints } from "./generationConstraints";
 import type { TrackPipelineLoad } from "../jobs/JobsContext";
 
 /**
- * Backs the header's BASE MODEL dropdown (multi-engine groundwork §3-97 P7;
- * `Docs/MULTI_ENGINE_DESIGN.md` §6). A base model is the unit the user picks —
+ * Backs the header's BASE MODEL dropdown (`Docs/MULTI_ENGINE_DESIGN.md` §6).
+ * A base model is the unit the user picks —
  * "LTX 2.3", "LTX 2.5", a future "Wan 2.x" — as opposed to the four
  * per-category weight files behind it, which stay in Settings' Models panel
  * (`shell/useModels.ts`).
@@ -29,7 +29,8 @@ import type { TrackPipelineLoad } from "../jobs/JobsContext";
  *    in a `finally` — a rejected switch cannot leave it stuck.
  *
  * The WebUI never chooses an inference engine. The server derives that from
- * the weight file's own GGUF metadata (§2.1); this hook only ever sends an id.
+ * the base model's descriptor and checks it against the weight file (§2.1);
+ * this hook only ever sends an id.
  *
  * `apiClient` defaults to the app-wide singleton but accepts an override so
  * tests can bind a purpose-configured mock bridge.
@@ -64,8 +65,8 @@ export interface BaseModelOption {
    * misses and the legacy fallbacks apply. */
   weightClass: string;
   /** The numeric rules this base model's engine checks a request against
-   * (`BaseModelBlock.constraints`, MiniMax H3 第 2 弾), copied as served.
-   * `null` on a backend older than 第 2 弾 that does not publish the key —
+   * (`BaseModelBlock.constraints`), copied as served.
+   * `null` on a backend that does not publish the key —
    * read through {@link UseBaseModelsResult.activeConstraints}, which turns
    * that into the LTX rules. */
   constraints: BaseModelConstraints | null;
@@ -162,7 +163,7 @@ export interface UseBaseModelsResult {
    * whenever a pipeline load finishes (`AppShell`, on `pipelineLoading`'s
    * true→false edge) to pick the new class up. */
   activeWeightClass: string;
-  /** The LOADED base model's numeric rules (MiniMax H3 第 2 弾), already
+  /** The LOADED base model's numeric rules, already
    * flattened by `shell/generationConstraints.ts`: Create's frame grid, size
    * multiple, fps range and sampling sliders. Read off `active` for the same
    * reason {@link activeEngineFamily} is — while a switch is in flight the
@@ -198,7 +199,7 @@ function toOption(block: BaseModelBlock): BaseModelOption {
     // `null` (the server could not tell, or a non-active base model) and an
     // absent field (a backend older than §1-31) both mean "unknown".
     weightClass: block.transformer_weight_class ?? "",
-    // Absent (a backend older than MiniMax H3 第 2 弾) means "the LTX rules";
+    // Absent (a backend that predates the key) means "the LTX rules";
     // `resolveGenerationConstraints` supplies them.
     constraints: block.constraints ?? null,
   };

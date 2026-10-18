@@ -21,11 +21,10 @@ Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
 mock, a variable category set): ``H3Runner`` subclasses ``LTXRunner``, the mock
 is 2.3's with its own label, and the categories are the same four words.
 
-THE WORKER PROTOCOL (Docs/MINIMAX_H3_DESIGN.md §8, with the stage-2 delta of
-the stage-2 plan §3.2): ``load`` carries the four paths, ``tokenizer_dir``,
-``blocks_on_gpu``, ``attention_backend``, ``block_swap_prefetch`` and
-``deterministic`` (``te_layers_on_gpu`` is gone — the text encoder is read
-layer by layer straight from the file). ``generate`` carries the job, the
+THE WORKER PROTOCOL (Docs/MINIMAX_H3_DESIGN.md §8): ``load`` carries the four
+paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
+``block_swap_prefetch`` and ``deterministic`` (no text-encoder knob: the text
+encoder is read layer by layer straight from the file). ``generate`` carries the job, the
 conditioning ``images`` (``{path, frame_idx}``; H3 has no strength), and the
 per-job ``attention_backend`` / ``block_swap_prefetch`` (always sent: an absent
 key would mean "the load value", not "off") and ``keep_resident`` (only when
@@ -119,7 +118,7 @@ H3_FRAME_RATE = 24.0
 #: The largest 17n+5 count the schema ceiling allows (481 = 17*28+5).
 H3_FRAMES_MAX = (NUM_FRAMES_MAX - H3_FRAMES_OFFSET) // H3_FRAMES_STEP * H3_FRAMES_STEP + H3_FRAMES_OFFSET
 
-#: This family's numeric rules (the stage-2 plan §3.3). The sampling defaults
+#: This family's numeric rules (Docs/MINIMAX_H3_DESIGN.md §9). The sampling defaults
 #: are the engine's own (engine_h3/constants.py: 20 Euler steps, shifts 12 / 3
 #: — the official scheduler pair); they are restated here because the app venv
 #: cannot import the engine package, and they must agree with it.

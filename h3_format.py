@@ -1,8 +1,8 @@
 """MiniMax H3 safetensors header inspection -- torch-free.
 
 Lives next to ``sft_quant_format.py`` / ``chain_math.py`` because the app
-process (its own torch-less ``.venv``) will call it for the pre-load check in
-the second stage, and the engine (``engine_h3``) calls it before it builds
+process (its own torch-less ``.venv``) calls it for the pre-load check
+(``services.model_registry.precheck_model_file``), and the engine (``engine_h3``) calls it before it builds
 anything. Built on ``sft_quant_format.read_header`` (the one place that
 validates offsets against the file size) and reads nothing but the header and
 the tiny ``comfy_quant`` byte tensors.
@@ -16,9 +16,9 @@ SPECIFICATION (R2 report, section H); no ComfyUI code is copied:
   the pruned AdaLN table's grid size G and rank R);
 * a layer's ``comfy_quant`` is read for ``format`` / ``convrot`` /
   ``convrot_groupsize`` only (top level or under ``params``); every other key
-  is ignored. Only ``int8_tensorwise`` is accepted in this stage.
+  is ignored. Only ``int8_tensorwise`` is accepted (:data:`ACCEPTED_FORMATS`).
 
-What this stage refuses, each with a Japanese reason the UI can show as is:
+What this module refuses, each with a Japanese reason the UI can show as is:
 not H3 / the non-pruned DiT (no ``adaln_t_table``; it needs the time embedder
 this engine does not build yet) / a required tensor missing / a shape that
 contradicts the others / an int8 layer without its scale or marker.

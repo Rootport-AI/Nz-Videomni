@@ -25,14 +25,13 @@ names and shapes, plus ``latents_mean``/``latents_std`` (F16 [24]) and an
 full float precision. The JSON is the one read here (R2 (3)-16: the F16 tensors
 are a rounded copy).
 
-Encoder and decoder are separate models (第 2 弾 2a, review M-8, 台帳 §1-99)
--------------------------------------------------------------------------------
+Encoder and decoder are separate models (Docs/MINIMAX_H3_DESIGN.md §8)
+----------------------------------------------------------------------
 :class:`H3VideoEncoder` (``encoder`` + ``quant_conv``) and :class:`H3VideoDecoder`
 (``post_quant_conv`` + ``decoder``) are built and read from the same file on
 their own, each with only its own tensors. T2V never builds the encoder; I2V
 builds it in float32 for one key frame and drops it. The decoder keeps the
-bf16 + float32-island precision below, exactly as the former whole-VAE class
-did, so a decode is unchanged.
+bf16 + float32-island precision below.
 
 Name mapping (``encoder_key_map`` / ``decoder_key_map``) mirrors the DiffSynth
 converter: ``decoder.mask_token`` is unused at inference and dropped;
@@ -81,10 +80,11 @@ temporal window's settled piece (after its cross-fade with the previous
 window's overlap) is un-normalised, clamped, scaled by 255, rounded and cast
 to uint8 on the GPU, then moved to the CPU on the spot; the frames are
 concatenated on the CPU. Only one window's float pieces live on the GPU at a
-time, so the decode's VRAM no longer grows with the clip (1344x768 x 345
-frames would hold ~4.3 GB of float32 pixels, twice over during the final
-concatenation). The order clamp -> x255 -> round -> uint8 is the one the
-whole-clip conversion used, so the frames are bit-identical to it.
+time, so the decode's VRAM does not grow with the clip (a whole 1344x768 x
+345-frame clip would be ~4.3 GB of float32 pixels, twice over during a final
+concatenation). The conversion is elementwise in the order clamp -> x255 ->
+round -> uint8, so converting window by window gives the same bytes as
+converting the whole clip at once.
 """
 
 from __future__ import annotations
@@ -570,7 +570,7 @@ class H3VideoEncoder(_H3VideoVAEBase):
 
     @classmethod
     def from_file(cls, path: str, *, device, dtype=torch.float32) -> "H3VideoEncoder":
-        """float32 in production (plan §3.1); ``bfloat16`` only for the gate that compares with DiffSynth."""
+        """float32 in production (module docstring, "Precision"); ``bfloat16`` only for the gate that compares with DiffSynth."""
         return super().from_file(path, device=device, dtype=dtype)
 
     @property
@@ -694,8 +694,8 @@ class H3VideoDecoder(_H3VideoVAEBase):
     def _frames_uint8(self, pixels: torch.Tensor) -> torch.Tensor:
         """Settled pixels [1, 3, f, H, W] float32 (ImageNet space) -> [f, H, W, 3] uint8 on the CPU.
 
-        Un-normalise, clamp to [0, 1], x255, round, uint8 -- the exact order of
-        the former whole-clip conversion (the T2V fingerprint depends on it);
+        Un-normalise, clamp to [0, 1], x255, round, uint8 -- the order the T2V
+        fingerprint (VERIFICATION_LOG §166) depends on;
         elementwise, so converting window by window changes no value. The cast
         runs where ``pixels`` is (the GPU) so only uint8 crosses to the CPU.
         """

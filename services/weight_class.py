@@ -88,8 +88,8 @@ def classify_transformer(path: Path, *, engine_family: str | None = None) -> str
     ``stat``; replacing the file under the same name re-classifies it.
 
     ``engine_family`` (the base model's): any family other than LTX answers
-    ``None`` without opening the file. Omitted, the file is classified (the
-    LTX callers and tests that predate the third family).
+    ``None`` without opening the file. Omitted, the file is classified by the
+    LTX rules (the tests call it that way).
     """
     if engine_family is not None and engine_family not in _LTX_FAMILIES:
         return None

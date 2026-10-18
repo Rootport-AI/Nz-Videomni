@@ -131,7 +131,9 @@ function usableAlphaGenBudget(published: number | null | undefined): number | nu
  * configuration, or `null` when there is none — in which case the caller falls
  * back to the legacy `AppLimits.spill_free_frames` lookup
  * (`modes/single/spillUtils.resolveSpillFreeFrames` for Create,
- * `shell/tokenBudget.resolveChainComfortBudget` for Chained).
+ * `shell/tokenBudget.resolveChainComfortBudget` for Chained), except when the
+ * table has no profile for the engine at all — Create and its right-click
+ * seeds then draw no line ({@link comfortProfileMissing}).
  *
  * **`null` is a normal, expected outcome, not an error.** LTX 2.3's DEFAULT
  * configuration deliberately has no row for the 4bit and Q6_K weight classes:
@@ -219,10 +221,10 @@ export function resolveComfortRow(
   return null;
 }
 
-/** MiniMax H3 第 2 弾 (2026-10-17): true when the served
- * `limits.comfort_budgets` table exists, the engine family is known, and the
- * table carries NO profile for that family — the server's way of saying "this
- * engine has no comfort line" (MiniMax H3's descriptor has no `comfort`).
+/** True when the served `limits.comfort_budgets` table exists, the engine
+ * family is known, and the table carries NO profile for that family — the
+ * server's way of saying "this engine has no comfort line" (its descriptor
+ * has no `comfort`).
  *
  * This is the ONLY case in which Create and its right-click seeds drop the
  * marker altogether instead of falling back to the legacy LTX lookup

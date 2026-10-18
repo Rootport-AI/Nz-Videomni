@@ -26,7 +26,7 @@
 
 ## 1. 結論（何をするのか）
 
-1. MiniMax H3 を第 3 のエンジン系統（`h3`）として足す。**専用の仮想環境 `.venv-engine-h3`・専用のワーカー `engine_h3/worker.py`・専用のアダプタ**を新設する（MULTI_ENGINE_DESIGN §3.3 の「同居できない系統」パターン）。
+1. MiniMax H3 を第 3 のエンジン系統（`h3`）として載せている。**専用の仮想環境 `.venv-engine-h3`・専用のワーカー `engine_h3/worker.py`・専用のアダプタ**を持つ（MULTI_ENGINE_DESIGN §3.3 の「同居できない系統」パターン）。
 2. 重みは公式系 FL2VA の**枝刈り（AdaLN の枝を表に畳んだ版）int8 ConvRot** の DiT と、**int8 ConvRot のテキストエンコーダ**、Comfy-Org 配布の映像 VAE と音声 VAE である。int8 の行列積は comfy-kitchen の CUDA 拡張に任せ、CPU オフロードは本製品の block swap と先読みに載せる。VRAM 16GB で動かす。
 3. 推論は CFG なし・1 ステップ 1 回の前向き計算で、映像と音声を同じ系列の中で同時にノイズ除去する。ステップ数と shift は要求の項目として API と操作パネルから渡し、ワーカーの引数で受け取る（§9）。
 
@@ -45,9 +45,9 @@
 - **裁定 11 【オーナー裁定】**: H3 の仮想環境は、torch の版を LTX に揃えなくてよい。comfy-kitchen の CUDA 拡張が効く版を選ぶ。利用者側の条件（ドライバ R580 以上・ディスクの増加）は README に書く。
 - **裁定 16 【オーナー裁定】**: int8 の実行は comfy-kitchen の CUDA 拡張に任せる。H3 の仮想環境の torch は、MiniMax H3 を動かすことに最も適した版を選ぶ。本製品はモデルごとに仮想環境を持てる設計なので、既存の torch の版にこだわらない。
 - **裁定 17 【オーナー裁定】**: 実装の土台は DiffSynth-Studio（Apache-2.0）、diffusers は数値の正解データ源、ComfyUI（GPL-3.0）は仕様書として読むだけとする。次の 4 点を設計に織り込む。(1) int8 の実行は comfy-kitchen に任せる（既存の読み込み〔呼び出しごとに bf16 へ戻す・groupsize 256 のみ〕はヘッダの判定には使えても、H3 の実行経路には向かない）。(2) attention は DiffSynth の区間ごとの Python ループを使わず、diffusers の「1 リクエストを 1 つの系列に詰めてマスクなしで渡す」形を手本にして書き、本製品に導入済みの SageAttention を効かせる。(3) CPU オフロードは DiffSynth の仕組みではなく、本製品の block swap と先読みを接続する。(4) ローダは「揺れを吸収する」作りで書く（DiffSynth の変換表を出発点に、ComfyUI の判定の振る舞いを仕様として自前で書く）。
-- **裁定 18 【オーナー裁定】**: 第 1 弾ではステップ数と shift を定数の既定値とし、ワーカーは引数で受け取る。画面に出すのは裁定 22 のとおり第 2 弾である。
+- **裁定 18 【オーナー裁定】**: ステップ数と shift は定数の既定値を持ち、ワーカーは引数で受け取る（画面に出すのは裁定 22）。
 - **裁定 19 【オーナー裁定】**: α版の I2V は先頭フレームのみとする。末尾キーフレームと中間キーフレームは台帳 §1-97 で扱う。
-- **裁定 22 【オーナー裁定】**: ステップ数と shift（映像・音声）の 3 本のスライダーを、第 2 弾で操作パネルと Gradio に出す。既存の CFG スライダーのモックを差し替え、項目名・スライダー本体・数値を 1 行に並べる。既定値と範囲は裁定 24 である。背景は、Turbo を融合した低ステップの配布物が多く、LoRA 未対応でも速く生成できる見込みがあることである。
+- **裁定 22 【オーナー裁定】**: ステップ数と shift（映像・音声）の 3 本のスライダーを、操作パネルと Gradio に出す。既存の CFG スライダーのモックを差し替え、項目名・スライダー本体・数値を 1 行に並べる。既定値と範囲は裁定 24 である。背景は、Turbo を融合した低ステップの配布物が多く、LoRA 未対応でも速く生成できる見込みがあることである。
 - **裁定 24 【オーナー裁定】**: ステップ数と shift（映像・音声）の 3 本のスライダーの既定値は **20／12／3**（ステップ数／shift〔映像〕／shift〔音声〕）。範囲は、ステップ数が 1〜50 の整数、shift が映像・音声とも 1〜20（刻みは 0.1）である。
 - **裁定 26 【オーナー裁定】**: 常駐（生成のあいだに読んだ重みを次の生成まで捨てずに持つこと）は α版から有りである。本製品の推奨スペックは VRAM 16GB・主メモリ 64GB であり、これに足りない機械への対応は後から考える。常駐の on／off は Settings 画面の「Acceleration／生成の高速化」の区画にある既存のトグル（モデル骨格の常駐）をそのまま使う。
 - **裁定 28 【オーナー裁定】**: I2V の先頭画像の VAE 符号化は、分布の平均を使う（サンプルしない）。ComfyUI と DiffSynth も平均を取り、diffusers だけが固定の種でサンプルする。
@@ -56,7 +56,7 @@
 - **裁定 32 【オーナー裁定】**: 常駐の方式。テキストエンコーダは層ごとにファイルから GPU へ直接読む（§4）。理由は、DiT と VAE を常駐させたまま、テキストエンコーダを主メモリへ丸ごと読む方式を取ると、主メモリの山が 64GB 機でもページファイルに溢れ、常駐の目的（速くする）と逆になるからである。直接読みにすれば、テキストエンコーダは主メモリをほぼ使わない。
 - **裁定 33 【オーナー裁定】**: 映像 VAE は符号化器と復号器に分けて組み、T2V では符号化器を読まない（§8）。
 - **裁定 34 【オーナー裁定】**: 操作パネルの Edit タブは、H3 では 4 つのサブタブ（Retake・Outpainting・Inpainting・Alpha Gen）が全部閉じるため、既存の規則によりタブごと灰色になる。裁定 30 の「グレーアウトして配置だけ決めておく」はこの形で満たす。
-- **裁定 35 【オーナー裁定】**: NAG のアコーディオンは H3 では非表示でなく灰色にし、要求に NAG の項目を載せない（非表示にすると、有効にしたまま解除できず全ジョブが 422 になるため）。Single の A2V カードは連結要求そのものなので `chain` で閉じる（灰色）。IC-LoRA の参照動画のアコーディオンは非表示にする。
+- **裁定 35 【オーナー裁定】**: NAG のアコーディオンは H3 では非表示でなく灰色にし、要求に NAG の項目を載せない（非表示にすると、有効にしたまま解除できず全ジョブが 422 になるため）。IC-LoRA の参照動画のアコーディオンは非表示にする。Single の A2V カードとバッチ A2V は H3 では非表示にする（2026-10-18 の目視の所感。当初の「連結要求そのものなので `chain` で閉じる〔灰色〕」を置き換えた。いまのコードは `featureScope.ts` の `chain` の行で灰色にしており、非表示への変更は台帳 §1-100）。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -76,7 +76,7 @@
 - **CFG なし【設計】**: モデルはガイダンス蒸留済みで、negative prompt も guidance scale も無い。1 ステップにつき前向き計算は 1 回である。
 - **Rectified Flow の Euler**: モデルの出力は「データ方向の速度」v で、`x0 = x + σ·v` と読む（一般の flow-match と符号が逆）。更新は `x_next = x + (σ − σ_next)·v`。N ステップは N 回の評価である。
 - **shift は 2 本立て**: σ の列は `base = linspace(1, 0, N+1)[:-1]`、`σ = s·base / (1 + (s−1)·base)` で作る。s は映像用と音声用の 2 つで、同じ添字 i について映像は σ_v[i]、音声は σ_a[i] を使い、出力もそれぞれの列で別々に更新する。モデルに渡す時刻は `t = 1 − σ`（1 が無ノイズ）。
-- **フレームと解像度の規約**: 24fps 固定。フレーム数は **17n+5**。潜在フレーム数は `T' = 5n + 2`、音声の潜在数は `A = round(F / 24 × 40)`（例: 124 フレームで T'=37、A=207）。縦横は **32 の倍数**（映像 VAE の 16 倍圧縮とパッチ 2 の積）。短辺 768 が既定である。
+- **フレームと解像度の規約**: 24fps 固定。フレーム数は **17n+5**。潜在フレーム数は `T' = 5n + 2`、音声の潜在数は `A = round(F / 24 × 40)`（例: 124 フレームで T'=37、A=207）。縦横は **32 の倍数**（映像 VAE の 16 倍圧縮とパッチ 2 の積）。モデルの学習上の既定は短辺 768 である（本製品の既定の画角ではない）。
 - **系列の並び**: `[ text(L) | cond | audio(2A) | video(T'×(H/32)×(W/32)) ]`。cond は条件付けのキーフレーム行で、T2V では空である。attention は系列全体で全結合（区間ごとの制限もマスクも無い）。token_refiner（テキストだけを整える 2 ブロック）はテキスト行の中に閉じ、時刻にも位置にも依存しないので、ループの前に 1 回だけ計算する。
 - **AdaLN の添字**: 各行が使う変調の行は `時刻の番号 × 3 + タグ`（タグは 0＝映像、1＝テキスト、2＝音声）。時刻の番号は、映像・テキスト・音声（と条件行）の時刻を `unique` でまとめた番号である。最終層の添字は時刻の番号だけである。
 - **枝刈り版の AdaLN（表の補間）**: 時刻はスカラーなので、「時刻の埋め込み→AdaLN 射影」の写像を格子点の表（`adaln_t_table`、格子数 G・ランク R）に先計算してある。表の引き方は次の式で、SiLU は挟まない（float32）。
@@ -157,7 +157,7 @@
 ## 7. ヘッダの判定と吸収する揺れ
 
 - **判定はテンソル名の指紋**: H3 の DiT は `{接頭辞}video_patch_proj.weight` と `{接頭辞}audio_patch_proj.weight` の**同時存在**で判定する。GGUF の KV のようなメタデータには頼らない（コミュニティ配布物は KV が偽装・欠落しており、safetensors の `__metadata__` も枝刈り版では空である）。MULTI_ENGINE_DESIGN §2.2・§2.4 の判定とは別の経路で、H3 系統は safetensors にこの指紋を使う。
-- **吸収する揺れ（第 1 弾でただで取れる分）**:
+- **吸収する揺れ**:
   - 接頭辞 4 通り（無し／`model.diffusion_model.`／`model.model.`／`net.`）を剥がす。
   - 構成（層数・幅・ヘッド数・ffn・AdaLN 表の格子数 G とランク・枝刈りか否か）は、メタデータでなく**テンソルの形状**から導く。
   - `comfy_quant` は `format`・`convrot`・`convrot_groupsize` の 3 キーだけを読み、他のキーは無視する。
@@ -214,7 +214,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
   - `attention_backend`・`block_swap_prefetch`: 無ければ `load` の値。アダプタは毎回送る。
 - **イベント**: `ready`（`sage_available`）／`progress`（`stage`・`index`・`total`）／`done`／`error`（`detail`）
 - **進捗の段階名**: LTX の語彙を借りる。`encode`／`stage1_denoise`（単段のノイズ除去。H3 は 1 段なのでこの名前だけを使う）／`decode`。アダプタは進捗の割合計算に `_read_worker_events(one_stage=True)` を使う。`encode` の総数は T2V で 3、I2V で 4（4 つ目が画像の符号化）である。
-- **`done` のキー**: `seed_used`・`sampler`・`num_inference_steps`・`shift_video`・`shift_audio`・`peak_vram_mb`・`peak_vram_reserved_mb`・`rss_peak_gib`・`seconds`・`num_frames`・`frame_rate`・`width`・`height`・`size_bytes`・`attention_used`（ジョブごとの値）・`block_swap_prefetch_used`・`keep_resident_used`（`"on"`／`"off"`。このジョブの終わりに保持したか）・`images_used`（0 か 1）・`commit_gib`・`commit_peak_gib`（コミット量）・`audio_samples`（切り揃え後）・`audio_samples_decoded`（復号した全量）・`h3`（段ごとの秒数と RSS を `phases` に、使われた量子化経路を `quant_backends` に持つ。I2V のときは `phases` に `image_encode`、常駐を使うときは `dit_source`・`vae_source` が入る）
+- **`done` のキー**: `seed_used`・`sampler`・`num_inference_steps`・`shift_video`・`shift_audio`・`peak_vram_mb`・`peak_vram_reserved_mb`・`rss_peak_gib`・`seconds`・`num_frames`・`frame_rate`・`width`・`height`・`size_bytes`・`attention_used`（ジョブごとの値）・`block_swap_prefetch_used`・`keep_resident_used`（`"on"`／`"off"`。このジョブの終わりに保持したか）・`images_used`（0 か 1）・`commit_gib`・`commit_peak_gib`（コミット量）・`h3`（段ごとの秒数と RSS を `phases` に、使われた量子化経路を `quant_backends` に持つ。`phases.decode` には `audio_samples`〔切り揃え後〕と `audio_samples_decoded`〔復号した全量〕が入る〔`engine_h3/pipeline_h3.py` の `_decode`〕。I2V のときは `phases` に `image_encode` が入る。`phases` の `denoise` には `dit_source`、`decode` には `vae_source` がいつも入る〔`"file"`／`"resident"`〕）
 
 ### 映像 VAE の構成
 
@@ -241,7 +241,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 ## 9. 定数と既定値
 
-- **値の正本は `engine_h3/constants.py`** である。本書は値を写さない。
+- **ワーカーの既定値と定数の正本は `engine_h3/constants.py`**、**API の既定と範囲の正本は `services/engines/h3/adapter.py` の `REQUEST_RULES`** である。本節の数値は裁定 24 と規約の代表値として引くもので、食い違えば正本を採る。
 - 置くもの: ステップ数・shift（映像・音声）の既定値、24fps、空間 32（1 トークン＝32px 四方）、VAE の圧縮率とクリップ長、音声の潜在レート・サンプルレート・ホップ長、モダリティのタグ（映像 0・テキスト 1・音声 2）、ログの接頭辞 `[h3_worker]`、`latent_frames(F)`・`audio_latents(F)`（17n+5 を外れた F は `ValueError`）。
 - ステップ数と shift の既定は **20／12／3**、範囲はステップ数が 1〜50 の整数・shift が 1〜20（刻み 0.1）である（裁定 24）。ワーカーの `generate` は引数で受け取り、省略時に既定値を使う。API では `num_inference_steps`・`shift_video`・`shift_audio` の既定が `null`（＝系統の既定値）で、アプリ側が系統の既定値を要求へ書き戻してからワーカーへ渡す。
 - 解像度の規約: 縦横は 32 の倍数、フレーム数は 17n+5 かつ `MIN_NUM_FRAMES = 22` 以上（F ≥ 22。F=5 は拒否する）、フレームレートは 24 固定。違反は日本語の理由つきの `ValueError` で止める。
@@ -268,39 +268,14 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 |---|---|
 | 第 1 弾（完了。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165） | 仮想環境・重みの取得・`engine_h3/` と `h3_format.py`・T2V セルフテスト 1 本・本書 |
 | 第 2 弾（完了。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166） | I2V（先頭フレーム）のセルフテスト → アダプタ・系統登録・記述子・ヘッダ判定（`h3_format.py` をアプリ側の事前検査から呼ぶ）・API の制約（17n+5・24fps 固定・32 の倍数）・API にステップ数と shift（映像・音声）の 3 項目・操作パネル（ドロップダウンは自動追随・フレーム数のスナップ・快適上限マーカーの非表示・`featureScope.ts`・ステップ数／Shift（映像）／Shift（音声）の 3 本のスライダー〔裁定 22〕）・Gradio の同じ 3 本・MCP の最小対応・テスト・常駐 |
-| 第 3 弾 | `install-MiniMaxH3.bat`（仮想環境の構築と取得を 1 回で）・`Ensure-EngineVenv` の 3 回目の呼び出し・freeze・README の要件行（ドライバ・GPU 世代・容量） |
-| 以後 | 台帳 §1-95（快適上限の較正）・§1-97（末尾と中間キーフレーム） |
+| 第 3 弾 | `install-MiniMaxH3.bat`（仮想環境の構築と取得を 1 回で）・`Ensure-EngineVenv` の 3 回目の呼び出し・インストーラで作った環境での freeze の取り直し・README の要件行（ドライバ・GPU 世代・容量） |
+| 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限は、較正が済むまで記述子に `comfort` の行を持たせず、操作パネルのマーカーを出さない。
 
-### 門（第 1 弾）
+### 門
 
-| 門 | 内容 | GPU |
-|---|---|---|
-| G0 | 仮想環境の構築が成功し、主要パッケージが import できる。`torch.version.cuda` が 13.0。freeze と容量を記録 | 不要 |
-| G1 | `list_backends()["cuda"]` が使用可能で、能力に `int8_linear` を含む（合否はこれだけ。SageAttention の可否は記録に回す） | 不要 |
-| G2 | 合成の int8 重みと第 1 弾の系列の大きさの入力で、`int8_linear` が CUDA 経路で走り、eager の結果と末尾の行まで一致する | 使う |
-| G3 | block swap の噛み合わせ: `H3Int8Linear` 入りの 50 個のブロック列に block swap を `install` し、CUDA 経路を示す印が `"on"`、かつ「全ブロック常駐」「同期」「先読み」の 3 通りで出力がビット単位で一致 | 使う |
-| G4 | 部品の数値照合: DiffSynth の実装を正解側に、同じ重みから部品ごと（ブロック 1 個・token_refiner・最終層・AdaLN の表・RoPE・VAE・テキストエンコーダの先頭と末尾の層）に同じ入力で比べる。テキストエンコーダは層オフロードの on と off で出力がビット単位で一致 | 使う（小さい） |
-| G5 | セルフテスト 1 本: 640×384・124 フレーム・24fps・20 ステップ・固定シードで、映像と音声の入った mp4 ができ、`done` に必要な数値が出る | 使う |
-
-- GPU を使う門は同時に 1 体だけ回す。結果は記録簿に書く。クローズはオーナーの判断である。
-
-### 門（第 2 弾）
-
-結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166 を見よ。
-
-| 門 | 内容 | GPU |
-|---|---|---|
-| 2a-G1 | ワーカーのテスト全件（新設分を含む）が通る。`engine_h3` 配下に `inference_mode` が無い | 不要 |
-| 2a-G2 | テキストエンコーダの直接読みの出力が、第 1 弾の方式の出力とビット一致する（T2V）。主メモリの山を記録する | 使う |
-| 2a-G3 | I2V の部品の照合（DiffSynth の写しを正解側に）: 画像の符号化・視覚塔の出力・トークン列とタグ・条件行の並び・時刻の番号・RoPE の座標 | 使う（小さい） |
-| 2a-G4 | I2V 1 本（先頭フレームと入力画像の PSNR を記録）。T2V の回帰（常駐なしで第 1 弾の指紋と一致）。常駐の照合（1 プロセスで T2V・I2V・キー無しを続け、指紋・読み込みの省略・合間の GPU の割り当て・コミット量の戻りを見る） | 使う |
-| 2a-G5 | 映像の復号 VRAM: 大きな画角（1344×768・345 フレーム）の潜在の復号だけを行い、予約ピークが 16GB の 8 割（AviUtl2 のプレビューと同居する余裕）未満で、出力が CPU の uint8 であること | 使う |
-| 2b-G1 | アプリのテスト全件が通る。`GET /models` に H3 と `constraints` が出る。mock で T2V と I2V が HTTP 経由で通る。LTX 2.3／2.5 の 422 の形と文言、`metadata.json` の `num_inference_steps` が変わらない | 不要 |
-| 2b-G2 | API 経由の実生成: H3 を読み込み（事前検査が実ファイルで通る）、`POST /generate` で T2V と I2V を 1 本ずつ。`metadata.json` に `h3` が入り、ステップ数と shift が `done` にこだまする。常駐で 2 本目が速い | 使う |
-| 2c-G1 | typecheck・vitest・oxlint・Gradio と MCP のテストが通る。モックで H3 を選ぶとスライダーが出て、Chained と Edit が灰色、参照動画が消え、A2V と NAG とキーフレームの追加と強度が灰色、マーカーが出ず、フレーム数が 17n+5 にスナップし fps が 24 固定になる | 不要 |
-| 2c-G2 | 操作パネルのビルドと配置の後、AviUtl2 でオーナーが T2V と I2V を生成して目視する（スライダー・常駐・グレーアウト・マーカー非表示を含む） | 使う |
+各弾の門の内容と結果は記録簿にある（第 1 弾は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165.5、第 2 弾は同 §166.3〜§166.5・§166.9）。GPU を使う門は同時に 1 体だけ回し、クローズはオーナーの判断である。
 
 ---
 
@@ -319,8 +294,8 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 ## 13. 未決事項
 
-- **性能**: 第 1 弾の G5（640×384・124 フレーム・20 ステップ）は全体で約 140 秒だった（実測の表は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165.5）。大きな画角では block swap の転送（毎ステップ約 19GB）が上限になる可能性がある（推測）。遅すぎて快適上限の較正に支障が出るなら、LoRA（Turbo）対応の優先順位を上げる（研究ノート §10 の裁定 21）。
+- **性能**: 大きな画角ではノイズ除去の段で VRAM が溢れ、1 ステップが大きく遅くなる（実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9）。最適化は台帳 §1-101。遅すぎて快適上限の較正（§1-95）に支障が出るなら、LoRA（Turbo）対応の優先順位を上げる（研究ノート §10 の裁定 21）。
 - **m×n ≥ 2³¹ の CUDA 経路**: ソースの水準では限界が無いが、実測は台帳 §1-95（快適上限の較正）で行う。
 - **サブマシンのドライバ**: 未確認。第 3 弾の README までに確かめる。
-- **メインメモリ 32GB 機**: コミット量の山が 32GB を超えるので、ページファイル前提になる（§4。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166）。README に書く（第 3 弾）。
+- **メインメモリ 32GB 機**: α版の対象外である（推奨は 64GB。裁定 26）。コミット量の山が 32GB を超えるので、ページファイルで動く可能性はあるが未検証である（§4。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166）。
 - **ヘッダの揺れのうち後回しにしたもの**: コミュニティ版の読み込み、非枝刈り版、groupsize の混在への対応範囲。

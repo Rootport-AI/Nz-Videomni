@@ -18,15 +18,16 @@ export interface KeyframesPanelProps {
   /** Disabled while a generation is in flight/reserved, mirroring the rest
    * of the form's fields. */
   disabled: boolean;
-  /** MiniMax H3 第 2 弾: the loaded base model uses ONE keyframe (the first
+  /** The loaded base model uses ONE keyframe (the first
    * frame) — `multi_keyframes` in its `unsupported_features`. The cap itself
    * comes from `useKeyframes`' `maxItemsOverride: 1` (so the add button greys
    * once a card exists); this only adds the note saying why. Omitted = no
    * note. */
   multiUnavailable?: boolean | undefined;
-  /** MiniMax H3 第 2 弾: the loaded base model ignores keyframe strength
-   * (`keyframe_strength`) — every card's strength slider greys, with a note.
-   * Omitted = usable. */
+  /** The loaded base model does not take keyframe strength
+   * (`keyframe_strength` — the server refuses a non-default strength) — every
+   * card's strength slider greys, with a note. Omitted = usable.
+   */
   strengthUnavailable?: boolean | undefined;
 }
 

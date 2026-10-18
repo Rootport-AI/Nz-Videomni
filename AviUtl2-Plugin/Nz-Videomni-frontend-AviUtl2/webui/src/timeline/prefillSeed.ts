@@ -245,13 +245,12 @@ export interface ResolvePrefillSeedArgs {
    * `weight_class` in the match). Both callers (`AppShell` and
    * `SingleScreen`) must hand in the same value (R-4). */
   weightClass?: string | undefined;
-  /** MiniMax H3 第 2 弾: the LOADED base model's numeric rules
+  /** The LOADED base model's numeric rules
    * (`useBaseModels().activeConstraints`). Applied to Single-targeted intents
    * only — the frame grid and floor, the size multiple, and a fixed frame rate
    * (which wins over `fpsPolicy`). Chain-targeted intents keep the LTX rules
-   * (an engine with other rules closes Chained). Omitted = the LTX rules, so
-   * every pre-existing caller is unchanged. Both callers (`AppShell` and
-   * `SingleScreen`) must hand in the same value (R-4). */
+   * (an engine with other rules closes Chained). Omitted = the LTX rules.
+   * Both callers (`AppShell` and `SingleScreen`) must hand in the same value. */
   constraints?: GenerationConstraints | undefined;
 }
 
@@ -290,7 +289,7 @@ export interface PrefillSeed {
  * useMaterialSize = `sizePolicy` ≠ `defaults`) for width/height → the three-tier
  * fps seed (material → project → config default, see below) → the intent's
  * {@link DurationPolicy} + {@link materialDurationForIntent} fed
- * into `computeTargetNumFrames` (which owns the 8n+1 snap and the comfort-
+ * into `computeTargetNumFrames` (which owns the grid snap and the comfort-
  * ceiling clamp) → the one intent-specific DURATION cap
  * ({@link END_SOURCE_SEED_MAX_FRAMES}). `computeTargetNumFrames`'s `null` (policy
  * resolved nothing) is surfaced as `undefined` so the caller falls back to the
@@ -299,7 +298,7 @@ export interface PrefillSeed {
 export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   const { intent, selection, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass } =
     args;
-  // MiniMax H3 第 2 弾: the served rules apply to the Single screen's seeds
+  // The served rules apply to the Single screen's seeds
   // only; a Chain-targeted seed keeps LTX's (see the arg's doc comment).
   const singleTarget = targetModeForIntent(intent) === "single";
   const rules = singleTarget ? (args.constraints ?? LTX_GENERATION_CONSTRAINTS) : LTX_GENERATION_CONSTRAINTS;
@@ -364,7 +363,7 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   const usableMaterialFps = snapFrameRate(rawMaterialFps) !== undefined ? rawMaterialFps : undefined;
   // The RAW rate the seed came from, kept beside the snapped one purely so the
   // toast can name it (see `PrefillSeed.frameRateSnappedFrom`).
-  // MiniMax H3 第 2 弾: an engine fixed at one frame rate overrides the fps
+  // An engine fixed at one frame rate overrides the fps
   // policy outright — there is nothing to seed and nothing to report.
   const fixedFps = fixedFrameRate(rules);
   const rawSeedFps = fixedFps !== null || fpsPolicy === "defaults" ? undefined : (usableMaterialFps ?? rawProjectFps);
@@ -405,7 +404,7 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // Computed against `derived.width/height` — the size this very seed is about
   // to apply — not the form's current size, which is what makes the seeded
   // DURATION and the marker that appears next to it agree.
-  // MiniMax H3 第 2 弾: an engine the served comfort table has no profile for
+  // An engine the served comfort table has no profile for
   // has NO comfort line — neither the smart one nor the legacy LTX lookup — so
   // the seed only snaps onto the grid (`comfortProfileMissing`).
   const noComfortLine = singleTarget && comfortProfileMissing(config.limits, engineFamily);

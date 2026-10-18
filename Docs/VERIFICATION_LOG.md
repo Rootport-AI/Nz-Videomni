@@ -17104,7 +17104,7 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 ### 166.2 やり方
 
 - 体制: 調査 R4a・R4b（I2V の符号化の外部規約と本製品の内部規約）・R5a・R5b（バックエンドと操作パネルの棚卸し）→ 計画（監督）→ 計画の敵対的レビュー（Opus）→ 担当 C1（2a ワーカー）・C3（2b バックエンド）・C4（2c 操作パネル）・C5（Gradio と MCP）を並行 → 門 → コードのレビュー 3 本（2a・2b・2c。Opus）→ 修正 → 取り直し。触るファイルは担当ごとに分け、GPU を使う門だけを順番に、同時に 1 体で行った。
-- 了承の単位: 2a は計画の了承で GPU を使う門（G2〜G5）をまとめて。2b・2c は夜間にまとめて了承。GPU を使う 2b-G2 は、担当のバックエンド起動が自動許可の判定で拒否されたため、同一プロセスで API を叩く方式に替えて再試行中。
+- 了承の単位: 2a は計画の了承で GPU を使う門（G2〜G5）をまとめて。2b・2c は夜間にまとめて了承。GPU を使う 2b-G2 は、サブエージェントによるサーバー起動が自動許可の判定で拒否されたため、オーナーが `run.bat` で起動したサーバーに監督が台本を実行した（§166.4）。
 - 正解データ源: 第 1 弾と同じ DiffSynth-Studio の写し（`outputs/h3-gate2/oracle/`）。I2V の視覚塔は同じ int8 ファイルを DiffSynth の経路で読ませて比べた。
 - 回帰の基準は第 1 弾の新基準（sdpa・seed 42・640×384・124 フレーム・20 ステップ）の指紋 `0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9`。
 
@@ -17237,3 +17237,41 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
   - Settings の「生成の高速化」にある「Fused GGUF Dequantization Kernel」の行が H3 でも表示される。H3 は GGUF を使わないので不適切。この行には機能名の受け口が無い。「Block-swap prefetch」の行は H3 でも効くので表示のままでよい。
   - Single の A2V のカードと Batch A2V は、灰色でなく非表示にすべき（今は `chain` の行で灰色）。
 - 残り: main への merge（オーナーの合図）。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッション。
+
+### 166.10 文書とコード内コメントの現行化（第 4 次。2026-10-18）
+
+- **結論**: main..dev の 8 コミット（131 ファイル）で変わった事実と、それで古くなった記述を、文書・Python のコメントと docstring・操作パネル（webui）のコメントで現行化した。挙動は変わらない（下の「挙動不変の担保」）。利用者や AI エージェントに見える文言（外部文言）は変えていない。
+- **やり方**:
+  - 棚卸し（読み取りのみ・Opus 3 体）: 文書は 31 件（D-001〜D-031）と判断が要るもの 7 件（J-1〜J-7）と README で誤りになった箇所 5 件（R-1〜R-5）。Python は 69 件と外部文言 5 件。webui は 134 件。文書の一覧は [`Outputs-archive/h3-stage2-reports-2026-10-17/AUDIT_docs_findings.md`](Outputs-archive/h3-stage2-reports-2026-10-17/AUDIT_docs_findings.md) に複写した。
+  - 直し: 文書は Opus、Python と webui は Sonnet が一字一句の差し替えを適用した。
+  - 敵対的レビュー（Opus 1 本）: Major 4・Minor 16 で、全件を採用した。Major は、MCP 設計 D27 の LTX の扱い（ステップ数は 8 以外が 422・shift は無視）、操作パネルの API_REFERENCE §5.2（連結生成は自分のスキーマで LTX の検査を持つ）、同 §3.5（Edit タブは 4 つのサブタブが全部閉じたときにタブごと灰色）、台帳 §1-102 の出典（本節）。
+- **挙動不変の担保**:
+  - Python 23 ファイル: docstring を除いた構文木が HEAD と一致し、コメントでも docstring でもないトークンの差は 0、`py_compile` 合格、`"""` の数が一致。レビューの採用で直した `services/engines/__init__.py` の docstring 1 件も、構文木の一致と `py_compile` を確かめた。
+  - webui 25 ファイル: コメントを除いたトークン列が HEAD と一致し、構文エラーの数も変わらない。レビューの採用で直した `i18n/strings.ts` のコメント 1 件も、差分がコメントの行だけであることを確かめた。
+  - 改行コードは行ごとに元のまま。
+- **機械ゲート**:
+  - アプリ全件: 3,413 passed・65 skipped・1 failed。落ちた 1 件は `test_mcp_registration` で、オーナーのサーバーが動いているときに落ちる既知のもの（差し替え前でも同じ）。
+  - `test_h3_format` 32 件合格。H3 エンジンのテスト 86 件合格・2 skipped。
+  - 操作パネル: typecheck・vitest 3,287 件・oxlint 合格。
+- **判断 J-1〜J-7 の結論**（監督の判断）:
+  - J-1: 主メモリ 32GB 機は α版の対象外（推奨は 64GB。研究ノートの裁定 26）。ページファイルで動く可能性はあるが未検証（設計正本 §13・仕様書 §2.1）。
+  - J-2: Single の A2V カードとバッチ A2V は、オーナーの目視の所感（2026-10-18）が裁定 35 の該当部分を置き換え、非表示にする。実装は台帳 §1-100（いまのコードは灰色）。
+  - J-3: 研究ノートの裁定 5 の後半（インストーラを先に作る）は、裁定 14（インストーラは第 3 弾）で置き換わった。
+  - J-4: `transformer_weight_class` が H3 では常に `null` である件は、台帳 §1-95 の留意に書き、較正の計画で扱う。
+  - J-5: H3 の 4 分類の正本は `services/engines/h3/adapter.py` の表そのもの（文書へ写さない）。
+  - J-6: MULTI_ENGINE_DESIGN §7 の保留の解除の根拠は、第 2 弾の計画の了承（2026-10-17・`PLAN_stage2.md` §3.3）。
+  - J-7: 台帳 §1-95 の題は「Turbo なし・int8 ConvRot」。
+- **据え置き（オーナー判断待ち）**: 外部文言 7 件（Python 5＝`engine_h3` の例外文 1 と MCP 向けの文 4、操作パネルの文言 2）は未適用。一覧と案は [`Outputs-archive/h3-stage2-reports-2026-10-17/AUDIT_external_strings.md`](Outputs-archive/h3-stage2-reports-2026-10-17/AUDIT_external_strings.md)。
+- **申し送り**: README の誤り 5 件は第 3 弾で README を書くときに直す（`AUDIT_docs_findings.md` の ④。台帳 §1-93 の入口から辿れる）。
+- **コードの疑い（直していない）**:
+  - Python の 3 件は台帳 §1-102 に起票した。観測事実と確かめ方:
+    1. `h3_format.inspect_h3_te` は視覚塔（`visual.*`）のテンソルを数えるだけで、無いファイルも通す（`services/model_registry.py` の `_precheck_h3` も同じ関数を使う）。そのファイルで I2V を投げると、ジョブの中で `engine_h3/text_encoder.py` の `encode` が英語の `RuntimeError`（「… has no vision tower (visual.*); I2V needs it」）で止まる。公式の Comfy-Org のテキストエンコーダは視覚塔を持つので、起きるのは第三者のファイルだけ。
+    2. Gradio の `gradio_ui/feature_scope.py` の `FEATURE_UI` は `prune_vaed` と `keep_resident_embeddings` しか扱わない。H3 の `unsupported_features`（`chain`・`retake`・`loras`・`reference_video`・`nag`・`multi_keyframes`・`keyframe_strength` など）に当たる操作部（Clip Chain・バッチ・A2V・LoRA・NAG・キーフレームの強度）は見えたままで、使うと 422 になる。操作パネルは灰色または非表示にする。
+    3. `services/engines/h3/adapter.py` の `REQUEST_RULES` は、H3 の既定のステップ数を `default_steps=20` と `sampling` の `num_inference_steps` の `default=20` に別々に持つ。`RequestRules.fill_defaults` は前者で書き戻し、`GET /models` の `constraints` は後者を配るので、片方だけを変えるとずれる。
+  - webui の 5 件（記録のみ。起票はしない）:
+    - C-1: H3 ではキーフレームが 1 枚に制限されるが、その 1 枚のピンや FRAME の入力は先頭以外へ動かせ、送信してから 422 になる（`modes/single/SingleScreen.tsx`・`KeyframesPanel.tsx`・`KeyframeTimeline.tsx`。アダプタは `frame_idx` が 0 以外を拒否する）。
+    - C-2: `GenerationConstraints.frameRate` は「`min` と `max` が等しければ固定」の判定にしか使われない。固定ではないが 1〜60 より狭い範囲を配る系統が来ると、fps 欄とスナップは 1〜60 のまま（今の 3 系統では起きない）。
+    - C-3: `modes/single/paramUtils.ts` の `isValidDimension` は 64 固定で、本番のコードからは使われていない（テストだけ）。
+    - C-4: `shell/generationConstraints.ts` の「規則の違う系統は Chained・Edit・Batch を `unsupported_features` で閉じる」は約束で、強制は無い（今は起きない）。
+    - C-5: `shell/nagSettings.ts` の作業ツリーで CRLF と LF が混在している（第 2 弾で足した末尾 12 行だけ LF）。git の索引は LF なので、コミットの中身には影響しない。
+- **コミット**: 監督が dev に積む。

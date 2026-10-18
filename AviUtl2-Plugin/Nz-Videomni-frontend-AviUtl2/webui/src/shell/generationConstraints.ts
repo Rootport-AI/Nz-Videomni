@@ -10,16 +10,15 @@ import type { FrameGrid } from "../modes/single/paramUtils";
 import { MIN_NUM_FRAMES } from "../modes/single/defaultConfig";
 
 /**
- * MiniMax H3 第 2 弾 (2026-10-17): the loaded base model's numeric rules, in
- * the shape Create (and the right-click seeds that land in Create) read them.
+ * The loaded base model's numeric rules, in the shape Create (and the
+ * right-click seeds that land in Create) read them.
  *
  * The SERVER is the source of these rules — `GET /models` publishes them per
  * base model as `base_models[].constraints`, built from the engine adapter's
  * own rule table. This module only (1) flattens that block into the form's
  * vocabulary and (2) holds the LTX values to use while it is absent (a backend
- * older than 第 2 弾, or before the first `GET /models` lands), which are
- * exactly the constants the WebUI used before — so an absent block changes
- * nothing.
+ * that predates the key, or before the first `GET /models` lands) — the same
+ * constants Chained, Edit and Batch use.
  *
  * The rule the shell follows for engines holds here too: no screen ever reads
  * an engine id. A screen is handed a {@link GenerationConstraints} and reads
@@ -27,7 +26,7 @@ import { MIN_NUM_FRAMES } from "../modes/single/defaultConfig";
  *
  * Only Create (Single) and its right-click seeds read this. Chained, Edit and
  * Batch keep their LTX constants on purpose: an engine whose rules differ
- * (MiniMax H3) closes those screens through its `unsupported_features`.
+ * closes those screens through its `unsupported_features`.
  */
 export interface GenerationConstraints {
   /** The `num_frames` lattice (`step * n + offset`). */
@@ -38,7 +37,7 @@ export interface GenerationConstraints {
    * meaning "no cap beyond `config.limits.max_num_frames`" — see
    * {@link frameLimitsFor}. */
   maxNumFrames: number;
-  /** Width/height multiple outside IC-LoRA mode (LTX 64, MiniMax H3 32). */
+  /** Width/height multiple outside IC-LoRA mode. */
   dimensionMultiple: number;
   /** Inclusive frame-rate range. `min === max` = fixed; see
    * {@link fixedFrameRate}. */
@@ -49,7 +48,7 @@ export interface GenerationConstraints {
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
- * rules, i.e. the constants every form used before 第 2 弾. */
+ * rules, built from the same constants the other forms use. */
 export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Object.freeze({
   frameGrid: LTX_FRAME_GRID,
   minNumFrames: MIN_NUM_FRAMES,
@@ -86,7 +85,7 @@ export function fixedFrameRate(constraints: GenerationConstraints): number | nul
 /** Create's `num_frames` bounds: the engine's floor, and the smaller of the
  * engine's ceiling and the app config's, floored onto the grid so
  * `snapNumFrames` can rely on both ends being grid values. With the LTX
- * fallback this is exactly `[MIN_NUM_FRAMES, config max]` as before. */
+ * fallback this is `[MIN_NUM_FRAMES, config max]`. */
 export function frameLimitsFor(
   constraints: GenerationConstraints,
   configMaxNumFrames: number,

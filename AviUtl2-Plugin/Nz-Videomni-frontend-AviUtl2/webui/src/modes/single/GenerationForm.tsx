@@ -88,7 +88,7 @@ export interface GenerationFormProps {
    * `"video-audio-to-video"` or `"audio-to-video"`. Opens the A2V
    * `<details>` on mount the same way `autoOpenReference` does for IC-LoRA. */
   autoOpenA2v?: boolean | undefined;
-  /** MiniMax H3 第 2 弾: the parts of this form the loaded base model's engine
+  /** The parts of this form the loaded base model's engine
    * cannot use (`featureScope.singleSectionsDisabledFor`, threaded down from
    * `AppShell` as finished booleans). The reference-video accordion is HIDDEN
    * (IC-LoRA is LTX's own mechanism); the A2V accordion greys with a note; the
@@ -256,7 +256,7 @@ export function GenerationForm({
         fixedFrameRate={form.fixedFrameRate}
       />
 
-      {/* MiniMax H3 第 2 弾 (裁定 22): the three sampling sliders replace the
+      {/* The three sampling sliders replace the
           CFG placeholder only while the loaded base model publishes
           `constraints.sampling`; LTX keeps the placeholder unchanged. */}
       {form.samplingConstraints && values.sampling ? (
@@ -281,12 +281,11 @@ export function GenerationForm({
         strengthUnavailable={sectionsUnavailable?.keyframeStrength}
       />
 
-      {/* IC-LoRA (reference video) — always rendered now (Gradio-faithful,
-          U2). A2V+IC-LoRA now combine (no exclusivity): both accordions stay
-          fully usable at once (see `ReferenceVideoSection`). Collapsed by
-          default. */}
-      {/* MiniMax H3 第 2 弾: HIDDEN (not greyed) while the loaded base model's
-          engine cannot take a reference video (`reference_video`). */}
+      {/* IC-LoRA (reference video), collapsed by default. A2V+IC-LoRA combine
+          (no exclusivity): both accordions stay fully usable at once (see
+          `ReferenceVideoSection`). */}
+      {/* HIDDEN (not greyed) while the loaded base model's engine cannot take
+          a reference video (`reference_video`). */}
       {!sectionsUnavailable?.referenceVideo && (
         <details className="form-accordion" ref={referenceDetailsRef}>
           <summary className="form-accordion-summary">{strings.single.referenceVideo.heading}</summary>
@@ -301,10 +300,10 @@ export function GenerationForm({
         </details>
       )}
 
-      {/* A2V (source audio) — always rendered, collapsed by default. MiniMax
-          H3 第 2 弾: greyed with a note while the loaded base model cannot
-          chain (an A2V submit IS a chain request) — the same treatment as
-          Chain's own audio panel. */}
+      {/* A2V (source audio) — always rendered, collapsed by default. Greyed
+          with a note while the loaded base model cannot chain (an A2V submit
+          IS a chain request) — the same treatment as Chain's own audio
+          panel. */}
       <details className="form-accordion" ref={a2vDetailsRef}>
         <summary className="form-accordion-summary">{strings.single.sourceAudio.heading}</summary>
         <div className="form-accordion-body">

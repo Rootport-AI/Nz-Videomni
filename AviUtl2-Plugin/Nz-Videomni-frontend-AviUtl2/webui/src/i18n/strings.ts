@@ -547,7 +547,7 @@ export const en = {
    * `onBadge` is intentionally identical in both languages (owner decision). */
   nag: {
     heading: "Negative Prompt",
-    /** MiniMax H3 第 2 弾: shown inside the greyed accordion while the loaded
+    /** Shown inside the greyed accordion while the loaded
      * base model's engine cannot run NAG/VSF (`nag` in its
      * `unsupported_features`). Nothing from this panel is sent meanwhile. */
     unavailableOnBaseModel:
@@ -1481,7 +1481,7 @@ export const en = {
     duration: {
       label: "Duration",
       fps: "FPS",
-      /** MiniMax H3 第 2 弾: tooltip on the disabled fps field while the loaded
+      /** Tooltip on the disabled fps field while the loaded
        * base model runs at one fixed rate (`constraints.frame_rate`). */
       fpsFixedTooltip: (fps: number): string => `The selected base model always generates at ${fps} fps.`,
     },
@@ -1502,8 +1502,10 @@ export const en = {
         portrait: "Portrait",
       },
     },
-    /** M7b: permanently disabled CFG-scale placeholder reserved for a future
-     * non-distilled backend (Mock/AVIUTL2_DESIGN_BRIEF.md §5-2 / §11). Never
+    /** M7b: permanently disabled CFG-scale placeholder
+     * (Mock/AVIUTL2_DESIGN_BRIEF.md §5-2 / §11); Create shows `sampling` below
+     * in its place while the loaded base model publishes
+     * `constraints.sampling`. Never
      * enabled, never submitted — see `modes/single/CommonGenerationFields.tsx`'s
      * `ReservedFields`. (`negativePrompt` lived here too until NAG unlocked a
      * real, sent negative prompt, 2026-07-28 — see `nag.*` above instead.) */
@@ -1511,7 +1513,7 @@ export const en = {
       label: "CFG scale",
     },
     reservedNote: "CFG is not supported by the current backend (reserved for future use)",
-    /** MiniMax H3 第 2 弾 (裁定 22): the three sampling sliders shown in place
+    /** The three sampling sliders shown in place
      * of the CFG placeholder while the loaded base model publishes
      * `constraints.sampling` (`CommonGenerationFields.tsx`'s `SamplingFields`). */
     sampling: {
@@ -1519,7 +1521,7 @@ export const en = {
       shiftVideo: "Shift (video)",
       shiftAudio: "Shift (audio)",
     },
-    /** MiniMax H3 第 2 弾: notes for the parts of Create the loaded base
+    /** Notes for the parts of Create the loaded base
      * model's engine cannot use (greyed, not hidden). Same shape as
      * `chained.unavailableOnBaseModel`. */
     unavailableOnBaseModel: {
@@ -2238,8 +2240,8 @@ export const en = {
     accelKeepResidentNote:
       "64GB or more of memory recommended: LTX 2.3 keeps about 20GB of main memory resident, LTX 2.5 about 8GB (2.5 only keeps the part that reads the prompt). MiniMax H3 keeps its DiT and VAE. Keeps the model's CPU-side skeleton between jobs, greatly shortening the preprocessing of the second and later generations. The output does not change.",
     /** Acceleration (2026-09-03, 台帳 §3-114): keep LTX 2.5's embeddings
-     * processor resident between jobs. The row is HIDDEN on LTX 2.3 (which has
-     * no such component and refuses the field), so the label names the engine
+     * processor resident between jobs. The row is HIDDEN on the engines without
+     * it (LTX 2.3 and MiniMax H3, which refuse the field), so the label names the engine
      * it belongs to — a reader who sees the row is on 2.5, and a reader who has
      * heard of it and cannot find it learns why from the label alone. */
     accelKeepResidentEmbeddingsLabel: "Keep embeddings processor resident (LTX 2.5)",

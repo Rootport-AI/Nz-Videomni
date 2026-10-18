@@ -150,9 +150,9 @@ export interface SizeFieldsProps {
    * (`useChainForm`'s `chainWindowMarkers`), because the budget being drawn is
    * chain-specific (one stage-2 window of a chain). */
   budgetMarkers?: SizeBudgetMarkers;
-  /** The sliders' and spinners' step (MiniMax H3 第 2 弾): Create passes the
-   * loaded base model's `constraints.dimension_multiple` (32 on MiniMax H3).
-   * Omitted = 64, LTX's — Chain and Retake never pass it. */
+  /** The sliders' and spinners' step: Create passes the loaded base model's
+   * `constraints.dimension_multiple`. Omitted = 64, LTX's — Chain and Retake
+   * never pass it. */
   step?: number;
 }
 
@@ -353,7 +353,7 @@ export interface DurationFieldProps {
   max: number;
   disabled: boolean;
   /** `snap` mirrors `SizeFields`' `onWidthChange`/`onHeightChange`: `true`
-   * for the slider/stepper (snap onto the 8n+1 grid), `false` for free
+   * for the slider/stepper (snap onto the `num_frames` grid), `false` for free
    * keyboard typing (pass through untouched — `isStepEvent` tells them
    * apart). */
   onChange: (value: number, snap: boolean) => void;
@@ -385,9 +385,9 @@ export interface DurationFieldProps {
    * passes its own id (Alpha Gen 第 2 弾). Omitted = `"spill-tick"`, Create's
    * id (every caller that does not pass one gets it). */
   tickId?: string;
-  /** The slider's and spinner's step — the `num_frames` grid's step (MiniMax
-   * H3 第 2 弾: Create passes 17 on MiniMax H3). Omitted = 8, LTX's 8n+1 —
-   * every other caller. */
+  /** The slider's and spinner's step — the `num_frames` grid's step (Create
+   * passes the loaded base model's). Omitted = 8, LTX's 8n+1 — every other
+   * caller. */
   step?: number;
 }
 
@@ -472,7 +472,7 @@ export interface FrameRateSeedFieldsProps {
   disabled: boolean;
   onFrameRateChange: (value: number) => void;
   onSeedChange: (value: number) => void;
-  /** MiniMax H3 第 2 弾: the fixed rate the loaded engine runs at, or
+  /** The fixed rate the loaded engine runs at, or
    * `null`/omitted when the user chooses. Fixed = the fps input is disabled
    * (it shows `frameRate`, which the form already pinned to this value).
    * Chain never passes it. */
@@ -553,9 +553,11 @@ export function FrameRateSeedFields({
 }
 
 /**
- * Permanently disabled CFG-scale placeholder for a future non-distilled
- * backend (Mock/AVIUTL2_DESIGN_BRIEF.md §5-2 / §11). Shared verbatim by
- * Create (`GenerationForm.tsx`) and Chain (`ChainedScreen.tsx`) — never
+ * Permanently disabled CFG-scale placeholder (Mock/AVIUTL2_DESIGN_BRIEF.md
+ * §5-2 / §11). Rendered by Chain (`ChainedScreen.tsx`) and by Create
+ * (`GenerationForm.tsx`) while the loaded base model publishes no
+ * `constraints.sampling` — otherwise Create shows {@link SamplingFields} in
+ * its place. Never
  * enabled, read, or included in any request body; there is no corresponding
  * state anywhere in `useGenerationForm`/`useChainForm` on purpose (task brief
  * M7b: "値はどこにも送らない"). Always shown fixed at "1.0", matching the
@@ -597,7 +599,7 @@ export interface SamplingFieldsProps {
 }
 
 /**
- * MiniMax H3 第 2 弾 (裁定 22): the three sampling sliders — step count,
+ * The three sampling sliders — step count,
  * Shift (video), Shift (audio) — one row each (label + range + number, the
  * `FloatSliderField` in its `inline` form). Rendered by Create IN PLACE OF
  * {@link ReservedFields} only while the loaded base model publishes

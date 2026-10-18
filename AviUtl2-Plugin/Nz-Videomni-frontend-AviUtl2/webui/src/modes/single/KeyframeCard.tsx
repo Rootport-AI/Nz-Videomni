@@ -29,7 +29,7 @@ export interface KeyframeCardProps {
   /** Disabled while a generation is in flight/reserved, mirroring the rest
    * of the form's fields. */
   disabled: boolean;
-  /** MiniMax H3 第 2 弾: grey the STRENGTH slider alone (the loaded base model
+  /** Grey the STRENGTH slider alone (the loaded base model
    * does not use keyframe strength). Omitted = usable. */
   strengthDisabled?: boolean | undefined;
   /** Fired once a FRAME edit is committed (blur/Enter) with the fully

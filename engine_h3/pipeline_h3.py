@@ -10,28 +10,32 @@ the first-frame I2V only (the condition rows: KeyframeEncoder 440-467, the
 packed layout 651-709, the per-row timesteps 1019); no CFG (H3 is guidance-distilled: one forward per step); no padding rows; the
 noise is drawn in float32 from one CPU generator (video, then audio); the
 model's output is used in its own direction (x0 = x + sigma v, no negation);
-every stage builds its model on meta, streams it in, and frees it before the
-next stage starts, so the peaks do not stack (TE ~27 GB, then DiT ~21 GB).
+every stage builds its model on meta, reads its weights from the file, and
+frees it (or, under ``keep_resident``, parks it on the CPU) before the next
+stage starts, so the stages' peaks do not stack.
 
 Stages (``progress`` names are the app's shared vocabulary):
 
 1. ``encode``: the Qwen3-VL text tower (:class:`H3TextEncoder`), built on
    meta and read layer by layer straight from the file onto the GPU during its
    one forward (no layer is kept in main memory); released before the DiT is built.
+   I2V adds the key frame's video VAE encode as a 4th step of the same progress
+   stage (``image_encode`` in the phases; see I2V below).
 2. ``stage1_denoise``: the DiT. Everything but ``blocks`` goes to the GPU; the
    50 blocks stay on the CPU and ``BlockSwapService`` pages them in (with the
    prefetch engine when asked). That is also what puts each int8 weight AND
    its scale on the GPU before the block's forward -- ``comfy_kitchen``'s CUDA
    backend refuses a CPU weight, and with triton / eager disabled the call
    would raise rather than silently run slowly.
-   Each step: video rows and audio rows get their own t = 1 - sigma (video
-   shift 12, audio shift 3, same step index); text rows share the video t; the
-   distinct values are numbered with ``torch.unique`` (M = 1 at step 0, where
-   both sigmas are 1, and 2 afterwards) and each row's AdaLN row is
-   ``number * 3 + modality``.
+   Each step: video rows and audio rows get their own t = 1 - sigma (the
+   job's ``shift_video`` / ``shift_audio``, same step index); text rows share
+   the video t and the I2V condition rows carry ``max(t_video, 0.999)``; the
+   distinct values (at most 3) are numbered with ``torch.unique`` (fewer when
+   values coincide, e.g. M = 1 at step 0 of a T2V job, where both sigmas are 1)
+   and each row's AdaLN row is ``number * 3 + modality``.
 3. ``decode``: the video VAE's decoder, then the audio VAE, then the mp4.
 
-I2V (第 2 弾 2a, INTERFACE2 §2-§4): the key frame is put onto the canvas
+I2V (Docs/MINIMAX_H3_DESIGN.md §3): the key frame is put onto the canvas
 (cover + centre crop, ``engine_h3.image_cond``) before anything is loaded; the
 text encoder sees it through its vision tower; after the text encoder is gone
 the video VAE's encoder (float32, built for this job only) turns it into one
@@ -40,7 +44,7 @@ Those rows are mixed once with noise drawn AFTER the video and audio noise
 (``0.999 * clean + 0.001 * noise``), carry t = max(t_video, 0.999) and the
 RoPE time L, and are handed to the DiT unchanged at every step.
 
-Keeping models between jobs (``keep_resident``, INTERFACE2 §8): at the end of
+Keeping models between jobs (``keep_resident``, Docs/MINIMAX_H3_DESIGN.md §4): at the end of
 a job that asks for it, the DiT (all of it on the CPU, block swap wrappers
 stripped), the video decoder and the audio VAE (both moved to the CPU) are
 kept; nothing stays on the GPU. A job without the key reuses what is kept and
@@ -48,7 +52,7 @@ releases it at its end; a failed job releases it at once.
 
 Inference is wrapped in ``torch.no_grad()`` only -- never the inference-mode context
 (the block swap and the prefetch engine rebind ``.data`` on tensors, which an
-inference tensor refuses; design rule §5.8).
+inference tensor refuses; Docs/MULTI_ENGINE_DESIGN.md §5.8).
 """
 
 from __future__ import annotations
@@ -106,8 +110,9 @@ class H3LoadOptions:
       ``<= 0`` or ``>= 50`` means NO swapping: the whole DiT (19.5 GiB) goes to
       the GPU and ``block_swap_prefetch_used`` is ``"off"``.
     * ``deterministic``: sets cuDNN's deterministic / no-benchmark flags. Only
-      the VAEs run cuDNN convolutions, so it affects the VAE decode only; the
-      DiT and the text encoder have no convolution for it to act on.
+      the convolutions use cuDNN: the VAEs (the decode, and the I2V key frame's
+      encode) and, for I2V, the vision tower's patch embedding (``Conv3d``); the
+      DiT and the text tower have none for it to act on.
     """
 
     blocks_on_gpu: int = 8
@@ -186,8 +191,8 @@ def time_rows(layout, t_video: float, t_audio: float, device=None) -> tuple[torc
     Text and video rows carry the video t, audio rows the audio t, the
     condition rows (I2V) ``max(t_video, 0.999)`` (DiffSynth
     pipelines/minimax_h3_audio_video.py:1006-1021). ``unique`` sorts, so the
-    numbering is by value, as in the reference; T2V has no condition rows and
-    is numbered exactly as before.
+    numbering is by value, as in the reference; T2V has no condition rows, so
+    only the video and audio values are numbered.
     """
     t = torch.full((layout.total,), float(t_video), dtype=torch.float32, device=device)
     t[layout.audio] = float(t_audio)
@@ -234,7 +239,7 @@ def _mem_gib() -> dict:
 
     The commit is the better answer to "does this process really hold that
     much memory": the working set can look small after the OS trims it, and
-    can stay high while the allocator keeps freed regions (REVIEW_code1 M1).
+    can stay high while the allocator keeps freed regions.
     psutil when present, else the Win32 counters through ctypes.
     """
     try:
@@ -364,7 +369,7 @@ class H3Pipeline:
         #: per-job teardown. Rebuilding the pool every job is what the pool's
         #: own docstring warns against (block_swap_prefetch.py:234-243).
         self._swap_service = None
-        #: What ``keep_resident`` kept from the previous job (INTERFACE2 §8):
+        #: What ``keep_resident`` kept from the previous job (Docs/MINIMAX_H3_DESIGN.md §4):
         #: ``{"dit", "cfg", "decoder", "audio_vae"}``, every tensor on the CPU, or None.
         self._resident: dict | None = None
         self.quant_backends: dict = {}
@@ -448,9 +453,9 @@ class H3Pipeline:
         phases = _Phases(cuda=self.device.type == "cuda")
         ok = False
         try:
-            # Inside the try (review M-1): a job refused here is a failed job and
-            # releases what is kept, like any other. Still before the text
-            # encoder, so a bad request or image never costs a 27 GB read.
+            # Inside the try: a job refused here is a failed job and releases
+            # what is kept, like any other. Still before the text encoder, so a
+            # bad request or image never costs a text-encoder read.
             validate_request(req)
             image = source_size = None
             if req.images:
@@ -519,13 +524,13 @@ class H3Pipeline:
             return bool(self.options.block_swap_prefetch)
         return bool(req.block_swap_prefetch)
 
-    # -- stage 1 -----------------------------------------------------------------
+    # -- stage 1: encode ---------------------------------------------------------
 
     def _encode(self, prompt: str, phases: _Phases, image=None) -> tuple[torch.Tensor, torch.Tensor]:
         from engine_h3.text_encoder import H3TextEncoder  # noqa: PLC0415
 
         te = H3TextEncoder(self.paths.text_encoder, self.paths.tokenizer_dir, device=self.device)
-        # I2V adds a 4th step to the same stage: the key frame's VAE encode (INTERFACE2 §5.2).
+        # I2V adds a 4th step to the same stage: the key frame's VAE encode.
         total = 3 if image is None else 4
         self._progress("encode", 0, total)
         try:
@@ -548,8 +553,8 @@ class H3Pipeline:
     def _encode_image(self, image, entry: dict) -> torch.Tensor:
         """The key frame -> its clean condition rows ``[grid, 96]`` float32 on the device.
 
-        The video VAE's encoder is built for this job only, in float32 (plan
-        §3.1), and dropped before the DiT is built -- it is never kept.
+        The video VAE's encoder is built for this job only, in float32, and
+        dropped before the DiT is built -- it is never kept.
         """
         from engine_h3.dit import patchify_video  # noqa: PLC0415
         from engine_h3.image_cond import canvas_to_tensor  # noqa: PLC0415
@@ -568,7 +573,7 @@ class H3Pipeline:
         self._progress("encode", 4, 4)
         return rows
 
-    # -- stage 2 -----------------------------------------------------------------
+    # -- stage 2: denoise (progress ``stage1_denoise``) --------------------------
 
     def _build_dit(self, entry: dict):
         from engine.sft_quant.sft_reader import TORCH_DTYPES  # noqa: PLC0415
@@ -657,7 +662,7 @@ class H3Pipeline:
         return service, str(service.last_prefetch_used or "off")
 
     def _park_dit(self, dit) -> int:
-        """Everything of a kept DiT back on the CPU, wrappers stripped (INTERFACE2 §8.1).
+        """Everything of a kept DiT back on the CPU, wrappers stripped.
 
         The prefetch teardown has already pointed the blocks at their CPU
         masters; the synchronous path leaves the last window's blocks on the
@@ -721,8 +726,8 @@ class H3Pipeline:
 
             # Noise: ONE CPU generator, float32, video first then audio (the
             # draw order is part of what "same seed" means for this engine).
-            # The condition rows' noise comes THIRD, so a T2V job draws exactly
-            # what it always drew.
+            # The condition rows' noise comes THIRD, so T2V draws only the first
+            # two and its noise does not depend on I2V being supported.
             gen = torch.Generator(device="cpu").manual_seed(int(req.seed))
             video = torch.randn((1, cfg.latents_dim, t_lat, lh, lw), generator=gen, dtype=torch.float32).to(dev)
             audio = torch.randn((2, cfg.audio_latents_dim, a_lat), generator=gen, dtype=torch.float32).to(dev)
@@ -790,7 +795,7 @@ class H3Pipeline:
             _free_cuda()
             phases.mark("denoise", "after_release")
 
-    # -- stage 3 -----------------------------------------------------------------
+    # -- stage 3: decode ---------------------------------------------------------
 
     def _decode(self, req, video_lat: torch.Tensor, audio_lat: torch.Tensor, entry: dict, keep=False) -> int:
         from engine_h3.audio_vae import H3AudioVAE  # noqa: PLC0415

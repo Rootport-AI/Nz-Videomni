@@ -896,8 +896,9 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
 
-        # 2) start generation. Quality is locked to distilled (steps/cfg
-        # fixed); the payload keeps the frozen contract.
+        # 2) start generation. The quality mode is distilled and CFG 1.0 (the
+        # frozen contract); the step count and the shifts follow the loaded
+        # base model's constraints (sampling_payload below).
         crop_output = None
         if crop_enabled and int(crop_w) > 0 and int(crop_h) > 0:
             crop_output = {"width": int(crop_w), "height": int(crop_h)}

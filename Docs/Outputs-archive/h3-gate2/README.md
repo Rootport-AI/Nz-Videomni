@@ -1,4 +1,4 @@
-# MiniMax H3 第 2 弾 2a（ワーカー）の門の台本と結果
+# MiniMax H3 第 2 弾の門（2a と 2b-G2）の台本と結果
 
 作成: 2026-10-17／担当 C1。`outputs/h3-gate2/` は git の管理外なので、門をやり直せるように台本と結果の JSON をここに写した。記録の正本は `Docs/VERIFICATION_LOG.md`（第 2 弾の節）。境界の仕様は `../h3-stage2-reports-2026-10-17/INTERFACE2.md`。
 

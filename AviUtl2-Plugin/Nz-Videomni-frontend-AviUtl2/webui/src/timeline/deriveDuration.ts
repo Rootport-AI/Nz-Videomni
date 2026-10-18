@@ -40,7 +40,7 @@ import { resolveSpillFreeFrames } from "../modes/single/spillUtils";
  *  - `"comfortCeiling"`: always the resolution's comfort ceiling (ignores any
  *    existing/current DURATION and any source material length).
  *  - `"materialClampedToCeiling"`: the source material's own length, floored
- *    onto the 8n+1 grid and never allowed past the comfort ceiling.
+ *    onto the `num_frames` grid (`frameGrid`) and never allowed past the comfort ceiling.
  *  - `"selectedRangeLength"` (§1-17 Retake): the user's SELECTED FRAME RANGE,
  *    converted from project frames to generation frames. No 8n+1 snap, no
  *    comfort ceiling — the retake's real window is decided elsewhere.
@@ -81,7 +81,7 @@ export interface ComputeTargetNumFramesArgs {
    * length (see the `materialClampedToCeiling` branch below). That is
    * intentional — #2/#3/#7's material clamp moves onto the smart line too. */
   comfortCeilingFrames?: number | undefined;
-  /** `limits.minNumFrames`/`limits.maxNumFrames` (already valid 8n+1 values —
+  /** `limits.minNumFrames`/`limits.maxNumFrames` (already on `frameGrid` —
    * see `paramUtils.snapNumFrames`'s own assumption). Both policies that can
    * return non-null clamp into this range. */
   minNumFrames: number;
@@ -89,8 +89,8 @@ export interface ComputeTargetNumFramesArgs {
   /** The source material's real-time duration in seconds — required (and
    * only meaningful) for `"materialClampedToCeiling"`. */
   materialDurationSec?: number;
-  /** The backend's fixed generation frame rate (`GEN_FPS` in
-   * `menuSelection.ts`) used to convert `materialDurationSec` to a frame
+  /** The generation frame rate the seeded form runs at (the caller's seed fps;
+   * a fixed engine rate wins) used to convert `materialDurationSec` to a frame
    * count — required for `"materialClampedToCeiling"` AND for
    * `"selectedRangeLength"` (both convert a real-time quantity into
    * GENERATION frames). */
@@ -105,9 +105,9 @@ export interface ComputeTargetNumFramesArgs {
    * be turned into a duration, and a raw frame count would be wrong by the
    * ratio of the two rates. */
   projectFps?: number;
-  /** The `num_frames` lattice the result must land on (MiniMax H3 第 2 弾).
-   * Omitted = LTX's 8n+1, so every pre-existing caller is unchanged. Passed by
-   * Create's right-click seeds from the loaded base model's `constraints`. */
+  /** The `num_frames` lattice the result must land on. Omitted = LTX's 8n+1
+   * (Chain-targeted seeds). Passed by Create's right-click seeds from the
+   * loaded base model's `constraints`. */
   frameGrid?: FrameGrid | undefined;
 }
 
@@ -120,21 +120,21 @@ export interface ComputeTargetNumFramesArgs {
  *  - `"untouched"`: always `null`.
  *  - `"comfortCeiling"`: `null` if the comfort ceiling can't be resolved
  *    (`spillFreeFrames` is `null`/empty/has no parseable keys — see
- *    `resolveSpillFreeFrames`); otherwise the ceiling snapped onto the 8n+1
- *    grid and clamped to `[minNumFrames, maxNumFrames]`. Never looks at a
+ *    `resolveSpillFreeFrames`); otherwise the ceiling snapped onto
+ *    `frameGrid` and clamped to `[minNumFrames, maxNumFrames]`. Never looks at a
  *    "current" DURATION — the same width/height always yields the same
  *    result, whether that raises or lowers whatever DURATION held before.
  *  - `"materialClampedToCeiling"`: `null` if `materialDurationSec`/`genFps`
  *    are missing (or `genFps` isn't positive) — there is nothing to clamp
  *    without a source length. Otherwise: floor `materialDurationSec *
- *    genFps` onto the 8n+1 grid via {@link floorToFrameGrid} (never rounds
+ *    genFps` onto `frameGrid` via {@link floorToFrameGrid} (never rounds
  *    UP past the material's real length), then take the smaller of that and
  *    the comfort ceiling (when the ceiling resolves; when it doesn't, the
- *    material-derived value stands on its own), and finally raise the result
- *    to `minNumFrames` if it landed below that floor — this last step can
+ *    material-derived value stands on its own), then raise the result
+ *    to `minNumFrames` if it landed below that floor — this step can
  *    push the result back above the comfort ceiling, since a DURATION below
  *    the form's own allowed minimum is never a valid prefill regardless of
- *    material length.
+ *    material length — and finally cap it at `maxNumFrames`.
  */
 export function computeTargetNumFrames(args: ComputeTargetNumFramesArgs): number | null {
   const {
@@ -196,15 +196,16 @@ export function computeTargetNumFrames(args: ComputeTargetNumFramesArgs): number
   let target = floorToFrameGrid(rawFrames, frameGrid);
   if (ceiling !== null) target = Math.min(target, ceiling);
   if (target < minNumFrames) target = minNumFrames;
-  // Code review m-1 (MiniMax H3 第 2 弾): with no comfort line at all the
+  // With no comfort line at all the
   // ceiling above is absent, so the form's own maximum is the last cap.
   return Math.min(target, maxNumFrames);
 }
 
 /**
- * Floors `frames` onto the 8n+1 `num_frames` grid (n >= 1): the largest valid
- * grid value that does not exceed `frames`, with `9` (n=1) as the absolute
- * floor for any `frames < 9`. Deliberately does NOT clamp against a caller
+ * Floors `frames` onto the `num_frames` grid (`grid`, LTX's 8n+1 by default;
+ * n >= 1): the largest valid grid value that does not exceed `frames`, with
+ * `step + offset` (n=1; 9 on 8n+1) as the absolute floor. Deliberately does
+ * NOT clamp against a caller
  * `minNumFrames`/`maxNumFrames` — that's `computeTargetNumFrames`'s job — so
  * this stays a small, total, single-purpose helper like `paramUtils.ts`'s own
  * `snapNumFrames` (round-to-nearest) counterpart.
@@ -216,7 +217,7 @@ export function computeTargetNumFrames(args: ComputeTargetNumFramesArgs): number
  * math this module has no use for.
  */
 export function floorToFrameGrid(frames: number, grid: FrameGrid = LTX_FRAME_GRID): number {
-  // MiniMax H3 第 2 弾: the grid is an argument now (8n+1 by default, so every
-  // existing caller is unchanged); `paramUtils.floorToGrid` is the one body.
+  // The one body is `paramUtils.floorToGrid`; this wrapper keeps the name the
+  // callers use.
   return floorToGrid(frames, grid);
 }

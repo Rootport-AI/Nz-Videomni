@@ -4,18 +4,18 @@ Conditioning accepts multiple keyframes (cap ``MAX_CONDITIONING_IMAGES``),
 arbitrary ``frame_idx`` (snapped server-side to the official ``0``-or-``8n+1``
 latent grid and clamped into range), and per-item ``strength``.
 ``num_pixel_frames`` (multi-frame keyframe conditioning) is not part of the
-request. The OTHER constraints are FROZEN as the final-form API so that
+request. LTX's numeric constraints are FROZEN as the final-form API so that
 frontends (the AviUtl2 plugin, and any other client of the same API such as
 a DaVinci Resolve script) do not break: ÷64 generation resolution, 8n+1 frame
 counts, and the distilled 8-step / CFG=1.0 requirement. Do not relax those
-validators without revisiting the spec.
+rules without revisiting the spec.
 
-For the single ``POST /generate`` those three LTX rules are no longer checked
-in :class:`GenerateRequest` itself: they are a fact about the engine family,
+For the single ``POST /generate`` those rules are not checked in
+:class:`GenerateRequest` itself: they are a fact about the engine family,
 so each adapter declares them as ``REQUEST_RULES`` (LTX's table is
 services/engines/ltx/request_rules.py) and ``services.engines.validate_for_family``
-applies them once the active family is known — same messages, a 422 of the
-same shape. The chain schema keeps its own validators (LTX only).
+applies them once the active family is known — with LTX's messages, in a 422
+of the pydantic shape. The chain schema keeps its own validators (LTX only).
 
 Resolution note: ``width``/``height`` are the *generation* size and must be a
 multiple of **64** on LTX — the two-stage distilled pipeline generates stage-1
@@ -591,7 +591,7 @@ class GenerateRequest(BaseModel):
     # false のときは何も刻まない（結合でも元動画のタグを引き継がない）。
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT
 
-    # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
+    # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
 
@@ -608,11 +608,11 @@ class GenerateRequest(BaseModel):
     num_frames: int = Field(49, ge=NUM_FRAMES_MIN, le=NUM_FRAMES_MAX)
     frame_rate: float = Field(24.0, ge=FRAME_RATE_MIN, le=FRAME_RATE_MAX)
     # None ＝「選択中の系統の既定値」。validate_for_family が系統の既定値
-    # （LTX は 8、MiniMax H3 は 20）を書き戻すので、ジョブの記録・ログ・
+    # （各アダプタの REQUEST_RULES）を書き戻すので、ジョブの記録・ログ・
     # アダプタは常に整数を見る。le=100 は LTX 2.3 の two_stage_hq の外枠。
     num_inference_steps: int | None = Field(None, ge=1, le=100)
     # MiniMax H3 のスケジュールの shift（映像・音声）。None ＝系統の既定値
-    # （H3 は 12／3。LTX には概念が無く、None のまま無視される）。
+    # （REQUEST_RULES の sampling。LTX には概念が無く、None のまま無視される）。
     shift_video: float | None = Field(None, gt=0)
     shift_audio: float | None = Field(None, gt=0)
     guidance_scale: float = Field(1.0, ge=0.0, le=20.0)

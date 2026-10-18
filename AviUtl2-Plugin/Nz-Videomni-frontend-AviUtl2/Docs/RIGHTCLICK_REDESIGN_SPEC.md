@@ -603,6 +603,8 @@ Repeat count（同じ条件の生成を指定回数繰り返す欄）も、自�
 
 > **【2026-08-31 追記】本節が「快適上限」と書いているものの出どころが変わりました。** **Single系（単発生成へ向かう項目）の快適上限は、いまは賢い快適上限マーカーと同じ値です**——`deriveDuration.ts`は自分で`spill_free_frames`を引かず、**呼び出し側が算出した天井を引数で受け取る**形になりました（どの項目が単発生成へ向かうかは`timeline/menuRouting.ts`の既存の経路表から逆引きします）。A2Vのwav自動調整の天井も同じ値へ揃いました。**Chain系（連結生成へ向かう項目）は本節のとおり`spill_free_frames`のままです**（揃えるかどうかの判断はバックエンド台帳[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §3-132）。**【2026-09-04 追記】その§3-132は2026-09-03のオーナー裁定「揃えない」で決着し、クローズ済みです**——現在の参照先はバックエンド[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-132で、Chain系が`spill_free_frames`のままであることが確定仕様になりました（生きた台帳§3を探しても見つかりません）。線そのものの正本はバックエンド[`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §1.1、実装記録は[`DEVLOG.md`](DEVLOG.md) §99です。**以下の本文は第2段階当時の記録としてそのまま残します。**
 
+> **追記（2026-10-18）**: 快適上限の表に系統の項目が無いベースモデル（いまは MiniMax H3）では、快適上限を使いません。`comfortCeiling` は尺を決めず（`computeTargetNumFrames` が `null` を返す）、呼び出し側が設定の既定値を格子に合わせて使うか、#9／#10 では今の値を残します。`materialClampedToCeiling` は素材の長さを格子へ切り下げ、上限はフォームの最大値です。格子（8n+1・17n+5 など）は `constraints.num_frames` から取ります（[`DEVLOG.md`](DEVLOG.md) §141）。
+
 **3つの方式（`DurationPolicy`）**:
 
 - **`comfortCeiling`（快適上限）**: 元になる素材の尺を持たない項目（t2v・i2vのように、これから作る動画の長さに素材由来の制約が無い項目）向け。解像度から`AppConfig.limits.spill_free_frames`（§5-4/`spillUtils.ts`の`resolveSpillFreeFrames`。ピクセル面積の最近傍で引く「快適に生成できる上限フレーム数」のテーブル）を引き、その値へ**常に**（それまで保持していたDURATION値に関係なく）合わせます。素材が無いため、上げる方向にも下げる方向にも遠慮なく快適上限へ揃える、という設計です。

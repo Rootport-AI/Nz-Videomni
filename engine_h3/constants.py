@@ -6,10 +6,13 @@ the latent strides, the two schedule shifts -- show up in the noise shapes,
 the RoPE grid, the VAE and the worker's defaults, and a second copy that
 drifted would be a silent shape bug rather than a loud one.
 
-Sources (Docs/MINIMAX_H3_RESEARCH_NOTES.md, scratchpad R2 report):
-  * steps 20 / Euler is the supervisor's first-gate choice (plan section 1);
-    the reference Euler default is 50, the Comfy template's 20 is res_multistep.
-  * shift 12 (video) / 3 (audio): the official scheduler_config.json pair.
+Sources (Docs/MINIMAX_H3_RESEARCH_NOTES.md; "R2" below is the model report
+Docs/Outputs-archive/h3-stage1-reports-2026-10-17/R2_model.md):
+  * steps 20 / Euler is the app's default (Docs/MINIMAX_H3_DESIGN.md §9; a job
+    may send its own ``num_inference_steps``); the reference Euler default is
+    50, the Comfy template's 20 is res_multistep.
+  * shift 12 (video) / 3 (audio): the official scheduler_config.json pair (the
+    defaults; a job may send its own ``shift_video`` / ``shift_audio``).
   * 17n+5 frames, T' = 5n+2 latent frames: the video VAE's clip length 17,
     temporal stride 4 and token_drop 3 (R2 F).
   * 40 audio latents per second at 32 kHz, hop 800 (R2 F).
@@ -31,7 +34,7 @@ VAE_TOKEN_DROP = 3
 AUDIO_LATENTS_PER_SECOND = 40
 AUDIO_SAMPLE_RATE = 32000
 AUDIO_HOP = 800                 # one audio latent = 800 samples
-KEYFRAME_NOISE_AUG = 0.999      # used from the second stage on (I2V condition rows)
+KEYFRAME_NOISE_AUG = 0.999      # I2V condition rows: 0.999 * clean + 0.001 * noise, t >= 0.999
 MODALITY_VIDEO, MODALITY_TEXT, MODALITY_AUDIO = 0, 1, 2
 LOG_PREFIX = "[h3_worker]"
 #: The attention backends the DiT accepts (the one list: worker, pipeline and dit read it).

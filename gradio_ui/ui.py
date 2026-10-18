@@ -444,7 +444,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # GET /models (gradio_ui/constraints.py). Refilled by every
         # refresh_model_dropdowns run; its .change re-shapes the Generate
         # tab (sampling sliders, labels, spill warning). Starts as the LTX
-        # rules, so the tab looks exactly as before until a server says
+        # rules, so the tab shows the LTX look until GET /models says
         # otherwise.
         gen_scope_state = gr.State(default_scope())
         # Current UI language. Fed as a runtime input to the generate/chain

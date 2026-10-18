@@ -216,12 +216,13 @@ def validate_for_family(family: str, request: GenerateRequest) -> None:
     """系統の数値の規約で ``request`` を検査する(違反は 422 VALIDATION_ERROR)。
 
     **``None`` の解決もここ1か所**。``num_inference_steps``(と H3 の shift)は
-    スキーマの既定が ``None``＝「系統の既定値」で、ここで系統の既定値を
-    要求に**書き戻す**(LTX は 8、MiniMax H3 は 20／12／3)。以後の読み手
+    スキーマの既定が ``None``＝「系統の既定値」で、ここで系統の既定値
+    (各アダプタの ``REQUEST_RULES``)を要求に**書き戻す**。以後の読み手
     (mock・ジョブ開始ログ・アダプタ・metadata.json・mp4 のレシピ)は
     常に数値を見る。
 
-    呼ぶ場所は api/generate.py の :func:`reject_unsupported` の**後**。
+    呼ぶ場所は api/generate.py の :func:`reject_unsupported` の**後**と、
+    api/generate_alpha.py(内部で組んだ要求の既定値の書き戻しのため)。
     機能の可否(FEATURE_UNSUPPORTED)が数値の違反(VALIDATION_ERROR)より
     先に返る。422 の形は pydantic の検証の失敗と同じ
     (``api.errors.request_validation_failed``)。

@@ -12,7 +12,7 @@ weights are read straight from the file onto the GPU while the forward runs
 vision tower is the cover-and-crop canvas image (``engine_h3.image_cond``), not
 a stretched one.
 
-I2V presentation (第 2 弾 2a, INTERFACE2 §1.5)
+I2V presentation (Docs/MINIMAX_H3_DESIGN.md §3)
 -----------------------------------------------
 ``"<Picture 1>: "`` (text, tag 1) + ``<|vision_start|> <|image_pad|> x N
 <|vision_end|>`` (tag 0, video) + the prompt (tag 1), each part tokenized on
@@ -23,20 +23,21 @@ canvas of 65 536 .. 16 777 216 pixels). ``mm_token_type_ids`` marks the
 without it); the DeepStack injection and the 3-axis vision positions happen
 inside Hugging Face's ``Qwen3VLModel.forward``, which is used unmodified.
 
-Direct read (第 2 弾 2a, 台帳 §1-98; review M-7)
-------------------------------------------------
+Direct read (Docs/MINIMAX_H3_DESIGN.md §4)
+------------------------------------------
 The encoder runs ONE forward per job (one prompt, no CFG), so no layer is
 worth keeping in main memory. ``load`` only builds the model on meta (and the
-tokenizer); ``encode`` reads the embedding table onto the GPU, then runs the
+tokenizer); ``encode`` reads the embedding table (and, for I2V, the vision
+tower) onto the GPU, then runs the
 unmodified Hugging Face ``forward`` with a pre-hook on every decoder layer that
 reads that layer's tensors from the file onto the GPU right before its forward,
 and a hook that drops them back to meta right after. The layer loop itself is
 HF's (the vision path's DeepStack injection and 3-axis positions live inside
 it), so nothing of it is rewritten here. The tensors keep the file's dtypes and
-the forward is the same code on the same device, so the hidden state is bit
-for bit the one of the former CPU-resident, layer-streamed encoder (gate
-2a-G2). The CPU side never holds more than one tensor of a layer or of the
-embedding table at a time, instead of the whole 24 GB.
+the forward is the same code on the same device, so reading the weights this
+way does not change the hidden state (VERIFICATION_LOG §166, 2a-G2). The CPU
+side never holds more than one tensor of a layer, of the embedding table or of
+the vision tower at a time.
 
 What H3 reads from the encoder (R2 D, R2 (3) item 10):
 
@@ -303,7 +304,7 @@ def te_read_plan(
 
 
 def presentation(tokenizer, prompt: str, image_tokens: int | None = None) -> tuple[list[int], list[int]]:
-    """The token ids and per-token modality tags the encoder reads (INTERFACE2 §1.5).
+    """The token ids and per-token modality tags the encoder reads (Docs/MINIMAX_H3_DESIGN.md §3).
 
     T2V (``image_tokens is None``): the prompt alone, all tag 1. I2V: the
     ``"<Picture 1>: "`` label (tag 1), the vision block of ``image_tokens``
@@ -365,7 +366,7 @@ def install_layer_read_hooks(layers, plans, path: str, header, device, stats: di
 
 
 class H3TextEncoder:
-    """Build (meta) -> encode (direct read) -> release, once per job (stage 1 of the pipeline)."""
+    """Build (meta) -> encode (direct read) -> release, once per job (the pipeline's ``encode`` stage)."""
 
     def __init__(self, te_path: str, tokenizer_dir: str, *, device) -> None:
         self.te_path = str(te_path)

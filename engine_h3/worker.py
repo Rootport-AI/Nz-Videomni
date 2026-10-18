@@ -1,7 +1,8 @@
 """Persistent MiniMax H3 generation worker.
 
 Runs inside ``.venv-engine-h3`` -- the environment with torch cu130,
-comfy-kitchen (the int8 kernels), transformers 5.14.1 (Qwen3-VL) and PyAV. It
+comfy-kitchen (the int8 kernels), transformers 5 (Qwen3-VL) and PyAV (the exact
+versions are engine_h3/venv-engine-h3.freeze.txt). It
 is a SIBLING of ``engine/worker.py`` (LTX 2.3) and ``engine25/worker.py``
 (LTX 2.5), never a replacement: each engine keeps its own venv and none of the
 three processes can import another's stack.
@@ -29,18 +30,19 @@ Protocol (one JSON object per line; parent -> worker):
       Paths are existence-checked first, then the headers are inspected
       (``h3_format``) and comfy-kitchen's CUDA int8 path is pinned. No weight is
       read at load: every job builds each stage from the files and frees it
-      (encode -> denoise -> decode). A failure is fatal: ``error`` + exit 1.
+      (encode -> denoise -> decode), except what a ``keep_resident`` job kept
+      (see ``generate``). A failure is fatal: ``error`` + exit 1.
       An optional key that is absent or null takes its default.
       ``blocks_on_gpu`` <= 0 (or >= 50) = the whole DiT on the GPU, no swap
       (see ``engine_h3.pipeline_h3.H3LoadOptions``). The text encoder has no
-      knob: it is read layer by layer from the file onto the GPU (§1-98).
+      knob: it is read layer by layer from the file onto the GPU.
       ``attention_backend`` / ``block_swap_prefetch`` here are the defaults of
       the jobs that do not send their own.
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch]}
       One T2V or I2V job. Omitted steps / shifts take the engine defaults
-      (20 / 12 / 3). ``images``: [] (T2V) or ONE ``{"path", "frame_idx": 0}``
+      (``engine_h3.constants``). ``images``: [] (T2V) or ONE ``{"path", "frame_idx": 0}``
       (the first frame); anything else is refused with a reason. Keys this
       engine does not read (top level, or inside an image entry) are logged
       once per job and ignored. ``keep_resident`` true keeps the DiT, the video
@@ -54,8 +56,9 @@ Protocol (one JSON object per line; parent -> worker):
 Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
   ready     {sampler, sage_available}
   progress  {stage, index, total}   stage: encode / stage1_denoise / decode
-            (there is no stage2: the second-stage app adapter must read these
-            with ``_read_worker_events(one_stage=True)``, as Alpha Gen does)
+            (there is no stage2: the app adapter, services/engines/h3/adapter.py,
+            reads these with ``_read_worker_events(one_stage=True)``, as Alpha
+            Gen does; ``encode`` counts 3 steps for T2V, 4 for I2V)
   done      {seed_used, sampler, num_inference_steps, shift_video, shift_audio,
              peak_vram_mb, peak_vram_reserved_mb, rss_peak_gib, commit_gib,
              commit_peak_gib, seconds,
@@ -316,7 +319,7 @@ def _do_generate(msg: dict) -> None:
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
     ignored += [f"images[].{k}" for k in inner_ignored]
     req = _generate_request(msg, images=images)
-    # Per job (plan §3.2): the job's own backend when it sends one, else the load value.
+    # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
     req.attention_backend = effective
     _log(
@@ -332,7 +335,7 @@ def _do_generate(msg: dict) -> None:
 
 
 def _release_after_failed_job() -> None:
-    """Every failed job releases what ``keep_resident`` kept (INTERFACE2 §8.1).
+    """Every failed job releases what ``keep_resident`` kept.
 
     The pipeline already does so for a failure inside ``generate``; this also
     covers a job refused before ``generate`` is reached (a malformed

@@ -308,29 +308,23 @@ const MOCK_MODEL_ENTRIES: Record<MockModelCategory, MockModelEntryFixture[]> = {
 };
 
 /** Multi-engine (§3-97): the BASE MODELS this fixture server declares, in the
- * order `GET /models` returns them. Both load. `LTX23` is always fully on
- * disk; how much of `LTX25` is on disk is the
- * {@link MockBridgeOptions.ltx25Install} knob, which is what lets the header
- * dropdown's install guidance and the server's missing-file refusal be
- * exercised without a real 22B download. */
+ * order `GET /models` returns them. Every one loads. `LTX23` is always fully
+ * on disk; how much of each other one is on disk is its own knob
+ * ({@link MockBridgeOptions.ltx25Install}, {@link MockBridgeOptions.h3Install}),
+ * which is what lets the header dropdown's install guidance and the server's
+ * missing-file refusal be exercised without a real download. */
 const MOCK_BASE_MODELS = [
   { id: "LTX23", display_name: "LTX 2.3", engine_family: "ltx" },
   { id: "LTX25", display_name: "LTX 2.5", engine_family: "ltx25" },
-  // MiniMax H3 第 2 弾 (2026-10-17): the third base model, the first whose
-  // numeric rules differ from LTX's (17n+5 frames, 32-multiple sizes, 24 fps
-  // only, three sampling sliders). How much of it is on disk is the
-  // {@link MockBridgeOptions.h3Install} knob. It has NO profile in
+  // A base model whose numeric rules differ from LTX's
+  // (`MOCK_CONSTRAINTS_BY_FAMILY.h3`). It has NO profile in
   // `MOCK_CONFIG_BODY.limits.comfort_budgets`, exactly like the real server
   // (its descriptor carries no `comfort`), so the comfort marker disappears.
   { id: "MiniMaxH3", display_name: "MiniMax H3", engine_family: "h3" },
 ] as const;
 
-/** `base_models[].constraints` per ENGINE FAMILY, as the real `GET /models`
- * publishes them (built server-side from each engine adapter's rule table —
- * MiniMax H3 第 2 弾 plan §3.3). The two LTX families share one table; the
- * fixture's `handleGenerate` validates against the ACTIVE base model's entry,
- * so a request that breaks its grid earns the same 422 a real server gives. */
-/** LTX 2.3 and 2.5 share one rule table (plan §3.3), so one constant. */
+/** LTX 2.3 and 2.5 share one rule table (`services/engines/ltx/request_rules.py`),
+ * so one constant. */
 const MOCK_LTX_CONSTRAINTS: BaseModelConstraints = {
   num_frames: { step: 8, offset: 1, min: 9, max: 481 },
   dimension_multiple: 64,
@@ -338,6 +332,11 @@ const MOCK_LTX_CONSTRAINTS: BaseModelConstraints = {
   sampling: null,
 };
 
+/** `base_models[].constraints` per ENGINE FAMILY, as the real `GET /models`
+ * publishes them (built server-side from each engine adapter's rule table).
+ * The fixture's `handleGenerate` validates against the ACTIVE base model's
+ * entry, so a request that breaks its grid earns the same 422 a real server
+ * gives. */
 const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
   ltx: MOCK_LTX_CONSTRAINTS,
   ltx25: MOCK_LTX_CONSTRAINTS,
@@ -353,8 +352,8 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
   },
 };
 
-/** `unsupported_features` per base model, verbatim from the server
- * (`services/engines/ltx25/adapter.py`'s `UNSUPPORTED_FEATURES`, published by
+/** `unsupported_features` per base model, verbatim from the server (each
+ * engine adapter's `UNSUPPORTED_FEATURES`, `services/engines/<family>/adapter.py`, published by
  * `api/models_registry.py`). Reproduced rather than paraphrased: the WebUI's
  * greying is driven by these exact strings, so a fixture that invented its
  * own names would let a typo in the real mapping pass every test.
@@ -473,15 +472,12 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // leaves `prune_vaed` as the ONE acceleration name this fixture still
     // publishes for LTX 2.5.
   ],
-  // MiniMax H3 第 2 弾: derived the way the real adapter derives it (plan
-  // §3.4) — every feature name of the single-request reject table, plus
-  // `chain` (the whole chain endpoint is refused) and `retake` (supervisor
-  // ruling 2026-10-17: a Retake is a chain request the engine refuses, so the
-  // adapter publishes the name, which closes the Retake sub-tab). On screen this hides the
-  // reference video, greys the Chained tab (and Create's A2V card and Batch
-  // A2V), the Negative Prompt accordion, the second-and-later keyframes and the
-  // keyframe strength, and — because all four of its sub-tabs close — the
-  // whole Edit tab.
+  // Derived the way the real adapter derives it
+  // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
+  // name of the single-request reject table, plus `chain` (the whole chain
+  // endpoint is refused) and `retake` (a Retake is a chain request, so the
+  // adapter publishes the name, which closes the Retake sub-tab). What each
+  // name closes on screen is `shell/featureScope.ts`'s `FEATURE_UI`.
   MiniMaxH3: [
     "loras",
     "reference_video",
@@ -1022,7 +1018,7 @@ export interface MockBridgeOptions {
    * answers 503 `ALPHA_OUTPUT_FAILED` (the server's ffmpeg failing) and records
    * nothing. */
   failAlphaOutput?: boolean;
-  /** Multi-engine (§3-97 P7): how much of the `LTX25` base model this fixture
+  /** How much of the `LTX25` base model this fixture
    * server has on disk, which decides what picking it in the header dropdown
    * does. `"full"` (default) → a complete install, and the load succeeds.
    * `"partial"` → `present: true, installed: false`, so the WebUI does call
@@ -1031,7 +1027,7 @@ export interface MockBridgeOptions {
    * the `install-LTX25.bat` guidance and never issues a request. `LTX23` is
    * always fully installed. */
   ltx25Install?: "none" | "partial" | "full";
-  /** MiniMax H3 第 2 弾: how much of the `MiniMaxH3` base model this fixture
+  /** How much of the `MiniMaxH3` base model this fixture
    * server has on disk — the same three states as {@link ltx25Install}, read
    * independently of it. `"full"` (default) → it loads. */
   h3Install?: "none" | "partial" | "full";
@@ -1207,8 +1203,8 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
    * what lets a test assert the WebUI's selection reverted to the base model
    * still loaded rather than to a coincidence. */
   let activeBaseModel: string = MOCK_DEFAULT_BASE_MODEL;
-  // Per base model, not per "everything that is not LTX 2.3": a third base
-  // model must not follow LTX 2.5's install state (MiniMax H3 第 2 弾).
+  // Per base model, not per "everything that is not LTX 2.3": each base model
+  // follows its own install knob.
   const presentByBase: Record<string, ReadonlySet<string>> = {
     LTX25: new Set<string>(MOCK_LTX25_PRESENT_CATEGORIES[options.ltx25Install ?? "full"]),
     MiniMaxH3: new Set<string>(MOCK_LTX25_PRESENT_CATEGORIES[options.h3Install ?? "full"]),
@@ -1394,7 +1390,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         // report — matching the real endpoint, which emits the key for every
         // base model precisely so "absent" and "empty" stay different facts.
         unsupported_features: [...(MOCK_UNSUPPORTED_FEATURES[base.id] ?? [])],
-        // MiniMax H3 第 2 弾: the numeric rules, per engine family.
+        // The numeric rules, per engine family.
         constraints: MOCK_CONSTRAINTS_BY_FAMILY[base.engine_family] ?? null,
         categories: Object.fromEntries(
           MOCK_MODEL_CATEGORIES.map((category) => [
@@ -1649,10 +1645,9 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     if (prompt.length < 1 || prompt.length > 2000) {
       return validationError("prompt", "String should have at least 1 character");
     }
-    // MiniMax H3 第 2 弾: the grid, the size multiple and the fps range are the
-    // ACTIVE base model's (`MOCK_CONSTRAINTS_BY_FAMILY`), so the LTX wording
-    // and limits below are unchanged for LTX and become 17n+5 / 32 / 24 fps on
-    // MiniMax H3.
+    // The grid, the size multiple and the fps range are the ACTIVE base
+    // model's (`MOCK_CONSTRAINTS_BY_FAMILY`), so the wording and limits below
+    // follow whichever base model is loaded.
     const activeFamily = MOCK_BASE_MODELS.find((b) => b.id === activeBaseModel)?.engine_family ?? "ltx";
     const rules = MOCK_CONSTRAINTS_BY_FAMILY[activeFamily] ?? MOCK_LTX_CONSTRAINTS;
     const dim = rules.dimension_multiple;
@@ -1926,7 +1921,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     // nothing and this loop could not fire for it at all; now it declares
     // `keep_resident_embeddings` and the loop fires on that one field.
     const activeUnsupported = new Set(MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []);
-    // MiniMax H3 第 2 弾 (code review M-2): a base model that declares `chain`
+    // A base model that declares `chain`
     // refuses the whole endpoint, like the real adapter's `reject_chain` —
     // decided by the declared list alone, as every row below is.
     if (activeUnsupported.has("chain")) return featureUnsupported("chain", "clips");

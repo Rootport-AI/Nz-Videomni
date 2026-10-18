@@ -933,7 +933,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // function has no use for either value, so there is no reason to spend a
     // `resolveComfortRow` lookup on it.
     //
-    // MiniMax H3 第 2 弾: the loaded base model's own frame floor/ceiling and
+    // The loaded base model's own frame floor/ceiling and
     // grid, and — for an engine the served comfort table has no profile for —
     // no ceiling at all (`comfortProfileMissing`), so #9/#10 leave DURATION as
     // the live form already holds it (on the grid) instead of rewriting it
@@ -1229,11 +1229,11 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         acceleration: accelerationControls.acceleration,
         sageAvailable: sageAvail,
         weightClass: baseModels.activeWeightClass,
-        // MiniMax H3 第 2 弾: the same rules `SingleScreen` hands its own call.
+        // The same rules `SingleScreen` hands its own call.
         constraints: baseModels.activeConstraints,
       });
-      // Code review m-2: a seed that resolved no DURATION (H3's comfortCeiling
-      // has no line) falls back to the config default ON THE GRID the remounted
+      // A seed that resolved no DURATION (e.g. a comfortCeiling intent on an
+      // engine with no comfort line) falls back to the config default ON THE GRID the remounted
       // form will snap it to, so the ribbon and the form agree. Single only —
       // the other targets keep LTX's grid (where the default already sits).
       numFrames =
@@ -1395,7 +1395,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     baseModels.activeEngineFamily,
     // §1-31: the weight class picks the comfort row beside the engine family.
     baseModels.activeWeightClass,
-    // MiniMax H3 第 2 弾: the frame grid / fps / size rules the seeds follow.
+    // The frame grid / fps / size rules the seeds follow.
     baseModels.activeConstraints,
     accelerationControls.acceleration,
     sageAvail,
@@ -1527,7 +1527,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // finished booleans and never reasons about engines itself.
   const editSubTabs = editSubTabsDisabledFor(baseModels.unsupportedFeatures);
 
-  // MiniMax H3 第 2 弾: the same arrangement for Create's own sections and for
+  // The same arrangement for Create's own sections and for
   // the shared Negative Prompt accordion. NAG closes in two halves: the
   // accordion greys, and every screen READS `NAG_OFF` meanwhile
   // (`effectiveNag`), so nothing of it rides on a request — the user's own
@@ -1584,7 +1584,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       />
 
       {/* NAG (2026-07-28): one shared accordion, outside every mode tab —
-          Create/Chain/Batch all read `nagControls.nag` (owner decision §UX 1). */}
+          Create/Chain/Batch all read the same settings (owner decision §UX 1),
+          as `nagForRequests` (`effectiveNag`), which reads as off while the
+          loaded base model cannot run NAG. */}
       <NagAccordion nag={nagControls.nag} controls={nagControls} unavailable={nagUnavailable} />
 
       {/* Shared note area (§6): tab-bar-level slot, visible on all three
@@ -1656,7 +1658,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  submits chain jobs, so it follows the engine's feature scope
                  rather than Create's own. */
               batchUnavailable={batchA2vDisabledFor(baseModels.unsupportedFeatures)}
-              /* MiniMax H3 第 2 弾: the loaded base model's numeric rules and
+              /* The loaded base model's numeric rules and
                  the Create sections its engine closes. */
               constraints={baseModels.activeConstraints}
               sectionsUnavailable={singleSections}

@@ -99,19 +99,20 @@ export interface SingleScreenProps {
    * Omitted/`""` ⇒ unknown ⇒ no `weight_class` in the match. */
   weightClass?: string | undefined;
   /** §3-98 P5: Batch A2V submits `POST /generate/chain`, which the loaded base
-   * model's engine may not support (LTX 2.5 v1 refuses the whole chain family
-   * with 422 `FEATURE_UNSUPPORTED`). `true` greys the panel's controls the same
+   * model's engine may not support (`featureScope.batchA2vDisabledFor`; the
+   * server answers such a request with 422 `FEATURE_UNSUPPORTED`). `true`
+   * greys the panel's controls the same
    * way its own runner state does — no new mechanism, just another reason.
    * Omitted ⇒ available, so every direct-render test keeps compiling. */
   batchUnavailable?: boolean | undefined;
-  /** MiniMax H3 第 2 弾: the LOADED base model's numeric rules
+  /** The LOADED base model's numeric rules
    * (`useBaseModels().activeConstraints`) — Create's frame grid, size
    * multiple, fps range and sampling sliders, threaded to `useGenerationForm`
    * and to this screen's right-click seeds (the same value `AppShell` hands its
-   * own `resolvePrefillSeed` call, R-4). Omitted = the LTX rules, so every
+   * own `resolvePrefillSeed` call). Omitted = the LTX rules, so every
    * direct-render test keeps compiling and behaving as before. */
   constraints?: GenerationConstraints | undefined;
-  /** MiniMax H3 第 2 弾: the parts of Create the loaded base model's engine
+  /** The parts of Create the loaded base model's engine
    * cannot use (`featureScope.singleSectionsDisabledFor`), as finished
    * booleans. Omitted = everything usable. */
   sectionsUnavailable?: SingleSectionsDisabled | undefined;
@@ -468,7 +469,7 @@ function SingleScreenBody({
         // policy can't resolve a value (null) or the intent has no DURATION policy.
         const effectiveWidth = sizePolicy === "project" ? editInfo.width : form.values.width;
         const effectiveHeight = sizePolicy === "project" ? editInfo.height : form.values.height;
-        // MiniMax H3 第 2 弾: a fixed engine rate is what the form holds and
+        // A fixed engine rate is what the form holds and
         // what the request carries, whatever the `project` policy read.
         const rules = constraints ?? LTX_GENERATION_CONSTRAINTS;
         const effectiveGenFps =
@@ -486,7 +487,7 @@ function SingleScreenBody({
           // Gated on `acceleration` for the same reason `resolvePrefillSeed` is:
           // a caller that does not thread the Settings state cannot say what
           // would effectively run, so it keeps the legacy ceiling.
-          // MiniMax H3 第 2 弾: no comfort line at all for an engine the served
+          // No comfort line at all for an engine the served
           // table has no profile for — only the grid snap remains.
           const noComfortLine = comfortProfileMissing(config.limits, engineFamily);
           const frameLimits = frameLimitsFor(rules, config.limits.max_num_frames);
@@ -526,10 +527,10 @@ function SingleScreenBody({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount consume
   }, []);
-  // MiniMax H3 第 2 弾: an engine that takes only the first frame
+  // An engine that takes only the first frame
   // (`multi_keyframes`) caps the panel at one card — the add button greys once
   // it exists. A card left from another base model is not removed; the
-  // server's 422 wording covers that case (m-18).
+  // server's 422 wording covers that case.
   const keyframes = useKeyframes(
     config,
     { nativeBridge },
@@ -848,7 +849,7 @@ function SingleScreenBody({
       if (command.type === "setDuration") {
         // W8 (#9/#10): live-set DURATION only — no other form value is touched
         // (prompt / width / height / keyframes all survive). `setNumFrames`
-        // re-snaps onto the 8n+1 grid and clamps into range, so an already-valid
+        // re-snaps onto the frame grid in force and clamps into range, so an already-valid
         // ceiling passes through unchanged.
         setNumFramesRef.current(command.numFrames);
         return;
@@ -1052,7 +1053,7 @@ function SingleScreenBody({
   // (This applies only while no Repeat count run is active — while a run has
   // remaining sends, the button is an always-enabled Stop, and the automatic
   // resend does not wait for serverBusy: a 409 ends the run instead.)
-  // Code review M-1: the reference-video slot's upload state, ignored while the
+  // The reference-video slot's upload state, ignored while the
   // loaded base model closes the reference video (`useGenerationForm`'s
   // `referenceVideoUnavailable` folds the rest of it).
   const referenceUploading = form.referenceVideo.state.status === "uploading";
@@ -1072,7 +1073,7 @@ function SingleScreenBody({
     // the `isICLora && !ready` gate below no longer covers this window — without
     // this the form would submit a reference-less plain T2V. Mirrors the
     // source-audio uploading gate directly above.
-    // Code review M-1: not while the reference video is closed — the form then
+    // Not while the reference video is closed — the form then
     // reads it as absent, so an upload into the hidden slot must not block.
     (referenceUploading && !referenceClosed) ||
     // IC-LoRA requires a reference video before it can submit

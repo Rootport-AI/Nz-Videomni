@@ -1705,7 +1705,7 @@ class _RealBackend:
     # ------------------------------------------------------------------ seams
     # Everything about this class that is a fact about the LTX 2.3 ENGINE
     # rather than about "how to talk to a worker subprocess" is named here, so
-    # a sibling family (engine25) inherits the process plumbing — spawn,
+    # a sibling family (engine25, engine_h3) inherits the process plumbing — spawn,
     # frame, read, unload — and restates only these. Every value below is the
     # 2.3 one.
 
@@ -2809,8 +2809,8 @@ class _RealBackend:
 # Declared (annotation-only) up in the class. Because the binding below sets
 # them on LTXRunner itself, a subclass family inherits 2.3's value for any
 # seam it does not bind, so a family binds its own ``_REAL_BACKEND_CLS``; the
-# mock class may be shared (LTX25Runner binds both explicitly, the mock one to
-# 2.3's ``_MockBackend``).
+# mock class may be shared (LTX25Runner and H3Runner bind both explicitly, the
+# mock one to 2.3's ``_MockBackend``).
 LTXRunner._REAL_BACKEND_CLS = _RealBackend
 LTXRunner._MOCK_BACKEND_CLS = _MockBackend
 

@@ -629,11 +629,11 @@ def request_validation_failed(message: str) -> APIError:
     "detail": [{"loc", "msg", "type"}]}``, and a ``ValueError`` raised in a
     model validator arrives as ``loc ["body"]``, ``msg "Value error, <text>"``,
     ``type "value_error"``. The family rules (``REQUEST_RULES`` in each engine
-    adapter, applied by ``services.engines.validate_for_family``) used to BE
-    such validators for LTX; they moved out of the schema because which family
-    runs a request is only known at the endpoint. Copying the shape keeps every
-    client that parses the old 422 (Gradio's ``format_api_error``, the MCP
-    server, the AviUtl2 panel) reading the same thing.
+    adapter, applied by ``services.engines.validate_for_family``) are checked
+    outside the schema because which family runs a request is only known at
+    the endpoint; the shape is the pydantic one so that every client parses
+    them the same way as any other 422 (Gradio's ``format_api_error``, the MCP
+    server, the AviUtl2 panel).
     """
     return APIError(
         "VALIDATION_ERROR",

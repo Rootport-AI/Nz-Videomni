@@ -8,8 +8,8 @@ that are a fact about ONE engine family — the frame grid, the spatial
 multiple, the fps, the step count and the shifts — live in a table each
 family's adapter declares as ``REQUEST_RULES``, and are applied once the
 active family is known: ``services.engines.validate_for_family``, called from
-api/generate.py right after ``reject_unsupported`` (MINIMAX_H3 stage-2 plan
-§3.3; Docs/MULTI_ENGINE_DESIGN.md §7).
+api/generate.py right after ``reject_unsupported`` (and from
+api/generate_alpha.py; Docs/MULTI_ENGINE_DESIGN.md §7).
 
 The same table is what ``GET /models`` publishes as a base model's
 ``constraints`` (:meth:`RequestRules.constraints`), so the screens read the
@@ -19,12 +19,11 @@ ONE PLACE FOR ``None``. ``num_inference_steps`` (and the two shifts) default to
 ``None`` on the schema, meaning "this family's default". :meth:`RequestRules.fill_defaults`
 writes the family default back into the request before it is checked, so every
 later reader (the mock, the job log line, the adapters, metadata.json, the mp4
-recipe) sees a number — and an LTX job still records ``8``.
+recipe) sees a number (an LTX job records ``8``).
 
-THE MESSAGES ARE THE OLD ONES, VERBATIM, for LTX: "width must be a multiple of
-64", "num_frames must be 8n+1", "distilled pipeline requires
-num_inference_steps=8" ... They used to come from the pydantic validator; the
-422 that carries them now is shaped exactly like pydantic's
+LTX'S MESSAGES ARE THE ONES ITS CLIENTS ALREADY PARSE: "width must be a
+multiple of 64", "num_frames must be 8n+1", "distilled pipeline requires
+num_inference_steps=8" ..., in a 422 shaped exactly like pydantic's
 (``api.errors.request_validation_failed``).
 
 This module imports nothing from api.models at module scope, because
@@ -128,9 +127,9 @@ class RequestRules:
     def violation(self, request: "GenerateRequest") -> str | None:
         """The message of the first rule ``request`` breaks, or ``None``.
 
-        First offender wins (as in the adapters' reject tables). The order is
-        the order the pydantic validator used to check LTX's three rules in:
-        width, height, frames, then the family's own extra check.
+        First offender wins (as in the adapters' reject tables), in a fixed
+        order: width, height, the frame grid, the frame range, the frame rate,
+        the sampling knobs, then the family's own extra check.
         """
         m = self.dimension_multiple
         if request.width % m != 0:

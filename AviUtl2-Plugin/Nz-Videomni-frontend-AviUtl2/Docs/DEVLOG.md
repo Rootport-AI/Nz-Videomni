@@ -5299,7 +5299,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 141.3 何を変えたか（`webui/src/`）
 
 - 制約の受け口: `api/types.ts`（`BaseModelBlock.constraints` と `GenerateRequest` の 3 項目）・`shell/generationConstraints.ts`（新設。LTX の既定値と、画面が読む形への変換）・`shell/useBaseModels.ts`（`activeConstraints`。中身が同じなら同じオブジェクトを返す）。
-- 刻みと倍数: `modes/single/paramUtils.ts` の `snapNumFrames`／`isValidNumFrames`／`isNumFramesOnGrid`／`isValidDimension` が刻みと倍数を引数で受けます（省略時は LTX の値なので、Chained・Edit・バッチの呼び出しはそのまま）。`timeline/deriveDuration.ts`・`deriveGenerationParams.ts`・`prefillSeed.ts`・`modes/single/useGenerationForm.ts`・`SingleScreen.tsx`・`shell/AppShell.tsx`（右クリック #9／#10）が `constraints` を読みます。
+- 刻みと倍数: `modes/single/paramUtils.ts` の `snapNumFrames`／`isValidNumFrames`／`isNumFramesOnGrid` が刻みを、`isDimensionOnGrid`（フォームの門）が倍数を引数で受けます（省略時は LTX の値なので、Chained・Edit・バッチの呼び出しはそのまま）。`isValidDimension` は 64 固定のままです（倍数を引数で受ける変更はレビューの指摘で元に戻しました）。`timeline/deriveDuration.ts`・`deriveGenerationParams.ts`・`prefillSeed.ts`・`modes/single/useGenerationForm.ts`・`SingleScreen.tsx`・`shell/AppShell.tsx`（右クリック #9／#10）が `constraints` を読みます。
 - 画面: `CommonGenerationFields.tsx`（`SamplingFields` を新設、`DurationField`／`SizeFields` の刻み、fps の固定）・`FloatSliderField.tsx`（横並びの引数）・`GenerationForm.tsx`・`KeyframesPanel.tsx`・`KeyframeCard.tsx`・`shell/NagAccordion.tsx`。
 - 機能名: `shell/featureScope.ts` に `nag`・`multi_keyframes`・`keyframe_strength` の行と、`reference_video`・`chain` の閉じる先を追加。ネガティブプロンプトは `shell/nagSettings.ts` の `effectiveNag` で、閉じている間は各画面が「オフ」を読みます（利用者の設定はそのまま残ります）。
 - 快適上限: `shell/comfortTable.ts` の `comfortProfileMissing`。
@@ -5312,8 +5312,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - 機能名の表（`featureScope.ts`）の「`chain` は Edit のサブタブに届かない」という規則は変えていません。Edit タブが閉じるのは、サーバーが `retake` を公開するためです。
 - A2V の音声やキーフレームを 2 枚以上、LTX で付けてから MiniMax H3 に切り替えた場合は、画面では外さず、送信時のサーバーの 422 に任せます（計画のとおり）。
-- 1 行のスライダーが WebView2 の狭い幅でどう折り返すかは、実機の目視で確かめます。
+- 1 行のスライダーの WebView2 の狭い幅での折り返しは、オーナーの目視（2c-G2）で合格しました。
 
 ### 141.5 状態
 
-- 実装済み・未コミット。ビルド（`build.ps1`）と配置（`deploy.ps1`）、オーナーの目視（2c-G2）は監督が行います。
+- dev にコミット済み（`b2a07e7`）。ビルドと配置済み。オーナーの目視（2c-G2）に合格（バックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §166.9）。目視で見つかった 2 点（Fused GGUF の行・A2V カードとバッチ A2V の閉じ方）はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-100。

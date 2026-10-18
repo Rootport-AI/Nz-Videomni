@@ -168,7 +168,7 @@ export function nagRequestFields(nag: NagSettings | undefined): NagRequestFields
   };
 }
 
-/** MiniMax H3 第 2 弾 (2026-10-17): the NAG settings every screen should READ
+/** The NAG settings every screen should READ
  * while the loaded base model's engine cannot run NAG (`nag` in its
  * `unsupported_features`, see `featureScope.nagDisabledFor`) — the frozen
  * {@link NAG_OFF}, so {@link nagRequestFields} emits nothing and

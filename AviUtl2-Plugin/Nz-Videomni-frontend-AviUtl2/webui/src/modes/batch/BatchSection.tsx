@@ -54,9 +54,8 @@ export interface BatchSectionProps {
    *
    * True exactly when the active engine's `unsupported_features` (GET /models)
    * contains `chain` or `a2v` — `shell/featureScope.ts`'s `FEATURE_UI` table,
-   * read through `batchA2vDisabledFor`. No engine the app ships with lists
-   * either, so the panel is not greyed for anyone today: a2v rows reach
-   * `POST /generate/chain` and i2v rows reach `POST /generate` on every engine.
+   * read through `batchA2vDisabledFor`. The whole panel greys then, i2v rows
+   * included (they would reach `POST /generate`, but share the panel).
    *
    * Rides the SAME `disabled` flag the runner state
    * already sets (no new mechanism, no new control), plus one explanation line

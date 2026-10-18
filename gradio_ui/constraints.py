@@ -21,10 +21,11 @@ request is checked against what the pipeline is on, not against a pending
 dropdown selection -- and turns it into the Single tab's labels, precheck and
 sampling sliders. It never branches on an engine id: a server that sends no
 block (an older backend, or before the first ``GET /models``) reads as
-:data:`LTX_CONSTRAINTS`, so LTX looks and behaves exactly as before.
+:data:`LTX_CONSTRAINTS`, so LTX keeps its fixed look (8 steps, CFG 1.0, 8n+1, ÷64).
 
-The Clip Chain tab, the batch and A2V paths are not touched: on a base model
-that takes sampling sliders they are closed by the server anyway (``chain``).
+The Clip Chain tab, the batch and A2V paths (POST /generate/chain) are not
+touched: MiniMax H3, the base model with sampling sliders, refuses the chain
+endpoint with a 422 (``chain`` in its ``unsupported_features``).
 """
 
 from __future__ import annotations
@@ -174,11 +175,10 @@ def sampling_payload(constraints: dict, steps, shift_video, shift_audio) -> dict
     """The sampling keys the Single tab sends. With sliders: all three, ALWAYS
     (one rule), each value falling back to its slider default when unreadable.
     Without: NONE -- the server writes the loaded family's own default back
-    (LTX: 8, so the LTX record is unchanged). Not sending a fixed 8 also keeps
+    (LTX: 8). Not sending a fixed 8 also keeps
     a stale scope (another client switched the server to a sampling family
     and this page was not refreshed) from silently running that family at 8
-    steps (code review 2b, M-2). ``guidance_scale`` is sent by the caller as
-    before."""
+    steps. ``guidance_scale`` is sent by the caller."""
     sampling = normalize_constraints(constraints)["sampling"]
     if sampling is None:
         return {}

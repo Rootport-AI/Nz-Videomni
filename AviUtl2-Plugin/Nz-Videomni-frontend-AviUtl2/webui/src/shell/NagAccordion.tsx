@@ -32,7 +32,7 @@ export interface NagAccordionControls {
 export interface NagAccordionProps {
   nag: NagSettings;
   controls: NagAccordionControls;
-  /** MiniMax H3 第 2 弾: the loaded base model's engine cannot run NAG/VSF
+  /** The loaded base model's engine cannot run NAG/VSF
    * (`featureScope.nagDisabledFor`). The accordion stays visible but GREYED —
    * every control disabled, a note on top, no ON badge — and the shell sends
    * none of its fields meanwhile (`nagSettings.effectiveNag`), so a NAG left
@@ -45,7 +45,8 @@ export interface NagAccordionProps {
 /**
  * The shared "Negative Prompt" accordion (D4), rendered ONCE by `AppShell`
  * directly below `PromptBar` and outside every mode tab — Create/Chain/Batch
- * all read the identical `NagSettings` (`shell/useNagSettings.ts`) this way,
+ * all read the identical `NagSettings` (`shell/useNagSettings.ts`, through
+ * `nagSettings.effectiveNag`) this way,
  * mirroring `PromptBar` itself. Presentation-only: every value comes from
  * `nag`, every mutation goes through `controls` — this component owns no
  * state of its own.
@@ -57,7 +58,7 @@ export interface NagAccordionProps {
 export function NagAccordion({ nag, controls, unavailable = false }: NagAccordionProps) {
   const strings = useStrings();
   const t = strings.nag;
-  // MiniMax H3 第 2 弾: while the engine cannot run NAG every control greys,
+  // While the engine cannot run NAG every control greys,
   // including the ones that are otherwise always operable (checkbox, radios).
   const off = !nag.enabled || unavailable;
 

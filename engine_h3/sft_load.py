@@ -124,7 +124,7 @@ def move_module_tree(root: nn.Module, device: torch.device, skip: set[int]) -> i
     The engine25 shape (``engine25/gguf_transformer.py:_move_module_tree``),
     rewritten here because that module imports ltx_core: written by hand
     rather than as ``root.to(device)`` because the point is to leave one
-    subtree (the DiT ``blocks`` / the TE decoder ``layers``) on the CPU for the
+    subtree (the DiT ``blocks``) on the CPU for the
     swap service. Parameters are rebound as fresh ``nn.Parameter``s with the
     same ``requires_grad`` (int8 ones stay ``False``); buffers go through their
     own ``.to()``. A tensor still on meta is a load bug and is refused by name.
@@ -159,9 +159,9 @@ def load_mapped_to(
 ) -> int:
     """Read ``mapping``'s file tensors straight onto ``device`` into a meta ``module``; returns bytes.
 
-    The direct read of the text encoder (第 2 弾 2a, §1-98): one decoder layer
-    (or the embedding table) at a time, file -> CPU buffer -> ``device``, so the
-    CPU never holds more than one tensor of it. ``mapping`` is file name ->
+    The direct read of the text encoder: one decoder layer (or the embedding
+    table, or the I2V vision tower) at a time, file -> CPU buffer -> ``device``,
+    so the CPU never holds more than one tensor of it. ``mapping`` is file name ->
     the module's own state-dict key (relative to ``module``). The tensors keep
     the file's dtype (``assign=True``), exactly as :func:`load_streaming` does,
     so a layer read this way computes bit for bit what a streamed-in layer

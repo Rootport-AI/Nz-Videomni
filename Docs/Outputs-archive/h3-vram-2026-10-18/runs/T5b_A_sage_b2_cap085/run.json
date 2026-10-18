@@ -1,0 +1,873 @@
+{
+  "label": "T5b_A_sage_b2_cap085",
+  "started": "2026-10-18 16:48:52.349",
+  "pid": 51144,
+  "args": {
+    "label": "T5b_A_sage_b2_cap085",
+    "width": 960,
+    "height": 1152,
+    "num_frames": 124,
+    "attention_backend": "sage",
+    "blocks_on_gpu": 2,
+    "memory_fraction": 0.85,
+    "record_history": false,
+    "history_entries": 2000000,
+    "steps": 2,
+    "seed": 42,
+    "idle_seconds": 10.0,
+    "dry_run": false,
+    "transformer": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "text_encoder": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+    "video_vae": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_audio_vae_fp32.safetensors",
+    "tokenizer_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_tokenizer"
+  },
+  "events": [
+    {
+      "t_mono": 88929.7331944,
+      "t_wall": 1792309749.9280543,
+      "event": "ready",
+      "sampler": "euler",
+      "sage_available": true
+    },
+    {
+      "t_mono": 88929.7375901,
+      "t_wall": 1792309749.9322164,
+      "event": "progress",
+      "stage": "encode",
+      "index": 0,
+      "total": 3
+    },
+    {
+      "t_mono": 88931.6256152,
+      "t_wall": 1792309751.8203397,
+      "event": "progress",
+      "stage": "encode",
+      "index": 1,
+      "total": 3
+    },
+    {
+      "t_mono": 88949.2530896,
+      "t_wall": 1792309769.447964,
+      "event": "progress",
+      "stage": "encode",
+      "index": 2,
+      "total": 3
+    },
+    {
+      "t_mono": 88949.4309378,
+      "t_wall": 1792309769.6254926,
+      "event": "progress",
+      "stage": "encode",
+      "index": 3,
+      "total": 3
+    },
+    {
+      "t_mono": 88961.9584814,
+      "t_wall": 1792309782.1529572,
+      "event": "progress",
+      "stage": "stage1_denoise",
+      "index": 0,
+      "total": 2
+    },
+    {
+      "t_mono": 88984.475679,
+      "t_wall": 1792309804.6704195,
+      "event": "progress",
+      "stage": "stage1_denoise",
+      "index": 1,
+      "total": 2
+    },
+    {
+      "t_mono": 89005.2888906,
+      "t_wall": 1792309825.4834955,
+      "event": "progress",
+      "stage": "stage1_denoise",
+      "index": 2,
+      "total": 2
+    },
+    {
+      "t_mono": 89005.5532498,
+      "t_wall": 1792309825.747921,
+      "event": "progress",
+      "stage": "decode",
+      "index": 0,
+      "total": 3
+    },
+    {
+      "t_mono": 89043.6578076,
+      "t_wall": 1792309863.8518558,
+      "event": "progress",
+      "stage": "decode",
+      "index": 1,
+      "total": 3
+    },
+    {
+      "t_mono": 89044.1913992,
+      "t_wall": 1792309864.3859236,
+      "event": "progress",
+      "stage": "decode",
+      "index": 2,
+      "total": 3
+    },
+    {
+      "t_mono": 89045.6331911,
+      "t_wall": 1792309865.8279738,
+      "event": "progress",
+      "stage": "decode",
+      "index": 3,
+      "total": 3
+    },
+    {
+      "t_mono": 89045.7087935,
+      "t_wall": 1792309865.9027913,
+      "event": "done",
+      "seed_used": 42,
+      "sampler": "euler",
+      "num_inference_steps": 2,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "peak_vram_mb": 10675,
+      "peak_vram_reserved_mb": 13630,
+      "rss_peak_gib": 22.2,
+      "commit_gib": 4.9,
+      "commit_peak_gib": 40.45,
+      "seconds": 115.98,
+      "num_frames": 124,
+      "frame_rate": 24,
+      "width": 960,
+      "height": 1152,
+      "size_bytes": 1622524,
+      "attention_used": "sage",
+      "block_swap_prefetch_used": "on",
+      "keep_resident_used": "off",
+      "images_used": 0,
+      "h3": {
+        "phases": {
+          "encode": {
+            "te": {
+              "num_layers_file": 50,
+              "num_layers_built": 50,
+              "int8_linears": 350,
+              "tensors_planned": 901,
+              "vision_tensors_in_file": 351,
+              "rope": {
+                "rope_type": "default",
+                "rope_theta": 5000000.0,
+                "mrope_section": [
+                  24,
+                  20,
+                  20
+                ],
+                "mrope_interleaved": true,
+                "head_dim": 128,
+                "num_attention_heads": 64,
+                "num_key_value_heads": 8,
+                "num_hidden_layers": 50,
+                "attn_implementation": "sdpa"
+              },
+              "extra_special_tokens": {
+                "ids": {
+                  "<d>": 151669,
+                  "</d>": 151670,
+                  "<|cutoff|>": 151671,
+                  "<|lyrics_start|>": 151672,
+                  "<|lyrics_end|>": 151673,
+                  "<|caption_start|>": 151674,
+                  "<|caption_end|>": 151675
+                },
+                "added_here": false
+              },
+              "seconds": 0.33
+            },
+            "rss_after_load_gib": 0.82,
+            "commit_after_load_gib": 2.11,
+            "te_read": {
+              "read_gib": 24.17,
+              "read_seconds": 17.2,
+              "layers_read": 50,
+              "encode_seconds": 17.58,
+              "tokens": 32,
+              "vision_tokens": 0
+            },
+            "rss_after_release_gib": 1.49,
+            "commit_after_release_gib": 3.2,
+            "text_tokens": 32,
+            "seconds": 19.7,
+            "rss_end_gib": 1.49,
+            "rss_process_peak_gib": 2.27,
+            "commit_end_gib": 3.2,
+            "commit_process_peak_gib": 5.18,
+            "peak_vram_mb": 1968,
+            "peak_vram_reserved_mb": 1992
+          },
+          "denoise": {
+            "dit": {
+              "int8_linears": 200,
+              "loaded_tensors": 732,
+              "loaded_gib": 19.53,
+              "read_seconds": 11.76
+            },
+            "dit_source": "file",
+            "rss_after_load_gib": 21.04,
+            "commit_after_load_gib": 26.69,
+            "rss_after_place_gib": 21.41,
+            "commit_after_place_gib": 29.93,
+            "sequence": {
+              "text": 32,
+              "cond": 0,
+              "audio": 414,
+              "video": 39960,
+              "total": 40406,
+              "latent_frames": 37,
+              "audio_latents": 207,
+              "grid": [
+                36,
+                30
+              ]
+            },
+            "m_per_step": [
+              1,
+              2
+            ],
+            "block_swap_prefetch_used": "on",
+            "rss_after_release_gib": 20.65,
+            "commit_after_release_gib": 26.93,
+            "seconds": 56.04,
+            "rss_end_gib": 20.65,
+            "rss_process_peak_gib": 21.54,
+            "commit_end_gib": 26.93,
+            "commit_process_peak_gib": 40.45,
+            "peak_vram_mb": 10675,
+            "peak_vram_reserved_mb": 13630
+          },
+          "decode": {
+            "vae_source": "file",
+            "audio_samples": 165333,
+            "audio_samples_decoded": 165600,
+            "frames": 124,
+            "seconds": 40.09,
+            "rss_end_gib": 3.09,
+            "rss_process_peak_gib": 22.2,
+            "commit_end_gib": 5.44,
+            "commit_process_peak_gib": 40.45,
+            "peak_vram_mb": 6459,
+            "peak_vram_reserved_mb": 7750
+          }
+        },
+        "quant_backends": {
+          "cuda": {
+            "available": true,
+            "disabled": false,
+            "int8_linear": true
+          },
+          "hip": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          },
+          "ascend": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false
+          },
+          "eager": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          },
+          "triton": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true
+          }
+        }
+      }
+    }
+  ],
+  "progress": [
+    {
+      "stage": "encode",
+      "index": 0,
+      "total": 3,
+      "t_mono": 88929.7375772,
+      "t_wall": 1792309749.9322164,
+      "iso": "2026-10-18 16:49:09.932"
+    },
+    {
+      "stage": "encode",
+      "index": 1,
+      "total": 3,
+      "t_mono": 88931.6255994,
+      "t_wall": 1792309751.8203397,
+      "iso": "2026-10-18 16:49:11.820"
+    },
+    {
+      "stage": "encode",
+      "index": 2,
+      "total": 3,
+      "t_mono": 88949.2530631,
+      "t_wall": 1792309769.447964,
+      "iso": "2026-10-18 16:49:29.447"
+    },
+    {
+      "stage": "encode",
+      "index": 3,
+      "total": 3,
+      "t_mono": 88949.4309147,
+      "t_wall": 1792309769.6254926,
+      "iso": "2026-10-18 16:49:29.625"
+    },
+    {
+      "stage": "stage1_denoise",
+      "index": 0,
+      "total": 2,
+      "t_mono": 88961.9584563,
+      "t_wall": 1792309782.1529572,
+      "iso": "2026-10-18 16:49:42.152"
+    },
+    {
+      "stage": "stage1_denoise",
+      "index": 1,
+      "total": 2,
+      "t_mono": 88983.0558744,
+      "t_wall": 1792309803.2504754,
+      "iso": "2026-10-18 16:50:03.250"
+    },
+    {
+      "stage": "stage1_denoise",
+      "index": 2,
+      "total": 2,
+      "t_mono": 89005.2789947,
+      "t_wall": 1792309825.4734342,
+      "iso": "2026-10-18 16:50:25.473"
+    },
+    {
+      "stage": "decode",
+      "index": 0,
+      "total": 3,
+      "t_mono": 89005.5532327,
+      "t_wall": 1792309825.747921,
+      "iso": "2026-10-18 16:50:25.747"
+    },
+    {
+      "stage": "decode",
+      "index": 1,
+      "total": 3,
+      "t_mono": 89043.6577767,
+      "t_wall": 1792309863.8518558,
+      "iso": "2026-10-18 16:51:03.851"
+    },
+    {
+      "stage": "decode",
+      "index": 2,
+      "total": 3,
+      "t_mono": 89044.1913724,
+      "t_wall": 1792309864.3859236,
+      "iso": "2026-10-18 16:51:04.385"
+    },
+    {
+      "stage": "decode",
+      "index": 3,
+      "total": 3,
+      "t_mono": 89045.6331567,
+      "t_wall": 1792309865.8279738,
+      "iso": "2026-10-18 16:51:05.827"
+    }
+  ],
+  "samples": {
+    "process_memory_preload": {
+      "tag": "preload",
+      "t_wall": 1792309747.255821,
+      "iso": "2026-10-18 16:49:07.255",
+      "seconds_taken": 1.38,
+      "csv": "gpu_process_memory_preload.csv",
+      "processes": 38,
+      "self_dedicated_mb": 183.3,
+      "self_shared_mb": 74.0,
+      "others_dedicated_mb": 5014.3,
+      "others_shared_mb": 82.2
+    },
+    "step1": {
+      "index": 1,
+      "t_mono_enter": 88983.0558744,
+      "t_wall_enter": 1792309803.2504754,
+      "memory_stats": {
+        "allocated_bytes.all.current": 3222493184,
+        "allocated_bytes.all.peak": 11193647616,
+        "reserved_bytes.all.current": 13090422784,
+        "reserved_bytes.all.peak": 14292090880,
+        "inactive_split_bytes.all.current": 583837696,
+        "inactive_split_bytes.all.peak": 3622125568,
+        "num_alloc_retries": 1,
+        "num_ooms": 0,
+        "num_device_alloc": 50,
+        "num_device_free": 21,
+        "allocated_mib.all.current": 3073.2,
+        "allocated_mib.all.peak": 10675.1,
+        "reserved_mib.all.current": 12484.0,
+        "reserved_mib.all.peak": 13630.0,
+        "inactive_split_mib.all.current": 556.8,
+        "inactive_split_mib.all.peak": 3454.3
+      },
+      "mem_get_info": {
+        "free_bytes": 2445733888,
+        "total_bytes": 17170956288,
+        "free_mib": 2332.4,
+        "total_mib": 16375.5,
+        "used_mib": 14043.1
+      },
+      "swap": {
+        "service": true,
+        "blocks_on_gpu": 2,
+        "last_prefetch_used": "on",
+        "prefetch_engine": true,
+        "arenas": 4,
+        "blocks": 50
+      },
+      "process_memory": {
+        "tag": "step1",
+        "t_wall": 1792309803.2509754,
+        "iso": "2026-10-18 16:50:03.250",
+        "seconds_taken": 1.42,
+        "csv": "gpu_process_memory_step1.csv",
+        "processes": 38,
+        "self_dedicated_mb": 12751.5,
+        "self_shared_mb": 1106.0,
+        "others_dedicated_mb": 5088.2,
+        "others_shared_mb": 106.1
+      },
+      "t_mono_done": 88984.4754395,
+      "t_wall_done": 1792309804.6698844
+    },
+    "step2": {
+      "index": 2,
+      "t_mono_enter": 89005.2789947,
+      "t_wall_enter": 1792309825.4734342,
+      "memory_stats": {
+        "allocated_bytes.all.current": 3222493184,
+        "allocated_bytes.all.peak": 11193889280,
+        "reserved_bytes.all.current": 13092519936,
+        "reserved_bytes.all.peak": 14292090880,
+        "inactive_split_bytes.all.current": 583837696,
+        "inactive_split_bytes.all.peak": 4491137536,
+        "num_alloc_retries": 1,
+        "num_ooms": 0,
+        "num_device_alloc": 51,
+        "num_device_free": 21,
+        "allocated_mib.all.current": 3073.2,
+        "allocated_mib.all.peak": 10675.3,
+        "reserved_mib.all.current": 12486.0,
+        "reserved_mib.all.peak": 13630.0,
+        "inactive_split_mib.all.current": 556.8,
+        "inactive_split_mib.all.peak": 4283.1
+      },
+      "mem_get_info": {
+        "free_bytes": 2434789376,
+        "total_bytes": 17170956288,
+        "free_mib": 2322.0,
+        "total_mib": 16375.5,
+        "used_mib": 14053.5
+      },
+      "t_mono_done": 89005.2791928,
+      "t_wall_done": 1792309825.4734342
+    }
+  },
+  "error": null,
+  "paths": {
+    "transformer": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "exists": true,
+      "bytes": 20970379616
+    },
+    "text_encoder": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "exists": true,
+      "bytes": 27141342152
+    },
+    "video_vae": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_video_vae_fp16.safetensors",
+      "exists": true,
+      "bytes": 5207808496
+    },
+    "audio_vae": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_audio_vae_fp32.safetensors",
+      "exists": true,
+      "bytes": 605254808
+    },
+    "tokenizer_dir": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_tokenizer",
+      "exists": true,
+      "files": [
+        "config.json",
+        "merges.txt",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json"
+      ]
+    }
+  },
+  "luid": {
+    "chosen_luid": "luid_0x00000000_0x0000f2a9_phys_0",
+    "chosen_dedicated_mb": 778.1,
+    "candidates": [
+      {
+        "instance": "luid_0x00000000_0x0000f2a9_phys_0",
+        "mb": 778.1
+      },
+      {
+        "instance": "luid_0x00000000_0x000104d7_phys_0",
+        "mb": 0
+      },
+      {
+        "instance": "luid_0x00000000_0x00010465_phys_0",
+        "mb": 0
+      }
+    ],
+    "discovered_at": "2026-10-18 16:48:53.666",
+    "note": "この回に取り直した値の記録。次の回では使わない"
+  },
+  "monitors_started": "2026-10-18 16:48:55.686",
+  "idle_window": {
+    "start_wall": 1792309735.709183,
+    "end_wall": 1792309745.720179,
+    "start_iso": "2026-10-18 16:48:55.709",
+    "end_iso": "2026-10-18 16:49:05.720"
+  },
+  "torch": {
+    "version": "2.13.0+cu130",
+    "cuda": "13.0",
+    "device": "NVIDIA GeForce RTX 4070 Ti SUPER"
+  },
+  "sdpa_paths": {
+    "is_flash_attention_available": false,
+    "mem_efficient_sdp_enabled": true,
+    "flash_sdp_enabled": true,
+    "math_sdp_enabled": true,
+    "cudnn_sdp_enabled": true
+  },
+  "mem_info_preload": {
+    "free_bytes": 15845031936,
+    "total_bytes": 17170956288,
+    "free_mib": 15111.0,
+    "total_mib": 16375.5,
+    "used_mib": 1264.5
+  },
+  "memory_cap": {
+    "fraction": 0.85,
+    "cap_mib": 13919.2,
+    "preload_free_mib": 15111.0,
+    "cap_exceeds_preload_free_minus_800mib": false
+  },
+  "per_process_memory_fraction": 0.8500000000116475,
+  "load_msg": {
+    "op": "load",
+    "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "text_encoder_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+    "video_vae_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\VAE\\minimax_h3_audio_vae_fp32.safetensors",
+    "tokenizer_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_tokenizer",
+    "blocks_on_gpu": 2,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true,
+    "deterministic": false
+  },
+  "load_seconds": 1.29,
+  "build_report": {
+    "dit": {
+      "prefix": "",
+      "num_layers": 50,
+      "hidden_size": 5376,
+      "heads": 56,
+      "adaln_grid": 1025,
+      "adaln_rank": 8,
+      "int8_layers": 200,
+      "quant_specs": [
+        "int8_tensorwise/convrot=True/g256"
+      ],
+      "unknown": []
+    },
+    "text_encoder": {
+      "num_layers": 50,
+      "int8_layers": 350,
+      "has_visual": true,
+      "metadata": {
+        "minimax_h3_te": {
+          "num_hidden_layers": 50,
+          "output": "unnormalized_hidden_after_layer_50"
+        }
+      }
+    },
+    "video_vae_tensors": 562,
+    "audio_vae_tensors": 917,
+    "options": {
+      "blocks_on_gpu": 2,
+      "attention_backend": "sage",
+      "block_swap_prefetch": true,
+      "deterministic": false
+    },
+    "quant_backends": {
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      }
+    },
+    "device": "cuda"
+  },
+  "generate_msg": {
+    "op": "generate",
+    "prompt": "A woman in a sunlit kitchen looks up from her cup of tea and smiles. <d>[English] Good morning. The kettle is still warm.</d>",
+    "seed": 42,
+    "width": 960,
+    "height": 1152,
+    "num_frames": 124,
+    "frame_rate": 24,
+    "num_inference_steps": 2,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vram-2026-10-18\\runs\\T5b_A_sage_b2_cap085\\out.mp4",
+    "images": [],
+    "keep_resident": false,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true
+  },
+  "generate_started_iso": "2026-10-18 16:49:09.928",
+  "generate_seconds": 115.98,
+  "monitors_stopped": "2026-10-18 16:51:08.248",
+  "done": {
+    "t_mono": 89045.7087935,
+    "t_wall": 1792309865.9027913,
+    "event": "done",
+    "seed_used": 42,
+    "sampler": "euler",
+    "num_inference_steps": 2,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "peak_vram_mb": 10675,
+    "peak_vram_reserved_mb": 13630,
+    "rss_peak_gib": 22.2,
+    "commit_gib": 4.9,
+    "commit_peak_gib": 40.45,
+    "seconds": 115.98,
+    "num_frames": 124,
+    "frame_rate": 24,
+    "width": 960,
+    "height": 1152,
+    "size_bytes": 1622524,
+    "attention_used": "sage",
+    "block_swap_prefetch_used": "on",
+    "keep_resident_used": "off",
+    "images_used": 0,
+    "h3": {
+      "phases": {
+        "encode": {
+          "te": {
+            "num_layers_file": 50,
+            "num_layers_built": 50,
+            "int8_linears": 350,
+            "tensors_planned": 901,
+            "vision_tensors_in_file": 351,
+            "rope": {
+              "rope_type": "default",
+              "rope_theta": 5000000.0,
+              "mrope_section": [
+                24,
+                20,
+                20
+              ],
+              "mrope_interleaved": true,
+              "head_dim": 128,
+              "num_attention_heads": 64,
+              "num_key_value_heads": 8,
+              "num_hidden_layers": 50,
+              "attn_implementation": "sdpa"
+            },
+            "extra_special_tokens": {
+              "ids": {
+                "<d>": 151669,
+                "</d>": 151670,
+                "<|cutoff|>": 151671,
+                "<|lyrics_start|>": 151672,
+                "<|lyrics_end|>": 151673,
+                "<|caption_start|>": 151674,
+                "<|caption_end|>": 151675
+              },
+              "added_here": false
+            },
+            "seconds": 0.33
+          },
+          "rss_after_load_gib": 0.82,
+          "commit_after_load_gib": 2.11,
+          "te_read": {
+            "read_gib": 24.17,
+            "read_seconds": 17.2,
+            "layers_read": 50,
+            "encode_seconds": 17.58,
+            "tokens": 32,
+            "vision_tokens": 0
+          },
+          "rss_after_release_gib": 1.49,
+          "commit_after_release_gib": 3.2,
+          "text_tokens": 32,
+          "seconds": 19.7,
+          "rss_end_gib": 1.49,
+          "rss_process_peak_gib": 2.27,
+          "commit_end_gib": 3.2,
+          "commit_process_peak_gib": 5.18,
+          "peak_vram_mb": 1968,
+          "peak_vram_reserved_mb": 1992
+        },
+        "denoise": {
+          "dit": {
+            "int8_linears": 200,
+            "loaded_tensors": 732,
+            "loaded_gib": 19.53,
+            "read_seconds": 11.76
+          },
+          "dit_source": "file",
+          "rss_after_load_gib": 21.04,
+          "commit_after_load_gib": 26.69,
+          "rss_after_place_gib": 21.41,
+          "commit_after_place_gib": 29.93,
+          "sequence": {
+            "text": 32,
+            "cond": 0,
+            "audio": 414,
+            "video": 39960,
+            "total": 40406,
+            "latent_frames": 37,
+            "audio_latents": 207,
+            "grid": [
+              36,
+              30
+            ]
+          },
+          "m_per_step": [
+            1,
+            2
+          ],
+          "block_swap_prefetch_used": "on",
+          "rss_after_release_gib": 20.65,
+          "commit_after_release_gib": 26.93,
+          "seconds": 56.04,
+          "rss_end_gib": 20.65,
+          "rss_process_peak_gib": 21.54,
+          "commit_end_gib": 26.93,
+          "commit_process_peak_gib": 40.45,
+          "peak_vram_mb": 10675,
+          "peak_vram_reserved_mb": 13630
+        },
+        "decode": {
+          "vae_source": "file",
+          "audio_samples": 165333,
+          "audio_samples_decoded": 165600,
+          "frames": 124,
+          "seconds": 40.09,
+          "rss_end_gib": 3.09,
+          "rss_process_peak_gib": 22.2,
+          "commit_end_gib": 5.44,
+          "commit_process_peak_gib": 40.45,
+          "peak_vram_mb": 6459,
+          "peak_vram_reserved_mb": 7750
+        }
+      },
+      "quant_backends": {
+        "cuda": {
+          "available": true,
+          "disabled": false,
+          "int8_linear": true
+        },
+        "hip": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        },
+        "ascend": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        },
+        "eager": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        },
+        "triton": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        }
+      }
+    }
+  },
+  "timing": {
+    "step2_seconds": 20.804,
+    "step1_hook_seconds": 1.42,
+    "rule": "2 ステップ目＝index 2 の時刻 − index 1 の割り込みを終えた時刻（synchronize 後）",
+    "step1_seconds_incl_prefetch_startup": 21.097,
+    "counts_step1_to_step2": {
+      "num_alloc_retries": 0,
+      "num_device_alloc": 1,
+      "num_device_free": 0,
+      "num_ooms": 0
+    }
+  },
+  "non_torch_estimate_mib": {
+    "formula": "(total-free)@index1 - reserved@index1 - others_dedicated@preload",
+    "value": -3455.2
+  },
+  "wddm": {
+    "samples": 134,
+    "nonzero_dedicated_samples": 134,
+    "dedicated_mb_min": 772.2,
+    "dedicated_mb_max": 13557.6,
+    "shared_mb_min": 65.2,
+    "shared_mb_max": 1212.1,
+    "dt_ms_median": 1002.0,
+    "idle": {
+      "samples": 10,
+      "dedicated_mb_median": 778.6,
+      "shared_mb_median": 81.3,
+      "dedicated_mb_max": 779.0,
+      "shared_mb_max": 82.3
+    }
+  },
+  "non_torch_estimate_mib_adapter_idle": {
+    "formula": "(total-free)@index1 - reserved@index1 - wddm_dedicated_median@idle",
+    "value": 780.5
+  },
+  "effective": {
+    "build_blocks_on_gpu": 2,
+    "build_attention_backend": "sage",
+    "attention_used": "sage",
+    "block_swap_prefetch_used": "on",
+    "arenas": 4,
+    "swap_blocks_on_gpu": 2,
+    "arenas_expected": 4,
+    "per_process_memory_fraction": 0.8500000000116475
+  },
+  "script_seconds": 135.91,
+  "finished": "2026-10-18 16:51:08.262"
+}

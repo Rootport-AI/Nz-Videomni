@@ -1,0 +1,54 @@
+{
+  "seq": 100352,
+  "heads": 8,
+  "torch": "2.13.0+cu130",
+  "cuda": "13.0",
+  "device": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "started": "2026-10-18 16:53:19",
+  "pid": 61540,
+  "sdpa_paths": {
+    "is_flash_attention_available": false,
+    "mem_efficient_sdp_enabled": true,
+    "flash_sdp_enabled": true,
+    "math_sdp_enabled": true
+  },
+  "strides": {
+    "q": [
+      7168,
+      128,
+      7168,
+      1
+    ],
+    "k": [
+      7168,
+      128,
+      7168,
+      1
+    ],
+    "v_view": [
+      7168,
+      128,
+      21504,
+      1
+    ],
+    "v_contiguous": [
+      102760448,
+      12845056,
+      128,
+      1
+    ]
+  },
+  "int32_products": {
+    "v_row_stride_x_S": 2157969408,
+    "q_row_stride_x_S": 719323136,
+    "int32_max": 2147483647
+  },
+  "isolated": {
+    "mode": "contiguous",
+    "seconds": 0.771,
+    "finite": true,
+    "abs_mean": 0.004143775440752506,
+    "error": null
+  },
+  "finished": "2026-10-18 16:53:20"
+}

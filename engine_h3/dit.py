@@ -389,7 +389,7 @@ class H3DiT(nn.Module):
         super().__init__()
         if not cfg.pruned or cfg.adaln_grid is None or cfg.adaln_rank is None:
             raise NotImplementedError(
-                "MiniMax H3: 枝刈り版（adaln_t_table を持つ）の DiT だけを扱います。非枝刈り版は第 1 弾の対象外です"
+                "MiniMax H3: 枝刈り版（adaln_t_table を持つ）の DiT だけを扱います。非枝刈り版には対応していません"
             )
         self.cfg = cfg
         hidden, heads, hd, ffn, rank = (

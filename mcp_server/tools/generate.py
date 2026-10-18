@@ -313,7 +313,7 @@ async def submit_generate(
         crop_width, crop_height: 最終出力のクロップサイズ（両方指定 or 両方
             省略）。
         num_frames: フレーム数（ベースモデルの ``constraints`` に従う。LTX は
-            8n+1、MiniMax H3 は 17n+5 かつ 22 以上・32 の倍数・24fps。
+            8n+1、MiniMax H3 は 17n+5 かつ 22 以上。
             既定 49 は LTX の値で、H3 で省略すると 422 になる）。
         frame_rate: フレームレート。1〜60の範囲内なら**整数へ四捨五入して**
             送る（29.97→30、23.976→24。非整数のfpsを避ける理由の記録は
@@ -322,7 +322,8 @@ async def submit_generate(
         seed: 乱数シード（-1でランダム）。
         conditioning_images: I2V用のキーフレーム画像（最大10件＝``config.py``
             の ``MAX_CONDITIONING_IMAGES``、``upload_image`` で得た ``image_id``
-            を使う）。
+            を使う）。MiniMax H3 は ``frame_idx=0`` の 1 件だけで、``strength``
+            は既定のまま（それ以外は 422 FEATURE_UNSUPPORTED）。
         loras: 適用するIC-LoRAアダプタのリスト。各要素の ``audio_strength``
             は映像軸（``strength``）とは独立した音声軸の適用強度（省略可、
             0〜2）。省略時は音声側も ``strength`` に追従する。0は
@@ -370,6 +371,10 @@ async def submit_generate(
             7.68GiB）です。2本目以降の生成が 27.6秒→20.5秒（約25%短縮）に
             なり（記録は同 §76）、LTX 2.5 側には併用の制限も自動降格も無いため、
             エコーは ``"on"`` / ``"off"`` の2値しか出ません。
+            MiniMax H3 でも使え、常駐するのは DiT・映像の復号器・音声 VAE
+            （すべて CPU 上。GPU には残しません）です。併用の制限も自動降格も
+            無く、エコーは ``"on"`` / ``"off"`` の2値です（実測は
+            ``Docs/VERIFICATION_LOG.md`` §166）。
         keep_resident_embeddings: **LTX 2.5 専用**。2.5 の埋め込み処理器
             （プロンプトを読み取ったあとの内部表現を整える部品）のCPU側の
             重み1本をジョブ間で常駐させ、毎ジョブのGGUF読み直しを省きます

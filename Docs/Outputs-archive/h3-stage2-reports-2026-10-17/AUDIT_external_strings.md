@@ -20,3 +20,9 @@ MiniMax H3 第 2 弾のあとのコード内コメントの現行化（記録は
 |---|---|---|---|---|
 | U-1 | `webui/src/i18n/strings.ts` の `single.reservedNote`（英・日） | 英 "CFG is not supported by the current backend (reserved for future use)"／日「CFGは現在のバックエンドでは未対応です（将来の使用のために予約されています）」 | 英 "The selected base model does not use CFG (reserved for future use)"／日「選択中のベースモデルはCFGを使いません（将来の使用のために予約されています）」 | この欄はいま、サンプリングの 3 本を持たないベースモデル（LTX）のときだけ出る。「現在のバックエンド」はベースモデルを切り替える今の画面の語彙と合わない。優先度 低 |
 | U-2 | 同 `single.unavailableOnBaseModel.keyframesMulti`（英・日） | 「選択中のベースモデルが使うキーフレームは先頭の1枚だけです」 | （コードの疑い C-1 を直さない場合）「先頭フレーム（0 フレーム目）に置いた 1 枚だけです」と位置まで言う | 制限されるのは枚数だけで、その 1 枚は先頭以外へ動かせる（動かすと送信時に 422。`VERIFICATION_LOG.md` §166.10 の webui の C-1）。C-1 と組で判断する。優先度 低 |
+
+## オーナー判断（2026-10-18）
+
+- **P-071: 適用済み**（オーナーの文面に、常駐に対応している LTX 2.3 の一句を監督が足した形。`mcp_server/server.py` の `INSTRUCTIONS`）: 「keep_resident（モデル骨格の常駐）が使えるのは LTX 2.3・LTX 2.5・MiniMax H3 です（既定 off。ただし、それぞれ常駐する中身が違い、2.3 が抱えるのは全部品の骨格、2.5 が抱えるのはテキストエンコーダの重みだけ、H3 が抱えるのは DiT・映像の復号器・音声 VAE です〔すべて CPU 上〕。常駐ぶんのメモリを多く使います）。」
+- **U-2: 現状のまま**（案は説明が詳細すぎる、とのオーナー判断）。
+- P-070・P-072〜P-074・U-1: 判断待ち。

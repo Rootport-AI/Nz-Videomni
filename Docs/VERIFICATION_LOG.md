@@ -17275,3 +17275,5 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
     - C-4: `shell/generationConstraints.ts` の「規則の違う系統は Chained・Edit・Batch を `unsupported_features` で閉じる」は約束で、強制は無い（今は起きない）。
     - C-5: `shell/nagSettings.ts` の作業ツリーで CRLF と LF が混在している（第 2 弾で足した末尾 12 行だけ LF）。git の索引は LF なので、コミットの中身には影響しない。
 - **コミット**: 監督が dev に積む。
+
+- 追記（2026-10-18 昼）: 外部文言 7 件のうち P-071（MCP の案内文の常駐の説明）はオーナーの文面で適用（LTX 2.3 の一句を監督が補った）、U-2 は現状のまま（オーナー判断）。残り 5 件（P-070・P-072〜P-074・U-1）は判断待ち。一覧は `Outputs-archive/h3-stage2-reports-2026-10-17/AUDIT_external_strings.md`。

@@ -143,6 +143,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.90 | 2026-10-16 | **文書のみ（API・実装・既定値はいずれも変わらない）**。Alpha Gen の LoRA（`alpha-gen` の実体）を `install-LTX25.bat` が `Rootport/Nz-LTX25-weights` から取得するようになったことを反映した。**§5.1b** の表に IC-LoRA Alpha Gen の行を足し、表の前の件数の文を件数を書かない形にした。**§11.2** の `ic_loras` の行の「配布方法は未定（`Docs/PENDING_TASKS.md` §1-87）」を現行化した。記録は `Docs/VERIFICATION_LOG.md` §161・`Docs/PENDING_TASKS_CLOSED.md` 3-235。 |
 | v0.5.91 | 2026-10-18 | **MiniMax H3（エンジン系統 `h3`）の第 2 弾を反映（加算。LTX 2.3／2.5 の既定の応答・記録・検査の文言は変わらない）**。`GenerateRequest` に `shift_video`／`shift_audio` を足し、`num_inference_steps` の既定を `8` から `null`（＝系統の既定値。LTX は 8、H3 は 20）へ改めた（アプリが書き戻すので記録は従来どおり 8）。64 の倍数・8n+1・distilled のステップ数と guidance の検査は `GenerateRequest` から系統の規則表へ移した（§6.2b。422 の形と英文は同じ、検査の順序だけが変わる）。`GET /models` の `base_models[]` に `constraints` を足した。`metadata.json` に `h3` 欄を足した。§6.2・§6.6・§6.9(c)・付録 A を合わせた。実測は `Docs/VERIFICATION_LOG.md` §166。 |
 | v0.5.92 | 2026-10-18 | **文書のみ（API・実装・既定値はいずれも変わらない）**。MiniMax H3 第 2 弾のあとの現行化。§6.10(d) の件数を `shift_video`／`shift_audio` の分だけ直した（無視＋ログが 4 件・全 34 件）。§6.9(b) の事前検査に H3 の経路を、§6.9(c) の `transformer_weight_class` に LTX 以外の系統は `null` であることを足した。§6.10 の冒頭に H3 の 4 分類の正本（アダプタの表）を書いた。venv・構成図・ディレクトリ・比較表・§11.2・用語集に `h3` 系統を足し、§12.2 の Gradio の刻みとステップ数・shift のスライダー、付録 A の検証の置き場（系統の規則表）、§6.10(f) の連結のフレーム規約（LTX の 2 系統で共通）を実装どおりにした。§0.3 の SSOT 地図に `Docs/MINIMAX_H3_DESIGN.md` を、§2.1 の RAM とドライバの行に H3 の条件を足した。記録は `Docs/VERIFICATION_LOG.md` §166.10。 |
+| v0.5.92（文言の現行化） | 2026-10-18 | **文言の現行化（版は上げない。API・挙動は不変）**。MiniMax H3 の第 3 弾（`install-MiniMaxH3.bat`）を §2.5 に反映した。ベースモデル別の導入バッチを `install-LTX25.bat` と `install-MiniMaxH3.bat` の 2 本にし、`setup.bat` が作らない venv を `-SkipVenv` を越えて作る規則と、冪等の粒度に `.venv-engine-h3`（`setup.bat` の再実行では当て直されない）の項を足した。§2.3 の venv の列挙を現行化し、付録 A の「I2V のキーフレーム画像」の行に【LTX の規則】の札を付けた。記録は `Docs/VERIFICATION_LOG.md` §167（第 3 弾は開発機の門まで合格。サブマシンの門の結果も同節）。 |
 
 ### 0.2 スコープ
 
@@ -254,10 +255,10 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 **このプロジェクトは開発マシンのシステム Python 環境を一切汚さない・壊さない。** これは本プロジェクトの最優先制約であり、維持し続ける。
 
-- **Python 本体を含め**、必要なものはすべてプロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.python/`）に閉じ込める。
+- **Python 本体を含め**、必要なものはすべてプロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.venv-engine-ltx25/`, `.venv-engine-h3/`〔任意導入〕, `.venv-utils/`〔任意導入〕, `.python/`, `.uv_cache/`, `tools/`）に閉じ込める。
 - グローバル/システムの `pip install` は**禁止**。必ず `uv` + プロジェクトローカル venv。
 - システム環境変数（永続的な `PATH`・`PYTHONPATH` 等）の恒久的な書き換えを禁止する。
-- 後片付けは**このディレクトリ（`.venv` / `.venv-engine` / `.python` を含む）を削除するだけ**で完全に元に戻せる状態を維持する。
+- 後片付けは**このディレクトリ（`.venv` / `.venv-engine` / `.venv-engine-ltx25` / `.venv-engine-h3` / `.venv-utils` / `.python` を含む）を削除するだけ**で完全に元に戻せる状態を維持する。
 
 ### 2.4 プロセススコープの環境変数
 
@@ -277,7 +278,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 セットアップの実体は `scripts/install_ltx.ps1`（冪等クリーンインストーラ）が担う。manifest 読み込みと妥当性検証 → 前提チェック → **既存 `models/` の新レイアウトへの移行と `config.yaml` の追随** → 各 venv の構築（アプリ＋エンジン系統ごと） → 現行 ~33GB モデルセットのダウンロード → PASS/MISSING 検証表 → `models/INSTALLED_PATHS.txt` 再生成、を冪等（再実行安全）に行う。手順とモデル内訳は **§5** / `README.md` §1 を参照（§16 は受け入れテスト）。
 
-**入口は2階建てである**: 本体の `setup.bat`（LTX 2.3 と共用前処理器）と、ベースモデル別の `install-<ID>.bat`（`ID` は記述子の `id`。現行は `install-LTX25.bat` の1本で、`scripts/install_model.ps1` を経て `install_ltx.ps1 -BaseModel <ID> -SkipVenv -SkipMigrate` を呼ぶ）。**どちらの経路が何を担当するかを決めているのは `install_ltx.ps1` の `-BaseModel`** で、その既定値が `setup.bat` の同梱集合そのものである。設計判断の正本は `Docs/MULTI_ENGINE_DESIGN.md` §6.2。
+**入口は2階建てである**: 本体の `setup.bat`（LTX 2.3 と共用前処理器）と、ベースモデル別の `install-<ID>.bat`（`ID` は記述子の `id`。現行は `install-LTX25.bat` と `install-MiniMaxH3.bat`。どちらも `scripts/install_model.ps1` を経て `install_ltx.ps1 -BaseModel <ID> -SkipVenv -SkipMigrate` を呼ぶ）。**どちらの経路が何を担当するかを決めているのは `install_ltx.ps1` の `-BaseModel`** で、その既定値が `setup.bat` の同梱集合そのものである。`-SkipVenv` の意味は「`setup.bat` が作った venv に触れない」であり、`setup.bat` が作らない venv（MiniMax H3 の `.venv-engine-h3`、物体追尾の `.venv-utils`）は、その記述子が `-BaseModel` に選ばれたときに限り、`install_ltx.ps1` が `-SkipVenv` を越えて作る（ベースモデルでない任意導入の `install-UETrack.bat` も同じ形である）。LTX 2.5 の venv は `setup.bat` が作るので、`install-LTX25.bat` は重みだけを取る。設計判断の正本は `Docs/MULTI_ENGINE_DESIGN.md` §6.2。
 
 **既存インストールの自動移行（2026-08-19 新設）**: 旧レイアウト（`models/ltx-2.3-gguf/` 等）で導入済みの環境は、`setup.bat` の再実行で新レイアウトへ**移動のみ**で移る（同一ボリュームのリネームなので数十 GB でも数秒・再ダウンロードは発生しない）。移行は全 manifest の `migrate` 表を合算した対応表に対する**パス区切り境界の前方一致・最長一致**で判定し、残余パスは移動先へ連結するため、サブフォルダや利用者が自分で置いたファイル（LoRA・自家変換 GGUF・x4 アップスケーラ）は無設定のまま持ち上がる。事前ガード（同一ボリューム／ジャンクション検査／衝突は throw＝`-Force` 不使用／パス長警告）が全通過するまで 1 ファイルも動かさず、実行は 1 ファイル 1 行の即時ログ（`logs\model_migration_*.log`）を残す。`.cache/`（HuggingFace の帳簿）はディレクトリごと破棄し、空になった旧ディレクトリだけを削除する（`-Recurse` を使うのは `.cache` の破棄のみ）。`-DryRun` は計画表を出して何も変更せず exit 0、`-SkipMigrate` は移行自体を飛ばす。ロールバック用スイッチは**意図的に作っていない**（コードの revert と組にならないロールバックは安全性を上げないため。代替はログからの手動逆再生で、手順は `README.md`「models フォルダの構成」にある）。
 
@@ -297,6 +298,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 - **アプリ venv `./.venv`**: `uv sync` は毎回走る（冪等だが SKIP はしない）。
 - **エンジン venv `./.venv-engine`**: **ピン留めされた依存が前回適用時から変わっていないときだけ SKIP** する。判定は freeze ファイル（`engine/venv-engine.freeze.txt`）の `名前==版` の行（コメント行と空行を除く）と、`install_ltx.ps1` 内にハードコードされた直接指定（`$engineDirectPins`／`$ltx25DirectPins`。LTX 2.3 は git 3 件と wheel 1 件、LTX 2.5 は 5 件）を連結した SHA-256 で行い（freeze ファイルのコメントだけを変えても貼り直しは起きない）、適用済みの値を `.venv-engine/.nz-engine-state` に記録する（`.gitignore` 配下＝追跡外・venv と運命を共にする）。このファイルは**完了マーカーを兼ねる**ため、記録が無い場合は「再適用する」側へ倒す（中断で半端に残った venv と、この仕組み以前に作られた venv を救うため）。この再同期があってはじめて「`git pull` → `setup.bat` 再実行」という更新手順が成立する。
+- **エンジン venv `./.venv-engine-h3`（MiniMax H3）**: SKIP の判定は上と同じ方式（freeze ファイル `engine_h3/venv-engine-h3.freeze.txt` の `名前==版` の行と、`install_ltx.ps1` の直接指定を連結した SHA-256 を `.nz-engine-state` と突き合わせる）。ただし判定して貼り直すのは `install-MiniMaxH3.bat` の経路だけで、**`setup.bat` の再実行では当て直されない**。freeze が変わったときの更新手順は「`install-MiniMaxH3.bat` を再実行する」である（`README.md` §1「更新のしかた」）。物体追尾の `.venv-utils` と同じ扱いである。
 - **モデル群（2026-08-19 全面改訂）**: 判定単位は**ディレクトリではなく期待ファイル 1 件**である。manifest の `files[]` が「このパスに、この `min` バイト以上のファイルがあること」を宣言し、**全行が満たされたときにだけそのダウンロードを SKIP** する（1 行でも欠ければダウンロードが走り、完了後に同じ `files[]` で再検証して不足なら throw）。ディレクトリ合計方式（`-Check` の `@{ Dir; Min }`・2026-08-19 廃止）は 2 つの理由で破綻していた: (a) `TextEncoder/` は 2 つのリポジトリから供給されるため、ディレクトリ合計で事後検証するとどちらの順に落としても片方だけでは合計に届かず、**新規インストールが 100% 失敗**する。(b) `Weights/` は利用者の自家変換 GGUF が同居してサイズが水増しされ、公式ファイルの欠損を隠す。ファイル単位なら「公式ファイルが無ければ必ず落ちてくる」が成立し、欠損隠蔽によるデッドロックが原理的に消える。**利用者資産はガードに一切影響しない。**
 - **ダウンロードの再試行（2026-08-30 追加）**: `hf download` の呼び出しは**固定 5 回**まで試みる（間隔は 5 / 10 / 20 / 40 秒）。`huggingface_hub` は転送中の再試行を内部で行うが、`snapshot_download` 冒頭の `repo_info` と Xet の接続情報の取得は再試行しないため、TLS のリセット 1 回でプロセスごと落ちるのを補う。**リマップは `.cache/`（レジューム情報）を消さない**ので、再試行も再実行も取得済みのバイトを取り直さない。**回数を固定してあるのは意図的である**（諦めないインストーラは、案内を出して止まるものより悪い）。実測は `Docs/VERIFICATION_LOG.md` §82.7。
 - **`min` の取り方**: 公式ファイルの実測サイズの約 5% 下に置く（GiB/GB 混同を避けるため 10 進バイトのリテラルで書き、根拠は各行の `_min` キーに直付けする）。例外は tokenizer の 1 行だけで、こちらは `kind:"dir"` として直下ファイルの合計を見る（10 ファイルを個別に列挙しても得るものが無いため）。この `files[]` が**ガード＝検証表＝`INSTALLED_PATHS.txt` の単一真実源**であり、二重管理は存在しない。
@@ -2369,7 +2371,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | フレーム数**【LTX の規則】** | **8n+1**（9, 17, 25, … 481） | 上限 cap=**481=20s@24fps**（旧 257 から緩和。§6.7）。検証は系統の規則表（§6.2b） |
 | distilled ステップ / CFG**【LTX の規則】** | **8 steps / CFG=1.0** 固定 | 系統の規則表（§6.2b。`services/engines/ltx/request_rules.py`） |
 | MiniMax H3 の規則 | **17n+5（22〜481）・32 の倍数・24fps 固定**・ステップ数 1〜50（既定 20）・shift 1〜20（既定 12／3）。キーフレームは先頭 1 枚だけ | 系統の規則表（§6.2b）。`GET /models` の `constraints` が配る |
-| I2V のキーフレーム画像 | **最大10枚**・`frame_idx` は 0 または 8n+1（画像なし=T2V）。`0` は開始フレーム、`> 0` は 8n+1 グリッドへスナップし `[1, num_frames-8]` へクランプ（**422 にはせず丸める**）。ただし**丸めた先が他の1枚とぶつかったときだけは 422**。上限10に届くのは `num_frames >= 73` から（置ける格子点は `(num_frames-9)//8+2` 個） | §6.2 の凍結制約 6・7、§6.7 の `max_conditioning_images` |
+| I2V のキーフレーム画像**【LTX の規則】** | **最大10枚**・`frame_idx` は 0 または 8n+1（画像なし=T2V）。`0` は開始フレーム、`> 0` は 8n+1 グリッドへスナップし `[1, num_frames-8]` へクランプ（**422 にはせず丸める**）。ただし**丸めた先が他の1枚とぶつかったときだけは 422**。上限10に届くのは `num_frames >= 73` から（置ける格子点は `(num_frames-9)//8+2` 個） | §6.2 の凍結制約 6・7、§6.7 の `max_conditioning_images` |
 | 非64 表示サイズ | **`crop_output` で中央クロップ**（例 1280×768→720, 960×576→540） | §8.2 |
 | 解像度別 spill-free フレーム（16GB 実測） | **数値はここへ書き写さない**——実体は `config.yaml` の `limits.spill_free_frames`（`GET /api/v1/config` で配信） | 超えると shared へ溢れ ~2-4x 低速（OOM せず）。**説明と現行値の正本＝`Docs/COMFORT_LIMIT_TABLE.md` §付記**（2026-08-31 に判定規則 v3 で再測定）。当初の実測経緯＝`Docs/RESOLUTION_DURATION_CAPABILITY.md` §8.4/§8.6 |
 | 解像度×尺の実用上限 | 解像度別に §10 / §6.7 を参照 | 1080p 長尺は非実用（~40分・commit リスク）→ **720p 生成 + 外部 upscale 推奨** |

@@ -542,6 +542,8 @@ config.yaml の `lora_dir`（Style LoRA の置き場）と `ic_loras`（IC-LoRA 
 > **既存の系統で読める重みなら、3本目以降のベースモデルは、バッチ1本と記述子1本で足せる**（別の系統なら、加えてワーカー・仮想環境・アダプタが要る。§3.3）。 `install_ltx.ps1` の既定値に手を入れるのは、**本体インストーラの同梱物そのものが増えるとき**（たとえば新しい共用記述子を `setup.bat` にも配らせるとき）だけである。
 >
 > **ベースモデルでないものも、同じ規約の導入バッチで足せる。** 物体追尾（`install-UETrack.bat`）がその例で、記述子は「任意導入である」という印を持つだけでエンジン系統を宣言しない——ドロップダウンには現れず、本節のガード(2)の対象にもならない。詳細は [`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) を参照。
+>
+> **別の系統のベースモデルは、導入バッチが仮想環境も作る。** MiniMax H3（`install-MiniMaxH3.bat`）がその例である。H3 は torch の版が既存の系統と同居できない別の系統（§3.3）なので、`setup.bat` は H3 の仮想環境 `.venv-engine-h3` を作らない。`install-MiniMaxH3.bat` は `install-LTX25.bat` と同じく `install_model.ps1` を経て `install_ltx.ps1 -BaseModel MiniMaxH3 -SkipVenv -SkipMigrate` を呼び、`install_ltx.ps1` は H3 の記述子が選ばれたときに限り、`-SkipVenv` を越えて H3 の仮想環境を作る（物体追尾の `.venv-utils` と同じ形。`setup.bat` が作った仮想環境には触れない）。その後に重みを取る。このため **`git pull` のあとの `setup.bat` の再実行では H3 の仮想環境は当て直されず**、H3 の依存が変わったときは `install-MiniMaxH3.bat` を再実行する。重みは再ホストせず、公開元（`Comfy-Org/MiniMax-H3` と `MiniMaxAI/MiniMax-H3`）から直接取る。H3 固有の取り決めは [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §10。
 
 ### 6.3 切り替えたとき、Settings のモデル選択欄に何が入るか
 

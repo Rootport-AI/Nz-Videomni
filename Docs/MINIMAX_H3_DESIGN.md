@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の MiniMax H3 の項目（§1-93）である。件数や項目番号の一覧は本書に書かない。
-- **現在の実装範囲**: 第 1 弾（ワーカーのセルフテスト）と第 2 弾（I2V〔先頭フレーム〕・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP）が実装済みである（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165・§166）。インストーラ（`install-MiniMaxH3.bat`）は第 3 弾で、まだ無い。範囲の全体は §11。
+- **現在の実装範囲**: 第 1 弾（ワーカーのセルフテスト）と第 2 弾（I2V〔先頭フレーム〕・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP）が実装済みである（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165・§166）。インストーラは `install-MiniMaxH3.bat` で、仮想環境の構築と重みの取得を 1 回で行う（第 3 弾。§10）。範囲の全体は §11。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -253,7 +253,8 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 - **名前**: `.venv-engine-h3`。MULTI_ENGINE_DESIGN §5.3 の一覧に並ぶ 3 つ目のエンジン用仮想環境である。
 - **torch を LTX に揃えない理由【オーナー裁定：裁定 11・16】**: comfy-kitchen の CUDA 拡張は CUDA 13 系の torch で効く。拡張自体は torch の DLL にリンクしていないので、CUDA 13 系でさえあれば torch の版は問わない。そのうえで、SageAttention・triton-windows などの周辺の実績がある版を選ぶ。既存の 2 系統の torch（CUDA 12.8 系）のままでは CUDA 拡張が使えない。
-- **利用者側の条件**: NVIDIA ドライバ **R580 以上**（CUDA 13 系の下限）。GPU は **Turing（RTX 20 系）以降**（CUDA 13 で Pascal 以前が削除された）。README に書く（第 3 弾）。
+- **利用者側の条件**: NVIDIA ドライバ **R580 以上**（CUDA 13 系の下限）。GPU は **Turing（RTX 20 系）以降**（CUDA 13 で Pascal 以前が削除された）。利用者向けの書き方（確かめた世代と未確認の世代の区別、主メモリと容量）は README の「ハードウェア要件の詳細」「対応する GPU 世代」と §7.6 にある。
+- **作るのは導入バッチ**: `setup.bat` はこの仮想環境を作らない。`install-MiniMaxH3.bat` が `install_ltx.ps1` の `Ensure-EngineVenv` で作り（`-SkipVenv` を越える。物体追尾の `.venv-utils` と同じ形）、そのあと重みを取る。導入バッチの位置づけは MULTI_ENGINE_DESIGN §6.2。`setup.bat` の再実行では当て直されないので、freeze が変わったときは `install-MiniMaxH3.bat` を再実行する。
 - **容量が増える**: torch の版が既存の仮想環境と違うため、uv のハードリンク共有（MULTI_ENGINE_DESIGN §5.3「容量は心配しなくてよい」）が効かず、この仮想環境ぶんの数 GB がそのまま増える。実測値は freeze と記録簿を見る。必要空き容量の正本は README のハードウェア要件表である。
 - **入れないもの**: torchaudio（CUDA 13 の Windows 版が torch の新しい版と組めず、H3 の経路は使わない）、diffsynth（部品は移植した）。
 - **版の正本は `engine_h3/venv-engine-h3.freeze.txt`** である。手で作り直すときの仕様と、各版を選んだ理由は `engine_h3/engine_h3-venv-pyproject.toml` に書く。
@@ -268,7 +269,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 |---|---|
 | 第 1 弾（完了。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165） | 仮想環境・重みの取得・`engine_h3/` と `h3_format.py`・T2V セルフテスト 1 本・本書 |
 | 第 2 弾（完了。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166） | I2V（先頭フレーム）のセルフテスト → アダプタ・系統登録・記述子・ヘッダ判定（`h3_format.py` をアプリ側の事前検査から呼ぶ）・API の制約（17n+5・24fps 固定・32 の倍数）・API にステップ数と shift（映像・音声）の 3 項目・操作パネル（ドロップダウンは自動追随・フレーム数のスナップ・快適上限マーカーの非表示・`featureScope.ts`・ステップ数／Shift（映像）／Shift（音声）の 3 本のスライダー〔裁定 22〕）・Gradio の同じ 3 本・MCP の最小対応・テスト・常駐 |
-| 第 3 弾 | `install-MiniMaxH3.bat`（仮想環境の構築と取得を 1 回で）・`Ensure-EngineVenv` の 3 回目の呼び出し・インストーラで作った環境での freeze の取り直し・README の要件行（ドライバ・GPU 世代・容量） |
+| 第 3 弾（開発機の門まで合格。サブマシンの門を含む記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167） | `install-MiniMaxH3.bat`（仮想環境の構築と取得を 1 回で）・`Ensure-EngineVenv` の 3 回目の呼び出し・インストーラで作った環境での freeze の取り直し・README（導入手順・要件〔ドライバ・GPU 世代・主メモリ・容量〕・α版の制限〔§7.6〕・ライセンス） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限は、較正が済むまで記述子に `comfort` の行を持たせず、操作パネルのマーカーを出さない。
@@ -296,6 +297,5 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 - **性能**: 大きな画角ではノイズ除去の段で VRAM が溢れ、1 ステップが大きく遅くなる（実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9）。最適化は台帳 §1-101。遅すぎて快適上限の較正（§1-95）に支障が出るなら、LoRA（Turbo）対応の優先順位を上げる（研究ノート §10 の裁定 21）。
 - **m×n ≥ 2³¹ の CUDA 経路**: ソースの水準では限界が無いが、実測は台帳 §1-95（快適上限の較正）で行う。
-- **サブマシンのドライバ**: 未確認。第 3 弾の README までに確かめる。
 - **メインメモリ 32GB 機**: α版の対象外である（推奨は 64GB。裁定 26）。コミット量の山が 32GB を超えるので、ページファイルで動く可能性はあるが未検証である（§4。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166）。
 - **ヘッダの揺れのうち後回しにしたもの**: コミュニティ版の読み込み、非枝刈り版、groupsize の混在への対応範囲。

@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-17（§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票・§1-92 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162）・§1-94 を起票・§2-1〔元 §1-89〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237・§3-238（テストコードの整理と不安定の一掃）を起票し §1-94 を吸収・運用規則に不安定なテストの扱いを追記・§3-238 に状態と順位の注記（2026-10-17・§1-93 に α版の完結条件を追記し、§1-95〜§1-97（快適上限の較正・ステップ数と shift の表示・末尾と中間キーフレーム）を起票（2026-10-17）・§1-96 を §1-93 の第 2 弾へ吸収（2026-10-17）・§1-93 の第 1 弾が完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165。2026-10-17）・§1-98 と §1-99（テキストエンコーダの直接読み・T2V で符号化器を読まない）を起票（2026-10-17）・§1-98 と §1-99 を §1-93 の第 2 弾へ吸収して削除・§1-93 の第 2 弾の計画を了承（2026-10-17）・§1-93 の第 2 弾の実装完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166。2026-10-18）。
+- 作成: 2026-07-15／最終更新: 2026-10-17（§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票・§1-92 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162）・§1-94 を起票・§2-1〔元 §1-89〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237・§3-238（テストコードの整理と不安定の一掃）を起票し §1-94 を吸収・運用規則に不安定なテストの扱いを追記・§3-238 に状態と順位の注記（2026-10-17・§1-93 に α版の完結条件を追記し、§1-95〜§1-97（快適上限の較正・ステップ数と shift の表示・末尾と中間キーフレーム）を起票（2026-10-17）・§1-96 を §1-93 の第 2 弾へ吸収（2026-10-17）・§1-93 の第 1 弾が完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165。2026-10-17）・§1-98 と §1-99（テキストエンコーダの直接読み・T2V で符号化器を読まない）を起票（2026-10-17）・§1-98 と §1-99 を §1-93 の第 2 弾へ吸収して削除・§1-93 の第 2 弾の計画を了承（2026-10-17）・§1-93 の第 2 弾の実装完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166。2026-10-18）・§1-100・§1-101 を起票・§1-93 の第 2 弾が目視合格（2026-10-18）。
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
@@ -15,14 +15,14 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-**§1-93（MiniMax H3 対応・α版）は第 1 弾（ワーカーのセルフテスト）が完了し、第 2 弾（ワーカーの I2V と常駐・アダプタ・操作パネル）は実装と機械の門（API 経由の実生成を含む）を終えて目視待ち（オーナーの目視と main への merge が残る）。§1-95 と §1-97 は §1-93 の α版が完結してから着手する（順序はオーナーが決める）。**
+**§1-93（MiniMax H3 対応・α版）は第 1 弾（ワーカーのセルフテスト）が完了し、第 2 弾（ワーカーの I2V と常駐・アダプタ・操作パネル）は目視合格・main への merge 待ち（オーナーの合図で行う）。§1-95 と §1-97 は §1-93 の α版が完結してから着手する（順序はオーナーが決める）。**
 
 ### 1-93. MiniMax H3 対応・α版（公式 FL2VA 枝刈り int8 ConvRot を 16GB で動かす）（起票：2026-10-16）
 
 - **概要**: 第 3 のベースモデルとして MiniMax H3（映像と音声を同時に作る 33B のモデル）を足す。α版の範囲は公式系 FL2VA の枝刈り int8 ConvRot 1 本と int8 ConvRot のテキストエンコーダで、16GB の VRAM で動かすこと。解像度と尺の快適上限の較正は α版に含めず §1-95 で行う。α版では快適上限マーカーを非表示にする。利用者が CivitAI などから落としたファイルを置くだけで動くことを理想とする（裁定 6）。ヘッダの揺れ（[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §13.3）を α版でどこまで吸収するかは計画のセッションで決める。
 - **裁定と前提**: 裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-09-06・2026-10-16・2026-10-17）。範囲のメモは同 §13.8。前提の工事＝フレーム規約 17n+5・24fps 固定・4〜15 秒の系統別制約（同 §9）と、専用の仮想環境（torch は LTX と揃えない）。
 - **α版の完結条件**: AviUtl2 の操作パネルから T2V と I2V（先頭フレームのみ）が生成できること、`install-MiniMaxH3.bat` と README まで進むこと。第 1 弾はワーカーのセルフテストで 1 本生成する。ステップ数と shift（映像・音声）は第 1 弾では既定値で固定し、第 2 弾で操作パネルと Gradio に 3 本のスライダーとして出す（裁定 22）。末尾と中間のキーフレームは §1-97。実装の土台の修正点と論点は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の裁定 17。
-- **入口**: 第 1 弾（ワーカーのセルフテストで T2V 1 本）は完了（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165）。**第 2 弾は実装・門（2a-G1〜G5・2b-G1・2b-G2・2c-G1）・コードのレビュー・ビルドと配置まで完了**（記録は同 §166）。残りは、2c-G2（オーナーの操作パネルでの目視）と、main への merge。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッションでプランモードで行う。計画とレビューは [`Outputs-archive/h3-stage2-reports-2026-10-17/`](Outputs-archive/h3-stage2-reports-2026-10-17/README.md)、裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の 23〜35。GPU を使う実測は段ごとにオーナーの了承を得る。
+- **入口**: 第 1 弾（ワーカーのセルフテストで T2V 1 本）は完了（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165）。**第 2 弾は実装・門（2a-G1〜G5・2b-G1・2b-G2・2c-G1）・コードのレビュー・ビルドと配置まで完了**（記録は同 §166）。2c-G2 合格（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9）。残りは main への merge。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッションでプランモードで行う。計画とレビューは [`Outputs-archive/h3-stage2-reports-2026-10-17/`](Outputs-archive/h3-stage2-reports-2026-10-17/README.md)、裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の 23〜35。GPU を使う実測は段ごとにオーナーの了承を得る。
 - **出典**: 同ノート §13・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §9。
 
 ### 1-95. MiniMax H3 非蒸留 int8 ConvRot の快適上限の較正（起票：2026-10-17）
@@ -39,6 +39,20 @@
 - **前提**: §1-93 の α版。
 - **入口**: 計画はプランモードで行う。GPU を使う実測は弾ごとにまとめてオーナーの了承を得る。
 - **出典**: [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-10-17 の裁定）・同 §13.3（FL2VA の列の並び）。
+
+### 1-100. MiniMax H3 の操作パネルの表示の表の更新（Fused GGUF の行の非表示・A2V カードとバッチ A2V の非表示）（起票：2026-10-18）
+
+- **概要**: 第 2 弾の目視で見つかった 2 点。① Settings「生成の高速化」の「Fused GGUF Dequantization Kernel」の行は GGUF を使わない系統（MiniMax H3）では表示しない。この行は今は機能名の受け口が無い（他の行は `prune_vaed` などの機能名で非表示にしている）ので、機能名（例: `fused_gguf_dequant_kernel`）をアダプタが公開し、`featureScope.ts` の表と Settings の部品に受け口を足す。「Block-swap prefetch」の行は H3 でも効くので表示のまま。② Single の A2V カードと Batch A2V は、H3 では灰色でなく非表示にする（今は `chain` の行で灰色。閉じ方は部品ごとに決める既存の作法に沿う）。
+- **前提**: §1-93 の第 2 弾（完了）。
+- **優先順位**: §1-93 の第 3 弾（インストーラと README）の前後どちらでもよい（オーナーが決める）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6。
+
+### 1-101. MiniMax H3 の VRAM 16GB 最適化（β版以降）（起票：2026-10-18）
+
+- **概要**: 第 2 弾の目視で、I2V 896×1152・124 フレームのノイズ除去が 1 ステップ約 210 秒かかり、VRAM の溢れ（共有 GPU メモリを約 3.7GB 使用。VRAM ピーク 12.8GB）が起きた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9）。これを H3 の特徴として受け入れず、推論エンジンが VRAM 16GB に最適化されていない可能性を疑って改善する。目標は LTX 系 8bit と同じくらいの快適上限（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) の 1280×768 で 265〜313 フレーム、1920×1088 で 121〜145 フレームの水準）。考え方（オーナー）: テンソルは数学的には好きなだけ小さく分割して計算でき、分割が細かいほど元の形へ戻す余計な計算が増えるが、「余計な計算による速度低下 ＜ VRAM 溢れによる PCIe のボトルネックの速度低下」なら細かく分割するほうが得。候補の手段（監督の見立て。計画で検討）: 系列方向のチャンク化（FFN と int8 行列積の入力をトークン方向に分けて回す）・常駐ブロック数 `blocks_on_gpu` の画角に応じた自動調整・注意の実装（SageAttention／SDPA のメモリ効率）の確認・ノイズ除去中の不要な保持（視覚塔・条件行の写し）の解放・音声復号の窓化。
+- **前提**: §1-93 の α版が完結していること。§1-95（快適上限の較正）はこの最適化の後に行うか、同時に扱う（順序はオーナーが決める）。
+- **優先順位**: β版以降。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9・[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13。
 
 ---
 

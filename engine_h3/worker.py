@@ -40,15 +40,17 @@ Protocol (one JSON object per line; parent -> worker):
       the jobs that do not send their own.
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
-   [images], [keep_resident], [attention_backend], [block_swap_prefetch]}
+   [images], [keep_resident], [attention_backend], [block_swap_prefetch],
+   [vram16_mode]}
       One T2V or I2V job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ONE ``{"path", "frame_idx": 0}``
       (the first frame); anything else is refused with a reason. Keys this
       engine does not read (top level, or inside an image entry) are logged
       once per job and ignored. ``keep_resident`` true keeps the DiT, the video
       decoder and the audio VAE on the CPU for the next job; a job without it
-      releases them. A failure is reported with ``error`` and the process
-      stays alive.
+      releases them. ``vram16_mode`` true runs the denoise in VRAM 16GB mode
+      (``engine_h3.lowvram``; absent / null = off here, the app sends it every
+      job). A failure is reported with ``error`` and the process stays alive.
   {"op": "shutdown"}
   Before load an unknown op is only logged (an ``error`` there would be read
   as the reply to the next ``load``); after load it is answered with ``error``.
@@ -63,8 +65,8 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
              peak_vram_mb, peak_vram_reserved_mb, rss_peak_gib, commit_gib,
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
-             block_swap_prefetch_used, keep_resident_used, images_used,
-             h3: {phases, quant_backends}}
+             block_swap_prefetch_used, keep_resident_used, vram16_mode_used,
+             images_used, h3: {phases, quant_backends}}
   error     {detail}
 STDERR carries the human log, prefixed ``[h3_worker]``.
 
@@ -74,7 +76,7 @@ Selftest:
       [--prompt S --width 640 --height 384 --num-frames 124 --seed 42 --steps 20
        --shift-video 12 --shift-audio 3 --rounds 1 --report r.json
        --attention-backend sdpa|sage --blocks-on-gpu 8 --prefetch|--no-prefetch
-       --deterministic --image P --keep-resident]
+       --deterministic --image P --keep-resident --vram16|--no-vram16]
 """
 
 import os
@@ -157,6 +159,7 @@ _GENERATE_FIELDS = frozenset({
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
+    "vram16_mode",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
@@ -308,6 +311,7 @@ def _generate_request(msg: dict, images: tuple | None = None):
         keep_resident=_or("keep_resident", False, bool),
         attention_backend=_or("attention_backend", None, str),
         block_swap_prefetch=_or("block_swap_prefetch", None, bool),
+        vram16_mode=_or("vram16_mode", False, bool),
     )
 
 
@@ -326,7 +330,7 @@ def _do_generate(msg: dict) -> None:
         f"generate: seed={req.seed} {req.width}x{req.height} frames={req.num_frames} "
         f"steps={req.num_inference_steps} shift={req.shift_video}/{req.shift_audio} "
         f"attention={effective} images={len(req.images)} keep_resident={req.keep_resident} "
-        f"prefetch={req.block_swap_prefetch} -> {req.output_path}"
+        f"prefetch={req.block_swap_prefetch} vram16={req.vram16_mode} -> {req.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
     )
     result = _PIPE.generate(req)
@@ -457,6 +461,8 @@ def _selftest_parser():
     parser.add_argument("--deterministic", action="store_true")
     parser.add_argument("--image", default=None, help="I2V: the first frame (frame_idx 0)")
     parser.add_argument("--keep-resident", action="store_true")
+    parser.add_argument("--vram16", action=argparse.BooleanOptionalAction, default=False,
+                        help="VRAM 16GB mode (vram16_mode)")
     return parser
 
 
@@ -494,6 +500,7 @@ def _selftest_generate_message(args, out: str) -> dict:
         "keep_resident": bool(args.keep_resident),
         "attention_backend": args.attention_backend,
         "block_swap_prefetch": bool(args.prefetch),
+        "vram16_mode": bool(args.vram16),
     }
 
 

@@ -80,6 +80,7 @@ from engine_h3.constants import (
     MODALITY_VIDEO,
     SPATIAL_FACTOR,
     VAE_SPATIAL,
+    VRAM16_CAP_MARGIN_MIB,
     audio_latents,
     latent_frames,
 )
@@ -148,6 +149,9 @@ class H3GenerateRequest:
     #: Per job; ``None`` = the load-time value.
     attention_backend: str | None = None
     block_swap_prefetch: bool | None = None
+    #: VRAM 16GB mode (engine_h3.lowvram, 台帳 §1-101). The worker's default is off;
+    #: the app's default (on for H3) is filled in by its adapter, which always sends it.
+    vram16_mode: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -341,6 +345,29 @@ def _free_cuda() -> None:
         torch.cuda.empty_cache()
 
 
+#: VRAM 16GB mode: the allocator counters recorded as differences over the denoise.
+_VRAM16_COUNTERS = ("num_alloc_retries", "num_ooms")
+
+#: VRAM 16GB mode's message for a CUDA OOM (裁定 47). Keeps "CUDA out of memory" so
+#: the app classifies it as GPU_OOM; the advice reaches the user in ``detail``.
+VRAM16_OOM_MESSAGE = (
+    "VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。"
+    "解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください"
+)
+
+
+def _cuda_index(device) -> int:
+    """The device as an integer index: ``set_per_process_memory_fraction`` refuses a
+    ``torch.device("cuda")`` without one (the pipeline's device usually has none)."""
+    d = torch.device(device)
+    return d.index if d.index is not None else torch.cuda.current_device()
+
+
+def _vram16_counters(device) -> dict:
+    stats = torch.cuda.memory_stats(device)
+    return {key: int(stats.get(key, 0)) for key in _VRAM16_COUNTERS}
+
+
 # --------------------------------------------------------------------------- #
 # the pipeline
 # --------------------------------------------------------------------------- #
@@ -512,6 +539,7 @@ class H3Pipeline:
             "attention_used": self._attention_for(req),
             "block_swap_prefetch_used": prefetch_used,
             "keep_resident_used": "on" if keep else "off",
+            "vram16_mode_used": "on" if req.vram16_mode else "off",
             "images_used": len(req.images or ()),
             "h3": {"phases": phases.data, "quant_backends": _backend_summary(self.quant_backends)},
         }
@@ -631,7 +659,9 @@ class H3Pipeline:
             cleaned += 1
         return cleaned
 
-    def _place_dit(self, dit, prefetch: bool | None = None) -> tuple[object | None, str]:
+    def _place_dit(
+        self, dit, prefetch: bool | None = None, blocks_on_gpu: int | None = None
+    ) -> tuple[object | None, str]:
         """Non-block tensors to the GPU; blocks stay on the CPU behind the swap service.
 
         Mirrors ``engine25/gguf_transformer.py:_place_transformer``: the blocks
@@ -640,13 +670,17 @@ class H3Pipeline:
         engine's VRAM peak is inside denoise, as LTX 2.5's is. Any wrapper a
         kept DiT still wears is stripped first, so a job never wraps twice
         whatever the previous job's prefetch setting was.
+
+        ``blocks_on_gpu``: this job's swap window (None = the load value). It is
+        written to the one resident service before every ``install`` (which
+        reads it), so a job's window never leaks into the next job.
         """
         from engine.transformer.block_swap_service import BlockSwapService  # noqa: PLC0415
         from engine_h3.sft_load import move_module_tree  # noqa: PLC0415
 
         self._unpatch_block_swap(dit)
         blocks = list(dit.blocks)
-        n = int(self.options.blocks_on_gpu)
+        n = int(self.options.blocks_on_gpu if blocks_on_gpu is None else blocks_on_gpu)
         if n <= 0 or n >= len(blocks):
             moved = move_module_tree(dit, self.device, skip=set())
             self._log(f"denoise: full residency ({moved} tensors to {self.device}; blocks_on_gpu={n})")
@@ -657,9 +691,75 @@ class H3Pipeline:
         if self._swap_service is None:
             self._swap_service = BlockSwapService(blocks_on_gpu=n, device=self.device, hold_arenas=True)
         service = self._swap_service
+        service.blocks_on_gpu = n
         service.prefetch_requested = bool(self.options.block_swap_prefetch if prefetch is None else prefetch)
         service.install(dit)
         return service, str(service.last_prefetch_used or "off")
+
+    @staticmethod
+    def _evict_text_modules(dit, keep: bool) -> str:
+        """VRAM 16GB mode: the token refiner and ``condition_proj`` leave the GPU after ``refine_text``.
+
+        Neither runs again in this job. A job that keeps the DiT parks them on
+        the CPU (``_park_dit`` would anyway); any other job drops them to meta,
+        since its DiT is released at the end of the job.
+        """
+        from engine_h3.sft_load import drop_to_meta, move_module_tree  # noqa: PLC0415
+
+        modules = (dit.token_refiner, dit.condition_proj)
+        if keep:
+            for module in modules:
+                move_module_tree(module, torch.device("cpu"), skip=set())
+            return "cpu"
+        for module in modules:
+            drop_to_meta(module)
+        return "meta"
+
+    @staticmethod
+    def _vram16_begin(dev, n_load: int, dit):
+        """VRAM 16GB mode's set-up at the head of the denoise (before ``_place_dit``).
+
+        Returns ``(plan, record, counters0, cap_set, blocks_on_gpu)``: the split
+        plan, the ``h3.phases.denoise.vram16`` record, the allocator counters
+        before the denoise (None off CUDA), whether the cap was set, and the
+        job's swap window. On CUDA the allocator is capped (it binds this
+        process only, 裁定 47); ``_vram16_finish`` lifts it.
+        """
+        from engine_h3.lowvram import Vram16Plan, blocks_on_gpu_for, derive_memory_cap  # noqa: PLC0415
+
+        plan = Vram16Plan()
+        n_blocks = blocks_on_gpu_for(n_load, num_blocks=len(dit.blocks))
+        record = {
+            "cap_fraction": None, "cap_mib": None, "blocks_on_gpu": n_blocks,
+            "head_group": plan.head_group, "row_chunk": plan.row_chunk,
+        }
+        counters0 = None
+        cap_set = False
+        if dev.type == "cuda":
+            index = _cuda_index(dev)
+            free, total = torch.cuda.mem_get_info(index)
+            fraction = derive_memory_cap(free, total, torch.cuda.memory_reserved(index), VRAM16_CAP_MARGIN_MIB * 2**20)
+            counters0 = _vram16_counters(index)
+            torch.cuda.set_per_process_memory_fraction(fraction, index)
+            cap_set = True
+            record["cap_fraction"] = round(fraction, 4)
+            record["cap_mib"] = int(fraction * total / 2**20)
+        return plan, record, counters0, cap_set, n_blocks
+
+    def _vram16_finish(self, dev, cap_set: bool, counters0: dict | None, record: dict) -> None:
+        """Lift the allocator cap and record the counters. Never raises (it runs in a finally)."""
+        try:
+            index = _cuda_index(dev)
+            if cap_set:
+                torch.cuda.set_per_process_memory_fraction(1.0, index)
+            if counters0 is not None:
+                now = _vram16_counters(index)
+                for key in _VRAM16_COUNTERS:
+                    record[key] = now[key] - counters0[key]
+                peak = torch.cuda.memory_stats(index).get("inactive_split_bytes.all.peak")
+                record["inactive_split_peak_mib"] = None if peak is None else int(round(peak / 2**20))
+        except Exception as exc:  # noqa: BLE001 -- must not mask the job's own outcome
+            self._log(f"VRAM 16GB mode: lifting the cap / reading the counters failed (ignored): {exc!r}")
 
     def _park_dit(self, dit) -> int:
         """Everything of a kept DiT back on the CPU, wrappers stripped.
@@ -707,11 +807,18 @@ class H3Pipeline:
         service = None
         prefetch_used = "off"
         ok = False
+        n_blocks = int(self.options.blocks_on_gpu)
+        vram16 = vram16_entry = counters0 = None
+        cap_set = False
         try:
-            service, prefetch_used = self._place_dit(dit, prefetch=self._prefetch_for(req))
+            if req.vram16_mode:
+                vram16, vram16_entry, counters0, cap_set, n_blocks = self._vram16_begin(dev, n_blocks, dit)
+            service, prefetch_used = self._place_dit(dit, prefetch=self._prefetch_for(req), blocks_on_gpu=n_blocks)
             phases.mark("denoise", "after_place")
 
             text_refined = dit.refine_text(text_hidden.to(dev))
+            if vram16 is not None:
+                vram16_entry["text_modules"] = self._evict_text_modules(dit, keep)
             L = int(text_refined.shape[0])
             layout = H3SeqLayout.make(
                 text_rows=L, cond_rows=cond_rows_n, audio_rows=2 * a_lat, video_rows=t_lat * gh * gw,
@@ -754,6 +861,10 @@ class H3Pipeline:
                 # The condition rows go in unchanged at every step (they are not
                 # part of the denoised state, so nothing ever updates them).
                 tokens = dit.embed_rows(text_refined, audio_to_rows(audio), patchify_video(video), cond_rows=cond)
+                box = None
+                if vram16 is not None:
+                    # Handed over in a box: no name here keeps the embedding alive.
+                    box, tokens = [tokens], None
                 v_video_rows, v_audio_rows = dit(
                     tokens,
                     layout=layout,
@@ -763,6 +874,8 @@ class H3Pipeline:
                     rope_cos=rope_cos,
                     rope_sin=rope_sin,
                     attention_backend=attention,
+                    vram16=vram16,
+                    tokens_box=box,
                 )
                 del tokens
                 v_video = unpatchify_video(v_video_rows.to(dev), t_lat, gh, gw)
@@ -777,7 +890,14 @@ class H3Pipeline:
                 raise RuntimeError("denoise: 潜在に NaN／Inf が出ました（数値が発散しています）")
             ok = True
             return video, audio, prefetch_used
+        except torch.OutOfMemoryError as exc:
+            if vram16 is None:
+                raise
+            raise RuntimeError(VRAM16_OOM_MESSAGE) from exc
         finally:
+            if vram16_entry is not None:
+                self._vram16_finish(dev, cap_set, counters0, vram16_entry)
+                entry["vram16"] = vram16_entry
             if service is not None:
                 try:
                     service.teardown_prefetch()

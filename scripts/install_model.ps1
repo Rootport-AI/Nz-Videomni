@@ -19,7 +19,8 @@
       6. これから何が起きるかの説明
       7. tools/ を PATH の先頭へ（このプロセスの中だけ）
       8. scripts/install_ltx.ps1 の実行（重みの取得。setup.bat が作った Python 環境には
-         触れない。物体追尾（UETrack）では専用の .venv-utils を作る）
+         触れない。物体追尾（UETrack）では専用の .venv-utils を、MiniMax H3 では
+         専用の .venv-engine-h3 を、重みより先に作る）
       9. 終了案内
 
     このファイルは UTF-8（BOM 付き）で保存すること。Windows PowerShell 5.1 は
@@ -154,7 +155,8 @@ function Get-BaseModelPlan {
 # 済んでいなければ、ここで止めて setup.bat へ案内する。このスクリプトは
 # setup.bat が作った Python 環境に触れない（触れると「重みを足したいだけ」の操作が、
 # 動いている LTX 2.3 の実行環境を書き換えてしまう）。物体追尾（UETrack）の
-# .venv-utils は例外で、install_ltx.ps1 が作る。
+# .venv-utils と MiniMax H3 の .venv-engine-h3 は例外で、setup.bat は作らず、
+# それぞれの install-<ID>.bat から呼ばれた install_ltx.ps1 が作る。
 # ---------------------------------------------------------------------------
 function Test-SetupDone {
     $needed = [ordered]@{
@@ -195,7 +197,7 @@ function Test-SetupDone {
     Write-Host ''
     Write-Bad '先に setup.bat を実行してください。'
     Write-Host ''
-    Write-Info 'このバッチは、追加のモデルファイルを取ってくるものです（物体追尾では専用の Python 環境も作ります）。'
+    Write-Info 'このバッチは、追加のモデルファイルを取ってくるものです（専用の Python 環境を持つモデルでは、その環境も作ります）。'
     Write-Info 'Python 環境とダウンロード道具は setup.bat が用意します。まだ揃っていません。'
     Write-Host ''
     Write-Info '足りないもの、または動かないもの:'
@@ -266,6 +268,9 @@ function Show-ModelInstallFailureHelp {
     Write-Info '  2. その行に書かれているファイルを 1 個だけ削除します（フォルダではありません）。'
     Write-Info ('  3. ' + $batName + ' をもう一度実行します。そのファイルだけ取り直します。')
     Write-Info 'すべて PASS になるまで、この 1 手順を繰り返してください。'
+    Write-Host ''
+    Write-Info ('Python 環境の構築で止まったとき（英語の表示が engine direct-pin install failed か engine freeze install failed）は、何も消さずにもう一度 ' + $batName + ' を実行してください。環境の中身を当て直します。')
+    Write-Info ('アプリ（run.bat の画面）が動いている間は、使用中のファイルを置き換えられずに当て直しが失敗することがあります。run.bat の画面を閉じてから再実行してください。')
 
     # 取得の途中で止まったときだけ案内する。検証の表で MISSING が出て終わった
     # 場合は、取得そのものは終わっていて .dl は残っていない。
@@ -342,17 +347,29 @@ try {
         Test-FreeSpaceFor -Plan $plan
 
         Write-Head 'これから行うこと'
-        Write-Info ($plan.DisplayName + ' の重みファイルを追加します。ほかのベースモデルの環境やモデルには手を加えません。')
+        Write-Info ($plan.DisplayName + ' の重みファイルを追加します（専用の Python 環境を持つモデルでは、その環境も先に作ります）。ほかのベースモデルの環境やモデルには手を加えません。')
         Write-Info ('取得するファイル: ' + $plan.FileCount + ' 個（空き容量は ' + $plan.NeedGB + ' GB ほど見ておいてください）')
-        Write-Info '回線速度により 1〜2 時間かかります。途中で閉じても、再実行で続きから再開します。'
+        Write-Info '回線速度により、1 時間前後から数時間かかります。途中で閉じても、再実行で続きから再開します。'
         Write-Info 'スリープすると通信が止まるので、電源設定でスリープを「なし」にしてください。'
         Write-Info 'すでに揃っているファイルは取り直しません。'
         Write-Host ''
 
+        # MiniMax H3 だけの注意（オーナー裁定 36）。表示するだけで、同意の入力は
+        # 求めない。文面の要点は README のライセンスの節と同じ。
+        if ($plan.Id -eq 'MiniMaxH3') {
+            Write-Head 'MiniMax H3 のライセンス'
+            Write-Warn 'MiniMax H3 の重みは「MiniMax H3 COMMUNITY LICENSE AGREEMENT」のもとで公開されています。'
+            Write-Info '利用できる地域は、EU・英国・韓国・米国を除く全世界です（定義はライセンス本文によります）。'
+            Write-Info '取得と利用は、取得する方ご自身の責任で、ライセンスに従って行ってください。'
+            Write-Info 'ライセンス本文: https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE'
+            Write-Info ('（本文の写しは ' + (Join-Path $ModelsDir 'MiniMaxH3\LICENSE') + ' にも保存します。）')
+            Write-Host ''
+        }
+
         # tools/ をこのプロセスの PATH の先頭へ（システム側の設定は変更しない）。
         $env:PATH = $UvDir + ';' + $FfmpegBin + ';' + $env:PATH
 
-        Write-Head ($plan.DisplayName + ' の重みを取得します')
+        Write-Head ($plan.DisplayName + ' の導入を始めます')
         Write-Info 'ここから先は英語表示になります。'
         Write-Host ''
 
@@ -370,8 +387,9 @@ try {
             #
             # -BaseModel: この実行で取得し、検証の表に出す記述子を1つに絞る。
             # -SkipVenv:  setup.bat が作った Python 環境（.venv・.venv-engine・
-            #             .venv-engine-ltx25）には手を加えない。UETrack の .venv-utils は
-            #             -SkipVenv があっても install_ltx.ps1 が作る。
+            #             .venv-engine-ltx25）には手を加えない。UETrack の .venv-utils と
+            #             MiniMax H3 の .venv-engine-h3 は、-SkipVenv があっても
+            #             install_ltx.ps1 が作る。
             # -SkipMigrate: 古いフォルダ構成の移動と config.yaml の書き換えは
             #               setup.bat の仕事なので、ここでは触らない。
             & $installScript -BaseModel $plan.Id -SkipVenv -SkipMigrate

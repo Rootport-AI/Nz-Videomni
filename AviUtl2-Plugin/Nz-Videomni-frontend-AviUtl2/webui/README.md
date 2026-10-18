@@ -15,7 +15,7 @@ timeline **partial filter**; runs on both LTX 2.3 and LTX 2.5; shipped
 2026-09-15, design canon `../../../Docs/INPAINTING_DESIGN.md`, completion
 records `../../../Docs/PENDING_TASKS_CLOSED.md` §3-55-02 and, for LTX 2.5,
 §3-150) and **Alpha Gen** (makes a black-and-white matte video from a video, at
-the source's own fps; LTX 2.5 only, greyed on LTX 2.3; design canon
+the source's own fps; LTX 2.5 only, greyed on the other base models; design canon
 `../../../Docs/ALPHAGEN_DESIGN.md` §9, completion record
 `../../../Docs/PENDING_TASKS_CLOSED.md` §3-227; a completed Alpha Gen job's
 card then offers ✂ (the source made transparent with the matte — a ProRes 4444

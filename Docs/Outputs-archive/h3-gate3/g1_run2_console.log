@@ -1,0 +1,97 @@
+﻿
+========================================================================
+   Nz-Videomni  MiniMax H3 の追加
+========================================================================
+
+  作業フォルダ: S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni
+
+==== setup.bat が済んでいるか確認します ============================================
+  [OK]   Python 環境とダウンロード道具は揃っています。
+
+==== パソコンの状態を確認します =====================================================
+  S: ドライブの空き容量: 252.3 GB（必要: 約 56 GB）
+  [OK]   空き容量は足りています。
+
+==== これから行うこと ==========================================================
+  MiniMax H3 の重みファイルを追加します（物体追尾と MiniMax H3 では、専用の Python 環境も先に作ります）。ほかのベースモデルの環境やモデルには手を加えません。
+  取得するファイル: 6 個（空き容量は 56 GB ほど見ておいてください）
+  回線速度により、1 時間前後から数時間かかります。途中で閉じても、再実行で続きから再開します。
+  スリープすると通信が止まるので、電源設定でスリープを「なし」にしてください。
+  すでに揃っているファイルは取り直しません。
+
+
+==== MiniMax H3 のライセンス =================================================
+  [注意] MiniMax H3 の重みは「MiniMax H3 COMMUNITY LICENSE AGREEMENT」のもとで公開されています。
+  利用できる地域は、EU・英国・韓国・米国を除く全世界です（定義はライセンス本文によります）。
+  取得と利用は、取得する方ご自身の責任で、ライセンスに従って行ってください。
+  ライセンス本文: https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE
+  （本文の写しは S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\LICENSE にも保存します。）
+
+
+==== MiniMax H3 の導入を始めます ===============================================
+  ここから先は英語表示になります。
+
+
+=== Model manifests ===
+  OK    base models: LTX 2.3, LTX 2.5, MiniMax H3
+  OK    5 manifest(s) validated: 00-preprocessors.json, 10-ltx23.json, 20-ltx25.json, 30-uetrack.json, 40-minimaxh3.json  (12 migrate entries)
+  OK    -BaseModel: downloads + verification limited to MiniMaxH3
+
+=== Checking prerequisites ===
+git    : C:\Program Files\Git\cmd\git.exe
+uv     : S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\tools\uv\uv.exe
+root   : S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni
+HF_HOME: S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\hf_home
+
+=== Migrate models/ to the base-model-first layout ===
+  SKIP  -SkipMigrate given
+
+=== Python 3.12 (uv-managed, in-project) ===
+  SKIP  uv Python 3.12 already installed (cpython-3.12.9-windows-x86_64-none)
+
+=== App venv .venv ===
+  SKIP  -SkipVenv given
+
+=== Engine venv .venv-engine ===
+  SKIP  -SkipVenv given
+
+=== Engine venv .venv-engine-ltx25 ===
+  SKIP  -SkipVenv given
+
+=== Engine venv .venv-engine-h3  (torch cu130 stack, deterministic freeze) ===
+  SKIP  .venv-engine-h3 already matches the pinned dependency set
+
+=== Model downloads (public repos, no token needed) ===
+  SKIP  MiniMax H3 DiT + text encoder + VAE (4 files)  (50.22 GB already present)
+  SKIP  MiniMax H3 Qwen3-VL tokenizer (6 files)  (11.0 MB already present)
+  SKIP  MiniMax H3 license text (1 file)  (17 KB already present)
+
+=== Verification (required load-bearing artifacts) ===
+  PASS    engine_python                             252 KB  .venv-engine/Scripts/python.exe
+  PASS    app_python                                252 KB  .venv/Scripts/python.exe
+  PASS    engine worker.py                           67 KB  engine/worker.py
+  PASS    h3_python                                 252 KB  .venv-engine-h3/Scripts/python.exe
+  PASS    engine_h3 worker.py                        25 KB  engine_h3/worker.py
+  PASS    h3_transformer                          19.53 GB  models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors
+  PASS    h3_text_encoder                         25.28 GB  models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors
+  PASS    h3_video_vae                             4.85 GB  models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors
+  PASS    h3_audio_vae                            577.2 MB  models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors
+  PASS    tokenizer_dir (Qwen3-VL tokenizer dir)   11.0 MB  models/MiniMaxH3/TextEncoder/qwen3vl_tokenizer
+  PASS    h3_license                                 17 KB  models/MiniMaxH3/LICENSE
+
+Regenerated models/INSTALLED_PATHS.txt
+  OK    All required artifacts present.
+
+Done. Backend is ready to run:  ./run.ps1
+
+   MiniMax H3 の追加が完了しました
+
+  次: S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\run.bat をダブルクリックし、画面上部のベースモデルの一覧から
+      「MiniMax H3」を選んでください。
+  すでに画面を開いている場合は、いったん閉じて開き直してください。
+  （一覧は画面を開いたときにしか読み直さないため、開いたままでは「未導入」のままに見えます。）
+
+  記録: S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\logs\install_MiniMaxH3_20261018_124635.log
+
+
+Press any key to continue . . . 

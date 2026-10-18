@@ -1,0 +1,5 @@
+﻿.............................ss......................................... [ 81%]
+................                                                         [100%]
+=========================== short test summary info ===========================
+SKIPPED [2] tests\test_h3_engine.py:684: GPU test: set H3_GPU_TESTS=1 (and have the supervisor's GPU permission)
+86 passed, 2 skipped in 13.76s

@@ -152,7 +152,7 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 ## 0. 環境分離ポリシー（最重要）
 
 **このプロジェクトは PC のシステム Python 環境を一切汚しません。** Python 本体を含め、必要なものはすべて
-プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.venv-engine-ltx25/`, `.venv-utils/`（任意導入）, `.python/`, `.uv_cache/`, `tools/`）に閉じ込めます（仕様書 2.5）。
+プロジェクトディレクトリ配下（`.venv/`, `.venv-engine/`, `.venv-engine-ltx25/`, `.venv-engine-h3/`（任意導入）, `.venv-utils/`（任意導入）, `.python/`, `.uv_cache/`, `tools/`）に閉じ込めます（仕様書 2.5）。
 
 - グローバル/システムの `pip install` は **禁止**。必ず `uv` + プロジェクトローカル venv。
 - 環境変数（`UV_PYTHON_INSTALL_DIR` など）は **そのプロセス内のみ**。永続化しない。
@@ -160,7 +160,7 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
   Windows の環境変数設定は書き換えません。
 - パッケージのダウンロードキャッシュも `.uv_cache/` としてプロジェクト内に置きます（システムのユーザープロファイル配下は使いません）。
   各 venv は、実体をここに置いてハードリンク（同じ実体を指す別名）で共有します。
-- 後片付けはこのディレクトリ（`.venv` / `.venv-engine` / `.venv-engine-ltx25` / `.venv-utils` / `.python` / `.uv_cache` / `tools` 含む）を
+- 後片付けはこのディレクトリ（`.venv` / `.venv-engine` / `.venv-engine-ltx25` / `.venv-engine-h3` / `.venv-utils` / `.python` / `.uv_cache` / `tools` 含む）を
   削除するだけで完全に元に戻ります。
 
 ### venv の構成（重要）
@@ -172,11 +172,12 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 | `./.venv` | FastAPI アプリ（`main.py`・API・ジョブ・Gradio・モック backend） | FastAPI / Pydantic / Pillow / ffmpeg 呼び出し。**torch は入れない** |
 | `./.venv-engine` | LTX 2.3 用のエンジン worker（`engine/worker.py`） | **torch 2.9.1+cu128** + LTX 推論スタック（`ltx_core`/`ltx_pipelines`@`00dc53d` + `gguf`） |
 | `./.venv-engine-ltx25` | LTX 2.5 用のエンジン worker（`engine25/worker.py`） | **torch 2.9.1+cu128** + 公式 v1.2.0 の推論スタック + `transformers` 5.x |
+| `./.venv-engine-h3` | MiniMax H3 用のエンジン worker（`engine_h3/worker.py`）。**任意導入**で、`install-MiniMaxH3.bat` を実行した人だけに作られます | **CUDA 13 系の torch**（版は [`engine_h3/venv-engine-h3.freeze.txt`](engine_h3/venv-engine-h3.freeze.txt) が正本で、LTX の 2 つとは揃えていません）＋ int8 の計算に使う comfy-kitchen |
 | `./.venv-utils` | 物体追尾のワーカー（`tracking/worker.py`）。**任意導入**で、`install-UETrack.bat` を実行した人だけに作られます | **CPU 版の torch**（GPU は使いません） |
 
-エンジン系統ごとに venv を分けているのは、LTX 2.3 と LTX 2.5 が要求するパッケージのバージョンが同居できないためです。**worker は同時に1つだけ動き**、モデルを切り替えると古い worker を終了させてから新しい worker を起こします。
+エンジン系統ごとに venv を分けているのは、系統ごとに要求するパッケージのバージョンが同居できないためです（LTX 2.3 と LTX 2.5 は `transformers` の版が、MiniMax H3 は torch そのものの版が違います）。**worker は同時に1つだけ動き**、モデルを切り替えると古い worker を終了させてから新しい worker を起こします。
 
-`./.venv-utils` だけは性格が違い、**動画生成のエンジンではありません**。物体追尾（タイムラインに置いた部分フィルタの枠を、被写体に合わせて自動で動かす機能）のためのもので、CPU 版の torch を使うため既存の3つとは同居できず、生成用の worker の入れ替えにも巻き込まれません。**`setup.bat` はこの venv を作りません**——必要な人だけが `install-UETrack.bat` をダブルクリックします（§1「物体追尾を追加する」）。機能の詳細は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) を参照してください。
+`./.venv-utils` だけは性格が違い、**動画生成のエンジンではありません**。物体追尾（タイムラインに置いた部分フィルタの枠を、被写体に合わせて自動で動かす機能）のためのもので、CPU 版の torch を使うため他の venv とは同居できず、生成用の worker の入れ替えにも巻き込まれません。**`setup.bat` はこの venv を作りません**——必要な人だけが `install-UETrack.bat` をダブルクリックします（§1「物体追尾を追加する」）。機能の詳細は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) を参照してください。
 
 アプリ（`./.venv`）は torch も LTX も import しません。実生成は、選ばれているモデルに対応する python で worker を **subprocess** として起動し、JSON-lines プロトコルで駆動します（§3「アーキテクチャ」）。`.venv-engine` の依存スナップショットは [`engine/venv-engine.freeze.txt`](engine/venv-engine.freeze.txt) に凍結してあります。
 
@@ -216,8 +217,11 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 
 1. VSCode の画面から `git pull`（同期）を実行して、最新のコードを取り込む。
 2. **そのあと、`setup.bat` をもう一度実行する。**
+3. **AviUtl2 から使っている場合は、`AviUtl2-Plugin\NzVideomni.aux2` を AviUtl2 のプレビュー画面へもう一度ドラッグ＆ドロップし、AviUtl2 を再起動する。** 操作パネルの画面はこのファイルに入っているので、入れ直さないと画面だけが古いままになります（新しいベースモデルを選べても、そのモデルの規則に合わない値が送られて生成が止まることがあります）。
 
 **2 を省かないでください。** 依存パッケージの内容が変わっていた場合、`run.bat` は起動こそするものの中身が古いままで正しく動かない、という分かりにくい状態になります。`setup.bat` は 2 回目以降、すでに揃っているものを飛ばすので、変更が無ければ短時間で終わります。
+
+**専用のバッチで足した仮想環境は、`setup.bat` では当て直されません。** MiniMax H3 の仮想環境（`.venv-engine-h3`）と物体追尾の仮想環境（`.venv-utils`）がこれに当たり、作り直すのはそれぞれの導入バッチだけです。更新でこれらの依存の内容が変わったとき（MiniMax H3 なら `engine_h3/venv-engine-h3.freeze.txt` が変わったとき）は、`setup.bat` のあとに **`install-MiniMaxH3.bat`（物体追尾なら `install-UETrack.bat`）をもう一度実行してください。** 変わっていなければ、揃っているものを飛ばして短時間で終わるので、MiniMax H3（物体追尾）を導入済みの方は、迷ったときは実行して構いません（導入していない方が実行すると、導入そのものが始まります）。
 
 自動更新の仕組みはあえて用意していません（更新確認の通信がウイルス対策ソフトに誤検知されるリスクを避けるためです）。
 
@@ -231,11 +235,11 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 
 | 項目 | 要件 |
 |------|------|
-| GPU | NVIDIA 製・**VRAM 16GB 以上**。対応世代は Turing（GeForce RTX 20系）／Ampere（同 30系）／Ada Lovelace（同 40系）／Hopper／Blackwell（同 50系） |
-| GPU ドライバ | **R570 以上を推奨**（Blackwell では必須）。CUDA 12.x のマイナーバージョン互換だけを見れば Windows では 525 以上が下限ですが、本プロジェクトは cu128 ビルドの torch を使うため R570 以上を勧めます |
-| メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要）。**モデル骨格の常駐（`keep_resident`）を使う場合は 64GB 以上を推奨**します（LTX 2.3 では約 20GB、LTX 2.5 では約 7.7GiB を常時占有するため。既定は off なので、使わないかぎりこの要件は増えません。§5「モデル骨格の常駐（`keep_resident`）」）。**LTX 2.5 を使う場合も 64GB 以上を推奨**します——2.5 のワーカーは仕上げ工程のために重みをメインメモリへ持ち続ける設計（`cache_weights`、既定 on）で、**生成中のメインメモリの山が実測で約 26GiB** あるためです。この既定を off にすれば常駐は減りますが、そのぶん仕上げ工程の作り直しに時間がかかります。**LTX 2.5 でモデル骨格の常駐も同時に on にする場合は、安全側の見積りとして合計 約 34GiB を見ておいてください**（内訳は連結生成の OFF ピーク 26.33GiB ＋ 常駐増分 7.68GiB ≒ 34.0GiB。[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §69.19・§76.2(3)・**§76.8(3)**）。**さらに埋め込み処理器の常駐（`keep_resident_embeddings`。LTX 2.5 専用の項目です）も on にする場合は、合計 約 39GiB を見ておいてください**（同じ式に常駐増分 4.66GiB を足したもので、26.33 ＋ 7.68 ＋ 4.66 ≒ 38.7GiB。出所は同 **§92**。§5「[埋め込み処理器の常駐](#keep-resident-embeddings)」） |
+| GPU | NVIDIA 製・**VRAM 16GB 以上**。対応世代は Turing（GeForce RTX 20系）／Ampere（同 30系）／Ada Lovelace（同 40系）／Hopper／Blackwell（同 50系）。**MiniMax H3 は RTX 20 以降（GTX 10 以前は動きません）で、動作を確かめたのは RTX 40 だけです**（下の「対応する GPU 世代」） |
+| GPU ドライバ | **R570 以上を推奨**（Blackwell では必須）。CUDA 12.x のマイナーバージョン互換だけを見れば Windows では 525 以上が下限ですが、本プロジェクトは cu128 ビルドの torch を使うため R570 以上を勧めます。**MiniMax H3 を使う場合は R580 以上が必須**です（H3 の仮想環境は CUDA 13 系の torch を使うため、これより古いドライバでは動きません） |
+| メインメモリ | **32GB 以上、かつページファイルを有効にしておくこと**（下の「メインメモリとページファイル」が最重要）。**モデル骨格の常駐（`keep_resident`）を使う場合は 64GB 以上を推奨**します（LTX 2.3 では約 20GB、LTX 2.5 では約 7.7GiB を常時占有するため。既定は off なので、使わないかぎりこの要件は増えません。§5「モデル骨格の常駐（`keep_resident`）」）。**LTX 2.5 を使う場合も 64GB 以上を推奨**します——2.5 のワーカーは仕上げ工程のために重みをメインメモリへ持ち続ける設計（`cache_weights`、既定 on）で、**生成中のメインメモリの山が実測で約 26GiB** あるためです。この既定を off にすれば常駐は減りますが、そのぶん仕上げ工程の作り直しに時間がかかります。**LTX 2.5 でモデル骨格の常駐も同時に on にする場合は、安全側の見積りとして合計 約 34GiB を見ておいてください**（内訳は連結生成の OFF ピーク 26.33GiB ＋ 常駐増分 7.68GiB ≒ 34.0GiB。[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §69.19・§76.2(3)・**§76.8(3)**）。**さらに埋め込み処理器の常駐（`keep_resident_embeddings`。LTX 2.5 専用の項目です）も on にする場合は、合計 約 39GiB を見ておいてください**（同じ式に常駐増分 4.66GiB を足したもので、26.33 ＋ 7.68 ＋ 4.66 ≒ 38.7GiB。出所は同 **§92**。§5「[埋め込み処理器の常駐](#keep-resident-embeddings)」）。**MiniMax H3 を使う場合は 64GB を推奨します。メインメモリ 32GB の機械は MiniMax H3 の対象外です**（ページファイルで動く可能性はありますが、未検証です。§7.6） |
 | ストレージ | **このフォルダを置くドライブに約 50GB**（`setup.bat`のみ＝LTX 2.3を導入した場合の必要空き容量。内訳は下の「必要な空き容量の内訳」参照）。**これとは別に**、ページファイルを置いたドライブに 60GB 以上の空き |
-| ストレージ（ベースモデルを追加する場合） | **LTX 2.5：追加で約 30GB**（`install-LTX25.bat`。下の「LTX 2.5 を追加する」参照） |
+| ストレージ（ベースモデルを追加する場合） | **LTX 2.5：追加で約 30GB**（`install-LTX25.bat`。下の「LTX 2.5 を追加する」参照）／**MiniMax H3：追加で約 60GB**（重み 約 54GB ＋ 専用の仮想環境 約 3.4GB ＋ 余裕。`install-MiniMaxH3.bat`。下の「MiniMax H3 を追加する」参照） |
 | attention（注意機構の計算方法） | 既定は全世代で **SDPA**（PyTorch 標準の実装）。**生成のたびに SageAttention へ切り替えられます**（§5「生成の高速化（Acceleration）」）。xformers・flash-attn は導入も使用もしません |
 
 #### 対応する GPU 世代
@@ -248,7 +252,14 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 
 `sm_XX` は GPU の compute capability（世代を表す番号）です。Ampere（RTX 30系＝`sm_86`）・Hopper（`sm_90`）・Blackwell（RTX 50系＝`sm_120`、データセンター向け B200＝`sm_100`）は、この一覧にそのまま含まれています。**`sm_89`（Ada Lovelace＝RTX 40系）が無いのは、`sm_86` 向けにコンパイルされたカーネル（cubin）がそのまま Ada の GPU 上で動くためです**——NVIDIA の [Ada Compatibility Guide](https://docs.nvidia.com/cuda/archive/12.8.0/ada-compatibility-guide/index.html) が名指しの例として明記しています（逆方向はできません）。実機で確認できているのは Ada と Ampere の2世代で、残りは理論上の互換です（§7.3）。
 
-attention は全世代で PyTorch の SDPA を既定にしており、xformers や flash-attn はインストールもしなければコードからも呼びません（16GB 環境で速度を決めているのは attention ではなく重みの転送であるため。仕様書 §5.4）。SageAttention に必要なパッケージは `setup.bat` が標準で入れるため、追加の作業は要りません（`sageattention` 2.2.0 と `triton-windows` 3.5.1.post24。後者は必要なコンパイラを同梱しているため、**Visual Studio の導入は不要**です）。
+**MiniMax H3 の仮想環境（`.venv-engine-h3`）だけは CUDA 13 系の torch を使うため、条件が違います。** 上の一覧は LTX の 2 つの仮想環境の話で、MiniMax H3 には当てはまりません。
+
+- **NVIDIA ドライバ**: R580 以上（CUDA 13 系を使うため。これより古いドライバでは動きません）。
+- **GPU**: RTX 20 シリーズ（Turing 世代）以降。GTX 10 シリーズ以前（Pascal 世代以前）は CUDA 13 の対象外のため動きません。
+  - 動作を確かめたのは RTX 40 シリーズ（Ada Lovelace 世代）だけです。RTX 30 シリーズ（Ampere 世代）と RTX 50 シリーズ（Blackwell 世代）は、まだ確かめていません。
+  - RTX 20 シリーズは、int8（8 ビットの整数）の計算が遅い経路になり、SageAttention も使えません（標準の SDPA で動きます）。動くかどうかも未確認です。
+
+attention は全世代で PyTorch の SDPA を既定にしており、xformers や flash-attn はインストールもしなければコードからも呼びません（16GB 環境で速度を決めているのは attention ではなく重みの転送であるため。仕様書 §5.4）。SageAttention に必要なパッケージは `setup.bat` が標準で入れるため、追加の作業は要りません（`sageattention` 2.2.0 と `triton-windows` 3.5.1.post24。後者は必要なコンパイラを同梱しているため、**Visual Studio の導入は不要**です）。MiniMax H3 の仮想環境に入れる SageAttention は、CUDA 13 系の torch に合わせたものを `install-MiniMaxH3.bat` が入れます。
 
 #### 必要な空き容量の内訳
 
@@ -257,6 +268,8 @@ attention は全世代で PyTorch の SDPA を既定にしており、xformers �
 中身は `models/`（モデル一式。フォルダの意味は下の「models フォルダの構成」を参照）＋ Python 環境（`.venv/` ＋ `.venv-engine/` ＋ `.venv-engine-ltx25/` ＋ 共有キャッシュ `.uv_cache/` ＋ `.python/`。3つの venv は `.uv_cache/` へのハードリンクで実体を共有するため、単純な足し算にはならず、キャッシュの再構築回数によっても変わります）＋ `tools/`（`uv` ＋ `ffmpeg`、約 0.4 GiB）です。**3つ目の仮想環境（`.venv-engine-ltx25`、LTX 2.5 用）は `install-LTX25.bat` ではなく `setup.bat` の時点で、選んだベースモデルに関わらず作られます**——この約 50GB にすでに含まれています。
 
 > **この約 50GB に LTX 2.5 の重みは含まれていません。** LTX 2.5 は `setup.bat` ではなく `install-LTX25.bat` で別に導入するもので、上表の「ストレージ（ベースモデルを追加する場合）」＝追加で約 30GB を見てください（詳しくは下の「LTX 2.5 を追加する」）。
+
+> **この約 50GB には、MiniMax H3 の重みも仮想環境も含まれていません。** MiniMax H3 は `install-MiniMaxH3.bat` で別に導入するもので、重みと一緒に専用の仮想環境（`.venv-engine-h3`）もこのバッチが作ります。この仮想環境は torch の版が他と違うため、上に書いたハードリンクによる共有が効かず、そのぶんがまるごと増えます。必要な容量は上表の「ストレージ（ベースモデルを追加する場合）」を見てください（詳しくは下の「MiniMax H3 を追加する」）。
 
 > **ページファイル用の 60GB は、上の「ストレージ」欄の空きの代わりにはなりません。** ページファイルは別のドライブに置いていても構わない性質のもので（Windows の既定では C ドライブ）、用途もまったく別です。**両方**必要だと考えてください。たとえばこのフォルダを D ドライブへ置き、ページファイルが C ドライブにあるなら、D に約 50GB・C に 60GB の空きが要ります。
 
@@ -303,16 +316,17 @@ uv sync --extra dev   # テストも動かす場合。実行だけなら素の u
 
 ### エンジン venv（torch+cu128）と実モデル
 
-実生成には、アプリ venv とは別に**エンジン系統ごとの venv**と GGUF/component モデル群が必要です。**2つに分かれているのは、LTX 2.3 と LTX 2.5 が要求するパッケージのバージョンが同居できないためです**（`transformers` 4.57 と 5.x）。どちらも `setup.bat` が自動で作るので、通常は意識する必要はありません。
+実生成には、アプリ venv とは別に**エンジン系統ごとの venv**と GGUF/component モデル群が必要です。**分かれているのは、系統ごとに要求するパッケージのバージョンが同居できないためです**（LTX 2.3 と LTX 2.5 は `transformers` 4.57 と 5.x、MiniMax H3 は torch の版そのもの）。LTX の 2 つは `setup.bat` が自動で作るので、通常は意識する必要はありません。MiniMax H3 の venv は `install-MiniMaxH3.bat` が作ります（§1「MiniMax H3 を追加する」）。
 
 | venv | 対象 | 依存の宣言（再構築に使うファイル） |
 |------|------|------------------------------------|
 | `./.venv-engine` | LTX 2.3（`engine/worker.py`） | [`engine/engine-venv-pyproject.toml`](engine/engine-venv-pyproject.toml)（`[tool.uv.sources]` に torch cu128 index と `ltx-core`/`ltx-pipelines`/`diffusers` の git rev を記載）＋ [`engine/venv-engine.freeze.txt`](engine/venv-engine.freeze.txt)（`name==version` の完全スナップショット） |
 | `./.venv-engine-ltx25` | LTX 2.5（`engine25/worker.py`） | [`engine25/engine25-venv-pyproject.toml`](engine25/engine25-venv-pyproject.toml) ＋ [`engine25/venv-engine-ltx25.freeze.txt`](engine25/venv-engine-ltx25.freeze.txt)（同じ作法。公式 LTX-2 v1.2.0 ＋ `transformers` 5.x） |
+| `./.venv-engine-h3` | MiniMax H3（`engine_h3/worker.py`）。任意導入 | [`engine_h3/engine_h3-venv-pyproject.toml`](engine_h3/engine_h3-venv-pyproject.toml)（手で作り直すときの仕様と、各版を選んだ理由）＋ [`engine_h3/venv-engine-h3.freeze.txt`](engine_h3/venv-engine-h3.freeze.txt)（版の正本。CUDA 13 系の torch） |
 
 `.venv-engine` の provenance と再現手順の詳細は [`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md) を参照してください。
 
-> **`setup.bat` を再実行したときのふるまい**: エンジン venv は「すでに存在するから飛ばす」のではなく、**ピン留めされた依存の内容が前回と変わっていないときだけ飛ばします**。freeze ファイルの依存の行（`名前==版`。コメント行は除く）と、`install_ltx.ps1` が持つ直接指定をまとめてハッシュにし、venv 内の `.nz-engine-state` に記録した前回の値と突き合わせる方式です（**2つのエンジン venv はそれぞれ独立に判定されます**）。`git pull` で依存が変わっていれば自動で貼り直され、記録が無い場合（前回の導入が途中で中断した場合など）も貼り直しになります。「`git pull` のあとに `setup.bat` を再実行する」という更新手順は、この仕組みで成り立っています。
+> **`setup.bat` を再実行したときのふるまい**: エンジン venv は「すでに存在するから飛ばす」のではなく、**ピン留めされた依存の内容が前回と変わっていないときだけ飛ばします**。freeze ファイルの依存の行（`名前==版`。コメント行は除く）と、`install_ltx.ps1` が持つ直接指定をまとめてハッシュにし、venv 内の `.nz-engine-state` に記録した前回の値と突き合わせる方式です（**エンジン venv はそれぞれ独立に判定されます**）。`git pull` で依存が変わっていれば自動で貼り直され、記録が無い場合（前回の導入が途中で中断した場合など）も貼り直しになります。「`git pull` のあとに `setup.bat` を再実行する」という更新手順は、この仕組みで成り立っています。**MiniMax H3 の venv も同じ方式で判定しますが、判定するのは `install-MiniMaxH3.bat` で、`setup.bat` ではありません**（§1「更新のしかた」）。
 
 **必要なモデル**は `setup.bat` / `install_ltx.ps1` が自動でダウンロードします。**どのファイルがどこに要るかを宣言しているのは `config.yaml` ではなく「ベースモデル記述子」**＝`scripts/manifests/*.json` で、そこに書かれた相対パスは `config.yaml` の `model.models_dir`（既定 `./models`）を起点に解決されます。
 
@@ -331,16 +345,16 @@ uv sync --extra dev   # テストも動かす場合。実行だけなら素の u
 
 上記10要素はすべて、本プロジェクトが再ホストした3つの公開リポジトリ——[`Rootport/Nz-LTX23-weights`](https://huggingface.co/Rootport/Nz-LTX23-weights)（transformer・VAE・アップスケーラ・IC-LoRA・VDA）／[`Rootport/Nz-Gemma3-12B`](https://huggingface.co/Rootport/Nz-Gemma3-12B)（text encoder と tokenizer）／[`Rootport/Nz-DWPose`](https://huggingface.co/Rootport/Nz-DWPose)（姿勢推定）——から取得します。いずれも Public かつ非 Gated（ライセンス承諾の壁が無い）ため、**HuggingFace のアカウントもアクセストークンも一切必要ありません**。どのファイルをどこへ置くかは manifest（`scripts/manifests/*.json`）が決めており、リポジトリの中身はまず一時置き場（`models/.dl/`）へ落としてから上表の場所へ移します。一時置き場は成功するまで消さないので、途中で失敗しても再実行すればダウンロード済みの分は再取得されません。
 
-インストールの最後に出る検証テーブルは、IC-LoRA・前処理器も含めて 1 ファイルずつ PASS/MISSING を表示します（**`setup.bat` が担当するのは LTX 2.3 と共用前処理器だけ**なので、この表に LTX 2.5 の行は出ません）。MISSING のまま気づかないと、UI にはアダプタ名が出るのに選んだ瞬間 404 になる——という分かりにくい壊れ方をするため、あえて検証の対象に含めてあります。生成の中核として実際にロードされるモデルは合計 **~28GB**（28.15GiB）で、`install_ltx.ps1` はこれに IC-LoRA・前処理器・枝刈りデコーダを加えた **約 33GB（32.51GiB）** をダウンロードします。
+インストールの最後に出る検証テーブルは、IC-LoRA・前処理器も含めて 1 ファイルずつ PASS/MISSING を表示します（**`setup.bat` が担当するのは LTX 2.3 と共用前処理器だけ**なので、この表に LTX 2.5・MiniMax H3 の行は出ません）。MISSING のまま気づかないと、UI にはアダプタ名が出るのに選んだ瞬間 404 になる——という分かりにくい壊れ方をするため、あえて検証の対象に含めてあります。生成の中核として実際にロードされるモデルは合計 **~28GB**（28.15GiB）で、`install_ltx.ps1` はこれに IC-LoRA・前処理器・枝刈りデコーダを加えた **約 33GB（32.51GiB）** をダウンロードします。
 
 backend の選択は `config.model.backend`（`auto`/`mock`/`real`）で行います。既定 `auto` は「そのエンジンの python・worker スクリプト・記述子が宣言するロード対象ファイルが全て存在」すれば **real**、無ければ **mock** です（`_real_available`）。**判定材料は選んでいるベースモデルのエンジン系統ごとに違います**。
 
-| | LTX 2.3（エンジン系統 `ltx`） | LTX 2.5（エンジン系統 `ltx25`） |
-|---|---|---|
-| python | `config.yaml` の `model.engine_python`（既定 `./.venv-engine/Scripts/python.exe`） | `config.yaml` の `model.engine_python_ltx25`（既定 `./.venv-engine-ltx25/Scripts/python.exe`） |
-| worker | `model.engine_dir`（既定 `./engine`）の `worker.py` | `./engine25/worker.py`（**設定項目は無く固定**。`engine25/` は本リポジトリ同梱のため置き場所の選択肢がありません） |
-| 重み | 記述子 `scripts/manifests/10-ltx23.json` の 4 カテゴリ＋固定ファイル 3 点 | 記述子 `scripts/manifests/20-ltx25.json` の 4 カテゴリ＋固定ファイル 1 点（空間アップスケーラのみ） |
-| 実装 | [`services/engines/ltx/adapter.py`](services/engines/ltx/adapter.py)（旧パス `services/ltx_runner.py` は再エクスポート用の薄い層です） | [`services/engines/ltx25/adapter.py`](services/engines/ltx25/adapter.py) |
+| | LTX 2.3（エンジン系統 `ltx`） | LTX 2.5（エンジン系統 `ltx25`） | MiniMax H3（エンジン系統 `h3`） |
+|---|---|---|---|
+| python | `config.yaml` の `model.engine_python`（既定 `./.venv-engine/Scripts/python.exe`） | `config.yaml` の `model.engine_python_ltx25`（既定 `./.venv-engine-ltx25/Scripts/python.exe`） | `config.yaml` の `model.engine_python_h3`（既定 `./.venv-engine-h3/Scripts/python.exe`） |
+| worker | `model.engine_dir`（既定 `./engine`）の `worker.py` | `./engine25/worker.py`（**設定項目は無く固定**。`engine25/` は本リポジトリ同梱のため置き場所の選択肢がありません） | `./engine_h3/worker.py`（LTX 2.5 と同じく**設定項目は無く固定**） |
+| 重み | 記述子 `scripts/manifests/10-ltx23.json` の 4 カテゴリ＋固定ファイル 3 点 | 記述子 `scripts/manifests/20-ltx25.json` の 4 カテゴリ＋固定ファイル 1 点（空間アップスケーラのみ） | 記述子 `scripts/manifests/40-minimaxh3.json` の 4 カテゴリ＋tokenizer のフォルダ |
+| 実装 | [`services/engines/ltx/adapter.py`](services/engines/ltx/adapter.py)（旧パス `services/ltx_runner.py` は再エクスポート用の薄い層です） | [`services/engines/ltx25/adapter.py`](services/engines/ltx25/adapter.py) | [`services/engines/h3/adapter.py`](services/engines/h3/adapter.py) |
 
 ### 追加の transformer（GGUF／量子化 safetensors）/ LoRA を配置する
 
@@ -359,9 +373,11 @@ GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字
 - **VRAM の目安**: fp8 は GGUF より VRAM を一定量多く使い、VRAM の使用量（torch の割当ピーク）は LTX 2.3 で Q6_K 比 約 **+1.2 GiB**（別の日に測った Q4_K_M との比較では約 +1.7 GiB）、LTX 2.5 で公式 GGUF 比 約 **+2.1 GiB** でした。LTX 2.3 の増え方は、GPU に常駐させるブロックの重さの差から見込んだ値の約 2 倍で、ブロックの重さだけでは説明できません（実測は [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md) 第13.3節）。**fp8 での快適上限の実測は [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md) 第13節にあります**（GGUF より低いところで VRAM が溢れます。画面の快適上限マーカーは重みの種別〔4bit／8bit／Q6_K〕ごとの実測の線です。表は [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md) 第 1 節）。**int8・w4a8 を同じプロセスで fp8 と並べた 1080p の実測（torch の割当ピークとコミットの最大）は [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md) 第14.3節にあります（数値は一次記録の表3・表4）。`asym_w4a8_int8` は 4 ビット詰めのぶん GPU に常駐させるブロックがおよそ半分の重さですが、512×320 の実測では torch の割当ピークは int8・fp8 と同じでした（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121.8）。**
 - **コミット（仮想メモリ）の目安**: fp8 は Windows のコミットを Q6_K より約 15 GiB 多く使います（開発機では、LTX 2.3 の fp8 を加速の設定をすべて有効にして動かしたとき、最大で 110.59 GiB＝上限 113.82 GiB の約 97% に達し、快適上限の較正はそこで打ち切りました。[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §119.4）。LTX 2.5 でも GGUF より増えます（数値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §118.8）。ページファイルが小さい機体では、keep_resident と併用するとコミットの上限に当たることがあります（実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §117.8）。**int8・w4a8 の快適上限の較正結果は [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md) 第14節にあります（いまの配信値は種別ごとの線として同書 第 1 節にまとめてあります）。**
 - **`config.yaml` の `dit_cpu_load` は有効（既定の `true`）のままにしてください。** 無効にすると量子化された transformer を GPU 上で組むことになり必ずメモリが溢れるため、読み込みの時点でエラーにしています。
-- **実機での確認**: LTX 2.3・LTX 2.5 の実在の int8 系の配布物（REDGraft の混在を含む）で、単発・スタイル LoRA・IC-LoRA・Chained・keep_resident の生成を確かめ、オーナーの目視でも合格しています（記録は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121）。確認したのは 5 本です（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121.4）。それ以外の配布物は、標準形式なら通る設計ですが未検証です。
+- **実機での確認**: LTX 2.3・LTX 2.5 の実在の int8 系の配布物（REDGraft の混在を含む）で、単発・スタイル LoRA・IC-LoRA・Chained・keep_resident の生成を確かめ、出来上がった動画も目で見て合格としています（記録は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121）。確認したのは 5 本です（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121.4）。それ以外の配布物は、標準形式なら通る設計ですが未検証です。
 
-**LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` / `in-outpainting`、LTX 2.5 の `alpha-gen`〔`install-LTX25.bat` が取得〕）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所はベースモデルで分かれていません**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。
+**MiniMax H3 は、ここまでの規則（GGUF・fp8／int8 safetensors）の対象外です。** `models/MiniMaxH3/Weights/` の `.safetensors` も同じように一覧へ並びますが、読み込む前の検査で通るのは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけで、試してあるのも公式の配布物だけです。コミュニティ版への対応は後回しにしています（§7.6）。
+
+**LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` / `in-outpainting`、LTX 2.5 の `alpha-gen`〔`install-LTX25.bat` が取得〕）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所はベースモデルで分かれていません**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。**MiniMax H3 は、スタイル LoRA にも IC-LoRA にも対応していません**（§7.6）。
 
 `models/LTX23/StyleLoRA/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、`POST /loras/reload` で明示再スキャン）。生成時は API の `loras: [{"name": ..., "strength": ...}]`、または Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します（強度は 0.05〜2、0は不可）。**指定した値がそのまま効きます（ComfyUI と同じ数え方です）。** 音声側の適用強度だけを映像側と別に指定したい場合は `<lora:名前:映像の強度:音声の強度>` の第3引数（0〜2。音声側だけ 0＝適用しない、を指定できる）を使います。省略時は音声側も映像側の値に追従します（詳細は [`Docs/LORA_AUDIO_STRENGTH_WORKORDER.md`](Docs/LORA_AUDIO_STRENGTH_WORKORDER.md)）。
 
@@ -369,7 +385,7 @@ GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字
 
 ### models フォルダの構成
 
-`models/` は「どのベースモデルのものか」を最上位で分ける構成になっています。置き場所がそのまま「このファイルは LTX 2.3 用です」という宣言になるため、ベースモデルが増えても、ファイルの中身を見分ける仕組みを足さずに並べていけます。**実際に `LTX23/` と `LTX25/` の2つが並んでいます。**
+`models/` は「どのベースモデルのものか」を最上位で分ける構成になっています。置き場所がそのまま「このファイルは LTX 2.3 用です」という宣言になるため、ベースモデルが増えても、ファイルの中身を見分ける仕組みを足さずに並べていけます。**実際に `LTX23/` と `LTX25/` が並び、MiniMax H3 を足すと `MiniMaxH3/` が加わります。**
 
 ```
 models/
@@ -385,16 +401,22 @@ models/
     ├─ Upscaler/             ltx-2.3-spatial-upscaler-x2-1.1.safetensors
     ├─ StyleLoRA/            利用者が用意する画風・キャラクター系 LoRA
     └─ IC-LoRA/              pixel-spatial-upscaler / union-control / deblur / in-outpainting
-└─ LTX25/                    LTX 2.5 のためのファイル一式
+├─ LTX25/                    LTX 2.5 のためのファイル一式
     ├─ Weights/              transformer の GGUF または量子化 safetensors（fp8／int8）
     ├─ TextEncoder/          Gemma 4 の GGUF（tokenizer は GGUF の中に入っています）
     ├─ VAE/                  映像 VAE（畳み込みデコーダ版）・音声 VAE
     │   └─ diffvae/          拡散デコーダ版の映像 VAE（現在は使いません・退避先）
     ├─ Upscaler/             空間アップスケーラ
     └─ IC-LoRA/              alpha-gen（Alpha Gen 用。install-LTX25.bat が置く）
+└─ MiniMaxH3/                MiniMax H3 のためのファイル一式（install-MiniMaxH3.bat が置く）
+    ├─ Weights/              DiT（枝刈り版の int8 ConvRot の safetensors）
+    ├─ TextEncoder/          テキストエンコーダ（int8 ConvRot の safetensors）
+    │   └─ qwen3vl_tokenizer/ tokenizer 一式（重みは含まない）
+    ├─ VAE/                  映像 VAE・音声 VAE
+    └─ LICENSE               MiniMax H3 のライセンスの写し
 ```
 
-**LTX 2.5 の重みは、設計上 `setup.bat` の取得対象ではありません**（上の約33GBには含まれません）。`setup.bat` は Nz-Videomni 本体のインストーラで、「最初にお試しいただくAI」として LTX 2.3 だけを一緒に導入します。**別のベースモデルは、そのモデル専用のバッチファイルをダブルクリックして導入します**（下の「LTX 2.5 を追加する」）。
+**LTX 2.5 の重みは、設計上 `setup.bat` の取得対象ではありません**（上の約33GBには含まれません）。`setup.bat` は Nz-Videomni 本体のインストーラで、「最初にお試しいただくAI」として LTX 2.3 だけを一緒に導入します。**別のベースモデルは、そのモデル専用のバッチファイルをダブルクリックして導入します**（下の「LTX 2.5 を追加する」「MiniMax H3 を追加する」）。
 
 **古い構成のまま使っている場合**、`setup.bat` を再実行すると自動で新しい構成へ移ります。中身を**移動するだけ**（同じドライブ内なので数秒で終わり、再ダウンロードは発生しません）で、移動先に同名のファイルがある場合は上書きせずその場で止まります。自分で置いた LoRA・自家変換 GGUF・x4 アップスケーラーなども、対応表に無いものはそのまま持ち上がります。実行のたびに、何をどこへ移すかの一覧が画面に出て、1ファイル1行の記録が `logs\model_migration_日付_時刻.log` に残ります。`config.yaml` に対して行うのは、**旧構成のモデルパスの書き換え**と、**記述子へ移って読まれなくなった廃止済みキーの行の削除**の2種類だけで（どちらも実行前に `config.yaml.bak` を書き出します）、それ以外の設定値・コメント・空行には一切触れません。
 
@@ -427,16 +449,49 @@ models/
 
 > **`install-LTX25.bat` を実行するまで、LTX 2.5 は「選べるが未導入」として画面に出ます。** LTX 2.3 だけを使うぶんには何の影響もありません。テキストエンコーダのトークナイザは GGUF の中に入っているので別途置く必要はありません。**隣にできる `*.assets.safetensors` は、バックエンドが初回のモデル読み込み時に GGUF の中身から自動で作るもの**なので、ダウンロードする必要はありませんし、消しても次回に作り直されます。
 
+### MiniMax H3 を追加する（`install-MiniMaxH3.bat`）
+
+**MiniMax H3 は、映像と音声を 1 つのモデルで同時に作る、3 つ目のベースモデルです（α版）。** α版で使える範囲と制限は §7.6 にまとめてあります。導入の前に、上の「ハードウェア要件の詳細」にある MiniMax H3 の条件（NVIDIA ドライバ R580 以上・RTX 20 シリーズ以降・メインメモリ 64GB 推奨・追加で約 60GB の空き容量）を確かめてください。
+
+**ドライバの版は、バッチが確かめてくれません。** 先にコマンドプロンプトで `nvidia-smi` と入力して実行し、表示の右上にある `Driver Version` が 580 以上であることを確かめてください（古いドライバのままだと、ダウンロードと準備が全部終わったあと、生成の時点で初めて止まります）。
+
+**先に最新版へ更新し、`setup.bat` を済ませてください。** 古い版には `install-MiniMaxH3.bat` そのものがありません。§1「更新のしかた」の手順（`git pull` → `setup.bat` → AviUtl2 から使う場合は `AviUtl2-Plugin\NzVideomni.aux2` のドロップし直し）を済ませてから進んでください。操作パネルが古いままだと、MiniMax H3 を選べても規則に合わない値が送られて生成が止まります。`install-MiniMaxH3.bat` は、アプリの Python 環境とダウンロード道具を `setup.bat` が用意した前提で動きます（済んでいないときは、その場でそう案内して止まります）。
+
+**実行する前に、下の「[ライセンス](#ライセンス)」の MiniMax H3 の段落を読み、利用できる地域と条件に当てはまることを確かめてください。** バッチも取得の前にライセンスの注意と本文の URL を表示しますが、何かを入力する必要はなく、そのまま次へ進みます（止めたいときは黒い画面を閉じれば止まります）。
+
+準備ができたら、**リポジトリ直下の `install-MiniMaxH3.bat` をダブルクリックしてください。** LTX 2.5 のバッチと違い、**MiniMax H3 専用の Python 環境（`./.venv-engine-h3`、CUDA 13 系の torch）もこのバッチが作ります**。そのあと下表のファイルが `models/MiniMaxH3/` の下の各フォルダへ置かれます。終わったら、画面上部のベースモデルの一覧から「MiniMax H3」を選べるようになります。**AviUtl2 で使う場合は AviUtl2 を再起動してください**（操作パネルを開いたままだと、未導入のままに見えます）。ブラウザの画面（Gradio UI）で使う場合は、ページを開き直してください。
+
+- **ダウンロードの量は、重みだけでおよそ 54GB**（1GB＝10 億バイトで数えた値。バッチの画面は 1GB＝1,073,741,824 バイトで数えるので、50GB 強と表示されます）あり、ほかに仮想環境のためのパッケージも取得します。回線によっては数時間かかります。途中でスリープしない設定にしておくと確実です。バッチ自身も実行前に必要な空き容量を表示しますが、この表示は重みの分だけなので、上表の「追加で約 60GB」を目安にしてください。画面の「取得するファイル」の数は tokenizer のフォルダを 1 つと数えるので、下表のファイル数より少なく出ます。
+- **揃っているものは取り直しません。** 仮想環境も重みも、揃っていれば飛ばします。途中で失敗しても、もう一度ダブルクリックすれば続きから再開します。
+- 実行の記録は `logs\install_MiniMaxH3_<日時>.log` に残ります。うまくいかないときは、この記録を見てください。
+- 検証の表で MISSING と出て終わったときは、**MISSING と出た行のファイルを 1 つだけ消して**（tokenizer の行なら、そのフォルダの中身を消して）もう一度実行してください。`models\MiniMaxH3` をフォルダごと消さないでください。**MISSING の表が出ないまま止まったとき**（Python 環境の構築やダウンロードの途中で止まったとき）は、**何も消さずに**もう一度実行してください。
+- **`git pull` と `setup.bat` による更新では、MiniMax H3 の仮想環境は当て直されません。** 更新で H3 の依存が変わったときは、このバッチをもう一度実行してください（§1「更新のしかた」）。
+
+**MiniMax H3 のために取得して検証するファイルは下表のとおりです**（記述子 `scripts/manifests/40-minimaxh3.json` に載っているファイル。すべて `models/` からの相対パスです）。**下表はバッチが置く場所の内訳で、手で置きたい場合の対応表も兼ねています**——ただし公開元のリポジトリ内のフォルダ名（`diffusion_models/`・`text_encoders/`・`vae/`・`FL2VA/text_encoder/`）は下表のフォルダ名と違うので、置く場所は下表に合わせてください。**仮想環境はバッチでしか作れないので、重みを手で置いた場合も `install-MiniMaxH3.bat` を一度実行してください**（揃っている重みは取り直しません）。
+
+| 役割 | 期待するパスとファイル名 | 取得元リポジトリ |
+|------|--------------------------|------------------|
+| DiT（本体。枝刈り版の int8 ConvRot） | `MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors` | [`Comfy-Org/MiniMax-H3`](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| テキストエンコーダ（Qwen3-VL-32B の int8 ConvRot） | `MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors` | [`Comfy-Org/MiniMax-H3`](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| 映像 VAE | `MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors` | [`Comfy-Org/MiniMax-H3`](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| 音声 VAE | `MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors` | [`Comfy-Org/MiniMax-H3`](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| tokenizer 一式（6 ファイル。重みは含まない） | `MiniMaxH3/TextEncoder/qwen3vl_tokenizer/` の `config.json`・`merges.txt`・`preprocessor_config.json`・`tokenizer.json`・`tokenizer_config.json`・`vocab.json` | [`MiniMaxAI/MiniMax-H3`](https://huggingface.co/MiniMaxAI/MiniMax-H3)（リポジトリ内の `FL2VA/text_encoder/` から、この 6 ファイルだけ） |
+| ライセンスの写し | `MiniMaxH3/LICENSE` | [`MiniMaxAI/MiniMax-H3`](https://huggingface.co/MiniMaxAI/MiniMax-H3) |
+
+**どちらのリポジトリも Public かつ非 Gated** なので、HuggingFace のアカウントもアクセストークンも要りません。**本プロジェクトは MiniMax H3 の重みを再ホストしていません。** ライセンスに利用できる地域の条項があるため、重みは公開元（ComfyUI の開発元の Comfy-Org と、モデルの開発元の MiniMaxAI）の公開リポジトリから、お使いのパソコンが直接取得します。**MiniMax H3 のライセンスは、本プロジェクト（Apache-2.0）とも LTX とも違います。使う前に必ず下の「[ライセンス](#ライセンス)」の MiniMax H3 の段落を読んでください。**
+
+> **`install-MiniMaxH3.bat` を実行するまで、MiniMax H3 は「選べるが未導入」として画面に出ます。** LTX 2.3・LTX 2.5 だけを使うぶんには何の影響もありません。
+
 ### 物体追尾を追加する（`install-UETrack.bat`）
 
 **先に `setup.bat` を済ませてください。** `install-UETrack.bat` は追尾用の環境と重みを足すだけのもので、Python 環境とダウンロード道具は `setup.bat` が用意します（済んでいないときは、その場でそう案内して止まります）。
 
-**物体追尾は、タイムラインに置いた部分フィルタ（画面の一部だけに効果を掛けるフィルタ）の枠を、被写体に合わせて自動で動かす機能です。** モザイクやぼかしを人物や物体に追従させたいときに使います。**これは動画を作る機能ではなく、既にタイムラインにあるオブジェクトの値を書き換える機能**なので、ベースモデル（LTX 2.3 / LTX 2.5）の選択とは関係がありません。
+**物体追尾は、タイムラインに置いた部分フィルタ（画面の一部だけに効果を掛けるフィルタ）の枠を、被写体に合わせて自動で動かす機能です。** モザイクやぼかしを人物や物体に追従させたいときに使います。**これは動画を作る機能ではなく、既にタイムラインにあるオブジェクトの値を書き換える機能**なので、どのベースモデルを選んでいるかとは関係がありません。
 
 準備ができたら、**リポジトリ直下の `install-UETrack.bat` をダブルクリックしてください。** 追尾専用の Python 環境（`./.venv-utils`、CPU 版の torch）が作られ、追跡AIの重み 1 ファイルが [`Rootport/Nz-UETrack`](https://huggingface.co/Rootport/Nz-UETrack) から `models/UETrack/` へ置かれます。
 
 - **ダウンロードの量はおよそ 107MB** です（重みの本体だけを抜き出したファイルで、公開元の配布物より小さくなっています）。
-- **任意導入です。** 入れなくても動画生成には何の影響もありません。既存の3つの Python 環境には一切触れないので、動いているインストールを壊すこともありません。
+- **任意導入です。** 入れなくても動画生成には何の影響もありません。既存の Python 環境（アプリと動画生成のエンジン）には一切触れないので、動いているインストールを壊すこともありません。
 - **入れていないときは、操作パネルの追尾の設定が灰色になり、その場で `install-UETrack.bat` の実行を案内します。**
 
 **使い方**: AviUtl2 のタイムラインで、追いかけたい映像の**下の段**に部分フィルタを置き、プレビューを見ながら枠を被写体に合わせます。その部分フィルタを右クリックして「🎯 物体追尾（部分フィルタを使用）」を選ぶと、操作パネルが Toolbox タブに切り替わって追尾が始まります。部分フィルタを選んだまま、操作パネルの Toolbox タブの「Tracking」サブタブにある「🎯 追尾を開始」を押しても同じです。終わると部分フィルタの先頭から末尾まで枠に中間点が打たれているので、あとはモザイクでもぼかしでも好きな効果を足してください。**追尾は枠を動かすだけで、効果の種類には関与しません。**
@@ -465,7 +520,7 @@ models/
 
 **使う LoRA**: Lightricks の Alpha Gen 用 IC-LoRA を、`config.yaml` の `model.ic_loras` の `alpha-gen` が指す場所に置きます（置き場所と書き方の正本は [`config.yaml.example`](config.yaml.example) の `alpha-gen` の行）。LoRA は `install-LTX25.bat` が他の LTX 2.5 のファイルと一緒に `models/LTX25/IC-LoRA/alpha-gen/` へ置きます（取得元は `Rootport/Nz-LTX25-weights`）。すでに LTX 2.5 を導入済みの方は、`install-LTX25.bat` をもう一度ダブルクリックすると、この LoRA だけを取りに行きます。
 
-**`config.yaml` に `alpha-gen` の行が無い場合**（`config.yaml` の `model.ic_loras` の中に `alpha-gen:` の行が見当たらないとき。`config.yaml` が 2026-10-13 より前に作られた方がこれに当たります）、LoRA が置かれていても、Alpha Gen の生成は `LORA_NOT_FOUND`（known adapters: […]）という 404 で止まります。`setup.bat` や `run.bat` を実行し直しても、既にある `config.yaml` には行を足しません。次のどちらかで直してください。
+**`config.yaml` に `alpha-gen` の行が無い場合**（`config.yaml` の `model.ic_loras` の中に `alpha-gen:` の行が見当たらないとき。`config.yaml` を、Alpha Gen が加わる前の版の本プロジェクトで作った場合がこれに当たります）、LoRA が置かれていても、Alpha Gen の生成は `LORA_NOT_FOUND`（known adapters: […]）という 404 で止まります。`setup.bat` や `run.bat` を実行し直しても、既にある `config.yaml` には行を足しません。次のどちらかで直してください。
 
 1. `config.yaml` の `model.ic_loras:` の中に、他の行と同じ字下げで次の 1 行を足す。
    `alpha-gen: "./models/LTX25/IC-LoRA/alpha-gen/ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors"`
@@ -543,6 +598,12 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
    │  python -m engine.worker    │  python -m engine25.worker   │
    │  ログ: logs/ltx_worker.log   │  ログ: logs/ltx25_worker.log  │
    └─────────────────────────────┴─────────────────────────────┘
+   ┌─────────────────────────────┐
+   │ MiniMax H3 の worker（系統 h3）│
+   │  ./.venv-engine-h3          │
+   │  python -m engine_h3.worker │
+   │  ログ: logs/h3_worker.log    │
+   └─────────────────────────────┘
 
    ┌──────────────────────────────────────────────────────────┐
    │ ユーティリティワーカー（物体追尾・任意導入）               │
@@ -552,8 +613,8 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
    └──────────────────────────────────────────────────────────┘
 ```
 
-- **`engine/`（LTX 2.3）と `engine25/`（LTX 2.5）はどちらも first-party**（project root 直下・git 追跡）で、由来と provenance は [`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md) にあります。上流参照用の `vendor/LTX-2` は温存しています。
-- **プロトコル**: アプリは real backend でも torch/LTX を import しません。`_RealBackend` がそのエンジンの python で worker を常駐起動し、`{"op":"load",...}` → `@@LTX@@{"event":"ready"}` → `{"op":"generate",...}` → `@@LTX@@{"event":"done",...}` と往復します。worker がモデルを **1度だけ**構築してジョブを使い回し、mp4 は worker が直接ディスクへ書きます（制御 JSON のみパイプを渡る）。**この受け答えの作法は2系統で共通**で、違うのは起動する python とモジュール、ロードペイロードの項目名、そしてワーカーログの名前だけです。
+- **`engine/`（LTX 2.3）と `engine25/`（LTX 2.5）はどちらも first-party**（project root 直下・git 追跡）で、由来と provenance は [`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md) にあります。上流参照用の `vendor/LTX-2` は温存しています。**`engine_h3/`（MiniMax H3）も同じく project root 直下・git 追跡**で、設計の正本は [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) です。
+- **プロトコル**: アプリは real backend でも torch/LTX を import しません。`_RealBackend` がそのエンジンの python で worker を常駐起動し、`{"op":"load",...}` → `@@LTX@@{"event":"ready"}` → `{"op":"generate",...}` → `@@LTX@@{"event":"done",...}` と往復します。worker がモデルを **1度だけ**構築してジョブを使い回し、mp4 は worker が直接ディスクへ書きます（制御 JSON のみパイプを渡る）。**この受け答えの作法はどの系統でも共通**で、違うのは起動する python とモジュール、ロードペイロードの項目名、そしてワーカーログの名前だけです。
 - **16GB 技術**: GGUF Q4_K_M transformer + block-swap（GPU 常駐 8 ブロック）+ GGUF Gemma の逐次 per-layer CPU オフロード（`--te-offload`）+ DiT の CPU 構築（`--dit-cpu-load`）+ VAE タイリング + component-file 経路。512×320 で peak_vram ~9.2GB、720p（1280×768→crop）実証済みです（内部の詳細は仕様書 §9「低VRAM戦略」）。
 - **モック backend** は `./.venv` のみで動く合成クリップ生成で、テストと GPU 無し開発に使います（`GenerationOutcome.backend` だけが real と異なり、API/スキーマ/出力構造は同一）。
 - **ユーティリティワーカー（物体追尾）は、上の「同時に1つ」の数に入りません。** エンジン worker とは別の第4のプロセスで、CPU だけを使い、生成ジョブを止めず、生成に止められもしません。起動するのは最初の追尾が始まったときで、以後はセッションをまたいで常駐します（重みの読み込みは1度だけ）。**任意導入**なので、`install-UETrack.bat` を実行していない環境ではそもそも存在しません。詳細は [`Docs/OBJECT_TRACKING_DESIGN.md`](Docs/OBJECT_TRACKING_DESIGN.md) §6 を参照してください。
@@ -571,9 +632,11 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 - **Edit**: できあがった動画に手を入れるタブで、**Retake**（選んだ区間の撮り直し）・**Outpainting**（画角拡張）・**Inpainting**（部分フィルタの枠の内側だけを描き替える）・**Alpha Gen**（動画から透過用の白黒マット動画を作る。LTX 2.5 専用）のサブタブに分かれます。入口は動画や部分フィルタの右クリックが中心です（§1「Inpainting」「Alpha Gen」。設計の正本は [`Docs/INPAINTING_DESIGN.md`](Docs/INPAINTING_DESIGN.md) と [`Docs/ALPHAGEN_DESIGN.md`](Docs/ALPHAGEN_DESIGN.md)）。
 - **Inventory**: 上がスタイル LoRA の棚、下が生成済みジョブの一覧です。棚のカードを押すとプロンプト欄へその LoRA のタグが入り、一覧の `🎞` ボタンで完成した動画をタイムラインへ送れます。
 
+**MiniMax H3 を選んでいるときは、使えないタブ・サブタブ・項目が灰色になるか、表示されなくなります**（Chained と Edit のタブは灰色になります）。どれが使えないかは §7.6 にまとめてあります。
+
 **Settings（上端の ⚙ ボタンで開く設定画面）** には、次の項目も並びます。
 
-- **Base model（ベースモデル）**: 「モデル」区画のすぐ上にあり、画面左上の選択と同じもの（LTX 2.3 ／ LTX 2.5 の切り替え）です。どちらで切り替えても両方が追随し、生成中やモデルの読み込み中は、どちらも選べません。切り替えが終わると、下の「モデル」区画も新しいベースモデルの内容に入れ替わります。
+- **Base model（ベースモデル）**: 「モデル」区画のすぐ上にあり、画面左上の選択と同じもの（LTX 2.3 ／ LTX 2.5 ／ MiniMax H3 の切り替え）です。どちらで切り替えても両方が追随し、生成中やモデルの読み込み中は、どちらも選べません。切り替えが終わると、下の「モデル」区画も新しいベースモデルの内容に入れ替わります。
 - **Metadata output（メタデータ出力）**: 「生成したmp4に生成条件をメタデータとして書き込む」の On / Off です（既定は On）。§5「[生成条件を mp4 に記録する](#mp4-recipe)」を参照してください。
 
 右クリックメニューの項目と、それぞれがどのタブのどの欄へ着地するかは、フロントエンドの `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md` が正本です。
@@ -598,17 +661,20 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | POST | `/utils/mp4-info` | サーバーと同じ PC 上の動画ファイルのパスを渡すと、書き込まれた生成条件（`comment` タグ）を返します。**同じ PC からの要求だけに答えます**（§5「[生成条件を mp4 に記録する](#mp4-recipe)」） |
 
 ### 凍結 API 契約（付録A・変更しない）
-- 幅・高さは **64の倍数**（two-stage distilled が stage1 を半解像度で生成し x2 アップサンプルするための帰結。由来の解説は [`Docs/LTX23_REFERENCE.md`](Docs/LTX23_REFERENCE.md) §3、検証は [`api/models.py`](api/models.py) の `GenerateRequest` validator）。
-- フレーム数は **8n+1**（9, 17, 25, … 121）。尺 cap は **20s（481f=8×60+1）@24fps** まで許容。溢れ/低速/非実用は**クライアント UI 警告に委ねる**方針で、解像度別 spill-free フレーム数を `GET /api/v1/config` の `limits.spill_free_frames` に露出します（**値の正本は `config.yaml` の `limits.spill_free_frames` と [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md)**。閾値の考え方は同書 §付記、実測の経緯は [`Docs/RESOLUTION_DURATION_CAPABILITY.md`](Docs/RESOLUTION_DURATION_CAPABILITY.md) §8.4/§8.6）。これを超えると shared へ溢れ ~2-4x 低速化します（OOM はしません）。1080p の長尺は非実用（~40分・commit リスク）のため **720p 生成＋外部 upscale** 推奨です。
-- Distilled は **8 steps / CFG=1.0** 固定。
-- I2V のキーフレーム画像は **最大10枚**（画像なし=T2V、1枚以上=I2V）。`frame_idx` は `0`（開始フレーム）か 8n+1 で、それ以外の値を送っても 422 にはならず、8n+1 グリッドへ丸めて `[1, num_frames-8]` の範囲へ収められます。ただし**丸めた先が他の1枚と同じフレームになったときだけは 422 で断ります**（同じ位置に2枚あると条件付けが二重になり、出来上がりが定まらないためです）。上限の10枚を実際に置けるのは `num_frames` が 73 以上のときです（置ける位置が `(num_frames-9)//8+2` 個しかないため、それより短い尺では途中で必ずぶつかります）。
+
+ここに挙げる数値は **LTX（LTX 2.3・LTX 2.5）の規則**です。系統ごとの値は `GET /models` の `base_models[].constraints` に出ます。MiniMax H3 の値は §7.6 にあります。
+
+- **【LTX の規則】** 幅・高さは **64の倍数**（two-stage distilled が stage1 を半解像度で生成し x2 アップサンプルするための帰結。由来の解説は [`Docs/LTX23_REFERENCE.md`](Docs/LTX23_REFERENCE.md) §3、検証は系統の規則表 [`services/engines/ltx/request_rules.py`](services/engines/ltx/request_rules.py)）。
+- **【LTX の規則】** フレーム数は **8n+1**（9, 17, 25, … 121）。尺 cap は **20s（481f=8×60+1）@24fps** まで許容。溢れ/低速/非実用は**クライアント UI 警告に委ねる**方針で、解像度別 spill-free フレーム数を `GET /api/v1/config` の `limits.spill_free_frames` に露出します（**値の正本は `config.yaml` の `limits.spill_free_frames` と [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md)**。閾値の考え方は同書 §付記、実測の経緯は [`Docs/RESOLUTION_DURATION_CAPABILITY.md`](Docs/RESOLUTION_DURATION_CAPABILITY.md) §8.4/§8.6）。これを超えると shared へ溢れ ~2-4x 低速化します（OOM はしません）。1080p の長尺は非実用（~40分・commit リスク）のため **720p 生成＋外部 upscale** 推奨です。
+- **【LTX の規則】** Distilled は **8 steps / CFG=1.0** 固定（検証は同じ規則表）。
+- **【LTX の規則】** I2V のキーフレーム画像は **最大10枚**（画像なし=T2V、1枚以上=I2V）。LTX では `frame_idx` は `0`（開始フレーム）か 8n+1 で、それ以外の値を送っても 422 にはならず、8n+1 グリッドへ丸めて `[1, num_frames-8]` の範囲へ収められます。ただし**丸めた先が他の1枚と同じフレームになったときだけは 422 で断ります**（同じ位置に2枚あると条件付けが二重になり、出来上がりが定まらないためです）。上限の10枚を実際に置けるのは `num_frames` が 73 以上のときです（置ける位置が `(num_frames-9)//8+2` 個しかないため、それより短い尺では途中で必ずぶつかります）。
 - `crop_output` を指定すると、任意の非64サイズ（例 960×540, 1280×720）を中央クロップで得ます。
 
 ---
 
 ## 5. 生成のしかたと高速化（16GB 向け生成テスト）
 
-> **本節は LTX 2.3 を選んでいるときの説明です。LTX 2.5 を選んでいるときの違いは §7.1 にまとめてあります。**
+> **本節は LTX 2.3 を選んでいるときの説明です。LTX 2.5 を選んでいるときの違いは §7.1、MiniMax H3 を選んでいるときの違いは §7.6 にまとめてあります。**
 
 出力は `outputs/{job_id}/output.mp4` と `outputs/{job_id}/metadata.json` に保存されます（`output.mp4` の中にも、既定で `metadata.json` と同じ生成条件が書き込まれます。下の「[生成条件を mp4 に記録する](#mp4-recipe)」）。`peak_vram_mb` は `metadata.json` またはワーカーログの `GENERATED_OK peak_vram_mb=` から取得できます（jobs API 応答には含まれません）。**ワーカーログはエンジン系統ごとに別ファイル**です（§7.4）。
 
@@ -638,6 +704,9 @@ $env:PYTHONPATH = (Get-Location).Path
 
 # LTX 2.5 は別の仮想環境・別のモジュール（受け答えの作法は同じ）
 & ".\.venv-engine-ltx25\Scripts\python.exe" -m engine25.worker
+
+# MiniMax H3 も同様（install-MiniMaxH3.bat で導入した場合）
+& ".\.venv-engine-h3\Scripts\python.exe" -m engine_h3.worker
 ```
 
 ### Gradio UI
@@ -667,16 +736,16 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ### 生成の高速化（Acceleration）
 
-生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は6つで、これは両方の UI で共通です。** **「どちらのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」がお互いに1つずつあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が使えません。**どちらの UI でも、使えないほうの行は単に表示されません。**
+生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は6つで、これは両方の UI で共通です。** **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。**どちらの UI でも、使えない行は単に表示されません。**
 
-| 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い |
-|------|--------|------------------|------------------|
-| Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化） | On / Off | **実装済み**。既定は on | **実装済み**。既定は on |
-| Attention（注意機構の実装） | `sdpa` / `sage attention` | **実装済み**。既定は `sdpa` | **実装済み**。既定は `sdpa` |
-| Block-swap prefetch（先読みblock swap） | On / Off | **実装済み**。既定は on | **実装済み**。既定は on |
-| モデル骨格の常駐（keep_resident） | On / Off | **実装済み**。既定は off | **実装済み**。既定は off |
-| 埋め込み処理器の常駐（keep_resident_embeddings） | On / Off | **この項目はありません**。**AviUtl2 の操作パネルでも Gradio UI の Settings タブでも、この行そのものが見えません**。API へ指定すると **422** | **実装済み**。既定は off |
-| VAE（映像の復元処理） | Default / PrunaVAED | **実装済み**。既定は Default（＝off） | Default のみ。PrunaVAED は **422**。**AviUtl2 の操作パネルでも Gradio UI の Settings タブでも、この行そのものが見えません** |
+| 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い | MiniMax H3 での扱い |
+|------|--------|------------------|------------------|---------------------|
+| Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化） | On / Off | **実装済み**。既定は on | **実装済み**。既定は on | **無視されます**（GGUF の重みを持たないため。指定してもエラーにはなりません） |
+| Attention（注意機構の実装） | `sdpa` / `sage attention` | **実装済み**。既定は `sdpa` | **実装済み**。既定は `sdpa` | **実装済み**。既定は `sdpa` |
+| Block-swap prefetch（先読みblock swap） | On / Off | **実装済み**。既定は on | **実装済み**。既定は on | **実装済み**。既定は on |
+| モデル骨格の常駐（keep_resident） | On / Off | **実装済み**。既定は off | **実装済み**。既定は off | **実装済み**。既定は off（中身は §7.6） |
+| 埋め込み処理器の常駐（keep_resident_embeddings） | On / Off | **この項目はありません**。**AviUtl2 の操作パネルでも Gradio UI の Settings タブでも、この行そのものが見えません**。API へ指定すると **422** | **実装済み**。既定は off | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ指定すると **422** |
+| VAE（映像の復元処理） | Default / PrunaVAED | **実装済み**。既定は Default（＝off） | Default のみ。PrunaVAED は **422**。**AviUtl2 の操作パネルでも Gradio UI の Settings タブでも、この行そのものが見えません** | LTX 2.5 と同じく Default のみで、行は見えません。PrunaVAED は **422** |
 
 **GGUF逆量子化の1カーネル化と先読み block swap を LTX 2.5 で併用したときの生成時間は、実測で 102.86 秒 → 39.28 秒＝61.8%短縮です。** 出力そのものは変わらず、**固定の検証用ジョブ17本すべてで動画のファイルが1バイトも変わっていない**ことを確認しています。残る PrunaVAED だけは LTX 2.5 で **422** で断られます——利用者が意図して on にしたときだけ付くものなので、効かないまま黙って通すより断ったほうが親切だという判断です（詳しくは §7.1 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75・§76・§77）。
 
@@ -704,7 +773,7 @@ VRAM の使用量は実測で変わりません（LTX 2.3 でピークの差は 
 > 避けるためです。**この注意書きが `sage` についての正本**で、他の箇所（§7 の制限事項や §8 の MCP 注意事項）はここを参照します。
 > **この注意は LTX 2.3 でも LTX 2.5 でもそのまま当てはまり、既定はどちらも `sdpa` です。**
 
-**入っていない環境ではどうなるか**: `sageattention` は `setup.bat` が標準で入れますが、何らかの事情で入っていない環境（古い手順で作った仮想環境など）では、`sage` を選んでも**エラーにはならず、自動的に `sdpa` に切り替わって最後まで生成されます**（**この降格のふるまいは2系統でまったく同じです**）。利用可否は `GET /status` の `acceleration.sage_available` で確認でき、操作パネル側は使えないときはボタン自体が選べなくなります。実際にどちらで生成されたかは `outputs/{ジョブID}/metadata.json` の `attention_used`（`"sdpa"` / `"sage"` / `"sage->sdpa"`）で確認できます。
+**入っていない環境ではどうなるか**: `sageattention` は `setup.bat` が標準で入れますが、何らかの事情で入っていない環境（古い手順で作った仮想環境など）では、`sage` を選んでも**エラーにはならず、自動的に `sdpa` に切り替わって最後まで生成されます**（**この降格のふるまいはどの系統でもまったく同じです**）。利用可否は `GET /status` の `acceleration.sage_available` で確認でき、操作パネル側は使えないときはボタン自体が選べなくなります。実際にどちらで生成されたかは `outputs/{ジョブID}/metadata.json` の `attention_used`（`"sdpa"` / `"sage"` / `"sage->sdpa"`）で確認できます。
 
 > **最初の1本だけ遅く感じることがあります。** `sage` は内部で triton という仕組みを使い、その初回にだけ「JIT コンパイル」（実行時にカーネルを組み立てる処理）が走るためです。2本目以降は本来の速さになります。速度を測って比べたい場合は、この点と、**worker プロセスの最初のジョブだけ約 8% 速い**という癖の両方を踏まえて、`sdpa` と `sage` を交互に流して隣り合う組で比べてください（詳細は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §43.6）。
 
@@ -810,6 +879,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 | [7.3](#limit-hardware) | 動作確認済みのハードウェア |
 | [7.4](#limit-server) | サーバーとファイルの扱い（設定・ジョブ履歴・保存領域・ログ） |
 | [7.5](#limit-generation) | 生成そのものの限界 |
+| [7.6](#limit-h3) | **MiniMax H3（α版）を選んでいるときの制限**（できること・できないこと・メモリ） |
 
 <a id="limit-ltx25"></a>
 ### 7.1 LTX 2.5 を選んでいるときの制限
@@ -831,7 +901,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 2. **撮り直しと素材（末尾）には、使い方の推奨があります。** **撮り直しは、窓（作り直す範囲）を 121 フレーム以上にしてください**——73 フレームだと前後ののりしろ（25＋24フレーム）を除いて自由に作り直せるのが 24 フレームしか残らず、出来上がりが元とほとんど変わりません（**LTX 2.3 のときからそうで、LTX 2.5 で悪くなったわけではありません**）。**素材（末尾）だけを使うときは、クリップ1本での使用を推奨します**（§7.5 の[注意書き](#end-source-note)）。
 3. **画面の見え方で戸惑いやすいところが2つあります。** **キャンバス拡張では、生成の進み具合の表示が 50% あたりで15秒ほど止まって見えます**が、不具合ではありません（内部で映像を組み直している区間で、進み具合の計算がこの区間を数えないためです。**LTX 2.3 でも同じです**）。**LoRA は LTX 2.5 でやや弱く効く傾向があります**——既定の強度は LTX 2.3 と同じ 1.0 のままなので、効きが弱いと感じたらプロンプト内の LoRA タグで `1.3` のように指定してください。**スタイル LoRA はトリガー語（学習時に使われた合言葉）をプロンプトに入れないと効きが穏やか**で、**参照動画で輪郭線制御（canny）を使うときは、ぼけていない鮮明な素材を渡してください**（輪郭がほとんど検出されません）。
 
-**指定しても断らず、黙って無視して生成を続ける項目もあります**——`guidance_scale` と `num_inference_steps` の2つです。蒸留版の LTX 2.5 は工程数が固定で、CFG（プロンプトへの従い具合の制御）そのものも無いためです。**無視したことは `logs/server.log` に1行残ります**（ただし**この2つは、LTX 2.5 が受け付けるリクエストでは既定値から動かせないので、実際にこの行が出ることはありません**）。**LTX 2.3 を選んでいるあいだは、これらはすべて従来どおり使えます。** LTX 2.5 の導入手順は §1「LTX 2.5 を追加する（`install-LTX25.bat`）」にあります。
+**指定しても断らず、黙って無視して生成を続ける項目もあります**——`guidance_scale`・`num_inference_steps`・`shift_video`・`shift_audio` です（一覧の正本は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.10(d)）。蒸留版の LTX 2.5 は工程数が固定で、CFG（プロンプトへの従い具合の制御）も shift（ノイズの減らし方の偏り。MiniMax H3 の項目です）の概念も無いためです。**既定以外の値を指定したときは、無視したことが `logs/server.log` に1行残ります**（`guidance_scale` と `num_inference_steps` は、LTX 2.5 が受け付けるリクエストでは既定値から動かせないので、実際に行が出るのは shift の 2 つを指定したときです）。**LTX 2.3 を選んでいるあいだは、`guidance_scale` と `num_inference_steps` は従来どおり使えます**（shift の 2 つは LTX 2.3 でも無視されます）。 LTX 2.5 の導入手順は §1「LTX 2.5 を追加する（`install-LTX25.bat`）」にあります。
 
 <a id="limit-onejob"></a>
 ### 7.2 同時に走る生成は1本だけ
@@ -852,17 +922,20 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 
 **メインメモリ 32GB では、上記サブマシン 1 台での実測合格があります**（最小構成の生成だけでなく 768p・257 フレームの IC-LoRA 制御生成まで通りました）。ただしこれは**この 1 台での実測結果**であり、あらゆる 32GB 環境での動作を保証するものではありません。§1 の「メインメモリとページファイル」の案内は引き続き必ず守ってください。**LTX 2.5 を使う場合は 64GB 以上を推奨**します（§1 のハードウェア要件）。
 
+**MiniMax H3 の推奨構成は、VRAM 16GB・メインメモリ 64GB です。** 動作を確かめたのは上記の開発機だけで、メインメモリ 32GB の機械は MiniMax H3 の対象外です（未検証）。GPU の世代とドライバの条件も LTX とは違います（§1「対応する GPU 世代」）。
+
 <a id="limit-server"></a>
 ### 7.4 サーバーとファイルの扱い
 
 - **`low_vram_mode=true` がデフォルト**。16GB 環境前提。`low_vram_mode=false` は高VRAM/クラウド用の任意検証で、16GB成功は保証しません。
 - ジョブ履歴は in-memory（再起動で消える）。`outputs/{job_id}/metadata.json` はディスクに残ります。
 - **`uploads/`（アップロードした画像・動画・音声）に自動削除はありません**。ディスクに残るファイルの区別と整理のしかたは [`Docs/STORAGE_POLICY.md`](Docs/STORAGE_POLICY.md) にまとめてあります（`outputs/` は成果物、`uploads/` は入力素材のキャッシュ）。
-- **ワーカーのログはエンジン系統ごとに別ファイル**です——LTX 2.3 は `logs/ltx_worker.log`、LTX 2.5 は `logs/ltx25_worker.log`。アプリ側のログは `logs/server.log` で、LTX 2.5 が「この設定は無視した」と書くのもこちらです。切り替えても両方の記録が残るように分けてあります。
+- **ワーカーのログはエンジン系統ごとに別ファイル**です——LTX 2.3 は `logs/ltx_worker.log`、LTX 2.5 は `logs/ltx25_worker.log`、MiniMax H3 は `logs/h3_worker.log`。アプリ側のログは `logs/server.log` で、LTX 2.5 が「この設定は無視した」と書くのもこちらです。切り替えても両方の記録が残るように分けてあります。
 
 <a id="limit-generation"></a>
 ### 7.5 生成そのものの限界
 
+- **この節は LTX（LTX 2.3・LTX 2.5）の話です。** MiniMax H3 の限界は §7.6 にあります。
 - transformer は Q4_K_M 量子化のため、フル bf16 公式とビット一致ではありません（聴感・視感は良好）。
 - **キーフレーム画像で「最終フレームちょうど」を条件にすることはできません**（`frame_idx` は `num_frames-8` にクランプされます）。末尾を指定したいときは end source（素材（末尾））を使ってください。
 - **「生成の高速化（Acceleration）」のうち2項目は、選ぶと絵が変わります**——`sage attention` と PrunaVAED です。詳しくは §5 の[`sage` の注意書き](#sage-seed-note)と[PrunaVAED の注意書き](#prunavaed-quality-note)を参照してください（`sage attention` は LTX 2.3・LTX 2.5 のどちらでも使えます。PrunaVAED は LTX 2.5 では 422 になります）。
@@ -878,6 +951,45 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 > 最終クリップを長くすると映像がほぼ静止する時間が出ることがあります。** **手順と考察の正本は
 > [`Docs/CHAIN_STAGE2_RESEARCH_NOTES.md`](Docs/CHAIN_STAGE2_RESEARCH_NOTES.md) §11** で、音声錨の幅と `context_frames` の
 > 関係もそちらにあります。
+
+<a id="limit-h3"></a>
+### 7.6 MiniMax H3（α版）を選んでいるときの制限
+
+**MiniMax H3 は α版です。** 映像と音声を 1 つのモデルで同時に作れますが、使えるのは基本の生成だけです。導入手順は §1「MiniMax H3 を追加する（`install-MiniMaxH3.bat`）」、推奨構成は §7.3、ライセンスは「[ライセンス](#ライセンス)」にあります。
+
+**できること**
+
+- **テキストから動画（T2V）と、先頭フレームの画像 1 枚からの動画（I2V）**。どちらも音声つきで生成されます。I2V の画像は、縦横比を保ったまま画面を覆うように拡大縮小し、はみ出た部分を中央で切り抜いて使います。
+- **フレームレートは 24fps 固定**です。**フレーム数は 17n+5 の形**（22・39・56 … と 17 ずつ）で、22 以上 481 以下です。**縦横は 32 の倍数**です。操作パネルでは、フレーム数がこの規則に合う値へ自動でそろいます。
+- **ステップ数と shift（映像・音声）の 3 本のスライダー**で、ノイズ除去の工程数と、工程のどこにノイズの減らし方の重みを置くかを変えられます。操作パネルと Gradio UI の両方にあり、LTX を選んでいるときは表示されません。既定はステップ数 20・shift（映像）12・shift（音声）3 で、範囲はステップ数が 1〜50、shift が 1〜20 です（値の正本はサーバーが `GET /models` の `base_models[].constraints` で配るもので、ここはその写しです）。
+- **生成の高速化のうち、`sage attention`・先読み block swap・モデル骨格の常駐**（§5 の表）。`sage attention` で絵の細部が変わる注意（§5 の[注意書き](#sage-seed-note)）は MiniMax H3 でも同じです。
+
+**できないこと**——下記は要求すると **422 `FEATURE_UNSUPPORTED`** で断られます。操作パネルでは、これらの入口は灰色になるか、表示されません（Chained タブと Edit タブは、タブごと灰色になります）。
+
+| 断られる機能 | 対応するリクエスト項目 |
+|--------------|------------------------|
+| クリップ連結（Chained）。連結の入口を通る V2V・A2V・撮り直し（Retake）も含みます | `POST /generate/chain` そのもの |
+| 画角拡張（Outpainting）・Inpainting・Alpha Gen | `outpaint`・`inpaint`・`alpha_gen` |
+| スタイル LoRA・IC-LoRA（参照動画による制御） | `loras`・`reference_video_id` |
+| ネガティブプロンプト（NAG／VSF） | `nag_enabled` |
+| 末尾と中間のキーフレーム（画像 2 枚以上、または先頭以外の位置） | `conditioning_images` |
+| キーフレームの強度の変更 | `conditioning_images` の `strength` |
+| PrunaVAED・埋め込み処理器の常駐 | `vae_mode`・`keep_resident_embeddings` |
+| 高品質パイプライン（`two_stage_hq`）・CFG の強さ | `pipeline`・`guidance_scale` |
+
+断られる機能の名前の一覧は、`GET /models`（MCP なら `list_models`）の `base_models[].unsupported_features` でも確かめられます。**指定しても断らず、無視して生成を続ける項目は `fused_gguf_dequant_kernel` です**（MiniMax H3 は GGUF の重みを持たないため。既定以外の値を指定したときは `logs/server.log` に 1 行残ります）。
+
+**読み込める重みは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけです。** 試してあるのは公式の配布物だけで、コミュニティが配っている派生版（ファインチューンや別の量子化）への対応は後回しにしています。
+
+**快適上限と速さ**
+
+- **快適上限（VRAM 16GB に収まる画角と尺の目安）はまだ測っていません。** そのため、操作パネルの快適上限マーカーは表示されません。
+- **大きな画角では、ノイズ除去の途中で VRAM が溢れ、1 ステップごとの時間が大きく延びます。** 生成時間の目安もまだ示せないので、たとえば 640×384 のような小さな画角と既定の尺から始めてください。
+
+**メインメモリと常駐**
+
+- **推奨はメインメモリ 64GB です。メインメモリ 32GB の機械は対象外です**（ページファイルで動く可能性はありますが、未検証です）。§1「メインメモリとページファイル」の案内は MiniMax H3 でも必ず守ってください。
+- **モデル骨格の常駐（`keep_resident`）は、LTX と同じトグルですが中身が違います。** on にすると、DiT（映像と音声を作る本体）・映像の復号器・音声 VAE をメインメモリに持ち続け、2 本目以降の読み込みを省きます。テキストエンコーダは毎回ファイルから 1 層ずつ読んで捨てる作りなので、常駐の対象ではありません。既定は off で、使うときはメインメモリ 64GB を前提にしてください。
 
 ---
 
@@ -920,8 +1032,8 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 |---|---|
 | `backend_status` | バックエンドの疎通状況を確認する |
 | `get_config` | バックエンドの実効設定を取得する（`GET /config`）。快適上限の表 `limits.comfort_budgets` の読み方は [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md) 第 1 節 |
-| `list_models` | 選択可能なモデル（transformer / text_encoder / video_vae / audio）を一覧する。**ベースモデル（LTX 2.3 / LTX 2.5）の一覧・導入状況・いま選ばれているもの**もここで分かる |
-| `load_pipeline` | パイプライン（推論モデル一式）を読み込む（`POST /pipeline/load`）。`base_model` に `"LTX23"` / `"LTX25"` を渡すと**ベースモデルを切り替える** |
+| `list_models` | 選択可能なモデル（transformer / text_encoder / video_vae / audio）を一覧する。**ベースモデル（LTX 2.3 / LTX 2.5 / MiniMax H3）の一覧・導入状況・いま選ばれているもの**もここで分かる |
+| `load_pipeline` | パイプライン（推論モデル一式）を読み込む（`POST /pipeline/load`）。`base_model` に `"LTX23"` / `"LTX25"` / `"MiniMaxH3"` を渡すと**ベースモデルを切り替える** |
 | `unload_pipeline` | パイプラインをメモリから解放する |
 | `list_loras` | 選択可能な IC-LoRA アダプタを一覧する（`GET /loras`） |
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
@@ -975,7 +1087,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`wait_for_job` は最大45秒でタイムアウト**します。エラーにはならず `timed_out: true` とその時点の進捗を返すので、終端状態になるまで繰り返し呼んでください。
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
-- **「生成の高速化（Acceleration）」の6項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings`）。**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**です（§7.1。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。
+- **「生成の高速化（Acceleration）」の6項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings`）。**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。
 - **`submit_generate` / `submit_chain` には引数 `embed_mp4_metadata`（既定 `True`）があります。** `False` にすると、完成した mp4 に生成条件を書き込みません（§5「[生成条件を mp4 に記録する](#mp4-recipe)」）。
 
 ---
@@ -983,3 +1095,5 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 ## ライセンス
 
 本リポジトリは **Apache-2.0** です（[LICENSE](LICENSE) を参照してください）。`engine/` は LTX-2 / LTX-Desktop 由来の派生コードを含むため、再配布時は上流の帰属表示を保持してください（[`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md)）。モデルウェイトは LTX-2 Community License に従ってください。
+
+**MiniMax H3 を導入する場合は、そのモデルに別のライセンスが適用されます。** ライセンスの名称は **MiniMax H3 COMMUNITY LICENSE AGREEMENT** で、本文は [`https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE`](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) にあります（`install-MiniMaxH3.bat` が同じ本文の写しを `models/MiniMaxH3/LICENSE` に置きます）。**このモデルを利用できる地域は、EU・英国・韓国・米国を除く全世界です。** 本プロジェクトは MiniMax H3 の重みを再ホストしておらず、`install-MiniMaxH3.bat` は公開元のリポジトリからお使いのパソコンへ直接ダウンロードするだけです。**ライセンスの条件を確かめ、守るのは、モデルを取得して使う方ご自身の責任です。** 使う前に必ず本文を読んでください。

@@ -37,16 +37,19 @@ export interface DeriveParamsInput {
   projectWidth: number;
   projectHeight: number;
   /** true for the IC-LoRA (`referenceVideo`) flow, which requires width/height
-   * to be multiples of 128 instead of the general-mode 64
+   * to be multiples of 128 instead of {@link DeriveParamsInput.generalMultiple}
    * (Docs/TIMELINE_ALPHA_REQUIREMENTS.md §2). */
   isICLora: boolean;
+  /** The general-mode (non-IC-LoRA) multiple — the loaded base model's
+   * `constraints.dimension_multiple`. Omitted = 64, LTX's. */
+  generalMultiple?: number | undefined;
   limits: GenerationParamLimits;
 }
 
 export interface DerivedGenerationParams {
   width: number;
   height: number;
-  /** The multiple width/height were rounded to (128 for IC-LoRA, else 64). */
+  /** The multiple width/height were rounded to (128 for IC-LoRA, else `generalMultiple`). */
   multiple: number;
   /** Which input the resolution was derived from. */
   source: "media" | "project";
@@ -81,13 +84,13 @@ function alignedMaxBound(max: number, multiple: number): number {
 /**
  * Derives the width/height to send for a right-click generation, per the
  * §7-5 α plan: prefer the selected material's real resolution, fall back to
- * the project resolution, round to the mode's required multiple (64, or 128
- * for IC-LoRA), and clamp into the server's actual limits (themselves aligned
+ * the project resolution, round to the mode's required multiple
+ * (`generalMultiple`, or 128 for IC-LoRA), and clamp into the server's actual limits (themselves aligned
  * to that multiple first, since `max_height` is not always a clean multiple).
  */
 export function deriveGenerationParams(input: DeriveParamsInput): DerivedGenerationParams {
-  const { mediaWidth, mediaHeight, projectWidth, projectHeight, isICLora, limits } = input;
-  const multiple = isICLora ? 128 : 64;
+  const { mediaWidth, mediaHeight, projectWidth, projectHeight, isICLora, limits, generalMultiple = 64 } = input;
+  const multiple = isICLora ? 128 : generalMultiple;
   const notes: string[] = [];
 
   let rawWidth: number;

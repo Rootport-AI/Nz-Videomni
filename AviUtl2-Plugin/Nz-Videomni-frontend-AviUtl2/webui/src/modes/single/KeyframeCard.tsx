@@ -29,6 +29,9 @@ export interface KeyframeCardProps {
   /** Disabled while a generation is in flight/reserved, mirroring the rest
    * of the form's fields. */
   disabled: boolean;
+  /** Grey the STRENGTH slider alone (the loaded base model
+   * does not use keyframe strength). Omitted = usable. */
+  strengthDisabled?: boolean | undefined;
   /** Fired once a FRAME edit is committed (blur/Enter) with the fully
    * resolved landing position — never the raw/unsnapped typed value. */
   onCommitFrameIdx: (id: string, frameIdx: number) => void;
@@ -92,6 +95,7 @@ export function KeyframeCard({
   offset,
   occupiedOthers,
   disabled,
+  strengthDisabled = false,
   onCommitFrameIdx,
   onStrengthChange,
   onRemove,
@@ -250,7 +254,7 @@ export function KeyframeCard({
             max={STRENGTH_MAX}
             step={STRENGTH_STEP}
             value={item.strength}
-            disabled={disabled}
+            disabled={disabled || strengthDisabled}
             onChange={(e) => onStrengthChange(item.id, Number(e.target.value))}
           />
           <span className="kfc-hint">{item.strength.toFixed(2)}</span>

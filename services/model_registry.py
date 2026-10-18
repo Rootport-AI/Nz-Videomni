@@ -43,6 +43,7 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
+import h3_format
 import sft_quant_format
 from api.errors import APIError, model_file_missing, model_incompatible, model_not_found
 from config import PROJECT_ROOT, AppConfig
@@ -121,6 +122,7 @@ def precheck_model_file(
     path: Path,
     *,
     descriptor: CategoryDescriptor | None = None,
+    engine_family: str | None = None,
 ) -> dict[str, str]:
     """Cheap compatibility precheck BEFORE the worker is (re)started.
 
@@ -142,6 +144,15 @@ def precheck_model_file(
     A ``.safetensors`` offered as the ``transformer`` is ruled on by the quantized-safetensors
     acceptance check (:func:`sft_quant_format.inspect`) instead of the
     bare header check.
+
+    ``engine_family`` (KEYWORD-ONLY) is the family of the base model the file
+    is being selected for. For MiniMax H3 (``"h3"``) the transformer and the
+    text encoder are ruled on by that engine's own header inspection
+    (:func:`h3_format.inspect_h3_dit` / :func:`h3_format.inspect_h3_te`, the
+    same functions the worker calls at load), the two VAEs by the generic
+    safetensors header check, and nothing is returned (H3 has no KV; its
+    fingerprint is the tensor names). An ``H3FormatError`` becomes
+    ``MODEL_INCOMPATIBLE`` with the inspection's Japanese reason as the detail.
 
     Returns the GGUF KV metadata read along the way (``{}`` for other
     safetensors and for a GGUF that declares none of
@@ -165,6 +176,8 @@ def precheck_model_file(
             f"(expected one of {sorted(_STRUCTURAL_CHECKS)})",
         )
     try:
+        if engine_family == "h3":
+            return _precheck_h3(category, name, path)
         if suffix == ".gguf":
             return _precheck_gguf(category, name, path)
         if category == "transformer":
@@ -180,6 +193,27 @@ def precheck_model_file(
         raise
     except OSError as exc:
         raise model_incompatible(category, name, detail=f"unreadable file: {exc}") from exc
+
+
+#: MiniMax H3's per-category header inspections; a category not here (the two
+#: VAEs) gets the generic safetensors header check.
+_H3_INSPECTIONS = {
+    "transformer": h3_format.inspect_h3_dit,
+    "text_encoder": h3_format.inspect_h3_te,
+}
+
+
+def _precheck_h3(category: str, name: str, path: Path) -> dict[str, str]:
+    """Rule on a MiniMax H3 file with the engine's own header inspection."""
+    inspect = _H3_INSPECTIONS.get(category)
+    if inspect is None:
+        _precheck_safetensors(category, name, path)
+        return {}
+    try:
+        inspect(str(path))
+    except h3_format.H3FormatError as exc:
+        raise model_incompatible(category, name, detail=str(exc)) from exc
+    return {}
 
 
 def _precheck_gguf(category: str, name: str, path: Path) -> dict[str, str]:

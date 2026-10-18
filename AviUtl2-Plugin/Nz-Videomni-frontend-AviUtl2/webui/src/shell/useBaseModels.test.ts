@@ -51,7 +51,8 @@ describe("useBaseModels", () => {
   it("lists base_models[] in server order and reports the active one", async () => {
     const { result } = await renderReady(createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "partial" })));
 
-    expect(result.current.options.map((o) => o.id)).toEqual(["LTX23", "LTX25"]);
+    // MiniMax H3 第 2 弾: the fixture server declares a third base model.
+    expect(result.current.options.map((o) => o.id)).toEqual(["LTX23", "LTX25", "MiniMaxH3"]);
     expect(result.current.options[0]).toMatchObject({
       displayName: "LTX 2.3",
       installed: true,
@@ -312,15 +313,15 @@ describe("useBaseModels", () => {
   it("activeWeightClass reads the ACTIVE base model's transformer_weight_class, and folds null into \"\"", async () => {
     const { result } = await renderReady(createApiClient(createMockBridge({ delayMs: 0, ltx25Install: "full" })));
     // The mock names only the active base model's class (the real endpoint's
-    // contract); the other one is `null`, which reads as "unknown".
-    expect(result.current.options.map((o) => o.weightClass)).toEqual(["4bit", ""]);
+    // contract); the other ones are `null`, which reads as "unknown".
+    expect(result.current.options.map((o) => o.weightClass)).toEqual(["4bit", "", ""]);
     expect(result.current.activeWeightClass).toBe("4bit");
 
     await act(async () => {
       await result.current.switchBaseModel("LTX25");
     });
     // After the switch the refetched list names LTX 2.5 as the active one.
-    expect(result.current.options.map((o) => o.weightClass)).toEqual(["", "4bit"]);
+    expect(result.current.options.map((o) => o.weightClass)).toEqual(["", "4bit", ""]);
     expect(result.current.activeWeightClass).toBe("4bit");
   });
 
@@ -476,5 +477,30 @@ describe("useBaseModels", () => {
 
     expect(result.current.options.every((o) => o.unsupportedFeatures.length === 0)).toBe(true);
     expect(result.current.disabledModes).toEqual([]);
+  });
+  // ── MiniMax H3 第 2 弾: activeConstraints ────────────────────────────────
+
+  it("activeConstraints follows the ACTIVE base model and keeps its identity across a refresh", async () => {
+    const { result } = await renderReady(createApiClient(createMockBridge({ delayMs: 0 })));
+    // LTX 2.3 publishes the LTX rules.
+    expect(result.current.activeConstraints.frameGrid).toEqual({ step: 8, offset: 1 });
+    expect(result.current.activeConstraints.sampling).toBeNull();
+
+    await act(async () => {
+      await result.current.switchBaseModel("MiniMaxH3");
+    });
+    const h3 = result.current.activeConstraints;
+    expect(h3.frameGrid).toEqual({ step: 17, offset: 5 });
+    expect(h3.minNumFrames).toBe(22);
+    expect(h3.dimensionMultiple).toBe(32);
+    expect(h3.frameRate).toEqual({ min: 24, max: 24 });
+    expect(h3.sampling?.shift_video.default).toBe(12);
+
+    // A refresh rebuilds `options`; an unchanged block must not look like a
+    // switch (Create resets its sliders on a new object).
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.activeConstraints).toBe(h3);
   });
 });

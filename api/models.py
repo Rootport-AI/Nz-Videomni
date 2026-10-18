@@ -4,17 +4,24 @@ Conditioning accepts multiple keyframes (cap ``MAX_CONDITIONING_IMAGES``),
 arbitrary ``frame_idx`` (snapped server-side to the official ``0``-or-``8n+1``
 latent grid and clamped into range), and per-item ``strength``.
 ``num_pixel_frames`` (multi-frame keyframe conditioning) is not part of the
-request. The OTHER constraints are FROZEN as the final-form API so that
+request. LTX's numeric constraints are FROZEN as the final-form API so that
 frontends (the AviUtl2 plugin, and any other client of the same API such as
 a DaVinci Resolve script) do not break: ÷64 generation resolution, 8n+1 frame
 counts, and the distilled 8-step / CFG=1.0 requirement. Do not relax those
-validators without revisiting the spec.
+rules without revisiting the spec.
+
+For the single ``POST /generate`` those rules are not checked in
+:class:`GenerateRequest` itself: they are a fact about the engine family,
+so each adapter declares them as ``REQUEST_RULES`` (LTX's table is
+services/engines/ltx/request_rules.py) and ``services.engines.validate_for_family``
+applies them once the active family is known — with LTX's messages, in a 422
+of the pydantic shape. The chain schema keeps its own validators (LTX only).
 
 Resolution note: ``width``/``height`` are the *generation* size and must be a
-multiple of **64** — the two-stage distilled pipeline generates stage-1 at half
-resolution then 2x-upsamples, so the requested size must be divisible by 64
-(``ltx_pipelines`` ``assert_resolution(is_two_stage=True)``). Any non-64 final
-display size (e.g. 960x540) is obtained via ``crop_output``.
+multiple of **64** on LTX — the two-stage distilled pipeline generates stage-1
+at half resolution then 2x-upsamples, so the requested size must be divisible
+by 64 (``ltx_pipelines`` ``assert_resolution(is_two_stage=True)``). Any non-64
+final display size (e.g. 960x540) is obtained via ``crop_output``.
 """
 
 from __future__ import annotations
@@ -26,6 +33,12 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from chain_math import ceil64
 from config import LimitsConfig, MAX_CONDITIONING_IMAGES
+from services.engines.ltx.request_rules import (
+    FRAME_RATE_MAX,
+    FRAME_RATE_MIN,
+    NUM_FRAMES_MAX,
+    NUM_FRAMES_MIN,
+)
 
 # Pydantic-declared DEFAULTS only (no config.yaml file I/O) — the single place
 # api/models.py sources the V2V and end-source context_frames bounds from, so
@@ -578,7 +591,7 @@ class GenerateRequest(BaseModel):
     # false のときは何も刻まない（結合でも元動画のタグを引き継がない）。
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT
 
-    # 生成サイズ。必ず64の倍数（two-stage distilled）。最終表示サイズは crop_output で。
+    # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
 
@@ -588,9 +601,20 @@ class GenerateRequest(BaseModel):
     # 尺 cap は 20s(481f=8×60+1)@24fps まで許容。溢れ/低速/非実用は
     # クライアント UI 警告に委ねる（解像度別 spill-free は /config の
     # limits.spill_free_frames、実測の記録は Docs/COMFORT_LIMIT_TABLE.md）。
-    num_frames: int = Field(49, ge=9, le=481)
-    frame_rate: float = Field(24.0, ge=1.0, le=60.0)
-    num_inference_steps: int = Field(8, ge=1, le=100)
+    # ここの上下限は「どの系統でも成り立つ外枠」。値の正本は
+    # services/engines/ltx/request_rules.py の定数で、系統ごとのフレーム規約
+    # （LTX は 8n+1、MiniMax H3 は 17n+5）・空間の倍数・fps は各アダプタの
+    # REQUEST_RULES が持ち、services.engines.validate_for_family が検査する。
+    num_frames: int = Field(49, ge=NUM_FRAMES_MIN, le=NUM_FRAMES_MAX)
+    frame_rate: float = Field(24.0, ge=FRAME_RATE_MIN, le=FRAME_RATE_MAX)
+    # None ＝「選択中の系統の既定値」。validate_for_family が系統の既定値
+    # （各アダプタの REQUEST_RULES）を書き戻すので、ジョブの記録・ログ・
+    # アダプタは常に整数を見る。le=100 は LTX 2.3 の two_stage_hq の外枠。
+    num_inference_steps: int | None = Field(None, ge=1, le=100)
+    # MiniMax H3 のスケジュールの shift（映像・音声）。None ＝系統の既定値
+    # （REQUEST_RULES の sampling。LTX には概念が無く、None のまま無視される）。
+    shift_video: float | None = Field(None, gt=0)
+    shift_audio: float | None = Field(None, gt=0)
     guidance_scale: float = Field(1.0, ge=0.0, le=20.0)
     seed: int = -1
     pipeline: Literal["distilled", "two_stage_hq"] = "distilled"
@@ -643,26 +667,17 @@ class GenerateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
-        if self.width % 64 != 0:
-            raise ValueError("width must be a multiple of 64")
-        if self.height % 64 != 0:
-            raise ValueError("height must be a multiple of 64")
-        if (self.num_frames - 1) % 8 != 0:
-            raise ValueError("num_frames must be 8n+1")
+        # The family-specific numeric rules (the spatial multiple, the frame
+        # grid, the distilled 8 steps / CFG 1.0) are NOT checked here: which
+        # family runs the request is unknown until the endpoint asks the
+        # pipeline. They are each adapter's ``REQUEST_RULES``, applied by
+        # ``services.engines.validate_for_family`` (api/generate.py), with the
+        # same messages and a 422 of the same shape.
         if self.crop_output is not None:
             if self.crop_output.width > self.width:
                 raise ValueError("crop_output.width must be <= width")
             if self.crop_output.height > self.height:
                 raise ValueError("crop_output.height must be <= height")
-        if self.pipeline == "distilled":
-            if self.num_inference_steps != 8:
-                raise ValueError(
-                    "distilled pipeline requires num_inference_steps=8"
-                )
-            if self.guidance_scale != 1.0:
-                raise ValueError(
-                    "distilled pipeline requires guidance_scale=1.0"
-                )
 
         # Conditioning: multi-keyframe I2V — 枚数 / スナップ / 重複の3段。
         _normalize_conditioning_images(self.conditioning_images, self.num_frames)
@@ -1158,8 +1173,9 @@ class GenerateChainRequest(BaseModel):
     Additive to the frozen single-``/generate`` contract. Shares
     width/height/seed/frame_rate/pipeline across clips; each clip's effective
     prompt is its override if present else the global ``prompt``. Reuses the
-    same FROZEN validators (÷64 resolution, 8n+1 frames, distilled 8-step /
-    CFG=1.0) as :class:`GenerateRequest`.
+    same FROZEN rules (÷64 resolution, 8n+1 frames, distilled 8-step /
+    CFG=1.0) as LTX's ``REQUEST_RULES`` for :class:`GenerateRequest`, checked
+    here in its own validator (the chain is LTX only).
 
     ARCHITECTURE: every clip is a stage-1 SEGMENT of one timeline;
     the segments are stage-1 generated with a video+audio latent tail carry over

@@ -18,7 +18,7 @@ Rows are ``[text (L) | cond (K x grid) | audio (2A) | video (T' x grid)]``
 no mask (the reference pads to a multiple of 64 and loops over cu_seqlens
 segments; the real-data segment is the whole unmasked sequence, so one SDPA /
 SageAttention call is the same maths without the padding rows, the
-``.tolist()`` sync and the per-segment copies — scratchpad R2 (2) C).
+``.tolist()`` sync and the per-segment copies — R2 (2) C, see engine_h3/constants.py).
 
 What each row gets from the step is chosen by an index, not by separate
 weights: AdaLN row = ``time_index * 3 + modality`` (0 video / 1 text /
@@ -103,7 +103,8 @@ class H3SeqLayout:
     """Row ranges of the packed sequence ``[text | cond | audio | video]``.
     T2V has an empty cond (``slice(L, L)``).
 
-    ``cond``: 第 1 弾（T2V）では未使用。座標は G4 A で照合済み、埋め込みは未検証。
+    ``cond``: the I2V key frame's rows (empty for T2V). Order and coordinates match
+    DiffSynth (VERIFICATION_LOG §165 G4 A, §166 2a-G3); the embedding is checked end to end only (§166 2a-G4).
     """
 
     text: slice
@@ -483,7 +484,8 @@ class H3DiT(nn.Module):
         rounded to bf16 (diffusers aligns inputs with the f32 projection
         dtype the same way).
 
-        ``cond_rows``: 第 1 弾（T2V）では未使用。座標は G4 A で照合済み、埋め込みは未検証。
+        ``cond_rows``: the I2V condition rows (already mixed with their noise), projected
+        like video rows; ``None`` / empty for T2V. Checked end to end in VERIFICATION_LOG §166 (2a-G4).
         """
         parts = [text_refined.to(torch.bfloat16)]
         if cond_rows is not None and cond_rows.shape[0] > 0:

@@ -1,0 +1,118 @@
+{
+  "schema": 2,
+  "id": "MiniMaxH3",
+  "display_name": "MiniMax H3",
+  "engine_family": "h3",
+  "_note": "MiniMax H3（FL2VA・枝刈り版の DiT を int8 ConvRot で量子化した Comfy-Org の配布物）。設計の正本は Docs/MINIMAX_H3_DESIGN.md。カテゴリは LTX と同じ 4 語（操作パネルの型がこの 4 語で閉じているため）。tokenizer は Qwen3-VL の tokenizer 一式のフォルダで、LTX 2.3 の gemma_root と同じく assets で渡す（追加の特殊トークンが tokenizer_config.json にしか無いため、ファイル一式を 1 つのフォルダとして扱う）。comfort（快適上限）は持たない（台帳 §1-95 で較正するまでマーカーを出さない）。H3 は GGUF を持たず、事前検査はテンソル名の指紋（h3_format）で行う。downloads は第 3 弾のインストーラで初めて実行と検証をする（第 2 弾は手動配置済みのファイルで動かす。Comfy-Org/MiniMax-H3 のゲートの有無とファイル名は未検証）。",
+
+  "categories": {
+    "transformer": {
+      "scan": ["MiniMaxH3/Weights"],
+      "extensions": [".safetensors"],
+      "recursive": true,
+      "default_file": "MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+    },
+    "text_encoder": {
+      "scan": ["MiniMaxH3/TextEncoder"],
+      "extensions": [".safetensors"],
+      "default_file": "MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+    },
+    "video_vae": {
+      "scan": ["MiniMaxH3/VAE"],
+      "extensions": [".safetensors"],
+      "name_hint": "video",
+      "default_file": "MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors"
+    },
+    "audio": {
+      "scan": ["MiniMaxH3/VAE"],
+      "extensions": [".safetensors"],
+      "name_hint": "audio",
+      "default_file": "MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors"
+    }
+  },
+
+  "assets": {
+    "tokenizer_dir": "MiniMaxH3/TextEncoder/qwen3vl_tokenizer"
+  },
+
+  "default_selection": {
+    "transformer": "default",
+    "text_encoder": "default",
+    "video_vae": "default",
+    "audio": "default"
+  },
+
+  "downloads": [
+    {
+      "name": "MiniMax H3 DiT + text encoder + VAE (4 files)",
+      "repo": "Comfy-Org/MiniMax-H3",
+      "include": [
+        "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        "vae/minimax_h3_video_vae_fp16.safetensors",
+        "vae/minimax_h3_audio_vae_fp32.safetensors"
+      ],
+      "map": [
+        { "from": "diffusion_models", "to": "MiniMaxH3/Weights" },
+        { "from": "text_encoders", "to": "MiniMaxH3/TextEncoder" },
+        { "from": "vae", "to": "MiniMaxH3/VAE" }
+      ],
+      "files": [
+        {
+          "path": "MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "min": 20100000000,
+          "label": "h3_transformer",
+          "key": "h3_transformer",
+          "_min": "手元の実物 20,970,379,616B の1ファイル(約4%下)"
+        },
+        {
+          "path": "MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+          "min": 26000000000,
+          "label": "h3_text_encoder",
+          "key": "h3_text_encoder",
+          "_min": "手元の実物 27,141,342,152B の1ファイル(約4%下)"
+        },
+        {
+          "path": "MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+          "min": 5000000000,
+          "label": "h3_video_vae",
+          "key": "h3_video_vae",
+          "_min": "手元の実物 5,207,808,496B の1ファイル(約4%下)"
+        },
+        {
+          "path": "MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+          "min": 580000000,
+          "label": "h3_audio_vae",
+          "key": "h3_audio",
+          "_min": "手元の実物 605,254,808B の1ファイル(約4%下)"
+        }
+      ]
+    },
+    {
+      "name": "MiniMax H3 Qwen3-VL tokenizer (6 files)",
+      "repo": "MiniMaxAI/MiniMax-H3",
+      "include": [
+        "FL2VA/text_encoder/config.json",
+        "FL2VA/text_encoder/merges.txt",
+        "FL2VA/text_encoder/preprocessor_config.json",
+        "FL2VA/text_encoder/tokenizer.json",
+        "FL2VA/text_encoder/tokenizer_config.json",
+        "FL2VA/text_encoder/vocab.json"
+      ],
+      "map": [
+        { "from": "FL2VA/text_encoder", "to": "MiniMaxH3/TextEncoder/qwen3vl_tokenizer" }
+      ],
+      "files": [
+        {
+          "kind": "dir",
+          "path": "MiniMaxH3/TextEncoder/qwen3vl_tokenizer",
+          "min": 11000000,
+          "label": "tokenizer_dir (Qwen3-VL tokenizer dir)",
+          "key": "h3_tokenizer_dir",
+          "_min": "手元の実物の合計 11,493,942B(直下6ファイル)の約4%下。tokenizer.json・vocab.json・merges.txt の3点が主要ボリューム"
+        }
+      ]
+    }
+  ],
+  "migrate": []
+}

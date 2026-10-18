@@ -20,6 +20,7 @@ import httpx
 from .adapters import ADAPTER_NONE, _FALLBACK_MAX_VIDEO_MB, _FALLBACK_VIDEO_EXTS
 from .adapters import MODEL_CATEGORIES, MODEL_DEFAULT
 from .api_client import ApiClient
+from .constraints import sampling_payload, single_shape_error
 from .formatting import format_api_error
 from .i18n import L, _DEFAULT_LANG
 from .validation import check_chain_total, check_v2v_context
@@ -723,7 +724,14 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # conditions into the mp4" checkbox (VERIFICATION_LOG §115).
                  # Same discipline -- keyword-only from ui.py's dispatch(),
                  # appended after keep_resident_embeddings.
-                 embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT):
+                 embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT,
+                 # The LOADED base model's GET /models ``constraints``
+                 # (gradio_ui/constraints.py; ``None`` = the LTX rules) and the
+                 # three sampling sliders, which ride only when the constraints
+                 # carry ``sampling``. Keyword-only from ui.py's dispatch(),
+                 # appended last.
+                 constraints=None,
+                 num_inference_steps=None, shift_video=None, shift_audio=None):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs. They are optional, so a call that omits them (e.g. a unit
         # test) falls back to the build-time default language and
@@ -744,27 +752,16 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             yield _precheck_reject(L("nag_msg_negative_required", lang)), "", None
             return
 
-        # 0) width/height (÷64) + num_frames (8n+1, [9, 481]) precheck, the
-        # same rule as make_chain_handler's dimension and per-clip frame
-        # prechecks, so a violating Generate-tab request never reaches the API
-        # either. Zero API calls on violation -- same _precheck_reject
-        # discipline as chain.
-        try:
-            w_i, h_i = int(width), int(height)
-        except (TypeError, ValueError):
-            yield _precheck_reject(L("msg_bad_dimension", lang)), "", None
+        # 0) width/height + num_frames precheck, built from the loaded base
+        # model's constraints (LTX: ÷64 and 8n+1 in [9, 481]), so a violating
+        # Generate-tab request never reaches the API. Zero API calls on
+        # violation -- same _precheck_reject discipline as chain.
+        shape_err = single_shape_error(width, height, num_frames,
+                                       constraints, lang)
+        if shape_err is not None:
+            yield _precheck_reject(shape_err), "", None
             return
-        if w_i % 64 != 0 or h_i % 64 != 0:
-            yield _precheck_reject(L("msg_bad_dimension", lang)), "", None
-            return
-        try:
-            nf_i = int(num_frames)
-        except (TypeError, ValueError):
-            yield _precheck_reject(L("msg_chain_bad_frames", lang).format(n=1)), "", None
-            return
-        if nf_i < 9 or nf_i > 481 or (nf_i - 1) % 8 != 0:
-            yield _precheck_reject(L("msg_chain_bad_frames", lang).format(n=1)), "", None
-            return
+        nf_i = int(num_frames)
 
         # 0b) A2V: a src_audio upload routes this SAME handler to
         # POST /generate/chain as a single-clip chain carrying a frozen
@@ -899,8 +896,9 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
 
-        # 2) start generation. Quality is locked to distilled (steps/cfg
-        # fixed); the payload keeps the frozen contract.
+        # 2) start generation. The quality mode is distilled and CFG 1.0 (the
+        # frozen contract); the step count and the shifts follow the loaded
+        # base model's constraints (sampling_payload below).
         crop_output = None
         if crop_enabled and int(crop_w) > 0 and int(crop_h) > 0:
             crop_output = {"width": int(crop_w), "height": int(crop_h)}
@@ -988,12 +986,17 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             # VERIFICATION_LOG §91). float() stays on the INSIDE: this
             # handler is called with string fps in tests and from Gradio fields.
             "frame_rate": _snap_frame_rate(float(frame_rate)),
-            "num_inference_steps": 8,
             "guidance_scale": 1.0,
             "seed": int(seed),
             "pipeline": "distilled",
             "conditioning_images": conditioning,
         }
+        # Sampling: a base model whose constraints carry ``sampling`` takes the
+        # three sliders' values -- all three, always (one rule); otherwise no
+        # step count is sent and the server writes the loaded family's default
+        # back (LTX: 8).
+        payload.update(sampling_payload(constraints, num_inference_steps,
+                                        shift_video, shift_audio))
         # loras: combine the adapter-dropdown control LoRA (IC-LoRA) with the
         # prompt <lora:...> style/character LoRAs. Adapter first, then prompt
         # order; deduped last-wins by name. The "loras" key is added ONLY when the

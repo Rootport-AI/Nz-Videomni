@@ -34,8 +34,9 @@
  *  - `keepResident` — REAL (2026-08-02, backend §48). Keeps the models'
  *    CPU-side skeleton (the `StateDictRegistry`) alive between jobs, so the
  *    second and later generations skip the re-materialization work (measured
- *    ~70s -> ~10s of preprocessing). Costs roughly 20GB of resident main
- *    memory, hence the "64GB or more recommended" note. Like
+ *    ~70s -> ~10s of preprocessing). The resident main-memory cost differs
+ *    per engine (the panel's note, `strings.settings.accelKeepResidentNote`,
+ *    states it), hence the "64GB or more recommended" note. Like
  *    `blockSwapPrefetch` (and unlike `attentionBackend`) the output is
  *    bit-for-bit identical on/off. Sent as `keep_resident`; the SERVER
  *    default is `false`, so the key rides along only while it is ON — and,
@@ -82,8 +83,8 @@
  *
  *    THE DIRECTION OF ITS SCOPE IS THE OPPOSITE OF EVERY ROW ABOVE, and that is
  *    the one thing worth remembering about it: the embeddings processor exists
- *    only on LTX 2.5, so it is LTX 2.3 that publishes `keep_resident_embeddings`
- *    in `unsupported_features` and 422s a `true`. `AppShell` hides the row (and
+ *    only on LTX 2.5, so it is the engines without it that publish
+ *    `keep_resident_embeddings` in `unsupported_features` and 422 a `true`. `AppShell` hides the row (and
  *    writes a leftover `true` back to `false`) on any engine that publishes the
  *    name — the same treatment `prune_vaed` gets, just pointing the other way.
  */

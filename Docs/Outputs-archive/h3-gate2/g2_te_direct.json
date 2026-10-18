@@ -1,0 +1,105 @@
+{
+  "encoder_kwargs": {
+    "device": "cuda"
+  },
+  "mem": {
+    "start": {
+      "rss": 0.59,
+      "rss_peak": 0.59,
+      "commit": 1.7,
+      "commit_peak": 1.7
+    },
+    "after_load": {
+      "rss": 0.73,
+      "rss_peak": 0.74,
+      "commit": 1.84,
+      "commit_peak": 1.85
+    },
+    "after_encode": {
+      "rss": 1.54,
+      "rss_peak": 2.26,
+      "commit": 4.97,
+      "commit_peak": 5.17
+    },
+    "after_release": {
+      "rss": 1.48,
+      "rss_peak": 2.26,
+      "commit": 3.2,
+      "commit_peak": 5.17
+    },
+    "process_end": {
+      "rss": 1.49,
+      "rss_peak": 2.26,
+      "commit": 3.2,
+      "commit_peak": 5.17
+    }
+  },
+  "load_info": {
+    "num_layers_file": 50,
+    "num_layers_built": 50,
+    "int8_linears": 350,
+    "tensors_planned": 901,
+    "rope": {
+      "rope_type": "default",
+      "rope_theta": 5000000.0,
+      "mrope_section": [
+        24,
+        20,
+        20
+      ],
+      "mrope_interleaved": true,
+      "head_dim": 128,
+      "num_attention_heads": 64,
+      "num_key_value_heads": 8,
+      "num_hidden_layers": 50,
+      "attn_implementation": "sdpa"
+    },
+    "extra_special_tokens": {
+      "ids": {
+        "<d>": 151669,
+        "</d>": 151670,
+        "<|cutoff|>": 151671,
+        "<|lyrics_start|>": 151672,
+        "<|lyrics_end|>": 151673,
+        "<|caption_start|>": 151674,
+        "<|caption_end|>": 151675
+      },
+      "added_here": false
+    },
+    "seconds": 0.32
+  },
+  "seconds": {
+    "load": 1.49,
+    "encode": 15.81,
+    "release": 0.1,
+    "total": 17.41
+  },
+  "peak_vram_mb": 1971,
+  "peak_vram_reserved_mb": 1988,
+  "tokens": 41,
+  "hidden": {
+    "shape": [
+      41,
+      5120
+    ],
+    "dtype": "torch.bfloat16",
+    "finite": true,
+    "abs_mean": 2.116621732711792
+  },
+  "mode": "compare",
+  "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+  "cuda_backend": {
+    "ascend": false,
+    "cuda": true,
+    "eager": false,
+    "hip": false,
+    "triton": false
+  },
+  "verdict": {
+    "bit_identical": true,
+    "ids_identical": true,
+    "tags_identical": true,
+    "max_abs_diff": 0.0
+  },
+  "ok": true
+}

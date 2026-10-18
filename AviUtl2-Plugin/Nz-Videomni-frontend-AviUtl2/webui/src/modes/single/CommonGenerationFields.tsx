@@ -1,10 +1,12 @@
 import type { CSSProperties } from "react";
-import type { CropOutput } from "../../api/types";
+import type { CropOutput, SamplingConstraints } from "../../api/types";
 import { useStrings } from "../../i18n/LanguageContext";
 import { useJobsContext } from "../../jobs/JobsContext";
 import { latestJobSeed } from "../../jobs/seedUtils";
 import { clampCropOutput, CROP_OUTPUT_MIN } from "../chained/chainUtils";
-import { FRAME_RATE_MAX, FRAME_RATE_MIN, isStepEvent } from "./paramUtils";
+import { FloatSliderField } from "./FloatSliderField";
+import { FRAME_RATE_MAX, FRAME_RATE_MIN, isStepEvent, LTX_DIMENSION_MULTIPLE, LTX_FRAME_GRID } from "./paramUtils";
+import type { SamplingValues } from "./useGenerationForm";
 
 /** Guide positions drawn on the width/height sliders, in pixels of the very
  * same axis the slider controls.
@@ -30,6 +32,8 @@ interface SizeSliderProps {
   value: number;
   min: number;
   max: number;
+  /** The slider's step — the size multiple in force (see `SizeFieldsProps.step`). */
+  step: number;
   disabled: boolean;
   onChange: (value: number) => void;
   /** The neutral "recommended point" guide, or `null`/omitted for no guide.
@@ -76,6 +80,7 @@ function SizeSlider({
   value,
   min,
   max,
+  step,
   disabled,
   onChange,
   comfort,
@@ -96,7 +101,7 @@ function SizeSlider({
         type="range"
         min={min}
         max={max}
-        step={64}
+        step={step}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
@@ -145,6 +150,10 @@ export interface SizeFieldsProps {
    * (`useChainForm`'s `chainWindowMarkers`), because the budget being drawn is
    * chain-specific (one stage-2 window of a chain). */
   budgetMarkers?: SizeBudgetMarkers;
+  /** The sliders' and spinners' step: Create passes the loaded base model's
+   * `constraints.dimension_multiple`. Omitted = 64, LTX's — Chain and Retake
+   * never pass it. */
+  step?: number;
 }
 
 /** Width/height sliders + numeric inputs, plus the "Get size from AviUtl2"
@@ -169,6 +178,7 @@ export function SizeFields({
   getSizeError = null,
   onGetSize,
   budgetMarkers,
+  step = LTX_DIMENSION_MULTIPLE,
 }: SizeFieldsProps) {
   const strings = useStrings();
   return (
@@ -179,6 +189,7 @@ export function SizeFields({
           <SizeSlider
             min={minWidth}
             max={maxWidth}
+            step={step}
             value={width}
             disabled={disabled}
             onChange={(value) => onWidthChange(value, true)}
@@ -191,7 +202,7 @@ export function SizeFields({
             type="number"
             min={minWidth}
             max={maxWidth}
-            step={64}
+            step={step}
             value={width}
             disabled={disabled}
             onChange={(e) => onWidthChange(Number(e.target.value), isStepEvent(e.nativeEvent))}
@@ -203,6 +214,7 @@ export function SizeFields({
           <SizeSlider
             min={minHeight}
             max={maxHeight}
+            step={step}
             value={height}
             disabled={disabled}
             onChange={(value) => onHeightChange(value, true)}
@@ -215,7 +227,7 @@ export function SizeFields({
             type="number"
             min={minHeight}
             max={maxHeight}
-            step={64}
+            step={step}
             value={height}
             disabled={disabled}
             onChange={(e) => onHeightChange(Number(e.target.value), isStepEvent(e.nativeEvent))}
@@ -341,7 +353,7 @@ export interface DurationFieldProps {
   max: number;
   disabled: boolean;
   /** `snap` mirrors `SizeFields`' `onWidthChange`/`onHeightChange`: `true`
-   * for the slider/stepper (snap onto the 8n+1 grid), `false` for free
+   * for the slider/stepper (snap onto the `num_frames` grid), `false` for free
    * keyboard typing (pass through untouched — `isStepEvent` tells them
    * apart). */
   onChange: (value: number, snap: boolean) => void;
@@ -373,6 +385,10 @@ export interface DurationFieldProps {
    * passes its own id (Alpha Gen 第 2 弾). Omitted = `"spill-tick"`, Create's
    * id (every caller that does not pass one gets it). */
   tickId?: string;
+  /** The slider's and spinner's step — the `num_frames` grid's step (Create
+   * passes the loaded base model's). Omitted = 8, LTX's 8n+1 — every other
+   * caller. */
+  step?: number;
 }
 
 /** Duration (`num_frames`) range+number pair, following `SizeFields`'
@@ -396,6 +412,7 @@ export function DurationField({
   isOverSpillThreshold,
   spillWarningText,
   tickId,
+  step = LTX_FRAME_GRID.step,
 }: DurationFieldProps) {
   const spillTickId = tickId ?? "spill-tick";
   // Duplicate commits (e.g. a keyup immediately followed by blur) are left
@@ -408,7 +425,7 @@ export function DurationField({
         type="range"
         min={min}
         max={max}
-        step={8}
+        step={step}
         value={value}
         disabled={disabled}
         list={spillThresholdFrames != null ? spillTickId : undefined}
@@ -421,7 +438,7 @@ export function DurationField({
         type="number"
         min={min}
         max={max}
-        step={8}
+        step={step}
         value={value}
         disabled={disabled}
         onChange={(e) => {
@@ -455,6 +472,11 @@ export interface FrameRateSeedFieldsProps {
   disabled: boolean;
   onFrameRateChange: (value: number) => void;
   onSeedChange: (value: number) => void;
+  /** The fixed rate the loaded engine runs at, or
+   * `null`/omitted when the user chooses. Fixed = the fps input is disabled
+   * (it shows `frameRate`, which the form already pinned to this value).
+   * Chain never passes it. */
+  fixedFrameRate?: number | null | undefined;
 }
 
 /** Frame-rate + seed inputs, extracted out of Create's `GenerationForm` (M6)
@@ -466,6 +488,7 @@ export function FrameRateSeedFields({
   disabled,
   onFrameRateChange,
   onSeedChange,
+  fixedFrameRate = null,
 }: FrameRateSeedFieldsProps) {
   const strings = useStrings();
   // ⑤ seed 🎲/♻ helpers. `latestJobSeed` reads the same job ledger the panel
@@ -476,14 +499,17 @@ export function FrameRateSeedFields({
   const lastSeed = latestJobSeed(jobs);
   return (
     <>
-      <label className="field field-inline">
+      <label
+        className="field field-inline"
+        title={fixedFrameRate !== null ? strings.single.duration.fpsFixedTooltip(fixedFrameRate) : undefined}
+      >
         <span className="field-label">{strings.single.duration.fps}</span>
         <input
           type="number"
           min={FRAME_RATE_MIN}
           max={FRAME_RATE_MAX}
           value={frameRate}
-          disabled={disabled}
+          disabled={disabled || fixedFrameRate !== null}
           onChange={(e) => onFrameRateChange(Number(e.target.value))}
         />
       </label>
@@ -527,9 +553,11 @@ export function FrameRateSeedFields({
 }
 
 /**
- * Permanently disabled CFG-scale placeholder for a future non-distilled
- * backend (Mock/AVIUTL2_DESIGN_BRIEF.md §5-2 / §11). Shared verbatim by
- * Create (`GenerationForm.tsx`) and Chain (`ChainedScreen.tsx`) — never
+ * Permanently disabled CFG-scale placeholder (Mock/AVIUTL2_DESIGN_BRIEF.md
+ * §5-2 / §11). Rendered by Chain (`ChainedScreen.tsx`) and by Create
+ * (`GenerationForm.tsx`) while the loaded base model publishes no
+ * `constraints.sampling` — otherwise Create shows {@link SamplingFields} in
+ * its place. Never
  * enabled, read, or included in any request body; there is no corresponding
  * state anywhere in `useGenerationForm`/`useChainForm` on purpose (task brief
  * M7b: "値はどこにも送らない"). Always shown fixed at "1.0", matching the
@@ -559,5 +587,50 @@ export function ReservedFields() {
       />
       <span className="field-hint">1.0</span>
     </label>
+  );
+}
+
+export interface SamplingFieldsProps {
+  /** The served ranges (`constraints.sampling`). */
+  constraints: SamplingConstraints;
+  values: SamplingValues;
+  disabled: boolean;
+  onChange: (key: keyof SamplingValues, value: number) => void;
+}
+
+/**
+ * The three sampling sliders — step count,
+ * Shift (video), Shift (audio) — one row each (label + range + number, the
+ * `FloatSliderField` in its `inline` form). Rendered by Create IN PLACE OF
+ * {@link ReservedFields} only while the loaded base model publishes
+ * `constraints.sampling`; LTX (no sampling block) keeps the reserved CFG row,
+ * so its screen does not change. The ranges, steps and defaults are the
+ * server's; the values live in `useGenerationForm` (`values.sampling`), whose
+ * setter also rounds the step count to a whole number.
+ */
+export function SamplingFields({ constraints, values, disabled, onChange }: SamplingFieldsProps) {
+  const strings = useStrings();
+  const t = strings.single.sampling;
+  const rows: { key: keyof SamplingValues; label: string; range: SamplingConstraints["shift_video"] }[] = [
+    { key: "numInferenceSteps", label: t.steps, range: constraints.num_inference_steps },
+    { key: "shiftVideo", label: t.shiftVideo, range: constraints.shift_video },
+    { key: "shiftAudio", label: t.shiftAudio, range: constraints.shift_audio },
+  ];
+  return (
+    <div className="sampling-fields">
+      {rows.map(({ key, label, range }) => (
+        <FloatSliderField
+          key={key}
+          inline
+          label={label}
+          value={values[key]}
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          disabled={disabled}
+          onChange={(value) => onChange(key, value)}
+        />
+      ))}
+    </div>
   );
 }

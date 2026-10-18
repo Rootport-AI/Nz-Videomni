@@ -16962,7 +16962,7 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - `backend.request` のログの行「transport error: <符号>」だけが古い形のまま（利用者が読むログなのでオーナー判断）。
 - `types.ts` の `backend.request` と `BACKEND_UNREACHABLE` の JSDoc の「transport-level failures only」、契約 §4.3／§5 の「接続不可・切断等」は据え置き（§164.2 の棄却 A-2・B-7）。
 - 台帳 §3-229／§3-230 の置き場所はオーナー判断（棄却 B-4）。
-- 次の番号: CLOSED 3-239・本書 §165・フロントエンド DEVLOG §141（§3-238 が生きているので 3-238 は使えない）。
+- 次の番号: CLOSED 3-239・本書 §167・フロントエンド DEVLOG §142（§3-238 が生きているので 3-238 は使えない）。
 
 ### 164.5 コミット
 
@@ -17090,3 +17090,188 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - [`Outputs-archive/h3-gate1/`](Outputs-archive/h3-gate1/README.md)（git 管理）: G2〜G4 の台本と JSON の複写・再実行の手順。
 - コード: `h3_format.py`、`engine_h3/` 13 モジュール、`tests/test_h3_format.py`・`tests/test_h3_engine.py`・`tests/test_h3_media.py`、実行器 `scripts/run_h3_pytest.py`。設計の正本は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md)。
 - 次: 第 2 弾の計画は別のセッションでプランモードで行う（台帳 §1-93）。第 1 弾のクローズはオーナーの判断。コミットは監督が dev に積み、ハッシュは積んだ後に足す。
+
+## 166. ★MiniMax H3 対応 α版・第 2 弾＝I2V・常駐・アダプタ・操作パネル（台帳 §1-93。2026-10-17〜18）
+
+### 166.1 結論
+
+- **第 2 弾の実装は終わり、ワーカー側の門（2a-G1〜G5）とバックエンド側の機械の門（2b-G1）と操作パネル側の機械の門（2c-G1）に合格した。ビルドと配置（`build.ps1`・`deploy.ps1`）も済んだ（2026-10-18 未明）。API 経由の実生成（2b-G2）にも合格した（2026-10-18 早朝。§166.4）。** 2c-G2（オーナーの操作パネルでの目視。§166.5）にも合格した（2026-10-18 朝。§166.9）。
+- 作ったもの: MiniMax H3 の I2V（先頭フレームのみ。視覚塔つきのテキストエンコーダ〔TE〕と、f32 の符号化器による先頭画像の条件づけ）・常駐（`keep_resident`。DiT と VAE を次のジョブまで保持）・TE を層ごとにファイルから GPU へ直接読む方式・復号の VRAM の削減・ジョブごとの attention と先読みの切り替え・バックエンドのアダプタと系統登録と記述子と事前検査・`GET /models` の `constraints`（系統ごとの入力の制約）・ステップ数と shift（映像・音声）の 3 項目・操作パネルと Gradio の 3 本のスライダー・MCP の引数。
+- 主な数値（実測。§166.3）: TE の主メモリの山はコミット量 35.69→5.17GiB（作業セット 24.99→2.26GiB）に下がり、出力はビット一致。T2V の指紋は第 1 弾の新基準 `0da6111c…` のまま一致。1344×768・345 フレームの復号の VRAM 予約ピークは 8.01GB（線 12.8GB）。
+- LTX 2.3／2.5 の生成結果は変わらない。利用者に見える差は 3 点の加算と文言の変更だけ（§166.7）。
+- **2c-G2 は合格（§166.9）。残りは main への merge だけで、merge はオーナーの合図で行う。**
+
+### 166.2 やり方
+
+- 体制: 調査 R4a・R4b（I2V の符号化の外部規約と本製品の内部規約）・R5a・R5b（バックエンドと操作パネルの棚卸し）→ 計画（監督）→ 計画の敵対的レビュー（Opus）→ 担当 C1（2a ワーカー）・C3（2b バックエンド）・C4（2c 操作パネル）・C5（Gradio と MCP）を並行 → 門 → コードのレビュー 3 本（2a・2b・2c。Opus）→ 修正 → 取り直し。触るファイルは担当ごとに分け、GPU を使う門だけを順番に、同時に 1 体で行った。
+- 了承の単位: 2a は計画の了承で GPU を使う門（G2〜G5）をまとめて。2b・2c は夜間にまとめて了承。GPU を使う 2b-G2 は、サブエージェントによるサーバー起動が自動許可の判定で拒否されたため、オーナーが `run.bat` で起動したサーバーに監督が台本を実行した（§166.4）。
+- 正解データ源: 第 1 弾と同じ DiffSynth-Studio の写し（`outputs/h3-gate2/oracle/`）。I2V の視覚塔は同じ int8 ファイルを DiffSynth の経路で読ませて比べた。
+- 回帰の基準は第 1 弾の新基準（sdpa・seed 42・640×384・124 フレーム・20 ステップ）の指紋 `0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9`。
+
+### 166.3 2a の門の結果（ワーカー）
+
+| 門 | 内容 | 結果 |
+|---|---|---|
+| 2a-G1 | ワーカーのテスト全件。`engine_h3` 配下に `inference_mode` が無い | 合格。86 件合格（GPU 用の 2 件は既定で飛ばす）。`test_h3_format.py` は 32 件。`inference_mode` は 0 件 |
+| 2a-G2 | TE の直接読みが改修前の出力とビット一致。主メモリの山を記録 | 合格。ビット一致。TE 単独の主メモリの山は、コミット量 35.69→5.17GiB・作業セット 24.99→2.26GiB・時間 21.4→17.4 秒。T2V の回帰は指紋 `0da6111c…` で一致。プロセス全体の山はコミット量 40.14→34.53GiB・作業セット 29.02→22.39GiB。復号の段の VRAM 予約 7,064→5,736MiB |
+| 2a-G3 | I2V の部品を DiffSynth と照合 | 合格（下の内訳）。符号化だけは bf16 どうしでビット一致せず、差を記録 |
+| 2a-G4 | I2V 1 本と、1 プロセス 6 ジョブでの常駐の照合 | 合格（下の内訳）。「合間の allocated が 0」は監督が文言を「常駐による上乗せが 0」に改めた |
+| 2a-G5 | 1344×768・345 フレームの復号の VRAM | 合格。潜在 `[1, 24, 102, 48, 84]` の復号で VRAM 予約ピーク 8.01GB（線 12.8GB）。出力は CPU の uint8 `[345, 768, 1344, 3]` |
+
+#### 2a-G3 の内訳（結果は `outputs/h3-gate2/g3_i2v_parts.json`）
+
+- トークン列（289 個。うち視覚 240）・視覚塔の入出力・DeepStack（視覚塔の中間層の特徴を言語側へ足す仕組み）・配線（差 0）が DiffSynth とビット一致。
+- int8 と bf16 に戻した場合の差は、全行で 1.75e-2・最終行で 2.74e-2（第 1 弾の G4-TE と同じ水準）。
+- 条件行の並び・時刻の番号・RoPE（位置の符号化）の座標は float64 で完全一致。
+- 符号化（bf16 どうし）はビット一致せず、最大差 1.52e-2（相対 1.45e-3）。原因はタイルの継ぎ目を混ぜるときの型の違い（本製品は f32・DiffSynth は bf16）で、レビューが CPU の小さなモデルで裏取りした。f32 と bf16 の差は相対 3.0e-2 で、符号化器を f32 にした選択を裏づける。
+
+#### 2a-G4 の内訳（結果は `outputs/h3-gate2/g4_i2v_resident.json`）
+
+1 プロセスで 6 ジョブ（640×384・124 フレーム・20 ステップ・seed 42。J0 から J5 の順）。
+
+| ジョブ | 種類／常駐／先読み | 指紋 | DiT と VAE の出所 | 終了後のコミット量（GiB） |
+|---|---|---|---|---|
+| J0 | T2V／キー無し／on | `0da6111c…`（基準と一致） | ファイル | 4.46 |
+| J1 | I2V／キー無し／off | `77e29687…` | ファイル | 4.77 |
+| J2 | T2V／常駐 on／on | `0da6111c…` | ファイル（保持を始める） | 保持中 約 36.0 |
+| J3 | I2V／常駐 on／off | `77e29687…`（J1 と一致） | 常駐 | 約 36.0 |
+| J4 | T2V／常駐 on／on | `0da6111c…` | 常駐 | 約 36.0 |
+| J5 | T2V／キー無し／on | `0da6111c…` | 常駐から使い、ジョブの終わりに解放 | 4.82（J1 の後の 4.77 へ戻った） |
+
+- T2V 4 本はすべて指紋一致。I2V 2 本の sha256 は同じ。2 本目以降は DiT と VAE の読み込みが飛ぶ。
+- 先頭フレームと入力画像（切り抜き後）の PSNR（画質の近さを表す数値、dB）は 30.3dB（目安 25dB 以上）。
+- 合間の GPU の allocated は、常駐の有無によらず 8,650,752B（約 8.25MiB）。別の切り分けで、torch が持つ cuBLAS（行列積のライブラリ）の作業領域と分かった（bf16 の行列積の後に `empty_cache` をしても残り、作業領域を空ける内部関数で 0 に戻る）。モデルのテンソルではないので例外と監督が判断し、門の文言を「常駐による上乗せが 0」に改めた。
+- 主メモリ: 保持中のコミット量 約 36.0GiB・プロセスの山 43.16GiB（常駐中の I2V）・作業セットの山 29.18GiB・常駐なしの山 34.27GiB。
+- I2V の秒数（約 250 秒）は先読み off（同期経路）の条件なので、T2V と比較しない。
+- 取り直し（コードのレビュー M-1 の修正後。常駐 on・先読み on・T2V を 2 ラウンド）: 2 本とも指紋一致・2 本目で DiT と VAE の読み込みを省略（denoise 114.6→102.8 秒）・コミット量の山 42.84GiB・保持中 35.77GiB（`g4_retake_after_review.json`）。
+
+### 166.4 2b の門の結果（バックエンド）
+
+| 門 | 内容 | 結果 |
+|---|---|---|
+| 2b-G1 | アプリのテスト全件。`GET /models` に H3 と `constraints`。mock で T2V と I2V が HTTP 経由で通る。LTX の 422 の形と文言。`metadata.json` の LTX のステップ数 | 合格。監督が結合後に実行して 3,414 件通過・65 件スキップ・失敗 0。`GET /models` に H3 と `constraints` が出る。mock の T2V と I2V が HTTP 経由で通過。LTX の 422 の形と文言は一字一句一致。LTX の `metadata.json` の `num_inference_steps` は 8 のまま。実ファイル 4 本が事前検査を通過し、`_real_available` は真 |
+| 2b-G2 | API 経由の実生成（H3 を読み込み、`POST /generate` で T2V と I2V を 1 本ずつ。`metadata.json` に `h3` が入り、ステップ 20／12／3 が `done` にこだまする。常駐 on で 2 本目が速い） | **合格**（2026-10-18 早朝）。合否 14 項目がすべて真。詳細は下の箇条書き |
+
+- 実施: オーナーが `run.bat` でバックエンドを起動し、監督が PowerShell から台本 `run_2b_g2.py` を実行した。サブエージェントによるサーバー起動と台本の実行は自動許可の判定で拒否され、オーナーが許可の規則を設定に足した。
+- 読み込み: アプリの事前検査が実ファイル 4 本を通し、実ワーカー（mock でない）で MiniMaxH3 を読み込んだ。
+- ジョブ: T2V（常駐 on）→ T2V（常駐 on）→ I2V（正方形 384×384 の試験画像。覆う拡縮と中央切り抜きの経路）。条件は 640×384・124 フレーム・24fps・ステップ 20・shift 12／3・seed 42・sdpa。
+- 合否 14 項目（すべて真）: 実ワーカーでの読み込み／全ジョブの `backend` が real／`metadata.json` に `h3` 欄／`request` にステップと shift／`done` にステップと shift のこだま／`keep_resident_used` の on・off／1 本目は DiT と VAE をファイルから読む／2 本目は読み込み省略（`dit_vae_source` が resident）／2 本目が速い／I2V の mode と `images_used`／I2V が切り抜きの経路。
+- 秒数・メモリ:
+
+| ジョブ | 秒数 | VRAM 割り当てピーク | コミット量の山 | ジョブ後のコミット量 |
+|---|---|---|---|---|
+| T2V 1 本目 | 157.5 秒 | 6,677MiB | 40.35GiB | 35.75GiB |
+| T2V 2 本目 | 130.2 秒 | 6,677MiB | 42.84GiB | 35.78GiB |
+| I2V | 139.4 秒 | 6,758MiB | 42.84GiB | 4.83GiB（解放後） |
+
+  I2V は先読み on で、T2V より大きく遅いことはない。
+- T2V の指紋: 2 本とも `0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9` で基準と一致した（アプリは `deterministic: true` で読み込むが、結果は変わらなかった）。I2V の先頭フレームと入力画像（切り抜き後）の PSNR は 29.78dB。I2V の mp4 にはレシピ（`h3` を含む）が埋め込まれている。
+- 後片付け: 台本がパイプラインを解放した。サーバーは止めず、`state.json` も書き換えていない（選択中のベースモデルは MiniMaxH3 のまま）。
+- 結果の所在: `outputs/h3-gate2/g2b_api/`（git 管理外。JSON・mp4・metadata の写し・先頭フレーム）と、[`Outputs-archive/h3-gate2/`](Outputs-archive/h3-gate2/README.md)（git 管理。台本・試験画像・JSON・手順書の複写）。
+
+### 166.5 2c の門の結果（操作パネル・Gradio・MCP）
+
+| 門 | 内容 | 結果 |
+|---|---|---|
+| 2c-G1 | typecheck・vitest・oxlint・Gradio と MCP のテスト | 合格。typecheck 合格・vitest 165 ファイル 3,287 件全合格・oxlint エラー 0（警告 31 は既存）。Gradio と MCP のテスト 1,019 件全合格 |
+| ビルドと配置 | `build.ps1`・`deploy.ps1` | 成功。実機の Plugin フォルダ・配布用コピー・Language ファイルを配置済み（2026-10-18 未明） |
+| 2c-G2 | オーナーが操作パネルから T2V と I2V を生成して目視（スライダー・常駐・グレーアウト・マーカー非表示を含む） | **合格**（2026-10-18 朝。§166.9） |
+
+- 不安定なテスト 2 件（記録のみ。§3-238 の扱いで台帳には起票しない）: `ChainedScreen.endSource.test.tsx`（時間切れ 1 回）・`AlphaControls.test.tsx`（1 回）。どちらも単独で 3 回合格し、改修の経路とは無関係。
+- 監督の判断（オーナー裁定ではない）: Edit タブを丸ごと灰色にするために、H3 の閉じる機能の名前に `retake` を足した。導出規則は「単発の拒否表＋`chain`＋`retake`」。
+
+### 166.6 レビューの採否
+
+| レビュー | 件数 | 採否 |
+|---|---|---|
+| 計画のレビュー（Opus） | Critical 1・Major 13・Minor 22 | E-7（操作パネルが既定値でも常に送る）以外はすべて採用。内訳は計画 §10 |
+| コードのレビュー 2a（Opus） | Critical 0・Major 1・Minor 18 | M-1（検査や画像の読み込みで失敗したジョブが保持物を解放しない）を採用して直し、取り直しに合格（§166.3） |
+| コードのレビュー 2b（Opus） | Critical 0・Major 2・Minor 13 | M-1（LTX の記録に `shift_video`／`shift_audio` の `null` が加わる）は記録のみ。M-2（Gradio は `sampling` が無ければステップ数を送らない）は採用 |
+| コードのレビュー 2c（Opus） | Critical 0・Major 2・Minor 9 | M-1（閉じた参照動画と制御 LoRA を「無い」と読む）を採用。M-2（mock が `chain` を拒否）を採用 |
+
+- 計画のレビューの Critical は C-1（ステップ数の既定を `None` にすると mock・ログ・記録が壊れる）。`None` の解決を 1 か所（`validate_for_family` が書き戻す）に集めて直した。
+
+### 166.7 設計へ持ち帰る事実と利用者に見える差
+
+設計へ持ち帰る事実:
+
+1. 常駐中のコミット量が作業セットより約 7〜14GiB 大きい（割り当て器が解放済みの領域を抱えているとみられる）。64GB 機では作業セット 29GiB で溢れない。32GB 機は引き続き対象外。
+2. cuBLAS の作業領域 約 8.25MiB は、ジョブの合間も GPU に残る。
+3. 符号化の bf16 の混ぜ方の差（最大差 1.52e-2）は、製品が f32 で混ぜるので影響しない。
+4. I2V の速度は先読みの有無で大きく変わる（同期経路は T2V の約 2 倍）。比較は同じ条件どうしで行う。
+
+利用者に見える LTX 側の差:
+
+- 422 の順序: LTX 2.5 に `two_stage_hq` と 8n+1 違反を同時に送ると、`FEATURE_UNSUPPORTED` が先に返る。
+- `metadata.json`・mp4 に埋めるレシピ・`GET /jobs` に `shift_video: null`・`shift_audio: null` が加わる（加算）。
+- Gradio の Single の事前検査の文言が「Clip 1: …」から「Frames must be 8n+1 and between 9 and 481.」に変わる。
+
+記録のみ（直さない）: Alpha Gen 経路の 422 の符号（届かない経路）・`conftest.py` の下線付き関数への依存・キーフレームの位置欄は 0 以外も入るが 422 の文言で直せる。
+
+### 166.8 成果物の所在と次
+
+- `outputs/h3-gate2/`（git 管理外）: 門の結果の JSON（`g2_te_direct.json`・`g2_t2v_regression.json`・`g3_i2v_parts.json`・`g4_i2v_resident.json`・`g4_retake_after_review.json`・`g4_allocated_probe.json`・`g5_decode_vram.json` など）・mp4・ログ・台本。
+- [`Outputs-archive/h3-gate2/`](Outputs-archive/h3-gate2/README.md)（git 管理）: 台本と JSON の複写。
+- [`Outputs-archive/h3-stage2-reports-2026-10-17/`](Outputs-archive/h3-stage2-reports-2026-10-17/README.md)（git 管理）: 計画・計画のレビュー・調査報告（R4a・R4b・R5a・R5b）・`INTERFACE2.md`。
+- 設計の正本は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md)（数値は書かず、本節を参照する）。
+- 次: 2c-G2 合格（§166.9）。残りは main への `--no-ff` の merge（オーナーの合図）。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッションでプランモード。コミットは監督が dev に積む。
+
+### 166.9 オーナーの目視と合格（2026-10-18）
+
+- オーナーが操作パネルで MiniMax H3 を選んで目視し、**2c-G2 は合格**した。項目ごとの結果:
+  - Chained と Edit のタブが灰色: 合格。
+  - 参照動画の非表示: 合格。設計も確認済み（サーバーの `unsupported_features` の `reference_video` → `featureScope.ts` の表 → 部品、という既存の経路で、系統 id の直書きは無い）。
+  - A2V（音声から動画）・NAG・キーフレームの追加と強度の灰色: 合格。
+  - 快適上限マーカー無し: 合格。
+  - フレーム数の 17n+5 スナップ: 合格。
+  - fps 24 固定: 合格。
+  - 3 本のスライダー（1 行・既定 20／12／3。LTX に戻すと消える）: 合格。
+  - 狭い幅での折り返し: 合格。
+  - PrunaVAED など LTX 固有の Settings の行の非表示: 合格。
+  - 常駐トグルの説明文の H3 への言及: 合格。
+- 生成の目視:
+  - T2V 1 本（640×384・124 フレーム・20 ステップ。105.9 秒・VRAM ピーク 7,026MB）: 合格。
+  - I2V 1 本（896×1152・124 フレーム・20 ステップ。4,066.8 秒・VRAM ピーク 12,807MB）: 生成は成功し合格。
+- I2V の観察: ノイズ除去の各ステップが約 210 秒かかり、共有 GPU メモリを 3.7GB 使う VRAM の溢れが起きた。快適上限が未較正の画角で、α版の想定内。ただしオーナーの所感により、最適化の課題を台帳 §1-101 に起票した。
+- 気づいた点 2 つ（どちらも台帳 §1-100 に起票）:
+  - Settings の「生成の高速化」にある「Fused GGUF Dequantization Kernel」の行が H3 でも表示される。H3 は GGUF を使わないので不適切。この行には機能名の受け口が無い。「Block-swap prefetch」の行は H3 でも効くので表示のままでよい。
+  - Single の A2V のカードと Batch A2V は、灰色でなく非表示にすべき（今は `chain` の行で灰色）。
+- 残り: main への merge（オーナーの合図）。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッション。
+
+### 166.10 文書とコード内コメントの現行化（第 4 次。2026-10-18）
+
+- **結論**: main..dev の 8 コミット（131 ファイル）で変わった事実と、それで古くなった記述を、文書・Python のコメントと docstring・操作パネル（webui）のコメントで現行化した。挙動は変わらない（下の「挙動不変の担保」）。利用者や AI エージェントに見える文言（外部文言）は変えていない。
+- **やり方**:
+  - 棚卸し（読み取りのみ・Opus 3 体）: 文書は 31 件（D-001〜D-031）と判断が要るもの 7 件（J-1〜J-7）と README で誤りになった箇所 5 件（R-1〜R-5）。Python は 69 件と外部文言 5 件。webui は 134 件。文書の一覧は [`Outputs-archive/h3-stage2-reports-2026-10-17/AUDIT_docs_findings.md`](Outputs-archive/h3-stage2-reports-2026-10-17/AUDIT_docs_findings.md) に複写した。
+  - 直し: 文書は Opus、Python と webui は Sonnet が一字一句の差し替えを適用した。
+  - 敵対的レビュー（Opus 1 本）: Major 4・Minor 16 で、全件を採用した。Major は、MCP 設計 D27 の LTX の扱い（ステップ数は 8 以外が 422・shift は無視）、操作パネルの API_REFERENCE §5.2（連結生成は自分のスキーマで LTX の検査を持つ）、同 §3.5（Edit タブは 4 つのサブタブが全部閉じたときにタブごと灰色）、台帳 §1-102 の出典（本節）。
+- **挙動不変の担保**:
+  - Python 23 ファイル: docstring を除いた構文木が HEAD と一致し、コメントでも docstring でもないトークンの差は 0、`py_compile` 合格、`"""` の数が一致。レビューの採用で直した `services/engines/__init__.py` の docstring 1 件も、構文木の一致と `py_compile` を確かめた。
+  - webui 25 ファイル: コメントを除いたトークン列が HEAD と一致し、構文エラーの数も変わらない。レビューの採用で直した `i18n/strings.ts` のコメント 1 件も、差分がコメントの行だけであることを確かめた。
+  - 改行コードは行ごとに元のまま。
+- **機械ゲート**:
+  - アプリ全件: 3,413 passed・65 skipped・1 failed。落ちた 1 件は `test_mcp_registration` で、オーナーのサーバーが動いているときに落ちる既知のもの（差し替え前でも同じ）。
+  - `test_h3_format` 32 件合格。H3 エンジンのテスト 86 件合格・2 skipped。
+  - 操作パネル: typecheck・vitest 3,287 件・oxlint 合格。
+- **判断 J-1〜J-7 の結論**（監督の判断）:
+  - J-1: 主メモリ 32GB 機は α版の対象外（推奨は 64GB。研究ノートの裁定 26）。ページファイルで動く可能性はあるが未検証（設計正本 §13・仕様書 §2.1）。
+  - J-2: Single の A2V カードとバッチ A2V は、オーナーの目視の所感（2026-10-18）が裁定 35 の該当部分を置き換え、非表示にする。実装は台帳 §1-100（いまのコードは灰色）。
+  - J-3: 研究ノートの裁定 5 の後半（インストーラを先に作る）は、裁定 14（インストーラは第 3 弾）で置き換わった。
+  - J-4: `transformer_weight_class` が H3 では常に `null` である件は、台帳 §1-95 の留意に書き、較正の計画で扱う。
+  - J-5: H3 の 4 分類の正本は `services/engines/h3/adapter.py` の表そのもの（文書へ写さない）。
+  - J-6: MULTI_ENGINE_DESIGN §7 の保留の解除の根拠は、第 2 弾の計画の了承（2026-10-17・`PLAN_stage2.md` §3.3）。
+  - J-7: 台帳 §1-95 の題は「Turbo なし・int8 ConvRot」。
+- **据え置き（オーナー判断待ち）**: 外部文言 7 件（Python 5＝`engine_h3` の例外文 1 と MCP 向けの文 4、操作パネルの文言 2）は未適用。一覧と案は [`Outputs-archive/h3-stage2-reports-2026-10-17/AUDIT_external_strings.md`](Outputs-archive/h3-stage2-reports-2026-10-17/AUDIT_external_strings.md)。
+- **申し送り**: README の誤り 5 件は第 3 弾で README を書くときに直す（`AUDIT_docs_findings.md` の ④。台帳 §1-93 の入口から辿れる）。
+- **コードの疑い（直していない）**:
+  - Python の 3 件は台帳 §1-102 に起票した。観測事実と確かめ方:
+    1. `h3_format.inspect_h3_te` は視覚塔（`visual.*`）のテンソルを数えるだけで、無いファイルも通す（`services/model_registry.py` の `_precheck_h3` も同じ関数を使う）。そのファイルで I2V を投げると、ジョブの中で `engine_h3/text_encoder.py` の `encode` が英語の `RuntimeError`（「… has no vision tower (visual.*); I2V needs it」）で止まる。公式の Comfy-Org のテキストエンコーダは視覚塔を持つので、起きるのは第三者のファイルだけ。
+    2. Gradio の `gradio_ui/feature_scope.py` の `FEATURE_UI` は `prune_vaed` と `keep_resident_embeddings` しか扱わない。H3 の `unsupported_features`（`chain`・`retake`・`loras`・`reference_video`・`nag`・`multi_keyframes`・`keyframe_strength` など）に当たる操作部（Clip Chain・バッチ・A2V・LoRA・NAG・キーフレームの強度）は見えたままで、使うと 422 になる。操作パネルは灰色または非表示にする。
+    3. `services/engines/h3/adapter.py` の `REQUEST_RULES` は、H3 の既定のステップ数を `default_steps=20` と `sampling` の `num_inference_steps` の `default=20` に別々に持つ。`RequestRules.fill_defaults` は前者で書き戻し、`GET /models` の `constraints` は後者を配るので、片方だけを変えるとずれる。
+  - webui の 5 件（記録のみ。起票はしない）:
+    - C-1: H3 ではキーフレームが 1 枚に制限されるが、その 1 枚のピンや FRAME の入力は先頭以外へ動かせ、送信してから 422 になる（`modes/single/SingleScreen.tsx`・`KeyframesPanel.tsx`・`KeyframeTimeline.tsx`。アダプタは `frame_idx` が 0 以外を拒否する）。
+    - C-2: `GenerationConstraints.frameRate` は「`min` と `max` が等しければ固定」の判定にしか使われない。固定ではないが 1〜60 より狭い範囲を配る系統が来ると、fps 欄とスナップは 1〜60 のまま（今の 3 系統では起きない）。
+    - C-3: `modes/single/paramUtils.ts` の `isValidDimension` は 64 固定で、本番のコードからは使われていない（テストだけ）。
+    - C-4: `shell/generationConstraints.ts` の「規則の違う系統は Chained・Edit・Batch を `unsupported_features` で閉じる」は約束で、強制は無い（今は起きない）。
+    - C-5: `shell/nagSettings.ts` の作業ツリーで CRLF と LF が混在している（第 2 弾で足した末尾 12 行だけ LF）。git の索引は LF なので、コミットの中身には影響しない。
+- **コミット**: 監督が dev に積む。

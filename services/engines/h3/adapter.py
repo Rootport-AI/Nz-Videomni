@@ -1,0 +1,507 @@
+"""MiniMax H3 engine adapter — the app-side half of the ``engine_h3`` worker.
+
+A SIBLING of :mod:`services.engines.ltx.adapter` and
+:mod:`services.engines.ltx25.adapter`, built the way the 2.5 one is: the
+app-side plumbing (the ``@@LTX@@`` JSON-lines protocol, the subprocess
+spawn/read/kill loop, the progress-receipt loop, the synthetic mock backend) is
+2.3's, reached through its override seams, and this module states only the
+facts that are genuinely different:
+
+* which venv and which ``python -m`` module the worker is (``engine_h3.worker``
+  in ``.venv-engine-h3``, ``model.engine_python_h3``);
+* which worker log file it writes;
+* which load-payload field each model-management category feeds, plus the
+  tokenizer folder (a descriptor ``assets`` entry, like 2.3's ``gemma_root``);
+* the feature scope (the four tables below) and the numeric rules
+  (:data:`REQUEST_RULES`: 17n+5 frames from 22, a 32 multiple, 24 fps fixed,
+  1..50 steps, the two shifts).
+
+THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
+Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
+mock, a variable category set): ``H3Runner`` subclasses ``LTXRunner``, the mock
+is 2.3's with its own label, and the categories are the same four words.
+
+THE WORKER PROTOCOL (Docs/MINIMAX_H3_DESIGN.md §8): ``load`` carries the four
+paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
+``block_swap_prefetch`` and ``deterministic`` (no text-encoder knob: the text
+encoder is read layer by layer straight from the file). ``generate`` carries the job, the
+conditioning ``images`` (``{path, frame_idx}``; H3 has no strength), and the
+per-job ``attention_backend`` / ``block_swap_prefetch`` (always sent: an absent
+key would mean "the load value", not "off") and ``keep_resident`` (only when
+asked for — an absent key is the release request, the LTX contract). The
+progress stages are LTX's single-stage ones (``encode`` / ``stage1_denoise`` /
+``decode``), read with ``one_stage=True``.
+
+LIKE THE LTX ADAPTERS, THIS FILE NEVER IMPORTS torch. The engine lives only in
+``.venv-engine-h3``; the app venv has none of it.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from pathlib import Path
+from typing import Callable
+
+from api.errors import feature_unsupported
+from api.models import (
+    ConditioningImage,
+    GenerateChainRequest,
+    GenerateRequest,
+)
+from config import AppConfig
+from services import video_io
+from services.engines.ltx.adapter import (
+    GenerationOutcome,
+    LTXRunner,
+    ProgressCallback,
+    _MockBackend,
+    _RealBackend,
+    resolve_seed,
+)
+from services.engines.ltx.request_rules import (
+    FRAME_RATE_MAX,
+    NUM_FRAMES_MAX,
+    RequestRules,
+    SamplingRange,
+)
+from services.lora_registry import ResolvedLora
+
+logger = logging.getLogger("h3.runner")
+
+#: Model-management category -> the worker load-payload field it feeds. THE
+#: SAME FOUR CATEGORY NAMES as both LTX families (the axes a user picks a file
+#: on are a property of the product, and state.json is keyed by them); only the
+#: payload fields are this worker's (engine_h3/worker.py ``_LOAD_FILE_FIELDS``).
+SELECTION_FIELDS: dict[str, str] = {
+    "transformer": "transformer_path",
+    "text_encoder": "text_encoder_path",
+    "video_vae": "video_vae_path",
+    "audio": "audio_vae_path",
+}
+
+#: Fixed (non-selectable) descriptor assets: the Qwen3-VL tokenizer FOLDER.
+#: A folder because the extra special tokens live only in
+#: ``tokenizer_config.json`` (Docs/MINIMAX_H3_DESIGN.md §8 "tokenizer の渡し方"),
+#: the same folder-asset form as 2.3's ``gemma_root``. ``_real_available``
+#: checks it with ``.exists()``, which a folder satisfies.
+REQUIRED_ASSETS: tuple[str, ...] = ("tokenizer_dir",)
+
+#: Real / mock backend identifiers surfaced in metadata.json.
+REAL_BACKEND_H3 = "minimax-h3"
+MOCK_BACKEND_H3 = "mock-h3"
+
+#: Worker load default for ``blocks_on_gpu`` (2.5's precedent, and the same
+#: ``or`` rule: 0 in the setting means "unset"). ``GET /status``'s
+#: ``block_swap_prefetch_available`` is computed app-side from the same setting.
+DEFAULT_BLOCKS_ON_GPU = 8
+
+#: ``ConditioningImage.strength``'s schema default. H3 has no keyframe
+#: strength; a request that sets another value is refused rather than silently
+#: run at a strength the engine does not have.
+_STRENGTH_DEFAULT = ConditioningImage.model_fields["strength"].default
+
+# --------------------------------------------------------------------------- #
+# numeric rules
+# --------------------------------------------------------------------------- #
+
+#: Frame grid: the video VAE's clip length 17 with 5 extra frames (``F = 17n +
+#: 5``, ``T' = 5n + 2``; engine_h3/constants.py ``latent_frames``). ``n >= 1``:
+#: F = 5 decodes poorly and is refused by the engine too (MIN_NUM_FRAMES = 22).
+H3_FRAMES_STEP = 17
+H3_FRAMES_OFFSET = 5
+H3_FRAMES_MIN = 22
+#: One DiT token = 32 px square (VAE 16 x patch 2).
+H3_DIMENSION_MULTIPLE = 32
+#: The model was trained at 24 fps only.
+H3_FRAME_RATE = 24.0
+#: The largest 17n+5 count the schema ceiling allows (481 = 17*28+5).
+H3_FRAMES_MAX = (NUM_FRAMES_MAX - H3_FRAMES_OFFSET) // H3_FRAMES_STEP * H3_FRAMES_STEP + H3_FRAMES_OFFSET
+
+#: This family's numeric rules (Docs/MINIMAX_H3_DESIGN.md §9). The sampling defaults
+#: are the engine's own (engine_h3/constants.py: 20 Euler steps, shifts 12 / 3
+#: — the official scheduler pair); they are restated here because the app venv
+#: cannot import the engine package, and they must agree with it.
+REQUEST_RULES = RequestRules(
+    frames_step=H3_FRAMES_STEP,
+    frames_offset=H3_FRAMES_OFFSET,
+    frames_min=H3_FRAMES_MIN,
+    frames_max=H3_FRAMES_MAX,
+    dimension_multiple=H3_DIMENSION_MULTIPLE,
+    frame_rate_min=H3_FRAME_RATE,
+    frame_rate_max=H3_FRAME_RATE,
+    default_steps=20,
+    sampling={
+        "num_inference_steps": SamplingRange(min=1, max=50, step=1, default=20),
+        "shift_video": SamplingRange(min=1, max=20, step=0.1, default=12),
+        "shift_audio": SamplingRange(min=1, max=20, step=0.1, default=3),
+    },
+)
+assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
+
+# --------------------------------------------------------------------------- #
+# feature scope (the four-way classification of GenerateRequest's fields)
+# --------------------------------------------------------------------------- #
+
+
+def _multi_keyframes(r: GenerateRequest) -> bool:
+    """More than one image, or one that is not the first frame."""
+    images = r.conditioning_images
+    return len(images) > 1 or any(ci.frame_idx != 0 for ci in images)
+
+
+def _keyframe_strength(r: GenerateRequest) -> bool:
+    """A conditioning image asks for a strength other than the default."""
+    return any(ci.strength != _STRENGTH_DEFAULT for ci in r.conditioning_images)
+
+
+#: The 422 half: ``(field, feature, is_non_default)``, first offender wins. Every
+#: predicate tests "differs from the default" (the frontend sends the whole
+#: schema), so a plain T2V / first-frame I2V request passes.
+#:
+#: ``conditioning_images`` appears TWICE and is also HONOURED: the first frame
+#: is what this engine does with it, and these two rows refuse what it cannot
+#: (more images / another position, and a strength). The audit test allows
+#: exactly this overlap.
+REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
+    ("loras", "loras", lambda r: bool(r.loras)),
+    ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
+    ("nag_enabled", "nag", lambda r: r.nag_enabled),
+    ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
+    ("guidance_scale", "guidance_scale", lambda r: r.guidance_scale != 1.0),
+    ("outpaint", "outpaint", lambda r: r.outpaint is not None),
+    ("inpaint", "inpaint", lambda r: r.inpaint is not None),
+    ("alpha_gen", "alpha_gen", lambda r: r.alpha_gen is not None),
+    ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
+    ("keep_resident_embeddings", "keep_resident_embeddings", lambda r: r.keep_resident_embeddings),
+    ("conditioning_images", "multi_keyframes", _multi_keyframes),
+    ("conditioning_images", "keyframe_strength", _keyframe_strength),
+)
+
+#: The ignore-and-log half: a concept this engine does not have. Logged only
+#: when the request sets a non-default value (2.5's discipline).
+IGNORED_FIELDS: dict[str, str] = {
+    "fused_gguf_dequant_kernel": "MiniMax H3 has no GGUF weights to dequantize",
+}
+
+#: Fields this engine ACTS ON: plain ``request.<field>`` reads in
+#: :meth:`_RealBackendH3.generate`, except ``crop_output`` (the app-side ffmpeg
+#: centre-crop of the finished mp4, as on LTX) and ``embed_mp4_metadata`` (the
+#: app-side recipe embed, ``PipelineManager._embed_recipe``).
+HONOURED_FIELDS: frozenset[str] = frozenset(
+    {
+        "prompt",
+        "seed",
+        "width",
+        "height",
+        "num_frames",
+        "frame_rate",
+        "num_inference_steps",
+        "shift_video",
+        "shift_audio",
+        "conditioning_images",
+        "keep_resident",
+        "attention_backend",
+        "block_swap_prefetch",
+        "crop_output",
+        "embed_mp4_metadata",
+    }
+)
+
+#: ``field -> the field that governs it``: sub-parameters inert unless their
+#: governor is non-default, and every governor here is refused above.
+GOVERNED_FIELDS: dict[str, str] = {
+    "negative_prompt": "nag_enabled",
+    "neg_method": "nag_enabled",
+    "vsf_scale": "nag_enabled",
+    "nag_scale": "nag_enabled",
+    "nag_tau": "nag_enabled",
+    "nag_alpha": "nag_enabled",
+    "conditioning_attention_strength": "loras",
+    "reference_video_strength": "loras",
+}
+
+#: Everything GET /models publishes as this engine's ``unsupported_features``:
+#: the single-request reject table's feature names, plus ``chain`` and
+#: ``retake``. Both are refused by :func:`reject_chain` (the chain endpoint is
+#: refused as a whole): ``chain`` closes the Chained tab and Single's A2V card,
+#: and ``retake`` — a chain request too — closes Retake's Edit sub-tab. With
+#: Outpainting, Inpainting and Alpha Gen also refused, all four Edit sub-tabs
+#: close and the operation panel greys the whole Edit tab (裁定 34). Nothing
+#: else — a name the server never refuses would close a working control.
+UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
+    dict.fromkeys(feature for _field, feature, _pred in REJECT_TABLE)
+) + ("chain", "retake")
+
+
+def _refusal_detail(field: str, feature: str) -> str:
+    if feature == "multi_keyframes":
+        return (
+            "MiniMax H3 は先頭フレーム 1 枚だけに対応しています"
+            "（conditioning_images は frame_idx 0 の 1 枚まで）。"
+        )
+    return (
+        f"MiniMax H3 は {feature} に対応していません"
+        f"（リクエストの {field} が既定値ではありません）。"
+    )
+
+
+def reject_unsupported(request: GenerateRequest) -> None:
+    """422 the first out-of-scope field of ``request`` (first offender wins)."""
+    for field, feature, is_non_default in REJECT_TABLE:
+        if is_non_default(request):
+            raise feature_unsupported(feature, detail=_refusal_detail(field, feature))
+
+
+def reject_chain(request: GenerateChainRequest) -> None:
+    """The chain endpoint is out of scope for this engine as a whole."""
+    raise feature_unsupported(
+        "chain",
+        detail="MiniMax H3 は chain（連結生成）に対応していません。",
+    )
+
+
+def _log_ignored(request: GenerateRequest) -> None:
+    """ONE log line naming every ignored field this request actually set."""
+    fields = type(request).model_fields
+    named = [
+        f"{name}={getattr(request, name)!r} ({reason})"
+        for name, reason in IGNORED_FIELDS.items()
+        if name in fields and getattr(request, name) != fields[name].default
+    ]
+    if named:
+        logger.info("MiniMax H3 ignores %d requested field(s): %s", len(named), "; ".join(named))
+
+
+def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
+    """Nothing to rule on: H3 is judged by its tensor-name fingerprint in the
+    precheck (``h3_format.inspect_h3_dit`` / ``inspect_h3_te``), which returns
+    no KV."""
+    return None
+
+
+#: Top-level facts of the worker's ``done`` event that ``metadata["h3"]``
+#: gathers next to the worker's own ``h3`` block (phases, quant backends).
+_DONE_FACTS = (
+    "sampler",
+    "num_inference_steps",
+    "shift_video",
+    "shift_audio",
+    "images_used",
+    "rss_peak_gib",
+    "commit_gib",
+    "commit_peak_gib",
+    "seconds",
+)
+
+
+def _h3_block(event: dict) -> dict:
+    block = {key: event[key] for key in _DONE_FACTS if key in event}
+    inner = event.get("h3")
+    if isinstance(inner, dict):
+        block.update(inner)
+    return block
+
+
+# --------------------------------------------------------------------------- #
+# backend
+# --------------------------------------------------------------------------- #
+
+
+class _RealBackendH3(_RealBackend):
+    """The ``engine_h3.worker`` subprocess, driven through 2.3's process plumbing."""
+
+    SELECTION_FIELDS = SELECTION_FIELDS
+    REQUIRED_ASSETS = REQUIRED_ASSETS
+    _WORKER_MODULE = "engine_h3.worker"
+    _LOG_NAME = "h3_worker.log"
+    #: Fixed, not configurable: the package ships in this repository.
+    _ENGINE_DIR_VALUE = "./engine_h3"
+    _ENGINE_PYTHON_LABEL = "engine_python_h3"
+
+    @classmethod
+    def _engine_python_value(cls, config: AppConfig) -> str | None:
+        return config.model.engine_python_h3
+
+    # ------------------------------------------------------------------ load
+
+    def _build_child_env(self, project_root: Path) -> dict[str, str]:
+        """Minimal, like 2.5's: none of 2.3's ``LTX_*`` knobs (each names a
+        code path inside ``engine/``); only the shared process hygiene."""
+        env = dict(os.environ)
+        env["TORCH_COMPILE_DISABLE"] = "1"
+        env["PYTHONUNBUFFERED"] = "1"
+        env.pop("PYTHONPATH", None)
+        env["PYTHONPATH"] = str(project_root)
+        return env
+
+    def _log_load_start(self, engine_python: str, engine_dir: Path, payload: dict) -> None:
+        logger.info(
+            "Loading pipeline (REAL engine_h3 worker). python=%s engine_dir=%s "
+            "blocks_on_gpu=%s deterministic=%s",
+            engine_python,
+            engine_dir,
+            payload["blocks_on_gpu"],
+            payload["deterministic"],
+        )
+
+    def _build_load_payload(self, selection: dict[str, str] | None = None) -> dict:
+        """The ``{"op": "load"}`` payload engine_h3's worker expects (pure).
+
+        Key set AND order are pinned by the golden test in
+        tests/test_engine_h3_adapter.py. ``attention_backend`` /
+        ``block_swap_prefetch`` here are only the worker's defaults: every
+        generate carries its own.
+        """
+        selection = selection or {}
+        swapped = {
+            field: (
+                str(selection[category])
+                if selection.get(category)
+                else self._require_default_file(category)
+            )
+            for category, field in self.SELECTION_FIELDS.items()
+        }
+        return {
+            "op": "load",
+            "transformer_path": swapped["transformer_path"],
+            "text_encoder_path": swapped["text_encoder_path"],
+            "video_vae_path": swapped["video_vae_path"],
+            "audio_vae_path": swapped["audio_vae_path"],
+            "tokenizer_dir": self._require_asset("tokenizer_dir"),
+            "blocks_on_gpu": self.low_vram.block_swap_blocks_on_gpu or DEFAULT_BLOCKS_ON_GPU,
+            "attention_backend": GenerateRequest.model_fields["attention_backend"].default,
+            "block_swap_prefetch": GenerateRequest.model_fields["block_swap_prefetch"].default,
+            # cuDNN algorithm selection pinned, so a same-seed rerun is
+            # bit-identical (2.5's precedent).
+            "deterministic": True,
+        }
+
+    # -------------------------------------------------------------- generate
+
+    def generate(
+        self,
+        request: GenerateRequest,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        conditioning_image_paths: list[Path] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
+        reference_video_path: Path | None = None,
+        seed: int | None = None,
+        outpaint_source_path: Path | None = None,
+        inpaint_source_path: Path | None = None,
+        inpaint_mask_path: Path | None = None,
+    ) -> GenerationOutcome:
+        """One T2V / first-frame I2V generation.
+
+        ``lora_paths`` / ``reference_video_path`` / the outpaint and inpaint
+        paths are accepted for the shared signature and never arrive filled:
+        the fields that would produce them are refused by
+        :func:`reject_unsupported` (re-checked here as the backstop).
+        """
+        if not self.loaded:
+            self.load()
+
+        reject_unsupported(request)
+        _log_ignored(request)
+
+        conditioning_image_paths = conditioning_image_paths or []
+        mode = request.generation_mode
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "output.mp4"
+        seed = int(seed) if seed is not None else resolve_seed(request.seed)
+
+        images: list[dict] = []
+        if mode == "i2v" and conditioning_image_paths:
+            images = [
+                {"path": str(path), "frame_idx": ci.frame_idx}
+                for ci, path in zip(request.conditioning_images, conditioning_image_paths)
+            ]
+
+        # crop_output: the worker writes the full-size mp4 to a temp file and
+        # the app's ffmpeg helper centre-crops it into output.mp4 (as on LTX).
+        target = output_dir / "_full.mp4" if request.crop_output is not None else output_path
+
+        if progress_callback:
+            progress_callback(None, None, 0.05)
+
+        payload: dict = {
+            "op": "generate",
+            "prompt": request.prompt,
+            "seed": seed,
+            "width": request.width,
+            "height": request.height,
+            "num_frames": request.num_frames,
+            "frame_rate": request.frame_rate,
+            "num_inference_steps": request.num_inference_steps,
+            "shift_video": request.shift_video,
+            "shift_audio": request.shift_audio,
+            "images": images,
+            # Per-job, ALWAYS sent: an absent key would mean "the load value".
+            "attention_backend": request.attention_backend,
+            "block_swap_prefetch": bool(request.block_swap_prefetch),
+            "output_path": str(target),
+        }
+        # keep_resident: the LTX contract — the key rides only when True, and
+        # an absent key IS the release request.
+        if request.keep_resident:
+            payload["keep_resident"] = True
+
+        with self._lock:
+            try:
+                self._send(payload)
+            except Exception as exc:
+                raise RuntimeError("MiniMax H3 worker died: " + self._stderr_tail()) from exc
+            event = self._read_worker_events(
+                progress_callback, chain=False, prefix="generate", one_stage=True
+            )
+
+        kind = event.get("event")
+        if kind == "error":
+            raise RuntimeError(event.get("detail", "MiniMax H3 worker generation failed"))
+        if kind != "done":
+            raise RuntimeError(f"MiniMax H3 worker returned unexpected event: {event!r}")
+
+        if request.crop_output is not None:
+            video_io.crop_mp4(
+                target,
+                output_path,
+                request.crop_output.width,
+                request.crop_output.height,
+            )
+            target.unlink(missing_ok=True)
+
+        if not output_path.exists() or output_path.stat().st_size <= 0:
+            raise RuntimeError(f"MiniMax H3 worker produced no/empty output: {output_path}")
+
+        if progress_callback:
+            progress_callback(None, None, 0.90)
+            progress_callback(None, None, 1.0)
+
+        return GenerationOutcome(
+            output_path=output_path,
+            seed_used=event.get("seed_used", seed),
+            peak_vram_mb=event.get("peak_vram_mb"),
+            generation_mode=mode,
+            backend=REAL_BACKEND_H3,
+            attention_used=event.get("attention_used"),
+            block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            keep_resident_used=event.get("keep_resident_used"),
+            peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
+            h3=_h3_block(event),
+        )
+
+    def generate_chain(self, chain_request, output_dir: Path, *args, **kwargs) -> GenerationOutcome:
+        """Never reached through the API (``reject_chain`` refuses first)."""
+        reject_chain(chain_request)
+        raise AssertionError("unreachable")  # pragma: no cover
+
+
+class H3Runner(LTXRunner):
+    """Facade for the MiniMax H3 engine family (the class attributes are the
+    only per-family facts; everything else is ``LTXRunner``'s)."""
+
+    _REAL_BACKEND_CLS = _RealBackendH3
+    _MOCK_BACKEND_CLS = _MockBackend
+    _MOCK_BACKEND_LABEL = MOCK_BACKEND_H3

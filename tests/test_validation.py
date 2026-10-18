@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json as _json
+
+import pytest as _pytest
+
 
 BASE = {
     "prompt": "test",
@@ -48,6 +52,107 @@ def test_num_frames_within_cap_but_not_8n_plus_1_rejected(client):
     r = client.post("/api/v1/generate", json={**BASE, "width": 512, "height": 320, "num_frames": 480})
     assert r.status_code == 422
     assert "8n+1" in r.text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MiniMax H3 第 2 弾 (2b): the three LTX rules (÷64, 8n+1, distilled 8 steps /
+# CFG 1.0) moved from the pydantic validator to LTX's REQUEST_RULES, applied by
+# services.engines.validate_for_family after the feature scope. The 422 must be
+# the one pydantic used to produce, byte for byte — code, message, and a
+# ``detail`` list of one ``{loc: ["body"], msg: "Value error, ...", type:
+# "value_error"}`` — and an omitted step count must still record 8.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _value_error(msg: str) -> dict:
+    return {
+        "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "Request validation failed",
+            "detail": [{"loc": ["body"], "msg": f"Value error, {msg}", "type": "value_error"}],
+        }
+    }
+
+
+_MOVED_RULES = [
+    ({"width": 544, "height": 512, "num_frames": 121}, "width must be a multiple of 64"),
+    ({"width": 512, "height": 288, "num_frames": 49}, "height must be a multiple of 64"),
+    ({"width": 960, "height": 576, "num_frames": 120}, "num_frames must be 8n+1"),
+    (
+        {"width": 512, "height": 320, "num_frames": 49, "num_inference_steps": 20},
+        "distilled pipeline requires num_inference_steps=8",
+    ),
+    (
+        {"width": 512, "height": 320, "num_frames": 49, "guidance_scale": 3.0},
+        "distilled pipeline requires guidance_scale=1.0",
+    ),
+]
+
+
+@_pytest.mark.parametrize("body, msg", _MOVED_RULES)
+def test_moved_ltx_rules_keep_the_pydantic_422_on_ltx23(client, body, msg):
+    r = client.post("/api/v1/generate", json={"prompt": "test", **body})
+    assert r.status_code == 422
+    assert r.json() == _value_error(msg)
+
+
+def test_the_moved_422_has_the_shape_of_a_pydantic_one(client):
+    """A rule that STAYED in the schema (crop_output) answers in the very same
+    shape — the moved ones are indistinguishable from it."""
+    r = client.post(
+        "/api/v1/generate",
+        json={"prompt": "test", "width": 512, "height": 320, "crop_output": {"width": 600, "height": 300}},
+    )
+    assert r.status_code == 422
+    assert r.json() == _value_error("crop_output.width must be <= width")
+
+
+def _activate(client, base_model: str) -> None:
+    r = client.post("/api/v1/pipeline/load", json={"base_model": base_model})
+    assert r.status_code == 200, r.text
+
+
+@_pytest.mark.parametrize("body, msg", _MOVED_RULES)
+def test_moved_ltx_rules_keep_the_pydantic_422_on_ltx25(two_family_client, body, msg):
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post("/api/v1/generate", json={"prompt": "test", **body})
+    assert r.status_code == 422
+    assert r.json() == _value_error(msg)
+
+
+def test_feature_scope_now_answers_before_the_numeric_rules_on_ltx25(two_family_client):
+    """The recorded order change: LTX 2.5 with two_stage_hq AND an 8n+1
+    violation used to be VALIDATION_ERROR (pydantic ran first); the numeric
+    rules now run after the feature scope, so it is FEATURE_UNSUPPORTED."""
+    _activate(two_family_client, "LTX25")
+    r = two_family_client.post(
+        "/api/v1/generate",
+        json={"prompt": "test", "num_frames": 50, "pipeline": "two_stage_hq"},
+    )
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "FEATURE_UNSUPPORTED"
+
+
+@_pytest.mark.parametrize("base_model", ["LTX23", "LTX25"])
+def test_omitted_steps_are_recorded_as_8_on_ltx(two_family_client, base_model):
+    _activate(two_family_client, base_model)
+    r = two_family_client.post("/api/v1/generate", json={"prompt": "test", "num_frames": 17})
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert two_family_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    ctx = two_family_client.app_context
+    meta = _json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["request"]["num_inference_steps"] == 8
+    assert meta["request"]["shift_video"] is None and meta["request"]["shift_audio"] is None
+    assert "h3" not in meta
+
+
+def test_the_schema_alone_no_longer_judges_the_ltx_grid():
+    """GenerateRequest itself accepts a 17n+5 / ÷32 body: the grid is the
+    family's, checked once the family is known."""
+    from api.models import GenerateRequest
+
+    req = GenerateRequest(prompt="test", width=640, height=384, num_frames=124)
+    assert req.num_inference_steps is None
 
 
 def test_too_many_conditioning_images(client):

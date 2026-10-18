@@ -11,7 +11,7 @@ copy, twice the bytes) or disagree with the int8 payload. A plain int8
 tensors, so ``engine/transformer/block_swap_service.py`` and its prefetch carry
 it unchanged, and the forward hands the same raw tensors to the public
 function ``comfy_kitchen.int8_linear`` — the kernel the wrapper would reach
-anyway (scratchpad R1 "2-2 追加" (a)(b)).
+anyway (R1 "2-2 追加" (a)(b); Docs/Outputs-archive/h3-stage1-reports-2026-10-17/R1_stack.md).
 
 Fail loud, never slow
 ---------------------
@@ -20,7 +20,7 @@ lives on that path) and its ``eager`` backend. With both gone, a call the CUDA
 backend refuses (weight still on the CPU, wrong dtype, ...) raises
 ``NoCapableBackendError`` instead of silently running ``torch._int_mm`` with a
 per-call host-to-device copy of the weight — eager accepts such calls and would
-only show up as a mysteriously slow job (plan §1, review M-1).
+only show up as a mysteriously slow job.
 
 The stored weight is ``W @ H^T`` per 256-column group (ConvRot), quantized per
 output row; ``weight_scale`` is that row scale, float32 ``[N, 1]`` exactly as

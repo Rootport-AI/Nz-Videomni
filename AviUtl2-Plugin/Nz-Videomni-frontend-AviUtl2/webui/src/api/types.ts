@@ -6,9 +6,13 @@
  *
  * Deliberately excluded from `GenerateRequest`/`GenerateChainRequest`
  * (Docs/API_REFERENCE.md §7, "UIに出してはいけない機能"): `guidance_scale`,
- * `num_inference_steps`, `pipeline`. The server fills its own defaults
- * (distilled / 8 steps / CFG 1.0) when these are omitted, and the WebUI must
- * never expose controls for them. `negative_prompt` was in this list too
+ * `pipeline`. The server fills its own defaults (distilled / CFG 1.0) when
+ * these are omitted, and the WebUI must never expose controls for them.
+ * `num_inference_steps` and the two shifts (`shift_video`/`shift_audio`) are
+ * sent only to a base model whose `constraints.sampling` is non-null — Create
+ * then shows them as sliders and sends all three on every request; otherwise
+ * they are omitted and the server writes its own family default back.
+ * `negative_prompt` was in this list too
  * until 2026-07-28, when NAG (Normalized Attention Guidance, backend commit
  * 2ae497b) made a negative prompt actually take effect without CFG — it is
  * now allowed, but ONLY alongside `nag_enabled`/`nag_scale`/`nag_tau`/
@@ -157,7 +161,8 @@ export interface InpaintSpec {
 
 /** Fields the WebUI is allowed to submit for a `/generate` call (M2 T2V scope,
  * extended by M4 for I2V, M5 for style LoRAs). Omitting `conditioning_images`
- * (or passing `[]`) is T2V; 1-5 entries is I2V (Docs/API_REFERENCE.md §5.1). */
+ * (or passing `[]`) is T2V; one or more entries is I2V, up to
+ * `limits.max_conditioning_images` (Docs/API_REFERENCE.md §5.1). */
 export interface GenerateRequest {
   prompt: string;
   width: number;
@@ -166,6 +171,17 @@ export interface GenerateRequest {
   num_frames: number;
   frame_rate: number;
   seed: number;
+  /** The sampling step count. Sent ONLY while the loaded base model publishes
+   * `constraints.sampling` (and then always, so the rule stays one rule);
+   * otherwise omitted, and the server fills its own family default. Built
+   * exclusively by `useGenerationForm`'s `toGenerateRequest`. */
+  num_inference_steps?: number;
+  /** The video-stream shift. Same "only while `constraints.sampling` exists,
+   * then always" rule as {@link GenerateRequest.num_inference_steps}. */
+  shift_video?: number;
+  /** The audio-stream shift. Same rule as
+   * {@link GenerateRequest.shift_video}. */
+  shift_audio?: number;
   conditioning_images?: ConditioningImage[];
   loras?: LoraSpec[];
   /** IC-LoRA (A3 "reference video") conditioning source: the `video_id`
@@ -911,7 +927,9 @@ export interface AppLimits {
    *
    * **一致する行が無い（＝`resolveComfortRow` が `null`）のは異常ではなく
    * 正常な状態**で、呼び手はレガシーの {@link AppLimits.spill_free_frames}
-   * へ落ちる。とくに LTX 2.3 の 4bit と Q6_K の既定構成は**意図的に**行を持たない
+   * へ落ちる（ただし表にその系統のプロファイル自体が無いときは、Create と
+   * 右クリックの事前入力はマーカーを出さない——`comfortTable.comfortProfileMissing`）。
+   * とくに LTX 2.3 の 4bit と Q6_K の既定構成は**意図的に**行を持たない
    * （8bit 行は条件が種別だけなので、8bit なら既定構成でも一致する）：素の VAE
    * デコーダのせいで快適境界がトークン数に対して単調でなく（境界がデコードの
    * チャンク数増分 7→8／4→5／2→3 と一致する）、1本のトークン線では表せない
@@ -1101,9 +1119,9 @@ export interface BaseModelBlock {
    * a hard-coded literal — adding a base model is a server-side descriptor
    * change only. */
   display_name: string;
-  /** Inference-engine lineage (`"ltx"`, …). The server picks the engine from
-   * the weight file's own GGUF metadata, never from anything the WebUI sends
-   * (`Docs/MULTI_ENGINE_DESIGN.md` §2.1).
+  /** Inference-engine lineage (`"ltx"`, …). The server takes it from the base
+   * model's descriptor (`scripts/manifests/<base>.json`), never from anything
+   * the WebUI sends (`Docs/MULTI_ENGINE_DESIGN.md` §2.1).
    *
    * Since 2026-08-31 this is no longer purely diagnostic: it is the key into
    * {@link AppLimits.comfort_budgets}. NON-optional on the wire — a reader
@@ -1146,10 +1164,9 @@ export interface BaseModelBlock {
    * Optional purely defensively: a backend older than this fix omits it, and
    * `resolveCategoryOrder` falls back rather than assuming presence. */
   category_order?: string[];
-  /** Feature names this base model's ENGINE cannot run (§3-98 Phase 5,
-   * `services/engines/ltx25/adapter.py`'s `UNSUPPORTED_FEATURES`). `[]` for a
-   * base model with no restrictions — LTX 2.3 sends exactly that, which is why
-   * nothing about the 2.3 response changed when this key was added.
+  /** Feature names this base model's ENGINE cannot run (§3-98 Phase 5; each
+   * engine adapter's `UNSUPPORTED_FEATURES`, `services/engines/<family>/adapter.py`).
+   * `[]` for a base model with no restrictions.
    *
    * The WebUI greys out the tabs and panels it RECOGNISES here and ignores the
    * rest; a name it has never heard of is not an error, just a feature this
@@ -1160,20 +1177,62 @@ export interface BaseModelBlock {
    * Optional purely defensively: a backend older than §3-98 P5 omits it, and
    * "omitted" must read as "no restrictions", never as "everything is off".
    *
-   * Known names at the time of writing: `chain`, `retake`, `end_source`,
-   * `v2v`, `a2v`, `two_stage_hq`, `outpaint`, `inpaint`, `loras`,
-   * `reference_video`, `nag`, `prune_vaed`, `sage_attention`,
-   * `keep_resident`, `keep_resident_embeddings`. That list is a history, not a
-   * contract: a name leaves it as soon as an engine gains the feature
-   * (`chain`/`v2v`/`a2v` on 2026-08-23, `loras`/`reference_video` on
-   * 2026-08-24, `keep_resident` on 2026-08-25 -- LTX 2.5 opened the
-   * text-encoder form of it -- `sage_attention` on 2026-08-25 as well, once
-   * LTX 2.5 started running LTX 2.3's sage attention kernels, and `inpaint` on
-   * 2026-09-15, the only name ever to arrive (2026-09-14, LTX 2.3-only) and
-   * then leave). Read the live array, never this comment; the canonical list is
-   * the backend spec's 6.10(b). */
+   * Read the live array, never a list in a comment: which names an engine
+   * publishes is the server's fact, and the names this WebUI acts on are
+   * `shell/featureScope.ts`'s `FEATURE_UI`. */
   unsupported_features?: string[];
+  /** The numeric rules this base model's engine checks a `POST /generate`
+   * against — the backend builds it from the engine adapter's own rule table,
+   * the one place those rules live. The WebUI reads it for Create's frame
+   * grid, size multiple, fps range and the sampling sliders; see
+   * `shell/generationConstraints.ts`, which also holds the LTX values used
+   * while it is absent.
+   *
+   * Optional purely defensively: a backend that predates the key omits it,
+   * and "omitted" must read as "the LTX rules". */
+  constraints?: BaseModelConstraints | null;
   categories: Record<string, ModelCategoryBlock>;
+}
+
+/** `BaseModelBlock.constraints.num_frames`: valid values are
+ * `step * n + offset` within `[min, max]`. */
+export interface NumFramesConstraint {
+  step: number;
+  offset: number;
+  min: number;
+  max: number;
+}
+
+/** An inclusive `[min, max]` range. `min === max` means "fixed at this value"
+ * — the WebUI then disables the field and sends that value. */
+export interface RangeConstraint {
+  min: number;
+  max: number;
+}
+
+/** One sampling slider's range, slider step and server default. */
+export interface SamplingParamConstraint {
+  min: number;
+  max: number;
+  step: number;
+  default: number;
+}
+
+/** The three sampling sliders a non-distilled engine exposes. */
+export interface SamplingConstraints {
+  num_inference_steps: SamplingParamConstraint;
+  shift_video: SamplingParamConstraint;
+  shift_audio: SamplingParamConstraint;
+}
+
+/** `BaseModelBlock.constraints`. `sampling: null` means "this engine has no
+ * user-facing sampling knobs" (LTX: distilled), and Create keeps the reserved
+ * CFG row (`ReservedFields`) in place of the sliders. */
+export interface BaseModelConstraints {
+  num_frames: NumFramesConstraint;
+  dimension_multiple: number;
+  frame_rate: RangeConstraint;
+  sampling: SamplingConstraints | null;
 }
 
 /** `GET /models`'s response (Docs/API_REFERENCE.md §3.5,

@@ -3,7 +3,7 @@
 Keeps only N transformer blocks resident on GPU at any time, swapping
 the rest to CPU RAM during the forward pass. Works with the LTX-2
 dual-stream DiT (48 blocks: video + audio streams share the same
-transformer block list).
+transformer block list) and MiniMax H3's DiT (50 ``blocks``, engine_h3/pipeline_h3.py).
 
 Usage:
     service = BlockSwapService(blocks_on_gpu=20, device=torch.device("cuda:0"))
@@ -159,7 +159,8 @@ class BlockSwapService:
         # release_installed() (LTXFastVideoPipeline's finally) — this clear() is
         # then just its safety net for a job that never reached that finally.
         # engine25 never calls release_installed(), so for it this clear()
-        # remains the ONLY mechanism.
+        # remains the ONLY mechanism. engine_h3 calls it from its denoise
+        # stage's finally (pipeline_h3.H3Pipeline._denoise), like LTX 2.3.
         self._installed_transformers.clear()
         self._installed_transformers.append(transformer)
 
@@ -176,7 +177,8 @@ class BlockSwapService:
         """Drop this job's prefetch state. Idempotent, and never raises.
 
         Called from the job's ``finally`` (on LTX 2.3 the pipeline's own, on
-        LTX 2.5 the worker's via ``Ltx25Pipeline.reset_acceleration_job``) —
+        LTX 2.5 the worker's via ``Ltx25Pipeline.reset_acceleration_job``, on
+        MiniMax H3 ``H3Pipeline._denoise``'s) —
         NOT deferred to the next install(), which would keep the finished
         transformer's 48 CPU masters and its GPU arenas (one at the end of a
         pass, the whole ring with ``hold_arenas``) alive across the gap between
@@ -334,15 +336,16 @@ class BlockSwapService:
         forward would silently run on CPU.
         """
         # Prefer the stashed original over the current forward: in production
-        # they are the same thing (LTX 2.3 rebuilds the transformer every job,
-        # and engine25 strips the previous build's wrappers before installing),
-        # but a second install() on the SAME block (selfcheck, or a future
-        # caller) would otherwise wrap the previous wrapper and drive two
-        # engines.
+        # they are the same thing (LTX 2.3 rebuilds the transformer every job;
+        # engine25 strips the previous build's wrappers before installing, and
+        # engine_h3 strips them from a kept DiT before installing again), but a
+        # second install() on the SAME block (selfcheck, or a future caller)
+        # would otherwise wrap the previous wrapper and drive two engines.
         original_forward = getattr(block, _BLOCK_SWAP_ATTR, None) or block.forward
-        # Same attribute the synchronous path sets — the line above and
-        # engine25's marker checks (``ensure_block_swap_installed`` /
-        # ``_unpatch_block_swap``) rely on it being there regardless of mode.
+        # Same attribute the synchronous path sets — the line above and the
+        # marker checks of engine25 (``ensure_block_swap_installed`` /
+        # ``_unpatch_block_swap``) and engine_h3 (``H3Pipeline._unpatch_block_swap``)
+        # rely on it being there regardless of mode.
         setattr(block, _BLOCK_SWAP_ATTR, original_forward)
 
         device = self.device

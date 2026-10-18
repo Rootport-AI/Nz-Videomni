@@ -1,7 +1,8 @@
 """Persistent MiniMax H3 generation worker.
 
 Runs inside ``.venv-engine-h3`` -- the environment with torch cu130,
-comfy-kitchen (the int8 kernels), transformers 5.14.1 (Qwen3-VL) and PyAV. It
+comfy-kitchen (the int8 kernels), transformers 5 (Qwen3-VL) and PyAV (the exact
+versions are engine_h3/venv-engine-h3.freeze.txt). It
 is a SIBLING of ``engine/worker.py`` (LTX 2.3) and ``engine25/worker.py``
 (LTX 2.5), never a replacement: each engine keeps its own venv and none of the
 three processes can import another's stack.
@@ -10,7 +11,8 @@ The protocol is the one the LTX workers speak, so the app-side plumbing
 (``@@LTX@@`` line reader, progress fractions, the error path) is shared. Only
 small control JSON crosses the pipe; the mp4 is written by this process to
 ``output_path``. Nothing LTX-specific is carried over: no IC-LoRA / reference
-video / chain / NAG / VSF / keep-resident branches.
+video / chain / NAG / VSF branches. ``keep_resident`` follows the LTX contract
+(kept while the key is true, released by a job without it).
 
 Bootstrap (mirrors engine25/worker.py):
   * TORCH_COMPILE_DISABLE=1 set before anything can import torch.
@@ -23,21 +25,30 @@ Bootstrap (mirrors engine25/worker.py):
 
 Protocol (one JSON object per line; parent -> worker):
   {"op": "load", transformer_path, text_encoder_path, video_vae_path,
-   audio_vae_path, tokenizer_dir, [blocks_on_gpu], [te_layers_on_gpu],
+   audio_vae_path, tokenizer_dir, [blocks_on_gpu],
    [attention_backend], [block_swap_prefetch], [deterministic]}
       Paths are existence-checked first, then the headers are inspected
       (``h3_format``) and comfy-kitchen's CUDA int8 path is pinned. No weight is
       read at load: every job builds each stage from the files and frees it
-      (encode -> denoise -> decode). A failure is fatal: ``error`` + exit 1.
+      (encode -> denoise -> decode), except what a ``keep_resident`` job kept
+      (see ``generate``). A failure is fatal: ``error`` + exit 1.
       An optional key that is absent or null takes its default.
-      ``blocks_on_gpu`` <= 0 (or >= 50) = the whole DiT on the GPU, no swap;
-      ``te_layers_on_gpu`` 0 = the text encoder streamed ONE layer at a time
-      (see ``engine_h3.pipeline_h3.H3LoadOptions``).
+      ``blocks_on_gpu`` <= 0 (or >= 50) = the whole DiT on the GPU, no swap
+      (see ``engine_h3.pipeline_h3.H3LoadOptions``). The text encoder has no
+      knob: it is read layer by layer from the file onto the GPU.
+      ``attention_backend`` / ``block_swap_prefetch`` here are the defaults of
+      the jobs that do not send their own.
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
-   [num_inference_steps], [shift_video], [shift_audio], output_path}
-      One T2V job. Omitted steps / shifts take the engine defaults (20 / 12 / 3).
-      Keys this engine does not read are logged once per job and ignored. A
-      failure is reported with ``error`` and the process stays alive.
+   [num_inference_steps], [shift_video], [shift_audio], output_path,
+   [images], [keep_resident], [attention_backend], [block_swap_prefetch]}
+      One T2V or I2V job. Omitted steps / shifts take the engine defaults
+      (``engine_h3.constants``). ``images``: [] (T2V) or ONE ``{"path", "frame_idx": 0}``
+      (the first frame); anything else is refused with a reason. Keys this
+      engine does not read (top level, or inside an image entry) are logged
+      once per job and ignored. ``keep_resident`` true keeps the DiT, the video
+      decoder and the audio VAE on the CPU for the next job; a job without it
+      releases them. A failure is reported with ``error`` and the process
+      stays alive.
   {"op": "shutdown"}
   Before load an unknown op is only logged (an ``error`` there would be read
   as the reply to the next ``load``); after load it is answered with ``error``.
@@ -45,13 +56,15 @@ Protocol (one JSON object per line; parent -> worker):
 Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
   ready     {sampler, sage_available}
   progress  {stage, index, total}   stage: encode / stage1_denoise / decode
-            (there is no stage2: the second-stage app adapter must read these
-            with ``_read_worker_events(one_stage=True)``, as Alpha Gen does)
+            (there is no stage2: the app adapter, services/engines/h3/adapter.py,
+            reads these with ``_read_worker_events(one_stage=True)``, as Alpha
+            Gen does; ``encode`` counts 3 steps for T2V, 4 for I2V)
   done      {seed_used, sampler, num_inference_steps, shift_video, shift_audio,
              peak_vram_mb, peak_vram_reserved_mb, rss_peak_gib, commit_gib,
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
-             block_swap_prefetch_used, h3: {phases, quant_backends}}
+             block_swap_prefetch_used, keep_resident_used, images_used,
+             h3: {phases, quant_backends}}
   error     {detail}
 STDERR carries the human log, prefixed ``[h3_worker]``.
 
@@ -61,7 +74,7 @@ Selftest:
       [--prompt S --width 640 --height 384 --num-frames 124 --seed 42 --steps 20
        --shift-video 12 --shift-audio 3 --rounds 1 --report r.json
        --attention-backend sdpa|sage --blocks-on-gpu 8 --prefetch|--no-prefetch
-       --te-layers-on-gpu 0 --deterministic]
+       --deterministic --image P --keep-resident]
 """
 
 import os
@@ -143,12 +156,15 @@ _LOAD_DIR_FIELDS = ("tokenizer_dir",)
 _GENERATE_FIELDS = frozenset({
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
+    "images", "keep_resident", "attention_backend", "block_swap_prefetch",
 })
+#: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
+_IMAGE_FIELDS = frozenset({"path", "frame_idx"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
-#: (effective backend, degraded) resolved at load; the attention backend is a
-#: load option for this engine, not a per-job one.
+#: (effective backend, degraded) resolved at load: the default of the jobs that
+#: do not send their own ``attention_backend``.
 _ATTENTION: tuple[str, bool] = ("sdpa", False)
 
 
@@ -217,7 +233,6 @@ def _do_load(msg: dict) -> None:
     defaults = H3LoadOptions()
     options = H3LoadOptions(
         blocks_on_gpu=_value_or(msg, "blocks_on_gpu", defaults.blocks_on_gpu, int),
-        te_layers_on_gpu=_value_or(msg, "te_layers_on_gpu", defaults.te_layers_on_gpu, int),
         attention_backend=attention[0],
         block_swap_prefetch=_value_or(msg, "block_swap_prefetch", defaults.block_swap_prefetch, bool),
         deterministic=_value_or(msg, "deterministic", defaults.deterministic, bool),
@@ -241,13 +256,43 @@ def _do_load(msg: dict) -> None:
     _emit("ready", sampler=pipeline.sampler, sage_available=sage_available)
 
 
-def _generate_request(msg: dict):
-    """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent)."""
+def _images(msg: dict) -> tuple[tuple, list[str]]:
+    """``images`` -> ``(H3ImageInput, ...)`` and the ignored inner keys.
+
+    The shape is checked here (a list of objects with a ``path``); how many and
+    which frame are the pipeline's ``validate_request`` (one place for the rule).
+    """
+    from engine_h3.pipeline_h3 import H3ImageInput  # noqa: PLC0415
+
+    raw = msg.get("images")
+    if raw is None:
+        return (), []
+    if not isinstance(raw, list):
+        raise ValueError(f"images はリストで渡してください（{type(raw).__name__}）")
+    out, ignored = [], set()
+    for entry in raw:
+        if not isinstance(entry, dict) or "path" not in entry:
+            raise ValueError(f"images の各要素は path を持つオブジェクトです（{entry!r}）")
+        ignored |= {k for k in entry if k not in _IMAGE_FIELDS}
+        out.append(H3ImageInput(path=str(entry["path"]), frame_idx=_value_or(entry, "frame_idx", 0, int)))
+    return tuple(out), sorted(ignored)
+
+
+def _generate_request(msg: dict, images: tuple | None = None):
+    """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent).
+
+    ``attention_backend`` is left as sent (``None`` = the load value); the
+    worker resolves it per job before the pipeline runs. ``images``: the
+    already parsed ``images`` (``_do_generate`` parses them once, for the
+    ignored-keys log too); parsed here when not given.
+    """
     from engine_h3.pipeline_h3 import H3GenerateRequest  # noqa: PLC0415
 
     def _or(key, default, cast):
         return _value_or(msg, key, default, cast)
 
+    if images is None:
+        images, _ignored = _images(msg)
     return H3GenerateRequest(
         prompt=str(msg["prompt"]),
         seed=int(msg["seed"]),
@@ -259,25 +304,49 @@ def _generate_request(msg: dict):
         num_inference_steps=_or("num_inference_steps", DEFAULT_STEPS, int),
         shift_video=_or("shift_video", DEFAULT_SHIFT_VIDEO, float),
         shift_audio=_or("shift_audio", DEFAULT_SHIFT_AUDIO, float),
+        images=images,
+        keep_resident=_or("keep_resident", False, bool),
+        attention_backend=_or("attention_backend", None, str),
+        block_swap_prefetch=_or("block_swap_prefetch", None, bool),
     )
 
 
 def _do_generate(msg: dict) -> None:
-    """Run one T2V job; the mp4 is written by this process to ``msg['output_path']``."""
+    """Run one T2V / I2V job; the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
         raise RuntimeError("generate before load")
+    images, inner_ignored = _images(msg)
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
-    req = _generate_request(msg)
+    ignored += [f"images[].{k}" for k in inner_ignored]
+    req = _generate_request(msg, images=images)
+    # Per job: the job's own backend when it sends one, else the load value.
+    effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
+    req.attention_backend = effective
     _log(
         f"generate: seed={req.seed} {req.width}x{req.height} frames={req.num_frames} "
         f"steps={req.num_inference_steps} shift={req.shift_video}/{req.shift_audio} "
-        f"attention={_ATTENTION[0]} -> {req.output_path}"
+        f"attention={effective} images={len(req.images)} keep_resident={req.keep_resident} "
+        f"prefetch={req.block_swap_prefetch} -> {req.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
     )
     result = _PIPE.generate(req)
-    effective, degraded = _ATTENTION
     result["attention_used"] = "sage->sdpa" if degraded else effective
     _emit("done", **result)
+
+
+def _release_after_failed_job() -> None:
+    """Every failed job releases what ``keep_resident`` kept.
+
+    The pipeline already does so for a failure inside ``generate``; this also
+    covers a job refused before ``generate`` is reached (a malformed
+    ``images``, an unknown ``attention_backend``, a missing key). Never raises.
+    """
+    if _PIPE is None:
+        return
+    try:
+        _PIPE.release_resident()
+    except Exception as exc:  # noqa: BLE001 -- the job's own error is what gets reported
+        _log(f"releasing the kept models after a failed job failed (ignored): {exc!r}")
 
 
 def _shutdown() -> None:
@@ -340,6 +409,7 @@ def main() -> None:
             except BaseException as exc:  # noqa: BLE001
                 # A failed job is reported and the process stays alive.
                 _log("GENERATE_FAILED")
+                _release_after_failed_job()
                 _emit("error", detail=_detail(exc))
             continue
         _log(f"unknown op={op!r} -- answered with an error event")
@@ -384,8 +454,9 @@ def _selftest_parser():
     parser.add_argument("--attention-backend", choices=("sdpa", "sage"), default="sdpa")
     parser.add_argument("--blocks-on-gpu", type=int, default=8)
     parser.add_argument("--prefetch", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--te-layers-on-gpu", type=int, default=0)
     parser.add_argument("--deterministic", action="store_true")
+    parser.add_argument("--image", default=None, help="I2V: the first frame (frame_idx 0)")
+    parser.add_argument("--keep-resident", action="store_true")
     return parser
 
 
@@ -399,7 +470,6 @@ def _selftest_load_message(args) -> dict:
         "audio_vae_path": args.audio_vae,
         "tokenizer_dir": args.tokenizer_dir,
         "blocks_on_gpu": args.blocks_on_gpu,
-        "te_layers_on_gpu": args.te_layers_on_gpu,
         "attention_backend": args.attention_backend,
         "block_swap_prefetch": bool(args.prefetch),
         "deterministic": bool(args.deterministic),
@@ -407,7 +477,7 @@ def _selftest_load_message(args) -> dict:
 
 
 def _selftest_generate_message(args, out: str) -> dict:
-    """The ``generate`` message the selftest sends (steps / shifts always present)."""
+    """The ``generate`` message the selftest sends (every key the app will send)."""
     return {
         "op": "generate",
         "prompt": args.prompt,
@@ -420,6 +490,10 @@ def _selftest_generate_message(args, out: str) -> dict:
         "shift_video": args.shift_video,
         "shift_audio": args.shift_audio,
         "output_path": out,
+        "images": [{"path": args.image, "frame_idx": 0}] if args.image else [],
+        "keep_resident": bool(args.keep_resident),
+        "attention_backend": args.attention_backend,
+        "block_swap_prefetch": bool(args.prefetch),
     }
 
 

@@ -88,6 +88,14 @@ from .presets import (
     slot_step_state,
 )
 from .styles import CUSTOM_CSS
+from .constraints import (
+    active_scope,
+    comfort_table_missing,
+    default_scope,
+    field_labels,
+    scope_constraints,
+    single_scope_updates,
+)
 from .comfort import (
     STAGE2_WINDOW_DEFAULT,
     build_stage2_window_choices,
@@ -98,9 +106,48 @@ from .comfort import (
 )
 
 
-def build_spill_rows(config: dict | None) -> list[list]:
+#: Client-side re-application of the HTML ``min`` attribute (the browser's
+#: arrow-key step-snap base) of the Generate tab's width / height / frames
+#: Numbers after the loaded base model's constraints changed. ``min`` is not a
+#: server-side prop on purpose (see the width Number's note in build_ui), so it
+#: is read back from what the label already shows: the multiple in the
+#: width / height label, ``step`` + ``offset`` (the first grid value) from the
+#: ``<step>n+<offset>`` in the frames label. Labels and grid come from one
+#: place (gradio_ui/constraints.field_labels), so they cannot disagree.
+_GEN_MIN_FROM_LABELS_JS = r"""() => {
+    const labelOf = (id) => {
+        const el = document.getElementById(id);
+        const span = el && el.querySelector('[data-testid="block-info"]');
+        return span ? span.textContent || '' : '';
+    };
+    const setMin = (id, v) => {
+        const el = document.getElementById(id);
+        const inp = el && el.querySelector('input');
+        if (inp && Number.isFinite(v)) inp.setAttribute('min', String(v));
+    };
+    try {
+        ['gen_width', 'gen_height'].forEach((id) => {
+            const m = labelOf(id).match(/(\d+)/);
+            if (m) setMin(id, parseInt(m[1], 10));
+        });
+        const g = labelOf('gen_num_frames').match(/(\d+)n\+(\d+)/);
+        if (g) setMin('gen_num_frames', parseInt(g[1], 10) + parseInt(g[2], 10));
+    } catch (e) { /* cosmetic only: the precheck and the server still guard */ }
+}"""
+
+
+def build_spill_rows(config: dict | None,
+                     engine_family: str | None = None) -> list[list]:
     """Rows for the Settings spill-free table: [resolution, max comfortable
-    frames] built from /config limits.spill_free_frames."""
+    frames] built from /config limits.spill_free_frames.
+
+    ``spill_free_frames`` is LTX's table, so it is empty when the loaded engine
+    family (``engine_family``, from GET /models) has no
+    ``limits.comfort_budgets`` table -- the same judgment as the Generate
+    tab's spill warning (:func:`gradio_ui.constraints.comfort_table_missing`).
+    An unknown family (``None`` / ``""``) keeps the LTX rows."""
+    if comfort_table_missing(config, engine_family):
+        return []
     spill = ((config or {}).get("limits") or {}).get("spill_free_frames") or {}
     return [[res, frames] for res, frames in spill.items()]
 
@@ -283,7 +330,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             return L("status_error").format(err=exc)
         return refresh_status()
 
-    def on_page_load(current_cfg, lang):
+    def _family(scope) -> str | None:
+        """The loaded engine family held in a gen_scope_state value."""
+        return (scope or {}).get("engine_family") if isinstance(scope, dict) else None
+
+    # ``scope`` (gen_scope_state, the LAST input of each config wiring) lets the
+    # Settings spill-free table -- LTX's -- come out empty for a loaded family
+    # without a comfort table (build_spill_rows). Optional, so a call without
+    # it keeps the LTX rows.
+    def on_page_load(current_cfg, lang, scope=None):
         status = refresh_status()
         cfg, err = fetch_config_safe(api, lang)
         if err is not None:
@@ -304,10 +359,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # by a dedicated config_state.change listener (see events) so this
         # closure keeps its exact return arity (frozen by test_gradio_handlers).
         return (status, cfg, preset_update, adapter_update,
-                gr.update(value=cfg), gr.update(value=build_spill_rows(cfg)),
+                gr.update(value=cfg),
+                gr.update(value=build_spill_rows(cfg, _family(scope))),
                 gr.update(active=False))
 
-    def on_config_retry(current_cfg, attempt, lang):
+    def on_config_retry(current_cfg, attempt, lang, scope=None):
         # One tick of the Settings-tab auto-retry gr.Timer, armed by
         # on_page_load (or a previous tick) after a failed /config fetch.
         # Keeps retrying until success or CONFIG_RETRY_MAX_ATTEMPTS, then
@@ -323,10 +379,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 gr.update(choices=build_preset_choices(cfg), value=pick_default_preset(cfg)),
                 gr.update(choices=build_adapter_choices(cfg)),
                 gr.update(value=cfg),
-                gr.update(value=build_spill_rows(cfg)),
+                gr.update(value=build_spill_rows(cfg, _family(scope))),
                 next_attempt, gr.update(active=False))
 
-    def on_refresh_config(current_cfg, lang):
+    def on_refresh_config(current_cfg, lang, scope=None):
         # Top-bar Refresh also refreshes the Settings config viewer + spill table
         # and rebuilds preset/adapter choices. On fetch failure everything is
         # left as-is (only the status line, refreshed separately, changes) and
@@ -337,7 +393,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             return current_cfg, gr.update(), gr.update(), gr.update(), gr.update()
         return (cfg,
                 gr.update(value=cfg),
-                gr.update(value=build_spill_rows(cfg)),
+                gr.update(value=build_spill_rows(cfg, _family(scope))),
                 gr.update(choices=build_preset_choices(cfg)),
                 gr.update(choices=build_adapter_choices(cfg)))
 
@@ -384,6 +440,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # /config is fetched on page load and stashed here for the handlers
         # that read it (presets, limits, ic_loras, etc.).
         config_state = gr.State({})
+        # {"engine_family", "constraints"} of the LOADED base model, from
+        # GET /models (gradio_ui/constraints.py). Refilled by every
+        # refresh_model_dropdowns run; its .change re-shapes the Generate
+        # tab (sampling sliders, labels, spill warning). Starts as the LTX
+        # rules, so the tab shows the LTX look until GET /models says
+        # otherwise.
+        gen_scope_state = gr.State(default_scope())
         # Current UI language. Fed as a runtime input to the generate/chain
         # handlers so flow messages localize, and updated by the Language switch.
         lang_state = gr.State("en")
@@ -543,11 +606,24 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         spill_warning = gr.Markdown("", visible=False,
                                                     elem_classes=["spill-warning"])
 
+                        # Steps / CFG are decorative (fixed at 8 / 1.0) on a
+                        # base model without sampling sliders (LTX distilled).
+                        # On one whose GET /models constraints carry
+                        # ``sampling`` (MiniMax H3), gen_scope_state.change
+                        # turns Steps live, hides CFG + the "fixed" caption
+                        # and shows the two Shift sliders; their values then
+                        # ride on the request (dispatch -> generate).
                         with gr.Row():
                             steps = reg(gr.Slider(1, 50, value=8, step=1, label=L("lbl_steps"),
                                                   interactive=False), "lbl_steps")
                             cfg = reg(gr.Slider(1.0, 12.0, value=1.0, step=0.1, label=L("lbl_cfg"),
                                                 interactive=False), "lbl_cfg")
+                            shift_video = reg(gr.Slider(1.0, 20.0, value=12.0, step=0.1,
+                                                        label=L("lbl_shift_video"),
+                                                        visible=False), "lbl_shift_video")
+                            shift_audio = reg(gr.Slider(1.0, 20.0, value=3.0, step=0.1,
+                                                        label=L("lbl_shift_audio"),
+                                                        visible=False), "lbl_shift_audio")
                         cap_lock = reg(gr.Markdown(L("cap_lock")), "cap_lock", "value")
 
                         seed = reg(gr.Number(value=-1, label=L("lbl_seed"), precision=0), "lbl_seed")
@@ -1300,8 +1376,15 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # ---- events ----
         refresh_btn.click(refresh_status, outputs=status_box)
         # Top-bar Refresh also refreshes the Settings config viewer + spill table.
+        # The Settings spill-free table is LTX's: the three /config wirings
+        # take gen_scope_state as their last input and build it for the loaded
+        # family (empty without a comfort_budgets table); a change of the
+        # loaded base model rebuilds it from the held config (below).
+        def _spill_table_for_scope(cfg_v, scope_v):
+            return gr.update(value=build_spill_rows(cfg_v, _family(scope_v)))
+
         refresh_btn.click(
-            on_refresh_config, inputs=[config_state, lang_state],
+            on_refresh_config, inputs=[config_state, lang_state, gen_scope_state],
             outputs=[config_state, server_config_json, spill_table, preset, adapter],
         )
 
@@ -1309,7 +1392,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # while active, calling on_config_retry, which disables the timer on
         # success (or once CONFIG_RETRY_MAX_ATTEMPTS is exhausted).
         config_retry_timer.tick(
-            on_config_retry, inputs=[config_state, config_retry_state, lang_state],
+            on_config_retry, inputs=[config_state, config_retry_state, lang_state,
+                                     gen_scope_state],
             outputs=[config_state, preset, adapter, server_config_json, spill_table,
                      config_retry_state, config_retry_timer],
         )
@@ -1327,8 +1411,20 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             inputs=config_state, outputs=chain_preset,
         )
 
+        # The spill-free warning also needs the loaded engine family (from
+        # gen_scope_state): spill_free_frames is LTX's table. lang_state stays
+        # the LAST input of these wirings (§1-66).
+        def _apply_preset_for_scope(name, cfg_v, scope_v, lang_v):
+            return apply_preset(name, cfg_v, lang_v,
+                                (scope_v or {}).get("engine_family"))
+
+        def _spill_warning_for_scope(w, h, nf, cfg_v, scope_v, lang_v):
+            return compute_spill_warning(w, h, nf, cfg_v, lang_v,
+                                         (scope_v or {}).get("engine_family"))
+
         preset.change(
-            apply_preset, inputs=[preset, config_state, lang_state],
+            _apply_preset_for_scope,
+            inputs=[preset, config_state, gen_scope_state, lang_state],
             outputs=[width, height, num_frames, crop_enabled, crop_w, crop_h,
                      crop_row, spill_warning],
         ).then(
@@ -1345,12 +1441,37 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         # Spill-free warning: recompute on any manual width/height/num_frames
         # edit (preset application already includes it in its own outputs above).
+        _spill_inputs = [width, height, num_frames, config_state,
+                         gen_scope_state, lang_state]
         for _ctrl in (width, height, num_frames):
             _ctrl.change(
-                compute_spill_warning,
-                inputs=[width, height, num_frames, config_state, lang_state],
+                _spill_warning_for_scope,
+                inputs=_spill_inputs,
                 outputs=spill_warning,
             )
+
+        # The loaded base model's constraints changed (a refresh / Load picked
+        # up another base model): re-shape the sampling sliders and the
+        # width / height / frames labels, re-evaluate the spill warning (LTX's
+        # table; hidden for a family without a comfort table), then re-apply
+        # the HTML ``min`` step-snap base of the three Numbers client-side
+        # from their new labels (see _min_attr_js below for why ``min`` is
+        # not a server-side prop).
+        def on_gen_scope_change(scope_v, w, h, nf, cfg_v, lang_v):
+            return single_scope_updates(scope_constraints(scope_v), lang_v) + (
+                _spill_warning_for_scope(w, h, nf, cfg_v, scope_v, lang_v),)
+
+        gen_scope_state.change(
+            on_gen_scope_change,
+            inputs=[gen_scope_state, width, height, num_frames, config_state,
+                    lang_state],
+            outputs=[steps, cfg, shift_video, shift_audio, cap_lock,
+                     width, height, num_frames, spill_warning],
+            show_progress="hidden",
+        ).then(None, js=_GEN_MIN_FROM_LABELS_JS)
+        gen_scope_state.change(_spill_table_for_scope,
+                               inputs=[config_state, gen_scope_state],
+                               outputs=spill_table, show_progress="hidden")
 
         # Theme: pure-frontend toggle (no backend round-trip). Matches the mount
         # site's dark-default js.
@@ -1410,6 +1531,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_enable_v, batch_rows_v, batch_wav_dir_v,
                      batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
                      batch_img_dir_v, batch_chunked_upsample_v,
+                     gen_scope_v, steps_v, shift_video_v, shift_audio_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
                      accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v,
@@ -1442,7 +1564,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     vae_mode=accel_vae_v,
                     keep_resident_embeddings=bool(
                         accel_keep_resident_embeddings_v),
-                    embed_mp4_metadata=bool(output_embed_mp4_metadata_v))
+                    embed_mp4_metadata=bool(output_embed_mp4_metadata_v),
+                    constraints=scope_constraints(gen_scope_v),
+                    num_inference_steps=steps_v, shift_video=shift_video_v,
+                    shift_audio=shift_audio_v)
                 return
 
             rows = batch_rows_v or []
@@ -1608,6 +1733,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     batch_enable, batch_rows_state, batch_wav_dir,
                     batch_out_mode, batch_out_dir, batch_add_replace,
                     batch_img_dir, batch_chunked_upsample,
+                    # The loaded base model's constraints + the sampling
+                    # sliders (read only when the constraints carry
+                    # ``sampling``). Placed before the NAG block so the
+                    # trailing order shared with the Chain flow is unchanged.
+                    gen_scope_state, steps, shift_video, shift_audio,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
@@ -2259,9 +2389,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # Two components carry language-dependent Dataframe HEADERS (jobs / spill)
         # and are not label-registered, so they are appended as explicit extras.
         lang_switch_extras = [jobs_table, spill_table]
+        # The Generate tab's Numbers whose label follows gen_scope_state.
+        _scope_labelled = {id(width): "width", id(height): "height",
+                           id(num_frames): "frames"}
         lang_switch_outputs = [c for c, _k, _a in registry] + lang_switch_extras
 
-        def switch_language(lang, config):
+        def switch_language(lang, config, scope=None):
             qmode_choices = [(L("qmode_fast", lang), "distilled"),
                              (L("qmode_hq", lang), "two_stage_hq")]
             theme_choices = [(L("opt_dark", lang), "dark"),
@@ -2292,13 +2425,18 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     kwargs["choices"] = batch_out_choices
                 elif component is nag_method:
                     kwargs["choices"] = nag_method_choices
+                elif id(component) in _scope_labelled and attr == "label":
+                    # Width / height / frames labels carry the loaded base
+                    # model's grid (LTX: the static lbl_* strings).
+                    kwargs[attr] = field_labels(scope_constraints(scope),
+                                                lang)[_scope_labelled[id(component)]]
                 updates.append(gr.update(**kwargs))
             updates.append(gr.update(headers=jobs_table_headers(lang)))
             updates.append(gr.update(headers=[L("col_res", lang), L("col_maxframes", lang)]))
             return updates
 
         lang_dd.change(
-            switch_language, inputs=[lang_dd, config_state],
+            switch_language, inputs=[lang_dd, config_state, gen_scope_state],
             outputs=lang_switch_outputs,
         ).then(
             # Re-apply the batch overrides AFTER switch_language resets the
@@ -2320,7 +2458,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # demo.load events, Gradio 6.19's client can leave a tracker pending
         # forever, and its pointer-events:auto overlay steals clicks from
         # components in collapsed accordions / inactive tabs.
-        demo.load(on_page_load, inputs=[config_state, lang_state],
+        demo.load(on_page_load, inputs=[config_state, lang_state, gen_scope_state],
                   outputs=[status_box, config_state, preset, adapter,
                            server_config_json, spill_table, config_retry_timer],
                   show_progress="hidden")
@@ -2379,9 +2517,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         }
         # chain_engine_state sits between the category dropdowns and
         # the gated controls, so the gated updates stay the TAIL.
+        # gen_scope_state (the loaded base model's constraints for the
+        # Generate tab) follows it, likewise ahead of the gated tail.
         model_refresh_outputs = [
             *model_all_dds,
             chain_engine_state,
+            gen_scope_state,
             *(_gated_components[control] for control in GATED_CONTROLS),
         ]
 
@@ -2436,7 +2577,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 gr.update(choices=build_model_choices(models_json, cat, lang),
                           value=model_active_value(models_json, cat))
                 for cat in MODEL_CATEGORIES
-            ) + (_chain_engine_state(models_json),) + tuple(
+            ) + (_chain_engine_state(models_json),
+                 active_scope(models_json)) + tuple(
                 gr.update(visible=False, value=RESET_VALUES[control])
                 if control in hidden else gr.update(visible=True)
                 for control in GATED_CONTROLS
@@ -2605,6 +2747,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
     demo.api = api  # type: ignore[attr-defined]
     demo.on_page_load = on_page_load  # type: ignore[attr-defined]
     demo.on_config_retry = on_config_retry  # type: ignore[attr-defined]
+    demo.on_refresh_config = on_refresh_config  # type: ignore[attr-defined]
     # Style LoRA closures: let a test drive the gallery load / reload /
     # select paths against a mock transport without a live server.
     demo.load_style_gallery = load_style_gallery  # type: ignore[attr-defined]

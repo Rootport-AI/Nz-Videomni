@@ -9,12 +9,9 @@ import type { NativeBridge } from "../bridge/types";
  * `disabledModesFor`) and the right-click gate that rides on it
  * (`AppShell.handleRoute`) can only be
  * exercised end to end while SOME base model in the fixture actually declares
- * enough limitations to take a whole tab down — and the fixture's LTX 2.5 keeps
- * declaring fewer of them, one increment at a time. Edit needs EVERY sub-tab's
- * feature refused before its tab greys (`retake`, `outpaint`, `inpaint` and,
- * since Alpha Gen 第 2 弾, `alpha_gen`), and LTX 2.5 refuses none of them, so
- * the tab is live and there is nothing left in the fixture world that disables
- * a mode.
+ * enough limitations to take a whole tab down. Edit needs EVERY sub-tab's
+ * feature refused before its tab greys, and which fixture base model
+ * declares what changes as the engines gain features.
  *
  * Pinning those tests to whatever LTX 2.5 happens to declare this month is what
  * made them need rewriting at every increment. This wraps the fixture instead:

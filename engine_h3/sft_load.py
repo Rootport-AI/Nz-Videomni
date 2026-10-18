@@ -124,7 +124,7 @@ def move_module_tree(root: nn.Module, device: torch.device, skip: set[int]) -> i
     The engine25 shape (``engine25/gguf_transformer.py:_move_module_tree``),
     rewritten here because that module imports ltx_core: written by hand
     rather than as ``root.to(device)`` because the point is to leave one
-    subtree (the DiT ``blocks`` / the TE decoder ``layers``) on the CPU for the
+    subtree (the DiT ``blocks``) on the CPU for the
     swap service. Parameters are rebound as fresh ``nn.Parameter``s with the
     same ``requires_grad`` (int8 ones stay ``False``); buffers go through their
     own ``.to()``. A tensor still on meta is a load bug and is refused by name.
@@ -148,3 +148,62 @@ def move_module_tree(root: nn.Module, device: torch.device, skip: set[int]) -> i
             module._buffers[name] = buf.to(device)
             moved += 1
     return moved
+
+
+def load_mapped_to(
+    module: nn.Module,
+    path: str,
+    header,
+    mapping: dict[str, str],
+    device: torch.device,
+) -> int:
+    """Read ``mapping``'s file tensors straight onto ``device`` into a meta ``module``; returns bytes.
+
+    The direct read of the text encoder: one decoder layer (or the embedding
+    table, or the I2V vision tower) at a time, file -> CPU buffer -> ``device``,
+    so the CPU never holds more than one tensor of it. ``mapping`` is file name ->
+    the module's own state-dict key (relative to ``module``). The tensors keep
+    the file's dtype (``assign=True``), exactly as :func:`load_streaming` does,
+    so a layer read this way computes bit for bit what a streamed-in layer
+    moved to the GPU computes. Every tensor of ``module`` must come from the
+    file: a key the module does not have, or a tensor left on meta, is refused.
+    """
+    state: dict[str, torch.Tensor] = {}
+    nbytes = 0
+    for key, tensor in read_tensors(path, list(mapping), header):
+        state[mapping[key]] = tensor.to(device)
+        nbytes += tensor.numel() * tensor.element_size()
+        del tensor
+    result = module.load_state_dict(state, strict=False, assign=True)
+    del state
+    if result.unexpected_keys:
+        raise RuntimeError(
+            f"sft_load: {type(module).__name__} has no place for {sorted(result.unexpected_keys)[:20]} of {path}"
+        )
+    still_meta = meta_tensor_names(module)
+    if still_meta:
+        raise RuntimeError(
+            f"sft_load: {len(still_meta)} tensor(s) of {type(module).__name__} were not read from "
+            f"{path} and are still on meta: {', '.join(still_meta[:40])}"
+        )
+    return nbytes
+
+
+def drop_to_meta(module: nn.Module) -> None:
+    """Rebind every parameter / buffer of ``module`` to an empty meta tensor of the same shape and dtype.
+
+    The other half of :func:`load_mapped_to`: the module keeps its structure
+    (and its hooks) and can be read in again, but holds no memory. Parameters
+    keep their ``requires_grad`` (int8 ones stay ``False``).
+    """
+    for sub in module.modules():
+        for name, param in list(sub._parameters.items()):
+            if param is None or param.is_meta:
+                continue
+            sub._parameters[name] = nn.Parameter(
+                torch.empty_like(param, device="meta"), requires_grad=param.requires_grad
+            )
+        for name, buf in list(sub._buffers.items()):
+            if buf is None or buf.is_meta:
+                continue
+            sub._buffers[name] = torch.empty_like(buf, device="meta")

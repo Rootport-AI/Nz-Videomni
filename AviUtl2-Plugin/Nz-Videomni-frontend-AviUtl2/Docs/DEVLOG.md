@@ -5279,3 +5279,41 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 実装済み・クローズ（バックエンド [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-236）。dev `e70a0d0`（テストの直し）。記録のコミットは監督が積みます。main への merge はオーナーの合図待ちです。
 
 > **更新（2026-10-17）**: バックエンドの記録のコミットは dev `04bf1ab`・main merge 済み（`1cfea51`）。
+
+## 141. MiniMax H3 を操作パネルで選べるようにする — 系統ごとの制約・3 本のスライダー・機能の閉じ方・快適上限マーカーの非表示（バックエンド台帳 §1-93 第 2 弾の 2c。2026-10-17）
+
+### 141.1 結論
+
+- **ヘッダーで「MiniMax H3」を選ぶと、Single（作る）タブがその系統の決まりに合わせて切り替わるようにしました。** 決まりは系統名ではなく、サーバーが `GET /models` でベースモデルごとに配る `constraints`（フレームの刻み・解像度の倍数・fps の範囲・サンプリングの 3 項目）と `unsupported_features`（機能名）から読みます。画面のどこにも系統名の分岐はありません。
+- **LTX 2.3／2.5 の画面と送る要求は変わりません。** サーバーが `constraints` を配らない古いバックエンドでも、LTX の決まり（今までの定数）で動きます。
+- 計画はバックエンドのリポジトリの [`PLAN_stage2.md`](../../../Docs/Outputs-archive/h3-stage2-reports-2026-10-17/PLAN_stage2.md) §3.5（操作パネルの節）。
+
+### 141.2 MiniMax H3 を選んだときの画面
+
+- **ステップ数・Shift（映像）・Shift（音声）の 3 本のスライダー**が、CFG の予約欄の場所に出ます（裁定 22）。1 行に項目名・スライダー・数値入力が並びます。初期値はサーバーの既定（20／12／3）で、ベースモデルを切り替えると既定に戻ります。`sampling` を配るベースモデルでは 3 項目を毎回送り、配らない LTX では送りません。
+- **尺は 17n+5（22〜481）にスナップ**し、スライダーの刻みも 17 になります。**解像度は 32 の倍数**、**fps は 24 に固定**（欄は押せず、右クリックの fps の方針より優先）。切り替えた時点で、今の値を新しい刻みに合わせ直します。
+- **快適上限マーカーは出ません。** 配信される快適上限の表にその系統の行が無いことを「線が無い」と読みます。表はあるが行が合わない LTX の場合は、今までどおり LTX の実測表に落ちます。右クリックの事前入力は、快適上限で尺を書き換えず、刻みへのスナップだけ行います。
+- **閉じるもの**（裁定 30）: Chained タブ（灰色）、参照動画（IC-LoRA）のアコーディオン（非表示。閉じている間は、LTX で選んだ参照動画と制御 LoRA を「無い」と読み、要求にも Generate の門にも使わない。選択そのものは消さない）、A2V のアコーディオン（灰色。A2V の送信は連結の要求のため `chain` で閉じる）、ネガティブプロンプト（灰色。同時に、その設定を要求に載せない）、2 枚目以降のキーフレームの追加（灰色）、キーフレームの強度（灰色）。Edit は Retake・Outpainting・Inpainting・Alpha Gen の 4 つのサブタブが全部閉じるので、Edit タブそのものが灰色になります（`retake` はバックエンドの H3 アダプタが公開します。Retake の送信は連結の要求で、H3 では拒否されるため。監督の判断 2026-10-17）。
+- Settings の「モデル骨格の常駐」の説明文に「MiniMax H3 では DiT と VAE を保持します」を足しました（数値は書かない）。先読みとの連動は変えていません。
+
+### 141.3 何を変えたか（`webui/src/`）
+
+- 制約の受け口: `api/types.ts`（`BaseModelBlock.constraints` と `GenerateRequest` の 3 項目）・`shell/generationConstraints.ts`（新設。LTX の既定値と、画面が読む形への変換）・`shell/useBaseModels.ts`（`activeConstraints`。中身が同じなら同じオブジェクトを返す）。
+- 刻みと倍数: `modes/single/paramUtils.ts` の `snapNumFrames`／`isValidNumFrames`／`isNumFramesOnGrid` が刻みを、`isDimensionOnGrid`（フォームの門）が倍数を引数で受けます（省略時は LTX の値なので、Chained・Edit・バッチの呼び出しはそのまま）。`isValidDimension` は 64 固定のままです（倍数を引数で受ける変更はレビューの指摘で元に戻しました）。`timeline/deriveDuration.ts`・`deriveGenerationParams.ts`・`prefillSeed.ts`・`modes/single/useGenerationForm.ts`・`SingleScreen.tsx`・`shell/AppShell.tsx`（右クリック #9／#10）が `constraints` を読みます。
+- 画面: `CommonGenerationFields.tsx`（`SamplingFields` を新設、`DurationField`／`SizeFields` の刻み、fps の固定）・`FloatSliderField.tsx`（横並びの引数）・`GenerationForm.tsx`・`KeyframesPanel.tsx`・`KeyframeCard.tsx`・`shell/NagAccordion.tsx`。
+- 機能名: `shell/featureScope.ts` に `nag`・`multi_keyframes`・`keyframe_strength` の行と、`reference_video`・`chain` の閉じる先を追加。ネガティブプロンプトは `shell/nagSettings.ts` の `effectiveNag` で、閉じている間は各画面が「オフ」を読みます（利用者の設定はそのまま残ります）。
+- 快適上限: `shell/comfortTable.ts` の `comfortProfileMissing`。
+- コードレビューの反映: 参照動画と制御 LoRA の読み替え（`useGenerationForm` の `referenceVideoUnavailable`）、モックの連結の要求の拒否（`chain`）、素材の長さで決める尺の上限、右クリックの仮オブジェクトの尺の格子、LTX のモックの表の一本化。
+- モック: `bridge/mockBridge.ts` に MiniMax H3（`constraints` と機能名つき・導入状態の切り替え `h3Install`）。`/generate` の検査を、読み込み中のベースモデルの決まりで行います。快適上限の表には足していません。
+- 文書: [`API_REFERENCE.md`](API_REFERENCE.md) §7・[`../Mock/AVIUTL2_DESIGN_BRIEF.md`](../Mock/AVIUTL2_DESIGN_BRIEF.md) §5 を「LTX では出さない（distilled で固定）。MiniMax H3 ではステップ数と shift を出す（裁定 22）」に改めました。
+- テスト: `shell/AppShell.minimaxH3.test.tsx`（モックの通しで、上の画面の振る舞いと送る要求）・`shell/generationConstraints.test.ts`・`modes/single/useGenerationForm.h3.test.ts`・`timeline/prefillSeed.h3.test.ts`・`bridge/mockBridge.h3.test.ts`。モックに 3 件目のベースモデルが増えたことと機能名の表が増えたことに合わせて、既存のテスト 3 ファイルの期待値を直しました。
+
+### 141.4 残っている点
+
+- 機能名の表（`featureScope.ts`）の「`chain` は Edit のサブタブに届かない」という規則は変えていません。Edit タブが閉じるのは、サーバーが `retake` を公開するためです。
+- A2V の音声やキーフレームを 2 枚以上、LTX で付けてから MiniMax H3 に切り替えた場合は、画面では外さず、送信時のサーバーの 422 に任せます（計画のとおり）。
+- 1 行のスライダーの WebView2 の狭い幅での折り返しは、オーナーの目視（2c-G2）で合格しました。
+
+### 141.5 状態
+
+- dev にコミット済み（`b2a07e7`）。ビルドと配置済み。オーナーの目視（2c-G2）に合格（バックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §166.9）。目視で見つかった 2 点（Fused GGUF の行・A2V カードとバッチ A2V の閉じ方）はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-100。

@@ -131,7 +131,9 @@ function usableAlphaGenBudget(published: number | null | undefined): number | nu
  * configuration, or `null` when there is none — in which case the caller falls
  * back to the legacy `AppLimits.spill_free_frames` lookup
  * (`modes/single/spillUtils.resolveSpillFreeFrames` for Create,
- * `shell/tokenBudget.resolveChainComfortBudget` for Chained).
+ * `shell/tokenBudget.resolveChainComfortBudget` for Chained), except when the
+ * table has no profile for the engine at all — Create and its right-click
+ * seeds then draw no line ({@link comfortProfileMissing}).
  *
  * **`null` is a normal, expected outcome, not an error.** LTX 2.3's DEFAULT
  * configuration deliberately has no row for the 4bit and Q6_K weight classes:
@@ -217,6 +219,24 @@ export function resolveComfortRow(
   }
 
   return null;
+}
+
+/** True when the served `limits.comfort_budgets` table exists, the engine
+ * family is known, and the table carries NO profile for that family — the
+ * server's way of saying "this engine has no comfort line" (its descriptor
+ * has no `comfort`).
+ *
+ * This is the ONLY case in which Create and its right-click seeds drop the
+ * marker altogether instead of falling back to the legacy LTX lookup
+ * (`spill_free_frames`). The other two `null`s {@link resolveComfortRow} can
+ * answer keep their fallback, deliberately: no table at all / engine unknown is
+ * an older backend or the moment before `GET /models` lands, and a profile
+ * whose rows all miss is an LTX configuration the table does not cover — both
+ * are LTX, for which the legacy table is still the truth. */
+export function comfortProfileMissing(limits: AppLimits, engineFamily: string | undefined): boolean {
+  const table = limits.comfort_budgets;
+  if (!table || engineFamily === undefined || engineFamily === "") return false;
+  return !Object.prototype.hasOwnProperty.call(table, engineFamily);
 }
 
 /** The comfortable `num_frames` ceiling at `width x height`, by inverting the

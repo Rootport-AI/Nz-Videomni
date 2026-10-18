@@ -32,12 +32,21 @@ export interface NagAccordionControls {
 export interface NagAccordionProps {
   nag: NagSettings;
   controls: NagAccordionControls;
+  /** The loaded base model's engine cannot run NAG/VSF
+   * (`featureScope.nagDisabledFor`). The accordion stays visible but GREYED —
+   * every control disabled, a note on top, no ON badge — and the shell sends
+   * none of its fields meanwhile (`nagSettings.effectiveNag`), so a NAG left
+   * on from another base model neither 422s a job nor hides out of reach. The
+   * user's settings are kept as they are for when a NAG-capable base model
+   * comes back. Omitted = available. */
+  unavailable?: boolean | undefined;
 }
 
 /**
  * The shared "Negative Prompt" accordion (D4), rendered ONCE by `AppShell`
  * directly below `PromptBar` and outside every mode tab — Create/Chain/Batch
- * all read the identical `NagSettings` (`shell/useNagSettings.ts`) this way,
+ * all read the identical `NagSettings` (`shell/useNagSettings.ts`, through
+ * `nagSettings.effectiveNag`) this way,
  * mirroring `PromptBar` itself. Presentation-only: every value comes from
  * `nag`, every mutation goes through `controls` — this component owns no
  * state of its own.
@@ -46,17 +55,21 @@ export interface NagAccordionProps {
  * the summary shows nothing extra while off, and only the ON badge while
  * `nag.enabled` (never any other indicator).
  */
-export function NagAccordion({ nag, controls }: NagAccordionProps) {
+export function NagAccordion({ nag, controls, unavailable = false }: NagAccordionProps) {
   const strings = useStrings();
   const t = strings.nag;
+  // While the engine cannot run NAG every control greys,
+  // including the ones that are otherwise always operable (checkbox, radios).
+  const off = !nag.enabled || unavailable;
 
   return (
     <details className="form-accordion nag-accordion">
       <summary className="form-accordion-summary">
         {t.heading}
-        {nag.enabled && <span className="nag-on-badge">{t.onBadge}</span>}
+        {nag.enabled && !unavailable && <span className="nag-on-badge">{t.onBadge}</span>}
       </summary>
-      <div className="form-accordion-body">
+      <div className={`form-accordion-body${unavailable ? " field-reserved" : ""}`}>
+        {unavailable && <p className="warning-banner">{t.unavailableOnBaseModel}</p>}
         {/* No visible label (2026-07-28 slim-down: `PROMPT`-style items
             already say what this field is via the accordion heading itself,
             so a repeated "NEGATIVE PROMPT" caption above the textarea was
@@ -70,7 +83,7 @@ export function NagAccordion({ nag, controls }: NagAccordionProps) {
           maxLength={2000}
           placeholder={DEFAULT_NEGATIVE_PROMPT}
           value={nag.text}
-          disabled={!nag.enabled}
+          disabled={off}
           aria-label={t.textLabel}
           onChange={(e) => controls.setText(e.target.value)}
         />
@@ -92,7 +105,12 @@ export function NagAccordion({ nag, controls }: NagAccordionProps) {
             precedent). */}
         <div className="nag-toggle-row">
           <label className="field field-inline">
-            <input type="checkbox" checked={nag.enabled} onChange={(e) => controls.setEnabled(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={nag.enabled}
+              disabled={unavailable}
+              onChange={(e) => controls.setEnabled(e.target.checked)}
+            />
             <span className="field-label">{t.enableLabel}</span>
           </label>
           <label className="field field-inline">
@@ -100,6 +118,7 @@ export function NagAccordion({ nag, controls }: NagAccordionProps) {
               type="radio"
               name="nag-method"
               checked={nag.method === "nag"}
+              disabled={unavailable}
               onChange={() => controls.setMethod("nag")}
             />
             <span>{t.methodNag}</span>
@@ -114,6 +133,7 @@ export function NagAccordion({ nag, controls }: NagAccordionProps) {
               type="radio"
               name="nag-method"
               checked={nag.method === "vsf"}
+              disabled={unavailable}
               onChange={() => controls.setMethod("vsf")}
             />
             <span>{t.methodVsf}</span>
@@ -135,7 +155,7 @@ export function NagAccordion({ nag, controls }: NagAccordionProps) {
               min={NAG_SCALE_MIN}
               max={NAG_SCALE_MAX}
               step={NAG_SCALE_STEP}
-              disabled={!nag.enabled}
+              disabled={off}
               onChange={controls.setScale}
             />
           ) : (
@@ -145,7 +165,7 @@ export function NagAccordion({ nag, controls }: NagAccordionProps) {
               min={VSF_SCALE_MIN}
               max={VSF_SCALE_MAX}
               step={VSF_SCALE_STEP}
-              disabled={!nag.enabled}
+              disabled={off}
               onChange={controls.setVsfScale}
             />
           )}
@@ -154,7 +174,7 @@ export function NagAccordion({ nag, controls }: NagAccordionProps) {
             className="icon-action-button"
             title={t.resetTooltip}
             aria-label={t.resetTooltip}
-            disabled={!nag.enabled}
+            disabled={off}
             onClick={controls.resetParams}
           >
             <span aria-hidden="true">🔄</span>
@@ -176,7 +196,7 @@ export function NagAccordion({ nag, controls }: NagAccordionProps) {
                 min={NAG_TAU_MIN}
                 max={NAG_TAU_MAX}
                 step={NAG_TAU_STEP}
-                disabled={!nag.enabled}
+                disabled={off}
                 onChange={controls.setTau}
               />
               <FloatSliderField
@@ -185,7 +205,7 @@ export function NagAccordion({ nag, controls }: NagAccordionProps) {
                 min={NAG_ALPHA_MIN}
                 max={NAG_ALPHA_MAX}
                 step={NAG_ALPHA_STEP}
-                disabled={!nag.enabled}
+                disabled={off}
                 onChange={controls.setAlpha}
               />
             </div>

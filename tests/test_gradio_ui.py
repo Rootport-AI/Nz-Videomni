@@ -282,8 +282,12 @@ def test_load_js_reapplies_min_attribute_client_side():
     # dimension/frame input (64 for width/height, 9 for the 8n+1 frame fields),
     # keyed off their elem_ids.
     demo = _demo()
-    js_blobs = [getattr(fn, "js", None) for fn in demo.fns.values()]
-    min_js = [j for j in js_blobs if j and "setAttribute" in j and "min" in j]
+    # Selected by what it IS -- a fn=None page-LOAD event -- not by its text:
+    # the Generate tab's constraints change has its own min-attribute hook
+    # (a .then step, pinned by tests/test_gradio_constraints.py).
+    min_js = [fn.js for fn in demo.fns.values()
+              if fn.fn is None and fn.js and "setAttribute" in fn.js
+              and any(event == "load" for _block, event in fn.targets)]
     assert min_js, "expected a demo.load js hook that sets the min attribute"
     blob = min_js[0]
     for elem_id in ("gen_width", "gen_height", "chain_width", "chain_height",
@@ -1474,7 +1478,7 @@ def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
     dep = next(d for d in demo.fns.values()
                if getattr(d.fn, "__name__", "") == "dispatch")
     rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
-    # The 41 scalar positionals in ui.py's dispatch() order (no keyframe tail).
+    # The 45 scalar positionals in ui.py's dispatch() order (no keyframe tail).
     args = [
         "prompt <lora:x:1.0>", "",          # prompt_v, negative_v
         500, 320, False, 0, 0,              # width..crop_h (width not ÷64)
@@ -1483,12 +1487,13 @@ def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
         "en", 1.0, 60.0, None,              # lang, poll x2, gen_a2v_audio
         True, rows, "C:/wavs",              # batch_enable, rows, wav_dir
         "same", "", "add", "", True,        # out_mode..chunked_upsample
+        {}, 8, 12.0, 3.0,                   # gen_scope, steps, shift x2
         False, 11.0, 2.5, 0.25,             # nag_enabled, scale, tau, alpha
         "nag", 1.0, "sdpa", False,          # method, vsf, attention, prefetch
         False, False, "default", False,     # keep_resident..keep_res_embeds
         False,                              # embed_mp4_metadata
     ]
-    assert len(args) == 41
+    assert len(args) == 45
     out = list(dep.fn(*args))
     assert out == [(LABELS["en"]["msg_bad_dimension"], "", None)]
     assert calls["n"] == 0  # not even list_loras for the <lora:> token
@@ -1499,20 +1504,22 @@ def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
 # language -- the four wirings pass lang_state as their last input.
 # --------------------------------------------------------------------------- #
 def test_preset_spill_and_qmode_wirings_end_with_lang_state():
-    from gradio_ui.presets import apply_preset, compute_spill_warning
-
     demo = _demo()
     dispatch_dep = next(d for d in demo.fns.values()
                         if getattr(d.fn, "__name__", "") == "dispatch")
     lang_state = list(dispatch_dep.inputs)[16]   # dispatch()'s lang_v
     assert isinstance(lang_state, gr.State)
 
+    # The preset / spill wirings go through thin wrappers that also hand the
+    # loaded engine family (gen_scope_state) to apply_preset /
+    # compute_spill_warning (the spill table is LTX's).
+    preset_name, spill_name = "_apply_preset_for_scope", "_spill_warning_for_scope"
     deps = [d for d in demo.fns.values()
-            if d.fn is apply_preset or d.fn is compute_spill_warning
-            or getattr(d.fn, "__name__", "") == "on_qmode_change"]
+            if getattr(d.fn, "__name__", "") in (preset_name, spill_name,
+                                                  "on_qmode_change")]
     # preset.change + 3 x (width/height/num_frames).change + qmode + chain_qmode
-    assert len([d for d in deps if d.fn is apply_preset]) == 1
-    assert len([d for d in deps if d.fn is compute_spill_warning]) == 3
+    assert len([d for d in deps if d.fn.__name__ == preset_name]) == 1
+    assert len([d for d in deps if d.fn.__name__ == spill_name]) == 3
     assert len([d for d in deps
                 if getattr(d.fn, "__name__", "") == "on_qmode_change"]) == 2
     for d in deps:

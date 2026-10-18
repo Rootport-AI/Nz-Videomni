@@ -90,10 +90,10 @@ def build_coords(
     ``grid_h`` / ``grid_w`` are the TOKEN grid (H/32, W/32 = latent / 2).
 
     * text  (L rows):  t = 0 .. L-1, h = w = 0.
-    * cond  (cond_frames x grid rows, 2nd stage): t = L, (h, w) = the video grid.
-      Only the first-frame anchor exists in the 1st/2nd stage; a last-frame
-      anchor (t = L + span - 5/3) is §1-97 and refused here.
-      ``cond_frames=1``: 第 1 弾（T2V）では未使用。座標は G4 A で照合済み、埋め込みは未検証。
+    * cond  (cond_frames x grid rows, I2V): t = L, (h, w) = the video grid.
+      Only the first-frame anchor exists; a last-frame anchor
+      (t = L + span - 5/3) is §1-97 and refused here. ``cond_frames=1`` matches
+      DiffSynth float64-exactly (VERIFICATION_LOG §165 G4 A, §166 2a-G3).
     * audio (2A rows, ch0 then ch1): t = L + k, h = 0, w = min of the w grid
       for ch0, max for ch1.
     * video (T' x grid rows, t -> h -> w): t starts at L with the

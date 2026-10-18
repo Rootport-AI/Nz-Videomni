@@ -9,6 +9,7 @@ import gradio as gr
 
 from config import MAX_CONDITIONING_IMAGES
 
+from .constraints import comfort_table_missing
 from .i18n import L, _DEFAULT_LANG
 from .validation import MAX_CHAIN_TOTAL_PIXEL_FRAMES
 
@@ -60,11 +61,19 @@ def pick_default_preset(config: dict | None) -> str:
 
 
 def compute_spill_warning(width, height, num_frames, config: dict | None,
-                           lang: str = _DEFAULT_LANG):
+                           lang: str = _DEFAULT_LANG,
+                           engine_family: str | None = None):
     """Look up limits.spill_free_frames[f"{width}x{height}"] from the fetched
     /config. Returns a gr.update for a Markdown warning: visible+worded when
     num_frames exceeds the comfortable (spill-free) threshold for that
-    resolution, hidden when the resolution is unknown or within budget."""
+    resolution, hidden when the resolution is unknown or within budget.
+
+    ``spill_free_frames`` is LTX's table, so the warning is also hidden when
+    the loaded engine family (``engine_family``, from GET /models) has no
+    ``limits.comfort_budgets`` table at all -- see
+    :func:`gradio_ui.constraints.comfort_table_missing`."""
+    if comfort_table_missing(config, engine_family):
+        return gr.update(value="", visible=False)
     try:
         w, h, nf = int(width), int(height), int(num_frames)
     except (TypeError, ValueError):
@@ -79,7 +88,8 @@ def compute_spill_warning(width, height, num_frames, config: dict | None,
     return gr.update(value="", visible=False)
 
 
-def apply_preset(name: str, config: dict | None, lang: str = _DEFAULT_LANG):
+def apply_preset(name: str, config: dict | None, lang: str = _DEFAULT_LANG,
+                 engine_family: str | None = None):
     """Resolve a preset name to the Generate-tab field values.
 
     Reads the server preset (config["generation_presets"][name]) when present;
@@ -102,7 +112,8 @@ def apply_preset(name: str, config: dict | None, lang: str = _DEFAULT_LANG):
 
     crop_enabled_v = bool(crop_w_v) and bool(crop_h_v)
     crop_row_update = gr.update(visible=crop_enabled_v)
-    spill_update = compute_spill_warning(width_v, height_v, frames_v, config, lang)
+    spill_update = compute_spill_warning(width_v, height_v, frames_v, config, lang,
+                                         engine_family)
     return (width_v, height_v, frames_v, crop_enabled_v, crop_w_v, crop_h_v,
             crop_row_update, spill_update)
 

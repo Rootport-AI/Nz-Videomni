@@ -145,6 +145,16 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_steps": "Steps",
         "lbl_cfg": "CFG scale",
         "cap_lock": "Fixed at 8 / 1.0 (distilled)",
+        # Single tab, built from the loaded base model's GET /models
+        # ``constraints`` (gradio_ui/constraints.py). For LTX they read exactly
+        # like lbl_width / lbl_height / lbl_frames above.
+        "lbl_width_rule": "Width (multiple of {m})",
+        "lbl_height_rule": "Height (multiple of {m})",
+        "lbl_frames_rule": "Frames ({rule})",
+        "lbl_shift_video": "Shift (video)",
+        "lbl_shift_audio": "Shift (audio)",
+        "msg_bad_dimension_rule": "Width and height must be multiples of {m}.",
+        "msg_bad_frames_rule": "Frames must be {rule} and between {min} and {max}.",
         "lbl_seed": "Seed (-1 = random)",
         "warn_spill_limit": ("Exceeds the comfortable limit for {res} ({limit} frames): "
                               "generation still works but is much slower."),
@@ -691,6 +701,13 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_steps": "ステップ数",
         "lbl_cfg": "CFGスケール",
         "cap_lock": "8 / 1.0 に固定 (distilled)",
+        "lbl_width_rule": "幅 ({m}の倍数)",
+        "lbl_height_rule": "高さ ({m}の倍数)",
+        "lbl_frames_rule": "フレーム数 ({rule})",
+        "lbl_shift_video": "Shift（映像）",
+        "lbl_shift_audio": "Shift（音声）",
+        "msg_bad_dimension_rule": "幅と高さは{m}の倍数にしてください。",
+        "msg_bad_frames_rule": "フレーム数は{rule}かつ{min}〜{max}にしてください。",
         "lbl_seed": "シード (-1 = ランダム)",
         "warn_spill_limit": "解像度 {res} の快適上限 ({limit} フレーム) を超えています: 生成は可能ですが大幅に低速化します。",
         # --- generate: keyframe accordion ---

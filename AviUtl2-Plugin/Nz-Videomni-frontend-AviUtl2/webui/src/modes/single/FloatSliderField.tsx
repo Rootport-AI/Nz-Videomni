@@ -6,6 +6,10 @@ export interface FloatSliderFieldProps {
   step: number;
   disabled: boolean;
   onChange: (value: number) => void;
+  /** Lay the label, range and number out on ONE row
+   * (`.field-inline`) instead of stacked. Omitted = stacked, as NAG's four
+   * sliders have always been. */
+  inline?: boolean;
 }
 
 /**
@@ -14,14 +18,14 @@ export interface FloatSliderFieldProps {
  * an app-specific grid via `isStepEvent`, branching on which control fired),
  * this is ONE unconditional path for both inputs — parse, ignore a
  * non-finite result (e.g. a momentarily-empty number field), then clamp into
- * `[min, max]`. Used four times by `shell/NagAccordion.tsx` (`nag_scale`/
- * `vsf_scale`/`nag_tau`/`nag_alpha`) — `nag_scale` and `vsf_scale` render
- * conditionally on `nag.method`, so at most three of the four are ever on
- * screen at once; pulled into its own file the same way
+ * `[min, max]`. Used by `shell/NagAccordion.tsx` (`nag_scale`/`vsf_scale`/
+ * `nag_tau`/`nag_alpha` — `nag_scale` and `vsf_scale` render conditionally
+ * on `nag.method`) and by `CommonGenerationFields.tsx`'s `SamplingFields`
+ * (in its `inline` form); pulled into its own file the same way
  * `ReferenceStrengthField.tsx` was, rather than folded into the already
  * 400+-line `CommonGenerationFields.tsx`.
  */
-export function FloatSliderField({ label, value, min, max, step, disabled, onChange }: FloatSliderFieldProps) {
+export function FloatSliderField({ label, value, min, max, step, disabled, onChange, inline = false }: FloatSliderFieldProps) {
   const handleChange = (raw: string) => {
     const v = Number(raw);
     if (!Number.isFinite(v)) return;
@@ -29,7 +33,7 @@ export function FloatSliderField({ label, value, min, max, step, disabled, onCha
   };
 
   return (
-    <label className="field">
+    <label className={inline ? "field field-inline" : "field"}>
       <span className="field-label">{label}</span>
       <input
         type="range"

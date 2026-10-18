@@ -225,7 +225,9 @@ def test_generate_t2v_payload():
     assert captured["width"] == 512 and captured["height"] == 320
     assert captured["num_frames"] == 49
     assert captured["frame_rate"] == 24.0
-    assert captured["num_inference_steps"] == 8
+    # No step count on a base model without sampling sliders (LTX): the
+    # server writes the family default (8) back (code review 2b, M-2).
+    assert "num_inference_steps" not in captured
     assert captured["guidance_scale"] == 1.0
     assert captured["pipeline"] == "distilled"
     assert captured["crop_output"] is None  # checkbox off

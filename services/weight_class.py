@@ -17,6 +17,9 @@ The rules' source of truth is Docs/COMFORT_LIMIT_TABLE.md §1. In short:
   scheme. The 8-bit schemes (fp8, fp8_scaled, int8, int8_convrot) are summed
   and compared with ``w4a8``: the larger side wins, a tie goes to ``"8bit"``.
   No quantized layer at all (bf16) -> ``inspect`` refuses -> ``None``.
+* A transformer of a family with no comfort table of weight classes (any
+  family but the two LTX ones — MiniMax H3) -> ``None``, quietly: the rules
+  above are LTX's, and an H3 DiT would only fail them noisily.
 * A file that cannot be read or parsed -> ``None``. The operation panel and
   Gradio then leave the class key out of the match, so no row matches: single
   falls back to ``spill_free_frames``, chain to ``chain_comfort_token_budget``.
@@ -38,6 +41,9 @@ import sft_quant_format
 from services.gguf_kv import GgufParseError, read_gguf_tensor_types
 
 logger = logging.getLogger("ltx.weight_class")
+
+#: The engine families whose transformer files the rules above describe.
+_LTX_FAMILIES = frozenset({"ltx", "ltx25"})
 
 #: Every value ``requires.weight_class`` may take (anything else in a manifest
 #: is a startup error, see api/context.py ``build_comfort_budgets``).
@@ -75,12 +81,18 @@ def classify_gguf_tensors(tensors: Mapping[str, tuple[int, int]]) -> str | None:
     return _GGUF_CLASS_BY_TYPE.get(majority)
 
 
-def classify_transformer(path: Path) -> str | None:
+def classify_transformer(path: Path, *, engine_family: str | None = None) -> str | None:
     """Weight class of the transformer file at ``path`` (``None`` = unknown).
 
     Cached on (path, size, mtime) so a repeated ``GET /models`` costs one
     ``stat``; replacing the file under the same name re-classifies it.
+
+    ``engine_family`` (the base model's): any family other than LTX answers
+    ``None`` without opening the file. Omitted, the file is classified by the
+    LTX rules (the tests call it that way).
     """
+    if engine_family is not None and engine_family not in _LTX_FAMILIES:
+        return None
     try:
         st = Path(path).stat()
     except OSError:

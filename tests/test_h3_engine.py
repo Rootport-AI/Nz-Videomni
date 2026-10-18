@@ -16,6 +16,10 @@ What is pinned (plan section 3.4, R2 (3)):
   * the text encoder's config after transformers' rope translation, the extra
     special token ids (only when a tokenizer folder is present), and the
     Comfy-Org -> model name mapping against the real meta-built models;
+  * the text encoder's direct read (第 2 弾 2a, §1-98): the read plan, and a
+    tiny Qwen3-VL text model read layer by layer from a synthetic file through
+    the forward hooks gives the same hidden state as the fully loaded model,
+    with every weight back on meta afterwards;
   * a tiny H3 DiT streamed from a synthetic file: no meta tensor left;
   * ``H3Int8Linear`` against the dequantized bf16 ``F.linear`` (GPU only,
     opt-in with ``H3_GPU_TESTS=1``);
@@ -271,35 +275,43 @@ def test_extra_special_token_ids():
 def test_te_name_mapping():
     from engine_h3.text_encoder import te_key_map, te_quant_names
 
-    assert te_key_map("model.layers.0.self_attn.q_proj.weight") == "layers.0.self_attn.q_proj.weight"
-    assert te_key_map("model.layers.49.mlp.down_proj.weight_scale") == "layers.49.mlp.down_proj.weight_scale"
+    # Stage 2 (2a, I2V): the encoder is Qwen3VLModel, so the text side lives under
+    # ``language_model.`` and the vision tower (``visual.*``) is mapped as is.
+    assert te_key_map("model.layers.0.self_attn.q_proj.weight") == "language_model.layers.0.self_attn.q_proj.weight"
+    assert (te_key_map("model.layers.49.mlp.down_proj.weight_scale")
+            == "language_model.layers.49.mlp.down_proj.weight_scale")
     assert te_key_map("model.layers.50.mlp.down_proj.weight") is None
-    assert te_key_map("model.embed_tokens.weight") == "embed_tokens.weight"
-    for dropped in ("visual.blocks.0.attn.qkv.weight", "lm_head.weight", "model.norm.weight"):
+    assert te_key_map("model.embed_tokens.weight") == "language_model.embed_tokens.weight"
+    assert te_key_map("visual.blocks.0.attn.qkv.weight") == "visual.blocks.0.attn.qkv.weight"
+    for dropped in ("lm_head.weight", "model.norm.weight"):
         assert te_key_map(dropped) is None
     q = te_quant_names({"model.layers.3.self_attn.o_proj": "spec", "model.layers.55.mlp.up_proj": "x"})
-    assert q == {"layers.3.self_attn.o_proj": "spec"}
+    assert q == {"language_model.layers.3.self_attn.o_proj": "spec"}
 
 
 def test_te_names_match_the_meta_built_model():
-    """Every Comfy-Org TE name we read lands on a key of the real (meta) 50-layer model."""
+    """Every Comfy-Org TE name we read lands on a key of the real (meta) Qwen3VLModel
+    (text side cut to 50 layers); with the real TE file present, its 351 vision
+    tensors match the model's vision tower exactly."""
     pytest.importorskip("transformers")
-    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLModel
 
     from engine_h3.quant_linear import H3Int8Linear, swap_in_int8_linears
-    from engine_h3.text_encoder import build_text_config, te_key_map, te_quant_names
+    from engine_h3.text_encoder import build_config, te_key_map, te_quant_names
 
     spec = h3_format.QuantSpec("int8_tensorwise", True, 256)
     linears = ("self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj",
                "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj")
     quant = {f"model.layers.{i}.{n}": spec for i in range(50) for n in linears}
     with torch.device("meta"):
-        model = Qwen3VLTextModel(build_text_config())
-        model.norm = torch.nn.Identity()
+        model = Qwen3VLModel(build_config())
+        model.language_model.norm = torch.nn.Identity()
         swapped = swap_in_int8_linears(model, te_quant_names(quant), bias_dtype_of=lambda n: torch.bfloat16)
     assert swapped == 350
-    assert isinstance(model.layers[0].self_attn.q_proj, H3Int8Linear)
-    keys = set(model.state_dict())
+    assert isinstance(model.language_model.layers[0].self_attn.q_proj, H3Int8Linear)
+    all_keys = set(model.state_dict())
+    keys = {k for k in all_keys if k.startswith("language_model.")}
+    assert all_keys - keys == {k for k in all_keys if k.startswith("visual.")}
     names = ["model.embed_tokens.weight"]
     for i in range(50):
         h = f"model.layers.{i}."
@@ -308,7 +320,237 @@ def test_te_names_match_the_meta_built_model():
                                             "input_layernorm.weight", "post_attention_layernorm.weight")]
     mapped = {te_key_map(n) for n in names}
     assert mapped == keys  # exactly: nothing unread, nothing unknown
-    assert "norm.weight" not in keys
+    assert "language_model.norm.weight" not in keys
+    te_file = ROOT / "models" / "MiniMaxH3" / "TextEncoder" / "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+    if te_file.is_file():
+        import sft_quant_format
+
+        header = sft_quant_format.read_header(str(te_file))
+        file_visual = {te_key_map(n) for n in header.tensors if n.startswith("visual.")}
+        assert file_visual == {k for k in all_keys if k.startswith("visual.")}
+        assert {header.tensors[n].dtype for n in header.tensors if n.startswith("visual.")} == {"BF16"}
+
+
+def test_te_read_plan_splits_embedding_and_layers():
+    from engine_h3.text_encoder import te_read_plan
+
+    names = [
+        "model.embed_tokens.weight",
+        "model.layers.0.self_attn.q_proj.weight", "model.layers.0.self_attn.q_proj.weight_scale",
+        "model.layers.0.self_attn.q_proj.comfy_quant",
+        "model.layers.1.mlp.down_proj.weight", "model.layers.50.mlp.down_proj.weight",
+        "visual.blocks.0.attn.qkv.weight", "lm_head.weight", "model.norm.weight",
+    ]
+    embed, layers, visual = te_read_plan(names, num_layers=2)
+    assert embed == {"model.embed_tokens.weight": "weight"}
+    assert visual == {"visual.blocks.0.attn.qkv.weight": "blocks.0.attn.qkv.weight"}
+    assert layers[0] == {
+        "model.layers.0.self_attn.q_proj.weight": "self_attn.q_proj.weight",
+        "model.layers.0.self_attn.q_proj.weight_scale": "self_attn.q_proj.weight_scale",
+    }
+    assert layers[1] == {"model.layers.1.mlp.down_proj.weight": "mlp.down_proj.weight"}
+
+
+def test_load_mapped_to_and_drop_to_meta(tmp_path):
+    import sft_quant_format
+    from safetensors.torch import save_file
+
+    from engine_h3.sft_load import drop_to_meta, load_mapped_to, meta_tensor_names
+
+    torch.manual_seed(0)
+    src = torch.nn.Linear(4, 3).to(torch.bfloat16)
+    path = tmp_path / "lin.safetensors"
+    save_file({"x.weight": src.weight.data.contiguous(), "x.bias": src.bias.data.contiguous()}, str(path))
+    header = sft_quant_format.read_header(str(path))
+    with torch.device("meta"):
+        dst = torch.nn.Linear(4, 3)
+    dst.requires_grad_(False)
+    n = load_mapped_to(dst, str(path), header, {"x.weight": "weight", "x.bias": "bias"}, torch.device("cpu"))
+    assert n == (12 + 3) * 2
+    assert dst.weight.dtype == torch.bfloat16 and torch.equal(dst.weight, src.weight)
+    assert not dst.weight.requires_grad
+    drop_to_meta(dst)
+    assert sorted(meta_tensor_names(dst)) == ["bias", "weight"]
+    assert dst.weight.dtype == torch.bfloat16 and tuple(dst.weight.shape) == (3, 4)
+    # a tensor the file does not give is refused by name
+    with pytest.raises(RuntimeError, match="still on meta"):
+        load_mapped_to(dst, str(path), header, {"x.weight": "weight"}, torch.device("cpu"))
+    drop_to_meta(dst)
+    with pytest.raises(RuntimeError, match="no place"):
+        load_mapped_to(dst, str(path), header, {"x.weight": "weight", "x.bias": "nope"}, torch.device("cpu"))
+
+
+def test_te_direct_read_hooks_match_the_loaded_model(tmp_path):
+    """A tiny Qwen3-VL text model: the unmodified HF forward with the per-layer read
+    hooks gives exactly the hidden state of the fully loaded model (the CPU
+    version of gate 2a-G2), and leaves every layer on meta."""
+    pytest.importorskip("transformers")
+    import sft_quant_format
+    from safetensors.torch import save_file
+    from transformers import Qwen3VLTextConfig
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel, Qwen3VLTextRotaryEmbedding
+
+    from engine_h3.sft_load import load_mapped_to, meta_tensor_names, move_module_tree
+    from engine_h3.text_encoder import install_layer_read_hooks, te_read_plan
+
+    cfg = Qwen3VLTextConfig(
+        hidden_size=64, intermediate_size=96, num_hidden_layers=3, num_attention_heads=4,
+        num_key_value_heads=2, head_dim=16, vocab_size=97, max_position_embeddings=128,
+        rope_scaling={"mrope_interleaved": True, "mrope_section": [2, 3, 3], "rope_type": "default"},
+        rope_theta=10000, rms_norm_eps=1e-6,
+    )
+    cfg._attn_implementation = "sdpa"
+    torch.manual_seed(0)
+    ref = Qwen3VLTextModel(cfg).to(torch.bfloat16).eval()
+    ref.norm = torch.nn.Identity()
+    with torch.no_grad():
+        for prm in ref.parameters():
+            prm.normal_(0.0, 0.05)
+    path = tmp_path / "te.safetensors"
+    save_file({f"model.{k}": v.contiguous() for k, v in ref.state_dict().items()}, str(path))
+    ids = torch.tensor([[5, 17, 3, 90, 41, 8]])
+    with torch.no_grad():
+        want = ref(input_ids=ids, attention_mask=torch.ones_like(ids), use_cache=False).last_hidden_state
+
+    header = sft_quant_format.read_header(str(path))
+    with torch.device("meta"):
+        model = Qwen3VLTextModel(cfg)
+    model.norm = torch.nn.Identity()
+    model.to(torch.bfloat16)
+    model.requires_grad_(False)
+    model.eval()
+    inv, scaling = Qwen3VLTextRotaryEmbedding.compute_default_rope_parameters(cfg, device="cpu")
+    model.rotary_emb.inv_freq = inv.float()
+    model.rotary_emb.original_inv_freq = inv.float().clone()
+    model.rotary_emb.attention_scaling = scaling
+    embed_plan, layer_plans, _visual = te_read_plan(header.tensors, cfg.num_hidden_layers)
+    dev = torch.device("cpu")
+    stats = {"bytes": 0, "read_seconds": 0.0, "layers": 0}
+    load_mapped_to(model.embed_tokens, str(path), header, embed_plan, dev)
+    move_module_tree(model.rotary_emb, dev, skip=set())
+    handles = install_layer_read_hooks(model.layers, layer_plans, str(path), header, dev, stats)
+    with torch.no_grad():
+        got = model(input_ids=ids, attention_mask=torch.ones_like(ids), use_cache=False).last_hidden_state
+    for h in handles:
+        h.remove()
+    assert torch.equal(got, want)
+    assert stats["layers"] == 3 and stats["bytes"] > 0
+    left = meta_tensor_names(model)
+    assert left and all(n.startswith("layers.") for n in left)   # every layer dropped, embedding still held
+    assert not [n for n, _ in model.layers.named_parameters() if not _.is_meta]
+
+
+def test_presentation_t2v_and_fl2va():
+    pytest.importorskip("transformers")
+    d = _tokenizer_dir()
+    if d is None:
+        pytest.skip("no Qwen3-VL tokenizer folder present")
+    from transformers import AutoTokenizer
+
+    from engine_h3.text_encoder import mm_token_type_ids, presentation
+
+    tok = AutoTokenizer.from_pretrained(str(d))
+    prompt = "A cat walks. <d>[English] Hello.</d>"
+    ids, tags = presentation(tok, prompt)
+    assert ids == tok(prompt, add_special_tokens=False)["input_ids"] and tags == [1] * len(ids)
+    ids2, tags2 = presentation(tok, prompt, image_tokens=240)
+    label = tok("<Picture 1>: ", add_special_tokens=False)["input_ids"]
+    assert label == [21604, 3826, 220, 16, 26818, 220]
+    n = len(label)
+    assert ids2[:n] == label and ids2[n] == 151652 and ids2[n + 1:n + 241] == [151655] * 240
+    assert ids2[n + 241] == 151653 and ids2[n + 242:] == ids
+    assert tags2 == [1] * n + [0] * 242 + [1] * len(ids)
+    mm = mm_token_type_ids(ids2)
+    assert sum(mm) == 240 and mm[n] == 0 and mm[n + 241] == 0
+
+
+def test_te_direct_read_with_vision_matches_the_loaded_model(tmp_path):
+    """I2V version of the direct-read check: a tiny Qwen3VLModel with a vision tower
+    and DeepStack, read from a synthetic Comfy-Org-named file (text layers through
+    the hooks, the vision tower read whole before the forward), equals the fully
+    loaded model bit for bit."""
+    pytest.importorskip("transformers")
+    import sft_quant_format
+    from safetensors.torch import save_file
+    from transformers import Qwen3VLConfig
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLModel, Qwen3VLTextRotaryEmbedding
+
+    from engine_h3.sft_load import drop_to_meta, load_mapped_to, meta_tensor_names, move_module_tree
+    from engine_h3.text_encoder import install_layer_read_hooks, te_read_plan
+
+    cfg = Qwen3VLConfig(
+        image_token_id=95, video_token_id=96, vision_start_token_id=93, vision_end_token_id=94,
+        tie_word_embeddings=False,
+        text_config=dict(
+            hidden_size=64, intermediate_size=96, num_hidden_layers=3, num_attention_heads=4,
+            num_key_value_heads=2, head_dim=16, vocab_size=97, max_position_embeddings=256,
+            rope_scaling={"mrope_interleaved": True, "mrope_section": [2, 3, 3], "rope_type": "default"},
+            rope_theta=10000, rms_norm_eps=1e-6,
+        ),
+        vision_config=dict(
+            depth=3, hidden_size=32, intermediate_size=48, num_heads=2, out_hidden_size=64,
+            patch_size=16, spatial_merge_size=2, temporal_patch_size=2, in_channels=3,
+            num_position_embeddings=16, deepstack_visual_indexes=[0, 1], hidden_act="gelu_pytorch_tanh",
+        ),
+    )
+    for c in (cfg, cfg.text_config, cfg.vision_config):
+        c._attn_implementation = "sdpa"
+    torch.manual_seed(0)
+    ref = Qwen3VLModel(cfg).to(torch.bfloat16).eval()
+    ref.language_model.norm = torch.nn.Identity()
+    # .to(bf16) also rounded the rotary buffers; the encoder keeps them float32.
+    ref.visual.rotary_pos_emb.inv_freq = 1.0 / (10000.0 ** (torch.arange(0, 8, 2, dtype=torch.float32) / 8))
+    r_inv, _ = Qwen3VLTextRotaryEmbedding.compute_default_rope_parameters(cfg.text_config, device="cpu")
+    ref.language_model.rotary_emb.inv_freq = r_inv.float()
+    ref.language_model.rotary_emb.original_inv_freq = r_inv.float().clone()
+    with torch.no_grad():
+        for prm in ref.parameters():
+            prm.normal_(0.0, 0.05)
+    names = {}
+    for k, v in ref.state_dict().items():
+        if k.startswith("language_model."):
+            names["model." + k[len("language_model."):]] = v.contiguous()
+        else:
+            names[k] = v.contiguous()
+    path = tmp_path / "te.safetensors"
+    save_file(names, str(path))
+    grid = torch.tensor([[1, 4, 4]])                       # 4 vision tokens after the 2x2 merge
+    pixels = torch.randn(16, 3 * 2 * 16 * 16)
+    ids = [5, 17, 93, 95, 95, 95, 95, 94, 3, 41, 8]
+    input_ids = torch.tensor([ids])
+    kw = dict(attention_mask=torch.ones_like(input_ids), use_cache=False,
+              mm_token_type_ids=torch.tensor([[1 if i == 95 else 0 for i in ids]]),  # tiny image token 95
+              pixel_values=pixels.to(torch.bfloat16), image_grid_thw=grid)
+    with torch.no_grad():
+        want = ref(input_ids=input_ids, **kw).last_hidden_state
+
+    header = sft_quant_format.read_header(str(path))
+    with torch.device("meta"):
+        model = Qwen3VLModel(cfg)
+    model.language_model.norm = torch.nn.Identity()
+    model.to(torch.bfloat16)
+    model.requires_grad_(False)
+    model.eval()
+    rot = model.language_model.rotary_emb
+    inv, scaling = Qwen3VLTextRotaryEmbedding.compute_default_rope_parameters(cfg.text_config, device="cpu")
+    rot.inv_freq, rot.original_inv_freq, rot.attention_scaling = inv.float(), inv.float().clone(), scaling
+    vrot = model.visual.rotary_pos_emb
+    vrot.inv_freq = 1.0 / (10000.0 ** (torch.arange(0, vrot.dim, 2, dtype=torch.float32) / vrot.dim))
+    embed_plan, layer_plans, visual_plan = te_read_plan(header.tensors, 3)
+    dev = torch.device("cpu")
+    stats = {"bytes": 0, "read_seconds": 0.0, "layers": 0}
+    load_mapped_to(model.language_model.embed_tokens, str(path), header, embed_plan, dev)
+    load_mapped_to(model.visual, str(path), header, visual_plan, dev)
+    move_module_tree(model.language_model.rotary_emb, dev, skip=set())
+    handles = install_layer_read_hooks(model.language_model.layers, layer_plans, str(path), header, dev, stats)
+    with torch.no_grad():
+        got = model(input_ids=input_ids, **kw).last_hidden_state
+    for h in handles:
+        h.remove()
+    assert torch.equal(got, want)
+    assert stats["layers"] == 3
+    drop_to_meta(model.visual)
+    assert not [n for n, t in model.visual.named_parameters() if not t.is_meta]
 
 
 # --------------------------------------------------------------------------- #
@@ -546,7 +788,7 @@ def test_request_validation():
 def test_load_options_treat_null_as_default(monkeypatch):
     from engine_h3 import worker
 
-    msg = {"blocks_on_gpu": None, "te_layers_on_gpu": None, "attention_backend": None,
+    msg = {"blocks_on_gpu": None, "attention_backend": None,
            "block_swap_prefetch": None, "deterministic": None}
     assert worker._value_or(msg, "blocks_on_gpu", 8, int) == 8
     assert worker._value_or(msg, "attention_backend", "sdpa", str) == "sdpa"
@@ -572,19 +814,25 @@ def test_attention_backends_have_one_source():
 # golden key sets of the protocol (the second-stage adapter builds against these)
 # --------------------------------------------------------------------------- #
 
+#: Stage 2 (2a, 台帳 §1-98 / plan §3.2): ``te_layers_on_gpu`` is gone -- the text
+#: encoder is read layer by layer straight from the file onto the GPU, so a
+#: CPU-resident layer window no longer exists to size.
 GOLDEN_LOAD_KEYS = [
     "op", "transformer_path", "text_encoder_path", "video_vae_path", "audio_vae_path", "tokenizer_dir",
-    "blocks_on_gpu", "te_layers_on_gpu", "attention_backend", "block_swap_prefetch", "deterministic",
+    "blocks_on_gpu", "attention_backend", "block_swap_prefetch", "deterministic",
 ]
+#: Stage 2 (2a, INTERFACE2 §5.1 / plan §3.2): the I2V image, keep_resident and the
+#: per-job attention / prefetch were added at the end.
 GOLDEN_GENERATE_KEYS = [
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
+    "images", "keep_resident", "attention_backend", "block_swap_prefetch",
 ]
 GOLDEN_DONE_KEYS = [
     "seed_used", "sampler", "num_inference_steps", "shift_video", "shift_audio",
     "peak_vram_mb", "peak_vram_reserved_mb", "rss_peak_gib", "commit_gib", "commit_peak_gib", "seconds",
     "num_frames", "frame_rate", "width", "height", "size_bytes", "attention_used",
-    "block_swap_prefetch_used", "h3",
+    "block_swap_prefetch_used", "keep_resident_used", "images_used", "h3",   # 2 keys added in stage 2 (2a)
 ]
 GOLDEN_H3_KEYS = ["phases", "quant_backends"]
 
@@ -599,10 +847,11 @@ def _selftest_args():
 
 
 def test_golden_load_message_keys():
-    from engine_h3 import worker
+    from engine_h3 import pipeline_h3, worker
 
     msg = worker._selftest_load_message(_selftest_args())
     assert list(msg) == GOLDEN_LOAD_KEYS
+    assert not hasattr(pipeline_h3.H3LoadOptions(), "te_layers_on_gpu")
     # every path field the worker checks is in the message
     assert set(worker._LOAD_FILE_FIELDS) | set(worker._LOAD_DIR_FIELDS) <= set(msg)
 
@@ -624,21 +873,25 @@ def test_golden_done_keys(monkeypatch, tmp_path):
         device="cpu", progress=lambda *a: None, log=lambda m: None,
     )
     pipe._dit_cfg = object()  # "loaded"
-    monkeypatch.setattr(pipe, "_encode", lambda prompt, phases: (torch.zeros(3, 8), torch.ones(3, dtype=torch.long)))
-    monkeypatch.setattr(pipe, "_denoise", lambda req, h, t, phases, entry: (torch.zeros(1), torch.zeros(1), "on"))
-    monkeypatch.setattr(pipe, "_decode", lambda req, v, a, entry: 1234)
+    monkeypatch.setattr(pipe, "_encode", lambda prompt, phases, **kw: (torch.zeros(3, 8), torch.ones(3, dtype=torch.long)))
+    monkeypatch.setattr(pipe, "_denoise", lambda req, h, t, phases, entry, **kw: (torch.zeros(1), torch.zeros(1), "on"))
+    monkeypatch.setattr(pipe, "_decode", lambda req, v, a, entry, **kw: 1234)
     req = pipeline_h3.H3GenerateRequest(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4")
     done = pipe.generate(req)
     assert list(done) == GOLDEN_DONE_KEYS
     assert list(done["h3"]) == GOLDEN_H3_KEYS
     assert set(done["h3"]["phases"]) == {"encode", "denoise", "decode"}
+    assert (done["keep_resident_used"], done["images_used"]) == ("off", 0)
 
     events = []
     monkeypatch.setattr(worker, "_PIPE", pipe)
     monkeypatch.setattr(worker, "_ATTENTION", ("sage", True))
     monkeypatch.setattr(worker, "_emit", lambda event, **f: events.append({"event": event, **f}))
     monkeypatch.setattr(worker, "_log", lambda m: None)
-    worker._do_generate(worker._selftest_generate_message(_selftest_args(), "o.mp4"))
+    monkeypatch.setattr("engine.transformer.sage_attention_service.probe_sage", lambda: False)
+    msg = worker._selftest_generate_message(_selftest_args(), "o.mp4")
+    msg["attention_backend"] = "sage"   # per job; no SageAttention here -> degraded
+    worker._do_generate(msg)
     assert events[0]["event"] == "done"
     assert list(events[0])[1:] == GOLDEN_DONE_KEYS
     assert events[0]["attention_used"] == "sage->sdpa"
@@ -655,7 +908,7 @@ def test_generate_frees_cuda_cache_after_a_failure(monkeypatch):
     )
     pipe._dit_cfg = object()
 
-    def boom(prompt, phases):
+    def boom(prompt, phases, **kw):
         raise RuntimeError("encode failed")
 
     monkeypatch.setattr(pipe, "_encode", boom)
@@ -690,3 +943,327 @@ def test_block_swap_service_is_resident_across_jobs(tmp_path):
         service.teardown_prefetch()
         service.release_installed()
     assert services[0] is services[1] is pipe._swap_service
+
+
+# --------------------------------------------------------------------------- #
+# stage 2 (2a): I2V plumbing, keep_resident, per-job settings (INTERFACE2 §2-§8)
+# --------------------------------------------------------------------------- #
+
+def test_condition_rows_time_is_max_of_video_t_and_0999():
+    from engine_h3.dit import H3SeqLayout
+    from engine_h3.pipeline_h3 import time_rows
+
+    layout = H3SeqLayout.make(text_rows=5, cond_rows=4, audio_rows=4, video_rows=6)
+    t_unique, idx = time_rows(layout, 0.0, 0.0)            # step 0: both sigmas 1
+    assert torch.allclose(t_unique[idx[layout.cond]], torch.tensor(0.999))
+    assert int(t_unique.numel()) == 2
+    t_unique, idx = time_rows(layout, 0.9995, 0.5)
+    assert torch.allclose(t_unique[idx[layout.cond]], torch.tensor(0.9995))
+    assert torch.allclose(t_unique[idx[layout.text]], torch.tensor(0.9995))
+
+
+def test_request_validation_images():
+    from engine_h3.pipeline_h3 import H3GenerateRequest, H3ImageInput, validate_request
+
+    ok = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4")
+    validate_request(H3GenerateRequest(**ok, images=(H3ImageInput("a.png", 0),)))
+    for bad in ((H3ImageInput("a.png", 0), H3ImageInput("b.png", 0)), (H3ImageInput("a.png", 9),),
+                (H3ImageInput("", 0),)):
+        with pytest.raises(ValueError):
+            validate_request(H3GenerateRequest(**ok, images=bad))
+    with pytest.raises(ValueError):
+        validate_request(H3GenerateRequest(**ok, attention_backend="flash"))
+
+
+def test_worker_images_and_per_job_keys():
+    from engine_h3 import worker
+
+    base = {"prompt": "p", "seed": 1, "width": 640, "height": 384, "num_frames": 124, "output_path": "o.mp4"}
+    req = worker._generate_request(base)
+    assert (req.images, req.keep_resident, req.attention_backend, req.block_swap_prefetch) == ((), False, None, None)
+    req = worker._generate_request({**base, "images": [{"path": "a.png", "frame_idx": 0, "strength": 0.8}],
+                                    "keep_resident": True, "attention_backend": "sage", "block_swap_prefetch": False})
+    assert [(i.path, i.frame_idx) for i in req.images] == [("a.png", 0)]
+    assert (req.keep_resident, req.attention_backend, req.block_swap_prefetch) == (True, "sage", False)
+    assert worker._images({"images": [{"path": "a.png", "strength": 1}]})[1] == ["strength"]
+    for bad in ({"images": "a.png"}, {"images": [{"frame_idx": 0}]}):
+        with pytest.raises(ValueError):
+            worker._generate_request({**base, **bad})
+
+
+def test_canvas_image_cover_and_centre_crop(tmp_path):
+    from PIL import Image
+
+    from engine_h3.image_cond import canvas_to_tensor, load_canvas_image
+
+    # 200 x 100 source onto a 64 x 64 canvas: scale = max(64/100, 64/200) = 0.64 ->
+    # 128 x 64, then the centre 64 columns. A white band marks the source centre.
+    src = Image.new("RGB", (200, 100), (0, 0, 0))
+    for x in range(90, 110):
+        for y in range(100):
+            src.putpixel((x, y), (255, 255, 255))
+    path = tmp_path / "src.png"
+    src.save(path)
+    img, size = load_canvas_image(str(path), 64, 64)
+    assert img.size == (64, 64) and size == (200, 100)
+    x = canvas_to_tensor(img)
+    assert x.shape == (1, 3, 1, 64, 64) and x.dtype == torch.float32
+    assert float(x.min()) >= 0.0 and float(x.max()) <= 1.0
+    centre = x[0, 0, 0, :, 28:36].mean()
+    edge = x[0, 0, 0, :, :8].mean()
+    assert centre > 0.8 and edge < 0.05       # cut from the centre, not stretched
+    same, _ = load_canvas_image(str(path), 200, 100)   # already the canvas: untouched
+    assert same.tobytes() == src.tobytes()
+    with pytest.raises(ValueError):
+        load_canvas_image(str(tmp_path / "missing.png"), 64, 64)
+    (tmp_path / "bad.png").write_bytes(b"not an image")
+    with pytest.raises(ValueError):
+        load_canvas_image(str(tmp_path / "bad.png"), 64, 64)
+
+
+def _tiny_pipe_and_dit(tmp_path, blocks_on_gpu=1):
+    from engine_h3.dit import H3DiT
+    from engine_h3.pipeline_h3 import H3LoadOptions, H3Paths, H3Pipeline, dit_key_map_for
+    from engine_h3.quant_linear import swap_in_int8_linears
+    from engine_h3.sft_load import load_streaming
+
+    path = tmp_path / "tiny.safetensors"
+    _write_sft(path, _tiny_dit_tensors(layers=3, refiner=2, grid=1025, rank=8))
+    header, cfg = h3_format.inspect_h3_dit(str(path))
+    pipe = H3Pipeline(H3Paths(str(path), "te", "vv", "av", "tok"), H3LoadOptions(blocks_on_gpu=blocks_on_gpu),
+                      device="cpu", progress=lambda *a: None, log=lambda m: None)
+    with torch.device("meta"):
+        dit = H3DiT(cfg)
+        swap_in_int8_linears(dit, cfg.quant, bias_dtype_of=lambda n: torch.bfloat16)
+    load_streaming(dit, str(path), header, key_map=dit_key_map_for(cfg))
+    return pipe, dit
+
+
+def test_block_swap_wrappers_are_stripped_and_never_doubled(tmp_path):
+    """Plan §3.2 / review M-1: a kept DiT goes back unwrapped, and installing again
+    wraps each block exactly once. On the CPU every install falls back to the
+    synchronous path (``on->off``), so this pins the synchronous double-wrap
+    only; the prefetch path and the "nothing left on the GPU" check are shown
+    on the GPU by gate 2a-G4 (32 tensors parked after a prefetch job, 46 after
+    a synchronous one) -- review m-6."""
+    from engine.transformer.block_swap_service import _BLOCK_SWAP_ATTR
+
+    pipe, dit = _tiny_pipe_and_dit(tmp_path)
+    for prefetch in (True, False, True, False):
+        service, _used = pipe._place_dit(dit, prefetch=prefetch)
+        for block in dit.blocks:
+            original = getattr(block, _BLOCK_SWAP_ATTR)
+            assert getattr(original, "__func__", None) is type(block).forward   # the class forward, not a wrapper
+        service.teardown_prefetch()
+        service.release_installed()
+        pipe._park_dit(dit)
+        for block in dit.blocks:
+            assert not hasattr(block, _BLOCK_SWAP_ATTR)
+            assert getattr(block.forward, "__func__", None) is type(block).forward
+        assert all(t.device.type == "cpu" for t in dit.state_dict().values())
+
+
+def _stubbed_pipe(monkeypatch, fail=False):
+    from engine_h3 import pipeline_h3
+
+    pipe = pipeline_h3.H3Pipeline(
+        pipeline_h3.H3Paths("t", "te", "vv", "av", "tok"), pipeline_h3.H3LoadOptions(),
+        device="cpu", progress=lambda *a: None, log=lambda m: None,
+    )
+    pipe._dit_cfg = object()
+
+    def encode(prompt, phases, **kw):
+        if fail:
+            raise RuntimeError("encode failed")
+        return torch.zeros(3, 8), torch.ones(3, dtype=torch.long)
+
+    monkeypatch.setattr(pipe, "_encode", encode)
+    monkeypatch.setattr(pipe, "_denoise", lambda req, h, t, phases, entry, **kw: (torch.zeros(1), torch.zeros(1), "on"))
+    monkeypatch.setattr(pipe, "_decode", lambda req, v, a, entry, **kw: 1)
+    return pipe
+
+
+@pytest.mark.parametrize("keep, fail, kept_after", [(True, False, True), (False, False, False), (True, True, False)])
+def test_resident_kept_only_while_the_key_is_true(monkeypatch, keep, fail, kept_after):
+    """INTERFACE2 §8.1: kept after a keep_resident job; released by a job without
+    the key; released at once by a failed job."""
+    from engine_h3.pipeline_h3 import H3GenerateRequest
+
+    pipe = _stubbed_pipe(monkeypatch, fail=fail)
+    pipe._resident = {"decoder": torch.nn.Linear(1, 1), "audio_vae": torch.nn.Linear(1, 1)}
+    req = H3GenerateRequest(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4",
+                            keep_resident=keep)
+    if fail:
+        with pytest.raises(RuntimeError):
+            pipe.generate(req)
+    else:
+        done = pipe.generate(req)
+        assert done["keep_resident_used"] == ("on" if keep else "off")
+    assert (pipe._resident is not None) == kept_after
+
+
+def test_attention_and_prefetch_per_job_fall_back_to_load_values():
+    from engine_h3.pipeline_h3 import H3GenerateRequest, H3LoadOptions, H3Paths, H3Pipeline
+
+    pipe = H3Pipeline(H3Paths("t", "te", "vv", "av", "tok"),
+                      H3LoadOptions(attention_backend="sage", block_swap_prefetch=True),
+                      device="cpu", progress=lambda *a: None, log=lambda m: None)
+    base = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4")
+    assert pipe._attention_for(H3GenerateRequest(**base)) == "sage"
+    assert pipe._attention_for(H3GenerateRequest(**base, attention_backend="sdpa")) == "sdpa"
+    assert pipe._prefetch_for(H3GenerateRequest(**base)) is True
+    assert pipe._prefetch_for(H3GenerateRequest(**base, block_swap_prefetch=False)) is False
+
+
+# --------------------------------------------------------------------------- #
+# after the code review (REVIEW_code2a): M-1, m-4, m-7
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("bad", ["missing_image", "two_images", "bad_frame_rate"])
+def test_failed_check_or_image_releases_what_is_kept(monkeypatch, tmp_path, bad):
+    """Review M-1: a job refused by the request check or the image load is a failed
+    job too, and releases the kept models (INTERFACE2 §8.1) -- before the TE runs."""
+    from engine_h3.pipeline_h3 import H3GenerateRequest, H3ImageInput
+
+    pipe = _stubbed_pipe(monkeypatch)
+    calls = []
+    monkeypatch.setattr(pipe, "_encode", lambda *a, **k: calls.append("encode"))
+    pipe._resident = {"decoder": torch.nn.Linear(1, 1), "audio_vae": torch.nn.Linear(1, 1)}
+    base = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4", keep_resident=True)
+    req = {
+        "missing_image": H3GenerateRequest(**base, images=(H3ImageInput(str(tmp_path / "nope.png"), 0),)),
+        "two_images": H3GenerateRequest(**base, images=(H3ImageInput("a.png", 0), H3ImageInput("b.png", 0))),
+        "bad_frame_rate": H3GenerateRequest(**base, frame_rate=30),
+    }[bad]
+    with pytest.raises(ValueError):
+        pipe.generate(req)
+    assert pipe._resident is None and calls == []
+
+
+def test_worker_releases_after_a_job_refused_before_generate(monkeypatch):
+    """Review M-1, worker side: a malformed message fails before ``generate``; the
+    GENERATE_FAILED branch still releases the kept models."""
+    import io
+
+    from engine_h3 import worker
+
+    class FakePipe:
+        sampler = "euler"
+        released = 0
+
+        def release_resident(self):
+            FakePipe.released += 1
+
+        def generate(self, req):  # never reached
+            raise AssertionError("generate must not run")
+
+        def close(self):
+            pass
+
+    events = []
+    monkeypatch.setattr(worker, "_PIPE", FakePipe())
+    monkeypatch.setattr(worker, "_do_load", lambda msg: None)
+    monkeypatch.setattr(worker, "_emit", lambda event, **f: events.append(event))
+    monkeypatch.setattr(worker, "_log", lambda m: None)
+    lines = [
+        json.dumps({"op": "load"}),
+        json.dumps({"op": "generate", "prompt": "p", "seed": 1, "width": 640, "height": 384, "num_frames": 124,
+                    "output_path": "o.mp4", "images": "not-a-list"}),
+    ]
+    monkeypatch.setattr(worker.sys, "stdin", io.StringIO("\n".join(lines) + "\n"))
+    with pytest.raises(SystemExit):
+        worker.main()
+    assert events == ["error"] and FakePipe.released == 1
+
+
+def test_vision_inv_freq_matches_transformers():
+    """Review m-4: the recomputed vision rotary buffer is HF's own initial value."""
+    pytest.importorskip("transformers")
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLVisionRotaryEmbedding
+
+    from engine_h3.text_encoder import vision_inv_freq
+
+    for dim in (8, 36):
+        assert torch.equal(vision_inv_freq(dim), Qwen3VLVisionRotaryEmbedding(dim).inv_freq)
+
+
+def test_keep_resident_state_transitions_with_a_tiny_dit(monkeypatch, tmp_path):
+    """Review m-7 / plan §4-5: keep -> reuse -> release, through the REAL ``_denoise``
+    and ``_decode`` (a tiny DiT on the CPU; the int8 matmul replaced by its
+    dequantized float form, the VAEs and the mp4 writer by stand-ins).
+
+    J1 keep: the DiT is built from the file, parked on the CPU unwrapped, the
+       decoder / audio VAE kept.  J2 keep: nothing is read again (same objects),
+       same latents bit for bit.  J3 no key: reused, then released.
+    """
+    import torch.nn.functional as Fn
+
+    from engine.transformer.block_swap_service import _BLOCK_SWAP_ATTR
+    from engine_h3 import audio_vae as AV
+    from engine_h3 import media_out as MO
+    from engine_h3 import pipeline_h3 as P
+    from engine_h3 import video_vae as VV
+    from engine_h3.quant_linear import H3Int8Linear
+
+    def int8_as_float(self, x):
+        w = self.weight.to(torch.float32) * self.weight_scale.to(torch.float32)
+        b = None if self.bias is None else self.bias.to(torch.float32)
+        return Fn.linear(x.to(torch.float32), w, b).to(x.dtype)
+
+    monkeypatch.setattr(H3Int8Linear, "forward", int8_as_float)
+    path = tmp_path / "tiny.safetensors"
+    _write_sft(path, _tiny_dit_tensors(layers=3, refiner=2, grid=1025, rank=8))
+    _header, cfg = h3_format.inspect_h3_dit(str(path))
+    pipe = P.H3Pipeline(P.H3Paths(str(path), "te", "vv", "av", "tok"), P.H3LoadOptions(blocks_on_gpu=1),
+                        device="cpu", progress=lambda *a: None, log=lambda m: None)
+    pipe._dit_cfg = cfg
+    builds, decoders, avaes, latents = [], [], [], []
+    real_build = pipe._build_dit
+    monkeypatch.setattr(pipe, "_build_dit", lambda entry: builds.append(1) or real_build(entry))
+    monkeypatch.setattr(pipe, "_encode", lambda prompt, phases, **kw: (
+        torch.randn(5, TEXT, generator=torch.Generator().manual_seed(3)).to(torch.bfloat16),
+        torch.ones(5, dtype=torch.long)))
+
+    class FakeDecoder(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.zeros(1), requires_grad=False)
+
+        def decode(self, z, tiled=True):
+            latents.append(z.clone())
+            return torch.zeros((22, 64, 64, 3), dtype=torch.uint8)
+
+    class FakeAudio(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.zeros(1), requires_grad=False)
+
+        def decode(self, a):
+            return torch.zeros((2, 800 * a.shape[-1]))
+
+    monkeypatch.setattr(VV.H3VideoDecoder, "from_file",
+                        classmethod(lambda cls, *a, **k: decoders.append(1) or FakeDecoder()))
+    monkeypatch.setattr(AV.H3AudioVAE, "from_file", classmethod(lambda cls, *a, **k: avaes.append(1) or FakeAudio()))
+    monkeypatch.setattr(MO, "write_mp4", lambda *a, **k: 1)
+
+    def job(keep):
+        req = P.H3GenerateRequest(prompt="p", seed=7, width=64, height=64, num_frames=22, output_path="o.mp4",
+                                  num_inference_steps=2, keep_resident=keep)
+        return pipe.generate(req)
+
+    d1 = job(True)
+    kept = dict(pipe._resident)
+    assert d1["keep_resident_used"] == "on" and pipe.resident_parts == ["audio_vae", "decoder", "dit"]
+    assert d1["h3"]["phases"]["denoise"]["dit_source"] == "file"
+    assert all(not hasattr(b, _BLOCK_SWAP_ATTR) for b in kept["dit"].blocks)     # parked unwrapped
+    assert all(t.device.type == "cpu" for t in kept["dit"].state_dict().values())
+    d2 = job(True)
+    assert (len(builds), len(decoders), len(avaes)) == (1, 1, 1)                # nothing read again
+    assert pipe._resident["dit"] is kept["dit"] and pipe._resident["decoder"] is kept["decoder"]
+    assert d2["h3"]["phases"]["denoise"]["dit_source"] == "resident"
+    assert d2["h3"]["phases"]["decode"]["vae_source"] == "resident"
+    assert torch.equal(latents[0], latents[1])                                  # reuse changes nothing
+    d3 = job(False)
+    assert d3["keep_resident_used"] == "off" and d3["h3"]["phases"]["denoise"]["dit_source"] == "resident"
+    assert pipe._resident is None and torch.equal(latents[2], latents[0])
+    assert len(builds) == 1

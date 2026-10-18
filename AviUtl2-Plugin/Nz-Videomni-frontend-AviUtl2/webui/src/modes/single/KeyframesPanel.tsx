@@ -18,6 +18,17 @@ export interface KeyframesPanelProps {
   /** Disabled while a generation is in flight/reserved, mirroring the rest
    * of the form's fields. */
   disabled: boolean;
+  /** The loaded base model uses ONE keyframe (the first
+   * frame) — `multi_keyframes` in its `unsupported_features`. The cap itself
+   * comes from `useKeyframes`' `maxItemsOverride: 1` (so the add button greys
+   * once a card exists); this only adds the note saying why. Omitted = no
+   * note. */
+  multiUnavailable?: boolean | undefined;
+  /** The loaded base model does not take keyframe strength
+   * (`keyframe_strength` — the server refuses a non-default strength) — every
+   * card's strength slider greys, with a note. Omitted = usable.
+   */
+  strengthUnavailable?: boolean | undefined;
 }
 
 /**
@@ -35,9 +46,19 @@ export interface KeyframesPanelProps {
  * duration-shrink guard and the out-of-range Generate blocker that surround
  * it.
  */
-export function KeyframesPanel({ keyframes, numFrames, frameRate, frameIdxMultiple, gridOffset, disabled }: KeyframesPanelProps) {
+export function KeyframesPanel({
+  keyframes,
+  numFrames,
+  frameRate,
+  frameIdxMultiple,
+  gridOffset,
+  disabled,
+  multiUnavailable = false,
+  strengthUnavailable = false,
+}: KeyframesPanelProps) {
   const strings = useStrings();
   const t = strings.single.keyframes;
+  const unavailable = strings.single.unavailableOnBaseModel;
 
   const items = keyframes.items;
   const occupied = new Set(items.map((item) => item.frameIdx));
@@ -82,6 +103,7 @@ export function KeyframesPanel({ keyframes, numFrames, frameRate, frameIdxMultip
               offset={gridOffset}
               occupiedOthers={new Set(items.filter((other) => other.id !== item.id).map((other) => other.frameIdx))}
               disabled={disabled}
+              strengthDisabled={strengthUnavailable}
               onCommitFrameIdx={keyframes.setFrameIdx}
               onStrengthChange={keyframes.setStrength}
               onRemove={keyframes.remove}
@@ -112,6 +134,8 @@ export function KeyframesPanel({ keyframes, numFrames, frameRate, frameIdxMultip
       ) : (
         noRoom && <span className="field-hint">{t.addNoRoomHint}</span>
       )}
+      {multiUnavailable && <span className="field-hint">{unavailable.keyframesMulti}</span>}
+      {strengthUnavailable && <span className="field-hint">{unavailable.keyframeStrength}</span>}
     </div>
   );
 }

@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient as defaultApiClient, BackendApiError } from "../api/client";
 import type { ApiClient } from "../api/client";
-import type { BaseModelBlock } from "../api/types";
+import type { BaseModelBlock, BaseModelConstraints } from "../api/types";
 import type { AppMode } from "./AppShell";
 import { disabledModesFor } from "./featureScope";
+import { resolveGenerationConstraints } from "./generationConstraints";
+import type { GenerationConstraints } from "./generationConstraints";
 import type { TrackPipelineLoad } from "../jobs/JobsContext";
 
 /**
- * Backs the header's BASE MODEL dropdown (multi-engine groundwork §3-97 P7;
- * `Docs/MULTI_ENGINE_DESIGN.md` §6). A base model is the unit the user picks —
+ * Backs the header's BASE MODEL dropdown (`Docs/MULTI_ENGINE_DESIGN.md` §6).
+ * A base model is the unit the user picks —
  * "LTX 2.3", "LTX 2.5", a future "Wan 2.x" — as opposed to the four
  * per-category weight files behind it, which stay in Settings' Models panel
  * (`shell/useModels.ts`).
@@ -27,7 +29,8 @@ import type { TrackPipelineLoad } from "../jobs/JobsContext";
  *    in a `finally` — a rejected switch cannot leave it stuck.
  *
  * The WebUI never chooses an inference engine. The server derives that from
- * the weight file's own GGUF metadata (§2.1); this hook only ever sends an id.
+ * the base model's descriptor and checks it against the weight file (§2.1);
+ * this hook only ever sends an id.
  *
  * `apiClient` defaults to the app-wide singleton but accepts an override so
  * tests can bind a purpose-configured mock bridge.
@@ -61,6 +64,12 @@ export interface BaseModelOption {
    * "unknown" and adds no `weight_class` to its match, so every typed row
    * misses and the legacy fallbacks apply. */
   weightClass: string;
+  /** The numeric rules this base model's engine checks a request against
+   * (`BaseModelBlock.constraints`), copied as served.
+   * `null` on a backend that does not publish the key —
+   * read through {@link UseBaseModelsResult.activeConstraints}, which turns
+   * that into the LTX rules. */
+  constraints: BaseModelConstraints | null;
 }
 
 /** What a switch attempt settled on. Returned by
@@ -154,6 +163,15 @@ export interface UseBaseModelsResult {
    * whenever a pipeline load finishes (`AppShell`, on `pipelineLoading`'s
    * true→false edge) to pick the new class up. */
   activeWeightClass: string;
+  /** The LOADED base model's numeric rules, already
+   * flattened by `shell/generationConstraints.ts`: Create's frame grid, size
+   * multiple, fps range and sampling sliders. Read off `active` for the same
+   * reason {@link activeEngineFamily} is — while a switch is in flight the
+   * OLD base model is what a submit would reach. The LTX rules until the first
+   * `GET /models` lands and on a backend that publishes none, so an older
+   * backend changes nothing. Stable identity between switches (memoized on the
+   * listing), so it is safe in a dependency array. */
+  activeConstraints: GenerationConstraints;
   /** The mode tabs {@link unsupportedFeatures} makes unreachable — the shell
    * greys these and bounces out of one if it is the current mode. */
   disabledModes: AppMode[];
@@ -181,6 +199,9 @@ function toOption(block: BaseModelBlock): BaseModelOption {
     // `null` (the server could not tell, or a non-active base model) and an
     // absent field (a backend older than §1-31) both mean "unknown".
     weightClass: block.transformer_weight_class ?? "",
+    // Absent (a backend that predates the key) means "the LTX rules";
+    // `resolveGenerationConstraints` supplies them.
+    constraints: block.constraints ?? null,
   };
 }
 
@@ -285,6 +306,16 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     () => options.find((o) => o.id === active)?.weightClass ?? "",
     [options, active],
   );
+  // Keyed on the block's CONTENT, not on `options`' identity: the shell
+  // re-runs `refresh()` after every pipeline load, which rebuilds `options`
+  // even when nothing changed, and Create resets its sampling sliders to the
+  // server defaults whenever this object changes (a base-model switch). A
+  // fresh-but-equal block must therefore keep the same object.
+  const activeConstraintsKey = JSON.stringify(options.find((o) => o.id === active)?.constraints ?? null);
+  const activeConstraints = useMemo(
+    () => resolveGenerationConstraints(JSON.parse(activeConstraintsKey) as BaseModelConstraints | null),
+    [activeConstraintsKey],
+  );
   const disabledModes = useMemo(
     () => disabledModesFor(unsupportedFeatures),
     [unsupportedFeatures],
@@ -297,6 +328,7 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     unsupportedFeatures,
     activeEngineFamily,
     activeWeightClass,
+    activeConstraints,
     disabledModes,
     switchBaseModel,
     refresh,

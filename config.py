@@ -120,6 +120,12 @@ class ModelConfig(BaseModel):
     # repository); only the interpreter is an installation detail an operator
     # may have to point elsewhere. Consumed by services/engines/ltx25/adapter.py.
     engine_python_ltx25: str = "./.venv-engine-ltx25/Scripts/python.exe"
+    # Interpreter for the MiniMax H3 worker (``python -m engine_h3.worker``). A
+    # THIRD venv for the same reason 2.5 has its own: .venv-engine-h3 holds
+    # torch cu130, comfy-kitchen (the int8 kernels) and a transformers major
+    # for Qwen3-VL that neither LTX venv can share (Docs/MINIMAX_H3_DESIGN.md
+    # §10). Consumed by services/engines/h3/adapter.py.
+    engine_python_h3: str = "./.venv-engine-h3/Scripts/python.exe"
 
     # IC-LoRA adapter registry. Maps a server-side adapter NAME (what the API
     # accepts in GenerateRequest.loras[].name — never a filesystem path) to

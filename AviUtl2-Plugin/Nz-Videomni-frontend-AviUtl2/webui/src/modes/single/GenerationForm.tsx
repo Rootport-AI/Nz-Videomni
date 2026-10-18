@@ -6,7 +6,15 @@ import { selectableControlLoraNames } from "../../lora/controlLoras";
 import { LORA_STRENGTH_MAX, LORA_STRENGTH_MIN } from "../../lora/loraTags";
 import { AUDIO_PLACEHOLDER_DATA_URL, VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
 import { SOURCE_AUDIO_EXTENSIONS, useFileDrop } from "../../shell/useFileDrop";
-import { CropOutputField, DurationField, FrameRateSeedFields, ReservedFields, SizeFields } from "./CommonGenerationFields";
+import type { SingleSectionsDisabled } from "../../shell/featureScope";
+import {
+  CropOutputField,
+  DurationField,
+  FrameRateSeedFields,
+  ReservedFields,
+  SamplingFields,
+  SizeFields,
+} from "./CommonGenerationFields";
 import { KeyframesPanel } from "./KeyframesPanel";
 import { formatSecondsLabel } from "./paramUtils";
 import { PresetDropdown } from "./PresetDropdown";
@@ -80,6 +88,13 @@ export interface GenerationFormProps {
    * `"video-audio-to-video"` or `"audio-to-video"`. Opens the A2V
    * `<details>` on mount the same way `autoOpenReference` does for IC-LoRA. */
   autoOpenA2v?: boolean | undefined;
+  /** The parts of this form the loaded base model's engine
+   * cannot use (`featureScope.singleSectionsDisabledFor`, threaded down from
+   * `AppShell` as finished booleans). The reference-video accordion is HIDDEN
+   * (IC-LoRA is LTX's own mechanism); the A2V accordion greys with a note; the
+   * two keyframe flags are handed to `KeyframesPanel`. Omitted = everything
+   * usable (both LTX engines). */
+  sectionsUnavailable?: SingleSectionsDisabled | undefined;
 }
 
 /** The Create form: size/duration/fps/seed/presets, the M4 I2V keyframe
@@ -103,6 +118,7 @@ export function GenerationForm({
   nativeBridge,
   autoOpenReference,
   autoOpenA2v,
+  sectionsUnavailable,
 }: GenerationFormProps) {
   const strings = useStrings();
   // Right-click redesign W2: the IC-LoRA/A2V accordions default to collapsed,
@@ -194,6 +210,7 @@ export function GenerationForm({
         minHeight={limits.minHeight}
         maxHeight={limits.maxHeight}
         disabled={disabled}
+        step={form.dimensionStep}
         onWidthChange={form.setWidth}
         onHeightChange={form.setHeight}
         gettingSize={gettingSize}
@@ -218,6 +235,7 @@ export function GenerationForm({
         onChange={onDurationChange}
         onCommit={onDurationCommit}
         hint={durationHint}
+        step={form.frameGrid.step}
         spillThresholdFrames={spillThresholdFrames}
         isOverSpillThreshold={isOverSpillThreshold}
         // Smart comfort marker (2026-08-18): the smart per-resolution marker
@@ -235,9 +253,22 @@ export function GenerationForm({
         disabled={disabled}
         onFrameRateChange={form.setFrameRate}
         onSeedChange={form.setSeed}
+        fixedFrameRate={form.fixedFrameRate}
       />
 
-      <ReservedFields />
+      {/* The three sampling sliders replace the
+          CFG placeholder only while the loaded base model publishes
+          `constraints.sampling`; LTX keeps the placeholder unchanged. */}
+      {form.samplingConstraints && values.sampling ? (
+        <SamplingFields
+          constraints={form.samplingConstraints}
+          values={values.sampling}
+          disabled={disabled}
+          onChange={form.setSamplingValue}
+        />
+      ) : (
+        <ReservedFields />
+      )}
 
       <KeyframesPanel
         keyframes={keyframes}
@@ -246,29 +277,44 @@ export function GenerationForm({
         frameIdxMultiple={frameIdxMultiple}
         gridOffset={gridOffset}
         disabled={disabled}
+        multiUnavailable={sectionsUnavailable?.keyframesMulti}
+        strengthUnavailable={sectionsUnavailable?.keyframeStrength}
       />
 
-      {/* IC-LoRA (reference video) — always rendered now (Gradio-faithful,
-          U2). A2V+IC-LoRA now combine (no exclusivity): both accordions stay
-          fully usable at once (see `ReferenceVideoSection`). Collapsed by
-          default. */}
-      <details className="form-accordion" ref={referenceDetailsRef}>
-        <summary className="form-accordion-summary">{strings.single.referenceVideo.heading}</summary>
-        <div className="form-accordion-body">
-          <ReferenceVideoSection
-            form={form}
-            disabled={disabled}
-            resolutionNotes={resolutionNotes}
-            nativeBridge={nativeBridge}
-          />
-        </div>
-      </details>
+      {/* IC-LoRA (reference video), collapsed by default. A2V+IC-LoRA combine
+          (no exclusivity): both accordions stay fully usable at once (see
+          `ReferenceVideoSection`). */}
+      {/* HIDDEN (not greyed) while the loaded base model's engine cannot take
+          a reference video (`reference_video`). */}
+      {!sectionsUnavailable?.referenceVideo && (
+        <details className="form-accordion" ref={referenceDetailsRef}>
+          <summary className="form-accordion-summary">{strings.single.referenceVideo.heading}</summary>
+          <div className="form-accordion-body">
+            <ReferenceVideoSection
+              form={form}
+              disabled={disabled}
+              resolutionNotes={resolutionNotes}
+              nativeBridge={nativeBridge}
+            />
+          </div>
+        </details>
+      )}
 
-      {/* A2V (source audio) — always rendered, collapsed by default. */}
+      {/* A2V (source audio) — always rendered, collapsed by default. Greyed
+          with a note while the loaded base model cannot chain (an A2V submit
+          IS a chain request) — the same treatment as Chain's own audio
+          panel. */}
       <details className="form-accordion" ref={a2vDetailsRef}>
         <summary className="form-accordion-summary">{strings.single.sourceAudio.heading}</summary>
         <div className="form-accordion-body">
-          <SourceAudioSection form={form} disabled={disabled} nativeBridge={nativeBridge} />
+          {sectionsUnavailable?.a2v && (
+            <p className="warning-banner">{strings.single.unavailableOnBaseModel.sourceAudio}</p>
+          )}
+          <SourceAudioSection
+            form={form}
+            disabled={disabled || (sectionsUnavailable?.a2v ?? false)}
+            nativeBridge={nativeBridge}
+          />
         </div>
       </details>
     </div>

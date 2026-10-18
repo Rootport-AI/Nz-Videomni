@@ -167,3 +167,15 @@ export function nagRequestFields(nag: NagSettings | undefined): NagRequestFields
     vsf_scale: nag.vsfScale,
   };
 }
+
+/** The NAG settings every screen should READ
+ * while the loaded base model's engine cannot run NAG (`nag` in its
+ * `unsupported_features`, see `featureScope.nagDisabledFor`) — the frozen
+ * {@link NAG_OFF}, so {@link nagRequestFields} emits nothing and
+ * {@link isNagNegativeEmpty} blocks nothing. The user's own settings are left
+ * untouched (the accordion still shows them, greyed), so switching back to a
+ * base model that runs NAG restores them as they were. `available` true
+ * returns `nag` itself (same identity — no re-render churn). */
+export function effectiveNag(nag: NagSettings, available: boolean): NagSettings {
+  return available ? nag : NAG_OFF;
+}

@@ -1,0 +1,51 @@
+{
+  "timers": [
+    [
+      "te.load",
+      4.88
+    ],
+    [
+      "te.encode",
+      14.23
+    ],
+    [
+      "te.release",
+      0.1
+    ],
+    [
+      "_free_cuda",
+      0.11
+    ],
+    [
+      "pipeline._encode (whole)",
+      19.32
+    ],
+    [
+      "_free_cuda",
+      0.14
+    ],
+    [
+      "_free_cuda",
+      0.1
+    ],
+    [
+      "_free_cuda",
+      0.15
+    ],
+    [
+      "_free_cuda",
+      0.07
+    ],
+    [
+      "_free_cuda",
+      0.09
+    ]
+  ],
+  "encode_phase_seconds": 19.32,
+  "te_read": {
+    "read_gib": 24.17,
+    "read_seconds": 13.61,
+    "layers_read": 50,
+    "encode_seconds": 14.23
+  }
+}

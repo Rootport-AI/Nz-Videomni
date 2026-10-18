@@ -28,6 +28,9 @@ describe("FEATURE_UI (the declaration table)", () => {
         "end_source",
         "inpaint",
         "keep_resident_embeddings",
+        "keyframe_strength",
+        "multi_keyframes",
+        "nag",
         "outpaint",
         "prune_vaed",
         "reference_video",
@@ -59,8 +62,10 @@ describe("disabledUiTargets", () => {
     expect(targets(["two_stage_hq", "constructor", "__proto__"])).toEqual([]);
   });
 
-  it("closes the Chained tab and the Batch A2V section for `chain`", () => {
-    expect(targets(["chain"])).toEqual(["createSection.batchA2v", "mode.chained"]);
+  it("closes the Chained tab, the Batch A2V section and Create's A2V card for `chain`", () => {
+    // MiniMax H3 第 2 弾: Create's A2V card joined — an A2V submit from Create
+    // IS a `POST /generate/chain`.
+    expect(targets(["chain"])).toEqual(["createSection.a2v", "createSection.batchA2v", "mode.chained"]);
     // And NOT the Edit tab: a container target closes only when everything it
     // contains has, and `chain` contains neither Edit sub-tab.
     expect(disabledUiTargets(["chain"]).has("mode.edit")).toBe(false);

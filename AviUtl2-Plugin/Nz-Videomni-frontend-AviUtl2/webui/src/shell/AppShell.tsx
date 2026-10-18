@@ -37,7 +37,7 @@ import { parseLoraPrompt, stripLoraTagsByName } from "../lora/loraTags";
 import { ChainedScreen } from "../modes/chained/ChainedScreen";
 import { EditScreen } from "../modes/edit/EditScreen";
 import { SingleScreen } from "../modes/single/SingleScreen";
-import { FALLBACK_APP_CONFIG, MIN_NUM_FRAMES } from "../modes/single/defaultConfig";
+import { FALLBACK_APP_CONFIG } from "../modes/single/defaultConfig";
 import { StatusHeader } from "../modes/single/StatusHeader";
 import { useBaseUrl } from "../modes/single/useBaseUrl";
 import { useConfig } from "../modes/single/useConfig";
@@ -61,14 +61,19 @@ import { ThemeProvider } from "./ThemeContext";
 import { ToastProvider, useToasts } from "./ToastContext";
 import { Toasts } from "./Toasts";
 import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationSettings";
-import { comfortFramesForBudget, resolveComfortRow } from "./comfortTable";
+import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from "./comfortTable";
 import {
   accelerationResetsFor,
   batchA2vDisabledFor,
   chainPanelsDisabledFor,
   editSubTabsDisabledFor,
+  nagDisabledFor,
   settingsRowsHiddenFor,
+  singleSectionsDisabledFor,
 } from "./featureScope";
+import { frameLimitsFor } from "./generationConstraints";
+import { snapNumFrames } from "../modes/single/paramUtils";
+import { effectiveNag } from "./nagSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
 import { baseModelInstaller, useBaseModels } from "./useBaseModels";
 import { BaseModelSelect } from "./BaseModelSelect";
@@ -927,8 +932,16 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // (single ternary, D tidy) — every other action reaching this shared
     // function has no use for either value, so there is no reason to spend a
     // `resolveComfortRow` lookup on it.
+    //
+    // The loaded base model's own frame floor/ceiling and
+    // grid, and — for an engine the served comfort table has no profile for —
+    // no ceiling at all (`comfortProfileMissing`), so #9/#10 leave DURATION as
+    // the live form already holds it (on the grid) instead of rewriting it
+    // with the LTX lookup.
+    const cursorItemFrameLimits = frameLimitsFor(baseModels.activeConstraints, config.limits.max_num_frames);
+    const cursorItemNoComfortLine = comfortProfileMissing(config.limits, baseModels.activeEngineFamily);
     const cursorItemComfortRow =
-      (intent === "text-to-video" || intent === "image-from-frame") && publishedForKeepState
+      (intent === "text-to-video" || intent === "image-from-frame") && publishedForKeepState && !cursorItemNoComfortLine
         ? resolveComfortRow(
             config.limits,
             baseModels.activeEngineFamily,
@@ -943,8 +956,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
             publishedForKeepState.width,
             publishedForKeepState.height,
             cursorItemComfortRow.singleBudget,
-            MIN_NUM_FRAMES,
-            config.limits.max_num_frames,
+            cursorItemFrameLimits.minNumFrames,
+            cursorItemFrameLimits.maxNumFrames,
             cursorItemComfortRow.spatialFactor,
             cursorItemComfortRow.temporalFactor,
           )
@@ -955,9 +968,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
             policy: "comfortCeiling",
             width: publishedForKeepState.width,
             height: publishedForKeepState.height,
-            spillFreeFrames: config.limits.spill_free_frames,
-            minNumFrames: MIN_NUM_FRAMES,
-            maxNumFrames: config.limits.max_num_frames,
+            spillFreeFrames: cursorItemNoComfortLine ? null : config.limits.spill_free_frames,
+            minNumFrames: cursorItemFrameLimits.minNumFrames,
+            maxNumFrames: cursorItemFrameLimits.maxNumFrames,
+            frameGrid: baseModels.activeConstraints.frameGrid,
             ...(cursorItemSmartCeiling !== null ? { comfortCeilingFrames: cursorItemSmartCeiling } : {}),
           })
         : null;
@@ -1215,8 +1229,23 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         acceleration: accelerationControls.acceleration,
         sageAvailable: sageAvail,
         weightClass: baseModels.activeWeightClass,
+        // The same rules `SingleScreen` hands its own call.
+        constraints: baseModels.activeConstraints,
       });
-      numFrames = seed.numFrames ?? config.generation_defaults.num_frames;
+      // A seed that resolved no DURATION (e.g. a comfortCeiling intent on an
+      // engine with no comfort line) falls back to the config default ON THE GRID the remounted
+      // form will snap it to, so the ribbon and the form agree. Single only —
+      // the other targets keep LTX's grid (where the default already sits).
+      numFrames =
+        seed.numFrames ??
+        (target === "single"
+          ? snapNumFrames(
+              config.generation_defaults.num_frames,
+              cursorItemFrameLimits.minNumFrames,
+              cursorItemFrameLimits.maxNumFrames,
+              baseModels.activeConstraints.frameGrid,
+            )
+          : config.generation_defaults.num_frames);
       genFps = seed.frameRate ?? config.generation_defaults.frame_rate;
     }
 
@@ -1366,6 +1395,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     baseModels.activeEngineFamily,
     // §1-31: the weight class picks the comfort row beside the engine family.
     baseModels.activeWeightClass,
+    // The frame grid / fps / size rules the seeds follow.
+    baseModels.activeConstraints,
     accelerationControls.acceleration,
     sageAvail,
     // Step 0. A memo in `useBaseModels` keyed on the ACTIVE base model's
@@ -1496,6 +1527,15 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // finished booleans and never reasons about engines itself.
   const editSubTabs = editSubTabsDisabledFor(baseModels.unsupportedFeatures);
 
+  // The same arrangement for Create's own sections and for
+  // the shared Negative Prompt accordion. NAG closes in two halves: the
+  // accordion greys, and every screen READS `NAG_OFF` meanwhile
+  // (`effectiveNag`), so nothing of it rides on a request — the user's own
+  // settings stay put for when a NAG-capable base model is back.
+  const singleSections = singleSectionsDisabledFor(baseModels.unsupportedFeatures);
+  const nagUnavailable = nagDisabledFor(baseModels.unsupportedFeatures);
+  const nagForRequests = effectiveNag(nagControls.nag, !nagUnavailable);
+
   const singleIntent = pendingIntent?.targetMode === "single" ? pendingIntent : undefined;
   const chainedIntent = pendingIntent?.targetMode === "chained" ? pendingIntent : undefined;
   // W0 (2026-08-09): same one-shot hand-off as the two above — Edit is now a
@@ -1544,8 +1584,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       />
 
       {/* NAG (2026-07-28): one shared accordion, outside every mode tab —
-          Create/Chain/Batch all read `nagControls.nag` (owner decision §UX 1). */}
-      <NagAccordion nag={nagControls.nag} controls={nagControls} />
+          Create/Chain/Batch all read the same settings (owner decision §UX 1),
+          as `nagForRequests` (`effectiveNag`), which reads as off while the
+          loaded base model cannot run NAG. */}
+      <NagAccordion nag={nagControls.nag} controls={nagControls} unavailable={nagUnavailable} />
 
       {/* Shared note area (§6): tab-bar-level slot, visible on all three
           screens, above the operation panel. Renders nothing until a note is
@@ -1603,7 +1645,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               controlLora={controlLora}
               setControlLora={setControlLora}
               controlLoraNames={controlLoraNames}
-              nag={nagControls.nag}
+              nag={nagForRequests}
               acceleration={accelerationControls.acceleration}
               sageAvailable={sageAvail}
               /* 2026-08-31: the loaded engine keys the served comfort-budget
@@ -1616,6 +1658,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  submits chain jobs, so it follows the engine's feature scope
                  rather than Create's own. */
               batchUnavailable={batchA2vDisabledFor(baseModels.unsupportedFeatures)}
+              /* The loaded base model's numeric rules and
+                 the Create sections its engine closes. */
+              constraints={baseModels.activeConstraints}
+              sectionsUnavailable={singleSections}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "chained"}>
@@ -1630,7 +1676,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               controlLoraNames={controlLoraNames}
               depthLoraNames={depthLoraNames}
               referenceDownscaleFactors={referenceDownscaleFactors}
-              nag={nagControls.nag}
+              nag={nagForRequests}
               acceleration={accelerationControls.acceleration}
               /* 2026-08-31: same served comfort-budget table Create reads —
                  Chained takes the row's CHAIN budget (the stage-2 window

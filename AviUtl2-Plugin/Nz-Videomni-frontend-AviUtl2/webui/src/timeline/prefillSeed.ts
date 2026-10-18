@@ -22,12 +22,14 @@
 
 import type { AppConfig } from "../api/types";
 import { pxFromVLatent } from "../modes/chained/chainUtils";
-import { MIN_HEIGHT, MIN_NUM_FRAMES, MIN_WIDTH } from "../modes/single/defaultConfig";
+import { MIN_HEIGHT, MIN_WIDTH } from "../modes/single/defaultConfig";
 import { snapFrameRate } from "../modes/single/paramUtils";
 import { STAGE2_WINDOW_DEFAULT, STAGE2_WINDOW_PRESETS } from "../shell/tokenBudget";
 import type { PrefillResolutionPolicy } from "../shell/PrefillPolicyContext";
 import type { AccelerationSettings } from "../shell/accelerationSettings";
-import { comfortFramesForBudget, resolveComfortRow } from "../shell/comfortTable";
+import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from "../shell/comfortTable";
+import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../shell/generationConstraints";
+import type { GenerationConstraints } from "../shell/generationConstraints";
 import { computeTargetNumFrames } from "./deriveDuration";
 import type { DurationPolicy } from "./deriveDuration";
 import { deriveGenerationParams } from "./deriveGenerationParams";
@@ -243,6 +245,13 @@ export interface ResolvePrefillSeedArgs {
    * `weight_class` in the match). Both callers (`AppShell` and
    * `SingleScreen`) must hand in the same value (R-4). */
   weightClass?: string | undefined;
+  /** The LOADED base model's numeric rules
+   * (`useBaseModels().activeConstraints`). Applied to Single-targeted intents
+   * only — the frame grid and floor, the size multiple, and a fixed frame rate
+   * (which wins over `fpsPolicy`). Chain-targeted intents keep the LTX rules
+   * (an engine with other rules closes Chained). Omitted = the LTX rules.
+   * Both callers (`AppShell` and `SingleScreen`) must hand in the same value. */
+  constraints?: GenerationConstraints | undefined;
 }
 
 export interface PrefillSeed {
@@ -280,7 +289,7 @@ export interface PrefillSeed {
  * useMaterialSize = `sizePolicy` ≠ `defaults`) for width/height → the three-tier
  * fps seed (material → project → config default, see below) → the intent's
  * {@link DurationPolicy} + {@link materialDurationForIntent} fed
- * into `computeTargetNumFrames` (which owns the 8n+1 snap and the comfort-
+ * into `computeTargetNumFrames` (which owns the grid snap and the comfort-
  * ceiling clamp) → the one intent-specific DURATION cap
  * ({@link END_SOURCE_SEED_MAX_FRAMES}). `computeTargetNumFrames`'s `null` (policy
  * resolved nothing) is surfaced as `undefined` so the caller falls back to the
@@ -289,6 +298,11 @@ export interface PrefillSeed {
 export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   const { intent, selection, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass } =
     args;
+  // The served rules apply to the Single screen's seeds
+  // only; a Chain-targeted seed keeps LTX's (see the arg's doc comment).
+  const singleTarget = targetModeForIntent(intent) === "single";
+  const rules = singleTarget ? (args.constraints ?? LTX_GENERATION_CONSTRAINTS) : LTX_GENERATION_CONSTRAINTS;
+  const frameLimits = frameLimitsFor(rules, config.limits.max_num_frames);
   // Both IC-LoRA intents seed on the 128 grid. 台帳§1-15 W4 (2026-08-11): the
   // Chain-targeted one MUST be here — its material lands in Chain's reference
   // slot, which flips `useChainForm`'s size grid from 64 to 128 the moment the
@@ -313,6 +327,7 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
     projectWidth: config.generation_defaults.width,
     projectHeight: config.generation_defaults.height,
     isICLora,
+    generalMultiple: rules.dimensionMultiple,
     limits: {
       minWidth: MIN_WIDTH,
       maxWidth: config.limits.max_width,
@@ -348,8 +363,11 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   const usableMaterialFps = snapFrameRate(rawMaterialFps) !== undefined ? rawMaterialFps : undefined;
   // The RAW rate the seed came from, kept beside the snapped one purely so the
   // toast can name it (see `PrefillSeed.frameRateSnappedFrom`).
-  const rawSeedFps = fpsPolicy === "defaults" ? undefined : (usableMaterialFps ?? rawProjectFps);
-  const frameRate = snapFrameRate(rawSeedFps);
+  // An engine fixed at one frame rate overrides the fps
+  // policy outright — there is nothing to seed and nothing to report.
+  const fixedFps = fixedFrameRate(rules);
+  const rawSeedFps = fixedFps !== null || fpsPolicy === "defaults" ? undefined : (usableMaterialFps ?? rawProjectFps);
+  const frameRate = fixedFps ?? snapFrameRate(rawSeedFps);
   // Only a snap that actually MOVED the value is worth reporting; a project or
   // material already on a whole frame rate must stay silent (no false positives).
   const frameRateSnappedFrom =
@@ -386,8 +404,12 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // Computed against `derived.width/height` — the size this very seed is about
   // to apply — not the form's current size, which is what makes the seeded
   // DURATION and the marker that appears next to it agree.
+  // An engine the served comfort table has no profile for
+  // has NO comfort line — neither the smart one nor the legacy LTX lookup — so
+  // the seed only snaps onto the grid (`comfortProfileMissing`).
+  const noComfortLine = singleTarget && comfortProfileMissing(config.limits, engineFamily);
   const smartCeiling =
-    targetModeForIntent(intent) === "single" && acceleration
+    singleTarget && acceleration && !noComfortLine
       ? (() => {
           const row = resolveComfortRow(
             config.limits,
@@ -401,8 +423,8 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
                 derived.width,
                 derived.height,
                 row.singleBudget,
-                MIN_NUM_FRAMES,
-                config.limits.max_num_frames,
+                frameLimits.minNumFrames,
+                frameLimits.maxNumFrames,
                 row.spatialFactor,
                 row.temporalFactor,
               )
@@ -415,9 +437,10 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
       policy,
       width: derived.width,
       height: derived.height,
-      spillFreeFrames: config.limits.spill_free_frames,
-      minNumFrames: MIN_NUM_FRAMES,
-      maxNumFrames: config.limits.max_num_frames,
+      spillFreeFrames: noComfortLine ? null : config.limits.spill_free_frames,
+      minNumFrames: frameLimits.minNumFrames,
+      maxNumFrames: frameLimits.maxNumFrames,
+      frameGrid: rules.frameGrid,
       ...(smartCeiling !== null ? { comfortCeilingFrames: smartCeiling } : {}),
       ...(materialDurationSec !== undefined ? { materialDurationSec } : {}),
       ...(selectedRangeFrames !== undefined ? { selectedRangeFrames } : {}),

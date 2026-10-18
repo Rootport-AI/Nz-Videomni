@@ -1365,7 +1365,7 @@ def test_vram16_row_chunks_are_equal():
         assert chunks[0][0] == 0 and chunks[-1][1] == s
         assert all(a[1] == b[0] for a, b in zip(chunks, chunks[1:]))
         assert len(chunks) == math.ceil(s / chunk) and max(sizes) - min(sizes) <= 1
-    assert [r1 - r0 for r0, r1 in row_chunks(9326, 4096)] == [3109, 3109, 3108]   # gate A-G3b: 3 chunks
+    assert [r1 - r0 for r0, r1 in row_chunks(9326, 4096)] == [3109, 3109, 3108]   # selftest default prompt (S=9,326); gate A-G3b used the G5 prompt (S=9,335), also 3 chunks
 
 
 def test_vram16_blocks_on_gpu_for():

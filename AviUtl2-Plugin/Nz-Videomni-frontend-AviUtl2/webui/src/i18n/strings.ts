@@ -1512,7 +1512,7 @@ export const en = {
     cfgScale: {
       label: "CFG scale",
     },
-    reservedNote: "CFG is not supported by the current backend (reserved for future use)",
+    reservedNote: "The selected base model does not use CFG (reserved for future use)",
     /** The three sampling sliders shown in place
      * of the CFG placeholder while the loaded base model publishes
      * `constraints.sampling` (`CommonGenerationFields.tsx`'s `SamplingFields`). */
@@ -3211,7 +3211,7 @@ export const ja: Strings = {
     cfgScale: {
       label: "CFGスケール",
     },
-    reservedNote: "CFGは現在のバックエンドでは未対応です（将来の使用のために予約されています）",
+    reservedNote: "選択中のベースモデルはCFGを使いません（将来の使用のために予約されています）",
     sampling: {
       steps: "ステップ数",
       shiftVideo: "Shift（映像）",

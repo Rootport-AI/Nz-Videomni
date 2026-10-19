@@ -30,7 +30,7 @@ Encoder and decoder are separate models (Docs/MINIMAX_H3_DESIGN.md §8)
 :class:`H3VideoEncoder` (``encoder`` + ``quant_conv``) and :class:`H3VideoDecoder`
 (``post_quant_conv`` + ``decoder``) are built and read from the same file on
 their own, each with only its own tensors. T2V never builds the encoder; I2V
-builds it in float32 for one key frame and drops it. The decoder keeps the
+builds it in float32 for its key frames (one at a time) and drops it. The decoder keeps the
 bf16 + float32-island precision below.
 
 Name mapping (``encoder_key_map`` / ``decoder_key_map``) mirrors the DiffSynth
@@ -64,7 +64,7 @@ Precision
 ---------
 The decoder's heavy work (convolutions, linears, attention) runs in the module
 dtype (bfloat16 in production); the encoder runs entirely in float32 in
-production (one key frame, so the cost is small; the file is F16, so the cast
+production (one latent frame per key frame, so the cost is small; the file is F16, so the cast
 is exact). The decoder's RMSNorm/LayerNorm weights,
 ``scale1``/``scale2``, ``x_embedder`` and ``post_quant_conv`` are kept in
 float32 and the decoder's residual stream is float32, as the reference does
@@ -249,7 +249,7 @@ class ResnetBlock3D(nn.Module):
 
 
 class EncoderFCN3D(nn.Module):
-    """Causal 3D CNN encoder (pixels -> mean/logvar). Used for the I2V key frame (H3VideoEncoder)."""
+    """Causal 3D CNN encoder (pixels -> mean/logvar). Used for the I2V key frames (H3VideoEncoder)."""
 
     def __init__(self, ch, ch_mult, space_down, time_down, num_res_blocks, in_channels, z_channels,
                  padding_mode="reflect"):

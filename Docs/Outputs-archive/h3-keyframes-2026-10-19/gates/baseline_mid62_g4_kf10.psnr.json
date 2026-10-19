@@ -1,0 +1,20 @@
+{
+  "mp4": "outputs/h3-keyframes-2026-10-19/g4_kf10.mp4",
+  "sha256": "1026bd06fab9c7b5aabc458cad60ad2523c7df9352827aeb2b9ad7f0af3512cd",
+  "frames": 124,
+  "size": [
+    640,
+    384
+  ],
+  "psnr": {
+    "62=kf_mid62.png": {
+      "frame": 62,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 32.73,
+      "mse": 34.687
+    }
+  }
+}

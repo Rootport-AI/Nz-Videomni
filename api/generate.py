@@ -86,7 +86,8 @@ def generate(
     # ``REQUEST_RULES``); the 422 is shaped like pydantic's. This is also the
     # ONE place an omitted ``num_inference_steps`` / shift becomes the family's
     # default, so everything downstream (the job log, the runner, metadata.json)
-    # sees a number.
+    # sees a number. The keyframe positions are also snapped onto the family's
+    # grid here (and an omitted keyframe strength gets the family's default).
     engines.validate_for_family(context.pipeline_manager.active_engine_family, request)
 
     # Alpha Gen's block is INTERNAL: only POST /generate/alpha builds it (from a

@@ -8,7 +8,7 @@ Pinned here, none of it needing a GPU or a weight file:
 
 1. the four-way audit of ``GenerateRequest`` against the adapter's tables
    (``conditioning_images`` is the one field that is both honoured and refused —
-   the first frame runs, more images / another position / a strength do not);
+   key frames on any frame run, a strength does not);
 2. the refusals and ``UNSUPPORTED_FEATURES`` (the reject table's names + ``chain`` + ``retake``);
 3. the numeric rules and the ``constraints`` block GET /models publishes, for
    H3 and for LTX (the two JSON blocks of the stage-2 plan §3.3, verbatim);
@@ -61,8 +61,8 @@ _CLASSIFICATIONS = {
     "governed by another field (GOVERNED_FIELDS)": lambda: set(h3.GOVERNED_FIELDS),
 }
 
-#: The one field allowed in two tables: honoured (the first frame) AND refused
-#: (more images / another position, and a strength).
+#: The one field allowed in two tables: honoured (the key frames) AND refused
+#: (a strength).
 _ALLOWED_OVERLAP = {"conditioning_images"}
 
 
@@ -142,8 +142,8 @@ REQUEST_OVERRIDES_H3: dict[str, dict] = {
     },
     "prune_vaed": {"vae_mode": "prune_vaed"},
     "keep_resident_embeddings": {"keep_resident_embeddings": True},
-    "multi_keyframes": {"conditioning_images": [_IMG, {"image_id": "img-2", "frame_idx": 60}]},
-    "keyframe_strength": {"conditioning_images": [{**_IMG, "strength": 1.0}]},
+    # 0.8 is LTX's default and still refused: H3 has no strength at all.
+    "keyframe_strength": {"conditioning_images": [{**_IMG, "strength": 0.8}]},
 }
 
 
@@ -164,18 +164,22 @@ def test_every_refusal_raises_feature_unsupported_naming_h3(feature):
     err = ei.value
     assert err.code == "FEATURE_UNSUPPORTED" and err.status_code == 422
     assert f"'{fired[0]}'" in err.message
-    assert err.detail.startswith("MiniMax H3 は")
+    assert err.detail.startswith("MiniMax H3 ")
 
 
-def test_multi_keyframes_message_names_the_first_frame_rule():
+def test_keyframe_strength_message_says_h3_has_none():
     with pytest.raises(APIError) as ei:
-        h3.reject_unsupported(_request(conditioning_images=[{"image_id": "a", "frame_idx": 17}]))
-    assert "先頭フレーム 1 枚だけに対応しています" in ei.value.detail
+        h3.reject_unsupported(_request(conditioning_images=[{"image_id": "a", "frame_idx": 17, "strength": 0.5}]))
+    assert ei.value.detail == "MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。"
 
 
-def test_t2v_and_first_frame_i2v_are_accepted():
+def test_t2v_and_keyframe_i2v_are_accepted():
     h3.reject_unsupported(_request())
     h3.reject_unsupported(_request(conditioning_images=[_IMG]))
+    # Several key frames, the last frame and a middle one: no refusal.
+    h3.reject_unsupported(_request(conditioning_images=[
+        _IMG, {"image_id": "img-2", "frame_idx": 60}, {"image_id": "img-3", "frame_idx": 123},
+    ]))
 
 
 def test_unsupported_features_is_the_reject_table_plus_chain_and_retake():
@@ -190,7 +194,6 @@ def test_unsupported_features_is_the_reject_table_plus_chain_and_retake():
         "alpha_gen",
         "prune_vaed",
         "keep_resident_embeddings",
-        "multi_keyframes",
         "keyframe_strength",
         "chain",
         "retake",
@@ -227,12 +230,14 @@ H3_CONSTRAINTS = {
         "shift_video": {"min": 1, "max": 20, "step": 0.1, "default": 12},
         "shift_audio": {"min": 1, "max": 20, "step": 0.1, "default": 3},
     },
+    "keyframes": {"step": 1, "offset": 0},
 }
 LTX_CONSTRAINTS = {
     "num_frames": {"step": 8, "offset": 1, "min": 9, "max": 481},
     "dimension_multiple": 64,
     "frame_rate": {"min": 1, "max": 60},
     "sampling": None,
+    "keyframes": {"step": 8, "offset": 1},
 }
 
 
@@ -536,6 +541,26 @@ def test_generate_payload_i2v_keep_resident_and_per_job_acceleration(tmp_path):
     assert list(payload)[-1] == "keep_resident" and payload["keep_resident"] is True
 
 
+def test_generate_payload_sends_every_key_frame_with_its_position(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    paths = []
+    for name in ("a.png", "b.png", "c.png"):
+        (tmp_path / name).write_bytes(b"png")
+        paths.append(tmp_path / name)
+    req = _validated(conditioning_images=[
+        _IMG, {"image_id": "img-2", "frame_idx": 123}, {"image_id": "img-3", "frame_idx": 60},
+    ])
+    be.generate(req, tmp_path / "job", conditioning_image_paths=paths, seed=1)
+    (payload,) = captured
+    # In request order (the engine sorts), each with its frame, no strength.
+    assert payload["images"] == [
+        {"path": str(paths[0]), "frame_idx": 0},
+        {"path": str(paths[1]), "frame_idx": 123},
+        {"path": str(paths[2]), "frame_idx": 60},
+    ]
+
+
 def test_generate_crops_on_the_app_side(tmp_path, monkeypatch):
     captured: list[dict] = []
     crops: list[tuple] = []
@@ -636,7 +661,11 @@ def test_mock_i2v_over_http(three_family_client, png_bytes):
             "num_frames": 22,
             "num_inference_steps": 4,
             "shift_video": 6.0,
-            "conditioning_images": [{"image_id": image_id, "frame_idx": 0}],
+            # The first frame and a position past the end (snapped to F-1 = 21).
+            "conditioning_images": [
+                {"image_id": image_id, "frame_idx": 0},
+                {"image_id": image_id, "frame_idx": 30},
+            ],
         },
     )
     assert r.status_code == 202, r.text
@@ -646,6 +675,9 @@ def test_mock_i2v_over_http(three_family_client, png_bytes):
     assert meta["generation_mode"] == "i2v"
     assert meta["request"]["num_inference_steps"] == 4
     assert (meta["request"]["shift_video"], meta["request"]["shift_audio"]) == (6.0, 3.0)
+    # The positions actually used, and no strength (H3 has none: null, not 1.0).
+    assert [ci["frame_idx"] for ci in meta["request"]["conditioning_images"]] == [0, 21]
+    assert [ci["strength"] for ci in meta["request"]["conditioning_images"]] == [None, None]
 
 
 @pytest.mark.parametrize(
@@ -671,7 +703,7 @@ def test_h3_numeric_422_over_http(three_family_client, overrides, msg):
     }
 
 
-@pytest.mark.parametrize("feature", ["nag", "multi_keyframes", "keyframe_strength", "loras"])
+@pytest.mark.parametrize("feature", ["nag", "keyframe_strength", "loras"])
 def test_h3_refuses_over_http_before_any_lookup(three_family_client, feature):
     _activate(three_family_client, "MiniMaxH3")
     before = len(three_family_client.get("/api/v1/jobs").json())
@@ -681,7 +713,7 @@ def test_h3_refuses_over_http_before_any_lookup(three_family_client, feature):
     assert r.status_code == 422, r.text
     error = r.json()["error"]
     assert error["code"] == "FEATURE_UNSUPPORTED"
-    assert error["detail"].startswith("MiniMax H3 は")
+    assert error["detail"].startswith("MiniMax H3 ")
     assert len(three_family_client.get("/api/v1/jobs").json()) == before
 
 

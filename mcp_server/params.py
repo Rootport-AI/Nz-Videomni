@@ -21,14 +21,18 @@ class ConditioningImageArg(BaseModel):
     ``image_id`` は ``upload_image`` が返す ID。``crf`` はサーバー側の隠し
     フィールド（two_stage_hq専用のモック残骸。``Docs/MCP_SERVER_DESIGN.md``
     §2 の D8 で非公開）なので、ここには出さない。``frame_idx`` はサーバー側で
-    0 または 8n+1 グリッドへスナップ・クランプされる（0 なら開始フレーム扱い。
-    LTX の場合）。MiniMax H3 は先頭フレーム 1 枚（``frame_idx=0``）だけを受け、
-    ``strength`` も既定の 0.8 以外は 422 FEATURE_UNSUPPORTED になる。
+    ベースモデルの規則に寄せられる（0 は開始フレーム。LTX はそれ以外を 8n+1
+    へスナップ・クランプ、MiniMax H3 は 0〜``num_frames``−1 の任意の
+    フレームをそのまま使い、それより後ろは最後のフレームに寄せる。どちらも
+    最大 10 枚）。``strength`` は省略
+    （``None``）でベースモデルの既定になる（LTX は 0.8）。MiniMax H3 には
+    強度が無く、値を指定すると 422 FEATURE_UNSUPPORTED（``keyframe_strength``）
+    になる。
     """
 
     image_id: str
     frame_idx: int = 0
-    strength: float = 0.8
+    strength: float | None = None
 
 
 class LoraArg(BaseModel):

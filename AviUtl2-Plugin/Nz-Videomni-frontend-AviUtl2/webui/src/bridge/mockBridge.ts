@@ -115,8 +115,6 @@ export const MOCK_CONFIG_BODY = {
     max_height: 1088,
     max_num_frames: 481,
     max_conditioning_images: 10,
-    conditioning_frame_idx_multiple: 8,
-    conditioning_keyframe_grid_offset: 1,
     phase1_max_concurrent_jobs: 1,
     low_vram_disabled_required: false,
     // 2026-08-31 再測定・判定規則v3・LTX 2.3 既定構成（正本は
@@ -330,6 +328,7 @@ const MOCK_LTX_CONSTRAINTS: BaseModelConstraints = {
   dimension_multiple: 64,
   frame_rate: { min: 1, max: 60 },
   sampling: null,
+  keyframes: { step: 8, offset: 1 },
 };
 
 /** `base_models[].constraints` per ENGINE FAMILY, as the real `GET /models`
@@ -349,6 +348,7 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
       shift_video: { min: 1, max: 20, step: 0.1, default: 12 },
       shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
     },
+    keyframes: { step: 1, offset: 0 },
   },
 };
 
@@ -496,7 +496,6 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "alpha_gen",
     "prune_vaed",
     "keep_resident_embeddings",
-    "multi_keyframes",
     "keyframe_strength",
     "chain",
     "retake",

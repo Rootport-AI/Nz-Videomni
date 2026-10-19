@@ -1,0 +1,29 @@
+{
+  "mp4": "outputs\\h3-gate2\\g4_J1_i2v.mp4",
+  "sha256": "77e29687bf84f58a2af1b0215e6d1ebebc307f1df3346390504c784b5cddd15a",
+  "frames": 124,
+  "size": [
+    640,
+    384
+  ],
+  "psnr": {
+    "0=kf_first.png": {
+      "frame": 0,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 30.3,
+      "mse": 60.659
+    },
+    "-1=kf_last.png": {
+      "frame": 123,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 25.35,
+      "mse": 189.601
+    }
+  }
+}

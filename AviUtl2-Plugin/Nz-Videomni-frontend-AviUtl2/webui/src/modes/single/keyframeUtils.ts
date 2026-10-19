@@ -1,10 +1,11 @@
 /**
  * Pure helpers for the M4 I2V keyframe (conditioning image) panel.
  * Docs/API_REFERENCE.md §5.1: `ConditioningImage` is `{image_id, frame_idx,
- * strength}` (the WebUI never sends `crf`). `frame_idx==0` is the leading
+ * strength?}` (the WebUI never sends `crf`). `frame_idx==0` is the leading
  * frame (latent-replace) and is sent as-is; anything greater is snapped by
- * the *server* to the `conditioning_frame_idx_multiple`/`grid_offset` grid
- * (default 8/1: `(frame_idx-1)//8*8+1`) and range-clamped — the WebUI submits
+ * the *server* to the base model's keyframe grid (`constraints.keyframes`:
+ * `(frame_idx-offset)//step*step+offset`, LTX 8/1, MiniMax H3 1/0 = as typed)
+ * and range-clamped — the WebUI submits
  * the user's natural value and only needs to *preview* that snap here so the
  * "will snap to N" hint under the frame-index input matches what the server
  * will actually do.
@@ -45,12 +46,16 @@ export function fileNameFromPath(path: string): string {
   return idx >= 0 ? path.slice(idx + 1) : path;
 }
 
-/** Previews the server-side 8n+1 grid snap for a `frame_idx` value
- * (Docs/API_REFERENCE.md §5.1). `0` always stays `0` (leading frame); a
- * negative input is treated as `0` since the field's own min is 0. */
+/** Previews the server-side keyframe-grid snap for a `frame_idx` value
+ * (Docs/API_REFERENCE.md §5.1; LTX 8n+1, identity on a 1/0 grid). `0` always
+ * stays `0` (leading frame); a negative input is treated as `0` since the
+ * field's own min is 0. For `frameIdx > 0` the result is clamped from below to
+ * the first grid point (`offset` if > 0, else `multiple`), like the server's
+ * `normalize_keyframes` (the upper clamp lives elsewhere). */
 export function snapFrameIdx(frameIdx: number, multiple: number, gridOffset: number): number {
   if (frameIdx <= 0) return 0;
-  return Math.floor((frameIdx - 1) / multiple) * multiple + gridOffset;
+  const first = gridOffset > 0 ? gridOffset : multiple;
+  return Math.max(first, Math.floor((frameIdx - gridOffset) / multiple) * multiple + gridOffset);
 }
 
 /** True when `frameIdx` falls outside the valid `[0, numFrames-1]` range for
@@ -84,4 +89,13 @@ export function buildConditioningImages(items: KeyframeItem[]): ConditioningImag
       frame_idx: item.frameIdx,
       strength: item.strength,
     }));
+}
+
+/** The same images with the `strength` key removed — sent when the loaded
+ * base model has no keyframe strength (`keyframe_strength` in its
+ * `unsupported_features`), which refuses any value. The key is left out, not
+ * set to `undefined`, so the job record shows "no strength" rather than a
+ * stand-in number. */
+export function omitStrength(images: readonly ConditioningImage[]): ConditioningImage[] {
+  return images.map(({ strength: _strength, ...rest }) => rest);
 }

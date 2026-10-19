@@ -42,7 +42,6 @@ export type UiTarget =
   | "createSection.batchA2v"
   | "createSection.referenceVideo"
   | "createSection.a2v"
-  | "createSection.keyframesMulti"
   | "createSection.keyframeStrength"
   | "shell.nag"
   | "settingsRow.vae"
@@ -105,10 +104,10 @@ interface FeatureUiEntry {
  *       (`nagSettings.effectiveNag`) — hiding alone would strand a NAG left
  *       enabled on another base model, 422-ing every job with no control left
  *       to turn it off.
- *     - `multi_keyframes` caps Create's keyframes at one (the add button greys
- *       once a card exists); `keyframe_strength` greys each card's strength.
- *       Both name the same request field (`conditioning_images`) from two
- *       sides, which is why they are two names.
+ *     - `keyframe_strength` HIDES each keyframe card's strength row, and the
+ *       shell stops sending `strength` at the same time
+ *       (`keyframeUtils.omitStrength`): the engine has no keyframe strength,
+ *       and omitted is what the job record then shows (not a stand-in 1.0).
  *    LTX publishes none of these names, so none of this reaches it.
  *  - **prune_vaed / keep_resident_embeddings** are Settings rows rather than
  *    generation surfaces, and both carry a `resets` because their choice is
@@ -143,7 +142,6 @@ export const FEATURE_UI = {
   end_source: { disables: ["chainPanel.endSource"] },
   reference_video: { disables: ["chainPanel.reference", "createSection.referenceVideo"] },
   nag: { disables: ["shell.nag"] },
-  multi_keyframes: { disables: ["createSection.keyframesMulti"] },
   keyframe_strength: { disables: ["createSection.keyframeStrength"] },
   prune_vaed: { disables: ["settingsRow.vae"], resets: "vaeMode" },
   keep_resident_embeddings: {
@@ -358,14 +356,13 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
 /** The parts of Create (Single) an engine's feature scope can close. Keyed
  * the way `SingleScreen`'s `sectionsUnavailable` prop is.
  * How each one closes is the screen's business (see {@link FEATURE_UI}'s
- * notes): the reference video is hidden, the rest grey. */
+ * notes): the reference video and the keyframe strength are hidden, the rest
+ * grey. */
 export interface SingleSectionsDisabled {
   /** The reference-video (IC-LoRA) accordion (`reference_video`). */
   referenceVideo: boolean;
   /** The A2V (source audio) accordion (`chain` — an A2V submit is a chain). */
   a2v: boolean;
-  /** Keyframes beyond the first (`multi_keyframes`). */
-  keyframesMulti: boolean;
   /** Each keyframe card's strength (`keyframe_strength`). */
   keyframeStrength: boolean;
 }
@@ -377,7 +374,6 @@ export function singleSectionsDisabledFor(unsupportedFeatures: readonly string[]
   return {
     referenceVideo: disabled.has("createSection.referenceVideo"),
     a2v: disabled.has("createSection.a2v"),
-    keyframesMulti: disabled.has("createSection.keyframesMulti"),
     keyframeStrength: disabled.has("createSection.keyframeStrength"),
   };
 }

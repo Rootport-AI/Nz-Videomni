@@ -49,8 +49,6 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
     max_height: 4096,
     max_num_frames: 481,
     max_conditioning_images: 10,
-    conditioning_frame_idx_multiple: 8,
-    conditioning_keyframe_grid_offset: 1,
     phase1_max_concurrent_jobs: 1,
     // 2026-08-31 再測定・判定規則v3・LTX 2.3 既定構成（正本は
     // `Nz-Videomni/config.yaml` の `limits.spill_free_frames`）。

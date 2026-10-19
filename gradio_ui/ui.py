@@ -75,6 +75,7 @@ from .presets import (
     CHAIN_MIN_OPEN,
     KF_MAX_SLOTS,
     KF_MIN_OPEN,
+    KF_STRENGTH_DEFAULT,
     PRESETS,
     apply_chain_preset,
     apply_preset,
@@ -634,7 +635,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                         # MAX_CONDITIONING_IMAGES, re-exported by presets.py). Slot 1
                         # suggests "start frame (0)"; the remaining slots are plain
                         # "frame position" slots, all defaulting to 0 (the server snaps
-                        # any non-zero value to the 8n+1 grid).
+                        # each position by the loaded base model's rule: LTX 0 and
+                        # 8n+1, MiniMax H3 any frame 0..F-1).
                         kf_slots: list[tuple[object, object, object, object]] = []
                         kf_extra_rows: list[object] = []
                         # Collapsible keyframe grid: slot 1 always visible (the
@@ -653,7 +655,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                    "lbl_kf_image")
                                     kf_frame = reg(gr.Number(value=0, label=L(frame_key), precision=0,
                                                              minimum=0), frame_key)
-                                    kf_strength = reg(gr.Slider(0.0, 1.0, value=0.8, step=0.05,
+                                    kf_strength = reg(gr.Slider(0.0, 1.0, value=KF_STRENGTH_DEFAULT,
+                                                               step=0.05,
                                                                label=L("lbl_kf_strength")),
                                                      "lbl_kf_strength")
                                 kf_slots.append((kf_enabled, kf_image, kf_frame, kf_strength))
@@ -1029,7 +1032,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                 "lbl_frames")
                                 c1_image = reg(gr.Image(label=L("lbl_clip_start_image"),
                                                         type="filepath"), "lbl_clip_start_image")
-                                c1_strength = reg(gr.Slider(0.0, 1.0, value=0.8, step=0.05,
+                                c1_strength = reg(gr.Slider(0.0, 1.0, value=KF_STRENGTH_DEFAULT,
+                                                            step=0.05,
                                                             label=L("lbl_kf_strength")),
                                                   "lbl_kf_strength")
                             reg(gr.Markdown(L("cap_first_clip")), "cap_first_clip", "value")
@@ -2536,6 +2540,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             "accel_vae": accel_vae,
             "accel_keep_resident_embeddings": accel_keep_resident_embeddings,
             "accel_vram16": accel_vram16,
+            # Each keyframe slot's strength slider, as kf_strength_<slot>.
+            **{f"kf_strength_{slot_n}": slot[3]
+               for slot_n, slot in enumerate(kf_slots, start=1)},
         }
         # chain_engine_state sits between the category dropdowns and
         # the gated controls, so the gated updates stay the TAIL.

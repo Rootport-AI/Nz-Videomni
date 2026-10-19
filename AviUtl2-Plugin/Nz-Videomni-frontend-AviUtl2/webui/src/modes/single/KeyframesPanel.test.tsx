@@ -5,6 +5,7 @@ import type { NativeBridge } from "../../bridge";
 import { createMockBridge } from "../../bridge/mockBridge";
 import { LanguageProvider, useStrings } from "../../i18n/LanguageContext";
 import { DurationField } from "./CommonGenerationFields";
+import { LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
 import { FALLBACK_APP_CONFIG } from "./defaultConfig";
 import { findOverflowFrameIdxs } from "./keyframeGrid";
 import { KeyframeShrinkModal } from "./KeyframeShrinkModal";
@@ -15,17 +16,19 @@ import { useKeyframes } from "./useKeyframes";
 // Integration harness: the REAL `useKeyframes` hook driving the REAL
 // `KeyframesPanel` (timeline bar + cards + add row) over a mock bridge — the
 // same wiring `GenerationForm` gives it, minus the surrounding form. `multiple`/
-// `offset` are the fixture config's 8/1, so with numFrames=49 the placeable
+// `offset` are the LTX keyframe grid's 8/1, so with numFrames=49 the placeable
 // grid is {0, 1, 9, 17, 25, 33, 41} (maxPlaceable = 41).
-const MULTIPLE = FALLBACK_APP_CONFIG.limits.conditioning_frame_idx_multiple;
-const OFFSET = FALLBACK_APP_CONFIG.limits.conditioning_keyframe_grid_offset;
+const MULTIPLE = LTX_GENERATION_CONSTRAINTS.keyframeGrid.step;
+const OFFSET = LTX_GENERATION_CONSTRAINTS.keyframeGrid.offset;
 
 function PanelHarness({
   nativeBridge,
   numFrames = 49,
+  strengthUnavailable = false,
 }: {
   nativeBridge: NativeBridge;
   numFrames?: number;
+  strengthUnavailable?: boolean;
 }) {
   const keyframes = useKeyframes(FALLBACK_APP_CONFIG, { nativeBridge });
   return (
@@ -36,15 +39,16 @@ function PanelHarness({
       frameIdxMultiple={MULTIPLE}
       gridOffset={OFFSET}
       disabled={false}
+      strengthUnavailable={strengthUnavailable}
     />
   );
 }
 
-function renderPanel(numFrames = 49) {
+function renderPanel(numFrames = 49, strengthUnavailable = false) {
   const nativeBridge = createMockBridge({ delayMs: 0 });
   const utils = render(
     <LanguageProvider>
-      <PanelHarness nativeBridge={nativeBridge} numFrames={numFrames} />
+      <PanelHarness nativeBridge={nativeBridge} numFrames={numFrames} strengthUnavailable={strengthUnavailable} />
     </LanguageProvider>,
   );
   return { ...utils, nativeBridge };
@@ -152,6 +156,20 @@ describe("KeyframesPanel (integration)", () => {
     // Panel wired `onCaptureInto`/`isCapturing`/`isPicking` to the real
     // `useKeyframes` fields rather than dead props.
     await waitFor(() => expect(screen.queryByText(/no image yet/i)).not.toBeInTheDocument());
+  });
+
+  it("strengthUnavailable hides each card's STRENGTH row (not greyed: absent from the DOM)", () => {
+    const shown = renderPanel();
+    fireEvent.click(addButton());
+    expect(shown.container.querySelector('.kfc-card input[type="range"]')).not.toBeNull();
+    expect(screen.getByText(/strength/i)).toBeInTheDocument();
+    shown.unmount();
+
+    const hidden = renderPanel(49, true);
+    fireEvent.click(addButton());
+    expect(hidden.container.querySelectorAll(".kfc-card")).toHaveLength(1);
+    expect(hidden.container.querySelector('.kfc-card input[type="range"]')).toBeNull();
+    expect(screen.queryByText(/strength/i)).toBeNull();
   });
 });
 

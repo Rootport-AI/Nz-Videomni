@@ -37,9 +37,9 @@ export interface DurationShrinkGuardDeps {
    * position-based (`frameIdx`) check, not a readiness one. */
   items: readonly KeyframeItem[];
   removeKeyframe: (id: string) => void;
-  /** `config.limits.conditioning_frame_idx_multiple`. */
+  /** The base model's keyframe grid step (`constraints.keyframes.step`). */
   multiple: number;
-  /** `config.limits.conditioning_keyframe_grid_offset`. */
+  /** The base model's keyframe grid origin (`constraints.keyframes.offset`). */
   offset: number;
 }
 

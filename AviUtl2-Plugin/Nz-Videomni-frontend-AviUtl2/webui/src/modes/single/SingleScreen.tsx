@@ -24,7 +24,7 @@ import type { SourceTrimDecision } from "../../timeline/sourceTrim";
 import { bindToJob, publishFormValues, publishKeyframeCount, publishSourceSlots, rollbackReservedPlacement } from "../../timeline/provisionalReservation";
 import { subscribeCreateCommands } from "../../timeline/createLiveCommands";
 import { useShowNote } from "../../shell/NoteArea";
-import { fileNameFromPath } from "./keyframeUtils";
+import { fileNameFromPath, omitStrength } from "./keyframeUtils";
 import { findOverflowFrameIdxs, nextAddPosition, placeableSlotCount } from "./keyframeGrid";
 import { KeyframeShrinkModal } from "./KeyframeShrinkModal";
 import { GenerateButtonBar } from "./GenerateButtonBar";
@@ -527,15 +527,7 @@ function SingleScreenBody({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount consume
   }, []);
-  // An engine that takes only the first frame
-  // (`multi_keyframes`) caps the panel at one card — the add button greys once
-  // it exists. A card left from another base model is not removed; the
-  // server's 422 wording covers that case.
-  const keyframes = useKeyframes(
-    config,
-    { nativeBridge },
-    sectionsUnavailable?.keyframesMulti ? { maxItemsOverride: 1 } : {},
-  );
+  const keyframes = useKeyframes(config, { nativeBridge });
 
   // I9 §3-4 (#2/#4) / §6: auto-load the routed material ONCE on this remount,
   // mirroring ChainedScreen's I8 pattern. #2 `reference-video` uploads the
@@ -752,14 +744,15 @@ function SingleScreenBody({
   const setNumFramesRef = useRef(form.setNumFrames);
   setNumFramesRef.current = form.setNumFrames;
   // I11 §3-4 #5: the "Add keyframe" button's landing/cap semantics
-  // (keyframeGrid) depend on the live DURATION and the server grid params. The
-  // subscription below is created once, so read these through a ref updated on
-  // every render (mirroring keyframesRef) rather than closing over stale values.
+  // (keyframeGrid) depend on the live DURATION and the base model's keyframe
+  // grid (`constraints.keyframeGrid`). The subscription below is created once,
+  // so read these through a ref updated on every render (mirroring
+  // keyframesRef) rather than closing over stale values.
   const keyframeAddCtxRef = useRef({ numFrames: 0, multiple: 0, offset: 0 });
   keyframeAddCtxRef.current = {
     numFrames: form.values.numFrames,
-    multiple: config.limits.conditioning_frame_idx_multiple,
-    offset: config.limits.conditioning_keyframe_grid_offset,
+    multiple: (constraints ?? LTX_GENERATION_CONSTRAINTS).keyframeGrid.step,
+    offset: (constraints ?? LTX_GENERATION_CONSTRAINTS).keyframeGrid.offset,
   };
   // W6: the append path (new frame-0 card, or #11's tail card) is watched by
   // `beforeIds` diff (the card that wasn't there before); the replace path
@@ -964,8 +957,8 @@ function SingleScreenBody({
     });
   }, [refVideoState, sourceAudioState, conditioningAttentionStrength, referenceVideoStrength]);
 
-  const frameIdxMultiple = config.limits.conditioning_frame_idx_multiple;
-  const gridOffset = config.limits.conditioning_keyframe_grid_offset;
+  const frameIdxMultiple = (constraints ?? LTX_GENERATION_CONSTRAINTS).keyframeGrid.step;
+  const gridOffset = (constraints ?? LTX_GENERATION_CONSTRAINTS).keyframeGrid.offset;
 
   // Keyframe timeline rework (2026-07-18): a DURATION shrink (or a preset that
   // carries a shorter num_frames) can strand a keyframe past the placeable
@@ -1013,16 +1006,20 @@ function SingleScreenBody({
   // the Repeat count settings fingerprint come from the very same values.
   const { isA2v, buildA2vRequest, toGenerateRequest } = form;
   const conditioningImages = keyframes.conditioningImages;
+  // A base model without keyframe strength (`keyframe_strength`) refuses any
+  // value, so the key is left out of every image (its strength row is hidden).
+  const strengthOmitted = sectionsUnavailable?.keyframeStrength ?? false;
   const buildSubmission = useCallback(():
     | { kind: "chain"; body: GenerateChainRequest }
     | { kind: "generate"; body: GenerateRequest } => {
     if (isA2v) return { kind: "chain", body: buildA2vRequest(conditioningImages) };
     const request = toGenerateRequest();
+    const images = strengthOmitted ? omitStrength(conditioningImages) : conditioningImages;
     return {
       kind: "generate",
-      body: conditioningImages.length > 0 ? { ...request, conditioning_images: conditioningImages } : request,
+      body: images.length > 0 ? { ...request, conditioning_images: images } : request,
     };
-  }, [isA2v, buildA2vRequest, toGenerateRequest, conditioningImages]);
+  }, [isA2v, buildA2vRequest, toGenerateRequest, conditioningImages, strengthOmitted]);
   const getSubmissionFingerprint = useCallback(() => submissionFingerprint(buildSubmission()), [buildSubmission]);
 
   const handleGenerate = () => {

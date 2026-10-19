@@ -26,26 +26,37 @@ from __future__ import annotations
 
 from typing import Iterable
 
+from .presets import KF_MAX_SLOTS, KF_STRENGTH_DEFAULT
+
 #: Feature name -> the control id(s) it closes. Control ids are defined here
 #: and nowhere else; ``ui.py`` maps them to components.
 FEATURE_UI: dict[str, tuple[str, ...]] = {
     "prune_vaed": ("accel_vae",),
     "keep_resident_embeddings": ("accel_keep_resident_embeddings",),
     "vram16_mode": ("accel_vram16",),
+    # One strength slider per keyframe slot; a base model without keyframe
+    # strength (MiniMax H3) closes all of them.
+    "keyframe_strength": tuple(
+        f"kf_strength_{i}" for i in range(1, KF_MAX_SLOTS + 1)),
 }
 
 #: The value a hidden control is reset to — the server's own default for the
 #: field it feeds, so an invisible control cannot keep a rejected value on the
 #: wire. Every id named in :data:`FEATURE_UI` must appear here. The type is as
 #: wide as the controls are: a radio resets to a string literal, a checkbox to
-#: a bool.
-RESET_VALUES: dict[str, str | bool] = {
+#: a bool, a slider to a float.
+RESET_VALUES: dict[str, str | bool | float] = {
     "accel_vae": "default",
     "accel_keep_resident_embeddings": False,
     # Reset to the H3 default (on), not False: the handler sends the key only
     # when the box is OFF, so a hidden box at its default puts nothing on the
     # wire and LTX never sees vram16_mode.
     "accel_vram16": True,
+    # Reset to the LTX default, not to "no strength": the handler sends the
+    # key only when a slot differs from it, so a hidden slider at its default
+    # puts nothing on the wire and H3 never sees strength.
+    **{f"kf_strength_{i}": KF_STRENGTH_DEFAULT
+       for i in range(1, KF_MAX_SLOTS + 1)},
 }
 
 #: Every gated control id, in :data:`FEATURE_UI` order and deduplicated. This

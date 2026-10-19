@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-19（§1-103〜§1-109 を起票し、§1-95・§1-97 の優先順位を順序に合わせた（2026-10-19）・§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票・§1-92 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162）・§1-94 を起票・§2-1〔元 §1-89〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237・§3-238（テストコードの整理と不安定の一掃）を起票し §1-94 を吸収・運用規則に不安定なテストの扱いを追記・§3-238 に状態と順位の注記（2026-10-17・§1-93 に α版の完結条件を追記し、§1-95〜§1-97（快適上限の較正・ステップ数と shift の表示・末尾と中間キーフレーム）を起票（2026-10-17）・§1-96 を §1-93 の第 2 弾へ吸収（2026-10-17）・§1-93 の第 1 弾が完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165。2026-10-17）・§1-98 と §1-99（テキストエンコーダの直接読み・T2V で符号化器を読まない）を起票（2026-10-17）・§1-98 と §1-99 を §1-93 の第 2 弾へ吸収して削除・§1-93 の第 2 弾の計画を了承（2026-10-17）・§1-93 の第 2 弾の実装完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166。2026-10-18）・§1-100・§1-101 を起票・§1-93 の第 2 弾が目視合格（2026-10-18）・第 2 弾のあとの文書の現行化で §1-93・§1-95 を直し、§1-102 を起票（2026-10-18）。§1-93 の第 3 弾が実装と開発機の門（3-G1・3-G2）まで合格（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167。2026-10-18）。サブマシンの門 3-G3 に合格して α版が完結し、§1-93 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167.8。2026-10-18）・§1-101 の第 1 段（計測）が完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168。2026-10-18）。§1-101 の第 2 段（VRAM 16GB mode）が B-G5 のオーナーの目視まで合格して §1-101 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-240（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169。2026-10-18）。
+- 作成: 2026-07-15／最終更新: 2026-10-19（§1-103〜§1-109 を起票し、§1-95・§1-97 の優先順位を順序に合わせた（2026-10-19）・§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票・§1-92 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162）・§1-94 を起票・§2-1〔元 §1-89〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237・§3-238（テストコードの整理と不安定の一掃）を起票し §1-94 を吸収・運用規則に不安定なテストの扱いを追記・§3-238 に状態と順位の注記（2026-10-17・§1-93 に α版の完結条件を追記し、§1-95〜§1-97（快適上限の較正・ステップ数と shift の表示・末尾と中間キーフレーム）を起票（2026-10-17）・§1-96 を §1-93 の第 2 弾へ吸収（2026-10-17）・§1-93 の第 1 弾が完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165。2026-10-17）・§1-98 と §1-99（テキストエンコーダの直接読み・T2V で符号化器を読まない）を起票（2026-10-17）・§1-98 と §1-99 を §1-93 の第 2 弾へ吸収して削除・§1-93 の第 2 弾の計画を了承（2026-10-17）・§1-93 の第 2 弾の実装完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166。2026-10-18）・§1-100・§1-101 を起票・§1-93 の第 2 弾が目視合格（2026-10-18）・第 2 弾のあとの文書の現行化で §1-93・§1-95 を直し、§1-102 を起票（2026-10-18）。§1-93 の第 3 弾が実装と開発機の門（3-G1・3-G2）まで合格（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167。2026-10-18）。サブマシンの門 3-G3 に合格して α版が完結し、§1-93 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167.8。2026-10-18）・§1-101 の第 1 段（計測）が完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168。2026-10-18）。§1-101 の第 2 段（VRAM 16GB mode）が B-G5 のオーナーの目視まで合格して §1-101 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-240（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169。2026-10-18）。§1-97 の第 1 弾（末尾キーフレーム）が実装と門 1-G1〜1-G5 まで合格（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170。2026-10-19）。§1-97 を §2-2 へ移送・§4-43 を起票（2026-10-19）。・§1 の順序の行と各項目の「優先順位」の欄を削除（オーナー決定 2026-10-19）・§2-2〔元 §1-97〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-241・記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170。2026-10-19
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
@@ -15,46 +15,31 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-**次のテーマの順序（オーナー決定 2026-10-19）: §1-97 → §1-103（A2V）→ §1-104（Style LoRA＋Turbo LoRA）→ §1-95（較正）→ §1-105（1 ステップの高速化・第 1 弾）→ §1-106（Chained）→ §1-107（Ref2VA）→ §1-108（ControlNet）→ §1-109（参照付き Chained）。§1-100・§1-102 は随時。**
-
 ### 1-95. MiniMax H3（Turbo なし・int8 ConvRot）の快適上限の較正（起票：2026-10-17）
 
 - **概要**: α版（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239）は快適上限マーカーを非表示にする。本項で、MiniMax H3（Turbo なし・int8 ConvRot）について快適上限を較正し、記述子（manifest）の `comfort` に行を足して配信する。較正が済むまで記述子に `comfort` の行は持たせない。
 - **前提**: なし（α版は完結。操作パネルからの T2V と I2V、`install-MiniMaxH3.bat` と README は済み）。復号の VRAM は第 2 弾で直した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.3 の 2a-G5）。ノイズ除去の段の VRAM の溢れは VRAM 16GB mode で解消した（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-240）。判定規則と計測の作法は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §4.2（快適の判定規則）と §16（直近の較正）。GPU を使う実測は弾ごとにまとめてオーナーの了承を得る。
-- **優先順位**: 4 番目（Turbo の後。生成が速くなってから測る）。
 - **留意**: Turbo（少ないステップ数で生成するための蒸留 LoRA）を後回しにしているため 1 本の生成が長い。生成が遅すぎて較正に支障が出るなら、LoRA 対応の優先順位を上げる。`transformer_weight_class` は MiniMax H3 では常に `null`（`services/weight_class.py`）で、快適上限の表の行は種別（`requires.weight_class`）が必須なので、このまま行を足しても操作パネルの照合でどの行にも当たらない。較正の計画で種別の扱い（判定を広げて int8 ConvRot を `"8bit"` とする／種別なしの行を許す／別の種別名を足す）を決める。
 - **留意（VRAM 16GB mode の後の前提。2026-10-19）**: ① 較正は製品の既定＝**VRAM 16GB mode on** で測る（off は参考）。② 線は速度ではなく、共有メモリへの退避（spill）そのものの量で引く（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.1 の裁定 3）。③ ただし on ではノイズ除去に割り当て器の上限が掛かるので、境界は退避ではなく「上限での OOM」か「復号の段（上限なし）の退避」として現れる。判定規則 v3（窓の共有メモリの中央値）をどう読み替えるかは、較正の計画で決める。④ `m×n ≥ 2³¹` の実測（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13 から預けた件）は、on では行の塊で分割されるので起きず、off でだけ届きうる（算術による推測: off の fc1 は S × 28,672 で、S ≥ 約 74,900 行で届く。on の最大の行列積は out_proj の S × 5,376 で、S ≥ 約 40 万行が要る）。扱いは計画で決める。記録は同 §169。
 - **出典**: [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-10-17 の裁定）。
-
-### 1-97. MiniMax H3 の末尾キーフレームと中間キーフレームへの対応（起票：2026-10-17）
-
-- **概要**: α版（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239）の I2V は先頭フレームだけを受け付ける。本項で、末尾キーフレーム（FL2VA が持つ先頭と末尾のフレーム条件付けの末尾側）と、中間キーフレームへの対応を扱う。中間キーフレームを公式の FL2VA が受け付けるかは調査が要る。
-- **前提**: なし（α版は完結）。
-- **優先順位**: 1 番目。条件行の時間座標の一般化（ComfyUI `MiniMaxH3AddGuide` と同じ方式）で、連結と A2V が使う「条件行」の部品を先に整える。
-- **手がかり**: 公式が対応しているのは先頭と末尾のキーフレームだけだが、同じ仕組みの応用で中間キーフレームを実現できる見込みがある（オーナー）。ComfyUI の `MiniMaxH3AddGuide` ノードが参考になる（https://github.com/Comfy-Org/docs/blob/main/tutorials/video/minimax/minimax-h3-native.mdx ）。調査報告 R4 によれば、AddGuide は PR #15439 で入り、任意のフレーム位置に静止画・短い動画・音声を置ける。置く素材は単独に符号化し、時刻を映像 0.999・音声 1.0 に固定して毎ステップ入れ直す。
-- **入口**: 計画はプランモードで行う。GPU を使う実測は弾ごとにまとめてオーナーの了承を得る。
-- **出典**: [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-10-17 の裁定）・同 §13.3（FL2VA の列の並び）。
 
 ### 1-100. MiniMax H3 の操作パネルの表示の表の更新（Fused GGUF の行の非表示・A2V カードとバッチ A2V の非表示）（起票：2026-10-18）
 
 - **概要**: 第 2 弾の目視で見つかった 2 点。① Settings「生成の高速化」の「Fused GGUF Dequantization Kernel」の行は GGUF を使わない系統（MiniMax H3）では表示しない。この行は今は機能名の受け口が無い（他の行は `prune_vaed` などの機能名で非表示にしている）ので、機能名（例: `fused_gguf_dequant_kernel`）をアダプタが公開し、`featureScope.ts` の表と Settings の部品に受け口を足す。「Block-swap prefetch」の行は H3 でも効くので表示のまま。② Single の A2V カードと Batch A2V は、H3 では灰色でなく非表示にする（今は `chain` の行で灰色。閉じ方は部品ごとに決める既存の作法に沿う）。
 - **前提**: なし（第 2 弾は完了）。
-- **優先順位**: 随時（オーナーが決める）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6。
 
 ### 1-102. MiniMax H3 の小さな疑い 4 件（第 2 弾の現行化・第 3 弾のサブマシンの門で発見）（起票：2026-10-18）
 
 - **概要**: ① 事前検査が視覚塔の無いテキストエンコーダのファイルを通してしまい、I2V のジョブが途中で英語の例外で止まる（`services/model_registry.py` の H3 の分岐と `h3_format.inspect_h3_te`。着手時に拒否するか警告するかを決める）。② Gradio は H3 が拒否する部品（連結・バッチ・A2V・LoRA・NAG など）を閉じず、使うと 422 になる（操作パネルと違い「隠して既定へ戻す」方式の行が無い。意図的かを着手時に決める）。③ `services/engines/h3/adapter.py` の `REQUEST_RULES` に H3 の既定のステップ数が 2 か所に書かれていて、片方を変えると配信される既定と書き戻す既定がずれる（1 か所にまとめる）。④ `metadata.json` の `environment`（torch・cuda・gpu）が H3 では空（H3 のアダプタが埋めていない。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167.8 の観察）。
-- **前提**: なし。
-- **優先順位**: 低（着手時に go／no-go を決める）。
+- **前提**: なし。着手時に go／no-go を決める。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.10（観測事実と確かめ方）・§167.8（④）。
 
 
 ### 1-103. MiniMax H3 の A2V（音声から映像）（起票：2026-10-19）
 
 - **概要**: 音声を入力し、同期した映像を生成する。仕組みは、音声行に符号化済みの潜在を入れて時刻 1.0 に固定し、映像行だけをノイズ除去する（DiffSynth の Retake の `retake_audio`、ComfyUI の音声 denoise mask と同じ。公式の task には無い）。V2A〔映像から音声〕も同じ部品で実現できる。
-- **前提**: 音声 VAE〔音声の圧縮器〕の符号化器があるかの確認。行ごとに時刻を固定する部品（§1-97 の条件行と、後の §1-106 の連結で共有する）。操作パネルの A2V カード（現状 H3 では灰色）。
-- **優先順位**: 2 番目。
+- **前提**: 音声 VAE〔音声の圧縮器〕の符号化器があるかの確認。行ごとに時刻を固定する部品（キーフレームの条件行〔実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170〕と、後の §1-106 の連結で共有する）。操作パネルの A2V カード（現状 H3 では灰色）。
 - **留意**: 「Ref2VA のほうが A2V に向く」という根拠は一次資料に無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
 - **出典**: [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（A2V の仕組み。一次資料つき）・[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3（条件行）。
 
@@ -62,22 +47,19 @@
 
 - **概要**: `H3Int8Linear` と `forward_rows` に、実行時のアダプタ（bf16 の低ランク経路）を当てる仕組みを足す。量子化済みの重みへの融合はしない。Turbo LoRA〔少ないステップ数で生成するための蒸留の追加重み〕は LightX2V の配布（Apache-2.0）で、ランクは 128、qkv は 3 本を束ねた block-diagonal〔ブロック対角〕形式、AdaLN は対象外、ステップ数は 4 または 8、shift は版ごとに違う（544p は 12／3、768p は 6／3）。
 - **前提**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5 の行分割の射影に、アダプタも同じ行で切って当てること。ステップ数と shift のスライダー（既存）。
-- **優先順位**: 3 番目（以降の実験と較正が速くなる）。
 - **出典**: [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（Turbo の形）・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の裁定 10（LoRA と Turbo は一緒に）。
 
 ### 1-105. MiniMax H3 の 1 ステップの高速化（第 1 弾：数値を変えない 3 件）（起票：2026-10-19）
 
 - **概要**: 出力の数値を変えない 3 件。① QKV の活性化量子化の共有（7 群×3 本＝21 回の量子化を 1 回にする）。② ステップ間の cyclic prefetch〔次のステップのブロック 0 と 1 を先読みする〕。③ CPU の正本から pinned staging〔固定メモリの中継領域〕への先読み。
 - **前提**: §1-104 の後（射影のコードを同じ箇所で触るため）。comfy-kitchen が量子化済みの入力の行列積を公開 API で受け付けるかの調査。
-- **優先順位**: 5 番目。
 - **留意**: ヘッド群 28（約 5% 速いが割り当てが +1.8GB）は、「つまみを増やさない方針」との兼ね合いを着手時に再検討する（オーナー指示）。kernel fusion〔RMSNorm と RoPE、SwiGLU の融合〕は数値が変わるので、裁定 46 の門つきで第 2 弾とする。オーナーのメモは一次資料で未裏取り。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（高速化 5 項目。未裏取り）・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3（A-G5）。
 
 ### 1-106. MiniMax H3 の Chained（H3 Continuum 型・FL2VA）（起票：2026-10-19）
 
 - **概要**: 直前のクリップの映像と音声の潜在の末尾を次のクリップの冒頭に置き、その行の時刻を固定して残りだけノイズ除去し、重なりを切り落として連結する（潜在の持ち越し。復号して再符号化はしない）。LTX の Chained に相当する。
-- **前提**: §1-97 と §1-103 の部品（条件行・行ごとの時刻固定）。Turbo（§1-104。実験の費用が下がる）。操作パネルの Chained タブ（現状 H3 では灰色）。
-- **優先順位**: 6 番目。Ref2VA（§1-107）を待たなくてよい。
+- **前提**: キーフレームの条件行（実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170）と §1-103 の部品（行ごとの時刻固定）。Turbo（§1-104。実験の費用が下がる）。操作パネルの Chained タブ（現状 H3 では灰色）。
 - **留意**: H3 Continuum の「FL2VA で検証済み」は、計画の冒頭で CHANGELOG を一次資料で確認する。継ぎ目と音声の品質の報告は無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）・[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（PR #15375 の denoise mask・LongMedia）。
 
@@ -85,21 +67,18 @@
 
 - **概要**: 参照素材（人物・衣装・背景・動画・音声）から生成する、H3 の目玉機能。テンソル名と形状は FL2VA と同じだが、重みは別の配布物（`transformer_ref`。FL2VA とはヘッダで区別できないので記述子の配布ファイル名で縛る）で、入力の組み方も違う。操作パネルでは別の UI にする（裁定 30）。
 - **前提**: 入力の組み方の調査（参照行の並びと時刻）。
-- **優先順位**: 7 番目。
 - **出典**: [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §13。
 
 ### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19）
 
 - **概要**: 姿勢（DWpose）と深度（Depth）による制御。
 - **前提**: 事前調査が要る。H3 の「ControlNet」が何者か（参照行で動く IC-LoRA 型か、別の網か、コミュニティの配布物があるか）を一次資料で確かめる。§1-107 の参照行の仕組みに乗る可能性が高い。
-- **優先順位**: 8 番目（正体が分かるまで固定しない）。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
 
 ### 1-109. MiniMax H3 の参照付き Chained（vLLM-Omni 型）（起票：2026-10-19）
 
 - **概要**: rolling window〔窓をずらしながら生成〕に、前の窓の潜在の末尾を追加の条件（固定でなくガイド）として投入し、`temporal_offset` で RoPE〔位置の埋め込み〕の時間座標を動画全体で連続させる。
 - **前提**: §1-106 と §1-107。
-- **優先順位**: 9 番目。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
 
 ---
@@ -621,6 +600,13 @@
   - B: 現状を許容し、拡散VAEでは保守的な固定タイルへ倒す（具体策: 上流の `ensure_tiling_config` の `free_bytes=` に固定値を渡す）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）・§146（`_retake_encode_tiling` の docstring の誤り〔拡散VAEでも型検査を通る〕は第6弾で訂正済み）。
 - **関連ファイル**: `engine25/chain25.py`（`run_chain` の `tiling_config = ensure_tiling_config(...)`・`_retake_encode_tiling`）。
+
+### 4-43. MiniMax H3 のテキストエンコーダの int8 ConvRot 計算核と bf16 の差が 2 枚の画像で大きい件（診断は回していない）（起票：2026-10-19）
+
+- **概要**: テキストエンコーダの出力を、int8 ConvRot の計算核と、同じ重みを bf16 に戻した場合とで比べた相対差は、画像 2 枚（先頭＋末尾）のとき画像の行で **0.277** だった。画像 1 枚では 0.013（先頭だけ。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166 の 2a-G3）・0.010（末尾だけ）で、テキストの行は約 0.022 のまま変わらない。配線の差は 0 で、画像読み取り部の出力は正解データと一致するので、構造は正しく、差は計算の側にある。仮説（推測）: 2 つの視覚ブロックが互いに注意を向け合うとき、画像の行の活性化を行ごとに int8 へ量子化すると精度が落ちる。
+- **前提（何が塞いでいるか）**: 生成した動画の目視が go だったので、オーナーが今は診断しないと決めた（2026-10-19）。
+- **再訪条件**: H3 で画像を 2 枚以上置いたときにプロンプトの効きが悪いと分かったとき。または、テキストエンコーダの量子化や int8 の経路を変えるとき。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.7 (a)、保管庫 [`Outputs-archive/h3-keyframes-2026-10-19/`](Outputs-archive/h3-keyframes-2026-10-19/README.md) の `gates/g2_keyframe_parts.json`（`quant_rel_*` の鍵）。
 
 ---
 

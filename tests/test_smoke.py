@@ -501,7 +501,8 @@ def test_i2v_smoke_generation(client, png_bytes):
         "guidance_scale": 1.0,
         "seed": 7,
         "pipeline": "distilled",
-        "conditioning_images": [{"image_id": image_id, "frame_idx": 0, "strength": 0.8}],
+        # strength omitted: LTX's default 0.8 is written back (REQUEST_RULES).
+        "conditioning_images": [{"image_id": image_id, "frame_idx": 0}],
     }
     r = client.post("/api/v1/generate", json=payload)
     assert r.status_code == 202
@@ -515,6 +516,7 @@ def test_i2v_smoke_generation(client, png_bytes):
     assert meta["generation_mode"] == "i2v"
     assert meta["request"]["conditioning_images"][0]["image_id"] == image_id
     assert meta["request"]["conditioning_images"][0]["frame_idx"] == 0
+    assert meta["request"]["conditioning_images"][0]["strength"] == 0.8
 
 
 def test_t2v_smoke_generation_with_nag(client):

@@ -14,7 +14,8 @@ facts that are genuinely different:
   tokenizer folder (a descriptor ``assets`` entry, like 2.3's ``gemma_root``);
 * the feature scope (the four tables below) and the numeric rules
   (:data:`REQUEST_RULES`: 17n+5 frames from 22, a 32 multiple, 24 fps fixed,
-  1..50 steps, the two shifts, and ``flag_defaults``: VRAM 16GB mode on).
+  1..50 steps, the two shifts, the keyframe grid (any frame 0..F-1: step 1 /
+  offset 0, no strength), and ``flag_defaults``: VRAM 16GB mode on).
 
 THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
 Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
@@ -46,7 +47,6 @@ from typing import Callable
 
 from api.errors import feature_unsupported
 from api.models import (
-    ConditioningImage,
     GenerateChainRequest,
     GenerateRequest,
     VRAM16_MODE_DEFAULT_H3,
@@ -98,11 +98,6 @@ MOCK_BACKEND_H3 = "mock-h3"
 #: ``block_swap_prefetch_available`` is computed app-side from the same setting.
 DEFAULT_BLOCKS_ON_GPU = 8
 
-#: ``ConditioningImage.strength``'s schema default. H3 has no keyframe
-#: strength; a request that sets another value is refused rather than silently
-#: run at a strength the engine does not have.
-_STRENGTH_DEFAULT = ConditioningImage.model_fields["strength"].default
-
 # --------------------------------------------------------------------------- #
 # numeric rules
 # --------------------------------------------------------------------------- #
@@ -140,6 +135,11 @@ REQUEST_RULES = RequestRules(
     },
     # vram16_mode's None means "this family's default" (裁定 44: on for H3).
     flag_defaults={"vram16_mode": VRAM16_MODE_DEFAULT_H3},
+    # A keyframe may sit on any frame 0..F-1 (the RoPE time coordinate is the
+    # pixel frame, not bound to a latent frame). No keyframe strength: an
+    # omitted one stays None (keyframe_strength_default left at None).
+    keyframe_step=1,
+    keyframe_offset=0,
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -148,25 +148,20 @@ assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 # --------------------------------------------------------------------------- #
 
 
-def _multi_keyframes(r: GenerateRequest) -> bool:
-    """More than one image, or one that is not the first frame."""
-    images = r.conditioning_images
-    return len(images) > 1 or any(ci.frame_idx != 0 for ci in images)
-
-
 def _keyframe_strength(r: GenerateRequest) -> bool:
-    """A conditioning image asks for a strength other than the default."""
-    return any(ci.strength != _STRENGTH_DEFAULT for ci in r.conditioning_images)
+    """A conditioning image sets a strength (H3 has none; omitted = ``None``)."""
+    return any(ci.strength is not None for ci in r.conditioning_images)
 
 
 #: The 422 half: ``(field, feature, is_non_default)``, first offender wins. Every
-#: predicate tests "differs from the default" (the frontend sends the whole
-#: schema), so a plain T2V / first-frame I2V request passes.
+#: predicate tests "differs from the default" (for ``strength`` the default is
+#: ``None``: the operation panel omits it when the family has none, and any
+#: value is refused), so a plain T2V / keyframe I2V request passes.
 #:
-#: ``conditioning_images`` appears TWICE and is also HONOURED: the first frame
-#: is what this engine does with it, and these two rows refuse what it cannot
-#: (more images / another position, and a strength). The audit test allows
-#: exactly this overlap.
+#: ``conditioning_images`` appears ONCE here and is also HONOURED: the
+#: keyframes (any frame, up to the schema's count cap) are what this engine
+#: does with it, and this row refuses what it cannot (a strength). The audit
+#: test allows exactly this overlap.
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("loras", "loras", lambda r: bool(r.loras)),
     ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
@@ -178,7 +173,6 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("alpha_gen", "alpha_gen", lambda r: r.alpha_gen is not None),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
     ("keep_resident_embeddings", "keep_resident_embeddings", lambda r: r.keep_resident_embeddings),
-    ("conditioning_images", "multi_keyframes", _multi_keyframes),
     ("conditioning_images", "keyframe_strength", _keyframe_strength),
 )
 
@@ -240,11 +234,8 @@ UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
 
 
 def _refusal_detail(field: str, feature: str) -> str:
-    if feature == "multi_keyframes":
-        return (
-            "MiniMax H3 は先頭フレーム 1 枚だけに対応しています"
-            "（conditioning_images は frame_idx 0 の 1 枚まで）。"
-        )
+    if feature == "keyframe_strength":
+        return "MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。"
     return (
         f"MiniMax H3 は {feature} に対応していません"
         f"（リクエストの {field} が既定値ではありません）。"
@@ -397,7 +388,7 @@ class _RealBackendH3(_RealBackend):
         inpaint_source_path: Path | None = None,
         inpaint_mask_path: Path | None = None,
     ) -> GenerationOutcome:
-        """One T2V / first-frame I2V generation.
+        """One T2V / keyframe I2V generation (keyframes on any frame 0..F-1).
 
         ``lora_paths`` / ``reference_video_path`` / the outpaint and inpaint
         paths are accepted for the shared signature and never arrive filled:

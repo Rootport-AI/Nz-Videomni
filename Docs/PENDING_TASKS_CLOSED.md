@@ -3018,6 +3018,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **正本・出典**: 裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10、記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165〜§167。
 - **残課題**: §1-95（快適上限の較正）・§1-97（末尾と中間のキーフレーム）・§1-100・§1-101・§1-102 として [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に起票済み。
   > **更新（2026-10-19）**: §1-101 は本書 3-240 でクローズした。
+  > **更新（2026-10-19）**: §1-97 は §2-2 を経て本書 3-241 でクローズした。
 
 ### 3-240. MiniMax H3 の VRAM 16GB 最適化（VRAM 16GB mode）（起票：2026-10-18、クローズ：2026-10-18）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-101 からクローズ）
 
@@ -3028,3 +3029,14 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev にコミット済み（弾 A `69e62a9`・弾 B `0d0a60d`・`a08c653`。弾 C の文書は監督が積む）。main merge はオーナーの合図待ち。
 - **正本・出典**: 裁定 44〜53 は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（設計の規則 44〜47・51・53 は設計正本 §2 にも）。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168・§169。複写は [`Outputs-archive/h3-vram16-2026-10-18/`](Outputs-archive/h3-vram16-2026-10-18/README.md)。
 - **残課題**: §1-95（快適上限の較正。退避そのものの量で線を引く）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 に起票済み。
+
+### 3-241. MiniMax H3 の末尾キーフレームと中間キーフレームへの対応（起票：2026-10-17、クローズ：2026-10-19）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §2-2〔元 §1-97〕からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-97（2026-10-17 起票）→ §2-2（2026-10-19。**同書側は §1-97・§2-2 とも欠番**）。生成した動画の目視は §1 にあるうちに遠隔で済み、操作パネルの目視だけを §2-2 で待った。
+- **到達条件**: MiniMax H3 の I2V で、キーフレームを先頭だけでなく末尾（F−1）と中間の任意のフレームにも置けること。末尾は正解データとの照合で、中間はオーナーの目視で確かめる。**達成した。**
+- **何が完了したか**: キーフレームの位置の規則を系統別の規則表（`RequestRules`）へ移した（H3 は 0〜F−1 の任意のフレーム、LTX は従来どおり 0 と 8n+1）。強度は省略可にした（LTX は既定 0.8 を書き戻し、H3 は `null` のまま。H3 で指定されたら 422）。エンジンの条件行を K 枚に一般化した（先頭と末尾の画像だけを画像読み取り部へ入れ、中間は条件行だけ）。操作パネル・Gradio・MCP も追随した。
+- **どの物差しで通ったか**: 末尾は正解データ（DiffSynth の写し）と照合して一致し、時間座標は正解データと同じ組み方の F−1 の式を残した（簡約した式では全桁一致しない）。中間は比べる相手が無いので、オーナーの目視で判断した（第 2 弾 2-G2 go）。指紋の回帰（T2V と先頭だけの I2V）は全桁一致で変わらなかった。操作パネルの目視（1-G7）は 6 項目とも合格（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.10）。
+- **既知の挙動（仕様どおり・変えない）**: 4 点（「追加」の 2 枚目は中点に置かれる・尺を延ばすと F−1 のピンは中間になる・1 フレーム刻みでは左端の近くがドラッグで 0 に吸われる・格子外のピンは LTX に切り替えても画面では寄せ直されない）。正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.7 (c)。
+- **状態**: dev にコミット済み（実装 `66761ec`・裁定の反映 `776a3d2`）。クローズの記録のコミットと main への merge は監督が行う。
+- **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170。複写は [`Outputs-archive/h3-keyframes-2026-10-19/`](Outputs-archive/h3-keyframes-2026-10-19/README.md)。
+- **残課題**: テキストエンコーダの int8 ConvRot と bf16 の差が画像 2 枚のときだけ大きい件（未診断。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.7 (a)）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-43 に起票済み。

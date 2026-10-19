@@ -667,7 +667,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 - **【LTX の規則】** 幅・高さは **64の倍数**（two-stage distilled が stage1 を半解像度で生成し x2 アップサンプルするための帰結。由来の解説は [`Docs/LTX23_REFERENCE.md`](Docs/LTX23_REFERENCE.md) §3、検証は系統の規則表 [`services/engines/ltx/request_rules.py`](services/engines/ltx/request_rules.py)）。
 - **【LTX の規則】** フレーム数は **8n+1**（9, 17, 25, … 121）。尺 cap は **20s（481f=8×60+1）@24fps** まで許容。溢れ/低速/非実用は**クライアント UI 警告に委ねる**方針で、解像度別 spill-free フレーム数を `GET /api/v1/config` の `limits.spill_free_frames` に露出します（**値の正本は `config.yaml` の `limits.spill_free_frames` と [`Docs/COMFORT_LIMIT_TABLE.md`](Docs/COMFORT_LIMIT_TABLE.md)**。閾値の考え方は同書 §付記、実測の経緯は [`Docs/RESOLUTION_DURATION_CAPABILITY.md`](Docs/RESOLUTION_DURATION_CAPABILITY.md) §8.4/§8.6）。これを超えると shared へ溢れ ~2-4x 低速化します（OOM はしません）。1080p の長尺は非実用（~40分・commit リスク）のため **720p 生成＋外部 upscale** 推奨です。
 - **【LTX の規則】** Distilled は **8 steps / CFG=1.0** 固定（検証は同じ規則表）。
-- **【LTX の規則】** I2V のキーフレーム画像は **最大10枚**（画像なし=T2V、1枚以上=I2V）。LTX では `frame_idx` は `0`（開始フレーム）か 8n+1 で、それ以外の値を送っても 422 にはならず、8n+1 グリッドへ丸めて `[1, num_frames-8]` の範囲へ収められます。ただし**丸めた先が他の1枚と同じフレームになったときだけは 422 で断ります**（同じ位置に2枚あると条件付けが二重になり、出来上がりが定まらないためです）。上限の10枚を実際に置けるのは `num_frames` が 73 以上のときです（置ける位置が `(num_frames-9)//8+2` 個しかないため、それより短い尺では途中で必ずぶつかります）。
+- **【LTX の規則】** I2V のキーフレーム画像は **最大10枚**（画像なし=T2V、1枚以上=I2V）。LTX では `frame_idx` は `0`（開始フレーム）か 8n+1 で、それ以外の値を送っても 422 にはならず、8n+1 グリッドへ丸めて `[1, num_frames-8]` の範囲へ収められます。ただし**丸めた先が他の1枚と同じフレームになったときだけは 422 で断ります**（同じ位置に2枚あると条件付けが二重になり、出来上がりが定まらないためです）。上限の10枚を実際に置けるのは `num_frames` が 73 以上のときです（置ける位置が `(num_frames-9)//8+2` 個しかないため、それより短い尺では途中で必ずぶつかります）。MiniMax H3 の置き方は §7.6 にあります。
 - `crop_output` を指定すると、任意の非64サイズ（例 960×540, 1280×720）を中央クロップで得ます。
 
 ---
@@ -938,7 +938,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 
 - **この節は LTX（LTX 2.3・LTX 2.5）の話です。** MiniMax H3 の限界は §7.6 にあります。
 - transformer は Q4_K_M 量子化のため、フル bf16 公式とビット一致ではありません（聴感・視感は良好）。
-- **キーフレーム画像で「最終フレームちょうど」を条件にすることはできません**（`frame_idx` は `num_frames-8` にクランプされます）。末尾を指定したいときは end source（素材（末尾））を使ってください。
+- **キーフレーム画像で「最終フレームちょうど」を条件にすることはできません**（`frame_idx` は `num_frames-8` にクランプされます）。末尾を指定したいときは end source（素材（末尾））を使ってください。MiniMax H3 では最終フレームにも置けます（§7.6）。
 - **「生成の高速化（Acceleration）」のうち2項目は、選ぶと絵が変わります**——`sage attention` と PrunaVAED です。詳しくは §5 の[`sage` の注意書き](#sage-seed-note)と[PrunaVAED の注意書き](#prunavaed-quality-note)を参照してください（`sage attention` は LTX 2.3・LTX 2.5 のどちらでも使えます。PrunaVAED は LTX 2.5 では 422 になります）。
 
 > <a id="end-source-note"></a>**素材（末尾）（end source）だけを使うときは、クリップ1本での使用を推奨します。** 2本以上つなぐ使い方
@@ -960,7 +960,12 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 
 **できること**
 
-- **テキストから動画（T2V）と、先頭フレームの画像 1 枚からの動画（I2V）**。どちらも音声つきで生成されます。I2V の画像は、縦横比を保ったまま画面を覆うように拡大縮小し、はみ出た部分を中央で切り抜いて使います。
+- **テキストから動画（T2V）と、キーフレームの画像からの動画（I2V）**。どちらも音声つきで生成されます。I2V の画像は、縦横比を保ったまま画面を覆うように拡大縮小し、はみ出た部分を中央で切り抜いて使います。
+- **キーフレームは最大 10 枚で、どのフレームにも置けます**（LTX のような 8n+1 への丸めはありません。先頭は 0、末尾は「フレーム数 − 1」です）。
+  - **先頭と末尾**は、MiniMax が公式に用意している「先頭と末尾のフレームを指定する生成」（FL2VA）と同じ扱いです。画像は映像の条件になるほか、プロンプトを読み取る部分にも見せます（先頭が `<Picture 1>`、末尾が `<Picture 2>`。末尾だけのときは末尾が `<Picture 1>` です）。
+  - **中間のフレーム**は、ComfyUI が独自に足している拡張と同じ考え方で、映像の条件にだけ入ります（プロンプトを読み取る部分には見せません）。公式の正解が無いので、**品質はまだオーナーの目視で確かめている途中です**。
+  - **キーフレームの強度はありません。** 操作パネルでは強度の行が出ず、Gradio UI では強度のスライダーが隠れます。API と MCP では `strength` を省略してください（値を送ると断られます。下の表）。
+  - 操作パネルで「キーフレームを追加」を押すと、2 枚目は最後のピンと末尾の中間に置かれます。末尾に置くときは、ピンを右端までドラッグするか、位置の数値を打ち込んでください。
 - **フレームレートは 24fps 固定**です。**フレーム数は 17n+5 の形**（22・39・56 … と 17 ずつ）で、22 以上 481 以下です。**縦横は 32 の倍数**です。操作パネルでは、フレーム数がこの規則に合う値へ自動でそろいます。
 - **ステップ数と shift（映像・音声）の 3 本のスライダー**で、ノイズ除去の工程数と、工程のどこにノイズの減らし方の重みを置くかを変えられます。操作パネルと Gradio UI の両方にあり、LTX を選んでいるときは表示されません。既定はステップ数 20・shift（映像）12・shift（音声）3 で、範囲はステップ数が 1〜50、shift が 1〜20 です（値の正本はサーバーが `GET /models` の `base_models[].constraints` で配るもので、ここはその写しです）。
 - **生成の高速化のうち、`sage attention`・先読み block swap・モデル骨格の常駐・VRAM 16GB mode**（§5 の表。VRAM 16GB mode は下の「快適上限と速さ」）。`sage attention` で絵の細部が変わる注意（§5 の[注意書き](#sage-seed-note)）は MiniMax H3 でも同じです。
@@ -973,12 +978,15 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 | 画角拡張（Outpainting）・Inpainting・Alpha Gen | `outpaint`・`inpaint`・`alpha_gen` |
 | スタイル LoRA・IC-LoRA（参照動画による制御） | `loras`・`reference_video_id` |
 | ネガティブプロンプト（NAG／VSF） | `nag_enabled` |
-| 末尾と中間のキーフレーム（画像 2 枚以上、または先頭以外の位置） | `conditioning_images` |
-| キーフレームの強度の変更 | `conditioning_images` の `strength` |
+| キーフレームの強度（MiniMax H3 には強度がありません。省略すれば通ります） | `conditioning_images` の `strength`（値を入れると、0.8 でも断られます） |
 | PrunaVAED・埋め込み処理器の常駐 | `vae_mode`・`keep_resident_embeddings` |
 | 高品質パイプライン（`two_stage_hq`）・CFG の強さ | `pipeline`・`guidance_scale` |
 
 断られる機能の名前の一覧は、`GET /models`（MCP なら `list_models`）の `base_models[].unsupported_features` でも確かめられます。**指定しても断らず、無視して生成を続ける項目は `fused_gguf_dequant_kernel` です**（MiniMax H3 は GGUF の重みを持たないため。既定以外の値を指定したときは `logs/server.log` に 1 行残ります）。
+
+**プロンプトの書き方（先頭と末尾を指定するとき）**
+
+MiniMax の公式のプロンプトの指南（Hugging Face の [VIDEO_PROMPT_WRITING_GUIDE](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_base_en.md)）は、先頭と末尾を指定する生成では、プロンプトの最初に「Picture 1 は 0.00 秒、Picture 2 は S.SS 秒の時点に合わせる」という趣旨の指示文を書くよう勧めています（S.SS は動画の長さを秒で小数点以下 2 桁にした値で、例えば 8 秒の動画なら 8.00 です。指南では、この文をプロンプトの 1 行目に置き、空行を 1 つ挟んでから本文を書きます）。**本製品はこの指示文をプロンプトに自動で入れません。** 効かせたいときは、指南の文例を見ながらご自分で書き足してください（末尾だけを指定するときの書き方も同じ指南にあります）。
 
 **読み込める重みは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけです。** 主に試してあるのは公式の配布物です。コミュニティが配っている派生版のうち PinkCherry Hybrid は、フォルダに置いて生成できた実績があります（動作の保証はありません）。別の量子化など、それ以外の派生版への対応は後回しにしています。
 

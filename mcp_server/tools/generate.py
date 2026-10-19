@@ -329,8 +329,10 @@ async def submit_generate(
         seed: 乱数シード（-1でランダム）。
         conditioning_images: I2V用のキーフレーム画像（最大10件＝``config.py``
             の ``MAX_CONDITIONING_IMAGES``、``upload_image`` で得た ``image_id``
-            を使う）。MiniMax H3 は ``frame_idx=0`` の 1 件だけで、``strength``
-            は既定のまま（それ以外は 422 FEATURE_UNSUPPORTED）。
+            を使う）。``frame_idx`` はベースモデルの規則に寄せられる（LTX は
+            0 と 8n+1、MiniMax H3 は 0〜``num_frames``−1 の任意のフレーム）。
+            ``strength`` は省略でベースモデルの既定（LTX は 0.8）。MiniMax H3
+            には強度が無く、指定すると 422 FEATURE_UNSUPPORTED。
         loras: 適用するIC-LoRAアダプタのリスト。各要素の ``audio_strength``
             は映像軸（``strength``）とは独立した音声軸の適用強度（省略可、
             0〜2）。省略時は音声側も ``strength`` に追従する。0は

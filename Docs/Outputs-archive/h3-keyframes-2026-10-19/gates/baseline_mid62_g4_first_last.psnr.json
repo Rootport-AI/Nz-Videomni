@@ -1,0 +1,20 @@
+{
+  "mp4": "outputs/h3-keyframes-2026-10-19/g4_first_last.mp4",
+  "sha256": "37e66bba9ddcc87eebeea33eb7331617a75a099f608530b7cf329a4f3cdb6d52",
+  "frames": 124,
+  "size": [
+    640,
+    384
+  ],
+  "psnr": {
+    "62=kf_mid62.png": {
+      "frame": 62,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 28.31,
+      "mse": 95.881
+    }
+  }
+}

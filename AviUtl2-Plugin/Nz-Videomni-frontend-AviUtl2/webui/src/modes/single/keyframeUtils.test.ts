@@ -4,6 +4,7 @@ import {
   clampStrength,
   fileNameFromPath,
   isFrameIdxOutOfRange,
+  omitStrength,
   snapFrameIdx,
   sortByFrameIdx,
   type KeyframeItem,
@@ -40,7 +41,7 @@ describe("fileNameFromPath", () => {
 
 describe("snapFrameIdx", () => {
   // Docs/API_REFERENCE.md §5.1: frame_idx==0 stays 0; >0 snaps to
-  // (f-1)//multiple*multiple + gridOffset.
+  // (f-gridOffset)//multiple*multiple + gridOffset (the server's own formula).
   it("keeps 0 as the leading frame", () => {
     expect(snapFrameIdx(0, 8, 1)).toBe(0);
   });
@@ -63,12 +64,30 @@ describe("snapFrameIdx", () => {
   });
 
   it("works with a different multiple/offset", () => {
-    // Grid points for multiple=4, offset=2 are 2, 6, 10, 14, ...
+    // Grid points for multiple=4, offset=2 are 2, 6, 10, 14, ... — a value
+    // between two points floors to the lower one, as on the server (13 used
+    // to land on 14 while the formula subtracted 1 instead of the offset).
     expect(snapFrameIdx(10, 4, 2)).toBe(10);
     expect(snapFrameIdx(11, 4, 2)).toBe(10);
     expect(snapFrameIdx(12, 4, 2)).toBe(10);
-    expect(snapFrameIdx(13, 4, 2)).toBe(14);
+    expect(snapFrameIdx(13, 4, 2)).toBe(10);
     expect(snapFrameIdx(14, 4, 2)).toBe(14);
+  });
+
+  it("clamps up to the first grid point on a (2, 0) grid (like the server)", () => {
+    expect(snapFrameIdx(0, 2, 0)).toBe(0);
+    expect(snapFrameIdx(1, 2, 0)).toBe(2);
+    expect(snapFrameIdx(3, 2, 0)).toBe(2);
+    expect(snapFrameIdx(4, 2, 0)).toBe(4);
+  });
+
+  it("is the identity on MiniMax H3's 1/0 grid (any frame)", () => {
+    for (const f of [0, 1, 2, 7, 8, 9, 61, 122, 123, 480]) expect(snapFrameIdx(f, 1, 0)).toBe(f);
+  });
+
+  it("gives the same values as before on LTX's 8/1 grid", () => {
+    // The previous formula, `(f-1)//8*8+1`, for every f in [1, 481].
+    for (let f = 1; f <= 481; f++) expect(snapFrameIdx(f, 8, 1)).toBe(Math.floor((f - 1) / 8) * 8 + 1);
   });
 });
 
@@ -128,5 +147,26 @@ describe("buildConditioningImages", () => {
     const payload = buildConditioningImages([makeItem()])[0];
     if (!payload) throw new Error("expected one conditioning image");
     expect(Object.keys(payload).sort()).toEqual(["frame_idx", "image_id", "strength"]);
+  });
+});
+
+describe("omitStrength", () => {
+  it("removes the strength key itself (not set to undefined) and keeps the rest", () => {
+    const images = buildConditioningImages([
+      makeItem({ id: "a", imageId: "img-1", frameIdx: 0 }),
+      makeItem({ id: "b", imageId: "img-2", frameIdx: 61, strength: 0.5 }),
+    ]);
+    const omitted = omitStrength(images);
+    expect(omitted).toEqual([
+      { image_id: "img-1", frame_idx: 0 },
+      { image_id: "img-2", frame_idx: 61 },
+    ]);
+    for (const image of omitted) expect(Object.keys(image).sort()).toEqual(["frame_idx", "image_id"]);
+    // The input is left untouched.
+    expect(images[1]?.strength).toBe(0.5);
+  });
+
+  it("returns [] for []", () => {
+    expect(omitStrength([])).toEqual([]);
   });
 });

@@ -152,6 +152,12 @@ CHAIN_MIN_OPEN = 2
 CHAIN_MAX_CLIPS = 24
 KF_MIN_OPEN = 1
 KF_MAX_SLOTS = MAX_CONDITIONING_IMAGES
+# A keyframe slot's strength slider default: the LTX families' own default
+# (the server writes 0.8 back when strength is omitted). The handler sends the
+# key only when a slot differs from it, and a base model without keyframe
+# strength (MiniMax H3) hides the slider and resets it here
+# (gradio_ui/feature_scope.py), so such a job carries no strength at all.
+KF_STRENGTH_DEFAULT = 0.8
 
 
 def clamp_open_count(count, delta, lo, hi) -> int:

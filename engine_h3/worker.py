@@ -43,8 +43,9 @@ Protocol (one JSON object per line; parent -> worker):
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
    [vram16_mode]}
       One T2V or I2V job. Omitted steps / shifts take the engine defaults
-      (``engine_h3.constants``). ``images``: [] (T2V) or ONE ``{"path", "frame_idx": 0}``
-      (the first frame); anything else is refused with a reason. Keys this
+      (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
+      key frames on distinct frames 0 .. num_frames-1 (any order); anything
+      else is refused with a reason. Keys this
       engine does not read (top level, or inside an image entry) are logged
       once per job and ignored. ``keep_resident`` true keeps the DiT, the video
       decoder and the audio VAE on the CPU for the next job; a job without it
@@ -60,7 +61,8 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
   progress  {stage, index, total}   stage: encode / stage1_denoise / decode
             (there is no stage2: the app adapter, services/engines/h3/adapter.py,
             reads these with ``_read_worker_events(one_stage=True)``, as Alpha
-            Gen does; ``encode`` counts 3 steps for T2V, 4 for I2V)
+            Gen does; ``encode`` counts 4 steps when the job has any key
+            frame, 3 otherwise)
   done      {seed_used, sampler, num_inference_steps, shift_video, shift_audio,
              peak_vram_mb, peak_vram_reserved_mb, rss_peak_gib, commit_gib,
              commit_peak_gib, seconds,
@@ -76,7 +78,8 @@ Selftest:
       [--prompt S --width 640 --height 384 --num-frames 124 --seed 42 --steps 20
        --shift-video 12 --shift-audio 3 --rounds 1 --report r.json
        --attention-backend sdpa|sage --blocks-on-gpu 8 --prefetch|--no-prefetch
-       --deterministic --image P --keep-resident --vram16|--no-vram16]
+       --deterministic --image P --keyframe FRAME=PATH ... --keep-resident
+       --vram16|--no-vram16]
 """
 
 import os
@@ -262,8 +265,9 @@ def _do_load(msg: dict) -> None:
 def _images(msg: dict) -> tuple[tuple, list[str]]:
     """``images`` -> ``(H3ImageInput, ...)`` and the ignored inner keys.
 
-    The shape is checked here (a list of objects with a ``path``); how many and
-    which frame are the pipeline's ``validate_request`` (one place for the rule).
+    The shape is checked here (a list of objects with a ``path``); which
+    frames (0 .. num_frames-1, distinct) are the pipeline's ``validate_request``
+    (one place for the rule).
     """
     from engine_h3.pipeline_h3 import H3ImageInput  # noqa: PLC0415
 
@@ -459,7 +463,11 @@ def _selftest_parser():
     parser.add_argument("--blocks-on-gpu", type=int, default=8)
     parser.add_argument("--prefetch", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--deterministic", action="store_true")
-    parser.add_argument("--image", default=None, help="I2V: the first frame (frame_idx 0)")
+    parser.add_argument("--image", default=None, help="I2V: the first frame (same as --keyframe 0=PATH)")
+    parser.add_argument(
+        "--keyframe", action="append", default=[], metavar="FRAME=PATH",
+        help="I2V: a key frame at pixel frame FRAME (repeatable)",
+    )
     parser.add_argument("--keep-resident", action="store_true")
     parser.add_argument("--vram16", action=argparse.BooleanOptionalAction, default=False,
                         help="VRAM 16GB mode (vram16_mode)")
@@ -496,12 +504,33 @@ def _selftest_generate_message(args, out: str) -> dict:
         "shift_video": args.shift_video,
         "shift_audio": args.shift_audio,
         "output_path": out,
-        "images": [{"path": args.image, "frame_idx": 0}] if args.image else [],
+        "images": _selftest_images(args),
         "keep_resident": bool(args.keep_resident),
         "attention_backend": args.attention_backend,
         "block_swap_prefetch": bool(args.prefetch),
         "vram16_mode": bool(args.vram16),
     }
+
+
+def _selftest_images(args) -> list[dict]:
+    """``--image P`` (frame 0) and every ``--keyframe FRAME=PATH`` -> the ``images`` entries.
+
+    A malformed ``--keyframe`` or two key frames on one frame (``--image`` with
+    ``--keyframe 0=...`` included) is refused here, before anything loads.
+    """
+    images: list[dict] = [{"path": args.image, "frame_idx": 0}] if args.image else []
+    for spec in args.keyframe:
+        frame, sep, path = str(spec).partition("=")
+        if not sep or not frame.strip().isdigit() or not path.strip():
+            raise ValueError(f"--keyframe は FRAME=PATH の形で渡してください（{spec!r}）")
+        images.append({"path": path, "frame_idx": int(frame)})
+    frames = [img["frame_idx"] for img in images]
+    duplicated = sorted({n for n in frames if frames.count(n) > 1})
+    if duplicated:
+        raise ValueError(
+            f"キーフレームの位置が重複しています（frame_idx={duplicated}。--image は --keyframe 0=PATH と同じです）"
+        )
+    return images
 
 
 def _selftest_generate(argv: list[str]) -> int:
@@ -516,6 +545,11 @@ def _selftest_generate(argv: list[str]) -> int:
     import time  # noqa: PLC0415
 
     args = _selftest_parser().parse_args(argv)
+    try:
+        _selftest_images(args)  # a bad --keyframe is refused before the load
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     load_msg = _selftest_load_message(args)
     events: list[dict] = []
     real_emit = _emit

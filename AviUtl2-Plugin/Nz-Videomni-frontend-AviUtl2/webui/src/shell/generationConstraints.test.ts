@@ -34,6 +34,7 @@ const H3: BaseModelConstraints = {
     shift_video: { min: 1, max: 20, step: 0.1, default: 12 },
     shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
   },
+  keyframes: { step: 1, offset: 0 },
 };
 
 /** LTX's block, as the server will publish it. */
@@ -42,6 +43,7 @@ const LTX: BaseModelConstraints = {
   dimension_multiple: 64,
   frame_rate: { min: 1, max: 60 },
   sampling: null,
+  keyframes: { step: 8, offset: 1 },
 };
 
 /** MiniMax H3's `unsupported_features`, derived the way the plan's §3.4 says
@@ -57,7 +59,6 @@ const H3_UNSUPPORTED = [
   "alpha_gen",
   "prune_vaed",
   "keep_resident_embeddings",
-  "multi_keyframes",
   "keyframe_strength",
   "chain",
   "retake",
@@ -103,7 +104,15 @@ describe("generationConstraints", () => {
     expect(LTX_GENERATION_CONSTRAINTS.minNumFrames).toBe(9);
     expect(LTX_GENERATION_CONSTRAINTS.dimensionMultiple).toBe(64);
     expect(LTX_GENERATION_CONSTRAINTS.sampling).toBeNull();
+    expect(LTX_GENERATION_CONSTRAINTS.keyframeGrid).toEqual({ step: 8, offset: 1 });
     expect(fixedFrameRate(LTX_GENERATION_CONSTRAINTS)).toBeNull();
+  });
+
+  it("reads the served keyframe grid, and the LTX one when a block predates the key", () => {
+    expect(resolveGenerationConstraints(H3).keyframeGrid).toEqual({ step: 1, offset: 0 });
+    expect(resolveGenerationConstraints(LTX).keyframeGrid).toEqual({ step: 8, offset: 1 });
+    const { keyframes: _omit, ...older } = H3;
+    expect(resolveGenerationConstraints(older).keyframeGrid).toEqual({ step: 8, offset: 1 });
   });
 
   it("flattens MiniMax H3's block", () => {
@@ -169,7 +178,6 @@ describe("MiniMax H3's feature names on screen", () => {
     expect(singleSectionsDisabledFor(H3_UNSUPPORTED)).toEqual({
       referenceVideo: true,
       a2v: true,
-      keyframesMulti: true,
       keyframeStrength: true,
     });
     expect(nagDisabledFor(H3_UNSUPPORTED)).toBe(true);
@@ -184,7 +192,6 @@ describe("MiniMax H3's feature names on screen", () => {
       expect(singleSectionsDisabledFor(list)).toEqual({
         referenceVideo: false,
         a2v: false,
-        keyframesMulti: false,
         keyframeStrength: false,
       });
       expect(nagDisabledFor(list)).toBe(false);

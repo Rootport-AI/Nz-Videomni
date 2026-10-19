@@ -318,25 +318,18 @@ def test_frame_idx_nonzero_accepted_and_snapped(client, png_bytes):
 
 
 def test_frame_idx_snap_and_clamp_math():
-    # Pure-model unit test of the official snap+clamp math, no HTTP layer.
-    # frame_idx 0 stays 0 (latent-replace start frame). Every other keyframe snaps
-    # to the 8n+1 latent-frame-START grid via (f-1)//8*8+1, then clamps to
-    # [1, num_frames-8] (num_frames=49 -> last start = 41). Matches ComfyUI
-    # LTXVAddGuide.get_latent_index. Each value hand-verified.
-    from api.models import ConditioningImage, GenerateRequest
+    # Pure unit test of the official snap+clamp math (LTX's REQUEST_RULES), no
+    # HTTP layer. frame_idx 0 stays 0 (latent-replace start frame). Every other
+    # keyframe snaps to the 8n+1 latent-frame-START grid via (f-1)//8*8+1, then
+    # clamps to [1, num_frames-8] (num_frames=49 -> last start = 41). Matches
+    # ComfyUI LTXVAddGuide.get_latent_index. Each value hand-verified.
+    from api.models import ConditioningImage
+    from services.engines.ltx.request_rules import LTX_REQUEST_RULES
 
     def snapped(idx: int, num_frames: int = 49) -> int:
-        req = GenerateRequest(
-            prompt="x",
-            width=512,
-            height=320,
-            num_frames=num_frames,
-            num_inference_steps=8,
-            guidance_scale=1.0,
-            pipeline="distilled",
-            conditioning_images=[ConditioningImage(image_id="a", frame_idx=idx, strength=0.8)],
-        )
-        return req.conditioning_images[0].frame_idx
+        images = [ConditioningImage(image_id="a", frame_idx=idx, strength=0.8)]
+        assert LTX_REQUEST_RULES.normalize_keyframes(images, num_frames) is None
+        return images[0].frame_idx
 
     assert snapped(0) == 0  # start frame, unchanged (latent-replace path)
     assert snapped(1) == 1  # (0)//8*8+1
@@ -346,6 +339,111 @@ def test_frame_idx_snap_and_clamp_math():
     assert snapped(24) == 17  # (23)//8*8+1
     assert snapped(48) == 41  # (47)//8*8+1 = last start pixel for num_frames=49
     assert snapped(100, num_frames=49) == 41  # snap 97 clamped to num_frames-8=41
+    assert snapped(100, num_frames=9) == 1  # F=9: the first and the last grid point are both 1
+
+
+def _images(*frames: int, strength: float | None = None):
+    from api.models import ConditioningImage
+
+    return [ConditioningImage(image_id=f"i{k}", frame_idx=f, strength=strength) for k, f in enumerate(frames)]
+
+
+def test_ltx_normalize_keyframes_duplicate_messages():
+    from services.engines.ltx.request_rules import LTX_REQUEST_RULES
+
+    assert LTX_REQUEST_RULES.normalize_keyframes(_images(10, 12), 49) == (
+        "conditioning_images: frame_idx 10 and 12 both snap to frame 9 (positions must be distinct)"
+    )
+    assert LTX_REQUEST_RULES.normalize_keyframes(_images(0, 0), 49) == (
+        "two conditioning images at frame_idx 0 (the start frame can only be set once)"
+    )
+    assert LTX_REQUEST_RULES.normalize_keyframes(_images(10, 12), 49, where="clips[0]: ").startswith(
+        "clips[0]: conditioning_images: frame_idx 10 and 12"
+    )
+
+
+@_pytest.mark.parametrize(
+    "raw, expected",
+    [(0, 0), (1, 1), (5, 5), (60, 60), (122, 122), (123, 123), (124, 123), (500, 123)],
+)
+def test_h3_normalize_keyframes_any_frame_up_to_the_last(raw, expected):
+    # H3 (step 1, offset 0): every frame 0..F-1 stays as sent; F and above
+    # become F-1 (F = 124 here).
+    from services.engines.h3.adapter import REQUEST_RULES as H3_RULES
+
+    images = _images(raw)
+    assert H3_RULES.normalize_keyframes(images, 124) is None
+    assert images[0].frame_idx == expected
+
+
+def test_h3_normalize_keyframes_duplicate_messages():
+    from services.engines.h3.adapter import REQUEST_RULES as H3_RULES
+
+    assert H3_RULES.normalize_keyframes(_images(123, 200), 124) == (
+        "conditioning_images: frame_idx 123 and 200 both snap to frame 123 (positions must be distinct)"
+    )
+    assert H3_RULES.normalize_keyframes(_images(0, 0), 124) == (
+        "two conditioning images at frame_idx 0 (the start frame can only be set once)"
+    )
+
+
+def test_keyframes_snap_in_validate_for_family_not_in_the_schema():
+    from api.models import GenerateRequest
+    from services.engines import validate_for_family
+
+    req = GenerateRequest(**BASE, width=512, height=320, num_frames=49, conditioning_images=_images(5))
+    assert req.conditioning_images[0].frame_idx == 5  # the schema no longer snaps
+    validate_for_family("ltx", req)
+    assert req.conditioning_images[0].frame_idx == 1
+
+
+def test_validate_for_family_snaps_after_the_numeric_rules():
+    # The frame grid is judged first: a bad num_frames is named, not a snap.
+    from api.models import GenerateRequest
+    from services.engines import validate_for_family
+
+    req = GenerateRequest(**BASE, width=512, height=320, num_frames=50, conditioning_images=_images(10, 12))
+    with _pytest.raises(Exception) as excinfo:
+        validate_for_family("ltx", req)
+    assert "num_frames must be 8n+1" in str(excinfo.value.detail)
+
+
+def test_omitted_strength_is_the_family_default():
+    from api.models import GenerateRequest
+    from services.engines import validate_for_family
+
+    ltx = GenerateRequest(**BASE, width=512, height=320, num_frames=49, conditioning_images=_images(0, 24))
+    assert [ci.strength for ci in ltx.conditioning_images] == [None, None]
+    validate_for_family("ltx", ltx)
+    assert [ci.strength for ci in ltx.conditioning_images] == [0.8, 0.8]
+
+    explicit = GenerateRequest(
+        **BASE, width=512, height=320, num_frames=49, conditioning_images=_images(0, strength=0.5)
+    )
+    validate_for_family("ltx", explicit)
+    assert explicit.conditioning_images[0].strength == 0.5
+
+    h3 = GenerateRequest(
+        prompt="x", width=640, height=384, num_frames=124, frame_rate=24.0,
+        conditioning_images=_images(0, 123),
+    )
+    validate_for_family("h3", h3)
+    assert [ci.strength for ci in h3.conditioning_images] == [None, None]
+    assert [ci.frame_idx for ci in h3.conditioning_images] == [0, 123]
+
+
+def test_chain_clip0_omitted_strength_is_filled_with_08():
+    from api.models import GenerateChainRequest
+
+    req = GenerateChainRequest(
+        prompt="x", width=384, height=256, overlap_frames=2,
+        clips=[
+            {"num_frames": 49, "conditioning_images": [{"image_id": "a", "frame_idx": 10}]},
+            {"num_frames": 25},
+        ],
+    )
+    image = req.clips[0].conditioning_images[0]
+    assert (image.frame_idx, image.strength) == (9, 0.8)
 
 
 def test_distilled_requires_8_steps(client):

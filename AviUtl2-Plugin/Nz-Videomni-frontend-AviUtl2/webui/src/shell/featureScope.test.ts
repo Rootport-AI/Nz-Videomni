@@ -29,7 +29,6 @@ describe("FEATURE_UI (the declaration table)", () => {
         "inpaint",
         "keep_resident_embeddings",
         "keyframe_strength",
-        "multi_keyframes",
         "nag",
         "outpaint",
         "prune_vaed",

@@ -39,9 +39,9 @@ const DEFAULT_CONTROL_LORA_STRENGTH = 1.0;
 export interface GenerationFormProps {
   form: UseGenerationFormResult;
   keyframes: UseKeyframesResult;
-  /** `config.limits.conditioning_frame_idx_multiple` (default 8). */
+  /** The base model's keyframe grid step (`constraints.keyframes.step`; LTX 8). */
   frameIdxMultiple: number;
-  /** `config.limits.conditioning_keyframe_grid_offset` (default 1). */
+  /** The base model's keyframe grid origin (`constraints.keyframes.offset`; LTX 1). */
   gridOffset: number;
   /** Keyframe timeline rework (2026-07-18): DURATION edits now route through
    * `SingleScreen`'s `useDurationShrinkGuard` instead of `form.setNumFrames`
@@ -277,7 +277,6 @@ export function GenerationForm({
         frameIdxMultiple={frameIdxMultiple}
         gridOffset={gridOffset}
         disabled={disabled}
-        multiUnavailable={sectionsUnavailable?.keyframesMulti}
         strengthUnavailable={sectionsUnavailable?.keyframeStrength}
       />
 

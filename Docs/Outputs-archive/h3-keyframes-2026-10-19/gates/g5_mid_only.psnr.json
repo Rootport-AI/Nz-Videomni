@@ -1,0 +1,38 @@
+{
+  "mp4": "outputs/h3-keyframes-2026-10-19/g5_mid_only.mp4",
+  "sha256": "135e1fb0b928c5ab51e2f85897e61f6bec6a9959f5941b3e823a13fd1f91cd6e",
+  "frames": 124,
+  "size": [
+    640,
+    384
+  ],
+  "psnr": {
+    "62=kf_mid62.png": {
+      "frame": 62,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 31.56,
+      "mse": 45.438
+    },
+    "0=kf_first.png": {
+      "frame": 0,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 26.37,
+      "mse": 150.104
+    },
+    "-1=kf_last.png": {
+      "frame": 123,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 27.65,
+      "mse": 111.62
+    }
+  }
+}

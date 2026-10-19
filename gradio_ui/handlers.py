@@ -23,6 +23,7 @@ from .api_client import ApiClient
 from .constraints import sampling_payload, single_shape_error
 from .formatting import format_api_error
 from .i18n import L, _DEFAULT_LANG
+from .presets import KF_STRENGTH_DEFAULT
 from .validation import check_chain_total, check_v2v_context
 
 # Clip-chain generation modes (stable values of the chain handler's ``mode``;
@@ -901,7 +902,14 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             except Exception as exc:
                 yield L("msg_upload_failed", lang).format(err=exc), "", None
                 return
-            conditioning.append({"image_id": image_id, "frame_idx": frame_idx, "strength": strength})
+            entry = {"image_id": image_id, "frame_idx": frame_idx}
+            # Send only when it differs from the default: the server writes
+            # the LTX default back, and a base model without keyframe strength
+            # (MiniMax H3; its sliders are hidden and reset to the default)
+            # refuses any strength at all.
+            if strength != KF_STRENGTH_DEFAULT:
+                entry["strength"] = strength
+            conditioning.append(entry)
 
         # Upload the reference video last (after keyframes), then attach the
         # lora + reference_video_id to the payload below.
@@ -1474,7 +1482,8 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 return
             conditioning.append({
                 "image_id": image_id, "frame_idx": 0,
-                "strength": float(clip0_strength if clip0_strength is not None else 0.8),
+                "strength": float(clip0_strength if clip0_strength is not None
+                                  else KF_STRENGTH_DEFAULT),
             })
 
         # --- V2V/A2V source upload (after the keyframe image, mirroring the

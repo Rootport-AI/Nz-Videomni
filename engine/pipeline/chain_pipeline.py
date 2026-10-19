@@ -313,7 +313,7 @@ def _build_video_conditionings(
     * frame_idx  > 0 -> keyframe/guide APPEND (VideoConditionByKeyframeIndex),
                         frame_idx passed as a raw PIXEL RoPE offset.
     ``images`` frame_idx values are already snapped to the 0-or-8n+1 grid by the
-    API validator.
+    API validator (LTX's ``REQUEST_RULES.normalize_keyframes``).
     """
     from ltx_pipelines.utils.args import ImageConditioningInput as _LtxImageInput
     from ltx_pipelines.utils.helpers import (

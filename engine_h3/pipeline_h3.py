@@ -6,7 +6,7 @@ Ported in part from DiffSynth-Studio (Apache-2.0), commit 4e34969:
      timesteps and their ``unique`` index 1011-1021)
 Copyright (c) the DiffSynth-Studio authors. Licensed under the Apache License,
 Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0). Changes: T2V and
-the first-frame I2V only (the condition rows: KeyframeEncoder 440-467, the
+the keyframe I2V only (the condition rows: KeyframeEncoder 440-467, the
 packed layout 651-709, the per-row timesteps 1019); no CFG (H3 is guidance-distilled: one forward per step); no padding rows; the
 noise is drawn in float32 from one CPU generator (video, then audio); the
 model's output is used in its own direction (x0 = x + sigma v, no negation);
@@ -19,8 +19,9 @@ Stages (``progress`` names are the app's shared vocabulary):
 1. ``encode``: the Qwen3-VL text tower (:class:`H3TextEncoder`), built on
    meta and read layer by layer straight from the file onto the GPU during its
    one forward (no layer is kept in main memory); released before the DiT is built.
-   I2V adds the key frame's video VAE encode as a 4th step of the same progress
-   stage (``image_encode`` in the phases; see I2V below).
+   A job with any key frame adds the key frames' video VAE encode as a 4th
+   step of the same progress stage (``image_encode`` in the phases; see I2V
+   below) -- also when no key frame goes to the vision tower.
 2. ``stage1_denoise``: the DiT. Everything but ``blocks`` goes to the GPU; the
    50 blocks stay on the CPU and ``BlockSwapService`` pages them in (with the
    prefetch engine when asked). That is also what puts each int8 weight AND
@@ -41,14 +42,19 @@ Stages (``progress`` names are the app's shared vocabulary):
    CPU for a kept DiT, to meta otherwise). Off, this stage is as described above.
 3. ``decode``: the video VAE's decoder, then the audio VAE, then the mp4.
 
-I2V (Docs/MINIMAX_H3_DESIGN.md §3): the key frame is put onto the canvas
-(cover + centre crop, ``engine_h3.image_cond``) before anything is loaded; the
-text encoder sees it through its vision tower; after the text encoder is gone
-the video VAE's encoder (float32, built for this job only) turns it into one
-latent frame, i.e. ``grid`` condition rows ``[text | cond | audio | video]``.
-Those rows are mixed once with noise drawn AFTER the video and audio noise
-(``0.999 * clean + 0.001 * noise``), carry t = max(t_video, 0.999) and the
-RoPE time L, and are handed to the DiT unchanged at every step.
+I2V (Docs/MINIMAX_H3_DESIGN.md §3): the key frames (any pixel frames 0..F-1,
+sorted by frame) are put onto the canvas (cover + centre crop,
+``engine_h3.image_cond``) before anything is loaded; the text encoder sees the
+first (frame 0) and the last (frame F-1) through its vision tower, as
+``<Picture 1>``, ``<Picture 2>`` in that order (a middle key frame only gets
+condition rows); after the text encoder is gone the video VAE's encoder
+(float32, built for this job only) turns each into one latent frame, i.e. one
+block of ``grid`` condition rows per key frame, ``[text | cond | audio |
+video]``. Those rows are mixed once with noise drawn AFTER the video and audio
+noise (one ``[grid, 96]`` draw shared by every block:
+``0.999 * clean + 0.001 * noise``), carry t = max(t_video, 0.999) and the
+RoPE time of their pixel frame (``engine_h3.rope.keyframe_t``), and are
+handed to the DiT unchanged at every step.
 
 Keeping models between jobs (``keep_resident``, Docs/MINIMAX_H3_DESIGN.md §4): at the end of
 a job that asks for it, the DiT (all of it on the CPU, block swap wrappers
@@ -117,8 +123,10 @@ class H3LoadOptions:
       ``<= 0`` or ``>= 50`` means NO swapping: the whole DiT (19.5 GiB) goes to
       the GPU and ``block_swap_prefetch_used`` is ``"off"``.
     * ``deterministic``: sets cuDNN's deterministic / no-benchmark flags. Only
-      the convolutions use cuDNN: the VAEs (the decode, and the I2V key frame's
-      encode) and, for I2V, the vision tower's patch embedding (``Conv3d``); the
+      the convolutions use cuDNN: the VAEs (the decode, and the I2V key frames'
+      encode) and the vision tower's patch embedding (``Conv3d``), which is read
+      only when a key frame at frame 0 or F-1 goes to the text encoder's
+      image-reading part (a middle-only job reads no vision tower, as in T2V); the
       DiT and the text tower have none for it to act on.
     """
 
@@ -130,7 +138,7 @@ class H3LoadOptions:
 
 @dataclass(frozen=True)
 class H3ImageInput:
-    """One conditioning image: a file and the pixel frame it pins (only 0, the first frame)."""
+    """One conditioning image: a file and the pixel frame it pins (0 .. num_frames-1)."""
 
     path: str
     frame_idx: int = 0
@@ -148,7 +156,7 @@ class H3GenerateRequest:
     num_inference_steps: int = DEFAULT_STEPS
     shift_video: float = DEFAULT_SHIFT_VIDEO
     shift_audio: float = DEFAULT_SHIFT_AUDIO
-    #: 0 images = T2V, 1 image at frame 0 = I2V (the alpha's only shape, 裁定 19).
+    #: 0 images = T2V; 1 or more (distinct frames 0 .. num_frames-1, any order) = I2V.
     images: tuple[H3ImageInput, ...] = ()
     #: Keep the DiT / video decoder / audio VAE (on the CPU) for the next job.
     keep_resident: bool = False
@@ -183,14 +191,17 @@ def validate_request(req: H3GenerateRequest) -> None:
         raise ValueError(f"ステップ数は 1 以上にしてください（{req.num_inference_steps}）")
     if not float(req.shift_video) > 0 or not float(req.shift_audio) > 0:
         raise ValueError(f"shift は正の値にしてください（映像 {req.shift_video}・音声 {req.shift_audio}）")
-    images = tuple(req.images or ())
-    if len(images) > 1:
-        raise ValueError(f"MiniMax H3 は先頭フレーム 1 枚だけに対応しています（画像 {len(images)} 枚）")
-    for img in images:
-        if int(img.frame_idx) != 0:
-            raise ValueError(f"MiniMax H3 は先頭フレーム 1 枚だけに対応しています（frame_idx={img.frame_idx}）")
+    last = int(req.num_frames) - 1
+    seen: set[int] = set()
+    for img in tuple(req.images or ()):
+        n = int(img.frame_idx)
+        if not 0 <= n <= last:
+            raise ValueError(f"キーフレームの位置は 0〜{last} にしてください（frame_idx={img.frame_idx}）")
+        if n in seen:
+            raise ValueError(f"キーフレームの位置が重複しています（frame_idx={n}）")
+        seen.add(n)
         if not str(img.path or "").strip():
-            raise ValueError("先頭フレームの画像のパスが空です")
+            raise ValueError(f"キーフレームの画像のパスが空です（frame_idx={n}）")
     if req.attention_backend is not None and req.attention_backend not in ATTENTION_BACKENDS:
         raise ValueError(f"attention_backend は {ATTENTION_BACKENDS} のどれかです（{req.attention_backend!r}）")
 
@@ -209,6 +220,24 @@ def time_rows(layout, t_video: float, t_audio: float, device=None) -> tuple[torc
     t[layout.cond] = max(float(t_video), KEYFRAME_NOISE_AUG)
     t_unique, time_index = torch.unique(t, sorted=True, return_inverse=True)
     return t_unique, time_index.to(torch.long)
+
+
+def noisy_condition(cond_clean: torch.Tensor, frame_rows: int, generator: torch.Generator, device=None) -> torch.Tensor:
+    """The condition rows handed to the DiT: ``0.999 * clean + 0.001 * noise``.
+
+    ``cond_clean`` is K blocks of ``frame_rows`` rows (one per key frame). The
+    noise is ONE ``[frame_rows, 96]`` draw from ``generator`` (the job's third
+    draw, after the video and the audio noise), repeated for every block -- all
+    key frames share it, as in DiffSynth and ComfyUI; with K = 1 this is the
+    same draw and the same values as the first-frame-only engine.
+    """
+    blocks, rem = divmod(int(cond_clean.shape[0]), int(frame_rows))
+    if rem or blocks < 1:
+        raise RuntimeError(f"condition rows {list(cond_clean.shape)} are not whole blocks of {frame_rows}")
+    noise = torch.randn((int(frame_rows), int(cond_clean.shape[1])), generator=generator, dtype=torch.float32)
+    noise = noise.to(device if device is not None else cond_clean.device).repeat(blocks, 1)
+    clean = cond_clean.to(noise.device, torch.float32)
+    return KEYFRAME_NOISE_AUG * clean + (1.0 - KEYFRAME_NOISE_AUG) * noise
 
 
 def modality_rows(layout, text_tags: torch.Tensor) -> torch.Tensor:
@@ -492,25 +521,42 @@ class H3Pipeline:
             # what is kept, like any other. Still before the text encoder, so a
             # bad request or image never costs a text-encoder read.
             validate_request(req)
-            image = source_size = None
-            if req.images:
+            # Ascending frame order (stable): the condition rows and the vision
+            # tower's pictures follow it (first frame then last frame, as in the
+            # official FL2VA).
+            images = sorted(req.images or (), key=lambda img: int(img.frame_idx))
+            cond_frame_idx = [int(img.frame_idx) for img in images]
+            canvases: list = []
+            source_size: list[list[int]] = []
+            if images:
                 from engine_h3.image_cond import load_canvas_image  # noqa: PLC0415
 
-                image, source_size = load_canvas_image(req.images[0].path, int(req.width), int(req.height))
+                for img in images:
+                    canvas, size = load_canvas_image(img.path, int(req.width), int(req.height))
+                    canvases.append(canvas)
+                    source_size.append([int(size[0]), int(size[1])])
+            # Only the first and the last frame go to the vision tower; a middle
+            # key frame gets condition rows only (裁定 6).
+            last = int(req.num_frames) - 1
+            vision_images = [c for n, c in zip(cond_frame_idx, canvases) if n in (0, last)]
             with torch.no_grad():
                 with phases.phase("encode") as entry:
-                    text_hidden, text_tags = self._encode(req.prompt, phases, image=image)
+                    text_hidden, text_tags = self._encode(
+                        req.prompt, phases, images=vision_images, has_cond=bool(canvases),
+                    )
                     entry["text_tokens"] = int(text_hidden.shape[0])
                 cond_clean = None
-                if image is not None:
+                if canvases:
                     with phases.phase("image_encode") as entry:
-                        cond_clean = self._encode_image(image, entry)
+                        cond_clean = self._encode_image(canvases, entry)
                         entry["vision_tokens"] = int(phases.data["encode"].get("te_read", {}).get("vision_tokens", 0))
                         entry["canvas"] = [int(req.width), int(req.height)]
-                        entry["source_size"] = [int(source_size[0]), int(source_size[1])]
+                        entry["source_size"] = source_size
+                del canvases, vision_images
                 with phases.phase("denoise") as entry:
                     video_lat, audio_lat, prefetch_used = self._denoise(
-                        req, text_hidden, text_tags, phases, entry, cond_clean=cond_clean, keep=keep,
+                        req, text_hidden, text_tags, phases, entry,
+                        cond_clean=cond_clean, cond_frame_idx=cond_frame_idx, keep=keep,
                     )
                 del text_hidden, text_tags, cond_clean
                 _free_cuda()
@@ -562,19 +608,27 @@ class H3Pipeline:
 
     # -- stage 1: encode ---------------------------------------------------------
 
-    def _encode(self, prompt: str, phases: _Phases, image=None) -> tuple[torch.Tensor, torch.Tensor]:
+    def _encode(
+        self, prompt: str, phases: _Phases, images=(), *, has_cond: bool
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """The text encoder's one forward. ``images``: the canvases the vision
+        tower reads (the first / last key frame); ``has_cond``: whether the job
+        has any key frame at all, which decides the stage's step count."""
         from engine_h3.text_encoder import H3TextEncoder  # noqa: PLC0415
 
+        images = list(images)
         te = H3TextEncoder(self.paths.text_encoder, self.paths.tokenizer_dir, device=self.device)
-        # I2V adds a 4th step to the same stage: the key frame's VAE encode.
-        total = 3 if image is None else 4
+        # A job with any key frame adds a 4th step to the same stage: the key
+        # frames' VAE encode (also when none of them goes to the vision tower,
+        # so a middle-only job never shows 3/3 then 4/4).
+        total = 4 if has_cond else 3
         self._progress("encode", 0, total)
         try:
             info = te.load()
             phases.data["encode"]["te"] = info
             phases.mark("encode", "after_load")
             self._progress("encode", 1, total)
-            hidden, tags = te.encode(prompt, image=image)
+            hidden, tags = te.encode(prompt, images=images)
             phases.data["encode"]["te_read"] = te.read_report
             self._progress("encode", 2, total)
         finally:
@@ -583,29 +637,38 @@ class H3Pipeline:
             _free_cuda()
         phases.mark("encode", "after_release")
         self._progress("encode", 3, total)
-        self._log(f"encode: {hidden.shape[0]} text tokens" + (" (with the key frame's vision block)" if image is not None else ""))
+        self._log(
+            f"encode: {hidden.shape[0]} text tokens"
+            + (f" (with {len(images)} key frame vision block(s))" if images else "")
+        )
         return hidden, tags
 
-    def _encode_image(self, image, entry: dict) -> torch.Tensor:
-        """The key frame -> its clean condition rows ``[grid, 96]`` float32 on the device.
+    def _encode_image(self, images, entry: dict) -> torch.Tensor:
+        """The key frames (in order) -> their clean condition rows ``[K * grid, 96]``
+        float32 on the device, one block of ``grid`` rows per key frame.
 
-        The video VAE's encoder is built for this job only, in float32, and
-        dropped before the DiT is built -- it is never kept.
+        The video VAE's encoder is built once for this job only, in float32,
+        encodes the frames one at a time, and is dropped before the DiT is
+        built -- it is never kept.
         """
         from engine_h3.dit import patchify_video  # noqa: PLC0415
         from engine_h3.image_cond import canvas_to_tensor  # noqa: PLC0415
         from engine_h3.video_vae import H3VideoEncoder  # noqa: PLC0415
 
+        blocks: list[torch.Tensor] = []
         enc = H3VideoEncoder.from_file(self.paths.video_vae, device=self.device, dtype=torch.float32)
         try:
-            z = enc.encode(canvas_to_tensor(image).to(self.device), tiled=True)   # [1, 24, 1, H/16, W/16] f32
+            for image in images:
+                z = enc.encode(canvas_to_tensor(image).to(self.device), tiled=True)   # [1, 24, 1, H/16, W/16] f32
+                if tuple(z.shape[:3]) != (1, 24, 1):
+                    raise RuntimeError(f"image encode: unexpected latent shape {list(z.shape)}")
+                blocks.append(patchify_video(z.float()))
+                entry["latent_shape"] = [int(v) for v in z.shape]
+                del z
         finally:
             del enc
             _free_cuda()
-        if tuple(z.shape[:3]) != (1, 24, 1):
-            raise RuntimeError(f"image encode: unexpected latent shape {list(z.shape)}")
-        rows = patchify_video(z.float())
-        entry["latent_shape"] = [int(v) for v in z.shape]
+        rows = torch.cat(blocks, dim=0)
         self._progress("encode", 4, 4)
         return rows
 
@@ -787,7 +850,10 @@ class H3Pipeline:
         self._unpatch_block_swap(dit)
         return moved
 
-    def _denoise(self, req, text_hidden, text_tags, phases: _Phases, entry: dict, cond_clean=None, keep=False):
+    def _denoise(
+        self, req, text_hidden, text_tags, phases: _Phases, entry: dict,
+        cond_clean=None, cond_frame_idx=(), keep=False,
+    ):
         from engine_h3.dit import (  # noqa: PLC0415
             H3SeqLayout,
             audio_to_rows,
@@ -803,10 +869,14 @@ class H3Pipeline:
         a_lat = audio_latents(int(req.num_frames))
         gh, gw = int(req.height) // SPATIAL_FACTOR, int(req.width) // SPATIAL_FACTOR
         lh, lw = int(req.height) // VAE_SPATIAL, int(req.width) // VAE_SPATIAL
-        cond_frames = 0 if cond_clean is None else 1
-        cond_rows_n = cond_frames * gh * gw
-        if cond_clean is not None and tuple(cond_clean.shape) != (cond_rows_n, 4 * 24):
-            raise RuntimeError(f"denoise: condition rows {list(cond_clean.shape)}, expected [{cond_rows_n}, 96]")
+        cond_frame_idx = [int(n) for n in cond_frame_idx]
+        cond_rows_n = len(cond_frame_idx) * gh * gw
+        actual = None if cond_clean is None else tuple(cond_clean.shape)
+        if actual != ((cond_rows_n, 4 * 24) if cond_rows_n else None):
+            raise RuntimeError(
+                f"denoise: condition rows {None if actual is None else list(actual)}, "
+                f"expected [{cond_rows_n}, 96] for key frames {cond_frame_idx}"
+            )
 
         resident = self._resident
         if resident is not None:
@@ -837,7 +907,7 @@ class H3Pipeline:
             )
             coords = build_coords(
                 text_len=L, latent_frames=t_lat, grid_h=gh, grid_w=gw, audio_latents=a_lat,
-                cond_frames=cond_frames,
+                cond_frame_idx=cond_frame_idx,
             )
             rope_cos, rope_sin = rope_tables(coords, dit.rope_inv_freq)
             rope_cos, rope_sin = rope_cos.to(dev), rope_sin.to(dev)
@@ -845,16 +915,15 @@ class H3Pipeline:
 
             # Noise: ONE CPU generator, float32, video first then audio (the
             # draw order is part of what "same seed" means for this engine).
-            # The condition rows' noise comes THIRD, so T2V draws only the first
-            # two and its noise does not depend on I2V being supported.
+            # The condition rows' noise comes THIRD (one block's worth, shared by
+            # every key frame), so T2V draws only the first two and its noise
+            # does not depend on I2V being supported.
             gen = torch.Generator(device="cpu").manual_seed(int(req.seed))
             video = torch.randn((1, cfg.latents_dim, t_lat, lh, lw), generator=gen, dtype=torch.float32).to(dev)
             audio = torch.randn((2, cfg.audio_latents_dim, a_lat), generator=gen, dtype=torch.float32).to(dev)
             cond = None
             if cond_clean is not None:
-                noise = torch.randn(tuple(cond_clean.shape), generator=gen, dtype=torch.float32).to(dev)
-                cond = KEYFRAME_NOISE_AUG * cond_clean.to(dev, torch.float32) + (1.0 - KEYFRAME_NOISE_AUG) * noise
-                del noise
+                cond = noisy_condition(cond_clean, gh * gw, gen, device=dev)
 
             sig_v = sigma_schedule(steps, float(req.shift_video))
             sig_a = sigma_schedule(steps, float(req.shift_audio))

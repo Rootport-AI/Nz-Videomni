@@ -24,6 +24,7 @@
 - 1-G3・1-G4 のセルフテスト 6 本: 各回の `.cmd`（コマンド）と `.json`（ワーカーの結果）。名前は `g3_t2v`・`g3_i2v_first`・`g3_i2v_first_vram16`・`g4_first_last`・`g4_last_only`・`g4_kf10`。
 - PSNR: `psnr_keyframes.py`（台本）と `*.psnr.json`。`baseline_J1.psnr.json` は比べる相手（§166 の J1）、`g3_t2v_vs_kf10.psnr.json` は試験画像が基準の動画から取り出したものであることの確かめ。
 - 試験画像の取り出し: `extract_keyframes.py`。
+- 第 2 弾 2-G1（中間のキーフレーム。§170.10）で足したもの: `g5_mid_only`・`g5_first_mid_last` の `.cmd`・`.json`・`.psnr.json`、比べる行の測り直し `baseline_mid62_*.psnr.json`、試験画像 `kf_mid62.png` の取り出しの台本 `extract_mid62.py` と記録 `extract_kf_mid62.json`、報告 `reports/gate2_report.md`。`GATES_RESULT.md`・`gates_result.json` は第 2 弾を足した版に差し替えた。目視用の動画と画像は Hugging Face の非公開データセット `Rootport/Nz-LTX23-eval-clips` の `round9-h3-keyframes/` にある。
 
 ## 複写していないもの
 

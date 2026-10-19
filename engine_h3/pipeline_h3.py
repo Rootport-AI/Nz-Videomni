@@ -536,7 +536,7 @@ class H3Pipeline:
                     canvases.append(canvas)
                     source_size.append([int(size[0]), int(size[1])])
             # Only the first and the last frame go to the vision tower; a middle
-            # key frame gets condition rows only (裁定 6).
+            # key frame gets condition rows only (MINIMAX_H3_DESIGN 裁定 59, §3).
             last = int(req.num_frames) - 1
             vision_images = [c for n, c in zip(cond_frame_idx, canvases) if n in (0, last)]
             with torch.no_grad():

@@ -35,8 +35,8 @@ export interface CropOutput {
   height: number;
 }
 
-/** One I2V conditioning keyframe (Docs/API_REFERENCE.md §5.1 `ConditioningImage`,
- * `api/models.py:40-45`). `image_id` comes from `POST /upload/image`'s
+/** One I2V conditioning keyframe (Docs/API_REFERENCE.md §5.1 and
+ * `api/models.py`'s `ConditioningImage`). `image_id` comes from `POST /upload/image`'s
  * response. `frame_idx==0` is the leading frame (latent-replace); anything
  * greater is snapped by the server to the base model's keyframe grid
  * (`constraints.keyframes`: `(frame_idx-offset)//step*step+offset`, LTX's

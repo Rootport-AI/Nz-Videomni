@@ -265,6 +265,7 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 17. 実装の土台は 9 月の推奨（DiffSynth-Studio を土台・diffusers は正解データ源・ComfyUI は仕様書として読むだけ）のままとし、次の修正点 4 つを計画に織り込む。(1) int8 の実行は comfy-kitchen（Apache-2.0）に任せる候補を正面に置く。既存の読み込み（呼び出しごとに bf16 へ戻す・groupsize 256 のみ）はヘッダの判定には使えても H3 の実行経路には向かない。(2) attention は DiffSynth の区間ごとの Python ループを使わず、diffusers の「1 リクエストを 1 つの文書に詰めてマスクなしで渡す」形を手本にして書き、本製品に導入済みの SageAttention を効かせる。(3) CPU オフロードは DiffSynth の仕組みではなく、本製品の block swap と先読みを接続する。(4) ローダを最初から「揺れを吸収する」作りで書く案を、計画で検討する（DiffSynth の変換表を出発点に、ComfyUI の判定の振る舞いを仕様として自前で書く）。あわせて、次の論点 4 つを計画で決める。(a) DiffSynth を移植するか、版を固定した依存として入れて本体のモデル部品だけ使うか。(b) 映像 VAE は Comfy-Org の fp16 版か、DiffSynth の例が使う MiniMax 公式の VAE か（中身が同じかは未確認）。(c) 「ガイダンス蒸留済みで negative prompt なし」が本当か（cfg 4 を使う利用例が複数あり、本当でなければ CFG の経路が要る）。(d) comfy-kitchen の triton 経路の未解決の問題（#136）。CUDA 拡張の経路なら影響しない見込みだが、計測で確かめる。 → 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 へ移管
 18. α版では、ステップ数と shift を定数で固定し、画面に出さない。画面に出す改修は台帳 §1-96（第 2 弾へ吸収済み。裁定 22）。 → 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 へ移管
 19. α版の I2V は先頭フレームのみ。末尾キーフレームと中間キーフレームは台帳 §1-97。 → 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 へ移管
+    > **更新（2026-10-19）**: 末尾と中間のキーフレームは実装済み（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-241、設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3）。
 20. ファイル群の取得と仮想環境の構築は 1 回の了承で進める。GPU を使う実測は、弾ごとにまとめて了承を得る。
 21. Turbo を後回しにするため生成が遅くなることは了承済み。快適上限の較正に支障が出るほど遅ければ、LoRA 対応の優先順位を上げる。
 22. ステップ数と shift（映像・音声）の 3 本のスライダーを、第 2 弾で操作パネルと Gradio に出す。既存の CFG スライダーのモックを差し替え、項目名・スライダー本体・数値を 1 行に並べる。既定値は第 2 弾の着手時に決める（→ 既定値は裁定 24）。背景は、Turbo を融合した低ステップの配布物が多く、LoRA 未対応でも速く生成できる見込みがあること。**裁定 18 のうち「画面に出さない」は取り下げる**（第 1 弾でステップ数と shift を定数の既定値とし、ワーカーが引数で受け取る部分は残る）。 → 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 へ移管
@@ -404,7 +405,7 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 
 - `__metadata__.minimax_h3_te = {"num_hidden_layers":50,"output":"unnormalized_hidden_after_layer_50"}`。ファイルの時点で 50 層に切り詰め済み。
 - `model.layers.0〜49` の q/k/v/o・gate/up/down の 350 本が I8（groupsize 256・合計 24.38GB）。
-- 量子化から外れているのは次の 3 つ: `model.embed_tokens` bf16 [151936,5120]（1.56GB）／視覚塔 `visual.*`（27 ブロック・merger・deepstack_merger 3 本・patch_embed・pos_embed。すべて bf16、計 1.19GB）／ノルム類。
+- 量子化から外れているのは次の 3 つ: `model.embed_tokens` bf16 [151936,5120]（1.56GB）／画像読み取り部（vision tower） `visual.*`（27 ブロック・merger・deepstack_merger 3 本・patch_embed・pos_embed。すべて bf16、計 1.19GB）／ノルム類。
 - `lm_head` と `model.norm` は入っていない。
 
 **映像 VAE `minimax_h3_video_vae_int8_convrot`**
@@ -555,6 +556,8 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 **これは設計ではなく、範囲のメモである。** 設計正本は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md)。外部ガイドは、オーナーが 2026-10-16 に別のエージェントとの議論の結果として共有した「Nz-Videomni MiniMax H3 対応 α版 スピードガイド」で、著者は 9 月 6 日の調査と本製品の実装を知らない。ここではその要点を、§10 の 2026-10-16 の裁定（6〜12）で修正した形で記す。
 
 > **更新（2026-10-17）**: α版の範囲と完結条件は §10 の裁定 13〜21 で確定した。第 1 弾はワーカーのセルフテストで 1 本、α版の完結は操作パネルからの T2V と I2V（先頭フレームのみ）と `install-MiniMaxH3.bat` と README まで。快適上限マーカーは非表示（較正は台帳 §1-95）、ステップ数と shift は第 1 弾では定数（画面に出すのは第 2 弾。裁定 22）、末尾と中間キーフレームは後回し（同 §1-97）。下の「監督が賛同した点」の 3 つはそのまま計画の材料とし、実装の土台の修正点 4 つと論点 4 つは裁定 17 にある。
+
+> **更新（2026-10-19）**: 末尾と中間のキーフレームは実装済み（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-241、設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3）。
 
 α版で対応するもの:
 

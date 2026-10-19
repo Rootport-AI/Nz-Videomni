@@ -1,4 +1,4 @@
-"""The I2V key frame: an image file put onto the generation canvas (第 2 弾 2a, plan §3.1).
+"""The I2V key frame: an image file put onto the generation canvas (MINIMAX_H3_DESIGN §3).
 
 One rule for the user, shared with LTX: the image is scaled to COVER the
 canvas with its aspect ratio kept, then the centre is cut out (never a
@@ -8,10 +8,12 @@ LTX pipelines' ``resize_and_center_crop``. The interpolation is PIL's LANCZOS,
 which all three MiniMax H3 references use (DiffSynth, diffusers, ComfyUI); LTX's
 one-frame H.264 re-compression is an LTX-specific step and is not done here.
 
-The cropped canvas image is the ONE image both consumers see: the video VAE
-encoder (as ``[1, 3, 1, H, W]`` float32 in [0, 1]; the ImageNet normalisation
-happens inside the encoder) and the vision tower of the text encoder (as the
-PIL image itself, through the Qwen3-VL image processor).
+The cropped canvas image is what both consumers see, for different key
+frames: the video VAE encoder takes every key frame (as ``[1, 3, 1, H, W]``
+float32 in [0, 1]; the ImageNet normalisation happens inside the encoder),
+and the vision tower of the text encoder takes only the key frames at frame 0
+and F-1 (as the PIL image itself, through the Qwen3-VL image processor); see
+MINIMAX_H3_DESIGN §3.
 """
 
 from __future__ import annotations

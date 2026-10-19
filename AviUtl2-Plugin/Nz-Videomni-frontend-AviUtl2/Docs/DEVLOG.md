@@ -5386,3 +5386,4 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 143.5 状態
 
 - 未コミット。埋め込みのビルドと配置（`scripts/build.ps1`→`deploy.ps1`）は監督が行う。中間のフレームの品質はオーナーの目視で go／no-go を決める（バックエンド台帳 §1-97 の第 2 弾）。門の結果はバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §170。
+  > **更新（2026-10-19）**: dev にコミット済み（66761ec／776a3d2）。生成動画の目視は go、操作パネルの目視も合格（バックエンド PENDING_TASKS_CLOSED.md 3-241／VERIFICATION_LOG §170.10）。

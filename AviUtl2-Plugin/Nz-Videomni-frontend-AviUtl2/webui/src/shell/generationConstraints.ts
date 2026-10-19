@@ -45,6 +45,9 @@ export interface GenerationConstraints {
   /** The three sampling sliders, or `null` for an engine that has none (LTX).
    * Verbatim from the server — the slider ranges and defaults are its. */
   sampling: SamplingConstraints | null;
+  /** Where a keyframe may sit: `0` and `offset + k * step` (LTX 8/1, MiniMax
+   * H3 1/0 = any frame). Read by the keyframe panel (`keyframeGrid.ts`). */
+  keyframeGrid: FrameGrid;
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
@@ -56,6 +59,7 @@ export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Objec
   dimensionMultiple: LTX_DIMENSION_MULTIPLE,
   frameRate: Object.freeze({ min: FRAME_RATE_MIN, max: FRAME_RATE_MAX }),
   sampling: null,
+  keyframeGrid: Object.freeze({ step: 8, offset: 1 }),
 });
 
 /** Flattens a served `constraints` block; `null`/absent → the LTX fallback.
@@ -72,6 +76,9 @@ export function resolveGenerationConstraints(
     dimensionMultiple: raw.dimension_multiple,
     frameRate: { min: raw.frame_rate.min, max: raw.frame_rate.max },
     sampling: raw.sampling ?? null,
+    keyframeGrid: raw.keyframes
+      ? { step: raw.keyframes.step, offset: raw.keyframes.offset }
+      : LTX_GENERATION_CONSTRAINTS.keyframeGrid,
   };
 }
 

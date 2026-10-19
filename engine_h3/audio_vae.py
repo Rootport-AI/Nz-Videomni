@@ -30,7 +30,7 @@ The 32+32 latent statistics are read from
 VAE for one rule).
 
 Only the decoder is built (``dec_in_proj`` + ``decoder.*``): T2V and the
-first-frame I2V need no audio encode. ``encoder.*``, ``pre_block.*`` (the attention projection
+keyframe I2V need no audio encode. ``encoder.*``, ``pre_block.*`` (the attention projection
 whose ``q_bias``/``v_bias``/``zero_k_bias`` the DiffSynth converter suffixes
 with ``.weight``), ``mean_proj.*``, ``logs_proj.*`` and the statistic tensors
 are mapped to None by ``audio_vae_key_map`` and never read.

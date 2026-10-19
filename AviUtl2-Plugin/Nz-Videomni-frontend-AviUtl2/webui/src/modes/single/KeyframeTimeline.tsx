@@ -20,9 +20,9 @@ export interface KeyframeTimelineProps {
   numFrames: number;
   /** Frames-per-second, used only to render the seconds half of each label. */
   frameRate: number;
-  /** Grid step (`conditioning_frame_idx_multiple`, 8 in practice). */
+  /** Keyframe grid step (`constraints.keyframes.step`; LTX 8). */
   multiple: number;
-  /** Grid origin (`conditioning_keyframe_grid_offset`, 1 in practice). */
+  /** Keyframe grid origin (`constraints.keyframes.offset`; LTX 1). */
   offset: number;
   disabled: boolean;
   /** Called with an already-landing-resolved frame index — the parent should

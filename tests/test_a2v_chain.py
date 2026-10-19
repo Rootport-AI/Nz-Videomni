@@ -325,12 +325,17 @@ def test_a2v_allows_clip0_conditioning(client, tmp_path, png_bytes):
 
     clips = [{
         "num_frames": 49,
-        "conditioning_images": [{"image_id": image_id, "frame_idx": 0, "strength": 0.8}],
+        # strength omitted: the chain schema fills LTX's default 0.8.
+        "conditioning_images": [{"image_id": image_id, "frame_idx": 0}],
     }]
     r = _run_chain(client, clips, source_audio={"audio_id": aid})
     assert r.status_code == 202, r.text
-    job = client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
     assert job["status"] == "completed", job
+    ctx = client.app_context
+    meta = json.loads((ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["request"]["clips"][0]["conditioning_images"][0]["strength"] == 0.8
 
 
 # ------------------------------------------------- (e2) full_length window §1-19

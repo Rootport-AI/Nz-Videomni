@@ -35,17 +35,17 @@ def load_canvas_image(path: str, width: int, height: int) -> tuple[Image.Image, 
     width, height = int(width), int(height)
     p = Path(path)
     if not p.is_file():
-        raise ValueError(f"先頭フレームの画像が見つかりません: {path}")
+        raise ValueError(f"キーフレームの画像が見つかりません: {path}")
     try:
         with Image.open(p) as opened:
             # The upload store applies the same two steps (EXIF orientation, RGB);
             # repeating them makes a hand-picked selftest image behave the same.
             img = ImageOps.exif_transpose(opened).convert("RGB")
     except (OSError, ValueError) as exc:
-        raise ValueError(f"先頭フレームの画像を読めません（{path}）: {exc}") from exc
+        raise ValueError(f"キーフレームの画像を読めません（{path}）: {exc}") from exc
     src_w, src_h = img.size
     if src_w < 1 or src_h < 1:
-        raise ValueError(f"先頭フレームの画像の大きさが不正です（{src_w}×{src_h}）: {path}")
+        raise ValueError(f"キーフレームの画像の大きさが不正です（{src_w}×{src_h}）: {path}")
     scale = max(height / src_h, width / src_w)
     new_h = math.ceil(src_h * scale)
     new_w = math.ceil(src_w * scale)

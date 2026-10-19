@@ -37,13 +37,19 @@ describe("mockBridge — MiniMax H3", () => {
       num_frames: { step: 17, offset: 5, min: 22, max: 481 },
       dimension_multiple: 32,
       frame_rate: { min: 24, max: 24 },
+      keyframes: { step: 1, offset: 0 },
     });
     expect(h3?.constraints?.sampling?.num_inference_steps.default).toBe(20);
     expect(h3?.unsupported_features).toEqual(
-      expect.arrayContaining(["chain", "retake", "reference_video", "nag", "multi_keyframes", "keyframe_strength"]),
+      expect.arrayContaining(["chain", "retake", "reference_video", "nag", "keyframe_strength"]),
     );
+    expect(h3?.unsupported_features).not.toContain("multi_keyframes");
     const ltx = blocks.find((b) => b.id === "LTX23");
-    expect(ltx?.constraints).toMatchObject({ num_frames: { step: 8, offset: 1 }, sampling: null });
+    expect(ltx?.constraints).toMatchObject({
+      num_frames: { step: 8, offset: 1 },
+      sampling: null,
+      keyframes: { step: 8, offset: 1 },
+    });
     // 台帳 §1-101: VRAM 16GB mode is H3's own — H3 does NOT publish the name,
     // both LTX engines do (which hides the Settings row there).
     expect(h3?.unsupported_features).not.toContain("vram16_mode");

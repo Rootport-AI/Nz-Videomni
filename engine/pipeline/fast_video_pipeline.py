@@ -1583,8 +1583,8 @@ class LTXFastVideoPipeline:
         # idx > 0 → keyframe/guide APPEND via image_conditionings_by_adding_guiding_latent,
         # which builds VideoConditionByKeyframeIndex(frame_idx=img.frame_idx) as a
         # PIXEL RoPE offset (no ÷8).  frame_idx is passed through as-is (already
-        # snapped onto the 0-or-8n+1 latent grid by the API's
-        # _normalize_conditioning_images).  Both Stage 1 and Stage 2 pick this
+        # snapped onto the 0-or-8n+1 latent grid by LTX's
+        # REQUEST_RULES.normalize_keyframes).  Both Stage 1 and Stage 2 pick this
         # up because DistilledPipeline reads the module-global name — the same
         # LOAD_GLOBAL mechanism as DISTILLED_SIGMA_VALUES above.
         #

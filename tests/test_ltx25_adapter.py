@@ -1629,6 +1629,27 @@ def test_chain_payload_carries_per_clip_prompts_and_clip0_images(tmp_path):
     assert clips[1]["images"] == []
 
 
+def test_chain_payload_omitted_strength_is_ltxs_default(tmp_path):
+    """An omitted keyframe strength reaches the worker as 0.8 (the chain
+    schema's LTX REQUEST_RULES wrote it back), never as None."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    request = _chain_request(
+        clips=[
+            {"num_frames": 25, "conditioning_images": [{"image_id": "img-1", "frame_idx": 0}]},
+            {"num_frames": 25},
+        ]
+    )
+    be.generate_chain(
+        request,
+        output_dir=tmp_path / "out",
+        clip0_conditioning_paths=[tmp_path / "img-1.png"],
+    )
+    assert captured[0]["clips"][0]["images"] == [
+        {"path": str(tmp_path / "img-1.png"), "frame_idx": 0, "strength": 0.8}
+    ]
+
+
 def test_chain_payload_carries_stage2_window_only_when_non_default(tmp_path):
     captured: list[dict] = []
     be = _capturing_chain_backend(captured)

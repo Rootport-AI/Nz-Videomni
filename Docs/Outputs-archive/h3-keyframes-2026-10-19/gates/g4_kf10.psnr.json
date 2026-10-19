@@ -1,0 +1,101 @@
+{
+  "mp4": "outputs\\h3-keyframes-2026-10-19\\g4_kf10.mp4",
+  "sha256": "1026bd06fab9c7b5aabc458cad60ad2523c7df9352827aeb2b9ad7f0af3512cd",
+  "frames": 124,
+  "size": [
+    640,
+    384
+  ],
+  "psnr": {
+    "0=kf10_000.png": {
+      "frame": 0,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 30.55,
+      "mse": 57.274
+    },
+    "13=kf10_013.png": {
+      "frame": 13,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 31.46,
+      "mse": 46.413
+    },
+    "27=kf10_027.png": {
+      "frame": 27,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 31.96,
+      "mse": 41.455
+    },
+    "41=kf10_041.png": {
+      "frame": 41,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 32.71,
+      "mse": 34.852
+    },
+    "55=kf10_055.png": {
+      "frame": 55,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 33.35,
+      "mse": 30.077
+    },
+    "68=kf10_068.png": {
+      "frame": 68,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 32.85,
+      "mse": 33.768
+    },
+    "82=kf10_082.png": {
+      "frame": 82,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 33.3,
+      "mse": 30.38
+    },
+    "96=kf10_096.png": {
+      "frame": 96,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 34.0,
+      "mse": 25.885
+    },
+    "110=kf10_110.png": {
+      "frame": 110,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 34.59,
+      "mse": 22.609
+    },
+    "-1=kf10_123.png": {
+      "frame": 123,
+      "source_size": [
+        640,
+        384
+      ],
+      "psnr_db": 34.32,
+      "mse": 24.071
+    }
+  }
+}

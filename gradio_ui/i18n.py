@@ -171,7 +171,8 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_kf_frame_pos0": "Frame position (0 = start frame)",
         "lbl_kf_frame_pos": "Frame position",
         "lbl_kf_strength": "Strength",
-        "cap_kf_grid": "Frame positions are snapped server-side to the 8n+1 grid.",
+        "cap_kf_grid": "Frame positions are snapped server-side by the base model's rule "
+                       "(LTX: 0 and 8n+1; MiniMax H3: any frame from 0 to the last).",
         "msg_kf_missing_image": "Slot {n}: enabled but no image selected.",
         "msg_kf_negative_frame": "Slot {n}: frame position must be 0 or greater.",
         "msg_uploading_keyframe": "Uploading keyframe {i}/{n}…",
@@ -726,7 +727,8 @@ LABELS: dict[str, dict[str, str]] = {
         "lbl_kf_frame_pos0": "フレーム位置 (0 = 開始フレーム)",
         "lbl_kf_frame_pos": "フレーム位置",
         "lbl_kf_strength": "適用強度",
-        "cap_kf_grid": "フレーム位置はサーバ側で8n+1の格子に合わせられます。",
+        "cap_kf_grid": "フレーム位置はサーバ側でベースモデルの規則に合わせられます"
+                       "（LTX は 0 と 8n+1、MiniMax H3 は 0 から最後までの任意のフレーム）。",
         "msg_kf_missing_image": "スロット{n}: 有効ですが画像が選択されていません。",
         "msg_kf_negative_frame": "スロット{n}: フレーム位置は0以上にしてください。",
         "msg_uploading_keyframe": "キーフレームをアップロード中… {i}/{n}",

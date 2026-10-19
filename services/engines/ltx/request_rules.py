@@ -5,7 +5,8 @@ arrives, before anything knows which base model will run it. The rules that
 are true of EVERY engine (shapes, the cross-field checks of IC-LoRA / NAG /
 outpaint / inpaint / Alpha Gen, the schema-wide ranges) stay there. The rules
 that are a fact about ONE engine family — the frame grid, the spatial
-multiple, the fps, the step count and the shifts — live in a table each
+multiple, the fps, the step count, the shifts and where a keyframe may sit —
+live in a table each
 family's adapter declares as ``REQUEST_RULES``, and are applied once the
 active family is known: ``services.engines.validate_for_family``, called from
 api/generate.py right after ``reject_unsupported`` (and from
@@ -33,10 +34,10 @@ api.models imports the schema-wide bounds below.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Sequence
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from api.models import GenerateRequest
+    from api.models import ConditioningImage, GenerateRequest
 
 # --------------------------------------------------------------------------- #
 # schema-wide bounds (GenerateRequest's Field reads these)
@@ -84,6 +85,13 @@ class RequestRules:
     whose schema default is ``None`` ("the family's default"), written back by
     :meth:`fill_defaults`; it is not published by :meth:`constraints` (the
     screens hold their own mirror). Empty for a family that declares none.
+    ``keyframe_step`` / ``keyframe_offset``: where a keyframe other than the
+    start frame (``frame_idx`` 0) may sit — ``keyframe_step * n +
+    keyframe_offset`` — applied by :meth:`normalize_keyframes` and published
+    by :meth:`constraints` so the screens draw the same grid.
+    ``keyframe_strength_default`` is what an omitted keyframe ``strength``
+    becomes; ``None`` for a family without the notion (the field stays
+    ``None``). Like ``flag_defaults`` it is not published.
     """
 
     frames_step: int
@@ -97,6 +105,9 @@ class RequestRules:
     sampling: dict[str, SamplingRange] | None = None
     extra: Callable[["GenerateRequest"], str | None] | None = field(default=None, compare=False)
     flag_defaults: dict[str, bool] = field(default_factory=dict)
+    keyframe_step: int = 1
+    keyframe_offset: int = 0
+    keyframe_strength_default: float | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -116,12 +127,19 @@ class RequestRules:
                 if self.sampling is None
                 else {name: knob.as_dict() for name, knob in self.sampling.items()}
             ),
+            "keyframes": {"step": self.keyframe_step, "offset": self.keyframe_offset},
         }
 
     # ------------------------------------------------------------ enforcing
 
     def fill_defaults(self, request: "GenerateRequest") -> None:
-        """Write this family's defaults over every ``None`` the rules own."""
+        """Write this family's defaults over every ``None`` the rules own.
+
+        The keyframes' ``strength`` is NOT filled here but by
+        :meth:`normalize_keyframes`, which runs after :meth:`violation`
+        (snapping needs a ``num_frames`` already known to be valid) and also
+        serves the chain schema, which never reaches this method.
+        """
         if request.num_inference_steps is None:
             request.num_inference_steps = self.default_steps
         for name, knob in (self.sampling or {}).items():
@@ -163,6 +181,59 @@ class RequestRules:
             return self.extra(request)
         return None
 
+    def normalize_keyframes(
+        self, images: Sequence["ConditioningImage"], num_frames: int, *, where: str = ""
+    ) -> str | None:
+        """Snap one request's keyframes onto this family's grid, in place.
+
+        Returns the message of the first violation (two keyframes on one
+        position), or ``None``. ``where`` is the prefix the chain request puts
+        on its messages (``clips[i]: ``).
+
+        ``frame_idx`` 0 is the start frame and stays 0. Any other position
+        snaps DOWN onto ``keyframe_step * n + keyframe_offset`` and is clamped
+        into the smallest grid point above 0 .. the last grid point that still
+        has a full step before ``num_frames`` (the screens' last placeable
+        position). LTX (8, 1): ``(f-1)//8*8+1`` clamped to ``1..num_frames-8``
+        — frame_idx is LTX's RAW PIXEL RoPE offset into the guide path, so it
+        must be a latent-frame START pixel (ComfyUI's LTXVAddGuide
+        convention). MiniMax H3 (1, 0): every frame ``1..num_frames-1`` stays
+        as it is, and a larger one becomes ``num_frames-1``.
+
+        The snapped ``frame_idx`` is written back, and so is the family's
+        ``keyframe_strength_default`` over a ``None`` strength. The count cap
+        (``MAX_CONDITIONING_IMAGES``) is not a family fact and stays on the
+        schema.
+        """
+        step, offset = self.keyframe_step, self.keyframe_offset
+        first = offset if offset > 0 else step
+        last = (num_frames - offset) // step * step + offset - step
+
+        claimed_by: dict[int, int] = {}  # snapped position -> the raw frame_idx that took it first
+        for image in images:
+            raw = image.frame_idx
+            if raw == 0:
+                snapped = 0
+            else:
+                snapped = max(first, min((raw - offset) // step * step + offset, last))
+
+            if snapped in claimed_by:
+                if snapped == 0:
+                    return (
+                        f"{where}two conditioning images at frame_idx 0 "
+                        "(the start frame can only be set once)"
+                    )
+                return (
+                    f"{where}conditioning_images: frame_idx {claimed_by[snapped]} and "
+                    f"{raw} both snap to frame {snapped} (positions must be distinct)"
+                )
+
+            claimed_by[snapped] = raw
+            image.frame_idx = snapped
+            if image.strength is None and self.keyframe_strength_default is not None:
+                image.strength = self.keyframe_strength_default
+        return None
+
 
 # --------------------------------------------------------------------------- #
 # LTX (2.3 and 2.5)
@@ -185,7 +256,8 @@ def _ltx_distilled(request: "GenerateRequest") -> str | None:
 
 #: LTX's rules. 64 is the two-stage distilled pipeline's spatial multiple
 #: (stage 1 at half size through a 32px VAE); a non-64 display size is
-#: ``crop_output``'s job. 8n+1 is the causal VAE's frame grid.
+#: ``crop_output``'s job. 8n+1 is the causal VAE's frame grid, and a keyframe
+#: other than the start frame sits on a latent-frame start pixel (8n+1 too).
 LTX_REQUEST_RULES = RequestRules(
     frames_step=8,
     frames_offset=1,
@@ -197,4 +269,7 @@ LTX_REQUEST_RULES = RequestRules(
     default_steps=LTX_DISTILLED_STEPS,
     sampling=None,
     extra=_ltx_distilled,
+    keyframe_step=8,
+    keyframe_offset=1,
+    keyframe_strength_default=0.8,
 )

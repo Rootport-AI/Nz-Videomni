@@ -1527,9 +1527,6 @@ export const en = {
     unavailableOnBaseModel: {
       sourceAudio:
         "Generating from an audio track (A2V) is not available on the selected base model. Switch the base model in the header to attach audio.",
-      keyframesMulti:
-        "The selected base model uses only one keyframe, the first frame. Switch the base model in the header to add more.",
-      keyframeStrength: "The selected base model does not use keyframe strength.",
     },
     keyframes: {
       label: "Keyframes (I2V)",
@@ -3231,9 +3228,6 @@ export const ja: Strings = {
     unavailableOnBaseModel: {
       sourceAudio:
         "選択中のベースモデルでは、音声から動画を作る機能（A2V）は使えません。音声を付けるには、上のベースモデルを切り替えてください。",
-      keyframesMulti:
-        "選択中のベースモデルが使うキーフレームは先頭の1枚だけです。増やすには、上のベースモデルを切り替えてください。",
-      keyframeStrength: "選択中のベースモデルはキーフレームの強度を使いません。",
     },
     keyframes: {
       label: "キーフレーム（I2V）",

@@ -2204,8 +2204,10 @@ class _RealBackend:
         seed = int(seed) if seed is not None else resolve_seed(request.seed)
 
         # Image conditioning: multi-keyframe I2V. frame_idx is already snapped
-        # onto the 8n+1 latent grid (0 kept as-is) and clamped in the validator
-        # (``_normalize_conditioning_images`` in api/models.py). cond_paths
+        # onto the 8n+1 latent grid (0 kept as-is) and clamped, and an omitted
+        # strength filled with 0.8, by LTX's ``REQUEST_RULES.normalize_keyframes``
+        # (services/engines/ltx/request_rules.py; ``validate_for_family`` for a
+        # single job, the chain schema's validator for a chain). cond_paths
         # are built by pipeline_manager in the same order as conditioning_images.
         # The engine's ImageConditioningInput has NO crf -> drop it.
         images: list[dict] = []

@@ -114,7 +114,8 @@ class H3SeqLayout:
     """Row ranges of the packed sequence ``[text | cond | audio | video]``.
     T2V has an empty cond (``slice(L, L)``).
 
-    ``cond``: the I2V key frame's rows (empty for T2V). Order and coordinates match
+    ``cond``: the I2V key frames' rows, one block of grid rows per key frame in
+    ascending frame order (empty for T2V). Order and coordinates match
     DiffSynth (VERIFICATION_LOG §165 G4 A, §166 2a-G3); the embedding is checked end to end only (§166 2a-G4).
     """
 
@@ -502,7 +503,7 @@ class H3DiT(nn.Module):
         rounded to bf16 (diffusers aligns inputs with the f32 projection
         dtype the same way).
 
-        ``cond_rows``: the I2V condition rows (already mixed with their noise), projected
+        ``cond_rows``: the I2V condition rows of every key frame (already mixed with their noise), projected
         like video rows; ``None`` / empty for T2V. Checked end to end in VERIFICATION_LOG §166 (2a-G4).
         """
         parts = [text_refined.to(torch.bfloat16)]

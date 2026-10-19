@@ -1,0 +1,500 @@
+{
+  "images": {
+    "first": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyframes-2026-10-19\\kf_first.png",
+    "last": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyframes-2026-10-19\\kf_last.png"
+  },
+  "canvas": [
+    640,
+    384
+  ],
+  "num_frames": 124,
+  "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+  "cases": {
+    "first_last": {
+      "frame_idx": [
+        0,
+        123
+      ],
+      "images": [
+        "first",
+        "last"
+      ],
+      "ds_keyframe_indices": [
+        0,
+        -1
+      ],
+      "ours_read": {
+        "read_gib": 25.28,
+        "read_seconds": 15.89,
+        "layers_read": 50,
+        "encode_seconds": 16.53,
+        "tokens": 537,
+        "vision_tokens": 480,
+        "vision_tokens_per_image": [
+          240,
+          240
+        ]
+      },
+      "A_tokens": {
+        "ids_identical": true,
+        "tags_identical": true,
+        "length": 537,
+        "vision_tokens": [
+          240,
+          240
+        ],
+        "ds_vision_tokens": [
+          240,
+          240
+        ]
+      },
+      "B_vision_inputs": {
+        "pixel_values_identical": true,
+        "grid_identical": true,
+        "grid": [
+          [
+            1,
+            24,
+            40
+          ],
+          [
+            1,
+            24,
+            40
+          ]
+        ],
+        "pixel_values_shape": [
+          1920,
+          1536
+        ],
+        "vision_output_identical": true,
+        "deepstack_identical": true,
+        "vision_output_shape": [
+          480,
+          5120
+        ]
+      },
+      "C_seconds_int8": 7.5,
+      "C_seconds_bf16": 9.7,
+      "C_text_encoder": {
+        "shape": [
+          537,
+          5120
+        ],
+        "wiring_bit_identical": true,
+        "wiring_max_abs": 0.0,
+        "quant_rel_all_rows": 0.20336033403873444,
+        "quant_rel_vision_rows": 0.2768821120262146,
+        "quant_rel_text_rows": 0.021869942545890808,
+        "quant_rel_last_row": 0.03971526026725769,
+        "finite": true
+      },
+      "E_layout": {
+        "frame_idx": [
+          0,
+          123
+        ],
+        "ds_keyframe_indices": [
+          0,
+          -1
+        ],
+        "text_len": 537,
+        "used_rows": 10311,
+        "cond_rows": 480,
+        "cond_blocks": 2,
+        "cond_t_ours": [
+          "537.0",
+          "742.0"
+        ],
+        "cond_t_ds": [
+          "537.0",
+          "742.0"
+        ],
+        "order_identical": true,
+        "adaln_tags_identical": true,
+        "rope_coords_identical_f64": true,
+        "rope_max_abs": 0.0,
+        "time_numbering_identical_20_steps": true,
+        "m_per_step": [
+          2,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      "verdict": {
+        "A_tokens": true,
+        "B_vision": true,
+        "C_wiring_zero": true,
+        "C_quant_level": 0.20336033403873444,
+        "E_all": true
+      }
+    },
+    "last_only": {
+      "frame_idx": [
+        123
+      ],
+      "images": [
+        "last"
+      ],
+      "ds_keyframe_indices": [
+        -1
+      ],
+      "ours_read": {
+        "read_gib": 25.28,
+        "read_seconds": 7.85,
+        "layers_read": 50,
+        "encode_seconds": 8.0,
+        "tokens": 289,
+        "vision_tokens": 240,
+        "vision_tokens_per_image": [
+          240
+        ]
+      },
+      "A_tokens": {
+        "ids_identical": true,
+        "tags_identical": true,
+        "length": 289,
+        "vision_tokens": [
+          240
+        ],
+        "ds_vision_tokens": [
+          240
+        ]
+      },
+      "B_vision_inputs": {
+        "pixel_values_identical": true,
+        "grid_identical": true,
+        "grid": [
+          [
+            1,
+            24,
+            40
+          ]
+        ],
+        "pixel_values_shape": [
+          960,
+          1536
+        ],
+        "vision_output_identical": true,
+        "deepstack_identical": true,
+        "vision_output_shape": [
+          240,
+          5120
+        ]
+      },
+      "C_seconds_int8": 7.9,
+      "C_seconds_bf16": 9.7,
+      "C_text_encoder": {
+        "shape": [
+          289,
+          5120
+        ],
+        "wiring_bit_identical": true,
+        "wiring_max_abs": 0.0,
+        "quant_rel_all_rows": 0.015119403600692749,
+        "quant_rel_vision_rows": 0.01014714315533638,
+        "quant_rel_text_rows": 0.021454140543937683,
+        "quant_rel_last_row": 0.028818510472774506,
+        "finite": true
+      },
+      "E_layout": {
+        "frame_idx": [
+          123
+        ],
+        "ds_keyframe_indices": [
+          -1
+        ],
+        "text_len": 289,
+        "used_rows": 9823,
+        "cond_rows": 240,
+        "cond_blocks": 1,
+        "cond_t_ours": [
+          "493.99999999999994"
+        ],
+        "cond_t_ds": [
+          "493.99999999999994"
+        ],
+        "order_identical": true,
+        "adaln_tags_identical": true,
+        "rope_coords_identical_f64": true,
+        "rope_max_abs": 0.0,
+        "time_numbering_identical_20_steps": true,
+        "m_per_step": [
+          2,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      "verdict": {
+        "A_tokens": true,
+        "B_vision": true,
+        "C_wiring_zero": true,
+        "C_quant_level": 0.015119403600692749,
+        "E_all": true
+      }
+    }
+  },
+  "int8_backend": {
+    "eager": {
+      "available": true,
+      "disabled": true,
+      "unavailable_reason": null,
+      "capabilities": [
+        "adaln",
+        "apply_rope",
+        "apply_rope1",
+        "apply_rope1_",
+        "apply_rope_",
+        "apply_rope_split_half",
+        "apply_rope_split_half1",
+        "apply_rope_split_half1_",
+        "apply_rope_split_half_",
+        "convrot_w4a4_linear",
+        "dequantize_convrot_w4a4_weight",
+        "dequantize_int8_convrot_weight",
+        "dequantize_int8_convrot_weight_dtype",
+        "dequantize_int8_embedding",
+        "dequantize_int8_simple",
+        "dequantize_int8_simple_dtype",
+        "dequantize_mxfp8",
+        "dequantize_nvfp4",
+        "dequantize_per_tensor_fp8",
+        "dequantize_w4a8_int8_weight",
+        "fp16_conv3d",
+        "fp16_conv3d_out",
+        "fp16_linear",
+        "gemv_awq_w4a16",
+        "group_norm_silu_pad3d",
+        "group_norm_silu_pad3d_out",
+        "int8_linear",
+        "na3d",
+        "prepare_int4_weight_for_int8_linear",
+        "quantize_and_rotate_rowwise",
+        "quantize_convrot_w4a4_weight",
+        "quantize_int8_convrot_weight",
+        "quantize_int8_rowwise",
+        "quantize_int8_tensorwise",
+        "quantize_mxfp8",
+        "quantize_nvfp4",
+        "quantize_per_tensor_fp8",
+        "quantize_svdquant_w4a4",
+        "quantize_w4a8_int8_weight",
+        "rms_adaln",
+        "rms_rope",
+        "rms_rope1",
+        "rms_rope1_",
+        "rms_rope_",
+        "rms_rope_split_half",
+        "rms_rope_split_half1",
+        "rms_rope_split_half1_",
+        "rms_rope_split_half_",
+        "rotate_int8_convrot_weight",
+        "scaled_mm_mxfp8",
+        "scaled_mm_nvfp4",
+        "scaled_mm_svdquant_w4a4",
+        "sol_attn",
+        "stochastic_rounding_fp8",
+        "w4a8_int8_linear"
+      ]
+    },
+    "cuda": {
+      "available": true,
+      "disabled": false,
+      "unavailable_reason": null,
+      "capabilities": [
+        "adaln",
+        "apply_rope",
+        "apply_rope1",
+        "apply_rope1_",
+        "apply_rope_",
+        "apply_rope_split_half",
+        "apply_rope_split_half1",
+        "apply_rope_split_half1_",
+        "apply_rope_split_half_",
+        "convrot_w4a4_linear",
+        "dequantize_convrot_w4a4_weight",
+        "dequantize_int8_convrot_weight",
+        "dequantize_int8_convrot_weight_dtype",
+        "dequantize_int8_simple",
+        "dequantize_int8_simple_dtype",
+        "dequantize_nvfp4",
+        "dequantize_per_tensor_fp8",
+        "dequantize_w4a8_int8_weight",
+        "fp16_conv3d",
+        "fp16_conv3d_out",
+        "fp16_linear",
+        "gemv_awq_w4a16",
+        "group_norm_silu_pad3d",
+        "group_norm_silu_pad3d_out",
+        "int8_linear",
+        "na3d",
+        "prepare_int4_weight_for_int8_linear",
+        "quantize_and_rotate_rowwise",
+        "quantize_convrot_w4a4_weight",
+        "quantize_int8_convrot_weight",
+        "quantize_int8_rowwise",
+        "quantize_int8_tensorwise",
+        "quantize_mxfp8",
+        "quantize_nvfp4",
+        "quantize_per_tensor_fp8",
+        "quantize_svdquant_w4a4",
+        "quantize_w4a8_int8_weight",
+        "rms_adaln",
+        "rms_rope",
+        "rms_rope1",
+        "rms_rope1_",
+        "rms_rope_",
+        "rms_rope_split_half",
+        "rms_rope_split_half1",
+        "rms_rope_split_half1_",
+        "rms_rope_split_half_",
+        "rotate_int8_convrot_weight",
+        "scaled_mm_nvfp4",
+        "scaled_mm_svdquant_w4a4",
+        "sol_attn",
+        "stochastic_rounding_fp8",
+        "w4a8_int8_linear"
+      ]
+    },
+    "ascend": {
+      "available": false,
+      "disabled": false,
+      "unavailable_reason": "torch-npu is not installed: No module named 'torch_npu'",
+      "capabilities": []
+    },
+    "triton": {
+      "available": true,
+      "disabled": true,
+      "unavailable_reason": null,
+      "capabilities": [
+        "adaln",
+        "apply_rope",
+        "apply_rope1",
+        "apply_rope1_",
+        "apply_rope_",
+        "apply_rope_split_half",
+        "apply_rope_split_half1",
+        "apply_rope_split_half1_",
+        "apply_rope_split_half_",
+        "dequantize_nvfp4",
+        "dequantize_per_tensor_fp8",
+        "int8_linear",
+        "na3d",
+        "quantize_and_rotate_rowwise",
+        "quantize_int8_rowwise",
+        "quantize_mxfp8",
+        "quantize_nvfp4",
+        "quantize_per_tensor_fp8",
+        "rms_adaln",
+        "rms_rope",
+        "rms_rope1",
+        "rms_rope1_",
+        "rms_rope_",
+        "rms_rope_split_half",
+        "rms_rope_split_half1",
+        "rms_rope_split_half1_",
+        "rms_rope_split_half_",
+        "w4a8_int8_linear"
+      ]
+    },
+    "hip": {
+      "available": false,
+      "disabled": false,
+      "unavailable_reason": "PyTorch ROCm/HIP runtime not available",
+      "capabilities": []
+    }
+  },
+  "source_size": {
+    "first": [
+      640,
+      384
+    ],
+    "last": [
+      640,
+      384
+    ]
+  },
+  "D_vae_encode": {
+    "first": {
+      "shape": [
+        1,
+        24,
+        1,
+        24,
+        40
+      ],
+      "bf16_vs_diffsynth_bit_identical": false,
+      "bf16_vs_diffsynth_max_abs": 0.01519465446472168,
+      "bf16_vs_diffsynth_rel": 0.001454201410524547,
+      "f32_vs_bf16_max_abs": 0.941124439239502,
+      "f32_vs_bf16_rel": 0.03033132664859295,
+      "f32_vs_diffsynth_rel": 0.030359964817762375,
+      "latent_abs_mean": 0.7701308131217957
+    },
+    "last": {
+      "shape": [
+        1,
+        24,
+        1,
+        24,
+        40
+      ],
+      "bf16_vs_diffsynth_bit_identical": false,
+      "bf16_vs_diffsynth_max_abs": 0.016281843185424805,
+      "bf16_vs_diffsynth_rel": 0.0014791118446737528,
+      "f32_vs_bf16_max_abs": 0.7024667263031006,
+      "f32_vs_bf16_rel": 0.029868649318814278,
+      "f32_vs_diffsynth_rel": 0.029900258406996727,
+      "latent_abs_mean": 0.765928328037262
+    }
+  },
+  "verdict": {
+    "pass_A_B_C_E_both_cases": true,
+    "D_recorded": {
+      "first": {
+        "bit_identical": false,
+        "max_abs": 0.01519465446472168
+      },
+      "last": {
+        "bit_identical": false,
+        "max_abs": 0.016281843185424805
+      }
+    }
+  },
+  "seconds": 67.9,
+  "peak_vram_reserved_mb": 4752
+}

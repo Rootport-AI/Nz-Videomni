@@ -195,15 +195,19 @@ def test_submit_generate_with_nag_and_conditioning_images_includes_them():
         512, 320,
         None, None,
         49, 24.0, -1,
-        [ConditioningImageArg(image_id="img-1", frame_idx=0, strength=0.9)],
+        [ConditioningImageArg(image_id="img-1", frame_idx=0, strength=0.9),
+         ConditioningImageArg(image_id="img-2", frame_idx=33)],
     )
 
     body = captured["body"]
     assert body["negative_prompt"] == "blurry"
     assert body["nag_enabled"] is True
     assert body["nag_scale"] == 11.0
+    # An explicit strength is sent as given; an omitted one goes out as null
+    # (the server writes the family's default back -- LTX 0.8, none for H3).
     assert body["conditioning_images"] == [
-        {"image_id": "img-1", "frame_idx": 0, "strength": 0.9}
+        {"image_id": "img-1", "frame_idx": 0, "strength": 0.9},
+        {"image_id": "img-2", "frame_idx": 33, "strength": None},
     ]
 
 
@@ -1346,7 +1350,8 @@ def test_submit_chain_nag_and_clip_prompt_and_conditioning_images_included():
             ChainClipArg(
                 prompt="clip0 override",
                 num_frames=25,
-                conditioning_images=[ConditioningImageArg(image_id="img-1", frame_idx=0, strength=0.9)],
+                conditioning_images=[ConditioningImageArg(image_id="img-1", frame_idx=0, strength=0.9),
+                                     ConditioningImageArg(image_id="img-2", frame_idx=17)],
             ),
             ChainClipArg(num_frames=25),
         ],
@@ -1360,7 +1365,8 @@ def test_submit_chain_nag_and_clip_prompt_and_conditioning_images_included():
     assert body["nag_scale"] == 11.0
     assert body["clips"][0]["prompt"] == "clip0 override"
     assert body["clips"][0]["conditioning_images"] == [
-        {"image_id": "img-1", "frame_idx": 0, "strength": 0.9}
+        {"image_id": "img-1", "frame_idx": 0, "strength": 0.9},
+        {"image_id": "img-2", "frame_idx": 17, "strength": None},
     ]
     assert "prompt" not in body["clips"][1]
     assert "conditioning_images" not in body["clips"][1]

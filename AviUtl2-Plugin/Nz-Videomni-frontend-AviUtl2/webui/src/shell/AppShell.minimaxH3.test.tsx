@@ -12,8 +12,9 @@ import { AppShell } from "./AppShell";
 // `unsupported_features`):
 //  - replace the CFG placeholder with the three sampling sliders,
 //  - grey the Chained and Edit tabs,
-//  - hide Create's reference video, grey its A2V card, the Negative Prompt
-//    accordion, the second keyframe and the keyframe strength,
+//  - hide Create's reference video and the keyframe strength, grey its A2V
+//    card and the Negative Prompt accordion (台帳 §1-97: keyframes at any
+//    frame, so the second keyframe stays open),
 //  - drop the comfort marker,
 //  - snap DURATION onto 17n+5 and pin fps at 24,
 // and the request it sends must carry the three sampling values and no NAG.
@@ -44,6 +45,31 @@ function numberInLabel(text: string): HTMLInputElement {
   const label = within(singlePanel()).getByText(text, { selector: ".field-label" }).closest("label");
   if (!label) throw new Error(`no field labelled ${text}`);
   return label.querySelector('input[type="number"]') as HTMLInputElement;
+}
+
+/** Adds `count` keyframe cards through Create's "Add keyframe" button and
+ * fills each one with its own 📸 capture, so every card ends up "ready". The
+ * capture and the upload are two fixture round trips (200 ms each on the
+ * app-wide fixture), hence the longer wait. */
+async function addCapturedKeyframes(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement, count: number) {
+  for (let n = 1; n <= count; n++) {
+    await user.click(within(panel).getByRole("button", { name: /add keyframe/i }));
+    await waitFor(() => expect(panel.querySelectorAll(".keyframe-list .kfc-card")).toHaveLength(n));
+    const empty = Array.from(panel.querySelectorAll<HTMLElement>(".keyframe-list .kfc-card")).find((card) =>
+      within(card).queryByText(/no image yet/i),
+    );
+    if (!empty) throw new Error("no empty card to capture into");
+    await user.click(within(empty).getByRole("button", { name: /capture/i }));
+    // Ready = neither the empty hint nor the upload spinner (the card goes
+    // "uploading" the moment the capture starts, so the hint alone clears early).
+    await waitFor(
+      () => {
+        expect(within(panel).queryByText(/no image yet/i)).not.toBeInTheDocument();
+        expect(panel.querySelector(".keyframe-list .kfc-spinner")).toBeNull();
+      },
+      { timeout: 5_000 },
+    );
+  }
 }
 
 /** `bridge` defaults to a fresh fixture server. The submit test passes the
@@ -159,30 +185,39 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
   );
 
   it(
-    "MiniMax H3: one keyframe only, and its strength is greyed",
+    "LTX 2.3: a keyframe card shows its strength row",
     async () => {
       await renderApp();
-      await switchTo("MiniMaxH3");
       const user = userEvent.setup();
       const panel = singlePanel();
-      await waitFor(() => expect(within(panel).getByText(/uses only one keyframe/)).toBeInTheDocument());
-
-      const add = within(panel).getByRole("button", { name: /add keyframe \( 0 \/ 1 \)/i });
-      expect(add).not.toBeDisabled();
-      await user.click(add);
-      await waitFor(() =>
-        expect(within(panel).getByRole("button", { name: /add keyframe \( 1 \/ 1 \)/i })).toBeDisabled(),
-      );
-      const strength = panel.querySelector(".keyframe-list .kfc-field input[type='range']") as HTMLInputElement | null;
+      await user.click(within(panel).getByRole("button", { name: /add keyframe/i }));
+      await waitFor(() => expect(panel.querySelectorAll(".keyframe-list .kfc-card")).toHaveLength(1));
+      const strength = panel.querySelector(".keyframe-list .kfc-field input[type='range']");
       expect(strength).not.toBeNull();
-      expect(strength).toBeDisabled();
-      expect(within(panel).getByText(/does not use keyframe strength/)).toBeInTheDocument();
+      expect(strength).not.toBeDisabled();
     },
     15_000,
   );
 
   it(
-    "MiniMax H3: the submitted body carries the three sampling values, fps 24, a 17n+5 length and no NAG",
+    "MiniMax H3 (台帳 §1-97): a second keyframe can be added, and no card has a strength row",
+    async () => {
+      await renderApp();
+      await switchTo("MiniMaxH3");
+      await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+      const user = userEvent.setup();
+      const panel = singlePanel();
+      await addCapturedKeyframes(user, panel, 2);
+      // The strength row is not greyed but absent.
+      expect(panel.querySelector(".keyframe-list input[type='range']")).toBeNull();
+      expect(within(panel).queryByText("Strength")).not.toBeInTheDocument();
+      expect(within(panel).getByRole("button", { name: /add keyframe/i })).not.toBeDisabled();
+    },
+    20_000,
+  );
+
+  it(
+    "MiniMax H3: the submitted body carries the three sampling values, fps 24, a 17n+5 length, no NAG and no keyframe strength",
     async () => {
       const bridge = await renderApp(appBridge);
       const requestSpy = vi.spyOn(bridge, "request");
@@ -195,6 +230,8 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 
       await switchTo("MiniMaxH3");
       await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+      // 台帳 §1-97: two keyframes, whose `strength` key must not be sent.
+      await addCapturedKeyframes(user, singlePanel(), 2);
 
       await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat riding a skateboard");
       const generate = screen.getByRole("button", { name: /^generate$/i });
@@ -220,6 +257,10 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       expect((body.width as number) % 32).toBe(0);
       expect(body.nag_enabled).toBeUndefined();
       expect(body.negative_prompt).toBeUndefined();
+      const images = body.conditioning_images as Record<string, unknown>[];
+      expect(images).toHaveLength(2);
+      expect(images[0]?.frame_idx).toBe(0);
+      for (const image of images) expect(image).not.toHaveProperty("strength");
       // The fixture validated it against H3's own rules and accepted it.
       await screen.findByText(/generating/i);
     },

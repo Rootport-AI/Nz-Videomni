@@ -1,8 +1,9 @@
 """Pydantic schemas — the external API contract (spec §6).
 
 Conditioning accepts multiple keyframes (cap ``MAX_CONDITIONING_IMAGES``),
-arbitrary ``frame_idx`` (snapped server-side to the official ``0``-or-``8n+1``
-latent grid and clamped into range), and per-item ``strength``.
+arbitrary ``frame_idx`` (snapped server-side onto the active family's keyframe
+grid and clamped into range — LTX's is the official ``0``-or-``8n+1`` latent
+grid), and per-item ``strength`` (omitted = the family's default).
 ``num_pixel_frames`` (multi-frame keyframe conditioning) is not part of the
 request. LTX's numeric constraints are FROZEN as the final-form API so that
 frontends (the AviUtl2 plugin, and any other client of the same API such as
@@ -36,6 +37,7 @@ from config import LimitsConfig, MAX_CONDITIONING_IMAGES
 from services.engines.ltx.request_rules import (
     FRAME_RATE_MAX,
     FRAME_RATE_MIN,
+    LTX_REQUEST_RULES,
     NUM_FRAMES_MAX,
     NUM_FRAMES_MIN,
 )
@@ -185,61 +187,10 @@ class CropOutput(BaseModel):
 class ConditioningImage(BaseModel):
     image_id: str
     frame_idx: int = Field(0, ge=0)
-    strength: float = Field(0.8, ge=0.0, le=1.0)
+    # None = the family's default, written back by RequestRules.normalize_keyframes
+    # (LTX: 0.8). A family without a keyframe strength (MiniMax H3) keeps None.
+    strength: float | None = Field(None, ge=0.0, le=1.0)
     crf: int | None = None
-
-
-def _normalize_conditioning_images(
-    images: list[ConditioningImage], num_frames: int, *, where: str = ""
-) -> None:
-    """Validate one request's keyframe list and snap it onto the latent grid, in place.
-
-    frame_idx is fed to the engine's guide path (VideoConditionByKeyframeIndex)
-    as a RAW PIXEL RoPE offset (positions[:,0] += frame_idx, no ÷8), so it must
-    be a latent-aligned pixel. Two on-grid cases, per the official LTX-2 /
-    ComfyUI (LTXVAddGuide) convention:
-
-      * frame_idx == 0  -> start frame, routed to the latent-replace path;
-        left byte-identical (the engine also special-cases idx==0 causal_fix).
-      * frame_idx  > 0  -> a keyframe/guide that must sit on a latent-frame
-        START pixel = the 8n+1 grid. Snap via (f-1)//8*8+1 (ComfyUI
-        get_latent_index) and clamp to [1, num_frames-8] — for num_frames=8m+1
-        the last latent-frame start is num_frames-8 (e.g. 49 -> 41).
-
-    Snapping is a safety net — the UI may still send natural values. The ÷64
-    rule is spatial-only and unrelated.
-
-    門番は3段: 枚数（``MAX_CONDITIONING_IMAGES`` まで）→ スナップ（上のグリッド）
-    → 重複（スナップ後に同じ位置へ落ちた2枚を弾く）。``where`` は連結リクエストが
-    ``clips[i]: `` を前置するための接頭辞。
-    """
-    if len(images) > MAX_CONDITIONING_IMAGES:
-        raise ValueError(
-            f"{where}at most {MAX_CONDITIONING_IMAGES} conditioning images are supported"
-        )
-
-    claimed_by: dict[int, int] = {}  # スナップ後の位置 -> それを先に取った入力 frame_idx
-    for image in images:
-        raw = image.frame_idx
-        if raw == 0:
-            snapped = 0
-        else:
-            snapped = max(1, min((raw - 1) // 8 * 8 + 1, num_frames - 8))
-
-        if snapped in claimed_by:
-            if snapped == 0:
-                raise ValueError(
-                    f"{where}two conditioning images at frame_idx 0 "
-                    "(the start frame can only be set once)"
-                )
-            raise ValueError(
-                f"{where}conditioning_images: frame_idx {claimed_by[snapped]} and "
-                f"{raw} both snap to frame {snapped} (positions must be distinct)"
-            )
-
-        claimed_by[snapped] = raw
-        if raw != 0:
-            image.frame_idx = snapped
 
 
 class LoraSpec(BaseModel):
@@ -646,7 +597,8 @@ class GenerateRequest(BaseModel):
     pipeline: Literal["distilled", "two_stage_hq"] = "distilled"
 
     # 空配列なら T2V。1件以上なら I2V（マルチキーフレーム対応、cap ``MAX_CONDITIONING_IMAGES``）。
-    # 各 frame_idx は validator で 0-or-8n+1 グリッドへスナップ＋範囲クランプされる。
+    # 各 frame_idx は系統が分かってから（services.engines.validate_for_family）
+    # その系統の格子へスナップ＋範囲クランプされる（LTX は 0-or-8n+1）。
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
 
     # IC-LoRA / style-LoRA (ADDITIVE/optional). ``loras`` are registered adapter
@@ -694,9 +646,10 @@ class GenerateRequest(BaseModel):
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
         # The family-specific numeric rules (the spatial multiple, the frame
-        # grid, the distilled 8 steps / CFG 1.0) are NOT checked here: which
-        # family runs the request is unknown until the endpoint asks the
-        # pipeline. They are each adapter's ``REQUEST_RULES``, applied by
+        # grid, the distilled 8 steps / CFG 1.0, where a keyframe may sit and
+        # its default strength) are NOT checked here: which family runs the
+        # request is unknown until the endpoint asks the pipeline. They are
+        # each adapter's ``REQUEST_RULES``, applied by
         # ``services.engines.validate_for_family`` (api/generate.py), with the
         # same messages and a 422 of the same shape.
         if self.crop_output is not None:
@@ -705,8 +658,12 @@ class GenerateRequest(BaseModel):
             if self.crop_output.height > self.height:
                 raise ValueError("crop_output.height must be <= height")
 
-        # Conditioning: multi-keyframe I2V — 枚数 / スナップ / 重複の3段。
-        _normalize_conditioning_images(self.conditioning_images, self.num_frames)
+        # Conditioning: multi-keyframe I2V — 枚数の上限だけ（系統に依らない）。
+        # スナップと重複は系統の規則表（RequestRules.normalize_keyframes）。
+        if len(self.conditioning_images) > MAX_CONDITIONING_IMAGES:
+            raise ValueError(
+                f"at most {MAX_CONDITIONING_IMAGES} conditioning images are supported"
+            )
 
         # The IC-LoRA reference requirement is KIND-dependent and enforced at the
         # endpoint layer (api/generate.py), not here: a CONTROL adapter (kind
@@ -1524,9 +1481,18 @@ class GenerateChainRequest(BaseModel):
                     "only clip 0 may carry conditioning_images (later clips are "
                     "later segments of one continuous timeline)"
                 )
-            _normalize_conditioning_images(
+            # 枚数の上限 → LTX の格子へのスナップと重複（連結は LTX 専用。
+            # 上の 8n+1 の検査と同じく、ここで LTX の規則表を直接使う）。
+            if len(clip.conditioning_images) > MAX_CONDITIONING_IMAGES:
+                raise ValueError(
+                    f"clips[{i}]: at most {MAX_CONDITIONING_IMAGES} conditioning images "
+                    "are supported"
+                )
+            message = LTX_REQUEST_RULES.normalize_keyframes(
                 clip.conditioning_images, clip.num_frames, where=f"clips[{i}]: "
             )
+            if message is not None:
+                raise ValueError(message)
 
         # Total-timeline geometry: sum of pixel frames minus the shared overlaps.
         # Delegated to the shared pure-Python chain_math so the validator, the

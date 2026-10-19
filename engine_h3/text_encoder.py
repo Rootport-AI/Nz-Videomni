@@ -8,15 +8,17 @@ Copyright (c) the DiffSynth-Studio authors. Licensed under the Apache License,
 Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0). Changes: built on the
 meta device; the 350 quantized Linears run through ``H3Int8Linear``; the
 weights are read straight from the file onto the GPU while the forward runs
-(below); the vision tower is read only for I2V; the key frame given to the
-vision tower is the cover-and-crop canvas image (``engine_h3.image_cond``), not
-a stretched one.
+(below); the vision tower is read only when a key frame is given to it; each
+key frame given to the vision tower is the cover-and-crop canvas image
+(``engine_h3.image_cond``), not a stretched one.
 
 I2V presentation (Docs/MINIMAX_H3_DESIGN.md §3)
 -----------------------------------------------
-``"<Picture 1>: "`` (text, tag 1) + ``<|vision_start|> <|image_pad|> x N
-<|vision_end|>`` (tag 0, video) + the prompt (tag 1), each part tokenized on
-its own (no chat template, no specials). N comes from the Qwen3-VL image
+Per key frame given to the vision tower (the pipeline gives it the first and
+the last frame, in that order): ``"<Picture i>: "`` (text, tag 1, i = 1, 2 ...)
++ ``<|vision_start|> <|image_pad|> x N <|vision_end|>`` (tag 0, video); then
+the prompt (tag 1), each part tokenized on its own (no chat template, no
+specials). N comes from the Qwen3-VL image
 processor's grid (``prod(grid_thw) // merge_size**2``; ``(H/32) x (W/32)`` for a
 canvas of 65 536 .. 16 777 216 pixels). ``mm_token_type_ids`` marks the
 ``<|image_pad|>`` positions with 1 (transformers 5 refuses a multimodal forward
@@ -61,6 +63,7 @@ from __future__ import annotations
 import gc
 import logging
 import time
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
@@ -138,7 +141,8 @@ IMAGE_TOKEN_ID = 151655      # <|image_pad|>
 VIDEO_TOKEN_ID = 151656      # <|video_pad|>
 VISION_START_ID = 151652     # <|vision_start|>
 VISION_END_ID = 151653       # <|vision_end|>
-#: The FL2VA label in front of each key frame's vision block (one key frame: "1").
+#: The FL2VA label in front of each key frame's vision block, numbered from 1 in
+#: the order the key frames are given (first frame then last frame).
 PICTURE_LABEL = "<Picture {}>: "
 #: ``Qwen3VLVisionRotaryEmbedding``'s default theta (its inverse frequencies are a
 #: non-persistent buffer, recomputed here because no file carries them).
@@ -303,22 +307,23 @@ def te_read_plan(
     return embed, layers, visual
 
 
-def presentation(tokenizer, prompt: str, image_tokens: int | None = None) -> tuple[list[int], list[int]]:
+def presentation(tokenizer, prompt: str, image_tokens: Sequence[int] = ()) -> tuple[list[int], list[int]]:
     """The token ids and per-token modality tags the encoder reads (Docs/MINIMAX_H3_DESIGN.md §3).
 
-    T2V (``image_tokens is None``): the prompt alone, all tag 1. I2V: the
-    ``"<Picture 1>: "`` label (tag 1), the vision block of ``image_tokens``
-    pads (tag 0) and the prompt (tag 1), each part tokenized on its own --
+    ``image_tokens``: the vision-token count of each image, in order. T2V
+    (empty): the prompt alone, all tag 1. I2V: per image, the
+    ``"<Picture i>: "`` label (tag 1, i from 1) and its vision block of pads
+    (tag 0); then the prompt (tag 1), each part tokenized on its own --
     tokenizing the joined string would glue the label's trailing space to the
     prompt's first word.
     """
     ids: list[int] = []
     tags: list[int] = []
-    if image_tokens is not None:
-        if int(image_tokens) < 1:
-            raise ValueError(f"H3 TE: an image needs at least one vision token ({image_tokens})")
-        label = list(tokenizer(PICTURE_LABEL.format(1), add_special_tokens=False)["input_ids"])
-        block = [VISION_START_ID] + [IMAGE_TOKEN_ID] * int(image_tokens) + [VISION_END_ID]
+    for i, count in enumerate(image_tokens):
+        if int(count) < 1:
+            raise ValueError(f"H3 TE: an image needs at least one vision token ({count})")
+        label = list(tokenizer(PICTURE_LABEL.format(i + 1), add_special_tokens=False)["input_ids"])
+        block = [VISION_START_ID] + [IMAGE_TOKEN_ID] * int(count) + [VISION_END_ID]
         ids += label + block
         tags += [MODALITY_TEXT] * len(label) + [MODALITY_VIDEO] * len(block)
     prompt_ids = list(tokenizer(prompt, add_special_tokens=False)["input_ids"])
@@ -461,38 +466,44 @@ class H3TextEncoder:
             raise RuntimeError("H3TextEncoder.tokenize before load")
         return list(self._tokenizer(prompt, add_special_tokens=False)["input_ids"])
 
-    def vision_inputs(self, image) -> tuple[torch.Tensor, torch.Tensor, int]:
-        """Canvas image (PIL RGB) -> ``(pixel_values f32, image_grid_thw [1, 3] long, vision tokens)``.
+    def vision_inputs(self, images) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
+        """Canvas images (PIL RGB) -> ``(pixel_values f32, image_grid_thw [K, 3] long,
+        vision tokens per image)``.
 
         The Qwen3-VL image processor of the tokenizer folder (the same
-        ``preprocessor_config.json`` as the official ``FL2VA/processor``).
+        ``preprocessor_config.json`` as the official ``FL2VA/processor``),
+        called once with all the images.
         """
         from transformers import AutoProcessor
 
+        images = list(images)
         processor = AutoProcessor.from_pretrained(self.tokenizer_dir)
         image_processor = processor.image_processor
-        vision = image_processor(images=[image], return_tensors="pt")
+        vision = image_processor(images=images, return_tensors="pt")
         grid = vision["image_grid_thw"]
         merge = int(image_processor.merge_size) ** 2
-        tokens = int(grid[0].prod().item()) // merge
+        tokens = [int(grid[i].prod().item()) // merge for i in range(len(images))]
         return vision["pixel_values"], grid, tokens
 
-    def encode(self, prompt: str, image=None) -> tuple[torch.Tensor, torch.Tensor]:
+    def encode(self, prompt: str, images=()) -> tuple[torch.Tensor, torch.Tensor]:
         """``([L, 5120] bf16 on device, [L] long modality tags)``.
 
-        ``image`` (I2V): the canvas image (``engine_h3.image_cond.load_canvas_image``);
-        its vision block goes in front of the prompt. T2V tags are all text (1).
+        ``images`` (I2V): the canvas images (``engine_h3.image_cond.load_canvas_image``)
+        the vision tower reads, in order; their vision blocks go in front of the
+        prompt. None (T2V, or only middle key frames): tags are all text (1).
         """
         if self._model is None:
             raise RuntimeError("H3TextEncoder.encode before load")
         model = self._model
         lm = model.language_model
+        images = list(images)
+        vision = bool(images)  # whether the vision tower is read
         vision_kwargs: dict = {}
-        image_tokens = None
-        if image is not None:
+        image_tokens: list[int] = []
+        if vision:
             if not self._visual_plan:
                 raise RuntimeError(f"H3 TE: {self.te_path} has no vision tower (visual.*); I2V needs it")
-            pixel_values, grid, image_tokens = self.vision_inputs(image)
+            pixel_values, grid, image_tokens = self.vision_inputs(images)
             vision_kwargs = {"pixel_values": pixel_values, "image_grid_thw": grid}
         ids, tags_list = presentation(self._tokenizer, prompt, image_tokens)   # refuses an empty prompt
         stats = {"bytes": 0, "read_seconds": 0.0, "layers": 0}
@@ -506,7 +517,7 @@ class H3TextEncoder:
             stats["bytes"] += load_mapped_to(
                 lm.embed_tokens, self.te_path, self._header, self._embed_plan, self.device,
             )
-            if image is not None:
+            if vision:
                 stats["bytes"] += load_mapped_to(
                     model.visual, self.te_path, self._header, self._visual_plan, self.device,
                 )
@@ -518,7 +529,7 @@ class H3TextEncoder:
             )
             input_ids = torch.tensor([ids], dtype=torch.long, device=self.device)
             kwargs = {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids), "use_cache": False}
-            if image is not None:
+            if vision:
                 model.rope_deltas = None  # never carry a previous call's M-RoPE offsets
                 kwargs["mm_token_type_ids"] = torch.tensor(
                     [mm_token_type_ids(ids)], dtype=torch.long, device=self.device,
@@ -539,7 +550,7 @@ class H3TextEncoder:
             drop_to_meta(lm.embed_tokens)
             for layer in lm.layers:
                 drop_to_meta(layer)
-            if image is not None:
+            if vision:
                 drop_to_meta(model.visual)
                 # The rotary buffer is computed, not read: put it back on the CPU so
                 # the tower can be read again (drop_to_meta took it to meta too).
@@ -554,7 +565,8 @@ class H3TextEncoder:
             "layers_read": stats["layers"],
             "encode_seconds": round(time.perf_counter() - started, 2),
             "tokens": len(ids),
-            "vision_tokens": int(image_tokens or 0),
+            "vision_tokens": int(sum(image_tokens)),
+            "vision_tokens_per_image": [int(n) for n in image_tokens],
         }
         logger.info("H3 TE encode (direct read): %s", self.read_report)
         self.last_ids = ids

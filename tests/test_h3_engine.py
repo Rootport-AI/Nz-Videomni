@@ -47,6 +47,7 @@ torch = pytest.importorskip("torch")
 pytest.importorskip("comfy_kitchen")
 
 import h3_format  # noqa: E402
+import numpy as np  # noqa: E402
 from engine_h3 import constants as C  # noqa: E402
 from engine_h3.scheduler import euler_step, sigma_schedule  # noqa: E402
 
@@ -223,6 +224,82 @@ def test_rope_coordinates_small_grid():
     # t axis of the last video row, first frequency
     assert torch.allclose(cos[-1, 0], torch.cos(torch.tensor(float(rows[-1][0]), dtype=torch.float32) * inv[0]))
     assert torch.allclose(cos[:, :48], cos[:, 48:])  # the 48-block is repeated for rotate_half
+
+
+def test_keyframe_t_last_frame_is_the_oracle_expression_bit_for_bit():
+    """台帳 §1-97: the last frame's time is DiffSynth ``_build_packed_fl2va``'s
+    ``(float(L) + temporal_span) - 5/3`` (the oracle, written inline here:
+    pipeline_coords.py:38-45 and :86-99), for every 17n+5 count and L = 0..8192.
+
+    Also counts how often the exact-arithmetic twin ``L + (5/3)(F-1)`` gives the
+    same float64: it does NOT always (VERIFICATION_LOG §170), which is why
+    ``keyframe_t`` keeps the F-1 branch."""
+    from engine_h3.rope import keyframe_t
+
+    total = matched = 0
+    for n in range(1, 29):
+        num_frames, t_lat = 17 * n + 5, 5 * n + 2
+        sp = np.ones(t_lat, dtype=np.float64) * (5.0 / 3.0)
+        for k, per in enumerate((1, 4, 4, 4, 4)):
+            sp[k::5] *= per
+        span = float(sp.sum())
+        for L in range(8193):
+            oracle = (float(L) + span) - 5.0 / 3.0
+            assert keyframe_t(num_frames - 1, t_lat, L) == oracle, (num_frames, L)
+            total += 1
+            matched += float(L) + (5.0 / 3.0) * (num_frames - 1) == oracle
+    print(f"L + (5/3)(F-1) matches the oracle in {matched} of {total} (F, L) pairs")
+    assert total == 28 * 8193
+    assert matched < total  # so the F-1 branch of keyframe_t is needed
+
+
+def test_keyframe_t_first_middle_and_errors():
+    from engine_h3.rope import keyframe_t
+
+    t_lat, F, L = 7, 22, 300
+    assert keyframe_t(0, t_lat, L) == float(L)
+    for n in (1, F // 2, F - 2):
+        assert keyframe_t(n, t_lat, L) == float(L) + (5.0 / 3.0) * n
+    for bad in (-1, F, F + 5):
+        with pytest.raises(ValueError):
+            keyframe_t(bad, t_lat, L)
+    with pytest.raises(ValueError):
+        keyframe_t(0, 6, L)  # not 5n+2
+
+
+@pytest.mark.parametrize("gh, gw", [(1, 2), (2, 3), (12, 20)])
+@pytest.mark.parametrize("frames", [[0], [21], [0, 21], [1], [11], [20], [0, 11, 21]])
+def test_build_coords_keyframe_blocks(gh, gw, frames):
+    """One block of grid rows per key frame, in the given order, each with its own
+    t and the video grid's (h, w); the text / audio / video rows do not move."""
+    from engine_h3.rope import build_coords, keyframe_t
+
+    L, T, A = 10, 7, 4   # T' = 7: F = 22
+    grid = gh * gw
+    g = build_coords(text_len=L, latent_frames=T, grid_h=gh, grid_w=gw, audio_latents=A, cond_frame_idx=frames)
+    plain = build_coords(text_len=L, latent_frames=T, grid_h=gh, grid_w=gw, audio_latents=A)
+    K = len(frames)
+    assert g.shape == (L + K * grid + 2 * A + T * grid, 3) and g.dtype == torch.float64
+    assert torch.equal(g[:L], plain[:L])
+    assert torch.equal(g[L + K * grid:], plain[L:])                 # audio and video unchanged
+    video_first = plain[L + 2 * A:L + 2 * A + grid]
+    for k, n in enumerate(frames):
+        block = g[L + k * grid:L + (k + 1) * grid]
+        assert bool((block[:, 0] == keyframe_t(n, T, L)).all())
+        assert torch.equal(block[:, 1:], video_first[:, 1:])
+    if frames == [0]:
+        assert bool((g[L:L + grid, 0] == float(L)).all())          # the first-frame anchor as before
+    if 0 < frames[0] < 21:
+        assert float(g[L, 0]) == float(L) + (5.0 / 3.0) * frames[0]
+
+
+def test_build_coords_refuses_bad_keyframes():
+    from engine_h3.rope import build_coords
+
+    kw = dict(text_len=10, latent_frames=7, grid_h=1, grid_w=2, audio_latents=4)
+    for bad in ([22], [-1], [0, 0], [5, 21, 5]):
+        with pytest.raises(ValueError):
+            build_coords(**kw, cond_frame_idx=bad)
 
 
 # --------------------------------------------------------------------------- #
@@ -457,7 +534,7 @@ def test_presentation_t2v_and_fl2va():
     prompt = "A cat walks. <d>[English] Hello.</d>"
     ids, tags = presentation(tok, prompt)
     assert ids == tok(prompt, add_special_tokens=False)["input_ids"] and tags == [1] * len(ids)
-    ids2, tags2 = presentation(tok, prompt, image_tokens=240)
+    ids2, tags2 = presentation(tok, prompt, image_tokens=(240,))
     label = tok("<Picture 1>: ", add_special_tokens=False)["input_ids"]
     assert label == [21604, 3826, 220, 16, 26818, 220]
     n = len(label)
@@ -466,6 +543,18 @@ def test_presentation_t2v_and_fl2va():
     assert tags2 == [1] * n + [0] * 242 + [1] * len(ids)
     mm = mm_token_type_ids(ids2)
     assert sum(mm) == 240 and mm[n] == 0 and mm[n + 241] == 0
+
+    # Two pictures (first frame, last frame): label 1 + block 1 + label 2 + block 2 + prompt.
+    ids3, tags3 = presentation(tok, prompt, image_tokens=(240, 100))
+    label2 = tok("<Picture 2>: ", add_special_tokens=False)["input_ids"]
+    m = len(label2)
+    block1 = [151652] + [151655] * 240 + [151653]
+    block2 = [151652] + [151655] * 100 + [151653]
+    assert ids3 == label + block1 + label2 + block2 + ids
+    assert tags3 == [1] * n + [0] * 242 + [1] * m + [0] * 102 + [1] * len(ids)
+    assert sum(mm_token_type_ids(ids3)) == 340
+    with pytest.raises(ValueError):
+        presentation(tok, prompt, image_tokens=(240, 0))
 
 
 def test_te_direct_read_with_vision_matches_the_loaded_model(tmp_path):
@@ -974,10 +1063,15 @@ def test_request_validation_images():
     from engine_h3.pipeline_h3 import H3GenerateRequest, H3ImageInput, validate_request
 
     ok = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4")
-    validate_request(H3GenerateRequest(**ok, images=(H3ImageInput("a.png", 0),)))
-    for bad in ((H3ImageInput("a.png", 0), H3ImageInput("b.png", 0)), (H3ImageInput("a.png", 9),),
-                (H3ImageInput("", 0),)):
-        with pytest.raises(ValueError):
+    for good in ((H3ImageInput("a.png", 0),), (H3ImageInput("a.png", 0), H3ImageInput("b.png", 123)),
+                 (H3ImageInput("a.png", 60),), (H3ImageInput("b.png", 123), H3ImageInput("a.png", 0)),
+                 tuple(H3ImageInput(f"{k}.png", k * 12) for k in range(10))):
+        validate_request(H3GenerateRequest(**ok, images=good))
+    for bad, words in (((H3ImageInput("a.png", 0), H3ImageInput("b.png", 0)), "重複"),
+                       ((H3ImageInput("a.png", 124),), "0〜123"),
+                       ((H3ImageInput("a.png", -1),), "0〜123"),
+                       ((H3ImageInput("", 60),), "パスが空")):
+        with pytest.raises(ValueError, match=words):
             validate_request(H3GenerateRequest(**ok, images=bad))
     with pytest.raises(ValueError):
         validate_request(H3GenerateRequest(**ok, attention_backend="flash"))
@@ -997,6 +1091,161 @@ def test_worker_images_and_per_job_keys():
     for bad in ({"images": "a.png"}, {"images": [{"frame_idx": 0}]}):
         with pytest.raises(ValueError):
             worker._generate_request({**base, **bad})
+    req = worker._generate_request({**base, "images": [{"path": "b.png", "frame_idx": 123},
+                                                       {"path": "a.png", "frame_idx": 0}]})
+    assert [(i.path, i.frame_idx) for i in req.images] == [("b.png", 123), ("a.png", 0)]
+
+
+def test_worker_selftest_keyframe_option(capsys):
+    from engine_h3 import worker
+
+    def args(*extra):
+        return worker._selftest_parser().parse_args([
+            "--transformer", "t", "--text-encoder", "te", "--video-vae", "vv", "--audio-vae", "av",
+            "--tokenizer-dir", "tok", "--output", "o.mp4", *extra,
+        ])
+
+    assert worker._selftest_generate_message(args(), "o.mp4")["images"] == []
+    # --image is frame 0, as before (the fingerprint commands do not change).
+    assert worker._selftest_generate_message(args("--image", "a.png"), "o.mp4")["images"] == [
+        {"path": "a.png", "frame_idx": 0}
+    ]
+    msg = worker._selftest_generate_message(
+        args("--image", "a.png", "--keyframe", "123=b.png", "--keyframe", "60=c:/d.png"), "o.mp4")
+    assert msg["images"] == [
+        {"path": "a.png", "frame_idx": 0}, {"path": "b.png", "frame_idx": 123}, {"path": "c:/d.png", "frame_idx": 60},
+    ]
+    with pytest.raises(ValueError, match="重複"):
+        worker._selftest_images(args("--image", "a.png", "--keyframe", "0=b.png"))
+    with pytest.raises(ValueError, match="重複"):
+        worker._selftest_images(args("--keyframe", "5=a.png", "--keyframe", "5=b.png"))
+    for bad in ("a.png", "x=a.png", "5=", "1.5=a.png"):
+        with pytest.raises(ValueError, match="FRAME=PATH"):
+            worker._selftest_images(args("--keyframe", bad))
+    # The CLI entry reports it on stderr with a non-zero code (no traceback).
+    code = worker._selftest_generate([
+        "--transformer", "t", "--text-encoder", "te", "--video-vae", "vv", "--audio-vae", "av",
+        "--tokenizer-dir", "tok", "--output", "o.mp4", "--keyframe", "a.png",
+    ])
+    assert code != 0
+    assert "FRAME=PATH" in capsys.readouterr().err
+
+
+def test_condition_noise_is_one_draw_shared_by_every_block():
+    """The condition rows' noise: K = 1 is bit for bit the first-frame-only
+    engine's formula (the third draw of the job's generator); with K = 3 every
+    block gets the same noise."""
+    from engine_h3.constants import KEYFRAME_NOISE_AUG
+    from engine_h3.pipeline_h3 import noisy_condition
+
+    grid = 6
+
+    def generator_after_video_and_audio():
+        gen = torch.Generator(device="cpu").manual_seed(42)
+        torch.randn((1, 4, 7, 2, 2), generator=gen, dtype=torch.float32)
+        torch.randn((2, 3, 5), generator=gen, dtype=torch.float32)
+        return gen
+
+    clean1 = torch.randn(grid, 96, generator=torch.Generator().manual_seed(1))
+    gen = generator_after_video_and_audio()
+    old_noise = torch.randn(tuple(clean1.shape), generator=gen, dtype=torch.float32)
+    old = KEYFRAME_NOISE_AUG * clean1.to(torch.float32) + (1.0 - KEYFRAME_NOISE_AUG) * old_noise
+    assert torch.equal(noisy_condition(clean1, grid, generator_after_video_and_audio()), old)
+
+    clean3 = torch.randn(3 * grid, 96, generator=torch.Generator().manual_seed(2))
+    out = noisy_condition(clean3, grid, generator_after_video_and_audio())
+    for k in range(3):
+        rows = slice(k * grid, (k + 1) * grid)
+        assert torch.equal(out[rows], noisy_condition(clean3[rows], grid, generator_after_video_and_audio()))
+    zeros = noisy_condition(torch.zeros(3 * grid, 96), grid, generator_after_video_and_audio())
+    assert torch.equal(zeros[:grid], zeros[grid:2 * grid]) and torch.equal(zeros[:grid], zeros[2 * grid:])
+    with pytest.raises(RuntimeError):
+        noisy_condition(torch.zeros(grid + 1, 96), grid, generator_after_video_and_audio())
+
+
+def _keyframe_job(monkeypatch, tmp_path, frames):
+    """Run ``generate`` with key frames at ``frames`` (64 x 64, 124 frames) through the
+    REAL ``_encode`` / ``_encode_image`` with a stand-in text encoder and VAE
+    encoder; returns (what the TE was given, the encode progress, the denoise's
+    keyword arguments, done). Each image is a flat grey of level 10 + frame, so a
+    condition block tells which image it came from."""
+    from PIL import Image
+
+    from engine_h3 import pipeline_h3 as P
+    from engine_h3 import text_encoder as TE
+    from engine_h3 import video_vae as VV
+
+    images = []
+    for n in frames:
+        path = tmp_path / f"k{n}.png"
+        Image.new("RGB", (80, 64), (10 + n,) * 3).save(path)
+        images.append(P.H3ImageInput(str(path), n))
+    te_images, progress, denoise_kw = [], [], {}
+
+    class FakeTE:
+        def __init__(self, *a, **k):
+            self.read_report = {}
+
+        def load(self):
+            return {}
+
+        def encode(self, prompt, images=()):
+            te_images.append([img.getpixel((0, 0))[0] for img in images])
+            self.read_report = {"vision_tokens": 7 * len(images)}
+            return torch.zeros(3, 8), torch.ones(3, dtype=torch.long)
+
+        def release(self):
+            pass
+
+    class FakeEncoder:
+        def encode(self, x, tiled=True):
+            return torch.full((1, 24, 1, 4, 4), float(round(float(x.mean()) * 255)))
+
+    monkeypatch.setattr(TE, "H3TextEncoder", FakeTE)
+    monkeypatch.setattr(VV.H3VideoEncoder, "from_file", classmethod(lambda cls, *a, **k: FakeEncoder()))
+    pipe = P.H3Pipeline(P.H3Paths("t", "te", "vv", "av", "tok"), P.H3LoadOptions(), device="cpu",
+                        progress=lambda stage, i, total: progress.append((stage, i, total)), log=lambda m: None)
+    pipe._dit_cfg = object()
+
+    def denoise(req, h, t, phases, entry, **kw):
+        denoise_kw.update(kw)
+        return torch.zeros(1), torch.zeros(1), "on"
+
+    monkeypatch.setattr(pipe, "_denoise", denoise)
+    monkeypatch.setattr(pipe, "_decode", lambda req, v, a, entry, **kw: 1)
+    req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=124, output_path="o.mp4",
+                              images=tuple(images))
+    done = pipe.generate(req)
+    return te_images, [p for p in progress if p[0] == "encode"], denoise_kw, done
+
+
+def test_keyframes_sorted_and_only_the_ends_go_to_the_vision_tower(monkeypatch, tmp_path):
+    te_images, progress, kw, done = _keyframe_job(monkeypatch, tmp_path, [123, 60, 0])
+    assert te_images == [[10, 133]]                     # frame 0 then frame 123; not the middle one
+    assert kw["cond_frame_idx"] == [0, 60, 123]
+    rows = kw["cond_clean"]
+    assert tuple(rows.shape) == (3 * 4, 96)             # 64 x 64: grid 2 x 2 per key frame
+    assert [float(rows[k * 4, 0]) for k in range(3)] == [10.0, 70.0, 133.0]
+    assert {total for _s, _i, total in progress} == {4} and progress[-1] == ("encode", 4, 4)
+    assert done["images_used"] == 3
+    image_encode = done["h3"]["phases"]["image_encode"]
+    assert image_encode["source_size"] == [[80, 64]] * 3 and image_encode["vision_tokens"] == 14
+
+
+def test_last_only_and_middle_only_key_frames(monkeypatch, tmp_path):
+    te_images, progress, kw, _done = _keyframe_job(monkeypatch, tmp_path, [123])
+    assert te_images == [[133]] and kw["cond_frame_idx"] == [123]   # the TE labels it <Picture 1>
+    te_images, progress, kw, _done = _keyframe_job(monkeypatch, tmp_path, [60])
+    assert te_images == [[]] and kw["cond_frame_idx"] == [60]       # no vision tower, as T2V
+    # The stage counts 4 because the job has a key frame (never 3/3 then 4/4).
+    assert {total for _s, _i, total in progress} == {4} and progress[-1] == ("encode", 4, 4)
+
+
+def test_t2v_encode_counts_three_steps(monkeypatch, tmp_path):
+    te_images, progress, kw, done = _keyframe_job(monkeypatch, tmp_path, [])
+    assert te_images == [[]] and kw["cond_clean"] is None and kw["cond_frame_idx"] == []
+    assert progress == [("encode", 0, 3), ("encode", 1, 3), ("encode", 2, 3), ("encode", 3, 3)]
+    assert "image_encode" not in done["h3"]["phases"]
 
 
 def test_canvas_image_cover_and_centre_crop(tmp_path):
@@ -1127,7 +1376,7 @@ def test_attention_and_prefetch_per_job_fall_back_to_load_values():
 # after the code review (REVIEW_code2a): M-1, m-4, m-7
 # --------------------------------------------------------------------------- #
 
-@pytest.mark.parametrize("bad", ["missing_image", "two_images", "bad_frame_rate"])
+@pytest.mark.parametrize("bad", ["missing_image", "duplicate_frames", "bad_frame_rate"])
 def test_failed_check_or_image_releases_what_is_kept(monkeypatch, tmp_path, bad):
     """Review M-1: a job refused by the request check or the image load is a failed
     job too, and releases the kept models (INTERFACE2 §8.1) -- before the TE runs."""
@@ -1140,7 +1389,7 @@ def test_failed_check_or_image_releases_what_is_kept(monkeypatch, tmp_path, bad)
     base = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4", keep_resident=True)
     req = {
         "missing_image": H3GenerateRequest(**base, images=(H3ImageInput(str(tmp_path / "nope.png"), 0),)),
-        "two_images": H3GenerateRequest(**base, images=(H3ImageInput("a.png", 0), H3ImageInput("b.png", 0))),
+        "duplicate_frames": H3GenerateRequest(**base, images=(H3ImageInput("a.png", 0), H3ImageInput("b.png", 0))),
         "bad_frame_rate": H3GenerateRequest(**base, frame_rate=30),
     }[bad]
     with pytest.raises(ValueError):
@@ -1511,6 +1760,30 @@ def test_vram16_cuda_oom_is_explained(monkeypatch, tmp_path, vram16):
         assert isinstance(exc.value, torch.OutOfMemoryError)
         assert "vram16" not in entry
     assert pipe._resident is not None and "dit" not in pipe._resident    # a failed job lets the DiT go
+
+
+def test_denoise_runs_with_several_key_frame_blocks(monkeypatch, tmp_path):
+    """The REAL ``_denoise`` on a tiny DiT with two key frames (first and last):
+    K x grid condition rows, recorded in the sequence; a block count that does
+    not match the frames is refused before the DiT runs."""
+    from engine_h3 import pipeline_h3 as P
+
+    _fake_int8(monkeypatch)
+    pipe, dit = _tiny_pipe_and_dit(tmp_path)
+    pipe._dit_cfg = dit.cfg
+    pipe._resident = {"dit": dit, "cfg": dit.cfg}
+    req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=22, output_path="o.mp4",
+                              num_inference_steps=1)
+    text = torch.zeros(5, TEXT, dtype=torch.bfloat16)
+    tags = torch.ones(5, dtype=torch.long)
+    cond = torch.randn(2 * 4, 96, generator=torch.Generator().manual_seed(4))
+    entry = {}
+    with torch.no_grad():
+        video, audio, _used = pipe._denoise(req, text, tags, P._Phases(cuda=False), entry,
+                                            cond_clean=cond, cond_frame_idx=[0, 21], keep=True)
+    assert entry["sequence"]["cond"] == 8 and torch.isfinite(video).all() and torch.isfinite(audio).all()
+    with pytest.raises(RuntimeError, match="condition rows"):
+        pipe._denoise(req, text, tags, P._Phases(cuda=False), {}, cond_clean=cond, cond_frame_idx=[0], keep=True)
 
 
 def test_worker_vram16_mode_key():

@@ -221,6 +221,12 @@ def validate_for_family(family: str, request: GenerateRequest) -> None:
     (mock・ジョブ開始ログ・アダプタ・metadata.json・mp4 のレシピ)は
     常に数値を見る。
 
+    順序は ``fill_defaults`` → ``violation`` → ``normalize_keyframes``。
+    キーフレームの位置を系統の格子へ寄せるのは、``num_frames`` が正しいと
+    分かってから(寄せる計算がフレーム数を使う)。同じ段で、省略された
+    キーフレームの ``strength`` に系統の既定(LTX は 0.8。H3 は既定なし＝
+    ``None`` のまま)を書き戻す。位置の重複も同じ 422 になる。
+
     呼ぶ場所は api/generate.py の :func:`reject_unsupported` の**後**と、
     api/generate_alpha.py(内部で組んだ要求の既定値の書き戻しのため)。
     機能の可否(FEATURE_UNSUPPORTED)が数値の違反(VALIDATION_ERROR)より
@@ -234,6 +240,8 @@ def validate_for_family(family: str, request: GenerateRequest) -> None:
         return
     rules.fill_defaults(request)
     message = rules.violation(request)
+    if message is None:
+        message = rules.normalize_keyframes(request.conditioning_images, request.num_frames)
     if message is not None:
         raise request_validation_failed(message)
 

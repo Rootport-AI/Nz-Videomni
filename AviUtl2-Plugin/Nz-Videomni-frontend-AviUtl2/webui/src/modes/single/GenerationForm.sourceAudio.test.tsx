@@ -5,6 +5,7 @@ import type { NativeBridge } from "../../bridge";
 import { createMockBridge, createMockFs } from "../../bridge/mockBridge";
 import type { MockFs } from "../../bridge/mockBridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
 import { FALLBACK_APP_CONFIG } from "./defaultConfig";
 import { GenerationForm } from "./GenerationForm";
 import { useGenerationForm } from "./useGenerationForm";
@@ -25,8 +26,8 @@ function Harness({ bridge }: { bridge: NativeBridge }) {
     <GenerationForm
       form={form}
       keyframes={keyframes}
-      frameIdxMultiple={FALLBACK_APP_CONFIG.limits.conditioning_frame_idx_multiple}
-      gridOffset={FALLBACK_APP_CONFIG.limits.conditioning_keyframe_grid_offset}
+      frameIdxMultiple={LTX_GENERATION_CONSTRAINTS.keyframeGrid.step}
+      gridOffset={LTX_GENERATION_CONSTRAINTS.keyframeGrid.offset}
       onDurationChange={(value) => form.setNumFrames(value)}
       onDurationCommit={(value) => form.setNumFrames(value)}
       onApplyPreset={form.applyPreset}

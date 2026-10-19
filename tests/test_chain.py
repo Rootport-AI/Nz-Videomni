@@ -340,8 +340,9 @@ def test_chain_clip0_conditioning_image_missing_404(client):
     assert r.json()["error"]["code"] == "IMAGE_NOT_FOUND"
 
 
-# Keyframe cap / grid on the chain path. Same _normalize_conditioning_images
-# gate as the single-shot endpoint, but prefixed with "clips[i]: ".
+# Keyframe cap / grid on the chain path. The same count cap and LTX's
+# RequestRules.normalize_keyframes as the single-shot endpoint, but prefixed
+# with "clips[i]: ".
 
 
 def _upload(client, png_bytes) -> str:
@@ -393,6 +394,23 @@ def test_chain_accepts_ten_conditioning_images_on_clip0(client, png_bytes):
     ]
     r = _run_chain(client, clips)
     assert r.status_code == 202, r.text
+
+
+def test_chain_clip0_omitted_strength_is_recorded_as_08(client, png_bytes):
+    # The chain schema snaps clip 0's keyframes with LTX's rules, which also
+    # write the default strength back: metadata.json records 0.8, never null.
+    iid = _upload(client, png_bytes)
+    clips = [
+        {"num_frames": 49, "conditioning_images": [{"image_id": iid, "frame_idx": 10}]},
+        {"num_frames": 25},
+    ]
+    r = _run_chain(client, clips)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    meta = json.loads((client.app_context.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8"))
+    image = meta["request"]["clips"][0]["conditioning_images"][0]
+    assert (image["frame_idx"], image["strength"]) == (9, 0.8)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

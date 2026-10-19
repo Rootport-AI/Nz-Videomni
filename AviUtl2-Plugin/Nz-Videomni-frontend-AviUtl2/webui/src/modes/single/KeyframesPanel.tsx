@@ -11,22 +11,17 @@ export interface KeyframesPanelProps {
   numFrames: number;
   /** Current form `frame_rate`, used only for the timeline/card "Xs" labels. */
   frameRate: number;
-  /** `config.limits.conditioning_frame_idx_multiple` (default 8). */
+  /** The base model's keyframe grid step (`constraints.keyframes.step`; LTX 8). */
   frameIdxMultiple: number;
-  /** `config.limits.conditioning_keyframe_grid_offset` (default 1). */
+  /** The base model's keyframe grid origin (`constraints.keyframes.offset`; LTX 1). */
   gridOffset: number;
   /** Disabled while a generation is in flight/reserved, mirroring the rest
    * of the form's fields. */
   disabled: boolean;
-  /** The loaded base model uses ONE keyframe (the first
-   * frame) — `multi_keyframes` in its `unsupported_features`. The cap itself
-   * comes from `useKeyframes`' `maxItemsOverride: 1` (so the add button greys
-   * once a card exists); this only adds the note saying why. Omitted = no
-   * note. */
-  multiUnavailable?: boolean | undefined;
-  /** The loaded base model does not take keyframe strength
-   * (`keyframe_strength` — the server refuses a non-default strength) — every
-   * card's strength slider greys, with a note. Omitted = usable.
+  /** The loaded base model has no keyframe strength
+   * (`keyframe_strength` — the server refuses any strength) — every card's
+   * strength row is hidden, and the shell omits `strength` from the request.
+   * Omitted = usable.
    */
   strengthUnavailable?: boolean | undefined;
 }
@@ -53,12 +48,10 @@ export function KeyframesPanel({
   frameIdxMultiple,
   gridOffset,
   disabled,
-  multiUnavailable = false,
   strengthUnavailable = false,
 }: KeyframesPanelProps) {
   const strings = useStrings();
   const t = strings.single.keyframes;
-  const unavailable = strings.single.unavailableOnBaseModel;
 
   const items = keyframes.items;
   const occupied = new Set(items.map((item) => item.frameIdx));
@@ -103,7 +96,7 @@ export function KeyframesPanel({
               offset={gridOffset}
               occupiedOthers={new Set(items.filter((other) => other.id !== item.id).map((other) => other.frameIdx))}
               disabled={disabled}
-              strengthDisabled={strengthUnavailable}
+              strengthHidden={strengthUnavailable}
               onCommitFrameIdx={keyframes.setFrameIdx}
               onStrengthChange={keyframes.setStrength}
               onRemove={keyframes.remove}
@@ -134,8 +127,6 @@ export function KeyframesPanel({
       ) : (
         noRoom && <span className="field-hint">{t.addNoRoomHint}</span>
       )}
-      {multiUnavailable && <span className="field-hint">{unavailable.keyframesMulti}</span>}
-      {strengthUnavailable && <span className="field-hint">{unavailable.keyframeStrength}</span>}
     </div>
   );
 }

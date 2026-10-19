@@ -1,14 +1,17 @@
 /**
  * Pure, DOM-free grid math for the Create screen's keyframe timeline bar
  * (Docs/KEYFRAME_TIMELINE_DESIGN_NOTES.md). Keyframes may only land on the
- * server's `conditioning_frame_idx_multiple`/`grid_offset` grid (default
- * 8/1, see `keyframeUtils.ts`'s `snapFrameIdx`): `{0, offset, offset+multiple,
- * offset+2*multiple, …}` up to whatever the current `num_frames` allows.
+ * loaded base model's keyframe grid — its family's rule table, served as
+ * `GET /models`' `base_models[].constraints.keyframes` (`multiple`/`offset`
+ * here; LTX 8/1, MiniMax H3 1/0 = any frame; see `keyframeUtils.ts`'s
+ * `snapFrameIdx`): `{0, offset, offset+multiple, offset+2*multiple, …}` (an
+ * `offset` of 0 starts the non-zero run at `multiple`) up to whatever the
+ * current `num_frames` allows.
  *
- * `num_frames` is normally `8n+1`, but while the user is free-typing into
- * the field it can transiently be an off-grid value, so every function here
- * first floors `numFrames` down to the grid via `maxPlaceablePosition`
- * rather than trusting it's already `8n+1`.
+ * `num_frames` is normally on its own grid (LTX `8n+1`), but while the user
+ * is free-typing into the field it can transiently be an off-grid value, so
+ * every function here first floors `numFrames` down to the keyframe grid via
+ * `maxPlaceablePosition` rather than trusting it already fits.
  *
  * Position `0` is an ordinary grid position — always the smallest one,
  * for any `numFrames` — not a dedicated slot. The UI can still make it
@@ -24,8 +27,8 @@ import type { KeyframeItem } from "./keyframeUtils";
  * `effective = floor((numFrames-offset)/multiple)*multiple + offset`, then
  * subtracts one grid step. Can go negative for a `numFrames` too small to
  * fit even one non-zero grid point (e.g. `numFrames<=offset`); callers that
- * care (`validPositions`) treat `maxPlaceable < offset` as "no non-zero
- * slots available". */
+ * care (`validPositions`) treat a `maxPlaceable` below the first non-zero
+ * grid point as "no non-zero slots available". */
 export function maxPlaceablePosition(numFrames: number, multiple: number, offset: number): number {
   const effective = Math.floor((numFrames - offset) / multiple) * multiple + offset;
   return effective - multiple;
@@ -36,10 +39,13 @@ export function maxPlaceablePosition(numFrames: number, multiple: number, offset
  * too small to fit any non-zero position. */
 export function validPositions(numFrames: number, multiple: number, offset: number): number[] {
   const maxPlaceable = maxPlaceablePosition(numFrames, multiple, offset);
-  if (maxPlaceable < offset) return [0];
+  // The smallest non-zero grid point: `offset`, or `multiple` when the grid
+  // starts at 0 itself (so `0` is not listed twice).
+  const first = offset > 0 ? offset : multiple;
+  if (maxPlaceable < first) return [0];
 
   const positions: number[] = [0];
-  for (let pos = offset; pos <= maxPlaceable; pos += multiple) {
+  for (let pos = first; pos <= maxPlaceable; pos += multiple) {
     positions.push(pos);
   }
   return positions;

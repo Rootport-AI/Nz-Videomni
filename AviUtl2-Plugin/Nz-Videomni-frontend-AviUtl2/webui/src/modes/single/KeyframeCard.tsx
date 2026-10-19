@@ -18,9 +18,9 @@ export interface KeyframeCardProps {
   /** Current form `frame_rate`, purely for the optional "Xs" seconds hint
    * next to the FRAME input — a `<=0` value just suppresses that hint. */
   frameRate: number;
-  /** `config.limits.conditioning_frame_idx_multiple` (default 8). */
+  /** The base model's keyframe grid step (`constraints.keyframes.step`; LTX 8). */
   multiple: number;
-  /** `config.limits.conditioning_keyframe_grid_offset` (default 1). */
+  /** The base model's keyframe grid origin (`constraints.keyframes.offset`; LTX 1). */
   offset: number;
   /** `frameIdx`s held by every *other* card — this card's own position must
    * already be excluded by the caller (`keyframeGrid.resolveLanding`'s own
@@ -29,9 +29,9 @@ export interface KeyframeCardProps {
   /** Disabled while a generation is in flight/reserved, mirroring the rest
    * of the form's fields. */
   disabled: boolean;
-  /** Grey the STRENGTH slider alone (the loaded base model
-   * does not use keyframe strength). Omitted = usable. */
-  strengthDisabled?: boolean | undefined;
+  /** Hide the STRENGTH row (the loaded base model has no
+   * keyframe strength). Omitted = shown. */
+  strengthHidden?: boolean | undefined;
   /** Fired once a FRAME edit is committed (blur/Enter) with the fully
    * resolved landing position — never the raw/unsnapped typed value. */
   onCommitFrameIdx: (id: string, frameIdx: number) => void;
@@ -58,7 +58,7 @@ export interface KeyframeCardProps {
 
 /** Snaps a raw (possibly off-grid, out-of-range, or negative) typed FRAME
  * value to a placeable grid position: `<=0` stays `0`; otherwise previews
- * the server's 8n+1 snap (`snapFrameIdx`) and then clamps down to the
+ * the server's keyframe-grid snap (`snapFrameIdx`) and then clamps down to the
  * largest position the current `numFrames` can still hold
  * (`keyframeGrid.maxPlaceablePosition`) so a value typed while `numFrames`
  * is transiently small/off-grid never produces a `desired` that
@@ -95,7 +95,7 @@ export function KeyframeCard({
   offset,
   occupiedOthers,
   disabled,
-  strengthDisabled = false,
+  strengthHidden = false,
   onCommitFrameIdx,
   onStrengthChange,
   onRemove,
@@ -246,19 +246,21 @@ export function KeyframeCard({
         </label>
         {isEditingFrame && <span className="kfc-hint kfc-hint-landing">{t.willLandAt(resolvedLanding)}</span>}
 
-        <label className="kfc-field">
-          <span className="kfc-field-label">{t.strengthLabel}</span>
-          <input
-            type="range"
-            min={STRENGTH_MIN}
-            max={STRENGTH_MAX}
-            step={STRENGTH_STEP}
-            value={item.strength}
-            disabled={disabled || strengthDisabled}
-            onChange={(e) => onStrengthChange(item.id, Number(e.target.value))}
-          />
-          <span className="kfc-hint">{item.strength.toFixed(2)}</span>
-        </label>
+        {!strengthHidden && (
+          <label className="kfc-field">
+            <span className="kfc-field-label">{t.strengthLabel}</span>
+            <input
+              type="range"
+              min={STRENGTH_MIN}
+              max={STRENGTH_MAX}
+              step={STRENGTH_STEP}
+              value={item.strength}
+              disabled={disabled}
+              onChange={(e) => onStrengthChange(item.id, Number(e.target.value))}
+            />
+            <span className="kfc-hint">{item.strength.toFixed(2)}</span>
+          </label>
+        )}
       </div>
     </li>
   );

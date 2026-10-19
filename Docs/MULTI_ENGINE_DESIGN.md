@@ -301,6 +301,7 @@ MiniMax H3 ────→ h3         （engine_h3/ + .venv-engine-h3）
 
 - **対応表はアダプタのクラスではなく、モジュールパスを文字列で持つ**（`FAMILY_BY_ID`）。呼ばれた系統だけを `importlib` で解決するので、ベースモデルを列挙したいだけのプロセス（インストーラ・MCPサーバー・起動時の記述子検査）が、全アダプタを芋づるに読み込む代金を払わずに済む。
 - **`ltx25` アダプタと `h3` アダプタは `ltx` アダプタを継承している。** 共有しているのは `@@LTX@@` プロトコル・サブプロセスの起動と後始末・進捗の受け取り・mock バックエンドで、**エンジン世代で本当に違う事実だけ**を上書きする（どの仮想環境とワーカーか、どのワーカーログへ書くか、どのカテゴリがどのペイロード項目になるか、子プロセスに渡す環境変数、扱える機能の範囲）。
+- **数値の規約はアダプタが規則表 `REQUEST_RULES`（型は `RequestRules`）として宣言する。** フレーム数・解像度の倍数・fps・ステップ数と shift に加え、キーフレームを置ける位置と、省略された強度の既定もここにある（§7）。
 - **「汎用の EngineRunner」と「エンジン別アダプタ」への分割は行っていない。** 共有できたのはすでに1ファイルに固まっていた部分で、別ファイルへ切り出す実利が無かった。**3例目の MiniMax H3 でも分割は要らなかった**（`H3Runner` も `LTXRunner` を継ぐ。§8.1）。次の系統で改めて判断する。
 
 **現行コードは書き直さない。** `_build_load_payload` は「ペイロードのキー集合と挿入順まで契約であり、`tests/test_model_swap_load.py` のゴールデンスナップショットで固定されている」と自身のドキュメント文字列に書いている。系統を足すときも、既存系統の振る舞いを変えないこと——変えていないことは、このゴールデンスナップショットが通り続けることで確認できる。
@@ -430,12 +431,14 @@ config.yaml の `lora_dir`（Style LoRA の置き場）と `ic_loras`（IC-LoRA 
     "num_inference_steps": {"min": 1, "max": 50, "step": 1,   "default": 20},
     "shift_video":         {"min": 1, "max": 20, "step": 0.1, "default": 12},
     "shift_audio":         {"min": 1, "max": 20, "step": 0.1, "default": 3}
-  }
+  },
+  "keyframes": {"step": 1, "offset": 0}
 }
 ```
 
 - `frame_rate` は `{min, max}` の1つの形に統一してある。**`min == max` なら固定**で、画面は欄を無効にしてその値を表示し、要求もその値にする。
 - `sampling` は `null` か、上の3本である。**`null` なら画面はステップ数と shift のスライダーを出さない**（LTX 2.3／2.5 は `null` で、見た目は変わらない）。LTX の `num_frames` は `{step: 8, offset: 1, min: 9, max: 481}`、`dimension_multiple` は 64、`frame_rate` は `{min: 1, max: 60}` である。
+- `keyframes` は、先頭（`frame_idx` 0）以外のキーフレームを置ける格子 `step × n + offset` である。LTX は `{step: 8, offset: 1}`（0 と 8n+1）、MiniMax H3 は `{step: 1, offset: 0}`（任意のフレーム）。画面はこの格子でピンを置き、サーバーは同じ格子へ寄せる（§7）。強度の既定は公開しない（`flag_defaults` と同じく画面が写しを持つ。強度が使えるかどうかは機能名 `keyframe_strength` で伝わる）。
 - **`unsupported_features` の導出規則**（H3）: 単発生成の拒否表の機能名 ＋ `chain`（連結は `reject_chain` で丸ごと拒否する）＋ `retake`（Retake は連結要求なので `chain` の拒否に当たる。Edit のサブタブを閉じる語として足す）。`v2v`・`a2v`・`end_source`・`ic_lora`・`vsf`・`negative_prompt` は、単発の要求に対応する項目が無いので公開しない。
 - **H3 専用の機能 `vram16_mode`（VRAM 16GB mode。2026-10-18 追加）は向きが逆である**——H3 の一覧には載らず、**LTX 2.3／2.5 の拒否表（`REJECT_TABLE`）が `true` を断り、両方の `unsupported_features` に `vram16_mode` が載る**（`null` と `false` は通す）。両方の LTX が断るので、422 の文言は「もう片方の LTX を選んでください」ではなく「MiniMax H3 専用です」になる（`services/engines/ltx/adapter.py` の `H3_ONLY_REFUSALS`。2.5 のアダプタも同じものを使う）。H3 の既定（on）は規則表の `flag_defaults` が書き戻す（仕様書 §6.2b (c)）。
 - **閉じた機能の項目は、操作パネルが要求に載せない。** 閉じ方が灰色の機能（NAG など）も同じで、載せると必ず 422 になり、利用者が解除できなくなるためである。
@@ -579,7 +582,7 @@ Settings のモデル選択欄に、既定の組み合わせへ戻すボタン�
 
 この仕組みは当初スコープ外（オーナー裁定）としていたが、MiniMax H3 の規約（17n+5・32 の倍数・24fps 固定）が LTX と食い違うため、第 2 弾の計画の了承（2026-10-17・[`PLAN_stage2.md`](Outputs-archive/h3-stage2-reports-2026-10-17/PLAN_stage2.md) §3.3）で解除した。
 
-**LTX の規則（8n+1・64の倍数・蒸留版のステップ数）は `services/engines/ltx/request_rules.py` に集約してあり、`GenerateRequest` の `Field` もそこの定数を参照する。** これは単発の要求についての集約で、連結のスキーマ（`GenerateChainRequest`。LTX 専用）は 64 の倍数・8n+1・ステップ 8 の検査を自分の validator に持つ。LTX 2.3 と LTX 2.5 はこの1つの規則表を共有する。フレーム数の `8n+1` は、LTXの映像VAEが時間方向を8分の1に圧縮し、因果的な先頭1フレームが加わることに由来し、出どころは `chain_math.py` の定数である。
+**LTX の規則（8n+1・64の倍数・蒸留版のステップ数）は `services/engines/ltx/request_rules.py` に集約してあり、`GenerateRequest` の `Field` もそこの定数を参照する。** これは単発の要求についての集約で、連結のスキーマ（`GenerateChainRequest`。LTX 専用）は 64 の倍数・8n+1・ステップ 8 の検査を自分の validator に持つ（キーフレームの位置と強度は、その validator が LTX の規則表の `normalize_keyframes` を直接呼んで寄せる）。LTX 2.3 と LTX 2.5 はこの1つの規則表を共有する。フレーム数の `8n+1` は、LTXの映像VAEが時間方向を8分の1に圧縮し、因果的な先頭1フレームが加わることに由来し、出どころは `chain_math.py` の定数である。
 
 ```python
 VIDEO_TIME_FACTOR = 8            # 映像VAEの時間圧縮率
@@ -587,6 +590,11 @@ AUDIO_LATENTS_PER_SEC = 25.0     # 16000 / 160 / 4
 ```
 
 MiniMax H3 の規則は `services/engines/h3/adapter.py` の `REQUEST_RULES` にある（値の意味は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §9）。規則表は数値の規約のほかに、真偽値の既定の小さな表 `flag_defaults` も持つ（スキーマの既定が `null` の真偽値を、`validate_for_family` が系統の既定へ書き戻す。H3 は `vram16_mode` を on。仕様書 §6.2b (c)）。
+
+**キーフレームの位置と強度も規則表が持つ**（2026-10-19。台帳 §1-97）。項目は `keyframe_step`・`keyframe_offset`（置ける格子。既定 1／0）と `keyframe_strength_default`（省略された強度に書き戻す値。既定 `None`）で、LTX は 8／1／0.8、MiniMax H3 は 1／0／`None` である。
+- **寄せる場所**: `validate_for_family` は `fill_defaults` → `violation`（数値の違反）→ `normalize_keyframes` の順に呼ぶ。寄せる計算はフレーム数が正しいと分かってから行う。`normalize_keyframes` は 0 をそのまま残し、それ以外を格子へ切り下げて「0 より大きい最小の格子点〜最後に置ける格子点」に収め、同じ点に寄る 2 枚があれば違反の文を返す（`request_validation_failed`）。続けて、強度が `None` で系統の既定があれば書き戻す。式と文言の正本は `services/engines/ltx/request_rules.py` の docstring である。
+- **系統が分かる前には寄せない**: 全系統に共通の config の値と、`GenerateRequest` の検査（pydantic）での 8n+1 の丸めは置かない（オーナー裁定。[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 56）。スキーマに残るのは系統に依存しない枚数の上限だけである。
+- **強度の省略**: スキーマの `strength` は省略でき、省略は「系統の既定」を意味する。LTX は 0.8 で埋まり、アダプタ・ワーカー・`metadata.json` には今までどおり数値が届く。H3 には強度の概念が無いので `None` のまま記録され、値を送った要求は 422 `FEATURE_UNSUPPORTED`（機能名 `keyframe_strength`）で断る（同 裁定 57）。
 
 ### 作業の順序 【オーナー裁定】
 
@@ -903,6 +911,7 @@ MiniMax H3 の規則は `services/engines/h3/adapter.py` の `REQUEST_RULES` に
 | 扱える機能の範囲 | 各アダプタの `UNSUPPORTED_FEATURES` と拒否関数 | §5.6。エンジンの事実であってエンドポイントの事情ではない |
 | 推論パイプライン一式 | `engine/`（ltx）・`engine25/`（ltx25） | モデル構造そのもの。それぞれの仮想環境側に閉じたままでよい |
 | フレーム規約の定数 | `chain_math.py` の `VIDEO_TIME_FACTOR` / `AUDIO_LATENTS_PER_SEC` | LTXの映像VAE（時間8分の1圧縮）と音声レイテント（毎秒25）の実装値。**LTX の2系統はどちらも同じ規約なので、この定数は共有している。H3 の規約は `engine_h3/constants.py` と規則表が持つ**（§7） |
+| キーフレームの位置と強度の既定 | 各系統の規則表の `keyframe_step`・`keyframe_offset`・`keyframe_strength_default`（型は `services/engines/ltx/request_rules.py` の `RequestRules`） | 置ける位置は VAE の時間方向の規約で決まる（LTX は潜在フレームの先頭の画素＝8n+1、H3 は画素のフレーム番号そのもの）。強度の有無もエンジンの事実である（§7）。H3 の時間座標の式は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3 |
 | H3 のアダプタと規則表 | `services/engines/h3/`（`adapter.py`） | H3 固有の4分類表・規則表 `REQUEST_RULES`・`UNSUPPORTED_FEATURES`・ワーカーへのメッセージの組み立て。LTX の `LTXRunner` を継ぐ |
 | H3 の推論パイプライン一式 | `engine_h3/` | モデル構造そのもの。専用の仮想環境側に閉じる（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §8） |
 | H3 のヘッダ判定 | `h3_format.py`（リポジトリ直下・torch 非依存） | アプリ側（torch の無い仮想環境）の事前検査と、ワーカーの両方から呼ぶため。判定は safetensors のテンソル名の指紋で行う（同 §7） |

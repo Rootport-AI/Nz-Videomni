@@ -127,8 +127,6 @@ const CONFIG_BODY = {
     max_height: 4096,
     max_num_frames: 481,
     max_conditioning_images: 10,
-    conditioning_frame_idx_multiple: 8,
-    conditioning_keyframe_grid_offset: 1,
     phase1_max_concurrent_jobs: 1,
     spill_free_frames: { "1280x768": 257 },
     v2v_context_frames_default: 73,

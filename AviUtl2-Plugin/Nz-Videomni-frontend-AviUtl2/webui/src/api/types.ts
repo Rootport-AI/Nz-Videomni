@@ -38,15 +38,19 @@ export interface CropOutput {
 /** One I2V conditioning keyframe (Docs/API_REFERENCE.md §5.1 `ConditioningImage`,
  * `api/models.py:40-45`). `image_id` comes from `POST /upload/image`'s
  * response. `frame_idx==0` is the leading frame (latent-replace); anything
- * greater is snapped by the server to the 8n+1 grid
- * (`(frame_idx-1)//8*8+1`) and clamped to range — the WebUI may submit the
- * user's natural value and only needs to *preview* the snap client-side (see
- * `modes/single/keyframeUtils.ts`). `crf` is intentionally omitted: never
- * exposed by this WebUI (M4 scope). */
+ * greater is snapped by the server to the base model's keyframe grid
+ * (`constraints.keyframes`: `(frame_idx-offset)//step*step+offset`, LTX's
+ * 8n+1) and clamped to range — the WebUI may submit the user's natural value
+ * and only needs to *preview* the snap client-side (see
+ * `modes/single/keyframeUtils.ts`). `strength` is optional: omitted means "the
+ * base model's default" (LTX fills 0.8 server-side), and an engine without a
+ * keyframe strength (`keyframe_strength` in its `unsupported_features`)
+ * refuses any value, so the WebUI omits the key there (`omitStrength`). `crf`
+ * is intentionally omitted: never exposed by this WebUI (M4 scope). */
 export interface ConditioningImage {
   image_id: string;
   frame_idx: number;
-  strength: number;
+  strength?: number;
 }
 
 /** One LoRA reference (Docs/API_REFERENCE.md §5.3 `LoraSpec`,
@@ -863,8 +867,6 @@ export interface AppLimits {
   max_height: number;
   max_num_frames: number;
   max_conditioning_images: number;
-  conditioning_frame_idx_multiple: number;
-  conditioning_keyframe_grid_offset: number;
   phase1_max_concurrent_jobs: number;
   spill_free_frames: Record<string, number>;
   v2v_context_frames_default: number;
@@ -1244,6 +1246,11 @@ export interface BaseModelConstraints {
   dimension_multiple: number;
   frame_rate: RangeConstraint;
   sampling: SamplingConstraints | null;
+  /** Where a keyframe (`conditioning_images[].frame_idx > 0`) may sit: `0`,
+   * and `offset + k * step` up to the last one that fits (LTX `8`/`1`, MiniMax
+   * H3 `1`/`0` = any frame). Optional purely defensively: a backend that
+   * predates the key omits it, and "omitted" reads as the LTX grid. */
+  keyframes?: { step: number; offset: number };
 }
 
 /** `GET /models`'s response (Docs/API_REFERENCE.md §3.5,

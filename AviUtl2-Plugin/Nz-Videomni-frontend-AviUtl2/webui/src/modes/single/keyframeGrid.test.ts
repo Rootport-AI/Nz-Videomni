@@ -14,8 +14,7 @@ import {
   validPositions,
 } from "./keyframeGrid";
 
-// The real config: server default conditioning_frame_idx_multiple/grid_offset
-// (Docs/API_REFERENCE.md §5.1).
+// The LTX keyframe grid (`constraints.keyframes`, Docs/API_REFERENCE.md §5.1).
 const MULTIPLE = 8;
 const OFFSET = 1;
 
@@ -227,5 +226,59 @@ describe("placeableSlotCount", () => {
   it("counts every valid position including 0", () => {
     expect(placeableSlotCount(9, MULTIPLE, OFFSET)).toBe(2);
     expect(placeableSlotCount(257, MULTIPLE, OFFSET)).toBe(33);
+  });
+});
+
+// 台帳 §1-97: MiniMax H3's keyframe grid is step 1 / offset 0 — any frame in
+// [0, F-1]. The 8/1 expectations above are unchanged.
+describe("MiniMax H3's 1/0 keyframe grid (any frame)", () => {
+  const STEP = 1;
+  const ORIGIN = 0;
+  const F = 22; // H3's shortest length (17n+5)
+
+  it("lists every frame 0..F-1 once (0 is not doubled)", () => {
+    const positions = validPositions(F, STEP, ORIGIN);
+    expect(positions).toEqual(Array.from({ length: F }, (_, i) => i));
+    expect(new Set(positions).size).toBe(positions.length);
+    expect(placeableSlotCount(F, STEP, ORIGIN)).toBe(F);
+    expect(validPositions(1, STEP, ORIGIN)).toEqual([0]);
+  });
+
+  it("places up to the last frame", () => {
+    expect(maxPlaceablePosition(F, STEP, ORIGIN)).toBe(F - 1);
+    expect(maxPlaceablePosition(124, STEP, ORIGIN)).toBe(123);
+  });
+
+  it("nextAddPosition starts at 0, then lands at the midpoint, and runs out at the last frame", () => {
+    expect(nextAddPosition(new Set(), F, STEP, ORIGIN)).toBe(0);
+    // midpoint of [0, 21] = 10.5, tie toward the smaller position
+    expect(nextAddPosition(new Set([0]), F, STEP, ORIGIN)).toBe(10);
+    expect(nextAddPosition(new Set([0, 10]), F, STEP, ORIGIN)).toBe(15);
+    expect(nextAddPosition(new Set([0, F - 1]), F, STEP, ORIGIN)).toBeNull();
+  });
+
+  it("stepPin moves one frame and jumps an occupied run", () => {
+    expect(stepPin(5, 1, new Set(), F, STEP, ORIGIN)).toBe(6);
+    expect(stepPin(5, 1, new Set([6, 7]), F, STEP, ORIGIN)).toBe(8);
+    expect(stepPin(1, -1, new Set(), F, STEP, ORIGIN)).toBe(0);
+    expect(stepPin(0, -1, new Set(), F, STEP, ORIGIN)).toBe(0);
+    expect(stepPin(F - 1, 1, new Set(), F, STEP, ORIGIN)).toBe(F - 1);
+  });
+
+  it("resolveLanding takes the frame itself, or the next free one either way", () => {
+    const base = { numFrames: F, multiple: STEP, offset: ORIGIN, origin: 3 };
+    expect(resolveLanding({ ...base, desired: 7, occupied: new Set() })).toBe(7);
+    expect(resolveLanding({ ...base, desired: 7, occupied: new Set([7, 8]) })).toBe(9);
+    expect(resolveLanding({ ...base, desired: F - 1, occupied: new Set([F - 1]) })).toBe(F - 2);
+  });
+
+  it("findOverflowFrameIdxs flags only frames past F-1", () => {
+    const items = [
+      makeItem({ id: "a", frameIdx: 0 }),
+      makeItem({ id: "b", frameIdx: F - 1 }),
+      makeItem({ id: "c", frameIdx: F }),
+    ];
+    expect(findOverflowFrameIdxs(items, F, STEP, ORIGIN).map((i) => i.id)).toEqual(["c"]);
+    expect(findOverflowFrameIdxs(items, F - 1, STEP, ORIGIN).map((i) => i.id)).toEqual(["b", "c"]);
   });
 });

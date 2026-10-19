@@ -356,8 +356,11 @@ def test_generate_multi_keyframe_uploads_in_slot_order(tmp_path):
     assert any("1/3" in m for m in progress_msgs)
     assert any("2/3" in m for m in progress_msgs)
     assert any("3/3" in m for m in progress_msgs)
+    # A slot at the default (0.8) carries no strength key -- the server writes
+    # the LTX default back, and MiniMax H3 refuses any strength -- while a
+    # slot that differs from it sends its own value.
     assert captured["conditioning_images"] == [
-        {"image_id": "img-1", "frame_idx": 0, "strength": 0.8},
+        {"image_id": "img-1", "frame_idx": 0},
         {"image_id": "img-2", "frame_idx": 32, "strength": 0.6},
         {"image_id": "img-3", "frame_idx": 64, "strength": 0.4},
     ]

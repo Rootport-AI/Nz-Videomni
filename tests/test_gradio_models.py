@@ -31,6 +31,7 @@ from gradio_ui.api_client import ApiClient
 from gradio_ui.feature_scope import GATED_CONTROLS, RESET_VALUES, hidden_controls
 from gradio_ui.handlers import fetch_models_safe, load_selected_models
 from gradio_ui.i18n import LABELS
+from gradio_ui.presets import KF_MAX_SLOTS, KF_STRENGTH_DEFAULT
 from gradio_ui.ui import build_ui
 
 
@@ -512,6 +513,39 @@ def test_refresh_shows_vram16_on_an_engine_that_does_not_name_it():
     update = _gated_update(updates, "accel_vram16")
     assert update["visible"] is True
     assert "value" not in update
+
+
+_KF_STRENGTH_CONTROLS = [f"kf_strength_{i}" for i in range(1, KF_MAX_SLOTS + 1)]
+
+
+def test_refresh_hides_every_keyframe_strength_slider_on_h3_and_resets_it():
+    # MiniMax H3 names keyframe_strength (it has no strength and refuses any).
+    # The reset value is the LTX default: the handler sends the key only when
+    # a slot differs from it, so a hidden slider puts nothing on the wire.
+    assert hidden_controls(["keyframe_strength"]) == set(_KF_STRENGTH_CONTROLS)
+    models_json = dict(SAMPLE_MODELS_MULTI, active_base_model="MiniMaxH3",
+                       base_models=[
+                           {"id": "LTX23", "display_name": "LTX 2.3",
+                            "active": False, "unsupported_features": []},
+                           {"id": "MiniMaxH3", "display_name": "MiniMax H3",
+                            "active": True,
+                            "unsupported_features": ["keyframe_strength",
+                                                     "prune_vaed"]},
+                       ])
+    updates = _refresh_with(models_json)
+    for control in _KF_STRENGTH_CONTROLS:
+        update = _gated_update(updates, control)
+        assert update["visible"] is False
+        assert update["value"] == RESET_VALUES[control] == KF_STRENGTH_DEFAULT == 0.8
+
+
+def test_refresh_shows_every_keyframe_strength_slider_on_ltx():
+    updates = _refresh_with(_models_json_with("LTX23", ["keep_resident_embeddings",
+                                                        "vram16_mode"]))
+    for control in _KF_STRENGTH_CONTROLS:
+        update = _gated_update(updates, control)
+        assert update["visible"] is True
+        assert "value" not in update
 
 
 def test_refresh_failure_leaves_every_output_untouched():

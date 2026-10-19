@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-19（§1-103〜§1-109 を起票し、§1-95・§1-97 の優先順位を順序に合わせた（2026-10-19）・§1-91 と §1-82 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-233・3-234・§1-89 の実装完了＝§2-1 へ移送・§1-92 を起票。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §160）・§1-87 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-235（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §161）・§1-93（MiniMax H3 対応・α版）を起票・§1-92 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-236（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §162）・§1-94 を起票・§2-1〔元 §1-89〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-237・§3-238（テストコードの整理と不安定の一掃）を起票し §1-94 を吸収・運用規則に不安定なテストの扱いを追記・§3-238 に状態と順位の注記（2026-10-17・§1-93 に α版の完結条件を追記し、§1-95〜§1-97（快適上限の較正・ステップ数と shift の表示・末尾と中間キーフレーム）を起票（2026-10-17）・§1-96 を §1-93 の第 2 弾へ吸収（2026-10-17）・§1-93 の第 1 弾が完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165。2026-10-17）・§1-98 と §1-99（テキストエンコーダの直接読み・T2V で符号化器を読まない）を起票（2026-10-17）・§1-98 と §1-99 を §1-93 の第 2 弾へ吸収して削除・§1-93 の第 2 弾の計画を了承（2026-10-17）・§1-93 の第 2 弾の実装完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166。2026-10-18）・§1-100・§1-101 を起票・§1-93 の第 2 弾が目視合格（2026-10-18）・第 2 弾のあとの文書の現行化で §1-93・§1-95 を直し、§1-102 を起票（2026-10-18）。§1-93 の第 3 弾が実装と開発機の門（3-G1・3-G2）まで合格（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167。2026-10-18）。サブマシンの門 3-G3 に合格して α版が完結し、§1-93 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167.8。2026-10-18）・§1-101 の第 1 段（計測）が完了（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168。2026-10-18）。§1-101 の第 2 段（VRAM 16GB mode）が B-G5 のオーナーの目視まで合格して §1-101 をクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-240（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169。2026-10-18）。§1-97 の第 1 弾（末尾キーフレーム）が実装と門 1-G1〜1-G5 まで合格（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170。2026-10-19）。§1-97 を §2-2 へ移送・§4-43 を起票（2026-10-19）。・§1 の順序の行と各項目の「優先順位」の欄を削除（オーナー決定 2026-10-19）・§2-2〔元 §1-97〕を目視合格でクローズ＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-241・記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170。2026-10-19
+- 作成: 2026-07-15／最終更新: 2026-10-19
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。**現在は空（節は削除済み）。**
@@ -17,24 +17,23 @@
 
 ### 1-95. MiniMax H3（Turbo なし・int8 ConvRot）の快適上限の較正（起票：2026-10-17）
 
-- **概要**: α版（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239）は快適上限マーカーを非表示にする。本項で、MiniMax H3（Turbo なし・int8 ConvRot）について快適上限を較正し、記述子（manifest）の `comfort` に行を足して配信する。較正が済むまで記述子に `comfort` の行は持たせない。
-- **前提**: なし（α版は完結。操作パネルからの T2V と I2V、`install-MiniMaxH3.bat` と README は済み）。復号の VRAM は第 2 弾で直した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.3 の 2a-G5）。ノイズ除去の段の VRAM の溢れは VRAM 16GB mode で解消した（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-240）。判定規則と計測の作法は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §4.2（快適の判定規則）と §16（直近の較正）。GPU を使う実測は弾ごとにまとめてオーナーの了承を得る。
-- **留意**: Turbo（少ないステップ数で生成するための蒸留 LoRA）を後回しにしているため 1 本の生成が長い。生成が遅すぎて較正に支障が出るなら、LoRA 対応の優先順位を上げる。`transformer_weight_class` は MiniMax H3 では常に `null`（`services/weight_class.py`）で、快適上限の表の行は種別（`requires.weight_class`）が必須なので、このまま行を足しても操作パネルの照合でどの行にも当たらない。較正の計画で種別の扱い（判定を広げて int8 ConvRot を `"8bit"` とする／種別なしの行を許す／別の種別名を足す）を決める。
-- **留意（VRAM 16GB mode の後の前提。2026-10-19）**: ① 較正は製品の既定＝**VRAM 16GB mode on** で測る（off は参考）。② 線は速度ではなく、共有メモリへの退避（spill）そのものの量で引く（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.1 の裁定 3）。③ ただし on ではノイズ除去に割り当て器の上限が掛かるので、境界は退避ではなく「上限での OOM」か「復号の段（上限なし）の退避」として現れる。判定規則 v3（窓の共有メモリの中央値）をどう読み替えるかは、較正の計画で決める。④ `m×n ≥ 2³¹` の実測（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13 から預けた件）は、on では行の塊で分割されるので起きず、off でだけ届きうる（算術による推測: off の fc1 は S × 28,672 で、S ≥ 約 74,900 行で届く。on の最大の行列積は out_proj の S × 5,376 で、S ≥ 約 40 万行が要る）。扱いは計画で決める。記録は同 §169。
+- **概要**: MiniMax H3 では快適上限マーカーを非表示にしている。本項で、MiniMax H3（Turbo なし・int8 ConvRot）について快適上限を較正し、記述子（manifest）の `comfort` に行を足して配信する。較正が済むまで記述子に `comfort` の行は持たせない。
+- **前提**: なし。復号の VRAM は直っている（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.3 の 2a-G5）。ノイズ除去の段の VRAM の溢れは VRAM 16GB mode で解消している（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169）。判定規則と計測の作法は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §4.2（快適の判定規則）と §16（直近の較正）。GPU を使う実測は弾ごとにまとめてオーナーの了承を得る。
+- **留意**: Turbo（少ないステップ数で生成するための蒸留 LoRA。§1-104）が未実装のため 1 本の生成が長い。生成が遅すぎて較正に支障が出るなら、LoRA 対応の優先順位を上げる。`transformer_weight_class` は MiniMax H3 では常に `null`（`services/weight_class.py`）で、快適上限の表の行は種別（`requires.weight_class`）が必須なので、このまま行を足しても操作パネルの照合でどの行にも当たらない。較正の計画で種別の扱い（判定を広げて int8 ConvRot を `"8bit"` とする／種別なしの行を許す／別の種別名を足す）を決める。
+- **留意**: ① 較正は製品の既定＝**VRAM 16GB mode on** で測る（off は参考）。条件にはキーフレームの枚数も入る（条件行が K×grid 行増える。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13）。② 線は速度ではなく、共有メモリへの退避（spill）そのものの量で引く（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.1 の裁定 3）。③ ただし on ではノイズ除去に割り当て器の上限が掛かるので、境界は退避ではなく「上限での OOM」か「復号の段（上限なし）の退避」として現れる。判定規則 v3（窓の共有メモリの中央値）をどう読み替えるかは、較正の計画で決める。④ `m×n ≥ 2³¹` の実測（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13 から預けた件）は、on では行の塊で分割されるので起きず、off でだけ届きうる（算術による推測: off の fc1 は S × 28,672 で、S ≥ 約 74,900 行で届く。on の最大の行列積は out_proj の S × 5,376 で、S ≥ 約 40 万行が要る）。扱いは計画で決める。記録は同 §169。
 - **出典**: [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-10-17 の裁定）。
 
 ### 1-100. MiniMax H3 の操作パネルの表示の表の更新（Fused GGUF の行の非表示・A2V カードとバッチ A2V の非表示）（起票：2026-10-18）
 
-- **概要**: 第 2 弾の目視で見つかった 2 点。① Settings「生成の高速化」の「Fused GGUF Dequantization Kernel」の行は GGUF を使わない系統（MiniMax H3）では表示しない。この行は今は機能名の受け口が無い（他の行は `prune_vaed` などの機能名で非表示にしている）ので、機能名（例: `fused_gguf_dequant_kernel`）をアダプタが公開し、`featureScope.ts` の表と Settings の部品に受け口を足す。「Block-swap prefetch」の行は H3 でも効くので表示のまま。② Single の A2V カードと Batch A2V は、H3 では灰色でなく非表示にする（今は `chain` の行で灰色。閉じ方は部品ごとに決める既存の作法に沿う）。
-- **前提**: なし（第 2 弾は完了）。
+- **概要**: 2 点。① Settings「生成の高速化」の「Fused GGUF Dequantization Kernel」の行は GGUF を使わない系統（MiniMax H3）では表示しない。この行は今は機能名の受け口が無い（他の行は `prune_vaed` などの機能名で非表示にしている）ので、機能名（例: `fused_gguf_dequant_kernel`）をアダプタが公開し、`featureScope.ts` の表と Settings の部品に受け口を足す。「Block-swap prefetch」の行は H3 でも効くので表示のまま。② Single の A2V カードと Batch A2V は、H3 では灰色でなく非表示にする（今は `chain` の行で灰色。閉じ方は部品ごとに決める既存の作法に沿う）。
+- **前提**: なし。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9・[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6。
 
-### 1-102. MiniMax H3 の小さな疑い 4 件（第 2 弾の現行化・第 3 弾のサブマシンの門で発見）（起票：2026-10-18）
+### 1-102. MiniMax H3 の小さな疑い 4 件（起票：2026-10-18）
 
-- **概要**: ① 事前検査が視覚塔の無いテキストエンコーダのファイルを通してしまい、I2V のジョブが途中で英語の例外で止まる（`services/model_registry.py` の H3 の分岐と `h3_format.inspect_h3_te`。着手時に拒否するか警告するかを決める）。② Gradio は H3 が拒否する部品（連結・バッチ・A2V・LoRA・NAG など）を閉じず、使うと 422 になる（操作パネルと違い「隠して既定へ戻す」方式の行が無い。意図的かを着手時に決める）。③ `services/engines/h3/adapter.py` の `REQUEST_RULES` に H3 の既定のステップ数が 2 か所に書かれていて、片方を変えると配信される既定と書き戻す既定がずれる（1 か所にまとめる）。④ `metadata.json` の `environment`（torch・cuda・gpu）が H3 では空（H3 のアダプタが埋めていない。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167.8 の観察）。
+- **概要**: ① 事前検査が画像読み取り部（vision tower）の無いテキストエンコーダのファイルを通してしまい、I2V のジョブが途中で英語の例外で止まる（`services/model_registry.py` の H3 の分岐と `h3_format.inspect_h3_te`。着手時に拒否するか警告するかを決める）。② Gradio は H3 が拒否する部品（連結・バッチ・A2V・LoRA・NAG など）を閉じず、使うと 422 になる（操作パネルと違い「隠して既定へ戻す」方式の行が無い。意図的かを着手時に決める）。③ `services/engines/h3/adapter.py` の `REQUEST_RULES` に H3 の既定のステップ数が 2 か所に書かれていて、片方を変えると配信される既定と書き戻す既定がずれる（1 か所にまとめる）。④ `metadata.json` の `environment`（torch・cuda・gpu）が H3 では空（H3 のアダプタが埋めていない。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167.8 の観察）。
 - **前提**: なし。着手時に go／no-go を決める。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.10（観測事実と確かめ方）・§167.8（④）。
-
 
 ### 1-103. MiniMax H3 の A2V（音声から映像）（起票：2026-10-19）
 
@@ -93,11 +92,11 @@
 
 #### 3-53. 生成時間の小粒最適化の積み上げ（起票：2026-08-03）
 
-- **概要**: 生成時間を1〜2秒級の小粒最適化で積み上げて縮めるテーマ。**分解計測は完了している**（内訳＝テキストエンコード／stage1／アップサンプル／stage2／VAEデコード／音声はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50、**現ベースライン119.20秒は同 §52.8**が正本。§50の146〜147.60秒は`fused_gguf_dequant_kernel`が既定onになる前の値なので混同しないこと）。**分解計測もベースラインもLTX 2.3のものだけで、LTX 2.5側には同種の内訳が無い**——2.5で本項を扱うなら分解計測から始めること。
-  - **映像VAEデコードは決着済み**（PrunaVAED＝[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-66。短縮幅の正本はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §52.8）。**ただし既定OFFの選択制**なので、既定のジョブの分母は縮んでいない点に注意。
-  - **残る最大の候補は動画エンコード（x264）である。** 「デコードが速くなってもエンコード側が律速になる」という懸念は実測では顕在化しなかった（同§3-66のG6）ため、**エンコード側には手つかずの余地が残っている**という読みになる。
-    - **着手の入口（2026-09-03調査）**: エンコードの実体は固定ホイール`ltx_pipelines/utils/media_io.py`の`encode_video`（呼び出し口は`engine/pipeline/common.py`の`encode_video_output`）。PyAV＋libx264で**preset/crf未指定＝x264既定のまま**・デコードと同一スレッドで交互実行＝**並行化なし**。改修するならラッパーの中身を自前実装へ差し替える確立パターン。**NVENC（h264_nvenc）はGPUの専用エンコーダASICで動くためCUDA演算と競合せず、CPUエンコード比で数倍高速になることも珍しくない。**
-- **int8 ConvRot の回転の整数化**（`torch._int_mm`・20〜40 行・1080p 単発で 3〜4.6 秒）——候補の詳細は[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) (8)。元は §1-33（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-214）。
+- **概要**: 生成時間を1〜2秒級の小粒最適化で積み上げて縮めるテーマ。工程ごとの内訳（テキストエンコード／stage1／アップサンプル／stage2／VAEデコード／音声）はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50、**現ベースライン（119.20秒）は同 §52.8 が正本**（§50 の総時間はベースラインに使わない）。**分解計測もベースラインもLTX 2.3のものだけで、LTX 2.5側には同種の内訳が無い**——2.5で本項を扱うなら分解計測から始めること。
+  - 映像VAEデコードの短縮（PrunaVAED。短縮幅は同 §52.8）は**既定OFFの選択制**なので、既定のジョブの時間は縮んでいない。
+  - **最大の候補は動画エンコード（x264）である。**
+    - **着手の入口**: エンコードの実体は固定ホイール`ltx_pipelines/utils/media_io.py`の`encode_video`（呼び出し口は`engine/pipeline/common.py`の`encode_video_output`）。PyAV＋libx264で**preset/crf未指定＝x264既定のまま**・デコードと同一スレッドで交互実行＝**並行化なし**。改修するならラッパーの中身を自前実装へ差し替える確立パターン。**NVENC（h264_nvenc）はGPUの専用エンコーダASICで動くためCUDA演算と競合せず、CPUエンコード比で数倍高速になることも珍しくない。**
+- **int8 ConvRot の回転の整数化**（`torch._int_mm`・20〜40 行・1080p 単発で 3〜4.6 秒）——候補の詳細は[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) (8)。
 - **候補一覧の正本**: バックエンド[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md)。
 - **状態**: 将来の改修項目（着手はオーナー判断待ち）。
 
@@ -123,8 +122,8 @@
 
 #### 3-238. 操作パネルのテストコードの整理と不安定なテストの一掃（起票：2026-10-16）
 
-- **概要**: 操作パネル（`webui`）のテストコードは製品コードより多く、同じ振る舞いを複数の層で重ねて確かめている箇所が多い。全件を繰り返し走らせるたびに、時間の隙間やモックの持ち越しに頼るテストが 1〜2 件ずつ新たに落ちる。**オーナー裁定（2026-10-16）: 不安定なテストは製品の不具合ではないので §1 に個別には起票せず本項に集める。不要なテストコードを減らす作業を、不安定の修正より優先する。**（この優先は本項の中での順序であり、§1 や他の §3 の項目との順位は変えない。） 数と履歴は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163。
-- **吸収した項目**: 旧 §1-94 の 2 件（`webui/src/App.prefill.test.tsx` の "videoAudioToVideo … (#3)" と `webui/src/modes/chained/SourceInputPanel.test.tsx` の "dropping a video switches to v2v mode …"。全件実行 20 回でそれぞれ 1 回落ちた。同 §162.4）。今後に見つかる同型の不安定も本項に追記する。
+- **概要**: 操作パネル（`webui`）のテストコードは製品コードより多く、同じ振る舞いを複数の層で重ねて確かめている箇所が多い。全件を繰り返し走らせるたびに、時間の隙間やモックの持ち越しに頼るテストが 1〜2 件ずつ新たに落ちる。不安定なテストは本項に集める（規則は末尾「本台帳の位置づけ（運用規則）」）。**不要なテストコードを減らす作業を、不安定の修正より優先する。**（この優先は本項の中での順序であり、§1 や他の §3 の項目との順位は変えない。） 数と履歴は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163。
+- **既知の不安定なテスト**: `webui/src/App.prefill.test.tsx` の "videoAudioToVideo … (#3)" と `webui/src/modes/chained/SourceInputPanel.test.tsx` の "dropping a video switches to v2v mode …"（同 §162.4）。
 - **進め方の候補**: 棚卸し（区域・層ごとの件数と所要・確かめている内容・不安定の履歴・重複）→ 削除の基準の確定（オーナー裁定）→ 層ごとに削減 → 全件の繰り返しで確認。基準の候補は同 §163.4。件数を目安に削らず、基準に照らして 1 件ずつ判断する（敵対的レビューで足したテストが退行を捕まえた例があるため）。
 - **状態**: 未着手（最初の一手は棚卸し）。
 - **範囲**: テストとモックのみ（製品コードは不変）。
@@ -134,7 +133,7 @@
 
 #### 3-1. バッチA2Vのα版で意図的に省略した機能
 
-バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能。2026-09-15からi2vモードも同じパネルに乗る。正本は`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md`）にα版として実装していない機能のうち、現在も残っているのは次の3点。出典: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
+バッチA2V（音声フォルダを丸ごと指定し、就寝中などまとまった時間に複数のA2Vジョブを順に流す機能。i2vモードも同じパネルに乗る。正本は`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md`）にα版として実装していない機能のうち、現在も残っているのは次の3点。出典: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §9.8、[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)「既知の意図的α省略」、`webui/src/modes/batch/`（`buildA2vChainPayload.ts`・`useBatchForm.ts`の実装ノート）。
 
 - **バッチでの参照動画**: IC-LoRA用の参照動画系フィールド（Gradio原典`batch.py`の`use_adapter`／`ref_video_path`／`control_adherence`／`reference_strength`）に相当する設定がバッチ経路に無い（`webui/src/modes/batch/batchRunner.ts`の実装ノートに「No reference-video (control IC-LoRA) adapter support」と明記）。
 - **開始前の一括妥当性検証（preflight）**: 画像不良（ファイル破損など）の事前検査が無く、バックエンドで失敗してその行だけが Failed になる（Shared キーフレームの有無と空のプロンプトは開始条件で止まる。正本はフロントエンド `BATCH_A2V_I2V_MODE.md` §2.8）。
@@ -148,7 +147,7 @@
 
 #### 3-30. LAN公開するとき → APIキーバッジの再検証
 
-**サーバーのバインドを`127.0.0.1`（同一PCからのみ到達）から変更してLANへ公開するとき** → APIキーの検証まわりを作り直すか判断する（詳しくは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-19）。α版ではローカル前提ツールとしてスコープ外クローズしており、バッジの表示機能自体は実装済み・無害のため撤去していない。
+**サーバーのバインドを`127.0.0.1`（同一PCからのみ到達）から変更してLANへ公開するとき** → APIキーの検証まわりを作り直すか判断する（詳しくは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-19）。
 
 #### 3-32. 422の別経路ができたとき → 予約詰まりの再検証
 
@@ -160,7 +159,7 @@
 
 #### 3-34. 範囲切り出しを配線すると判断したとき → 先に判断材料3点を読む
 
-**タイムラインの範囲選択切り抜き（`cutoutRange`）を製品UIへ配線すると判断したとき** → 着手前に判断材料3点を必ず読む（詳しくは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-48）。3点とは、①1フレームずつシーン合成でレンダリングするため処理が重い（実装はフレームあたり10秒のタイムアウトを見込む）②焼き込まれるのは対象オブジェクト単独ではなくシーン合成全体の絵③現状は範囲選択が無言で無視され、V2Vには常に元ファイル全体が送られる、である。実装済みコード（`CutoutRangeWorker`・`cutoutRangeAndUpload`）は死にコードとして残置している。**補足**: 判断材料③が指すギャップ（V2Vに常に元ファイル全体が送られる）は、V2Vリボン範囲トリム（元動画ファイルを時間で切る**別方式**。シーン合成レンダリングはしない。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-59）が有効化済みなので既に塞がっている。`cutoutRange`（合成結果を焼く方式）の配線判断は未着手のままで、本項の再訪トリガーはこれでは成立しない。
+**タイムラインの範囲選択切り抜き（`cutoutRange`）を製品UIへ配線すると判断したとき** → 着手前に判断材料3点を必ず読む（詳しくは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-48）。3点とは、①1フレームずつシーン合成でレンダリングするため処理が重い（実装はフレームあたり10秒のタイムアウトを見込む）②焼き込まれるのは対象オブジェクト単独ではなくシーン合成全体の絵③現状は範囲選択が無言で無視される（V2Vへ送る範囲は、元動画ファイルを時間で切る別方式のV2Vリボン範囲トリム〔[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-59〕で決まる）、である。実装済みコード（`CutoutRangeWorker`・`cutoutRangeAndUpload`）は死にコードとして残置している。
 
 #### 3-38. 該当GPUが手に入ったとき → Turing・Hopper・Blackwellの実測
 
@@ -230,8 +229,8 @@
 
 #### 3-96. End source付き連結クリップの改善研究（起票：2026-08-19）
 
-- **概要**: End source（素材（末尾））の複数クリップ時の継ぎ目品質を、より使いやすい形で解決する方法を実用の中で探る。旧方式（正順・内部区画）と新方式（逆順Chained）は継ぎ目の弱点がちょうど裏返しで、A/B目視でも構造的な差だと確認できている（理由は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-91と同じ非対称）。
-- **判断材料**: 切替UIを作るなら、旧方式は現在APIから到達不能の死蔵状態（`chain_math.py`の`end_source_mode_override`はテスト・切り戻し専用のキーワード専用引数）なので、**APIへ露出する設計が新たに要る**。「本体は正順Chained→最終クリップだけEnd sourceで補間」という実用手順（手作業のままで、通しの実機検証はしていない）も本項の材料である。**なお2026-09-07のブリッジモード開通で、素材（冒頭）を併用する構図はこの手順と実質同じ形が1ジョブで走るようになった**（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-90）ので、本項に残るのは**素材（末尾）だけを使う場合**の改善である。
+- **概要**: End source（素材（末尾））の複数クリップ時の継ぎ目品質を、より使いやすい形で解決する方法を実用の中で探る。旧方式（正順・内部区画）と新方式（逆順Chained）は継ぎ目の弱点がちょうど裏返しの構造的な差である（理由は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-91と同じ非対称）。
+- **判断材料**: 切替UIを作るなら、旧方式は現在APIから到達不能の死蔵状態（`chain_math.py`の`end_source_mode_override`はテスト・切り戻し専用のキーワード専用引数）なので、**APIへ露出する設計が新たに要る**。「本体は正順Chained→最終クリップだけEnd sourceで補間」という実用手順（手作業のままで、通しの実機検証はしていない）も本項の材料である。素材（冒頭）を併用する構図はブリッジモード（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-90）が1ジョブで扱うので、本項の対象は**素材（末尾）だけを使う場合**の改善である。
 - **この実用手順の弱点**: 本体を正順で生成する以上、**素材（末尾）の雰囲気が届くのは最終クリップだけ**で、それより前のクリップは素材と無関係に生成される。素材（末尾）だけを使いたい場面では、全クリップが素材の世界で生成されることを保証する現行の遡り生成のほうが勝る（[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11）。
 - **状態**: 将来の研究課題（着手時期未定）。
 - **出典**: バックエンド[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §11（A/Bの考察と実用手順の正本）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §64.2（死蔵引数）・§64.7のR2-7追記（A/Bの記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-84（本体テーマの完結記録）・同§3-91（非対称の考察の完結記録）。
@@ -248,7 +247,7 @@
 
 #### 3-141. RetakeのIC-LoRA（参照動画つき制御）対応（起票：2026-09-02）
 
-- **概要**: 撮り直し（Retake）でスタイルLoRA（画風・キャラクター系）は使えるようになった（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-62-02）。**残るのは、参照動画を要する制御系のIC-LoRA（canny／pose／depth等）を撮り直しでも使えるようにすることである。** スタイルLoRA側は「フロントエンドが`loras`を送っていなかっただけ」で済んだが、こちらはそうではない——**現在は3つの層で明示的に禁止されている。**
+- **概要**: 撮り直し（Retake）では、スタイルLoRA（画風・キャラクター系）は使えるが、参照動画を要する制御系のIC-LoRA（canny／pose／depth等）は使えない。**残るのはこの制御系IC-LoRAの対応である。** 制御系は**3つの層で明示的に禁止されている。**
 - **禁止している3箇所（着手時に外す対象。すべて現物を確認済み）**:
   1. **アプリ層（422）**: `api/models.py:1251-1256`（行番号がずれていたら`retake and reference_video_id are mutually exclusive`で引き直すこと）。`GenerateChainRequest`のバリデータが「`retake`と`reference_video_id`は排他（制御アダプタの参照条件付けが、撮り直しの凍結帯と競合する）」として弾く。
   2. **LTX 2.3のエンジン**: `engine/pipeline/chain_pipeline.py:1099-1104`。`assert ic_reference is None or (source is None and retake is None and end_source is None)`。**分岐ではなくassertにしてある**のは、排他が「場合分けして扱うもの」ではなく不変条件だという設計判断からである。
@@ -258,7 +257,7 @@
   - **凍結位置のずれは、この経路では既に対策済みである。** 尾側の凍結範囲は**絶対添字**（`chain_math.retake_tail_token_range`）で取っており、`m[:, -k*hw:]`のような負の添字は使っていない（`chain_pipeline.py:455-457`のdocstringが「条件付けトークンを後ろへ足すと負の添字は静かに凍結不足になる」と理由まで書いている）。**つまり条件付けトークンが増えても、凍結する場所は動かない。**
 - **LTX 2.5は別実装になる**: `engine25/chain25.py`はセグメントごとの参照条件を`ref_conds`という別のリストで持ち（:2320で全セグメント空リストに初期化）、`conds_v = band_v + (stage1_conds if i == 0 else []) + ref_conds[i]`（:2770）で足し合わせる。**載せる場所は構造としては既にあるが、直前のコメント（:2765-2769）が「撮り直しではこれは`band_v`だけになる。それは偶然ではなく、関数冒頭の2つの排他が保証している」と明記している。** 2.3側とは書き方が違うので、**改修は2エンジンぶんの別作業になる**（共有できるのは`chain_math`の窓計算だけである）。
 - **未検証の懸念**: **凍結帯の境界で、制御の効きが不連続になる可能性がある。** 撮り直しの窓は前後ののりしろ（既定で頭25・尾24画素フレーム）が元映像のまま凍結され、その内側だけが作り直される。参照動画による制御は窓全体へ一様に掛かるので、**凍結された帯では制御が効かず、自由部分では効く**という段差が継ぎ目に出ないかは、実機で見るまで分からない。**着手時はここを最初に確かめること。**
-- **状態**: 未着手（将来の研究課題）。**急ぎではない**——スタイルLoRAの解禁で、撮り直しにLoRAが使えない状態そのものは解消している。
+- **状態**: 未着手（将来の研究課題）。**急ぎではない**（撮り直しでもスタイルLoRAは使える）。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-62-02（スタイルLoRA側の解禁記録と、そこで置いた設計判断）、`api/models.py`・`engine/pipeline/chain_pipeline.py`・`engine25/chain25.py`・`chain_math.py`（上記の各行）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57（長尺IC-LoRAの窓機構）・§55.3（両側凍結の検証）。
 
 #### 3-217. Settings の快適上限の表の列見出し「全on」は宣言である（起票：2026-10-06）
@@ -283,14 +282,14 @@
 
 #### 3-223. Alpha Gen の快適上限の較正（Q6_K・8bit を含む）（起票：2026-10-07）
 
-- **概要**: 操作パネルの Alpha Gen で軽量モード OFF のときに引く快適上限の線の値 `alpha_gen_budget` は暫定値で、種別ごとの単発の線の半分を置いている（値の正本は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5）。サーバーはこの値で縮小しなくなった（縮小は軽量モード ON のときだけ。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153.7）ので、この値の役目は「ここを超えると遅くなる」という目安の線だけになった。ゲート 0 で測ったのは 4bit（Q4_K_M）だけなので、Q6_K・8bit を含めて較正する。既定の操作（FHD・81 コマ・8bit）でも線を超える（[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §24）ため、8bit の線は特に測る価値が高い。
+- **概要**: 操作パネルの Alpha Gen で軽量モード OFF のときに引く快適上限の線の値 `alpha_gen_budget` は暫定値で、種別ごとの単発の線の半分を置いている（値の正本は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5）。この値の役目は「ここを超えると遅くなる」という目安の線だけである（サーバーが縮小するのは軽量モード ON のときだけ。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §153.7）。ゲート 0 で測ったのは 4bit（Q4_K_M）だけなので、Q6_K・8bit を含めて較正する。既定の操作（FHD・81 コマ・8bit）でも線を超える（[`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §24）ため、8bit の線は特に測る価値が高い。
 - **判断材料**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §151（負荷は生成側＋参照側の合計トークンで効くという見立て）、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.5。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §6・§16。
 - **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-229. MCP に Alpha Gen の出口（透過つき動画・塗りつぶし動画の作成と取得）を足す（起票：2026-10-15）
 
-- **概要**: Alpha Gen の出口（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-231）は操作パネルにだけあり、MCP には無い。AI エージェントからも透過つき動画（ProRes 4444 の MOV）と塗りつぶし動画を作って取り出せるように、`save_job_video` の `which` に `rgba`／`chroma`（＋色）を足し、作成を頼むツール（`export_alpha_rgba`・`export_alpha_chroma`）を足す。ツールを足すときは `tests/test_mcp_registration.py` の `EXPECTED_TOOLS`・README の表・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §8 をそろえる。
+- **概要**: Alpha Gen の出口（透過つき動画・塗りつぶし動画の作成と取得）は操作パネルにだけあり、MCP には無い。AI エージェントからも透過つき動画（ProRes 4444 の MOV）と塗りつぶし動画を作って取り出せるように、`save_job_video` の `which` に `rgba`／`chroma`（＋色）を足し、作成を頼むツール（`export_alpha_rgba`・`export_alpha_chroma`）を足す。ツールを足すときは `tests/test_mcp_registration.py` の `EXPECTED_TOOLS`・README の表・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) §8 をそろえる。
 - **出典**: [`ALPHAGEN_DESIGN.md`](ALPHAGEN_DESIGN.md) §10、第 3 弾の計画の敵対的レビュー（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §157）。
 - **状態**: 将来の改修項目（着手はオーナー判断）。
 
@@ -304,8 +303,6 @@
 
 ## 4. スコープ外（さらに先の将来）
 
-**注記**: 本節の§4-xxは、旧文書に現れる旧§4-xx（将来の研究課題）とは無関係な採番である。読み替えは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
-
 §3（将来の研究課題）よりもさらに優先度が低く、当面は着手しないと判断したものの置き場。**捨てずに残すのは、前提が変わったときに読み返すため**である（たとえば非蒸留モデルが動くマシンを入手した、上流のSDKに機能が増えた、など）。各項目には「何が塞いでいるか」を1〜2行で書く。
 
 ### 4-1. 非蒸留（dev）モデル向けの生成つまみのGUI露出
@@ -317,15 +314,13 @@
 - **例外的な解禁**: **ネガティブプロンプトのみ、NAG（Normalized Attention Guidance。CFGを使わずにネガティブプロンプトを効かせる手法）とVSF（Value Sign Flip）経由で解禁済みで、これはLTX 2.3・LTX 2.5の両エンジンに及ぶ**（`nag_*`に加えて`neg_method`／`vsf_scale`もCFGを迂回してworkerへ配線されている。`services/engines/ltx/adapter.py`・同`ltx25/adapter.py`）。**未配線のまま残っているのは`guidance_scale`と`pipeline`の2つで、`num_steps`は配線済み・API層の強制だけが塞いでいる**（上記のとおり）。
 - **相互参照**: 上記3点の復活条件は**§4-28**（`two_stage_hq`）と同じで、非蒸留モデルを動かせるハイスペックマシンを用意したとき。
 - **出典**: [`Nz-Videomni/Docs/A2V_DESIGN.md`](A2V_DESIGN.md) §2.5、[`API_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md) §7（NAG）。
-- **背景知識（着手時の前提。独自 GGUF を選んだ経緯から）**:
-  - **なぜ transformer が GGUF なのか**: 当初は公式 `ltx_pipelines` で bf16 の safetensors をオフロードして動かす計画だった（[`note.md`](note.md)）。実機（VRAM 16GB・Windows）で公式ローダが safetensors の一括読み込み中に native crash し（VRAM 容量の問題ではなく、オフロードでも同じ）、低 VRAM フォーク由来の「GGUF transformer（圧縮のまま VRAM に置き、層ごとに逆量子化）＋ block swap」へ転換した。Q4_K_M はコミュニティの 16GB レシピと一致する実績優先の選択で、Q6 は実績が無いため後回しにした。正本: `engine/VENDOR_NOTICE.md`・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §1〜§2・§5・[`DESIGN_COMPARISON_and_direction.md`](DESIGN_COMPARISON_and_direction.md)・[`LTX23_REFERENCE.md`](LTX23_REFERENCE.md) §5〜§6・README の GGUF の段落。
-  - **クラッシュの真因は後日特定済み**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §2.9）: ローダが CUDA 初期化後に mmap で開いた safetensors へ `.to(non_blocking=True, copy=False)` を掛けていた実装ミスで、safetensors 形式そのものの問題ではない。ただし bf16 は 16GB に入らず、公式のオフロードはコミット量を悪化させ GGUF とも非互換なため退けた（同 §9.2）。
+- **背景知識（着手時の前提）**: transformer を GGUF にしている理由（bf16 は 16GB に入らず、公式のオフロードはコミット量を悪化させ GGUF とも非互換）は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §1〜§2.9・§9.2 と [`note.md`](note.md) が正本。
   - **Windows のコミット（仮想メモリ）制約**（同 §9.1）: 巨大な safetensors をコピーオンライトの mmap で開くと、読む量に関係なくファイルサイズ分のコミットが予約され、巨大なページファイルなしでは落ちる。OS 側にこの予約を止める設定は無い。現行設計はモノリスを開かず、小さな部品ファイルと GGUF（共有読み取り専用の memmap）だけを読むので当たらない。大きな safetensors を直接読む必要が出たら、safetensors 0.8 以降の `backend="pread"`（`.venv-engine-ltx25` の 0.8.0 にはあり、`.venv-engine` の 0.7.0 には無い）か「テンソルを1本ずつ読んで即 GPU へ送る」で収める。
   - **dev モデルの扱い**: dev も同じ 22B 構造なので `Nz-GGUF-Converter-LTX23` で GGUF にでき、読み込み自体は現行の 16GB 機で塞がっていない（前例＝非蒸留の 10Eros を Q4_K_M に変換し読み込みまで確認、Converter の VERIFICATION §6。蒸留 LoRA は `StyleLoRA` から実行時に当てられる。Q6_K への変換も同ツールで可能）。本項の本当のコストは時間で、CFG はステップごとに順伝播が2回になり、ステップ数も 8 ではなく数十になる。2回の順伝播をバッチにすると活性化が倍になり快適上限を割りやすく、逐次にすると時間が伸びる、という設計上の分かれ目がある。「CFG あり・多ステップ」の推論経路は未検証（10Eros は蒸留 LoRA 込みの 8 ステップで確認しただけ）。着手時は、dev チェックポイントのテンソル名・形状が参照 GGUF の型マップと過不足なく一致することの照合から始める。§4-28（`two_stage_hq`＝非量子化の第2段）は bf16 を VRAM に載せる前提なので、本項とは別に塞がったまま。
 
 ### 4-2. attention tilingの再実装
 
-- **概要**: attention（注意機構）の計算を分割してピークVRAMを抑える仕組み。SDPAへのグローバルパッチとして一度実装されたが、**その実装は除去済み**（エンジンの移設時。残っていた引数の除去は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §16.1）。再投入するなら実装からやり直しになる。設定キー `attention_tile_size` も、どこからも読まれていなかったため `config.py`・`config.yaml.example` から削除済み（2026-10-02）。
+- **概要**: attention（注意機構）の計算を分割してピークVRAMを抑える仕組み。現行のコードには実装も設定キーも無く、**再投入するなら実装からやり直し**になる。
 - **何が塞いでいるか**: 現行の16GB運用が二段パイプライン＋block-swapで足りており、作り直す動機と実測がまだ無い。高解像度側へ踏み込むときに、実装を作り直したうえで推奨値（256／512／1024／2048）の効果と副作用を測るところから。
 - **出典**: [`Nz-Videomni/Docs/SCALEUP_16GB_RESEARCH.md`](SCALEUP_16GB_RESEARCH.md) §2、`Nz-Videomni/config.yaml`。
 
@@ -366,7 +361,7 @@
 
 **(B) Motion-Track（動きの軌跡追従）＝ 未対応**（枝番(A)は欠番）
 
-- 未対応のIC-LoRA制御アダプタとして残っているのは**Motion-Track だけ**である（Depth・Deblurは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-63、In-Outpaintingは同§3-70で対応済み）。
+- 未対応のIC-LoRA制御アダプタは**Motion-Track だけ**である。
 - **何が塞いでいるか**: **需要が確認できていない**こと。技術的に塞がれているわけではない——「制御信号を作る前処理器を新設して登録する」経路はDepthで実証済みなので、必要になれば同じ型で足せる。なお旧19b世代のアダプタは、適用してもエラーは出ないが**視覚効果がゼロ**と報告されており流用できない。
 
 **(C) `conditioning_attention_mask`のAPI露出 ＝ 未着手**
@@ -392,14 +387,14 @@
 
 - **概要**: Chain画面で制御系LoRAのタグを手打ちするとGenerateは正しくブロックされるが、そこへ至るまでにソース動画のアップロードは走り終えており**無駄なアップロードになる**。
 - **何が塞いでいるか**: 「動かない」わけではなく、失敗の伝え方が遅いという性質の問題のため優先度が低い。
-- **現行ゲートでの再確認が要る**: 起票時の`hasControlLoraTag`（チェーンで制御系LoRAを一律に禁じるハードブロック）は**撤去済み**で、いまは`controlLoraNeedsReference`（制御系LoRAに参照動画の同伴を求める交差検査）に置き換わっている。**この形でもなお無駄なアップロードが起きるのかを、まず実地で確かめること。**
+- **現行ゲートでの再確認が要る**: いまのゲートは`controlLoraNeedsReference`（制御系LoRAに参照動画の同伴を求める交差検査）である。**無駄なアップロードが起きるのかを、まず実地で確かめること。**
 - **出典**: `webui/src/modes/chained/useChainForm.ts`（`controlLoraNeedsReference`）・`webui/src/lora/controlLoras.ts`、`Nz-Videomni`の`api/generate_chain.py`。
 
 ### 4-13. 時間アップスケーラ（temporal upscaler x2）
 
 - **概要**: LTX 2.3には空間アップスケーラ（x2）と並んで**時間方向のアップスケーラ（x2）**が公式に存在するが、本プロジェクトは空間側だけを導入しており、時間側は取得も配線もしていない。フレーム数を後段で2倍に増やす（＝滑らかにする）用途にあたる。
 - **何が塞いでいるか**: 需要が未確認で、モデルの追加取得（ダウンロード容量の増加）とVRAM影響の実測が要る。
-- **出典**: [`Nz-Videomni/Docs/LTX23_REFERENCE.md`](LTX23_REFERENCE.md)（モデル変種一覧）、`Nz-Videomni`の`services/base_models.py`とベースモデル記述子の`assets`ブロック（空間アップサンプラはここにあり、時間側は無い。旧`config.yaml`の`spatial_upsampler_path`は`config.py`の`DEPRECATED_MODEL_KEYS`へ移行済み）。
+- **出典**: [`Nz-Videomni/Docs/LTX23_REFERENCE.md`](LTX23_REFERENCE.md)（モデル変種一覧）、`Nz-Videomni`の`services/base_models.py`とベースモデル記述子の`assets`ブロック（空間アップサンプラはここにあり、時間側は無い）。
 
 ### 4-16. Join（V2V結合）の既知の縮退3ケース
 
@@ -436,12 +431,12 @@
 
 - **再訪条件**: SageAttention（生成の高速化＝Acceleration機能。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-58）が、フィールド（オーナー以外の実際の利用環境）で十分な期間・十分な件数にわたって問題なく動いた実績が溜まったとき。あるいは、利用者から「毎回わざわざ切り替えるのが面倒」という声が出たとき。
 - **概要**: 現在、attention（注意機構）の実装の既定は`sdpa`（PyTorch標準）で、`sage`は利用者が設定画面で選んだときだけ有効になる。これを`sage`既定へ切り替えるかどうかを再検討する。
-- **本項の対象はLTX 2.3・LTX 2.5の両方である**: **LTX 2.5でもSageAttentionは開通しているが、既定は2.3とまったく同じ理由（アップデートで利用者の生成結果を黙って変えない）で`sdpa`のままである。したがって既定を反転するかどうかの議論は、2.3と2.5をまとめて本項で扱う**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77）。**判断材料が1つ増えた**——LTX 2.5では効き目が形状に強く依存し、512×320級では効かないかむしろ遅くなる実測があるので、「既定onにすれば誰でも速くなる」とは言えない。
+- **本項の対象はLTX 2.3・LTX 2.5の両方である**: **LTX 2.5でもSageAttentionは開通しているが、既定は2.3とまったく同じ理由（アップデートで利用者の生成結果を黙って変えない）で`sdpa`のままである。したがって既定を反転するかどうかの議論は、2.3と2.5をまとめて本項で扱う**（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §77）。**判断材料**: LTX 2.5では効き目が形状に強く依存し、512×320級では効かないかむしろ遅くなる実測があるので、「既定onにすれば誰でも速くなる」とは言えない。
 - **いま`sdpa`既定にしている理由（オーナー確定）**:
   1. **アップデートで生成結果を黙って変えない**。`sage`は数値精度が異なるため、同じシードを指定しても生成結果の細部が変わる（構図は同じで、質感やノイズの出方が変わる。実測でPSNR 27〜28dB程度の差）。既定を差し替えると、利用者が「昨日と同じ設定なのに絵が違う」という説明のつかない体験をすることになる。
   2. **`sdpa`は常に正しい参照実装**であり、比較の基準として動かさない価値がある。
   3. **切替のコストが小さい**。UIの1クリックで済み、選択は保存される。
-- **着手の前提は満たされた**: 先に片づけるべきだった「`vae_mode`にエンジン軸が無い」件は解消済みで（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-139）、**保存済み設定がエンジンを跨いだときの振る舞いが決まったので、既定を反転しても説明のつかない422を踏ませることはない。** 残るのは上記の再訪条件（フィールドでの実績が溜まること）だけである。
+- **着手の前提**: 保存済み設定がエンジンを跨いだときの振る舞いは決まっている（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-139）ので、既定を反転しても説明のつかない422は出ない。**残るのは上記の再訪条件だけである。**
 - **切り替えるとしたら何を決めるか**: 既存プロジェクトの再現性をどう扱うか（既定変更の告知方法、あるいは「以前と同じ結果が欲しいなら`sdpa`」の案内の出し方）。`sageattention`未導入環境での降格挙動はすでに実装済みなので、そちらは追加作業にならない。
 - **出典**: バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §43.1・§43.9、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-58、[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §55。
 
@@ -464,7 +459,7 @@
 
 - **概要**: AviUtl2には、他者が作成したプラグインとして、物体認識や追尾マスク（動く被写体を自動で追いかけて切り抜くマスク）を作成できるものが既に存在する。これらを使ってAviUtl2側でマスク動画（白黒の適用範囲指定動画）を作り、それをNz-Videomniのバックエンドへ渡す汎用の受け口を作るというアイディア。
 - **本項はInpaintingのマスク契約の応用先である**: **受け渡しの形（ピクセル精度1本・1chグレースケール動画・uploadsレール・受信側の二値化）は[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6が正本**で、本項が扱うのは**その入口をAviUtl2側の既存プラグインへ繋ぐこと**である。ほかの応用先は§4-8(C)（`conditioning_attention_mask`の露出）である。
-- **入力源は他者のプラグインだけではない（2026-09-11以降）**: 本プロジェクト自身の物体追尾（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-54-02）が動かした部分フィルタも、契約から見れば同じ「AviUtl2側のオブジェクト」である（[`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) §8・§13）。したがって「他者プラグインの調査」は本項の唯一の入口ではなく、自前のオブジェクトから先に着手することもできる。
+- **入力源は他者のプラグインだけではない**: 本プロジェクト自身の物体追尾（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-54-02）が動かした部分フィルタも、契約から見れば同じ「AviUtl2側のオブジェクト」である（[`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) §8・§13）。したがって「他者プラグインの調査」は本項の唯一の入口ではなく、自前のオブジェクトから先に着手することもできる。
 - **何が塞いでいるか**: **利用可能な物体認識・追尾マスクプラグインの調査が未着手**で、それらが吐き出すマスク動画の形式が[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6の契約に合うかどうかも分かっていない。着手はこの調査から始める。
 - **出典**: オーナー発案。
 
@@ -488,7 +483,7 @@
 - **何が塞いでいるか**: 何も塞いでいない。必要が生じた時点（VRAM容量の異なる機体で25,000線を調整したくなった時点）で着手すればよい。25,000は実機ゲートで実測の急変点と一致することが確認済みの暫定値である（バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §57のG4）。
 - **着手時の最初の分岐**: 「`LimitsConfig`へ独立の鍵を1つ足す」か「`comfort_budgets`のテーブル（正本はマニフェスト`scripts/manifests/*.json`の`comfort`）へ行として持たせる」かを選ぶこと。後者を選ぶなら、この予算が**参照動画つきstage-1という別軸**である点を表側でどう表すかの設計が要る。
 - **着手時に必ず同時に決めること**: 参照エンコードのタイル化のしきい値`REFERENCE_ENCODE_TILE_TOKEN_BUDGET`（5,000＝25,000÷5）は、**この線に自動追随しない**（コードのコメントにその旨が明記してある）。25,000を動かすなら、しきい値をどうするかも同じ改修の中で決めること——**放置すると、画面の警告が出る位置と実際にタイル化へ切り替わる位置がずれる。** 正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §101.2。
-- **関連**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-133（参照動画つき単発生成の実測。**単発側の線は動かないという結論で決着済み**であり、この25,000とは別軸のままである）・同書§3-76（参照動画VAEエンコードのタイル化。**しきい値をこの25,000から機械的に割り出した固定値で導入しており、線そのものは動かしていない**——再較正は本書§4-39の担当である）。
+- **関連**: 参照動画つき単発生成の線は、この25,000とは別軸である。参照動画VAEエンコードのタイル化のしきい値の再較正は本書§4-39の担当。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-85（Chained快適上限マーカーの実装記録）、`Nz-Videomni/chain_math.py`、`webui/src/shell/tokenBudget.ts`、[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §6。
 
 ### 4-31. 失敗ジョブの`metadata.json`が必要になったとき → 失敗経路でも書き出す（起票：2026-08-03）
@@ -528,7 +523,7 @@
 - **概要**: LTX 2.5の復号は、**1920×1088×241フレームで予約VRAMがカードの総量を超え、WDDMの共有システムメモリへこぼれる**（実測値の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §79.2。**本書には写さない**）。**落ちはしないが、這うように遅くなる。**
 - **何が塞いでいるか**: 何も塞いでいない。**画角拡張が持ち込んだ問題ではなく、出荷済みの復号経路そのものの性質**であり、画角拡張を使わない普通の生成でも同じ形状なら同じことが起きる。**この形状に到達するのは高解像度×長尺を狙った利用者だけで、そのとき起きるのは失敗ではなく減速である**——直す対象は画角拡張ではなく復号側であり、いま急いで着手する理由が無い、というのが優先度を下げて本節へ置いた理由である。
 - **着手時の入口**: **符号化の側では、同じ形状の膨張が`set_conv3d_memory_format`（重みの並びを変えるだけの処置）で大きく落ちている**（往復の一致度はほぼ不変）。原因は bf16 の3次元畳み込みが im2col 経路へ落ちることなので、**復号側にも同種の余地があるかどうかをまず測ること。** 測る前に実装へ進まないこと——符号化で効いたから復号でも効く、とは限らない。
-- **関連**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-134（画角拡張のトークン予算）——**その較正で退避へ反転した点は、拡張なしの対照が平坦だったことから画角拡張に固有と確定しており、本項には帰属しない**（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.1）。ほかに§3-59（画角拡張のチェーン対応）。
+- **関連**: 画角拡張の較正で見つかった退避への反転は画角拡張に固有で、本項には帰属しない（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §9.1）。ほかに§3-59（画角拡張のチェーン対応）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §79.2、`outputs/ltx25-outpaint-prep/RESULTS.md`（複写: [`Outputs-archive/ltx25-outpaint-prep/RESULTS.md`](Outputs-archive/ltx25-outpaint-prep/RESULTS.md)）の G0-d、オーナー裁定（2026-09-03）。
 
 ### 4-35. FFNチャンキング（残り唯一の未実装VRAMレバー）
@@ -539,19 +534,19 @@
 - **概要**: FFNが隠れ次元を4倍に広げるときの巨大な中間テンソルを、シーケンス方向に分割して計算する省メモリ手法。VRAM削減レバーの棚卸しでは、二段パイプライン・attentionタイル・VAEの空間/時間タイル・block-swapがいずれも実装済みなのに対し、FFNチャンキングだけが未実装である。
 - **参考値**: コミュニティ実装（LTX-2専用の`ffn_chunks`）は600フレームで8・800フレームで12〜16・900フレーム以上で16〜24を推奨し、最大で約8分の1までピークを削減すると謳う。ただし実績は24GB環境のみで、GGUF・block-swapとの併用可否は記載が無い。
 - **実装形は決まっている（オーナー決定）**: **採るのはチャンク化である。** 中間テンソルはタッチ回数こそ少ないが総バイト量が大きいため、メインメモリへ展開する方式（activation offloading相当）は採らない——PCIe帯域が先読みblock swapの経路と衝突する。チャンク化は分割数を過剰にしても損失が数%で済むので、**最適な分割数を探す境界探索も要らない。**
-- **出典**: [`Nz-Videomni/Docs/SCALEUP_16GB_RESEARCH.md`](SCALEUP_16GB_RESEARCH.md) §2（レバー棚卸し）・付録A、オーナーとの議論による実装形の決定（2026-09-05）。**同書は本項を旧番号「§3-44」・旧リポジトリの相対パスで参照したままである**——凍結文書のため本文は直していない（冒頭バナーに注記あり）。
+- **出典**: [`Nz-Videomni/Docs/SCALEUP_16GB_RESEARCH.md`](SCALEUP_16GB_RESEARCH.md) §2（レバー棚卸し）・付録A、オーナーとの議論による実装形の決定（2026-09-05）。
 
 ### 4-36. 仮オブジェクトの完了時自動置換（`resolveProvisional`配線）
 
 **β版以降の作り込みに入るとき** → 生成の投入時にタイムラインへ置いた仮オブジェクトを、ジョブ完了時に生成結果の動画へ自動で差し替える機能を載せるかどうかを、右クリック再設計の方針（「仮オブジェクトは編集時のヒントに徹する」）との整合も含めて判断する。
 
 - **何が塞いでいるか**: 何も塞いでいない。α版は手動挿入（操作パネルの🎞ボタン、および右クリックの「⬇ この生成結果を今すぐ挿入」）に留めるというオーナー決定によるものである。
-- **現行機構**: 仮オブジェクトは`webui/src/timeline/provisionalReservation.ts`とブリッジRPC`updateProvisionalReservation`（予約席の更新）で成り立っているため、着手する場合は**この現行機構の上に自動置換を載せる**。`webui/src/timeline/provisionalFlow.ts`（`runProvisionalFlow`）は配線されないままの試作モジュールとして撤去済みなので、**それを復活させる話ではない**（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) 35.2）。
+- **現行機構**: 仮オブジェクトは`webui/src/timeline/provisionalReservation.ts`とブリッジRPC`updateProvisionalReservation`（予約席の更新）で成り立っているため、着手する場合は**この現行機構の上に自動置換を載せる**。
 - **付随して先送りされる実機検証項目**（いずれも`native/src`に`REALDEVICE-VERIFY`注記として現存し、未検証のまま残っている）:
   - `ReplaceObjectEditProc`のアンドゥ挙動（delete+createが1ステップにまとまるか）。
   - `UpdateObjectTextEditProc`のカーソル依存書込の実機挙動。
   - `ExtractAudioWorker`の残検証（音声抽出のsolo分離は本書§4-21を参照）。※`CutoutRangeWorker`（範囲選択切り抜き）は製品UIから呼ぶ配線が無いため実機検証の対象外（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-48。配線を再検討するときの入口は本書§3-34）。
-- **`register_project_load_handler`の発火は検証済みである**（手動での「ファイル→開く」でも発火する。実測の正本は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §97、クローズ記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-35-02、仕様書側の実機チェックリスト#9も確認済み＝フロントエンド[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) 第8節）。なお予約検出はテキスト本文の`[#id]`マーカーを第一手段とする二重化設計なので、縮退しても実害は小さい。
+- **予約の検出**: `register_project_load_handler`（手動での「ファイル→開く」でも発火する。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §97）と、テキスト本文の`[#id]`マーカーを第一手段とする二重化設計なので、縮退しても実害は小さい。
 - **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §7.6、§7.7、§33.1、§33.3、35.2、`native/src/plugin.cpp`・`native/src/bridge.cpp`の`REALDEVICE-VERIFY`注記。
 
 ### 4-37. 操作パネルの状態復帰（起票：2026-07-20）
@@ -586,8 +581,8 @@
 
 **連結生成の1回あたり数秒以下の短縮に確かな需要が出て、かつ「尺によって出力の性質が変わる隠れた切替」を受け入れると判断したとき** → LTX 2.5のChainedで、連結の拡大工程（`chunked_upsample`）を短い連結に限って一括処理へ切り替えるかどうかを判断する。
 
-- **概要**: 連結生成の拡大工程（Stage-1のあとStage-2の前に、連結した潜在表現を空間方向へ2倍に引き伸ばす1回きりの工程。ノイズ除去はしない）は、時間方向に32フレーム＋のり代18のチャンクへ分けて処理している（リクエスト項目`chunked_upsample`。APIの既定はオフ、Gradio検証UIと操作パネルの既定はオン）。**Stage-2を潜在22フレームの窓で処理する仕組みとは別の機構である。** LTX 2.5ではVRAM消費がトークン数に線形なので、総尺が約20万トークン以内（1280×768で約69秒・1920×1088で約32秒）の連結なら、一括で拡大しても溢れない。これを根拠に、短い連結に限って一括拡大へ切り替える案があった。
-- **何が塞いでいるか**: ①得られるのは拡大工程の数秒以下の短縮だけである。②無条件に一括へ戻すと連結の総尺に上限が生まれ、「連結生成は長さが柔軟」という棲み分け原則（[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §7）と衝突する。③上限を超えたときだけチャンク化へ自動で戻す条件つきにしても、チャンク化経路は3次元畳み込みのメモリ配置（`channels_last_3d`）を変えるため一括と出力が一致せず、尺が上限をまたいだ瞬間に出力の性質が静かに変わる隠れた切替になる。「規則は単純に、例外を増やさない」という設計方針に反する。**オーナー裁定（2026-09-09）: 実装しない。**
+- **概要**: 連結生成の拡大工程（Stage-1のあとStage-2の前に、連結した潜在表現を空間方向へ2倍に引き伸ばす1回きりの工程。ノイズ除去はしない）は、時間方向に32フレーム＋のり代18のチャンクへ分けて処理している（リクエスト項目`chunked_upsample`。APIの既定はオフ、Gradio検証UIと操作パネルの既定はオン）。**Stage-2を潜在22フレームの窓で処理する仕組みとは別の機構である。** LTX 2.5ではVRAM消費がトークン数に線形なので、総尺が約20万トークン以内（1280×768で約69秒・1920×1088で約32秒）の連結なら、一括で拡大しても溢れない。
+- **何が塞いでいるか**: ①得られるのは拡大工程の数秒以下の短縮だけである。②無条件に一括へ戻すと連結の総尺に上限が生まれ、「連結生成は長さが柔軟」という棲み分け原則（[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §7）と衝突する。③上限を超えたときだけチャンク化へ自動で戻す条件つきにしても、チャンク化経路は3次元畳み込みのメモリ配置（`channels_last_3d`）を変えるため一括と出力が一致せず、尺が上限をまたいだ瞬間に出力の性質が静かに変わる隠れた切替になる。「規則は単純に、例外を増やさない」という設計方針に反する。**実装しない（オーナー裁定）。**
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §71.4・§71.5・§72.2(d)・§72.6、[`LTX25_RESEARCH_NOTES.md`](LTX25_RESEARCH_NOTES.md) 11節、`CHUNKED_UPSAMPLE_WORKORDER.md`、[`CHAIN_STAGE2_RESEARCH_NOTES.md`](CHAIN_STAGE2_RESEARCH_NOTES.md) §7（棲み分け原則）。
 
 ### 4-42. 拡散 VAE を置いたときの復号タイルの決め方（起票：2026-10-01）
@@ -598,13 +593,13 @@
 - **選択肢**（オーナー判断・優劣はつけない）:
   - A: 拡散VAEのときだけ、モデルを組み終えた後の空きVRAMでタイルを決め直す。
   - B: 現状を許容し、拡散VAEでは保守的な固定タイルへ倒す（具体策: 上流の `ensure_tiling_config` の `free_bytes=` に固定値を渡す）。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）・§146（`_retake_encode_tiling` の docstring の誤り〔拡散VAEでも型検査を通る〕は第6弾で訂正済み）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §133（申し送り）・§146。
 - **関連ファイル**: `engine25/chain25.py`（`run_chain` の `tiling_config = ensure_tiling_config(...)`・`_retake_encode_tiling`）。
 
 ### 4-43. MiniMax H3 のテキストエンコーダの int8 ConvRot 計算核と bf16 の差が 2 枚の画像で大きい件（診断は回していない）（起票：2026-10-19）
 
 - **概要**: テキストエンコーダの出力を、int8 ConvRot の計算核と、同じ重みを bf16 に戻した場合とで比べた相対差は、画像 2 枚（先頭＋末尾）のとき画像の行で **0.277** だった。画像 1 枚では 0.013（先頭だけ。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166 の 2a-G3）・0.010（末尾だけ）で、テキストの行は約 0.022 のまま変わらない。配線の差は 0 で、画像読み取り部の出力は正解データと一致するので、構造は正しく、差は計算の側にある。仮説（推測）: 2 つの視覚ブロックが互いに注意を向け合うとき、画像の行の活性化を行ごとに int8 へ量子化すると精度が落ちる。
-- **前提（何が塞いでいるか）**: 生成した動画の目視が go だったので、オーナーが今は診断しないと決めた（2026-10-19）。
+- **前提（何が塞いでいるか）**: 生成した動画の目視は go なので、今は診断しない（オーナー判断）。
 - **再訪条件**: H3 で画像を 2 枚以上置いたときにプロンプトの効きが悪いと分かったとき。または、テキストエンコーダの量子化や int8 の経路を変えるとき。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.7 (a)、保管庫 [`Outputs-archive/h3-keyframes-2026-10-19/`](Outputs-archive/h3-keyframes-2026-10-19/README.md) の `gates/g2_keyframe_parts.json`（`quant_rel_*` の鍵）。
 
@@ -615,18 +610,17 @@
 節の分け方と各節の意味は**冒頭の「位置づけ」に一本化**してある（本節では繰り返さない）。個々の項目の正本は各出典ドキュメント（`DEVLOG.md`・`API_REFERENCE.md`・`TIMELINE_ALPHA_REQUIREMENTS.md`・`REAL_BACKEND_CHECKLIST.md`・`WEBVIEW2_PARITY_BACKLOG.md`、およびバックエンド`Docs/`の各文書等）にあり、本書はそれを優先度順に一覧するための派生的な台帳である。運用は次のとおり。
 
 - 新たな未着手タスクが判明した場合は、出典を明記のうえ「1. 近日中の改修項目」「3. 将来の研究課題」「4. スコープ外」のいずれかへ追記する。**該当する節が無い場合は、冒頭の「位置づけ」の書式で節を立て直してから追記する。** §3と§4の線引きは、**前提が変われば着手しうるもの＝§3／当面は着手しないと判断済みのもの＝§4**とする。§3の内部はさらに「改修項目（先）＞研究課題（後）」に分かれる（オーナー指定の階層）。
-- **操作パネルの既存テストの不安定（時間の隙間やモックの持ち越しに頼るテストが全件実行で落ちる型）は、製品の不具合ではないので §1 に個別には起票せず、§3-238「操作パネルのテストコードの整理と不安定なテストの一掃」に追記する**（オーナー裁定 2026-10-16）。
+- **操作パネルの既存テストの不安定（時間の隙間やモックの持ち越しに頼るテストが全件実行で落ちる型）は、製品の不具合ではないので §1 に個別には起票せず、§3-238「操作パネルのテストコードの整理と不安定なテストの一掃」に追記する**。
 - **§4「スコープ外」の項目には「何が塞いでいるか」を必ず書く。** 前提が変わったかどうかを、あとから読んだ人が判定できるようにするため。**再訪の条件がはっきりしているものは、条件を行頭に置いて書く**（§3-30〜§3-38の書式）。
 - **1項目は「見出し＋本文2〜4行＋出典」を上限の目安にする。** 詳細は正本の文書へ置き、台帳は「次に何をすべきか」が読み取れる密度に保つ。**判断材料が他文書に無いときは、先に出典側（研究ノート等）へ書いてから本書を参照に切り替える**——縮約で記録が消えてよいわけではない。
-- **本書には歴史的経緯を書かない**（オーナー決定・全節に適用）。**本書に載せてよいのは「これから何をするか」「そのための判断材料」「本台帳の運用規則」の3つだけ**であり、「過去に何があったか」は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)の責任である。本書はオーナーやAIエージェントが「次に何をすべきか」を確認するために読む場所であり、歴史はノイズになる。旧番号の欠番はそのままでよい。
-- **歴史的経緯（クローズ・移動・欠番の来歴）は本書に書かない——それは[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)の役割であり、両書を読み比べれば分かることを本書へ書くのは単なる重複で、読む人（とAIエージェント）の時間とトークンの浪費になる**（オーナー指示・2026-09-01）。
+- **本書には歴史的経緯（クローズ・移動・欠番の来歴を含む）を書かない**（オーナー決定・全節に適用）。**本書に載せてよいのは「これから何をするか」「そのための判断材料」「本台帳の運用規則」の3つだけ**であり、「過去に何があったか」は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)の責任である。本書はオーナーやAIエージェントが「次に何をすべきか」を確認するために読む場所であり、両書を読み比べれば分かることを本書へ書くのは単なる重複で、読む人（とAIエージェント）の時間とトークンの浪費になる。旧番号の欠番はそのままでよい。
 - **クローズした項目の跡地に説明文は残さない**（記録は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)および`DEVLOG.md`等の出典へ移す）。**例外は各節の冒頭に置く「欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照」という総括の1行だけ**——番号ごとの個別の欠番説明・移動の説明は置かない（同書冒頭が正本）。
 - 項目の実装が完了したら「2. 実装済み・ユーザーのテスト待ち」へ移す（書式は冒頭の位置づけ2番を参照）。**該当する節が無い場合は、冒頭の「位置づけ」の書式で節を立て直してから移す。** オーナーのテスト（実機・目視・実GPU）に合格したら[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移すか、本書から除去する。正本側の更新にも合わせること。
-- **例外（オーナー裁定2026-09-01）: 実機で確認できる要素が原理的に無い項目——MCPサーバーやフロントエンドのモックに閉じた改修のように、GPUもAviUtl2本体も関与しないもの——は、自動ゲートが全部緑になった記録を根拠に、§2を経ず直接[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移してよい。** 根拠記録（どの物差しで何件通ったか）は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)へ必ず残し、クローズ記録からそこを指すこと。
-- **ブランチは`main`（利用者に配る）と`dev`（開発中。その日の改修を全部載せる）の2本だけで、テーマごとの`feature/<slug>`ブランチは作らない**（オーナー裁定2026-09-15。2026-09-07の運用を置き換え）。理由は、機能ごとに枝を分けると機能どうしの相互作用をmainへ入れる前に見つけられないから——開発中の1本に丸ごと載せていれば、実機ゲート・目視・指紋比較が常に組み合わさった状態に対して走る。各セッションは`dev`へコミット＆プッシュし（コミットはテーマごとに分け、明示パスで足す——1件が落ちたときに`git revert`で切り離して残りをmergeするため）、機械検証とその日のオーナー目視が済んだら`git merge --no-ff dev`でmainへ入れる。mergeの合図は暦ではなく検証である。**ユーザーはmainを`git clone`／`git pull`する**ので、検証の済んでいないものをmainへ置いてはならない。
+- **例外（オーナー裁定）: 実機で確認できる要素が原理的に無い項目——MCPサーバーやフロントエンドのモックに閉じた改修のように、GPUもAviUtl2本体も関与しないもの——は、自動ゲートが全部緑になった記録を根拠に、§2を経ず直接[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ移してよい。** 根拠記録（どの物差しで何件通ったか）は[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)へ必ず残し、クローズ記録からそこを指すこと。
+- **ブランチは`main`（利用者に配る）と`dev`（開発中。その日の改修を全部載せる）の2本だけで、テーマごとの`feature/<slug>`ブランチは作らない**（オーナー裁定）。理由は、機能ごとに枝を分けると機能どうしの相互作用をmainへ入れる前に見つけられないから——開発中の1本に丸ごと載せていれば、実機ゲート・目視・指紋比較が常に組み合わさった状態に対して走る。各セッションは`dev`へコミット＆プッシュし（コミットはテーマごとに分け、明示パスで足す——1件が落ちたときに`git revert`で切り離して残りをmergeするため）、機械検証とその日のオーナー目視が済んだら`git merge --no-ff dev`でmainへ入れる。mergeの合図は暦ではなく検証である。**ユーザーはmainを`git clone`／`git pull`する**ので、検証の済んでいないものをmainへ置いてはならない。
 - **全項目が合格して空になった節は、見出しごと削除する**（オーナー決定）。合格記録は本書に残さず[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)へ一本化し、他文書からの参照もそちらへ付け替える。**節番号の再採番はしない**——過去の文書・記憶が番号で参照しているため、削除した節の番号は欠番のままにする。
 - **本書に断りなく現れる略号の凡例**（初めて読む人向け）:
   - **W1〜W9／X1〜X6／Y1〜Y3**＝フロントエンド微調整バッチの第1〜第3波（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §46〜§48）。
   - **G0・G1・G4…**＝各テーマの実機ゲート（オーナーが実機で通す確認項目）の番号。番号と内容の対応は**テーマごとに独立**しているので、必ずそのテーマの正本（[`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md)の該当節・各WORKORDER・バックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)）で引くこと。
   - **N1〜N13**＝バックエンド同梱のGradio UIに対するパリティ（同等機能）項目の番号（[`WEBVIEW2_PARITY_BACKLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/WEBVIEW2_PARITY_BACKLOG.md)）。
-- **他文書から本書や`PENDING_TASKS_CLOSED.md`を参照するときは、必ずファイル名を添えて書く。行番号は書かない**（本書は頻繁に増減するため、行番号はすぐ古くなる。過去に節番号の振り替えも起きており、番号だけでは新旧どちらを指すのか判別できないため）。
+- **他文書から本書や`PENDING_TASKS_CLOSED.md`を参照するときは、必ずファイル名を添えて書く。行番号は書かない**（本書は頻繁に増減するため、行番号はすぐ古くなる。また番号だけでは、本書と`PENDING_TASKS_CLOSED.md`のどちらか、旧番号か現番号かを判別できないため）。

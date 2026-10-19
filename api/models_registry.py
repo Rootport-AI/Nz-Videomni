@@ -135,8 +135,10 @@ def list_models(context: AppContext = Depends(get_context)) -> dict:
                     engines.unsupported_features(descriptor.engine_family)
                 ),
                 # The family's numeric request rules (frame grid, spatial
-                # multiple, fps range, and the sampling knobs or null), built
-                # from the adapter's ``REQUEST_RULES`` — the same table
+                # multiple, fps range, keyframe grid, and the sampling knobs
+                # or null), built from the adapter's ``REQUEST_RULES`` (a
+                # ``RequestRules`` from services/engines/ltx/request_rules.py; each
+                # family's adapter table is the source of its values) — the same table
                 # POST /generate enforces, so a screen that reads this is
                 # reading the rule itself. Additive, like the key above.
                 "constraints": engines.request_constraints(descriptor.engine_family),

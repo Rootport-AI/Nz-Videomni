@@ -33,6 +33,9 @@ export interface KeyframeItem {
   errorCode: string | null;
 }
 
+/** The LTX families' keyframe `strength` default (single source: the server's
+ * `request_rules.py`); never sent for a family without a keyframe strength
+ * (`omitStrength`). */
 export const DEFAULT_STRENGTH = 0.8;
 export const STRENGTH_STEP = 0.05;
 export const STRENGTH_MIN = 0.0;
@@ -51,7 +54,8 @@ export function fileNameFromPath(path: string): string {
  * stays `0` (leading frame); a negative input is treated as `0` since the
  * field's own min is 0. For `frameIdx > 0` the result is clamped from below to
  * the first grid point (`offset` if > 0, else `multiple`), like the server's
- * `normalize_keyframes` (the upper clamp lives elsewhere). */
+ * `normalize_keyframes` (the upper clamp lives elsewhere). `multiple` /
+ * `gridOffset` are the served `constraints.keyframes` `step` / `offset`. */
 export function snapFrameIdx(frameIdx: number, multiple: number, gridOffset: number): number {
   if (frameIdx <= 0) return 0;
   const first = gridOffset > 0 ? gridOffset : multiple;

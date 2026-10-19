@@ -327,7 +327,8 @@ class EngineComfortProfile(BaseModel):
 
 
 # キーフレーム画像（conditioning_images）の枚数上限。設定項目ではなく契約定数で、
-# 公式 LTX Desktop の LOCAL_MULTI_KEYFRAME_MAX_COUNT = 10 に LTX 2.3 / 2.5 共通で揃える。
+# 全系統（LTX 2.3 / 2.5 / MiniMax H3）に共通する。値は公式 LTX Desktop の
+# LOCAL_MULTI_KEYFRAME_MAX_COUNT に揃える。
 MAX_CONDITIONING_IMAGES = 10
 
 

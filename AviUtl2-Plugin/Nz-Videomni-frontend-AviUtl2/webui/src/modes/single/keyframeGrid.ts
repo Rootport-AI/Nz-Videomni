@@ -3,7 +3,8 @@
  * (Docs/KEYFRAME_TIMELINE_DESIGN_NOTES.md). Keyframes may only land on the
  * loaded base model's keyframe grid — its family's rule table, served as
  * `GET /models`' `base_models[].constraints.keyframes` (`multiple`/`offset`
- * here; LTX 8/1, MiniMax H3 1/0 = any frame; see `keyframeUtils.ts`'s
+ * here, `multiple` being the served `step`; LTX 8/1, MiniMax H3 1/0 = any
+ * frame; see `keyframeUtils.ts`'s
  * `snapFrameIdx`): `{0, offset, offset+multiple, offset+2*multiple, …}` (an
  * `offset` of 0 starts the non-zero run at `multiple`) up to whatever the
  * current `num_frames` allows.

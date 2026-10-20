@@ -190,7 +190,8 @@ async def submit_generate(
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
     現在選択中のベースモデル（LTX 2.3 / LTX 2.5 など）が対応していない機能を
-    使うと 422 FEATURE_UNSUPPORTED になります。どの機能が使えないかは
+    使うと 422 FEATURE_UNSUPPORTED になるか、無視されます（例: MiniMax H3 の
+    ``fused_gguf_dequant_kernel``）。どの機能が使えないかは
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
     LTX 2.5 では、このツールで使えないのは ``vae_mode``
     （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``

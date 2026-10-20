@@ -129,8 +129,9 @@ def list_models(context: AppContext = Depends(get_context)) -> dict:
                 # endpoint. A client that has never heard of this key is
                 # unaffected either way. The frontend greys out the controls it
                 # recognises; POST /generate refuses the rest with the matching
-                # FEATURE_UNSUPPORTED, so this list is a courtesy, never the
-                # enforcement (a page can be stale, a script never asked).
+                # FEATURE_UNSUPPORTED (422) or ignores them (MiniMax H3's
+                # fused_gguf_dequant_kernel), so this list is a courtesy, never
+                # the enforcement (a page can be stale, a script never asked).
                 "unsupported_features": list(
                     engines.unsupported_features(descriptor.engine_family)
                 ),

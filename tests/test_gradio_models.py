@@ -548,6 +548,35 @@ def test_refresh_shows_every_keyframe_strength_slider_on_ltx():
         assert "value" not in update
 
 
+def test_refresh_hides_fused_dequant_on_h3_and_resets_it_to_on():
+    # MiniMax H3 names fused_gguf_dequant_kernel (no GGUF weights; the server
+    # ignores the field rather than 422-ing it). The reset value is the default
+    # (on): the handlers send the key only when the box is off, so a hidden box
+    # puts nothing on the wire.
+    assert hidden_controls(["fused_gguf_dequant_kernel"]) == {"accel_fused_dequant"}
+    models_json = dict(SAMPLE_MODELS_MULTI, active_base_model="MiniMaxH3",
+                       base_models=[
+                           {"id": "LTX23", "display_name": "LTX 2.3",
+                            "active": False, "unsupported_features": []},
+                           {"id": "MiniMaxH3", "display_name": "MiniMax H3",
+                            "active": True,
+                            "unsupported_features": ["keyframe_strength",
+                                                     "fused_gguf_dequant_kernel"]},
+                       ])
+    updates = _refresh_with(models_json)
+    update = _gated_update(updates, "accel_fused_dequant")
+    assert update["visible"] is False
+    assert update["value"] == RESET_VALUES["accel_fused_dequant"] is True
+
+
+def test_refresh_shows_fused_dequant_on_ltx():
+    updates = _refresh_with(_models_json_with("LTX23", ["keep_resident_embeddings",
+                                                        "vram16_mode"]))
+    update = _gated_update(updates, "accel_fused_dequant")
+    assert update["visible"] is True
+    assert "value" not in update
+
+
 def test_refresh_failure_leaves_every_output_untouched():
     demo = build_ui("http://127.0.0.1:8000", api_key=None)
 

@@ -1492,10 +1492,11 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // The write-back is not optional tidiness: the stored choice PERSISTS, so a
   // value picked on a base model that supports it would otherwise keep riding
   // along on every request to an engine that refuses it and 422 every job
-  // (the reason the old per-row comments gave, one row at a time). The two rows
-  // that carry a `resets` today point in OPPOSITE directions — LTX 2.5 refuses
-  // `prune_vaed`, LTX 2.3 refuses `keep_resident_embeddings` — and this code
-  // never has to know that; a hidden row is a hidden row.
+  // (the reason the old per-row comments gave, one row at a time). Which rows
+  // carry a `resets` is `FEATURE_UI` in `shell/featureScope.ts` and nowhere
+  // else. Their directions differ row by row — it is the engine WITHOUT the
+  // part that publishes the name — and this code never has to know that; a
+  // hidden row is a hidden row.
   //
   // Runs on a leftover from a previous session and on a switch made just now
   // with the one effect and no request of its own. `unsupportedFeatures` keeping
@@ -1758,6 +1759,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           onBlockSwapPrefetchChange={accelerationControls.setBlockSwapPrefetch}
           onKeepResidentChange={accelerationControls.setKeepResident}
           onFusedGgufDequantKernelChange={accelerationControls.setFusedGgufDequantKernel}
+          fusedGgufDequantKernelUnsupported={settingsRowsHidden.fusedGgufDequantKernel}
           onVaeModeChange={accelerationControls.setVaeMode}
           vaeUnsupported={settingsRowsHidden.vae}
           onKeepResidentEmbeddingsChange={accelerationControls.setKeepResidentEmbeddings}

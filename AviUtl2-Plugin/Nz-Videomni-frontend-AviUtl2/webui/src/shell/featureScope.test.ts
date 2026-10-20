@@ -36,6 +36,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "retake",
         "v2v",
         "vram16_mode",
+        "fused_gguf_dequant_kernel",
       ].sort(),
     );
   });
@@ -99,35 +100,57 @@ describe("disabledUiTargets", () => {
 
 describe("settingsRowsHiddenFor", () => {
   it("hides no row for the ordinary case", () => {
-    expect(settingsRowsHiddenFor([])).toEqual({ vae: false, keepResidentEmbeddings: false, vram16: false });
+    expect(settingsRowsHiddenFor([])).toEqual({
+      vae: false,
+      keepResidentEmbeddings: false,
+      vram16: false,
+      fusedGgufDequantKernel: false,
+    });
     expect(settingsRowsHiddenFor(["chain", "retake", "two_stage_hq"])).toEqual({
       vae: false,
       keepResidentEmbeddings: false,
       vram16: false,
+      fusedGgufDequantKernel: false,
     });
   });
 
   it("maps each feature name onto exactly its own row", () => {
-    expect(settingsRowsHiddenFor(["prune_vaed"])).toEqual({ vae: true, keepResidentEmbeddings: false, vram16: false });
+    expect(settingsRowsHiddenFor(["prune_vaed"])).toEqual({
+      vae: true,
+      keepResidentEmbeddings: false,
+      vram16: false,
+      fusedGgufDequantKernel: false,
+    });
     expect(settingsRowsHiddenFor(["keep_resident_embeddings"])).toEqual({
       vae: false,
       keepResidentEmbeddings: true,
       vram16: false,
+      fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["vram16_mode"])).toEqual({
       vae: false,
       keepResidentEmbeddings: false,
       vram16: true,
+      fusedGgufDequantKernel: false,
+    });
+    expect(settingsRowsHiddenFor(["fused_gguf_dequant_kernel"])).toEqual({
+      vae: false,
+      keepResidentEmbeddings: false,
+      vram16: false,
+      fusedGgufDequantKernel: true,
     });
   });
 
-  it("hides all three when all three are refused", () => {
+  it("hides all four when all four are refused", () => {
     // Not a hypothetical pairing to guard against — just the honest answer, the
     // same way `editSubTabsDisabledFor` answers two `true`s.
-    expect(settingsRowsHiddenFor(["prune_vaed", "keep_resident_embeddings", "vram16_mode"])).toEqual({
+    expect(
+      settingsRowsHiddenFor(["prune_vaed", "keep_resident_embeddings", "vram16_mode", "fused_gguf_dequant_kernel"]),
+    ).toEqual({
       vae: true,
       keepResidentEmbeddings: true,
       vram16: true,
+      fusedGgufDequantKernel: true,
     });
   });
 });
@@ -142,6 +165,7 @@ describe("accelerationResetsFor", () => {
     expect(accelerationResetsFor(["prune_vaed"])).toEqual(["vaeMode"]);
     expect(accelerationResetsFor(["keep_resident_embeddings"])).toEqual(["keepResidentEmbeddings"]);
     expect(accelerationResetsFor(["vram16_mode"])).toEqual(["vram16Mode"]);
+    expect(accelerationResetsFor(["fused_gguf_dequant_kernel"])).toEqual(["fusedGgufDequantKernel"]);
   });
 
   it("collects both without duplicates", () => {

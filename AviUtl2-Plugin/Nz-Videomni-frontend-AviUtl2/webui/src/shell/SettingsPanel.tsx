@@ -61,10 +61,16 @@ export interface SettingsPanelProps {
    * toggle. Gated on block-swap prefetch since §1-10 — see the row itself. */
   onKeepResidentChange: (value: boolean) => void;
   /** Acceleration (2026-08-04, backend §51 / ledger §1-11): fused GGUF
-   * dequantization kernel. An INDEPENDENT toggle — unlike keep-resident it is
-   * gated on nothing at all (no `/status` capability flag, no relationship to
-   * prefetch). */
+   * dequantization kernel. An INDEPENDENT toggle — unlike keep-resident it has
+   * no `/status` capability flag and no relationship to prefetch; it is hidden
+   * per engine family via {@link fusedGgufDequantKernelUnsupported}. */
   onFusedGgufDequantKernelChange: (value: boolean) => void;
+  /** 台帳 §1-100: whether the LOADED base model's engine publishes
+   * `fused_gguf_dequant_kernel` (MiniMax H3, which has no GGUF weights) —
+   * derived by `AppShell` from `GET /models`' `unsupported_features`, never
+   * from a base-model id. HIDES the row and its note; the server ignores the
+   * field there, so the row would be a control that does nothing. */
+  fusedGgufDequantKernelUnsupported: boolean;
   /** Acceleration (2026-08-05, backend §52): the PrunaVAED decoder choice.
    * INDEPENDENT like the fused-kernel row — no `/status` capability flag and
    * no relationship to any other row (a server without the pruned weights
@@ -147,6 +153,7 @@ export function SettingsPanel({
   onBlockSwapPrefetchChange,
   onKeepResidentChange,
   onFusedGgufDequantKernelChange,
+  fusedGgufDequantKernelUnsupported,
   onVaeModeChange,
   vaeUnsupported,
   onKeepResidentEmbeddingsChange,
@@ -379,33 +386,41 @@ export function SettingsPanel({
             the position the old `fused_gguf_dequant_gemm` MOCK held at the
             head of this section — that mock was removed outright (owner
             ruling 2026-08-04) and this REAL toggle took its place. Same
-            two-button shape as prefetch/keep-resident, but with NO gate at
-            all: the backend publishes no availability flag for it (same
-            discipline as `keep_resident`) and it depends on no other row. */}
-        <div className="field">
-          <span className="field-label">{strings.settings.accelFusedGgufKernelLabel}</span>
-          <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelFusedGgufKernelLabel}>
-            {[
-              { on: true, label: strings.settings.accelFusedGgufKernelOn },
-              { on: false, label: strings.settings.accelFusedGgufKernelOff },
-            ].map(({ on, label }) => (
-              <button
-                key={label}
-                type="button"
-                className={`mode-tab${acceleration.fusedGgufDequantKernel === on ? " mode-tab--active" : ""}`}
-                aria-pressed={acceleration.fusedGgufDequantKernel === on}
-                onClick={() => onFusedGgufDequantKernelChange(on)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* Shown only while it is ON, like the prefetch/keep-resident notes —
-            and like them it is reassurance, not a warning: the output is
-            bit-identical either way. */}
-        {acceleration.fusedGgufDequantKernel && (
-          <p className="field-hint">{strings.settings.accelFusedGgufKernelNote}</p>
+            two-button shape as prefetch/keep-resident, but NOT gated on
+            Triton availability: the backend publishes no availability flag
+            for it (same discipline as `keep_resident`) and it depends on no
+            other row. HIDDEN OUTRIGHT, row and note under the ONE condition,
+            on an engine whose `unsupported_features` name
+            `fused_gguf_dequant_kernel` (MiniMax H3 — 台帳 §1-100), exactly
+            like the VRAM 16GB row further down. */}
+        {!fusedGgufDequantKernelUnsupported && (
+          <>
+            <div className="field">
+              <span className="field-label">{strings.settings.accelFusedGgufKernelLabel}</span>
+              <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelFusedGgufKernelLabel}>
+                {[
+                  { on: true, label: strings.settings.accelFusedGgufKernelOn },
+                  { on: false, label: strings.settings.accelFusedGgufKernelOff },
+                ].map(({ on, label }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className={`mode-tab${acceleration.fusedGgufDequantKernel === on ? " mode-tab--active" : ""}`}
+                    aria-pressed={acceleration.fusedGgufDequantKernel === on}
+                    onClick={() => onFusedGgufDequantKernelChange(on)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Shown only while it is ON, like the prefetch/keep-resident notes —
+                and like them it is reassurance, not a warning: the output is
+                bit-identical either way. */}
+            {acceleration.fusedGgufDequantKernel && (
+              <p className="field-hint">{strings.settings.accelFusedGgufKernelNote}</p>
+            )}
+          </>
         )}
 
         <div className="field">

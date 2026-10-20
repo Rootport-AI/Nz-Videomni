@@ -62,6 +62,7 @@ const H3_UNSUPPORTED = [
   "keyframe_strength",
   "chain",
   "retake",
+  "fused_gguf_dequant_kernel",
 ];
 
 describe("paramUtils grid helpers (17n+5 / 32)", () => {

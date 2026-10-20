@@ -650,4 +650,73 @@ describe("AppShell — base-model feature scope", () => {
 
     await waitFor(() => expect(readStoredAcceleration().vram16Mode).toBe(true));
   });
+
+  // -- 台帳 §1-100: Fused GGUF Dequantization Kernel, hidden on MiniMax H3 -----
+  //
+  // MiniMax H3 has no GGUF weights, so it publishes `fused_gguf_dequant_kernel`
+  // (the server ignores the field there rather than 422-ing it). Scoped the
+  // other way round from VRAM 16GB mode: LTX 2.3 / 2.5 keep the row. Default
+  // ON, so the write-back lands on `true`.
+
+  /** Seeds the persisted choices with the fused kernel turned OFF — the
+   * leftover a user leaves behind by turning it off on LTX. */
+  function storeFusedGgufOff() {
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({
+        attentionBackend: "sdpa",
+        blockSwapPrefetch: true,
+        keepResident: false,
+        fusedGgufDequantKernel: false,
+        vaeMode: "default",
+        keepResidentEmbeddings: false,
+        vram16Mode: true,
+      }),
+    );
+  }
+
+  function fusedGgufRow() {
+    return screen.queryByRole("group", { name: /^Fused GGUF Dequantization Kernel$/ });
+  }
+
+  function fusedGgufNote() {
+    return screen.queryByText(/only how the model's compressed weights are unpacked changes/i);
+  }
+
+  it("hides the Fused GGUF row AND its note on MiniMax H3, and shows both on LTX 2.3 / 2.5", async () => {
+    const { select } = await renderApp(AS_LTX25);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    // LTX 2.3: default ON, so the note is on screen with the row.
+    expect(fusedGgufRow()).toBeInTheDocument();
+    expect(within(fusedGgufRow()!).getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
+    expect(fusedGgufNote()).toBeInTheDocument();
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    expect(fusedGgufRow()).toBeInTheDocument();
+    expect(fusedGgufNote()).toBeInTheDocument();
+
+    await user.selectOptions(select, "MiniMaxH3");
+    await waitFor(() => expect(select.value).toBe("MiniMaxH3"));
+    await waitFor(() => expect(fusedGgufRow()).toBeNull());
+    expect(fusedGgufNote()).toBeNull();
+    // The Block-swap prefetch row next to it stays on screen on H3.
+    expect(screen.getByRole("group", { name: /^Block-swap prefetch$/ })).toBeInTheDocument();
+  });
+
+  it("writes a leftover Fused GGUF OFF back to the default (ON) on MiniMax H3, and leaves it alone on LTX", async () => {
+    storeFusedGgufOff();
+    expect(readStoredAcceleration().fusedGgufDequantKernel).toBe(false);
+    const { select } = await renderApp(AS_LTX25);
+    // LTX 2.3 does not publish the name, so the OFF survives the load.
+    expect(select.value).toBe("LTX23");
+    expect(readStoredAcceleration().fusedGgufDequantKernel).toBe(false);
+
+    const user = userEvent.setup();
+    await user.selectOptions(select, "MiniMaxH3");
+    await waitFor(() => expect(select.value).toBe("MiniMaxH3"));
+    await waitFor(() => expect(readStoredAcceleration().fusedGgufDequantKernel).toBe(true));
+  });
 });

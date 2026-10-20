@@ -46,7 +46,8 @@ export type UiTarget =
   | "shell.nag"
   | "settingsRow.vae"
   | "settingsRow.keepResidentEmbeddings"
-  | "settingsRow.vram16";
+  | "settingsRow.vram16"
+  | "settingsRow.fusedGgufDequantKernel";
 
 interface FeatureUiEntry {
   /** The UI parts to close while this feature is unavailable. A disjunction —
@@ -58,7 +59,11 @@ interface FeatureUiEntry {
    * `ACCELERATION_DEFAULTS` — only the field NAME belongs here). Hiding a row
    * is not enough on its own, because the choice PERSISTS: a value picked on a
    * base model that supports it would otherwise keep riding along on every
-   * request after a switch and 422 every job. */
+   * request after a switch and 422 every job. Where the server IGNORES the
+   * field instead (`fused_gguf_dequant_kernel` on MiniMax H3), the write-back
+   * stays all the same: the rule "a hidden row returns to its default" then
+   * has no exception, and an OFF the user could not see there is not carried
+   * back to LTX. */
   readonly resets?: keyof AccelerationSettings;
 }
 
@@ -120,6 +125,11 @@ interface FeatureUiEntry {
  *    scoped like `keep_resident_embeddings`: it exists on MiniMax H3 only, so
  *    LTX 2.3 / 2.5 publish the name. Its default is ON, so the write-back
  *    lands on `true` — which is what an LTX request then omits.
+ *  - **fused_gguf_dequant_kernel** (台帳 §1-100) is a fourth Settings row with
+ *    a `resets`, published by MiniMax H3, which has no GGUF weights for the
+ *    kernel to unpack. Unlike the rows above, the server IGNORES the field
+ *    there rather than 422-ing it; the row hides and writes back (to ON) all
+ *    the same — see {@link FeatureUiEntry}'s `resets`.
  *
  * Note what is NOT here. `single` and `inventory` have no row and never will:
  * Single IS the baseline any engine must serve, and Inventory only browses
@@ -149,6 +159,10 @@ export const FEATURE_UI = {
     resets: "keepResidentEmbeddings",
   },
   vram16_mode: { disables: ["settingsRow.vram16"], resets: "vram16Mode" },
+  fused_gguf_dequant_kernel: {
+    disables: ["settingsRow.fusedGgufDequantKernel"],
+    resets: "fusedGgufDequantKernel",
+  },
 } as const satisfies Record<string, FeatureUiEntry>;
 
 // No union type over the feature NAMES (no `UiRelevantFeature` or the like):
@@ -323,9 +337,9 @@ export function editSubTabsDisabledFor(unsupportedFeatures: readonly string[]): 
 }
 
 /** The Settings-panel rows an engine's feature scope HIDES outright (not greys:
- * an engine that publishes one of these names answers the field with a 422
- * rather than degrading, so there is nothing to offer). Keyed the way
- * `SettingsPanel`'s props are. */
+ * an engine that publishes one of these names refuses the field with a 422 or
+ * ignores it, rather than degrading, so there is nothing to offer). Keyed the
+ * way `SettingsPanel`'s props are. */
 export interface SettingsRowsHidden {
   /** The VAE decoder row — PrunaVAED (`prune_vaed`). */
   vae: boolean;
@@ -333,10 +347,13 @@ export interface SettingsRowsHidden {
   keepResidentEmbeddings: boolean;
   /** MiniMax H3's VRAM 16GB mode row (`vram16_mode`). */
   vram16: boolean;
+  /** The Fused GGUF Dequantization Kernel row and its ON-only note
+   * (`fused_gguf_dequant_kernel`). */
+  fusedGgufDequantKernel: boolean;
 }
 
 /**
- * Which of {@link SettingsRowsHidden}'s rows `unsupportedFeatures` hides — three
+ * Which of {@link SettingsRowsHidden}'s rows `unsupportedFeatures` hides — four
  * `false`s for the ordinary case.
  *
  * Read off the published `unsupported_features`, never off a base-model id:
@@ -350,6 +367,7 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
     vae: disabled.has("settingsRow.vae"),
     keepResidentEmbeddings: disabled.has("settingsRow.keepResidentEmbeddings"),
     vram16: disabled.has("settingsRow.vram16"),
+    fusedGgufDequantKernel: disabled.has("settingsRow.fusedGgufDequantKernel"),
   };
 }
 

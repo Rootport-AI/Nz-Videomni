@@ -23,12 +23,6 @@
 - **留意**: ① 較正は製品の既定＝**VRAM 16GB mode on** で測る（off は参考）。条件にはキーフレームの枚数も入る（条件行が K×grid 行増える。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13）。② 線は速度ではなく、共有メモリへの退避（spill）そのものの量で引く（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.1 の裁定 3）。③ ただし on ではノイズ除去に割り当て器の上限が掛かるので、境界は退避ではなく「上限での OOM」か「復号の段（上限なし）の退避」として現れる。判定規則 v3（窓の共有メモリの中央値）をどう読み替えるかは、較正の計画で決める。④ `m×n ≥ 2³¹` の実測（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13 から預けた件）は、on では行の塊で分割されるので起きず、off でだけ届きうる（算術による推測: off の fc1 は S × 28,672 で、S ≥ 約 74,900 行で届く。on の最大の行列積は out_proj の S × 5,376 で、S ≥ 約 40 万行が要る）。扱いは計画で決める。記録は同 §169。
 - **出典**: [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-10-17 の裁定）。
 
-### 1-102. MiniMax H3 の小さな疑い 4 件（起票：2026-10-18）
-
-- **概要**: ① 事前検査が画像読み取り部（vision tower）の無いテキストエンコーダのファイルを通してしまい、I2V のジョブが途中で英語の例外で止まる（`services/model_registry.py` の H3 の分岐と `h3_format.inspect_h3_te`。着手時に拒否するか警告するかを決める）。② Gradio は H3 が拒否する部品（連結・バッチ・A2V・LoRA・NAG など）を閉じず、使うと 422 になる（操作パネルと違い「隠して既定へ戻す」方式の行が無い。意図的かを着手時に決める）。③ `services/engines/h3/adapter.py` の `REQUEST_RULES` に H3 の既定のステップ数が 2 か所に書かれていて、片方を変えると配信される既定と書き戻す既定がずれる（1 か所にまとめる）。④ `metadata.json` の `environment`（torch・cuda・gpu）が H3 では空（H3 のアダプタが埋めていない。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167.8 の観察）。
-- **前提**: なし。着手時に go／no-go を決める。
-- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.10（観測事実と確かめ方）・§167.8（④）。
-
 ### 1-103. MiniMax H3 の A2V（音声から映像）（起票：2026-10-19）
 
 - **概要**: 音声を入力し、同期した映像を生成する。仕組みは、音声行に符号化済みの潜在を入れて時刻 1.0 に固定し、映像行だけをノイズ除去する（DiffSynth の Retake の `retake_audio`、ComfyUI の音声 denoise mask と同じ。公式の task には無い）。V2A〔映像から音声〕も同じ部品で実現できる。
@@ -143,6 +137,12 @@
 - **状態**: 未着手（最初の一手は棚卸し）。
 - **範囲**: テストとモックのみ（製品コードは不変）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163（実測と裁定）・§160.5・§162.4（不安定の記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236（直した前例）。
+
+#### 3-243. MiniMax H3 の Gradio UI の整理（起票：2026-10-21）
+
+- **概要**: Gradio には、H3 が拒否する機能の操作部が見えたまま残っている（Clip Chain タブ、音声から動画生成のアコーディオン、バッチ A2V のアコーディオン、Style LoRA タブ、参照動画による制御のアコーディオン、ネガティブプロンプトのアコーディオン）。使うと 422 になる。操作パネルと同じく、機能名で閉じるか灰色にするかを部品ごとに決めて整える。閉じる仕組みは `gradio_ui/feature_scope.py` の表（既に PrunaVAED・埋め込み処理器の常駐・VRAM 16GB mode・Fused GGUF・キーフレームの強度を閉じている）。
+- **前提**: H3 の機能実装が一通り完了してから着手する。開発途上で閉じると、機能を足すたびに開け直す手間が出るため、それまでは触らない（オーナー裁定 2026-10-21）。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.10（観測）・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-244（§1-102 ② の取り下げ）。
 
 ### 研究課題（上の改修項目より優先度が下）
 

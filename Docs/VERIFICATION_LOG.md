@@ -17273,8 +17273,11 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - **コードの疑い（直していない）**:
   - Python の 3 件は台帳 §1-102 に起票した。観測事実と確かめ方:
     1. `h3_format.inspect_h3_te` は視覚塔（`visual.*`）のテンソルを数えるだけで、無いファイルも通す（`services/model_registry.py` の `_precheck_h3` も同じ関数を使う）。そのファイルで I2V を投げると、ジョブの中で `engine_h3/text_encoder.py` の `encode` が英語の `RuntimeError`（「… has no vision tower (visual.*); I2V needs it」）で止まる。公式の Comfy-Org のテキストエンコーダは視覚塔を持つので、起きるのは第三者のファイルだけ。
+       > **更新（2026-10-21）**: no-go（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 63・§172）。
     2. Gradio の `gradio_ui/feature_scope.py` の `FEATURE_UI` は `prune_vaed` と `keep_resident_embeddings` しか扱わない。H3 の `unsupported_features`（`chain`・`retake`・`loras`・`reference_video`・`nag`・`multi_keyframes`・`keyframe_strength` など）に当たる操作部（Clip Chain・バッチ・A2V・LoRA・NAG・キーフレームの強度）は見えたままで、使うと 422 になる。操作パネルは灰色または非表示にする。
+       > **更新（2026-10-21）**: H3 の開発中は触らない。[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243 で再検討（§172）。（その後、VRAM 16GB mode・Fused GGUF・キーフレームの強度は `gradio_ui/feature_scope.py` で閉じた。残りの一覧は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243）
     3. `services/engines/h3/adapter.py` の `REQUEST_RULES` は、H3 の既定のステップ数を `default_steps=20` と `sampling` の `num_inference_steps` の `default=20` に別々に持つ。`RequestRules.fill_defaults` は前者で書き戻し、`GET /models` の `constraints` は後者を配るので、片方だけを変えるとずれる。
+       > **更新（2026-10-21）**: `H3_DEFAULT_STEPS` の 1 か所にまとめた（§172）。
   - webui の 5 件（記録のみ。起票はしない）:
     - C-1: H3 ではキーフレームが 1 枚に制限されるが、その 1 枚のピンや FRAME の入力は先頭以外へ動かせ、送信してから 422 になる（`modes/single/SingleScreen.tsx`・`KeyframesPanel.tsx`・`KeyframeTimeline.tsx`。アダプタは `frame_idx` が 0 以外を拒否する）。
     - C-2: `GenerationConstraints.frameRate` は「`min` と `max` が等しければ固定」の判定にしか使われない。固定ではないが 1〜60 より狭い範囲を配る系統が来ると、fps 欄とスナップは 1〜60 のまま（今の 3 系統では起きない）。
@@ -17378,6 +17381,7 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - `quant_backends.cuda.int8_linear` は真。Ampere での実測はこれが初めて。
 - ドライバの版は記録していない。cu130 の torch が動いたことから R580 以上と分かる。
 - 小さな発見: `metadata.json` の `environment`（torch・cuda・gpu）が H3 では空だった。H3 のアダプタが埋めていない。台帳 §1-102 の ④ に起票した。
+  > **更新（2026-10-21）**: 誤認。この欄は全系統共通で、アプリ側の仮想環境に torch が無いため LTX でも null（§172）。
 - README の 2 文言は、サブマシンの結果を受けてオーナー了承の文面に更新した（担当 C2）。GPU は「RTX 40 と RTX 30 で確認。RTX 50 は未確認、RTX 20 も未確認」、主メモリは「推奨 64GB。32GB はページファイルがシステム管理なら短い生成を確認済み」。裁定は研究ノート §10 の 43。
 - 配布用 aux2 のコピー（U-1 の文言のみ変更）は `89d93ef` でオーナーがコミット済み。
 - **計画の条件との違い**: 計画（§167.7 の手順 6・裁定 39）は常駐 off・640×384・124 フレームだったが、サブマシンでは常駐 on・512×320・56 フレームで行った。オーナーが実行し、監督が「構築・取得・UI・T2V 1 本」の合格条件を満たすと判断した。手順 1 で確かめるはずだったページファイルの設定は、報告に無く未記録（README の「システム管理なら」の言い方の根拠は、記録簿の上では未確認）。clone も、計画の「dev を pull」でなく main の新規 clone だった（第 3 弾の本体が main に入っていたため実害は無い）。
@@ -18037,3 +18041,67 @@ dev に 3 コミット。
 - **コミット**: dev の `cfef2c3`・`090a68f`・`6e92085`。文書の現行化とクローズの記録のコミット、main への merge は監督が行う。
 - **台帳**: §1-100 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-242 へクローズした。目視の備忘は [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-3。
 - 次の番号: CLOSED 3-243・本書 §172・フロントエンド DEVLOG §145。
+
+## 172. ★MiniMax H3 の小さな疑い 4 件（台帳 §1-102。③ を実装・① は no-go・② は §3-243 へ・④ は誤認。2026-10-21）
+
+### 172.1 要旨
+
+- §166.10 の「コードの疑い」の Python 3 件と §167.8 の観察 1 件（台帳 §1-102 の ①〜④）に決着をつけた。直したのは ③ だけで、値は変えていない。API・操作パネル・Gradio・MCP の挙動は変わらず、aux2 の作り直しも無い。
+- ① は no-go、② は H3 の開発が一段落してから台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243 で扱う、④ は前提の誤り（誤認）だった。
+
+### 172.2 裁定（オーナー 2026-10-21）
+
+- ① 画像読み取り部（vision tower。テキストエンコーダの `visual.*`）の無いファイルを事前検査や送信時に断る仕組みは作らない（no-go）。理由は §172.5。
+- ② Gradio の操作部は、H3 の開発中は触らない。機能を足すたびに開け直す手間を避けるため。§3-243 を起票した。
+- ③ 既定のステップ数を 1 か所にまとめる（go）。
+- ④ 誤認としてクローズし、記録を訂正する。埋める改修は起票しない。
+- 設計の規則は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 63 と §9 に置いた。
+
+### 172.3 ③ の変更
+
+- `services/engines/h3/adapter.py`: モジュール定数 `H3_DEFAULT_STEPS = 20` を `H3_FRAME_RATE` の直後に置き、`REQUEST_RULES` の `default_steps`（`fill_defaults` が要求へ書き戻す値）と `sampling["num_inference_steps"].default`（`GET /models` の `constraints` が配るスライダーの既定）の両方がそれを引くようにした。
+- 同じ箇所のコメントは、値をここに写す理由を「アプリの仮想環境がエンジンのパッケージを読み込めないから」（原文 "they are restated here because the app venv cannot import the engine package, and they must agree with it"）としていたが、事実と違った（`engine_h3/constants.py` は torch を使わない）。本当の理由に書き換えた。新しいコメントは「サーバー側は `engine_h3` のパッケージを読み込まないので写している（境界であり、できないのではない）。ステップ数の既定は `H3_DEFAULT_STEPS` の 1 か所に持ち、写しと `engine_h3/constants.py` の一致は `tests/test_engine_h3_adapter.py` が確かめる」の趣旨である。
+- `tests/test_engine_h3_adapter.py`: 2 か所が定数と等しいこと、ステップ数と shift の既定が `engine_h3.constants`（`DEFAULT_STEPS` 20・`DEFAULT_SHIFT_VIDEO` 12.0・`DEFAULT_SHIFT_AUDIO` 3.0）と一致することを確かめるテスト `test_default_steps_is_held_once_and_agrees_with_the_engine_constants` を足した。
+- アダプタの外にある同じ値の写し（MCP の説明 `mcp_server/server.py`、操作パネルのモック `webui/src/bridge/mockBridge.ts`、Gradio の shift のスライダーの初期値 `gradio_ui/ui.py`）は、値が同じなのでそのままにした。
+
+### 172.4 門の結果
+
+- バックエンドの pytest: 指定 3 ファイル（`test_engine_h3_adapter.py`・`test_validation.py`・`test_gradio_constraints.py`）で 179 件合格。`tests/` 全体で 3,453 件合格・65 件スキップ・失敗 0（基準の 3,452 から、新しいテスト 1 件の分だけ増えた。スキップはエンジン側の仮想環境と torch が無いため）。
+- 操作パネルの型検査・vitest・ビルド・配置は行っていない（操作パネルを変えていないので不要）。
+- **行っていないこと**: GPU を使う生成・サーバーの起動・目視（値と挙動が変わらないため）。
+
+### 172.5 ① と ④ の根拠（再訪の材料）
+
+- **①**:
+  - `h3_format.inspect_h3_te` は `visual.*` を数えて `has_visual` を返すが、それで動くものは無い。`services/model_registry.py` の `_precheck_h3` は `H3FormatError` を変換するだけで、`engine_h3/pipeline_h3.py` は `has_visual` を読み込みの報告に載せるだけである。
+  - 例外は `engine_h3/text_encoder.py` の `encode` で、画像（先頭か末尾のキーフレーム）を渡したときだけ出る（`H3 TE: <path> has no vision tower (visual.*); I2V needs it`）。T2V と中間だけのキーフレームは画像読み取り部を読まない（設計正本 §3）。
+  - 公式の Comfy-Org のテキストエンコーダ（`scripts/manifests/40-minimaxh3.json`・int8 ConvRot 約 27.14GB）は画像読み取り部を持つ（研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md)）。起きるのは第三者のファイルだけである。
+  - 選択肢の比較: 読み込みで断ると T2V の利用者まで止まる。読み込み時の警告のログは利用者に見えない。送信時に日本語の 422 で断る案（読み込みの報告の `has_visual` を使う）は、まれな場合のための新しい仕組みになる。
+  - 再訪するときの材料: 読み込みの報告には既に `has_visual` がある。LTX の前例は、`/pipeline/load` の `MODEL_INCOMPATIBLE` と、`check_kv` の警告のログである。
+- **④**:
+  - `metadata.json` の `environment` は、系統に関係なく `services/pipeline_manager.py` の `_environment_block` が書く（アダプタは関わらない）。
+  - torch と cuda が null なのは、アプリ側の仮想環境に torch が無いためである（`requirements.txt` の「torch-free app venv」、`pyproject.toml`、仕様書 `Videomni_Backend_Specification.md`）。`_environment_block` は torch の読み込みに失敗すると null のままにする。
+  - gpu が null なのは、`services/gpu_info.get_gpu_info()` が torch を読み込めないと `available=False`・`name: None` を返すためである。同モジュールの冒頭の説明は「エンジンは別のワーカーのプロセスと仮想環境で動くので、アプリのプロセスは普通 torch を見ず、`available=False` を報告する」（原文 "the app process normally sees no torch and reports ``available=False``"）と書いている。
+  - `outputs/*/metadata.json` 400 件を読むだけで数えた結果、torch・cuda・gpu は全件で null だった。
+
+    | 系統 | 件数 |
+    |---|---|
+    | LTX 2.3 | 367 |
+    | LTX 2.5 | 23 |
+    | MiniMax H3 | 10 |
+
+  - 埋めるなら、各ワーカーが `ready` の通知で torch・cuda・gpu を報告し、サーバーがそれを写す別の改修になる。オーナーは起票しないと決めた。
+
+### 172.6 レビュー
+
+どちらも Opus の敵対的レビュー。
+
+- **計画のレビュー**: Critical 0・Major 0・Minor 4・Nit 4。任意の 1 文を除いて全件を採用した。
+- **コードと文書のレビュー**: Opus による独立レビュー（コード `d9514c7` と文書の差分をまとめて 1 回）。Critical 0・Major 0・Minor 1・Nit 4。採用 4 点＝§166.10 の 2 の更新行に現状の補足、本項の記入、テストの説明文に shift の照合を追記（dev の追加コミット。識別子は 172.7）、CLOSED 3-244 の件数を §172.5 への参照に。見送り 1 点＝設計書 §9 の 1 文は裁定 63 と重なるが計画どおり残す。
+
+### 172.7 所在と次
+
+- **コミット**: dev の `d9514c7`（アダプタとテスト）と、テストの説明文の追記 `b531eb8`。文書のコミットと main への merge は監督が行う。
+- **台帳**: §1-102 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-244 へクローズした。② は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243 へ。
+- 番号: §171.7 の「次の番号: CLOSED 3-243」は、§3 の新しい項目（§3-243）に使った。本項のクローズは 3-244 である。
+- 次の番号: CLOSED 3-245・本書 §173・フロントエンド DEVLOG §145。

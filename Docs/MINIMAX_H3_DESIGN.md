@@ -81,6 +81,7 @@
 - **裁定 60 【オーナー裁定】**: 公式のプロンプトの指南にある指示文（「Picture 1 は 0.00 秒、Picture 2 は S.SS 秒に合わせる」の趣旨）は、README で紹介するだけで、製品はプロンプトに入れない。
 - **裁定 61 【オーナー裁定】**: T2V と先頭だけの I2V の結果は、キーフレームへの対応で変えない。回帰は基準の指紋で確かめる（§3・§8 の「セルフテスト」）。GPU を使う実測の了承の取り方（進め方の分）は研究ノート §10 にある。
 - **裁定 62 【オーナー裁定】**: Settings の「Fused GGUF Dequantization Kernel」の行は、H3 では非表示にする。仕組みは他の行と同じ機能名の仕組みで、H3 のアダプタが `fused_gguf_dequant_kernel` を `unsupported_features` に載せる。サーバーはこの項目を引き続き無視し、422 にはしない（拒否表には入れない）。Gradio も同じ名前で隠す。隠した行の保存値は、既存の規則どおり既定の ON へ戻す（例外を作らない）。「Block-swap prefetch」の行は表示のままとする。クローズは自動の門で行い、オーナーの目視は台帳 §2 に備忘として起票する（オーナー裁定 2026-10-21）。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171。実装の正本は `services/engines/h3/adapter.py`、操作パネルの `featureScope.ts`、Gradio の `feature_scope.py` である。
+- **裁定 63 【オーナー裁定】**: 台帳 §1-102 の小さな疑い 4 件は次のとおり扱う（オーナー裁定 2026-10-21）。① 画像読み取り部（vision tower。テキストエンコーダの `visual.*`）の無いテキストエンコーダのファイルを事前検査で断ることはしない（no-go）。I2V で先頭か末尾のキーフレームを渡したときだけ必要になる部品で、T2V と中間だけのキーフレームには要らない（§3）。公式の Comfy-Org のファイルは持っているので、起きるのは第三者のファイルだけである。読み込みで断ると T2V の利用者まで止まり、読み込み時の警告のログは利用者に見えず、送信時の日本語の 422 はまれな場合のための新しい仕組みになる。② Gradio が H3 の断る機能の操作部を見せたままにしている件は、H3 の開発中は触らない。機能を足すたびに開け直す手間を避けるためで、H3 の機能実装が一通り終わってから [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243 で整える。③ API 側のステップ数の既定は、アダプタ（`services/engines/h3/adapter.py`）のモジュール定数 `H3_DEFAULT_STEPS` の 1 か所に持ち、規則表の書き戻しと `GET /models` の配る既定の両方がそれを引く。ワーカーの定数（`engine_h3/constants.py`）との一致はテストで確かめる。サーバー側は境界として `engine_h3` のパッケージを読み込まない。④ `metadata.json` の `environment`（torch・cuda・gpu）が H3 だけ空という観察は誤認で、全系統で空である（アプリ側の仮想環境に torch が無いため）。埋める改修は起票しない。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §172。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -367,7 +368,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 ## 9. 定数と既定値
 
-- **ワーカーの既定値と定数の正本は `engine_h3/constants.py`**、**API の既定と範囲の正本は `services/engines/h3/adapter.py` の `REQUEST_RULES`** である。本節の数値は裁定 24 と規約の代表値として引くもので、食い違えば正本を採る。
+- **ワーカーの既定値と定数の正本は `engine_h3/constants.py`**、**API の既定と範囲の正本は `services/engines/h3/adapter.py` の `REQUEST_RULES`** である。本節の数値は裁定 24 と規約の代表値として引くもので、食い違えば正本を採る。API 側のステップ数の既定はアダプタの `H3_DEFAULT_STEPS` の 1 か所に持ち、ワーカーの定数との一致は `tests/test_engine_h3_adapter.py` のテストで確かめる（裁定 63）。
 - 置くもの: ステップ数・shift（映像・音声）の既定値、24fps、空間 32（1 トークン＝32px 四方）、VAE の圧縮率とクリップ長、音声の潜在レート・サンプルレート・ホップ長、モダリティのタグ（映像 0・テキスト 1・音声 2）、ログの接頭辞 `[h3_worker]`、`latent_frames(F)`・`audio_latents(F)`（17n+5 を外れた F は `ValueError`）。
 - ステップ数と shift の既定は **20／12／3**、範囲はステップ数が 1〜50 の整数・shift が 1〜20（刻み 0.1）である（裁定 24）。ワーカーの `generate` は引数で受け取り、省略時に既定値を使う。API では `num_inference_steps`・`shift_video`・`shift_audio` の既定が `null`（＝系統の既定値）で、アプリ側が系統の既定値を要求へ書き戻してからワーカーへ渡す。
 - VRAM 16GB mode の定数（`VRAM16_HEAD_GROUP`・`VRAM16_ROW_CHUNK`・`VRAM16_BLOCKS_ON_GPU`・`VRAM16_CAP_MARGIN_MIB`）も `constants.py` が正本で、値と理由は §6.5 の表にある。

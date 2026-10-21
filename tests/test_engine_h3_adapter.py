@@ -281,7 +281,7 @@ def test_h3_defaults_are_written_back():
 
 
 def test_default_steps_is_held_once_and_agrees_with_the_engine_constants():
-    """台帳 §1-102 ③: one step default in the adapter, equal to the engine's."""
+    """台帳 §1-102 ③: one step default in the adapter, equal to the engine's; the shift defaults also match the engine's."""
     rules = h3.REQUEST_RULES
     assert rules.default_steps == rules.sampling["num_inference_steps"].default == h3.H3_DEFAULT_STEPS
     assert h3.H3_DEFAULT_STEPS == C.DEFAULT_STEPS

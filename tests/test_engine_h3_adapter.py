@@ -34,6 +34,7 @@ import pytest
 from api.errors import APIError
 from api.models import GenerateChainRequest, GenerateRequest
 from config import AppConfig
+from engine_h3 import constants as C
 from services import engines
 from services.base_models import BaseModelDescriptor, CategoryDescriptor
 from services.engines.h3 import adapter as h3
@@ -277,6 +278,15 @@ def test_h3_defaults_are_written_back():
     assert (req.num_inference_steps, req.shift_video, req.shift_audio) == (20, 12.0, 3.0)
     assert isinstance(req.num_inference_steps, int)
     assert req.vram16_mode is True  # 裁定 44: on by default on H3 (flag_defaults)
+
+
+def test_default_steps_is_held_once_and_agrees_with_the_engine_constants():
+    """台帳 §1-102 ③: one step default in the adapter, equal to the engine's; the shift defaults also match the engine's."""
+    rules = h3.REQUEST_RULES
+    assert rules.default_steps == rules.sampling["num_inference_steps"].default == h3.H3_DEFAULT_STEPS
+    assert h3.H3_DEFAULT_STEPS == C.DEFAULT_STEPS
+    assert rules.sampling["shift_video"].default == C.DEFAULT_SHIFT_VIDEO
+    assert rules.sampling["shift_audio"].default == C.DEFAULT_SHIFT_AUDIO
 
 
 def test_vram16_mode_default_is_none_and_an_explicit_false_is_kept():

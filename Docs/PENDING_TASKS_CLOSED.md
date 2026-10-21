@@ -3051,3 +3051,14 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev にコミット済み（`cfef2c3`・`090a68f`・`6e92085`）。文書の現行化とクローズの記録のコミット、main への merge は監督が行う。
 - **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2（裁定 35 の訂正行・裁定 62）、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171、操作パネルの記録はフロントエンドの `Docs/DEVLOG.md` §144、API は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.95。
 - **残課題**: なし。目視の備忘は [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-3。
+
+### 3-244. MiniMax H3 の小さな疑い 4 件（③ ステップ数の既定の一本化を実装。① は no-go・② は §3-243 へ・④ は誤認）（起票：2026-10-18、クローズ：2026-10-21）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-102 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-102（2026-10-18 起票。**同書側は欠番**）。MiniMax H3 の第 2 弾の現行化で見つけたコードの疑い 3 件（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.10）と、第 3 弾のサブマシンの門での観察 1 件（同 §167.8）をまとめたもの。
+- **到達条件**: 4 件それぞれに go／no-go を決め、go のものを直すこと。**達成した。**
+- **何が完了したか**: ③ `services/engines/h3/adapter.py` にモジュール定数 `H3_DEFAULT_STEPS = 20` を置き、`REQUEST_RULES` の書き戻しの既定（`default_steps`）と `GET /models` が配る既定（`num_inference_steps` の `default`）の両方がそれを引くようにした。事実と違っていたコメント（値を写す理由を「アプリの仮想環境がエンジンのパッケージを読み込めないから」としていた）を、本当の理由（サーバー側は `engine_h3` のパッケージを読み込まない。境界であり、できないのではない）に直し、`engine_h3/constants.py` の既定（ステップ数 20・shift 12／3）との一致を確かめるテスト（`test_default_steps_is_held_once_and_agrees_with_the_engine_constants`）を `tests/test_engine_h3_adapter.py` に足した。値は変えていない。① 画像読み取り部（vision tower）の無いテキストエンコーダのファイルを断る件は **no-go**。必要なのは I2V で先頭か末尾のキーフレームを渡したときだけで、公式のファイルは持っており、起きるのは第三者のファイルだけである。読み込みで断ると T2V まで止まり、警告のログは見えず、送信時の 422 はまれな場合のための新しい仕組みになる（オーナー裁定）。② Gradio が H3 の断る機能の操作部を見せたままにしている件は、H3 の開発中は触らない。機能を足すたびに開け直す手間を避けるためで、[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243 に起票した。④ `metadata.json` の `environment`（torch・cuda・gpu）が H3 だけ空という前提は**誤認**。全系統共通の欄で、アプリ側の仮想環境に torch が無いため LTX でも null である（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §172.5）。
+- **どの物差しで通ったか**: 自動の門。バックエンドの pytest は指定 3 ファイルで 179 件合格、`tests/` 全体で 3,453 件合格・65 件スキップ・失敗 0（新しいテスト 1 件の分だけ増えた。スキップはエンジン側の仮想環境と torch が無いため）。値と挙動が変わらないので、GPU・サーバーの起動・実機の目視は無く、操作パネルの型検査・vitest・ビルド・配置も不要だった。
+- **既知の挙動**: なし。
+- **状態**: dev の `d9514c7`（アダプタとテスト）。文書のコミットと main への merge は監督が行う。
+- **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 63・§9、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §172。
+- **残課題**: ② の Gradio の整理は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243。

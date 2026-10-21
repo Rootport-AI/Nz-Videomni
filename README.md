@@ -740,7 +740,7 @@ $env:PYTHONPATH = (Get-Location).Path
 
 | 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い | MiniMax H3 での扱い |
 |------|--------|------------------|------------------|---------------------|
-| Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化） | On / Off | **実装済み**。既定は on | **実装済み**。既定は on | **無視されます**（GGUF の重みを持たないため。指定してもエラーにはなりません） |
+| Fused GGUF Dequantization Kernel（GGUF逆量子化の1カーネル化） | On / Off | **実装済み**。既定は on | **実装済み**。既定は on | **無視されます**（GGUF の重みを持たないため。指定してもエラーにはなりません）。操作パネルと Gradio では、この行を表示しません |
 | Attention（注意機構の実装） | `sdpa` / `sage attention` | **実装済み**。既定は `sdpa` | **実装済み**。既定は `sdpa` | **実装済み**。既定は `sdpa` |
 | Block-swap prefetch（先読みblock swap） | On / Off | **実装済み**。既定は on | **実装済み**。既定は on | **実装済み**。既定は on |
 | モデル骨格の常駐（keep_resident） | On / Off | **実装済み**。既定は off | **実装済み**。既定は off | **実装済み**。既定は off（中身は §7.6） |
@@ -982,7 +982,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 | PrunaVAED・埋め込み処理器の常駐 | `vae_mode`・`keep_resident_embeddings` |
 | 高品質パイプライン（`two_stage_hq`）・CFG の強さ | `pipeline`・`guidance_scale` |
 
-断られる機能の名前の一覧は、`GET /models`（MCP なら `list_models`）の `base_models[].unsupported_features` でも確かめられます。**指定しても断らず、無視して生成を続ける項目は `fused_gguf_dequant_kernel` です**（MiniMax H3 は GGUF の重みを持たないため。既定以外の値を指定したときは `logs/server.log` に 1 行残ります）。
+断られる機能の名前の一覧は、`GET /models`（MCP なら `list_models`）の `base_models[].unsupported_features` でも確かめられます。**`fused_gguf_dequant_kernel` は MiniMax H3 の一覧に載りますが、指定しても断らず、無視して生成を続けます**（MiniMax H3 は GGUF の重みを持たないため。既定以外の値を指定したときは `logs/server.log` に 1 行残ります）。操作パネルと Gradio では、この行を表示しません。
 
 **プロンプトの書き方（先頭と末尾を指定するとき）**
 
@@ -1097,7 +1097,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`wait_for_job` は最大45秒でタイムアウト**します。エラーにはならず `timed_out: true` とその時点の進捗を返すので、終端状態になるまで繰り返し呼んでください。
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
-- **「生成の高速化（Acceleration）」の7項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings` / `vram16_mode`。`vram16_mode` は `submit_generate` だけ）。**`vram16_mode=True` は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では 422 になります。** それを除くと、**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。
+- **「生成の高速化（Acceleration）」の7項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings` / `vram16_mode`。`vram16_mode` は `submit_generate` だけ）。**`vram16_mode=True` は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では 422 になります。** それを除くと、**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は一覧に載りますが 422 にはならず、無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。
 - **`submit_generate` / `submit_chain` には引数 `embed_mp4_metadata`（既定 `True`）があります。** `False` にすると、完成した mp4 に生成条件を書き込みません（§5「[生成条件を mp4 に記録する](#mp4-recipe)」）。
 
 ---

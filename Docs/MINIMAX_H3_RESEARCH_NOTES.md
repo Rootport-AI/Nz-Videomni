@@ -288,6 +288,7 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 34. 操作パネルの Edit タブは、H3 では 4 つのサブタブ（Retake・Outpainting・Inpainting・Alpha Gen）が全部閉じるため、既存の規則によりタブごと灰色になる。裁定 30 の「グレーアウトして配置だけ決めておく」はこの形で満たす（第 2 弾の計画の了承で確定）。 → 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 へ移管
 35. NAG のアコーディオンは H3 では非表示でなく灰色にし、要求に NAG の項目を載せない（非表示にすると有効にしたまま解除できず全ジョブが 422 になるため）。Single の A2V カードは連結要求そのものなので `chain` で閉じる（灰色）。IC-LoRA の参照動画のアコーディオンは非表示（第 2 弾の計画の了承で確定）。 → 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 へ移管
    > **訂正（2026-10-18）**: Single の A2V カードとバッチ A2V は非表示にする（2026-10-18 の目視の所感。実装は台帳 §1-100）。
+   > **更新（2026-10-21）**: 非表示は取り下げ（A2V を近日実装するため灰色のまま。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 35 の訂正行・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171）。
 
 ### 2026-10-18 の裁定（第 3 弾の着手時・追記）
 

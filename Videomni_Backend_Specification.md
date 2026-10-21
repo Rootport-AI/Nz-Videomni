@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.94**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-10-19**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.95**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-10-21**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -148,6 +148,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.93（文言の現行化） | 2026-10-19 | **文言の現行化（版は上げない。API・挙動は不変）**。VRAM 16GB mode のクローズ（台帳 CLOSED 3-240）の後の追随。§6.6 の `h3` 欄の行に、VRAM 16GB mode のジョブでは `phases.denoise.vram16` が入ることを足した。§11.3 の `block_swap_blocks_on_gpu` の行に、MiniMax H3 も load の値に使い、VRAM 16GB mode の on のジョブでは `min(値, 4)` になることを足した。記録は `Docs/VERIFICATION_LOG.md` §169.9。 |
 | v0.5.94 | 2026-10-19 | **MiniMax H3 のキーフレーム（末尾と中間）を反映し、キーフレームの位置と強度の規則を系統の規則表へ移した（台帳 §1-97）**。LTX 2.3／2.5 の受理範囲・寄せた先の値・ワーカーペイロード・`metadata.json` の値は変わらない。**変わる点は次の 4 つ**。(1) **`ConditioningImage.strength` を省略可**にした（既定 `0.8` → `null`＝系統の既定。LTX は 0.8 を書き戻すので記録は従来どおり 0.8。MiniMax H3 は `null` 以外を `keyframe_strength` の 422 `FEATURE_UNSUPPORTED` で断り、記録は `null`）。(2) **`frame_idx` の寄せと重複の検査を、スキーマから §6.2b の `validate_for_family` の最後の段へ移した**。同じ 422 の形のまま、**位置の重複の 422 は `FEATURE_UNSUPPORTED` の後、かつ系統の数値の違反（8n+1／17n+5 など）の後に返る**。(3) **`GET /models` の `constraints` に `keyframes {step, offset}` を加算**し、**`GET /config` の `limits` から `conditioning_frame_idx_multiple`／`conditioning_keyframe_grid_offset` の 2 鍵を削除**した（**この版より古い操作パネルは 2 鍵から格子を計算するので NaN になる。操作パネルとサーバーは同時に配置すること**。古い `config.yaml` に残った 2 鍵は `extra='ignore'` で無視される）。(4) **MiniMax H3 の I2V はキーフレームを最大 10 枚・0〜`num_frames`−1 の任意のフレームに置ける**（`unsupported_features` から `multi_keyframes` が消えた）。**§6.2** の凍結制約 7／**§6.2b**（(b) の順序、(c) の表に位置と強度の 2 行、(e) の `keyframes`、(f) の H3 の一覧、(g) の記録）／**§6.2 の ConditioningImage** の表／**§6.6** の `h3` 欄（`images_used` は枚数、`phases.image_encode.source_size` は画像ごとの `[w, h]` のリスト）／**§6.7**／**§12.2**（Gradio のキーフレームの説明と強度のスライダー）／**§16**／**付録 A・B** を合わせた。設計正本は `Docs/MINIMAX_H3_DESIGN.md` §2（裁定 56〜61）・§3、仕組みは `Docs/MULTI_ENGINE_DESIGN.md` §7。記録は `Docs/VERIFICATION_LOG.md` §170。 |
 | v0.5.94（文言の現行化） | 2026-10-19 | **文言の現行化（版は上げない。API・挙動は不変）**。キーフレーム関連の記述の整合（Gradio の節と規約の表の文言）。 |
+| v0.5.95 | 2026-10-21 | **`GET /models` の MiniMax H3 の `unsupported_features` に `fused_gguf_dequant_kernel` を追加（台帳 §1-100 の ①）**。受け取って無視する項目を一覧に載せる初めての例で、サーバーの挙動は変わらない（H3 はこの項目を引き続き無視し、422 にしない）。これに伴い `unsupported_features` の意味は「その系統に無い機能（422 で断るか、受け取って無視する）」になった。操作パネルと Gradio は、この名前で Settings の「Fused GGUF Dequantization Kernel」の行を隠す。**§6.2b (f)**（H3 の一覧と導出の書き方）／**§6.10(b)**（例の注記の正本を各アダプタの `UNSUPPORTED_FEATURES` に）／**§12.2**（Gradio の Settings で H3 ではこの行を非表示）を更新した。記録は `Docs/VERIFICATION_LOG.md` §171。 |
 
 ### 0.2 スコープ
 
@@ -873,7 +874,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 `keyframes` は、開始フレーム（`frame_idx` 0）以外のキーフレームを置ける格子 `step × n + offset` である（寄せ方は §6.2 の凍結制約 7）。省略（古いバックエンド）は LTX の `{step: 8, offset: 1}` として扱う。
 
-**(f) MiniMax H3 の `unsupported_features`。** 単発生成の拒否表の機能名（`loras`・`reference_video`・`nag`・`two_stage_hq`・`guidance_scale`・`outpaint`・`inpaint`・`alpha_gen`・`prune_vaed`・`keep_resident_embeddings`・`keyframe_strength`〔`strength` が `null` 以外。0.8 でも断る〕）＋ `chain` ＋ `retake`。I2V はキーフレームを最大 10 枚・0〜`num_frames`−1 の任意のフレームに置け、強度は省略する（ワーカーへは送らない）。H3 の strength の 422 の文言は「MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。」である。導出規則は MULTI_ENGINE_DESIGN §5.6 (4)。**逆向きに、LTX 2.3／2.5 の `unsupported_features` には H3 専用の `vram16_mode`（2026-10-18 追加）が載る**（H3 の一覧には載らない）。
+**(f) MiniMax H3 の `unsupported_features`。** 単発生成の拒否表の機能名（`loras`・`reference_video`・`nag`・`two_stage_hq`・`guidance_scale`・`outpaint`・`inpaint`・`alpha_gen`・`prune_vaed`・`keep_resident_embeddings`・`keyframe_strength`〔`strength` が `null` 以外。0.8 でも断る〕）＋ `chain` ＋ `retake` ＋ `fused_gguf_dequant_kernel`〔無視表の項目。422 にはならず、H3 では効かない操作部を隠すためだけに載せる〕。I2V はキーフレームを最大 10 枚・0〜`num_frames`−1 の任意のフレームに置け、強度は省略する（ワーカーへは送らない）。H3 の strength の 422 の文言は「MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。」である。導出規則は MULTI_ENGINE_DESIGN §5.6 (4)。**逆向きに、LTX 2.3／2.5 の `unsupported_features` には H3 専用の `vram16_mode`（2026-10-18 追加）が載る**（H3 の一覧には載らない）。
 
 **(g) `metadata.json`。** H3 のジョブには `h3` 欄が加わる（§6.6）。LTX の記録には `shift_video`／`shift_audio` が `null` で載る（`request` の写し。足すだけの差）。H3 の記録の `request.conditioning_images[].strength` は `null` である（強度が効いていないことの印。1.0 にはしない）。実際に使った位置は同じ写しの `frame_idx`（サーバーが寄せた後の値）に残る。
 
@@ -1609,7 +1610,7 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
     "id": "LTX25",
     "display_name": "LTX 2.5",
     "engine_family": "ltx25",
-    "unsupported_features": [        // 加算。このエンジンが扱えない機能の名前（例。正本はアダプタの拒否表 REJECT_TABLE）
+    "unsupported_features": [        // 加算。このエンジンが扱えない機能の名前（例。正本は各アダプタの `UNSUPPORTED_FEATURES`）
       "two_stage_hq", "prune_vaed", "vram16_mode"
     ],
     "...": "id / display_name / active / installed / present / categories は §6.9(c) のまま"
@@ -2099,7 +2100,7 @@ GET        /api/v1/jobs/{job_id}/video -> mp4
 - Quality mode 直下に **Preset** ドロップダウン。選択すると解像度・crop と各クリップの推奨フレーム数（解像度別の快適上限）を全スロットへ一括自動入力する。
 - width / height の `minimum` 撤去・JS での `min` 属性付与、および「生成中はボタンをグレーアウト」は Generate タブと同じ仕組みを共有する。
 
-**Settings タブ**: 言語/テーマ・接続情報・ポーリング設定・サーバー config ビューアに加え、**Models** セクション（見出し直下に**ベースモデル（LTX 2.3 ／ LTX 2.5 の系統）を選ぶドロップダウン**、その下にカテゴリ別ドロップダウン＋Load。選択肢と初期値は `GET /models` の `base_models[]` ・ `active_base_model` から作り、系統を変えると4カテゴリの選択肢がその系統のものへ入れ替わる。Load は `base_model` を常に送る。`default` 選択肢は実ファイル名を併記した `default — <ファイル名>` 表示）と **Danger zone**（Unload 等・チェックボックスで解錠）を持つ。あわせて **Acceleration（生成の高速化）** 区画があり、**6項目すべて実装済み**の切替——Fused GGUF Dequantization Kernel（GGUF 逆量子化の1カーネル化）／attention（`sdpa`・`sage`）／Block-swap prefetch（先読み block swap）／モデル骨格の常駐（`keep_resident`）／埋め込み処理器の常駐（`keep_resident_embeddings`。既定 off。LTX 2.5 専用。**2026-09-18 に追加**）／VAE（Default・PrunaVAED。**2026-08-05 に実装**。既定は Default で恒久的に反転しない）——を並べ、**2026-10-18 に 7 項目目の VRAM 16GB mode（`vram16_mode`。MiniMax H3 専用・既定 on。off のときだけ `vram16_mode: false` を単発の Generate タブの要求へ載せる。連結・A2V バッチには載せない）を足した**。**このうち VAE の PrunaVAED は LTX 2.5 で、埋め込み処理器の常駐は LTX 2.3 で、VRAM 16GB mode は LTX 2.3／2.5 の両方で、それぞれ読み込み中のベースモデルが対応しないため行ごと非表示になる**（非表示のときは既定 on へ戻すので、キーは送られない）（`GET /models` の `base_models[].unsupported_features` に基づく判定。§6.10(b)）。**常時グレーアウトのプレースホルダは 2026-08-05 をもって1件も無くなった**。**値はジョブ単位でリクエストに載る**（サーバーの再起動もパイプラインの再読み込みも要らない。フィールドは §6.2 を参照）。Acceleration の直後には **「Metadata output（メタデータ出力）」** 区画があり、チェックボックス「生成したmp4に生成条件をメタデータとして書き込む」（既定 on。off のときだけ `embed_mp4_metadata: false` を単発・連結・A2V バッチの要求へ載せる）を置く。
+**Settings タブ**: 言語/テーマ・接続情報・ポーリング設定・サーバー config ビューアに加え、**Models** セクション（見出し直下に**ベースモデル（LTX 2.3 ／ LTX 2.5 の系統）を選ぶドロップダウン**、その下にカテゴリ別ドロップダウン＋Load。選択肢と初期値は `GET /models` の `base_models[]` ・ `active_base_model` から作り、系統を変えると4カテゴリの選択肢がその系統のものへ入れ替わる。Load は `base_model` を常に送る。`default` 選択肢は実ファイル名を併記した `default — <ファイル名>` 表示）と **Danger zone**（Unload 等・チェックボックスで解錠）を持つ。あわせて **Acceleration（生成の高速化）** 区画があり、**6項目すべて実装済み**の切替——Fused GGUF Dequantization Kernel（GGUF 逆量子化の1カーネル化）／attention（`sdpa`・`sage`）／Block-swap prefetch（先読み block swap）／モデル骨格の常駐（`keep_resident`）／埋め込み処理器の常駐（`keep_resident_embeddings`。既定 off。LTX 2.5 専用。**2026-09-18 に追加**）／VAE（Default・PrunaVAED。**2026-08-05 に実装**。既定は Default で恒久的に反転しない）——を並べ、**2026-10-18 に 7 項目目の VRAM 16GB mode（`vram16_mode`。MiniMax H3 専用・既定 on。off のときだけ `vram16_mode: false` を単発の Generate タブの要求へ載せる。連結・A2V バッチには載せない）を足した**。**このうち VAE の PrunaVAED は LTX 2.5 で、埋め込み処理器の常駐は LTX 2.3 で、VRAM 16GB mode は LTX 2.3／2.5 の両方で、Fused GGUF Dequantization Kernel は MiniMax H3 で（2026-10-21 追加。H3 は GGUF を使わない）、それぞれ読み込み中のベースモデルが対応しないため行ごと非表示になる**（非表示のときは既定へ戻すので、キーは送られない）（`GET /models` の `base_models[].unsupported_features` に基づく判定。§6.10(b)）。**常時グレーアウトのプレースホルダは 2026-08-05 をもって1件も無くなった**。**値はジョブ単位でリクエストに載る**（サーバーの再起動もパイプラインの再読み込みも要らない。フィールドは §6.2 を参照）。Acceleration の直後には **「Metadata output（メタデータ出力）」** 区画があり、チェックボックス「生成したmp4に生成条件をメタデータとして書き込む」（既定 on。off のときだけ `embed_mp4_metadata: false` を単発・連結・A2V バッチの要求へ載せる）を置く。
 
 **MP4 Info（mp4 情報）タブ（2026-09-24追加）**: Jobs と Settings の間にある。左に動画ファイルの受け口（`gr.File`）、右に読み取り専用のテキスト欄（欄の名前は「Metadata (Generation conditions)／メタデータ（生成条件）」）を置き、受け取ったファイルのパスを `POST /utils/mp4-info` へ渡して `comment` タグの文字列をそのまま表示する。タグが無ければ「生成条件のメタデータが見つかりませんでした」。コピー専用のボタンは無い（欄の文字を選択してコピーする）。
 

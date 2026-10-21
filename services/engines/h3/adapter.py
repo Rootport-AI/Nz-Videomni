@@ -221,16 +221,21 @@ GOVERNED_FIELDS: dict[str, str] = {
 }
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``:
-#: the single-request reject table's feature names, plus ``chain`` and
-#: ``retake``. Both are refused by :func:`reject_chain` (the chain endpoint is
-#: refused as a whole): ``chain`` closes the Chained tab and Single's A2V card,
-#: and ``retake`` — a chain request too — closes Retake's Edit sub-tab. With
-#: Outpainting, Inpainting and Alpha Gen also refused, all four Edit sub-tabs
-#: close and the operation panel greys the whole Edit tab (裁定 34). Nothing
-#: else — a name the server never refuses would close a working control.
+#: the single-request reject table's feature names, plus ``chain``,
+#: ``retake`` and ``fused_gguf_dequant_kernel``. ``chain`` and ``retake`` are
+#: refused by :func:`reject_chain` (the chain endpoint is refused as a whole):
+#: ``chain`` closes the Chained tab and Single's A2V card, and ``retake`` — a
+#: chain request too — closes Retake's Edit sub-tab. With Outpainting,
+#: Inpainting and Alpha Gen also refused, all four Edit sub-tabs close and the
+#: operation panel greys the whole Edit tab (裁定 34).
+#: ``fused_gguf_dequant_kernel`` is the one name here the server does NOT
+#: refuse: it stays in :data:`IGNORED_FIELDS` (MiniMax H3 has no GGUF weights,
+#: so a saved OFF must keep passing rather than 422), and is published only
+#: so the UIs hide a control that can do nothing on this engine (台帳 §1-100).
+#: Nothing else — a name for a control that works here would close it.
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     dict.fromkeys(feature for _field, feature, _pred in REJECT_TABLE)
-) + ("chain", "retake")
+) + ("chain", "retake", "fused_gguf_dequant_kernel")
 
 
 def _refusal_detail(field: str, feature: str) -> str:

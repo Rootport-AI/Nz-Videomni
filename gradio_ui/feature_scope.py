@@ -9,9 +9,9 @@ server feature name — every caller receives a finished set of control ids.
 
 Hiding a control is only half the job: a Gradio component keeps SENDING its
 value while invisible, so a choice made on a base model that supports the
-feature would keep riding along after a switch and 422 every job. Hence
-:data:`RESET_VALUES`: a hidden control is also written back to the server
-default.
+feature would keep riding along after a switch, to be refused with 422 or
+ignored on every job. Hence :data:`RESET_VALUES`: a hidden control is also
+written back to the server default.
 
 A feature with no control here is simply absent from the table rather than
 listed with an empty tuple — ``two_stage_hq`` (the quality radio already falls
@@ -34,6 +34,10 @@ FEATURE_UI: dict[str, tuple[str, ...]] = {
     "prune_vaed": ("accel_vae",),
     "keep_resident_embeddings": ("accel_keep_resident_embeddings",),
     "vram16_mode": ("accel_vram16",),
+    # Published by the family without GGUF weights (MiniMax H3). The server
+    # ignores the value rather than 422-ing it; it is hidden because the
+    # control can do nothing there.
+    "fused_gguf_dequant_kernel": ("accel_fused_dequant",),
     # One strength slider per keyframe slot; a base model without keyframe
     # strength (MiniMax H3) closes all of them.
     "keyframe_strength": tuple(
@@ -41,10 +45,11 @@ FEATURE_UI: dict[str, tuple[str, ...]] = {
 }
 
 #: The value a hidden control is reset to — the server's own default for the
-#: field it feeds, so an invisible control cannot keep a rejected value on the
-#: wire. Every id named in :data:`FEATURE_UI` must appear here. The type is as
-#: wide as the controls are: a radio resets to a string literal, a checkbox to
-#: a bool, a slider to a float.
+#: field it feeds, so an invisible control cannot keep a value that is
+#: refused with 422 or ignored on the wire. Every id named in
+#: :data:`FEATURE_UI` must appear here. The type is as wide as the controls
+#: are: a radio resets to a string literal, a checkbox to a bool, a slider to
+#: a float.
 RESET_VALUES: dict[str, str | bool | float] = {
     "accel_vae": "default",
     "accel_keep_resident_embeddings": False,
@@ -52,6 +57,9 @@ RESET_VALUES: dict[str, str | bool | float] = {
     # when the box is OFF, so a hidden box at its default puts nothing on the
     # wire and LTX never sees vram16_mode.
     "accel_vram16": True,
+    # Reset to the default (on): the handlers send the key only when the box
+    # is OFF, so a hidden box puts nothing on the wire.
+    "accel_fused_dequant": True,
     # Reset to the LTX default, not to "no strength": the handler sends the
     # key only when a slot differs from it, so a hidden slider at its default
     # puts nothing on the wire and H3 never sees strength.

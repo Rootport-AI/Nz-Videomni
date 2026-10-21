@@ -3040,3 +3040,14 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev にコミット済み（実装 `66761ec`・裁定の反映 `776a3d2`）。クローズの記録のコミットと main への merge は監督が行う。
 - **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170。複写は [`Outputs-archive/h3-keyframes-2026-10-19/`](Outputs-archive/h3-keyframes-2026-10-19/README.md)。
 - **残課題**: テキストエンコーダの int8 ConvRot と bf16 の差が画像 2 枚のときだけ大きい件（未診断。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.7 (a)）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-43 に起票済み。
+
+### 3-242. Settings の「Fused GGUF Dequantization Kernel」の行を MiniMax H3 では非表示にする（① のみ。② は取り下げ）（起票：2026-10-18、クローズ：2026-10-21）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-100 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-100（2026-10-18 起票。**同書側は欠番**）。MiniMax H3 の第 2 弾の目視（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.9）で気づいた 2 点を起票したもの。
+- **到達条件**: MiniMax H3 を選んでいる間、Settings「生成の高速化」の「Fused GGUF Dequantization Kernel」の行が出ないこと（GGUF を使わない系統なので効かない）。他の行と同じ機能名の仕組みで閉じ、「Block-swap prefetch」の行は表示のまま残すこと。**達成した。**
+- **何が完了したか**: ① H3 のアダプタ（`services/engines/h3/adapter.py`）が `unsupported_features` に `fused_gguf_dequant_kernel` を載せるようにした。サーバーはこの項目を引き続き無視し、422 にしない（拒否表には入れない）。操作パネル（`featureScope.ts`・`SettingsPanel.tsx`）と Gradio（`feature_scope.py`・`ui.py`）がこの名前で行を隠し、保存値を既定の ON へ戻す。あわせて、一覧を「載っていれば 422」と説明していた文言（`api/models_registry.py` のコメント、MCP の `list_models` と `submit_generate` の説明）を「422 で断るか無視する」に直した。② Single の A2V カードとバッチ A2V を灰色でなく非表示にする件は**実施しなかった**。A2V（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-103）とバッチ A2V を近日実装するので、いま隠してもすぐ戻すことになるため、オーナーが取り下げた（2026-10-21）。H3 では `chain` の行で灰色のままである。
+- **どの物差しで通ったか**: 自動の門。バックエンドの pytest は `tests/` 全体で 3,452 passed・65 skipped（skipped はエンジンの venv や torch が無いためで無関係）、操作パネルは `npm run typecheck` のエラー 0・vitest 166 files・3,320 tests 合格、aux2 の作成と配置も成功した。`GET /models` は FastAPI のテストクライアントで確かめた。実機で確かめられる要素は操作パネルと Gradio の表示だが、オーナー裁定で目視を待たずに閉じ、備忘を [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-3 に起票した。
+- **既知の挙動（仕様どおり・変えない）**: LTX でこの行を OFF にし、H3 を経て LTX へ戻ると ON になっている（隠した行は既定へ戻す既存の規則どおり）。
+- **状態**: dev にコミット済み（`cfef2c3`・`090a68f`・`6e92085`）。文書の現行化とクローズの記録のコミット、main への merge は監督が行う。
+- **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2（裁定 35 の訂正行・裁定 62）、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171、操作パネルの記録はフロントエンドの `Docs/DEVLOG.md` §144、API は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.95。
+- **残課題**: なし。目視の備忘は [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-3。

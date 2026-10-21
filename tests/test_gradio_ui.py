@@ -957,9 +957,11 @@ def test_fused_dequant_checkbox_default_and_label():
     box = boxes[0]
     assert box.value is FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
     assert box.value is True, "on by default since the gates passed (§51)"
-    # NOT gated client-side: the server degrades to the eager implementation on
-    # its own, so a client-side lockout would only be a second, drifting source
-    # of truth (same reasoning as the attention selector).
+    # NOT gated on Triton availability: the server degrades to the eager
+    # implementation on its own, so a client-side lockout would only be a
+    # second, drifting source of truth (same reasoning as the attention
+    # selector). It is still interactive; it is hidden per family instead
+    # (MiniMax H3 publishes fused_gguf_dequant_kernel — feature_scope.py).
     assert box.interactive is not False
     assert box.info == en["accel_info_fused_dequant"]
 

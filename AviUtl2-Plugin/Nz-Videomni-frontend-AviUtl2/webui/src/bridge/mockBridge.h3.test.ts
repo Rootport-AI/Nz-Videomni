@@ -55,6 +55,11 @@ describe("mockBridge — MiniMax H3", () => {
     expect(h3?.unsupported_features).not.toContain("vram16_mode");
     expect(ltx?.unsupported_features).toContain("vram16_mode");
     expect(blocks.find((b) => b.id === "LTX25")?.unsupported_features).toContain("vram16_mode");
+    // 台帳 §1-100: the fused GGUF kernel is the other way round — H3 (no GGUF
+    // weights) publishes the name, neither LTX engine does.
+    expect(h3?.unsupported_features).toContain("fused_gguf_dequant_kernel");
+    expect(ltx?.unsupported_features).not.toContain("fused_gguf_dequant_kernel");
+    expect(blocks.find((b) => b.id === "LTX25")?.unsupported_features).not.toContain("fused_gguf_dequant_kernel");
   });
 
   it("follows its OWN install knob, not LTX 2.5's", async () => {

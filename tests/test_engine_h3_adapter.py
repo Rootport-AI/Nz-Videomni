@@ -9,7 +9,8 @@ Pinned here, none of it needing a GPU or a weight file:
 1. the four-way audit of ``GenerateRequest`` against the adapter's tables
    (``conditioning_images`` is the one field that is both honoured and refused —
    key frames on any frame run, a strength does not);
-2. the refusals and ``UNSUPPORTED_FEATURES`` (the reject table's names + ``chain`` + ``retake``);
+2. the refusals and ``UNSUPPORTED_FEATURES`` (the reject table's names + ``chain`` + ``retake``
+   + ``fused_gguf_dequant_kernel``);
 3. the numeric rules and the ``constraints`` block GET /models publishes, for
    H3 and for LTX (the two JSON blocks of the stage-2 plan §3.3, verbatim);
 4. the worker payloads: ``load`` (golden, no ``te_layers_on_gpu``) and
@@ -182,7 +183,7 @@ def test_t2v_and_keyframe_i2v_are_accepted():
     ]))
 
 
-def test_unsupported_features_is_the_reject_table_plus_chain_and_retake():
+def test_unsupported_features_is_the_reject_table_plus_chain_retake_and_fused_kernel():
     assert h3.UNSUPPORTED_FEATURES == (
         "loras",
         "reference_video",
@@ -197,8 +198,20 @@ def test_unsupported_features_is_the_reject_table_plus_chain_and_retake():
         "keyframe_strength",
         "chain",
         "retake",
+        "fused_gguf_dequant_kernel",
     )
     assert engines.unsupported_features("h3") == h3.UNSUPPORTED_FEATURES
+
+
+def test_fused_kernel_is_published_but_ignored_not_refused():
+    # Published so the UIs hide the Settings row, yet never a 422: a saved OFF
+    # must keep passing on H3 (台帳 §1-100).
+    assert "fused_gguf_dequant_kernel" in h3.UNSUPPORTED_FEATURES
+    # The name is both a request field and a feature name; neither column has it.
+    assert "fused_gguf_dequant_kernel" not in {field for field, _feature, _pred in h3.REJECT_TABLE}
+    assert "fused_gguf_dequant_kernel" not in {feature for _field, feature, _pred in h3.REJECT_TABLE}
+    assert "fused_gguf_dequant_kernel" in h3.IGNORED_FIELDS
+    h3.reject_unsupported(_request(fused_gguf_dequant_kernel=False))
 
 
 def test_every_chain_is_refused():
@@ -613,6 +626,9 @@ def test_models_lists_h3_with_constraints(three_family_client):
     assert "vram16_mode" not in h3_entry["unsupported_features"]
     assert "vram16_mode" in _base(three_family_client, "LTX23")["unsupported_features"]
     assert "vram16_mode" in _base(three_family_client, "LTX25")["unsupported_features"]
+    # Fused GGUF Dequantization Kernel: hidden on H3 only (台帳 §1-100).
+    assert "fused_gguf_dequant_kernel" in h3_entry["unsupported_features"]
+    assert "fused_gguf_dequant_kernel" not in _base(three_family_client, "LTX23")["unsupported_features"]
 
 
 def test_switch_to_h3_runs_the_h3_precheck_and_weight_class_is_null(three_family_client):

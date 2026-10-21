@@ -499,6 +499,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "keyframe_strength",
     "chain",
     "retake",
+    // 台帳 §1-100: no GGUF weights, so the server IGNORES the field (no 422) — hides the Settings row only.
+    "fused_gguf_dequant_kernel",
   ],
 };
 

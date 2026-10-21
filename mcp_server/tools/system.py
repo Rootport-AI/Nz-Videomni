@@ -111,8 +111,9 @@ async def list_models() -> dict[str, Any]:
             ``engine_family`` / ``present`` / ``category_order`` /
             ``categories`` を含みます。
             ``unsupported_features`` に載っている機能を submit_generate /
-            submit_chain / submit_alpha_gen で使うと 422 FEATURE_UNSUPPORTED
-            になります（``alpha_gen`` は submit_alpha_gen の機能です）。
+            submit_chain / submit_alpha_gen で使うと、その系統では 422
+            FEATURE_UNSUPPORTED になるか無視されます（``alpha_gen`` は
+            submit_alpha_gen の機能です）。
     """
     client = get_client()
     return await client.get_json("/models")

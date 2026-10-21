@@ -17239,7 +17239,9 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - I2V の観察: ノイズ除去の各ステップが約 210 秒かかり、共有 GPU メモリを 3.7GB 使う VRAM の溢れが起きた。快適上限が未較正の画角で、α版の想定内。ただしオーナーの所感により、最適化の課題を台帳 §1-101 に起票した。
 - 気づいた点 2 つ（どちらも台帳 §1-100 に起票）:
   - Settings の「生成の高速化」にある「Fused GGUF Dequantization Kernel」の行が H3 でも表示される。H3 は GGUF を使わないので不適切。この行には機能名の受け口が無い。「Block-swap prefetch」の行は H3 でも効くので表示のままでよい。
+    > **更新（2026-10-21）**: 実装済み（§171）。
   - Single の A2V のカードと Batch A2V は、灰色でなく非表示にすべき（今は `chain` の行で灰色）。
+    > **更新（2026-10-21）**: 非表示は取り下げ（灰色のまま。§171・設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 35 の訂正行）。
 - 残り: main への merge（オーナーの合図）。第 3 弾（`install-MiniMaxH3.bat`・README）は別のセッション。
 
 ### 166.10 文書とコード内コメントの現行化（第 4 次。2026-10-18）
@@ -17260,6 +17262,7 @@ vitest は `npx vitest run --exclude "**/backend.integration.test.ts"`。作業�
 - **判断 J-1〜J-7 の結論**（監督の判断）:
   - J-1: 主メモリ 32GB 機は α版の対象外（推奨は 64GB。研究ノートの裁定 26）。ページファイルで動く可能性はあるが未検証（設計正本 §13・仕様書 §2.1）。
   - J-2: Single の A2V カードとバッチ A2V は、オーナーの目視の所感（2026-10-18）が裁定 35 の該当部分を置き換え、非表示にする。実装は台帳 §1-100（いまのコードは灰色）。
+    > **更新（2026-10-21）**: 非表示は取り下げ（灰色のまま。§171・設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 35 の訂正行）。
   - J-3: 研究ノートの裁定 5 の後半（インストーラを先に作る）は、裁定 14（インストーラは第 3 弾）で置き換わった。
   - J-4: `transformer_weight_class` が H3 では常に `null` である件は、台帳 §1-95 の留意に書き、較正の計画で扱う。
   - J-5: H3 の 4 分類の正本は `services/engines/h3/adapter.py` の表そのもの（文書へ写さない）。
@@ -17972,3 +17975,65 @@ PSNR（dB。出力のフレーム対キーフレームの画像。frame 0 は `k
 - 雑談（オーナーの所感）: 中間だけのキーフレームでも、テキストエンコーダはその画像を見ていないのに、入力画像がかなり正確に再現された。監督の説明: 条件行は画像の VAE の潜在（画素の情報）を正しい時間座標に載せて運び、モデルは注意（attention）を通じてそれを写す。先頭フレームの I2V と同じ経路であり、テキストエンコーダに渡す画像は意味の説明を足すだけである。
 
 **クローズ**: 台帳 §2-2〔元 §1-97〕は CLOSED 3-241 へクローズした（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)）。main への merge は監督が行う。
+
+## 171. ★Settings の「Fused GGUF Dequantization Kernel」の行を MiniMax H3 で非表示（台帳 §1-100 ①。② は取り下げ。2026-10-21）
+
+### 171.1 要旨
+
+- **作ったもの**: MiniMax H3（以下 H3）を選んでいるとき、Settings「生成の高速化」の「Fused GGUF Dequantization Kernel」の行と、ON のときに出る注記を出さないようにした。H3 は GGUF を使わないので、この行は効かない。仕組みは他の行（`prune_vaed` など）と同じ機能名の仕組みで、H3 のアダプタが `fused_gguf_dequant_kernel` を `GET /models` の `unsupported_features` に載せ、操作パネルと Gradio がその名前で行を隠す。
+- **隠した行の保存値**: 既存の規則（隠した行は既定へ戻す）どおり、保存値が OFF なら H3 で既定の ON へ戻す。
+- **変わらないもの**: LTX 2.3・LTX 2.5 の画面。「Block-swap prefetch」の行（H3 でも効くので表示のまま）。サーバーの挙動（H3 はこの項目を受け取っても無視し、422 にはしない）。
+- **② は実施しない**: Single の A2V カードとバッチ A2V は、H3 では `chain` の行で灰色のまま（§171.2）。
+
+### 171.2 裁定（オーナー 2026-10-21）
+
+- 台帳 §1-100 は ① だけ行う。
+- ②（Single の A2V カードとバッチ A2V を、灰色でなく非表示にする）は行わず、取り下げる。理由: A2V（台帳 §1-103）とバッチ A2V を近日実装するので、いま隠してもすぐ戻すことになる。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 35 に訂正行を足した。
+- Gradio も同じ名前で隠す。
+- オーナーの目視は待たず、自動の門でクローズする。目視は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-3 に備忘として起票する。
+- 隠した行の保存値を既定へ戻す動きは、既存の規則のまま残す（例外を作らない）。
+- 設計の規則は設計正本 §2 の裁定 62 に置いた。
+
+### 171.3 変更
+
+dev に 3 コミット。
+
+- **`cfef2c3` バックエンドと Gradio**:
+  - `services/engines/h3/adapter.py`: `UNSUPPORTED_FEATURES` の明示の組を `("chain", "retake", "fused_gguf_dequant_kernel")` にした。この項目は無視表 `IGNORED_FIELDS` に残したまま（H3 では受け取って無視し、422 にしない）。拒否表 `REJECT_TABLE` には入れないので、保存値が OFF の要求もこれまでどおり通る。
+  - Gradio: `gradio_ui/feature_scope.py` の `FEATURE_UI` と `RESET_VALUES`（`accel_fused_dequant` は True へ戻す）、`ui.py` の `_gated_components` への登録。H3 ではチェックボックスを隠して ON へ戻す。送信の処理は OFF のときだけこの項目を送るので、H3 では何も送られない。
+  - テスト: `tests/test_engine_h3_adapter.py`（期待する組の更新・「公開するが無視し、断らない」の新しいテスト・`/models` で H3 には載り LTX 2.3 には載らないこと）、`tests/test_gradio_models.py`（2 件）、`tests/test_gradio_ui.py`（コメントのみ）。
+  - 文言だけの修正: `api/models_registry.py` のコメント、`mcp_server/tools/system.py` の `list_models` の説明、`mcp_server/tools/generate.py` の `submit_generate` の説明（「載っていれば 422」→「422 で断るか無視する」）。
+- **`090a68f` 操作パネル（`webui/src/`）**:
+  - `shell/featureScope.ts`: 操作部の名前 `settingsRow.fusedGgufDequantKernel`、表の行 `fused_gguf_dequant_kernel: { disables: [...], resets: "fusedGgufDequantKernel" }`、`SettingsRowsHidden` の鍵。
+  - `shell/SettingsPanel.tsx`: 必須の属性 `fusedGgufDequantKernelUnsupported` を足し、行と ON のときの注記を、VRAM 16GB mode の行と同じ形で包んだ。
+  - `shell/AppShell.tsx`: 属性を渡す 1 行。既定への書き戻しは既存の仕組み（`accelerationSettings.ts` の `withServerDefaults`。既定は ON）を使う。
+  - `bridge/mockBridge.ts`: H3 の一覧に足した（連結の拒否表ではない）。
+  - テスト: `featureScope.test.ts`・`SettingsPanel.test.tsx`・`AppShell.featureScope.test.tsx`（H3 で隠れ「Block-swap prefetch」は出たままであること・保存値の OFF が H3 では ON へ戻り LTX では変わらないこと）・`mockBridge.h3.test.ts`・`generationConstraints.test.ts`。
+- **`6e92085` 配布用 aux2**: `AviUtl2-Plugin/NzVideomni.aux2` を `scripts/build.ps1` → `deploy.ps1` で作り直した（実機にも配置）。SHA-256 は `2E1F033CE2ED0D62…`。埋め込みの画面に `settingsRow.fusedGgufDequantKernel` が入っていることを確かめた（検索で 1 件）。
+- **`unsupported_features` の意味の変化**: 今までは「その系統で断られる機能（422）」だった。いまは「その系統に無い機能（422 で断るか、H3 の `fused_gguf_dequant_kernel` だけは受け取って無視する）」である。コードでこの一覧を「必ず 422」として扱っている箇所は無い（名前で照合しているのは `api/generate_alpha.py` の `alpha_gen` だけ）。
+
+### 171.4 門の結果
+
+- バックエンドの pytest: 関係する 7 ファイルで 741 passed。MCP のテストを含めて 932 passed。`tests/` 全体で 3,452 passed・65 skipped（skipped はエンジンの venv や torch が無いためで、本件と無関係）。
+- `GET /models` は FastAPI のテストクライアントで確かめた（3 系統のテスト）。
+- 操作パネル: `npm run typecheck` は 0 errors。`npx vitest run --exclude "**/backend.integration.test.ts"` は 166 files・3,320 tests passed。
+- aux2 の作成と配置: 成功。
+- **行っていないこと**: GPU を使う生成・サーバーの起動・実機での目視（オーナー裁定で目視を待たない。§171.2）。
+
+### 171.5 レビュー
+
+どちらも Opus の敵対的レビュー。
+
+- **計画のレビュー**: Critical 0・Major 1・Minor 9 で、全件を採用した。Major は、文書の定義の文「必ず断られる操作」（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6 と操作パネルの `Docs/API_REFERENCE.md`）が計画の直す一覧に無かったこと。確認を求められた 1 件（保存値を既定へ戻す動きを残すか）は、既存の規則のまま残した。
+- **コードのレビュー**: Critical 0・Major 0・Minor 1・Nit 5 で、全件を採用した。Minor は `mcp_server/tools/generate.py` の説明。Nit は行の長さ・古くなった属性のコメント・「Block-swap prefetch」が残ることの確かめ、など。
+- 計画の外の追加: 監督が `shell/AppShell.tsx` のコメントを 1 か所直した（コードのレビューの報告に追加として記した）。
+
+### 171.6 既知の挙動（仕様どおり・変えない）
+
+- LTX でこの行を OFF にし、H3 を経て LTX へ戻ると、ON になっている。隠した行は既定へ戻す既存の規則どおりで、オーナーが以前に了承した規則を例外なしに当てた結果である。
+
+### 171.7 所在と次
+
+- **コミット**: dev の `cfef2c3`・`090a68f`・`6e92085`。文書の現行化とクローズの記録のコミット、main への merge は監督が行う。
+- **台帳**: §1-100 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-242 へクローズした。目視の備忘は [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-3。
+- 次の番号: CLOSED 3-243・本書 §172・フロントエンド DEVLOG §145。

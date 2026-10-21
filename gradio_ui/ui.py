@@ -1215,9 +1215,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 reg(gr.Markdown(L("accel_note"), elem_classes=["note"]),
                     "accel_note", "value")
                 # GGUF逆量子化の Triton 1カーネル化のつまみ。
-                # 利用可否はクライアント側でゲートしない（attention と同じ理由
+                # Triton の有無ではゲートしない（attention と同じ理由
                 # ＝サーバが Triton 不在・例外・自己検証不一致のいずれでも黙って
                 # 従来実装へ降格するので、二つ目の真理の源を作らない）。
+                # ただし系統が fused_gguf_dequant_kernel を unsupported_features
+                # に載せたときは、隠して既定値へ戻す（feature_scope.py を参照）。
                 accel_fused_dequant = reg(gr.Checkbox(
                     value=FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
                     label=L("accel_lbl_fused_dequant"),
@@ -2540,6 +2542,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             "accel_vae": accel_vae,
             "accel_keep_resident_embeddings": accel_keep_resident_embeddings,
             "accel_vram16": accel_vram16,
+            "accel_fused_dequant": accel_fused_dequant,
             # Each keyframe slot's strength slider, as kf_strength_<slot>.
             **{f"kf_strength_{slot_n}": slot[3]
                for slot_n, slot in enumerate(kf_slots, start=1)},
@@ -2598,9 +2601,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # the pipeline is actually on.
             #
             # Feature scope: the LOADED base model's unsupported_features hide
-            # the controls that would 422 on it. Hiding alone is not enough —
-            # an invisible Gradio component still sends its value — so a hidden
-            # control is reset to the server default at the same time.
+            # the controls that would 422 or be ignored on it.
+            # Hiding alone is not enough — an invisible Gradio component
+            # still sends its value — so a hidden control is reset to the
+            # server default at the same time.
             hidden = hidden_controls(active_unsupported_features(models_json))
             return (_base_model_update(models_json),) + tuple(
                 gr.update(choices=build_model_choices(models_json, cat, lang),

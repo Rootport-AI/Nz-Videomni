@@ -88,6 +88,10 @@ function Harness({
       onBlockSwapPrefetchChange={accelerationControls.setBlockSwapPrefetch}
       onKeepResidentChange={accelerationControls.setKeepResident}
       onFusedGgufDequantKernelChange={accelerationControls.setFusedGgufDequantKernel}
+      // 台帳 §1-100: hidden on an engine that publishes
+      // `fused_gguf_dequant_kernel` (MiniMax H3). Same "supported" case as the
+      // rows below; the hiding is covered in `AppShell.featureScope.test.tsx`.
+      fusedGgufDequantKernelUnsupported={false}
       onVaeModeChange={accelerationControls.setVaeMode}
       // backend Docs/PENDING_TASKS_CLOSED.md's old §1-26 (closed 2026-09-01): the
       // PrunaVAED row is hidden only on an engine that publishes `prune_vaed`;

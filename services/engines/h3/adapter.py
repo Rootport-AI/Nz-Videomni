@@ -112,13 +112,19 @@ H3_FRAMES_MIN = 22
 H3_DIMENSION_MULTIPLE = 32
 #: The model was trained at 24 fps only.
 H3_FRAME_RATE = 24.0
+#: The engine's own default (engine_h3/constants.py DEFAULT_STEPS); held once here,
+#: agreement checked by test.
+H3_DEFAULT_STEPS = 20
 #: The largest 17n+5 count the schema ceiling allows (481 = 17*28+5).
 H3_FRAMES_MAX = (NUM_FRAMES_MAX - H3_FRAMES_OFFSET) // H3_FRAMES_STEP * H3_FRAMES_STEP + H3_FRAMES_OFFSET
 
-#: This family's numeric rules (Docs/MINIMAX_H3_DESIGN.md §9). The sampling defaults
-#: are the engine's own (engine_h3/constants.py: 20 Euler steps, shifts 12 / 3
-#: — the official scheduler pair); they are restated here because the app venv
-#: cannot import the engine package, and they must agree with it.
+#: This family's numeric rules (Docs/MINIMAX_H3_DESIGN.md §9). The sampling
+#: defaults are the engine's own (engine_h3/constants.py: 20 Euler steps,
+#: shifts 12 / 3 -- the official scheduler pair). They are copied here because
+#: the server side does not import the ``engine_h3`` package (a boundary, not
+#: an inability). The step default is held once in ``H3_DEFAULT_STEPS``, and
+#: tests/test_engine_h3_adapter.py checks the copies agree with
+#: engine_h3/constants.py.
 REQUEST_RULES = RequestRules(
     frames_step=H3_FRAMES_STEP,
     frames_offset=H3_FRAMES_OFFSET,
@@ -127,9 +133,9 @@ REQUEST_RULES = RequestRules(
     dimension_multiple=H3_DIMENSION_MULTIPLE,
     frame_rate_min=H3_FRAME_RATE,
     frame_rate_max=H3_FRAME_RATE,
-    default_steps=20,
+    default_steps=H3_DEFAULT_STEPS,
     sampling={
-        "num_inference_steps": SamplingRange(min=1, max=50, step=1, default=20),
+        "num_inference_steps": SamplingRange(min=1, max=50, step=1, default=H3_DEFAULT_STEPS),
         "shift_video": SamplingRange(min=1, max=20, step=0.1, default=12),
         "shift_audio": SamplingRange(min=1, max=20, step=0.1, default=3),
     },

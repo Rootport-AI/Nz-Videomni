@@ -84,7 +84,7 @@ arguments. The end source runs in the modes the API can reach (``in_window``
 The non-CFG negative prompt (NAG/VSF) runs too, but never passes through this
 file: the worker arms it on the pipeline (``Ltx25Pipeline.set_nag_job``)
 before calling :func:`run_chain`, the prompt encoder encodes the negative
-prompt alongside the clips' prompts, and the patch is installed on every
+prompt alongside the chain's prompts, and the patch is installed on every
 transformer build -- so it applies to every stage-1 clip and every stage-2
 tile alike. The features a chain refuses are engine-level rather than modes;
 ``CHAIN_REJECT_TABLE`` in ``services/engines/ltx25/adapter.py`` lists them
@@ -93,10 +93,13 @@ keys in ``CHAIN_UNSUPPORTED_KEYS`` (``engine25/worker.py``) by name -- the
 table's ``pipeline`` entry never rides in the worker payload, so there is
 nothing there to refuse.
 
-Prompts: stage 1 conditions each clip on that clip's own effective prompt;
-stage 2 refines every tile with clip 0's (see the note at the top of the
-stage-2 block in :func:`run_chain`). The public statement of this is
-``Videomni_Backend_Specification.md`` §6.2.
+Prompts: stage 1 conditions each clip on that clip's own string, which the app
+has already composed (the shared prompt, with the clip's own text appended
+after one space when it has any); stage 2 refines every tile with the shared
+prompt alone, ``ChainSpec.prompt`` (see the note at the top of the stage-2
+block in :func:`run_chain`). :func:`_encode_chain_prompts` encodes both in one
+call. The public statement of this is ``Videomni_Backend_Specification.md``
+§6.2.
 
 The four ways material gets frozen
 ----------------------------------
@@ -339,7 +342,12 @@ class ChainError(RuntimeError):
 
 @dataclass
 class ChainClipSpec:
-    """One clip of the chain (prompt already resolved to its effective value)."""
+    """One clip of the chain.
+
+    ``prompt`` is the clip's STAGE-1 string, already composed app side (the
+    shared prompt, with the clip's own text appended after one space when it
+    has any). Stage 2 never reads it -- it uses :attr:`ChainSpec.prompt`.
+    """
 
     prompt: str
     num_frames: int
@@ -499,7 +507,7 @@ class ChainSpec:
     negative prompt (NAG/VSF) has no field here either, for a different
     reason: it DOES run, but it never passes through this module -- the worker
     arms it on the pipeline (``Ltx25Pipeline.set_nag_job``), the prompt encoder
-    encodes it alongside the clips' prompts, and the patch is installed per
+    encodes it alongside the chain's prompts, and the patch is installed per
     transformer build. The features it DOES run but that arrive as prepared
     MATERIAL rather than as body keys -- ``retake``, ``end_source``,
     ``ic_loras``, ``ic_reference`` -- are keyword arguments of
@@ -513,8 +521,14 @@ class ChainSpec:
     ``num_steps`` is carried and reported but never acted on, exactly as in 2.3:
     the distilled schedule is fixed (``ltxcore_compat.verify()`` checks its
     shape at startup).
+
+    ``prompt`` is the payload's top-level shared prompt (trimmed app side) and
+    is STAGE 2's only prompt; each clip's composed stage-1 string is
+    :attr:`ChainClipSpec.prompt`. It has no default, so a payload that drops it
+    fails loudly instead of quietly refining with some clip's string.
     """
 
+    prompt: str
     clips: list[ChainClipSpec]
     width: int
     height: int
@@ -1510,6 +1524,44 @@ def _drop_leading_frames(
 # ---------------------------------------------------------------------------
 
 
+def _encode_chain_prompts(
+    prompt_encoder: Callable[[list[str]], Sequence[Any]],
+    clip_prompts: Sequence[str],
+    stage2_prompt: str,
+) -> tuple[list[tuple[Any, Any]], tuple[Any, Any]]:
+    """Encode the chain's prompts: each clip's stage-1 string and stage 2's.
+
+    Returns ``(seg_ctx, stage2_ctx)``: one ``(video, audio)`` context pair per
+    clip, in clip order, and the pair for ``stage2_prompt``.
+
+    Every DISTINCT string is encoded once, in ONE ``prompt_encoder`` call.
+    ``PromptEncoder.__call__`` takes a list and loads Gemma once for the whole
+    list, so the dedup is about the transformer-side encode cost, not about the
+    load. Order-preserving (clips first, then stage 2) and mapped back by value:
+    a clip whose string equals the shared prompt (no text of its own) shares
+    its encode with stage 2, and two clips with the same string share one.
+    With a negative prompt armed, the encoder appends it and pops it back off,
+    so what comes back is one entry per string passed in -- ``strict=True``
+    makes any other length an error rather than a misaligned mapping.
+    """
+    distinct = list(dict.fromkeys([*clip_prompts, stage2_prompt]))
+    encoded = prompt_encoder(distinct)
+    ctx_by_prompt = {
+        prompt: (out.video_encoding, out.audio_encoding)
+        for prompt, out in zip(distinct, encoded, strict=True)
+    }
+    if stage2_prompt in clip_prompts:
+        stage2_note = f"shares clip {list(clip_prompts).index(stage2_prompt)}'s encode"
+    else:
+        stage2_note = "is one extra encode"
+    logger.info(
+        "chain prompts: %d distinct encoded for %d clip(s); stage 2 (shared prompt) %s",
+        len(distinct), len(clip_prompts), stage2_note,
+    )
+    seg_ctx = [ctx_by_prompt[p] for p in clip_prompts]
+    return seg_ctx, ctx_by_prompt[stage2_prompt]
+
+
 def _stage1_sampler_kwargs(sampler: str, eta: float, seed: int, dtype: torch.dtype) -> dict[str, Any]:
     """``stepper`` / ``loop`` for one stage-1 segment.
 
@@ -2059,17 +2111,11 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
 
     with torch.no_grad():
         # ── Text encode: every DISTINCT prompt, in ONE call ───────────────────
-        # ``PromptEncoder.__call__`` takes a list and loads Gemma once for the
-        # whole list, so the dedup is about the transformer-side encode cost,
-        # not about the load. Order-preserving so a two-clip chain with the same
-        # prompt twice is one encode and the mapping back is by value.
-        distinct = list(dict.fromkeys(c.prompt for c in clips))
-        encoded = pipeline.prompt_encoder(distinct)
-        ctx_by_prompt = {
-            prompt: (out.video_encoding, out.audio_encoding)
-            for prompt, out in zip(distinct, encoded, strict=True)
-        }
-        seg_ctx = [ctx_by_prompt[c.prompt] for c in clips]
+        # Each clip's composed stage-1 string plus stage 2's shared prompt; see
+        # :func:`_encode_chain_prompts` for the dedup and the mapping back.
+        seg_ctx, stage2_ctx = _encode_chain_prompts(
+            pipeline.prompt_encoder, [c.prompt for c in clips], spec.prompt
+        )
 
         # ── Material ingest: the uploaded audio, if any ───────────────────────
         # BEFORE the video encoder and the transformer, because it is the
@@ -3004,11 +3050,12 @@ def run_chain(  # noqa: PLR0915 -- one linear procedure; splitting it would hide
         cleanup_memory()
 
         # ── STAGE 2: always-tiled refine, video + audio jointly ───────────────
-        # ONE context for the WHOLE refine -- clip 0's. Per-clip prompt variation
-        # lives in stage 1, where the carry + crossfade absorbs it; switching the
-        # AUDIO context mid-tile-overlap injects a click at the frozen tile seam
-        # (a measured finding in 2.3).
-        stage2_vctx, stage2_actx = seg_ctx[0]
+        # ONE context for the WHOLE refine -- the shared prompt (``spec.prompt``),
+        # never a clip's composed string. Per-clip prompt variation lives in
+        # stage 1, where the carry + crossfade absorbs it; switching the AUDIO
+        # context mid-tile-overlap injects a click at the frozen tile seam (a
+        # measured finding in 2.3).
+        stage2_vctx, stage2_actx = stage2_ctx
         stage_2_sigmas = STAGE_2_DISTILLED_SIGMAS.to(dtype=torch.float32, device=device)
         noise_scale2 = float(stage_2_sigmas[0].item())
         refined_v: list[torch.Tensor] = []

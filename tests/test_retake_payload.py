@@ -30,7 +30,7 @@ from services.ltx_runner import _RealBackend
 # here as a literal on purpose — deriving it from the code under test would make
 # this pin vacuous.
 DEFAULT_CHAIN_PAYLOAD_KEYS = {
-    "op", "width", "height", "frame_rate", "num_steps", "seed",
+    "op", "prompt", "width", "height", "frame_rate", "num_steps", "seed",
     "overlap_frames", "overlap_strength", "chunked_upsample",
     "output_path", "clips", "block_swap_prefetch",
     "fused_gguf_dequant_kernel",

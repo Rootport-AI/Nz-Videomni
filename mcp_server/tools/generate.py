@@ -618,10 +618,10 @@ async def submit_generate(
 
 
 def _serialize_chain_clip(clip: ChainClipArg) -> dict[str, Any]:
-    """``ChainClipArg`` を送信用dictへ変換する。``prompt`` が None（=チェーン
-    基準プロンプトを継承）と ``conditioning_images`` が None/空（=クリップ0
-    以外、または画像なし）の場合はキーごと省略する（「Noneまたは空は送らない」
-    の送信規約）。"""
+    """``ChainClipArg`` を送信用dictへ変換する。``prompt`` が None（=共通
+    プロンプトだけを使う。指定時は共通プロンプトの後ろに追記される）と
+    ``conditioning_images`` が None/空（=クリップ0以外、または画像なし）の
+    場合はキーごと省略する（「Noneまたは空は送らない」の送信規約）。"""
     d: dict[str, Any] = {"num_frames": clip.num_frames}
     if clip.prompt is not None:
         d["prompt"] = clip.prompt
@@ -856,10 +856,16 @@ async def submit_chain(
         度チェーンでのOOM回避）。常に明示的に送信します。
 
     Args:
-        prompt: チェーン全体の基準プロンプト（各クリップの ``prompt`` 省略時
-            に使われる）。
+        prompt: チェーン全体の共通プロンプト（全クリップと Stage-2 に使わ
+            れる）。各クリップの ``prompt`` を指定すると、共通プロンプトの
+            後ろに半角スペース1つで追記される。
         clips: クリップごとの指定（``num_frames`` は 8n+1・9〜481 で、省略
             時は49。``prompt`` / ``conditioning_images`` は省略可）。
+            ``prompt`` が省略・空・空白だけのクリップは共通プロンプトだけ
+            を使う。指定した ``prompt`` は Stage-1（クリップごとの生成）に
+            だけ効き、Stage-2（全体の仕上げ）は共通プロンプトだけを使う。
+            共通プロンプトと追記を合成した後の長さが2,000文字を超えると
+            422 ``VALIDATION_ERROR`` になる。
         negative_prompt, nag_enabled, nag_scale, nag_tau, nag_alpha:
             submit_generate と同じ意味（チェーン全体・全ステージ共通）。
         neg_method, vsf_scale: submit_generate と同じ意味

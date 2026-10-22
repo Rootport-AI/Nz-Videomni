@@ -809,8 +809,13 @@ MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481  # 11544
 class ChainClip(BaseModel):
     """One clip in a generate-chain request.
 
-    ``prompt`` is optional: when absent the chain's base ``prompt`` is used
-    (prompt propagation). ``num_frames`` must be 8n+1. Only clip 0 may carry
+    ``prompt`` is optional and is APPENDED to the chain's shared ``prompt`` for
+    this clip's stage-1 segment (see :meth:`GenerateChainRequest.clip_prompt`);
+    absent, empty or whitespace-only means the shared prompt alone. Stage 2
+    refines the whole timeline with the shared prompt only. The 2000-character
+    cap below is on this field alone; the validator of
+    :class:`GenerateChainRequest` caps the combined string as well.
+    ``num_frames`` must be 8n+1. Only clip 0 may carry
     conditioning images (minimal I2V start / keyframes) — clips 1..N are the
     later segments of one continuous masked AV-latent timeline (they inherit
     continuity from the previous segment's frozen overlap latents, not images).
@@ -1154,8 +1159,10 @@ class GenerateChainRequest(BaseModel):
     """A chain of clips assembled into ONE continuous masked AV-latent timeline.
 
     Additive to the frozen single-``/generate`` contract. Shares
-    width/height/seed/frame_rate/pipeline across clips; each clip's effective
-    prompt is its override if present else the global ``prompt``. Reuses the
+    width/height/seed/frame_rate/pipeline across clips; each clip's stage-1
+    prompt is the global ``prompt`` with the clip's own prompt appended
+    (:meth:`clip_prompt`), and stage 2 refines every tile with the global
+    ``prompt`` alone (:meth:`shared_prompt`). Reuses the
     same FROZEN rules (÷64 resolution, 8n+1 frames, distilled 8-step /
     CFG=1.0) as LTX's ``REQUEST_RULES`` for :class:`GenerateRequest`, checked
     here in its own validator (the chain is LTX only).
@@ -1679,12 +1686,37 @@ class GenerateChainRequest(BaseModel):
             )
         if self.nag_enabled and not self.negative_prompt.strip():
             raise ValueError("nag_enabled requires a non-empty negative_prompt")
+        # Each field is capped at 2000 on its own, but a clip's stage-1 prompt
+        # is the two joined (clip_prompt), so the joined string gets the same
+        # cap, counted the same way as the fields' max_length (len()).
+        for i in range(len(self.clips)):
+            combined = len(self.clip_prompt(i))
+            if combined > 2000:
+                raise ValueError(
+                    f"clips[{i}].prompt appended to the shared prompt is "
+                    f"{combined} characters (max 2000 combined)"
+                )
         return self
 
+    def shared_prompt(self) -> str:
+        """The shared ``prompt`` with both ends trimmed.
+
+        Stage 2 refines every tile with this string alone; it rides the worker
+        payload as the top-level ``prompt``.
+        """
+        return self.prompt.strip()
+
     def clip_prompt(self, index: int) -> str:
-        """Effective prompt for clip ``index`` (override else global base)."""
-        override = self.clips[index].prompt
-        return override if override else self.prompt
+        """Stage-1 prompt for clip ``index``: the shared prompt + the clip's own.
+
+        Both parts are trimmed at their ends (inner line breaks are kept) and
+        the non-empty ones are joined with one space, so a clip without its own
+        prompt (absent, empty or whitespace-only) gets the shared prompt alone,
+        and a whitespace-only shared prompt adds no leading space. This is the
+        worker payload's ``clips[].prompt``.
+        """
+        own = (self.clips[index].prompt or "").strip()
+        return " ".join(part for part in (self.shared_prompt(), own) if part)
 
     def to_clip_request(self, index: int) -> "GenerateRequest":
         """Build the per-clip :class:`GenerateRequest` (clip 0 keeps its images).
@@ -1717,10 +1749,16 @@ class GenerateChainRequest(BaseModel):
         ``JobRecord.chain_request``, which ``run_chain_job`` reads and which the
         worker payload is built from.
         ``end_source`` follows that same precedent for the same reasons.
+
+        ``prompt`` is the chain's shared ``prompt`` exactly as sent (not
+        trimmed, no clip prompt appended), so the stored record shows what the
+        client wrote for the whole chain. The worker payload does not read it:
+        the adapters build theirs from :meth:`shared_prompt` and
+        :meth:`clip_prompt`.
         """
         clip = self.clips[index]
         return GenerateRequest(
-            prompt=self.clip_prompt(index),
+            prompt=self.prompt,
             negative_prompt=self.negative_prompt,
             nag_enabled=self.nag_enabled,
             nag_scale=self.nag_scale,

@@ -394,7 +394,8 @@ def _run_chain_capturing_set_ic_job(monkeypatch, ic_loras):
     ]
     with pytest.raises(_StopBeforeBuild):
         cp.run_chain(
-            FakePipe(), clips=clips, width=384, height=256, frame_rate=24.0,
+            FakePipe(), clips=clips, stage2_prompt="shared", width=384,
+            height=256, frame_rate=24.0,
             num_steps=8, seed=1, overlap_frames=2, overlap_strength=0.5,
             output_path="x.mp4", ic_loras=ic_loras,
         )

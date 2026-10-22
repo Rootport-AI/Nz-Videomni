@@ -360,7 +360,8 @@ def _drive_stage1(monkeypatch, *, num_clips, ref_frames, clip_frames=25, kv=2):
     ]
     with pytest.raises(_Stop):
         cp.run_chain(
-            FakePipe(), clips=clips, width=384, height=256, frame_rate=24.0,
+            FakePipe(), clips=clips, stage2_prompt="shared", width=384,
+            height=256, frame_rate=24.0,
             num_steps=8, seed=1, overlap_frames=kv, overlap_strength=0.5,
             output_path="x.mp4", ic_loras=[],
             ic_reference=("/p/ref.mp4", 0.75), ic_attention_strength=1.0,
@@ -548,7 +549,8 @@ def _drive_stage1_no_reference(monkeypatch, *, num_clips=2):
     ]
     with pytest.raises(_Stop):
         cp.run_chain(
-            FakePipe(), clips=clips, width=384, height=256, frame_rate=24.0,
+            FakePipe(), clips=clips, stage2_prompt="shared", width=384,
+            height=256, frame_rate=24.0,
             num_steps=8, seed=1, overlap_frames=2, overlap_strength=0.5,
             output_path="x.mp4", ic_loras=[], ic_reference=None,
         )

@@ -55,9 +55,12 @@ class LoraArg(BaseModel):
 class ChainClipArg(BaseModel):
     """チェーンの1クリップ分の指定（``submit_chain`` の ``clips`` の1要素）。
 
-    ``prompt`` を省略すると、チェーン全体の基準プロンプトを継承する
-    （プロンプト伝播）。``conditioning_images`` はクリップ0のみ有効
-    （クリップ1以降は前クリップの潜在表現を引き継ぐ後続セグメントのため）。
+    ``prompt`` は省略・空・空白だけなら、チェーン全体の共通プロンプトだけが
+    使われる。指定すると、共通プロンプトの後ろに半角スペース1つで追記される
+    （Stage-1 用）。Stage-2（全体の仕上げ）は共通プロンプトだけを使う。
+    合成後の長さが2,000文字を超えると422 ``VALIDATION_ERROR`` になる。
+    ``conditioning_images`` はクリップ0のみ有効（クリップ1以降は前クリップの
+    潜在表現を引き継ぐ後続セグメントのため）。
     """
 
     prompt: str | None = None

@@ -1399,6 +1399,9 @@ GOLDEN_ACCEL_KEYS_25 = ["block_swap_prefetch", "fused_gguf_dequant_kernel"]
 #: absent: it is additive and rides only when the request opted off "standard".
 GOLDEN_CHAIN_KEYS_25 = [
     "op",
+    # The shared prompt, trimmed: what stage 2 refines with. Each clip's
+    # stage-1 prompt rides inside ``clips`` (the shared one + the clip's own).
+    "prompt",
     "width",
     "height",
     "frame_rate",
@@ -1483,6 +1486,7 @@ def test_chain_payload_golden_for_a_plain_two_clip_chain(tmp_path):
     assert list(payload) == GOLDEN_CHAIN_KEYS_25 + GOLDEN_ACCEL_KEYS_25
     assert payload == {
         "op": "generate_chain",
+        "prompt": "a quiet harbour at first light",
         "width": 512,
         "height": 320,
         "frame_rate": 24.0,
@@ -1600,8 +1604,9 @@ def test_chain_payload_carries_keep_resident_embeddings_only_when_asked(tmp_path
 
 
 def test_chain_payload_carries_per_clip_prompts_and_clip0_images(tmp_path):
-    """A per-clip prompt override wins over the global one, and ONLY clip 0 may
-    carry conditioning images (the schema enforces that; the payload shows it)."""
+    """A clip's own prompt is appended to the shared one for its stage 1, the
+    top-level ``prompt`` stays the shared one, and ONLY clip 0 may carry
+    conditioning images (the schema enforces that; the payload shows it)."""
     captured: list[dict] = []
     be = _capturing_chain_backend(captured)
     request = _chain_request(
@@ -1620,13 +1625,33 @@ def test_chain_payload_carries_per_clip_prompts_and_clip0_images(tmp_path):
         clip0_conditioning_paths=[tmp_path / "img-1.png"],
     )
 
+    assert captured[0]["prompt"] == "a quiet harbour at first light"
     clips = captured[0]["clips"]
-    assert clips[0]["prompt"] == "a harbour at dusk"
+    assert clips[0]["prompt"] == "a quiet harbour at first light a harbour at dusk"
     assert clips[1]["prompt"] == "a quiet harbour at first light"
     assert clips[0]["images"] == [
         {"path": str(tmp_path / "img-1.png"), "frame_idx": 0, "strength": 0.9}
     ]
     assert clips[1]["images"] == []
+
+
+def test_chain_payload_top_level_prompt_is_the_trimmed_shared_prompt(tmp_path):
+    """Both ends of the shared prompt are trimmed before it rides as the
+    top-level ``prompt`` (stage 2), and the same trimmed text heads every
+    clip's stage-1 prompt."""
+    captured: list[dict] = []
+    be = _capturing_chain_backend(captured)
+    request = _chain_request(
+        prompt="  a quiet harbour at first light \n",
+        clips=[{"num_frames": 25, "prompt": " gulls overhead\n"}, {"num_frames": 25}],
+    )
+    be.generate_chain(request, output_dir=tmp_path / "out")
+
+    assert captured[0]["prompt"] == "a quiet harbour at first light"
+    assert [c["prompt"] for c in captured[0]["clips"]] == [
+        "a quiet harbour at first light gulls overhead",
+        "a quiet harbour at first light",
+    ]
 
 
 def test_chain_payload_omitted_strength_is_ltxs_default(tmp_path):
@@ -3243,7 +3268,7 @@ def test_the_nested_chain_clip_fields_are_all_accounted_for():
     assert set(ChainClip.model_fields) == {"prompt", "num_frames", "conditioning_images"}
     # ...and each of the three really is read when the payload is built.
     source = inspect.getsource(ltx25._RealBackend25.generate_chain)
-    assert "clip_prompt" in source  # prompt (override else the global one)
+    assert "clip_prompt" in source  # prompt (the shared one + the clip's own)
     assert "num_frames" in source
     assert "conditioning_images" in source
 
@@ -3260,8 +3285,9 @@ _APP_SIDE_HONOURED_FIELDS = frozenset({"embed_mp4_metadata"})
 
 #: ``field -> the text that proves it is read``. Three fields need an entry,
 #: and each for the same reason: the request field is not what ``generate_chain``
-#: touches. The global ``prompt`` is reached THROUGH the schema's own helper (a
-#: clip's override else the global one), and the two SOURCE fields are upload
+#: touches. The global ``prompt`` is reached THROUGH the schema's own helpers
+#: (``clip_prompt`` appends a clip's own prompt to it for stage 1,
+#: ``shared_prompt`` trims it for stage 2), and the two SOURCE fields are upload
 #: IDS the orchestrator has already resolved into material — so what the method
 #: reads is the keyword argument carrying that material, not ``chain.source_*``.
 _CHAIN_HONOURED_READS = {

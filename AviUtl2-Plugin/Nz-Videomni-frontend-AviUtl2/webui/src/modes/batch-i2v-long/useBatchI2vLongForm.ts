@@ -123,14 +123,6 @@ export type I2vLongBlockReason =
 export interface I2vLongNotes {
   /** `seed >= 0`: every image gets the SAME seed. */
   seedFixed: boolean;
-  /** Clip 0 has a prompt of its own. The strongest of these notes: each row's
-   * image lands on clip 0, so a clip-0 override means the shared/row prompt
-   * never reaches the part of the video the image actually controls — even in
-   * `replace` mode. */
-  clip0PromptOverride: boolean;
-  /** Some clip AFTER clip 0 has a prompt of its own (案A: the shared/row
-   * prompt never rewrites per-clip prompts). */
-  otherClipPromptOverride: boolean;
   /** The Chain form has a start-frame image on clip 0; each row's own image
    * replaces it. */
   startFrameIgnored: boolean;
@@ -540,11 +532,9 @@ export function useBatchI2vLongForm(
   const notes = useMemo<I2vLongNotes>(
     () => ({
       seedFixed: templatePreview.seed >= 0,
-      clip0PromptOverride: (chain.clips[0]?.prompt ?? "").trim() !== "",
-      otherClipPromptOverride: chain.clips.slice(1).some((clip) => clip.prompt.trim() !== ""),
       startFrameIgnored: built.startFrameIgnored,
     }),
-    [templatePreview, chain.clips, built.startFrameIgnored],
+    [templatePreview, built.startFrameIgnored],
   );
 
   const canStart =

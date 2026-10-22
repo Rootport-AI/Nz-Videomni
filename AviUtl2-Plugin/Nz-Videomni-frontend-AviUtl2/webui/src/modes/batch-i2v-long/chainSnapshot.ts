@@ -51,9 +51,11 @@ export interface ChainSnapshotSource {
    * shorter than the Chain screen's own predicted output said. Optional for the
    * same reason as {@link hasSourceAudio}. */
   hasEndSource?: boolean;
-  /** The clip list — read only for its length (`clips < 2` would 422, since a
-   * source-less chain needs at least 2 clips) and for detecting per-clip
-   * prompt overrides, which batch prompts deliberately do NOT rewrite. */
+  /** The clip list — read only for its length, by `chainSummary` in
+   * `BatchI2vLongSection.tsx` (the clip-count readout). The `clips < 2`
+   * judgement (a source-less chain needs at least 2 clips, or it 422s) is made
+   * by `templatePreview.clips.length` in `useBatchI2vLongForm.ts`, not here.
+   * Each element's `prompt` is not read anywhere today. */
   clips: readonly { readonly prompt: string }[];
   /** The Chain form's own Generate gate. Batch Start does NOT require it
    * directly: it requires the batch's filtered `chainBlockReasons` to be empty

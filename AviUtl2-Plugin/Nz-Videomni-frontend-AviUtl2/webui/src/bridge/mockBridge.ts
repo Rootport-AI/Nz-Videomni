@@ -752,14 +752,14 @@ function buildEchoedRequest(request: Record<string, unknown>): Record<string, un
   const isChain = clipsArr !== null;
   const clip0: Record<string, unknown> = clipsArr?.[0] ?? {};
 
-  // Chain jobs echo clip-0's `to_clip_request(0)` GenerateRequest: prompt /
-  // num_frames / conditioning_images come from clip 0, crop is deferred to the
-  // final concat (always null per-clip), and the IC-LoRA fields are NOT
-  // forwarded per-clip (default []/null). Plain /generate jobs echo their own
-  // submitted GenerateRequest fields, with server-only defaults filled in.
-  const prompt = isChain
-    ? (typeof clip0.prompt === "string" && clip0.prompt.length > 0 ? clip0.prompt : str(request.prompt, ""))
-    : str(request.prompt, "");
+  // Chain jobs echo clip-0's `to_clip_request(0)` GenerateRequest: prompt is
+  // the chain-wide shared prompt exactly as submitted (a clip's own prompt is
+  // appended to it only inside the job, never in the record); num_frames /
+  // conditioning_images come from clip 0, crop is deferred to the final concat
+  // (always null per-clip), and the IC-LoRA fields are NOT forwarded per-clip
+  // (default []/null). Plain /generate jobs echo their own submitted
+  // GenerateRequest fields, with server-only defaults filled in.
+  const prompt = str(request.prompt, "");
   const numFrames = isChain ? num(clip0.num_frames, 49) : num(request.num_frames, 49);
   const conditioningImages = isChain
     ? (Array.isArray(clip0.conditioning_images) ? clip0.conditioning_images : [])

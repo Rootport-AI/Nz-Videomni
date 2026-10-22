@@ -693,35 +693,31 @@ describe("useBatchI2vLongForm", () => {
 
   // --- non-blocking notes ---------------------------------------------------
 
-  it("非ブロック注意フラグ（seed固定・clip0個別prompt・他clip個別prompt・開始フレーム置換）", () => {
+  it("非ブロック注意フラグ（seed固定・開始フレーム置換）", () => {
     const bridge = createMockBridge({ delayMs: 0, fs: imgFolder([]) });
     const chain = makeChain({
       seed: 42,
       clips: [
-        { prompt: "clip0 override", numFrames: 121, startImage: true },
-        { prompt: "clip1 override", numFrames: 121 },
+        { prompt: "clip0 own prompt", numFrames: 121, startImage: true },
+        { prompt: "clip1 own prompt", numFrames: 121 },
       ],
     });
     const { result } = renderForm(bridge, { chain });
 
     expect(result.current.notes).toEqual({
       seedFixed: true,
-      clip0PromptOverride: true,
-      otherClipPromptOverride: true,
       startFrameIgnored: true,
     });
     // どれもブロックはしない。
     expect(result.current.blockReasons).not.toContain("promptEmpty");
   });
 
-  it("seed=-1・個別prompt無し・開始フレーム無しなら注意フラグは全部false", () => {
+  it("seed=-1・開始フレーム無しなら注意フラグは全部false", () => {
     const bridge = createMockBridge({ delayMs: 0, fs: imgFolder([]) });
     const { result } = renderForm(bridge);
 
     expect(result.current.notes).toEqual({
       seedFixed: false,
-      clip0PromptOverride: false,
-      otherClipPromptOverride: false,
       startFrameIgnored: false,
     });
   });

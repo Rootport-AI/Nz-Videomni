@@ -179,31 +179,6 @@ describe("BatchI2vLongSection", () => {
     expect(within(note).queryByText(en.chained.generateReasons.chainLayoutInvalid)).toBeNull();
   });
 
-  it("clip0に個別プロンプトがあるときだけ強警告を出す", () => {
-    const withOverride = makeChain({
-      clips: [
-        { prompt: "clip0 override", numFrames: 121 },
-        { prompt: "", numFrames: 121 },
-      ],
-    });
-    const { container, unmount } = renderSection(createMockBridge({ delayMs: 0 }), { chain: withOverride });
-    open(container);
-    expect(screen.getByText(en.batchI2vLong.notes.clip0PromptOverride)).toBeInTheDocument();
-    expect(screen.queryByText(en.batchI2vLong.notes.clipPromptOverride)).toBeNull();
-    unmount();
-
-    const laterOnly = makeChain({
-      clips: [
-        { prompt: "", numFrames: 121 },
-        { prompt: "clip1 override", numFrames: 121 },
-      ],
-    });
-    const second = renderSection(createMockBridge({ delayMs: 0 }), { chain: laterOnly });
-    open(second.container);
-    expect(screen.queryByText(en.batchI2vLong.notes.clip0PromptOverride)).toBeNull();
-    expect(screen.getByText(en.batchI2vLong.notes.clipPromptOverride)).toBeInTheDocument();
-  });
-
   it("シード固定の注意はseed>=0のときだけ出る", () => {
     const { container, unmount } = renderSection(createMockBridge({ delayMs: 0 }), { chain: makeChain({ seed: -1 }) });
     open(container);

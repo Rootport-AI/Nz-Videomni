@@ -25,7 +25,9 @@ export interface ClipCardProps {
 }
 
 /** One clip's card in Chain mode's clip list: an optional per-clip prompt
- * override (blank = "use the shared prompt", task brief §1) and its
+ * that the server appends after the shared prompt for this clip's Stage-1
+ * pass (blank = the shared prompt alone; Stage-2 always uses the shared
+ * prompt alone) and its
  * `num_frames` (8n+1, reusing `formatDurationHint` verbatim from Create's
  * `paramUtils` — the hint text is identical in meaning). Clip 0's keyframe
  * panel is rendered by the caller (`ChainClipsForm`), not here, since it's

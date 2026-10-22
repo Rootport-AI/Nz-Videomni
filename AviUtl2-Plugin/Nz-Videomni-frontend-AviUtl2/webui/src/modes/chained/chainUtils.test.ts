@@ -232,7 +232,7 @@ describe("chainUtils", () => {
       });
     });
 
-    it("builds a Clips request with per-clip prompt overrides and clip-0-only conditioning images", () => {
+    it("builds a Clips request with per-clip prompts and clip-0-only conditioning images", () => {
       const request = buildChainRequest({
         ...base,
         clips: [

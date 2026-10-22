@@ -766,9 +766,10 @@ export function endSourceLastClipHasFreeLatents(lastClipFrames: number, kv: numb
 }
 
 /** One clip card's editable state, owned by `useChainForm`. `prompt` empty
- * means "use the chain-wide shared prompt" (task brief §1: "空=共通プロンプ
- * トを使用"); `conditioningImages` is only ever read for index 0 by
- * `buildChainRequest`. */
+ * means "the chain-wide shared prompt alone"; non-empty is appended by the
+ * server after the shared prompt for this clip's Stage-1 pass (Stage-2 uses
+ * the shared prompt alone). `conditioningImages` is only ever read for index
+ * 0 by `buildChainRequest`. */
 export interface ChainClipInput {
   id: string;
   prompt: string;
@@ -918,9 +919,10 @@ export interface BuildChainRequestParams {
 
 /** Assembles a `GenerateChainRequest` body from the Chain form's current
  * state. Per-clip `prompt` is omitted entirely (not sent as `""`) when the
- * user left it blank, and `conditioning_images` is only ever attached to
- * clip 0, matching `ChainClip`'s documented shape
- * (Docs/API_REFERENCE.md §5.2). */
+ * user left it blank or whitespace-only; otherwise it is sent untrimmed — the
+ * server trims both halves and appends it after the shared prompt for that
+ * clip's Stage-1 pass. `conditioning_images` is only ever attached to clip 0,
+ * matching `ChainClip`'s documented shape (Docs/API_REFERENCE.md §5.2). */
 export function buildChainRequest(params: BuildChainRequestParams): GenerateChainRequest {
   const clips: ChainClip[] = params.clips.map((clip, index) => {
     const out: ChainClip = { num_frames: clip.numFrames };

@@ -18105,3 +18105,74 @@ dev に 3 コミット。
 - **台帳**: §1-102 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-244 へクローズした。② は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243 へ。
 - 番号: §171.7 の「次の番号: CLOSED 3-243」は、§3 の新しい項目（§3-243）に使った。本項のクローズは 3-244 である。
 - 次の番号: CLOSED 3-245・本書 §173・フロントエンド DEVLOG §145。
+
+## 173. ★Chained の共通プロンプトと個別プロンプトを「置き換え」から「追記」へ（台帳 §1-110・LTX 2.3／2.5）＝計画の敵対的レビュー 1 本・実装 5 担当＋文書 2 担当・実装差分のレビュー 1 本・機械の門 4 環境 失敗 0・実 GPU の煙試験 5 本 全完走（2026-10-22〜23）
+
+### 173.1 結論
+
+- Chained のクリップごとの個別プロンプトは、共通のプロンプトを置き換えるのをやめ、**共通の後ろに付け足す**ようにした。仕様は次のとおり。Stage-1（粗い解像度で作る第 1 段階）は「共通＋半角スペース 1 つ＋個別」、Stage-2（全解像度へ仕上げ直す第 2 段階）は共通だけ。個別が未指定・空・空白だけなら共通だけ。合成後が 2,000 文字を超えるときは生成の前に 422 で断る。ジョブ記録の `request.prompt` は共通のまま。置き換えへ戻す互換スイッチは無い。正本は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2（v0.5.96）で、本節は指すだけにする。
+- 規則は `api/models.py` の `GenerateChainRequest.clip_prompt`／`shared_prompt` に集めた。ワーカーへ送る payload にはトップレベルの `prompt`（共通）を足した。両エンジンは `_encode_chain_prompts` で同じ文字列の重複を除いて符号化し、Stage-2 は共通の符号化結果 `stage2_ctx` を使う。
+- オーナーの目視は未了。確認項目は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-4 に置いた。
+
+### 173.2 機械の門
+
+| 門 | 結果 |
+|---|---|
+| アプリの仮想環境の pytest 全件（`PATH` の先頭に `tools\ffmpeg\bin`・`-o addopts=""`・既知の 1 件を deselect） | 3,460 件合格・67 件スキップ・失敗 0。変更前（dev `be873da` を別の作業ツリーで同じ条件）は 3,452 件合格・65 件スキップ。合格の差 8 件は新設したアプリ側のテスト、スキップの差 2 件は torch の無い環境で飛ぶ新設のエンジン側テスト 2 ファイル |
+| `.venv-engine`（`--noconftest`・§102.5 の基準 14 ファイル＋新設 `tests/test_chain_prompt_encode.py`） | 259 件合格・失敗 0 |
+| `.venv-engine-ltx25`（§102.5 のランナー・新設 `tests/test_ltx25_chain_prompts.py` と chain25 を使う 3 ファイル） | 81 件合格・失敗 0 |
+| 操作パネル | `npm run typecheck` 合格・`npm run lint` エラー 0／警告 31（不変）・`npx vitest run --exclude "**/backend.integration.test.ts"` 166 ファイル 3,320 件 全合格 |
+| ネイティブ `build.ps1 -Config Release -RunTests` | 398 件合格・失敗 0・スキップ 7・警告 0。`deploy.ps1` で実機と配布用コピーの 2 箇所に配置（文言 `Clip prompt (appended)` で両方ヒット） |
+
+- **文言の手直し後に回し直した門**（ja の句点 1 文字とコメントの手直し）:
+  - `.venv-engine-ltx25` の 4 ファイル 81 件合格。`npm run typecheck` 合格。
+  - vitest は 1 回目に `src/shell/AppShell.minimaxH3.test.tsx` の「code review m-8: NAG on with an EMPTY body on LTX does not block Generate once on MiniMax H3」が 1 件失敗した（`Unable to find an accessible element with the role "button" and name /^generate$/i`。2,068 ミリ秒）。本件で触っていないファイルのテストで、単体の再実行 3 回とも 8 件合格、全件の再実行は 166 ファイル 3,320 件 全合格。時間に頼る既知の型の不安定さと判断し、台帳 §3-238 に追記した。
+  - 再ビルド（`build.ps1 -Config Release -RunTests`）はネイティブ 398 件合格・失敗 0・スキップ 7・警告 0。`deploy.ps1` で実機と配布用コピーへ配置し、2 箇所の SHA-256 は `B3C8721D6E2C6D3C2E96F03E21B749252B53FF7637B0A176E772D6E439586CB6` で一致。新しい文言（「全体の仕上げには上のプロンプトだけが効きます。」と `Clip prompt (appended)`）を両方で確認。
+
+### 173.3 実 GPU の煙試験
+
+オーナーの許可（2026-10-23「GPU は空いているので、テストは自由に行っていい」）を得て行った。
+
+- **条件**: 実サーバー（`main.py`）・768×512・2 クリップ×49 コマ・seed 20261023・distilled・8 ステップ。共通は「cinematic film still, soft golden morning light, gentle sea breeze and distant waves」。個別はクリップ 0 が「a small wooden fishing boat slowly leaves the pier」、クリップ 1 が「white seagulls circle and call above the boat」。「共用」の腕は、クリップ 0 の個別を外したもの。
+
+| 腕 | エンジン | 異なる文字列（ワーカーのログ） | 所要 | ジョブの VRAM の山 | 符号化の段の山 |
+|---|---|---|---|---|---|
+| ltx23_all | LTX 2.3 | 3 本・Stage-2 は追加の 1 本 | 85.1 秒 | 8,479MB | — |
+| ltx23_clip0none | LTX 2.3 | 2 本・Stage-2 はクリップと共用 | 100.1 秒 | 8,465MB | — |
+| ltx25_all（切り替え直後の 1 本目） | LTX 2.5 | 3 本・追加の 1 本 | 65.1 秒 | 8,056MB | 7.50GiB |
+| ltx25_clip0none | LTX 2.5 | 2 本・クリップ 0 と共用 | 45.1 秒 | 7,322MB | 6.82GiB |
+| ltx25_all_rerun | LTX 2.5 | 3 本・追加の 1 本 | 45.1 秒 | 7,719MB | 7.19GiB |
+
+- **所見**:
+  - 全 5 本が completed。ジョブ記録の `request.prompt` は 5 本とも共通だけだった。
+  - LTX 2.3 は 1 本ずつ符号化するので、山は変わらない（差 14MB）。LTX 2.5 は一括で符号化するので、文字列が 1 本増えると山が上がる。
+  - この解像度では、符号化の段がジョブ全体の山を握る。再実行どうしの比較で約 0.4GB の差になった（1 本目の 0.7GB の差には、切り替え直後の初回の分が含まれる）。大きい解像度ではノイズ除去の段の山が上回るので、この差は表に出にくい見込み（推測）。
+  - LTX 2.3 の 2 本は既定の設定のまま（attention は sdpa・常駐は off）。
+- **GPU なしの確認**: 共通 1,000 文字＋個別 1,000 文字（合成後 2,001 文字）で 422 `VALIDATION_ERROR`。メッセージは「clips[1].prompt appended to the shared prompt is 2001 characters (max 2000 combined)」。
+- **行わなかったこと**: `engine25.worker --selftest-chain` のダイジェスト照合（任意の項目）。
+
+### 173.4 レビューの採否
+
+- **計画の敵対的レビュー**（Opus・読み取りのみ）: 高 0・中 3・低 4。すべて採用した。中の 3 点は、空白だけの共通プロンプトを 422 にする案の取り下げ（操作パネルの連結画面と Single の A2V にも届くため）、2.3 の新設テストの手本を `test_chain_reference_engine.py` へ、`importorskip("torch")`。
+- **実装差分のレビュー**（Opus）: 高 0・中 2・低 4。すべて採用した。中の 2 点は、§173 を書いてからコミットすること、仕様書の未計測の断定を実測の参照へ置き換えること。低の 4 点は、Stage-2 の「別に符号化」の言い切り、`chainSnapshot.ts` の説明、セルフテストのコメント、ja の文末の句点。
+- テストの例の文字列に残る「override」はデータなので直さない。
+
+### 173.5 申し送り
+
+- git 管理外の `outputs/ltx25-chain-g1/g1_chain_ab.py` と `outputs/ltx25-v2v-a2v-g1/g1_v2v_a2v.py` ほか、過去の検証用スクリプトの一部は、`prompt` の無い payload や `ChainSpec` を組み立てるので、再実行すると失敗する（製品とテストには影響しない）。
+- `tests/test_chain_lora.py` は呼び出しの形を合わせただけで、どの環境でも走らない（§102.5）。
+- `ChainSnapshot.clips` の要素の `prompt` は読まれなくなった（型は据え置き）。
+
+### 173.6 成果物とコミット
+
+- **成果物**: 煙試験の成果物は git 管理外の `outputs/chain-prompt-add-smoke-2026-10-23/`（各腕の mp4・ジョブの JSON・`smoke.py`・422 の応答・退避した `state.json`）。サーバーは停止し、`state.json` は退避した写しから戻した（LTX 2.3 有効・LTX 2.3 の transformer は `sulphur_distil_fp8mixed`）。
+- **コミット**（dev）:
+
+| コミット | 中身 |
+|---|---|
+| `61c1312` | バックエンドのコードとテスト（API・アダプタ 2 本・エンジン 2 本・Gradio と MCP の説明文・テスト〔新設 2 ファイル〕） |
+| `f2dd7f0` | 操作パネル（文言・バッチ i2v-long の注意文の削除・モック・コメント・テスト）と配布用 aux2 |
+| （本節） | 文書（仕様書 v0.5.96・README・研究ノート・API_REFERENCE・フロント DEVLOG §145・本節・台帳） |
+
+- **台帳**: §1-110 は [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-4（目視待ち）へ移した。
+- 次の番号: CLOSED 3-245・本書 §174・フロントエンド DEVLOG §146。

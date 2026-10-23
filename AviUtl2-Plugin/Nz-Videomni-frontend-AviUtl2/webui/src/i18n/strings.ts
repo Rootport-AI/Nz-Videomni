@@ -603,9 +603,8 @@ export const en = {
     addClipButton: "Add clip",
     removeClipButton: "Remove clip",
     clipLabel: (index: number): string => `Clip ${index + 1}`,
-    clipPromptLabel: "Clip prompt (appended)",
-    clipPromptPlaceholder:
-      "Added after the prompt above for this clip only. Leave empty to use the prompt above alone. The final pass uses the prompt above only.",
+    clipPromptLabel: "Unique prompt",
+    clipPromptPlaceholder: "Add a unique prompt to this clip.",
     clipNumFramesLabel: "Duration",
     /** §1-16 長尺A2V: the "🎵 which part of the track does this clip cover?"
      * badge in a clip card's header, shown only while an audio file is attached
@@ -2752,9 +2751,8 @@ export const ja: Strings = {
     addClipButton: "クリップを追加",
     removeClipButton: "クリップを削除",
     clipLabel: (index: number): string => `クリップ ${index + 1}`,
-    clipPromptLabel: "このクリップへの追記",
-    clipPromptPlaceholder:
-      "このクリップでは上のプロンプトの後ろに付け足します（空欄なら上のプロンプトだけ）。全体の仕上げには上のプロンプトだけが効きます。",
+    clipPromptLabel: "個別プロンプト",
+    clipPromptPlaceholder: "このクリップに個別のプロンプトを追加する。",
     clipNumFramesLabel: "尺",
     clipAudioWindow: {
       label: (startSec: string, endSec: string): string => `🎵 担当時間帯 ${startSec}〜${endSec}秒`,

@@ -96,7 +96,8 @@ ProgressFn = Callable[[str, int, int], None]
 
 @dataclass
 class ChainClipSpec:
-    """One clip in the chain (prompt already resolved to its effective value)."""
+    """One clip in the chain (``prompt`` is its stage-1 string, already composed
+    app-side; stage 2 uses ``run_chain``'s ``stage2_prompt`` instead)."""
 
     prompt: str
     num_frames: int
@@ -961,6 +962,31 @@ def _chunked_upsample_cpu(assembled_v, video_encoder, upsampler, upsample_video_
     return result
 
 
+def _encode_chain_prompts(
+    encode_one: Callable[[str], tuple],
+    clip_prompts: list[str],
+    stage2_prompt: str,
+) -> tuple[list[tuple], tuple]:
+    """Encode every DISTINCT chain prompt once; return per-clip and stage-2 contexts.
+
+    ``clip_prompts`` are the clips' stage-1 strings (one per clip, composed
+    app-side) and ``stage2_prompt`` is the chain's shared prompt. They are
+    encoded in ``dict.fromkeys([*clip_prompts, stage2_prompt])`` order — first
+    appearance, each distinct string exactly once — so a stage-2 prompt equal to
+    a clip's string (a clip with no text of its own) shares that clip's encoding,
+    and one that differs from every clip costs exactly one extra encode.
+
+    ``encode_one(prompt)`` returns that prompt's ``(video_ctx, audio_ctx)``.
+    Returns ``(seg_ctx, stage2_ctx)``. ``seg_ctx`` holds one context per clip and
+    is a LIST because ``run_chain`` appends to it in ``internal_segment`` mode.
+    """
+    by_prompt = {
+        p: encode_one(p) for p in dict.fromkeys([*clip_prompts, stage2_prompt])
+    }
+    seg_ctx = [by_prompt[p] for p in clip_prompts]
+    return seg_ctx, by_prompt[stage2_prompt]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main chain orchestration.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -969,6 +995,7 @@ def run_chain(
     pipe,
     *,
     clips: list[ChainClipSpec],
+    stage2_prompt: str,
     width: int,
     height: int,
     frame_rate: float,
@@ -994,8 +1021,15 @@ def run_chain(
 
     All heavy weights (transformer/video_encoder) are built ONCE and reused for
     every stage-1 segment and stage-2 tile; the text encoder is loaded once,
-    used to encode all distinct clip prompts, then freed (mirrors the spikes +
-    DistilledPipeline ordering).
+    used to encode every distinct prompt (the clips' stage-1 strings plus
+    ``stage2_prompt``, see ``_encode_chain_prompts``), then freed (mirrors the
+    spikes + DistilledPipeline ordering).
+
+    ``clips[i].prompt`` drives stage-1 segment ``i`` and is used as given (the
+    app composes it: the shared prompt, then the clip's own text appended).
+    ``stage2_prompt`` is the chain's shared prompt; the whole stage-2 refine
+    runs on this one context (see the comment at the stage-2 block for why it
+    is a single uniform context).
 
     ``audio_source`` (audio-to-video; ``None`` leaves every branch it opens
     untaken) freezes an uploaded audio latent over the whole timeline and
@@ -1218,11 +1252,17 @@ def run_chain(
     if progress:
         progress("encode", 0, 1)
     text_encoder = ledger.text_encoder()
-    distinct = list(dict.fromkeys(c.prompt for c in clips))  # preserves order, dedups
-    ctx_by_prompt: dict[str, tuple] = {}
-    for p in distinct:
-        vctx, actx = encode_text(text_encoder, prompts=[p])[0]
-        ctx_by_prompt[p] = (vctx, actx)
+    clip_prompts = [c.prompt for c in clips]
+    seg_ctx, stage2_ctx = _encode_chain_prompts(
+        lambda p: encode_text(text_encoder, prompts=[p])[0],
+        clip_prompts,
+        stage2_prompt,
+    )
+    logger.info(
+        "chain prompts: %d distinct encoded; stage-2 prompt %s",
+        len(dict.fromkeys([*clip_prompts, stage2_prompt])),
+        "shared with a clip" if stage2_prompt in clip_prompts else "is one extra encode",
+    )
     # NAG/VSF negative encode: one extra call against the SAME live text_encoder
     # (avoids a second Gemma load), stashed in NagState before it's freed below.
     # Inert when this chain didn't request either (pipe._nag.requested is False).
@@ -1241,7 +1281,6 @@ def run_chain(
     del text_encoder
     cleanup_memory()
 
-    seg_ctx = [ctx_by_prompt[c.prompt] for c in clips]
     # The internal band segment REUSES the last clip's encoding — it is the tail of
     # that same scene, and its audio (the one modality still generated freely there)
     # should read as a continuation of it, not as a scene change. Reusing the tuple
@@ -1881,14 +1920,14 @@ def run_chain(
         cleanup_memory()
 
     # ── STAGE 2: always-tiled refine (video+audio jointly). ───────────────────
-    # ONE context (clip 0's EFFECTIVE prompt -- its own override if set, else the
-    # base prompt) for the ENTIRE stage-2 refine. Per-segment prompt variation
-    # lives in STAGE 1 (where the carry+freeze+crossfade absorbs it smoothly —
-    # all segment seams stay continuous). Switching the AUDIO context
+    # ONE context (the chain's shared prompt, ``stage2_prompt``) for the ENTIRE
+    # stage-2 refine. Per-segment prompt variation lives in STAGE 1 (where the
+    # carry+freeze+crossfade absorbs it smoothly — all segment seams stay
+    # continuous). Switching the AUDIO context
     # mid-tile-overlap in stage 2 injects a speech-context click at the frozen
     # tile seam (observed: Chain B J=456 audio ratio 13.67); a uniform context
     # removes that seam entirely.
-    stage2_vctx, stage2_actx = seg_ctx[0]
+    stage2_vctx, stage2_actx = stage2_ctx
     stage2_sigmas = torch.Tensor(STAGE_2_DISTILLED_SIGMA_VALUES).to(device)
     refined_v: list[torch.Tensor] = []
     refined_a: list[torch.Tensor] = []

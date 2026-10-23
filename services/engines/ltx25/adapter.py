@@ -343,7 +343,9 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: verbatim (``stage2_window`` only when it differs from the default) and the
 #: acceleration and residency flags ride it as additive keys (see
 #: :meth:`_RealBackend25.generate_chain`), ``prompt`` and ``clips`` together
-#: become the per-clip list (effective prompt / num_frames / clip-0 images), and
+#: become the per-clip list (stage-1 prompt = the shared prompt with the clip's
+#: own appended / num_frames / clip-0 images) while ``prompt`` alone also rides
+#: as the top-level ``prompt`` stage 2 refines with, and
 #: ``crop_output`` is the app-side ffmpeg centre-crop applied to the finished
 #: mp4 — the same engine-independent ruling the single path makes.
 #:
@@ -1256,6 +1258,7 @@ class _RealBackend25(_RealBackend):
         # why num_inference_steps is classified ignore-and-log, not honoured.
         payload: dict = {
             "op": "generate_chain",
+            "prompt": chain.shared_prompt(),
             "width": chain.width,
             "height": chain.height,
             "frame_rate": chain.frame_rate,

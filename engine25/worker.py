@@ -96,13 +96,17 @@ Protocol (one JSON object per line; parent -> worker):
       sub-dict, which the app does write into metadata.json. ``vae_mode_used``
       and ``ltx25`` are different: metadata.json DOES carry both -- the app
       reads only the top-level ``ltx25``, never ``outpaint.ltx25``.
-  {"op": "generate_chain", output_path, seed, clips, width, height, frame_rate,
-   num_steps, overlap_frames, overlap_strength, [chunked_upsample],
+  {"op": "generate_chain", prompt, output_path, seed, clips, width, height,
+   frame_rate, num_steps, overlap_frames, overlap_strength, [chunked_upsample],
    [stage2_window], [source], [audio_source], [retake], [end_source]}
       One masked AV-latent clip chain -> ONE mp4 (:mod:`engine25.chain25`). The
       body keys are the 2.3 chain op's, verbatim, because the app builds one
-      payload shape for whichever engine is loaded. ``clips`` entries are
-      {prompt, num_frames, images}; only clip 0 may carry images.
+      payload shape for whichever engine is loaded. The top-level ``prompt`` is
+      the shared prompt (trimmed app side) and is stage 2's only prompt; it is
+      required. ``clips`` entries are {prompt, num_frames, images}, where each
+      ``prompt`` is that clip's stage-1 string, already composed app side (the
+      shared prompt, with the clip's own text appended after one space when it
+      has any); only clip 0 may carry images.
       ``source`` = {path, context_frames} continues an existing video (V2V):
       ``path`` is an mp4 the app has ALREADY cut to the requested frame rate,
       and its first ``context_frames`` pixel frames are frozen as the head of
@@ -1268,6 +1272,15 @@ def _do_generate_chain(msg: dict) -> None:
     raw_clips = msg.get("clips") or []
     if not raw_clips:
         raise RuntimeError("engine25 worker: generate_chain needs a non-empty 'clips' list")
+    # The shared prompt is stage 2's only prompt (each clip's composed stage-1
+    # string rides in ``clips``). Required, with no fallback to a clip's string:
+    # its absence means the app's payload builder and this reader have drifted
+    # apart, and a refine with the wrong prompt would not announce itself.
+    if "prompt" not in msg:
+        raise ValueError(
+            "engine25 worker: generate_chain needs the top-level 'prompt' (the shared "
+            "prompt stage 2 refines with)"
+        )
 
     seed = int(msg["seed"])
     clips = [
@@ -1418,6 +1431,7 @@ def _do_generate_chain(msg: dict) -> None:
     nag = _resolve_nag(msg)
 
     spec = ChainSpec(
+        prompt=str(msg["prompt"]),
         clips=clips,
         width=int(msg["width"]),
         height=int(msg["height"]),
@@ -2295,6 +2309,11 @@ def _selftest_chain(argv: list[str]) -> int:
             round_started = time.perf_counter()
             payload: dict = {
                 "op": "generate_chain",
+                # The shared prompt, which stage 2 refines with. It is clip 0's
+                # string, so stage 2 shares clip 0's encode: the number of strings
+                # encoded is unchanged from before, and the output should
+                # match the plain-chain digest VERIFICATION_LOG records.
+                "prompt": prompts[0],
                 "width": args.width,
                 "height": args.height,
                 "frame_rate": args.frame_rate,

@@ -31,7 +31,7 @@ function fullBase(): GenerateChainRequest {
     overlap_strength: 0.5,
     clips: [
       { num_frames: 121, conditioning_images: [{ image_id: "img-chain-start", frame_idx: 0, strength: 1.0 }] },
-      { num_frames: 121, prompt: "clip 1 override" },
+      { num_frames: 121, prompt: "clip 1 own prompt" },
       { num_frames: 97 },
     ],
     chunked_upsample: true,
@@ -101,7 +101,7 @@ describe("buildI2vLongTemplate", () => {
   it("promptはChain画面の共通プロンプトのまま（合成しない・clip個別も無改変＝案A）", () => {
     const template = buildI2vLongTemplate({ base: fullBase() });
     expect(template.prompt).toBe("base prompt");
-    expect(template.clips[1]?.prompt).toBe("clip 1 override");
+    expect(template.clips[1]?.prompt).toBe("clip 1 own prompt");
     expect(template.clips[2]?.prompt).toBeUndefined();
   });
 
@@ -329,7 +329,7 @@ describe("buildRowPayload", () => {
     const withClipPrompt = buildI2vLongTemplate({ base: fullBase() });
     const request = buildRowPayload(withClipPrompt, { imageId: "i", rowPrompt: "a dog", promptMode: "replace" });
     expect(request.prompt).toBe("a dog");
-    expect(request.clips[1]?.prompt).toBe("clip 1 override");
+    expect(request.clips[1]?.prompt).toBe("clip 1 own prompt");
   });
 
   it("template を一切変更しない（コピーオンライト）", () => {

@@ -85,6 +85,11 @@ Protocol (one JSON object per line; parent -> worker):
   # Masked AV-latent clip chaining (ONE decode, always-tiled stage2):
   {"op": "generate_chain", width, height, frame_rate, num_steps, seed,
    overlap_frames, overlap_strength, output_path,
+   # prompt (required): the chain's shared prompt, trimmed app-side. Stage 2
+   # refines every tile with this one string; clips[].prompt below is each
+   # clip's stage-1 string, already composed app-side (shared prompt, then the
+   # clip's own text appended):
+   prompt,
    # chunked_upsample (optional; absent -> off): when true the whole-timeline
    # spatial upsample runs in halo-padded temporal chunks (VRAM-bounded for long
    # 768p chains). Omitted/false -> the one-shot upsample path.
@@ -1150,6 +1155,17 @@ def _do_generate_chain(msg: dict) -> None:
     torch.cuda.reset_peak_memory_stats(DEV)
     _log_job_start_vram()
 
+    # Stage-2 prompt: the chain's shared prompt (trimmed app-side). Required —
+    # a missing key fails loudly instead of quietly refining with clip 0's
+    # stage-1 string.
+    try:
+        stage2_prompt = str(msg["prompt"])
+    except KeyError as exc:
+        raise ValueError(
+            "generate_chain: prompt (the shared stage-2 prompt) is required "
+            f"(missing key {exc})"
+        ) from exc
+
     clips = [
         ChainClipSpec(
             prompt=c["prompt"],
@@ -1298,6 +1314,7 @@ def _do_generate_chain(msg: dict) -> None:
 
     meta = _PIPE.generate_chain(
         clips=clips,
+        stage2_prompt=stage2_prompt,
         width=int(msg["width"]),
         height=int(msg["height"]),
         frame_rate=msg["frame_rate"],

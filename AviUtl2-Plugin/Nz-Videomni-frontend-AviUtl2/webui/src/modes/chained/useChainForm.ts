@@ -1094,8 +1094,9 @@ function fitClipsToBounds(clips: ChainClipInput[], min: number, max: number, def
 }
 
 /**
- * Owns Chain mode's entire form state: the clip list (per-clip prompt override
- * + duration, clip-0-only start frame), the seam-blend params, the optional
+ * Owns Chain mode's entire form state: the clip list (per-clip prompt appended
+ * to the shared one + duration, clip-0-only start frame), the seam-blend
+ * params, the optional
  * V2V source video + context_frames, and the common
  * width/height/frame_rate/seed fields shared with Create
  * (Docs/API_REFERENCE.md §5.2 "common" fields — same frozen constraints as

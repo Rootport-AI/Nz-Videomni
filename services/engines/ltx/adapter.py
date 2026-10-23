@@ -2551,6 +2551,7 @@ class _RealBackend:
 
         payload = {
             "op": "generate_chain",
+            "prompt": chain.shared_prompt(),
             "width": chain.width,
             "height": chain.height,
             "frame_rate": chain.frame_rate,

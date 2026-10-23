@@ -627,3 +627,122 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 - [note: RTX 4060 Ti 16GB の実測（tank_ai）](https://note.com/tank_ai/n/nab26edd4ab96) / [note: RTX 4080 16GB の実測（aibijyolab）](https://note.com/aibijyolab/n/n062ec8f871d9)
 - [smeltcore: RTX 4070 Ti SUPER と Turbo LoRA](https://smeltcore.com/recipes/minimax-h3-on-rtx-4070-ti-super-ada-at-16-gb-and-the-turbo-lora-question)
 - ComfyUI issue #15261・#15628・#15665・#17017、comfy-kitchen issue #136、diffusers PR #14742・issue #14433、DiffSynth-Studio #1620・#1743（いずれも 13.4・13.5 で言及したもの）
+
+## §14 推論高速化の事前調査と台帳への配置（オーナー共有・2026-10-21）
+
+2026-10-21 にオーナーが共有した事前調査の記録である。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の §1-105 と、§3 に新しく起票した 4 件（§3-245〜§3-248）の材料として置く。本製品の内部実測の数値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3（A-G5）と `engine_h3/constants.py` で裏取りした。外部のベンチマークは裏取りしておらず、Nz-Videomni の実測値として扱ってはならない。
+
+### 14.1 §1-105（第 1 弾：数値等価）の 4 件の材料
+
+- **QKV の活性化量子化の共有**: VRAM 16GB mode の経路では、Q／K／V の射影を 7 つのヘッド群に分けて計算している。同じ入力に対する INT8 ConvRot の前処理を共有し、重複した計算を減らす。
+- **Cyclic prefetch（ステップ間の先読み）**: 次のステップの冒頭で使うブロックの重みを先読みする。節約できる GPU の待ち時間が小さい可能性があるので、20 ステップの生成で 5 秒程度以上の改善の余地があるかを事前に確かめる。
+- **CPU から pinned staging（固定メモリの中継領域）への先読み**: CPU 側の重みのコピーを GPU の計算と重ねる。評価するのはコピーの処理時間ではなく、GPU の待ち時間がどれだけ減るかである。
+- **QKV のコピーとレイアウト変換の削減（条件付き）**: SageAttention を呼ぶ前の `contiguous()` などが対象である。既存の設計は strided な Q／K の渡し方を採っていない（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5 の「採らないもの」）ので、数値の一致と VRAM の使用量を検証し直してから扱う。
+
+参考資料:
+
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/engine_h3/quant_linear.py
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/engine_h3/dit.py
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/engine/transformer/block_swap_prefetch.py
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/Docs/Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md
+- https://github.com/hao-ai-lab/FastVideo/blob/main/scripts/benchmarks/minimax_h3_4090/README.md
+
+### 14.2 ヘッド群（Head group）の拡大
+
+既存の内部実測（RTX 4070 Ti SUPER・I2V 896×1152・124 フレーム・SageAttention・2 ステップ。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3 の A-G5。現在の値 `VRAM16_HEAD_GROUP = 8` を定める `engine_h3/constants.py` のコメントにも同じ数値がある）:
+
+| ヘッド群 | 1 ステップ | 割り当て（Allocated） | 予約（Reserved） |
+|---|---|---|---|
+| 8 | 21.74 秒 | 4,411 MiB | 7,262 MiB |
+| 14 | 20.99 秒 | 4,965 MiB | 7,264 MiB |
+| 28 | 20.54 秒 | 6,257 MiB | 8,354 MiB |
+
+- 20 ステップに換算すると、14 で約 15 秒、28 で約 24 秒の短縮になる。ただし実測は 124 フレーム・2 ステップのもので、20 ステップを通して測ったものではない。
+- VRAM の使用量が増えると、快適上限のフレーム数が下がる可能性がある。124 フレームではヘッド群 14 の予約はほとんど増えていないが、長尺の生成での挙動は確かめていない。既存の実測から線形に外挿すると、8→14 で快適上限が約 16% 下がるという見積もりも出るが、粗い推定であって実際の上限ではない。
+- 採否の判断で重く見る点:
+  1. 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-95 で、現行のヘッド群 8 の快適上限の較正が済んでいること。
+  2. ヘッド群を変えたことで快適上限が 20% 以上下がるなら、採用を考え直す。
+  3. LTX 2.3〜2.5 と同じ水準のフレーム数を保つという設計目標を優先する（オーナーの基準。設計正本には書かれていない）。
+  4. 数値の差・品質・OOM〔VRAM 不足による停止〕の危険と、速度の向上とを費用対効果で比べる（基準は 14.6）。
+
+参考資料:
+
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/engine_h3/constants.py
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/Docs/MINIMAX_H3_DESIGN.md
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/Docs/Outputs-archive/h3-vram16-2026-10-18/gates/G5_summary.jsonl
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/Docs/Outputs-archive/h3-vram16-2026-10-18/gates/G4_summary.jsonl
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/Docs/COMFORT_LIMIT_TABLE.md
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/Docs/PENDING_TASKS.md
+
+### 14.3 INT8 ConvRot のカーネルの高速化
+
+- **Bit-exact Triton fusion**: FastVideo には、RoPE・AdaLN・SwiGLU でビット一致を目指した融合カーネル〔複数の演算を 1 回の GPU 呼び出しにまとめたもの〕がある。Nz-Videomni の出力と一致するかは確かめていない。
+- **通常の kernel fusion**: 演算をまとめて、メモリへの読み書きとカーネルの起動を減らす。丸めの順序が変わるので数値の差が出うる（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5 の「採らないもの」と、裁定 46 の門の対象）。
+- **INT8 GEMM epilogue fusion**: 行列積（GEMM）の直後の後処理（scale・bias など）を行列積に融合する。comfy-kitchen の既存の最適化と重なっていないかの調査が要る。
+- **AdaLN〔条件づけ用の正規化〕の計算の再利用**: 重複している AdaLN の計算を減らす。枝刈り版の H3 では AdaLN の rank が 8 なので、効果は限られる可能性がある。
+- **Regional Compile〔部分的なコンパイル〕／CUDA Graph〔GPU の呼び出し列を記録して再生する仕組み〕**: コンパイルや実行グラフで、呼び出しのオーバーヘッドを減らす。動的な block swap との整合は確かめていない。
+- 「INT8 ConvRot の回転の整数化」は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-53 に既にあるので、重ねて起票しない。
+
+参考資料:
+
+- https://github.com/hao-ai-lab/FastVideo/blob/main/fastvideo/models/dits/minimax_h3_fusions/exact.py
+- https://github.com/NVlabs/Sana/tree/sol-engine
+- https://github.com/Comfy-Org/comfy-kitchen
+- https://docs.pytorch.org/docs/stable/torch.compiler.html
+- https://github.com/Rootport-AI/Nz-Videomni/blob/main/Docs/ACCELERATION_RESEARCH_NOTES.md
+
+### 14.4 Sparse Attention（注意の疎化）
+
+- **Sol-Attn**: 学習済みの gate〔どこを間引くかを決める小さな網〕が要らない。MiniMax H3 の INT8 ConvRot での外部実測があり、RTX 5080 16GB・8 ステップで 58.2 秒→45.1 秒。ただしこの改善には、メモリ転送との競合が和らいだことも寄与している。
+- **VSA（Video Sparse Attention）**: 学習済みの gate で Attention を疎にする。FastVideo に実装があり、Turbo と併用した例もある。ファインチューンしたモデルで gate が使えるか（互換性）が課題である。
+- **SpargeAttn／Cube／SubBlock Sparse**: その他の疎化の方式。H3・VRAM 16GB mode・現行のヘッド分割に合うかと、実装の費用は確かめていない。
+
+参考資料:
+
+- https://github.com/quzopl/ComfyUI-SolAttn-H3
+- https://github.com/NVlabs/Sana/tree/sol-engine
+- https://github.com/hao-ai-lab/FastVideo
+- https://github.com/Kablex/ComfyUI-Ref2VA-VSA
+- https://arxiv.org/abs/2505.13389
+- https://github.com/thu-ml/SpargeAttn
+
+### 14.5 Cross-step Cache（ステップ間の再利用）
+
+- **TeaCache／FirstBlockCache（FBC）／Cache-DiT／EasyCache**: 過去のステップの残差や中間結果を再利用して、DiT の計算を省く。FBC には、RTX 5090・INT8 ConvRot・20 ステップ・SageAttention2 で 57.96 秒→40.26 秒という外部実測がある。
+- 生成の軌道が変わりやすく、4 ステップの Turbo との相性に懸念がある。PSNR・SSIM〔画質の客観指標〕だけでは、主観で見た映像と音声の品質を保証できない。このため優先度は低い。
+
+参考資料:
+
+- https://github.com/duckyshell/ComfyUI-MiniMaxH3-FirstBlockCache
+- https://github.com/NVlabs/Sana/tree/sol-engine
+- https://github.com/vllm-project/vllm-omni/blob/main/recipes/MiniMaxAI/MiniMax-H3.md
+
+### 14.6 費用対効果の共通の基準
+
+20 ステップの生成での壁時計の時間（wall time。実際に待つ時間）の短縮を、主な判断材料にする。
+
+| 短縮時間 | 暫定の判断 |
+|---|---|
+| 1〜2 秒 | 原則として見送る |
+| 3〜5 秒 | 小さな改修なら検討する |
+| 5〜15 秒 | 実装の負担と比べる |
+| 15 秒以上 | 有力な候補 |
+
+- 将来の 4 ステップの Turbo での絶対の短縮時間も考える。
+- 外部のベンチマークを Nz-Videomni の実測値として扱わない。
+- VRAM の消費が増える方式では、速度の向上だけでなく快適上限への影響も採用の条件に入れる。
+- 対象外: FP8・GGUF・NVFP4 への対応。RoPE のテーブルの事前計算は実装済み（`engine_h3/pipeline_h3.py` が生成の冒頭で `rope_tables` を 1 回組む）なので起票しない。
+
+### 14.7 技術の分類と台帳への配置
+
+- **A 数値等価型**: 計算結果を変えずに速くする。
+- **B 演算最適化型**: 計算の構造を保ち、ごく小さな数値の差を許す。
+- **C Attention 近似型**: Attention を間引く。Turbo と原理的に併用できる。
+- **D ステップ間近似型**: 過去のステップの結果を流用する。品質の危険が大きく、Turbo との相性に懸念がある。
+
+台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) への配置:
+
+- §1-105 = A 群の具体的な改修（14.1）。
+- §3 の改修項目 = ヘッド群の拡大（§3-245。14.2）・INT8 ConvRot のカーネルの高速化（§3-246。14.3）。
+- §3 の研究課題 = Sparse Attention（§3-247。14.4）・Cross-step Cache（§3-248。14.5）。
+- ヘッド群の拡大は速度の向上が実測されているが、快適上限を損なう可能性があるので、§1-95 の較正が済むまで着手しない。§1 への新しい起票はしない。

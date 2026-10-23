@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-21
+- 作成: 2026-07-15／最終更新: 2026-10-23
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -36,12 +36,12 @@
 - **前提**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5 の行分割の射影に、アダプタも同じ行で切って当てること。ステップ数と shift のスライダー（既存）。
 - **出典**: [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（Turbo の形）・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の裁定 10（LoRA と Turbo は一緒に）。
 
-### 1-105. MiniMax H3 の 1 ステップの高速化（第 1 弾：数値を変えない 3 件）（起票：2026-10-19）
+### 1-105. MiniMax H3 の 1 ステップの高速化（第 1 弾：数値等価）（起票：2026-10-19）
 
-- **概要**: 出力の数値を変えない 3 件。① QKV の活性化量子化の共有（7 群×3 本＝21 回の量子化を 1 回にする）。② ステップ間の cyclic prefetch〔次のステップのブロック 0 と 1 を先読みする〕。③ CPU の正本から pinned staging〔固定メモリの中継領域〕への先読み。
+- **概要**: 出力の数値を変えない 4 件（④ は条件付き）。① QKV の活性化量子化の共有（7 群×3 本＝21 回の量子化を 1 回にする）。② ステップ間の cyclic prefetch〔次のステップのブロック 0 と 1 を先読みする〕。③ CPU の正本から pinned staging〔固定メモリの中継領域〕への先読み。④ QKV の不要なコピー・レイアウト変換の削減（条件付き: SageAttention 呼び出し前の `contiguous()` などが対象。既存設計は strided Q/K 方式を不採用としているので、数値一致と VRAM 使用量を再検証してから）。
 - **前提**: §1-104 の後（射影のコードを同じ箇所で触るため）。comfy-kitchen が量子化済みの入力の行列積を公開 API で受け付けるかの調査。
-- **留意**: ヘッド群 28（約 5% 速いが割り当てが +1.8GB）は、「つまみを増やさない方針」との兼ね合いを着手時に再検討する（オーナー指示）。kernel fusion〔RMSNorm と RoPE、SwiGLU の融合〕は数値が変わるので、裁定 46 の門つきで第 2 弾とする。オーナーのメモは一次資料で未裏取り。
-- **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（高速化 5 項目。未裏取り）・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3（A-G5）。
+- **留意**: ヘッド群の拡大（14／28）は §3-245 で再評価する（§1-95 の較正の完了が前提）。kernel fusion〔RMSNorm と RoPE、SwiGLU の融合〕は数値が変わるので本弾には入れず、§3-246 の候補とする（裁定 46 の門つき）。オーナーのメモは一次資料で未裏取り。各件の評価の物差し（20 ステップでの短縮秒数と快適上限への影響）は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.6。
+- **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（高速化 5 項目。未裏取り）・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3（A-G5）・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14（2026-10-21 の事前調査）。
 
 ### 1-106. MiniMax H3 の Chained（H3 Continuum 型・FL2VA）（起票：2026-10-19）
 
@@ -68,26 +68,11 @@
 - **前提**: §1-106 と §1-107。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
 
----
+### 1-111. 操作パネルにトークナイザーを常設し、トークン上限を超えそうなときに注意を出す（起票：2026-10-22）
 
-## 2. 実装済み・ユーザーのテスト待ち
-
-実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。全項目が合格して空になったら、本節は見出しごと削除する。
-
-### 2-3. Settings の「Fused GGUF Dequantization Kernel」の行の非表示の目視（備忘。元 §1-100 ①・起票 2026-10-21）
-
-実装と門は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171。クローズ済み（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-242）。本節は備忘である。配置済みの aux2 は SHA-256 `2E1F033CE2ED0D62…`。
-
-**Settings（操作パネル・MiniMax H3）**
-
-- [ ] ① ベースモデルを MiniMax H3 にして Settings「生成の高速化」を見る → 「Fused GGUF Dequantization Kernel」の行と注記が無い。「Block-swap prefetch」の行はある。
-- [ ] ② LTX 2.3 か LTX 2.5 で同じ行を OFF にし、MiniMax H3 へ切り替えてから LTX へ戻す → 行が再び出て、値は ON に戻っている（隠した行は既定へ戻す既存の規則どおり）。
-
-**Gradio（MiniMax H3）**
-
-- [ ] ③ Gradio の Settings で MiniMax H3 を読み込む → 同じチェックボックスが消える。LTX に戻すと ON で出る。
-
-全項目が合格したら [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-242 に更新行を足し、本節を削除する（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171 に追記）。
+- **概要**: プロンプトを文字数（2,000 文字）ではなくトークン数で見張る。LTX のテキストエンコーダ（Gemma）のトークン上限は 1,024 で、超えた分は切り捨てられる見込み（LTX 2.3 は vendor のトークナイザーが `truncation=True`、LTX 2.5 は `TOKENIZER_MAX_LENGTH = 1024`。切り捨て時に警告が出ないかは未確認）。Chained では共通＋個別の合成後の長さを見る。
+- **前提**: トークナイザーをどこで動かすか（WebView2 の中で動かせるか、サーバーに数えさせる API にするか）の調査が要る。ベースモデルによってトークナイザーが異なりうる（MiniMax H3 など）ので、選択中のベースモデルに合わせて切り替える。
+- **出典**: オーナー指示 2026-10-22（§1-110 の検討時）。
 
 ---
 
@@ -134,6 +119,7 @@
 - **概要**: 操作パネル（`webui`）のテストコードは製品コードより多く、同じ振る舞いを複数の層で重ねて確かめている箇所が多い。全件を繰り返し走らせるたびに、時間の隙間やモックの持ち越しに頼るテストが 1〜2 件ずつ新たに落ちる。不安定なテストは本項に集める（規則は末尾「本台帳の位置づけ（運用規則）」）。**不要なテストコードを減らす作業を、不安定の修正より優先する。**（この優先は本項の中での順序であり、§1 や他の §3 の項目との順位は変えない。） 数と履歴は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163。
 - **既知の不安定なテスト**: `webui/src/App.prefill.test.tsx` の "videoAudioToVideo … (#3)" と `webui/src/modes/chained/SourceInputPanel.test.tsx` の "dropping a video switches to v2v mode …"（同 §162.4）。
 - **進め方の候補**: 棚卸し（区域・層ごとの件数と所要・確かめている内容・不安定の履歴・重複）→ 削除の基準の確定（オーナー裁定）→ 層ごとに削減 → 全件の繰り返しで確認。基準の候補は同 §163.4。件数を目安に削らず、基準に照らして 1 件ずつ判断する（敵対的レビューで足したテストが退行を捕まえた例があるため）。
+- **既知の不安定なテスト（追記）**: `webui/src/shell/AppShell.minimaxH3.test.tsx` の「code review m-8: NAG on with an EMPTY body on LTX does not block Generate once on MiniMax H3」が全件実行で 1 回落ち（Generate ボタンが見つからない）、単体と全件の再実行では合格（2026-10-23。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §173.2）。
 - **状態**: 未着手（最初の一手は棚卸し）。
 - **範囲**: テストとモックのみ（製品コードは不変）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163（実測と裁定）・§160.5・§162.4（不安定の記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236（直した前例）。
@@ -143,6 +129,19 @@
 - **概要**: Gradio には、H3 が拒否する機能の操作部が見えたまま残っている（Clip Chain タブ、音声から動画生成のアコーディオン、バッチ A2V のアコーディオン、Style LoRA タブ、参照動画による制御のアコーディオン、ネガティブプロンプトのアコーディオン）。使うと 422 になる。操作パネルと同じく、機能名で閉じるか灰色にするかを部品ごとに決めて整える。閉じる仕組みは `gradio_ui/feature_scope.py` の表（既に PrunaVAED・埋め込み処理器の常駐・VRAM 16GB mode・Fused GGUF・キーフレームの強度を閉じている）。
 - **前提**: H3 の機能実装が一通り完了してから着手する。開発途上で閉じると、機能を足すたびに開け直す手間が出るため、それまでは触らない（オーナー裁定 2026-10-21）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.10（観測）・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-244（§1-102 ② の取り下げ）。
+
+#### 3-245. MiniMax H3 のヘッド群（Head group）拡大の再評価（起票：2026-10-21）
+
+- **概要**: VRAM 16GB mode のヘッド群を現行の 8 から 14 または 28 へ広げると 1 ステップが速くなる（A-G5 の実測）が、割り当てが増えて快適上限のフレーム数を下げる可能性がある。再評価して採否を決める。
+- **判断材料**: 20 ステップ換算の短縮と VRAM の増加は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.2 の表。採用の条件は、快適上限の低下が 20% 以上なら考え直すこと、LTX 2.3〜2.5 と同じ水準のフレーム数を保つことを優先すること、費用対効果は同 §14.6 の基準で見ること。利用者向けのつまみは増やさない方針（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.7）との兼ね合いも着手時に再検討する（オーナー指示）。
+- **前提**: §1-95（現行のヘッド群 8 の快適上限の較正）の完了。
+- **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3（A-G5）・§169.7、[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5（`VRAM16_HEAD_GROUP`）、研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.2。
+
+#### 3-246. MiniMax H3 の INT8 ConvRot カーネル高速化（起票：2026-10-21）
+
+- **概要**: 候補は Bit-exact Triton fusion〔ビット一致を目指した融合カーネル〕・RMSNorm／RoPE／SwiGLU の kernel fusion・INT8 GEMM epilogue fusion〔行列積の後処理の融合〕・AdaLN〔条件づけ用の正規化〕の計算の再利用・Regional Compile〔部分的なコンパイル〕・CUDA Graph〔GPU の呼び出し列を記録して再生する仕組み〕。数値が変わりうる候補は裁定 46 の門つきで扱う。「INT8 ConvRot の回転の整数化」は §3-53 にあり、本項では扱わない。
+- **判断材料**: 各候補の概要と未確認の点は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.3。費用対効果は同 §14.6。
+- **出典**: 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.3、[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5（「採らないもの」の行）、[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) (8)。
 
 ### 研究課題（上の改修項目より優先度が下）
 
@@ -313,6 +312,20 @@
 - **概要**: ホスト（`webview_host.cpp`）には `NavigationStarting` が無く、初回の読み込みより後にトップレベルの遷移が起きると、成功すればページ自体が置き換わり（操作パネルが消える）、ダウンロード以外の理由で失敗すれば Chromium のエラーページで止まる（どちらも再読み込みの経路が無い）。いまこの遷移を起こすのは `💾`（透過つき動画のダウンロード。遷移がダウンロードに化けるのでページは残る）だけで、実害は無い。直すなら「初回以外の遷移は取り消す、ただしバックエンドの origin へのダウンロードは通す」と「失敗したら `index.html` へ戻す」の 2 点。
 - **出典**: 第 3 弾の目視 G5 の手直し（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §157.7）。
 - **状態**: 将来の改修項目。
+
+#### 3-247. MiniMax H3 の Sparse Attention（注意の疎化）の導入調査（起票：2026-10-21）
+
+- **概要**: Attention を間引いて 1 ステップを速くする方式（Sol-Attn・VSA・SpargeAttn・Cube／SubBlock Sparse）。Turbo と原理的に併用できる。
+- **判断材料**: 各方式の特徴・外部の実測・未確認の点は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.4。H3・VRAM 16GB mode・現行のヘッド分割に合うかと、実装の費用は確かめていない。外部のベンチマークは本製品の実測値として扱わない（同 §14.6）。
+- **出典**: 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.4。
+- **状態**: 将来の研究課題（着手時期未定）。
+
+#### 3-248. MiniMax H3 の Cross-step Cache（ステップ間の再利用）の研究（低優先度）（起票：2026-10-21）
+
+- **概要**: 過去のステップの残差や中間結果を再利用して、DiT の計算を省く方式（TeaCache・FirstBlockCache・Cache-DiT・EasyCache）。
+- **判断材料**: 生成の軌道が変わりやすく、4 ステップの Turbo との相性に懸念がある。PSNR・SSIM〔画質の客観指標〕だけでは主観で見た映像と音声の品質を保証できないため、優先度は低い。外部の実測と参考資料は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.5。
+- **出典**: 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.5。
+- **状態**: 将来の研究課題（着手時期未定）。
 
 ---
 

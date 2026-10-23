@@ -102,7 +102,8 @@ def test_chain_junction_metadata_matches_chain_math(client):
 
 
 def test_chain_prompt_propagation(client):
-    # clip 0 uses the global base prompt; clip 1 overrides.
+    # clip 0 has no prompt of its own (the shared one alone); clip 1's own
+    # prompt is appended to the shared one.
     clips = [
         {"num_frames": 25},
         {"num_frames": 25, "prompt": "the camera pushes in on a red boat"},
@@ -117,17 +118,101 @@ def test_chain_prompt_propagation(client):
         (ctx.config.output_dir / job_id / "metadata.json").read_text(encoding="utf-8")
     )
     req = meta["request"]
-    # base prompt stored; clip-1 override preserved in the clip spec.
+    # shared prompt stored; clip 1's own prompt preserved in the clip spec.
     assert req["prompt"] == BASE["prompt"]
-    assert req["clips"][0]["prompt"] is None  # falls back to base
+    assert req["clips"][0]["prompt"] is None
     assert req["clips"][1]["prompt"] == "the camera pushes in on a red boat"
+    # The job record (GET /jobs request) shows the shared prompt too.
+    assert job["request"]["prompt"] == BASE["prompt"]
 
-    # Confirm the resolved effective prompt logic directly on the model.
+    # Confirm the stage-1 prompt of each clip directly on the model.
     from api.models import GenerateChainRequest
 
     model = GenerateChainRequest(**{**BASE, "clips": clips})
     assert model.clip_prompt(0) == BASE["prompt"]
-    assert model.clip_prompt(1) == "the camera pushes in on a red boat"
+    assert model.clip_prompt(1) == (
+        "a serene mountain lake at dawn the camera pushes in on a red boat"
+    )
+    assert model.shared_prompt() == BASE["prompt"]
+
+
+def test_chain_job_record_prompt_is_shared_even_when_clip0_has_its_own(client):
+    # GET /jobs' request.prompt is the chain's shared prompt as sent (not
+    # trimmed), never clip 0's stage-1 prompt.
+    shared = "  a serene mountain lake at dawn \n"
+    clips = [
+        {"num_frames": 25, "prompt": "birds lift off the water"},
+        {"num_frames": 25},
+    ]
+    r = _run_chain(client, clips, prompt=shared)
+    assert r.status_code == 202, r.text
+    job = client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    assert job["status"] == "completed", job
+    assert job["request"]["prompt"] == shared
+
+
+def _chain_model(prompt, clip_prompts):
+    from api.models import GenerateChainRequest
+
+    clips = [
+        {"num_frames": 25} if p is None else {"num_frames": 25, "prompt": p}
+        for p in clip_prompts
+    ]
+    return GenerateChainRequest(**{**BASE, "prompt": prompt, "clips": clips})
+
+
+def test_chain_clip_prompt_appends_the_clips_own_to_the_shared_prompt():
+    model = _chain_model(
+        "  a lake at dawn \n",
+        [None, "", "   \n ", " mist rolls in\n", "line one\nline two"],
+    )
+    # No own prompt (absent / empty / whitespace-only) -> the shared one alone.
+    assert model.clip_prompt(0) == "a lake at dawn"
+    assert model.clip_prompt(1) == "a lake at dawn"
+    assert model.clip_prompt(2) == "a lake at dawn"
+    # Both ends trimmed, joined by exactly one space.
+    assert model.clip_prompt(3) == "a lake at dawn mist rolls in"
+    # Inner line breaks are kept.
+    assert model.clip_prompt(4) == "a lake at dawn line one\nline two"
+
+
+def test_chain_shared_prompt_is_trimmed_and_the_record_is_not():
+    model = _chain_model("  a lake at dawn \n", ["birds lift off", None])
+    assert model.shared_prompt() == "a lake at dawn"
+    # The stored record keeps the shared prompt exactly as sent, even when
+    # clip 0 has its own prompt.
+    assert model.to_clip_request(0).prompt == "  a lake at dawn \n"
+
+
+def test_chain_whitespace_only_shared_prompt_adds_no_leading_space(client):
+    model = _chain_model("   ", ["birds lift off", None])
+    assert model.shared_prompt() == ""
+    assert model.clip_prompt(0) == "birds lift off"
+    assert model.clip_prompt(1) == ""
+    # ...and it is not a 422 (no check was added for it).
+    r = _run_chain(
+        client,
+        [{"num_frames": 25, "prompt": "birds lift off"}, {"num_frames": 25}],
+        prompt="   ",
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_chain_combined_prompt_of_exactly_2000_chars_is_accepted(client):
+    # 1000 + one space + 999 = 2000.
+    clips = [{"num_frames": 25}, {"num_frames": 25, "prompt": "c" * 999}]
+    r = _run_chain(client, clips, prompt="s" * 1000)
+    assert r.status_code == 202, r.text
+
+
+def test_chain_combined_prompt_over_2000_chars_is_422(client):
+    # 1000 + one space + 1000 = 2001: each field is within its own cap.
+    clips = [{"num_frames": 25}, {"num_frames": 25, "prompt": "c" * 1000}]
+    r = _run_chain(client, clips, prompt="s" * 1000)
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert "clips[1]" in r.text
+    assert "2001" in r.text
 
 
 def test_chain_duration_matches_timeline(client):

@@ -3052,6 +3052,8 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2（裁定 35 の訂正行・裁定 62）、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171、操作パネルの記録はフロントエンドの `Docs/DEVLOG.md` §144、API は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.95。
 - **残課題**: なし。目視の備忘は [`PENDING_TASKS.md`](PENDING_TASKS.md) §2-3。
 
+> **更新（2026-10-23）**: 備忘だった目視（台帳 §2-3）①② もオーナーが合格とした。
+
 ### 3-244. MiniMax H3 の小さな疑い 4 件（③ ステップ数の既定の一本化を実装。① は no-go・② は §3-243 へ・④ は誤認）（起票：2026-10-18、クローズ：2026-10-21）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-102 からクローズ）
 
 - **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-102（2026-10-18 起票。**同書側は欠番**）。MiniMax H3 の第 2 弾の現行化で見つけたコードの疑い 3 件（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.10）と、第 3 弾のサブマシンの門での観察 1 件（同 §167.8）をまとめたもの。
@@ -3062,3 +3064,12 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev の `d9514c7`（アダプタとテスト）。文書のコミットと main への merge は監督が行う。
 - **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 63・§9、記録 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §172。
 - **残課題**: ② の Gradio の整理は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243。
+
+### 3-245. Chained の共通プロンプトと個別プロンプトを「置き換え」から「追記」へ（LTX 2.3・2.5）（起票：2026-10-22、クローズ：2026-10-23）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-110 から §2-4 を経てクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-110（2026-10-22 起票）・元 §2-4（目視待ち）。**同書側はいずれも欠番**。
+- **到達条件**: Chained のクリップごとの個別プロンプトが、共通のプロンプトを置き換えず、後ろに付け足されること。**達成した。**
+- **何が完了したか**: 規則と実装は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §173、仕様は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2 を正本とする。オーナーの目視（2026-10-23）は合格で、操作パネルでの 2 クリップの生成とバッチ i2v-long で個別プロンプトが効くことを確かめた。煙試験の mp4 5 本は短すぎて品質の判断ができないため、③が合格であることをもって合格扱いとした（オーナー判断）。クリップ欄の文言はオーナーの指示で差し替えた（見出し「個別プロンプト」／「Unique prompt」、説明文「このクリップに個別のプロンプトを追加する。」／「Add a unique prompt to this clip.」。同 §173.7）。
+- **状態**: 文言の差し替えは配布用コピーの aux2 だけに配置済み。実機の aux2 は AviUtl2 を閉じて `deploy.ps1` を流すと新しい文言になる。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §173（目視と文言の差し替えは §173.7）、操作パネルの記録はフロントエンドの `Docs/DEVLOG.md` §145。
+- **残課題**: なし。

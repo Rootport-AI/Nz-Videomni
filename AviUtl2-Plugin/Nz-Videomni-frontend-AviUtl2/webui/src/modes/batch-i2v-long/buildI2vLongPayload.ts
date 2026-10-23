@@ -201,14 +201,11 @@ export interface BuildRowPayloadParams {
  *   carries this row's image as its single frame-0 keyframe at full strength.
  *
  * 案A（驚き最小）is unchanged by the 2026-07-30 row-prompt redesign: the
- * composition touches the chain-wide prompt ONLY, never a clip's own `prompt`
- * override. A user who typed a per-clip prompt on the Chain screen sees it
- * respected verbatim — whereas applying `replace` across every clip would wipe
- * out visible on-screen text. **Future switch point**: moving to 案B (compose
- * into every clip) is three lines inside the `clips.map` below — `prompt:
- * clip.prompt === undefined ? undefined : composeBatchPrompt(clip.prompt,
- * rowPrompt, promptMode)` — and nothing else in this file or its callers
- * changes.
+ * composition touches the chain-wide prompt ONLY, never a clip's own `prompt`.
+ * The server appends each clip's own prompt after this composed shared prompt
+ * for that clip's Stage-1 pass (Stage-2 uses the shared prompt alone), so the
+ * row's text reaches every clip, and a per-clip prompt typed on the Chain
+ * screen is still sent verbatim.
  *
  * Copy-on-write: `template` and every clip in it are left untouched, so the
  * SAME template is reused for every row of a run and repeated calls are fully

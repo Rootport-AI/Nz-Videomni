@@ -155,13 +155,8 @@ export function BatchI2vLongSection({ config, chain, serverBusy, nativeBridge }:
         <p className="field-hint">{t.summary(form.summary.done, form.summary.total)}</p>
         {form.currentRow && <p className="field-hint">{t.currentRow(form.currentRow.image)}</p>}
 
-        {/* Advisory notes — none of these blocks Start. `clip0PromptOverride`
-            is the strong one (a warning banner rather than a hint): the row's
-            image always lands on clip 0, so an override there means the batch
-            prompt never touches the part of the video the image controls. */}
-        {form.notes.clip0PromptOverride && <p className="warning-banner">{t.notes.clip0PromptOverride}</p>}
+        {/* Advisory notes — none of these blocks Start. */}
         {form.notes.seedFixed && <p className="field-hint">{t.notes.seedFixed}</p>}
-        {form.notes.otherClipPromptOverride && <p className="field-hint">{t.notes.clipPromptOverride}</p>}
         {form.notes.startFrameIgnored && <p className="field-hint">{t.notes.startFrameIgnored}</p>}
         <p className="field-hint">{t.notes.concurrency}</p>
 

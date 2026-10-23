@@ -52,8 +52,10 @@ class JobRecord:
     ):
         self.job_id = job_id
         # ``request`` is always a GenerateRequest because JobResponse.request is
-        # typed as one. For a chain job it is the clip-0 request (representative);
-        # ``chain_request`` carries the full multi-clip spec for the orchestrator.
+        # typed as one. For a chain job it is the clip-0 request (representative;
+        # its ``prompt`` is the chain's shared prompt, not clip 0's stage-1
+        # prompt); ``chain_request`` carries the full multi-clip spec for the
+        # orchestrator.
         self.request = request
         self.chain_request = chain_request
         self.status: JobStatus = JobStatus.queued
@@ -159,7 +161,8 @@ class JobStore:
         """Atomically create a chain job only if none is active (single-job guard).
 
         Stores the clip-0 :class:`GenerateRequest` as the record's ``request``
-        (keeps the JobResponse contract intact) and the full
+        (keeps the JobResponse contract intact; its ``prompt`` is the chain's
+        shared prompt as sent) and the full
         :class:`GenerateChainRequest` as ``chain_request`` for the orchestrator.
         Returns ``None`` if a job is already queued/running (respond 409).
         """

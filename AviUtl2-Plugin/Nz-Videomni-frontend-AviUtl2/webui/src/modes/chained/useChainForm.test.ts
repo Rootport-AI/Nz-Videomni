@@ -227,7 +227,7 @@ describe("useChainForm", () => {
     });
   });
 
-  it("buildRequest's clips carry per-clip prompt overrides and only clip 0 gets the start frame (scratch mode)", async () => {
+  it("buildRequest's clips carry per-clip prompts and only clip 0 gets the start frame (scratch mode)", async () => {
     const { result } = setup();
     act(() => {
       const secondId = result.current.clips[1]?.id;

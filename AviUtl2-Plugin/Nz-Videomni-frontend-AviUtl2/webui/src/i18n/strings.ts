@@ -603,8 +603,8 @@ export const en = {
     addClipButton: "Add clip",
     removeClipButton: "Remove clip",
     clipLabel: (index: number): string => `Clip ${index + 1}`,
-    clipPromptLabel: "Prompt override",
-    clipPromptPlaceholder: "Leave empty to use the prompt above",
+    clipPromptLabel: "Unique prompt",
+    clipPromptPlaceholder: "Add a unique prompt to this clip.",
     clipNumFramesLabel: "Duration",
     /** §1-16 長尺A2V: the "🎵 which part of the track does this clip cover?"
      * badge in a clip card's header, shown only while an audio file is attached
@@ -1290,9 +1290,6 @@ export const en = {
     /** Advisory notes — none of these blocks Start. */
     notes: {
       seedFixed: "The seed is fixed, so every image is generated with the same seed. Set the seed to -1 on the Clip Chain form to vary it per image.",
-      clip0PromptOverride:
-        "The first clip has a prompt of its own. Each image goes on that first clip, so the prompt and the additional prompts never reach the part of the video the image controls.",
-      clipPromptOverride: "Some clips have a prompt of their own. The prompt and the additional prompts do not change those.",
       startFrameIgnored: "The start frame on the Clip Chain form is not used — each row's own image takes its place.",
       concurrency: "Only one batch runs at a time, and Generate on the Clip Chain form is unavailable while this batch is running.",
     },
@@ -2754,8 +2751,8 @@ export const ja: Strings = {
     addClipButton: "クリップを追加",
     removeClipButton: "クリップを削除",
     clipLabel: (index: number): string => `クリップ ${index + 1}`,
-    clipPromptLabel: "プロンプトの上書き",
-    clipPromptPlaceholder: "空欄の場合は上のプロンプトを使用します",
+    clipPromptLabel: "個別プロンプト",
+    clipPromptPlaceholder: "このクリップに個別のプロンプトを追加する。",
     clipNumFramesLabel: "尺",
     clipAudioWindow: {
       label: (startSec: string, endSec: string): string => `🎵 担当時間帯 ${startSec}〜${endSec}秒`,
@@ -3073,9 +3070,6 @@ export const ja: Strings = {
     },
     notes: {
       seedFixed: "シードが固定されているため、すべての画像が同じシードで生成されます。画像ごとに変えたい場合は、クリップチェーンのシードを-1にしてください。",
-      clip0PromptOverride:
-        "1本目のクリップに個別のプロンプトが入力されています。画像は必ず1本目のクリップに乗るため、プロンプトも行ごとの追加プロンプトも、画像が効く部分にはまったく反映されません。",
-      clipPromptOverride: "個別のプロンプトが入力されたクリップがあります。プロンプトも行ごとの追加プロンプトも、それらを書き換えません。",
       startFrameIgnored: "クリップチェーンの開始フレーム画像は使われません。各行の画像がその位置に入ります。",
       concurrency: "バッチは同時に1つしか実行できません。実行中はクリップチェーンの生成ボタンも使えなくなります。",
     },

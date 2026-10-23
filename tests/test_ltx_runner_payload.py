@@ -348,6 +348,28 @@ def test_chain_payload_omits_vae_mode_by_default(tmp_path):
     assert "vae_mode" not in captured[0]
 
 
+def test_chain_payload_top_level_prompt_follows_op(tmp_path):
+    # The chain's top-level ``prompt`` is the shared prompt, trimmed (what
+    # stage 2 refines with), placed right after ``op`` as on the single op and
+    # on LTX 2.5. Each clip's stage-1 prompt stays in ``clips`` (the shared one
+    # + the clip's own), and the clip entries keep their three keys.
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _chain_request(
+        prompt="  a serene mountain lake at dawn \n",
+        clips=[{"num_frames": 25, "prompt": "mist rolls in"}, {"num_frames": 25}],
+    )
+    be.generate_chain(req, tmp_path / "out")
+    payload = captured[0]
+    assert list(payload)[:2] == ["op", "prompt"]
+    assert payload["prompt"] == "a serene mountain lake at dawn"
+    assert [c["prompt"] for c in payload["clips"]] == [
+        "a serene mountain lake at dawn mist rolls in",
+        "a serene mountain lake at dawn",
+    ]
+    assert all(set(c) == {"prompt", "num_frames", "images"} for c in payload["clips"])
+
+
 def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
     # Byte-identical contract, stated positively: a fully-default request's key
     # set must be exactly the pre-acceleration one, MODULO the two fields whose
@@ -359,6 +381,9 @@ def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
     # "default"), so they stay absent — vae_mode's default is permanently off
     # because the pruned decoder changes the picture (PrunaVAED,
     # Docs/PENDING_TASKS_CLOSED.md §3-66, filed as §3-50 at the time).
+    # The chain set also carries ``prompt``, the one owner-ruled addition that
+    # is not a flipped default (§1-110, 2026-10-22): the shared prompt stage 2
+    # refines with, beside the per-clip stage-1 prompts in ``clips``.
     captured: list[dict] = []
     be = _capturing_backend(captured)
     be.generate(_nag_request(), tmp_path / "single")
@@ -374,7 +399,7 @@ def test_default_payload_key_set_is_unchanged_by_acceleration(tmp_path):
     be2 = _capturing_backend(captured_chain)
     be2.generate_chain(_chain_request(), tmp_path / "chain")
     assert set(captured_chain[0]) == {
-        "op", "width", "height", "frame_rate", "num_steps", "seed",
+        "op", "prompt", "width", "height", "frame_rate", "num_steps", "seed",
         "overlap_frames", "overlap_strength", "chunked_upsample",
         "output_path", "clips", "block_swap_prefetch",
         "fused_gguf_dequant_kernel",
@@ -619,6 +644,9 @@ def test_default_payload_key_set_is_unchanged_by_keep_resident(tmp_path):
     # passed", which is the only sanctioned way this set may grow:
     #   * block_swap_prefetch -- flipped 2026-08-01 (§44 S4)
     #   * fused_gguf_dequant_kernel -- flipped 2026-08-04 (§51, gates G1-G8)
+    # The one owner-ruled exception is the chain's ``prompt`` (§1-110,
+    # 2026-10-22): the shared prompt stage 2 refines with, beside the per-clip
+    # stage-1 prompts in ``clips``.
     # Every other feature must still leave a default request byte-identical.
     captured: list[dict] = []
     be = _capturing_backend(captured)
@@ -633,7 +661,7 @@ def test_default_payload_key_set_is_unchanged_by_keep_resident(tmp_path):
     be2 = _capturing_backend(captured_chain)
     be2.generate_chain(_chain_request(), tmp_path / "chain")
     assert set(captured_chain[0]) == {
-        "op", "width", "height", "frame_rate", "num_steps", "seed",
+        "op", "prompt", "width", "height", "frame_rate", "num_steps", "seed",
         "overlap_frames", "overlap_strength", "chunked_upsample",
         "output_path", "clips", "block_swap_prefetch",
         "fused_gguf_dequant_kernel",

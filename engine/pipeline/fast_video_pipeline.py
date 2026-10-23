@@ -1931,12 +1931,15 @@ class LTXFastVideoPipeline:
         keep_resident: bool | None = None,
         fused_gguf_dequant_kernel: bool = False,
         vae_mode: str = "default",
+        *,
+        stage2_prompt: str,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4.
 
         Delegates to :func:`engine.pipeline.chain_pipeline.run_chain`, which
         reuses THIS pipeline's ledger/components/low-VRAM machinery. ``clips`` is
-        a list of ``ChainClipSpec`` (prompt already resolved, images built).
+        a list of ``ChainClipSpec`` (stage-1 prompt already composed app-side,
+        images built).
         ``source`` (optional ``SourceSpec``) enables video-to-video continuation:
         the source tail is frozen as clip-0's head and trimmed from the output.
         ``audio_source`` (optional ``AudioSourceSpec``) enables audio-to-video:
@@ -1948,6 +1951,11 @@ class LTXFastVideoPipeline:
         above). Like ``source``/``audio_source`` it is a pure pass-through —
         nothing is armed on this pipeline for it. Returns metadata incl.
         segment/tile junction pixel-frame indices.
+
+        ``stage2_prompt`` (keyword-only, required): the chain's shared prompt,
+        which stage 2 refines every tile with; passed straight through to
+        ``run_chain``. It has no default on purpose, so a caller that forgets
+        it fails loudly rather than refining with clip 0's stage-1 string.
 
         ``end_source`` (optional ``EndSourceSpec``, additive) is the mirror of
         ``source`` at the far end: the app-cut material is VAE-encoded and frozen
@@ -2033,6 +2041,7 @@ class LTXFastVideoPipeline:
             return run_chain(
                 self,
                 clips=clips,
+                stage2_prompt=stage2_prompt,
                 width=width,
                 height=height,
                 frame_rate=frame_rate,

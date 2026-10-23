@@ -523,6 +523,34 @@ describe("createMockBridge", () => {
       expect((got.body as { is_v2v: boolean }).is_v2v).toBe(true);
     });
 
+    // §1-110: a clip's own prompt is appended to the shared one inside the job
+    // only; the record keeps the shared prompt, even when clip 0 has its own.
+    it("a chain job whose clip 0 has its own prompt echoes the shared prompt", async () => {
+      const bridge = createMockBridge({ delayMs: 0 });
+      const generated = await bridge.request("backend.request", {
+        method: "POST",
+        path: "/api/v1/generate/chain",
+        body: {
+          prompt: "watercolor style",
+          width: 512,
+          height: 320,
+          frame_rate: 24,
+          seed: 7,
+          overlap_frames: 3,
+          overlap_strength: 0.5,
+          clips: [
+            { num_frames: 49, prompt: "a cat walks" },
+            { num_frames: 33, prompt: "a dog runs" },
+          ],
+        },
+      });
+      const jobId = (generated.body as { job_id: string }).job_id;
+      const got = await bridge.request("backend.request", { method: "GET", path: `/api/v1/jobs/${jobId}` });
+      const req = (got.body as { request: Record<string, unknown> }).request;
+      expect(req.prompt).toBe("watercolor style");
+      expect(req.num_frames).toBe(49);
+    });
+
     it("a plain /generate job echoes its own GenerateRequest fields", async () => {
       const bridge = createMockBridge({ delayMs: 0 });
       const generated = await bridge.request("backend.request", {

@@ -76,46 +76,6 @@
 
 ---
 
-## 2. 実装済み・ユーザーのテスト待ち
-
-実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。全項目が合格して空になったら、本節は見出しごと削除する。
-
-### 2-3. Settings の「Fused GGUF Dequantization Kernel」の行の非表示の目視（備忘。元 §1-100 ①・起票 2026-10-21）
-
-実装と門は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171。クローズ済み（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-242）。本節は備忘である。配置済みの aux2 は SHA-256 `2E1F033CE2ED0D62…`。
-
-**Settings（操作パネル・MiniMax H3）**
-
-- [ ] ① ベースモデルを MiniMax H3 にして Settings「生成の高速化」を見る → 「Fused GGUF Dequantization Kernel」の行と注記が無い。「Block-swap prefetch」の行はある。
-- [ ] ② LTX 2.3 か LTX 2.5 で同じ行を OFF にし、MiniMax H3 へ切り替えてから LTX へ戻す → 行が再び出て、値は ON に戻っている（隠した行は既定へ戻す既存の規則どおり）。
-
-**Gradio（MiniMax H3）**
-
-- [ ] ③ Gradio の Settings で MiniMax H3 を読み込む → 同じチェックボックスが消える。LTX に戻すと ON で出る。
-
-全項目が合格したら [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-242 に更新行を足し、本節を削除する（記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171 に追記）。
-
-### 2-4. Chained の共通プロンプトへの個別プロンプトの追記（元 §1-110・起票 2026-10-22）
-
-実装と門は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §173、仕様の正本は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2。aux2 は配置済み。
-
-**煙試験の出力（品質の目視）**
-
-- [ ] ① `outputs/chain-prompt-add-smoke-2026-10-23/` の mp4 5 本を見る → どちらのエンジンでも、各クリップに個別の場面（クリップ 0 は桟橋を離れる小舟・クリップ 1 はカモメ）が出て、共通の画風（朝の金色の光）が全体に効き、継ぎ目の映像・音声に重大な退行やクリック音が無い。
-
-**操作パネル（Chained）**
-
-- [ ] ② クリップ欄の見出し「このクリップへの追記」と説明文を読む → 意味が通る（文言の最終判断）。
-- [ ] ③ クリップ 2 本に個別プロンプトを書いて生成 → ①と同じ観点で合格。
-
-**操作パネル（バッチ i2v-long）**
-
-- [ ] ④ クリップに個別プロンプトのある Chain 設定でバッチ i2v-long のパネルを開く → 「個別プロンプトがあると反映されない」旨の注意文が出ない。行プロンプトも効く。
-
-全項目が合格したら [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へクローズし、本節を削除する。
-
----
-
 ## 3. 将来の研究課題
 
 調査・検討段階の大きめのテーマ。着手時期は未定。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。

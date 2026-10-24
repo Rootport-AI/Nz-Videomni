@@ -178,8 +178,9 @@ export function formatDurationHint(numFrames: number, frameRate: number): string
   return `${numFrames} frames ≈ ${seconds.toFixed(1)}s @ ${frameRate}fps`;
 }
 
+/** True iff the prompt is non-empty (there is no upper length limit). */
 export function isValidPrompt(prompt: string): boolean {
-  return prompt.length >= 1 && prompt.length <= 2000;
+  return prompt.length >= 1;
 }
 
 /** True iff `nativeEvent` represents a stepper/slider-driven change on a

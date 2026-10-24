@@ -157,11 +157,12 @@ describe("isValidPrompt", () => {
   it("accepts a normal prompt", () => {
     expect(isValidPrompt("a cat riding a skateboard")).toBe(true);
   });
-  it("rejects a prompt over 2000 characters", () => {
-    expect(isValidPrompt("a".repeat(2001))).toBe(false);
+  it("accepts a prompt over 2000 characters (no upper length limit)", () => {
+    expect(isValidPrompt("a".repeat(2001))).toBe(true);
+    expect(isValidPrompt("a".repeat(10000))).toBe(true);
   });
-  it("accepts a prompt at exactly the 2000 character boundary", () => {
-    expect(isValidPrompt("a".repeat(2000))).toBe(true);
+  it("accepts a long Japanese / emoji / multi-line prompt", () => {
+    expect(isValidPrompt("夕暮れの海辺を歩く猫🐈‍⬛\n".repeat(300))).toBe(true);
   });
 });
 

@@ -864,8 +864,6 @@ async def submit_chain(
             ``prompt`` が省略・空・空白だけのクリップは共通プロンプトだけ
             を使う。指定した ``prompt`` は Stage-1（クリップごとの生成）に
             だけ効き、Stage-2（全体の仕上げ）は共通プロンプトだけを使う。
-            共通プロンプトと追記を合成した後の長さが2,000文字を超えると
-            422 ``VALIDATION_ERROR`` になる。
         negative_prompt, nag_enabled, nag_scale, nag_tau, nag_alpha:
             submit_generate と同じ意味（チェーン全体・全ステージ共通）。
         neg_method, vsf_scale: submit_generate と同じ意味

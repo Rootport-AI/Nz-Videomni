@@ -1652,7 +1652,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
 
     const req = (body ?? {}) as Record<string, unknown>;
     const prompt = typeof req.prompt === "string" ? req.prompt : "";
-    if (prompt.length < 1 || prompt.length > 2000) {
+    if (prompt.length < 1) {
       return validationError("prompt", "String should have at least 1 character");
     }
     // The grid, the size multiple and the fps range are the ACTIVE base
@@ -1946,7 +1946,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     }
 
     const prompt = typeof req.prompt === "string" ? req.prompt : "";
-    if (prompt.length < 1 || prompt.length > 2000) {
+    if (prompt.length < 1) {
       return validationError("prompt", "String should have at least 1 character");
     }
     const clips = Array.isArray(req.clips) ? req.clips : [];

@@ -273,7 +273,6 @@ export interface UseGenerationFormResult {
   limits: FormLimits;
   presets: AppConfig["generation_presets"];
   durationHint: string;
-  promptError: string | null;
   isValid: boolean;
   /** W7: the structured breakdown behind `isValid` — one code per failing gate,
    * empty exactly when `isValid` is true (`isValid === (validityReasons.length
@@ -1137,7 +1136,6 @@ export function useGenerationForm(
     [isA2v, audioDurationSec, values.numFrames, values.frameRate],
   );
 
-  const promptError = isValidPrompt(prompt) ? null : "Prompt must be 1-2000 characters.";
   // Gate submission on the width/height grid too: free-typed values are passed
   // through unsnapped (see `setWidth`/`setHeight`), so an off-grid or
   // out-of-range dimension must block Generate here. In IC-LoRA mode
@@ -1193,7 +1191,7 @@ export function useGenerationForm(
   // CURRENT width/height (see `chainUtils.isCropOutputValid`'s doc comment —
   // this is what catches a crop left stale by a later width/height shrink).
   const validityReasons: GenerationValidityReason[] = [];
-  if (promptError !== null) validityReasons.push("promptEmpty");
+  if (!isValidPrompt(prompt)) validityReasons.push("promptEmpty");
   if (!dimensionsOnGrid) validityReasons.push("dimensionsOffGrid");
   if (!numFramesOnGrid) validityReasons.push("numFramesOffGrid");
   if (isA2v && !(audioPrecheck?.ok ?? false)) validityReasons.push("audioTooShort");
@@ -1356,7 +1354,6 @@ export function useGenerationForm(
     limits,
     presets: config.generation_presets,
     durationHint,
-    promptError,
     isValid,
     validityReasons,
     gettingSize,

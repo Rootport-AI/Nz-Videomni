@@ -1269,7 +1269,6 @@ export const en = {
         "Remove the end source — this batch generates from images only, and does not send the end material.",
       clipsTooFew: "The Clip Chain needs at least 2 clips when no source video is attached. Add a clip.",
       promptEmpty: "Write a prompt — either on the Clip Chain form or in a row's own Additional prompt column.",
-      promptTooLong: "The combined prompt is too long. Shorten it to 2000 characters or less.",
       unknownLoraTag: "The prompt has a LoRA name that does not exist. Fix or remove the tag.",
       jobActive: "The server is busy: another job is running, or a model is being loaded. Wait for it to finish.",
       /** The shared run lock (`shell/runLock.ts`) is held by the OTHER batch
@@ -1277,15 +1276,13 @@ export const en = {
        * time. */
       lockedByOther: "Batch A2V is running on the Create screen. Only one batch runs at a time — stop it, or wait for it to finish.",
     },
-    /** Row-aware variants of the two prompt block reasons above: once the
+    /** Row-aware variant of the `promptEmpty` block reason above: once the
      * folder has been scanned the panel knows exactly WHICH rows are at fault,
      * so it names them. Kept out of `blockReasons` (a `Record<string, string>`
-     * consumed by `GenerateReasonsNote`) because these are functions. */
+     * consumed by `GenerateReasonsNote`) because it is a function. */
     promptRowIssues: {
       empty: (queues: string): string =>
         `These rows would be sent with an empty prompt: ${queues}. Write a prompt on the Clip Chain form, or in each row's Additional prompt column.`,
-      tooLong: (queues: string): string =>
-        `The combined prompt is over 2000 characters on these rows: ${queues}. Shorten the Clip Chain prompt, or those rows' additional prompts.`,
     },
     /** Advisory notes — none of these blocks Start. */
     notes: {
@@ -2101,7 +2098,6 @@ export const en = {
    * (task brief: "aria-labelやtitle属性も" must be covered). */
   common: {
     loadingPreview: "Loading preview…",
-    promptLengthError: "Prompt must be 1-2000 characters.",
     dismissNotification: "Dismiss notification",
     modeAriaLabel: "Mode",
     loraTagsAriaLabel: "LoRA tags",
@@ -3057,7 +3053,6 @@ export const ja: Strings = {
         "素材（末尾）を外してください。このバッチは画像だけから生成し、末尾の素材は送信しません。",
       clipsTooFew: "元動画を使わない場合、クリップチェーンにはクリップが2本以上必要です。クリップを追加してください。",
       promptEmpty: "プロンプトを入力してください（クリップチェーンのプロンプトか、行ごとの追加プロンプト欄のどちらかで）。",
-      promptTooLong: "合成後のプロンプトが長すぎます。2000文字以内にしてください。",
       unknownLoraTag: "プロンプトに存在しないLoRA名が含まれています。タグを修正するか削除してください。",
       jobActive: "サーバーが処理中です（他のジョブが実行中か、モデルを読み込み中です）。終わるまで待ってください。",
       lockedByOther: "作成画面のバッチA2Vが実行中です。バッチは同時に1つしか実行できません。停止するか、終わるまで待ってください。",
@@ -3065,8 +3060,6 @@ export const ja: Strings = {
     promptRowIssues: {
       empty: (queues: string): string =>
         `プロンプトが空のまま送信される行があります: ${queues}。クリップチェーンのプロンプトか、その行の追加プロンプト欄に入力してください。`,
-      tooLong: (queues: string): string =>
-        `合成後のプロンプトが2000文字を超えている行があります: ${queues}。クリップチェーンのプロンプトか、その行の追加プロンプトを短くしてください。`,
     },
     notes: {
       seedFixed: "シードが固定されているため、すべての画像が同じシードで生成されます。画像ごとに変えたい場合は、クリップチェーンのシードを-1にしてください。",
@@ -3507,7 +3500,6 @@ export const ja: Strings = {
   },
   common: {
     loadingPreview: "プレビューを読み込み中…",
-    promptLengthError: "プロンプトは1〜2000文字で入力してください。",
     dismissNotification: "通知を閉じる",
     modeAriaLabel: "モード",
     loraTagsAriaLabel: "LoRAタグ",

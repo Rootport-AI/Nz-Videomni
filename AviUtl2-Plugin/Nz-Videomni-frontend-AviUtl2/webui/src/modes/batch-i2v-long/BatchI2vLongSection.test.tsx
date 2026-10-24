@@ -212,7 +212,7 @@ describe("BatchI2vLongSection", () => {
     expect(container.querySelector("textarea")).toBeNull();
   });
 
-  it("スキャンした行にはプロンプト入力欄（2000字上限）と📝が出る", async () => {
+  it("スキャンした行にはプロンプト入力欄（文字数の上限なし）と📝が出る", async () => {
     const user = userEvent.setup();
     const bridge = createMockBridge({
       delayMs: 0,
@@ -230,7 +230,7 @@ describe("BatchI2vLongSection", () => {
 
     const inputs = screen.getAllByLabelText(en.batchI2vLong.table.promptInputLabel) as HTMLInputElement[];
     expect(inputs).toHaveLength(2);
-    expect(inputs[0]!.maxLength).toBe(2000);
+    expect(inputs[0]).not.toHaveAttribute("maxlength");
 
     // 行ごとに独立して入力できる。
     await user.type(inputs[1]!, "on the beach");

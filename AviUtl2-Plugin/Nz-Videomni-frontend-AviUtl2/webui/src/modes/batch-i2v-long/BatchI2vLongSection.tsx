@@ -67,13 +67,10 @@ export function BatchI2vLongSection({ config, chain, serverBusy, nativeBridge }:
     }),
     ...t.blockReasons,
     // Once the folder is scanned the panel knows exactly WHICH rows carry an
-    // empty/over-long prompt, so the generic line is replaced by one naming
+    // empty prompt, so the generic line is replaced by one naming
     // them (2026-07-30 row-prompt redesign).
     ...(form.promptEmptyQueues.length > 0
       ? { promptEmpty: t.promptRowIssues.empty(formatQueues(form.promptEmptyQueues)) }
-      : {}),
-    ...(form.promptTooLongQueues.length > 0
-      ? { promptTooLong: t.promptRowIssues.tooLong(formatQueues(form.promptTooLongQueues)) }
       : {}),
   };
   const allReasons = [...form.blockReasons, ...form.chainBlockReasons];

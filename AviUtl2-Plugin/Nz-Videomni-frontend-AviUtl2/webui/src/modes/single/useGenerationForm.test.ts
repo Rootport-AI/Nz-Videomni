@@ -61,7 +61,7 @@ describe("useGenerationForm", () => {
       frameRate: 24,
       seed: -1,
     });
-    expect(result.current.promptError).not.toBeNull(); // empty prompt
+    expect(result.current.validityReasons).toContain("promptEmpty"); // empty prompt
     expect(result.current.isValid).toBe(false);
   });
 
@@ -164,16 +164,16 @@ describe("useGenerationForm", () => {
     expect(result.current.cropOutput).toEqual({ width: 1280, height: 720 });
   });
 
-  it("isValid/promptError follow the externally-provided prompt argument (owned by the shared PromptBar)", () => {
+  it("isValid/validityReasons follow the externally-provided prompt argument (owned by the shared PromptBar)", () => {
     const { result, rerender } = renderHook(({ prompt }) => useGenerationForm(FALLBACK_APP_CONFIG, prompt), {
       initialProps: { prompt: "" },
     });
     expect(result.current.isValid).toBe(false);
-    expect(result.current.promptError).not.toBeNull();
+    expect(result.current.validityReasons).toContain("promptEmpty");
 
     rerender({ prompt: "a cat riding a skateboard" });
     expect(result.current.isValid).toBe(true);
-    expect(result.current.promptError).toBeNull();
+    expect(result.current.validityReasons).not.toContain("promptEmpty");
 
     const request = result.current.toGenerateRequest();
     expect(request).toEqual({

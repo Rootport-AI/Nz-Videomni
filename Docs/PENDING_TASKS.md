@@ -68,11 +68,6 @@
 - **前提**: §1-106 と §1-107。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
 
-### 1-112. プロンプトの 2,000 文字制限の撤廃（起票：2026-10-23）
-
-- **概要**: 共通・個別・ネガティブの各 2,000 文字と、Chained の合成後 2,000 文字の制限を撤廃する。撤廃の対象は、サーバー側の検査（超えると 422）と、操作パネル側の入力欄の打ち止め（2,000 文字より先を入力できない制限）と事前の検査（エラー文と Generate の無効化）の両方。API・操作パネル・Gradio・MCP などに残る文字数制限の整合を確かめる。代わりに 1,024 トークンで 422 を返す制限は設けない（トークン数の表示は別機能。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-249）。
-- **出典**: [`TOKEN_COUNTER_RESEARCH_NOTES.md`](TOKEN_COUNTER_RESEARCH_NOTES.md) 第 7 節（オーナーの事前調査 2026-10-23）。現行の制限の正本は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2。
-
 ---
 
 ## 3. 将来の研究課題

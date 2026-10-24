@@ -2704,6 +2704,12 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # gated controls (this is the event that actually changes it).
             lambda lang: refresh_model_dropdowns(lang, warn=False),
             inputs=lang_state, outputs=model_refresh_outputs,
+        ).then(
+            # GET /loras follows the selected base model's family (台帳
+            # §1-104), so a switch must not leave the old family's gallery.
+            lambda lang, names: load_style_gallery(lang, names, warn=False),
+            inputs=[lang_state, style_names_state],
+            outputs=[style_gallery, style_names_state],
         )
 
         # ---- Style LoRA tab events (INDEPENDENT listeners) ----

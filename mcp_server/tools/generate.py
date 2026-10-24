@@ -205,6 +205,9 @@ async def submit_generate(
     ``loras``（スタイルLoRA・制御系IC-LoRA）と
     ``reference_video_id``、``conditioning_attention_strength`` /
     ``reference_video_strength`` は LTX 2.5 でも使えます。
+    MiniMax H3 でも ``loras``（スタイル LoRA・Turbo LoRA）は使えます
+    （各要素の ``audio_strength`` は無視されます）。H3 では
+    ``reference_video_id`` は 422 FEATURE_UNSUPPORTED です。
     ``keep_resident`` も LTX 2.5 で使えます（既定off。
     2.5 が常駐させるのはテキストエンコーダの重み1つだけで約7.7GiBです）。
     ``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
@@ -259,7 +262,8 @@ async def submit_generate(
     IC-LoRA:
       * ``conditioning_images`` を1件以上指定するとI2V（画像条件付け）に
         なります。空ならT2V。
-      * ``loras`` で指定するアダプタ名は ``list_loras`` で確認してください。
+      * ``loras`` で指定するアダプタ名は ``list_loras`` で確認してください
+        （一覧は選択中のベースモデルの系統ごとです）。
         参照動画が必須な制御系（control）アダプタを使う場合は
         ``reference_video_id`` も指定してください（``loras`` の中の位置は
         問いません。スタイル系/character系アダプタは参照動画不要）。
@@ -338,7 +342,7 @@ async def submit_generate(
             は映像軸（``strength``）とは独立した音声軸の適用強度（省略可、
             0〜2）。省略時は音声側も ``strength`` に追従する。0は
             音声側の重みを一切適用しない（style LoRAが生成音声を壊す事例
-            への対処）。
+            への対処）。MiniMax H3 では ``audio_strength`` は無視される。
         reference_video_id: 制御系IC-LoRA用の参照動画ID（``upload_video`` で
             取得）。
         conditioning_attention_strength: 制御系IC-LoRAの追従の強さ（0〜1、

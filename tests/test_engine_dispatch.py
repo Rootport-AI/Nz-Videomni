@@ -255,6 +255,33 @@ def test_shipped_descriptors_match_their_familys_selection_fields():
         assert set(descriptor.categories) == set(fields), base_id
 
 
+def test_lora_verdict_only_where_the_adapter_declares_one():
+    assert engines.lora_verdict("ltx") is None
+    assert engines.lora_verdict("ltx25") is None
+    assert callable(engines.lora_verdict("h3"))
+
+
+def test_lora_scope_for_maps_family_to_directory_in_one_place():
+    """台帳 §1-104: 記述子の ``lora_dir`` があればその系統専用(設定の
+    ``ic_loras`` は含めない・判定はアダプタ)、無ければ今日と同じ
+    ``config.model.lora_dir``(設定の登録を含む・判定は既定の規則)。"""
+    config = AppConfig()
+    shipped = load_base_models(config.manifest_dir)
+    h3 = engines.lora_scope_for(shipped["MiniMaxH3"], config)
+    assert h3.family == "h3"
+    assert h3.lora_dir == config.models_dir / "MiniMaxH3" / "LoRA"
+    assert h3.lora_dir_display == "models/MiniMaxH3/LoRA"
+    assert h3.include_config is False
+    assert h3.verdict is engines.lora_verdict("h3")
+    for base_id in ("LTX23", "LTX25"):
+        assert shipped[base_id].lora_dir is None
+        ltx = engines.lora_scope_for(shipped[base_id], config)
+        assert ltx.lora_dir == config._abs(config.model.lora_dir)
+        assert ltx.lora_dir_display == "models/LTX23/StyleLoRA"
+        assert ltx.include_config is True
+        assert ltx.verdict is None
+
+
 # --------------------------------------------------------------------------- #
 # 4) 系統跨ぎの往復(mock)
 # --------------------------------------------------------------------------- #

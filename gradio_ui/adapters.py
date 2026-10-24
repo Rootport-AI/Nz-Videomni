@@ -224,7 +224,9 @@ def build_style_gallery(loras: list[dict] | None, base_url: str | None) -> list[
     """gr.Gallery ``value`` for the Style LoRA tab: ``[(image, caption), ...]``
     over the style LoRAs only. ``image`` is the thumbnail URL when the entry has
     one (fetched by the browser from ``base_url``), else the neutral
-    placeholder; ``caption`` is the LoRA name."""
+    placeholder; ``caption`` is the LoRA name, with ``(非対応)`` when the server
+    judged its format unsupported (``supported: false``; it can still be
+    picked — on MiniMax H3 it still runs, but may have no effect)."""
     base = (base_url or "").rstrip("/")
     items: list[tuple] = []
     for entry in _style_lora_entries(loras):
@@ -233,7 +235,8 @@ def build_style_gallery(loras: list[dict] | None, base_url: str | None) -> list[
             image: object = f"{base}/api/v1/loras/{name}/thumbnail"
         else:
             image = _STYLE_PLACEHOLDER
-        items.append((image, name))
+        caption = f"{name} (非対応)" if entry.get("supported") is False else name
+        items.append((image, caption))
     return items
 
 

@@ -26,7 +26,8 @@ THE WORKER PROTOCOL (Docs/MINIMAX_H3_DESIGN.md §8): ``load`` carries the four
 paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
 ``block_swap_prefetch`` and ``deterministic`` (no text-encoder knob: the text
 encoder is read layer by layer straight from the file). ``generate`` carries the job, the
-conditioning ``images`` (``{path, frame_idx}``; H3 has no strength), and the
+conditioning ``images`` (``{path, frame_idx}``; H3 has no strength), the
+``loras`` (``{path, strength}``; always sent, ``[]`` = none), and the
 per-job ``attention_backend`` / ``block_swap_prefetch`` (always sent: an absent
 key would mean "the load value", not "off"), ``vram16_mode`` (always sent: the
 worker's own default is off, the app's is on) and ``keep_resident`` (only when
@@ -45,6 +46,7 @@ import os
 from pathlib import Path
 from typing import Callable
 
+import h3_lora_format
 from api.errors import feature_unsupported
 from api.models import (
     GenerateChainRequest,
@@ -198,7 +200,6 @@ def _keyframe_strength(r: GenerateRequest) -> bool:
 #: does with it, and this row refuses what it cannot (a strength). The audit
 #: test allows exactly this overlap.
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
-    ("loras", "loras", lambda r: bool(r.loras)),
     ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
     ("nag_enabled", "nag", lambda r: r.nag_enabled),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
@@ -233,6 +234,7 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "shift_video",
         "shift_audio",
         "conditioning_images",
+        "loras",
         "keep_resident",
         "attention_backend",
         "block_swap_prefetch",
@@ -243,7 +245,10 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
 )
 
 #: ``field -> the field that governs it``: sub-parameters inert unless their
-#: governor is non-default, and every governor here is refused above.
+#: governor is non-default, and every governor here is refused above. The two
+#: IC-LoRA strengths are the REFERENCE VIDEO's (what they scale), so
+#: ``reference_video_id`` governs them: sent with ``loras`` alone they are
+#: inert here.
 GOVERNED_FIELDS: dict[str, str] = {
     "negative_prompt": "nag_enabled",
     "neg_method": "nag_enabled",
@@ -251,8 +256,8 @@ GOVERNED_FIELDS: dict[str, str] = {
     "nag_scale": "nag_enabled",
     "nag_tau": "nag_enabled",
     "nag_alpha": "nag_enabled",
-    "conditioning_attention_strength": "loras",
-    "reference_video_strength": "loras",
+    "conditioning_attention_strength": "reference_video_id",
+    "reference_video_strength": "reference_video_id",
 }
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``:
@@ -267,10 +272,36 @@ GOVERNED_FIELDS: dict[str, str] = {
 #: refuse: it stays in :data:`IGNORED_FIELDS` (MiniMax H3 has no GGUF weights,
 #: so a saved OFF must keep passing rather than 422), and is published only
 #: so the UIs hide a control that can do nothing on this engine (台帳 §1-100).
+#: ``lora_audio_strength`` is not refused either: H3 has no separate audio
+#: strength for a LoRA, and ``services.engines.validate_for_family`` writes
+#: every ``LoraSpec.audio_strength`` back to ``None`` (台帳 §1-104 裁定 4).
 #: Nothing else — a name for a control that works here would close it.
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
     dict.fromkeys(feature for _field, feature, _pred in REJECT_TABLE)
-) + ("chain", "retake", "fused_gguf_dequant_kernel")
+) + ("chain", "retake", "fused_gguf_dequant_kernel", "lora_audio_strength")
+
+
+def _h3_lora_verdict(header: dict) -> tuple[bool, str | None]:
+    """GET /loras' "supported" for one file, from its safetensors header alone
+    (``h3_lora_format.map_lora_keys``: the same key mapping the engine uses).
+    Display only: an unsupported file still runs (裁定 2)."""
+    tensors = {
+        name: spec for name, spec in header.items()
+        if name != "__metadata__" and isinstance(spec, dict)
+    }
+    keymap = h3_lora_format.map_lora_keys(
+        tensors,
+        shapes={
+            name: spec["shape"] if isinstance(spec.get("shape"), list) else ()
+            for name, spec in tensors.items()
+        },
+        dtypes={name: str(spec.get("dtype")) for name, spec in tensors.items()},
+    )
+    return keymap.supported, keymap.reason
+
+
+#: The family's LoRA format judge (``services.engines.lora_verdict``).
+LORA_VERDICT = _h3_lora_verdict
 
 
 def _refusal_detail(field: str, feature: str) -> str:
@@ -428,12 +459,16 @@ class _RealBackendH3(_RealBackend):
         inpaint_source_path: Path | None = None,
         inpaint_mask_path: Path | None = None,
     ) -> GenerationOutcome:
-        """One T2V / keyframe I2V generation (keyframes on any frame 0..F-1).
+        """One T2V / keyframe I2V generation (keyframes on any frame 0..F-1),
+        with the requested LoRAs.
 
-        ``lora_paths`` / ``reference_video_path`` / the outpaint and inpaint
-        paths are accepted for the shared signature and never arrive filled:
-        the fields that would produce them are refused by
-        :func:`reject_unsupported` (re-checked here as the backstop).
+        ``lora_paths`` is ``request.loras`` resolved by the registry (same
+        order); only path and strength reach the worker (``audio_strength`` is
+        ``None`` here, written back by ``validate_for_family``).
+        ``reference_video_path`` and the outpaint and inpaint paths are
+        accepted for the shared signature and never arrive filled: the fields
+        that would produce them are refused by :func:`reject_unsupported`
+        (re-checked here as the backstop).
         """
         if not self.loaded:
             self.load()
@@ -455,6 +490,17 @@ class _RealBackendH3(_RealBackend):
                 for ci, path in zip(request.conditioning_images, conditioning_image_paths)
             ]
 
+        lora_paths = lora_paths or []
+        if len(lora_paths) != len(request.loras):
+            raise RuntimeError(
+                f"MiniMax H3: {len(request.loras)} LoRA(s) requested but "
+                f"{len(lora_paths)} resolved"
+            )
+        loras = [
+            {"path": str(lp.path), "strength": float(lp.strength)}
+            for lp in lora_paths
+        ]
+
         # crop_output: the worker writes the full-size mp4 to a temp file and
         # the app's ffmpeg helper centre-crops it into output.mp4 (as on LTX).
         target = output_dir / "_full.mp4" if request.crop_output is not None else output_path
@@ -474,6 +520,8 @@ class _RealBackendH3(_RealBackend):
             "shift_video": request.shift_video,
             "shift_audio": request.shift_audio,
             "images": images,
+            # ALWAYS sent ([] = no LoRA).
+            "loras": loras,
             # Per-job, ALWAYS sent: an absent key would mean "the load value".
             "attention_backend": request.attention_backend,
             "block_swap_prefetch": bool(request.block_swap_prefetch),

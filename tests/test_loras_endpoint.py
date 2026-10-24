@@ -80,7 +80,17 @@ def test_get_loras_shape(loras_client):
         assert set(e) == {
             "name", "kind", "has_thumbnail", "exists", "source",
             "preprocess", "reference_downscale_factor",
+            "supported", "unsupported_reason",
         }
+    # The scanned directory rides next to the rows (台帳 §1-104). This fixture
+    # is LTX (no descriptor lora_dir): config.model.lora_dir, outside the project.
+    assert r.json()["lora_dir"] == loras_client.app_context.config._abs(
+        loras_client.app_context.config.model.lora_dir
+    ).as_posix()
+    # LTX judges by _detect_layout: these header-only fixtures carry no LoRA
+    # weight keys, so both are listed as unsupported, with the reason.
+    assert loras["Pixar_Toon"]["supported"] is False
+    assert "no LoRA weight keys" in loras["Pixar_Toon"]["unsupported_reason"]
     assert loras["Pixar_Toon"]["kind"] == "style"
     assert loras["Pixar_Toon"]["has_thumbnail"] is True
     assert loras["Pixar_Toon"]["source"] == "scan"

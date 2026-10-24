@@ -506,7 +506,10 @@ LABELS: dict[str, dict[str, str]] = {
         "style_note": ("Click a LoRA below to append a <lora:name:1.0:1.0> token to the prompt "
                        "box above the tabs. Adjust the weight by editing the first number in the "
                        "prompt "
-                       "(0–2.0; 1.0 = the strength the LoRA was trained for). Control LoRAs "
+                       "(0–2.0; 1.0 = the strength the LoRA was trained for). On MiniMax H3 the "
+                       "third number (audio) is ignored. The list follows the loaded base model; "
+                       "a LoRA marked (非対応) has an unsupported format and may have no effect. "
+                       "Control LoRAs "
                        "(canny / pose / upscaler) are not shown here — use them as before from "
                        "the reference-video adapter field on the Generate tab."),
         "style_added": "Added to the prompt: {name}",
@@ -1016,6 +1019,9 @@ LABELS: dict[str, dict[str, str]] = {
         "style_note": ("下のLoRAをクリックすると、タブの上のプロンプト欄の末尾に <lora:名前:1.0:1.0> が"
                        "追加されます。重みはプロンプト内の最初の数値を書き換えて調整します"
                        "（0〜2.0・1.0=そのLoRAが学習時に想定した強さ）。"
+                       "MiniMax H3 では 3 つ目の数値（音声）は無視されます。"
+                       "一覧は読み込み中のベースモデルに合わせて切り替わります。"
+                       "（非対応）と付いたLoRAは形式が非対応で、効果がない可能性があります。"
                        "canny／pose／アップスケーラなどの制御LoRAはここには表示されません。"
                        "従来どおりGenerateタブの参照動画アダプタ欄から使ってください。"),
         "style_added": "プロンプトに追加しました: {name}",

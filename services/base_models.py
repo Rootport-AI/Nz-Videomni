@@ -21,6 +21,11 @@ What this module reads from a descriptor:
 ``default_selection``
     Category -> registered NAME (or the ``"default"`` sentinel) for the initial
     selection when this base model is picked.
+``lora_dir``
+    Optional ``models_dir``-relative directory of this base model's own
+    (style) LoRA files. Absent -> the family shares ``config.model.lora_dir``
+    (LTX 2.3 / 2.5, unchanged). Mapping it to a registry scope is the engine
+    layer's job (``services.engines.lora_scope_for``).
 ``comfort``
     The comfort-limit table of this base model (the single source of truth for
     ``limits.comfort_budgets``; Docs/COMFORT_LIMIT_TABLE.md §1). Kept here as
@@ -97,6 +102,9 @@ class BaseModelDescriptor:
     #: Raw ``comfort`` object (or ``None`` when absent). The type check lives
     #: in ``api/context.py`` (pydantic ``EngineComfortProfile``).
     comfort: dict | None = None
+    #: ``models_dir``-relative LoRA directory of this base model, or ``None``
+    #: when the base model uses the shared ``config.model.lora_dir``.
+    lora_dir: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -211,6 +219,12 @@ def _parse_descriptor(source: str, raw: dict) -> BaseModelDescriptor:
     if comfort is not None and not isinstance(comfort, dict):
         raise _fail(source, "'comfort' must be an object when present")
 
+    lora_dir = raw.get("lora_dir")
+    if lora_dir is not None:
+        if not isinstance(lora_dir, str) or not lora_dir.strip():
+            raise _fail(source, f"'lora_dir' must be a non-empty string when present (got {lora_dir!r})")
+        _require_rel_path(source, "lora_dir", lora_dir)
+
     return BaseModelDescriptor(
         id=identifier,
         display_name=display_name,
@@ -219,6 +233,7 @@ def _parse_descriptor(source: str, raw: dict) -> BaseModelDescriptor:
         assets=assets,
         default_selection=default_selection,
         comfort=comfort,
+        lora_dir=lora_dir,
     )
 
 

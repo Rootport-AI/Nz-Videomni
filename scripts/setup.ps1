@@ -309,6 +309,8 @@ function Show-InstallFailureHelp {
     Write-Info ('  ' + (Join-Path $ProjectRoot 'models\LTX23\Weights') + '  … あなたが自分で変換した GGUF')
     Write-Info ('  ' + (Join-Path $ProjectRoot 'models\LTX23\IC-LoRA\pixel-spatial-upscaler') + '  … x4 の拡大アダプタ')
     Write-Info 'x4 の拡大アダプタは配布元にも存在しません。消すと入手手段がありません。'
+    Write-Warn ('models\MiniMaxH3\LoRA も同じく削除しないでください: ' + (Join-Path $ProjectRoot 'models\MiniMaxH3\LoRA'))
+    Write-Info '  … あなたが集めた MiniMax H3 用の LoRA（全部）'
     Write-Host ('-' * 74) -ForegroundColor Yellow
 
     Write-Host ''

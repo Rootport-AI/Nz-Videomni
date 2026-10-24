@@ -31,9 +31,11 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Callable
 
 from api.errors import model_incompatible, request_validation_failed
+from services.lora_registry import LoraScope, make_scope, shared_scope
 
 if TYPE_CHECKING:  # 実行時にはimportしない(上のdocstringの規約)
     from api.models import GenerateChainRequest, GenerateRequest
+    from config import AppConfig
     from services.base_models import BaseModelDescriptor
 
 #: (``general.architecture``, ``model_version``のminor) -> エンジン系統id。
@@ -173,6 +175,35 @@ def unsupported_features(family: str) -> tuple[str, ...]:
     return tuple(getattr(_adapter(family), "UNSUPPORTED_FEATURES", ()))
 
 
+def lora_verdict(family: str) -> Callable[[dict], tuple[bool, str | None]] | None:
+    """この系統の LoRA の形式の判定(アダプタの ``LORA_VERDICT``)。宣言なしは None。
+
+    判定は safetensors のヘッダ(辞書)を受けて ``(対応か, 理由)`` を返す。
+    None の系統は登録簿の既定の規則(``_detect_layout``。非対応は 422)に従う。
+    """
+    return getattr(_adapter(family), "LORA_VERDICT", None)
+
+
+def lora_scope_for(descriptor: BaseModelDescriptor, config: AppConfig) -> LoraScope:
+    """選択中のベースモデルの LoRA の一覧の範囲(台帳 §1-104)。
+
+    **系統と LoRA のディレクトリの対応はここ 1 か所**。記述子が ``lora_dir`` を
+    持てば ``models_dir`` 配下のそのディレクトリだけ(``config.yaml`` の
+    ``ic_loras`` の登録は含めない＝H3 の一覧に LTX の IC-LoRA を出さない)、
+    持たなければ今日と同じ ``config.model.lora_dir``＋``ic_loras``。
+    判定は前者がアダプタの ``LORA_VERDICT``、後者は既定の規則(None)。
+    """
+    family = descriptor.engine_family
+    if descriptor.lora_dir:
+        return make_scope(
+            family,
+            config.models_dir / descriptor.lora_dir,
+            include_config=False,
+            verdict=lora_verdict(family),
+        )
+    return shared_scope(config, family)
+
+
 def reject_unsupported(family: str, request: GenerateRequest) -> None:
     """この系統が走らせられないリクエストなら、その場で422にする。
 
@@ -256,8 +287,16 @@ def validate_for_family(family: str, request: GenerateRequest) -> None:
     先に返る。422 の形は pydantic の検証の失敗と同じ
     (``api.errors.request_validation_failed``)。
 
+    LoRA の音声側の強度(``lora_audio_strength``)を持たない系統
+    (``unsupported_features`` に名前がある系統。MiniMax H3)では、各
+    ``LoraSpec.audio_strength`` を ``None`` に書き戻す(422 にはしない。
+    metadata.json にも無視した値が残らない)。
+
     宣言していない系統は素通り(:func:`reject_unsupported` と同じ規約)。
     """
+    if "lora_audio_strength" in unsupported_features(family):
+        for spec in request.loras:
+            spec.audio_strength = None
     rules = request_rules(family)
     if rules is None:
         return

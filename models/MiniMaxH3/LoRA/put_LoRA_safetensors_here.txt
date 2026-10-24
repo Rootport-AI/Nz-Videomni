@@ -1,0 +1,1 @@
+﻿MiniMax H3 用の LoRA の .safetensors を置くと自動認識されます（ComfyUI の名前 diffusion_model.～ と kohya の名前 lora_unet_～ のどちらも読めます）。同名の .png を並べるとサムネイルになります。一覧で「非対応」と表示されたファイルも選んで実行できますが、効果がない可能性があります。

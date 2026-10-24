@@ -10,12 +10,13 @@ Pinned here, none of it needing a GPU or a weight file:
    (``conditioning_images`` is the one field that is both honoured and refused —
    key frames on any frame run, a strength does not);
 2. the refusals and ``UNSUPPORTED_FEATURES`` (the reject table's names + ``chain`` + ``retake``
-   + ``fused_gguf_dequant_kernel``);
+   + ``fused_gguf_dequant_kernel`` + ``lora_audio_strength``);
 3. the numeric rules and the ``constraints`` block GET /models publishes, for
    H3 and for LTX (the two JSON blocks of the stage-2 plan §3.3, verbatim);
 4. the worker payloads: ``load`` (golden, no ``te_layers_on_gpu``) and
-   ``generate`` (golden, ``images`` without strength, per-job acceleration,
-   ``keep_resident`` only when asked) and the ``done`` -> outcome relay;
+   ``generate`` (golden, ``images`` without strength, ``loras`` always sent
+   without ``audio_strength``, per-job acceleration, ``keep_resident`` only
+   when asked) and the ``done`` -> outcome relay;
 5. HTTP on three families (``three_family_client`` in conftest.py): GET /models,
    the switch to H3 (the H3 header precheck runs on every default file), mock
    T2V and I2V, the 422s, and the precheck refusing an LTX file.
@@ -25,6 +26,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import struct
 import threading
 import types
 from pathlib import Path
@@ -117,7 +119,6 @@ def test_ignored_fields_are_really_not_read_by_generate():
 
 #: One VALID request per reject-table row (keyed by FEATURE: one field has two).
 REQUEST_OVERRIDES_H3: dict[str, dict] = {
-    "loras": {"loras": _LORAS},
     "reference_video": {"reference_video_id": "vid-1", "loras": _LORAS},
     "nag": {"nag_enabled": True, "negative_prompt": "blurry"},
     "two_stage_hq": {"pipeline": "two_stage_hq"},
@@ -156,9 +157,10 @@ def test_the_fixture_covers_every_refusal():
 @pytest.mark.parametrize("feature", list(REQUEST_OVERRIDES_H3))
 def test_every_refusal_raises_feature_unsupported_naming_h3(feature):
     request = _request(**REQUEST_OVERRIDES_H3[feature])
-    # The row itself fires; the 422 names the FIRST row that fires (a reference
-    # video, an outpaint ... carry their schema companion ``loras``, which is
-    # refused before them).
+    # The row itself fires; the 422 names the FIRST row that fires (an
+    # outpaint, an inpaint ... carry their schema companion
+    # ``reference_video_id``, which is refused before them; their ``loras`` is
+    # accepted on H3).
     fired = [feat for _f, feat, pred in h3.REJECT_TABLE if pred(request)]
     assert feature in fired
     with pytest.raises(APIError) as ei:
@@ -186,7 +188,6 @@ def test_t2v_and_keyframe_i2v_are_accepted():
 
 def test_unsupported_features_is_the_reject_table_plus_chain_retake_and_fused_kernel():
     assert h3.UNSUPPORTED_FEATURES == (
-        "loras",
         "reference_video",
         "nag",
         "two_stage_hq",
@@ -200,8 +201,47 @@ def test_unsupported_features_is_the_reject_table_plus_chain_retake_and_fused_ke
         "chain",
         "retake",
         "fused_gguf_dequant_kernel",
+        "lora_audio_strength",
     )
     assert engines.unsupported_features("h3") == h3.UNSUPPORTED_FEATURES
+
+
+def test_loras_are_accepted_and_lora_audio_strength_is_published_not_refused():
+    # 台帳 §1-104: H3 runs LoRAs; it has no separate audio strength, which is
+    # normalised away rather than refused.
+    assert "loras" in h3.HONOURED_FIELDS
+    assert "loras" not in {feature for _field, feature, _pred in h3.REJECT_TABLE}
+    assert "lora_audio_strength" not in {feature for _field, feature, _pred in h3.REJECT_TABLE}
+    h3.reject_unsupported(_request(loras=[{"name": "style-a", "strength": 0.7, "audio_strength": 0.0}]))
+
+
+def test_validate_for_family_nulls_lora_audio_strength_on_h3_only():
+    req = _validated(loras=[
+        {"name": "a", "strength": 0.7, "audio_strength": 0.0},
+        {"name": "b", "audio_strength": 1.5},
+    ])
+    assert [(s.name, s.strength, s.audio_strength) for s in req.loras] == [("a", 0.7, None), ("b", 1.0, None)]
+    ltx = GenerateRequest(prompt=PROMPT, loras=[{"name": "a", "audio_strength": 0.0}])
+    engines.validate_for_family("ltx", ltx)
+    assert ltx.loras[0].audio_strength == 0.0  # LTX keeps it
+
+
+def test_lora_verdict_dispatch():
+    assert engines.lora_verdict("h3") is h3.LORA_VERDICT
+    assert engines.lora_verdict("ltx") is None
+    assert engines.lora_verdict("ltx25") is None
+
+
+def test_h3_lora_verdict_reads_the_header():
+    header = {
+        "__metadata__": {"ss_network_dim": "16"},
+        "lora_unet_blocks_0_attn_qkv_proj.lora_down.weight": {"dtype": "F32", "shape": [16, 5376], "data_offsets": [0, 0]},
+        "lora_unet_blocks_0_attn_qkv_proj.lora_up.weight": {"dtype": "F32", "shape": [21504, 16], "data_offsets": [0, 0]},
+    }
+    assert h3.LORA_VERDICT(header) == (True, None)
+    header["blocks.0.norm1.lora_A.weight"] = {"dtype": "F32", "shape": [16, 5376], "data_offsets": [0, 0]}
+    supported, reason = h3.LORA_VERDICT(header)
+    assert supported is False and reason
 
 
 def test_fused_kernel_is_published_but_ignored_not_refused():
@@ -500,6 +540,7 @@ GOLDEN_GENERATE_KEYS_H3 = [
     "shift_video",
     "shift_audio",
     "images",
+    "loras",
     "attention_backend",
     "block_swap_prefetch",
     "vram16_mode",
@@ -522,6 +563,7 @@ def test_generate_payload_t2v_golden(tmp_path):
     assert payload["num_inference_steps"] == 20
     assert (payload["shift_video"], payload["shift_audio"]) == (12.0, 3.0)
     assert payload["images"] == []
+    assert payload["loras"] == []  # always sent
     assert payload["attention_backend"] == "sdpa"
     assert payload["block_swap_prefetch"] is True
     assert payload["vram16_mode"] is True  # the H3 default, sent every job
@@ -584,6 +626,33 @@ def test_generate_payload_sends_every_key_frame_with_its_position(tmp_path):
         {"path": str(paths[1]), "frame_idx": 123},
         {"path": str(paths[2]), "frame_idx": 60},
     ]
+
+
+def test_generate_payload_sends_loras_with_path_and_strength_only(tmp_path):
+    from services.lora_registry import ResolvedLora  # noqa: PLC0415
+
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _validated(loras=[
+        {"name": "turbo", "strength": 1.0, "audio_strength": 0.0},
+        {"name": "style", "strength": 0.6},
+    ])
+    resolved = [
+        ResolvedLora(tmp_path / "turbo.safetensors", 1.0, "none", None),
+        ResolvedLora(tmp_path / "style.safetensors", 0.6, "none", None),
+    ]
+    be.generate(req, tmp_path / "job", lora_paths=resolved, seed=1)
+    (payload,) = captured
+    assert payload["loras"] == [
+        {"path": str(tmp_path / "turbo.safetensors"), "strength": 1.0},
+        {"path": str(tmp_path / "style.safetensors"), "strength": 0.6},
+    ]
+
+
+def test_generate_refuses_a_lora_count_mismatch(tmp_path):
+    be = _capturing_backend([])
+    with pytest.raises(RuntimeError, match="LoRA"):
+        be.generate(_validated(loras=_LORAS), tmp_path / "job", lora_paths=[], seed=1)
 
 
 def test_generate_crops_on_the_app_side(tmp_path, monkeypatch):
@@ -731,7 +800,7 @@ def test_h3_numeric_422_over_http(three_family_client, overrides, msg):
     }
 
 
-@pytest.mark.parametrize("feature", ["nag", "keyframe_strength", "loras"])
+@pytest.mark.parametrize("feature", ["nag", "keyframe_strength", "reference_video"])
 def test_h3_refuses_over_http_before_any_lookup(three_family_client, feature):
     _activate(three_family_client, "MiniMaxH3")
     before = len(three_family_client.get("/api/v1/jobs").json())
@@ -743,6 +812,84 @@ def test_h3_refuses_over_http_before_any_lookup(three_family_client, feature):
     assert error["code"] == "FEATURE_UNSUPPORTED"
     assert error["detail"].startswith("MiniMax H3 ")
     assert len(three_family_client.get("/api/v1/jobs").json()) == before
+
+
+def _write_h3_lora(path: Path, *, foreign: bool = False) -> Path:
+    """A header-only H3 LoRA (kohya underscore names); ``foreign`` adds an
+    AdaLN key no H3 target maps (listed as unsupported)."""
+    header = {
+        "lora_unet_blocks_0_attn_qkv_proj.lora_down.weight": {"dtype": "F32", "shape": [16, 5376], "data_offsets": [0, 0]},
+        "lora_unet_blocks_0_attn_qkv_proj.lora_up.weight": {"dtype": "F32", "shape": [21504, 16], "data_offsets": [0, 0]},
+    }
+    if foreign:
+        header["blocks.0.adaLN_modulation.1.lora_A.weight"] = {"dtype": "F32", "shape": [16, 5376], "data_offsets": [0, 0]}
+    blob = json.dumps(header).encode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(struct.pack("<Q", len(blob)) + blob + bytes(8))
+    return path
+
+
+def _h3_lora_dir(client) -> Path:
+    return Path(client.app_context.config.model.models_dir) / "MiniMaxH3" / "LoRA"
+
+
+def test_h3_accepts_loras_over_http(three_family_client):
+    _write_h3_lora(_h3_lora_dir(three_family_client) / "style-a.safetensors")
+    _write_h3_lora(_h3_lora_dir(three_family_client) / "odd.safetensors", foreign=True)
+    _activate(three_family_client, "MiniMaxH3")
+    r = three_family_client.post(
+        "/api/v1/generate",
+        json={
+            "prompt": PROMPT, "width": 640, "height": 384, "num_frames": 124,
+            # An unsupported-format file still runs (display only), and the
+            # audio strength is normalised away (no 422).
+            "loras": [
+                {"name": "style-a", "strength": 0.8, "audio_strength": 0.0},
+                {"name": "odd", "strength": 1.0},
+            ],
+        },
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert three_family_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    meta = _metadata(three_family_client, job_id)
+    assert [(lo["name"], lo["strength"], lo["audio_strength"]) for lo in meta["request"]["loras"]] == [
+        ("style-a", 0.8, None),
+        ("odd", 1.0, None),
+    ]
+
+
+def test_h3_unknown_lora_is_404_over_http(three_family_client):
+    _activate(three_family_client, "MiniMaxH3")
+    r = three_family_client.post(
+        "/api/v1/generate",
+        json={"prompt": PROMPT, "width": 640, "height": 384, "num_frames": 124, "loras": _LORAS},
+    )
+    assert r.status_code == 404, r.text
+    assert r.json()["error"]["code"] == "LORA_NOT_FOUND"
+
+
+def test_get_loras_follows_the_base_model(three_family_client, tmp_path):
+    from services.lora_registry import make_scope  # noqa: PLC0415
+
+    # The LTX side scans a tmp folder, never the owner's models/LTX23/StyleLoRA.
+    ltx_dir = tmp_path / "ltx_loras"
+    ltx_dir.mkdir()
+    three_family_client.app_context.config.model.lora_dir = ltx_dir.as_posix()
+    _write_h3_lora(_h3_lora_dir(three_family_client) / "style-a.safetensors")
+    _write_h3_lora(_h3_lora_dir(three_family_client) / "odd.safetensors", foreign=True)
+    _activate(three_family_client, "MiniMaxH3")
+    body = three_family_client.get("/api/v1/loras").json()
+    assert body["lora_dir"] == _h3_lora_dir(three_family_client).as_posix()  # tmp: absolute
+    rows = {row["name"]: row for row in body["loras"]}
+    assert set(rows) == {"style-a", "odd"}
+    assert rows["style-a"]["supported"] is True and rows["style-a"]["unsupported_reason"] is None
+    assert rows["odd"]["supported"] is False and rows["odd"]["unsupported_reason"]
+    _activate(three_family_client, "LTX23")
+    body = three_family_client.get("/api/v1/loras").json()
+    # Back on LTX: config.model.lora_dir (here the tmp folder).
+    assert body["lora_dir"] == make_scope("ltx", ltx_dir, include_config=True).lora_dir_display
+    assert not {"style-a", "odd"} & {row["name"] for row in body["loras"]}
 
 
 def test_h3_refuses_a_chain_over_http(three_family_client):

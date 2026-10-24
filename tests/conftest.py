@@ -308,6 +308,7 @@ def h3_base_model_descriptor() -> dict:
         "id": root,
         "display_name": "MiniMax H3",
         "engine_family": "h3",
+        "lora_dir": f"{root}/LoRA",
         "categories": {
             "transformer": {
                 "scan": [f"{root}/Weights"],

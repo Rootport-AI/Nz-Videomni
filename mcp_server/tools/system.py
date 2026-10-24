@@ -233,12 +233,24 @@ async def unload_pipeline() -> dict[str, Any]:
 async def list_loras() -> dict[str, Any]:
     """選択可能な IC-LoRA アダプタを一覧します（GET /loras）。
 
+    一覧は**選択中のベースモデルの系統ごと**です。MiniMax H3 では
+    ``models/MiniMaxH3/LoRA`` のファイルだけ（制御系の IC-LoRA は出ません）、
+    LTX 2.3 / LTX 2.5 では従来どおり ``models/LTX23/StyleLoRA`` と
+    config.yaml の登録です。ベースモデルを切り替えたら呼び直してください。
     スタイル系（style）と制御系（control、参照動画が必須）の両方を含みます。
     呼ぶたびにサーバー側でフォルダを再スキャンするので、追加した直後の
     アダプタも再起動なしで見えます。
 
+    各アダプタの ``supported`` はファイルの形式がその系統で読めるかどうかで、
+    false のときは ``unsupported_reason`` に理由が入ります。LTX では
+    ``supported`` が false のアダプタを ``loras`` に入れると 422
+    LORA_FORMAT_UNSUPPORTED、MiniMax H3 では 422 にならず実行されますが、
+    効果がない可能性があります。
+
     Returns:
-        loras: 各アダプタの {name, kind, has_thumbnail, source, ...} のリスト。
+        loras: 各アダプタの {name, kind, has_thumbnail, source, supported,
+            unsupported_reason, ...} のリスト。
+        lora_dir: 走査したフォルダ（例 ``models/MiniMaxH3/LoRA``）。
     """
     client = get_client()
     return await client.get_json("/loras")

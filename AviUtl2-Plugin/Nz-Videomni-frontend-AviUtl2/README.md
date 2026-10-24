@@ -56,8 +56,9 @@ cannot run is greyed out. One line per screen here — the details are in
   transparency from a video, LTX 2.5 only; the finished job's card then makes
   the transparent MOV or a color-filled video; design canon
   [`../../Docs/ALPHAGEN_DESIGN.md`](../../Docs/ALPHAGEN_DESIGN.md)).
-- **Inventory** — the style-LoRA shelf (a card puts its tag into the prompt)
-  and the generated-job history.
+- **Inventory** — the LoRA shelf of the selected base model (a card puts its
+  tag into the prompt; the shelf follows the base model, and a LoRA the server
+  marks unsupported carries a badge) and the generated-job history.
 
 ### Cross-cutting
 

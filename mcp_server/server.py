@@ -47,9 +47,12 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   下げるか、VRAM 16GB mode を切ってください）を含みます。LTX で vram16_mode=true を送ると 422
   FEATURE_UNSUPPORTED です。H3 は単発の T2V と I2V（キーフレームは最大 10 枚・
   frame_idx は 0〜num_frames−1 の任意のフレーム・strength は指定しない）
-  だけに対応し、submit_chain・loras・reference_video_id・nag_enabled などは
+  だけに対応し、submit_chain・reference_video_id・nag_enabled などは
   422 FEATURE_UNSUPPORTED になります（使えない機能は unsupported_features
-  を見てください）。
+  を見てください）。H3 でも submit_generate の loras（スタイル LoRA・
+  Turbo LoRA。名前は H3 を選んでいるときの list_loras で確認）は使えます。
+  H3 では loras の各要素の audio_strength は無視されます（422 にはならず、
+  サーバーが None に直します）。
   LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）と
   vram16_mode=true だけです
   （422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
@@ -74,7 +77,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   自動的に "sdpa" へ降格して完走します（この降格の規律は 2.3 と同じです）。
   loras（スタイルLoRA・制御系IC-LoRA）と reference_video_id、および
   conditioning_attention_strength / reference_video_strength は LTX 2.5 でも
-  使えます。submit_chain は連結生成そのものに加えて
+  使えます（list_loras の一覧はベースモデルの系統ごとで、LTX 2.3 と
+  LTX 2.5 は同じ一覧です）。submit_chain は連結生成そのものに加えて
   source_video_id（V2V継続）と source_audio_id（A2V。複数クリップにまたがる
   長尺A2Vも含みます）、loras と reference_video_id（複数クリップにまたがる
   長尺IC-LoRAも含みます）が使えます。submit_chain のモードは、撮り直し

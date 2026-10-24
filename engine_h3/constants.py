@@ -63,6 +63,14 @@ VRAM16_BLOCKS_ON_GPU = 4
 #: Headroom left below the allocator cap, MiB.
 VRAM16_CAP_MARGIN_MIB = 1024
 
+# LoRA (engine_h3.lora, 台帳 §1-104).
+#: Output columns per chunk of the LoRA's B stage. Equals VRAM16_HEAD_GROUP x
+#: head_dim (128) = the q / k / v rows of one head group, which is what VRAM 16GB
+#: mode's ``forward_rows`` hands over; the off path cuts every target the same
+#: way, so cuBLAS sees the same shapes on both paths (bit identity by
+#: construction). Pinned by a CPU test.
+LORA_COL_CHUNK = 1024
+
 
 def latent_frames(num_frames: int) -> int:
     """``F = 17n + 5`` pixel frames -> ``T' = 5n + 2`` latent frames.

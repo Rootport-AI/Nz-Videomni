@@ -17,6 +17,7 @@ from config import AppConfig, EngineComfortProfile
 from services.alpha_output_manager import AlphaOutputManager
 from services.audio_upload_store import AudioUploadStore
 from services.base_models import BaseModelDescriptor, load_base_models
+from services.engines import lora_scope_for
 from services.job_store import JobStore
 from services.join_manager import JoinManager
 from services.lora_registry import LoraRegistry
@@ -80,7 +81,6 @@ class AppContext:
             self.config, self.job_store, self.video_upload_store
         )
         self.alpha_output_manager = AlphaOutputManager(self.config, self.job_store)
-        self.lora_registry = LoraRegistry(self.config)
         self.model_registry = ModelRegistry(self.config, base_models=self.base_models)
         active_base = self._restore_active_base_model()
         # The registry answers base-less calls with the ACTIVE base model, so
@@ -91,6 +91,14 @@ class AppContext:
         # the registry is on the right one.
         self.model_registry.set_active_base_model(active_base)
         active_models, selection_paths = self._restore_selection(active_base)
+        # The LoRA listing is family-scoped (台帳 §1-104), so it is built once
+        # the active base model is known, and before the pipeline manager that
+        # receives it. Its scope follows the descriptor the /generate checks
+        # read (see :meth:`_lora_descriptor`).
+        self.lora_registry = LoraRegistry(
+            self.config,
+            scope_provider=lambda: lora_scope_for(self._lora_descriptor(), self.config),
+        )
         self.pipeline_manager = PipelineManager(
             self.config,
             self.job_store,
@@ -117,6 +125,17 @@ class AppContext:
         # Last, and independent of everything above: tracking shares no state
         # with the pipeline (no base model, no selection, no queue).
         self.tracking_manager = TrackingManager(self.config)
+
+    def _lora_descriptor(self) -> BaseModelDescriptor:
+        """The descriptor whose family the LoRA listing follows: the RUNNER's
+        (what ``/generate`` validates against, ``PipelineManager.
+        active_engine_family``), or the model registry's active one while the
+        pipeline manager does not exist yet (the registry scans on
+        construction)."""
+        manager = getattr(self, "pipeline_manager", None)
+        if manager is not None:
+            return manager.runner.descriptor
+        return self.model_registry.descriptor()
 
     def _restore_selection(self, base_model: str) -> tuple[dict[str, str], dict[str, str]]:
         """The remembered selection of ``base_model``, as NAMES *and* PATHS.

@@ -120,7 +120,7 @@ class H3Int8Linear(nn.Module):
         )
         return out.reshape(*lead, self.out_features)
 
-    def forward_rows(self, x: torch.Tensor, n0: int, n1: int) -> torch.Tensor:
+    def forward_rows(self, x: torch.Tensor, n0: int, n1: int, lora_xa=None) -> torch.Tensor:
         """Output features ``[n0, n1)`` only: :meth:`forward` on rows ``n0:n1`` of the weight.
 
         For VRAM 16GB mode (``engine_h3.lowvram``: q, k and v of one head group
@@ -131,6 +131,11 @@ class H3Int8Linear(nn.Module):
         contiguous [N, K] (and [N, 1]) tensor is a contiguous view; the
         activation is quantized per row, so each output column is the one
         :meth:`forward` computes (the GPU tests of tests/test_h3_engine.py, gate A-G2).
+
+        This call does not go through ``Module.__call__``, so an attached LoRA
+        (``engine_h3.lora``) is added here, rows ``[n0, n1)`` of its B;
+        ``lora_xa`` is ``lora.xa_for(self, x)`` computed once by the caller.
+        Without LoRA this is one attribute lookup.
         """
         lead = x.shape[:-1]
         x2d = x.reshape(-1, x.shape[-1])
@@ -151,7 +156,12 @@ class H3Int8Linear(nn.Module):
             convrot=bool(self.spec.convrot),
             convrot_groupsize=int(self.spec.convrot_groupsize),
         )
-        return out.reshape(*lead, n1 - n0)
+        out = out.reshape(*lead, n1 - n0)
+        if getattr(self, "_lora_specs", None):
+            from engine_h3 import lora  # noqa: PLC0415 -- only a LoRA job gets here
+
+            out = lora.apply(self, x, out, n0, n1, xa=lora_xa)
+        return out
 
     def extra_repr(self) -> str:
         return (

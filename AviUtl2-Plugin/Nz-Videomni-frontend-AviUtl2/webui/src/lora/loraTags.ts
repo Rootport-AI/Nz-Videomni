@@ -265,3 +265,11 @@ export function stripLoraTagsByName(prompt: string, names: ReadonlySet<string>):
   });
   return anyStripped ? collapseWhitespace(stripped) : prompt;
 }
+
+/** 台帳 §1-104: `specs` with every `audio_strength` dropped (the rest of each
+ * spec untouched) — Single's submission on an engine whose LoRAs have one
+ * strength only (`featureScope.loraAudioStrengthHiddenFor`), the same shape
+ * as `keyframeUtils.omitStrength`. Pure: returns new objects, never mutates. */
+export function omitLoraAudioStrength(specs: LoraSpec[]): LoraSpec[] {
+  return specs.map(({ audio_strength: _dropped, ...rest }) => rest);
+}

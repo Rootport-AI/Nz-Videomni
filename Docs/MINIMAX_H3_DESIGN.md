@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165〜§170（α版の 3 弾は §165〜§167、VRAM 16GB mode は §168〜§169、キーフレームは §170。台帳の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239・3-240・3-241）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165〜§170（α版の 3 弾は §165〜§167、VRAM 16GB mode は §168〜§169、キーフレームは §170、LoRA は §176。台帳の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239・3-240・3-241）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -18,7 +18,7 @@
 | [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 | 次の作業の入口（α版の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239） |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 土台。記述子（§4）・エンジンアダプタ（§5.2）・仮想環境（§5.3）・推論モード（§5.8）・写像表（§9） |
 | [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) | 調査の記録（参考資料）。**進め方の裁定**は同ノート §10。配布ファイルの実測は同 §13.2 |
-| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170） |
+| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176） |
 | `engine_h3/venv-engine-h3.freeze.txt` | 仮想環境の**版の正本**。本書は版の数字を書かない |
 | `engine_h3/engine_h3-venv-pyproject.toml` | 仮想環境を手で作り直すときの依存の仕様（なぜその版かの説明つき） |
 
@@ -43,7 +43,7 @@
 - **裁定 7 【オーナー裁定】**: 配布は公開リポジトリからの直接ダウンロードとし、再ホストはしない（ライセンスに地域条項があるため）。
 - **裁定 8 【オーナー裁定】**: テキストエンコーダは int8 ConvRot を使う。nvfp4 や bf16 は将来の拡張とする。
 - **裁定 9 【オーナー裁定】**: 動画の尺は「快適上限を測って決める」方針に揃える。外部ガイドの 1344×768・345 フレームは正式目標にしない。
-- **裁定 10 【オーナー裁定】**: LoRA は後回しとする。Turbo LoRA（少ないステップで生成するための蒸留 LoRA）への対応は Style LoRA への対応とほぼ同じ仕組みになるので、Style LoRA に対応するときに一緒に進める。
+- **裁定 10 【オーナー裁定】**: LoRA は後回しとする。Turbo LoRA（少ないステップで生成するための蒸留 LoRA）への対応は Style LoRA への対応とほぼ同じ仕組みになるので、Style LoRA に対応するときに一緒に進める。（実装した。§6.6・研究ノート §10 の裁定 62〜73）
 - **裁定 11 【オーナー裁定】**: H3 の仮想環境は、torch の版を LTX に揃えなくてよい。comfy-kitchen の CUDA 拡張が効く版を選ぶ。利用者側の条件（ドライバ R580 以上・ディスクの増加）は README に書く。
 - **裁定 16 【オーナー裁定】**: int8 の実行は comfy-kitchen の CUDA 拡張に任せる。H3 の仮想環境の torch は、MiniMax H3 を動かすことに最も適した版を選ぶ。本製品はモデルごとに仮想環境を持てる設計なので、既存の torch の版にこだわらない。
 - **裁定 17 【オーナー裁定】**: 実装の土台は DiffSynth-Studio（Apache-2.0）、diffusers は数値の正解データ源、ComfyUI（GPL-3.0）は仕様書として読むだけとする。次の 4 点を設計に織り込む。(1) int8 の実行は comfy-kitchen に任せる（既存の読み込み〔呼び出しごとに bf16 へ戻す・groupsize 256 のみ〕はヘッダの判定には使えても、H3 の実行経路には向かない）。(2) attention は DiffSynth の区間ごとの Python ループを使わず、diffusers の「1 リクエストを 1 つの系列に詰めてマスクなしで渡す」形を手本にして書き、本製品に導入済みの SageAttention を効かせる。(3) CPU オフロードは DiffSynth の仕組みではなく、本製品の block swap と先読みを接続する。(4) ローダは「揺れを吸収する」作りで書く（DiffSynth の変換表を出発点に、ComfyUI の判定の振る舞いを仕様として自前で書く）。
@@ -279,6 +279,73 @@ block swap の常駐ブロック数 `blocks_on_gpu`（block swap が GPU に置�
 
 ---
 
+## 6.6 LoRA（実行時の低ランク経路）
+
+**結論**: LoRA（追加学習した低ランクの差分重み。Style・Motion・Turbo など）は、int8 の重みには触れず、各対象層の出力に FP32 で差分を足す経路として動く。利用者が `models/MiniMaxH3/LoRA/` に置いた `.safetensors` を、操作パネル・Gradio・MCP から使える。同時に使う本数に制限はなく、ステップ数と shift は自動では変えない（Turbo を使うときは利用者が下げる。オーナー裁定は研究ノート §10 の裁定 62〜73）。LoRA を使わないジョブには hook も buffer も無く、今日と同じ経路を通る（基準の指紋 `0da6111c…` が変わらないことで確かめた。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176）。
+
+### 式
+
+対象は本体 50 ブロックと token_refiner 2 ブロックの `attn.qkv_proj`・`attn.out_proj`・`mlp.fc1`・`mlp.fc2`（正規名は `blocks.{i}.…`・`token_refiner.blocks.{j}.…`）。1 層の出力は次の式で決まる。
+
+`y = bf16( f32(base(x)) + Σ_k s_k · ( f32(x) @ A_kᵀ ) @ B_kᵀ )`、`s_k = 強度_k × alpha_k ÷ rank_k`
+
+- ファイルに `.alpha` が無いときの倍率は 1.0（alpha ÷ rank を使わない）。
+- LoRA が見る `x` は**回転前の生の入力**である（ConvRot の回転は int8 カーネルの内部の話）。
+- A と B は CPU の主メモリに**ファイルの dtype のまま**（BF16・F16・F32）置き、使うときに f32 へ持ち上げる（可逆）。
+- 丸めは 1 回だけ。f32 の差分を bf16 の出力へ `add_` で足すと、共通の dtype である f32 で計算して最後に 1 回だけ bf16 に丸める。
+
+### 接続（hook と `forward_rows`）
+
+- **forward hook**: `forward()` を通る呼び出し（off の経路の 4 層・token_refiner・VRAM 16GB mode の out_proj と `block.mlp`）はすべて `Module.__call__` を通るので、層ごとに hook を 1 本掛けて差分を足す。`dit.py` と `H3Int8Linear.forward` は変えない。
+- **`H3Int8Linear.forward_rows(x, n0, n1, lora_xa=None)`**: VRAM 16GB mode の qkv は `__call__` を通らないので、`forward_rows` が自分で差分を足す。B は出力の行 `[n0, n1)` で切る。`lowvram.block_forward` はヘッド群のループの前に `f32(h) @ Aᵀ` を 1 回だけ計算して `lora_xa` で渡す（群ごとの 21 回の計算を避ける）。LoRA が無いジョブでは `None` で、算術は増えない。
+- **buffer**: A と B は層の**永続しない buffer**（`_lora_A_{k}`・`_lora_B_{k}`）として置く。block swap・先読みの受け皿・`_park_dit`・`drop_to_meta` がブロックと一緒に運び、state dict は変わらない。
+
+### 塊の切り方（off と VRAM 16GB mode が一致する理由）
+
+差分は、行を `VRAM16_ROW_CHUNK`（4096）、出力の列を `LORA_COL_CHUNK`（1024）の塊で回して足す。1024 は `VRAM16_HEAD_GROUP × head_dim`（8 × 128）で、VRAM 16GB mode が qkv を切る q・k・v の 1 切片と同じ幅である。fc1・fc2・out_proj も同じ規則で切るので、cuBLAS に渡る形は **off と on で全層一致**する。qkv だけの特別扱いは作らない。したがって「LoRA ありの off と VRAM 16GB mode の出力は**形によって**ビット一致する」（裁定 46 の基準の延長）。確認は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176（off と on の mp4 の sha256 が全組で一致。先読みを切った同期の入れ替えも含む）。`LORA_COL_CHUNK` と `VRAM16_HEAD_GROUP × head_dim` の一致、および行の塊の幅が `VRAM16_ROW_CHUNK` と等しいことは CPU テストで固定する。
+
+加算の形は「行の塊ごとに `xs = f32(x[行]) @ Aᵀ × s`、列の塊ごとに `delta = xs @ B[列]ᵀ`（2 本目以降は `addmm_`）を f32 の塊 `[行, 1024]`（約 16MB）へ作り、`out[行, 列].add_(delta)`」である。要素あたりの読み書きは 12 バイトで、`apply` に `except` は書かない（失敗は失敗）。
+
+### 付け外しの位置（`pipeline_h3.py`）
+
+1. **`validate_request`**: 各 LoRA の存在・ヘッダ・鍵の写像を調べ、パス空・強度が正でない・ファイルが無い・壊れている場合は**文章の符号化の前**に日本語で拒否する（常駐 DiT を失わない）。鍵が写らないだけでは拒否しない。
+2. **`_denoise` の `try:` 先頭**（`_vram16_begin`・`_place_dit` の前）: ファイルを読み、CPU のまま `attach`。先読みの計画がその buffer を一緒に詰める。付けた後は読んだ辞書を捨てる。
+3. **`finally`**: `teardown_prefetch` → `release_installed` → **`detach`（無条件）** → `_park_dit` の順。**順序の制約**: `teardown_prefetch` の `_release` は飛行中のブロックの buffer を `mod._buffers[name]` へ**名前で書き戻す**ので、`detach` が先だと A と B が戻ってしまう。`detach` は `delattr` で buffer と非永続集合を消し、hook を外す（冪等。meta・CPU・GPU のどれでも安全）。この順序は CPU テストで固定する。
+4. **ジョブ間のキャッシュは作らない**。ファイルは毎ジョブ読み直す（Turbo の約 2GB で NVMe 上 1〜3 秒。見積もり）。常駐 DiT は次のジョブの前に付ける前と同一に戻る。
+
+### 例外と注意
+
+- **全ブロック常駐の例外**: `blocks_on_gpu` が 0 以下か全ブロック以上のときは、LoRA の buffer も全部 GPU に載る（Turbo で約 +1.9GB。見積もり）。ベースの重みも全部 GPU にある条件なので整合するが、「50 ブロック分を常駐させない」要件の例外としてここに明記する。
+- **固定メモリの中継は育つ**: 先読みの固定メモリの中継は大きくなる方向にだけ変わる（縮まない）。Turbo の後は常駐サービスが約 2×39MB を持ち続ける。数値には関係しない。
+- **形の合わない組**: `attach` は A が `[rank, in_features]`・B が `[out_features, rank]` であることを確かめ、合わない組・モデルに無い名前・dtype が BF16／F16／F32 以外の組は**飛ばして記録する**（実行は続く）。対象は `H3Int8Linear` と素の `nn.Linear` だけ。
+
+### FP32 の保証
+
+`H3Pipeline.load` が 1 回 `require_fp32_matmul()` を呼ぶ。次の 3 条件を確かめ、違えば `RuntimeError` で止める（`done` には記録しない）。(1) `allow_tf32` が False。(2) `torch.get_float32_matmul_precision()` が `"highest"`。(3) （属性があれば）`torch.backends.cuda.matmul.fp32_precision` が `"ieee"` か `"none"`。torch 2.13 の既定は `"none"`（親の設定を引き継ぐ）で、効いているのは (1)(2) の旧来の旗である。当初の計画の「`"ieee"` に等しい」は全ロードを拒否する誤りで、実測で訂正した。テストは、bf16 の行列積なら必ず違う値になる入力で f32 の明示的な参照と `torch.equal` で比べ、`mm`／`addmm_` を差し替えて全オペランドが f32 であることも確かめる。
+
+### 非対応の判定
+
+「LoRA が対応か」の判定の正本は**リポジトリ直下の `h3_lora_format.py`**（torch 非依存）で、アプリ（一覧の「非対応」表示）とワーカー（A／B を探す写像）が同じ関数 `map_lora_keys` を import する。写像の規則は 2 つの名前の流儀と 2 組の接尾辞で、詳細は同ファイルの冒頭に書いてある。
+
+- 受ける名前: 点区切り（先頭の `diffusion_model.` は任意）と kohya の下線区切り（`lora_unet_blocks_0_attn_qkv_proj`）。接尾辞は `lora_A`／`lora_B` と `lora_down`／`lora_up`。`.alpha` は任意。
+- **非対応**: 対のキーが 1 つも無い・DoRA／LoHa／LoKr のキーがある・H3 の対象に写らないキー（AdaLN・norm など）が 1 つでもある・A と B の rank が合わない・dtype が BF16／F16／F32 以外。**対象の一部が無いだけ**（token_refiner が無いなど）は対応である。
+- **非対応でも選べて実行できる**（裁定 63）。H3 では 422 `LORA_FORMAT_UNSUPPORTED` を返さない。操作パネルは一覧に「非対応」のバッジを出し、生成ボタンの下に黄色い注意文を出す（送信は止めない）。写らないキーは無視され、効果が出ない可能性がある。LTX は今日のまま 422 を返す。
+- 記述子の `lora_dir` と系統→ディレクトリの対応は `services/engines/__init__.py::lora_scope_for` の 1 か所（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) の LoRA の項）。H3 の一覧には LTX の IC-LoRA を出さない。
+
+### 記録
+
+LoRA を使ったジョブだけ、`done.h3.loras` に LoRA 1 本ごと `{name, strength, layout, dtype, pairs_applied, skipped[]}` を入れる（`name` はファイル名だけ。絶対パスは mp4 のコメントに埋まるので書かない）。`metadata.json` では `h3.loras` に入る。LoRA の無いジョブの `done` は変わらない。
+
+### 費用
+
+加算は FP32 で行うので、1 ステップごとに時間が増える。Style や Motion のような rank の小さい LoRA は 1 割強、rank の大きい Turbo は事前の見積もりを大きく上回った。それでも Turbo の少ないステップ数なら、通常の 20 ステップより短く済む。**実測の数値の正本は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176**（VRAM・主メモリの増分も同じ）。ジョブ間の LoRA キャッシュは作らず、v1 はこの費用を受け入れた。高速化は台帳 §3-253。
+
+### 範囲外
+
+diffusers／PEFT の分離 QKV の LoRA・量子化 LoRA・LoHa／LoKr／DoRA・テキストエンコーダ用 LoRA・Ref2VA 用の重みとの互換（Ref2VA 自体が未実装）。LoRA を焼き込んだ配布物は普通の重みとして読む（既存どおり）。
+
+---
+
 ## 7. ヘッダの判定と吸収する揺れ
 
 - **判定はテンソル名の指紋**: H3 の DiT は `{接頭辞}video_patch_proj.weight` と `{接頭辞}audio_patch_proj.weight` の**同時存在**で判定する。GGUF の KV のようなメタデータには頼らない（コミュニティ配布物は KV が偽装・欠落しており、safetensors の `__metadata__` も枝刈り版では空である）。MULTI_ENGINE_DESIGN §2.2・§2.4 の判定とは別の経路で、H3 系統は safetensors にこの指紋を使う。
@@ -310,6 +377,8 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | `engine_h3/sft_load.py` | テンソルを 1 本ずつ読んで meta のモデルへ入れる（`assign=True`）。読み残しの検査 |
 | `engine_h3/quant_linear.py` | `H3Int8Linear`（出力の行の範囲だけを計算する `forward_rows` を含む）・CUDA 経路の検査と固定・量子化層の差し替え（§5） |
 | `engine_h3/dit.py` | DiT 本体・枝刈り版の AdaLN・attention（SDPA／SageAttention）・行の並べ替え。VRAM 16GB mode の分岐（`vram16`）と `tokens_box` を持つ（§6.5） |
+| `h3_lora_format.py`（リポジトリ直下・torch 非依存） | LoRA の鍵の写像と「対応・非対応」の判定。アプリとワーカーが同じ関数を import する（§6.6） |
+| `engine_h3/lora.py` | LoRA の読み込み・付け外し（hook と buffer）・FP32 の加算（§6.6） |
 | `engine_h3/lowvram.py` | VRAM 16GB mode の経路（§6.5）。`dit.py` の既存関数をヘッド群・行の塊ごとに呼ぶだけで、新しい計算は持たない |
 | `engine_h3/rope.py` | 3 軸 RoPE・キーフレームの時間座標 `keyframe_t`（§3） |
 | `engine_h3/text_encoder.py` | Qwen3-VL（文章側 50 層＋I2V の画像読み取り部〔vision tower〕。正規化前の隠れ状態を出す）・層ごとの直接読み・トークン列の書式（§3・§4） |
@@ -415,7 +484,6 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 次は書かない（後回し）。
 
-- LoRA・Turbo（裁定 10）
 - Ref2VA・Hybrid（FL2VA と Ref2VA を混ぜた配布物）。ただしオーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。対応の保証は §12 のとおり後回しである（§13）。
 - 連結・画角拡張・NAG／VSF
 
@@ -425,7 +493,8 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 ## 13. 未決事項
 
-- **性能**: 大きな画角でノイズ除去の段の VRAM が溢れる問題は、VRAM 16GB mode（§6.5）の on で消えた（開発機の機械の門。製品の条件で退避ゼロ・1 ステップ約 22 秒。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3）。配置後のオーナーの目視（B-G5）にも合格し、sage の 2 ブロックの値の差は採用した（裁定 53）。残るのは次の 2 点である。(1) 計測台の T1 で重い減速が出なかった理由は未解明のまま残している（オーナー裁定で追わない。同 §168.9）。(2) 快適上限の較正（台帳 §1-95）は、退避そのものの量で線を引く（同 §168.1）。溢れが消えたので、較正の遅さを理由にした LoRA（Turbo）対応の優先順位の引き上げ（研究ノート §10 の裁定 21）が要るかは、較正（§1-95）の計画のときに確かめる。
+- **性能**: 大きな画角でノイズ除去の段の VRAM が溢れる問題は、VRAM 16GB mode（§6.5）の on で消えた（開発機の機械の門。製品の条件で退避ゼロ・1 ステップ約 22 秒。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3）。配置後のオーナーの目視（B-G5）にも合格し、sage の 2 ブロックの値の差は採用した（裁定 53）。残るのは次の 2 点である。(1) 計測台の T1 で重い減速が出なかった理由は未解明のまま残している（オーナー裁定で追わない。同 §168.9）。(2) 快適上限の較正（台帳 §1-95）は、退避そのものの量で線を引く（同 §168.1）。LoRA（Turbo）は §6.6 で対応した。較正（§1-95）の計画では、LoRA の有無を条件に入れるかを確かめる。
+- **LoRA の後続**: (1) 動画と音声に個別の強度を持たせる（台帳 §3-252。いまは `audio_strength` を送らず、1 本の強度が両方に効く）。(2) 加算の高速化（台帳 §3-253。費用は §6.6）。
 - **PinkCherry Hybrid**: オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。対応の保証は §12 のとおり後回し（Ref2VA の参照経路も後回し）。
 - **m×n ≥ 2³¹ の CUDA 経路**: ソースの水準では限界が無いが、実測は台帳 §1-95（快適上限の較正）で行う。VRAM 16GB mode の on では行の塊で分割されるので届かず、off でだけ届きうる（算術による推測。扱いは §1-95 の計画で決める）。
 - **中間のキーフレームの品質**: 実装は 0〜F−1 の任意の位置を受けるが、中間のフレームは ComfyUI だけの拡張で、比べられる正解データが無い。そこで品質はオーナーの目視で決め、go だった（第 2 弾の 2-G2。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.10）。No-go のときの戻し方（規則表に「先頭と末尾だけ」の項目 `keyframe_ends_only` を足して位置を絞る）は要らなかった。

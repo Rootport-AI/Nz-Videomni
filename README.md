@@ -379,11 +379,15 @@ GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字
 
 **MiniMax H3 は、ここまでの規則（GGUF・fp8／int8 safetensors）の対象外です。** `models/MiniMaxH3/Weights/` の `.safetensors` も同じように一覧へ並びますが、読み込む前の検査で通るのは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけです。主に試してあるのは公式の配布物で、コミュニティ版のうち PinkCherry Hybrid は、置いて生成できた実績があります（動作の保証はありません）。それ以外の派生版への対応は後回しにしています（§7.6）。
 
-**LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` / `in-outpainting`、LTX 2.5 の `alpha-gen`〔`install-LTX25.bat` が取得〕）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所はベースモデルで分かれていません**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。**MiniMax H3 は、スタイル LoRA にも IC-LoRA にも対応していません**（§7.6）。
+**LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` / `in-outpainting`、LTX 2.5 の `alpha-gen`〔`install-LTX25.bat` が取得〕）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所は、LTX 2.3 と LTX 2.5 では共通です**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。**MiniMax H3 は置き場所が別で、`models/MiniMaxH3/LoRA/` です**（下に書きます）。H3 を選ぶと、一覧にはこのフォルダの LoRA だけが並びます。H3 は IC-LoRA（参照動画による制御）には対応していません（§7.6）。
 
-`models/LTX23/StyleLoRA/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、`POST /loras/reload` で明示再スキャン）。生成時は API の `loras: [{"name": ..., "strength": ...}]`、または Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します（強度は 0.05〜2、0は不可）。**指定した値がそのまま効きます（ComfyUI と同じ数え方です）。** 音声側の適用強度だけを映像側と別に指定したい場合は `<lora:名前:映像の強度:音声の強度>` の第3引数（0〜2。音声側だけ 0＝適用しない、を指定できる）を使います。省略時は音声側も映像側の値に追従します（詳細は [`Docs/LORA_AUDIO_STRENGTH_WORKORDER.md`](Docs/LORA_AUDIO_STRENGTH_WORKORDER.md)）。
+`models/LTX23/StyleLoRA/` に `.safetensors` を置くと自動認識されます（`GET /loras` で一覧確認、`POST /loras/reload` で明示再スキャン）。生成時は API の `loras: [{"name": ..., "strength": ...}]`、または Gradio UI のプロンプト内 `<lora:名前:強度>` 記法で適用します（強度は 0.05〜2、0は不可）。**指定した値がそのまま効きます（ComfyUI と同じ数え方です）。** 音声側の適用強度だけを映像側と別に指定したい場合は `<lora:名前:映像の強度:音声の強度>` の第3引数（0〜2。音声側だけ 0＝適用しない、を指定できる。LTX 2.3／2.5 のみで、MiniMax H3 では使われません）を使います。省略時は音声側も映像側の値に追従します（詳細は [`Docs/LORA_AUDIO_STRENGTH_WORKORDER.md`](Docs/LORA_AUDIO_STRENGTH_WORKORDER.md)）。
 
-**読み込める書式は2つです。** ComfyUI 形式（`diffusion_model.` プレフィックス＋ `lora_A`/`lora_B`）と、**kohya 形式**（LoRA 学習ツール kohya-ss 系が出力する書式。`lora_down`/`lora_up` ＋ `alpha`）で、kohya 形式のファイルは読み込むときに自動で変換します（`alpha ÷ rank` の倍率もそこで重みへ畳み込みます）。ただし kohya 形式でも、**鍵がドットではなくアンダースコアでつながれているもの**（`lora_unet_…`）は読めません。**読めない書式のファイルを指定した生成は、422 `LORA_FORMAT_UNSUPPORTED` ではっきり断ります**——上記のアンダースコア連結の鍵に加えて、DoRA・LoHa・LoKr がこれに当たります。どちらの書式も量子化 GGUF モデルにそのまま適用できます（実行時加算方式のため、モデル側の量子化と衝突しません）。
+**LTX 2.3／2.5 で読み込める書式は2つです。** ComfyUI 形式（`diffusion_model.` プレフィックス＋ `lora_A`/`lora_B`）と、**kohya 形式**（LoRA 学習ツール kohya-ss 系が出力する書式。`lora_down`/`lora_up` ＋ `alpha`）で、kohya 形式のファイルは読み込むときに自動で変換します（`alpha ÷ rank` の倍率もそこで重みへ畳み込みます）。ただし kohya 形式でも、**鍵がドットではなくアンダースコアでつながれているもの**（`lora_unet_…`）は読めません。**読めない書式のファイルを指定した生成は、422 `LORA_FORMAT_UNSUPPORTED` ではっきり断ります**——上記のアンダースコア連結の鍵に加えて、DoRA・LoHa・LoKr がこれに当たります。どちらの書式も量子化 GGUF モデルにそのまま適用できます（実行時加算方式のため、モデル側の量子化と衝突しません）。
+
+**MiniMax H3 の LoRA（Style・Motion・Turbo など）**: `models/MiniMaxH3/LoRA/` に `.safetensors` を置くと、MiniMax H3 を選んでいるときの一覧（Inventory など）に並びます（`install-MiniMaxH3.bat` が空のフォルダと案内ファイルを作ります）。使い方は LTX と同じ `<lora:名前:強度>` で、同時に何本でも使えます。ステップ数と shift は自動では変わらないので、Turbo（少ないステップで生成するための蒸留 LoRA）を使うときは自分で減らしてください。
+
+読める名前は、ComfyUI が読める形に合わせて **2 流儀**です。ドット区切り（`diffusion_model.…`。`lora_A`/`lora_B` または `lora_down`/`lora_up`）と、kohya のアンダースコア区切り（`lora_unet_blocks_0_attn_qkv_proj…`）の両方を読み、`.alpha` があればその分の倍率も掛けます。**H3 に写らない部分を含むファイル（DoRA・LoHa・LoKr、AdaLN などを狙うものなど）は、一覧に「非対応」と出ます。選んで生成することはできますが、効果が出ない可能性があります**（生成ボタンの下に黄色い注意文が出ます）。H3 では映像と音声の強度を分けられないので、第3引数は使われません。LoRA を足すと 1 ステップが少し遅くなります（実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §176）。設計は [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §6.6 です。
 
 ### models フォルダの構成
 
@@ -415,6 +419,7 @@ models/
     ├─ TextEncoder/          テキストエンコーダ（int8 ConvRot の safetensors）
     │   └─ qwen3vl_tokenizer/ tokenizer 一式（重みは含まない）
     ├─ VAE/                  映像 VAE・音声 VAE
+    ├─ LoRA/                 利用者が用意する LoRA（install-MiniMaxH3.bat が空のフォルダを作る）
     └─ LICENSE               MiniMax H3 のライセンスの写し
 ```
 
@@ -978,7 +983,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 |--------------|------------------------|
 | クリップ連結（Chained）。連結の入口を通る V2V・A2V・撮り直し（Retake）も含みます | `POST /generate/chain` そのもの |
 | 画角拡張（Outpainting）・Inpainting・Alpha Gen | `outpaint`・`inpaint`・`alpha_gen` |
-| スタイル LoRA・IC-LoRA（参照動画による制御） | `loras`・`reference_video_id` |
+| IC-LoRA（参照動画による制御）。スタイル LoRA は使えます（`models/MiniMaxH3/LoRA/`）が、音声だけの強度（第3引数）は使われません | `reference_video_id`（`loras` は使えます） |
 | ネガティブプロンプト（NAG／VSF） | `nag_enabled` |
 | キーフレームの強度（MiniMax H3 には強度がありません。省略すれば通ります） | `conditioning_images` の `strength`（値を入れると、0.8 でも断られます） |
 | PrunaVAED・埋め込み処理器の常駐 | `vae_mode`・`keep_resident_embeddings` |
@@ -1047,7 +1052,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `list_models` | 選択可能なモデル（transformer / text_encoder / video_vae / audio）を一覧する。**ベースモデル（LTX 2.3 / LTX 2.5 / MiniMax H3）の一覧・導入状況・いま選ばれているもの**もここで分かる |
 | `load_pipeline` | パイプライン（推論モデル一式）を読み込む（`POST /pipeline/load`）。`base_model` に `"LTX23"` / `"LTX25"` / `"MiniMaxH3"` を渡すと**ベースモデルを切り替える** |
 | `unload_pipeline` | パイプラインをメモリから解放する |
-| `list_loras` | 選択可能な IC-LoRA アダプタを一覧する（`GET /loras`） |
+| `list_loras` | 選択中のベースモデルで使える LoRA を一覧する（`GET /loras`。MiniMax H3 では `models/MiniMaxH3/LoRA/` の LoRA） |
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
 | `upload_audio` | ローカルの音声ファイルをアップロードする（A2V用） |

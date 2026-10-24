@@ -34,6 +34,7 @@ from dataclasses import dataclass
 import torch
 
 from engine_h3 import dit as _dit
+from engine_h3 import lora as _lora
 from engine_h3.constants import (
     VRAM16_BLOCKS_ON_GPU,
     VRAM16_HEAD_GROUP,
@@ -133,12 +134,13 @@ def block_forward(
     heads, d = attn.heads, attn.head_dim
     inner = heads * d
     o = torch.empty((s, inner), dtype=torch.bfloat16, device=x.device)
+    xa = _lora.xa_for(attn.qkv_proj, h)   # LoRA's f32(h) @ A^T once per block; None without LoRA
     for h0 in range(0, heads, plan.head_group):
         h1 = min(h0 + plan.head_group, heads)
         g = h1 - h0
-        q = attn.qkv_proj.forward_rows(h, 0 * inner + h0 * d, 0 * inner + h1 * d).view(s, g, d)
-        k = attn.qkv_proj.forward_rows(h, 1 * inner + h0 * d, 1 * inner + h1 * d).view(s, g, d)
-        v = attn.qkv_proj.forward_rows(h, 2 * inner + h0 * d, 2 * inner + h1 * d).view(s, g, d)
+        q = attn.qkv_proj.forward_rows(h, 0 * inner + h0 * d, 0 * inner + h1 * d, lora_xa=xa).view(s, g, d)
+        k = attn.qkv_proj.forward_rows(h, 1 * inner + h0 * d, 1 * inner + h1 * d, lora_xa=xa).view(s, g, d)
+        v = attn.qkv_proj.forward_rows(h, 2 * inner + h0 * d, 2 * inner + h1 * d, lora_xa=xa).view(s, g, d)
         q = attn.q_norm(q)
         k = attn.k_norm(k)
         if rope_cos is not None:
@@ -148,7 +150,7 @@ def block_forward(
         del q, k, v
         o[:, h0 * d:h1 * d].view(s, g, d).copy_(out)
         del out
-    del h
+    del h, xa
     a = attn.out_proj(o)
     del o
 

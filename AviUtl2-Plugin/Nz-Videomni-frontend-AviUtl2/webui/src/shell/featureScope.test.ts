@@ -7,6 +7,7 @@ import {
   disabledUiTargets,
   editSubTabsDisabledFor,
   FEATURE_UI,
+  loraAudioStrengthHiddenFor,
   settingsRowsHiddenFor,
 } from "./featureScope";
 
@@ -29,6 +30,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "inpaint",
         "keep_resident_embeddings",
         "keyframe_strength",
+        "lora_audio_strength",
         "nag",
         "outpaint",
         "prune_vaed",
@@ -407,5 +409,20 @@ describe("editSubTabsDisabledFor", () => {
       inpainting: false,
       alphaGen: false,
     });
+  });
+});
+
+describe("loraAudioStrengthHiddenFor (台帳 §1-104)", () => {
+  it("is false for the ordinary case (both LTX engines publish nothing here)", () => {
+    expect(loraAudioStrengthHiddenFor([])).toBe(false);
+  });
+
+  it("is true once `lora_audio_strength` is published", () => {
+    expect(loraAudioStrengthHiddenFor(["chain", "lora_audio_strength"])).toBe(true);
+  });
+
+  it("is NOT closed by `loras` itself — that name still has no UI target", () => {
+    expect(loraAudioStrengthHiddenFor(["loras"])).toBe(false);
+    expect(targets(["loras"])).toEqual([]);
   });
 });

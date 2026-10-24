@@ -1,11 +1,16 @@
 """GET/POST /loras — style/character + control IC-LoRA enumeration.
 
 Additive endpoints (the frozen API is extended, never changed): list the
-selectable IC-LoRA adapter names the server knows about — ``config.model.ic_loras``
-registrations plus ``*.safetensors`` files discovered by scanning
-``config.model.lora_dir`` — with each adapter's ``kind`` (``style`` | ``control``,
-so a GUI can group a "Style LoRA" tab), whether it has a sibling ``<stem>.png``
-thumbnail, and its source. Rescans on every call so a newly dropped-in file
+selectable IC-LoRA adapter names the server knows about FOR THE SELECTED BASE
+MODEL'S FAMILY (台帳 §1-104; the scope is ``services.engines.lora_scope_for``):
+a family whose descriptor declares ``lora_dir`` (MiniMax H3:
+``models/MiniMaxH3/LoRA``) lists only the files there; the others list
+``config.model.ic_loras`` registrations plus ``*.safetensors`` files discovered
+by scanning ``config.model.lora_dir``. Each row carries the adapter's ``kind``
+(``style`` | ``control``, so a GUI can group a "Style LoRA" tab), whether it has
+a sibling ``<stem>.png`` thumbnail, its source, and the family's format verdict
+(``supported`` / ``unsupported_reason``); the response also names the scanned
+directory (``lora_dir``). Rescans on every call so a newly dropped-in file
 appears without a restart (mirrors GET /models).
 """
 
@@ -25,13 +30,16 @@ router = APIRouter()
 def list_loras(context: AppContext = Depends(get_context)) -> dict:
     registry = context.lora_registry
     registry.rescan()
-    return {"loras": [e.as_dict() for e in registry.entries()]}
+    return {
+        "loras": [e.as_dict() for e in registry.entries()],
+        "lora_dir": registry.lora_dir_display,
+    }
 
 
 @router.post("/loras/reload")
 def reload_loras(context: AppContext = Depends(get_context)) -> dict:
-    """Explicit rescan of the registry (config + lora_dir), returning counts by
-    kind so a GUI can confirm what a folder drop-in picked up."""
+    """Explicit rescan of the registry (the selected family's scope), returning
+    counts by kind so a GUI can confirm what a folder drop-in picked up."""
     registry = context.lora_registry
     registry.rescan()
     entries = registry.entries()

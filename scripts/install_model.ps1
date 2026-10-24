@@ -260,6 +260,9 @@ function Show-ModelInstallFailureHelp {
     Write-Warn ('次のフォルダを、フォルダごと削除しないでください: ' + $modelDir)
     Write-Info 'ここには、配布物に含まれない＝二度と取り直せないあなたの資産が同居していることがあります'
     Write-Info '（あなたが集めた LoRA、自分で変換した GGUF など）。'
+    if ($Plan.Id -eq 'MiniMaxH3') {
+        Write-Info ('  ' + (Join-Path $modelDir 'LoRA') + '  … あなたが集めた MiniMax H3 用の LoRA（全部）')
+    }
     Write-Host ('-' * 74) -ForegroundColor Yellow
 
     Write-Host ''
@@ -364,6 +367,9 @@ try {
             Write-Info 'ライセンス本文: https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE'
             Write-Info ('（本文の写しは ' + (Join-Path $ModelsDir 'MiniMaxH3\LICENSE') + ' にも保存します。）')
             Write-Host ''
+            # LoRA の置き場所（台帳 §1-104 裁定 7）。空のフォルダを作るだけで、
+            # ダウンロードはしない。案内ファイルは git 管理（put_LoRA_safetensors_here.txt）。
+            New-Item -ItemType Directory -Force (Join-Path $ModelsDir 'MiniMaxH3\LoRA') | Out-Null
         }
 
         # tools/ をこのプロセスの PATH の先頭へ（システム側の設定は変更しない）。

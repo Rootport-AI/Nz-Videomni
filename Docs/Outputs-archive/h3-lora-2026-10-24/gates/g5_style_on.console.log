@@ -1,0 +1,40 @@
+      "blocks_on_gpu": 8,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "deterministic": false
+    },
+    "quant_backends": {
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true
+      }
+    },
+    "device": "cuda"
+  },
+  "ready": {
+    "event": "ready",
+    "sampler": "euler",
+    "sage_available": true
+  }
+}

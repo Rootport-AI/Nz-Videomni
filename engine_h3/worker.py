@@ -41,7 +41,7 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
-   [vram16_mode]}
+   [vram16_mode], [loras]}
       One T2V or I2V job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
@@ -51,7 +51,9 @@ Protocol (one JSON object per line; parent -> worker):
       decoder and the audio VAE on the CPU for the next job; a job without it
       releases them. ``vram16_mode`` true runs the denoise in VRAM 16GB mode
       (``engine_h3.lowvram``; absent / null = off here, the app sends it every
-      job). A failure is reported with ``error`` and the process stays alive.
+      job). ``loras``: [] or ``{"path", "strength"}`` entries (``engine_h3.lora``;
+      strength defaults to 1.0; the app sends the key every job). A failure is
+      reported with ``error`` and the process stays alive.
   {"op": "shutdown"}
   Before load an unknown op is only logged (an ``error`` there would be read
   as the reply to the next ``load``); after load it is answered with ``error``.
@@ -68,7 +70,9 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
              block_swap_prefetch_used, keep_resident_used, vram16_mode_used,
-             images_used, h3: {phases, quant_backends}}
+             images_used, h3: {phases, quant_backends, [loras]}}
+            (``h3.loras`` only for a job with LoRA: one entry per file, its
+            name, strength, layout, dtype, pairs_applied and skipped)
   error     {detail}
 STDERR carries the human log, prefixed ``[h3_worker]``.
 
@@ -79,7 +83,7 @@ Selftest:
        --shift-video 12 --shift-audio 3 --rounds 1 --report r.json
        --attention-backend sdpa|sage --blocks-on-gpu 8 --prefetch|--no-prefetch
        --deterministic --image P --keyframe FRAME=PATH ... --keep-resident
-       --vram16|--no-vram16]
+       --vram16|--no-vram16 --lora PATH ... --lora-strength 1.0]
 """
 
 import os
@@ -162,10 +166,12 @@ _GENERATE_FIELDS = frozenset({
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
-    "vram16_mode",
+    "vram16_mode", "loras",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
+#: The keys of one ``loras`` entry this engine reads (``audio_strength`` is an LTX notion).
+_LORA_FIELDS = frozenset({"path", "strength"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -285,13 +291,35 @@ def _images(msg: dict) -> tuple[tuple, list[str]]:
     return tuple(out), sorted(ignored)
 
 
-def _generate_request(msg: dict, images: tuple | None = None):
+def _loras(msg: dict) -> tuple[tuple, list[str]]:
+    """``loras`` -> ``(H3LoraInput, ...)`` and the ignored inner keys.
+
+    The shape is checked here (a list of objects with a ``path``); the path,
+    the strength and the file itself are the pipeline's ``validate_request``.
+    """
+    from engine_h3.pipeline_h3 import H3LoraInput  # noqa: PLC0415
+
+    raw = msg.get("loras")
+    if raw is None:
+        return (), []
+    if not isinstance(raw, list):
+        raise ValueError(f"loras はリストで渡してください（{type(raw).__name__}）")
+    out, ignored = [], set()
+    for entry in raw:
+        if not isinstance(entry, dict) or "path" not in entry:
+            raise ValueError(f"loras の各要素は path を持つオブジェクトです（{entry!r}）")
+        ignored |= {k for k in entry if k not in _LORA_FIELDS}
+        out.append(H3LoraInput(path=str(entry["path"]), strength=_value_or(entry, "strength", 1.0, float)))
+    return tuple(out), sorted(ignored)
+
+
+def _generate_request(msg: dict, images: tuple | None = None, loras: tuple | None = None):
     """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent).
 
     ``attention_backend`` is left as sent (``None`` = the load value); the
     worker resolves it per job before the pipeline runs. ``images``: the
     already parsed ``images`` (``_do_generate`` parses them once, for the
-    ignored-keys log too); parsed here when not given.
+    ignored-keys log too); parsed here when not given. ``loras``: the same.
     """
     from engine_h3.pipeline_h3 import H3GenerateRequest  # noqa: PLC0415
 
@@ -300,6 +328,8 @@ def _generate_request(msg: dict, images: tuple | None = None):
 
     if images is None:
         images, _ignored = _images(msg)
+    if loras is None:
+        loras, _ignored = _loras(msg)
     return H3GenerateRequest(
         prompt=str(msg["prompt"]),
         seed=int(msg["seed"]),
@@ -316,6 +346,7 @@ def _generate_request(msg: dict, images: tuple | None = None):
         attention_backend=_or("attention_backend", None, str),
         block_swap_prefetch=_or("block_swap_prefetch", None, bool),
         vram16_mode=_or("vram16_mode", False, bool),
+        loras=loras,
     )
 
 
@@ -324,9 +355,11 @@ def _do_generate(msg: dict) -> None:
     if _PIPE is None:
         raise RuntimeError("generate before load")
     images, inner_ignored = _images(msg)
+    loras, lora_ignored = _loras(msg)
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
     ignored += [f"images[].{k}" for k in inner_ignored]
-    req = _generate_request(msg, images=images)
+    ignored += [f"loras[].{k}" for k in lora_ignored]
+    req = _generate_request(msg, images=images, loras=loras)
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
     req.attention_backend = effective
@@ -334,7 +367,8 @@ def _do_generate(msg: dict) -> None:
         f"generate: seed={req.seed} {req.width}x{req.height} frames={req.num_frames} "
         f"steps={req.num_inference_steps} shift={req.shift_video}/{req.shift_audio} "
         f"attention={effective} images={len(req.images)} keep_resident={req.keep_resident} "
-        f"prefetch={req.block_swap_prefetch} vram16={req.vram16_mode} -> {req.output_path}"
+        f"prefetch={req.block_swap_prefetch} vram16={req.vram16_mode} "
+        f"loras={[(Path(item.path).name, item.strength) for item in req.loras]} -> {req.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
     )
     result = _PIPE.generate(req)
@@ -471,6 +505,10 @@ def _selftest_parser():
     parser.add_argument("--keep-resident", action="store_true")
     parser.add_argument("--vram16", action=argparse.BooleanOptionalAction, default=False,
                         help="VRAM 16GB mode (vram16_mode)")
+    parser.add_argument("--lora", action="append", default=[], metavar="PATH",
+                        help="a LoRA file (repeatable)")
+    parser.add_argument("--lora-strength", type=float, default=1.0,
+                        help="the strength of every --lora (default 1.0)")
     return parser
 
 
@@ -509,6 +547,7 @@ def _selftest_generate_message(args, out: str) -> dict:
         "attention_backend": args.attention_backend,
         "block_swap_prefetch": bool(args.prefetch),
         "vram16_mode": bool(args.vram16),
+        "loras": [{"path": path, "strength": float(args.lora_strength)} for path in args.lora],
     }
 
 

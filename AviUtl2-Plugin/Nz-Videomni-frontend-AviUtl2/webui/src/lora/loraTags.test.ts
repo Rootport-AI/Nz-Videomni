@@ -6,6 +6,7 @@ import {
   formatLoraStrength,
   formatLoraTag,
   isValidLoraName,
+  omitLoraAudioStrength,
   parseLoraPrompt,
   removeLoraTag,
   setLoraTagAudioStrength,
@@ -365,5 +366,30 @@ describe("stripLoraTagsByName (IC-LoRA UI redesign, 第5波)", () => {
   it("removes a 3-argument (video+audio strength) tag just as readily as a 2-argument one", () => {
     const prompt = "a cat <lora:canny-control:1.0:0.5> riding a skateboard";
     expect(stripLoraTagsByName(prompt, new Set(["canny-control"]))).toBe("a cat riding a skateboard");
+  });
+});
+
+describe("omitLoraAudioStrength (台帳 §1-104)", () => {
+  it("drops only `audio_strength`, key and all, leaving name and strength", () => {
+    const specs = [
+      { name: "A", strength: 0.8, audio_strength: 0.3 },
+      { name: "B", strength: 1.0 },
+    ];
+    const omitted = omitLoraAudioStrength(specs);
+    expect(omitted).toEqual([
+      { name: "A", strength: 0.8 },
+      { name: "B", strength: 1.0 },
+    ]);
+    for (const spec of omitted) expect(spec).not.toHaveProperty("audio_strength");
+  });
+
+  it("is pure: the input specs are not mutated", () => {
+    const specs = [{ name: "A", strength: 0.8, audio_strength: 0.3 }];
+    omitLoraAudioStrength(specs);
+    expect(specs[0]).toEqual({ name: "A", strength: 0.8, audio_strength: 0.3 });
+  });
+
+  it("maps an empty list to an empty list", () => {
+    expect(omitLoraAudioStrength([])).toEqual([]);
   });
 });

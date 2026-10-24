@@ -76,6 +76,26 @@ def test_list_loras_ok(mcp_app):
     result = anyio.run(system.list_loras)
     assert "loras" in result
     assert isinstance(result["loras"], list)
+    # 台帳 §1-104: the scanned directory and each row's verdict ride through.
+    assert isinstance(result["lora_dir"], str)
+    for row in result["loras"]:
+        assert isinstance(row["supported"], bool)
+        assert "unsupported_reason" in row
+
+
+def test_list_loras_passes_the_family_fields_through():
+    body = {
+        "loras": [{"name": "odd", "kind": "style", "supported": False,
+                   "unsupported_reason": "MiniMax H3 の LoRA として使えない可能性があります: x"}],
+        "lora_dir": "models/MiniMaxH3/LoRA",
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/loras")
+        return httpx.Response(200, json=body)
+
+    set_client(_client_for_handler(handler))
+    assert anyio.run(system.list_loras) == body
 
 
 # ----- load_pipeline branches (MockTransport: assert which calls happen) ---

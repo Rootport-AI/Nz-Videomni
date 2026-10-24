@@ -160,6 +160,40 @@ describe("InventoryScreen — LoRA browser", () => {
   });
 });
 
+describe("InventoryScreen — 台帳 §1-104 (per-base-model list)", () => {
+  it("badges a `supported: false` card 非対応/Unsupported with the server's reason — and it stays clickable", async () => {
+    const { apiClient } = setup();
+    const user = userEvent.setup();
+    const { onPromptChange } = renderInventory({ apiClient, prompt: "" });
+
+    const henshinCard = (await screen.findByText("LTX-2.3-Henshin")).closest("li")!;
+    const badge = within(henshinCard).getByText("Unsupported");
+    expect(badge).toHaveAttribute("title", expect.stringMatching(/adaLN/));
+    const pixarCard = screen.getByText("Pixar_Toon").closest("li")!;
+    expect(within(pixarCard).queryByText("Unsupported")).not.toBeInTheDocument();
+
+    // The same 3-argument tag as any other card (no exception for the badge).
+    await user.click(within(henshinCard).getByRole("button"));
+    expect(onPromptChange).toHaveBeenCalledWith("<lora:LTX-2.3-Henshin:1.0:1.0>");
+  });
+
+  it("the empty state names the directory the server reports", async () => {
+    const { apiClient: base } = setup();
+    const apiClient = { ...base, getLoras: async () => ({ loras: [], lora_dir: "models/MiniMaxH3/LoRA" }) };
+    renderInventory({ apiClient });
+
+    expect(await screen.findByText(/drop files into models\/MiniMaxH3\/LoRA and reload/i)).toBeInTheDocument();
+  });
+
+  it("falls back to the old directory when an older server sends no `lora_dir`", async () => {
+    const { apiClient: base } = setup();
+    const apiClient = { ...base, getLoras: async () => ({ loras: [] }) };
+    renderInventory({ apiClient });
+
+    expect(await screen.findByText(/drop files into models\/LTX23\/StyleLoRA and reload/i)).toBeInTheDocument();
+  });
+});
+
 describe("InventoryScreen — history", () => {
   it("shows a completed job in the history grid with a prompt excerpt and resolution/duration", async () => {
     const { apiClient } = setup({ runningPollCount: 1 });

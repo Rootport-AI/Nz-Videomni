@@ -43,6 +43,7 @@ export type UiTarget =
   | "createSection.referenceVideo"
   | "createSection.a2v"
   | "createSection.keyframeStrength"
+  | "promptBar.loraAudioStrength"
   | "shell.nag"
   | "settingsRow.vae"
   | "settingsRow.keepResidentEmbeddings"
@@ -114,6 +115,11 @@ interface FeatureUiEntry {
  *       (`keyframeUtils.omitStrength`): the engine has no keyframe strength,
  *       and omitted is what the job record then shows (not a stand-in 1.0).
  *    LTX publishes none of these names, so none of this reaches it.
+ *  - **lora_audio_strength** (台帳 §1-104) is scoped like `keyframe_strength`:
+ *    published by MiniMax H3, whose LoRAs have one strength only. It HIDES
+ *    each LoRA chip's audio toggle (and its 🎥 / audio value), and the shell
+ *    stops sending `audio_strength` at the same time
+ *    (`loraTags.omitLoraAudioStrength`).
  *  - **prune_vaed / keep_resident_embeddings** are Settings rows rather than
  *    generation surfaces, and both carry a `resets` because their choice is
  *    persisted in `localStorage`. Their SCOPES point in opposite directions:
@@ -153,6 +159,7 @@ export const FEATURE_UI = {
   reference_video: { disables: ["chainPanel.reference", "createSection.referenceVideo"] },
   nag: { disables: ["shell.nag"] },
   keyframe_strength: { disables: ["createSection.keyframeStrength"] },
+  lora_audio_strength: { disables: ["promptBar.loraAudioStrength"] },
   prune_vaed: { disables: ["settingsRow.vae"], resets: "vaeMode" },
   keep_resident_embeddings: {
     disables: ["settingsRow.keepResidentEmbeddings"],
@@ -170,7 +177,8 @@ export const FEATURE_UI = {
 // older than the server it talks to more often than the reverse, so an unknown
 // name is the ordinary case, not an error — and a feature with no UI target at
 // all (`two_stage_hq`, `loras`, `sage_attention`, …) is simply absent
-// from the table rather than listed with an empty `disables`.
+// from the table rather than listed with an empty `disables`. (`loras` itself
+// has no UI target; its per-LoRA audio strength does — `lora_audio_strength`.)
 
 /** A `Map`, not the plain object: looking `FEATURE_UI` up with an arbitrary
  * server string would also answer for `"constructor"`, `"__proto__"` and the
@@ -402,4 +410,12 @@ export function singleSectionsDisabledFor(unsupportedFeatures: readonly string[]
  * neither 422 a job nor be stuck on screen. `false` for the ordinary case. */
 export function nagDisabledFor(unsupportedFeatures: readonly string[]): boolean {
   return disabledUiTargets(unsupportedFeatures).has("shell.nag");
+}
+
+/** Whether each LoRA chip's audio toggle (🎥 / 🔊 / audio value) is hidden
+ * (`lora_audio_strength`). The shell hides it AND stops sending
+ * `audio_strength` on Single's request (`loraTags.omitLoraAudioStrength`).
+ * `false` for the ordinary case (both LTX engines). */
+export function loraAudioStrengthHiddenFor(unsupportedFeatures: readonly string[]): boolean {
+  return disabledUiTargets(unsupportedFeatures).has("promptBar.loraAudioStrength");
 }

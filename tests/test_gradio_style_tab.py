@@ -142,3 +142,47 @@ def test_style_note_is_registered_for_language_switch():
     updates = demo.switch_language("ja", None)
     note_ja = LABELS["ja"]["style_note"]
     assert any(u.get("value") == note_ja for u in updates)
+
+
+# --------------------------------------------------------------------------- #
+# 台帳 §1-104: the family-scoped list (unsupported caption, refresh on Load).
+# --------------------------------------------------------------------------- #
+def test_build_style_gallery_marks_unsupported_entries():
+    loras = [
+        {"name": "turbo", "kind": "style", "has_thumbnail": False, "supported": True},
+        {"name": "odd", "kind": "style", "has_thumbnail": False, "supported": False,
+         "unsupported_reason": "x"},
+        # An older server sends no "supported": not marked.
+        {"name": "legacy", "kind": "style", "has_thumbnail": False},
+    ]
+    assert [cap for _img, cap in build_style_gallery(loras, BASE)] == [
+        "turbo", "odd (非対応)", "legacy"]
+    # The names stay bare (they are what the prompt token carries).
+    assert style_lora_names(loras) == ["turbo", "odd", "legacy"]
+
+
+def test_model_load_chain_refreshes_the_style_gallery():
+    import gradio as gr
+
+    demo = build_ui(BASE, api_key=None)
+    gallery = next(c for c in demo.blocks.values()
+                   if isinstance(c, gr.Gallery)
+                   and c.label == LABELS["en"]["style_gallery_label"])
+    load_btn = next(c for c in demo.blocks.values()
+                    if isinstance(c, gr.Button) and c.value == LABELS["en"]["model_btn_load"])
+    fns = {dep._id: dep for dep in demo.fns.values()}
+    chained = [dep for dep in fns.values()
+               if dep.trigger_after is not None
+               and any(out is gallery for out in dep.outputs)]
+    assert len(chained) == 1
+    # Walk the .then chain back to its root: the Load button's click.
+    root = chained[0]
+    while root.trigger_after is not None:
+        root = fns[root.trigger_after]
+    assert any(t[0] == load_btn._id and t[1] == "click" for t in root.targets)
+
+
+def test_style_note_mentions_h3_ignores_the_audio_number():
+    assert "MiniMax H3" in LABELS["en"]["style_note"]
+    assert "MiniMax H3" in LABELS["ja"]["style_note"]
+    assert "音声" in LABELS["ja"]["style_note"]

@@ -179,4 +179,36 @@ describe("LoraChips", () => {
       expect(onChange).toHaveBeenCalledWith("<lora:X:0.9:0.3> a cat");
     });
   });
+
+  describe("audioStrengthHidden (台帳 §1-104, MiniMax H3)", () => {
+    it("drops the 🎥 mark, the mute toggle and the audio value — the rest of the chip stays", () => {
+      const { container } = renderWithLanguage(
+        <LoraChips prompt="<lora:Pixar_Toon:1.0:1.0> a cat" onChange={vi.fn()} audioStrengthHidden />,
+      );
+      const chip = container.querySelector(".lora-chip");
+      const classNames = Array.from(chip?.children ?? []).map((el) => el.className);
+      expect(classNames).toEqual([
+        "lora-chip-name",
+        "lora-chip-strength",
+        "lora-chip-btn",
+        "lora-chip-btn",
+        "lora-chip-remove",
+      ]);
+      expect(screen.queryByText("🎥")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /mute/i })).not.toBeInTheDocument();
+      expect(container.querySelector(".lora-chip-audio")).toBeNull();
+    });
+
+    it("leaves the default chip unchanged when false or omitted", () => {
+      for (const hidden of [false, undefined]) {
+        const { container, unmount } = renderWithLanguage(
+          <LoraChips prompt="<lora:Pixar_Toon:1.0:1.0> a cat" onChange={vi.fn()} audioStrengthHidden={hidden} />,
+        );
+        expect(container.querySelector(".lora-chip-video-icon")).not.toBeNull();
+        expect(container.querySelector(".lora-chip-audio-toggle")).not.toBeNull();
+        expect(container.querySelector(".lora-chip-audio")).not.toBeNull();
+        unmount();
+      }
+    });
+  });
 });

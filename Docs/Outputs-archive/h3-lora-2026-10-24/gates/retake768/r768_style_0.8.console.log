@@ -1,0 +1,30 @@
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      }
+    },
+    "device": "cuda"
+  },
+  "ready": {
+    "event": "ready",
+    "sampler": "euler",
+    "sage_available": true
+  }
+}

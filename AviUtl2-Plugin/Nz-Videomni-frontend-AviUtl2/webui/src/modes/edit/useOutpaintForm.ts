@@ -108,6 +108,10 @@ export interface UseOutpaintFormDeps {
    * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
    * Omitted keeps `accelerationRequestFields` sending nothing at all. */
   acceleration?: AccelerationSettings | undefined;
+  /** 台帳 §1-104: the LOADED base model's id, used only as `useLoras`'s
+   * `refreshKey` (the server's LoRA list follows the base model). Omitted ⇒
+   * fetched once on mount, as before. */
+  loraRefreshKey?: string | undefined;
 }
 
 export interface UseOutpaintFormResult {
@@ -205,7 +209,7 @@ export interface UseOutpaintFormResult {
  *    source can't leave a stale clamp behind.
  */
 export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintFormResult {
-  const { nativeBridge, initialIntent, config, engineFamily, acceleration } = deps;
+  const { nativeBridge, initialIntent, config, engineFamily, acceleration, loraRefreshKey } = deps;
   const apiClient = useMemo<ApiClient>(
     () => deps.apiClient ?? (nativeBridge ? createApiClient(nativeBridge) : defaultApiClient),
     [deps.apiClient, nativeBridge],
@@ -401,7 +405,7 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   );
 
   // --- the pinned control LoRA -------------------------------------------
-  const lorasState = useLoras({ apiClient });
+  const lorasState = useLoras({ apiClient, refreshKey: loraRefreshKey });
   const hasOutpaintLora =
     lorasState.status === "ready" &&
     lorasState.loras.some((lora) => lora.name === OUTPAINT_LORA_NAME && lora.kind === "control");

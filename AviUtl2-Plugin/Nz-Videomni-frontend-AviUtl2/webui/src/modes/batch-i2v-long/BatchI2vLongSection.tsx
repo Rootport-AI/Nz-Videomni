@@ -26,6 +26,10 @@ export interface BatchI2vLongSectionProps {
    * not start. */
   serverBusy: boolean;
   nativeBridge?: NativeBridge | undefined;
+  /** 台帳 §1-104: the LOADED base model's id, used only as `useLoras`'s
+   * `refreshKey` (the server's LoRA list follows the base model). Omitted ⇒
+   * fetched once on mount, as before. */
+  loraRefreshKey?: string | undefined;
 }
 
 /**
@@ -42,11 +46,12 @@ export interface BatchI2vLongSectionProps {
  * Must be rendered OUTSIDE `.single-layout` (the Chain screen's 2-column grid),
  * as a full-width sibling below it — see `ChainedScreen.tsx`'s fragment.
  */
-export function BatchI2vLongSection({ config, chain, serverBusy, nativeBridge }: BatchI2vLongSectionProps) {
+export function BatchI2vLongSection({ config, chain, serverBusy, nativeBridge, loraRefreshKey }: BatchI2vLongSectionProps) {
   const strings = useStrings();
   const t = strings.batchI2vLong;
   const form = useBatchI2vLongForm(config, chain, serverBusy, {
     ...(nativeBridge !== undefined ? { nativeBridge } : {}),
+    ...(loraRefreshKey !== undefined ? { loraRefreshKey } : {}),
   });
 
   // Everything is hand-editable only while the runner isn't writing rows (and

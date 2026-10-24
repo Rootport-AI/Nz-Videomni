@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { loraThumbnailUrl } from "../../api/client";
 import type { LoraEntry } from "../../api/types";
+import { useStrings } from "../../i18n/LanguageContext";
 
 export interface LoraCardProps {
   lora: LoraEntry;
@@ -19,8 +20,13 @@ export interface LoraCardProps {
  * `LORA_THUMBNAIL_NOT_FOUND` is entirely plausible even when the registry
  * *thinks* there's a thumbnail) and name. The kind badge is gone along with
  * the Control tab (第5波 Step 6) — every card `InventoryScreen` renders is a
- * style LoRA now, so a per-card kind label would be redundant. */
+ * style LoRA now, so a per-card kind label would be redundant.
+ *
+ * 台帳 §1-104: a card the server marks `supported === false` carries a
+ * 非対応 badge (its reason as the tooltip). It stays clickable — on MiniMax H3
+ * such a LoRA can still be selected and run. */
 export function LoraCard({ lora, baseUrl, onClick }: LoraCardProps) {
+  const strings = useStrings();
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const showImage = lora.has_thumbnail && baseUrl !== null && !thumbnailFailed;
 
@@ -44,6 +50,11 @@ export function LoraCard({ lora, baseUrl, onClick }: LoraCardProps) {
         <span className="lora-card-name" title={lora.name}>
           {lora.name}
         </span>
+        {lora.supported === false && (
+          <span className="lora-card-unsupported" title={lora.unsupported_reason ?? undefined}>
+            {strings.inventory.unsupportedBadge}
+          </span>
+        )}
       </button>
     </li>
   );

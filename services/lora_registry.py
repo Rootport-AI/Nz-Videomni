@@ -7,9 +7,19 @@ authoritative over the scan:
 
 1. ``config.yaml`` ``model.ic_loras`` (name -> project-relative path, or name ->
    ``IcLoraEntry`` for control adapters) — the authoritative registration;
-2. a directory scan of ``config.model.lora_dir``: every ``*.safetensors``
+2. a directory scan of the scope's LoRA directory: every ``*.safetensors``
    there is exposed under its filename stem, so a style/character LoRA dropped in
    the folder shows up without any config edit (mirrors ``services.model_registry``).
+
+FAMILY-SCOPED (台帳 §1-104). Which directory is scanned, whether the config
+registrations take part, and who judges a file's format is a
+:class:`LoraScope`, handed in by a ``scope_provider`` (the app passes
+``services.engines.lora_scope_for`` on the runner's descriptor — the ONE place
+that maps a family to a directory). No provider = today's single scope:
+``config.model.lora_dir`` plus ``ic_loras``, judged by :func:`_detect_layout`.
+Every read (``resolve`` / ``info`` / ``names`` / ``preprocess_for``) first checks
+the provider's scope and rescans when it changed, so a job submitted right after
+a base-model switch never resolves a name from the previous family's listing.
 
 Arbitrary filesystem paths are never accepted (the Pydantic ``LoraSpec`` validator
 rejects path-like names, and this layer refuses to treat a name as a path).
@@ -48,10 +58,10 @@ import logging
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
 from api.errors import lora_format_unsupported, lora_not_found
-from config import AppConfig, IcLoraEntry
+from config import PROJECT_ROOT, AppConfig, IcLoraEntry
 
 logger = logging.getLogger("ltx.loras")
 
@@ -84,6 +94,61 @@ _LAYOUT_AB = "ab"
 _LAYOUT_KOHYA = "kohya"
 _LAYOUT_UNSUPPORTED = "unsupported"
 
+#: A family's format judge: the safetensors header (``__metadata__`` included)
+#: -> ``(supported, reason)``. Declared by an engine adapter as
+#: ``LORA_VERDICT``.
+LoraVerdict = Callable[[dict], "tuple[bool, str | None]"]
+
+
+@dataclass(frozen=True)
+class LoraScope:
+    """What one registry listing covers.
+
+    ``verdict`` is ``None`` -> today's rule: :func:`_detect_layout` judges and
+    ``resolve()`` refuses an unsupported file with 422 (LTX). A ``verdict`` ->
+    it judges, and the judgement is DISPLAY ONLY: ``resolve()`` lets the file
+    through (MiniMax H3: an unsupported file may still run, 裁定 2).
+    """
+
+    family: str | None
+    #: Absolute directory scanned flat for ``*.safetensors`` (``None``: no scan).
+    lora_dir: Path | None
+    #: The same directory as GET /loras shows it (project-relative POSIX).
+    lora_dir_display: str
+    #: Whether ``config.model.ic_loras`` registrations are part of the listing.
+    include_config: bool
+    verdict: LoraVerdict | None = None
+
+    @property
+    def key(self) -> tuple:
+        return (self.family, str(self.lora_dir), self.include_config)
+
+
+def make_scope(
+    family: str | None,
+    lora_dir: Path | None,
+    *,
+    include_config: bool,
+    verdict: LoraVerdict | None = None,
+) -> LoraScope:
+    """A :class:`LoraScope` with its display path filled in: relative to the
+    project root in POSIX form (``models/MiniMaxH3/LoRA``), else absolute."""
+    if lora_dir is None:
+        display = ""
+    else:
+        try:
+            display = lora_dir.relative_to(PROJECT_ROOT).as_posix()
+        except ValueError:
+            display = lora_dir.as_posix()
+    return LoraScope(family, lora_dir, display, include_config, verdict)
+
+
+def shared_scope(config: AppConfig, family: str | None = None) -> LoraScope:
+    """Today's scope: ``config.model.lora_dir`` + the config registrations,
+    judged by :func:`_detect_layout`."""
+    raw = getattr(config.model, "lora_dir", None)
+    return make_scope(family, config._abs(raw) if raw else None, include_config=True)
+
 
 @dataclass
 class LoraEntryInfo:
@@ -106,6 +171,10 @@ class LoraEntryInfo:
     # None when the header carries no such key (style LoRAs; a config control
     # entry whose header is missing/unreadable) or the value is unparsable.
     reference_downscale_factor: float | None = None
+    #: The scope's judgement (GET /loras shows it). Without a family verdict it
+    #: is ``layout`` read as a flag; with one, the verdict's answer.
+    supported: bool = True
+    unsupported_reason: str | None = None
 
     def as_dict(self) -> dict:
         """GET /loras row (mirrors ModelEntryInfo.as_dict — no path leak)."""
@@ -122,6 +191,8 @@ class LoraEntryInfo:
             # this server ever leaves it out.
             "preprocess": self.preprocess,
             "reference_downscale_factor": self.reference_downscale_factor,
+            "supported": self.supported,
+            "unsupported_reason": self.unsupported_reason,
         }
 
 
@@ -200,38 +271,67 @@ def _detect_layout(header: dict) -> str:
 
 
 class LoraRegistry:
-    def __init__(self, config: AppConfig):
+    def __init__(
+        self,
+        config: AppConfig,
+        scope_provider: Callable[[], LoraScope] | None = None,
+    ):
         self.config = config
         # name -> project-relative (or absolute) safetensors path (string form)
         # or an IcLoraEntry (path + preprocess kind). Config-authoritative
-        # source, kept verbatim: ``preprocess_for`` reads it directly.
+        # source (part of a listing only when the scope includes config).
         self.registry: dict[str, str | IcLoraEntry] = dict(config.model.ic_loras or {})
-        # name -> LoraEntryInfo, rebuilt by rescan() (config entries + scan hits).
-        self._entries: dict[str, LoraEntryInfo] = {}
+        self._scope_provider = scope_provider or (lambda: shared_scope(config))
+        # (scope key, name -> LoraEntryInfo, scope), rebuilt by rescan() and
+        # swapped in ONE assignment, so a reader never sees the entries of one
+        # scope paired with another scope's key.
+        self._state: tuple[tuple, dict[str, LoraEntryInfo], LoraScope]
         self.rescan()
+
+    @property
+    def _entries(self) -> dict[str, LoraEntryInfo]:
+        return self._state[1]
+
+    @property
+    def scope(self) -> LoraScope:
+        """The scope the cached listing was built for."""
+        return self._state[2]
+
+    @property
+    def lora_dir_display(self) -> str:
+        """The scanned directory as GET /loras shows it (``lora_dir``)."""
+        return self.scope.lora_dir_display
 
     # ------------------------------------------------------------------ scan
 
+    def _ensure_scope(self) -> None:
+        """Rescan when the provider's scope is not the one the cache holds."""
+        if self._scope_provider().key != self._state[0]:
+            self.rescan()
+
     def rescan(self) -> None:
-        """Rebuild the entry cache: config registrations (authoritative) merged
-        with a fresh ``lora_dir`` scan. Cheap (a directory listing + header reads
-        of small JSON blobs), so the API layer runs it per GET /loras — a newly
-        dropped-in file appears without a restart (model_registry precedent)."""
+        """Rebuild the entry cache for the provider's CURRENT scope: config
+        registrations (authoritative, when the scope includes them) merged with
+        a fresh scan of the scope's directory. Cheap (a directory listing +
+        header reads of small JSON blobs), so the API layer runs it per GET
+        /loras — a newly dropped-in file appears without a restart
+        (model_registry precedent)."""
+        scope = self._scope_provider()
         entries: dict[str, LoraEntryInfo] = {}
         known_paths: set[Path] = set()
 
         # 1. Config registrations win.
-        for name, raw in self.registry.items():
+        for name, raw in (self.registry.items() if scope.include_config else ()):
             if isinstance(raw, str):
                 rel, preprocess = raw, "none"
             else:
                 rel, preprocess = raw.path, raw.preprocess
             abs_path = self.config._abs(rel)
-            entries[name] = self._build_entry(name, abs_path, preprocess, "config")
+            entries[name] = self._build_entry(name, abs_path, preprocess, "config", scope)
             known_paths.add(abs_path.resolve())
 
         # 2. Directory scan (best-effort; broken files silently dropped).
-        for found in self._scan_lora_dir():
+        for found in self._scan_lora_dir(scope.lora_dir):
             resolved = found.resolve()
             if resolved in known_paths:
                 continue  # already covered by a config registration (same file)
@@ -243,21 +343,18 @@ class LoraRegistry:
             if name in entries:
                 logger.warning("lora scan: name collision for %s (ignored)", found)
                 continue
-            info = self._build_entry(name, found, "none", "scan")
+            info = self._build_entry(name, found, "none", "scan", scope)
             if info is None:
                 continue  # unreadable header -> not surfaced from the scan
             entries[name] = info
             known_paths.add(resolved)
 
-        self._entries = entries
+        self._state = (scope.key, entries, scope)
 
-    def _scan_lora_dir(self) -> list[Path]:
-        """Flat scan of ``config.model.lora_dir`` for ``*.safetensors`` files."""
-        lora_dir = getattr(self.config.model, "lora_dir", None)
-        if not lora_dir:
-            return []
-        base = self.config._abs(lora_dir)
-        if not base.is_dir():
+    @staticmethod
+    def _scan_lora_dir(base: Path | None) -> list[Path]:
+        """Flat scan of the scope's directory for ``*.safetensors`` files."""
+        if base is None or not base.is_dir():
             return []
         found: list[Path] = []
         for path in sorted(base.iterdir()):
@@ -269,7 +366,7 @@ class LoraRegistry:
         return found
 
     def _build_entry(
-        self, name: str, abs_path: Path, preprocess: str, source: str
+        self, name: str, abs_path: Path, preprocess: str, source: str, scope: LoraScope
     ) -> LoraEntryInfo | None:
         """Build a LoraEntryInfo, reading kind/layout from the header when possible.
 
@@ -280,6 +377,10 @@ class LoraRegistry:
         ``"ab"`` default is deliberate: with no header there is nothing to judge
         a layout on, so the file is accepted and the engine is left to
         speak, rather than inventing a rejection out of missing evidence.
+
+        ``supported`` / ``unsupported_reason``: the scope's ``verdict`` on the
+        header when it has one; otherwise ``layout`` read as a flag (the reason
+        is the text after ``unsupported:``).
         """
         exists = abs_path.exists()
         has_thumbnail = abs_path.with_suffix(".png").exists()
@@ -288,6 +389,7 @@ class LoraRegistry:
         kind = "control" if preprocess != "none" else "style"
         layout = _LAYOUT_AB
         ref_downscale: float | None = None
+        verdict: tuple[bool, str | None] | None = None
         if exists:
             try:
                 header = _read_safetensors_header(abs_path)
@@ -313,6 +415,15 @@ class LoraRegistry:
                     except (TypeError, ValueError):
                         ref_downscale = None
                 layout = _detect_layout(header)
+                if scope.verdict is not None:
+                    try:
+                        verdict = scope.verdict(header)
+                    except Exception as exc:  # a malformed entry must not fail the scan
+                        verdict = (False, f"header unreadable: {type(exc).__name__}")
+        if verdict is None:
+            _, _, reason = layout.partition(":")
+            verdict = (not layout.startswith(_LAYOUT_UNSUPPORTED), reason or None)
+        supported, unsupported_reason = verdict
         return LoraEntryInfo(
             name=name,
             path=abs_path,
@@ -323,11 +434,14 @@ class LoraRegistry:
             source=source,
             exists=exists,
             reference_downscale_factor=ref_downscale,
+            supported=bool(supported),
+            unsupported_reason=None if supported else unsupported_reason,
         )
 
     # ----------------------------------------------------------------- reads
 
     def names(self) -> list[str]:
+        self._ensure_scope()
         return sorted(self._entries)
 
     def entries(self) -> list[LoraEntryInfo]:
@@ -339,22 +453,24 @@ class LoraRegistry:
 
         Used by the endpoint layer for the kind-aware reference-required check.
         """
+        self._ensure_scope()
         entry = self._entries.get(name)
         if entry is None:
             raise lora_not_found(name, detail=f"known adapters: {self.names()}")
         return entry
 
     def preprocess_for(self, name: str) -> str:
-        """Return the ``preprocess`` kind for a registered ``name`` (no file check).
+        """Return the ``preprocess`` kind for ``name`` in the current scope (no
+        file check).
 
-        ``"none"`` for string-form entries, scanned files, or an unknown name;
-        the ``IcLoraEntry.preprocess`` value for config dict entries. Used for
-        metadata annotation (``pipeline_manager._lora_metadata_entry``).
+        ``"none"`` for string-form entries, scanned files, or a name the scope
+        does not list; the ``IcLoraEntry.preprocess`` value for config dict
+        entries. Used for metadata annotation
+        (``pipeline_manager._lora_metadata_entry``).
         """
-        entry = self.registry.get(name)
-        if entry is None or isinstance(entry, str):
-            return "none"
-        return entry.preprocess
+        self._ensure_scope()
+        entry = self._entries.get(name)
+        return "none" if entry is None else entry.preprocess
 
     # --------------------------------------------------------------- resolve
 
@@ -374,28 +490,30 @@ class LoraRegistry:
         Raises ``lora_not_found`` (404) for a path-like name, an empty registry,
         an unknown name, or a registered-but-missing file; and
         ``lora_format_unsupported`` (422) for a file whose weight-key layout the
-        engine loader cannot read. Both endpoint validation loops (single and
-        chain) call this per requested adapter, so the layout refusal needs
-        no check of its own there.
+        engine loader cannot read — only in a scope WITHOUT a family verdict
+        (LTX); a verdict's "unsupported" is display only (MiniMax H3). Both
+        endpoint validation loops (single and chain) call this per requested
+        adapter, so the layout refusal needs no check of its own there.
         """
         if "/" in name or "\\" in name or ".." in name:
             raise lora_not_found(name, detail="adapter name must not be a path")
-        entry = self._entries.get(name)
+        self._ensure_scope()
+        # One read of the state: the entries and the scope below are the same pair.
+        _key, entries, scope = self._state
+        entry = entries.get(name)
         if entry is None:
-            if not self._entries:
-                raise lora_not_found(
-                    name,
-                    detail="no LoRA registry configured (model.ic_loras is empty "
-                    "and no files found in model.lora_dir)",
-                )
-            raise lora_not_found(name, detail=f"known adapters: {self.names()}")
+            if not entries:
+                detail = f"no LoRA files found in {scope.lora_dir_display}"
+                if scope.include_config:
+                    detail += " and model.ic_loras is empty"
+                raise lora_not_found(name, detail=detail)
+            raise lora_not_found(name, detail=f"known adapters: {sorted(entries)}")
         if not entry.path.exists():
             raise lora_not_found(
                 name, detail=f"registered adapter file missing: {entry.path}"
             )
-        if entry.layout.startswith(_LAYOUT_UNSUPPORTED):
-            _, _, reason = entry.layout.partition(":")
-            raise lora_format_unsupported(name, reason or entry.layout)
+        if not entry.supported and scope.verdict is None:
+            raise lora_format_unsupported(name, entry.unsupported_reason or entry.layout)
         return ResolvedLora(
             entry.path,
             float(strength),

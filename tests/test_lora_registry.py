@@ -22,8 +22,8 @@ import struct
 import pytest
 
 from api.errors import APIError
-from config import AppConfig
-from services.lora_registry import LoraRegistry
+from config import PROJECT_ROOT, AppConfig
+from services.lora_registry import LoraRegistry, make_scope, shared_scope
 
 
 # --------------------------------------------------------------------------- #
@@ -525,9 +525,9 @@ def test_resolve_unsupported_layout_is_422(tmp_path):
 
 
 def test_as_dict_key_set_unchanged_by_layout(tmp_path):
-    """``layout`` is server-internal: GET /loras keeps exactly its prior keys, so
-    no frontend build has to learn anything new (the former ``scale`` was never
-    exposed either)."""
+    """``layout`` is server-internal: GET /loras never shows it (the former
+    ``scale`` was never exposed either). §1-104 added exactly the family's
+    verdict, ``supported`` / ``unsupported_reason``."""
     lora_dir = tmp_path / "loras"
     _write_safetensors(
         lora_dir / "kohya-style.safetensors",
@@ -547,4 +547,175 @@ def test_as_dict_key_set_unchanged_by_layout(tmp_path):
         "source",
         "preprocess",
         "reference_downscale_factor",
+        "supported",
+        "unsupported_reason",
     }
+    assert reg.info("kohya-style").as_dict()["supported"] is True
+    assert reg.info("kohya-style").as_dict()["unsupported_reason"] is None
+
+
+# --------------------------------------------------------------------------- #
+# §1-104: family-scoped listing (LoraScope / scope_provider)
+# --------------------------------------------------------------------------- #
+
+#: An H3 kohya-underscore pair (the Style 3dsrx file's naming): unsupported on
+#: LTX (no dotted module path), supported on H3.
+_H3_UNDERSCORE = {
+    "lora_unet_blocks_0_attn_qkv_proj.lora_down.weight": [16, 5376],
+    "lora_unet_blocks_0_attn_qkv_proj.lora_up.weight": [21504, 16],
+    "lora_unet_blocks_0_attn_qkv_proj.alpha": [],
+}
+#: An AdaLN key no H3 target maps -> unsupported on H3 (display only).
+_H3_FOREIGN = {
+    **_H3_UNDERSCORE,
+    "diffusion_model.blocks.0.adaLN_modulation.1.lora_A.weight": [16, 5376],
+    "diffusion_model.blocks.0.adaLN_modulation.1.lora_B.weight": [32256, 16],
+}
+
+
+def _h3_verdict():
+    pytest.importorskip("h3_lora_format")
+    from services.engines.h3.adapter import LORA_VERDICT  # noqa: PLC0415
+
+    return LORA_VERDICT
+
+
+class _Switch:
+    """A scope provider whose answer the test flips (a base-model switch)."""
+
+    def __init__(self, scope):
+        self.scope = scope
+
+    def __call__(self):
+        return self.scope
+
+
+def test_default_scope_is_todays_config_lora_dir(tmp_path):
+    cfg = _config(tmp_path)
+    reg = LoraRegistry(cfg)
+    assert reg.scope == shared_scope(cfg)
+    assert reg.scope.include_config is True and reg.scope.verdict is None
+    assert reg.lora_dir_display == (tmp_path / "loras").as_posix()  # outside the project
+
+
+def test_make_scope_display_is_project_relative_posix():
+    scope = make_scope("h3", PROJECT_ROOT / "models" / "MiniMaxH3" / "LoRA", include_config=False)
+    assert scope.lora_dir_display == "models/MiniMaxH3/LoRA"
+
+
+def test_scope_switch_rescans_before_resolve(tmp_path):
+    ltx_dir, h3_dir = tmp_path / "ltx", tmp_path / "h3"
+    _write_safetensors(ltx_dir / "ltx-style.safetensors")
+    _write_safetensors(h3_dir / "h3-style.safetensors", tensors=_H3_UNDERSCORE)
+    cfg = _config(tmp_path, lora_dir=ltx_dir)
+    switch = _Switch(shared_scope(cfg, "ltx"))
+    reg = LoraRegistry(cfg, scope_provider=switch)
+    assert reg.names() == ["ltx-style"]
+    switch.scope = make_scope("h3", h3_dir, include_config=False, verdict=lambda h: (True, None))
+    # No explicit rescan(): the very next resolve sees the new family's listing.
+    assert reg.resolve("h3-style", 1.0).path == h3_dir / "h3-style.safetensors"
+    with pytest.raises(APIError) as ei:
+        reg.resolve("ltx-style", 1.0)
+    assert ei.value.code == "LORA_NOT_FOUND"
+    assert reg.lora_dir_display == h3_dir.as_posix()
+
+
+def test_h3_scope_excludes_config_ic_loras(tmp_path):
+    control = _write_safetensors(tmp_path / "ic" / "pose.safetensors")
+    h3_dir = tmp_path / "h3"
+    _write_safetensors(h3_dir / "h3-style.safetensors", tensors=_H3_UNDERSCORE)
+    cfg = _config(tmp_path, ic_loras={"pose": {"path": str(control), "preprocess": "dwpose"}})
+    reg = LoraRegistry(
+        cfg, scope_provider=lambda: make_scope("h3", h3_dir, include_config=False, verdict=_h3_verdict())
+    )
+    assert reg.names() == ["h3-style"]
+    # preprocess_for reads the scoped entry: the config's dwpose is not in scope.
+    assert reg.preprocess_for("pose") == "none"
+    assert reg.preprocess_for("h3-style") == "none"
+
+
+def test_preprocess_for_is_scoped(tmp_path):
+    control = _write_safetensors(tmp_path / "ic" / "pose.safetensors")
+    cfg = _config(tmp_path, ic_loras={"pose": {"path": str(control), "preprocess": "dwpose"}})
+    switch = _Switch(shared_scope(cfg, "ltx"))
+    reg = LoraRegistry(cfg, scope_provider=switch)
+    assert reg.preprocess_for("pose") == "dwpose"
+    switch.scope = make_scope("h3", tmp_path / "h3", include_config=False)
+    assert reg.preprocess_for("pose") == "none"
+
+
+def test_h3_underscore_kohya_is_supported(tmp_path):
+    h3_dir = tmp_path / "h3"
+    _write_safetensors(h3_dir / "style.safetensors", tensors=_H3_UNDERSCORE)
+    reg = LoraRegistry(
+        _config(tmp_path),
+        scope_provider=lambda: make_scope("h3", h3_dir, include_config=False, verdict=_h3_verdict()),
+    )
+    entry = reg.info("style")
+    assert entry.supported is True and entry.unsupported_reason is None
+    # layout stays _detect_layout's (server-internal), the verdict decides.
+    assert entry.layout.startswith("unsupported:")
+    assert reg.resolve("style", 0.8).strength == 0.8
+
+
+def test_h3_unsupported_file_is_listed_and_resolves_without_422(tmp_path):
+    h3_dir = tmp_path / "h3"
+    _write_safetensors(h3_dir / "foreign.safetensors", tensors=_H3_FOREIGN)
+    reg = LoraRegistry(
+        _config(tmp_path),
+        scope_provider=lambda: make_scope("h3", h3_dir, include_config=False, verdict=_h3_verdict()),
+    )
+    row = reg.info("foreign").as_dict()
+    assert row["supported"] is False
+    assert row["unsupported_reason"]
+    # Display only (裁定 2): the job may still run.
+    assert reg.resolve("foreign", 1.0).path == h3_dir / "foreign.safetensors"
+
+
+def test_h3_malformed_header_entry_is_listed_unsupported(tmp_path):
+    """A verdict that cannot read a header (here ``"shape": 5``) lists the file
+    as unsupported instead of failing the scan."""
+    h3_dir = tmp_path / "h3"
+    path = _write_safetensors(h3_dir / "bad.safetensors", tensors={})
+    header = {
+        "lora_unet_blocks_0_attn_qkv_proj.lora_down.weight": {"dtype": "F32", "shape": 5, "data_offsets": [0, 0]},
+        "lora_unet_blocks_0_attn_qkv_proj.lora_up.weight": {"dtype": "F32", "shape": [21504, 16], "data_offsets": [0, 0]},
+    }
+    blob = json.dumps(header).encode("utf-8")
+    path.write_bytes(struct.pack("<Q", len(blob)) + blob + bytes(16))
+
+    def exploding(_header):
+        raise TypeError("boom")
+
+    reg = LoraRegistry(
+        _config(tmp_path),
+        scope_provider=lambda: make_scope("h3", h3_dir, include_config=False, verdict=_h3_verdict()),
+    )
+    assert reg.info("bad").as_dict()["supported"] is False
+    reg = LoraRegistry(
+        _config(tmp_path),
+        scope_provider=lambda: make_scope("h3", h3_dir, include_config=False, verdict=exploding),
+    )
+    row = reg.info("bad").as_dict()
+    assert row["supported"] is False
+    assert row["unsupported_reason"] == "header unreadable: TypeError"
+
+
+def test_empty_scope_404_names_the_directory(tmp_path):
+    h3_dir = tmp_path / "h3"
+    reg = LoraRegistry(_config(tmp_path), scope_provider=lambda: make_scope("h3", h3_dir, include_config=False))
+    with pytest.raises(APIError) as ei:
+        reg.resolve("x", 1.0)
+    assert ei.value.detail == f"no LoRA files found in {h3_dir.as_posix()}"
+
+
+def test_ltx_underscore_kohya_still_422(tmp_path):
+    """The same underscore file in the LTX scope (no verdict): 422 as before."""
+    lora_dir = tmp_path / "loras"
+    _write_safetensors(lora_dir / "style.safetensors", tensors=_H3_UNDERSCORE)
+    reg = LoraRegistry(_config(tmp_path, lora_dir=lora_dir))
+    assert reg.info("style").supported is False
+    assert "underscores" in reg.info("style").unsupported_reason
+    with pytest.raises(APIError) as ei:
+        reg.resolve("style", 1.0)
+    assert ei.value.code == "LORA_FORMAT_UNSUPPORTED"

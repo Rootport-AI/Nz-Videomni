@@ -25,6 +25,7 @@ import { bindToJob, publishFormValues, publishKeyframeCount, publishSourceSlots,
 import { subscribeCreateCommands } from "../../timeline/createLiveCommands";
 import { useShowNote } from "../../shell/NoteArea";
 import { fileNameFromPath, omitStrength } from "./keyframeUtils";
+import { omitLoraAudioStrength } from "../../lora/loraTags";
 import { findOverflowFrameIdxs, nextAddPosition, placeableSlotCount } from "./keyframeGrid";
 import { KeyframeShrinkModal } from "./KeyframeShrinkModal";
 import { GenerateButtonBar } from "./GenerateButtonBar";
@@ -116,6 +117,14 @@ export interface SingleScreenProps {
    * cannot use (`featureScope.singleSectionsDisabledFor`), as finished
    * booleans. Omitted = everything usable. */
   sectionsUnavailable?: SingleSectionsDisabled | undefined;
+  /** 台帳 §1-104: the loaded base model's LoRAs have one strength only
+   * (`featureScope.loraAudioStrengthHiddenFor`), so `audio_strength` is left
+   * out of every `loras[]` entry. Omitted = sent as typed. */
+  loraAudioHidden?: boolean | undefined;
+  /** 台帳 §1-104: a LoRA in the prompt is marked unsupported by the server's
+   * list — shows a non-blocking note under Generate (it never disables the
+   * button). Omitted = no note. */
+  loraUnsupportedNotice?: boolean | undefined;
 }
 
 /** The "Create" screen: T2V generation form (minus the prompt, which lives in
@@ -142,6 +151,8 @@ export function SingleScreen({
   batchUnavailable,
   constraints,
   sectionsUnavailable,
+  loraAudioHidden,
+  loraUnsupportedNotice,
 }: SingleScreenProps) {
   const strings = useStrings();
   const configState = useConfig();
@@ -171,6 +182,8 @@ export function SingleScreen({
       batchUnavailable={batchUnavailable}
       constraints={constraints}
       sectionsUnavailable={sectionsUnavailable}
+      loraAudioHidden={loraAudioHidden}
+      loraUnsupportedNotice={loraUnsupportedNotice}
     />
   );
 }
@@ -195,6 +208,8 @@ interface SingleScreenBodyProps {
   batchUnavailable?: boolean | undefined;
   constraints?: GenerationConstraints | undefined;
   sectionsUnavailable?: SingleSectionsDisabled | undefined;
+  loraAudioHidden?: boolean | undefined;
+  loraUnsupportedNotice?: boolean | undefined;
 }
 
 function SingleScreenBody({
@@ -217,6 +232,8 @@ function SingleScreenBody({
   batchUnavailable = false,
   constraints,
   sectionsUnavailable,
+  loraAudioHidden = false,
+  loraUnsupportedNotice = false,
 }: SingleScreenBodyProps) {
   const strings = useStrings();
   const toasts = useToasts();
@@ -1013,13 +1030,17 @@ function SingleScreenBody({
     | { kind: "chain"; body: GenerateChainRequest }
     | { kind: "generate"; body: GenerateRequest } => {
     if (isA2v) return { kind: "chain", body: buildA2vRequest(conditioningImages) };
-    const request = toGenerateRequest();
+    const built = toGenerateRequest();
+    // 台帳 §1-104: likewise a base model whose LoRAs have one strength only
+    // gets no `audio_strength` (each chip's audio toggle is hidden).
+    const request =
+      loraAudioHidden && built.loras ? { ...built, loras: omitLoraAudioStrength(built.loras) } : built;
     const images = strengthOmitted ? omitStrength(conditioningImages) : conditioningImages;
     return {
       kind: "generate",
       body: images.length > 0 ? { ...request, conditioning_images: images } : request,
     };
-  }, [isA2v, buildA2vRequest, toGenerateRequest, conditioningImages, strengthOmitted]);
+  }, [isA2v, buildA2vRequest, toGenerateRequest, conditioningImages, strengthOmitted, loraAudioHidden]);
   const getSubmissionFingerprint = useCallback(() => submissionFingerprint(buildSubmission()), [buildSubmission]);
 
   const handleGenerate = () => {
@@ -1213,6 +1234,13 @@ function SingleScreenBody({
           {/* W7: the out-of-range keyframe hint is now one of these reasons — the
               old standalone `hasOverflowKeyframes` banner was folded in here. */}
           <GenerateReasonsNote reasons={generateReasonCodes} messages={generateReasonMessages} />
+          {/* 台帳 §1-104: informational only — deliberately NOT one of
+              `generateReasonCodes`, so Generate stays enabled. */}
+          {loraUnsupportedNotice && (
+            <p className="warning-banner warning-banner-mild" role="status">
+              {strings.single.loraUnsupportedNotice}
+            </p>
+          )}
           {submitState.phase === "error" && (
             <div className="card card-error">
               <p className="error-code">{submitState.code}</p>

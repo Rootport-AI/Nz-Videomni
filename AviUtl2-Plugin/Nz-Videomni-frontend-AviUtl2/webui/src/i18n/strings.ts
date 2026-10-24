@@ -1297,7 +1297,11 @@ export const en = {
     reloading: "Reloading…",
     reloadToast: (total: number, styles: number, controls: number): string =>
       `Reloaded LoRAs: ${total} total (${styles} style, ${controls} control).`,
-    emptyLoras: "No LoRAs found. Drop files into models/LTX23/StyleLoRA and Reload.",
+    /** 台帳 §1-104: `dir` is the server's `lora_dir` (it follows the active
+     * base model). */
+    emptyLoras: (dir: string): string => `No LoRAs found. Drop files into ${dir} and Reload.`,
+    /** 台帳 §1-104: the badge on a card the server marks `supported: false`. */
+    unsupportedBadge: "Unsupported",
     loadError: "Could not load the LoRA list.",
     loadingLoras: "Loading LoRAs…",
     addedToast: (name: string): string => `Added <lora:${name}:1.0:1.0> to the prompt.`,
@@ -1418,6 +1422,9 @@ export const en = {
     configFallbackWarning:
       "Could not reach the server to load presets/limits — using built-in defaults. Values may not match the running server.",
     loadingConfig: "Loading configuration…",
+    /** 台帳 §1-104: under Generate when a LoRA in the prompt is marked
+     * unsupported by the server's list. Informational — never blocks. */
+    loraUnsupportedNotice: "This LoRA's format is not supported. It may have no effect.",
     spillWarning: "Generation slows down 2-4x beyond this point.",
     /** Smart comfort marker (2026-08-18): shown INSTEAD of `spillWarning`
      * above whenever the marker itself is the smart per-resolution ceiling
@@ -3073,7 +3080,8 @@ export const ja: Strings = {
     reloading: "再読み込み中…",
     reloadToast: (total: number, styles: number, controls: number): string =>
       `LoRAを再読み込みしました: 合計 ${total} 件（画風 ${styles} 件、制御 ${controls} 件）。`,
-    emptyLoras: "LoRAが見つかりません。models/LTX23/StyleLoRA にファイルを置いてから再読み込みしてください。",
+    emptyLoras: (dir: string): string => `LoRAが見つかりません。${dir} にファイルを置いてから再読み込みしてください。`,
+    unsupportedBadge: "非対応",
     loadError: "LoRA一覧を取得できませんでした。",
     loadingLoras: "LoRAを読み込み中…",
     addedToast: (name: string): string => `プロンプトに <lora:${name}:1.0:1.0> を追加しました。`,
@@ -3154,6 +3162,7 @@ export const ja: Strings = {
     configFallbackWarning:
       "サーバーからプリセット・上限値を取得できませんでした — 内蔵の既定値を使用しています。実際のサーバーと値が異なる場合があります。",
     loadingConfig: "設定を読み込み中…",
+    loraUnsupportedNotice: "LoRAが非対応の形式です。効果がない可能性があります。",
     spillWarning: "これを超えると生成速度が2〜4倍遅くなります。",
     // 賢い快適上限マーカー（2026-08-18）: マーカー自体が賢い解像度別上限
     // （`useGenerationForm` の `isComfortMarkerSmart`）のときは上の

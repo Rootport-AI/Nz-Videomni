@@ -1380,10 +1380,22 @@ export interface LoraEntry {
    * pre-existing test fixture that builds a `LoraEntry` by hand, omits it) —
    * every consumer must treat "absent" the same as "unknown"/`null`. */
   reference_downscale_factor?: number | null;
+  /** 台帳 §1-104: `false` when the server judged the file's format not
+   * loadable by the active base model's engine (the Library shows a
+   * 非対応 badge; on MiniMax H3 the LoRA can still be selected and run).
+   * OPTIONAL — an older server omits it; absent reads as "supported". */
+  supported?: boolean;
+  /** 台帳 §1-104: the server's reason for `supported === false`, shown as
+   * the badge's tooltip. `null`/absent otherwise. */
+  unsupported_reason?: string | null;
 }
 
 export interface LorasListResponse {
   loras: LoraEntry[];
+  /** 台帳 §1-104: the directory this list was scanned from, relative to the
+   * install (e.g. `"models/MiniMaxH3/LoRA"`) — it follows the active base
+   * model. OPTIONAL — an older server omits it. */
+  lora_dir?: string;
 }
 
 /** `POST /loras/reload`'s response (Docs/API_REFERENCE.md §3.7) — an

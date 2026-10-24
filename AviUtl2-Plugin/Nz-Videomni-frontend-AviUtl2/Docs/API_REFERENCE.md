@@ -251,19 +251,23 @@ workerを停止しVRAM解放。ジョブ実行中は `409 JOB_BUSY`、読み込�
 
 ```json
 { "loras": [ {"name":"Pixar_Toon", "kind":"style", "has_thumbnail":true, "exists":true, "source":"scan",
-              "preprocess":null, "reference_downscale_factor":null}, ... ] }
+              "preprocess":null, "reference_downscale_factor":null,
+              "supported":true, "unsupported_reason":null}, ... ],
+  "lora_dir": "models/LTX23/StyleLoRA" }
 ```
 
 - 行の形は `services/lora_registry.py::LoraEntryInfo.as_dict`。**パスは漏らさない**(nameのみ)。
 - `kind`: `"style"`(画風・キャラ、参照動画不要) / `"control"`(制御、参照動画必須)。フロントでタブ分けに使う。
 - `preprocess`(str \| null、**2026-08-11追加**): 制御系アダプタの前処理種別(`"canny"`/`"pose"`/`"depth"`等)。styleアダプタや前処理不要の参照系(`deblur`等)は`null`。フロントは**このフィールドの値が`"depth"`かどうか**でチェーン(2クリップ以上)を選ぶ操作を先回りブロックする(`LORA_DEPTH_CHAIN_UNSUPPORTED`、§2)。
 - `reference_downscale_factor`(int \| null、**2026-08-11追加**): 参照動画の内部ダウンスケール倍率(`2`または`1`)。union-control系は`2`、`deblur`等のタイル化エンコード経路は`1`。
-- 呼ぶたび `config.model.lora_dir`(既定 `./models/LTX23/StyleLoRA`)を再スキャン。
-- **エンジンのローダーが読めない書式のファイルも、この一覧には出る**(2026-09-02)。一覧は書式で絞り込まない。書式の判定は生成時のLoRA名前解決で行い、そこで422 `LORA_FORMAT_UNSUPPORTED`(§2のエラーコード表)になる。一覧から消えるのは、そのファイルを置き場から取り除いたときだけ。
+- **一覧は選択中のベースモデルの系統ごとに切り替わる**(2026-10-24・台帳§1-104)。LTX 2.3／2.5は呼ぶたび `config.model.lora_dir`(既定 `./models/LTX23/StyleLoRA`)と `ic_loras` の登録を再スキャンする。MiniMax H3はベースモデルの記述子の `lora_dir`(`models/MiniMaxH3/LoRA`)だけを再スキャンし、IC-LoRAは出さない。系統とディレクトリの対応はサーバーが持つ(正本はバックエンド[`MULTI_ENGINE_DESIGN.md`](../../../Docs/MULTI_ENGINE_DESIGN.md)の「LoRAの置き場」)。**フロントは系統を知らずに一覧を使う**ので、ベースモデルを切り替えたら取り直すこと(Inventory・AppShell・Outpaint・バッチ長尺i2vの`useLoras`はすべてベースモデルの切り替えで再取得する)。
+- **`supported`(bool)・`unsupported_reason`(str \| null)(2026-10-24追加)**: その系統のローダーが読める書式か。`false`のとき`unsupported_reason`に理由が入る。Inventoryのカードは「非対応」のバッジ(`title`に理由)を出す。
+- **`lora_dir`(str、応答の最上位、2026-10-24追加)**: 選択中の系統の置き場(例 `models/MiniMaxH3/LoRA`)。Inventoryの空表示の案内文に使う。
+- **エンジンのローダーが読めない書式のファイルも、この一覧には出る**(2026-09-02)。一覧は書式で絞り込まない。**LTX 2.3／2.5**では書式の判定を生成時のLoRA名前解決で行い、そこで422 `LORA_FORMAT_UNSUPPORTED`(§2のエラーコード表)になる。**MiniMax H3は422にしない**(2026-10-24)——非対応のファイルも選べて、生成できる(効果が出ない可能性がある)。操作パネルは生成ボタンの下に黄色い注意文を出す(送信は止めない。LTXでも同じ条件で同じ文言が出て、送信時に422のエラーカードが並ぶ)。一覧から消えるのは、そのファイルを置き場から取り除いたときだけ。
 
 ### 3.7 `POST /loras/reload`(`api/loras.py::reload_loras`)— 認証不要
 
-明示再スキャン。応答 `{"total":N, "styles":n, "controls":m}`。「再読み込み」ボタン用。
+明示再スキャン。応答 `{"total":N, "styles":n, "controls":m}`。「再読み込み」ボタン用。**件数だけを返す**(`supported`・`lora_dir`は含まない。2026-10-24にGET側へ足した項目を取るには、続けて§3.6を呼び直す)。スキャンの対象は§3.6と同じく選択中の系統の置き場。
 
 ### 3.8 `GET /loras/{name}/thumbnail`(`api/loras.py::get_lora_thumbnail`)— 認証不要
 
@@ -662,6 +666,7 @@ V2V結合(元動画+続きを1本化、音声クロスフェード付き)。**�
 - **`audio_strength`(2026-08-02追加)**: LoRAの適用強度を、映像軸(既存の`strength`)と音声軸(`audio_strength`)の2軸で独立に指定できるフィールド。**省略時(null)は音声側も`strength`の値にそのまま追従し、`audio_strength`を持たない従来のリクエストと完全同一の挙動になる**(後方互換)。範囲は0.0〜2.0で、既存の`strength`(`gt=0.0`、0は拒否)と異なり**0を許容する**——`0`を指定すると音声側の重みを一切適用しない(=適用そのものをスキップする)。これはLTX 2.3において、映像目的で訓練された画風LoRA(Style LoRA。追加学習した差分重みを本体モデルに足し込む仕組み)に含まれる音声側の差分重みが、生成音声を壊す(雑音・音割れ)というコミュニティの報告への対処。
   - **軸判定のルール**: 1本のLoRAが持つ多数の重みキーのうち、どのキーが音声軸でどのキーが映像軸かは、キーをドット分割して得たコンポーネント名が判定順のどのパターンと一致するかで決まる(`engine/gguf/ic_lora_common.py::classify_lora_axis`)。コンポーネント名`video_to_audio_attn`、および`audio_`で始まるコンポーネント名は音声軸。**`audio_to_video_attn`はコンポーネント名に`audio_`を含むが、映像ストリームへ書き込むクロス注意(音声を参照して映像を更新する層)なので映像軸として扱う特例**——クロス注意はソース側ではなく書き込み先のストリームで軸を判定する。`av_ca_v2a_gate_adaln_single`等のv2a/a2v変調項にも同種の特例があり、判定順の全体は[`LORA_AUDIO_STRENGTH_WORKORDER.md`](../../../Docs/LORA_AUDIO_STRENGTH_WORKORDER.md) §3の表を参照。それ以外のコンポーネント名は映像軸。
   - **音声関連の重みを持たないLoRA(例: 登録済みIC-LoRA、`Pixar_Toon`)では、`audio_strength`を指定しても効果がない(no-op)。** 分類対象となる音声軸のキー自体がLoRAに含まれていないため。
+  - **MiniMax H3では音声だけの強度を持てない**(2026-10-24・台帳§1-104)。H3のLoRAは1本の強度が映像・音声の両方に効き、サーバーが各`LoraSpec.audio_strength`を`null`に書き換える(422にはならない)。`GET /models`のH3の`unsupported_features`に機能名`lora_audio_strength`が載るので、操作パネルは`featureScope.ts`の行でチップの音声トグルと🎥の絵文字と音声値を隠し、Singleの送信では`audio_strength`を省く(`omitLoraAudioStrength`)。LTX 2.3／2.5は従来どおり。Libraryのカードは`<lora:名前:1.0:1.0>`を挿すままで、H3では3つ目の引数は送られず、チップにも出ない。
 - **制御LoRA(kind=control)は `reference_video_id` 必須**。画風LoRA(kind=style)は不要。
 - 既存UIはプロンプト内 `<lora:名前:映像の強さ:音声の強さ>` トークンをパースして `loras` 配列に変換(`gradio_ui/handlers.py::parse_prompt_loras`、映像側weight 0.05-2.0にクランプ)。**この記法はフロント側の慣習であり、API自体は `loras` 配列で受ける**。
   - **第3引数(音声の強さ、2026-08-02追加)**: 省略時は映像の強さにそのまま追従する。クランプ範囲は**0〜2.0**で、映像側の0.05〜2.0とは下限が異なる(音声側は0を許容)。

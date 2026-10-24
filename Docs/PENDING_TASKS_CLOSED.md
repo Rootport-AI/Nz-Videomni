@@ -3089,3 +3089,11 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **何が完了したか**: 要点・機械の門・オーナーの目視（2026-10-24 全項目合格）は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §175、契約は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2（v0.5.98）を正本とする。LTX が 1,024 トークンを超えた分を切り捨てることは変わらず、トークン数は §1-111 のカウンター（3-249）で見える。
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §175、操作パネルの記録はフロントエンドの `Docs/DEVLOG.md` §147、判断材料は [`TOKEN_COUNTER_RESEARCH_NOTES.md`](TOKEN_COUNTER_RESEARCH_NOTES.md) 第 7 節。
 - **残課題**: なし。
+
+### 3-251. MiniMax H3 の Style LoRA と Turbo LoRA（起票：2026-10-19、クローズ：2026-10-24）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-104 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-104（2026-10-19 起票）。**同書側は欠番**。番号は、3-250 の次の空き番号である。
+- **到達条件**: MiniMax H3 が、利用者の置いた LoRA（Style・Motion・Turbo など）を操作パネル・Gradio・MCP から使えること。**達成した。**
+- **何が完了したか**: `models/MiniMaxH3/LoRA/` の LoRA を、FP32 の低ランク経路で適用する（int8 の重みは変えない）。LoRA を使わないジョブの出力は変わらず、LoRA ありの off と VRAM 16GB mode の出力はビット一致した。要点・機械の門・GPU の門 1〜6（オーナーの目視を含む）は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176 を正本とする。
+- **正本・出典**: 設計は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.6、裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の裁定 62〜73、契約は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.99）、操作パネルはフロントエンドの `Docs/DEVLOG.md` §148。計画・レビュー・門の記録の保管は `Docs/Outputs-archive/h3-lora-2026-10-24/`。
+- **残課題**: 動画・音声に個別の強度は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-252、LoRA 加算の高速化は同 §3-253 に起票した。

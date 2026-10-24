@@ -19,7 +19,7 @@
 
 - **概要**: MiniMax H3 では快適上限マーカーを非表示にしている。本項で、MiniMax H3（Turbo なし・int8 ConvRot）について快適上限を較正し、記述子（manifest）の `comfort` に行を足して配信する。較正が済むまで記述子に `comfort` の行は持たせない。
 - **前提**: なし。復号の VRAM は直っている（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.3 の 2a-G5）。ノイズ除去の段の VRAM の溢れは VRAM 16GB mode で解消している（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169）。判定規則と計測の作法は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §4.2（快適の判定規則）と §16（直近の較正）。GPU を使う実測は弾ごとにまとめてオーナーの了承を得る。
-- **留意**: Turbo（少ないステップ数で生成するための蒸留 LoRA。§1-104）が未実装のため 1 本の生成が長い。生成が遅すぎて較正に支障が出るなら、LoRA 対応の優先順位を上げる。`transformer_weight_class` は MiniMax H3 では常に `null`（`services/weight_class.py`）で、快適上限の表の行は種別（`requires.weight_class`）が必須なので、このまま行を足しても操作パネルの照合でどの行にも当たらない。較正の計画で種別の扱い（判定を広げて int8 ConvRot を `"8bit"` とする／種別なしの行を許す／別の種別名を足す）を決める。
+- **留意**: Turbo（少ないステップ数で生成するための蒸留 LoRA）は実装済み（CLOSED 3-251）。LoRA なしの 1 本は長いので、較正の計画では Turbo を使うかどうかを決める。`transformer_weight_class` は MiniMax H3 では常に `null`（`services/weight_class.py`）で、快適上限の表の行は種別（`requires.weight_class`）が必須なので、このまま行を足しても操作パネルの照合でどの行にも当たらない。較正の計画で種別の扱い（判定を広げて int8 ConvRot を `"8bit"` とする／種別なしの行を許す／別の種別名を足す）を決める。
 - **留意**: ① 較正は製品の既定＝**VRAM 16GB mode on** で測る（off は参考）。条件にはキーフレームの枚数も入る（条件行が K×grid 行増える。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13）。② 線は速度ではなく、共有メモリへの退避（spill）そのものの量で引く（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.1 の裁定 3）。③ ただし on ではノイズ除去に割り当て器の上限が掛かるので、境界は退避ではなく「上限での OOM」か「復号の段（上限なし）の退避」として現れる。判定規則 v3（窓の共有メモリの中央値）をどう読み替えるかは、較正の計画で決める。④ `m×n ≥ 2³¹` の実測（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13 から預けた件）は、on では行の塊で分割されるので起きず、off でだけ届きうる（算術による推測: off の fc1 は S × 28,672 で、S ≥ 約 74,900 行で届く。on の最大の行列積は out_proj の S × 5,376 で、S ≥ 約 40 万行が要る）。扱いは計画で決める。記録は同 §169。
 - **出典**: [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-10-17 の裁定）。
 
@@ -30,23 +30,17 @@
 - **留意**: 「Ref2VA のほうが A2V に向く」という根拠は一次資料に無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
 - **出典**: [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（A2V の仕組み。一次資料つき）・[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3（条件行）。
 
-### 1-104. MiniMax H3 の Style LoRA と Turbo LoRA（同時に実装）（起票：2026-10-19）
-
-- **概要**: `H3Int8Linear` と `forward_rows` に、実行時のアダプタ（bf16 の低ランク経路）を当てる仕組みを足す。量子化済みの重みへの融合はしない。Turbo LoRA〔少ないステップ数で生成するための蒸留の追加重み〕は LightX2V の配布（Apache-2.0）で、ランクは 128、qkv は 3 本を束ねた block-diagonal〔ブロック対角〕形式、AdaLN は対象外、ステップ数は 4 または 8、shift は版ごとに違う（544p は 12／3、768p は 6／3）。
-- **前提**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5 の行分割の射影に、アダプタも同じ行で切って当てること。ステップ数と shift のスライダー（既存）。
-- **出典**: [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（Turbo の形）・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の裁定 10（LoRA と Turbo は一緒に）。
-
 ### 1-105. MiniMax H3 の 1 ステップの高速化（第 1 弾：数値等価）（起票：2026-10-19）
 
 - **概要**: 出力の数値を変えない 4 件（④ は条件付き）。① QKV の活性化量子化の共有（7 群×3 本＝21 回の量子化を 1 回にする）。② ステップ間の cyclic prefetch〔次のステップのブロック 0 と 1 を先読みする〕。③ CPU の正本から pinned staging〔固定メモリの中継領域〕への先読み。④ QKV の不要なコピー・レイアウト変換の削減（条件付き: SageAttention 呼び出し前の `contiguous()` などが対象。既存設計は strided Q/K 方式を不採用としているので、数値一致と VRAM 使用量を再検証してから）。
-- **前提**: §1-104 の後（射影のコードを同じ箇所で触るため）。comfy-kitchen が量子化済みの入力の行列積を公開 API で受け付けるかの調査。
+- **前提**: §1-104 は完了（CLOSED 3-251）。射影のコードを同じ箇所で触る。comfy-kitchen が量子化済みの入力の行列積を公開 API で受け付けるかの調査。
 - **留意**: ヘッド群の拡大（14／28）は §3-245 で再評価する（§1-95 の較正の完了が前提）。kernel fusion〔RMSNorm と RoPE、SwiGLU の融合〕は数値が変わるので本弾には入れず、§3-246 の候補とする（裁定 46 の門つき）。オーナーのメモは一次資料で未裏取り。各件の評価の物差し（20 ステップでの短縮秒数と快適上限への影響）は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.6。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（高速化 5 項目。未裏取り）・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3（A-G5）・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14（2026-10-21 の事前調査）。
 
 ### 1-106. MiniMax H3 の Chained（H3 Continuum 型・FL2VA）（起票：2026-10-19）
 
 - **概要**: 直前のクリップの映像と音声の潜在の末尾を次のクリップの冒頭に置き、その行の時刻を固定して残りだけノイズ除去し、重なりを切り落として連結する（潜在の持ち越し。復号して再符号化はしない）。LTX の Chained に相当する。
-- **前提**: キーフレームの条件行（実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170）と §1-103 の部品（行ごとの時刻固定）。Turbo（§1-104。実験の費用が下がる）。操作パネルの Chained タブ（現状 H3 では灰色）。
+- **前提**: キーフレームの条件行（実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170）と §1-103 の部品（行ごとの時刻固定）。Turbo（§1-104 は完了、CLOSED 3-251。実験の費用が下がる）。操作パネルの Chained タブ（現状 H3 では灰色）。
 - **留意**: H3 Continuum の「FL2VA で検証済み」は、計画の冒頭で CHANGELOG を一次資料で確認する。継ぎ目と音声の品質の報告は無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）・[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（PR #15375 の denoise mask・LongMedia）。
 
@@ -136,6 +130,19 @@
 - **概要**: 候補は Bit-exact Triton fusion〔ビット一致を目指した融合カーネル〕・RMSNorm／RoPE／SwiGLU の kernel fusion・INT8 GEMM epilogue fusion〔行列積の後処理の融合〕・AdaLN〔条件づけ用の正規化〕の計算の再利用・Regional Compile〔部分的なコンパイル〕・CUDA Graph〔GPU の呼び出し列を記録して再生する仕組み〕。数値が変わりうる候補は裁定 46 の門つきで扱う。「INT8 ConvRot の回転の整数化」は §3-53 にあり、本項では扱わない。
 - **判断材料**: 各候補の概要と未確認の点は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.3。費用対効果は同 §14.6。
 - **出典**: 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.3、[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5（「採らないもの」の行）、[`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) (8)。
+
+#### 3-252. MiniMax H3 の LoRA で動画・音声に個別の強度（audio_strength）（起票：2026-10-24）
+
+- **概要**: H3 の LoRA は、1 本の強度が映像と音声の両方に効く。LTX にある「音声側だけ別の強度（0〜2。0 なら音声側に適用しない）」を H3 でも使えるようにし、操作パネルではチップの音声トグルと 🎥 の絵文字と音声の値を H3 でも出す。H3 では `LoraSpec.audio_strength` をサーバーが `null` に書き換えており（[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の LoraSpec の注）、機能名 `lora_audio_strength` で操作部を隠している。
+- **前提**: §1-104 は完了（CLOSED 3-251）。H3 のどの重みを音声側とみなすかの軸の判定を決めること（LTX の軸の判定は [`LORA_AUDIO_STRENGTH_WORKORDER.md`](LORA_AUDIO_STRENGTH_WORKORDER.md) §3 の表）。
+- **留意**: ① Library のカードを押したときのタグを、H3 でも 3 つ目の引数つき（`<lora:名前:1.0:1.0>`）のままにするか、H3 では 2 つ（`<lora:名前:1.0>`）にするか。② 黄色い注意文（「LoRAが非対応の形式です。」）は Library の「再読み込み」では更新されず、次にベースモデルを切り替えたときに更新される（一覧の取り直しの鍵がベースモデルの切り替えだけのため。操作パネル DEVLOG §148.4）。
+- **出典**: 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の裁定 65・設計上の判断 5、[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.6。
+
+#### 3-253. MiniMax H3 の LoRA 加算の高速化（起票：2026-10-24）
+
+- **概要**: LoRA の加算（FP32）は 1 ステップごとに時間が増え、rank の大きい Turbo で見積もりを大きく上回った。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176.5。ビット一致（off と VRAM 16GB mode が全組で一致）は保ったまま、次を調べて速くする。(1) `comfy_kitchen.int8_linear` が持つ `residual`／`residual_scale`（行列積のエピローグ〔後処理〕で差分を足す既存の口）で、f32 の受け皿の往復を省けるか（dtype の扱いは未確認）。(2) Turbo の qkv はブロック対角なので、非対角のゼロを計算しない（約 −30% の FLOP）。(3) 小さな行列積の起動回数と、B の f32 化の繰り返しのどちらが効いているかの切り分け。
+- **前提**: §1-104 は完了（CLOSED 3-251）。数値の約束（FP32 で足す・丸めは 1 回・off と on の一致）は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.6 のとおり守ること。
+- **出典**: [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.6（費用）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176.5、計画の敵対的レビュー Major 6（`Outputs-archive/h3-lora-2026-10-24/REVIEW_plan.md`）。
 
 ### 研究課題（上の改修項目より優先度が下）
 

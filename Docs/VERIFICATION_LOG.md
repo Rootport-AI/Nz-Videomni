@@ -18300,3 +18300,102 @@ dev に 3 コミット。
 
 - **台帳**: §1-112 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-250 へクローズし、[`PENDING_TASKS.md`](PENDING_TASKS.md) から削除した。
 - 次の番号: CLOSED 3-251（台帳 §3 の生きた番号は飛ばす）・本書 §176・フロントエンド DEVLOG §148。
+
+## 176. ★MiniMax H3 の LoRA（Style・Motion・Turbo）（台帳 §1-104・MiniMax H3）＝計画の敵対的レビュー（Critical 0・Major 7・Minor 14）・実装差分のレビュー 3 本・機械の門 失敗 0・GPU の門 1〜6 合格（2026-10-24）
+
+### 176.1 結論
+
+- **MiniMax H3 が、利用者の置いた LoRA（Style・Motion・Turbo など）を、操作パネル・Gradio・MCP から使えるようになった。** 置き場所は `models/MiniMaxH3/LoRA/`。同時に使う本数に制限はなく、ステップ数と shift は自動では変えない。オーナー裁定は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の裁定 62〜73。
+- **LoRA を使わないジョブは、これまでと同じ経路を通る。** 基準の指紋 `0da6111c…` は、VRAM 16GB mode の off でも on でも変わらない（門 1・2）。
+- **LoRA を使うジョブでは、off と VRAM 16GB mode の出力が全組でビット一致した**（先読みを切った同期の入れ替えを含む。門 4・5）。両経路で同じ形（行 4096 × 列 1024 の塊）を cuBLAS に渡す設計が、実機で成立した。
+- **費用**は、rank の小さい Style・Motion で 1 ステップあたり 1 割強、rank の大きい Turbo は事前の見積もりを大きく上回った（176.5）。高速化は台帳 §3-253。それでも Turbo の少ないステップ数なら、通常の 20 ステップより短く済む。
+- **門 1〜6 はすべて合格した**（門 3 は 176.6、門 6 は 176.7）。クローズ（台帳 §1-104 → CLOSED）は門 6 の後（176.8）。
+- 設計の正本は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.6。契約は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.99）。操作パネルはフロントエンド `Docs/DEVLOG.md` §148。本節は実装の中身を書き写さない。
+
+### 176.2 範囲
+
+- **入れたもの**: エンジン（`engine_h3/lora.py`・`h3_lora_format.py`・`forward_rows` の `lora_xa`・`require_fp32_matmul()`・ワーカーの `loras` と `done.h3.loras`・セルフテストの `--lora`）／バックエンド（記述子の `lora_dir`・`lora_scope_for`・`LoraRegistry` の範囲・`GET /loras` の `supported`／`unsupported_reason`／`lora_dir`・H3 アダプタの表）／操作パネル／Gradio（非対応の表示・Load 後のギャラリー更新）／MCP の説明／インストーラ（空の `LoRA` フォルダと案内ファイル）。
+- **入れなかったもの**: diffusers／PEFT の分離 QKV・量子化 LoRA・LoHa／LoKr／DoRA・テキストエンコーダ用 LoRA・Ref2VA 用の重みとの互換・快適上限の較正（台帳 §1-95）・LoRA 加算の高速化（台帳 §3-253）・動画と音声の個別の強度（台帳 §3-252）。LTX 側のコード（`engine/`）は触っていない。
+
+### 176.3 機械の門
+
+条件は §175.3 と同じ。
+
+| 門 | 結果 |
+|---|---|
+| エンジンの仮想環境の pytest | 215 件合格（変更前は 165 件）・14 件スキップ（GPU の選択式 3 件を含む）・失敗 0 |
+| アプリの仮想環境の pytest 全件 | 3,553 件合格（変更前は 3,495 件）・67 件スキップ・失敗 0 |
+| 操作パネル | `npm run typecheck` 合格・`npx vitest run --exclude "**/backend.integration.test.ts"` 3,354 件 全合格（変更前は 3,336 件） |
+
+### 176.4 敵対的レビュー
+
+| 対象 | 結果 | 取捨 |
+|---|---|---|
+| 計画（Opus） | Critical 0・Major 7・Minor 14 | Major 7 件を全採用。Minor は 13 件を採用し、1 件（注意文の文言）はオーナー裁定 73（原文のまま）。却下 0 |
+| 実装 C1（エンジン） | Critical 0・Major 0・Minor 9 | 7 件採用 |
+| 実装 C2（バックエンド） | Critical 0・Major 0・Minor 8 | 5 件採用 |
+| 実装 C3（操作パネル） | Critical 0・Major 1・Minor 7 | 全件採用 |
+
+- 計画のレビューの主な指摘（すべて設計に反映）: 系統の出どころを `/generate` の検証と同じ実行器の記述子に一本化／壊れたファイルは文章の符号化の前に拒否／FP32 の保証をテストで示す／同期の入れ替えと全ブロック常駐の確認／detach は teardown の後（順序の制約）／加算の形を 12 バイト／要素にする／1024 列の塊を最初から採る。本文は `Outputs-archive/h3-lora-2026-10-24/REVIEW_plan.md`。
+
+### 176.5 GPU の門（セルフテスト経由）
+
+開発機 RTX 4070 Ti SUPER 16GB・RAM 64GB。表と条件の正本は `Outputs-archive/h3-lora-2026-10-24/GATES.md`（本節は読み取りだけを書く）。
+
+- **門 1・2（LoRA なし・16GB mode の off／on）**: 指紋 `0da6111c…` が基準と一致。
+- **門 4（Turbo）・門 5（Style・Motion・両方・同期の入れ替え）**: off と on（と同期の入れ替え）の sha256 が**全組で一致**。LoRA の適用は全 LoRA で「対の数 > 0・飛ばし 0」。
+- **費用**（640×384・124 フレーム・sdpa・1 ステップあたり。LoRA なしは 5.40 秒）: Style または Motion が +0.8〜0.9 秒、両方で +1.2 秒、Turbo（rank 384／128）が +4.2 秒。1344×768×124 フレームの Turbo は 57.9 秒／ステップで、4 ステップの 1 本が約 4.9 分。事前の見積もり（Turbo で +3 秒）を Turbo の rank の大きさが上回った。原因の切り分けと高速化は台帳 §3-253。
+- **VRAM**: 16GB mode の on では割り当ての山は LoRA の有無で変わらない（上限つき）。off では Turbo で +615MB。主メモリのコミットの山は Turbo で +2.4GiB。
+- **FP32 の確認の訂正**: 計画の条件は「`fp32_precision == "ieee"`」だったが、torch 2.13 の既定は `"none"`（親の設定を引き継ぐ）で、全ロードを拒否する誤りだった。C1 の実測で見つかり、`allow_tf32 is False`・`get_float32_matmul_precision() == "highest"`・（属性があれば）`fp32_precision in ("ieee", "none")` に改めた。
+
+### 176.5.1 門 5 の目視と取り直し（768p・短尺）
+
+- **640×384 の目視（オーナー・2026-10-24）**: g1〜g4 は想定どおり合格。g5 の Style と Motion は、640×384 では H3 の絵が粗く、効果がノイズに埋もれて判定できなかった。g5 の混合（Style 1.0＋Motion 1.0）は、LoRA を切った off の時点で絵が崩れていた。
+- **取り直し**: 1344×768×56 フレーム・20 ステップ・16GB mode on・同一プロンプト（先頭に Motion のトリガー語「camera motion, slow push-in.」と Style のトリガー語「3dsrx,」・台詞なし）・同一 seed 42。強度は配布元の推奨（Style 0.8・Motion 1.0・混合は 0.8＋0.8）。表と台本は `Outputs-archive/h3-lora-2026-10-24/GATES.md` の「門 5 の取り直し」。
+- **オーナーの目視（合格）**:
+  - LoRA なし: 実写調で、カメラの動きは小さい。
+  - Style 0.8: ひと目で分かる 3D アニメ（Pixar）調。構図は基準に近い。
+  - Motion 1.0: 構図が大きく変わる（画面左半分を覆う大きな車両）。同一プロンプト・同一 seed なので、LoRA が重みに効いている証拠になる。
+  - 混合 0.8＋0.8: 動きが増え、絵柄もやや 3D 調になった。
+- **640×384 の混合の崩れ**は、小さい解像度で 2 本を強度 1.0 ずつ重ねたことによるモデル側の崩れか、解像度不足と見る（推測）。LoRA の加算の数式は CPU テストで参照と一致している。
+- **費用**（768p・系列約 6 万行）: rank 16 の LoRA 1 本で +1.6 秒／ステップ（+11%）、2 本で +2.3 秒（+16%）。16GB mode on では VRAM の山は LoRA の有無で変わらない。
+
+### 176.6 門 3（常駐の清潔さ・アプリ経由）— 合格
+
+- 条件: アプリの HTTP API 経由（監督が `run.ps1` で起動し、`POST /pipeline/load` で MiniMaxH3 を読み込む）。門 1 と同じ条件で、J0 LoRA なし（常駐 off）→ J1 Turbo（常駐 on）→ J2 Style（常駐 on）→ J3 LoRA なし（常駐 on）→ J4 Style（常駐 off）の順に走らせた。表と台本は `Outputs-archive/h3-lora-2026-10-24/GATES.md` の「門 3」。
+- **J0 の sha256 は、セルフテストの基準の指紋 `0da6111c…` と一致した**（アプリ経由でも LoRA なしの経路は変わらない）。
+- **J3（LoRA なし・常駐 DiT を再利用）は J0 と一致した**。J2 は J1 の Turbo を引き継がず、門 5 と同じ指紋になった。常駐の DiT は LoRA を持ち越さない。
+- J4（Style・常駐 off）は J2 と一致した。J1 と J2 も門 4・5 の指紋と一致した。
+- `metadata.json` の `ic_lora.loras[].audio_strength` はすべて `None`（サーバー側の正規化）。
+- `GET /loras` は `lora_dir = models/MiniMaxH3/LoRA` を返し、`supported` は試験ファイルだけが `false` だった。
+
+### 176.7 門 6（オーナーの目視）— 合格
+
+- 条件: 配布用 aux2 は `scripts/deploy.ps1` で実機の Plugin フォルダと配布用コピーに配置済み（2026-10-24・AviUtl2 停止中に実施）。オーナーが操作パネルで確かめた（2026-10-24）。
+- **すべて合格**。
+  - H3 を選ぶと、Inventory に `models/MiniMaxH3/LoRA` の 3 本と試験ファイルが並び、試験ファイルだけに「非対応」のバッジが付く。
+  - H3 のチップに、🎥・🔊 のトグルと音声の値が出ない。
+  - 試験ファイルを選ぶと、生成ボタンの下に黄色い注意文（「LoRAが非対応の形式です。効果がない可能性があります。」）が出て、生成ボタンは押せる。
+  - 操作パネルから Style 0.8 で 768p・20 ステップを 1 本生成し、`metadata.json` に `h3.loras` が記録された。
+  - LTX 2.3 に退行なし。ベースモデルを切り替えると一覧が LTX の LoRA に変わり、チップは従来どおり。
+- 試験ファイルは、確認の後に削除した。
+
+### 176.8 コミットと台帳
+
+- コミットは監督が dev で 4 つに分けて行う。(1) エンジン (2) バックエンド・Gradio・MCP・インストーラ (3) 操作パネル・配布用 aux2 (4) 文書・保管。ハッシュは、本節の末尾に監督が追記する。
+
+| 分割 | コミット |
+|---|---|
+| エンジン | dev `0f6647a` |
+| バックエンド・Gradio・MCP・インストーラ | dev `d425152` |
+| 操作パネル・配布用 aux2 | dev `f11ce13` |
+| 文書・保管 | 本節を含むコミット（上の 3 つの直後。ハッシュは `git log` の「§1-104 クローズ」の行） |
+
+- **台帳**: §1-104 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-251 へクローズし、[`PENDING_TASKS.md`](PENDING_TASKS.md) から削除した。新しい項目として §3-252（動画・音声に個別の強度）・§3-253（LoRA 加算の高速化）を起票した。
+
+### 176.9 教訓
+
+- **FP32 の確認の条件は、計画の文面でなく torch の実際の既定値で決める。** 新しい API の既定が「継承」だったため、計画どおりに書くと全ロードを拒否していた（実測で訂正）。
+- **MiniMax H3 の品質の目視は 768p 以上で行う。** 640×384 では絵が粗く、LoRA の効果が判定できない（176.5.1）。
+- **「ビット一致」は、測って合わせるより、形を揃える設計で作る。** 両経路で cuBLAS に渡す形（4096 行 × 1024 列の塊）を同一にしたので、一致は設計の帰結になり、門は確認だけで済んだ。
+- 次の番号: CLOSED 3-254（3-252・3-253 は台帳 §3 の生きた番号なので飛ばす）・本書 §177・フロントエンド DEVLOG §149。

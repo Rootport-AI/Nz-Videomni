@@ -410,8 +410,8 @@ class AlphaGenRequest(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    prompt: str = Field(..., min_length=1, max_length=2000)
-    negative_prompt: str = Field("", max_length=2000)
+    prompt: str = Field(..., min_length=1)
+    negative_prompt: str = Field("")
 
     # NAG（Normalized Attention Guidance, arXiv:2505.21179）— CFG を使わない
     # ネガティブプロンプト手法。蒸留パイプラインは guidance_scale=1.0 固定
@@ -826,16 +826,14 @@ class ChainClip(BaseModel):
     ``prompt`` is optional and is APPENDED to the chain's shared ``prompt`` for
     this clip's stage-1 segment (see :meth:`GenerateChainRequest.clip_prompt`);
     absent, empty or whitespace-only means the shared prompt alone. Stage 2
-    refines the whole timeline with the shared prompt only. The 2000-character
-    cap below is on this field alone; the validator of
-    :class:`GenerateChainRequest` caps the combined string as well.
+    refines the whole timeline with the shared prompt only.
     ``num_frames`` must be 8n+1. Only clip 0 may carry
     conditioning images (minimal I2V start / keyframes) — clips 1..N are the
     later segments of one continuous masked AV-latent timeline (they inherit
     continuity from the previous segment's frozen overlap latents, not images).
     """
 
-    prompt: str | None = Field(None, max_length=2000)
+    prompt: str | None = Field(None)
     num_frames: int = Field(49, ge=9, le=481)
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
 
@@ -1189,8 +1187,8 @@ class GenerateChainRequest(BaseModel):
     the seams are continuous.
     """
 
-    prompt: str = Field(..., min_length=1, max_length=2000)
-    negative_prompt: str = Field("", max_length=2000)
+    prompt: str = Field(..., min_length=1)
+    negative_prompt: str = Field("")
 
     # NAG（Normalized Attention Guidance, arXiv:2505.21179）— CFG を使わない
     # ネガティブプロンプト手法。詳細は GenerateRequest の同名フィールドを参照。
@@ -1700,16 +1698,6 @@ class GenerateChainRequest(BaseModel):
             )
         if self.nag_enabled and not self.negative_prompt.strip():
             raise ValueError("nag_enabled requires a non-empty negative_prompt")
-        # Each field is capped at 2000 on its own, but a clip's stage-1 prompt
-        # is the two joined (clip_prompt), so the joined string gets the same
-        # cap, counted the same way as the fields' max_length (len()).
-        for i in range(len(self.clips)):
-            combined = len(self.clip_prompt(i))
-            if combined > 2000:
-                raise ValueError(
-                    f"clips[{i}].prompt appended to the shared prompt is "
-                    f"{combined} characters (max 2000 combined)"
-                )
         return self
 
     def shared_prompt(self) -> str:

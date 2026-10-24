@@ -198,21 +198,21 @@ def test_chain_whitespace_only_shared_prompt_adds_no_leading_space(client):
     assert r.status_code == 202, r.text
 
 
-def test_chain_combined_prompt_of_exactly_2000_chars_is_accepted(client):
-    # 1000 + one space + 999 = 2000.
-    clips = [{"num_frames": 25}, {"num_frames": 25, "prompt": "c" * 999}]
-    r = _run_chain(client, clips, prompt="s" * 1000)
+def test_chain_prompts_over_2000_chars_are_accepted(client):
+    # No length cap: shared and per-clip prompts (Japanese, line breaks, emoji
+    # mixed in) both exceed 2000 characters and the request is still accepted.
+    unit = "\u6e56\u306e\u671d\u713c\u3051\nmist rolls in \U0001F305 "
+    shared = unit * 200
+    clip_prompt = unit * 200
+    assert len(shared) > 2000 and len(clip_prompt) > 2000
+    clips = [{"num_frames": 25}, {"num_frames": 25, "prompt": clip_prompt}]
+    r = _run_chain(client, clips, prompt=shared)
     assert r.status_code == 202, r.text
-
-
-def test_chain_combined_prompt_over_2000_chars_is_422(client):
-    # 1000 + one space + 1000 = 2001: each field is within its own cap.
-    clips = [{"num_frames": 25}, {"num_frames": 25, "prompt": "c" * 1000}]
-    r = _run_chain(client, clips, prompt="s" * 1000)
-    assert r.status_code == 422, r.text
-    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
-    assert "clips[1]" in r.text
-    assert "2001" in r.text
+    # The same request as a model: to_clip_request() (job-creation re-validation)
+    # returns for every clip, carrying the shared prompt as sent.
+    model = _chain_model(shared, [None, clip_prompt])
+    for i in range(len(clips)):
+        assert model.to_clip_request(i).prompt == shared
 
 
 def test_chain_duration_matches_timeline(client):

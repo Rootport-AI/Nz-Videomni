@@ -580,19 +580,37 @@ def test_nag_fields_omitted_defaults_disabled(client):
     assert req.nag_enabled is False
 
 
-def test_negative_prompt_over_2000_chars_rejected(client):
+def test_negative_prompt_over_2000_chars_accepted(client):
     r = client.post(
         "/api/v1/generate",
         json={**BASE, "width": 512, "height": 320, "num_frames": 49,
               "negative_prompt": "x" * 2001},
     )
-    assert r.status_code == 422
+    assert r.status_code == 202, r.text
 
 
-def test_negative_prompt_over_2000_chars_rejected_chain(client):
+def test_negative_prompt_over_2000_chars_accepted_chain(client):
     r = client.post(
         "/api/v1/generate/chain",
         json={**CHAIN_BASE, "negative_prompt": "x" * 2001},
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_prompt_over_2000_chars_accepted(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "prompt": "x" * 2001},
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_empty_prompt_rejected(client):
+    r = client.post(
+        "/api/v1/generate",
+        json={**BASE, "width": 512, "height": 320, "num_frames": 49,
+              "prompt": ""},
     )
     assert r.status_code == 422
 

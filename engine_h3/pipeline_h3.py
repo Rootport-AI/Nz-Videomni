@@ -71,6 +71,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import math
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -144,6 +145,14 @@ class H3ImageInput:
     frame_idx: int = 0
 
 
+@dataclass(frozen=True)
+class H3LoraInput:
+    """One LoRA file and its strength (engine_h3.lora; 台帳 §1-104)."""
+
+    path: str
+    strength: float = 1.0
+
+
 @dataclass
 class H3GenerateRequest:
     prompt: str
@@ -166,6 +175,8 @@ class H3GenerateRequest:
     #: VRAM 16GB mode (engine_h3.lowvram, 台帳 §1-101). The worker's default is off;
     #: the app's default (on for H3) is filled in by its adapter, which always sends it.
     vram16_mode: bool = False
+    #: LoRA files applied to the DiT for this job only (engine_h3.lora); () = none.
+    loras: tuple[H3LoraInput, ...] = ()
 
 
 # --------------------------------------------------------------------------- #
@@ -204,6 +215,43 @@ def validate_request(req: H3GenerateRequest) -> None:
             raise ValueError(f"キーフレームの画像のパスが空です（frame_idx={n}）")
     if req.attention_backend is not None and req.attention_backend not in ATTENTION_BACKENDS:
         raise ValueError(f"attention_backend は {ATTENTION_BACKENDS} のどれかです（{req.attention_backend!r}）")
+    loras = tuple(req.loras or ())
+    if loras:
+        from engine_h3.lora import inspect_lora_file  # noqa: PLC0415
+
+        for lora in loras:
+            if not str(lora.path or "").strip():
+                raise ValueError("LoRA のファイルのパスが空です")
+            try:
+                s = float(lora.strength)
+            except (TypeError, ValueError):
+                raise ValueError(f"LoRA の強度は数値で渡してください（{lora.strength!r}）") from None
+            if not (math.isfinite(s) and s > 0):
+                raise ValueError(f"LoRA の強度は正の値にしてください（{lora.strength}）")
+            # The header only: a missing or broken file is refused here, before
+            # the text encoder runs (the keys themselves never refuse a job).
+            inspect_lora_file(lora.path)
+
+
+def require_fp32_matmul() -> None:
+    """Refuse a process whose float32 matmuls may run in TF32 (the LoRA path adds in f32).
+
+    On torch 2.13 the default ``torch.backends.cuda.matmul.fp32_precision`` is
+    "none" (= inherit from ``torch.backends.fp32_precision``, itself "none"), so
+    the legacy flags are the effective ones: ``allow_tf32`` False and
+    ``get_float32_matmul_precision()`` "highest". Nothing in this engine sets
+    them; this only fails loud if something did.
+    """
+    matmul = torch.backends.cuda.matmul
+    allow_tf32 = matmul.allow_tf32
+    precision = torch.get_float32_matmul_precision()
+    fp32 = getattr(matmul, "fp32_precision", None)
+    if allow_tf32 is not False or precision != "highest" or (fp32 is not None and fp32 not in ("ieee", "none")):
+        raise RuntimeError(
+            "FP32 の行列積が TF32 に落ちる設定になっています（LoRA の FP32 加算が保証できません）: "
+            f"allow_tf32={allow_tf32!r}・float32_matmul_precision={precision!r}・"
+            f"cuda.matmul.fp32_precision={fp32!r}"
+        )
 
 
 def time_rows(layout, t_video: float, t_audio: float, device=None) -> tuple[torch.Tensor, torch.Tensor]:
@@ -469,6 +517,7 @@ class H3Pipeline:
         from engine_h3.quant_linear import require_cuda_int8  # noqa: PLC0415
 
         backends = require_cuda_int8()
+        require_fp32_matmul()
 
         if self.options.deterministic:
             torch.backends.cudnn.deterministic = True
@@ -516,6 +565,7 @@ class H3Pipeline:
         started = time.perf_counter()
         phases = _Phases(cuda=self.device.type == "cuda")
         ok = False
+        lora_report: list[dict] = []
         try:
             # Inside the try: a job refused here is a failed job and releases
             # what is kept, like any other. Still before the text encoder, so a
@@ -557,6 +607,7 @@ class H3Pipeline:
                     video_lat, audio_lat, prefetch_used = self._denoise(
                         req, text_hidden, text_tags, phases, entry,
                         cond_clean=cond_clean, cond_frame_idx=cond_frame_idx, keep=keep,
+                        lora_report=lora_report,
                     )
                 del text_hidden, text_tags, cond_clean
                 _free_cuda()
@@ -573,6 +624,9 @@ class H3Pipeline:
             # cached until the next job's encode, competing with AviUtl2's preview.
             _free_cuda()
         mem = _mem_gib()
+        h3 = {"phases": phases.data, "quant_backends": _backend_summary(self.quant_backends)}
+        if req.loras:
+            h3["loras"] = lora_report   # only for a LoRA job: the LoRA-off payload is unchanged
         return {
             "seed_used": int(req.seed),
             "sampler": self.sampler,
@@ -595,7 +649,7 @@ class H3Pipeline:
             "keep_resident_used": "on" if keep else "off",
             "vram16_mode_used": "on" if req.vram16_mode else "off",
             "images_used": len(req.images or ()),
-            "h3": {"phases": phases.data, "quant_backends": _backend_summary(self.quant_backends)},
+            "h3": h3,
         }
 
     def _attention_for(self, req: H3GenerateRequest) -> str:
@@ -852,7 +906,7 @@ class H3Pipeline:
 
     def _denoise(
         self, req, text_hidden, text_tags, phases: _Phases, entry: dict,
-        cond_clean=None, cond_frame_idx=(), keep=False,
+        cond_clean=None, cond_frame_idx=(), keep=False, lora_report=None,
     ):
         from engine_h3.dit import (  # noqa: PLC0415
             H3SeqLayout,
@@ -893,6 +947,20 @@ class H3Pipeline:
         vram16 = vram16_entry = counters0 = None
         cap_set = False
         try:
+            if req.loras:
+                # Attached on the CPU before the placement, so the block swap
+                # (its prefetch plan packs every buffer of a block) carries A / B
+                # with their block. The file objects go once attached.
+                from engine_h3 import lora as _lora  # noqa: PLC0415
+
+                files = [(_lora.load_lora_file(item.path), float(item.strength)) for item in req.loras]
+                report = _lora.attach(dit, files)
+                del files
+                if lora_report is not None:
+                    lora_report.extend(report)
+                self._log("denoise: LoRA " + ", ".join(
+                    f"{r['name']} x{r['strength']} ({r['pairs_applied']} pairs, {len(r['skipped'])} skipped)"
+                    for r in report))
             if req.vram16_mode:
                 vram16, vram16_entry, counters0, cap_set, n_blocks = self._vram16_begin(dev, n_blocks, dit)
             service, prefetch_used = self._place_dit(dit, prefetch=self._prefetch_for(req), blocks_on_gpu=n_blocks)
@@ -985,6 +1053,15 @@ class H3Pipeline:
                 except Exception as exc:  # noqa: BLE001 -- teardown must never fail a job
                     self._log(f"block swap prefetch teardown failed (ignored): {exc!r}")
                 service.release_installed()
+            # LoRA off the DiT, unconditionally (a no-op without LoRA), so a kept
+            # DiT never carries this job's LoRA into the next one. ORDER: after
+            # teardown_prefetch, whose ``_release`` writes ``mod._buffers[name]``
+            # back BY NAME -- detaching first would put the A / B buffers back
+            # (Docs/MINIMAX_H3_DESIGN.md §6.6). Before ``_park_dit``, so they are
+            # not moved for nothing.
+            from engine_h3 import lora as _lora  # noqa: PLC0415
+
+            _lora.detach(dit)
             if ok and keep:
                 entry["dit_parked_tensors"] = self._park_dit(dit)
                 self._resident = {**(self._resident or {}), "dit": dit, "cfg": cfg}

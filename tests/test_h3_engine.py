@@ -921,7 +921,8 @@ GOLDEN_GENERATE_KEYS = [
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
-    "vram16_mode",   # VRAM 16GB mode (台帳 §1-101), at the end
+    "vram16_mode",   # VRAM 16GB mode (台帳 §1-101)
+    "loras",         # LoRA (台帳 §1-104), at the end; [] = none, always sent
 ]
 GOLDEN_DONE_KEYS = [
     "seed_used", "sampler", "num_inference_steps", "shift_video", "shift_audio",
@@ -1938,3 +1939,679 @@ def test_vram16_begin_passes_an_indexed_device(monkeypatch, tmp_path):
     assert cap_set and counters0 == {"num_alloc_retries": 0, "num_ooms": 0} and n == 8   # 3-block DiT: 8 >= 3 = no swap, kept
     assert record["cap_fraction"] == round(10 / 16, 4)
     assert seen == ["mem_get_info", "memory_reserved", "memory_stats", "set_fraction"]
+
+
+# --------------------------------------------------------------------------- #
+# LoRA (台帳 §1-104, engine_h3.lora): a float32 low-rank path on the output
+# --------------------------------------------------------------------------- #
+
+_LORA_TARGET = re.compile(r"(token_refiner\.)?blocks\.\d+\.(attn\.qkv_proj|attn\.out_proj|mlp\.fc1|mlp\.fc2)")
+
+
+def _lora_targets(dit):
+    return [(n, m) for n, m in dit.named_modules() if _LORA_TARGET.fullmatch(n)]
+
+
+def _tiny_lora_tensors(dit, *, rank=4, dtype=torch.float32, alpha=None, naming="ab", refiner=True, seed=1, scale=0.3):
+    """A LoRA file's tensors for every target of ``dit`` (A [r, in], B [out, r])."""
+    g = torch.Generator().manual_seed(seed)
+    t = {}
+    for name, mod in _lora_targets(dit):
+        if name.startswith("token_refiner") and not refiner:
+            continue
+        a = (torch.randn(rank, mod.in_features, generator=g) * scale).to(dtype)
+        b = (torch.randn(mod.out_features, rank, generator=g) * scale).to(dtype)
+        if naming == "ab":
+            stem, sa, sb = f"diffusion_model.{name}", "lora_A", "lora_B"
+        elif naming == "kohya":
+            stem, sa, sb = name, "lora_down", "lora_up"
+        else:
+            stem, sa, sb = "lora_unet_" + name.replace(".", "_"), "lora_down", "lora_up"
+        t[f"{stem}.{sa}.weight"] = a
+        t[f"{stem}.{sb}.weight"] = b
+        if alpha is not None:
+            t[f"{stem}.alpha"] = torch.tensor(float(alpha))
+    return t
+
+
+def _write_lora(tmp_path, name, tensors) -> Path:
+    """``_write_sft`` plus 0-dim tensors (the alpha scalars of real files have shape [])."""
+    path = tmp_path / name
+    doc, blobs, off = {}, [], 0
+    for key, ten in tensors.items():
+        data = ten.contiguous().reshape(-1).view(torch.uint8).numpy().tobytes()
+        doc[key] = {"dtype": _ST_DTYPES[ten.dtype], "shape": list(ten.shape), "data_offsets": [off, off + len(data)]}
+        blobs.append(data)
+        off += len(data)
+    head = json.dumps(doc).encode()
+    with open(path, "wb") as f:
+        f.write(struct.pack("<Q", len(head)))
+        f.write(head)
+        for blob in blobs:
+            f.write(blob)
+    return path
+
+
+def _module_state(dit) -> dict:
+    """Everything attach may touch, per module (names only: valid on meta too)."""
+    return {
+        n: (list(m._buffers), sorted(m._non_persistent_buffers_set), list(m._forward_hooks),
+            sorted(k for k in m.__dict__ if k.startswith("_lora")))
+        for n, m in dit.named_modules()
+    }
+
+
+def test_lora_col_chunk_is_one_head_group():
+    from engine_h3.lowvram import Vram16Plan
+
+    assert C.LORA_COL_CHUNK == C.VRAM16_HEAD_GROUP * 128 == Vram16Plan().head_group * HD   # head_dim 128
+    assert 7168 % C.LORA_COL_CHUNK == 0   # H3's q / k / v width: a head group never straddles a chunk
+
+
+def test_lora_attach_and_detach_restore_every_module(monkeypatch, tmp_path):
+    from engine_h3 import lora as L
+    from engine_h3.sft_load import drop_to_meta
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit)
+    before, sd_keys = _module_state(dit), list(dit.state_dict())
+    assert not any(k.startswith("_lora") for m in dit.modules() for k in m.__dict__)
+    with torch.no_grad():
+        want = dit(tokens, **kw)
+    lf = L.load_lora_file(_write_lora(tmp_path, "l.safetensors", _tiny_lora_tensors(dit, alpha=4)))
+    targets = len(_lora_targets(dit))
+    (rep,) = L.attach(dit, [(lf, 1.0)])
+    assert rep == {"name": "l.safetensors", "strength": 1.0, "layout": "ab", "dtype": "F32",
+                   "pairs_applied": targets, "skipped": []}
+    qkv = dit.blocks[0].attn.qkv_proj
+    assert {"_lora_A_0", "_lora_B_0"} <= set(qkv._buffers) & qkv._non_persistent_buffers_set
+    assert len(qkv._forward_hooks) == 1 and qkv._lora_A_0.device.type == "cpu"
+    assert list(dit.state_dict()) == sd_keys            # non-persistent: the state dict does not change
+    with torch.no_grad():
+        lit = dit(tokens, **kw)
+    assert not torch.equal(lit[0], want[0])
+    assert L.detach(dit) == targets and L.detach(dit) == 0     # idempotent
+    assert _module_state(dit) == before
+    with torch.no_grad():
+        again = dit(tokens, **kw)
+    assert all(torch.equal(a, w) for a, w in zip(again, want))
+    # on meta too (a released DiT)
+    L.attach(dit, [(lf, 1.0)])
+    drop_to_meta(dit)
+    assert dit.blocks[0].attn.qkv_proj._lora_A_0.device.type == "meta"
+    assert L.detach(dit) == targets and _module_state(dit) == before
+
+
+def test_lora_fp32_proof_and_the_chunked_reference():
+    """Part 1: an input a bf16 LoRA provably loses (bf16 rounds 1 + 2^-12 to 1, so
+    the sum is 0), computed in f32. Part 2: rows > VRAM16_ROW_CHUNK, columns >
+    LORA_COL_CHUNK, two LoRAs: equal to an explicit f32 reference built with the
+    same chunks, rounded to bf16 once."""
+    from engine_h3 import lora as L
+    from engine_h3.lowvram import row_chunks
+
+    k = 256
+    root = torch.nn.Module()
+    root.lin = torch.nn.Linear(k, 2, bias=False).to(torch.bfloat16)
+    torch.nn.init.zeros_(root.lin.weight)
+    a = torch.empty(1, k)
+    a[0, 0::2], a[0, 1::2] = 1 + 2**-12, -1.0
+    b = torch.tensor([[1.0], [3.0]])
+    assert a.bfloat16().float().sum() == 0
+    L.attach(root, [(L.H3LoraFile("t", "ab", "F32", {"lin": (a, b, 1.0)}), 1.0)])
+    x = torch.ones(3, k, dtype=torch.bfloat16)
+    with torch.no_grad():
+        got = root.lin(x)
+    ref = torch.mm(torch.mm(x.float(), a.t()), b.t()).bfloat16()
+    bf16_way = (x @ a.bfloat16().t()) @ b.bfloat16().t()
+    assert torch.equal(got, ref) and torch.equal(got[0], torch.tensor([2**-5, 3 * 2**-5]).bfloat16())
+    assert not torch.equal(got, bf16_way)
+
+    g = torch.Generator().manual_seed(9)
+    m, k, n = C.VRAM16_ROW_CHUNK + 5, 64, C.LORA_COL_CHUNK + 300
+    root = torch.nn.Module()
+    root.lin = torch.nn.Linear(k, n, bias=True).to(torch.bfloat16)
+    a0, b0 = torch.randn(3, k, generator=g), torch.randn(n, 3, generator=g)
+    a1, b1 = torch.randn(5, k, generator=g).bfloat16(), torch.randn(n, 5, generator=g).bfloat16()
+    L.attach(root, [(L.H3LoraFile("f0", "ab", "F32", {"lin": (a0, b0, 0.5)}), 0.8),
+                    (L.H3LoraFile("f1", "ab", "BF16", {"lin": (a1, b1, 1.0)}), 1.3)])
+    x = torch.randn(m, k, generator=g).bfloat16()
+    with torch.no_grad():
+        got = root.lin(x)
+        ref = torch.nn.functional.linear(x, root.lin.weight, root.lin.bias)
+        for r0, r1 in row_chunks(m, C.VRAM16_ROW_CHUNK):
+            xs0 = torch.mm(x[r0:r1].float(), a0.t()) * (0.8 * 0.5)
+            xs1 = torch.mm(x[r0:r1].float(), a1.float().t()) * 1.3
+            for c0 in range(0, n, C.LORA_COL_CHUNK):
+                c1 = min(c0 + C.LORA_COL_CHUNK, n)
+                d = torch.mm(xs0, b0[c0:c1].t())
+                d.addmm_(xs1, b1[c0:c1].float().t())
+                ref[r0:r1, c0:c1] = (ref[r0:r1, c0:c1].float() + d).bfloat16()
+    assert len(row_chunks(m, C.VRAM16_ROW_CHUNK)) == 2 and torch.equal(got, ref)
+
+
+def test_lora_every_matmul_operand_is_f32(monkeypatch, tmp_path):
+    """``torch.mm`` / ``Tensor.addmm_`` spied during an off and a VRAM 16GB mode
+    forward with a BF16 and an F16 LoRA (the int8 kernel is faked with F.linear, the
+    DiT has no torch.mm of its own): every operand of every LoRA matmul is f32."""
+    # Covers torch.mm / Tensor.addmm_ only; the torch.equal FP32 proof and the vram16 == off test cover the rest.
+    from engine_h3 import lora as L
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit)
+    files = [(L.load_lora_file(_write_lora(tmp_path, f"{n}.safetensors", _tiny_lora_tensors(dit, dtype=dt, seed=s))), 1.0)
+             for n, dt, s in (("bf", torch.bfloat16, 1), ("hf", torch.float16, 2))]
+    L.attach(dit, files)
+    seen = []
+    real_mm, real_addmm = torch.mm, torch.Tensor.addmm_
+
+    def mm(a, b, *args, **kwargs):
+        seen.append(("mm", a.dtype, b.dtype))
+        return real_mm(a, b, *args, **kwargs)
+
+    def addmm_(self, a, b, *args, **kwargs):
+        seen.append(("addmm_", self.dtype, a.dtype, b.dtype))
+        return real_addmm(self, a, b, *args, **kwargs)
+
+    monkeypatch.setattr(torch, "mm", mm)
+    monkeypatch.setattr(torch.Tensor, "addmm_", addmm_)
+    with torch.no_grad():
+        dit(tokens, **kw)
+        dit(tokens.clone(), vram16=Vram16Plan(), **kw)
+    assert any(s[0] == "mm" for s in seen) and any(s[0] == "addmm_" for s in seen)
+    assert all(dt == torch.float32 for s in seen for dt in s[1:]), sorted(set(seen), key=str)
+
+
+def test_lora_alpha_scale_and_no_alpha(monkeypatch, tmp_path):
+    """alpha / rank (here 8 / 4 = 2) and the strength multiply the LoRA; without alpha the
+    scale is 1.0. Doubling is exact, so alpha 8 == B pre-multiplied by 2, bit for bit."""
+    from engine_h3 import lora as L
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit)
+    with_alpha = _tiny_lora_tensors(dit, alpha=8.0)
+    no_alpha = {k: (v * 2 if ".lora_B." in k else v) for k, v in _tiny_lora_tensors(dit).items()}
+    fa = L.load_lora_file(_write_lora(tmp_path, "a.safetensors", with_alpha))
+    fn = L.load_lora_file(_write_lora(tmp_path, "n.safetensors", no_alpha))
+    assert {s for _a, _b, s in fa.modules.values()} == {2.0} and {s for _a, _b, s in fn.modules.values()} == {1.0}
+    outs = []
+    for lf, strength, scale in ((fa, 1.0, 2.0), (fn, 1.0, 1.0), (fa, 0.5, 1.0)):
+        L.attach(dit, [(lf, strength)])
+        assert dit.blocks[0].mlp.fc1._lora_specs[0].scale == scale
+        with torch.no_grad():
+            outs.append(dit(tokens, **kw))
+        L.detach(dit)
+    assert all(torch.equal(a, b) for a, b in zip(outs[0], outs[1]))
+    assert not torch.equal(outs[2][0], outs[0][0])
+
+
+def test_lora_kohya_and_ab_names_give_the_same_output(monkeypatch, tmp_path):
+    from engine_h3 import lora as L
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit)
+    outs, layouts = [], []
+    for naming in ("ab", "kohya", "kohya_underscore"):
+        lf = L.load_lora_file(_write_lora(tmp_path, f"{naming}.safetensors",
+                                          _tiny_lora_tensors(dit, alpha=4.0, naming=naming)))
+        (rep,) = L.attach(dit, [(lf, 1.0)])
+        layouts.append(rep["layout"])
+        assert rep["pairs_applied"] == len(_lora_targets(dit))
+        with torch.no_grad():
+            outs.append(dit(tokens, **kw))
+        L.detach(dit)
+    assert layouts == ["ab", "kohya", "kohya_underscore"]
+    assert all(torch.equal(a, b) for o in outs[1:] for a, b in zip(o, outs[0]))
+
+
+def test_lora_misfit_pairs_are_skipped_and_recorded(tmp_path):
+    from engine_h3 import lora as L
+
+    dit = _tiny_vram16_dit(tmp_path)
+    t = _tiny_lora_tensors(dit)
+    t["diffusion_model.blocks.0.mlp.fc1.lora_B.weight"] = torch.zeros(2 * FFN, 3)        # rank 3 vs A's 4
+    t["diffusion_model.blocks.9.mlp.fc1.lora_A.weight"] = torch.zeros(4, HID)            # no block 9
+    t["diffusion_model.blocks.9.mlp.fc1.lora_B.weight"] = torch.zeros(2 * FFN, 4)
+    t["diffusion_model.blocks.1.mlp.fc2.lora_A.weight"] = torch.zeros(4, FFN, dtype=torch.uint8)   # dtype
+    t["diffusion_model.blocks.0.adaln_proj.linear.lora_A.weight"] = torch.zeros(4, 8)   # outside the targets
+    lf = L.load_lora_file(_write_lora(tmp_path, "odd.safetensors", t))
+    (rep,) = L.attach(dit, [(lf, 1.0)])
+    reasons = {s["module"]: s["reason"] for s in rep["skipped"]}
+    assert set(reasons) == {"(unmapped keys)", "blocks.1.mlp.fc2", "blocks.0.mlp.fc1", "blocks.9.mlp.fc1"}
+    assert "U8" in reasons["blocks.1.mlp.fc2"] and "shape" in reasons["blocks.0.mlp.fc1"]
+    assert "not in this model" in reasons["blocks.9.mlp.fc1"]
+    assert rep["pairs_applied"] == len(_lora_targets(dit)) - 2
+    assert not hasattr(dit.blocks[0].mlp.fc1, "_lora_specs") and not hasattr(dit.blocks[1].mlp.fc2, "_lora_specs")
+    assert rep["name"] == "odd.safetensors"   # the file name only, never the path
+
+
+def test_lora_several_files_accumulate():
+    """Two LoRAs on one float32 Linear: base + s0 (x A0^T) B0^T + s1 (x A1^T) B1^T."""
+    from engine_h3 import lora as L
+
+    g = torch.Generator().manual_seed(3)
+    root = torch.nn.Module()
+    root.lin = torch.nn.Linear(16, 12)
+    a0, b0, a1, b1 = (torch.randn(*s, generator=g) for s in ((2, 16), (12, 2), (3, 16), (12, 3)))
+    x = torch.randn(7, 16, generator=g)
+    with torch.no_grad():
+        base = root.lin(x)
+        L.attach(root, [(L.H3LoraFile("0", "ab", "F32", {"lin": (a0, b0, 1.0)}), 0.5),
+                        (L.H3LoraFile("1", "ab", "F32", {"lin": (a1, b1, 0.25)}), 2.0)])
+        got = root.lin(x)
+    want = base + 0.5 * (x @ a0.t()) @ b0.t() + 0.5 * (x @ a1.t()) @ b1.t()
+    assert [s.k for s in root.lin._lora_specs] == [0, 1]
+    assert torch.allclose(got, want, rtol=1e-5, atol=1e-5) and not torch.allclose(got, base)
+
+
+def test_lora_reaches_the_token_refiner_through_the_hook(monkeypatch, tmp_path):
+    from engine_h3 import lora as L
+
+    dit = _tiny_vram16_dit(tmp_path)
+    text = torch.randn(5, TEXT, generator=torch.Generator().manual_seed(2)).to(torch.bfloat16)
+    with torch.no_grad():
+        want = dit.refine_text(text)
+    L.attach(dit, [(L.load_lora_file(_write_lora(tmp_path, "l.safetensors", _tiny_lora_tensors(dit))), 1.0)])
+    hit = []
+    real_apply = L.apply
+    monkeypatch.setattr(L, "apply", lambda mod, x, out, *a, **k: hit.append(mod) or real_apply(mod, x, out, *a, **k))
+    with torch.no_grad():
+        got = dit.refine_text(text)
+    refiner = {id(m) for n, m in _lora_targets(dit) if n.startswith("token_refiner")}
+    assert refiner and {id(m) for m in hit} == refiner
+    assert type(dit.token_refiner.blocks[0].attn.qkv_proj) is torch.nn.Linear   # not replaced
+    assert not torch.equal(got, want)
+
+
+@pytest.mark.parametrize("heads, head_group, row_chunk", [(16, None, None), (4, 2, 16), (4, 1, 7)])
+def test_lora_vram16_matches_off(monkeypatch, tmp_path, heads, head_group, row_chunk):
+    """LoRA on: the whole DiT forward in VRAM 16GB mode == off, bit for bit (the
+    int8 kernel faked in float64, the LoRA's own f32 matmuls real). (16, None, None)
+    = the shipped constants (2 head groups of 8 = 1,024 columns each); the other
+    rows shrink the head group, the column chunk (= head group x 128, as shipped)
+    and the row chunk together. f32(h) @ A^T runs once per block (``xa_for``) and
+    every ``forward_rows`` gets it."""
+    from engine_h3 import lora as L
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    if head_group is None:
+        plan = Vram16Plan()
+    else:
+        monkeypatch.setattr(C, "LORA_COL_CHUNK", head_group * HD)
+        monkeypatch.setattr(C, "VRAM16_ROW_CHUNK", row_chunk)
+        plan = Vram16Plan(head_group=head_group, row_chunk=row_chunk)
+    dit = _tiny_vram16_dit(tmp_path, heads=heads)
+    tokens, kw = _tiny_forward_inputs(dit)
+    with torch.no_grad():
+        plain = dit(tokens, **kw)
+    files = [(L.load_lora_file(_write_lora(tmp_path, f"{s}.safetensors", _tiny_lora_tensors(dit, seed=s, rank=r))), st)
+             for s, r, st in ((1, 4, 1.0), (2, 6, 0.7))]
+    L.attach(dit, files)
+    xa_calls, rows_xa = [], []
+    real_xa, real_apply = L.xa_for, L.apply
+    monkeypatch.setattr(L, "xa_for", lambda mod, x: xa_calls.append(mod) or real_xa(mod, x))
+
+    def apply(mod, x, out, n0=0, n1=None, xa=None):
+        if n1 is not None:
+            rows_xa.append(xa is not None)
+        return real_apply(mod, x, out, n0, n1, xa=xa)
+
+    monkeypatch.setattr(L, "apply", apply)
+    with torch.no_grad():
+        want = dit(tokens, **kw)
+        got = dit(None, tokens_box=[tokens.clone()], vram16=plan, **kw)
+    assert not torch.equal(want[0], plain[0])
+    for g, w in zip(got, want):
+        assert torch.isfinite(w).all() and torch.equal(g, w)
+    assert xa_calls == [b.attn.qkv_proj for b in dit.blocks]          # once per block
+    groups = math.ceil(heads / plan.head_group)
+    assert len(rows_xa) == 3 * groups * len(dit.blocks) and all(rows_xa)
+
+
+def test_lora_buffers_are_in_the_prefetch_slots(tmp_path):
+    from engine.transformer.block_swap_prefetch import _enumerate_slots
+    from engine_h3 import lora as L
+
+    dit = _tiny_vram16_dit(tmp_path)
+    L.attach(dit, [(L.load_lora_file(_write_lora(tmp_path, "l.safetensors", _tiny_lora_tensors(dit))), 1.0)])
+    qkv = dit.blocks[0].attn.qkv_proj
+    slots = [(mod, name, is_param) for mod, name, is_param, _t in _enumerate_slots(dit.blocks[0])]
+    assert (qkv, "_lora_A_0", False) in slots and (qkv, "_lora_B_0", False) in slots
+    L.detach(dit)
+    assert not any(name.startswith("_lora") for _m, name, *_ in _enumerate_slots(dit.blocks[0]))
+
+
+def test_lora_buffers_ride_the_synchronous_block_swap(monkeypatch, tmp_path):
+    """The synchronous swap path (``_patch_block``: ``blk.to(device)`` for the window)
+    hands the LoRA buffers to ``Tensor.to`` with their block (device "cpu" here, so
+    the call is spied rather than seen as a move); the swapped forward gives the
+    unswapped LoRA forward's numbers; after detach no LoRA buffer is left."""
+    from engine.transformer.block_swap_service import BlockSwapService
+    from engine_h3 import lora as L
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path, layers=3)
+    tokens, kw = _tiny_forward_inputs(dit)
+    L.attach(dit, [(L.load_lora_file(_write_lora(tmp_path, "l.safetensors", _tiny_lora_tensors(dit))), 1.0)])
+    with torch.no_grad():
+        want = dit(tokens, **kw)
+    service = BlockSwapService(blocks_on_gpu=1, device=torch.device("cpu"))
+    service.install(dit)
+    assert service.last_prefetch_used == "off"
+    moved = []
+    real_to = torch.Tensor.to
+
+    def spy_to(self, *a, **k):
+        moved.append(id(self))
+        return real_to(self, *a, **k)
+
+    t_emb = dit.adaln_embed(kw["t_unique"])
+    adaln_index = kw["time_index"] * 3 + kw["modality"]
+    monkeypatch.setattr(torch.Tensor, "to", spy_to)
+    with torch.no_grad():
+        dit.blocks[0](tokens, t_emb, adaln_index, kw["rope_cos"], kw["rope_sin"])
+    monkeypatch.setattr(torch.Tensor, "to", real_to)
+    assert id(dit.blocks[0].attn.qkv_proj._lora_A_0) in moved and id(dit.blocks[0].mlp.fc2._lora_B_0) in moved
+    assert id(dit.blocks[1].attn.qkv_proj._lora_A_0) not in moved          # outside the window of 1
+    with torch.no_grad():
+        got = dit(tokens, **kw)
+    assert all(torch.equal(g, w) for g, w in zip(got, want))
+    service.release_installed()
+    L.detach(dit)
+    for block in dit.blocks:
+        for mod in block.modules():
+            assert not any(n.startswith("_lora") for n in mod._buffers)
+            assert not any(n.startswith("_lora") for n in mod._non_persistent_buffers_set)
+
+
+def test_lora_buffer_dtype_is_watched(tmp_path):
+    from engine_h3 import lora as L
+
+    dit = _tiny_vram16_dit(tmp_path)
+    L.attach(dit, [(L.load_lora_file(_write_lora(tmp_path, "l.safetensors", _tiny_lora_tensors(dit))), 1.0)])
+    fc2 = dit.token_refiner.blocks[0].mlp.fc2
+    fc2._buffers["_lora_A_0"] = fc2._lora_A_0.half()
+    with torch.no_grad(), pytest.raises(RuntimeError, match="LoRA buffer _lora_A_0"):
+        fc2(torch.zeros(3, FFN, dtype=torch.bfloat16))
+
+
+def _tiny_job_pipe(monkeypatch, tmp_path):
+    """The REAL generate / _denoise / _decode on a tiny DiT (template:
+    ``test_keep_resident_state_transitions_with_a_tiny_dit``); returns
+    ``(pipe, latents, job)``."""
+    from engine_h3 import audio_vae as AV
+    from engine_h3 import media_out as MO
+    from engine_h3 import pipeline_h3 as P
+    from engine_h3 import video_vae as VV
+
+    _fake_int8(monkeypatch)
+    path = tmp_path / "tiny.safetensors"
+    _write_sft(path, _tiny_dit_tensors(layers=3, refiner=2, grid=1025, rank=8))
+    _header, cfg = h3_format.inspect_h3_dit(str(path))
+    pipe = P.H3Pipeline(P.H3Paths(str(path), "te", "vv", "av", "tok"), P.H3LoadOptions(blocks_on_gpu=1),
+                        device="cpu", progress=lambda *a: None, log=lambda m: None)
+    pipe._dit_cfg = cfg
+    latents = []
+    monkeypatch.setattr(pipe, "_encode", lambda prompt, phases, **kw: (
+        torch.randn(5, TEXT, generator=torch.Generator().manual_seed(3)).to(torch.bfloat16),
+        torch.ones(5, dtype=torch.long)))
+
+    class FakeDecoder(torch.nn.Module):
+        def decode(self, z, tiled=True):
+            latents.append(z.clone())
+            return torch.zeros((22, 64, 64, 3), dtype=torch.uint8)
+
+    class FakeAudio(torch.nn.Module):
+        def decode(self, a):
+            return torch.zeros((2, 800 * a.shape[-1]))
+
+    monkeypatch.setattr(VV.H3VideoDecoder, "from_file", classmethod(lambda cls, *a, **k: FakeDecoder()))
+    monkeypatch.setattr(AV.H3AudioVAE, "from_file", classmethod(lambda cls, *a, **k: FakeAudio()))
+    monkeypatch.setattr(MO, "write_mp4", lambda *a, **k: 1)
+
+    def job(keep, loras=(), vram16=False):
+        req = P.H3GenerateRequest(prompt="p", seed=7, width=64, height=64, num_frames=22, output_path="o.mp4",
+                                  num_inference_steps=2, keep_resident=keep, vram16_mode=vram16,
+                                  loras=tuple(P.H3LoraInput(str(p), s) for p, s in loras))
+        return pipe.generate(req)
+
+    return pipe, latents, job
+
+
+def _tiny_job_lora(tmp_path, name="l.safetensors", seed=1):
+    """A LoRA file for the 3-block, 2-refiner tiny DiT of ``_tiny_job_pipe`` (shapes from a meta build)."""
+    from engine_h3.dit import H3DiT
+    from engine_h3.quant_linear import swap_in_int8_linears
+
+    _header, cfg = h3_format.inspect_h3_dit(str(tmp_path / "tiny.safetensors"))
+    with torch.device("meta"):
+        shapes = H3DiT(cfg)
+        swap_in_int8_linears(shapes, cfg.quant, bias_dtype_of=lambda n: torch.bfloat16)
+    return _write_lora(tmp_path, name, _tiny_lora_tensors(shapes, seed=seed, alpha=4.0))
+
+
+def test_lora_detach_runs_after_the_prefetch_teardown(monkeypatch, tmp_path):
+    """Review Major 5: ``_release`` writes ``mod._buffers[name]`` back by name, so
+    detach comes after ``teardown_prefetch`` (and ``release_installed``), and before
+    ``_park_dit``."""
+    from engine.transformer.block_swap_service import BlockSwapService
+    from engine_h3 import lora as L
+
+    pipe, _latents, job = _tiny_job_pipe(monkeypatch, tmp_path)
+    lora = _tiny_job_lora(tmp_path)
+    order = []
+    for name in ("teardown_prefetch", "release_installed"):
+        real = getattr(BlockSwapService, name)
+        monkeypatch.setattr(BlockSwapService, name, lambda self, _n=name, _r=real: order.append(_n) or _r(self))
+    real_detach, real_park = L.detach, pipe._park_dit
+    monkeypatch.setattr(L, "detach", lambda dit: order.append("detach") or real_detach(dit))
+    monkeypatch.setattr(pipe, "_park_dit", lambda dit: order.append("park") or real_park(dit))
+    done = job(True, loras=[(lora, 1.0)])
+    assert order[-4:] == ["teardown_prefetch", "release_installed", "detach", "park"], order
+    (rep,) = done["h3"]["loras"]
+    assert rep["name"] == "l.safetensors" and rep["pairs_applied"] == 3 * 4 + 2 * 4 and rep["skipped"] == []
+    assert str(tmp_path) not in json.dumps(done["h3"]["loras"])
+
+
+@pytest.mark.parametrize("vram16", [False, True])
+def test_lora_job_then_plain_job_equals_the_baseline(monkeypatch, tmp_path, vram16):
+    """J0 no LoRA (from the file, released) -> J1 LoRA, kept -> J2 no LoRA on the kept
+    DiT: J2 == J0 bit for bit, J1 differs, and the kept DiT carries no LoRA
+    buffer, non-persistent entry, hook or attribute. ``h3.loras`` only in J1."""
+    pipe, latents, job = _tiny_job_pipe(monkeypatch, tmp_path)
+    lora = _tiny_job_lora(tmp_path)
+    d0 = job(False, vram16=vram16)
+    d1 = job(True, loras=[(lora, 1.0)], vram16=vram16)
+    kept = pipe._resident["dit"]
+    for mod in kept.modules():
+        assert not any(n.startswith("_lora") for n in list(mod._buffers) + list(mod._non_persistent_buffers_set))
+        assert not mod._forward_hooks and not any(k.startswith("_lora") for k in mod.__dict__)
+    d2 = job(False, vram16=vram16)
+    assert d2["h3"]["phases"]["denoise"]["dit_source"] == "resident"
+    assert torch.equal(latents[2], latents[0]) and not torch.equal(latents[1], latents[0])
+    assert list(d0["h3"]) == list(d2["h3"]) == GOLDEN_H3_KEYS
+    assert list(d1["h3"]) == GOLDEN_H3_KEYS + ["loras"]
+
+
+def test_lora_failed_job_still_detaches(monkeypatch, tmp_path):
+    from engine_h3 import lora as L
+    from engine_h3.dit import H3DiT
+
+    pipe, _latents, job = _tiny_job_pipe(monkeypatch, tmp_path)
+    lora = _tiny_job_lora(tmp_path)
+    attached = []
+    real_attach = L.attach
+    monkeypatch.setattr(L, "attach", lambda dit, files: attached.append(dit) or real_attach(dit, files))
+
+    def boom(self, *a, **k):
+        raise RuntimeError("embed failed")
+
+    monkeypatch.setattr(H3DiT, "embed_rows", boom)
+    with pytest.raises(RuntimeError, match="embed failed"):
+        job(True, loras=[(lora, 1.0)])
+    (dit,) = attached
+    assert not any(k.startswith("_lora") for m in dit.modules() for k in list(m._buffers) + list(m.__dict__))
+    assert not any(m._forward_hooks for m in dit.modules())
+    assert pipe._resident is None
+
+
+def test_request_validation_loras(monkeypatch, tmp_path):
+    """Refused in Japanese inside generate's try, before the text encoder runs."""
+    from engine_h3.pipeline_h3 import H3GenerateRequest, H3LoraInput, validate_request
+
+    good = _write_lora(tmp_path, "good.safetensors", {"diffusion_model.blocks.0.mlp.fc1.lora_A.weight": torch.zeros(2, 4)})
+    broken = tmp_path / "broken.safetensors"
+    broken.write_bytes(b"\xff" * 64)
+    base = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4")
+    validate_request(H3GenerateRequest(**base, loras=(H3LoraInput(str(good)), H3LoraInput(str(good), 2.0))))
+    for lora, msg in (
+        (H3LoraInput(" "), "パスが空"),
+        (H3LoraInput(str(good), 0.0), "強度"),
+        (H3LoraInput(str(good), -1.0), "強度"),
+        (H3LoraInput(str(good), float("nan")), "強度"),
+        (H3LoraInput(str(good), float("inf")), "強度"),
+        (H3LoraInput(str(good), "abc"), "数値"),
+        (H3LoraInput(str(tmp_path / "nope.safetensors")), "ありません"),
+        (H3LoraInput(str(broken)), "読めません"),
+    ):
+        with pytest.raises(ValueError, match=msg):
+            validate_request(H3GenerateRequest(**base, loras=(lora,)))
+    pipe = _stubbed_pipe(monkeypatch)
+    calls = []
+    monkeypatch.setattr(pipe, "_encode", lambda *a, **k: calls.append("encode"))
+    with pytest.raises(ValueError):
+        pipe.generate(H3GenerateRequest(**base, loras=(H3LoraInput(str(broken)),)))
+    assert calls == []
+
+
+def test_inspect_lora_file_reads_the_header_only(tmp_path):
+    from engine_h3 import lora as L
+
+    path = _write_lora(tmp_path, "k.safetensors", {
+        "lora_unet_blocks_0_mlp_fc1.lora_down.weight": torch.zeros(2, 4),
+        "lora_unet_blocks_0_mlp_fc1.lora_up.weight": torch.zeros(6, 2),
+        "lora_unet_blocks_0_adaln_proj_linear.lora_down.weight": torch.zeros(2, 4),
+    })
+    km = L.inspect_lora_file(path)
+    assert km.layout == "kohya_underscore" and set(km.pairs) == {"blocks.0.mlp.fc1"} and not km.supported
+
+
+def test_worker_loras_key(monkeypatch):
+    from engine_h3 import worker
+
+    loras, ignored = worker._loras({"loras": [{"path": "a.safetensors", "strength": 0.5, "audio_strength": 0.3},
+                                              {"path": "b.safetensors", "strength": None}]})
+    assert [(x.path, x.strength) for x in loras] == [("a.safetensors", 0.5), ("b.safetensors", 1.0)]
+    assert ignored == ["audio_strength"]
+    assert worker._loras({}) == ((), []) and worker._loras({"loras": None}) == ((), [])
+    for bad in ("a.safetensors", [{"strength": 1.0}], ["a"]):
+        with pytest.raises(ValueError):
+            worker._loras({"loras": bad})
+    base = {"prompt": "p", "seed": 1, "width": 640, "height": 384, "num_frames": 124, "output_path": "o.mp4"}
+    assert worker._generate_request(base).loras == ()
+    assert worker._generate_request({**base, "loras": [{"path": "x"}]}).loras[0].path == "x"
+
+    logs, seen = [], []
+
+    class FakePipe:
+        def generate(self, req):
+            seen.append(req)
+            return {"attention_used": "sdpa"}
+
+    monkeypatch.setattr(worker, "_PIPE", FakePipe())
+    monkeypatch.setattr(worker, "_emit", lambda event, **f: None)
+    monkeypatch.setattr(worker, "_log", logs.append)
+    worker._do_generate({**base, "op": "generate", "loras": [{"path": "d/a.safetensors", "audio_strength": 1.0}]})
+    assert seen[0].loras[0].path == "d/a.safetensors"
+    assert "loras[].audio_strength" in logs[0] and "a.safetensors" in logs[0]
+
+
+def test_worker_selftest_lora_options():
+    from engine_h3 import worker
+
+    args = worker._selftest_parser().parse_args([
+        "--transformer", "t", "--text-encoder", "te", "--video-vae", "vv", "--audio-vae", "av",
+        "--tokenizer-dir", "tok", "--output", "o.mp4", "--lora", "a.safetensors", "--lora", "b.safetensors",
+        "--lora-strength", "0.7",
+    ])
+    assert worker._selftest_generate_message(args, "o.mp4")["loras"] == [
+        {"path": "a.safetensors", "strength": 0.7}, {"path": "b.safetensors", "strength": 0.7}]
+    assert worker._selftest_generate_message(_selftest_args(), "o.mp4")["loras"] == []
+
+
+def test_golden_done_h3_keys_with_lora(monkeypatch, tmp_path):
+    """``h3.loras`` is added only for a job with LoRA; the top-level keys do not change."""
+    from engine_h3 import pipeline_h3
+
+    good = _write_lora(tmp_path, "good.safetensors", {"diffusion_model.blocks.0.mlp.fc1.lora_A.weight": torch.zeros(2, 4)})
+    pipe = _stubbed_pipe(monkeypatch)
+
+    def denoise(req, h, t, phases, entry, lora_report=None, **kw):
+        lora_report.append({"name": "good.safetensors"})
+        return torch.zeros(1), torch.zeros(1), "on"
+
+    monkeypatch.setattr(pipe, "_denoise", denoise)
+    base = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4")
+    done = pipe.generate(pipeline_h3.H3GenerateRequest(**base, loras=(pipeline_h3.H3LoraInput(str(good)),)))
+    assert list(done) == GOLDEN_DONE_KEYS and list(done["h3"]) == GOLDEN_H3_KEYS + ["loras"]
+    assert done["h3"]["loras"] == [{"name": "good.safetensors"}]
+    done = pipe.generate(pipeline_h3.H3GenerateRequest(**base))
+    assert list(done["h3"]) == GOLDEN_H3_KEYS
+
+
+_LORA_DIR = ROOT / "models" / "MiniMaxH3" / "LoRA"
+_DIT_FILE = ROOT / "models" / "MiniMaxH3" / "Weights" / "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+
+
+@_GPU
+@pytest.mark.parametrize("name, pairs", [
+    ("minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors", 208),
+    ("3dsrx_minimax_h3.safetensors", 200),
+    ("camera_motion_h3_lora_v1_3000_pruned.safetensors", 208),
+])
+def test_gpu_trial_lora_files_attach_to_the_real_dit(name, pairs):
+    """The three trial files against the real DiT's shapes (built on meta; the LoRA
+    tensors are read, so this is opt-in with the GPU tests)."""
+    from engine_h3 import lora as L
+    from engine_h3.dit import H3DiT
+    from engine_h3.quant_linear import swap_in_int8_linears
+
+    path = _LORA_DIR / name
+    if not (path.is_file() and _DIT_FILE.is_file()):
+        pytest.skip("trial LoRA or DiT file not present")
+    _header, cfg = h3_format.inspect_h3_dit(str(_DIT_FILE))
+    with torch.device("meta"):
+        dit = H3DiT(cfg)
+        swap_in_int8_linears(dit, cfg.quant, bias_dtype_of=lambda n: torch.bfloat16)
+    (rep,) = L.attach(dit, [(L.load_lora_file(path), 1.0)])
+    assert (rep["pairs_applied"], rep["skipped"]) == (pairs, [])
+    assert L.detach(dit) == pairs
+
+
+def test_fp32_matmul_check(monkeypatch):
+    """The torch defaults pass; TF32 by any of the three switches is refused."""
+    import types
+
+    from engine_h3 import pipeline_h3 as P
+
+    P.require_fp32_matmul()   # this venv's defaults
+    ok = {"allow_tf32": False, "fp32_precision": "none"}
+    for bad in ({"allow_tf32": True}, {"fp32_precision": "tf32"}, {"precision": "high"}):
+        state = {**ok, **bad}
+        monkeypatch.setattr(torch.backends.cuda, "matmul", types.SimpleNamespace(
+            allow_tf32=state["allow_tf32"], fp32_precision=state["fp32_precision"]))
+        monkeypatch.setattr(torch, "get_float32_matmul_precision", lambda s=state: s.get("precision", "highest"))
+        with pytest.raises(RuntimeError, match="TF32"):
+            P.require_fp32_matmul()
+    for fp32 in ("ieee", "none"):
+        monkeypatch.setattr(torch.backends.cuda, "matmul", types.SimpleNamespace(allow_tf32=False, fp32_precision=fp32))
+        monkeypatch.setattr(torch, "get_float32_matmul_precision", lambda: "highest")
+        P.require_fp32_matmul()
+    monkeypatch.setattr(torch.backends.cuda, "matmul", types.SimpleNamespace(allow_tf32=False))   # older torch: no attribute
+    P.require_fp32_matmul()

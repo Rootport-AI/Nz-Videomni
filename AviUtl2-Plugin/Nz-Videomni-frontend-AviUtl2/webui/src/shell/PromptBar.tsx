@@ -1,6 +1,7 @@
 import { useStrings } from "../i18n/LanguageContext";
 import { LoraChips } from "../lora/LoraChips";
 import { isValidPrompt } from "../modes/single/paramUtils";
+import { isOverTokenLimit, TokenCounter } from "./TokenCounter";
 
 export interface PromptBarProps {
   value: string;
@@ -16,6 +17,10 @@ export interface PromptBarProps {
    * an intermediate, not-yet-final string. */
   onCompositionStart?: (() => void) | undefined;
   onCompositionEnd?: (() => void) | undefined;
+  /** §1-111: token count of the shared prompt (`<lora:>` stripped) and the
+   * engine's limit; see `TokenCounter`. Omitted/`null` count = no counter. */
+  tokenCount?: number | null | undefined;
+  tokenLimit?: number | null | undefined;
 }
 
 /** The prompt input, shared across Create and Chain (Mock/AVIUTL2_DESIGN_BRIEF.md
@@ -30,16 +35,19 @@ export interface PromptBarProps {
  * apply in Chain mode", §3-3) was removed together with its `promptBar.chainNote`
  * string — with it gone this component no longer depends on the current mode at
  * all, so the `mode` prop is gone too. */
-export function PromptBar({ value, onChange, hiddenNames, onCompositionStart, onCompositionEnd }: PromptBarProps) {
+export function PromptBar({ value, onChange, hiddenNames, onCompositionStart, onCompositionEnd, tokenCount, tokenLimit }: PromptBarProps) {
   const strings = useStrings();
   const error = isValidPrompt(value) ? null : strings.common.promptLengthError;
 
   return (
     <div className="prompt-bar">
       <label className="field prompt-bar-field">
-        <span className="field-label">{strings.promptBar.label}</span>
+        <span className="prompt-field-head">
+          <span className="field-label">{strings.promptBar.label}</span>
+          <TokenCounter count={tokenCount} limit={tokenLimit} />
+        </span>
         <textarea
-          className="prompt-input"
+          className={`prompt-input${isOverTokenLimit(tokenCount, tokenLimit) ? " input-warning" : ""}`}
           value={value}
           placeholder={strings.promptBar.placeholder}
           rows={3}
@@ -48,9 +56,7 @@ export function PromptBar({ value, onChange, hiddenNames, onCompositionStart, on
           onCompositionStart={onCompositionStart}
           onCompositionEnd={onCompositionEnd}
         />
-        <span className="field-hint">
-          {value.length}/2000{error ? ` — ${error}` : ""}
-        </span>
+        {error && <span className="field-hint">{error}</span>}
       </label>
       <LoraChips prompt={value} onChange={onChange} hiddenNames={hiddenNames} />
     </div>

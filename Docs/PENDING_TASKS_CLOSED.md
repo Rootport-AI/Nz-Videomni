@@ -3073,3 +3073,11 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: 文言の差し替えは配布用コピーの aux2 だけに配置済み。実機の aux2 は AviUtl2 を閉じて `deploy.ps1` を流すと新しい文言になる。
 - **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §173（目視と文言の差し替えは §173.7）、操作パネルの記録はフロントエンドの `Docs/DEVLOG.md` §145。
 - **残課題**: なし。
+
+### 3-249. 操作パネルのプロンプト欄にトークンカウンターを付ける（LTX 2.3・2.5・MiniMax H3）（起票：2026-10-22、クローズ：2026-10-24）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-111 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-111（2026-10-22 起票）。**同書側は欠番**。番号は、同書 §3 の生きた項目（3-246〜3-248）を飛ばした次の空き番号である。
+- **到達条件**: 共通プロンプト欄・ネガティブプロンプト欄・Chained の各クリップに、選択中のベースモデルの実際のトークナイザーで数えたトークン数が出て、上限を超えたら赤くなること（生成は妨げない）。**達成した。**
+- **何が完了したか**: 設計・G0 の実測・機械の門・既知の挙動は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §174、契約は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.1 の補足と §6.2b (e)（v0.5.97）、決めた経緯は [`TOKEN_COUNTER_RESEARCH_NOTES.md`](TOKEN_COUNTER_RESEARCH_NOTES.md) を正本とする。オーナーの目視（2026-10-24）は全項目合格。1 回目の目視のあと、オーナーの指示でカウンターに単位 `tokens` を付け（`876 / 1024 tokens`・上限を確かめていない〔`null`〕モデルは `876 tokens`）、オーナーが目視で確かめた。
+- **正本・出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §174、操作パネルの記録はフロントエンドの `Docs/DEVLOG.md` §146。
+- **残課題**: なし。2,000 文字の制限の撤廃は別項目で、[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-112 に残る。

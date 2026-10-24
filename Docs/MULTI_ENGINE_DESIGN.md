@@ -302,6 +302,7 @@ MiniMax H3 ────→ h3         （engine_h3/ + .venv-engine-h3）
 - **対応表はアダプタのクラスではなく、モジュールパスを文字列で持つ**（`FAMILY_BY_ID`）。呼ばれた系統だけを `importlib` で解決するので、ベースモデルを列挙したいだけのプロセス（インストーラ・MCPサーバー・起動時の記述子検査）が、全アダプタを芋づるに読み込む代金を払わずに済む。
 - **`ltx25` アダプタと `h3` アダプタは `ltx` アダプタを継承している。** 共有しているのは `@@LTX@@` プロトコル・サブプロセスの起動と後始末・進捗の受け取り・mock バックエンドで、**エンジン世代で本当に違う事実だけ**を上書きする（どの仮想環境とワーカーか、どのワーカーログへ書くか、どのカテゴリがどのペイロード項目になるか、子プロセスに渡す環境変数、扱える機能の範囲）。
 - **数値の規約はアダプタが規則表 `REQUEST_RULES`（型は `RequestRules`）として宣言する。** フレーム数・解像度の倍数・fps・ステップ数と shift に加え、キーフレームを置ける位置と、省略された強度の既定もここにある（§7）。
+- **プロンプトのトークンの数え方もアダプタが持つ**（関数 `count_prompt_tokens`。宣言の無い系統は数えない）。トークナイザーの種類・資産の在りか・前処理はエンジンの知識なので、記述子には置かない。振り分けは `services/engines/__init__.py` の `count_prompt_tokens`、トークナイザーの読み込みと保持は `services/prompt_tokens.py`、窓口は `POST /utils/prompt-tokens`（仕様書 §6.1 の補足）。各系統の数え方は各アダプタの docstring が正本で、決めた経緯は [`TOKEN_COUNTER_RESEARCH_NOTES.md`](TOKEN_COUNTER_RESEARCH_NOTES.md)。
 - **「汎用の EngineRunner」と「エンジン別アダプタ」への分割は行っていない。** 共有できたのはすでに1ファイルに固まっていた部分で、別ファイルへ切り出す実利が無かった。**3例目の MiniMax H3 でも分割は要らなかった**（`H3Runner` も `LTXRunner` を継ぐ。§8.1）。次の系統で改めて判断する。
 
 **現行コードは書き直さない。** `_build_load_payload` は「ペイロードのキー集合と挿入順まで契約であり、`tests/test_model_swap_load.py` のゴールデンスナップショットで固定されている」と自身のドキュメント文字列に書いている。系統を足すときも、既存系統の振る舞いを変えないこと——変えていないことは、このゴールデンスナップショットが通り続けることで確認できる。
@@ -432,7 +433,8 @@ config.yaml の `lora_dir`（Style LoRA の置き場）と `ic_loras`（IC-LoRA 
     "shift_video":         {"min": 1, "max": 20, "step": 0.1, "default": 12},
     "shift_audio":         {"min": 1, "max": 20, "step": 0.1, "default": 3}
   },
-  "keyframes": {"step": 1, "offset": 0}
+  "keyframes": {"step": 1, "offset": 0},
+  "prompt_token_limit": null
 }
 ```
 
@@ -595,6 +597,8 @@ MiniMax H3 の規則は `services/engines/h3/adapter.py` の `REQUEST_RULES` に
 - **寄せる場所**: `validate_for_family` は `fill_defaults` → `violation`（数値の違反）→ `normalize_keyframes` の順に呼ぶ。寄せる計算はフレーム数が正しいと分かってから行う。`normalize_keyframes` は 0 をそのまま残し、それ以外を格子へ切り下げて「0 より大きい最小の格子点〜最後に置ける格子点」に収め、同じ点に寄る 2 枚があれば違反の文を返す（`request_validation_failed`）。続けて、強度が `None` で系統の既定があれば書き戻す。式と文言の正本は `services/engines/ltx/request_rules.py` の docstring である。
 - **系統が分かる前には寄せない**: 全系統に共通の config の値と、`GenerateRequest` の検査（pydantic）での 8n+1 の丸めは置かない（オーナー裁定。[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 の裁定 56）。スキーマに残るのは系統に依存しない枚数の上限だけである。
 - **強度の省略**: スキーマの `strength` は省略でき、省略は「系統の既定」を意味する。LTX は 0.8 で埋まり、アダプタ・ワーカー・`metadata.json` には今までどおり数値が届く。H3 には強度の概念が無いので `None` のまま記録され、値を送った要求は 422 `FEATURE_UNSUPPORTED`（機能名 `keyframe_strength`）で断る（同 裁定 57）。
+
+**プロンプトのトークン数の上限も規則表が持つ**（`prompt_token_limit`）。画面のトークンカウンターが比べるためだけに `constraints` で配り、サーバーは検査しない。値と意味の正本は仕様書 §6.2b (c)(e)。
 
 ### 作業の順序 【オーナー裁定】
 
@@ -898,6 +902,7 @@ MiniMax H3 の規則は `services/engines/h3/adapter.py` の `REQUEST_RULES` に
 | `PipelineManager` の状態機械 | `services/pipeline_manager.py` の5状態と、その遷移 | どのエンジンでも「未ロード→読み込み中→準備完了→実行中／エラー」は同じ |
 | 記述ファイル基盤 | `scripts/manifests/*.json` と `scripts/install_ltx.ps1` の読み込み・検証・移行の仕組み | 「スクリプトはモデル名を持たない」形になっている。§4 はこの上に足すだけ |
 | ジョブ実行中のガード | `api/pipeline.py` の409 `JOB_BUSY` | §6.2 のガード(1)がそのまま流用する |
+| トークナイザーの読み込みと保持 | `services/prompt_tokens.py`（`tokenizer_file`・`tokenizer_gguf`） | `tokenizer.json` を読む部品と、GGUF に同梱された JSON を読む部品だけを持ち、どのファイルをどう数えるかは知らない（それはアダプタ。§5.2） |
 
 > **mock バックエンドはエンジン非依存ではない。** 実物の mock は**LTXの出力の形そのものを模して**おり、クリップ連結の窓計算（`chain_math.py`）まで使って LTX と同じフレーム規約の結果を組み立てる。したがって汎用側へは切り出さず、`ltx` アダプタの中に置いたままにしてある——`ltx25` アダプタはそれを**継承して**使っている（LTX 2.5 も同じ `8n+1` 規約を共有するため、模造の骨格がそのまま通用した）。3例目の MiniMax H3 は別規約（17n+5）の系統だが、この mock を自分の名札（`mock-h3`）で共有して足りたので、共通化は要らなかった（§8.1）。次の系統で改めて判断する。
 
@@ -914,6 +919,8 @@ MiniMax H3 の規則は `services/engines/h3/adapter.py` の `REQUEST_RULES` に
 | 推論パイプライン一式 | `engine/`（ltx）・`engine25/`（ltx25） | モデル構造そのもの。それぞれの仮想環境側に閉じたままでよい |
 | フレーム規約の定数 | `chain_math.py` の `VIDEO_TIME_FACTOR` / `AUDIO_LATENTS_PER_SEC` | LTXの映像VAE（時間8分の1圧縮）と音声レイテント（毎秒25）の実装値。**LTX の2系統はどちらも同じ規約なので、この定数は共有している。H3 の規約は `engine_h3/constants.py` と規則表が持つ**（§7） |
 | キーフレームの位置と強度の既定 | 各系統の規則表の `keyframe_step`・`keyframe_offset`・`keyframe_strength_default`（型は `services/engines/ltx/request_rules.py` の `RequestRules`） | 置ける位置は VAE の時間方向の規約で決まる（LTX は潜在フレームの先頭の画素＝8n+1、H3 は画素のフレーム番号そのもの）。強度の有無もエンジンの事実である（§7）。H3 の時間座標の式は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3 |
+| プロンプトのトークンの数え方 | 各アダプタの `count_prompt_tokens` | トークナイザーの種類・資産の在りか・前処理（開始トークン・追加の特殊トークン・前後の空白）はエンジンの事実である（§5.2） |
+| プロンプトのトークン数の上限 | 各系統の規則表の `prompt_token_limit` | テキストエンコーダーが読む長さはエンジンの事実である（§7） |
 | H3 のアダプタと規則表 | `services/engines/h3/`（`adapter.py`） | H3 固有の4分類表・規則表 `REQUEST_RULES`・`UNSUPPORTED_FEATURES`・ワーカーへのメッセージの組み立て。LTX の `LTXRunner` を継ぐ |
 | H3 の推論パイプライン一式 | `engine_h3/` | モデル構造そのもの。専用の仮想環境側に閉じる（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §8） |
 | H3 のヘッダ判定 | `h3_format.py`（リポジトリ直下・torch 非依存） | アプリ側（torch の無い仮想環境）の事前検査と、ワーカーの両方から呼ぶため。判定は safetensors のテンソル名の指紋で行う（同 §7） |

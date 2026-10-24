@@ -107,7 +107,10 @@ async def list_models() -> dict[str, Any]:
             ``shift_audio`` の ``{min, max, step, default}``。LTX は null＝
             ステップ数 8 固定で shift なし）、``keyframes``（キーフレームを
             置ける位置の格子 ``{step, offset}``。LTX は ``{8, 1}``＝位置 0 と
-            8n+1、MiniMax H3 は ``{1, 0}``＝0〜num_frames−1 の任意のフレーム））。ほかに
+            8n+1、MiniMax H3 は ``{1, 0}``＝0〜num_frames−1 の任意のフレーム）、
+            ``prompt_token_limit``（プロンプトのトークン数の上限。LTX は開始
+            トークン込みで 1024、MiniMax H3 は null＝上限を確かめていない。
+            サーバーはこの値で要求を検査しない））。ほかに
             ``engine_family`` / ``present`` / ``category_order`` /
             ``categories`` を含みます。
             ``unsupported_features`` に載っている機能を submit_generate /

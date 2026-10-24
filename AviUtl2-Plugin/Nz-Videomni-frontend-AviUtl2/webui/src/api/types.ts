@@ -1253,6 +1253,10 @@ export interface BaseModelConstraints {
    * H3 `1`/`0` = any frame). Optional purely defensively: a backend that
    * predates the key omits it, and "omitted" reads as the LTX grid. */
   keyframes?: { step: number; offset: number };
+  /** §1-111: the text encoder's prompt-token limit (LTX 1024; tokens past it
+   * are cut silently). `null` = not confirmed for the engine (MiniMax H3). Optional
+   * defensively like `keyframes`: omitted reads as "no limit known". */
+  prompt_token_limit?: number | null;
 }
 
 /** `GET /models`'s response (Docs/API_REFERENCE.md §3.5,
@@ -1321,6 +1325,23 @@ export interface PipelineUnloadResponse {
  * `LOCAL_ONLY` (403). */
 export interface Mp4InfoResponse {
   comment: string | null;
+}
+
+/** `POST /utils/prompt-tokens`'s request (§1-111). `prompt` is the shared
+ * prompt AFTER `<lora:>` stripping; each `clips` item is a clip's own prompt as
+ * sent (the server composes shared + own). Unsent fields come back `null`. */
+export interface PromptTokensRequest {
+  prompt: string;
+  negative_prompt?: string;
+  clips?: string[];
+}
+
+/** `POST /utils/prompt-tokens`'s response: always HTTP 200. Every field is
+ * `null` when counting is impossible (or the field was not sent). */
+export interface PromptTokensResponse {
+  prompt: number | null;
+  negative_prompt: number | null;
+  clips: number[] | null;
 }
 
 /** One row from `GET /loras` (Docs/API_REFERENCE.md §3.6,

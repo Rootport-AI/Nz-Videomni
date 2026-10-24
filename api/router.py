@@ -13,6 +13,7 @@ from api import (
     media_info,
     models_registry,
     pipeline,
+    prompt_tokens,
     status,
     tracking,
     uploads,
@@ -36,3 +37,6 @@ api_router.include_router(tracking.router, tags=["tracking"])
 # mp4 recipe read-out. Loopback-only; reads a local file's container
 # ``comment`` tag via ffprobe.
 api_router.include_router(media_info.router, tags=["utils"])
+# Prompt token counter for the operator panel. Always 200 (null counts when
+# the active base model's tokenizer cannot be had).
+api_router.include_router(prompt_tokens.router, tags=["utils"])

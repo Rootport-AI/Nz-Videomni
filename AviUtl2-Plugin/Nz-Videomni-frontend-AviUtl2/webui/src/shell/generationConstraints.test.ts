@@ -116,6 +116,14 @@ describe("generationConstraints", () => {
     expect(resolveGenerationConstraints(older).keyframeGrid).toEqual({ step: 8, offset: 1 });
   });
 
+  it("reads the served prompt-token limit; null (H3) and the fallback have none", () => {
+    expect(resolveGenerationConstraints({ ...LTX, prompt_token_limit: 1024 }).promptTokenLimit).toBe(1024);
+    expect(resolveGenerationConstraints({ ...H3, prompt_token_limit: null }).promptTokenLimit).toBeNull();
+    // A block that predates the key reads as "no limit known".
+    expect(resolveGenerationConstraints(LTX).promptTokenLimit).toBeNull();
+    expect(LTX_GENERATION_CONSTRAINTS.promptTokenLimit).toBeNull();
+  });
+
   it("flattens MiniMax H3's block", () => {
     const c = resolveGenerationConstraints(H3);
     expect(c.frameGrid).toEqual({ step: 17, offset: 5 });

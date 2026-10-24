@@ -55,6 +55,7 @@ import { NagAccordion } from "./NagAccordion";
 import { NoteArea, ShowNoteProvider } from "./NoteArea";
 import type { AppNote, ShowNote } from "./NoteArea";
 import { PromptBar } from "./PromptBar";
+import { usePromptTokenCounts } from "./usePromptTokenCounts";
 import { SettingsPanel } from "./SettingsPanel";
 import { PrefillPolicyProvider, usePrefillPolicy } from "./PrefillPolicyContext";
 import { ThemeProvider } from "./ThemeContext";
@@ -1537,6 +1538,18 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const nagUnavailable = nagDisabledFor(baseModels.unsupportedFeatures);
   const nagForRequests = effectiveNag(nagControls.nag, !nagUnavailable);
 
+  // §1-111 prompt token counters. The shared prompt is counted the way it is
+  // sent (`<lora:>` tags stripped); Chained gets the same stripped string and
+  // counts its own clips. The model key re-counts after a base-model switch or
+  // a pipeline (re)load, which is where a text-encoder swap lands.
+  const strippedPrompt = useMemo(() => parseLoraPrompt(prompt).strippedPrompt, [prompt]);
+  const promptTokenLimit = baseModels.activeConstraints.promptTokenLimit;
+  const promptTokenModelKey = `${baseModels.active}|${pipelineLoading}`;
+  const promptTokens = usePromptTokenCounts(
+    { prompt: strippedPrompt, negative_prompt: nagControls.nag.text },
+    promptTokenModelKey,
+  );
+
   const singleIntent = pendingIntent?.targetMode === "single" ? pendingIntent : undefined;
   const chainedIntent = pendingIntent?.targetMode === "chained" ? pendingIntent : undefined;
   // W0 (2026-08-09): same one-shot hand-off as the two above — Edit is now a
@@ -1582,13 +1595,21 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         hiddenNames={mode === "single" ? controlLoraNames : undefined}
         onCompositionStart={handlePromptCompositionStart}
         onCompositionEnd={handlePromptCompositionEnd}
+        tokenCount={promptTokens?.prompt}
+        tokenLimit={promptTokenLimit}
       />
 
       {/* NAG (2026-07-28): one shared accordion, outside every mode tab —
           Create/Chain/Batch all read the same settings (owner decision §UX 1),
           as `nagForRequests` (`effectiveNag`), which reads as off while the
           loaded base model cannot run NAG. */}
-      <NagAccordion nag={nagControls.nag} controls={nagControls} unavailable={nagUnavailable} />
+      <NagAccordion
+        nag={nagControls.nag}
+        controls={nagControls}
+        unavailable={nagUnavailable}
+        tokenCount={promptTokens?.negative_prompt}
+        tokenLimit={promptTokenLimit}
+      />
 
       {/* Shared note area (§6): tab-bar-level slot, visible on all three
           screens, above the operation panel. Renders nothing until a note is
@@ -1669,6 +1690,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
             <ChainedScreen
               key={`chained-${remountTokens.chained}`}
               prompt={prompt}
+              strippedPrompt={strippedPrompt}
+              promptTokenLimit={promptTokenLimit}
+              promptTokenModelKey={promptTokenModelKey}
+              isActive={mode === "chained"}
               baseUrl={baseUrl}
               initialIntent={chainedIntent}
               nativeBridge={nativeBridge}

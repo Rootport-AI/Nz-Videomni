@@ -16,6 +16,7 @@ import {
   VSF_SCALE_STEP,
 } from "./nagSettings";
 import type { NagSettings } from "./nagSettings";
+import { isOverTokenLimit, TokenCounter } from "./TokenCounter";
 import "../styles/formAccordion.css";
 
 export interface NagAccordionControls {
@@ -40,6 +41,10 @@ export interface NagAccordionProps {
    * user's settings are kept as they are for when a NAG-capable base model
    * comes back. Omitted = available. */
   unavailable?: boolean | undefined;
+  /** §1-111: token count of the negative prompt text and the engine's limit
+   * (`TokenCounter`). Shown even while the field is greyed (incl. H3). */
+  tokenCount?: number | null | undefined;
+  tokenLimit?: number | null | undefined;
 }
 
 /**
@@ -55,7 +60,7 @@ export interface NagAccordionProps {
  * the summary shows nothing extra while off, and only the ON badge while
  * `nag.enabled` (never any other indicator).
  */
-export function NagAccordion({ nag, controls, unavailable = false }: NagAccordionProps) {
+export function NagAccordion({ nag, controls, unavailable = false, tokenCount, tokenLimit }: NagAccordionProps) {
   const strings = useStrings();
   const t = strings.nag;
   // While the engine cannot run NAG every control greys,
@@ -77,8 +82,11 @@ export function NagAccordion({ nag, controls, unavailable = false }: NagAccordio
             for `App.nag.test.tsx`'s `getByRole("textbox", { name: /negative
             prompt/i })` queries (same fix-up `BatchTable.tsx:106-114` used
             when it dropped a visible column label). */}
+        <div className="prompt-field-head">
+          <TokenCounter count={tokenCount} limit={tokenLimit} />
+        </div>
         <textarea
-          className="prompt-input"
+          className={`prompt-input${isOverTokenLimit(tokenCount, tokenLimit) ? " input-warning" : ""}`}
           rows={2}
           maxLength={2000}
           placeholder={DEFAULT_NEGATIVE_PROMPT}

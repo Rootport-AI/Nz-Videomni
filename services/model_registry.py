@@ -376,6 +376,18 @@ class ModelRegistry:
         """Descriptor-relative path -> absolute path under the model store."""
         return self.config._abs((Path(self.config.model.models_dir) / rel).as_posix())
 
+    def asset_path(self, key: str, *, base_model: str | None = None) -> Path:
+        """Absolute path of a fixed descriptor asset (``assets.<key>``).
+
+        The same resolution the adapters use for the worker payload
+        (:meth:`_models_abs`). Raises ``KeyError`` when the base model does
+        not declare the asset; whether the path exists is the caller's concern.
+        """
+        rel = self.descriptor(base_model).assets.get(key)
+        if not rel:
+            raise KeyError(f"base model '{self._base_id(base_model)}' declares no asset '{key}'")
+        return self._models_abs(rel)
+
     def _store_path(self, rel: str) -> str:
         """The RAW string stored in the registry for a descriptor-relative path.
 

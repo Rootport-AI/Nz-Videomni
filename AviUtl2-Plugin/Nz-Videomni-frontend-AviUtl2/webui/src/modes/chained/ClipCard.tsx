@@ -1,4 +1,5 @@
 import { useStrings } from "../../i18n/LanguageContext";
+import { TokenCounter, isOverTokenLimit } from "../../shell/TokenCounter";
 import { DurationField } from "../single/CommonGenerationFields";
 import { formatDurationHint } from "../single/paramUtils";
 import { MAX_CLIP_NUM_FRAMES, MIN_CLIP_NUM_FRAMES } from "./chainUtils";
@@ -22,6 +23,11 @@ export interface ClipCardProps {
    * straight through. */
   onNumFramesChange: (value: number, snap: boolean) => void;
   onRemove: () => void;
+  /** §1-111: token count of this clip's composed prompt (shared + own, as the
+   * server composes it) and the engine's limit — `null`/omitted count shows no
+   * counter. */
+  tokenCount?: number | null | undefined;
+  tokenLimit?: number | null | undefined;
 }
 
 /** One clip's card in Chain mode's clip list: an optional per-clip prompt
@@ -42,6 +48,8 @@ export function ClipCard({
   onPromptChange,
   onNumFramesChange,
   onRemove,
+  tokenCount,
+  tokenLimit,
 }: ClipCardProps) {
   const strings = useStrings();
   return (
@@ -71,9 +79,12 @@ export function ClipCard({
       </div>
 
       <label className="field">
-        <span className="field-label">{strings.chained.clipPromptLabel}</span>
+        <span className="prompt-field-head">
+          <span className="field-label">{strings.chained.clipPromptLabel}</span>
+          <TokenCounter count={tokenCount} limit={tokenLimit} />
+        </span>
         <textarea
-          className="clip-prompt-input"
+          className={`clip-prompt-input${isOverTokenLimit(tokenCount, tokenLimit) ? " input-warning" : ""}`}
           rows={2}
           value={clip.prompt}
           placeholder={strings.chained.clipPromptPlaceholder}

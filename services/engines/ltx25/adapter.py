@@ -46,7 +46,7 @@ import chain_math
 from api.errors import feature_unsupported, model_incompatible
 from api.models import GenerateChainRequest, GenerateRequest
 from config import AppConfig
-from services import video_io
+from services import prompt_tokens, video_io
 from services.engines.ltx.request_rules import LTX_REQUEST_RULES
 from services.engines.ltx.adapter import (
     H3_ONLY_REFUSALS,
@@ -481,6 +481,35 @@ UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
 #: The numeric request rules — LTX 2.3's table, shared (8n+1, the 64 multiple,
 #: the distilled 8 steps / CFG 1.0). See services/engines/ltx/request_rules.py.
 REQUEST_RULES = LTX_REQUEST_RULES
+
+#: The GGUF tensor holding the tokenizer JSON in an LTX 2.5 text encoder.
+#: A copy of ``engine25/assets_export.py``'s ``TOKENIZER_JSON_TENSOR_KEY`` (the
+#: server does not import ``engine25``); tests/test_prompt_tokens.py checks it.
+TOKENIZER_JSON_TENSOR = "tokenizer_json"
+
+
+def count_prompt_tokens(
+    texts: list[str],
+    *,
+    assets: Callable[[str], Path],
+    text_encoder: Callable[[], Path],
+) -> list[int]:
+    """Token count of each prompt as the LTX 2.5 text encoder sees it.
+
+    The tokenizer travels inside the SELECTED text-encoder GGUF
+    (:data:`TOKENIZER_JSON_TENSOR`), so ``text_encoder`` is resolved here and
+    only here. The pinned ltx-core strips the prompt, tokenizes it without
+    special tokens and puts a BOS in front unless the text already starts
+    with one, so the count includes the BOS (an empty prompt is 1). A
+    tokenizer without ``<bos>`` cannot be counted this way and raises.
+    ``assets`` is unused. Dispatched by ``services.engines.count_prompt_tokens``.
+    """
+    tokenizer = prompt_tokens.tokenizer_gguf(text_encoder(), TOKENIZER_JSON_TENSOR)
+    bos = tokenizer.token_to_id("<bos>")
+    if bos is None:
+        raise RuntimeError("the text encoder's tokenizer has no <bos> token")
+    encodings = tokenizer.encode_batch([t.strip() for t in texts], add_special_tokens=False)
+    return [len(e.ids) if e.ids[:1] == [bos] else len(e.ids) + 1 for e in encodings]
 
 
 def reject_unsupported(request: GenerateRequest) -> None:

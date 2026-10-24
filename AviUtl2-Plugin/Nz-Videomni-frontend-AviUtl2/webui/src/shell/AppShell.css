@@ -85,6 +85,27 @@
   gap: 4px;
 }
 
+/* §1-111: a prompt field's label row with the token counter on its right
+ * (PromptBar, NagAccordion, ClipCard). Red comes from the existing
+ * `.field-hint-error`; same flex recipe as `.keyframes-label-row`. */
+.prompt-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.token-counter {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.token-counter.field-hint-error {
+  color: var(--danger);
+}
+
 /* NAG (2026-07-28): the shared Negative Prompt accordion — a plain flex
  * sibling in `.app-shell`'s column (not a `.prompt-bar` descendant), so it
  * needs its own horizontal margin to line up with `.prompt-bar`'s own

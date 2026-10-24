@@ -1,6 +1,5 @@
 import { useStrings } from "../i18n/LanguageContext";
 import { LoraChips } from "../lora/LoraChips";
-import { isValidPrompt } from "../modes/single/paramUtils";
 import { isOverTokenLimit, TokenCounter } from "./TokenCounter";
 
 export interface PromptBarProps {
@@ -37,7 +36,6 @@ export interface PromptBarProps {
  * all, so the `mode` prop is gone too. */
 export function PromptBar({ value, onChange, hiddenNames, onCompositionStart, onCompositionEnd, tokenCount, tokenLimit }: PromptBarProps) {
   const strings = useStrings();
-  const error = isValidPrompt(value) ? null : strings.common.promptLengthError;
 
   return (
     <div className="prompt-bar">
@@ -51,12 +49,10 @@ export function PromptBar({ value, onChange, hiddenNames, onCompositionStart, on
           value={value}
           placeholder={strings.promptBar.placeholder}
           rows={3}
-          maxLength={2000}
           onChange={(e) => onChange(e.target.value)}
           onCompositionStart={onCompositionStart}
           onCompositionEnd={onCompositionEnd}
         />
-        {error && <span className="field-hint">{error}</span>}
       </label>
       <LoraChips prompt={value} onChange={onChange} hiddenNames={hiddenNames} />
     </div>

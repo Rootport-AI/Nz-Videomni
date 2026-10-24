@@ -536,35 +536,21 @@ describe("useBatchI2vLongForm", () => {
     expect(result.current.blockReasons.filter((code) => code === "promptEmpty")).toEqual(["promptEmpty"]);
   });
 
-  it("promptTooLongは合成後2000字で通り、2001字で立つ（境界・行単位）", async () => {
+  it("合成後のプロンプトが2000字を超えても開始禁止にならない（§1-112）", async () => {
     const fs = imgFolder([png("a.png"), png("b.png")]);
     const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: IMG_DIR });
-    const { result } = renderForm(bridge, { chain: makeChain({ prompt: "base" }) });
+    const { result } = renderForm(bridge, { chain: makeChain({ prompt: "x".repeat(1500) }) });
     await scanned(result);
+    const before = result.current.blockReasons;
 
+    // add モード: 共通 1500 + 空白 1 + 行 1500 = 3001 字。
+    act(() => result.current.setRowPromptLocal(0, "y".repeat(1500)));
+    expect(result.current.blockReasons).toEqual(before);
+
+    // replace モード: 行だけで 3000 字。
     act(() => result.current.setPromptMode("replace"));
-
-    act(() => result.current.setRowPromptLocal(1, "x".repeat(2000)));
-    expect(result.current.blockReasons).not.toContain("promptTooLong");
-
-    act(() => result.current.setRowPromptLocal(1, "x".repeat(2001)));
-    expect(result.current.blockReasons).toContain("promptTooLong");
-    // 長すぎるのは2行目だけ。
-    expect(result.current.promptTooLongQueues).toEqual([2]);
-  });
-
-  it("addモードでは共通プロンプトと行プロンプトの合計長で判定する", async () => {
-    const fs = imgFolder([png("a.png")]);
-    const bridge = createMockBridge({ delayMs: 0, fs, pickFolderPath: IMG_DIR });
-    const { result } = renderForm(bridge, { chain: makeChain({ prompt: "base" }) });
-    await scanned(result);
-
-    // "base" + 空白1文字 + 1995 = 2000ちょうど。
-    act(() => result.current.setRowPromptLocal(0, "x".repeat(1995)));
-    expect(result.current.blockReasons).not.toContain("promptTooLong");
-
-    act(() => result.current.setRowPromptLocal(0, "x".repeat(1996)));
-    expect(result.current.blockReasons).toContain("promptTooLong");
+    act(() => result.current.setRowPromptLocal(1, "z".repeat(3000)));
+    expect(result.current.blockReasons).toEqual(before);
   });
 
   // --- row prompt editing ---------------------------------------------------

@@ -54,13 +54,6 @@ import type { I2vLongRow, ScannedImageFile } from "./imageRows";
 import { useBatchI2vLongRunner } from "./useBatchI2vLongRunner";
 import type { BatchI2vLongRunnerState } from "./batchI2vLongRunner";
 
-/** Server-side prompt length cap (`api/models.py`'s `prompt: str = Field(...,
- * max_length=2000)`). The Chain screen's own `PromptBar` already enforces it
- * with a `maxLength`, but each ROW adds its own text on top of that value, so
- * the COMBINED prompt has to be re-checked here — a row's prompt input is a new
- * input outside `PromptBar`'s protection. */
-export const MAX_PROMPT_LENGTH = 2000;
-
 /** A source-less chain needs at least 2 clips or the server 422s
  * (`validate_chain_constraints`, `api/models.py`). */
 const MIN_CHAIN_CLIPS = 2;
@@ -108,7 +101,6 @@ export type I2vLongBlockReason =
   | "endSourceAttached"
   | "clipsTooFew"
   | "promptEmpty"
-  | "promptTooLong"
   | "unknownLoraTag"
   | "jobActive"
   /** The shared run lock (`shell/runLock.ts`) is currently held by the OTHER
@@ -214,9 +206,6 @@ export interface UseBatchI2vLongFormResult {
    * the rows behind a `promptEmpty` reason. Empty otherwise. Surfaced so the
    * panel can name them instead of showing a generic line. */
   promptEmptyQueues: number[];
-  /** `queue` numbers of the runnable rows whose COMPOSED prompt is over
-   * {@link MAX_PROMPT_LENGTH} — the rows behind a `promptTooLong` reason. */
-  promptTooLongQueues: number[];
   notes: I2vLongNotes;
   canStart: boolean;
 
@@ -427,18 +416,16 @@ export function useBatchI2vLongForm(
 
   // The prompt each runnable row would actually be submitted with — the SAME
   // `composeBatchPrompt` the runner calls, over the same inputs, so the two can
-  // never disagree about what is being judged. Both prompt guards below are
-  // derived from this one pass (2026-07-30 row-prompt redesign: an empty or
-  // over-long prompt is now a per-ROW property, not a property of the panel).
+  // never disagree about what is being judged. The empty-prompt guard below is
+  // derived from this one pass (2026-07-30 row-prompt redesign: an empty
+  // prompt is now a per-ROW property, not a property of the panel).
   const promptIssues = useMemo(() => {
     const empty: number[] = [];
-    const tooLong: number[] = [];
     for (const row of runnableRows) {
       const composed = composeBatchPrompt(templatePreview.prompt, row.prompt, promptMode);
       if (composed.trim().length === 0) empty.push(row.queue);
-      if (composed.length > MAX_PROMPT_LENGTH) tooLong.push(row.queue);
     }
-    return { empty, tooLong };
+    return { empty };
   }, [runnableRows, templatePreview, promptMode]);
 
   // The known-LoRA-name set behind `unknownLoraTag`. A `<lora:typo>` in the
@@ -492,9 +479,6 @@ export function useBatchI2vLongForm(
     // instead of only appearing after the folder is scanned.
     if (rows.length === 0 ? templatePreview.prompt.trim().length === 0 : promptIssues.empty.length > 0) {
       reasons.push("promptEmpty");
-    }
-    if (rows.length === 0 ? templatePreview.prompt.length > MAX_PROMPT_LENGTH : promptIssues.tooLong.length > 0) {
-      reasons.push("promptTooLong");
     }
     if (unknownLoraNames.length > 0) reasons.push("unknownLoraTag");
     if (serverBusy) reasons.push("jobActive");
@@ -600,7 +584,6 @@ export function useBatchI2vLongForm(
     blockReasons,
     chainBlockReasons,
     promptEmptyQueues: promptIssues.empty,
-    promptTooLongQueues: promptIssues.tooLong,
     notes,
     canStart,
     runnerState: runner.state,

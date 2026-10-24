@@ -121,8 +121,8 @@ function textSelection(body = "hello"): ResultOf<"timeline.getSelection"> {
 }
 
 // The shared prompt textarea (owned by AppShell's PromptBar, above the tabs).
-// Queried by its unique placeholder — the wrapping <label> folds the char-count
-// hint into the accessible name, so a name match isn't exact.
+// Queried by its unique placeholder — the wrapping <label> folds the token
+// counter into the accessible name, so a name match isn't exact.
 const promptBox = () => screen.getByPlaceholderText(/describe the video/i) as HTMLTextAreaElement;
 
 // Two selected objects (single-selection-only guard, §4-2).

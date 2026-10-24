@@ -40,14 +40,16 @@ describe("PromptBar", () => {
     expect(container.querySelector(".token-counter.field-hint-error")).not.toBeNull();
   });
 
-  it("shows no counter and no hint text without a count or an error", () => {
+  it("shows no counter and no hint text without a count, even for an empty prompt", () => {
     const { container } = render(
       <LanguageProvider>
-        <PromptBar value="hello" onChange={noop} />
+        <PromptBar value="" onChange={noop} />
       </LanguageProvider>,
     );
     expect(container.querySelector(".token-counter")).toBeNull();
     expect(container.querySelector(".field-hint")).toBeNull();
+    // §1-112: no character cap on the textarea.
+    expect(container.querySelector("textarea")).not.toHaveAttribute("maxlength");
   });
 });
 
@@ -60,6 +62,8 @@ describe("NagAccordion", () => {
     );
     expect(container.querySelector(".token-counter")?.textContent).toBe("42 tokens");
     expect(screen.getByRole("textbox", { name: /negative prompt/i })).toBeDisabled();
+    // §1-112: no character cap on the negative prompt either.
+    expect(screen.getByRole("textbox", { name: /negative prompt/i })).not.toHaveAttribute("maxlength");
   });
 });
 

@@ -331,9 +331,8 @@ export interface AlphaGenRequestBody {
  * `ChainClip`, `api/models.py`). `prompt` is appended after the chain-wide
  * common prompt for this clip's Stage-1 pass (the server trims both and joins
  * them with one space; omitted, empty or whitespace-only means "the shared
- * prompt alone"). Stage-2 uses the shared prompt alone, and the server 422s
- * when the combined text exceeds 2000 characters. `conditioning_images` is
- * only ever populated for clip 0 (M6 scope: "clip 0のみ画像を持てる") — the
+ * prompt alone"). Stage-2 uses the shared prompt alone. `conditioning_images`
+ * is only ever populated for clip 0 (M6 scope: "clip 0のみ画像を持てる") — the
  * WebUI never attaches it to any other clip. */
 export interface ChainClip {
   prompt?: string;

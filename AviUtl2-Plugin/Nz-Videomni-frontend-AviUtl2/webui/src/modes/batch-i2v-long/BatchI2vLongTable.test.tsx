@@ -67,7 +67,7 @@ describe("BatchI2vLongTable", () => {
 
     const inputs = screen.getAllByLabelText(en.batchI2vLong.table.promptInputLabel);
     expect(inputs).toHaveLength(2);
-    expect(inputs[1]).toHaveAttribute("maxlength", "2000");
+    expect(inputs[1]).not.toHaveAttribute("maxlength");
 
     await user.type(inputs[1]!, "x");
     expect(onUpdateRowPrompt).toHaveBeenCalledWith(1, "x");

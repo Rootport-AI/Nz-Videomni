@@ -15,13 +15,6 @@ const STAT_ICON: Record<I2vLongStat, string> = {
  * `useBatchI2vLongForm.resetRowToWaiting` honours. */
 const RESETTABLE_STATS: ReadonlySet<I2vLongStat> = new Set<I2vLongStat>(["Done", "Failed"]);
 
-/** The row prompt `<input>`'s cap — the server's own `prompt` limit
- * (`api/models.py`, mirrored by `useBatchI2vLongForm.MAX_PROMPT_LENGTH`).
- * Duplicated as a literal rather than imported so this presentational component
- * keeps depending on nothing but the row model; the composed-length guard in
- * the hook is what actually protects the request. */
-const MAX_ROW_PROMPT_LENGTH = 2000;
-
 export interface BatchI2vLongTableProps {
   rows: I2vLongRow[];
   /** True while a run is in flight (or a scan is landing) — disables every
@@ -81,7 +74,6 @@ export function BatchI2vLongTable({ rows, disabled, onResetRow, onUpdateRowPromp
                   className="batch-table-prompt-input"
                   aria-label={t.promptInputLabel}
                   value={row.prompt}
-                  maxLength={MAX_ROW_PROMPT_LENGTH}
                   disabled={disabled}
                   onChange={(e) => onUpdateRowPrompt(index, e.target.value)}
                 />

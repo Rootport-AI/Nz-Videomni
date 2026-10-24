@@ -88,7 +88,6 @@ export function NagAccordion({ nag, controls, unavailable = false, tokenCount, t
         <textarea
           className={`prompt-input${isOverTokenLimit(tokenCount, tokenLimit) ? " input-warning" : ""}`}
           rows={2}
-          maxLength={2000}
           placeholder={DEFAULT_NEGATIVE_PROMPT}
           value={nag.text}
           disabled={off}

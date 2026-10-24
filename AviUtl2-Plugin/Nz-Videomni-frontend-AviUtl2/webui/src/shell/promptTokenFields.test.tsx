@@ -28,7 +28,7 @@ describe("PromptBar", () => {
         <PromptBar value="hello" onChange={noop} tokenCount={10} tokenLimit={1024} />
       </LanguageProvider>,
     );
-    expect(container.textContent).toContain("10 / 1024");
+    expect(container.textContent).toContain("10 / 1024 tokens");
     expect(container.textContent).not.toContain("/2000");
     expect(container.querySelector("textarea.input-warning")).toBeNull();
     rerender(
@@ -58,7 +58,7 @@ describe("NagAccordion", () => {
         <NagAccordion nag={NAG_OFF} controls={controls} unavailable tokenCount={42} tokenLimit={null} />
       </LanguageProvider>,
     );
-    expect(container.querySelector(".token-counter")?.textContent).toBe("42");
+    expect(container.querySelector(".token-counter")?.textContent).toBe("42 tokens");
     expect(screen.getByRole("textbox", { name: /negative prompt/i })).toBeDisabled();
   });
 });
@@ -85,7 +85,7 @@ describe("ClipCard", () => {
         </ul>
       </LanguageProvider>,
     );
-    expect(container.querySelector(".token-counter")?.textContent).toBe("1100 / 1024");
+    expect(container.querySelector(".token-counter")?.textContent).toBe("1100 / 1024 tokens");
     expect(container.querySelector("textarea.clip-prompt-input.input-warning")).not.toBeNull();
   });
 });

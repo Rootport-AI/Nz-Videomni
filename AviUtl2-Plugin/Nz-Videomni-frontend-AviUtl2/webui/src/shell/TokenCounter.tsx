@@ -18,7 +18,7 @@ export function TokenCounter({ count, limit }: TokenCounterProps) {
   const over = isOverTokenLimit(count, limit);
   return (
     <span className={`token-counter${over ? " field-hint-error" : ""}`}>
-      {limit == null ? count : `${count} / ${limit}`}
+      {limit == null ? `${count} tokens` : `${count} / ${limit} tokens`}
     </span>
   );
 }

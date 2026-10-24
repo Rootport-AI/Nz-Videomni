@@ -18268,7 +18268,7 @@ dev に 3 コミット。
 
 ### 175.2 変えなかったもの
 
-- 正プロンプトの 1 文字以上の検査、`ChainClip.prompt` を省略できること、NAG／VSF の空ネガティブの検査、Chained の追記の規則（`clip_prompt`）、`to_clip_request` が共通 prompt をそのまま持つこと、バッチの `promptEmpty`、トークンカウンター（§174）、エンジン・Gradio・C++。`api/models.py` は凍結の例外として、オーナー裁定（2026-10-24）で今回に限り編集した。
+- 正プロンプトの 1 文字以上の検査、`ChainClip.prompt` を省略できること、NAG／VSF の空ネガティブの検査、Chained の追記の規則（`clip_prompt`）、`to_clip_request` が共通 prompt をそのまま持つこと、バッチの `promptEmpty`、トークンカウンター（§174）、エンジン・C++。Gradio の画面には、もともと文字数の制限が無いので変更が要らなかった。`api/models.py` は凍結の例外として、オーナー裁定（2026-10-24）で今回に限り編集した。
 
 ### 175.3 機械の門
 
@@ -18278,7 +18278,7 @@ dev に 3 コミット。
 |---|---|
 | アプリの仮想環境の pytest 全件 | 3,495 件合格・67 件スキップ・失敗 0。変更前の HEAD `f079a9f` を別の作業ツリーで同じ条件で走らせると 3,494 件合格・67 件スキップ。差の +1 は、置き換えと追加のテストの分 |
 | 操作パネル | `npm run typecheck` 合格・`npx vitest run --exclude "**/backend.integration.test.ts"` 3,336 件 全合格（変更前は 3,337 件）。差の -1 は、バッチ i2v-long の境界テスト 2 本を 1 本にまとめた分 |
-| 撤去の確認 | Python・`mcp_server`・`webui/src`・生きている文書を grep し、プロンプトの長さに関わる文字数の制限（`max_length=2000`・`MAX_PROMPT_LENGTH`・`promptTooLong`・`promptLengthError`・「1〜2000文字」など）が 0 件 |
+| 撤去の確認 | Python・`mcp_server`・`webui/src`・生きている文書を grep し、プロンプトの長さに関わる文字数の制限（`max_length=2000`・`MAX_PROMPT_LENGTH`・`promptTooLong`・`promptLengthError`・「1〜2000文字」など）が 0 件。ただしこの確認では、`AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_I2V_WORKORDER.md` に残っていた `promptTooLong` の行などを見落とした。レビューで見つけて直した |
 | aux2 の鮮度 | `build.ps1`／`deploy.ps1` で作り直し、配置の前後の 2 か所で UTF-8 のバイト列を数えた。「プロンプトは1〜2000文字」が 1 → 0、「合成後のプロンプトが2000文字を超えている行があります」が 1 → 0、変わらない文言「メインプロンプトを入力してください。」が 1 → 1（画面が埋め込まれていないビルドを見逃さないための対照） |
 
 ### 175.4 オーナーの目視（2026-10-24）

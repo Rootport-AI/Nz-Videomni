@@ -15,7 +15,9 @@ as every requested key has been found. :func:`read_gguf_tensor_types` skips
 the KV section and reads the tensor-info table that follows it (name, number
 of dimensions, ggml type) -- used to tell a transformer's weight class
 (services/weight_class.py). Tensor data (the multi-gigabyte bulk of the file)
-is never touched by either. GGUF value types 0-12 (see ``_SCALAR_FORMATS`` /
+is never touched by either; :func:`read_gguf_tensor_bytes` reads exactly one
+small I8 tensor (the LTX 2.5 text encoder's tokenizer JSON for the prompt
+token counter, services/prompt_tokens.py). GGUF value types 0-12 (see ``_SCALAR_FORMATS`` /
 ``_TYPE_STRING`` / ``_TYPE_ARRAY`` below) are understood; anything else, or
 any structural inconsistency (bad magic, unsupported version, truncation, an
 oversized count) raises :class:`GgufParseError`.
@@ -274,3 +276,89 @@ def read_gguf_tensor_types(path: Path) -> dict[str, tuple[int, int]]:
             types[name] = (n_dims, ggml_type)
 
     return types
+
+
+#: ggml type id of a 1-byte signed integer tensor (GGML_TYPE_I8).
+_GGML_TYPE_I8 = 24
+#: GGUF's default data alignment when ``general.alignment`` is absent.
+_DEFAULT_ALIGNMENT = 32
+#: Sanity ceiling for :func:`read_gguf_tensor_bytes` (an LTX 2.5 text
+#: encoder's ``tokenizer_json`` is a few tens of MB).
+_MAX_TENSOR_BYTES = 256 * 1024 * 1024
+
+
+def read_gguf_tensor_bytes(path: Path, name: str) -> bytes:
+    """Read the raw bytes of ONE small I8 tensor (``name``) from a GGUF file.
+
+    Used for the tokenizer JSON an LTX 2.5 text-encoder GGUF carries as the
+    tensor ``tokenizer_json`` (services/prompt_tokens.py). Skips every KV entry
+    except ``general.alignment`` (default 32), reads the tensor-info table,
+    and then reads ``prod(dims)`` bytes at the tensor's offset from the data
+    section, which starts at the end of the table rounded up to the alignment.
+    Only the I8 type is accepted.
+
+    Raises :class:`GgufParseError` on any structural problem (as
+    :func:`read_gguf_tensor_types`), when the tensor is absent, is not I8, or
+    exceeds this module's size ceiling.
+    """
+    with open(path, "rb") as f:
+        magic = _read_exact(f, 4)
+        if magic != _MAGIC:
+            raise GgufParseError(f"bad magic {magic!r} (expected {_MAGIC!r})")
+        version = _read_u32(f)
+        if version not in _SUPPORTED_VERSIONS:
+            raise GgufParseError(
+                f"unsupported GGUF version {version} (expected 2 or 3)"
+            )
+        tensor_count = _read_u64(f)
+        if tensor_count > _MAX_TENSOR_COUNT:
+            raise GgufParseError(
+                f"tensor_count {tensor_count} exceeds the {_MAX_TENSOR_COUNT} limit"
+            )
+        kv_count = _read_u64(f)
+        if kv_count > _MAX_KV_COUNT:
+            raise GgufParseError(
+                f"kv_count {kv_count} exceeds the {_MAX_KV_COUNT} limit"
+            )
+
+        alignment = _DEFAULT_ALIGNMENT
+        for _ in range(kv_count):
+            key = _read_string(f, _MAX_KEY_LEN)
+            value = _read_value(f, _read_u32(f), key == "general.alignment")
+            if key == "general.alignment":
+                alignment = value
+        if not isinstance(alignment, int) or alignment <= 0:
+            raise GgufParseError(f"invalid general.alignment {alignment!r}")
+
+        found = None
+        for _ in range(tensor_count):
+            tensor_name = _read_string(f, _MAX_KEY_LEN)
+            n_dims = _read_u32(f)
+            if n_dims > _MAX_TENSOR_DIMS:
+                raise GgufParseError(
+                    f"tensor {tensor_name!r} has {n_dims} dimensions "
+                    f"(at most {_MAX_TENSOR_DIMS} are allowed)"
+                )
+            dims = [_read_u64(f) for _ in range(n_dims)]
+            ggml_type = _read_u32(f)
+            offset = _read_u64(f)
+            if tensor_name == name:
+                found = (dims, ggml_type, offset)
+        if found is None:
+            raise GgufParseError(f"tensor {name!r} not found")
+
+        dims, ggml_type, offset = found
+        if ggml_type != _GGML_TYPE_I8:
+            raise GgufParseError(
+                f"tensor {name!r} has ggml type {ggml_type} (only I8 is supported)"
+            )
+        size = 1
+        for d in dims:
+            size *= d
+        if size > _MAX_TENSOR_BYTES:
+            raise GgufParseError(
+                f"tensor {name!r} is {size} bytes (limit {_MAX_TENSOR_BYTES})"
+            )
+        data_start = -(-f.tell() // alignment) * alignment
+        f.seek(data_start + offset)
+        return _read_exact(f, size)

@@ -245,6 +245,7 @@ H3_CONSTRAINTS = {
         "shift_audio": {"min": 1, "max": 20, "step": 0.1, "default": 3},
     },
     "keyframes": {"step": 1, "offset": 0},
+    "prompt_token_limit": None,
 }
 LTX_CONSTRAINTS = {
     "num_frames": {"step": 8, "offset": 1, "min": 9, "max": 481},
@@ -252,6 +253,7 @@ LTX_CONSTRAINTS = {
     "frame_rate": {"min": 1, "max": 60},
     "sampling": None,
     "keyframes": {"step": 8, "offset": 1},
+    "prompt_token_limit": 1024,
 }
 
 

@@ -92,6 +92,10 @@ class RequestRules:
     ``keyframe_strength_default`` is what an omitted keyframe ``strength``
     becomes; ``None`` for a family without the notion (the field stays
     ``None``). Like ``flag_defaults`` it is not published.
+    ``prompt_token_limit`` is the text encoder's prompt length in tokens
+    (the rest is cut off without a word), published for the screens' token
+    counter and never enforced here; ``None`` when not confirmed (the counter
+    then shows the count alone).
     """
 
     frames_step: int
@@ -108,6 +112,7 @@ class RequestRules:
     keyframe_step: int = 1
     keyframe_offset: int = 0
     keyframe_strength_default: float | None = None
+    prompt_token_limit: int | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -128,6 +133,7 @@ class RequestRules:
                 else {name: knob.as_dict() for name, knob in self.sampling.items()}
             ),
             "keyframes": {"step": self.keyframe_step, "offset": self.keyframe_offset},
+            "prompt_token_limit": self.prompt_token_limit,
         }
 
     # ------------------------------------------------------------ enforcing
@@ -258,6 +264,10 @@ def _ltx_distilled(request: "GenerateRequest") -> str | None:
 #: (stage 1 at half size through a 32px VAE); a non-64 display size is
 #: ``crop_output``'s job. 8n+1 is the causal VAE's frame grid, and a keyframe
 #: other than the start frame sits on a latent-frame start pixel (8n+1 too).
+#: The prompt token limit 1024 (BOS included) is the pinned ltx-core's own:
+#: 2.3 ``LTXVGemmaTokenizer(tokenizer_root, 1024)`` in encoders/base_encoder.py,
+#: 2.5 ``TOKENIZER_MAX_LENGTH`` in gemma_assets.py (both truncate silently;
+#: Docs/TOKEN_COUNTER_RESEARCH_NOTES.md).
 LTX_REQUEST_RULES = RequestRules(
     frames_step=8,
     frames_offset=1,
@@ -272,4 +282,5 @@ LTX_REQUEST_RULES = RequestRules(
     keyframe_step=8,
     keyframe_offset=1,
     keyframe_strength_default=0.8,
+    prompt_token_limit=1024,
 )

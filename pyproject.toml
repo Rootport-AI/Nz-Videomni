@@ -22,6 +22,9 @@ dependencies = [
     "python-multipart>=0.0.9",
     "httpx>=0.27",
     "mcp>=1.28,<2",
+    # Prompt token counter (POST /utils/prompt-tokens): the Hugging Face Rust
+    # tokenizer, no torch. The same version as the three engine venvs.
+    "tokenizers==0.22.2",
 ]
 
 [project.optional-dependencies]

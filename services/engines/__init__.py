@@ -26,8 +26,9 @@ TYPE_CHECKING ガードの下で書ける。
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from api.errors import model_incompatible, request_validation_failed
 
@@ -210,6 +211,28 @@ def request_constraints(family: str) -> dict | None:
     """
     rules = request_rules(family)
     return None if rules is None else rules.constraints()
+
+
+def count_prompt_tokens(
+    family: str,
+    texts: list[str],
+    *,
+    assets: Callable[[str], Path],
+    text_encoder: Callable[[], Path],
+) -> list[int] | None:
+    """各プロンプトのトークン数(POST /utils/prompt-tokens)。宣言なしは None。
+
+    **数え方はアダプタの ``count_prompt_tokens`` が持ち、ここは取り次ぐだけ**。
+    トークナイザーの種類・資産の在りか・前処理はエンジンの知識だからである
+    (上限は規則表の ``prompt_token_limit``)。``assets`` は記述子の資産キー→
+    絶対パス、``text_encoder`` は選択中のテキストエンコーダーの絶対パスを返す
+    関数で、使うアダプタが呼んだときだけ解決される(使わない系統は、その解決の
+    失敗に巻き込まれない)。数えられないときの例外はそのまま上げる。
+    """
+    counter = getattr(_adapter(family), "count_prompt_tokens", None)
+    if counter is None:
+        return None
+    return counter(texts, assets=assets, text_encoder=text_encoder)
 
 
 def validate_for_family(family: str, request: GenerateRequest) -> None:

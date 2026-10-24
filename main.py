@@ -207,6 +207,41 @@ class JobsListAccessFilter(logging.Filter):
             return True  # fail-open: never let log filtering break logging
 
 
+class PromptTokensAccessFilter(logging.Filter):
+    """Drop uvicorn access-log lines for SUCCESSFUL prompt token counts.
+
+    The operator panel sends ``POST /api/v1/utils/prompt-tokens`` each time
+    typing pauses in a prompt field, so one console line per pause would bury
+    the meaningful traffic. This filter suppresses exactly that traffic and
+    nothing else:
+
+    * only ``POST`` to the counter resource itself,
+    * only status 200 — a 401/422/500 on the counter URL still shows.
+
+    Same defensive contract as :class:`JobPollingAccessFilter`: uvicorn's
+    access LogRecord carries ``record.args == (client_addr, method,
+    full_path, http_version, status_code)``; any unexpected shape fails open
+    (the record is kept) so log filtering can never swallow a genuine access
+    line.
+    """
+
+    _PROMPT_TOKENS_POST = re.compile(r"^/api/v1/utils/prompt-tokens/?(?:[?#].*)?$")
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        try:
+            args = record.args
+            if not isinstance(args, tuple) or len(args) != 5:
+                return True
+            _client, method, path, _http_version, status = args
+            if method != "POST" or status != 200:
+                return True
+            if not isinstance(path, str):
+                return True
+            return not self._PROMPT_TOKENS_POST.match(path)
+        except Exception:
+            return True  # fail-open: never let log filtering break logging
+
+
 def build_uvicorn_log_config() -> dict:
     """uvicorn's default logging dictConfig + the access-log filters.
 
@@ -216,8 +251,9 @@ def build_uvicorn_log_config() -> dict:
     :class:`JobPollingAccessFilter` (mutes the job-status polling flood), the
     :class:`GradioApiInternalAccessFilter` (mutes the ``/ui/gradio_api/`` SSE /
     queue traffic), the :class:`StatusAccessFilter` (mutes ``/api/v1/status``
-    polling), and the :class:`JobsListAccessFilter` (mutes the bare
-    ``/api/v1/jobs`` list polling).
+    polling), the :class:`JobsListAccessFilter` (mutes the bare
+    ``/api/v1/jobs`` list polling), and the :class:`PromptTokensAccessFilter`
+    (mutes the operator panel's prompt token counts).
     """
     log_config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
     filters = log_config.setdefault("filters", {})
@@ -228,6 +264,7 @@ def build_uvicorn_log_config() -> dict:
     filters["gradio_api_internal_access"] = {"()": GradioApiInternalAccessFilter}
     filters["status_access"] = {"()": StatusAccessFilter}
     filters["jobs_list_access"] = {"()": JobsListAccessFilter}
+    filters["prompt_tokens_access"] = {"()": PromptTokensAccessFilter}
     access_handler = log_config.get("handlers", {}).get("access")
     if isinstance(access_handler, dict):
         handler_filters = access_handler.setdefault("filters", [])
@@ -236,6 +273,7 @@ def build_uvicorn_log_config() -> dict:
             "gradio_api_internal_access",
             "status_access",
             "jobs_list_access",
+            "prompt_tokens_access",
         ):
             if _name not in handler_filters:
                 handler_filters.append(_name)

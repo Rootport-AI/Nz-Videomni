@@ -52,7 +52,7 @@ from api.models import (
     VRAM16_MODE_DEFAULT_H3,
 )
 from config import AppConfig
-from services import video_io
+from services import prompt_tokens, video_io
 from services.engines.ltx.adapter import (
     GenerationOutcome,
     LTXRunner,
@@ -148,6 +148,35 @@ REQUEST_RULES = RequestRules(
     keyframe_offset=0,
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
+
+#: The seven special tokens the H3 text encoder adds to the Qwen3-VL
+#: tokenizer.json, in id order (151669..). A copy of
+#: ``engine_h3/text_encoder.py``'s ``EXTRA_SPECIAL_TOKENS`` (the server does not
+#: import ``engine_h3``); tests/test_prompt_tokens.py checks it.
+EXTRA_SPECIAL_TOKENS: tuple[str, ...] = (
+    "<d>", "</d>", "<|cutoff|>", "<|lyrics_start|>", "<|lyrics_end|>", "<|caption_start|>", "<|caption_end|>",
+)
+
+
+def count_prompt_tokens(
+    texts: list[str],
+    *,
+    assets: Callable[[str], Path],
+    text_encoder: Callable[[], Path],
+) -> list[int]:
+    """Token count of each prompt as the H3 text encoder sees it.
+
+    The Qwen3-VL tokenizer (``assets.tokenizer_dir``) plus
+    :data:`EXTRA_SPECIAL_TOKENS`, no special tokens added and no stripping
+    (an empty prompt is 0). The text only: an I2V image's tokens are not
+    counted, and there is no confirmed limit (``prompt_token_limit`` stays
+    ``None``). ``text_encoder`` is unused. Dispatched by
+    ``services.engines.count_prompt_tokens``.
+    """
+    tokenizer = prompt_tokens.tokenizer_file(
+        assets("tokenizer_dir") / "tokenizer.json", EXTRA_SPECIAL_TOKENS
+    )
+    return [len(e.ids) for e in tokenizer.encode_batch(list(texts), add_special_tokens=False)]
 
 # --------------------------------------------------------------------------- #
 # feature scope (the four-way classification of GenerateRequest's fields)

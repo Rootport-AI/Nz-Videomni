@@ -169,7 +169,7 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 
 | venv | 役割 | 主要依存 |
 |------|------|----------|
-| `./.venv` | FastAPI アプリ（`main.py`・API・ジョブ・Gradio・モック backend） | FastAPI / Pydantic / Pillow / ffmpeg 呼び出し。**torch は入れない** |
+| `./.venv` | FastAPI アプリ（`main.py`・API・ジョブ・Gradio・モック backend） | FastAPI / Pydantic / Pillow / ffmpeg 呼び出し / `tokenizers`（プロンプト欄のトークン数を数える）。**torch は入れない** |
 | `./.venv-engine` | LTX 2.3 用のエンジン worker（`engine/worker.py`） | **torch 2.9.1+cu128** + LTX 推論スタック（`ltx_core`/`ltx_pipelines`@`00dc53d` + `gguf`） |
 | `./.venv-engine-ltx25` | LTX 2.5 用のエンジン worker（`engine25/worker.py`） | **torch 2.9.1+cu128** + 公式 v1.2.0 の推論スタック + `transformers` 5.x |
 | `./.venv-engine-h3` | MiniMax H3 用のエンジン worker（`engine_h3/worker.py`）。**任意導入**で、`install-MiniMaxH3.bat` を実行した人だけに作られます | **CUDA 13 系の torch**（版は [`engine_h3/venv-engine-h3.freeze.txt`](engine_h3/venv-engine-h3.freeze.txt) が正本で、LTX の 2 つとは揃えていません）＋ int8 の計算に使う comfy-kitchen |
@@ -220,6 +220,8 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 3. **AviUtl2 から使っている場合は、`AviUtl2-Plugin\NzVideomni.aux2` を AviUtl2 のプレビュー画面へもう一度ドラッグ＆ドロップし、AviUtl2 を再起動する。** 操作パネルの画面はこのファイルに入っているので、入れ直さないと画面だけが古いままになります（新しいベースモデルを選べても、そのモデルの規則に合わない値が送られて生成が止まることがあります）。
 
 **2 を省かないでください。** 依存パッケージの内容が変わっていた場合、`run.bat` は起動こそするものの中身が古いままで正しく動かない、という分かりにくい状態になります。`setup.bat` は 2 回目以降、すでに揃っているものを飛ばすので、変更が無ければ短時間で終わります。
+
+更新のあと、操作パネルのプロンプト欄にトークン数が出ず、`run.bat` の黒い画面に「setup.bat をもう一度実行してください」と出ている場合は、2 が済んでいません。`setup.bat` を実行してから `run.bat` を起動し直してください。
 
 **専用のバッチで足した仮想環境は、`setup.bat` では当て直されません。** MiniMax H3 の仮想環境（`.venv-engine-h3`）と物体追尾の仮想環境（`.venv-utils`）がこれに当たり、作り直すのはそれぞれの導入バッチだけです。更新でこれらの依存の内容が変わったとき（MiniMax H3 なら `engine_h3/venv-engine-h3.freeze.txt` が変わったとき）は、`setup.bat` のあとに **`install-MiniMaxH3.bat`（物体追尾なら `install-UETrack.bat`）をもう一度実行してください。** 変わっていなければ、揃っているものを飛ばして短時間で終わるので、MiniMax H3（物体追尾）を導入済みの方は、迷ったときは実行して構いません（導入していない方が実行すると、導入そのものが始まります）。
 

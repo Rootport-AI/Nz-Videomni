@@ -58,7 +58,7 @@ from api.models import (
     round_up_128,
 )
 from config import AppConfig
-from services import gpu_info, video_io
+from services import gpu_info, prompt_tokens, video_io
 from services.base_models import BaseModelDescriptor, load_base_models
 from services.engines.ltx.request_rules import LTX_REQUEST_RULES
 from services.lora_registry import ResolvedLora
@@ -247,6 +247,25 @@ UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
 #: module. Applied by ``services.engines.validate_for_family`` and published by
 #: ``GET /models`` as ``constraints``.
 REQUEST_RULES = LTX_REQUEST_RULES
+
+
+def count_prompt_tokens(
+    texts: list[str],
+    *,
+    assets: Callable[[str], Path],
+    text_encoder: Callable[[], Path],
+) -> list[int]:
+    """Token count of each prompt as the LTX 2.3 text encoder sees it.
+
+    The pinned ltx-core strips the prompt and lets the Gemma 3 tokenizer
+    (``assets.gemma_root``) add its BOS, so the count includes the BOS (an
+    empty prompt is 1). Compared with :data:`REQUEST_RULES`'
+    ``prompt_token_limit``. ``text_encoder`` is unused (the tokenizer is a
+    fixed asset). Dispatched by ``services.engines.count_prompt_tokens``.
+    """
+    tokenizer = prompt_tokens.tokenizer_file(assets("gemma_root") / "tokenizer.json")
+    encodings = tokenizer.encode_batch([t.strip() for t in texts], add_special_tokens=True)
+    return [len(e.ids) for e in encodings]
 
 
 def reject_unsupported(request: GenerateRequest) -> None:

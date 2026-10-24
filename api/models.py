@@ -806,6 +806,20 @@ class GenerateRequest(BaseModel):
 MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481  # 11544
 
 
+def compose_clip_prompt(shared: str, own: str | None) -> str:
+    """A chain clip's Stage-1 prompt: the shared prompt + the clip's own.
+
+    Both parts are trimmed at their ends (inner line breaks are kept) and
+    the non-empty ones are joined with one space, so a clip without its own
+    prompt (absent, empty or whitespace-only) gets the shared prompt alone,
+    and a whitespace-only shared prompt adds no leading space. The one rule
+    for :meth:`GenerateChainRequest.clip_prompt` and the prompt token counter
+    (api/prompt_tokens.py).
+    """
+    parts = (shared.strip(), (own or "").strip())
+    return " ".join(part for part in parts if part)
+
+
 class ChainClip(BaseModel):
     """One clip in a generate-chain request.
 
@@ -1707,16 +1721,11 @@ class GenerateChainRequest(BaseModel):
         return self.prompt.strip()
 
     def clip_prompt(self, index: int) -> str:
-        """Stage-1 prompt for clip ``index``: the shared prompt + the clip's own.
-
-        Both parts are trimmed at their ends (inner line breaks are kept) and
-        the non-empty ones are joined with one space, so a clip without its own
-        prompt (absent, empty or whitespace-only) gets the shared prompt alone,
-        and a whitespace-only shared prompt adds no leading space. This is the
-        worker payload's ``clips[].prompt``.
+        """Stage-1 prompt for clip ``index``: the shared prompt + the clip's own
+        (the rule is :func:`compose_clip_prompt`). This is the worker payload's
+        ``clips[].prompt``.
         """
-        own = (self.clips[index].prompt or "").strip()
-        return " ".join(part for part in (self.shared_prompt(), own) if part)
+        return compose_clip_prompt(self.prompt, self.clips[index].prompt)
 
     def to_clip_request(self, index: int) -> "GenerateRequest":
         """Build the per-clip :class:`GenerateRequest` (clip 0 keeps its images).

@@ -26,7 +26,14 @@ export interface InventoryScreenProps {
    * `ApiClient` (Reload's result shape `{total,styles,controls}` doesn't
    * match any other `ApiClient` method and isn't otherwise reused). */
   reloadLoras?: () => Promise<{ total: number; styles: number; controls: number }>;
+  /** 台帳 §1-104: the active base-model id — the server's list follows it,
+   * so a change refetches (see `useLoras`'s `refreshKey`). */
+  refreshKey?: string | undefined;
 }
+
+/** The empty-state directory for a server older than 台帳 §1-104, whose
+ * `GET /loras` carries no `lora_dir` (it only ever scanned this one). */
+const LEGACY_LORA_DIR = "models/LTX23/StyleLoRA";
 
 /** The M5 "Library" mode (task brief §2, Mock/AVIUTL2_DESIGN_BRIEF.md §11's
  * "素材棚"): the STYLE LoRA browser (`GET /loras` + thumbnails + reload)
@@ -36,10 +43,17 @@ export interface InventoryScreenProps {
  * existed; now that CONTROL LoRAs have their own selection UI on Create
  * (`GenerationForm.tsx`'s `ReferenceVideoSection`), this screen is Style-only,
  * matching Gradio's own "Style browser" scope. */
-export function InventoryScreen({ prompt, onPromptChange, baseUrl, apiClient, reloadLoras = defaultReloadLoras }: InventoryScreenProps) {
+export function InventoryScreen({
+  prompt,
+  onPromptChange,
+  baseUrl,
+  apiClient,
+  reloadLoras = defaultReloadLoras,
+  refreshKey,
+}: InventoryScreenProps) {
   const strings = useStrings();
   const { push } = useToasts();
-  const lorasState = useLoras(apiClient ? { apiClient } : {});
+  const lorasState = useLoras(apiClient ? { apiClient, refreshKey } : { refreshKey });
   const [reloading, setReloading] = useState(false);
 
   const handleReload = useCallback(() => {
@@ -85,7 +99,7 @@ export function InventoryScreen({ prompt, onPromptChange, baseUrl, apiClient, re
 
         {lorasState.status === "ready" &&
           (styles.length === 0 ? (
-            <p className="hint">{strings.inventory.emptyLoras}</p>
+            <p className="hint">{strings.inventory.emptyLoras(lorasState.loraDir ?? LEGACY_LORA_DIR)}</p>
           ) : (
             <ul className="lora-grid">
               {styles.map((lora) => (

@@ -89,6 +89,10 @@ export interface EditScreenProps {
    * `base_models[].display_name`), printed in the Retake stage-2 window labels.
    * Omitted ⇒ `""`. */
   engineLabel?: string | undefined;
+  /** 台帳 §1-104: the LOADED base model's id, used only as `useLoras`'s
+   * `refreshKey` (the server's LoRA list follows the base model). Omitted ⇒
+   * fetched once on mount, as before. */
+  loraRefreshKey?: string | undefined;
 }
 
 /** The Edit mode screen (2026-08-09). Until this day the Edit tab was a
@@ -172,6 +176,7 @@ export function EditScreen({
   sageAvailable,
   weightClass,
   engineLabel,
+  loraRefreshKey,
 }: EditScreenProps = {}) {
   const strings = useStrings();
   // Consumed EXACTLY ONCE, in the lazy initializer: `AppShell` bumps
@@ -234,6 +239,7 @@ export function EditScreen({
     config,
     engineFamily,
     acceleration,
+    loraRefreshKey,
   });
   // Wrapped rather than passed straight through: `onSubmitted` is an OPTIONAL
   // property and `exactOptionalPropertyTypes` forbids handing it an explicit

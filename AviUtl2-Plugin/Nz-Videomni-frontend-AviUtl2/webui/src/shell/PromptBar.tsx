@@ -9,6 +9,9 @@ export interface PromptBarProps {
    * own doc comment. `AppShell` passes the control-LoRA name set here, only
    * while `mode === "single"`. */
   hiddenNames?: ReadonlySet<string> | undefined;
+  /** 台帳 §1-104: forwarded straight to `LoraChips` (hides each chip's audio
+   * side). */
+  audioStrengthHidden?: boolean | undefined;
   /** IC-LoRA UI redesign (第5波): IME composition boundary, forwarded to the
    * `<textarea>` so `AppShell`'s control-LoRA auto-migration effect can defer
    * while a Japanese (or other IME) composition is in progress — reading the
@@ -34,7 +37,7 @@ export interface PromptBarProps {
  * apply in Chain mode", §3-3) was removed together with its `promptBar.chainNote`
  * string — with it gone this component no longer depends on the current mode at
  * all, so the `mode` prop is gone too. */
-export function PromptBar({ value, onChange, hiddenNames, onCompositionStart, onCompositionEnd, tokenCount, tokenLimit }: PromptBarProps) {
+export function PromptBar({ value, onChange, hiddenNames, audioStrengthHidden, onCompositionStart, onCompositionEnd, tokenCount, tokenLimit }: PromptBarProps) {
   const strings = useStrings();
 
   return (
@@ -54,7 +57,7 @@ export function PromptBar({ value, onChange, hiddenNames, onCompositionStart, on
           onCompositionEnd={onCompositionEnd}
         />
       </label>
-      <LoraChips prompt={value} onChange={onChange} hiddenNames={hiddenNames} />
+      <LoraChips prompt={value} onChange={onChange} hiddenNames={hiddenNames} audioStrengthHidden={audioStrengthHidden} />
     </div>
   );
 }

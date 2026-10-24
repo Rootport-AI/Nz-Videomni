@@ -140,6 +140,10 @@ export interface UseBatchI2vLongFormDeps {
    * waiting on the 1s production poll interval. */
   pollIntervalMs?: number;
   jobBusyBackoffMs?: number;
+  /** 台帳 §1-104: the LOADED base model's id, used only as `useLoras`'s
+   * `refreshKey` (the server's LoRA list follows the base model). Omitted ⇒
+   * fetched once on mount, as before. */
+  loraRefreshKey?: string | undefined;
 }
 
 export interface UseBatchI2vLongFormResult {
@@ -433,7 +437,9 @@ export function useBatchI2vLongForm(
   // catching up front — but only when the list actually loaded: while it is
   // loading (or failed), the guard passes, because blocking a whole batch on a
   // transient `GET /loras` failure would be far worse than the 404 it prevents.
-  const lorasState = useLoras(deps.apiClient ? { apiClient: deps.apiClient } : {});
+  const lorasState = useLoras(
+    deps.apiClient ? { apiClient: deps.apiClient, refreshKey: deps.loraRefreshKey } : { refreshKey: deps.loraRefreshKey },
+  );
   const readyLoras = lorasState.status === "ready" ? lorasState.loras : null;
   const knownLoraNames = useMemo(
     () => (readyLoras === null ? null : new Set(readyLoras.map((l) => l.name))),

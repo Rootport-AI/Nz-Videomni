@@ -136,6 +136,10 @@ export interface ChainedScreenProps {
    * `base_models[].display_name`), printed in the stage-2 window dropdown's
    * labels. Omitted ⇒ `""`. */
   engineLabel?: string | undefined;
+  /** 台帳 §1-104: the LOADED base model's id, used only as `useLoras`'s
+   * `refreshKey` (the server's LoRA list follows the base model). Omitted ⇒
+   * fetched once on mount, as before. */
+  loraRefreshKey?: string | undefined;
   /** §3-102 (LTX 2.5 Chained, first stage): the four material panels the
    * LOADED base model's engine cannot use, computed by `AppShell` from
    * `useBaseModels`' `unsupportedFeatures` (`shell/featureScope.ts`'s
@@ -186,6 +190,7 @@ export function ChainedScreen({
   engineFamily,
   weightClass,
   engineLabel,
+  loraRefreshKey,
   v2vUnavailable,
   a2vUnavailable,
   endSourceUnavailable,
@@ -221,6 +226,7 @@ export function ChainedScreen({
       engineFamily={engineFamily}
       weightClass={weightClass}
       engineLabel={engineLabel}
+      loraRefreshKey={loraRefreshKey}
       v2vUnavailable={v2vUnavailable}
       a2vUnavailable={a2vUnavailable}
       endSourceUnavailable={endSourceUnavailable}
@@ -251,6 +257,7 @@ interface ChainedScreenBodyProps {
   engineFamily?: string | undefined;
   weightClass?: string | undefined;
   engineLabel?: string | undefined;
+  loraRefreshKey?: string | undefined;
   v2vUnavailable?: boolean | undefined;
   a2vUnavailable?: boolean | undefined;
   endSourceUnavailable?: boolean | undefined;
@@ -279,6 +286,7 @@ function ChainedScreenBody({
   engineFamily,
   weightClass,
   engineLabel,
+  loraRefreshKey,
   v2vUnavailable = false,
   a2vUnavailable = false,
   endSourceUnavailable = false,
@@ -1257,6 +1265,7 @@ function ChainedScreenBody({
       chain={form}
       serverBusy={serverBusy}
       nativeBridge={nativeBridge}
+      loraRefreshKey={loraRefreshKey}
     />
     </>
   );

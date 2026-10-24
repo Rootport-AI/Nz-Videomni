@@ -217,7 +217,44 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
   );
 
   it(
-    "MiniMax H3: the submitted body carries the three sampling values, fps 24, a 17n+5 length, no NAG and no keyframe strength",
+    "台帳 §1-104: LTX 2.3 keeps the chip's audio toggle and sends the tag's audio strength",
+    async () => {
+      // The app-wide fixture (Create submits through the singleton client).
+      // The generate call is recorded and answered with a 422 here instead of
+      // reaching the fixture, so no job is left running for the next test on
+      // this same fixture (a running job would refuse its base-model switch).
+      const bridge = await renderApp(appBridge);
+      const original = bridge.request.bind(bridge);
+      const requestSpy = vi.spyOn(bridge, "request").mockImplementation(((method: string, params: unknown) => {
+        if (method === "backend.request" && (params as { path?: string }).path === "/api/v1/generate") {
+          return Promise.resolve({
+            status: 422,
+            body: { error: { code: "VALIDATION_ERROR", message: "recorded by the test", detail: [] } },
+          });
+        }
+        return (original as (m: string, p: unknown) => Promise<unknown>)(method, params);
+      }) as typeof bridge.request);
+      const user = userEvent.setup();
+
+      await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat <lora:Pixar_Toon:1.0:0.3>");
+      const chip = document.querySelector('.lora-chip[data-lora-name="Pixar_Toon"]') as HTMLElement | null;
+      expect(chip?.querySelector(".lora-chip-audio-toggle")).not.toBeNull();
+      const generate = screen.getByRole("button", { name: /^generate$/i });
+      await waitFor(() => expect(generate).not.toBeDisabled());
+      await user.click(generate);
+
+      const isGenerate = (c: unknown[]) =>
+        c[0] === "backend.request" && (c[1] as { path?: string }).path === "/api/v1/generate";
+      await waitFor(() => expect(requestSpy.mock.calls.some(isGenerate)).toBe(true));
+      const call = requestSpy.mock.calls.find(isGenerate);
+      const body = (call?.[1] as { body?: Record<string, unknown> } | undefined)?.body ?? {};
+      expect(body.loras).toEqual([{ name: "Pixar_Toon", strength: 1, audio_strength: 0.3 }]);
+    },
+    20_000,
+  );
+
+  it(
+    "MiniMax H3: the submitted body carries the three sampling values, fps 24, a 17n+5 length, no NAG, no keyframe strength and no LoRA audio strength",
     async () => {
       const bridge = await renderApp(appBridge);
       const requestSpy = vi.spyOn(bridge, "request");
@@ -233,7 +270,17 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       // 台帳 §1-97: two keyframes, whose `strength` key must not be sent.
       await addCapturedKeyframes(user, singlePanel(), 2);
 
-      await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat riding a skateboard");
+      // 台帳 §1-104: a Library-style 3-argument tag — its chip shows no audio
+      // side on H3, and the third number is not sent.
+      await user.type(
+        screen.getByPlaceholderText(/describe the video/i),
+        "a cat riding a skateboard <lora:Pixar_Toon:1.0:1.0>",
+      );
+      const chip = document.querySelector('.lora-chip[data-lora-name="Pixar_Toon"]') as HTMLElement | null;
+      expect(chip).not.toBeNull();
+      expect(chip?.querySelector(".lora-chip-audio-toggle")).toBeNull();
+      expect(chip?.querySelector(".lora-chip-video-icon")).toBeNull();
+      expect(chip?.querySelector(".lora-chip-audio")).toBeNull();
       const generate = screen.getByRole("button", { name: /^generate$/i });
       await waitFor(() => expect(generate).not.toBeDisabled());
       await user.click(generate);
@@ -261,6 +308,9 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       expect(images).toHaveLength(2);
       expect(images[0]?.frame_idx).toBe(0);
       for (const image of images) expect(image).not.toHaveProperty("strength");
+      const loras = body.loras as Record<string, unknown>[];
+      expect(loras).toEqual([{ name: "Pixar_Toon", strength: 1 }]);
+      expect(loras[0]).not.toHaveProperty("audio_strength");
       // The fixture validated it against H3's own rules and accepted it.
       await screen.findByText(/generating/i);
     },
@@ -282,6 +332,72 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       // …and on MiniMax H3 (NAG closed) it no longer does.
       await switchTo("MiniMaxH3");
       await waitFor(() => expect(generate).not.toBeDisabled());
+    },
+    20_000,
+  );
+
+  it(
+    "台帳 §1-104: an unsupported LoRA in the prompt shows the yellow note, and Generate stays enabled",
+    async () => {
+      await renderApp();
+      await switchTo("MiniMaxH3");
+      await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+      const user = userEvent.setup();
+      const note = "This LoRA's format is not supported. It may have no effect.";
+
+      await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat <lora:Pixar_Toon:1.0>");
+      const generate = screen.getByRole("button", { name: /^generate$/i });
+      await waitFor(() => expect(generate).not.toBeDisabled());
+      expect(screen.queryByText(note)).not.toBeInTheDocument();
+
+      // The fixture marks `LTX-2.3-Henshin` `supported: false`.
+      await user.type(screen.getByPlaceholderText(/describe the video/i), " <lora:LTX-2.3-Henshin:1.0>");
+      const banner = await within(singlePanel()).findByText(note);
+      expect(banner).toHaveAttribute("role", "status");
+      expect(banner).toHaveClass("warning-banner", "warning-banner-mild");
+      expect(generate).not.toBeDisabled();
+    },
+    20_000,
+  );
+
+  it(
+    "台帳 §1-104 (plan §7-6): the unsupported-format note shows on LTX 2.3 too, Generate still enabled",
+    async () => {
+      await renderApp();
+      const user = userEvent.setup();
+      await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat <lora:LTX-2.3-Henshin:1.0>");
+      const banner = await within(singlePanel()).findByText(
+        "This LoRA's format is not supported. It may have no effect.",
+      );
+      expect(banner).toHaveAttribute("role", "status");
+      await waitFor(() => expect(screen.getByRole("button", { name: /^generate$/i })).not.toBeDisabled());
+    },
+    20_000,
+  );
+
+  it(
+    "台帳 §1-104: a completed base-model switch refetches GET /loras (the list follows the base model)",
+    async () => {
+      const bridge = await renderApp();
+      const requestSpy = vi.spyOn(bridge, "request");
+      const loraCalls = () =>
+        requestSpy.mock.calls.filter(
+          (c) =>
+            c[0] === "backend.request" &&
+            (c[1] as { method?: string; path?: string }).method === "GET" &&
+            (c[1] as { path?: string }).path === "/api/v1/loras",
+        ).length;
+      expect(loraCalls()).toBe(0);
+
+      await switchTo("MiniMaxH3");
+      await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+      await waitFor(() => expect(loraCalls()).toBeGreaterThan(0));
+      // …and what came back is H3's directory, not LTX's.
+      const index = requestSpy.mock.calls.findIndex(
+        (c) => c[0] === "backend.request" && (c[1] as { path?: string }).path === "/api/v1/loras",
+      );
+      const result = (await requestSpy.mock.results[index]?.value) as { body?: { lora_dir?: string } };
+      expect(result.body?.lora_dir).toBe("models/MiniMaxH3/LoRA");
     },
     20_000,
   );

@@ -68,6 +68,7 @@ import {
   batchA2vDisabledFor,
   chainPanelsDisabledFor,
   editSubTabsDisabledFor,
+  loraAudioStrengthHiddenFor,
   nagDisabledFor,
   settingsRowsHiddenFor,
   singleSectionsDisabledFor,
@@ -314,7 +315,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const [controlLora, setControlLora] = useState<ControlLoraSelection | null>(null);
   const configState = useConfig();
   const config = configState.status === "ready" ? configState.config : FALLBACK_APP_CONFIG;
-  const lorasState = useLoras();
+  // 台帳 §1-104: the server's LoRA list follows the LOADED base model (H3 and
+  // LTX scan different directories), so a completed switch refetches it.
+  const lorasState = useLoras({ refreshKey: baseModels.active });
   // M-1 (post-implementation adversarial review, 2026-07-17): stability of
   // this Set is load-bearing (it's a dependency of the auto-migration effect
   // below) — extracted into its own hook so that stability is independently
@@ -1537,12 +1540,28 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const singleSections = singleSectionsDisabledFor(baseModels.unsupportedFeatures);
   const nagUnavailable = nagDisabledFor(baseModels.unsupportedFeatures);
   const nagForRequests = effectiveNag(nagControls.nag, !nagUnavailable);
+  // 台帳 §1-104: an engine whose LoRAs have one strength only hides each
+  // chip's audio side, and Single stops sending `audio_strength`.
+  const loraAudioHidden = loraAudioStrengthHiddenFor(baseModels.unsupportedFeatures);
 
   // §1-111 prompt token counters. The shared prompt is counted the way it is
   // sent (`<lora:>` tags stripped); Chained gets the same stripped string and
   // counts its own clips. The model key re-counts after a base-model switch or
   // a pipeline (re)load, which is where a text-encoder swap lands.
-  const strippedPrompt = useMemo(() => parseLoraPrompt(prompt).strippedPrompt, [prompt]);
+  const parsedPrompt = useMemo(() => parseLoraPrompt(prompt), [prompt]);
+  const strippedPrompt = parsedPrompt.strippedPrompt;
+  // 台帳 §1-104: a LoRA in the prompt that the server's list marks
+  // `supported === false` gets a non-blocking note under Create's Generate
+  // button (the job still runs; on LTX the server's 422 says the rest).
+  // Keyed on the ready ARRAY, not `lorasState` (a new object every render) —
+  // the same arrangement as `useControlLoraNames`.
+  const lorasReady = lorasState.status === "ready" ? lorasState.loras : null;
+  const loraUnsupportedNotice = useMemo(() => {
+    if (!lorasReady) return false;
+    const unsupported = new Set(lorasReady.filter((l) => l.supported === false).map((l) => l.name));
+    if (unsupported.size === 0) return false;
+    return parsedPrompt.loras.some((l) => unsupported.has(l.name));
+  }, [parsedPrompt, lorasReady]);
   const promptTokenLimit = baseModels.activeConstraints.promptTokenLimit;
   const promptTokenModelKey = `${baseModels.active}|${pipelineLoading}`;
   const promptTokens = usePromptTokenCounts(
@@ -1593,6 +1612,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         // INTO only renders there; hiding them anywhere else would just make
         // a stray control tag invisible with no other way to see/remove it.
         hiddenNames={mode === "single" ? controlLoraNames : undefined}
+        audioStrengthHidden={loraAudioHidden}
         onCompositionStart={handlePromptCompositionStart}
         onCompositionEnd={handlePromptCompositionEnd}
         tokenCount={promptTokens?.prompt}
@@ -1684,6 +1704,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  the Create sections its engine closes. */
               constraints={baseModels.activeConstraints}
               sectionsUnavailable={singleSections}
+              loraAudioHidden={loraAudioHidden}
+              loraUnsupportedNotice={loraUnsupportedNotice}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "chained"}>
@@ -1713,6 +1735,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               weightClass={baseModels.activeWeightClass}
               /* §3-165: the stage-2 window dropdown names the loaded engine. */
               engineLabel={activeEngineLabel}
+              loraRefreshKey={baseModels.active}
               /* §3-102: the four material panels the loaded engine's feature
                  scope can take down one by one — see `chainPanels` above. */
               v2vUnavailable={chainPanels.v2v}
@@ -1758,6 +1781,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  reads its row through the same inputs. */
               sageAvailable={sageAvail}
               engineLabel={activeEngineLabel}
+              loraRefreshKey={baseModels.active}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "inventory"}>
@@ -1767,6 +1791,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               onPromptChange={setPrompt}
               baseUrl={baseUrl}
               nativeBridge={nativeBridge}
+              refreshKey={baseModels.active}
             />
           </div>
         </main>

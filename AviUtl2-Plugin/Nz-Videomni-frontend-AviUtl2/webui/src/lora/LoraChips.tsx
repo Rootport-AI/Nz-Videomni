@@ -26,6 +26,11 @@ export interface LoraChipsProps {
    * tag's `-`/`+`/`×` never render, and it's still counted by
    * `parseLoraPrompt` for everything else (submission, migration). */
   hiddenNames?: ReadonlySet<string> | undefined;
+  /** 台帳 §1-104: hide every chip's audio side — the 🎥 mark, the 🔊/🔇
+   * toggle and the audio value — for an engine whose LoRAs have one
+   * strength only (`featureScope.loraAudioStrengthHiddenFor`). The tag text
+   * itself is left alone. */
+  audioStrengthHidden?: boolean | undefined;
 }
 
 /** Renders the shared prompt's `<lora:name:strength>` tags as chips right
@@ -35,7 +40,7 @@ export interface LoraChipsProps {
  * the next render re-derives the chip list from the (now-updated) prompt
  * (task brief §1: "プロンプト手編集とチップは双方向同期"). Renders nothing
  * when the prompt has no valid, un-hidden LoRA tags. */
-export function LoraChips({ prompt, onChange, hiddenNames }: LoraChipsProps) {
+export function LoraChips({ prompt, onChange, hiddenNames, audioStrengthHidden = false }: LoraChipsProps) {
   const strings = useStrings();
   const { tags } = parseLoraPrompt(prompt);
   const chips = tags.filter((tag) => tag.valid && !hiddenNames?.has(tag.name));
@@ -47,6 +52,7 @@ export function LoraChips({ prompt, onChange, hiddenNames }: LoraChipsProps) {
         <LoraChip
           key={`${tag.name}@${tag.index}`}
           tag={tag}
+          audioStrengthHidden={audioStrengthHidden}
           onAdjust={(delta) => onChange(setLoraTagStrength(prompt, tag, clampLoraStrength(tag.strength + delta)))}
           onRemove={() => onChange(removeLoraTag(prompt, tag))}
           onToggleAudio={() =>
@@ -66,6 +72,8 @@ export function LoraChips({ prompt, onChange, hiddenNames }: LoraChipsProps) {
 
 interface LoraChipProps {
   tag: ParsedLoraTag;
+  /** See {@link LoraChipsProps.audioStrengthHidden}. */
+  audioStrengthHidden: boolean;
   onAdjust: (delta: number) => void;
   onRemove: () => void;
   /** Style LoRA音声強度制御 (2026-08-02): the mute toggle's click handler —
@@ -73,7 +81,7 @@ interface LoraChipProps {
   onToggleAudio: () => void;
 }
 
-function LoraChip({ tag, onAdjust, onRemove, onToggleAudio }: LoraChipProps) {
+function LoraChip({ tag, audioStrengthHidden, onAdjust, onRemove, onToggleAudio }: LoraChipProps) {
   const strings = useStrings();
   // Style LoRA音声強度制御 (2026-08-02): "muted" is specifically
   // `audio_strength === 0` (the LOWEST valid value, not falsy-check —
@@ -95,9 +103,11 @@ function LoraChip({ tag, onAdjust, onRemove, onToggleAudio }: LoraChipProps) {
       <span className="lora-chip-name" title={tag.name}>
         {tag.name}
       </span>
-      <span className="lora-chip-video-icon" aria-hidden="true">
-        🎥
-      </span>
+      {!audioStrengthHidden && (
+        <span className="lora-chip-video-icon" aria-hidden="true">
+          🎥
+        </span>
+      )}
       <span className="lora-chip-strength">{tag.strength.toFixed(2)}</span>
       <button
         type="button"
@@ -115,18 +125,22 @@ function LoraChip({ tag, onAdjust, onRemove, onToggleAudio }: LoraChipProps) {
       >
         +
       </button>
-      <button
-        type="button"
-        className={muted ? "lora-chip-audio-toggle lora-chip-audio-toggle-muted" : "lora-chip-audio-toggle"}
-        aria-pressed={muted}
-        aria-label={muted ? strings.common.unmuteLoraAudio(tag.name) : strings.common.muteLoraAudio(tag.name)}
-        onClick={onToggleAudio}
-      >
-        {muted ? "🔇" : "🔊"}
-      </button>
-      <span className={muted ? "lora-chip-audio lora-chip-audio-muted" : "lora-chip-audio"}>
-        {audioDisplay.toFixed(2)}
-      </span>
+      {!audioStrengthHidden && (
+        <>
+          <button
+            type="button"
+            className={muted ? "lora-chip-audio-toggle lora-chip-audio-toggle-muted" : "lora-chip-audio-toggle"}
+            aria-pressed={muted}
+            aria-label={muted ? strings.common.unmuteLoraAudio(tag.name) : strings.common.muteLoraAudio(tag.name)}
+            onClick={onToggleAudio}
+          >
+            {muted ? "🔇" : "🔊"}
+          </button>
+          <span className={muted ? "lora-chip-audio lora-chip-audio-muted" : "lora-chip-audio"}>
+            {audioDisplay.toFixed(2)}
+          </span>
+        </>
+      )}
       <button type="button" className="lora-chip-remove" aria-label={strings.common.removeLora(tag.name)} onClick={onRemove}>
         ×
       </button>

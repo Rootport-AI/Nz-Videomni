@@ -202,21 +202,43 @@ export const MOCK_CONFIG_BODY = {
  * a row missing here would make the Create dropdown silently SHRINK the moment
  * `/loras` resolved. Keep the two lists in step whenever either gains an
  * adapter (`depth-control`/`deblur` were added on 2026-08-04 for exactly this
- * reason — see ledger §4-8(A)). */
-const MOCK_LORAS: Array<{ name: string; kind: "style" | "control"; has_thumbnail: boolean; exists: boolean; source: string }> = [
-  { name: "Pixar_Toon", kind: "style", has_thumbnail: true, exists: true, source: "scan" },
-  { name: "LTX-2.3-Henshin", kind: "style", has_thumbnail: false, exists: true, source: "scan" },
-  { name: "canny-control", kind: "control", has_thumbnail: true, exists: true, source: "config" },
-  { name: "pose-control", kind: "control", has_thumbnail: false, exists: true, source: "config" },
-  { name: "depth-control", kind: "control", has_thumbnail: false, exists: true, source: "config" },
-  { name: "deblur", kind: "control", has_thumbnail: false, exists: true, source: "config" },
+ * reason — see ledger §4-8(A)).
+ *
+ * 台帳 §1-104: every row carries `supported`; `LTX-2.3-Henshin` is the one
+ * `supported: false` row (with a reason), so the Library's 非対応 badge and
+ * Create's yellow note have something to show in dev/tests. */
+const MOCK_LORAS: Array<{
+  name: string;
+  kind: "style" | "control";
+  has_thumbnail: boolean;
+  exists: boolean;
+  source: string;
+  supported: boolean;
+  unsupported_reason: string | null;
+}> = [
+  { name: "Pixar_Toon", kind: "style", has_thumbnail: true, exists: true, source: "scan", supported: true, unsupported_reason: null },
+  // A fixture: marked unsupported for EVERY mock base model (the list is
+  // shared), not a claim about the real file on LTX.
+  {
+    name: "LTX-2.3-Henshin",
+    kind: "style",
+    has_thumbnail: false,
+    exists: true,
+    source: "scan",
+    supported: false,
+    unsupported_reason: "keys outside the engine's LoRA targets (e.g. adaLN_modulation)",
+  },
+  { name: "canny-control", kind: "control", has_thumbnail: true, exists: true, source: "config", supported: true, unsupported_reason: null },
+  { name: "pose-control", kind: "control", has_thumbnail: false, exists: true, source: "config", supported: true, unsupported_reason: null },
+  { name: "depth-control", kind: "control", has_thumbnail: false, exists: true, source: "config", supported: true, unsupported_reason: null },
+  { name: "deblur", kind: "control", has_thumbnail: false, exists: true, source: "config", supported: true, unsupported_reason: null },
   // Docs/PENDING_TASKS_CLOSED.md §3-70 (filed as §1-13 at the time) Outpainting:
   // see the matching `ic_loras` entry above for why this
   // one must stay in step too. Deliberately EXCLUDED from Create/Chain's own
   // dropdown by `lora/controlLoras.ts`'s `UI_HIDDEN_CONTROL_LORA_NAMES` — see
   // `AppShell.controlLora.test.tsx`'s "lists every control adapter" test,
   // which pins the dropdown's set to the four names ABOVE this one on purpose.
-  { name: "in-outpainting", kind: "control", has_thumbnail: false, exists: true, source: "config" },
+  { name: "in-outpainting", kind: "control", has_thumbnail: false, exists: true, source: "config", supported: true, unsupported_reason: null },
 ];
 
 /** Model management (S1) fixed category order, mirroring
@@ -487,8 +509,9 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   // endpoint is refused) and `retake` (a Retake is a chain request, so the
   // adapter publishes the name, which closes the Retake sub-tab). What each
   // name closes on screen is `shell/featureScope.ts`'s `FEATURE_UI`.
+  // 台帳 §1-104: `loras` left (H3 runs Style / Turbo LoRAs now) and
+  // `lora_audio_strength` joined at the end (one strength per LoRA).
   MiniMaxH3: [
-    "loras",
     "reference_video",
     "nag",
     "two_stage_hq",
@@ -503,6 +526,7 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "retake",
     // 台帳 §1-100: no GGUF weights, so the server IGNORES the field (no 422) — hides the Settings row only.
     "fused_gguf_dequant_kernel",
+    "lora_audio_strength",
   ],
 };
 
@@ -1355,7 +1379,12 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
   }
 
   function handleLoras(): ResultOf<"backend.request"> {
-    return { status: 200, body: { loras: MOCK_LORAS } };
+    // 台帳 §1-104: the real server scans a directory per base model (the
+    // descriptor's `lora_dir`, else the config's) and says which. The fixture
+    // keeps ONE list for every base model; only the reported directory moves.
+    const activeFamily = MOCK_BASE_MODELS.find((b) => b.id === activeBaseModel)?.engine_family ?? "ltx";
+    const loraDir = activeFamily === "h3" ? "models/MiniMaxH3/LoRA" : "models/LTX23/StyleLoRA";
+    return { status: 200, body: { loras: MOCK_LORAS, lora_dir: loraDir } };
   }
 
   function handleLorasReload(): ResultOf<"backend.request"> {

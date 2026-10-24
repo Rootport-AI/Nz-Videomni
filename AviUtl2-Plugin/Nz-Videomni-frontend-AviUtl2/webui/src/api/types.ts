@@ -1254,7 +1254,7 @@ export interface BaseModelConstraints {
    * predates the key omits it, and "omitted" reads as the LTX grid. */
   keyframes?: { step: number; offset: number };
   /** §1-111: the text encoder's prompt-token limit (LTX 1024; tokens past it
-   * are cut silently). `null` = the engine has none (MiniMax H3). Optional
+   * are cut silently). `null` = not confirmed for the engine (MiniMax H3). Optional
    * defensively like `keyframes`: omitted reads as "no limit known". */
   prompt_token_limit?: number | null;
 }

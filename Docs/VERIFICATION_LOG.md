@@ -18191,3 +18191,69 @@ dev に 3 コミット。
 - **台帳**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-245。[`PENDING_TASKS.md`](PENDING_TASKS.md) から §2-4 を削除した。あわせて §171 の備忘（§2-3）の目視 ①② もオーナーが合格とし、§2-3 を削除した。これで台帳の §2 は空になり、節ごと削除した。
 
 - 次の番号: CLOSED 3-246・本書 §174・フロントエンド DEVLOG §146。
+
+## 174. ★操作パネルのプロンプト欄にトークンカウンター（台帳 §1-111・LTX 2.3／2.5・MiniMax H3）＝G0 の実測 3 系統 × 20 入力 全一致・計画の敵対的レビュー 15 件（14 件採用）・機械の門 失敗 0・オーナーの目視 合格（2026-10-24）
+
+### 174.1 結論
+
+- 操作パネルの共通プロンプト欄・ネガティブプロンプト欄・Chained の各クリップに、選択中のベースモデルの実際のトークナイザーで数えたトークン数を `876 / 1024 tokens`（上限を確かめていないモデル〔上限 `null`〕は `876 tokens`）で出すようにした。上限を超えたら数字と枠を赤くするだけで、生成は妨げない。文字数の表示 `n/2000` は消した。2,000 文字の制限とエラー文は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-112 まで残る。
+- サーバーに窓口 `POST /utils/prompt-tokens`（常に 200。数えられないときは全部 `null`）を足し、`GET /models` の `constraints` に `prompt_token_limit`（LTX 2.3／2.5 は開始トークン込みで 1024、MiniMax H3 は `null`）を足した。契約の正本は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.1 の補足と §6.2b (e)（v0.5.97）、数え方の置き場は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.2・§7、決めた経緯と G0 の数値は [`TOKEN_COUNTER_RESEARCH_NOTES.md`](TOKEN_COUNTER_RESEARCH_NOTES.md) の「G0 の実測」と「決まったことと実装」。本節は書き写さずに指す。
+- オーナーの目視は全項目合格。台帳 §1-111 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-249 でクローズした。
+
+### 174.2 設計の要点
+
+- **数え方はエンジンのアダプタに置いた**（オーナー裁定）。3 つの `services/engines/<系統>/adapter.py` に同じ形の `count_prompt_tokens` があり、`services/engines/__init__.py` が振り分ける。LTX 2.3 は記述子の `assets.gemma_root`、LTX 2.5 は選択中のテキストエンコーダーの GGUF の中のテンソル `tokenizer_json`、MiniMax H3 は `assets.tokenizer_dir`＋追加の特殊トークン 7 個。サーバーは `engine*` を import しないので、H3 の特殊トークンと LTX 2.5 のテンソル名はアダプタに写し、テストでエンジンのソースとの一致を縛った（H3 は torch を読まないよう `ast.parse` で読む）。
+- **共通部品**: `services/prompt_tokens.py`（トークナイザーはプロセスに 1 つだけ持ち、組み立てはロックで囲む）、`services/gguf_kv.py` の `read_gguf_tensor_bytes`（小さな I8 のテンソルを 1 本だけ読む。本体の位置は `general.alignment` で切り上げる）、`ModelRegistry.asset_path`（既存の資産パスの計算を使う）。
+- **クリップの合成は 1 か所**: `api/models.py` の `GenerateChainRequest.clip_prompt` の中身を `compose_clip_prompt` に切り出し、窓口も同じ関数で合成する（振る舞いは変えていない）。
+- **アクセスログ**: 成功した計数の要求は uvicorn のアクセスログに出さない（`main.py` の `PromptTokensAccessFilter`。既存の `JobPollingAccessFilter` などと同じ作り）。
+- **依存**: アプリの仮想環境に `tokenizers==0.22.2`（3 つのエンジンの仮想環境と同じ版）。入っていないとき（更新後に `setup.bat` を流していない）は、計数だけが `null` になり、「setup.bat をもう一度実行」と `logs/server.log` に 1 回出る。README の更新手順に 1 段落足した。
+- **操作パネル**: `shell/usePromptTokenCounts.ts`（入力が止まって 250 ms 後に送る・最新の要求の応答だけを採る・失敗は `null`）、`shell/TokenCounter.tsx`、`shell/generationConstraints.ts` の `promptTokenLimit`。共通とネガティブはシェル（`AppShell`）が 1 往復、Chained のクリップ群は Chained タブを表示している間だけ別の 1 往復で数える。詳細はフロントエンドの `Docs/DEVLOG.md` §146。
+
+### 174.3 G0（実装前の実測）
+
+- E1・E2 とも合格。数値の正本は研究ノートの「G0 の実測」である。要点だけ書く。
+  - E1: 3 系統 × 20 入力で、推論経路と ID の列が全件一致した（1,023／1,024／1,025 トークン前後と空文字列を含む）。
+  - E2: 初回の読み込みは最も遅い LTX 2.5 で 650 ms、常駐の増加は最大で約 71 MB、1 万文字でも数 ms。計画の中止の目安には届かなかった。
+- スクリプトはセッションの作業用フォルダに置き、残していない。
+
+### 174.4 機械の門
+
+| 門 | 結果 |
+|---|---|
+| アプリの仮想環境の pytest 全件 | 3,495 件合格・67 件スキップ・失敗 0（変更前は 3,461 件合格）。新設 `tests/test_prompt_tokens.py`（GGUF のテンソルの読み出し・3 系統の数え方・写しの一致・キャッシュ・`tokenizers` が無いときの案内・`compose_clip_prompt` の同値・窓口の形と認証と失敗時の `null`・有効なベースモデルとテキストエンコーダーへの追従・上限の配信・アクセスログのフィルタ）。既存の `tests/test_logging.py` と `tests/test_engine_h3_adapter.py` は `constraints` とフィルタの追加に合わせて期待値を足した |
+| 実資産での確認 | 3 系統の実際のトークナイザーをアダプタ経由で呼び、E1 の期待値と一致 |
+| 操作パネル | `npm run typecheck` 合格・`npx vitest run --exclude "**/backend.integration.test.ts"` 3,337 件 全合格（変更前は 3,320 件）。新設は `usePromptTokenCounts.test.ts`（デバウンス・順序の逆転・失敗・モデル鍵の変化・無効時）、`TokenCounter.test.tsx`（1,024 と 1,025 の境界・上限 `null`）、`promptTokenFields.test.tsx`（3 つの欄）、`mockBridge.promptTokens.test.ts`。`generationConstraints.test.ts` に上限の読み取りを足した |
+| 配置 | `build.ps1`／`deploy.ps1` 経由で埋め込み、実機（`D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2`）と配布用コピーの 2 箇所に配置。単位 `tokens` を付けた後の版で、2 箇所の SHA-256 は `C1B1E62786B9C0CAF2DF2D605A1F11DDBE7D77089231979CD51E41F49929DCA3` で一致し、どちらも新しい文字列「 tokens」を含む |
+
+### 174.5 オーナーの目視（2026-10-24）
+
+- **全項目合格**。観点は、入力の軽さ・1,024 を超えると赤くなること・ベースモデルとテキストエンコーダーの切り替えで数え直すこと・MiniMax H3 では数だけが出ること・Chained のクリップの表示・LTX のネガティブプロンプト欄。
+- 1 回目の目視のあと、オーナーの指示でカウンターに単位 `tokens` を付けた（`876 / 1024 tokens`、上限を確かめていない（`null`）MiniMax H3 は `876 tokens`。日本語の画面も同じ語。コミット `0924d0f`）。そのあとオーナーが目視で確かめた。
+
+### 174.6 既知の挙動（受け入れ済み）
+
+- LTX は欄が空でも、開始トークンの分で「1 / 1024 tokens」と出る（裁定どおり）。
+- Gradio や MCP からテキストエンコーダーを差し替えても、操作パネルはベースモデルの切り替えか読み込みの完了が来るまで数え直さない。
+- Edit の画角拡張（Outpaint）は、プロンプトを `<lora:>` のタグを除かずに送る。カウンターはタグを除いた文字列を数えるので、その画面だけ送る文字列とトークン数が食い違う（送信側は変えていない）。
+- Chained でクリップを足したり消したりした直後の約 250 ms は、隣のクリップの数が出ることがある（オーナーが受け入れた）。
+
+### 174.7 計画の敵対的レビューの採否
+
+- 15 件のうち 14 件を採用し、1 件を棄却した（計画は git 管理外の `~/.claude/plans/pasted-content-id-9c64-1-h3-quirky-hinton.md`）。採用した主なもの: Chained のクリップの計数をタブの表示中だけにする（常時マウントのため）、共通は `<lora:>` を除いた文字列を数える、GGUF の本体の位置を `general.alignment` で求める、トークナイザーはプロセスに 1 つ、テキストエンコーダーのパスは LTX 2.5 のアダプタが呼んだときだけ解決する、アクセスログのフィルタ、`tokenizers` が無いときの案内。
+- 棄却: 窓口の入力に文字数と本数の上限を付ける案（R12）。ローカル専用で入力が止まってから送るので害が無く、§1-112 で文字数の制限を外す方針とも逆になるため（過剰設計）。
+
+### 174.8 コミット（dev）
+
+| コミット | 中身 |
+|---|---|
+| `bb78ef4` | バックエンド（窓口・アダプタ 3 本・上限の配信・`compose_clip_prompt`・GGUF のテンソル読み出し・アクセスログ・依存・README・テスト） |
+| `a699270` | 操作パネル（カウンター・フック・3 つの欄・モック・テスト） |
+| `a844cec` | 配布用 aux2 |
+| `0924d0f` | 単位 `tokens` と配布用 aux2 |
+| `8456fc5` | 台帳 §1-112 の対象の明記 |
+| （本節） | 文書（仕様書 v0.5.97・MULTI_ENGINE_DESIGN・研究ノート・API_REFERENCE・フロントエンド DEVLOG §146・本節・台帳） |
+
+- **台帳**: §1-111 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-249 へクローズし、[`PENDING_TASKS.md`](PENDING_TASKS.md) から削除した。§1-112 は残る。
+
+- 番号: §173.7 の「次の番号: CLOSED 3-246」は、台帳 §3 の生きた項目（3-246〜3-248）と重なるため使わず、両書で空いている 3-249 を使った（3-152 の前例と同じ扱い）。§1-110 の CLOSED 3-245 は台帳の §3-245 と同じ番号だが、振り直していない。
+- 次の番号: CLOSED 3-250・本書 §175・フロントエンド DEVLOG §147。

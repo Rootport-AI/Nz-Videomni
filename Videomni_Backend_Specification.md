@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.96**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-10-23**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.97**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-10-24**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -150,6 +150,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.94（文言の現行化） | 2026-10-19 | **文言の現行化（版は上げない。API・挙動は不変）**。キーフレーム関連の記述の整合（Gradio の節と規約の表の文言）。 |
 | v0.5.95 | 2026-10-21 | **`GET /models` の MiniMax H3 の `unsupported_features` に `fused_gguf_dequant_kernel` を追加（台帳 §1-100 の ①）**。受け取って無視する項目を一覧に載せる初めての例で、サーバーの挙動は変わらない（H3 はこの項目を引き続き無視し、422 にしない）。これに伴い `unsupported_features` の意味は「その系統に無い機能（422 で断るか、受け取って無視する）」になった。操作パネルと Gradio は、この名前で Settings の「Fused GGUF Dequantization Kernel」の行を隠す。**§6.2b (f)**（H3 の一覧と導出の書き方）／**§6.10(b)**（例の注記の正本を各アダプタの `UNSUPPORTED_FEATURES` に）／**§12.2**（Gradio の Settings で H3 ではこの行を非表示）を更新した。記録は `Docs/VERIFICATION_LOG.md` §171。 |
 | v0.5.96 | 2026-10-23 | **Chained（連結生成）の共通プロンプトと個別プロンプトを「置き換え」から「追記」へ変更した（凍結 API 契約の挙動変更。オーナー裁定・台帳 §1-110）**。Stage-1 は「共通＋半角スペース1つ＋個別」、Stage-2 は共通だけを使う。個別が未指定・空・空白だけなら共通だけ。**合成後の文字列が 2,000 文字を超えると 422 `VALIDATION_ERROR`**。ワーカーのペイロードにトップレベルの `prompt`（両端を除いた共通）を加えた（LTX 2.3・2.5 とも）。ジョブの記録の `request.prompt` は共通のままで、旧仕様へ戻す互換のスイッチは設けていない。**§6.2** の補足「チェーンのプロンプトの効き方」を全面的に書き換え、「凍結 API 契約への影響は無い」を撤回した。**§6.10(f)** の「動作」欄と **§13.4** を合わせた。記録は `Docs/VERIFICATION_LOG.md` §173。 |
+| v0.5.97 | 2026-10-24 | **プロンプトのトークン数の窓口と上限の配信を反映（加算のみ。既存のフィールド・既定値・応答・検査の文言は変わらない。台帳 §1-111）**。`POST /utils/prompt-tokens` を新設した（常に 200。数えられないときは全部 `null`）。`GET /models` の `base_models[].constraints` に `prompt_token_limit`（LTX 2.3／2.5 は開始トークン込みで `1024`、MiniMax H3 は `null`）を加えた。サーバーは上限を検査しない。**§6.1**（エンドポイント表へ 1 行・認証の要る経路・窓口の補足）／**§6.2**（チェーンのプロンプトの補足の 2,000 文字の項に、LTX がトークンの上限を超えた分を黙って切り捨てること）／**§6.2b**（(c) の表に 1 行・(e) に `prompt_token_limit`）／**§4.4**・**§4.5**・**用語集の GGUF KV**（`services/prompt_tokens.py`・アプリの venv の `tokenizers`・GGUF のテンソルを 1 本だけ読む関数）を合わせた。2,000 文字の上限はこの版でも残る（撤廃は台帳 §1-112）。記録は `Docs/VERIFICATION_LOG.md` §174。 |
 
 ### 0.2 スコープ
 
@@ -487,6 +488,8 @@ Nz-Videomni/
 │                          base_models.py（ベースモデル記述子の読み手）/
 │                          model_registry.py（カテゴリ別モデル一覧）/
 │                          gguf_kv.py（最小の自前 GGUF KV パーサ）/
+│                          prompt_tokens.py（プロンプトのトークン数を数える
+│                          トークナイザーの読み込みと保持）/
 │                          runtime_state.py（state.json）/
 │                          engines/ltx/adapter.py（唯一の LTX 接点・mock/real
 │                          backend。旧 ltx_runner.py は再エクスポート shim）
@@ -534,7 +537,7 @@ Nz-Videomni/
 
 | 層 | 主なパッケージ / バージョン | 出所 |
 |----|------------------------------|------|
-| アプリ（`./.venv`） | fastapi / uvicorn / gradio / pydantic / pillow / **`mcp`（`>=1.28,<2`。2026-07-28追加・MCPサーバー用main依存＝§12b）**（+ ffmpeg 呼び出し）。**torch 無し** | `pyproject.toml` / `requirements.txt` |
+| アプリ（`./.venv`） | fastapi / uvicorn / gradio / pydantic / pillow / **`mcp`（`>=1.28,<2`。2026-07-28追加・MCPサーバー用main依存＝§12b）**／**`tokenizers`（`==0.22.2`。2026-10-24追加・プロンプトのトークン数を数える＝§6.1 の `POST /utils/prompt-tokens`。3 つのエンジンの venv と同じ版）**（+ ffmpeg 呼び出し）。**torch 無し** | `pyproject.toml` / `requirements.txt` |
 | エンジン（`./.venv-engine`） | **torch 2.9.1+cu128**（+ torchaudio 0.24.1+cu128 / torchvision）、`ltx-core` / `ltx-pipelines` @git rev `00dc53d`、`diffusers` @git rev（`engine/venv-engine.freeze.txt` ヘッダが正）、`gguf`、`transformers`、**`sageattention` 2.2.0＋`triton-windows` 3.5.1.post24（2026-07-31追加・Acceleration 機能用＝§5.4）** | `engine/venv-engine.freeze.txt`（完全スナップショット）/ `engine/engine-venv-pyproject.toml`（`[tool.uv.sources]` に cu128 index と git rev） |
 | エンジン（`./.venv-engine-ltx25`） | **torch 2.9.1+cu128**（+ torchaudio / torchvision）、公式 v1.2.0 の推論スタック、`transformers` 5.x（Gemma 4）、`gguf`、`opencv-python-headless`、**`triton-windows` 3.5.1.post24（2026-08-24追加・fused GGUF 逆量子化カーネル用）**、**`sageattention` 2.2.0（2026-08-25追加・高速化第3弾＝SageAttention の LTX 2.5 開通用。wheel は `./.venv-engine` 側とバイト単位で同一のもの）** | `engine25/venv-engine-ltx25.freeze.txt`（完全スナップショット）/ `engine25/engine25-venv-pyproject.toml` |
 
@@ -684,10 +687,11 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | GET | `/api/v1/jobs/{job_id}/alpha/chroma/{color}` | 塗りつぶした動画（`chroma_<色>.mp4`・`video/mp4`）を返す（**2026-10-15 加算**。§6.3c） | 不要 | 200 / 404(JOB_NOT_FOUND, ALPHA_OUTPUT_NOT_READY) / 422(VALIDATION_ERROR) |
 | DELETE | `/api/v1/jobs/{job_id}` | 実行中はキャンセル要求、終了済みは結果削除 | 要 | 200 / 404(JOB_NOT_FOUND) |
 | POST | `/api/v1/utils/mp4-info` | サーバーを動かしている PC 上の動画ファイルのパスを受け取り、コンテナの `comment` タグを返す（**2026-09-24 加算**。§6.6 の埋め込みの読み出し口。ffprobe で読むだけで、ジョブは作らない） | 要 | 200 / 403(LOCAL_ONLY) / 404(MEDIA_NOT_FOUND) / 422(MEDIA_UNREADABLE, VALIDATION_ERROR) |
+| POST | `/api/v1/utils/prompt-tokens` | 有効なベースモデルのトークナイザーで、プロンプト・ネガティブプロンプト・連結のクリップごとのプロンプトのトークン数を数える（**2026-10-24 加算**。操作パネルのトークンカウンター用。ジョブは作らない） | 要 | 200 / 422(VALIDATION_ERROR) |
 
 補足（実装どおり）:
 - `POST /generate` は成功時 **202 Accepted**（`status_code=202`）。レスポンス `status` は `queued`。
-- 認証が必要なのは `require_auth` 依存を持つ経路: `pipeline/load`, `pipeline/unload`, `upload/image`, **`upload/video`**, **`upload/audio`**, `generate`, **`generate/chain`**, **`generate/alpha`**, `jobs/{job_id}/join`, **`jobs/{job_id}/alpha/rgba`・`jobs/{job_id}/alpha/chroma`（POST）**, `DELETE /jobs/{job_id}`, 物体追尾の `/utils/track/*`（§4.7）, `utils/mp4-info`。このうち `upload/video` / `upload/audio` / `generate/chain` / `/utils/track/*` は本表に未掲載の ADDITIVE エンドポイントで、掲載済みの経路と同じ `require_auth` を持つ。`status` / `config` / `jobs` 系 GET（`jobs/{job_id}/joined`・`jobs/{job_id}/matte`・`jobs/{job_id}/alpha/*` の GET を含む）と `GET /models` / `GET /loras`、さらに `POST /loras/reload` と `GET /loras/{name}/thumbnail`（`api/loras.py` のどちらにも `require_auth` が無い）は認証不要。
+- 認証が必要なのは `require_auth` 依存を持つ経路: `pipeline/load`, `pipeline/unload`, `upload/image`, **`upload/video`**, **`upload/audio`**, `generate`, **`generate/chain`**, **`generate/alpha`**, `jobs/{job_id}/join`, **`jobs/{job_id}/alpha/rgba`・`jobs/{job_id}/alpha/chroma`（POST）**, `DELETE /jobs/{job_id}`, 物体追尾の `/utils/track/*`（§4.7）, `utils/mp4-info`, `utils/prompt-tokens`。このうち `upload/video` / `upload/audio` / `generate/chain` / `/utils/track/*` は本表に未掲載の ADDITIVE エンドポイントで、掲載済みの経路と同じ `require_auth` を持つ。`status` / `config` / `jobs` 系 GET（`jobs/{job_id}/joined`・`jobs/{job_id}/matte`・`jobs/{job_id}/alpha/*` の GET を含む）と `GET /models` / `GET /loras`、さらに `POST /loras/reload` と `GET /loras/{name}/thumbnail`（`api/loras.py` のどちらにも `require_auth` が無い）は認証不要。
 - api_key 設定時に Bearer 不一致/欠落 → `401 UNAUTHORIZED`。
 - `POST /generate` は投入時にまず `conditioning_images` の各 `image_id` の実在を検証（`upload_store.path_for` が `IMAGE_NOT_FOUND`=404 を送出）、次に単一ジョブガードで 409。
 - `POST /pipeline/unload` は実行中ジョブがあると `409 JOB_BUSY`（detail="cannot unload while a job is running"）。**ロード中は `409 PIPELINE_LOADING`**——load・内部の reload と同じ見張りを unload も通る（2026-10-03〜。`load`／`reload` は `finally` で状態を `loading` に残さないので、ロード中に張り付く経路は無い。§6.9(f)）。
@@ -696,6 +700,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 - `POST /jobs/{job_id}/join`・`GET /jobs/{job_id}/joined` は V2V（video-to-video 継続）専用の ADDITIVE エンドポイントで、V2V 継続機能そのものの実装時（§24）に新設され、**2026-07-21 に凍結の限定解除（オーナー承認・コミット `d22706e`）でリクエスト/レスポンスが拡張された**。リクエスト `JoinRequest` は `audio_smoothing`（bool, 既定 `true`＝クロスフェード）・`handle_crossfade_ms`（int, 既定 `300`, `0`〜`2000`）・`source_tail_seconds`（float, 既定 `5.0`, `2026-07-21追加`——結合前にソース動画の末尾 `N` 秒だけを残す tail-keep トリム。`0` はソースを全長のまま結合）。レスポンス `JoinResponse` は `job_id`・`joined_path`（結合後 mp4 のパス）・`join_mode`・`source_normalized`・`source_lufs`・`continuation_lufs_before`・`fade_ms_applied`・`handle_crossfade_ms_applied`・`handle_context_seconds`・`loudness_matched`・`trimmed_source_seconds`（float, `2026-07-21追加`——tail-keep で削られた秒数。挿入位置計算に使う）・`source_fps`（float \| null, `2026-07-21追加`——ソースの実測fps）を返す。ボディ省略（またはPOST時ボディ無し）は既定値でのスムーズ結合になる。
 - `POST /generate/chain`（`api/generate_chain.py::generate_chain`）も本表に未掲載の ADDITIVE エンドポイントで、クリップ連結・Retake・End source・V2V・A2V の**5系統すべてがこの1本を通る**。**2026-08-22 追加／2026-08-23 更新**: 選択中のベースモデルのエンジンが扱えない要求は、ジョブを作る前に `engines.reject_chain(family, request)` が **422 `FEATURE_UNSUPPORTED`** で断る（エンジン系統 `ltx25` が該当）。**2026-08-23 から、拒否は「5系統をまとめて」ではなく「リクエストのフィールド単位」になった。** **さらに 2026-08-26、Retake と End source も LTX 2.5 で走るようになったので、いま断るのは扱えない機能のフィールドだけである**——**この 5 系統はどれも、エンジン系統によらず通る**（残る 422 は `pipeline` / `vae_mode` の 2 つで、いずれも系統の機能ではなくフィールドの話である。**【2026-09-03 訂正】本括弧はそれまで「`nag_enabled` / `pipeline` / `vae_mode` の 3 つ」と書いていたが、これが真だったのは 2026-08-30 より前についてだけである**——同日の非CFGネガティブプロンプト〔NAG／VSF〕の開通で `nag_enabled` は 422 の側から「動作」の側へ移っており、現物の `services/engines/ltx25/adapter.py` の `CHAIN_REJECT_TABLE`〔単発側の `REJECT_TABLE` も同一〕は `pipeline`〔`two_stage_hq`〕と `vae_mode`〔`prune_vaed`〕の 2 行だけである）。§6.10(c)・§6.10(f)。**2026-08-31 追加**: モデル読み込み中の要求はジョブを作る前に 409 `PIPELINE_LOADING` で断る（`/generate` と同じ。§6.9(f)）。
 - **`POST /utils/mp4-info`（`api/media_info.py::mp4_info`、2026-09-24 加算・タグ `utils`）** は本文 `{"path": "<絶対パス>"}` を受け取り `{"comment": str | null}` を返す（タグが無ければ `null`）。**ループバック（`127.0.0.1`／`::1`）からの要求だけに答え、それ以外は `403 LOCAL_ONLY`**——本文でサーバー側のパスを指定させる入口なので、`--listen`（§3.2）で LAN に開いていても外からファイルを探らせない。**UNC パス（`\\server\share`・`//server/share`・`\\?\UNC\…`・区切りの混在など、`pathlib` がドライブを `\\` 始まりと解釈する形すべて）はファイルに触れる前に `422 MEDIA_UNREADABLE`**（副作用として長いパス用の `\\?\C:\…` とデバイスパス `\\.\…` も断られる）。ネットワークドライブを割り当てたドライブ文字は文字列から区別できないので断らない（既知の制約）。存在しない・通常のファイルでない → `404 MEDIA_NOT_FOUND`、ffprobe が読めない → `422 MEDIA_UNREADABLE`。**ローカル運用向け**であり、クライアントの接続先が別 PC なら手元のパスは読めない。
+- **`POST /utils/prompt-tokens`（`api/prompt_tokens.py::prompt_tokens`、2026-10-24 加算・タグ `utils`・台帳 §1-111）** は本文 `{"prompt": str, "negative_prompt"?: str, "clips"?: [str, ...]}` を受け取り、`{"prompt": int | null, "negative_prompt": int | null, "clips": [int, ...] | null}` を返す。`prompt` は共通のプロンプトを送られたとおりに数える（`<lora:>` のタグを除くのはクライアントの仕事）。`clips` の各要素はクリップ自身のプロンプトで、サーバーが §6.2 のチェーンの合成規則（`api/models.py::compose_clip_prompt`。`GenerateChainRequest.clip_prompt` と同じ 1 か所）で共通と結んでから数える。`negative_prompt`／`clips` は送らなければ `null`。**数える相手は有効なベースモデル（`active_base_model`）と、LTX 2.5 では選択中のテキストエンコーダー**で、数え方はエンジンのアダプタの `count_prompt_tokens` が持つ（`Docs/MULTI_ENGINE_DESIGN.md` §5.2。LTX 2.3 と 2.5 は開始トークン込みで数え、空のプロンプトは 1、MiniMax H3 は空が 0 で、I2V の画像のトークンは数えない）。比べる上限は `GET /models` の `constraints.prompt_token_limit`（§6.2b (e)）。**常に 200 を返す**: 数えられないとき（数え方を持たない系統・トークナイザーのファイルが無い・アプリの venv に `tokenizers` が無い〔`setup.bat` の再実行で入る〕など）は 3 つとも `null` で、失敗の内容は `logs/server.log` に同じ文につき 1 回だけ書く。本文の形が違うときだけ pydantic の 422 `VALIDATION_ERROR` になる。文字数や本数の上限は付けていない。読み込んだトークナイザーはプロセスに 1 つだけ（最後に使ったもの）保持する（`services/prompt_tokens.py`）。成功した要求は uvicorn のアクセスログに出さない（`main.py::PromptTokensAccessFilter`。200 以外は出る）。生成の要求は数えた結果にかかわらずこれまでどおり受け付ける。
 
 ### 6.2 GenerateRequest 全文
 
@@ -813,8 +818,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 
 > **チェーンのプロンプトの効き方（Stage-1 と Stage-2）の補足（2026-09-28追加・2026-10-23に「置き換え」から「追記」へ改訂）**: `GenerateChainRequest` の `prompt`（全体共通のプロンプト）と `clips[].prompt`（クリップ別のプロンプト）が、生成のどの段でどう効くかを定める。**本項がこの挙動の正本**で、他の文書はここを指す。LTX 2.3・LTX 2.5 のどちらのエンジン系統でも同じである。
 >
-> - **クリップごとのプロンプトは、共通のプロンプトの後ろへ「追記」する**。クリップ `i` の Stage-1 用のプロンプトは、共通の `prompt` の両端の空白を除いたものと、`clips[i].prompt` の両端の空白を除いたもののうち、空でないほうを半角スペース1つで結んだ文字列である（「共通＋半角スペース1つ＋個別」）。個別が未指定・空文字列・空白だけのときは、共通だけになる。共通が空白だけのときも、先頭に余分な空白は付かない。どちらも内部の改行はそのまま残る（除くのは両端の空白だけ）。規則の実装は `api/models.py` の `GenerateChainRequest.clip_prompt`（Stage-1 用）と `GenerateChainRequest.shared_prompt`（共通を trim したもの）の2箇所で、エンジンのアダプタ（`services/engines/ltx/adapter.py`・`services/engines/ltx25/adapter.py`）は、合成した文字列を `clips[].prompt` として、trim 済みの共通をトップレベルの `prompt` として、ワーカーへ送る。エンジンは渡された文字列を符号化するだけで、合成はしない。
-> - **合成後の文字列にも 2,000 文字の上限がある**。共通と個別はそれぞれ単独でも 2,000 文字までだが、合成後の文字列の長さ（`len()`）が 2,000 文字を超えると、ジョブを作る前に 422 `VALIDATION_ERROR` で断る（メッセージに `clips[i]` の番号と文字数が入る）。クライアント側に事前検査は無い。なお 2,000 文字は、テキストの符号化器が読める長さ（トークン数）を保証する値ではない。
+> - **クリップごとのプロンプトは、共通のプロンプトの後ろへ「追記」する**。クリップ `i` の Stage-1 用のプロンプトは、共通の `prompt` の両端の空白を除いたものと、`clips[i].prompt` の両端の空白を除いたもののうち、空でないほうを半角スペース1つで結んだ文字列である（「共通＋半角スペース1つ＋個別」）。個別が未指定・空文字列・空白だけのときは、共通だけになる。共通が空白だけのときも、先頭に余分な空白は付かない。どちらも内部の改行はそのまま残る（除くのは両端の空白だけ）。規則の本体は `api/models.py` の `compose_clip_prompt` で、Stage-1 用の `GenerateChainRequest.clip_prompt` とトークン数の窓口 `POST /utils/prompt-tokens`（§6.1 の補足）が共用する。Stage-2 用の共通（両端の空白を除いたもの）は `GenerateChainRequest.shared_prompt` が返す。エンジンのアダプタ（`services/engines/ltx/adapter.py`・`services/engines/ltx25/adapter.py`）は、合成した文字列を `clips[].prompt` として、trim 済みの共通をトップレベルの `prompt` として、ワーカーへ送る。エンジンは渡された文字列を符号化するだけで、合成はしない。
+> - **合成後の文字列にも 2,000 文字の上限がある**。共通と個別はそれぞれ単独でも 2,000 文字までだが、合成後の文字列の長さ（`len()`）が 2,000 文字を超えると、ジョブを作る前に 422 `VALIDATION_ERROR` で断る（メッセージに `clips[i]` の番号と文字数が入る）。クライアント側に事前検査は無い。なお 2,000 文字は、テキストの符号化器が読める長さ（トークン数）を保証する値ではない。LTX 2.3／2.5 は、開始トークン込みで 1,024 トークン（`GET /models` の `constraints.prompt_token_limit`。§6.2b (e)）を超えた分を、エラーにせず黙って切り捨てる。合成後の文字列のトークン数は `POST /utils/prompt-tokens`（§6.1 の補足）で数えられ、操作パネルはクリップごとに表示する。
 > - **Stage-1（半解像度で全体の動きを作る第1段階）は、クリップ（セグメント）ごとに、上の合成後の文字列で条件付けする**。テキストの符号化は「異なる文字列」ごとに1回だけ行い、クリップごとの対応表 `seg_ctx` を引く（LTX 2.3 は `engine/pipeline/chain_pipeline.py`、LTX 2.5 は `engine25/chain25.py` の、どちらも `_encode_chain_prompts`）。
 > - **Stage-2（全解像度へ仕上げ直す第2段階。時間方向の窓〔タイル〕に分けて処理する）は、全部の窓が共通のプロンプトだけを使う**。個別のプロンプトは Stage-2 に一切入らない。両エンジンとも、共通のプロンプトの符号化結果 `stage2_ctx`（個別を持たないクリップがあれば、そのクリップと同じ文字列なので符号化を共用する）を、Stage-2 の処理の冒頭で `stage2_vctx, stage2_actx = stage2_ctx` と代入して使う。窓の位置・クリップの境界・窓どうしの重なりとは無関係に、1本の文脈を全部の窓で使う理由は、窓の重なりの途中で音声側の条件を切り替えると、凍結した継ぎ目にクリック音が入ることを実測したためである。クリップごとのプロンプトの違いは、Stage-1 の引き継ぎ（前のクリップの末尾の潜在を次の頭に凍結する仕組み）とクロスフェードが吸収する。
 > - **符号化の本数**: 異なる文字列だけを1回ずつ符号化するので、個別を持たないクリップが1本でもあれば、そのクリップの文字列（共通だけ）が Stage-2 の文字列と同じになり、Stage-2 のための追加の符号化は要らない。全クリップに個別があるときだけ、共通が追加の1本になる（クリップ数＋1本）。LTX 2.3 は1本ずつ符号化する。LTX 2.5 は1回の呼び出しで全部の文字列をまとめて符号化するので、追加の1本があると符号化の段のメモリの山が上がる（実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §173.3）。
@@ -855,6 +860,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | `vram16_mode` | 機能として拒否（`true` のとき） | 既定 `true`（`flag_defaults`） |
 | キーフレームの位置（`frame_idx > 0`） | 8n+1 へ寄せ、`[1, num_frames-8]` へクランプ（`keyframe_step` 8・`keyframe_offset` 1） | 0〜`num_frames`−1 の任意のフレーム（`keyframe_step` 1・`keyframe_offset` 0） |
 | キーフレームの強度（`strength` を省略したとき） | 0.8 を書き戻す（`keyframe_strength_default`） | 概念が無い。省略は `null` のまま記録し、値を送ると `keyframe_strength` の 422 |
+| プロンプトのトークン数の上限（`prompt_token_limit`。**検査はしない**） | 1024（開始トークン込み。固定版の ltx-core の値で、超えた分は黙って切り捨てられる） | `null`（確かめていない） |
 
 規則表は数値の規約のほかに、**真偽値の既定の小さな表 `flag_defaults`**（スキーマの既定が `null`＝「系統の既定」の真偽値フィールドごとの既定値）を持ち、`validate_for_family` が `null` のときだけ書き戻す。いまは H3 の `{"vram16_mode": true}` だけで、LTX は宣言しない（`null` のまま）。`flag_defaults` は `constraints`（下記 (e)）には出さない。キーフレームの強度の既定（`keyframe_strength_default`）も同じく `constraints` には出さない（画面が写しの 0.8 を持ち、強度を使えるかどうかは機能名 `keyframe_strength` で伝わる）。
 
@@ -872,11 +878,14 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
     "shift_video":         {"min": 1, "max": 20, "step": 0.1, "default": 12},
     "shift_audio":         {"min": 1, "max": 20, "step": 0.1, "default": 3}
   },
-  "keyframes": {"step": 1, "offset": 0}                              // 2026-10-19 加算。LTX は {step: 8, offset: 1}
+  "keyframes": {"step": 1, "offset": 0},                             // 2026-10-19 加算。LTX は {step: 8, offset: 1}
+  "prompt_token_limit": null                                         // 2026-10-24 加算。LTX は 1024
 }
 ```
 
 `keyframes` は、開始フレーム（`frame_idx` 0）以外のキーフレームを置ける格子 `step × n + offset` である（寄せ方は §6.2 の凍結制約 7）。省略（古いバックエンド）は LTX の `{step: 8, offset: 1}` として扱う。
+
+`prompt_token_limit`（2026-10-24 加算・台帳 §1-111）は、テキストエンコーダーが読むプロンプトの長さの上限（トークン数）で、画面のトークンカウンターが `POST /utils/prompt-tokens`（§6.1 の補足）の数と比べる。**サーバーはこの値で要求を検査しない**（超えても 422 にせず、そのまま生成する）。確かめていない系統は `null` で、カウンターは数だけを出す。操作パネルは省略（古いバックエンド）も `null` として扱う。
 
 **(f) MiniMax H3 の `unsupported_features`。** 単発生成の拒否表の機能名（`loras`・`reference_video`・`nag`・`two_stage_hq`・`guidance_scale`・`outpaint`・`inpaint`・`alpha_gen`・`prune_vaed`・`keep_resident_embeddings`・`keyframe_strength`〔`strength` が `null` 以外。0.8 でも断る〕）＋ `chain` ＋ `retake` ＋ `fused_gguf_dequant_kernel`〔無視表の項目。422 にはならず、H3 では効かない操作部を隠すためだけに載せる〕。I2V はキーフレームを最大 10 枚・0〜`num_frames`−1 の任意のフレームに置け、強度は省略する（ワーカーへは送らない）。H3 の strength の 422 の文言は「MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。」である。導出規則は MULTI_ENGINE_DESIGN §5.6 (4)。**逆向きに、LTX 2.3／2.5 の `unsupported_features` には H3 専用の `vram16_mode`（2026-10-18 追加）が載る**（H3 の一覧には載らない）。
 
@@ -2422,7 +2431,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 | **ベースモデル（base model）** | 利用者から見た「どの動画生成AIか」の単位（LTX 2.3 / LTX 2.5 / 将来の別モデル）。実体は記述子 1 本＝`scripts/manifests/*.json` で、`GET /status` の `base_model`・`POST /pipeline/load` の `base_model`・`GET /models` の `base_models[]` に現れる（§6.9）。 |
 | **エンジン系統（engine family）** | 推論実装の単位（記述子の `engine_family`。現在は `"ltx"`〔LTX 2.3〕・`"ltx25"`〔LTX 2.5〕・`"h3"`〔MiniMax H3〕。一覧の正本は `services/engines/__init__.py` の `FAMILY_BY_ID`）。ベースモデル→エンジン系統は多対1で、**どのエンジンで動かすかは選択中のベースモデルの記述子（`engine_family`）が決める**。読み込み時に重みの GGUF KV メタデータから系統を導いて照合し、食い違えば自動解決せず 422 で選び直しを案内する（`Docs/MULTI_ENGINE_DESIGN.md` §2.1）。MiniMax H3 は KV を持たず、テンソル名の指紋で判定する（§6.9(b)）。 |
 | **記述子（base-model descriptor）** | ベースモデル 1 件が何のファイルでできているかを宣言する JSON（`schema: 2`＋`engine_family`）。`categories[].default_file`＝カテゴリ別の既定の重み、`assets`＝tokenizer・アップサンプラ等の固定ファイル。**2026-08-20 以降、モデル既定パスの正本**（§4.3・§5.1・§11.2）。 |
-| **GGUF KV（メタデータ）** | GGUF ファイルのヘッダにある key-value 群。本プロジェクトはロード前に `general.architecture`（`ltxv` か）と `model_version`（対応世代か）の 2 つだけを読み、不適合を 422 で止める。読み手は依存パッケージ無しの自前パーサ `services/gguf_kv.py`（巨大なテンソル本体には触れない）。 |
+| **GGUF KV（メタデータ）** | GGUF ファイルのヘッダにある key-value 群。本プロジェクトはロード前に `general.architecture`（`ltxv` か）と `model_version`（対応世代か）の 2 つだけを読み、不適合を 422 で止める。読み手は依存パッケージ無しの自前パーサ `services/gguf_kv.py`（巨大なテンソル本体には触れない。例外は LTX 2.5 のテキストエンコーダーが同梱するトークナイザーの JSON〔小さなテンソル `tokenizer_json` 1 本〕で、プロンプトのトークン数を数えるために `read_gguf_tensor_bytes` がそれだけを読む）。 |
 
 ### B.2 SSOT ドキュメント地図
 

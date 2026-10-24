@@ -51,7 +51,8 @@ export interface GenerationConstraints {
    * H3 1/0 = any frame). Read by the keyframe panel (`keyframeGrid.ts`). */
   keyframeGrid: FrameGrid;
   /** Prompt-token limit shown beside the token counters (§1-111), or `null`
-   * when the engine has none (H3) or the server has not said (fallback). */
+   * when the limit is not confirmed for the engine (H3) or the server has not
+   * said (fallback). */
   promptTokenLimit: number | null;
 }
 

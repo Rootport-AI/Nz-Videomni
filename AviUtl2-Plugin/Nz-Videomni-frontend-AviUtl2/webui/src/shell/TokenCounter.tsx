@@ -1,7 +1,8 @@
 export interface TokenCounterProps {
   /** `null`/`undefined` (not counted, or counting failed) renders nothing. */
   count: number | null | undefined;
-  /** `null`/`undefined` = the engine has no limit: the count alone, never red. */
+  /** `null`/`undefined` = the limit is not confirmed (MiniMax H3) or not
+   * served: the count alone, never red. */
   limit: number | null | undefined;
 }
 
@@ -11,7 +12,8 @@ export function isOverTokenLimit(count: number | null | undefined, limit: number
   return count != null && limit != null && count > limit;
 }
 
-/** §1-111: `n / limit` (or `n`) beside a prompt field; red past the limit.
+/** §1-111: `n / limit tokens` (or `n tokens` without a limit) beside a
+ * prompt field; red past the limit.
  * Informational only — it never blocks generation. */
 export function TokenCounter({ count, limit }: TokenCounterProps) {
   if (count == null) return null;

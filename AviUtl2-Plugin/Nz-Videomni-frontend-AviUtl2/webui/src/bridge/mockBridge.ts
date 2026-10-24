@@ -329,6 +329,7 @@ const MOCK_LTX_CONSTRAINTS: BaseModelConstraints = {
   frame_rate: { min: 1, max: 60 },
   sampling: null,
   keyframes: { step: 8, offset: 1 },
+  prompt_token_limit: 1024,
 };
 
 /** `base_models[].constraints` per ENGINE FAMILY, as the real `GET /models`
@@ -349,6 +350,7 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
       shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
     },
     keyframes: { step: 1, offset: 0 },
+    prompt_token_limit: null,
   },
 };
 
@@ -2138,6 +2140,30 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     return { status: 200, body: { comment: MOCK_MP4_INFO_COMMENT } };
   }
 
+  /** §1-111: `POST /utils/prompt-tokens`. A rough stand-in for the real
+   * tokenizers: whitespace-separated words, +1 start token for the LTX
+   * families (H3 adds none). Clips are composed like the server does (both
+   * trimmed, non-empty parts joined by one space). Never fails. */
+  function handlePromptTokens(body: unknown): ResultOf<"backend.request"> {
+    const req = (body ?? {}) as { prompt?: unknown; negative_prompt?: unknown; clips?: unknown };
+    const activeFamily = MOCK_BASE_MODELS.find((b) => b.id === activeBaseModel)?.engine_family ?? "ltx";
+    const bos = activeFamily === "h3" ? 0 : 1;
+    const count = (text: string) => text.split(/\s+/).filter((w) => w.length > 0).length + bos;
+    const shared = typeof req.prompt === "string" ? req.prompt : "";
+    return {
+      status: 200,
+      body: {
+        prompt: typeof req.prompt === "string" ? count(req.prompt) : null,
+        negative_prompt: typeof req.negative_prompt === "string" ? count(req.negative_prompt) : null,
+        clips: Array.isArray(req.clips)
+          ? req.clips.map((own) =>
+              count([shared.trim(), typeof own === "string" ? own.trim() : ""].filter((p) => p.length > 0).join(" ")),
+            )
+          : null,
+      },
+    };
+  }
+
   const JOB_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)$/;
   const JOB_JOIN_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)\/join$/;
   const JOB_JOINED_PATH = /^\/api\/v1\/jobs\/(?<id>[^/]+)\/joined$/;
@@ -2166,6 +2192,7 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     if (method === "POST" && path === "/api/v1/pipeline/load") return handlePipelineLoad(body);
     if (method === "POST" && path === "/api/v1/pipeline/unload") return handlePipelineUnload();
     if (method === "POST" && path === "/api/v1/utils/mp4-info") return handleMp4Info(body);
+    if (method === "POST" && path === "/api/v1/utils/prompt-tokens") return handlePromptTokens(body);
 
     const joinId = JOB_JOIN_PATH.exec(path)?.groups?.id;
     if (joinId && method === "POST") return handleJoinJob(joinId, body);

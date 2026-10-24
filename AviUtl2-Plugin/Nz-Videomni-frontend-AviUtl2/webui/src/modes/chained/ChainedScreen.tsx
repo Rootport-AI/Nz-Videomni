@@ -11,6 +11,7 @@ import { useToasts } from "../../shell/ToastContext";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
+import { usePromptTokenCounts } from "../../shell/usePromptTokenCounts";
 import { isChainStage1OverBudget } from "../../shell/tokenBudget";
 import { STAGE2_WINDOW_OPTIONS } from "../../shell/tokenBudget";
 import type { Stage2Window } from "../../shell/tokenBudget";
@@ -78,6 +79,15 @@ export interface ChainedScreenProps {
    * its own (`useChainForm.controlLora`), so this feeds both that dropdown and
    * the `controlLoraNeedsReference` gate. */
   controlLoraNames: ReadonlySet<string>;
+  /** §1-111 token counters: the shared prompt after `<lora:>` stripping (the
+   * string actually sent), the engine's limit, the key that re-counts on a
+   * model change, and whether the Chained tab is shown (the tab is
+   * always-mounted; clips are counted only while it is). All optional so
+   * direct-render tests keep compiling — no `strippedPrompt` = no counting. */
+  strippedPrompt?: string | undefined;
+  promptTokenLimit?: number | null | undefined;
+  promptTokenModelKey?: string | undefined;
+  isActive?: boolean | undefined;
   /** §1-15: the depth-preprocess control adapters (`resolveDepthLoraNames`,
    * computed by `AppShell`), for the `depthChainUnsupported` gate. Optional so
    * direct-render tests that predate it keep compiling — omitted means the gate
@@ -158,6 +168,10 @@ export interface ChainedScreenProps {
  * width/height/frame_rate/seed section. */
 export function ChainedScreen({
   prompt,
+  strippedPrompt,
+  promptTokenLimit,
+  promptTokenModelKey,
+  isActive,
   baseUrl,
   initialIntent,
   nativeBridge,
@@ -189,6 +203,10 @@ export function ChainedScreen({
       config={configState.config}
       usingFallback={configState.usingFallback}
       prompt={prompt}
+      strippedPrompt={strippedPrompt}
+      promptTokenLimit={promptTokenLimit}
+      promptTokenModelKey={promptTokenModelKey}
+      isActive={isActive}
       baseUrl={baseUrl}
       initialIntent={initialIntent}
       nativeBridge={nativeBridge}
@@ -215,6 +233,10 @@ interface ChainedScreenBodyProps {
   config: AppConfig;
   usingFallback: boolean;
   prompt: string;
+  strippedPrompt?: string | undefined;
+  promptTokenLimit?: number | null | undefined;
+  promptTokenModelKey?: string | undefined;
+  isActive?: boolean | undefined;
   baseUrl: string | null;
   initialIntent?: GenerationPrefill | undefined;
   nativeBridge?: NativeBridge | undefined;
@@ -239,6 +261,10 @@ function ChainedScreenBody({
   config,
   usingFallback,
   prompt,
+  strippedPrompt,
+  promptTokenLimit,
+  promptTokenModelKey = "",
+  isActive = false,
   baseUrl,
   initialIntent,
   nativeBridge,
@@ -394,6 +420,15 @@ function ChainedScreenBody({
       engineLabel,
     },
     initialCommon,
+  );
+
+  // §1-111: per-clip token counts (shared + own prompt, composed by the
+  // server) — only while this always-mounted tab is shown, else nothing is sent.
+  const clipTokens = usePromptTokenCounts(
+    isActive && strippedPrompt !== undefined
+      ? { prompt: strippedPrompt, clips: form.clips.map((clip) => clip.prompt) }
+      : null,
+    promptTokenModelKey,
   );
 
   // §1-15, plan F5: the stage-1 comfort-budget warning banner's inputs — a
@@ -1033,7 +1068,7 @@ function ChainedScreenBody({
           videoUnavailable={v2vUnavailable}
         />
 
-        <ClipsSection form={form} disabled={disabled} />
+        <ClipsSection form={form} disabled={disabled} tokenCounts={clipTokens?.clips ?? null} tokenLimit={promptTokenLimit} />
 
         {/* 素材（末尾）: directly after the clip list (plan §2-H) — the START
             material is above the list, the END material below it, so the two
@@ -1227,7 +1262,17 @@ function ChainedScreenBody({
   );
 }
 
-function ClipsSection({ form, disabled }: { form: UseChainFormResult; disabled: boolean }) {
+function ClipsSection({
+  form,
+  disabled,
+  tokenCounts,
+  tokenLimit,
+}: {
+  form: UseChainFormResult;
+  disabled: boolean;
+  tokenCounts: readonly number[] | null;
+  tokenLimit: number | null | undefined;
+}) {
   const strings = useStrings();
   return (
     <div className="field">
@@ -1247,6 +1292,8 @@ function ClipsSection({ form, disabled }: { form: UseChainFormResult; disabled: 
             disabled={disabled}
             canRemove={form.clips.length > form.minClips}
             audioWindow={form.audioSegmentWindowsForClips?.[index] ?? null}
+            tokenCount={tokenCounts?.[index]}
+            tokenLimit={tokenLimit}
             onPromptChange={(value) => form.setClipPrompt(clip.id, value)}
             onNumFramesChange={(value, snap) => form.setClipNumFrames(clip.id, value, snap)}
             onRemove={() => form.removeClip(clip.id)}

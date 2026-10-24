@@ -24,9 +24,11 @@ import { MIN_NUM_FRAMES } from "../modes/single/defaultConfig";
  * an engine id. A screen is handed a {@link GenerationConstraints} and reads
  * numbers off it; which engine produced them is the server's fact.
  *
- * Only Create (Single) and its right-click seeds read this. Chained, Edit and
- * Batch keep their LTX constants on purpose: an engine whose rules differ
- * closes those screens through its `unsupported_features`.
+ * The numeric rules are read by Create (Single) and its right-click seeds;
+ * Chained, Edit and Batch keep their LTX constants on purpose (an engine whose
+ * rules differ closes those screens through its `unsupported_features`).
+ * {@link GenerationConstraints.promptTokenLimit} is the exception: the shell
+ * reads it for the prompt token counters of every screen.
  */
 export interface GenerationConstraints {
   /** The `num_frames` lattice (`step * n + offset`). */
@@ -48,6 +50,9 @@ export interface GenerationConstraints {
   /** Where a keyframe may sit: `0` and `offset + k * step` (LTX 8/1, MiniMax
    * H3 1/0 = any frame). Read by the keyframe panel (`keyframeGrid.ts`). */
   keyframeGrid: FrameGrid;
+  /** Prompt-token limit shown beside the token counters (§1-111), or `null`
+   * when the engine has none (H3) or the server has not said (fallback). */
+  promptTokenLimit: number | null;
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
@@ -60,6 +65,7 @@ export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Objec
   frameRate: Object.freeze({ min: FRAME_RATE_MIN, max: FRAME_RATE_MAX }),
   sampling: null,
   keyframeGrid: Object.freeze({ step: 8, offset: 1 }),
+  promptTokenLimit: null,
 });
 
 /** Flattens a served `constraints` block; `null`/absent → the LTX fallback.
@@ -79,6 +85,7 @@ export function resolveGenerationConstraints(
     keyframeGrid: raw.keyframes
       ? { step: raw.keyframes.step, offset: raw.keyframes.offset }
       : LTX_GENERATION_CONSTRAINTS.keyframeGrid,
+    promptTokenLimit: raw.prompt_token_limit ?? null,
   };
 }
 

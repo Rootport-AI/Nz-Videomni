@@ -18517,3 +18517,5 @@ R1 は GPU を使わないコード読解と見積もり、R2 は製品の条件
 - **保管庫の複写**: [`Outputs-archive/h3-speedup-2026-10-24/`](Outputs-archive/h3-speedup-2026-10-24/README.md)（報告書 6 本・台本・門の json・テストのログ。動画・腕 P の trace・`runs/` は省いた）。
 - **台帳**: §1-105 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-254 へクローズし、[`PENDING_TASKS.md`](PENDING_TASKS.md) から削除した。④ は同 §3-255 に起票した。ヘッド群の拡大の再評価（同 §3-245）の判断材料に本節を足した（① の後はヘッド群を広げる得が小さくなる見込み。推測。研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.2）。
 - 次の番号: CLOSED 3-256（3-255 は台帳 §3 の生きた番号なので飛ばす）・本書 §178・フロントエンド DEVLOG §149（今回は操作パネルに変更が無いので進めない）。
+
+> **更新（2026-10-25）**: dev に積んだコミットは、エンジン＋テスト `4d9d73a`、文書・保管 `e1208bd`。main への merge はオーナーの合図待ち。

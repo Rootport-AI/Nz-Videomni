@@ -76,13 +76,19 @@ def test_a2v_metadata_carries_engine_and_app_records(three_family_client, tmp_pa
     assert "h3" not in meta  # the mock has nothing else to report
 
 
-def test_full_strength_keeps_the_original_audio_and_is_the_default(three_family_client, tmp_path):
+def test_full_strength_keeps_the_original_audio_and_the_default_is_half(three_family_client, tmp_path):
+    from api.models import SingleSourceAudioSpec
+    from services import engines
+
     _activate(three_family_client, "MiniMaxH3")
     audio_id = _upload(three_family_client, tmp_path, 2.0)
     explicit = _run(three_family_client, source_audio={"audio_id": audio_id, "strength": 1.0})["a2v"]
+    assert explicit["strength"] == 1.0 and explicit["audio_output"] == "original"
     default = _run(three_family_client, source_audio={"audio_id": audio_id})["a2v"]
-    for a2v in (explicit, default):
-        assert a2v["strength"] == 1.0 and a2v["audio_output"] == "original"
+    assert default["strength"] == 0.5 and default["audio_output"] == "decoded"
+    # the two default literals (published constraint / request model) cannot drift
+    published = engines.request_constraints("h3")["source_audio"]["strength"]["default"]
+    assert published == SingleSourceAudioSpec.model_fields["strength"].default
 
 
 def test_audio_shorter_than_the_video_is_422(three_family_client, tmp_path):

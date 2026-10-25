@@ -268,7 +268,7 @@ async def submit_generate(
         ``source_audio``）。LTX で A2V をしたいときは ``submit_chain`` の
         ``source_audio_id`` を使ってください。
       * ``source_audio_strength``（0〜1、``source_audio_id`` とセット）は音声を
-        どれだけ固定するかです。省略すると送らず、サーバー側の既定 1.0 になります。**1.0 は音声を
+        どれだけ固定するかです。省略すると送らず、サーバー側の既定 0.5 になります。**1.0 は音声を
         固定し、出力には元の音声波形をそのまま付けます。1.0 未満ではモデルが
         音声を解釈し直し、出力の音声はモデルが作ったものになります。**
       * 動画の長さが優先で、音声は動画の長さに切られます（足されません）。
@@ -491,7 +491,7 @@ async def submit_generate(
             **MiniMax H3 専用**（LTX では 422 FEATURE_UNSUPPORTED。LTX は
             ``submit_chain`` の ``source_audio_id`` を使う）。省略で送らない。
         source_audio_strength: 駆動音声の固定の強さ（0〜1、``source_audio_id``
-            とセット）。省略すると送らず、サーバー側の既定 1.0 になる。1.0 は音声を固定して元の波形を
+            とセット）。省略すると送らず、サーバー側の既定 0.5 になる。1.0 は音声を固定して元の波形を
             出力に付け、1.0 未満はモデルが解釈し直した音声になる。
             ``source_audio_id`` なしで指定すると POST 前に ToolError。
 

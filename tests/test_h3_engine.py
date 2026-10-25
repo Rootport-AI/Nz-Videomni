@@ -2907,7 +2907,7 @@ def test_request_validation_source_audio(tmp_path):
     wav.write_bytes(b"RIFF")   # only its existence is checked here; the decode is source_audio's
     ok = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4")
     assert H3GenerateRequest(**ok).source_audio is None
-    assert H3AudioInput("x").strength == 1.0
+    assert H3AudioInput("x").strength == 0.5
     for s in (0.0, 0.5, 1.0, 1):
         validate_request(H3GenerateRequest(**ok, source_audio=H3AudioInput(str(wav), s)))
     for audio, match in ((H3AudioInput("  "), "パスが空"), (H3AudioInput(str(tmp_path / "none.wav")), "見つかりません"),

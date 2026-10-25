@@ -287,7 +287,7 @@ H3_CONSTRAINTS = {
         "shift_audio": {"min": 1, "max": 20, "step": 0.1, "default": 3},
     },
     "keyframes": {"step": 1, "offset": 0},
-    "source_audio": {"strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 1.0}},
+    "source_audio": {"strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
     "prompt_token_limit": None,
 }
 LTX_CONSTRAINTS = {

@@ -375,7 +375,7 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
     prompt_token_limit: null,
     // 台帳 H3 A2V: the single-generate A2V route's Strength slider range, as
     // the real `GET /models` publishes it. LTX publishes no `source_audio`.
-    source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 1 } },
+    source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
   },
 };
 

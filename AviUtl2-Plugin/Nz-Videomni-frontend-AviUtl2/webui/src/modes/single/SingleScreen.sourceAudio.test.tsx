@@ -21,7 +21,7 @@ const H3_CONSTRAINTS = resolveGenerationConstraints({
   dimension_multiple: 32,
   frame_rate: { min: 24, max: 24 },
   sampling: null,
-  source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 1 } },
+  source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
 });
 
 function Providers({ children, nativeBridge }: { children: ReactNode; nativeBridge: ReturnType<typeof createMockBridge> }) {

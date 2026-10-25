@@ -155,7 +155,7 @@ REQUEST_RULES = RequestRules(
     keyframe_offset=0,
     # Single-generate A2V (``request.source_audio.strength``): mask value
     # m = 1 - strength on every audio latent; 1.0 keeps the source audio as is.
-    source_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=1.0),
+    source_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 

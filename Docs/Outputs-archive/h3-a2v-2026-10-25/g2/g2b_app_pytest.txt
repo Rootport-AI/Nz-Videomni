@@ -1,0 +1,162 @@
+........................................................................ [  2%]
+........................................................................ [  4%]
+..........................ss............................................ [  6%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+........................................................................ [ 12%]
+........................................................................ [ 14%]
+........................................................................ [ 16%]
+........................................................................ [ 18%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 24%]
+........................................................................ [ 26%]
+........................................................................ [ 28%]
+........................................................................ [ 30%]
+........................................................................ [ 32%]
+........................................................................ [ 34%]
+........................................................................ [ 36%]
+........................................................................ [ 38%]
+........................................................................ [ 40%]
+........................................................................ [ 42%]
+........................................................................ [ 44%]
+........................................................................ [ 46%]
+........................................................................ [ 48%]
+........................................................................ [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 54%]
+...........................................sssssssssssssssssss.......... [ 56%]
+........................................................................ [ 58%]
+........................................................................ [ 60%]
+........................................................................ [ 62%]
+........................................................................ [ 64%]
+........................................................................ [ 66%]
+........................................................................ [ 68%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 74%]
+........................................................................ [ 76%]
+........................................................................ [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+........................................................................ [ 90%]
+......ssssss................s........................................... [ 92%]
+........................................................................ [ 94%]
+........................................................................ [ 96%]
+........................................................................ [ 98%]
+.......................................................................  [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_gradio_batch_fullstack.py: 19 warnings
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\httpx\_client.py:1144: StarletteDeprecationWarning: You should not use the 'timeout' argument with the TestClient. See https://github.com/Kludex/starlette/issues/1108 for more information.
+    return self.request(
+
+tests/test_gradio_batch_fullstack.py: 16 warnings
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\httpx\_client.py:1053: StarletteDeprecationWarning: You should not use the 'timeout' argument with the TestClient. See https://github.com/Kludex/starlette/issues/1108 for more information.
+    return self.request(
+
+tests/test_gradio_constraints.py::test_generate_h3_precheck_rejects_ltx_grid_with_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Frames must be 17n+5 and between 22 and 481.
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_generate_adapter_resolution_not_128_errors_zero_calls
+tests/test_gradio_handlers.py::test_generate_bad_width_precheck_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Width and height must be multiples of 64.
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_generate_bad_num_frames_precheck_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Frames must be 8n+1 and between 9 and 481.
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_generate_a2v_unknown_style_token_aborts_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Unknown LoRA name(s) in the prompt: does-not-exist. Remove or fix the <lora:...> token(s) and retry.
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_generate_a2v_short_wav_rejected_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: The audio is too short. This setting (121 frames @ 24.0 fps = 5.04s) needs at least 5.04s of audio, but the attached file is 2.00s. Use longer audio or reduce the frames.
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_generate_a2v_precheck_uses_snapped_fps
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: The audio is too short. This setting (97 frames @ 29.0 fps = 3.34s) needs at least 3.36s of audio, but the attached file is 3.32s. Use longer audio or reduce the frames.
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_chain_fewer_than_two_clips_errors_zero_calls
+tests/test_gradio_v2v_a2v.py::test_chain_mode_none_single_clip_still_errors
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Enable between 2 and 24 clips.
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_chain_bad_num_frames_errors_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Clip 2: frames must be 8n+1 and between 9 and 481.
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_chain_overlap_too_large_for_shortest_clip_errors_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Transition frames (3) must be smaller than the shortest enabled clip allows (max 1).
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_chain_unknown_shared_prompt_lora_aborts_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Unknown LoRA name(s) in the prompt: missing. Remove or fix the <lora:...> token(s) and retry.
+    warnings.warn(message)
+
+tests/test_gradio_handlers.py::test_generate_nag_enabled_empty_negative_precheck_zero_calls
+tests/test_gradio_handlers.py::test_chain_nag_enabled_empty_negative_precheck_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Enter a negative prompt, or turn off non-CFG Negative.
+    warnings.warn(message)
+
+tests/test_gradio_lora_parse.py::test_weight_clamped_above_max
+  S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Lib\\site-packages\\gradio\\helpers.py:1154: UserWarning: LoRA <neon-city> weight 3.5 is out of range (0\u20132.0); clamped to 2.0.\n    warnings.warn(message)
+
+tests/test_gradio_lora_parse.py::test_weight_clamped_at_or_below_zero
+  S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Lib\\site-packages\\gradio\\helpers.py:1154: UserWarning: LoRA <neon-city> weight 0.0 is out of range (0\u20132.0); clamped to 0.05.\n    warnings.warn(message)
+
+tests/test_gradio_lora_parse.py::test_unknown_prompt_lora_aborts_with_zero_generate_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Unknown LoRA name(s) in the prompt: missing-one. Remove or fix the <lora:...> token(s) and retry.
+    warnings.warn(message)
+
+tests/test_gradio_stage2_window.py::test_precheck_receives_the_selected_window
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: stop here
+    warnings.warn(message)
+
+tests/test_gradio_style_tab.py::test_on_style_reload_keeps_state_on_failure
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Failed to reload LoRAs: Server error '500 Internal Server Error' for url 'http://127.0.0.1:8000/api/v1/loras/reload'
+  For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500
+    warnings.warn(message)
+
+tests/test_gradio_ui.py::test_batch_regen_refuses_skip_row
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: This row is skipped (Over the frame limit), so it cannot be regenerated from here. Raise Frames (or replace the file) and press "Set audios" again to bring it back.
+    warnings.warn(message)
+
+tests/test_gradio_v2v_a2v.py::test_chain_v2v_context_ge_clip_frames_errors_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Context frames (73) must be smaller than clip 1's frames (73) so a new part remains to generate.
+    warnings.warn(message)
+
+tests/test_gradio_v2v_a2v.py::test_chain_v2v_missing_video_errors_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Please select a source video for V2V continuation.
+    warnings.warn(message)
+
+tests/test_gradio_v2v_a2v.py::test_chain_v2v_clip0_image_conflict_errors_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: V2V cannot use a start image on clip 1 (the source tail occupies the head). Remove the image and retry.
+    warnings.warn(message)
+
+tests/test_gradio_v2v_a2v.py::test_chain_v2v_bad_extension_errors_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Source video type not allowed. Allowed: .mp4, .mov, .webm, .mkv
+    warnings.warn(message)
+
+tests/test_gradio_v2v_a2v.py::test_chain_a2v_two_clips_errors_zero_calls
+  S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Lib\\site-packages\\gradio\\helpers.py:1154: UserWarning: A2V on this screen uses 1 clip \u2014 enable clip 1 only. For one audio across several chained clips, use the AviUtl2 plug-in window.\n    warnings.warn(message)
+
+tests/test_gradio_v2v_a2v.py::test_chain_a2v_missing_audio_errors_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Please select a source audio file for A2V.
+    warnings.warn(message)
+
+tests/test_gradio_v2v_a2v.py::test_chain_a2v_bad_extension_errors_zero_calls
+  S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Lib\site-packages\gradio\helpers.py:1154: UserWarning: Audio type not allowed. Allowed: .wav, .mp3, .m4a, .aac, .flac, .ogg
+    warnings.warn(message)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+pytest exit=0

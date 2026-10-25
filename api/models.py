@@ -415,8 +415,9 @@ class SingleSourceAudioSpec(BaseModel):
     ``audio_id`` is an existing upload from POST /upload/audio. The uploaded
     waveform is encoded to audio latents that hold the generated audio to the
     source, so the video is driven to match it (lip-sync). ``strength`` is how
-    hard: the engine's per-row audio mask is ``1 - strength`` (1.0 freezes the
-    source audio and muxes the ORIGINAL waveform back; 0.0 has no effect).
+    hard: the engine's per-row audio mask is ``1 - strength`` (default 0.5; 1.0 freezes the
+    source audio exactly and muxes the ORIGINAL waveform back; 0.0 has no
+    effect). The owner's viewing found 1.0 gives rigid mouth motion, 0.5 natural.
     Video length is authoritative: the audio is cut to the clip, never padded,
     and a too-short upload is rejected up front (422 SOURCE_AUDIO_TOO_SHORT).
 
@@ -432,7 +433,7 @@ class SingleSourceAudioSpec(BaseModel):
     """
 
     audio_id: str = Field(..., min_length=1)
-    strength: float = Field(1.0, ge=0.0, le=1.0)
+    strength: float = Field(0.5, ge=0.0, le=1.0)
 
 
 class GenerateRequest(BaseModel):

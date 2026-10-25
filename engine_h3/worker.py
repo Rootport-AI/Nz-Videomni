@@ -54,7 +54,7 @@ Protocol (one JSON object per line; parent -> worker):
       job). ``loras``: [] or ``{"path", "strength"}`` entries (``engine_h3.lora``;
       strength defaults to 1.0; the app sends the key every job).
       ``source_audio`` (A2V, 台帳 §1-103): absent / null = T2V / I2V as before, else
-      ``{"path", "strength"}`` (``strength`` 0..1, defaults to 1.0; the file's
+      ``{"path", "strength"}`` (``strength`` 0..1, defaults to 0.5; the file's
       waveform is encoded to the audio latents and, at strength 1.0, muxed into
       the mp4; ``engine_h3.pipeline_h3.H3AudioInput``). Unknown inner keys are
       logged once and ignored. A failure is reported with ``error`` and the
@@ -95,7 +95,7 @@ Selftest:
        --attention-backend sdpa|sage --blocks-on-gpu 8 --prefetch|--no-prefetch
        --deterministic --image P --keyframe FRAME=PATH ... --keep-resident
        --vram16|--no-vram16 --lora PATH ... --lora-strength 1.0
-       --source-audio PATH --audio-strength 1.0]
+       --source-audio PATH --audio-strength 0.5]
 """
 
 import os
@@ -348,7 +348,7 @@ def _source_audio(msg: dict) -> tuple:
         raise ValueError(f"source_audio には空でない文字列の path が必要です（{path!r}）")
     strength = raw.get("strength")
     if strength is None:
-        strength = 1.0
+        strength = 0.5
     elif isinstance(strength, bool) or not isinstance(strength, (int, float)) or not math.isfinite(strength):
         raise ValueError(f"source_audio の strength は有限の数値で渡してください（{strength!r}）")
     ignored = sorted(k for k in raw if k not in _SOURCE_AUDIO_FIELDS)
@@ -567,8 +567,8 @@ def _selftest_parser():
                         help="the strength of every --lora (default 1.0)")
     parser.add_argument("--source-audio", default=None, metavar="PATH",
                         help="A2V: the source audio file (source_audio.path)")
-    parser.add_argument("--audio-strength", type=float, default=1.0,
-                        help="A2V: source_audio.strength (default 1.0)")
+    parser.add_argument("--audio-strength", type=float, default=0.5,
+                        help="A2V: source_audio.strength (default 0.5)")
     return parser
 
 

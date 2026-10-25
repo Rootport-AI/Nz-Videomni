@@ -37,9 +37,9 @@ def test_source_audio_valid_and_default_strength():
     audio, ignored = worker._source_audio({"source_audio": {"path": "a.wav", "strength": 0.5}})
     assert audio == H3AudioInput(path="a.wav", strength=0.5) and ignored == []
     audio, _ = worker._source_audio({"source_audio": {"path": "a.wav"}})
-    assert audio == H3AudioInput(path="a.wav", strength=1.0)
+    assert audio == H3AudioInput(path="a.wav", strength=0.5)
     audio, _ = worker._source_audio({"source_audio": {"path": "a.wav", "strength": None}})
-    assert audio.strength == 1.0
+    assert audio.strength == 0.5
     audio, _ = worker._source_audio({"source_audio": {"path": "a.wav", "strength": 1}})
     assert audio.strength == 1.0 and isinstance(audio.strength, float)
 
@@ -89,7 +89,7 @@ def test_generate_request_with_and_without_source_audio():
 
 def test_selftest_cli_source_audio():
     args = _args()
-    assert (args.source_audio, args.audio_strength) == (None, 1.0)
+    assert (args.source_audio, args.audio_strength) == (None, 0.5)
     msg = worker._selftest_generate_message(args, "o.mp4")
     assert "source_audio" not in msg           # the golden key list is unchanged
     args = _args("--source-audio", "a.wav", "--audio-strength", "0.4")

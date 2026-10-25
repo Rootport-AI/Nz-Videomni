@@ -23,17 +23,10 @@
 - **留意**: ① 較正は製品の既定＝**VRAM 16GB mode on** で測る（off は参考）。条件にはキーフレームの枚数も入る（条件行が K×grid 行増える。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13）。② 線は速度ではなく、共有メモリへの退避（spill）そのものの量で引く（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.1 の裁定 3）。③ ただし on ではノイズ除去に割り当て器の上限が掛かるので、境界は退避ではなく「上限での OOM」か「復号の段（上限なし）の退避」として現れる。判定規則 v3（窓の共有メモリの中央値）をどう読み替えるかは、較正の計画で決める。④ `m×n ≥ 2³¹` の実測（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13 から預けた件）は、on では行の塊で分割されるので起きず、off でだけ届きうる（算術による推測: off の fc1 は S × 28,672 で、S ≥ 約 74,900 行で届く。on の最大の行列積は out_proj の S × 5,376 で、S ≥ 約 40 万行が要る）。扱いは計画で決める。記録は同 §169。
 - **出典**: [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-10-17 の裁定）。
 
-### 1-103. MiniMax H3 の A2V（音声から映像）（起票：2026-10-19）
-
-- **概要**: 音声を入力し、同期した映像を生成する。仕組みは、音声行に符号化済みの潜在を入れて時刻 1.0 に固定し、映像行だけをノイズ除去する（DiffSynth の Retake の `retake_audio`、ComfyUI の音声 denoise mask と同じ。公式の task には無い）。V2A〔映像から音声〕も同じ部品で実現できる。
-- **前提**: 音声 VAE〔音声の圧縮器〕の符号化器があるかの確認。行ごとに時刻を固定する部品（キーフレームの条件行〔実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170〕と、後の §1-106 の連結で共有する）。操作パネルの A2V カード（現状 H3 では灰色）。
-- **留意**: 「Ref2VA のほうが A2V に向く」という根拠は一次資料に無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
-- **出典**: [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（A2V の仕組み。一次資料つき）・[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3（条件行）。
-
 ### 1-106. MiniMax H3 の Chained（H3 Continuum 型・FL2VA）（起票：2026-10-19）
 
 - **概要**: 直前のクリップの映像と音声の潜在の末尾を次のクリップの冒頭に置き、その行の時刻を固定して残りだけノイズ除去し、重なりを切り落として連結する（潜在の持ち越し。復号して再符号化はしない）。LTX の Chained に相当する。
-- **前提**: キーフレームの条件行（実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170）と §1-103 の部品（行ごとの時刻固定）。Turbo（§1-104 は完了、CLOSED 3-251。実験の費用が下がる）。操作パネルの Chained タブ（現状 H3 では灰色）。
+- **前提**: キーフレームの条件行（実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170）と、行ごとの連続値マスク（[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.1、CLOSED 3-257。映像のマスクはエンジンにあり API には未公開）。Turbo（§1-104 は完了、CLOSED 3-251。実験の費用が下がる）。操作パネルの Chained タブ（現状 H3 では灰色）。
 - **留意**: H3 Continuum の「FL2VA で検証済み」は、計画の冒頭で CHANGELOG を一次資料で確認する。継ぎ目と音声の品質の報告は無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）・[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（PR #15375 の denoise mask・LongMedia）。
 
@@ -147,7 +140,7 @@
 
 - **概要**: 音声の潜在数は `A = round(F / 24 × 40)`（`engine_h3/constants.py` の `audio_latents`）で、復号した波形の長さは `A × 800` サンプルである。F = 17n+5 のとき `5F/3` の小数部は 0・1/3・2/3 のどれかなので、`A × 800` と映像の長さ `F × 32000 / 24` の差は n を 3 で割った余りで決まる。余り 1 なら音声が約 266.7 サンプル長く、余り 0 なら約 266.7 サンプル（約 8.3 ミリ秒）短く、余り 2 なら等しい。mp4 の書き出し（`engine_h3/media_out.py` の `audio_keep_samples`）は映像の長さで切り詰めるだけで埋めないので、余り 0 の尺（例: 56 フレーム）では音声が映像より約 8.3 ミリ秒短い mp4 になる。`engine_h3/audio_vae.py` の説明文「最大で半潜在だけ長い」は、短くなる場合を書いていない。
 - **状態**: 計算による推定で、実ファイルでの確認はしていない。実害は尺の末尾の無音が 1 フレームの 1/5 程度で、目立たない見込み。直すなら、末尾を無音で埋めるか、説明文を直すかを決める。
-- **出典**: §1-103（H3 の A2V）の事前調査（2026-10-25）で見つかった副産物。A2V では Strength 1.0 のとき元の波形を映像の長さで切って載せるので、この差は出ない。
+- **出典**: §1-103（H3 の A2V。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-257）の事前調査（2026-10-25）で見つかった副産物。A2V では Strength 1.0 のとき元の波形を映像の長さで切って載せるので、この差は出ない。
 
 ### 研究課題（上の改修項目より優先度が下）
 

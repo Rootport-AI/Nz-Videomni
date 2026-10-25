@@ -1,0 +1,5 @@
+
+> webui@1.0.0 typecheck
+> tsc -b --noEmit
+
+typecheck exit=0

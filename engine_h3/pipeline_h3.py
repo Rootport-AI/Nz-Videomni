@@ -174,7 +174,7 @@ class H3AudioInput:
     """
 
     path: str
-    strength: float = 1.0
+    strength: float = 0.5
 
 
 @dataclass

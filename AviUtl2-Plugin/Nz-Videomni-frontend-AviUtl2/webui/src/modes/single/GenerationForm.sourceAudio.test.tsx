@@ -19,7 +19,7 @@ vi.mock("../../jobs/JobsContext", () => ({
 // source-audio section (`SourceAudioSection` inside `GenerationForm`). Same
 // real-hook harness as `GenerationForm.referenceVideo.test.tsx`.
 
-const H3_SOURCE_AUDIO = { strength: { min: 0, max: 1, step: 0.05, default: 1 } };
+const H3_SOURCE_AUDIO = { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } };
 
 function Harness({
   bridge,
@@ -46,7 +46,7 @@ function Harness({
       config={FALLBACK_APP_CONFIG}
       nativeBridge={bridge}
       singleSourceAudio={singleSourceAudio}
-      sourceAudioStrength={1}
+      sourceAudioStrength={0.5}
       onSourceAudioStrengthChange={onStrengthChange}
     />
   );
@@ -207,7 +207,7 @@ describe("GenerationForm — SourceAudioSection (A2V card redesign)", () => {
 });
 
 describe("GenerationForm — single-clip A2V Strength (constraints.source_audio)", () => {
-  it("the slider and its 1.00 readout render only when the engine publishes source_audio; the chain hint goes with it", async () => {
+  it("the slider and its 0.50 readout render only when the engine publishes source_audio; the chain hint goes with it", async () => {
     const bridge = createMockBridge({ delayMs: 0, fs: fsWithWavDurations() });
     const user = userEvent.setup();
     const onStrengthChange = vi.fn();
@@ -216,9 +216,9 @@ describe("GenerationForm — single-clip A2V Strength (constraints.source_audio)
     const slider = screen.getByTestId("source-audio-strength") as HTMLInputElement;
     expect(slider.max).toBe("1");
     expect(slider.step).toBe("0.05");
-    expect(screen.getByTestId("source-audio-strength-value")).toHaveTextContent("1.00");
-    fireEvent.change(slider, { target: { value: "0.5" } });
-    expect(onStrengthChange).toHaveBeenCalledWith(0.5);
+    expect(screen.getByTestId("source-audio-strength-value")).toHaveTextContent("0.50");
+    fireEvent.change(slider, { target: { value: "0.7" } });
+    expect(onStrengthChange).toHaveBeenCalledWith(0.7);
 
     await user.click(screen.getByRole("button", { name: /choose audio file/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /remove audio/i })).toBeEnabled());

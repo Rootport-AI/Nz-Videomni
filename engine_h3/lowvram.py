@@ -6,7 +6,12 @@ instead (``engine_h3/dit.py`` branches at the top of the two methods). Nothing
 here is new maths: every number is produced by the SAME functions the off path
 calls (``_modulate``, ``_gate``, ``block.mlp``, ``_attention``, ``apply_rope``,
 ``_linear_f32``, the norms), only over a range of rows or a group of heads at a
-time, written into preallocated outputs. Every one of those operations is
+time, written into preallocated outputs. The one exception is how the qkv
+input reaches the int8 kernels: it is quantized once per block and the head
+groups' slices reuse it (``H3Int8Linear.quantize_input`` / ``forward_rows_q``,
+台帳 §1-105 ①; the same comfy-kitchen kernels with the same arguments, see
+``engine_h3.quant_linear``), or, when ``shares_input`` says no, once per slice
+by ``forward_rows`` as before. Every one of those operations is
 per row or per head, so the target is the off path's result bit for bit
 (裁定 46; checked by the CPU tests and the GPU gates A-G2 / A-G3b). sdpa is
 bit-identical; with sage, 2 of the 50 blocks differ (the SageAttention kernel
@@ -14,7 +19,8 @@ depends on the heads per call), accepted by 裁定 53 (VERIFICATION_LOG §169.3)
 
 What is cut, and why it lowers the peak (VERIFICATION_LOG §168):
   * attention: q, k and v are projected per head group straight from the
-    rows of the stacked ``[q; k; v]`` weight (``H3Int8Linear.forward_rows``),
+    rows of the stacked ``[q; k; v]`` weight (``H3Int8Linear.forward_rows``, or
+    ``forward_rows_q`` on the input quantized once per block),
     so the fused ``[S, 3 * 7168]`` qkv never exists; the group's output is
     copied into one ``[S, 7168]`` buffer before ``out_proj``;
   * FFN: ``block.mlp`` over equal row chunks (``row_chunks``), so the
@@ -28,6 +34,7 @@ Called inside ``torch.no_grad()`` (the pipeline's), like the off path.
 
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass
 
@@ -134,13 +141,20 @@ def block_forward(
     heads, d = attn.heads, attn.head_dim
     inner = heads * d
     o = torch.empty((s, inner), dtype=torch.bfloat16, device=x.device)
-    xa = _lora.xa_for(attn.qkv_proj, h)   # LoRA's f32(h) @ A^T once per block; None without LoRA
+    qkv = attn.qkv_proj
+    xa = _lora.xa_for(qkv, h)   # LoRA's f32(h) @ A^T once per block (before h goes); None without LoRA
+    if qkv.shares_input(h):
+        # h quantized once for every head group's q, k, v slice (台帳 §1-105 ①)
+        proj = functools.partial(qkv.forward_rows_q, *qkv.quantize_input(h), lora_xa=xa)
+    else:
+        proj = functools.partial(qkv.forward_rows, h, lora_xa=xa)
+    del h   # shared: freed here; otherwise the partial keeps it, as before
     for h0 in range(0, heads, plan.head_group):
         h1 = min(h0 + plan.head_group, heads)
         g = h1 - h0
-        q = attn.qkv_proj.forward_rows(h, 0 * inner + h0 * d, 0 * inner + h1 * d, lora_xa=xa).view(s, g, d)
-        k = attn.qkv_proj.forward_rows(h, 1 * inner + h0 * d, 1 * inner + h1 * d, lora_xa=xa).view(s, g, d)
-        v = attn.qkv_proj.forward_rows(h, 2 * inner + h0 * d, 2 * inner + h1 * d, lora_xa=xa).view(s, g, d)
+        q = proj(0 * inner + h0 * d, 0 * inner + h1 * d).view(s, g, d)
+        k = proj(1 * inner + h0 * d, 1 * inner + h1 * d).view(s, g, d)
+        v = proj(2 * inner + h0 * d, 2 * inner + h1 * d).view(s, g, d)
         q = attn.q_norm(q)
         k = attn.k_norm(k)
         if rope_cos is not None:
@@ -150,7 +164,7 @@ def block_forward(
         del q, k, v
         o[:, h0 * d:h1 * d].view(s, g, d).copy_(out)
         del out
-    del h, xa
+    del proj, xa
     a = attn.out_proj(o)
     del o
 

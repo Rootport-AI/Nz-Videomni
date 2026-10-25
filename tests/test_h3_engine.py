@@ -1570,6 +1570,144 @@ def _fake_int8(monkeypatch):
     monkeypatch.setattr(quant_linear, "_ck", lambda: fake)
 
 
+def _fake_shared_quant(monkeypatch):
+    """VRAM 16GB mode's shared qkv quantization (台帳 §1-105 ①) on the CPU.
+
+    ``shares_input`` says yes (the tiny files are ``convrot=False``, K = 64); the
+    fake ``comfy_kitchen.backends.cuda`` quantizer hands back the input in float64
+    (scale 1, unused) and the fake GEMM is ``_int8_linear_as_float64`` on it, so a
+    slice is the number ``forward_rows`` gives. The REAL ``quantize_input`` and
+    ``forward_rows_q`` (cast, slicing, bias, ``lora.apply(x=None)``) run. Neither
+    fake keeps its arguments (the ``h`` weakref check relies on it)."""
+    import types
+
+    from engine_h3 import quant_linear
+
+    def quantize(x2d, group_size):
+        return x2d.to(torch.float64), torch.ones(x2d.shape[0], 1, dtype=torch.float64)
+
+    def gemm(xq, xs, weight, weight_scale, bias, out_dtype):
+        return _int8_linear_as_float64(xq, weight, weight_scale, bias, out_dtype=out_dtype,
+                                       convrot=False, convrot_groupsize=256)
+
+    monkeypatch.setattr(quant_linear, "_SHARED_CB", types.SimpleNamespace(quantize_int8_rowwise_convrot64=quantize))
+    monkeypatch.setattr(quant_linear.H3Int8Linear, "shares_input", lambda self, x: True)
+    monkeypatch.setattr(quant_linear, "_int8_gemm_prequantized", gemm)
+
+
+def _count_qkv_calls(monkeypatch):
+    """Count ``forward_rows`` / ``quantize_input`` / ``forward_rows_q`` calls. Returns
+    ``(calls, h_gone)``: ``h_gone`` gets, at each ``forward_rows_q`` call, whether the
+    tensor last given to ``quantize_input`` has been freed (only a weakref is kept)."""
+    import weakref
+
+    from engine_h3.quant_linear import H3Int8Linear
+
+    calls = {"forward_rows": 0, "quantize_input": 0, "forward_rows_q": 0}
+    refs, h_gone = [], []
+    real_rows, real_quant, real_rows_q = (
+        H3Int8Linear.forward_rows, H3Int8Linear.quantize_input, H3Int8Linear.forward_rows_q)
+
+    def rows(self, *args, **kwargs):
+        calls["forward_rows"] += 1
+        return real_rows(self, *args, **kwargs)
+
+    def quant(self, x):
+        calls["quantize_input"] += 1
+        refs.append(weakref.ref(x))
+        return real_quant(self, x)
+
+    def rows_q(self, *args, **kwargs):
+        calls["forward_rows_q"] += 1
+        h_gone.append(refs[-1]() is None)
+        return real_rows_q(self, *args, **kwargs)
+
+    monkeypatch.setattr(H3Int8Linear, "forward_rows", rows)
+    monkeypatch.setattr(H3Int8Linear, "quantize_input", quant)
+    monkeypatch.setattr(H3Int8Linear, "forward_rows_q", rows_q)
+    return calls, h_gone
+
+
+def test_shared_quant_symbols_of_the_pinned_comfy_kitchen(monkeypatch):
+    """台帳 §1-105 ①: the real comfy-kitchen 0.2.37 passes the probe's checks (version,
+    symbols, argument lists, the extension's docstrings); no CUDA call is made."""
+    import importlib.metadata
+    import types
+
+    import comfy_kitchen.backends.cuda as cb
+
+    from engine_h3 import quant_linear
+
+    assert quant_linear._shared_quant_missing(cb) is None
+    partial = types.SimpleNamespace(**{n: getattr(cb, n) for n in quant_linear._SHARED_CB_NAMES
+                                       if n != "get_cublas_workspace"})
+    assert quant_linear._shared_quant_missing(partial) == "comfy_kitchen.backends.cuda.get_cublas_workspace is missing"
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "0.2.38")
+    assert quant_linear._shared_quant_missing(cb) == "comfy-kitchen 0.2.38 != 0.2.37"
+
+
+def test_shared_quant_probe_never_raises_and_says_why(monkeypatch):
+    """A failed check (or a check that raises) leaves the sharing off with the reason;
+    the probe starts from "off" each time, so a previous pass does not linger."""
+    from engine_h3 import quant_linear
+
+    monkeypatch.setattr(quant_linear, "_SHARED_CB", object())   # as if an earlier probe passed
+    monkeypatch.setattr(quant_linear, "_SHARED_REASON", None)
+    why = "comfy_kitchen.backends.cuda._C.cutlass_int8_dequant is missing"
+    monkeypatch.setattr(quant_linear, "_shared_quant_missing", lambda cb: why)
+    quant_linear._probe_shared_quant()
+    assert quant_linear.shared_quant_status() == (False, why) and quant_linear._SHARED_CB is None
+
+    def boom(cb):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(quant_linear, "_shared_quant_missing", boom)
+    quant_linear._probe_shared_quant()
+    shared, reason = quant_linear.shared_quant_status()
+    assert not shared and "RuntimeError" in reason and quant_linear._SHARED_CB is None
+
+
+def test_shares_input_conditions(monkeypatch):
+    """Each condition of ``H3Int8Linear.shares_input`` broken alone gives False."""
+    import types
+
+    from engine_h3 import quant_linear
+    from engine_h3.quant_linear import H3Int8Linear
+
+    fits, cutlass = [True], [True]
+    fake = types.SimpleNamespace(
+        _CONVROT_FUSED_MAX_K=512,
+        _convrot_fused_shared_memory_fits=lambda x, k, group_size: fits[0],
+        _cuda_device_supports_cutlass_int8_dequant=lambda t: cutlass[0],
+    )
+
+    def lin(k=256, convrot=True, group=256):
+        return H3Int8Linear(k, 8, bias=False, spec=h3_format.QuantSpec("int8_tensorwise", convrot, group))
+
+    def x(m=3, k=256):
+        return torch.zeros(m, k, dtype=torch.bfloat16)
+
+    monkeypatch.setattr(quant_linear, "_SHARED_CB", None)
+    assert not lin().shares_input(x())                         # 1: the probe did not pass
+    monkeypatch.setattr(quant_linear, "_SHARED_CB", fake)
+    assert lin().shares_input(x()) and lin(512).shares_input(x(k=512))
+    assert not lin(convrot=False).shares_input(x())            # 2: ConvRot, groups of 256
+    assert not lin(group=64).shares_input(x())
+    for k in (128, 384, 768):                                  # 3: K < 256, K % 256, K > _CONVROT_FUSED_MAX_K
+        assert not lin(k).shares_input(x(k=k)), k
+    fits[0] = False                                            # 4: shared memory
+    assert not lin().shares_input(x())
+    fits[0] = True
+    assert not lin().shares_input(x(m=2))                      # 5: m > 2
+    cutlass[0] = False                                         # 6: CUTLASS int8 (not Turing)
+    assert not lin().shares_input(x())
+    cutlass[0] = True
+    for name in ("weight", "weight_scale"):                    # 7: weight and scale on x's device
+        mod = lin()
+        setattr(mod, name, torch.nn.Parameter(torch.empty_like(getattr(mod, name), device="meta"), requires_grad=False))
+        assert not mod.shares_input(x()), name
+
+
 def _tiny_vram16_dit(tmp_path, heads=4, layers=2):
     from engine_h3.dit import H3DiT
     from engine_h3.pipeline_h3 import dit_key_map_for
@@ -1639,14 +1777,21 @@ def test_vram16_derive_memory_cap():
     assert derive_memory_cap(16 * gib, 16 * gib, 4 * gib, 0) == 1.0    # clamped above
 
 
+@pytest.mark.parametrize("shared", [False, True])
 @pytest.mark.parametrize("head_group, row_chunk", [(3, 16), (1, 7), (4, 4096), (2, 41)])
-def test_vram16_block_forward_matches_off(monkeypatch, tmp_path, head_group, row_chunk):
+def test_vram16_block_forward_matches_off(monkeypatch, tmp_path, head_group, row_chunk, shared):
     """4 heads in groups of ``head_group`` (3 = an uneven last group; 4 = one group,
     the attention of ``H3Attention.forward`` with q, k, v projected apart), rows in
-    chunks of ``row_chunk`` (S = 41): the same bf16 block output, bit for bit."""
+    chunks of ``row_chunk`` (S = 41): the same bf16 block output, bit for bit.
+    ``shared``: the qkv input quantized once for the block (台帳 §1-105 ①, faked):
+    no ``forward_rows``, one ``quantize_input``, 3 x groups ``forward_rows_q``, and
+    ``h`` already freed when the first slice runs."""
     from engine_h3.lowvram import Vram16Plan
 
     _fake_int8(monkeypatch)
+    if shared:
+        _fake_shared_quant(monkeypatch)
+        calls, h_gone = _count_qkv_calls(monkeypatch)
     dit = _tiny_vram16_dit(tmp_path)
     tokens, kw = _tiny_forward_inputs(dit)
     t_emb = dit.adaln_embed(kw["t_unique"])
@@ -1668,6 +1813,10 @@ def test_vram16_block_forward_matches_off(monkeypatch, tmp_path, head_group, row
     assert len(seen) == 2 and torch.equal(seen[1], seen[0])
     assert torch.isfinite(want.float()).all() and got.dtype == want.dtype
     assert torch.equal(got, want)
+    if shared:
+        groups = math.ceil(4 / head_group)
+        assert calls == {"forward_rows": 0, "quantize_input": 1, "forward_rows_q": 3 * groups}
+        assert h_gone == [True] * (3 * groups)
 
 
 def test_vram16_final_rows_matches_off(tmp_path):
@@ -1728,6 +1877,27 @@ def test_vram16_off_forward_never_calls_lowvram(monkeypatch, tmp_path):
     tokens, kw = _tiny_forward_inputs(dit)
     with torch.no_grad():
         dit(tokens, **kw)
+
+
+def test_vram16_falls_back_when_not_shared(monkeypatch, tmp_path):
+    """No shared quantization (the probe did not pass; set explicitly, since the GPU
+    tests leave the module state behind): every slice through ``forward_rows``."""
+    from engine_h3 import quant_linear
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    monkeypatch.setattr(quant_linear, "_SHARED_CB", None)
+    calls, _h_gone = _count_qkv_calls(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit)
+    plan = Vram16Plan(head_group=3, row_chunk=16)
+    with torch.no_grad():
+        want = dit(tokens, **kw)
+        got = dit(None, tokens_box=[tokens.clone()], vram16=plan, **kw)
+    for g, w in zip(got, want):
+        assert torch.equal(g, w)
+    groups = math.ceil(4 / plan.head_group)
+    assert calls == {"forward_rows": 3 * groups * len(dit.blocks), "quantize_input": 0, "forward_rows_q": 0}
 
 
 @pytest.mark.parametrize("vram16", [False, True])
@@ -1880,6 +2050,38 @@ def test_gpu_forward_rows_join_equals_forward(convrot, bias):
     with torch.no_grad():
         want = lin(x)
         got = torch.cat([lin.forward_rows(x, n0, n0 + 1024) for n0 in range(0, 3 * 7168, 1024)], dim=1)
+    assert torch.equal(got, want)
+
+
+@_GPU
+@pytest.mark.parametrize("m", [4096, 39764])
+@pytest.mark.parametrize("cutlass", [True, False])
+@pytest.mark.parametrize("bias", [False, True])
+def test_gpu_shared_quant_join_equals_forward(monkeypatch, bias, cutlass, m):
+    """台帳 §1-105 ①: the qkv input quantized once, 21 head-group slices of 1,024 rows
+    through ``forward_rows_q``: each slice == ``forward_rows``, the join == ``forward``.
+    ``cutlass=False`` sends both paths to cuBLAS + dequant (``_DISABLE_CUTLASS_INT8``
+    is read at every call by ``int8_linear`` and by the copy). m = 39,764 is the
+    I2V 896 x 1152 x 124 sequence (about 4 GB of outputs)."""
+    import comfy_kitchen.backends.cuda as cb
+
+    from engine_h3.quant_linear import shared_quant_status
+
+    lin, g = _gpu_int8_linear(3 * 7168, 5376, convrot=True, bias=bias)
+    assert shared_quant_status() == (True, None)
+    if not cutlass:
+        monkeypatch.setattr(cb, "_DISABLE_CUTLASS_INT8", True)
+    x = torch.randn(m, 5376, generator=g).to("cuda", torch.bfloat16)
+    assert lin.shares_input(x)
+    with torch.no_grad():
+        want = lin(x)
+        xq, xs = lin.quantize_input(x)
+        parts = []
+        for n0 in range(0, 3 * 7168, 1024):
+            part = lin.forward_rows_q(xq, xs, n0, n0 + 1024)
+            assert torch.equal(part, lin.forward_rows(x, n0, n0 + 1024)), n0
+            parts.append(part)
+        got = torch.cat(parts, dim=1)
     assert torch.equal(got, want)
 
 
@@ -2272,6 +2474,49 @@ def test_lora_vram16_matches_off(monkeypatch, tmp_path, heads, head_group, row_c
     assert xa_calls == [b.attn.qkv_proj for b in dit.blocks]          # once per block
     groups = math.ceil(heads / plan.head_group)
     assert len(rows_xa) == 3 * groups * len(dit.blocks) and all(rows_xa)
+
+
+@pytest.mark.parametrize("heads, head_group, row_chunk", [(16, None, None), (4, 2, 16), (4, 1, 7)])
+def test_lora_vram16_shared_matches_off(monkeypatch, tmp_path, heads, head_group, row_chunk):
+    """``test_lora_vram16_matches_off`` with the qkv input quantized once per block
+    (台帳 §1-105 ①, faked): still == off bit for bit; every slice's ``apply`` gets
+    ``x=None`` and the block's ``xa`` (rows taken from ``xa``)."""
+    from engine_h3 import lora as L
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    _fake_shared_quant(monkeypatch)
+    calls, h_gone = _count_qkv_calls(monkeypatch)
+    if head_group is None:
+        plan = Vram16Plan()
+    else:
+        monkeypatch.setattr(C, "LORA_COL_CHUNK", head_group * HD)
+        monkeypatch.setattr(C, "VRAM16_ROW_CHUNK", row_chunk)
+        plan = Vram16Plan(head_group=head_group, row_chunk=row_chunk)
+    dit = _tiny_vram16_dit(tmp_path, heads=heads)
+    tokens, kw = _tiny_forward_inputs(dit)
+    files = [(L.load_lora_file(_write_lora(tmp_path, f"{s}.safetensors", _tiny_lora_tensors(dit, seed=s, rank=r))), st)
+             for s, r, st in ((1, 4, 1.0), (2, 6, 0.7))]
+    L.attach(dit, files)
+    rows_args = []
+    real_apply = L.apply
+
+    def apply(mod, x, out, n0=0, n1=None, xa=None):
+        if n1 is not None:
+            rows_args.append((x is None, xa is not None))
+        return real_apply(mod, x, out, n0, n1, xa=xa)
+
+    monkeypatch.setattr(L, "apply", apply)
+    with torch.no_grad():
+        want = dit(tokens, **kw)
+        got = dit(None, tokens_box=[tokens.clone()], vram16=plan, **kw)
+    for g, w in zip(got, want):
+        assert torch.isfinite(w).all() and torch.equal(g, w)
+    groups = math.ceil(heads / plan.head_group)
+    n = 3 * groups * len(dit.blocks)
+    assert rows_args == [(True, True)] * n
+    assert h_gone == [True] * n
+    assert calls == {"forward_rows": 0, "quantize_input": len(dit.blocks), "forward_rows_q": n}
 
 
 def test_lora_buffers_are_in_the_prefetch_slots(tmp_path):

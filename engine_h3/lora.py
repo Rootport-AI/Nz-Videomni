@@ -20,7 +20,9 @@ How it is wired (Docs/MINIMAX_H3_DESIGN.md §6.6):
 * ``H3Int8Linear.forward_rows`` (VRAM 16GB mode's qkv, which does not go
   through ``__call__``) calls :func:`apply` itself with its ``[n0, n1)`` rows of
   B, and ``lowvram.block_forward`` computes ``f32(h) @ A^T`` once per block
-  (:func:`xa_for`) instead of once per head group;
+  (:func:`xa_for`) instead of once per head group; ``forward_rows_q`` (the same
+  rows on the input quantized once per block, 台帳 §1-105 ①) no longer has the
+  input and calls :func:`apply` with ``x=None`` and that ``xa``;
 * ``detach`` removes all of it (``delattr``, so ``_non_persistent_buffers_set``
   is cleaned too, and ``handle.remove()``). It MUST run after the prefetch
   teardown: ``_release`` writes ``mod._buffers[name]`` back by name.
@@ -285,23 +287,26 @@ def apply(module, x: torch.Tensor, out: torch.Tensor, n0: int = 0, n1: int | Non
 
     ``out`` holds output features ``[n0, n1)`` (``forward_rows``) or all of them;
     ``xa``: :func:`xa_for`'s result for this ``x`` (VRAM 16GB mode), else it is
-    computed here. Every matmul operand is float32; the f32 sum is added into
+    computed here; the row count comes from ``xa`` when given, so
+    ``H3Int8Linear.forward_rows_q`` passes ``x=None`` and always passes ``xa``.
+    Every matmul operand is float32; the f32 sum is added into
     the bf16 ``out`` once per element (the in-place add computes in f32 and
     rounds once).
     """
     from engine_h3.lowvram import row_chunks  # noqa: PLC0415 -- lowvram imports this module
 
     specs = getattr(module, _SPECS)
-    x2d = x.reshape(-1, x.shape[-1])
+    x2d = None if xa is not None else x.reshape(-1, x.shape[-1])
+    m = xa[0].shape[0] if xa is not None else x2d.shape[0]
     out2d = out.view(-1, out.shape[-1])
     if n1 is None:
         n1 = n0 + out2d.shape[1]
-    if out2d.shape[1] != n1 - n0 or out2d.shape[0] != x2d.shape[0]:
-        raise RuntimeError(f"LoRA: output {list(out2d.shape)} does not match rows {x2d.shape[0]} x [{n0}, {n1})")
+    if out2d.shape[1] != n1 - n0 or out2d.shape[0] != m:
+        raise RuntimeError(f"LoRA: output {list(out2d.shape)} does not match rows {m} x [{n0}, {n1})")
     col = int(_C.LORA_COL_CHUNK)
     a_s = None if xa is not None else [_buffer(module, s.a, s.dtype_a).float() for s in specs]
     b_s = [_buffer(module, s.b, s.dtype_b) for s in specs]
-    for r0, r1 in row_chunks(x2d.shape[0], _C.VRAM16_ROW_CHUNK):
+    for r0, r1 in row_chunks(m, _C.VRAM16_ROW_CHUNK):
         if xa is not None:
             xs = [xa[i][r0:r1] * s.scale for i, s in enumerate(specs)]
         else:

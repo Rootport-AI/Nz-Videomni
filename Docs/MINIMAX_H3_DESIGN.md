@@ -175,6 +175,10 @@
   - eager を切る理由: eager は制約から外れた呼び出しを黙って受けて遅くなるだけで、速度の低下から区別できない。切っておけば、CUDA 経路に乗らない呼び出しは `NoCapableBackendError` で止まる（**fail loud**）。
 - **CUDA 経路に乗る条件**: 重みとスケールが GPU 上にあること。block swap が重みを GPU に載せた状態で呼ぶ限り満たされる。
 - groupsize は 256 以外（例: 64）も、そのまま `int8_linear` に渡す。
+- **例外（VRAM 16GB mode の qkv だけ。台帳 §1-105 ①・オーナー裁定 2026-10-25）**: VRAM 16GB mode の qkv の射影（§6.5）だけは、関数 API の `int8_linear` に任せず、comfy-kitchen 0.2.37 の**公開されていない内部**を使って、入力の量子化を 1 ブロック 1 回にする。量子化は `backends.cuda.quantize_int8_rowwise_convrot64`（`int8_linear` が中で呼ぶものと同じ核・同じ引数）、行列積は `int8_linear` の量子化より後の部分を写した `_int8_gemm_prequantized`（`engine_h3/quant_linear.py`）で行う。
+  - 版 0.2.37・記号・引数の並びを起動時に検査し、外れたらログに残して従来の経路に戻す（ロードは拒否しない。詳細は `quant_linear.py` の冒頭）。
+  - **fail loud の保ち方**: この経路は comfy-kitchen の登録の制約を通らない。そのため、重みとスケールが入力と同じデバイスに無い呼び出しは共有せず、従来の `int8_linear` に回して `NoCapableBackendError` で止める。
+  - 数値が変わらないことと短縮の実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177。
 
 ---
 
@@ -190,7 +194,7 @@
 
 ## 6.5 VRAM 16GB mode（ノイズ除去の活性化を分割して VRAM 16GB に収める）
 
-**結論**: ノイズ除去の段で、1 ブロックの計算を「ヘッド群」と「行の塊」に分けて回し、活性化（計算途中のテンソル）の山を下げる。割り当て器（torch の CUDA メモリの割り当ての仕組み）には上限を課して、返されない空きセグメントが共有メモリへの退避（VRAM から主メモリ側へ溢れること）を起こさないようにする。H3 では**既定で on** で、Settings の「Acceleration／生成の高速化」から切れる（裁定 44）。製品の条件（I2V 896×1152×124 フレーム）で、ノイズ除去の割り当て／予約が 12,807／16,828MiB から 4,411／7,262MiB に下がり、1 ステップが約 203 秒から約 22 秒になる（退避ゼロ。詳しい実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3）。精度を落とす手段は使わない（裁定 46）。
+**結論**: ノイズ除去の段で、1 ブロックの計算を「ヘッド群」と「行の塊」に分けて回し、活性化（計算途中のテンソル）の山を下げる。割り当て器（torch の CUDA メモリの割り当ての仕組み）には上限を課して、返されない空きセグメントが共有メモリへの退避（VRAM から主メモリ側へ溢れること）を起こさないようにする。H3 では**既定で on** で、Settings の「Acceleration／生成の高速化」から切れる（裁定 44）。製品の条件（I2V 896×1152×124 フレーム）で、ノイズ除去の割り当て／予約が 12,807／16,828MiB から 4,411／7,262MiB に下がり、1 ステップが約 203 秒から約 22 秒になる（退避ゼロ。詳しい実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3、qkv の量子化の共有の後の値は同 §177）。精度を落とす手段は使わない（裁定 46）。
 
 ### 何をするか
 
@@ -199,7 +203,7 @@ on の経路で行うことは次の 8 つである。#1・#7・#8 は VRAM の�
 | # | 単位 | 内容 |
 |---|---|---|
 | 1 | 割り当て器の上限 | ノイズ除去の頭で、このプロセスの割り当て器に上限を課し、終わりに外す。導き方は下の「上限と OOM」 |
-| 2 | 早期解放 | q・k・v を重みの行で切って射影し（融合した qkv を作らない）、埋め込み済みのトークンは bf16 にした直後に捨てる。norm 後の入力は最後のヘッド群の後に捨てる |
+| 2 | 早期解放 | q・k・v を重みの行で切って射影し（融合した qkv を作らない）、埋め込み済みのトークンは bf16 にした直後に捨てる。norm 後の入力は量子化の直後に捨てる（共有に乗らないときは最後のヘッド群の後） |
 | 3 | ヘッド分割 | 注意計算をヘッド群ごとに回す。呼ぶのは off と同じ `_attention` |
 | 4 | FFN の行の塊化 | FFN を行の塊ごとに回し、結果を 1 本の受け皿へ書く |
 | 5 | AdaLN の塊化 | 変調とゲートを行の塊ごとに回す |
@@ -213,6 +217,7 @@ on の経路で行うことは次の 8 つである。#1・#7・#8 は VRAM の�
 ### 置き方
 
 - **`engine_h3/lowvram.py`**: 新しい計算を書かない。off の経路が呼ぶ既存の関数（`_modulate`・`_gate`・`block.mlp`・`_attention`・`apply_rope`・`_linear_f32`・各 norm）を、**行の範囲・ヘッドの群ごとに呼ぶだけ**で、結果は事前に確保した受け皿へ書く。含むのは `Vram16Plan`（分割の単位）・`row_chunks`・`blocks_on_gpu_for`・`derive_memory_cap`・`block_forward`・`final_rows_chunked`。`_modulate`・`_gate`・`_attention`・`apply_rope`・`_linear_f32` の 5 つは `engine_h3.dit` のモジュールを経由して呼ぶので、テストでの差し替えが効く（`block.mlp` と各 norm はブロックから直接呼ぶ）。
+  - **例外（台帳 §1-105 ①・オーナー裁定 2026-10-25）**: qkv の入力は、ヘッド群のループの前に 1 回だけ量子化し（`H3Int8Linear.quantize_input`）、その直後に `h` を捨てる。ループの中の q・k・v は、量子化済みの入力から `forward_rows_q` で切片ごとに計算する（行列積は `_int8_gemm_prequantized`。§5 の例外）。使えるかはブロックごとに `shares_input` が決め、使えないときは従来どおり `forward_rows` で切片ごとに量子化する（分岐はこの 1 か所）。LoRA の行数は `xa` から取る（`forward_rows_q` は `lora.apply` に入力を渡さない）。
 - **`engine_h3/dit.py`** は分岐と引数だけ。`H3DiTBlock.vram16`（クラス属性。None なら off）に計画が入っていれば、`forward` の先頭で `lowvram.block_forward` へ渡す。`H3DiT.forward` は `vram16` と `tokens_box`（埋め込み済みトークンを入れた容れ物。取り出した後に呼び出し側の参照が残らないようにするため）を受け、ブロックごとに `block.vram16` を**毎回**代入する（None も。常駐した DiT の後始末になる）。`final_rows` も `vram16` の有無で分岐する。off の経路の行は変えない。
 - **`H3Int8Linear.forward_rows(x, n0, n1)`**: 出力の行 `[n0, n1)` だけを、毎回 `self.weight` から切った連続ビューで計算する。呼び出し側がヘッドの境目で切るので、`n0` は結果として `head_dim`（128）の倍数になる。
 - 割り当て器の上限と、モジュールを降ろす処理と、`tokens_box` は `pipeline_h3.py` の `_denoise`（`_vram16_begin`・`_vram16_finish`・`_evict_text_modules`）にある。ワーカーとアダプタの鍵は §8。
@@ -231,7 +236,7 @@ on の経路で行うことは次の 8 つである。#1・#7・#8 は VRAM の�
 ### 上限と OOM
 
 - **上限**: `set_per_process_memory_fraction` に、`(このプロセスの予約 + mem_get_info の空き − 余白) / 総量` を渡す（`derive_memory_cap`。0〜1 に収める）。ノイズ除去の頭（`_place_dit` の前）で課し、`finally` の先頭で 1.0 に戻す。CUDA のデバイスは番号つきで渡す（番号無しの `cuda` を渡すと上限が課せない）。製品の条件での値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3 にある。
-- **記録**: `done` の `h3.phases.denoise.vram16` に、上限（比と MiB）・常駐ブロック数・ヘッド群・行の塊・降ろした先（`text_modules`）・割り当て器の再試行と OOM の回数の差分・`inactive_split` のピークを入れる。
+- **記録**: `done` の `h3.phases.denoise.vram16` に、上限（比と MiB）・常駐ブロック数・ヘッド群・行の塊・降ろした先（`text_modules`）・割り当て器の再試行と OOM の回数の差分・`inactive_split` のピーク・qkv の量子化の共有の可否（`qkv_quant_shared`。ロード時の検査〔§5 の例外〕の合否で、ブロックごとの判定ではない）を入れる。
 - **OOM は失敗させる（裁定 47）**。on のとき `torch.OutOfMemoryError` を `VRAM16_OOM_MESSAGE`（「VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください」）の `RuntimeError` に包む。アプリ側は「out of memory」を含む文言を `GPU_OOM` に分類するので、ジョブは失敗し、`get_job` の `error` に案内が出る。黙って退避を許す経路は作らない。案内に「画角」と書かない。
 - **カーネルが投げる `RuntimeError("CUDA error: out of memory")` は包まれない**。包むのは `torch.OutOfMemoryError` だけである（記録だけの小さな漏れ）。
 
@@ -257,7 +262,7 @@ block swap の常駐ブロック数 `blocks_on_gpu`（block swap が GPU に置�
 |---|---|---|---|
 | 入口 | `x`（トークンはもともと bf16。`tokens_box` で呼び出し側に参照を残さず、ブロック 0 を抜けると解放される） | 1 | 2（トークンも保持） |
 | norm1 と変調 | `x`・norm1 の出力・変調後の `h` + 塊の f32 の一時 | 約 3.4 | 7 |
-| 注意（山） | `x`・`h`・出力の受け皿 `o`（1.33）+ 群の q・k・v・RoPE の出力・sage の内部 | 約 5 | 18.33 |
+| 注意（山） | `x`・量子化済みの入力（int8 で 0.5）・出力の受け皿 `o`（1.33）+ 群の q・k・v・RoPE の出力・sage の内部 | 約 4.5 | 18.33 |
 | out_proj | `x`・`o`・int8 の写し・出力 | 約 4 | 約 12.7 |
 | 注意の残差 | `x`・注意の出力・新しい `x2` + 塊の一時 | 約 3.4 | 約 6 |
 | norm2 と変調 | `x`・`x2`・norm2 の出力・`h2` | 4 | 8 |
@@ -265,7 +270,7 @@ block swap の常駐ブロック数 `blocks_on_gpu`（block swap が GPU に置�
 | FFN の残差 | `x2`・`m`・出力 + 塊の一時 | 約 3.5 | 約 7 |
 
 - off の列は第 1 段の棚卸し（[`Outputs-archive/h3-vram-2026-10-18/reports/R1_vram_inventory.md`](Outputs-archive/h3-vram-2026-10-18/reports/R1_vram_inventory.md) §3.2）の値で、活性化の山は 18.33U ≈ 7,475MiB。on の山は約 5U ≈ 2.1GB。
-- 実測との照合: on のノイズ除去の割り当てのピーク 4,411MiB から、先読みの受け皿 6 本（371.08 × 6 ≈ 2,226MiB）を引くと約 2,185MiB ≈ 5.4U で、概算の山（約 5U）と合う。
+- 実測との照合: on のノイズ除去の割り当てのピーク 4,411MiB から、先読みの受け皿 6 本（371.08 × 6 ≈ 2,226MiB）を引くと約 2,185MiB ≈ 5.4U で、概算の山（約 5U）と合う（qkv の量子化の共有の後の実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177）。
 - 山が下がるので、割り当て器の上限（14,033MiB）の下に収まり、返されない空きセグメントが共有メモリへの退避に化けない。
 
 ### 範囲と既知の限界
@@ -275,7 +280,7 @@ block swap の常駐ブロック数 `blocks_on_gpu`（block swap が GPU に置�
 - **VRAM 16GB mode の実測は開発機（RTX 4070 Ti SUPER・Ada）だけである。** RTX 30 系（Ampere）は未確認（サブマシンで確かめたのは α版の T2V だけ。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167.8）。
 - **off の経路の限界**: SDPA の mem-efficient 経路は、系列が約 10 万行を超えて v が view（行の刻みが詰まっていない）のとき、不正なメモリアクセスになる。実測は 98,304 行で正常・100,352 行で不正（v を連続にすれば正常。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.3 の T6）。on は群ごとに連続な q・k・v を渡すので、この境界に近づかない。off の経路には防御を足していない。
 - 上限のせいで先読みの受け皿が確保できないとき、同期の経路に黙って切り替わる（記録だけ。on の条件では起きていない）。
-- qkv の量子化が 1 ブロックで 3 × 7 群の 21 回走る。時間の要因として記録するが、実測の 1 ステップ（約 22 秒）に収まっている。
+- Turing と、comfy-kitchen の内部が検査に合わないときは、qkv の量子化は従来どおり 1 ブロック 21 回になる（§5 の例外）。共有の経路は Ampere では確かめていない（オーナー裁定 2026-10-25 で門に入れなかった）。
 
 ---
 
@@ -297,7 +302,7 @@ block swap の常駐ブロック数 `blocks_on_gpu`（block swap が GPU に置�
 ### 接続（hook と `forward_rows`）
 
 - **forward hook**: `forward()` を通る呼び出し（off の経路の 4 層・token_refiner・VRAM 16GB mode の out_proj と `block.mlp`）はすべて `Module.__call__` を通るので、層ごとに hook を 1 本掛けて差分を足す。`dit.py` と `H3Int8Linear.forward` は変えない。
-- **`H3Int8Linear.forward_rows(x, n0, n1, lora_xa=None)`**: VRAM 16GB mode の qkv は `__call__` を通らないので、`forward_rows` が自分で差分を足す。B は出力の行 `[n0, n1)` で切る。`lowvram.block_forward` はヘッド群のループの前に `f32(h) @ Aᵀ` を 1 回だけ計算して `lora_xa` で渡す（群ごとの 21 回の計算を避ける）。LoRA が無いジョブでは `None` で、算術は増えない。
+- **`H3Int8Linear.forward_rows(x, n0, n1, lora_xa=None)`**: VRAM 16GB mode の qkv は `__call__` を通らないので、`forward_rows` と、共有の経路の `forward_rows_q`（`x=None`・`lora_xa` で呼ぶ）が自分で差分を足す。B は出力の行 `[n0, n1)` で切る。`lowvram.block_forward` はヘッド群のループの前に `f32(h) @ Aᵀ` を 1 回だけ計算して `lora_xa` で渡す（群ごとの 21 回の計算を避ける）。LoRA が無いジョブでは `None` で、算術は増えない。
 - **buffer**: A と B は層の**永続しない buffer**（`_lora_A_{k}`・`_lora_B_{k}`）として置く。block swap・先読みの受け皿・`_park_dit`・`drop_to_meta` がブロックと一緒に運び、state dict は変わらない。
 
 ### 塊の切り方（off と VRAM 16GB mode が一致する理由）
@@ -375,7 +380,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | `h3_format.py`（リポジトリ直下・torch 非依存） | ヘッダの判定・接頭辞の剥がし・構成の導出・`comfy_quant` の読み・量子化層の一覧（§7） |
 | `engine_h3/constants.py` | 定数と既定値（§9）。フレーム規約の算術 |
 | `engine_h3/sft_load.py` | テンソルを 1 本ずつ読んで meta のモデルへ入れる（`assign=True`）。読み残しの検査 |
-| `engine_h3/quant_linear.py` | `H3Int8Linear`（出力の行の範囲だけを計算する `forward_rows` を含む）・CUDA 経路の検査と固定・量子化層の差し替え（§5） |
+| `engine_h3/quant_linear.py` | `H3Int8Linear`（出力の行の範囲だけを計算する `forward_rows` を含む）・CUDA 経路の検査と固定・量子化層の差し替え（§5）・VRAM 16GB mode の qkv の量子化の共有（`shares_input`・`quantize_input`・`forward_rows_q`・起動時の検査。§5 の例外） |
 | `engine_h3/dit.py` | DiT 本体・枝刈り版の AdaLN・attention（SDPA／SageAttention）・行の並べ替え。VRAM 16GB mode の分岐（`vram16`）と `tokens_box` を持つ（§6.5） |
 | `h3_lora_format.py`（リポジトリ直下・torch 非依存） | LoRA の鍵の写像と「対応・非対応」の判定。アプリとワーカーが同じ関数を import する（§6.6） |
 | `engine_h3/lora.py` | LoRA の読み込み・付け外し（hook と buffer）・FP32 の加算（§6.6） |
@@ -493,7 +498,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 ## 13. 未決事項
 
-- **性能**: 大きな画角でノイズ除去の段の VRAM が溢れる問題は、VRAM 16GB mode（§6.5）の on で消えた（開発機の機械の門。製品の条件で退避ゼロ・1 ステップ約 22 秒。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3）。配置後のオーナーの目視（B-G5）にも合格し、sage の 2 ブロックの値の差は採用した（裁定 53）。残るのは次の 2 点である。(1) 計測台の T1 で重い減速が出なかった理由は未解明のまま残している（オーナー裁定で追わない。同 §168.9）。(2) 快適上限の較正（台帳 §1-95）は、退避そのものの量で線を引く（同 §168.1）。LoRA（Turbo）は §6.6 で対応した。較正（§1-95）の計画では、LoRA の有無を条件に入れるかを確かめる。
+- **性能**: 大きな画角でノイズ除去の段の VRAM が溢れる問題は、VRAM 16GB mode（§6.5）の on で消えた（開発機の機械の門。製品の条件で退避ゼロ。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3。1 ステップ約 20 秒〔同 §177〕）。配置後のオーナーの目視（B-G5）にも合格し、sage の 2 ブロックの値の差は採用した（裁定 53）。残るのは次の 2 点である。(1) 計測台の T1 で重い減速が出なかった理由は未解明のまま残している（オーナー裁定で追わない。同 §168.9）。(2) 快適上限の較正（台帳 §1-95）は、退避そのものの量で線を引く（同 §168.1）。LoRA（Turbo）は §6.6 で対応した。較正（§1-95）の計画では、LoRA の有無を条件に入れるかを確かめる。
 - **LoRA の後続**: (1) 動画と音声に個別の強度を持たせる（台帳 §3-252。いまは `audio_strength` を送らず、1 本の強度が両方に効く）。(2) 加算の高速化（台帳 §3-253。費用は §6.6）。
 - **PinkCherry Hybrid**: オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。対応の保証は §12 のとおり後回し（Ref2VA の参照経路も後回し）。
 - **m×n ≥ 2³¹ の CUDA 経路**: ソースの水準では限界が無いが、実測は台帳 §1-95（快適上限の較正）で行う。VRAM 16GB mode の on では行の塊で分割されるので届かず、off でだけ届きうる（算術による推測。扱いは §1-95 の計画で決める）。

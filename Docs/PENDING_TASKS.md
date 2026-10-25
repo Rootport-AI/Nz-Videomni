@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-24
+- 作成: 2026-07-15／最終更新: 2026-10-25
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -29,13 +29,6 @@
 - **前提**: 音声 VAE〔音声の圧縮器〕の符号化器があるかの確認。行ごとに時刻を固定する部品（キーフレームの条件行〔実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170〕と、後の §1-106 の連結で共有する）。操作パネルの A2V カード（現状 H3 では灰色）。
 - **留意**: 「Ref2VA のほうが A2V に向く」という根拠は一次資料に無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
 - **出典**: [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（A2V の仕組み。一次資料つき）・[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3（条件行）。
-
-### 1-105. MiniMax H3 の 1 ステップの高速化（第 1 弾：数値等価）（起票：2026-10-19）
-
-- **概要**: 出力の数値を変えない 4 件（④ は条件付き）。① QKV の活性化量子化の共有（7 群×3 本＝21 回の量子化を 1 回にする）。② ステップ間の cyclic prefetch〔次のステップのブロック 0 と 1 を先読みする〕。③ CPU の正本から pinned staging〔固定メモリの中継領域〕への先読み。④ QKV の不要なコピー・レイアウト変換の削減（条件付き: SageAttention 呼び出し前の `contiguous()` などが対象。既存設計は strided Q/K 方式を不採用としているので、数値一致と VRAM 使用量を再検証してから）。
-- **前提**: §1-104 は完了（CLOSED 3-251）。射影のコードを同じ箇所で触る。comfy-kitchen が量子化済みの入力の行列積を公開 API で受け付けるかの調査。
-- **留意**: ヘッド群の拡大（14／28）は §3-245 で再評価する（§1-95 の較正の完了が前提）。kernel fusion〔RMSNorm と RoPE、SwiGLU の融合〕は数値が変わるので本弾には入れず、§3-246 の候補とする（裁定 46 の門つき）。オーナーのメモは一次資料で未裏取り。各件の評価の物差し（20 ステップでの短縮秒数と快適上限への影響）は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.6。
-- **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（高速化 5 項目。未裏取り）・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3（A-G5）・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14（2026-10-21 の事前調査）。
 
 ### 1-106. MiniMax H3 の Chained（H3 Continuum 型・FL2VA）（起票：2026-10-19）
 
@@ -121,7 +114,7 @@
 #### 3-245. MiniMax H3 のヘッド群（Head group）拡大の再評価（起票：2026-10-21）
 
 - **概要**: VRAM 16GB mode のヘッド群を現行の 8 から 14 または 28 へ広げると 1 ステップが速くなる（A-G5 の実測）が、割り当てが増えて快適上限のフレーム数を下げる可能性がある。再評価して採否を決める。
-- **判断材料**: 20 ステップ換算の短縮と VRAM の増加は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.2 の表。採用の条件は、快適上限の低下が 20% 以上なら考え直すこと、LTX 2.3〜2.5 と同じ水準のフレーム数を保つことを優先すること、費用対効果は同 §14.6 の基準で見ること。利用者向けのつまみは増やさない方針（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.7）との兼ね合いも着手時に再検討する（オーナー指示）。
+- **判断材料**: 20 ステップ換算の短縮と VRAM の増加は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.2 の表。採用の条件は、快適上限の低下が 20% 以上なら考え直すこと、LTX 2.3〜2.5 と同じ水準のフレーム数を保つことを優先すること、費用対効果は同 §14.6 の基準で見ること。qkv の量子化を 1 ブロック 1 回にした後は、広げる得が同 §14.2 の表より小さくなる見込み（推測。新しい群 8 の速さは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177）。利用者向けのつまみは増やさない方針（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.7）との兼ね合いも着手時に再検討する（オーナー指示）。
 - **前提**: §1-95（現行のヘッド群 8 の快適上限の較正）の完了。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3（A-G5）・§169.7、[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5（`VRAM16_HEAD_GROUP`）、研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.2。
 
@@ -143,6 +136,12 @@
 - **概要**: LoRA の加算（FP32）は 1 ステップごとに時間が増え、rank の大きい Turbo で見積もりを大きく上回った。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176.5。ビット一致（off と VRAM 16GB mode が全組で一致）は保ったまま、次を調べて速くする。(1) `comfy_kitchen.int8_linear` が持つ `residual`／`residual_scale`（行列積のエピローグ〔後処理〕で差分を足す既存の口）で、f32 の受け皿の往復を省けるか（dtype の扱いは未確認）。(2) Turbo の qkv はブロック対角なので、非対角のゼロを計算しない（約 −30% の FLOP）。(3) 小さな行列積の起動回数と、B の f32 化の繰り返しのどちらが効いているかの切り分け。
 - **前提**: §1-104 は完了（CLOSED 3-251）。数値の約束（FP32 で足す・丸めは 1 回・off と on の一致）は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.6 のとおり守ること。
 - **出典**: [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.6（費用）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176.5、計画の敵対的レビュー Major 6（`Outputs-archive/h3-lora-2026-10-24/REVIEW_plan.md`）。
+
+#### 3-255. MiniMax H3 の QKV の不要なコピー・レイアウト変換の削減（起票：2026-10-25）
+
+- **概要**: 注意の計算で、q・k・v を SageAttention などへ渡す前の `contiguous()`〔メモリ上で詰めて並べ直すコピー〕やレイアウトの変換のうち、要らないものを省いて 1 ステップを短くする。出力の数値は変えないことが目標。
+- **前提**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5 の「採らないもの」（q と k の strided〔行の刻みが詰まっていない〕な渡し方）と衝突する。そのため、数値の一致（指紋と製品の形の 50 ブロック比較）と VRAM の使用量を検証し直してから扱う。off の経路の SDPA は、系列が長く v が詰まっていないと不正なメモリアクセスになる既知の境界がある（同 §6.5「範囲と既知の限界」）。
+- **出典**: 元は台帳 §1-105 の ④（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-254）。研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.1、事前調査は [`Outputs-archive/h3-speedup-2026-10-24/R1_investigation.md`](Outputs-archive/h3-speedup-2026-10-24/R1_investigation.md) の ① の節（公開 API だけで済ませる代替案の strided な出力の扱い）、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177。
 
 ### 研究課題（上の改修項目より優先度が下）
 

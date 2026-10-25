@@ -1,0 +1,573 @@
+........................................................................ [ 44%]
+........................................................................ [ 88%]
+..................                                                       [100%]
+=================================== PASSES ====================================
+_______ test_keyframe_t_last_frame_is_the_oracle_expression_bit_for_bit _______
+---------------------------- Captured stdout call -----------------------------
+L + (5/3)(F-1) matches the oracle in 141203 of 229404 (F, L) pairs
+_______________ test_block_swap_service_is_resident_across_jobs _______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_service_is_res0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_service_is_res0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_service_is_res0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_service_is_res0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_service_is_res0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_service_is_res0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_service_is_res0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_service_is_res0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+___________ test_block_swap_wrappers_are_stripped_and_never_doubled ___________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_wrappers_are_s0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_wrappers_are_s0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_wrappers_are_s0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_block_swap_wrappers_are_s0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+_________ test_keep_resident_state_transitions_with_a_tiny_dit[False] _________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+_________ test_keep_resident_state_transitions_with_a_tiny_dit[True] __________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans1\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans1\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans1\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans1\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans1\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans1\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans1\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_keep_resident_state_trans1\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+______________ test_vram16_block_forward_matches_off[3-16-False] ______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc0\tiny_h4.safetensors in 0.0s
+______________ test_vram16_block_forward_matches_off[3-16-True] _______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc1\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc1\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc1\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc1\tiny_h4.safetensors in 0.0s
+______________ test_vram16_block_forward_matches_off[1-7-False] _______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc2\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc2\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc2\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc2\tiny_h4.safetensors in 0.0s
+_______________ test_vram16_block_forward_matches_off[1-7-True] _______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc3\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc3\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc3\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc3\tiny_h4.safetensors in 0.0s
+_____________ test_vram16_block_forward_matches_off[4-4096-False] _____________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc4\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc4\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc4\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc4\tiny_h4.safetensors in 0.0s
+_____________ test_vram16_block_forward_matches_off[4-4096-True] ______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc5\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc5\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc5\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc5\tiny_h4.safetensors in 0.0s
+______________ test_vram16_block_forward_matches_off[2-41-False] ______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc6\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc6\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc6\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc6\tiny_h4.safetensors in 0.0s
+______________ test_vram16_block_forward_matches_off[2-41-True] _______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc7\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc7\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc7\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_block_forward_matc7\tiny_h4.safetensors in 0.0s
+_____________________ test_vram16_final_rows_matches_off ______________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_final_rows_matches0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_final_rows_matches0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_final_rows_matches0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_final_rows_matches0\tiny_h4.safetensors in 0.0s
+_________ test_vram16_dit_forward_matches_off_and_frees_the_embedding _________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_dit_forward_matche0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 66 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_dit_forward_matche0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_dit_forward_matche0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 66 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_dit_forward_matche0\tiny_h4.safetensors in 0.0s
+_________________ test_vram16_off_forward_never_calls_lowvram _________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_off_forward_never_0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_off_forward_never_0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_off_forward_never_0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_off_forward_never_0\tiny_h4.safetensors in 0.0s
+___________________ test_vram16_falls_back_when_not_shared ____________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_falls_back_when_no0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_falls_back_when_no0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_falls_back_when_no0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_falls_back_when_no0\tiny_h4.safetensors in 0.0s
+__________________ test_vram16_cuda_oom_is_explained[False] ___________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_cuda_oom_is_explai0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_cuda_oom_is_explai0\tiny.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_cuda_oom_is_explai0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_cuda_oom_is_explai0\tiny.safetensors in 0.0s
+___________________ test_vram16_cuda_oom_is_explained[True] ___________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_cuda_oom_is_explai1\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_cuda_oom_is_explai1\tiny.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_cuda_oom_is_explai1\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_cuda_oom_is_explai1\tiny.safetensors in 0.0s
+_______________ test_denoise_runs_with_several_key_frame_blocks _______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_denoise_runs_with_several0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_denoise_runs_with_several0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_denoise_runs_with_several0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_denoise_runs_with_several0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+_________________ test_vram16_window_of_one_job_does_not_stay _________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_window_of_one_job_0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_window_of_one_job_0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 2/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_window_of_one_job_0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_window_of_one_job_0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 2/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+_______________________ test_gpu_k_mean_of_a_head_group _______________________
+---------------------------- Captured stdout call -----------------------------
+k.mean head groups of 8 vs 56: max abs diff 0.0 (equal=True)
+_________________ test_vram16_begin_passes_an_indexed_device __________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_begin_passes_an_in0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_begin_passes_an_in0\tiny.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_begin_passes_an_in0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_vram16_begin_passes_an_in0\tiny.safetensors in 0.0s
+______________ test_lora_attach_and_detach_restore_every_module _______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_attach_and_detach_re0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_attach_and_detach_re0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_attach_and_detach_re0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_attach_and_detach_re0\tiny_h4.safetensors in 0.0s
+____________________ test_lora_every_matmul_operand_is_f32 ____________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_every_matmul_operand0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_every_matmul_operand0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_every_matmul_operand0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_every_matmul_operand0\tiny_h4.safetensors in 0.0s
+_____________________ test_lora_alpha_scale_and_no_alpha ______________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_alpha_scale_and_no_a0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_alpha_scale_and_no_a0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_alpha_scale_and_no_a0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_alpha_scale_and_no_a0\tiny_h4.safetensors in 0.0s
+______________ test_lora_kohya_and_ab_names_give_the_same_output ______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_kohya_and_ab_names_g0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_kohya_and_ab_names_g0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_kohya_and_ab_names_g0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_kohya_and_ab_names_g0\tiny_h4.safetensors in 0.0s
+_______________ test_lora_misfit_pairs_are_skipped_and_recorded _______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_misfit_pairs_are_ski0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_misfit_pairs_are_ski0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_misfit_pairs_are_ski0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_misfit_pairs_are_ski0\tiny_h4.safetensors in 0.0s
+____________ test_lora_reaches_the_token_refiner_through_the_hook _____________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_reaches_the_token_re0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_reaches_the_token_re0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_reaches_the_token_re0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_reaches_the_token_re0\tiny_h4.safetensors in 0.0s
+_________________ test_lora_vram16_matches_off[16-None-None] __________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_10\tiny_h16.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_10\tiny_h16.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_10\tiny_h16.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_10\tiny_h16.safetensors in 0.0s
+____________________ test_lora_vram16_matches_off[4-2-16] _____________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_40\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_40\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_40\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_40\tiny_h4.safetensors in 0.0s
+_____________________ test_lora_vram16_matches_off[4-1-7] _____________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_41\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_41\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_41\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_matches_off_41\tiny_h4.safetensors in 0.0s
+______________ test_lora_vram16_shared_matches_off[16-None-None] ______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche0\tiny_h16.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche0\tiny_h16.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche0\tiny_h16.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche0\tiny_h16.safetensors in 0.0s
+_________________ test_lora_vram16_shared_matches_off[4-2-16] _________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche1\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche1\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche1\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche1\tiny_h4.safetensors in 0.0s
+_________________ test_lora_vram16_shared_matches_off[4-1-7] __________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche2\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche2\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche2\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_vram16_shared_matche2\tiny_h4.safetensors in 0.0s
+_________________ test_lora_buffers_are_in_the_prefetch_slots _________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffers_are_in_the_p0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffers_are_in_the_p0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffers_are_in_the_p0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffers_are_in_the_p0\tiny_h4.safetensors in 0.0s
+______________ test_lora_buffers_ride_the_synchronous_block_swap ______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffers_ride_the_syn0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 66 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffers_ride_the_syn0\tiny_h4.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffers_ride_the_syn0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 66 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffers_ride_the_syn0\tiny_h4.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+______________________ test_lora_buffer_dtype_is_watched ______________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffer_dtype_is_watc0\tiny_h4.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffer_dtype_is_watc0\tiny_h4.safetensors in 0.0s
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 8 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffer_dtype_is_watc0\tiny_h4.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 52 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_buffer_dtype_is_watc0\tiny_h4.safetensors in 0.0s
+______________ test_lora_detach_runs_after_the_prefetch_teardown ______________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_detach_runs_after_th0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_detach_runs_after_th0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_detach_runs_after_th0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_detach_runs_after_th0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+___________ test_lora_job_then_plain_job_equals_the_baseline[False] ___________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+___________ test_lora_job_then_plain_job_equals_the_baseline[True] ____________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e1\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e1\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e1\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e1\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e1\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e1\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e1\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_job_then_plain_job_e1\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+_____________________ test_lora_failed_job_still_detaches _____________________
+---------------------------- Captured stderr call -----------------------------
+[h3_worker] engine_h3.sft_load: sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_failed_job_still_det0\tiny.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_failed_job_still_det0\tiny.safetensors in 0.0s
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+[h3_worker] engine.transformer.block_swap_service: BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+------------------------------ Captured log call ------------------------------
+INFO     engine_h3.sft_load:sft_load.py:108 sft_load: skipped 12 tensor(s) of C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_failed_job_still_det0\tiny.safetensors (markers / unused)
+INFO     engine_h3.sft_load:sft_load.py:109 sft_load: 74 tensors, 0.00 GiB from C:\Users\phenotype nezu\AppData\Local\Temp\pytest-of-phenotype nezu\pytest-1817\test_lora_failed_job_still_det0\tiny.safetensors in 0.0s
+INFO     engine.transformer.block_swap_service:block_swap_service.py:125 BlockSwap: installing on 3 blocks, keeping 1/3 on cpu
+WARNING  engine.transformer.block_swap_service:block_swap_service.py:326 BlockSwap prefetch unavailable (prefetch needs a CUDA device, got cpu) — falling back to the synchronous path for this job
+=========================== short test summary info ===========================
+PASSED tests/test_h3_engine.py::test_adaln_interpolation_ends_do_not_read_past_the_table
+PASSED tests/test_h3_engine.py::test_frame_rule[124-37-207]
+PASSED tests/test_h3_engine.py::test_frame_rule[345-102-575]
+PASSED tests/test_h3_engine.py::test_frame_rule[192-57-320]
+PASSED tests/test_h3_engine.py::test_frame_rule[243-72-405]
+PASSED tests/test_h3_engine.py::test_frame_rule_refuses_off_grid[123]
+PASSED tests/test_h3_engine.py::test_frame_rule_refuses_off_grid[125]
+PASSED tests/test_h3_engine.py::test_frame_rule_refuses_off_grid[361]
+PASSED tests/test_h3_engine.py::test_frame_rule_refuses_off_grid[0]
+PASSED tests/test_h3_engine.py::test_sigma_schedule_n20[12.0-expected0]
+PASSED tests/test_h3_engine.py::test_sigma_schedule_n20[3.0-expected1]
+PASSED tests/test_h3_engine.py::test_video_and_audio_schedules_differ
+PASSED tests/test_h3_engine.py::test_euler_step_goes_towards_the_data
+PASSED tests/test_h3_engine.py::test_schedule_rejects_bad_arguments
+PASSED tests/test_h3_engine.py::test_time_numbering_m_is_one_then_two
+PASSED tests/test_h3_engine.py::test_modality_rows
+PASSED tests/test_h3_engine.py::test_patchify_and_audio_rows_round_trip
+PASSED tests/test_h3_engine.py::test_rope_coordinates_small_grid
+PASSED tests/test_h3_engine.py::test_keyframe_t_last_frame_is_the_oracle_expression_bit_for_bit
+PASSED tests/test_h3_engine.py::test_keyframe_t_first_middle_and_errors
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames0-1-2]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames0-2-3]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames0-12-20]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames1-1-2]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames1-2-3]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames1-12-20]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames2-1-2]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames2-2-3]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames2-12-20]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames3-1-2]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames3-2-3]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames3-12-20]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames4-1-2]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames4-2-3]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames4-12-20]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames5-1-2]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames5-2-3]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames5-12-20]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames6-1-2]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames6-2-3]
+PASSED tests/test_h3_engine.py::test_build_coords_keyframe_blocks[frames6-12-20]
+PASSED tests/test_h3_engine.py::test_build_coords_refuses_bad_keyframes
+PASSED tests/test_h3_engine.py::test_te_config_after_rope_translation
+PASSED tests/test_h3_engine.py::test_extra_special_token_ids
+PASSED tests/test_h3_engine.py::test_te_name_mapping
+PASSED tests/test_h3_engine.py::test_te_names_match_the_meta_built_model
+PASSED tests/test_h3_engine.py::test_te_read_plan_splits_embedding_and_layers
+PASSED tests/test_h3_engine.py::test_load_mapped_to_and_drop_to_meta
+PASSED tests/test_h3_engine.py::test_te_direct_read_hooks_match_the_loaded_model
+PASSED tests/test_h3_engine.py::test_presentation_t2v_and_fl2va
+PASSED tests/test_h3_engine.py::test_te_direct_read_with_vision_matches_the_loaded_model
+PASSED tests/test_h3_engine.py::test_tiny_dit_streams_in_with_no_meta_left
+PASSED tests/test_h3_engine.py::test_load_streaming_refuses_a_missing_tensor
+PASSED tests/test_h3_engine.py::test_int8_linear_matches_dequantized_bf16[True]
+PASSED tests/test_h3_engine.py::test_int8_linear_matches_dequantized_bf16[False]
+PASSED tests/test_h3_engine.py::test_no_inference_mode_under_engine_h3
+PASSED tests/test_h3_engine.py::test_worker_module_scope_is_torch_free
+PASSED tests/test_h3_engine.py::test_worker_unknown_op_after_load_is_answered
+PASSED tests/test_h3_engine.py::test_worker_unknown_op_before_load_is_silent
+PASSED tests/test_h3_engine.py::test_worker_generate_defaults
+PASSED tests/test_h3_engine.py::test_request_validation
+PASSED tests/test_h3_engine.py::test_load_options_treat_null_as_default
+PASSED tests/test_h3_engine.py::test_attention_backends_have_one_source
+PASSED tests/test_h3_engine.py::test_golden_load_message_keys
+PASSED tests/test_h3_engine.py::test_golden_generate_message_keys
+PASSED tests/test_h3_engine.py::test_golden_done_keys
+PASSED tests/test_h3_engine.py::test_generate_frees_cuda_cache_after_a_failure
+PASSED tests/test_h3_engine.py::test_block_swap_service_is_resident_across_jobs
+PASSED tests/test_h3_engine.py::test_condition_rows_time_is_max_of_video_t_and_0999
+PASSED tests/test_h3_engine.py::test_request_validation_images
+PASSED tests/test_h3_engine.py::test_worker_images_and_per_job_keys
+PASSED tests/test_h3_engine.py::test_worker_selftest_keyframe_option
+PASSED tests/test_h3_engine.py::test_condition_noise_is_one_draw_shared_by_every_block
+PASSED tests/test_h3_engine.py::test_keyframes_sorted_and_only_the_ends_go_to_the_vision_tower
+PASSED tests/test_h3_engine.py::test_last_only_and_middle_only_key_frames
+PASSED tests/test_h3_engine.py::test_t2v_encode_counts_three_steps
+PASSED tests/test_h3_engine.py::test_canvas_image_cover_and_centre_crop
+PASSED tests/test_h3_engine.py::test_block_swap_wrappers_are_stripped_and_never_doubled
+PASSED tests/test_h3_engine.py::test_resident_kept_only_while_the_key_is_true[True-False-True]
+PASSED tests/test_h3_engine.py::test_resident_kept_only_while_the_key_is_true[False-False-False]
+PASSED tests/test_h3_engine.py::test_resident_kept_only_while_the_key_is_true[True-True-False]
+PASSED tests/test_h3_engine.py::test_attention_and_prefetch_per_job_fall_back_to_load_values
+PASSED tests/test_h3_engine.py::test_failed_check_or_image_releases_what_is_kept[missing_image]
+PASSED tests/test_h3_engine.py::test_failed_check_or_image_releases_what_is_kept[duplicate_frames]
+PASSED tests/test_h3_engine.py::test_failed_check_or_image_releases_what_is_kept[bad_frame_rate]
+PASSED tests/test_h3_engine.py::test_worker_releases_after_a_job_refused_before_generate
+PASSED tests/test_h3_engine.py::test_vision_inv_freq_matches_transformers
+PASSED tests/test_h3_engine.py::test_keep_resident_state_transitions_with_a_tiny_dit[False]
+PASSED tests/test_h3_engine.py::test_keep_resident_state_transitions_with_a_tiny_dit[True]
+PASSED tests/test_h3_engine.py::test_shared_quant_symbols_of_the_pinned_comfy_kitchen
+PASSED tests/test_h3_engine.py::test_shared_quant_probe_never_raises_and_says_why
+PASSED tests/test_h3_engine.py::test_shares_input_conditions
+PASSED tests/test_h3_engine.py::test_vram16_row_chunks_are_equal
+PASSED tests/test_h3_engine.py::test_vram16_blocks_on_gpu_for
+PASSED tests/test_h3_engine.py::test_vram16_derive_memory_cap
+PASSED tests/test_h3_engine.py::test_vram16_block_forward_matches_off[3-16-False]
+PASSED tests/test_h3_engine.py::test_vram16_block_forward_matches_off[3-16-True]
+PASSED tests/test_h3_engine.py::test_vram16_block_forward_matches_off[1-7-False]
+PASSED tests/test_h3_engine.py::test_vram16_block_forward_matches_off[1-7-True]
+PASSED tests/test_h3_engine.py::test_vram16_block_forward_matches_off[4-4096-False]
+PASSED tests/test_h3_engine.py::test_vram16_block_forward_matches_off[4-4096-True]
+PASSED tests/test_h3_engine.py::test_vram16_block_forward_matches_off[2-41-False]
+PASSED tests/test_h3_engine.py::test_vram16_block_forward_matches_off[2-41-True]
+PASSED tests/test_h3_engine.py::test_vram16_final_rows_matches_off
+PASSED tests/test_h3_engine.py::test_vram16_dit_forward_matches_off_and_frees_the_embedding
+PASSED tests/test_h3_engine.py::test_vram16_off_forward_never_calls_lowvram
+PASSED tests/test_h3_engine.py::test_vram16_falls_back_when_not_shared
+PASSED tests/test_h3_engine.py::test_vram16_cuda_oom_is_explained[False]
+PASSED tests/test_h3_engine.py::test_vram16_cuda_oom_is_explained[True]
+PASSED tests/test_h3_engine.py::test_denoise_runs_with_several_key_frame_blocks
+PASSED tests/test_h3_engine.py::test_worker_vram16_mode_key
+PASSED tests/test_h3_engine.py::test_vram16_window_of_one_job_does_not_stay
+PASSED tests/test_h3_engine.py::test_vram16_finish_lifts_the_cap_and_never_raises
+PASSED tests/test_h3_engine.py::test_gpu_forward_rows_join_equals_forward[False-True]
+PASSED tests/test_h3_engine.py::test_gpu_forward_rows_join_equals_forward[False-False]
+PASSED tests/test_h3_engine.py::test_gpu_forward_rows_join_equals_forward[True-True]
+PASSED tests/test_h3_engine.py::test_gpu_forward_rows_join_equals_forward[True-False]
+PASSED tests/test_h3_engine.py::test_gpu_shared_quant_join_equals_forward[False-True-4096]
+PASSED tests/test_h3_engine.py::test_gpu_shared_quant_join_equals_forward[False-True-39764]
+PASSED tests/test_h3_engine.py::test_gpu_shared_quant_join_equals_forward[False-False-4096]
+PASSED tests/test_h3_engine.py::test_gpu_shared_quant_join_equals_forward[False-False-39764]
+PASSED tests/test_h3_engine.py::test_gpu_shared_quant_join_equals_forward[True-True-4096]
+PASSED tests/test_h3_engine.py::test_gpu_shared_quant_join_equals_forward[True-True-39764]
+PASSED tests/test_h3_engine.py::test_gpu_shared_quant_join_equals_forward[True-False-4096]
+PASSED tests/test_h3_engine.py::test_gpu_shared_quant_join_equals_forward[True-False-39764]
+PASSED tests/test_h3_engine.py::test_gpu_forward_of_row_chunks_equals_forward[1024-5376]
+PASSED tests/test_h3_engine.py::test_gpu_forward_of_row_chunks_equals_forward[5376-7168]
+PASSED tests/test_h3_engine.py::test_gpu_forward_of_row_chunks_equals_forward[28672-5376]
+PASSED tests/test_h3_engine.py::test_gpu_forward_of_row_chunks_equals_forward[5376-14336]
+PASSED tests/test_h3_engine.py::test_gpu_k_mean_of_a_head_group
+PASSED tests/test_h3_engine.py::test_vram16_begin_passes_an_indexed_device
+PASSED tests/test_h3_engine.py::test_lora_col_chunk_is_one_head_group
+PASSED tests/test_h3_engine.py::test_lora_attach_and_detach_restore_every_module
+PASSED tests/test_h3_engine.py::test_lora_fp32_proof_and_the_chunked_reference
+PASSED tests/test_h3_engine.py::test_lora_every_matmul_operand_is_f32
+PASSED tests/test_h3_engine.py::test_lora_alpha_scale_and_no_alpha
+PASSED tests/test_h3_engine.py::test_lora_kohya_and_ab_names_give_the_same_output
+PASSED tests/test_h3_engine.py::test_lora_misfit_pairs_are_skipped_and_recorded
+PASSED tests/test_h3_engine.py::test_lora_several_files_accumulate
+PASSED tests/test_h3_engine.py::test_lora_reaches_the_token_refiner_through_the_hook
+PASSED tests/test_h3_engine.py::test_lora_vram16_matches_off[16-None-None]
+PASSED tests/test_h3_engine.py::test_lora_vram16_matches_off[4-2-16]
+PASSED tests/test_h3_engine.py::test_lora_vram16_matches_off[4-1-7]
+PASSED tests/test_h3_engine.py::test_lora_vram16_shared_matches_off[16-None-None]
+PASSED tests/test_h3_engine.py::test_lora_vram16_shared_matches_off[4-2-16]
+PASSED tests/test_h3_engine.py::test_lora_vram16_shared_matches_off[4-1-7]
+PASSED tests/test_h3_engine.py::test_lora_buffers_are_in_the_prefetch_slots
+PASSED tests/test_h3_engine.py::test_lora_buffers_ride_the_synchronous_block_swap
+PASSED tests/test_h3_engine.py::test_lora_buffer_dtype_is_watched
+PASSED tests/test_h3_engine.py::test_lora_detach_runs_after_the_prefetch_teardown
+PASSED tests/test_h3_engine.py::test_lora_job_then_plain_job_equals_the_baseline[False]
+PASSED tests/test_h3_engine.py::test_lora_job_then_plain_job_equals_the_baseline[True]
+PASSED tests/test_h3_engine.py::test_lora_failed_job_still_detaches
+PASSED tests/test_h3_engine.py::test_request_validation_loras
+PASSED tests/test_h3_engine.py::test_inspect_lora_file_reads_the_header_only
+PASSED tests/test_h3_engine.py::test_worker_loras_key
+PASSED tests/test_h3_engine.py::test_worker_selftest_lora_options
+PASSED tests/test_h3_engine.py::test_golden_done_h3_keys_with_lora
+PASSED tests/test_h3_engine.py::test_gpu_trial_lora_files_attach_to_the_real_dit[minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors-208]
+PASSED tests/test_h3_engine.py::test_gpu_trial_lora_files_attach_to_the_real_dit[3dsrx_minimax_h3.safetensors-200]
+PASSED tests/test_h3_engine.py::test_gpu_trial_lora_files_attach_to_the_real_dit[camera_motion_h3_lora_v1_3000_pruned.safetensors-208]
+PASSED tests/test_h3_engine.py::test_fp32_matmul_check
+162 passed in 34.14s
+exit=0

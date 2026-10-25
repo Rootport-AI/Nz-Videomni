@@ -3097,3 +3097,12 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **何が完了したか**: `models/MiniMaxH3/LoRA/` の LoRA を、FP32 の低ランク経路で適用する（int8 の重みは変えない）。LoRA を使わないジョブの出力は変わらず、LoRA ありの off と VRAM 16GB mode の出力はビット一致した。要点・機械の門・GPU の門 1〜6（オーナーの目視を含む）は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176 を正本とする。
 - **正本・出典**: 設計は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.6、裁定は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10 の裁定 62〜73、契約は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.99）、操作パネルはフロントエンドの `Docs/DEVLOG.md` §148。計画・レビュー・門の記録の保管は `Docs/Outputs-archive/h3-lora-2026-10-24/`。
 - **残課題**: 動画・音声に個別の強度は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-252、LoRA 加算の高速化は同 §3-253 に起票した。
+
+### 3-254. MiniMax H3 の 1 ステップの高速化（第 1 弾：数値等価。① QKV の量子化の共有を実装・②③ は実測で見送り・④ は §3-255 へ）（起票：2026-10-19、クローズ：2026-10-25）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-105 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-105（2026-10-19 起票）。**同書側は欠番**。番号は、同書 §3 の生きた項目（3-252・3-253）を飛ばした次の空き番号である。
+- **到達条件**: 出力の数値を変えずに MiniMax H3 の 1 ステップを短くする 4 件（台帳の元 §1-105 の ①〜④）を調べ、採るものを実装すること。**達成した。**
+- **何が完了したか**: ① VRAM 16GB mode の qkv の入力の量子化を 1 ブロック 1 回にした（出力の数値は変わらない）。②③ は実測で見送り、④ は同書 §3-255 へ起票し直した（オーナー裁定 2026-10-25）。要点・門・オーナーの目視（合格）は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177 を正本とする。
+- **状態**: dev `4d9d73a`（エンジン＋テスト）・`e1208bd`（文書・保管）。
+- **正本・出典**: 設計は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5（例外）と §6.5、事前調査の材料は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.1、契約は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.100）。調査・計画・レビュー・門の記録の保管は [`Outputs-archive/h3-speedup-2026-10-24/`](Outputs-archive/h3-speedup-2026-10-24/README.md)。
+- **残課題**: ④ は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-255。

@@ -1,0 +1,618 @@
+[
+ {
+  "label": "R3_A8_pre1_h8_r4096_b4",
+  "no_qkv_share": true,
+  "steps": [
+   {
+    "step": 1,
+    "seconds": 22.167,
+    "rx_median_MBps": 126.0,
+    "samples": 22,
+    "loaded": false
+   },
+   {
+    "step": 2,
+    "seconds": 22.034,
+    "rx_median_MBps": 23.0,
+    "samples": 22,
+    "loaded": false
+   },
+   {
+    "step": 3,
+    "seconds": 21.968,
+    "rx_median_MBps": 5,
+    "samples": 21,
+    "loaded": false
+   }
+  ],
+  "idle_sm_rx": [
+   [
+    12,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    2,
+    232
+   ],
+   [
+    9,
+    0
+   ],
+   [
+    0,
+    169
+   ],
+   [
+    7,
+    314
+   ],
+   [
+    13,
+    31
+   ],
+   [
+    8,
+    34
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    115
+   ]
+  ],
+  "md5": "eb2a53ae336e4eb99dc6ef8ddcad6bb7",
+  "qkv_quant_shared": false,
+  "log_shared": false,
+  "log_not_shared_disabled": true,
+  "peak_alloc_mib": 4411,
+  "peak_reserved_mib": 7262,
+  "vram16": {
+   "cap_fraction": 0.857,
+   "cap_mib": 14033,
+   "blocks_on_gpu": 4,
+   "head_group": 8,
+   "row_chunk": 4096,
+   "qkv_quant_shared": false,
+   "text_modules": "cpu",
+   "num_alloc_retries": 0,
+   "num_ooms": 0,
+   "inactive_split_peak_mib": 952
+  },
+  "wddm_denoise": {
+   "samples": 68,
+   "dedicated_mb_median": 8540.9,
+   "shared_mb_median": 1189.1,
+   "dedicated_mb_max": 8569.7,
+   "shared_mb_max": 1272.3,
+   "rule": "stage1_denoise の index 0 から最後の index までの壁時計"
+  },
+  "commit_peak_gib": 35.25,
+  "error": null,
+  "effective_mismatch": null,
+  "counts_step1_to_step2": {
+   "num_alloc_retries": 0,
+   "num_device_alloc": 0,
+   "num_device_free": 0,
+   "num_ooms": 0
+  }
+ },
+ {
+  "label": "R3_A8_post1_h8_r4096_b4",
+  "no_qkv_share": false,
+  "steps": [
+   {
+    "step": 1,
+    "seconds": 21.547,
+    "rx_median_MBps": 472,
+    "samples": 21,
+    "loaded": true
+   },
+   {
+    "step": 2,
+    "seconds": 21.374,
+    "rx_median_MBps": 473.5,
+    "samples": 22,
+    "loaded": true
+   },
+   {
+    "step": 3,
+    "seconds": 21.385,
+    "rx_median_MBps": 470.5,
+    "samples": 20,
+    "loaded": true
+   }
+  ],
+  "idle_sm_rx": [
+   [
+    25,
+    492
+   ],
+   [
+    25,
+    885
+   ],
+   [
+    26,
+    440
+   ],
+   [
+    26,
+    549
+   ],
+   [
+    26,
+    438
+   ],
+   [
+    26,
+    438
+   ],
+   [
+    26,
+    568
+   ],
+   [
+    25,
+    437
+   ],
+   [
+    26,
+    547
+   ],
+   [
+    26,
+    525
+   ]
+  ],
+  "md5": "eb2a53ae336e4eb99dc6ef8ddcad6bb7",
+  "qkv_quant_shared": true,
+  "log_shared": true,
+  "log_not_shared_disabled": false,
+  "peak_alloc_mib": 4379,
+  "peak_reserved_mib": 7262,
+  "vram16": {
+   "cap_fraction": 0.857,
+   "cap_mib": 14033,
+   "blocks_on_gpu": 4,
+   "head_group": 8,
+   "row_chunk": 4096,
+   "qkv_quant_shared": true,
+   "text_modules": "cpu",
+   "num_alloc_retries": 0,
+   "num_ooms": 0,
+   "inactive_split_peak_mib": 964
+  },
+  "wddm_denoise": {
+   "samples": 65,
+   "dedicated_mb_median": 8491.1,
+   "shared_mb_median": 1231.3,
+   "dedicated_mb_max": 8491.1,
+   "shared_mb_max": 1253.4,
+   "rule": "stage1_denoise の index 0 から最後の index までの壁時計"
+  },
+  "commit_peak_gib": 35.25,
+  "error": null,
+  "effective_mismatch": null,
+  "counts_step1_to_step2": {
+   "num_alloc_retries": 0,
+   "num_device_alloc": 0,
+   "num_device_free": 0,
+   "num_ooms": 0
+  }
+ },
+ {
+  "label": "R3_A8_pre2_h8_r4096_b4",
+  "no_qkv_share": true,
+  "steps": [
+   {
+    "step": 1,
+    "seconds": 23.02,
+    "rx_median_MBps": 469.0,
+    "samples": 22,
+    "loaded": true
+   },
+   {
+    "step": 2,
+    "seconds": 22.823,
+    "rx_median_MBps": 475,
+    "samples": 23,
+    "loaded": true
+   },
+   {
+    "step": 3,
+    "seconds": 22.853,
+    "rx_median_MBps": 473.5,
+    "samples": 22,
+    "loaded": true
+   }
+  ],
+  "idle_sm_rx": [
+   [
+    26,
+    439
+   ],
+   [
+    25,
+    466
+   ],
+   [
+    26,
+    548
+   ],
+   [
+    26,
+    548
+   ],
+   [
+    25,
+    438
+   ],
+   [
+    20,
+    328
+   ],
+   [
+    19,
+    328
+   ],
+   [
+    19,
+    328
+   ],
+   [
+    19,
+    327
+   ]
+  ],
+  "md5": "eb2a53ae336e4eb99dc6ef8ddcad6bb7",
+  "qkv_quant_shared": false,
+  "log_shared": false,
+  "log_not_shared_disabled": true,
+  "peak_alloc_mib": 4411,
+  "peak_reserved_mib": 7262,
+  "vram16": {
+   "cap_fraction": 0.857,
+   "cap_mib": 14033,
+   "blocks_on_gpu": 4,
+   "head_group": 8,
+   "row_chunk": 4096,
+   "qkv_quant_shared": false,
+   "text_modules": "cpu",
+   "num_alloc_retries": 0,
+   "num_ooms": 0,
+   "inactive_split_peak_mib": 952
+  },
+  "wddm_denoise": {
+   "samples": 70,
+   "dedicated_mb_median": 8496.7,
+   "shared_mb_median": 1217.6,
+   "dedicated_mb_max": 8496.7,
+   "shared_mb_max": 1217.8,
+   "rule": "stage1_denoise の index 0 から最後の index までの壁時計"
+  },
+  "commit_peak_gib": 35.25,
+  "error": null,
+  "effective_mismatch": null,
+  "counts_step1_to_step2": {
+   "num_alloc_retries": 0,
+   "num_device_alloc": 0,
+   "num_device_free": 0,
+   "num_ooms": 0
+  }
+ },
+ {
+  "label": "R3_A8_post2_h8_r4096_b4",
+  "no_qkv_share": false,
+  "steps": [
+   {
+    "step": 1,
+    "seconds": 21.545,
+    "rx_median_MBps": 470.0,
+    "samples": 20,
+    "loaded": true
+   },
+   {
+    "step": 2,
+    "seconds": 21.381,
+    "rx_median_MBps": 479.0,
+    "samples": 22,
+    "loaded": true
+   },
+   {
+    "step": 3,
+    "seconds": 21.436,
+    "rx_median_MBps": 472.5,
+    "samples": 20,
+    "loaded": true
+   }
+  ],
+  "idle_sm_rx": [
+   [
+    25,
+    438
+   ],
+   [
+    25,
+    549
+   ],
+   [
+    29,
+    676
+   ],
+   [
+    25,
+    823
+   ],
+   [
+    26,
+    438
+   ],
+   [
+    26,
+    438
+   ],
+   [
+    26,
+    837
+   ],
+   [
+    26,
+    438
+   ],
+   [
+    25,
+    440
+   ]
+  ],
+  "md5": "eb2a53ae336e4eb99dc6ef8ddcad6bb7",
+  "qkv_quant_shared": true,
+  "log_shared": true,
+  "log_not_shared_disabled": false,
+  "peak_alloc_mib": 4379,
+  "peak_reserved_mib": 7262,
+  "vram16": {
+   "cap_fraction": 0.857,
+   "cap_mib": 14033,
+   "blocks_on_gpu": 4,
+   "head_group": 8,
+   "row_chunk": 4096,
+   "qkv_quant_shared": true,
+   "text_modules": "cpu",
+   "num_alloc_retries": 0,
+   "num_ooms": 0,
+   "inactive_split_peak_mib": 964
+  },
+  "wddm_denoise": {
+   "samples": 65,
+   "dedicated_mb_median": 8499.3,
+   "shared_mb_median": 1206.0,
+   "dedicated_mb_max": 8500.7,
+   "shared_mb_max": 1207.5,
+   "rule": "stage1_denoise の index 0 から最後の index までの壁時計"
+  },
+  "commit_peak_gib": 35.26,
+  "error": null,
+  "effective_mismatch": null,
+  "counts_step1_to_step2": {
+   "num_alloc_retries": 0,
+   "num_device_alloc": 0,
+   "num_device_free": 0,
+   "num_ooms": 0
+  }
+ },
+ {
+  "label": "R3_A8_post3_h8_r4096_b4",
+  "no_qkv_share": false,
+  "steps": [
+   {
+    "step": 1,
+    "seconds": 20.512,
+    "rx_median_MBps": 6,
+    "samples": 19,
+    "loaded": false
+   },
+   {
+    "step": 2,
+    "seconds": 20.326,
+    "rx_median_MBps": 5,
+    "samples": 21,
+    "loaded": false
+   },
+   {
+    "step": 3,
+    "seconds": 20.348,
+    "rx_median_MBps": 6,
+    "samples": 19,
+    "loaded": false
+   }
+  ],
+  "idle_sm_rx": [
+   [
+    5,
+    0
+   ],
+   [
+    12,
+    3
+   ],
+   [
+    20,
+    1
+   ],
+   [
+    6,
+    0
+   ],
+   [
+    8,
+    9
+   ],
+   [
+    7,
+    2
+   ],
+   [
+    3,
+    0
+   ],
+   [
+    6,
+    4
+   ],
+   [
+    2,
+    3
+   ],
+   [
+    3,
+    8
+   ]
+  ],
+  "md5": "eb2a53ae336e4eb99dc6ef8ddcad6bb7",
+  "qkv_quant_shared": true,
+  "log_shared": true,
+  "log_not_shared_disabled": false,
+  "peak_alloc_mib": 4379,
+  "peak_reserved_mib": 7262,
+  "vram16": {
+   "cap_fraction": 0.857,
+   "cap_mib": 14033,
+   "blocks_on_gpu": 4,
+   "head_group": 8,
+   "row_chunk": 4096,
+   "qkv_quant_shared": true,
+   "text_modules": "cpu",
+   "num_alloc_retries": 0,
+   "num_ooms": 0,
+   "inactive_split_peak_mib": 964
+  },
+  "wddm_denoise": {
+   "samples": 62,
+   "dedicated_mb_median": 8529.5,
+   "shared_mb_median": 1235.2,
+   "dedicated_mb_max": 8558.9,
+   "shared_mb_max": 1236.5,
+   "rule": "stage1_denoise の index 0 から最後の index までの壁時計"
+  },
+  "commit_peak_gib": 35.25,
+  "error": null,
+  "effective_mismatch": null,
+  "counts_step1_to_step2": {
+   "num_alloc_retries": 0,
+   "num_device_alloc": 0,
+   "num_device_free": 0,
+   "num_ooms": 0
+  }
+ },
+ {
+  "label": "R3_A8_pre3_h8_r4096_b4",
+  "no_qkv_share": true,
+  "steps": [
+   {
+    "step": 1,
+    "seconds": 21.893,
+    "rx_median_MBps": 5,
+    "samples": 21,
+    "loaded": false
+   },
+   {
+    "step": 2,
+    "seconds": 21.719,
+    "rx_median_MBps": 6.0,
+    "samples": 22,
+    "loaded": false
+   },
+   {
+    "step": 3,
+    "seconds": 21.75,
+    "rx_median_MBps": 6,
+    "samples": 21,
+    "loaded": false
+   }
+  ],
+  "idle_sm_rx": [
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    2,
+    0
+   ],
+   [
+    0,
+    4
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    2,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    3
+   ],
+   [
+    14,
+    94
+   ]
+  ],
+  "md5": "eb2a53ae336e4eb99dc6ef8ddcad6bb7",
+  "qkv_quant_shared": false,
+  "log_shared": false,
+  "log_not_shared_disabled": true,
+  "peak_alloc_mib": 4411,
+  "peak_reserved_mib": 7262,
+  "vram16": {
+   "cap_fraction": 0.857,
+   "cap_mib": 14033,
+   "blocks_on_gpu": 4,
+   "head_group": 8,
+   "row_chunk": 4096,
+   "qkv_quant_shared": false,
+   "text_modules": "cpu",
+   "num_alloc_retries": 0,
+   "num_ooms": 0,
+   "inactive_split_peak_mib": 952
+  },
+  "wddm_denoise": {
+   "samples": 67,
+   "dedicated_mb_median": 8526.0,
+   "shared_mb_median": 1206.6,
+   "dedicated_mb_max": 8543.2,
+   "shared_mb_max": 1212.1,
+   "rule": "stage1_denoise の index 0 から最後の index までの壁時計"
+  },
+  "commit_peak_gib": 35.25,
+  "error": null,
+  "effective_mismatch": null,
+  "counts_step1_to_step2": {
+   "num_alloc_retries": 0,
+   "num_device_alloc": 0,
+   "num_device_free": 0,
+   "num_ooms": 0
+  }
+ }
+]

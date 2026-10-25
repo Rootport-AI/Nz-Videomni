@@ -22,6 +22,25 @@ backend refuses (weight still on the CPU, wrong dtype, ...) raises
 per-call host-to-device copy of the weight — eager accepts such calls and would
 only show up as a mysteriously slow job.
 
+The one exception: VRAM 16GB mode's qkv (台帳 §1-105 ①)
+---------------------------------------------------------
+``engine_h3.lowvram`` projects q, k and v per head group from the stacked qkv
+weight: 3 x 7 ``forward_rows`` calls per block on the SAME input, and each
+``int8_linear`` call quantizes that input again. For that one caller the call
+is split in two (design doc §5, exception): :meth:`H3Int8Linear.quantize_input`
+runs comfy-kitchen's ``backends.cuda.quantize_int8_rowwise_convrot64`` once per
+block (the kernel ``int8_linear`` itself runs, same arguments; it is
+deterministic), and :meth:`H3Int8Linear.forward_rows_q` hands the result to
+``_int8_gemm_prequantized``, a copy of ``int8_linear``'s code after the
+quantization (the same GEMM kernels, chosen the same way). Both are
+comfy-kitchen 0.2.37 internals, not its API: ``require_cuda_int8`` ends with
+``_probe_shared_quant``, which checks the version, the symbols and their
+argument lists, and on any mismatch leaves the sharing off (logged; the load
+goes on) so every call takes ``forward_rows`` as before. That path bypasses the
+backend registry and its constraints, so to stay fail loud
+:meth:`H3Int8Linear.shares_input` sends a call whose weight is not on the
+input's device back to ``forward_rows``, where ``int8_linear`` refuses it.
+
 The stored weight is ``W @ H^T`` per 256-column group (ConvRot), quantized per
 output row; ``weight_scale`` is that row scale, float32 ``[N, 1]`` exactly as
 the file holds it. ``int8_linear(convrot=True)`` rotates the activation by
@@ -31,6 +50,7 @@ weight.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 
 import torch
@@ -39,6 +59,70 @@ import torch.nn as nn
 from h3_format import QuantSpec
 
 _ck_module = None
+
+# VRAM 16GB mode's shared qkv quantization (台帳 §1-105 ①; module docstring).
+# _SHARED_CB: comfy_kitchen.backends.cuda once _probe_shared_quant passed it, else None.
+# _SHARED_REASON: why it is None (None once it passed).
+_SHARED_CB = None
+_SHARED_REASON = "not probed"
+
+_SHARED_CK_VERSION = "0.2.37"
+_SHARED_CB_NAMES = (
+    "quantize_int8_rowwise_convrot64",
+    "_CONVROT_FUSED_MAX_K",
+    "_convrot_fused_shared_memory_fits",
+    "_cuda_device_supports_cutlass_int8_dequant",
+    "_prefer_cublas_int8_fallback",
+    "_DISABLE_CUTLASS_INT8",
+    "_int8_weight_scale_arg",
+    "_gemm_vector_arg",
+    "_empty_cuda_tensor",
+    "_wrap_for_dlpack",
+    "DTYPE_TO_CODE",
+    "get_cublas_workspace",
+    "_EXT_AVAILABLE",
+    "_C",
+)
+# The Python functions' argument names, in order (inspect.signature).
+_SHARED_CB_SIGNATURES = {
+    "quantize_int8_rowwise_convrot64": (
+        "weight_2d", "group_size", "stochastic_rounding", "input_act", "input_act_weight", "input_act_eps",
+    ),
+    "_convrot_fused_shared_memory_fits": ("x", "k", "group_size"),
+    "_cuda_device_supports_cutlass_int8_dequant": ("tensor",),
+    "_prefer_cublas_int8_fallback": ("m", "n", "k", "device_index"),
+    "_int8_weight_scale_arg": ("weight_scale", "device"),
+    "_gemm_vector_arg": ("v", "device", "dtype"),
+    "_empty_cuda_tensor": ("device", "dtype"),
+    "_wrap_for_dlpack": ("tensor",),
+    "get_cublas_workspace": (),
+}
+# The extension's functions: the first line of the nanobind docstring, as is.
+_SHARED_C_DOCS = {
+    "quantize_int8_rowwise_convrot64": (
+        "quantize_int8_rowwise_convrot64(input: ndarray[shape=(*, *), device='cuda'], "
+        "output: ndarray[dtype=int8, shape=(*, *), device='cuda'], "
+        "scales: ndarray[dtype=float32, shape=(*, *), device='cuda'], group_size: int, stochastic: bool, "
+        "act_code: int, seed: int, act_weight: ndarray[device='cuda'], act_eps: float, stream_ptr: int) -> None"
+    ),
+    "cutlass_int8_dequant": (
+        "cutlass_int8_dequant(a: ndarray[dtype=int8, shape=(*, *), device='cuda'], "
+        "b: ndarray[dtype=int8, shape=(*, *), device='cuda'], xs: ndarray[dtype=float32, device='cuda'], "
+        "ws: ndarray[dtype=float32, device='cuda'], bias: ndarray[device='cuda'], "
+        "d: ndarray[shape=(*, *), device='cuda'], out_dtype_code: int, stream_ptr: int) -> bool"
+    ),
+    "cublas_gemm_int8": (
+        "cublas_gemm_int8(a: ndarray[dtype=int8, shape=(*, *), device='cuda'], "
+        "b: ndarray[dtype=int8, shape=(*, *), device='cuda'], c: ndarray[dtype=int32, shape=(*, *), device='cuda'], "
+        "workspace: ndarray[device='cuda'], stream_ptr: int) -> None"
+    ),
+    "dequantize_int8_linear": (
+        "dequantize_int8_linear(input: ndarray[dtype=int32, shape=(*, *), device='cuda'], "
+        "x_scales: ndarray[dtype=float32, shape=(*, *), device='cuda'], "
+        "weight_scales: ndarray[dtype=float32, device='cuda'], bias: ndarray[device='cuda'], "
+        "output: ndarray[shape=(*, *), device='cuda'], output_dtype_code: int, stream_ptr: int) -> None"
+    ),
+}
 
 
 def _ck():
@@ -163,6 +247,70 @@ class H3Int8Linear(nn.Module):
             out = lora.apply(self, x, out, n0, n1, xa=lora_xa)
         return out
 
+    def shares_input(self, x: torch.Tensor) -> bool:
+        """Whether :meth:`quantize_input` + :meth:`forward_rows_q` may stand in for
+        :meth:`forward_rows` on ``x`` (VRAM 16GB mode's qkv; module docstring).
+
+        True only where ``int8_linear`` would quantize ``x`` with the fused ConvRot
+        kernel and multiply on the generic GEMM path that ``_int8_gemm_prequantized``
+        copies: the m = 1 / m <= 2 kernels and the Turing kernels are never reached.
+        The weight and its scale must already be on ``x``'s device: this path skips
+        the backend registry, so such a call goes to ``forward_rows`` and fails
+        there. The bias's device is not checked (a CPU bias would be copied over by
+        ``_gemm_vector_arg``, slow but not refused); the qkv this serves has no bias.
+        """
+        cb = _SHARED_CB
+        if cb is None:
+            return False
+        if not self.spec.convrot or int(self.spec.convrot_groupsize) != 256:
+            return False
+        x2d = x.reshape(-1, x.shape[-1])
+        k = x2d.shape[1]
+        if k % 256 != 0 or not 256 <= k <= cb._CONVROT_FUSED_MAX_K:          # int8_linear 2062-2065
+            return False
+        if not cb._convrot_fused_shared_memory_fits(x2d, k, 256):            # int8_linear 2066
+            return False
+        if x2d.shape[0] <= 2:                                                # int8_linear 2091, 2169
+            return False
+        if not cb._cuda_device_supports_cutlass_int8_dequant(x2d):           # major >= 8: not Turing
+            return False
+        return self.weight.device == x.device and self.weight_scale.device == x.device
+
+    def quantize_input(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """``x`` quantized as ``int8_linear`` quantizes it: ``(int8 [M, K], float32 [M, 1])``.
+
+        Only after :meth:`shares_input` said True. Same cast as :meth:`forward_rows`.
+        """
+        x2d = x.reshape(-1, x.shape[-1])
+        if x2d.dtype != torch.bfloat16:
+            x2d = x2d.to(torch.bfloat16)
+        x2d = x2d.contiguous()
+        return _SHARED_CB.quantize_int8_rowwise_convrot64(x2d, int(self.spec.convrot_groupsize))
+
+    def forward_rows_q(
+        self, xq: torch.Tensor, xs: torch.Tensor, n0: int, n1: int, lora_xa=None
+    ) -> torch.Tensor:
+        """:meth:`forward_rows` on an input already quantized by :meth:`quantize_input`.
+
+        Returns ``[M, n1 - n0]``. The weight, scale and bias rows are cut at every
+        call, never stored, for the same reason as in :meth:`forward_rows`. The raw
+        input is gone, so an attached LoRA gets ``x=None`` and needs ``lora_xa``
+        (``lora.xa_for`` of the raw input, computed by the caller before quantizing).
+        """
+        bias = self.bias
+        if bias is not None:
+            bias = bias[n0:n1]
+            if bias.dtype != torch.bfloat16:
+                bias = bias.to(torch.bfloat16)
+        out = _int8_gemm_prequantized(
+            xq, xs, self.weight[n0:n1], self.weight_scale[n0:n1], bias, torch.bfloat16
+        )
+        if getattr(self, "_lora_specs", None):
+            from engine_h3 import lora  # noqa: PLC0415 -- only a LoRA job gets here
+
+            out = lora.apply(self, None, out, n0, n1, xa=lora_xa)
+        return out
+
     def extra_repr(self) -> str:
         return (
             f"in_features={self.in_features}, out_features={self.out_features}, "
@@ -208,7 +356,142 @@ def require_cuda_int8() -> dict:
     # refuses and run it slowly; with it gone such a call raises instead.
     ck.disable_backend("triton")
     ck.disable_backend("eager")
+    _probe_shared_quant()
     return ck.list_backends()
+
+
+def _shared_quant_missing(cb) -> str | None:
+    """What keeps ``cb`` (``comfy_kitchen.backends.cuda``) from serving the shared
+    qkv quantization, as a short sentence; None when nothing does. No CUDA call.
+
+    The version first: the copy in ``_int8_gemm_prequantized`` is of 0.2.37's
+    ``int8_linear``, and a newer one could branch differently with the same names.
+    """
+    from importlib import metadata  # noqa: PLC0415
+
+    try:
+        version = metadata.version("comfy-kitchen")
+    except metadata.PackageNotFoundError:
+        return "the comfy-kitchen distribution is not installed"
+    if version != _SHARED_CK_VERSION:
+        return f"comfy-kitchen {version} != {_SHARED_CK_VERSION}"
+    for name in _SHARED_CB_NAMES:
+        if not hasattr(cb, name):
+            return f"comfy_kitchen.backends.cuda.{name} is missing"
+    if not cb._EXT_AVAILABLE or cb._C is None:
+        return "comfy_kitchen.backends.cuda._C is not loaded"
+    for name, want in _SHARED_C_DOCS.items():
+        fn = getattr(cb._C, name, None)
+        if fn is None:
+            return f"comfy_kitchen.backends.cuda._C.{name} is missing"
+        got = (fn.__doc__ or "").split("\n", 1)[0]
+        if got != want:
+            return f"signature of _C.{name} is {got!r}, expected {want!r}"
+    for name, want in _SHARED_CB_SIGNATURES.items():
+        got = tuple(inspect.signature(getattr(cb, name)).parameters)
+        if got != want:
+            return f"signature of {name} is {got}, expected {want}"
+    return None
+
+
+def _probe_shared_quant() -> None:
+    """Set ``_SHARED_CB`` / ``_SHARED_REASON`` (module docstring). Never raises:
+    a failed probe only means the qkv input is quantized per call, as before."""
+    global _SHARED_CB, _SHARED_REASON
+    _SHARED_CB, _SHARED_REASON = None, "not probed"
+    try:
+        import comfy_kitchen.backends.cuda as cb  # noqa: PLC0415
+
+        reason = _shared_quant_missing(cb)
+        if reason is None:
+            major, minor = torch.cuda.get_device_capability(torch.cuda.current_device())
+            if major < 8:
+                reason = f"compute capability {major}.{minor} < 8.0"
+    except Exception as exc:  # noqa: BLE001 -- the probe never fails the load
+        reason = f"the probe failed: {exc!r}"
+    if reason is None:
+        _SHARED_CB, _SHARED_REASON = cb, None
+    else:
+        _SHARED_REASON = reason
+
+
+def shared_quant_status() -> tuple[bool, str | None]:
+    """``(shared, reason)``: whether the last probe enabled the shared qkv
+    quantization, and why not when it did not."""
+    return _SHARED_CB is not None, _SHARED_REASON
+
+
+def _int8_gemm_prequantized(
+    xq: torch.Tensor,
+    xs: torch.Tensor,
+    weight: torch.Tensor,
+    weight_scale: torch.Tensor,
+    bias: torch.Tensor | None,
+    out_dtype: torch.dtype,
+) -> torch.Tensor:
+    """``comfy_kitchen.backends.cuda.int8_linear`` (0.2.37) after its quantization:
+    ``xq`` / ``xs`` are what its fused ConvRot quantizer would have produced.
+
+    The numbers in the comments are the lines of ``int8_linear`` in
+    ``comfy_kitchen/backends/cuda/__init__.py`` (0.2.37) each line copies;
+    compare them when the version moves. Not copied, unreachable under
+    :meth:`H3Int8Linear.shares_input`: the m = 1 kernel (2091-2126), the m <= 2
+    GEMV (2169-2188), the Turing kernels and padding (2195-2209, 2258-2263) and
+    the residual (2079-2089, 2224-2244; none is passed, the output is 2-D).
+    ``_DISABLE_CUTLASS_INT8`` is read from the module at every call, as there.
+    """
+    cb = _SHARED_CB
+    ext = cb._C
+    wrap = cb._wrap_for_dlpack
+    dev = xq.device
+    if not weight.is_contiguous():                                                    # 2053
+        weight = weight.contiguous()                                                  # 2054
+    stream_ptr = torch.cuda.current_stream(dev).cuda_stream                           # 2055
+    m, k = xq.shape                                                                   # 2072-2073
+    n, k_w = weight.shape                                                             # 2074
+    assert k == k_w, "Input and weight inner dimensions must match"                   # 2075
+    output_dtype_code = cb.DTYPE_TO_CODE[out_dtype]                                   # 2078
+    out = torch.empty((m, n), dtype=out_dtype, device=dev)                            # 2190
+    weight_scale = cb._int8_weight_scale_arg(weight_scale, dev)                       # 2191
+    bias_arg = (cb._gemm_vector_arg(bias, dev, out_dtype) if bias is not None         # 2192
+                else cb._empty_cuda_tensor(dev, out_dtype))                           # 2193
+    used_cutlass = False                                                              # 2211
+    prefer_cublas_fallback = cb._prefer_cublas_int8_fallback(m, n, k, xq.get_device())  # 2212-2217
+    if (
+        not prefer_cublas_fallback                                                    # 2219
+        and not cb._DISABLE_CUTLASS_INT8                                              # 2220
+        and cb._cuda_device_supports_cutlass_int8_dequant(xq)                         # 2221
+    ):
+        ws_cutlass = weight_scale if weight_scale.numel() == n else weight_scale.expand(n).contiguous()  # 2223
+        used_cutlass = ext.cutlass_int8_dequant(                                      # 2246
+            wrap(xq),
+            wrap(weight),
+            wrap(xs),
+            wrap(ws_cutlass),
+            wrap(bias_arg),
+            wrap(out),
+            output_dtype_code,
+            stream_ptr,
+        )                                                                             # 2255
+    if not used_cutlass:                                                              # 2256
+        out_int32 = torch.empty((m, n), dtype=torch.int32, device=dev)                # 2265-2269 (padded_n = n)
+        ext.cublas_gemm_int8(                                                         # 2270
+            wrap(xq),
+            wrap(weight),
+            wrap(out_int32),
+            wrap(cb.get_cublas_workspace()),
+            stream_ptr,
+        )                                                                             # 2276
+        ext.dequantize_int8_linear(                                                   # 2279
+            wrap(out_int32),
+            wrap(xs),
+            wrap(weight_scale),
+            wrap(bias_arg),
+            wrap(out),
+            output_dtype_code,
+            stream_ptr,
+        )                                                                             # 2287
+    return out                                                                        # 2289
 
 
 def swap_in_int8_linears(

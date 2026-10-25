@@ -514,9 +514,15 @@ class H3Pipeline:
         av = sft_quant_format.read_header(p.audio_vae)
 
         # Needs CUDA: fail the load here, not on the first int8 call of a job.
-        from engine_h3.quant_linear import require_cuda_int8  # noqa: PLC0415
+        from engine_h3.quant_linear import require_cuda_int8, shared_quant_status  # noqa: PLC0415
 
         backends = require_cuda_int8()
+        shared, why = shared_quant_status()
+        if shared:
+            self._log("int8: qkv quantization shared across head groups (comfy-kitchen internals found)")
+        else:
+            self._log(f"int8: qkv quantization NOT shared ({why}); "
+                      "VRAM 16GB mode quantizes the qkv input once per head-group slice, as before")
         require_fp32_matmul()
 
         if self.options.deterministic:
@@ -855,12 +861,14 @@ class H3Pipeline:
         process only, 裁定 47); ``_vram16_finish`` lifts it.
         """
         from engine_h3.lowvram import Vram16Plan, blocks_on_gpu_for, derive_memory_cap  # noqa: PLC0415
+        from engine_h3.quant_linear import shared_quant_status  # noqa: PLC0415
 
         plan = Vram16Plan()
         n_blocks = blocks_on_gpu_for(n_load, num_blocks=len(dit.blocks))
         record = {
             "cap_fraction": None, "cap_mib": None, "blocks_on_gpu": n_blocks,
             "head_group": plan.head_group, "row_chunk": plan.row_chunk,
+            "qkv_quant_shared": shared_quant_status()[0],
         }
         counters0 = None
         cap_set = False

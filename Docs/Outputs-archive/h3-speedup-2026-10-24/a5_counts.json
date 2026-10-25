@@ -1,0 +1,41 @@
+{
+  "status": [
+    true,
+    null
+  ],
+  "status_after": [
+    true,
+    null
+  ],
+  "blocks": 50,
+  "counts": {
+    "sage/off|block": 50,
+    "sage/off|forward": 200,
+    "sage/on|block": 50,
+    "sage/on|forward": 1050,
+    "sage/on|forward_rows_q": 1050,
+    "sage/on|quantize_input": 50,
+    "sdpa/off|block": 50,
+    "sdpa/off|forward": 200,
+    "sdpa/on|block": 50,
+    "sdpa/on|forward": 1050,
+    "sdpa/on|forward_rows_q": 1050,
+    "sdpa/on|quantize_input": 50
+  },
+  "checks": {
+    "sage": {
+      "on_forward_rows": 0,
+      "on_forward_rows_q": 1050,
+      "on_quantize_input": 50,
+      "expect_forward_rows_q": 1050,
+      "ok": true
+    },
+    "sdpa": {
+      "on_forward_rows": 0,
+      "on_forward_rows_q": 1050,
+      "on_quantize_input": 50,
+      "expect_forward_rows_q": 1050,
+      "ok": true
+    }
+  }
+}

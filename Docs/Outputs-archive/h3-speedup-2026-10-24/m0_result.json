@@ -1,0 +1,93 @@
+{
+  "started": "2026-10-25 01:17:00",
+  "torch": "2.13.0+cu130",
+  "cuda": "13.0",
+  "device": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "comfy_kitchen": null,
+  "fused_shared_memory_fits": true,
+  "runs": [
+    {
+      "S": 39764,
+      "K": 5376,
+      "N": 1024,
+      "seed": 1234,
+      "quantize_int8_rowwise_convrot64": {
+        "median_ms": 1.4417,
+        "min_ms": 1.3937,
+        "max_ms": 1.9702,
+        "mean_ms": 1.521,
+        "iters": 100,
+        "warmup": 10
+      },
+      "int8_linear_N1024": {
+        "median_ms": 2.8609,
+        "min_ms": 2.731,
+        "max_ms": 3.5514,
+        "mean_ms": 2.9745,
+        "iters": 100,
+        "warmup": 10
+      },
+      "ratio_quant_over_linear_median": 0.5039,
+      "quant_effective_GBps_median": 444.9,
+      "quant_bytes_moved_MB": 641.5,
+      "quant_x1000_seconds_median": 1.442,
+      "determinism": {
+        "q_equal": true,
+        "scale_equal": true,
+        "q_dtype": "torch.int8",
+        "q_shape": [
+          39764,
+          5376
+        ],
+        "scale_dtype": "torch.float32",
+        "scale_shape": [
+          39764,
+          1
+        ],
+        "int8_linear_out_equal": true
+      }
+    },
+    {
+      "S": 89388,
+      "K": 5376,
+      "N": 1024,
+      "seed": 1234,
+      "quantize_int8_rowwise_convrot64": {
+        "median_ms": 3.138,
+        "min_ms": 3.0771,
+        "max_ms": 3.4743,
+        "mean_ms": 3.2296,
+        "iters": 100,
+        "warmup": 10
+      },
+      "int8_linear_N1024": {
+        "median_ms": 6.5183,
+        "min_ms": 6.1665,
+        "max_ms": 7.0369,
+        "mean_ms": 6.518,
+        "iters": 100,
+        "warmup": 10
+      },
+      "ratio_quant_over_linear_median": 0.4814,
+      "quant_effective_GBps_median": 459.5,
+      "quant_bytes_moved_MB": 1442.0,
+      "quant_x1000_seconds_median": 3.138,
+      "determinism": {
+        "q_equal": true,
+        "scale_equal": true,
+        "q_dtype": "torch.int8",
+        "q_shape": [
+          89388,
+          5376
+        ],
+        "scale_dtype": "torch.float32",
+        "scale_shape": [
+          89388,
+          1
+        ],
+        "int8_linear_out_equal": true
+      }
+    }
+  ],
+  "finished": "2026-10-25 01:17:02"
+}

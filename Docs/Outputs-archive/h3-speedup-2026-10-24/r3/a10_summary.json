@@ -1,0 +1,206 @@
+[
+ {
+  "label": "R3_A10_T2V1280x768x311_pre",
+  "no_qkv_share": true,
+  "steps": [
+   {
+    "step": 1,
+    "seconds": 75.116,
+    "rx_median_MBps": 5.0,
+    "samples": 72,
+    "loaded": false
+   },
+   {
+    "step": 2,
+    "seconds": 74.444,
+    "rx_median_MBps": 2.0,
+    "samples": 72,
+    "loaded": false
+   },
+   {
+    "step": 3,
+    "seconds": 74.426,
+    "rx_median_MBps": 2,
+    "samples": 71,
+    "loaded": false
+   }
+  ],
+  "idle_sm_rx": [
+   [
+    0,
+    0
+   ],
+   [
+    3,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    2,
+    0
+   ],
+   [
+    4,
+    4
+   ],
+   [
+    2,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    5,
+    0
+   ],
+   [
+    0,
+    180
+   ]
+  ],
+  "md5": "a7bfab231e1863bea36d3e5383cdb8e0",
+  "qkv_quant_shared": false,
+  "log_shared": false,
+  "log_not_shared_disabled": true,
+  "peak_alloc_mib": 7062,
+  "peak_reserved_mib": 11382,
+  "vram16": {
+   "cap_fraction": 0.8565,
+   "cap_mib": 14025,
+   "blocks_on_gpu": 4,
+   "head_group": 8,
+   "row_chunk": 4096,
+   "qkv_quant_shared": false,
+   "text_modules": "cpu",
+   "num_alloc_retries": 0,
+   "num_ooms": 0,
+   "inactive_split_peak_mib": 1634
+  },
+  "wddm_denoise": {
+   "samples": 225,
+   "dedicated_mb_median": 12641.9,
+   "shared_mb_median": 1203.0,
+   "dedicated_mb_max": 12687.7,
+   "shared_mb_max": 1236.6,
+   "rule": "stage1_denoise ÇÃ index 0 Ç©ÇÁç≈å„ÇÃ index Ç‹Ç≈ÇÃï«éûåv"
+  },
+  "commit_peak_gib": 39.04,
+  "error": null,
+  "effective_mismatch": null,
+  "counts_step1_to_step2": {
+   "num_alloc_retries": 0,
+   "num_device_alloc": 1,
+   "num_device_free": 0,
+   "num_ooms": 0
+  }
+ },
+ {
+  "label": "R3_A10_T2V1280x768x311_post",
+  "no_qkv_share": false,
+  "steps": [
+   {
+    "step": 1,
+    "seconds": 71.592,
+    "rx_median_MBps": 2,
+    "samples": 69,
+    "loaded": false
+   },
+   {
+    "step": 2,
+    "seconds": 71.372,
+    "rx_median_MBps": 2.0,
+    "samples": 70,
+    "loaded": false
+   },
+   {
+    "step": 3,
+    "seconds": 71.347,
+    "rx_median_MBps": 2.0,
+    "samples": 68,
+    "loaded": false
+   }
+  ],
+  "idle_sm_rx": [
+   [
+    2,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    2,
+    0
+   ]
+  ],
+  "md5": "a7bfab231e1863bea36d3e5383cdb8e0",
+  "qkv_quant_shared": true,
+  "log_shared": true,
+  "log_not_shared_disabled": false,
+  "peak_alloc_mib": 6605,
+  "peak_reserved_mib": 11382,
+  "vram16": {
+   "cap_fraction": 0.8565,
+   "cap_mib": 14025,
+   "blocks_on_gpu": 4,
+   "head_group": 8,
+   "row_chunk": 4096,
+   "qkv_quant_shared": true,
+   "text_modules": "cpu",
+   "num_alloc_retries": 0,
+   "num_ooms": 0,
+   "inactive_split_peak_mib": 1665
+  },
+  "wddm_denoise": {
+   "samples": 216,
+   "dedicated_mb_median": 12655.4,
+   "shared_mb_median": 1175.1,
+   "dedicated_mb_max": 12668.0,
+   "shared_mb_max": 1213.0,
+   "rule": "stage1_denoise ÇÃ index 0 Ç©ÇÁç≈å„ÇÃ index Ç‹Ç≈ÇÃï«éûåv"
+  },
+  "commit_peak_gib": 39.04,
+  "error": null,
+  "effective_mismatch": null,
+  "counts_step1_to_step2": {
+   "num_alloc_retries": 0,
+   "num_device_alloc": 1,
+   "num_device_free": 0,
+   "num_ooms": 0
+  }
+ }
+]

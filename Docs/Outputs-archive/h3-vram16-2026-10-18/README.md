@@ -19,7 +19,7 @@
 - A-G2: `g2_block_equal.json`（製品の形の 50 ブロック比較）・`g2_repeat_b{0,22,40}.json`（再現性）・`g2_sage_diag_b22.json`（sage のヘッド数依存の切り分け）・`g2_smoke.json`・`g2_block_equal.log`。
 - A-G3／A-G3b: `g3_off.json`・`g3_on.json`（と `.log`）。mp4 は省いた。
 - B-G5: `b_g5_metadata.json`（オーナーが操作パネルから行った実行〔job `871a9b96`、2026-10-18 23:01〜23:10〕の `metadata.json`。動画は省いた）。
-- 台本: `g2_block_equal.py`・`g2_sage_diag.py`・`g3.sh`・`g4.sh`・`arm.sh`・`g5a.sh`・`g5b.sh`・`g5c.sh`・`summarize.py`、プロンプト `f0_prompt.txt`・`g5_prompt.txt`。
+- 台本: `g2_block_equal.py`・`g2_sage_diag.py`・`g3.sh`・`g4.sh`・`arm.sh`・`g5a.sh`・`g5b.sh`・`g5c.sh`・`summarize.py`、プロンプト `f0_prompt.txt`・`g5_prompt.txt`。§1-97 以降のコードでは `rope.build_coords` の引数名が変わり `g2_block_equal.py` は動かない。写し [`../h3-speedup-2026-10-24/g2_block_equal_r3.py`](../h3-speedup-2026-10-24/g2_block_equal_r3.py) を使う。
 - `runs/<腕>/`: 各腕の `run.json`・`memory_stats_step*.json`・`wddm.csv`・`dmon.txt`・`stdout.log`。腕の名前は `G5a_h8_r4096_b4`（ヘッド群 8・行の塊 4096・常駐 4）のように条件を並べたもの。
   - `G5a_h8_r4096_b4_try1_devbug`: 最初の試行。`set_per_process_memory_fraction` に番号の無い `cuda` を渡す実装の誤りで上限が課せなかった（`_cuda_index` で直した）。
   - `G5a_h8_r4096_b4_overlapped`: 取り直す前の h8 の回。止めたはずの h28 の腕が孤児プロセスとして残り、重なって走った（`arms.log` の注記）。取り直した `G5a_h8_r4096_b4` を結果として使った。

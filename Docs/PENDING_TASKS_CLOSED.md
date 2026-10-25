@@ -3101,8 +3101,8 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 ### 3-254. MiniMax H3 の 1 ステップの高速化（第 1 弾：数値等価。① QKV の量子化の共有を実装・②③ は実測で見送り・④ は §3-255 へ）（起票：2026-10-19、クローズ：2026-10-25）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-105 からクローズ）
 
 - **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-105（2026-10-19 起票）。**同書側は欠番**。番号は、同書 §3 の生きた項目（3-252・3-253）を飛ばした次の空き番号である。
-- **到達条件**: 出力の数値を変えずに MiniMax H3 の 1 ステップを短くする 4 件（① QKV の活性化量子化の共有・② ステップ間の cyclic prefetch・③ CPU の正本から pinned staging への先読み・④ QKV の不要なコピー・レイアウト変換の削減〔条件付き〕）を調べ、採るものを実装すること。**① を実装し、②③ は実測で見送りと決めた。④ は同書 §3-255 へ起票し直した**（オーナー裁定 2026-10-25）。
-- **何が完了したか**: ① VRAM 16GB mode の 1 ブロックで、qkv の入力の量子化を 21 回から 1 回にした（comfy-kitchen 0.2.37 の公開されていない内部を使い、起動時に版・記号・引数の並びを検査して、外れたら従来の経路に戻る）。②③ は、GPU が待つのはステップの頭だけで得が小さいと実測で分かり、研究ノートの費用対効果の基準（§14.6）で見送った。要点・事前調査と実測・計画と実装のレビュー・GPU の門 A-4〜A-10 は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177 を正本とする。
-- **状態**: オーナーの目視（O-1 操作パネルからの I2V・O-2 Turbo LoRA）は合格（同 §177.6）。エンジンだけの変更なので aux2 の再配置は要らない。dev `4d9d73a`（エンジン＋テスト）・`e1208bd`（文書・保管）。main への merge はオーナーの合図待ち。
+- **到達条件**: 出力の数値を変えずに MiniMax H3 の 1 ステップを短くする 4 件（台帳の元 §1-105 の ①〜④）を調べ、採るものを実装すること。**達成した。**
+- **何が完了したか**: ① VRAM 16GB mode の qkv の入力の量子化を 1 ブロック 1 回にした（出力の数値は変わらない）。②③ は実測で見送り、④ は同書 §3-255 へ起票し直した（オーナー裁定 2026-10-25）。要点・門・オーナーの目視（合格）は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177 を正本とする。
+- **状態**: dev `4d9d73a`（エンジン＋テスト）・`e1208bd`（文書・保管）。
 - **正本・出典**: 設計は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5（例外）と §6.5、事前調査の材料は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.1、契約は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.100）。調査・計画・レビュー・門の記録の保管は [`Outputs-archive/h3-speedup-2026-10-24/`](Outputs-archive/h3-speedup-2026-10-24/README.md)。
-- **残課題**: ④ は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-255。ヘッド群の拡大（同 §3-245）は、① の後で得が小さくなる見込み（推測。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177）。
+- **残課題**: ④ は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-255。

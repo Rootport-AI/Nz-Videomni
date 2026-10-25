@@ -30,6 +30,9 @@ requires-python = ">=3.12"
 #     It has no dependencies of its own. The venv uses only its function API
 #     (comfy_kitchen.int8_linear); the quantised-tensor wrapper types are not
 #     used, because they do not ride this project's block swap / prefetch.
+#     VRAM 16GB mode's qkv sharing (quant_linear.py) copies 0.2.37 internals,
+#     so another version turns the sharing off at load (logged) and the old
+#     path runs.
 #   * triton-windows: the build that matches this torch (torch's own Linux
 #     metadata pins the matching triton). It is installed because SageAttention
 #     JIT-compiles with it. comfy-kitchen's own triton backend is NOT used: its

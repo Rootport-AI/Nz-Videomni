@@ -104,7 +104,8 @@ interface FeatureUiEntry {
  *       panel. Create HIDES it (IC-LoRA is LTX's own mechanism).
  *     - `chain` also takes Create's A2V card: an attached audio turns a Create
  *       submit into `POST /generate/chain`, so a base model that cannot chain
- *       cannot run it either. Greyed.
+ *       cannot run it either. Greyed — unless the engine publishes
+ *       `constraints.source_audio` (`a2vRouteFor` then routes the card to `/generate`).
  *     - `nag` closes the shared Negative Prompt accordion. Greyed rather than
  *       hidden, and the shell stops sending its fields at the same time
  *       (`nagSettings.effectiveNag`) — hiding alone would strand a NAG left

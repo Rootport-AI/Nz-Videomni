@@ -2091,7 +2091,7 @@ def test_submit_generate_source_audio_absent_by_default():
 
 
 def test_submit_generate_source_audio_omits_strength_when_not_given():
-    # The default (1.0) belongs to the server; the MCP does not invent it.
+    # The default belongs to the server; the MCP does not invent it.
     body = _capture_generate_body(source_audio_id="aud1")
     assert body["source_audio"] == {"audio_id": "aud1"}
 

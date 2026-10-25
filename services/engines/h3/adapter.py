@@ -15,12 +15,12 @@ facts that are genuinely different:
 * the feature scope (the four tables below) and the numeric rules
   (:data:`REQUEST_RULES`: 17n+5 frames from 22, a 32 multiple, 24 fps fixed,
   1..50 steps, the two shifts, the keyframe grid (any frame 0..F-1: step 1 /
-  offset 0, no strength), and ``flag_defaults``: VRAM 16GB mode on).
+  offset 0, no strength), ``source_audio_strength`` (single-generate A2V), and ``flag_defaults``: VRAM 16GB mode on).
 
 THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
 Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
 mock, a variable category set): ``H3Runner`` subclasses ``LTXRunner``, the mock
-is 2.3's with its own label, and the categories are the same four words.
+is 2.3's plus the A2V record (``_MockBackendH3``); ``generate`` also forwards ``source_audio_path``, and the categories are the same four words.
 
 THE WORKER PROTOCOL (Docs/MINIMAX_H3_DESIGN.md §8): ``load`` carries the four
 paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
@@ -275,7 +275,7 @@ GOVERNED_FIELDS: dict[str, str] = {
 #: the single-request reject table's feature names, plus ``chain``,
 #: ``retake`` and ``fused_gguf_dequant_kernel``. ``chain`` and ``retake`` are
 #: refused by :func:`reject_chain` (the chain endpoint is refused as a whole):
-#: ``chain`` closes the Chained tab and Single's A2V card, and ``retake`` — a
+#: ``chain`` closes the Chained tab and Single's A2V card — unless the engine publishes ``constraints.source_audio`` (``a2vRouteFor`` then routes the card to ``/generate``) — and ``retake`` — a
 #: chain request too — closes Retake's Edit sub-tab. With Outpainting,
 #: Inpainting and Alpha Gen also refused, all four Edit sub-tabs close and the
 #: operation panel greys the whole Edit tab (裁定 34).

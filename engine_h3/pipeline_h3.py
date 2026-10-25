@@ -1,12 +1,12 @@
-"""MiniMax H3 T2V / I2V pipeline: encode -> denoise -> decode, one stage at a time.
+"""MiniMax H3 T2V / I2V / A2V pipeline: encode -> denoise -> decode, one stage at a time.
 
 Ported in part from DiffSynth-Studio (Apache-2.0), commit 4e34969:
   diffsynth/pipelines/minimax_h3_audio_video.py
     (the noise initializer 245-250, the two-schedule loop 184-198, the per-row
      timesteps and their ``unique`` index 1011-1021)
 Copyright (c) the DiffSynth-Studio authors. Licensed under the Apache License,
-Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0). Changes: T2V and
-the keyframe I2V only (the condition rows: KeyframeEncoder 440-467, the
+Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0). Changes: T2V, the
+keyframe I2V and A2V (the per-row mask is engine_h3/denoise_mask.py, not DiffSynth's) (the condition rows: KeyframeEncoder 440-467, the
 packed layout 651-709, the per-row timesteps 1019); no CFG (H3 is guidance-distilled: one forward per step); no padding rows; the
 noise is drawn in float32 from one CPU generator (video, then audio); the
 model's output is used in its own direction (x0 = x + sigma v, no negation);

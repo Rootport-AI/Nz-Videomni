@@ -69,7 +69,7 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             (there is no stage2: the app adapter, services/engines/h3/adapter.py,
             reads these with ``_read_worker_events(one_stage=True)``, as Alpha
             Gen does; ``encode`` counts 3 steps, +1 when the job has any
-            key frame, +1 when it has a source_audio; the audio encoding is
+            key frame, +1 when it encodes a source_audio (strength > 0); the audio encoding is
             one ``encode`` step, and ``audio_encode`` is only a phase name in
             ``done.h3.phases``, not a progress stage)
   done      {seed_used, sampler, num_inference_steps, shift_video, shift_audio,

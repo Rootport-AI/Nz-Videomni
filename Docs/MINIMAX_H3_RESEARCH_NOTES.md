@@ -362,7 +362,7 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 
 ### 2026-10-25 の裁定（A2V の着手時・追記）
 
-台帳 §1-103（A2V〔音声から映像〕）の裁定 74〜80 は、すべて設計の規則なので、本節には番号の範囲だけを置き、本文は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 に書いた（番号の重なりを防ぐため）。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §178。
+台帳 §1-103（A2V〔音声から映像〕）の裁定 74〜80 は、すべて設計の規則なので、本節には番号の範囲だけを置き、本文は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 に書いた。設計正本の裁定 62・63 は、本ノートの 62・63 とは別物である。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §178。
 
 ## §11 未検証事項と次段の調査候補
 

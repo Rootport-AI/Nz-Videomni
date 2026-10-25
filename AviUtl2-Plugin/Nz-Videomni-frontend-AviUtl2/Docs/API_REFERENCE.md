@@ -328,7 +328,7 @@ multipart `file`。制御LoRAの参照動画 / V2V継続元 / 素材（末尾）
 multipart `file`。A2V音声用。
 
 - 応答 `UploadAudioResponse`(`api/models.py::UploadAudioResponse`): `{audio_id, original_filename, stored_path, content_type, size_bytes}`。
-- `audio_id` を `/generate/chain` の `source_audio.audio_id` に渡す。
+- `audio_id` を `/generate/chain` の `source_audio.audio_id` に渡す（MiniMax H3 は `/generate` の `source_audio.audio_id` にも。§5.1）。
 - 制約: max 50MB、`.wav/.mp3/.m4a/.aac/.flac/.ogg`(`config.yaml`の`upload.max_audio_size_mb`／`upload.allowed_audio_extensions`)。
 
 ### 3.12 `POST /generate`(`api/generate.py::generate`)— 認証あり — 中核

@@ -312,7 +312,7 @@ export function GenerationForm({
 
       {/* A2V (source audio) — always rendered, collapsed by default. Greyed
           with a note while the loaded base model cannot chain (an A2V submit
-          IS a chain request) — the same treatment as Chain's own audio
+          IS a chain request), unless the engine publishes `constraints.source_audio` (`a2vRouteFor` then routes the card to `/generate`) — the same treatment as Chain's own audio
           panel. */}
       <details className="form-accordion" ref={a2vDetailsRef}>
         <summary className="form-accordion-summary">{strings.single.sourceAudio.heading}</summary>

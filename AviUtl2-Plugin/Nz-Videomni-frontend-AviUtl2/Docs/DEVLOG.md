@@ -5543,12 +5543,12 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 149.3 テスト
 
 - 追加・更新: `shell/featureScope.test.ts`・`shell/generationConstraints.test.ts`・`shell/useBaseModels.test.ts`・`shell/AppShell.minimaxH3.test.tsx`・`bridge/mockBridge.test.ts`・`modes/single/audioFit.test.ts`（新）・`modes/single/SingleScreen.sourceAudio.test.tsx`（新。送り先と本文）・`modes/single/useGenerationForm.h3.test.ts`・`modes/single/GenerationForm.sourceAudio.test.tsx` ほか。
-- 門 G2（2026-10-25）: `npm run typecheck` 合格。`npx vitest run --exclude "**/backend.integration.test.ts"` は 3,370 件、全件合格。既定を 0.5 に変えた後続のコミットの件数は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §178 に書きます。
+- 門 G2（2026-10-25）: `npm run typecheck` 合格。`npx vitest run --exclude "**/backend.integration.test.ts"` は 3,370 件、全件合格。既定を 0.5 に変えた後続のコミットの件数は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §178.5 にあります。
 - 実装差分のレビュー（R5。アプリと操作パネル）の操作パネル側の指摘のうち、模擬サーバーの 422 の文を実サーバーに合わせる件と、本文に連結専用の項目が無いことを試験で確かめる件を採りました。wav の提案値を格子へ戻し直す件は、H3 には快適上限の表が無く実際の流れでは格子から外れないので採っていません（採否の全体は §178）。
 
 ### 149.4 状態と既知の隙
 
-- バックエンドの門とオーナーの目視（G4）は合格です（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §178）。目視は API から作った動画で行いました。配布用 aux2 は 2026-10-25 に `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\NzVideomni.aux2`）と配布コピー（dev `1caab3c`）へ配置し、新設の `source-audio-strength` が両方に入っていることを確かめました（それ以前にオーナーが手で置いた 10 月 24 日の配布コピーには入っておらず、A2V カードが閉じたままでした。計画の弾の表に aux2 のビルドと配置の工程が無かったのが原因）。操作パネルからの目視はオーナー待ちです。
+- バックエンドの門とオーナーの目視（G4）は合格です（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §178）。G4 の目視は API から作った動画で行いました。配布用 aux2 は 2026-10-25 に `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\NzVideomni.aux2`）と配布コピー（dev `1caab3c`）へ配置し、新設の `source-audio-strength` が両方に入っていることを確かめました（それ以前にオーナーが手で置いた 10 月 24 日の配布コピーには入っておらず、A2V カードが閉じたままでした。計画の弾の表に aux2 のビルドと配置の工程が無かったのが原因）。操作パネルからの確認にも合格しました（§178.7）。
 - **既知の隙（受け入れ済み）**: カードの補足文（「単一の distilled クリップを使用」）は、H3 の経路では正しくありません。見た目を変えない方針なので、今回は直していません（R5 の I4。直すかどうかはオーナーの判断）。
 - 送り先の判定は、`SingleScreen.tsx` と `AppShell.tsx` では `a2vRouteFor` を通さず、`singleSourceAudio` の有無を直接見ています。元のデータは同じなので結果は一致します（R5 の I5）。
 - エンジン・C++ は触っていません。

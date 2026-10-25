@@ -5548,7 +5548,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 ### 149.4 状態と既知の隙
 
-- バックエンドの門とオーナーの目視（G4）は合格です（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §178）。目視は API から作った動画で行いました。配布用 aux2 の配置と、操作パネルからの確認は、本節の時点では記録がありません（未確認）。
+- バックエンドの門とオーナーの目視（G4）は合格です（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §178）。目視は API から作った動画で行いました。配布用 aux2 は 2026-10-25 に `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\NzVideomni.aux2`）と配布コピー（dev `1caab3c`）へ配置し、新設の `source-audio-strength` が両方に入っていることを確かめました（それ以前にオーナーが手で置いた 10 月 24 日の配布コピーには入っておらず、A2V カードが閉じたままでした。計画の弾の表に aux2 のビルドと配置の工程が無かったのが原因）。操作パネルからの目視はオーナー待ちです。
 - **既知の隙（受け入れ済み）**: カードの補足文（「単一の distilled クリップを使用」）は、H3 の経路では正しくありません。見た目を変えない方針なので、今回は直していません（R5 の I4。直すかどうかはオーナーの判断）。
 - 送り先の判定は、`SingleScreen.tsx` と `AppShell.tsx` では `a2vRouteFor` を通さず、`singleSourceAudio` の有無を直接見ています。元のデータは同じなので結果は一致します（R5 の I5）。
 - エンジン・C++ は触っていません。

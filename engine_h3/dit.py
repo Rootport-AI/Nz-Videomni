@@ -25,7 +25,9 @@ What each row gets from the step is chosen by an index, not by separate
 weights: AdaLN row = ``time_index * 3 + modality`` (0 video / 1 text /
 2 audio) into the ``[M * 3, 6 * hidden]`` table each block projects from the
 M distinct timesteps of this step (video and audio run different sigma
-schedules, so M is 1..3). The final layer is indexed by ``time_index`` only.
+schedules, so M is 1..3 without a mask; a per-row mask, engine_h3/denoise_mask.py,
+adds the masked rows' own times, so M can exceed 3 -- nothing here depends on
+M). The final layer is indexed by ``time_index`` only.
 
 Layout conventions this file pins (R2 (3), each checked against the source)
 --------------------------------------------------------------------------

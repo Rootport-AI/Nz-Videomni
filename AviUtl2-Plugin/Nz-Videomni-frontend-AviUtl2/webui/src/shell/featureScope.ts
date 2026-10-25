@@ -387,19 +387,42 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
 export interface SingleSectionsDisabled {
   /** The reference-video (IC-LoRA) accordion (`reference_video`). */
   referenceVideo: boolean;
-  /** The A2V (source audio) accordion (`chain` — an A2V submit is a chain). */
+  /** The A2V (source audio) accordion: closed only when neither route is
+   * open (see {@link a2vRouteFor}). */
   a2v: boolean;
   /** Each keyframe card's strength (`keyframe_strength`). */
   keyframeStrength: boolean;
 }
 
+/** Where Create's A2V card submits.
+ * - `"generate"`: the engine takes the source audio on `/generate` itself
+ *   (`singleA2vAvailable` — the server publishes `constraints.source_audio`;
+ *   MiniMax H3).
+ * - `"chain"`: otherwise, through `/generate/chain` as before (LTX), unless
+ *   the feature table closes `createSection.a2v` (no `chain`).
+ * - `null`: neither — the card is closed.
+ *
+ * Read off what the server publishes, never off an engine id. */
+export function a2vRouteFor(
+  unsupportedFeatures: readonly string[],
+  singleA2vAvailable: boolean,
+): "generate" | "chain" | null {
+  if (singleA2vAvailable) return "generate";
+  if (!disabledUiTargets(unsupportedFeatures).has("createSection.a2v")) return "chain";
+  return null;
+}
+
 /** Which of {@link SingleSectionsDisabled}'s parts `unsupportedFeatures`
- * closes — all `false` for the ordinary case (both LTX engines). */
-export function singleSectionsDisabledFor(unsupportedFeatures: readonly string[]): SingleSectionsDisabled {
+ * closes — all `false` for the ordinary case (both LTX engines). The A2V
+ * card closes only when {@link a2vRouteFor} finds no route. */
+export function singleSectionsDisabledFor(
+  unsupportedFeatures: readonly string[],
+  singleA2vAvailable = false,
+): SingleSectionsDisabled {
   const disabled = disabledUiTargets(unsupportedFeatures);
   return {
     referenceVideo: disabled.has("createSection.referenceVideo"),
-    a2v: disabled.has("createSection.a2v"),
+    a2v: a2vRouteFor(unsupportedFeatures, singleA2vAvailable) === null,
     keyframeStrength: disabled.has("createSection.keyframeStrength"),
   };
 }

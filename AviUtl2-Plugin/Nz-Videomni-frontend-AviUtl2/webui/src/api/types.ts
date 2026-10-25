@@ -187,6 +187,11 @@ export interface GenerateRequest {
    * {@link GenerateRequest.shift_video}. */
   shift_audio?: number;
   conditioning_images?: ConditioningImage[];
+  /** Single-clip A2V: the `audio_id` from `POST /upload/audio` and the
+   * Strength (0.0-1.0; 0.0 is the same as no source audio). Sent only while
+   * the loaded base model publishes `constraints.source_audio` (MiniMax H3);
+   * LTX's A2V goes through `/generate/chain` instead. */
+  source_audio?: { audio_id: string; strength: number };
   loras?: LoraSpec[];
   /** IC-LoRA (A3 "reference video") conditioning source: the `video_id`
    * returned by `POST /upload/video` for the selected reference clip
@@ -1256,6 +1261,11 @@ export interface BaseModelConstraints {
    * are cut silently). `null` = not confirmed for the engine (MiniMax H3). Optional
    * defensively like `keyframes`: omitted reads as "no limit known". */
   prompt_token_limit?: number | null;
+  /** Single-clip A2V (the source audio rides on `/generate`): present only
+   * for an engine that takes it (MiniMax H3), with the Strength slider's
+   * range, step and default. Absent/`null` = A2V goes through `/generate/chain`
+   * as before (LTX, or a backend that predates the key). */
+  source_audio?: { strength: SamplingParamConstraint } | null;
 }
 
 /** `GET /models`'s response (Docs/API_REFERENCE.md §3.5,

@@ -96,6 +96,12 @@ class RequestRules:
     (the rest is cut off without a word), published for the screens' token
     counter and never enforced here; ``None`` when not confirmed (the counter
     then shows the count alone).
+    ``source_audio_strength`` is the range of a single ``POST /generate``'s
+    ``source_audio.strength`` (single-generate A2V), published as
+    ``constraints["source_audio"]`` so the screens know the family takes the
+    field at all; ``None`` for a family that refuses it (LTX: its A2V is the
+    chain's), and then the key is left out of :meth:`constraints` entirely.
+    The 0..1 bound itself is the schema's.
     """
 
     frames_step: int
@@ -113,12 +119,13 @@ class RequestRules:
     keyframe_offset: int = 0
     keyframe_strength_default: float | None = None
     prompt_token_limit: int | None = None
+    source_audio_strength: SamplingRange | None = None
 
     # ------------------------------------------------------------ publishing
 
     def constraints(self) -> dict:
         """The ``constraints`` block ``GET /models`` publishes for a base model."""
-        return {
+        published = {
             "num_frames": {
                 "step": self.frames_step,
                 "offset": self.frames_offset,
@@ -135,6 +142,11 @@ class RequestRules:
             "keyframes": {"step": self.keyframe_step, "offset": self.keyframe_offset},
             "prompt_token_limit": self.prompt_token_limit,
         }
+        # Only a family that takes single-generate A2V publishes the key, so a
+        # family that refuses it (LTX) publishes the same block as before.
+        if self.source_audio_strength is not None:
+            published["source_audio"] = {"strength": self.source_audio_strength.as_dict()}
+        return published
 
     # ------------------------------------------------------------ enforcing
 

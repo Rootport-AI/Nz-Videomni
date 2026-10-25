@@ -2085,6 +2085,39 @@ def test_submit_chain_embed_mp4_metadata_sent_only_when_off():
     assert _capture_chain_body(embed_mp4_metadata=False)["embed_mp4_metadata"] is False
 
 
+def test_submit_generate_source_audio_absent_by_default():
+    # Byte-identical to today's payload: no source_audio key at all.
+    assert "source_audio" not in _capture_generate_body()
+
+
+def test_submit_generate_source_audio_omits_strength_when_not_given():
+    # The default (1.0) belongs to the server; the MCP does not invent it.
+    body = _capture_generate_body(source_audio_id="aud1")
+    assert body["source_audio"] == {"audio_id": "aud1"}
+
+
+def test_submit_generate_source_audio_explicit_strength_passes_through():
+    body = _capture_generate_body(source_audio_id="aud1", source_audio_strength=0.5)
+    assert body["source_audio"] == {"audio_id": "aud1", "strength": 0.5}
+    # Strength 0.0 is a real value, not "omitted".
+    body = _capture_generate_body(source_audio_id="aud1", source_audio_strength=0.0)
+    assert body["source_audio"]["strength"] == 0.0
+
+
+def test_submit_generate_source_audio_strength_only_raises_before_http():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("no HTTP call expected")
+
+    set_client(_client_for_handler(handler))
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(
+            functools.partial(
+                generate.submit_generate, "a prompt", source_audio_strength=0.5
+            )
+        )
+    assert "source_audio_id" in str(exc_info.value)
+
+
 def test_embed_mp4_metadata_argument_default_matches_the_server():
     from api.models import EMBED_MP4_METADATA_DEFAULT, GenerateChainRequest, GenerateRequest
 

@@ -30,10 +30,14 @@ conditioning ``images`` (``{path, frame_idx}``; H3 has no strength), the
 ``loras`` (``{path, strength}``; always sent, ``[]`` = none), and the
 per-job ``attention_backend`` / ``block_swap_prefetch`` (always sent: an absent
 key would mean "the load value", not "off"), ``vram16_mode`` (always sent: the
-worker's own default is off, the app's is on) and ``keep_resident`` (only when
-asked for — an absent key is the release request, the LTX contract). The
-progress stages are LTX's single-stage ones (``encode`` / ``stage1_denoise`` /
-``decode``), read with ``one_stage=True``.
+worker's own default is off, the app's is on), ``source_audio``
+(``{path, strength}``; single-generate A2V only — an absent key is "no source
+audio") and ``keep_resident`` (only when asked for — an absent key is the
+release request, the LTX contract). The progress stages are LTX's single-stage
+ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
+``one_stage=True``; the A2V audio encode is a step of ``encode`` (its own name,
+``audio_encode``, is a phase in ``done.h3.phases`` only), and a stage name the
+reader does not know holds the bar where it is.
 
 LIKE THE LTX ADAPTERS, THIS FILE NEVER IMPORTS torch. The engine lives only in
 ``.venv-engine-h3``; the app venv has none of it.
@@ -41,6 +45,7 @@ LIKE THE LTX ADAPTERS, THIS FILE NEVER IMPORTS torch. The engine lives only in
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import os
 from pathlib import Path
@@ -148,6 +153,9 @@ REQUEST_RULES = RequestRules(
     # omitted one stays None (keyframe_strength_default left at None).
     keyframe_step=1,
     keyframe_offset=0,
+    # Single-generate A2V (``request.source_audio.strength``): mask value
+    # m = 1 - strength on every audio latent; 1.0 keeps the source audio as is.
+    source_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=1.0),
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -239,6 +247,9 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "attention_backend",
         "block_swap_prefetch",
         "vram16_mode",
+        # Single-generate A2V: the uploaded audio's path + strength reach the
+        # worker as the ``source_audio`` payload key.
+        "source_audio",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -349,6 +360,9 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
 
 #: Top-level facts of the worker's ``done`` event that ``metadata["h3"]``
 #: gathers next to the worker's own ``h3`` block (phases, quant backends).
+#: The worker's ``h3`` block is merged in flat, so its A2V record
+#: (``done.h3.a2v``, A2V jobs only) arrives as ``outcome.h3["a2v"]``;
+#: ``PipelineManager._write_metadata`` lifts it out into ``metadata["a2v"]``.
 _DONE_FACTS = (
     "sampler",
     "num_inference_steps",
@@ -458,9 +472,14 @@ class _RealBackendH3(_RealBackend):
         outpaint_source_path: Path | None = None,
         inpaint_source_path: Path | None = None,
         inpaint_mask_path: Path | None = None,
+        source_audio_path: Path | None = None,
     ) -> GenerationOutcome:
         """One T2V / keyframe I2V generation (keyframes on any frame 0..F-1),
-        with the requested LoRAs.
+        with the requested LoRAs and, for single-generate A2V, the source audio.
+
+        ``source_audio_path`` is ``request.source_audio.audio_id`` resolved by
+        the audio upload store (``PipelineManager.run_job``); ``None`` for every
+        job without ``source_audio``.
 
         ``lora_paths`` is ``request.loras`` resolved by the registry (same
         order); only path and strength reach the worker (``audio_strength`` is
@@ -505,6 +524,18 @@ class _RealBackendH3(_RealBackend):
         # the app's ffmpeg helper centre-crops it into output.mp4 (as on LTX).
         target = output_dir / "_full.mp4" if request.crop_output is not None else output_path
 
+        source_audio: dict | None = None
+        if request.source_audio is not None:
+            if source_audio_path is None:
+                raise RuntimeError(
+                    "MiniMax H3: source_audio が指定されていますが、音声ファイルのパスが"
+                    "解決されていません（アプリ側の不具合です）。"
+                )
+            source_audio = {
+                "path": str(source_audio_path),
+                "strength": float(request.source_audio.strength),
+            }
+
         if progress_callback:
             progress_callback(None, None, 0.05)
 
@@ -529,8 +560,11 @@ class _RealBackendH3(_RealBackend):
             # (VRAM16_MODE_DEFAULT_H3), which validate_for_family writes back,
             # so None is not expected here; if it ever arrives it still means on.
             "vram16_mode": request.vram16_mode is not False,
-            "output_path": str(target),
         }
+        # source_audio: only for single-generate A2V (an absent key = none).
+        if source_audio is not None:
+            payload["source_audio"] = source_audio
+        payload["output_path"] = str(target)
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
         if request.keep_resident:
@@ -587,10 +621,118 @@ class _RealBackendH3(_RealBackend):
         raise AssertionError("unreachable")  # pragma: no cover
 
 
+def _mock_channels_used(channels: int | None) -> str | None:
+    """The worker's ``channels_used`` word (engine_h3/source_audio.py) for an
+    ffprobed channel count: mono is duplicated, three or more keep the first two."""
+    if not channels:
+        return None
+    if channels == 1:
+        return "mono->stereo"
+    if channels == 2:
+        return "stereo"
+    return "first2"
+
+
+class _MockBackendH3(_MockBackend):
+    """2.3's synthetic-clip mock plus the one H3-only input: ``source_audio``.
+
+    The clip itself is the shared mock's. For an A2V job it adds the ``a2v``
+    record the real worker reports in ``done.h3.a2v`` (so
+    ``outcome.h3 == {"a2v": {...}}``, and a mock job's metadata carries an
+    ``a2v`` block but no ``h3`` one). ``channels_used`` comes from an ffprobe of
+    the upload; the latent-side keys the mock cannot know are ``None``. The mock
+    does not mux audio (its mp4 is silent), so ``muxed_audio_samples`` is
+    ``None``.
+    """
+
+    def generate(
+        self,
+        request: GenerateRequest,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        conditioning_image_paths: list[Path] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
+        reference_video_path: Path | None = None,
+        seed: int | None = None,
+        outpaint_source_path: Path | None = None,
+        inpaint_source_path: Path | None = None,
+        inpaint_mask_path: Path | None = None,
+        source_audio_path: Path | None = None,
+    ) -> GenerationOutcome:
+        outcome = super().generate(
+            request,
+            output_dir=output_dir,
+            progress_callback=progress_callback,
+            conditioning_image_paths=conditioning_image_paths,
+            lora_paths=lora_paths,
+            reference_video_path=reference_video_path,
+            seed=seed,
+            outpaint_source_path=outpaint_source_path,
+            inpaint_source_path=inpaint_source_path,
+            inpaint_mask_path=inpaint_mask_path,
+        )
+        if request.source_audio is None:
+            return outcome
+        if source_audio_path is None:
+            raise RuntimeError(
+                "MiniMax H3 (mock): source_audio が指定されていますが、音声ファイルの"
+                "パスが解決されていません（アプリ側の不具合です）。"
+            )
+        strength = float(request.source_audio.strength)
+        _sample_rate, channels = video_io.probe_audio_stream(Path(source_audio_path))
+        a2v = {
+            "mask_value": 1.0 - strength,
+            "audio_latents": None,
+            "required_samples": None,
+            "encoded_samples": None,
+            "channels_used": _mock_channels_used(channels),
+            "resampler": None,
+            "encoder_tensors": None,
+            "audio_output": "original" if strength == 1.0 else "decoded",
+            "muxed_audio_samples": None,
+            "mock": True,
+        }
+        return dataclasses.replace(outcome, h3={**(outcome.h3 or {}), "a2v": a2v})
+
+
 class H3Runner(LTXRunner):
     """Facade for the MiniMax H3 engine family (the class attributes are the
-    only per-family facts; everything else is ``LTXRunner``'s)."""
+    only per-family facts; everything else is ``LTXRunner``'s, except
+    :meth:`generate`, which also forwards the H3-only ``source_audio_path``)."""
 
     _REAL_BACKEND_CLS = _RealBackendH3
-    _MOCK_BACKEND_CLS = _MockBackend
+    _MOCK_BACKEND_CLS = _MockBackendH3
     _MOCK_BACKEND_LABEL = MOCK_BACKEND_H3
+
+    def generate(
+        self,
+        request: GenerateRequest,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        conditioning_image_paths: list[Path] | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
+        reference_video_path: Path | None = None,
+        seed: int | None = None,
+        outpaint_source_path: Path | None = None,
+        inpaint_source_path: Path | None = None,
+        inpaint_mask_path: Path | None = None,
+        source_audio_path: Path | None = None,
+    ) -> GenerationOutcome:
+        """``LTXRunner.generate`` plus ``source_audio_path`` (single-generate
+        A2V's resolved upload; ``None`` otherwise), passed to the backend."""
+        if self._backend is None or not self._backend.loaded:
+            self.load()
+        assert self._backend is not None
+        return self._backend.generate(
+            request,
+            output_dir=output_dir,
+            progress_callback=progress_callback,
+            conditioning_image_paths=conditioning_image_paths,
+            lora_paths=lora_paths,
+            reference_video_path=reference_video_path,
+            seed=seed,
+            outpaint_source_path=outpaint_source_path,
+            inpaint_source_path=inpaint_source_path,
+            inpaint_mask_path=inpaint_mask_path,
+            source_audio_path=source_audio_path,
+        )

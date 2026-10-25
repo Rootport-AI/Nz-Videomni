@@ -19,7 +19,17 @@ vi.mock("../../jobs/JobsContext", () => ({
 // source-audio section (`SourceAudioSection` inside `GenerationForm`). Same
 // real-hook harness as `GenerationForm.referenceVideo.test.tsx`.
 
-function Harness({ bridge }: { bridge: NativeBridge }) {
+const H3_SOURCE_AUDIO = { strength: { min: 0, max: 1, step: 0.05, default: 1 } };
+
+function Harness({
+  bridge,
+  singleSourceAudio = null,
+  onStrengthChange = () => {},
+}: {
+  bridge: NativeBridge;
+  singleSourceAudio?: typeof H3_SOURCE_AUDIO | null;
+  onStrengthChange?: (value: number) => void;
+}) {
   const form = useGenerationForm(FALLBACK_APP_CONFIG, "a music video", { nativeBridge: bridge });
   const keyframes = useKeyframes(FALLBACK_APP_CONFIG, { nativeBridge: bridge });
   return (
@@ -35,14 +45,17 @@ function Harness({ bridge }: { bridge: NativeBridge }) {
       configFallbackWarning={false}
       config={FALLBACK_APP_CONFIG}
       nativeBridge={bridge}
+      singleSourceAudio={singleSourceAudio}
+      sourceAudioStrength={1}
+      onSourceAudioStrengthChange={onStrengthChange}
     />
   );
 }
 
-function renderForm(bridge: NativeBridge) {
+function renderForm(bridge: NativeBridge, props: Omit<Parameters<typeof Harness>[0], "bridge"> = {}) {
   return render(
     <LanguageProvider>
-      <Harness bridge={bridge} />
+      <Harness bridge={bridge} {...props} />
     </LanguageProvider>,
   );
 }
@@ -190,5 +203,32 @@ describe("GenerationForm — SourceAudioSection (A2V card redesign)", () => {
         screen.getAllByText(/both a reference video and an audio file are attached/i).length,
       ).toBeGreaterThanOrEqual(2),
     );
+  });
+});
+
+describe("GenerationForm — single-clip A2V Strength (constraints.source_audio)", () => {
+  it("the slider and its 1.00 readout render only when the engine publishes source_audio; the chain hint goes with it", async () => {
+    const bridge = createMockBridge({ delayMs: 0, fs: fsWithWavDurations() });
+    const user = userEvent.setup();
+    const onStrengthChange = vi.fn();
+    const { unmount } = renderForm(bridge, { singleSourceAudio: H3_SOURCE_AUDIO, onStrengthChange });
+
+    const slider = screen.getByTestId("source-audio-strength") as HTMLInputElement;
+    expect(slider.max).toBe("1");
+    expect(slider.step).toBe("0.05");
+    expect(screen.getByTestId("source-audio-strength-value")).toHaveTextContent("1.00");
+    fireEvent.change(slider, { target: { value: "0.5" } });
+    expect(onStrengthChange).toHaveBeenCalledWith(0.5);
+
+    await user.click(screen.getByRole("button", { name: /choose audio file/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /remove audio/i })).toBeEnabled());
+    expect(screen.queryByText(/long audio can use chained/i)).not.toBeInTheDocument();
+    unmount();
+
+    // LTX-like: no slider, and the "long audio -> Chained" note shows once audio is attached.
+    renderForm(bridge, { singleSourceAudio: null });
+    expect(screen.queryByTestId("source-audio-strength")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /choose audio file/i }));
+    await waitFor(() => expect(screen.getByText(/long audio can use chained/i)).toBeInTheDocument());
   });
 });

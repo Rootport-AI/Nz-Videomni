@@ -373,6 +373,9 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
     },
     keyframes: { step: 1, offset: 0 },
     prompt_token_limit: null,
+    // 台帳 H3 A2V: the single-generate A2V route's Strength slider range, as
+    // the real `GET /models` publishes it. LTX publishes no `source_audio`.
+    source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 1 } },
   },
 };
 
@@ -433,6 +436,9 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // which hides the Settings row. No `MOCK_CHAIN_FEATURE_FIELDS` row: the
     // chain schema has no such field.
     "vram16_mode",
+    // H3 A2V (single generate): `source_audio` on POST /generate is MiniMax
+    // H3's own; both LTX engines refuse it (the server's REJECT_TABLE, last).
+    "source_audio",
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -502,6 +508,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // rather than 422'd, and the worker echoes back what actually ran. That
     // leaves `prune_vaed` as the ONE acceleration name this fixture still
     // publishes for LTX 2.5.
+    // H3 A2V: `source_audio` joined at the end — see the LTX23 entry above.
+    "source_audio",
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
@@ -1734,6 +1742,22 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     // client-side pre-check for the same rule; this is the server-side echo).
     if (req.nag_enabled === true && String(req.negative_prompt ?? "").trim() === "") {
       return validationError("negative_prompt", "negative_prompt must not be empty when nag_enabled is true");
+    }
+
+    // H3 A2V: LTX engines refuse `source_audio` on the single route (the
+    // server's REJECT_TABLE row); H3 accepts it and lets the body through.
+    if (req.source_audio != null && (MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("source_audio")) {
+      return {
+        status: 422,
+        body: {
+          error: {
+            code: "FEATURE_UNSUPPORTED",
+            message:
+              "'source_audio' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
+            detail: "単発の A2V は MiniMax H3 専用です。LTX の A2V は Chained の音声で使えます。",
+          },
+        },
+      };
     }
 
     jobCounter += 1;

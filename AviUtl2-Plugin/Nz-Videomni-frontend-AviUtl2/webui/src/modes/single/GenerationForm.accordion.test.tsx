@@ -49,6 +49,9 @@ function Harness(props: Partial<Pick<GenerationFormProps, "autoOpenReference" | 
       configFallbackWarning={false}
       config={FALLBACK_APP_CONFIG}
       nativeBridge={nativeBridge}
+      singleSourceAudio={null}
+      sourceAudioStrength={1}
+      onSourceAudioStrengthChange={() => {}}
       autoOpenReference={props.autoOpenReference}
       autoOpenA2v={props.autoOpenA2v}
     />

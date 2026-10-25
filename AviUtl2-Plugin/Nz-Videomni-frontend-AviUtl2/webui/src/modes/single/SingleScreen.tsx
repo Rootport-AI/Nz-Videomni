@@ -1018,10 +1018,16 @@ function SingleScreenBody({
 
   // Group3 item11: an attached source audio switches submission to
   // `POST /generate/chain` (the distilled A2V fast path), carrying Create's
-  // I2V keyframes on the single clip. Otherwise this is the usual T2V/I2V
+  // I2V keyframes on the single clip — unless the loaded base model takes the
+  // source audio on `/generate` itself (it publishes
+  // `constraints.source_audio`: MiniMax H3), where A2V is the usual
+  // `/generate` body plus `source_audio`. Otherwise this is the usual T2V/I2V
   // `/generate` call. §1-80: assembled in one function so the submission and
-  // the Repeat count settings fingerprint come from the very same values.
-  const { isA2v, buildA2vRequest, toGenerateRequest } = form;
+  // the Repeat count settings fingerprint (Strength included) come from the
+  // very same values.
+  const { isA2v, buildA2vRequest, toGenerateRequest, singleSourceAudio, sourceAudioStrength } = form;
+  const a2vOnGenerate = isA2v && singleSourceAudio !== null;
+  const sourceAudioId = form.sourceAudio.state.id;
   const conditioningImages = keyframes.conditioningImages;
   // A base model without keyframe strength (`keyframe_strength`) refuses any
   // value, so the key is left out of every image (its strength row is hidden).
@@ -1029,18 +1035,32 @@ function SingleScreenBody({
   const buildSubmission = useCallback(():
     | { kind: "chain"; body: GenerateChainRequest }
     | { kind: "generate"; body: GenerateRequest } => {
-    if (isA2v) return { kind: "chain", body: buildA2vRequest(conditioningImages) };
+    if (isA2v && !a2vOnGenerate) return { kind: "chain", body: buildA2vRequest(conditioningImages) };
     const built = toGenerateRequest();
     // 台帳 §1-104: likewise a base model whose LoRAs have one strength only
     // gets no `audio_strength` (each chip's audio toggle is hidden).
     const request =
       loraAudioHidden && built.loras ? { ...built, loras: omitLoraAudioStrength(built.loras) } : built;
     const images = strengthOmitted ? omitStrength(conditioningImages) : conditioningImages;
+    const withImages = images.length > 0 ? { ...request, conditioning_images: images } : request;
     return {
       kind: "generate",
-      body: images.length > 0 ? { ...request, conditioning_images: images } : request,
+      body:
+        a2vOnGenerate && sourceAudioId
+          ? { ...withImages, source_audio: { audio_id: sourceAudioId, strength: sourceAudioStrength } }
+          : withImages,
     };
-  }, [isA2v, buildA2vRequest, toGenerateRequest, conditioningImages, strengthOmitted, loraAudioHidden]);
+  }, [
+    isA2v,
+    a2vOnGenerate,
+    sourceAudioId,
+    sourceAudioStrength,
+    buildA2vRequest,
+    toGenerateRequest,
+    conditioningImages,
+    strengthOmitted,
+    loraAudioHidden,
+  ]);
   const getSubmissionFingerprint = useCallback(() => submissionFingerprint(buildSubmission()), [buildSubmission]);
 
   const handleGenerate = () => {
@@ -1211,6 +1231,9 @@ function SingleScreenBody({
           autoOpenReference={autoOpenReference}
           autoOpenA2v={autoOpenA2v}
           sectionsUnavailable={sectionsUnavailable}
+          singleSourceAudio={form.singleSourceAudio}
+          sourceAudioStrength={form.sourceAudioStrength}
+          onSourceAudioStrengthChange={form.setSourceAudioStrength}
         />
         <div className="generation-column">
           <GenerateButtonBar

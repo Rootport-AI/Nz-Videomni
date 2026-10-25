@@ -47,6 +47,7 @@ REQUEST_OVERRIDES_23: dict[str, dict] = {
         "height": 384,
     },
     "vram16_mode": {"vram16_mode": True},
+    "source_audio": {"source_audio": {"audio_id": "aud-123"}},
 }
 
 #: The refusals whose 422 does NOT point at LTX 2.5 (the feature is MiniMax H3's).
@@ -157,7 +158,7 @@ def test_a_default_request_is_accepted():
 
 
 def test_unsupported_features_publishes_both_refusals_in_table_order():
-    assert ltx23.UNSUPPORTED_FEATURES == ("keep_resident_embeddings", "alpha_gen", "vram16_mode")
+    assert ltx23.UNSUPPORTED_FEATURES == ("keep_resident_embeddings", "alpha_gen", "vram16_mode", "source_audio")
     assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
 
 

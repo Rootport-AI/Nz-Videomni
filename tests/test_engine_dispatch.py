@@ -225,6 +225,7 @@ def test_unsupported_features_per_family():
         "keep_resident_embeddings",
         "alpha_gen",
         "vram16_mode",
+        "source_audio",
     )
     features = engines.unsupported_features("ltx25")
     # 系統ごとの一覧は「その系統のアダプタが宣言したものだけ」である。それは

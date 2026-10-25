@@ -19,6 +19,7 @@ import { KeyframesPanel } from "./KeyframesPanel";
 import { formatSecondsLabel } from "./paramUtils";
 import { PresetDropdown } from "./PresetDropdown";
 import { ReferenceStrengthField } from "./ReferenceStrengthField";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
 import type { UseGenerationFormResult } from "./useGenerationForm";
 import type { UseKeyframesResult } from "./useKeyframes";
 
@@ -95,6 +96,13 @@ export interface GenerationFormProps {
    * two keyframe flags are handed to `KeyframesPanel`. Omitted = everything
    * usable (both LTX engines). */
   sectionsUnavailable?: SingleSectionsDisabled | undefined;
+  /** `constraints.source_audio` of the loaded base model (H3 publishes it, LTX
+   * does not). Non-null = the single-generate A2V route is active: the A2V
+   * card shows the Strength slider and the Chained-only clip note is hidden. */
+  singleSourceAudio: GenerationConstraints["singleSourceAudio"];
+  /** Current source-audio strength (0..1). */
+  sourceAudioStrength: number;
+  onSourceAudioStrengthChange: (value: number) => void;
 }
 
 /** The Create form: size/duration/fps/seed/presets, the M4 I2V keyframe
@@ -119,6 +127,9 @@ export function GenerationForm({
   autoOpenReference,
   autoOpenA2v,
   sectionsUnavailable,
+  singleSourceAudio,
+  sourceAudioStrength,
+  onSourceAudioStrengthChange,
 }: GenerationFormProps) {
   const strings = useStrings();
   // Right-click redesign W2: the IC-LoRA/A2V accordions default to collapsed,
@@ -313,6 +324,9 @@ export function GenerationForm({
             form={form}
             disabled={disabled || (sectionsUnavailable?.a2v ?? false)}
             nativeBridge={nativeBridge}
+            singleSourceAudio={singleSourceAudio}
+            sourceAudioStrength={sourceAudioStrength}
+            onSourceAudioStrengthChange={onSourceAudioStrengthChange}
           />
         </div>
       </details>
@@ -584,10 +598,16 @@ function SourceAudioSection({
   form,
   disabled,
   nativeBridge,
+  singleSourceAudio,
+  sourceAudioStrength,
+  onSourceAudioStrengthChange,
 }: {
   form: UseGenerationFormResult;
   disabled: boolean;
   nativeBridge?: NativeBridge | undefined;
+  singleSourceAudio: GenerationConstraints["singleSourceAudio"];
+  sourceAudioStrength: number;
+  onSourceAudioStrengthChange: (value: number) => void;
 }) {
   const strings = useStrings();
   const t = strings.single.sourceAudio;
@@ -692,7 +712,29 @@ function SourceAudioSection({
       {state.status === "idle" && <p className="field-hint">{t.none}</p>}
       {state.status === "error" && <p className="field-hint field-hint-error">{state.errorCode}</p>}
       {bothAttached && <p className="field-hint">{t.exclusiveWithReferenceNote}</p>}
-      {form.isA2v && <p className="field-hint">{t.singleClipNote}</p>}
+      {singleSourceAudio != null && (
+        <>
+          <label className="kfc-field">
+            <span className="kfc-field-label">{t.strengthLabel}</span>
+            <input
+              type="range"
+              min={singleSourceAudio.strength.min}
+              max={singleSourceAudio.strength.max}
+              step={singleSourceAudio.strength.step}
+              value={sourceAudioStrength}
+              disabled={disabled}
+              aria-label={t.strengthLabel}
+              data-testid="source-audio-strength"
+              onChange={(e) => onSourceAudioStrengthChange(Number(e.target.value))}
+            />
+            <span className="kfc-hint" data-testid="source-audio-strength-value">
+              {sourceAudioStrength.toFixed(2)}
+            </span>
+          </label>
+          <p className="field-hint">{t.strengthHint}</p>
+        </>
+      )}
+      {form.isA2v && singleSourceAudio == null && <p className="field-hint">{t.singleClipNote}</p>}
       {form.audioPrecheck && !form.audioPrecheck.ok && (
         <p className="warning-banner warning-banner-mild">{t.tooShortWarning(form.audioPrecheck.requiredSeconds)}</p>
       )}

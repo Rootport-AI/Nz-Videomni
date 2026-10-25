@@ -47,7 +47,9 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   下げるか、VRAM 16GB mode を切ってください）を含みます。LTX で vram16_mode=true を送ると 422
   FEATURE_UNSUPPORTED です。H3 は単発の T2V と I2V（キーフレームは最大 10 枚・
   frame_idx は 0〜num_frames−1 の任意のフレーム・strength は指定しない）
-  だけに対応し、submit_chain・reference_video_id・nag_enabled などは
+  と単発の A2V（submit_generate の source_audio_id と
+  source_audio_strength。H3 専用）だけに対応します。複数クリップの連結
+  （submit_chain）は H3 では使えず、reference_video_id・nag_enabled なども
   422 FEATURE_UNSUPPORTED になります（使えない機能は unsupported_features
   を見てください）。H3 でも submit_generate の loras（スタイル LoRA・
   Turbo LoRA。名前は H3 を選んでいるときの list_loras で確認）は使えます。

@@ -1537,7 +1537,11 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // accordion greys, and every screen READS `NAG_OFF` meanwhile
   // (`effectiveNag`), so nothing of it rides on a request — the user's own
   // settings stay put for when a NAG-capable base model is back.
-  const singleSections = singleSectionsDisabledFor(baseModels.unsupportedFeatures);
+  // Single-clip A2V: an engine that publishes `constraints.source_audio`
+  // takes the source audio on `/generate` itself; otherwise A2V stays a chain
+  // submit (capability-driven — the engine id is never read).
+  const singleA2vAvailable = baseModels.activeConstraints.singleSourceAudio != null;
+  const singleSections = singleSectionsDisabledFor(baseModels.unsupportedFeatures, singleA2vAvailable);
   const nagUnavailable = nagDisabledFor(baseModels.unsupportedFeatures);
   const nagForRequests = effectiveNag(nagControls.nag, !nagUnavailable);
   // 台帳 §1-104: an engine whose LoRAs have one strength only hides each

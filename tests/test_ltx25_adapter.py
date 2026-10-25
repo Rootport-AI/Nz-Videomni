@@ -273,6 +273,7 @@ REQUEST_OVERRIDES: dict[str, dict] = {
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
     "vram16_mode": {"vram16_mode": True},
+    "source_audio": {"source_audio": {"audio_id": "aud-123"}},
 }
 
 #: The SCHEMA-REQUIRED companion for every NAG row below: ``nag_enabled`` is the
@@ -620,8 +621,8 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     # coming back is exactly what this catches, and there one deliberately did.
     # BACK TO TWO with 台帳 §3-150, which built the 2.5 driver and took it off
     # again. THREE with VRAM 16GB mode (``vram16_mode``, MiniMax H3 only — a
-    # feature name, not a mode).
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 3
+    # feature name, not a mode). FOUR with ``source_audio`` (single-shot A2V, H3 only).
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 4
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -752,6 +753,7 @@ def test_inpaint_is_honoured_and_says_so_in_every_table():
         "two_stage_hq",
         "prune_vaed",
         "vram16_mode",
+        "source_audio",
     }
 
 
@@ -769,14 +771,14 @@ def test_alpha_gen_is_honoured_and_says_so_in_every_table():
     stage was asked for. Honoured, therefore not refused / ignored / governed —
     and NOT published by this engine (it is LTX 2.3 that publishes it), with
     this engine's published list at its two engine-level names plus MiniMax
-    H3's ``vram16_mode``."""
+    H3's ``vram16_mode`` and ``source_audio``."""
     assert "alpha_gen" in ltx25.HONOURED_FIELDS
     assert "alpha_gen" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
     assert "alpha_gen" not in ltx25.IGNORED_FIELDS
     assert "alpha_gen" not in ltx25.GOVERNED_FIELDS
     assert "alpha_gen" not in ltx25.UNSUPPORTED_FEATURES
     assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 3
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 4
     # The needle the generic honoured-read audit below also relies on, named
     # here so a reader of this feature's tests sees it.
     assert "request.alpha_gen" in inspect.getsource(ltx25._RealBackend25.generate)

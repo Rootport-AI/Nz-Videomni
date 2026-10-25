@@ -924,6 +924,9 @@ GOLDEN_GENERATE_KEYS = [
     "vram16_mode",   # VRAM 16GB mode (台帳 §1-101)
     "loras",         # LoRA (台帳 §1-104), at the end; [] = none, always sent
 ]
+#: Keys the worker accepts but a message carries only when used (appended after
+#: ``GOLDEN_GENERATE_KEYS`` in this order): A2V's ``source_audio`` (台帳 §1-103).
+GOLDEN_GENERATE_OPTIONAL_KEYS = ["source_audio"]
 GOLDEN_DONE_KEYS = [
     "seed_used", "sampler", "num_inference_steps", "shift_video", "shift_audio",
     "peak_vram_mb", "peak_vram_reserved_mb", "rss_peak_gib", "commit_gib", "commit_peak_gib", "seconds",
@@ -957,8 +960,13 @@ def test_golden_generate_message_keys():
     from engine_h3 import worker
 
     msg = worker._selftest_generate_message(_selftest_args(), "o.mp4")
-    assert list(msg) == GOLDEN_GENERATE_KEYS
-    assert worker._GENERATE_FIELDS == frozenset(GOLDEN_GENERATE_KEYS)
+    assert list(msg) == GOLDEN_GENERATE_KEYS            # a job without the optional keys: as before
+    assert worker._GENERATE_FIELDS == frozenset(GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS)
+    args = _selftest_args()
+    args.source_audio, args.audio_strength = "a.wav", 0.5
+    msg = worker._selftest_generate_message(args, "o.mp4")
+    assert list(msg) == GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS
+    assert msg["source_audio"] == {"path": "a.wav", "strength": 0.5}
 
 
 def test_golden_done_keys(monkeypatch, tmp_path):
@@ -2860,3 +2868,349 @@ def test_fp32_matmul_check(monkeypatch):
         P.require_fp32_matmul()
     monkeypatch.setattr(torch.backends.cuda, "matmul", types.SimpleNamespace(allow_tf32=False))   # older torch: no attribute
     P.require_fp32_matmul()
+
+
+# --------------------------------------------------------------------------- #
+# A2V: per-row masks in the step loop and the source audio (台帳 §1-103, gate G1)
+# --------------------------------------------------------------------------- #
+
+def _time_rows_before_a2v(layout, t_video, t_audio, device=None):
+    """A frozen copy of ``time_rows``'s body as it was before the A2V masks (G1 ⑦)."""
+    t = torch.full((layout.total,), float(t_video), dtype=torch.float32, device=device)
+    t[layout.audio] = float(t_audio)
+    t[layout.cond] = max(float(t_video), C.KEYFRAME_NOISE_AUG)
+    t_unique, time_index = torch.unique(t, sorted=True, return_inverse=True)
+    return t_unique, time_index.to(torch.long)
+
+
+def test_time_rows_without_masks_is_the_function_of_before():
+    """G1 ⑦: called without the new keywords, the same numbers and dtypes as before."""
+    from engine_h3.dit import H3SeqLayout
+    from engine_h3.pipeline_h3 import time_rows
+
+    sv, sa = sigma_schedule(20, 12.0), sigma_schedule(20, 3.0)
+    for cond in (0, 4, 8):
+        layout = H3SeqLayout.make(text_rows=5, cond_rows=cond, audio_rows=6, video_rows=12)
+        pairs = [(1.0 - float(sv[i]), 1.0 - float(sa[i])) for i in range(20)] + [(0.0, 0.0), (0.9995, 0.5)]
+        for t_v, t_a in pairs:
+            got, want = time_rows(layout, t_v, t_a), _time_rows_before_a2v(layout, t_v, t_a)
+            got_none = time_rows(layout, t_v, t_a, audio_t=None, video_t=None)
+            for g in (got, got_none):
+                assert torch.equal(g[0], want[0]) and torch.equal(g[1], want[1])
+                assert g[0].dtype == want[0].dtype and g[1].dtype == want[1].dtype
+
+
+def test_request_validation_source_audio(tmp_path):
+    from engine_h3.pipeline_h3 import H3AudioInput, H3GenerateRequest, validate_request
+
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"RIFF")   # only its existence is checked here; the decode is source_audio's
+    ok = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4")
+    assert H3GenerateRequest(**ok).source_audio is None
+    assert H3AudioInput("x").strength == 1.0
+    for s in (0.0, 0.5, 1.0, 1):
+        validate_request(H3GenerateRequest(**ok, source_audio=H3AudioInput(str(wav), s)))
+    for audio, match in ((H3AudioInput("  "), "パスが空"), (H3AudioInput(str(tmp_path / "none.wav")), "見つかりません"),
+                         (H3AudioInput(str(wav), -0.01), "0〜1"), (H3AudioInput(str(wav), 1.01), "0〜1"),
+                         (H3AudioInput(str(wav), float("nan")), "0〜1"), (H3AudioInput(str(wav), float("inf")), "0〜1"),
+                         (H3AudioInput(str(wav), "x"), "数値")):
+        with pytest.raises(ValueError, match=match):
+            validate_request(H3GenerateRequest(**ok, source_audio=audio))
+
+
+def _tiny_denoiser(monkeypatch, tmp_path):
+    """The REAL ``_denoise`` on the tiny DiT (template: ``test_denoise_runs_with_several_key_frame_blocks``);
+    returns ``(dit, run)``; ``run(**kw) -> (video, audio, entry)`` for a 64 x 64, 22-frame job
+    (T' = 7, grid 2 x 2, A = 37)."""
+    from engine_h3 import pipeline_h3 as P
+
+    _fake_int8(monkeypatch)
+    pipe, dit = _tiny_pipe_and_dit(tmp_path)
+    pipe._dit_cfg = dit.cfg
+    pipe._resident = {"dit": dit, "cfg": dit.cfg}
+    text = torch.randn(5, TEXT, generator=torch.Generator().manual_seed(3)).to(torch.bfloat16)
+    tags = torch.ones(5, dtype=torch.long)
+
+    def run(steps=3, vram16=False, **kw):
+        req = P.H3GenerateRequest(prompt="p", seed=11, width=64, height=64, num_frames=22, output_path="o.mp4",
+                                  num_inference_steps=steps, vram16_mode=vram16)
+        entry = {}
+        with torch.no_grad():
+            video, audio, _used = pipe._denoise(req, text, tags, P._Phases(cuda=False), entry, keep=True, **kw)
+        return video, audio, entry
+
+    return dit, run
+
+
+def _clean_latents(seed=21):
+    g = torch.Generator().manual_seed(seed)
+    return torch.randn(2, AUD, 37, generator=g), torch.randn(1, LAT, 7, 4, 4, generator=g)
+
+
+def test_denoise_all_ones_mask_is_the_unmasked_run_bit_for_bit(monkeypatch, tmp_path):
+    """G1 ①: an all-ones mask is never built, and the whole denoise is the plain one."""
+    from engine_h3 import denoise_mask as DM
+
+    _dit, run = _tiny_denoiser(monkeypatch, tmp_path)
+    clean_a, clean_v = _clean_latents()
+    assert DM.audio_mask(clean_a, torch.ones(37)) is None
+    v0, a0, e0 = run()
+    v1, a1, e1 = run(audio_fix=(clean_a, torch.ones(37)), video_fix=(clean_v, torch.ones(7)))
+    assert torch.isfinite(v0).all() and torch.isfinite(a0).all()
+    assert torch.equal(v1, v0) and torch.equal(a1, a0)
+    assert "mask" not in e0 and "mask" not in e1 and e1["m_per_step"] == e0["m_per_step"]
+
+
+def test_denoise_kept_rows_feed_inject_and_end_clean(monkeypatch, tmp_path):
+    """G1 ③④: audio m = 0 (and video m = 0 on frame 0): at every step the DiT is given
+    the injected rows and they carry t = 1.0 (audio) / 0.999 (video); the result is
+    clean bit for bit on those rows."""
+    from engine_h3 import denoise_mask as DM
+    from engine_h3 import pipeline_h3 as P
+    from engine_h3.dit import audio_to_rows, patchify_video
+
+    dit, run = _tiny_denoiser(monkeypatch, tmp_path)
+    clean_a, clean_v = _clean_latents()
+    seen_audio, seen_video, seen_t = [], [], []
+    real_embed = dit.embed_rows
+    real_time_rows = P.time_rows
+
+    def embed(text_refined, audio_rows, video_rows, cond_rows=None):
+        seen_audio.append(audio_rows.clone())
+        seen_video.append(video_rows.clone())
+        return real_embed(text_refined, audio_rows, video_rows, cond_rows=cond_rows)
+
+    def time_rows(layout, t_v, t_a, device=None, **kw):
+        out = real_time_rows(layout, t_v, t_a, device=device, **kw)
+        seen_t.append((layout, out[0][out[1]]))
+        return out
+
+    monkeypatch.setattr(dit, "embed_rows", embed)
+    monkeypatch.setattr(P, "time_rows", time_rows)
+    per_frame = torch.tensor([0.0] + [1.0] * 6)
+    video, audio, entry = run(audio_fix=(clean_a, torch.zeros(37)), video_fix=(clean_v, per_frame))
+    assert len(seen_audio) == 3
+    # The video inject reuses the job's initial video noise (the first draw of seed 11).
+    noise = torch.randn((1, LAT, 7, 4, 4), generator=torch.Generator().manual_seed(11), dtype=torch.float32)
+    inject_v = patchify_video(0.999 * clean_v + 0.001 * noise)
+    for rows_a, rows_v, (layout, t) in zip(seen_audio, seen_video, seen_t):
+        assert torch.equal(rows_a, audio_to_rows(clean_a))
+        assert torch.allclose(rows_v[:4], inject_v[:4], atol=1e-6)            # frame 0's 4 grid rows
+        assert bool((t[layout.audio] == 1.0).all())
+        assert t[layout.video][:4].tolist() == [float(torch.tensor(0.999))] * 4
+    assert torch.equal(audio, clean_a)
+    assert torch.equal(video[:, :, 0], clean_v[:, :, 0]) and not torch.equal(video[:, :, 1], clean_v[:, :, 1])
+    assert entry["mask"] == {"audio": {"rows": 74, "min": 0.0, "max": 0.0},
+                             "video": {"rows": 28, "min": 0.0, "max": 1.0}}
+
+
+def test_denoise_with_more_than_three_times_passes_adaln_and_vram16(monkeypatch, tmp_path):
+    """G1 ④: a mask of 37 different values makes M > 3 at every step; the AdaLN table
+    and VRAM 16GB mode's chunked path take it, and on == off bit for bit."""
+    _dit, run = _tiny_denoiser(monkeypatch, tmp_path)
+    clean_a, _clean_v = _clean_latents()
+    values = torch.linspace(0.0, 0.9, 37)
+    v_off, a_off, e_off = run(audio_fix=(clean_a, values))
+    v_on, a_on, e_on = run(audio_fix=(clean_a, values), vram16=True)
+    assert min(e_off["m_per_step"]) > 3 and e_on["m_per_step"] == e_off["m_per_step"]
+    assert torch.isfinite(v_off).all() and torch.isfinite(a_off).all()
+    assert torch.equal(v_on, v_off) and torch.equal(a_on, a_off)
+    assert torch.equal(a_off[:, :, 0], clean_a[:, :, 0])                     # the m = 0 latent ends clean
+
+
+def _a2v_fakes(monkeypatch, samples=40000, *, encoder_tensors=134):
+    """Stand-ins for ``engine_h3.source_audio.load_source_waveform`` (PyAV decode) and
+    ``engine_h3.audio_vae.H3AudioEncoder`` (the encoder's weights), so these tests need
+    neither a real audio file nor the audio VAE file; the real modules are tested in
+    tests/test_h3_audio_encoder.py. Returns ``(wave, calls)``."""
+    import sys
+    import types
+
+    from engine_h3 import audio_vae as AV
+
+    wave = torch.randn(2, samples, generator=torch.Generator().manual_seed(8)) * 0.1
+    calls = {"load": [], "build": 0, "encode": []}
+
+    def load_source_waveform(path, *, keep_samples, read_samples):
+        calls["load"].append((path, keep_samples, read_samples))
+        return wave, {"channels_used": [0, 1], "resampler": "fake-swr"}
+
+    class FakeEncoder:
+        load_report = types.SimpleNamespace(loaded=encoder_tensors)
+
+        @classmethod
+        def from_file(cls, path, *, device):
+            calls["build"] += 1
+            return cls()
+
+        def encode(self, w):
+            calls["encode"].append(w.clone())
+            n = math.ceil(w.shape[-1] / 800)
+            return torch.randn(2, 32, n, generator=torch.Generator().manual_seed(9))
+
+    module = types.ModuleType("engine_h3.source_audio")
+    module.load_source_waveform = load_source_waveform
+    monkeypatch.setitem(sys.modules, "engine_h3.source_audio", module)
+    monkeypatch.setattr(AV, "H3AudioEncoder", FakeEncoder, raising=False)
+    return wave, calls
+
+
+def _a2v_stage_job(monkeypatch, tmp_path, strength, frames=()):
+    """``generate`` through the REAL ``_encode`` / ``_encode_image`` / ``_encode_audio``
+    (stand-in TE, VAE encoders and source loader); the denoise and the decode are
+    stubs that record their keyword arguments. 64 x 64, 22 frames (A = 37)."""
+    from PIL import Image
+
+    from engine_h3 import pipeline_h3 as P
+    from engine_h3 import text_encoder as TE
+    from engine_h3 import video_vae as VV
+
+    wave, calls = _a2v_fakes(monkeypatch)
+    audio_file = tmp_path / "a.wav"
+    audio_file.write_bytes(b"RIFF")
+    images = []
+    for n in frames:
+        path = tmp_path / f"k{n}.png"
+        Image.new("RGB", (64, 64), (40,) * 3).save(path)
+        images.append(P.H3ImageInput(str(path), n))
+    progress, seen = [], {}
+
+    class FakeTE:
+        def __init__(self, *a, **k):
+            self.read_report = {}
+
+        def load(self):
+            return {}
+
+        def encode(self, prompt, images=()):
+            return torch.zeros(3, 8), torch.ones(3, dtype=torch.long)
+
+        def release(self):
+            pass
+
+    class FakeVideoEncoder:
+        def encode(self, x, tiled=True):
+            return torch.zeros((1, 24, 1, 4, 4))
+
+    monkeypatch.setattr(TE, "H3TextEncoder", FakeTE)
+    monkeypatch.setattr(VV.H3VideoEncoder, "from_file", classmethod(lambda cls, *a, **k: FakeVideoEncoder()))
+    pipe = P.H3Pipeline(P.H3Paths("t", "te", "vv", "av", "tok"), P.H3LoadOptions(), device="cpu",
+                        progress=lambda stage, i, total: progress.append((stage, i, total)), log=lambda m: None)
+    pipe._dit_cfg = object()
+
+    def denoise(req, h, t, phases, entry, **kw):
+        seen["denoise"] = kw
+        return torch.zeros(1), torch.zeros(1), "on"
+
+    def decode(req, v, a, entry, **kw):
+        seen["decode"] = kw
+        entry["audio_samples"] = 29333
+        return 1
+
+    monkeypatch.setattr(pipe, "_denoise", denoise)
+    monkeypatch.setattr(pipe, "_decode", decode)
+    req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=22, output_path="o.mp4",
+                              images=tuple(images), source_audio=P.H3AudioInput(str(audio_file), strength))
+    done = pipe.generate(req)
+    return done, [p for p in progress if p[0] == "encode"], seen, wave, calls
+
+
+@pytest.mark.parametrize("strength", [1.0, 0.5])
+def test_a2v_audio_encode_phase_and_its_progress(monkeypatch, tmp_path, strength):
+    done, progress, seen, wave, calls = _a2v_stage_job(monkeypatch, tmp_path, strength)
+    required, read = round(22 * 32000 / 24), 37 * 800 + 32000
+    assert calls["load"] == [(str(tmp_path / "a.wav"), required, read)] and calls["build"] == 1
+    assert torch.equal(calls["encode"][0], wave[:, :40000])                    # 40000 < 37*800 + 32000
+    assert progress == [("encode", i, 4) for i in range(5)]                    # TE 0..3, then the audio 4/4
+    clean, values = seen["denoise"]["audio_fix"]
+    assert tuple(clean.shape) == (2, 32, 37) and clean.dtype == torch.float32
+    want = torch.randn(2, 32, 50, generator=torch.Generator().manual_seed(9))[:, :, :37]
+    assert torch.equal(clean, want)                                            # the first 37 latents
+    assert values.tolist() == [1.0 - strength] * 37
+    assert (seen["decode"]["source_wave"] is wave) == (strength == 1.0)
+    phases = done["h3"]["phases"]
+    assert phases["audio_encode"]["encoded_samples"] == 40000 and phases["audio_encode"]["encoder_tensors"] == 134
+    assert list(done["h3"]) == GOLDEN_H3_KEYS + ["a2v"]
+    assert done["h3"]["a2v"] == {
+        "mask_value": 1.0 - strength, "audio_latents": 37, "required_samples": required, "encoded_samples": 40000,
+        "channels_used": [0, 1], "resampler": "fake-swr", "encoder_tensors": 134,
+        "audio_output": "original" if strength == 1.0 else "decoded", "muxed_audio_samples": 29333,
+    }
+
+
+def test_a2v_with_a_key_frame_counts_five_and_strength_zero_encodes_nothing(monkeypatch, tmp_path):
+    done, progress, seen, _wave, calls = _a2v_stage_job(monkeypatch, tmp_path, 1.0, frames=(0,))
+    assert progress == [("encode", i, 5) for i in range(6)]                    # TE, key frame 4/5, audio 5/5
+    assert list(done["h3"]["phases"])[:3] == ["encode", "image_encode", "audio_encode"]
+    done, progress, seen, _wave, calls = _a2v_stage_job(monkeypatch, tmp_path, 0.0)
+    assert calls["build"] == 0 and calls["encode"] == [] and len(calls["load"]) == 1
+    assert progress == [("encode", i, 3) for i in range(4)]
+    assert "audio_encode" not in done["h3"]["phases"]
+    assert seen["denoise"]["audio_fix"] is None and seen["decode"]["source_wave"] is None
+    a2v = done["h3"]["a2v"]
+    assert (a2v["mask_value"], a2v["encoded_samples"], a2v["encoder_tensors"], a2v["audio_output"]) == (
+        1.0, 0, None, "decoded")
+
+
+def test_a2v_tiny_job_audio_output_switch(monkeypatch, tmp_path):
+    """The REAL generate / _denoise / _decode on the tiny DiT: at 1.0 the mp4 gets the
+    source waveform itself and no audio VAE is built; at 0.5 the generated latents are
+    decoded; at 0.0 nothing is encoded and the latents are the plain job's, bit for bit.
+    A job without ``source_audio`` has no ``a2v`` / ``mask`` / ``audio_encode``."""
+    from engine_h3 import audio_vae as AV
+    from engine_h3 import media_out as MO
+    from engine_h3 import pipeline_h3 as P
+
+    pipe, latents, _job = _tiny_job_pipe(monkeypatch, tmp_path)
+    wave, calls = _a2v_fakes(monkeypatch)
+    audio_file = tmp_path / "a.wav"
+    audio_file.write_bytes(b"RIFF")
+    written, decoded, builds = [], [], []
+    monkeypatch.setattr(MO, "write_mp4", lambda path, frames, **k: written.append(k["audio"]) or 1)
+    real_from_file = AV.H3AudioVAE.from_file
+
+    def audio_vae_from_file(*a, **k):
+        builds.append(1)
+        avae = real_from_file(*a, **k)
+        real_decode = avae.decode
+        avae.decode = lambda z: decoded.append(z.clone()) or real_decode(z)
+        return avae
+
+    monkeypatch.setattr(AV.H3AudioVAE, "from_file", audio_vae_from_file)
+    real_denoise = pipe._denoise
+    audio_out = []
+    monkeypatch.setattr(pipe, "_denoise", lambda *a, **k: (lambda r: audio_out.append(r[1]) or r)(real_denoise(*a, **k)))
+
+    def job(strength=None):
+        source = None if strength is None else P.H3AudioInput(str(audio_file), strength)
+        req = P.H3GenerateRequest(prompt="p", seed=7, width=64, height=64, num_frames=22, output_path="o.mp4",
+                                  num_inference_steps=2, source_audio=source)
+        return pipe.generate(req)
+
+    plain = job()
+    assert "a2v" not in plain["h3"] and "audio_encode" not in plain["h3"]["phases"]
+    assert "mask" not in plain["h3"]["phases"]["denoise"]
+    assert "audio_output" not in plain["h3"]["phases"]["decode"] and len(builds) == 1   # unchanged record
+
+    full = job(1.0)
+    assert written[-1] is wave and len(builds) == 1                     # no audio VAE built
+    decode = full["h3"]["phases"]["decode"]
+    assert (decode["audio_output"], decode["audio_vae_source"], decode["audio_samples"]) == ("original", "skipped", 29333)
+    clean = torch.randn(2, 32, 50, generator=torch.Generator().manual_seed(9))[:, :, :37]
+    assert torch.equal(audio_out[-1], clean)                            # the kept latents end clean
+    assert full["h3"]["a2v"]["audio_output"] == "original" and full["h3"]["a2v"]["muxed_audio_samples"] == 29333
+    assert full["h3"]["phases"]["denoise"]["mask"]["audio"] == {"rows": 74, "min": 0.0, "max": 0.0}
+
+    half = job(0.5)
+    assert len(builds) == 2 and torch.equal(decoded[-1], audio_out[-1])
+    assert written[-1] is not wave and half["h3"]["a2v"]["audio_output"] == "decoded"
+    assert half["h3"]["phases"]["decode"]["audio_output"] == "decoded"
+    assert "audio_vae_source" not in half["h3"]["phases"]["decode"]
+    assert half["h3"]["a2v"]["muxed_audio_samples"] == min(37 * 800, 29333)
+
+    builds_before = calls["build"]
+    zero = job(0.0)
+    assert calls["build"] == builds_before and "audio_encode" not in zero["h3"]["phases"]
+    assert "mask" not in zero["h3"]["phases"]["denoise"]
+    assert torch.equal(latents[-1], latents[0]) and torch.equal(audio_out[-1], audio_out[0])
+    assert zero["h3"]["a2v"]["audio_output"] == "decoded"

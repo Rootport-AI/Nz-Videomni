@@ -331,8 +331,11 @@ def test_base_model_switch_and_listing_survive_the_round_trip(two_family_client,
     # LTX AlphaGen 第 1 弾 added the second, same direction: ``alpha_gen`` (the
     # matte IC-LoRA is trained for 2.5). Order is the REJECT_TABLE's.
     # VRAM 16GB mode added the third: ``vram16_mode`` (MiniMax H3 only).
+    # H3 single-generate A2V added the fourth: ``source_audio`` (H3 only; LTX
+    # does A2V through the chain's source_audio).
     assert by_id["LTX23"]["unsupported_features"] == [
         "keep_resident_embeddings",
         "alpha_gen",
         "vram16_mode",
+        "source_audio",
     ]

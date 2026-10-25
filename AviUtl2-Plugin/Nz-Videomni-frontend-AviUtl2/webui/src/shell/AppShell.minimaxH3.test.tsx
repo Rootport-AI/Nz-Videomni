@@ -139,14 +139,15 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       expect(screen.getByRole("tab", { name: "Edit" })).toBeDisabled();
       expect(screen.getByRole("tab", { name: "Single" })).not.toBeDisabled();
 
-      // Reference video hidden; A2V greyed with its note.
+      // Reference video hidden. A2V stays OPEN: H3 publishes `source_audio`,
+      // so the card submits through the single `/generate` route.
       expect(within(panel).queryByText("Reference video (IC-LoRA)")).not.toBeInTheDocument();
-      expect(within(panel).getByText(/Generating from an audio track \(A2V\) is not available/)).toBeInTheDocument();
-      // Code review m-4: the A2V card's controls themselves are disabled.
+      expect(within(panel).queryByText(/Generating from an audio track (A2V) is not available/)).not.toBeInTheDocument();
       const a2vCard = within(panel).getByText("Audio to video (A2V)").closest("details") as HTMLElement;
       const a2vButtons = within(a2vCard).getAllByRole("button", { hidden: true });
-      expect(a2vButtons.length).toBeGreaterThan(0);
-      for (const button of a2vButtons) expect(button).toBeDisabled();
+      expect(a2vButtons.some((button) => !(button as HTMLButtonElement).disabled)).toBe(true);
+      // The strength slider (served `constraints.source_audio`) is on the card.
+      expect(within(a2vCard).getByTestId("source-audio-strength")).toBeInTheDocument();
 
       // Negative Prompt accordion greyed with its note; the switch is disabled.
       expect(screen.getByText(/Negative prompts \(NAG\/VSF\) are not available/)).toBeInTheDocument();
@@ -210,7 +211,8 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       await addCapturedKeyframes(user, panel, 2);
       // The strength row is not greyed but absent.
       expect(panel.querySelector(".keyframe-list input[type='range']")).toBeNull();
-      expect(within(panel).queryByText("Strength")).not.toBeInTheDocument();
+      // (Scoped to the keyframe cards: the A2V card has its own Strength slider.)
+      expect(within(panel.querySelector(".keyframe-list") as HTMLElement).queryByText("Strength")).not.toBeInTheDocument();
       expect(within(panel).getByRole("button", { name: /add keyframe/i })).not.toBeDisabled();
     },
     20_000,

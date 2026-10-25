@@ -32,6 +32,7 @@ from api.models import (
     JobResult,
     JobStatus,
     RetakeSpec,
+    SingleSourceAudioSpec,
     SourceAudioSpec,
     SourceVideoSpec,
 )
@@ -93,6 +94,17 @@ def _prompt_for_log(prompt: str, limit: int = _PROMPT_LOG_MAX) -> str:
     if len(text) > limit:
         text = text[:limit] + "..."
     return text
+
+
+def _probe_source_audio(path: Path) -> dict:
+    """ffprobe facts of an uploaded source audio, as metadata["a2v"]["source"]
+    records them (each ``None`` when unmeasured)."""
+    sample_rate, channels = video_io.probe_audio_stream(path)
+    return {
+        "duration_sec": video_io.probe_duration(path),
+        "sample_rate": sample_rate,
+        "channels": channels,
+    }
 
 
 def _loras_for_log(specs, resolved) -> str:
@@ -700,6 +712,23 @@ class PipelineManager:
                 else None
             )
 
+            # Single-generate A2V (MiniMax H3 only; an LTX family's REJECT_TABLE
+            # refused ``source_audio`` before the job was created). The API
+            # layer already checked the upload exists and is long enough; this
+            # re-resolves it for the runner hop and records the app's side of
+            # metadata["a2v"] (which upload, what strength, what ffprobe saw).
+            runner_extra: dict = {}
+            a2v_provenance = None
+            if job.request.source_audio is not None:
+                sa = job.request.source_audio
+                source_audio_path = self.audio_upload_store.path_for(sa.audio_id)
+                runner_extra["source_audio_path"] = source_audio_path
+                a2v_provenance = {
+                    "source_audio_id": sa.audio_id,
+                    "strength": sa.strength,
+                    "source": _probe_source_audio(source_audio_path),
+                }
+
             # Outpainting: build the green-padded canvas and hand THAT to
             # the runner as the reference video. Substituting the path here is
             # what keeps the whole IC-LoRA chain below untouched — the engine's
@@ -966,6 +995,8 @@ class PipelineManager:
                 outpaint_source_path=outpaint_source_path,
                 inpaint_source_path=inpaint_source_path,
                 inpaint_mask_path=inpaint_mask_path,
+                # Only when set: the LTX runners' generate has no such keyword.
+                **runner_extra,
             )
 
             # Alpha Gen post-process: the engine wrote the padded CANVAS. Crop
@@ -1007,6 +1038,7 @@ class PipelineManager:
                 delivered_size=inpaint_source_size or alpha_source_size,
                 inpaint_provenance=inpaint_provenance,
                 alpha_provenance=alpha_provenance,
+                a2v_provenance=a2v_provenance,
             )
 
             if job.cancel_requested:
@@ -1280,6 +1312,45 @@ class PipelineManager:
                     f"timeline @ {frame_rate} fps"
                 )
             )
+
+    def preflight_single_source_audio(
+        self,
+        source_audio: SingleSourceAudioSpec,
+        num_frames: int,
+        frame_rate: float,
+    ) -> dict:
+        """Validate a single ``POST /generate``'s source audio (MiniMax H3 A2V)
+        BEFORE a job is created.
+
+        Resolves the ``audio_id`` (the endpoint 404s first) and ffprobes the
+        stored file. Compared in seconds (the audio-latent geometry is the
+        engine's, engine_h3/constants.py): the audio must last at least the
+        video, ``num_frames / frame_rate``, with 1 ms of slack (the engine pads
+        up to 32 samples). Video length is authoritative — longer audio is
+        truncated, never padded. An unmeasurable duration is left to the
+        engine's own length guard. Returns the ffprobe facts
+        ``{"duration_sec", "sample_rate", "channels"}`` (each ``None`` when
+        unmeasured). The chain's :meth:`preflight_source_audio` is separate.
+        """
+        src_path = self.audio_upload_store.path_for(source_audio.audio_id)
+        if not video_io.has_audio_stream(src_path):
+            raise source_audio_too_short(
+                detail=(
+                    f"アップロードされた音声（{source_audio.audio_id}）に"
+                    "読み取れる音声の流れがありません。"
+                )
+            )
+        facts = _probe_source_audio(src_path)
+        duration = facts["duration_sec"]
+        needed = num_frames / float(frame_rate)
+        if duration is not None and duration + 0.001 < needed:
+            raise source_audio_too_short(
+                detail=(
+                    f"音声が {duration:.3f} 秒しかありません。{num_frames} フレーム"
+                    f"（{frame_rate:g} fps）の映像には {needed:.3f} 秒以上の音声が必要です。"
+                )
+            )
+        return facts
 
     # -------------------------------------------------------- run chain job
 
@@ -1809,6 +1880,7 @@ class PipelineManager:
         delivered_size: tuple[int, int] | None = None,
         inpaint_provenance: dict | None = None,
         alpha_provenance: dict | None = None,
+        a2v_provenance: dict | None = None,
     ) -> JobResult:
         req = job.request
         if delivered_size is not None:
@@ -1839,6 +1911,7 @@ class PipelineManager:
                 elapsed=elapsed,
                 inpaint_provenance=inpaint_provenance,
                 alpha_provenance=alpha_provenance,
+                a2v_provenance=a2v_provenance,
             )
 
         return JobResult(
@@ -1854,7 +1927,7 @@ class PipelineManager:
 
     def _write_metadata(
         self, *, job, outcome, metadata_path, resolution, duration, file_size, elapsed,
-        inpaint_provenance=None, alpha_provenance=None,
+        inpaint_provenance=None, alpha_provenance=None, a2v_provenance=None,
     ) -> None:
         req = job.request
         metadata = {
@@ -1955,9 +2028,32 @@ class PipelineManager:
             metadata["ltx25"] = outcome.ltx25
         # MiniMax H3 engine facts (additive, the ``ltx25`` precedent): only
         # present on a real H3 generation, so an LTX (or mock) job carries no
-        # ``h3`` key.
-        if outcome.h3 is not None:
-            metadata["h3"] = outcome.h3
+        # ``h3`` key. An A2V job's engine record (``done.h3.a2v``) is lifted out
+        # into ``metadata["a2v"]`` below, and ``h3`` is written only if anything
+        # is left (a mock A2V job has nothing else). A job without ``a2v``
+        # writes ``outcome.h3`` exactly as before.
+        h3_facts = outcome.h3
+        a2v_engine = None
+        if h3_facts is not None and "a2v" in h3_facts:
+            h3_facts = dict(h3_facts)
+            a2v_engine = h3_facts.pop("a2v")
+            if not h3_facts:
+                h3_facts = None
+        if h3_facts is not None:
+            metadata["h3"] = h3_facts
+        # Single-generate A2V (additive, MiniMax H3 only): the ENGINE's record
+        # (mask_value, audio_latents, required_samples, encoded_samples,
+        # channels_used, resampler, encoder_tensors, audio_output,
+        # muxed_audio_samples; ``mock`` on the mock backend) merged with the
+        # APP's provenance (source_audio_id, strength, source{duration_sec,
+        # sample_rate, channels}) — the inpaint precedent below. The two key
+        # sets are disjoint by construction, so neither side overwrites the
+        # other.
+        if a2v_provenance is not None or a2v_engine is not None:
+            metadata["a2v"] = {
+                **(a2v_engine or {}),
+                **(a2v_provenance or {}),
+            }
         # Inpainting (additive): only present when an inpaint was requested, so
         # every other job carries no ``inpaint`` key.
         # The ENGINE's own block (geometry, blend settings, VRAM peaks, the

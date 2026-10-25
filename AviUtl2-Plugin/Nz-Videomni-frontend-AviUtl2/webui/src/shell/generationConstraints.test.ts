@@ -116,6 +116,14 @@ describe("generationConstraints", () => {
     expect(resolveGenerationConstraints(older).keyframeGrid).toEqual({ step: 8, offset: 1 });
   });
 
+  it("copies the served source_audio rule; absent or null (LTX, the fallback) means no single-clip A2V", () => {
+    const rule = { strength: { min: 0, max: 1, step: 0.05, default: 1 } };
+    expect(resolveGenerationConstraints({ ...H3, source_audio: rule }).singleSourceAudio).toEqual(rule);
+    expect(resolveGenerationConstraints({ ...H3, source_audio: null }).singleSourceAudio).toBeNull();
+    expect(resolveGenerationConstraints(H3).singleSourceAudio).toBeNull();
+    expect(LTX_GENERATION_CONSTRAINTS.singleSourceAudio).toBeNull();
+  });
+
   it("reads the served prompt-token limit; null (H3) and the fallback have none", () => {
     expect(resolveGenerationConstraints({ ...LTX, prompt_token_limit: 1024 }).promptTokenLimit).toBe(1024);
     expect(resolveGenerationConstraints({ ...H3, prompt_token_limit: null }).promptTokenLimit).toBeNull();

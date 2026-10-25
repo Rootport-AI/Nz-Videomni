@@ -31,9 +31,9 @@ Stages (``progress`` names are the app's shared vocabulary):
    Each step: video rows and audio rows get their own t = 1 - sigma (the
    job's ``shift_video`` / ``shift_audio``, same step index); text rows share
    the video t and the I2V condition rows carry ``max(t_video, 0.999)``; the
-   distinct values (at most 3) are numbered with ``torch.unique`` (fewer when
-   values coincide, e.g. M = 1 at step 0 of a T2V job, where both sigmas are 1)
-   and each row's AdaLN row is ``number * 3 + modality``.
+   distinct values (at most 3 without a mask) are numbered with ``torch.unique``
+   (fewer when values coincide, e.g. M = 1 at step 0 of a T2V job, where both
+   sigmas are 1) and each row's AdaLN row is ``number * 3 + modality``.
    VRAM 16GB mode (``vram16_mode``, ``engine_h3.lowvram``; Docs/MINIMAX_H3_DESIGN.md
    §6.5): the activations are cut into head groups and row chunks, the
    allocator is capped for the denoise (the cap is derived at run time from
@@ -41,6 +41,16 @@ Stages (``progress`` names are the app's shared vocabulary):
    refiner and ``condition_proj`` leave the GPU after ``refine_text`` (to the
    CPU for a kept DiT, to meta otherwise). Off, this stage is as described above.
 3. ``decode``: the video VAE's decoder, then the audio VAE, then the mp4.
+
+A2V (``source_audio``, Docs/MINIMAX_H3_DESIGN.md §3.1, 台帳 §1-103): the source
+waveform is read (32 kHz, 2 channels; ``engine_h3.source_audio``) before the
+text encoder; after it (and after any key frame) the audio VAE's encoder,
+built for this job only in float32 (``audio_encode`` in the phases, one more
+step of the ``encode`` stage), turns it into the clean audio latents. The
+denoise keeps them through a per-row mask of value ``m = 1 - strength``
+(``engine_h3.denoise_mask``; strength 0 = no mask, nothing encoded). At
+strength 1.0 the decode skips the audio VAE and muxes the source waveform
+itself; below 1.0 the generated audio latents are decoded as usual.
 
 I2V (Docs/MINIMAX_H3_DESIGN.md §3): the key frames (any pixel frames 0..F-1,
 sorted by frame) are put onto the canvas (cover + centre crop,
@@ -72,6 +82,7 @@ from __future__ import annotations
 import gc
 import logging
 import math
+import os
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -83,6 +94,7 @@ import h3_format
 import sft_quant_format
 from engine_h3.constants import (
     ATTENTION_BACKENDS,
+    AUDIO_HOP,
     AUDIO_SAMPLE_RATE,
     DEFAULT_SHIFT_AUDIO,
     DEFAULT_SHIFT_VIDEO,
@@ -153,6 +165,18 @@ class H3LoraInput:
     strength: float = 1.0
 
 
+@dataclass(frozen=True)
+class H3AudioInput:
+    """The A2V source audio: a file and how strongly its latents are kept (台帳 §1-103).
+
+    ``strength`` 0..1: the audio rows' mask value is ``1 - strength`` (1.0 = kept
+    as is and the file's waveform goes into the mp4; 0.0 = no effect).
+    """
+
+    path: str
+    strength: float = 0.5
+
+
 @dataclass
 class H3GenerateRequest:
     prompt: str
@@ -177,6 +201,8 @@ class H3GenerateRequest:
     vram16_mode: bool = False
     #: LoRA files applied to the DiT for this job only (engine_h3.lora); () = none.
     loras: tuple[H3LoraInput, ...] = ()
+    #: A2V (台帳 §1-103): the source audio; ``None`` = T2V / I2V as before.
+    source_audio: H3AudioInput | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -231,6 +257,18 @@ def validate_request(req: H3GenerateRequest) -> None:
             # The header only: a missing or broken file is refused here, before
             # the text encoder runs (the keys themselves never refuse a job).
             inspect_lora_file(lora.path)
+    audio = req.source_audio
+    if audio is not None:
+        if not str(audio.path or "").strip():
+            raise ValueError("音声のファイルのパスが空です")
+        if not os.path.isfile(str(audio.path)):
+            raise ValueError(f"音声のファイルが見つかりません（{audio.path}）")
+        try:
+            s = float(audio.strength)
+        except (TypeError, ValueError):
+            raise ValueError(f"音声の強度は数値で渡してください（{audio.strength!r}）") from None
+        if not (math.isfinite(s) and 0.0 <= s <= 1.0):
+            raise ValueError(f"音声の強度は 0〜1 にしてください（{audio.strength}）")
 
 
 def require_fp32_matmul() -> None:
@@ -254,7 +292,10 @@ def require_fp32_matmul() -> None:
         )
 
 
-def time_rows(layout, t_video: float, t_audio: float, device=None) -> tuple[torch.Tensor, torch.Tensor]:
+def time_rows(
+    layout, t_video: float, t_audio: float, device=None, *,
+    audio_t: torch.Tensor | None = None, video_t: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Per-row t -> ``(t_unique [M] f32, time_index [S] long)``.
 
     Text and video rows carry the video t, audio rows the audio t, the
@@ -262,9 +303,18 @@ def time_rows(layout, t_video: float, t_audio: float, device=None) -> tuple[torc
     pipelines/minimax_h3_audio_video.py:1006-1021). ``unique`` sorts, so the
     numbering is by value, as in the reference; T2V has no condition rows, so
     only the video and audio values are numbered.
+
+    ``audio_t`` / ``video_t``: per-row times of a masked stream
+    (``engine_h3.denoise_mask.masked_row_times``, rows in sequence order) that
+    replace that stream's value; the text rows keep the video t. None (the
+    default) leaves the rows as above. The condition rows are set last either way.
     """
     t = torch.full((layout.total,), float(t_video), dtype=torch.float32, device=device)
     t[layout.audio] = float(t_audio)
+    if audio_t is not None:
+        t[layout.audio] = audio_t.to(device=t.device, dtype=torch.float32)
+    if video_t is not None:
+        t[layout.video] = video_t.to(device=t.device, dtype=torch.float32)
     t[layout.cond] = max(float(t_video), KEYFRAME_NOISE_AUG)
     t_unique, time_index = torch.unique(t, sorted=True, return_inverse=True)
     return t_unique, time_index.to(torch.long)
@@ -286,6 +336,12 @@ def noisy_condition(cond_clean: torch.Tensor, frame_rows: int, generator: torch.
     noise = noise.to(device if device is not None else cond_clean.device).repeat(blocks, 1)
     clean = cond_clean.to(noise.device, torch.float32)
     return KEYFRAME_NOISE_AUG * clean + (1.0 - KEYFRAME_NOISE_AUG) * noise
+
+
+def encode_steps(*, has_cond: bool, has_audio: bool) -> int:
+    """The ``encode`` stage's step count: the text encoder's 3, then one for the key
+    frames' VAE encode (any key frame) and one for the source audio's encode (A2V)."""
+    return 3 + int(bool(has_cond)) + int(bool(has_audio))
 
 
 def modality_rows(layout, text_tags: torch.Tensor) -> torch.Tensor:
@@ -572,6 +628,7 @@ class H3Pipeline:
         phases = _Phases(cuda=self.device.type == "cuda")
         ok = False
         lora_report: list[dict] = []
+        a2v: dict = {}
         try:
             # Inside the try: a job refused here is a failed job and releases
             # what is kept, like any other. Still before the text encoder, so a
@@ -595,31 +652,75 @@ class H3Pipeline:
             # key frame gets condition rows only (MINIMAX_H3_DESIGN 裁定 59, §3).
             last = int(req.num_frames) - 1
             vision_images = [c for n, c in zip(cond_frame_idx, canvases) if n in (0, last)]
+            # A2V: the source waveform is read here, still before the text
+            # encoder, so a short or unreadable file costs no model read.
+            source = req.source_audio
+            wave = None
+            strength = 0.0
+            a_lat = audio_latents(int(req.num_frames))
+            if source is not None:
+                from engine_h3.source_audio import load_source_waveform  # noqa: PLC0415
+
+                strength = float(source.strength)
+                required = round(int(req.num_frames) * AUDIO_SAMPLE_RATE / int(req.frame_rate))
+                wave, wave_info = load_source_waveform(
+                    source.path, keep_samples=required, read_samples=a_lat * AUDIO_HOP + AUDIO_SAMPLE_RATE,
+                )
+                a2v.update({
+                    "mask_value": 1.0 - strength,
+                    "audio_latents": int(a_lat),
+                    "required_samples": int(required),
+                    "encoded_samples": 0,
+                    "channels_used": wave_info.get("channels_used"),
+                    "resampler": wave_info.get("resampler"),
+                    "encoder_tensors": None,
+                })
+            # Strength 0 is mask value 1 everywhere: no effect, so nothing is encoded.
+            encode_audio = wave is not None and strength > 0.0
+            encode_total = encode_steps(has_cond=bool(canvases), has_audio=encode_audio)
             with torch.no_grad():
                 with phases.phase("encode") as entry:
                     text_hidden, text_tags = self._encode(
                         req.prompt, phases, images=vision_images, has_cond=bool(canvases),
+                        has_audio=encode_audio,
                     )
                     entry["text_tokens"] = int(text_hidden.shape[0])
                 cond_clean = None
                 if canvases:
                     with phases.phase("image_encode") as entry:
-                        cond_clean = self._encode_image(canvases, entry)
+                        cond_clean = self._encode_image(canvases, entry, 4, encode_total)
                         entry["vision_tokens"] = int(phases.data["encode"].get("te_read", {}).get("vision_tokens", 0))
                         entry["canvas"] = [int(req.width), int(req.height)]
                         entry["source_size"] = source_size
                 del canvases, vision_images
+                audio_fix = None
+                if encode_audio:
+                    with phases.phase("audio_encode") as entry:
+                        clean_audio = self._encode_audio(wave, a_lat, entry, encode_total, encode_total)
+                    a2v["encoded_samples"] = entry["encoded_samples"]
+                    a2v["encoder_tensors"] = entry["encoder_tensors"]
+                    audio_fix = (clean_audio, torch.full((a_lat,), 1.0 - strength, dtype=torch.float32))
+                    del clean_audio
                 with phases.phase("denoise") as entry:
                     video_lat, audio_lat, prefetch_used = self._denoise(
                         req, text_hidden, text_tags, phases, entry,
                         cond_clean=cond_clean, cond_frame_idx=cond_frame_idx, keep=keep,
-                        lora_report=lora_report,
+                        lora_report=lora_report, audio_fix=audio_fix,
                     )
-                del text_hidden, text_tags, cond_clean
+                del text_hidden, text_tags, cond_clean, audio_fix
                 _free_cuda()
                 with phases.phase("decode") as entry:
-                    size_bytes = self._decode(req, video_lat, audio_lat, entry, keep=keep)
-                del video_lat, audio_lat
+                    # Strength 1.0 keeps the audio latents as they are: the mp4
+                    # gets the source waveform itself, not its decoded copy.
+                    source_wave = wave if (wave is not None and strength == 1.0) else None
+                    size_bytes = self._decode(req, video_lat, audio_lat, entry, keep=keep, source_wave=source_wave)
+                    if source is not None:
+                        # Only for an A2V job: every other job's decode record is unchanged.
+                        entry["audio_output"] = "original" if source_wave is not None else "decoded"
+                        a2v["audio_output"] = entry["audio_output"]
+                        a2v["muxed_audio_samples"] = entry.get("audio_samples")
+                    del source_wave
+                del video_lat, audio_lat, wave
             ok = True
         finally:
             if not (ok and keep):
@@ -633,6 +734,8 @@ class H3Pipeline:
         h3 = {"phases": phases.data, "quant_backends": _backend_summary(self.quant_backends)}
         if req.loras:
             h3["loras"] = lora_report   # only for a LoRA job: the LoRA-off payload is unchanged
+        if req.source_audio is not None:
+            h3["a2v"] = a2v             # only for an A2V job, the same way
         return {
             "seed_used": int(req.seed),
             "sampler": self.sampler,
@@ -669,19 +772,21 @@ class H3Pipeline:
     # -- stage 1: encode ---------------------------------------------------------
 
     def _encode(
-        self, prompt: str, phases: _Phases, images=(), *, has_cond: bool
+        self, prompt: str, phases: _Phases, images=(), *, has_cond: bool, has_audio: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """The text encoder's one forward. ``images``: the canvases the vision
         tower reads (the first / last key frame); ``has_cond``: whether the job
-        has any key frame at all, which decides the stage's step count."""
+        has any key frame at all; ``has_audio``: whether it encodes a source
+        audio (A2V). Together they decide the stage's step count."""
         from engine_h3.text_encoder import H3TextEncoder  # noqa: PLC0415
 
         images = list(images)
         te = H3TextEncoder(self.paths.text_encoder, self.paths.tokenizer_dir, device=self.device)
         # A job with any key frame adds a 4th step to the same stage: the key
         # frames' VAE encode (also when none of them goes to the vision tower,
-        # so a middle-only job never shows 3/3 then 4/4).
-        total = 4 if has_cond else 3
+        # so a middle-only job never shows 3/3 then 4/4); an A2V job adds one
+        # more after it, the source audio's encode.
+        total = encode_steps(has_cond=has_cond, has_audio=has_audio)
         self._progress("encode", 0, total)
         try:
             info = te.load()
@@ -703,13 +808,14 @@ class H3Pipeline:
         )
         return hidden, tags
 
-    def _encode_image(self, images, entry: dict) -> torch.Tensor:
+    def _encode_image(self, images, entry: dict, index: int, total: int) -> torch.Tensor:
         """The key frames (in order) -> their clean condition rows ``[K * grid, 96]``
         float32 on the device, one block of ``grid`` rows per key frame.
 
         The video VAE's encoder is built once for this job only, in float32,
         encodes the frames one at a time, and is dropped before the DiT is
-        built -- it is never kept.
+        built -- it is never kept. ``index`` / ``total``: this step of the
+        ``encode`` stage and the stage's step count.
         """
         from engine_h3.dit import patchify_video  # noqa: PLC0415
         from engine_h3.image_cond import canvas_to_tensor  # noqa: PLC0415
@@ -729,8 +835,40 @@ class H3Pipeline:
             del enc
             _free_cuda()
         rows = torch.cat(blocks, dim=0)
-        self._progress("encode", 4, 4)
+        self._progress("encode", index, total)
         return rows
+
+    def _encode_audio(self, wave: torch.Tensor, a_lat: int, entry: dict, index: int, total: int) -> torch.Tensor:
+        """The source waveform ``[2, N]`` float32 (32 kHz) -> its clean audio latents
+        ``[2, 32, a_lat]`` float32 on the device (A2V, 台帳 §1-103).
+
+        The first ``min(N, a_lat * 800 + 32000)`` samples are encoded (about one
+        second past the video: the encoder's attention is causal, so only the
+        convolutions' receptive field looks ahead) and the latents are cut to
+        ``a_lat``. Same manners as :meth:`_encode_image`: the audio VAE's
+        encoder is built for this job only, in float32, encodes once, and is
+        dropped before the DiT is built -- it is never kept. ``index`` /
+        ``total``: this step of the ``encode`` stage and the stage's step count.
+        """
+        from engine_h3.audio_vae import H3AudioEncoder  # noqa: PLC0415
+
+        samples = min(int(wave.shape[-1]), int(a_lat) * AUDIO_HOP + AUDIO_SAMPLE_RATE)
+        enc = H3AudioEncoder.from_file(self.paths.audio_vae, device=self.device)
+        try:
+            report = getattr(enc, "load_report", None)
+            entry["encoder_tensors"] = None if report is None else int(report.loaded)
+            z = enc.encode(wave[:, :samples].to(device=self.device, dtype=torch.float32))
+        finally:
+            del enc
+            _free_cuda()
+        if z.dim() != 3 or tuple(z.shape[:2]) != (2, 32) or int(z.shape[2]) < int(a_lat):
+            raise RuntimeError(f"audio encode: unexpected latent shape {list(z.shape)} for {a_lat} latents")
+        clean = z[:, :, :int(a_lat)].to(torch.float32).contiguous()
+        entry["encoded_samples"] = int(samples)
+        entry["latent_shape"] = [int(v) for v in z.shape]
+        del z
+        self._progress("encode", index, total)
+        return clean
 
     # -- stage 2: denoise (progress ``stage1_denoise``) --------------------------
 
@@ -915,7 +1053,24 @@ class H3Pipeline:
     def _denoise(
         self, req, text_hidden, text_tags, phases: _Phases, entry: dict,
         cond_clean=None, cond_frame_idx=(), keep=False, lora_report=None,
+        audio_fix=None, video_fix=None,
     ):
+        """The step loop. ``audio_fix`` / ``video_fix``: ``(clean latent, one mask
+        value per audio latent / per latent frame)`` for a stream whose rows are
+        (partly) kept (``engine_h3.denoise_mask``; Docs/MINIMAX_H3_DESIGN.md §3.1);
+        None = generated as usual. The masks are built after the noise is drawn
+        (the video mask reuses the initial video noise), so the draws and their
+        order do not depend on them."""
+        from engine_h3.denoise_mask import (  # noqa: PLC0415
+            AUDIO_TIME_CAP,
+            VIDEO_TIME_CAP,
+            audio_mask,
+            dit_input,
+            finish,
+            masked_row_times,
+            state_velocity,
+            video_mask,
+        )
         from engine_h3.dit import (  # noqa: PLC0415
             H3SeqLayout,
             audio_to_rows,
@@ -1000,6 +1155,18 @@ class H3Pipeline:
             cond = None
             if cond_clean is not None:
                 cond = noisy_condition(cond_clean, gh * gw, gen, device=dev)
+            # Per-row masks (A2V / V2A): built from what was drawn above, no new draw.
+            am = vm = None
+            if audio_fix is not None:
+                clean_a = audio_fix[0]
+                if tuple(clean_a.shape) != tuple(audio.shape):
+                    raise RuntimeError(f"denoise: clean audio {list(clean_a.shape)}, expected {list(audio.shape)}")
+                am = audio_mask(clean_a.to(dev), audio_fix[1])
+            if video_fix is not None:
+                clean_v = video_fix[0]
+                if tuple(clean_v.shape) != tuple(video.shape):
+                    raise RuntimeError(f"denoise: clean video {list(clean_v.shape)}, expected {list(video.shape)}")
+                vm = video_mask(clean_v.to(dev), video_fix[1], grid=gh * gw, noise=video)
 
             sig_v = sigma_schedule(steps, float(req.shift_video))
             sig_a = sigma_schedule(steps, float(req.shift_audio))
@@ -1013,11 +1180,18 @@ class H3Pipeline:
             for i in range(steps):
                 t_v = 1.0 - float(sig_v[i])
                 t_a = 1.0 - float(sig_a[i])
-                t_unique, time_index = time_rows(layout, t_v, t_a, device=dev)
+                t_unique, time_index = time_rows(
+                    layout, t_v, t_a, device=dev,
+                    audio_t=None if am is None else masked_row_times(t_a, float(sig_a[i]), am.rows, AUDIO_TIME_CAP),
+                    video_t=None if vm is None else masked_row_times(t_v, float(sig_v[i]), vm.rows, VIDEO_TIME_CAP),
+                )
                 m_per_step.append(int(t_unique.numel()))
                 # The condition rows go in unchanged at every step (they are not
                 # part of the denoised state, so nothing ever updates them).
-                tokens = dit.embed_rows(text_refined, audio_to_rows(audio), patchify_video(video), cond_rows=cond)
+                tokens = dit.embed_rows(
+                    text_refined, audio_to_rows(dit_input(audio, am)), patchify_video(dit_input(video, vm)),
+                    cond_rows=cond,
+                )
                 box = None
                 if vram16 is not None:
                     # Handed over in a box: no name here keeps the embedding alive.
@@ -1037,12 +1211,23 @@ class H3Pipeline:
                 del tokens
                 v_video = unpatchify_video(v_video_rows.to(dev), t_lat, gh, gw)
                 v_audio = rows_to_audio(v_audio_rows.to(dev), a_lat)
+                v_video = state_velocity(v_video, video, vm, float(sig_v[i]))
+                v_audio = state_velocity(v_audio, audio, am, float(sig_a[i]))
                 video = euler_step(video, v_video, float(sig_v[i]), float(sig_v[i + 1]))
                 audio = euler_step(audio, v_audio, float(sig_a[i]), float(sig_a[i + 1]))
                 del v_video_rows, v_audio_rows, v_video, v_audio
                 self._progress("stage1_denoise", i + 1, steps)
             entry["m_per_step"] = m_per_step
             entry["block_swap_prefetch_used"] = prefetch_used
+            # The kept (m = 0) rows end as their clean latent exactly.
+            audio = finish(audio, am)
+            video = finish(video, vm)
+            if am is not None or vm is not None:
+                # Only for a masked job: the payload of every other job is unchanged.
+                entry["mask"] = {
+                    name: {"rows": int(mask.rows.numel()), "min": float(mask.rows.min()), "max": float(mask.rows.max())}
+                    for name, mask in (("audio", am), ("video", vm)) if mask is not None
+                }
             if not (torch.isfinite(video).all() and torch.isfinite(audio).all()):
                 raise RuntimeError("denoise: 潜在に NaN／Inf が出ました（数値が発散しています）")
             ok = True
@@ -1083,7 +1268,13 @@ class H3Pipeline:
 
     # -- stage 3: decode ---------------------------------------------------------
 
-    def _decode(self, req, video_lat: torch.Tensor, audio_lat: torch.Tensor, entry: dict, keep=False) -> int:
+    def _decode(
+        self, req, video_lat: torch.Tensor, audio_lat: torch.Tensor, entry: dict, keep=False, source_wave=None,
+    ) -> int:
+        """Video decoder, audio VAE, mp4. ``source_wave`` (A2V at strength 1.0):
+        the source waveform ``[2, N]`` float32 goes into the mp4 instead of the
+        decoded audio, and the audio VAE is neither built nor touched (a kept
+        one stays as it is)."""
         from engine_h3.audio_vae import H3AudioVAE  # noqa: PLC0415
         from engine_h3.media_out import audio_keep_samples, write_mp4  # noqa: PLC0415
         from engine_h3.video_vae import H3VideoDecoder  # noqa: PLC0415
@@ -1111,21 +1302,25 @@ class H3Pipeline:
             raise RuntimeError(f"decode: {frames.shape[0]} frames decoded, {req.num_frames} expected")
         self._progress("decode", 1, 3)
 
-        avae = resident.get("audio_vae")
-        if avae is None:
-            avae = H3AudioVAE.from_file(self.paths.audio_vae, device=self.device)
+        if source_wave is not None:
+            wav = source_wave
+            entry["audio_vae_source"] = "skipped"
         else:
-            avae.to(self.device)
-        try:
-            wav = avae.decode(audio_lat).float().cpu()
-        finally:
-            if keep:
-                avae.to("cpu")
-                self._resident = {**(self._resident or {}), "audio_vae": avae}
-            elif self._resident is not None:
-                self._resident.pop("audio_vae", None)
-            del avae
-            _free_cuda()
+            avae = resident.get("audio_vae")
+            if avae is None:
+                avae = H3AudioVAE.from_file(self.paths.audio_vae, device=self.device)
+            else:
+                avae.to(self.device)
+            try:
+                wav = avae.decode(audio_lat).float().cpu()
+            finally:
+                if keep:
+                    avae.to("cpu")
+                    self._resident = {**(self._resident or {}), "audio_vae": avae}
+                elif self._resident is not None:
+                    self._resident.pop("audio_vae", None)
+                del avae
+                _free_cuda()
         self._progress("decode", 2, 3)
 
         # write_mp4 creates the output folder (one place for that).
@@ -1135,7 +1330,10 @@ class H3Pipeline:
         entry["audio_samples"] = int(audio_keep_samples(
             int(wav.shape[-1]), num_frames=int(frames.shape[0]), fps=int(req.frame_rate), sample_rate=AUDIO_SAMPLE_RATE,
         ))
-        entry["audio_samples_decoded"] = int(wav.shape[-1])
+        if source_wave is None:
+            entry["audio_samples_decoded"] = int(wav.shape[-1])
+        else:
+            entry["audio_samples_source"] = int(wav.shape[-1])
         entry["frames"] = int(frames.shape[0])
         self._progress("decode", 3, 3)
         return size

@@ -1,0 +1,47 @@
+{
+  "input": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\実験の成功、楽しみにしていますね.wav",
+  "source": {
+    "source_sample_rate": 44100,
+    "source_channels": 1,
+    "decoded_samples": 124356,
+    "padded_samples": 0,
+    "channels_used": "mono->stereo",
+    "resampler": "pyav"
+  },
+  "samples_32k": 124356,
+  "latents": [
+    2,
+    32,
+    156
+  ],
+  "encoder_load": {
+    "loaded": 134,
+    "skipped_total": 783,
+    "skipped_logs_proj": [
+      "logs_proj.bias",
+      "logs_proj.weight"
+    ],
+    "skipped_stats": [
+      "latents_mean",
+      "latents_std"
+    ],
+    "skipped_decoder": 779,
+    "skipped_other": [],
+    "meta_left": []
+  },
+  "rms_ref": 0.053076844973626296,
+  "rms_rec": 0.05322485950791956,
+  "rms_ratio_db": 0.024188487791950045,
+  "wave_corr_lag0": 0.97936403819444,
+  "wave_corr_best": 0.97936403819444,
+  "wave_corr_best_lag": 0,
+  "stft_mag_corr": 0.993278639791204,
+  "channels_identical_in_rec": false,
+  "seconds": {
+    "encode_incl_load": 1.3,
+    "decode_incl_load": 2.1
+  },
+  "pass_weights": true,
+  "pass_metrics": true,
+  "pass": true
+}

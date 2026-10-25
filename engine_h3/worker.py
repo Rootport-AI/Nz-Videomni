@@ -41,8 +41,8 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
-   [vram16_mode], [loras]}
-      One T2V or I2V job. Omitted steps / shifts take the engine defaults
+   [vram16_mode], [loras], [source_audio]}
+      One T2V, I2V or A2V job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
       else is refused with a reason. Keys this
@@ -52,8 +52,13 @@ Protocol (one JSON object per line; parent -> worker):
       releases them. ``vram16_mode`` true runs the denoise in VRAM 16GB mode
       (``engine_h3.lowvram``; absent / null = off here, the app sends it every
       job). ``loras``: [] or ``{"path", "strength"}`` entries (``engine_h3.lora``;
-      strength defaults to 1.0; the app sends the key every job). A failure is
-      reported with ``error`` and the process stays alive.
+      strength defaults to 1.0; the app sends the key every job).
+      ``source_audio`` (A2V, 台帳 §1-103): absent / null = T2V / I2V as before, else
+      ``{"path", "strength"}`` (``strength`` 0..1, defaults to 0.5; the file's
+      waveform is encoded to the audio latents and, at strength 1.0, muxed into
+      the mp4; ``engine_h3.pipeline_h3.H3AudioInput``). Unknown inner keys are
+      logged once and ignored. A failure is reported with ``error`` and the
+      process stays alive.
   {"op": "shutdown"}
   Before load an unknown op is only logged (an ``error`` there would be read
   as the reply to the next ``load``); after load it is answered with ``error``.
@@ -63,16 +68,22 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
   progress  {stage, index, total}   stage: encode / stage1_denoise / decode
             (there is no stage2: the app adapter, services/engines/h3/adapter.py,
             reads these with ``_read_worker_events(one_stage=True)``, as Alpha
-            Gen does; ``encode`` counts 4 steps when the job has any key
-            frame, 3 otherwise)
+            Gen does; ``encode`` counts 3 steps, +1 when the job has any
+            key frame, +1 when it has a source_audio; the audio encoding is
+            one ``encode`` step, and ``audio_encode`` is only a phase name in
+            ``done.h3.phases``, not a progress stage)
   done      {seed_used, sampler, num_inference_steps, shift_video, shift_audio,
              peak_vram_mb, peak_vram_reserved_mb, rss_peak_gib, commit_gib,
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
              block_swap_prefetch_used, keep_resident_used, vram16_mode_used,
-             images_used, h3: {phases, quant_backends, [loras]}}
+             images_used, h3: {phases, quant_backends, [loras], [a2v]}}
             (``h3.loras`` only for a job with LoRA: one entry per file, its
-            name, strength, layout, dtype, pairs_applied and skipped)
+            name, strength, layout, dtype, pairs_applied and skipped;
+            ``h3.a2v`` only for an A2V job, passed through from the pipeline:
+            mask_value, audio_latents, required_samples, encoded_samples,
+            channels_used, resampler, encoder_tensors, audio_output,
+            muxed_audio_samples)
   error     {detail}
 STDERR carries the human log, prefixed ``[h3_worker]``.
 
@@ -83,7 +94,8 @@ Selftest:
        --shift-video 12 --shift-audio 3 --rounds 1 --report r.json
        --attention-backend sdpa|sage --blocks-on-gpu 8 --prefetch|--no-prefetch
        --deterministic --image P --keyframe FRAME=PATH ... --keep-resident
-       --vram16|--no-vram16 --lora PATH ... --lora-strength 1.0]
+       --vram16|--no-vram16 --lora PATH ... --lora-strength 1.0
+       --source-audio PATH --audio-strength 0.5]
 """
 
 import os
@@ -166,12 +178,14 @@ _GENERATE_FIELDS = frozenset({
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
-    "vram16_mode", "loras",
+    "vram16_mode", "loras", "source_audio",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
 #: The keys of one ``loras`` entry this engine reads (``audio_strength`` is an LTX notion).
 _LORA_FIELDS = frozenset({"path", "strength"})
+#: The keys of ``source_audio`` this engine reads.
+_SOURCE_AUDIO_FIELDS = frozenset({"path", "strength"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -313,13 +327,45 @@ def _loras(msg: dict) -> tuple[tuple, list[str]]:
     return tuple(out), sorted(ignored)
 
 
-def _generate_request(msg: dict, images: tuple | None = None, loras: tuple | None = None):
+def _source_audio(msg: dict) -> tuple:
+    """``source_audio`` -> ``(H3AudioInput | None, ignored inner keys)``.
+
+    Absent / null = no A2V. The shape (an object with a non-empty string
+    ``path`` and a finite number ``strength``) is checked here; the 0..1 range
+    and the file itself are the pipeline's ``validate_request``.
+    """
+    import math  # noqa: PLC0415
+
+    from engine_h3.pipeline_h3 import H3AudioInput  # noqa: PLC0415
+
+    raw = msg.get("source_audio")
+    if raw is None:
+        return None, []
+    if not isinstance(raw, dict):
+        raise ValueError(f"source_audio はオブジェクトで渡してください（{type(raw).__name__}）")
+    path = raw.get("path")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError(f"source_audio には空でない文字列の path が必要です（{path!r}）")
+    strength = raw.get("strength")
+    if strength is None:
+        strength = 0.5
+    elif isinstance(strength, bool) or not isinstance(strength, (int, float)) or not math.isfinite(strength):
+        raise ValueError(f"source_audio の strength は有限の数値で渡してください（{strength!r}）")
+    ignored = sorted(k for k in raw if k not in _SOURCE_AUDIO_FIELDS)
+    return H3AudioInput(path=path, strength=float(strength)), ignored
+
+
+def _generate_request(
+    msg: dict, images: tuple | None = None, loras: tuple | None = None, source_audio=None,
+):
     """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent).
 
     ``attention_backend`` is left as sent (``None`` = the load value); the
     worker resolves it per job before the pipeline runs. ``images``: the
     already parsed ``images`` (``_do_generate`` parses them once, for the
     ignored-keys log too); parsed here when not given. ``loras``: the same.
+    ``source_audio``: the already parsed ``H3AudioInput``; ``None`` falls back to
+    parsing the message (a message without the key stays T2V / I2V).
     """
     from engine_h3.pipeline_h3 import H3GenerateRequest  # noqa: PLC0415
 
@@ -330,6 +376,8 @@ def _generate_request(msg: dict, images: tuple | None = None, loras: tuple | Non
         images, _ignored = _images(msg)
     if loras is None:
         loras, _ignored = _loras(msg)
+    if source_audio is None:
+        source_audio, _ignored = _source_audio(msg)
     return H3GenerateRequest(
         prompt=str(msg["prompt"]),
         seed=int(msg["seed"]),
@@ -347,6 +395,7 @@ def _generate_request(msg: dict, images: tuple | None = None, loras: tuple | Non
         block_swap_prefetch=_or("block_swap_prefetch", None, bool),
         vram16_mode=_or("vram16_mode", False, bool),
         loras=loras,
+        source_audio=source_audio,
     )
 
 
@@ -356,10 +405,12 @@ def _do_generate(msg: dict) -> None:
         raise RuntimeError("generate before load")
     images, inner_ignored = _images(msg)
     loras, lora_ignored = _loras(msg)
+    source_audio, audio_ignored = _source_audio(msg)
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
     ignored += [f"images[].{k}" for k in inner_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
-    req = _generate_request(msg, images=images, loras=loras)
+    ignored += [f"source_audio.{k}" for k in audio_ignored]
+    req = _generate_request(msg, images=images, loras=loras, source_audio=source_audio)
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
     req.attention_backend = effective
@@ -368,7 +419,12 @@ def _do_generate(msg: dict) -> None:
         f"steps={req.num_inference_steps} shift={req.shift_video}/{req.shift_audio} "
         f"attention={effective} images={len(req.images)} keep_resident={req.keep_resident} "
         f"prefetch={req.block_swap_prefetch} vram16={req.vram16_mode} "
-        f"loras={[(Path(item.path).name, item.strength) for item in req.loras]} -> {req.output_path}"
+        f"loras={[(Path(item.path).name, item.strength) for item in req.loras]} "
+        + (
+            f"source_audio={(Path(req.source_audio.path).name, req.source_audio.strength)} "
+            if req.source_audio is not None else ""
+        )
+        + f"-> {req.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
     )
     result = _PIPE.generate(req)
@@ -509,6 +565,10 @@ def _selftest_parser():
                         help="a LoRA file (repeatable)")
     parser.add_argument("--lora-strength", type=float, default=1.0,
                         help="the strength of every --lora (default 1.0)")
+    parser.add_argument("--source-audio", default=None, metavar="PATH",
+                        help="A2V: the source audio file (source_audio.path)")
+    parser.add_argument("--audio-strength", type=float, default=0.5,
+                        help="A2V: source_audio.strength (default 0.5)")
     return parser
 
 
@@ -530,7 +590,7 @@ def _selftest_load_message(args) -> dict:
 
 def _selftest_generate_message(args, out: str) -> dict:
     """The ``generate`` message the selftest sends (every key the app will send)."""
-    return {
+    msg = {
         "op": "generate",
         "prompt": args.prompt,
         "seed": args.seed,
@@ -549,6 +609,10 @@ def _selftest_generate_message(args, out: str) -> dict:
         "vram16_mode": bool(args.vram16),
         "loras": [{"path": path, "strength": float(args.lora_strength)} for path in args.lora],
     }
+    if args.source_audio:
+        # Appended only when asked: a job without it is the same message as before.
+        msg["source_audio"] = {"path": args.source_audio, "strength": float(args.audio_strength)}
+    return msg
 
 
 def _selftest_images(args) -> list[dict]:

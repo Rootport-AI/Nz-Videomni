@@ -25,6 +25,7 @@ from api.errors import (
     outpaint_source_too_short,
     reference_requires_control_lora,
     reference_resolution_invalid,
+    source_audio_not_found,
 )
 from api.models import (
     INPAINT_MIN_SOURCE_SIDE,
@@ -100,6 +101,20 @@ def generate(
     # Validate conditioning images exist up front.
     for ci in request.conditioning_images:
         context.upload_store.path_for(ci.image_id)  # raises IMAGE_NOT_FOUND
+
+    # Single-generate A2V (MiniMax H3): resolve the source audio (404) and
+    # preflight it (422 for too-short / no audio stream) BEFORE reserving a
+    # job — the same order and the same errors as /generate/chain's
+    # source_audio. An LTX engine never gets here: its REJECT_TABLE refused the
+    # field above (422 FEATURE_UNSUPPORTED), ahead of any upload lookup.
+    if request.source_audio is not None:
+        try:
+            context.audio_upload_store.path_for(request.source_audio.audio_id)
+        except APIError:
+            raise source_audio_not_found(request.source_audio.audio_id)
+        context.pipeline_manager.preflight_single_source_audio(
+            request.source_audio, request.num_frames, request.frame_rate
+        )
 
     # IC-LoRA: validate the reference video + adapter names up front, the same
     # way conditioning image_ids are checked (fail at job creation, not deep in

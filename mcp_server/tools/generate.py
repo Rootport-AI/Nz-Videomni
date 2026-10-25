@@ -186,6 +186,8 @@ async def submit_generate(
     shift_video: float | None = None,
     shift_audio: float | None = None,
     vram16_mode: bool | None = None,
+    source_audio_id: str | None = None,
+    source_audio_strength: float | None = None,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -258,6 +260,21 @@ async def submit_generate(
       * LTX（``sampling`` が null）ではステップ数は distilled の 8 に固定で、
         8 以外を送ると 422 になります。shift は LTX には無い概念で、送っても
         無視されます。
+
+    単発の A2V（音声から映像。**MiniMax H3 専用**）:
+      * ``source_audio_id``（``upload_audio`` で取得した音声のID）を指定すると、
+        その音声に口の動きなどが合う映像を生成します。LTX 2.3 / LTX 2.5 では
+        422 FEATURE_UNSUPPORTED です（``unsupported_features`` に
+        ``source_audio``）。LTX で A2V をしたいときは ``submit_chain`` の
+        ``source_audio_id`` を使ってください。
+      * ``source_audio_strength``（0〜1、``source_audio_id`` とセット）は音声を
+        どれだけ固定するかです。省略すると送らず、サーバー側の既定 0.5 になります。**1.0 は音声を
+        固定し、出力には元の音声波形をそのまま付けます。1.0 未満ではモデルが
+        音声を解釈し直し、出力の音声はモデルが作ったものになります。**
+      * 動画の長さが優先で、音声は動画の長さに切られます（足されません）。
+        短すぎる音声は 422 SOURCE_AUDIO_TOO_SHORT です。
+      * ``source_audio_strength`` だけを指定するとエラーです（HTTP を呼ぶ前に
+        弾きます）。
 
     IC-LoRA:
       * ``conditioning_images`` を1件以上指定するとI2V（画像条件付け）に
@@ -470,6 +487,14 @@ async def submit_generate(
             ジョブ完了後のメタデータの ``vram16_mode_used``（``"off"`` /
             ``"on"``）に記録されます。
 
+        source_audio_id: 単発 A2V の駆動音声のID（``upload_audio`` で取得）。
+            **MiniMax H3 専用**（LTX では 422 FEATURE_UNSUPPORTED。LTX は
+            ``submit_chain`` の ``source_audio_id`` を使う）。省略で送らない。
+        source_audio_strength: 駆動音声の固定の強さ（0〜1、``source_audio_id``
+            とセット）。省略すると送らず、サーバー側の既定 0.5 になる。1.0 は音声を固定して元の波形を
+            出力に付け、1.0 未満はモデルが解釈し直した音声になる。
+            ``source_audio_id`` なしで指定すると POST 前に ToolError。
+
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
     """
@@ -488,6 +513,12 @@ async def submit_generate(
             "outpaint_freeze_source_audio を指定するには、outpaint_pad_left / "
             "_right / _top / _bottom のいずれかを0より大きくしてください"
             "（4辺すべて0だと画角拡張そのものが行われず、指定が無視されます）"
+        )
+    if source_audio_strength is not None and source_audio_id is None:
+        raise ToolError(
+            "SOURCE_AUDIO_ID_REQUIRED: source_audio_strength を指定するには "
+            "source_audio_id も指定してください（強度だけでは音声が決まらず、"
+            "指定が無視されます）"
         )
     if (crop_width is None) != (crop_height is None):
         raise ToolError(
@@ -571,6 +602,12 @@ async def submit_generate(
         payload["loras"] = [lora.model_dump(exclude_none=True) for lora in loras]
     if reference_video_id:
         payload["reference_video_id"] = reference_video_id
+    if source_audio_id is not None:
+        # 強度の既定（1.0）はサーバーの pydantic が補う。MCP は値を発明しない。
+        source_audio_payload: dict[str, Any] = {"audio_id": source_audio_id}
+        if source_audio_strength is not None:
+            source_audio_payload["strength"] = source_audio_strength
+        payload["source_audio"] = source_audio_payload
     if conditioning_attention_strength is not None:
         payload["conditioning_attention_strength"] = conditioning_attention_strength
     if reference_video_strength is not None:

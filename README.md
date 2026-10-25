@@ -973,6 +973,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
   - **中間のフレーム**は、ComfyUI が独自に足している拡張と同じ考え方で、映像の条件にだけ入ります（プロンプトを読み取る部分には見せません）。公式の正解が無いので、**品質はオーナーの目視で確かめて採用しています**。
   - **キーフレームの強度はありません。** 操作パネルでは強度の行が出ず、Gradio UI では強度のスライダーが隠れます。API と MCP では `strength` を省略してください（値を送ると断られます。下の表）。
   - 操作パネルで「キーフレームを追加」を押すと、2 枚目は最後のピンと末尾の中間に置かれます。末尾に置くときは、ピンを右端までドラッグするか、位置の数値を打ち込んでください。
+- **音声から動画（単発の A2V）**。Single の A2V カードに音声を付けると、その音声に合わせて口や体が動く動画を作ります（1 クリップだけで、キーフレームと一緒に使えます）。カードに出る「強さ（Strength）」のスライダーで、元の音声にどれだけ寄せるかを 0〜1 で選べます（既定 0.5）。1.0 では元の音声をそのまま動画に入れ、1.0 未満では動画の音声もモデルが作り直したものになります。音声は動画の長さ以上が必要で、長い分は切り詰められます（足りないと断られます）。API では `POST /generate` の `source_audio`、MCP では `submit_generate` の `source_audio_id`・`source_audio_strength` です。
 - **フレームレートは 24fps 固定**です。**フレーム数は 17n+5 の形**（22・39・56 … と 17 ずつ）で、22 以上 481 以下です。**縦横は 32 の倍数**です。操作パネルでは、フレーム数がこの規則に合う値へ自動でそろいます。
 - **ステップ数と shift（映像・音声）の 3 本のスライダー**で、ノイズ除去の工程数と、工程のどこにノイズの減らし方の重みを置くかを変えられます。操作パネルと Gradio UI の両方にあり、LTX を選んでいるときは表示されません。既定はステップ数 20・shift（映像）12・shift（音声）3 で、範囲はステップ数が 1〜50、shift が 1〜20 です（値の正本はサーバーが `GET /models` の `base_models[].constraints` で配るもので、ここはその写しです）。
 - **生成の高速化のうち、`sage attention`・先読み block swap・モデル骨格の常駐・VRAM 16GB mode**（§5 の表。VRAM 16GB mode は下の「快適上限と速さ」）。`sage attention` で絵の細部が変わる注意（§5 の[注意書き](#sage-seed-note)）は MiniMax H3 でも同じです。
@@ -981,7 +982,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 
 | 断られる機能 | 対応するリクエスト項目 |
 |--------------|------------------------|
-| クリップ連結（Chained）。連結の入口を通る V2V・A2V・撮り直し（Retake）も含みます | `POST /generate/chain` そのもの |
+| クリップ連結（Chained）。連結の入口を通る V2V・長尺の A2V・Batch A2V・撮り直し（Retake）も含みます（単発の A2V は使えます。上の「できること」） | `POST /generate/chain` そのもの |
 | 画角拡張（Outpainting）・Inpainting・Alpha Gen | `outpaint`・`inpaint`・`alpha_gen` |
 | IC-LoRA（参照動画による制御）。スタイル LoRA は使えます（`models/MiniMaxH3/LoRA/`）が、音声だけの強度（第3引数）は使われません | `reference_video_id`（`loras` は使えます） |
 | ネガティブプロンプト（NAG／VSF） | `nag_enabled` |
@@ -1056,7 +1057,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
 | `upload_audio` | ローカルの音声ファイルをアップロードする（A2V用） |
-| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）に加え、**画角拡張（Outpainting）の6引数**も指定できる |
+| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）に加え、**画角拡張（Outpainting）の6引数**も指定できる |
 | `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（連結生成には無い項目のため）に加え、**撮り直し（Retake）の5引数**と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる |
 | `submit_alpha_gen` | Alpha Gen（動画から白黒のマット動画を作る）のジョブを登録する（`POST /generate/alpha`）。**LTX 2.5 専用**。1 段原寸モードが既定で、`light_mode` で軽量モード（既存の 2 段の経路）になる |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |

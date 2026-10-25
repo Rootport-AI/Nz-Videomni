@@ -999,6 +999,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
       "keep_resident_embeddings",
       "alpha_gen",
       "vram16_mode",
+      "source_audio",
     ]);
   });
 
@@ -1009,7 +1010,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // halves `services/engines/ltx25/adapter.py` builds `UNSUPPORTED_FEATURES`
     // from. Spelt out rather than counted so a rename on either side shows up.
     // 台帳 §1-101: `vram16_mode` joined — VRAM 16GB mode is MiniMax H3's own.
-    expect(features).toEqual(expect.arrayContaining(["two_stage_hq", "prune_vaed", "vram16_mode"]));
+    expect(features).toEqual(expect.arrayContaining(["two_stage_hq", "prune_vaed", "vram16_mode", "source_audio"]));
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
     // chains now, and its absence is what un-greys the Chained tab. §3-102
     // second stage: `v2v` and `a2v` left with it — the engine takes a source
@@ -1067,10 +1068,10 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // on greying out the Edit tab's Inpainting sub-tab for a mode that runs,
     // and nothing else in this suite would notice.
     expect(features).not.toContain("inpaint");
-    // What is left is THREE engine-level names (台帳 §1-101 added
-    // `vram16_mode`) and no mode of any kind, which is what the count says
+    // What is left is FOUR engine-level names (台帳 §1-101 added
+    // `vram16_mode`; H3 A2V added `source_audio`) and no mode of any kind, which is what the count says
     // rather than only the membership above.
-    expect(features).toHaveLength(3);
+    expect(features).toHaveLength(4);
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {
@@ -1386,5 +1387,36 @@ describe("POST /generate/chain — engine feature scope (§3-102)", () => {
     // chain has to be accepted rather than earning a 409 JOB_BUSY.
     const next = await postChain(bridge, CHAIN_BODY);
     expect(next.status).toBe(202);
+  });
+});
+
+describe("POST /generate — single-clip A2V (`source_audio`)", () => {
+  // LTX 8n+1 / MiniMax H3 17n+5 frame grids.
+  const BODY = {
+    prompt: "a cat",
+    width: 512,
+    height: 320,
+    num_frames: 0,
+    frame_rate: 24,
+    seed: -1,
+    source_audio: { audio_id: "aud-1", strength: 1 },
+  };
+  const post = (bridge: ReturnType<typeof createMockBridge>, numFrames: number) =>
+    bridge.request("backend.request", { method: "POST", path: "/api/v1/generate", body: { ...BODY, num_frames: numFrames } });
+
+  it("LTX answers 422 FEATURE_UNSUPPORTED (its list carries source_audio)", async () => {
+    const result = await post(createMockBridge({ delayMs: 0 }), 49);
+    expect(result.status).toBe(422);
+    expect((result.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+  });
+
+  it("MiniMax H3 accepts it with 202", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    await bridge.request("backend.request", {
+      method: "POST",
+      path: "/api/v1/pipeline/load",
+      body: { base_model: "MiniMaxH3" },
+    });
+    expect((await post(bridge, 56)).status).toBe(202);
   });
 });

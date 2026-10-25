@@ -1621,6 +1621,7 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
         "keep_resident_embeddings",
         "alpha_gen",
         "vram16_mode",
+        "source_audio",
     ]
     features = by_id["LTX25"]["unsupported_features"]
     # Retake段で ``retake`` が外れた——残っていればEditタブの「撮り直し」
@@ -1658,7 +1659,8 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     # VRAM 16GB mode で ``vram16_mode`` が**入った**（MiniMax H3 専用の機能で、
     # モード名ではない）。エンジン側の機能名 2 つにこれを足した 3 件になる。
     assert "vram16_mode" in features
-    assert len(features) == 3
+    assert "source_audio" in features  # 単発 A2V（MiniMax H3 専用）
+    assert len(features) == 4
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

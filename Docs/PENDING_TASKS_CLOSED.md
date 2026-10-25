@@ -3106,3 +3106,12 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: dev `4d9d73a`（エンジン＋テスト）・`e1208bd`（文書・保管）。
 - **正本・出典**: 設計は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5（例外）と §6.5、事前調査の材料は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.1、契約は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.100）。調査・計画・レビュー・門の記録の保管は [`Outputs-archive/h3-speedup-2026-10-24/`](Outputs-archive/h3-speedup-2026-10-24/README.md)。
 - **残課題**: ④ は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-255。
+
+### 3-257. MiniMax H3 の A2V（音声から映像）（起票：2026-10-19、クローズ：2026-10-25）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-103 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-103（2026-10-19 起票）。**同書側は欠番**。番号は、同書 §3 の生きた項目（3-255・3-256）を飛ばした次の空き番号である。
+- **到達条件**: MiniMax H3 で、音声を入力して同期した映像を作れること。**達成した。**
+- **何が完了したか**: 単発の `POST /generate` に任意の項目 `source_audio`（`audio_id` と `strength`。既定 0.5）を足し、エンジンに行ごとの連続値マスクと音声 VAE の符号化器を入れた。操作パネルの A2V カードは H3 では `/generate` に送り、Strength のスライダーを出す。LTX 2.3／2.5 の A2V は今までどおり連結生成で、単発の `source_audio` は 422 で断る。V2A（映像から音声）は部品だけで製品には出していない。要点・機械の門 G0〜G2・GPU の門 G3-0／G3／G3b・オーナーの目視 G4（既定を 1.0 から 0.5 に変えた）は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §178 を正本とする。
+- **状態**: dev `6285a90`（実装の弾 1〜5 と機械の門）。Strength の既定の変更と文書・保管は dev `e2dd996`。
+- **正本・出典**: 設計は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.1（式と仕組み）と §2 の裁定 74〜80、契約は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.101）、操作パネルはフロントエンドの `Docs/DEVLOG.md` §149、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) の D30。計画・調査・レビュー・門の報告の保管は [`Outputs-archive/h3-a2v-2026-10-25/`](Outputs-archive/h3-a2v-2026-10-25/README.md)。
+- **残課題**: 出力の音声が映像より約 8.3 ミリ秒短くなる場合は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-256（A2V の Strength 1.0 では起きない）。映像のマスクの使い方（雑音増しの有無）は同 §1-106（H3 の Chained）の計画で決める。

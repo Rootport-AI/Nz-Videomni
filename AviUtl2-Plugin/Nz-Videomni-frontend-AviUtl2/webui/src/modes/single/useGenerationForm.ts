@@ -26,6 +26,7 @@ import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from
 import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import type { SamplingConstraints } from "../../api/types";
+import { singleAudioPrecheck, suggestFramesForSingleAudio } from "./audioFit";
 import { MIN_HEIGHT, MIN_WIDTH } from "./defaultConfig";
 import { estimateGenerationSeconds, formatEstimate } from "./estimateUtils";
 import {
@@ -103,6 +104,12 @@ function samplingDefaults(sampling: SamplingConstraints | null): SamplingValues 
     shiftVideo: sampling.shift_video.default,
     shiftAudio: sampling.shift_audio.default,
   };
+}
+
+/** The single-clip A2V Strength's server default, or 1.0 (full strength)
+ * for an engine that takes no source audio on `/generate`. */
+function sourceAudioStrengthDefault(rules: GenerationConstraints): number {
+  return rules.singleSourceAudio?.strength.default ?? 1.0;
 }
 
 export interface FormLimits {
@@ -420,6 +427,16 @@ export interface UseGenerationFormResult {
    * (`chainUtils.audioLengthPrecheck`). Folded into `isValid`; also surfaced
    * so the form can show the exact "audio too short" seconds. */
   audioPrecheck: AudioLengthPrecheckResult | null;
+  /** Single-clip A2V's Strength slider (`constraints.source_audio`), or
+   * `null` when A2V goes through `/generate/chain` (LTX). Its presence is
+   * what switches the A2V submit to `/generate`. */
+  singleSourceAudio: GenerationConstraints["singleSourceAudio"];
+  /** The Strength `source_audio.strength` carries on the `/generate` route
+   * (0.0 = same as no source audio). Starts at, and goes back to on a
+   * base-model switch, the served default (1.0 without one). */
+  sourceAudioStrength: number;
+  /** Clamped into the served range; ignored without one. */
+  setSourceAudioStrength: (value: number) => void;
   /** A2V source card's `12.3s` duration readout: the attached wav's measured
    * duration in seconds (`fs.probeAudioDuration`), or `null` before a `.wav`
    * has been successfully probed (and `null` again whenever the attachment
@@ -762,13 +779,26 @@ export function useGenerationForm(
     };
   });
 
+  // Single-clip A2V Strength (the `/generate` route). Kept beside `values`
+  // rather than in it: it rides only on that route's `source_audio`.
+  const [sourceAudioStrength, setSourceAudioStrengthRaw] = useState(() => sourceAudioStrengthDefault(rules));
+  const singleSourceAudio = rules.singleSourceAudio;
+  const setSourceAudioStrength = useCallback(
+    (raw: number) => {
+      if (!singleSourceAudio || !Number.isFinite(raw)) return;
+      setSourceAudioStrengthRaw(clamp(raw, singleSourceAudio.strength.min, singleSourceAudio.strength.max));
+    },
+    [singleSourceAudio],
+  );
+
   // Follow a change of the loaded base model's rules (a
   // base-model switch while the form is mounted). Skips the first render —
   // the lazy initializer above already used these rules — and fires only on a
   // real change: `useBaseModels` keeps the object stable while its content is.
   // DURATION and the size are re-snapped onto the new grid (a value valid on
   // the old one would otherwise block Generate), a fixed fps is pinned, and the
-  // sampling sliders go back to the new base model's defaults.
+  // sampling sliders and the A2V Strength go back to the new base model's
+  // defaults.
   const appliedRulesRef = useRef(rules);
   useEffect(() => {
     if (appliedRulesRef.current === rules) return;
@@ -781,6 +811,7 @@ export function useGenerationForm(
       frameRate: fixedFps ?? prev.frameRate,
       sampling: samplingDefaults(rules.sampling),
     }));
+    setSourceAudioStrengthRaw(sourceAudioStrengthDefault(rules));
   }, [rules, active, baseLimits, frameGrid, fixedFps]);
 
   // Smart comfort marker (2026-08-31, was 2026-08-18): which comfort row the
@@ -1045,6 +1076,29 @@ export function useGenerationForm(
   // already ran for the current id).
   const probedAudioIdRef = useRef<string | null>(null);
 
+  // The wav's frame suggestion, by route: `/generate` (the engine publishes
+  // `constraints.source_audio`) fits plain time onto the engine's own grid
+  // (`./audioFit`); the chain route keeps the LTX audio-latent arithmetic
+  // (`chainUtils.suggestFramesForAudio`).
+  const suggestFramesForAudioOnRoute = useCallback(
+    (durationSec: number): number => {
+      if (singleSourceAudio) {
+        return suggestFramesForSingleAudio(durationSec, values.frameRate, {
+          ...frameGrid,
+          min: limits.minNumFrames,
+          max: limits.maxNumFrames,
+        });
+      }
+      return snapNumFrames(
+        suggestFramesForAudio(durationSec, values.frameRate),
+        limits.minNumFrames,
+        limits.maxNumFrames,
+        frameGrid,
+      );
+    },
+    [singleSourceAudio, values.frameRate, frameGrid, limits.minNumFrames, limits.maxNumFrames],
+  );
+
   useEffect(() => {
     if (sourceAudio.state.status !== "ready") {
       probedAudioIdRef.current = null;
@@ -1071,12 +1125,7 @@ export function useGenerationForm(
         return;
       }
       setAudioDurationSec(probe.durationSec);
-      let suggested = snapNumFrames(
-        suggestFramesForAudio(probe.durationSec, values.frameRate),
-        limits.minNumFrames,
-        limits.maxNumFrames,
-        frameGrid,
-      );
+      let suggested = suggestFramesForAudioOnRoute(probe.durationSec);
       // W8: cap the wav-derived suggestion at the current resolution's comfort
       // ceiling so a long wav never auto-adjusts DURATION past the point
       // generation starts spilling. Applies to EVERY A2V attach path (pick /
@@ -1125,16 +1174,23 @@ export function useGenerationForm(
       // never see a duration for this upload.
       if (!settled) probedAudioIdRef.current = null;
     };
-  }, [sourceAudio.state.status, sourceAudio.state.id, sourceAudio.state.filePath, nativeBridge, values.frameRate, values.width, values.height, spillThresholdFrames, limits.minNumFrames, limits.maxNumFrames, frameGrid, a2vSeedMaxFrames]);
+  }, [sourceAudio.state.status, sourceAudio.state.id, sourceAudio.state.filePath, nativeBridge, values.width, values.height, spillThresholdFrames, suggestFramesForAudioOnRoute, a2vSeedMaxFrames]);
 
   // A2V-only: gates on whether the attached wav's MEASURED duration is long
   // enough for `values.numFrames` (`chainUtils.audioLengthPrecheck`). `null`
   // outside A2V, or before any wav duration was measured — folded into
   // `isValid` below and surfaced standalone for the "audio too short" warning.
-  const audioPrecheck = useMemo<AudioLengthPrecheckResult | null>(
-    () => (isA2v && audioDurationSec != null ? audioLengthPrecheck(audioDurationSec, values.numFrames, values.frameRate) : null),
-    [isA2v, audioDurationSec, values.numFrames, values.frameRate],
-  );
+  // On the `/generate` route the need is plain time (`./audioFit`).
+  const audioPrecheck = useMemo<AudioLengthPrecheckResult | null>(() => {
+    if (!isA2v || audioDurationSec == null) return null;
+    if (singleSourceAudio) {
+      return {
+        ok: singleAudioPrecheck(audioDurationSec, values.numFrames, values.frameRate),
+        requiredSeconds: values.numFrames / values.frameRate,
+      };
+    }
+    return audioLengthPrecheck(audioDurationSec, values.numFrames, values.frameRate);
+  }, [isA2v, audioDurationSec, values.numFrames, values.frameRate, singleSourceAudio]);
 
   // Gate submission on the width/height grid too: free-typed values are passed
   // through unsnapped (see `setWidth`/`setHeight`), so an off-grid or
@@ -1383,6 +1439,9 @@ export function useGenerationForm(
     attachSourceAudioByPath,
     isA2v,
     audioPrecheck,
+    singleSourceAudio,
+    sourceAudioStrength,
+    setSourceAudioStrength,
     audioDurationSec,
     audioFramesAdjustedEvent,
     setWidth,

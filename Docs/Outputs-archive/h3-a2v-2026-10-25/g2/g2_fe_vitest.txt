@@ -1,0 +1,10 @@
+
+ RUN  v4.1.10 S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui
+
+
+ Test Files  172 passed (172)
+      Tests  3370 passed (3370)
+   Start at  15:13:34
+   Duration  52.25s (transform 13.77s, setup 26.46s, import 82.53s, tests 274.53s, environment 269.50s)
+
+vitest exit=0

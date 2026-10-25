@@ -1,7 +1,8 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { AppConfig, BaseModelConstraints } from "../../api/types";
-import { createMockBridge } from "../../bridge/mockBridge";
+import { createMockBridge, createMockFs } from "../../bridge/mockBridge";
+import { suggestFramesForAudio } from "../chained/chainUtils";
 import { resolveGenerationConstraints } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { FALLBACK_APP_CONFIG } from "./defaultConfig";
@@ -198,3 +199,58 @@ describe("useGenerationForm — MiniMax H3 constraints", () => {
   });
 });
 
+describe("useGenerationForm — single-clip A2V (constraints.source_audio)", () => {
+  const H3_A2V = resolveGenerationConstraints({
+    ...H3_BLOCK,
+    source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+  });
+
+  function renderA2v(constraints: GenerationConstraints, engineFamily: string) {
+    const fs = createMockFs({
+      folders: {
+        "C:\\Users\\mock\\Downloads": [{ name: "dropped.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 3.886 }],
+      },
+    });
+    const nativeBridge = createMockBridge({ delayMs: 0, fs });
+    return renderHook(
+      ({ c, family }: { c: GenerationConstraints; family: string }) =>
+        useGenerationForm(FALLBACK_APP_CONFIG, "a prompt", { nativeBridge, constraints: c, engineFamily: family }),
+      { initialProps: { c: constraints, family: engineFamily } },
+    );
+  }
+
+  it("strength starts at the served default, is clamped by the setter, and resets on an engine switch", () => {
+    const { result, rerender } = renderA2v(H3_A2V, "h3");
+    expect(result.current.sourceAudioStrength).toBe(0.5);
+    act(() => result.current.setSourceAudioStrength(0.4));
+    expect(result.current.sourceAudioStrength).toBe(0.4);
+    act(() => result.current.setSourceAudioStrength(7));
+    expect(result.current.sourceAudioStrength).toBe(1);
+    act(() => result.current.setSourceAudioStrength(-3));
+    expect(result.current.sourceAudioStrength).toBe(0);
+
+    act(() => result.current.setSourceAudioStrength(0.4));
+    rerender({ c: LTX, family: "ltx" });
+    expect(result.current.singleSourceAudio).toBeNull();
+    // Without the constraint the setter is a no-op.
+    act(() => result.current.setSourceAudioStrength(0.2));
+    rerender({ c: H3_A2V, family: "h3" });
+    expect(result.current.sourceAudioStrength).toBe(0.5);
+  });
+
+  it("audio-fit on a wav import uses the H3 grid (3.886 s -> 90) when the constraint exists, the chain logic when not", async () => {
+    const h3 = renderA2v(H3_A2V, "h3");
+    await act(async () => {
+      await h3.result.current.attachSourceAudioByPath("C:\\Users\\mock\\Downloads\\dropped.wav", "dropped.wav");
+    });
+    await waitFor(() => expect(h3.result.current.values.numFrames).toBe(90));
+    expect(h3.result.current.audioPrecheck?.ok).toBe(true);
+
+    const ltx = renderA2v(LTX, "ltx");
+    await act(async () => {
+      await ltx.result.current.attachSourceAudioByPath("C:\\Users\\mock\\Downloads\\dropped.wav", "dropped.wav");
+    });
+    const expected = suggestFramesForAudio(3.886, ltx.result.current.values.frameRate);
+    await waitFor(() => expect(ltx.result.current.values.numFrames).toBe(expected));
+  });
+});

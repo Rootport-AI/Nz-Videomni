@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  a2vRouteFor,
   accelerationResetsFor,
   batchA2vDisabledFor,
   chainPanelsDisabledFor,
@@ -9,6 +10,7 @@ import {
   FEATURE_UI,
   loraAudioStrengthHiddenFor,
   settingsRowsHiddenFor,
+  singleSectionsDisabledFor,
 } from "./featureScope";
 
 /** The set as a sorted array, so a comparison reads as a value rather than as a
@@ -424,5 +426,27 @@ describe("loraAudioStrengthHiddenFor (台帳 §1-104)", () => {
   it("is NOT closed by `loras` itself — that name still has no UI target", () => {
     expect(loraAudioStrengthHiddenFor(["loras"])).toBe(false);
     expect(targets(["loras"])).toEqual([]);
+  });
+});
+
+describe("a2vRouteFor / singleSectionsDisabledFor with single-clip A2V", () => {
+  // `chain` is the name that closes `createSection.a2v` (MiniMax H3's list).
+  it("a2vRouteFor: a published source_audio wins, even when chain is unsupported", () => {
+    expect(a2vRouteFor(["chain"], true)).toBe("generate");
+    expect(a2vRouteFor([], true)).toBe("generate");
+  });
+
+  it("a2vRouteFor: without source_audio the card routes through the chain while the chain is open, else nowhere", () => {
+    expect(a2vRouteFor([], false)).toBe("chain");
+    expect(a2vRouteFor(["chain"], false)).toBeNull();
+  });
+
+  it("singleSectionsDisabledFor: the A2V card opens when the generate route exists; the other two parts are unchanged", () => {
+    expect(singleSectionsDisabledFor(["chain"], true)).toEqual({
+      ...singleSectionsDisabledFor(["chain"]),
+      a2v: false,
+    });
+    expect(singleSectionsDisabledFor(["chain"]).a2v).toBe(true);
+    expect(singleSectionsDisabledFor([])).toEqual({ referenceVideo: false, a2v: false, keyframeStrength: false });
   });
 });

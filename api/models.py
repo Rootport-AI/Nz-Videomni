@@ -409,6 +409,33 @@ class AlphaGenRequest(BaseModel):
         return value
 
 
+class SingleSourceAudioSpec(BaseModel):
+    """Single-generate audio-to-video source (optional, MiniMax H3 only).
+
+    ``audio_id`` is an existing upload from POST /upload/audio. The uploaded
+    waveform is encoded to audio latents that hold the generated audio to the
+    source, so the video is driven to match it (lip-sync). ``strength`` is how
+    hard: the engine's per-row audio mask is ``1 - strength`` (default 0.5; 1.0 freezes the
+    source audio exactly and muxes the ORIGINAL waveform back; 0.0 has no
+    effect). The owner's viewing found 1.0 gives rigid mouth motion, 0.5 natural.
+    Video length is authoritative: the audio is cut to the clip, never padded,
+    and a too-short upload is rejected up front (422 SOURCE_AUDIO_TOO_SHORT).
+
+    A DIFFERENT TYPE from the chain's :class:`SourceAudioSpec` on purpose: the
+    chain's spec has no strength (its audio is always hard-frozen) and stays
+    exactly as it is. Both LTX families refuse this field (422
+    FEATURE_UNSUPPORTED, pointing at the chain's ``source_audio``); which
+    families take it is published as ``constraints["source_audio"]``.
+
+    **No file path here, deliberately** — the same rule as
+    :class:`InpaintSpec`: a request field cannot make the server read an
+    arbitrary path.
+    """
+
+    audio_id: str = Field(..., min_length=1)
+    strength: float = Field(0.5, ge=0.0, le=1.0)
+
+
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1)
     negative_prompt: str = Field("")
@@ -642,6 +669,13 @@ class GenerateRequest(BaseModel):
     # ``None`` ⇒ the worker payload carries no ``alpha_gen`` key. See
     # AlphaGenSpec for the geometry contract.
     alpha_gen: AlphaGenSpec | None = None
+
+    # Single-generate A2V (ADDITIVE/optional, MiniMax H3 only; both LTX
+    # families answer 422 FEATURE_UNSUPPORTED). ``None`` ⇒ plain T2V / I2V and
+    # the engine receives no audio. ``generation_mode`` stays t2v / i2v: whether
+    # a job was A2V is told by metadata.json's ``a2v`` block. See
+    # SingleSourceAudioSpec.
+    source_audio: SingleSourceAudioSpec | None = None
 
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
@@ -1740,11 +1774,15 @@ class GenerateChainRequest(BaseModel):
         record would otherwise claim the default).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
-        as ``source_video`` / ``source_audio``: it has no counterpart on
-        ``GenerateRequest``, so there is nothing to drop it INTO, and dropping it
-        changes no validation outcome. The authoritative copy is
-        ``JobRecord.chain_request``, which ``run_chain_job`` reads and which the
-        worker payload is built from.
+        as ``source_video``: it has no counterpart on ``GenerateRequest``, so
+        there is nothing to drop it INTO, and dropping it changes no validation
+        outcome. The chain's ``source_audio`` is deliberately NOT copied either,
+        although ``GenerateRequest`` has a field of the same name: that one is
+        the single-generate :class:`SingleSourceAudioSpec` (a different type,
+        with a strength), so the stored per-clip record keeps ``None`` there.
+        The authoritative copy of all three is ``JobRecord.chain_request``,
+        which ``run_chain_job`` reads and which the worker payload is built
+        from.
         ``end_source`` follows that same precedent for the same reasons.
 
         ``prompt`` is the chain's shared ``prompt`` exactly as sent (not

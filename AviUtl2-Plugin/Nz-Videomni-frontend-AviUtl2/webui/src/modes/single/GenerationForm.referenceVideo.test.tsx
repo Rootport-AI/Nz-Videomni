@@ -41,6 +41,9 @@ function Harness({ bridge, formDeps }: { bridge: NativeBridge; formDeps?: Partia
       configFallbackWarning={false}
       config={FALLBACK_APP_CONFIG}
       nativeBridge={bridge}
+      singleSourceAudio={null}
+      sourceAudioStrength={1}
+      onSourceAudioStrengthChange={() => {}}
     />
   );
 }

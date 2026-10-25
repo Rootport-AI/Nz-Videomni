@@ -93,13 +93,14 @@ def source_audio_not_found(audio_id: str) -> APIError:
 
 
 def source_audio_too_short(detail: str | None = None) -> APIError:
-    """A2V: the uploaded source audio VAE-encodes to fewer audio-latent frames
-    than the chain timeline requires (video length is authoritative; audio is
-    truncated, never padded). Rejected up front (422) before any GPU work —
-    mirrors :func:`source_video_too_short`."""
+    """A2V: the uploaded source audio is shorter than the video it must drive —
+    the chain timeline (``/generate/chain``) or the single clip (MiniMax H3's
+    ``/generate``) — or has no decodable audio stream (video length is
+    authoritative; audio is truncated, never padded). Rejected up front (422)
+    before any GPU work — mirrors :func:`source_video_too_short`."""
     return APIError(
         "SOURCE_AUDIO_TOO_SHORT",
-        "source audio is shorter than the requested chain timeline",
+        "source audio is shorter than the requested video length",
         422,
         detail=detail,
     )

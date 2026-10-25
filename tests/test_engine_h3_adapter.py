@@ -268,7 +268,9 @@ def test_registration():
     assert engines.FAMILY_DISPLAY["h3"] == "MiniMax H3"
     assert "h3" not in engines.FAMILY_BY_KV.values()
     assert engines.runner_class_for("h3") is h3.H3Runner
-    assert h3.H3Runner._MOCK_BACKEND_CLS is engines.runner_class_for("ltx")._MOCK_BACKEND_CLS
+    # H3 owns a mock backend subclass (it adds the A2V mock job) of the LTX one.
+    assert h3.H3Runner._MOCK_BACKEND_CLS is h3._MockBackendH3
+    assert issubclass(h3.H3Runner._MOCK_BACKEND_CLS, engines.runner_class_for("ltx")._MOCK_BACKEND_CLS)
 
 
 # --------------------------------------------------------------------------- #
@@ -285,6 +287,7 @@ H3_CONSTRAINTS = {
         "shift_audio": {"min": 1, "max": 20, "step": 0.1, "default": 3},
     },
     "keyframes": {"step": 1, "offset": 0},
+    "source_audio": {"strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
     "prompt_token_limit": None,
 }
 LTX_CONSTRAINTS = {

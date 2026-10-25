@@ -1,4 +1,4 @@
-import type { BaseModelConstraints, SamplingConstraints } from "../api/types";
+import type { BaseModelConstraints, SamplingConstraints, SamplingParamConstraint } from "../api/types";
 import {
   floorToGrid,
   FRAME_RATE_MAX,
@@ -54,6 +54,10 @@ export interface GenerationConstraints {
    * when the limit is not confirmed for the engine (H3) or the server has not
    * said (fallback). */
   promptTokenLimit: number | null;
+  /** Single-clip A2V's Strength slider (range, step, default), or `null` when
+   * the engine takes no source audio on `/generate` (LTX, fallback) — A2V
+   * then goes through `/generate/chain`. Verbatim from the server. */
+  singleSourceAudio: { strength: SamplingParamConstraint } | null;
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
@@ -67,6 +71,7 @@ export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Objec
   sampling: null,
   keyframeGrid: Object.freeze({ step: 8, offset: 1 }),
   promptTokenLimit: null,
+  singleSourceAudio: null,
 });
 
 /** Flattens a served `constraints` block; `null`/absent → the LTX fallback.
@@ -87,6 +92,7 @@ export function resolveGenerationConstraints(
       ? { step: raw.keyframes.step, offset: raw.keyframes.offset }
       : LTX_GENERATION_CONSTRAINTS.keyframeGrid,
     promptTokenLimit: raw.prompt_token_limit ?? null,
+    singleSourceAudio: raw.source_audio ?? null,
   };
 }
 

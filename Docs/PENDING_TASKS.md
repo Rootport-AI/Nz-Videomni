@@ -33,7 +33,8 @@
 ### 1-107. MiniMax H3 の Ref2VA（参照素材からの生成）（起票：2026-10-19）
 
 - **概要**: 参照素材（人物・衣装・背景・動画・音声）から生成する、H3 の目玉機能。テンソル名と形状は FL2VA と同じだが、重みは別の配布物（`transformer_ref`。FL2VA とはヘッダで区別できないので記述子の配布ファイル名で縛る）で、入力の組み方も違う。操作パネルでは別の UI にする（裁定 30）。
-- **前提**: 入力の組み方の調査（参照行の並びと時刻）。
+- **前提**: 入力の組み方の調査（参照行の並びと時刻）。操作パネルの UI は先行実装済み（dev のみ・main へは未マージ。フロントエンド `Docs/DEVLOG.md` §150、設計は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 81）。送信本文は FL2VA のまま。参照の受け口（API と推論エンジン）は未実装。
+- **留意**: 右クリックの #4「この画像から動画を生成 (i2v)」は、H3 でも Single を作り直すので Reference の内容が消える。エンジン実装時に扱いを決める。
 - **出典**: [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §13。
 
 ### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19）
@@ -47,6 +48,12 @@
 - **概要**: rolling window〔窓をずらしながら生成〕に、前の窓の潜在の末尾を追加の条件（固定でなくガイド）として投入し、`temporal_offset` で RoPE〔位置の埋め込み〕の時間座標を動画全体で連続させる。
 - **前提**: §1-106 と §1-107。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
+
+### 1-113. 右クリックメニューから、動画の音声で a2v および long a2v を削除する（起票：2026-10-28）
+
+- **概要**: 右クリックメニューの #3「この動画の音声で a2v」と #17「この動画の音声で long a2v」を削除する。代わりに、音声の入力欄のカードが動画も受け入れ、動画から音声を分離する処理を操作パネルの UI へ移す。LTX 系も同様にする。
+- **前提**: H3 では #3 を案内で断る暫定の扱いが入っている（フロントエンド `Docs/DEVLOG.md` §150）。この暫定の案内は本項で不要になる。
+- **出典**: フロントエンド `Docs/RIGHTCLICK_REDESIGN_SPEC.md` §3-4。
 
 ---
 

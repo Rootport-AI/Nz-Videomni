@@ -71,6 +71,34 @@ class SamplingRange:
 
 
 @dataclass(frozen=True)
+class ReferenceLimits:
+    """Limits of the Reference (Ref2VA) inputs, published as ``constraints["reference"]``.
+
+    ``clip_min_sec`` is the recommended minimum length: below it the screens only warn, nothing rejects.
+    For the screens only: nothing here is enforced by ``POST /generate``.
+    """
+
+    max_images: int
+    max_videos: int
+    max_audios: int
+    max_total: int
+    video_total_sec: float
+    audio_total_sec: float
+    clip_min_sec: float
+
+    def as_dict(self) -> dict:
+        return {
+            "max_images": self.max_images,
+            "max_videos": self.max_videos,
+            "max_audios": self.max_audios,
+            "max_total": self.max_total,
+            "video_total_sec": self.video_total_sec,
+            "audio_total_sec": self.audio_total_sec,
+            "clip_min_sec": self.clip_min_sec,
+        }
+
+
+@dataclass(frozen=True)
 class RequestRules:
     """One family's numeric rules for a single ``POST /generate``.
 
@@ -102,6 +130,9 @@ class RequestRules:
     field at all; ``None`` for a family that refuses it (LTX: its A2V is the
     chain's), and then the key is left out of :meth:`constraints` entirely.
     The 0..1 bound itself is the schema's.
+    ``reference`` is the upper limits of the Reference (Ref2VA) inputs, published
+    as ``constraints["reference"]`` for the screens (not enforced here); ``None``
+    for a family without them (LTX), and then the key is left out.
     """
 
     frames_step: int
@@ -120,6 +151,7 @@ class RequestRules:
     keyframe_strength_default: float | None = None
     prompt_token_limit: int | None = None
     source_audio_strength: SamplingRange | None = None
+    reference: ReferenceLimits | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -146,6 +178,8 @@ class RequestRules:
         # family that refuses it (LTX) publishes the same block as before.
         if self.source_audio_strength is not None:
             published["source_audio"] = {"strength": self.source_audio_strength.as_dict()}
+        if self.reference is not None:
+            published["reference"] = self.reference.as_dict()
         return published
 
     # ------------------------------------------------------------ enforcing

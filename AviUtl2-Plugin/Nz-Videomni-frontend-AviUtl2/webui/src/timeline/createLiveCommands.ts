@@ -41,12 +41,28 @@
  *    (`num_frames`) WITHOUT touching any other form value — the DURATION engine's
  *    keep-panel-state write for ✨ text-to-video / 📷 image-from-frame, whose
  *    comfort-ceiling target `AppShell` resolves from the published width/height.
- *    The subscriber calls `form.setNumFrames(numFrames)` and nothing else. */
+ *    The subscriber calls `form.setNumFrames(numFrames)` and nothing else.
+ *  - `addReferenceVideo` / `addReferenceAudio` (§1-107, #2/#7 on a base model
+ *    whose constraints carry `reference` — MiniMax H3): put the right-clicked
+ *    video / audio into the FIRST FREE card of the Reference accordion's
+ *    Videos / Audios row WITHOUT remounting Create (the prompt and the other
+ *    cards survive). `filePath` is `null` when native could not resolve the
+ *    object's file (→ the §6-2 missing-material note). The video variant
+ *    carries the ribbon's trim window (`trimQuery`) and the trimmed length
+ *    (`durationSec`), both omitted when no trim applies. Enable is untouched. */
 export type CreateLiveCommand =
   | { type: "captureFrameToKeyframe" }
   | { type: "addCaptureAsKeyframe" }
   | { type: "addImageKeyframe"; filePath: string | null; fileName: string }
-  | { type: "setDuration"; numFrames: number };
+  | { type: "setDuration"; numFrames: number }
+  | {
+      type: "addReferenceVideo";
+      filePath: string | null;
+      fileName: string;
+      trimQuery?: Record<string, string>;
+      durationSec?: number;
+    }
+  | { type: "addReferenceAudio"; filePath: string | null; fileName: string };
 
 type CreateCommandListener = (command: CreateLiveCommand) => void;
 

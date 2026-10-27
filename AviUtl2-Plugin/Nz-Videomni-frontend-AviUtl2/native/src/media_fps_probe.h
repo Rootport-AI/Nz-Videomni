@@ -69,6 +69,14 @@
 
 namespace nzvideomni {
 
+// MFStartup(MF_VERSION, MFSTARTUP_LITE) exactly once per process (std::call_once);
+// MFShutdown is never called (see "COM / MF lifecycle" above). Returns whether
+// that one MFStartup succeeded. Shared with wic_png.cpp's
+// MakeJpegThumbnailFromVideo (contract v17) so the process starts Media
+// Foundation through one place. COM is NOT touched here: the caller must have
+// initialised COM on its thread first. Never throws.
+bool EnsureMediaFoundation();
+
 // Frames per second for an MF_MT_FRAME_RATE numerator/denominator pair.
 //
 // Returns 0.0 when either component is 0 (a media type that declares no usable

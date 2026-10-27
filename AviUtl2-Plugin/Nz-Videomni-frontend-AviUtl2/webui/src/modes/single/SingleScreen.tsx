@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type { AppConfig, GenerateChainRequest, GenerateRequest } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
@@ -39,8 +40,24 @@ import { useDurationShrinkGuard } from "./useDurationShrinkGuard";
 import { useGenerationSubmit } from "./useGeneration";
 import { useGenerationForm } from "./useGenerationForm";
 import { useKeyframes } from "./useKeyframes";
+import { appendReferenceTag, type ReferenceAttachOptions, type ReferenceKind, type ReferenceRules } from "./referenceRules";
+import { useReferenceA2vSync, useReferenceSlots } from "./useReferenceSlots";
 import { useRepeatRun, useRepeatRunDriver } from "./useRepeatRun";
 import "./SingleScreen.css";
+
+/** §1-107: the Reference rules used before any base model has published
+ * `constraints.reference` — no slots at all. Once H3's rules have been seen,
+ * they are kept while another base model is loaded (see `referenceRules` in
+ * the body), so the cards survive a round trip through LTX. */
+const NO_REFERENCE_RULES: ReferenceRules = {
+  maxImages: 0,
+  maxVideos: 0,
+  maxAudios: 0,
+  maxTotal: 0,
+  videoTotalSec: 0,
+  audioTotalSec: 0,
+  clipMinSec: 0,
+};
 
 export interface SingleScreenProps {
   /** Owned by `AppShell`'s shared `PromptBar`, above the mode tabs. */
@@ -125,6 +142,10 @@ export interface SingleScreenProps {
    * list — shows a non-blocking note under Generate (it never disables the
    * button). Omitted = no note. */
   loraUnsupportedNotice?: boolean | undefined;
+  /** §1-107: `AppShell`'s shared prompt setter, used in its updater form by the
+   * Reference cards' ✒ button to append a tag (`<Picture 1>`) to the prompt
+   * without closing over a stale value. Omitted = ✒ does nothing. */
+  onPromptChange?: Dispatch<SetStateAction<string>> | undefined;
 }
 
 /** The "Create" screen: T2V generation form (minus the prompt, which lives in
@@ -153,6 +174,7 @@ export function SingleScreen({
   sectionsUnavailable,
   loraAudioHidden,
   loraUnsupportedNotice,
+  onPromptChange,
 }: SingleScreenProps) {
   const strings = useStrings();
   const configState = useConfig();
@@ -184,6 +206,7 @@ export function SingleScreen({
       sectionsUnavailable={sectionsUnavailable}
       loraAudioHidden={loraAudioHidden}
       loraUnsupportedNotice={loraUnsupportedNotice}
+      onPromptChange={onPromptChange}
     />
   );
 }
@@ -210,6 +233,7 @@ interface SingleScreenBodyProps {
   sectionsUnavailable?: SingleSectionsDisabled | undefined;
   loraAudioHidden?: boolean | undefined;
   loraUnsupportedNotice?: boolean | undefined;
+  onPromptChange?: Dispatch<SetStateAction<string>> | undefined;
 }
 
 function SingleScreenBody({
@@ -234,6 +258,7 @@ function SingleScreenBody({
   sectionsUnavailable,
   loraAudioHidden = false,
   loraUnsupportedNotice = false,
+  onPromptChange,
 }: SingleScreenBodyProps) {
   const strings = useStrings();
   const toasts = useToasts();
@@ -546,6 +571,24 @@ function SingleScreenBody({
   }, []);
   const keyframes = useKeyframes(config, { nativeBridge });
 
+  // §1-107 (UI first): MiniMax H3's Reference accordion. Shown only while the
+  // loaded base model's constraints carry `reference`; while they do not (LTX),
+  // the hook keeps the last rules it was given (supervisor ruling: the
+  // cards survive a trip through LTX and resume on H3), or no slots at all if
+  // none were ever seen. The A2V card's audio is mirrored into `form.sourceAudio`
+  // by `useReferenceA2vSync`, so the `/generate` body still takes its
+  // `source_audio` from the one existing road (`buildSubmission` is unchanged).
+  const liveReferenceRules = constraints?.reference ?? null;
+  const lastReferenceRulesRef = useRef<ReferenceRules>(NO_REFERENCE_RULES);
+  if (liveReferenceRules !== null) lastReferenceRulesRef.current = liveReferenceRules;
+  const reference = useReferenceSlots(lastReferenceRulesRef.current, { nativeBridge });
+  useReferenceA2vSync(reference, form.sourceAudio, liveReferenceRules !== null);
+  const [referenceOpenSignal, setReferenceOpenSignal] = useState(0);
+  const appendReferenceTagToPrompt = useCallback(
+    (tag: string) => onPromptChange?.((prev) => appendReferenceTag(prev, tag)),
+    [onPromptChange],
+  );
+
   // I9 §3-4 (#2/#4) / §6: auto-load the routed material ONCE on this remount,
   // mirroring ChainedScreen's I8 pattern. #2 `reference-video` uploads the
   // selected video into the IC-LoRA reference slot; #4 `image-to-video` adds
@@ -755,6 +798,9 @@ function SingleScreenBody({
   showNoteRef.current = showNote;
   const stringsRef = useRef(strings);
   stringsRef.current = strings;
+  // §1-107: the Reference slots, read at dispatch time like keyframesRef.
+  const referenceRef = useRef(reference);
+  referenceRef.current = reference;
   // W8 (#9/#10 setDuration): the live-command subscription is created once, so
   // reach the current `form.setNumFrames` through a ref (mirrors keyframesRef)
   // rather than closing over the mount-time closure's stale setter.
@@ -854,6 +900,31 @@ function SingleScreenBody({
           fileName: command.fileName,
         };
         void kf.addFromPath(command.filePath, command.fileName, nextPos);
+        return;
+      }
+      if (command.type === "addReferenceVideo" || command.type === "addReferenceAudio") {
+        // §1-107 (#2/#7 on MiniMax H3): the right-clicked video/audio goes into
+        // the first free card of its Reference row WITHOUT remounting Create.
+        // Enable is deliberately left as it is (owner ruling 14); the
+        // accordion is only opened so the user sees where the file went.
+        if (!command.filePath) {
+          showNoteRef.current("warning", stringsRef.current.notes.sourceFileMissing);
+          return;
+        }
+        const kind: ReferenceKind = command.type === "addReferenceVideo" ? "video" : "audio";
+        const opts: ReferenceAttachOptions = {};
+        if (command.type === "addReferenceVideo") {
+          if (command.trimQuery) opts.query = command.trimQuery;
+          if (command.durationSec !== undefined) opts.durationSec = command.durationSec;
+        }
+        const slot = referenceRef.current.attachToFirstEmpty(kind, command.filePath, command.fileName, opts);
+        if (slot === null) {
+          const kindLabel = stringsRef.current.single.reference.rowTitle[kind];
+          showNoteRef.current("warning", stringsRef.current.notes.referenceSlotsFull(kindLabel));
+          return;
+        }
+        showNoteRef.current("info", stringsRef.current.notes.loadedFromRightClick(command.fileName));
+        setReferenceOpenSignal((n) => n + 1);
         return;
       }
       if (command.type === "setDuration") {
@@ -1234,6 +1305,27 @@ function SingleScreenBody({
           singleSourceAudio={form.singleSourceAudio}
           sourceAudioStrength={form.sourceAudioStrength}
           onSourceAudioStrengthChange={form.setSourceAudioStrength}
+          reference={
+            liveReferenceRules !== null
+              ? {
+                  api: reference,
+                  openSignal: referenceOpenSignal,
+                  onAppendTag: appendReferenceTagToPrompt,
+                  a2v: {
+                    available: form.singleSourceAudio != null,
+                    strength: form.sourceAudioStrength,
+                    onStrengthChange: form.setSourceAudioStrength,
+                    strengthMin: form.singleSourceAudio?.strength.min ?? 0,
+                    strengthMax: form.singleSourceAudio?.strength.max ?? 1,
+                    strengthStep: form.singleSourceAudio?.strength.step ?? 0.05,
+                    tooShortWarning:
+                      form.audioPrecheck && !form.audioPrecheck.ok
+                        ? strings.single.sourceAudio.tooShortWarning(form.audioPrecheck.requiredSeconds)
+                        : null,
+                  },
+                }
+              : undefined
+          }
         />
         <div className="generation-column">
           <GenerateButtonBar

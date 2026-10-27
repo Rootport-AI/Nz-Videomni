@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BaseModelBlock, ModelsResponse } from "../api/types";
-import { createMockBridge } from "./mockBridge";
+import { createMockBridge, createMockFs } from "./mockBridge";
 import type { MockBridgeOptions } from "./mockBridge";
 
 // MiniMax H3 第 2 弾 (2026-10-17): the fixture server's third base model —
@@ -96,5 +96,36 @@ describe("mockBridge — MiniMax H3", () => {
     const error = (res.body as { error: { code: string; message: string } }).error;
     expect(error.code).toBe("FEATURE_UNSUPPORTED");
     expect(error.message).toContain("'chain'");
+  });
+
+  // §1-107 (UI first): the Ref2VA reference limits are H3's own.
+  it("publishes `reference` for MiniMax H3 only (LTX publishes none)", async () => {
+    const blocks = await listModels(createMockBridge({ delayMs: 0 }));
+    expect(blocks.find((b) => b.id === "MiniMaxH3")?.constraints?.reference).toEqual({
+      max_images: 9,
+      max_videos: 3,
+      max_audios: 3,
+      max_total: 12,
+      video_total_sec: 15,
+      audio_total_sec: 15,
+      clip_min_sec: 2,
+    });
+    expect(blocks.find((b) => b.id === "LTX23")?.constraints?.reference).toBeUndefined();
+    expect(blocks.find((b) => b.id === "LTX25")?.constraints?.reference).toBeUndefined();
+  });
+
+  it("fs.probeMediaInfo returns a MockFs entry's own durationSec ahead of the global knob", async () => {
+    const fs = createMockFs({
+      folders: {
+        "C:\\clips": [
+          { name: "a.mp4", sizeBytes: 1, mtimeMs: 0, durationSec: 6 },
+          { name: "b.mp4", sizeBytes: 1, mtimeMs: 0 },
+        ],
+      },
+    });
+    const bridge = createMockBridge({ delayMs: 0, fs, probeMediaInfoDurationSec: 10 });
+    expect((await bridge.request("fs.probeMediaInfo", { filePath: "C:\\clips\\a.mp4" })).durationSec).toBe(6);
+    expect((await bridge.request("fs.probeMediaInfo", { filePath: "C:\\clips\\b.mp4" })).durationSec).toBe(10);
+    expect((await bridge.request("fs.probeMediaInfo", { filePath: "C:\\elsewhere\\c.mp4" })).durationSec).toBe(10);
   });
 });

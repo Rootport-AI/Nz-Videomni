@@ -289,6 +289,15 @@ H3_CONSTRAINTS = {
     "keyframes": {"step": 1, "offset": 0},
     "source_audio": {"strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
     "prompt_token_limit": None,
+    "reference": {
+        "max_images": 9,
+        "max_videos": 3,
+        "max_audios": 3,
+        "max_total": 12,
+        "video_total_sec": 15.0,
+        "audio_total_sec": 15.0,
+        "clip_min_sec": 2.0,
+    },
 }
 LTX_CONSTRAINTS = {
     "num_frames": {"step": 8, "offset": 1, "min": 9, "max": 481},

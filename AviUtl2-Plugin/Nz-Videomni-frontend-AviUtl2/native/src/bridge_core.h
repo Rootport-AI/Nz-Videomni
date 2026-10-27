@@ -738,8 +738,8 @@ std::vector<PickFileFilterEntry> PickFileFilter(const std::string& kind);
 // ---------------------------------------------------------------------------
 // ui.makeThumbnail (contract v3) - pure parsing / sizing / base64 / data URL.
 //
-// The decode/scale/encode itself is done with WIC off the UI thread (see
-// wic_png.h); everything testable without a real image lives here.
+// The decode/scale/encode itself is done with WIC (or, for a video, a Media
+// Foundation first frame since v17) off the UI thread (see wic_png.h); everything testable without a real image lives here.
 // ---------------------------------------------------------------------------
 
 inline constexpr int kDefaultThumbnailMaxDim = 256;

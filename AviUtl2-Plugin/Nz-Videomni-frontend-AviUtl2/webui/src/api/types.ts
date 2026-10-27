@@ -1266,6 +1266,25 @@ export interface BaseModelConstraints {
    * range, step and default. Absent/`null` = A2V goes through `/generate/chain`
    * as before (LTX, or a backend that predates the key). */
   source_audio?: { strength: SamplingParamConstraint } | null;
+  /** §1-107 (UI first): the Ref2VA reference inputs' limits — per-kind slot
+   * counts, the mixed-total cap, the per-kind total seconds of videos and of
+   * audios, and the shortest clip before a warning. Present only for an
+   * engine that takes references (MiniMax H3); absent/`null` = no Reference
+   * accordion (LTX, or a backend that predates the key). */
+  reference?: ReferenceConstraint | null;
+}
+
+/** `BaseModelConstraints.reference`: the flat seven limits (supervisor ruling
+ * Q1). The WebUI reads them camelCased as `ReferenceRules`
+ * (`modes/single/referenceRules.ts`). */
+export interface ReferenceConstraint {
+  max_images: number;
+  max_videos: number;
+  max_audios: number;
+  max_total: number;
+  video_total_sec: number;
+  audio_total_sec: number;
+  clip_min_sec: number;
 }
 
 /** `GET /models`'s response (Docs/API_REFERENCE.md §3.5,

@@ -73,13 +73,6 @@ private:
 std::once_flag g_mf_once;
 bool g_mf_started = false;
 
-bool EnsureMediaFoundation() {
-    std::call_once(g_mf_once, []() {
-        g_mf_started = SUCCEEDED(::MFStartup(MF_VERSION, MFSTARTUP_LITE));
-    });
-    return g_mf_started;
-}
-
 // True when `path` ends in an extension the Windows Matroska source is
 // registered for with video (.mkv / .webm / .mk3d), compared case-insensitively.
 // The extension is taken with rfind(L'.') - not PathFindExtensionW, since shlwapi
@@ -98,6 +91,13 @@ bool HasMatroskaExtension(const std::wstring& path) {
 }
 
 }  // namespace
+
+bool EnsureMediaFoundation() {
+    std::call_once(g_mf_once, []() {
+        g_mf_started = SUCCEEDED(::MFStartup(MF_VERSION, MFSTARTUP_LITE));
+    });
+    return g_mf_started;
+}
 
 double FpsFromRatio(std::uint32_t num, std::uint32_t den) {
     if (num == 0 || den == 0) {

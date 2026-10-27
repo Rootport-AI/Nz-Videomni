@@ -360,9 +360,10 @@ export interface BridgeParamsMap {
   "ui.pickFile": {
     kind: "image" | "video" | "audio" | "imageOrVideo";
   };
-  /** Renders a downscaled preview of a local image file as a data URL, for a
+  /** Renders a downscaled preview of a local image or video file as a data URL, for a
    * keyframe card's thumbnail (contract v3, M4). `maxDim` bounds the longer
-   * side in pixels (native default 256 when omitted). */
+   * side in pixels (native default 256 when omitted).
+   * v17: a video (mp4/mov/webm/mkv) returns a thumbnail of its first frame; an unreadable one rejects with THUMBNAIL_FAILED. */
   "ui.makeThumbnail": {
     filePath: string;
     maxDim?: number;

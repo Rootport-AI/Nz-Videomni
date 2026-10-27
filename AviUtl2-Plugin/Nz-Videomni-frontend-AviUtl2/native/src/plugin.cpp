@@ -499,7 +499,7 @@ struct TimelineMenuItem {
 // Language/*.NzVideomni.aul2 files gained one line for it.
 const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3AC Video: continue this video (v2v)",                             "extendVideo",       &OnMenu_ExtendVideo },
-    { L"Nz-Videomni\\\U0001F3AC Video: generate using this video as reference (IC-LoRA)",      "referenceVideo",    &OnMenu_ReferenceVideo },
+    { L"Nz-Videomni\\\U0001F3AC Video: use this video as a reference input",                   "referenceVideo",    &OnMenu_ReferenceVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: long IC-LoRA reference for a clip chain",               "referenceVideoChain", &OnMenu_ReferenceVideoChain },
     { L"Nz-Videomni\\\U0001F3AC Video: audio-to-video from this video's sound",                "videoAudioToVideo", &OnMenu_VideoAudioToVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: long a2v from this video's sound",                      "videoAudioToLongA2v", &OnMenu_VideoAudioToLongA2v },
@@ -511,7 +511,7 @@ const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F5BC Image: add this image as a keyframe",                          "addImageKeyframe",  &OnMenu_AddImageKeyframe },
     { L"Nz-Videomni\\\U0001F5BC Image: generate a long video from this image (i2v Clip Chain)", "imageToClipChain", &OnMenu_ImageToClipChain },
     { L"Nz-Videomni\\\U0001F3AC\U0001F5BC: Generate a video ending with this",                 "endWithThis",       &OnMenu_EndWithThis },
-    { L"Nz-Videomni\\\U0001F3B5 Audio: audio-to-video from this audio",                        "audioToVideo",      &OnMenu_AudioToVideo },
+    { L"Nz-Videomni\\\U0001F3B5 Audio: use this audio as a reference input (or a2v)",                    "audioToVideo",      &OnMenu_AudioToVideo },
     { L"Nz-Videomni\\\U0001F3B5 Audio: long a2v from this audio",                              "audioToLongA2v",    &OnMenu_AudioToLongA2v },
     { L"Nz-Videomni\\\U0001F4DD Text: append to the main prompt",                              "appendText",        &OnMenu_AppendText },
     { L"Nz-Videomni\\\U00002B07 Insert this generated result now",                             "insertProvisionalResult", &OnMenu_InsertProvisionalResult },

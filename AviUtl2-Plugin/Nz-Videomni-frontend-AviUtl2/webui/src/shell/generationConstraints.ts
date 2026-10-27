@@ -8,6 +8,7 @@ import {
 } from "../modes/single/paramUtils";
 import type { FrameGrid } from "../modes/single/paramUtils";
 import { MIN_NUM_FRAMES } from "../modes/single/defaultConfig";
+import type { ReferenceRules } from "../modes/single/referenceRules";
 
 /**
  * The loaded base model's numeric rules, in the shape Create (and the
@@ -58,6 +59,11 @@ export interface GenerationConstraints {
    * the engine takes no source audio on `/generate` (LTX, fallback) — A2V
    * then goes through `/generate/chain`. Verbatim from the server. */
   singleSourceAudio: { strength: SamplingParamConstraint } | null;
+  /** §1-107 (UI first): the Ref2VA reference limits, camelCased, or `null`
+   * when the engine takes no references (LTX, fallback) — Create then shows
+   * no Reference accordion. Its presence alone decides that (no featureScope
+   * entry, like {@link singleSourceAudio}). */
+  reference: ReferenceRules | null;
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
@@ -72,6 +78,7 @@ export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Objec
   keyframeGrid: Object.freeze({ step: 8, offset: 1 }),
   promptTokenLimit: null,
   singleSourceAudio: null,
+  reference: null,
 });
 
 /** Flattens a served `constraints` block; `null`/absent → the LTX fallback.
@@ -93,6 +100,17 @@ export function resolveGenerationConstraints(
       : LTX_GENERATION_CONSTRAINTS.keyframeGrid,
     promptTokenLimit: raw.prompt_token_limit ?? null,
     singleSourceAudio: raw.source_audio ?? null,
+    reference: raw.reference
+      ? {
+          maxImages: raw.reference.max_images,
+          maxVideos: raw.reference.max_videos,
+          maxAudios: raw.reference.max_audios,
+          maxTotal: raw.reference.max_total,
+          videoTotalSec: raw.reference.video_total_sec,
+          audioTotalSec: raw.reference.audio_total_sec,
+          clipMinSec: raw.reference.clip_min_sec,
+        }
+      : null,
   };
 }
 

@@ -382,4 +382,48 @@ describe("useSourceUpload", () => {
       expect(result.current.state.trimFailed).toBe(true);
     });
   });
+
+  // §1-107 (H3 Reference): the A2V audio slot hands its upload over.
+  describe("adopt (take over an already-uploaded id, no upload)", () => {
+    it("settles into the same ready shape as a carried initial, without uploading", () => {
+      const mockBridge = createMockBridge({ delayMs: 0 });
+      const spy = vi.spyOn(mockBridge, "request");
+      const { result } = renderHook(() => useSourceUpload("audio", { nativeBridge: mockBridge }));
+
+      act(() => result.current.adopt({ id: "ref-audio-1", fileName: "voice.wav", filePath: "C:\\a\\voice.wav" }));
+
+      expect(result.current.state).toEqual({
+        status: "ready",
+        fileName: "voice.wav",
+        filePath: "C:\\a\\voice.wav",
+        id: "ref-audio-1",
+        errorCode: null,
+        trimFailed: false,
+        frames: null,
+        fps: null,
+      });
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("supersedes an in-flight upload, whose late result is discarded", async () => {
+      const mockBridge = createMockBridge({ delayMs: 0, holdUploads: true });
+      const { result } = renderHook(() => useSourceUpload("audio", { nativeBridge: mockBridge }));
+
+      act(() => {
+        void result.current.uploadPath("C:\\a\\other.wav", "other.wav");
+      });
+      await waitFor(() => expect(result.current.state.status).toBe("uploading"));
+
+      act(() => result.current.adopt({ id: "ref-audio-1", fileName: "voice.wav", filePath: "C:\\a\\voice.wav" }));
+      act(() => {
+        mockBridge.releaseUploads();
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(result.current.state.id).toBe("ref-audio-1");
+      expect(result.current.state.fileName).toBe("voice.wav");
+    });
+  });
 });

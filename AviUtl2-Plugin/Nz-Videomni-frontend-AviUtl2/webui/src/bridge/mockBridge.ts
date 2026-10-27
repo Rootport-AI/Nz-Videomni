@@ -376,6 +376,17 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
     // 台帳 H3 A2V: the single-generate A2V route's Strength slider range, as
     // the real `GET /models` publishes it. LTX publishes no `source_audio`.
     source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+    // §1-107 (UI first): the Ref2VA reference limits, as the real `GET /models`
+    // publishes them. LTX publishes no `reference`.
+    reference: {
+      max_images: 9,
+      max_videos: 3,
+      max_audios: 3,
+      max_total: 12,
+      video_total_sec: 15,
+      audio_total_sec: 15,
+      clip_min_sec: 2,
+    },
   },
 };
 
@@ -904,7 +915,8 @@ export interface MockFsFileEntry {
    * `withAudioDuration`/`fs.probeAudioDuration` fixtures. Only meaningful for
    * `.wav`-named entries; leave unset to simulate a `.wav` native fails to
    * read (both resolve `durationSec: 0`/`isWav: false` rather than erroring,
-   * per contract). */
+   * per contract). §1-107: `fs.probeMediaInfo` also returns it, for any
+   * extension, ahead of `probeMediaInfoDurationSec`. */
   durationSec?: number;
 }
 
@@ -2856,12 +2868,15 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
    * that never rejects for a bad/unreadable file. The values come straight
    * from `options.probeMediaInfoDurationSec`/`Width`/`Height` (all default
    * `0`, matching native's "unknown" response when there's no edit handle or
-   * `get_media_info` fails). */
+   * `get_media_info` fails). §1-107: a `MockFs` entry for the probed path
+   * that carries `durationSec` overrides the duration (any extension), so a
+   * test can give each clip its own length. */
   async function handleProbeMediaInfo(
-    _params: ParamsOf<"fs.probeMediaInfo">,
+    params: ParamsOf<"fs.probeMediaInfo">,
   ): Promise<ResultOf<"fs.probeMediaInfo">> {
+    const entryDurationSec = findMockFsEntry(params.filePath)?.durationSec;
     return {
-      durationSec: options.probeMediaInfoDurationSec ?? 0,
+      durationSec: entryDurationSec ?? options.probeMediaInfoDurationSec ?? 0,
       width: options.probeMediaInfoWidth ?? 0,
       height: options.probeMediaInfoHeight ?? 0,
       fps: options.probeMediaInfoFps ?? 0,

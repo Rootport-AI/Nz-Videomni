@@ -36,8 +36,8 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.101**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
-| 日付 | **2026-10-25**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
+| 版 | **v0.5.102**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 日付 | **2026-10-27**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
 
@@ -155,6 +155,7 @@ LTX 2.3 ／ LTX 2.5 動画生成 REST API バックエンド（16GB VRAM 向け�
 | v0.5.99 | 2026-10-24 | **MiniMax H3 が LoRA（Style・Motion・Turbo など）を受けられるようになった（加算のみ。LTX 2.3／2.5 の挙動は変わらない。台帳 §1-104）**。H3 は `loras` を「動作」として受け、`models/MiniMaxH3/LoRA/` の一覧を使う（ベースモデルの記述子の任意キー `lora_dir`。系統→ディレクトリの対応は `services/engines/__init__.py::lora_scope_for` の 1 か所）。`GET /loras` の各行に `supported`・`unsupported_reason`、応答に `lora_dir` を加えた。H3 は LoRA の書式では 422 `LORA_FORMAT_UNSUPPORTED` を返さない（非対応でも選べて実行できる）。`LoraSpec.audio_strength` は H3 で `null` に正規化し、IC-LoRA の 2 つの強度は `reference_video_id` が統治する。`GET /models` の H3 の `unsupported_features` は `loras` を外し `lora_audio_strength` を足した。**§4.4**（木に `MiniMaxH3/LoRA/`）／**§4.3**（記述子の任意キー `lora_dir`）／**§6.2**（`loras` の行・検査 8〜10）／**§6.2b** (f)／**§6.3**（LoraSpec とその注）／**§6.6**（`metadata.json` の `h3.loras`）／**§6.8**（エラー表）／**§11.2**（`lora_dir` 設定）を合わせた。設計は `Docs/MINIMAX_H3_DESIGN.md` §6.6、記録は `Docs/VERIFICATION_LOG.md` §176。 |
 | v0.5.100 | 2026-10-25 | **MiniMax H3 の VRAM 16GB mode の記録に 1 鍵を加えた（加算のみ。API・挙動・LTX 2.3／2.5 は変わらない。台帳 §1-105 ①）**。エンジンが VRAM 16GB mode の qkv の入力の量子化を 1 ブロック 1 回にした（出力の数値は変わらない）のに合わせ、**§6.6** の `h3` 欄の `phases.denoise.vram16` に `qkv_quant_shared`（真偽値。ロード時の検査の合否）を足した。設計は `Docs/MINIMAX_H3_DESIGN.md` §5（例外）・§6.5、記録は `Docs/VERIFICATION_LOG.md` §177。 |
 | v0.5.101 | 2026-10-25 | **MiniMax H3 の単発の A2V（音声から映像）を加えた（加算のみ。LTX 2.3／2.5 で動くジョブの挙動は変わらない。台帳 §1-103）**。`GenerateRequest` に任意の `source_audio: {audio_id, strength}`（`SingleSourceAudioSpec`。強度は 0〜1・既定 0.5）を加えた。H3 は「動作」として受け、LTX 2.3／2.5 は 422 `FEATURE_UNSUPPORTED`（文言は H3 専用の案内）で断る。存在しない `audio_id` は 404 `SOURCE_AUDIO_NOT_FOUND`、映像より短い音声と読める音声の流れが無いファイルは 422 `SOURCE_AUDIO_TOO_SHORT`。この 422 の `message` は単発と連結に共通の文に変わった（連結の側の文も変わる。コードは同じ）。`GET /models` の H3 の `constraints` に `source_audio.strength` を、LTX 2.3／2.5 の `unsupported_features` に `source_audio` を加えた。A2V のジョブの `metadata.json` に最上位の `a2v` ブロックを加えた（普通のジョブの `request` の写しには `"source_audio": null` が増える）。**§6.2**（表に 1 行・補足 1 つ）／**§6.2b**（(c)・(e)・(f)）／**§6.6**（`h3` の注記と `a2v` の行）／**§6.8**（エラー表 2 行）／**§6.10(d)**（LTX 2.5 の 4 分類の件数）を合わせた。設計は `Docs/MINIMAX_H3_DESIGN.md` §3.1、記録は `Docs/VERIFICATION_LOG.md` §178。 |
+| v0.5.102 | 2026-10-27 | **H3 の `constraints` に `reference`（Ref2VA〔参照した画像・動画・音声から映像を作る機能〕の画面用の上限）を加えた（加算のみ。エンジンは未実装で、`POST /generate` の本文・検査は変わらない。台帳 `Docs/PENDING_TASKS.md` §1-107）**。**§6.2b**（(c) の表に 1 行・(e) に `reference`）を合わせた。 |
 
 ### 0.2 スコープ
 
@@ -878,6 +879,7 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 | キーフレームの位置（`frame_idx > 0`） | 8n+1 へ寄せ、`[1, num_frames-8]` へクランプ（`keyframe_step` 8・`keyframe_offset` 1） | 0〜`num_frames`−1 の任意のフレーム（`keyframe_step` 1・`keyframe_offset` 0） |
 | キーフレームの強度（`strength` を省略したとき） | 0.8 を書き戻す（`keyframe_strength_default`） | 概念が無い。省略は `null` のまま記録し、値を送ると `keyframe_strength` の 422 |
 | 単発の A2V の強度（`source_audio.strength`。2026-10-25） | 機能として拒否（`source_audio` が `null` 以外のとき） | 0〜1・刻み 0.05・既定 0.5（`source_audio_strength`） |
+| 参照入力の上限（`constraints.reference`。2026-10-27。**画面用で、検査はしない**） | 鍵ごと無い | 値は設計正本 [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §3.2（`max_images`・`max_videos`・`max_audios`・`max_total`・`video_total_sec`・`audio_total_sec`・`clip_min_sec`。読み込んだ重みに関係なく常に公開する） |
 | プロンプトのトークン数の上限（`prompt_token_limit`。**検査はしない**） | 1024（開始トークン込み。固定版の ltx-core の値で、超えた分は黙って切り捨てられる） | `null`（確かめていない） |
 
 規則表は数値の規約のほかに、**真偽値の既定の小さな表 `flag_defaults`**（スキーマの既定が `null`＝「系統の既定」の真偽値フィールドごとの既定値）を持ち、`validate_for_family` が `null` のときだけ書き戻す。いまは H3 の `{"vram16_mode": true}` だけで、LTX は宣言しない（`null` のまま）。`flag_defaults` は `constraints`（下記 (e)）には出さない。キーフレームの強度の既定（`keyframe_strength_default`）も同じく `constraints` には出さない（画面が写しの 0.8 を持ち、強度を使えるかどうかは機能名 `keyframe_strength` で伝わる）。
@@ -898,6 +900,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
   },
   "keyframes": {"step": 1, "offset": 0},                             // 2026-10-19 加算。LTX は {step: 8, offset: 1}
   "source_audio": {"strength": {"min": 0, "max": 1, "step": 0.05, "default": 0.5}},  // 2026-10-25 加算。LTX は鍵ごと無い
+  "reference": {"max_images": 9, "max_videos": 3, "max_audios": 3, "max_total": 12,
+                "video_total_sec": 15.0, "audio_total_sec": 15.0, "clip_min_sec": 2.0},  // 2026-10-27 加算。LTX は鍵ごと無い
   "prompt_token_limit": null                                         // 2026-10-24 加算。LTX は 1024
 }
 ```
@@ -907,6 +911,8 @@ Phase 1 で**実在する**全エンドポイント。認証は `server.api_key`
 `prompt_token_limit`（2026-10-24 加算・台帳 §1-111）は、テキストエンコーダーが読むプロンプトの長さの上限（トークン数）で、画面のトークンカウンターが `POST /utils/prompt-tokens`（§6.1 の補足）の数と比べる。**サーバーはこの値で要求を検査しない**（超えても 422 にせず、そのまま生成する）。確かめていない系統は `null` で、カウンターは数だけを出す。操作パネルは省略（古いバックエンド）も `null` として扱う。
 
 `source_audio`（2026-10-25 加算・台帳 §1-103）は、単発の `POST /generate` で `source_audio`（§6.2）を受ける系統だけが持つ。中身は `strength` の範囲と既定である。**鍵が無い系統（LTX 2.3／2.5・古いバックエンド）は単発の A2V を受けない**。操作パネルはこの鍵の有無で、A2V カードの送り先を `/generate` か `/generate/chain` に切り替える。
+
+`reference`（2026-10-27 加算・台帳 `Docs/PENDING_TASKS.md` §1-107）は、Ref2VA（参照した画像・動画・音声から映像を作る機能）の入力の上限で、画面が数と長さの目安を出すために読む。MiniMax H3 だけが持ち、読み込んだ重みに関係なく常に公開する。LTX 2.3／2.5 と古いバックエンドには鍵ごと無い。中身は整数の `max_images`（画像の本数）・`max_videos`（動画の本数）・`max_audios`（音声の本数）・`max_total`（3 種の合計本数）と、秒数の `video_total_sec`（動画の合計の長さ）・`audio_total_sec`（音声の合計の長さ）・`clip_min_sec`（推奨の最短秒数。下回っても拒否せず、画面が警告を出すだけ）である。値は設計正本 `Docs/MINIMAX_H3_DESIGN.md` §3.2。**サーバーはこの値で要求を検査しない**。エンジンは未実装で、`POST /generate` の本文も変わらない。
 
 **(f) MiniMax H3 の `unsupported_features`。** 単発生成の拒否表の機能名（`reference_video`・`nag`・`two_stage_hq`・`guidance_scale`・`outpaint`・`inpaint`・`alpha_gen`・`prune_vaed`・`keep_resident_embeddings`・`keyframe_strength`〔`strength` が `null` 以外。0.8 でも断る〕）＋ `lora_audio_strength`〔LoRA の音声だけの強度。422 にはならず、操作部の音声トグルを隠すためだけに載せる〕＋ `chain` ＋ `retake` ＋ `fused_gguf_dequant_kernel`〔無視表の項目。422 にはならず、H3 では効かない操作部を隠すためだけに載せる〕。I2V はキーフレームを最大 10 枚・0〜`num_frames`−1 の任意のフレームに置け、強度は省略する（ワーカーへは送らない）。H3 の strength の 422 の文言は「MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。」である。導出規則は MULTI_ENGINE_DESIGN §5.6 (4)。**H3 は `loras` を受ける**（2026-10-24。拒否表から外れ「動作」。LoRA の置き場所と判定は §6.3 の LoraSpec の注）。**H3 は `source_audio`（単発の A2V）を受ける**（2026-10-25。「動作」。§6.2 の補足）。**逆向きに、LTX 2.3／2.5 の `unsupported_features` には H3 専用の `vram16_mode`（2026-10-18 追加）と `source_audio`（2026-10-25 追加）が載る**（H3 の一覧には載らない）。
 

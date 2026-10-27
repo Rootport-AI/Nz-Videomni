@@ -25,6 +25,7 @@ import { END_SOURCE_CONTEXT_FRAMES, tailAlignedStartFrame } from "../timeline/ta
 import { computeTargetNumFrames } from "../timeline/deriveDuration";
 import { resolvePrefillSeed } from "../timeline/prefillSeed";
 import { dispatchCreateCommand } from "../timeline/createLiveCommands";
+import { decideSourceTrim, trimQuery } from "../timeline/sourceTrim";
 import { fileNameFromPath } from "../modes/single/keyframeUtils";
 import { LanguageProvider, useStrings } from "../i18n/LanguageContext";
 import { JobsProvider, useJobsContext } from "../jobs/JobsContext";
@@ -681,6 +682,46 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     ) {
       showNote("warning", strings.edit.unavailableOnBaseModel.alphaGen);
       return;
+    }
+
+    // ── §1-107 (UI first): on a base model whose constraints carry `reference`
+    // (MiniMax H3), #2 and #7 put the file into the Reference accordion's first
+    // free Videos / Audios card instead of the IC-LoRA / A2V slot — a live
+    // command, so Create is NOT remounted (the prompt and the other cards
+    // survive). Like #5's 2nd-and-later keyframes: no provisional and no
+    // reservation-seat check (plan Q6). #3 (a2v from a video's sound) is
+    // refused with a pointer to the Audios card's 📁 button. Without
+    // `reference` (LTX) none of this runs and the routes below are unchanged.
+    if (baseModels.activeConstraints.reference) {
+      if (action === "referenceVideo") {
+        const item = command.selection.selected[0];
+        const filePath = item?.filePath ?? null;
+        const fileName = filePath ? fileNameFromPath(filePath) : "";
+        // The ribbon's own range, exactly as the IC-LoRA #2 path trims it; the
+        // card's seconds are the TRIMMED length (adversarial review M1).
+        const decision = decideSourceTrim(item, command.selection);
+        const query = trimQuery(decision);
+        dispatchCreateCommand({
+          type: "addReferenceVideo",
+          filePath,
+          fileName,
+          ...(query ? { trimQuery: query } : {}),
+          ...(decision.trim ? { durationSec: decision.durationSec } : {}),
+        });
+        setMode("single");
+        return;
+      }
+      if (action === "audioToVideo") {
+        const filePath = command.selection.selected[0]?.filePath ?? null;
+        const fileName = filePath ? fileNameFromPath(filePath) : "";
+        dispatchCreateCommand({ type: "addReferenceAudio", filePath, fileName });
+        setMode("single");
+        return;
+      }
+      if (action === "videoAudioToVideo") {
+        showNote("warning", strings.notes.videoAudioA2vUseReference);
+        return;
+      }
     }
 
     // ── §3-54 物体追尾 (trackObject): the Toolbox tab's tracking panel. An
@@ -1683,6 +1724,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
             <SingleScreen
               key={`single-${remountTokens.single}`}
               prompt={prompt}
+              onPromptChange={setPrompt}
               baseUrl={baseUrl}
               initialIntent={singleIntent}
               nativeBridge={nativeBridge}

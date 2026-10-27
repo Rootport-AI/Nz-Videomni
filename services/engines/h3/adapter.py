@@ -71,6 +71,7 @@ from services.engines.ltx.adapter import (
 from services.engines.ltx.request_rules import (
     FRAME_RATE_MAX,
     NUM_FRAMES_MAX,
+    ReferenceLimits,
     RequestRules,
     SamplingRange,
 )
@@ -156,6 +157,16 @@ REQUEST_RULES = RequestRules(
     # Single-generate A2V (``request.source_audio.strength``): mask value
     # m = 1 - strength on every audio latent; 1.0 keeps the source audio as is.
     source_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
+    # Ref2VA's limits for the UI, always published whatever weights are loaded. The engine is not implemented yet (§1-107).
+    reference=ReferenceLimits(
+        max_images=9,
+        max_videos=3,
+        max_audios=3,
+        max_total=12,
+        video_total_sec=15.0,
+        audio_total_sec=15.0,
+        clip_min_sec=2.0,
+    ),
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 

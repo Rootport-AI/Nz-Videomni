@@ -1,6 +1,7 @@
 # タイムライン右クリック機能の再設計 設計仕様書
 
 - 改訂履歴:
+  - 2026-10-27 台帳§1-107前段（MiniMax H3のReferenceアコーディオン）に伴い、#2・#7の表示名を「この動画を参照入力」「この音声を参照入力（またはa2v）する」へ改名し、MiniMax H3（参照入力の規約`constraints.reference`を公開するベースモデル）では#2・#7の行き先がSingle画面のReferenceアコーディオンの空き最若番カードになり画面を作り直さないこと、#3は案内を出して受け付けないことを§3-4の#2・#3・#7の説明と§7-1の表に追記（`action`のIDは不変）
   - 2026-07-19 敵対的レビュー2本の指摘を反映（第2版）
   - 2026-07-19 オーナーディスカッション反映: 仮オブジェクトを全生成起点項目へ拡大・予約席1つルール・#5/#8の精密化（第3版）
   - 2026-07-19 Phase A実装完了とG1実機ゲート結果を反映: EDIT_INFOカーソルの実機挙動判明（赤カーソル、`get_mouse_layer_frame`での上書きを実験中）・#9/#10のリマウント廃止（D3決定）・レイヤー/フレーム番号の+1表示規約を新設・実機チェックリストの結果を反映（第4版）
@@ -115,12 +116,12 @@ AviUtl2が拡張機能に用意しているメニュー登録の仕組み（`reg
 | # | 絵文字 | 英語キー（表示キー） | 日本語ラベル（提案） | アクションID | 行き先 | 必須種別 | リマウント | 仮オブジェクト | やること |
 |---|--------|------|------|------|------|------|------|------|------|
 | 1 | 🎬 | Video: continue this video (v2v) | 🎬 Video: この動画の続きを生成 (v2v) | `extendVideo` | Chain画面 | 動画 | リマウント（※） | 素材の直後 | 選択動画のファイルパスをソース欄へ自動読み込みし、解像度をプリフィル |
-| 2 | 🎬 | Video: generate using this video as reference (IC-LoRA) | 🎬 Video: この動画を参照にIC-LoRA生成 | `referenceVideo` | Create画面 | 動画 | リマウント | 素材と同開始でlayer_max+1 | 選択動画を参照動画欄へ自動読み込みし、128の倍数へ丸めた解像度をプリフィル |
+| 2 | 🎬 | Video: use this video as a reference input | 🎬 Video: この動画を参照入力 | `referenceVideo` | Create画面 | 動画 | リマウント（H3はリマウントなし・仮オブジェクトなし。本文参照） | 素材と同開始でlayer_max+1 | 選択動画を参照動画欄へ自動読み込みし、128の倍数へ丸めた解像度をプリフィル |
 | 3 | 🎬 | Video: audio-to-video from this video's sound | 🎬 Video: この動画の音声でa2v | `videoAudioToVideo` | Create画面 | 動画 | リマウント | 素材と同開始でlayer_max+1 | 選択オブジェクトの実尺範囲の音声をwav化して音声欄へ自動読み込み、A2Vモードを有効化 |
 | 4 | 🖼 | Image: generate a video from this image (i2v) | 🖼 Image: この画像から動画を生成 (i2v) | `imageToVideo` | Create画面 | 画像 | リマウント | 素材の直後 | 画像をキーフレームの1枚目（frame 0）へ自動追加。モードバッジがI2Vになる |
 | 5 | 🖼 | Image: add this image as a keyframe | 🖼 Image: この画像をキーフレームに追加 | `addImageKeyframe` | Create画面 | 画像 | リマウントなし（ライブ追記） | 追加先が1枚目になる時のみ素材の直後（2枚目以降は挿入せず） | 現在のフォーム状態を保ったまま、キーフレーム末尾へ追加 |
 | 6 | 🖼 | Image: generate a long video from this image (i2v Clip Chain) | 🖼 Image: この画像から長尺動画を生成 (i2v Clip Chain) | `imageToClipChain` | Chain画面 | 画像 | リマウント（※） | 素材の直後 | 画像をClip Chainの冒頭キーフレームへ自動設定 |
-| 7 | 🎵 | Audio: audio-to-video from this audio | 🎵 Audio: この音声からa2v | `audioToVideo` | Create画面 | 音声 | リマウント | 素材と同開始でlayer_max+1 | 音声ファイルパスを直接アップロードし、A2Vモードを有効化 |
+| 7 | 🎵 | Audio: use this audio as a reference input (or a2v) | 🎵 Audio: この音声を参照入力（またはa2v）する | `audioToVideo` | Create画面 | 音声 | リマウント（H3はリマウントなし・仮オブジェクトなし。本文参照） | 素材と同開始でlayer_max+1 | 音声ファイルパスを直接アップロードし、A2Vモードを有効化 |
 | 8 | 📝 | Text: append to the main prompt | 📝 Text: メインプロンプトへ追記 | `appendText` | 画面遷移なし | テキスト | 遷移なし・リマウントなし | 素材と同開始でlayer_max+1 | テキストオブジェクトの本文を取得し、共有プロンプト欄の末尾へ追記 |
 | 13 | ⬇ | Insert this generated result now | ⬇ この生成結果を今すぐ挿入 | `insertProvisionalResult` | 画面遷移なし | 仮オブジェクト（`NzVideomni#<ジョブID>`を持つもの） | 遷移なし・リマウントなし | 触れない（完了時は🎞と同じく挿入で自動削除される） | 右クリックした仮オブジェクトのジョブIDを逆引きし、完了済みなら操作パネルの🎞ボタンと同じ置換挿入（仮オブジェクト自動削除）を実行。未完了・失敗・非仮オブジェクト等は状況に応じたトーストで案内 |
 
@@ -207,9 +208,9 @@ AviUtl2が拡張機能に用意しているメニュー登録の仕組み（`reg
 
 **#1のクリップカード枚数（2026-07-22・X4）**: 右クリック#1でChainへプリフィルするとき、操作パネルに置くクリップカードは**1枚**です（以前は2枚になっていました。[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-32のテスト中に発覚）。v2vの続き生成はソース動画を起点にした1クリップの生成であり、カードが2枚あると余分な空クリップを生む紛らわしさがあったためです。**この1枚化は右クリック経路（#1）だけの変更**で、ユーザーが操作パネルから手動でソース動画を添付してChainを組む場合は、従来どおりクリップ数を維持します（手動フローには手を付けません。出典: [`DEVLOG.md`](DEVLOG.md) §47.4）。
 
-**#2 🎬 Video: この動画を参照にIC-LoRA生成** — Create画面へ遷移し、選択動画を参照動画欄へ自動読み込みします。解像度は128の倍数へ丸めた値をプリフィルします。単発生成（`/generate`）向けの入口で、行き先はCreate画面です（出典: 現行の`webui/src/timeline/menuRouting.ts`の`referenceVideo`エントリの設計判断コメント、[`TIMELINE_ALPHA_REQUIREMENTS.md`](TIMELINE_ALPHA_REQUIREMENTS.md) §2・§7-3-A）。**この設計判断コメントが書かれた時点では`/generate/chain`に`reference_video_id`が無くChain側に同等の入口が存在しなかったが、2026-08-11の長尺IC-LoRAで`/generate/chain`にも参照動画が解禁され、Chain側の入口が#19（下記）として新設された。** クリップ連結で参照を使いたい場合は#19を選ぶ。
+**#2 🎬 Video: この動画を参照入力** — Create画面へ遷移し、選択動画を参照動画欄へ自動読み込みします。解像度は128の倍数へ丸めた値をプリフィルします。単発生成（`/generate`）向けの入口で、行き先はCreate画面です（出典: 現行の`webui/src/timeline/menuRouting.ts`の`referenceVideo`エントリの設計判断コメント、[`TIMELINE_ALPHA_REQUIREMENTS.md`](TIMELINE_ALPHA_REQUIREMENTS.md) §2・§7-3-A）。**この設計判断コメントが書かれた時点では`/generate/chain`に`reference_video_id`が無くChain側に同等の入口が存在しなかったが、2026-08-11の長尺IC-LoRAで`/generate/chain`にも参照動画が解禁され、Chain側の入口が#19（下記）として新設された。** クリップ連結で参照を使いたい場合は#19を選ぶ。ベースモデルが参照入力の規約（`constraints.reference`）を公開しているとき（MiniMax H3）は、Single画面のReferenceアコーディオンの空き最若番カードへ入り、Single画面は作り直されません（リマウントしません）。それ以外（LTX系）は従来どおりです。
 
-**#3 🎬 Video: この動画の音声でa2v** — Create画面へ遷移します。ネイティブ側の音声抽出（`timeline.extractAudio`）を使い、選択オブジェクトの実尺範囲の音声をwav化してから音声欄へ自動読み込みします。抽出経路は**mix経路**（タイムライン全体で鳴っている音をそのまま録る経路）で確定です。対象オブジェクトだけを分離するsolo分離は将来課題です（出典: [`DEVLOG.md`](DEVLOG.md) §33.6、[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §4-21〔旧§3-9〕）。不要な音を除きたい場合は、ユーザーが手作業で対象外レイヤーを無効化すれば代替できます。wavが読み込まれると、wavの長さからFrames（生成フレーム数）を自動調整する処理が発火し、あわせてA2Vモードが有効化されます。
+**#3 🎬 Video: この動画の音声でa2v** — Create画面へ遷移します。ネイティブ側の音声抽出（`timeline.extractAudio`）を使い、選択オブジェクトの実尺範囲の音声をwav化してから音声欄へ自動読み込みします。抽出経路は**mix経路**（タイムライン全体で鳴っている音をそのまま録る経路）で確定です。対象オブジェクトだけを分離するsolo分離は将来課題です（出典: [`DEVLOG.md`](DEVLOG.md) §33.6、[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §4-21〔旧§3-9〕）。不要な音を除きたい場合は、ユーザーが手作業で対象外レイヤーを無効化すれば代替できます。wavが読み込まれると、wavの長さからFrames（生成フレーム数）を自動調整する処理が発火し、あわせてA2Vモードが有効化されます。ベースモデルが参照入力の規約（`constraints.reference`）を公開しているとき（MiniMax H3）は、案内を出して受け付けません（音声はReferenceアコーディオンのAudiosカードの📁から入れます）。
 
 音声抽出は時間がかかりうるため、進捗と結果を第6節の共通ノート領域に表示します。抽出中は「音声を抽出しています…」（en: Extracting audio…）を出します。mix経路の性質を利用者に伝えるため、受領ノートには「タイムラインで実際に鳴っている音を抽出します」（en: This extracts the sound as it actually plays on the timeline.）という説明を含めます。抽出に失敗した場合の文言は次のとおりです。
 
@@ -224,7 +225,7 @@ AviUtl2が拡張機能に用意しているメニュー登録の仕組み（`reg
 
 **#6 🖼 Image: この画像から長尺動画を生成 (i2v Clip Chain)** — Chain画面へ遷移し、選択画像をClip Chain（複数のクリップをつないで長尺の動画を作る仕組み）の冒頭キーフレームへ自動設定します（出典: [`DEVLOG.md`](DEVLOG.md) §33.11）。
 
-**#7 🎵 Audio: この音声からa2v** — Create画面へ遷移し、音声ファイルのパスを直接アップロードします。バックエンドが許可する拡張子は wav / mp3 / m4a / aac / flac / ogg です。この許可拡張子リストは、バックエンド凍結方針のもとで2026-07-19のバックエンド調査（`config.yaml`の実読）により確認済みであり、バックエンド側の改修は不要です（出典: [`DEVLOG.md`](DEVLOG.md) §33.7の拡張子リスト、および2026-07-19の`config.yaml`実読）。ただし、wavの場合のみFramesの自動調整が効きます（音声長を測る`fs.probeAudioDuration`がwav専用のため）。非wav（mp3など）は自動調整なしでそのまま受け入れます。
+**#7 🎵 Audio: この音声を参照入力（またはa2v）する** — Create画面へ遷移し、音声ファイルのパスを直接アップロードします。バックエンドが許可する拡張子は wav / mp3 / m4a / aac / flac / ogg です。この許可拡張子リストは、バックエンド凍結方針のもとで2026-07-19のバックエンド調査（`config.yaml`の実読）により確認済みであり、バックエンド側の改修は不要です（出典: [`DEVLOG.md`](DEVLOG.md) §33.7の拡張子リスト、および2026-07-19の`config.yaml`実読）。ただし、wavの場合のみFramesの自動調整が効きます（音声長を測る`fs.probeAudioDuration`がwav専用のため）。非wav（mp3など）は自動調整なしでそのまま受け入れます。ベースモデルが参照入力の規約（`constraints.reference`）を公開しているとき（MiniMax H3）は、Single画面のReferenceアコーディオンの空き最若番カードへ入り、Single画面は作り直されません（リマウントしません）。それ以外（LTX系）は従来どおりです。
 
 **#8 📝 Text: メインプロンプトへ追記** — テキストオブジェクトの本文を取得し、共有プロンプト欄（画面上部のPromptBar）の末尾へ**追記**します。タブの切り替えや画面のリマウントは行いません（プロンプトは`AppShell`の共有stateにあるため、その場で書き足せます）。本文の取得にはネイティブ側の拡張が必要です（詳細は第4節）。
 
@@ -331,12 +332,12 @@ AviUtl2が拡張機能に用意しているメニュー登録の仕組み（`reg
 | 項目 | 必須種別 |
 |------|------|
 | #1 この動画の続きを生成 | 動画 |
-| #2 この動画を参照にIC-LoRA生成 | 動画 |
+| #2 この動画を参照入力 | 動画 |
 | #3 この動画の音声でa2v | 動画 |
 | #4 この画像から動画を生成 | 画像 |
 | #5 この画像をキーフレームに追加 | 画像 |
 | #6 この画像から長尺動画を生成 | 画像 |
-| #7 この音声からa2v | 音声 |
+| #7 この音声を参照入力（またはa2v）する | 音声 |
 | #8 メインプロンプトへ追記 | テキスト |
 | #9 ここにAI生成を挿入 | 対象外（レイヤーメニュー） |
 | #10 現在フレームから動画を生成 | 対象外（レイヤーメニュー） |
@@ -367,7 +368,7 @@ AviUtl2が拡張機能に用意しているメニュー登録の仕組み（`reg
 
 **近縁ケースの誘導（当初は1件だけの特例、2026-08-10に2件へ）**: 種別は近いが項目が違う、という間違いやすい組合せについては、単なるエラーではなく次の行き先へ導きます。第1段階で特例化したのは1件だけでしたが、長尺A2Vの新設にあわせて**単発と長尺で誘導先が分かれる形**へ一般化しました（音声を必須とする項目の一覧と、その項目ごとの誘導先を1つの表にまとめてあります）。
 
-- 動画オブジェクトで「🎵 この音声からa2v」（#7）を選んだとき: 「動画の音声を使うには『🎬 この動画の音声でa2v』を選んでください」（en: To use this video's sound, choose "🎬 Audio-to-video from this video's sound".）
+- 動画オブジェクトで「🎵 この音声を参照入力（またはa2v）する」（#7）を選んだとき: 「動画の音声を使うには『🎬 この動画の音声でa2v』を選んでください」（en: To use this video's sound, choose "🎬 Audio-to-video from this video's sound".）。H3 ではその #3 も案内で断られる（音声は Audios のカードの📁から入れる）
 - 動画オブジェクトで「🎵 この音声からlong a2v」（#18）を選んだとき: 「動画の音声を使うには『🎬 この動画の音声でlong a2v』を選んでください。」（2026-08-10追加。単発の#3ではなく、長尺の対である#17へ導きます）
 
 ### 4-4. テキスト本文の取得（ネイティブ拡張が必要）
@@ -381,7 +382,7 @@ AviUtl2が拡張機能に用意しているメニュー登録の仕組み（`reg
 
 参照動画が短すぎると、IC-LoRAはサーバー内部で異常終了することが分かっています（サーバー側は入力の長さを検査しません）。また、Chain画面のv2vにも、短い動画では`context_frames`（接続に使う末尾フレーム数）や`overlap`（重なりフレーム数）の制約に触れて422エラーになる境界があります。これらを防ぐため、`timeline.getSelection`の応答に**`mediaDurationSec`**（`get_media_info`の`total_time`由来の実尺秒数）を追加します。
 
-- #1（この動画の続きを生成）と #2（この動画を参照にIC-LoRA生成）は、プリフィルの時点で`mediaDurationSec`を検査します。
+- #1（この動画の続きを生成）と #2（この動画を参照入力）は、プリフィルの時点で`mediaDurationSec`を検査します。
 - 尺が不足している場合はプリフィルで止め、Generateへ進ませず、人が読める理由を表示します。文言例: 「この参照動画は短すぎます。約◯秒以上の動画が必要です」（en: This reference video is too short. A video of about ◯ seconds or longer is required.）。しきい値の具体値は、実装時にバックエンド仕様から確定します。
 
 ### 4-6. 解像度の丸め規則（統一表）
@@ -390,7 +391,7 @@ AviUtl2が拡張機能に用意しているメニュー登録の仕組み（`reg
 
 | 項目 | 丸め |
 |------|------|
-| #2 この動画を参照にIC-LoRA生成 | 128の倍数 |
+| #2 この動画を参照入力 | 128の倍数 |
 | #1 この動画の続きを生成 | 64の倍数 |
 | #3 この動画の音声でa2v | 64の倍数 |
 | #4 この画像から動画を生成 | 64の倍数 |
@@ -615,9 +616,9 @@ Repeat count（同じ条件の生成を指定回数繰り返す欄）も、自�
 
 | 項目 | 方式 | 適用場面・備考 |
 |------|------|------|
-| #2 この動画を参照にIC-LoRA生成 | `materialClampedToCeiling` | 参照動画の実尺（`mediaDurationSec`）を基準に、快適上限でクランプ |
+| #2 この動画を参照入力 | `materialClampedToCeiling` | 参照動画の実尺（`mediaDurationSec`）を基準に、快適上限でクランプ |
 | #4 この画像から動画を生成 (i2v) | `comfortCeiling` | 素材（画像）に尺の概念が無いため、解像度の快適上限へ常に合わせる |
-| #3 この動画の音声でa2v／#7 この音声からa2v | `untouched`（初期プリフィルとしては） | DURATIONの決定は初期シードではなく、wav長からの自動調整（`useGenerationForm.ts`の`suggestFramesForAudio`）に委ねる。ただし**この自動調整の提案値自体を快適上限でキャップする変更を第2段階で加えた**（下記参照）。手動アップロードを含むA2V全経路に適用される |
+| #3 この動画の音声でa2v／#7 この音声を参照入力（またはa2v）する | `untouched`（初期プリフィルとしては） | DURATIONの決定は初期シードではなく、wav長からの自動調整（`useGenerationForm.ts`の`suggestFramesForAudio`）に委ねる。ただし**この自動調整の提案値自体を快適上限でキャップする変更を第2段階で加えた**（下記参照）。手動アップロードを含むA2V全経路に適用される |
 | #1 この動画の続きを生成（v2v、Chain）／#6 この画像から長尺動画を生成／#12 現在フレームから長尺動画を生成（Chain、第2段階） | `comfortCeiling`（Clip 0のみ） | Chainは常に`comfortCeiling`（素材長にクランプするv2v的な意味づけはClip 0には無い）。Clip 0のDURATIONのみを対象とし、ゼロから追加される穴埋めクリップは既定値のまま |
 | #9 ✨ ここにAI生成を挿入／#10 現在フレームから動画を生成 | （プリフィル方式ではなく）ライブSET | この2項目はリマウントしない（D3決定）ため、`deriveDuration`の初期シード経路には乗らない。代わりに`AppShell`がクリックのたびに`computeTargetNumFrames({policy:"comfortCeiling", ...})`をライブなフォーム幅・高さから直接計算し、`setDuration`コマンドでCreateフォームのDURATIONだけをその場で書き換える（他のフォーム値・キーフレームは一切変更しない） |
 | #5 この画像をキーフレームに追加／#8 メインプロンプトへ追記／#11 現在フレームをキーフレームに追加（第2段階） | `untouched` | リマウントを伴わないライブ追記系。フォームのDURATIONには一切触れない |
@@ -628,7 +629,7 @@ Repeat count（同じ条件の生成を指定回数繰り返す欄）も、自�
 
 **追記（2026-07-21、単一ソース`resolvePrefillSeed`への集約）**: 上記の「幅・高さ→DURATION_POLICY_BY_INTENT表→`computeTargetNumFrames`」というシード計算は、Create画面・Chain画面それぞれのuseMemo群に重複しており、かつ`AppShell`の予約経路（仮オブジェクトの長さ）はこれと別にconfig既定へフォールバックしていました。素材系の予約長を自動計算DURATIONへ揃える改修（[`DEVLOG.md`](DEVLOG.md) §43）で、このシード計算を**フォームと予約の単一ソースとなる純関数`resolvePrefillSeed`（新規`webui/src/timeline/prefillSeed.ts`）**へ集約しました。`DURATION_POLICY_BY_INTENT`（全intentを網羅）とintent別の素材尺決定`materialDurationForIntent`（#2/#7＝素材フルファイルの`mediaDurationSec`、#3＝タイムラインspan長、その他＝素材尺不要）をこの純関数が持ち、フォームシード（`CreateScreen`/`ChainScreen`）も予約長（`AppShell`）も同じ入力で同じ純関数を呼ぶため、両者が別々の値を導くことがなくなりました。`deriveDuration.ts`自体は本純関数をimportしないプリミティブに保ち、循環依存を避けています。Settings「プロジェクトに合わせる」の`getEditInfo`による1回限りの上書き（§5-13）も、同じ`materialDurationForIntent`のspanセマンティクスを経由するよう統一しました。
 
-**追記（2026-07-22、#2/#7の尺基準をトリム済みspan長へ統一）**: 上記`materialDurationForIntent`は、#2（この動画を参照にIC-LoRA生成）・#7（この音声からa2v）については素材のフルファイル長（`mediaDurationSec`）を、#3（この動画の音声でa2v）についてはタイムラインのトリム済みspan長（`timeline.getSelection`が返す実尺範囲＝タイムライン上でトリムした後の長さ）を返していました。2026-07-22に、この3項目の尺基準を**すべてタイムラインのトリム済みspan長へ統一**しました（[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-43の解消）。span長の算出は新設の共通ヘルパ`spanDurationSec`に集約し、`materialDurationForIntent`の#2/#7もこれを経由します。これにより、素材をタイムライン上でトリムしている場合、仮オブジェクトのリボン長も配置時からトリム後の長さになります。あわせて次の2点を調整しました。
+**追記（2026-07-22、#2/#7の尺基準をトリム済みspan長へ統一）**: 上記`materialDurationForIntent`は、#2（この動画を参照入力）・#7（この音声を参照入力（またはa2v）する）については素材のフルファイル長（`mediaDurationSec`）を、#3（この動画の音声でa2v）についてはタイムラインのトリム済みspan長（`timeline.getSelection`が返す実尺範囲＝タイムライン上でトリムした後の長さ）を返していました。2026-07-22に、この3項目の尺基準を**すべてタイムラインのトリム済みspan長へ統一**しました（[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-43の解消）。span長の算出は新設の共通ヘルパ`spanDurationSec`に集約し、`materialDurationForIntent`の#2/#7もこれを経由します。これにより、素材をタイムライン上でトリムしている場合、仮オブジェクトのリボン長も配置時からトリム後の長さになります。あわせて次の2点を調整しました。
 
 - **#2の最短尺ガードのspan化**: 「参照動画が短すぎる」ガード（下限チェック）の基準も、フルファイル長からトリム済みspan長へ切り替えました（#1〔v2v続き生成〕はフル尺のまま）。
 - **#7のwav自動調整の上限キャップ**: #7は音声ファイルをフル尺でアップロードするため、wav実測からのFrames自動調整（`useGenerationForm.ts`の`suggestFramesForAudio`）が、span由来のシード値を上書きしてしまう問題がありました。これを避けるため、**プリフィル由来の音声に限り**、自動調整の提案値をspan由来の上限（`a2vSeedMaxFrames`）でキャップします。ユーザーが音声を差し替えると、このキャップは解除されます（差し替えた音声はフル尺で扱う）。
@@ -667,7 +668,7 @@ AviUtl2本体の言語設定を**Default**（本体内蔵の日本語文言を�
 
 ### 5-15. 反対スロットの保持（2026-07-22新設）
 
-出典: `webui/src/timeline/provisionalReservation.ts`（`publishSourceSlots`）・`GenerationPrefill.carryOver`。#2（この動画を参照にIC-LoRA生成）・#3（この動画の音声でa2v）・#7（この音声からa2v）のプリフィルは、§3-4のとおり画面をリマウント（フォーム初期化）して適用します。この初期化は、ユーザーがすでに入力していた「反対側スロットの素材」まで消してしまうという不便がありました（例: 音声を入れた状態で#2〔参照動画〕を右クリックすると、リマウントで音声が失われる）。
+出典: `webui/src/timeline/provisionalReservation.ts`（`publishSourceSlots`）・`GenerationPrefill.carryOver`。#2（この動画を参照入力）・#3（この動画の音声でa2v）・#7（この音声を参照入力（またはa2v）する）のプリフィルは、§3-4のとおり画面をリマウント（フォーム初期化）して適用します。この初期化は、ユーザーがすでに入力していた「反対側スロットの素材」まで消してしまうという不便がありました（例: 音声を入れた状態で#2〔参照動画〕を右クリックすると、リマウントで音声が失われる）。
 
 2026-07-22に、リマウント（フォーム初期化）は維持しつつ、**反対側スロットの素材だけをアップロード済みのファイルIDの再利用で引き継ぐ**「反対スロット保持」を新設しました。引き継ぐ対象は次のとおりです。
 
@@ -745,6 +746,7 @@ AviUtl2本体の言語設定を**Default**（本体内蔵の日本語文言を�
 | `replace` | Chain行き（骨組み） | （廃止） | 第2段階へ（jobIDタグ基盤とセット） |
 | `sendToChain` | Chain行き（骨組み） | （廃止） | 具体的な各項目に置き換え |
 | `audioToVideo` | Chain行き（配線切れ） | `audioToVideo` | Create行きへ修正（音声ファイル直接アップロード） |
+| `referenceVideo`／`audioToVideo`／`videoAudioToVideo`（2026-10-27） | — | （IDは不変） | ベースモデルが参照入力の規約（`constraints.reference`）を公開しているとき（MiniMax H3）は、`referenceVideo`・`audioToVideo`はSingle画面のReferenceアコーディオンの空き最若番カードへ入り、Single画面は作り直されない。`videoAudioToVideo`は案内を出して受け付けない。それ以外（LTX系）は上の行のとおり（§3-4の#2・#3・#7） |
 | （新規） | — | `videoAudioToVideo` | 新設（動画の音声をwav化してa2v） |
 | （新規） | — | `addImageKeyframe` | 新設（リマウントせずキーフレーム末尾へ追加） |
 | （新規） | — | `imageToClipChain` | 新設（画像からClip Chain冒頭キーフレームへ） |

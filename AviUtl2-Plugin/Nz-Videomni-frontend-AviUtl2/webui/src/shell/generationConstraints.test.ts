@@ -124,6 +124,30 @@ describe("generationConstraints", () => {
     expect(LTX_GENERATION_CONSTRAINTS.singleSourceAudio).toBeNull();
   });
 
+  it("camelCases the served reference limits; absent or null (LTX, the fallback) means no Reference", () => {
+    const reference = {
+      max_images: 9,
+      max_videos: 3,
+      max_audios: 3,
+      max_total: 12,
+      video_total_sec: 15,
+      audio_total_sec: 15,
+      clip_min_sec: 2,
+    };
+    expect(resolveGenerationConstraints({ ...H3, reference }).reference).toEqual({
+      maxImages: 9,
+      maxVideos: 3,
+      maxAudios: 3,
+      maxTotal: 12,
+      videoTotalSec: 15,
+      audioTotalSec: 15,
+      clipMinSec: 2,
+    });
+    expect(resolveGenerationConstraints({ ...H3, reference: null }).reference).toBeNull();
+    expect(resolveGenerationConstraints(LTX).reference).toBeNull();
+    expect(LTX_GENERATION_CONSTRAINTS.reference).toBeNull();
+  });
+
   it("reads the served prompt-token limit; null (H3) and the fallback have none", () => {
     expect(resolveGenerationConstraints({ ...LTX, prompt_token_limit: 1024 }).promptTokenLimit).toBe(1024);
     expect(resolveGenerationConstraints({ ...H3, prompt_token_limit: null }).promptTokenLimit).toBeNull();

@@ -1,7 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bridge as appBridge } from "../bridge";
+import { bridge as appBridge, TIMELINE_MENU_INVOKED_EVENT } from "../bridge";
+import type { ResultOf } from "../bridge";
+import { resetCreateLiveCommands } from "../timeline/createLiveCommands";
+import { resetProvisionalReservation } from "../timeline/provisionalReservation";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { NativeBridge } from "../bridge";
 import { AppShell } from "./AppShell";
@@ -139,15 +142,17 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       expect(screen.getByRole("tab", { name: "Edit" })).toBeDisabled();
       expect(screen.getByRole("tab", { name: "Single" })).not.toBeDisabled();
 
-      // Reference video hidden. A2V stays OPEN: H3 publishes `source_audio`,
-      // so the card submits through the single `/generate` route.
+      // Reference video hidden. §1-107: H3 publishes `reference`, so the A2V
+      // accordion gives way to the Reference accordion, whose Audios cards carry
+      // the "Audio to video" tick; ticking one brings up the Strength slider
+      // (served `constraints.source_audio`) under that card.
       expect(within(panel).queryByText("Reference video (IC-LoRA)")).not.toBeInTheDocument();
-      expect(within(panel).queryByText(/Generating from an audio track (A2V) is not available/)).not.toBeInTheDocument();
-      const a2vCard = within(panel).getByText("Audio to video (A2V)").closest("details") as HTMLElement;
-      const a2vButtons = within(a2vCard).getAllByRole("button", { hidden: true });
-      expect(a2vButtons.some((button) => !(button as HTMLButtonElement).disabled)).toBe(true);
-      // The strength slider (served `constraints.source_audio`) is on the card.
-      expect(within(a2vCard).getByTestId("source-audio-strength")).toBeInTheDocument();
+      expect(within(panel).queryByText("Audio to video (A2V)")).not.toBeInTheDocument();
+      expect(within(panel).getByText("Reference", { selector: "summary" })).toBeInTheDocument();
+      const audioCard = within(panel).getByTestId("ref-slot-audio-1");
+      expect(within(audioCard).queryByTestId("source-audio-strength")).not.toBeInTheDocument();
+      await userEvent.setup().click(within(audioCard).getByRole("checkbox", { name: "Audio to video", hidden: true }));
+      expect(within(audioCard).getByTestId("source-audio-strength")).toBeInTheDocument();
 
       // Negative Prompt accordion greyed with its note; the switch is disabled.
       expect(screen.getByText(/Negative prompts \(NAG\/VSF\) are not available/)).toBeInTheDocument();
@@ -422,4 +427,194 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
     },
     20_000,
   );
+
+  // ── §1-107 (UI first): right-click #2 / #7 / #3 on MiniMax H3 ──────────────
+  describe("§1-107 right-click into the Reference accordion", () => {
+    beforeEach(() => {
+      resetProvisionalReservation();
+      resetCreateLiveCommands();
+    });
+
+    /** A video object whose ribbon is frames 30..119 @30fps of a 10.7 s file,
+     * played from 1.0 s to 4.0 s — `decideSourceTrim` cuts a 3.000 s window. */
+    function trimmedVideoSelection(filePath: string): ResultOf<"timeline.getSelection"> {
+      return {
+        hasRange: true,
+        rangeStart: 30,
+        rangeEnd: 119,
+        selected: [
+          {
+            layer: 1,
+            frameStart: 30,
+            frameEnd: 119,
+            effectName: "動画ファイル",
+            filePath,
+            objectName: "a",
+            textContent: null,
+            mediaWidth: 1280,
+            mediaHeight: 720,
+            mediaDurationSec: 10.7,
+            hasPlaybackRange: true,
+            playbackStartSec: 1.0,
+            playbackEndSec: 4.0,
+          },
+        ],
+        cursorFrame: 0,
+        cursorLayer: 1,
+        rate: 30,
+        scale: 1,
+        sampleRate: 44100,
+      };
+    }
+
+    function audioSelection(filePath: string): ResultOf<"timeline.getSelection"> {
+      const sel = trimmedVideoSelection(filePath);
+      return {
+        ...sel,
+        selected: [{ ...sel.selected[0]!, effectName: "音声ファイル", mediaWidth: 0, mediaHeight: 0 }],
+      };
+    }
+
+    const card = (id: string) => within(singlePanel()).getByTestId(id);
+
+    async function waitForCardReady(id: string) {
+      await waitFor(
+        () => {
+          expect(within(card(id)).getByRole("button", { name: /add this tag/i, hidden: true })).toBeEnabled();
+          expect(card(id).querySelector(".keyframe-spinner")).toBeNull();
+        },
+        { timeout: 5_000 },
+      );
+    }
+
+    it(
+      "H3: #2 and #7 fill the first free card without remounting Create (prompt and other cards survive); #2 carries the trimmed length",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        const requestSpy = vi.spyOn(bridge, "request");
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(card("ref-slot-video-1")).toBeInTheDocument());
+        const user = userEvent.setup();
+        await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat on a skateboard");
+
+        // #2 → Videos card 1, trimmed to the ribbon; the card shows the trimmed 3.0 s.
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "referenceVideo",
+            selection: trimmedVideoSelection("C:\\v\\one.mp4"),
+          });
+        });
+        await waitForCardReady("ref-slot-video-1");
+        expect(within(card("ref-slot-video-1")).getByText("one.mp4")).toBeInTheDocument();
+        expect(within(card("ref-slot-video-1")).getByText("3.0s")).toBeInTheDocument();
+        expect(requestSpy).toHaveBeenCalledWith("backend.uploadFile", {
+          kind: "video",
+          filePath: "C:\\v\\one.mp4",
+          query: { trim_start_sec: "1.000", trim_duration_sec: "3.000" },
+        });
+
+        // A second #2 lands in card 2; card 1 is untouched.
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "referenceVideo",
+            selection: trimmedVideoSelection("C:\\v\\two.mp4"),
+          });
+        });
+        await waitForCardReady("ref-slot-video-2");
+        expect(within(card("ref-slot-video-2")).getByText("two.mp4")).toBeInTheDocument();
+        expect(within(card("ref-slot-video-1")).getByText("one.mp4")).toBeInTheDocument();
+
+        // #7 → Audios card 1.
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "audioToVideo",
+            selection: audioSelection("C:\\a\\voice.wav"),
+          });
+        });
+        await waitForCardReady("ref-slot-audio-1");
+        expect(within(card("ref-slot-audio-1")).getByText("voice.wav")).toBeInTheDocument();
+        expect(within(card("ref-slot-video-1")).getByText("one.mp4")).toBeInTheDocument();
+        expect((screen.getByPlaceholderText(/describe the video/i) as HTMLTextAreaElement).value).toBe(
+          "a cat on a skateboard",
+        );
+        // Enable is left off (owner ruling 14); still on Single.
+        expect(within(singlePanel()).getByRole("checkbox", { name: "Enable", hidden: true })).not.toBeChecked();
+        expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+      },
+      25_000,
+    );
+
+    it(
+      "H3 → LTX 2.3 → H3: the Reference accordion goes away on LTX and the filled card is still there on return",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(card("ref-slot-audio-1")).toBeInTheDocument());
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "audioToVideo",
+            selection: audioSelection("C:\\a\\voice.wav"),
+          });
+        });
+        await waitForCardReady("ref-slot-audio-1");
+
+        await switchTo("LTX23");
+        await waitFor(() =>
+          expect(within(singlePanel()).queryByTestId("ref-slot-audio-1")).not.toBeInTheDocument(),
+        );
+        expect(within(singlePanel()).queryByText("Reference", { selector: "summary" })).not.toBeInTheDocument();
+
+        await switchTo("MiniMaxH3");
+        await waitForCardReady("ref-slot-audio-1");
+        expect(within(card("ref-slot-audio-1")).getByText("voice.wav")).toBeInTheDocument();
+      },
+      25_000,
+    );
+
+    it(
+      "H3: #3 (a2v from a video's sound) is refused with a pointer to the Audios card",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        const requestSpy = vi.spyOn(bridge, "request");
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(card("ref-slot-audio-1")).toBeInTheDocument());
+
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "videoAudioToVideo",
+            selection: trimmedVideoSelection("C:\\v\\one.mp4"),
+          });
+        });
+        await screen.findByText(
+          "On MiniMax H3, add the audio with 📁 on a Reference Audios card, then tick Audio to video.",
+          {},
+          { timeout: 5_000 },
+        );
+        // Refused: no audio was extracted.
+        expect(requestSpy.mock.calls.some((c) => c[0] === "timeline.extractAudio")).toBe(false);
+      },
+      20_000,
+    );
+
+    it(
+      "LTX 2.3: #2 still takes the IC-LoRA road (no Reference accordion)",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        await renderApp(bridge);
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "referenceVideo",
+            selection: trimmedVideoSelection("C:\\v\\one.mp4"),
+          });
+        });
+        await screen.findByText(/ic-lora is \/generate-only/i, {}, { timeout: 5_000 });
+        expect(within(singlePanel()).queryByText("Reference", { selector: "summary" })).not.toBeInTheDocument();
+        expect(within(singlePanel()).queryByTestId("ref-slot-video-1")).not.toBeInTheDocument();
+      },
+      20_000,
+    );
+  });
 });

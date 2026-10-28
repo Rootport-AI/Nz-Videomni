@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   appendReferenceTag,
+  buildReferenceBody,
+  countUsedReferences,
   createInitialState,
   effectiveA2vSlot,
   firstEmptySlot,
+  referenceNotices,
   referenceReducer,
+  referenceSendUploading,
   referenceTag,
   summarizeReference,
 } from "./referenceRules";
 import type { ReferenceAction, ReferenceKind, ReferenceRules, ReferenceState } from "./referenceRules";
 
-// §1-107 (UI first): the Reference accordion's reducer and rules.
+// §1-107: the Reference accordion's reducer and rules.
 
 const RULES: ReferenceRules = {
   maxImages: 9,
@@ -322,5 +326,109 @@ describe("referenceRules — helpers", () => {
     // An uploading slot is not free.
     s = run(s, { type: "attachStart", kind: "video", slot: 3, filePath: "C:\\v", fileName: "v" });
     expect(firstEmptySlot(s.slots.video)).toBeNull();
+  });
+});
+
+describe("referenceRules — the /generate body (§1-107)", () => {
+  const body = (s: ReferenceState, role: "fl2va" | "ref2va" | null = null, isH3 = true) =>
+    buildReferenceBody(summarizeReference(s, RULES), s.slots, role, isH3);
+
+  it("pictures, then videos, then audios, each by card number; max_sec only on a truncated card", () => {
+    const s = put(put(put(put(put(enabled(), "audio", 2, 3), "video", 2, 10), "picture", 4), "video", 1, 8), "picture", 1);
+    expect(body(s)).toEqual([
+      { kind: "picture", id: "picture-1", slot: 1 },
+      { kind: "picture", id: "picture-4", slot: 4 },
+      { kind: "video", id: "video-1", slot: 1 },
+      { kind: "video", id: "video-2", slot: 2, max_sec: 7 },
+      { kind: "audio", id: "audio-2", slot: 2 },
+    ]);
+  });
+
+  it("an audio card cut short carries max_sec = its used seconds", () => {
+    const s = put(put(enabled(), "audio", 1, 9), "audio", 2, 8);
+    const use = summarizeReference(s, RULES).slotUse.audio[1];
+    expect(use).toMatchObject({ used: true, truncated: true, usedSec: 6 });
+    expect(body(s)).toEqual([
+      { kind: "audio", id: "audio-1", slot: 1 },
+      { kind: "audio", id: "audio-2", slot: 2, max_sec: 6 },
+    ]);
+  });
+
+  it("empty off H3, with FL2VA loaded, and with Enable off; a Hybrid / unknown file (null) and Ref2VA send", () => {
+    const on = put(enabled(), "picture", 1);
+    expect(body(on, null, false)).toEqual([]);
+    expect(body(on, "fl2va")).toEqual([]);
+    expect(body(on, "ref2va")).toHaveLength(1);
+    expect(body(on, null)).toHaveLength(1);
+    expect(body(put(createInitialState(RULES), "picture", 1), "ref2va")).toEqual([]);
+  });
+
+  it("left out by a rule, the effective A2V slot, an uploading card and an error card are not in the body", () => {
+    let s = put(put(put(enabled(), "video", 1, 15), "video", 2, 4), "picture", 2);
+    s = run(
+      s,
+      { type: "attachStart", kind: "picture", slot: 3, filePath: "C:\\p3", fileName: "p3" },
+      { type: "attachStart", kind: "picture", slot: 5, filePath: "C:\\p5", fileName: "p5" },
+      { type: "attachFail", kind: "picture", slot: 5, errorCode: "UPLOAD_FAILED" },
+    );
+    // video 2 is overDuration; picture 3 is still uploading; picture 5 failed.
+    expect(body(s)).toEqual([
+      { kind: "picture", id: "picture-2", slot: 2 },
+      { kind: "video", id: "video-1", slot: 1 },
+    ]);
+    const a2v = run(put(s, "audio", 1, 5), { type: "setA2vSlot", slot: 1 });
+    expect(body(a2v)).toEqual([]);
+  });
+
+  it("referenceSendUploading: only a card that would be sent blocks", () => {
+    const uploading = run(enabled(), {
+      type: "attachStart",
+      kind: "picture",
+      slot: 1,
+      filePath: "C:\\p",
+      fileName: "p",
+    });
+    const check = (s: ReferenceState, role: "fl2va" | "ref2va" | null, isH3: boolean) =>
+      referenceSendUploading(summarizeReference(s, RULES), s.slots, role, isH3);
+    expect(check(uploading, "ref2va", true)).toBe(true);
+    expect(check(uploading, null, true)).toBe(true);
+    expect(check(uploading, "fl2va", true)).toBe(false);
+    expect(check(uploading, "ref2va", false)).toBe(false);
+    expect(check(run(uploading, { type: "setEnabled", enabled: false }), "ref2va", true)).toBe(false);
+    expect(check(put(enabled(), "picture", 1), "ref2va", true)).toBe(false);
+  });
+
+  it("countUsedReferences: used cards without the A2V slot", () => {
+    const s = put(put(enabled(), "picture", 1), "video", 1);
+    expect(countUsedReferences(summarizeReference(s, RULES))).toBe(2);
+    const a2v = run(put(s, "audio", 1), { type: "setA2vSlot", slot: 1 });
+    expect(countUsedReferences(summarizeReference(a2v, RULES))).toBe(0);
+  });
+});
+
+describe("referenceRules — referenceNotices (§1-107)", () => {
+  const n = (role: "fl2va" | "ref2va" | null, enabled: boolean, a2vActive: boolean, usedCount: number) =>
+    referenceNotices({ role, enabled, a2vActive, usedCount });
+
+  it("① FL2VA + Enable on, ③ with no card — both at once", () => {
+    expect(n("fl2va", true, false, 2)).toEqual(["fl2vaLoaded"]);
+    expect(n("fl2va", true, false, 0)).toEqual(["fl2vaLoaded", "noReferences"]);
+    expect(n("fl2va", false, false, 0)).toEqual([]);
+  });
+
+  it("② Ref2VA + Enable off only", () => {
+    expect(n("ref2va", false, false, 0)).toEqual(["ref2vaLoaded"]);
+    expect(n("ref2va", true, false, 1)).toEqual([]);
+    expect(n("ref2va", true, false, 0)).toEqual(["noReferences"]);
+  });
+
+  it("A2V in effect: neither ① nor ③", () => {
+    expect(n("fl2va", true, true, 0)).toEqual([]);
+    expect(n(null, true, true, 0)).toEqual([]);
+  });
+
+  it("an unknown role (Hybrid, renamed): only ③", () => {
+    expect(n(null, true, false, 0)).toEqual(["noReferences"]);
+    expect(n(null, false, false, 0)).toEqual([]);
   });
 });

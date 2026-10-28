@@ -295,7 +295,7 @@ function ReferenceRow({
 }
 
 /**
- * §1-107 (UI first): MiniMax H3's "Reference" accordion, with three rows
+ * §1-107: MiniMax H3's "Reference" accordion, with three rows
  * (Pictures / Videos / Audios) of horizontally scrolling cards. Presentation
  * only: every value and mutation goes through `api` (`useReferenceSlots`).
  * `<details>` is uncontrolled (like `NagAccordion`); `openSignal` opens it.

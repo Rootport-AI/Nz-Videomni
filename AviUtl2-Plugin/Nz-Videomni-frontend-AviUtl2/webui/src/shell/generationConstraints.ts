@@ -59,7 +59,7 @@ export interface GenerationConstraints {
    * the engine takes no source audio on `/generate` (LTX, fallback) — A2V
    * then goes through `/generate/chain`. Verbatim from the server. */
   singleSourceAudio: { strength: SamplingParamConstraint } | null;
-  /** §1-107 (UI first): the Ref2VA reference limits, camelCased, or `null`
+  /** §1-107: the Ref2VA reference limits, camelCased, or `null`
    * when the engine takes no references (LTX, fallback) — Create then shows
    * no Reference accordion. Its presence alone decides that (no featureScope
    * entry, like {@link singleSourceAudio}). */

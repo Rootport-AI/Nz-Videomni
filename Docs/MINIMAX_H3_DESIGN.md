@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165〜§178（α版の 3 弾は §165〜§167、VRAM 16GB mode は §168〜§169、キーフレームは §170、LoRA は §176、1 ステップの高速化は §177、A2V は §178。台帳の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239・3-240・3-241・3-251・3-254・3-257）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165〜§180（α版の 3 弾は §165〜§167、VRAM 16GB mode は §168〜§169、キーフレームは §170、LoRA は §176、1 ステップの高速化は §177、A2V は §178、Reference アコーディオンの UI は §179、Ref2VA は §180。台帳の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239・3-240・3-241・3-251・3-254・3-257）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -18,7 +18,7 @@
 | [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 | 次の作業の入口（α版の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239） |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 土台。記述子（§4）・エンジンアダプタ（§5.2）・仮想環境（§5.3）・推論モード（§5.8）・写像表（§9） |
 | [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) | 調査の記録（参考資料）。**進め方の裁定**は同ノート §10。配布ファイルの実測は同 §13.2 |
-| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176、A2V は §178） |
+| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176、A2V は §178、Ref2VA は §180） |
 | `engine_h3/venv-engine-h3.freeze.txt` | 仮想環境の**版の正本**。本書は版の数字を書かない |
 | `engine_h3/engine_h3-venv-pyproject.toml` | 仮想環境を手で作り直すときの依存の仕様（なぜその版かの説明つき） |
 
@@ -31,6 +31,7 @@
 3. 推論は CFG なし・1 ステップ 1 回の前向き計算で、映像と音声を同じ系列の中で同時にノイズ除去する。ステップ数と shift は要求の項目として API と操作パネルから渡し、ワーカーの引数で受け取る（§9）。
 4. ノイズ除去の段には「VRAM 16GB mode」（既定 on）がある。活性化をヘッド群と行の塊に分けて VRAM の山を下げ、共有メモリへの退避を防ぐ（§6.5）。
 5. 単発の A2V（音声から映像）は、音声の行を元の音声の潜在に寄せる「行ごとの連続値マスク」で行う（§3.1）。
+6. Ref2VA（参照素材からの生成）は、参照の画像・動画・音声を符号化した行を系列に足し、テキストエンコーダーには札と視覚ブロックで見せる。重みは Ref2VA 用の別のファイルで、Settings で選んで読み込む（§3.2）。
 
 ---
 
@@ -56,7 +57,7 @@
 - **裁定 26 【オーナー裁定】**: 常駐（生成のあいだに読んだ重みを次の生成まで捨てずに持つこと）は α版から有りである。本製品の推奨スペックは VRAM 16GB・主メモリ 64GB であり、これに足りない機械への対応は後から考える。常駐の on／off は Settings 画面の「Acceleration／生成の高速化」の区画にある既存のトグル（モデル骨格の常駐）をそのまま使う。
 - **裁定 28 【オーナー裁定】**: I2V の先頭画像の VAE 符号化は、分布の平均を使う（サンプルしない）。ComfyUI と DiffSynth も平均を取り、diffusers だけが固定の種でサンプルする。
 - **裁定 29 【オーナー裁定】**: サンプラは Euler 固定とし、選択肢は出さない。
-- **裁定 30 【オーナー裁定】**: 操作パネルの方針。LTX に固有の機能（IC-LoRA、Edit の Alpha Gen、Chained の Stage-2〔upscale pass〕の clip length など）は H3 では非表示にする。動画生成の基本機能（中間キーフレームの指定、Chained、Inpainting、Outpainting など）は H3 でも将来実装する予定なので、グレーアウトして操作できない状態で配置だけ決めておく。H3 には「Ref2V」（参照素材からの生成）という目玉機能があり、LTX とまったく違う UI が要る。その UI／UX は Ref2V の実装時に考える。→ UI は先行して決めた（裁定 81）。
+- **裁定 30 【オーナー裁定】**: 操作パネルの方針。LTX に固有の機能（IC-LoRA、Edit の Alpha Gen、Chained の Stage-2〔upscale pass〕の clip length など）は H3 では非表示にする。動画生成の基本機能（中間キーフレームの指定、Chained、Inpainting、Outpainting など）は H3 でも将来実装する予定なので、グレーアウトして操作できない状態で配置だけ決めておく。H3 には「Ref2V」（参照素材からの生成）という目玉機能があり、LTX とまったく違う UI が要る。その UI／UX は Ref2V の実装時に考える。→ UI は先行して決めた（裁定 81）。エンジンは裁定 82 で実装した。
   > **更新（2026-10-19）**: 中間キーフレームは実装済み（裁定 56・59、§3）。
 - **裁定 32 【オーナー裁定】**: 常駐の方式。テキストエンコーダは層ごとにファイルから GPU へ直接読む（§4）。理由は、DiT と VAE を常駐させたまま、テキストエンコーダを主メモリへ丸ごと読む方式を取ると、主メモリの山が 64GB 機でもページファイルに溢れ、常駐の目的（速くする）と逆になるからである。直接読みにすれば、テキストエンコーダは主メモリをほぼ使わない。
 - **裁定 33 【オーナー裁定】**: 映像 VAE は符号化器と復号器に分けて組み、T2V では符号化器を読まない（§8）。
@@ -93,6 +94,7 @@
 - **裁定 79 【オーナー裁定】**: キーフレーム（先頭画像など）との併用を許す。
 - **裁定 80 【オーナー裁定】**: 操作パネルの文言で、Strength 1.0 を「実用的でない」とは書かない。どの値がよいかの主観の判断は利用者に任せる。
 - **裁定 81 【オーナー裁定・監督裁定】**: Single タブの Reference アコーディオン（Ref2VA の UI。参照素材を入れる欄）の決定。オーナー裁定（2026-10-27）14 件と、監督の裁定（計画の未決点への裁定 15 件と追加裁定）をまとめて記す。各項の見出しの括弧で、オーナー裁定か監督の裁定かを分けた。**UI だけを先行して作り、推論エンジンは未実装**（台帳 §1-107。実装の記録はフロントエンド `Docs/DEVLOG.md` §150、門と目視は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §179）。公式の仕様は §3.2。
+  > **更新（2026-10-28）**: エンジン・API・送信本文・注意文は裁定 82 で実装した。下の「先行実装の約束」のうち、送信本文・型・モックの受け口・警告文の項は裁定 82 に置き換わった。受け入れた副作用の (3) は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-114 に起票した。
   - **先行実装の約束**: 生成時の送信本文は FL2VA と同じまま（参照は送らない）。送信本文の型もモックの受け口も作らない。参照の状態は操作パネルの中だけに持つ。「参照は使われません」等の仮の警告文は出さない（監督の裁定も同じ）。LTX 系のタブは変えない。dev にだけ入れ、エンジンが完成するまで main へはマージしない。
   - **構成（オーナー裁定）**: 段の名前は Pictures／Videos／Audios で、カードのタイトルは `<Picture 1>` のようにタグと同じ。参照動画は映像だけを参照し、Audios のカードは音声ファイルだけを受け付ける。合計 15 秒は種類ごとに数える。Enable の既定は off。右クリックで素材を送ってもアコーディオンを開くだけで Enable は触らない。✒（タグをプロンプトへ足す）の区切りは空白 1 つ。§1-103 の A2V の Strength スライダーは、Audios のカードの「Audio to video」の下へ移す。
   - **警告と外す規則（オーナー裁定）**: 2 秒未満のクリップは警告を出すが入力は受け付ける。12 枚を超えた判定は入力した時刻の順で、秒数の切り出しはカード番号順（2 つの規則の混在は可）。Enable=off では全カードを灰色にし、内容は保持して生成に使わない（「Audio to video」も効かない）。
@@ -103,7 +105,22 @@
   - **A2V との統合（監督の裁定）**: A2V の正本は `form.sourceAudio` のまま残し、Reference の A2V のカードから写すだけにする。A2V のカードは参照ではなく既存の A2V の経路に載せるので、n/12・n/3・n/15s にも切り詰め・2 秒の警告・12 枚の判定にも入れない。A2V が on で有効なとき、Reference の他のカードは**空のカードも含めて**灰色にする（オーナーの「他のすべて」による。キーフレームは対象外）。Enable=off のときは A2V が効かず、そのカードも普通の参照として数える。Reference が出る間は従来の A2V アコーディオンを描かない。
   - **警告の出し先（監督の追加裁定）**: 2 秒未満と「長さを測れません」の警告は、外れたカードにも出す（カードそのものの事実）。切り詰めの警告は使われるカードだけに出す。
   - **規約が null の間の扱い（監督の裁定）**: 別のベースモデルへ切り替えて規約が null の間は、直前の規約を据え置く（初回は枠 0）。これで H3 → LTX → H3 と切り替えても内容が残る。
-  - **受け入れた副作用**: (1) LTX で入れた A2V の音声は、H3 に切り替えた時点で消える（Reference が出ている間、A2V の正本 `form.sourceAudio` は Reference に従う）。(2) Enable や A2V のチェックの付け外しのたびに、フレーム数の自動調整と通知が走る（既存の挙動の延長）。(3) H3 で右クリックの #4（i2v）を使うと Single が作り直され、Reference の内容が消える（`PENDING_TASKS.md` §1-107 の留意）。
+  - **受け入れた副作用**: (1) LTX で入れた A2V の音声は、H3 に切り替えた時点で消える（Reference が出ている間、A2V の正本 `form.sourceAudio` は Reference に従う）。(2) Enable や A2V のチェックの付け外しのたびに、フレーム数の自動調整と通知が走る（既存の挙動の延長）。(3) H3 で右クリックの #4（i2v）を使うと Single が作り直され、Reference の内容が消える（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-114）。
+- **裁定 82 【オーナー裁定・監督裁定】**: Ref2VA の推論エンジン・API・操作パネルの配線（送信本文・注意文）・インストーラー・重みの種別の判定の決定（台帳 §1-107。2026-10-28）。オーナー裁定 9 件と、監督の裁定（計画の未決点への裁定 12 件と実装中の追加裁定 2 件）をまとめて記す。各項の見出しの括弧で、オーナー裁定か監督の裁定かを分けた。仕組みの正本は §3.2、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2・§6.9(c)、実測と門は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180。
+  - **重み（オーナー裁定）**: 既定の Ref2VA の重みは FL2VA と同じ配布元 `Comfy-Org/MiniMax-H3` の `diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors`。記述子の `default_file` は FL2VA のままで、Ref2VA は Settings のドロップダウンから選んで読み込む。「読み込まれている重み」は、サーバーの `active` の transformer（「読込」で切り替わったもの）で、Settings のドロップダウンの未反映の選択は見ない。
+  - **種別の判定（オーナー裁定）**: ファイル全体の SHA-256 を記述子の値と突き合わせる（ファイル名ではない）。理由は、改名に強いことと、部分のハッシュでは FL2VA を土台にした Hybrid を FL2VA と誤判定して事実と違う注意を出すこと。一致しなければ種別なし（Hybrid・改名・第三者の配布物は注意を出さない）。
+  - **注意文（オーナー裁定）**: 生成ボタンの下・琥珀色・生成は止めない（前例は LoRA の非対応の注意）。① FL2VA＋Enable が on →「FL2VA モデルがロードされています。参照資料は無視されます。Ref2VA モデルまたは Hybrid モデルをロードしてください。」② Ref2VA＋Enable が off →「Ref2VA モデルがロードされています。参照資料を使わない場合、FL2VA モデルまたは Hybrid モデルのほうが高精度です。」③ Enable が on で参照 0 件 →「参照ファイルがありません。」。「Audio to video」が有効なときは ① を出さない（A2V は FL2VA でも動くので、事実と違うことを書かない）。
+  - **キーフレームとの併用と参照 0 件（オーナー裁定）**: Reference の Enable が on のとき、キーフレームは一緒に送る（併用可）。検証はキーフレームなしを優先し、併用の失敗や品質不足は台帳 §1 に「Reference とキーフレーム入力の併用」として起票して許容する（応急処置はしない）。参照 0 件でも Ref2VA で生成を妨げない（注意 ③ だけ）。
+  - **右クリック #4（オーナー裁定）**: Reference の内容が消える件は今回は受け入れたまま、台帳 §1-114「右クリックメニューから操作パネルに情報を送ったときに入力済みの情報をリセットしないようにする」に起票する（H3 と LTX 系の両方。着手時に #4 以外も点検する）。
+  - **進め方（オーナー裁定）**: GPU を使う real 検証と Ref2VA の重み（約 21GB）の取得は了承済み。コーディング担当は設計の無断変更を禁じ、疑問があれば手を止めて報告する権利を持つ。計画は敵対的レビューを受け、「過剰設計・スパゲッティ化のリスク」と「調査で裏付けが取れるか」の 2 点で採否を決める。
+  - **名前（監督の裁定）**: 要求の項目は `references`、配信は `transformer_role`（`"fl2va"`／`"ref2va"`／null）。操作パネルの「Reference」と同じ語で、IC-LoRA の `reference_video_id` とは型が違うので取り違えない。種類の名前は全層で `picture`／`video`／`audio`。
+  - **FL2VA では送らない（監督の裁定）**: 操作パネルは `transformer_role` が `"fl2va"` のとき参照を送らない（注意 ① の文言を事実にする）。判定なし（Hybrid・改名）は送る。照合は SHA-256 だけで、ファイル名は見ない。
+  - **長さ（監督の裁定）**: 音声の参照は `max_sec` と公式の 15 秒の小さい方で切り、目的の長さでは切らない（ComfyUI と同じ）。行数の上限も、長い動画の注意も足さない（快適上限は情報であって制約ではない。VRAM 16GB mode は既定で on。費用は文書に書く）。
+  - **注意文の同時表示とアップロード中（監督の裁定）**: ① と ③ は両方出す（例外の規則を足さない）。送るカードがアップロード中の間は生成を止める（キーフレームと同じ既存の挙動。理由のコードを 1 つ足す）。
+  - **ハッシュと取得（監督の裁定）**: ハッシュの計算は読込の成功時に同期で行う（取り直しの仕組みを足さずに済む。費用は初回だけ）。Ref2VA の重みはインストーラーが常に取得する（任意にしない）。
+  - **提示（監督の裁定）**: 参照動画の組の pad は `<|image_pad|>`・grid_t=1（ComfyUI の方式）。札の番号はカードの番号（操作パネルの ✒ のタグと一致させる）。
+  - **切り詰めの格子（監督の追加裁定）**: 参照動画の上限は公式の 15 秒を 17k+5 に切り上げた 362 フレームとし、操作パネルの切り詰めの秒数も格子に切り上げる（15 秒×24＝360 を切り下げると 345＝14.4 秒になるため）。
+  - **短すぎる音声（監督の追加裁定）**: 800 サンプル（潜在 1 個）未満の参照音声は日本語の理由で止める。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -124,7 +141,7 @@
 - **Rectified Flow の Euler**: モデルの出力は「データ方向の速度」v で、`x0 = x + σ·v` と読む（一般の flow-match と符号が逆）。更新は `x_next = x + (σ − σ_next)·v`。N ステップは N 回の評価である。
 - **shift は 2 本立て**: σ の列は `base = linspace(1, 0, N+1)[:-1]`、`σ = s·base / (1 + (s−1)·base)` で作る。s は映像用と音声用の 2 つで、同じ添字 i について映像は σ_v[i]、音声は σ_a[i] を使い、出力もそれぞれの列で別々に更新する。モデルに渡す時刻は `t = 1 − σ`（1 が無ノイズ）。
 - **フレームと解像度の規約**: 24fps 固定。フレーム数は **17n+5**。潜在フレーム数は `T' = 5n + 2`、音声の潜在数は `A = round(F / 24 × 40)`（例: 124 フレームで T'=37、A=207）。縦横は **32 の倍数**（映像 VAE の 16 倍圧縮とパッチ 2 の積）。モデルの学習上の既定は短辺 768 である（本製品の既定の画角ではない）。
-- **系列の並び**: `[ text(L) | cond | audio(2A) | video(T'×(H/32)×(W/32)) ]`。cond は条件付けのキーフレーム行で、T2V では空である。attention は系列全体で全結合（区間ごとの制限もマスクも無い）。token_refiner（テキストだけを整える 2 ブロック）はテキスト行の中に閉じ、時刻にも位置にも依存しないので、ループの前に 1 回だけ計算する。
+- **系列の並び**: `[ text(L) | cond | audio(2A) | video(T'×(H/32)×(W/32)) ]`。cond は条件付けのキーフレーム行で、T2V では空である。Ref2VA の参照の行は cond と audio の間に入る（§3.2）。attention は系列全体で全結合（区間ごとの制限もマスクも無い）。token_refiner（テキストだけを整える 2 ブロック）はテキスト行の中に閉じ、時刻にも位置にも依存しないので、ループの前に 1 回だけ計算する。
 - **AdaLN の添字**: 各行が使う変調の行は `時刻の番号 × 3 + タグ`（タグは 0＝映像、1＝テキスト、2＝音声）。時刻の番号は、映像・テキスト・音声（と条件行）の時刻を `unique` でまとめた番号である。最終層の添字は時刻の番号だけである。
 - **枝刈り版の AdaLN（表の補間）**: 時刻はスカラーなので、「時刻の埋め込み→AdaLN 射影」の写像を格子点の表（`adaln_t_table`、格子数 G・ランク R）に先計算してある。表の引き方は次の式で、SiLU は挟まない（float32）。
 
@@ -151,7 +168,7 @@
     - **F−1 だけ別の式にする理由**: 実数の計算では `L + (5/3)·(F−1)` と同じ値だが、float64 では最後の桁が合わない組がある（総当たりのテストは `tests/test_h3_engine.py`、件数は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170）。正解データと全桁一致させるため、F−1 は正解データと同じ組み方の式を使う。
   - 進捗の数え方（`encode` の総数）は §8 の「ワーカーのメッセージ」にある。
 - **I2V の画像読み取り部（vision tower）とプロンプトの書式**: テキストエンコーダは `Qwen3VLModel`（文章側＋画像読み取り部）を使い、T2V でも I2V でも同じ型で組む（T2V は画像読み取り部を読まない）。
-  - **渡す画像の規則**: 画像読み取り部に渡すのは、`frame_idx` が 0 か F−1 の画像だけである。昇順に渡し、ラベルは渡す順に `<Picture 1>`、`<Picture 2>` とする（公式の FL2VA と同じ）。末尾だけのジョブでは、末尾の画像が `<Picture 1>` になる。中間の画像は条件行だけに入り、トークン列を増やさない（裁定 59）。中間だけのジョブは画像読み取り部を読まず、トークン列は T2V と同じ形になる。
+  - **渡す画像の規則**: 画像読み取り部に渡すのは、`frame_idx` が 0 か F−1 の画像だけである。昇順に渡し、ラベルは渡す順に `<Picture 1>`、`<Picture 2>` とする（公式の FL2VA と同じ）。末尾だけのジョブでは、末尾の画像が `<Picture 1>` になる。中間の画像は条件行だけに入り、トークン列を増やさない（裁定 59）。中間だけのジョブは画像読み取り部を読まず、トークン列は T2V と同じ形になる。Ref2VA の参照が 1 件でもあるジョブでは、キーフレームの画像を画像読み取り部に渡さない（§3.2）。
   - 渡す画像ごとに次の 1・2 を、全部の画像の後に 3 を、それぞれ**別々にトークン化して ID を連結**する（つなげた文字列をまとめてトークン化すると、`": "` の空白が次の語とくっつくため）。2 枚なら「ラベル 1・塊 1・ラベル 2・塊 2・プロンプト」の順になる。チャットテンプレートは使わない。
     1. `"<Picture i>: "`（i は 1 から。AdaLN のタグは文章＝1）
     2. `<|vision_start|>` ＋ `<|image_pad|>` × N ＋ `<|vision_end|>`（タグは映像＝0）
@@ -259,12 +276,128 @@ H3 の音声 VAE〔音声の圧縮器〕のファイル（`minimax_h3_audio_vae_
 
 ---
 
-## 3.2 Ref2VA の公式仕様（UI の根拠。エンジンは未実装）
+## 3.2 Ref2VA の公式仕様と本製品の入力の組み方
+
+**結論**: Ref2VA〔参照素材からの映像と音声の生成〕は、参照素材（画像・動画・音声）を符号化した行を、キーフレームの条件行と同じく「毎ステップ同じ値で DiT に渡し、更新しない行」として系列に足し、テキストエンコーダーには `<Picture n>`・`<Video n>`・`<Audio n>` の札と視覚ブロックで見せる。重みは FL2VA と同じ形で値だけが違う別のファイル（`minimax_h3_ref2va_pruned_int8_convrot.safetensors`）で、利用者が Settings で選んで読み込む。挙動の基準は ComfyUI で、コードは写していない（裁定 17・82）。API の形（`references`・422・404・`metadata.json` の `references`・`GET /models` の `transformer_role`）の正本は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2・§6.2b・§6.6・§6.9(c)、実測と門は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180 にある。一次資料の調査は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §15。
+
+### 公式の上限
 
 参照素材の数と長さの上限は次のとおり（公式の仕様。Reference アコーディオンは規約 `constraints.reference` としてサーバーから受け取る。値の正本は本節。裁定 81）。
 
 | 項目 | 値 |
 |---|---|
+| 参照の枚数・本数 | 画像 9 枚・動画 3 本・音声 3 本。混在のときは合計 12 ファイルまで |
+| 動画と音声の長さ | 各ファイル 2〜15 秒。種類ごとに合計 15 秒まで |
+| プロンプトのタグ | `<Picture n>`・`<Video n>`・`<Audio n>`（n は 1 始まり） |
+| 強さの係数 | なし（A2V の Strength とは別物） |
+
+- **下限の扱いは実装ごとに違う。** 公式の API は範囲外を拒否する。ローカルの実装（ComfyUI・SGLang・DiffSynth）は 2 秒の下限を持たず、長すぎる参照は出力の長さで冒頭から切り詰める。本製品の UI は、2 秒未満は警告だけで受け付け、長すぎるものは番号順に冒頭から切り詰める警告を出す。
+- **サーバーが検査するのは本数と番号の範囲だけ**で、秒数は検査しない（操作パネルが切り詰めた長さをカードごとの `max_sec` で送り、エンジンも 1 本 15 秒で止める）。
+- **参照動画の音声**: ComfyUI では別の `<Audio n>` として繋ぐかどうかを選べる。本製品は参照動画の映像だけを使う（音声は Audios のカードで別に入れる）。
+- **出典**: MiniMax 公式 README（GitHub `MiniMax-AI/MiniMax-H3`）・公式 API リファレンス（platform.minimax.io）・ComfyUI の `comfy_extras/nodes_minimax_h3.py`・SGLang の `minimax_h3` のステージ・DiffSynth の `minimax_h3_audio_video.py`。
+
+### 推奨の設定
+
+- Turbo なしで 20〜25 ステップ（既定の 20／12／3 のまま。裁定 24）。**4 ステップの Turbo では参照がほとんど効かない**（ComfyUI の文書。参照の行は毎ステップ効くので、ステップ数が少ないと寄り切らない）。
+- 参照画像の大きさは `match`（下の「素材の読み方」）。
+
+### 列の並び
+
+系列は **`[text | cond | ref_video | ref_audio | audio | video]`** である（`engine_h3/dit.py` の `H3SeqLayout`）。
+
+- `ref_video` は画像の参照と動画の参照の区間、`ref_audio` は音声の参照の区間である。どちらも参照が無ければ空で、列は §3 の `[text | cond | audio | video]` と同じになる。
+- **参照の並べ方は 1 つ**: 画像 → 動画 → 音声の順に、種類ごとにカードの番号（slot）の昇順で並べる（`pipeline_h3.py` の `ordered_references`）。行・時刻・テキストエンコーダーへの提示・乱数・記録がすべてこの順に従う。ComfyUI の固定順（画像 → 動画 → 単独の音声）と同じで、参照動画の音声は使わないので連続した 2 区間で表せる。
+- 種類の名前は API・操作パネル・ワーカー・エンジンで `picture`／`video`／`audio` に統一してある（層ごとの読み替えを置かない）。
+- 行の数: 画像は `(h/32)×(w/32)`、動画は `vt×(h/32)×(w/32)`（`vt = 5k+2` は潜在フレーム数）、音声は `2×rt`（`rt` は音声の潜在の数。左右のチャンネルで 2 倍）。h・w は参照自身の大きさで、目的の映像の大きさとは別である。
+- DiT の最終層は `layout.video`・`layout.audio` の行だけを取り出すので、参照の行の予測は捨てられる。VRAM 16GB mode と LoRA は行の数だけで塊を切るので、並びに依存しない。注意〔attention〕は今までどおり系列全体で全結合（マスクなし）である。
+- **AdaLN のタグ**: 画像と動画の参照は映像（0）、音声の参照は音声（2）。
+
+### 時刻（RoPE〔位置の回転埋め込み〕の座標）
+
+`engine_h3/rope.py` の `build_coords(..., refs=...)` が、テキストの直後の `cursor = L`（L は視覚ブロックを含むテキストの全長）から、上の並びの順に時刻を積み上げる。
+
+| 参照 | 行の時刻 | 縦横の座標 | cursor の進み |
+|---|---|---|---|
+| 画像 | 全部の行が `cursor` | 参照自身の格子 | +1.0 |
+| 動画 | `cursor` から `5/3×(1,4,4,4,4)` の周期で進む（§3 の映像の時間と同じ式） | 参照自身の格子 | その動画の時間幅（上の周期の和） |
+| 音声 | `cursor + 0, 1, …, rt−1` を左右のチャンネル分 | 縦 0、横は目的の映像の格子の両端（1 チャンネル目が下端・2 チャンネル目が上端） | +rt |
+
+- **条件行（キーフレーム）・目的の音声・目的の映像の時刻の原点は、全部の参照を積んだ後の `cursor`** である（`keyframe_t(..., origin=cursor)`。§3 の式の `L` を `cursor` に置き換えるだけで、F−1 の別式もそのまま使う）。参照が無ければ `cursor == L` で、§3 と同じ式・同じ値になる。
+- 格子は既存の `np.linspace` の式（DiffSynth の式）を使い回す。ComfyUI の `_frame_grid` との最終桁の一致は目標にしない。
+
+### ノイズ時刻と乱数
+
+- **時刻**: `ref_video` の行は `max(t_video, 0.999)`（条件行と同じ）、`ref_audio` の行は `REF_AUDIO_TIME`＝1.0（`pipeline_h3.py` の `time_rows`）。ComfyUI の `VISUAL_COND_TIMESTEP`／`AUDIO_COND_TIMESTEP` と同じ値である。
+- **映像の参照の値**: 参照ごとに `noisy_condition` で `0.999·clean + 0.001·noise` を 1 回作り、全ステップで使い回す（条件行と同じ関数。乱数は参照 1 本の全行の形 `[行数, 96]` を 1 回引く）。**音声の参照はノイズを混ぜない**（時刻 1.0 なので clean のまま）。
+- **乱数の引き順**: 映像の初期乱数 → 音声の初期乱数 → 条件行 → 映像の参照（上の並びの順に 1 本ずつ）。今までの 3 本の後ろに足すだけなので、参照の無いジョブは乱数の値が変わらない。乱数の値そのものの ComfyUI・DiffSynth との一致は目標にしない（ComfyUI は条件ごとに同じ乱数列を最初から引く）。
+
+### 素材の読み方と切り詰め（`engine_h3/reference.py`）
+
+素材はすべて、テキストエンコーダーを読む**前**に CPU で読む（短い・読めないファイルはモデルを読む前に日本語の理由で止まる。A2V の波形の先読みと同じ作法）。
+
+- **画像（`match`）**: EXIF の向きを直して RGB にし（キーフレームの画像と同じ開き方）、生成の画素数 W×H に合わせて `scale = min(1, √(W·H / (w·h)))` で縦横比を保って縮小し、各辺を**最も近い** 32 の倍数に丸める（最小 32。PIL の LANCZOS。切り抜きはしない）。拡大はしない（丸めで最大 16 画素動くことはある）。
+- **動画**: PyAV で最初の映像の流れだけを読み、**先頭フレームの時刻（PTS）を 0 として**、時刻 k/24 秒の時点で表示されているフレーム（その時刻以前の最後のフレーム）を取って 24fps にそろえる。大きさは短辺 768・面積 768×1344 の枠に収め（元がそれより小さければ元の大きさを 32 の倍数に丸めたもの）、uint8 `[F, h, w, 3]` にする。**フレーム数 F は `min(読めた枚数, 目的のフレーム数, frames_for_seconds(max_sec), 362)` を 17k+5 に切り下げた値**である。`frames_for_seconds` は `round(秒×24)` 以上で最小の 17k+5（操作パネルの切り詰めの秒数を格子に切り上げる。超えるのは最大 16 フレーム）。362 は公式の 1 本 15 秒を格子に丸めた値（15 秒×24＝360 を切り下げると 345＝14.4 秒になってしまうため、切り上げた 362 を上限にする）。5 枚未満は止める。回転情報（表示行列）は扱わない（保存されたままの向きで使う）。参照動画の音声は読まない。
+- **音声**: A2V の読み込み（`source_audio.load_source_waveform`）を `keep_samples=1`・`read_samples = min(max_sec, 15)×32000` で使う（32kHz ステレオ。§3.1 の「元の波形の読み込み」と同じ規則）。**目的の映像の長さでは切らない**（ComfyUI と同じ）。800 サンプル（0.025 秒。潜在 1 個）未満は止める。
+- **max_sec**: 操作パネルが切り詰めたカードだけに付く秒数で、動画と音声に効く（画像には付けられない）。無ければ 15 秒の上限だけがかかる。
+
+### 潜在の符号化（段 `reference_encode`）
+
+- **画像**: 映像 VAE の符号化器で 1 フレームとして符号化し（キーフレームと同じ経路。分布の平均・正規化・空間タイル）、`[1, 24, 1, h/16, w/16]` をパッチに並べる。
+- **動画**: 映像 VAE の `encode_clips` で 17 フレームずつ GPU に送って符号化し、連結して末尾の 3 潜在を捨てる（`vt = 5k+2`。`encode` と算術は同じ。15 秒・1344×768 を 1 本のテンソルで GPU に置くと f32 で約 4.4GB になるので分けて送る）。
+- **音声**: 音声 VAE の符号化器（§3.1 と同じ `H3AudioEncoder`）で符号化し、潜在を `rt = ceil(サンプル数 / 800)` 個に切り詰めて音声の行と同じ形に並べる。
+- **組み方**: 映像の符号化器はキーフレームと参照で **1 ジョブに 1 回だけ**組み（`_build_video_encoder`。画像か動画の参照があるときだけ受け渡し、参照の無いジョブは今までどおり `_encode_image` が自分で組んで捨てる）、参照を符号化し終えたら捨てる。音声の符号化器は参照の中で 1 回だけ組む。行は CPU の f32 で持ち、ノイズ除去の段で毎ステップ同じ値を `embed_rows` に渡す。進捗では `encode` の 1 ステップとして数える（§8 の「ワーカーのメッセージ」）。
+
+### テキストエンコーダーへの提示
+
+- 参照ごとに、次を**別々にトークン化して ID を連結**し、最後に利用者のプロンプトを足す（§3 のキーフレームの提示と同じ作法。区切りの文字は入れない）。
+  - 画像: `"<Picture n>: "`（タグは文章＝1）＋視覚ブロック（`<|vision_start|>`＋`<|image_pad|>`×N＋`<|vision_end|>`。タグは映像＝0）
+  - 動画: `"<Video n>: "` の後に、組ごとに `"<x.x seconds>"`＋視覚ブロック
+  - 音声: `"<Audio n>: "` だけ
+- **札の番号 n はカードの番号（slot）**である（操作パネルの ✒ が足すタグと一致させるため。カードが詰まっていれば ComfyUI の通し番号と同じ）。札は普通の文字列で、特殊トークンではない。
+- **画像**: DiT に渡すのと同じ `match` 済みの画像を、既存の画像プロセッサ（tokenizer フォルダの `preprocessor_config.json`）にまとめて 1 回渡す。
+- **動画**: 先頭から 12 フレームおき（0.5 秒ごと）に取り、奇数なら最後の 1 枚を複製して 2 枚 1 組にする（`qwen_pairs`）。時刻の札は組の 2 枚の時刻の平均を小数 1 桁で書く（15 秒＝362 フレームなら 16 組で、札は 0.2, 1.2, …, 14.2, 15.0）。組は `pair_patches` で Qwen-VL の時間パッチ 1 つに詰め（grid_t=1。HF の画像プロセッサの平坦化を移植したもの）、`pixel_values`・`image_grid_thw` の末尾にトークン列と同じ順でつなぐ。pad はすべて `<|image_pad|>`（ComfyUI の方式）。HF の `forward` は変えない。
+- **参照が 1 件でもあれば、キーフレームの画像は画像読み取り部〔vision tower〕に渡さない**（条件行には今までどおり入る。ComfyUI の AddGuide と同じ）。キーフレームの画像と参照を同時に渡す呼び出しは `encode` が断る。
+- 音声だけのジョブは画像読み取り部を読まない。
+- 参照が無ければ、提示は §3 と同じ形（キーフレームの画像を `<Picture i>` で）になる。
+
+### キーフレームとの併用と参照 0 件
+
+- **キーフレームとの併用**: 通す（裁定 82）。条件行は参照の後ろの `cursor` を原点にした目的の映像の時間軸に置かれる（ComfyUI の公式の雛形「Multiframe Reference」と同じ並び）。公式 API は併用を断るので、品質の保証は無い。
+- **参照 0 件**: Ref2VA の重みでも生成を妨げない（裁定 82）。列・座標・時刻・タグ・埋め込み・乱数の引き順・`done` のキーは参照の無いジョブと同じで、T2V の基準の指紋 `0da6111c…`（§8 の「セルフテスト」）が変わらないことで確かめる。公式の配信（SGLang）は Ref2VA の重みでの参照 0 件を断るが、ComfyUI と DiffSynth は通す。品質を比べた一次資料は無い。
+
+### 重みの種別の判定（FL2VA／Ref2VA）
+
+- FL2VA と Ref2VA はヘッダが同じなので、**ファイル全体の SHA-256** を記述子の `known_weights`（形は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §4.3）と突き合わせて判定する。ファイル名は見ない（改名しても判定できる）。一致しなければ種別なし（Hybrid・第三者の配布物）。
+- 計算は `services/weight_identity.py` が、読込の成功の直後に 1 回だけ同期で行い、結果をルート直下の `weight_identity.json` に保存する（サイズが既知のどれとも違うファイルは計算しない。初回だけ 21GB を読むので数十秒、HDD なら数分かかる）。`GET /models` は計算せず、保存した値を `base_models[].transformer_role`（`"fl2va"`／`"ref2va"`／null）として返す。対象は「読込」で切り替わったサーバーの `active` の transformer で、Settings のドロップダウンの未反映の選択は見ない（裁定 82）。
+- インストーラーは取得したファイルを同じ値で照合し、違えば警告する（失敗にはしない）。
+
+### 操作パネルの送り方と注意文
+
+- **送る条件**: H3 を選んでいて、`transformer_role` が `"fl2va"` でないとき（Ref2VA・Hybrid・判定なしは送る）。送るのは、使われるカード（Enable が on・「Audio to video」が無効・アップロード済み）で、画像 → 動画 → 音声・番号順に並べ、切り詰めたカードにだけ `max_sec` を付ける（`webui/src/modes/single/referenceRules.ts` の `buildReferenceBody`）。送るカードがアップロード中の間は生成を止める。
+- **注意文**（生成ボタンの下・琥珀色・生成は止めない。裁定 82）: ① FL2VA を読み込み・Enable が on・A2V が無効 →「参照資料は無視されます」の案内。② Ref2VA を読み込み・Enable が off →「FL2VA モデルまたは Hybrid モデルのほうが高精度」の案内。③ Enable が on・A2V が無効・使われるカードが 0 件 →「参照ファイルがありません。」。① と ③ は同時に出る。種別なし（Hybrid など）では ① と ② は出ない。文言の正本は `webui/src/i18n/strings.ts` の `single.reference.notices`。
+
+### 既知の限界
+
+- **行の数と時間**: 参照動画は目的の長さで頭打ちになるが、1 本で目的の映像と同じ行数まで増え、動画 3 本では DiT の行が約 15 万行を超えうる。テキストエンコーダー側の視覚トークンも動画 1 本につき 1 組約 1,000（1344×768 の 15 秒で約 16,000）増える。注意の計算量は行数の 2 乗なので 1 ステップは数倍になりうる。**行数の上限は設けない**（裁定 82）。VRAM 16GB mode が off の経路は約 10 万行を超えると不正なメモリアクセスになる既知の限界がある（§6.5）ので、**参照動画を使うときは VRAM 16GB mode を on のままにする**。所要時間と VRAM の実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180。
+- **実測**: 1 ステップは参照画像 1 枚でわずかに増え、参照動画 1 本（5 秒）で約 4 倍になる。数値と条件は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.4。
+- **参照動画でテキストエンコーダーの段の VRAM が物理の 16GB を超える**（G-R3 で 25,450MB。画像 1 枚で 4.0GB、画像 3 枚で 9.3GB と、視覚トークンの数に対して超線形に増える）。Windows の共有メモリにはみ出して動いたと読め、テキストエンコーダーの読みは 15 秒から 150 秒に延びた。原因は、参照動画の 6 組（6,048 視覚トークン）を視覚の塔〔Qwen3-VL の画像読み取り部〕に一度に通していることが有力だが、確かめていない（推測）。参照動画を 2 本以上入れたときや、共有メモリへのフォールバックを禁じた環境では、メモリ不足で止まりうる。未修正で、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-116 に起票済み。
+- **キーフレームとの併用の品質**: 公式の正解が無い。GPU 検証（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.4 の G-R5）では先頭フレームが画像に固定されなかった（PSNR 12.44dB）。原因は未切り分けで、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-115 に起票した。
+- **小さな参照画像**: 6.5 万画素未満の参照画像は、テキストエンコーダー側だけ画像プロセッサの下限（公式の `preprocessor_config.json` の `shortest_edge 65536`）で拡大され、DiT 側の行（`match`・拡大なし）と大きさが食い違う（ComfyUI の既定の下限 3136 とは違う。公式の設定に従っている）。
+- **A2V と音声の参照を同じジョブで指定**すると、音声の符号化器を参照用と A2V 用で 2 回組む（操作パネルは A2V が有効なら参照を送らないので、API を直接呼んだときだけ起きる。結果は正しい）。
+- **0.025 秒未満に切り詰められた音声のカード**（前の音声で合計 15 秒をほぼ使い切ったとき）は、エンジンの 800 サンプルの下限に掛かり、ジョブ全体が日本語の理由で止まる。
+- **`transformer_role` の古さ**: Gradio や MCP など別の入口で transformer を替えたとき、操作パネルが開き直すまで古い値のまま残る（`transformer_weight_class` と同じ既知の穴）。
+- **右クリックの #4**（この画像から動画を生成〔i2v〕）は Single を作り直すので、Reference の内容が消える（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-114）。
+- **MCP と Gradio の受け口は無い**（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-259）。Gradio は知らない項目を送らないので影響は無い。
+
+### 採らなかった案
+
+- **ファイル名で判定する**: 改名で判定が黙って外れる。
+- **ファイルの一部だけのハッシュで判定する**: FL2VA を土台にした Hybrid を FL2VA と誤判定し、事実と違う注意 ① を出す。
+- **FL2VA でも参照を送る**: 注意 ① の「参照資料は無視されます」が事実でなくなる。
+- **行数の上限や長い動画の注意を足す**: 快適上限は情報であって制約ではない。VRAM 16GB mode は既定で on である。
+- **参照の合計秒数をサーバーで検査する**: ComfyUI も SGLang も検査しておらず、操作パネルの切り詰めとエンジンの 15 秒の上限で足りる。
+
+---|---|
 | 参照の枚数・本数 | 画像 9 枚・動画 3 本・音声 3 本。混在のときは合計 12 ファイルまで |
 | 動画と音声の長さ | 各ファイル 2〜15 秒。種類ごとに合計 15 秒まで |
 | プロンプトのタグ | `<Picture n>`・`<Video n>`・`<Audio n>`（n は 1 始まり） |
@@ -284,8 +417,10 @@ H3 の音声 VAE〔音声の圧縮器〕のファイル（`minimax_h3_audio_vae_
 |---|---|---|---|
 | 0. 画像の読み込み（I2V のみ） | キーフレームの画像を全部読み、キャンバスに合わせる | なし | — |
 | 0b. 元の音声の読み込み（A2V のみ） | 元の波形を 32kHz のステレオで読む（§3.1）。テキストエンコーダより前に読むので、短い・読めない音声はモデルを読む前に止まる | なし | — |
+| 0c. 参照素材の読み込み（Ref2VA のみ） | 参照の画像・動画・音声を全部読み、大きさと長さをそろえる（§3.2）。テキストエンコーダより前に読む | なし | — |
 | 1. 条件付け（`encode`） | テキストエンコーダでプロンプトを埋め込みにする | いま計算している 1 層（層ごとにファイルから直接読む）。先頭か末尾の画像があるジョブでは、画像読み取り部も計算の前に読む | テキストエンコーダ全体 |
 | 2. 画像の符号化（`image_encode`。I2V のみ） | 映像 VAE の符号化器（1 度だけ組む）で K 枚の画像を 1 枚ずつ符号化する | 符号化器（f32） | 符号化器（保持しない） |
+| 2a. 参照の符号化（`reference_encode`。Ref2VA のみ） | 参照の画像・動画を映像 VAE の符号化器（キーフレームと共用で 1 度だけ組む）で、音声を音声 VAE の符号化器で符号化する（§3.2）。進捗では `encode` の 1 ステップとして数える | 符号化器（f32）。動画は 17 フレームずつ GPU へ送る | 符号化器（保持しない） |
 | 2b. 音声の符号化（`audio_encode`。A2V で Strength が 0 より大きいときだけ） | 音声 VAE の符号化器で元の波形を 1 回符号化する（§3.1）。進捗では `encode` の 1 ステップとして数える（`audio_encode` は `done` の `h3.phases` の段の名前だけ。§8） | 符号化器（f32） | 符号化器（保持しない） |
 | 3. ノイズ除去（`stage1_denoise`） | DiT をステップ数だけ回す | ブロック以外（埋め込み・最終層など）と、block swap が選んだ一部のブロック（`blocks_on_gpu`） | DiT のブロック以外と全ブロック（常駐しなければ DiT 全体も） |
 | 4. デコード（`decode`） | 映像 VAE と音声 VAE で復号し、mp4 に書く。Strength 1.0 の A2V では音声 VAE を組まず、元の波形を入れる（§3.1） | 映像の復号器 → 音声 VAE の順に 1 つずつ | VAE（常駐しなければ） |
@@ -485,7 +620,7 @@ LoRA を使ったジョブだけ、`done.h3.loras` に LoRA 1 本ごと `{name, 
 
 ### 範囲外
 
-diffusers／PEFT の分離 QKV の LoRA・量子化 LoRA・LoHa／LoKr／DoRA・テキストエンコーダ用 LoRA・Ref2VA 用の重みとの互換（Ref2VA 自体が未実装）。LoRA を焼き込んだ配布物は普通の重みとして読む（既存どおり）。
+diffusers／PEFT の分離 QKV の LoRA・量子化 LoRA・LoHa／LoKr／DoRA・テキストエンコーダ用 LoRA・Ref2VA の重みに LoRA を当てたときの品質の保証（Ref2VA 用の 4 ステップ Turbo を含む。テンソル名は FL2VA と同じなので仕組みはそのまま乗るが、確かめていない。Turbo では参照がほとんど効かない。§3.2）。LoRA を焼き込んだ配布物は普通の重みとして読む（既存どおり）。
 
 ---
 
@@ -523,21 +658,24 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | `h3_lora_format.py`（リポジトリ直下・torch 非依存） | LoRA の鍵の写像と「対応・非対応」の判定。アプリとワーカーが同じ関数を import する（§6.6） |
 | `engine_h3/lora.py` | LoRA の読み込み・付け外し（hook と buffer）・FP32 の加算（§6.6） |
 | `engine_h3/lowvram.py` | VRAM 16GB mode の経路（§6.5）。`dit.py` の既存関数をヘッド群・行の塊ごとに呼ぶだけで、新しい計算は持たない |
-| `engine_h3/rope.py` | 3 軸 RoPE・キーフレームの時間座標 `keyframe_t`（§3） |
+| `engine_h3/rope.py` | 3 軸 RoPE・キーフレームの時間座標 `keyframe_t`（§3）・参照の行の座標と時刻の積み上げ（`RefShape`・`build_coords` の `refs`。§3.2） |
 | `engine_h3/text_encoder.py` | Qwen3-VL（文章側 50 層＋I2V の画像読み取り部〔vision tower〕。正規化前の隠れ状態を出す）・層ごとの直接読み・トークン列の書式（§3・§4） |
 | `engine_h3/scheduler.py` | σ の列と Euler の 1 ステップ |
 | `engine_h3/video_vae.py`・`engine_h3/audio_vae.py` | 映像 VAE（符号化器 `H3VideoEncoder`＝f32・I2V のときだけ組む／復号器 `H3VideoDecoder`＝bf16。下の「映像 VAE の構成」）・音声 VAE（復号器 `H3AudioVAE`／符号化器 `H3AudioEncoder`＝f32・A2V のときだけ組む。§3.1） |
 | `engine_h3/denoise_mask.py` | 行ごとの連続値マスクの式（torch だけに依存。§3.1） |
-| `engine_h3/source_audio.py` | A2V の元の波形の読み込み（PyAV で 32kHz のステレオに。長さの歯止め。§3.1） |
+| `engine_h3/source_audio.py` | A2V の元の波形の読み込み（PyAV で 32kHz のステレオに。長さの歯止め。§3.1）。参照の音声の読み込みにも使う（§3.2） |
+| `engine_h3/reference.py` | Ref2VA の参照素材（CPU だけで試験できる）。画像の `match`・動画のキャンバスと 24fps への揃え方と切り詰め・テキストエンコーダーに見せる 2 フレームの組（`qwen_pairs`）と Qwen-VL の時間パッチへの詰め方（`pair_patches`）。§3.2 |
 | `engine_h3/image_cond.py` | キーフレームの画像の読み込みとキャンバスへの合わせ方（§3）・符号化器へ渡すテンソルへの変換 |
 | `engine_h3/media_out.py` | mp4 の書き出し（映像 libx264、音声 AAC、色空間は BT.709 を明示して変換） |
-| `engine_h3/pipeline_h3.py` | 段の組み立て（§4）・I2V のキーフレームの条件行（並べる順・画像読み取り部へ渡す画像の選び方・ノイズ。§3）・A2V の段とマスクの受け渡し・出力の音声の切り替え（§3.1）・常駐の保持と解放 |
+| `engine_h3/pipeline_h3.py` | 段の組み立て（§4）・I2V のキーフレームの条件行（並べる順・画像読み取り部へ渡す画像の選び方・ノイズ。§3）・A2V の段とマスクの受け渡し・出力の音声の切り替え（§3.1）・Ref2VA の参照の読み込み・符号化・行の時刻とノイズ（§3.2）・常駐の保持と解放 |
 | `scripts/run_h3_pytest.py` | エンジン用の仮想環境でテストを回す実行器 |
 | `scripts/h3_a2v_g0_roundtrip.py` | 音声の符号化器の CPU の往復試験（符号化して既存の復号器で戻し、元と比べる。門 G0。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §178） |
 | `services/engines/h3/adapter.py` | アプリ側のアダプタ。`H3Runner`（`LTXRunner` を継ぐ）・4 分類表（動作・拒否・無視・従属）・系統の規則表 `REQUEST_RULES`（§9）・`UNSUPPORTED_FEATURES`・ワーカーへのメッセージの組み立て（A2V の `source_audio` を含む）・`metadata.json` の `h3` 欄・mock の `_MockBackendH3`（A2V の記録の形だけを作る。音声は入れない） |
 | `services/engines/ltx/request_rules.py` | 系統の規則表の型 `RequestRules` と、LTX 2.3／2.5 共通の表。H3 の表も同じ型で `adapter.py` に置く。A2V の Strength の範囲と既定（`source_audio_strength`）は H3 の表だけが持ち、`constraints.source_audio` に出る |
-| `scripts/manifests/40-minimaxh3.json` | 記述子。`engine_family: "h3"`・カテゴリは既存の 4 語・`assets.tokenizer_dir`・`comfort` は持たない・`downloads`（配布元の 4 本と tokenizer 一式） |
+| `scripts/manifests/40-minimaxh3.json` | 記述子。`engine_family: "h3"`・カテゴリは既存の 4 語・`assets.tokenizer_dir`・`comfort` は持たない・`downloads`（配布元の 4 本と tokenizer 一式、Ref2VA の DiT は独立した項目）・`known_weights`（FL2VA と Ref2VA の SHA-256。§3.2） |
+| `services/weight_identity.py` | 重みの種別の判定（ファイル全体の SHA-256 と `known_weights` の照合・`weight_identity.json` への永続キャッシュ）。`GET /models` の `transformer_role` の元（§3.2） |
 | `tests/test_h3_format.py`・`tests/test_h3_engine.py`・`tests/test_h3_media.py`・`tests/test_engine_h3_adapter.py`（A2V は別に `tests/test_h3_denoise_mask.py`〔式〕・`tests/test_h3_audio_encoder.py`〔符号化器と波形の読み込み〕・`tests/test_h3_worker_a2v.py`〔ワーカー〕・`tests/test_h3_a2v_api.py`〔API と mock〕） | ヘッダの判定（アプリ側の仮想環境）／DiT・テキストエンコーダ・ワーカーの約束事（GPU のテストは既定で飛ばす〔`H3_GPU_TESTS=1` で回す〕。件数は `-rs` の出力が正本）／映像 VAE・音声 VAE・mp4 書き出し・画像の切り抜き（CPU）／アダプタ・規則表・`GET /models`・422 の形・mock での T2V と I2V |
+| `tests/test_h3_ref_layout.py`・`tests/test_h3_reference_media.py`・`tests/test_h3_worker_ref.py`・`tests/test_h3_ref_api.py`・`tests/test_weight_identity.py` | Ref2VA の列と座標（参照 0 件で従来の写しと一致）／素材の読み方・提示・`encode_clips`／ワーカーのキーと参照ありのノイズ除去（小さな DiT・CPU）／API・422・404・記録／重みの種別の判定とキャッシュ |
 | `engine_h3/worker.py` | ワーカー本体。`engine25/worker.py` と同じ作法（`python -m engine_h3.worker`、stdin の JSON 行、stdout の `@@LTX@@`＋JSON、stderr のログ `[h3_worker]`）。torch はモジュール最上位で import せず、`load` の中で遅延 import する |
 
 ### 呼び出しの分担
@@ -549,21 +687,22 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 アダプタの `_build_load_payload` がそのまま写せるよう、キー名はここで固定する。
 
 - **`load`**: `transformer_path`・`text_encoder_path`・`video_vae_path`・`audio_vae_path`・`tokenizer_dir`・`blocks_on_gpu`・`attention_backend`・`block_swap_prefetch`・`deterministic`（`attention_backend` と `block_swap_prefetch` は、ジョブごとの値が無いときの既定になる）
-- **`generate`**: `prompt`・`seed`・`width`・`height`・`num_frames`・`frame_rate`・`num_inference_steps`・`shift_video`・`shift_audio`・`images`・`keep_resident`・`attention_backend`・`block_swap_prefetch`・`vram16_mode`・`source_audio`・`output_path`（ステップ数と shift は省略可。省略時は既定値。`source_audio` は A2V のときだけ）
+- **`generate`**: `prompt`・`seed`・`width`・`height`・`num_frames`・`frame_rate`・`num_inference_steps`・`shift_video`・`shift_audio`・`images`・`keep_resident`・`attention_backend`・`block_swap_prefetch`・`vram16_mode`・`source_audio`・`references`・`output_path`（ステップ数と shift は省略可。省略時は既定値。`source_audio` は A2V のときだけ、`references` は Ref2VA のときだけ）
   - `images`: `[{path, frame_idx}]`。無ければ T2V。アダプタは要求のキーフレームを全部（最大 10 枚。上限は API の検査）、サーバーが寄せた後の `frame_idx` で送る。ワーカーは並び順を問わず、`frame_idx` が 0〜F−1 の範囲・重複なし・パスが空でないことを確かめ、外れれば日本語の理由つきの `ValueError` でジョブを止める（プロセスは生き続ける）。要素の知らないキー（強度など）は無視してログに 1 回出す。アダプタは強度を送らない（H3 に強度の概念が無い。裁定 57）。
   - `keep_resident`: 真のときだけ保持する。無ければ偽（保持物を解放する）。アダプタは真のときだけ送る。
   - `attention_backend`・`block_swap_prefetch`: 無ければ `load` の値。アダプタは毎回送る。
   - `vram16_mode`: 真のときだけ VRAM 16GB mode の経路で回す（§6.5）。無ければ偽（ワーカーの既定は off。H3 の既定 on はアプリ側の規則表が書き戻す）。アダプタは毎回送る。
   - `source_audio`: `{path, strength}`。無いか `null` なら T2V／I2V（今までどおり）。あれば A2V（§3.1）。`strength` は 0〜1 で、省略は 0.5。中の知らないキーはログに 1 回出して無視する。アダプタは A2V のときだけ、`output_path` の前に置いて送る（アプリ側の既定を書き戻した値なので、`strength` は毎回入る）。
+  - `references`: `[{kind, path, slot, max_sec?}]`（`kind` は `picture`／`video`／`audio`、`slot` はカードの番号で 1 以上・種類ごとに重複なし、`max_sec` は省略か正の有限の秒数）。無いか空なら参照なし（今までどおり）。並び順は問わない（ワーカーが §3.2 の順に並べ直す）。種類・番号・パスの存在・秒数を確かめ、外れればテキストエンコーダを読む前に日本語の理由でジョブを止める。要素の知らないキーはログに 1 回出して無視する。アダプタは参照があるときだけ送る。
 - **イベント**: `ready`（`sage_available`）／`progress`（`stage`・`index`・`total`）／`done`／`error`（`detail`）
-- **進捗の段階名**: LTX の語彙を借りる。`encode`／`stage1_denoise`（単段のノイズ除去。H3 は 1 段なのでこの名前だけを使う）／`decode`。アダプタは進捗の割合計算に `_read_worker_events(one_stage=True)` を使う。`encode` の総数は、3 に、キーフレームが 1 枚以上あれば 1（画像の符号化）、元の音声を符号化するなら 1（音声の符号化。Strength 0 では符号化しないので足さない）を足した数である（`pipeline_h3.py` の `encode_steps` の 1 か所で決める）。画像読み取り部に入る画像の有無では決めない（中間だけのジョブも 4 になり、3 と数えたあとに 4/4 が出ることはない）。`audio_encode` は `done` の `h3.phases` の段の名前で、進捗の段ではない。アダプタは `encode` を常に同じ割合に写すので、A2V でないジョブの進捗は変わらない。
-- **`done` のキー**: `seed_used`・`sampler`・`num_inference_steps`・`shift_video`・`shift_audio`・`peak_vram_mb`・`peak_vram_reserved_mb`・`rss_peak_gib`・`seconds`・`num_frames`・`frame_rate`・`width`・`height`・`size_bytes`・`attention_used`（ジョブごとの値）・`block_swap_prefetch_used`・`keep_resident_used`（`"on"`／`"off"`。このジョブの終わりに保持したか）・`vram16_mode_used`（`"on"`／`"off"`。VRAM 16GB mode で回したか）・`images_used`（要求のキーフレームの枚数。名前は変えない）・`commit_gib`・`commit_peak_gib`（コミット量）・`h3`（段ごとの秒数と RSS を `phases` に、使われた量子化経路を `quant_backends` に持つ。`phases.decode` には `audio_samples`〔切り揃え後〕と `audio_samples_decoded`〔復号した全量〕が入る〔`engine_h3/pipeline_h3.py` の `_decode`〕。I2V のときは `phases` に `image_encode` が入る〔`source_size` は画像ごとの元の大きさ `[w, h]` を昇順に並べたリスト、`vision_tokens` は画像読み取り部に入ったトークンの合計〕。`phases` の `denoise` には `dit_source`、`decode` には `vae_source` がいつも入る〔`"file"`／`"resident"`〕。VRAM 16GB mode のジョブは `phases.denoise.vram16` に上限・常駐数・分割の単位・割り当て器の再試行と OOM の回数の差分・`inactive_split` のピーク・退避の行き先〔`text_modules`〕が入る〔§6.5〕。A2V のジョブだけ、`phases` に `audio_encode`〔符号化した本数・サンプル数・潜在の形〕と `denoise.mask`、`decode` に `audio_output`〔`"original"`／`"decoded"`〕が入り、`h3` に `a2v`〔A2V の記録。アプリが `metadata.json` の最上位の `a2v` へ移す。キーの正本は仕様書 §6.6〕が加わる。A2V でないジョブの記録は変わらない）
+- **進捗の段階名**: LTX の語彙を借りる。`encode`／`stage1_denoise`（単段のノイズ除去。H3 は 1 段なのでこの名前だけを使う）／`decode`。アダプタは進捗の割合計算に `_read_worker_events(one_stage=True)` を使う。`encode` の総数は、3 に、キーフレームが 1 枚以上あれば 1（画像の符号化）、参照が 1 件以上あれば 1（参照の符号化）、元の音声を符号化するなら 1（音声の符号化。Strength 0 では符号化しないので足さない）を足した数である（`pipeline_h3.py` の `encode_steps` の 1 か所で決める。進む順もこの順）。画像読み取り部に入る画像の有無では決めない（中間だけのジョブも 4 になり、3 と数えたあとに 4/4 が出ることはない）。`audio_encode` と `reference_encode` は `done` の `h3.phases` の段の名前で、進捗の段ではない。アダプタは `encode` を常に同じ割合に写すので、A2V でないジョブの進捗は変わらない。
+- **`done` のキー**: `seed_used`・`sampler`・`num_inference_steps`・`shift_video`・`shift_audio`・`peak_vram_mb`・`peak_vram_reserved_mb`・`rss_peak_gib`・`seconds`・`num_frames`・`frame_rate`・`width`・`height`・`size_bytes`・`attention_used`（ジョブごとの値）・`block_swap_prefetch_used`・`keep_resident_used`（`"on"`／`"off"`。このジョブの終わりに保持したか）・`vram16_mode_used`（`"on"`／`"off"`。VRAM 16GB mode で回したか）・`images_used`（要求のキーフレームの枚数。名前は変えない）・`commit_gib`・`commit_peak_gib`（コミット量）・`h3`（段ごとの秒数と RSS を `phases` に、使われた量子化経路を `quant_backends` に持つ。`phases.decode` には `audio_samples`〔切り揃え後〕と `audio_samples_decoded`〔復号した全量〕が入る〔`engine_h3/pipeline_h3.py` の `_decode`〕。I2V のときは `phases` に `image_encode` が入る〔`source_size` は画像ごとの元の大きさ `[w, h]` を昇順に並べたリスト、`vision_tokens` は画像読み取り部に入ったトークンの合計〕。`phases` の `denoise` には `dit_source`、`decode` には `vae_source` がいつも入る〔`"file"`／`"resident"`〕。VRAM 16GB mode のジョブは `phases.denoise.vram16` に上限・常駐数・分割の単位・割り当て器の再試行と OOM の回数の差分・`inactive_split` のピーク・退避の行き先〔`text_modules`〕が入る〔§6.5〕。A2V のジョブだけ、`phases` に `audio_encode`〔符号化した本数・サンプル数・潜在の形〕と `denoise.mask`、`decode` に `audio_output`〔`"original"`／`"decoded"`〕が入り、`h3` に `a2v`〔A2V の記録。アプリが `metadata.json` の最上位の `a2v` へ移す。キーの正本は仕様書 §6.6〕が加わる。A2V でないジョブの記録は変わらない。Ref2VA のジョブだけ、`phases` に `reference_encode`〔参照ごとに `kind`・`slot`・`rows`・`seconds`、画像は `source_size`・`size`・`vision_tokens`、動画は `source_frames`・`used_frames`・`latent_t`・`pairs`、音声は `samples`・`latent_t`〕が入り、`denoise.sequence` に `ref_video`・`ref_audio` の区間が、`h3` に `references`〔`pictures`・`videos`・`audios` の件数。アプリが `metadata.json` の最上位の `references` へ移す。キーの正本は仕様書 §6.6〕が加わる。`image_encode` の `vision_tokens` はキーフレームの分だけで、参照の分は `reference_encode` に入る。参照の無いジョブの記録は変わらない）
 
 ### 映像 VAE の構成
 
 符号化器と復号器に分け、別々にファイルから読む（裁定 33）。共通の部分（正規化の平均と標準偏差・空間タイルの分割・継ぎ目の混ぜ）は基底の型に置く。
 
-- **`H3VideoEncoder`**（`encoder`＋`quant_conv`）: f32。精度の島は無い。I2V のジョブごとに 1 度だけ組んでキーフレームの画像を 1 枚ずつ符号化し、すぐ捨てる。T2V では組まない。戻り値は事後分布の平均を `latents_mean`／`std` で正規化した潜在である。
+- **`H3VideoEncoder`**（`encoder`＋`quant_conv`）: f32。精度の島は無い。I2V と Ref2VA（画像か動画の参照がある）のジョブごとに 1 度だけ組んでキーフレームと参照を符号化し、すぐ捨てる。T2V では組まない。戻り値は事後分布の平均を `latents_mean`／`std` で正規化した潜在である。複数フレームの動画は `encode_clips` で 17 フレームずつ GPU へ送って符号化する（CPU 上の uint8 `[F, h, w, 3]` を受ける。`encode` と算術は同じ）。
 - **`H3VideoDecoder`**（`post_quant_conv`＋`decoder`）: bf16。精度の島（`post_quant_conv`・入力の埋め込み・出力の正規化・各ブロックの正規化とスケール）は f32。
 - ファイルの名前の振り分けは `encoder_key_map`／`decoder_key_map` で行い、それぞれの型は自分のテンソルだけを持つので、読み残しは例外になる。
 
@@ -578,7 +717,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 ### セルフテスト
 
-`python -m engine_h3.worker --selftest-generate` が、`load`／`generate` を合成メッセージで直接呼んで全イベントを記録し、mp4 の SHA-256 と `done` を JSON で書く。`--image P`（先頭フレーム。`--keyframe 0=P` と同じ）と `--keyframe FRAME=PATH`（何度でも書ける。同じフレームを 2 度渡すと読み込みの前に断る）で I2V、`--keep-resident` で常駐を、`--vram16` で VRAM 16GB mode を、`--source-audio PATH` と `--audio-strength S` で A2V を試せる。回帰の基準の指紋 `0da6111c…` は、`--prompt` に第 1 弾の門 G5 のプロンプト（黄色いレインコートの女性の文。正確な文は `Docs/Outputs-archive/h3-gate3/g2_selftest_g5prompt.cmd`）を渡し、ほかはセルフテストの既定（640×384・124 フレーム・20 ステップ・seed 42・sdpa）で回したときのものである。既定のプロンプトのまま回すと別の指紋になり、一致しない（条件は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167）。
+`python -m engine_h3.worker --selftest-generate` が、`load`／`generate` を合成メッセージで直接呼んで全イベントを記録し、mp4 の SHA-256 と `done` を JSON で書く。`--image P`（先頭フレーム。`--keyframe 0=P` と同じ）と `--keyframe FRAME=PATH`（何度でも書ける。同じフレームを 2 度渡すと読み込みの前に断る）で I2V、`--keep-resident` で常駐を、`--vram16` で VRAM 16GB mode を、`--source-audio PATH` と `--audio-strength S` で A2V を、`--ref-image PATH`・`--ref-video PATH`・`--ref-audio PATH`（何度でも書ける。番号は種類ごとに出てきた順）で Ref2VA を試せる。回帰の基準の指紋 `0da6111c…` は、`--prompt` に第 1 弾の門 G5 のプロンプト（黄色いレインコートの女性の文。正確な文は `Docs/Outputs-archive/h3-gate3/g2_selftest_g5prompt.cmd`）を渡し、ほかはセルフテストの既定（640×384・124 フレーム・20 ステップ・seed 42・sdpa）で回したときのものである。既定のプロンプトのまま回すと別の指紋になり、一致しない（条件は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167）。
 
 ---
 
@@ -588,8 +727,9 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 - 置くもの: ステップ数・shift（映像・音声）の既定値、24fps、空間 32（1 トークン＝32px 四方）、VAE の圧縮率とクリップ長、音声の潜在レート・サンプルレート・ホップ長、モダリティのタグ（映像 0・テキスト 1・音声 2）、ログの接頭辞 `[h3_worker]`、`latent_frames(F)`・`audio_latents(F)`（17n+5 を外れた F は `ValueError`）。
 - ステップ数と shift の既定は **20／12／3**、範囲はステップ数が 1〜50 の整数・shift が 1〜20（刻み 0.1）である（裁定 24）。ワーカーの `generate` は引数で受け取り、省略時に既定値を使う。API では `num_inference_steps`・`shift_video`・`shift_audio` の既定が `null`（＝系統の既定値）で、アプリ側が系統の既定値を要求へ書き戻してからワーカーへ渡す。
 - VRAM 16GB mode の定数（`VRAM16_HEAD_GROUP`・`VRAM16_ROW_CHUNK`・`VRAM16_BLOCKS_ON_GPU`・`VRAM16_CAP_MARGIN_MIB`）も `constants.py` が正本で、値と理由は §6.5 の表にある。
+- Ref2VA の定数: 参照の行の時刻 `REF_AUDIO_TIME`（1.0。映像の参照は条件行と同じ `KEYFRAME_NOISE_AUG` の 0.999）と種類の並び `REFERENCE_KINDS`（`picture`・`video`・`audio`）は `constants.py`、素材の大きさと長さの定数（`REF_CLIP_MAX_SEC`＝15 秒・`REF_VIDEO_MAX_FRAMES`＝362・`REF_VIDEO_SHORT_EDGE`＝768・`REF_VIDEO_MAX_AREA`＝768×1344・`REF_TE_FRAME_STRIDE`＝12・`REF_FPS`＝24・`MIN_VIDEO_FRAMES`＝5）は `engine_h3/reference.py` が正本である（意味は §3.2）。
 - 解像度の規約: 縦横は 32 の倍数、フレーム数は 17n+5 かつ `MIN_NUM_FRAMES = 22` 以上（F ≥ 22。F=5 は拒否する）、フレームレートは 24 固定。違反は日本語の理由つきの `ValueError` で止める。
-- **アプリ側（API）の制約の正本は、系統の規則表**（`services/engines/h3/adapter.py` の `REQUEST_RULES`）である。フレーム数の格子（17n+5・22 以上・481 以下）・縦横の倍数（32）・フレームレート（24 固定）・ステップ数と shift の既定と範囲・キーフレームを置ける位置（`keyframe_step` 1・`keyframe_offset` 0＝任意のフレーム。強度の既定は持たない）・A2V の Strength の範囲と既定（`source_audio_strength`。0〜1・刻み 0.05・既定 0.5。裁定 76）を持ち、`GET /models` の `base_models[].constraints` に機械的に出る。操作パネル・Gradio・MCP はこれを読む。形は MULTI_ENGINE_DESIGN §5.6、検査の仕組みは同 §7 を見よ。
+- **アプリ側（API）の制約の正本は、系統の規則表**（`services/engines/h3/adapter.py` の `REQUEST_RULES`）である。フレーム数の格子（17n+5・22 以上・481 以下）・縦横の倍数（32）・フレームレート（24 固定）・ステップ数と shift の既定と範囲・キーフレームを置ける位置（`keyframe_step` 1・`keyframe_offset` 0＝任意のフレーム。強度の既定は持たない）・A2V の Strength の範囲と既定（`source_audio_strength`。0〜1・刻み 0.05・既定 0.5。裁定 76）・参照の上限（`reference`。§3.2。本数と番号の範囲は検査もする）を持ち、`GET /models` の `base_models[].constraints` に機械的に出る。操作パネル・Gradio・MCP はこれを読む。形は MULTI_ENGINE_DESIGN §5.6、検査の仕組みは同 §7 を見よ。
 
 ---
 
@@ -618,13 +758,14 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | VRAM 16GB mode（台帳 §1-101 の第 2 段。α版の後の最初の改修〔台帳では β版以降の項目〕。完了（B-G5 のオーナーの目視まで合格。台帳 CLOSED 3-240）。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169） | ＝エンジンの on の経路・API の `vram16_mode`・アダプタ・Gradio・MCP・操作パネルの Settings の行・OOM の案内（§6.5） |
 | キーフレーム（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-241。第 1 弾＝末尾、第 2 弾＝中間。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170） | ＝系統の規則表の位置の項目と強度の省略（裁定 56・57）・エンジンの条件行の一般化と画像読み取り部の規則（§3）・操作パネル・Gradio・MCP。第 2 弾はコードを足さず、中間の品質を目視で確かめる（§13） |
 | A2V（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-257。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §178） | 弾 1＝音声の符号化器と波形の読み込み／行ごとの連続値マスクの式、弾 2＝エンジンの段とワーカー、弾 3＝API・アダプタ・事前検査・記録、弾 4＝操作パネル、弾 5＝MCP（§3.1）。Gradio は触っていない（§12） |
+| Ref2VA（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-107。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180、操作パネルはフロントエンド `Docs/DEVLOG.md` §151。UI は前段で先行〔裁定 81。§179・フロントエンド `Docs/DEVLOG.md` §150〕） | R1＝列の骨格（`rope.py`・`dit.py`）、R2＝素材と提示（`reference.py`・`text_encoder.py`・`video_vae.py`）、R3＝段とワーカー、R4＝重みの種別の判定、R5＝API、R6＝インストーラー、R7＝操作パネル、R8＝GPU 検証（§3.2）。MCP と Gradio は触っていない（§12） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限は、較正が済むまで記述子に `comfort` の行を持たせず、操作パネルのマーカーを出さない。
 
 ### 門
 
-各弾の門の内容と結果は記録簿にある（第 1 弾は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165.5、第 2 弾は同 §166.3〜§166.5・§166.9、第 3 弾は同 §167.3・§167.4・§167.8、VRAM 16GB mode は同 §169.3〜§169.5、キーフレームは同 §170.6・§170.10、A2V は同 §178。CPU の門 G0〜G2・GPU の門 G3-0・G3・G3b・オーナーの目視 G4）。GPU を使う門は同時に 1 体だけ回し、クローズはオーナーの判断である。
+各弾の門の内容と結果は記録簿にある（第 1 弾は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165.5、第 2 弾は同 §166.3〜§166.5・§166.9、第 3 弾は同 §167.3・§167.4・§167.8、VRAM 16GB mode は同 §169.3〜§169.5、キーフレームは同 §170.6・§170.10、A2V は同 §178。CPU の門 G0〜G2・GPU の門 G3-0・G3・G3b・オーナーの目視 G4、Ref2VA は同 §180）。GPU を使う門は同時に 1 体だけ回し、クローズはオーナーの判断である。
 
 ---
 
@@ -632,7 +773,8 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 次は書かない（後回し）。
 
-- Ref2VA〔参照素材からの映像と音声の生成〕の推論エンジンと API・Hybrid（FL2VA と Ref2VA を混ぜた配布物）。操作パネルの UI は先行実装済み（裁定 81・フロントエンド `Docs/DEVLOG.md` §150）で、エンジンは未実装。ただしオーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。対応の保証は §12 のとおり後回しである（§13）。
+- Hybrid（FL2VA と Ref2VA を混ぜた配布物）の対応の保証。Hybrid は SHA-256 が既知のどれとも一致しないので種別なしになり、① FL2VA の注意と ② Ref2VA の注意は出さずに動く（参照も送る。§3.2。③「参照ファイルがありません。」は重みの種別に関係なく、Enable がオンでカードが 0 件なら出る）。オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。
+- Ref2VA のうち次のもの（§3.2）: MCP と Gradio の受け口（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-259）・参照動画の音声・参照画像の `max`（短辺 2048）の大きさ・参照の行数の上限。
 - 連結・画角拡張・NAG／VSF
 - A2V のうち次のもの（§3.1）: V2A（映像から音声）の API と UI・映像のマスクの公開・音声の切り出しの引数・行ごとに違う値や区間のマスク・映像のマスクのパッチ単位化・バッチ A2V と MCP の `plan_a2v_batch` の H3 対応。Gradio の H3 の A2V は触っていない（Gradio の H3 の整理は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243。Gradio は知らない機能名と知らない `constraints` のキーを捨てるので、影響は無い）
 
@@ -644,7 +786,8 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 - **性能**: 大きな画角でノイズ除去の段の VRAM が溢れる問題は、VRAM 16GB mode（§6.5）の on で消えた（開発機の機械の門。製品の条件で退避ゼロ。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3。1 ステップ約 20 秒〔同 §177〕）。配置後のオーナーの目視（B-G5）にも合格し、sage の 2 ブロックの値の差は採用した（裁定 53）。残るのは次の 2 点である。(1) 計測台の T1 で重い減速が出なかった理由は未解明のまま残している（オーナー裁定で追わない。同 §168.9）。(2) 快適上限の較正（台帳 §1-95）は、退避そのものの量で線を引く（同 §168.1）。LoRA（Turbo）は §6.6 で対応した。較正（§1-95）の計画では、LoRA の有無を条件に入れるかを確かめる。
 - **LoRA の後続**: (1) 動画と音声に個別の強度を持たせる（台帳 §3-252。いまは `audio_strength` を送らず、1 本の強度が両方に効く）。(2) 加算の高速化（台帳 §3-253。費用は §6.6）。
-- **PinkCherry Hybrid**: オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。対応の保証は §12 のとおり後回し（Ref2VA の参照経路も後回し。UI は先行済み・エンジン未実装。裁定 81）。
+- **PinkCherry Hybrid**: オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。対応の保証は §12 のとおり後回しである。種別の判定では種別なしになり、① と ② の注意は出さずに参照も送る（§3.2。③ は種別に関係なく出る）。
+- **Ref2VA の残り（§3.2 の「既知の限界」）**: (1) キーフレームとの併用は、GPU 検証（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.4 の G-R5）で先頭フレームが固定されず、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-115 に起票済みである。(2) 参照動画の組を `<|image_pad|>`・grid_t=1 で渡す方式が ComfyUI と同等であることは、GPU の門で確かめた範囲に限られる（同 §180）。(3) 参照動画を何本も入れたときの行数と時間には上限を設けていない。(4) 小さな参照画像のテキストエンコーダー側だけの拡大は、公式の設定に従ったまま残している。(5) 参照動画でテキストエンコーダー（TE）の段の VRAM が物理の 16GB を超える件（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.4。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-116 に起票済み）。
 - **m×n ≥ 2³¹ の CUDA 経路**: ソースの水準では限界が無いが、実測は台帳 §1-95（快適上限の較正）で行う。VRAM 16GB mode の on では行の塊で分割されるので届かず、off でだけ届きうる（算術による推測。扱いは §1-95 の計画で決める）。
 - **中間のキーフレームの品質**: 実装は 0〜F−1 の任意の位置を受けるが、中間のフレームは ComfyUI だけの拡張で、比べられる正解データが無い。そこで品質はオーナーの目視で決め、go だった（第 2 弾の 2-G2。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.10）。No-go のときの戻し方（規則表に「先頭と末尾だけ」の項目 `keyframe_ends_only` を足して位置を絞る）は要らなかった。
 - **テキストエンコーダの int8 と bf16 の差**: 画像 2 枚のときに大きい件（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.7 (a)）は診断していない。台帳 §4-43。

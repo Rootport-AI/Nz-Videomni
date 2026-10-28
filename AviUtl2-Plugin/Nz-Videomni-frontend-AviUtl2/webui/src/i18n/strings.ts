@@ -1699,7 +1699,7 @@ export const en = {
       exclusiveWithReferenceNote:
         "Both a reference video and an audio file are attached. The a2v generation will be guided by the IC-LoRA reference video.",
     },
-    /** §1-107 (UI first): MiniMax H3's Reference accordion
+    /** §1-107: MiniMax H3's Reference accordion
      * (`modes/single/ReferenceAccordion.tsx`). `onBadge` is identical in both
      * languages (like `nag.onBadge`). */
     reference: {
@@ -1723,6 +1723,15 @@ export const en = {
         `Shorter than ${minSeconds}s (${minSeconds}s or longer is recommended).`,
       durationUnknownWarning: "The length could not be measured.",
       trimFailedWarning: "The range could not be cut out. The whole video is attached.",
+      /** §1-107: non-blocking notices under Generate, one paragraph each
+       * (`referenceRules.ts`'s `referenceNotices` decides which show). */
+      notices: {
+        fl2vaLoaded:
+          "An FL2VA model is loaded. The references will be ignored. Load a Ref2VA model or a Hybrid model.",
+        ref2vaLoaded:
+          "A Ref2VA model is loaded. When no references are used, an FL2VA model or a Hybrid model is more accurate.",
+        noReferences: "There are no reference files.",
+      },
     },
     /** W7: imperative one-line reasons the Generate button is disabled, shown
      * directly below it (`GenerateReasonsNote`). Each corresponds to a
@@ -1742,6 +1751,8 @@ export const en = {
       keyframeUploading: "Wait for the keyframe upload to finish.",
       audioUploading: "Wait for the audio upload to finish.",
       referenceUploading: "Wait for the reference video upload to finish.",
+      /** §1-107: a Reference card that will be sent is still uploading. */
+      referenceCardUploading: "Wait for the reference file upload to finish.",
       /** NAG (2026-07-28): shown when "non-CFG Negative" is enabled but the
        * shared negative-prompt text is empty/whitespace-only — mirrors the
        * backend's own 422 for the same combination. */
@@ -3377,6 +3388,13 @@ export const ja: Strings = {
         `${minSeconds}秒未満です（推奨は${minSeconds}秒以上）。`,
       durationUnknownWarning: "長さを測れません。",
       trimFailedWarning: "指定範囲を切り出せませんでした。動画全体が入っています。",
+      notices: {
+        fl2vaLoaded:
+          "FL2VA モデルがロードされています。参照資料は無視されます。Ref2VA モデルまたは Hybrid モデルをロードしてください。",
+        ref2vaLoaded:
+          "Ref2VA モデルがロードされています。参照資料を使わない場合、FL2VA モデルまたは Hybrid モデルのほうが高精度です。",
+        noReferences: "参照ファイルがありません。",
+      },
     },
     generateReasons: {
       promptEmpty: "メインプロンプトを入力してください。",
@@ -3389,6 +3407,7 @@ export const ja: Strings = {
       keyframeUploading: "キーフレームのアップロード完了を待ってください。",
       audioUploading: "音声のアップロード完了を待ってください。",
       referenceUploading: "参照動画のアップロード完了を待ってください。",
+      referenceCardUploading: "参照ファイルのアップロード完了を待ってください。",
       nagNegativeEmpty: "ネガティブプロンプトを入力するか、「non-CFG Negative」をオフにしてください。",
       referenceTrimFailed:
         "参照動画の範囲切り出しが適用されませんでした。プラグインが古い可能性があります。プラグインを更新するか、ファイルを選び直すと全体を使って実行できます。",

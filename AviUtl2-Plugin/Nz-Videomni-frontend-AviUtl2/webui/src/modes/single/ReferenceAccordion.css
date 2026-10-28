@@ -1,4 +1,4 @@
-/* §1-107 (UI first): the H3 Reference accordion. Cards reuse `.source-section`
+/* §1-107: the H3 Reference accordion. Cards reuse `.source-section`
  * / `.source-input-actions` / `.source-input-body` / `.keyframe-thumb`. */
 
 .ref-accordion > .form-accordion-summary {

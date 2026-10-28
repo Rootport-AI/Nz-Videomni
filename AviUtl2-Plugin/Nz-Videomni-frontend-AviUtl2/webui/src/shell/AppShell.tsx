@@ -223,8 +223,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   );
   const baseModels = useBaseModels(baseModelDeps);
   // §1-31: re-read `GET /models` whenever a pipeline load we started finishes
-  // (`pipelineLoading` true→false), so `activeWeightClass` follows a
-  // transformer swapped in Settings' Models panel — that load does not go
+  // (`pipelineLoading` true→false), so `activeWeightClass` (and §1-107's
+  // `activeTransformerRole`) follows a transformer swapped in Settings'
+  // Models panel — that load does not go
   // through `switchBaseModel`. Both issuers (the Models panel and the header
   // dropdown) run through `trackPipelineLoad`, so this one edge catches both;
   // a header switch therefore refetches twice, which is harmless.
@@ -684,7 +685,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       return;
     }
 
-    // ── §1-107 (UI first): on a base model whose constraints carry `reference`
+    // ── §1-107: on a base model whose constraints carry `reference`
     // (MiniMax H3), #2 and #7 put the file into the Reference accordion's first
     // free Videos / Audios card instead of the IC-LoRA / A2V slot — a live
     // command, so Create is NOT remounted (the prompt and the other cards
@@ -1742,6 +1743,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               /* §1-31: the loaded transformer's weight class picks the row
                  beside the engine family. */
               weightClass={baseModels.activeWeightClass}
+              /* §1-107: the loaded H3 transformer's role (FL2VA / Ref2VA)
+                 decides whether the Reference cards are sent and which
+                 notice shows under Generate. */
+              transformerRole={baseModels.activeTransformerRole}
               /* §3-98 P5 (M4): the Batch A2V section lives on this screen but
                  submits chain jobs, so it follows the engine's feature scope
                  rather than Create's own. */

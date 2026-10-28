@@ -143,6 +143,8 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     # MiniMax H3 only (single-generate A2V); LTX's A2V is the chain's
     # ``source_audio``. The field's default is None.
     ("source_audio", "source_audio", lambda r: r.source_audio is not None),
+    # MiniMax H3 only (Ref2VA). The field's default is [].
+    ("references", "references", lambda r: bool(r.references)),
 )
 
 #: The 422 message for a feature that belongs to neither LTX: the generic one
@@ -151,6 +153,7 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
 H3_ONLY_REFUSALS: dict[str, str] = {
     "vram16_mode": "VRAM 16GB mode は MiniMax H3 専用です。LTX では使えません。",
     "source_audio": "単発の A2V は MiniMax H3 専用です。LTX の A2V は Chained の音声で使えます。",
+    "references": "参照素材（Ref2VA）は MiniMax H3 専用です。",
 }
 
 #: The ignore half of the four-way classification: fields 2.3's

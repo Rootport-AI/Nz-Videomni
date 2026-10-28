@@ -90,6 +90,12 @@ config.yaml.bak
 /state.json
 /state.json.bad
 
+# Weight-identity cache (services/weight_identity.py): the SHA-256 of known
+# transformer files, keyed by absolute path + size + mtime. Per-machine and
+# disposable like state.json -- deleting it only costs one re-hash per file.
+/weight_identity.json
+/weight_identity.json.bad
+
 # Prerequisite tools fetched by setup.bat (uv + ffmpeg/ffprobe), ~378 MB on disk.
 # Leading slash: root-only, so this must never shadow mcp_server/tools/ (the
 # MCP server's own source package) or any other nested tools/ directory.

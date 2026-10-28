@@ -1,5 +1,5 @@
 /**
- * §1-107 (UI first): the MiniMax H3 Reference accordion's state hook
+ * §1-107: the MiniMax H3 Reference accordion's state hook
  * (`useReferenceSlots`) and the hook that mirrors its A2V audio slot into the
  * form's existing `sourceAudio` upload (`useReferenceA2vSync`).
  *

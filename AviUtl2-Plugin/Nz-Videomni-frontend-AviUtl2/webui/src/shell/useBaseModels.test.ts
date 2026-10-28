@@ -242,7 +242,7 @@ describe("useBaseModels", () => {
     // IC-LoRA is a 2.5 adapter). It greys one Edit sub-tab — still not a mode.
     // 台帳 §1-101 (2026-10-18) added a third, `vram16_mode` (VRAM 16GB mode is
     // MiniMax H3's own) — it hides one Settings row.
-    expect(result.current.options[0]?.unsupportedFeatures).toEqual(["keep_resident_embeddings", "alpha_gen", "vram16_mode", "source_audio"]);
+    expect(result.current.options[0]?.unsupportedFeatures).toEqual(["keep_resident_embeddings", "alpha_gen", "vram16_mode", "source_audio", "references"]);
     // §3-102: `chain` is no longer among them — LTX 2.5 chains now — and its
     // second stage took `v2v` and `a2v` with it. The End-source increment took
     // the LAST chain-family name, `end_source`, and the Outpainting increment
@@ -259,7 +259,7 @@ describe("useBaseModels", () => {
     expect(result.current.options[1]?.unsupportedFeatures).toContain("two_stage_hq");
     // LTX 2.3 is what is loaded, so no MODE is disabled — its two declared
     // names hide a Settings row (§3-114) and grey a sub-tab (Alpha Gen).
-    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings", "alpha_gen", "vram16_mode", "source_audio"]);
+    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings", "alpha_gen", "vram16_mode", "source_audio", "references"]);
     expect(result.current.disabledModes).toEqual([]);
   });
 
@@ -371,6 +371,51 @@ describe("useBaseModels", () => {
     expect(result.current.activeWeightClass).toBe("8bit");
   });
 
+  // ── §1-107: activeTransformerRole (H3 FL2VA / Ref2VA) ────────────────────────
+
+  it("activeTransformerRole reads the ACTIVE base model's transformer_role; null / absent read as null", async () => {
+    const real = createApiClient(createMockBridge({ delayMs: 0 }));
+    let served: "fl2va" | "ref2va" | null | undefined = "ref2va";
+    const apiClient: ApiClient = {
+      ...real,
+      getModels: async () => {
+        const models = await real.getModels();
+        return {
+          ...models,
+          base_models: (models.base_models ?? []).map(({ transformer_role: _drop, ...rest }) =>
+            rest.active && served !== undefined ? { ...rest, transformer_role: served } : rest,
+          ),
+        };
+      },
+    };
+    const view = renderHook(() => useBaseModels({ apiClient }));
+    // Before the first response: unknown.
+    expect(view.result.current.activeTransformerRole).toBeNull();
+    await waitFor(() => expect(view.result.current.activeTransformerRole).toBe("ref2va"));
+    // Only the active entry carries a role.
+    expect(view.result.current.options.filter((o) => o.transformerRole !== null)).toHaveLength(1);
+
+    // A transformer swap is picked up by refresh() (the shell's post-load refetch).
+    served = "fl2va";
+    await act(async () => {
+      await view.result.current.refresh();
+    });
+    expect(view.result.current.activeTransformerRole).toBe("fl2va");
+
+    served = null;
+    await act(async () => {
+      await view.result.current.refresh();
+    });
+    expect(view.result.current.activeTransformerRole).toBeNull();
+
+    // A backend older than §1-107 omits the field.
+    served = undefined;
+    await act(async () => {
+      await view.result.current.refresh();
+    });
+    expect(view.result.current.activeTransformerRole).toBeNull();
+  });
+
   it("switching to a restricted base model moves the restrictions with it", async () => {
     // THE RESTRICTION IS SYNTHETIC (`withExtraUnsupportedFeatures`), and since
     // the Outpainting increment it has to be: LTX 2.5's real list no longer
@@ -395,7 +440,7 @@ describe("useBaseModels", () => {
     // §3-114: LTX 2.3's own one name is the starting list here. What matters
     // for this test is that it is not `retake` — the switch below is what has
     // to move `retake` in, and 2.3's `keep_resident_embeddings` out.
-    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings", "alpha_gen", "vram16_mode", "source_audio"]);
+    expect(result.current.unsupportedFeatures).toEqual(["keep_resident_embeddings", "alpha_gen", "vram16_mode", "source_audio", "references"]);
 
     await act(async () => {
       await result.current.switchBaseModel("LTX25");

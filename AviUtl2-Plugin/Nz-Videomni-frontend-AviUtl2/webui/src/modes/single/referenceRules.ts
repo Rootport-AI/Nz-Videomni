@@ -1,7 +1,7 @@
 /**
- * §1-107 (UI first): the MiniMax H3 Reference accordion's state, its reducer
- * and the pure rules that decide which reference inputs a generation would
- * use.
+ * §1-107: the MiniMax H3 Reference accordion's state, its reducer, the pure
+ * rules that decide which reference inputs a generation uses, and the
+ * `/generate` `references` body built from them.
  *
  * Every limit (slot counts, the mixed-total cap, the per-kind total seconds,
  * the shortest clip) comes from the server's `constraints.reference`
@@ -9,9 +9,11 @@
  * number such as 9/3/3 is written here. What IS fixed: the three kinds
  * (picture/video/audio) and the tag names ({@link referenceTag}).
  *
- * The state lives only in the panel — nothing here reaches `/generate` (the
- * A2V slot reaches it through the existing `form.sourceAudio` path).
+ * The used cards reach `/generate` as `references` ({@link buildReferenceBody});
+ * the A2V slot reaches it through the existing `form.sourceAudio` path instead.
  */
+
+import type { ReferenceInputBody, TransformerRole } from "../../api/types";
 
 export type ReferenceKind = "picture" | "video" | "audio";
 
@@ -452,4 +454,102 @@ export function summarizeReference(state: ReferenceState, rules: ReferenceRules)
     },
     slotUse,
   };
+}
+
+// --- the /generate body and the notices --------------------------------------------
+
+/**
+ * The cards a generation would send, in body order (pictures, videos, audios;
+ * card-number order within a kind), whatever their upload status. Empty off
+ * H3 (`isH3` false — the state survives a trip through LTX, Enable included,
+ * so this is what keeps LTX from receiving `references` and answering 422)
+ * and while an FL2VA transformer is loaded (its notice says the references
+ * are ignored, so they are not sent). A Hybrid or an unrecognised file
+ * (`role === null`) sends them. Enable off and an effective A2V slot are
+ * already folded into `used` / `isA2v` by {@link summarizeReference}.
+ */
+function sentSlots(
+  summary: ReferenceSummary,
+  slots: Record<ReferenceKind, ReferenceSlot[]>,
+  role: TransformerRole | null,
+  isH3: boolean,
+): { slot: ReferenceSlot; use: ReferenceSlotUse }[] {
+  if (!isH3 || role === "fl2va") return [];
+  const out: { slot: ReferenceSlot; use: ReferenceSlotUse }[] = [];
+  for (const kind of REFERENCE_KINDS) {
+    slots[kind].forEach((s, i) => {
+      const use = summary.slotUse[kind][i];
+      if (use?.used && !use.isA2v) out.push({ slot: s, use });
+    });
+  }
+  return out;
+}
+
+/**
+ * `GenerateRequest.references`: the ready cards of {@link sentSlots}, with
+ * `max_sec` only on a card truncated to fit its kind's total seconds.
+ */
+export function buildReferenceBody(
+  summary: ReferenceSummary,
+  slots: Record<ReferenceKind, ReferenceSlot[]>,
+  role: TransformerRole | null,
+  isH3: boolean,
+): ReferenceInputBody[] {
+  const body: ReferenceInputBody[] = [];
+  for (const { slot: s, use } of sentSlots(summary, slots, role, isH3)) {
+    if (s.status !== "ready" || s.id === null) continue;
+    const entry: ReferenceInputBody = { kind: s.kind, id: s.id, slot: s.slot };
+    if (use.truncated && use.usedSec !== null) entry.max_sec = use.usedSec;
+    body.push(entry);
+  }
+  return body;
+}
+
+/** A card {@link buildReferenceBody} would send is still uploading — the
+ * generation waits for it (like a keyframe upload). Cards that would not be
+ * sent (LTX, FL2VA, Enable off, left out by a rule) never block. */
+export function referenceSendUploading(
+  summary: ReferenceSummary,
+  slots: Record<ReferenceKind, ReferenceSlot[]>,
+  role: TransformerRole | null,
+  isH3: boolean,
+): boolean {
+  return sentSlots(summary, slots, role, isH3).some(({ slot }) => slot.status === "uploading");
+}
+
+/** The non-blocking notices under Generate (`strings.single.reference.notices`). */
+export type ReferenceNoticeCode = "fl2vaLoaded" | "ref2vaLoaded" | "noReferences";
+
+export interface ReferenceNoticeInput {
+  role: TransformerRole | null;
+  /** The accordion's Enable. */
+  enabled: boolean;
+  /** An effective "Audio to video" slot ({@link effectiveA2vSlot}). */
+  a2vActive: boolean;
+  /** Used cards, the A2V slot excluded. */
+  usedCount: number;
+}
+
+/**
+ * Each notice is decided on its own (no rule suppresses another):
+ *  - `fl2vaLoaded`: FL2VA loaded, Enable on, no A2V (A2V works on FL2VA, so
+ *    the "references are ignored" sentence would not hold);
+ *  - `ref2vaLoaded`: Ref2VA loaded, Enable off;
+ *  - `noReferences`: Enable on, no A2V, no card used.
+ */
+export function referenceNotices(input: ReferenceNoticeInput): ReferenceNoticeCode[] {
+  const codes: ReferenceNoticeCode[] = [];
+  if (input.role === "fl2va" && input.enabled && !input.a2vActive) codes.push("fl2vaLoaded");
+  if (input.role === "ref2va" && !input.enabled) codes.push("ref2vaLoaded");
+  if (input.enabled && !input.a2vActive && input.usedCount === 0) codes.push("noReferences");
+  return codes;
+}
+
+/** Used cards excluding the A2V slot — {@link ReferenceNoticeInput.usedCount}. */
+export function countUsedReferences(summary: ReferenceSummary): number {
+  let n = 0;
+  for (const kind of REFERENCE_KINDS) {
+    for (const use of summary.slotUse[kind]) if (use.used && !use.isA2v) n += 1;
+  }
+  return n;
 }

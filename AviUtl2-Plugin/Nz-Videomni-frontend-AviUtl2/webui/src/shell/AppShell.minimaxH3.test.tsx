@@ -428,7 +428,7 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
     20_000,
   );
 
-  // ── §1-107 (UI first): right-click #2 / #7 / #3 on MiniMax H3 ──────────────
+  // ── §1-107: right-click #2 / #7 / #3 on MiniMax H3 ──────────────
   describe("§1-107 right-click into the Reference accordion", () => {
     beforeEach(() => {
       resetProvisionalReservation();

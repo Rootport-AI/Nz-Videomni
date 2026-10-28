@@ -41,7 +41,8 @@ cannot run is greyed out. One line per screen here — the details are in
   mp4; [`Docs/API_REFERENCE.md`](Docs/API_REFERENCE.md) §3.23).
 - **Single** — one video at a time: T2V / I2V with keyframes, the IC-LoRA
   reference video, single-shot A2V (on MiniMax H3, a Reference accordion for
-  Ref2VA inputs replaces the A2V accordion; the backend engine is pending),
+  Ref2VA inputs replaces the A2V accordion and sends them as `references`;
+  [`../../Docs/MINIMAX_H3_DESIGN.md`](../../Docs/MINIMAX_H3_DESIGN.md) §3.2),
   and the batch panel (a2v from an audio folder, or i2v from an image folder alone;
   [`Docs/BATCH_A2V_I2V_MODE.md`](Docs/BATCH_A2V_I2V_MODE.md)).
 - **Chained** — a long video from chained clips, including V2V continuation

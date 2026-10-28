@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { AppConfig, GenerateChainRequest, GenerateRequest } from "../../api/types";
+import type { AppConfig, GenerateChainRequest, GenerateRequest, TransformerRole } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
@@ -40,7 +40,17 @@ import { useDurationShrinkGuard } from "./useDurationShrinkGuard";
 import { useGenerationSubmit } from "./useGeneration";
 import { useGenerationForm } from "./useGenerationForm";
 import { useKeyframes } from "./useKeyframes";
-import { appendReferenceTag, type ReferenceAttachOptions, type ReferenceKind, type ReferenceRules } from "./referenceRules";
+import {
+  appendReferenceTag,
+  buildReferenceBody,
+  countUsedReferences,
+  effectiveA2vSlot,
+  referenceNotices,
+  referenceSendUploading,
+  type ReferenceAttachOptions,
+  type ReferenceKind,
+  type ReferenceRules,
+} from "./referenceRules";
 import { useReferenceA2vSync, useReferenceSlots } from "./useReferenceSlots";
 import { useRepeatRun, useRepeatRunDriver } from "./useRepeatRun";
 import "./SingleScreen.css";
@@ -116,6 +126,13 @@ export interface SingleScreenProps {
    * {@link engineFamily} to every `resolveComfortRow` call this screen makes.
    * Omitted/`""` ⇒ unknown ⇒ no `weight_class` in the match. */
   weightClass?: string | undefined;
+  /** §1-107: the LOADED MiniMax H3 transformer's role
+   * (`useBaseModels().activeTransformerRole`), threaded down the same road as
+   * {@link weightClass}. `"fl2va"` keeps the Reference cards out of the
+   * `/generate` body; it and `"ref2va"` pick the notices under Generate.
+   * Omitted/`null` ⇒ unknown (a Hybrid or unrecognised file: cards are sent,
+   * no role notice). */
+  transformerRole?: TransformerRole | null | undefined;
   /** §3-98 P5: Batch A2V submits `POST /generate/chain`, which the loaded base
    * model's engine may not support (`featureScope.batchA2vDisabledFor`; the
    * server answers such a request with 422 `FEATURE_UNSUPPORTED`). `true`
@@ -169,6 +186,7 @@ export function SingleScreen({
   sageAvailable,
   engineFamily,
   weightClass,
+  transformerRole,
   batchUnavailable,
   constraints,
   sectionsUnavailable,
@@ -201,6 +219,7 @@ export function SingleScreen({
       sageAvailable={sageAvailable}
       engineFamily={engineFamily}
       weightClass={weightClass}
+      transformerRole={transformerRole}
       batchUnavailable={batchUnavailable}
       constraints={constraints}
       sectionsUnavailable={sectionsUnavailable}
@@ -228,6 +247,7 @@ interface SingleScreenBodyProps {
   sageAvailable?: boolean | null | undefined;
   engineFamily?: string | undefined;
   weightClass?: string | undefined;
+  transformerRole?: TransformerRole | null | undefined;
   batchUnavailable?: boolean | undefined;
   constraints?: GenerationConstraints | undefined;
   sectionsUnavailable?: SingleSectionsDisabled | undefined;
@@ -253,6 +273,7 @@ function SingleScreenBody({
   sageAvailable,
   engineFamily,
   weightClass,
+  transformerRole = null,
   batchUnavailable = false,
   constraints,
   sectionsUnavailable,
@@ -571,19 +592,44 @@ function SingleScreenBody({
   }, []);
   const keyframes = useKeyframes(config, { nativeBridge });
 
-  // §1-107 (UI first): MiniMax H3's Reference accordion. Shown only while the
+  // §1-107: MiniMax H3's Reference accordion. Shown only while the
   // loaded base model's constraints carry `reference`; while they do not (LTX),
   // the hook keeps the last rules it was given (supervisor ruling: the
   // cards survive a trip through LTX and resume on H3), or no slots at all if
   // none were ever seen. The A2V card's audio is mirrored into `form.sourceAudio`
-  // by `useReferenceA2vSync`, so the `/generate` body still takes its
-  // `source_audio` from the one existing road (`buildSubmission` is unchanged).
+  // by `useReferenceA2vSync`, so the `/generate` body takes its `source_audio`
+  // from the one existing road; the other used cards go out as `references`
+  // (`buildSubmission`, H3 only — see `referenceBody` below).
   const liveReferenceRules = constraints?.reference ?? null;
   const lastReferenceRulesRef = useRef<ReferenceRules>(NO_REFERENCE_RULES);
   if (liveReferenceRules !== null) lastReferenceRulesRef.current = liveReferenceRules;
   const reference = useReferenceSlots(lastReferenceRulesRef.current, { nativeBridge });
   useReferenceA2vSync(reference, form.sourceAudio, liveReferenceRules !== null);
   const [referenceOpenSignal, setReferenceOpenSignal] = useState(0);
+  // §1-107: the `references` body and its upload gate. `liveReferenceRules`
+  // (not the kept `lastReferenceRulesRef`) decides "H3", so the cards left
+  // Enabled on a trip through LTX are never sent there.
+  const isH3Reference = liveReferenceRules !== null;
+  const referenceSummary = reference.summary;
+  const referenceSlots = reference.state.slots;
+  const referenceBody = useMemo(
+    () => buildReferenceBody(referenceSummary, referenceSlots, transformerRole, isH3Reference),
+    [referenceSummary, referenceSlots, transformerRole, isH3Reference],
+  );
+  const referenceCardUploading = referenceSendUploading(
+    referenceSummary,
+    referenceSlots,
+    transformerRole,
+    isH3Reference,
+  );
+  const referenceNoticeCodes = isH3Reference
+    ? referenceNotices({
+        role: transformerRole,
+        enabled: reference.state.enabled,
+        a2vActive: effectiveA2vSlot(reference.state) !== null,
+        usedCount: countUsedReferences(referenceSummary),
+      })
+    : [];
   const appendReferenceTagToPrompt = useCallback(
     (tag: string) => onPromptChange?.((prev) => appendReferenceTag(prev, tag)),
     [onPromptChange],
@@ -1114,12 +1160,14 @@ function SingleScreenBody({
       loraAudioHidden && built.loras ? { ...built, loras: omitLoraAudioStrength(built.loras) } : built;
     const images = strengthOmitted ? omitStrength(conditioningImages) : conditioningImages;
     const withImages = images.length > 0 ? { ...request, conditioning_images: images } : request;
+    // §1-107: the Reference cards (empty off H3 and on FL2VA).
+    const withReferences = referenceBody.length > 0 ? { ...withImages, references: referenceBody } : withImages;
     return {
       kind: "generate",
       body:
         a2vOnGenerate && sourceAudioId
-          ? { ...withImages, source_audio: { audio_id: sourceAudioId, strength: sourceAudioStrength } }
-          : withImages,
+          ? { ...withReferences, source_audio: { audio_id: sourceAudioId, strength: sourceAudioStrength } }
+          : withReferences,
     };
   }, [
     isA2v,
@@ -1131,6 +1179,7 @@ function SingleScreenBody({
     conditioningImages,
     strengthOmitted,
     loraAudioHidden,
+    referenceBody,
   ]);
   const getSubmissionFingerprint = useCallback(() => submissionFingerprint(buildSubmission()), [buildSubmission]);
 
@@ -1188,6 +1237,9 @@ function SingleScreenBody({
     // IC-LoRA requires a reference video before it can submit
     // (`reference_video_id` is mandatory for that flow).
     (form.isICLora && form.referenceVideo.state.status !== "ready") ||
+    // §1-107: a Reference card that will be sent is still uploading (like a
+    // keyframe upload; cards that are not sent never block).
+    referenceCardUploading ||
     // Keyframe timeline rework: an out-of-range keyframe blocks submit until
     // the user resolves it (moves/removes the pin or lengthens the duration).
     hasOverflowKeyframes;
@@ -1214,6 +1266,7 @@ function SingleScreenBody({
     // disabled with no reason line.
     ...(referenceUploading && !referenceClosed ? ["referenceUploading"] : []),
     ...(form.isICLora && form.referenceVideo.state.status !== "ready" ? ["referenceNotReady"] : []),
+    ...(referenceCardUploading ? ["referenceCardUploading"] : []),
     ...(hasOverflowKeyframes ? ["overflowKeyframes"] : []),
   ];
 
@@ -1246,6 +1299,7 @@ function SingleScreenBody({
     keyframeUploading: strings.single.generateReasons.keyframeUploading,
     audioUploading: strings.single.generateReasons.audioUploading,
     referenceUploading: strings.single.generateReasons.referenceUploading,
+    referenceCardUploading: strings.single.generateReasons.referenceCardUploading,
     overflowKeyframes: strings.single.keyframes.outOfRangeGenerateHint,
     // §1-6 拡張 (2026-08-01): a reference-video range cut was requested but the
     // response did not confirm it (old plugin / no ffmpeg), so the stored upload
@@ -1356,6 +1410,13 @@ function SingleScreenBody({
               {strings.single.loraUnsupportedNotice}
             </p>
           )}
+          {/* §1-107: H3 only, informational like the LoRA note above — one
+              paragraph per sentence, never a reason to disable Generate. */}
+          {referenceNoticeCodes.map((code) => (
+            <p key={code} className="warning-banner warning-banner-mild" role="status">
+              {strings.single.reference.notices[code]}
+            </p>
+          ))}
           {submitState.phase === "error" && (
             <div className="card card-error">
               <p className="error-code">{submitState.code}</p>

@@ -5596,3 +5596,41 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **受け入れた副作用**: 設計正本 [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 81 の「受け入れた副作用」3 点のとおりです（右クリックの #4（i2v）の件は `PENDING_TASKS.md` §1-107 の留意にも書きました）。
 - **未検証**: 負の行幅（下から上へ並ぶ配置）の経路は、この PC では通らず実機で未検証です（[`BRIDGE_CONTRACT.md`](BRIDGE_CONTRACT.md) §4.10）。
 - **残課題**: 参照の受け口（API）と推論エンジン（`PENDING_TASKS.md` §1-107）。右クリックの #3・#17 そのものの削除（`PENDING_TASKS.md` §1-113）。エンジンが完成するまで、この変更は main へマージしません。
+
+## 151. MiniMax H3 の Ref2VA〔参照素材からの生成〕の配線 — Reference の内容を `/generate` の `references` で送る・注意文 3 種・`transformer_role` の受け取り（バックエンド台帳 `PENDING_TASKS.md` §1-107 の本体。2026-10-28）
+
+### 151.1 結論
+
+- **Reference アコーディオンの内容を、`POST /generate` の `references` として送るようにしました。** §150 で先行実装した UI に、送信本文・注意文・アップロード中の待ち・モックの受け口をつないだものです。H3 以外と、FL2VA の重みを読み込んでいる間は送りません。
+- 生成ボタンの下に、琥珀色の注意文を最大 3 種出します（生成は止めません）。
+- 推論エンジン・API・インストーラー・重みの種別の判定（ファイル全体の SHA-256）はバックエンド側の仕事です。仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.2・裁定 82、門と GPU の実測は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §180 にあります。この節は操作パネル側の変更だけを書きます。
+- オーナーの目視は未実施です。キーフレームとの併用は、GPU 検証で先頭フレームが固定されなかったため、目視の対象から外しました（`PENDING_TASKS.md` §1-115）。
+
+### 151.2 何を変えたか（`webui/src/`）
+
+- **送信本文（`modes/single/referenceRules.ts`）**: 純関数 `buildReferenceBody(summary, slots, role, isH3)` を足しました。使われるカード（Enable が on・「Audio to video」が無効・ルールで外れていない）を、画像 → 動画 → 音声の順・各種類は番号順に並べ、`{kind, id, slot}` にします。秒数の上限で切り詰められたカードにだけ `max_sec` を付けます。`isH3` が偽のときと、`role` が `"fl2va"` のときは空です（判定できない Hybrid や改名した重みは送ります）。`SingleScreen.tsx` の `buildSubmission` が、空でなければ `references` を本文に足します。型は `api/types.ts` の `ReferenceInputBody`・`TransformerRole`・`GenerateRequest.references`。
+- **「H3 かどうか」は今の規約で決めます**: `lastReferenceRulesRef`（H3 → LTX → H3 でカードの内容を残すために直前の規約を保持する参照）ではなく、`liveReferenceRules` を使います。カードが Enable のまま LTX に切り替えても、LTX には送らないためです（LTX は `references` に 422 `FEATURE_UNSUPPORTED` を返します）。
+- **注意文（`referenceNotices`）**: ① FL2VA を読み込み・Enable が on・A2V が無効 →「FL2VA モデルがロードされています。参照資料は無視されます。…」、② Ref2VA を読み込み・Enable が off →「Ref2VA モデルがロードされています。参照資料を使わない場合、…」、③ Enable が on・A2V が無効・使われるカードが 0 件 →「参照ファイルがありません。」。3 つは互いに打ち消さず、それぞれ単独で判定します（① と ③ は同時に出ます）。A2V が有効なら ① は出しません（A2V は FL2VA でも動くので、「無視されます」は事実ではなくなるため）。種別が分からないとき（Hybrid など）は ① も ② も出しません。文言は `i18n/strings.ts` の `single.reference.notices`（日本語・英語）。表示は `SingleScreen.tsx` が LoRA 非対応の注意と同じ `warning-banner-mild` の段落で、1 文ずつ描きます。
+- **重みの種別の受け取り**: `shell/useBaseModels.ts` が `GET /models` の `base_models[].transformer_role`（`"fl2va"`／`"ref2va"`／null）を読み、各ベースモデルの `transformerRole` と、読み込み中のベースモデルの `activeTransformerRole` を返します。フィールドが無い古いバックエンドは null（不明）として扱います。パイプラインの読み込みが終わるたびに取り直す仕組みは `activeWeightClass` と同じなので、Settings の「選択したモデルを読込」で替えた重みに追従します。`AppShell` が `baseModels.activeTransformerRole` を `SingleScreen` の `transformerRole` へ渡します（`useBaseModels` → `AppShell` → `SingleScreen`）。
+- **送るカードがアップロード中は生成を止める**: `referenceSendUploading` は、`buildReferenceBody` が送るカードの中にアップロード中のものがあるかを返します。真のとき、キーフレームのアップロード中と同じ道で生成を止め、理由コード `referenceCardUploading`（「参照ファイルのアップロード完了を待ってください。」）を出します。**送らないカード（LTX・FL2VA・Enable が off・ルールで外れたカード）では止めません。** 本文の組み立てと止める条件が同じ `sentSlots` から出るので、食い違いません。
+- **模擬サーバー（`bridge/mockBridge.ts`）**: `references` は、LTX 系の基底では 422 `FEATURE_UNSUPPORTED`（LTX 系では `references` を 422 で返す。模擬は空配列でも 422 を返し、`detail` は持たない。操作パネルは空なら送らないので画面の挙動は変わらない）。H3 では形（`kind` が `picture`／`video`／`audio`・`id` が空でない文字列・`slot` が 1 以上の整数）だけを調べ、通れば本文をそのまま保存します。`GET /models` の `transformer_role` は、有効な H3 の基底に限り、選択中の transformer の**名前**に `ref2va`／`fl2va` が含まれるかで返します（実サーバーは SHA-256 で判定するが、模擬にはファイルが無いので、開発中に注意文を目で確かめるための代用）。
+- **「(UI first)」の札の現行化**: §150 で付けた「(UI first)」のコメントを、`api/types.ts`・`i18n/strings.ts`・`GenerationForm.tsx`・`ReferenceAccordion.tsx` と `.css`・`SingleScreen.tsx`・`referenceRules.ts`・`useReferenceSlots.ts`・`AppShell.tsx`・`generationConstraints.ts`・`mockBridge.ts`・ほか数ファイルで、現状に合う文へ書き換えました（`webui/src` に「UI first」は残っていません）。
+
+### 151.3 レビューと採否の要点
+
+- 計画の敵対的レビュー（R3）と実装差分のレビュー（R10）の件数と棄却は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §180.2 が正本です。操作パネルに関わる計画の採用は、R3 の M1（H3 以外へは送らない。`liveReferenceRules` で決める）です。R10 は、本文の組み立てと「送るカードがアップロード中のときだけ止める」判定が同じ `sentSlots` から出ている点を、同意した点に挙げました。
+- 棄却した m1（残り 0.025 秒未満に切り詰められた音声のカード）は、操作パネルに例外を足さず、設計正本 §3.2 の「既知の限界」に書いて受け入れました。
+
+### 151.4 テストと機械の門
+
+- 追加・更新: `modes/single/referenceRules.test.ts`（本文・並び順・`max_sec`・FL2VA／Hybrid／LTX・注意文の組み合わせ）、`modes/single/SingleScreen.reference.test.tsx`（本文に `references` が入ること・LTX や FL2VA では入らないこと・アップロード中に止まること・注意文の表示。§150 で「本文に reference を含まない」と検査していた箇所は意図的に書き換えました）、`shell/useBaseModels.test.ts`（`transformer_role` の受け取り）、`bridge/mockBridge.test.ts`・`bridge/mockBridge.h3.test.ts`（LTX の 422・H3 の保存・名前からの種別）。
+- 門（2026-10-28。差分レビュー反映後）: `npx vitest run --exclude "**/backend.integration.test.ts"` は 3,475 件合格・失敗 0、`npm run typecheck` エラー 0、`npm run lint` エラー 0（警告のみ）。バックエンドの門と GPU の門は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §180.3・§180.4。
+- 配置: aux2（1,550,336 バイト）を実機と配布コピーに置きました（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §180.3）。
+
+### 151.5 状態と既知の隙
+
+- **オーナーの目視は未実施**です。台帳 `PENDING_TASKS.md` §2 の 1-107 のチェックリスト（参照の効き・注意文 3 種）で確かめます。
+- **参照とキーフレームの併用**は送りますが、GPU 検証で先頭フレームが固定されませんでした（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §180.4 の注意 2。台帳 §1-115）。
+- **参照動画を入れるとテキストエンコーダーの段の VRAM が物理の 16GB を超える**ことがあります（同 §180.4 の注意 1）。操作パネルには警告を出していません。
+- **右クリックの #4**（この画像から動画を生成〔i2v〕）は Single を作り直すので、Reference の内容が消えます（台帳 §1-114）。
+- **MCP と Gradio の受け口はありません**（台帳 §3-259）。

@@ -246,8 +246,10 @@ MiniMax H3 ────→ h3         （engine_h3/ + .venv-engine-h3）
 - **`default_selection` の値は、レジストリの登録名か予約センチネル `"default"` のいずれかでなければならない。** レジストリの走査は、既定パスと同一実体を指すファイルにスキャンで別名を作らない（既定パスと同じファイルは常に `"default"` という名前だけで参照する設計である）。ファイル名ベースで直接書くとその名前がレジストリに存在せず、`resolve()` が 404 を返す。ファイル名で指定したい場合は、config の明示登録map（`model.*_names` 相当）側にも同じ名前で登録しておく必要がある。
 - **`assets` の内容は系統ごとに違う。** LTX 2.5 側の `assets` は空間アップスケーラ1つだけである——tokenizer とプロセッサのメタデータは**テキストエンコーダのGGUFの中**にあり、`engine25/assets_export.py` がそれをGGUFの隣へ書き出すためで、LTX 2.3 の `gemma_root` や text projection に相当するものは存在しない。MiniMax H3 の `assets` は Qwen3-VL の tokenizer のフォルダ（`tokenizer_dir`）1つである。**音声VAEはワーカーに必須だが `assets` へは入れない**（カテゴリ軸で届くので、二重に宣言すると整合先が2箇所になる）。
 - 記述ファイルは既存のものにならって **UTF-8（BOM 付き）** で保存する。Python 側は `encoding="utf-8-sig"` で読む。
+- **任意の最上位キー `known_weights`（既知の配布物の一覧）**。いまは MiniMax H3 の記述子だけが持つ。形は `[{"path": "<models/ 相対>", "size": <バイト数>, "sha256": "<16 進 64 文字>", "role": "<名前>"}]` で、H3 では FL2VA（`"fl2va"`）と Ref2VA（`"ref2va"`）の 2 行である。サーバーはこれを読み（`services/base_models.py` の `KnownWeight`。形が壊れていれば起動時に止める）、選択中の transformer のファイル全体の SHA-256 と照合して `GET /models` の `transformer_role` を出す（照合とキャッシュは `services/weight_identity.py`、意味は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2）。インストーラは取得したファイルを同じ値で照合して、違えば警告する（失敗にはしない）。`path` は `downloads[].files[].path` のどれかと一致しなければならない（インストーラの記述子の形の検査が確かめる）。
+  - **サーバーは `downloads` を読まないが `known_weights` は読む。** `downloads` はインストーラ専用の取得手順で、サーバーが中身を当てにしない約束である（取得手順の書き換えがサーバーの挙動を変えないようにするため）。既知の SHA-256 はサーバーが判定に使う事実なので、`downloads[].files[]` の中には書かず、独立した最上位の節に置いた。値の正本はこの 1 箇所で、インストーラの照合もここを読む。
 
-**この記述ファイルを、インストーラ（`downloads` / `migrate` を読む）・レジストリ（`categories` でスキャンする）・API（`categories` のキー集合でリクエストを検証する）・フロントエンド（`GET /models` の応答で受け取る）の4者が全員読む。** これが「散在の解消」の実体である。
+**この記述ファイルを、インストーラ（`downloads` / `migrate` と `known_weights` を読む）・レジストリ（`categories` でスキャンする）・API（`categories` のキー集合でリクエストを検証する）・フロントエンド（`GET /models` の応答で受け取る）の4者が全員読む。** これが「散在の解消」の実体である。
 
 ### 4.4 ワーカーへ送る項目名はエンジンアダプタが持つ
 
@@ -378,6 +380,8 @@ MiniMax H3（`h3`）の依存と版を選んだ理由は [`MINIMAX_H3_DESIGN.md`
 - **読むのは起動時の1回だけ**。実行中に読み直さない（サーバーが唯一の書き手なので、読み直す理由が無い）。
 - **書くのは読み込みが成功したときだけ**（§6.3の「失敗した組み合わせを覚えない」に対応）。一時ファイルへ書いてから差し替える原子的な方式なので、途中で電源が落ちても中途半端なファイルが残らない。
 - **壊れていても止まらない**。JSONとして読めなければ WARNING を出し、`state.json.bad` へ退避して既定の組み合わせで起動する。未知のベースモデルidなら先頭のベースモデルへ落とす。書き込み失敗も WARNING を残して続行する。
+
+**`weight_identity.json`（重みの SHA-256 のキャッシュ）は 3 層のどれでもない。** 重みファイルから計算し直せる派生物のキャッシュで（`services/weight_identity.py`。`state.json` の隣・`.gitignore` 済み・壊れていれば `.bad` へ退避）、消しても次の読込でファイルごとに 1 回計算し直すだけである。
 
 #### LoRA の置き場（記述子の任意キー `lora_dir`）
 

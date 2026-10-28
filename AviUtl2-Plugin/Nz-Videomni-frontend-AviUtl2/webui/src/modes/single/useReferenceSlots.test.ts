@@ -7,7 +7,7 @@ import { useSourceUpload } from "../chained/useSourceUpload";
 import type { ReferenceRules } from "./referenceRules";
 import { useReferenceA2vSync, useReferenceSlots } from "./useReferenceSlots";
 
-// §1-107 (UI first): the Reference accordion's state hook and its A2V sync.
+// §1-107: the Reference accordion's state hook and its A2V sync.
 
 const RULES: ReferenceRules = {
   maxImages: 9,

@@ -161,6 +161,8 @@ class ModelRegistry:
 - `source` = `"config"` | `"scan"`。
 - `GET /config` は**無改変**（`model_dump` の形は変えない）。モデル一覧は新エンドポイント専任。
 
+> **注記（2026-10-28）**: 現在の `GET /models` は 3 層構造で、ベースモデルごとの要素 `base_models[]` に重みの種別 `transformer_weight_class` と、MiniMax H3 の FL2VA／Ref2VA のどちらかを名乗る `transformer_role`（ファイル全体の SHA-256 による判定。計算は読込の成功時だけで、この応答は保存値を引くだけ）が載る。形と意味の正本は [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.9(c)。
+
 ---
 
 ## 4. `POST /pipeline/load` 拡張

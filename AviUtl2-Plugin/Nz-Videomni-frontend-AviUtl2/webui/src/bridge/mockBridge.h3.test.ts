@@ -98,7 +98,7 @@ describe("mockBridge — MiniMax H3", () => {
     expect(error.message).toContain("'chain'");
   });
 
-  // §1-107 (UI first): the Ref2VA reference limits are H3's own.
+  // §1-107: the Ref2VA reference limits are H3's own.
   it("publishes `reference` for MiniMax H3 only (LTX publishes none)", async () => {
     const blocks = await listModels(createMockBridge({ delayMs: 0 }));
     expect(blocks.find((b) => b.id === "MiniMaxH3")?.constraints?.reference).toEqual({
@@ -128,4 +128,44 @@ describe("mockBridge — MiniMax H3", () => {
     expect((await bridge.request("fs.probeMediaInfo", { filePath: "C:\\clips\\b.mp4" })).durationSec).toBe(10);
     expect((await bridge.request("fs.probeMediaInfo", { filePath: "C:\\elsewhere\\c.mp4" })).durationSec).toBe(10);
   });
+
+  // §1-107: `references` on POST /generate — LTX refuses it, H3 checks the shape.
+  it("refuses `references` on LTX with 422 FEATURE_UNSUPPORTED; H3 checks the shape and stores it", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    const references = [
+      { kind: "picture", id: "mock-image-1", slot: 1 },
+      { kind: "video", id: "mock-video-1", slot: 2, max_sec: 7.5 },
+    ];
+    for (const id of ["LTX23", "LTX25"]) {
+      if (id !== "LTX23") expect((await load(bridge, id)).status).toBe(200);
+      const res = await generate(bridge, { ...BODY, num_frames: 121, references });
+      expect(res.status).toBe(422);
+      const error = (res.body as { error: { code: string; message: string } }).error;
+      expect(error.code).toBe("FEATURE_UNSUPPORTED");
+      expect(error.message).toContain("'references'");
+      expect(blocksFeature(await listModels(bridge), id)).toContain("references");
+    }
+    expect(blocksFeature(await listModels(bridge), "MiniMaxH3")).not.toContain("references");
+
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    expect((await generate(bridge, { ...BODY, references: "nope" })).status).toBe(422);
+    expect((await generate(bridge, { ...BODY, references: [{ kind: "image", id: "x", slot: 1 }] })).status).toBe(422);
+    expect((await generate(bridge, { ...BODY, references: [{ kind: "picture", id: "", slot: 1 }] })).status).toBe(422);
+    expect((await generate(bridge, { ...BODY, references: [{ kind: "picture", id: "x", slot: 0 }] })).status).toBe(422);
+    expect((await generate(bridge, { ...BODY, references })).status).toBe(202);
+  });
+
+  it("publishes `transformer_role` for the active H3 from the selected transformer's name (null otherwise)", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    const roleOf = async (id: string) => (await listModels(bridge)).find((b) => b.id === id)?.transformer_role;
+    expect(await roleOf("LTX23")).toBeNull();
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    // The fixture's H3 transformer is called "default": no role.
+    expect(await roleOf("MiniMaxH3")).toBeNull();
+    expect(await roleOf("LTX23")).toBeNull();
+  });
 });
+
+function blocksFeature(blocks: BaseModelBlock[], id: string): string[] {
+  return blocks.find((b) => b.id === id)?.unsupported_features ?? [];
+}

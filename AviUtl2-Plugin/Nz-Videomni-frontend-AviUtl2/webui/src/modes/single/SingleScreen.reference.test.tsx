@@ -11,15 +11,19 @@ import { ShowNoteProvider } from "../../shell/NoteArea";
 import { resolveGenerationConstraints } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { dispatchCreateCommand, resetCreateLiveCommands } from "../../timeline/createLiveCommands";
+import type { TransformerRole } from "../../api/types";
 import { SingleScreen } from "./SingleScreen";
 
-// §1-107 (UI first): the Reference accordion wired into Create. With MiniMax
-// H3's constraints (which carry `reference`):
+// §1-107: the Reference accordion wired into Create. With MiniMax H3's
+// constraints (which carry `reference`):
 //  - ✒ appends the card's tag to the shared prompt with one space;
 //  - an Audios card ticked "Audio to video" (Enable on) reaches `/generate` as
-//    the usual `source_audio {audio_id, strength}`, through `form.sourceAudio`;
-//  - Enable off: the tick does nothing, no `source_audio`;
-//  - the references themselves never reach the body (UI first);
+//    the usual `source_audio {audio_id, strength}`, through `form.sourceAudio`,
+//    and no `references` (A2V is exclusive);
+//  - Enable off: the tick does nothing, no `source_audio`, no `references`;
+//  - Enable on: the used cards go out as `references` (not on FL2VA, never
+//    off H3), a still-uploading card that would be sent blocks Generate, and
+//    the role / empty notices show under Generate;
 // and with LTX's constraints Create is exactly as before.
 
 const H3_CONSTRAINTS = resolveGenerationConstraints({
@@ -60,10 +64,12 @@ function Harness({
   constraints,
   nativeBridge,
   initialPrompt,
+  transformerRole = null,
 }: {
   constraints: GenerationConstraints | undefined;
   nativeBridge: ReturnType<typeof createMockBridge>;
   initialPrompt: string;
+  transformerRole?: TransformerRole | null;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   return (
@@ -74,6 +80,7 @@ function Harness({
         onPromptChange={setPrompt}
         baseUrl={null}
         constraints={constraints}
+        transformerRole={transformerRole}
         nativeBridge={nativeBridge}
         highlightedJobId={null}
         onJobSubmitted={() => {}}
@@ -85,7 +92,11 @@ function Harness({
   );
 }
 
-function renderCreate(constraints: GenerationConstraints | undefined, initialPrompt = "a cat riding a skateboard") {
+function renderCreate(
+  constraints: GenerationConstraints | undefined,
+  initialPrompt = "a cat riding a skateboard",
+  options: { transformerRole?: TransformerRole | null; holdUploads?: boolean } = {},
+) {
   // A 20 s wav, so the audio covers the form's default duration.
   const fs = createMockFs({
     folders: {
@@ -93,19 +104,23 @@ function renderCreate(constraints: GenerationConstraints | undefined, initialPro
       "C:\\v": [{ name: "clip.mp4", sizeBytes: 4_096, mtimeMs: 0, durationSec: 5 }],
     },
   });
-  const nativeBridge = createMockBridge({ delayMs: 0, fs });
+  const nativeBridge = createMockBridge({ delayMs: 0, fs, holdUploads: options.holdUploads ?? false });
   // Submissions go through the app-wide singleton client, so spy on that.
   const requestSpy = vi.spyOn(appBridge, "request");
-  render(
+  const tree = (next: GenerationConstraints | undefined, role: TransformerRole | null) => (
     <Providers nativeBridge={nativeBridge}>
-      <Harness constraints={constraints} nativeBridge={nativeBridge} initialPrompt={initialPrompt} />
-    </Providers>,
+      <Harness constraints={next} nativeBridge={nativeBridge} initialPrompt={initialPrompt} transformerRole={role} />
+    </Providers>
   );
+  const view = render(tree(constraints, options.transformerRole ?? null));
   const postsTo = (path: string) =>
     requestSpy.mock.calls
       .filter((c) => c[0] === "backend.request" && (c[1] as { path?: string }).path === path)
       .map((c) => (c[1] as { body: Record<string, unknown> }).body);
-  return { postsTo };
+  /** Re-renders with another base model's constraints / role (a switch). */
+  const switchTo = (next: GenerationConstraints | undefined, role: TransformerRole | null = null) =>
+    view.rerender(tree(next, role));
+  return { postsTo, switchTo, nativeBridge };
 }
 
 const slot = (id: string) => screen.getByTestId(id);
@@ -231,7 +246,7 @@ describe("SingleScreen — §1-107 Reference accordion", () => {
       const sourceAudio = body.source_audio as { audio_id: unknown; strength: unknown };
       expect(sourceAudio.strength).toBe(0.5);
       expect(sourceAudio.audio_id).toMatch(/^mock-audio-/);
-      // UI first: the references themselves are not sent.
+      // A2V is exclusive: the other cards are left out, so no `references`.
       for (const key of Object.keys(body)) expect(key).not.toMatch(/reference/i);
       expect(postsTo("/api/v1/generate/chain")).toHaveLength(0);
     },
@@ -266,6 +281,216 @@ describe("SingleScreen — §1-107 Reference accordion", () => {
       await screen.findByText(/audio to video \(a2v\)/i, {}, { timeout: 5_000 });
       expect(screen.queryByText("Reference", { selector: "summary" })).not.toBeInTheDocument();
       expect(screen.queryByTestId("ref-slot-audio-1")).not.toBeInTheDocument();
+    },
+    15_000,
+  );
+});
+
+// ── §1-107: the `references` body, the upload gate and the notices ─────────────
+
+const NOTICE = {
+  fl2va: "An FL2VA model is loaded. The references will be ignored. Load a Ref2VA model or a Hybrid model.",
+  ref2va: "A Ref2VA model is loaded. When no references are used, an FL2VA model or a Hybrid model is more accurate.",
+  none: "There are no reference files.",
+};
+const CARD_UPLOADING = "Wait for the reference file upload to finish.";
+
+function openReference() {
+  const summary = screen.getByText("Reference", { selector: "summary" });
+  const details = summary.closest("details") as HTMLDetailsElement;
+  if (!details.open) fireEvent.click(summary);
+}
+
+function setEnabled(on: boolean) {
+  const box = screen.getByRole("checkbox", { name: "Enable" }) as HTMLInputElement;
+  if (box.checked !== on) fireEvent.click(box);
+}
+
+function pickPicture(slotNumber: number) {
+  fireEvent.click(within(slot(`ref-slot-picture-${slotNumber}`)).getByRole("button", { name: /choose file/i }));
+}
+
+async function clickGenerateOnLtxGrid() {
+  await waitFor(
+    () => {
+      const duration = document.querySelector<HTMLInputElement>("input[type=number][step='8']")!;
+      fireEvent.change(duration, { target: { value: "121" } });
+      fireEvent.blur(duration);
+      expect(duration.value).toBe("121");
+      expect(screen.getByRole("button", { name: /^generate$/i })).toBeEnabled();
+    },
+    { timeout: 5_000 },
+  );
+  fireEvent.click(screen.getByRole("button", { name: /^generate$/i }));
+}
+
+const noticeShown = (text: string) => screen.queryByText(text, { selector: "p.warning-banner" }) !== null;
+
+describe("SingleScreen — §1-107 Reference body and notices", () => {
+  it(
+    "Enable on with one picture: /generate carries references [{kind, id, slot}]",
+    async () => {
+      const { postsTo } = renderCreate(H3_CONSTRAINTS, "a cat <Picture 2>", { transformerRole: "ref2va" });
+      await waitForCard("ref-slot-picture-2");
+      openReference();
+      pickPicture(2);
+      await waitForReady("ref-slot-picture-2");
+      setEnabled(true);
+
+      await clickGenerateOnH3Grid();
+      await waitFor(() => expect(postsTo("/api/v1/generate")).toHaveLength(1));
+      const body = postsTo("/api/v1/generate")[0]!;
+      expect(body.references).toEqual([{ kind: "picture", id: expect.stringMatching(/^mock-image-/), slot: 2 }]);
+      expect(body).not.toHaveProperty("source_audio");
+    },
+    20_000,
+  );
+
+  it(
+    "a video truncated to the 15 s total carries max_sec; the shorter one before it does not",
+    async () => {
+      const { postsTo } = renderCreate(H3_CONSTRAINTS);
+      await waitForCard("ref-slot-video-2");
+      act(() => {
+        dispatchCreateCommand({ type: "addReferenceVideo", filePath: "C:\\v\\clip.mp4", fileName: "clip.mp4" });
+        dispatchCreateCommand({
+          type: "addReferenceVideo",
+          filePath: "C:\\v\\clip.mp4",
+          fileName: "long.mp4",
+          durationSec: 20,
+        });
+      });
+      await waitForReady("ref-slot-video-1");
+      await waitForReady("ref-slot-video-2");
+      setEnabled(true);
+
+      await clickGenerateOnH3Grid();
+      await waitFor(() => expect(postsTo("/api/v1/generate")).toHaveLength(1));
+      const refs = postsTo("/api/v1/generate")[0]!.references as Array<Record<string, unknown>>;
+      expect(refs).toHaveLength(2);
+      expect(refs[0]).toEqual({ kind: "video", id: expect.any(String), slot: 1 });
+      expect(refs[1]).toEqual({ kind: "video", id: expect.any(String), slot: 2, max_sec: 10 });
+    },
+    20_000,
+  );
+
+  it(
+    "FL2VA loaded: Enable on sends no references, and ① + ③ / ① show under Generate",
+    async () => {
+      const { postsTo } = renderCreate(H3_CONSTRAINTS, "a cat", { transformerRole: "fl2va" });
+      await waitForCard("ref-slot-picture-1");
+      openReference();
+      expect(noticeShown(NOTICE.fl2va)).toBe(false);
+      setEnabled(true);
+      // Enable on and nothing used: ① and ③ both (no rule suppresses the other).
+      expect(noticeShown(NOTICE.fl2va)).toBe(true);
+      expect(noticeShown(NOTICE.none)).toBe(true);
+
+      pickPicture(1);
+      await waitForReady("ref-slot-picture-1");
+      await waitFor(() => expect(noticeShown(NOTICE.none)).toBe(false));
+      expect(noticeShown(NOTICE.fl2va)).toBe(true);
+      expect(noticeShown(NOTICE.ref2va)).toBe(false);
+
+      await clickGenerateOnH3Grid();
+      await waitFor(() => expect(postsTo("/api/v1/generate")).toHaveLength(1));
+      expect(postsTo("/api/v1/generate")[0]).not.toHaveProperty("references");
+    },
+    20_000,
+  );
+
+  it(
+    "Ref2VA loaded: ② while Enable is off; Enable on with no card shows ③ only",
+    async () => {
+      renderCreate(H3_CONSTRAINTS, "a cat", { transformerRole: "ref2va" });
+      await waitForCard("ref-slot-picture-1");
+      openReference();
+      expect(noticeShown(NOTICE.ref2va)).toBe(true);
+      expect(noticeShown(NOTICE.none)).toBe(false);
+      setEnabled(true);
+      expect(noticeShown(NOTICE.ref2va)).toBe(false);
+      expect(noticeShown(NOTICE.none)).toBe(true);
+      expect(noticeShown(NOTICE.fl2va)).toBe(false);
+    },
+    15_000,
+  );
+
+  it(
+    "FL2VA with Audio to video in effect: neither ① nor ③",
+    async () => {
+      renderCreate(H3_CONSTRAINTS, "a cat", { transformerRole: "fl2va" });
+      await waitForCard("ref-slot-audio-1");
+      act(() => {
+        dispatchCreateCommand({ type: "addReferenceAudio", filePath: "C:\\a\\bg.wav", fileName: "bg.wav" });
+      });
+      await waitForReady("ref-slot-audio-1");
+      setEnabled(true);
+      fireEvent.click(within(slot("ref-slot-audio-1")).getByRole("checkbox", { name: "Audio to video" }));
+      await waitFor(() => expect(noticeShown(NOTICE.fl2va)).toBe(false));
+      expect(noticeShown(NOTICE.none)).toBe(false);
+    },
+    15_000,
+  );
+
+  it(
+    "LTX constraints: no notice, even with a role served",
+    async () => {
+      renderCreate(undefined, "a cat", { transformerRole: "ref2va" });
+      await screen.findByText(/audio to video \(a2v\)/i, {}, { timeout: 5_000 });
+      for (const text of Object.values(NOTICE)) expect(noticeShown(text)).toBe(false);
+    },
+    15_000,
+  );
+
+  it(
+    "H3 with Enable on, then a switch to LTX: the kept cards are not sent",
+    async () => {
+      const { postsTo, switchTo } = renderCreate(H3_CONSTRAINTS, "a cat");
+      await waitForCard("ref-slot-picture-1");
+      openReference();
+      pickPicture(1);
+      await waitForReady("ref-slot-picture-1");
+      setEnabled(true);
+
+      switchTo(undefined);
+      await waitFor(() => expect(screen.queryByTestId("ref-slot-picture-1")).not.toBeInTheDocument());
+      await clickGenerateOnLtxGrid();
+      await waitFor(() => expect(postsTo("/api/v1/generate")).toHaveLength(1));
+      expect(postsTo("/api/v1/generate")[0]).not.toHaveProperty("references");
+    },
+    20_000,
+  );
+
+  it(
+    "a card that would be sent and is still uploading blocks Generate with its reason; Enable off does not",
+    async () => {
+      const { nativeBridge } = renderCreate(H3_CONSTRAINTS, "a cat", { holdUploads: true });
+      await waitForCard("ref-slot-picture-1");
+      openReference();
+      pickPicture(1);
+      await waitFor(() => expect(slot("ref-slot-picture-1").querySelector(".keyframe-spinner")).not.toBeNull());
+      // Enable off: the card is not sent, so it does not block.
+      expect(screen.queryByText(CARD_UPLOADING)).not.toBeInTheDocument();
+      setEnabled(true);
+      expect(await screen.findByText(CARD_UPLOADING)).toBeInTheDocument();
+
+      act(() => nativeBridge.releaseUploads());
+      await waitForReady("ref-slot-picture-1");
+      expect(screen.queryByText(CARD_UPLOADING)).not.toBeInTheDocument();
+    },
+    15_000,
+  );
+
+  it(
+    "FL2VA: an uploading card does not block (it would not be sent)",
+    async () => {
+      renderCreate(H3_CONSTRAINTS, "a cat", { transformerRole: "fl2va", holdUploads: true });
+      await waitForCard("ref-slot-picture-1");
+      openReference();
+      setEnabled(true);
+      pickPicture(1);
+      await waitFor(() => expect(slot("ref-slot-picture-1").querySelector(".keyframe-spinner")).not.toBeNull());
+      expect(screen.queryByText(CARD_UPLOADING)).not.toBeInTheDocument();
     },
     15_000,
   );

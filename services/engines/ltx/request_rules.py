@@ -74,8 +74,14 @@ class SamplingRange:
 class ReferenceLimits:
     """Limits of the Reference (Ref2VA) inputs, published as ``constraints["reference"]``.
 
-    ``clip_min_sec`` is the recommended minimum length: below it the screens only warn, nothing rejects.
-    For the screens only: nothing here is enforced by ``POST /generate``.
+    ``POST /generate`` enforces the counts and the slot ranges
+    (:meth:`RequestRules.violation`: at most ``max_images`` pictures,
+    ``max_videos`` videos, ``max_audios`` audios and ``max_total`` in all; each
+    kind's ``slot`` within 1..its own maximum). The seconds are NOT checked:
+    ``video_total_sec`` / ``audio_total_sec`` are for the screens, which send the
+    cut as each card's ``max_sec``, and the engine stops at them anyway.
+    ``clip_min_sec`` is the recommended minimum length: below it the screens
+    only warn, nothing rejects.
     """
 
     max_images: int
@@ -131,8 +137,10 @@ class RequestRules:
     chain's), and then the key is left out of :meth:`constraints` entirely.
     The 0..1 bound itself is the schema's.
     ``reference`` is the upper limits of the Reference (Ref2VA) inputs, published
-    as ``constraints["reference"]`` for the screens (not enforced here); ``None``
-    for a family without them (LTX), and then the key is left out.
+    as ``constraints["reference"]`` for the screens; its counts and slot ranges
+    are also enforced by :meth:`violation`. ``None`` for a family without them
+    (LTX: its ``reject_unsupported`` refuses ``references`` first), and then the
+    key is left out and nothing is checked.
     """
 
     frames_step: int
@@ -207,7 +215,8 @@ class RequestRules:
 
         First offender wins (as in the adapters' reject tables), in a fixed
         order: width, height, the frame grid, the frame range, the frame rate,
-        the sampling knobs, then the family's own extra check.
+        the sampling knobs, the reference counts and slots, then the family's
+        own extra check.
         """
         m = self.dimension_multiple
         if request.width % m != 0:
@@ -229,8 +238,36 @@ class RequestRules:
             value = getattr(request, name)
             if value is not None and not knob.min <= value <= knob.max:
                 return f"{name} must be between {knob.min:g} and {knob.max:g}"
+        if self.reference is not None:
+            message = self._reference_violation(request)
+            if message is not None:
+                return message
         if self.extra is not None:
             return self.extra(request)
+        return None
+
+    def _reference_violation(self, request: "GenerateRequest") -> str | None:
+        """The first count or slot-range violation of ``request.references``.
+
+        Per kind first (pictures, videos, audios), then the total. The seconds
+        are not checked (see :class:`ReferenceLimits`).
+        """
+        limits = self.reference
+        assert limits is not None
+        per_kind = (
+            ("picture", limits.max_images),
+            ("video", limits.max_videos),
+            ("audio", limits.max_audios),
+        )
+        for kind, most in per_kind:
+            refs = [ref for ref in request.references if ref.kind == kind]
+            if len(refs) > most:
+                return f"at most {most} {kind} references are supported"
+            for ref in refs:
+                if ref.slot > most:
+                    return f"the {kind} reference slot must be between 1 and {most}"
+        if len(request.references) > limits.max_total:
+            return f"at most {limits.max_total} references are supported in all"
         return None
 
     def normalize_keyframes(

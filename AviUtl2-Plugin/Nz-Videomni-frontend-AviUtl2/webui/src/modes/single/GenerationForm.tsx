@@ -104,7 +104,7 @@ export interface GenerationFormProps {
   /** Current source-audio strength (0..1). */
   sourceAudioStrength: number;
   onSourceAudioStrengthChange: (value: number) => void;
-  /** §1-107 (UI first): present only while the loaded base model's
+  /** §1-107: present only while the loaded base model's
    * constraints carry `reference` (MiniMax H3). Then the Reference accordion
    * is drawn right under the keyframes and the A2V accordion is NOT drawn
    * (A2V lives on the Reference Audios cards). Omitted = exactly the previous
@@ -299,7 +299,7 @@ export function GenerationForm({
         strengthUnavailable={sectionsUnavailable?.keyframeStrength}
       />
 
-      {/* §1-107: MiniMax H3's Reference accordion (UI first), right under the
+      {/* §1-107: MiniMax H3's Reference accordion, right under the
           keyframes. Only while the constraints carry `reference`. */}
       {reference && (
         <ReferenceAccordion

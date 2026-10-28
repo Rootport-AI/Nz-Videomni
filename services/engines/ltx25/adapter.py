@@ -147,6 +147,8 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     # MiniMax H3 only (single-generate A2V); LTX's A2V is the chain's
     # ``source_audio``. The field's default is None.
     ("source_audio", "source_audio", lambda r: r.source_audio is not None),
+    # MiniMax H3 only (Ref2VA). The field's default is [].
+    ("references", "references", lambda r: bool(r.references)),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT

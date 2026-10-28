@@ -1616,12 +1616,14 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     # LTX AlphaGen 第 1 弾で**2件目** ``alpha_gen`` が同じ向きで加わった
     # （マット用の IC-LoRA は 2.5 用）。順序は REJECT_TABLE の順。
     # VRAM 16GB mode で**3件目** ``vram16_mode`` が加わった（MiniMax H3 専用で、
-    # 2.5 も同じく断る）。
+    # 2.5 も同じく断る）。単発の A2V の ``source_audio`` と Ref2VA の
+    # ``references``（どちらも MiniMax H3 専用）が続く。
     assert by_id["LTX23"]["unsupported_features"] == [
         "keep_resident_embeddings",
         "alpha_gen",
         "vram16_mode",
         "source_audio",
+        "references",
     ]
     features = by_id["LTX25"]["unsupported_features"]
     # Retake段で ``retake`` が外れた——残っていればEditタブの「撮り直し」
@@ -1660,7 +1662,8 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     # モード名ではない）。エンジン側の機能名 2 つにこれを足した 3 件になる。
     assert "vram16_mode" in features
     assert "source_audio" in features  # 単発 A2V（MiniMax H3 専用）
-    assert len(features) == 4
+    assert "references" in features  # Ref2VA（MiniMax H3 専用）
+    assert len(features) == 5
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

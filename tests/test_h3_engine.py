@@ -927,6 +927,8 @@ GOLDEN_GENERATE_KEYS = [
 #: Keys the worker accepts but a message carries only when used (appended after
 #: ``GOLDEN_GENERATE_KEYS`` in this order): A2V's ``source_audio`` (台帳 §1-103).
 GOLDEN_GENERATE_OPTIONAL_KEYS = ["source_audio"]
+#: Ref2VA's ``references`` (台帳 §1-107), sent only when used, after the keys above.
+GOLDEN_GENERATE_REFERENCE_KEYS = ["references"]
 GOLDEN_DONE_KEYS = [
     "seed_used", "sampler", "num_inference_steps", "shift_video", "shift_audio",
     "peak_vram_mb", "peak_vram_reserved_mb", "rss_peak_gib", "commit_gib", "commit_peak_gib", "seconds",
@@ -961,7 +963,8 @@ def test_golden_generate_message_keys():
 
     msg = worker._selftest_generate_message(_selftest_args(), "o.mp4")
     assert list(msg) == GOLDEN_GENERATE_KEYS            # a job without the optional keys: as before
-    assert worker._GENERATE_FIELDS == frozenset(GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS)
+    assert worker._GENERATE_FIELDS == frozenset(
+        GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS + GOLDEN_GENERATE_REFERENCE_KEYS)
     args = _selftest_args()
     args.source_audio, args.audio_strength = "a.wav", 0.5
     msg = worker._selftest_generate_message(args, "o.mp4")
@@ -3214,3 +3217,394 @@ def test_a2v_tiny_job_audio_output_switch(monkeypatch, tmp_path):
     assert "mask" not in zero["h3"]["phases"]["denoise"]
     assert torch.equal(latents[-1], latents[0]) and torch.equal(audio_out[-1], audio_out[0])
     assert zero["h3"]["a2v"]["audio_output"] == "decoded"
+
+
+# --------------------------------------------------------------------------- #
+# Ref2VA: references in the denoise and in generate (台帳 §1-107, plan §3.1)
+# --------------------------------------------------------------------------- #
+
+def _modality_rows_before_ref(layout, text_tags):
+    """A frozen copy of ``modality_rows``'s body as it was before the references."""
+    m = torch.full((layout.total,), C.MODALITY_VIDEO, dtype=torch.long, device=text_tags.device)
+    m[layout.text] = text_tags.to(torch.long)
+    m[layout.audio] = C.MODALITY_AUDIO
+    return m
+
+
+def _tiny_refs(seed=31):
+    """One picture (latent 4 x 2 -> 2 rows), one video (vt 2, latent 2 x 2 -> 2 rows) and
+    one audio (rt 3 -> 6 rows) reference, as ``_encode_references`` hands them over."""
+    from engine_h3.rope import RefShape
+
+    g = torch.Generator().manual_seed(seed)
+    return [
+        (RefShape.picture(4, 2), torch.randn(2, 96, generator=g)),
+        (RefShape.video(2, 2, 2), torch.randn(2, 96, generator=g)),
+        (RefShape.audio(3), torch.randn(6, AUD, generator=g)),
+    ]
+
+
+def test_time_and_modality_rows_without_references_are_the_functions_of_before():
+    """Reference ranges empty: the per-row times, their numbering and the modality
+    rows are the ones of before, for every step of a 20-step job."""
+    from engine_h3.dit import H3SeqLayout
+    from engine_h3.pipeline_h3 import modality_rows, time_rows
+
+    sv, sa = sigma_schedule(20, 12.0), sigma_schedule(20, 3.0)
+    tags = torch.tensor([1, 1, 0, 0, 1])
+    for cond in (0, 4):
+        layout = H3SeqLayout.make(text_rows=5, cond_rows=cond, audio_rows=6, video_rows=12)
+        explicit = H3SeqLayout.make(text_rows=5, cond_rows=cond, audio_rows=6, video_rows=12,
+                                    ref_video_rows=0, ref_audio_rows=0)
+        assert explicit == layout
+        assert torch.equal(modality_rows(layout, tags), _modality_rows_before_ref(layout, tags))
+        for i in range(20):
+            t_v, t_a = 1.0 - float(sv[i]), 1.0 - float(sa[i])
+            got, want = time_rows(layout, t_v, t_a), _time_rows_before_a2v(layout, t_v, t_a)
+            assert torch.equal(got[0], want[0]) and torch.equal(got[1], want[1])
+
+
+def test_time_and_modality_rows_of_the_reference_ranges():
+    from engine_h3.dit import H3SeqLayout
+    from engine_h3.pipeline_h3 import modality_rows, time_rows
+
+    layout = H3SeqLayout.make(text_rows=3, cond_rows=2, audio_rows=4, video_rows=6,
+                              ref_video_rows=5, ref_audio_rows=4)
+    for t_v, t_a in ((0.0, 0.0), (0.5, 0.25), (0.9995, 0.7)):
+        t_unique, index = time_rows(layout, t_v, t_a)
+        t = t_unique[index]
+        assert bool((t[layout.ref_video] == torch.tensor(max(t_v, 0.999))).all())
+        assert bool((t[layout.ref_audio] == 1.0).all())
+        assert bool((t[layout.cond] == torch.tensor(max(t_v, 0.999))).all())
+        assert bool((t[layout.audio] == torch.tensor(t_a)).all())
+    m = modality_rows(layout, torch.ones(3, dtype=torch.long))
+    assert m[layout.ref_video].tolist() == [C.MODALITY_VIDEO] * 5
+    assert m[layout.ref_audio].tolist() == [C.MODALITY_AUDIO] * 4
+
+
+def test_ordered_references_kind_then_slot():
+    from engine_h3.pipeline_h3 import H3ReferenceInput as R
+    from engine_h3.pipeline_h3 import ordered_references
+
+    given = [R("audio", "a2", 2), R("video", "v1", 1), R("picture", "p3", 3), R("audio", "a1", 1),
+             R("picture", "p1", 1), R("video", "v2", 2)]
+    assert [(r.kind, r.slot) for r in ordered_references(given)] == [
+        ("picture", 1), ("picture", 3), ("video", 1), ("video", 2), ("audio", 1), ("audio", 2)]
+    assert ordered_references(()) == [] and ordered_references(None) == []
+
+
+def test_denoise_without_references_is_the_same_job(monkeypatch, tmp_path):
+    """refs=None / [] / absent: the same latents, the same M per step, the same
+    sequence record (no ref keys) and the same random draws. The three runs all
+    go through the new ``_denoise``; equality with the code before the change is
+    carried by G-R0 (the fingerprint) and the per-part tests against frozen copies."""
+    from engine_h3 import pipeline_h3 as P
+
+    _dit, run = _tiny_denoiser(monkeypatch, tmp_path)
+    draws = []
+    real_randn = torch.randn
+
+    def counting_randn(*a, **k):
+        if k.get("generator") is not None:
+            draws.append(tuple(a[0]))
+        return real_randn(*a, **k)
+
+    monkeypatch.setattr(P.torch, "randn", counting_randn)
+    runs = []
+    for kw in ({}, {"refs": None}, {"refs": []}):
+        draws.clear()
+        runs.append((*run(**kw), list(draws)))
+    (v0, a0, e0, n0) = runs[0]
+    assert len(n0) == 2                                           # video, then audio: nothing more
+    for v, a, e, n in runs[1:]:
+        assert n == n0 and torch.equal(v, v0) and torch.equal(a, a0)
+        assert e["sequence"] == e0["sequence"] and e["m_per_step"] == e0["m_per_step"]
+    assert "ref_video" not in e0["sequence"] and "ref_audio" not in e0["sequence"]
+
+
+def test_denoise_with_a_picture_a_video_and_an_audio_reference(monkeypatch, tmp_path):
+    """The REAL ``_denoise`` on the tiny DiT with one reference of each kind: the
+    reference rows are mixed (picture / video, after the video and audio draws)
+    or handed over clean (audio), given unchanged at every step with t = 0.999 /
+    1.0, and recorded in the sequence; VRAM 16GB mode gives the same numbers."""
+    from engine_h3 import pipeline_h3 as P
+
+    dit, run = _tiny_denoiser(monkeypatch, tmp_path)
+    refs = _tiny_refs()
+    seen, seen_t = [], []
+    real_embed = dit.embed_rows
+    real_time_rows = P.time_rows
+
+    def embed(text_refined, audio_rows, video_rows, cond_rows=None, **kw):
+        seen.append({k: (None if v is None else v.clone()) for k, v in kw.items()})
+        return real_embed(text_refined, audio_rows, video_rows, cond_rows=cond_rows, **kw)
+
+    def time_rows(layout, t_v, t_a, device=None, **kw):
+        out = real_time_rows(layout, t_v, t_a, device=device, **kw)
+        seen_t.append((layout, out[0][out[1]]))
+        return out
+
+    monkeypatch.setattr(dit, "embed_rows", embed)
+    monkeypatch.setattr(P, "time_rows", time_rows)
+    video, audio, entry = run(refs=refs)
+    assert torch.isfinite(video).all() and torch.isfinite(audio).all()
+    seq = entry["sequence"]
+    assert (seq["ref_video"], seq["ref_audio"]) == (4, 6)
+    assert seq["total"] == seq["text"] + 4 + 6 + seq["audio"] + seq["video"]
+    # One draw per picture / video reference after the job's video and audio draws
+    # (no key frame here), in row order.
+    gen = torch.Generator().manual_seed(11)
+    torch.randn((1, LAT, 7, 4, 4), generator=gen, dtype=torch.float32)
+    torch.randn((2, AUD, 37), generator=gen, dtype=torch.float32)
+    want = torch.cat([P.noisy_condition(refs[0][1], 2, gen), P.noisy_condition(refs[1][1], 2, gen)])
+    assert len(seen) == 3
+    for kw in seen:
+        assert torch.equal(kw["ref_video_rows"], want)
+        assert torch.equal(kw["ref_audio_rows"], refs[2][1])
+    for layout, t in seen_t:
+        assert (layout.ref_video.stop - layout.ref_video.start, layout.ref_audio.stop - layout.ref_audio.start) == (4, 6)
+        assert t[layout.ref_video].tolist() == [float(torch.tensor(0.999))] * 4
+        assert t[layout.ref_audio].tolist() == [1.0] * 6
+    v_on, a_on, _e = run(refs=refs, vram16=True)
+    assert torch.equal(v_on, video) and torch.equal(a_on, audio)
+    v_plain, _a, _e = run()
+    assert not torch.equal(v_plain, video)                        # the references reach the result
+    # An audio reference listed first changes nothing: the picture / video rows and
+    # the audio rows are taken by kind, and the coordinates follow the same order.
+    v_order, a_order, _e = run(refs=[refs[2], refs[0], refs[1]])
+    assert torch.equal(v_order, video) and torch.equal(a_order, audio)
+    with pytest.raises(RuntimeError, match="do not match"):
+        run(refs=[(refs[0][0], refs[0][1][:1])])
+
+
+def test_denoise_with_a2v_and_an_audio_reference(monkeypatch, tmp_path):
+    """A2V (``audio_fix``) and an audio reference in one job: ``ref_audio`` and the
+    target ``audio`` are separate ranges of the sequence, the reference rows carry
+    t = 1.0 and the A2V rows the mask's time (m = 0 -> 1.0, m = 1 -> the step's t),
+    and the record holds both the reference count and the mask."""
+    from engine_h3 import pipeline_h3 as P
+
+    dit, run = _tiny_denoiser(monkeypatch, tmp_path)
+    clean_a, _clean_v = _clean_latents()
+    ref = _tiny_refs()[2]
+    seen_ref, seen_t = [], []
+    real_embed = dit.embed_rows
+    real_time_rows = P.time_rows
+
+    def embed(text_refined, audio_rows, video_rows, cond_rows=None, **kw):
+        seen_ref.append(kw.get("ref_audio_rows"))
+        return real_embed(text_refined, audio_rows, video_rows, cond_rows=cond_rows, **kw)
+
+    def time_rows(layout, t_v, t_a, device=None, **kw):
+        out = real_time_rows(layout, t_v, t_a, device=device, **kw)
+        seen_t.append((layout, t_a, out[0][out[1]]))
+        return out
+
+    monkeypatch.setattr(dit, "embed_rows", embed)
+    monkeypatch.setattr(P, "time_rows", time_rows)
+    mask = torch.tensor([0.0] * 10 + [1.0] * 27)
+    video, audio, entry = run(audio_fix=(clean_a, mask), refs=[ref])
+    assert torch.isfinite(video).all() and torch.isfinite(audio).all()
+    seq = entry["sequence"]
+    assert (seq["ref_video"], seq["ref_audio"], seq["audio"]) == (0, 6, 74)
+    assert seq["total"] == seq["text"] + 6 + seq["audio"] + seq["video"]
+    assert entry["mask"]["audio"] == {"rows": 74, "min": 0.0, "max": 1.0}
+    assert len(seen_ref) == 3 and all(torch.equal(r, ref[1]) for r in seen_ref)
+    for layout, t_a, t in seen_t:
+        assert layout.ref_audio.stop <= layout.audio.start                    # no overlap
+        assert (layout.ref_audio.stop - layout.ref_audio.start) == 6
+        assert t[layout.ref_audio].tolist() == [1.0] * 6
+        kept = (mask == 0).repeat(2)                                         # channel 0's latents, then channel 1's
+        t_audio = t[layout.audio]
+        assert bool((t_audio[kept] == 1.0).all())
+        assert bool((t_audio[~kept] == torch.tensor(t_a)).all())
+    assert torch.equal(audio[:, :, :10], clean_a[:, :, :10])               # the kept latents end clean
+
+
+def _ref_job(monkeypatch, tmp_path, references, frames=()):
+    """``generate`` through the REAL ``_encode`` / ``_encode_image`` / ``_read_references`` /
+    ``_encode_references`` with a stand-in text encoder, video encoder, audio encoder and
+    loader (``_a2v_fakes``, 2,000 samples) and video reader; the denoise and the decode
+    are stubs. 64 x 64, 22 frames. ``references``: ``(kind, slot, max_sec)``.
+    Returns ``(done, te_calls, encode progress, denoise kwargs, builds)``."""
+    import numpy as np
+    from PIL import Image
+
+    from engine_h3 import pipeline_h3 as P
+    from engine_h3 import reference as RM
+    from engine_h3 import text_encoder as TE
+    from engine_h3 import video_vae as VV
+
+    _wave, calls = _a2v_fakes(monkeypatch, samples=2000)
+    te_calls, progress, seen = [], [], {}
+    builds = {"video": 0, "audio_loads": calls["load"], "audio_encodes": calls["encode"]}
+
+    class FakeTE:
+        def __init__(self, *a, **k):
+            self.read_report = {}
+
+        def load(self):
+            return {}
+
+        def encode(self, prompt, images=(), *, refs=None):
+            te_calls.append({"images": len(images), "refs": None if refs is None else [(r.kind, r.slot) for r in refs]})
+            self.read_report = {"vision_tokens": 7 * len(images)}
+            if refs is not None:
+                self.read_report["references"] = [
+                    {"kind": r.kind, "slot": r.slot, "vision_tokens": 5 * r.slot} for r in refs if r.kind == "picture"
+                ]
+            return torch.zeros(3, 8), torch.ones(3, dtype=torch.long)
+
+        def release(self):
+            pass
+
+    class FakeVideoEncoder:
+        def encode(self, x, tiled=True):
+            return torch.zeros((1, 24, 1, x.shape[-2] // 16, x.shape[-1] // 16))
+
+        def encode_clips(self, frames, *, device, tiled=True):
+            vt = (int(frames.shape[0]) - 5) // 17 * 5 + 2
+            return torch.zeros((1, 24, vt, frames.shape[1] // 16, frames.shape[2] // 16))
+
+    def build_video(cls, *a, **k):
+        builds["video"] += 1
+        return FakeVideoEncoder()
+
+    def read_video(path, *, num_frames, max_sec=None):
+        n = 22 if max_sec is None else 5
+        info = {"source_size": [64, 32], "size": [64, 32], "source_fps": 24.0, "source_frames": n + 2, "used_frames": n}
+        return np.zeros((n, 32, 64, 3), np.uint8), info
+
+    monkeypatch.setattr(TE, "H3TextEncoder", FakeTE)
+    monkeypatch.setattr(VV.H3VideoEncoder, "from_file", classmethod(build_video))
+    monkeypatch.setattr(RM, "read_reference_video", read_video)
+    pipe = P.H3Pipeline(P.H3Paths("t", "te", "vv", "av", "tok"), P.H3LoadOptions(), device="cpu",
+                        progress=lambda stage, i, total: progress.append((stage, i, total)), log=lambda m: None)
+    pipe._dit_cfg = object()
+
+    def denoise(req, h, t, phases, entry, **kw):
+        seen.update(kw)
+        return torch.zeros(1), torch.zeros(1), "on"
+
+    monkeypatch.setattr(pipe, "_denoise", denoise)
+    monkeypatch.setattr(pipe, "_decode", lambda req, v, a, entry, **kw: 1)
+    images = []
+    for n in frames:
+        path = tmp_path / f"k{n}.png"
+        Image.new("RGB", (64, 64), (40,) * 3).save(path)
+        images.append(P.H3ImageInput(str(path), n))
+    refs = []
+    for kind, slot, max_sec in references:
+        path = tmp_path / (f"{kind}{slot}.png" if kind == "picture" else f"{kind}{slot}.bin")
+        if kind == "picture":
+            Image.new("RGB", (128, 64), (90,) * 3).save(path)
+        else:
+            path.write_bytes(b"x")
+        refs.append(P.H3ReferenceInput(kind, str(path), slot, max_sec))
+    req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=22, output_path="o.mp4",
+                              images=tuple(images), references=tuple(refs))
+    done = pipe.generate(req)
+    return done, te_calls, [p for p in progress if p[0] == "encode"], seen, builds
+
+
+def test_references_sorted_key_frames_kept_off_the_vision_tower(monkeypatch, tmp_path):
+    refs = [("audio", 2, None), ("video", 1, None), ("picture", 3, None), ("picture", 1, None), ("audio", 1, 0.5)]
+    done, te_calls, progress, kw, builds = _ref_job(monkeypatch, tmp_path, refs, frames=(0, 21))
+    order = [("picture", 1), ("picture", 3), ("video", 1), ("audio", 1), ("audio", 2)]
+    assert te_calls == [{"images": 0, "refs": order}]         # the key frames do not reach the vision tower
+    assert [s.kind for s, _r in kw["refs"]] == ["picture", "picture", "video", "audio", "audio"]
+    assert kw["cond_frame_idx"] == [0, 21] and tuple(kw["cond_clean"].shape) == (2 * 4, 96)
+    assert builds["video"] == 1                              # one video encoder for key frames and references
+    # encode: 3 (TE) + key frames + references = 5 steps, image_encode at 4, reference_encode at 5.
+    assert {total for _s, _i, total in progress} == {5} and progress[-2:] == [("encode", 4, 5), ("encode", 5, 5)]
+    phases = done["h3"]["phases"]
+    assert list(phases) == ["encode", "image_encode", "reference_encode", "denoise", "decode"]
+    assert phases["image_encode"]["vision_tokens"] == 0       # only the key frames' share, none here
+    assert "seconds" in phases["reference_encode"]
+    recs = phases["reference_encode"]["references"]
+    assert [(r["kind"], r["slot"]) for r in recs] == order
+    pic = recs[0]
+    # 128 x 64 for a 64 x 64 job (match): scale sqrt(1/2), aspect kept -> 96 x 32 (multiples of 32).
+    assert set(pic) == {"kind", "slot", "source_size", "size", "vision_tokens", "rows", "seconds"}
+    assert (pic["source_size"], pic["size"], pic["vision_tokens"]) == ([128, 64], [96, 32], 5)
+    assert pic["rows"] == 1 * 3
+    vid = recs[2]
+    assert set(vid) == {"kind", "slot", "source_frames", "used_frames", "latent_t", "pairs", "rows", "seconds"}
+    assert (vid["source_frames"], vid["used_frames"], vid["latent_t"], vid["pairs"]) == (24, 22, 7, 1)
+    assert vid["rows"] == 7 * 1 * 2
+    aud = recs[3]
+    assert set(aud) == {"kind", "slot", "samples", "latent_t", "rows", "seconds"}
+    assert (aud["samples"], aud["latent_t"], aud["rows"]) == (2000, 3, 6)
+    # The audio references: keep_samples=1, min(max_sec, 15 s) x 32000 read; one encoder.
+    assert [(k, r) for _p, k, r in builds["audio_loads"]] == [(1, 16000), (1, 15 * 32000)]
+    assert done["h3"]["references"] == {"pictures": 2, "videos": 1, "audios": 2}
+    assert list(done) == GOLDEN_DONE_KEYS and list(done["h3"]) == GOLDEN_H3_KEYS + ["references"]
+    for shape, rows in kw["refs"]:
+        assert rows.device.type == "cpu" and rows.dtype == torch.float32 and rows.shape[0] == shape.rows
+
+
+def test_audio_only_references_build_no_video_encoder(monkeypatch, tmp_path):
+    done, te_calls, progress, kw, builds = _ref_job(monkeypatch, tmp_path, [("audio", 1, None)])
+    assert builds["video"] == 0
+    assert te_calls == [{"images": 0, "refs": [("audio", 1)]}]
+    assert progress[-1] == ("encode", 4, 4)
+    assert list(done["h3"]["phases"]) == ["encode", "reference_encode", "denoise", "decode"]
+    assert done["h3"]["references"] == {"pictures": 0, "videos": 0, "audios": 1}
+
+
+def test_reference_audio_shorter_than_one_latent_is_refused(monkeypatch, tmp_path):
+    import sys
+    import types
+
+    from engine_h3 import pipeline_h3 as P
+
+    module = types.ModuleType("engine_h3.source_audio")
+    module.load_source_waveform = lambda path, *, keep_samples, read_samples: (torch.zeros(2, 640), {})
+    monkeypatch.setitem(sys.modules, "engine_h3.source_audio", module)
+    f = tmp_path / "a.wav"
+    f.write_bytes(b"x")
+    pipe = P.H3Pipeline(P.H3Paths("t", "te", "vv", "av", "tok"), P.H3LoadOptions(), device="cpu",
+                        progress=lambda *a: None, log=lambda m: None)
+    req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=22, output_path="o.mp4",
+                              references=(P.H3ReferenceInput("audio", str(f), 1),))
+    with pytest.raises(ValueError, match="参照音声が短すぎます"):
+        pipe._read_references(req)
+
+
+def test_job_without_references_records_nothing_new(monkeypatch, tmp_path):
+    done, te_calls, progress, kw, builds = _ref_job(monkeypatch, tmp_path, [], frames=(0,))
+    assert te_calls == [{"images": 1, "refs": None}]           # the TE is called as before (no refs keyword)
+    assert kw["refs"] is None and builds["video"] == 1
+    assert "reference_encode" not in done["h3"]["phases"] and "references" not in done["h3"]
+    assert list(done["h3"]) == GOLDEN_H3_KEYS
+    assert {total for _s, _i, total in progress} == {4}
+
+
+def test_request_validation_references(tmp_path):
+    from engine_h3.pipeline_h3 import H3GenerateRequest, H3ReferenceInput, validate_request
+
+    f = tmp_path / "r.png"
+    f.write_bytes(b"x")
+    ok = dict(prompt="p", seed=1, width=640, height=384, num_frames=124, output_path="o.mp4")
+    assert H3GenerateRequest(**ok).references == ()
+    validate_request(H3GenerateRequest(**ok, references=(
+        H3ReferenceInput("picture", str(f), 1), H3ReferenceInput("video", str(f), 1, 3.0),
+        H3ReferenceInput("audio", str(f), 1, 2), H3ReferenceInput("picture", str(f), 3),
+    )))
+    bad = [
+        ((H3ReferenceInput("image", str(f), 1),), "種類"),
+        ((H3ReferenceInput("picture", str(f), 0),), "1 以上"),
+        ((H3ReferenceInput("picture", str(f), True),), "整数"),
+        ((H3ReferenceInput("picture", str(f), 1.0),), "整数"),
+        ((H3ReferenceInput("video", str(f), 2), H3ReferenceInput("video", str(f), 2)), "重複"),
+        ((H3ReferenceInput("audio", "  ", 1),), "パスが空"),
+        ((H3ReferenceInput("audio", str(tmp_path / "none.wav"), 1),), "見つかりません"),
+        ((H3ReferenceInput("video", str(f), 1, 0.0),), "正の有限"),
+        ((H3ReferenceInput("video", str(f), 1, -1.0),), "正の有限"),
+        ((H3ReferenceInput("video", str(f), 1, float("inf")),), "正の有限"),
+        ((H3ReferenceInput("video", str(f), 1, float("nan")),), "正の有限"),
+        ((H3ReferenceInput("video", str(f), 1, "3"),), "正の有限"),
+    ]
+    for refs, match in bad:
+        with pytest.raises(ValueError, match=match):
+            validate_request(H3GenerateRequest(**ok, references=refs))

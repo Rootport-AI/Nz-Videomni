@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Full, idempotent clean installer for the Nz-Videomni backend (LTX 2.3 and
     LTX 2.5 engines; the opt-in MiniMax H3 engine when -BaseModel selects it).
@@ -170,6 +170,7 @@ function Write-Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
 function Write-Skip($msg) { Write-Host "  SKIP  $msg" -ForegroundColor DarkGray }
 function Write-Do($msg) { Write-Host "  ..    $msg" -ForegroundColor Yellow }
 function Write-Ok($msg) { Write-Host "  OK    $msg" -ForegroundColor Green }
+function Write-Warn($msg) { Write-Host "  WARN  $msg" -ForegroundColor Magenta }
 
 function Require-Cmd($name) {
     if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
@@ -440,6 +441,29 @@ function Test-BaseModelShape {
             }
             if ($hasDownloads -and -not $filePaths.ContainsKey($val)) {
                 throw "${Name} assets.$($prop.Name): '$val' does not match any downloads[].files[].path in $Name -- descriptor drift."
+            }
+        }
+    }
+
+    # known_weights (optional; only the MiniMax H3 descriptor carries it): the
+    # weights whose whole-file SHA-256 identifies FL2VA vs Ref2VA. Each entry must
+    # name a file this SAME descriptor downloads (so the post-download check in
+    # step 6 can find it) and carry a well-formed size / sha256 / role.
+    if ($Manifest.known_weights) {
+        foreach ($kw in @($Manifest.known_weights)) {
+            $kwPath = [string] $kw.path
+            if (-not $filePaths.ContainsKey($kwPath)) {
+                throw "${Name} known_weights: '$kwPath' does not match any downloads[].files[].path in $Name -- descriptor drift."
+            }
+            if ([string] $kw.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+                throw "${Name} known_weights '$kwPath': 'sha256' must be 64 hex characters."
+            }
+            $kwSize = 0L
+            if (-not ([long]::TryParse([string] $kw.size, [ref] $kwSize)) -or $kwSize -le 0) {
+                throw "${Name} known_weights '$kwPath': 'size' must be a positive integer."
+            }
+            if ([string]::IsNullOrWhiteSpace([string] $kw.role)) {
+                throw "${Name} known_weights '$kwPath': 'role' must be non-empty."
             }
         }
     }
@@ -1706,6 +1730,36 @@ function Get-ShortEntries {
     return @($short)
 }
 
+# SHA-256 check of the just-fetched files that the descriptor lists in
+# known_weights (FL2VA / Ref2VA identification). A mismatch is a WARNING, never a
+# failure: the upstream file may simply have been updated, and generation still
+# works -- only the FL2VA/Ref2VA notice is lost. Returns the warning strings.
+function Test-KnownWeightHashes {
+    param(
+        [Parameter(Mandatory)] $Manifest,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Files
+    )
+    $warnings = @()
+    if (-not $Manifest.known_weights) { return @($warnings) }
+    $groupPaths = @($Files | ForEach-Object { [string] $_.path })
+    foreach ($kw in @($Manifest.known_weights)) {
+        if ($groupPaths -notcontains [string] $kw.path) { continue }
+        $abs = Join-Path $ModelsDir (([string] $kw.path) -replace '/', '\')
+        $gb = [math]::Round(([double] $kw.size) / 1GB, 1)
+        Write-Do "SHA-256 を照合しています（約 ${gb}GB・数分かかることがあります）: $($kw.path)"
+        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $abs).Hash.ToLowerInvariant()
+        $expected = ([string] $kw.sha256).ToLowerInvariant()
+        if ($actual -ne $expected) {
+            $w = "SHA-256 が記述子の値と一致しません: $($kw.path)（期待 $expected／実際 $actual）。取得元が更新された可能性があります。生成はできますが、FL2VA／Ref2VA の種別の注意は表示されません。"
+            Write-Warn $w
+            $warnings += $w
+        }
+    }
+    return @($warnings)
+}
+
+$HashWarnings = @()
+
 if ($SkipModels) {
     Write-Step "Model downloads"
     Write-Skip "-SkipModels given"
@@ -1793,6 +1847,10 @@ if ($SkipModels) {
             if ($short.Count -gt 0) {
                 throw "'$($dl.name)' downloaded but these expected files are missing or short: $($short -join '; '). Check your network first (a download that was cut off can end here), then check the include globs and the map in $($mf.Name). Staging kept at $stage. Maintainer note: if this repeats on a healthy network, check whether .venv-engine's huggingface_hub moved past 0.36.2 -- the single --include form this script builds is silently ignored on 1.x (see the version WARNING above the download loop)."
             }
+
+            # Only groups fetched in THIS run reach here (already-present groups
+            # `continue`d above), so only freshly downloaded files get hashed.
+            $HashWarnings += @(Test-KnownWeightHashes -Manifest $mf.Data -Files @($dl.files))
 
             Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
             $total = [long] 0
@@ -1904,6 +1962,13 @@ foreach ($row in $rows) {
     $color = if ($row.Status -eq "PASS") { "Green" } else { "Red" }
     $line = "  {0,-8}{1,-$($wLabel + 2)}{2,$wSize}  {3}" -f $row.Status, $row.Label, $row.Size, $row.Path
     Write-Host $line -ForegroundColor $color
+}
+
+# Re-show the SHA-256 warnings from step 6 (they scrolled past during the
+# download); they never change the exit code.
+if ($HashWarnings.Count -gt 0) {
+    Write-Host ""
+    foreach ($hw in $HashWarnings) { Write-Warn $hw }
 }
 
 # ----------------------------------------------------------------------------

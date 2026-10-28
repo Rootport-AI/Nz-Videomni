@@ -519,18 +519,27 @@ void CaptureFrameWorker(EDIT_HANDLE* handle, int frame, json_t id,
 
 // ---------------------------------------------------------------------------
 // ui.makeThumbnail - runs on an HTTP worker thread: WIC decode -> scale -> JPEG
-// -> base64 -> data URL. Never touches the UI thread.
+// -> base64 -> data URL. Never touches the UI thread. Contract v17: a video
+// extension (mp4 / mov / webm / mkv, any case) takes the Media Foundation
+// first-frame path instead; the result shape and THUMBNAIL_FAILED are the same.
 // ---------------------------------------------------------------------------
 void MakeThumbnailWorker(MakeThumbnailRequest req, json_t id,
                          Bridge::ResponsePoster poster) {
+    static const std::vector<std::string> kVideoExtensions = {".mp4", ".mov",
+                                                              ".webm", ".mkv"};
+    const bool is_video = MatchesAnyExtension(req.file_path, kVideoExtensions);
     std::vector<unsigned char> bytes;
     int width = 0;
     int height = 0;
     int src_w = 0;
     int src_h = 0;
     std::string enc_err;
-    const bool ok = MakeJpegThumbnail(Utf8ToWide(req.file_path), req.max_dim, &bytes,
-                                      &width, &height, &src_w, &src_h, &enc_err);
+    const std::wstring path = Utf8ToWide(req.file_path);
+    const bool ok =
+        is_video ? MakeJpegThumbnailFromVideo(path, req.max_dim, &bytes, &width,
+                                              &height, &src_w, &src_h, &enc_err)
+                 : MakeJpegThumbnail(path, req.max_dim, &bytes, &width, &height,
+                                     &src_w, &src_h, &enc_err);
     if (!ok) {
         LogWarn(std::wstring(L"ui.makeThumbnail: failed: ") + Utf8ToWide(enc_err));
         poster(MakeErrorResponse(id, "THUMBNAIL_FAILED",
@@ -3493,7 +3502,7 @@ std::string Bridge::HandleMessage(const std::string& request_json) {
         return std::string();  // response delivered asynchronously
     }
 
-    // --- ui.makeThumbnail (async WIC decode -> scale -> JPEG -> data URL) -----
+    // --- ui.makeThumbnail (async WIC decode, or a Media Foundation first frame for a video since v17 -> scale -> JPEG -> data URL) -----
     if (method == "ui.makeThumbnail") {
         const json id = ExtractId(req);
         const json params =

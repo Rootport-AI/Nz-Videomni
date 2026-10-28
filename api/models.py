@@ -436,6 +436,41 @@ class SingleSourceAudioSpec(BaseModel):
     strength: float = Field(0.5, ge=0.0, le=1.0)
 
 
+class ReferenceInput(BaseModel):
+    """One Reference (Ref2VA) input of a single generate (optional, MiniMax H3 only).
+
+    ``id`` is an existing upload of the store ``kind`` names: an ``image_id``
+    from POST /upload/image (``picture``), a ``video_id`` from POST
+    /upload/video (``video``), an ``audio_id`` from POST /upload/audio
+    (``audio``). ``slot`` is the card number on the operation panel (1-based,
+    per kind); the prompt's tag for the material carries the same number.
+    ``max_sec`` is how many seconds of a video / audio to use from its start
+    (the panel sends it only for a card it cut short); a picture has no length
+    and must leave it out.
+
+    The counts and the slot ranges are the family's (``ReferenceLimits``,
+    checked by ``RequestRules.violation``); both LTX families refuse the field
+    (422 FEATURE_UNSUPPORTED).
+
+    **No file path here, deliberately** -- the same rule as
+    :class:`SingleSourceAudioSpec`: a request field cannot make the server
+    read an arbitrary path.
+    """
+
+    kind: Literal["picture", "video", "audio"]
+    id: str = Field(..., min_length=1)
+    slot: int = Field(..., ge=1)
+    max_sec: float | None = Field(None, gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_picture_has_no_length(self) -> "ReferenceInput":
+        if self.kind == "picture" and self.max_sec is not None:
+            raise ValueError(
+                "a picture reference takes no max_sec (only video and audio have a length)"
+            )
+        return self
+
+
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1)
     negative_prompt: str = Field("")
@@ -677,6 +712,13 @@ class GenerateRequest(BaseModel):
     # SingleSourceAudioSpec.
     source_audio: SingleSourceAudioSpec | None = None
 
+    # Reference (Ref2VA) inputs (ADDITIVE/optional, MiniMax H3 only; both LTX
+    # families answer 422 FEATURE_UNSUPPORTED). ``[]`` = none: the engine
+    # receives no references. Sent pictures, videos, audios, each by card
+    # number; ``slot``, not the position in the list, names the material.
+    # See ReferenceInput.
+    references: list[ReferenceInput] = []
+
     @model_validator(mode="after")
     def validate_ltx_constraints(self) -> "GenerateRequest":
         # The family-specific numeric rules (the spatial multiple, the frame
@@ -724,6 +766,17 @@ class GenerateRequest(BaseModel):
             )
         if self.nag_enabled and not self.negative_prompt.strip():
             raise ValueError("nag_enabled requires a non-empty negative_prompt")
+
+        # References: one material per (kind, slot). The counts and the slot
+        # ranges are the family's (RequestRules.violation).
+        seen_slots: set[tuple[str, int]] = set()
+        for ref in self.references:
+            if (ref.kind, ref.slot) in seen_slots:
+                raise ValueError(
+                    f"references has two {ref.kind} entries for slot {ref.slot} "
+                    "(each card number appears once per kind)"
+                )
+            seen_slots.add((ref.kind, ref.slot))
 
         # ── Outpainting ───────────────────────────────────────────────────────
         # One flat check per rule (no nesting): every failure names exactly what

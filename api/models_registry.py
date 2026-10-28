@@ -34,7 +34,12 @@ two-layer shape and describes the ACTIVE base model. Alongside it:
     selected transformer file, the key a client matches against
     ``limits.comfort_budgets`` rows' ``requires.weight_class``). Only the
     ACTIVE base model gets a value; every other one, and any file that cannot
-    be classified, is ``null``.
+    be classified, is ``null``. Next to it ``transformer_role`` (``"fl2va"``/
+    ``"ref2va"``/``null``): which of the descriptor's ``known_weights`` the
+    selected transformer is by whole-file SHA-256, from the cache the last
+    successful load filled (services/weight_identity.py). Never computed here;
+    ``null`` for every non-active base model, a base model without
+    ``known_weights``, a file that matches none, or one not yet hashed.
 
 CATEGORY ORDER IS CARRIED BY AN ARRAY, NOT BY OBJECT KEY ORDER. Both
 ``categories`` blocks are emitted in declaration order and Python dicts keep
@@ -56,10 +61,10 @@ from fastapi import APIRouter, Depends
 
 from api.context import AppContext
 from api.deps import get_context
-from api.errors import APIError
 from services import engines
 from services.model_registry import CATEGORIES, DEFAULT_NAME, ModelRegistry
 from services.weight_class import classify_transformer
+from services.weight_identity import WeightIdentity, transformer_path
 
 router = APIRouter()
 
@@ -88,12 +93,30 @@ def transformer_weight_class(
     ``None`` when the name does not resolve (unknown name, missing file, no
     transformer category) or the file cannot be classified.
     """
-    name = selection.get("transformer", DEFAULT_NAME)
-    try:
-        path = registry.resolve("transformer", name, base_model=base_id)
-    except APIError:
+    path = transformer_path(registry, base_id, selection)
+    if path is None:
         return None
     return classify_transformer(path, engine_family=registry.descriptor(base_id).engine_family)
+
+
+def transformer_role(
+    registry: ModelRegistry,
+    base_id: str,
+    selection: dict[str, str],
+    identity: WeightIdentity,
+) -> str | None:
+    """Role (``known_weights[].role``) of the transformer ``selection`` names
+    for ``base_id``, from the hash cache ONLY — a stat and a lookup, never a
+    hash (the load path computes it). ``None`` when the base model has no
+    ``known_weights``, the name does not resolve, or the cache has no match.
+    """
+    known = registry.descriptor(base_id).known_weights
+    if not known:
+        return None
+    path = transformer_path(registry, base_id, selection)
+    if path is None:
+        return None
+    return identity.cached_role(path, known)
 
 
 @router.get("/models")
@@ -155,6 +178,18 @@ def list_models(context: AppContext = Depends(get_context)) -> dict:
                 # guessing from their default file.
                 "transformer_weight_class": (
                     transformer_weight_class(registry, base_id, base_active)
+                    if is_active
+                    else None
+                ),
+                # Which known weight the selected transformer is (see the
+                # module docstring). Active base model only, like the above.
+                "transformer_role": (
+                    transformer_role(
+                        registry,
+                        base_id,
+                        base_active,
+                        context.pipeline_manager.weight_identity,
+                    )
                     if is_active
                     else None
                 ),

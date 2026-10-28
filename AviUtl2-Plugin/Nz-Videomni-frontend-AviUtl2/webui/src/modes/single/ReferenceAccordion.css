@@ -1,0 +1,74 @@
+/* §1-107: the H3 Reference accordion. Cards reuse `.source-section`
+ * / `.source-input-actions` / `.source-input-body` / `.keyframe-thumb`. */
+
+.ref-accordion > .form-accordion-summary {
+  display: flex;
+  align-items: center;
+}
+
+.ref-summary-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+
+.ref-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ref-row-title {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ref-row-count {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* A counter past its limit: red and bold. Two classes, so it wins over the
+ * one-class rules above whatever the bundle order (like
+ * `.token-counter.field-hint-error`). */
+.ref-summary-count.ref-over,
+.ref-row-count.ref-over {
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.ref-row-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+/* 66% of the row: the next card peeks out at the right edge. */
+.ref-row-scroll > .ref-slot {
+  flex: 0 0 66%;
+  min-width: 180px;
+  box-sizing: border-box;
+}
+
+/* Left out of the generation (Enable off, over a limit, ...): grey only;
+ * the card stays operable. */
+.ref-slot-ignored {
+  opacity: 0.45;
+}
+
+.ref-slot-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ref-slot-name {
+  overflow-wrap: anywhere;
+}

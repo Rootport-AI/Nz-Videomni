@@ -50,6 +50,7 @@ from services.model_registry import CATEGORIES, DEFAULT_NAME, ModelRegistry
 from services.runtime_state import RuntimeState
 from services.upload_store import UploadStore
 from services.video_upload_store import VideoUploadStore
+from services.weight_identity import WeightIdentity, transformer_path
 
 logger = logging.getLogger("ltx.pipeline")
 
@@ -167,6 +168,7 @@ class PipelineManager:
         active_models: dict[str, str] | None = None,
         active_selection_paths: dict[str, str] | None = None,
         model_registry: ModelRegistry | None = None,
+        weight_identity: WeightIdentity | None = None,
     ):
         self.config = config
         self.job_store = job_store
@@ -239,6 +241,11 @@ class PipelineManager:
         # can never leave this half empty while the other half claims a
         # non-default selection.
         self._active_selection_paths: dict[str, str] = dict(active_selection_paths or {})
+        # Hash cache that tells which known weight (descriptor
+        # ``known_weights``) the loaded transformer is. Read ONCE here, next to
+        # the state file; written by :meth:`_identify_transformer` and read by
+        # GET /models (``transformer_role``).
+        self.weight_identity = weight_identity or WeightIdentity.for_config(config)
 
     # --------------------------------------------------------------- status
 
@@ -449,6 +456,7 @@ class PipelineManager:
             self.active_models = dict(active_names)
         self._active_selection_paths = dict(selection)
         self._remember()
+        self._identify_transformer()
 
     def reload(
         self,
@@ -500,6 +508,7 @@ class PipelineManager:
         self.active_models = dict(active_names)
         self._active_selection_paths = dict(selection)
         self._remember()
+        self._identify_transformer()
 
     def unload(self) -> None:
         # One rule for the whole lifecycle: while a load is in flight, every
@@ -635,6 +644,31 @@ class PipelineManager:
             self.model_registry.set_active_base_model(self.active_base_model)
         self.runtime_state.save(self.active_base_model, self.active_models)
 
+    def _identify_transformer(self) -> None:
+        """Hash the loaded transformer against the descriptor's
+        ``known_weights`` (§1-107), so GET /models can report its role.
+
+        SUCCESS PATH of ``load``/``reload`` only, synchronously: the first
+        load of a file costs one full read (tens of seconds; minutes on an
+        HDD), every later one is a cache hit. Base models without
+        ``known_weights`` (LTX) skip it entirely. The path comes from
+        :func:`transformer_path` — NOT from ``_active_selection_paths``, which
+        does not carry a ``"default"`` selection. Any failure here is a
+        WARNING: identification is a courtesy and never fails a load.
+        """
+        known = self.runner.descriptor.known_weights
+        if not known or self.model_registry is None:
+            return
+        path = transformer_path(self.model_registry, self.active_base_model, self.active_models)
+        if path is None:
+            return
+        try:
+            role = self.weight_identity.identify(path, known)
+        except Exception:
+            logger.warning("重みの種別を判定できませんでした: %s", path, exc_info=True)
+            return
+        logger.info("Transformer weight role: %s (%s)", role, Path(path).name)
+
     def _cleanup_after_error(self) -> None:
         try:
             self.runner.unload()
@@ -728,6 +762,27 @@ class PipelineManager:
                     "strength": sa.strength,
                     "source": _probe_source_audio(source_audio_path),
                 }
+
+            # Reference (Ref2VA, MiniMax H3 only; an LTX family's REJECT_TABLE
+            # refused ``references`` before the job was created). The API layer
+            # already checked every upload exists; this re-resolves each one in
+            # its kind's store for the runner hop (one path per entry, same
+            # order) and records the app's side of metadata["references"].
+            references_provenance = None
+            if job.request.references:
+                reference_stores = {
+                    "picture": self.upload_store,
+                    "video": self.video_upload_store,
+                    "audio": self.audio_upload_store,
+                }
+                runner_extra["reference_paths"] = [
+                    reference_stores[ref.kind].path_for(ref.id)
+                    for ref in job.request.references
+                ]
+                references_provenance = [
+                    {"kind": ref.kind, "slot": ref.slot, "id": ref.id, "max_sec": ref.max_sec}
+                    for ref in job.request.references
+                ]
 
             # Outpainting: build the green-padded canvas and hand THAT to
             # the runner as the reference video. Substituting the path here is
@@ -1039,6 +1094,7 @@ class PipelineManager:
                 inpaint_provenance=inpaint_provenance,
                 alpha_provenance=alpha_provenance,
                 a2v_provenance=a2v_provenance,
+                references_provenance=references_provenance,
             )
 
             if job.cancel_requested:
@@ -1881,6 +1937,7 @@ class PipelineManager:
         inpaint_provenance: dict | None = None,
         alpha_provenance: dict | None = None,
         a2v_provenance: dict | None = None,
+        references_provenance: list[dict] | None = None,
     ) -> JobResult:
         req = job.request
         if delivered_size is not None:
@@ -1912,6 +1969,7 @@ class PipelineManager:
                 inpaint_provenance=inpaint_provenance,
                 alpha_provenance=alpha_provenance,
                 a2v_provenance=a2v_provenance,
+                references_provenance=references_provenance,
             )
 
         return JobResult(
@@ -1928,6 +1986,7 @@ class PipelineManager:
     def _write_metadata(
         self, *, job, outcome, metadata_path, resolution, duration, file_size, elapsed,
         inpaint_provenance=None, alpha_provenance=None, a2v_provenance=None,
+        references_provenance=None,
     ) -> None:
         req = job.request
         metadata = {
@@ -2032,11 +2091,19 @@ class PipelineManager:
         # into ``metadata["a2v"]`` below, and ``h3`` is written only if anything
         # is left (a mock A2V job has nothing else). A job without ``a2v``
         # writes ``outcome.h3`` exactly as before.
+        # A Ref2VA job's reference counts (``done.h3.references``) are lifted
+        # out the same way, into ``metadata["references"]``.
         h3_facts = outcome.h3
         a2v_engine = None
         if h3_facts is not None and "a2v" in h3_facts:
             h3_facts = dict(h3_facts)
             a2v_engine = h3_facts.pop("a2v")
+            if not h3_facts:
+                h3_facts = None
+        references_engine = None
+        if h3_facts is not None and "references" in h3_facts:
+            h3_facts = dict(h3_facts)
+            references_engine = h3_facts.pop("references")
             if not h3_facts:
                 h3_facts = None
         if h3_facts is not None:
@@ -2053,6 +2120,15 @@ class PipelineManager:
             metadata["a2v"] = {
                 **(a2v_engine or {}),
                 **(a2v_provenance or {}),
+            }
+        # Reference (Ref2VA, additive, MiniMax H3 only): the ENGINE's counts
+        # (pictures, videos, audios) beside the APP's provenance under
+        # ``inputs`` ([{kind, slot, id, max_sec}], the request's order). A job
+        # without references carries no ``references`` key.
+        if references_provenance is not None or references_engine is not None:
+            metadata["references"] = {
+                **(references_engine or {}),
+                "inputs": references_provenance or [],
             }
         # Inpainting (additive): only present when an inpaint was requested, so
         # every other job carries no ``inpaint`` key.

@@ -66,6 +66,20 @@ noise (one ``[grid, 96]`` draw shared by every block:
 RoPE time of their pixel frame (``engine_h3.rope.keyframe_t``), and are
 handed to the DiT unchanged at every step.
 
+Ref2VA (``references``, 台帳 §1-107, plan §3.1): picture / video / audio
+references are read on the CPU before the text encoder (``engine_h3.reference``,
+``engine_h3.source_audio``), always in the order pictures, videos, audios, each
+by slot. The text encoder presents them as ``<Picture n>`` / ``<Video n>`` /
+``<Audio n>`` (n = the slot); with any reference the key frames no longer go
+to the vision tower (they keep their condition rows, as ComfyUI's AddGuide).
+After the key frames' encode, one more ``encode`` step (``reference_encode`` in
+the phases) turns them into clean rows with the same video encoder (built once)
+and, for audio, the audio VAE's encoder. In the DiT they sit between the
+condition rows and the audio rows, ``[text | cond | ref_video | ref_audio |
+audio | video]``; the picture / video rows are mixed once with noise drawn
+after the condition rows' and carry t = max(t_video, 0.999), the audio rows
+are clean and carry t = 1.0. A job without references is the same as before.
+
 Keeping models between jobs (``keep_resident``, Docs/MINIMAX_H3_DESIGN.md §4): at the end of
 a job that asks for it, the DiT (all of it on the CPU, block swap wrappers
 stripped), the video decoder and the audio VAE (both moved to the CPU) are
@@ -103,6 +117,8 @@ from engine_h3.constants import (
     KEYFRAME_NOISE_AUG,
     MODALITY_AUDIO,
     MODALITY_VIDEO,
+    REF_AUDIO_TIME,
+    REFERENCE_KINDS,
     SPATIAL_FACTOR,
     VAE_SPATIAL,
     VRAM16_CAP_MARGIN_MIB,
@@ -177,6 +193,28 @@ class H3AudioInput:
     strength: float = 0.5
 
 
+@dataclass(frozen=True)
+class H3ReferenceInput:
+    """One Ref2VA reference (台帳 §1-107): a file, its kind and its card number.
+
+    ``kind``: ``"picture"`` / ``"video"`` / ``"audio"``. ``slot``: the n of
+    ``<Picture n>`` / ``<Video n>`` / ``<Audio n>`` (1 or more, distinct per
+    kind). ``max_sec``: cut a video / audio reference to at most this many
+    seconds (None = only the official 15 s cap; ignored for a picture).
+    """
+
+    kind: str
+    path: str
+    slot: int
+    max_sec: float | None = None
+
+
+def ordered_references(refs) -> list:
+    """The references in the order the engine uses everywhere: pictures, videos,
+    then audios, each kind by ascending ``slot`` (stable)."""
+    return sorted(refs or (), key=lambda r: (REFERENCE_KINDS.index(str(r.kind)), int(r.slot)))
+
+
 @dataclass
 class H3GenerateRequest:
     prompt: str
@@ -203,6 +241,8 @@ class H3GenerateRequest:
     loras: tuple[H3LoraInput, ...] = ()
     #: A2V (台帳 §1-103): the source audio; ``None`` = T2V / I2V as before.
     source_audio: H3AudioInput | None = None
+    #: Ref2VA (台帳 §1-107): the reference media; () = no reference rows (as before).
+    references: tuple[H3ReferenceInput, ...] = ()
 
 
 # --------------------------------------------------------------------------- #
@@ -269,6 +309,27 @@ def validate_request(req: H3GenerateRequest) -> None:
             raise ValueError(f"音声の強度は数値で渡してください（{audio.strength!r}）") from None
         if not (math.isfinite(s) and 0.0 <= s <= 1.0):
             raise ValueError(f"音声の強度は 0〜1 にしてください（{audio.strength}）")
+    seen_slots: set[tuple[str, int]] = set()
+    for ref in tuple(req.references or ()):
+        kind = ref.kind
+        if kind not in REFERENCE_KINDS:
+            raise ValueError(f"参照の種類は picture／video／audio のどれかです（{kind!r}）")
+        slot = ref.slot
+        if isinstance(slot, bool) or not isinstance(slot, int):
+            raise ValueError(f"参照の番号は整数で渡してください（{kind} {slot!r}）")
+        if slot < 1:
+            raise ValueError(f"参照の番号は 1 以上にしてください（{kind} {slot}）")
+        if (kind, slot) in seen_slots:
+            raise ValueError(f"参照の番号が重複しています（{kind} {slot}）")
+        seen_slots.add((kind, slot))
+        if not str(ref.path or "").strip():
+            raise ValueError(f"参照のファイルのパスが空です（{kind} {slot}）")
+        if not os.path.isfile(str(ref.path)):
+            raise ValueError(f"参照のファイルが見つかりません（{kind} {slot}: {ref.path}）")
+        if ref.max_sec is not None:
+            sec = ref.max_sec
+            if isinstance(sec, bool) or not isinstance(sec, (int, float)) or not (math.isfinite(sec) and sec > 0):
+                raise ValueError(f"参照の切り詰めの秒数は正の有限の値にしてください（{kind} {slot}: {sec!r}）")
 
 
 def require_fp32_matmul() -> None:
@@ -308,6 +369,11 @@ def time_rows(
     (``engine_h3.denoise_mask.masked_row_times``, rows in sequence order) that
     replace that stream's value; the text rows keep the video t. None (the
     default) leaves the rows as above. The condition rows are set last either way.
+
+    Ref2VA (台帳 §1-107): the picture / video reference rows carry
+    ``max(t_video, 0.999)`` like the condition rows, the audio reference rows
+    ``REF_AUDIO_TIME`` (1.0). A job without references has both ranges empty
+    and gets the numbers above unchanged.
     """
     t = torch.full((layout.total,), float(t_video), dtype=torch.float32, device=device)
     t[layout.audio] = float(t_audio)
@@ -316,6 +382,10 @@ def time_rows(
     if video_t is not None:
         t[layout.video] = video_t.to(device=t.device, dtype=torch.float32)
     t[layout.cond] = max(float(t_video), KEYFRAME_NOISE_AUG)
+    if layout.ref_video.stop > layout.ref_video.start:
+        t[layout.ref_video] = max(float(t_video), KEYFRAME_NOISE_AUG)
+    if layout.ref_audio.stop > layout.ref_audio.start:
+        t[layout.ref_audio] = REF_AUDIO_TIME
     t_unique, time_index = torch.unique(t, sorted=True, return_inverse=True)
     return t_unique, time_index.to(torch.long)
 
@@ -338,17 +408,20 @@ def noisy_condition(cond_clean: torch.Tensor, frame_rows: int, generator: torch.
     return KEYFRAME_NOISE_AUG * clean + (1.0 - KEYFRAME_NOISE_AUG) * noise
 
 
-def encode_steps(*, has_cond: bool, has_audio: bool) -> int:
+def encode_steps(*, has_cond: bool, has_audio: bool, has_refs: bool = False) -> int:
     """The ``encode`` stage's step count: the text encoder's 3, then one for the key
-    frames' VAE encode (any key frame) and one for the source audio's encode (A2V)."""
-    return 3 + int(bool(has_cond)) + int(bool(has_audio))
+    frames' VAE encode (any key frame), one for the references' encode (Ref2VA)
+    and one for the source audio's encode (A2V), in that order."""
+    return 3 + int(bool(has_cond)) + int(bool(has_refs)) + int(bool(has_audio))
 
 
 def modality_rows(layout, text_tags: torch.Tensor) -> torch.Tensor:
-    """[S] long: the TE's tags on the text rows, 2 on audio, 0 on cond and video."""
+    """[S] long: the TE's tags on the text rows, 2 on audio and audio reference rows,
+    0 on cond, picture / video reference and video rows."""
     m = torch.full((layout.total,), MODALITY_VIDEO, dtype=torch.long, device=text_tags.device)
     m[layout.text] = text_tags.to(torch.long)
     m[layout.audio] = MODALITY_AUDIO
+    m[layout.ref_audio] = MODALITY_AUDIO
     return m
 
 
@@ -629,6 +702,7 @@ class H3Pipeline:
         ok = False
         lora_report: list[dict] = []
         a2v: dict = {}
+        references_summary: dict | None = None
         try:
             # Inside the try: a job refused here is a failed job and releases
             # what is kept, like any other. Still before the text encoder, so a
@@ -652,6 +726,13 @@ class H3Pipeline:
             # key frame gets condition rows only (MINIMAX_H3_DESIGN 裁定 59, §3).
             last = int(req.num_frames) - 1
             vision_images = [c for n, c in zip(cond_frame_idx, canvases) if n in (0, last)]
+            # Ref2VA: the reference media are read here, before the text
+            # encoder, in the engine's one order (pictures, videos, audios; each
+            # by slot). With any reference the key frames go to the DiT only
+            # (condition rows), never to the vision tower (ComfyUI's AddGuide).
+            ref_media = self._read_references(req)
+            if ref_media:
+                vision_images = []
             # A2V: the source waveform is read here, still before the text
             # encoder, so a short or unreadable file costs no model read.
             source = req.source_audio
@@ -677,22 +758,45 @@ class H3Pipeline:
                 })
             # Strength 0 is mask value 1 everywhere: no effect, so nothing is encoded.
             encode_audio = wave is not None and strength > 0.0
-            encode_total = encode_steps(has_cond=bool(canvases), has_audio=encode_audio)
+            encode_total = encode_steps(has_cond=bool(canvases), has_audio=encode_audio, has_refs=bool(ref_media))
             with torch.no_grad():
                 with phases.phase("encode") as entry:
                     text_hidden, text_tags = self._encode(
                         req.prompt, phases, images=vision_images, has_cond=bool(canvases),
-                        has_audio=encode_audio,
+                        has_audio=encode_audio, refs=self._te_references(ref_media),
                     )
                     entry["text_tokens"] = int(text_hidden.shape[0])
                 cond_clean = None
+                ref_rows = None
+                # ONE video encoder for the key frames and the picture / video
+                # references: built by the first of the two phases that needs it,
+                # dropped once the references are encoded. Without a visual
+                # reference ``_encode_image`` builds and drops its own, as before.
+                visual_refs = any(m["kind"] != "audio" for m in ref_media)
+                video_enc = None
                 if canvases:
                     with phases.phase("image_encode") as entry:
-                        cond_clean = self._encode_image(canvases, entry, 4, encode_total)
+                        if visual_refs:
+                            video_enc = self._build_video_encoder()
+                        cond_clean = self._encode_image(canvases, entry, 4, encode_total, enc=video_enc)
                         entry["vision_tokens"] = int(phases.data["encode"].get("te_read", {}).get("vision_tokens", 0))
                         entry["canvas"] = [int(req.width), int(req.height)]
                         entry["source_size"] = source_size
                 del canvases, vision_images
+                if ref_media:
+                    with phases.phase("reference_encode") as entry:
+                        if visual_refs and video_enc is None:
+                            video_enc = self._build_video_encoder()
+                        te_refs = phases.data["encode"].get("te_read", {}).get("references", [])
+                        index = 3 + int(bool(cond_clean is not None)) + 1
+                        ref_rows = self._encode_references(ref_media, entry, index, encode_total, video_enc, te_refs)
+                        video_enc = None
+                        _free_cuda()
+                    del ref_media
+                    counts = {kind: sum(1 for s, _r in ref_rows if s.kind == kind) for kind in REFERENCE_KINDS}
+                    references_summary = {
+                        "pictures": counts["picture"], "videos": counts["video"], "audios": counts["audio"],
+                    }
                 audio_fix = None
                 if encode_audio:
                     with phases.phase("audio_encode") as entry:
@@ -705,9 +809,9 @@ class H3Pipeline:
                     video_lat, audio_lat, prefetch_used = self._denoise(
                         req, text_hidden, text_tags, phases, entry,
                         cond_clean=cond_clean, cond_frame_idx=cond_frame_idx, keep=keep,
-                        lora_report=lora_report, audio_fix=audio_fix,
+                        lora_report=lora_report, audio_fix=audio_fix, refs=ref_rows,
                     )
-                del text_hidden, text_tags, cond_clean, audio_fix
+                del text_hidden, text_tags, cond_clean, audio_fix, ref_rows
                 _free_cuda()
                 with phases.phase("decode") as entry:
                     # Strength 1.0 keeps the audio latents as they are: the mp4
@@ -736,6 +840,8 @@ class H3Pipeline:
             h3["loras"] = lora_report   # only for a LoRA job: the LoRA-off payload is unchanged
         if req.source_audio is not None:
             h3["a2v"] = a2v             # only for an A2V job, the same way
+        if references_summary is not None:
+            h3["references"] = references_summary   # only for a Ref2VA job, the same way
         return {
             "seed_used": int(req.seed),
             "sampler": self.sampler,
@@ -772,28 +878,37 @@ class H3Pipeline:
     # -- stage 1: encode ---------------------------------------------------------
 
     def _encode(
-        self, prompt: str, phases: _Phases, images=(), *, has_cond: bool, has_audio: bool = False
+        self, prompt: str, phases: _Phases, images=(), *, has_cond: bool, has_audio: bool = False,
+        refs=None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """The text encoder's one forward. ``images``: the canvases the vision
         tower reads (the first / last key frame); ``has_cond``: whether the job
         has any key frame at all; ``has_audio``: whether it encodes a source
-        audio (A2V). Together they decide the stage's step count."""
+        audio (A2V); ``refs``: the Ref2VA references as the text encoder takes
+        them (``RefMedia``, in presentation order; None / empty = none, and then
+        the encoder is called exactly as before). Together they decide the
+        stage's step count."""
         from engine_h3.text_encoder import H3TextEncoder  # noqa: PLC0415
 
         images = list(images)
+        refs = list(refs or ())
         te = H3TextEncoder(self.paths.text_encoder, self.paths.tokenizer_dir, device=self.device)
         # A job with any key frame adds a 4th step to the same stage: the key
         # frames' VAE encode (also when none of them goes to the vision tower,
-        # so a middle-only job never shows 3/3 then 4/4); an A2V job adds one
-        # more after it, the source audio's encode.
-        total = encode_steps(has_cond=has_cond, has_audio=has_audio)
+        # so a middle-only job never shows 3/3 then 4/4); a Ref2VA job adds one
+        # for the references' encode, an A2V job one more after it, the source
+        # audio's encode.
+        total = encode_steps(has_cond=has_cond, has_audio=has_audio, has_refs=bool(refs))
         self._progress("encode", 0, total)
         try:
             info = te.load()
             phases.data["encode"]["te"] = info
             phases.mark("encode", "after_load")
             self._progress("encode", 1, total)
-            hidden, tags = te.encode(prompt, images=images)
+            if refs:
+                hidden, tags = te.encode(prompt, images=images, refs=refs)
+            else:
+                hidden, tags = te.encode(prompt, images=images)
             phases.data["encode"]["te_read"] = te.read_report
             self._progress("encode", 2, total)
         finally:
@@ -805,24 +920,34 @@ class H3Pipeline:
         self._log(
             f"encode: {hidden.shape[0]} text tokens"
             + (f" (with {len(images)} key frame vision block(s))" if images else "")
+            + (f" (with {len(refs)} reference(s))" if refs else "")
         )
         return hidden, tags
 
-    def _encode_image(self, images, entry: dict, index: int, total: int) -> torch.Tensor:
+    def _build_video_encoder(self):
+        """The video VAE's encoder, built for this job only in float32 (never kept)."""
+        from engine_h3.video_vae import H3VideoEncoder  # noqa: PLC0415
+
+        return H3VideoEncoder.from_file(self.paths.video_vae, device=self.device, dtype=torch.float32)
+
+    def _encode_image(self, images, entry: dict, index: int, total: int, enc=None) -> torch.Tensor:
         """The key frames (in order) -> their clean condition rows ``[K * grid, 96]``
         float32 on the device, one block of ``grid`` rows per key frame.
 
         The video VAE's encoder is built once for this job only, in float32,
         encodes the frames one at a time, and is dropped before the DiT is
-        built -- it is never kept. ``index`` / ``total``: this step of the
+        built -- it is never kept. ``enc``: an encoder the caller built and
+        will drop (shared with the Ref2VA references); None builds one here and
+        drops it before returning. ``index`` / ``total``: this step of the
         ``encode`` stage and the stage's step count.
         """
         from engine_h3.dit import patchify_video  # noqa: PLC0415
         from engine_h3.image_cond import canvas_to_tensor  # noqa: PLC0415
-        from engine_h3.video_vae import H3VideoEncoder  # noqa: PLC0415
 
         blocks: list[torch.Tensor] = []
-        enc = H3VideoEncoder.from_file(self.paths.video_vae, device=self.device, dtype=torch.float32)
+        own = enc is None
+        if own:
+            enc = self._build_video_encoder()
         try:
             for image in images:
                 z = enc.encode(canvas_to_tensor(image).to(self.device), tiled=True)   # [1, 24, 1, H/16, W/16] f32
@@ -833,10 +958,149 @@ class H3Pipeline:
                 del z
         finally:
             del enc
-            _free_cuda()
+            if own:
+                _free_cuda()
         rows = torch.cat(blocks, dim=0)
         self._progress("encode", index, total)
         return rows
+
+    # -- Ref2VA references (台帳 §1-107) ------------------------------------------
+
+    def _read_references(self, req: H3GenerateRequest) -> list[dict]:
+        """Read every reference's media on the CPU, before any model is loaded.
+
+        Returns one dict per reference in :func:`ordered_references` order:
+        ``{"kind", "slot", "info"}`` plus ``image`` ([1, 3, 1, h, w] f32, picture),
+        ``frames`` (uint8 [F, h, w, 3]) and ``pairs`` (video), or ``wave``
+        ([2, N] f32 at 32 kHz, audio). A file that cannot be used is refused
+        here with a Japanese ``ValueError``.
+        """
+        refs = ordered_references(req.references)
+        if not refs:
+            return []
+        from engine_h3.reference import (  # noqa: PLC0415
+            REF_CLIP_MAX_SEC,
+            load_reference_image,
+            qwen_pairs,
+            read_reference_video,
+        )
+
+        media: list[dict] = []
+        for ref in refs:
+            kind, slot = str(ref.kind), int(ref.slot)
+            item: dict = {"kind": kind, "slot": slot}
+            if kind == "picture":
+                item["image"], item["info"] = load_reference_image(ref.path, int(req.width), int(req.height))
+            elif kind == "video":
+                frames, info = read_reference_video(ref.path, num_frames=int(req.num_frames), max_sec=ref.max_sec)
+                item["frames"], item["info"] = frames, info
+                item["pairs"] = tuple(qwen_pairs(frames))
+            else:
+                from engine_h3.source_audio import load_source_waveform  # noqa: PLC0415
+
+                sec = REF_CLIP_MAX_SEC if ref.max_sec is None else min(float(ref.max_sec), REF_CLIP_MAX_SEC)
+                read = max(1, int(sec * AUDIO_SAMPLE_RATE))
+                wave, info = load_source_waveform(ref.path, keep_samples=1, read_samples=read)
+                if int(wave.shape[-1]) < AUDIO_HOP:
+                    raise ValueError(
+                        f"参照音声が短すぎます（{int(wave.shape[-1])} サンプル。"
+                        f"{AUDIO_HOP} サンプル（0.025 秒）以上が必要です）: {ref.path}"
+                    )
+                item["wave"], item["info"] = wave, info
+            media.append(item)
+        return media
+
+    @staticmethod
+    def _te_references(media: list[dict]) -> list:
+        """The read references as the text encoder takes them (``RefMedia``, same order)."""
+        if not media:
+            return []
+        from engine_h3.text_encoder import RefMedia  # noqa: PLC0415
+
+        out = []
+        for item in media:
+            if item["kind"] == "picture":
+                out.append(RefMedia("picture", item["slot"], image=item["image"]))
+            elif item["kind"] == "video":
+                out.append(RefMedia("video", item["slot"], pairs=item["pairs"]))
+            else:
+                out.append(RefMedia("audio", item["slot"]))
+        return out
+
+    def _encode_references(
+        self, media: list[dict], entry: dict, index: int, total: int, video_enc, te_refs=(),
+    ) -> list:
+        """The references -> ``[(RefShape, clean rows f32 on the CPU)]`` in the same order.
+
+        Picture: one latent frame through the key frames' path ``[1, 24, 1, lh, lw]``;
+        video: ``encode_clips`` (17 frames at a time to the device); both
+        patchified like video rows. Audio: the audio VAE's encoder (built once
+        here for this job only, float32, dropped before returning), cut to
+        ``rt = ceil(samples / 800)`` latents, packed like audio rows.
+        ``video_enc``: the job's one video encoder (the caller drops it); None
+        when there is no picture / video reference. ``te_refs``: the text
+        encoder's per-reference report (``vision_tokens``). Writes
+        ``entry["references"]``: one record per reference.
+        """
+        from engine_h3.dit import audio_to_rows, patchify_video  # noqa: PLC0415
+        from engine_h3.rope import RefShape  # noqa: PLC0415
+
+        tokens = {(r.get("kind"), int(r.get("slot", 0))): r.get("vision_tokens") for r in te_refs or ()}
+        records: list[dict] = []
+        out: list = []
+        audio_enc = None
+        try:
+            for item in media:
+                started = time.perf_counter()
+                kind, slot, info = item["kind"], item["slot"], item["info"]
+                record: dict = {"kind": kind, "slot": slot}
+                if kind == "picture":
+                    z = video_enc.encode(item["image"].to(self.device), tiled=True)   # [1, 24, 1, lh, lw]
+                    if z.dim() != 5 or tuple(z.shape[:3]) != (1, 24, 1):
+                        raise RuntimeError(f"reference encode: unexpected picture latent shape {list(z.shape)}")
+                    shape = RefShape.picture(int(z.shape[3]), int(z.shape[4]))
+                    rows = patchify_video(z.float()).cpu()
+                    record.update({
+                        "source_size": list(info["source_size"]), "size": list(info["size"]),
+                        "vision_tokens": tokens.get((kind, slot)),
+                    })
+                elif kind == "video":
+                    z = video_enc.encode_clips(item["frames"], device=self.device, tiled=True)   # [1, 24, vt, lh, lw]
+                    if z.dim() != 5 or tuple(z.shape[:2]) != (1, 24):
+                        raise RuntimeError(f"reference encode: unexpected video latent shape {list(z.shape)}")
+                    shape = RefShape.video(int(z.shape[2]), int(z.shape[3]), int(z.shape[4]))
+                    rows = patchify_video(z.float()).cpu()
+                    record.update({
+                        "source_frames": int(info["source_frames"]), "used_frames": int(info["used_frames"]),
+                        "latent_t": int(z.shape[2]), "pairs": len(item["pairs"]),
+                    })
+                else:
+                    if audio_enc is None:
+                        from engine_h3.audio_vae import H3AudioEncoder  # noqa: PLC0415
+
+                        audio_enc = H3AudioEncoder.from_file(self.paths.audio_vae, device=self.device)
+                    wave = item["wave"]
+                    samples = int(wave.shape[-1])
+                    rt = math.ceil(samples / AUDIO_HOP)   # >= 1: _read_references refused < 800 samples
+                    z = audio_enc.encode(wave.to(device=self.device, dtype=torch.float32))
+                    if z.dim() != 3 or tuple(z.shape[:2]) != (2, 32) or int(z.shape[2]) < rt:
+                        raise RuntimeError(f"reference encode: unexpected audio latent shape {list(z.shape)} for {rt} latents")
+                    shape = RefShape.audio(rt)
+                    rows = audio_to_rows(z[:, :, :rt].to(torch.float32)).cpu()
+                    record.update({"samples": samples, "latent_t": rt})
+                del z
+                shape.check()
+                if int(rows.shape[0]) != shape.rows:
+                    raise RuntimeError(f"reference encode: {rows.shape[0]} rows for {shape}")
+                record["rows"] = int(rows.shape[0])
+                record["seconds"] = round(time.perf_counter() - started, 2)
+                records.append(record)
+                out.append((shape, rows.to(torch.float32).contiguous()))
+        finally:
+            del audio_enc
+            entry["references"] = records
+        self._progress("encode", index, total)
+        return out
 
     def _encode_audio(self, wave: torch.Tensor, a_lat: int, entry: dict, index: int, total: int) -> torch.Tensor:
         """The source waveform ``[2, N]`` float32 (32 kHz) -> its clean audio latents
@@ -1053,14 +1317,22 @@ class H3Pipeline:
     def _denoise(
         self, req, text_hidden, text_tags, phases: _Phases, entry: dict,
         cond_clean=None, cond_frame_idx=(), keep=False, lora_report=None,
-        audio_fix=None, video_fix=None,
+        audio_fix=None, video_fix=None, refs=None,
     ):
         """The step loop. ``audio_fix`` / ``video_fix``: ``(clean latent, one mask
         value per audio latent / per latent frame)`` for a stream whose rows are
         (partly) kept (``engine_h3.denoise_mask``; Docs/MINIMAX_H3_DESIGN.md §3.1);
         None = generated as usual. The masks are built after the noise is drawn
         (the video mask reuses the initial video noise), so the draws and their
-        order do not depend on them."""
+        order do not depend on them.
+
+        ``refs`` (Ref2VA, 台帳 §1-107): ``[(RefShape, clean rows)]`` in
+        :func:`ordered_references` order (pictures, videos, then audios); None /
+        empty = no reference rows, and the job is the same as before. The
+        picture / video rows form ``ref_video`` and get ``0.999 * clean + 0.001 *
+        noise`` with one draw per reference AFTER the video, audio and condition
+        draws; the audio rows form ``ref_audio`` and are not mixed. Both go to
+        the DiT unchanged at every step."""
         from engine_h3.denoise_mask import (  # noqa: PLC0415
             AUDIO_TIME_CAP,
             VIDEO_TIME_CAP,
@@ -1094,6 +1366,15 @@ class H3Pipeline:
                 f"denoise: condition rows {None if actual is None else list(actual)}, "
                 f"expected [{cond_rows_n}, 96] for key frames {cond_frame_idx}"
             )
+        refs = list(refs or ())
+        ref_video_clean = [rows for shape, rows in refs if shape.kind != "audio"]
+        ref_audio_clean = [rows for shape, rows in refs if shape.kind == "audio"]
+        for shape, rows in refs:
+            shape.check()
+            if tuple(rows.shape) != (shape.rows, (4 * 24) if shape.kind != "audio" else 32):
+                raise RuntimeError(f"denoise: reference rows {list(rows.shape)} do not match {shape}")
+        ref_video_n = sum(int(rows.shape[0]) for rows in ref_video_clean)
+        ref_audio_n = sum(int(rows.shape[0]) for rows in ref_audio_clean)
 
         resident = self._resident
         if resident is not None:
@@ -1135,10 +1416,11 @@ class H3Pipeline:
             L = int(text_refined.shape[0])
             layout = H3SeqLayout.make(
                 text_rows=L, cond_rows=cond_rows_n, audio_rows=2 * a_lat, video_rows=t_lat * gh * gw,
+                ref_video_rows=ref_video_n, ref_audio_rows=ref_audio_n,
             )
             coords = build_coords(
                 text_len=L, latent_frames=t_lat, grid_h=gh, grid_w=gw, audio_latents=a_lat,
-                cond_frame_idx=cond_frame_idx,
+                cond_frame_idx=cond_frame_idx, refs=[shape for shape, _rows in refs],
             )
             rope_cos, rope_sin = rope_tables(coords, dit.rope_inv_freq)
             rope_cos, rope_sin = rope_cos.to(dev), rope_sin.to(dev)
@@ -1155,6 +1437,19 @@ class H3Pipeline:
             cond = None
             if cond_clean is not None:
                 cond = noisy_condition(cond_clean, gh * gw, gen, device=dev)
+            # Ref2VA: one draw per picture / video reference, in row order, after
+            # the three draws above (a job without references draws nothing more).
+            # The audio references are handed over clean.
+            ref_kw: dict = {}
+            if refs:
+                ref_kw["ref_video_rows"] = (
+                    torch.cat([noisy_condition(rows, int(rows.shape[0]), gen, device=dev) for rows in ref_video_clean])
+                    if ref_video_clean else None
+                )
+                ref_kw["ref_audio_rows"] = (
+                    torch.cat(ref_audio_clean).to(device=dev, dtype=torch.float32) if ref_audio_clean else None
+                )
+            del ref_video_clean, ref_audio_clean
             # Per-row masks (A2V / V2A): built from what was drawn above, no new draw.
             am = vm = None
             if audio_fix is not None:
@@ -1174,6 +1469,10 @@ class H3Pipeline:
                 "text": L, "cond": cond_rows_n, "audio": 2 * a_lat, "video": t_lat * gh * gw,
                 "total": layout.total, "latent_frames": t_lat, "audio_latents": a_lat, "grid": [gh, gw],
             }
+            if refs:
+                # Only for a Ref2VA job: every other job's sequence record is unchanged.
+                entry["sequence"]["ref_video"] = ref_video_n
+                entry["sequence"]["ref_audio"] = ref_audio_n
             m_per_step: list[int] = []
             attention = self._attention_for(req)
             self._progress("stage1_denoise", 0, steps)
@@ -1186,11 +1485,12 @@ class H3Pipeline:
                     video_t=None if vm is None else masked_row_times(t_v, float(sig_v[i]), vm.rows, VIDEO_TIME_CAP),
                 )
                 m_per_step.append(int(t_unique.numel()))
-                # The condition rows go in unchanged at every step (they are not
-                # part of the denoised state, so nothing ever updates them).
+                # The condition rows (and the reference rows) go in unchanged at
+                # every step (they are not part of the denoised state, so nothing
+                # ever updates them).
                 tokens = dit.embed_rows(
                     text_refined, audio_to_rows(dit_input(audio, am)), patchify_video(dit_input(video, vm)),
-                    cond_rows=cond,
+                    cond_rows=cond, **ref_kw,
                 )
                 box = None
                 if vram16 is not None:

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient as defaultApiClient, BackendApiError } from "../api/client";
 import type { ApiClient } from "../api/client";
-import type { BaseModelBlock, BaseModelConstraints } from "../api/types";
+import type { BaseModelBlock, BaseModelConstraints, TransformerRole } from "../api/types";
 import type { AppMode } from "./AppShell";
 import { disabledModesFor } from "./featureScope";
 import { resolveGenerationConstraints } from "./generationConstraints";
@@ -64,6 +64,12 @@ export interface BaseModelOption {
    * "unknown" and adds no `weight_class` to its match, so every typed row
    * misses and the legacy fallbacks apply. */
   weightClass: string;
+  /** §1-107: which MiniMax H3 transformer this base model has selected
+   * (`BaseModelBlock.transformer_role`): `"fl2va"`, `"ref2va"`, or `null`
+   * when the server could not tell (a Hybrid, a renamed or third-party file),
+   * this is not the active base model, or the field was omitted (a backend
+   * older than §1-107). */
+  transformerRole: TransformerRole | null;
   /** The numeric rules this base model's engine checks a request against
    * (`BaseModelBlock.constraints`), copied as served.
    * `null` on a backend that does not publish the key —
@@ -163,6 +169,11 @@ export interface UseBaseModelsResult {
    * whenever a pipeline load finishes (`AppShell`, on `pipelineLoading`'s
    * true→false edge) to pick the new class up. */
   activeWeightClass: string;
+  /** §1-107: the LOADED base model's transformer role — see
+   * {@link BaseModelOption.transformerRole}. Read off `active` and refreshed
+   * after a pipeline load exactly like {@link activeWeightClass}. `null` =
+   * unknown. */
+  activeTransformerRole: TransformerRole | null;
   /** The LOADED base model's numeric rules, already
    * flattened by `shell/generationConstraints.ts`: Create's frame grid, size
    * multiple, fps range and sampling sliders. Read off `active` for the same
@@ -199,6 +210,8 @@ function toOption(block: BaseModelBlock): BaseModelOption {
     // `null` (the server could not tell, or a non-active base model) and an
     // absent field (a backend older than §1-31) both mean "unknown".
     weightClass: block.transformer_weight_class ?? "",
+    // Same "null or absent = unknown" rule (§1-107).
+    transformerRole: block.transformer_role ?? null,
     // Absent (a backend that predates the key) means "the LTX rules";
     // `resolveGenerationConstraints` supplies them.
     constraints: block.constraints ?? null,
@@ -306,6 +319,10 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     () => options.find((o) => o.id === active)?.weightClass ?? "",
     [options, active],
   );
+  const activeTransformerRole = useMemo(
+    () => options.find((o) => o.id === active)?.transformerRole ?? null,
+    [options, active],
+  );
   // Keyed on the block's CONTENT, not on `options`' identity: the shell
   // re-runs `refresh()` after every pipeline load, which rebuilds `options`
   // even when nothing changed, and Create resets its sampling sliders to the
@@ -328,6 +345,7 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     unsupportedFeatures,
     activeEngineFamily,
     activeWeightClass,
+    activeTransformerRole,
     activeConstraints,
     disabledModes,
     switchBaseModel,

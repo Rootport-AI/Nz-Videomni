@@ -71,6 +71,40 @@ class SamplingRange:
 
 
 @dataclass(frozen=True)
+class ReferenceLimits:
+    """Limits of the Reference (Ref2VA) inputs, published as ``constraints["reference"]``.
+
+    ``POST /generate`` enforces the counts and the slot ranges
+    (:meth:`RequestRules.violation`: at most ``max_images`` pictures,
+    ``max_videos`` videos, ``max_audios`` audios and ``max_total`` in all; each
+    kind's ``slot`` within 1..its own maximum). The seconds are NOT checked:
+    ``video_total_sec`` / ``audio_total_sec`` are for the screens, which send the
+    cut as each card's ``max_sec``, and the engine stops at them anyway.
+    ``clip_min_sec`` is the recommended minimum length: below it the screens
+    only warn, nothing rejects.
+    """
+
+    max_images: int
+    max_videos: int
+    max_audios: int
+    max_total: int
+    video_total_sec: float
+    audio_total_sec: float
+    clip_min_sec: float
+
+    def as_dict(self) -> dict:
+        return {
+            "max_images": self.max_images,
+            "max_videos": self.max_videos,
+            "max_audios": self.max_audios,
+            "max_total": self.max_total,
+            "video_total_sec": self.video_total_sec,
+            "audio_total_sec": self.audio_total_sec,
+            "clip_min_sec": self.clip_min_sec,
+        }
+
+
+@dataclass(frozen=True)
 class RequestRules:
     """One family's numeric rules for a single ``POST /generate``.
 
@@ -102,6 +136,11 @@ class RequestRules:
     field at all; ``None`` for a family that refuses it (LTX: its A2V is the
     chain's), and then the key is left out of :meth:`constraints` entirely.
     The 0..1 bound itself is the schema's.
+    ``reference`` is the upper limits of the Reference (Ref2VA) inputs, published
+    as ``constraints["reference"]`` for the screens; its counts and slot ranges
+    are also enforced by :meth:`violation`. ``None`` for a family without them
+    (LTX: its ``reject_unsupported`` refuses ``references`` first), and then the
+    key is left out and nothing is checked.
     """
 
     frames_step: int
@@ -120,6 +159,7 @@ class RequestRules:
     keyframe_strength_default: float | None = None
     prompt_token_limit: int | None = None
     source_audio_strength: SamplingRange | None = None
+    reference: ReferenceLimits | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -146,6 +186,8 @@ class RequestRules:
         # family that refuses it (LTX) publishes the same block as before.
         if self.source_audio_strength is not None:
             published["source_audio"] = {"strength": self.source_audio_strength.as_dict()}
+        if self.reference is not None:
+            published["reference"] = self.reference.as_dict()
         return published
 
     # ------------------------------------------------------------ enforcing
@@ -173,7 +215,8 @@ class RequestRules:
 
         First offender wins (as in the adapters' reject tables), in a fixed
         order: width, height, the frame grid, the frame range, the frame rate,
-        the sampling knobs, then the family's own extra check.
+        the sampling knobs, the reference counts and slots, then the family's
+        own extra check.
         """
         m = self.dimension_multiple
         if request.width % m != 0:
@@ -195,8 +238,36 @@ class RequestRules:
             value = getattr(request, name)
             if value is not None and not knob.min <= value <= knob.max:
                 return f"{name} must be between {knob.min:g} and {knob.max:g}"
+        if self.reference is not None:
+            message = self._reference_violation(request)
+            if message is not None:
+                return message
         if self.extra is not None:
             return self.extra(request)
+        return None
+
+    def _reference_violation(self, request: "GenerateRequest") -> str | None:
+        """The first count or slot-range violation of ``request.references``.
+
+        Per kind first (pictures, videos, audios), then the total. The seconds
+        are not checked (see :class:`ReferenceLimits`).
+        """
+        limits = self.reference
+        assert limits is not None
+        per_kind = (
+            ("picture", limits.max_images),
+            ("video", limits.max_videos),
+            ("audio", limits.max_audios),
+        )
+        for kind, most in per_kind:
+            refs = [ref for ref in request.references if ref.kind == kind]
+            if len(refs) > most:
+                return f"at most {most} {kind} references are supported"
+            for ref in refs:
+                if ref.slot > most:
+                    return f"the {kind} reference slot must be between 1 and {most}"
+        if len(request.references) > limits.max_total:
+            return f"at most {limits.max_total} references are supported in all"
         return None
 
     def normalize_keyframes(

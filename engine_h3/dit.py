@@ -113,12 +113,19 @@ assert (MODALITY_VIDEO, MODALITY_TEXT, MODALITY_AUDIO) == (0, 1, 2), (
 
 @dataclass(frozen=True)
 class H3SeqLayout:
-    """Row ranges of the packed sequence ``[text | cond | audio | video]``.
-    T2V has an empty cond (``slice(L, L)``).
+    """Row ranges of the packed sequence
+    ``[text | cond | ref_video | ref_audio | audio | video]``.
+    T2V has an empty cond (``slice(L, L)``); a job without references has
+    empty ``ref_video`` / ``ref_audio`` and the same ranges as before they existed.
 
     ``cond``: the I2V key frames' rows, one block of grid rows per key frame in
     ascending frame order (empty for T2V). Order and coordinates match
     DiffSynth (VERIFICATION_LOG §165 G4 A, §166 2a-G3); the embedding is checked end to end only (§166 2a-G4).
+
+    ``ref_video``: the picture and video references' rows (Ref2VA), in the
+    order the caller passes them; ``ref_audio``: the standalone audio
+    references' rows. The final layer reads only ``audio`` / ``video``, so the
+    predictions of these rows are dropped.
     """
 
     text: slice
@@ -126,14 +133,30 @@ class H3SeqLayout:
     audio: slice
     video: slice
     total: int
+    ref_video: slice = slice(0, 0)
+    ref_audio: slice = slice(0, 0)
 
     @classmethod
-    def make(cls, *, text_rows: int, cond_rows: int, audio_rows: int, video_rows: int) -> "H3SeqLayout":
+    def make(
+        cls,
+        *,
+        text_rows: int,
+        cond_rows: int,
+        audio_rows: int,
+        video_rows: int,
+        ref_video_rows: int = 0,
+        ref_audio_rows: int = 0,
+    ) -> "H3SeqLayout":
         a = text_rows
         b = a + cond_rows
-        c = b + audio_rows
+        rv = b + ref_video_rows
+        ra = rv + ref_audio_rows
+        c = ra + audio_rows
         d = c + video_rows
-        return cls(text=slice(0, a), cond=slice(a, b), audio=slice(b, c), video=slice(c, d), total=d)
+        return cls(
+            text=slice(0, a), cond=slice(a, b), audio=slice(ra, c), video=slice(c, d), total=d,
+            ref_video=slice(b, rv), ref_audio=slice(rv, ra),
+        )
 
 
 def patchify_video(latent: torch.Tensor) -> torch.Tensor:
@@ -498,8 +521,12 @@ class H3DiT(nn.Module):
         audio_rows: torch.Tensor,
         video_rows: torch.Tensor,
         cond_rows: torch.Tensor | None = None,
+        *,
+        ref_video_rows: torch.Tensor | None = None,
+        ref_audio_rows: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Packed tokens [S, hidden] bf16 in the order ``[text | cond | audio | video]``.
+        """Packed tokens [S, hidden] bf16 in the order
+        ``[text | cond | ref_video | ref_audio | audio | video]`` (``H3SeqLayout``).
 
         The patch projections are float32 islands; only their results are
         rounded to bf16 (diffusers aligns inputs with the f32 projection
@@ -507,10 +534,19 @@ class H3DiT(nn.Module):
 
         ``cond_rows``: the I2V condition rows of every key frame (already mixed with their noise), projected
         like video rows; ``None`` / empty for T2V. Checked end to end in VERIFICATION_LOG §166 (2a-G4).
+
+        ``ref_video_rows`` / ``ref_audio_rows``: the Ref2VA picture + video
+        reference rows (projected like video rows) and the standalone audio
+        reference rows (projected like audio rows). ``None`` / empty adds
+        nothing, so a job without references packs the same tensor as before.
         """
         parts = [text_refined.to(torch.bfloat16)]
         if cond_rows is not None and cond_rows.shape[0] > 0:
             parts.append(_linear_f32(cond_rows, self.video_patch_proj).to(torch.bfloat16))
+        if ref_video_rows is not None and ref_video_rows.shape[0] > 0:
+            parts.append(_linear_f32(ref_video_rows, self.video_patch_proj).to(torch.bfloat16))
+        if ref_audio_rows is not None and ref_audio_rows.shape[0] > 0:
+            parts.append(_linear_f32(ref_audio_rows, self.audio_patch_proj).to(torch.bfloat16))
         parts.append(_linear_f32(audio_rows, self.audio_patch_proj).to(torch.bfloat16))
         parts.append(_linear_f32(video_rows, self.video_patch_proj).to(torch.bfloat16))
         return torch.cat(parts, dim=0)

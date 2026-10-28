@@ -24,6 +24,7 @@ from api.errors import (
     outpaint_source_mismatch,
     outpaint_source_too_short,
     reference_requires_control_lora,
+    reference_not_found,
     reference_resolution_invalid,
     source_audio_not_found,
 )
@@ -115,6 +116,23 @@ def generate(
         context.pipeline_manager.preflight_single_source_audio(
             request.source_audio, request.num_frames, request.frame_rate
         )
+
+    # Reference (Ref2VA, MiniMax H3): every id must name an upload of its own
+    # kind's store (404 otherwise), before a job is reserved. The stores' own
+    # 404s name other fields (image_id, reference_video_id, source_audio), so
+    # the miss is answered as REFERENCE_NOT_FOUND naming the entry. An LTX
+    # engine never gets here (its REJECT_TABLE refused the field above), and
+    # the counts and slots were checked by validate_for_family.
+    reference_stores = {
+        "picture": context.upload_store,
+        "video": context.video_upload_store,
+        "audio": context.audio_upload_store,
+    }
+    for index, ref in enumerate(request.references):
+        try:
+            reference_stores[ref.kind].path_for(ref.id)
+        except APIError:
+            raise reference_not_found(index, ref.id, ref.kind, ref.slot)
 
     # IC-LoRA: validate the reference video + adapter names up front, the same
     # way conditioning image_ids are checked (fail at job creation, not deep in

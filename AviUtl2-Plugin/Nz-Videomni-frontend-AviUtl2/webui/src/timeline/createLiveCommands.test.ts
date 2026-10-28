@@ -118,4 +118,31 @@ describe("createLiveCommands", () => {
 
     expect(received).toEqual([{ type: "setDuration", numFrames: 481 }]);
   });
+
+  // §1-107: the two Reference variants (H3's #2 / #7) carry the file and, for a
+  // video, the ribbon's trim window and trimmed length.
+  it("delivers the §1-107 addReferenceVideo variant with its trim payload", () => {
+    const received: CreateLiveCommand[] = [];
+    subscribeCreateCommands((command) => received.push(command));
+
+    const command: CreateLiveCommand = {
+      type: "addReferenceVideo",
+      filePath: "C:/v/a.mp4",
+      fileName: "a.mp4",
+      trimQuery: { trim_start_sec: "1.000", trim_duration_sec: "3.000" },
+      durationSec: 3,
+    };
+    dispatchCreateCommand(command);
+
+    expect(received).toEqual([command]);
+  });
+
+  it("delivers the §1-107 addReferenceAudio variant (null filePath allowed)", () => {
+    const received: CreateLiveCommand[] = [];
+    subscribeCreateCommands((command) => received.push(command));
+
+    dispatchCreateCommand({ type: "addReferenceAudio", filePath: null, fileName: "" });
+
+    expect(received).toEqual([{ type: "addReferenceAudio", filePath: null, fileName: "" }]);
+  });
 });

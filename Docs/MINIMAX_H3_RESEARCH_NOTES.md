@@ -12,6 +12,7 @@
 - 2026-10-16 に鮮度の確認と裁定の更新を行った。更新内容は §13、裁定の更新は §10 の追記にある。§1〜§9 の本文は 2026-09-06 時点のままで、古くなった箇所には訂正の引用を添えてある。
 - 2026-10-17 に計画のセッションを開始し、オーナーの裁定 13〜21 を §10 に追記した。§13.7 の 1 と §13.8 に訂正と更新の引用を添えてある。
 - 設計正本は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md)（2026-10-17 新設）。
+- 2026-10-28 に、Ref2VA（参照素材からの生成）の一次資料の調査を §15 に追記した。
 - 調査の内訳: WEB調査4本（公式情報・ComfyUI事例・配布地域制限・実装ベース比較）＋配布ファイルのヘッダ実測（GGUF 13本・safetensors 7本をHTTP Rangeリクエストで部分取得して解析）＋当リポジトリの受け皿の棚卸し。数値・状況はすべて2026-09-06時点のものである。
 - 本書内では「一次資料で確認済み」「実測」「二次情報」「推測」を区別して記す。
 
@@ -781,3 +782,111 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 - §3 の改修項目 = ヘッド群の拡大（§3-245。14.2）・INT8 ConvRot のカーネルの高速化（§3-246。14.3）。
 - §3 の研究課題 = Sparse Attention（§3-247。14.4）・Cross-step Cache（§3-248。14.5）。
 - ヘッド群の拡大は速度の向上が実測されているが、快適上限を損なう可能性があるので、§1-95 の較正が済むまで着手しない。§1 への新しい起票はしない。
+
+
+## §15 Ref2VA の一次資料調査（2026-10-28）
+
+台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-107（Ref2VA〔参照素材からの映像と音声の生成〕）の計画のために、2026-10-28 に行った一次資料の調査の記録である。ファイルはダウンロードせず、ヘッダと表だけを HTTP Range で取得した。本製品がどう作ったかは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2（と裁定 82）にあり、本節と食い違えば設計正本を採る。行番号は下の版に対するもの。
+
+### 15.1 参照した版
+
+| 出典 | 版 |
+|---|---|
+| ComfyUI（Comfy-Org/ComfyUI） | commit `08cf0284ff45723aa67841c80cabb0e3cb50c9d7` |
+| MiniMax 公式 GitHub（MiniMax-AI/MiniMax-H3） | commit `d21241f0a4b3acbb34c97dae47fa417b7065e438` |
+| SGLang（sgl-project/sglang） | commit `54be2010d310577c62b23e4b3857f45a5b833d5f` |
+| DiffSynth-Studio（modelscope/DiffSynth-Studio） | commit `e5a44c42776978457b61d51d595a1f6746c3d87a` |
+| ComfyUI の文書（Comfy-Org/docs） | commit `491d3262bee90683b02821551f5bcd1f2939b1cc` |
+| ComfyUI の雛形（Comfy-Org/workflow_templates） | main（2026-10-28 取得） |
+
+URL の書式は `https://github.com/<repo>/blob/<commit>/<path>#L<n>`。ComfyUI の略称は、te＝`comfy/text_encoders/minimax.py`、nodes＝`comfy_extras/nodes_minimax_h3.py`、model＝`comfy/ldm/minimax/model.py`、base＝`comfy/model_base.py`、vae＝`comfy/ldm/minimax/vae.py`、avae＝`comfy/ldm/minimax/audio_vae.py`。SGLang のファイルは `python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3/` の下、DiffSynth は `diffsynth/pipelines/minimax_h3_audio_video.py`。
+
+### 15.2 配布物と SHA-256（一次資料で確認済み）
+
+出典: `https://huggingface.co/api/models/Comfy-Org/MiniMax-H3/tree/main/diffusion_models?expand=true`（sha256 は各要素の `lfs.oid`、バイト数は `size`）。全ファイルの最終コミットは `3f57e829…`「Initial commit」（2026-07-30）。
+
+| ファイル名 | バイト数 | sha256 |
+|---|---:|---|
+| minimax_h3_fl2va_bf16.safetensors | 66,280,487,368 | 907d4add438438ec1544f5240c3b38532ed934fe6be75677a6bbda2a6fdd6182 |
+| minimax_h3_fl2va_int8_convrot.safetensors | 34,038,892,334 | 7ad4c73e6e378b822ffd1629f27f632d3787d95f5e468e3af958f98c58df96a5 |
+| minimax_h3_fl2va_pruned_bf16.safetensors | 40,225,724,176 | a32572fb90b5508b201ec7c2eddcc184b13ddfd3c6f6d2cf06a0b46535d541b4 |
+| minimax_h3_fl2va_pruned_fp8_scaled.safetensors | 20,958,205,608 | 12944c1f7791637e7de12208aef04da82bd26b95271b1b47d817364315ade993 |
+| **minimax_h3_fl2va_pruned_int8_convrot.safetensors** | **20,970,379,616** | **e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a** |
+| minimax_h3_fl2va_pruned_w6a8.safetensors | 15,983,746,636 | ac746a2e41628ab25afd44d2b22a7fab8d7e66cd07a01bf89ed9d74b0d3f0c35 |
+| minimax_h3_ref2va_bf16.safetensors | 66,280,487,368 | e32c54c1a7b4f5f397f195cea267ccb18806303bb665678c4bee60953bdf3026 |
+| minimax_h3_ref2va_int8_convrot.safetensors | 34,038,894,550 | 9eef934046a0671bc8a5daf87100705e1478419c574cfde70c50fbe6885f76a9 |
+| minimax_h3_ref2va_pruned_bf16.safetensors | 40,225,724,176 | 37c0da793e20ca735272ec2be655f08a2e10f97a3ec8fdfb40f5b39a736ed6fe |
+| minimax_h3_ref2va_pruned_fp8_scaled.safetensors | 20,958,205,608 | f86f2f79ebd2d76eb8eeb46091e83982e6ff51d255747e7b16e92834b392b8e9 |
+| **minimax_h3_ref2va_pruned_int8_convrot.safetensors** | **20,970,379,616** | **9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779** |
+| minimax_h3_ref2va_pruned_w6a8.safetensors | 15,983,746,636 | ece96bbbce76670ec782de84acc888fd9d9b210bd2ab97c1957b39896734f9f1 |
+
+- 太字の 2 本が本製品の取得するもの（値の正本は記述子 `scripts/manifests/40-minimaxh3.json` の `known_weights`）。バイト数は同じで、sha256 は違う。
+- **ヘッダの比較（実測）**: 両者のヘッダ長は 95,416 B で、**ヘッダ JSON はバイト単位で一致**した（テンソル 932 個。`__metadata__` は無い）。`adaln_t_table`（F32・`[1025, 8]`）は両方にあり、8,200 要素のすべてで値が違う（差の最大 0.01385）。ヘッダだけで両者を区別できる項目は無く、区別にはファイル名・sha256・テンソルの値のどれかが要る。§11 の「FL2VA と Ref2VA の重み内容が実際に異なることの確認」はこれで確かめた。
+- Hugging Face の README（https://huggingface.co/Comfy-Org/MiniMax-H3/blob/main/README.md）には使い分けや推奨設定の記述は無く、Ref2VA 用の 4 ステップ Turbo（`minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors`）が LoRA の一覧にある。
+
+### 15.3 推奨設定（一次資料で確認済み）
+
+出典: ComfyUI の文書 https://github.com/Comfy-Org/docs/blob/491d3262bee90683b02821551f5bcd1f2939b1cc/tutorials/video/minimax/minimax-h3.mdx と同じフォルダの `minimax-h3-native.mdx`。
+
+- Turbo なしの既定は 20 ステップ。Turbo ありは T2V／I2V が 8、R2V（参照からの生成）・Multiframe・Fun ControlNet は 4（minimax-h3.mdx L141）。
+- 「参照の行は毎ステップ効くので、4 ステップの Turbo では参照がほとんど効かない（姿勢や顔がずれる）。参照に強く合わせるなら Turbo を切るか 25 に近づける」（L143）。native の文書も「参照を保ちたいときは 20〜25 ステップ」（L221）。
+- shift は映像 12・音声 3（L164）。学習の解像度は短辺 768・面積の上限 768×1344。参照動画はこの枠に縮める。参照画像は `ref_image_size` に従い、`match` は生成の画素数へ、`max` は短辺 2048 へ縮める（L104・L106）。既定は `match`（native L219）。R2V の重みは `ref2va`（native L220）。
+- 雛形 `video_minimax_h3_r2v.json` の値: `UNETLoader` は `minimax_h3_ref2va_pruned_int8_convrot.safetensors`、サンプラーは `res_multistep`、スケジューラーは `simple, 20, 1.0`、`MiniMaxH3ReferenceToVideo` は `1344×768, length 124, "match"`。
+- Ref2VA の Turbo LoRA（ModelTC/Minimax-H3-Turbo の README、commit 02e26d5 の L73-L81・L128-L137）は 544p・shift 12／3・4 ステップ・参照画像 `match` で学習。公式の Ref2VA の手順（`scripts/readme/reproducible-768p-ref2va-request.sh`）は SGLang の既定（50 ステップ・shift 12／3）。
+
+### 15.4 参照 0 件のときの挙動（実装ごとに違う。一次資料で確認済み）
+
+| 実装 | 参照 0 件（文章だけ） | 参照 0 件で先頭フレームだけ |
+|---|---|---|
+| MiniMax 公式（README の手順の SGLang 配信） | 拒否 | 拒否 |
+| 公式 API（platform.minimax.io） | 「文章から動画」として受ける（どの重みで処理するかは書かれていない） | 「画像から動画」として受ける。参照と先頭・末尾のフレームは同時に使えない |
+| ComfyUI `MiniMaxH3ReferenceToVideo` | 通る（列は文章だけの生成と同じ） | ノード単体には先頭フレームの入力が無い。`MiniMaxH3AddGuide` を足せば通る |
+| DiffSynth-Studio | 通る（FL2VA と同じ組み方で、条件の行なし） | 通る |
+
+- SGLang: Ref2VA の `model_index.json` は `"partition": "ref2va", "tasks": ["ref2va"]`（https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/Ref2VA/model_index.json#L29-L35）。`release_metadata.py` L161-L176 は区分に無いタスクを拒否し（https://github.com/sgl-project/sglang/blob/54be2010d310577c62b23e4b3857f45a5b833d5f/python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3/release_metadata.py#L161-L176）、`task_profiles.py` L186-L188 の `conditions_required=True` と `request_validation.py` L150-L153 で条件 0 件の ref2va を拒否する（https://github.com/sgl-project/sglang/blob/54be2010d310577c62b23e4b3857f45a5b833d5f/python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3/request_validation.py#L150-L153）。
+- ComfyUI: nodes L294-L364 は参照が無ければ `minimax_refs` を付けない（https://github.com/Comfy-Org/ComfyUI/blob/08cf0284ff45723aa67841c80cabb0e3cb50c9d7/comfy_extras/nodes_minimax_h3.py#L294-L364）。model の `PackedLayout`（L356-L455）は参照もキーフレームも無ければ `[text | audio | video]`（https://github.com/Comfy-Org/ComfyUI/blob/08cf0284ff45723aa67841c80cabb0e3cb50c9d7/comfy/ldm/minimax/model.py#L356-L455）。
+- DiffSynth: L547-L549 の `if not references: return {}`、L842-L845 で FL2VA の組み方へ（https://github.com/modelscope/DiffSynth-Studio/blob/e5a44c42776978457b61d51d595a1f6746c3d87a/diffsynth/pipelines/minimax_h3_audio_video.py#L838-L845）。
+- **「Ref2VA の重みで参照なしは FL2VA に劣る」という記述は、どの一次資料にも無い**（公式 README・API・ComfyUI の文書・SGLang・DiffSynth を検索）。公式は文章だけの生成を FL2VA に割り当てている（README L84・L188）ので、品質の保証の外だと考えられる（推測）。
+
+### 15.5 キーフレームとの併用（実装ごとに違う。一次資料で確認済み）
+
+- **ComfyUI: できる。** 公式の雛形「Multiframe Reference」（`video_minimax_h3_multiframe_reference.json`）が Ref2VA の重み＋ AddGuide 3 つ（フレーム 36・72・120）である。文書 minimax-h3-multiframe.mdx L74 は「Add Guide にだけつないだ画像はテキストエンコーダーから見えない」と書く。並びは `[text | 条件の行 | 参照 | 目的の音声 | 目的の映像]` で、条件の行の時刻は全参照の後ろの `cursor` を原点にする（model L370-L455）。
+- **SGLang: 参照が 1 件以上あり、フレームが先頭か末尾のときだけできる**（`task_profiles.py` L8-L11・L72-L76、`packed_sequence.py` L316-L317・L517-L520）。
+- **公式 API: できない**（「Image-to-video and reference-to-video are mutually exclusive」。https://platform.minimax.io/docs/api-reference/video-generation-v2-create）。
+- **DiffSynth: 実質できない**（参照があると先頭・末尾のフレームの行を使わない。L998・L842-L843）。
+- 公式のプロンプトの指針（`skills/h3-prompt-writing/references/ref-en.txt` L62-L66）は、Ref2VA で画像を先頭のフレームにする方法として、条件の行ではなく参照画像とプロンプトの文（「<Picture 2> is the first frame of [Shot 1] …」）を示している。
+
+### 15.6 入力の組み方（3 実装の差。一次資料で確認済み）
+
+- **並び**: ComfyUI は画像 → 動画 → 単独の音声の固定順（動画に音声が付けば、その `<Audio j>` を `<Video k>` の直前に出す。nodes L246-L249・L297-L358）。SGLang は要求の `conditions` の順（presentation.py L229）、DiffSynth は渡した順（L146・L264-L287）。種類ごとに並べ直すのは ComfyUI だけ。
+- **時刻と cursor**（model L95-L130・L398-L452）: 文章のトークンは 0〜text_len−1、参照の `cursor` は text_len から。画像は全行が `cursor` で、その後 `cursor += 1.0`。単独の音声は `cursor + arange(rt)` で `cursor += rt`、横の座標は目的の映像の格子の両端（L418）。動画は `_video_t_grid(vt, cursor)`（1 トークンあたり 5/3×(1,4,4,4,4)）で、`cursor += max(rt, 映像の時間幅)`。目的の音声と映像はすべての参照の後ろの `cursor` から。SGLang（packed_sequence.py L433-L506）と DiffSynth（L744-L809）も同じ計算。
+- **ノイズ時刻**（model L32-L33・L674-L683）: `VISUAL_COND_TIMESTEP = 0.999`、`AUDIO_COND_TIMESTEP = 1.0`。区画の t は ref_img `max(t_v, 0.999)`・ref_audio `max(t_a, 1.0)`・cond `max(t_v, 0.999)`。SGLang（denoise_loop.py L30・L32）と DiffSynth（L38・L1020）も同じ値。
+- **映像の参照のノイズ**（model L535-L560）: `aug·r + (1−aug)·noise`（aug 0.999）、`torch.Generator("cpu").manual_seed(seed)`（サンプラーの seed。base L2252）。条件ごとに同じ乱数列を最初から引く。毎 forward で作り直すが値は同じ。音声は seed+1・aug 1.0（混ぜない）。
+- **画像の大きさ**: ComfyUI は `match`（既定。`scale = min(1, √(W×H/(w×h)))`）と `max`（短辺 2048）。どちらも縦横比を保ち、各辺を 32 の倍数に丸め、拡大しない（nodes L267-L268・L300-L308）。SGLang の既定は `diffusers`（短辺 2048 に拡大もする。`configs/sample/minimax_h3.py` L57）、DiffSynth も短辺 2048（拡大あり。L121・L482-L484）。SGLang の注記によると `match` は ModelTC の Ref2VA Turbo LoRA の学習の前処理（constants.py L73-L74）。参照動画は ComfyUI・DiffSynth とも短辺 768・面積の上限 768×1344（元が小さければそのまま。nodes L321-L325・DiffSynth L486-L488）。
+- **参照動画の音声**: ComfyUI は別の入力 `ref_video_audio_N` で組にする（L314-L319・L345-L350）。SGLang は `video` の種類でも音声を自動で取り出す（task_profiles.py L203-L212）。DiffSynth は `video` を無音として扱う（L532-L533）。
+- **切り詰めと 15 秒**: 公式の制約は 1 本 2〜15 秒・合計 15 秒・全部で 12 個（README L85・API の表）。ComfyUI に合計 15 秒の検査も切り詰めも無い。参照動画は目的の長さで切ってから 17k+5 に切り下げ（L326-L333）、5 フレーム未満は拒否する。参照音声は切らない（`_encode_ref_audio` L75-L82）。SGLang は参照動画と参照音声を目的の長さで切る（reference_encoding.py L781-L796・L811、stages/audio_encoding.py L147-L152・L191）。DiffSynth は参照動画を目的のフレーム数で切って 17k+5 に切り下げ、音声は切らない（L490-L496・L508）。
+- **札**: `<Picture n>`・`<Video n>`・`<Audio n>` は普通の文字列で、特殊トークンではない（te L3-L4・L175・L178・L187。追加の特殊トークンは `<d>`・`</d>`・`<|cutoff|>`・歌詞とキャプションの札だけ〔L32-L34〕）。SGLang も `add_special_tokens=False` で普通の文字列として扱う（presentation.py L31・L270-L286）。
+
+### 15.7 テキストエンコーダーへの提示（ComfyUI。一次資料で確認済み）
+
+- te L169-L197: 素材ごとに `counters[kind] += 1`。画像は `"<Picture %d>: "` の後に視覚ブロック、音声は `"<Audio %d>: "` だけ、動画は `"<Video %d>: "` の後に 2 フレームごとに `"<%.1f seconds>"` と 2 フレームの視覚ブロック（`video_block=True`）。最後に利用者のプロンプト。区切りの改行や空白は入れず、各文字列を別々にトークン化し、開始・終了のトークンは付けない（q3 L150-L151）。番号は種類ごとに 1 から。参照が 0 件なら FL2VA と同じ経路（L192-L195）。
+- 視覚ブロックは `VISION_START`（151652）・埋め込みの差し込み口・`VISION_END`（151653）（L164-L167）。種別のタグは視覚ブロック（前後の 1 トークンずつを含む）が 0、札と時刻の文字が 1（L75-L82）。DiT の中の `seg_tag` は text 1・video 0・audio 2・cond 0・ref_img 0・cond_audio 2・ref_audio 2（model L713）。
+- 画像の前処理: テキストエンコーダーに渡すのは `match` で縮めた後の画像そのもの（nodes L308-L309。VAE と同じテンソル）。`process_qwen2vl_images(..., patch_size=16, image_mean/std=0.5)`（`qwen3vl.py` L62-L66）、min_pixels 3136・max_pixels 12,845,056 は ComfyUI の既定（`qwen_vl.py` L9-L19）。視覚トークン数は H×W÷1024（1344×768 で 1008）。本製品の tokenizer フォルダの `preprocessor_config.json` は公式の値（`shortest_edge 65536`・`longest_edge 16777216`）で、ComfyUI の既定と違う。
+- 参照動画のフレーム（nodes L326-L341・te L180-L191）: 目的の長さで切り 17k+5 に切り下げた後、`range(0, n, 12)`（0.5 秒ごと・枚数の上限なし）。奇数なら最後を複製し、2 枚ずつ `process_video_block`（Qwen-VL の時間パッチ 2 を 2 フレームで埋める。grid_t=1）。時刻の札は組の 2 枚の平均。15 秒（362 フレーム）で 16 組（`<0.2 seconds>`, `<1.2 seconds>`, …, `<14.2 seconds>`, `<15.0 seconds>`）、1344×768 なら合計 16,128 トークン。5 秒（124 フレーム）なら 6 組。
+- AddGuide（キーフレーム）の画像はテキストエンコーダーを通らない（nodes L191-L240。FL2VA の `MiniMaxH3ImageToVideo` は先頭・末尾の画像をテキストエンコーダーに渡す〔L156〕）。参照は positive の条件にだけ付き、公式の雛形はネガティブを使わない（L286・L362-L363）。
+
+### 15.8 潜在の符号化（ComfyUI。一次資料で確認済み）
+
+- **参照画像**（nodes L311・vae L792-L809）: 映像 VAE で 1 フレームとして符号化（`T==1` なら 1 回）。分布の平均だけを `(mean − LATENTS_MEAN)/LATENTS_STD` で正規化。形 `[1, 24, 1, H/16, W/16]`。空間の格子は `_frame_grid(h, w)`（model L70-L74・L88-L92。面積の平方根で正規化）で、参照は自身の大きさ（L403）、目的の映像は目的の大きさ（L357）。
+- **参照動画**（vae L664-L677・sd L1051）: 1 回の呼び出しの中で 17 フレームずつ符号化し、各塊 5 潜在、最後の 3 を捨てて `vt = 5k+2`。時刻は `_video_t_grid(vt, cursor)`（model L95-L102。24fps×5/3＝毎秒 40 で音声の潜在のレートにそろう）。15 秒（362 フレーム）で vt＝107、1344×768 なら 107,856 行。
+- **参照音声**（nodes L75-L82・avae L377-L443）: 32kHz に変換し、800 サンプルの倍数まで 0 で埋め、左右を別々に符号化して平均を正規化。潜在 `[1, 32, 2, rt]`、`rt = ceil(L/800)`（毎秒 40）。15 秒で rt＝600・1,200 行。
+- **配置と出力**: 参照の潜在はキーフレームの潜在の後ろに並べ（base L2238-L2247）、配置はサンプリングの開始時に 1 度だけ組む（base L2260-L2266）。注意はマスクなし（model L200）。`final_layer` に渡すのは目的の映像と音声の区画だけで、参照と条件の行の予測は捨てる（model L775-L786）。
+
+### 15.9 未確認
+
+1. 公式 API が文章だけ・先頭フレームだけの要求を、FL2VA と Ref2VA のどちらの重みで処理しているか。
+2. Ref2VA の重みで参照 0 件のとき、FL2VA より品質が劣るかどうか（一次資料に記述が無い）。
+3. SGLang に参照の合計 15 秒の検査があるか（調べた範囲には見当たらない）。
+4. Multiframe の雛形で、`ref_images` に入っていない `<Picture 2>`〜`<Picture 4>` をプロンプトに書いていることの効果。
+5. ヘッダを比べたのは pruned int8 ConvRot の 2 本だけで、他の量子化版のヘッダが一致するか。
+6. ComfyUI の SDTokenizer が各文字列をどう分けるか・モノラルの参照音声の正確な扱い（`output_channels=2, pad_channel_value="replicate"` から複製と推測）・SGLang の画像読み取り部の min／max pixels。

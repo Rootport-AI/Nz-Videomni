@@ -163,6 +163,22 @@ export interface InpaintSpec {
   blend_dilation_stage2: number;
 }
 
+/** §1-107: the MiniMax H3 transformer kinds the server can tell apart
+ * ({@link BaseModelBlock.transformer_role}). */
+export type TransformerRole = "fl2va" | "ref2va";
+
+/** §1-107: one Reference card in {@link GenerateRequest.references}. */
+export interface ReferenceInputBody {
+  kind: "picture" | "video" | "audio";
+  /** The upload's `image_id` / `video_id` / `audio_id`, by `kind`. */
+  id: string;
+  /** The card number, 1-based (= the tag number, `<Picture 1>`). */
+  slot: number;
+  /** Seconds to use from the head of the clip. Only on a card truncated to
+   * fit the per-kind total; otherwise omitted. */
+  max_sec?: number;
+}
+
 /** Fields the WebUI is allowed to submit for a `/generate` call (M2 T2V scope,
  * extended by M4 for I2V, M5 for style LoRAs). Omitting `conditioning_images`
  * (or passing `[]`) is T2V; one or more entries is I2V, up to
@@ -192,6 +208,12 @@ export interface GenerateRequest {
    * the loaded base model publishes `constraints.source_audio` (MiniMax H3);
    * LTX's A2V goes through `/generate/chain` instead. */
   source_audio?: { audio_id: string; strength: number };
+  /** §1-107 MiniMax H3 Ref2VA: the Reference cards that go into the
+   * generation, pictures then videos then audios, each in card-number order
+   * (`modes/single/referenceRules.ts`'s `buildReferenceBody`). Sent only on
+   * H3 and never while an FL2VA transformer is loaded; LTX answers 422
+   * `FEATURE_UNSUPPORTED`. Omitted when no card is used. */
+  references?: ReferenceInputBody[];
   loras?: LoraSpec[];
   /** IC-LoRA (A3 "reference video") conditioning source: the `video_id`
    * returned by `POST /upload/video` for the selected reference clip
@@ -1163,6 +1185,15 @@ export interface BaseModelBlock {
    *
    * Optional: a backend older than §1-31 omits the field. */
   transformer_weight_class?: string | null;
+  /** §1-107: which MiniMax H3 transformer the ACTIVE base model has loaded,
+   * judged from the whole file's SHA-256 against the descriptor:
+   * `"fl2va"` (keyframe rows), `"ref2va"` (reference blocks), or `null` when
+   * the file matches neither (a Hybrid, a renamed or third-party file) or
+   * the base model is not active. Read it through `shell/useBaseModels.ts`'s
+   * `activeTransformerRole`.
+   *
+   * Optional: a backend older than §1-107 omits the field. */
+  transformer_role?: TransformerRole | null;
   active: boolean;
   installed: boolean;
   present: boolean;
@@ -1266,6 +1297,25 @@ export interface BaseModelConstraints {
    * range, step and default. Absent/`null` = A2V goes through `/generate/chain`
    * as before (LTX, or a backend that predates the key). */
   source_audio?: { strength: SamplingParamConstraint } | null;
+  /** §1-107: the Ref2VA reference inputs' limits — per-kind slot
+   * counts, the mixed-total cap, the per-kind total seconds of videos and of
+   * audios, and the shortest clip before a warning. Present only for an
+   * engine that takes references (MiniMax H3); absent/`null` = no Reference
+   * accordion (LTX, or a backend that predates the key). */
+  reference?: ReferenceConstraint | null;
+}
+
+/** `BaseModelConstraints.reference`: the flat seven limits (supervisor ruling
+ * Q1). The WebUI reads them camelCased as `ReferenceRules`
+ * (`modes/single/referenceRules.ts`). */
+export interface ReferenceConstraint {
+  max_images: number;
+  max_videos: number;
+  max_audios: number;
+  max_total: number;
+  video_total_sec: number;
+  audio_total_sec: number;
+  clip_min_sec: number;
 }
 
 /** `GET /models`'s response (Docs/API_REFERENCE.md §3.5,

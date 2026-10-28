@@ -35,6 +35,10 @@ AUDIO_LATENTS_PER_SECOND = 40
 AUDIO_SAMPLE_RATE = 32000
 AUDIO_HOP = 800                 # one audio latent = 800 samples
 KEYFRAME_NOISE_AUG = 0.999      # I2V condition rows: 0.999 * clean + 0.001 * noise, t >= 0.999
+REF_AUDIO_TIME = 1.0            # audio reference rows' noise time (ComfyUI AUDIO_COND_TIMESTEP)
+#: The Ref2VA reference kinds, in the order their rows and presentation follow
+#: (ComfyUI's fixed order: pictures, then videos, then standalone audio).
+REFERENCE_KINDS = ("picture", "video", "audio")
 MODALITY_VIDEO, MODALITY_TEXT, MODALITY_AUDIO = 0, 1, 2
 LOG_PREFIX = "[h3_worker]"
 #: The attention backends the DiT accepts (the one list: worker, pipeline and dit read it).

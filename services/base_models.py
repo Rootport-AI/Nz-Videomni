@@ -32,10 +32,18 @@ What this module reads from a descriptor:
     the raw JSON object -- only "is it an object" is checked. Its shape and
     values are validated by pydantic in ``api/context.py``
     (``build_comfort_budgets``), so this module stays pydantic-free.
+``known_weights``
+    Optional list of published weight files identified by their whole-file
+    SHA-256 (``path``/``size``/``sha256``/``role``). Read by
+    ``services/weight_identity.py`` to tell which variant of a transformer is
+    loaded (MiniMax H3 FL2VA vs Ref2VA). Matching is by ``sha256`` only; the
+    ``path`` is informational here (the installer checks it). Absent -> ``()``.
 
 The installer's ``downloads`` / ``migrate`` blocks are deliberately NOT parsed:
 they belong to ``scripts/install_ltx.ps1`` and nothing on the Python side has
-any business acting on them.
+any business acting on them. ``known_weights`` is a separate top-level block
+for exactly that reason: the server reads it, so it cannot live inside
+``downloads``.
 
 FAIL LOUD AT STARTUP: a descriptor that is broken JSON, or that claims
 ``schema: 2`` + ``engine_family`` while missing/mistyping a required field,
@@ -56,6 +64,7 @@ layer's job.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -86,6 +95,21 @@ class CategoryDescriptor:
 
 
 @dataclass(frozen=True)
+class KnownWeight:
+    """One published weight file, identified by its whole-file SHA-256."""
+
+    #: ``models_dir``-relative path the installer puts it at (informational:
+    #: identification never looks at the file name).
+    path: str
+    #: Exact file size in bytes. A file of any other size is not hashed.
+    size: int
+    #: Lowercase hex SHA-256 of the whole file.
+    sha256: str
+    #: What the file is (e.g. ``"fl2va"`` / ``"ref2va"``), served as-is.
+    role: str
+
+
+@dataclass(frozen=True)
 class BaseModelDescriptor:
     """One base model: what it is called, which engine family runs it, and
     which categories/assets it is made of."""
@@ -105,6 +129,8 @@ class BaseModelDescriptor:
     #: ``models_dir``-relative LoRA directory of this base model, or ``None``
     #: when the base model uses the shared ``config.model.lora_dir``.
     lora_dir: str | None = None
+    #: Published weight files identified by SHA-256 (empty when absent).
+    known_weights: tuple[KnownWeight, ...] = ()
 
 
 # --------------------------------------------------------------------------- #
@@ -177,6 +203,37 @@ def _parse_category(source: str, name: str, raw: object) -> CategoryDescriptor:
     )
 
 
+_SHA256_RE = re.compile(r"[0-9a-fA-F]{64}")
+
+
+def _parse_known_weights(source: str, raw: object) -> tuple[KnownWeight, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise _fail(source, "'known_weights' must be an array when present")
+    weights: list[KnownWeight] = []
+    for index, item in enumerate(raw):
+        where = f"known_weights[{index}]"
+        if not isinstance(item, dict):
+            raise _fail(source, f"{where} must be an object (got {type(item).__name__})")
+        path = item.get("path")
+        if not isinstance(path, str) or not path:
+            raise _fail(source, f"{where}.path must be a non-empty string")
+        _require_rel_path(source, f"{where}.path", path)
+        size = item.get("size")
+        # bool is an int subclass; a size of ``true`` is a typo, not 1 byte.
+        if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
+            raise _fail(source, f"{where}.size must be a positive integer (got {size!r})")
+        sha256 = item.get("sha256")
+        if not isinstance(sha256, str) or not _SHA256_RE.fullmatch(sha256):
+            raise _fail(source, f"{where}.sha256 must be 64 hex characters (got {sha256!r})")
+        role = item.get("role")
+        if not isinstance(role, str) or not role.strip():
+            raise _fail(source, f"{where}.role must be a non-empty string (got {role!r})")
+        weights.append(KnownWeight(path=path, size=size, sha256=sha256.lower(), role=role))
+    return tuple(weights)
+
+
 def _parse_descriptor(source: str, raw: dict) -> BaseModelDescriptor:
     identifier = _require_str(source, raw, "id")
     display_name = _require_str(source, raw, "display_name")
@@ -225,6 +282,8 @@ def _parse_descriptor(source: str, raw: dict) -> BaseModelDescriptor:
             raise _fail(source, f"'lora_dir' must be a non-empty string when present (got {lora_dir!r})")
         _require_rel_path(source, "lora_dir", lora_dir)
 
+    known_weights = _parse_known_weights(source, raw.get("known_weights"))
+
     return BaseModelDescriptor(
         id=identifier,
         display_name=display_name,
@@ -234,6 +293,7 @@ def _parse_descriptor(source: str, raw: dict) -> BaseModelDescriptor:
         default_selection=default_selection,
         comfort=comfort,
         lora_dir=lora_dir,
+        known_weights=known_weights,
     )
 
 

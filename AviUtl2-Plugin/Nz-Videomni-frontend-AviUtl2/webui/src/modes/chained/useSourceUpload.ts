@@ -64,7 +64,7 @@ export interface UseSourceUploadDeps {
    * re-render never re-applies it), so it behaves exactly like the frozen
    * `idle` start for every existing caller that omits it. `null`/`undefined` =
    * the ordinary `idle` start. */
-  initial?: { id: string; fileName: string; filePath: string } | null | undefined;
+  initial?: AdoptedSource | null | undefined;
 }
 
 /** What {@link UseSourceUploadResult.uploadPath} resolves with when the upload
@@ -116,6 +116,34 @@ export interface UseSourceUploadResult {
     query?: Record<string, string>,
   ) => Promise<SourceUploadOutcome | null>;
   clear: () => void;
+  /** §1-107 (H3 Reference): takes over an id ANOTHER uploader already holds
+   * (the Reference accordion's A2V audio slot) as a `ready` state — no
+   * upload. Supersedes any in-flight upload like `clear()` does. The state has
+   * the same shape as the {@link UseSourceUploadDeps.initial} seed. */
+  adopt: (file: AdoptedSource) => void;
+}
+
+/** An already-uploaded file handed to a slot without re-uploading it
+ * (`deps.initial`, `adopt`). */
+export interface AdoptedSource {
+  id: string;
+  fileName: string;
+  filePath: string;
+}
+
+/** The `ready` state for an adopted / carried-over file: nothing was uploaded
+ * here, so no trim was requested and nothing was measured. */
+function adoptedState(file: AdoptedSource): SourceUploadState {
+  return {
+    status: "ready",
+    fileName: file.fileName,
+    filePath: file.filePath,
+    id: file.id,
+    errorCode: null,
+    trimFailed: false,
+    frames: null,
+    fps: null,
+  };
 }
 
 const INITIAL_STATE: SourceUploadState = {
@@ -162,7 +190,7 @@ function idFieldFor(kind: "video" | "audio"): "video_id" | "audio_id" {
  * `trim_start_sec` together with `trim_duration_sec`). */
 const TRIM_QUERY_KEYS = ["trim_start_sec"] as const;
 
-function requestedTrim(query: Record<string, string> | undefined): boolean {
+export function requestedTrim(query: Record<string, string> | undefined): boolean {
   if (query === undefined) return false;
   return TRIM_QUERY_KEYS.some((key) => key in query);
 }
@@ -183,24 +211,11 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
   // supplied — same field shape as a genuine post-upload `ready` state, so the
   // downstream duration-probe / gate logic can't tell it apart from a fresh
   // upload. Lazy initializer, so it applies once at mount only.
+  // A carried-over slot was never (re)uploaded here, so no trim was requested
+  // and nothing was measured (`adoptedState`). The carry-over is only ever used
+  // by Create's opposite-slot flows, which have no band to derive.
   const [state, setState] = useState<SourceUploadState>(() =>
-    deps.initial
-      ? {
-          status: "ready",
-          fileName: deps.initial.fileName,
-          filePath: deps.initial.filePath,
-          id: deps.initial.id,
-          errorCode: null,
-          // A carried-over slot was never (re)uploaded here, so no trim was
-          // requested for it — see W5 above.
-          trimFailed: false,
-          // …and no response body was seen here either, so nothing was measured.
-          // The carry-over is only ever used by Create's opposite-slot flows,
-          // which have no band to derive.
-          frames: null,
-          fps: null,
-        }
-      : INITIAL_STATE,
+    deps.initial ? adoptedState(deps.initial) : INITIAL_STATE,
   );
   // Generation token: bumped by `clear()` and at the start of every fresh
   // `uploadPath()` call. Each call captures its own generation and checks it
@@ -334,5 +349,10 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
     setState(INITIAL_STATE);
   }, []);
 
-  return { state, pick, uploadPath, clear };
+  const adopt = useCallback((file: AdoptedSource) => {
+    generationRef.current += 1; // an in-flight upload must not overwrite it
+    setState(adoptedState(file));
+  }, []);
+
+  return { state, pick, uploadPath, clear, adopt };
 }

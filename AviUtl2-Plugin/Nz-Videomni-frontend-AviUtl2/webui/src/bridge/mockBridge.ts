@@ -376,8 +376,45 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
     // 台帳 H3 A2V: the single-generate A2V route's Strength slider range, as
     // the real `GET /models` publishes it. LTX publishes no `source_audio`.
     source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+    // §1-107: the Ref2VA reference limits, as the real `GET /models`
+    // publishes them. LTX publishes no `reference`.
+    reference: {
+      max_images: 9,
+      max_videos: 3,
+      max_audios: 3,
+      max_total: 12,
+      video_total_sec: 15,
+      audio_total_sec: 15,
+      clip_min_sec: 2,
+    },
   },
 };
+
+/** §1-107: the fixture's stand-in for the server's SHA-256 role judgement —
+ * a transformer whose selected NAME contains `ref2va` / `fl2va`, else `null`. */
+function mockTransformerRole(name: string): "fl2va" | "ref2va" | null {
+  const lower = name.toLowerCase();
+  if (lower.includes("ref2va")) return "ref2va";
+  if (lower.includes("fl2va")) return "fl2va";
+  return null;
+}
+
+/** §1-107: `references` shape check only (an array of `{kind, id, slot}`);
+ * returns the error message, or `null` when the shape holds. */
+function mockReferencesShapeError(value: unknown): string | null {
+  if (!Array.isArray(value)) return "references must be an array";
+  for (const item of value as unknown[]) {
+    const ref = (item ?? {}) as Record<string, unknown>;
+    if (ref.kind !== "picture" && ref.kind !== "video" && ref.kind !== "audio") {
+      return "references[].kind must be picture, video or audio";
+    }
+    if (typeof ref.id !== "string" || ref.id === "") return "references[].id must be a non-empty string";
+    if (typeof ref.slot !== "number" || !Number.isInteger(ref.slot) || ref.slot < 1) {
+      return "references[].slot must be an integer >= 1";
+    }
+  }
+  return null;
+}
 
 /** `unsupported_features` per base model, verbatim from the server (each
  * engine adapter's `UNSUPPORTED_FEATURES`, `services/engines/<family>/adapter.py`, published by
@@ -439,6 +476,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // H3 A2V (single generate): `source_audio` on POST /generate is MiniMax
     // H3's own; both LTX engines refuse it (the server's REJECT_TABLE, last).
     "source_audio",
+    // §1-107: `references` (H3 Ref2VA's Reference cards) likewise.
+    "references",
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -510,6 +549,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // publishes for LTX 2.5.
     // H3 A2V: `source_audio` joined at the end — see the LTX23 entry above.
     "source_audio",
+    // §1-107: `references` — see the LTX23 entry above.
+    "references",
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
@@ -904,7 +945,8 @@ export interface MockFsFileEntry {
    * `withAudioDuration`/`fs.probeAudioDuration` fixtures. Only meaningful for
    * `.wav`-named entries; leave unset to simulate a `.wav` native fails to
    * read (both resolve `durationSec: 0`/`isWav: false` rather than erroring,
-   * per contract). */
+   * per contract). §1-107: `fs.probeMediaInfo` also returns it, for any
+   * extension, ahead of `probeMediaInfoDurationSec`. */
   durationSec?: number;
 }
 
@@ -1424,6 +1466,10 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         // base model carries one, exactly like the real endpoint (every other
         // entry is `null`). The fixture's transformers are all Q4_K GGUFs.
         transformer_weight_class: isActive ? "4bit" : null,
+        // §1-107: the real server judges the role from the file's SHA-256; the
+        // fixture has no files, so it reads the selected transformer's NAME
+        // (for eyeballing the notices during development). Active H3 only.
+        transformer_role: isActive && base.engine_family === "h3" ? mockTransformerRole(activeModels.transformer) : null,
         active: isActive,
         installed: missing.length === 0,
         present: missing.length < MOCK_MODEL_CATEGORIES.length,
@@ -1742,6 +1788,25 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     // client-side pre-check for the same rule; this is the server-side echo).
     if (req.nag_enabled === true && String(req.negative_prompt ?? "").trim() === "") {
       return validationError("negative_prompt", "negative_prompt must not be empty when nag_enabled is true");
+    }
+
+    // §1-107: LTX engines refuse `references` (the server's REJECT_TABLE row);
+    // H3 checks the shape only and lets the body through (stored as sent).
+    if (req.references != null) {
+      if ((MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("references")) {
+        return {
+          status: 422,
+          body: {
+            error: {
+              code: "FEATURE_UNSUPPORTED",
+              message:
+                "'references' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
+            },
+          },
+        };
+      }
+      const shapeError = mockReferencesShapeError(req.references);
+      if (shapeError !== null) return validationError("references", shapeError);
     }
 
     // H3 A2V: LTX engines refuse `source_audio` on the single route (the
@@ -2856,12 +2921,15 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
    * that never rejects for a bad/unreadable file. The values come straight
    * from `options.probeMediaInfoDurationSec`/`Width`/`Height` (all default
    * `0`, matching native's "unknown" response when there's no edit handle or
-   * `get_media_info` fails). */
+   * `get_media_info` fails). §1-107: a `MockFs` entry for the probed path
+   * that carries `durationSec` overrides the duration (any extension), so a
+   * test can give each clip its own length. */
   async function handleProbeMediaInfo(
-    _params: ParamsOf<"fs.probeMediaInfo">,
+    params: ParamsOf<"fs.probeMediaInfo">,
   ): Promise<ResultOf<"fs.probeMediaInfo">> {
+    const entryDurationSec = findMockFsEntry(params.filePath)?.durationSec;
     return {
-      durationSec: options.probeMediaInfoDurationSec ?? 0,
+      durationSec: entryDurationSec ?? options.probeMediaInfoDurationSec ?? 0,
       width: options.probeMediaInfoWidth ?? 0,
       height: options.probeMediaInfoHeight ?? 0,
       fps: options.probeMediaInfoFps ?? 0,

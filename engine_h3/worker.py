@@ -41,7 +41,7 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
-   [vram16_mode], [loras], [source_audio]}
+   [vram16_mode], [loras], [source_audio], [references]}
       One T2V, I2V or A2V job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
@@ -57,6 +57,12 @@ Protocol (one JSON object per line; parent -> worker):
       ``{"path", "strength"}`` (``strength`` 0..1, defaults to 0.5; the file's
       waveform is encoded to the audio latents and, at strength 1.0, muxed into
       the mp4; ``engine_h3.pipeline_h3.H3AudioInput``). Unknown inner keys are
+      logged once and ignored.
+      ``references`` (Ref2VA, 台帳 §1-107): absent / null / [] = no reference,
+      else ``{"kind", "path", "slot", "max_sec"}`` entries (``kind`` picture /
+      video / audio; ``slot`` the n of ``<Picture n>`` etc., 1 or more, distinct
+      per kind; ``max_sec`` absent / null = only the 15 s cap;
+      ``engine_h3.pipeline_h3.H3ReferenceInput``). Unknown inner keys are
       logged once and ignored. A failure is reported with ``error`` and the
       process stays alive.
   {"op": "shutdown"}
@@ -69,21 +75,27 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             (there is no stage2: the app adapter, services/engines/h3/adapter.py,
             reads these with ``_read_worker_events(one_stage=True)``, as Alpha
             Gen does; ``encode`` counts 3 steps, +1 when the job has any
-            key frame, +1 when it encodes a source_audio (strength > 0); the audio encoding is
-            one ``encode`` step, and ``audio_encode`` is only a phase name in
+            key frame, +1 when it has references, +1 when it encodes a source_audio
+            (strength > 0); the reference and the audio encodings are one
+            ``encode`` step each, and ``reference_encode`` / ``audio_encode`` are only phase names in
             ``done.h3.phases``, not a progress stage)
   done      {seed_used, sampler, num_inference_steps, shift_video, shift_audio,
              peak_vram_mb, peak_vram_reserved_mb, rss_peak_gib, commit_gib,
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
              block_swap_prefetch_used, keep_resident_used, vram16_mode_used,
-             images_used, h3: {phases, quant_backends, [loras], [a2v]}}
+             images_used, h3: {phases, quant_backends, [loras], [a2v], [references]}}
             (``h3.loras`` only for a job with LoRA: one entry per file, its
             name, strength, layout, dtype, pairs_applied and skipped;
             ``h3.a2v`` only for an A2V job, passed through from the pipeline:
             mask_value, audio_latents, required_samples, encoded_samples,
             channels_used, resampler, encoder_tensors, audio_output,
-            muxed_audio_samples)
+            muxed_audio_samples; ``h3.references`` only for a Ref2VA job:
+            {pictures, videos, audios} counts, with ``h3.phases.reference_encode``
+            (its ``references`` list: kind, slot, rows, seconds, and per kind
+            source_size / size / vision_tokens, source_frames / used_frames /
+            latent_t / pairs, or samples / latent_t) and ``ref_video`` /
+            ``ref_audio`` in ``h3.phases.denoise.sequence``)
   error     {detail}
 STDERR carries the human log, prefixed ``[h3_worker]``.
 
@@ -95,7 +107,8 @@ Selftest:
        --attention-backend sdpa|sage --blocks-on-gpu 8 --prefetch|--no-prefetch
        --deterministic --image P --keyframe FRAME=PATH ... --keep-resident
        --vram16|--no-vram16 --lora PATH ... --lora-strength 1.0
-       --source-audio PATH --audio-strength 0.5]
+       --source-audio PATH --audio-strength 0.5
+       --ref-image PATH ... --ref-video PATH ... --ref-audio PATH ...]
 """
 
 import os
@@ -178,7 +191,7 @@ _GENERATE_FIELDS = frozenset({
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
-    "vram16_mode", "loras", "source_audio",
+    "vram16_mode", "loras", "source_audio", "references",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
@@ -186,6 +199,8 @@ _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
 _LORA_FIELDS = frozenset({"path", "strength"})
 #: The keys of ``source_audio`` this engine reads.
 _SOURCE_AUDIO_FIELDS = frozenset({"path", "strength"})
+#: The keys of one ``references`` entry this engine reads (Ref2VA, 台帳 §1-107).
+_REFERENCE_FIELDS = frozenset({"kind", "path", "slot", "max_sec"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -355,8 +370,49 @@ def _source_audio(msg: dict) -> tuple:
     return H3AudioInput(path=path, strength=float(strength)), ignored
 
 
+def _references(msg: dict) -> tuple[tuple, list[str]]:
+    """``references`` -> ``(H3ReferenceInput, ...)`` and the ignored inner keys.
+
+    Absent / null = none. The shape (a list of objects with a string ``kind``,
+    a non-empty string ``path``, an integer ``slot`` and an absent / null /
+    finite-number ``max_sec``) is checked here; the kind's name, the slot's
+    range and uniqueness, the file and the ``max_sec`` range are the pipeline's
+    ``validate_request``.
+    """
+    import math  # noqa: PLC0415
+
+    from engine_h3.pipeline_h3 import H3ReferenceInput  # noqa: PLC0415
+
+    raw = msg.get("references")
+    if raw is None:
+        return (), []
+    if not isinstance(raw, list):
+        raise ValueError(f"references はリストで渡してください（{type(raw).__name__}）")
+    out, ignored = [], set()
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise ValueError(f"references の各要素はオブジェクトです（{entry!r}）")
+        kind, path, slot, max_sec = entry.get("kind"), entry.get("path"), entry.get("slot"), entry.get("max_sec")
+        if not isinstance(kind, str):
+            raise ValueError(f"references の kind は文字列で渡してください（{kind!r}）")
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError(f"references には空でない文字列の path が必要です（{path!r}）")
+        if isinstance(slot, bool) or not isinstance(slot, int):
+            raise ValueError(f"references の slot は整数で渡してください（{slot!r}）")
+        if max_sec is not None and (
+            isinstance(max_sec, bool) or not isinstance(max_sec, (int, float)) or not math.isfinite(max_sec)
+        ):
+            raise ValueError(f"references の max_sec は有限の数値か null で渡してください（{max_sec!r}）")
+        ignored |= {k for k in entry if k not in _REFERENCE_FIELDS}
+        out.append(H3ReferenceInput(
+            kind=kind, path=path, slot=slot, max_sec=None if max_sec is None else float(max_sec),
+        ))
+    return tuple(out), sorted(ignored)
+
+
 def _generate_request(
     msg: dict, images: tuple | None = None, loras: tuple | None = None, source_audio=None,
+    references: tuple | None = None,
 ):
     """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent).
 
@@ -366,6 +422,7 @@ def _generate_request(
     ignored-keys log too); parsed here when not given. ``loras``: the same.
     ``source_audio``: the already parsed ``H3AudioInput``; ``None`` falls back to
     parsing the message (a message without the key stays T2V / I2V).
+    ``references``: the already parsed references; ``None`` parses the message.
     """
     from engine_h3.pipeline_h3 import H3GenerateRequest  # noqa: PLC0415
 
@@ -378,6 +435,8 @@ def _generate_request(
         loras, _ignored = _loras(msg)
     if source_audio is None:
         source_audio, _ignored = _source_audio(msg)
+    if references is None:
+        references, _ignored = _references(msg)
     return H3GenerateRequest(
         prompt=str(msg["prompt"]),
         seed=int(msg["seed"]),
@@ -396,6 +455,7 @@ def _generate_request(
         vram16_mode=_or("vram16_mode", False, bool),
         loras=loras,
         source_audio=source_audio,
+        references=references,
     )
 
 
@@ -406,11 +466,13 @@ def _do_generate(msg: dict) -> None:
     images, inner_ignored = _images(msg)
     loras, lora_ignored = _loras(msg)
     source_audio, audio_ignored = _source_audio(msg)
+    references, ref_ignored = _references(msg)
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
     ignored += [f"images[].{k}" for k in inner_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
     ignored += [f"source_audio.{k}" for k in audio_ignored]
-    req = _generate_request(msg, images=images, loras=loras, source_audio=source_audio)
+    ignored += [f"references[].{k}" for k in ref_ignored]
+    req = _generate_request(msg, images=images, loras=loras, source_audio=source_audio, references=references)
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
     req.attention_backend = effective
@@ -423,6 +485,10 @@ def _do_generate(msg: dict) -> None:
         + (
             f"source_audio={(Path(req.source_audio.path).name, req.source_audio.strength)} "
             if req.source_audio is not None else ""
+        )
+        + (
+            f"references={[(r.kind, r.slot, Path(r.path).name, r.max_sec) for r in req.references]} "
+            if req.references else ""
         )
         + f"-> {req.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
@@ -569,6 +635,12 @@ def _selftest_parser():
                         help="A2V: the source audio file (source_audio.path)")
     parser.add_argument("--audio-strength", type=float, default=0.5,
                         help="A2V: source_audio.strength (default 0.5)")
+    parser.add_argument("--ref-image", action="append", default=[], metavar="PATH",
+                        help="Ref2VA: a picture reference (repeatable; <Picture 1>, <Picture 2>, ... in order)")
+    parser.add_argument("--ref-video", action="append", default=[], metavar="PATH",
+                        help="Ref2VA: a video reference (repeatable; <Video 1>, ... in order)")
+    parser.add_argument("--ref-audio", action="append", default=[], metavar="PATH",
+                        help="Ref2VA: an audio reference (repeatable; <Audio 1>, ... in order)")
     return parser
 
 
@@ -612,7 +684,21 @@ def _selftest_generate_message(args, out: str) -> dict:
     if args.source_audio:
         # Appended only when asked: a job without it is the same message as before.
         msg["source_audio"] = {"path": args.source_audio, "strength": float(args.audio_strength)}
+    references = _selftest_references(args)
+    if references:
+        # The same way: a job without references is the same message as before.
+        msg["references"] = references
     return msg
+
+
+def _selftest_references(args) -> list[dict]:
+    """``--ref-image`` / ``--ref-video`` / ``--ref-audio`` -> the ``references`` entries;
+    the slot is numbered per kind in the order the options appear (from 1)."""
+    out: list[dict] = []
+    for kind, paths in (("picture", args.ref_image), ("video", args.ref_video), ("audio", args.ref_audio)):
+        for slot, path in enumerate(paths, start=1):
+            out.append({"kind": kind, "path": path, "slot": slot, "max_sec": None})
+    return out
 
 
 def _selftest_images(args) -> list[dict]:

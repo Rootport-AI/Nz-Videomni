@@ -1699,6 +1699,40 @@ export const en = {
       exclusiveWithReferenceNote:
         "Both a reference video and an audio file are attached. The a2v generation will be guided by the IC-LoRA reference video.",
     },
+    /** §1-107: MiniMax H3's Reference accordion
+     * (`modes/single/ReferenceAccordion.tsx`). `onBadge` is identical in both
+     * languages (like `nag.onBadge`). */
+    reference: {
+      heading: "Reference",
+      onBadge: "【🔴ON】",
+      enableLabel: "Enable",
+      rowTitle: { picture: "Pictures", video: "Videos", audio: "Audios" },
+      pictureAlt: "Reference picture",
+      videoAlt: "Reference video",
+      audioAlt: "Reference audio",
+      uploading: "Uploading…",
+      emptySlot: "—",
+      clearButton: "Clear this card",
+      chooseButton: "Choose file…",
+      changeButton: "Change file…",
+      tagButton: "Add this tag to the prompt",
+      audioToVideoLabel: "Audio to video",
+      truncatedWarning: (usedSeconds: number): string =>
+        `Only the first ${usedSeconds.toFixed(1)}s will be referenced.`,
+      tooShortWarning: (minSeconds: number): string =>
+        `Shorter than ${minSeconds}s (${minSeconds}s or longer is recommended).`,
+      durationUnknownWarning: "The length could not be measured.",
+      trimFailedWarning: "The range could not be cut out. The whole video is attached.",
+      /** §1-107: non-blocking notices under Generate, one paragraph each
+       * (`referenceRules.ts`'s `referenceNotices` decides which show). */
+      notices: {
+        fl2vaLoaded:
+          "An FL2VA model is loaded. The references will be ignored. Load a Ref2VA model or a Hybrid model.",
+        ref2vaLoaded:
+          "A Ref2VA model is loaded. When no references are used, an FL2VA model or a Hybrid model is more accurate.",
+        noReferences: "There are no reference files.",
+      },
+    },
     /** W7: imperative one-line reasons the Generate button is disabled, shown
      * directly below it (`GenerateReasonsNote`). Each corresponds to a
      * `validityReasons` code from `useGenerationForm` (or a Create-screen-level
@@ -1717,6 +1751,8 @@ export const en = {
       keyframeUploading: "Wait for the keyframe upload to finish.",
       audioUploading: "Wait for the audio upload to finish.",
       referenceUploading: "Wait for the reference video upload to finish.",
+      /** §1-107: a Reference card that will be sent is still uploading. */
+      referenceCardUploading: "Wait for the reference file upload to finish.",
       /** NAG (2026-07-28): shown when "non-CFG Negative" is enabled but the
        * shared negative-prompt text is empty/whitespace-only — mirrors the
        * backend's own 422 for the same combination. */
@@ -2017,6 +2053,17 @@ export const en = {
      * slot), so the right-clicked image could not be appended. Mirrors the "Add
      * keyframe" button's disabled condition (atCapacity || noRoom). */
     keyframeLimitReached: "The keyframe limit has been reached.",
+    /** §1-107 (MiniMax H3 Reference): a right-clicked video / audio found no
+     * free card in its Reference row, so it was not accepted (the
+     * `keyframeLimitReached` twin). `kindLabel` is the row's title. */
+    referenceSlotsFull: (kindLabel: string): string =>
+      `The Reference ${kindLabel} cards are full. Clear a card with 🔁 and try again.`,
+    /** §1-107: #3 (a2v from a video's sound) is refused on MiniMax H3, whose
+     * A2V lives on the Reference accordion's Audios cards. Points at the 📁
+     * button rather than another right-click, so the two notes never send the
+     * user round in a circle. */
+    videoAudioA2vUseReference:
+      "On MiniMax H3, add the audio with 📁 on a Reference Audios card, then tick Audio to video.",
     /** I11 §3-4 #5 receipt: the right-clicked image was appended to a keyframe.
      * `fileName` names the loaded file (the visible new card is the primary
      * feedback; this reinforces it). */
@@ -3320,6 +3367,35 @@ export const ja: Strings = {
         `音声ファイルが現在の尺に対して短すぎます。少なくとも${requiredSeconds.toFixed(2)}秒の音声が必要です。`,
       exclusiveWithReferenceNote: "参照動画と音声の両方が入力されています。IC-LoRAで制御されたa2vが生成されます。",
     },
+    reference: {
+      heading: "Reference",
+      onBadge: "【🔴ON】",
+      enableLabel: "Enable",
+      rowTitle: { picture: "Pictures", video: "Videos", audio: "Audios" },
+      pictureAlt: "参照画像",
+      videoAlt: "参照動画",
+      audioAlt: "参照音声",
+      uploading: "アップロード中…",
+      emptySlot: "—",
+      clearButton: "このカードを空にする",
+      chooseButton: "ファイルを選ぶ…",
+      changeButton: "ファイルを変更…",
+      tagButton: "このタグをプロンプトに追記",
+      audioToVideoLabel: "Audio to video",
+      truncatedWarning: (usedSeconds: number): string =>
+        `冒頭${usedSeconds.toFixed(1)}秒だけ参照されます。`,
+      tooShortWarning: (minSeconds: number): string =>
+        `${minSeconds}秒未満です（推奨は${minSeconds}秒以上）。`,
+      durationUnknownWarning: "長さを測れません。",
+      trimFailedWarning: "指定範囲を切り出せませんでした。動画全体が入っています。",
+      notices: {
+        fl2vaLoaded:
+          "FL2VA モデルがロードされています。参照資料は無視されます。Ref2VA モデルまたは Hybrid モデルをロードしてください。",
+        ref2vaLoaded:
+          "Ref2VA モデルがロードされています。参照資料を使わない場合、FL2VA モデルまたは Hybrid モデルのほうが高精度です。",
+        noReferences: "参照ファイルがありません。",
+      },
+    },
     generateReasons: {
       promptEmpty: "メインプロンプトを入力してください。",
       dimensionsOffGrid: "幅と高さを有効な値にしてください。",
@@ -3331,6 +3407,7 @@ export const ja: Strings = {
       keyframeUploading: "キーフレームのアップロード完了を待ってください。",
       audioUploading: "音声のアップロード完了を待ってください。",
       referenceUploading: "参照動画のアップロード完了を待ってください。",
+      referenceCardUploading: "参照ファイルのアップロード完了を待ってください。",
       nagNegativeEmpty: "ネガティブプロンプトを入力するか、「non-CFG Negative」をオフにしてください。",
       referenceTrimFailed:
         "参照動画の範囲切り出しが適用されませんでした。プラグインが古い可能性があります。プラグインを更新するか、ファイルを選び直すと全体を使って実行できます。",
@@ -3480,6 +3557,10 @@ export const ja: Strings = {
     appendedToPrompt: (head: string, truncated: boolean): string =>
       `プロンプトに追記しました: ${head}${truncated ? "…" : ""}`,
     keyframeLimitReached: "キーフレームの上限に達しました。",
+    referenceSlotsFull: (kindLabel: string): string =>
+      `Reference の ${kindLabel} のカードが満杯です。🔁 でカードを空けてから、もう一度お試しください。`,
+    videoAudioA2vUseReference:
+      "MiniMax H3 では、Reference の Audios カードの 📁 から音声を入れ、Audio to video にチェックを入れてください。",
     appendedImageToKeyframe: (fileName: string): string =>
       `画像をキーフレームに追記しました: ${fileName}`,
     trackingUnavailable:

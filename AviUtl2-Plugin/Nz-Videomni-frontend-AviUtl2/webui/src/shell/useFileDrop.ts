@@ -26,6 +26,11 @@ function extensionOf(fileName: string): string | null {
  */
 export const SOURCE_AUDIO_EXTENSIONS = ["wav", "mp3", "m4a", "aac", "flac", "ogg"];
 
+/** §1-107: the extensions the H3 Reference accordion's Pictures / Videos cards
+ * accept (its Audios cards use {@link SOURCE_AUDIO_EXTENSIONS}). */
+export const REFERENCE_IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp"];
+export const REFERENCE_VIDEO_EXTENSIONS = ["mp4", "mov", "webm", "mkv"];
+
 export interface UseFileDropOptions {
   /** Accepted extensions, lowercase and without the leading dot (e.g.
    * `["mp4", "mov", "webm", "mkv"]`). A dropped file whose extension isn't in

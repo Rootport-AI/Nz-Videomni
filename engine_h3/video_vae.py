@@ -622,6 +622,42 @@ class H3VideoEncoder(_H3VideoVAEBase):
         std = self.latents_std.to(z.device).view(1, -1, 1, 1, 1)
         return (z - mean) / std
 
+    def encode_clips(self, frames_u8_cpu, *, device, tiled: bool = True) -> torch.Tensor:
+        """CPU uint8 frames ``[F, H, W, 3]`` (F >= 2) -> normalised posterior mean
+        ``[1, 24, T', H/16, W/16]`` float32 on ``device`` (a reference video, 台帳 §1-107).
+
+        The same arithmetic as :meth:`encode` on ``uint8 / 255`` (padding to a
+        multiple of 17 by repeating the last frame, 17 frames per clip, the
+        trailing 3 latents dropped), but only one 17-frame clip at a time is
+        sent to ``device``: a 15 s 1344 x 768 clip held whole in float32 would
+        take about 4.4 GB there.
+        """
+        frames = torch.as_tensor(frames_u8_cpu)
+        if frames.ndim != 4 or frames.shape[-1] != 3 or frames.dtype != torch.uint8:
+            raise ValueError(f"encode_clips: uint8 [F, H, W, 3] を期待しましたが {frames.dtype} {tuple(frames.shape)} でした")
+        num_frames = int(frames.shape[0])
+        if num_frames < 2:
+            raise ValueError(f"encode_clips: 2 フレーム以上が必要です（{num_frames}）")
+        if frames.shape[1] % self.vae_ratio or frames.shape[2] % self.vae_ratio:
+            raise ValueError(f"encode_clips: 高さと幅は {self.vae_ratio} の倍数が必要です（{tuple(frames.shape[1:3])}）")
+        device = torch.device(device)
+        pm, ps = self._pixel_stats(device)
+        index = list(range(num_frames)) + [num_frames - 1] * ((-num_frames) % self.clip_length)
+        parts = []
+        for i in range(0, len(index), self.clip_length):
+            clip = frames[index[i:i + self.clip_length]].to(device)                  # [17, H, W, 3] uint8
+            video = (clip.to(torch.float32) / 255.0).permute(3, 0, 1, 2).unsqueeze(0)  # [1, 3, 17, H, W]
+            x = ((video - pm) / ps).to(self.compute_dtype)
+            del clip, video
+            parts.append(self._encode_clip(x, tiled))
+        moments = torch.cat(parts, dim=2)
+        if self.token_drop > 0:
+            moments = moments[:, :, : -self.token_drop]
+        z = moments.chunk(2, dim=1)[0]
+        mean = self.latents_mean.to(z.device).view(1, -1, 1, 1, 1)
+        std = self.latents_std.to(z.device).view(1, -1, 1, 1, 1)
+        return (z - mean) / std
+
 
 class H3VideoDecoder(_H3VideoVAEBase):
     """``post_quant_conv`` + ``decoder``: latents -> CPU uint8 frames. Use :meth:`from_file`."""

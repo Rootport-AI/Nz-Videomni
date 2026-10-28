@@ -38,4 +38,21 @@ bool MakeJpegThumbnail(const std::wstring& src_path, int max_dim,
                        int* out_height, int* out_source_width,
                        int* out_source_height, std::string* err_message);
 
+// Contract v17: the same thumbnail, made from the FIRST decodable frame of the
+// video at `src_path` (mp4 / mov / webm / mkv - whatever the installed Media
+// Foundation sources and decoders can open). The frame is read with a Source
+// Reader in RGB32 (video processing on), cropped to its display area (so the
+// padding rows of a 1080-line clip decoded as 1088 lines are dropped), then
+// scaled and JPEG-encoded exactly like MakeJpegThumbnail. *out_source_width /
+// *out_source_height are the display-area size. Same argument rules, return
+// value and COM handling as MakeJpegThumbnail; Media Foundation is started via
+// media_fps_probe.h's EnsureMediaFoundation (once per process, never shut
+// down). A codec Windows cannot decode, a frame larger than 8192x8192, or an
+// allocation failure is an ordinary failure (false).
+bool MakeJpegThumbnailFromVideo(const std::wstring& src_path, int max_dim,
+                                std::vector<unsigned char>* out_bytes,
+                                int* out_width, int* out_height,
+                                int* out_source_width, int* out_source_height,
+                                std::string* err_message);
+
 }  // namespace nzvideomni

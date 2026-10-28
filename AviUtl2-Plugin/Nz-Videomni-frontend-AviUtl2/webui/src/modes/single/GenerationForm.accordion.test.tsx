@@ -8,6 +8,8 @@ import { GenerationForm } from "./GenerationForm";
 import type { GenerationFormProps } from "./GenerationForm";
 import { useGenerationForm } from "./useGenerationForm";
 import { useKeyframes } from "./useKeyframes";
+import { useReferenceSlots } from "./useReferenceSlots";
+import type { ReferenceRules } from "./referenceRules";
 
 // `FrameRateSeedFields` (rendered inside `GenerationForm`) reads the job
 // ledger via `useJobsContext` for its ♻ seed-reuse button; stub it the same
@@ -32,10 +34,28 @@ vi.mock("../../jobs/JobsContext", () => ({
 // AppShell/menu-routing integration stack (keeps this test independent of the
 // parallel work in `App.prefill.test.tsx`).
 
-function Harness(props: Partial<Pick<GenerationFormProps, "autoOpenReference" | "autoOpenA2v">>) {
+/** MiniMax H3's served `constraints.reference` (camelCase). */
+const H3_REFERENCE_RULES: ReferenceRules = {
+  maxImages: 9,
+  maxVideos: 3,
+  maxAudios: 3,
+  maxTotal: 12,
+  videoTotalSec: 15,
+  audioTotalSec: 15,
+  clipMinSec: 2,
+};
+
+type HarnessProps = Partial<Pick<GenerationFormProps, "autoOpenReference" | "autoOpenA2v">> & {
+  /** §1-107: pass the `reference` prop (what `SingleScreen` does while the
+   * constraints carry `reference`). */
+  withReference?: boolean;
+};
+
+function Harness(props: HarnessProps) {
   const nativeBridge = createMockBridge({ delayMs: 0 });
   const form = useGenerationForm(FALLBACK_APP_CONFIG, "a cat riding a skateboard", { nativeBridge });
   const keyframes = useKeyframes(FALLBACK_APP_CONFIG, { nativeBridge });
+  const reference = useReferenceSlots(H3_REFERENCE_RULES, { nativeBridge });
   return (
     <GenerationForm
       form={form}
@@ -54,11 +74,29 @@ function Harness(props: Partial<Pick<GenerationFormProps, "autoOpenReference" | 
       onSourceAudioStrengthChange={() => {}}
       autoOpenReference={props.autoOpenReference}
       autoOpenA2v={props.autoOpenA2v}
+      reference={
+        props.withReference
+          ? {
+              api: reference,
+              openSignal: 0,
+              onAppendTag: () => {},
+              a2v: {
+                available: false,
+                strength: 1,
+                onStrengthChange: () => {},
+                strengthMin: 0,
+                strengthMax: 1,
+                strengthStep: 0.05,
+                tooShortWarning: null,
+              },
+            }
+          : undefined
+      }
     />
   );
 }
 
-function renderForm(props: Partial<Pick<GenerationFormProps, "autoOpenReference" | "autoOpenA2v">> = {}) {
+function renderForm(props: HarnessProps = {}) {
   return render(
     <LanguageProvider>
       <Harness {...props} />
@@ -105,5 +143,27 @@ describe("GenerationForm — accordion auto-expand (right-click redesign W2)", (
 
     expect(referenceDetails().open).toBe(false);
     expect(a2vDetails().open).toBe(false);
+  });
+});
+
+describe("GenerationForm — §1-107 Reference accordion (MiniMax H3)", () => {
+  it("with `reference`: the Reference accordion is drawn after the keyframes and the A2V accordion is not", () => {
+    renderForm({ withReference: true });
+
+    const referenceAccordion = screen.getByText("Reference", { selector: "summary" }).closest("details");
+    expect(referenceAccordion).not.toBeNull();
+    expect(screen.queryByText(/audio to video \(a2v\)/i)).not.toBeInTheDocument();
+    // Right under the keyframes: the keyframe list precedes it in the document.
+    const addKeyframe = screen.getByRole("button", { name: /add keyframe/i });
+    expect(addKeyframe.compareDocumentPosition(referenceAccordion!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The IC-LoRA accordion is untouched by this prop.
+    expect(referenceDetails()).not.toBeNull();
+  });
+
+  it("without `reference` (LTX): no Reference accordion, the A2V accordion as before", () => {
+    renderForm();
+
+    expect(screen.queryByText("Reference", { selector: "summary" })).not.toBeInTheDocument();
+    expect(a2vDetails()).not.toBeNull();
   });
 });

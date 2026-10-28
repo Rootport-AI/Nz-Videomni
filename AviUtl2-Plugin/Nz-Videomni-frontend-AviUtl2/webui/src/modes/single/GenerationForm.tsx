@@ -19,6 +19,7 @@ import { KeyframesPanel } from "./KeyframesPanel";
 import { formatSecondsLabel } from "./paramUtils";
 import { PresetDropdown } from "./PresetDropdown";
 import { ReferenceStrengthField } from "./ReferenceStrengthField";
+import { ReferenceAccordion, type ReferenceAccordionProps } from "./ReferenceAccordion";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import type { UseGenerationFormResult } from "./useGenerationForm";
 import type { UseKeyframesResult } from "./useKeyframes";
@@ -103,6 +104,12 @@ export interface GenerationFormProps {
   /** Current source-audio strength (0..1). */
   sourceAudioStrength: number;
   onSourceAudioStrengthChange: (value: number) => void;
+  /** §1-107: present only while the loaded base model's
+   * constraints carry `reference` (MiniMax H3). Then the Reference accordion
+   * is drawn right under the keyframes and the A2V accordion is NOT drawn
+   * (A2V lives on the Reference Audios cards). Omitted = exactly the previous
+   * form (LTX). */
+  reference?: Omit<ReferenceAccordionProps, "nativeBridge" | "disabled"> | undefined;
 }
 
 /** The Create form: size/duration/fps/seed/presets, the M4 I2V keyframe
@@ -130,6 +137,7 @@ export function GenerationForm({
   singleSourceAudio,
   sourceAudioStrength,
   onSourceAudioStrengthChange,
+  reference,
 }: GenerationFormProps) {
   const strings = useStrings();
   // Right-click redesign W2: the IC-LoRA/A2V accordions default to collapsed,
@@ -291,6 +299,19 @@ export function GenerationForm({
         strengthUnavailable={sectionsUnavailable?.keyframeStrength}
       />
 
+      {/* §1-107: MiniMax H3's Reference accordion, right under the
+          keyframes. Only while the constraints carry `reference`. */}
+      {reference && (
+        <ReferenceAccordion
+          api={reference.api}
+          openSignal={reference.openSignal}
+          onAppendTag={reference.onAppendTag}
+          a2v={reference.a2v}
+          nativeBridge={nativeBridge}
+          disabled={disabled}
+        />
+      )}
+
       {/* IC-LoRA (reference video), collapsed by default. A2V+IC-LoRA combine
           (no exclusivity): both accordions stay fully usable at once (see
           `ReferenceVideoSection`). */}
@@ -310,26 +331,29 @@ export function GenerationForm({
         </details>
       )}
 
-      {/* A2V (source audio) — always rendered, collapsed by default. Greyed
+      {/* A2V (source audio) — collapsed by default. Greyed
           with a note while the loaded base model cannot chain (an A2V submit
           IS a chain request), unless the engine publishes `constraints.source_audio` (`a2vRouteFor` then routes the card to `/generate`) — the same treatment as Chain's own audio
-          panel. */}
-      <details className="form-accordion" ref={a2vDetailsRef}>
-        <summary className="form-accordion-summary">{strings.single.sourceAudio.heading}</summary>
-        <div className="form-accordion-body">
-          {sectionsUnavailable?.a2v && (
-            <p className="warning-banner">{strings.single.unavailableOnBaseModel.sourceAudio}</p>
-          )}
-          <SourceAudioSection
-            form={form}
-            disabled={disabled || (sectionsUnavailable?.a2v ?? false)}
-            nativeBridge={nativeBridge}
-            singleSourceAudio={singleSourceAudio}
-            sourceAudioStrength={sourceAudioStrength}
-            onSourceAudioStrengthChange={onSourceAudioStrengthChange}
-          />
-        </div>
-      </details>
+          panel. §1-107: not drawn at all while the Reference accordion is
+          (its Audios cards carry the A2V checkbox and Strength). */}
+      {!reference && (
+        <details className="form-accordion" ref={a2vDetailsRef}>
+          <summary className="form-accordion-summary">{strings.single.sourceAudio.heading}</summary>
+          <div className="form-accordion-body">
+            {sectionsUnavailable?.a2v && (
+              <p className="warning-banner">{strings.single.unavailableOnBaseModel.sourceAudio}</p>
+            )}
+            <SourceAudioSection
+              form={form}
+              disabled={disabled || (sectionsUnavailable?.a2v ?? false)}
+              nativeBridge={nativeBridge}
+              singleSourceAudio={singleSourceAudio}
+              sourceAudioStrength={sourceAudioStrength}
+              onSourceAudioStrengthChange={onSourceAudioStrengthChange}
+            />
+          </div>
+        </details>
+      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ facts that are genuinely different:
 THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
 Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
 mock, a variable category set): ``H3Runner`` subclasses ``LTXRunner``, the mock
-is 2.3's plus the A2V record (``_MockBackendH3``); ``generate`` also forwards ``source_audio_path``, and the categories are the same four words.
+is 2.3's plus the A2V and reference records (``_MockBackendH3``); ``generate`` also forwards ``source_audio_path`` and ``reference_paths``, and the categories are the same four words.
 
 THE WORKER PROTOCOL (Docs/MINIMAX_H3_DESIGN.md §8): ``load`` carries the four
 paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
@@ -32,8 +32,9 @@ per-job ``attention_backend`` / ``block_swap_prefetch`` (always sent: an absent
 key would mean "the load value", not "off"), ``vram16_mode`` (always sent: the
 worker's own default is off, the app's is on), ``source_audio``
 (``{path, strength}``; single-generate A2V only — an absent key is "no source
-audio") and ``keep_resident`` (only when asked for — an absent key is the
-release request, the LTX contract). The progress stages are LTX's single-stage
+audio"), ``references`` (``{kind, path, slot, max_sec?}``; Ref2VA only — an
+absent key is "no references") and ``keep_resident`` (only when asked for — an
+absent key is the release request, the LTX contract). The progress stages are LTX's single-stage
 ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``one_stage=True``; the A2V audio encode is a step of ``encode`` (its own name,
 ``audio_encode``, is a phase in ``done.h3.phases`` only), and a stage name the
@@ -71,6 +72,7 @@ from services.engines.ltx.adapter import (
 from services.engines.ltx.request_rules import (
     FRAME_RATE_MAX,
     NUM_FRAMES_MAX,
+    ReferenceLimits,
     RequestRules,
     SamplingRange,
 )
@@ -156,6 +158,18 @@ REQUEST_RULES = RequestRules(
     # Single-generate A2V (``request.source_audio.strength``): mask value
     # m = 1 - strength on every audio latent; 1.0 keeps the source audio as is.
     source_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
+    # Ref2VA's limits, always published whatever weights are loaded; the counts
+    # and slot ranges are also enforced (RequestRules.violation), the seconds
+    # are not.
+    reference=ReferenceLimits(
+        max_images=9,
+        max_videos=3,
+        max_audios=3,
+        max_total=12,
+        video_total_sec=15.0,
+        audio_total_sec=15.0,
+        clip_min_sec=2.0,
+    ),
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -250,6 +264,9 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         # Single-generate A2V: the uploaded audio's path + strength reach the
         # worker as the ``source_audio`` payload key.
         "source_audio",
+        # Ref2VA: the uploads' paths + kind / slot / max_sec reach the worker
+        # as the ``references`` payload key.
+        "references",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -361,8 +378,10 @@ def check_kv(category: str, name: str, kv: dict[str, str]) -> None:
 #: Top-level facts of the worker's ``done`` event that ``metadata["h3"]``
 #: gathers next to the worker's own ``h3`` block (phases, quant backends).
 #: The worker's ``h3`` block is merged in flat, so its A2V record
-#: (``done.h3.a2v``, A2V jobs only) arrives as ``outcome.h3["a2v"]``;
-#: ``PipelineManager._write_metadata`` lifts it out into ``metadata["a2v"]``.
+#: (``done.h3.a2v``, A2V jobs only) arrives as ``outcome.h3["a2v"]`` and its
+#: reference counts (``done.h3.references``, Ref2VA jobs only) as
+#: ``outcome.h3["references"]``; ``PipelineManager._write_metadata`` lifts them
+#: out into ``metadata["a2v"]`` / ``metadata["references"]``.
 _DONE_FACTS = (
     "sampler",
     "num_inference_steps",
@@ -374,6 +393,35 @@ _DONE_FACTS = (
     "commit_peak_gib",
     "seconds",
 )
+
+
+def _reference_payload(request: GenerateRequest, reference_paths: list[Path] | None) -> list[dict]:
+    """``request.references`` with each upload's resolved path, as the worker
+    takes them: ``{kind, path, slot}`` plus ``max_sec`` when the request set it.
+    ``[]`` for a job without references."""
+    paths = reference_paths or []
+    if len(paths) != len(request.references):
+        raise RuntimeError(
+            f"MiniMax H3: {len(request.references)} reference(s) requested but "
+            f"{len(paths)} resolved"
+        )
+    entries: list[dict] = []
+    for ref, path in zip(request.references, paths):
+        entry: dict = {"kind": ref.kind, "path": str(path), "slot": ref.slot}
+        if ref.max_sec is not None:
+            entry["max_sec"] = float(ref.max_sec)
+        entries.append(entry)
+    return entries
+
+
+def _reference_counts(request: GenerateRequest) -> dict[str, int]:
+    """The worker's ``done.h3.references`` summary, counted from the request."""
+    kinds = [ref.kind for ref in request.references]
+    return {
+        "pictures": kinds.count("picture"),
+        "videos": kinds.count("video"),
+        "audios": kinds.count("audio"),
+    }
 
 
 def _h3_block(event: dict) -> dict:
@@ -473,6 +521,7 @@ class _RealBackendH3(_RealBackend):
         inpaint_source_path: Path | None = None,
         inpaint_mask_path: Path | None = None,
         source_audio_path: Path | None = None,
+        reference_paths: list[Path] | None = None,
     ) -> GenerationOutcome:
         """One T2V / keyframe I2V generation (keyframes on any frame 0..F-1),
         with the requested LoRAs and, for single-generate A2V, the source audio.
@@ -480,6 +529,10 @@ class _RealBackendH3(_RealBackend):
         ``source_audio_path`` is ``request.source_audio.audio_id`` resolved by
         the audio upload store (``PipelineManager.run_job``); ``None`` for every
         job without ``source_audio``.
+
+        ``reference_paths`` is ``request.references`` resolved by each kind's
+        upload store (``PipelineManager.run_job``), one path per entry in the
+        same order; ``None`` for every job without references.
 
         ``lora_paths`` is ``request.loras`` resolved by the registry (same
         order); only path and strength reach the worker (``audio_strength`` is
@@ -536,6 +589,8 @@ class _RealBackendH3(_RealBackend):
                 "strength": float(request.source_audio.strength),
             }
 
+        references = _reference_payload(request, reference_paths) if request.references else []
+
         if progress_callback:
             progress_callback(None, None, 0.05)
 
@@ -564,6 +619,9 @@ class _RealBackendH3(_RealBackend):
         # source_audio: only for single-generate A2V (an absent key = none).
         if source_audio is not None:
             payload["source_audio"] = source_audio
+        # references: only for a Ref2VA job (an absent key = none).
+        if references:
+            payload["references"] = references
         payload["output_path"] = str(target)
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
@@ -634,7 +692,12 @@ def _mock_channels_used(channels: int | None) -> str | None:
 
 
 class _MockBackendH3(_MockBackend):
-    """2.3's synthetic-clip mock plus the one H3-only input: ``source_audio``.
+    """2.3's synthetic-clip mock plus the H3-only inputs: ``source_audio`` and
+    ``references``.
+
+    A job with references gets the same synthetic clip; the mock adds the
+    ``references`` counts the real worker reports in ``done.h3.references``
+    (``{"pictures", "videos", "audios"}``).
 
     The clip itself is the shared mock's. For an A2V job it adds the ``a2v``
     record the real worker reports in ``done.h3.a2v`` (so
@@ -658,6 +721,7 @@ class _MockBackendH3(_MockBackend):
         inpaint_source_path: Path | None = None,
         inpaint_mask_path: Path | None = None,
         source_audio_path: Path | None = None,
+        reference_paths: list[Path] | None = None,
     ) -> GenerationOutcome:
         outcome = super().generate(
             request,
@@ -671,6 +735,12 @@ class _MockBackendH3(_MockBackend):
             inpaint_source_path=inpaint_source_path,
             inpaint_mask_path=inpaint_mask_path,
         )
+        if request.references:
+            _reference_payload(request, reference_paths)  # the same resolution check
+            outcome = dataclasses.replace(
+                outcome,
+                h3={**(outcome.h3 or {}), "references": _reference_counts(request)},
+            )
         if request.source_audio is None:
             return outcome
         if source_audio_path is None:
@@ -698,7 +768,8 @@ class _MockBackendH3(_MockBackend):
 class H3Runner(LTXRunner):
     """Facade for the MiniMax H3 engine family (the class attributes are the
     only per-family facts; everything else is ``LTXRunner``'s, except
-    :meth:`generate`, which also forwards the H3-only ``source_audio_path``)."""
+    :meth:`generate`, which also forwards the H3-only ``source_audio_path`` and
+    ``reference_paths``)."""
 
     _REAL_BACKEND_CLS = _RealBackendH3
     _MOCK_BACKEND_CLS = _MockBackendH3
@@ -717,9 +788,12 @@ class H3Runner(LTXRunner):
         inpaint_source_path: Path | None = None,
         inpaint_mask_path: Path | None = None,
         source_audio_path: Path | None = None,
+        reference_paths: list[Path] | None = None,
     ) -> GenerationOutcome:
         """``LTXRunner.generate`` plus ``source_audio_path`` (single-generate
-        A2V's resolved upload; ``None`` otherwise), passed to the backend."""
+        A2V's resolved upload; ``None`` otherwise) and ``reference_paths``
+        (Ref2VA's resolved uploads, one per ``request.references`` entry;
+        ``None`` otherwise), passed to the backend."""
         if self._backend is None or not self._backend.loaded:
             self.load()
         assert self._backend is not None
@@ -735,4 +809,5 @@ class H3Runner(LTXRunner):
             inpaint_source_path=inpaint_source_path,
             inpaint_mask_path=inpaint_mask_path,
             source_audio_path=source_audio_path,
+            reference_paths=reference_paths,
         )

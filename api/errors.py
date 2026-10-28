@@ -92,6 +92,18 @@ def source_audio_not_found(audio_id: str) -> APIError:
     return APIError("SOURCE_AUDIO_NOT_FOUND", f"source_audio.audio_id not found: {audio_id}", 404)
 
 
+def reference_not_found(index: int, ref_id: str, kind: str, slot: int) -> APIError:
+    """Reference (Ref2VA, MiniMax H3): ``references[index].id`` does not resolve
+    to an upload of its own kind's store. The stores' own 404s name other
+    fields (image_id, reference_video_id, source_audio), so the miss gets its
+    own stable code naming the entry."""
+    return APIError(
+        "REFERENCE_NOT_FOUND",
+        f"references[{index}].id not found: {ref_id} ({kind} slot {slot})",
+        404,
+    )
+
+
 def source_audio_too_short(detail: str | None = None) -> APIError:
     """A2V: the uploaded source audio is shorter than the video it must drive —
     the chain timeline (``/generate/chain``) or the single clip (MiniMax H3's

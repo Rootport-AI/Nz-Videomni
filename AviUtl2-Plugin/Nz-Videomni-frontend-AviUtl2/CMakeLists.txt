@@ -193,6 +193,7 @@ add_executable(NzVideomni_tests
     "${NATIVE_DIR}/tests/test_media_fps_probe.cpp"
     "${NATIVE_DIR}/tests/test_wav_probe.cpp"
     "${NATIVE_DIR}/tests/test_fs_util.cpp"
+    "${NATIVE_DIR}/tests/test_video_thumbnail.cpp"
     ${NZVIDEOMNI_COMMON_SOURCES})
 
 target_include_directories(NzVideomni_tests PRIVATE "${NATIVE_DIR}/src")

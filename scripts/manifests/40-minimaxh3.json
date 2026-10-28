@@ -4,7 +4,7 @@
   "display_name": "MiniMax H3",
   "engine_family": "h3",
   "lora_dir": "MiniMaxH3/LoRA",
-  "_note": "MiniMax H3（FL2VA・枝刈り版の DiT を int8 ConvRot で量子化した Comfy-Org の配布物）。設計の正本は Docs/MINIMAX_H3_DESIGN.md。カテゴリは LTX と同じ 4 語（操作パネルの型がこの 4 語で閉じているため）。tokenizer は Qwen3-VL の tokenizer 一式のフォルダで、LTX 2.3 の gemma_root と同じく assets で渡す（追加の特殊トークンが tokenizer_config.json にしか無いため、ファイル一式を 1 つのフォルダとして扱う）。comfort（快適上限）は持たない（台帳 §1-95 で較正するまでマーカーを出さない）。H3 は GGUF を持たず、事前検査はテンソル名の指紋（h3_format）で行う。downloads は install-MiniMaxH3.bat 専用（setup.bat からの実行はここに到達しない）。取得元の 2 リポジトリはゲート無しで、include のパスとファイルサイズは手元の実物と照合して検証済み（取得元のリビジョン: Comfy-Org/MiniMax-H3 e5eb578・MiniMaxAI/MiniMax-H3 42ed227。リビジョンは固定しない）。tokenizer の include は 1 ファイルずつ並べる（--include の * は / をまたぐので、FL2VA/text_encoder/* と書くと約 65GB の bf16 テキストエンコーダまで落ちてくる）。LICENSE はライセンス本文の写しを手元に置くための取得専用の行で、ファイル単位の既得判定のため downloads の独立した項目にしてある（tokenizer の項目に足すと、導入済みの人の再実行で tokenizer ごと取り直す）。",
+  "_note": "MiniMax H3（FL2VA・枝刈り版の DiT を int8 ConvRot で量子化した Comfy-Org の配布物）。設計の正本は Docs/MINIMAX_H3_DESIGN.md。カテゴリは LTX と同じ 4 語（操作パネルの型がこの 4 語で閉じているため）。tokenizer は Qwen3-VL の tokenizer 一式のフォルダで、LTX 2.3 の gemma_root と同じく assets で渡す（追加の特殊トークンが tokenizer_config.json にしか無いため、ファイル一式を 1 つのフォルダとして扱う）。comfort（快適上限）は持たない（台帳 §1-95 で較正するまでマーカーを出さない）。H3 は GGUF を持たず、事前検査はテンソル名の指紋（h3_format）で行う。downloads は install-MiniMaxH3.bat 専用（setup.bat からの実行はここに到達しない）。取得元の 2 リポジトリはゲート無しで、include のパスとファイルサイズは手元の実物と照合して検証済み（取得元のリビジョン: Comfy-Org/MiniMax-H3 e5eb578・MiniMaxAI/MiniMax-H3 42ed227。リビジョンは固定しない）。tokenizer の include は 1 ファイルずつ並べる（--include の * は / をまたぐので、FL2VA/text_encoder/* と書くと約 65GB の bf16 テキストエンコーダまで落ちてくる）。LICENSE はライセンス本文の写しを手元に置くための取得専用の行で、ファイル単位の既得判定のため downloads の独立した項目にしてある（tokenizer の項目に足すと、導入済みの人の再実行で tokenizer ごと取り直す）。known_weights は FL2VA／Ref2VA の種別の判定に使う既知の重みの一覧（値の正本はこの節だけ。downloads[].files[] には書かない）。sha256 は HF の tree API の lfs.oid（2026-10-28）。判定はファイル名でなく sha256 だけで行う（改名に強い。Hybrid は一致しないので判定なし）。インストーラーは取得後に同じ値で照合して警告する。Ref2VA を downloads の独立した項目にしたのは導入済みの人が 4 本を取り直さないため。",
 
   "categories": {
     "transformer": {
@@ -42,6 +42,21 @@
     "video_vae": "default",
     "audio": "default"
   },
+
+  "known_weights": [
+    {
+      "path": "MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "size": 20970379616,
+      "sha256": "e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a",
+      "role": "fl2va"
+    },
+    {
+      "path": "MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "size": 20970379616,
+      "sha256": "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779",
+      "role": "ref2va"
+    }
+  ],
 
   "downloads": [
     {
@@ -126,6 +141,21 @@
           "label": "h3_license",
           "key": "h3_license",
           "_min": "取得元の実物 17,604B の1ファイル(約9%下)"
+        }
+      ]
+    },
+    {
+      "name": "MiniMax H3 Ref2VA DiT (1 file)",
+      "repo": "Comfy-Org/MiniMax-H3",
+      "include": ["diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors"],
+      "map": [ { "from": "diffusion_models", "to": "MiniMaxH3/Weights" } ],
+      "files": [
+        {
+          "path": "MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+          "min": 20100000000,
+          "label": "h3_transformer_ref2va",
+          "key": "h3_transformer_ref2va",
+          "_min": "取得元の実物 20,970,379,616B の1ファイル(約4%下)"
         }
       ]
     }

@@ -220,7 +220,7 @@ describe("ChainReferencePanel (§1-15 参照動画)", () => {
     it("2. an unreadable resolution beats the short-reference reminder", () => {
       const { container } = setup(
         {},
-        { referenceVideo: { state: { status: "ready", fileName: "r.mp4", filePath: "C:\\r.mp4", id: "v1", errorCode: null, trimFailed: false, frames: null, fps: null }, pick: async () => {}, uploadPath: async () => null, clear: () => {} }, hasReferenceVideo: true, referenceMediaSize: null },
+        { referenceVideo: { state: { status: "ready", fileName: "r.mp4", filePath: "C:\\r.mp4", id: "v1", errorCode: null, trimFailed: false, frames: null, fps: null }, pick: async () => {}, uploadPath: async () => null, clear: () => {}, adopt: () => {} }, hasReferenceVideo: true, referenceMediaSize: null },
       );
 
       expect(noteText(container)).toBe(t.probeFailed);

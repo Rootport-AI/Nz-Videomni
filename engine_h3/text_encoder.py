@@ -64,12 +64,13 @@ import gc
 import logging
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 
 import h3_format
-from engine_h3.constants import MODALITY_TEXT, MODALITY_VIDEO
+from engine_h3.constants import MODALITY_TEXT, MODALITY_VIDEO, REFERENCE_KINDS
 from engine_h3.quant_linear import swap_in_int8_linears
 from engine_h3.sft_load import drop_to_meta, load_mapped_to, move_module_tree
 
@@ -144,6 +145,9 @@ VISION_END_ID = 151653       # <|vision_end|>
 #: The FL2VA label in front of each key frame's vision block, numbered from 1 in
 #: the order the key frames are given (first frame then last frame).
 PICTURE_LABEL = "<Picture {}>: "
+#: Ref2VA labels (台帳 §1-107): plain text, numbered by the reference card (slot).
+VIDEO_LABEL = "<Video {}>: "
+AUDIO_LABEL = "<Audio {}>: "
 #: ``Qwen3VLVisionRotaryEmbedding``'s default theta (its inverse frequencies are a
 #: non-persistent buffer, recomputed here because no file carries them).
 VISION_ROPE_THETA = 10000.0
@@ -307,7 +311,50 @@ def te_read_plan(
     return embed, layers, visual
 
 
-def presentation(tokenizer, prompt: str, image_tokens: Sequence[int] = ()) -> tuple[list[int], list[int]]:
+@dataclass(frozen=True)
+class RefPresentation:
+    """One Ref2VA reference as the text encoder presents it (台帳 §1-107).
+
+    ``kind``: ``"picture"`` / ``"video"`` / ``"audio"``; ``slot``: the card
+    number (the n of ``<Picture n>`` etc., from 1). ``vision_tokens``: one count
+    for a picture, one per pair for a video, none for audio. ``labels``: a
+    video's per-pair ``"<x.x seconds>"`` (same length as ``vision_tokens``),
+    empty otherwise.
+    """
+
+    kind: str
+    slot: int
+    vision_tokens: tuple[int, ...] = ()
+    labels: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RefMedia:
+    """One Ref2VA reference as :meth:`H3TextEncoder.encode` takes it.
+
+    ``image`` (picture): a PIL RGB image, or the ``[1, 3, 1, h, w]`` float32
+    tensor of ``engine_h3.reference.load_reference_image`` (``uint8 / 255``;
+    turned back into the image exactly). ``pairs`` (video): the list
+    ``engine_h3.reference.qwen_pairs`` returns, ``[(uint8 [2, h, w, 3], label)]``.
+    Audio carries neither.
+    """
+
+    kind: str
+    slot: int
+    image: object = None
+    pairs: tuple = ()
+
+
+def _vision_block(count: int) -> list[int]:
+    if int(count) < 1:
+        raise ValueError(f"H3 TE: an image needs at least one vision token ({count})")
+    return [VISION_START_ID] + [IMAGE_TOKEN_ID] * int(count) + [VISION_END_ID]
+
+
+def presentation(
+    tokenizer, prompt: str, image_tokens: Sequence[int] = (), *,
+    ref_items: Sequence[RefPresentation] | None = None,
+) -> tuple[list[int], list[int]]:
     """The token ids and per-token modality tags the encoder reads (Docs/MINIMAX_H3_DESIGN.md §3).
 
     ``image_tokens``: the vision-token count of each image, in order. T2V
@@ -316,7 +363,19 @@ def presentation(tokenizer, prompt: str, image_tokens: Sequence[int] = ()) -> tu
     (tag 0); then the prompt (tag 1), each part tokenized on its own --
     tokenizing the joined string would glue the label's trailing space to the
     prompt's first word.
+
+    ``ref_items`` (Ref2VA, 台帳 §1-107): None or empty takes the path above
+    unchanged. Otherwise, per item in the given order, each part tokenized on
+    its own, no separator: picture ``"<Picture {slot}>: "`` (tag 1) + vision
+    block (tag 0); audio ``"<Audio {slot}>: "`` (tag 1) alone; video
+    ``"<Video {slot}>: "`` (tag 1), then per pair its ``"<x.x seconds>"`` label
+    (tag 1) + vision block (tag 0); then the prompt (tag 1). With references
+    the key frames do not reach the text encoder (ComfyUI's AddGuide):
+    ``image_tokens`` is not read (:meth:`H3TextEncoder.encode` refuses both at
+    once).
     """
+    if ref_items:
+        return _ref_presentation(tokenizer, prompt, ref_items)
     ids: list[int] = []
     tags: list[int] = []
     for i, count in enumerate(image_tokens):
@@ -332,6 +391,63 @@ def presentation(tokenizer, prompt: str, image_tokens: Sequence[int] = ()) -> tu
     ids += prompt_ids
     tags += [MODALITY_TEXT] * len(prompt_ids)
     return ids, tags
+
+
+def _ref_presentation(tokenizer, prompt: str, ref_items: Sequence[RefPresentation]) -> tuple[list[int], list[int]]:
+    """:func:`presentation` with references (its docstring)."""
+    ids: list[int] = []
+    tags: list[int] = []
+
+    def text(s: str) -> None:
+        part = list(tokenizer(s, add_special_tokens=False)["input_ids"])
+        ids.extend(part)
+        tags.extend([MODALITY_TEXT] * len(part))
+
+    def block(count: int) -> None:
+        part = _vision_block(count)
+        ids.extend(part)
+        tags.extend([MODALITY_VIDEO] * len(part))
+
+    for item in ref_items:
+        if item.kind == "picture":
+            if len(item.vision_tokens) != 1 or item.labels:
+                raise ValueError(f"H3 TE: a picture reference has one vision block and no label ({item})")
+            text(PICTURE_LABEL.format(int(item.slot)))
+            block(item.vision_tokens[0])
+        elif item.kind == "audio":
+            if item.vision_tokens or item.labels:
+                raise ValueError(f"H3 TE: an audio reference has no vision block ({item})")
+            text(AUDIO_LABEL.format(int(item.slot)))
+        elif item.kind == "video":
+            if not item.vision_tokens or len(item.labels) != len(item.vision_tokens):
+                raise ValueError(f"H3 TE: a video reference needs one label per pair ({item})")
+            text(VIDEO_LABEL.format(int(item.slot)))
+            for label, count in zip(item.labels, item.vision_tokens):
+                text(label)
+                block(count)
+        else:
+            raise ValueError(f"H3 TE: unknown reference kind {item.kind!r} (expected one of {REFERENCE_KINDS})")
+    prompt_ids = list(tokenizer(prompt, add_special_tokens=False)["input_ids"])
+    if not prompt_ids:
+        raise ValueError("プロンプトが空です（H3 は文章の条件づけが必須です）")
+    ids += prompt_ids
+    tags += [MODALITY_TEXT] * len(prompt_ids)
+    return ids, tags
+
+
+def _picture_image(ref: RefMedia):
+    """A picture reference's image as PIL RGB (a ``[1, 3, 1, h, w]`` ``uint8 / 255`` tensor is turned back exactly)."""
+    from PIL import Image
+
+    img = ref.image
+    if isinstance(img, torch.Tensor):
+        if img.ndim != 5 or img.shape[0] != 1 or img.shape[1] != 3 or img.shape[2] != 1:
+            raise ValueError(f"H3 TE: picture reference {ref.slot}: [1, 3, 1, h, w] expected, got {tuple(img.shape)}")
+        arr = (img.detach().to("cpu", torch.float32)[0, :, 0] * 255.0).round().clamp(0, 255)
+        img = Image.fromarray(arr.to(torch.uint8).permute(1, 2, 0).contiguous().numpy(), "RGB")
+    if not isinstance(img, Image.Image):
+        raise ValueError(f"H3 TE: picture reference {ref.slot} has no image")
+    return img.convert("RGB")
 
 
 def vision_inv_freq(dim: int) -> torch.Tensor:
@@ -485,27 +601,110 @@ class H3TextEncoder:
         tokens = [int(grid[i].prod().item()) // merge for i in range(len(images))]
         return vision["pixel_values"], grid, tokens
 
-    def encode(self, prompt: str, images=()) -> tuple[torch.Tensor, torch.Tensor]:
+    def ref_vision_inputs(
+        self, refs: Sequence[RefMedia],
+    ) -> tuple[list[RefPresentation], torch.Tensor | None, torch.Tensor | None, list[dict]]:
+        """References -> ``(ref_items, pixel_values f32 | None, image_grid_thw [K, 3] | None, per-reference report)``.
+
+        Pictures go through :meth:`vision_inputs` together (one call, the same
+        path as the key frames); each video pair through
+        ``engine_h3.reference.pair_patches`` (one grid row ``[1, gh, gw]`` per
+        pair). The rows of ``pixel_values`` / ``image_grid_thw`` follow the
+        order of the vision blocks in the token ids (Hugging Face's
+        ``get_rope_index`` takes one grid row per run of image pads, in order).
+        None when no reference has a vision block (audio only).
+        """
+        from PIL import Image
+
+        from engine_h3.reference import pair_patches
+
+        pictures = []
+        for ref in refs:
+            if ref.kind not in REFERENCE_KINDS:
+                raise ValueError(f"H3 TE: unknown reference kind {ref.kind!r} (expected one of {REFERENCE_KINDS})")
+            if ref.kind == "picture":
+                pictures.append(_picture_image(ref))
+        picture_chunks: list[tuple[torch.Tensor, torch.Tensor, int]] = []
+        if pictures:
+            pv, grid, tokens = self.vision_inputs(pictures)
+            start = 0
+            for i, count in enumerate(tokens):
+                rows = int(grid[i].prod().item())
+                picture_chunks.append((pv[start:start + rows], grid[i:i + 1], count))
+                start += rows
+        patch = int(VISION_CONFIG["patch_size"])
+        merge = int(VISION_CONFIG["spatial_merge_size"])
+        items: list[RefPresentation] = []
+        pixel_parts: list[torch.Tensor] = []
+        grid_parts: list[torch.Tensor] = []
+        report: list[dict] = []
+        next_picture = 0
+        for ref in refs:
+            slot = int(ref.slot)
+            if ref.kind == "picture":
+                pv, grid, count = picture_chunks[next_picture]
+                next_picture += 1
+                pixel_parts.append(pv)
+                grid_parts.append(grid)
+                items.append(RefPresentation("picture", slot, (int(count),)))
+                report.append({"kind": "picture", "slot": slot, "vision_tokens": int(count)})
+            elif ref.kind == "video":
+                if not ref.pairs:
+                    raise ValueError(f"H3 TE: video reference {slot} has no frame pairs")
+                counts, labels = [], []
+                for pair, label in ref.pairs:
+                    patches, grid = pair_patches(pair, patch=patch, merge=merge)
+                    pixel_parts.append(patches)
+                    grid_parts.append(grid)
+                    counts.append(int(grid.prod().item()) // merge**2)
+                    labels.append(str(label))
+                items.append(RefPresentation("video", slot, tuple(counts), tuple(labels)))
+                report.append({"kind": "video", "slot": slot, "pairs": len(counts), "vision_tokens": int(sum(counts))})
+            else:
+                items.append(RefPresentation("audio", slot))
+                report.append({"kind": "audio", "slot": slot, "vision_tokens": 0})
+        if not pixel_parts:
+            return items, None, None, report
+        return items, torch.cat(pixel_parts, dim=0), torch.cat(grid_parts, dim=0), report
+
+    def encode(
+        self, prompt: str, images=(), *, refs: Sequence[RefMedia] | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """``([L, 5120] bf16 on device, [L] long modality tags)``.
 
         ``images`` (I2V): the canvas images (``engine_h3.image_cond.load_canvas_image``)
         the vision tower reads, in order; their vision blocks go in front of the
         prompt. None (T2V, or only middle key frames): tags are all text (1).
+
+        ``refs`` (Ref2VA, 台帳 §1-107): the references in presentation order
+        (:class:`RefMedia`); None or empty is the path above, unchanged. With
+        references ``images`` must be empty (refused here). Audio-only
+        references do not read the vision tower. ``read_report["references"]``
+        (only when ``refs`` is given) lists each reference's vision tokens.
         """
+        images = list(images)
+        refs = list(refs or ())
+        if refs and images:
+            raise ValueError("H3 TE: key-frame images and references cannot both be given to the text encoder")
         if self._model is None:
             raise RuntimeError("H3TextEncoder.encode before load")
         model = self._model
         lm = model.language_model
-        images = list(images)
-        vision = bool(images)  # whether the vision tower is read
+        ref_items: list[RefPresentation] | None = None
+        ref_report: list[dict] = []
         vision_kwargs: dict = {}
         image_tokens: list[int] = []
-        if vision:
-            if not self._visual_plan:
-                raise RuntimeError(f"H3 TE: {self.te_path} has no vision tower (visual.*); I2V needs it")
+        if refs:
+            ref_items, pixel_values, grid, ref_report = self.ref_vision_inputs(refs)
+            if pixel_values is not None:
+                vision_kwargs = {"pixel_values": pixel_values, "image_grid_thw": grid}
+        elif images:
             pixel_values, grid, image_tokens = self.vision_inputs(images)
             vision_kwargs = {"pixel_values": pixel_values, "image_grid_thw": grid}
-        ids, tags_list = presentation(self._tokenizer, prompt, image_tokens)   # refuses an empty prompt
+        vision = bool(vision_kwargs)  # whether the vision tower is read
+        if vision and not self._visual_plan:
+            raise RuntimeError(f"H3 TE: {self.te_path} has no vision tower (visual.*); images need it")
+        ids, tags_list = presentation(self._tokenizer, prompt, image_tokens, ref_items=ref_items)   # refuses an empty prompt
         stats = {"bytes": 0, "read_seconds": 0.0, "layers": 0}
         started = time.perf_counter()
         handles: list = []
@@ -568,6 +767,8 @@ class H3TextEncoder:
             "vision_tokens": int(sum(image_tokens)),
             "vision_tokens_per_image": [int(n) for n in image_tokens],
         }
+        if refs:
+            self.read_report["references"] = ref_report
         logger.info("H3 TE encode (direct read): %s", self.read_report)
         self.last_ids = ids
         tags = torch.tensor(tags_list, dtype=torch.long, device=self.device)

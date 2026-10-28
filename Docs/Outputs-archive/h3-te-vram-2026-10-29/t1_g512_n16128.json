@@ -1,0 +1,76 @@
+{
+  "kernel": "g512",
+  "n": 16128,
+  "shape": {
+    "q": [
+      1,
+      64,
+      16128,
+      128
+    ],
+    "kv": [
+      1,
+      8,
+      16128,
+      128
+    ],
+    "dtype": "bfloat16"
+  },
+  "env": {
+    "torch": "2.13.0+cu130",
+    "cuda_runtime": "13.0",
+    "python": "3.12.9",
+    "cudnn": 92000,
+    "device_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "device_total_mb": 16375
+  },
+  "sdp": {
+    "is_flash_attention_available": false,
+    "flash_sdp_enabled": true,
+    "mem_efficient_sdp_enabled": true,
+    "cudnn_sdp_enabled": true,
+    "math_sdp_enabled": true,
+    "fp16_bf16_reduction_math_sdp_allowed": false,
+    "sdp_priority_order": [
+      1,
+      2,
+      0,
+      3,
+      4
+    ],
+    "sdp_priority_order_names": [
+      "FLASH_ATTENTION",
+      "EFFICIENT_ATTENTION",
+      "MATH",
+      "CUDNN_ATTENTION",
+      "OVERRIDEABLE"
+    ],
+    "matmul_allow_tf32": false,
+    "float32_matmul_precision": "highest",
+    "cudnn_deterministic": false,
+    "cudnn_benchmark": false
+  },
+  "warmup": 1,
+  "repeat": 3,
+  "inputs_alloc_mb": 316.0,
+  "ms": 1506.122,
+  "ms_all": [
+    1505.033,
+    1506.122,
+    1506.628
+  ],
+  "peak_alloc_mb": 6292.3,
+  "peak_reserved_mb": 6562.0,
+  "peak_alloc_over_inputs_mb": 5976.3,
+  "output": {
+    "shape": [
+      1,
+      64,
+      16128,
+      128
+    ],
+    "dtype": "torch.bfloat16",
+    "finite": true
+  },
+  "ok": true
+}

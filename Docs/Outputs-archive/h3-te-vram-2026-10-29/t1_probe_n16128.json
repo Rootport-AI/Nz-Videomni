@@ -1,0 +1,76 @@
+{
+  "kernel": "probe",
+  "n": 16128,
+  "shape": {
+    "q": [
+      1,
+      64,
+      16128,
+      128
+    ],
+    "kv": [
+      1,
+      8,
+      16128,
+      128
+    ],
+    "dtype": "bfloat16"
+  },
+  "env": {
+    "torch": "2.13.0+cu130",
+    "cuda_runtime": "13.0",
+    "python": "3.12.9",
+    "cudnn": 92000,
+    "device_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "device_total_mb": 16375
+  },
+  "sdp": {
+    "is_flash_attention_available": false,
+    "flash_sdp_enabled": true,
+    "mem_efficient_sdp_enabled": true,
+    "cudnn_sdp_enabled": true,
+    "math_sdp_enabled": true,
+    "fp16_bf16_reduction_math_sdp_allowed": false,
+    "sdp_priority_order": [
+      1,
+      2,
+      0,
+      3,
+      4
+    ],
+    "sdp_priority_order_names": [
+      "FLASH_ATTENTION",
+      "EFFICIENT_ATTENTION",
+      "MATH",
+      "CUDNN_ATTENTION",
+      "OVERRIDEABLE"
+    ],
+    "matmul_allow_tf32": false,
+    "float32_matmul_precision": "highest",
+    "cudnn_deterministic": false,
+    "cudnn_benchmark": false
+  },
+  "warmup": 1,
+  "repeat": 3,
+  "inputs_alloc_mb": 316.0,
+  "probe": {
+    "sdpa_params_signature": "__init__(self: torch._C._SDPAParams, arg0: torch.Tensor, arg1: torch.Tensor, arg2: torch.Tensor, arg3: torch.Tensor | None, arg4: typing.SupportsFloat | typing.SupportsIndex, arg5: bool, arg6: bool) -> None",
+    "params": {
+      "is_causal": true,
+      "enable_gqa": true,
+      "dropout": 0.0,
+      "attn_mask_is_none": true
+    },
+    "efficient": {
+      "can_use": false,
+      "error": null,
+      "warnings": []
+    },
+    "cudnn": {
+      "can_use": true,
+      "error": null,
+      "warnings": []
+    }
+  },
+  "ok": true
+}

@@ -69,39 +69,12 @@
 - **留意**: DiT 側の VRAM 16GB mode は TE の段には効かない。行数の上限や自動の縮小は足さない（快適上限は情報であって制約ではない）。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2・§13。
 - **出典**: オーナー指示 2026-10-28（起票の裁定）。GPU 検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.4 の G-R3。
 
----
+### 1-117. Reference アコーディオンの UI 小改善（起票：2026-10-28）
 
-## 2. 実装済み・ユーザーのテスト待ち
-
-実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。全項目が合格して空になったら、本節は見出しごと削除する。
-
-### 1-107. MiniMax H3 の Ref2VA（参照素材からの生成）（起票：2026-10-19）
-
-AviUtl2 の操作パネルで MiniMax H3 を選んで確かめる。仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2・裁定 82、使い方は README §7.6、機械の門と GPU 検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180。
-
-#### 生成した動画の目視（遠隔。監督が GPU 検証で生成したもの）
-
-生成した動画は遠隔で見られる。操作パネルでの確認は帰宅後に行う。置き場は非公開の Hugging Face データセット `Rootport/Nz-LTX23-eval-clips` のフォルダ `round10-h3-ref2va`（<https://huggingface.co/datasets/Rootport/Nz-LTX23-eval-clips/tree/main/round10-h3-ref2va>）。比べる表つきの README と参照素材 `references/` も同じフォルダにある。
-
-- [ ] `G-R1_picture1_gentleman.mp4`（参照画像 1 枚＝老紳士の三面図）→ 老紳士の顔・髪・服が参照に似ていれば合格
-- [ ] `G-R2_pictures3_audio1_bridge.mp4`（画像 3 枚＝老紳士・番傘の少女・艦橋＋音声 1 本＝女性の声 5 秒）→ 3 枚の人物・衣装・背景がそれぞれ出ていれば合格。声質が参照の音声に寄っているかは参考（参照が女性の声で、プロンプトの「紳士の声」と矛盾する条件）
-- [ ] `G-R3_video1_studio.mp4`（参照動画 1 本＝過去の H3 出力「雪原の少女と狼」の先頭 5.17 秒）→ 参照動画の少女の見た目や動きがスタジオの場面に移っていれば合格
-- （参考）`G-R5_picture1_plus_first_keyframe.mp4` は併用の結果。先頭フレームが艦橋の画像に固定されていないのは既知で、§1-115 に起票済み。合否は付けない
-- （参考）`G-R0_no_reference_baseline_640x384.mp4` は参照なしの回帰の基準（指紋一致）。目視の対象ではない
-
-#### 参照の効き
-
-- [ ] Settings の「モデル」で動画モデルに `minimax_h3_ref2va_pruned_int8_convrot` を選んで「選択したモデルを読込」→ Single の Reference の Enable をオン → Pictures に人物の画像を 1 枚入れ、プロンプトに `<Picture 1>` を書いて生成 → 参照に似た人物が出れば合格（初回の読込だけ数十秒長くかかるが、失敗しなければよい）
-- [ ] 画像を複数枚と音声 1 本、または動画 1 本を入れて生成 → 参照の人物・衣装・背景・声が出力に表れていれば合格
-- （注記）Reference とキーフレームの併用は、監督の GPU 検証（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180 の G-R5）で先頭フレームが固定されず、§1-115 に起票済み。目視の対象から外す。
-
-#### 注意文（生成ボタンの下・琥珀色。生成は止めない）
-
-- [ ] FL2VA を読み込んだまま Reference の Enable をオン → 注意 ①「FL2VA モデルがロードされています。…」が出れば合格
-- [ ] Ref2VA を読み込んで Enable をオフ → 注意 ②「Ref2VA モデルがロードされています。…」が出れば合格
-- [ ] Enable をオンにしてカードを全部空にする → 注意 ③「参照ファイルがありません。」が出れば合格（FL2VA のときは ① と ③ が両方出る）
-- [ ] FL2VA・Enable オンで Audios のカードの「Audio to video」を有効にする → ① が出なければ合格
-- [ ] Hybrid（PinkCherry Hybrid）を読み込んで Enable をオン／オフ → ① も ② も出なければ合格
+- **概要**: Reference アコーディオンの Audios のカードにある「Audio to video」のチェックボックスは、そのカードに音声データが入っているときだけ押せるようにする。音声データが未入力のカードでは、チェックボックスを無効にし、マウスを重ねたときのカーソルを「🚫」（CSS の `not-allowed`）にし、「Audio to video」の文字色も少し暗くする。
+- **前提**: 対象は `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/modes/single/ReferenceAccordion.tsx` の Audios のカードのチェックボックス（`type="checkbox"`）。現状は `disabled={disabled}` だけで、カードが空でも押せる。
+- **留意**: チェック済みのカードの音声を外したときにチェックをどう扱うかは、着手時に決める。既存の A2V アコーディオン（LTX 系）は対象外。
+- **出典**: オーナー指示 2026-10-28。
 
 ---
 

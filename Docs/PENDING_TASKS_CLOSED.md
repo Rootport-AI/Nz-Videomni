@@ -3115,3 +3115,12 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: 完結。dev `6285a90`（実装の弾 1〜5 と機械の門）・`e2dd996`（既定 0.5・文書・保管）・`24af23f`（ハッシュ追記）・`1caab3c`（配布用 aux2）・`c180b01`（配置の記録）。main merge は `1f6143b`・`66f356f`・`690f766`（push 済み）。操作パネルからの確認にも合格した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §178.7）。
 - **正本・出典**: 設計は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.1（式と仕組み）と §2 の裁定 74〜80、契約は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.101）、操作パネルはフロントエンドの `Docs/DEVLOG.md` §149、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) の D30。計画・調査・レビュー・門の報告の保管は [`Outputs-archive/h3-a2v-2026-10-25/`](Outputs-archive/h3-a2v-2026-10-25/README.md)。
 - **残課題**: 出力の音声が映像より約 8.3 ミリ秒短くなる場合は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-256（A2V の Strength 1.0 では起きない）。映像のマスクの使い方（雑音増しの有無）は同 §1-106（H3 の Chained）の計画で決める。
+
+### 3-258. MiniMax H3 の Ref2VA（参照素材からの生成）（起票：2026-10-19、クローズ：2026-10-28）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-107 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-107（2026-10-19 起票）。**同書側は欠番**。番号は、同書 §3 の生きた項目（3-255・3-256・3-259）を飛ばした空き番号である。
+- **到達条件**: MiniMax H3 の Ref2VA の重みで、参照画像・参照動画・参照音声から生成できること。**達成した。**
+- **何が完了したか**: 推論エンジンの参照ブロック（列 `[text|cond|ref_video|ref_audio|audio|video]`。テキストエンコーダーへ `<Picture n>`・`<Video n>`・`<Audio n>` を提示する）、API（`POST /generate` の `references`。LTX は 422、無い id は 404。`metadata.references`）、操作パネル（Reference アコーディオンの配線・注意文 3 種・`transformer_role`）、インストーラー（Ref2VA の重みの取得と SHA-256 の照合）、重みの種別判定（ファイル全体の SHA-256 と `GET /models` の `transformer_role`）。前段の UI は dev `9269a38`。要点・機械の門・GPU の門・オーナーの目視は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180 を正本とする（数値はここに写さない）。
+- **状態**: 完結。dev `9269a38`（前段 UI）・`04c8886`（本体）・目視後の文書の反映（本項の記入）。main へは目視合格後に `--no-ff` でマージする（ハッシュは git の履歴を正とする）。オーナーの目視 10 項目に合格した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.6）。
+- **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2 と裁定 81・82、契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.103）、操作パネルはフロントエンドの `Docs/DEVLOG.md` §150・§151、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §179・§180。保管は [`Outputs-archive/h3-ref2va-2026-10-28/`](Outputs-archive/h3-ref2va-2026-10-28/)。
+- **残課題**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-114（右クリックで Reference が消える）・§1-115（キーフレームとの併用）・§1-116（参照動画でテキストエンコーダーの VRAM 超過）・§1-117（Reference アコーディオンの UI 小改善）・§3-259（MCP と Gradio の受け口）。

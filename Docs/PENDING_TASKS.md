@@ -27,7 +27,8 @@
 
 - **概要**: 直前のクリップの映像と音声の潜在の末尾を次のクリップの冒頭に置き、その行の時刻を固定して残りだけノイズ除去し、重なりを切り落として連結する（潜在の持ち越し。復号して再符号化はしない）。LTX の Chained に相当する。
 - **前提**: キーフレームの条件行（実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170）と、行ごとの連続値マスク（[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.1、CLOSED 3-257。映像のマスクはエンジンにあり API には未公開）。Turbo（§1-104 は完了、CLOSED 3-251。実験の費用が下がる）。操作パネルの Chained タブ（現状 H3 では灰色）。
-- **留意**: H3 Continuum の「FL2VA で検証済み」は、計画の冒頭で CHANGELOG を一次資料で確認する。継ぎ目と音声の品質の報告は無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
+- **留意**: H3 Continuum の「FL2VA で検証済み」は確認済み（研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.3）。継ぎ目と音声の品質の報告は無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
+- **留意**: 計測（2026-10-29）の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183、一次資料の事実は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）・[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（PR #15375 の denoise mask・LongMedia）。
 
 ### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19）
@@ -664,6 +665,20 @@
 - **前提（何が塞いでいるか）**: 生成した動画の目視は go なので、今は診断しない（オーナー判断）。
 - **再訪条件**: H3 で画像を 2 枚以上置いたときにプロンプトの効きが悪いと分かったとき。または、テキストエンコーダの量子化や int8 の経路を変えるとき。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.7 (a)、保管庫 [`Outputs-archive/h3-keyframes-2026-10-19/`](Outputs-archive/h3-keyframes-2026-10-19/README.md) の `gates/g2_keyframe_parts.json`（`quant_rel_*` の鍵）。
+
+### 4-44. MiniMax H3 の連結の重なりを選択可能にする（起票：2026-10-29）
+
+- **概要**: 既定は 22 フレーム固定（[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 裁定 84）。5／39 を操作パネルで選べるようにする。
+- **前提（何が塞いでいるか）**: 22 フレームで満足している（裁定 84）。5／39 の所見は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183.13 の H3。
+- **再訪条件**: ユーザーからの要望があったとき。
+- **出典**: [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 裁定 84・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183。
+
+### 4-45. MiniMax H3 の長い連結での焼け（コントラストの累積）への対処（起票：2026-10-29）
+
+- **概要**: 長い連結でコントラストが累積する問題への対処。まず長い連結で計測してから対処を考える。
+- **前提（何が塞いでいるか）**: 3 本・今回の題材では兆しが見えない（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183.5 の H7）。4 本以上は未計測（H3 Continuum では 6 本で劣化の報告がある。課題 #13・未解決。[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.3）。
+- **再訪条件**: ユーザーからの要望があったとき。
+- **出典**: [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 裁定 84・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16。
 
 ---
 

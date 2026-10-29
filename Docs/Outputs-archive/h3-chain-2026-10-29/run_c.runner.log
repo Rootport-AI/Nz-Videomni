@@ -1,0 +1,48 @@
+﻿--- nvidia-smi (compute processes) ---
+pid, process_name, used_gpu_memory [MiB]
+2152, [Insufficient Permissions], [N/A]
+12404, C:\Windows\System32\ShellHost.exe, [N/A]
+12544, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\CrossDeviceResume.exe, [N/A]
+14592, C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe, [N/A]
+14568, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe, [N/A]
+17428, C:\Program Files (x86)\Microsoft\EdgeWebView\Application\155.0.4283.62\msedgewebview2.exe, [N/A]
+18816, [Insufficient Permissions], [N/A]
+17760, C:\Windows\SystemApps\Microsoft.LockApp_cw5n1h2txyewy\LockApp.exe, [N/A]
+15132, C:\Program Files\LogiOptionsPlus\logioptionsplus_agent.exe, [N/A]
+20856, C:\Program Files\NVIDIA Corporation\NVIDIA app\CEF\NVIDIA Overlay.exe, [N/A]
+20412, C:\Program Files\NVIDIA Corporation\NVIDIA app\CEF\NVIDIA Overlay.exe, [N/A]
+24032, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe, [N/A]
+25156, C:\Users\phenotype nezu\AppData\Local\Discord\app-1.0.9265\Discord.exe, [N/A]
+24896, C:\Program Files (x86)\Microsoft\EdgeWebView\Application\155.0.4283.62\msedgewebview2.exe, [N/A]
+28496, C:\Program Files\WindowsApps\MSTeams_26260.1717.5229.7049_x64__8wekyb3d8bbwe\ms-teams.exe, [N/A]
+20348, C:\Users\phenotype nezu\AppData\Local\slack\app-4.51.180\slack.exe, [N/A]
+30400, C:\Users\phenotype nezu\AppData\Local\slack\app-4.51.180\slack.exe, [N/A]
+31440, C:\Program Files\WindowsApps\9426MICRO-STARINTERNATION.MSICenter_2.0.74.0_x64__kzh8wxbdkxb8p\DCv2\DCv2.exe, [N/A]
+27204, C:\Program Files (x86)\Razer\Synapse3\WPFUI\Framework\Razer Synapse 3 Host\Razer Synapse 3.exe, [N/A]
+25972, C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe, [N/A]
+35200, C:\Users\phenotype nezu\AppData\Local\Programs\Notion\Notion.exe, [N/A]
+33384, C:\Users\phenotype nezu\AppData\Local\Programs\Microsoft VS Code\Code.exe, [N/A]
+11680, C:\Windows\System32\ApplicationFrameHost.exe, [N/A]
+50900, C:\Program Files (x86)\Microsoft\Copilot\Application\copilotapp.exe, [N/A]
+24436, C:\Program Files (x86)\Microsoft\Copilot\Application\undocked_copilot\copilotapphost.exe, [N/A]
+55724, C:\Program Files\WindowsApps\Microsoft.YourPhone_1.26082.121.0_x64__8wekyb3d8bbwe\PhoneExperienceHost.exe, [N/A]
+name, memory.used [MiB], memory.total [MiB]
+NVIDIA GeForce RTX 4070 Ti SUPER, 354 MiB, 16376 MiB
+[13:53:27] selfcheck: --selfcheck
+    exit 0 in 3.2 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\selfcheck.json
+[13:53:31] c0_gate: --name c0_gate --width 640 --height 384 --overlap 22 --strength 1.0 --inject noise --attention sdpa --prompts Docs\Outputs-archive\h3-chain-2026-10-29\prompts_c0.json --decode both --save-latents --fingerprint --recheck-clip0
+    exit 0 in 512.7 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\c0_gate.json
+[14:02:03] c1_base: --name c1_base --overlap 22 --strength 1.0 --inject noise --attention sage --prompts Docs\Outputs-archive\h3-chain-2026-10-29\prompts_c.json --decode both --save-latents
+    exit 0 in 1389.6 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\c1_base.json
+[14:25:13] c3_inject_clean: --name c3_inject_clean --overlap 22 --strength 1.0 --inject clean --decode both --reuse-clip0 Docs\Outputs-archive\h3-chain-2026-10-29\c1_base.json --attention sage --prompts Docs\Outputs-archive\h3-chain-2026-10-29\prompts_c.json --save-latents
+    exit 0 in 1004.3 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\c3_inject_clean.json
+[14:41:57] c2_strength05: --name c2_strength05 --overlap 22 --strength 0.5 --inject noise --decode both --reuse-clip0 Docs\Outputs-archive\h3-chain-2026-10-29\c1_base.json --attention sage --prompts Docs\Outputs-archive\h3-chain-2026-10-29\prompts_c.json --save-latents
+    exit 0 in 1097.1 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\c2_strength05.json
+[15:00:14] c4_overlap5: --name c4_overlap5 --overlap 5 --strength 1.0 --inject noise --decode both --reuse-clip0 Docs\Outputs-archive\h3-chain-2026-10-29\c1_base.json --attention sage --prompts Docs\Outputs-archive\h3-chain-2026-10-29\prompts_c.json --save-latents
+    exit 0 in 1014.6 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\c4_overlap5.json
+[15:17:09] c5_overlap39: --name c5_overlap39 --overlap 39 --strength 1.0 --inject noise --decode both --reuse-clip0 Docs\Outputs-archive\h3-chain-2026-10-29\c1_base.json --attention sage --prompts Docs\Outputs-archive\h3-chain-2026-10-29\prompts_c.json --save-latents
+    exit 0 in 993.7 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\c5_overlap39.json
+[15:33:43] c7_control: --name c7_control --strength 0 --decode perclip --reuse-clip0 Docs\Outputs-archive\h3-chain-2026-10-29\c1_base.json --attention sage --prompts Docs\Outputs-archive\h3-chain-2026-10-29\prompts_c.json --save-latents
+    exit 0 in 922.5 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\c7_control.json
+[15:49:05] analysis: --c1 c1_base --c3 c3_inject_clean --c7 c7_control
+    exit 0 in 69.2 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\analysis.json

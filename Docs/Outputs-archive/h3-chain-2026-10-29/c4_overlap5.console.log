@@ -1,0 +1,59 @@
+[c_chain] int8: qkv quantization shared across head groups (comfy-kitchen internals found)
+[c_chain] clip 0 reused from outputs\h3-chain-2026-10-29\c1_base\clip0.pt
+[c_chain] clip 1: seed 43, fix k=2 ka=9
+[progress] encode 0/3
+[progress] encode 1/3
+[progress] encode 2/3
+[progress] encode 3/3
+[c_chain] encode: 54 text tokens
+[c_chain] denoise: 32 non-block tensors to cuda; 50 blocks stay on CPU
+[progress] stage1_denoise 0/20
+[progress] stage1_denoise 1/20
+[progress] stage1_denoise 2/20
+[progress] stage1_denoise 3/20
+[progress] stage1_denoise 4/20
+[progress] stage1_denoise 5/20
+[progress] stage1_denoise 6/20
+[progress] stage1_denoise 7/20
+[progress] stage1_denoise 8/20
+[progress] stage1_denoise 9/20
+[progress] stage1_denoise 10/20
+[progress] stage1_denoise 11/20
+[progress] stage1_denoise 12/20
+[progress] stage1_denoise 13/20
+[progress] stage1_denoise 14/20
+[progress] stage1_denoise 15/20
+[progress] stage1_denoise 16/20
+[progress] stage1_denoise 17/20
+[progress] stage1_denoise 18/20
+[progress] stage1_denoise 19/20
+[progress] stage1_denoise 20/20
+[c_chain] clip 2: seed 44, fix k=2 ka=8
+[progress] encode 0/3
+[progress] encode 1/3
+[progress] encode 2/3
+[progress] encode 3/3
+[c_chain] encode: 66 text tokens
+[c_chain] denoise: 32 non-block tensors to cuda; 50 blocks stay on CPU
+[progress] stage1_denoise 0/20
+[progress] stage1_denoise 1/20
+[progress] stage1_denoise 2/20
+[progress] stage1_denoise 3/20
+[progress] stage1_denoise 4/20
+[progress] stage1_denoise 5/20
+[progress] stage1_denoise 6/20
+[progress] stage1_denoise 7/20
+[progress] stage1_denoise 8/20
+[progress] stage1_denoise 9/20
+[progress] stage1_denoise 10/20
+[progress] stage1_denoise 11/20
+[progress] stage1_denoise 12/20
+[progress] stage1_denoise 13/20
+[progress] stage1_denoise 14/20
+[progress] stage1_denoise 15/20
+[progress] stage1_denoise 16/20
+[progress] stage1_denoise 17/20
+[progress] stage1_denoise 18/20
+[progress] stage1_denoise 19/20
+[progress] stage1_denoise 20/20
+{"name": "c4_overlap5", "ok": true, "error": null, "mismatch": [], "seconds_total": 1012.0}

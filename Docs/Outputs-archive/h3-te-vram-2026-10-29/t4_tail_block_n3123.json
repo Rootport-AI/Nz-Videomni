@@ -1,0 +1,118 @@
+{
+  "n": 3123,
+  "block": 512,
+  "device": "cuda",
+  "torch": "2.13.0+cu130",
+  "scale": 0.08838834764831845,
+  "tail_rows_of_last_block": 51,
+  "device_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "matmul_allow_tf32": false,
+  "float32_matmul_precision": "highest",
+  "ref_peak_alloc_mb": 5883.7,
+  "ref_peak_over_inputs_mb": 5822.7,
+  "ref_peak_reserved_mb": 6008.0,
+  "ref_seconds": 0.21,
+  "product": {
+    "equal": true,
+    "max_abs_diff": 0.0,
+    "mismatch_elements": 0,
+    "differing_rows": [],
+    "differing_row_count": 0
+  },
+  "tail_sweep": {
+    "1": {
+      "equal": false,
+      "max_abs_diff": 7.62939453125e-06,
+      "mismatch_elements": 8
+    },
+    "2": {
+      "equal": false,
+      "max_abs_diff": 0.0001220703125,
+      "mismatch_elements": 17
+    },
+    "4": {
+      "equal": false,
+      "max_abs_diff": 0.000244140625,
+      "mismatch_elements": 27
+    },
+    "8": {
+      "equal": false,
+      "max_abs_diff": 0.000244140625,
+      "mismatch_elements": 54
+    },
+    "12": {
+      "equal": false,
+      "max_abs_diff": 0.000244140625,
+      "mismatch_elements": 79
+    },
+    "16": {
+      "equal": false,
+      "max_abs_diff": 0.000244140625,
+      "mismatch_elements": 95
+    },
+    "24": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "32": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "48": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "51": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "64": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "96": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "128": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "256": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "512": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    }
+  },
+  "position_check": {
+    "rows": [
+      1024,
+      1028
+    ],
+    "equal": false,
+    "max_abs_diff": 0.0001220703125,
+    "mismatch_elements": 18
+  },
+  "fold_check": {
+    "rows": [
+      2607,
+      3123
+    ],
+    "equal": true,
+    "max_abs_diff": 0.0,
+    "mismatch_elements": 0
+  },
+  "ok": true
+}

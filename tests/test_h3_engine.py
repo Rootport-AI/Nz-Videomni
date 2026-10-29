@@ -647,6 +647,187 @@ def test_te_direct_read_with_vision_matches_the_loaded_model(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# the text side's attention (G) and the early drop of the embedding table and
+# the vision tower (J), 台帳 §1-116
+# --------------------------------------------------------------------------- #
+
+
+def test_blocked_causal_attention_matches_causal_sdpa(monkeypatch):
+    """Query blocks against the full key / value with absolute-position mask slices equal
+    plain causal GQA attention (close, not bit for bit: the CPU fp32 math adds in a
+    block-dependent order; bit equality is the GPU gate's job). A tail shorter than
+    ``min_tail`` is folded into the block before it (block heights recorded per call)."""
+    import torch.nn.functional as F
+
+    from engine_h3.text_encoder import blocked_causal_attention
+
+    original = F.scaled_dot_product_attention
+    heights = []
+
+    def recording_sdpa(query, *args, **kwargs):
+        heights.append(query.shape[2])
+        return original(query, *args, **kwargs)
+
+    torch.manual_seed(0)
+    cases = (
+        (1100, {}, [512, 512, 76]),                    # ragged, 76 >= 64: not folded
+        (1087, {}, [512, 575]),                        # tail 63 folded
+        (1088, {}, [512, 512, 64]),                    # tail 64 not folded
+        (5, {"block": 2, "min_tail": 0}, [2, 2, 1]),   # the mask alignment on a tiny shape
+    )
+    for n, kw, want_heights in cases:
+        q = torch.randn(1, 4, n, 16)
+        k = torch.randn(1, 2, n, 16)
+        v = torch.randn(1, 2, n, 16)
+        want = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=True, scale=0.25)
+        heights.clear()
+        monkeypatch.setattr(torch.nn.functional, "scaled_dot_product_attention", recording_sdpa)
+        got = blocked_causal_attention(q, k, v, scale=0.25, **kw)
+        monkeypatch.undo()
+        assert heights == want_heights
+        assert got.shape == want.shape
+        assert torch.allclose(got, want, rtol=1e-5, atol=1e-6)
+
+
+def test_h3_text_attention_contract():
+    """A mask reaching the function stops it; otherwise (B, N, H, D) contiguous and None."""
+    from types import SimpleNamespace
+
+    from engine_h3.text_encoder import h3_text_attention
+
+    module = SimpleNamespace(scaling=0.25)
+    q = torch.randn(1, 4, 6, 16)
+    k = torch.randn(1, 2, 6, 16)
+    v = torch.randn(1, 2, 6, 16)
+    with pytest.raises(RuntimeError, match="attention_mask"):
+        h3_text_attention(module, q, k, v, torch.ones(1, 1, 6, 6, dtype=torch.bool))
+    out, weights = h3_text_attention(module, q, k, v, None)
+    assert tuple(out.shape) == (1, 6, 4, 16) and out.is_contiguous()
+    assert weights is None
+
+
+def test_build_config_registers_the_text_attention():
+    """build_config registers the function and names it on the text side only; the
+    real (meta) Qwen3VLModel builds with it (an unregistered name would raise)."""
+    pytest.importorskip("transformers")
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLModel
+
+    from engine_h3.text_encoder import H3_TEXT_ATTENTION, build_config
+
+    config = build_config()
+    assert H3_TEXT_ATTENTION in ALL_ATTENTION_FUNCTIONS
+    assert config.text_config._attn_implementation == H3_TEXT_ATTENTION
+    assert config.vision_config._attn_implementation == "sdpa"
+    with torch.device("meta"):
+        model = Qwen3VLModel(config)
+    assert model.language_model.layers[0].self_attn.config._attn_implementation == H3_TEXT_ATTENTION
+    assert model.visual.config._attn_implementation == "sdpa"
+
+
+def test_te_drop_after_forward_keeps_the_hidden_state(tmp_path):
+    """J: with the drop hooks on the embedding table and the vision tower, both are on
+    meta before layer 0 runs, and the hidden state equals the fully loaded model's
+    bit for bit (both on the registered text attention; G vs sdpa is the test above)."""
+    pytest.importorskip("transformers")
+    import sft_quant_format
+    from safetensors.torch import save_file
+    from transformers import Qwen3VLConfig
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLModel, Qwen3VLTextRotaryEmbedding
+
+    from engine_h3.sft_load import load_mapped_to, move_module_tree
+    from engine_h3.text_encoder import (
+        H3_TEXT_ATTENTION, build_config, install_drop_after_forward_hooks, install_layer_read_hooks, te_read_plan,
+    )
+
+    build_config()   # registers H3_TEXT_ATTENTION (the product's registration)
+    cfg = Qwen3VLConfig(
+        image_token_id=95, video_token_id=96, vision_start_token_id=93, vision_end_token_id=94,
+        tie_word_embeddings=False,
+        text_config=dict(
+            hidden_size=64, intermediate_size=96, num_hidden_layers=3, num_attention_heads=4,
+            num_key_value_heads=2, head_dim=16, vocab_size=97, max_position_embeddings=256,
+            rope_scaling={"mrope_interleaved": True, "mrope_section": [2, 3, 3], "rope_type": "default"},
+            rope_theta=10000, rms_norm_eps=1e-6,
+        ),
+        vision_config=dict(
+            depth=3, hidden_size=32, intermediate_size=48, num_heads=2, out_hidden_size=64,
+            patch_size=16, spatial_merge_size=2, temporal_patch_size=2, in_channels=3,
+            num_position_embeddings=16, deepstack_visual_indexes=[0, 1], hidden_act="gelu_pytorch_tanh",
+        ),
+    )
+    for c in (cfg, cfg.text_config, cfg.vision_config):
+        c._attn_implementation = "sdpa"
+    # Before either model is built (they share cfg): the reference must run the same attention.
+    cfg.text_config._attn_implementation = H3_TEXT_ATTENTION
+    torch.manual_seed(0)
+    ref = Qwen3VLModel(cfg).to(torch.bfloat16).eval()
+    ref.language_model.norm = torch.nn.Identity()
+    ref.visual.rotary_pos_emb.inv_freq = 1.0 / (10000.0 ** (torch.arange(0, 8, 2, dtype=torch.float32) / 8))
+    r_inv, _ = Qwen3VLTextRotaryEmbedding.compute_default_rope_parameters(cfg.text_config, device="cpu")
+    ref.language_model.rotary_emb.inv_freq = r_inv.float()
+    ref.language_model.rotary_emb.original_inv_freq = r_inv.float().clone()
+    with torch.no_grad():
+        for prm in ref.parameters():
+            prm.normal_(0.0, 0.05)
+    names = {}
+    for k, v in ref.state_dict().items():
+        if k.startswith("language_model."):
+            names["model." + k[len("language_model."):]] = v.contiguous()
+        else:
+            names[k] = v.contiguous()
+    path = tmp_path / "te.safetensors"
+    save_file(names, str(path))
+    grid = torch.tensor([[1, 4, 4]])
+    pixels = torch.randn(16, 3 * 2 * 16 * 16)
+    ids = [5, 17, 93, 95, 95, 95, 95, 94, 3, 41, 8]
+    input_ids = torch.tensor([ids])
+    kw = dict(attention_mask=torch.ones_like(input_ids), use_cache=False,
+              mm_token_type_ids=torch.tensor([[1 if i == 95 else 0 for i in ids]]),
+              pixel_values=pixels.to(torch.bfloat16), image_grid_thw=grid)
+    with torch.no_grad():
+        want = ref(input_ids=input_ids, **kw).last_hidden_state
+
+    header = sft_quant_format.read_header(str(path))
+    with torch.device("meta"):
+        model = Qwen3VLModel(cfg)
+    model.language_model.norm = torch.nn.Identity()
+    model.to(torch.bfloat16)
+    model.requires_grad_(False)
+    model.eval()
+    assert model.language_model.layers[0].self_attn.config._attn_implementation == H3_TEXT_ATTENTION
+    rot = model.language_model.rotary_emb
+    inv, scaling = Qwen3VLTextRotaryEmbedding.compute_default_rope_parameters(cfg.text_config, device="cpu")
+    rot.inv_freq, rot.original_inv_freq, rot.attention_scaling = inv.float(), inv.float().clone(), scaling
+    vrot = model.visual.rotary_pos_emb
+    vrot.inv_freq = 1.0 / (10000.0 ** (torch.arange(0, vrot.dim, 2, dtype=torch.float32) / vrot.dim))
+    embed_plan, layer_plans, visual_plan = te_read_plan(header.tensors, 3)
+    dev = torch.device("cpu")
+    stats = {"bytes": 0, "read_seconds": 0.0, "layers": 0}
+    lm = model.language_model
+    load_mapped_to(lm.embed_tokens, str(path), header, embed_plan, dev)
+    load_mapped_to(model.visual, str(path), header, visual_plan, dev)
+    move_module_tree(lm.rotary_emb, dev, skip=set())
+    seen = {}
+
+    def before_layer0(module, args):
+        tensors = [*lm.embed_tokens.parameters(), *lm.embed_tokens.buffers(),
+                   *model.visual.parameters(), *model.visual.buffers()]
+        seen["all_meta"] = all(t.is_meta for t in tensors)
+
+    handles = [lm.layers[0].register_forward_pre_hook(before_layer0)]
+    handles += install_drop_after_forward_hooks([lm.embed_tokens, model.visual])
+    handles += install_layer_read_hooks(lm.layers, layer_plans, str(path), header, dev, stats)
+    with torch.no_grad():
+        got = model(input_ids=input_ids, **kw).last_hidden_state
+    for h in handles:
+        h.remove()
+    assert seen == {"all_meta": True}
+    assert stats["layers"] == 3
+    assert torch.equal(got, want)
+
+
+# --------------------------------------------------------------------------- #
 # a tiny DiT streamed from a synthetic file
 # --------------------------------------------------------------------------- #
 

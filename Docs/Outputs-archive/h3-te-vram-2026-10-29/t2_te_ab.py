@@ -16,12 +16,15 @@ H3TextEncoder -> load -> encode(prompt, refs) -> release.
 --mode (plan §5): the text side's config._attn_implementation is set to a function registered with
 transformers.AttentionInterface after te.load() (the vision tower keeps "sdpa"). Hugging Face builds no
 mask for an unregistered mask name, so the function gets attention_mask=None and applies causality itself.
-  today  nothing registered (stock "sdpa")
+  today  nothing registered; the text side is reset to stock "sdpa" after load (the product now builds it with H3_TEXT_ATTENTION); the product's J hooks stay on
   probe  pass-through to sdpa_attention_forward; the first call's arguments are recorded
   f1     k / v repeat_interleave -> sdpa_kernel([EFFICIENT_ATTENTION]), is_causal=True
   f0     sdpa_kernel([CUDNN_ATTENTION]), is_causal=True, enable_gqa=True
   g256 / g512  math forced, query blocks against the full k / v with bool mask slices (t1's g_blocked_attention)
   sage   sageattention.sageattn(q, k, v, tensor_layout="HND", is_causal=True, sm_scale=module.scaling)
+  product  nothing registered here: the product's own text attention (engine_h3.text_encoder.H3_TEXT_ATTENTION,
+         set by build_config) and its own J hooks in encode (§1-116 implementation, plan §5 G-I1..G-I3)
+--pairs K: video15 cut to its first K pairs (default: all 16; the N >= 16,000 check applies only to all 16).
 --drop-early (J): forward hooks drop lm.embed_tokens and model.visual to meta right after their forward.
 --cap: the allocator cap of VRAM 16GB mode (derive_memory_cap, margin VRAM16_CAP_MARGIN_MIB) during encode.
 Always: a pre-hook on layer 0 splits the peak into "before the decoder" and "the decoder"; every layer's
@@ -63,7 +66,7 @@ VIDEO = ROOT / "outputs/03cffa21-eba7-4950-9229-746601284a28/output.mp4"
 OUT_DIR = ROOT / "outputs/h3-te-vram-2026-10-29"
 CANVAS_W, CANVAS_H = 1344, 768
 VIDEO_FRAMES = 362
-MODES = ("today", "probe", "f1", "g256", "g512", "sage", "f0")
+MODES = ("today", "probe", "f1", "g256", "g512", "sage", "f0", "product")
 REFS = ("pictures3", "pictures9", "video15")
 BENCH_PREFIX = "bench_"
 
@@ -71,8 +74,8 @@ BENCH_PREFIX = "bench_"
 # -- references and prompt -----------------------------------------------------------
 
 
-def build_refs(kind: str) -> tuple[list, str, dict]:
-    """``(refs, prompt, info)`` for ``--refs kind`` (CPU only)."""
+def build_refs(kind: str, pairs_limit: int | None = None) -> tuple[list, str, dict]:
+    """``(refs, prompt, info)`` for ``--refs kind`` (CPU only); ``pairs_limit`` keeps video15's first K pairs."""
     from engine_h3.reference import load_reference_image, qwen_pairs, read_reference_video
     from engine_h3.text_encoder import RefMedia
 
@@ -98,6 +101,8 @@ def build_refs(kind: str) -> tuple[list, str, dict]:
         del frames
         if len(pairs) != 16:
             raise AssertionError(f"video15: {len(pairs)} pairs, 16 expected")
+        if pairs_limit is not None:
+            pairs = pairs[:pairs_limit]
         refs = [RefMedia("video", 1, pairs=tuple(pairs))]
         tags = "<Video 1>"
         info["video"] = {"file": str(VIDEO.relative_to(ROOT)), **vinfo, "pairs": len(pairs),
@@ -195,8 +200,8 @@ def make_attention(mode: str):
 
 
 def register(mode: str) -> str | None:
-    """Register ``mode``'s function; returns its name (None for today = stock sdpa)."""
-    if mode == "today":
+    """Register ``mode``'s function; returns its name (None for today = stock sdpa, and for product)."""
+    if mode in ("today", "product"):
         return None
     from transformers import AttentionInterface
 
@@ -300,9 +305,10 @@ def run(args) -> int:
     from engine_h3.quant_linear import require_cuda_int8
     from engine_h3.text_encoder import H3TextEncoder
 
-    rec: dict = {"mode": args.mode, "drop_early": args.drop_early, "refs": args.refs, "cap": args.cap,
-                 "torch": torch.__version__, "mem": {}, "seconds": {}}
-    report = Path(args.report or HERE / f"t2_{args.refs}_{args.mode}{'_dropearly' if args.drop_early else ''}"
+    rec: dict = {"mode": args.mode, "drop_early": args.drop_early, "refs": args.refs, "pairs": args.pairs,
+                 "cap": args.cap, "torch": torch.__version__, "mem": {}, "seconds": {}}
+    report = Path(args.report or HERE / f"t2_{args.refs}{'' if args.pairs is None else f'_pairs{args.pairs}'}"
+                                        f"_{args.mode}{'_dropearly' if args.drop_early else ''}"
                                         f"{'_cap' if args.cap else ''}.json")
     ok = False
     exit_code = 1
@@ -325,7 +331,12 @@ def run(args) -> int:
             import importlib.metadata as md
             rec["sageattention"] = md.version("sageattention")
         name = register(args.mode)
-        rec["attn_implementation"] = name or "sdpa"
+        if args.mode == "product":
+            from engine_h3.text_encoder import H3_TEXT_ATTENTION
+            want_text = H3_TEXT_ATTENTION
+        else:
+            want_text = name or "sdpa"
+        rec["attn_implementation"] = want_text
 
         te = H3TextEncoder(str(TE), str(TOK), device=dev)
         index = _cuda_index(dev)
@@ -339,20 +350,24 @@ def run(args) -> int:
         model = te._model
         if name:
             model.language_model.config._attn_implementation = name
+        elif args.mode == "today":
+            # today = the stock SDPA path (the product now builds the text side with H3_TEXT_ATTENTION);
+            # the product's J hooks stay active and do not change the numbers.
+            model.language_model.config._attn_implementation = "sdpa"
         rec["attn_check"] = {
             "text": model.language_model.layers[0].self_attn.config._attn_implementation,
             "vision": model.visual.config._attn_implementation,
         }
-        if rec["attn_check"]["text"] != (name or "sdpa") or rec["attn_check"]["vision"] != "sdpa":
+        if rec["attn_check"]["text"] != want_text or rec["attn_check"]["vision"] != "sdpa":
             raise RuntimeError(f"attention implementation not as intended: {rec['attn_check']}")
 
-        refs, prompt, rinfo = build_refs(args.refs)
+        refs, prompt, rinfo = build_refs(args.refs, args.pairs)
         rec["refs_info"] = rinfo
         rec["prompt"] = prompt
         t2 = time.perf_counter()
         rec["expected"] = count_tokens(te, te._tokenizer, prompt, refs)
         rec["seconds"]["precount"] = round(time.perf_counter() - t2, 2)
-        if args.refs == "video15" and rec["expected"]["tokens"] < 16000:
+        if args.refs == "video15" and args.pairs is None and rec["expected"]["tokens"] < 16000:
             raise AssertionError(f"video15: N={rec['expected']['tokens']} < 16,000 (the plan's condition)")
 
         meters = Meters(model, drop_early=args.drop_early, index=index)
@@ -576,6 +591,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mode", choices=MODES)
     ap.add_argument("--refs", choices=REFS, default="pictures3")
+    ap.add_argument("--pairs", type=int, help="video15 only: keep the first K of the 16 pairs (default: all)")
     ap.add_argument("--drop-early", action="store_true", help="J: drop embed_tokens / visual right after their forward")
     ap.add_argument("--cap", action="store_true", help="the VRAM 16GB mode allocator cap during encode")
     ap.add_argument("--save", help=f"write hidden/tags/ids .pt (a bare file name goes under {OUT_DIR})")
@@ -587,6 +603,8 @@ def main() -> int:
         return selfcheck()
     if args.mode is None:
         ap.error("--mode is required (or --selfcheck)")
+    if args.pairs is not None and args.refs != "video15":
+        ap.error("--pairs applies to --refs video15 only")
     return run(args)
 
 

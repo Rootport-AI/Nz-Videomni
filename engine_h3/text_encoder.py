@@ -68,6 +68,8 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 import h3_format
 from engine_h3.constants import MODALITY_TEXT, MODALITY_VIDEO, REFERENCE_KINDS
@@ -153,6 +155,62 @@ AUDIO_LABEL = "<Audio {}>: "
 VISION_ROPE_THETA = 10000.0
 
 
+#: The name the text side's attention function is registered under (``AttentionInterface``).
+H3_TEXT_ATTENTION = "nz_h3_blocked_math"
+#: Query rows per block in ``blocked_causal_attention`` (the size measured in VERIFICATION_LOG §181). Not a setting.
+TEXT_ATTENTION_QUERY_BLOCK = 512
+#: A last block shorter than this is folded into the block before it. Blocks of 1, 2, 4, 8,
+#: 12 and 16 rows did not match stock SDPA bit for bit (probably a different cuBLAS kernel
+#: for small M); every height in 17-23 and 64-575 did, on dummy (1,64,N,128)/(1,8,N,128)
+#: inputs at N = 3,123 / 4,100 / 6,148 (VERIFICATION_LOG §182). 64 keeps a margin. Not a
+#: setting.
+TEXT_ATTENTION_MIN_TAIL = 64
+
+
+def blocked_causal_attention(query, key, value, *, scale, block=TEXT_ATTENTION_QUERY_BLOCK,
+                             min_tail=TEXT_ATTENTION_MIN_TAIL):
+    """Causal GQA attention, query rows in blocks of ``block`` against the full key / value.
+
+    The mask slice keeps the rows' absolute positions (``is_causal=True`` on a
+    block would align the triangle top-left, wrong for every block but the
+    first). The math kernel is forced: it gives the numbers stock SDPA gave
+    (which fell back to math anyway), and no future kernel choice can change
+    them silently. At most a (block + min_tail - 1, N) score table exists at a
+    time, not (N, N).
+    """
+    n_q, n_kv = query.shape[2], key.shape[2]
+    kv_idx = torch.arange(n_kv, device=query.device)
+    outs = []
+    s = 0
+    with sdpa_kernel([SDPBackend.MATH]):
+        while s < n_q:
+            e = min(s + block, n_q)
+            if n_q - e < min_tail:   # a short tail: make this the last block (at most block + min_tail - 1 rows)
+                e = n_q
+            mask = torch.arange(s, e, device=query.device)[:, None] >= kv_idx[None, :]
+            outs.append(F.scaled_dot_product_attention(
+                query[:, :, s:e], key, value, attn_mask=mask, is_causal=False, enable_gqa=True, scale=scale,
+            ))
+            s = e
+    return torch.cat(outs, dim=2)
+
+
+def h3_text_attention(module, query, key, value, attention_mask, dropout=0.0, scaling=None, **kwargs):
+    """The text side's attention function (Hugging Face's contract): q (B, 64, N, 128),
+    k / v (B, 8, N, 128) -> ``(out.transpose(1, 2).contiguous(), None)``.
+
+    The name has no entry in the mask-function table, so Hugging Face drops a
+    2-D mask instead of building one and ``attention_mask`` arrives as None
+    (only a 4-D mask would pass through). Causality is applied here; the
+    product's batch of 1 with an all-ones mask loses nothing.
+    """
+    if attention_mask is not None:
+        raise RuntimeError(f"H3 TE attention: unexpected attention_mask {tuple(attention_mask.shape)}")
+    scale = scaling if scaling is not None else module.scaling
+    out = blocked_causal_attention(query, key, value, scale=scale)
+    return out.transpose(1, 2).contiguous(), None
+
+
 def build_text_config():
     """The ``Qwen3VLTextConfig`` H3 uses (50 layers, SDPA attention)."""
     from transformers import Qwen3VLTextConfig
@@ -166,9 +224,13 @@ def build_text_config():
 
 
 def build_config():
-    """The ``Qwen3VLConfig`` H3 uses: the text side cut to 50 layers, SDPA on both sides."""
-    from transformers import Qwen3VLConfig
+    """The ``Qwen3VLConfig`` H3 uses: the text side cut to 50 layers with ``h3_text_attention``,
+    the vision tower on SDPA."""
+    from transformers import AttentionInterface, Qwen3VLConfig
 
+    # Registered before any model is built: an unknown name stops the build (ValueError).
+    # Registering again only replaces the same dict entry.
+    AttentionInterface.register(H3_TEXT_ATTENTION, h3_text_attention)
     config = Qwen3VLConfig(
         architectures=["Qwen3VLForConditionalGeneration"],
         image_token_id=IMAGE_TOKEN_ID,
@@ -184,6 +246,10 @@ def build_config():
             cfg._attn_implementation = "sdpa"
         except Exception:  # noqa: BLE001 -- setter shapes differ between versions; checked by check_rope
             pass
+    # The text side only: stock SDPA falls back to math there and builds the whole
+    # 64 x N x N fp32 score table. The vision tower stays on SDPA (per-image cu_seqlens,
+    # linear in the image count). text_config has no sub-configs, so this stays put.
+    config.text_config._attn_implementation = H3_TEXT_ATTENTION
     return config
 
 
@@ -486,6 +552,20 @@ def install_layer_read_hooks(layers, plans, path: str, header, device, stats: di
     return handles
 
 
+def install_drop_after_forward_hooks(modules) -> list:
+    """Hooks that drop each module's weights to meta right after its forward returns
+    (the embedding table and the vision tower: their VRAM is back before the 50
+    layers run); returns the hook handles.
+
+    The vision tower runs once per forward for image input (``pixel_values``)
+    only. Video input (``pixel_values_videos``) would call it a second time on
+    meta weights and fail; this TE passes video pairs as images (see ``encode``).
+    """
+    def post(module, args, output):
+        drop_to_meta(module)
+    return [m.register_forward_hook(post) for m in modules]
+
+
 class H3TextEncoder:
     """Build (meta) -> encode (direct read) -> release, once per job (the pipeline's ``encode`` stage)."""
 
@@ -710,8 +790,9 @@ class H3TextEncoder:
         handles: list = []
         try:
             # The embedding table (1.5 GB), the vision tower (1.1 GB, I2V only)
-            # and the rotary buffers go to the GPU for this forward only; the
-            # decoder layers come in one by one through the hooks.
+            # and the rotary buffers go to the GPU here; each stays only until its own
+            # forward returns (install_drop_after_forward_hooks); the decoder layers
+            # come in one by one through the hooks.
             t0 = time.perf_counter()
             stats["bytes"] += load_mapped_to(
                 lm.embed_tokens, self.te_path, self._header, self._embed_plan, self.device,
@@ -723,7 +804,8 @@ class H3TextEncoder:
                 move_module_tree(model.visual.rotary_pos_emb, self.device, skip=set())
             stats["read_seconds"] += time.perf_counter() - t0
             move_module_tree(lm.rotary_emb, self.device, skip=set())
-            handles = install_layer_read_hooks(
+            handles = install_drop_after_forward_hooks([lm.embed_tokens] + ([model.visual] if vision else []))
+            handles += install_layer_read_hooks(
                 lm.layers, self._layer_plans, self.te_path, self._header, self.device, stats,
             )
             input_ids = torch.tensor([ids], dtype=torch.long, device=self.device)

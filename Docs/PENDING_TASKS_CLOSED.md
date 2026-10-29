@@ -3124,3 +3124,12 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: 完結。dev `9269a38`（前段 UI）・`04c8886`（本体）・目視後の文書の反映（本項の記入）。main へは目視合格後に `--no-ff` でマージする（ハッシュは git の履歴を正とする）。オーナーの目視 10 項目に合格した（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.6）。別の PC でのインストーラー（`install-MiniMaxH3.bat`）の目視にも合格した（記録簿 §180.6）。
 - **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2 と裁定 81・82、契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.103）、操作パネルはフロントエンドの `Docs/DEVLOG.md` §150・§151、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §179・§180。保管は [`Outputs-archive/h3-ref2va-2026-10-28/`](Outputs-archive/h3-ref2va-2026-10-28/)。
 - **残課題**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-114（右クリックで Reference が消える）・§1-115（キーフレームとの併用）・§1-116（参照動画でテキストエンコーダーの VRAM 超過）・§1-117（Reference アコーディオンの UI 小改善）・§3-259（MCP と Gradio の受け口）。
+
+### 3-260. MiniMax H3 のテキストエンコーダーの VRAM 超過（参照動画で 16GB を超える件）（起票：2026-10-28、クローズ：2026-10-29）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-116 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-116（2026-10-28 起票）。**同書側は欠番**。番号は、同書 §3 の生きた項目（3-259）を飛ばした次の空き番号である。
+- **到達条件**: 参照動画 15 秒または参照画像 9 枚を入れても、テキストエンコーダー（TE。プロンプトを読む部分）の段が物理 16GB に収まり、出力の精度を落とさないこと。**達成した。**
+- **何が完了したか**: TE のテキスト側の注意を、SDPA〔PyTorch の注意の関数〕の math カーネルに固定したまま問い合わせ 512 行ずつに分け、埋め込み表と視覚の塔を各自の forward の直後に降ろすようにした。設定項目も、参照の数や長さの制限も足していない。出力は測った全ての形で今までの方式と全桁一致し、生成全体の mp4 も一致した（全ての N での保証ではない）。途中で見つかった塊の高さによる不一致は、64 行未満の端数を前の塊に併合して除いた。要点・実験・機械の門・GPU の門は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §182 を正本とする（数値はここに写さない）。
+- **状態**: 完結。dev の `engine_h3/text_encoder.py` と `tests/test_h3_engine.py`（コミットのハッシュは git の履歴を正とする）。
+- **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) の裁定 83 と §3.2 の既知の限界、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §181（原因の確定と候補の実測）・§182（実装と門）、フロントエンドの `Docs/DEVLOG.md` §152。計画・実験・門の記録の保管は [`Outputs-archive/h3-te-vram-2026-10-29/`](Outputs-archive/h3-te-vram-2026-10-29/README.md)。
+- **残課題**: 視覚の塔の活性の山は参照動画の長さに比例して増える（早期解放では減らない）。G の時間は入力の長さの 2 乗で伸びる。どちらも設計正本の既知の限界に書いた。DiT 側の VRAM 対策は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-118。

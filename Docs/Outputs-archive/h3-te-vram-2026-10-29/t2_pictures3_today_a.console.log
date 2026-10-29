@@ -1,0 +1,234 @@
+{
+  "mode": "today",
+  "drop_early": false,
+  "refs": "pictures3",
+  "cap": false,
+  "torch": "2.13.0+cu130",
+  "mem": {
+    "start": {
+      "rss": 0.59,
+      "rss_peak": 0.59,
+      "commit": 1.71,
+      "commit_peak": 1.71
+    },
+    "after_load": {
+      "rss": 0.73,
+      "rss_peak": 0.74,
+      "commit": 1.84,
+      "commit_peak": 1.86
+    },
+    "after_encode": {
+      "rss": 2.09,
+      "rss_peak": 2.52,
+      "commit": 13.08,
+      "commit_peak": 13.09
+    },
+    "after_release": {
+      "rss": 2.03,
+      "rss_peak": 2.52,
+      "commit": 3.84,
+      "commit_peak": 13.09
+    }
+  },
+  "seconds": {
+    "load": 1.58,
+    "precount": 0.36,
+    "encode": 16.44,
+    "release": 0.12,
+    "total": 18.75
+  },
+  "cuda_backend": {
+    "cuda": true,
+    "triton": false,
+    "ascend": false,
+    "hip": false,
+    "eager": false
+  },
+  "numerics": {
+    "matmul_allow_tf32": false,
+    "float32_matmul_precision": "highest",
+    "cudnn_deterministic": false,
+    "cudnn_benchmark": false
+  },
+  "device_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "attn_implementation": "sdpa",
+  "load_info": {
+    "num_layers_file": 50,
+    "num_layers_built": 50,
+    "int8_linears": 350,
+    "tensors_planned": 901,
+    "vision_tensors_in_file": 351,
+    "rope": {
+      "rope_type": "default",
+      "rope_theta": 5000000.0,
+      "mrope_section": [
+        24,
+        20,
+        20
+      ],
+      "mrope_interleaved": true,
+      "head_dim": 128,
+      "num_attention_heads": 64,
+      "num_key_value_heads": 8,
+      "num_hidden_layers": 50,
+      "attn_implementation": "sdpa"
+    },
+    "extra_special_tokens": {
+      "ids": {
+        "<d>": 151669,
+        "</d>": 151670,
+        "<|cutoff|>": 151671,
+        "<|lyrics_start|>": 151672,
+        "<|lyrics_end|>": 151673,
+        "<|caption_start|>": 151674,
+        "<|caption_end|>": 151675
+      },
+      "added_here": false
+    },
+    "seconds": 0.31
+  },
+  "attn_check": {
+    "text": "sdpa",
+    "vision": "sdpa"
+  },
+  "refs_info": {
+    "refs": "pictures3",
+    "pictures": [
+      {
+        "file": "17fde0c1-image.png",
+        "source_size": [
+          1536,
+          1024
+        ],
+        "size": [
+          1248,
+          832
+        ]
+      },
+      {
+        "file": "d80320dd-image.png",
+        "source_size": [
+          1536,
+          1024
+        ],
+        "size": [
+          1248,
+          832
+        ]
+      },
+      {
+        "file": "31d79f30-image.png",
+        "source_size": [
+          1672,
+          941
+        ],
+        "size": [
+          1344,
+          768
+        ]
+      }
+    ],
+    "picture_order": [
+      "17fde0c1-image.png",
+      "d80320dd-image.png",
+      "31d79f30-image.png"
+    ],
+    "build_seconds": 0.15
+  },
+  "prompt": "<Picture 1><Picture 2><Picture 3><Audio 1> A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+  "expected": {
+    "tokens": 3123,
+    "vision_tokens": 3036,
+    "text_tokens": 87,
+    "items": 4,
+    "references": [
+      {
+        "kind": "picture",
+        "slot": 1,
+        "vision_tokens": 1014
+      },
+      {
+        "kind": "picture",
+        "slot": 2,
+        "vision_tokens": 1014
+      },
+      {
+        "kind": "picture",
+        "slot": 3,
+        "vision_tokens": 1008
+      },
+      {
+        "kind": "audio",
+        "slot": 1,
+        "vision_tokens": 0
+      }
+    ],
+    "video_tokens_per_pair": [],
+    "grid_rows": 3
+  },
+  "free_before_encode_mb": 15111.0,
+  "allocator": {
+    "num_ooms": 0,
+    "num_alloc_retries": 0
+  },
+  "decoder_peak_alloc_mb": 9320.1,
+  "decoder_peak_reserved_mb": 9618.0,
+  "hooks": {
+    "min_free_pre_mb": 5421.0,
+    "min_free_post_mb": 5421.0,
+    "dropped": [],
+    "pre_decoder_peak_alloc_mb": 3320.4,
+    "pre_decoder_peak_reserved_mb": 3452.0,
+    "at_decoder_start_alloc_mb": 2885.9,
+    "at_decoder_start_reserved_mb": 3452.0
+  },
+  "min_free_attn_mb": null,
+  "attention_calls": 0,
+  "probe": null,
+  "read_report": {
+    "read_gib": 25.28,
+    "read_seconds": 14.77,
+    "layers_read": 50,
+    "encode_seconds": 16.02,
+    "tokens": 3123,
+    "vision_tokens": 0,
+    "vision_tokens_per_image": [],
+    "references": [
+      {
+        "kind": "picture",
+        "slot": 1,
+        "vision_tokens": 1014
+      },
+      {
+        "kind": "picture",
+        "slot": 2,
+        "vision_tokens": 1014
+      },
+      {
+        "kind": "picture",
+        "slot": 3,
+        "vision_tokens": 1008
+      },
+      {
+        "kind": "audio",
+        "slot": 1,
+        "vision_tokens": 0
+      }
+    ]
+  },
+  "tokens": 3123,
+  "hidden": {
+    "shape": [
+      3123,
+      5120
+    ],
+    "dtype": "torch.bfloat16",
+    "finite": true,
+    "abs_mean": 1.7840330600738525
+  },
+  "tokens_match_expected": true,
+  "saved": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-te-vram-2026-10-29\\today_a.pt",
+  "peak_alloc_mb_at_exit": 9320.1,
+  "oom": false,
+  "ok": true
+}

@@ -1,0 +1,141 @@
+ref done 3.0 s
+product {'equal': False, 'max_abs_diff': 0.0001220703125, 'mismatch_elements': 36, 'differing_rows': [6144, 6145, 6146, 6147], 'differing_row_count': 4}
+tail 1 {'equal': False, 'max_abs_diff': 3.0517578125e-05, 'mismatch_elements': 13}
+tail 2 {'equal': False, 'max_abs_diff': 6.103515625e-05, 'mismatch_elements': 20}
+tail 4 {'equal': False, 'max_abs_diff': 0.0001220703125, 'mismatch_elements': 36}
+tail 8 {'equal': False, 'max_abs_diff': 0.000244140625, 'mismatch_elements': 65}
+tail 12 {'equal': False, 'max_abs_diff': 0.000244140625, 'mismatch_elements': 101}
+tail 16 {'equal': False, 'max_abs_diff': 0.000244140625, 'mismatch_elements': 143}
+tail 24 {'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+tail 32 {'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+tail 48 {'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+tail 51 {'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+tail 64 {'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+tail 96 {'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+tail 128 {'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+tail 256 {'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+tail 512 {'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+position {'rows': [1024, 1028], 'equal': False, 'max_abs_diff': 0.00048828125, 'mismatch_elements': 22} fold {'rows': [5632, 6148], 'equal': True, 'max_abs_diff': 0.0, 'mismatch_elements': 0}
+{
+  "n": 6148,
+  "block": 512,
+  "device": "cuda",
+  "torch": "2.13.0+cu130",
+  "scale": 0.08838834764831845,
+  "tail_rows_of_last_block": 4,
+  "device_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "matmul_allow_tf32": false,
+  "float32_matmul_precision": "highest",
+  "ref_peak_alloc_mb": 21853.3,
+  "ref_peak_over_inputs_mb": 21733.2,
+  "ref_peak_reserved_mb": 22140.0,
+  "ref_seconds": 3.0,
+  "product": {
+    "equal": false,
+    "max_abs_diff": 0.0001220703125,
+    "mismatch_elements": 36,
+    "differing_rows": [
+      6144,
+      6145,
+      6146,
+      6147
+    ],
+    "differing_row_count": 4
+  },
+  "tail_sweep": {
+    "1": {
+      "equal": false,
+      "max_abs_diff": 3.0517578125e-05,
+      "mismatch_elements": 13
+    },
+    "2": {
+      "equal": false,
+      "max_abs_diff": 6.103515625e-05,
+      "mismatch_elements": 20
+    },
+    "4": {
+      "equal": false,
+      "max_abs_diff": 0.0001220703125,
+      "mismatch_elements": 36
+    },
+    "8": {
+      "equal": false,
+      "max_abs_diff": 0.000244140625,
+      "mismatch_elements": 65
+    },
+    "12": {
+      "equal": false,
+      "max_abs_diff": 0.000244140625,
+      "mismatch_elements": 101
+    },
+    "16": {
+      "equal": false,
+      "max_abs_diff": 0.000244140625,
+      "mismatch_elements": 143
+    },
+    "24": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "32": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "48": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "51": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "64": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "96": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "128": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "256": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    },
+    "512": {
+      "equal": true,
+      "max_abs_diff": 0.0,
+      "mismatch_elements": 0
+    }
+  },
+  "position_check": {
+    "rows": [
+      1024,
+      1028
+    ],
+    "equal": false,
+    "max_abs_diff": 0.00048828125,
+    "mismatch_elements": 22
+  },
+  "fold_check": {
+    "rows": [
+      5632,
+      6148
+    ],
+    "equal": true,
+    "max_abs_diff": 0.0,
+    "mismatch_elements": 0
+  },
+  "ok": true
+}

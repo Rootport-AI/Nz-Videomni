@@ -26,6 +26,8 @@ import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from
 import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import type { SamplingConstraints } from "../../api/types";
+import { clampSamplingValue, samplingDefaults, samplingRequestFields } from "./samplingValues";
+import type { SamplingValues } from "./samplingValues";
 import { singleAudioPrecheck, suggestFramesForSingleAudio } from "./audioFit";
 import { MIN_HEIGHT, MIN_WIDTH } from "./defaultConfig";
 import { estimateGenerationSeconds, formatEstimate } from "./estimateUtils";
@@ -88,23 +90,9 @@ export interface FormValues {
   sampling: SamplingValues | null;
 }
 
-/** The sampling sliders' current values. */
-export interface SamplingValues {
-  numInferenceSteps: number;
-  shiftVideo: number;
-  shiftAudio: number;
-}
-
-/** The server defaults of a `constraints.sampling` block, or `null` for an
- * engine without one. */
-function samplingDefaults(sampling: SamplingConstraints | null): SamplingValues | null {
-  if (!sampling) return null;
-  return {
-    numInferenceSteps: sampling.num_inference_steps.default,
-    shiftVideo: sampling.shift_video.default,
-    shiftAudio: sampling.shift_audio.default,
-  };
-}
+// The sampling values' type and rules live in `samplingValues.ts` (shared with
+// Chained, §1-106); re-exported so existing importers keep their path.
+export type { SamplingValues } from "./samplingValues";
 
 /** The single-clip A2V Strength's server default, or 1.0 (full strength)
  * for an engine that takes no source audio on `/generate`. */
@@ -926,15 +914,8 @@ export function useGenerationForm(
   const samplingConstraints = rules.sampling;
   const setSamplingValue = useCallback(
     (key: keyof SamplingValues, raw: number) => {
-      if (!samplingConstraints || !Number.isFinite(raw)) return;
-      const range =
-        key === "numInferenceSteps"
-          ? samplingConstraints.num_inference_steps
-          : key === "shiftVideo"
-            ? samplingConstraints.shift_video
-            : samplingConstraints.shift_audio;
-      const clamped = clamp(raw, range.min, range.max);
-      const value = key === "numInferenceSteps" ? Math.round(clamped) : clamped;
+      const value = clampSamplingValue(samplingConstraints, key, raw);
+      if (value === null) return;
       setValues((prev) => (prev.sampling ? { ...prev, sampling: { ...prev.sampling, [key]: value } } : prev));
     },
     [samplingConstraints],
@@ -1308,13 +1289,7 @@ export function useGenerationForm(
       // the loaded base model publishes `constraints.sampling` (one rule — the
       // server would write its defaults back anyway) and never otherwise, so
       // a request to a base model without them carries none of the three keys.
-      ...(values.sampling
-        ? {
-            num_inference_steps: values.sampling.numInferenceSteps,
-            shift_video: values.sampling.shiftVideo,
-            shift_audio: values.sampling.shiftAudio,
-          }
-        : {}),
+      ...samplingRequestFields(values.sampling),
       // NAG (2026-07-28)/VSF (2026-07-29): the additive `negative_prompt`/
       // `nag_*`/`neg_method`/`vsf_scale` set of 7, built by the single shared
       // contract function — `{}` (no keys at all)

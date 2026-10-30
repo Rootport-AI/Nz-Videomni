@@ -60,6 +60,7 @@ from api.models import (
 from config import AppConfig
 from services import gpu_info, prompt_tokens, video_io
 from services.base_models import BaseModelDescriptor, load_base_models
+from services.engines.ltx.chain_rules import validate_ltx_chain
 from services.engines.ltx.request_rules import LTX_REQUEST_RULES
 from services.lora_registry import ResolvedLora
 from services.low_vram import LowVramSettings, safe_memory_cleanup
@@ -239,6 +240,9 @@ CHAIN_REJECT_TABLE: tuple[
 ] = (
     ("keep_resident_embeddings", "keep_resident_embeddings",
      lambda r: r.keep_resident_embeddings),
+    # MiniMax H3 only (VRAM 16GB mode), the single path's row on the chain
+    # schema. None (the family default) and False pass.
+    ("vram16_mode", "vram16_mode", lambda r: r.vram16_mode is True),
 )
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.
@@ -254,6 +258,10 @@ UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
 #: module. Applied by ``services.engines.validate_for_family`` and published by
 #: ``GET /models`` as ``constraints``.
 REQUEST_RULES = LTX_REQUEST_RULES
+
+#: The chain twin: LTX's numeric rules for ``POST /generate/chain`` (shared with
+#: LTX 2.5), applied by ``services.engines.validate_chain_for_family``.
+validate_chain = validate_ltx_chain
 
 
 def count_prompt_tokens(
@@ -306,10 +314,14 @@ def reject_chain(request: GenerateChainRequest) -> None:
     """422 the first out-of-scope field of a chain ``request``.
 
     The chain twin of :func:`reject_unsupported`, with the same table discipline
-    and the same first-offender rule; see :data:`CHAIN_REJECT_TABLE`.
+    and the same first-offender rule; see :data:`CHAIN_REJECT_TABLE`. A MiniMax
+    H3 feature gets its own message (:data:`H3_ONLY_REFUSALS`), as on the single
+    path.
     """
     for field, feature, is_non_default in CHAIN_REJECT_TABLE:
         if is_non_default(request):
+            if feature in H3_ONLY_REFUSALS:
+                raise feature_unsupported(feature, detail=H3_ONLY_REFUSALS[feature])
             raise feature_unsupported(
                 feature,
                 detail=(
@@ -499,9 +511,16 @@ def _progress_frac(
     caller keeps the last fraction — an unknown stage must never yank the bar
     around).
 
-    ``one_stage`` (single generate only): the job runs Stage 1 alone at full
+    ``one_stage`` (single generate): the job runs Stage 1 alone at full
     size (Alpha Gen's default), so there is no Stage-2 band to leave room for
     and ``stage1_denoise`` fills 0.06..0.90 instead of 0.06..0.50.
+
+    ``one_stage`` on a chain (MiniMax H3's): one band, no Stage 2. Each clip's
+    ``encode`` holds the bar at its clip's start (``0.05 + 0.85 *
+    outer_index/outer_total``; the encode steps repeat 0..3 per clip, so they
+    must not move it within the clip), ``stage1_denoise`` fills 0.05..0.90
+    across all clips, and the one ``decode`` of the whole timeline moves it
+    0.90..0.99 so a long decode does not look stalled.
     """
     step = done / total if total > 0 else 0.0
     if outer_total:
@@ -511,6 +530,19 @@ def _progress_frac(
             outer_step = step
     else:
         outer_step = step
+    if chain and one_stage:
+        if stage == "encode":
+            if outer_total:
+                try:
+                    return 0.05 + 0.85 * (int(outer_index or 0) / int(outer_total))
+                except (TypeError, ValueError):
+                    pass
+            return 0.05
+        if stage == "stage1_denoise":
+            return 0.05 + 0.85 * outer_step
+        if stage == "decode":
+            return 0.90 + 0.09 * step
+        return None
     if chain:
         if stage == "encode":
             return 0.04
@@ -2751,10 +2783,18 @@ class _RealBackend:
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
         )
 
-    def _read_chain_events(self, progress_callback: ProgressCallback | None) -> dict:
+    def _read_chain_events(
+        self, progress_callback: ProgressCallback | None, *, one_stage: bool = False
+    ) -> dict:
         """Read framed events until a terminal ``done``/``error``; forward
         ``progress`` events to ``progress_callback`` and emit rate-limited INFO
-        lines per stage. See :meth:`_read_worker_events`."""
+        lines per stage. See :meth:`_read_worker_events`. ``one_stage`` selects
+        the single-band chain progress (MiniMax H3's chain; :func:`_progress_frac`);
+        the LTX chains' call is passed through exactly as before."""
+        if one_stage:
+            return self._read_worker_events(
+                progress_callback, chain=True, prefix="chain", one_stage=True
+            )
         return self._read_worker_events(progress_callback, chain=True, prefix="chain")
 
     def _read_worker_events(
@@ -2787,7 +2827,8 @@ class _RealBackend:
           (worker-measured it/s preferred when present).
 
         ``one_stage`` is passed through to :func:`_progress_frac` (a single
-        full-size stage; only the LTX 2.5 adapter sets it, for Alpha Gen).
+        full-size stage: the LTX 2.5 adapter sets it for Alpha Gen, the MiniMax
+        H3 adapter for its generate and its chain).
         """
         stage_state: dict[str, dict] = {}
         last_frac = 0.0

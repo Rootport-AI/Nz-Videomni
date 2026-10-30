@@ -10,9 +10,11 @@ three processes can import another's stack.
 The protocol is the one the LTX workers speak, so the app-side plumbing
 (``@@LTX@@`` line reader, progress fractions, the error path) is shared. Only
 small control JSON crosses the pipe; the mp4 is written by this process to
-``output_path``. Nothing LTX-specific is carried over: no IC-LoRA / reference
-video / chain / NAG / VSF branches. ``keep_resident`` follows the LTX contract
-(kept while the key is true, released by a job without it).
+``output_path``. Nothing LTX-specific is carried over: no IC-LoRA / NAG / VSF
+branches; the chain (``generate_chain``) is this engine's own
+(``engine_h3.chain_h3``, Docs/MINIMAX_H3_DESIGN.md 裁定 84), not the LTX
+chain's. ``keep_resident`` follows the LTX contract (kept while the key is
+true, released by a job without it).
 
 Bootstrap (mirrors engine25/worker.py):
   * TORCH_COMPILE_DISABLE=1 set before anything can import torch.
@@ -65,13 +67,30 @@ Protocol (one JSON object per line; parent -> worker):
       ``engine_h3.pipeline_h3.H3ReferenceInput``). Unknown inner keys are
       logged once and ignored. A failure is reported with ``error`` and the
       process stays alive.
+  {"op": "generate_chain", seed, width, height, frame_rate, clips,
+   [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
+   [keep_resident], [attention_backend], [block_swap_prefetch], [vram16_mode],
+   [loras]}
+      One T2V chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
+      of ``{"prompt", "num_frames"}`` (2..24 clips; each prompt is the clip's
+      whole text, the top-level ``prompt`` is not used), clip i runs with seed
+      ``seed + i``, and the clips are joined on a fixed 22-frame overlap into
+      ONE mp4 at ``output_path``. The other keys mean what they mean for
+      ``generate`` and apply to every clip (the LoRA too). ``images`` /
+      ``source_audio`` / ``references`` and any other key are logged and
+      ignored, as are unknown keys inside a clip. A failure is reported with
+      ``error`` and the process stays alive.
   {"op": "shutdown"}
   Before load an unknown op is only logged (an ``error`` there would be read
   as the reply to the next ``load``); after load it is answered with ``error``.
 
 Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
   ready     {sampler, sage_available}
-  progress  {stage, index, total}   stage: encode / stage1_denoise / decode
+  progress  {stage, index, total[, outer_index, outer_total]}
+            stage: encode / stage1_denoise / decode
+            (``outer_index`` / ``outer_total``: a chain's clip, 0-based, and
+            clip count, on its clips' encode / denoise lines only; absent
+            otherwise, so a single job's lines are unchanged)
             (there is no stage2: the app adapter, services/engines/h3/adapter.py,
             reads these with ``_read_worker_events(one_stage=True)``, as Alpha
             Gen does; ``encode`` counts 3 steps, +1 when the job has any
@@ -96,6 +115,12 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             source_size / size / vision_tokens, source_frames / used_frames /
             latent_t / pairs, or samples / latent_t) and ``ref_video`` /
             ``ref_audio`` in ``h3.phases.denoise.sequence``)
+            A chain's ``done`` has the same keys plus ``chain`` (the layout of
+            ``h3_chain_math.H3ChainLayout.to_dict()``, ``seeds``, ``clips``:
+            prompt_sha256 / seconds / latents_sha256 / head_equals_prev_tail,
+            and ``h3``: overlap_frames / inject_clean / decode); its
+            ``num_frames`` is the timeline's, ``h3.phases`` is
+            ``{clips: [...], decode}`` and ``h3.loras`` is clip 0's.
   error     {detail}
 STDERR carries the human log, prefixed ``[h3_worker]``.
 
@@ -174,10 +199,22 @@ def _detail(exc: BaseException) -> str:
     return f"{exc!r}\n{tb}"
 
 
-def _emit_progress(stage: str, index: int, total: int) -> None:
-    """One framed ``progress`` line. Never allowed to fail a job."""
+def _emit_progress(
+    stage: str, index: int, total: int, *, outer_index: int | None = None, outer_total: int | None = None,
+) -> None:
+    """One framed ``progress`` line. Never allowed to fail a job.
+
+    ``outer_index`` / ``outer_total``: a chain's clip (0-based) and clip count,
+    under the LTX workers' field names (the app's receipt loop is shared).
+    Omitted from the line when absent, so a single job's lines are unchanged.
+    """
     try:
-        _emit("progress", stage=str(stage), index=int(index), total=int(total))
+        fields: dict[str, object] = {"stage": str(stage), "index": int(index), "total": int(total)}
+        if outer_index is not None:
+            fields["outer_index"] = int(outer_index)
+        if outer_total is not None:
+            fields["outer_total"] = int(outer_total)
+        _emit("progress", **fields)
     except Exception as exc:  # noqa: BLE001
         _log(f"progress emit failed (ignored): {exc!r}")
 
@@ -201,6 +238,12 @@ _LORA_FIELDS = frozenset({"path", "strength"})
 _SOURCE_AUDIO_FIELDS = frozenset({"path", "strength"})
 #: The keys of one ``references`` entry this engine reads (Ref2VA, 台帳 §1-107).
 _REFERENCE_FIELDS = frozenset({"kind", "path", "slot", "max_sec"})
+#: The generate_chain payload's keys this engine reads (台帳 §1-106): the single
+#: job's, less what a T2V chain has no use for (the frame count is per clip),
+#: plus ``clips``.
+_CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}) | {"clips"}
+#: The keys of one ``clips`` entry this engine reads.
+_CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -498,6 +541,69 @@ def _do_generate(msg: dict) -> None:
     _emit("done", **result)
 
 
+def _chain_clips(msg: dict) -> tuple[list, list[str]]:
+    """``clips`` -> ``[H3ChainClipSpec, ...]`` and the ignored inner keys.
+
+    The shape (a list of objects with a string ``prompt`` and an integer
+    ``num_frames``) is checked here; the count, the frame grid and the lengths
+    are ``h3_chain_math``'s, the prompt the pipeline's ``validate_request``.
+    """
+    from engine_h3.chain_h3 import H3ChainClipSpec  # noqa: PLC0415
+
+    raw = msg.get("clips")
+    if not isinstance(raw, list):
+        raise ValueError(f"clips はリストで渡してください（{type(raw).__name__}）")
+    out, ignored = [], set()
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise ValueError(f"clips の各要素はオブジェクトです（{entry!r}）")
+        prompt, frames = entry.get("prompt"), entry.get("num_frames")
+        if not isinstance(prompt, str):
+            raise ValueError(f"clips の prompt は文字列で渡してください（{prompt!r}）")
+        if isinstance(frames, bool) or not isinstance(frames, int):
+            raise ValueError(f"clips の num_frames は整数で渡してください（{frames!r}）")
+        ignored |= {k for k in entry if k not in _CHAIN_CLIP_FIELDS}
+        out.append(H3ChainClipSpec(prompt=prompt, num_frames=frames))
+    return out, sorted(ignored)
+
+
+def _do_generate_chain(msg: dict) -> None:
+    """Run one T2V chain (台帳 §1-106); the mp4 is written by this process to ``msg['output_path']``."""
+    if _PIPE is None:
+        raise RuntimeError("generate before load")
+    from engine_h3.chain_h3 import H3ChainSpec, run_chain_h3  # noqa: PLC0415
+
+    clips, clip_ignored = _chain_clips(msg)
+    loras, lora_ignored = _loras(msg)
+    ignored = sorted(k for k in msg if k not in _CHAIN_FIELDS)
+    ignored += [f"clips[].{k}" for k in clip_ignored]
+    ignored += [f"loras[].{k}" for k in lora_ignored]
+    # The shared settings, read by the single job's rules. The prompt and the
+    # frame count are each clip's; ``clips[0]``'s stand in for them here.
+    base_msg = {k: v for k, v in msg.items() if k in _CHAIN_FIELDS}
+    if clips:
+        base_msg["prompt"], base_msg["num_frames"] = clips[0].prompt, clips[0].num_frames
+    else:
+        base_msg["prompt"], base_msg["num_frames"] = "", 0
+    base = _generate_request(base_msg, images=(), loras=loras, source_audio=None, references=())
+    # Per job: the job's own backend when it sends one, else the load value.
+    effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
+    base.attention_backend = effective
+    spec = H3ChainSpec(base=base, clips=tuple(clips), seed=base.seed)
+    _log(
+        f"generate_chain: seed={base.seed} {base.width}x{base.height} clips={[c.num_frames for c in clips]} "
+        f"steps={base.num_inference_steps} shift={base.shift_video}/{base.shift_audio} "
+        f"attention={effective} keep_resident={base.keep_resident} "
+        f"prefetch={base.block_swap_prefetch} vram16={base.vram16_mode} "
+        f"loras={[(Path(item.path).name, item.strength) for item in base.loras]} "
+        f"-> {base.output_path}"
+        + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
+    )
+    result = run_chain_h3(_PIPE, spec, _emit_progress, _log)
+    result["attention_used"] = "sage->sdpa" if degraded else effective
+    _emit("done", **result)
+
+
 def _release_after_failed_job() -> None:
     """Every failed job releases what ``keep_resident`` kept.
 
@@ -573,6 +679,15 @@ def main() -> None:
             except BaseException as exc:  # noqa: BLE001
                 # A failed job is reported and the process stays alive.
                 _log("GENERATE_FAILED")
+                _release_after_failed_job()
+                _emit("error", detail=_detail(exc))
+            continue
+        if op == "generate_chain":
+            try:
+                _do_generate_chain(msg)
+            except BaseException as exc:  # noqa: BLE001
+                # A failed chain is reported and the process stays alive, as a job.
+                _log("GENERATE_CHAIN_FAILED")
                 _release_after_failed_job()
                 _emit("error", detail=_detail(exc))
             continue

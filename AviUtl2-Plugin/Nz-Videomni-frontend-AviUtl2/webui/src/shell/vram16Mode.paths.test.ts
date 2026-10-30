@@ -10,10 +10,9 @@ import { buildI2vGeneratePayload } from "../modes/batch/buildI2vGeneratePayload"
  * 台帳 §1-101 (2026-10-18) — the cross-path regression test for `vram16_mode`
  * (VRAM 16GB mode), the same shape as `keepResidentEmbeddings.paths.test.ts`.
  *
- * The paths are the `POST /generate` bodies MiniMax H3 can actually be sent,
- * not the chain ones: H3 refuses the chain endpoint as a whole (it publishes
- * `chain`), the backend's chain schema has no `vram16_mode`, and the chain
- * request types deliberately do not carry it. Each path builds its body with
+ * The paths are the `POST /generate` bodies MiniMax H3 can be sent (its chain
+ * body, which carries `vram16_mode` since §1-106, is covered by the Chained
+ * tests). Each path builds its body with
  * its own code, so a field wired into `accelerationRequestFields` can still
  * fail to reach the wire on one of them:
  *

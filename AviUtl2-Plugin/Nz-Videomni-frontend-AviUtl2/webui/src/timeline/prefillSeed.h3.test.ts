@@ -97,7 +97,9 @@ describe("resolvePrefillSeed — MiniMax H3 rules", () => {
     expect(seed("audio-to-video", sel, false).numFrames ?? 0).toBeLessThan(464);
   });
 
-  it("a Chain-targeted intent ignores the H3 rules (Chained is closed on H3 anyway)", () => {
+  // The seed never reads an engine for a Chain intent; snapping it onto the
+  // loaded rules is the form's job (useChainForm — see its H3 test).
+  it("a Chain-targeted intent ignores the H3 rules", () => {
     const s = seed("image-to-clip-chain", selection(), true);
     expect(s.derived.width % 64).toBe(0);
     expect(s.frameRate).toBe(30);

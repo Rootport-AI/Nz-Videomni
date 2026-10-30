@@ -168,6 +168,59 @@ def test_two_stage_generate_bands_are_unchanged_by_one_stage_default():
     assert _progress_frac("stage2_denoise", 3, 3, None, None, chain=False) == pytest.approx(0.85)
 
 
+def test_one_stage_chain_is_one_band_clip_by_clip():
+    """MiniMax H3's chain (台帳 §1-106, 裁定 85): no Stage-2 band. Each clip's
+    encode (0..3, repeated per clip) holds the bar at its clip's start, the
+    clips' denoise steps fill 0.05 -> 0.90 without going back, the one decode
+    of the timeline moves it 0.90 -> 0.99, and the denoise events carry the
+    clip position."""
+    n, steps = 3, 4
+    events = []
+    for clip in range(n):
+        events += [
+            {"event": "progress", "stage": "encode", "index": i, "total": 4,
+             "outer_index": clip, "outer_total": n}
+            for i in range(4)
+        ]
+        events += [
+            {"event": "progress", "stage": "stage1_denoise", "index": i, "total": steps,
+             "outer_index": clip, "outer_total": n}
+            for i in range(1, steps + 1)
+        ]
+    events += [{"event": "progress", "stage": "decode", "index": i, "total": 4} for i in range(4)]
+    events.append({"event": "done", "seed_used": 1, "peak_vram_mb": 1000})
+    calls: list[tuple] = []
+    be = _backend_with_events(events)
+
+    result = be._read_chain_events(
+        lambda step, total, frac, stage=None, **kw: calls.append((frac, stage, kw)),
+        one_stage=True,
+    )
+
+    assert result["event"] == "done"
+    fracs = [c[0] for c in calls]
+    assert fracs == sorted(fracs)  # monotone across clips
+    encode = [c[0] for c in calls if c[1] == "encode"]
+    assert encode[:4] == [0.05] * 4  # clip 0's encode does not move the bar
+    assert encode[4:8] == [pytest.approx(0.05 + 0.85 / 3, abs=1e-3)] * 4
+    denoise = [c for c in calls if c[1] == "stage1_denoise"]
+    assert len({c[0] for c in denoise}) == n * steps  # every step moves the bar
+    assert denoise[-1][0] == pytest.approx(0.90)
+    assert [c[2] for c in denoise[:steps]] == [{"clip": 1, "clip_count": 3}] * steps
+    assert denoise[-1][2] == {"clip": 3, "clip_count": 3}
+    decode = [c[0] for c in calls if c[1] == "decode"]
+    assert decode[0] > 0.90 and decode[-1] == pytest.approx(0.99)
+
+
+def test_two_stage_chain_bands_are_unchanged_by_one_stage_default():
+    """LTX's chain (``one_stage=False``) keeps its bands."""
+    assert _progress_frac("encode", 1, 4, 0, 3, chain=True) == 0.04
+    assert _progress_frac("stage1_denoise", 8, 8, 2, 3, chain=True) == pytest.approx(0.50)
+    assert _progress_frac("stage2_denoise", 8, 8, 0, 1, chain=True) == pytest.approx(0.90)
+    assert _progress_frac("decode", 1, 4, None, None, chain=True) == 0.95
+    assert _progress_frac("tile", 1, 2, None, None, chain=True, one_stage=True) is None
+
+
 def test_single_generate_loop_returns_error_terminal():
     be = _backend_with_events(
         [

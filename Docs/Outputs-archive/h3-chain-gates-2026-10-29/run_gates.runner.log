@@ -1,0 +1,47 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261029215613
+Username: DESKTOP-1I1LT65\phenotype nezu
+RunAs User: DESKTOP-1I1LT65\phenotype nezu
+Configuration Name: 
+Machine: DESKTOP-1I1LT65 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File Docs\Outputs-archive\h3-chain-gates-2026-10-29\run_gates.ps1 -SkipHarness
+Process ID: 32180
+PSVersion: 5.1.26100.9711
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9711
+BuildVersion: 10.0.26100.9711
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+--- nvidia-smi (compute processes) ---
+
+
+weights, LoRA, venvs, scripts: present
+config.yaml model.backend: auto (must be auto or real; g_chain.py also refuses a backend that looks mock)
+RAM 63.8 GB + page file allocated 75.9 GB = commit limit about 139.7 GB (G-C2 expects about 37 GB)
+PS>TerminatingError(Invoke-RestMethod): "リモート サーバーに接続できません。"
+[21:56:15] g_selfcheck: --selfcheck
+    exit 0 in 0.2 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-gates-2026-10-29\g_selfcheck.json
+harness reused: Docs\Outputs-archive\h3-chain-gates-2026-10-29\g_c0_harness.json
+starting the backend on port 18629
+PS>TerminatingError(Invoke-RestMethod): "リモート サーバーに接続できません。"
+backend: state=unloaded base_model=LTX25 pipeline_loaded=False
+[21:56:19] g_c0: G-C0 --base-url http://127.0.0.1:18629/api/v1 --backend-pid 48472 --compare Docs\Outputs-archive\h3-chain-gates-2026-10-29\g_c0_harness.json
+    exit 0 in 394 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-gates-2026-10-29\g_c0.json
+[22:02:53] g_c1: G-C1 --base-url http://127.0.0.1:18629/api/v1 --backend-pid 48472
+    exit 0 in 787.6 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-gates-2026-10-29\g_c1.json
+[22:16:01] g_c2: G-C2 --base-url http://127.0.0.1:18629/api/v1 --backend-pid 48472
+    exit 0 in 5708.1 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-gates-2026-10-29\g_c2.json
+all gates finished
+[23:51:09] g_cleanup: cleanup --base-url http://127.0.0.1:18629/api/v1
+    exit 0 in 2.1 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-gates-2026-10-29\g_cleanup.json
+backend stopped
+state.json put back
+
+**********************
+Windows PowerShell transcript end
+End time: 20261029235111
+**********************

@@ -20,11 +20,17 @@ import {
 } from "../../shell/tokenBudget";
 import type { ChainWindowBudgetMarkers, Stage2Window } from "../../shell/tokenBudget";
 import { resolveComfortRow } from "../../shell/comfortTable";
+import { fixedFrameRate, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
+import type { SamplingConstraints } from "../../api/types";
 import { MIN_HEIGHT, MIN_WIDTH } from "../single/defaultConfig";
+import { clampSamplingValue, samplingDefaults } from "../single/samplingValues";
+import type { SamplingValues } from "../single/samplingValues";
 import { estimateGenerationSeconds, formatEstimate } from "../single/estimateUtils";
 import {
   ceilToMultiple,
   clamp,
+  floorToGrid,
   floorToMultiple,
   FRAME_RATE_FALLBACK,
   FRAME_RATE_MIN,
@@ -41,6 +47,7 @@ import {
   AUDIO_LATENTS_PER_SEC,
   audioLatentsAvailable,
   audioLatentsRequired,
+  audioDriftSeamFlags,
   audioSegmentWindows,
   buildChainRequest,
   chainLayoutError,
@@ -48,6 +55,7 @@ import {
   clampEndSourceStrength,
   clampOverlapFrames,
   clampOverlapStrength,
+  computeFixedOverlapOutputFrames,
   computeOutputFrames,
   computeTotalFrames,
   DEFAULT_END_SOURCE_STRENGTH,
@@ -65,9 +73,9 @@ import {
   MAX_CLIPS,
   MAX_REFERENCE_STRENGTH,
   maxChainAudioLatents,
-  MIN_CLIP_NUM_FRAMES,
   MIN_CLIPS_NO_SOURCE,
   MIN_CLIPS_WITH_SOURCE,
+  minClipFramesForFixedOverlap,
   minClipsForChain,
   MIN_REFERENCE_STRENGTH,
   pxFromVLatent,
@@ -168,6 +176,31 @@ export interface UseChainFormDeps {
    * alongside {@link engineFamily}. Only printed in the stage-2 window
    * dropdown's labels ({@link UseChainFormResult.stage2WindowLabel}). Omitted = `""`. */
   engineLabel?: string | undefined;
+  /** §1-106: the loaded base model's numeric rules
+   * (`useBaseModels().activeConstraints`), the same object Create reads —
+   * the clip grid and bounds, the size multiple, a fixed fps, the sampling
+   * sliders and, through `chain`, the server-fixed seam. Omitted = the LTX
+   * rules (`LTX_GENERATION_CONSTRAINTS`), so every pre-existing caller and
+   * test keeps today's behaviour. */
+  constraints?: GenerationConstraints | undefined;
+  /** §1-106: the material panels the loaded base model's engine has
+   * closed (finished booleans from `AppShell` — this hook never reasons about
+   * engines). Material left in a closed panel (attached on another base model:
+   * a base-model switch does not remount this form) blocks Generate with
+   * `materialInClosedPanel` instead of reaching the server as a 422. Omitted =
+   * nothing closed. */
+  unavailablePanels?: ChainUnavailablePanels | undefined;
+}
+
+/** §1-106: see {@link UseChainFormDeps.unavailablePanels}. Each flag closes
+ * one material slot: the V2V source video, clip 0's opening image, the audio
+ * track, the end source and the reference video. */
+export interface ChainUnavailablePanels {
+  v2v?: boolean | undefined;
+  startImage?: boolean | undefined;
+  a2v?: boolean | undefined;
+  endSource?: boolean | undefined;
+  reference?: boolean | undefined;
 }
 
 const EMPTY_CONTROL_LORA_NAMES: ReadonlySet<string> = new Set();
@@ -177,9 +210,9 @@ const EMPTY_CONTROL_LORA_NAMES: ReadonlySet<string> = new Set();
  * needs both dimensions on the 128 grid, vs. 64 for a plain chain. Mirrors
  * Create's `IC_LORA_MULTIPLE`/`GENERAL_MULTIPLE` pair
  * (`modes/single/useGenerationForm.ts`), which is the same constraint on the
- * same server field. */
+ * same server field. The general multiple itself is the loaded base model's
+ * (`constraints.dimension_multiple` — 64 on LTX, 32 on MiniMax H3, §1-106). */
 const REFERENCE_MULTIPLE = 128;
-const GENERAL_MULTIPLE = 64;
 
 /** §1-15: the reference upload's frame cap, sent as `POST /upload/video`'s
  * `max_frames` query. Exactly `MAX_CHAIN_TOTAL_FRAMES` (11544 = 24 x 481) —
@@ -475,6 +508,8 @@ export type ChainValidityReason =
    * the two are mutually exclusive server-side). The remedy is the same as
    * `endSourceNeedsOverlap`'s: raise the seam blend width. */
   | "endSourceAudioOverlapBudget"
+  /** §1-106: see {@link UseChainFormDeps.unavailablePanels}. */
+  | "materialInClosedPanel"
   | "cropInvalid"
   | "nagNegativeEmpty";
 
@@ -591,7 +626,7 @@ export interface UseChainFormResult {
   removeClip: (id: string) => void;
   setClipPrompt: (id: string, value: string) => void;
   /** Sets one clip's `numFrames`. `snap` (default true) rounds `value` onto
-   * the 8n+1 grid (clamped to `[MIN_CLIP_NUM_FRAMES, MAX_CLIP_NUM_FRAMES]`) —
+   * the clip grid (clamped to {@link clipFrameLimits}; LTX: 8n+1 in `[9, 481]`) —
    * used by the stepper arrows, ↑↓ keys, and slider. `snap === false` (free
    * keyboard typing) passes the value straight through with only a NaN
    * guard; the grid gate lives in `isValid` so an off-grid manual entry
@@ -620,8 +655,40 @@ export interface UseChainFormResult {
   /** X3: the minimum `num_frames` every clip must have for the current
    * `overlapFrames` (= `8 * overlapFrames + 1`), the exact threshold behind the
    * `clipTooShortForOverlap` validity reason. Exposed so `ChainedScreen` can
-   * interpolate it into the Generate-disabled note (`n`). */
+   * interpolate it into the Generate-disabled note (`n`). §1-106: in the
+   * fixed-overlap mode it is the floor of every clip AFTER the first
+   * (`overlap + grid step`, 39 on MiniMax H3). */
   minFramesForOverlap: number;
+
+  // ── §1-106: the loaded base model's rules (`UseChainFormDeps.constraints`) ──
+
+  /** The server-fixed seam in PIXEL frames (`constraints.chain.overlap_frames`
+   * — 22 on MiniMax H3), or `null` while the seam is the user's (LTX). Non-null
+   * is the fixed-overlap mode: one condition that currently also means "no
+   * Stage-2" (no blend sliders, no chunked upsample, no stage-2 window, no
+   * stage-2 comfort guide); the four LTX seam fields are left out of the
+   * request. */
+  fixedOverlapFrames: number | null;
+  /** Every clip card's duration slider: the grid step and the bounds
+   * (`constraints.num_frames`, capped at {@link MAX_CLIP_NUM_FRAMES}). */
+  clipFrameLimits: { min: number; max: number; step: number };
+  /** The fps the loaded base model is fixed at (`min === max`), or `null`
+   * when the user may choose — fed to `FrameRateSeedFields`. */
+  fixedFrameRate: number | null;
+  /** The three sampling sliders' values, or `null` while the loaded base model
+   * publishes no `constraints.sampling` (LTX). Reset to the served defaults on
+   * a base-model switch, and sent as Create sends them. */
+  sampling: SamplingValues | null;
+  /** The served sampling ranges, or `null` (LTX). */
+  samplingConstraints: SamplingConstraints | null;
+  /** Sets one sampling slider, clamped into the served range (the step count
+   * rounded to a whole number). A no-op while {@link sampling} is `null`. */
+  setSamplingValue: (key: keyof SamplingValues, value: number) => void;
+  /** Ruling 84-6: per clip, `true` when the seam in front of it does not land
+   * on an audio-latent boundary (`chainUtils.audioDriftSeamFlags`) — the clip
+   * card then shows its one-line note. All `false` outside the fixed-overlap
+   * mode. Same order as {@link clips}. */
+  clipAudioDriftFlags: boolean[];
 
   /** Opt into temporal-chunk upsampling (`GenerateChainRequest.chunked_upsample`,
    * task brief §1). Defaults to `true` — the chunked path trades time for a
@@ -1146,6 +1213,20 @@ export function useChainForm(
   const engineFamily = deps.engineFamily;
   const weightClass = deps.weightClass;
   const engineLabel = deps.engineLabel ?? "";
+  // §1-106: the loaded base model's numeric rules — the same object Create
+  // reads (`useGenerationForm`'s `rules`). Omitted = LTX, i.e. exactly the
+  // constants this hook used to hard-code: the 8n+1 clip grid from 9 to 481,
+  // the 64 size multiple, a free 1-60 fps, no sampling sliders and no fixed seam.
+  const rules = deps.constraints ?? LTX_GENERATION_CONSTRAINTS;
+  const clipGrid = rules.frameGrid;
+  const clipMin = rules.minNumFrames;
+  // Capped at the chain's own per-clip ceiling (`MAX_CLIP_NUM_FRAMES`) — NOT at
+  // `config.limits.max_num_frames`, so LTX's Chained ceiling stays where it is.
+  const clipMax = Math.max(clipMin, floorToGrid(Math.min(rules.maxNumFrames, MAX_CLIP_NUM_FRAMES), clipGrid));
+  const generalMultiple = rules.dimensionMultiple;
+  const fixedFps = fixedFrameRate(rules);
+  const fixedOverlapFrames = rules.chain?.overlapFrames ?? null;
+  const unavailablePanels = deps.unavailablePanels;
 
   // ── §1-15 参照動画: declared FIRST because the width/height grid depends on
   // it. A reference video (or a control LoRA, which mandates one) puts the
@@ -1192,7 +1273,7 @@ export function useChainForm(
   const active = useMemo(() => {
     if (!referenceActive) {
       return {
-        multiple: GENERAL_MULTIPLE,
+        multiple: generalMultiple,
         minWidth: baseLimits.minWidth,
         maxWidth: baseLimits.maxWidth,
         minHeight: baseLimits.minHeight,
@@ -1208,7 +1289,7 @@ export function useChainForm(
       minHeight: ceilToMultiple(baseLimits.minHeight, REFERENCE_MULTIPLE, baseLimits.minHeight, maxHeight),
       maxHeight,
     };
-  }, [referenceActive, baseLimits]);
+  }, [referenceActive, baseLimits, generalMultiple]);
 
   /** The bounds the UI renders (`SizeFields`' input bounds) — the ACTIVE ones. */
   const limits: ChainCommonLimits = useMemo(
@@ -1222,15 +1303,30 @@ export function useChainForm(
   );
 
   const [common, setCommon] = useState<ChainCommonValues>(() => ({
-    width: roundToMultiple(initial.width ?? config.generation_defaults.width, 64, MIN_WIDTH, config.limits.max_width),
-    height: roundToMultiple(initial.height ?? config.generation_defaults.height, 64, MIN_HEIGHT, config.limits.max_height),
+    width: roundToMultiple(initial.width ?? config.generation_defaults.width, generalMultiple, MIN_WIDTH, config.limits.max_width),
+    height: roundToMultiple(initial.height ?? config.generation_defaults.height, generalMultiple, MIN_HEIGHT, config.limits.max_height),
     // W7: a right-click prefill can seed fps (material policy: selection
     // rate/scale); otherwise the config default.
     // 台帳§3-71/§3-72: snapped here too — see the twin in `useGenerationForm`
     // for why the fallback is the constant rather than `?? config…`.
-    frameRate: snapFrameRate(initial.frameRate ?? config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
+    // §1-106: an engine fixed at one rate takes it, whatever the seed said.
+    frameRate:
+      fixedFps ?? snapFrameRate(initial.frameRate ?? config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
     seed: config.generation_defaults.seed,
   }));
+
+  // §1-106: the sampling sliders (`constraints.sampling`), seeded from the
+  // served defaults — `null` on LTX, which publishes none.
+  const [sampling, setSampling] = useState<SamplingValues | null>(() => samplingDefaults(rules.sampling));
+  const samplingConstraints = rules.sampling;
+  const setSamplingValue = useCallback(
+    (key: keyof SamplingValues, raw: number) => {
+      const value = clampSamplingValue(samplingConstraints, key, raw);
+      if (value === null) return;
+      setSampling((prev) => (prev ? { ...prev, [key]: value } : prev));
+    },
+    [samplingConstraints],
+  );
 
   const [gettingSize, setGettingSize] = useState(false);
   const [getSizeError, setGetSizeError] = useState<string | null>(null);
@@ -1263,8 +1359,8 @@ export function useChainForm(
   // form whose §3-71 symptom was worst: a non-integer fps made
   // `chainLayoutError` reject ordinary clip lists with a 422.
   const setFrameRate = useCallback(
-    (raw: number) => setCommon((prev) => ({ ...prev, frameRate: snapFrameRate(raw) ?? FRAME_RATE_MIN })),
-    [],
+    (raw: number) => setCommon((prev) => ({ ...prev, frameRate: fixedFps ?? snapFrameRate(raw) ?? FRAME_RATE_MIN })),
+    [fixedFps],
   );
   const setSeed = useCallback((raw: number) => setCommon((prev) => ({ ...prev, seed: Math.trunc(raw) })), []);
 
@@ -1296,9 +1392,11 @@ export function useChainForm(
     }
   }, [nativeBridge, active]);
 
+  // §1-106: the config default (LTX's 49) pulled onto the LOADED clip grid —
+  // `constraints` has no default-length field of its own.
   const defaultClipNumFrames = useMemo(
-    () => snapClipNumFrames(config.generation_defaults.num_frames),
-    [config.generation_defaults.num_frames],
+    () => snapClipNumFrames(config.generation_defaults.num_frames, clipMax, clipGrid, clipMin),
+    [config.generation_defaults.num_frames, clipMax, clipGrid, clipMin],
   );
 
   // Auto-detected mode: attaching a source video (attach intent — see
@@ -1322,7 +1420,7 @@ export function useChainForm(
     // the source-attaching prefill doesn't leave a stray 2nd clip card; every
     // other flow opens in scratch mode at the from-scratch 2-clip minimum.
     fitClipsToBounds(
-      [makeClip(snapClipNumFrames(initial.numFrames ?? config.generation_defaults.num_frames))],
+      [makeClip(snapClipNumFrames(initial.numFrames ?? config.generation_defaults.num_frames, clipMax, clipGrid, clipMin))],
       initial.forceSingleClip ? MIN_CLIPS_WITH_SOURCE : MIN_CLIPS_NO_SOURCE,
       MAX_CLIPS,
       defaultClipNumFrames,
@@ -1375,24 +1473,27 @@ export function useChainForm(
     );
   }, []);
 
-  const setClipNumFrames = useCallback((id: string, value: number, snap = true) => {
-    setClips((prev) =>
-      prev.map((clip) => {
-        if (clip.id !== id) return clip;
-        // §1-16: same "only a REAL change touches the card" rule as
-        // `setClipPrompt` — and it is the SNAPPED (i.e. actually applied) value
-        // that is compared, so nudging a slider back onto the value it already
-        // holds leaves the card intact.
-        const next = snap ? snapClipNumFrames(value) : value;
-        // Free manual entry: pass through untouched (no snapping, no clamp —
-        // Gradio-faithful), mirroring `setWidth`/`setHeight`. Reject only
-        // non-finite input, keeping the prior value.
-        if (!snap && !Number.isFinite(value)) return clip;
-        if (next === clip.numFrames) return clip;
-        return { ...clip, numFrames: next, intact: false };
-      }),
-    );
-  }, []);
+  const setClipNumFrames = useCallback(
+    (id: string, value: number, snap = true) => {
+      setClips((prev) =>
+        prev.map((clip) => {
+          if (clip.id !== id) return clip;
+          // §1-16: same "only a REAL change touches the card" rule as
+          // `setClipPrompt` — and it is the SNAPPED (i.e. actually applied) value
+          // that is compared, so nudging a slider back onto the value it already
+          // holds leaves the card intact.
+          const next = snap ? snapClipNumFrames(value, clipMax, clipGrid, clipMin) : value;
+          // Free manual entry: pass through untouched (no snapping, no clamp —
+          // Gradio-faithful), mirroring `setWidth`/`setHeight`. Reject only
+          // non-finite input, keeping the prior value.
+          if (!snap && !Number.isFinite(value)) return clip;
+          if (next === clip.numFrames) return clip;
+          return { ...clip, numFrames: next, intact: false };
+        }),
+      );
+    },
+    [clipMax, clipGrid, clipMin],
+  );
 
   // §1-16: the "追加クリップの長さ" slider. Declared above `applyPreset` because
   // that callback re-seeds it (judgement point 7); see the field's doc comment
@@ -1435,7 +1536,16 @@ export function useChainForm(
       // `height_v` verbatim) — not the just-clamped `common` values above,
       // since the server's `spill_free_frames` map is keyed by the preset's
       // documented resolution.
-      const recommended = recommendedClipFrames(preset.width, preset.height, preset.num_frames, config.limits.spill_free_frames);
+      // §1-106: `spill_free_frames` is LTX's calibrated comfort ceiling, so a
+      // fixed-overlap base model (no comfort line, like Create's H3) takes the
+      // preset's own length, pulled onto its grid. LTX's path is unchanged.
+      const recommended = recommendedClipFrames(
+        preset.width,
+        preset.height,
+        preset.num_frames,
+        fixedOverlapFrames !== null ? undefined : config.limits.spill_free_frames,
+        { grid: clipGrid, min: clipMin, max: clipMax },
+      );
       // §1-16: `intact` is deliberately NOT spread away here. Applying a preset
       // is not "the user edited this card" — it is a bulk re-seed the user asked
       // for from the preset dropdown — so an untouched card stays untouched and
@@ -1450,8 +1560,38 @@ export function useChainForm(
       // with a length that preset deliberately avoided.
       setAddedClipFramesState(recommended);
     },
-    [config.generation_presets, config.limits.spill_free_frames, active],
+    [config.generation_presets, config.limits.spill_free_frames, active, clipGrid, clipMin, clipMax, fixedOverlapFrames],
   );
+
+  // §1-106: follow a change of the loaded base model's rules (a base-model
+  // switch while the form is mounted — `ChainedScreen` is not remounted by
+  // one). The twin of `useGenerationForm`'s `appliedRulesRef` effect: skips
+  // the first render (the initializers above already used these rules) and
+  // fires only on a real change (`useBaseModels` keeps the object stable while
+  // its content is). Every clip length and the size are re-snapped onto the new
+  // grid (a value valid on the old one would otherwise block Generate), a fixed
+  // fps is pinned, and the sampling sliders go back to the new defaults.
+  const appliedRulesRef = useRef(rules);
+  useEffect(() => {
+    if (appliedRulesRef.current === rules) return;
+    appliedRulesRef.current = rules;
+    setCommon((prev) => ({
+      ...prev,
+      width: roundToMultiple(prev.width, active.multiple, active.minWidth, active.maxWidth),
+      height: roundToMultiple(prev.height, active.multiple, active.minHeight, active.maxHeight),
+      frameRate: fixedFps ?? prev.frameRate,
+    }));
+    setClips((prev) =>
+      prev.map((clip) => {
+        const next = snapClipNumFrames(clip.numFrames, clipMax, clipGrid, clipMin);
+        return next === clip.numFrames ? clip : { ...clip, numFrames: next };
+      }),
+    );
+    // The "追加クリップの長さ" slider follows the grid too (and back onto 8n+1
+    // on a return to LTX).
+    setAddedClipFramesState((prev) => snapClipNumFrames(prev, clipMax, clipGrid, clipMin));
+    setSampling(samplingDefaults(rules.sampling));
+  }, [rules, active, fixedFps, clipMax, clipGrid, clipMin]);
 
   // Clip 0's single start frame — `useKeyframes` capped to one image. Only
   // rendered/injected in `"scratch"` mode (a V2V source supplies clip 0's
@@ -2378,11 +2518,20 @@ export function useChainForm(
   // 素材（末尾）adds NOTHING to this (2026-08-17): the anchor is frozen inside the
   // last clip's window instead of being appended after it, so the delivered file
   // is exactly as long with end material as without it.
-  const outputFrames = computeOutputFrames(
-    clips.map((clip) => clip.numFrames),
-    overlapFrames,
-    hasSourceVideo ? contextFrames : null,
-  );
+  // §1-106: a server-fixed seam is plain pixel arithmetic — `Σ − overlap ×
+  // (n − 1)` — rather than the LTX latent copy (a fixed-overlap base model
+  // has no V2V either, so there is no context term to subtract).
+  const outputFrames =
+    fixedOverlapFrames !== null
+      ? computeFixedOverlapOutputFrames(
+          clips.map((clip) => clip.numFrames),
+          fixedOverlapFrames,
+        )
+      : computeOutputFrames(
+          clips.map((clip) => clip.numFrames),
+          overlapFrames,
+          hasSourceVideo ? contextFrames : null,
+        );
   const outputSeconds = common.frameRate > 0 ? outputFrames / common.frameRate : 0;
   const outputTailSeconds = common.frameRate > 0 ? outputTailFrames / common.frameRate : 0;
 
@@ -2408,15 +2557,34 @@ export function useChainForm(
   // input, one instance per `ClipCard`): EVERY clip's `numFrames` must be
   // checked, not just the first — a hand-typed off-grid value on any clip
   // must block Generate.
-  const clipsNumFramesOnGrid = clips.every((clip) => isNumFramesOnGrid(clip.numFrames, MIN_CLIP_NUM_FRAMES, MAX_CLIP_NUM_FRAMES));
+  const clipsNumFramesOnGrid = clips.every((clip) => isNumFramesOnGrid(clip.numFrames, clipMin, clipMax, clipGrid));
 
   // X3: client-side gate for the backend's per-clip seam-blend minimum. The
   // server rejects (HTTP 422) any clip with `overlap_frames >= (num_frames-1)//8+1`,
   // i.e. it requires `num_frames >= 8*overlap_frames + 1`. Pre-block Generate
   // here with an imperative note so the user fixes it before submitting (the
   // server 422 stays as a fallback). Boundary `num_frames == 8*overlap+1` passes.
-  const minFramesForOverlap = 8 * overlapFrames + 1;
-  const clipsMeetOverlapMinimum = clips.every((clip) => clip.numFrames >= minFramesForOverlap);
+  //
+  // §1-106: the fixed-overlap mode has its own rule — every clip AFTER the
+  // first must reach `overlap + grid step` (39 on MiniMax H3; the server's
+  // own floor), the first only the grid's (already the slider's minimum).
+  const minFramesForOverlap =
+    fixedOverlapFrames !== null ? minClipFramesForFixedOverlap(fixedOverlapFrames, clipGrid) : 8 * overlapFrames + 1;
+  const clipsMeetOverlapMinimum = clips.every(
+    (clip, index) => (fixedOverlapFrames !== null && index === 0) || clip.numFrames >= minFramesForOverlap,
+  );
+  // Ruling 84-6: the seams that do not land on an audio-latent boundary
+  // (fixed-overlap mode only — LTX's own seams are blended, not placed).
+  const clipAudioDriftFlags = useMemo(
+    () =>
+      fixedOverlapFrames !== null
+        ? audioDriftSeamFlags(
+            clips.map((clip) => clip.numFrames),
+            fixedOverlapFrames,
+          )
+        : clips.map(() => false),
+    [clips, fixedOverlapFrames],
+  );
 
   // Unconditional guard: while the source video is still uploading (or failed),
   // never present the form as submittable — even though `mode` stays "v2v"
@@ -2719,6 +2887,16 @@ export function useChainForm(
   if (endSourceLengthUnknown) validityReasons.push("endSourceLengthUnknown");
   if (endSourceNeedsOverlap) validityReasons.push("endSourceNeedsOverlap");
   if (endSourceAudioOverlapBudget) validityReasons.push("endSourceAudioOverlapBudget");
+  // §1-106 `materialInClosedPanel`: attach INTENT counts.
+  if (
+    (unavailablePanels?.v2v && hasSourceVideo) ||
+    (unavailablePanels?.startImage && startFrame.items.length > 0) ||
+    (unavailablePanels?.a2v && hasSourceAudio) ||
+    (unavailablePanels?.endSource && hasEndSource) ||
+    (unavailablePanels?.reference && hasReferenceVideo)
+  ) {
+    validityReasons.push("materialInClosedPanel");
+  }
   if (!isCropOutputValid(cropOutput, common.width, common.height)) validityReasons.push("cropInvalid");
   // NAG (2026-07-28): enabled + blank negative-prompt body blocks Generate
   // client-side (the server 422s the same combination).
@@ -2732,8 +2910,8 @@ export function useChainForm(
   // prompts before being overwritten by a second right-click).
   const baselineCommon = useMemo(
     () => ({
-      width: roundToMultiple(config.generation_defaults.width, 64, MIN_WIDTH, config.limits.max_width),
-      height: roundToMultiple(config.generation_defaults.height, 64, MIN_HEIGHT, config.limits.max_height),
+      width: roundToMultiple(config.generation_defaults.width, generalMultiple, MIN_WIDTH, config.limits.max_width),
+      height: roundToMultiple(config.generation_defaults.height, generalMultiple, MIN_HEIGHT, config.limits.max_height),
       // 台帳§3-71/§3-72: snapped the same way the `common` initializer above is.
       // The baseline exists to answer "has the user edited anything?", so it has
       // to be the value the form ACTUALLY mounts with — with a non-integer
@@ -2741,10 +2919,10 @@ export function useChainForm(
       // would report itself dirty before the user touched it. (Today's config
       // default is 24.0, so this changes nothing in practice; it is the guard
       // that keeps it that way.)
-      frameRate: snapFrameRate(config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
+      frameRate: fixedFps ?? snapFrameRate(config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
       seed: config.generation_defaults.seed,
     }),
-    [config.generation_defaults.width, config.generation_defaults.height, config.generation_defaults.frame_rate, config.generation_defaults.seed, config.limits.max_width, config.limits.max_height],
+    [config.generation_defaults.width, config.generation_defaults.height, config.generation_defaults.frame_rate, config.generation_defaults.seed, config.limits.max_width, config.limits.max_height, generalMultiple, fixedFps],
   );
   const baselineCrop = config.generation_defaults.crop_output ?? null;
 
@@ -2850,6 +3028,10 @@ export function useChainForm(
       seed: common.seed,
       overlapFrames,
       overlapStrength,
+      // §1-106: the fixed-overlap mode leaves the four LTX seam fields out, and
+      // the sampling values ride along exactly as Create sends them.
+      fixedOverlap: fixedOverlapFrames !== null,
+      sampling,
       clips: clipInputs,
       sourceVideo: sourceVideo.state.id ? { videoId: sourceVideo.state.id, contextFrames } : null,
       // §1-16: `source_audio` and `source_video` are mutually exclusive
@@ -2903,6 +3085,8 @@ export function useChainForm(
     stage2Window,
     nag,
     acceleration,
+    fixedOverlapFrames,
+    sampling,
   ]);
 
   return {
@@ -2937,6 +3121,13 @@ export function useChainForm(
     endSourceStrength,
     setEndSourceStrength,
     minFramesForOverlap,
+    fixedOverlapFrames,
+    clipFrameLimits: { min: clipMin, max: clipMax, step: clipGrid.step },
+    fixedFrameRate: fixedFps,
+    sampling,
+    samplingConstraints,
+    setSamplingValue,
+    clipAudioDriftFlags,
     chunkedUpsample,
     setChunkedUpsample,
     stage2Window,

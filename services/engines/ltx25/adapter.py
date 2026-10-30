@@ -47,6 +47,7 @@ from api.errors import feature_unsupported, model_incompatible
 from api.models import GenerateChainRequest, GenerateRequest
 from config import AppConfig
 from services import prompt_tokens, video_io
+from services.engines.ltx.chain_rules import validate_ltx_chain
 from services.engines.ltx.request_rules import LTX_REQUEST_RULES
 from services.engines.ltx.adapter import (
     H3_ONLY_REFUSALS,
@@ -333,6 +334,9 @@ CHAIN_REJECT_TABLE: tuple[
 ] = (
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
+    # MiniMax H3 only (VRAM 16GB mode), the single path's row on the chain
+    # schema. None (the family default) and False pass.
+    ("vram16_mode", "vram16_mode", lambda r: r.vram16_mode is True),
 )
 
 #: The ignore-and-log half. Field-for-field the same as
@@ -342,6 +346,9 @@ CHAIN_REJECT_TABLE: tuple[
 CHAIN_IGNORED_FIELDS: dict[str, str] = {
     "guidance_scale": "LTX 2.5 distilled runs without classifier-free guidance",
     "num_inference_steps": "the distilled schedule has a fixed step count",
+    # MiniMax H3's schedule shifts, on the chain schema too.
+    "shift_video": "the distilled schedule has no shift knob",
+    "shift_audio": "the distilled schedule has no shift knob",
 }
 
 #: Fields the chain path ACTS ON. The scalar settings ride the worker payload
@@ -487,6 +494,10 @@ UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
 #: the distilled 8 steps / CFG 1.0). See services/engines/ltx/request_rules.py.
 REQUEST_RULES = LTX_REQUEST_RULES
 
+#: The chain twin, shared with LTX 2.3 (services/engines/ltx/chain_rules.py),
+#: applied by ``services.engines.validate_chain_for_family``.
+validate_chain = validate_ltx_chain
+
 #: The GGUF tensor holding the tokenizer JSON in an LTX 2.5 text encoder.
 #: A copy of ``engine25/assets_export.py``'s ``TOKENIZER_JSON_TENSOR_KEY`` (the
 #: server does not import ``engine25``); tests/test_prompt_tokens.py checks it.
@@ -557,10 +568,13 @@ def reject_chain(request: GenerateChainRequest) -> None:
 
     Lives at module level (like :func:`reject_unsupported`) so the API layer can
     refuse before a job record is created, while the backend method keeps it as
-    the backstop for a payload that arrives another way.
+    the backstop for a payload that arrives another way. A MiniMax H3 feature
+    (``H3_ONLY_REFUSALS``) gets its own message, as on the single path.
     """
     for field, feature, is_non_default in CHAIN_REJECT_TABLE:
         if is_non_default(request):
+            if feature in H3_ONLY_REFUSALS:
+                raise feature_unsupported(feature, detail=H3_ONLY_REFUSALS[feature])
             raise feature_unsupported(
                 feature,
                 detail=(

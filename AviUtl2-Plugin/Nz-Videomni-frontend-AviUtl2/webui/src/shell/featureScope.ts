@@ -35,6 +35,8 @@ export type UiTarget =
   | "chainPanel.a2v"
   | "chainPanel.endSource"
   | "chainPanel.reference"
+  | "chainPanel.startImage"
+  | "chainSection.batchI2vLong"
   | "editSubTab.retake"
   | "editSubTab.outpainting"
   | "editSubTab.inpainting"
@@ -86,6 +88,10 @@ interface FeatureUiEntry {
  *    `reference_video_id` (§3-102, LTX 2.5 Chained's first stage — once an
  *    engine can chain, the tab is live and the panels it still cannot feed have
  *    to grey on their own).
+ *  - **chain_start_image** (§1-106, MiniMax H3's text-only chain) is the
+ *    request field `clips[0].conditioning_images`: it closes the image half of
+ *    the Chain screen's SOURCE card, and the Batch i2v-long section with it —
+ *    every row of that section puts its image on clip 0.
  *  - **retake / outpaint / inpaint** are the three Edit sub-tabs. Note the
  *    SERVER's features are `outpaint`/`inpaint` (that is what a request field
  *    and a 422 say) while the sub-tabs are `outpainting`/`inpainting`; this
@@ -157,6 +163,7 @@ export const FEATURE_UI = {
   v2v: { disables: ["chainPanel.v2v"] },
   a2v: { disables: ["chainPanel.a2v", "createSection.batchA2v"] },
   end_source: { disables: ["chainPanel.endSource"] },
+  chain_start_image: { disables: ["chainPanel.startImage", "chainSection.batchI2vLong"] },
   reference_video: { disables: ["chainPanel.reference", "createSection.referenceVideo"] },
   nag: { disables: ["shell.nag"] },
   keyframe_strength: { disables: ["createSection.keyframeStrength"] },
@@ -280,7 +287,16 @@ export function batchA2vDisabledFor(unsupportedFeatures: readonly string[]): boo
   return disabledUiTargets(unsupportedFeatures).has("createSection.batchA2v");
 }
 
-/** The four Chain-screen material panels an engine's feature scope can take
+/**
+ * Whether the Batch i2v-long section (`modes/batch-i2v-long/`, on the Chain
+ * screen) is unusable — the {@link batchA2vDisabledFor} twin. Its rows each
+ * put an image on clip 0, so `chain_start_image` closes it.
+ */
+export function batchI2vLongDisabledFor(unsupportedFeatures: readonly string[]): boolean {
+  return disabledUiTargets(unsupportedFeatures).has("chainSection.batchI2vLong");
+}
+
+/** The Chain-screen material panels an engine's feature scope can take
  * down individually, keyed the way `ChainedScreen`'s props are. */
 export interface ChainPanelsDisabled {
   /** `SourceInputPanel` — the V2V source video (`source_video`). */
@@ -291,11 +307,14 @@ export interface ChainPanelsDisabled {
   endSource: boolean;
   /** `ChainReferencePanel` — the IC-LoRA reference (`reference_video_id`). */
   reference: boolean;
+  /** §1-106: `SourceInputPanel`'s image half — clip 0's opening image
+   * (`clips[0].conditioning_images`). */
+  startImage: boolean;
 }
 
 /**
  * Which of {@link ChainPanelsDisabled}'s panels `unsupportedFeatures` makes
- * unusable — four `false`s for the ordinary case.
+ * unusable — all `false` for the ordinary case.
  *
  * Deliberately blind to `chain`: a base model that cannot chain at all loses the
  * whole tab through {@link disabledModesFor}, so the table gives `chain` no
@@ -309,6 +328,7 @@ export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): 
     a2v: disabled.has("chainPanel.a2v"),
     endSource: disabled.has("chainPanel.endSource"),
     reference: disabled.has("chainPanel.reference"),
+    startImage: disabled.has("chainPanel.startImage"),
   };
 }
 

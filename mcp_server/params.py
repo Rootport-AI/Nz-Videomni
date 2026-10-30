@@ -62,6 +62,8 @@ class ChainClipArg(BaseModel):
     （Stage-1 用）。Stage-2（全体の仕上げ）は共通プロンプトだけを使う。
     ``conditioning_images`` はクリップ0のみ有効（クリップ1以降は前クリップの
     潜在表現を引き継ぐ後続セグメントのため）。
+    ``num_frames`` の既定 49 は LTX の値（8n+1）。MiniMax H3 の連結は 17n+5
+    なので、H3 で省略すると 422 VALIDATION_ERROR になる（必ず指定する）。
     """
 
     prompt: str | None = None

@@ -24,8 +24,10 @@ block (an older backend, or before the first ``GET /models``) reads as
 :data:`LTX_CONSTRAINTS`, so LTX keeps its fixed look (8 steps, CFG 1.0, 8n+1, ÷64).
 
 The Clip Chain tab, the batch and A2V paths (POST /generate/chain) are not
-touched: MiniMax H3, the base model with sampling sliders, refuses the chain
-endpoint with a 422 (``chain`` in its ``unsupported_features``).
+touched: they are LTX-only. They send LTX's frame grid (8n+1) and 8 steps,
+which MiniMax H3's chain refuses with a 422 (it takes 17n+5 clips; a chain
+that happens to be on both grids, e.g. 73 / 209 / 345 / 481 frames, runs on
+H3 at 8 steps). The operation panel's Chained screen is H3's chain client.
 """
 
 from __future__ import annotations

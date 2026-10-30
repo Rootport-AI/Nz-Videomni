@@ -28,6 +28,12 @@ export interface ChainEndSourcePanelProps {
    * to `true` so direct-render tests see the heading. Same convention as
    * `ChainReferencePanel`/`ChainAudioPanel`. */
   showHeading?: boolean | undefined;
+  /** §1-106: the loaded base model has closed this panel. Everything that
+   * ADDS or EDITS material goes dead (as with `disabled`), but the clear
+   * button stays live so material attached on another base model can be
+   * removed here (it blocks Generate with `materialInClosedPanel` meanwhile).
+   * Omitted -> open. */
+  unavailable?: boolean | undefined;
 }
 
 /**
@@ -52,7 +58,15 @@ export interface ChainEndSourcePanelProps {
  *   same time as any of the readouts. The anchor's STRENGTH, unlike its
  *   length, IS a control (バッチ1・2026-08-18) — see the strength slider below.
  */
-export function ChainEndSourcePanel({ form, disabled, nativeBridge, showHeading = true }: ChainEndSourcePanelProps) {
+export function ChainEndSourcePanel({
+  form,
+  disabled: inFlight,
+  nativeBridge,
+  showHeading = true,
+  unavailable = false,
+}: ChainEndSourcePanelProps) {
+  // §1-106: clear reads `inFlight` only.
+  const disabled = inFlight || unavailable;
   const strings = useStrings();
   const t = strings.chained.endSource;
 
@@ -130,7 +144,7 @@ export function ChainEndSourcePanel({ form, disabled, nativeBridge, showHeading 
           className="icon-action-button chain-end-source-clear"
           title={t.clearButton}
           aria-label={t.clearButton}
-          disabled={disabled || uploading || !form.hasEndSource}
+          disabled={inFlight || uploading || !form.hasEndSource}
           onClick={() => {
             form.clearEndSource();
             setDropResetToken((n) => n + 1);

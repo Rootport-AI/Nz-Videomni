@@ -535,13 +535,19 @@ def test_ltx25_refuses_every_field_in_the_chain_reject_table(two_family_client, 
     assert r.status_code == 422, f"{field}: {r.text}"
     error = r.json()["error"]
     assert error["code"] == "FEATURE_UNSUPPORTED"
-    assert "LTX 2.3" in error["detail"]
+    if field in ltx23.H3_ONLY_REFUSALS:
+        assert error["detail"] == ltx23.H3_ONLY_REFUSALS[field]
+    else:
+        assert "LTX 2.3" in error["detail"]
     assert _job_count(two_family_client) == before
 
 
-@pytest.mark.parametrize("field", sorted(CHAIN_OVERRIDES))
+@pytest.mark.parametrize(
+    "field", sorted(set(CHAIN_OVERRIDES) - set(ltx23.H3_ONLY_REFUSALS))
+)
 def test_ltx23_accepts_every_chain_field_the_2_5_engine_refuses(two_family_client, field):
     """対の検証。ガードが系統を見ずに効いていたら、ここが落ちる。
+    MiniMax H3 専用の機能(``H3_ONLY_REFUSALS``)は両方の LTX が断るので対象外。
 
     ステータスコードそのものは問わない——素材のidは実在しないので404が正しい。
     見るのは「機能が無いから拒否された」という**別の理由**で落ちていないこと。"""
@@ -1049,7 +1055,8 @@ def test_no_chain_mode_is_refused_any_more():
         "retake", "end_source",
         "nag_enabled",
     }
-    assert refused == {"pipeline", "vae_mode"}
+    # vram16_mode は MiniMax H3 専用(台帳 §1-106)で、両方の LTX が断る。
+    assert refused == {"pipeline", "vae_mode", "vram16_mode"}
 
 
 @pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_RETAKE))

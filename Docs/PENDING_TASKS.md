@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-29
+- 作成: 2026-07-15／最終更新: 2026-10-30
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -23,14 +23,6 @@
 - **留意**: ① 較正は製品の既定＝**VRAM 16GB mode on** で測る（off は参考）。条件にはキーフレームの枚数も入る（条件行が K×grid 行増える。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13）。② 線は速度ではなく、共有メモリへの退避（spill）そのものの量で引く（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.1 の裁定 3）。③ ただし on ではノイズ除去に割り当て器の上限が掛かるので、境界は退避ではなく「上限での OOM」か「復号の段（上限なし）の退避」として現れる。判定規則 v3（窓の共有メモリの中央値）をどう読み替えるかは、較正の計画で決める。④ `m×n ≥ 2³¹` の実測（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13 から預けた件）は、on では行の塊で分割されるので起きず、off でだけ届きうる（算術による推測: off の fc1 は S × 28,672 で、S ≥ 約 74,900 行で届く。on の最大の行列積は out_proj の S × 5,376 で、S ≥ 約 40 万行が要る）。扱いは計画で決める。記録は同 §169。
 - **出典**: [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-10-17 の裁定）。
 
-### 1-106. MiniMax H3 の Chained（H3 Continuum 型・FL2VA）（起票：2026-10-19）
-
-- **概要**: 直前のクリップの映像と音声の潜在の末尾を次のクリップの冒頭に置き、その行の時刻を固定して残りだけノイズ除去し、重なりを切り落として連結する（潜在の持ち越し。復号して再符号化はしない）。LTX の Chained に相当する。
-- **前提**: キーフレームの条件行（実装済み。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170）と、行ごとの連続値マスク（[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.1、CLOSED 3-257。映像のマスクはエンジンにあり API には未公開）。Turbo（§1-104 は完了、CLOSED 3-251。実験の費用が下がる）。操作パネルの Chained タブ（現状 H3 では灰色）。
-- **留意**: H3 Continuum の「FL2VA で検証済み」は確認済み（研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.3）。継ぎ目と音声の品質の報告は無い（[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)）。
-- **留意**: 計測（2026-10-29）の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183、一次資料の事実は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16。
-- **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）・[`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md)（PR #15375 の denoise mask・LongMedia）。
-
 ### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19）
 
 - **概要**: 姿勢（DWpose）と深度（Depth）による制御。
@@ -40,7 +32,7 @@
 ### 1-109. MiniMax H3 の参照付き Chained（vLLM-Omni 型）（起票：2026-10-19）
 
 - **概要**: rolling window〔窓をずらしながら生成〕に、前の窓の潜在の末尾を追加の条件（固定でなくガイド）として投入し、`temporal_offset` で RoPE〔位置の埋め込み〕の時間座標を動画全体で連続させる。
-- **前提**: §1-106 と、Ref2VA の参照行（実装済み。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2。参照の時刻は文章の直後から積み上げ、目的の映像の原点を後ろへずらす形）。
+- **前提**: H3 の Chained（実装済み・オーナーの実機確認に合格。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-262）と、Ref2VA の参照行（実装済み。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2。参照の時刻は文章の直後から積み上げ、目的の映像の原点を後ろへずらす形）。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
 
 ### 1-113. 右クリックメニューから、動画の音声で a2v および long a2v を削除する（起票：2026-10-28）
@@ -130,7 +122,7 @@
 
 #### 3-243. MiniMax H3 の Gradio UI の整理（起票：2026-10-21）
 
-- **概要**: Gradio には、H3 が拒否する機能の操作部が見えたまま残っている（Clip Chain タブ、音声から動画生成のアコーディオン（H3 は単発の `source_audio` で受けられる。設計正本 §3.1）、バッチ A2V のアコーディオン、Style LoRA タブ、参照動画による制御のアコーディオン、ネガティブプロンプトのアコーディオン）。使うと 422 になる。操作パネルと同じく、機能名で閉じるか灰色にするかを部品ごとに決めて整える。閉じる仕組みは `gradio_ui/feature_scope.py` の表（既に PrunaVAED・埋め込み処理器の常駐・VRAM 16GB mode・Fused GGUF・キーフレームの強度を閉じている）。
+- **概要**: Gradio には、H3 が拒否する機能の操作部が見えたまま残っている（Clip Chain タブ〔LTX の格子を送るので H3 では 422〕、音声から動画生成のアコーディオン（H3 は単発の `source_audio` で受けられる。設計正本 §3.1）、バッチ A2V のアコーディオン、Style LoRA タブ、参照動画による制御のアコーディオン、ネガティブプロンプトのアコーディオン）。使うと 422 になる。操作パネルと同じく、機能名で閉じるか灰色にするかを部品ごとに決めて整える。閉じる仕組みは `gradio_ui/feature_scope.py` の表（既に PrunaVAED・埋め込み処理器の常駐・VRAM 16GB mode・Fused GGUF・キーフレームの強度を閉じている）。
 - **前提**: H3 の機能実装が一通り完了してから着手する。開発途上で閉じると、機能を足すたびに開け直す手間が出るため、それまでは触らない（オーナー裁定 2026-10-21）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.10（観測）・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-244（§1-102 ② の取り下げ）。
 
@@ -361,6 +353,12 @@
 - **判断材料**: 生成の軌道が変わりやすく、4 ステップの Turbo との相性に懸念がある。PSNR・SSIM〔画質の客観指標〕だけでは主観で見た映像と音声の品質を保証できないため、優先度は低い。外部の実測と参考資料は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.5。
 - **出典**: 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.5。
 - **状態**: 将来の研究課題（着手時期未定）。
+
+#### 3-261. MiniMax H3 の Chained の推定時間（Est.）の表示（起票：2026-10-29）
+
+- **概要**: H3 の Chained（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-262。第 1 弾）では、LTX の定数と推定式で出している「Est.」（推定時間）を隠し、「出力の合計長」だけを H3 の式（各クリップの長さの合計 − 22×(本数−1)）で出す。H3 用の推定時間は、快適上限の較正などで情報（1 ステップの秒数・復号の秒数の画角と長さへの依存）が集まってから出す。
+- **前提**: 推定の材料が無い（H3 の連結の 1 ステップの秒数は記録簿 §183.4・§184.6 の数点だけ）。較正は台帳 §1-95 の領分。
+- **出典**: [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 裁定 85、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183。
 
 ---
 
@@ -675,10 +673,17 @@
 
 ### 4-45. MiniMax H3 の長い連結での焼け（コントラストの累積）への対処（起票：2026-10-29）
 
-- **概要**: 長い連結でコントラストが累積する問題への対処。まず長い連結で計測してから対処を考える。
-- **前提（何が塞いでいるか）**: 3 本・今回の題材では兆しが見えない（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183.5 の H7）。4 本以上は未計測（H3 Continuum では 6 本で劣化の報告がある。課題 #13・未解決。[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.3）。
+- **概要**: 長い連結でコントラストが累積する問題への対処。
+- **前提（何が塞いでいるか）**: 13 本（1,348 フレーム）でコントラストの強まりをオーナーが感じた（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §184.6）。モデルの性質で、今すぐ直す必要はない（H3 Continuum では 6 本で劣化の報告がある。課題 #13・未解決。[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.3）。
 - **再訪条件**: ユーザーからの要望があったとき。
 - **出典**: [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 裁定 84・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183・[`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16。
+
+### 4-46. MiniMax H3 の 10 連結超での音声と映像のわずかなズレへの対処（起票：2026-10-30）
+
+- **概要**: 13 クリップ（1,348 フレーム）の実機確認で、10 連結を過ぎると音声と映像にわずかなズレを覚えた（オーナー所見。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §184）。
+- **前提（何が塞いでいるか）**: 実用は 10 秒×3 本〜6 秒×5 本が中心で、10 連結を超える使い方はまれ。音声潜在の丸めは継ぎ目ごとに全体の時間軸へ合わせ直すので累積しない（コード上の事実。継ぎ目ごとのずれは 1/3 潜在以下、合計の差は ±1 個。[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3）。体感のずれの原因は未調査。
+- **再訪条件**: ユーザーからの要望があったとき。
+- **出典**: 記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §184・設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3。
 
 ---
 

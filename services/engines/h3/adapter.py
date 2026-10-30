@@ -15,7 +15,11 @@ facts that are genuinely different:
 * the feature scope (the four tables below) and the numeric rules
   (:data:`REQUEST_RULES`: 17n+5 frames from 22, a 32 multiple, 24 fps fixed,
   1..50 steps, the two shifts, the keyframe grid (any frame 0..F-1: step 1 /
-  offset 0, no strength), ``source_audio_strength`` (single-generate A2V), and ``flag_defaults``: VRAM 16GB mode on).
+  offset 0, no strength), ``source_audio_strength`` (single-generate A2V), and ``flag_defaults``: VRAM 16GB mode on);
+* the chain (``POST /generate/chain``, 裁定 84): its own four tables, the
+  numeric check :func:`validate_chain` (the geometry is the repository-root
+  ``h3_chain_math``, shared with the engine), the ``generate_chain`` worker op
+  and the published ``constraints["chain"]`` (the fixed 22-frame overlap).
 
 THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
 Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
@@ -39,6 +43,12 @@ ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``one_stage=True``; the A2V audio encode is a step of ``encode`` (its own name,
 ``audio_encode``, is a phase in ``done.h3.phases`` only), and a stage name the
 reader does not know holds the bar where it is.
+``generate_chain`` carries the same keys minus ``num_frames`` / ``images`` /
+``source_audio`` / ``references``, plus ``clips`` (``[{prompt, num_frames}]``);
+its ``done`` is the generate one (``num_frames`` = the whole timeline) plus
+``chain``, and its progress events add ``outer_index`` / ``outer_total`` (the
+clip) to ``encode`` and ``stage1_denoise``, read as the one-band chain
+(``_read_chain_events(one_stage=True)``).
 
 LIKE THE LTX ADAPTERS, THIS FILE NEVER IMPORTS torch. The engine lives only in
 ``.venv-engine-h3``; the app venv has none of it.
@@ -47,11 +57,13 @@ LIKE THE LTX ADAPTERS, THIS FILE NEVER IMPORTS torch. The engine lives only in
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import logging
 import os
 from pathlib import Path
 from typing import Callable
 
+import h3_chain_math
 import h3_lora_format
 from api.errors import feature_unsupported
 from api.models import (
@@ -60,7 +72,7 @@ from api.models import (
     VRAM16_MODE_DEFAULT_H3,
 )
 from config import AppConfig
-from services import prompt_tokens, video_io
+from services import gpu_info, prompt_tokens, video_io
 from services.engines.ltx.adapter import (
     GenerationOutcome,
     LTXRunner,
@@ -77,6 +89,7 @@ from services.engines.ltx.request_rules import (
     SamplingRange,
 )
 from services.lora_registry import ResolvedLora
+from services.low_vram import safe_memory_cleanup
 
 logger = logging.getLogger("h3.runner")
 
@@ -170,6 +183,9 @@ REQUEST_RULES = RequestRules(
         audio_total_sec=15.0,
         clip_min_sec=2.0,
     ),
+    # The chain's fixed overlap (裁定 84-3), published as constraints["chain"].
+    # The number's source of truth is h3_chain_math.
+    chain_overlap_frames=h3_chain_math.H3_CHAIN_OVERLAP_FRAMES,
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -288,14 +304,102 @@ GOVERNED_FIELDS: dict[str, str] = {
     "reference_video_strength": "reference_video_id",
 }
 
+# --------------------------------------------------------------------------- #
+# chain feature scope (the four-way classification of GenerateChainRequest)
+# --------------------------------------------------------------------------- #
+#
+# The chain runs T2V clips only (裁定 84; 第 1 弾): every head / end / audio
+# source the chain schema can carry is refused, and so is a start image. The
+# same four tables as the LTX 2.5 adapter's chain tables, held against
+# ``GenerateChainRequest.model_fields`` by tests/test_engine_h3_adapter.py.
+
+
+def _chain_start_image(r: GenerateChainRequest) -> bool:
+    """A clip carries conditioning images (the schema allows them on clip 0 only)."""
+    return any(clip.conditioning_images for clip in r.clips)
+
+
+#: The 422 half: ``(field, feature, is_non_default)``, first offender wins, the
+#: same "differs from the default" discipline as :data:`REJECT_TABLE`.
+#: ``chain_start_image`` is the one feature name only the chain has (the
+#: Chained screen's start image and the i2v-long batch, which puts each row's
+#: image on clip 0). ``clips`` is also HONOURED (the prompts and lengths): the
+#: audit allows exactly this overlap, as it allows ``conditioning_images`` on
+#: the single path.
+CHAIN_REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateChainRequest], bool]], ...] = (
+    ("clips", "chain_start_image", _chain_start_image),
+    ("source_video", "v2v", lambda r: r.source_video is not None),
+    ("source_audio", "a2v", lambda r: r.source_audio is not None),
+    ("end_source", "end_source", lambda r: r.end_source is not None),
+    ("retake", "retake", lambda r: r.retake is not None),
+    ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
+    ("nag_enabled", "nag", lambda r: r.nag_enabled),
+    ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
+    ("guidance_scale", "guidance_scale", lambda r: r.guidance_scale != 1.0),
+    ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
+    ("keep_resident_embeddings", "keep_resident_embeddings", lambda r: r.keep_resident_embeddings),
+)
+
+#: The ignore-and-log half: ignored, not refused, because their schema defaults
+#: are LTX's values and an omitted field cannot be told from an explicit default.
+CHAIN_IGNORED_FIELDS: dict[str, str] = {
+    "overlap_frames": "MiniMax H3's chain overlap is fixed at 22 frames",
+    "overlap_strength": "MiniMax H3's chain fixes the overlap at strength 1.0",
+    "stage2_window": "MiniMax H3's chain has no Stage 2",
+    "chunked_upsample": "MiniMax H3's chain has no Stage-2 upsample",
+    "fused_gguf_dequant_kernel": "MiniMax H3 has no GGUF weights to dequantize",
+}
+
+#: Fields the chain ACTS ON: ``chain.<field>`` reads in
+#: :meth:`_RealBackendH3.generate_chain` (``prompt`` and ``clips`` become the
+#: per-clip ``{prompt, num_frames}`` list, ``prompt`` alone also the top-level
+#: ``prompt``; ``loras`` arrive resolved as ``lora_paths``), except
+#: ``crop_output`` (the app-side centre-crop) and ``embed_mp4_metadata`` (the
+#: app-side recipe embed).
+CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
+    {
+        "prompt",
+        "clips",
+        "seed",
+        "width",
+        "height",
+        "frame_rate",
+        "num_inference_steps",
+        "shift_video",
+        "shift_audio",
+        "loras",
+        "keep_resident",
+        "attention_backend",
+        "block_swap_prefetch",
+        "vram16_mode",
+        "crop_output",
+        "embed_mp4_metadata",
+    }
+)
+
+#: ``field -> the field that governs it``: the single path's eight, each
+#: inert unless its governor is non-default, and every governor here is in
+#: :data:`CHAIN_REJECT_TABLE`.
+CHAIN_GOVERNED_FIELDS: dict[str, str] = {
+    "negative_prompt": "nag_enabled",
+    "neg_method": "nag_enabled",
+    "vsf_scale": "nag_enabled",
+    "nag_scale": "nag_enabled",
+    "nag_tau": "nag_enabled",
+    "nag_alpha": "nag_enabled",
+    "conditioning_attention_strength": "reference_video_id",
+    "reference_video_strength": "reference_video_id",
+}
+
 #: Everything GET /models publishes as this engine's ``unsupported_features``:
-#: the single-request reject table's feature names, plus ``chain``,
-#: ``retake`` and ``fused_gguf_dequant_kernel``. ``chain`` and ``retake`` are
-#: refused by :func:`reject_chain` (the chain endpoint is refused as a whole):
-#: ``chain`` closes the Chained tab and Single's A2V card — unless the engine publishes ``constraints.source_audio`` (``a2vRouteFor`` then routes the card to ``/generate``) — and ``retake`` — a
-#: chain request too — closes Retake's Edit sub-tab. With Outpainting,
-#: Inpainting and Alpha Gen also refused, all four Edit sub-tabs close and the
-#: operation panel greys the whole Edit tab (裁定 34).
+#: the feature names of both reject tables (single, then the chain's new
+#: ones: ``chain_start_image``, ``v2v``, ``a2v``, ``end_source``, ``retake``),
+#: plus ``fused_gguf_dequant_kernel`` and ``lora_audio_strength``. Derived, so a
+#: refused feature is always published. ``retake`` closes Retake's Edit
+#: sub-tab; with Outpainting, Inpainting and Alpha Gen also refused, all four
+#: Edit sub-tabs close and the operation panel greys the whole Edit tab (裁定
+#: 34). ``a2v`` closes the Chained audio panel and Batch A2V; Single's A2V card
+#: goes to ``/generate`` (``constraints.source_audio``), so it stays open.
 #: ``fused_gguf_dequant_kernel`` is the one name here the server does NOT
 #: refuse: it stays in :data:`IGNORED_FIELDS` (MiniMax H3 has no GGUF weights,
 #: so a saved OFF must keep passing rather than 422), and is published only
@@ -305,8 +409,11 @@ GOVERNED_FIELDS: dict[str, str] = {
 #: every ``LoraSpec.audio_strength`` back to ``None`` (台帳 §1-104 裁定 4).
 #: Nothing else — a name for a control that works here would close it.
 UNSUPPORTED_FEATURES: tuple[str, ...] = tuple(
-    dict.fromkeys(feature for _field, feature, _pred in REJECT_TABLE)
-) + ("chain", "retake", "fused_gguf_dequant_kernel", "lora_audio_strength")
+    dict.fromkeys(
+        [feature for _field, feature, _pred in REJECT_TABLE]
+        + [feature for _field, feature, _pred in CHAIN_REJECT_TABLE]
+    )
+) + ("fused_gguf_dequant_kernel", "lora_audio_strength")
 
 
 def _h3_lora_verdict(header: dict) -> tuple[bool, str | None]:
@@ -348,20 +455,70 @@ def reject_unsupported(request: GenerateRequest) -> None:
             raise feature_unsupported(feature, detail=_refusal_detail(field, feature))
 
 
-def reject_chain(request: GenerateChainRequest) -> None:
-    """The chain endpoint is out of scope for this engine as a whole."""
-    raise feature_unsupported(
-        "chain",
-        detail="MiniMax H3 は chain（連結生成）に対応していません。",
+def _chain_refusal_detail(field: str, feature: str) -> str:
+    return (
+        f"MiniMax H3 の連結生成（Chained）は {feature} に対応していません"
+        f"（リクエストの {field} が既定値ではありません）。"
     )
 
 
-def _log_ignored(request: GenerateRequest) -> None:
-    """ONE log line naming every ignored field this request actually set."""
+def reject_chain(request: GenerateChainRequest) -> None:
+    """422 the first out-of-scope field of a chain ``request`` (first offender wins)."""
+    for field, feature, is_non_default in CHAIN_REJECT_TABLE:
+        if is_non_default(request):
+            raise feature_unsupported(feature, detail=_chain_refusal_detail(field, feature))
+
+
+class _ClipView:
+    """One clip of a chain as :meth:`RequestRules.violation` reads a request:
+    the chain's shared fields plus this clip's ``num_frames`` (no references).
+    A copy of only the fields ``violation`` reads; add one here if the rules
+    ever read another."""
+
+    def __init__(self, chain: GenerateChainRequest, num_frames: int) -> None:
+        self.width = chain.width
+        self.height = chain.height
+        self.num_frames = num_frames
+        self.frame_rate = chain.frame_rate
+        self.num_inference_steps = chain.num_inference_steps
+        self.shift_video = chain.shift_video
+        self.shift_audio = chain.shift_audio
+        self.references: list = []
+
+
+def validate_chain(request: GenerateChainRequest) -> None:
+    """This family's numeric rules for a chain; raises ``ValueError``. Writes the
+    defaults back (steps when omitted per ``model_fields_set``, shifts, VRAM 16GB
+    mode), checks the request-wide fields once, then each clip's ``num_frames``
+    (``clips[i]: ``), then the timeline (clips[i], i >= 1, at least 39 frames).
+    """
+    if "num_inference_steps" not in request.model_fields_set:
+        request.num_inference_steps = None
+    REQUEST_RULES.fill_defaults(request)
+    # The request-wide fields, checked once with a frame count on the grid, so
+    # only they can fire and the message is the single path's.
+    message = REQUEST_RULES.violation(_ClipView(request, REQUEST_RULES.frames_min))
+    if message is not None:
+        raise ValueError(message)
+    # Each clip: with the request-wide fields already good, only its
+    # num_frames can fire here.
+    for i, clip in enumerate(request.clips):
+        message = REQUEST_RULES.violation(_ClipView(request, clip.num_frames))
+        if message is not None:
+            raise ValueError(f"clips[{i}]: {message}")
+    h3_chain_math.compute_h3_chain_layout([clip.num_frames for clip in request.clips])
+    for spec in request.loras:
+        spec.audio_strength = None
+
+
+def _log_ignored(request, table: dict[str, str] | None = None) -> None:
+    """ONE log line naming every ignored field this request actually set
+    (``table``: :data:`IGNORED_FIELDS` for a single request, :data:`CHAIN_IGNORED_FIELDS`
+    for a chain)."""
     fields = type(request).model_fields
     named = [
         f"{name}={getattr(request, name)!r} ({reason})"
-        for name, reason in IGNORED_FIELDS.items()
+        for name, reason in (IGNORED_FIELDS if table is None else table).items()
         if name in fields and getattr(request, name) != fields[name].default
     ]
     if named:
@@ -673,10 +830,174 @@ class _RealBackendH3(_RealBackend):
             h3=_h3_block(event),
         )
 
-    def generate_chain(self, chain_request, output_dir: Path, *args, **kwargs) -> GenerationOutcome:
-        """Never reached through the API (``reject_chain`` refuses first)."""
-        reject_chain(chain_request)
-        raise AssertionError("unreachable")  # pragma: no cover
+    def generate_chain(
+        self,
+        chain_request,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        clip0_conditioning_paths: list[Path] | None = None,
+        source_tail_path: Path | None = None,
+        source_context_frames: int | None = None,
+        source_audio_path: Path | None = None,
+        retake_window_path: Path | None = None,
+        end_source_path: Path | None = None,
+        end_source_context_frames: int | None = None,
+        end_source_strength: float | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
+        reference_video_path: Path | None = None,
+        seed: int | None = None,
+    ) -> GenerationOutcome:
+        """A T2V chain via the worker's ``generate_chain`` op (裁定 84).
+
+        THE CALL SHAPE IS LTX's (``PipelineManager.run_chain_job`` passes the
+        same thirteen keywords to every runner). Only ``lora_paths`` and
+        ``seed`` are used: the material keywords belong to chain shapes
+        :func:`reject_chain` refuses (re-checked here as the backstop, before
+        the load).
+
+        The payload is the single ``generate`` one minus ``num_frames`` /
+        ``images`` / ``source_audio`` / ``references``, plus ``clips``
+        (``[{prompt, num_frames}]``; each prompt is the shared one with the
+        clip's own appended, :meth:`GenerateChainRequest.clip_prompt`). Key set
+        and order are pinned by ``GOLDEN_CHAIN_KEYS_H3`` in
+        tests/test_engine_h3_adapter.py.
+        """
+        chain = chain_request
+        reject_chain(chain)
+        _log_ignored(chain, CHAIN_IGNORED_FIELDS)
+
+        if not self.loaded:
+            self.load()
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "output.mp4"
+        seed = int(seed) if seed is not None else resolve_seed(chain.seed)
+
+        lora_paths = lora_paths or []
+        if len(lora_paths) != len(chain.loras):
+            raise RuntimeError(
+                f"MiniMax H3: {len(chain.loras)} LoRA(s) requested but "
+                f"{len(lora_paths)} resolved"
+            )
+        loras = [
+            {"path": str(lp.path), "strength": float(lp.strength)}
+            for lp in lora_paths
+        ]
+        clips = [
+            {"prompt": chain.clip_prompt(i), "num_frames": chain.clips[i].num_frames}
+            for i in range(len(chain.clips))
+        ]
+
+        # crop_output: the worker writes the full-size mp4 to a temp file and
+        # the app's ffmpeg helper centre-crops it into output.mp4 (as on LTX).
+        target = output_dir / "_full.mp4" if chain.crop_output is not None else output_path
+
+        if progress_callback:
+            progress_callback(None, None, 0.05)
+
+        payload: dict = {
+            "op": "generate_chain",
+            # Not used by the worker (each clip's prompt is whole).
+            "prompt": chain.shared_prompt(),
+            "seed": seed,
+            "width": chain.width,
+            "height": chain.height,
+            "frame_rate": chain.frame_rate,
+            "num_inference_steps": chain.num_inference_steps,
+            "shift_video": chain.shift_video,
+            "shift_audio": chain.shift_audio,
+            # ALWAYS sent ([] = no LoRA); applied to every clip.
+            "loras": loras,
+            # Per-job, ALWAYS sent: an absent key would mean "the load value".
+            "attention_backend": chain.attention_backend,
+            "block_swap_prefetch": bool(chain.block_swap_prefetch),
+            # validate_chain writes the family default back, so None is not
+            # expected here; if it ever arrives it still means on.
+            "vram16_mode": chain.vram16_mode is not False,
+            "output_path": str(target),
+            "clips": clips,
+        }
+        # keep_resident: the LTX contract — the key rides only when True, and
+        # an absent key IS the release request.
+        if chain.keep_resident:
+            payload["keep_resident"] = True
+
+        with self._lock:
+            try:
+                self._send(payload)
+            except Exception as exc:
+                raise RuntimeError("MiniMax H3 worker died: " + self._stderr_tail()) from exc
+            event = self._read_chain_events(progress_callback, one_stage=True)
+
+        kind = event.get("event")
+        if kind == "error":
+            raise RuntimeError(event.get("detail", "MiniMax H3 worker chain generation failed"))
+        if kind != "done":
+            raise RuntimeError(f"MiniMax H3 worker returned unexpected event: {event!r}")
+
+        if chain.crop_output is not None:
+            video_io.crop_mp4(
+                target, output_path, chain.crop_output.width, chain.crop_output.height
+            )
+            target.unlink(missing_ok=True)
+
+        if not output_path.exists() or output_path.stat().st_size <= 0:
+            raise RuntimeError(f"MiniMax H3 worker produced no/empty chain output: {output_path}")
+
+        if progress_callback:
+            progress_callback(None, None, 1.0)
+
+        h3_facts = _h3_block(event)
+        return GenerationOutcome(
+            output_path=output_path,
+            seed_used=event.get("seed_used", seed),
+            peak_vram_mb=event.get("peak_vram_mb"),
+            generation_mode="chain",
+            backend=REAL_BACKEND_H3,
+            chain_metadata=_chain_metadata(event, h3_facts),
+            attention_used=event.get("attention_used"),
+            block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
+            keep_resident_used=event.get("keep_resident_used"),
+            vram16_mode_used=event.get("vram16_mode_used"),
+            peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
+            h3=h3_facts,
+        )
+
+
+#: ``done.chain`` keys copied into ``chain["h3"]`` too, so they reach
+#: ``metadata["h3"]`` (``PipelineManager._write_chain_metadata`` relays only
+#: the LTX-shaped keys of ``chain`` plus ``chain["h3"]``): the per-clip record
+#: (``prompt_sha256`` / ``seconds`` / ``latents_sha256`` /
+#: ``head_equals_prev_tail``, the GPU gates' evidence), the seeds, and the
+#: audio geometry the seams were laid out with.
+_CHAIN_FACTS_TO_H3 = ("clips", "seeds", "audio_latent_excess", "audio_drift_flags")
+
+#: ``metadata.json``'s ``chain.architecture`` for an H3 chain (LTX's is
+#: ``masked_av_latent_concat``, written by ``PipelineManager._write_chain_metadata``).
+H3_CHAIN_ARCHITECTURE = "h3_masked_av_latent_carry"
+
+
+def _chain_metadata(event: dict, h3_facts: dict) -> dict:
+    """``done.chain`` as ``outcome.chain_metadata``, with the engine's ``h3``
+    facts (:func:`_h3_block`: phases, LoRA report, shifts ...) merged under the
+    chain's own ``chain.h3`` (overlap / inject / decode) and
+    :data:`_CHAIN_FACTS_TO_H3`, so ``PipelineManager._write_chain_metadata``
+    relays them all as ``metadata["h3"]`` (the ``chain_metadata["ltx25"]``
+    route)."""
+    chain = dict(event.get("chain") or {})
+    inner = chain.get("h3")
+    chain["h3"] = {
+        **h3_facts,
+        **{key: chain[key] for key in _CHAIN_FACTS_TO_H3 if key in chain},
+        **(inner if isinstance(inner, dict) else {}),
+    }
+    # No stage 2: the metadata records no window (not the request's ignored
+    # LTX default).
+    chain.setdefault("stage2_window", None)
+    # metadata.json's chain.architecture: H3 carries the previous clip's tail
+    # latents over as fixed rows (裁定 84), not LTX's masked concat + stage 2.
+    chain["architecture"] = H3_CHAIN_ARCHITECTURE
+    return chain
 
 
 def _mock_channels_used(channels: int | None) -> str | None:
@@ -763,6 +1084,102 @@ class _MockBackendH3(_MockBackend):
             "mock": True,
         }
         return dataclasses.replace(outcome, h3={**(outcome.h3 or {}), "a2v": a2v})
+
+    def generate_chain(
+        self,
+        chain_request,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        clip0_conditioning_paths: list[Path] | None = None,
+        source_tail_path: Path | None = None,
+        source_context_frames: int | None = None,
+        source_audio_path: Path | None = None,
+        retake_window_path: Path | None = None,
+        end_source_path: Path | None = None,
+        end_source_context_frames: int | None = None,
+        end_source_strength: float | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
+        reference_video_path: Path | None = None,
+        seed: int | None = None,
+    ) -> GenerationOutcome:
+        """A synthetic H3 chain: ONE mp4 of the whole timeline (``F_total`` =
+        the clips minus 22 per seam, ``h3_chain_math``) and the layout as
+        ``chain_metadata``, plus the chain's ``h3`` record (``mock: true``).
+        Progress is ``stage1_denoise`` per clip with its ``clip`` /
+        ``clip_count``, on the real chain's one band. The material keywords
+        are accepted for the shared signature and ignored (the request fields
+        behind them are refused by :func:`reject_chain`)."""
+        if not self._loaded:
+            self.load()
+
+        chain = chain_request
+        seed = int(seed) if seed is not None else resolve_seed(chain.seed)
+        layout = h3_chain_math.compute_h3_chain_layout([c.num_frames for c in chain.clips])
+        gpu_info.reset_peak_vram()
+        if progress_callback:
+            progress_callback(None, None, 0.05)
+
+        n_clips = layout.n_clips
+        steps = int(chain.num_inference_steps)
+        for i in range(n_clips):
+            for step in range(1, steps + 1):
+                if progress_callback:
+                    frac = 0.05 + 0.85 * (i + step / steps) / n_clips
+                    progress_callback(
+                        step, steps, round(frac, 3), "stage1_denoise",
+                        clip=i + 1, clip_count=n_clips,
+                    )
+
+        frames = self._render_chain_frames(
+            width=chain.width, height=chain.height, n=layout.total_frames,
+            seed=seed, start_image=None, progress_callback=progress_callback,
+        )
+        if progress_callback:
+            progress_callback(None, None, 0.95, "decode")
+
+        crop = None
+        if chain.crop_output is not None:
+            crop = (chain.crop_output.width, chain.crop_output.height)
+        output_path = output_dir / "output.mp4"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        video_io.encode_frames_to_mp4(
+            frames, output_path, frame_rate=chain.frame_rate, crop=crop,
+            keep_raw=self.config.output.keep_raw_frames, raw_dir=output_dir / "raw",
+        )
+        peak = gpu_info.peak_vram_mb()
+        if progress_callback:
+            progress_callback(None, None, 1.0)
+        safe_memory_cleanup()
+
+        # The real worker's ``done.chain`` shape: the layout, the seeds and the
+        # per-clip record. What only real latents can tell (``latents_sha256``,
+        # ``head_equals_prev_tail``) and the timings are None — the mock never
+        # fabricates a passing proof (the retake / end-source precedent).
+        done_chain = layout.to_dict()
+        done_chain["seeds"] = [seed + i for i in range(n_clips)]
+        done_chain["clips"] = [
+            {
+                "prompt_sha256": hashlib.sha256(chain.clip_prompt(i).encode("utf-8")).hexdigest(),
+                "seconds": None,
+                "latents_sha256": None,
+                "head_equals_prev_tail": None,
+            }
+            for i in range(n_clips)
+        ]
+        done_chain["h3"] = {
+            "overlap_frames": layout.overlap_frames,
+            "inject_clean": 1.0,
+            "decode": "once",
+        }
+        chain_metadata = _chain_metadata({"chain": done_chain}, {"mock": True})
+        return GenerationOutcome(
+            output_path=output_path,
+            seed_used=seed,
+            peak_vram_mb=peak,
+            generation_mode="chain",
+            backend=self.backend_label,
+            chain_metadata=chain_metadata,
+        )
 
 
 class H3Runner(LTXRunner):

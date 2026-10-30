@@ -4475,7 +4475,7 @@ def test_mp4_info_transport_error_returns_exception_text():
 # --------------------------------------------------------------------------- #
 # VRAM 16GB mode (vram16_mode): MiniMax H3 only. The server field defaults to
 # None (= the family default, on for H3); the Gradio mirror is on, so the key
-# rides only as ``false``. Single Generate flow only (H3 refuses every chain).
+# rides only as ``false``. Single Generate flow only (the Chain tab is LTX-only).
 # --------------------------------------------------------------------------- #
 
 

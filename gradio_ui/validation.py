@@ -1,5 +1,6 @@
 """Clip-chain total-timeline precheck. Mirrors the SAME arithmetic the API
-validator uses (api/models.py GenerateChainRequest.validate_chain_constraints):
+validator uses (LTX's chain rules, services/engines/ltx/chain_rules.py
+``validate_ltx_chain``, applied by services.engines.validate_chain_for_family):
 it delegates to the shared pure-Python ``chain_math.compute_chain_layout`` and
 compares against MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24 * 481 (= 11544), so the GUI and
 the server agree byte-for-byte. Returns a localized error string on violation,

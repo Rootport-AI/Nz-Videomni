@@ -9,8 +9,8 @@ Pinned here, none of it needing a GPU or a weight file:
 1. the four-way audit of ``GenerateRequest`` against the adapter's tables
    (``conditioning_images`` is the one field that is both honoured and refused —
    key frames on any frame run, a strength does not);
-2. the refusals and ``UNSUPPORTED_FEATURES`` (the reject table's names + ``chain`` + ``retake``
-   + ``fused_gguf_dequant_kernel`` + ``lora_audio_strength``);
+2. the refusals and ``UNSUPPORTED_FEATURES`` (both reject tables' names +
+   ``fused_gguf_dequant_kernel`` + ``lora_audio_strength``);
 3. the numeric rules and the ``constraints`` block GET /models publishes, for
    H3 and for LTX (the two JSON blocks of the stage-2 plan §3.3, verbatim);
 4. the worker payloads: ``load`` (golden, no ``te_layers_on_gpu``) and
@@ -186,7 +186,9 @@ def test_t2v_and_keyframe_i2v_are_accepted():
     ]))
 
 
-def test_unsupported_features_is_the_reject_table_plus_chain_retake_and_fused_kernel():
+def test_unsupported_features_is_both_reject_tables_plus_fused_kernel():
+    # 台帳 §1-106: ``chain`` is no longer published (the Chained tab opens);
+    # the chain shapes H3 does not run are named one by one instead.
     assert h3.UNSUPPORTED_FEATURES == (
         "reference_video",
         "nag",
@@ -198,7 +200,10 @@ def test_unsupported_features_is_the_reject_table_plus_chain_retake_and_fused_ke
         "prune_vaed",
         "keep_resident_embeddings",
         "keyframe_strength",
-        "chain",
+        "chain_start_image",
+        "v2v",
+        "a2v",
+        "end_source",
         "retake",
         "fused_gguf_dequant_kernel",
         "lora_audio_strength",
@@ -255,12 +260,11 @@ def test_fused_kernel_is_published_but_ignored_not_refused():
     h3.reject_unsupported(_request(fused_gguf_dequant_kernel=False))
 
 
-def test_every_chain_is_refused():
-    chain = GenerateChainRequest(prompt=PROMPT, clips=[{"num_frames": 49}, {"num_frames": 49}])
-    with pytest.raises(APIError) as ei:
-        engines.reject_chain("h3", chain)
-    assert ei.value.code == "FEATURE_UNSUPPORTED"
-    assert "chain" in ei.value.message
+def test_a_plain_t2v_chain_is_not_refused():
+    # 台帳 §1-106: the chain endpoint is open on H3 (T2V clips); the shapes it
+    # does not run are refused field by field (section 6 below).
+    engines.reject_chain("h3", _chain())
+    assert "chain" not in h3.UNSUPPORTED_FEATURES
 
 
 def test_registration():
@@ -288,6 +292,8 @@ H3_CONSTRAINTS = {
     },
     "keyframes": {"step": 1, "offset": 0},
     "source_audio": {"strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
+    # The chain's fixed overlap (台帳 §1-106, 裁定 84-3). H3 only: LTX has no key.
+    "chain": {"overlap_frames": 22},
     "prompt_token_limit": None,
     "reference": {
         "max_images": 9,
@@ -904,14 +910,31 @@ def test_get_loras_follows_the_base_model(three_family_client, tmp_path):
     assert not {"style-a", "odd"} & {row["name"] for row in body["loras"]}
 
 
-def test_h3_refuses_a_chain_over_http(three_family_client):
+def test_h3_refuses_a_chain_start_image_over_http(three_family_client):
+    """A start image is refused as FEATURE_UNSUPPORTED before the image lookup
+    (the id does not exist), and LTX's 49-frame clips are a numeric 422."""
     _activate(three_family_client, "MiniMaxH3")
+    r = three_family_client.post(
+        "/api/v1/generate/chain",
+        json={
+            "prompt": PROMPT,
+            "width": 640,
+            "height": 384,
+            "clips": [
+                {"num_frames": 124, "conditioning_images": [{"image_id": "nope", "frame_idx": 0}]},
+                {"num_frames": 124},
+            ],
+        },
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "FEATURE_UNSUPPORTED"
+    assert "'chain_start_image'" in r.json()["error"]["message"]
     r = three_family_client.post(
         "/api/v1/generate/chain",
         json={"prompt": PROMPT, "clips": [{"num_frames": 49}, {"num_frames": 49}]},
     )
     assert r.status_code == 422, r.text
-    assert r.json()["error"]["code"] == "FEATURE_UNSUPPORTED"
+    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 def test_ltx_request_shapes_still_pass_on_ltx_after_h3(three_family_client):
@@ -1014,3 +1037,414 @@ def test_vram16_oom_guidance_reaches_the_job_error_as_gpu_oom(three_family_clien
     assert job.status == JobStatus.failed
     assert job.error.startswith("GPU_OOM:")
     assert "解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください" in job.error
+
+
+# --------------------------------------------------------------------------- #
+# 6) the chain (台帳 §1-106, 裁定 84): scope, numeric rules, payload, HTTP
+# --------------------------------------------------------------------------- #
+
+import h3_chain_math  # noqa: E402  (the repository-root geometry, torch-free)
+
+
+def _chain(**overrides) -> GenerateChainRequest:
+    body: dict = {
+        "prompt": PROMPT,
+        "width": 640,
+        "height": 384,
+        "clips": [{"num_frames": 124}, {"num_frames": 124, "prompt": "waves crash"}, {"num_frames": 124}],
+    }
+    body.update(overrides)
+    return GenerateChainRequest(**body)
+
+
+def _validated_chain(**overrides) -> GenerateChainRequest:
+    chain = _chain(**overrides)
+    engines.validate_chain_for_family("h3", chain)
+    return chain
+
+
+_CHAIN_CLASSIFICATIONS = {
+    "422 (CHAIN_REJECT_TABLE)": lambda: {f for f, _feat, _p in h3.CHAIN_REJECT_TABLE},
+    "ignored (CHAIN_IGNORED_FIELDS)": lambda: set(h3.CHAIN_IGNORED_FIELDS),
+    "honoured (CHAIN_HONOURED_FIELDS)": lambda: set(h3.CHAIN_HONOURED_FIELDS),
+    "governed (CHAIN_GOVERNED_FIELDS)": lambda: set(h3.CHAIN_GOVERNED_FIELDS),
+}
+
+#: The one chain field allowed in two tables: honoured (the prompts and
+#: lengths) AND refused (a start image).
+_ALLOWED_CHAIN_OVERLAP = {"clips"}
+
+
+def test_the_four_chain_tables_together_are_exactly_the_chain_schema():
+    classified: set[str] = set()
+    for produce in _CHAIN_CLASSIFICATIONS.values():
+        classified |= produce()
+    fields = set(GenerateChainRequest.model_fields)
+    assert not fields - classified, (
+        "GenerateChainRequest gained field(s) the MiniMax H3 adapter says nothing "
+        f"about: {sorted(fields - classified)}"
+    )
+    assert not classified - fields, f"unknown field(s): {sorted(classified - fields)}"
+
+
+def test_the_four_chain_tables_overlap_only_on_clips():
+    seen: dict[str, str] = {}
+    overlaps: set[str] = set()
+    for label, produce in _CHAIN_CLASSIFICATIONS.items():
+        for field in produce():
+            if field in seen:
+                overlaps.add(field)
+            seen[field] = label
+    assert overlaps == _ALLOWED_CHAIN_OVERLAP
+    refused = {f for f, _feat, _p in h3.CHAIN_REJECT_TABLE}
+    assert _ALLOWED_CHAIN_OVERLAP <= refused & set(h3.CHAIN_HONOURED_FIELDS)
+
+
+def test_every_chain_governor_is_itself_refused():
+    refused = {f for f, _feat, _p in h3.CHAIN_REJECT_TABLE}
+    for field, governor in h3.CHAIN_GOVERNED_FIELDS.items():
+        assert governor in refused, f"{field} is governed by {governor}, which is not refused"
+
+
+def test_chain_honoured_fields_are_read_by_generate_chain():
+    source = inspect.getsource(h3._RealBackendH3.generate_chain)
+    # ``prompt`` is read through shared_prompt() / clip_prompt(i).
+    for field in h3.CHAIN_HONOURED_FIELDS - {"embed_mp4_metadata", "prompt"}:
+        assert f"chain.{field}" in source, f"{field} is declared honoured but never read"
+    assert "chain.shared_prompt()" in source and "chain.clip_prompt(i)" in source
+
+
+def test_chain_ignored_fields_are_really_not_read_by_generate_chain():
+    source = inspect.getsource(h3._RealBackendH3.generate_chain)
+    for field in h3.CHAIN_IGNORED_FIELDS:
+        assert f"chain.{field}" not in source
+
+
+#: One request per chain reject-table row (keyed by FEATURE).
+CHAIN_OVERRIDES_H3: dict[str, dict] = {
+    "chain_start_image": {"clips": [{"num_frames": 124, "conditioning_images": [_IMG]}, {"num_frames": 124}]},
+    "v2v": {"source_video": {"video_id": "vid-1", "context_frames": 73}},
+    "a2v": {"source_audio": {"audio_id": "aud-1"}},
+    "end_source": {"end_source": {"video_id": "vid-1", "context_frames": 72}},
+    "retake": {
+        "clips": [{"num_frames": 124}],
+        "retake": {"video_id": "vid-1", "window_start_sec": 0.0},
+    },
+    "reference_video": {"reference_video_id": "vid-1", "loras": _LORAS},
+    "nag": {"nag_enabled": True, "negative_prompt": "blurry"},
+    "two_stage_hq": {"pipeline": "two_stage_hq"},
+    "guidance_scale": {"guidance_scale": 3.0},
+    "prune_vaed": {"vae_mode": "prune_vaed"},
+    "keep_resident_embeddings": {"keep_resident_embeddings": True},
+}
+
+
+def test_the_chain_fixture_covers_every_chain_refusal():
+    assert set(CHAIN_OVERRIDES_H3) == {feat for _f, feat, _p in h3.CHAIN_REJECT_TABLE}
+
+
+@pytest.mark.parametrize("feature", list(CHAIN_OVERRIDES_H3))
+def test_every_chain_refusal_raises_feature_unsupported_naming_h3(feature):
+    chain = _chain(**CHAIN_OVERRIDES_H3[feature])
+    fired = [feat for _f, feat, pred in h3.CHAIN_REJECT_TABLE if pred(chain)]
+    assert fired == [feature]
+    with pytest.raises(APIError) as ei:
+        engines.reject_chain("h3", chain)
+    assert ei.value.code == "FEATURE_UNSUPPORTED"
+    assert f"'{feature}'" in ei.value.message
+    assert "MiniMax H3" in ei.value.detail
+
+
+def test_every_chain_refusal_is_published():
+    """The ``tests/test_ltx25_api_guard.py`` rule: a name the 422 uses must be
+    in ``unsupported_features``, or a control stays open that always fails."""
+    assert {feat for _f, feat, _p in h3.CHAIN_REJECT_TABLE} <= set(h3.UNSUPPORTED_FEATURES)
+    assert {feat for _f, feat, _p in h3.REJECT_TABLE} <= set(h3.UNSUPPORTED_FEATURES)
+
+
+def test_chain_defaults_are_written_back():
+    chain = _validated_chain()
+    assert (chain.num_inference_steps, chain.shift_video, chain.shift_audio) == (20, 12.0, 3.0)
+    assert isinstance(chain.num_inference_steps, int)
+    assert chain.vram16_mode is True
+    # The schema default stays LTX's 8 (LTX's payload and stored request).
+    assert GenerateChainRequest.model_fields["num_inference_steps"].default == 8
+
+
+def test_chain_explicit_values_are_kept_including_an_explicit_8():
+    chain = _validated_chain(num_inference_steps=8, shift_video=5.5, shift_audio=2.0, vram16_mode=False)
+    assert (chain.num_inference_steps, chain.shift_video, chain.shift_audio) == (8, 5.5, 2.0)
+    assert chain.vram16_mode is False
+
+
+def test_chain_lora_audio_strength_is_nulled():
+    chain = _validated_chain(loras=[{"name": "turbo", "strength": 1.0, "audio_strength": 0.0}])
+    assert chain.loras[0].audio_strength is None
+
+
+def test_chain_constraints_publish_the_fixed_overlap_from_the_geometry():
+    assert engines.request_constraints("h3")["chain"] == {
+        "overlap_frames": h3_chain_math.H3_CHAIN_OVERLAP_FRAMES
+    }
+    assert "chain" not in engines.request_constraints("ltx")
+    assert "chain" not in engines.request_constraints("ltx25")
+
+
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        # Request-wide fields: once, with the single path's message.
+        ({"width": 650}, "width must be a multiple of 32"),
+        ({"height": 400}, "height must be a multiple of 32"),
+        ({"frame_rate": 30.0}, "frame_rate must be 24"),
+        ({"num_inference_steps": 60}, "num_inference_steps must be between 1 and 50"),
+        ({"shift_video": 25.0}, "shift_video must be between 1 and 20"),
+        ({"shift_audio": 0.5}, "shift_audio must be between 1 and 20"),
+        # A clip's own num_frames: prefixed with the clip.
+        (
+            {"clips": [{"num_frames": 124}, {"num_frames": 121}]},
+            "clips[1]: num_frames must be 17n+5",
+        ),
+        # The timeline (h3_chain_math): clip 2 onward needs a new latent past the overlap.
+        # (The total cap 11,544 is out of reach here: 24 clips x 481 frames = 11,038.)
+        (
+            {"clips": [{"num_frames": 124}, {"num_frames": 22}]},
+            "clips[1]: num_frames must be at least 39 (overlap 22 + one grid step)",
+        ),
+        # A clip-length violation and a request-wide one together: the
+        # request-wide one comes first.
+        (
+            {"clips": [{"num_frames": 124}, {"num_frames": 121}], "width": 650},
+            "width must be a multiple of 32",
+        ),
+    ],
+)
+def test_chain_violations(overrides, message):
+    with pytest.raises(APIError) as ei:
+        _validated_chain(**overrides)
+    err = ei.value
+    assert err.code == "VALIDATION_ERROR" and err.status_code == 422
+    assert err.detail == [{"loc": ["body"], "msg": f"Value error, {message}", "type": "value_error"}]
+
+
+def test_chain_clip_two_onward_needs_39_frames():
+    with pytest.raises(APIError) as ei:
+        _validated_chain(clips=[{"num_frames": 124}, {"num_frames": 22}])
+    assert ei.value.code == "VALIDATION_ERROR"
+    assert str(h3_chain_math.H3_CHAIN_MIN_NEXT_FRAMES) in ei.value.detail[0]["msg"]
+    _validated_chain(clips=[{"num_frames": 22}, {"num_frames": 39}, {"num_frames": 39}])
+
+
+def test_chain_cap_is_the_ltx_cap():
+    from api.models import MAX_CHAIN_TOTAL_PIXEL_FRAMES
+
+    assert h3_chain_math.H3_CHAIN_MAX_TOTAL_FRAMES == MAX_CHAIN_TOTAL_PIXEL_FRAMES
+
+
+GOLDEN_CHAIN_KEYS_H3 = [
+    "op",
+    "prompt",
+    "seed",
+    "width",
+    "height",
+    "frame_rate",
+    "num_inference_steps",
+    "shift_video",
+    "shift_audio",
+    "loras",
+    "attention_backend",
+    "block_swap_prefetch",
+    "vram16_mode",
+    "output_path",
+    "clips",
+]
+
+CHAIN_DONE_EVENT = {
+    **DONE_EVENT,
+    "num_frames": 328,
+    "h3": {"phases": {"clips": [{"encode": 1.0}], "decode": {"seconds": 2.0}}, "loras": []},
+    "chain": {
+        **h3_chain_math.compute_h3_chain_layout([124, 124, 124]).to_dict(),
+        "seeds": [42, 43, 44],
+        "clips": [
+            {
+                "prompt_sha256": "ab" * 32,
+                "seconds": {"encode": 1.0, "denoise": 100.0},
+                "latents_sha256": {"video": "cd" * 32, "audio": "ef" * 32},
+                "head_equals_prev_tail": i > 0 or None,
+            }
+            for i in range(3)
+        ],
+        "h3": {"overlap_frames": 22, "inject_clean": 1.0, "decode": "once"},
+    },
+}
+
+
+def test_generate_chain_payload_golden(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    be.generate_chain(_validated_chain(), tmp_path / "job", seed=42)
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_H3
+    assert payload["op"] == "generate_chain"
+    assert payload["prompt"] == PROMPT
+    # Each clip's prompt is the shared one with the clip's own appended (§1-110).
+    assert payload["clips"] == [
+        {"prompt": PROMPT, "num_frames": 124},
+        {"prompt": f"{PROMPT} waves crash", "num_frames": 124},
+        {"prompt": PROMPT, "num_frames": 124},
+    ]
+    assert (payload["num_inference_steps"], payload["shift_video"], payload["shift_audio"]) == (20, 12.0, 3.0)
+    assert payload["vram16_mode"] is True
+    assert payload["loras"] == []
+    for absent in ("num_frames", "images", "source_audio", "references", "keep_resident"):
+        assert absent not in payload
+    assert be.read_calls == [{"chain": True, "prefix": "chain", "one_stage": True}]
+
+
+def test_generate_chain_payload_keep_resident_and_loras(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    lora = types.SimpleNamespace(path=tmp_path / "turbo.safetensors", strength=1.0, audio_strength=None)
+    be.generate_chain(
+        _validated_chain(keep_resident=True, loras=[{"name": "turbo", "strength": 1.0}]),
+        tmp_path / "job", seed=42, lora_paths=[lora],
+    )
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_H3 + ["keep_resident"]
+    assert payload["loras"] == [{"path": str(tmp_path / "turbo.safetensors"), "strength": 1.0}]
+
+
+def test_generate_chain_relays_the_done_event(tmp_path):
+    be = _capturing_backend([], CHAIN_DONE_EVENT)
+    out = be.generate_chain(_validated_chain(), tmp_path / "job", seed=42)
+    assert out.generation_mode == "chain"
+    assert out.backend == h3.REAL_BACKEND_H3
+    assert out.vram16_mode_used == "on"
+    assert out.attention_used == "sdpa"
+    cm = out.chain_metadata
+    assert cm["total_px"] == 328
+    assert cm["overlap_frames"] == 22 and cm["overlap_strength"] == 1.0
+    assert cm["stage2_window"] is None
+    # The engine's facts and the chain's own, both under chain["h3"].
+    assert cm["h3"]["inject_clean"] == 1.0 and cm["h3"]["decode"] == "once"
+    assert cm["h3"]["phases"] == CHAIN_DONE_EVENT["h3"]["phases"]
+    assert cm["h3"]["num_inference_steps"] == 20
+    # The GPU gates' evidence rides chain["h3"] -> metadata["h3"].
+    assert cm["h3"]["clips"] == CHAIN_DONE_EVENT["chain"]["clips"]
+    assert cm["h3"]["seeds"] == [42, 43, 44]
+    assert cm["h3"]["audio_latent_excess"] == CHAIN_DONE_EVENT["chain"]["audio_latent_excess"]
+    assert cm["h3"]["audio_drift_flags"] == CHAIN_DONE_EVENT["chain"]["audio_drift_flags"]
+    assert out.h3["phases"] == CHAIN_DONE_EVENT["h3"]["phases"]
+
+
+def test_generate_chain_crops_on_the_app_side(tmp_path, monkeypatch):
+    captured: list[dict] = []
+    crops: list[tuple] = []
+
+    def _crop(src, dst, w, h):
+        crops.append((Path(src).name, w, h))
+        Path(dst).write_bytes(b"\x00" * 8)
+
+    monkeypatch.setattr(h3.video_io, "crop_mp4", _crop)
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    out = be.generate_chain(
+        _validated_chain(crop_output={"width": 600, "height": 360}), tmp_path / "job", seed=1
+    )
+    assert Path(captured[0]["output_path"]).name == "_full.mp4"
+    assert crops == [("_full.mp4", 600, 360)]
+    assert out.output_path.name == "output.mp4"
+
+
+def test_generate_chain_refuses_as_the_backstop(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    with pytest.raises(APIError):
+        be.generate_chain(_chain(nag_enabled=True, negative_prompt="x"), tmp_path / "job", seed=1)
+    assert captured == []
+
+
+def test_mock_chain_over_http(three_family_client):
+    """裁定 84 on the mock: 3 clips of 124 -> one 328-frame mp4, H3's geometry
+    in metadata, and the bar walking clip by clip on one band."""
+    _activate(three_family_client, "MiniMaxH3")
+    pm = three_family_client.app_context.pipeline_manager
+    orig = pm.runner.generate_chain
+    events: list[tuple] = []
+
+    def wrapped(*a, **k):
+        inner = k["progress_callback"]
+
+        def cb(step, total, frac, stage=None, **kw):
+            events.append((frac, stage, kw.get("clip"), kw.get("clip_count")))
+            inner(step, total, frac, stage, **kw)
+
+        k["progress_callback"] = cb
+        return orig(*a, **k)
+
+    pm.runner.generate_chain = wrapped  # type: ignore[method-assign]
+    r = three_family_client.post(
+        "/api/v1/generate/chain",
+        json={
+            "prompt": PROMPT,
+            "width": 640,
+            "height": 384,
+            "clips": [{"num_frames": 124}, {"num_frames": 124}, {"num_frames": 124}],
+        },
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = three_family_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+    assert (job["clip"], job["clip_count"]) == (3, 3)
+
+    fracs = [e[0] for e in events]
+    assert fracs == sorted(fracs) and fracs[-1] == 1.0
+    assert {e[2] for e in events if e[1] == "stage1_denoise"} == {1, 2, 3}
+    assert {e[3] for e in events if e[1] == "stage1_denoise"} == {3}
+
+    meta = _metadata(three_family_client, job_id)
+    assert meta["backend"] == h3.MOCK_BACKEND_H3
+    assert meta["request"]["num_inference_steps"] == 20
+    assert meta["request"]["vram16_mode"] is True
+    assert meta["chain"]["overlap_frames"] == 22
+    assert meta["chain"]["overlap_strength"] == 1.0
+    assert meta["chain"]["stage2_window"] is None
+    assert meta["chain"]["architecture"] == "h3_masked_av_latent_carry"
+    assert meta["chain"]["total_frames"] == 3 * 124 - 2 * 22
+    assert meta["chain"]["segment_seam_junctions"] == [123, 225]
+    assert meta["h3"]["mock"] is True and meta["h3"]["decode"] == "once"
+    # The GPU gates' evidence reaches metadata.json (the mock fabricates no proof).
+    assert meta["h3"]["seeds"] == [meta["seed_used"] + i for i in range(3)]
+    assert [c["latents_sha256"] for c in meta["h3"]["clips"]] == [None, None, None]
+    assert [c["head_equals_prev_tail"] for c in meta["h3"]["clips"]] == [None, None, None]
+    assert len({c["prompt_sha256"] for c in meta["h3"]["clips"]}) == 1  # one shared prompt
+    assert meta["h3"]["audio_latent_excess"] == h3_chain_math.compute_h3_chain_layout(
+        [124, 124, 124]
+    ).audio_latent_excess
+    assert meta["h3"]["audio_drift_flags"] == [False, False, False]
+    assert meta["output"]["duration_seconds"] == round(328 / 24.0, 3)
+
+
+def test_ltx_chain_metadata_is_unchanged_after_h3(three_family_client):
+    """The writer prefers the chain metadata's own overlap / window only when
+    it carries them; an LTX mock chain still records the request's."""
+    _activate(three_family_client, "MiniMaxH3")
+    _activate(three_family_client, "LTX23")
+    r = three_family_client.post(
+        "/api/v1/generate/chain",
+        json={
+            "prompt": PROMPT, "width": 384, "height": 256, "overlap_frames": 2,
+            "clips": [{"num_frames": 25}, {"num_frames": 25}],
+        },
+    )
+    assert r.status_code == 202, r.text
+    meta = _metadata(three_family_client, r.json()["job_id"])
+    assert (meta["chain"]["overlap_frames"], meta["chain"]["overlap_strength"]) == (2, 0.5)
+    assert meta["chain"]["stage2_window"] == "standard"
+    assert meta["chain"]["architecture"] == "masked_av_latent_concat"
+    assert meta["request"]["num_inference_steps"] == 8
+    # The three H3 fields ride along as null keys (additive).
+    assert meta["request"]["vram16_mode"] is None
+    assert meta["request"]["shift_video"] is None and meta["request"]["shift_audio"] is None
+    assert "h3" not in meta

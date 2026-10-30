@@ -387,6 +387,9 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
       audio_total_sec: 15,
       clip_min_sec: 2,
     },
+    // §1-106: the server-fixed chain seam (22 PIXEL frames), as the real
+    // `GET /models` publishes it. LTX publishes no `chain` block.
+    chain: { overlap_frames: 22 },
   },
 };
 
@@ -554,12 +557,16 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
-  // name of the single-request reject table, plus `chain` (the whole chain
-  // endpoint is refused) and `retake` (a Retake is a chain request, so the
-  // adapter publishes the name, which closes the Retake sub-tab). What each
-  // name closes on screen is `shell/featureScope.ts`'s `FEATURE_UI`.
+  // name of the single-request reject table, plus `retake` (a Retake is a
+  // chain request, so the adapter publishes the name, which closes the Retake
+  // sub-tab). What each name closes on screen is `shell/featureScope.ts`'s
+  // `FEATURE_UI`.
   // 台帳 §1-104: `loras` left (H3 runs Style / Turbo LoRAs now) and
   // `lora_audio_strength` joined at the end (one strength per LoRA).
+  // §1-106: `chain` LEFT (H3 chains from text now) and the chain material it
+  // cannot take joined in its place: `v2v`, `end_source`, `a2v` (the chain's
+  // audio panel and Batch A2V) and `chain_start_image` (clip 0's opening image
+  // and Batch i2v-long).
   MiniMaxH3: [
     "reference_video",
     "nag",
@@ -571,7 +578,10 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "prune_vaed",
     "keep_resident_embeddings",
     "keyframe_strength",
-    "chain",
+    "v2v",
+    "end_source",
+    "a2v",
+    "chain_start_image",
     "retake",
     // 台帳 §1-100: no GGUF weights, so the server IGNORES the field (no 422) — hides the Settings row only.
     "fused_gguf_dequant_kernel",
@@ -631,6 +641,21 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
   // correctly (`false` is not a request, `true` is), unlike the two
   // string-valued rows above it.
   { field: "keep_resident_embeddings", feature: "keep_resident_embeddings" },
+  // §1-106: the two chain features MiniMax H3 publishes that no row above
+  // carried — the end source, and clip 0's opening image (which lives INSIDE
+  // `clips`, hence a predicate of its own: a clip list is always non-empty, so
+  // the shared test would refuse every chain).
+  { field: "end_source", feature: "end_source" },
+  {
+    field: "clips",
+    feature: "chain_start_image",
+    isSet: (v) =>
+      Array.isArray(v) &&
+      v.some((clip) => {
+        const images = (clip as { conditioning_images?: unknown } | null)?.conditioning_images;
+        return Array.isArray(images) && images.length > 0;
+      }),
+  },
 ];
 
 const MOCK_DEFAULT_BASE_MODEL = "LTX23";

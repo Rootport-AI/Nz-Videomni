@@ -50,6 +50,11 @@ export interface SourceInputPanelProps {
    * `ChainedScreen` renders the sentence explaining it directly above the
    * card. Omitted -> no restriction. */
   videoUnavailable?: boolean | undefined;
+  /** §1-106 (`chain_start_image`): closes clip 0's opening image (strength
+   * slider dead; an attached image keeps its thumbnail so it can be cleared).
+   * With `videoUnavailable` too, the whole card closes via `closed`. Not meant
+   * alone: an engine publishing `chain_start_image` publishes `v2v` too. */
+  imageUnavailable?: boolean | undefined;
 }
 
 /** Chain's unified source-input slot (task brief "Chainのソース入力欄一本
@@ -78,7 +83,11 @@ export function SourceInputPanel({
   nativeBridge,
   mediaSize,
   videoUnavailable = false,
+  imageUnavailable = false,
 }: SourceInputPanelProps) {
+  // §1-106: both halves closed = the card takes no material at all. Everything
+  // that adds or edits reads `closed`; the clear button reads `disabled` alone.
+  const closed = disabled || (videoUnavailable && imageUnavailable);
   const strings = useStrings();
   const t = strings.chained.sourceInput;
   const svt = strings.chained.sourceVideo;
@@ -116,7 +125,7 @@ export function SourceInputPanel({
     accept: videoUnavailable ? IMAGE_ONLY_SOURCE_EXTENSIONS : SOURCE_INPUT_EXTENSIONS,
     onFile: (filePath, fileName) =>
       void form.attachSourceByPath(filePath, fileName, undefined, { imagesOnly: videoUnavailable }),
-    disabled: disabled || busy,
+    disabled: closed || busy,
     nativeBridge,
   });
 
@@ -152,7 +161,7 @@ export function SourceInputPanel({
           className="icon-action-button source-input-pick"
           title={chooseLabel}
           aria-label={chooseLabel}
-          disabled={disabled || busy}
+          disabled={closed || busy}
           onClick={() => void form.pickSource({ imagesOnly: videoUnavailable })}
         >
           <span aria-hidden="true">📁</span>
@@ -202,7 +211,7 @@ export function SourceInputPanel({
                 max={form.contextFramesLimits.max}
                 step={8}
                 value={form.contextFrames}
-                disabled={disabled || videoUnavailable || videoState.status !== "ready"}
+                disabled={closed || videoUnavailable || videoState.status !== "ready"}
                 onChange={(e) => form.setContextFrames(Number(e.target.value))}
               />
               <span className="field-hint">{form.contextFrames}</span>
@@ -216,7 +225,7 @@ export function SourceInputPanel({
                 max={STRENGTH_MAX}
                 step={STRENGTH_STEP}
                 value={imageItem?.strength ?? DEFAULT_STRENGTH}
-                disabled={disabled || !imageItem || imageItem.status === "error"}
+                disabled={closed || imageUnavailable || !imageItem || imageItem.status === "error"}
                 onChange={(e) => imageItem && form.startFrame.setStrength(imageItem.id, Number(e.target.value))}
               />
               <span className="field-hint">{(imageItem?.strength ?? DEFAULT_STRENGTH).toFixed(2)}</span>

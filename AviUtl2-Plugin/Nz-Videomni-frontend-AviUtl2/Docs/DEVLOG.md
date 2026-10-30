@@ -5649,3 +5649,66 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - §151.5 の「参照動画を入れるとテキストエンコーダーの段の VRAM が物理の 16GB を超えることがある」という既知の隙は、解消しました。操作パネルに警告を出していなかったので、取り下げるものはありません。
 - 残る限界は 2 つで、どちらも操作パネルには出していません。参照動画が長いほど視覚の塔の VRAM が増えること、入力が長いほどテキストエンコーダーの時間が入力の長さの 2 乗で伸びること（設計正本の既知の限界）。行数の上限や自動の縮小は足していません（快適上限は情報であって制約ではない）。
 - ノイズ除去の段（DiT）の VRAM 対策は、別件として台帳 §1-118 にあります。
+
+## 153. MiniMax H3 の Chained〔複数クリップの連結〕 — Chained タブが H3 で開く・固定の重なりモード・右クリック入口の門・音声の注意の一行（バックエンド台帳 CLOSED 3-262。2026-10-29〜30）
+
+### 153.1 結論
+
+- **Chained タブが MiniMax H3 でも使えるようになりました。** 画面はエンジンの名前を読まず、サーバーの `constraints.chain`（あれば「重なりを固定したモード」）と `unsupported_features`（閉じる素材）だけで切り替えます。LTX の Chained の見た目と送信本文は変わりません。
+- 固定の重なりモードで LTX 専用の欄を隠し、サンプリングと出力の合計長を出します（153.2）。
+- H3 の連結は文章だけから始まります。源入力パネル（動画も画像も）・素材（末尾）・参照動画・長尺 A2V・バッチ i2v-long は閉じ、右クリックの Chained 系の入口 7 種は、閉じたパネル行きなら案内 1 行だけで断ります。
+- **BRIDGE_CONTRACT は不変です（v17 のまま）。** 変更は `webui/src/` だけで、native は触っていません。
+- 設計の正本は [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.3 と裁定 84・85、門の記録は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §183・§184、台帳は `PENDING_TASKS_CLOSED.md` 3-262 です（バックエンド側の仕組みはここに写しません）。
+
+### 153.2 設計上の判断
+
+- **画面はエンジン id を読まない。** 固定の重なりモードに入る条件は `constraints.chain` が在ることだけです。この 1 つの条件が「重なりが固定」と「Stage-2 がない」を兼ねています（コード内のコメントにも明記）。両者が別々になったら条件を分けます。
+- **`constraints` を Chained にも渡す。** `generationConstraints.ts` の方針を「Single と Chained は読む。Edit と Batch は LTX 定数」に改め、`GenerationConstraints` に `chain: { overlapFrames } | null` を足しました。
+- **幾何の直書きを `constraints` の読みに置き換え。** 刻み（`frameGrid`）、最小は `minNumFrames`、最大は `maxNumFrames` と `MAX_CLIP_NUM_FRAMES` の小さい方、サイズの倍数（`dimensionMultiple`）、fps（固定なら固定値）。規則が変わったとき（ベースモデルの切り替え）は、全クリップ長・幅と高さ・fps、「クリップを足す」スライダーの値 `addedClipFrames` を再び snap〔最寄りの許される値へ揃える〕します。
+- **固定の重なりモードで隠す要素と出す要素。** 隠す: ブレンド幅・ブレンド強度・逆連結の案内・チャンク分割アップスケール・Stage-2 窓のセレクト・Stage-2 窓式の快適上限マーカーと予算超過の警告・「合計入力 n」と「Est.」・固定 CFG の行。出す: サンプリングのスライダー、出力の合計長（`computeFixedOverlapOutputFrames`）、2 本目以降が短すぎるときの専用の理由文（`clipTooShortForFixedOverlap`）。
+- **プリセット。** 固定の重なりモードでは LTX の快適上限（`spill_free_frames`）を使わず、プリセットの長さを H3 の刻みへ寄せるだけです（H3 には快適上限の線がまだ無いため）。
+- **サンプリングの共用。** Single と同じ部品を Chained も使います（`modes/single/samplingValues.ts`。振る舞いは変えずに移した）。
+- **送信本文。** 規則の正本は [`API_REFERENCE.md`](API_REFERENCE.md) §5.2 です。画面側の判断は、`audio_strength` を落とす `omitLoraAudioStrength` を `ChainedScreen` の `buildSubmission` で Single と同じ規則で当てることだけです。
+- **機能の表（`featureScope.ts`）。** 新しい名前は 1 つだけ、`chain_start_image`（クリップ 0 の冒頭画像）。`UiTarget` は `chainPanel.startImage` と `chainSection.batchI2vLong` の 2 つで、判定関数 `batchI2vLongDisabledFor` は `batchA2vDisabledFor` の写しです。源入力パネルは、動画と画像の両方が閉じるとカード全体を灰色にし、案内の行は画像側の文言に差し替えます。
+
+### 153.3 右クリックの入口の門（門 0 の対応表）と理由コード
+
+- **問題。** H3 で Chained タブが開くので、Chained 系の右クリック入口が、閉じたパネルへ素材を入れて 422 になります。従来の門 0 はモード単位しか見ていません。
+- **対応表（`AppShell.tsx` の `CHAIN_INTENT_PANELS`）。** 入口ごとに「素材が入るパネル」と「閉じているときに出す案内」を決めました。パネルをキーにしていて、エンジンは見ません。
+
+  | 入口 | 素材が入るパネル | 案内 |
+  |---|---|---|
+  | `extend-video` | 源入力（動画） | 動画は使えません |
+  | `image-to-clip-chain`・`current-frame-to-clip-chain` | 冒頭画像 | 冒頭画像は使えません |
+  | `reference-video-chain` | 参照動画 | 参照動画は使えません |
+  | `end-with-this` | 素材（末尾） | 末尾素材は使えません |
+  | `video-audio-to-long-a2v`・`audio-to-long-a2v` | 音声（長尺 A2V） | 音声は使えません |
+
+  閉じたパネル行きなら、案内を 1 行出して何も書き込まずに終えます。
+- **理由コード `materialInClosedPanel`。** ベースモデルを切り替えても `ChainedScreen` は作り直されないため、LTX で付けた素材が H3 でも残ります。残った素材があると Generate を止め、「このベースモデルでは使えない素材が残っています。外してください。」を出します。
+- **裁定（閉じたパネルでも「消す」ボタンだけ生かす）。** 追加や編集は止めますが、取り除くボタンは生かします。止めたままだと、理由コードが出ているのに利用者が解消できなくなるためです。
+
+### 153.4 音声の注意の一行
+
+- クリップの継ぎ目が音声の潜在の境界に乗らない組のときだけ、そのクリップの尺スライダーの下に、既定の文字色で 1 行「音声がわずかにズレる可能性があります。」を出します。ロックも黄色の警告もなく、Generate を止めません（設計正本 裁定 84-6）。
+- 判定はバックエンドの `h3_chain_math` と同じ式です（設計正本 §3.3）。経路は、関数 `audioDriftSeamFlags`（`chainUtils.ts`）→ `useChainForm` の `clipAudioDriftFlags` → `ClipCard` です。
+- 既存の `field-hint` は薄い色（ミュート色）なので使わず、新しいクラス `.clip-note`（`ChainedScreen.css`）を足しました。
+
+### 153.5 テスト
+
+- 新規は `modes/chained/useChainForm.h3.test.ts` と `modes/chained/ChainedScreen.h3.test.tsx` の 2 本です。`modes/single/samplingValues.ts`（新規）は移しただけで専用の試験はなく、Single の既存の試験で担保します。
+- 更新は `chainUtils.test.ts`・`shell/featureScope.test.ts`・`shell/AppShell.minimaxH3.test.tsx`（模擬サーバーの `GET /models` だけから H3 の Chained を検証）・`bridge/mockBridge.h3.test.ts` です。
+- 散発的な失敗への対処は、`AppShell.minimaxH3.test.tsx` の 5 か所に `{ timeout: 5_000 }` を付けました（台帳 §3-238 の型）。
+
+### 153.6 門の結果
+
+- `npm run typecheck` は 0 エラー。`npx vitest run --exclude "**/backend.integration.test.ts"` は 178 ファイル・3,519 件合格。`npm run lint` は 0 エラー。
+
+### 153.7 差分のレビューと採否
+
+- 実装差分のレビュー: Critical 0・Major 0・Minor 4・Nit 5。**Minor 4 件は全て採用**しました。プリセットで LTX の快適上限を流用しない・`addedClipFrames` を規則の変更で寄せ直す・`imageUnavailable` を単独では使わない旨を書く・LTX 側に `.size-marker` の「ある」検査を足す、です。
+- Nit のうち 2 件を採用（`ltxSeam` で判定を 1 回にする・送信テストの後で `appBridge` を LTX 2.3 に戻す）。据え置きは 3 件（字下げ・LTX から H3 へ寄せ直したときの短い 2 本目以降の理由・`ChainUnavailablePanels` と `ChainPanelsDisabled` の重複）です。過剰設計の指摘（`minClipFramesForFixedOverlap`）は、39 の根拠を置く場所として維持しました。
+
+### 153.8 状態
+
+- ビルド・デプロイ済みです（SHA-256 の 3 値が一致: `72C78BDB…`）。オーナーの実機確認（G-C3）に合格しました。台帳は CLOSED 3-262 です。

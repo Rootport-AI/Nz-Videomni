@@ -868,7 +868,7 @@ export function useBatchForm(
       // be added to this OR-list too — omitting it makes the toggle work
       // everywhere except Batch A2V. (The list feeds BOTH modes: §1-101's
       // `vram16Mode` is here for Batch i2v's `/generate` rows — MiniMax H3
-      // cannot chain, so Batch A2V never runs on the engine that reads it.)
+      // closes Batch A2V (`a2v`), so that mode never runs on the engine that reads it.)
       ...(acceleration.attentionBackend !== ATTENTION_BACKEND_DEFAULT ||
       acceleration.blockSwapPrefetch !== BLOCK_SWAP_PREFETCH_SERVER_DEFAULT ||
       acceleration.keepResident !== KEEP_RESIDENT_SERVER_DEFAULT ||

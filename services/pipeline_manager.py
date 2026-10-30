@@ -40,7 +40,7 @@ from config import AppConfig
 from services import gpu_info, video_io
 from services.audio_upload_store import AudioUploadStore
 from services.base_models import BaseModelDescriptor
-from services.engines import runner_class_for
+from services.engines import request_constraints, runner_class_for
 from services.job_store import JobRecord, JobStore, now_iso
 from services.low_vram import build_low_vram_settings, safe_memory_cleanup
 from services.lora_registry import LoraRegistry
@@ -1450,11 +1450,20 @@ class PipelineManager:
         # runner so the console value matches the render even for a -1 request.
         seed = resolve_seed(chain.seed)
 
+        # The overlap the engine will actually use. A family whose chain has a
+        # fixed overlap publishes it (constraints["chain"], MiniMax H3: 22
+        # frames at strength 1.0) and ignores the request's LTX-default
+        # overlap_frames / overlap_strength, so the line names the fixed one.
+        fixed_chain = (request_constraints(self.active_engine_family) or {}).get("chain")
+        if fixed_chain is not None:
+            overlap = f"{fixed_chain['overlap_frames']}f(fixed)"
+        else:
+            overlap = f"{chain.overlap_frames}/{chain.overlap_strength:.2f}"
         logger.info(
-            "Chain job %s start clips=%d %dx%d steps=%d fps=%g overlap=%d/%.2f seed=%d",
+            "Chain job %s start clips=%d %dx%d steps=%d fps=%g overlap=%s seed=%d",
             job.job_id, n, chain.width, chain.height,
             chain.num_inference_steps, chain.frame_rate,
-            chain.overlap_frames, chain.overlap_strength, seed,
+            overlap, seed,
         )
 
         try:
@@ -1704,6 +1713,7 @@ class PipelineManager:
                         outcome.fused_gguf_dequant_kernel_used
                     ),
                     vae_mode_used=outcome.vae_mode_used,
+                    vram16_mode_used=outcome.vram16_mode_used,
                     peak_vram_reserved_mb=outcome.peak_vram_reserved_mb,
                 )
 
@@ -1760,9 +1770,27 @@ class PipelineManager:
         block_swap_prefetch_used=None, keep_resident_used=None,
         keep_resident_embeddings_used=None,
         fused_gguf_dequant_kernel_used=None, vae_mode_used=None,
+        vram16_mode_used=None,
         peak_vram_reserved_mb=None,
     ) -> None:
         cm = chain_meta or {}
+        # The overlap and the stage-2 window as the ENGINE ran them: the chain
+        # metadata's own values when it carries them (MiniMax H3's fixed
+        # 22 frames / 1.0 and no stage-2 window, where the request holds LTX's
+        # ignored defaults; on real LTX the worker's ``done.chain`` carries the
+        # overlap too, equal to the request's), else the request's (the LTX
+        # mock's layout carries neither, nor does LTX carry a top-level window).
+        overlap_frames = cm["overlap_frames"] if "overlap_frames" in cm else chain.overlap_frames
+        overlap_strength = (
+            cm["overlap_strength"] if "overlap_strength" in cm else chain.overlap_strength
+        )
+        stage2_window = (
+            cm["stage2_window"] if "stage2_window" in cm
+            else getattr(chain, "stage2_window", "standard")
+        )
+        # The architecture's name, the same rule: MiniMax H3's chain metadata
+        # names its own; LTX's carries none and keeps the name below.
+        architecture = cm.get("architecture", "masked_av_latent_concat")
         metadata = {
             "job_id": job.job_id,
             "created_at": job.created_at,
@@ -1780,14 +1808,17 @@ class PipelineManager:
             "keep_resident_embeddings_used": keep_resident_embeddings_used,
             "fused_gguf_dequant_kernel_used": fused_gguf_dequant_kernel_used,
             "vae_mode_used": vae_mode_used,
+            # Acceleration, MiniMax H3 only: see the same key in
+            # :meth:`_write_metadata`. Always null on LTX and on the mock.
+            "vram16_mode_used": vram16_mode_used,
             "peak_vram_reserved_mb": peak_vram_reserved_mb,
             "generation_time_seconds": round(elapsed, 2),
             "backend": backend,
             "chain": {
                 "num_clips": len(chain.clips),
-                "architecture": "masked_av_latent_concat",
-                "overlap_frames": chain.overlap_frames,
-                "overlap_strength": chain.overlap_strength,
+                "architecture": architecture,
+                "overlap_frames": overlap_frames,
+                "overlap_strength": overlap_strength,
                 "total_frames": total_frames,
                 "clip_num_frames": [c.num_frames for c in chain.clips],
                 # Junction pixel-frame indices (0-based last-frame-of-segment; the
@@ -1803,7 +1834,7 @@ class PipelineManager:
                 # return chain_math.ChainLayout.to_dict(), which already carries
                 # v_tile/kt_v). Recording both is what makes a GPU gate able to
                 # prove the opt-in reached the engine.
-                "stage2_window": getattr(chain, "stage2_window", "standard"),
+                "stage2_window": stage2_window,
                 "v_tile": cm.get("v_tile"),
                 "kt_v": cm.get("kt_v"),
             },
@@ -1856,6 +1887,13 @@ class PipelineManager:
         ltx25 = cm.get("ltx25")
         if ltx25 is not None:
             metadata["ltx25"] = ltx25
+        # MiniMax H3 engine facts (additive, the same route): only present on
+        # an H3 chain. The adapter puts the engine's facts (phases, LoRA
+        # report, shifts ...) and the chain's own (overlap, inject, one decode)
+        # in ``chain["h3"]``; relayed verbatim.
+        h3 = cm.get("h3")
+        if h3 is not None:
+            metadata["h3"] = h3
         # Clip-wise IC-LoRA reference (additive): only present when a reference
         # video was actually used, so a normal (or style-loras-only) chain
         # carries no ``ic_lora`` key. Mirrors _write_metadata's single-generate

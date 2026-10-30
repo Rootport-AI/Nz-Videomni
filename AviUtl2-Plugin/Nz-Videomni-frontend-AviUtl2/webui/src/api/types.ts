@@ -299,9 +299,8 @@ export interface GenerateRequest {
    * in — omitted entirely while the server default (`true`, filled in by the
    * H3 server when absent) is selected, so this key only ever appears as
    * `false`. LTX 2.3 / 2.5 publish `vram16_mode` in `unsupported_features` and
-   * answer a `true` with a 422. Deliberately NOT mirrored on
-   * {@link GenerateChainRequest}: the backend's chain schema has no such field
-   * (H3 refuses the chain endpoint as a whole). */
+   * answer a `true` with a 422. Mirrored on {@link GenerateChainRequest}
+   * since §1-106 (MiniMax H3 chains). */
   vram16_mode?: boolean;
   /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
    * later joined.mp4) gets the same JSON as metadata.json written into its
@@ -489,8 +488,22 @@ export interface GenerateChainRequest {
   crop_output?: CropOutput | null;
   frame_rate: number;
   seed: number;
-  overlap_frames: number;
-  overlap_strength: number;
+  /** The seam blend (LTX). Omitted on a base model whose seams are fixed by
+   * the server (`constraints.chain` published — MiniMax H3), which ignores
+   * the two fields; always sent otherwise. */
+  overlap_frames?: number;
+  overlap_strength?: number;
+  /** The three sampling values (§1-106). Same rule as
+   * {@link GenerateRequest.num_inference_steps}: sent only while the loaded
+   * base model publishes `constraints.sampling` (and then always), omitted
+   * otherwise. */
+  num_inference_steps?: number;
+  shift_video?: number;
+  shift_audio?: number;
+  /** VRAM 16GB mode (§1-106): mirrors {@link GenerateRequest.vram16_mode} —
+   * same single builder (`accelerationRequestFields`), same "sent only as
+   * `false`" rule. */
+  vram16_mode?: boolean;
   clips: ChainClip[];
   source_video?: SourceVideoSpec | null;
   source_audio?: SourceAudioSpec | null;
@@ -1303,6 +1316,11 @@ export interface BaseModelConstraints {
    * engine that takes references (MiniMax H3); absent/`null` = no Reference
    * accordion (LTX, or a backend that predates the key). */
   reference?: ReferenceConstraint | null;
+  /** §1-106: present only for an engine whose chain seams are fixed by the
+   * server (MiniMax H3: `{ overlap_frames: 22 }`, in PIXEL frames). Absent =
+   * the Chained screen keeps its own seam-blend controls (LTX, or a backend
+   * that predates the key). */
+  chain?: { overlap_frames: number } | null;
 }
 
 /** `BaseModelConstraints.reference`: the flat seven limits (supervisor ruling

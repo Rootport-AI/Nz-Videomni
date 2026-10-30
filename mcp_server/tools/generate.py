@@ -8,8 +8,9 @@
 MiniMax H3 には CFG そのものが無いため。``num_inference_steps`` と shift
 （``shift_video`` / ``shift_audio``）は、ステップ数が固定の LTX には意味が無いが
 MiniMax H3 では利用者の選ぶ値なので、``submit_generate`` に限り任意引数で
-公開する（既定 ``None`` は送らない＝ベースモデルの既定値。LTX では 8 以外は 422。
-連結生成は H3 では使えないので ``submit_chain`` には出さない）。
+公開する（既定 ``None`` は送らない＝ベースモデルの既定値。LTX では 8 以外は 422）。
+``submit_chain`` には出さない: H3 の連結生成は送らないとき H3 の既定（20 ステップ・
+shift 12 / 3）で動くので、MCP からは Turbo LoRA の 8 ステップを指定できない。
 一方で Acceleration 機能の引数（``GenerateRequest`` の Acceleration の
 区画）はすべて公開する（同書 §2 の D12・D22）--
 ``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）と
@@ -37,8 +38,8 @@ VERIFICATION_LOG §52。公開はオーナー裁定で、``Docs/PRUNAVAED_WORKOR
 
 ``vram16_mode``（MiniMax H3 の VRAM 16GB mode）は ``submit_generate`` に限り
 任意引数で公開する（既定 ``None`` は送らない＝ベースモデルの既定値。H3 では on。
-LTX では ``True`` が 422。連結生成は H3 では使えないので ``submit_chain`` には
-出さない。``Docs/MCP_SERVER_DESIGN.md`` §2 の D28）。
+LTX では ``True`` が 422。``submit_chain`` には出さない（H3 の連結生成では
+送らないので既定の on で動く）。``Docs/MCP_SERVER_DESIGN.md`` §2 の D28）。
 
 ``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
 ``EMBED_MP4_METADATA_DEFAULT``。既定と
@@ -754,6 +755,18 @@ async def submit_chain(
     同じシードでも生成結果の細部が変わります。** エコーはチェーン全体の畳み込み
     で、どこか1回でも降格すれば ``"sage->sdpa"`` になります。
 
+    **MiniMax H3 でも連結生成（T2V のクリップの連結だけ）が使えます**。前の
+    クリップの末尾 22 フレーム（固定）を次のクリップの先頭に引き継ぎます。
+    各クリップの ``num_frames`` は 17n+5 で、1 本目は 22 以上・2 本目以降は 39
+    以上、幅と高さは 32 の倍数、``frame_rate`` は 24 です。ステップ数と shift と
+    VRAM 16GB mode はこのツールに引数が無いので、H3 の既定（20 ステップ・
+    shift 12 / 3・VRAM 16GB mode on）で動きます（Turbo LoRA の 8 ステップは
+    指定できません）。``overlap_frames`` / ``overlap_strength`` /
+    ``stage2_window`` / ``chunked_upsample`` は H3 では無視されます。
+    ``clips[0].conditioning_images``（冒頭画像）・``source_video_id``・
+    ``source_audio_id``・``end_source_*``・``retake_*``・``reference_video_id``・
+    ``nag_enabled`` などは H3 では 422 FEATURE_UNSUPPORTED です。
+
     複数クリップを1本の連続した動画に合成します（クリップ間はlatentレベルで
     継ぎ目なく繋がります――ピクセル領域での結合ではありません）。同時に実行
     できるジョブは1本だけです。既にジョブが進行中の場合は
@@ -900,8 +913,9 @@ async def submit_chain(
         prompt: チェーン全体の共通プロンプト（全クリップと Stage-2 に使わ
             れる）。各クリップの ``prompt`` を指定すると、共通プロンプトの
             後ろに半角スペース1つで追記される。
-        clips: クリップごとの指定（``num_frames`` は 8n+1・9〜481 で、省略
-            時は49。``prompt`` / ``conditioning_images`` は省略可）。
+        clips: クリップごとの指定（``num_frames`` は LTX の場合 8n+1・9〜481
+            で、省略時は49。H3 は上の段落。``prompt`` /
+            ``conditioning_images`` は省略可）。
             ``prompt`` が省略・空・空白だけのクリップは共通プロンプトだけ
             を使う。指定した ``prompt`` は Stage-1（クリップごとの生成）に
             だけ効き、Stage-2（全体の仕上げ）は共通プロンプトだけを使う。
@@ -910,14 +924,17 @@ async def submit_chain(
         neg_method, vsf_scale: submit_generate と同じ意味
             （``nag_enabled=True`` のときのみ意味を持ち、チェーン全体・全
             ステージ共通で効く）。
-        width, height: 生成解像度（64の倍数、参照動画使用時は128の倍数）。
+        width, height: 生成解像度（LTX の場合 64の倍数、参照動画使用時は128の
+            倍数。MiniMax H3 では 32 の倍数）。
         crop_width, crop_height: 最終出力のクロップサイズ（両方指定 or 両方
             省略）。
         frame_rate: フレームレート。1〜60の範囲内なら**整数へ四捨五入して**
             送る（29.97→30、23.976→24。``_snap_frame_rate`` 参照）。範囲外の
             値は丸めずそのまま送るのでサーバーが422で弾く。
         seed: 乱数シード（-1でランダム）。
-        overlap_frames: クリップ間の重なり潜在フレーム数（1〜8）。
+        overlap_frames: クリップ間の重なり潜在フレーム数（LTX の場合 1〜8）。
+            MiniMax H3 では無視される（重なりは 22 フレーム固定。
+            ``overlap_strength`` も同じく無視される）。
         overlap_strength: 重なり部分の強度（0〜1）。
         source_video_id: V2V継続元の動画ID（``upload_video`` で取得）。
         source_video_context_frames: 元動画から凍結するフレーム数（8n+1）。

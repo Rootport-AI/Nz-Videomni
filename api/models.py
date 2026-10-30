@@ -16,7 +16,10 @@ For the single ``POST /generate`` those rules are not checked in
 so each adapter declares them as ``REQUEST_RULES`` (LTX's table is
 services/engines/ltx/request_rules.py) and ``services.engines.validate_for_family``
 applies them once the active family is known — with LTX's messages, in a 422
-of the pydantic shape. The chain schema keeps its own validators (LTX only).
+of the pydantic shape. ``POST /generate/chain`` follows the same route: the
+chain schema keeps only the checks true of every family, and each adapter's
+``validate_chain`` (LTX's is services/engines/ltx/chain_rules.py, MiniMax
+H3's its own) is applied by ``services.engines.validate_chain_for_family``.
 
 Resolution note: ``width``/``height`` are the *generation* size and must be a
 multiple of **64** on LTX — the two-stage distilled pipeline generates stage-1
@@ -37,7 +40,6 @@ from config import LimitsConfig, MAX_CONDITIONING_IMAGES
 from services.engines.ltx.request_rules import (
     FRAME_RATE_MAX,
     FRAME_RATE_MIN,
-    LTX_REQUEST_RULES,
     NUM_FRAMES_MAX,
     NUM_FRAMES_MIN,
 )
@@ -626,8 +628,8 @@ class GenerateRequest(BaseModel):
     # FEATURE_UNSUPPORTED で断る（各アダプタの REJECT_TABLE）。None と false は通す。
     # 収まらないときはジョブを OOM で失敗させる（黙って共有メモリへ退避させない）。
     # 実際に効いたかどうかは metadata.json の vram16_mode_used で確認できる。
-    # GET /status には載せない（keep_resident と同じ規律）。連結スキーマには
-    # 置かない（H3 は連結を断る）。
+    # GET /status には載せない（keep_resident と同じ規律）。連結スキーマにも
+    # 同じ形で置く（H3 の連結で効く。LTX の連結は true を断る）。
     vram16_mode: bool | None = Field(None)
 
     # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
@@ -914,7 +916,8 @@ class ChainClip(BaseModel):
     this clip's stage-1 segment (see :meth:`GenerateChainRequest.clip_prompt`);
     absent, empty or whitespace-only means the shared prompt alone. Stage 2
     refines the whole timeline with the shared prompt only.
-    ``num_frames`` must be 8n+1. Only clip 0 may carry
+    ``num_frames`` follows the active family's rules (8n+1 on LTX, 17n+5 on
+    MiniMax H3; ``services.engines.validate_chain_for_family``). Only clip 0 may carry
     conditioning images (minimal I2V start / keyframes) — clips 1..N are the
     later segments of one continuous masked AV-latent timeline (they inherit
     continuity from the previous segment's frozen overlap latents, not images).
@@ -1261,10 +1264,15 @@ class GenerateChainRequest(BaseModel):
     width/height/seed/frame_rate/pipeline across clips; each clip's stage-1
     prompt is the global ``prompt`` with the clip's own prompt appended
     (:meth:`clip_prompt`), and stage 2 refines every tile with the global
-    ``prompt`` alone (:meth:`shared_prompt`). Reuses the
-    same FROZEN rules (÷64 resolution, 8n+1 frames, distilled 8-step /
-    CFG=1.0) as LTX's ``REQUEST_RULES`` for :class:`GenerateRequest`, checked
-    here in its own validator (the chain is LTX only).
+    ``prompt`` alone (:meth:`shared_prompt`). The family's numeric rules are
+    not checked here: LTX's (the same FROZEN ÷64 resolution, 8n+1 frames and
+    distilled 8-step / CFG=1.0 as its ``REQUEST_RULES``) are
+    services/engines/ltx/chain_rules.py, MiniMax H3's are its adapter's
+    ``validate_chain``, both applied by
+    ``services.engines.validate_chain_for_family`` once the active family is
+    known. The architecture below is LTX's; MiniMax H3's chain carries the
+    previous clip's last latents over as the next clip's fixed head instead
+    (Docs/MINIMAX_H3_DESIGN.md 裁定 84).
 
     ARCHITECTURE: every clip is a stage-1 SEGMENT of one timeline;
     the segments are stage-1 generated with a video+audio latent tail carry over
@@ -1322,13 +1330,24 @@ class GenerateChainRequest(BaseModel):
     # 既定は EMBED_MP4_METADATA_DEFAULT。チェーンでは完成した連結動画
     # （output.mp4）に刻む。
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT
+    # vram16_mode: 詳細は GenerateRequest の同名フィールドを参照。
+    # H3 の validate_chain が既定値を書き戻す。
+    vram16_mode: bool | None = Field(None)
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
     crop_output: CropOutput | None = None
 
     frame_rate: float = Field(24.0, ge=1.0, le=60.0)
+    # 既定 8 は LTX の蒸留の段数（LTX の送信本文と保存される request がこの値を
+    # 持つ）。MiniMax H3 の validate_chain は、この欄が送られなかったこと
+    # （model_fields_set に無いこと）を見て H3 の既定値を書き込む。
     num_inference_steps: int = Field(8, ge=1, le=100)
+    # MiniMax H3 のスケジュールの shift（映像・音声）。GenerateRequest の同名
+    # フィールドと同じ形。None ＝系統の既定値（H3 の validate_chain が書き戻す。
+    # LTX には概念が無く、None のまま無視される）。
+    shift_video: float | None = Field(None, gt=0)
+    shift_audio: float | None = Field(None, gt=0)
     guidance_scale: float = Field(1.0, ge=0.0, le=20.0)
     seed: int = -1
     pipeline: Literal["distilled", "two_stage_hq"] = "distilled"
@@ -1438,24 +1457,16 @@ class GenerateChainRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
-        if self.width % 64 != 0:
-            raise ValueError("width must be a multiple of 64")
-        if self.height % 64 != 0:
-            raise ValueError("height must be a multiple of 64")
+        # The family's numeric rules (LTX: the 64 multiple, the distilled 8
+        # steps / CFG 1.0, 8n+1 and the overlap per clip, the keyframe grid, the
+        # timeline geometry and its cap) are not checked here: they run once
+        # the active family is known (services.engines.validate_chain_for_family;
+        # LTX's are services/engines/ltx/chain_rules.py).
         if self.crop_output is not None:
             if self.crop_output.width > self.width:
                 raise ValueError("crop_output.width must be <= width")
             if self.crop_output.height > self.height:
                 raise ValueError("crop_output.height must be <= height")
-        if self.pipeline == "distilled":
-            if self.num_inference_steps != 8:
-                raise ValueError(
-                    "distilled pipeline requires num_inference_steps=8"
-                )
-            if self.guidance_scale != 1.0:
-                raise ValueError(
-                    "distilled pipeline requires guidance_scale=1.0"
-                )
 
         # A2V + V2V are mutually exclusive (do not mix an uploaded continuation
         # video with an uploaded driving audio). Rejected up front.
@@ -1570,48 +1581,25 @@ class GenerateChainRequest(BaseModel):
                 )
 
         for i, clip in enumerate(self.clips):
-            if (clip.num_frames - 1) % 8 != 0:
-                raise ValueError(f"clips[{i}].num_frames must be 8n+1")
-            # overlap_frames (K_v LATENT) must fit inside EVERY clip's stage-1
-            # latent-frame count = (num_frames - 1)//8 + 1 (each segment either
-            # provides or receives the K_v-frame overlap).
-            stage1_frames = (clip.num_frames - 1) // 8 + 1
-            if self.overlap_frames >= stage1_frames:
-                raise ValueError(
-                    f"overlap_frames ({self.overlap_frames}) must be < "
-                    f"clips[{i}] stage-1 latent frames ({stage1_frames})"
-                )
             # Only clip 0 may carry conditioning images.
             if i > 0 and clip.conditioning_images:
                 raise ValueError(
                     "only clip 0 may carry conditioning_images (later clips are "
                     "later segments of one continuous timeline)"
                 )
-            # 枚数の上限 → LTX の格子へのスナップと重複（連結は LTX 専用。
-            # 上の 8n+1 の検査と同じく、ここで LTX の規則表を直接使う）。
+            # 枚数の上限は系統に依らない（GenerateRequest と同じ）。格子への
+            # スナップと重複の検査は系統の規則（LTX は chain_rules.py）。
             if len(clip.conditioning_images) > MAX_CONDITIONING_IMAGES:
                 raise ValueError(
                     f"clips[{i}]: at most {MAX_CONDITIONING_IMAGES} conditioning images "
                     "are supported"
                 )
-            message = LTX_REQUEST_RULES.normalize_keyframes(
-                clip.conditioning_images, clip.num_frames, where=f"clips[{i}]: "
-            )
-            if message is not None:
-                raise ValueError(message)
 
-        # Total-timeline geometry: sum of pixel frames minus the shared overlaps.
-        # Delegated to the shared pure-Python chain_math so the validator, the
-        # engine and the metadata agree; it also raises on a degenerate audio
-        # overlap (clips too short for a continuous crossfade).
+        # The stage-2 window checks below stay on the schema (the schema tests
+        # build the model directly for them). Stage-2 window preset -> the
+        # (v_tile, v_adv) the engine will actually tile with.
         import chain_math
-        # Stage-2 window preset -> the (v_tile, v_adv) the engine will actually
-        # tile with. Passed EXPLICITLY so this validator's geometry matches the
-        # engine's even when the request opted into a non-default window; the
-        # default preset resolves to the same pair compute_chain_layout's own
-        # defaults are bound to (chain_math.STAGE2_V_TILE / STAGE2_V_ADV), so an
-        # omitted stage2_window yields the same layout either way.
-        stage2_v_tile, stage2_v_adv = chain_math.resolve_stage2_window(self.stage2_window)
+        stage2_v_tile, _stage2_v_adv = chain_math.resolve_stage2_window(self.stage2_window)
 
         # "full_length" (the zero-overlap, single-tile a2v window) is only
         # geometrically valid on the shape the a2v flow builds. Two independent
@@ -1670,67 +1658,14 @@ class GenerateChainRequest(BaseModel):
         # LimitsConfig value) is an OPERATIONAL cap, not a geometric one.
 
         # Retake x non-default window: ALLOWED. A retake window must be refined
-        # as ONE stage-2 tile, which is the only geometry the both-side freeze was
-        # validated under (VERIFICATION_LOG §55.2/§55.3); that is enforced by
-        # BOUNDING the window rather than refusing the combination:
-        # compute_chain_layout below checks the window against
-        # chain_math.retake_max_window_px(v_tile). ``stage2_v_tile`` is resolved
-        # above and passed in, so that bound follows the request's own preset. A
-        # window past the preset's ceiling (it would split into 2 tiles and freeze
-        # only the last one) is therefore a 422 that names the ceiling.
+        # as ONE stage-2 tile, which is enforced by BOUNDING the window
+        # (chain_math.retake_max_window_px(v_tile)) in LTX's chain rules
+        # (services/engines/ltx/chain_rules.py), together with the rest of the
+        # timeline geometry (chain_math.compute_chain_layout) and the
+        # MAX_CHAIN_TOTAL_PIXEL_FRAMES cap.
         # config.limits.retake_window_{min,max}_frames publishes the
         # STANDARD-preset numbers; a client that offers other windows is
         # responsible for mirroring retake_max_window_px(v_tile) (see config.py).
-
-        try:
-            layout = chain_math.compute_chain_layout(
-                [c.num_frames for c in self.clips], self.frame_rate,
-                kv=self.overlap_frames,
-                v_tile=stage2_v_tile,
-                v_adv=stage2_v_adv,
-                source_context_px=(
-                    self.source_video.context_frames if self.source_video else None
-                ),
-                # Window length + glue-band geometry (8n+1 window in
-                # [chain_math.RETAKE_WINDOW_MIN_PX, retake_max_window_px(v_tile)],
-                # head/tail grids, a free middle in BOTH latent domains) is
-                # validated THERE, so the validator, the engine and the mock
-                # cannot disagree. Its ValueError surfaces as 422.
-                retake_glue_px=(
-                    None if self.retake is None
-                    else (self.retake.head_px, self.retake.tail_px)
-                ),
-                # The frozen tail band's own geometry (multiple of 8, >= 8, and
-                # free stage-1 latents left in the FINAL clip) is validated
-                # THERE, so the validator, the engine and the mock cannot
-                # disagree. Its ValueError — which names the concrete frame count
-                # the final clip would need — surfaces as 422. NO MODE IS PASSED:
-                # the clip count already in ``clip_frames`` plus the
-                # ``source_context_px`` passed just above are the whole input to
-                # that decision, and passing a mode is what would let this
-                # validator and the engine disagree about which one a request is
-                # in.
-                end_context_px=(
-                    None if self.end_source is None
-                    else self.end_source.context_frames
-                ),
-            )
-        except ValueError as exc:
-            raise ValueError(str(exc)) from exc
-        # The cap is on the USER'S OWN CLIPS, not on the delivered timeline.
-        # ``ChainLayout.clips_total_px`` is the SINGLE definition of that quantity
-        # — the same property ``to_dict`` publishes, so the validator and the
-        # metadata can never disagree. In the three modes a request can reach
-        # (``in_window``, ``reverse`` and ``bridge``) the band is part of a clip,
-        # so it equals ``total_px``, exactly as on a chain without an end source;
-        # only the API-unreachable ``internal_segment`` mode appends a band
-        # segment AFTER the clips and makes the two differ.
-        clips_total_px = layout.clips_total_px
-        if clips_total_px > MAX_CHAIN_TOTAL_PIXEL_FRAMES:
-            raise ValueError(
-                f"chain total timeline {clips_total_px} pixel frames exceeds the "
-                f"cap {MAX_CHAIN_TOTAL_PIXEL_FRAMES} (reduce clip count or lengths)"
-            )
 
         # NO end-source x clip-0-keyframe collision check here. In the
         # ``reverse`` and ``bridge`` modes the band is the LAST clip's tail while
@@ -1824,7 +1759,8 @@ class GenerateChainRequest(BaseModel):
         The chain's OWN worker payload is built from the chain request, not from
         this per-clip copy — this transcription only feeds the stored record.
         ``embed_mp4_metadata`` is transcribed for the same reason (the stored
-        record would otherwise claim the default).
+        record would otherwise claim the default), and so are ``vram16_mode``,
+        ``shift_video`` and ``shift_audio`` (MiniMax H3's; ``None`` on LTX).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
         as ``source_video``: it has no counterpart on ``GenerateRequest``, so
@@ -1861,12 +1797,15 @@ class GenerateChainRequest(BaseModel):
             fused_gguf_dequant_kernel=self.fused_gguf_dequant_kernel,
             vae_mode=self.vae_mode,
             embed_mp4_metadata=self.embed_mp4_metadata,
+            vram16_mode=self.vram16_mode,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.
             num_frames=clip.num_frames,
             frame_rate=self.frame_rate,
             num_inference_steps=self.num_inference_steps,
+            shift_video=self.shift_video,
+            shift_audio=self.shift_audio,
             guidance_scale=self.guidance_scale,
             seed=self.seed,
             pipeline=self.pipeline,

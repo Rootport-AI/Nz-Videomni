@@ -35,6 +35,12 @@ export interface ChainAudioPanelProps {
    * direct-render tests (`ChainAudioPanel.test.tsx`) that predate the
    * accordion keep seeing the heading exactly as before. */
   showHeading?: boolean | undefined;
+  /** §1-106: the loaded base model has closed this panel. Everything that
+   * ADDS or EDITS material goes dead (as with `disabled`), but the clear
+   * button stays live so material attached on another base model can be
+   * removed here (it blocks Generate with `materialInClosedPanel` meanwhile).
+   * Omitted -> open. */
+  unavailable?: boolean | undefined;
 }
 
 /**
@@ -57,7 +63,15 @@ export interface ChainAudioPanelProps {
  *   reserved by CSS (`.chain-audio-note`), same trick as
  *   `SourceInputPanel`'s `.source-input-note`.
  */
-export function ChainAudioPanel({ form, disabled, nativeBridge, showHeading = true }: ChainAudioPanelProps) {
+export function ChainAudioPanel({
+  form,
+  disabled: inFlight,
+  nativeBridge,
+  showHeading = true,
+  unavailable = false,
+}: ChainAudioPanelProps) {
+  // §1-106: clear reads `inFlight` only.
+  const disabled = inFlight || unavailable;
   const strings = useStrings();
   const t = strings.chained.sourceAudio;
 
@@ -141,7 +155,7 @@ export function ChainAudioPanel({ form, disabled, nativeBridge, showHeading = tr
           className="icon-action-button chain-audio-clear"
           title={t.clearButton}
           aria-label={t.clearButton}
-          disabled={disabled || uploading || !form.hasSourceAudio}
+          disabled={inFlight || uploading || !form.hasSourceAudio}
           onClick={() => {
             form.clearAudio();
             setDropResetToken((n) => n + 1);

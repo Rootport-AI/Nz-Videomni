@@ -696,7 +696,7 @@ def test_submit_generate_sends_sampling_fields_when_given():
 def test_submit_generate_input_schema_exposes_optional_vram16_mode():
     # MiniMax H3's VRAM 16GB mode (D28): optional, default None (= the base
     # model's own default, on for H3), and single-only -- submit_chain does
-    # not carry it (H3 refuses every chain).
+    # not carry it (an H3 chain runs at the default, on).
     async def _run():
         mcp = build_server()
         return await mcp.list_tools()

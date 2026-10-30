@@ -1317,14 +1317,16 @@ class H3Pipeline:
     def _denoise(
         self, req, text_hidden, text_tags, phases: _Phases, entry: dict,
         cond_clean=None, cond_frame_idx=(), keep=False, lora_report=None,
-        audio_fix=None, video_fix=None, refs=None,
+        audio_fix=None, video_fix=None, refs=None, video_inject_clean: float | None = None,
     ):
         """The step loop. ``audio_fix`` / ``video_fix``: ``(clean latent, one mask
         value per audio latent / per latent frame)`` for a stream whose rows are
         (partly) kept (``engine_h3.denoise_mask``; Docs/MINIMAX_H3_DESIGN.md §3.1);
         None = generated as usual. The masks are built after the noise is drawn
         (the video mask reuses the initial video noise), so the draws and their
-        order do not depend on them.
+        order do not depend on them. ``video_inject_clean``: the video mask's
+        ``inject_clean`` (None = its default 0.999; the H3 chain passes 1.0,
+        裁定 84-2).
 
         ``refs`` (Ref2VA, 台帳 §1-107): ``[(RefShape, clean rows)]`` in
         :func:`ordered_references` order (pictures, videos, then audios); None /
@@ -1461,7 +1463,9 @@ class H3Pipeline:
                 clean_v = video_fix[0]
                 if tuple(clean_v.shape) != tuple(video.shape):
                     raise RuntimeError(f"denoise: clean video {list(clean_v.shape)}, expected {list(video.shape)}")
-                vm = video_mask(clean_v.to(dev), video_fix[1], grid=gh * gw, noise=video)
+                vm = video_mask(
+                    clean_v.to(dev), video_fix[1], grid=gh * gw, noise=video, inject_clean=video_inject_clean,
+                )
 
             sig_v = sigma_schedule(steps, float(req.shift_video))
             sig_a = sigma_schedule(steps, float(req.shift_audio))
@@ -1528,6 +1532,10 @@ class H3Pipeline:
                     name: {"rows": int(mask.rows.numel()), "min": float(mask.rows.min()), "max": float(mask.rows.max())}
                     for name, mask in (("audio", am), ("video", vm)) if mask is not None
                 }
+                if vm is not None and video_inject_clean is not None:
+                    # Only when the caller chose the coefficient (the chain): the
+                    # video record of every other job, and the audio record, are unchanged.
+                    entry["mask"]["video"]["inject_clean"] = float(video_inject_clean)
             if not (torch.isfinite(video).all() and torch.isfinite(audio).all()):
                 raise RuntimeError("denoise: 潜在に NaN／Inf が出ました（数値が発散しています）")
             ok = True

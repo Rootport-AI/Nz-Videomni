@@ -67,6 +67,7 @@ import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from
 import {
   accelerationResetsFor,
   batchA2vDisabledFor,
+  batchI2vLongDisabledFor,
   chainPanelsDisabledFor,
   editSubTabsDisabledFor,
   loraAudioStrengthHiddenFor,
@@ -74,6 +75,7 @@ import {
   settingsRowsHiddenFor,
   singleSectionsDisabledFor,
 } from "./featureScope";
+import type { ChainPanelsDisabled } from "./featureScope";
 import { frameLimitsFor } from "./generationConstraints";
 import { snapNumFrames } from "../modes/single/paramUtils";
 import { effectiveNag } from "./nagSettings";
@@ -97,6 +99,31 @@ import "./AppShell.css";
  * any route whose target is in `disabledModes`, so a row added there later
  * would silently kill the 追尾 right-click. */
 export type AppMode = "single" | "chained" | "edit" | "inventory" | "toolbox";
+
+/** §1-106: the Chained right-click entries, each with the ONE material
+ * panel it fills on arrival (`ChainedScreen`'s auto-load) and the line that
+ * panel shows when it is closed (`strings.chained.unavailableOnBaseModel`).
+ * `handleRoute` refuses an entry whose panel the loaded base model has closed —
+ * the same "a note and nothing else" shape as Step 0 — because the Chained TAB
+ * stays live on such a base model, so Step 0 alone would let the entry through
+ * to a panel that would only 422. Keyed by panel, never by engine. */
+const CHAIN_INTENT_PANELS: Readonly<
+  Record<
+    string,
+    {
+      panel: keyof ChainPanelsDisabled;
+      note: "sourceVideo" | "startImage" | "sourceAudio" | "endSource" | "referenceVideo";
+    }
+  >
+> = {
+  "extend-video": { panel: "v2v", note: "sourceVideo" },
+  "image-to-clip-chain": { panel: "startImage", note: "startImage" },
+  "current-frame-to-clip-chain": { panel: "startImage", note: "startImage" },
+  "reference-video-chain": { panel: "reference", note: "referenceVideo" },
+  "end-with-this": { panel: "endSource", note: "endSource" },
+  "video-audio-to-long-a2v": { panel: "a2v", note: "sourceAudio" },
+  "audio-to-long-a2v": { panel: "a2v", note: "sourceAudio" },
+};
 
 /** W3 (⬇ "insert the latest generation result here"): pick the most recently
  * completed job from the ledger. Sorts `completed_at` DESCENDING (latest first);
@@ -657,6 +684,14 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // through here unchanged, exactly as they must.
     if (disabledModes.includes(target)) {
       showNote("warning", strings.notes.modeUnsupportedByBaseModel);
+      return;
+    }
+
+    // ── Step 0, one level down: refuse an entry whose Chained panel is closed
+    // (see `CHAIN_INTENT_PANELS`). Computed in place: `chainPanels` is declared later.
+    const chainEntry = target === "chained" ? CHAIN_INTENT_PANELS[intent] : undefined;
+    if (chainEntry && chainPanelsDisabledFor(baseModels.unsupportedFeatures)[chainEntry.panel]) {
+      showNote("warning", strings.chained.unavailableOnBaseModel[chainEntry.note]);
       return;
     }
 
@@ -1787,12 +1822,21 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               /* §3-165: the stage-2 window dropdown names the loaded engine. */
               engineLabel={activeEngineLabel}
               loraRefreshKey={baseModels.active}
-              /* §3-102: the four material panels the loaded engine's feature
+              /* §3-102: the material panels the loaded engine's feature
                  scope can take down one by one — see `chainPanels` above. */
               v2vUnavailable={chainPanels.v2v}
               a2vUnavailable={chainPanels.a2v}
               endSourceUnavailable={chainPanels.endSource}
               referenceUnavailable={chainPanels.reference}
+              /* §1-106: clip 0's opening image, and the Batch i2v-long
+                 section that puts an image on clip 0 for every row. */
+              startImageUnavailable={chainPanels.startImage}
+              batchI2vLongUnavailable={batchI2vLongDisabledFor(baseModels.unsupportedFeatures)}
+              /* §1-106: the same `audio_strength` rule as Create, and the loaded
+                 base model's numeric rules (clip grid, size multiple, fixed
+                 fps, sampling sliders, a server-fixed seam). */
+              loraAudioHidden={loraAudioHidden}
+              constraints={baseModels.activeConstraints}
             />
           </div>
           {/* Edit (2026-08-09): promoted from a disabled mock tab to a real

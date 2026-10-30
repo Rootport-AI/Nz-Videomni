@@ -41,8 +41,13 @@ describe("mockBridge — MiniMax H3", () => {
     });
     expect(h3?.constraints?.sampling?.num_inference_steps.default).toBe(20);
     expect(h3?.unsupported_features).toEqual(
-      expect.arrayContaining(["chain", "retake", "reference_video", "nag", "keyframe_strength"]),
+      expect.arrayContaining(["retake", "reference_video", "nag", "keyframe_strength"]),
     );
+    // §1-106: H3 chains now — `chain` left, and the chain material it cannot
+    // take is published instead; `constraints.chain` carries the fixed seam.
+    expect(h3?.unsupported_features).not.toContain("chain");
+    expect(h3?.unsupported_features).toEqual(expect.arrayContaining(["v2v", "end_source", "a2v", "chain_start_image"]));
+    expect(h3?.constraints?.chain).toEqual({ overlap_frames: 22 });
     expect(h3?.unsupported_features).not.toContain("multi_keyframes");
     const ltx = blocks.find((b) => b.id === "LTX23");
     expect(ltx?.constraints).toMatchObject({
@@ -50,6 +55,8 @@ describe("mockBridge — MiniMax H3", () => {
       sampling: null,
       keyframes: { step: 8, offset: 1 },
     });
+    expect(ltx?.constraints?.chain).toBeUndefined();
+    expect(ltx?.unsupported_features).not.toContain("chain_start_image");
     // 台帳 §1-101: VRAM 16GB mode is H3's own — H3 does NOT publish the name,
     // both LTX engines do (which hides the Settings row there).
     expect(h3?.unsupported_features).not.toContain("vram16_mode");
@@ -84,18 +91,53 @@ describe("mockBridge — MiniMax H3", () => {
     expect(ok.status).toBe(202);
   });
 
-  it("refuses a whole POST /generate/chain while MiniMax H3 (which declares `chain`) is loaded", async () => {
-    const bridge = createMockBridge({ delayMs: 0 });
-    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
-    const res = await bridge.request("backend.request", {
+  // §1-106: H3 chains from text — a plain chain is accepted, and only the
+  // material it declares unsupported is refused, field by field.
+  function chain(bridge: Bridge, extra: Record<string, unknown> = {}, clips: unknown[] = [{ num_frames: 124 }, { num_frames: 124 }]) {
+    return bridge.request("backend.request", {
       method: "POST",
       path: "/api/v1/generate/chain",
-      body: { prompt: "a cat", width: 1280, height: 704, frame_rate: 24, seed: 1, clips: [{ num_frames: 124 }] },
+      body: { prompt: "a cat", width: 1280, height: 704, frame_rate: 24, seed: 1, clips, ...extra },
     });
-    expect(res.status).toBe(422);
-    const error = (res.body as { error: { code: string; message: string } }).error;
-    expect(error.code).toBe("FEATURE_UNSUPPORTED");
-    expect(error.message).toContain("'chain'");
+  }
+
+  it("accepts a text-only POST /generate/chain while MiniMax H3 is loaded", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    const res = await chain(bridge, { num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
+    expect(res.status).toBe(202);
+  });
+
+  it("refuses the chain material MiniMax H3 declares (opening image, end source, V2V, A2V)", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    const cases: Array<[string, Awaited<ReturnType<typeof chain>>]> = [
+      [
+        "chain_start_image",
+        await chain(bridge, {}, [
+          { num_frames: 124, conditioning_images: [{ image_id: "img", frame_idx: 0, strength: 1 }] },
+          { num_frames: 124 },
+        ]),
+      ],
+      ["end_source", await chain(bridge, { end_source: { image_id: "img", context_frames: 8, strength: 1 } })],
+      ["v2v", await chain(bridge, { source_video: { video_id: "vid", context_frames: 9 } })],
+      ["a2v", await chain(bridge, { source_audio: { audio_id: "aud" } })],
+    ];
+    for (const [feature, res] of cases) {
+      expect(res.status, feature).toBe(422);
+      const error = (res.body as { error: { code: string; message: string } }).error;
+      expect(error.code, feature).toBe("FEATURE_UNSUPPORTED");
+      expect(error.message, feature).toContain(`'${feature}'`);
+    }
+  });
+
+  it("does not refuse an opening image on LTX 2.3 (the predicate is H3's declared list)", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    const res = await chain(bridge, {}, [
+      { num_frames: 121, conditioning_images: [{ image_id: "img", frame_idx: 0, strength: 1 }] },
+      { num_frames: 121 },
+    ]);
+    expect(res.status).toBe(202);
   });
 
   // §1-107: the Ref2VA reference limits are H3's own.

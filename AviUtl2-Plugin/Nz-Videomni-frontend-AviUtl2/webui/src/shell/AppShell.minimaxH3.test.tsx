@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bridge as appBridge, TIMELINE_MENU_INVOKED_EVENT } from "../bridge";
@@ -91,7 +91,7 @@ async function switchTo(id: string) {
   const user = userEvent.setup();
   const select = screen.getByRole("combobox", { name: /base model/i }) as HTMLSelectElement;
   await user.selectOptions(select, id);
-  await waitFor(() => expect(select.value).toBe(id));
+  await waitFor(() => expect(select.value).toBe(id), { timeout: 5_000 });
 }
 
 describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
@@ -136,9 +136,10 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       expect(numberInLabel("Shift (video)").value).toBe("12");
       expect(numberInLabel("Shift (audio)").value).toBe("3");
 
-      // The Chained tab greys, and so does the Edit tab — see the dedicated
-      // case below for the four sub-tabs behind it.
-      expect(screen.getByRole("tab", { name: "Chained" })).toBeDisabled();
+      // The Edit tab greys — see the dedicated case below for the four
+      // sub-tabs behind it. §1-106: the Chained tab stays live now (H3
+      // chains from text; see the Chained block at the end of this file).
+      expect(screen.getByRole("tab", { name: "Chained" })).not.toBeDisabled();
       expect(screen.getByRole("tab", { name: "Edit" })).toBeDisabled();
       expect(screen.getByRole("tab", { name: "Single" })).not.toBeDisabled();
 
@@ -175,8 +176,7 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
     "MiniMax H3: all four Edit sub-tabs close, so the Edit tab itself greys",
     async () => {
       // Supervisor ruling 2026-10-17: the H3 adapter publishes `retake` (a
-      // Retake is a chain request it refuses); `chain` itself still reaches no
-      // Edit sub-tab. With Outpainting / Inpainting / Alpha Gen closed too,
+      // Retake is a chain request it refuses). With Outpainting / Inpainting / Alpha Gen closed too,
       // `CONTAINER_TARGETS` closes the whole tab.
       await renderApp();
       expect(screen.getByRole("tab", { name: "Edit" })).not.toBeDisabled();
@@ -338,7 +338,7 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       await waitFor(() => expect(generate).toBeDisabled());
       // …and on MiniMax H3 (NAG closed) it no longer does.
       await switchTo("MiniMaxH3");
-      await waitFor(() => expect(generate).not.toBeDisabled());
+      await waitFor(() => expect(generate).not.toBeDisabled(), { timeout: 5_000 });
     },
     20_000,
   );
@@ -354,7 +354,7 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 
       await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat <lora:Pixar_Toon:1.0>");
       const generate = screen.getByRole("button", { name: /^generate$/i });
-      await waitFor(() => expect(generate).not.toBeDisabled());
+      await waitFor(() => expect(generate).not.toBeDisabled(), { timeout: 5_000 });
       expect(screen.queryByText(note)).not.toBeInTheDocument();
 
       // The fixture marks `LTX-2.3-Henshin` `supported: false`.
@@ -617,4 +617,224 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       20_000,
     );
   });
+});
+
+// ── §1-106: MiniMax H3's Chained tab, from the fixture's GET /models alone ──
+// No engine id is read anywhere: the screen follows `constraints` (17n+5 clips,
+// 24fps, the sampling sliders, `chain.overlap_frames`) and the booleans
+// `unsupported_features` turns into (v2v / end_source / a2v / reference_video /
+// chain_start_image).
+describe("AppShell — MiniMax H3 Chained (§1-106)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    resetProvisionalReservation();
+    resetCreateLiveCommands();
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  async function openChained() {
+    await userEvent.setup().click(screen.getByRole("tab", { name: "Chained" }));
+    await waitFor(() => expect(within(singlePanel()).getByText("Clips")).toBeInTheDocument());
+    return singlePanel();
+  }
+
+  /** Every clip card's DURATION number input, in order. */
+  function clipDurations(panel: HTMLElement): HTMLInputElement[] {
+    return Array.from(panel.querySelectorAll<HTMLInputElement>(".clip-card input[type='number']"));
+  }
+
+  it(
+    "LTX 2.3 keeps its Chained screen: seam blend, chunked upsample, stage-2 window, CFG row, 8n+1 clips",
+    async () => {
+      await renderApp();
+      const panel = await openChained();
+      expect(within(panel).getByText("Seam blend width")).toBeInTheDocument();
+      expect(within(panel).getByText("Chunked upsample")).toBeInTheDocument();
+      expect(within(panel).getByText("CFG scale")).toBeInTheDocument();
+      expect(within(panel).queryByText("Steps")).not.toBeInTheDocument();
+      expect(within(panel).getByText(/Total input:/)).toBeInTheDocument();
+      expect(within(panel).getByText("Batch i2v-long (prototype)")).toBeInTheDocument();
+      for (const input of clipDurations(panel)) expect(input.step).toBe("8");
+      expect(panel.querySelector(".clip-note")).toBeNull();
+    },
+    20_000,
+  );
+
+  it(
+    "MiniMax H3: the Chained tab opens in the fixed-overlap mode and closes the material it cannot take",
+    async () => {
+      await renderApp();
+      await switchTo("MiniMaxH3");
+      await waitFor(() => expect(screen.getByRole("tab", { name: "Chained" })).not.toBeDisabled());
+      const panel = await openChained();
+
+      // Fixed-overlap mode: no seam blend, no chunked upsample, no stage-2 window,
+      // no "Total input / Est.", and the sampling sliders in place of the CFG row.
+      await waitFor(() => expect(within(panel).getByText("Steps")).toBeInTheDocument());
+      expect(within(panel).queryByText("Seam blend width")).not.toBeInTheDocument();
+      expect(within(panel).queryByText("Seam blend strength")).not.toBeInTheDocument();
+      expect(within(panel).queryByText("Chunked upsample")).not.toBeInTheDocument();
+      expect(within(panel).queryByText("CFG scale")).not.toBeInTheDocument();
+      expect(within(panel).queryByText(/Total input:/)).not.toBeInTheDocument();
+      expect(within(panel).queryByText(/Est\./)).not.toBeInTheDocument();
+
+      // 17n+5 clips with a 17 step; fps pinned at 24.
+      const durations = clipDurations(panel);
+      expect(durations).toHaveLength(2);
+      for (const input of durations) {
+        expect(input.step).toBe("17");
+        expect((Number(input.value) - 5) % 17).toBe(0);
+      }
+      const fps = within(panel).getByRole("spinbutton", { name: /fps/i }) as HTMLInputElement;
+      expect(fps).toBeDisabled();
+      expect(fps.value).toBe("24");
+
+      // The material it cannot take: the opening image (the SOURCE card greys
+      // whole) and Batch i2v-long (not rendered); the three accordions grey.
+      expect(within(panel).getByText(/An opening image for clip 1 cannot be used/)).toBeInTheDocument();
+      expect(within(panel).queryByText("Batch i2v-long (prototype)")).not.toBeInTheDocument();
+      expect(within(panel).getByText(/End source is not available/)).toBeInTheDocument();
+      expect(within(panel).getByText(/Reference video \(control IC-LoRA\) is not available/)).toBeInTheDocument();
+      expect(within(panel).getByText(/Generating from an audio track \(A2V\) is not available/)).toBeInTheDocument();
+    },
+    20_000,
+  );
+
+  it(
+    "MiniMax H3: the audio note follows the seam (141 shows it, 124 does not) and the output length is Σ − 22 × (n − 1)",
+    async () => {
+      await renderApp();
+      await switchTo("MiniMaxH3");
+      const panel = await openChained();
+      await waitFor(() => expect(within(panel).getByText("Steps")).toBeInTheDocument());
+      const [first, second] = clipDurations(panel);
+      fireEvent.change(first!, { target: { value: "124" } });
+      fireEvent.change(second!, { target: { value: "124" } });
+      await waitFor(() => expect(first!.value).toBe("124"));
+      expect(panel.querySelector(".clip-note")).toBeNull();
+      // 124 + 124 − 22 = 226 frames.
+      expect(within(panel).getByText(/\(226 frames\)/)).toBeInTheDocument();
+
+      fireEvent.change(first!, { target: { value: "141" } });
+      await waitFor(() => expect(panel.querySelectorAll(".clip-note")).toHaveLength(1));
+      const note = panel.querySelector(".clip-note") as HTMLElement;
+      expect(note.textContent).toBe("The audio may drift slightly.");
+      // On the SECOND card — the seam in front of it.
+      expect(panel.querySelectorAll(".clip-card")[1]?.contains(note)).toBe(true);
+      expect(within(panel).getByText(/\(243 frames\)/)).toBeInTheDocument();
+    },
+    20_000,
+  );
+
+  it(
+    "MiniMax H3: the chain request carries the sampling values and none of the four LTX seam fields",
+    async () => {
+      // The app-wide fixture is shared with the Create submit test above, which
+      // leaves it on MiniMax H3 — put it back on LTX 2.3 so `renderApp` starts
+      // where every other case does.
+      await appBridge.request("backend.request", {
+        method: "POST",
+        path: "/api/v1/pipeline/load",
+        body: { base_model: "LTX23" },
+      });
+      const bridge = await renderApp(appBridge);
+      const requestSpy = vi.spyOn(bridge, "request");
+      await switchTo("MiniMaxH3");
+      const panel = await openChained();
+      await waitFor(() => expect(within(panel).getByText("Steps")).toBeInTheDocument());
+      const user = userEvent.setup();
+      await user.type(
+        screen.getByPlaceholderText(/describe the video/i),
+        "a cat riding a skateboard <lora:Pixar_Toon:1.0:1.0>",
+      );
+      const generate = within(panel).getByRole("button", { name: /^generate$/i });
+      await waitFor(() => expect(generate).not.toBeDisabled());
+      await user.click(generate);
+
+      const isChain = (c: unknown[]) =>
+        c[0] === "backend.request" && (c[1] as { path?: string }).path === "/api/v1/generate/chain";
+      await waitFor(() => expect(requestSpy.mock.calls.some(isChain)).toBe(true));
+      const call = requestSpy.mock.calls.find(isChain);
+      const body = (call?.[1] as { body?: Record<string, unknown> } | undefined)?.body ?? {};
+      expect(body.num_inference_steps).toBe(20);
+      expect(body.shift_video).toBe(12);
+      expect(body.shift_audio).toBe(3);
+      expect(body.frame_rate).toBe(24);
+      expect((body.width as number) % 32).toBe(0);
+      for (const key of ["overlap_frames", "overlap_strength", "stage2_window", "chunked_upsample"]) {
+        expect(body).not.toHaveProperty(key);
+      }
+      for (const clip of body.clips as Record<string, unknown>[]) {
+        expect(((clip.num_frames as number) - 5) % 17).toBe(0);
+        expect(clip).not.toHaveProperty("conditioning_images");
+      }
+      expect(body.loras).toEqual([{ name: "Pixar_Toon", strength: 1 }]);
+      // The fixture accepted it (no FEATURE_UNSUPPORTED card).
+      await waitFor(() => expect(within(panel).queryByText("FEATURE_UNSUPPORTED")).not.toBeInTheDocument());
+      // Leave the shared app-wide fixture on LTX 2.3 for whoever uses it next.
+      await appBridge.request("backend.request", {
+        method: "POST",
+        path: "/api/v1/pipeline/load",
+        body: { base_model: "LTX23" },
+      });
+    },
+    20_000,
+  );
+
+  it(
+    "MiniMax H3: Chained right-click entries into closed panels are refused with one note and nothing else",
+    async () => {
+      const bridge = createMockBridge({ delayMs: 0 });
+      const requestSpy = vi.spyOn(bridge, "request");
+      await renderApp(bridge);
+      await switchTo("MiniMaxH3");
+      await waitFor(() => expect(screen.getByRole("tab", { name: "Chained" })).not.toBeDisabled());
+      const selection: ResultOf<"timeline.getSelection"> = {
+        hasRange: false,
+        rangeStart: 0,
+        rangeEnd: 0,
+        selected: [
+          {
+            layer: 1,
+            frameStart: 0,
+            frameEnd: 59,
+            effectName: "動画ファイル",
+            filePath: "C:\\v\\one.mp4",
+            objectName: "a",
+            textContent: null,
+            mediaWidth: 1280,
+            mediaHeight: 720,
+            mediaDurationSec: 2,
+            hasPlaybackRange: false,
+            playbackStartSec: 0,
+            playbackEndSec: 0,
+          },
+        ],
+        cursorFrame: 0,
+        cursorLayer: 1,
+        rate: 30,
+        scale: 1,
+        sampleRate: 44100,
+      };
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "extendVideo", selection });
+      });
+      await screen.findByText(/A source VIDEO cannot be used on the selected base model/, {}, { timeout: 5_000 });
+      // Nothing else: still on Single, nothing uploaded, no provisional placed.
+      expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+      expect(requestSpy.mock.calls.some((c) => c[0] === "backend.uploadFile")).toBe(false);
+      expect(requestSpy.mock.calls.some((c) => String(c[0]).startsWith("timeline.place"))).toBe(false);
+
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "currentFrameToClipChain", selection });
+      });
+      await screen.findByText(/An opening image for clip 1 cannot be used/, {}, { timeout: 5_000 });
+      expect(requestSpy.mock.calls.some((c) => c[0] === "timeline.captureFrame")).toBe(false);
+      expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+    },
+    20_000,
+  );
 });

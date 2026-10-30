@@ -434,6 +434,7 @@ def test_omitted_strength_is_the_family_default():
 
 def test_chain_clip0_omitted_strength_is_filled_with_08():
     from api.models import GenerateChainRequest
+    from services.engines import validate_chain_for_family
 
     req = GenerateChainRequest(
         prompt="x", width=384, height=256, overlap_frames=2,
@@ -442,6 +443,8 @@ def test_chain_clip0_omitted_strength_is_filled_with_08():
             {"num_frames": 25},
         ],
     )
+    # LTX's chain rules snap and fill (api/generate_chain.py calls this).
+    validate_chain_for_family("ltx", req)
     image = req.clips[0].conditioning_images[0]
     assert (image.frame_idx, image.strength) == (9, 0.8)
 
@@ -756,13 +759,25 @@ def test_acceleration_fields_default_values_generate():
     assert req.vram16_mode is None
 
 
-def test_vram16_mode_is_single_only_and_type_checked(client):
+def test_vram16_mode_is_on_both_schemas_and_type_checked(client):
     from api.models import VRAM16_MODE_DEFAULT_H3, GenerateChainRequest
 
     assert VRAM16_MODE_DEFAULT_H3 is True
-    # H3 refuses every chain, so the chain schema does not carry the field.
-    assert "vram16_mode" not in GenerateChainRequest.model_fields
+    # The chain schema carries the field in the same shape (H3's chain runs it,
+    # 台帳 §1-106); the schema default is None (= the family's default), and
+    # the stored per-clip record transcribes it.
+    assert GenerateChainRequest.model_fields["vram16_mode"].default is None
     assert GenerateChainRequest(**CHAIN_BASE).to_clip_request(0).vram16_mode is None
+    assert (
+        GenerateChainRequest(**CHAIN_BASE, vram16_mode=False).to_clip_request(0).vram16_mode
+        is False
+    )
+    # On an LTX chain: omission and false pass; true is refused (H3 only).
+    r = client.post("/api/v1/generate/chain", json={**CHAIN_BASE, "vram16_mode": False})
+    assert r.status_code == 202, r.text
+    r = client.post("/api/v1/generate/chain", json={**CHAIN_BASE, "vram16_mode": True})
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "FEATURE_UNSUPPORTED"
     # On LTX: false (and omission) pass; a non-bool is a pydantic 422.
     body = {**BASE, "width": 512, "height": 320, "num_frames": 49}
     assert client.post("/api/v1/generate", json={**body, "vram16_mode": False}).status_code == 202

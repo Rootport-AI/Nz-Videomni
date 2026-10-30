@@ -592,6 +592,11 @@ export const en = {
         "End source is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach an end material.",
       referenceVideo:
         "Reference video (control IC-LoRA) is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach a reference.",
+      /** §1-106: clip 1's opening IMAGE (feature `chain_start_image`). Shown
+       * above the SOURCE card, which then greys as a whole when the video half
+       * is closed too (MiniMax H3: the chain starts from text). */
+      startImage:
+        "An opening image for clip 1 cannot be used on the selected base model — the chain starts from the prompt. Chained generation itself still works; switch the base model in the header to start from an image.",
     },
     /** Sprint 2 item 9: chain preset dropdown (`config.generation_presets`),
      * mirroring Create's `strings.single.presets` naming. */
@@ -606,6 +611,10 @@ export const en = {
     clipPromptLabel: "Unique prompt",
     clipPromptPlaceholder: "Add a unique prompt to this clip.",
     clipNumFramesLabel: "Duration",
+    /** Ruling 84-6 (§1-106): the one-line note under a clip's duration when the
+     * seam in front of it does not land on an audio-latent boundary. Plain
+     * text in the default colour — not a warning, and never a Generate gate. */
+    audioDriftNote: "The audio may drift slightly.",
     /** §1-16 長尺A2V: the "🎵 which part of the track does this clip cover?"
      * badge in a clip card's header, shown only while an audio file is attached
      * (`useChainForm.audioSegmentWindowsForClips` supplies one window per clip).
@@ -1043,6 +1052,15 @@ export const en = {
        * length. */
       endSourceAudioOverlapBudget:
         "This end source's clip lengths leave no audio overlap budget for the joins. Raise the seam blend width.",
+      /** §1-106: the fixed-seam twin of `clipTooShortForOverlap` (no seam
+       * blend setting exists there to blame) — every clip after the first
+       * must reach `n` frames. */
+      clipTooShortForFixedOverlap: (n: number): string =>
+        `Make every clip after the first at least ${n} frames long (the seam to the previous clip is fixed).`,
+      /** §1-106: material left in a panel the selected base model has
+       * closed (attached before a base-model switch). */
+      materialInClosedPanel:
+        "Material that cannot be used on the selected base model is still attached. Remove it.",
     },
     generateButton: "Generate",
     generatingButton: "Generating…",
@@ -2795,6 +2813,8 @@ export const ja: Strings = {
         "素材（末尾）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。末尾の素材を読み込むには、上のベースモデルを切り替えてください。",
       referenceVideo:
         "参照動画（制御系IC-LoRA）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。参照動画を読み込むには、上のベースモデルを切り替えてください。",
+      startImage:
+        "クリップ1の開始画像は、選択中のベースモデルでは使えません（プロンプトから連結します）。連結生成そのものは使えます。画像から始めるには、上のベースモデルを切り替えてください。",
     },
     presets: {
       label: "プリセット",
@@ -2807,6 +2827,7 @@ export const ja: Strings = {
     clipPromptLabel: "個別プロンプト",
     clipPromptPlaceholder: "このクリップに個別のプロンプトを追加する。",
     clipNumFramesLabel: "尺",
+    audioDriftNote: "音声がわずかにズレる可能性があります。",
     clipAudioWindow: {
       label: (startSec: string, endSec: string): string => `🎵 担当時間帯 ${startSec}〜${endSec}秒`,
       tooltip: "このクリップが担当する音声の区間です。隣のクリップと少し重なります（継ぎ目のクロスフェード）。",
@@ -2966,6 +2987,10 @@ export const ja: Strings = {
       endSourceNeedsOverlap: "素材（末尾）はのりしろ1では使えません。ブレンド幅を2以上にしてください。",
       endSourceAudioOverlapBudget:
         "このクリップ構成では、素材（末尾）のつなぎ目に必要な音声のりしろが足りません。ブレンド幅を上げてください。",
+      clipTooShortForFixedOverlap: (n: number): string =>
+        `2本目以降のクリップは${n}フレーム以上にしてください（前のクリップとの重なりは固定です）。`,
+      materialInClosedPanel:
+        "このベースモデルでは使えない素材が残っています。外してください。",
     },
     generateButton: "生成",
     generatingButton: "生成中…",

@@ -1,0 +1,58 @@
+PASS  CPU only (CUDA_VISIBLE_DEVICES='-1')
+PASS  1 geometry C0-C3: S=[102, 204] J=[124, 226] ka=[37, 37] F=328 T'=97 A=547 (round 547, excess +0) shift=[0.0, 0.0]
+PASS  1 geometry C4: S=[119, 238] J=[124, 243] ka=[9, 8] F=362 T'=107 A=604 (round 603, excess +1) shift=[-0.3333, 0.3333]
+PASS  1 geometry C5: S=[85, 170] J=[124, 209] ka=[65, 66] F=294 T'=87 A=490 (round 490, excess +0) shift=[0.3333, -0.3333]
+PASS  1 geometry C7: S=[124, 248] J=[124, 248] ka=[0, 0] F=372 T'=111 A=621 (round 620, excess +1) shift=None
+PASS  1 round(n*5/3) (exact) == constants.audio_latents(n) for n < 3000
+PASS  2 sweep F 22..481 x O 5/22/39 x N 2..6: 390 valid, 30 refused, excess counts {-1: 34, 0: 320, 1: 36}, invariant failures []
+PASS  3 build_fix: shapes, head = previous tail, zeros past k / ka, per values (s=1, 0.5), ka=0 -> no audio mask, s=0 -> (None, None) and all-ones masks are None
+PASS  4 video_mask / audio_mask: rows = per x grid, inject 0.999/0.001 by default; patched -> inject == clean; undone -> as before
+PASS  5 dit_input / state_velocity / euler_step / finish: m=0 rows end == clean, m=0.5 finite
+PASS  6 s=1: cat(prev, cur[k:]) == cat(prev[:-k], cur)
+PASS  6 concat lengths: video 97 (T'_total), audio 547 (A concat)
+PASS  7 cross-fade: end weights 1/(n+1), n/(n+1); same input -> same output; lengths (video k, audio ka) = the concatenation's
+      C0-C3: frames 328 = arange, audio 437600 samples, max |pos - value| 0.000
+      C4: frames 362 = arange, audio 482933 samples, max |pos - value| 0.333
+      C5: frames 294 = arange, audio 392267 samples, max |pos - value| 0.333
+      C7: frames 372 = arange, audio 496267 samples, max |pos - value| 0.333
+PASS  8 trim: frames = arange(F_total); audio ramp off by <= 1 sample
+[c_chain] clip 0: seed 42, fix none
+[c_chain] clip 1: seed 43, fix k=7 ka=37
+[c_chain] clip 2: seed 44, fix k=7 ka=37
+{"name": "fake1", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.44}
+PASS  9 fake run s=1: exit 0, keep all True, seeds [42, 43, 44, 42], clip 0 fix None, heads = previous tails, encode inside its phase, release before decode, (a)/(b) 175/175 frames = F_total 175, frames let go after writing (2 weakrefs dead)
+[c_chain] clip 0: seed 42, fix none
+[c_chain] clip 1: seed 43, fix k=7 ka=37
+[c_chain] clip 2: seed 44, fix k=7 ka=37
+{"name": "fake2", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.43}
+PASS  9 fake run s=0.5 inject clean: writes ['once.mp4', 'perclip.mp4', 'xfade.mp4'], patch undone, heads not fixed bit-for-bit
+[c_chain] clip 0: seed 42, fix none
+[c_chain] clip 1: seed 43, fix none
+[c_chain] clip 2: seed 44, fix none
+{"name": "fake3", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.3}
+PASS  9 fake run s=0: no fix on any clip, one per-clip mp4 of 219 frames
+[c_chain] clip 0 reused from C:\Users\phenotype nezu\AppData\Local\Temp\tmpkfuxye0d\fake1\clip0.pt
+[c_chain] clip 1: seed 43, fix k=7 ka=37
+[c_chain] clip 2: seed 44, fix k=7 ka=37
+{"name": "fake4", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.19}
+PASS  9 fake run reuse: clip 0 reused (sha as C1), denoised seeds [43, 44]
+{"name": "fake5", "ok": false, "error": "ValueError: --fingerprint refused: width: 64 != 640; height: 64 != 384; clip_frames: 73 != 124; attention: 'sage' != 'sdpa'", "mismatch": null, "seconds_total": 0.0}
+Traceback (most recent call last):
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\c_chain.py", line 683, in run
+    raise ValueError("--fingerprint refused: " + "; ".join(problems))
+ValueError: --fingerprint refused: width: 64 != 640; height: 64 != 384; clip_frames: 73 != 124; attention: 'sage' != 'sdpa'
+
+{"name": "fake6", "ok": false, "error": "ValueError: strength 0 (the control) is decoded per clip only: --decode perclip", "mismatch": null, "seconds_total": 0.0}
+Traceback (most recent call last):
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\c_chain.py", line 679, in run
+    raise ValueError("strength 0 (the control) is decoded per clip only: --decode perclip")
+ValueError: strength 0 (the control) is decoded per clip only: --decode perclip
+
+PASS  11 refusals: overlap off 17m+5 / F off 17n+5 / O >= F / 2k > T' / F < 22 / N < 2 / s > 1; --fingerprint off FP_COND (2 problems); load_clip0 refuses a condition, a prompt and a sha mismatch, accepts the match; strength 0 with --decode both refused
+PASS  10 product contract: _denoise / _encode / _decode / _Phases / H3GenerateRequest fields / write_mp4 signatures, _denoise imports video_mask at call time, video_mask reads VIDEO_INJECT_CLEAN, _encode writes phases.data['encode'], VIDEO_INJECT_CLEAN == 0.999
+      mp4: 46 frames, audio (2, 61440) at 32000 Hz (muxed 61333), argmax d = 30, ratio at J 68.8, memory ratio 66.2, torch vs numpy max rel 4.01e-16
+PASS  12 analyze_chain reads the synthetic mp4: 46 frames, 61440 samples (~61333), the planted jump found at t=30
+PASS  12 seam_metrics (torch) == analyze_chain.stats_from_rgb (numpy) on the same frames (max rel 4.0e-16; jump ratio 66.21, region dY 54.09)
+PASS  12 audio_seam: 20 RMS windows, planted click ratio 99.6
+SELFCHECK PASS (23/23)
+SELFCHECK PASS

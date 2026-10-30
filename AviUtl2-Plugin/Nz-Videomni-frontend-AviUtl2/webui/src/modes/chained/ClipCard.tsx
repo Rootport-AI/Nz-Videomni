@@ -1,7 +1,7 @@
 import { useStrings } from "../../i18n/LanguageContext";
 import { TokenCounter, isOverTokenLimit } from "../../shell/TokenCounter";
 import { DurationField } from "../single/CommonGenerationFields";
-import { formatDurationHint } from "../single/paramUtils";
+import { formatDurationHint, LTX_FRAME_GRID } from "../single/paramUtils";
 import { MAX_CLIP_NUM_FRAMES, MIN_CLIP_NUM_FRAMES } from "./chainUtils";
 import type { AudioSegmentWindow, ChainClipInput } from "./chainUtils";
 
@@ -28,6 +28,13 @@ export interface ClipCardProps {
    * counter. */
   tokenCount?: number | null | undefined;
   tokenLimit?: number | null | undefined;
+  /** §1-106: the duration slider's grid step and bounds
+   * (`useChainForm.clipFrameLimits`). Omitted = LTX's 8n+1 in
+   * `[MIN_CLIP_NUM_FRAMES, MAX_CLIP_NUM_FRAMES]`. */
+  frameLimits?: { min: number; max: number; step: number } | undefined;
+  /** Ruling 84-6: show the one-line audio note under the duration
+   * (`useChainForm.clipAudioDriftFlags[index]`). Omitted = hidden. */
+  showAudioDriftNote?: boolean | undefined;
 }
 
 /** One clip's card in Chain mode's clip list: an optional per-clip prompt
@@ -50,6 +57,8 @@ export function ClipCard({
   onRemove,
   tokenCount,
   tokenLimit,
+  frameLimits = { min: MIN_CLIP_NUM_FRAMES, max: MAX_CLIP_NUM_FRAMES, step: LTX_FRAME_GRID.step },
+  showAudioDriftNote = false,
 }: ClipCardProps) {
   const strings = useStrings();
   return (
@@ -96,12 +105,14 @@ export function ClipCard({
       <DurationField
         label={strings.chained.clipNumFramesLabel}
         value={clip.numFrames}
-        min={MIN_CLIP_NUM_FRAMES}
-        max={MAX_CLIP_NUM_FRAMES}
+        min={frameLimits.min}
+        max={frameLimits.max}
+        step={frameLimits.step}
         disabled={disabled}
         onChange={onNumFramesChange}
         hint={formatDurationHint(clip.numFrames, frameRate)}
       />
+      {showAudioDriftNote && <p className="clip-note">{strings.chained.audioDriftNote}</p>}
     </li>
   );
 }

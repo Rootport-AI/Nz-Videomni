@@ -229,3 +229,41 @@ def test_time_rows_unique_set_with_masks():
     assert sorted(set(t_unique.tolist())) == sorted({1.0, f32(1 - 0.5 * sa), f32(t_a), f32(0.999),
                                                      f32(1 - 0.5 * sv), f32(t_v)})
     assert int(t_unique.numel()) == 6                                # M > 3
+
+
+# --------------------------------------------------------------------------- #
+# the injection coefficient (the H3 chain, 台帳 §1-106, 裁定 84-2)
+# --------------------------------------------------------------------------- #
+
+def test_video_inject_clean_one_is_the_clean_latent_itself():
+    clean, noise = _video(), _video(seed=7)
+    per = torch.tensor([0.0, 1.0, 0.3])
+    mask = DM.video_mask(clean, per, grid=6, noise=noise, inject_clean=1.0)
+    # The module's own expression at c = 1.0 (no shortcut): 1.0 * clean + 0.0 * noise.
+    assert torch.equal(mask.inject, 1.0 * clean + 0.0 * noise)
+    assert torch.equal(mask.inject, clean)
+    # Everything but the inject is the default mask's.
+    default = DM.video_mask(clean, per, grid=6, noise=noise)
+    assert torch.equal(mask.m, default.m) and torch.equal(mask.rows, default.rows)
+    assert torch.equal(mask.clean, default.clean) and torch.equal(mask.zero, default.zero)
+
+
+def test_video_inject_clean_none_is_the_default_bit_for_bit():
+    clean, noise = _video(), _video(seed=7)
+    per = torch.tensor([0.0, 1.0, 0.3])
+    assert DM.VIDEO_INJECT_CLEAN == 0.999
+    default = DM.video_mask(clean, per, grid=6, noise=noise)
+    explicit = DM.video_mask(clean, per, grid=6, noise=noise, inject_clean=None)
+    same = DM.video_mask(clean, per, grid=6, noise=noise, inject_clean=0.999)
+    assert torch.equal(explicit.inject, default.inject) and torch.equal(same.inject, default.inject)
+    half = DM.video_mask(clean, per, grid=6, noise=noise, inject_clean=0.5)
+    assert torch.equal(half.inject, 0.5 * clean + 0.5 * noise)
+    # An all-ones mask is still not built, whatever the coefficient.
+    assert DM.video_mask(clean, torch.ones(3), grid=6, noise=noise, inject_clean=1.0) is None
+
+
+@pytest.mark.parametrize("bad", [-0.01, 1.01, float("nan"), float("inf"), True, "1.0"])
+def test_video_inject_clean_refuses_bad_values(bad):
+    clean, noise = _video(), _video(seed=7)
+    with pytest.raises(ValueError, match="inject_clean"):
+        DM.video_mask(clean, torch.tensor([0.0, 1.0, 1.0]), grid=6, noise=noise, inject_clean=bad)

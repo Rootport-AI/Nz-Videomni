@@ -898,6 +898,8 @@ def _chain_request(**overrides) -> GenerateChainRequest:
 CHAIN_OVERRIDES: dict[str, dict] = {
     "pipeline": {"pipeline": "two_stage_hq"},
     "vae_mode": {"vae_mode": "prune_vaed"},
+    # MiniMax H3 only (VRAM 16GB mode), on the chain schema too (台帳 §1-106).
+    "vram16_mode": {"vram16_mode": True},
 }
 
 
@@ -1203,7 +1205,8 @@ def test_no_chain_mode_is_refused_any_more():
     # ...and what remains really is only the engine-level half. ``nag_enabled``
     # left it with the NAG/VSF increment, which is asserted by its own
     # acceptance test below rather than only by this set shrinking.
-    assert refused == {"pipeline", "vae_mode"}
+    # ``vram16_mode`` is MiniMax H3's (台帳 §1-106), refused by both LTX.
+    assert refused == {"pipeline", "vae_mode", "vram16_mode"}
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))
@@ -1273,6 +1276,10 @@ def test_every_rejected_chain_field_raises_feature_unsupported(field):
     with pytest.raises(APIError) as ei:
         ltx25.reject_chain(request)
     assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
+    if expected in ltx23.H3_ONLY_REFUSALS:
+        # Neither LTX runs it: the message must not point at LTX 2.3.
+        assert ei.value.detail == ltx23.H3_ONLY_REFUSALS[expected]
+        return
     assert expected in ei.value.detail
     assert "LTX 2.3" in ei.value.detail
 
@@ -1660,8 +1667,11 @@ def test_chain_payload_top_level_prompt_is_the_trimmed_shared_prompt(tmp_path):
 
 
 def test_chain_payload_omitted_strength_is_ltxs_default(tmp_path):
-    """An omitted keyframe strength reaches the worker as 0.8 (the chain
-    schema's LTX REQUEST_RULES wrote it back), never as None."""
+    """An omitted keyframe strength reaches the worker as 0.8 (LTX's chain
+    rules wrote it back, ``services.engines.validate_chain_for_family`` as
+    api/generate_chain.py calls it), never as None."""
+    from services.engines import validate_chain_for_family
+
     captured: list[dict] = []
     be = _capturing_chain_backend(captured)
     request = _chain_request(
@@ -1670,6 +1680,7 @@ def test_chain_payload_omitted_strength_is_ltxs_default(tmp_path):
             {"num_frames": 25},
         ]
     )
+    validate_chain_for_family("ltx25", request)
     be.generate_chain(
         request,
         output_dir=tmp_path / "out",

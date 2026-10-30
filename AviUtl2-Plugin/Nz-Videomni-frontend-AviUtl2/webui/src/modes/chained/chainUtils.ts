@@ -22,7 +22,10 @@ import { accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { STAGE2_WINDOW_DEFAULT } from "../../shell/tokenBudget";
 import type { Stage2Window } from "../../shell/tokenBudget";
-import { clamp, snapNumFrames } from "../single/paramUtils";
+import { clamp, LTX_FRAME_GRID, snapNumFrames } from "../single/paramUtils";
+import type { FrameGrid } from "../single/paramUtils";
+import { samplingRequestFields } from "../single/samplingValues";
+import type { SamplingValues } from "../single/samplingValues";
 
 /** Total-duration ceiling across every clip in a chain request
  * (Docs/API_REFERENCE.md §5.2: `MAX_CHAIN_TOTAL_PIXEL_FRAMES = 24*481 = 11544`). */
@@ -232,11 +235,66 @@ export function computeOutputFrames(
   return Math.max(0, output);
 }
 
-/** Snaps a per-clip `num_frames` value onto the 8n+1 grid, clamped to
- * `[MIN_CLIP_NUM_FRAMES, MAX_CLIP_NUM_FRAMES]` (or a narrower caller-supplied
- * max, e.g. what's left of the total-frames budget). */
-export function snapClipNumFrames(raw: number, max: number = MAX_CLIP_NUM_FRAMES): number {
-  return snapNumFrames(raw, MIN_CLIP_NUM_FRAMES, Math.max(MIN_CLIP_NUM_FRAMES, max));
+/** Snaps a per-clip `num_frames` value onto the clip grid, clamped to
+ * `[min, max]` (or a narrower caller-supplied max, e.g. what's left of the
+ * total-frames budget). The grid and the floor default to LTX's 8n+1 and
+ * {@link MIN_CLIP_NUM_FRAMES}; §1-106: `useChainForm` passes the loaded base
+ * model's own (`constraints.num_frames`) so a MiniMax H3 chain lands on 17n+5. */
+export function snapClipNumFrames(
+  raw: number,
+  max: number = MAX_CLIP_NUM_FRAMES,
+  grid: FrameGrid = LTX_FRAME_GRID,
+  min: number = MIN_CLIP_NUM_FRAMES,
+): number {
+  return snapNumFrames(raw, min, Math.max(min, max), grid);
+}
+
+// ── §1-106: the server-fixed seam (MiniMax H3) ──────────────────────────────
+// While the server publishes `constraints.chain` the seam is not the user's: the
+// clips overlap by exactly `overlapFrames` PIXEL frames (22 on MiniMax H3) and
+// nothing is blended or re-tiled. The helpers below are the client-side copies of
+// the server's geometry (`h3_chain_math.py` — the same formulas), kept pure like
+// the LTX ones above.
+
+/** The delivered pixel-frame count of a fixed-overlap chain:
+ * `Σ clip − overlap × (n − 1)`. `0` for no clips; never negative (a total
+ * function, safe to call mid-edit). */
+export function computeFixedOverlapOutputFrames(clipNumFrames: number[], overlapFrames: number): number {
+  if (clipNumFrames.length === 0) return 0;
+  const sum = clipNumFrames.reduce((total, frames) => total + frames, 0);
+  return Math.max(0, sum - overlapFrames * (clipNumFrames.length - 1));
+}
+
+/** Where each clip starts on the delivered pixel timeline of a fixed-overlap
+ * chain (`S_i` in `h3_chain_math.py`): `S_0 = 0`, `S_i = S_(i-1) + F_(i-1) −
+ * overlap`. One entry per clip. */
+export function clipStartFrames(lengths: readonly number[], overlap: number): number[] {
+  const starts: number[] = [];
+  let start = 0;
+  lengths.forEach((frames, i) => {
+    starts.push(start);
+    if (i < lengths.length - 1) start += frames - overlap;
+  });
+  return starts;
+}
+
+/** Per clip: `true` when the seam in front of it does not fall on an audio-latent
+ * boundary — its start `S_i` maps to `S_i × 5/3` audio latents (24fps video,
+ * 40 audio latents per second), which is not a whole number unless `S_i` is a
+ * multiple of 3. Index 0 has no seam in front of it and is always `false`, so a
+ * one-clip list is all `false`. The same rule as `h3_chain_math.py`'s
+ * `audio_drift_flags` (the placement error is not 0); drives the clip card's
+ * one-line audio note (ruling 84-6). */
+export function audioDriftSeamFlags(lengths: readonly number[], overlap: number): boolean[] {
+  return clipStartFrames(lengths, overlap).map((start, i) => i > 0 && (5 * start) % 3 !== 0);
+}
+
+/** The shortest a clip after the first may be in a fixed-overlap chain: the
+ * overlap plus one grid step (`22 + 17 = 39` on MiniMax H3) — a clip has to
+ * generate SOMETHING beyond the head it copies from the previous clip. The
+ * first clip only needs the grid's own floor. */
+export function minClipFramesForFixedOverlap(overlap: number, grid: FrameGrid): number {
+  return overlap + grid.step;
 }
 
 export function clampOverlapFrames(raw: number): number {
@@ -257,19 +315,26 @@ export function clampEndSourceStrength(raw: number): number {
  * `Nz-Videomni/gradio_ui/presets.py`): the resolution's
  * `limits.spill_free_frames["{width}x{height}"]` comfortable cap when the
  * server publishes one for this EXACT `(width, height)`, else the preset's
- * own `num_frames`. The result is additionally snapped onto the 8n+1 grid via
+ * own `num_frames`. The result is additionally snapped onto the clip grid via
  * {@link snapClipNumFrames} (defensive — server presets/spill thresholds are
  * already valid 8n+1 values in practice, but this keeps the function a total,
- * safe-to-call-anytime helper like every other snap* in this file). */
+ * safe-to-call-anytime helper like every other snap* in this file). `limits`
+ * defaults to LTX's clip grid and bounds; §1-106 passes the loaded base
+ * model's. */
 export function recommendedClipFrames(
   width: number,
   height: number,
   presetNumFrames: number,
   spillFreeFrames: Record<string, number> | undefined,
+  limits: { grid: FrameGrid; min: number; max: number } = {
+    grid: LTX_FRAME_GRID,
+    min: MIN_CLIP_NUM_FRAMES,
+    max: MAX_CLIP_NUM_FRAMES,
+  },
 ): number {
   const threshold = spillFreeFrames?.[`${width}x${height}`];
   const raw = threshold ?? presetNumFrames;
-  return snapClipNumFrames(raw);
+  return snapClipNumFrames(raw, limits.max, limits.grid, limits.min);
 }
 
 // ── A2V wav-duration geometry (Sprint 2 item 10) ────────────────────────────
@@ -858,6 +923,16 @@ export interface BuildChainRequestParams {
   seed: number;
   overlapFrames: number;
   overlapStrength: number;
+  /** §1-106: `true` while the server fixes the seam (`constraints.chain`
+   * published — MiniMax H3). The four LTX seam/stage-2 fields
+   * (`overlap_frames`, `overlap_strength`, `stage2_window`,
+   * `chunked_upsample`) are then left out of the request entirely; the server
+   * would ignore them. Omitted/`false` = LTX, byte-identical to before. */
+  fixedOverlap?: boolean;
+  /** §1-106: the three sampling values (`constraints.sampling`), sent as
+   * `num_inference_steps`/`shift_video`/`shift_audio` exactly like Create's
+   * request. `null`/omitted (LTX) sends none of the three. */
+  sampling?: SamplingValues | null;
   clips: ChainClipInput[];
   sourceVideo?: SourceVideoInput | null;
   /** §1-16 long-form A2V (`GenerateChainRequest.source_audio`). `null`/
@@ -933,18 +1008,36 @@ export function buildChainRequest(params: BuildChainRequestParams): GenerateChai
     return out;
   });
 
+  // §1-106: the four LTX-only seam/stage-2 keys, decided ONCE — `null` on a
+  // server-fixed seam (the server ignores all four), else exactly what LTX has
+  // always sent (`stage2_window` only off its default). Each key is still
+  // placed at its historical position below, so an LTX request keeps its key
+  // order byte for byte.
+  const ltxSeam = params.fixedOverlap
+    ? null
+    : {
+        overlap_frames: params.overlapFrames,
+        overlap_strength: params.overlapStrength,
+        chunked_upsample: params.chunkedUpsample,
+        stage2_window:
+          params.stage2Window && params.stage2Window !== STAGE2_WINDOW_DEFAULT ? params.stage2Window : null,
+      };
+
   const request: GenerateChainRequest = {
     prompt: params.prompt,
     width: params.width,
     height: params.height,
     frame_rate: params.frameRate,
     seed: params.seed,
-    overlap_frames: params.overlapFrames,
-    overlap_strength: params.overlapStrength,
+    // §1-106: `{}` while the loaded base model publishes no sampling block
+    // (LTX), keeping this request byte-identical to before.
+    ...samplingRequestFields(params.sampling ?? null),
+    ...(ltxSeam ? { overlap_frames: ltxSeam.overlap_frames, overlap_strength: ltxSeam.overlap_strength } : {}),
     clips,
     // Always sent explicitly — see `chunkedUpsample`'s JSDoc above; omitting
-    // it silently reverts to the server's one-pass upsample default.
-    chunked_upsample: params.chunkedUpsample,
+    // it silently reverts to the server's one-pass upsample default. §1-106:
+    // except on a fixed-seam (one-stage) base model, which has no upsample.
+    ...(ltxSeam ? { chunked_upsample: ltxSeam.chunked_upsample } : {}),
     // NAG (2026-07-28): `{}` (no keys) whenever NAG is off/unset, keeping this
     // request byte-identical to before NAG existed.
     ...nagRequestFields(params.nag),
@@ -956,8 +1049,8 @@ export function buildChainRequest(params: BuildChainRequestParams): GenerateChai
   // Omitted at the default, like every other optional field below — see
   // `stage2Window`'s own JSDoc for why this does NOT follow
   // `chunked_upsample`'s always-explicit rule.
-  if (params.stage2Window && params.stage2Window !== STAGE2_WINDOW_DEFAULT) {
-    request.stage2_window = params.stage2Window;
+  if (ltxSeam?.stage2_window) {
+    request.stage2_window = ltxSeam.stage2_window;
   }
   if (params.cropOutput) {
     request.crop_output = params.cropOutput;

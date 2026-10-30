@@ -3,6 +3,7 @@ import {
   a2vRouteFor,
   accelerationResetsFor,
   batchA2vDisabledFor,
+  batchI2vLongDisabledFor,
   chainPanelsDisabledFor,
   disabledModesFor,
   disabledUiTargets,
@@ -28,6 +29,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "a2v",
         "alpha_gen",
         "chain",
+        "chain_start_image",
         "end_source",
         "inpaint",
         "keep_resident_embeddings",
@@ -233,13 +235,25 @@ describe("batchA2vDisabledFor", () => {
   });
 });
 
+describe("batchI2vLongDisabledFor (§1-106)", () => {
+  it("is false when nothing is restricted, and for the other chain-material names", () => {
+    expect(batchI2vLongDisabledFor([])).toBe(false);
+    expect(batchI2vLongDisabledFor(["v2v", "a2v", "end_source", "reference_video"])).toBe(false);
+  });
+
+  it("is true once clip 0 cannot take an image", () => {
+    expect(batchI2vLongDisabledFor(["chain_start_image"])).toBe(true);
+  });
+});
+
 describe("chainPanelsDisabledFor", () => {
-  it("answers four falses for the ordinary case", () => {
+  it("answers all falses for the ordinary case", () => {
     expect(chainPanelsDisabledFor([])).toEqual({
       v2v: false,
       a2v: false,
       endSource: false,
       reference: false,
+      startImage: false,
     });
   });
 
@@ -268,6 +282,7 @@ describe("chainPanelsDisabledFor", () => {
       a2v: true,
       endSource: true,
       reference: true,
+      startImage: false,
     });
   });
 
@@ -279,7 +294,30 @@ describe("chainPanelsDisabledFor", () => {
       a2v: false,
       endSource: false,
       reference: false,
+      startImage: false,
     });
+  });
+
+  it("§1-106: `chain_start_image` closes the opening image alone among the panels", () => {
+    expect(chainPanelsDisabledFor(["chain_start_image"])).toEqual({
+      v2v: false,
+      a2v: false,
+      endSource: false,
+      reference: false,
+      startImage: true,
+    });
+  });
+
+  it("§1-106: MiniMax H3's chain scope closes every material panel, the tab stays live", () => {
+    const h3 = ["reference_video", "nag", "keyframe_strength", "v2v", "end_source", "a2v", "chain_start_image", "retake"];
+    expect(chainPanelsDisabledFor(h3)).toEqual({
+      v2v: true,
+      a2v: true,
+      endSource: true,
+      reference: true,
+      startImage: true,
+    });
+    expect(disabledModesFor(h3)).not.toContain("chained");
   });
 
   it("ignores names it has never heard of", () => {

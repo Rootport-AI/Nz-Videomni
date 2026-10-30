@@ -47,7 +47,9 @@ const LTX: BaseModelConstraints = {
 };
 
 /** MiniMax H3's `unsupported_features`, derived the way the plan's §3.4 says
- * the adapter derives it, plus `retake` (supervisor ruling 2026-10-17). */
+ * the adapter derives it, plus `retake` (supervisor ruling 2026-10-17).
+ * §1-106: `chain` left (H3 chains from text) and the chain material it cannot
+ * take joined: `v2v`, `end_source`, `a2v`, `chain_start_image`. */
 const H3_UNSUPPORTED = [
   "loras",
   "reference_video",
@@ -60,10 +62,16 @@ const H3_UNSUPPORTED = [
   "prune_vaed",
   "keep_resident_embeddings",
   "keyframe_strength",
-  "chain",
+  "v2v",
+  "end_source",
+  "a2v",
+  "chain_start_image",
   "retake",
   "fused_gguf_dequant_kernel",
 ];
+
+/** Engine-neutral: any base model that cannot chain at all publishes `chain`. */
+const A_BASE_MODEL_THAT_CANNOT_CHAIN = ["chain"];
 
 describe("paramUtils grid helpers (17n+5 / 32)", () => {
   const grid = { step: 17, offset: 5 };
@@ -206,22 +214,30 @@ describe("comfortProfileMissing", () => {
 });
 
 describe("MiniMax H3's feature names on screen", () => {
-  it("closes Chained, the whole Edit tab, and every Create section the plan lists", () => {
+  it("keeps Chained open (§1-106), closes the whole Edit tab and the Create sections H3 cannot use", () => {
     // Supervisor ruling 2026-10-17: the adapter publishes `retake` too (a
     // Retake is a chain request it refuses), so all four Edit sub-tabs close.
-    expect(disabledModesFor(H3_UNSUPPORTED)).toEqual(["chained", "edit"]);
+    // §1-106: no `chain` any more, so the Chained tab stays open.
+    expect(disabledModesFor(H3_UNSUPPORTED)).toEqual(["edit"]);
     expect(editSubTabsDisabledFor(H3_UNSUPPORTED)).toEqual({
       retake: true,
       outpainting: true,
       inpainting: true,
       alphaGen: true,
     });
-    expect(singleSectionsDisabledFor(H3_UNSUPPORTED)).toEqual({
+    // Create's A2V card: H3 publishes `constraints.source_audio`, so it rides
+    // `/generate` and stays open (no `chain` closes it any more either).
+    expect(singleSectionsDisabledFor(H3_UNSUPPORTED, true)).toEqual({
       referenceVideo: true,
-      a2v: true,
+      a2v: false,
       keyframeStrength: true,
     });
     expect(nagDisabledFor(H3_UNSUPPORTED)).toBe(true);
+  });
+
+  it("a base model that publishes `chain` loses the Chained tab (and Create's chain-routed A2V card)", () => {
+    expect(disabledModesFor(A_BASE_MODEL_THAT_CANNOT_CHAIN)).toEqual(["chained"]);
+    expect(singleSectionsDisabledFor(A_BASE_MODEL_THAT_CANNOT_CHAIN).a2v).toBe(true);
   });
 
   it("closes nothing new on either LTX engine", () => {

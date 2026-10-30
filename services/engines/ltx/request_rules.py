@@ -141,6 +141,13 @@ class RequestRules:
     are also enforced by :meth:`violation`. ``None`` for a family without them
     (LTX: its ``reject_unsupported`` refuses ``references`` first), and then the
     key is left out and nothing is checked.
+    ``chain_overlap_frames`` is the fixed overlap (pixel frames) of a family
+    whose ``POST /generate/chain`` carries the previous clip's tail over as the
+    next clip's fixed head (MiniMax H3: 22), published as
+    ``constraints["chain"]`` so the Chained screen draws that chain (a fixed
+    overlap and no blend controls) from the server's word. ``None`` for a
+    family without it (LTX: its overlap is a request field), and then the key
+    is left out entirely.
     """
 
     frames_step: int
@@ -160,6 +167,7 @@ class RequestRules:
     prompt_token_limit: int | None = None
     source_audio_strength: SamplingRange | None = None
     reference: ReferenceLimits | None = None
+    chain_overlap_frames: int | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -188,6 +196,10 @@ class RequestRules:
             published["source_audio"] = {"strength": self.source_audio_strength.as_dict()}
         if self.reference is not None:
             published["reference"] = self.reference.as_dict()
+        # Only a fixed-overlap chain family (MiniMax H3) publishes the key, so
+        # LTX publishes the same block as before.
+        if self.chain_overlap_frames is not None:
+            published["chain"] = {"overlap_frames": self.chain_overlap_frames}
         return published
 
     # ------------------------------------------------------------ enforcing
@@ -198,7 +210,11 @@ class RequestRules:
         The keyframes' ``strength`` is NOT filled here but by
         :meth:`normalize_keyframes`, which runs after :meth:`violation`
         (snapping needs a ``num_frames`` already known to be valid) and also
-        serves the chain schema, which never reaches this method.
+        serves LTX's chain rules (services/engines/ltx/chain_rules.py), which
+        do not call this method. MiniMax H3's chain does call it
+        (``validate_chain`` in its adapter, after marking an omitted
+        ``num_inference_steps`` as ``None``), for the steps, the shifts and
+        VRAM 16GB mode.
         """
         if request.num_inference_steps is None:
             request.num_inference_steps = self.default_steps

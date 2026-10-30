@@ -101,8 +101,7 @@
  *    NOT have it (LTX 2.3 / 2.5) publish `vram16_mode` in
  *    `unsupported_features` and 422 a `true`, and `AppShell` hides the row and
  *    writes a leftover choice back to the default on any engine that publishes
- *    the name. Not added to the chain request types: the backend's chain schema
- *    has no such field (H3 refuses the chain endpoint outright).
+ *    the name. Since §1-106 the chain request carries it too (H3 chains).
  */
 import type { StatusResponse } from "../api/types";
 
@@ -521,7 +520,8 @@ export interface AccelerationRequestFields {
   fused_gguf_dequant_kernel?: boolean;
   vae_mode?: VaeMode;
   keep_resident_embeddings?: boolean;
-  /** 台帳 §1-101: `/generate` only — the chain request types do not carry it. */
+  /** 台帳 §1-101: VRAM 16GB mode — `/generate` and, since §1-106,
+   * `/generate/chain` (MiniMax H3 chains). */
   vram16_mode?: boolean;
 }
 

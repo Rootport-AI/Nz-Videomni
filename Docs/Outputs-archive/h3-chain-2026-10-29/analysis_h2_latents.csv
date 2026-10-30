@@ -1,0 +1,4 @@
+clip,video_max_abs,video_mean_abs,video_ref_abs_mean,video_equal,audio_max_abs,audio_mean_abs,audio_ref_abs_mean,audio_equal,missing
+0,0,0,0.872533,True,0,0,0.376275,True,
+1,4.9991,0.130547,0.854711,False,0.939848,0.0217057,0.373723,False,
+2,5.0526,0.439778,0.88334,False,1.82085,0.147501,0.403818,False,

@@ -1,0 +1,42 @@
+ok   prompts_c.json has 3 prompts (prompts_c.json)
+ok   split: shared = prompts[0]; clips 1, 2 carry an appended part
+ok   compose(shared, own) == prompts_c.json for the 3 clips (exact strings)
+ok   compose trims both ends, one space, skips empty parts
+ok   sha_text is sha256 of the UTF-8 bytes
+ok   sha256(prompts_c[0]) == the measurement script's clip-0 prompt_sha (c0_gate.json)
+skip (product not importable here: ModuleNotFoundError): compare with api.models.compose_clip_prompt
+ok   G-C0 body: 640x384 3x124 sdpa steps 20
+ok   G-C1 body: 1344x768 3x124 sage steps 8
+ok   G-C2 body: 1344x768 13x124 sage steps 20
+ok   G-C0 body: appended parts, embed false, vram16 default, no LoRA, no crop
+ok   G-C1 body: VRAM 16GB mode, the Turbo LoRA by registered name, 8 steps
+ok   G-C2 body: 13 clips, appended parts alternate, no LoRA, 20 steps
+ok   13-clip composed prompts cycle
+ok   split_prompts refuses a prompt that does not start with the shared one
+ok   expected frames: 3 clips = 328, 13 clips = 1348
+ok   monotonic: a rising trace passes
+ok   monotonic: progress going down is caught
+ok   monotonic: clip going down is caught
+ok   monotonic: clip_count changing is caught
+ok   monotonic: progress above 1 is caught
+ok   compare_latents: equal -> no mismatch
+ok   compare_latents: one audio sha differs -> 1 mismatch
+ok   compare_latents: a missing clip is caught
+ok   compare_latents: missing sha values are caught
+ok   evaluate G-C0: a consistent run passes; VRAM peaks are read from phases
+ok   evaluate G-C0: one differing latent sha fails the first criterion
+ok   evaluate G-C0: a differing mp4 sha256 is a record, not a failure
+ok   evaluate G-C0: 327 frames fails
+ok   evaluate G-C0: head_equals_prev_tail false fails
+ok   evaluate G-C0: a request whose composed prompt differs fails
+ok   evaluate G-C0: no --compare report fails (the criterion cannot be judged)
+ok   evaluate G-C0: a failed job fails
+ok   evaluate G-C1: Turbo reported, 328 frames, heads equal -> pass
+ok   evaluate G-C1: no LoRA report fails
+ok   evaluate G-C2: 13 clips, 1348 frames pass; decode seconds and sampler recorded
+ok   evaluate G-C2: 1347 frames fails
+ok   psnr_db: identical = inf; one saturated sample of 48 = 10log10(48) dB
+ok   ProcSampler: this process tree has a working set 0.03 GiB and a commit 0.74 GiB
+ok   sha256_file
+SELFCHECK PASS (39/39)
+SELFCHECK PASS

@@ -1,0 +1,2845 @@
+{
+  "gate": "G-C1",
+  "conditions": {
+    "width": 1344,
+    "height": 768,
+    "clips": 3,
+    "attention": "sage",
+    "steps": 8,
+    "shift_video": 6.0,
+    "shift_audio": 3.0,
+    "vram16_mode": true,
+    "embed_mp4_metadata": null,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8
+      }
+    ],
+    "frames": 328
+  },
+  "base_url": "http://127.0.0.1:18629/api/v1",
+  "started": "2026-10-29T22:02:53",
+  "ok": true,
+  "prompts_file": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-2026-10-29\\prompts_c.json",
+  "expected_prompts": [
+    "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+    "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d> She turns and walks slowly along the street, humming a tune.",
+    "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d> She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>"
+  ],
+  "expected_prompt_sha256": [
+    "d83e7d299e6e41b5ee60551bbf4d43f56be4011a904dfe506662933f72b908e3",
+    "551e0dcffe7a112af2d500f04a07975f7aa9f7a41b20f301ae984f3be6594afb",
+    "723f807d13e60c3a91a5e2c9d4a44ebb0ef5773ca9cd3b6a64115ab72c941fda"
+  ],
+  "request_body": {
+    "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+    "width": 1344,
+    "height": 768,
+    "seed": 42,
+    "attention_backend": "sage",
+    "num_inference_steps": 8,
+    "shift_video": 6.0,
+    "shift_audio": 3.0,
+    "clips": [
+      {
+        "num_frames": 124
+      },
+      {
+        "num_frames": 124,
+        "prompt": "She turns and walks slowly along the street, humming a tune."
+      },
+      {
+        "num_frames": 124,
+        "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>"
+      }
+    ],
+    "vram16_mode": true,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8
+      }
+    ]
+  },
+  "status_before": {
+    "server": "running",
+    "version": "0.4.0",
+    "host": "127.0.0.1",
+    "port": 18629,
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled",
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "gpu": {
+      "available": false,
+      "name": null,
+      "vram_total_mb": 0,
+      "vram_used_mb": 0,
+      "vram_free_mb": 0
+    },
+    "vram_optimization": {
+      "low_vram_mode": true,
+      "low_vram_profile": "16gb_safe",
+      "fp8_transformer": true,
+      "cpu_offload_text_encoder": true,
+      "vae_tiling": true,
+      "attention_tiling": false,
+      "block_swap": true,
+      "low_vram_disabled_required": false
+    },
+    "acceleration": {
+      "attention_backends": [
+        "sdpa",
+        "sage"
+      ],
+      "sage_available": true,
+      "block_swap_prefetch_available": true
+    },
+    "tracking": {
+      "available": true
+    },
+    "queue": {
+      "mode": "single_job_in_memory",
+      "pending": 0,
+      "running": 0,
+      "completed": 1,
+      "failed": 0
+    }
+  },
+  "models_before": {
+    "categories": {
+      "transformer": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          },
+          {
+            "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+            "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+            "is_default": false,
+            "exists": true,
+            "source": "scan"
+          },
+          {
+            "name": "h3ErosMax_beta4_int8",
+            "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+            "is_default": false,
+            "exists": true,
+            "source": "scan"
+          },
+          {
+            "name": "minimax_h3_ref2va_pruned_int8_convrot",
+            "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+            "is_default": false,
+            "exists": true,
+            "source": "scan"
+          },
+          {
+            "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+            "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+            "is_default": false,
+            "exists": true,
+            "source": "scan"
+          }
+        ]
+      },
+      "text_encoder": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      },
+      "video_vae": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      },
+      "audio": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      }
+    },
+    "active_base_model": "MiniMaxH3",
+    "base_models": [
+      {
+        "id": "LTX23",
+        "display_name": "LTX 2.3",
+        "engine_family": "ltx",
+        "active": false,
+        "installed": true,
+        "present": true,
+        "missing_categories": [],
+        "unsupported_features": [
+          "keep_resident_embeddings",
+          "alpha_gen",
+          "vram16_mode",
+          "source_audio",
+          "references"
+        ],
+        "constraints": {
+          "num_frames": {
+            "step": 8,
+            "offset": 1,
+            "min": 9,
+            "max": 481
+          },
+          "dimension_multiple": 64,
+          "frame_rate": {
+            "min": 1.0,
+            "max": 60.0
+          },
+          "sampling": null,
+          "keyframes": {
+            "step": 8,
+            "offset": 1
+          },
+          "prompt_token_limit": 1024
+        },
+        "category_order": [
+          "transformer",
+          "text_encoder",
+          "video_vae",
+          "audio"
+        ],
+        "transformer_weight_class": null,
+        "transformer_role": null,
+        "categories": {
+          "transformer": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              },
+              {
+                "name": "10Eros-v1.2-Q4_K_M",
+                "path": "models/LTX23/Weights/10Eros-v1.2-Q4_K_M.gguf",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "Sulphur-2-base-distil-Q6_K",
+                "path": "models/LTX23/Weights/Sulphur-2-base-distil-Q6_K.gguf",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "ltx-2.3-22b-distilled-1.1_int8mixedtensorwise",
+                "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_int8mixedtensorwise.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot",
+                "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "ltx-2.3-22b-distilled-1.1_w4a8",
+                "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_w4a8.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "sulphur_distil_fp8mixed",
+                "path": "models/LTX23/Weights/sulphur_distil_fp8mixed.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              }
+            ]
+          },
+          "text_encoder": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "video_vae": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX23/VAE/LTX23_video_vae_bf16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "audio": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "LTX25",
+        "display_name": "LTX 2.5",
+        "engine_family": "ltx25",
+        "active": false,
+        "installed": true,
+        "present": true,
+        "missing_categories": [],
+        "unsupported_features": [
+          "two_stage_hq",
+          "prune_vaed",
+          "vram16_mode",
+          "source_audio",
+          "references"
+        ],
+        "constraints": {
+          "num_frames": {
+            "step": 8,
+            "offset": 1,
+            "min": 9,
+            "max": 481
+          },
+          "dimension_multiple": 64,
+          "frame_rate": {
+            "min": 1.0,
+            "max": 60.0
+          },
+          "sampling": null,
+          "keyframes": {
+            "step": 8,
+            "offset": 1
+          },
+          "prompt_token_limit": 1024
+        },
+        "category_order": [
+          "transformer",
+          "text_encoder",
+          "video_vae",
+          "audio"
+        ],
+        "transformer_weight_class": null,
+        "transformer_role": null,
+        "categories": {
+          "transformer": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              },
+              {
+                "name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot",
+                "path": "models/LTX25/Weights/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "ltx25_uncensored_v1.1-fp8_scaled",
+                "path": "models/LTX25/Weights/ltx25_uncensored_v1.1-fp8_scaled.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW",
+                "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K",
+                "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K.gguf",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              }
+            ]
+          },
+          "text_encoder": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "video_vae": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "audio": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "MiniMaxH3",
+        "display_name": "MiniMax H3",
+        "engine_family": "h3",
+        "active": true,
+        "installed": true,
+        "present": true,
+        "missing_categories": [],
+        "unsupported_features": [
+          "reference_video",
+          "nag",
+          "two_stage_hq",
+          "guidance_scale",
+          "outpaint",
+          "inpaint",
+          "alpha_gen",
+          "prune_vaed",
+          "keep_resident_embeddings",
+          "keyframe_strength",
+          "chain_start_image",
+          "v2v",
+          "a2v",
+          "end_source",
+          "retake",
+          "fused_gguf_dequant_kernel",
+          "lora_audio_strength"
+        ],
+        "constraints": {
+          "num_frames": {
+            "step": 17,
+            "offset": 5,
+            "min": 22,
+            "max": 481
+          },
+          "dimension_multiple": 32,
+          "frame_rate": {
+            "min": 24.0,
+            "max": 24.0
+          },
+          "sampling": {
+            "num_inference_steps": {
+              "min": 1,
+              "max": 50,
+              "step": 1,
+              "default": 20
+            },
+            "shift_video": {
+              "min": 1,
+              "max": 20,
+              "step": 0.1,
+              "default": 12
+            },
+            "shift_audio": {
+              "min": 1,
+              "max": 20,
+              "step": 0.1,
+              "default": 3
+            }
+          },
+          "keyframes": {
+            "step": 1,
+            "offset": 0
+          },
+          "prompt_token_limit": null,
+          "source_audio": {
+            "strength": {
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05,
+              "default": 0.5
+            }
+          },
+          "reference": {
+            "max_images": 9,
+            "max_videos": 3,
+            "max_audios": 3,
+            "max_total": 12,
+            "video_total_sec": 15.0,
+            "audio_total_sec": 15.0,
+            "clip_min_sec": 2.0
+          },
+          "chain": {
+            "overlap_frames": 22
+          }
+        },
+        "category_order": [
+          "transformer",
+          "text_encoder",
+          "video_vae",
+          "audio"
+        ],
+        "transformer_weight_class": null,
+        "transformer_role": "fl2va",
+        "categories": {
+          "transformer": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              },
+              {
+                "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+                "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "h3ErosMax_beta4_int8",
+                "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "minimax_h3_ref2va_pruned_int8_convrot",
+                "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+                "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              }
+            ]
+          },
+          "text_encoder": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "video_vae": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "audio": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "load_response": {
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled",
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "models": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    }
+  },
+  "load_seconds": 0.01,
+  "status_after_load": {
+    "server": "running",
+    "version": "0.4.0",
+    "host": "127.0.0.1",
+    "port": 18629,
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled",
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "gpu": {
+      "available": false,
+      "name": null,
+      "vram_total_mb": 0,
+      "vram_used_mb": 0,
+      "vram_free_mb": 0
+    },
+    "vram_optimization": {
+      "low_vram_mode": true,
+      "low_vram_profile": "16gb_safe",
+      "fp8_transformer": true,
+      "cpu_offload_text_encoder": true,
+      "vae_tiling": true,
+      "attention_tiling": false,
+      "block_swap": true,
+      "low_vram_disabled_required": false
+    },
+    "acceleration": {
+      "attention_backends": [
+        "sdpa",
+        "sage"
+      ],
+      "sage_available": true,
+      "block_swap_prefetch_available": true
+    },
+    "tracking": {
+      "available": true
+    },
+    "queue": {
+      "mode": "single_job_in_memory",
+      "pending": 0,
+      "running": 0,
+      "completed": 1,
+      "failed": 0
+    }
+  },
+  "models_after_load": {
+    "categories": {
+      "transformer": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          },
+          {
+            "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+            "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+            "is_default": false,
+            "exists": true,
+            "source": "scan"
+          },
+          {
+            "name": "h3ErosMax_beta4_int8",
+            "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+            "is_default": false,
+            "exists": true,
+            "source": "scan"
+          },
+          {
+            "name": "minimax_h3_ref2va_pruned_int8_convrot",
+            "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+            "is_default": false,
+            "exists": true,
+            "source": "scan"
+          },
+          {
+            "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+            "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+            "is_default": false,
+            "exists": true,
+            "source": "scan"
+          }
+        ]
+      },
+      "text_encoder": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      },
+      "video_vae": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      },
+      "audio": {
+        "default": "default",
+        "active": "default",
+        "entries": [
+          {
+            "name": "default",
+            "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+            "is_default": true,
+            "exists": true,
+            "source": "config"
+          }
+        ]
+      }
+    },
+    "active_base_model": "MiniMaxH3",
+    "base_models": [
+      {
+        "id": "LTX23",
+        "display_name": "LTX 2.3",
+        "engine_family": "ltx",
+        "active": false,
+        "installed": true,
+        "present": true,
+        "missing_categories": [],
+        "unsupported_features": [
+          "keep_resident_embeddings",
+          "alpha_gen",
+          "vram16_mode",
+          "source_audio",
+          "references"
+        ],
+        "constraints": {
+          "num_frames": {
+            "step": 8,
+            "offset": 1,
+            "min": 9,
+            "max": 481
+          },
+          "dimension_multiple": 64,
+          "frame_rate": {
+            "min": 1.0,
+            "max": 60.0
+          },
+          "sampling": null,
+          "keyframes": {
+            "step": 8,
+            "offset": 1
+          },
+          "prompt_token_limit": 1024
+        },
+        "category_order": [
+          "transformer",
+          "text_encoder",
+          "video_vae",
+          "audio"
+        ],
+        "transformer_weight_class": null,
+        "transformer_role": null,
+        "categories": {
+          "transformer": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              },
+              {
+                "name": "10Eros-v1.2-Q4_K_M",
+                "path": "models/LTX23/Weights/10Eros-v1.2-Q4_K_M.gguf",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "Sulphur-2-base-distil-Q6_K",
+                "path": "models/LTX23/Weights/Sulphur-2-base-distil-Q6_K.gguf",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "ltx-2.3-22b-distilled-1.1_int8mixedtensorwise",
+                "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_int8mixedtensorwise.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot",
+                "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "ltx-2.3-22b-distilled-1.1_w4a8",
+                "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_w4a8.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "sulphur_distil_fp8mixed",
+                "path": "models/LTX23/Weights/sulphur_distil_fp8mixed.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              }
+            ]
+          },
+          "text_encoder": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "video_vae": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX23/VAE/LTX23_video_vae_bf16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "audio": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "LTX25",
+        "display_name": "LTX 2.5",
+        "engine_family": "ltx25",
+        "active": false,
+        "installed": true,
+        "present": true,
+        "missing_categories": [],
+        "unsupported_features": [
+          "two_stage_hq",
+          "prune_vaed",
+          "vram16_mode",
+          "source_audio",
+          "references"
+        ],
+        "constraints": {
+          "num_frames": {
+            "step": 8,
+            "offset": 1,
+            "min": 9,
+            "max": 481
+          },
+          "dimension_multiple": 64,
+          "frame_rate": {
+            "min": 1.0,
+            "max": 60.0
+          },
+          "sampling": null,
+          "keyframes": {
+            "step": 8,
+            "offset": 1
+          },
+          "prompt_token_limit": 1024
+        },
+        "category_order": [
+          "transformer",
+          "text_encoder",
+          "video_vae",
+          "audio"
+        ],
+        "transformer_weight_class": null,
+        "transformer_role": null,
+        "categories": {
+          "transformer": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              },
+              {
+                "name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot",
+                "path": "models/LTX25/Weights/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "ltx25_uncensored_v1.1-fp8_scaled",
+                "path": "models/LTX25/Weights/ltx25_uncensored_v1.1-fp8_scaled.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW",
+                "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K",
+                "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K.gguf",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              }
+            ]
+          },
+          "text_encoder": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "video_vae": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "audio": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "MiniMaxH3",
+        "display_name": "MiniMax H3",
+        "engine_family": "h3",
+        "active": true,
+        "installed": true,
+        "present": true,
+        "missing_categories": [],
+        "unsupported_features": [
+          "reference_video",
+          "nag",
+          "two_stage_hq",
+          "guidance_scale",
+          "outpaint",
+          "inpaint",
+          "alpha_gen",
+          "prune_vaed",
+          "keep_resident_embeddings",
+          "keyframe_strength",
+          "chain_start_image",
+          "v2v",
+          "a2v",
+          "end_source",
+          "retake",
+          "fused_gguf_dequant_kernel",
+          "lora_audio_strength"
+        ],
+        "constraints": {
+          "num_frames": {
+            "step": 17,
+            "offset": 5,
+            "min": 22,
+            "max": 481
+          },
+          "dimension_multiple": 32,
+          "frame_rate": {
+            "min": 24.0,
+            "max": 24.0
+          },
+          "sampling": {
+            "num_inference_steps": {
+              "min": 1,
+              "max": 50,
+              "step": 1,
+              "default": 20
+            },
+            "shift_video": {
+              "min": 1,
+              "max": 20,
+              "step": 0.1,
+              "default": 12
+            },
+            "shift_audio": {
+              "min": 1,
+              "max": 20,
+              "step": 0.1,
+              "default": 3
+            }
+          },
+          "keyframes": {
+            "step": 1,
+            "offset": 0
+          },
+          "prompt_token_limit": null,
+          "source_audio": {
+            "strength": {
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05,
+              "default": 0.5
+            }
+          },
+          "reference": {
+            "max_images": 9,
+            "max_videos": 3,
+            "max_audios": 3,
+            "max_total": 12,
+            "video_total_sec": 15.0,
+            "audio_total_sec": 15.0,
+            "clip_min_sec": 2.0
+          },
+          "chain": {
+            "overlap_frames": 22
+          }
+        },
+        "category_order": [
+          "transformer",
+          "text_encoder",
+          "video_vae",
+          "audio"
+        ],
+        "transformer_weight_class": null,
+        "transformer_role": "fl2va",
+        "categories": {
+          "transformer": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              },
+              {
+                "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+                "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "h3ErosMax_beta4_int8",
+                "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "minimax_h3_ref2va_pruned_int8_convrot",
+                "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              },
+              {
+                "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+                "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+                "is_default": false,
+                "exists": true,
+                "source": "scan"
+              }
+            ]
+          },
+          "text_encoder": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "video_vae": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          },
+          "audio": {
+            "default": "default",
+            "active": "default",
+            "entries": [
+              {
+                "name": "default",
+                "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+                "is_default": true,
+                "exists": true,
+                "source": "config"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "job_id": "13caf32c-7563-4fe4-8572-75341e0019e9",
+  "submit_response": {
+    "job_id": "13caf32c-7563-4fe4-8572-75341e0019e9",
+    "status": "running",
+    "created_at": "2026-10-29T13:02:54Z",
+    "num_clips": 3
+  },
+  "poll": {
+    "timed_out": false,
+    "samples": [
+      {
+        "t": 0.0,
+        "status": "running",
+        "progress": 0.05,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "current_step": null,
+        "total_steps": null
+      },
+      {
+        "t": 5.0,
+        "status": "running",
+        "progress": 0.05,
+        "stage": "encode",
+        "clip": null,
+        "clip_count": null,
+        "current_step": null,
+        "total_steps": null
+      },
+      {
+        "t": 25.0,
+        "status": "running",
+        "progress": 0.05,
+        "stage": "stage1_denoise",
+        "clip": 1,
+        "clip_count": 3,
+        "current_step": 0,
+        "total_steps": 8
+      },
+      {
+        "t": 50.1,
+        "status": "running",
+        "progress": 0.085,
+        "stage": "stage1_denoise",
+        "clip": 1,
+        "clip_count": 3,
+        "current_step": 1,
+        "total_steps": 8
+      },
+      {
+        "t": 75.1,
+        "status": "running",
+        "progress": 0.121,
+        "stage": "stage1_denoise",
+        "clip": 1,
+        "clip_count": 3,
+        "current_step": 2,
+        "total_steps": 8
+      },
+      {
+        "t": 100.1,
+        "status": "running",
+        "progress": 0.156,
+        "stage": "stage1_denoise",
+        "clip": 1,
+        "clip_count": 3,
+        "current_step": 3,
+        "total_steps": 8
+      },
+      {
+        "t": 130.1,
+        "status": "running",
+        "progress": 0.192,
+        "stage": "stage1_denoise",
+        "clip": 1,
+        "clip_count": 3,
+        "current_step": 4,
+        "total_steps": 8
+      },
+      {
+        "t": 155.2,
+        "status": "running",
+        "progress": 0.227,
+        "stage": "stage1_denoise",
+        "clip": 1,
+        "clip_count": 3,
+        "current_step": 5,
+        "total_steps": 8
+      },
+      {
+        "t": 180.2,
+        "status": "running",
+        "progress": 0.263,
+        "stage": "stage1_denoise",
+        "clip": 1,
+        "clip_count": 3,
+        "current_step": 6,
+        "total_steps": 8
+      },
+      {
+        "t": 205.2,
+        "status": "running",
+        "progress": 0.298,
+        "stage": "stage1_denoise",
+        "clip": 1,
+        "clip_count": 3,
+        "current_step": 7,
+        "total_steps": 8
+      },
+      {
+        "t": 230.3,
+        "status": "running",
+        "progress": 0.333,
+        "stage": "encode",
+        "clip": 1,
+        "clip_count": 3,
+        "current_step": null,
+        "total_steps": null
+      },
+      {
+        "t": 250.3,
+        "status": "running",
+        "progress": 0.333,
+        "stage": "stage1_denoise",
+        "clip": 2,
+        "clip_count": 3,
+        "current_step": 0,
+        "total_steps": 8
+      },
+      {
+        "t": 280.3,
+        "status": "running",
+        "progress": 0.369,
+        "stage": "stage1_denoise",
+        "clip": 2,
+        "clip_count": 3,
+        "current_step": 1,
+        "total_steps": 8
+      },
+      {
+        "t": 305.3,
+        "status": "running",
+        "progress": 0.404,
+        "stage": "stage1_denoise",
+        "clip": 2,
+        "clip_count": 3,
+        "current_step": 2,
+        "total_steps": 8
+      },
+      {
+        "t": 330.4,
+        "status": "running",
+        "progress": 0.44,
+        "stage": "stage1_denoise",
+        "clip": 2,
+        "clip_count": 3,
+        "current_step": 3,
+        "total_steps": 8
+      },
+      {
+        "t": 355.4,
+        "status": "running",
+        "progress": 0.475,
+        "stage": "stage1_denoise",
+        "clip": 2,
+        "clip_count": 3,
+        "current_step": 4,
+        "total_steps": 8
+      },
+      {
+        "t": 380.4,
+        "status": "running",
+        "progress": 0.51,
+        "stage": "stage1_denoise",
+        "clip": 2,
+        "clip_count": 3,
+        "current_step": 5,
+        "total_steps": 8
+      },
+      {
+        "t": 405.4,
+        "status": "running",
+        "progress": 0.546,
+        "stage": "stage1_denoise",
+        "clip": 2,
+        "clip_count": 3,
+        "current_step": 6,
+        "total_steps": 8
+      },
+      {
+        "t": 435.5,
+        "status": "running",
+        "progress": 0.581,
+        "stage": "stage1_denoise",
+        "clip": 2,
+        "clip_count": 3,
+        "current_step": 7,
+        "total_steps": 8
+      },
+      {
+        "t": 460.5,
+        "status": "running",
+        "progress": 0.617,
+        "stage": "encode",
+        "clip": 2,
+        "clip_count": 3,
+        "current_step": null,
+        "total_steps": null
+      },
+      {
+        "t": 480.5,
+        "status": "running",
+        "progress": 0.617,
+        "stage": "stage1_denoise",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": 0,
+        "total_steps": 8
+      },
+      {
+        "t": 510.5,
+        "status": "running",
+        "progress": 0.652,
+        "stage": "stage1_denoise",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": 1,
+        "total_steps": 8
+      },
+      {
+        "t": 535.5,
+        "status": "running",
+        "progress": 0.688,
+        "stage": "stage1_denoise",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": 2,
+        "total_steps": 8
+      },
+      {
+        "t": 560.5,
+        "status": "running",
+        "progress": 0.723,
+        "stage": "stage1_denoise",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": 3,
+        "total_steps": 8
+      },
+      {
+        "t": 585.6,
+        "status": "running",
+        "progress": 0.758,
+        "stage": "stage1_denoise",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": 4,
+        "total_steps": 8
+      },
+      {
+        "t": 610.6,
+        "status": "running",
+        "progress": 0.794,
+        "stage": "stage1_denoise",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": 5,
+        "total_steps": 8
+      },
+      {
+        "t": 635.6,
+        "status": "running",
+        "progress": 0.829,
+        "stage": "stage1_denoise",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": 6,
+        "total_steps": 8
+      },
+      {
+        "t": 665.6,
+        "status": "running",
+        "progress": 0.865,
+        "stage": "stage1_denoise",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": 7,
+        "total_steps": 8
+      },
+      {
+        "t": 690.6,
+        "status": "running",
+        "progress": 0.93,
+        "stage": "decode",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": null,
+        "total_steps": null
+      },
+      {
+        "t": 750.7,
+        "status": "running",
+        "progress": 0.93,
+        "stage": "decode",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": null,
+        "total_steps": null
+      },
+      {
+        "t": 780.7,
+        "status": "running",
+        "progress": 0.99,
+        "stage": "decode",
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": null,
+        "total_steps": null
+      },
+      {
+        "t": 785.7,
+        "status": "completed",
+        "progress": 1.0,
+        "stage": null,
+        "clip": 3,
+        "clip_count": 3,
+        "current_step": null,
+        "total_steps": null
+      }
+    ],
+    "stage_log": [
+      {
+        "t": 0.0,
+        "stage": null,
+        "progress": 0.05,
+        "clip": null
+      },
+      {
+        "t": 5.0,
+        "stage": "encode",
+        "progress": 0.05,
+        "clip": null
+      },
+      {
+        "t": 25.0,
+        "stage": "stage1_denoise",
+        "progress": 0.05,
+        "clip": 1
+      },
+      {
+        "t": 230.3,
+        "stage": "encode",
+        "progress": 0.333,
+        "clip": 1
+      },
+      {
+        "t": 250.3,
+        "stage": "stage1_denoise",
+        "progress": 0.333,
+        "clip": 2
+      },
+      {
+        "t": 460.5,
+        "stage": "encode",
+        "progress": 0.617,
+        "clip": 2
+      },
+      {
+        "t": 480.5,
+        "stage": "stage1_denoise",
+        "progress": 0.617,
+        "clip": 3
+      },
+      {
+        "t": 690.6,
+        "stage": "decode",
+        "progress": 0.93,
+        "clip": 3
+      },
+      {
+        "t": 785.7,
+        "stage": null,
+        "progress": 1.0,
+        "clip": 3
+      }
+    ],
+    "polls": 158,
+    "monotonic_ok": true,
+    "monotonic_problems": [],
+    "max_progress": 1.0,
+    "seconds": 785.7
+  },
+  "job": {
+    "job_id": "13caf32c-7563-4fe4-8572-75341e0019e9",
+    "status": "completed",
+    "progress": 1.0,
+    "current_step": null,
+    "total_steps": null,
+    "stage": null,
+    "clip": 3,
+    "clip_count": 3,
+    "is_v2v": false,
+    "joined": false,
+    "matte": false,
+    "alpha": null,
+    "created_at": "2026-10-29T13:02:54Z",
+    "started_at": "2026-10-29T13:02:54Z",
+    "completed_at": "2026-10-29T13:15:57Z",
+    "error": null,
+    "request": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "negative_prompt": "",
+      "nag_enabled": false,
+      "nag_scale": 11.0,
+      "nag_tau": 2.5,
+      "nag_alpha": 0.25,
+      "neg_method": "nag",
+      "vsf_scale": 1.5,
+      "attention_backend": "sage",
+      "block_swap_prefetch": true,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "fused_gguf_dequant_kernel": true,
+      "vae_mode": "default",
+      "embed_mp4_metadata": true,
+      "vram16_mode": true,
+      "width": 1344,
+      "height": 768,
+      "crop_output": null,
+      "num_frames": 124,
+      "frame_rate": 24.0,
+      "num_inference_steps": 8,
+      "shift_video": 6.0,
+      "shift_audio": 3.0,
+      "guidance_scale": 1.0,
+      "seed": 42,
+      "pipeline": "distilled",
+      "conditioning_images": [],
+      "loras": [],
+      "reference_video_id": null,
+      "conditioning_attention_strength": null,
+      "reference_video_strength": null,
+      "outpaint": null,
+      "inpaint": null,
+      "alpha_gen": null,
+      "source_audio": null,
+      "references": []
+    },
+    "result": {
+      "video_url": "/api/v1/jobs/13caf32c-7563-4fe4-8572-75341e0019e9/video",
+      "duration_seconds": 13.667,
+      "resolution": "1344x768",
+      "file_size_bytes": 6236599,
+      "generation_time_seconds": 783.08,
+      "seed_used": 42,
+      "output_path": "outputs/13caf32c-7563-4fe4-8572-75341e0019e9/output.mp4",
+      "metadata_path": "outputs/13caf32c-7563-4fe4-8572-75341e0019e9/metadata.json"
+    }
+  },
+  "memory_sampler": {
+    "root_pid": 48472,
+    "interval_s": 10.0,
+    "samples": 79,
+    "max_working_set_gib": 24.49,
+    "max_commit_gib": 35.8,
+    "trace": [
+      [
+        0.0,
+        2.88,
+        6.54
+      ],
+      [
+        10.0,
+        3.06,
+        8.21
+      ],
+      [
+        20.0,
+        19.35,
+        26.52
+      ],
+      [
+        30.0,
+        24.35,
+        35.6
+      ],
+      [
+        40.0,
+        24.35,
+        35.6
+      ],
+      [
+        50.1,
+        24.35,
+        35.8
+      ],
+      [
+        60.1,
+        24.35,
+        35.8
+      ],
+      [
+        70.1,
+        24.35,
+        35.8
+      ],
+      [
+        80.1,
+        24.35,
+        35.8
+      ],
+      [
+        90.1,
+        24.35,
+        35.8
+      ],
+      [
+        100.1,
+        24.35,
+        35.8
+      ],
+      [
+        110.1,
+        24.35,
+        35.8
+      ],
+      [
+        120.1,
+        24.35,
+        35.8
+      ],
+      [
+        130.1,
+        24.35,
+        35.8
+      ],
+      [
+        140.1,
+        24.35,
+        35.8
+      ],
+      [
+        150.2,
+        24.35,
+        35.8
+      ],
+      [
+        160.2,
+        24.35,
+        35.8
+      ],
+      [
+        170.2,
+        24.35,
+        35.8
+      ],
+      [
+        180.2,
+        24.35,
+        35.8
+      ],
+      [
+        190.2,
+        24.35,
+        35.8
+      ],
+      [
+        200.2,
+        24.35,
+        35.8
+      ],
+      [
+        210.2,
+        24.35,
+        35.8
+      ],
+      [
+        220.2,
+        24.35,
+        35.8
+      ],
+      [
+        230.2,
+        24.31,
+        33.75
+      ],
+      [
+        240.2,
+        22.71,
+        32.03
+      ],
+      [
+        250.2,
+        24.46,
+        35.79
+      ],
+      [
+        260.3,
+        24.46,
+        35.78
+      ],
+      [
+        270.3,
+        24.46,
+        35.78
+      ],
+      [
+        280.3,
+        24.46,
+        35.78
+      ],
+      [
+        290.3,
+        24.46,
+        35.78
+      ],
+      [
+        300.3,
+        24.46,
+        35.78
+      ],
+      [
+        310.3,
+        24.46,
+        35.78
+      ],
+      [
+        320.3,
+        24.46,
+        35.78
+      ],
+      [
+        330.3,
+        24.46,
+        35.78
+      ],
+      [
+        340.3,
+        24.46,
+        35.78
+      ],
+      [
+        350.3,
+        24.46,
+        35.78
+      ],
+      [
+        360.4,
+        24.46,
+        35.78
+      ],
+      [
+        370.4,
+        24.46,
+        35.78
+      ],
+      [
+        380.4,
+        24.46,
+        35.78
+      ],
+      [
+        390.4,
+        24.46,
+        35.78
+      ],
+      [
+        400.4,
+        24.46,
+        35.78
+      ],
+      [
+        410.4,
+        24.46,
+        35.78
+      ],
+      [
+        420.4,
+        24.46,
+        35.78
+      ],
+      [
+        430.4,
+        24.46,
+        35.78
+      ],
+      [
+        440.4,
+        24.46,
+        35.78
+      ],
+      [
+        450.5,
+        24.46,
+        35.78
+      ],
+      [
+        460.5,
+        22.95,
+        32.28
+      ],
+      [
+        470.5,
+        22.79,
+        32.06
+      ],
+      [
+        480.5,
+        24.49,
+        35.79
+      ],
+      [
+        490.5,
+        24.49,
+        35.78
+      ],
+      [
+        500.5,
+        24.49,
+        35.78
+      ],
+      [
+        510.5,
+        24.49,
+        35.78
+      ],
+      [
+        520.5,
+        24.49,
+        35.78
+      ],
+      [
+        530.5,
+        24.49,
+        35.78
+      ],
+      [
+        540.5,
+        24.49,
+        35.78
+      ],
+      [
+        550.5,
+        24.49,
+        35.78
+      ],
+      [
+        560.6,
+        24.49,
+        35.78
+      ],
+      [
+        570.6,
+        24.49,
+        35.78
+      ],
+      [
+        580.6,
+        24.49,
+        35.78
+      ],
+      [
+        590.6,
+        24.49,
+        35.78
+      ],
+      [
+        600.6,
+        24.49,
+        35.78
+      ],
+      [
+        610.6,
+        24.49,
+        35.78
+      ],
+      [
+        620.6,
+        24.49,
+        35.78
+      ],
+      [
+        630.6,
+        24.49,
+        35.78
+      ],
+      [
+        640.6,
+        24.49,
+        35.78
+      ],
+      [
+        650.6,
+        24.49,
+        35.78
+      ],
+      [
+        660.6,
+        24.49,
+        35.78
+      ],
+      [
+        670.7,
+        24.49,
+        35.78
+      ],
+      [
+        680.7,
+        24.49,
+        35.78
+      ],
+      [
+        690.7,
+        10.61,
+        18.97
+      ],
+      [
+        700.7,
+        10.7,
+        21.69
+      ],
+      [
+        710.7,
+        10.8,
+        21.82
+      ],
+      [
+        720.7,
+        10.9,
+        21.94
+      ],
+      [
+        730.7,
+        11.0,
+        22.07
+      ],
+      [
+        740.7,
+        11.1,
+        22.19
+      ],
+      [
+        750.7,
+        11.2,
+        22.32
+      ],
+      [
+        760.7,
+        11.34,
+        22.5
+      ],
+      [
+        770.7,
+        11.44,
+        22.63
+      ],
+      [
+        780.8,
+        4.66,
+        8.76
+      ]
+    ],
+    "error": null
+  },
+  "metadata_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\13caf32c-7563-4fe4-8572-75341e0019e9\\metadata.json",
+  "mp4": {
+    "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\13caf32c-7563-4fe4-8572-75341e0019e9\\output.mp4",
+    "metadata_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\13caf32c-7563-4fe4-8572-75341e0019e9\\metadata.json",
+    "size_bytes": 6256632,
+    "sha256": "1fdd8bf60ef82fc239990854b14a50da2f6756a716afca5615306aa8bcfdca8b",
+    "frames": 328,
+    "frame_rate": 24.0,
+    "has_audio": true,
+    "reader": "av"
+  },
+  "metadata_h3": {
+    "sampler": "euler",
+    "num_inference_steps": 8,
+    "shift_video": 6.0,
+    "shift_audio": 3.0,
+    "images_used": 0,
+    "rss_peak_gib": 24.87,
+    "commit_gib": 6.75,
+    "commit_peak_gib": 34.95,
+    "seconds": 783.08,
+    "phases": {
+      "clips": [
+        {
+          "encode": {
+            "te": {
+              "num_layers_file": 50,
+              "num_layers_built": 50,
+              "int8_linears": 350,
+              "tensors_planned": 901,
+              "vision_tensors_in_file": 351,
+              "rope": {
+                "rope_type": "default",
+                "rope_theta": 5000000.0,
+                "mrope_section": [
+                  24,
+                  20,
+                  20
+                ],
+                "mrope_interleaved": true,
+                "head_dim": 128,
+                "num_attention_heads": 64,
+                "num_key_value_heads": 8,
+                "num_hidden_layers": 50,
+                "attn_implementation": "nz_h3_blocked_math"
+              },
+              "extra_special_tokens": {
+                "ids": {
+                  "<d>": 151669,
+                  "</d>": 151670,
+                  "<|cutoff|>": 151671,
+                  "<|lyrics_start|>": 151672,
+                  "<|lyrics_end|>": 151673,
+                  "<|caption_start|>": 151674,
+                  "<|caption_end|>": 151675
+                },
+                "added_here": false
+              },
+              "seconds": 0.32
+            },
+            "rss_after_load_gib": 2.76,
+            "commit_after_load_gib": 5.74,
+            "te_read": {
+              "read_gib": 24.17,
+              "read_seconds": 9.94,
+              "layers_read": 50,
+              "encode_seconds": 10.05,
+              "tokens": 41,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": []
+            },
+            "rss_after_release_gib": 2.84,
+            "commit_after_release_gib": 6.05,
+            "text_tokens": 41,
+            "seconds": 10.53,
+            "rss_end_gib": 2.84,
+            "rss_process_peak_gib": 23.69,
+            "commit_end_gib": 6.05,
+            "commit_process_peak_gib": 32.33,
+            "peak_vram_mb": 1493,
+            "peak_vram_reserved_mb": 2974
+          },
+          "denoise": {
+            "dit": {
+              "int8_linears": 200,
+              "loaded_tensors": 732,
+              "loaded_gib": 19.53,
+              "read_seconds": 11.26
+            },
+            "dit_source": "file",
+            "rss_after_load_gib": 22.36,
+            "commit_after_load_gib": 29.51,
+            "rss_after_place_gib": 23.34,
+            "commit_after_place_gib": 33.11,
+            "sequence": {
+              "text": 41,
+              "cond": 0,
+              "audio": 414,
+              "video": 37296,
+              "total": 37751,
+              "latent_frames": 37,
+              "audio_latents": 207,
+              "grid": [
+                24,
+                42
+              ]
+            },
+            "m_per_step": [
+              1,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "block_swap_prefetch_used": "on",
+            "vram16": {
+              "cap_fraction": 0.855,
+              "cap_mib": 14001,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 1718
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 24.16,
+            "commit_after_release_gib": 31.82,
+            "seconds": 217.73,
+            "rss_end_gib": 24.16,
+            "rss_process_peak_gib": 24.18,
+            "commit_end_gib": 31.81,
+            "commit_process_peak_gib": 34.95,
+            "peak_vram_mb": 4642,
+            "peak_vram_reserved_mb": 5022
+          }
+        },
+        {
+          "encode": {
+            "te": {
+              "num_layers_file": 50,
+              "num_layers_built": 50,
+              "int8_linears": 350,
+              "tensors_planned": 901,
+              "vision_tensors_in_file": 351,
+              "rope": {
+                "rope_type": "default",
+                "rope_theta": 5000000.0,
+                "mrope_section": [
+                  24,
+                  20,
+                  20
+                ],
+                "mrope_interleaved": true,
+                "head_dim": 128,
+                "num_attention_heads": 64,
+                "num_key_value_heads": 8,
+                "num_hidden_layers": 50,
+                "attn_implementation": "nz_h3_blocked_math"
+              },
+              "extra_special_tokens": {
+                "ids": {
+                  "<d>": 151669,
+                  "</d>": 151670,
+                  "<|cutoff|>": 151671,
+                  "<|lyrics_start|>": 151672,
+                  "<|lyrics_end|>": 151673,
+                  "<|caption_start|>": 151674,
+                  "<|caption_end|>": 151675
+                },
+                "added_here": false
+              },
+              "seconds": 0.36
+            },
+            "rss_after_load_gib": 24.22,
+            "commit_after_load_gib": 31.75,
+            "te_read": {
+              "read_gib": 24.17,
+              "read_seconds": 19.38,
+              "layers_read": 50,
+              "encode_seconds": 19.49,
+              "tokens": 54,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": []
+            },
+            "rss_after_release_gib": 22.49,
+            "commit_after_release_gib": 29.88,
+            "text_tokens": 54,
+            "seconds": 20.03,
+            "rss_end_gib": 22.49,
+            "rss_process_peak_gib": 24.36,
+            "commit_end_gib": 29.88,
+            "commit_process_peak_gib": 34.95,
+            "peak_vram_mb": 1493,
+            "peak_vram_reserved_mb": 2976
+          },
+          "denoise": {
+            "dit_source": "resident",
+            "rss_after_load_gib": 22.49,
+            "commit_after_load_gib": 29.88,
+            "rss_after_place_gib": 23.31,
+            "commit_after_place_gib": 33.09,
+            "sequence": {
+              "text": 54,
+              "cond": 0,
+              "audio": 414,
+              "video": 37296,
+              "total": 37764,
+              "latent_frames": 37,
+              "audio_latents": 207,
+              "grid": [
+                24,
+                42
+              ]
+            },
+            "m_per_step": [
+              3,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4
+            ],
+            "block_swap_prefetch_used": "on",
+            "mask": {
+              "audio": {
+                "rows": 414,
+                "min": 0.0,
+                "max": 1.0
+              },
+              "video": {
+                "rows": 37296,
+                "min": 0.0,
+                "max": 1.0,
+                "inject_clean": 1.0
+              }
+            },
+            "vram16": {
+              "cap_fraction": 0.855,
+              "cap_mib": 14001,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 1690
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 24.24,
+            "commit_after_release_gib": 31.84,
+            "seconds": 208.11,
+            "rss_end_gib": 24.24,
+            "rss_process_peak_gib": 24.36,
+            "commit_end_gib": 31.84,
+            "commit_process_peak_gib": 34.95,
+            "peak_vram_mb": 4672,
+            "peak_vram_reserved_mb": 4920
+          }
+        },
+        {
+          "encode": {
+            "te": {
+              "num_layers_file": 50,
+              "num_layers_built": 50,
+              "int8_linears": 350,
+              "tensors_planned": 901,
+              "vision_tensors_in_file": 351,
+              "rope": {
+                "rope_type": "default",
+                "rope_theta": 5000000.0,
+                "mrope_section": [
+                  24,
+                  20,
+                  20
+                ],
+                "mrope_interleaved": true,
+                "head_dim": 128,
+                "num_attention_heads": 64,
+                "num_key_value_heads": 8,
+                "num_hidden_layers": 50,
+                "attn_implementation": "nz_h3_blocked_math"
+              },
+              "extra_special_tokens": {
+                "ids": {
+                  "<d>": 151669,
+                  "</d>": 151670,
+                  "<|cutoff|>": 151671,
+                  "<|lyrics_start|>": 151672,
+                  "<|lyrics_end|>": 151673,
+                  "<|caption_start|>": 151674,
+                  "<|caption_end|>": 151675
+                },
+                "added_here": false
+              },
+              "seconds": 0.39
+            },
+            "rss_after_load_gib": 24.31,
+            "commit_after_load_gib": 31.79,
+            "te_read": {
+              "read_gib": 24.17,
+              "read_seconds": 20.76,
+              "layers_read": 50,
+              "encode_seconds": 20.87,
+              "tokens": 66,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": []
+            },
+            "rss_after_release_gib": 22.58,
+            "commit_after_release_gib": 29.92,
+            "text_tokens": 66,
+            "seconds": 21.45,
+            "rss_end_gib": 22.58,
+            "rss_process_peak_gib": 24.43,
+            "commit_end_gib": 29.92,
+            "commit_process_peak_gib": 34.95,
+            "peak_vram_mb": 1493,
+            "peak_vram_reserved_mb": 2974
+          },
+          "denoise": {
+            "dit_source": "resident",
+            "rss_after_load_gib": 22.58,
+            "commit_after_load_gib": 29.92,
+            "rss_after_place_gib": 23.62,
+            "commit_after_place_gib": 33.39,
+            "sequence": {
+              "text": 66,
+              "cond": 0,
+              "audio": 414,
+              "video": 37296,
+              "total": 37776,
+              "latent_frames": 37,
+              "audio_latents": 207,
+              "grid": [
+                24,
+                42
+              ]
+            },
+            "m_per_step": [
+              3,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4
+            ],
+            "block_swap_prefetch_used": "on",
+            "mask": {
+              "audio": {
+                "rows": 414,
+                "min": 0.0,
+                "max": 1.0
+              },
+              "video": {
+                "rows": 37296,
+                "min": 0.0,
+                "max": 1.0,
+                "inject_clean": 1.0
+              }
+            },
+            "vram16": {
+              "cap_fraction": 0.855,
+              "cap_mib": 14001,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 1690
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 24.31,
+            "commit_after_release_gib": 31.9,
+            "seconds": 208.77,
+            "rss_end_gib": 24.3,
+            "rss_process_peak_gib": 24.43,
+            "commit_end_gib": 31.89,
+            "commit_process_peak_gib": 34.95,
+            "peak_vram_mb": 4672,
+            "peak_vram_reserved_mb": 4920
+          }
+        }
+      ],
+      "decode": {
+        "vae_source": "file",
+        "audio_samples": 437333,
+        "audio_samples_decoded": 437600,
+        "frames": 328,
+        "seconds": 95.73,
+        "rss_end_gib": 3.77,
+        "rss_process_peak_gib": 24.87,
+        "commit_end_gib": 6.77,
+        "commit_process_peak_gib": 34.95,
+        "peak_vram_mb": 6434,
+        "peak_vram_reserved_mb": 7618
+      }
+    },
+    "quant_backends": {
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      }
+    },
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "strength": 0.8,
+        "layout": "ab",
+        "dtype": "BF16",
+        "pairs_applied": 208,
+        "skipped": []
+      }
+    ],
+    "clips": [
+      {
+        "prompt_sha256": "d83e7d299e6e41b5ee60551bbf4d43f56be4011a904dfe506662933f72b908e3",
+        "seconds": {
+          "encode": 10.53,
+          "denoise": 217.73
+        },
+        "latents_sha256": {
+          "video": "d169a1810960d0a68efc89c5a8d4092bb3b611f3400762447de2a1cea042bdcf",
+          "audio": "c252cbbe021de0cf4f3e181199c82d10733e840c668f5a56a6daad8d4553831d"
+        },
+        "head_equals_prev_tail": null
+      },
+      {
+        "prompt_sha256": "551e0dcffe7a112af2d500f04a07975f7aa9f7a41b20f301ae984f3be6594afb",
+        "seconds": {
+          "encode": 20.03,
+          "denoise": 208.11
+        },
+        "latents_sha256": {
+          "video": "b46e89482f075acf68cfd1b39fa0a4918c109b2aeb00eac73e838c9ce536860f",
+          "audio": "e180ccb51a6d5a870d1048cea89e883bc419856b2d5ea5982e60cb493d05b6f6"
+        },
+        "head_equals_prev_tail": true
+      },
+      {
+        "prompt_sha256": "723f807d13e60c3a91a5e2c9d4a44ebb0ef5773ca9cd3b6a64115ab72c941fda",
+        "seconds": {
+          "encode": 21.45,
+          "denoise": 208.77
+        },
+        "latents_sha256": {
+          "video": "0a39f18a2b90d9dc67bb6cccc466587d6b08fa214e69db189d0f23d8f7c9e546",
+          "audio": "6dd784cf33d7fc2a97b60c3823e52fedeb1ce0687b633945b835a605d8d41047"
+        },
+        "head_equals_prev_tail": true
+      }
+    ],
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "audio_latent_excess": 0,
+    "audio_drift_flags": [
+      false,
+      false,
+      false
+    ],
+    "overlap_frames": 22,
+    "inject_clean": 1.0,
+    "decode": "once"
+  },
+  "metadata_summary": {
+    "backend": "minimax-h3",
+    "attention_used": "sage",
+    "vram16_mode_used": "on",
+    "block_swap_prefetch_used": "on",
+    "keep_resident_used": "off",
+    "peak_vram_reserved_mb": 7618,
+    "generation_time_seconds": 783.08,
+    "seed_used": 42,
+    "models": {
+      "base_model": "MiniMaxH3",
+      "selection": {
+        "transformer": {
+          "name": "default",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+        },
+        "text_encoder": {
+          "name": "default",
+          "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        },
+        "video_vae": {
+          "name": "default",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        "audio": {
+          "name": "default",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        }
+      }
+    },
+    "chain": {
+      "num_clips": 3,
+      "architecture": "masked_av_latent_concat",
+      "overlap_frames": 22,
+      "overlap_strength": 1.0,
+      "total_frames": 328,
+      "clip_num_frames": [
+        124,
+        124,
+        124
+      ],
+      "segment_seam_junctions": [
+        123,
+        225
+      ],
+      "tile_seam_junctions": [],
+      "all_junctions": [
+        122,
+        123,
+        124,
+        224,
+        225,
+        226
+      ],
+      "video_tiles": [],
+      "n_tiles": 0,
+      "stage2_window": null,
+      "v_tile": null,
+      "kt_v": null
+    },
+    "output": {
+      "path": "outputs/13caf32c-7563-4fe4-8572-75341e0019e9/output.mp4",
+      "resolution": "1344x768",
+      "duration_seconds": 13.667,
+      "frame_rate": 24.0,
+      "file_size_bytes": 6236599
+    }
+  },
+  "metadata_request": {
+    "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+    "negative_prompt": "",
+    "nag_enabled": false,
+    "nag_scale": 11.0,
+    "nag_tau": 2.5,
+    "nag_alpha": 0.25,
+    "neg_method": "nag",
+    "vsf_scale": 1.5,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "keep_resident_embeddings": false,
+    "fused_gguf_dequant_kernel": true,
+    "vae_mode": "default",
+    "embed_mp4_metadata": true,
+    "vram16_mode": true,
+    "width": 1344,
+    "height": 768,
+    "crop_output": null,
+    "frame_rate": 24.0,
+    "num_inference_steps": 8,
+    "shift_video": 6.0,
+    "shift_audio": 3.0,
+    "guidance_scale": 1.0,
+    "seed": 42,
+    "pipeline": "distilled",
+    "overlap_frames": 3,
+    "overlap_strength": 0.5,
+    "clips": [
+      {
+        "prompt": null,
+        "num_frames": 124,
+        "conditioning_images": []
+      },
+      {
+        "prompt": "She turns and walks slowly along the street, humming a tune.",
+        "num_frames": 124,
+        "conditioning_images": []
+      },
+      {
+        "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>",
+        "num_frames": 124,
+        "conditioning_images": []
+      }
+    ],
+    "source_video": null,
+    "source_audio": null,
+    "retake": null,
+    "end_source": null,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8,
+        "audio_strength": null
+      }
+    ],
+    "reference_video_id": null,
+    "conditioning_attention_strength": null,
+    "reference_video_strength": null,
+    "chunked_upsample": false,
+    "stage2_window": "standard"
+  },
+  "verdict": {
+    "gate": "G-C1",
+    "pass": true,
+    "failed": [],
+    "checks": [
+      {
+        "name": "job completed",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "status=completed error=None"
+      },
+      {
+        "name": "backend is the real H3 engine",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "metadata.backend='minimax-h3'"
+      },
+      {
+        "name": "progress / clip trace is monotonic",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "158 polls, max progress 1.0"
+      },
+      {
+        "name": "final progress is 1.0",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "progress=1.0"
+      },
+      {
+        "name": "clip_count is the clip count",
+        "kind": "record",
+        "ok": true,
+        "detail": "job.clip=3 clip_count=3"
+      },
+      {
+        "name": "3 clip records in metadata.h3.clips",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "3 records"
+      },
+      {
+        "name": "head_equals_prev_tail is true for every clip after the first",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "[True, True]"
+      },
+      {
+        "name": "mp4 plays and has 328 frames",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "frames=328 (expected 328 = 3x124 - 2x22) reader=av"
+      },
+      {
+        "name": "seeds are seed + i",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "[42, 43, 44]"
+      },
+      {
+        "name": "attention used",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "'sage'"
+      },
+      {
+        "name": "VRAM 16GB mode used",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "'on'"
+      },
+      {
+        "name": "steps / shifts as requested",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "(8, 6.0, 3.0)"
+      },
+      {
+        "name": "composed prompts reach the engine unchanged",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "equal"
+      },
+      {
+        "name": "h3.loras reports the Turbo LoRA",
+        "kind": "criterion",
+        "ok": true,
+        "detail": "[{'name': 'minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 'strength': 0.8, 'layout': 'ab', 'dtype': 'BF16', 'pairs_applied': 208, 'skipped': []}]"
+      }
+    ],
+    "records": {
+      "job_seconds": 783.08,
+      "per_clip_seconds": [
+        {
+          "encode": 10.53,
+          "denoise": 217.73
+        },
+        {
+          "encode": 20.03,
+          "denoise": 208.11
+        },
+        {
+          "encode": 21.45,
+          "denoise": 208.77
+        }
+      ],
+      "decode_seconds": 95.73,
+      "vram": {
+        "max_allocated_mb": 6434,
+        "max_reserved_mb": 7618,
+        "decode_allocated_mb": 6434,
+        "decode_reserved_mb": 7618
+      },
+      "worker_rss_peak_gib": 24.87,
+      "worker_commit_peak_gib": 34.95,
+      "decode_rss_process_peak_gib": 24.87,
+      "decode_commit_process_peak_gib": 34.95,
+      "sampler": {
+        "root_pid": 48472,
+        "interval_s": 10.0,
+        "samples": 79,
+        "max_working_set_gib": 24.49,
+        "max_commit_gib": 35.8,
+        "error": null
+      }
+    }
+  },
+  "seconds_total": 787.4
+}

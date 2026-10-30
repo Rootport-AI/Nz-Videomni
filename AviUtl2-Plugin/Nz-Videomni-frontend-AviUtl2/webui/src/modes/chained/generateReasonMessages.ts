@@ -37,6 +37,11 @@ export interface ChainReasonMessageParams {
    * it; omitted -> the standard step's 161, which never binds (the server caps
    * `context_frames` at 145 anyway), so the line simply never fires. */
   stage2MaxContextFrames?: number;
+  /** §1-106: `UseChainFormResult.fixedOverlapFrames` — non-null in the
+   * fixed-overlap mode, where `clipTooShortForOverlap` gets its own sentence
+   * (there is no seam-blend setting to name). Optional for the same reason as
+   * `stage2MaxContextFrames`; omitted/`null` = the LTX sentence. */
+  fixedOverlapFrames?: number | null;
   // 素材（末尾）v2 (2026-08-15): `stage2MaxEndContextFrames` and
   // `endContextRequiredLastClipFrames` were removed from this params object
   // together with the two gates that interpolated them. Neither number exists on
@@ -62,14 +67,17 @@ export interface ChainReasonMessageParams {
  */
 export function buildChainReasonMessages(
   strings: Strings,
-  { minFramesForOverlap, minClips, stage2MaxContextFrames = 161 }: ChainReasonMessageParams,
+  { minFramesForOverlap, minClips, stage2MaxContextFrames = 161, fixedOverlapFrames = null }: ChainReasonMessageParams,
 ): Record<string, string> {
   return {
     promptEmpty: strings.single.generateReasons.promptEmpty,
     dimensionsOffGrid: strings.single.generateReasons.dimensionsOffGrid,
     cropInvalid: strings.single.generateReasons.cropInvalid,
     clipFramesOffGrid: strings.chained.generateReasons.clipFramesOffGrid,
-    clipTooShortForOverlap: strings.chained.generateReasons.clipTooShortForOverlap(minFramesForOverlap),
+    clipTooShortForOverlap:
+      fixedOverlapFrames !== null
+        ? strings.chained.generateReasons.clipTooShortForFixedOverlap(minFramesForOverlap)
+        : strings.chained.generateReasons.clipTooShortForOverlap(minFramesForOverlap),
     minClips: strings.chained.minClipsError(minClips),
     totalFramesExceeded: strings.chained.totalFramesExceeded(MAX_CHAIN_TOTAL_FRAMES),
     sourceUploading: strings.chained.generateReasons.uploadInFlight,
@@ -128,6 +136,8 @@ export function buildChainReasonMessages(
     endSourceLengthUnknown: strings.chained.generateReasons.endSourceLengthUnknown,
     endSourceNeedsOverlap: strings.chained.generateReasons.endSourceNeedsOverlap,
     endSourceAudioOverlapBudget: strings.chained.generateReasons.endSourceAudioOverlapBudget,
+    // §1-106: material left in a panel the loaded base model has closed.
+    materialInClosedPanel: strings.chained.generateReasons.materialInClosedPanel,
     // NAG (2026-07-28): shares Create's copy — `useChainForm`'s own
     // `validityReasons` pushes this code identically to `useGenerationForm`'s.
     nagNegativeEmpty: strings.single.generateReasons.nagNegativeEmpty,

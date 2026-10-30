@@ -38,6 +38,10 @@ import {
   suggestFramesForAudio,
   vLatentFrames,
   vTailLatents,
+  audioDriftSeamFlags,
+  clipStartFrames,
+  computeFixedOverlapOutputFrames,
+  minClipFramesForFixedOverlap,
 } from "./chainUtils";
 import type { ChainLayoutError } from "./chainUtils";
 import { STAGE2_WINDOW_PRESETS } from "../../shell/tokenBudget";
@@ -1141,6 +1145,121 @@ describe("chainUtils", () => {
       // v_latent(9) = 2; kv=8 >= 2, the OTHER rejection this function stays
       // silent about.
       expect(endSourceAudioOverlapOk([9, 9], 30, 8)).toBe(true);
+    });
+  });
+});
+
+// ── §1-106: the server-fixed seam (MiniMax H3) ──────────────────────────────
+// Expected values are the measurement table (VERIFICATION_LOG §183.8) — the
+// same table `tests/test_h3_chain_math.py` uses for `h3_chain_math.py`.
+describe("chainUtils — fixed-overlap geometry (§1-106)", () => {
+  const H3_GRID = { step: 17, offset: 5 };
+
+  describe("snapClipNumFrames / recommendedClipFrames with the loaded grid", () => {
+    it("snaps onto 17n+5 within [22, 481] when given H3's grid", () => {
+      expect(snapClipNumFrames(49, 481, H3_GRID, 22)).toBe(56);
+      expect(snapClipNumFrames(121, 481, H3_GRID, 22)).toBe(124);
+      expect(snapClipNumFrames(1, 481, H3_GRID, 22)).toBe(22);
+      expect(snapClipNumFrames(9999, 481, H3_GRID, 22)).toBe(481);
+    });
+
+    it("keeps LTX's 8n+1 in [9, 481] when the grid is omitted (unchanged)", () => {
+      expect(snapClipNumFrames(50)).toBe(49);
+      expect(snapClipNumFrames(1)).toBe(9);
+    });
+
+    it("recommendedClipFrames snaps the preset length onto the given grid", () => {
+      expect(recommendedClipFrames(1280, 704, 121, undefined, { grid: H3_GRID, min: 22, max: 481 })).toBe(124);
+      expect(recommendedClipFrames(1280, 704, 121, undefined)).toBe(121);
+    });
+  });
+
+  const TABLE: ReadonlyArray<{
+    name: string;
+    lengths: number[];
+    overlap: number;
+    starts: number[];
+    total: number;
+    drift: boolean[];
+  }> = [
+    // §183.8 C0-C3: 124 x 3, O = 22 -> S = 102, 204; F = 328; no placement error.
+    { name: "C0-C3", lengths: [124, 124, 124], overlap: 22, starts: [0, 102, 204], total: 328, drift: [false, false, false] },
+    // §183.8 C4: O = 5 -> S = 119, 238 (placement error 1/3 at both seams).
+    { name: "C4", lengths: [124, 124, 124], overlap: 5, starts: [0, 119, 238], total: 362, drift: [false, true, true] },
+    // §183.8 C5: O = 39 -> S = 85, 170 (placement error 1/3 at both seams).
+    { name: "C5", lengths: [124, 124, 124], overlap: 39, starts: [0, 85, 170], total: 294, drift: [false, true, true] },
+    // The boundary pairs: 22 (the grid floor) then 39 (the i>=1 floor).
+    { name: "22+39+39", lengths: [22, 39, 39], overlap: 22, starts: [0, 0, 17], total: 56, drift: [false, false, true] },
+    // 141 = 17*8+5 puts the next seam off the boundary; 124 = 17*7+5 does not.
+    { name: "141+124", lengths: [141, 124], overlap: 22, starts: [0, 119], total: 243, drift: [false, true] },
+    { name: "124+141", lengths: [124, 141], overlap: 22, starts: [0, 102], total: 243, drift: [false, false] },
+    // The plan's audio-excess -1 example; the seam itself lands off the boundary.
+    { name: "141+107", lengths: [141, 107], overlap: 22, starts: [0, 119], total: 226, drift: [false, true] },
+  ];
+
+  for (const row of TABLE) {
+    it(`${row.name}: starts, output length and drift flags`, () => {
+      expect(clipStartFrames(row.lengths, row.overlap)).toEqual(row.starts);
+      expect(computeFixedOverlapOutputFrames(row.lengths, row.overlap)).toBe(row.total);
+      expect(audioDriftSeamFlags(row.lengths, row.overlap)).toEqual(row.drift);
+    });
+  }
+
+  it("a single clip has no seam: all false, output = its length", () => {
+    expect(audioDriftSeamFlags([141], 22)).toEqual([false]);
+    expect(computeFixedOverlapOutputFrames([141], 22)).toBe(141);
+    expect(computeFixedOverlapOutputFrames([], 22)).toBe(0);
+    expect(audioDriftSeamFlags([], 22)).toEqual([]);
+  });
+
+  it("the floor of a clip after the first is overlap + one grid step (39 on H3)", () => {
+    expect(minClipFramesForFixedOverlap(22, H3_GRID)).toBe(39);
+  });
+
+  describe("buildChainRequest in the fixed-overlap mode", () => {
+    const base = {
+      prompt: "a cat",
+      width: 640,
+      height: 384,
+      frameRate: 24,
+      seed: 42,
+      overlapFrames: 3,
+      overlapStrength: 0.5,
+      chunkedUpsample: true,
+      clips: [
+        { id: "c0", prompt: "", numFrames: 124 },
+        { id: "c1", prompt: "", numFrames: 124 },
+      ],
+    };
+
+    it("leaves out the four LTX seam fields and sends the three sampling values", () => {
+      const req = buildChainRequest({
+        ...base,
+        fixedOverlap: true,
+        stage2Window: "high_resolution",
+        sampling: { numInferenceSteps: 8, shiftVideo: 12, shiftAudio: 3 },
+      });
+      for (const key of ["overlap_frames", "overlap_strength", "chunked_upsample", "stage2_window"]) {
+        expect(req).not.toHaveProperty(key);
+      }
+      expect(req.num_inference_steps).toBe(8);
+      expect(req.shift_video).toBe(12);
+      expect(req.shift_audio).toBe(3);
+    });
+
+    it("keeps LTX's key set and order (no fixedOverlap, no sampling)", () => {
+      const req = buildChainRequest(base);
+      expect(Object.keys(req)).toEqual([
+        "prompt",
+        "width",
+        "height",
+        "frame_rate",
+        "seed",
+        "overlap_frames",
+        "overlap_strength",
+        "clips",
+        "chunked_upsample",
+      ]);
     });
   });
 });

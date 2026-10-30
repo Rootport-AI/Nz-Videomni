@@ -325,3 +325,27 @@ def reject_chain(family: str, request: GenerateChainRequest) -> None:
     guard = getattr(_adapter(family), "reject_chain", None)
     if guard is not None:
         guard(request)
+
+
+def validate_chain_for_family(family: str, request: GenerateChainRequest) -> None:
+    """系統の数値の規約で連結生成 ``request`` を検査する(違反は 422 VALIDATION_ERROR)。
+
+    :func:`validate_for_family` の連結版。**検査はアダプタの
+    ``validate_chain`` が持ち、ここは取り次ぐだけ**である(LTX 2.3／2.5 は
+    services/engines/ltx/chain_rules.py、MiniMax H3 は自身のアダプタ)。
+    アダプタは違反を ``ValueError`` で上げ、ここで pydantic の検証の失敗と
+    同じ形の 422(``api.errors.request_validation_failed``)にする。系統の
+    既定値の書き戻し(H3 の段数・shift・VRAM 16GB mode)もアダプタが行う。
+
+    呼ぶ場所は api/generate_chain.py の :func:`reject_chain` の**直後**。
+    機能の可否(FEATURE_UNSUPPORTED)が数値の違反より先に返る。
+
+    宣言していない系統は素通り(:func:`reject_chain` と同じ規約)。
+    """
+    check = getattr(_adapter(family), "validate_chain", None)
+    if check is None:
+        return
+    try:
+        check(request)
+    except ValueError as exc:
+        raise request_validation_failed(str(exc)) from exc

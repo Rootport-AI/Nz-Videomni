@@ -3133,3 +3133,13 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: 完結。dev の `engine_h3/text_encoder.py` と `tests/test_h3_engine.py`（コミットのハッシュは git の履歴を正とする）。
 - **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) の裁定 83 と §3.2 の既知の限界、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §181（原因の確定と候補の実測）・§182（実装と門）、フロントエンドの `Docs/DEVLOG.md` §152。計画・実験・門の記録の保管は [`Outputs-archive/h3-te-vram-2026-10-29/`](Outputs-archive/h3-te-vram-2026-10-29/README.md)。
 - **残課題**: 視覚の塔の活性の山は参照動画の長さに比例して増える（早期解放では減らない）。G の時間は入力の長さの 2 乗で伸びる。どちらも設計正本の既知の限界に書いた。DiT 側の VRAM 対策は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-118。
+
+### 3-262. MiniMax H3 の Chained（H3 Continuum 型・FL2VA。複数クリップの連結）（起票：2026-10-19、クローズ：2026-10-30）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-106 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-106（2026-10-19 起票）。**同書側は欠番**。番号は、同書 §3 の生きた項目（3-261）を飛ばした次の空き番号である。
+- **到達条件**: MiniMax H3 で複数クリップを、前のクリップの映像と音声の潜在の末尾を次の冒頭に固定して連結し、1 本の動画にできること（文章からの連結。重なりは 22 フレーム固定）。**達成した。**
+- **何が完了したか**: 推論エンジンの連結（潜在の持ち越し。連結した潜在を 1 本で復号）、API（`POST /generate/chain` を H3 が受ける。`constraints.chain`、サンプリング値と `vram16_mode` の受け取り）、操作パネル（Chained タブが H3 で開く固定の重なりモード・出力の合計長・音声の注意の一行・右クリック入口の門・閉じる素材）、MCP と Gradio は注記のみ（Gradio の Chain タブは LTX 専用のまま、H3 では 422）。
+- **合格の根拠**: 継ぎ目の計測と計画の敵対的レビューは記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183、実装・機械の門・GPU の門（G-C0〜G-C2）は同 §184。オーナーの実機確認（G-C3）に合格した。
+- **状態**: 完結（日付 2026-10-30）。コミットのハッシュは git の履歴を正とする。
+- **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3 と裁定 85、契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.104）§6.2b (h)、操作パネルはフロントエンドの `Docs/DEVLOG.md` §153。
+- **残課題**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-261（H3 の Chained の推定時間）・§4-44（重なりの選択）・§4-45（長い連結での焼け）・§4-46（10 連結超での音声と映像のわずかなズレ）。

@@ -34,6 +34,12 @@ export interface ChainReferencePanelProps {
    * direct-render tests (`ChainReferencePanel.test.tsx`) that predate the
    * accordion keep seeing the heading exactly as before. */
   showHeading?: boolean | undefined;
+  /** §1-106: the loaded base model has closed this panel. Everything that
+   * ADDS or EDITS material goes dead (as with `disabled`), but the clear
+   * button stays live so material attached on another base model can be
+   * removed here (it blocks Generate with `materialInClosedPanel` meanwhile).
+   * Omitted -> open. */
+  unavailable?: boolean | undefined;
 }
 
 /**
@@ -61,7 +67,15 @@ export interface ChainReferencePanelProps {
  *   comfort-budget banner instead, since it needs the whole form's
  *   resolution/clip-length, not just this card's own state).
  */
-export function ChainReferencePanel({ form, disabled, nativeBridge, showHeading = true }: ChainReferencePanelProps) {
+export function ChainReferencePanel({
+  form,
+  disabled: inFlight,
+  nativeBridge,
+  showHeading = true,
+  unavailable = false,
+}: ChainReferencePanelProps) {
+  // §1-106: clear reads `inFlight` only.
+  const disabled = inFlight || unavailable;
   const strings = useStrings();
   const t = strings.chained.referenceVideo;
 
@@ -142,7 +156,7 @@ export function ChainReferencePanel({ form, disabled, nativeBridge, showHeading 
           className="icon-action-button chain-reference-clear"
           title={t.clearButton}
           aria-label={t.clearButton}
-          disabled={disabled || uploading || !form.hasReferenceVideo}
+          disabled={inFlight || uploading || !form.hasReferenceVideo}
           onClick={() => {
             form.clearReference();
             setDropResetToken((n) => n + 1);

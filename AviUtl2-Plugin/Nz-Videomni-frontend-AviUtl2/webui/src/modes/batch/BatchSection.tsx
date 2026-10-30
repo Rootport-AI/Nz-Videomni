@@ -111,8 +111,8 @@ export function BatchSection({
   // mirrors every other mode's `disabled` gate on "isGenerating". Also gated
   // on `isScanning` (L1 remediation): `scan()`'s async merge (`setRows`) can
   // land mid-edit and clobber it otherwise.
-  // §3-98 P5 joins the same flag: an engine that cannot chain makes every
-  // control here pointless, exactly as an in-flight run does.
+  // §3-98 P5 joins the same flag: an engine that publishes `a2v` (or `chain`)
+  // closes every control here, exactly as an in-flight run does.
   const disabled = form.runnerState !== "idle" || form.isScanning || unavailable;
 
   return (

@@ -597,3 +597,135 @@ def test_chain_carry_always_fits_current_segment():
                 )
                 limit = min(layout.seg_audio[j], layout.seg_audio[j + 1])
                 assert ka <= limit, (clip_frames, fps, kv, j, ka, layout.seg_audio)
+
+
+# --------------------------------------------------------------------------- #
+# Characterization: the LTX chain 422 bodies (§1-106, 裁定 85)
+#
+# The LTX-only numeric checks of the chain schema moved out of the pydantic
+# validator into services/engines/ltx/chain_rules.py (applied by
+# ``services.engines.validate_chain_for_family`` right after ``reject_chain``).
+# Each request below breaks exactly ONE rule, and the WHOLE 422 body (status,
+# error.code, error.message, detail[].loc/msg/type) is pinned as it was before
+# the move, on both LTX families. The ``kept_*`` rows are checks that stayed in
+# the schema; they are pinned the same way.
+# --------------------------------------------------------------------------- #
+
+import pytest
+
+_CHAR_BASE = {
+    "prompt": "a lake",
+    "width": 384,
+    "height": 256,
+    "frame_rate": 24.0,
+    "num_inference_steps": 8,
+    "guidance_scale": 1.0,
+    "seed": 1,
+    "pipeline": "distilled",
+    "overlap_frames": 2,
+    "overlap_strength": 0.5,
+    "clips": [{"num_frames": 25}, {"num_frames": 25}],
+}
+
+_CHAR_CASES: dict[str, tuple[dict, str]] = {
+    "width_64": ({"width": 352}, "width must be a multiple of 64"),
+    "height_64": ({"height": 300}, "height must be a multiple of 64"),
+    "distilled_steps": (
+        {"num_inference_steps": 4},
+        "distilled pipeline requires num_inference_steps=8",
+    ),
+    "distilled_cfg": ({"guidance_scale": 3.0}, "distilled pipeline requires guidance_scale=1.0"),
+    "frames_8n1": (
+        {"clips": [{"num_frames": 25}, {"num_frames": 24}]},
+        "clips[1].num_frames must be 8n+1",
+    ),
+    "overlap_latents": (
+        {"overlap_frames": 4},
+        "overlap_frames (4) must be < clips[0] stage-1 latent frames (4)",
+    ),
+    "keyframe_two_at_zero": (
+        {"clips": [
+            {"num_frames": 25, "conditioning_images": [
+                {"image_id": "a", "frame_idx": 0}, {"image_id": "b", "frame_idx": 0},
+            ]},
+            {"num_frames": 25},
+        ]},
+        "clips[0]: two conditioning images at frame_idx 0 (the start frame can only be set once)",
+    ),
+    "keyframe_snap_collision": (
+        {"clips": [
+            {"num_frames": 49, "conditioning_images": [
+                {"image_id": "a", "frame_idx": 9}, {"image_id": "b", "frame_idx": 10},
+            ]},
+            {"num_frames": 25},
+        ]},
+        "clips[0]: conditioning_images: frame_idx 9 and 10 both snap to frame 9 "
+        "(positions must be distinct)",
+    ),
+    "layout_retake_window": (
+        {"clips": [{"num_frames": 49}], "retake": {"video_id": "v", "window_start_sec": 0.0}},
+        "retake window (49) must be within [73, 169] for v_tile=22: the whole window is "
+        "refined as ONE stage-2 tile (that is the only geometry the both-side freeze was "
+        "validated under)",
+    ),
+    "layout_end_source": (
+        {"end_source": {"video_id": "v", "context_frames": 72}},
+        "end_context_px (72) leaves the LAST clip no free video latents between its two "
+        "frozen ends: the frozen tail band (n_end_v=9) plus the のり代 at its head (K_v=2) "
+        "already fill all 4 of that clip's stage-1 latent frames. With two or more clips "
+        "the band is the last clip's OWN tail, so that clip must be at least 89 pixel "
+        "frames long for this combination. Lengthen the last clip, shorten "
+        "context_frames, or lower overlap_frames.",
+    ),
+    "kept_full_length_clips": (
+        {"stage2_window": "full_length"},
+        'stage2_window="full_length" requires exactly 1 clip (got 2): the window spans '
+        "the WHOLE timeline as one stage-2 tile, which only fits inside the 481-frame "
+        "per-clip ceiling when there is a single clip",
+    ),
+    "kept_v2v_window": (
+        {
+            "clips": [{"num_frames": 361}],
+            "source_video": {"video_id": "v", "context_frames": 145},
+            "stage2_window": "high_resolution",
+        },
+        "source_video.context_frames (145) must be <= 137 when "
+        "stage2_window='high_resolution' (a longer frozen head would fill the whole "
+        "first stage-2 window, leaving nothing to generate). Shorten context_frames or "
+        "choose a wider stage2_window.",
+    ),
+    "kept_crop": ({"crop_output": {"width": 400, "height": 200}}, "crop_output.width must be <= width"),
+    "kept_clip_count": ({"clips": [{"num_frames": 25}]}, "chain requires at least 2 clips"),
+    "kept_nag": ({"nag_enabled": True}, "nag_enabled requires a non-empty negative_prompt"),
+    "kept_keyframe_on_clip1": (
+        {"clips": [
+            {"num_frames": 25},
+            {"num_frames": 25, "conditioning_images": [{"image_id": "a", "frame_idx": 0}]},
+        ]},
+        "only clip 0 may carry conditioning_images (later clips are later segments of "
+        "one continuous timeline)",
+    ),
+}
+
+
+@pytest.mark.parametrize("family", ["LTX23", "LTX25"])
+@pytest.mark.parametrize("case", sorted(_CHAR_CASES))
+def test_ltx_chain_422_body_is_pinned(three_family_client, family, case):
+    client = three_family_client
+    if family != "LTX23":
+        r = client.post("/api/v1/pipeline/load", json={"base_model": family})
+        assert r.status_code == 200, r.text
+    overrides, message = _CHAR_CASES[case]
+    r = client.post("/api/v1/generate/chain", json={**_CHAR_BASE, **overrides})
+    assert r.status_code == 422, r.text
+    assert r.json() == {
+        "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "Request validation failed",
+            "detail": [
+                {"loc": ["body"], "msg": f"Value error, {message}", "type": "value_error"}
+            ],
+        }
+    }
+    # Nothing was reserved: a 422 never leaves a job behind.
+    assert client.get("/api/v1/jobs").json() == []

@@ -1,4 +1,4 @@
-"""Per-row continuous denoise masks for MiniMax H3 (A2V now; V2A / Chained later).
+"""Per-row continuous denoise masks for MiniMax H3 (A2V and the H3 chain; V2A later).
 
 Docs/MINIMAX_H3_DESIGN.md §3.1 is the home of the formulas (台帳 §1-103). The
 semantics follow the ComfyUI H3 specification (read as a specification only:
@@ -11,8 +11,9 @@ A mask value ``m`` in [0, 1] per row: 0 = keep the row's original latent
 (x0 = x + s v, engine_h3/scheduler.py), every step:
 
 1. DiT input      ``x_in = m x + (1 - m) inject``
-   (audio: ``inject = clean``; video: ``0.999 clean + 0.001 noise`` with the
-   row's INITIAL noise, so no new random number is drawn)
+   (audio: ``inject = clean``; video: ``c clean + (1 - c) noise`` with the
+   row's INITIAL noise, so no new random number is drawn; ``c`` = 0.999 by
+   default, ``inject_clean=1.0`` for the chain, 裁定 84-2)
 2. row time       ``t = min(1 - m s, cap)`` for m < 1 rows (cap 0.999 video,
    1.0 audio); m = 1 rows keep the stream's t
 3. estimate       ``x0_hat = x_in + s (m v)``
@@ -32,6 +33,7 @@ Granularity (V1): video per latent frame ``[T']`` (one value for the frame's
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import torch
@@ -92,26 +94,35 @@ def audio_mask(clean: torch.Tensor, per_latent) -> StreamMask | None:
     return StreamMask(m=m, rows=values.repeat(channels), clean=clean32, inject=clean32, zero=m == 0)
 
 
-def video_mask(clean: torch.Tensor, per_frame, *, grid: int, noise: torch.Tensor) -> StreamMask | None:
+def video_mask(
+    clean: torch.Tensor, per_frame, *, grid: int, noise: torch.Tensor, inject_clean: float | None = None,
+) -> StreamMask | None:
     """Video ``clean [1, C, T', H/16, W/16]`` and one value per latent frame ``[T']`` -> mask, or None.
 
     ``grid``: token rows per latent frame (``(H/32) * (W/32)``); the video rows
     are t -> h -> w (``engine_h3.dit.patchify_video``), so each frame's value
     is repeated ``grid`` times in a row. ``noise``: the job's initial video
     noise (the same draw the state started from); ``inject`` is
-    ``0.999 clean + 0.001 noise``, fixed for the whole job.
+    ``c clean + (1 - c) noise``, fixed for the whole job, with ``c`` =
+    ``inject_clean`` (finite, in [0, 1]; None = ``VIDEO_INJECT_CLEAN``, 0.999).
+    The chain passes 1.0: its fixed rows are the previous clip's own latents
+    (Docs/MINIMAX_H3_DESIGN.md 裁定 84-2).
     """
     if clean.dim() != 5 or clean.shape[0] != 1:
         raise ValueError(f"video mask: clean must be [1, C, T', H, W] ({list(clean.shape)})")
     if tuple(noise.shape) != tuple(clean.shape):
         raise ValueError(f"video mask: noise {list(noise.shape)} does not match clean {list(clean.shape)}")
+    c = VIDEO_INJECT_CLEAN if inject_clean is None else inject_clean
+    if isinstance(c, bool) or not isinstance(c, (int, float)) or not (math.isfinite(c) and 0.0 <= c <= 1.0):
+        raise ValueError(f"video mask: inject_clean must be finite and in [0, 1] ({inject_clean!r})")
+    c = float(c)
     frames = int(clean.shape[2])
     values = _values(per_frame, frames, "video", clean.device)
     if bool((values == 1).all()):
         return None
     clean32 = clean.to(torch.float32)
     noise32 = noise.to(device=clean.device, dtype=torch.float32)
-    inject = VIDEO_INJECT_CLEAN * clean32 + (1.0 - VIDEO_INJECT_CLEAN) * noise32
+    inject = c * clean32 + (1.0 - c) * noise32
     m = values.view(1, 1, frames, 1, 1)
     rows = values.repeat_interleave(int(grid))
     return StreamMask(m=m, rows=rows, clean=clean32, inject=inject, zero=m == 0)

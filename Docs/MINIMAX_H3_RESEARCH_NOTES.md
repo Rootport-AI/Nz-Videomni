@@ -890,3 +890,162 @@ URL の書式は `https://github.com/<repo>/blob/<commit>/<path>#L<n>`。ComfyUI
 4. Multiframe の雛形で、`ref_images` に入っていない `<Picture 2>`〜`<Picture 4>` をプロンプトに書いていることの効果。
 5. ヘッダを比べたのは pruned int8 ConvRot の 2 本だけで、他の量子化版のヘッダが一致するか。
 6. ComfyUI の SDTokenizer が各文字列をどう分けるか・モノラルの参照音声の正確な扱い（`output_channels=2, pad_channel_value="replicate"` から複製と推測）・SGLang の画像読み取り部の min／max pixels。
+
+
+## §16 Chained（潜在の持ち越し）の一次資料調査（2026-10-29）
+
+台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-106（MiniMax H3 の Chained）の計測の計画のために、2026-10-29 に行った一次資料の調査の記録である。コードは実行していない。ソースは浅く複製して読んだ。本製品のエンジンの事実は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.1（行ごとの連続値マスク）と本製品のコードで確かめた。計測の結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183 が正本で、本節には数値を書かない。本節と設計正本が食い違えば設計正本を採る。
+
+### 16.1 結論
+
+- 台帳 §1-106 の方式（前のクリップの映像と音声の潜在の末尾を次のクリップの先頭に置き、その行を固定して残りだけノイズ除去し、重なりを切り落として連結する。復号して再符号化はしない）は、一次資料で裏取りできた。
+- コミュニティの 3 実装（H3 Continuum・LongMedia・vLLM-Omni）は、固定の仕方は違っても同じ骨格に収斂している。
+  - 重なりは 17k+5 フレームに限る。既定は 22 フレーム（映像の潜在 7 個）。
+  - 前のクリップの潜在の末尾 5k+2 個を、符号化し直さずに使う。置き方は、次のクリップの先頭に固定する方式（H3 Continuum・LongMedia）と、条件行に足す方式（vLLM-Omni）がある。
+- 本製品の `_denoise` は、固定に要る `video_fix`・`audio_fix` をすでに持つ。製品の経路から映像のマスクを渡す所だけが無い（16.7）。
+- 継ぎ目の品質を数値で比べた報告は、どの一次資料にも無い。比較は本製品で測る（結果は記録簿 §183）。
+
+### 16.2 映像の符号化器〔VAE〕の時間構造（訂正を含む）
+
+- 映像 VAE〔映像と潜在を相互に変換する圧縮器〕は、動画を**先頭から 17 フレームずつの塊に区切り、塊ごとに独立に**符号化する。塊の中の時間方向の畳み込みは因果（過去側だけを 0 で埋める）で、塊をまたぐ状態は持たない。
+- 1 つの塊 → 潜在 5 個。担当するフレームは (1, 4, 4, 4, 4) の順（塊の先頭 1 フレーム、残りを 4 フレームずつ）。
+- 17n+5 フレームの動画は、17 フレームの塊が n 個（潜在 5n 個）と、**末尾の端数 5 フレーム**からなる。末尾の塊は 17 フレームになるまで最後のフレームを繰り返して符号化し、潜在 5 個のうち末尾の 3 個を捨てるので、端数 5 フレーム → 潜在 2 個（担当は 1, 4）。合計は 5n+2 個。
+- **訂正**: 2026-10-19 の [`R4_fl2va_ref2va_a2v.md`](Outputs-archive/h3-roadmap-2026-10-19/R4_fl2va_ref2va_a2v.md) 133 行目の推測「先頭 5 フレーム → 潜在 2 個、その後 17 フレームごとに潜在 5 個」は誤りである。**端数 5 フレーム → 潜在 2 個は末尾**にある。ComfyUI 文書の旧版にも「Frames pack from frame 0 in 17-frame blocks, so the leftover 5 frames are the last block, not the first.」とある。
+- 帰結（推測。コードからの導出）:
+  - 前のクリップの末尾 17k+5 フレームの区間は、塊の境目から始まる。その潜在は、前のクリップの潜在の末尾 5k+2 個とまったく同じになる。
+  - 末尾 5k+2 個を切り出して次のクリップの先頭 5k+2 個に置くと、各潜在の担当フレーム数 (1, 4, 4, 4, 4, …, 1, 4) がそのまま一致する。先頭の 2 個 (1, 4) は、どの塊の先頭 2 個とも同じ形である。
+  - 個数が 5k+2 でない（たとえば 5 個）と、位置がずれて「1 フレーム担当」の潜在が間違った場所に来る。採用している実装は無い。
+- 復号器は 7 潜在（5＋重なり 2）の窓ごとに復号する。窓の境目では 5 フレームを混ぜ合わせる。窓の中は全結合の注意で、因果ではない。
+- 音声の復号器（BigVGAN〔音声波形を作る復号網〕）は、注意が無く、畳み込みの詰め物が左右対称で、因果ではない。窓も無く、潜在全体を一度に通す。因果の注意があるのは音声の符号化器だけで、潜在を持ち越す連結では符号化器を通らない。
+- 音声の潜在は 1 秒あたり 40 個で、映像の時間座標（5/3 × 24 フレーム＝毎秒 40）と物差しが同じである。ただし 5 フレームの重なりは音声の潜在 8.33 個にあたり、割り切れない。
+- 出典:
+  - ComfyUI `comfy/ldm/minimax/vae.py` L798-L812（符号化）・L905-L950（復号）・L557・L559・L581。
+  - 本製品 `engine_h3/video_vae.py` L436-L439・L612-L619・L645-L655・L743-L790、`engine_h3/constants.py` L31-L33・L79-L96、`engine_h3/audio_vae.py` L206-L243・L273-L282・L370-L402。
+  - vLLM-Omni `vae_temporal.py` L45-L89 も同じ。
+
+### 16.3 H3 Continuum の「Masked AV」（MIT）
+
+版は 3.10.2（commit `d04977f1a06e840d95a1787c2d46d33ddf377b69`・2026-10-27）。
+
+- **「Native Masked」という語はリポジトリのどこにも無い。** 実際の呼び名は「Masked AV Continuation」（内部の識別子 `masked_av_prefix_22_v1`）と「Standard」。状態の検査のエラー文にだけ「Native Continuity」がある（`state.py:108`）。
+- **重なり**（Continuity の設定。`constants.py:46-59`・`temporal.py:71-80`）:
+
+  | 設定 | フレーム数 | 映像の潜在 | 音声の潜在 |
+  |---|---:|---:|---:|
+  | Fast | 5 | 2 | 8 |
+  | Balanced（既定・推奨） | 22 | 7 | 37 |
+  | Strong（原典で Experimental） | 39 | 12 | 65 |
+
+  映像と音声の両方を固定する Masked AV は、Balanced 22 のときだけ使う（`driving_nodes.py:350-376`）。ほかの設定では旧方式の Reference Context に落とす。音声の継続を切ると、映像だけを固定する。
+- **持ち越し**: 前のクリップのサンプリング済みの潜在の末尾をそのまま切り出す（映像 `session.py:241`・音声 `:242`）。切り出しの開始位置が 5 の倍数であることを要求する（`temporal.py:104-107`）。次のクリップの先頭へそのまま上書きする（`v3/masked_continuation.py:100-104`）。復号も再符号化もしない。
+- **固定**: ComfyUI 本体の `noise_mask` をそのまま使う。値は 0（固定）と 1（生成）だけで、連続値は使わない（同 `:106-135`）。ComfyUI 本体は、固定した行の時刻を映像 0.999・音声 1.0 に止め、毎ステップ元の値を入れ直す（映像は `0.999·clean + 0.001·noise`、音声は clean のまま。`comfy/ldm/minimax/model.py:32-33`・`:687-704`、`comfy/model_base.py:2303-2326`）。サンプリングの後に固定区間を元の潜在で書き戻し、ビット単位で一致させる（`restore_masked_*`、同 `:169-207`）。
+- **時間座標**: 各クリップを時刻 0 から生成する。前のクリップから続く時刻のずらしは与えない（`v2/sequence.py:1148`）。旧方式の Reference Context は、持ち越しの行の座標を目標の先頭の座標に重ねる（`layout_adapter.py:610-643`）。
+- **音声の端数**: 音声の潜在の個数は `round(フレーム数 × 40/24)`（22 フレームなら 37 個）。前のクリップの端数のずれ（`audio_grid_offset`）は、Masked 方式では報告文に書くだけで、置く位置の補正には使っていない（`v2/sequence.py:1077-1081`）。最大 1/3 個（約 8 ミリ秒）ずれたまま置いていることになる（推測）。
+- **最初のフレームの条件**: Masked のとき、2 本目以降には First Image のキーフレームを付けない（`v2/sequence.py:1057`）。Last Frame は最後のクリップにだけ付ける。
+- **継ぎ目**: 重なりは切り落とす（`trim_frames`・`v2/sequence.py:1103`）。復号は**クリップごと**で、各クリップの `[trim_frames:]` だけをつなぐ（`v3/assembly_v35.py:396`、`docs/ARCHITECTURE.md:70-78`）。切り落としを選んだ理由の原文は無い。後処理（Finalize）に、音声は継ぎ目の探索と 10〜60 ミリ秒のクロスフェード、映像は主に解析がある。
+- **品質の報告**:
+  - 課題 #13（未解決）: クリップを重ねるたびにコントラスト・鋭さが強まり焼ける。作者は Standard に「no active production mitigation」と書く。Masked 方式でも 60 秒（6 クリップ）で劣化した報告がある。
+  - 課題 #24（閉）: ComfyUI 本体の版（0.34.0 と 0.34.6 以降）で継ぎ目の滑らかさが変わった報告。作者は「0.35 の denoise mask の変更」を疑い、継ぎ目の約 5 フレーム後に最大の変化があると分析した。修正のコミットは見つからない。
+  - 課題 #19（閉）・#33（未解決）: 継ぎ目が切れる・開始画像に戻る、2 本目でプロンプトに従わない。
+  - 数値で比べた報告は無い。
+- **「FL2VA で検証済み」の確認結果**（CHANGELOG の 3.6.0 の節 L331-L332、Release v3.6.0＝2026-08-27）:
+  - 原文は「GPU-accepted T2VA, I2VA, Reference Image + Reference Audio, Balanced 22f/37T Joint AV, and 3×5-second FL2VA Long Terminal Merge Masked continuation.」で、固定した先頭がビット一致で確定したこと、音声を聴いて合格したことも書く。
+  - この「FL2VA」（先頭と末尾のフレームと音声から作る仕組み）は、主に FL2VA の重みの意味で使われ、最後の 2 チャンクを 1 回のサンプルにまとめる「Long Terminal Merge」（Last Frame を使うとき）を指す。
+  - 継ぎ目の品質を比べた記述は無い。**Ref2VA の重みで Masked 方式を検証したという記述は見つからなかった**（未確認）。
+- **プロンプトとステップ**: 同梱の文書は、2 本目以降の本文を「Continuation of Chunk 1.」で始めることを勧めるが、「not a verified quality guarantee」とする。同梱のワークフローは simple・20 ステップ。shift の推奨は見つからなかった。Turbo のサンプルは 4step・6 ステップで「not a verified quality preset」と書く。
+
+### 16.4 LongMedia（Apache-2.0）
+
+版は 0.6.63（commit `409e4cb03c85cf455bf195d5185d106c0d821487`・2026-09-29）。
+
+- **0.6.40 でキーフレーム方式から、denoise mask で固定した先頭へ変えた。** 理由はリリースノート `docs/RELEASE_NOTES_0.6.40_EN.md` L23 に書かれている。複製した動きの文脈とノイズの位相が、短い動きの繰り返しの周期を生んでいた。`nodes.py` L24247 のコメントは、先頭を新しく生成してキーフレームで約 22 フレームを案内する方式では、案内の区間が約 0.92 秒（24fps）の動きの模様として全体に繰り返されうる、と書く。
+- **固定**: 前の結果の映像の潜在の末尾 `video_latent_t(overlap)` 個を、新しい潜在の先頭にそのままコピーする（`nodes.py:24263`）。音声は末尾 `round(overlap/24×40)` 個（同 `:24236`）。その区間の denoise mask を 0 にする（映像 `:24364`・音声 `:24368`）。映像のマスクは潜在の時刻ごとの値を持つ形 `(1,1,T,1,1)`。
+- **キーフレームや参照の併用はしない**（`_clone_guider_with_segment_audio`・`nodes.py:17915-17926`）。同じ末尾をキーフレームに入れ直すと、時間の権威が二重になり周期的な動きの種になりうる、と書く。
+- **重なりの長さ**: 既定 22 フレーム、17 刻み（`docs/PARAMETER_REFERENCE_EN.md` L23・L148）。個数は `video_latent_t(f) = 2 + 5×((f−5)//17)`（`latent_ops.py:24-27`）。
+- **時間座標**: 窓の `context_start`（重なりを含む始まり）× 40/24 を、RoPE〔位置の埋め込み〕の時間座標に足す（`nodes.py:17947`、`temporal_positioning.py:15-43`）。テキストと静止画の参照は動かさない。H3 Continuum（各クリップ 0 から）とは違う。
+- **重なりの除去は潜在で行い、累積した潜在を復号する。** 映像は `next_video[:, :, overlap_video_t:]`、音声は `next_audio[..., overlap_audio_t:]` を連結する（`latent_ops.py:693-850`）。復号は連続して生成された並びごと（`docs/ARCHITECTURE_EN.md` L83）。H3 Continuum（クリップごとに復号）とは違う。
+- **半々の混ぜ合わせの報告**: 重なり区間を smoothstep で混ぜる機能があるが、既定は無効（`blend_video_overlap`）。見える継ぎ目をまたいで混ぜることを、わざと禁じている。コメントは「a 50/50 mix decodes as several ghosted/stalled pixel frames followed by a jump」（`latent_ops.py:783-789`）。ぼやけて止まった後に跳ぶ、という報告である。
+- 先行調査 R4 の「末尾を次の単位のキーフレームとして渡す」という記述は、0.6.40 より前の方式で、現在は当てはまらない。
+- 外部動画から続ける場合は、末尾の画素を VAE で符号化し直し、フレーム 0 のガイドにする（`nodes.py:24518-24714`）。リリースノート 0.6.61 は、公開の検証時に GPU が無かったと書く（L13）。
+
+### 16.5 vLLM-Omni（Apache-2.0）と ttulttul
+
+版は vllm-project/vllm-omni commit `8d4b2789acd7e5cf0ac68a0f3f219327622bbdfe`（2026-10-29）。元になった実装は ttulttul/ComfyUI-Minimax-H3-Continuation（MIT・commit `e1768d5f`・README のみ読んだ）。
+
+- **Ref2VA〔参照素材からの生成〕専用の guide 方式**（`vllm_omni/diffusion/models/minimax_h3/continuation.py`）:
+  - 窓 277 フレーム・重なり 22 フレーム（L59-L60）。どちらも 17n+5 で、窓は 107〜345（L62-L65）。次の窓の始まりは `前の end − 22`（L69-L80）。
+  - 累積した映像の潜在の末尾 7 個をそのまま切り出し（L123-L125）、条件行の `latent_guide` として足す（L127-L144）。目的の映像はマスクなしで全部新しく生成し、隠れた重なりを捨てて新しい部分だけを足す（レシピ L931-L936）。
+  - 時間位置は目的の映像と同じ起点。窓の始まり × 40/24 を `temporal_offset` として加える（L116、`packed_sequence.py:689-694`）。
+  - `task != "ref2va"` なら例外（L57-L58）。`latent_guide` を受け付けるのは Ref2VA の配置の関数だけ。理由の文章による説明は無い。
+  - 「継ぎ目が滑らかな保証はない」と書き、数値の報告は無い（レシピ L964-L966）。
+- これは §1-109 の領分で、§1-106（FL2VA）の範囲外である。
+- **音声の重なりは全体の時間軸で丸める**: `overlap_audio_t = round((start+22)×5/3) − round(start×5/3)`（L30-L31・L49-L50）。窓ごとに丸めて誤差が積み重なるのを避ける作法で、境目は累積の 24fps／40Hz の時間軸の上で四捨五入する（L95-L96）。
+- 累積した潜在は、全部の窓が終わってから 1 回で復号する（レシピ L961-L962）。
+
+### 16.6 ComfyUI 本体（GPL-3.0）と DiffSynth（Apache-2.0）
+
+ComfyUI は commit `0df1646a9cd71d4c990a87014fb37797a2956ead`（2026-10-28）。GPL-3.0 なので、仕様として読むだけでコードは写さない（裁定 17）。
+
+- **denoise mask の粒度**（`comfy/model_base.py:2270-2287`）: 映像は時間方向が潜在 1 個単位、空間方向が 2×2 パッチ単位。音声は潜在 1 個単位。値は連続値で 1/256 刻み。行の時刻は `1 − m×σ` を映像 0.999・音声 1.0 で頭打ちにし、毎ステップ元の値を入れ直す（`model.py:687-704`）。本製品の行ごとの連続値マスクと同じ意味である。
+- **LatentCut／LatentConcat は H3 の潜在に使えない**（推測。実行はしていない）: H3 の潜在は `NestedTensor` で、`narrow`／`cat` を受ける仕組みが無く、音声の形 `[B,32,2,T]` に時間軸の指定を当てると違う軸を切る。H3 用の切り出しや連結のノードは本体に見当たらない（`comfy_extras/nodes_latent.py:140-215`、`comfy/nested_tensor.py:3-6`）。
+- **AddGuide は画素の入力だけ**を受け、VAE で符号化して条件行にする（`nodes_minimax_h3.py:166-240`）。潜在を直接受ける入力は無い。通常の使い方は「末尾の画素を符号化し直す」方式である。
+- **公式の I2V 継続の雛形**: 文書の旧版（commit `161b02726831525bc3ee8689694194d818100138`）は、各クリップの最後のフレームから I2V をつなぐと誤差が積み重なる（顔のきめが先に失われる。Turbo は焼けが早い）と書いていた。この節は 2026-10-28 に削除された（commit `710728e`・「Remove Desktop-only i2v_continuation」）。雛形 `video_minimax_h3_i2v_continuation.json` の中身は普通の I2V に見え、前の動画の末尾を取り出すノードは無い。
+- **DiffSynth の Retake**: 設計正本 §3.1 のとおり、固定した行を clean のまま注入し（ノイズを足さない）、時刻も映像で 1.0 にする。連結の固定行の注入の形は設計正本の裁定 84 で決定した（16.8）。
+
+### 16.7 本製品との対応
+
+- **固定の仕組みはある。** `H3Pipeline._denoise` の `video_fix`（映像）と `audio_fix`（音声）が、設計正本 §3.1 の行ごとの連続値マスクにあたる。意味は H3 Continuum・LongMedia・ComfyUI 本体の固定と一致する（m＝0 の行は時刻が上限に止まり、毎ステップ注入され、最後に clean へビット一致で置き換わる）。製品の経路が渡しているのは `audio_fix` だけで、`video_fix` を渡す所は無い（呼ぶのはテストだけ）。H3 Continuum と LongMedia は 0/1 の硬い固定だが、本製品は連続値を持つので、固定の強さを変えて比べられる。
+- **潜在を返す口は無い。** `generate` は必ず `_decode` まで進む。private な `_denoise` の戻り値を受ければ、計測の台本は製品コードを変えずに潜在の持ち越しを組める。
+- **映像の重なりは 17k+5 フレーム**（潜在 5k+2 個）に限る。これだと、本製品の VAE の構造でも担当フレーム数が一致する（16.2）。
+- **音声の継ぎ目が潜在の境界に乗る条件**（推測。算術からの導出）: 継ぎ目の開始フレーム S の音声の位置 S×5/3 が整数になるのは S が 3 の倍数のときである。クリップが 17a+5 フレーム、重なりが 17m+5 フレームなら S＝17(a−m) なので、条件は **a−m ≡ 0 (mod 3)**。満たさなければ、継ぎ目の位置に最大 1/3 潜在（約 8 ミリ秒）の置き場所の誤差が出る（ka は全体の時間軸で丸めた整数）。固定した末尾と映像のずれは最大 2/3 潜在。この条件はクリップの長さと重なりの組で決まり、重なりだけでは決まらない。長さの違うクリップをつなぐときは、累積の開始フレーム S で判定する。重なりそのものが音声の潜在で割り切れるか（39 フレームは 65 個）とは別の話である。H3 Continuum はこの誤差を補正せずに置いている（16.3）。
+- **音声の重なり ka は全体の時間軸で丸める**（vLLM-Omni の作法。16.5）。窓ごとに丸めない。
+- **時間座標**: H3 Continuum は各クリップを 0 から生成し、LongMedia と vLLM-Omni は窓の始まりを足す。本製品の台本は 0 から始める（時間を連続させる案は §1-109 の領分）。
+- **復号**: 映像の復号器は 1 窓ぶんしか GPU に載せないので、VRAM は長さで増えない。連結した潜在 1 本の復号は、窓の重なりの混ぜ合わせが継ぎ目にも効く（推測）。クリップごとに復号して画素でつなぐ案は H3 Continuum の方式で、両方を同じ潜在から作って比べられる。音声の復号器は窓が無く、長いほど VRAM が増える。実測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183.4。
+- **乱数**: LTX 2.5 の Chained は区間 i に `seed+i` を使う先例がある（`engine25/chain25.py`）。同じ種を繰り返すと、新しく作る部分が毎回同じ乱数から始まる（推測）。
+
+### 16.8 固定行の注入の形と時刻の比較
+
+固定行に DiT〔拡散の本体〕が見る値と、その行の時刻の比較である。計測の数値は書かない（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183 が正本）。
+
+| 実装 | 固定行に見せる値 | 固定行の時刻 | 出典 |
+|---|---|---|---|
+| ComfyUI 本体 | `0.999·clean + 0.001·noise`（音声は clean） | 映像 0.999・音声 1.0 | `comfy/ldm/minimax/model.py:32-33`・`:687-704`、`comfy/model_base.py:2303-2326`（16.3）。粒度は `model_base.py:2270-2287`（16.6） |
+| H3 Continuum・LongMedia | ComfyUI 本体と同じ（本体の経路を使う） | ComfyUI 本体と同じ | 16.3・16.4 |
+| DiffSynth の Retake | clean そのもの（ノイズを足さない） | 映像も 1.0 | 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.1（DiffSynth の commit は 16.11 の `e5a44c4`） |
+| 本製品の連結 | clean そのもの（映像・音声とも） | 映像 0.999・音声 1.0 | 設計正本の裁定 84。**選択の理由は裁定 84 を参照**（ここには書かない） |
+
+### 16.9 ライセンスの扱い
+
+| 出典 | ライセンス | 扱い |
+|---|---|---|
+| H3 Continuum | MIT | 参考にできる |
+| LongMedia | Apache-2.0 | 参考にできる |
+| vLLM-Omni | Apache-2.0 | 参考にできる |
+| ttulttul/ComfyUI-Minimax-H3-Continuation | MIT | 参考にできる（README のみ読んだ） |
+| DiffSynth-Studio | Apache-2.0 | 移植できる（設計正本 裁定 17） |
+| ComfyUI 本体 | GPL-3.0 | 仕様として読むだけ。コードは写さない |
+
+### 16.10 未確認
+
+1. Ref2VA の重みでの Masked 方式（H3 Continuum に検証の記述が無い）。
+2. 継ぎ目の品質の数値の報告（どの実装にも無い）。
+3. H3 Continuum が重なりの切り落としを選んだ理由（原文が無い）。
+4. 焼け（課題 #13）が Masked 方式の何に起因するか。
+5. vLLM-Omni の guide 方式が Ref2VA 専用である理由（文章による説明が無い）。
+6. 公式 I2V 継続の雛形の実体（Desktop 版だけの機能らしい。推測）。
+
+### 16.11 出典の一覧
+
+| 出典 | 版 | 読んだ場所 |
+|---|---|---|
+| ukr8b3g-cmyk/ComfyUI-H3-Continuum（MIT） | 3.10.2・`d04977f1a06e840d95a1787c2d46d33ddf377b69` | `CHANGELOG.md` L331-L332・`constants.py`・`temporal.py`・`state.py`・`v2/session.py`・`v2/sequence.py`・`v3/masked_continuation.py`・`v3/driving_nodes.py`・`v3/assembly_v35.py`・`layout_adapter.py`・`docs/ARCHITECTURE.md`・`docs/USER_GUIDE.md`。課題 #13・#19・#24・#33。Release v3.6.0 |
+| vizart-vj/ComfyUI-MiniMax-H3-LongMedia（Apache-2.0） | 0.6.63・`409e4cb03c85cf455bf195d5185d106c0d821487` | `nodes.py`・`latent_ops.py`・`temporal_positioning.py`・`docs/RELEASE_NOTES_0.6.40_EN.md`・`docs/PARAMETER_REFERENCE_EN.md`・`docs/ARCHITECTURE_EN.md` |
+| vllm-project/vllm-omni（Apache-2.0） | `8d4b2789acd7e5cf0ac68a0f3f219327622bbdfe` | `vllm_omni/diffusion/models/minimax_h3/` の `continuation.py`・`packed_sequence.py`・`vae_temporal.py`・`pipeline_minimax_h3.py`、`recipes/MiniMaxAI/MiniMax-H3.md` |
+| ttulttul/ComfyUI-Minimax-H3-Continuation（MIT） | `e1768d5f` | README のみ |
+| Comfy-Org/ComfyUI（GPL-3.0） | `0df1646a9cd71d4c990a87014fb37797a2956ead` | `comfy/ldm/minimax/model.py`・`vae.py`・`comfy/model_base.py`・`comfy_extras/nodes_minimax_h3.py`・`nodes_latent.py`・`comfy/nested_tensor.py` |
+| Comfy-Org/docs | `161b02726831525bc3ee8689694194d818100138`（旧版）・`710728e` | `minimax-h3.mdx` |
+| Comfy-Org/workflow_templates | main（最終コミット `e7cd011d`） | `templates/video_minimax_h3_i2v_continuation.json` |
+| modelscope/DiffSynth-Studio（Apache-2.0） | `e5a44c42776978457b61d51d595a1f6746c3d87a`（§15.1 と同じ） | Retake の記述は設計正本 §3.1 による |
+| 本製品 | dev（2026-10-29） | `engine_h3/` の `pipeline_h3.py`・`denoise_mask.py`・`rope.py`・`video_vae.py`・`audio_vae.py`・`constants.py`・`media_out.py`・`worker.py` |
+
+URL の書式は `https://github.com/<repo>/blob/<commit>/<path>#L<n>`。調査の報告の原本は、作業場の `h3chain\R1_continuum.md`・`R2_others.md`・`R3_engine.md`。

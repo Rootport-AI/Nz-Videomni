@@ -11,25 +11,26 @@ import { MIN_NUM_FRAMES } from "../modes/single/defaultConfig";
 import type { ReferenceRules } from "../modes/single/referenceRules";
 
 /**
- * The loaded base model's numeric rules, in the shape Create (and the
- * right-click seeds that land in Create) read them.
+ * The loaded base model's numeric rules, in the shape Create, Chained (and the
+ * right-click seeds that land in them) read them.
  *
  * The SERVER is the source of these rules — `GET /models` publishes them per
  * base model as `base_models[].constraints`, built from the engine adapter's
  * own rule table. This module only (1) flattens that block into the form's
  * vocabulary and (2) holds the LTX values to use while it is absent (a backend
  * that predates the key, or before the first `GET /models` lands) — the same
- * constants Chained, Edit and Batch use.
+ * constants Edit and Batch use.
  *
  * The rule the shell follows for engines holds here too: no screen ever reads
  * an engine id. A screen is handed a {@link GenerationConstraints} and reads
  * numbers off it; which engine produced them is the server's fact.
  *
- * The numeric rules are read by Create (Single) and its right-click seeds;
- * Chained, Edit and Batch keep their LTX constants on purpose (an engine whose
- * rules differ closes those screens through its `unsupported_features`).
- * {@link GenerationConstraints.promptTokenLimit} is the exception: the shell
- * reads it for the prompt token counters of every screen.
+ * The numeric rules are read by Create (Single), Chained (§1-106) and their
+ * right-click seeds; Edit and Batch keep their LTX constants on purpose (an
+ * engine whose rules differ closes those screens through its
+ * `unsupported_features`). {@link GenerationConstraints.promptTokenLimit} is
+ * the exception: the shell reads it for the prompt token counters of every
+ * screen.
  */
 export interface GenerationConstraints {
   /** The `num_frames` lattice (`step * n + offset`). */
@@ -64,6 +65,12 @@ export interface GenerationConstraints {
    * no Reference accordion. Its presence alone decides that (no featureScope
    * entry, like {@link singleSourceAudio}). */
   reference: ReferenceRules | null;
+  /** §1-106: the server-fixed chain seam, flattened from `constraints.chain`
+   * (`overlapFrames` in PIXEL frames), or `null` when the server publishes no
+   * `chain` block (LTX, fallback) — Chained then keeps its own seam-blend
+   * controls. Its presence alone switches Chained into the fixed-overlap mode
+   * (no featureScope entry, like {@link reference}). */
+  chain: { overlapFrames: number } | null;
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
@@ -79,6 +86,7 @@ export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Objec
   promptTokenLimit: null,
   singleSourceAudio: null,
   reference: null,
+  chain: null,
 });
 
 /** Flattens a served `constraints` block; `null`/absent → the LTX fallback.
@@ -111,6 +119,7 @@ export function resolveGenerationConstraints(
           clipMinSec: raw.reference.clip_min_sec,
         }
       : null,
+    chain: raw.chain ? { overlapFrames: raw.chain.overlap_frames } : null,
   };
 }
 

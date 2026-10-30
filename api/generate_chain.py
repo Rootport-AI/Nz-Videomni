@@ -55,7 +55,15 @@ def generate_chain(
     # fact about the server; "that video does not exist" is a fact about the
     # request. Answering the second first would send the user to fix something
     # that is not the problem.
-    engines.reject_chain(context.pipeline_manager.active_engine_family, request)
+    family = context.pipeline_manager.active_engine_family
+    engines.reject_chain(family, request)
+    # The family's numeric rules (LTX: services/engines/ltx/chain_rules.py), in
+    # a 422 of the pydantic shape. AFTER the feature scope (what the engine
+    # cannot do comes first) and BEFORE the upload lookups (a malformed request
+    # is answered without touching the stores). Also writes the family's
+    # defaults back (MiniMax H3's steps / shifts / VRAM 16GB mode), so the job
+    # record, the log and the adapter see numbers.
+    engines.validate_chain_for_family(family, request)
 
     # Validate clip-0 conditioning images exist up front (only clip 0 may carry
     # them; the model validator already enforces that).

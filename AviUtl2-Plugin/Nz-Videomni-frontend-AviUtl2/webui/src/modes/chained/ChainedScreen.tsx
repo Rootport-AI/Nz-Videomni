@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import type { AppConfig } from "../../api/types";
+import type { AppConfig, GenerateChainRequest } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
@@ -12,6 +12,8 @@ import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
 import { usePromptTokenCounts } from "../../shell/usePromptTokenCounts";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
+import { omitLoraAudioStrength } from "../../lora/loraTags";
 import { isChainStage1OverBudget } from "../../shell/tokenBudget";
 import { STAGE2_WINDOW_OPTIONS } from "../../shell/tokenBudget";
 import type { Stage2Window } from "../../shell/tokenBudget";
@@ -30,7 +32,13 @@ import { decideSourceTrim } from "../../timeline/sourceTrim";
 import type { SourceTrimDecision } from "../../timeline/sourceTrim";
 import { tailAlignedStartFrame } from "../../timeline/tailAlign";
 import { fileNameFromPath } from "../single/keyframeUtils";
-import { CropOutputField, FrameRateSeedFields, ReservedFields, SizeFields } from "../single/CommonGenerationFields";
+import {
+  CropOutputField,
+  FrameRateSeedFields,
+  ReservedFields,
+  SamplingFields,
+  SizeFields,
+} from "../single/CommonGenerationFields";
 import { MIN_NUM_FRAMES } from "../single/defaultConfig";
 import { GenerateButtonBar } from "../single/GenerateButtonBar";
 import { GenerateReasonsNote } from "../single/GenerateReasonsNote";
@@ -140,7 +148,7 @@ export interface ChainedScreenProps {
    * `refreshKey` (the server's LoRA list follows the base model). Omitted ⇒
    * fetched once on mount, as before. */
   loraRefreshKey?: string | undefined;
-  /** §3-102 (LTX 2.5 Chained, first stage): the four material panels the
+  /** §3-102 (LTX 2.5 Chained, first stage): the material panels the
    * LOADED base model's engine cannot use, computed by `AppShell` from
    * `useBaseModels`' `unsupportedFeatures` (`shell/featureScope.ts`'s
    * `chainPanelsDisabledFor`) — this screen receives finished booleans and
@@ -152,15 +160,28 @@ export interface ChainedScreenProps {
    * that predate them keep compiling — omitted means "no restriction", which
    * is also what an older server (no `unsupported_features`) produces.
    *
-   * Material attached BEFORE a switch to a restricted base model is
-   * deliberately not cleared or client-side blocked: the panel greys, and the
-   * submission itself fails loud with the server's own 422
-   * `FEATURE_UNSUPPORTED` (the same fail-loud treatment LoRA tags and NAG get
-   * — see the plan's 単純化原則). */
+   * Material attached before a switch stays visible; Generate is blocked by
+   * `materialInClosedPanel` and the clear button stays live. */
   v2vUnavailable?: boolean | undefined;
   a2vUnavailable?: boolean | undefined;
   endSourceUnavailable?: boolean | undefined;
   referenceUnavailable?: boolean | undefined;
+  /** §1-106 (`chain_start_image`): clip 0's opening IMAGE — the image half of
+   * the SOURCE card — is closed on the loaded base model (MiniMax H3 chains
+   * from text). Same finished-boolean contract as the flags above. */
+  startImageUnavailable?: boolean | undefined;
+  /** §1-106 (`chain_start_image`): the Batch i2v-long section (every row puts
+   * its image on clip 0) is closed — not rendered at all. */
+  batchI2vLongUnavailable?: boolean | undefined;
+  /** 台帳 §1-104 / §1-106: the loaded base model's LoRAs have one strength
+   * only (`featureScope.loraAudioStrengthHiddenFor`) — the request then
+   * carries no `audio_strength`, exactly as Create's does. Omitted = sent. */
+  loraAudioHidden?: boolean | undefined;
+  /** §1-106: the loaded base model's numeric rules
+   * (`useBaseModels().activeConstraints`, the object Create reads) — the clip
+   * grid, the size multiple, a fixed fps, the sampling sliders and the
+   * server-fixed seam. Omitted = LTX, so direct-render tests are unchanged. */
+  constraints?: GenerationConstraints | undefined;
 }
 
 /** The Chain screen: `POST /generate/chain` with a single, auto-detected mode
@@ -195,6 +216,10 @@ export function ChainedScreen({
   a2vUnavailable,
   endSourceUnavailable,
   referenceUnavailable,
+  startImageUnavailable,
+  batchI2vLongUnavailable,
+  loraAudioHidden,
+  constraints,
 }: ChainedScreenProps) {
   const strings = useStrings();
   const configState = useConfig();
@@ -231,6 +256,10 @@ export function ChainedScreen({
       a2vUnavailable={a2vUnavailable}
       endSourceUnavailable={endSourceUnavailable}
       referenceUnavailable={referenceUnavailable}
+      startImageUnavailable={startImageUnavailable}
+      batchI2vLongUnavailable={batchI2vLongUnavailable}
+      loraAudioHidden={loraAudioHidden}
+      constraints={constraints}
     />
   );
 }
@@ -262,6 +291,10 @@ interface ChainedScreenBodyProps {
   a2vUnavailable?: boolean | undefined;
   endSourceUnavailable?: boolean | undefined;
   referenceUnavailable?: boolean | undefined;
+  startImageUnavailable?: boolean | undefined;
+  batchI2vLongUnavailable?: boolean | undefined;
+  loraAudioHidden?: boolean | undefined;
+  constraints?: GenerationConstraints | undefined;
 }
 
 function ChainedScreenBody({
@@ -291,6 +324,10 @@ function ChainedScreenBody({
   a2vUnavailable = false,
   endSourceUnavailable = false,
   referenceUnavailable = false,
+  startImageUnavailable = false,
+  batchI2vLongUnavailable = false,
+  loraAudioHidden = false,
+  constraints,
 }: ChainedScreenBodyProps) {
   const strings = useStrings();
   const jobsCtx = useJobsContext();
@@ -426,9 +463,19 @@ function ChainedScreenBody({
       engineFamily,
       weightClass,
       engineLabel,
+      constraints,
+      unavailablePanels: {
+        v2v: v2vUnavailable,
+        startImage: startImageUnavailable,
+        a2v: a2vUnavailable,
+        endSource: endSourceUnavailable,
+        reference: referenceUnavailable,
+      },
     },
     initialCommon,
   );
+  /** §1-106: see `UseChainFormResult.fixedOverlapFrames`. */
+  const fixedOverlap = form.fixedOverlapFrames !== null;
 
   // §1-111: per-clip token counts (shared + own prompt, composed by the
   // server) — only while this always-mounted tab is shown, else nothing is sent.
@@ -863,6 +910,15 @@ function ChainedScreenBody({
    * でも同じ意味（帯は常に最終クリップの内側）のままなので、この打ち直しは
    * クリップ数によらず成立する。
    */
+  // 台帳 §1-104 / §1-106: the request this screen sends — the form's, minus
+  // every LoRA's `audio_strength` on a base model whose LoRAs have one strength
+  // only (Create's `buildSubmission` applies the same rule).
+  const buildRequest = form.buildRequest;
+  const buildSubmission = useCallback((): GenerateChainRequest => {
+    const built = buildRequest();
+    return loraAudioHidden && built.loras ? { ...built, loras: omitLoraAudioStrength(built.loras) } : built;
+  }, [buildRequest, loraAudioHidden]);
+
   const inFlightRef = useRef(false);
   const handleGenerate = useCallback(async () => {
     if (inFlightRef.current) return;
@@ -900,17 +956,16 @@ function ChainedScreenBody({
           // 打ち直せなくても送信は続ける（上の doc 参照）。
         }
       }
-      submitChain(form.buildRequest());
+      submitChain(buildSubmission());
     } finally {
       inFlightRef.current = false;
     }
-  }, [form, submitChain, nativeBridge, strings]);
+  }, [form, submitChain, nativeBridge, strings, buildSubmission]);
 
   // §1-80 Repeat count driver: once the awaited job completes, send the next
   // run with the panel's values at that moment (same `handleGenerate`). The
   // settings fingerprint is the very request `handleGenerate` sends.
-  const buildRequest = form.buildRequest;
-  const getRequestFingerprint = useCallback(() => submissionFingerprint(buildRequest()), [buildRequest]);
+  const getRequestFingerprint = useCallback(() => submissionFingerprint(buildSubmission()), [buildSubmission]);
   const sendRepeat = useCallback(() => void handleGenerate(), [handleGenerate]);
   const pushToast = toasts.push;
   const onRepeatSettingsChanged = useCallback(
@@ -944,6 +999,7 @@ function ChainedScreenBody({
     minFramesForOverlap: form.minFramesForOverlap,
     minClips: form.minClips,
     stage2MaxContextFrames: form.stage2MaxContextFrames,
+    fixedOverlapFrames: form.fixedOverlapFrames,
   });
 
   // W3 レイアウト再構成 (2026-08-11): the reference-video (§1-15) and A2V
@@ -1002,7 +1058,9 @@ function ChainedScreenBody({
             ahead of every field they're about, rather than buried after the
             clip list. §1-14: never a Generate gate — the budget marks "this
             will get heavy", not "this is invalid". */}
-        {form.chainWindowOverBudget && (
+        {/* §1-106: the stage-2 window's comfort line has no meaning without a
+            stage 2 (fixed-overlap mode). */}
+        {!fixedOverlap && form.chainWindowOverBudget && (
           <p className="warning-banner">{strings.chained.stage2Window.overBudgetWarning}</p>
         )}
 
@@ -1035,7 +1093,12 @@ function ChainedScreenBody({
           gettingSize={form.gettingSize}
           getSizeError={form.getSizeError}
           onGetSize={() => void form.getSizeFromAviUtl2()}
-          budgetMarkers={form.chainWindowMarkers}
+          // §1-106: the loaded base model's multiple (32 on MiniMax H3). While
+          // a reference video is active (an LTX-only mechanism) the default
+          // step is kept, exactly as before.
+          {...(form.isReferenceActive ? {} : { step: form.sizeMultiple })}
+          // §1-106: no stage-2 window, no stage-2 comfort guide.
+          {...(fixedOverlap ? {} : { budgetMarkers: form.chainWindowMarkers })}
         />
 
         <CropOutputField
@@ -1052,9 +1115,22 @@ function ChainedScreenBody({
           disabled={disabled}
           onFrameRateChange={form.setFrameRate}
           onSeedChange={form.setSeed}
+          fixedFrameRate={form.fixedFrameRate}
         />
 
-        <ReservedFields />
+        {/* §1-106: the sampling sliders in place of the reserved CFG row while
+            the loaded base model publishes `constraints.sampling` — Create's
+            exact arrangement (`GenerationForm.tsx`). */}
+        {form.samplingConstraints && form.sampling ? (
+          <SamplingFields
+            constraints={form.samplingConstraints}
+            values={form.sampling}
+            disabled={disabled}
+            onChange={form.setSamplingValue}
+          />
+        ) : (
+          <ReservedFields />
+        )}
 
         {/* §3-102: one line saying why, the same shape `BatchSection` already
             uses for its own refusal, placed ABOVE the card it explains so a
@@ -1065,8 +1141,15 @@ function ChainedScreenBody({
             VIDEO is out of scope — clip 0's opening IMAGE is part of chained
             generation proper and must stay attachable. So `disabled` is left
             alone and `videoUnavailable` closes just that half. */}
-        {v2vUnavailable && (
+        {/* §1-106: with the IMAGE half closed too (`chain_start_image` —
+            MiniMax H3 chains from text) the card greys as a whole, and the
+            image line replaces the video one (whose "the opening image is
+            unaffected" would no longer be true). */}
+        {v2vUnavailable && !startImageUnavailable && (
           <p className="warning-banner">{strings.chained.unavailableOnBaseModel.sourceVideo}</p>
+        )}
+        {startImageUnavailable && (
+          <p className="warning-banner">{strings.chained.unavailableOnBaseModel.startImage}</p>
         )}
         <SourceInputPanel
           form={form}
@@ -1074,6 +1157,7 @@ function ChainedScreenBody({
           nativeBridge={nativeBridge}
           mediaSize={form.sourceMediaSize}
           videoUnavailable={v2vUnavailable}
+          imageUnavailable={startImageUnavailable}
         />
 
         <ClipsSection form={form} disabled={disabled} tokenCounts={clipTokens?.clips ?? null} tokenLimit={promptTokenLimit} />
@@ -1092,7 +1176,8 @@ function ChainedScreenBody({
             )}
             <ChainEndSourcePanel
               form={form}
-              disabled={disabled || endSourceUnavailable}
+              disabled={disabled}
+              unavailable={endSourceUnavailable}
               nativeBridge={nativeBridge}
               showHeading={false}
             />
@@ -1114,7 +1199,8 @@ function ChainedScreenBody({
             )}
             <ChainReferencePanel
               form={form}
-              disabled={disabled || referenceUnavailable}
+              disabled={disabled}
+              unavailable={referenceUnavailable}
               nativeBridge={nativeBridge}
               showHeading={false}
             />
@@ -1129,13 +1215,20 @@ function ChainedScreenBody({
             )}
             <ChainAudioPanel
               form={form}
-              disabled={disabled || a2vUnavailable}
+              disabled={disabled}
+              unavailable={a2vUnavailable}
               nativeBridge={nativeBridge}
               showHeading={false}
             />
           </div>
         </details>
 
+        {/* §1-106: the seam-blend section and the stage-2 window are the
+            user's only while the seam is (LTX). A server-fixed seam
+            (fixed-overlap mode) hides all of it — the two blend sliders, the
+            reverse-chain hint, chunked upsample and the window select. */}
+        {!fixedOverlap && (
+        <>
         <hr className="chained-section-divider" />
 
         <div className="field">
@@ -1218,6 +1311,8 @@ function ChainedScreenBody({
             </p>
           ))}
         </label>
+        </>
+        )}
 
         {!form.isClipCountValid && (
           <p className="warning-banner">{strings.chained.minClipsError(form.minClips)}</p>
@@ -1247,7 +1342,13 @@ function ChainedScreenBody({
               disabled={repeating}
             />
           }
-          hint={`${strings.chained.totalFramesLabel(form.totalFrames, MAX_CHAIN_TOTAL_FRAMES)} — ${form.estimateLabel}`}
+          // §1-106: "Total input n / 11544" and "Est." are LTX figures
+          // (§3-261); the fixed-overlap mode shows neither.
+          hint={
+            fixedOverlap
+              ? undefined
+              : `${strings.chained.totalFramesLabel(form.totalFrames, MAX_CHAIN_TOTAL_FRAMES)} — ${form.estimateLabel}`
+          }
         />
         <GenerateReasonsNote reasons={form.validityReasons} messages={generateReasonMessages} />
         {submitState.phase === "error" && (
@@ -1259,14 +1360,17 @@ function ChainedScreenBody({
         <JobLedger baseUrl={baseUrl} highlightedJobId={highlightedJobId} nativeBridge={nativeBridge} />
       </div>
     </div>
-    {/* §1-7 バッチi2v-long: Chainの設定を流用して画像1枚ごとに長尺chainを直列生成 */}
-    <BatchI2vLongSection
-      config={config}
-      chain={form}
-      serverBusy={serverBusy}
-      nativeBridge={nativeBridge}
-      loraRefreshKey={loraRefreshKey}
-    />
+    {/* §1-7 バッチi2v-long: Chainの設定を流用して画像1枚ごとに長尺chainを直列生成
+        §1-106: closed (not rendered) where clip 0 cannot take an image. */}
+    {!batchI2vLongUnavailable && (
+      <BatchI2vLongSection
+        config={config}
+        chain={form}
+        serverBusy={serverBusy}
+        nativeBridge={nativeBridge}
+        loraRefreshKey={loraRefreshKey}
+      />
+    )}
     </>
   );
 }
@@ -1303,6 +1407,8 @@ function ClipsSection({
             audioWindow={form.audioSegmentWindowsForClips?.[index] ?? null}
             tokenCount={tokenCounts?.[index]}
             tokenLimit={tokenLimit}
+            frameLimits={form.clipFrameLimits}
+            showAudioDriftNote={form.clipAudioDriftFlags[index] ?? false}
             onPromptChange={(value) => form.setClipPrompt(clip.id, value)}
             onNumFramesChange={(value, snap) => form.setClipNumFrames(clip.id, value, snap)}
             onRemove={() => form.removeClip(clip.id)}

@@ -1,0 +1,17 @@
+reports: ['c0_gate', 'c1_base', 'c2_strength05', 'c3_inject_clean', 'c4_overlap5', 'c5_overlap39', 'c7_control']
+c0_gate/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c0_gate\once.mp4
+c0_gate/perclip: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c0_gate\perclip.mp4
+c1_base/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c1_base\once.mp4
+c1_base/perclip: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c1_base\perclip.mp4
+c2_strength05/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c2_strength05\once.mp4
+c2_strength05/perclip: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c2_strength05\perclip.mp4
+c2_strength05/xfade: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c2_strength05\xfade.mp4
+c3_inject_clean/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c3_inject_clean\once.mp4
+c3_inject_clean/perclip: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c3_inject_clean\perclip.mp4
+c4_overlap5/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c4_overlap5\once.mp4
+c4_overlap5/perclip: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c4_overlap5\perclip.mp4
+c5_overlap39/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c5_overlap39\once.mp4
+c5_overlap39/perclip: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c5_overlap39\perclip.mp4
+c7_control/perclip: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-chain-2026-10-29\c7_control\perclip.mp4
+wrote S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\analysis_summary.csv (28 rows)
+wrote S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-2026-10-29\analysis_h2_latents.csv

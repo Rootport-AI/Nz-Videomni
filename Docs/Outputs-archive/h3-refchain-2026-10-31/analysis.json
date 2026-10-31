@@ -1,0 +1,36 @@
+{
+  "name": "analysis",
+  "ok": true,
+  "reports": [
+    "c0_fl2va",
+    "c1_ref2va_noref",
+    "c2_ref2va_same",
+    "c3_ref2va_perclip",
+    "c4_ref2va_same_stayprompt",
+    "c5_ref2va_perclip_walkprompt",
+    "g_fl2va_gate",
+    "g_ref2va_gate"
+  ],
+  "skipped": [],
+  "summary_rows": 16,
+  "expected_rows": 16,
+  "files": [
+    "analysis_curve_c0_fl2va.csv",
+    "analysis_audio_c0_fl2va.csv",
+    "analysis_curve_c1_ref2va_noref.csv",
+    "analysis_audio_c1_ref2va_noref.csv",
+    "analysis_curve_c2_ref2va_same.csv",
+    "analysis_audio_c2_ref2va_same.csv",
+    "analysis_curve_c3_ref2va_perclip.csv",
+    "analysis_audio_c3_ref2va_perclip.csv",
+    "analysis_curve_c4_ref2va_same_stayprompt.csv",
+    "analysis_audio_c4_ref2va_same_stayprompt.csv",
+    "analysis_curve_c5_ref2va_perclip_walkprompt.csv",
+    "analysis_audio_c5_ref2va_perclip_walkprompt.csv",
+    "analysis_curve_g_fl2va_gate.csv",
+    "analysis_audio_g_fl2va_gate.csv",
+    "analysis_curve_g_ref2va_gate.csv",
+    "analysis_audio_g_ref2va_gate.csv",
+    "analysis_summary.csv"
+  ]
+}

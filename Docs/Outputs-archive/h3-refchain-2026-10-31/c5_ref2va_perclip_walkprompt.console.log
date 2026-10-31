@@ -1,0 +1,61 @@
+[cr_chain] int8: qkv quantization shared across head groups (comfy-kitchen internals found)
+[cr_chain] clip 0 reused from outputs\h3-refchain-2026-10-31\c2_ref2va_same\clip0.pt
+[cr_chain] clip 1: seed 43, 2 reference(s), fix k=7 ka=37
+[progress] encode 0/4
+[progress] encode 1/4
+[progress] encode 2/4
+[progress] encode 3/4
+[cr_chain] encode: 2124 text tokens (with 2 reference(s))
+[progress] encode 4/4
+[cr_chain] denoise: 32 non-block tensors to cuda; 50 blocks stay on CPU
+[progress] stage1_denoise 0/20
+[progress] stage1_denoise 1/20
+[progress] stage1_denoise 2/20
+[progress] stage1_denoise 3/20
+[progress] stage1_denoise 4/20
+[progress] stage1_denoise 5/20
+[progress] stage1_denoise 6/20
+[progress] stage1_denoise 7/20
+[progress] stage1_denoise 8/20
+[progress] stage1_denoise 9/20
+[progress] stage1_denoise 10/20
+[progress] stage1_denoise 11/20
+[progress] stage1_denoise 12/20
+[progress] stage1_denoise 13/20
+[progress] stage1_denoise 14/20
+[progress] stage1_denoise 15/20
+[progress] stage1_denoise 16/20
+[progress] stage1_denoise 17/20
+[progress] stage1_denoise 18/20
+[progress] stage1_denoise 19/20
+[progress] stage1_denoise 20/20
+[cr_chain] clip 2: seed 44, 2 reference(s), fix k=7 ka=37
+[progress] encode 0/4
+[progress] encode 1/4
+[progress] encode 2/4
+[progress] encode 3/4
+[cr_chain] encode: 2135 text tokens (with 2 reference(s))
+[progress] encode 4/4
+[cr_chain] denoise: 32 non-block tensors to cuda; 50 blocks stay on CPU
+[progress] stage1_denoise 0/20
+[progress] stage1_denoise 1/20
+[progress] stage1_denoise 2/20
+[progress] stage1_denoise 3/20
+[progress] stage1_denoise 4/20
+[progress] stage1_denoise 5/20
+[progress] stage1_denoise 6/20
+[progress] stage1_denoise 7/20
+[progress] stage1_denoise 8/20
+[progress] stage1_denoise 9/20
+[progress] stage1_denoise 10/20
+[progress] stage1_denoise 11/20
+[progress] stage1_denoise 12/20
+[progress] stage1_denoise 13/20
+[progress] stage1_denoise 14/20
+[progress] stage1_denoise 15/20
+[progress] stage1_denoise 16/20
+[progress] stage1_denoise 17/20
+[progress] stage1_denoise 18/20
+[progress] stage1_denoise 19/20
+[progress] stage1_denoise 20/20
+{"name": "c5_ref2va_perclip_walkprompt", "ok": true, "error": null, "mismatch": [], "seconds_total": 1097.57}

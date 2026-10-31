@@ -63,7 +63,7 @@ export interface GenerationFormProps {
   disabled: boolean;
   configFallbackWarning: boolean;
   /** `deriveGenerationParams`'s human-readable reasons for the auto-chosen
-   * resolution (only present on a right-click prefill). Surfaced in the
+   * resolution (set by the latest right-click prefill). Surfaced in the
    * IC-LoRA reference block to explain the 128-multiple rounding. */
   resolutionNotes?: string[] | undefined;
   /** Read by `PresetDropdown`. The IC-LoRA control-LoRA dropdown (below) no
@@ -78,18 +78,15 @@ export interface GenerationFormProps {
    * file's path — not a second, untracked default singleton. Omitted ->
    * `useFileDrop`'s own default (the app-wide bridge singleton). */
   nativeBridge?: NativeBridge | undefined;
-  /** Right-click redesign W2 (accordion auto-expand): true when this mount's
-   * `initialIntent` was `"reference-video"` (`SingleScreen` derives it from
-   * `menuRouting.ts`'s intent string). Opens the IC-LoRA `<details>`
-   * imperatively once on mount via `referenceDetailsRef` — see that effect's
-   * doc comment for why this stays a ref write rather than a controlled
-   * `open` prop. Omitted/false leaves the accordion exactly as before
-   * (collapsed, user-togglable). */
-  autoOpenReference?: boolean | undefined;
-  /** Right-click redesign W2: true when `initialIntent.intent` was
-   * `"audio-to-video"`. Opens the A2V
-   * `<details>` on mount the same way `autoOpenReference` does for IC-LoRA. */
-  autoOpenA2v?: boolean | undefined;
+  /** Right-click redesign W2 (accordion auto-expand), live since 台帳 §1-114:
+   * a counter `SingleScreen` bumps when a right-click lands material in the
+   * IC-LoRA reference slot (#2). Every change opens the `<details>`
+   * imperatively via `referenceDetailsRef` — see that effect's doc comment for
+   * why this stays a ref write rather than a controlled `open` prop. Omitted or
+   * unchanged leaves the accordion exactly as the user left it. */
+  referenceOpenSignal?: number | undefined;
+  /** The same for the A2V accordion (#7 lands its audio there). */
+  a2vOpenSignal?: number | undefined;
   /** The parts of this form the loaded base model's engine
    * cannot use (`featureScope.singleSectionsDisabledFor`, threaded down from
    * `AppShell` as finished booleans). The reference-video accordion is HIDDEN
@@ -131,8 +128,8 @@ export function GenerationForm({
   resolutionNotes,
   config,
   nativeBridge,
-  autoOpenReference,
-  autoOpenA2v,
+  referenceOpenSignal = 0,
+  a2vOpenSignal = 0,
   sectionsUnavailable,
   singleSourceAudio,
   sourceAudioStrength,
@@ -141,40 +138,29 @@ export function GenerationForm({
 }: GenerationFormProps) {
   const strings = useStrings();
   // Right-click redesign W2: the IC-LoRA/A2V accordions default to collapsed,
-  // but a right-click prefill that lands material INSIDE one of them
-  // (referenceVideo / audioToVideo) should open it so the
-  // user immediately sees where the material went — see intents routed by
-  // `menuRouting.ts` and SingleScreen's `autoOpenReference`/`autoOpenA2v`
-  // derivation. Kept as an imperative `.open = true` on mount (NOT a
-  // controlled `open={autoOpenReference}` prop) so the `<details>` stays
-  // fully uncontrolled afterward — the user's own manual expand/collapse is
-  // never fought by a prop that doesn't change again. `GenerationForm` only
-  // ever mounts fresh for these two intents (SingleScreen remounts the
-  // whole form via `key` on a new intent), so a mount-only effect is exactly
-  // "open once, then hands off" — no dependency array churn to guard against.
-  // `useLayoutEffect` (not `useEffect`): this write must land in the SAME
-  // synchronous commit phase as the rest of the mount, before any passive
-  // effect elsewhere in the tree runs. `SingleScreen`'s own auto-load mount
-  // effect (the sibling `useEffect` that shows the "loaded from a right-click"
-  // note / kicks off the #7 audio extraction) is a passive effect too; a
-  // passive-effect write here landed AFTER it in practice and could get
-  // coalesced with that effect's own note-area DOM updates under React's
-  // batching, which starved a real regression test
-  // (`App.prefill.test.tsx`'s #7 extraction case) of ever observing the
-  // transient "Extracting…" note. Layout effects run before ANY
-  // passive effect in the commit, so this write no longer shares a batching
-  // window with that unrelated async note sequence.
+  // but a right-click that lands material INSIDE one of them (#2 reference
+  // video / #7 audio-to-video) should open it so the user immediately sees
+  // where the material went. Since 台帳 §1-114 Create is never remounted, so
+  // the request arrives as a counter (`referenceOpenSignal` / `a2vOpenSignal`,
+  // the Reference accordion's `openSignal` shape): each change sets
+  // `.open = true` imperatively (NOT a controlled `open` prop) so the
+  // `<details>` stays fully uncontrolled afterward — the user's own manual
+  // expand/collapse is never fought. The first render only records the
+  // starting value, so a mount never opens anything.
   const referenceDetailsRef = useRef<HTMLDetailsElement>(null);
   const a2vDetailsRef = useRef<HTMLDetailsElement>(null);
+  const lastReferenceOpenSignal = useRef(referenceOpenSignal);
+  const lastA2vOpenSignal = useRef(a2vOpenSignal);
   useLayoutEffect(() => {
-    if (autoOpenReference && referenceDetailsRef.current) {
-      referenceDetailsRef.current.open = true;
-    }
-    if (autoOpenA2v && a2vDetailsRef.current) {
-      a2vDetailsRef.current.open = true;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: this form remounts fresh per intent (key change), never re-renders with a new autoOpen* value on the same instance
-  }, []);
+    if (lastReferenceOpenSignal.current === referenceOpenSignal) return;
+    lastReferenceOpenSignal.current = referenceOpenSignal;
+    if (referenceDetailsRef.current) referenceDetailsRef.current.open = true;
+  }, [referenceOpenSignal]);
+  useLayoutEffect(() => {
+    if (lastA2vOpenSignal.current === a2vOpenSignal) return;
+    lastA2vOpenSignal.current = a2vOpenSignal;
+    if (a2vDetailsRef.current) a2vDetailsRef.current.open = true;
+  }, [a2vOpenSignal]);
   const {
     values,
     limits,

@@ -115,56 +115,6 @@ describe("useSourceUpload", () => {
     expect(result.current.state).toEqual({ status: "idle", fileName: null, filePath: null, id: null, errorCode: null, trimFailed: false, frames: null, fps: null });
   });
 
-  describe("W5 initial (carried-over ready state)", () => {
-    it("starts in a ready state seeded from deps.initial, with no upload call", () => {
-      const mockBridge = createMockBridge({ delayMs: 0 });
-      const spy = vi.spyOn(mockBridge, "request");
-      const { result } = renderHook(() =>
-        useSourceUpload("video", {
-          nativeBridge: mockBridge,
-          initial: { id: "carried-video-1", fileName: "ref.mp4", filePath: "C:\\v\\ref.mp4" },
-        }),
-      );
-
-      expect(result.current.state).toEqual({
-        status: "ready",
-        fileName: "ref.mp4",
-        filePath: "C:\\v\\ref.mp4",
-        id: "carried-video-1",
-        errorCode: null,
-        // §1-6: a carried-over slot was never re-uploaded, so no trim was asked
-        // for it (the field is part of every state, always false here).
-        trimFailed: false,
-        // 素材（末尾）v2: no response body was ever seen for a carried slot,
-        // so nothing was measured either.
-        frames: null,
-        fps: null,
-      });
-      // No re-upload: the carried id is already valid server-side.
-      expect(spy).not.toHaveBeenCalledWith("backend.uploadFile", expect.anything());
-    });
-
-    it("clear() from a carried initial resets back to idle", () => {
-      const mockBridge = createMockBridge({ delayMs: 0 });
-      const { result } = renderHook(() =>
-        useSourceUpload("audio", {
-          nativeBridge: mockBridge,
-          initial: { id: "carried-audio-1", fileName: "voice.wav", filePath: "C:\\a\\voice.wav" },
-        }),
-      );
-      expect(result.current.state.status).toBe("ready");
-
-      act(() => result.current.clear());
-      expect(result.current.state).toEqual({ status: "idle", fileName: null, filePath: null, id: null, errorCode: null, trimFailed: false, frames: null, fps: null });
-    });
-
-    it("a null initial behaves exactly like the default idle start", () => {
-      const mockBridge = createMockBridge({ delayMs: 0 });
-      const { result } = renderHook(() => useSourceUpload("video", { nativeBridge: mockBridge, initial: null }));
-      expect(result.current.state).toEqual({ status: "idle", fileName: null, filePath: null, id: null, errorCode: null, trimFailed: false, frames: null, fps: null });
-    });
-  });
-
   describe("uploadPath (already-resolved file path, skipping ui.pickFile)", () => {
     it("uploads a given path directly, settling into 'ready'", async () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
@@ -385,7 +335,7 @@ describe("useSourceUpload", () => {
 
   // §1-107 (H3 Reference): the A2V audio slot hands its upload over.
   describe("adopt (take over an already-uploaded id, no upload)", () => {
-    it("settles into the same ready shape as a carried initial, without uploading", () => {
+    it("settles into a ready state, without uploading", () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
       const spy = vi.spyOn(mockBridge, "request");
       const { result } = renderHook(() => useSourceUpload("audio", { nativeBridge: mockBridge }));

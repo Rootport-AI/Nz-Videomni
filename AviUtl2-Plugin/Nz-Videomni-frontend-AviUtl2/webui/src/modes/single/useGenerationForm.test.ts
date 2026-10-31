@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { AppConfig, GenerateChainRequest } from "../../api/types";
 import { createApiClient } from "../../api/client";
 import { createMockBridge, createMockFs } from "../../bridge/mockBridge";
@@ -65,35 +65,6 @@ describe("useGenerationForm", () => {
     expect(result.current.isValid).toBe(false);
   });
 
-  // W8: a right-click prefill can seed the initial DURATION (num_frames) from
-  // the DURATION policy engine — the fourth `initial` arg's `numFrames`.
-  describe("initial.numFrames (W8 right-click DURATION seed)", () => {
-    it("seeds the initial DURATION from initial.numFrames instead of the config default (raise)", () => {
-      // 512x320's comfort ceiling (481) is ABOVE the config default (345) — the
-      // seed raises DURATION, not just lowers it.
-      const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "", {}, { numFrames: 481 }));
-      expect(result.current.values.numFrames).toBe(481);
-    });
-
-    it("seeds a LOWER initial DURATION when the policy resolved a smaller value", () => {
-      const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "", {}, { numFrames: 153 }));
-      expect(result.current.values.numFrames).toBe(153);
-    });
-
-    it("re-snaps the seed onto the 8n+1 grid and clamps it into range", () => {
-      // 999999 clamps to max (481); an off-grid 100 snaps to the nearest 8n+1 (97).
-      const { result: high } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "", {}, { numFrames: 999_999 }));
-      expect(high.current.values.numFrames).toBe(FALLBACK_APP_CONFIG.limits.max_num_frames);
-      const { result: offGrid } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "", {}, { numFrames: 100 }));
-      expect(offGrid.current.values.numFrames).toBe(97);
-    });
-
-    it("keeps the config default when initial.numFrames is omitted (normal tab-opened form)", () => {
-      const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, "", {}, {}));
-      expect(result.current.values.numFrames).toBe(345);
-    });
-  });
-
   // 台帳§3-71/§3-72: the fps field only ever holds a whole frame rate in [1, 60].
   // The rounding rules themselves are `paramUtils.test.ts`'s; these pin that
   // Create's setter and lazy init are wired to them.
@@ -122,12 +93,7 @@ describe("useGenerationForm", () => {
       expect(result.current.values.frameRate).toBe(1);
     });
 
-    it("snaps a right-click fps seed as well as the config default", () => {
-      const { result: seeded } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "x", {}, { frameRate: 29.97 }),
-      );
-      expect(seeded.current.values.frameRate).toBe(30);
-
+    it("snaps a non-integer config default fps", () => {
       const ntscConfig: AppConfig = {
         ...FALLBACK_APP_CONFIG,
         generation_defaults: { ...FALLBACK_APP_CONFIG.generation_defaults, frame_rate: 23.976 },
@@ -899,14 +865,6 @@ describe("useGenerationForm", () => {
     expect(result.current.getSizeError).not.toBeNull();
   });
 
-  it("seeds width/height from the initial override (right-click prefill)", () => {
-    const { result } = renderHook(() =>
-      useGenerationForm(FALLBACK_APP_CONFIG, "x", {}, { width: 832, height: 448 }),
-    );
-    expect(result.current.values).toMatchObject({ width: 832, height: 448 });
-    expect(result.current.isICLora).toBe(false);
-  });
-
   it("in IC-LoRA mode snaps width/height to multiples of 128 and floors the max onto that grid (1088 -> 1024)", () => {
     // Pin the config maxima to 1920x1088 so the 128-grid floor is observable
     // (the real-server 4096 is itself a clean 128-multiple, floors to a no-op).
@@ -980,7 +938,7 @@ describe("useGenerationForm", () => {
     const { result } = renderHook(() =>
       // A LoRA tag is required alongside the reference video (N3's loras
       // gate) — see the two tests below for the gate itself.
-      useGenerationForm(FALLBACK_APP_CONFIG, "a cat <lora:Pixar_Toon:1.0>", { nativeBridge: mockBridge }, { isICLora: true }),
+      useGenerationForm(FALLBACK_APP_CONFIG, "a cat <lora:Pixar_Toon:1.0>", { nativeBridge: mockBridge }),
     );
 
     // Nothing uploaded yet -> the field is absent entirely.
@@ -1003,7 +961,7 @@ describe("useGenerationForm", () => {
     it("omits reference_video_id (and the strength fields) once the reference video is ready but the prompt has no loras — the server 422s otherwise", async () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: mockBridge }, { isICLora: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: mockBridge }),
       );
 
       await act(async () => {
@@ -1024,7 +982,7 @@ describe("useGenerationForm", () => {
     it("conditioningAttentionStrength/referenceVideoStrength default to null and are sent only once set, alongside a ready + lora'd reference video", async () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "a cat <lora:Pixar_Toon:1.0>", { nativeBridge: mockBridge }, { isICLora: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "a cat <lora:Pixar_Toon:1.0>", { nativeBridge: mockBridge }),
       );
       expect(result.current.conditioningAttentionStrength).toBeNull();
       expect(result.current.referenceVideoStrength).toBeNull();
@@ -1443,12 +1401,11 @@ describe("useGenerationForm", () => {
   // mount-frozen intent flag — so removing the reference video that a routed #2
   // auto-loaded relaxes the form back out of IC-LoRA mode and restores Generate.
   describe("Y1: dynamic IC-LoRA mode (removing the reference video restores Generate)", () => {
-    it("a routed #2 (isICLora seed) drops out of IC-LoRA mode when the reference video is cleared, un-blocking isValid", async () => {
+    it("a #2 reference video drops out of IC-LoRA mode when it is cleared, un-blocking isValid", async () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
-      // Routed #2: mounts with the isICLora seed (128-grid width/height) and a
-      // valid prompt but no loRA.
+      // A valid prompt but no LoRA.
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: mockBridge }, { isICLora: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: mockBridge }),
       );
       // Clear the default crop so the isValid assertions isolate the IC-LoRA gate.
       act(() => result.current.setCropOutput(null));
@@ -1465,7 +1422,7 @@ describe("useGenerationForm", () => {
 
       // Remove the reference video (🔁/❌, id -> null). Pre-Y1 the frozen intent
       // kept isICLora true forever, leaving referenceNeedsLoras + Generate stuck.
-      // Now the mode relaxes and Generate is restored; the 128-seeded dimensions
+      // Now the mode relaxes and Generate is restored; the 128-snapped dimensions
       // stay valid on the relaxed 64 grid (no dimensionsOffGrid).
       act(() => result.current.referenceVideo.clear());
       await waitFor(() => expect(result.current.referenceVideo.state.status).not.toBe("ready"));
@@ -1476,96 +1433,6 @@ describe("useGenerationForm", () => {
     });
   });
 
-  // W5 (反対スロット保持): the opposite source slot carried across a #2/#7
-  // remount is seeded into the form's one-shot `initial` (no re-upload).
-  describe("W5 carry-over (initial.carryReferenceVideo / initial.carryAudio)", () => {
-    // A config whose default height (320) is NOT a multiple of 128, so the
-    // 回帰対策1 128-grid seed is observable.
-    const off128Config: AppConfig = {
-      ...FALLBACK_APP_CONFIG,
-      generation_defaults: { ...FALLBACK_APP_CONFIG.generation_defaults, width: 512, height: 320, crop_output: null },
-    };
-
-    it("carrying a reference video (#7) mounts it ready, forces the 128 grid, and seeds both strengths (回帰対策1)", () => {
-      const mockBridge = createMockBridge({ delayMs: 0 });
-      const spy = vi.spyOn(mockBridge, "request");
-      const { result } = renderHook(() =>
-        useGenerationForm(
-          off128Config,
-          "a cat",
-          { nativeBridge: mockBridge },
-          {
-            carryReferenceVideo: { id: "carried-ref-1", fileName: "ref.mp4", filePath: "C:\\v\\ref.mp4" },
-            carryConditioningAttentionStrength: 0.5,
-            carryReferenceVideoStrength: 0.8,
-          },
-        ),
-      );
-
-      // Mounted ready with the carried id — no re-upload.
-      expect(result.current.referenceVideo.state.status).toBe("ready");
-      expect(result.current.referenceVideo.state.id).toBe("carried-ref-1");
-      expect(spy).not.toHaveBeenCalledWith("backend.uploadFile", expect.anything());
-      // 回帰対策1: IC-LoRA active from mount, width/height seeded on the 128 grid,
-      // so `dimensionsOffGrid` never blocks Generate.
-      expect(result.current.isICLora).toBe(true);
-      expect(result.current.values.width % 128).toBe(0);
-      expect(result.current.values.height % 128).toBe(0);
-      expect(result.current.validityReasons).not.toContain("dimensionsOffGrid");
-      // Strengths survived the carry.
-      expect(result.current.conditioningAttentionStrength).toBe(0.5);
-      expect(result.current.referenceVideoStrength).toBe(0.8);
-    });
-
-    it("a carried reference video with un-opted (null) strengths starts them at null", () => {
-      const mockBridge = createMockBridge({ delayMs: 0 });
-      const { result } = renderHook(() =>
-        useGenerationForm(
-          FALLBACK_APP_CONFIG,
-          "a cat",
-          { nativeBridge: mockBridge },
-          {
-            carryReferenceVideo: { id: "carried-ref-1", fileName: "ref.mp4", filePath: "C:\\v\\ref.mp4" },
-            carryConditioningAttentionStrength: null,
-            carryReferenceVideoStrength: null,
-          },
-        ),
-      );
-      expect(result.current.isICLora).toBe(true);
-      expect(result.current.conditioningAttentionStrength).toBeNull();
-      expect(result.current.referenceVideoStrength).toBeNull();
-    });
-
-    it("carrying a source audio (#2) mounts it ready and fires the mount-time wav auto-adjust (回帰対策2)", async () => {
-      const mockFs = createMockFs({
-        folders: {
-          "C:\\a": [{ name: "voice.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 2.0 }],
-        },
-      });
-      const mockBridge = createMockBridge({ delayMs: 0, fs: mockFs });
-      const spy = vi.spyOn(mockBridge, "request");
-      const { result } = renderHook(() =>
-        useGenerationForm(
-          FALLBACK_APP_CONFIG,
-          "a music video",
-          { nativeBridge: mockBridge },
-          { carryAudio: { id: "carried-audio-1", fileName: "voice.wav", filePath: "C:\\a\\voice.wav" } },
-        ),
-      );
-
-      // Mounted ready with the carried id (A2V active) — no re-upload.
-      expect(result.current.sourceAudio.state.status).toBe("ready");
-      expect(result.current.sourceAudio.state.id).toBe("carried-audio-1");
-      expect(result.current.isA2v).toBe(true);
-      expect(spy).not.toHaveBeenCalledWith("backend.uploadFile", expect.anything());
-
-      // 回帰対策2: the mount-time probe fires off the carried filePath and the
-      // DURATION auto-adjusts to the audio (A2V DURATION priority preserved).
-      const expected = suggestFramesForAudio(2.0, result.current.values.frameRate);
-      await waitFor(() => expect(result.current.values.numFrames).toBe(expected));
-      expect(result.current.audioFramesAdjustedEvent?.frames).toBe(expected);
-    });
-  });
 });
 
 // W7: `validityReasons` is the structured breakdown behind `isValid`. Each case
@@ -1647,7 +1514,7 @@ describe("useGenerationForm — validityReasons (W7)", () => {
   it("reports referenceNeedsLoras when a reference video is ready but no LoRA is present", async () => {
     const mockBridge = createMockBridge({ delayMs: 0 });
     const { result } = renderHook(() =>
-      useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: mockBridge }, { isICLora: true }),
+      useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: mockBridge }),
     );
     await act(async () => {
       await result.current.referenceVideo.pick();
@@ -1679,7 +1546,7 @@ describe("useGenerationForm — validityReasons (W7)", () => {
     it("reports referenceTrimFailed when a requested reference trim is not confirmed", async () => {
       const inner = createMockBridge({ delayMs: 0 });
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: dropsTrimQuery(inner) }, { isICLora: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: dropsTrimQuery(inner) }),
       );
 
       await act(async () => {
@@ -1698,7 +1565,7 @@ describe("useGenerationForm — validityReasons (W7)", () => {
     it("does not fire when the trim IS confirmed", async () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: mockBridge }, { isICLora: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: mockBridge }),
       );
 
       await act(async () => {
@@ -1716,7 +1583,7 @@ describe("useGenerationForm — validityReasons (W7)", () => {
     it("does not fire when no trim was requested at all (manual 📁 pick / untrimmed route)", async () => {
       const inner = createMockBridge({ delayMs: 0 });
       const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: dropsTrimQuery(inner) }, { isICLora: true }),
+        useGenerationForm(FALLBACK_APP_CONFIG, "a cat", { nativeBridge: dropsTrimQuery(inner) }),
       );
 
       await act(async () => {

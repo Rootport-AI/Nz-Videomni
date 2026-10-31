@@ -55,16 +55,6 @@ export interface SourceUploadState {
 
 export interface UseSourceUploadDeps {
   nativeBridge?: NativeBridge;
-  /** W5 (反対スロット保持): an already-uploaded file to seed the slot with as a
-   * ready state from mount, instead of the usual `idle`. Used by Create's
-   * opposite-slot carry-over across a right-click remount (#2 carries the
-   * existing audio; #7 carries the existing reference video): the upload id is
-   * still valid server-side, so the material survives the remount with no
-   * re-upload. Applied ONLY in the lazy `useState` initializer (a later
-   * re-render never re-applies it), so it behaves exactly like the frozen
-   * `idle` start for every existing caller that omits it. `null`/`undefined` =
-   * the ordinary `idle` start. */
-  initial?: AdoptedSource | null | undefined;
   /** The 📁 dialog's kind for {@link UseSourceUploadResult.pick}, when it must
    * differ from the upload `kind` (台帳 §1-113: an audio slot whose dialog also
    * offers video files — only their sound is used). Only `pick()` reads it; the
@@ -124,20 +114,19 @@ export interface UseSourceUploadResult {
   clear: () => void;
   /** §1-107 (H3 Reference): takes over an id ANOTHER uploader already holds
    * (the Reference accordion's A2V audio slot) as a `ready` state — no
-   * upload. Supersedes any in-flight upload like `clear()` does. The state has
-   * the same shape as the {@link UseSourceUploadDeps.initial} seed. */
+   * upload. Supersedes any in-flight upload like `clear()` does. */
   adopt: (file: AdoptedSource) => void;
 }
 
 /** An already-uploaded file handed to a slot without re-uploading it
- * (`deps.initial`, `adopt`). */
+ * (`adopt`). */
 export interface AdoptedSource {
   id: string;
   fileName: string;
   filePath: string;
 }
 
-/** The `ready` state for an adopted / carried-over file: nothing was uploaded
+/** The `ready` state for an adopted file: nothing was uploaded
  * here, so no trim was requested and nothing was measured. */
 function adoptedState(file: AdoptedSource): SourceUploadState {
   return {
@@ -214,16 +203,7 @@ export function requestedTrim(query: Record<string, string> | undefined): boolea
 export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDeps = {}): UseSourceUploadResult {
   const nativeBridge = deps.nativeBridge ?? defaultBridge;
   const pickKind = deps.pickKind ?? kind;
-  // W5 (反対スロット保持): seed a carried-over ready state when `deps.initial` is
-  // supplied — same field shape as a genuine post-upload `ready` state, so the
-  // downstream duration-probe / gate logic can't tell it apart from a fresh
-  // upload. Lazy initializer, so it applies once at mount only.
-  // A carried-over slot was never (re)uploaded here, so no trim was requested
-  // and nothing was measured (`adoptedState`). The carry-over is only ever used
-  // by Create's opposite-slot flows, which have no band to derive.
-  const [state, setState] = useState<SourceUploadState>(() =>
-    deps.initial ? adoptedState(deps.initial) : INITIAL_STATE,
-  );
+  const [state, setState] = useState<SourceUploadState>(INITIAL_STATE);
   // Generation token: bumped by `clear()` and at the start of every fresh
   // `uploadPath()` call. Each call captures its own generation and checks it
   // against the ref before ever calling `setState` after an `await` — so a

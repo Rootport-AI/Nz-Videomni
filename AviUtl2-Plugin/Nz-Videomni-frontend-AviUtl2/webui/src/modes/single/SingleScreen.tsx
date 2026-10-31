@@ -19,12 +19,13 @@ import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../.
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { computeTargetNumFrames } from "../../timeline/deriveDuration";
 import { DURATION_POLICY_BY_INTENT, materialDurationForIntent, resolvePrefillSeed } from "../../timeline/prefillSeed";
-import type { GenerationPrefill } from "../../timeline/generationPrefill";
+import type { TimelineSelection } from "../../timeline/menuSelection";
+import type { PrefillResolutionPolicy } from "../../shell/PrefillPolicyContext";
 import { extractAudioFailureNote, extractObjectAudio } from "../../timeline/extractObjectAudio";
 import { decideSourceTrim, trimQuery } from "../../timeline/sourceTrim";
-import type { SourceTrimDecision } from "../../timeline/sourceTrim";
-import { bindToJob, publishFormValues, publishKeyframeCount, publishSourceSlots, rollbackReservedPlacement } from "../../timeline/provisionalReservation";
+import { bindToJob, publishFormValues, publishKeyframeCount, rollbackReservedPlacement } from "../../timeline/provisionalReservation";
 import { subscribeCreateCommands } from "../../timeline/createLiveCommands";
+import type { CreateLiveCommand } from "../../timeline/createLiveCommands";
 import { useShowNote } from "../../shell/NoteArea";
 import { fileNameFromPath, omitStrength } from "./keyframeUtils";
 import { omitLoraAudioStrength } from "../../lora/loraTags";
@@ -40,6 +41,7 @@ import { useConfig } from "./useConfig";
 import { useDurationShrinkGuard } from "./useDurationShrinkGuard";
 import { useGenerationSubmit } from "./useGeneration";
 import { useGenerationForm } from "./useGenerationForm";
+import type { UseGenerationFormResult } from "./useGenerationForm";
 import { useKeyframes } from "./useKeyframes";
 import {
   appendReferenceTag,
@@ -70,14 +72,141 @@ const NO_REFERENCE_RULES: ReferenceRules = {
   clipMinSec: 0,
 };
 
+/** The form setters the `project` overwrite writes through. */
+type ProjectOverwriteSetters = Pick<UseGenerationFormResult, "setWidth" | "setHeight" | "setFrameRate" | "setNumFrames">;
+
+interface ProjectOverwriteArgs {
+  bridge: NativeBridge;
+  intent: string;
+  selection: TimelineSelection;
+  sizePolicy: PrefillResolutionPolicy;
+  fpsPolicy: PrefillResolutionPolicy;
+  config: AppConfig;
+  constraints: GenerationConstraints | undefined;
+  engineFamily: string | undefined;
+  acceleration: AccelerationSettings | undefined;
+  sageAvailable: boolean | null | undefined;
+  weightClass: string | undefined;
+  /** The width/height/fps this right-click's seed just applied — read back for
+   * an axis whose policy is NOT `project` (the form state has not committed
+   * yet when the overwrite starts, so `form.values` would be stale). */
+  seeded: { width: number; height: number; frameRate: number };
+  /** The form's setters at the moment `getEditInfo` answers — they are rebuilt
+   * when the size grid changes (e.g. a #2 reference video turning ready), so
+   * the ones captured at dispatch time could round on a stale grid. */
+  getSetters: () => ProjectOverwriteSetters;
+  /** False once a newer right-click has arrived: its own seed wins, and this
+   * late `getEditInfo` answer is dropped. */
+  isCurrent: () => boolean;
+}
+
+/**
+ * W7 `project` policy: read the AviUtl2 project's own resolution/fps via
+ * `getEditInfo` and overwrite the form's width/height/frameRate, then
+ * recompute DURATION off the effective values. Runs once per `prefillMaterial`
+ * whose size or fps policy is `project` (台帳 §1-114: formerly a one-shot mount
+ * effect of the remounted Create). A `getEditInfo` failure leaves the seed in
+ * place (③ fallback).
+ */
+async function applyProjectOverwrite(a: ProjectOverwriteArgs): Promise<void> {
+  const { config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass } = a;
+  try {
+    const editInfo = await a.bridge.request("getEditInfo", {});
+    if (!a.isCurrent()) return;
+    const form = a.getSetters();
+    // 台帳§3-71/§3-72: snapped HERE, at the definition — not around the
+    // `form.setFrameRate` call below — because `effectiveGenFps` further down
+    // reads this value directly (it never goes through the form), so a snap
+    // applied only at the setter would leave the DURATION recomputation
+    // converting against a raw 29.97.
+    // The `?? config…` fallback can only ever reach `effectiveGenFps`: the
+    // `setFrameRate` call is itself guarded on a resolvable rate/scale, i.e.
+    // exactly the case where `snapFrameRate` returns a number.
+    const projectGenFps = snapFrameRate(editInfo.rate / editInfo.scale) ?? config.generation_defaults.frame_rate;
+    // W1: apply only the axis (or axes) whose policy is `project`.
+    if (sizePolicy === "project") {
+      form.setWidth(editInfo.width);
+      form.setHeight(editInfo.height);
+    }
+    if (fpsPolicy === "project" && editInfo.scale > 0 && editInfo.rate > 0) {
+      form.setFrameRate(projectGenFps);
+    }
+    // W1/W8 (② project policy): keep DURATION consistent with the just-applied
+    // axes. The DURATION target is recomputed off the EFFECTIVE resolution +
+    // fps: the `project` axis takes the getEditInfo value, while a non-project
+    // axis reads back the seed this right-click applied. This is the only way
+    // the crossing cases (size=project × fps=material, and the reverse) land
+    // correctly (adversarial review R4). The material duration input still goes
+    // through `materialDurationForIntent` (M-1) so the span semantics match the
+    // seed. Leaves the seed in place when the policy can't resolve a value
+    // (null) or the intent has no DURATION policy.
+    const effectiveWidth = sizePolicy === "project" ? editInfo.width : a.seeded.width;
+    const effectiveHeight = sizePolicy === "project" ? editInfo.height : a.seeded.height;
+    // A fixed engine rate is what the form holds and what the request carries,
+    // whatever the `project` policy read.
+    const rules = a.constraints ?? LTX_GENERATION_CONSTRAINTS;
+    const effectiveGenFps = fixedFrameRate(rules) ?? (fpsPolicy === "project" ? projectGenFps : a.seeded.frameRate);
+    const policy = DURATION_POLICY_BY_INTENT[a.intent];
+    if (!policy) return;
+    const materialDurationSec = materialDurationForIntent(a.intent, a.selection);
+    // 2026-08-31: the smart ceiling has to be RE-derived here, not reused from
+    // the seed, because `size=project` has just replaced the seed's
+    // width/height with the project's — a token-derived ceiling computed at
+    // the old geometry would be the wrong number.
+    // Gated on `acceleration` for the same reason `resolvePrefillSeed` is: a
+    // caller that does not thread the Settings state cannot say what would
+    // effectively run, so it keeps the legacy ceiling.
+    // No comfort line at all for an engine the served table has no profile
+    // for — only the grid snap remains.
+    const noComfortLine = comfortProfileMissing(config.limits, engineFamily);
+    const frameLimits = frameLimitsFor(rules, config.limits.max_num_frames);
+    const comfortRow =
+      acceleration && !noComfortLine
+        ? resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null, weightClass)
+        : null;
+    const smartCeiling = comfortRow
+      ? comfortFramesForBudget(
+          effectiveWidth,
+          effectiveHeight,
+          comfortRow.singleBudget,
+          frameLimits.minNumFrames,
+          frameLimits.maxNumFrames,
+          comfortRow.spatialFactor,
+          comfortRow.temporalFactor,
+        )
+      : null;
+    const target = computeTargetNumFrames({
+      policy,
+      width: effectiveWidth,
+      height: effectiveHeight,
+      spillFreeFrames: noComfortLine ? null : config.limits.spill_free_frames,
+      minNumFrames: frameLimits.minNumFrames,
+      maxNumFrames: frameLimits.maxNumFrames,
+      frameGrid: rules.frameGrid,
+      ...(smartCeiling !== null ? { comfortCeilingFrames: smartCeiling } : {}),
+      ...(materialDurationSec !== undefined ? { materialDurationSec } : {}),
+      genFps: effectiveGenFps,
+    });
+    if (target !== null) form.setNumFrames(target);
+  } catch {
+    // Fall back to the seed already in the form (③ behavior).
+  }
+}
+
+/** What the `prefillMaterial` handler is waiting on to report the §6-2
+ * missing-material note: the reference-video / source-audio slot's status, the
+ * replaced frame-0 keyframe card (`cardId`), or the card a fresh append adds
+ * (the one id not in `beforeIds`). */
+type MaterialWatch =
+  | { kind: "referenceVideo" }
+  | { kind: "sourceAudio" }
+  | { kind: "keyframe"; cardId: string }
+  | { kind: "keyframe"; beforeIds: ReadonlySet<string> };
+
 export interface SingleScreenProps {
   /** Owned by `AppShell`'s shared `PromptBar`, above the mode tabs. */
   prompt: string;
   baseUrl: string | null;
-  /** One-shot right-click prefill (task: "ルーティング→プリフィル"). Present
-   * only when this screen was opened by a routed menu action; consumed once in
-   * the form's lazy init. `intent === "reference-video"` selects IC-LoRA. */
-  initialIntent?: GenerationPrefill | undefined;
   /** Test/integration seam threaded from `AppShell`; production omits it. */
   nativeBridge?: NativeBridge | undefined;
   /** The currently highlighted job (last submitted / toast-clicked), threaded
@@ -175,7 +304,6 @@ export interface SingleScreenProps {
 export function SingleScreen({
   prompt,
   baseUrl,
-  initialIntent,
   nativeBridge,
   highlightedJobId,
   onJobSubmitted,
@@ -208,7 +336,6 @@ export function SingleScreen({
       usingFallback={configState.usingFallback}
       prompt={prompt}
       baseUrl={baseUrl}
-      initialIntent={initialIntent}
       nativeBridge={nativeBridge}
       highlightedJobId={highlightedJobId}
       onJobSubmitted={onJobSubmitted}
@@ -236,7 +363,6 @@ interface SingleScreenBodyProps {
   usingFallback: boolean;
   prompt: string;
   baseUrl: string | null;
-  initialIntent?: GenerationPrefill | undefined;
   nativeBridge?: NativeBridge | undefined;
   highlightedJobId: string | null;
   onJobSubmitted: (jobId: string) => void;
@@ -262,7 +388,6 @@ function SingleScreenBody({
   usingFallback,
   prompt,
   baseUrl,
-  initialIntent,
   nativeBridge,
   highlightedJobId,
   onJobSubmitted,
@@ -337,250 +462,31 @@ function SingleScreenBody({
   }, [nativeBridge, stopRepeat]);
   const { submitState, submit, submitChain } = useGenerationSubmit({ onSubmitted, onFailed });
 
-  const isICLora = initialIntent?.intent === "reference-video";
-  // Right-click redesign W2 (accordion auto-expand): mirrors the intent
-  // branch the I9/I10 auto-load effect below already switches on
-  // (`menuRouting.ts`'s `reference-video` / `audio-to-video`) — the material
-  // lands in the IC-LoRA or A2V accordion, so that accordion should start open
-  // instead of hiding where it went.
-  // Passed straight through to `GenerationForm`, which applies them once on
-  // mount (this whole body remounts via `key` on a new intent, so a fresh
-  // mount = a fresh one-shot open, same as the auto-load effect).
-  // X5 (併用プリフィルでアコーディオンを閉じない): also open an accordion when the
-  // OPPOSITE slot was carried across this remount (`carryOver`), not only when
-  // this intent targets it. #7 carries the existing reference video (keep
-  // IC-LoRA open), #2 carries the existing audio (keep A2V open) — otherwise the
-  // carried material survives but its accordion collapses, hiding it. `!= null`
-  // coerces the optional-chain result to a plain boolean for GenerationForm's
-  // boolean props. `carryOver` is declared below, so reference it inline here.
-  const autoOpenReference =
-    initialIntent?.intent === "reference-video" || initialIntent?.carryOver?.referenceVideo != null;
-  const autoOpenA2v =
-    initialIntent?.intent === "audio-to-video" ||
-    initialIntent?.carryOver?.sourceAudio != null;
-  // Derive the whole right-click prefill seed (width/height + fps + DURATION)
-  // in ONE call to the shared純関数 `resolvePrefillSeed`, so the form seed and
-  // `AppShell`'s provisional-reservation length come from the identical
-  // arithmetic on the identical inputs — a placed provisional's ribbon can't
-  // diverge from what the remounted form shows (owner requirement 2026-07-21
-  // #1). Computed once (this whole body remounts via `key` on a new intent) and
-  // handed to the form's lazy init. `derived` is returned whole so `notes`/
-  // `width`/`height` references below are unchanged; the seed also decides the
-  // #2 IC-LoRA reference / #7 A2V material-clamped DURATION and the #4/#6/#12
-  // comfort-ceiling DURATION (A2V's is then superseded by the wav auto-adjust —
-  // see the A2V auto-load below). `deriveGenerationParams` remains the frozen
-  // Phase-1 width/height contract inside `resolvePrefillSeed`.
-  // W7: the right-click prefill resolution/fps policy (Settings). Only affects
-  // the initial-value decision here — ordinary edits/presets are unchanged; the
-  // `project` policy overwrites width/height/fps AND recomputes DURATION off
-  // `getEditInfo` in the mount effect below.
+  // W7: the right-click prefill size/fps policies (Settings). They only affect
+  // the `prefillMaterial` live command below — ordinary edits/presets are
+  // unchanged.
   const { sizePolicy, fpsPolicy } = usePrefillPolicy();
-  const seed = useMemo(
-    () =>
-      initialIntent
-        ? resolvePrefillSeed({
-            intent: initialIntent.intent,
-            selection: initialIntent.selection,
-            config,
-            sizePolicy,
-            fpsPolicy,
-            // 2026-08-31: the same trio `AppShell` hands its OWN
-            // `resolvePrefillSeed` call for the reservation length — the two
-            // must be given identical inputs or the placed ribbon and the
-            // seeded form disagree (R-4).
-            engineFamily,
-            acceleration,
-            sageAvailable,
-            weightClass,
-            constraints,
-          })
-        : null,
-    [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass, constraints],
-  );
-  const derived = seed?.derived ?? null;
-  const prefillFrameRate = seed?.frameRate;
-  const prefillNumFrames = seed?.numFrames;
-
-  // 台帳§3-71/§3-72: tell the user, ONCE, when a right-click prefill had to
-  // round the project's (or the material's) frame rate to a whole number —
-  // the one place the snap is worth reporting, because the value the user
-  // gets is not the value their project has (owner ruling 2026-09-02 ②).
-  // Manual typing and the `project` mount overwrite below stay silent: the
-  // field re-renders rounded the same instant, so a toast would only repeat
-  // what the user can already see (and the overwrite would double-report this
-  // very seed).
-  //
-  // One-shot ref + empty deps, exactly like the `project` overwrite effect
-  // below: this whole body remounts under a fresh `key` on every right-click
-  // (`AppShell`'s `remountTokens`), so "once per mount" IS "once per prefill",
-  // and StrictMode's double-invoked mount effect still shows one toast.
-  const fpsSnapToastedRef = useRef(false);
-  useEffect(() => {
-    if (fpsSnapToastedRef.current) return;
-    const from = seed?.frameRateSnappedFrom;
-    if (from === undefined || seed?.frameRate === undefined) return;
-    fpsSnapToastedRef.current = true;
-    toasts.push({ kind: "warning", message: strings.prefill.fpsSnappedToast(formatFps(from), seed.frameRate) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount consume
-  }, []);
-
-  // W5 (反対スロット保持): the opposite source slot carried across this remount —
-  // #2 carries the existing audio, #7 carries the existing reference video +
-  // strengths (AppShell filled the relevant side). Threaded into the form's
-  // one-shot initial so the carried slot mounts ready (no re-upload).
-  const carryOver = initialIntent?.carryOver;
-  const form = useGenerationForm(
-    config,
-    prompt,
-    {
-      nativeBridge,
-      controlLora,
-      setControlLora,
-      controlLoraNames,
-      nag,
-      acceleration,
-      sageAvailable,
-      engineFamily,
-      weightClass,
-      constraints,
-      referenceVideoUnavailable: sectionsUnavailable?.referenceVideo,
-    },
-    {
-      ...(derived
-        ? {
-            width: derived.width,
-            height: derived.height,
-            isICLora,
-            ...(prefillFrameRate != null ? { frameRate: prefillFrameRate } : {}),
-            ...(prefillNumFrames != null ? { numFrames: prefillNumFrames } : {}),
-          }
-        : {}),
-      // W5: #7 carries the existing reference video + its two strengths. This
-      // also forces the 128 grid from mount (回帰対策1, in useGenerationForm).
-      ...(carryOver?.referenceVideo
-        ? {
-            carryReferenceVideo: {
-              id: carryOver.referenceVideo.id,
-              fileName: carryOver.referenceVideo.fileName,
-              filePath: carryOver.referenceVideo.filePath,
-            },
-            carryConditioningAttentionStrength: carryOver.referenceVideo.conditioningAttentionStrength,
-            carryReferenceVideoStrength: carryOver.referenceVideo.referenceVideoStrength,
-          }
-        : {}),
-      // W5: #2 carries the existing audio (it follows the full wav length —
-      // 回帰対策2 fires the mount-time probe in useGenerationForm).
-      ...(carryOver?.sourceAudio ? { carryAudio: carryOver.sourceAudio } : {}),
-    },
-  );
-
-  // W7 `project` policy: read the AviUtl2 project's own resolution/fps via
-  // `getEditInfo` ONCE on this prefilling remount and overwrite the form's
-  // width/height/frameRate. A consumed ref limits it to a single run before the
-  // user touches anything (the "form initializes once, never re-applied later"
-  // invariant is preserved for every other path — this is a deliberate,
-  // prefill-only, mount-time overwrite). getEditInfo failure leaves the
-  // material-derived seed in place (③ fallback). Only runs for an actual
-  // prefill under the `project` policy; every other case is a no-op.
-  const projectOverwriteConsumedRef = useRef(false);
-  useEffect(() => {
-    if (projectOverwriteConsumedRef.current) return;
-    // W1: the two axes are independent, so the overwrite runs whenever EITHER
-    // the size or the fps policy is `project`. Each axis is then applied only
-    // when its own policy is `project`; the other axis keeps the material seed.
-    if (!initialIntent || (sizePolicy !== "project" && fpsPolicy !== "project")) return;
-    projectOverwriteConsumedRef.current = true;
-    void (async () => {
-      const bridge = nativeBridge ?? defaultBridge;
-      try {
-        const editInfo = await bridge.request("getEditInfo", {});
-        // 台帳§3-71/§3-72: snapped HERE, at the definition — not around the
-        // `form.setFrameRate` call below — because `effectiveGenFps` further
-        // down reads this value directly (it never goes through the form), so a
-        // snap applied only at the setter would leave the DURATION recomputation
-        // converting against a raw 29.97.
-        // The `?? config…` fallback can only ever reach `effectiveGenFps`: the
-        // `setFrameRate` call is itself guarded on a resolvable rate/scale, i.e.
-        // exactly the case where `snapFrameRate` returns a number.
-        const projectGenFps = snapFrameRate(editInfo.rate / editInfo.scale) ?? config.generation_defaults.frame_rate;
-        // Apply only the axis (or axes) whose policy is `project`.
-        if (sizePolicy === "project") {
-          form.setWidth(editInfo.width);
-          form.setHeight(editInfo.height);
-        }
-        if (fpsPolicy === "project" && editInfo.scale > 0 && editInfo.rate > 0) {
-          form.setFrameRate(projectGenFps);
-        }
-        // W1/W8 (② project policy): keep DURATION consistent with the just-applied
-        // axes. The DURATION target is recomputed off the EFFECTIVE resolution +
-        // fps: the `project` axis takes the getEditInfo value, while a non-project
-        // axis reads back the material seed already in the form (form.values here
-        // is the mount-time seed, since this effect runs once). This is the only
-        // way the crossing cases (size=project × fps=material, and the reverse)
-        // land correctly (adversarial review R4). The material duration input
-        // still goes through `materialDurationForIntent` (M-1) so the span
-        // semantics match the initial seed. Leaves the seed in place when the
-        // policy can't resolve a value (null) or the intent has no DURATION policy.
-        const effectiveWidth = sizePolicy === "project" ? editInfo.width : form.values.width;
-        const effectiveHeight = sizePolicy === "project" ? editInfo.height : form.values.height;
-        // A fixed engine rate is what the form holds and
-        // what the request carries, whatever the `project` policy read.
-        const rules = constraints ?? LTX_GENERATION_CONSTRAINTS;
-        const effectiveGenFps =
-          fixedFrameRate(rules) ?? (fpsPolicy === "project" ? projectGenFps : form.values.frameRate);
-        const policy = DURATION_POLICY_BY_INTENT[initialIntent.intent];
-        if (policy) {
-          const materialDurationSec = materialDurationForIntent(initialIntent.intent, initialIntent.selection);
-          // 2026-08-31: the smart ceiling has to be RE-derived here, not reused
-          // from `seed`, because `size=project` has just replaced the seed's
-          // width/height with the project's — a token-derived ceiling computed
-          // at the old geometry would be the wrong number. Dropping this
-          // recomputation would silently send the `project` policy's DURATION
-          // back to the legacy table (this is a one-shot mount effect, so
-          // nothing later would correct it).
-          // Gated on `acceleration` for the same reason `resolvePrefillSeed` is:
-          // a caller that does not thread the Settings state cannot say what
-          // would effectively run, so it keeps the legacy ceiling.
-          // No comfort line at all for an engine the served
-          // table has no profile for — only the grid snap remains.
-          const noComfortLine = comfortProfileMissing(config.limits, engineFamily);
-          const frameLimits = frameLimitsFor(rules, config.limits.max_num_frames);
-          const comfortRow =
-            acceleration && !noComfortLine
-              ? resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null, weightClass)
-              : null;
-          const smartCeiling =
-            comfortRow
-              ? comfortFramesForBudget(
-                  effectiveWidth,
-                  effectiveHeight,
-                  comfortRow.singleBudget,
-                  frameLimits.minNumFrames,
-                  frameLimits.maxNumFrames,
-                  comfortRow.spatialFactor,
-                  comfortRow.temporalFactor,
-                )
-              : null;
-          const target = computeTargetNumFrames({
-            policy,
-            width: effectiveWidth,
-            height: effectiveHeight,
-            spillFreeFrames: noComfortLine ? null : config.limits.spill_free_frames,
-            minNumFrames: frameLimits.minNumFrames,
-            maxNumFrames: frameLimits.maxNumFrames,
-            frameGrid: rules.frameGrid,
-            ...(smartCeiling !== null ? { comfortCeilingFrames: smartCeiling } : {}),
-            ...(materialDurationSec !== undefined ? { materialDurationSec } : {}),
-            genFps: effectiveGenFps,
-          });
-          if (target !== null) form.setNumFrames(target);
-        }
-      } catch {
-        // Fall back to the material-derived seed already in the form (③ behavior).
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount consume
-  }, []);
+  const form = useGenerationForm(config, prompt, {
+    nativeBridge,
+    controlLora,
+    setControlLora,
+    controlLoraNames,
+    nag,
+    acceleration,
+    sageAvailable,
+    engineFamily,
+    weightClass,
+    constraints,
+    referenceVideoUnavailable: sectionsUnavailable?.referenceVideo,
+  });
+  // 台帳 §1-114: what the latest `prefillMaterial` seed decided about the size
+  // (`deriveGenerationParams`'s notes), shown in the IC-LoRA block. Empty until
+  // a right-click arrives.
+  const [resolutionNotes, setResolutionNotes] = useState<string[] | undefined>(undefined);
+  // Right-click redesign W2: counters the `prefillMaterial` handler bumps to
+  // open the IC-LoRA (#2) / A2V (#7) accordion where the material landed.
+  const [icLoraOpenSignal, setIcLoraOpenSignal] = useState(0);
+  const [a2vOpenSignal, setA2vOpenSignal] = useState(0);
   const keyframes = useKeyframes(config, { nativeBridge });
 
   // §1-107: MiniMax H3's Reference accordion. Shown only while the
@@ -626,130 +532,35 @@ function SingleScreenBody({
     [onPromptChange],
   );
 
-  // I9 §3-4 (#2/#4) / §6: auto-load the routed material ONCE on this remount,
-  // mirroring ChainedScreen's I8 pattern. #2 `reference-video` uploads the
-  // selected video into the IC-LoRA reference slot; #4 `image-to-video` adds
-  // the selected image as KEYFRAMES' 1st card (frame 0) — the fresh remount
-  // guarantees KEYFRAMES is empty, so it always lands as the 1st keyframe and
-  // the mode badge becomes I2V. A lazy useState initializer can't drive the
-  // async upload, so this runs in a mount effect guarded by a consumed ref
-  // (StrictMode-safe; the body remounts via `key` on a new intent, so a fresh
-  // ref = a fresh one-shot per prefill). `autoLoadPendingRef` lets the
-  // status-watch effect below report only THIS load's outcome (the §6-2
-  // missing-material note), never a later user-initiated error. (#10
-  // image-from-frame is NOT here — it keeps the panel state and arrives via the
-  // live-command channel below, not a remount/intent.)
-  const autoLoadConsumedRef = useRef(false);
-  const autoLoadPendingRef = useRef(false);
+  // §6-2: replace the `prefillMaterial` receipt with the missing-material note
+  // if the material's upload failed. The handler records what it attached
+  // (`materialWatch`); this watches only that slot / card and stops at its first
+  // terminal state, so a later manual re-pick that errors never re-triggers it.
+  // A keyframe is watched by its own card id (the replaced frame-0 card) or as
+  // the one new card of an append — never as `items[0]`, which another card
+  // can occupy.
+  const [materialWatch, setMaterialWatch] = useState<MaterialWatch | null>(null);
+  const watchedStatus = (() => {
+    if (materialWatch === null) return undefined;
+    if (materialWatch.kind === "referenceVideo") return form.referenceVideo.state.status;
+    if (materialWatch.kind === "sourceAudio") return form.sourceAudio.state.status;
+    const watch = materialWatch;
+    const card =
+      "cardId" in watch
+        ? keyframes.items.find((item) => item.id === watch.cardId)
+        : keyframes.items.find((item) => !watch.beforeIds.has(item.id));
+    return card?.status;
+  })();
   useEffect(() => {
-    if (autoLoadConsumedRef.current) return;
-    const intent = initialIntent?.intent;
-    if (
-      intent !== "reference-video" &&
-      intent !== "image-to-video" &&
-      intent !== "audio-to-video"
-    ) {
-      return;
-    }
-    autoLoadConsumedRef.current = true;
-    // §1-6 拡張: the routed selection is also the trim measurement input for #2
-    // below, so it is bound once here (`selection`) rather than re-derived —
-    // `item` is its first object, exactly as before.
-    const selection = initialIntent?.selection;
-    const item = selection?.selected[0];
-
-    // §3-4 #7 (audio-to-video, 台帳 §1-113): unlike every other material item,
-    // this one does NOT load the selected file directly. The selected audio OR
-    // video object's own sound over its ribbon range is rendered to a wav in
-    // SOLO mode (`timeline/extractObjectAudio.ts`) and fed into the source-audio
-    // slot. Kept as its own async routine because it opens with a distinct
-    // "extracting…" note and has native-specific failure branches.
-    if (intent === "audio-to-video") {
-      if (!item) {
-        showNote("warning", strings.notes.sourceFileMissing);
-        return;
-      }
-      // Extraction can take several seconds; the one-shot `autoLoadConsumedRef`
-      // above already prevents a second run (StrictMode / re-render).
-      void (async () => {
-        showNote("info", strings.notes.extractingObjectAudio);
-        try {
-          const { filePath, fileName } = await extractObjectAudio(nativeBridge ?? defaultBridge, item);
-          // Success: the wav goes into the source-audio slot (wav output means
-          // the form's Frames auto-adjust fires). `autoLoadPendingRef` lets the
-          // status-watch below downgrade to the missing-material note if the
-          // (temp-file) upload itself fails.
-          showNote("info", strings.notes.loadedObjectAudio);
-          autoLoadPendingRef.current = true;
-          void form.attachSourceAudioByPath(filePath, fileName);
-        } catch (err) {
-          showNote("warning", extractAudioFailureNote(err, strings.notes));
-        }
-      })();
-      return;
-    }
-
-    const filePath = item?.filePath ?? null;
-    if (!filePath) {
-      // §6-2: the path couldn't even be resolved (object without a backing file).
+    if (watchedStatus === "error") {
       showNote("warning", strings.notes.sourceFileMissing);
-      return;
+      setMaterialWatch(null);
+    } else if (watchedStatus === "ready" || watchedStatus === "idle" || watchedStatus === "empty") {
+      // "idle"/"empty": the user cleared the slot / card — stop watching, so a
+      // later manual pick that fails is not reported as the right-click's.
+      setMaterialWatch(null);
     }
-    const fileName = fileNameFromPath(filePath);
-    // §6 receipt note, shown at load START — the visible reference slot / new
-    // keyframe card / filled audio slot is the primary feedback; this reinforces it.
-    showNote("info", strings.notes.loadedFromRightClick(fileName));
-    autoLoadPendingRef.current = true;
-    if (intent === "reference-video") {
-      // #2: video path → IC-LoRA reference slot. `deriveGenerationParams`
-      // already seeded 128-rounded width/height (isICLora), and the form
-      // re-snaps to 128 again once the upload id turns non-null.
-      //
-      // §1-6 拡張 (2026-08-01): the reference video is trimmed to the ribbon's
-      // own range, exactly like #1 extend-video's source. Before this, a ribbon
-      // showing frames 31..120 of a 321-frame file uploaded the WHOLE file, and
-      // the pipeline (which reads `frame_cap` frames from the START) conditioned
-      // on frames 1..90 — visibly the wrong footage. `decideSourceTrim` is the
-      // SAME conservative decision #1 uses (`modes/chained/ChainedScreen.tsx`), and
-      // `trimQuery` returns `undefined` for every no-trim decision, so an
-      // untrimmed upload's request params stay byte-identical to before —
-      // machine-checked by `SingleScreen.prefill.test.tsx`'s strict assertion.
-      // The manual 📁 pick path (`referenceVideo.pick()`) has no timeline
-      // object to measure and is deliberately left untrimmed.
-      const decision: SourceTrimDecision = selection
-        ? decideSourceTrim(item, selection)
-        : { trim: false, reason: "noItem" };
-      void form.referenceVideo.uploadPath(filePath, fileName, trimQuery(decision));
-    } else {
-      // #4: image → KEYFRAMES 1st card (frame 0), flipping the mode badge to I2V.
-      void keyframes.addFromPath(filePath, fileName, 0);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount consume
-  }, []);
-
-  // §6-2: replace the receipt with the missing-material note if the auto-load
-  // upload failed. Gated on `autoLoadPendingRef` so it fires only for the
-  // auto-load's own terminal state, then stops watching (a later manual
-  // re-pick/replace that errors won't re-trigger it).
-  const autoLoadIntent = initialIntent?.intent;
-  const autoLoadStatus =
-    autoLoadIntent === "reference-video"
-      ? form.referenceVideo.state.status
-      : // #7 audio-to-video (after extraction) feeds the source-audio slot, so its
-        // upload status is the terminal signal to watch for the §6-2
-        // missing-material downgrade.
-        autoLoadIntent === "audio-to-video"
-        ? form.sourceAudio.state.status
-        : keyframes.items[0]?.status;
-  useEffect(() => {
-    if (!autoLoadPendingRef.current) return;
-    if (autoLoadStatus === "error") {
-      showNote("warning", strings.notes.sourceFileMissing);
-      autoLoadPendingRef.current = false;
-    } else if (autoLoadStatus === "ready") {
-      autoLoadPendingRef.current = false;
-    }
-  }, [autoLoadStatus, showNote, strings]);
+  }, [watchedStatus, showNote, strings]);
 
   // I9 §3-6 (#10): 📷 imageFromCurrentFrame keeps the panel state (D3: no
   // remount), so AppShell can't hand it a `pendingIntent`. It instead dispatches
@@ -778,7 +589,7 @@ function SingleScreenBody({
   // (the pre-capture card ids for the append path, or the target card's own
   // id for the replace path) and a status-watch effect (below) reports the
   // receipt/failure note once the relevant card reaches a terminal status
-  // (`ready`/`error`) — the same watch pattern the #2/#4 auto-load uses. Refs
+  // (`ready`/`error`) — the same watch pattern `prefillMaterial` uses. Refs
   // keep the subscription itself stable (subscribe once on mount) while
   // reading the latest keyframes/showNote/strings at dispatch time.
   const keyframesRef = useRef(keyframes);
@@ -806,6 +617,36 @@ function SingleScreenBody({
     multiple: (constraints ?? LTX_GENERATION_CONSTRAINTS).keyframeGrid.step,
     offset: (constraints ?? LTX_GENERATION_CONSTRAINTS).keyframeGrid.offset,
   };
+  // 台帳 §1-114 (#2/#4/#7 `prefillMaterial`): everything the handler reads at
+  // dispatch time, refreshed every render like the refs above — `form.setWidth`
+  // and friends are rebuilt whenever the size grid changes, and the policies /
+  // base-model inputs must be the ones in force when the right-click arrives.
+  const prefillCtx = {
+    form,
+    keyframes,
+    sizePolicy,
+    fpsPolicy,
+    config,
+    constraints,
+    engineFamily,
+    acceleration,
+    sageAvailable,
+    weightClass,
+    nativeBridge,
+    toasts,
+  };
+  const prefillCtxRef = useRef(prefillCtx);
+  prefillCtxRef.current = prefillCtx;
+  // One number per `prefillMaterial`, so a `project` overwrite whose
+  // `getEditInfo` answers after a newer right-click is dropped.
+  const prefillSeqRef = useRef(0);
+  // The DURATION shrink guard (declared further down), read at dispatch time:
+  // a right-click's DURATION goes through the same live-apply + confirm-before-
+  // deleting-stranded-keyframes path as a hand edit of the Frames field.
+  const shrinkGuardRef = useRef<{
+    onDurationChange: (value: number, snap: boolean) => void;
+    onDurationCommit: (value: number, snap: boolean) => void;
+  } | null>(null);
   // W6: the append path (new frame-0 card, or #11's tail card) is watched by
   // `beforeIds` diff (the card that wasn't there before); the replace path
   // (an existing frame-0 card whose image gets swapped via `captureIntoCard`)
@@ -816,7 +657,176 @@ function SingleScreenBody({
   // receipt/missing-material note (same pattern as capturePendingRef for #10).
   const appendPendingRef = useRef<{ beforeIds: Set<string>; fileName: string } | null>(null);
   useEffect(() => {
+    // 台帳 §1-114: a Single-bound material right-click (#2 reference video, #4
+    // image-to-video, #7 audio-to-video) arrives LIVE — Create is never
+    // remounted, so the prompt, the settings and every other slot survive.
+    // In order: (1) resolve the seed with the panel's current values, (2) apply
+    // it, (3) run the `project` overwrite if either axis asks for it, (4) attach
+    // the material, (5) note + failure watch, (6) open the accordion it went in.
+    const runPrefillMaterial = (command: Extract<CreateLiveCommand, { type: "prefillMaterial" }>) => {
+      const ctx = prefillCtxRef.current;
+      const { form: liveForm, keyframes: kf } = ctx;
+      const showNoteNow = showNoteRef.current;
+      const notes = stringsRef.current.notes;
+      const { intent, selection } = command;
+      prefillSeqRef.current += 1;
+      const seq = prefillSeqRef.current;
+      // DURATION from a right-click: the Frames field's own edit pair (apply
+      // live, then raise the shrink modal if a keyframe would be stranded).
+      const applyNumFrames = (value: number) => {
+        const guard = shrinkGuardRef.current;
+        if (!guard) {
+          prefillCtxRef.current.form.setNumFrames(value);
+          return;
+        }
+        guard.onDurationChange(value, true);
+        guard.onDurationCommit(value, true);
+      };
+
+      // (1) The same pure function (and the same inputs) `AppShell` sizes the
+      // provisional with, so the ribbon and the form agree (R-4).
+      const panel = {
+        width: liveForm.values.width,
+        height: liveForm.values.height,
+        frameRate: liveForm.values.frameRate,
+      };
+      const seed = resolvePrefillSeed({
+        intent,
+        selection,
+        config: ctx.config,
+        sizePolicy: ctx.sizePolicy,
+        fpsPolicy: ctx.fpsPolicy,
+        panel,
+        engineFamily: ctx.engineFamily,
+        acceleration: ctx.acceleration,
+        sageAvailable: ctx.sageAvailable,
+        weightClass: ctx.weightClass,
+        constraints: ctx.constraints,
+      });
+
+      // (2) Apply it. `derived` is already on the intent's grid (128 for #2),
+      // which the current grid's setters leave unchanged.
+      liveForm.setWidth(seed.derived.width);
+      liveForm.setHeight(seed.derived.height);
+      if (seed.frameRate !== undefined) liveForm.setFrameRate(seed.frameRate);
+      if (seed.numFrames !== undefined) applyNumFrames(seed.numFrames);
+      setResolutionNotes(seed.derived.notes);
+      // 台帳§3-71/§3-72: tell the user when the project's (or the material's)
+      // frame rate had to be rounded — the value they get is not their
+      // project's. The `project` overwrite below stays silent (it would only
+      // repeat this very seed).
+      const snappedFrom = seed.frameRateSnappedFrom;
+      if (snappedFrom !== undefined && seed.frameRate !== undefined) {
+        ctx.toasts.push({
+          kind: "warning",
+          message: stringsRef.current.prefill.fpsSnappedToast(formatFps(snappedFrom), seed.frameRate),
+        });
+      }
+
+      // (3) The `project` policy on either axis.
+      if (ctx.sizePolicy === "project" || ctx.fpsPolicy === "project") {
+        void applyProjectOverwrite({
+          bridge: ctx.nativeBridge ?? defaultBridge,
+          intent,
+          selection,
+          sizePolicy: ctx.sizePolicy,
+          fpsPolicy: ctx.fpsPolicy,
+          config: ctx.config,
+          constraints: ctx.constraints,
+          engineFamily: ctx.engineFamily,
+          acceleration: ctx.acceleration,
+          sageAvailable: ctx.sageAvailable,
+          weightClass: ctx.weightClass,
+          seeded: {
+            width: seed.derived.width,
+            height: seed.derived.height,
+            frameRate: seed.frameRate ?? panel.frameRate,
+          },
+          getSetters: () => ({ ...prefillCtxRef.current.form, setNumFrames: applyNumFrames }),
+          isCurrent: () => prefillSeqRef.current === seq,
+        });
+      }
+
+      // (4)–(6) Attach the material.
+      const item = selection.selected[0];
+      if (intent === "audio-to-video") {
+        // §3-4 #7 (台帳 §1-113): the selected audio OR video object's own sound
+        // over its ribbon range is rendered to a wav in SOLO mode
+        // (`timeline/extractObjectAudio.ts`) and fed into the source-audio slot.
+        if (!item) {
+          showNoteNow("warning", notes.sourceFileMissing);
+          return;
+        }
+        setA2vOpenSignal((n) => n + 1);
+        void (async () => {
+          showNoteRef.current("info", stringsRef.current.notes.extractingObjectAudio);
+          try {
+            const { filePath, fileName } = await extractObjectAudio(
+              prefillCtxRef.current.nativeBridge ?? defaultBridge,
+              item,
+            );
+            // Success: the wav goes into the source-audio slot (wav output means
+            // the form's Frames auto-adjust fires); the watch downgrades to the
+            // missing-material note if the (temp-file) upload itself fails.
+            showNoteRef.current("info", stringsRef.current.notes.loadedObjectAudio);
+            // A newer right-click owns the failure watch.
+            if (prefillSeqRef.current === seq) setMaterialWatch({ kind: "sourceAudio" });
+            void prefillCtxRef.current.form.attachSourceAudioByPath(filePath, fileName);
+          } catch (err) {
+            showNoteRef.current("warning", extractAudioFailureNote(err, stringsRef.current.notes));
+          }
+        })();
+        return;
+      }
+
+      const filePath = item?.filePath ?? null;
+      if (!filePath) {
+        // §6-2: the path couldn't even be resolved (object without a backing file).
+        showNoteNow("warning", notes.sourceFileMissing);
+        return;
+      }
+      const fileName = fileNameFromPath(filePath);
+      if (intent === "reference-video") {
+        // #2: video → IC-LoRA reference slot, trimmed to the ribbon's own range
+        // (§1-6 拡張, the same conservative decision #1 uses; `trimQuery` is
+        // `undefined` for every no-trim decision, so an untrimmed upload's
+        // request params stay byte-identical). The form re-snaps width/height
+        // to 128 once the upload id turns non-null — `uploadPath` clears the id
+        // first, so a replacement re-snaps too.
+        showNoteNow("info", notes.loadedFromRightClick(fileName));
+        setMaterialWatch({ kind: "referenceVideo" });
+        void liveForm.referenceVideo.uploadPath(filePath, fileName, trimQuery(decideSourceTrim(item, selection)));
+        setIcLoraOpenSignal((n) => n + 1);
+        return;
+      }
+      // #4: image → the frame-0 keyframe (the mode badge becomes I2V). An
+      // existing frame-0 card has its image replaced in place (frameIdx and
+      // strength kept, owner ruling 2026-10-31); otherwise a card is added at 0
+      // under the same cap the "Add keyframe" button and #5 obey.
+      const existingAtZero = kf.items.find((card) => card.frameIdx === 0);
+      if (existingAtZero) {
+        showNoteNow("info", notes.loadedFromRightClick(fileName));
+        setMaterialWatch({ kind: "keyframe", cardId: existingAtZero.id });
+        void kf.replaceFile(existingAtZero.id, filePath, fileName);
+        return;
+      }
+      // The cap is measured against the DURATION this right-click just seeded.
+      const { numFrames: liveNumFrames, multiple, offset } = keyframeAddCtxRef.current;
+      const numFrames = seed.numFrames ?? liveNumFrames;
+      if (kf.items.length >= Math.min(kf.maxItems, placeableSlotCount(numFrames, multiple, offset))) {
+        showNoteNow("warning", notes.keyframeLimitReached);
+        return;
+      }
+      showNoteNow("info", notes.loadedFromRightClick(fileName));
+      setMaterialWatch({ kind: "keyframe", beforeIds: new Set(kf.items.map((card) => card.id)) });
+      void kf.addFromPath(filePath, fileName, 0);
+    };
+
     return subscribeCreateCommands((command) => {
+      if (command.type === "prefillMaterial") {
+        runPrefillMaterial(command);
+        return;
+      }
       if (command.type === "captureFrameToKeyframe") {
         const kf = keyframesRef.current;
         const existingAtZero = kf.items.find((item) => item.frameIdx === 0);
@@ -1008,37 +1018,6 @@ function SingleScreenBody({
     publishKeyframeCount(keyframes.items.length);
   }, [keyframes.items.length]);
 
-  // W5 (反対スロット保持): publish the two source slots so `AppShell.handleRoute`
-  // can carry the OPPOSITE slot across a #2/#7 remount. Only a `ready` slot is
-  // published (id/path valid, re-attachable with no re-upload); uploading/idle/
-  // error publish `null` so a half-finished slot is never carried (safe side).
-  // The reference video also carries its two adapter strengths.
-  const refVideoState = form.referenceVideo.state;
-  const sourceAudioState = form.sourceAudio.state;
-  const { conditioningAttentionStrength, referenceVideoStrength } = form;
-  useEffect(() => {
-    publishSourceSlots({
-      referenceVideo:
-        refVideoState.status === "ready" && refVideoState.id && refVideoState.filePath
-          ? {
-              id: refVideoState.id,
-              fileName: refVideoState.fileName ?? "",
-              filePath: refVideoState.filePath,
-              conditioningAttentionStrength,
-              referenceVideoStrength,
-            }
-          : null,
-      sourceAudio:
-        sourceAudioState.status === "ready" && sourceAudioState.id && sourceAudioState.filePath
-          ? {
-              id: sourceAudioState.id,
-              fileName: sourceAudioState.fileName ?? "",
-              filePath: sourceAudioState.filePath,
-            }
-          : null,
-    });
-  }, [refVideoState, sourceAudioState, conditioningAttentionStrength, referenceVideoStrength]);
-
   const frameIdxMultiple = (constraints ?? LTX_GENERATION_CONSTRAINTS).keyframeGrid.step;
   const gridOffset = (constraints ?? LTX_GENERATION_CONSTRAINTS).keyframeGrid.offset;
 
@@ -1063,6 +1042,7 @@ function SingleScreenBody({
     multiple: frameIdxMultiple,
     offset: gridOffset,
   });
+  shrinkGuardRef.current = shrinkGuard;
 
   // Final防壁 for out-of-range keyframes: the shrink guard covers deliberate
   // duration/preset edits, but a range-key nudge on the timeline, a click
@@ -1298,11 +1278,11 @@ function SingleScreenBody({
           onApplyPreset={shrinkGuard.onApplyPreset}
           disabled={submitting}
           configFallbackWarning={usingFallback}
-          resolutionNotes={derived?.notes}
+          resolutionNotes={resolutionNotes}
           config={config}
           nativeBridge={nativeBridge}
-          autoOpenReference={autoOpenReference}
-          autoOpenA2v={autoOpenA2v}
+          referenceOpenSignal={icLoraOpenSignal}
+          a2vOpenSignal={a2vOpenSignal}
           sectionsUnavailable={sectionsUnavailable}
           singleSourceAudio={form.singleSourceAudio}
           sourceAudioStrength={form.sourceAudioStrength}

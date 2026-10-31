@@ -202,56 +202,6 @@ function noopSetControlLora(): void {
   // just a placeholder.
 }
 
-/** One-shot initial overrides seeded from a right-click `GenerationPrefill`
- * (`SingleScreen` derives width/height via `deriveGenerationParams`). Applied
- * only in the form's lazy `useState` initializer, so a later re-render never
- * re-applies them. Omitted entirely for the normal (tab-opened) form, which
- * keeps seeding from `config.generation_defaults`. */
-export interface GenerationFormInitial {
-  width?: number;
-  height?: number;
-  /** W7: one-shot initial frame rate seeded from a right-click prefill (the
-   * `material` policy's selection rate/scale, else omitted to keep the config
-   * default). Applied only in the lazy `useState` initializer, like
-   * `width`/`height`. Omitted for the normal (tab-opened) form and the
-   * `defaults` policy, both of which keep `config.generation_defaults.frame_rate`. */
-  frameRate?: number;
-  /** W8: one-shot initial DURATION (`num_frames`) seeded from a right-click
-   * prefill's DURATION policy (`deriveDuration.computeTargetNumFrames`) — the
-   * resolution's comfort ceiling for #4 image-to-video, or the reference
-   * material's own length clamped to that ceiling for #2 reference-video.
-   * Applied only in the lazy `useState` initializer (re-snapped onto the frame
-   * grid in force), like `width`/`height`. Omitted for the normal (tab-opened) form and
-   * any prefill whose policy leaves DURATION untouched (#7 A2V, whose length
-   * comes from the wav auto-adjust below instead), both of which keep
-   * `config.generation_defaults.num_frames`. */
-  numFrames?: number;
-  /** true for the IC-LoRA (`referenceVideo`) flow: pins the rounding multiple
-   * to 128 and switches the max bounds onto that grid from mount. */
-  isICLora?: boolean;
-  /** W5 (反対スロット保持): a reference video carried across a #7 (A2V)
-   * remount — the opposite slot the new A2V material does not replace. Seeds the
-   * `referenceVideo` slot's ready state (no re-upload) AND, crucially, forces the
-   * form's width/height grid onto the 128 multiple from mount (see the derived
-   * `seedICLora`): without that, the 64-grid seed would fail the IC-LoRA 128
-   * gate and permanently block Generate (回帰対策1). */
-  carryReferenceVideo?: { id: string; fileName: string; filePath: string };
-  /** W5: the carried reference video's `conditioning_attention_strength`
-   * (`null` when the user hadn't opted it in on the previous form). Seeds the
-   * matching state so the strength survives the remount alongside the video. */
-  carryConditioningAttentionStrength?: number | null;
-  /** W5: the carried reference video's `reference_video_strength` (see
-   * `carryConditioningAttentionStrength`). */
-  carryReferenceVideoStrength?: number | null;
-  /** W5 (反対スロット保持): a source audio carried across a #2 (IC-LoRA) remount —
-   * the opposite slot the new reference material does not replace. Seeds the
-   * `sourceAudio` slot's ready state (no re-upload) INCLUDING its `filePath`,
-   * so the mount-time wav probe — which reads that same
-   * `sourceAudio.state.filePath` — still fires and the DURATION auto-adjusts to
-   * the audio (回帰対策2 — keeps the A2V DURATION priority). */
-  carryAudio?: { id: string; fileName: string; filePath: string };
-}
-
 export interface UseGenerationFormResult {
   values: FormValues;
   limits: FormLimits;
@@ -482,7 +432,6 @@ export function useGenerationForm(
   config: AppConfig,
   prompt: string,
   deps: UseGenerationFormDeps = {},
-  initial: GenerationFormInitial = {},
 ): UseGenerationFormResult {
   const nativeBridge = deps.nativeBridge ?? defaultBridge;
 
@@ -536,19 +485,6 @@ export function useGenerationForm(
     [controlLora, setControlLora],
   );
 
-  // W5 回帰対策1: a carried reference video (#7 A2V remount) must ALSO seed
-  // the form in IC-LoRA mode, exactly as a routed `reference-video` intent does —
-  // otherwise the 64-grid width/height seed fails the 128 gate the reference
-  // video imposes and Generate is permanently blocked (`dimensionsOffGrid`).
-  // Y1: this is now ONLY the mount-time `values` initializer's "seed on the 128
-  // grid?" flag (evaluated once). The active-mode determination (`icLoraActive`
-  // below) no longer reads it — it is fully dynamic off the live reference
-  // video / control LoRA — so a routed #2 whose reference video is later
-  // removed correctly falls back out of IC-LoRA mode instead of sticking. The
-  // 128-aligned seed left behind stays valid on the relaxed 64 grid (128 is a
-  // multiple of 64), so no re-snap is needed when the mode relaxes.
-  const seedICLora = (initial.isICLora ?? false) || initial.carryReferenceVideo !== undefined;
-
   const baseLimits: FormLimits = useMemo(
     () => ({
       minWidth: MIN_WIDTH,
@@ -562,12 +498,7 @@ export function useGenerationForm(
     [config.limits.max_width, config.limits.max_height, config.limits.max_num_frames, rules],
   );
 
-  const referenceVideo = useSourceUpload("video", {
-    nativeBridge,
-    // W5: seed the carried reference video's ready state (#7 remount) — the
-    // id is still valid server-side, so no re-upload.
-    ...(initial.carryReferenceVideo ? { initial: initial.carryReferenceVideo } : {}),
-  });
+  const referenceVideo = useSourceUpload("video", { nativeBridge });
   // The same fold for the reference video itself.
   const referenceVideoId = referenceVideoUnavailable ? null : referenceVideo.state.id;
 
@@ -575,20 +506,13 @@ export function useGenerationForm(
   // until the user opts in via the UI's enable checkbox, matching the
   // server's own "omitted = use its own default" semantics. Mirrors Chain's
   // `useChainForm.conditioningAttentionStrength`/`referenceVideoStrength`.
-  // W5: the two strengths seed from the carried reference video (#7 remount)
-  // so an opted-in strength survives alongside the video; `undefined` (no carry)
-  // and `null` (carried but not opted in) both start at `null` ("not set").
-  const [conditioningAttentionStrength, setConditioningAttentionStrengthState] = useState<number | null>(
-    initial.carryConditioningAttentionStrength ?? null,
-  );
+  const [conditioningAttentionStrength, setConditioningAttentionStrengthState] = useState<number | null>(null);
   const setConditioningAttentionStrength = useCallback(
     (raw: number | null) =>
       setConditioningAttentionStrengthState(raw == null ? null : clamp(raw, MIN_REFERENCE_STRENGTH, MAX_REFERENCE_STRENGTH)),
     [],
   );
-  const [referenceVideoStrength, setReferenceVideoStrengthState] = useState<number | null>(
-    initial.carryReferenceVideoStrength ?? null,
-  );
+  const [referenceVideoStrength, setReferenceVideoStrengthState] = useState<number | null>(null);
   const setReferenceVideoStrength = useCallback(
     (raw: number | null) =>
       setReferenceVideoStrengthState(raw == null ? null : clamp(raw, MIN_REFERENCE_STRENGTH, MAX_REFERENCE_STRENGTH)),
@@ -600,7 +524,7 @@ export function useGenerationForm(
   // §3-36 (2026-09-04): the local `filePath` the wav-duration probe below needs
   // now comes straight off `sourceAudio.state.filePath`. `useSourceUpload` sets
   // that field on EVERY transition — a `ui.pickFile` pick, a direct
-  // `uploadPath` (drag-and-drop / #7), and the W5 `initial` seed alike —
+  // `uploadPath` (drag-and-drop / #7) and the H3 Reference `adopt` alike —
   // so the plain `nativeBridge` is passed through here as it is everywhere
   // else. The old wav-picker snoop wrapper (`audioProbingBridge` capturing the
   // pick's path into a `lastAudioFilePathRef`) dated from contract v9, before
@@ -612,10 +536,6 @@ export function useGenerationForm(
     // 台帳 §1-113: the 📁 dialog also offers video files (only their sound is
     // used); the upload stays `kind: "audio"`.
     pickKind: "audioOrVideo",
-    // W5: seed the carried source audio's ready state (#2 remount) — its
-    // `filePath` comes along, which is what keeps the mount-time wav probe
-    // firing for a carried-over audio (回帰対策2).
-    ...(initial.carryAudio ? { initial: initial.carryAudio } : {}),
   });
   const audioReady = sourceAudio.state.status === "ready";
 
@@ -695,41 +615,27 @@ export function useGenerationForm(
     [baseLimits, active],
   );
 
+  // Seeded from the config defaults on the general grid. A right-click never
+  // seeds this initializer any more (台帳 §1-114): `SingleScreen` applies its
+  // `prefillMaterial` seed through the ordinary setters below.
   const [values, setValues] = useState<FormValues>(() => {
-    // Seed on the correct grid from the start: an IC-LoRA route already handed
-    // us 128-aligned width/height via `deriveGenerationParams`, but re-round
-    // here defensively so the initial state is always self-consistent.
-    const mult = seedICLora ? IC_LORA_MULTIPLE : generalMultiple;
-    const maxW = seedICLora
-      ? floorToMultiple(config.limits.max_width, IC_LORA_MULTIPLE, 0, config.limits.max_width)
-      : config.limits.max_width;
-    const maxH = seedICLora
-      ? floorToMultiple(config.limits.max_height, IC_LORA_MULTIPLE, 0, config.limits.max_height)
-      : config.limits.max_height;
-    const minW = seedICLora ? ceilToMultiple(MIN_WIDTH, IC_LORA_MULTIPLE, MIN_WIDTH, maxW) : MIN_WIDTH;
-    const minH = seedICLora ? ceilToMultiple(MIN_HEIGHT, IC_LORA_MULTIPLE, MIN_HEIGHT, maxH) : MIN_HEIGHT;
     return {
-      width: roundToMultiple(initial.width ?? config.generation_defaults.width, mult, minW, maxW),
-      height: roundToMultiple(initial.height ?? config.generation_defaults.height, mult, minH, maxH),
-      // W8: a right-click prefill can seed DURATION (comfort ceiling / material
-      // length); otherwise the config default, unchanged. Re-snapped so the
-      // initial state is always on the frame grid in force and in range.
+      width: roundToMultiple(config.generation_defaults.width, generalMultiple, MIN_WIDTH, config.limits.max_width),
+      height: roundToMultiple(config.generation_defaults.height, generalMultiple, MIN_HEIGHT, config.limits.max_height),
+      // Re-snapped so the initial state is always on the frame grid in force
+      // and in range.
       numFrames: snapNumFrames(
-        initial.numFrames ?? config.generation_defaults.num_frames,
+        config.generation_defaults.num_frames,
         baseLimits.minNumFrames,
         baseLimits.maxNumFrames,
         frameGrid,
       ),
-      // W7: a right-click prefill can seed fps (material policy: selection
-      // rate/scale); otherwise the config default.
       // 台帳§3-71/§3-72: snapped to a whole frame rate here too, so a non-integer
       // CONFIG default can't slip past every entry point. The fallback is the
       // constant, NOT `?? config…` — chaining back to the config would let the
       // raw value through exactly when the snap rejected it.
-      // An engine fixed at one rate takes it, whatever
-      // the seed said.
-      frameRate:
-        fixedFps ?? snapFrameRate(initial.frameRate ?? config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
+      // An engine fixed at one rate takes it, whatever the config said.
+      frameRate: fixedFps ?? snapFrameRate(config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
       seed: config.generation_defaults.seed,
       sampling: samplingDefaults(rules.sampling),
     };

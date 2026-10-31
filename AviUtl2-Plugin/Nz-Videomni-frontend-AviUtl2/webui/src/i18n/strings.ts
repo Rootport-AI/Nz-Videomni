@@ -2216,11 +2216,11 @@ export const en = {
     rightClickMenuHeading: "Right-click menu:",
     prefillSizePolicyLabel: "Match Gen video size to the...",
     prefillFpsPolicyLabel: "Match Gen video FPS to the...",
-    prefillPolicyDefaults: "Dev",
+    prefillPolicyPanel: "panel",
     prefillPolicyProject: "project",
     prefillPolicyMaterial: "materials",
-    /** X6: tooltip on both axes' "Dev" button (its label is intentionally terse). */
-    prefillPolicyDevTooltip: "Developmental defaults",
+    /** 台帳 §1-114: tooltip on both axes' "panel" button (it replaced "Dev"). */
+    prefillPolicyPanelTooltip: "Keep the values currently set in the panel",
     /** Acceleration (2026-07-31, backend §43): five rows, all of them REAL as
      * of 2026-08-05, when the VAE row (the last mock) went live with backend
      * §52 (see `shell/accelerationSettings.ts`). The attention buttons' own
@@ -3625,10 +3625,10 @@ export const ja: Strings = {
     rightClickMenuHeading: "右クリックからの動画生成時:",
     prefillSizePolicyLabel: "サイズはどれに合わせる？",
     prefillFpsPolicyLabel: "fpsはどれに合わせる？",
-    prefillPolicyDefaults: "開発用",
+    prefillPolicyPanel: "操作パネル",
     prefillPolicyProject: "プロジェクト",
     prefillPolicyMaterial: "素材",
-    prefillPolicyDevTooltip: "開発用の既定値",
+    prefillPolicyPanelTooltip: "操作パネルに今設定されている値を保つ",
     accelerationHeading: "生成の高速化:",
     accelFusedGgufKernelLabel: "GGUF脱量子化カーネルの1本化",
     accelFusedGgufKernelOn: "ON",

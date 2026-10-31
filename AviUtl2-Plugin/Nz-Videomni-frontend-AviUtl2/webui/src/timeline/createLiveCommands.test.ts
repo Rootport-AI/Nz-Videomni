@@ -145,4 +145,30 @@ describe("createLiveCommands", () => {
 
     expect(received).toEqual([{ type: "addReferenceAudio", filePath: null, fileName: "" }]);
   });
+
+  // 台帳 §1-114: the Single-bound material items (#2/#4/#7) arrive live with
+  // their intent and the routed selection, untouched.
+  it("delivers the §1-114 prefillMaterial variant with its intent and selection", () => {
+    const received: CreateLiveCommand[] = [];
+    subscribeCreateCommands((command) => received.push(command));
+
+    const command: CreateLiveCommand = {
+      type: "prefillMaterial",
+      intent: "image-to-video",
+      selection: {
+        hasRange: false,
+        rangeStart: 0,
+        rangeEnd: 0,
+        selected: [],
+        cursorFrame: 0,
+        cursorLayer: 1,
+        rate: 30,
+        scale: 1,
+        sampleRate: 44100,
+      },
+    };
+    dispatchCreateCommand(command);
+
+    expect(received).toEqual([command]);
+  });
 });

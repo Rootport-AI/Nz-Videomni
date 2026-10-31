@@ -51,7 +51,6 @@ export function resetProvisionalReservation(): void {
   publishedFormValues = null;
   chainDirty = false;
   publishedKeyframeCount = 0;
-  publishedSourceSlots = { referenceVideo: null, sourceAudio: null };
   retakeReservationPendingId = null;
   // Y3: clear the shared inserted-jobs store too (and notify, so any live
   // subscriber re-reads a clean state), keeping tests isolated per-module.
@@ -200,51 +199,6 @@ export function publishKeyframeCount(count: number): void {
 /** The last-published keyframe count (0 before Create publishes / when empty). */
 export function getPublishedKeyframeCount(): number {
   return publishedKeyframeCount;
-}
-
-// --- W5 反対スロット保持: live Create source-slot mirror --------------------
-//
-// #2/#7 remount Create (owner-approved full form reset), but the OPPOSITE
-// source slot should survive that remount. The always-mounted Create screen
-// PUBLISHES its two source slots' ready material here whenever they change, and
-// `AppShell.handleRoute` READS it synchronously at route time to decide the
-// remount's `carryOver` — the same lightweight module-level shared-reference
-// pattern `publishedFormValues` uses. A slot is non-null ONLY while its upload
-// is `ready` (uploading/idle/error publish `null`, so a half-finished slot is
-// never carried — the safe side). The uploaded ids are still valid server-side,
-// so carrying them re-attaches the material with no re-upload.
-
-export interface PublishedSourceSlots {
-  /** The IC-LoRA reference video slot + its two adapter strengths (each
-   * `null` when the user hasn't opted the strength in), or `null` unless the
-   * reference video upload is currently `ready`. */
-  referenceVideo: {
-    id: string;
-    fileName: string;
-    filePath: string;
-    conditioningAttentionStrength: number | null;
-    referenceVideoStrength: number | null;
-  } | null;
-  /** The A2V source-audio slot, or `null` unless the audio upload is currently
-   * `ready`. */
-  sourceAudio: {
-    id: string;
-    fileName: string;
-    filePath: string;
-  } | null;
-}
-
-let publishedSourceSlots: PublishedSourceSlots = { referenceVideo: null, sourceAudio: null };
-
-/** Publish Create's current two source slots for the W5 carry-over to read. */
-export function publishSourceSlots(slots: PublishedSourceSlots): void {
-  publishedSourceSlots = slots;
-}
-
-/** The last-published Create source slots (both `null` before Create publishes
- * / when neither slot is ready). */
-export function getPublishedSourceSlots(): PublishedSourceSlots {
-  return publishedSourceSlots;
 }
 
 // --- Retake の❌が自分の席かを見分けるための publish（§2-3） ------------------

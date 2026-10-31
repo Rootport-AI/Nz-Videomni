@@ -5,7 +5,6 @@ import {
   getChainDirty,
   getPublishedFormValues,
   getPublishedKeyframeCount,
-  getPublishedSourceSlots,
   getReservationPhase,
   markJobInserted,
   publishRetakeReservation,
@@ -284,7 +283,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const showNote = useCallback<ShowNote>((kind, message) => setNote({ kind, message }), []);
   const dismissNote = useCallback(() => setNote(null), []);
   // Right-click routing -> prefill. `pendingIntent` is the payload the target
-  // mode consumes once.
+  // mode consumes once (Chained / Edit; 台帳 §1-114: Create receives its
+  // material items live over `createLiveCommands.ts` and is never remounted).
   //
   // Tab-state persistence (2026-07-18): all three mode screens are now mounted
   // at once (`.app-mode-body` below) and merely hidden when inactive, so a tab
@@ -293,10 +293,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // something that changes *only* when we actually want a remount.
   //
   // `remountTokens` is a per-mode monotonic counter, bumped in `handleRoute`
-  // when a right-click routes an intent AT that mode — EXCEPT the two
-  // keep-panel-state intents ✨ text-to-video / 📷 image-from-frame (D3 owner
-  // decision), which deliberately skip the bump so Create is not remounted. The
-  // Screen `key` is `${mode}-${remountTokens[mode]}`, so:
+  // when a right-click routes an intent AT that mode. Create has no counter at
+  // all (台帳 §1-114, 2026-10-31): every Create-bound right-click — the
+  // keep-panel-state ✨ / 📷 (D3 owner decision) and the material items
+  // #2/#4/#7 alike — reaches the mounted screen as a live command, so its
+  // prompt, settings and slots survive. For the other modes the Screen `key` is
+  // `${mode}-${remountTokens[mode]}`, so:
   //  - a fresh intent (even to the mode we're already on) bumps the counter ->
   //    the target Screen remounts and re-applies the new prefill (the frozen
   //    right-click behaviour), and
@@ -316,8 +318,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // object a new run is the bumped remount token below, not a field in this
   // payload.
   const [trackRequest, setTrackRequest] = useState<ObjectTrackRequest | null>(null);
-  const [remountTokens, setRemountTokens] = useState<Record<AppMode, number>>({
-    single: 0,
+  const [remountTokens, setRemountTokens] = useState<Record<Exclude<AppMode, "single">, number>>({
     chained: 0,
     // 2026-08-09 W0（共通スパイン）: `MenuTargetMode` に "edit" が入り、Edit も
     // 右クリックの転送先になった（outpaintVideo / retakeRange）。この枠は Step 6
@@ -336,8 +337,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // is owned HERE, not by Create's own form state, for the same reason the
   // prompt itself lives here — it must survive a tab switch away from Create
   // and back (M2 of the plan's adversarial review: a form-local `controlLora`
-  // would silently reset on every Create remount, e.g. a right-click prefill's
-  // `key` bump). `useLoras`/`useConfig` are each also called independently by
+  // would silently reset whenever Create remounted — which a right-click
+  // prefill's `key` bump used to do; since 台帳 §1-114 Create is never
+  // remounted by a right-click, while Chained/Edit still are). `useLoras`/`useConfig` are each also called independently by
   // Create/Chain/Library (no shared cache) — this is one more call in that
   // same pre-existing pattern, needed here only to resolve `controlLoraNames`
   // for the auto-migration effect below.
@@ -645,7 +647,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   //   §3-4 #5)  4b. #11 addCurrentFrameAsKeyframe (W5: the capture twin of #5 —
   //   live keyframe append, conditional placement C at the cursor)  5.
   //   reservation-seat busy-guard (§5-6)  6. prefill delivery (§3 remount for
-  //   material items + #12, keep-state for ✨/📷/#11)  7. reservation length
+  //   Chain/Edit material items + #12, a live `prefillMaterial` for Create's
+  //   #2/#4/#7 (台帳 §1-114), keep-state for ✨/📷/#11)  7. reservation length
   //   source (§5-1/D3)  8. provisional placement/move (§5-9).
   const handleRoute = useCallback(async (command: RoutedMenuCommand) => {
     const bridge = nativeBridge ?? defaultBridge;
@@ -1201,43 +1204,36 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       if (!confirmed) return;
     }
 
-    // ── Step 6: prefill delivery. Material items (#1/#2/#4/#6/#7) remount the
-    // target Create/Chain form and re-apply the fresh selection (pendingIntent +
+    // ── Step 6: prefill delivery. Chain/Edit material items (#1/#6/#12 …)
+    // remount the target form and re-apply the fresh selection (pendingIntent +
     // per-mode remount token, so the other always-mounted screens keep state).
-    // The two keep-panel-state cursor items ✨/📷 (D3) skip both so their edited
-    // form survives; they only switch mode and reserve. W5 #11
-    // add-current-frame-keyframe is likewise a no-remount item (it lands via its
-    // own early-return block above, mirroring #5, before this line is reached —
-    // this keeps the keep-panel-state set an accurate description of every
-    // no-remount intent). #12 current-frame-to-clip-chain is NOT here: it is a
-    // Chain-remount item (like #6).
+    // Create is never remounted (台帳 §1-114): its material items #2/#4/#7 are
+    // delivered live as `prefillMaterial` — the mounted screen re-seeds its
+    // size/fps/DURATION per the Settings policies and attaches the material,
+    // keeping the prompt and every other slot. The two keep-panel-state cursor
+    // items ✨/📷 (D3) deliver nothing here; they only switch mode and reserve.
+    // W5 #11 add-current-frame-keyframe is likewise a no-remount item (it lands
+    // via its own early-return block above, mirroring #5, before this line is
+    // reached — this keeps the keep-panel-state set an accurate description of
+    // every no-remount intent). #12 current-frame-to-clip-chain is NOT here: it
+    // is a Chain-remount item (like #6).
     const keepPanelState =
       intent === "text-to-video" ||
       intent === "image-from-frame" ||
       intent === "add-current-frame-keyframe";
     if (!keepPanelState) {
-      // W5 (反対スロット保持): a #2/#7 remount resets the whole Create form, but
-      // the OPPOSITE source slot survives — #2 (`reference-video`) keeps the
-      // existing audio; #7 (`audio-to-video`) keeps the existing reference
-      // video + strengths. Read the live-published slots
-      // synchronously here (they still reflect the currently-mounted Create, the
-      // one about to remount) and load only the relevant, ready side onto the
-      // pending intent's `carryOver`. Every other intent — and an unpublished/
-      // not-ready slot — carries nothing (identical to the pre-W5 behaviour).
-      const slots = getPublishedSourceSlots();
-      let carryOver: GenerationPrefill["carryOver"];
-      if (intent === "reference-video") {
-        if (slots.sourceAudio) carryOver = { sourceAudio: slots.sourceAudio };
-      } else if (intent === "audio-to-video") {
-        if (slots.referenceVideo) carryOver = { referenceVideo: slots.referenceVideo };
+      if (target === "single") {
+        if (intent === "reference-video" || intent === "image-to-video" || intent === "audio-to-video") {
+          dispatchCreateCommand({ type: "prefillMaterial", intent, selection: command.selection });
+        }
+      } else {
+        setPendingIntent({
+          intent,
+          targetMode: target,
+          selection: command.selection,
+        });
+        setRemountTokens((prev) => ({ ...prev, [target]: prev[target] + 1 }));
       }
-      setPendingIntent({
-        intent,
-        targetMode: target,
-        selection: command.selection,
-        ...(carryOver ? { carryOver } : {}),
-      });
-      setRemountTokens((prev) => ({ ...prev, [target]: prev[target] + 1 }));
     }
     setMode(target);
 
@@ -1268,12 +1264,16 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     //    (`keepStateNumFrames`/`keepStateGenFps`), or the resolution's comfort
     //    ceiling live-set above for #9/#10 (`cursorItemCeilingNumFrames`),
     //    falling back to the config defaults before Create ever publishes (D3).
-    //  - Material items (#1/#2/#4/#6/#7/#12) REMOUNT the form and seed its
-    //    initial DURATION/fps from the shared純関数 `resolvePrefillSeed`. Owner
-    //    requirement 2026-07-21 #1: place the provisional at that SAME derived
-    //    length from the outset (not the config default), so its ribbon matches
-    //    the remounted form the instant it appears. Both call `resolvePrefillSeed`
-    //    with the identical right-click inputs, so they cannot diverge here.
+    //  - Material items (#1/#2/#4/#6/#7/#12) seed the form's DURATION/fps from
+    //    the shared純関数 `resolvePrefillSeed` (Chain by remounting, Create live
+    //    via `prefillMaterial`). Owner requirement 2026-07-21 #1: place the
+    //    provisional at that SAME derived length from the outset (not the config
+    //    default), so its ribbon matches the form the instant it appears. Both
+    //    call `resolvePrefillSeed` with the identical right-click inputs, so they
+    //    cannot diverge here. 台帳 §1-114: for Create that includes the panel's
+    //    current width/height/fps (the `panel` policy's input), read from the
+    //    published form values — never for Chain/Edit, whose remounted form
+    //    starts from the defaults (R-4).
     //
     // Two residual, transient divergences remain — both are accepted (not bugs)
     // and both converge at Generate via `bindToJob`'s
@@ -1306,6 +1306,14 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         config,
         sizePolicy,
         fpsPolicy,
+        panel:
+          target === "single" && publishedForKeepState
+            ? {
+                width: publishedForKeepState.width,
+                height: publishedForKeepState.height,
+                frameRate: publishedForKeepState.frameRate,
+              }
+            : undefined,
         // 2026-08-31: the same three inputs Create's own comfort marker reads,
         // so a reserved provisional's ribbon is the length the remounted form
         // will show. `SingleScreen`'s own `resolvePrefillSeed` call is handed
@@ -1319,20 +1327,21 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         constraints: baseModels.activeConstraints,
       });
       // A seed that resolved no DURATION (e.g. a comfortCeiling intent on an
-      // engine with no comfort line) falls back to the config default ON THE GRID the remounted
-      // form will snap it to, so the ribbon and the form agree. Single only —
-      // the other targets keep LTX's grid (where the default already sits).
+      // engine with no comfort line) or no fps leaves that value as the form
+      // holds it: for Create (never remounted, 台帳 §1-114) the live published
+      // value, on the grid the form keeps it on; for the remounted Chain/Edit
+      // forms the config default. Either way the ribbon and the form agree.
       numFrames =
         seed.numFrames ??
         (target === "single"
           ? snapNumFrames(
-              config.generation_defaults.num_frames,
+              keepStateNumFrames,
               cursorItemFrameLimits.minNumFrames,
               cursorItemFrameLimits.maxNumFrames,
               baseModels.activeConstraints.frameGrid,
             )
           : config.generation_defaults.num_frames);
-      genFps = seed.frameRate ?? config.generation_defaults.frame_rate;
+      genFps = seed.frameRate ?? (target === "single" ? keepStateGenFps : config.generation_defaults.frame_rate);
     }
 
     // ── Step 8: place (or move) the provisional per the route's placement系統
@@ -1655,9 +1664,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     promptTokenModelKey,
   );
 
-  const singleIntent = pendingIntent?.targetMode === "single" ? pendingIntent : undefined;
   const chainedIntent = pendingIntent?.targetMode === "chained" ? pendingIntent : undefined;
-  // W0 (2026-08-09): same one-shot hand-off as the two above — Edit is now a
+  // W0 (2026-08-09): same one-shot hand-off as the one above — Edit is now a
   // right-click destination (every `MENU_ROUTING_TABLE` entry whose
   // `targetMode` is `"edit"`).
   const editIntent = pendingIntent?.targetMode === "edit" ? pendingIntent : undefined;
@@ -1733,11 +1741,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               `role="tabpanel"` also lets tests grab the single visible panel
               (`getByRole` skips hidden subtrees) to disambiguate the now
               double-mounted UI. See `remountTokens` above for how right-click
-              prefills still force a targeted remount via `key`. */}
+              prefills still force a targeted remount via `key` (every mode
+              but Create, which takes its right-clicks live). */}
           {/* Toolbox (§3-54, 2026-09-11): promoted from the last disabled mock
               tab to a real mode, and a right-click destination in the same
               change (`trackObject`). First in the row, matching the tab order.
-              Unlike Create/Chain/Edit it takes no `initialIntent`: the 追尾
+              Unlike Chain/Edit it takes no `initialIntent`: the 追尾
               route carries a SELECTION to act on, not a form to seed, so the
               one-shot payload is `trackRequest` + the same remount-token
               arrangement. The settings come from this shell's single
@@ -1763,11 +1772,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           </div>
           <div role="tabpanel" hidden={mode !== "single"}>
             <SingleScreen
-              key={`single-${remountTokens.single}`}
               prompt={prompt}
               onPromptChange={setPrompt}
               baseUrl={baseUrl}
-              initialIntent={singleIntent}
               nativeBridge={nativeBridge}
               highlightedJobId={highlightedJobId}
               onJobSubmitted={setHighlightedJobId}

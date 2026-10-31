@@ -39,10 +39,20 @@ describe("PrefillPolicyContext", () => {
 
   it("restores each axis from its own persisted key on mount", () => {
     window.localStorage.setItem(PREFILL_SIZE_POLICY_STORAGE_KEY, "project");
-    window.localStorage.setItem(PREFILL_FPS_POLICY_STORAGE_KEY, "defaults");
+    window.localStorage.setItem(PREFILL_FPS_POLICY_STORAGE_KEY, "panel");
     const { result } = renderHook(() => usePrefillPolicy(), { wrapper });
     expect(result.current.sizePolicy).toBe("project");
-    expect(result.current.fpsPolicy).toBe("defaults");
+    expect(result.current.fpsPolicy).toBe("panel");
+  });
+
+  it("台帳 §1-114: a stored retired \"defaults\" (the former Dev) falls back to each axis default (no migration)", () => {
+    window.localStorage.setItem(PREFILL_SIZE_POLICY_STORAGE_KEY, "defaults");
+    window.localStorage.setItem(PREFILL_FPS_POLICY_STORAGE_KEY, "defaults");
+    const { result } = renderHook(() => usePrefillPolicy(), { wrapper });
+    expect(result.current.sizePolicy).toBe("material");
+    expect(result.current.fpsPolicy).toBe("project");
+    expect(readStoredSizePolicy()).toBe("material");
+    expect(readStoredFpsPolicy()).toBe("project");
   });
 
   it("§3-13: restores a persisted fps=material unchanged (the X1 coercion is gone)", () => {
@@ -79,20 +89,20 @@ describe("PrefillPolicyContext", () => {
     const { result } = renderHook(() => usePrefillPolicy(), { wrapper });
 
     act(() => {
-      result.current.setSizePolicy("defaults");
+      result.current.setSizePolicy("panel");
     });
-    expect(result.current.sizePolicy).toBe("defaults");
+    expect(result.current.sizePolicy).toBe("panel");
     // The fps axis is untouched by a size-axis change.
     expect(result.current.fpsPolicy).toBe("project");
-    expect(window.localStorage.getItem(PREFILL_SIZE_POLICY_STORAGE_KEY)).toBe("defaults");
+    expect(window.localStorage.getItem(PREFILL_SIZE_POLICY_STORAGE_KEY)).toBe("panel");
 
     act(() => {
       result.current.setFpsPolicy("project");
     });
     expect(result.current.fpsPolicy).toBe("project");
-    expect(result.current.sizePolicy).toBe("defaults");
+    expect(result.current.sizePolicy).toBe("panel");
     expect(window.localStorage.getItem(PREFILL_FPS_POLICY_STORAGE_KEY)).toBe("project");
-    expect(readStoredSizePolicy()).toBe("defaults");
+    expect(readStoredSizePolicy()).toBe("panel");
     expect(readStoredFpsPolicy()).toBe("project");
   });
 

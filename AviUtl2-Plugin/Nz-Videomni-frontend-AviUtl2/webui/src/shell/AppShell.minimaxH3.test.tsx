@@ -640,6 +640,61 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
     );
 
     it(
+      "H3: #4 keeps the Reference cards and the prompt, and reserves the seat at the panel's own DURATION (台帳 §1-114: no remount)",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        const requestSpy = vi.spyOn(bridge, "request");
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(card("ref-slot-video-1")).toBeInTheDocument());
+        const user = userEvent.setup();
+        await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat on a skateboard");
+
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "referenceVideo",
+            selection: trimmedVideoSelection("C:\\v\\one.mp4"),
+          });
+        });
+        await waitForCardReady("ref-slot-video-1");
+
+        // Hand-set DURATION to a value on H3's 17n+5 grid that no seed produces.
+        // H3 has no comfort line, so #4's seed leaves DURATION alone and the
+        // provisional must be reserved at the panel's own value.
+        fireEvent.change(durationNumber(), { target: { value: "277" } });
+        fireEvent.blur(durationNumber());
+        await waitFor(() => expect(durationNumber().value).toBe("277"));
+
+        // #4 on an image object: the image becomes the frame-0 keyframe, and the
+        // Reference card and the prompt are untouched.
+        const image = trimmedVideoSelection("C:\\i\\a.png");
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "imageToVideo",
+            selection: { ...image, selected: [{ ...image.selected[0]!, effectName: "画像ファイル" }] },
+          });
+        });
+        await screen.findByText(/loaded from a right-click: a\.png/i, undefined, { timeout: 5_000 });
+        await waitFor(() => expect(within(singlePanel()).getByAltText("a.png")).toBeInTheDocument(), {
+          timeout: 5_000,
+        });
+        expect(within(card("ref-slot-video-1")).getByText("one.mp4")).toBeInTheDocument();
+        expect((screen.getByPlaceholderText(/describe the video/i) as HTMLTextAreaElement).value).toBe(
+          "a cat on a skateboard",
+        );
+        expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+        await waitFor(() =>
+          expect(requestSpy).toHaveBeenCalledWith(
+            "timeline.insertProvisional",
+            expect.objectContaining({ placement: "A", numFrames: 277 }),
+          ),
+        );
+        expect(durationNumber().value).toBe("277");
+      },
+      25_000,
+    );
+
+    it(
       "LTX 2.3: #2 still takes the IC-LoRA road (no Reference accordion)",
       async () => {
         const bridge = createMockBridge({ delayMs: 0 });

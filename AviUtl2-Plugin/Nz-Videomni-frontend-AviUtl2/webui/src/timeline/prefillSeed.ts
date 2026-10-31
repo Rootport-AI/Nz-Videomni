@@ -18,6 +18,15 @@
  * and adds only the intent→policy table and the intent-specific material-
  * duration decision that sits between them. `deriveDuration.ts` itself stays a
  * primitive (no import of this module) so there is no circular dependency.
+ *
+ * 台帳 §1-114 (2026-10-31): the Single screen is no longer remounted by a
+ * right-click — `SingleScreen` applies this seed LIVE to the mounted form when
+ * the `prefillMaterial` command arrives (#2/#4/#7), and `AppShell` sizes the
+ * provisional off the same call. The Settings policy that ignores the material
+ * is now `"panel"` (keep the panel's current width/height/fps, handed in as
+ * {@link ResolvePrefillSeedArgs.panel}); it replaced `"defaults"`, which always
+ * took `config.generation_defaults`. Chained (still remounted) passes no
+ * `panel`, so there "the panel's values" are the rebuilt form's defaults.
  */
 
 import type { AppConfig } from "../api/types";
@@ -207,12 +216,21 @@ export interface ResolvePrefillSeedArgs {
   selection: TimelineSelection;
   config: AppConfig;
   /** W1: the Settings SIZE policy (`usePrefillPolicy().sizePolicy`), driving
-   * width/height only. `defaults` ignores the material's real size;
-   * `material`/`project` seed width/height from it (`project` is later
-   * overwritten off `getEditInfo` by the caller). */
+   * width/height only. `panel` ignores the material's real size and keeps
+   * {@link panel}'s width/height (the config defaults when absent), still run
+   * through the intent's grid — #2 IC-LoRA rounds it to 128;
+   * `material`/`project` seed width/height from the material (`project` is
+   * later overwritten off `getEditInfo` by the caller). */
   sizePolicy: PrefillResolutionPolicy;
+  /** 台帳 §1-114: the panel's CURRENT width/height/fps, read by the `panel`
+   * policy on either axis. Only the Single-bound callers pass it (`SingleScreen`
+   * from its live form, `AppShell` from the published form values when the
+   * target is Single); Chained/Edit omit it, so `panel` there falls back to the
+   * config defaults their freshly remounted form starts from. */
+  panel?: { width: number; height: number; frameRate: number } | undefined;
   /** W1: the Settings FPS policy (`usePrefillPolicy().fpsPolicy`), driving the
-   * frame rate only. `defaults` keeps the config default fps; `project` seeds it
+   * frame rate only. `panel` keeps {@link panel}'s fps (the config default when
+   * absent); `project` seeds it
    * from the selection's project rate/scale (and is later overwritten off
    * `getEditInfo` by the caller); §3-13: `material` seeds it from the selected
    * object's OWN probed framerate, falling back to that same project rate/scale
@@ -257,7 +275,8 @@ export interface PrefillSeed {
    * `derived.notes`/`derived.width`/… keep working unchanged. */
   derived: DerivedGenerationParams;
   /** The generation fps to seed the form with, or `undefined` to keep the
-   * config default (the `defaults` policy, or an unresolvable rate/scale).
+   * form's current value (the `panel` policy without a `panel`, or an
+   * unresolvable rate/scale).
    * Always a whole frame rate in [1, 60] — see `frameRateSnappedFrom`. */
   frameRate: number | undefined;
   /** 台帳§3-71/§3-72: the RAW rate `frameRate` was snapped FROM, but only when
@@ -269,7 +288,7 @@ export interface PrefillSeed {
    * formatting (`jobs/fpsConvert.ts`'s `formatFps`). */
   frameRateSnappedFrom: number | undefined;
   /** The DURATION (`num_frames`) to seed the form/reservation with, or
-   * `undefined` to keep the config default (no DURATION policy for the intent,
+   * `undefined` to keep the form's current value (no DURATION policy for the intent,
    * or the policy couldn't resolve a value — e.g. an unknown material length or
    * an unresolvable comfort ceiling). */
   numFrames: number | undefined;
@@ -283,8 +302,8 @@ export interface PrefillSeed {
  * matches the remounted form.
  *
  * Composition: `deriveGenerationParams` (isICLora = either IC-LoRA intent,
- * useMaterialSize = `sizePolicy` ≠ `defaults`) for width/height → the three-tier
- * fps seed (material → project → config default, see below) → the intent's
+ * useMaterialSize = `sizePolicy` ≠ `panel`) for width/height → the fps seed
+ * (`panel`, or material → project → config default, see below) → the intent's
  * {@link DurationPolicy} + {@link materialDurationForIntent} fed
  * into `computeTargetNumFrames` (which owns the grid snap and the comfort-
  * ceiling clamp) → the one intent-specific DURATION cap
@@ -293,8 +312,18 @@ export interface PrefillSeed {
  * config default.
  */
 export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
-  const { intent, selection, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass } =
-    args;
+  const {
+    intent,
+    selection,
+    config,
+    sizePolicy,
+    fpsPolicy,
+    panel,
+    engineFamily,
+    acceleration,
+    sageAvailable,
+    weightClass,
+  } = args;
   // The served rules apply to the Single screen's seeds
   // only; a Chain-targeted seed keeps LTX's (see the arg's doc comment).
   const singleTarget = targetModeForIntent(intent) === "single";
@@ -307,22 +336,26 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // and a re-snapped one a beat later, i.e. a size that visibly jumps on its own.
   const isICLora = intent === "reference-video" || intent === "reference-video-chain";
   // W1: the two axes are independent — width/height follow `sizePolicy`, the
-  // fps follows `fpsPolicy`. `defaults` on an axis ignores the material for that
-  // axis; `material`/`project` seed it from the selection (`project` is later
-  // overwritten off `getEditInfo` by the caller).
+  // fps follows `fpsPolicy`. `panel` on an axis ignores the material for that
+  // axis and keeps the panel's value; `material`/`project` seed it from the
+  // selection (`project` is later overwritten off `getEditInfo` by the caller).
   //
   // §3-13: the fps axis needs all THREE policies told apart, so it has no
   // `useMaterialFps` twin of the flag below — that boolean was true for both
   // `material` and `project` and so could never distinguish them. See the fps
   // seed further down.
-  const useMaterialSize = sizePolicy !== "defaults";
+  const useMaterialSize = sizePolicy !== "panel";
   const primarySel = selection.selected[0];
+  // The `panel` policy's size goes in as `deriveGenerationParams`'s "project"
+  // input — the same slot the config defaults take — so it is rounded onto the
+  // intent's grid (128 for IC-LoRA) and clamped exactly like that fallback.
+  const sizeFromPanel = sizePolicy === "panel" ? panel : undefined;
 
-  const derived = deriveGenerationParams({
+  const derivedRaw = deriveGenerationParams({
     mediaWidth: useMaterialSize ? (primarySel?.mediaWidth ?? null) : null,
     mediaHeight: useMaterialSize ? (primarySel?.mediaHeight ?? null) : null,
-    projectWidth: config.generation_defaults.width,
-    projectHeight: config.generation_defaults.height,
+    projectWidth: sizeFromPanel?.width ?? config.generation_defaults.width,
+    projectHeight: sizeFromPanel?.height ?? config.generation_defaults.height,
     isICLora,
     generalMultiple: rules.dimensionMultiple,
     limits: {
@@ -332,6 +365,11 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
       maxHeight: config.limits.max_height,
     },
   });
+  // Under `panel` the size is the panel's own, so the source note ("no material
+  // resolution, so the project's W×H") would be wrong — it is always
+  // `notes[0]`, and only it is dropped; the rounding/clamp notes stay.
+  const derived: DerivedGenerationParams =
+    sizePolicy === "panel" ? { ...derivedRaw, notes: derivedRaw.notes.slice(1) } : derivedRaw;
 
   // fps seed (§3-13, contract v11) — three tiers, tried in order:
   //  1. `material`: the selected object's OWN framerate. Native probes it off the
@@ -341,8 +379,10 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   //     native build, a non-video object, or an unsupported container such as
   //     mkv/webm — all normal outcomes, not errors). Also RAW: an NTSC project is
   //     `30000/1001`, not 30.
-  //  3. `undefined`: keep the config default — the `defaults` policy, or a
-  //     rate/scale that isn't resolvable either.
+  //  3. `undefined`: keep the form's value — a rate/scale that isn't
+  //     resolvable either.
+  // The `panel` policy skips all three and keeps the panel's own fps (already
+  // a whole number — the form snaps every value it holds).
   //
   // 台帳§3-71/§3-72: BOTH value tiers are snapped to a whole frame rate by
   // `snapFrameRate` (the one source of truth, in `modes/single/paramUtils.ts`).
@@ -363,7 +403,8 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // An engine fixed at one frame rate overrides the fps
   // policy outright — there is nothing to seed and nothing to report.
   const fixedFps = fixedFrameRate(rules);
-  const rawSeedFps = fixedFps !== null || fpsPolicy === "defaults" ? undefined : (usableMaterialFps ?? rawProjectFps);
+  const rawSeedFps =
+    fixedFps !== null ? undefined : fpsPolicy === "panel" ? panel?.frameRate : (usableMaterialFps ?? rawProjectFps);
   const frameRate = fixedFps ?? snapFrameRate(rawSeedFps);
   // Only a snap that actually MOVED the value is worth reporting; a project or
   // material already on a whole frame rate must stay silent (no false positives).
@@ -372,8 +413,10 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
 
   const policy: DurationPolicy = DURATION_POLICY_BY_INTENT[intent] ?? "untouched";
   // The fps used to convert a material duration to frames — the same fps that
-  // seeds the form, falling back to the config default when there's no seed fps.
-  const genFps = frameRate ?? config.generation_defaults.frame_rate;
+  // seeds the form. With no seed fps the form keeps the fps it holds: the
+  // panel's (台帳 §1-114: Single is never remounted), else the config default
+  // a freshly remounted Chained form starts from.
+  const genFps = frameRate ?? panel?.frameRate ?? config.generation_defaults.frame_rate;
   const materialDurationSec = materialDurationForIntent(intent, selection);
   // §1-17 Retake: the selected range's length + the PROJECT's own fps, the two
   // inputs the `selectedRangeLength` policy converts into generation frames.

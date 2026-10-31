@@ -177,18 +177,14 @@ describe("buildI2vGeneratePayload", () => {
       conditioningImages: ConditioningImage[] = [],
       cropOutput: CropOutput | null = null,
     ): string {
-      // width/height/numFrames/frameRate are seeded through
-      // `GenerationFormInitial`; `seed` has no initial field, so it is driven
-      // through the hook's own `setSeed`.
-      const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, prompt, deps, {
-          width: WIDTH,
-          height: HEIGHT,
-          numFrames: NUM_FRAMES,
-          frameRate: FRAME_RATE,
-        }),
-      );
+      // width/height/numFrames/frameRate/seed are driven through the hook's
+      // own setters (the form has no seeded initial values since 台帳 §1-114).
+      const { result } = renderHook(() => useGenerationForm(FALLBACK_APP_CONFIG, prompt, deps));
       act(() => {
+        result.current.setWidth(WIDTH);
+        result.current.setHeight(HEIGHT);
+        result.current.setNumFrames(NUM_FRAMES);
+        result.current.setFrameRate(FRAME_RATE);
         result.current.setSeed(SEED);
       });
       if (cropOutput !== null) {

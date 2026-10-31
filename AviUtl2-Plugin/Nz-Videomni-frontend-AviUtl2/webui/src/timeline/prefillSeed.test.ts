@@ -183,8 +183,8 @@ describe("resolvePrefillSeed — fps snapping (台帳§3-71/§3-72)", () => {
     expect(s.frameRateSnappedFrom).toBe(120);
   });
 
-  it("the `defaults` policy seeds no fps at all, and so reports no snap", () => {
-    const s = seed("image-to-video", makeSelection({ mediaFps: 29.97 }, { rate: 30000, scale: 1001 }), "material", "defaults");
+  it("the `panel` policy without a panel seeds no fps at all, and so reports no snap", () => {
+    const s = seed("image-to-video", makeSelection({ mediaFps: 29.97 }, { rate: 30000, scale: 1001 }), "material", "panel");
     expect(s.frameRate).toBeUndefined();
     expect(s.frameRateSnappedFrom).toBeUndefined();
   });
@@ -274,12 +274,12 @@ describe("resolvePrefillSeed — width/height/fps", () => {
     expect(s.derived.height).toBe(768);
   });
 
-  it("ignores the material size/rate when BOTH axes are `defaults` (config defaults, no fps seed)", () => {
+  it("ignores the material size/rate when BOTH axes are `panel` and no panel is given (config defaults, no fps seed)", () => {
     const s = seed(
       "image-to-video",
       makeSelection({ mediaWidth: 512, mediaHeight: 320 }, { rate: 30, scale: 1 }),
-      "defaults",
-      "defaults",
+      "panel",
+      "panel",
     );
     expect(s.derived.width).toBe(cfg.generation_defaults.width); // 1280
     expect(s.derived.height).toBe(cfg.generation_defaults.height); // 768
@@ -295,23 +295,23 @@ describe("resolvePrefillSeed — width/height/fps", () => {
 
   // --- W1 axis crossings ----------------------------------------------------
 
-  it("size=defaults × fps=material: config-default size, but fps still from the selection", () => {
+  it("size=panel × fps=material: config-default size (no panel), but fps still from the selection", () => {
     const s = seed(
       "image-to-video",
       makeSelection({ mediaWidth: 512, mediaHeight: 320 }, { rate: 30, scale: 1 }),
-      "defaults",
+      "panel",
       "material",
     );
     expect(s.derived.width).toBe(cfg.generation_defaults.width);
     expect(s.frameRate).toBe(30);
   });
 
-  it("size=material × fps=defaults: material size, but fps kept at the config default (undefined seed)", () => {
+  it("size=material × fps=panel: material size, but no fps seed when no panel is given", () => {
     const s = seed(
       "image-to-video",
       makeSelection({ mediaWidth: 512, mediaHeight: 320 }, { rate: 30, scale: 1 }),
       "material",
-      "defaults",
+      "panel",
     );
     expect(s.derived.width).toBe(512);
     expect(s.derived.height).toBe(320);
@@ -397,12 +397,12 @@ describe("resolvePrefillSeed — fps の3段フォールバック（§3-13）", 
     expect(s.frameRate).toBe(25);
   });
 
-  it("fps=defaults は素材 fps があっても undefined のまま", () => {
+  it("fps=panel（操作パネルの値の受け渡しなし）は素材 fps があっても undefined のまま", () => {
     const s = seed(
       "image-to-video",
       makeSelection({ mediaWidth: 512, mediaHeight: 320, mediaFps: 29.97 }, { rate: 25, scale: 1 }),
       "material",
-      "defaults",
+      "panel",
     );
     expect(s.frameRate).toBeUndefined();
   });
@@ -536,11 +536,11 @@ describe("selectedRangeFramesForIntent / retake の尺シード（§1-17）", ()
     expect(seed("retake", ranged).frameRate).toBe(30);
   });
 
-  it("fps ポリシーが defaults なら、設定の生成 fps へ換算される", () => {
+  it("fps ポリシーが panel（操作パネルの値の受け渡しなし）なら、設定の生成 fps へ換算される", () => {
     // プロジェクト 30fps・150 フレーム = 5.0 秒 -> 既定 24fps で 120 フレーム。
     const sel = makeSelection({}, { rate: 30, scale: 1 });
     const ranged: Selection = { ...sel, hasRange: true, rangeStart: 60, rangeEnd: 209 };
-    const s = seed("retake", ranged, "material", "defaults");
+    const s = seed("retake", ranged, "material", "panel");
     expect(s.frameRate).toBeUndefined(); // 設定の既定を使う
     expect(s.numFrames).toBe(120);
   });
@@ -548,6 +548,78 @@ describe("selectedRangeFramesForIntent / retake の尺シード（§1-17）", ()
   it("範囲が無い retake は尺を決めない（設定の既定へ落ちる）", () => {
     const sel = makeSelection({}, { rate: 30, scale: 1 });
     expect(seed("retake", { ...sel, hasRange: false }).numFrames).toBeUndefined();
+  });
+});
+
+// 台帳 §1-114: the `panel` policy keeps the panel's CURRENT values (the Single
+// screen hands them in as `panel`), still run through the intent's grid.
+describe("resolvePrefillSeed — the panel policy (台帳 §1-114)", () => {
+  const panel = { width: 832, height: 448, frameRate: 30 };
+  const sel = makeSelection(
+    { mediaWidth: 1920, mediaHeight: 1080, mediaFps: 25 },
+    { rate: 24, scale: 1 },
+  );
+
+  it("size=panel keeps the panel's width/height (not the material's) and drops the source note", () => {
+    const s = resolvePrefillSeed({
+      intent: "image-to-video",
+      selection: sel,
+      config: cfg,
+      sizePolicy: "panel",
+      fpsPolicy: "material",
+      panel,
+    });
+    expect(s.derived.width).toBe(832);
+    expect(s.derived.height).toBe(448);
+    expect(s.derived.notes.some((n) => n.includes("プロジェクト設定"))).toBe(false);
+    // The fps axis is independent: still the material's own rate.
+    expect(s.frameRate).toBe(25);
+  });
+
+  it("fps=panel keeps the panel's fps over the material's and the project's", () => {
+    const s = resolvePrefillSeed({
+      intent: "image-to-video",
+      selection: sel,
+      config: cfg,
+      sizePolicy: "material",
+      fpsPolicy: "panel",
+      panel,
+    });
+    expect(s.frameRate).toBe(30);
+    expect(s.frameRateSnappedFrom).toBeUndefined();
+    expect(s.derived.width).toBe(1920);
+  });
+
+  it("#2 IC-LoRA rounds the panel's size up onto the 128 grid, like the config-default path", () => {
+    const s = resolvePrefillSeed({
+      intent: "reference-video",
+      selection: sel,
+      config: cfg,
+      sizePolicy: "panel",
+      fpsPolicy: "panel",
+      panel,
+    });
+    expect(s.derived.width).toBe(896);
+    expect(s.derived.height).toBe(512);
+    expect(s.derived.notes).toEqual(["IC-LoRAのため128の倍数に丸め"]);
+  });
+
+  it("the DURATION follows the panel's size and fps (the frame-count rules are unchanged)", () => {
+    const fromPanel = resolvePrefillSeed({
+      intent: "image-to-video",
+      selection: sel,
+      config: cfg,
+      sizePolicy: "panel",
+      fpsPolicy: "panel",
+      panel,
+    });
+    const fromSameMaterial = seed(
+      "image-to-video",
+      makeSelection({ mediaWidth: 832, mediaHeight: 448, mediaFps: 30 }, { rate: 24, scale: 1 }),
+      "material",
+      "material",
+    );
+    expect(fromPanel.numFrames).toBe(fromSameMaterial.numFrames);
   });
 });
 

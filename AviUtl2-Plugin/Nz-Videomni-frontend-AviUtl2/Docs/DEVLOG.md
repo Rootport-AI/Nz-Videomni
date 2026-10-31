@@ -5813,3 +5813,42 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - オーナー裁定 2 件（2026-10-31）: ① `timeline.extractAudio` を WebUI の 10 秒の時間切れの対象外にした（155.2）。② 音声の参照への事前検査 `REFERENCE_AUDIO_NO_STREAM` を足した（155.1）。
 - 既知の限界（直さない）: H3 の #7 は空きカードの確認より先に抽出する・待ちの間に `baseModels` が古くなりうる・追尾やマスク描画の「1 ジョブの枠」を抽出は取らない。`SingleScreen.reference.test.tsx` の「✒ appends the card's tag … right-clicked video opens the accordion」は単独実行 9 回中 2 回失敗したが、変更していない `addReferenceVideo` の経路で、台帳 §3-238 と同種であり退行ではない。
 - 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §187。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（G-1〜G-10）。
+
+## 156. 右クリックの Single 行き（#2・#4・#7）を作り直し無しのライブ経路へ・Settings「開発用」→「操作パネル」・反対スロットの持ち越しの削除（バックエンド台帳 §1-114。2026-10-31）
+
+### 156.1 結論
+
+- **右クリックの #2（この動画を参照入力）・#4（この画像から動画を生成）・#7（この音声を参照入力〔またはa2v〕する）で、Single の操作パネルを作り直さなくなりました。** 3 項目はライブ命令 `prefillMaterial` で、常にマウントされている Single 画面へ届きます。プロンプト・設定・ほかの欄（キーフレーム・参照動画・音声・H3 の Reference のカード）はそのまま残ります。
+- **#4 は、すでに frame 0 のキーフレームがあれば、そのカードの画像を置き換えます**（位置と強さは保ちます）。無ければ従来どおり frame 0 に足します（上限いっぱいなら「キーフレームの上限」の案内）。
+- **幅・高さ・fps・フレーム数の種は、従来どおり Settings「右クリックからの動画生成時」に従って上書きします。** 「プロジェクトに合わせる」の上書き（`getEditInfo`）は、右クリック 1 回につき 1 回走ります。
+- **Settings の「開発用（Dev）」を廃止し、「操作パネル（panel）」＝操作パネルに今設定されている値を保つ、に置き換えました。** ツールチップは「操作パネルに今設定されている値を保つ」／「Keep the values currently set in the panel」です。保存済みの旧値 `"defaults"` は読み捨てて、その軸の既定値（サイズ＝素材・fps＝プロジェクト）に戻ります（移行処理は作っていません）。Chained 行きの項目は今も作り直すので、Chained での「操作パネルの値」は作り直した直後の既定値です（破棄の確認に同意したうえでの読み込みなので矛盾しません）。
+- **反対スロットの持ち越し（W5 の carryOver）を削除しました。** 作り直しが無いので、反対側の欄はもともと消えません。Chained・Edit は持ち越しを使っていなかったので、ほかのタブへの影響はありません（型検査で確認）。
+- H3 の #2・#7（Reference のカードへ入る `addReferenceVideo`／`addReferenceAudio`）は変えていません。
+- 仕様書は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第 31 版（§3-4・§5-13・§5-15・§7-2）です。
+
+### 156.2 何を変えたか
+
+- **`AppShell.handleRoute` の Step 6。** 行き先が Single のときは `setPendingIntent`／`remountTokens` を触らず、`dispatchCreateCommand({ type: "prefillMaterial", intent, selection })` を送ります。Step 2（タイムラインとの照合）・Step 5（生成中の予約の門）・Step 7〜8（仮オブジェクトの配置）は今のままです。`singleIntent`・`<SingleScreen>` の `key`・`initialIntent`・`remountTokens` の `single` を消しました（ほかのモードの数は残しています）。
+- **Step 7（仮オブジェクトの長さ）。** 行き先が Single のときだけ、公開済みのフォームの値（`getPublishedFormValues()`）を `resolvePrefillSeed` の `panel` として渡します。Chained・Edit には渡しません（それぞれの画面の計算と一致させる R-4 の規約）。種がフレーム数や fps を決めなかったとき（例: 快適上限の無いベースモデルの #4）の落とし先も、Single では「設定の既定値」から「公開済みのフォームの値」に変えました。作り直しが無いので、フォームはその値を保つからです（リボンと操作パネルを食い違わせないため）。
+- **`timeline/prefillSeed.ts`。** ポリシーの型は `"panel" | "project" | "material"` です。`panel?: { width, height, frameRate }` を受け、サイズ軸が `panel` なら素材の寸法を使わず、パネルの幅・高さを `deriveGenerationParams` の「プロジェクト」の入力として通します（#2 の IC-LoRA では従来どおり 128 の倍数へ丸まる。`panel` が無ければ `config.generation_defaults`）。この経路では「プロジェクト設定 W×H に合わせて決定」の注記（`notes` の先頭）を落とします。fps 軸が `panel` ならパネルの fps です（固定 fps のエンジンは従来どおり固定値が優先）。
+- **`modes/single/SingleScreen.tsx`。** 既存の `subscribeCreateCommands` の受け手に `prefillMaterial` を足しました。購読は一度きりなので、値は毎描画で更新する `prefillCtxRef`（フォーム・キーフレーム・2 つのポリシー・config・ベースモデルの規則など）から読みます。処理は (1) 今のフォームの値を `panel` にして種を計算 → (2) `setWidth`／`setHeight`／`setFrameRate`／`setNumFrames` で適用し、注記を `resolutionNotes` の state へ・fps を丸めたらトースト → (3) どちらかの軸が「プロジェクト」なら、旧マウント効果の本体を関数にした `applyProjectOverwrite` を呼ぶ（命令ごとの連番で、後から戻った古い `getEditInfo` の答えは捨てる。setter は答えが戻った時点のものを読む）→ (4) 素材を付ける（#2 は従来どおりリボンの範囲で切ってアップロード・#7 は solo 抽出して音声欄へ・#4 は frame 0 の置き換えか追加）→ (5) 受領の案内と、失敗の監視（state `materialWatch`。参照動画・音声は欄の状態、キーフレームは置き換えたカードの id か、追加で増えた 1 枚を見る。`items[0]` は見ない）→ (6) アコーディオンを開く、の順です。
+- **アコーディオン。** `GenerationForm` の `autoOpenReference`／`autoOpenA2v`（マウント時に 1 回だけ開く）を、数が変わるたびに開く `referenceOpenSignal`／`a2vOpenSignal` に替えました（Reference アコーディオンの `openSignal` と同じ作り。初回の描画では開かない）。#2 は IC-LoRA 欄、#7 は A2V 欄を開きます。
+- **引き算。** `SingleScreen` の `initialIntent` 由来の一度きりの処理（`isICLora` の初期値・種の `useMemo`・fps のトーストの効果・「プロジェクト」上書きのマウント効果・素材の自動読み込みのマウント効果・持ち越しの読み取り・`publishSourceSlots` の効果）、`useGenerationForm` の第 4 引数 `GenerationFormInitial`（`seedICLora`・`carry*` を含む。`icLoraActive` は従来どおり動的）、`timeline/generationPrefill.ts` の `carryOver`、`timeline/provisionalReservation.ts` の `publishSourceSlots`／`getPublishedSourceSlots`／`PublishedSourceSlots`、`modes/chained/useSourceUpload.ts` の `initial` シード（利用者は持ち越しだけだった）を消しました。`GenerationPrefill` 型は Chained・Edit が使うので残しています。
+- **文言。** `settings.prefillPolicyDefaults`（en「Dev」／ja「開発用」）を `prefillPolicyPanel`（en「panel」／ja「操作パネル」）に、`prefillPolicyDevTooltip` を `prefillPolicyPanelTooltip` に替えました。
+- 作り直しが無くなったので、Single で連続生成（Repeat count）中に #2・#4・#7 を右クリックしても、連続生成は止まらなくなりました（以前は作り直しで止まっていた）。設定が変わると、既存の「設定が変わりました」のトーストが出ます。
+- **縮める確認は右クリックの種にも掛かります。** 右クリックが決めたフレーム数（種と「プロジェクト」の上書きの両方）は、Frames 欄を手で変えたときと同じ `useDurationShrinkGuard` の組（`onDurationChange` → `onDurationCommit`）を通します。今あるキーフレームが新しい長さの外へはみ出すときは、手入力と同じ確認（`KeyframeShrinkModal`）が出ます。#4 の枚数の上限も、この右クリックが決めたフレーム数で数えます。
+- 既知の限界（直さない）: Single の本体が `/config` を読み込んでいる最中（起動直後・config の再試行中）に届いた右クリックは、H3 の #2・#7 のライブ経路と同じく受け手がいないので捨てられます。以前は `pendingIntent` が残っていて、読み込み後に適用されていました。
+
+### 156.3 テスト
+
+- 書き換え: `App.prefill.test.tsx`（#2・#4 が入力済みのプロンプトとキーフレームのカードを消さない・#4 が frame 0 のカードの画像を置き換えて他のカードを残す・W5 の持ち越し 2 件は「作り直しが無いので反対側の欄が残る」に・M-1 は作り直しが無い前提に単純化・`pinMaterialPolicies` の fps は「panel」）、`App.prefillPolicy.test.tsx`（「panel」で幅・高さ・fps が右クリック前の手入力の値のまま残る・「プロジェクト」の上書きが右クリック 1 回につき 1 回走り、その間の手入力は次の右クリックまで残る）、`shell/SettingsPanel.test.tsx`・`shell/PrefillPolicyContext.test.tsx`（保存済みの `"defaults"` が既定値へ戻る）、`timeline/prefillSeed.test.ts`（`panel` の分岐・#2 の 128 丸め・注記の削除・フレーム数がパネルの値から計算される）、`modes/single/useGenerationForm.test.ts`・`useGenerationForm.h3.test.ts`・`modes/batch/buildI2vGeneratePayload.test.ts`（第 4 引数を setter に置き換え）、`modes/single/GenerationForm.accordion.test.tsx`（数で開く・マウントでは開かない・利用者が閉じたら次の数まで閉じたまま）、`modes/single/SingleScreen.prefill.test.tsx`（R1・R2 を描画済みの Single への `prefillMaterial` の送信で）、`modes/single/SingleScreen.sourceAudio.test.tsx`（音声は 📁 で付ける）。
+- 追加: `shell/AppShell.minimaxH3.test.tsx` に「H3 の #4 で Reference のカードとプロンプトが残り、仮オブジェクトは操作パネルの今のフレーム数で予約される」、`timeline/createLiveCommands.test.ts` に `prefillMaterial` の受け渡し、`modes/single/SingleScreen.prefill.test.tsx` に「2 回続けた右クリックで、古い `getEditInfo` の答えが後から戻っても捨てる」、`App.prefill.test.tsx` に「上限いっぱいで frame 0 が空いているときの #4 は上限の案内だけ」「frame 0 の置き換えのアップロードが失敗すると素材が見つからない案内」「#2 で IC-LoRA 欄・#7 で A2V 欄が開く」。
+- 削除: `modes/single/SingleScreen.carryOver.test.tsx`、`modes/chained/useSourceUpload.test.ts` の `initial` の 3 件。
+
+### 156.4 門の結果
+
+- WebUI: `npm run typecheck` 0 エラー・`npm run lint` 0 エラー／32 警告（これまでと同数）。`npx vitest run --exclude "**/backend.integration.test.ts"` は 179 ファイル・3,537 テスト。1 回目と 2 回目は各 1 件が失敗し、3 回目は全件合格。失敗したのは本テーマが触れていない時間の隙間に頼るテストで、どちらも単独では通る: `SingleScreen.reference.test.tsx` の「✒ appends the card's tag … right-clicked video opens the accordion」（変更前の HEAD の複製でも 8 回中 1 回失敗）と `AlphaControls.test.tsx` の「from the matte, with no MOV yet …」。台帳 §3-238 に追記した。
+- ネイティブ・バックエンド: 変更なしのため再実行していない。
+- 差分の敵対的レビュー（Opus）: Critical 0・Major 0・Minor 7・Nit 2 → 全件採用（`prefillSeed` の fps の落とし先・DURATION を縮小の守りへ通す・#4 の上限を種のフレーム数で数える・`materialWatch` を連番で守る・古いコメントの訂正・テストの追加・本記録の訂正）。
+- 配置: aux2（1,557,504 バイト・2026-10-31 22:46）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `f883ab5d…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。
+- 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §188。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（G-1〜G-9）。

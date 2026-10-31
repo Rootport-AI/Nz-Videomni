@@ -19,20 +19,16 @@ vi.mock("../../jobs/JobsContext", () => ({
   useJobsContext: () => ({ jobs: [] }),
 }));
 
-// Right-click redesign W2 (accordion auto-expand): coverage for
-// `GenerationForm`'s `autoOpenReference`/`autoOpenA2v` props — the IC-LoRA and
-// A2V `<details className="form-accordion">` blocks should open on mount when
-// `SingleScreen` derives one of them true from a right-click prefill's intent
-// (`referenceVideo` -> "reference-video", `audioToVideo` -> "audio-to-video" —
-// see `timeline/menuRouting.ts`),
-// and stay collapsed exactly like before otherwise. Unit-level: this harness
+// Right-click redesign W2 (accordion auto-expand), live since 台帳 §1-114:
+// coverage for `GenerationForm`'s `referenceOpenSignal`/`a2vOpenSignal` props —
+// the IC-LoRA and A2V `<details className="form-accordion">` blocks open each
+// time `SingleScreen` bumps the matching counter for a `prefillMaterial`
+// (#2 reference video / #7 audio-to-video), never on mount, and the user's own
+// collapse is not fought until the next bump. Unit-level: this harness
 // drives the REAL `useGenerationForm`/`useKeyframes` hooks (mirroring
 // `KeyframesPanel.test.tsx`'s pattern) straight into the real
-// `GenerationForm`, but bypasses `SingleScreen` entirely — the intent ->
-// prop derivation itself is a two-line static mapping in `SingleScreen.tsx`
-// verified by reading the code, not re-exercised through the full
-// AppShell/menu-routing integration stack (keeps this test independent of the
-// parallel work in `App.prefill.test.tsx`).
+// `GenerationForm`, but bypasses `SingleScreen` entirely — the bump itself is
+// covered end to end by `App.prefill.test.tsx`.
 
 /** MiniMax H3's served `constraints.reference` (camelCase). */
 const H3_REFERENCE_RULES: ReferenceRules = {
@@ -45,7 +41,7 @@ const H3_REFERENCE_RULES: ReferenceRules = {
   clipMinSec: 2,
 };
 
-type HarnessProps = Partial<Pick<GenerationFormProps, "autoOpenReference" | "autoOpenA2v">> & {
+type HarnessProps = Partial<Pick<GenerationFormProps, "referenceOpenSignal" | "a2vOpenSignal">> & {
   /** §1-107: pass the `reference` prop (what `SingleScreen` does while the
    * constraints carry `reference`). */
   withReference?: boolean;
@@ -72,8 +68,8 @@ function Harness(props: HarnessProps) {
       singleSourceAudio={null}
       sourceAudioStrength={1}
       onSourceAudioStrengthChange={() => {}}
-      autoOpenReference={props.autoOpenReference}
-      autoOpenA2v={props.autoOpenA2v}
+      referenceOpenSignal={props.referenceOpenSignal}
+      a2vOpenSignal={props.a2vOpenSignal}
       reference={
         props.withReference
           ? {
@@ -117,32 +113,54 @@ function a2vDetails(): HTMLDetailsElement {
 }
 
 describe("GenerationForm — accordion auto-expand (right-click redesign W2)", () => {
-  it("autoOpenReference opens the IC-LoRA accordion on mount and leaves A2V collapsed", () => {
-    renderForm({ autoOpenReference: true });
+  it("a mount never opens either accordion, whatever the starting signals", () => {
+    renderForm({ referenceOpenSignal: 3, a2vOpenSignal: 5 });
+
+    expect(referenceDetails().open).toBe(false);
+    expect(a2vDetails().open).toBe(false);
+  });
+
+  it("bumping referenceOpenSignal opens the IC-LoRA accordion and leaves A2V collapsed", () => {
+    const { rerender } = renderForm({ referenceOpenSignal: 0, a2vOpenSignal: 0 });
+    rerender(
+      <LanguageProvider>
+        <Harness referenceOpenSignal={1} a2vOpenSignal={0} />
+      </LanguageProvider>,
+    );
 
     expect(referenceDetails().open).toBe(true);
     expect(a2vDetails().open).toBe(false);
   });
 
-  it("autoOpenA2v opens the A2V accordion on mount and leaves IC-LoRA collapsed", () => {
-    renderForm({ autoOpenA2v: true });
+  it("bumping a2vOpenSignal opens the A2V accordion and leaves IC-LoRA collapsed", () => {
+    const { rerender } = renderForm({ referenceOpenSignal: 0, a2vOpenSignal: 0 });
+    rerender(
+      <LanguageProvider>
+        <Harness referenceOpenSignal={0} a2vOpenSignal={1} />
+      </LanguageProvider>,
+    );
 
     expect(a2vDetails().open).toBe(true);
     expect(referenceDetails().open).toBe(false);
   });
 
-  it("neither prop set (normal, non-prefilled mount): both accordions stay collapsed", () => {
-    renderForm();
+  it("a user collapse stays collapsed on an unrelated re-render and reopens on the next bump", () => {
+    const { rerender } = renderForm({ referenceOpenSignal: 0, a2vOpenSignal: 0 });
+    const rerenderWith = (referenceOpenSignal: number, a2vOpenSignal: number) =>
+      rerender(
+        <LanguageProvider>
+          <Harness referenceOpenSignal={referenceOpenSignal} a2vOpenSignal={a2vOpenSignal} />
+        </LanguageProvider>,
+      );
+    rerenderWith(0, 1);
+    expect(a2vDetails().open).toBe(true);
 
-    expect(referenceDetails().open).toBe(false);
+    a2vDetails().open = false;
+    rerenderWith(0, 1);
     expect(a2vDetails().open).toBe(false);
-  });
 
-  it("autoOpenReference=false (explicit) behaves identically to omitted — still collapsed", () => {
-    renderForm({ autoOpenReference: false, autoOpenA2v: false });
-
-    expect(referenceDetails().open).toBe(false);
-    expect(a2vDetails().open).toBe(false);
+    rerenderWith(0, 2);
+    expect(a2vDetails().open).toBe(true);
   });
 });
 

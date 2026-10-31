@@ -52,7 +52,7 @@ export function shouldNotifyChange({
 }
 
 // ---- The field text, kept per screen for the session (not in localStorage):
-// it survives a screen remount (right-click `key` rebuild) and resets on reload.
+// it survives a screen remount (Chained's right-click `key` rebuild) and resets on reload.
 
 export type RepeatScreen = "single" | "chained";
 

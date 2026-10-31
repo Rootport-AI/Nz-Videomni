@@ -13,7 +13,7 @@ import type { SelectionItem, TimelineSelection } from "./menuSelection";
  *
  * そこで「値はモジュール側に置き、画面は読むだけ」にする。前例は
  * `provisionalReservation.ts` の publish ミラー群（`publishFormValues` /
- * `publishSourceSlots` など）で、あちらと違うのはリスナーを持つこと ——
+ * `publishKeyframeCount` など）で、あちらと違うのはリスナーを持つこと ——
  * 画面は右クリックの到着で**再描画されなければならない**ので、
  * `useSyncExternalStore` が読める形にしてある（`jobs/JobCard.tsx` の
  * `subscribeInserted` と同じ作り）。

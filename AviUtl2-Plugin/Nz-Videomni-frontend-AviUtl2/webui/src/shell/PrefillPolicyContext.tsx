@@ -10,10 +10,16 @@ import type { ReactNode } from "react";
  *    project defaults) / the selected object's own probed framerate (falling back
  *    to the project's rate/scale).
  *  - `"project"`: the AviUtl2 project's own resolution/fps, read via
- *    `timeline.getEditInfo` once on the prefilling remount.
- *  - `"defaults"` (label "Dev"): always the backend
- *    `config.generation_defaults` (width/height / frame_rate), ignoring the
- *    material's real size/rate.
+ *    `timeline.getEditInfo` once per right-click.
+ *  - `"panel"` (label "panel" / 「操作パネル」, 台帳 §1-114, 2026-10-31): keep
+ *    the values the panel currently holds, ignoring the material's real
+ *    size/rate. It replaced the former `"defaults"` (label "Dev", always the
+ *    backend `config.generation_defaults`), which meant something once every
+ *    right-click remounted Create but has no use now that Create's material
+ *    items arrive live. A stored `"defaults"` is no longer recognised and falls
+ *    back to the axis default (no migration). On the Chained items, which
+ *    still remount their panel, "the panel's values" are that freshly rebuilt
+ *    panel's defaults.
  *
  * §3-13 (2026-09-01): BOTH axes offer all three choices. The fps axis's
  * `"material"` was retired by X1 while native had no way to read a material's
@@ -33,7 +39,7 @@ import type { ReactNode } from "react";
  * ordinary panel edits, presets and the "Get size from AviUtl2" button are
  * unchanged.
  */
-export type PrefillResolutionPolicy = "defaults" | "project" | "material";
+export type PrefillResolutionPolicy = "panel" | "project" | "material";
 
 /** `localStorage` keys the active size/fps prefill policies are persisted
  * under (W1: split from the former single `nzvideomni.prefillResolutionPolicy`,
@@ -47,7 +53,7 @@ export const DEFAULT_PREFILL_SIZE_POLICY: PrefillResolutionPolicy = "material";
 export const DEFAULT_PREFILL_FPS_POLICY: PrefillResolutionPolicy = "project";
 
 function isPolicy(value: string | null): value is PrefillResolutionPolicy {
-  return value === "defaults" || value === "project" || value === "material";
+  return value === "panel" || value === "project" || value === "material";
 }
 
 /** Reads a persisted prefill-policy choice for the given key, falling back to

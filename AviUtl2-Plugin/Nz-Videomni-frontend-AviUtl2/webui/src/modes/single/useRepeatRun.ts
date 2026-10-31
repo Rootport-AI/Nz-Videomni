@@ -20,7 +20,8 @@ import type { RepeatScreen } from "./repeatRun";
  *
  * "Active" means `remaining > 0`: that one condition drives the Stop button,
  * the disabled count field, and the settings-changed toast. The run lives in
- * this hook's state, so a screen remount (right-click `key` rebuild) ends it —
+ * this hook's state, so a screen remount (Chained's right-click `key` rebuild;
+ * Create is never remounted since 台帳 §1-114) ends it —
  * the job already running finishes on its own. Only the field text survives
  * (module variable in `repeatRun.ts`). */
 export interface RepeatRun {

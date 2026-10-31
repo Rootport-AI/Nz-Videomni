@@ -356,9 +356,11 @@ export interface BridgeParamsMap {
    * task brief "Chainのソース入力欄一本化") shows a single dialog whose default
    * filter accepts both image and video extensions — the caller then routes
    * the picked file by extension (`modes/chained/sourceRouting.ts`) rather than
-   * the dialog itself picking a kind up front. */
+   * the dialog itself picking a kind up front. v18 (台帳 §1-113): `"audioOrVideo"`
+   * is the same shape for the three audio cards, which also take a video file
+   * (only its sound is used); the upload itself stays `kind: "audio"`. */
   "ui.pickFile": {
-    kind: "image" | "video" | "audio" | "imageOrVideo";
+    kind: "image" | "video" | "audio" | "imageOrVideo" | "audioOrVideo";
   };
   /** Renders a downscaled preview of a local image or video file as a data URL, for a
    * keyframe card's thumbnail (contract v3, M4). `maxDim` bounds the longer
@@ -1231,6 +1233,8 @@ export const NO_LOCAL_TIMEOUT_METHODS: ReadonlySet<BridgeMethod> = new Set([
   "ui.pickFolder",
   "timeline.trackObject",
   "timeline.renderMaskVideo",
+  // 2026-10-31: native already bounds the render with a 10 s per-frame wait (`bridge.cpp` ExtractAudioWorker); a WebUI-side timeout would release the serialization in `timeline/extractObjectAudio.ts` while native is still rendering with solo layer-disable applied.
+  "timeline.extractAudio",
 ]);
 
 /** Abstraction implemented by both the production WebView2 bridge and the

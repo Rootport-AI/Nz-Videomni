@@ -13,13 +13,13 @@ function extensionOf(fileName: string): string | null {
 }
 
 /**
- * The audio extensions every audio slot accepts — Create's A2V card
+ * The AUDIO-ONLY extension set. Mirrors native's `ui.pickFile({kind: "audio"})`
+ * filter exactly (`bridge_core.cpp`'s `PickFileFilter`) and must stay in sync
+ * with it. The audio cards themselves — Create's A2V card
  * (`modes/single/GenerationForm.tsx`) and Chain's long-A2V card
- * (`modes/chained/ChainAudioPanel.tsx`), for both drag-and-drop
- * ({@link UseFileDropOptions.accept}) and the native picker.
- *
- * Mirrors native's `ui.pickFile({kind: "audio"})` filter exactly
- * (`bridge_core.cpp`'s `PickFileFilter`) and must stay in sync with it. It
+ * (`modes/chained/ChainAudioPanel.tsx`) — accept audio + video and use
+ * `SOURCE_AUDIO_INPUT_EXTENSIONS` for drag-and-drop
+ * ({@link UseFileDropOptions.accept}) and the picker. This list
  * lives here — next to the `accept` contract it is passed to — rather than in
  * either card, so §1-16 長尺A2V did not have to give one screen's component
  * module a non-component export just to share the list with the other.
@@ -27,9 +27,16 @@ function extensionOf(fileName: string): string | null {
 export const SOURCE_AUDIO_EXTENSIONS = ["wav", "mp3", "m4a", "aac", "flac", "ogg"];
 
 /** §1-107: the extensions the H3 Reference accordion's Pictures / Videos cards
- * accept (its Audios cards use {@link SOURCE_AUDIO_EXTENSIONS}). */
+ * accept (its Audios cards use {@link SOURCE_AUDIO_INPUT_EXTENSIONS}). */
 export const REFERENCE_IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp"];
 export const REFERENCE_VIDEO_EXTENSIONS = ["mp4", "mov", "webm", "mkv"];
+
+/** 台帳 §1-113: what the three audio cards (Create's A2V card, the H3 Reference
+ * Audios cards, Chain's audio card) accept by drag-and-drop — the audio
+ * extensions plus the video containers, whose sound alone is used. The upload
+ * still goes to `/upload/audio`, which accepts those containers too. Mirrors
+ * native's `ui.pickFile({kind: "audioOrVideo"})` filter. */
+export const SOURCE_AUDIO_INPUT_EXTENSIONS = [...SOURCE_AUDIO_EXTENSIONS, ...REFERENCE_VIDEO_EXTENSIONS] as const;
 
 export interface UseFileDropOptions {
   /** Accepted extensions, lowercase and without the leading dot (e.g.

@@ -13,10 +13,9 @@
  * can be exhaustively unit-tested; the `useMenuRouter` hook applies it.
  *
  * IMPORTANT — identifier source of truth: the identifiers below must match the
- * strings `plugin.cpp` emits. The shipping plugin emits the twenty concrete
+ * strings `plugin.cpp` emits. The shipping plugin emits the eighteen concrete
  * object/layer identifiers of the right-click redesign
- * (`extendVideo`, `referenceVideo`, `referenceVideoChain`, `videoAudioToVideo`,
- * `videoAudioToLongA2v`,
+ * (`extendVideo`, `referenceVideo`, `referenceVideoChain`,
  * `imageToVideo`, `addImageKeyframe`, `imageToClipChain`, `endWithThis`,
  * `audioToVideo`,
  * `audioToLongA2v`, `appendText`, `insertProvisionalResult`, `outpaintVideo`,
@@ -170,13 +169,12 @@ export interface MenuRoute extends MenuRouteInfo {
  *    picking the menu item. Same `requiredKind`/`placement` as `referenceVideo`
  *    — only the target mode and the intent differ, exactly like the §1-16
  *    long-a2v pair below.
- *  - `videoAudioToVideo` (#3, a2v from a video's sound) and `audioToVideo`
- *    (#7, a2v from an audio object) both route to **single**: single-shot A2V
- *    lives on the Create form (the standalone-A2V move of 2026-07-15). NOTE:
- *    `audioToVideo` used to route to **chained** in the骨組み table; that Chain
- *    audio path is fully de-wired, so the redesign corrects it to single
- *    (SPEC §7-1 note). Their §1-16 long-form siblings `videoAudioToLongA2v` /
- *    `audioToLongA2v` (2026-08-10) DO route to **chained**: that Chain audio
+ *  - `audioToVideo` (#7, a2v from an audio or video object) routes to
+ *    **single**: single-shot A2V lives on the Create form (the standalone-A2V
+ *    move of 2026-07-15). NOTE: `audioToVideo` used to route to **chained** in
+ *    the骨組み table; that Chain audio path is fully de-wired, so the redesign
+ *    corrects it to single (SPEC §7-1 note). Its §1-16 long-form sibling
+ *    `audioToLongA2v` (2026-08-10) DOES route to **chained**: that Chain audio
  *    path is wired again — as ONE track spread over the whole clip list by the
  *    server, which is a different feature from the骨組み's per-clip audio, and
  *    the only place a multi-clip A2V can live.
@@ -213,21 +211,6 @@ export const MENU_ROUTING_TABLE: Readonly<Record<string, MenuRouteInfo>> = {
    * material head-aligned (placement B), matching #2. */
   referenceVideoChain: {
     targetMode: "chained", intent: "reference-video-chain", needsSelection: true,
-    requiredKind: "video", placement: "B",
-  },
-  /** #3 a2v-from-video: Create画面. Extract the selected video's sound to a
-   * wav and run A2V from it. Result head-aligned with the source (placement B). */
-  videoAudioToVideo: {
-    targetMode: "single", intent: "video-audio-to-video", needsSelection: true,
-    requiredKind: "video", placement: "B",
-  },
-  /** §1-16 長尺A2V (2026-08-10): Chain画面. The long-form sibling of #3 — the
-   * SAME mix-path extraction of the selected video's sound over its ribbon
-   * range, but the resulting wav is attached to the whole clip chain
-   * (`ChainAudioPanel`), not to a single generation. Requires a video, and the
-   * result overlays the material head-aligned (placement B), matching #3. */
-  videoAudioToLongA2v: {
-    targetMode: "chained", intent: "video-audio-to-long-a2v", needsSelection: true,
     requiredKind: "video", placement: "B",
   },
   /** #4 i2v: Create画面. Generate a video from the selected image (frame-0
@@ -270,22 +253,22 @@ export const MENU_ROUTING_TABLE: Readonly<Record<string, MenuRouteInfo>> = {
     targetMode: "chained", intent: "end-with-this", needsSelection: true,
     requiredKind: ["video", "image"], placement: "E",
   },
-  /** #7 a2v-from-audio: Create画面. Upload the selected audio file directly
-   * and enable A2V (corrected from the骨組み's chain route; SPEC §7-1). Result
-   * head-aligned with the audio (placement B). */
+  /** #7 a2v: Create画面 (corrected from the骨組み's chain route; SPEC §7-1).
+   * #7/#18 accept an audio OR a video object; the object's own sound over its
+   * ribbon range is rendered by native (solo — only the object's layer kept
+   * audible, `timeline/extractObjectAudio.ts`) and attached as the A2V source.
+   * Result head-aligned with the object (placement B). */
   audioToVideo: {
     targetMode: "single", intent: "audio-to-video", needsSelection: true,
-    requiredKind: "audio", placement: "B",
+    requiredKind: ["audio", "video"], placement: "B",
   },
-  /** §1-16 長尺A2V (2026-08-10): Chain画面. The long-form sibling of #7. Unlike
-   * #7 — which uploads the audio object's BACKING FILE whole — this one extracts
-   * the object's own ribbon range through `timeline.extractAudio` in SOLO mode
-   * (only the object's layer kept audible), so a trimmed audio object
-   * contributes exactly the seconds the ribbon shows. Requires an audio object;
-   * head-aligned placement (B), matching #7. */
+  /** §1-16 長尺A2V (2026-08-10): Chain画面. The long-form sibling of #7.
+   * #7/#18 accept an audio OR a video object; the object's own sound over its
+   * ribbon range is rendered by native (solo) and attached to the whole clip
+   * chain (`ChainAudioPanel`). Head-aligned placement (B), matching #7. */
   audioToLongA2v: {
     targetMode: "chained", intent: "audio-to-long-a2v", needsSelection: true,
-    requiredKind: "audio", placement: "B",
+    requiredKind: ["audio", "video"], placement: "B",
   },
   /** #8 append text to the shared prompt. No transition/remount — handled by an
    * early-return in AppShell.handleRoute; `targetMode` is a formal default
@@ -470,7 +453,7 @@ const TARGET_MODE_BY_INTENT: ReadonlyMap<string, MenuTargetMode> = new Map(
  *
  * Its one caller uses this to decide whether the SINGLE screen's comfort
  * ceiling applies to a prefill's DURATION seed, so note the shape of the
- * answer: `"single"` comes back for 11 rows, but only #2/#3/#4/#7 carry a
+ * answer: `"single"` comes back for 10 rows, but only #2/#4/#7 carry a
  * DURATION policy at all (`prefillSeed.DURATION_POLICY_BY_INTENT` — the rest
  * are `untouched` and never reach a ceiling). Retake routes to `"edit"` and
  * `end-with-this` to `"chained"`, so neither can collide with

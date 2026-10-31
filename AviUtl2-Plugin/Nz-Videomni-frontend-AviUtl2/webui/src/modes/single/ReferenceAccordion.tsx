@@ -4,7 +4,7 @@ import type { NativeBridge } from "../../bridge";
 import {
   REFERENCE_IMAGE_EXTENSIONS,
   REFERENCE_VIDEO_EXTENSIONS,
-  SOURCE_AUDIO_EXTENSIONS,
+  SOURCE_AUDIO_INPUT_EXTENSIONS,
   useFileDrop,
 } from "../../shell/useFileDrop";
 import { AUDIO_PLACEHOLDER_DATA_URL, VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
@@ -50,7 +50,7 @@ export interface ReferenceAccordionProps {
 const ACCEPT: Record<ReferenceKind, readonly string[]> = {
   picture: REFERENCE_IMAGE_EXTENSIONS,
   video: REFERENCE_VIDEO_EXTENSIONS,
-  audio: SOURCE_AUDIO_EXTENSIONS,
+  audio: SOURCE_AUDIO_INPUT_EXTENSIONS,
 };
 
 function ReferenceSlotCard({

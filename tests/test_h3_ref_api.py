@@ -303,3 +303,82 @@ def test_real_payload_refuses_unresolved_references(tmp_path):
     req = _validated(references=[{"kind": "picture", "id": "img-1", "slot": 1}])
     with pytest.raises(RuntimeError, match="1 reference\\(s\\) requested but 0 resolved"):
         _capturing_backend([]).generate(req, tmp_path / "job", seed=1)
+
+
+# --------------------------------------------------------------------------- #
+# an audio reference needs a decodable audio stream (video containers allowed)
+# --------------------------------------------------------------------------- #
+
+
+def _make_mp4(path, *, with_audio: bool):
+    """Tiny 1 s mp4 from ffmpeg lavfi sources; ``with_audio=False`` is video-only."""
+    import subprocess
+
+    from services import video_io
+
+    cmd = [video_io.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "color=c=red:s=64x64:r=24"]
+    if with_audio:
+        cmd += ["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000"]
+    cmd += ["-t", "1"]
+    cmd += ["-c:a", "aac", "-shortest"] if with_audio else ["-an"]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    return path
+
+
+def _upload_mp4_as_audio(client, path) -> str:
+    r = client.post("/api/v1/upload/audio", files={"file": (path.name, path.read_bytes(), "video/mp4")})
+    assert r.status_code == 200, r.text
+    return r.json()["audio_id"]
+
+
+def _need_ffmpeg():
+    import shutil
+
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not on PATH")
+
+
+def test_audio_reference_without_audio_stream_is_422(three_family_client, tmp_path):
+    _need_ffmpeg()
+    _activate(three_family_client, "MiniMaxH3")
+    audio_id = _upload_mp4_as_audio(three_family_client, _make_mp4(tmp_path / "silent.mp4", with_audio=False))
+    before = len(three_family_client.get("/api/v1/jobs").json())
+    r = _post(three_family_client, [{"kind": "audio", "id": audio_id, "slot": 1}])
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "REFERENCE_AUDIO_NO_STREAM"
+    assert error["message"] == f"reference audio has no decodable audio stream: {audio_id}"
+    assert len(three_family_client.get("/api/v1/jobs").json()) == before
+
+
+def test_audio_reference_with_audio_stream_passes_the_check(three_family_client, tmp_path):
+    _need_ffmpeg()
+    _activate(three_family_client, "MiniMaxH3")
+    audio_id = _upload_mp4_as_audio(three_family_client, _make_mp4(tmp_path / "voiced.mp4", with_audio=True))
+    r = _post(three_family_client, [{"kind": "audio", "id": audio_id, "slot": 1}])
+    assert r.status_code == 202, r.text
+
+
+def test_chain_audio_reference_without_audio_stream_is_422(three_family_client, tmp_path):
+    _need_ffmpeg()
+    from test_h3_chain_ref_api import _clips, _post_chain
+
+    _activate(three_family_client, "MiniMaxH3")
+    audio_id = _upload_mp4_as_audio(three_family_client, _make_mp4(tmp_path / "silent.mp4", with_audio=False))
+    r = _post_chain(three_family_client, _clips([{"kind": "audio", "id": audio_id, "slot": 1}], []))
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "REFERENCE_AUDIO_NO_STREAM"
+    assert error["detail"] == "clips[0].references[0]"
+
+
+def test_chain_audio_reference_with_audio_stream_passes_the_check(three_family_client, tmp_path):
+    _need_ffmpeg()
+    from test_h3_chain_ref_api import _clips, _post_chain
+
+    _activate(three_family_client, "MiniMaxH3")
+    audio_id = _upload_mp4_as_audio(three_family_client, _make_mp4(tmp_path / "voiced.mp4", with_audio=True))
+    r = _post_chain(three_family_client, _clips([{"kind": "audio", "id": audio_id, "slot": 1}], []))
+    assert r.status_code == 202, r.text

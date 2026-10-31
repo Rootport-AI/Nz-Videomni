@@ -1055,8 +1055,10 @@ bool ParsePickFileKind(const json& params, std::string* kind_out,
         return false;
     }
     const std::string kind = params["kind"].get<std::string>();
-    if (kind != "image" && kind != "video" && kind != "audio" && kind != "imageOrVideo") {
-        *err_message = "ui.pickFile 'kind' must be image, video, audio or imageOrVideo";
+    if (kind != "image" && kind != "video" && kind != "audio" && kind != "imageOrVideo" &&
+        kind != "audioOrVideo") {
+        *err_message =
+            "ui.pickFile 'kind' must be image, video, audio, imageOrVideo or audioOrVideo";
         return false;
     }
     *kind_out = kind;
@@ -1084,6 +1086,16 @@ std::vector<PickFileFilterEntry> PickFileFilter(const std::string& kind) {
                            "*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.mov;*.webm;*.mkv"});
         entries.push_back(
             {"Image files (*.png;*.jpg;*.jpeg;*.webp)", "*.png;*.jpg;*.jpeg;*.webp"});
+        entries.push_back(
+            {"Video files (*.mp4;*.mov;*.webm;*.mkv)", "*.mp4;*.mov;*.webm;*.mkv"});
+    } else if (kind == "audioOrVideo") {
+        // Same shape as imageOrVideo: a combined audio+video filter leads, then
+        // the audio-only and video-only entries (same extension lists as above).
+        entries.push_back(
+            {"Audio or video files (*.wav;*.mp3;*.m4a;*.aac;*.flac;*.ogg;*.mp4;*.mov;*.webm;*.mkv)",
+             "*.wav;*.mp3;*.m4a;*.aac;*.flac;*.ogg;*.mp4;*.mov;*.webm;*.mkv"});
+        entries.push_back({"Audio files (*.wav;*.mp3;*.m4a;*.aac;*.flac;*.ogg)",
+                           "*.wav;*.mp3;*.m4a;*.aac;*.flac;*.ogg"});
         entries.push_back(
             {"Video files (*.mp4;*.mov;*.webm;*.mkv)", "*.mp4;*.mov;*.webm;*.mkv"});
     }

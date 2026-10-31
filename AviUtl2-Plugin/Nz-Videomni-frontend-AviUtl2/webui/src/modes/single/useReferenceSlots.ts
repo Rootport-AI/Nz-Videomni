@@ -36,6 +36,16 @@ const UPLOAD_KIND: Record<ReferenceKind, "image" | "video" | "audio"> = {
   audio: "audio",
 };
 
+/** The 📁 dialog's kind, kept apart from {@link UPLOAD_KIND} (台帳 §1-113): the
+ * Audios cards also take a video file (only its sound is used), so their
+ * dialog offers both — but native's `backend.uploadFile` only knows
+ * `image|video|audio`, and the file still goes to `/upload/audio`. */
+const PICK_KIND: Record<ReferenceKind, "image" | "video" | "audioOrVideo"> = {
+  picture: "image",
+  video: "video",
+  audio: "audioOrVideo",
+};
+
 const ID_FIELD: Record<ReferenceKind, "image_id" | "video_id" | "audio_id"> = {
   picture: "image_id",
   video: "video_id",
@@ -172,7 +182,7 @@ export function useReferenceSlots(rules: ReferenceRules, deps: UseReferenceSlots
     async (kind: ReferenceKind, slot: number) => {
       let picked: { filePath: string; fileName: string };
       try {
-        picked = await nativeBridge.request("ui.pickFile", { kind: UPLOAD_KIND[kind] });
+        picked = await nativeBridge.request("ui.pickFile", { kind: PICK_KIND[kind] });
       } catch {
         // CANCELLED (or a dialog failure): the slot is left as it was.
         return;

@@ -111,6 +111,22 @@ def reference_not_found(
     )
 
 
+def reference_audio_no_stream(
+    index: int, ref_id: str, clip_index: int | None = None
+) -> APIError:
+    """Reference (Ref2VA, MiniMax H3): the ``kind == "audio"`` entry resolves to
+    an upload (POST /upload/audio also takes a video container) that holds no
+    decodable audio stream. Rejected up front (422) instead of failing late
+    inside the engine. ``clip_index`` is as in :func:`reference_not_found`."""
+    field = "references" if clip_index is None else f"clips[{clip_index}].references"
+    return APIError(
+        "REFERENCE_AUDIO_NO_STREAM",
+        f"reference audio has no decodable audio stream: {ref_id}",
+        422,
+        detail=f"{field}[{index}]",
+    )
+
+
 def source_audio_too_short(detail: str | None = None) -> APIError:
     """A2V: the uploaded source audio is shorter than the video it must drive —
     the chain timeline (``/generate/chain``) or the single clip (MiniMax H3's

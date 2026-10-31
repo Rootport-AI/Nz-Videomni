@@ -58,13 +58,19 @@ export interface UseSourceUploadDeps {
   /** W5 (反対スロット保持): an already-uploaded file to seed the slot with as a
    * ready state from mount, instead of the usual `idle`. Used by Create's
    * opposite-slot carry-over across a right-click remount (#2 carries the
-   * existing audio; #3/#7 carry the existing reference video): the upload id is
+   * existing audio; #7 carries the existing reference video): the upload id is
    * still valid server-side, so the material survives the remount with no
    * re-upload. Applied ONLY in the lazy `useState` initializer (a later
    * re-render never re-applies it), so it behaves exactly like the frozen
    * `idle` start for every existing caller that omits it. `null`/`undefined` =
    * the ordinary `idle` start. */
   initial?: AdoptedSource | null | undefined;
+  /** The 📁 dialog's kind for {@link UseSourceUploadResult.pick}, when it must
+   * differ from the upload `kind` (台帳 §1-113: an audio slot whose dialog also
+   * offers video files — only their sound is used). Only `pick()` reads it; the
+   * upload always uses `kind`, because native's `backend.uploadFile` knows only
+   * `image|video|audio`. Omitted = `kind`. */
+  pickKind?: "image" | "video" | "audio" | "imageOrVideo" | "audioOrVideo";
 }
 
 /** What {@link UseSourceUploadResult.uploadPath} resolves with when the upload
@@ -207,6 +213,7 @@ export function requestedTrim(query: Record<string, string> | undefined): boolea
  */
 export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDeps = {}): UseSourceUploadResult {
   const nativeBridge = deps.nativeBridge ?? defaultBridge;
+  const pickKind = deps.pickKind ?? kind;
   // W5 (反対スロット保持): seed a carried-over ready state when `deps.initial` is
   // supplied — same field shape as a genuine post-upload `ready` state, so the
   // downstream duration-probe / gate logic can't tell it apart from a fresh
@@ -320,7 +327,7 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
   const pick = useCallback(async () => {
     let picked: { filePath: string; fileName: string };
     try {
-      picked = await nativeBridge.request("ui.pickFile", { kind });
+      picked = await nativeBridge.request("ui.pickFile", { kind: pickKind });
     } catch (err) {
       const code = errorCodeOf(err);
       // A CANCELLED dialog leaves whatever was previously selected (if any)
@@ -342,7 +349,7 @@ export function useSourceUpload(kind: "video" | "audio", deps: UseSourceUploadDe
     }
 
     await uploadPath(picked.filePath, picked.fileName);
-  }, [nativeBridge, kind, uploadPath]);
+  }, [nativeBridge, pickKind, uploadPath]);
 
   const clear = useCallback(() => {
     generationRef.current += 1; // invalidate any in-flight uploadPath()

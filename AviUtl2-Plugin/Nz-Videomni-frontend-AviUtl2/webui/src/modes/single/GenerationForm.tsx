@@ -5,7 +5,7 @@ import { useStrings } from "../../i18n/LanguageContext";
 import { selectableControlLoraNames } from "../../lora/controlLoras";
 import { LORA_STRENGTH_MAX, LORA_STRENGTH_MIN } from "../../lora/loraTags";
 import { AUDIO_PLACEHOLDER_DATA_URL, VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
-import { SOURCE_AUDIO_EXTENSIONS, useFileDrop } from "../../shell/useFileDrop";
+import { SOURCE_AUDIO_INPUT_EXTENSIONS, useFileDrop } from "../../shell/useFileDrop";
 import type { SingleSectionsDisabled } from "../../shell/featureScope";
 import {
   CropOutputField,
@@ -87,7 +87,7 @@ export interface GenerationFormProps {
    * (collapsed, user-togglable). */
   autoOpenReference?: boolean | undefined;
   /** Right-click redesign W2: true when `initialIntent.intent` was
-   * `"video-audio-to-video"` or `"audio-to-video"`. Opens the A2V
+   * `"audio-to-video"`. Opens the A2V
    * `<details>` on mount the same way `autoOpenReference` does for IC-LoRA. */
   autoOpenA2v?: boolean | undefined;
   /** The parts of this form the loaded base model's engine
@@ -142,26 +142,26 @@ export function GenerationForm({
   const strings = useStrings();
   // Right-click redesign W2: the IC-LoRA/A2V accordions default to collapsed,
   // but a right-click prefill that lands material INSIDE one of them
-  // (referenceVideo / videoAudioToVideo / audioToVideo) should open it so the
+  // (referenceVideo / audioToVideo) should open it so the
   // user immediately sees where the material went — see intents routed by
   // `menuRouting.ts` and SingleScreen's `autoOpenReference`/`autoOpenA2v`
   // derivation. Kept as an imperative `.open = true` on mount (NOT a
   // controlled `open={autoOpenReference}` prop) so the `<details>` stays
   // fully uncontrolled afterward — the user's own manual expand/collapse is
   // never fought by a prop that doesn't change again. `GenerationForm` only
-  // ever mounts fresh for these three intents (SingleScreen remounts the
+  // ever mounts fresh for these two intents (SingleScreen remounts the
   // whole form via `key` on a new intent), so a mount-only effect is exactly
   // "open once, then hands off" — no dependency array churn to guard against.
   // `useLayoutEffect` (not `useEffect`): this write must land in the SAME
   // synchronous commit phase as the rest of the mount, before any passive
   // effect elsewhere in the tree runs. `SingleScreen`'s own auto-load mount
   // effect (the sibling `useEffect` that shows the "loaded from a right-click"
-  // note / kicks off the #3 audio extraction) is a passive effect too; a
+  // note / kicks off the #7 audio extraction) is a passive effect too; a
   // passive-effect write here landed AFTER it in practice and could get
   // coalesced with that effect's own note-area DOM updates under React's
   // batching, which starved a real regression test
-  // (`App.prefill.test.tsx`'s videoAudioToVideo case) of ever observing the
-  // transient "Extracting audio…" note. Layout effects run before ANY
+  // (`App.prefill.test.tsx`'s #7 extraction case) of ever observing the
+  // transient "Extracting…" note. Layout effects run before ANY
   // passive effect in the commit, so this write no longer shares a batching
   // window with that unrelated async note sequence.
   const referenceDetailsRef = useRef<HTMLDetailsElement>(null);
@@ -653,15 +653,14 @@ function SourceAudioSection({
 
   // IC-LoRA/A2V card redesign: whole-card drop target (mirrors Chain's
   // `SourceInputPanel`), replacing the old `DropZone` wrapper. Routed through
-  // `form.attachSourceAudioByPath` (NOT `sourceAudio.uploadPath` directly) — it
-  // also captures the W4 span cap so a #7 prefill audio keeps following the
-  // trimmed ribbon (see that function's doc comment in useGenerationForm.ts).
+  // `form.attachSourceAudioByPath`, the non-picker attach path. 台帳 §1-113:
+  // a video file is accepted too (only its sound is used).
   const {
     isDragOver,
     error: dropError,
     handlers: dropHandlers,
   } = useFileDrop({
-    accept: SOURCE_AUDIO_EXTENSIONS,
+    accept: SOURCE_AUDIO_INPUT_EXTENSIONS,
     onFile: (filePath, fileName) => void form.attachSourceAudioByPath(filePath, fileName),
     disabled: disabled || uploading,
     nativeBridge,

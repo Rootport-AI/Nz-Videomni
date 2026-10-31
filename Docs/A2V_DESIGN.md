@@ -50,7 +50,7 @@
 ### 2.1 API 表層（凍結契約の加算的拡張・V2V 前例に従う）
 
 - **`POST /upload/audio` を新設**（`services/audio_upload_store.py` を新設＝`video_upload_store.py` のクローン）:
-  - 保存先 `uploads/audios/{id}/input{ext}`・許可拡張子 `.wav/.mp3/.m4a/.aac/.flac/.ogg`・`max_audio_size_mb`（config デフォルト付き）。無検査保存（コーデック検査は preflight で ffprobe が担当）。
+  - 保存先 `uploads/audios/{id}/input{ext}`・許可拡張子 `.wav/.mp3/.m4a/.aac/.flac/.ogg` と動画の容器 `.mp4/.mov/.webm/.mkv`（動画の場合は音声トラックだけを使う）・`max_audio_size_mb`（config デフォルト 200MB）。無検査保存（コーデック検査は preflight で ffprobe が担当）。
   - `api/uploads.py` に `POST /upload/audio` を追加（`POST /upload/video` と同型）。
 - **`POST /generate/chain` に optional `source_audio` を追加**（省略時 byte 同一＝V2V `source_video` 前例）:
 

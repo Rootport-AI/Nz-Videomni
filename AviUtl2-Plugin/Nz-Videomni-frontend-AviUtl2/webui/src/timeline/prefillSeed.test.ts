@@ -78,15 +78,13 @@ describe("DURATION_POLICY_BY_INTENT", () => {
       // nothing about how long clip 0 should be (unlike its #2 sibling above,
       // whose single generation IS the reference's length).
       "reference-video-chain": "comfortCeiling",
-      "video-audio-to-video": "materialClampedToCeiling",
       "image-to-video": "comfortCeiling",
       "image-to-clip-chain": "comfortCeiling",
       "audio-to-video": "materialClampedToCeiling",
       "current-frame-to-clip-chain": "comfortCeiling",
       // 台帳§1-16 長尺A2V: Chain intents, so comfortCeiling — the extracted
       // track's own length re-lays the WHOLE clip list via the audio auto-fit,
-      // it does not clamp clip 0 (unlike their single-shot #3/#7 siblings).
-      "video-audio-to-long-a2v": "comfortCeiling",
+      // it does not clamp clip 0 (unlike its single-shot #7 sibling).
       "audio-to-long-a2v": "comfortCeiling",
       // 素材（末尾）(2026-08-15): a Chain intent, so comfortCeiling. Its material
       // is EMBEDDED in the generation's own tail (the frozen frames) rather than
@@ -99,10 +97,10 @@ describe("DURATION_POLICY_BY_INTENT", () => {
     });
   });
 
-  // 台帳§1-16: the long-a2v intents must NOT inherit #3/#7's material clamp —
+  // 台帳§1-16: the long-a2v intent must NOT inherit #7's material clamp —
   // asserted directly, since the two families are one table row apart.
-  it("長尺A2Vの2意図は素材尺でクランプしない（comfortCeilingのまま）", () => {
-    for (const intent of ["video-audio-to-long-a2v", "audio-to-long-a2v"]) {
+  it("長尺A2Vの意図は素材尺でクランプしない（comfortCeilingのまま）", () => {
+    for (const intent of ["audio-to-long-a2v"]) {
       expect(DURATION_POLICY_BY_INTENT[intent]).toBe("comfortCeiling");
       expect(
         materialDurationForIntent(intent, makeSelection({ frameStart: 0, frameEnd: 120 }, { rate: 24, scale: 1 })),
@@ -473,39 +471,26 @@ describe("resolvePrefillSeed — DURATION (materialClampedToCeiling intents, W4 
     expect(s.numFrames).toBe(121);
   });
 
-  it("#3 video-audio-to-video: seeds from the object's timeline SPAN", () => {
-    // span = (frameEnd - frameStart + 1) / (rate/scale) = 121/24 s; * genFps(24)
-    // = 121 -> already on the 8n+1 grid. media 512x320 -> ceiling 481, no clamp.
-    const s = seed(
-      "video-audio-to-video",
-      makeSelection({ mediaWidth: 512, mediaHeight: 320, frameStart: 0, frameEnd: 120, mediaDurationSec: 999 }, { rate: 24, scale: 1 }),
-    );
-    expect(s.numFrames).toBe(121);
-  });
-
   it("falls back (undefined DURATION) when the span is unresolvable (rate/scale <= 0)", () => {
     // No rate -> the span can't be resolved: the policy resolves nothing, so
     // numFrames is undefined and the caller keeps the config default.
     expect(seed("reference-video", makeSelection({ frameStart: 0, frameEnd: 120 }, { rate: 0, scale: 1 })).numFrames).toBeUndefined();
     expect(seed("audio-to-video", makeSelection({ mediaWidth: 0, mediaHeight: 0 }, { rate: 24, scale: 0 })).numFrames).toBeUndefined();
-    expect(
-      seed("video-audio-to-video", makeSelection({ frameStart: 0, frameEnd: 120 }, { rate: 0, scale: 1 })).numFrames,
-    ).toBeUndefined();
   });
 });
 
-describe("materialDurationForIntent (W4: span-based for #2/#7/#3)", () => {
-  it("returns the inclusive timeline span (seconds) for #2/#7/#3", () => {
+describe("materialDurationForIntent (W4: span-based for #2/#7)", () => {
+  it("returns the inclusive timeline span (seconds) for #2/#7", () => {
     // (120 - 10 + 1) frames / (24/1) = 111/24 s.
-    for (const intent of ["reference-video", "audio-to-video", "video-audio-to-video"]) {
+    for (const intent of ["reference-video", "audio-to-video"]) {
       expect(
         materialDurationForIntent(intent, makeSelection({ frameStart: 10, frameEnd: 120 }, { rate: 24, scale: 1 })),
       ).toBeCloseTo(111 / 24, 6);
     }
   });
 
-  it("returns undefined for #2/#7/#3 when rate/scale or the span is invalid", () => {
-    for (const intent of ["reference-video", "audio-to-video", "video-audio-to-video"]) {
+  it("returns undefined for #2/#7 when rate/scale or the span is invalid", () => {
+    for (const intent of ["reference-video", "audio-to-video"]) {
       expect(
         materialDurationForIntent(intent, makeSelection({ frameStart: 0, frameEnd: 120 }, { rate: 0, scale: 1 })),
       ).toBeUndefined();

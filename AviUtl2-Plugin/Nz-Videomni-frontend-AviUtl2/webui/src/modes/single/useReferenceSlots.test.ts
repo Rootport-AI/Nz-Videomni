@@ -346,6 +346,22 @@ describe("useReferenceSlots — pick / attachToFirstEmpty / clear", () => {
     expect(slot.fileName).toBe("pic.png");
   });
 
+  // 台帳 §1-113: the Audios cards' dialog also offers video files, but the
+  // upload stays kind "audio" (native's backend.uploadFile knows no other).
+  it("pick: an Audios card asks for audio OR video and uploads the pick as audio", async () => {
+    const bridge = createMockBridge({ delayMs: 0, pickFileName: "clip.mp4" });
+    const spy = vi.spyOn(bridge, "request");
+    const { result } = renderHook(() => useReferenceSlots(RULES, { nativeBridge: bridge }));
+
+    await act(async () => {
+      await result.current.pick("audio", 1);
+    });
+
+    expect(spy).toHaveBeenCalledWith("ui.pickFile", { kind: "audioOrVideo" });
+    expect(spy).toHaveBeenCalledWith("backend.uploadFile", expect.objectContaining({ kind: "audio" }));
+    expect(result.current.state.slots.audio[0]!.fileName).toBe("clip.mp4");
+  });
+
   it("attachToFirstEmpty fills the lowest free slots, then returns null when full", async () => {
     const bridge = bridgeWithClips();
     const spy = vi.spyOn(bridge, "request");

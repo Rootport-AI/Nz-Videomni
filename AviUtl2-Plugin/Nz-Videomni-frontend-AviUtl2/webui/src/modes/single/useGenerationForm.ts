@@ -222,23 +222,14 @@ export interface GenerationFormInitial {
    * material's own length clamped to that ceiling for #2 reference-video.
    * Applied only in the lazy `useState` initializer (re-snapped onto the frame
    * grid in force), like `width`/`height`. Omitted for the normal (tab-opened) form and
-   * any prefill whose policy leaves DURATION untouched (#3/#7 A2V, whose length
+   * any prefill whose policy leaves DURATION untouched (#7 A2V, whose length
    * comes from the wav auto-adjust below instead), both of which keep
    * `config.generation_defaults.num_frames`. */
   numFrames?: number;
-  /** W4 (#7 trim追従): the span-derived DURATION cap for an audio-to-video
-   * right-click prefill. #7 uploads the WHOLE audio file, so the wav-duration
-   * auto-adjust below would otherwise re-seed `numFrames` off the full file
-   * length, overriding the trimmed (ribbon) span the prefill seeded. When set,
-   * the wav suggestion is capped at this value — BUT only while the currently
-   * attached audio is still the prefill-attached one; swapping the audio lifts
-   * the cap and restores the ordinary full-wav follow. Omitted for every
-   * non-#7 path (normal form, #3 whose extracted wav is already span-length). */
-  a2vSeedMaxFrames?: number;
   /** true for the IC-LoRA (`referenceVideo`) flow: pins the rounding multiple
    * to 128 and switches the max bounds onto that grid from mount. */
   isICLora?: boolean;
-  /** W5 (反対スロット保持): a reference video carried across a #3/#7 (A2V)
+  /** W5 (反対スロット保持): a reference video carried across a #7 (A2V)
    * remount — the opposite slot the new A2V material does not replace. Seeds the
    * `referenceVideo` slot's ready state (no re-upload) AND, crucially, forces the
    * form's width/height grid onto the 128 multiple from mount (see the derived
@@ -257,9 +248,7 @@ export interface GenerationFormInitial {
    * `sourceAudio` slot's ready state (no re-upload) INCLUDING its `filePath`,
    * so the mount-time wav probe — which reads that same
    * `sourceAudio.state.filePath` — still fires and the DURATION auto-adjusts to
-   * the audio (回帰対策2 — keeps the A2V DURATION priority). NOT paired with
-   * `a2vSeedMaxFrames`: a #2-carried audio is not a prefill material, so it
-   * follows the full wav length (no span cap). */
+   * the audio (回帰対策2 — keeps the A2V DURATION priority). */
   carryAudio?: { id: string; fileName: string; filePath: string };
 }
 
@@ -394,14 +383,11 @@ export interface UseGenerationFormResult {
    * A2V payload also carries the reference-video fields (reference-controlled
    * A2V). */
   sourceAudio: UseSourceUploadResult;
-  /** Contract v7 (drag-and-drop): attaches a dropped audio file, wrapping
-   * `sourceAudio.uploadPath` with the W4 span-cap capture (`a2vSeedCapPathRef`)
-   * that lets a #7 prefill audio follow the trimmed ribbon. Use this instead of
-   * `sourceAudio.uploadPath` directly for any non-`ui.pickFile` attach path.
-   *
-   * §3-36 (2026-09-04): the wav-duration auto-adjust probe reads
-   * `sourceAudio.state.filePath` — which `uploadPath` itself sets — so this
-   * wrapper no longer has any path-priming duty; only the cap capture. */
+  /** Contract v7 (drag-and-drop): attaches an audio file by path — the
+   * non-`ui.pickFile` attach path (drag-and-drop and the #7 right-click
+   * auto-load). A thin wrapper over `sourceAudio.uploadPath` that drops the
+   * upload's outcome value; the wav-duration auto-adjust probe reads
+   * `sourceAudio.state.filePath`, which `uploadPath` itself sets. */
   attachSourceAudioByPath: (filePath: string, fileName: string) => Promise<void>;
   /** True once a source audio is attached (`status === "ready"`) — i.e. audio
    * is the generation's driving source — the flag that routes submission
@@ -550,7 +536,7 @@ export function useGenerationForm(
     [controlLora, setControlLora],
   );
 
-  // W5 回帰対策1: a carried reference video (#3/#7 A2V remount) must ALSO seed
+  // W5 回帰対策1: a carried reference video (#7 A2V remount) must ALSO seed
   // the form in IC-LoRA mode, exactly as a routed `reference-video` intent does —
   // otherwise the 64-grid width/height seed fails the 128 gate the reference
   // video imposes and Generate is permanently blocked (`dimensionsOffGrid`).
@@ -562,15 +548,6 @@ export function useGenerationForm(
   // 128-aligned seed left behind stays valid on the relaxed 64 grid (128 is a
   // multiple of 64), so no re-snap is needed when the mode relaxes.
   const seedICLora = (initial.isICLora ?? false) || initial.carryReferenceVideo !== undefined;
-
-  // W4 (#7 trim追従): the span-derived DURATION cap for an audio-to-video
-  // prefill, frozen at mount like every other one-shot `initial.*`. `undefined`
-  // for every non-#7 path (no cap). `a2vSeedCapPathRef` captures the FIRST
-  // audio path attached while the cap is set — the prefill-attached audio — so
-  // the wav auto-adjust below can tell "still the prefill audio" (apply the cap)
-  // from "user swapped the audio" (lift the cap) by comparing paths.
-  const [a2vSeedMaxFrames] = useState(() => initial.a2vSeedMaxFrames);
-  const a2vSeedCapPathRef = useRef<string | null>(null);
 
   const baseLimits: FormLimits = useMemo(
     () => ({
@@ -587,7 +564,7 @@ export function useGenerationForm(
 
   const referenceVideo = useSourceUpload("video", {
     nativeBridge,
-    // W5: seed the carried reference video's ready state (#3/#7 remount) — the
+    // W5: seed the carried reference video's ready state (#7 remount) — the
     // id is still valid server-side, so no re-upload.
     ...(initial.carryReferenceVideo ? { initial: initial.carryReferenceVideo } : {}),
   });
@@ -598,7 +575,7 @@ export function useGenerationForm(
   // until the user opts in via the UI's enable checkbox, matching the
   // server's own "omitted = use its own default" semantics. Mirrors Chain's
   // `useChainForm.conditioningAttentionStrength`/`referenceVideoStrength`.
-  // W5: the two strengths seed from the carried reference video (#3/#7 remount)
+  // W5: the two strengths seed from the carried reference video (#7 remount)
   // so an opted-in strength survives alongside the video; `undefined` (no carry)
   // and `null` (carried but not opted in) both start at `null` ("not set").
   const [conditioningAttentionStrength, setConditioningAttentionStrengthState] = useState<number | null>(
@@ -623,7 +600,7 @@ export function useGenerationForm(
   // §3-36 (2026-09-04): the local `filePath` the wav-duration probe below needs
   // now comes straight off `sourceAudio.state.filePath`. `useSourceUpload` sets
   // that field on EVERY transition — a `ui.pickFile` pick, a direct
-  // `uploadPath` (drag-and-drop / #3 / #7), and the W5 `initial` seed alike —
+  // `uploadPath` (drag-and-drop / #7), and the W5 `initial` seed alike —
   // so the plain `nativeBridge` is passed through here as it is everywhere
   // else. The old wav-picker snoop wrapper (`audioProbingBridge` capturing the
   // pick's path into a `lastAudioFilePathRef`) dated from contract v9, before
@@ -632,6 +609,9 @@ export function useGenerationForm(
   // the audio path — matching the reference-video slot right below.
   const sourceAudio = useSourceUpload("audio", {
     nativeBridge,
+    // 台帳 §1-113: the 📁 dialog also offers video files (only their sound is
+    // used); the upload stays `kind: "audio"`.
+    pickKind: "audioOrVideo",
     // W5: seed the carried source audio's ready state (#2 remount) — its
     // `filePath` comes along, which is what keeps the mount-time wav probe
     // firing for a carried-over audio (回帰対策2).
@@ -640,27 +620,15 @@ export function useGenerationForm(
   const audioReady = sourceAudio.state.status === "ready";
 
   // Contract v7 (drag-and-drop): the non-`ui.pickFile` attach path — D&D, and
-  // the #3/#7 right-click auto-loads. Since §3-36 its only extra duty over a
-  // bare `sourceAudio.uploadPath` is the W4 span-cap capture below (the
-  // wav-duration probe reads `sourceAudio.state.filePath`, which `uploadPath`
-  // sets for every caller), but callers must still route through here rather
-  // than `uploadPath` directly, or a #7 prefill audio stops following the
-  // trimmed ribbon.
+  // the #7 right-click auto-load (the wav-duration probe reads
+  // `sourceAudio.state.filePath`, which `uploadPath` sets for every caller).
   const attachSourceAudioByPath = useCallback(
     (filePath: string, fileName: string) => {
-      // W4 (#7 trim追従): remember the FIRST audio attached under an active
-      // span cap as the prefill audio (the #7 auto-load attaches exactly once at
-      // mount, before any user action). Later attaches — a drag-and-drop swap —
-      // leave this untouched, so their path differs from the cap path and the
-      // wav auto-adjust lifts the cap. `undefined` cap → nothing to capture.
-      if (a2vSeedMaxFrames !== undefined && a2vSeedCapPathRef.current === null) {
-        a2vSeedCapPathRef.current = filePath;
-      }
       // `uploadPath` resolves with the upload's outcome since Alpha Gen 第 2 弾;
       // this attach path only ever needed the settle, so the value is dropped.
       return sourceAudio.uploadPath(filePath, fileName).then(() => undefined);
     },
-    [sourceAudio, a2vSeedMaxFrames],
+    [sourceAudio],
   );
 
   // Audio (`isA2v`) and the reference video (`icLoraActive`) are combinable,
@@ -1110,7 +1078,7 @@ export function useGenerationForm(
       // W8: cap the wav-derived suggestion at the current resolution's comfort
       // ceiling so a long wav never auto-adjusts DURATION past the point
       // generation starts spilling. Applies to EVERY A2V attach path (pick /
-      // drag-and-drop / right-click #3/#7), an owner-approved intentional
+      // drag-and-drop / right-click #7), an owner-approved intentional
       // behavior change. A null ceiling (unresolvable map) leaves the
       // suggestion untouched.
       //
@@ -1123,23 +1091,9 @@ export function useGenerationForm(
       // Both the smart ceiling and the `spill_free_frames` entries are valid
       // 8n+1 values, so clamping down to one keeps `suggested` on-grid.
       if (spillThresholdFrames !== null && suggested > spillThresholdFrames) suggested = spillThresholdFrames;
-      // W4 (#7 trim追従): while the attached audio is STILL the prefill-attached
-      // one (path matches the captured cap path), additionally cap the wav
-      // suggestion at the span-derived DURATION so #7 follows the trimmed ribbon
-      // rather than the full uploaded file. Both `a2vSeedMaxFrames` and the span
-      // seed are valid 8n+1 values, so `min` keeps `suggested` on-grid. Swapping
-      // the audio makes the paths differ, lifting the cap (ordinary full-wav
-      // follow resumes). `filePath` is this probe run's own path (captured
-      // above): a swap that lands mid-probe tears this run down and returns at
-      // the `cancelled` guard, so it never reaches this comparison.
-      if (
-        a2vSeedMaxFrames !== undefined &&
-        a2vSeedCapPathRef.current !== null &&
-        filePath === a2vSeedCapPathRef.current &&
-        suggested > a2vSeedMaxFrames
-      ) {
-        suggested = a2vSeedMaxFrames;
-      }
+      // No separate ribbon cap (§1-113): the #7 right-click wav is rendered
+      // from exactly the ribbon range (`timeline/extractObjectAudio.ts`), so
+      // its measured length already bounds this suggestion.
       setValues((prev) => ({ ...prev, numFrames: suggested }));
       audioAdjustCounterRef.current += 1;
       setAudioFramesAdjustedEvent({ id: audioAdjustCounterRef.current, frames: suggested, durationSec: probe.durationSec });
@@ -1155,7 +1109,7 @@ export function useGenerationForm(
       // never see a duration for this upload.
       if (!settled) probedAudioIdRef.current = null;
     };
-  }, [sourceAudio.state.status, sourceAudio.state.id, sourceAudio.state.filePath, nativeBridge, values.width, values.height, spillThresholdFrames, suggestFramesForAudioOnRoute, a2vSeedMaxFrames]);
+  }, [sourceAudio.state.status, sourceAudio.state.id, sourceAudio.state.filePath, nativeBridge, values.width, values.height, spillThresholdFrames, suggestFramesForAudioOnRoute]);
 
   // A2V-only: gates on whether the attached wav's MEASURED duration is long
   // enough for `values.numFrames` (`chainUtils.audioLengthPrecheck`). `null`

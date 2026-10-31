@@ -206,6 +206,19 @@ describe("ReferenceAccordion", () => {
     await waitFor(() => expect(api.attach).toHaveBeenCalledWith("picture", 3, "C:\\a\\p.png", "p.png"));
   });
 
+  // 台帳 §1-113: an Audios card also takes a video file (only its sound is used).
+  it("attaches a dropped video file to an Audios card", async () => {
+    const api = makeApi(enabled(createInitialState(RULES)));
+    const nativeBridge = {
+      requestWithFiles: vi.fn().mockResolvedValue({ files: [{ filePath: "C:/a/clip.mp4", fileName: "clip.mp4" }] }),
+    } as unknown as NativeBridge;
+    renderAccordion(api, { nativeBridge });
+    fireEvent.drop(screen.getByTestId("ref-slot-audio-1"), {
+      dataTransfer: { files: [new File([], "clip.mp4")] },
+    });
+    await waitFor(() => expect(api.attach).toHaveBeenCalledWith("audio", 1, "C:/a/clip.mp4", "clip.mp4"));
+  });
+
   it("rejects a dropped file of the wrong kind", async () => {
     const api = makeApi(enabled(createInitialState(RULES)));
     const nativeBridge = {

@@ -370,10 +370,11 @@ void OnMenuInvokedParam(void* param) {
 // Outpainting / Retake sub-panels; both require a video, and retakeRange
 // additionally requires a selected frame range (the WebUI enforces both in
 // menuSelection.ts - this file only registers and emits).
-// videoAudioToLongA2v / audioToLongA2v (ledger 1-16, long a2v) are the Chained
-// tab's counterparts of videoAudioToVideo / audioToVideo: the WebUI extracts
-// the ribbon's audio (mix for the video item, solo for the audio item) and
-// attaches it to the whole clip chain instead of a single generation.
+// audioToLongA2v (ledger 1-16, long a2v) is the Chained tab's counterpart of
+// audioToVideo: the WebUI extracts the ribbon's audio (solo) and attaches it
+// to the whole clip chain instead of a single generation. (The video-sound
+// items videoAudioToVideo / videoAudioToLongA2v were removed from the object
+// menu in contract v18; the audio is now picked in the panels.)
 // referenceVideoChain (ledger 1-15 W4, 2026-08-11) is the same idea applied to
 // the IC-LoRA reference: referenceVideo sends the clip to the Single tab's
 // reference slot, referenceVideoChain sends it to the Chained tab's, so one
@@ -386,8 +387,6 @@ void OnMenuInvokedParam(void* param) {
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_ExtendVideo,       "extendVideo")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_ReferenceVideo,    "referenceVideo")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_ReferenceVideoChain, "referenceVideoChain")
-NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_VideoAudioToVideo, "videoAudioToVideo")
-NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_VideoAudioToLongA2v, "videoAudioToLongA2v")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_AudioToLongA2v,    "audioToLongA2v")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_ImageToVideo,      "imageToVideo")
 NZVIDEOMNI_MENU_FALLBACK_FN(OnMenu_AddImageKeyframe,  "addImageKeyframe")
@@ -461,10 +460,10 @@ struct TimelineMenuItem {
 // Language/*.NzVideomni.aul2 are untouched. (Keep this comment ASCII - see the
 // file header; a non-ASCII byte anywhere here raises MSVC C4819.)
 //
-// Ledger 1-16 (long a2v): the two entries sit directly beside the
-// single-shot a2v items they mirror - videoAudioToLongA2v right after
-// videoAudioToVideo inside the Video block, audioToLongA2v right after
-// audioToVideo - so the pair "single shot / long chain" reads together.
+// Ledger 1-16 (long a2v): audioToLongA2v sits directly beside the
+// single-shot a2v item it mirrors, right after audioToVideo, so the pair
+// "single shot / long chain" reads together. (Its Video-block twin
+// videoAudioToLongA2v and videoAudioToVideo were removed in contract v18.)
 //
 // Ledger 1-15 W4 (2026-08-11, 14 items): referenceVideoChain follows the same
 // rule - it sits directly after referenceVideo, the single-shot IC-LoRA item it
@@ -497,12 +496,15 @@ struct TimelineMenuItem {
 // entry and sits at the end of the Video block, directly under inpaintVideo.
 // Its name_key is new, so both
 // Language/*.NzVideomni.aul2 files gained one line for it.
+//
+// 17 items (2026-10-31, not a contract change; v18 is the `audioOrVideo`
+// picker kind): the two video-sound items videoAudioToVideo and
+// videoAudioToLongA2v were removed from the Video block (their name_keys were
+// dropped from both Language files); every other item and the order stay.
 const TimelineMenuItem kObjectMenuItems[] = {
     { L"Nz-Videomni\\\U0001F3AC Video: continue this video (v2v)",                             "extendVideo",       &OnMenu_ExtendVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: use this video as a reference input",                   "referenceVideo",    &OnMenu_ReferenceVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: long IC-LoRA reference for a clip chain",               "referenceVideoChain", &OnMenu_ReferenceVideoChain },
-    { L"Nz-Videomni\\\U0001F3AC Video: audio-to-video from this video's sound",                "videoAudioToVideo", &OnMenu_VideoAudioToVideo },
-    { L"Nz-Videomni\\\U0001F3AC Video: long a2v from this video's sound",                      "videoAudioToLongA2v", &OnMenu_VideoAudioToLongA2v },
     { L"Nz-Videomni\\\U0001F3AC Video: expand this video's canvas (Outpainting)",              "outpaintVideo",     &OnMenu_OutpaintVideo },
     { L"Nz-Videomni\\\U0001F3AC Video: redo the selected range (Retake)",                      "retakeRange",       &OnMenu_RetakeRange },
     { L"Nz-Videomni\\\U0001F3AC Video: inpaint this video",                                    "inpaintVideo",      &OnMenu_InpaintVideo },

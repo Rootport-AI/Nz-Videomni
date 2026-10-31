@@ -20,6 +20,7 @@ import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { computeTargetNumFrames } from "../../timeline/deriveDuration";
 import { DURATION_POLICY_BY_INTENT, materialDurationForIntent, resolvePrefillSeed } from "../../timeline/prefillSeed";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
+import { extractAudioFailureNote, extractObjectAudio } from "../../timeline/extractObjectAudio";
 import { decideSourceTrim, trimQuery } from "../../timeline/sourceTrim";
 import type { SourceTrimDecision } from "../../timeline/sourceTrim";
 import { bindToJob, publishFormValues, publishKeyframeCount, publishSourceSlots, rollbackReservedPlacement } from "../../timeline/provisionalReservation";
@@ -339,15 +340,15 @@ function SingleScreenBody({
   const isICLora = initialIntent?.intent === "reference-video";
   // Right-click redesign W2 (accordion auto-expand): mirrors the intent
   // branch the I9/I10 auto-load effect below already switches on
-  // (`menuRouting.ts`'s `reference-video` / `video-audio-to-video` /
-  // `audio-to-video`) — the material lands in the IC-LoRA or A2V accordion,
-  // so that accordion should start open instead of hiding where it went.
+  // (`menuRouting.ts`'s `reference-video` / `audio-to-video`) — the material
+  // lands in the IC-LoRA or A2V accordion, so that accordion should start open
+  // instead of hiding where it went.
   // Passed straight through to `GenerationForm`, which applies them once on
   // mount (this whole body remounts via `key` on a new intent, so a fresh
   // mount = a fresh one-shot open, same as the auto-load effect).
   // X5 (併用プリフィルでアコーディオンを閉じない): also open an accordion when the
   // OPPOSITE slot was carried across this remount (`carryOver`), not only when
-  // this intent targets it. #3/#7 carry the existing reference video (keep
+  // this intent targets it. #7 carries the existing reference video (keep
   // IC-LoRA open), #2 carries the existing audio (keep A2V open) — otherwise the
   // carried material survives but its accordion collapses, hiding it. `!= null`
   // coerces the optional-chain result to a plain boolean for GenerationForm's
@@ -355,7 +356,6 @@ function SingleScreenBody({
   const autoOpenReference =
     initialIntent?.intent === "reference-video" || initialIntent?.carryOver?.referenceVideo != null;
   const autoOpenA2v =
-    initialIntent?.intent === "video-audio-to-video" ||
     initialIntent?.intent === "audio-to-video" ||
     initialIntent?.carryOver?.sourceAudio != null;
   // Derive the whole right-click prefill seed (width/height + fps + DURATION)
@@ -366,7 +366,7 @@ function SingleScreenBody({
   // #1). Computed once (this whole body remounts via `key` on a new intent) and
   // handed to the form's lazy init. `derived` is returned whole so `notes`/
   // `width`/`height` references below are unchanged; the seed also decides the
-  // #2 IC-LoRA reference / #3/#7 A2V material-clamped DURATION and the #4/#6/#12
+  // #2 IC-LoRA reference / #7 A2V material-clamped DURATION and the #4/#6/#12
   // comfort-ceiling DURATION (A2V's is then superseded by the wav auto-adjust —
   // see the A2V auto-load below). `deriveGenerationParams` remains the frozen
   // Phase-1 width/height contract inside `resolvePrefillSeed`.
@@ -425,7 +425,7 @@ function SingleScreenBody({
   }, []);
 
   // W5 (反対スロット保持): the opposite source slot carried across this remount —
-  // #2 carries the existing audio, #3/#7 carry the existing reference video +
+  // #2 carries the existing audio, #7 carries the existing reference video +
   // strengths (AppShell filled the relevant side). Threaded into the form's
   // one-shot initial so the carried slot mounts ready (no re-upload).
   const carryOver = initialIntent?.carryOver;
@@ -453,17 +453,9 @@ function SingleScreenBody({
             isICLora,
             ...(prefillFrameRate != null ? { frameRate: prefillFrameRate } : {}),
             ...(prefillNumFrames != null ? { numFrames: prefillNumFrames } : {}),
-            // W4 (#7 trim追従): audio-to-video uploads the whole audio file, so the
-            // form's wav auto-adjust would otherwise re-seed DURATION off the FULL
-            // file length, overriding the span (trimmed ribbon) seed. Cap the wav
-            // suggestion at the span-derived DURATION so #7 follows the ribbon; the
-            // cap lifts once the user swaps the audio (see useGenerationForm).
-            ...(initialIntent?.intent === "audio-to-video" && prefillNumFrames != null
-              ? { a2vSeedMaxFrames: prefillNumFrames }
-              : {}),
           }
         : {}),
-      // W5: #3/#7 carry the existing reference video + its two strengths. This
+      // W5: #7 carries the existing reference video + its two strengths. This
       // also forces the 128 grid from mount (回帰対策1, in useGenerationForm).
       ...(carryOver?.referenceVideo
         ? {
@@ -476,9 +468,8 @@ function SingleScreenBody({
             carryReferenceVideoStrength: carryOver.referenceVideo.referenceVideoStrength,
           }
         : {}),
-      // W5: #2 carries the existing audio; NOT paired with `a2vSeedMaxFrames`
-      // (a carried audio is not a #7 prefill material, so it follows the full
-      // wav length — 回帰対策2 fires the mount-time probe in useGenerationForm).
+      // W5: #2 carries the existing audio (it follows the full wav length —
+      // 回帰対策2 fires the mount-time probe in useGenerationForm).
       ...(carryOver?.sourceAudio ? { carryAudio: carryOver.sourceAudio } : {}),
     },
   );
@@ -656,8 +647,7 @@ function SingleScreenBody({
     if (
       intent !== "reference-video" &&
       intent !== "image-to-video" &&
-      intent !== "audio-to-video" &&
-      intent !== "video-audio-to-video"
+      intent !== "audio-to-video"
     ) {
       return;
     }
@@ -668,13 +658,13 @@ function SingleScreenBody({
     const selection = initialIntent?.selection;
     const item = selection?.selected[0];
 
-    // I10 §3-4 #3 (videoAudioToVideo): unlike every other material item, this
-    // one does NOT load the selected file directly. It extracts the audio *as it
-    // actually plays on the timeline* (mix path) over the object's real frame
-    // range, then feeds that wav into the SAME source-audio slot the rest of the
-    // A2V flow uses. Kept as its own async routine because it opens with a
-    // distinct "extracting…" note and has native-specific failure branches.
-    if (intent === "video-audio-to-video") {
+    // §3-4 #7 (audio-to-video, 台帳 §1-113): unlike every other material item,
+    // this one does NOT load the selected file directly. The selected audio OR
+    // video object's own sound over its ribbon range is rendered to a wav in
+    // SOLO mode (`timeline/extractObjectAudio.ts`) and fed into the source-audio
+    // slot. Kept as its own async routine because it opens with a distinct
+    // "extracting…" note and has native-specific failure branches.
+    if (intent === "audio-to-video") {
       if (!item) {
         showNote("warning", strings.notes.sourceFileMissing);
         return;
@@ -682,58 +672,18 @@ function SingleScreenBody({
       // Extraction can take several seconds; the one-shot `autoLoadConsumedRef`
       // above already prevents a second run (StrictMode / re-render).
       void (async () => {
-        // frameEnd is INCLUSIVE: native's `FindObjectByJob` walks objects with
-        // `next = frameEnd + 1` (native/src/bridge.cpp), so the object spans
-        // [frameStart, frameEnd] and its real length is frameEnd - frameStart + 1.
-        // (If a 1-frame boundary drift ever surfaces on real hardware, this `+1`
-        // is the first thing to re-check against the object's true frame span.)
-        const frameCount = item.frameEnd - item.frameStart + 1;
-        // §3-4 #3: extracting note + mix-path explanation, up front.
-        showNote("info", strings.notes.extractingAudio);
-        const bridge = nativeBridge ?? defaultBridge;
+        showNote("info", strings.notes.extractingObjectAudio);
         try {
-          // §7-2 design decision: call `timeline.extractAudio` DIRECTLY rather
-          // than `timeline/cutoutAndUpload.ts`'s `extractAudioAndUpload` — that
-          // helper *also* uploads to the backend itself, which would
-          // double-upload against the source-audio slot (`useSourceUpload`) we
-          // hand the wav to below. Uploading is funnelled through the single
-          // source-audio channel; `cutoutAndUpload.ts` is intentionally left
-          // untouched.
-          const extracted = await bridge.request("timeline.extractAudio", {
-            layer: item.layer,
-            frameStart: item.frameStart,
-            frameCount,
-            // mix path (§3-4 #3): capture the sound as it actually plays; solo
-            // separation is a future task, so no layers are kept solo.
-            audioMode: "mix",
-            soloKeepLayers: [],
-          });
+          const { filePath, fileName } = await extractObjectAudio(nativeBridge ?? defaultBridge, item);
           // Success: the wav goes into the source-audio slot (wav output means
-          // the form's Frames auto-adjust fires — §3-4 #3). `autoLoadPendingRef`
-          // lets the status-watch below downgrade to the missing-material note
-          // if the (temp-file) upload itself fails.
-          showNote("info", strings.notes.loadedVideoAudio);
+          // the form's Frames auto-adjust fires). `autoLoadPendingRef` lets the
+          // status-watch below downgrade to the missing-material note if the
+          // (temp-file) upload itself fails.
+          showNote("info", strings.notes.loadedObjectAudio);
           autoLoadPendingRef.current = true;
-          void form.attachSourceAudioByPath(extracted.filePath, fileNameFromPath(extracted.filePath));
+          void form.attachSourceAudioByPath(filePath, fileName);
         } catch (err) {
-          // §3-4 #3 failure branches. Native returns a single `EXTRACT_FAILED`
-          // code for every failure and only the message differentiates them
-          // (native/src/bridge.cpp `ExtractAudioWorker`): "…silent range" for a
-          // muted/disabled range; "audio render failed at frame N" for a
-          // per-frame render failure whose dominant cause is the worker's render
-          // timeout; and setup failures ("rendering_scene_audio is not
-          // available" / "failed to write wav file") otherwise. Native does not
-          // hand us finer-grained codes, so we classify on those message
-          // substrings and fall through to the generic note for anything we
-          // cannot place.
-          const message = err instanceof Error ? err.message : "";
-          if (/silent range|no audio stream/i.test(message)) {
-            showNote("warning", strings.notes.audioExtractSilent);
-          } else if (/render failed/i.test(message)) {
-            showNote("warning", strings.notes.audioExtractTimeout);
-          } else {
-            showNote("warning", strings.notes.audioExtractFailed);
-          }
+          showNote("warning", extractAudioFailureNote(err, strings.notes));
         }
       })();
       return;
@@ -770,13 +720,6 @@ function SingleScreenBody({
         ? decideSourceTrim(item, selection)
         : { trim: false, reason: "noItem" };
       void form.referenceVideo.uploadPath(filePath, fileName, trimQuery(decision));
-    } else if (intent === "audio-to-video") {
-      // #7 (§3-4 #7): audio object → source-audio slot, enabling A2V once the
-      // upload is ready. A wav triggers the form's Frames auto-adjust
-      // (fs.probeAudioDuration); a non-wav is accepted without adjustment
-      // (existing behavior). `attachSourceAudioByPath` rather than
-      // `sourceAudio.uploadPath` because it also captures the W4 span cap.
-      void form.attachSourceAudioByPath(filePath, fileName);
     } else {
       // #4: image → KEYFRAMES 1st card (frame 0), flipping the mode badge to I2V.
       void keyframes.addFromPath(filePath, fileName, 0);
@@ -792,10 +735,10 @@ function SingleScreenBody({
   const autoLoadStatus =
     autoLoadIntent === "reference-video"
       ? form.referenceVideo.state.status
-      : // #7 audio-to-video / #3 video-audio-to-video (after extraction) both feed
-        // the source-audio slot, so its upload status is the terminal signal to
-        // watch for the §6-2 missing-material downgrade.
-        autoLoadIntent === "audio-to-video" || autoLoadIntent === "video-audio-to-video"
+      : // #7 audio-to-video (after extraction) feeds the source-audio slot, so its
+        // upload status is the terminal signal to watch for the §6-2
+        // missing-material downgrade.
+        autoLoadIntent === "audio-to-video"
         ? form.sourceAudio.state.status
         : keyframes.items[0]?.status;
   useEffect(() => {
@@ -969,7 +912,12 @@ function SingleScreenBody({
           showNoteRef.current("warning", stringsRef.current.notes.referenceSlotsFull(kindLabel));
           return;
         }
-        showNoteRef.current("info", stringsRef.current.notes.loadedFromRightClick(command.fileName));
+        showNoteRef.current(
+          "info",
+          kind === "audio"
+            ? stringsRef.current.notes.loadedObjectAudio
+            : stringsRef.current.notes.loadedFromRightClick(command.fileName),
+        );
         setReferenceOpenSignal((n) => n + 1);
         return;
       }
@@ -1061,7 +1009,7 @@ function SingleScreenBody({
   }, [keyframes.items.length]);
 
   // W5 (反対スロット保持): publish the two source slots so `AppShell.handleRoute`
-  // can carry the OPPOSITE slot across a #2/#3/#7 remount. Only a `ready` slot is
+  // can carry the OPPOSITE slot across a #2/#7 remount. Only a `ready` slot is
   // published (id/path valid, re-attachable with no re-upload); uploading/idle/
   // error publish `null` so a half-finished slot is never carried (safe side).
   // The reference video also carries its two adapter strengths.

@@ -25,11 +25,11 @@ export interface GenerationPrefill {
    * from — same shape as `timeline.getSelection`. */
   selection: TimelineSelection;
   /** W5 (反対スロット保持): the OPPOSITE source slot carried across the Create
-   * remount a material-item prefill triggers. The material intents #2/#3/#7
+   * remount a material-item prefill triggers. The material intents #2/#7
    * reset the whole Create form (owner-approved), but the slot they do NOT
    * replace should survive: #2 (`reference-video`) carries the existing
-   * `sourceAudio`; #3 (`video-audio-to-video`) / #7 (`audio-to-video`) carry the
-   * existing `referenceVideo` plus its two adapter strengths. The uploaded ids
+   * `sourceAudio`; #7 (`audio-to-video`) carries the existing `referenceVideo`
+   * plus its two adapter strengths. The uploaded ids
    * are still valid server-side, so the material is re-attached with no
    * re-upload. `AppShell.handleRoute` reads `getPublishedSourceSlots()` at route
    * time and fills only the relevant, ready (non-null) side; absent = nothing to

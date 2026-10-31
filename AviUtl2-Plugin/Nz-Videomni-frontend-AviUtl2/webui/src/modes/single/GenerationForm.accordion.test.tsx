@@ -23,8 +23,8 @@ vi.mock("../../jobs/JobsContext", () => ({
 // `GenerationForm`'s `autoOpenReference`/`autoOpenA2v` props — the IC-LoRA and
 // A2V `<details className="form-accordion">` blocks should open on mount when
 // `SingleScreen` derives one of them true from a right-click prefill's intent
-// (`referenceVideo` -> "reference-video", `videoAudioToVideo`/`audioToVideo`
-// -> "video-audio-to-video"/"audio-to-video" — see `timeline/menuRouting.ts`),
+// (`referenceVideo` -> "reference-video", `audioToVideo` -> "audio-to-video" —
+// see `timeline/menuRouting.ts`),
 // and stay collapsed exactly like before otherwise. Unit-level: this harness
 // drives the REAL `useGenerationForm`/`useKeyframes` hooks (mirroring
 // `KeyframesPanel.test.tsx`'s pattern) straight into the real

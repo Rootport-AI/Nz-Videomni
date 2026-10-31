@@ -720,7 +720,8 @@ struct PickFileFilterEntry {
 };
 
 // Validate params of ui.pickFile. Requires a 'kind' of image/video/audio/
-// imageOrVideo - the last is Chain's unified source-input picker (task brief
+// imageOrVideo/audioOrVideo (audioOrVideo, contract v18, is the audio+video
+// counterpart of imageOrVideo) - imageOrVideo is Chain's unified source-input picker (task brief
 // "unify Chain's source input field"), whose caller routes the picked file to the
 // image or video flow by extension after the fact instead of picking a kind
 // up front.
@@ -731,7 +732,8 @@ bool ParsePickFileKind(const json_t& params, std::string* kind_out,
 // Filter entries for a validated kind, in dialog order. "image"/"video"/
 // "audio" each yield their single-type entry followed by an "All files (*.*)"
 // catch-all; "imageOrVideo" leads with a combined image+video filter, then the
-// same image-only and video-only entries, then All files. The extensions match
+// same image-only and video-only entries, then All files; "audioOrVideo" does
+// the same with a combined audio+video filter, then audio-only, video-only. The extensions match
 // the backend allow-list. An unrecognised kind yields just the All-files entry.
 std::vector<PickFileFilterEntry> PickFileFilter(const std::string& kind);
 

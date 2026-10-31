@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMockBridge } from "./bridge/mockBridge";
+import { createMockBridge, createMockFs } from "./bridge/mockBridge";
 import { bridge as singletonBridge, TIMELINE_MENU_INVOKED_EVENT, TIMELINE_PROJECT_LOADED_EVENT } from "./bridge";
 import type { MockBridge, MockBridgeOptions, ResultOf } from "./bridge";
 import { AppShell } from "./shell/AppShell";
@@ -17,6 +17,9 @@ import {
   resetProvisionalReservation,
 } from "./timeline/provisionalReservation";
 import { resetCreateLiveCommands } from "./timeline/createLiveCommands";
+import { snapNumFrames } from "./modes/single/paramUtils";
+import { suggestFramesForAudio } from "./modes/chained/chainUtils";
+import { resetExtractObjectAudioChain } from "./timeline/extractObjectAudio";
 import { END_SOURCE_SEED_MAX_FRAMES } from "./timeline/prefillSeed";
 import { END_SOURCE_CONTEXT_FRAMES } from "./timeline/tailAlign";
 import { ACCELERATION_STORAGE_KEY } from "./shell/accelerationSettings";
@@ -239,6 +242,7 @@ describe("App / right-click routing -> prefill", () => {
   // into the next. Cleared state = the product defaults (size material, fps project).
   beforeEach(() => {
     window.localStorage.clear();
+    resetExtractObjectAudioChain();
   });
   afterEach(() => {
     window.localStorage.clear();
@@ -1748,10 +1752,10 @@ describe("App / right-click routing -> prefill", () => {
     30_000,
   );
 
-  // --- I10: audio wiring (#7 audioToVideo / #3 videoAudioToVideo) -------------
+  // --- #7 audioToVideo (台帳 §1-113: solo extraction of the ribbon range) -----
 
   it(
-    "audioToVideo auto-loads the selected audio file into the source-audio slot and enables A2V (#7)",
+    "audioToVideo extracts the audio object's ribbon range (solo) and loads the wav into the source-audio slot (#7)",
     async () => {
       resetProvisionalReservation();
       const bridge = createMockBridge({ delayMs: 0 });
@@ -1760,6 +1764,7 @@ describe("App / right-click routing -> prefill", () => {
 
       await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
 
+      // audioSelection(): layer 2, frames 10..130 -> frameCount 121 (inclusive).
       act(() => {
         bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
           action: "audioToVideo",
@@ -1767,28 +1772,81 @@ describe("App / right-click routing -> prefill", () => {
         });
       });
 
-      // #7: the selected audio's filePath is auto-uploaded into the source-audio
-      // slot via attachSourceAudioByPath -> backend.uploadFile({kind:"audio"}).
+      await screen.findByText(/extracting the selected object's sound/i, undefined, { timeout: 5_000 });
+
+      await waitFor(
+        () => {
+          expect(spy).toHaveBeenCalledWith("timeline.extractAudio", {
+            layer: 2,
+            frameStart: 10,
+            frameCount: 121,
+            audioMode: "solo",
+            soloKeepLayers: [2],
+          });
+        },
+        { timeout: 5_000 },
+      );
+
+      // The uploaded file is the extracted wav, never the object's backing file.
       await waitFor(
         () => {
           expect(spy).toHaveBeenCalledWith(
             "backend.uploadFile",
-            expect.objectContaining({ kind: "audio", filePath: "C:\\a\\voice.wav" }),
+            expect.objectContaining({ kind: "audio", filePath: expect.stringContaining("extract_2_10_") }),
           );
         },
         { timeout: 5_000 },
       );
-      // Never uploaded as a video (that would be the wrong slot).
+      expect(spy).not.toHaveBeenCalledWith(
+        "backend.uploadFile",
+        expect.objectContaining({ filePath: "C:\\a\\voice.wav" }),
+      );
       expect(spy).not.toHaveBeenCalledWith("backend.uploadFile", expect.objectContaining({ kind: "video" }));
-      // §6 receipt note names the loaded file, and we stayed on Create.
-      expect(screen.getByText(/loaded from a right-click: voice\.wav/i)).toBeInTheDocument();
+      await screen.findByText(/loaded the object's sound/i, undefined, { timeout: 5_000 });
       expect(screen.getByRole("tab", { name: /^single$/i })).toHaveAttribute("aria-selected", "true");
     },
     15_000,
   );
 
   it(
-    "videoAudioToVideo extracts the video's audio (mix, inclusive frame range) and loads the wav into the source-audio slot (#3)",
+    "audioToVideo: Frames follows the extracted wav's measured length (#7, no ribbon cap)",
+    async () => {
+      resetProvisionalReservation();
+      // The mock's first extraction is `extract_<layer>_<frameStart>_1.wav`; give
+      // that file a 2.5 s length (the ribbon itself is 121 frames = ~4 s @30fps).
+      const fs = createMockFs({
+        folders: {
+          "C:\\Users\\mock\\AppData\\Local\\Temp\\Nz-Videomni": [
+            { name: "extract_2_10_1.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 2.5 },
+          ],
+        },
+      });
+      // The project rate is 30 fps; LTX grid 8n+1 in [9, 481].
+      const expected = snapNumFrames(suggestFramesForAudio(2.5, 30), 9, 481);
+      expect(expected).not.toBe(121);
+      const bridge = createMockBridge({ delayMs: 0, fs });
+      render(<AppShell nativeBridge={bridge} />);
+      await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
+
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "audioToVideo", selection: audioSelection() });
+      });
+      await screen.findByText(/loaded the object's sound/i, undefined, { timeout: 5_000 });
+
+      await waitFor(
+        () => {
+          const duration = document.querySelector<HTMLInputElement>("input[type=number][step='8']")!;
+          expect(duration).not.toBeNull();
+          expect(Number(duration.value)).toBe(expected);
+        },
+        { timeout: 5_000 },
+      );
+    },
+    15_000,
+  );
+
+  it(
+    "audioToVideo accepts a VIDEO object and extracts its own sound in solo mode (#7)",
     async () => {
       resetProvisionalReservation();
       const bridge = createMockBridge({ delayMs: 0 });
@@ -1797,34 +1855,26 @@ describe("App / right-click routing -> prefill", () => {
 
       await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
 
-      // selectionWith(): video, layer 1, frameStart 0, frameEnd 120 -> frameCount
-      // 121 (frameEnd inclusive). audioMode "mix", empty solo.
+      // selectionWith(): video, layer 1, frameStart 0, frameEnd 120 -> frameCount 121.
       act(() => {
         bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
-          action: "videoAudioToVideo",
+          action: "audioToVideo",
           selection: selectionWith(800, 600),
         });
       });
 
-      // The extracting note shows up front (mix-path explanation bundled).
-      await screen.findByText(/extracting audio/i, undefined, { timeout: 5_000 });
-
-      // #3: timeline.extractAudio is called DIRECTLY with the exact params.
       await waitFor(
         () => {
           expect(spy).toHaveBeenCalledWith("timeline.extractAudio", {
             layer: 1,
             frameStart: 0,
             frameCount: 121,
-            audioMode: "mix",
-            soloKeepLayers: [],
+            audioMode: "solo",
+            soloKeepLayers: [1],
           });
         },
         { timeout: 5_000 },
       );
-
-      // The extracted wav (mock's extract_*.wav) is then uploaded to the audio
-      // slot — a single upload, funnelled through the source-audio channel.
       await waitFor(
         () => {
           expect(spy).toHaveBeenCalledWith(
@@ -1834,21 +1884,24 @@ describe("App / right-click routing -> prefill", () => {
         },
         { timeout: 5_000 },
       );
-      // The success receipt replaces the extracting note.
-      await screen.findByText(/loaded the video's audio/i, undefined, { timeout: 5_000 });
+      await screen.findByText(/loaded the object's sound/i, undefined, { timeout: 5_000 });
       expect(screen.getByRole("tab", { name: /^single$/i })).toHaveAttribute("aria-selected", "true");
     },
     15_000,
   );
 
-  it(
-    "videoAudioToVideo shows the silence note when the range is silent (#3)",
-    async () => {
+  it.each([
+    ["silence", "no audio stream present (silent range)", /no audible sound/i],
+    ["timeout", "audio render failed at frame 3", /took too long and was aborted/i],
+    ["generic failure", "rendering_scene_audio is not available", /audio extraction failed/i],
+  ])(
+    "audioToVideo shows the %s note when extraction fails (#7)",
+    async (_label, message, note) => {
       resetProvisionalReservation();
       const bridge = createMockBridge({
         delayMs: 0,
         failExtractAudio: "EXTRACT_FAILED",
-        extractAudioErrorMessage: "no audio stream present (silent range)",
+        extractAudioErrorMessage: message,
       });
       render(<AppShell nativeBridge={bridge} />);
 
@@ -1856,73 +1909,24 @@ describe("App / right-click routing -> prefill", () => {
 
       act(() => {
         bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
-          action: "videoAudioToVideo",
+          action: "audioToVideo",
           selection: selectionWith(800, 600),
         });
       });
 
-      await screen.findByText(/no audible sound/i, undefined, { timeout: 5_000 });
+      await screen.findByText(note, undefined, { timeout: 5_000 });
     },
     15_000,
   );
 
-  it(
-    "videoAudioToVideo shows the timeout note when extraction runs too long (#3)",
-    async () => {
-      resetProvisionalReservation();
-      const bridge = createMockBridge({
-        delayMs: 0,
-        failExtractAudio: "EXTRACT_FAILED",
-        extractAudioErrorMessage: "audio render failed at frame 3",
-      });
-      render(<AppShell nativeBridge={bridge} />);
-
-      await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
-
-      act(() => {
-        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
-          action: "videoAudioToVideo",
-          selection: selectionWith(800, 600),
-        });
-      });
-
-      await screen.findByText(/took too long and was aborted/i, undefined, { timeout: 5_000 });
-    },
-    15_000,
-  );
-
-  it(
-    "videoAudioToVideo shows the generic failure note for an unclassified EXTRACT_FAILED (#3)",
-    async () => {
-      resetProvisionalReservation();
-      const bridge = createMockBridge({
-        delayMs: 0,
-        failExtractAudio: "EXTRACT_FAILED",
-        extractAudioErrorMessage: "rendering_scene_audio is not available",
-      });
-      render(<AppShell nativeBridge={bridge} />);
-
-      await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
-
-      act(() => {
-        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
-          action: "videoAudioToVideo",
-          selection: selectionWith(800, 600),
-        });
-      });
-
-      await screen.findByText(/audio extraction failed/i, undefined, { timeout: 5_000 });
-    },
-    15_000,
-  );
-
-  // --- 台帳§1-16 長尺A2V: the two Chain-targeted right-click audio items -------
+  // --- 台帳§1-16 長尺A2V: the Chain-targeted right-click audio item (#18) ------
   //
-  // Both cut the SELECTED OBJECT'S RIBBON RANGE with `timeline.extractAudio` and
-  // hand the wav to Chained's audio slot. What they must prove here is exactly
+  // It cuts the SELECTED (audio or video) OBJECT'S RIBBON RANGE with
+  // `timeline.extractAudio` and hands the wav to Chained's audio slot. What the
+  // tests below must prove is exactly
   // what a unit test cannot: that the right-click really lands on the Chained
   // tab, that the extraction arguments describe the ribbon (frameCount is
-  // INCLUSIVE) with the correct mix/solo semantics, that the wav reaches the
+  // INCLUSIVE) in solo mode, that the wav reaches the
   // AUDIO upload channel, and that the once-per-track auto-fit fires once.
   //
   // The mock's `timeline.extractAudio` reports `durationSec = frameCount * scale
@@ -1950,7 +1954,7 @@ describe("App / right-click routing -> prefill", () => {
   const AUDIO_FIT_TOAST = /adjusted the clips to match the 40\.00s audio/i;
 
   it(
-    "🎬 videoAudioToLongA2v routes to Chained and mixes the ribbon's audio into the chain's audio slot",
+    "🎵 audioToLongA2v accepts a VIDEO object and extracts its ribbon's own sound (solo) into the chain's audio slot",
     async () => {
       resetProvisionalReservation();
       const bridge = createMockBridge({ delayMs: 0 });
@@ -1961,26 +1965,27 @@ describe("App / right-click routing -> prefill", () => {
 
       act(() => {
         bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
-          action: "videoAudioToLongA2v",
+          action: "audioToLongA2v",
           selection: videoSelectionSpan(),
         });
       });
 
-      // Unlike #3 (which stays on Create), this one lands on Chained.
+      // Unlike #7 (which stays on Create), this one lands on Chained.
       await waitFor(
         () => expect(screen.getByRole("tab", { name: /^chained$/i })).toHaveAttribute("aria-selected", "true"),
         { timeout: 5_000 },
       );
 
-      // Mix path, ribbon range, frameCount = frameEnd - frameStart + 1 = 1200.
+      // Solo (the video's own layer only), ribbon range,
+      // frameCount = frameEnd - frameStart + 1 = 1200.
       await waitFor(
         () => {
           expect(spy).toHaveBeenCalledWith("timeline.extractAudio", {
             layer: 1,
             frameStart: 0,
             frameCount: 1200,
-            audioMode: "mix",
-            soloKeepLayers: [],
+            audioMode: "solo",
+            soloKeepLayers: [1],
           });
         },
         { timeout: 5_000 },
@@ -1998,7 +2003,7 @@ describe("App / right-click routing -> prefill", () => {
       );
       expect(spy).not.toHaveBeenCalledWith("backend.uploadFile", expect.objectContaining({ kind: "video" }));
 
-      await screen.findByText(/loaded the video's audio/i, undefined, { timeout: 5_000 });
+      await screen.findByText(/loaded the object's sound/i, undefined, { timeout: 5_000 });
 
       // The wav is visibly in the Chained panel's audio card…
       await waitFor(
@@ -2054,8 +2059,7 @@ describe("App / right-click routing -> prefill", () => {
         { timeout: 5_000 },
       );
 
-      // The uploaded file is the CUT wav, never the audio object's backing file
-      // (that whole-file upload is #7's single-shot behaviour, not this one's).
+      // The uploaded file is the CUT wav, never the audio object's backing file.
       await waitFor(
         () => {
           expect(spy).toHaveBeenCalledWith(
@@ -2070,7 +2074,7 @@ describe("App / right-click routing -> prefill", () => {
         expect.objectContaining({ filePath: "C:\\a\\voice.wav" }),
       );
 
-      await screen.findByText(/loaded the audio object's sound/i, undefined, { timeout: 5_000 });
+      await screen.findByText(/loaded the object's sound/i, undefined, { timeout: 5_000 });
       await waitFor(
         () => expect(within(panel()).getByText(/extract_4_30_\d+\.wav/)).toBeInTheDocument(),
         { timeout: 5_000 },
@@ -2541,39 +2545,6 @@ describe("App / right-click routing -> prefill", () => {
   );
 
   it(
-    "#3 videoAudioToVideo reserves the provisional at the object's SPAN-derived DURATION (121 frames @30fps span)",
-    async () => {
-      resetProvisionalReservation();
-      const bridge = createMockBridge({ delayMs: 0 });
-      const spy = vi.spyOn(bridge, "request");
-      render(<AppShell nativeBridge={bridge} />);
-      await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
-
-      // selectionWith(): frames 0..120 (inclusive span 121) @ rate 30/scale 1 ->
-      // 121/30 s * 30fps = 121 frames (on the 8n+1 grid). media 800x600 -> ceiling
-      // 481, so no clamp. Placement B (§5-9). The A2V wav auto-adjust later
-      // supersedes the FORM value, but the RESERVATION is placed at this seed.
-      act(() => {
-        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
-          action: "videoAudioToVideo",
-          selection: selectionWith(800, 600),
-        });
-      });
-
-      await waitFor(
-        () => {
-          expect(spy).toHaveBeenCalledWith(
-            "timeline.insertProvisional",
-            expect.objectContaining({ placement: "B", numFrames: 121 }),
-          );
-        },
-        { timeout: 5_000 },
-      );
-    },
-    15_000,
-  );
-
-  it(
     "#7 audioToVideo reserves the provisional at the span-derived DURATION (121-frame span @30fps -> numFrames 121)",
     async () => {
       resetProvisionalReservation();
@@ -2697,7 +2668,7 @@ describe("App / right-click routing -> prefill", () => {
       expect(uploadsOfKind(spy, "video")).toHaveLength(1);
       expect(spy).toHaveBeenCalledWith(
         "backend.uploadFile",
-        expect.objectContaining({ kind: "audio", filePath: "C:\\a\\voice.wav" }),
+        expect.objectContaining({ kind: "audio", filePath: expect.stringContaining("extract_2_10_") }),
       );
 
       // 回帰対策1: the carried reference video forces the 128 grid, so the width

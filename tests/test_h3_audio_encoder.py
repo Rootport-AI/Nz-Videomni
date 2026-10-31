@@ -242,6 +242,35 @@ def test_passthrough_file_32k_fltp_decodes(tmp_path):
     assert torch.isfinite(wave_out).all()
 
 
+def test_video_container_audio_stream_is_read(tmp_path):
+    # An uploaded mp4 (video + 32 kHz stereo AAC) is read through its first audio stream.
+    n = 32000
+    path = tmp_path / "clip.mp4"
+    with av.open(str(path), "w") as c:
+        vs = c.add_stream("libx264", rate=24)
+        vs.width, vs.height, vs.pix_fmt = 64, 64, "yuv420p"
+        ast = c.add_stream("aac", rate=32000)
+        ast.codec_context.layout = "stereo"
+        for k in range(24):
+            vf = av.VideoFrame.from_ndarray(np.zeros((64, 64, 3), dtype=np.uint8), format="rgb24")
+            vf.pts = k
+            c.mux(vs.encode(vf))
+        c.mux(vs.encode())
+        data = np.stack([_sine(n, 32000), _sine(n, 32000, 660.0)])
+        for start in range(0, n, 1024):
+            f = av.AudioFrame.from_ndarray(np.ascontiguousarray(data[:, start:start + 1024]),
+                                           format="fltp", layout="stereo")
+            f.sample_rate = 32000
+            f.pts = start
+            c.mux(ast.encode(f))
+        c.mux(ast.encode())
+
+    wave_out, info = S.load_source_waveform(str(path), keep_samples=n - 2048, read_samples=10**9)
+    assert wave_out.shape[0] == 2 and info["channels_used"] == "stereo"
+    assert abs(wave_out.shape[1] - n) <= 2048            # AAC frames round the length
+    assert torch.isfinite(wave_out).all()
+
+
 def test_short_by_at_most_1ms_is_padded_more_is_refused(tmp_path):
     keep = 32000
     ok = _write_wav(tmp_path / "ok.wav", _sine(keep - 20, 32000)[None], 32000)

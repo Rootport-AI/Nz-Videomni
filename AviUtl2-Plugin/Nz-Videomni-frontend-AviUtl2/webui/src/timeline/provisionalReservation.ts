@@ -204,7 +204,7 @@ export function getPublishedKeyframeCount(): number {
 
 // --- W5 反対スロット保持: live Create source-slot mirror --------------------
 //
-// #2/#3/#7 remount Create (owner-approved full form reset), but the OPPOSITE
+// #2/#7 remount Create (owner-approved full form reset), but the OPPOSITE
 // source slot should survive that remount. The always-mounted Create screen
 // PUBLISHES its two source slots' ready material here whenever they change, and
 // `AppShell.handleRoute` READS it synchronously at route time to decide the

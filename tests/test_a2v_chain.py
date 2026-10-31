@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import struct
+import subprocess
 import wave
 
 import pytest
@@ -127,6 +129,44 @@ def test_upload_audio_roundtrip(client, tmp_path):
     stored = ctx.audio_upload_store.path_for(body["audio_id"])
     assert stored.exists()
     assert stored.read_bytes() == wav.read_bytes()
+
+
+def _make_mp4(path, *, with_audio: bool):
+    """Tiny 1 s mp4 built with ffmpeg lavfi sources; ``with_audio=False`` writes
+    a video-only file (no audio input at all, ``-an``)."""
+    cmd = [video_io.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "color=c=red:s=64x64:r=24"]
+    if with_audio:
+        cmd += ["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000"]
+    cmd += ["-t", "1"]
+    cmd += ["-c:a", "aac", "-shortest"] if with_audio else ["-an"]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    return path
+
+
+def test_upload_audio_accepts_video_container(client, tmp_path):
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not on PATH")
+    mp4 = _make_mp4(tmp_path / "clip.mp4", with_audio=True)
+    r = client.post(
+        "/api/v1/upload/audio", files={"file": ("clip.mp4", mp4.read_bytes(), "video/mp4")}
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["stored_path"].endswith("/input.mp4")
+    assert body["content_type"] == "video/mp4"
+
+
+def test_upload_audio_rejects_video_without_audio_stream_at_preflight(client, tmp_path):
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not on PATH")
+    mp4 = _make_mp4(tmp_path / "silent_video.mp4", with_audio=False)
+    aid = _upload_audio(client, mp4, name="silent_video.mp4", content_type="video/mp4")
+    r = _run_chain(client, [{"num_frames": 49}], source_audio={"audio_id": aid})
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "SOURCE_AUDIO_TOO_SHORT"
+    assert "no decodable audio stream" in r.text
 
 
 def test_upload_audio_bad_extension_rejected(client):

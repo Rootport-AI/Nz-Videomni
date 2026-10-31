@@ -45,7 +45,7 @@ import { selectionRangeFrames } from "./selectionRange";
  *  - `comfortCeiling`: flows with no natural source duration (T2V/I2V-style,
  *    plus every Chain intent) — DURATION is the resolution's comfort ceiling.
  *  - `materialClampedToCeiling`: flows with a source clip whose length should
- *    bound DURATION (IC-LoRA reference #2, A2V #3/#7) — the material's own
+ *    bound DURATION (IC-LoRA reference #2, A2V #7) — the material's own
  *    length floored to the 8n+1 grid, never past the comfort ceiling.
  *
  * Intents absent from this table (e.g. `text-to-video`, `image-from-frame`) are
@@ -55,24 +55,22 @@ import { selectionRangeFrames } from "./selectionRange";
 export const DURATION_POLICY_BY_INTENT: Readonly<Record<string, DurationPolicy>> = {
   "extend-video": "comfortCeiling", // #1 (Chain)
   "reference-video": "materialClampedToCeiling", // #2 (IC-LoRA)
-  "video-audio-to-video": "materialClampedToCeiling", // #3 (A2V from a video's sound)
   "image-to-video": "comfortCeiling", // #4
   "image-to-clip-chain": "comfortCeiling", // #6 (Chain)
-  "audio-to-video": "materialClampedToCeiling", // #7 (A2V from an audio file)
+  "audio-to-video": "materialClampedToCeiling", // #7 (A2V from an audio or video object)
   "current-frame-to-clip-chain": "comfortCeiling", // #12 (Chain)
   // 台帳§1-16 長尺A2V (2026-08-10). Deliberately `comfortCeiling`, NOT the
-  // `materialClampedToCeiling` their single-shot siblings #3/#7 use: this seed
+  // `materialClampedToCeiling` its single-shot sibling #7 uses: this seed
   // sizes ONE CLIP of the chain, while the extracted audio's length is spread
   // over the WHOLE clip list by `audioFit.planAudioFit` (which re-lays the
   // cards the moment the wav is measured). Clamping clip 0 to the track's full
   // length would seed a single 60-second clip and then immediately be undone by
   // the auto-fit — so the honest seed is the resolution's comfort ceiling, the
   // same one every other Chain intent uses.
-  "video-audio-to-long-a2v": "comfortCeiling", // 🎬 (Chain, 台帳§1-16)
   "audio-to-long-a2v": "comfortCeiling", // 🎵 (Chain, 台帳§1-16)
   // 台帳§1-15 W4 (2026-08-11). Deliberately `comfortCeiling`, NOT the
   // `materialClampedToCeiling` its single-shot sibling `reference-video` uses,
-  // for the same reason the long-a2v pair above is: this seed sizes ONE CLIP of
+  // for the same reason long-a2v above is: this seed sizes ONE CLIP of
   // a chain, while the reference is a conditioning input for the WHOLE chain —
   // the server slices it by frame number across every clip, so the reference's
   // own length says nothing about how long clip 0 should be. Every other Chain
@@ -151,8 +149,8 @@ export function spanDurationSec(
  * async `project`-policy overwrite path recomputes DURATION off the SAME
  * intent-specific span math, keeping the span semantics consistent (M-1).
  *
- * W4 (trim追従): the IC-LoRA reference (#2), audio-to-video (#7) and
- * video-audio-to-video (#3) intents now ALL derive their length from the
+ * W4 (trim追従): the IC-LoRA reference (#2) and audio-to-video (#7) intents
+ * both derive their length from the
  * object's inclusive timeline SPAN ({@link spanDurationSec}) rather than the
  * full backing file's `mediaDurationSec` — the DURATION follows the ribbon's
  * trimmed length, matching the owner requirement that a trimmed #2/#7 clip seed
@@ -168,7 +166,6 @@ export function materialDurationForIntent(
   switch (intent) {
     case "reference-video":
     case "audio-to-video":
-    case "video-audio-to-video":
       return spanDurationSec(item, selection);
     // §1-17 `"retake"` is deliberately NOT here. Its `selectedRangeLength`
     // policy takes the SELECTED RANGE, not the object's own span — see

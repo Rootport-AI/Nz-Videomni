@@ -27,6 +27,7 @@ import { resolvePrefillSeed } from "../timeline/prefillSeed";
 import { dispatchCreateCommand } from "../timeline/createLiveCommands";
 import { decideSourceTrim, trimQuery } from "../timeline/sourceTrim";
 import { fileNameFromPath } from "../modes/single/keyframeUtils";
+import { extractAudioFailureNote, extractObjectAudio } from "../timeline/extractObjectAudio";
 import { LanguageProvider, useStrings } from "../i18n/LanguageContext";
 import { JobsProvider, useJobsContext } from "../jobs/JobsContext";
 import { downloadAndInsertVideo } from "../jobs/downloadAndInsert";
@@ -121,7 +122,6 @@ const CHAIN_INTENT_PANELS: Readonly<
   "current-frame-to-clip-chain": { panel: "startImage", note: "startImage" },
   "reference-video-chain": { panel: "reference", note: "referenceVideo" },
   "end-with-this": { panel: "endSource", note: "endSource" },
-  "video-audio-to-long-a2v": { panel: "a2v", note: "sourceAudio" },
   "audio-to-long-a2v": { panel: "a2v", note: "sourceAudio" },
 };
 
@@ -696,9 +696,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     }
 
     // ── Step 1: selection guard (§4). Runs FIRST for every command: multiple-
-    // selection -> undeterminable kind -> required-kind mismatch (+ #7 near-
-    // neighbor) -> #1/#2 length guard. On any failure, show the guidance note
-    // and do NOTHING else — no tab switch, no remount, no reservation, no
+    // selection -> undeterminable kind -> required-kind mismatch -> #1/#2 length
+    // guard. On any failure, show the guidance note and do NOTHING else — no tab switch, no remount, no reservation, no
     // prefill (§4 "破壊的な動作をしない"). Layer-menu items (#9/#10,
     // requiredKind null) always pass the guard.
     const guard = guardMenuSelection(route, command.selection);
@@ -725,9 +724,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // free Videos / Audios card instead of the IC-LoRA / A2V slot — a live
     // command, so Create is NOT remounted (the prompt and the other cards
     // survive). Like #5's 2nd-and-later keyframes: no provisional and no
-    // reservation-seat check (plan Q6). #3 (a2v from a video's sound) is
-    // refused with a pointer to the Audios card's 📁 button. Without
-    // `reference` (LTX) none of this runs and the routes below are unchanged.
+    // reservation-seat check (plan Q6). #7 renders the selected audio or video
+    // object's own sound over its ribbon range (solo, `extractObjectAudio`)
+    // and puts that wav in the card. Without `reference` (LTX) none of this
+    // runs and the routes below are unchanged.
     if (baseModels.activeConstraints.reference) {
       if (action === "referenceVideo") {
         const item = command.selection.selected[0];
@@ -748,14 +748,19 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         return;
       }
       if (action === "audioToVideo") {
-        const filePath = command.selection.selected[0]?.filePath ?? null;
-        const fileName = filePath ? fileNameFromPath(filePath) : "";
-        dispatchCreateCommand({ type: "addReferenceAudio", filePath, fileName });
-        setMode("single");
-        return;
-      }
-      if (action === "videoAudioToVideo") {
-        showNote("warning", strings.notes.videoAudioA2vUseReference);
+        const item = command.selection.selected[0];
+        if (!item) {
+          showNote("warning", strings.notes.sourceFileMissing);
+          return;
+        }
+        showNote("info", strings.notes.extractingObjectAudio);
+        try {
+          const { filePath, fileName } = await extractObjectAudio(bridge, item);
+          dispatchCreateCommand({ type: "addReferenceAudio", filePath, fileName });
+          setMode("single");
+        } catch (err) {
+          showNote("warning", extractAudioFailureNote(err, strings.notes));
+        }
         return;
       }
     }
@@ -1175,7 +1180,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     }
 
     // Everything past here is a generation-origin item with placement A/B/C
-    // (#1/#2/#3/#4/#6/#7 material, #9/#10/#12 cursor).
+    // (#1/#2/#4/#6/#7 material, #9/#10/#12 cursor).
     //
     // ── Step 5: reservation-seat busy-guard (§5-6). A ⏳生成中 (a job actually in
     // flight) holds the single seat, so a new generation reservation is refused:
@@ -1196,7 +1201,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       if (!confirmed) return;
     }
 
-    // ── Step 6: prefill delivery. Material items (#1/#2/#3/#4/#6/#7) remount the
+    // ── Step 6: prefill delivery. Material items (#1/#2/#4/#6/#7) remount the
     // target Create/Chain form and re-apply the fresh selection (pendingIntent +
     // per-mode remount token, so the other always-mounted screens keep state).
     // The two keep-panel-state cursor items ✨/📷 (D3) skip both so their edited
@@ -1211,10 +1216,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       intent === "image-from-frame" ||
       intent === "add-current-frame-keyframe";
     if (!keepPanelState) {
-      // W5 (反対スロット保持): a #2/#3/#7 remount resets the whole Create form, but
+      // W5 (反対スロット保持): a #2/#7 remount resets the whole Create form, but
       // the OPPOSITE source slot survives — #2 (`reference-video`) keeps the
-      // existing audio; #3/#7 (`video-audio-to-video`/`audio-to-video`) keep the
-      // existing reference video + strengths. Read the live-published slots
+      // existing audio; #7 (`audio-to-video`) keeps the existing reference
+      // video + strengths. Read the live-published slots
       // synchronously here (they still reflect the currently-mounted Create, the
       // one about to remount) and load only the relevant, ready side onto the
       // pending intent's `carryOver`. Every other intent — and an unpublished/
@@ -1223,7 +1228,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       let carryOver: GenerationPrefill["carryOver"];
       if (intent === "reference-video") {
         if (slots.sourceAudio) carryOver = { sourceAudio: slots.sourceAudio };
-      } else if (intent === "video-audio-to-video" || intent === "audio-to-video") {
+      } else if (intent === "audio-to-video") {
         if (slots.referenceVideo) carryOver = { referenceVideo: slots.referenceVideo };
       }
       setPendingIntent({
@@ -1263,7 +1268,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     //    (`keepStateNumFrames`/`keepStateGenFps`), or the resolution's comfort
     //    ceiling live-set above for #9/#10 (`cursorItemCeilingNumFrames`),
     //    falling back to the config defaults before Create ever publishes (D3).
-    //  - Material items (#1/#2/#3/#4/#6/#7/#12) REMOUNT the form and seed its
+    //  - Material items (#1/#2/#4/#6/#7/#12) REMOUNT the form and seed its
     //    initial DURATION/fps from the shared純関数 `resolvePrefillSeed`. Owner
     //    requirement 2026-07-21 #1: place the provisional at that SAME derived
     //    length from the outset (not the config default), so its ribbon matches
@@ -1274,7 +1279,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // and both converge at Generate via `bindToJob`'s
     // `timeline.updateProvisionalReservation` re-stamp (§5-3 用途b / owner
     // requirement #2): (a) the `project` policy's async `getEditInfo` overwrite
-    // recomputes the form's DURATION a beat after placement, and (b) A2V (#3/#7)
+    // recomputes the form's DURATION a beat after placement, and (b) A2V (#7)
     // supersedes the material-clamped seed once the wav is actually measured.
     //
     // §1-17 Retake (`retakeRange`, 系統"D") is a THIRD, deliberately different

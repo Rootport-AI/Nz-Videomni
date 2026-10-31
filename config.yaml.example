@@ -172,9 +172,10 @@ upload:
   max_video_size_mb: 200
   allowed_video_extensions: [".mp4", ".mov", ".webm", ".mkv"]
   # 音声アップロード（A2V, POST /upload/audio）。再エンコードせず保存。コーデック
-  # 検査は preflight（ffprobe）が担当。ここは拡張子とサイズのみ。
-  max_audio_size_mb: 50
-  allowed_audio_extensions: [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
+  # 検査は preflight（ffprobe）が担当。ここは拡張子とサイズのみ。動画の容器（.mp4 など）も
+  # 受け付け、音声トラックだけを使う。
+  max_audio_size_mb: 200
+  allowed_audio_extensions: [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".mp4", ".mov", ".webm", ".mkv"]
 
 limits:
   # 生成の幅・高さ・フレーム数の上限。/config で公開し、Gradio の連結の事前検査（幅・高さ）と

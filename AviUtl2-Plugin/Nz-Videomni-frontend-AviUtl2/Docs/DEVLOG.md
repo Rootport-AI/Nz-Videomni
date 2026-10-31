@@ -5773,3 +5773,43 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **完結しました。** オーナーの実機確認 G-4 に全項目合格（記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §186.8）、バックエンド台帳は CLOSED 3-264。GPU の門は §186.6。デプロイ済みです（aux2 は 1,559,040 バイト・SHA-256 の先頭 `732cc77f`（G-4 はこの配置で確認。その後、文言の監査〔右クリック #19 の案内を「IC-LoRA の参照動画」と限定〕を反映して再配置し、先頭は `d78299d3`・バイト数は同じ）。実機と配布コピーとビルド成果物の 3 つが一致）。
 - 右クリックの補足: H3 単独では、右クリックから Chained を作り直す入口はありません（Chained 系の 7 つの入口は、すべて H3 では閉じたパネル行きで、確認より前に案内で断られます）。「破棄して読み込みますか？」の確認が効くのは、LTX に切り替えた後だけです（§186.8）。
 - `shell/AppShell.minimaxH3.test.tsx` の既存の 2 テストは、全件実行で散発的に落ちることがあります。今回の追加が無くても起きるので（台帳 §3-238 の型。回数は記録簿 §186.5）、製品の不具合として個別には起票していません。
+
+## 155. 右クリック #3・#17 の削除・#7／#18 の動画オブジェクト受け入れ・音声の入力欄の動画ファイル受け入れ（バックエンド台帳 `PENDING_TASKS.md` §1-113。2026-10-31）
+
+### 155.1 結論
+
+- **右クリックの #3（🎬 この動画の音声でa2v）と #17（🎬 この動画の音声でlong a2v）を削除しました。** オブジェクトメニューは 19 項目から 17 項目になります（native のメニュー表 `kObjectMenuItems` と言語ファイルは native 側の担当）。番号は詰めず欠番にしています。
+- **代わりに #7（🎵 この音声を参照入力〔またはa2v〕する）と #18（🎵 この音声からlong a2v）が、動画オブジェクトも受け付けます**（必須種別＝音声または動画。メニューの文言と絵文字は変えていません）。どちらも、選択オブジェクトのリボンの範囲の音声を solo 録り（そのオブジェクトのレイヤーだけを鳴らす）で wav にして、音声の入力欄へ入れます。#7 は LTX では Single の A2V カード、MiniMax H3 では Reference の Audios カードへ入り、#18 は Chained の音声カードへ入ります。mix 録り（タイムライン全体で鳴っている音を録る経路）は無くなりました。
+- **3 つの音声の入力欄（LTX の Single の A2V カード・H3 の Reference の Audios カード・Chained の音声カード）が、ドラッグ＆ドロップと 📁 で動画ファイル（.mp4 .mov .webm .mkv）も受けます。** 使うのは音声だけです。アップロード先は従来どおり `/upload/audio` で、バックエンドがこの 4 つの容器を受け、上限を 200MB にしました（バックエンド側の担当。記録はバックエンドの記録簿）。バッチ a2v は対象外です。音声の参照のファイルに復号できる音声の流れが無ければ、バックエンドが 422 `REFERENCE_AUDIO_NO_STREAM` で断ります（`/generate`・`/generate/chain` の両方。オーナー裁定 2026-10-31）。Chained に埋め込まれたクリップごとの Reference の Audios カードも同じ部品なので、動画ファイルを受けます。
+- 📁 のダイアログの種類に `audioOrVideo` を足しました（ブリッジ契約 v18。`imageOrVideo` と同じ作り。native 側の担当）。
+- 仕様書は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第 30 版（§3-4・§3-5・§4-3・第 8 節ほか）です。
+
+### 155.2 何を変えたか
+
+- **抽出を 1 つの関数に。** 新規の `timeline/extractObjectAudio.ts` の `extractObjectAudio(bridge, item)` が `timeline.extractAudio` を `{ layer, frameStart, frameCount: frameEnd - frameStart + 1, audioMode: "solo", soloKeepLayers: [layer] }` で呼び、`{ filePath, fileName, durationSec }` を返します。受け口の 3 か所（`modes/single/SingleScreen.tsx` の #7・`shell/AppShell.tsx` の H3 の #7・`modes/chained/ChainedScreen.tsx` の #18）がこれを呼びます。失敗の分類（無音・時間切れ・その他）は `classifyExtractAudioError` と `extractAudioFailureNote` にまとめ、Single と Chained で重複していた正規表現を消しました。
+- **抽出は直列に実行します。** solo 録りは他のレイヤーを一時的に無効にして、終わったら元の状態へ戻します。2 つの抽出が重なると互いの「元の状態」を取り違えてレイヤーが無効のまま残りうるので、モジュール内の Promise の連鎖で 1 件ずつ実行します（前の抽出が失敗しても連鎖は止まりません）。物体追尾やマスク描画とは調停していません（#18 に元からある既知の限界のまま）。
+- **H3 の #7。** 抽出してから `addReferenceAudio` で Audios カードへ入れます（型は不変。秒数は受け手が wav のヘッダから読みます）。#3 を案内で断る分岐と文言 `notes.videoAudioA2vUseReference` は消しました。
+- **`a2vSeedMaxFrames` を削除。** #7 が元ファイルを丸ごとアップロードしていたころ、wav の長さからの Frames の提案をリボンの長さで抑えていた仕組み（`useGenerationForm.ts` の `a2vSeedMaxFrames`・`a2vSeedCapPathRef`、`SingleScreen.tsx` の種）です。いまは抽出した wav の長さがリボンの長さそのものなので不要になりました。Frames の自動調整は従来どおり wav だけで、動画ファイルの長さを測って合わせる処理は入れていません（容器の長さと音声の長さが違いうるため）。
+- **ガード。** `menuRouting.ts` の #7・#18 の `requiredKind` を `["audio", "video"]` にし、動画オブジェクトを #3・#17 へ導いていた特例（`menuSelection.ts` の `VIDEO_FOR_AUDIO_ACTION_NOTE` と注意の種類 2 つ・文言 2 つ）を消しました。画像などには既存の `typeMismatchAny` が「音声か動画」と案内します。
+- **📁 の種類とアップロードの種類を分けました。** native の `backend.uploadFile` は `image|video|audio` しか受けないためです。`useSourceUpload` に `pickKind`（`pick()` だけが読む）を足し、LTX の A2V カードは `audioOrVideo` を渡します。`useReferenceSlots.ts` は `UPLOAD_KIND` とは別に `PICK_KIND` を持ち、`useChainForm.ts` の `pickAudio` も `audioOrVideo` です。ドラッグ＆ドロップの受け付けは `shell/useFileDrop.ts` の `SOURCE_AUDIO_INPUT_EXTENSIONS`（音声 6 種＋動画 4 種）で、`strings.dnd.unsupportedAudio` に動画の拡張子を足しました。
+- **文言。** mix 用の `notes.extractingAudio`・`notes.loadedVideoAudio` を消し、`notes.extractingObjectAudio`・`notes.loadedObjectAudio` を動画オブジェクトにも合う中立な文に改めました。
+- **引き算。** 製品コードから使われていなかった `timeline/cutoutAndUpload.ts` とその試験を消しました。削除した 2 つの intent（`video-audio-to-video`・`video-audio-to-long-a2v`）への参照は、文字列のキーで型検査に掛からないので、`webui/src` を検索して 0 件にしました。
+- mock（`bridge/mockBridge.ts`）の `ui.pickFile` は `audioOrVideo` で `picked-audio-N.wav` を返します（音声の種類と同じ名前）。
+- **`timeline.extractAudio` を `NO_LOCAL_TIMEOUT_METHODS` へ入れました（2026-10-31）。** native が 1 フレームごとに 10 秒で描画を打ち切るので、WebUI 側の 10 秒で先に切ると、native がソロ中のまま描画している間に `extractObjectAudio.ts` の直列化が解けてしまうためです。`BridgeError` の `TIMEOUT` も「時間切れ」に分類します。
+
+### 155.3 テスト
+
+- 新規は `timeline/extractObjectAudio.test.ts`（要求の形・直列化の順序・失敗が連鎖を止めない・分類の表）。
+- 書き換えは `App.prefill.test.tsx`（#7 が音声オブジェクトでも動画オブジェクトでも solo で抽出して wav を添付する・3 つの失敗の注意・#18 が動画オブジェクトを solo で抽出する）・`shell/AppShell.minimaxH3.test.tsx`（H3 の #7 が抽出してから Audios カードへ入る・動画オブジェクトでも入る・無音の注意）・`timeline/menuSelection.test.ts`（種別の表を受け付ける種類の集合で判定・#7／#18 は動画を通し画像を「音声か動画」で断る）・`timeline/menuRouting.test.ts`・`timeline/prefillSeed.test.ts`。
+- 追加は 3 つのカードの mp4 のドロップと `audioOrVideo` の 📁（アップロードの `kind` は `audio` のまま）: `modes/single/GenerationForm.sourceAudio.test.tsx`・`modes/single/ReferenceAccordion.test.tsx`・`modes/single/useReferenceSlots.test.ts`・`modes/chained/ChainAudioPanel.test.tsx`。
+- 削除は #3・#17 の試験と `a2vSeedMaxFrames` の試験（`modes/single/useGenerationForm.test.ts`）・`timeline/cutoutAndUpload.test.ts`。
+
+### 155.4 門の結果
+
+- WebUI: `npm run typecheck` 0 エラー・`npm run lint` 0 エラー／32 警告（これまでと同数）・`npx vitest run --exclude "**/backend.integration.test.ts"` 180 ファイル・3,538 テスト合格・失敗 0。
+- ネイティブ: doctest 402 ケース・2,090 アサーション・失敗 0・スキップ 7・コンパイラーの警告なし。
+- バックエンド: pytest 3,766 件合格・28 件スキップ・失敗 0（進捗表示の . と s を数えた値。要約行は出力されない設定のため）。H3 の仮想環境の `tests/test_h3_audio_encoder.py` は 20 件合格。
+- 配置: `build/ninja-release/NzVideomni.aux2` 1,556,992 バイト（2026-10-31 21:04:10）を、実機の `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2` と配布用の複製 `AviUtl2-Plugin\NzVideomni.aux2` へ置いた。3 つとも sha256 は `5617683927601CFEDCA14869F76040605D0E2094529C0D0138409CF27751D0E3` で一致。言語ファイルは実機の `data\Language` へ複製した。
+- オーナー裁定 2 件（2026-10-31）: ① `timeline.extractAudio` を WebUI の 10 秒の時間切れの対象外にした（155.2）。② 音声の参照への事前検査 `REFERENCE_AUDIO_NO_STREAM` を足した（155.1）。
+- 既知の限界（直さない）: H3 の #7 は空きカードの確認より先に抽出する・待ちの間に `baseModels` が古くなりうる・追尾やマスク描画の「1 ジョブの枠」を抽出は取らない。`SingleScreen.reference.test.tsx` の「✒ appends the card's tag … right-clicked video opens the accordion」は単独実行 9 回中 2 回失敗したが、変更していない `addReferenceVideo` の経路で、台帳 §3-238 と同種であり退行ではない。
+- 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §187。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（G-1〜G-10）。

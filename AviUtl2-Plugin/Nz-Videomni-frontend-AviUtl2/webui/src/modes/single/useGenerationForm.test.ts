@@ -1192,46 +1192,6 @@ describe("useGenerationForm", () => {
       expect(smart.current.values.numFrames).toBe(377);
     });
 
-    // W4 (#7 trim追従): an audio-to-video right-click prefill uploads the WHOLE
-    // audio file, so the wav auto-adjust is additionally capped at the span
-    // (trimmed ribbon) DURATION the prefill seeded (`a2vSeedMaxFrames`) — but
-    // only while the attached audio is still the prefill-attached one. Swapping
-    // the audio lifts the cap and restores the ordinary full-wav follow.
-    it("caps the #7 prefill wav auto-adjust at a2vSeedMaxFrames, and lifts the cap once the audio is swapped", async () => {
-      const SPAN_CAP = 121;
-      const mockFs = createMockFs({
-        folders: {
-          // The prefill-attached audio: a long (30s) file whose raw suggestion is
-          // far above the span cap (and even above the 273 spill ceiling).
-          "C:\\a": [{ name: "voice.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 30 }],
-          // The user's replacement pick (8s), well under the spill ceiling.
-          "C:\\Users\\mock\\Pictures": [{ name: "picked-audio-1.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 8 }],
-        },
-      });
-      const mockBridge = createMockBridge({ delayMs: 0, fs: mockFs });
-      const { result } = renderHook(() =>
-        useGenerationForm(FALLBACK_APP_CONFIG, "a music video", { nativeBridge: mockBridge }, { a2vSeedMaxFrames: SPAN_CAP }),
-      );
-
-      // Attach the prefill audio (the #7 auto-load path). Its raw 30s suggestion
-      // is held down to the span cap, not the full-file length.
-      await act(async () => {
-        await result.current.attachSourceAudioByPath("C:\\a\\voice.wav", "voice.wav");
-      });
-      await waitFor(() => expect(result.current.sourceAudio.state.status).toBe("ready"));
-      await waitFor(() => expect(result.current.values.numFrames).toBe(SPAN_CAP));
-      expect(result.current.audioFramesAdjustedEvent?.frames).toBe(SPAN_CAP);
-
-      // Swap the audio via a normal pick -> a DIFFERENT path: the cap lifts and
-      // the ordinary full-wav follow resumes (the 8s suggestion is above the cap).
-      const uncapped = suggestFramesForAudio(8, result.current.values.frameRate);
-      expect(uncapped).toBeGreaterThan(SPAN_CAP);
-      act(() => {
-        void result.current.sourceAudio.pick();
-      });
-      await waitFor(() => expect(result.current.values.numFrames).toBe(uncapped));
-    });
-
     it("buildA2vRequest assembles a distilled single-clip A2V chain payload", async () => {
       const { result } = setupA2V(2.0);
       act(() => {
@@ -1516,7 +1476,7 @@ describe("useGenerationForm", () => {
     });
   });
 
-  // W5 (反対スロット保持): the opposite source slot carried across a #2/#3/#7
+  // W5 (反対スロット保持): the opposite source slot carried across a #2/#7
   // remount is seeded into the form's one-shot `initial` (no re-upload).
   describe("W5 carry-over (initial.carryReferenceVideo / initial.carryAudio)", () => {
     // A config whose default height (320) is NOT a multiple of 128, so the
@@ -1526,7 +1486,7 @@ describe("useGenerationForm", () => {
       generation_defaults: { ...FALLBACK_APP_CONFIG.generation_defaults, width: 512, height: 320, crop_output: null },
     };
 
-    it("carrying a reference video (#3/#7) mounts it ready, forces the 128 grid, and seeds both strengths (回帰対策1)", () => {
+    it("carrying a reference video (#7) mounts it ready, forces the 128 grid, and seeds both strengths (回帰対策1)", () => {
       const mockBridge = createMockBridge({ delayMs: 0 });
       const spy = vi.spyOn(mockBridge, "request");
       const { result } = renderHook(() =>

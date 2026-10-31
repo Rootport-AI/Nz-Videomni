@@ -14,7 +14,7 @@ import { SingleScreen } from "./SingleScreen";
 // `autoOpenReference`/`autoOpenA2v` (the two accordion auto-expand props it
 // hands `GenerationForm`) not only from THIS prefill's intent but also from the
 // OPPOSITE slot carried across the remount (`initialIntent.carryOver`). Before
-// this fix, running #3/#7 (audio) with an existing reference video, or #2 with
+// this fix, running #7 (audio) with an existing reference video, or #2 with
 // existing audio, kept the carried material but collapsed its accordion. These
 // tests exercise the derivation through a real `SingleScreen` render (the
 // intent->prop mapping lives here, not in `GenerationForm`); `GenerationForm`'s

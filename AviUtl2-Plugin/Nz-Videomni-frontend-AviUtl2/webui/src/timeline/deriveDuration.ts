@@ -79,7 +79,7 @@ export interface ComputeTargetNumFramesArgs {
    * ⚠ It is ONE ceiling for both policies that have one: as well as capping
    * `"comfortCeiling"`, it caps `"materialClampedToCeiling"`'s material-derived
    * length (see the `materialClampedToCeiling` branch below). That is
-   * intentional — #2/#3/#7's material clamp moves onto the smart line too. */
+   * intentional — #2/#7's material clamp moves onto the smart line too. */
   comfortCeilingFrames?: number | undefined;
   /** `limits.minNumFrames`/`limits.maxNumFrames` (already on `frameGrid` —
    * see `paramUtils.snapNumFrames`'s own assumption). Both policies that can

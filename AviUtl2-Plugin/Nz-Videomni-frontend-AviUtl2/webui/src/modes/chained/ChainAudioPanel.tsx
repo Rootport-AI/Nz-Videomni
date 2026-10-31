@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
 import { AUDIO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
-import { SOURCE_AUDIO_EXTENSIONS, useFileDrop } from "../../shell/useFileDrop";
+import { SOURCE_AUDIO_INPUT_EXTENSIONS, useFileDrop } from "../../shell/useFileDrop";
 import { formatSecondsLabel } from "../single/paramUtils";
 import { AUDIO_FIT_SAFETY_MARGIN_LATENTS } from "./audioFit";
 import {
@@ -91,7 +91,7 @@ export function ChainAudioPanel({
     error: dropError,
     handlers: dropHandlers,
   } = useFileDrop({
-    accept: SOURCE_AUDIO_EXTENSIONS,
+    accept: SOURCE_AUDIO_INPUT_EXTENSIONS,
     onFile: (filePath, fileName) => void form.attachAudioByPath(filePath, fileName),
     disabled: disabled || uploading,
     nativeBridge,

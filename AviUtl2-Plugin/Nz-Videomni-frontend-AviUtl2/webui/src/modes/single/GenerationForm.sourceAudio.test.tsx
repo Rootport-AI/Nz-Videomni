@@ -114,6 +114,36 @@ describe("GenerationForm — SourceAudioSection (A2V card redesign)", () => {
     expect(await screen.findByText("3.0s")).toBeInTheDocument();
   });
 
+  // 台帳 §1-113: the A2V card also takes a video file (only its sound is used).
+  // The upload still goes up as kind "audio" (`/upload/audio`).
+  it("accepts a dropped .mp4 and uploads it as audio", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    const spy = vi.spyOn(bridge, "request");
+    const { container } = renderForm(bridge);
+
+    fireEvent.drop(a2vCard(container), { dataTransfer: { files: [new File([], "clip.mp4")] } });
+
+    expect(await screen.findByText("clip.mp4")).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith(
+      "backend.uploadFile",
+      expect.objectContaining({ kind: "audio", filePath: expect.stringContaining("clip.mp4") }),
+    );
+    expect(a2vCard(container).querySelector(".field-hint-error")).toBeNull();
+  });
+
+  it("📁 asks the native dialog for audio OR video, and uploads the pick as audio", async () => {
+    const user = userEvent.setup();
+    const bridge = createMockBridge({ delayMs: 0, pickFileName: "clip.mov" });
+    const spy = vi.spyOn(bridge, "request");
+    renderForm(bridge);
+
+    await user.click(screen.getByRole("button", { name: /choose audio file/i }));
+
+    expect(await screen.findByText("clip.mov")).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith("ui.pickFile", { kind: "audioOrVideo" });
+    expect(spy).toHaveBeenCalledWith("backend.uploadFile", expect.objectContaining({ kind: "audio" }));
+  });
+
   it("dragging over the card highlights it with .source-section-dragover", () => {
     const bridge = createMockBridge({ delayMs: 0 });
     const { container } = renderForm(bridge);

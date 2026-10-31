@@ -2,11 +2,13 @@
 
 Mirrors :mod:`services.video_upload_store` but for the uploaded audio track that
 drives audio-to-video generation. Audio is stored AS-IS (no re-encode) under
-``uploads/audios/{audio_id}/input{ext}`` — the engine's PyAV-based decode
-(``decode_audio_from_file``) reads the container directly (wav/mp3/m4a/…).
-Validation is minimal (extension + size), consistent with the image/video
-store allow-list pattern; codec validity is verified later at preflight
-(ffprobe) rather than on upload.
+``uploads/audios/{audio_id}/input{ext}`` — the file is stored as-is and the
+engines (PyAV-based ``decode_audio_from_file``) read its first audio stream
+directly. Video containers (mp4/mov/webm/mkv) are accepted too; only their
+audio stream is used. Validation is minimal (extension + size), consistent
+with the image/video store allow-list pattern; codec validity (and a video
+without any audio stream) is verified later at preflight (ffprobe) rather
+than on upload.
 
 Audio lives in a dedicated ``audios/`` subdir so an ``audio_id`` can never be
 confused with a ``video_id`` or an image ``image_id`` (all are UUIDs, but the
@@ -29,6 +31,10 @@ _CONTENT_TYPES = {
     ".aac": "audio/aac",
     ".flac": "audio/flac",
     ".ogg": "audio/ogg",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    ".mkv": "video/x-matroska",
 }
 
 

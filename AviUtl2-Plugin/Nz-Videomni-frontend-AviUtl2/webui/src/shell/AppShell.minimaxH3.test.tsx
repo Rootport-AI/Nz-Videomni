@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bridge as appBridge, TIMELINE_MENU_INVOKED_EVENT } from "../bridge";
 import type { ResultOf } from "../bridge";
 import { resetCreateLiveCommands } from "../timeline/createLiveCommands";
+import { resetExtractObjectAudioChain } from "../timeline/extractObjectAudio";
 import { resetProvisionalReservation } from "../timeline/provisionalReservation";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { NativeBridge } from "../bridge";
@@ -98,6 +99,7 @@ async function switchTo(id: string) {
 describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    resetExtractObjectAudioChain();
   });
   afterEach(() => {
     window.localStorage.clear();
@@ -434,6 +436,7 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
     beforeEach(() => {
       resetProvisionalReservation();
       resetCreateLiveCommands();
+      resetExtractObjectAudioChain();
     });
 
     /** A video object whose ribbon is frames 30..119 @30fps of a 10.7 s file,
@@ -526,7 +529,8 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
         expect(within(card("ref-slot-video-2")).getByText("two.mp4")).toBeInTheDocument();
         expect(within(card("ref-slot-video-1")).getByText("one.mp4")).toBeInTheDocument();
 
-        // #7 → Audios card 1.
+        // #7 → the object's ribbon range is extracted (solo) and the wav lands in
+        // Audios card 1 (台帳 §1-113).
         act(() => {
           bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
             action: "audioToVideo",
@@ -534,7 +538,15 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
           });
         });
         await waitForCardReady("ref-slot-audio-1");
-        expect(within(card("ref-slot-audio-1")).getByText("voice.wav")).toBeInTheDocument();
+        expect(requestSpy).toHaveBeenCalledWith("timeline.extractAudio", {
+          layer: 1,
+          frameStart: 30,
+          frameCount: 90,
+          audioMode: "solo",
+          soloKeepLayers: [1],
+        });
+        expect(within(card("ref-slot-audio-1")).getByText(/^extract_1_30_\d+\.wav$/)).toBeInTheDocument();
+        expect(screen.getByText(/loaded the object's sound/i)).toBeInTheDocument();
         expect(within(card("ref-slot-video-1")).getByText("one.mp4")).toBeInTheDocument();
         expect((screen.getByPlaceholderText(/describe the video/i) as HTMLTextAreaElement).value).toBe(
           "a cat on a skateboard",
@@ -569,13 +581,14 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 
         await switchTo("MiniMaxH3");
         await waitForCardReady("ref-slot-audio-1");
-        expect(within(card("ref-slot-audio-1")).getByText("voice.wav")).toBeInTheDocument();
+        expect(within(card("ref-slot-audio-1")).getByText(/^extract_1_30_\d+\.wav$/)).toBeInTheDocument();
+        expect(screen.getByText(/loaded the object's sound/i)).toBeInTheDocument();
       },
       25_000,
     );
 
     it(
-      "H3: #3 (a2v from a video's sound) is refused with a pointer to the Audios card",
+      "H3: #7 on a VIDEO object extracts its own sound and lands in the Audios card (never the Videos card)",
       async () => {
         const bridge = createMockBridge({ delayMs: 0 });
         const requestSpy = vi.spyOn(bridge, "request");
@@ -585,17 +598,43 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 
         act(() => {
           bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
-            action: "videoAudioToVideo",
+            action: "audioToVideo",
             selection: trimmedVideoSelection("C:\\v\\one.mp4"),
           });
         });
-        await screen.findByText(
-          "On MiniMax H3, add the audio with 📁 on a Reference Audios card, then tick Audio to video.",
-          {},
-          { timeout: 5_000 },
+        await waitForCardReady("ref-slot-audio-1");
+        expect(within(card("ref-slot-audio-1")).getByText(/^extract_1_30_\d+\.wav$/)).toBeInTheDocument();
+        expect(screen.getByText(/loaded the object's sound/i)).toBeInTheDocument();
+        expect(requestSpy).toHaveBeenCalledWith(
+          "backend.uploadFile",
+          expect.objectContaining({ kind: "audio", filePath: expect.stringContaining("extract_1_30_") }),
         );
-        // Refused: no audio was extracted.
-        expect(requestSpy.mock.calls.some((c) => c[0] === "timeline.extractAudio")).toBe(false);
+        expect(requestSpy).not.toHaveBeenCalledWith("backend.uploadFile", expect.objectContaining({ kind: "video" }));
+      },
+      20_000,
+    );
+
+    it(
+      "H3: #7 shows the silence note and fills no card when the extraction is silent",
+      async () => {
+        const bridge = createMockBridge({
+          delayMs: 0,
+          failExtractAudio: "EXTRACT_FAILED",
+          extractAudioErrorMessage: "no audio stream present (silent range)",
+        });
+        const requestSpy = vi.spyOn(bridge, "request");
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(card("ref-slot-audio-1")).toBeInTheDocument());
+
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "audioToVideo",
+            selection: trimmedVideoSelection("C:\\v\\one.mp4"),
+          });
+        });
+        await screen.findByText(/no audible sound/i, undefined, { timeout: 5_000 });
+        expect(requestSpy).not.toHaveBeenCalledWith("backend.uploadFile", expect.anything());
       },
       20_000,
     );

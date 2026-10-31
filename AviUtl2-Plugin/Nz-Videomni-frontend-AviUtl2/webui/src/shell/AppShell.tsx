@@ -1837,6 +1837,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  fps, sampling sliders, a server-fixed seam). */
               loraAudioHidden={loraAudioHidden}
               constraints={baseModels.activeConstraints}
+              /* §1-109: the per-clip Reference cards follow the same role
+                 rule as Create's (not sent on FL2VA, the notices). */
+              transformerRole={baseModels.activeTransformerRole}
             />
           </div>
           {/* Edit (2026-08-09): promoted from a disabled mock tab to a real

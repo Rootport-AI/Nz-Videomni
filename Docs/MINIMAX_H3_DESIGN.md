@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結だけ。§3.3）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §165〜§184（α版の 3 弾は §165〜§167、VRAM 16GB mode は §168〜§169、キーフレームは §170、LoRA は §176、1 ステップの高速化は §177、A2V は §178、Reference アコーディオンの UI は §179、Ref2VA は §180、テキストエンコーダーの VRAM は §181〜§182、連結は §183〜§184。台帳の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239・3-240・3-241・3-251・3-254・3-257・3-260・3-262）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結だけ。クリップごとの Ref2VA の参照を付けられる。§3.3）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -18,7 +18,7 @@
 | [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 | 次の作業の入口（α版の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239） |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 土台。記述子（§4）・エンジンアダプタ（§5.2）・仮想環境（§5.3）・推論モード（§5.8）・写像表（§9） |
 | [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) | 調査の記録（参考資料）。**進め方の裁定**は同ノート §10。配布ファイルの実測は同 §13.2 |
-| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176、A2V は §178、Ref2VA は §180、テキストエンコーダーの VRAM は §181〜§182、連結は §183〜§184） |
+| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176、A2V は §178、Ref2VA は §180、テキストエンコーダーの VRAM は §181〜§182、連結は §183〜§184、参照付きの連結は §185〜§186） |
 | `engine_h3/venv-engine-h3.freeze.txt` | 仮想環境の**版の正本**。本書は版の数字を書かない |
 | `engine_h3/engine_h3-venv-pyproject.toml` | 仮想環境を手で作り直すときの依存の仕様（なぜその版かの説明つき） |
 
@@ -147,6 +147,7 @@
   - **LoRA を第 1 弾に含める（オーナー裁定）**: Style LoRA と Turbo LoRA を連結でも使う（クリップごとに付け外し）。
   - **Est. は隠し、出力の合計長だけを出す（オーナー裁定）**: H3 用の推定時間は台帳 §3-261。
   - **T2V だけ（オーナー裁定）**: 冒頭画像は無し。源入力パネル（動画も画像も）・素材（末尾）・参照動画・長尺 A2V・バッチ i2v-long は H3 で閉じる。
+    > **更新（2026-10-31）**: ここで閉じた「参照動画」は IC-LoRA の参照動画（`reference_video_id`）である。Ref2VA の参照素材（`references`）は、クリップごとに付けられるようにした（裁定 87・§3.3）。
   - **クリップ 1 以降は 39 フレーム以上（監督の裁定）**: 根拠は、新しい内容が潜在 1 個以上要ること（`T′_i − k ≥ 1`）。計測台本の条件（2k ≤ T′。56 以上）より緩い。39 では、次へ写す末尾 7 個に固定した頭 2 個が含まれるが、強さ 1.0 でビットが一致するので害は無い。
   - **音声の余り ±1 を受け入れる（監督の裁定）**: 記録（`audio_latent_excess`）に残し、制限はしない（裁定 84-6）。例と影響は §3.3。
   - **機能名（監督の裁定）**: 既存の `a2v`・`reference_video` を再利用し、新しい名前は冒頭画像の `chain_start_image` の 1 つだけにした。`chain_reference`・`batch_i2v_long` は作らない。
@@ -164,7 +165,19 @@
 - **裁定 86 【オーナー裁定】**: Ref2VA の重みで参照を付けた連結（固定行方式。台帳 §1-109。2026-10-31）で、新しい区間の展開が人物の向きや場所を変える内容だと新しいショットに切り替わる事象には、**対処しない**。先行事例の vLLM-Omni（研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.12）も対処せず、注意にとどめている。計測と切り分け（原因は追記の展開で、参照の枚数ではない）は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185、裁定の経緯は §185.8・§185.9。計測値は §185 にだけ書く。
   - 事象は台帳 §3-263 に起票した（再訪条件つき）。台帳 §1-109 の本体（クリップごとの Reference アコーディオン付きの Chained）は、この事象を既知の限界として実装へ進む。
   - 目視の扱い: C0〜C3 はオーナーが目視した。c4・c5 はオーナーは目視せず、監督の所見（継ぎ目の前後のフレーム）と数値で裁定した。
-  - 使い方の注意（参照付きの連結では、新しい区間の展開が前の区間の構図から続く内容だと連続しやすい）は、台帳 §1-109 の実装時に §3.3 と README に書く。§3.3 の本文は、実装がまだ無いので触らない。
+  - 使い方の注意（参照付きの連結では、新しい区間の展開が前の区間の構図から続く内容だと連続しやすい）は、§3.3 の「参照付きの連結」と README に書いた（実装は裁定 87）。
+
+- **裁定 87 【オーナー裁定・監督裁定】**: 参照付きの連結（台帳 §1-109。2026-10-31）を製品に載せたときの裁定。仕組みの正本は §3.3 の「参照付きの連結」、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §154。計画の敵対的レビューの採否・実装差分のレビュー・門は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §186 にだけ書く（本書には写さない）。計測値は §185・§186 にだけ書く。
+  - **画面の形（オーナー裁定）**: 各クリップに、Single と同じ見た目の Reference アコーディオンを 1 つずつ付ける。共通の参照（全クリップが共有する参照）は作らない。Audios のカードには「Audio to video」のチェックと Strength を出さない（連結は A2V を受けない）。右クリックは Single のままで変えない。vLLM-Omni 型（ガイド方式と時刻の連続）は採らない。
+  - **`References` のチェックの位置と既定（オーナー裁定）**: アコーディオンの中ではなく、`Clips` の見出し行の右端に `References` のチェックを 1 つ置く。既定は off。off のあいだは各クリップのアコーディオンを隠し、中身（アップロード済みの参照）は残して送らない。LTX を選んでいるときは、チェックもアコーディオンも出さない（中身は残る）。
+  - **注意文 ①②③（オーナー裁定）**: Single と同じ 3 種を、Generate の下に 1 か所だけ出す（クリップごとには出さない）。① は on で FL2VA の重みを読み込んでいるとき、② は off で Ref2VA の重みを読み込んでいるとき、③ は on で**全クリップの使われるカードが 0 件**のとき。一部のクリップだけが 0 件でも ③ は出さない。種別なし（Hybrid）では ①② を出さない。文言は Single の `single.reference.notices` を使い回す（§3.2）。
+  - **契約の形（監督の裁定）**: `ChainClip.references` を足し、要素は単発と同じ `ReferenceInput`（`id` だけを受け、パスは受けない）。既定は空で、空なら送信本文・ワーカーへのペイロード・記録は従来と同じ。**連結全体の参照は無く、本数と番号の検査はクリップごとに行う。**
+  - **`pipeline_h3.py` を触らない（監督の裁定）**: 参照の段（読む → テキストエンコーダーに見せる → 符号化する）を単発の `generate()` から切り出して共用することはせず、`chain_h3.py` のクリップのループに、単発と同じ順の短い版を書いた（部品は共有）。共通化できる部分が少なく、符号化器の共有・段の番号・解放の順序の約束が増えるうえ、凍結した単発の経路に手を入れることになるため。
+  - **LTX は 422（監督の裁定）**: LTX 2.3 と LTX 2.5 は、いずれかのクリップに `references` があれば `FEATURE_UNSUPPORTED`（機能名 `references`。単発と同じ名前と文言）で断る。連結専用の機能名は作らない。拒否表の行は既存の順序を変えないよう最後に足し、LTX 2.5 の 4 分類の監査には「許す重なり」として `clips` を設けた（`clips` は動作でもあり、入れ子の `references` を断る行でもある。入れ子の欄は最上位の欄の名前でしか言えないため）。
+  - **記録の形（監督の裁定）**: `metadata.json` の最上位 `references` は、連結では `{"clips": [ … ]}`（参照のあるクリップは件数と入力の一覧、無いクリップは `null`）とし、参照がまったく無い連結にはキーを出さない。全クリップの合算にはしない。LTX を含む全ての連結の `request.clips[i]` に `"references": []` が増える（足すだけの差）。
+  - **操作パネルの設計（監督の裁定）**: クリップごとに 1 つの部品が自分のカードを持ち、画面は各部品が上げてくる要約だけを読む（案 A）。`isH3` は今の `constraints` から求め、LTX に切り替えたあとに残った参照は送らない。送信の門・dirty の扱い・`embedded` の部品の変更・テストの粒度はフロントエンド `Docs/DEVLOG.md` §154。
+  - **使い方の注意は書くだけ（裁定 86 の実装）**: 新しい区間の展開の内容による連続の違いは、対処せず §3.3 と README に注意として書く。
+  - **状態**: 実機確認 G-4 合格（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §186.8）。CLOSED 3-264。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -444,7 +457,7 @@ H3 の音声 VAE〔音声の圧縮器〕のファイル（`minimax_h3_audio_vae_
 
 ## 3.3 連結（Chained）
 
-**結論**: T2V のクリップを複数つなぐ。前のクリップの映像と音声の潜在の末尾（重なり 22 フレーム＝映像の潜在フレーム 7 個）を、次のクリップの先頭に写して「固定行」にする。固定行以外をノイズ除去し、全クリップの潜在を連結して、最後に 1 本で復号する（裁定 84・85）。Stage 2〔高解像度の仕上げ〕は無い。計測と目視の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183、実装の記録は §184、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h) にある。幾何は `h3_chain_math.py`、本体は `engine_h3/chain_h3.py`。
+**結論**: T2V のクリップを複数つなぐ。前のクリップの映像と音声の潜在の末尾（重なり 22 フレーム＝映像の潜在フレーム 7 個）を、次のクリップの先頭に写して「固定行」にする。固定行以外をノイズ除去し、全クリップの潜在を連結して、最後に 1 本で復号する（裁定 84・85）。Stage 2〔高解像度の仕上げ〕は無い。計測と目視の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183、実装の記録は §184、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h) にある。幾何は `h3_chain_math.py`、本体は `engine_h3/chain_h3.py`。クリップごとの Ref2VA の参照を付けることもできる（「参照付きの連結」。裁定 87）。
 
 ### 幾何（`h3_chain_math.py`）
 
@@ -485,6 +498,32 @@ H3 の音声 VAE〔音声の圧縮器〕のファイル（`minimax_h3_audio_vae_
 
 H3 の連結の帯は一段である（Stage 2 が無い。LTX の連結の 2 段の帯とは違う）。ワーカーの進捗の行は、クリップの `encode` と `stage1_denoise` にだけクリップの位置（`outer_index`・`outer_total`）を付け、単発の行は変えない。`encode` の 0..3 は各クリップで繰り返されるので、帯はクリップの頭の位置に留める。全体の 1 回の復号にも帯を割り当て、長い復号が止まって見えないようにする。段ごとの値は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)。
 
+### 参照付きの連結（台帳 §1-109。裁定 87）
+
+**結論**: 連結の各クリップに、そのクリップだけの Ref2VA の参照（画像・動画・音声）を付けられる。クリップの番になったら、そのクリップの参照の行と固定行を同時に DiT に入れてノイズ除去する。参照は共有せず、クリップごとに読み、符号化し、捨てる。参照のないクリップは従来と同じ手順で動く。API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §154 にある。
+
+**仕組み**
+
+- **列**: クリップ i のノイズ除去の系列は、§3.2 の列 `[text | cond | ref_video | ref_audio | audio | video]`（連結は T2V なので `cond` は空）に、固定行（上の「固定行」）が音声と映像の先頭に加わった形になる。参照の行は §3.2 と同じく毎ステップ同じ値で渡し、更新しない。固定行も同じ性質の行なので、両者は DiT の中で同時に扱われる。
+- **時刻の原点**: クリップ i の目的の音声・映像の時刻は、そのクリップの参照を積んだあとの位置から始まる（§3.2 の「時刻」と同じ式）。各クリップの座標が 0 から始まる点（上の「実行の流れ」）は、参照の有無で変わらない。クリップをまたいで時間座標を連続させることはしない（採らなかった案）。
+- **符号化はクリップごと**: クリップの番になってから、そのクリップの参照だけを CPU で読み、テキストエンコーダーに札と視覚ブロックで見せ（§3.2）、映像の符号化器をそのクリップ用に組んで参照を符号化し、符号化器を捨ててからノイズ除去に入る。使い回しの最適化はしない。
+- **手順の置き場**: `engine_h3/chain_h3.py` の `run_chain_h3` のクリップのループに、単発の `generate()`（`engine_h3/pipeline_h3.py`）と同じ順の手順を書いた。読み込み・テキストエンコーダーへの提示・符号化器の組み立て・参照の符号化は、`pipeline_h3.py` の既存の部品をそのまま呼ぶ。`pipeline_h3.py` は変えていない。
+- **記録**: 参照のあるクリップだけ、段 `reference_encode` の秒数と使った件数（画像・動画・音声）が残る。参照のないクリップの記録は従来と同じ。アプリの `metadata.json` の形は仕様書 §6.6 が正本である。
+- **進捗**: 参照のあるクリップの `encode` は、参照の符号化の分だけステップが 1 つ増える。帯の位置は変わらない（`encode` はクリップの頭に留まるため。上の「進捗」）。
+
+**使い方の注意**
+
+- **新しい区間の追記の内容で、継ぎ目の連続の度合いが変わる。** 前の区間の構図から続く内容（同じ人物が同じ場所で動き続ける）だと連続しやすい。人物の向きや場所を変える展開（例: 振り返って歩き去る）だと、続きを描かずに新しいショットへ切り替わることがある。固定行と参照はどちらも効いており、原因は追記の展開であって、参照の枚数ではない。**これは既知の限界で、対処しない**（裁定 86）。根拠の計測と切り分けは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185、再訪の条件は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-263。
+- 参照が効く条件は単発と同じである（Ref2VA の重みを読み込む・4 ステップの Turbo ではほとんど効かない・参照動画を使うときは VRAM 16GB mode を on のままにする。§3.2）。連結の画面にも、単発と同じ注意文が出る（裁定 87）。
+
+**既知の限界**
+
+- **上限はクリップごと**で、連結全体の合計ではない。参照の本数と番号は単発と同じ規則でクリップごとに検査する（違反は `clips[i]: ` つきの 422）。クリップを増やし、各クリップに動画の参照を入れると、所要時間はクリップごとに参照の分だけ増える（§3.2 の「既知の限界」。数値は記録簿 §180・§186）。
+- **共通の参照は無い。** 全クリップで同じ素材を使いたいときは、各クリップに同じ素材を入れる（アップロードの id は使い回せる）。
+- **参照の読み込みの失敗は、そのクリップの番で出る。** 読めない動画・短すぎる音声は、前のクリップの生成が終わってから失敗する。ファイルの存在・本数・番号・`max_sec` は、生成を始める前に全クリップ分を検査する。素材を先に読み直す二重の読み込みはしない（採らなかった案）。
+- **MCP と Gradio は参照付きの連結を受けない**（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-259）。MCP の `submit_chain` は `references` の引数を持たず、Gradio は知らない項目を送らない。
+- 連結は T2V だけなので、キーフレームとの併用の問題（§3.2 の「既知の限界」）は連結には当てはまらない。
+
 ### API とフィーチャースコープ
 
 受ける欄・断る機能名・無視する欄・`unsupported_features` の差分・`done.chain`／`metadata.json` の `h3` の欄・単位の差は、仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h) が正本である。分類の表は `services/engines/h3/adapter.py` の 4 枚（`CHAIN_REJECT_TABLE`・`CHAIN_IGNORED_FIELDS`・`CHAIN_HONOURED_FIELDS`・`CHAIN_GOVERNED_FIELDS`。LTX 2.5 のアダプタと同じ形）で、連結の要求の全ての欄が分類済みであることを監査するテストがある。ここには理由だけを書く。
@@ -496,11 +535,11 @@ H3 の連結の帯は一段である（Stage 2 が無い。LTX の連結の 2 �
 
 ### 操作パネル
 
-操作パネルの判断（固定重なりモード・隠す欄・右クリックの入口の門など）は、フロントエンド `Docs/DEVLOG.md` §153。
+操作パネルの判断（固定重なりモード・隠す欄・右クリックの入口の門など）は、フロントエンド `Docs/DEVLOG.md` §153。クリップごとの Reference アコーディオンと `References` のチェック（裁定 87）は同 §154。
 
 ### 既知の限界・範囲外
 
-- 第 1 弾は T2V の連結だけ。V2V・Retake・End source・A2V・キーフレーム付きの連結は無い。時間座標の連続は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-109。
+- 第 1 弾は T2V の連結だけ。V2V・Retake・End source・A2V・キーフレーム付きの連結は無い。参照はクリップごとの Ref2VA だけを付けられる（上の「参照付きの連結」）。クリップをまたぐ時間座標の連続（ガイド方式）は採らない（裁定 86・87）。
 - 重なりは 22 フレームの固定（選べるようにするのは §4-44）。長い連結での焼け（コントラストの累積）への対処は §4-45。H3 用の推定時間（Est.）は §3-261。快適上限の較正は §1-95（H3 の記述子に `comfort` が無いので、Chained でも快適上限のマーカーは出ない）。
 - 合計の上限 11,544 フレームのうち、実測は 1,348 フレームまで（記録簿 §184.6）。復号の主記憶（1344×768 で 1 フレーム当たり uint8 で約 3.1MB）と音声復号器の VRAM は長さに比例する。
 - MCP の `submit_chain` はステップ数と shift の引数を持たないので、H3 では既定（20 ステップ・shift 12／3）で動く。**Turbo LoRA の 8 ステップは MCP から指定できない。** Gradio の Chain タブは LTX の格子（8n+1）と 8 ステップを送るので、H3 では 422 になる（73・209・345・481 フレームのような両方の格子に乗る長さは、8 ステップで走る）。Gradio の Chain タブは LTX 専用。
@@ -511,6 +550,14 @@ H3 の連結の帯は一段である（Stage 2 が無い。LTX の連結の 2 �
 - **クリップごとに復号して画素を切り落とす**: 復号の継ぎ目が見える。強さ 1.0 では 1 本復号と同じ結果になるので、クロスフェードも実装しない（裁定 84-4）。
 - **音声の誤差を理由にクリップの長さを制限する**: 17n+5 の中で自由にし、注意の一行だけ出す（裁定 84-6）。
 - **`chain_reference`・`batch_i2v_long` の機能名を作る**: 冒頭画像を閉じる名前 `chain_start_image` を 1 つ足せば足りる（裁定 85）。
+- **参照付きの連結のために、`pipeline_h3.generate()` から参照の段を切り出して共用する**: 共通化できる手順が少なく、符号化器の共有・段の番号・解放の順序の約束が増える。凍結した単発の経路に手を入れない方が安全（裁定 87）。
+- **ランナー共通の 13 個の引数に 14 個目を足す**: H3 のランナーが `generate_chain` を上書きして、参照のパスだけを足せば足りる。LTX のランナーと実バックエンドは変えない。
+- **全クリップの参照を連結の前にまとめて符号化し、使い回す**: クリップごとに組んで捨てる方式で足りる（計測 §185 で実績がある）。使い回しは符号化器の寿命の管理を増やす。
+- **連結専用の機能名（`chain_references` など）を `unsupported_features` に足す**: 単発と同じ `references` で足りる。
+- **`metadata["references"]` を全クリップの合算の 1 つにする**: どのクリップにどの素材を使ったかが残らない。クリップごとの配列（参照のないクリップは `null`）にした。
+- **参照の素材を生成の前に読み直して、失敗を早く出す**: 二重に読む費用に見合わない。既知の限界として書く（上の「参照付きの連結」）。
+- **共通の参照・クリップをまたぐ時間座標の連続（vLLM-Omni 型のガイド方式）**: オーナー裁定（裁定 86・87）。
+- **操作パネルの状態の持たせ方の別案**（参照の状態を連結のフォームに持たせる・クリップ id をキーにした 1 本の状態に作り直す・`Enable` を上書きするなど）: フロントエンド `Docs/DEVLOG.md` §154 に理由を書く。
 
 
 ---
@@ -805,7 +852,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 - **イベント**: `ready`（`sage_available`）／`progress`（`stage`・`index`・`total`）／`done`／`error`（`detail`）
 - **進捗の段階名**: LTX の語彙を借りる。`encode`／`stage1_denoise`（単段のノイズ除去。H3 は 1 段なのでこの名前だけを使う）／`decode`。アダプタは進捗の割合計算に `_read_worker_events(one_stage=True)` を使う。`encode` の総数は、3 に、キーフレームが 1 枚以上あれば 1（画像の符号化）、参照が 1 件以上あれば 1（参照の符号化）、元の音声を符号化するなら 1（音声の符号化。Strength 0 では符号化しないので足さない）を足した数である（`pipeline_h3.py` の `encode_steps` の 1 か所で決める。進む順もこの順）。画像読み取り部に入る画像の有無では決めない（中間だけのジョブも 4 になり、3 と数えたあとに 4/4 が出ることはない）。`audio_encode` と `reference_encode` は `done` の `h3.phases` の段の名前で、進捗の段ではない。アダプタは `encode` を常に同じ割合に写すので、A2V でないジョブの進捗は変わらない。
 - **`done` のキー**: `seed_used`・`sampler`・`num_inference_steps`・`shift_video`・`shift_audio`・`peak_vram_mb`・`peak_vram_reserved_mb`・`rss_peak_gib`・`seconds`・`num_frames`・`frame_rate`・`width`・`height`・`size_bytes`・`attention_used`（ジョブごとの値）・`block_swap_prefetch_used`・`keep_resident_used`（`"on"`／`"off"`。このジョブの終わりに保持したか）・`vram16_mode_used`（`"on"`／`"off"`。VRAM 16GB mode で回したか）・`images_used`（要求のキーフレームの枚数。名前は変えない）・`commit_gib`・`commit_peak_gib`（コミット量）・`h3`（段ごとの秒数と RSS を `phases` に、使われた量子化経路を `quant_backends` に持つ。`phases.decode` には `audio_samples`〔切り揃え後〕と `audio_samples_decoded`〔復号した全量〕が入る〔`engine_h3/pipeline_h3.py` の `_decode`〕。I2V のときは `phases` に `image_encode` が入る〔`source_size` は画像ごとの元の大きさ `[w, h]` を昇順に並べたリスト、`vision_tokens` は画像読み取り部に入ったトークンの合計〕。`phases` の `denoise` には `dit_source`、`decode` には `vae_source` がいつも入る〔`"file"`／`"resident"`〕。VRAM 16GB mode のジョブは `phases.denoise.vram16` に上限・常駐数・分割の単位・割り当て器の再試行と OOM の回数の差分・`inactive_split` のピーク・退避の行き先〔`text_modules`〕が入る〔§6.5〕。A2V のジョブだけ、`phases` に `audio_encode`〔符号化した本数・サンプル数・潜在の形〕と `denoise.mask`、`decode` に `audio_output`〔`"original"`／`"decoded"`〕が入り、`h3` に `a2v`〔A2V の記録。アプリが `metadata.json` の最上位の `a2v` へ移す。キーの正本は仕様書 §6.6〕が加わる。A2V でないジョブの記録は変わらない。Ref2VA のジョブだけ、`phases` に `reference_encode`〔参照ごとに `kind`・`slot`・`rows`・`seconds`、画像は `source_size`・`size`・`vision_tokens`、動画は `source_frames`・`used_frames`・`latent_t`・`pairs`、音声は `samples`・`latent_t`〕が入り、`denoise.sequence` に `ref_video`・`ref_audio` の区間が、`h3` に `references`〔`pictures`・`videos`・`audios` の件数。アプリが `metadata.json` の最上位の `references` へ移す。キーの正本は仕様書 §6.6〕が加わる。`image_encode` の `vision_tokens` はキーフレームの分だけで、参照の分は `reference_encode` に入る。参照の無いジョブの記録は変わらない）
-- **`generate_chain`**（§3.3）: `generate` のキーから `num_frames`・`images`・`source_audio`・`references` を除き、`clips`（`[{prompt, num_frames}]`）を足したもの。各クリップの種は `seed + i`。`prompt` は使わない（各クリップの `prompt` が、共通と個別を合成した全文）。`done` は `generate` のキーに `chain` を足したもの（`done.chain` の欄名は実装の `H3ChainLayout.to_dict()` が正、`metadata.json` の欄は仕様書 §6.2b (h) が正）。`progress` はクリップの `encode` と `stage1_denoise` にだけ `outer_index`・`outer_total` を付ける。知らないキーはログに出して無視する。
+- **`generate_chain`**（§3.3）: `generate` のキーから `num_frames`・`images`・`source_audio`・最上位の `references` を除き、`clips`（`[{prompt, num_frames, [references]}]`。`references` は参照のあるクリップだけ、形は `generate` と同じ）を足したもの。各クリップの種は `seed + i`。`prompt` は使わない（各クリップの `prompt` が、共通と個別を合成した全文）。`done` は `generate` のキーに `chain` を足したもの（`done.chain` の欄名は実装の `H3ChainLayout.to_dict()` が正、`metadata.json` の欄は仕様書 §6.2b (h) が正）。`progress` はクリップの `encode` と `stage1_denoise` にだけ `outer_index`・`outer_total` を付ける。知らないキーはログに出して無視する。
 
 ### 映像 VAE の構成
 
@@ -869,6 +916,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | A2V（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-257。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §178） | 弾 1＝音声の符号化器と波形の読み込み／行ごとの連続値マスクの式、弾 2＝エンジンの段とワーカー、弾 3＝API・アダプタ・事前検査・記録、弾 4＝操作パネル、弾 5＝MCP（§3.1）。Gradio は触っていない（§12） |
 | Ref2VA（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-107。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180、操作パネルはフロントエンド `Docs/DEVLOG.md` §151。UI は前段で先行〔裁定 81。§179・フロントエンド `Docs/DEVLOG.md` §150〕） | R1＝列の骨格（`rope.py`・`dit.py`）、R2＝素材と提示（`reference.py`・`text_encoder.py`・`video_vae.py`）、R3＝段とワーカー、R4＝重みの種別の判定、R5＝API、R6＝インストーラー、R7＝操作パネル、R8＝GPU 検証（§3.2）。MCP と Gradio は触っていない（§12） |
 | 連結（Chained。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-106。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183〜§184、操作パネルはフロントエンド `Docs/DEVLOG.md` §153） | 第 1 弾は T2V の連結だけ。幾何・エンジン・ワーカー／API・系統の規則・進捗・mock／操作パネルの 3 本を並行で作り、機械の門・GPU の門・オーナーの実機確認に合格した（記録簿 §184。§3.3・裁定 85） |
+| 参照付きの連結（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-264。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §186、操作パネルはフロントエンド `Docs/DEVLOG.md` §154） | エンジン（クリップのループに参照の段）・アプリ（スキーマ・404・系統の規則・LTX の 422・ワーカーへのペイロード・記録）・操作パネル（クリップごとの Reference アコーディオン）の 3 本を並行で作った。差分のレビュー・機械の門・GPU の門の結果は記録簿 §186（裁定 87・§3.3） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限は、較正が済むまで記述子に `comfort` の行を持たせず、操作パネルのマーカーを出さない。

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import type { AppConfig, GenerateChainRequest } from "../../api/types";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { AppConfig, GenerateChainRequest, ReferenceInputBody, TransformerRole } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
@@ -48,11 +48,21 @@ import { submissionFingerprint } from "../single/repeatRun";
 import { useGenerationSubmit } from "../single/useGeneration";
 import { useConfig } from "../single/useConfig";
 import { useRepeatRun, useRepeatRunDriver } from "../single/useRepeatRun";
+import {
+  appendReferenceTag,
+  buildReferenceBody,
+  countUsedReferences,
+  referenceNotices,
+  referenceSendUploading,
+  type ReferenceRules,
+} from "../single/referenceRules";
 import { BatchI2vLongSection } from "../batch-i2v-long/BatchI2vLongSection";
 import { ChainAudioPanel } from "./ChainAudioPanel";
 import { ChainEndSourcePanel } from "./ChainEndSourcePanel";
 import { ChainReferencePanel } from "./ChainReferencePanel";
 import { ClipCard } from "./ClipCard";
+import { ClipReferences } from "./ClipReferences";
+import type { ClipReferenceEntry } from "./ClipReferences";
 import { buildChainReasonMessages } from "./generateReasonMessages";
 import {
   MAX_CHAIN_TOTAL_FRAMES,
@@ -65,6 +75,22 @@ import { SourceInputPanel } from "./SourceInputPanel";
 import { useChainForm } from "./useChainForm";
 import type { UseChainFormResult } from "./useChainForm";
 import "./ChainedScreen.css";
+
+/** §1-109: the Reference rules before any base model has published
+ * `constraints.reference` — no slots, and no clip cards mounted. Once H3's
+ * rules have been seen they are kept (Create's `NO_REFERENCE_RULES` /
+ * `lastReferenceRulesRef` arrangement), so the cards survive a trip through
+ * LTX. A copy of Create's constant: `referenceRules.ts` stays untouched and a
+ * component module (`SingleScreen.tsx`) should export components only. */
+const NO_REFERENCE_RULES: ReferenceRules = {
+  maxImages: 0,
+  maxVideos: 0,
+  maxAudios: 0,
+  maxTotal: 0,
+  videoTotalSec: 0,
+  audioTotalSec: 0,
+  clipMinSec: 0,
+};
 
 export interface ChainedScreenProps {
   /** Owned by `AppShell`'s shared `PromptBar`, above the mode tabs — same
@@ -182,6 +208,11 @@ export interface ChainedScreenProps {
    * grid, the size multiple, a fixed fps, the sampling sliders and the
    * server-fixed seam. Omitted = LTX, so direct-render tests are unchanged. */
   constraints?: GenerationConstraints | undefined;
+  /** §1-109: the loaded MiniMax H3 transformer's role
+   * (`useBaseModels().activeTransformerRole`) — on FL2VA the clips' Reference
+   * cards are not sent, and it picks the notices under Generate (Create's
+   * rule). Omitted/`null` = unknown (a Hybrid: sent, no role notice). */
+  transformerRole?: TransformerRole | null | undefined;
 }
 
 /** The Chain screen: `POST /generate/chain` with a single, auto-detected mode
@@ -220,6 +251,7 @@ export function ChainedScreen({
   batchI2vLongUnavailable,
   loraAudioHidden,
   constraints,
+  transformerRole,
 }: ChainedScreenProps) {
   const strings = useStrings();
   const configState = useConfig();
@@ -260,6 +292,7 @@ export function ChainedScreen({
       batchI2vLongUnavailable={batchI2vLongUnavailable}
       loraAudioHidden={loraAudioHidden}
       constraints={constraints}
+      transformerRole={transformerRole}
     />
   );
 }
@@ -295,6 +328,7 @@ interface ChainedScreenBodyProps {
   batchI2vLongUnavailable?: boolean | undefined;
   loraAudioHidden?: boolean | undefined;
   constraints?: GenerationConstraints | undefined;
+  transformerRole?: TransformerRole | null | undefined;
 }
 
 function ChainedScreenBody({
@@ -328,6 +362,7 @@ function ChainedScreenBody({
   batchI2vLongUnavailable = false,
   loraAudioHidden = false,
   constraints,
+  transformerRole,
 }: ChainedScreenBodyProps) {
   const strings = useStrings();
   const jobsCtx = useJobsContext();
@@ -477,6 +512,56 @@ function ChainedScreenBody({
   /** §1-106: see `UseChainFormResult.fixedOverlapFrames`. */
   const fixedOverlap = form.fixedOverlapFrames !== null;
 
+  // §1-109: MiniMax H3's per-clip Reference cards. `isH3` is the LIVE
+  // constraints (never the kept rules), so cards left over on a trip through
+  // LTX are never sent there. Each clip's `ClipReferences` owns its cards and
+  // hands its summary up through `register`; the registry below is all this
+  // body reads.
+  const liveReferenceRules = constraints?.reference ?? null;
+  const isH3 = liveReferenceRules !== null;
+  const referenceRulesRef = useRef<ReferenceRules>(NO_REFERENCE_RULES);
+  if (liveReferenceRules !== null) referenceRulesRef.current = liveReferenceRules;
+  /** H3 has been seen: the clip cards stay mounted from then on. */
+  const referenceCardsMounted = referenceRulesRef.current !== NO_REFERENCE_RULES;
+  const [referencesOn, setReferencesOn] = useState(false);
+  const [clipReferences, setClipReferences] = useState<Record<string, ClipReferenceEntry>>({});
+  const registerClipReferences = useCallback((clipId: string, entry: ClipReferenceEntry) => {
+    setClipReferences((prev) => {
+      const current = prev[clipId];
+      if (current && current.summary === entry.summary && current.slots === entry.slots) return prev;
+      return { ...prev, [clipId]: entry };
+    });
+  }, []);
+  const unregisterClipReferences = useCallback((clipId: string) => {
+    setClipReferences((prev) => {
+      if (!(clipId in prev)) return prev;
+      const next = { ...prev };
+      delete next[clipId];
+      return next;
+    });
+  }, []);
+  const role = transformerRole ?? null;
+  const referenceView = useMemo(() => {
+    const bodies: Record<string, ReferenceInputBody[]> = {};
+    let uploading = false;
+    let usedCount = 0;
+    let anyFilled = false;
+    for (const [clipId, { summary, slots }] of Object.entries(clipReferences)) {
+      bodies[clipId] = buildReferenceBody(summary, slots, role, isH3);
+      if (referenceSendUploading(summary, slots, role, isH3)) uploading = true;
+      usedCount += countUsedReferences(summary);
+      if (summary.filled.total > 0) anyFilled = true;
+    }
+    return { bodies, uploading, usedCount, anyFilled };
+  }, [clipReferences, role, isH3]);
+  /** A card that will be sent is still uploading: Generate waits (Create's rule). */
+  const referenceUploading = isH3 && referencesOn && referenceView.uploading;
+  /** Ruling: the "no references" notice shows only when EVERY clip has no
+   * card in use. */
+  const referenceNoticeCodes = isH3
+    ? referenceNotices({ role, enabled: referencesOn, a2vActive: false, usedCount: referenceView.usedCount })
+    : [];
+
   // §1-111: per-clip token counts (shared + own prompt, composed by the
   // server) — only while this always-mounted tab is shown, else nothing is sent.
   const clipTokens = usePromptTokenCounts(
@@ -617,9 +702,12 @@ function ChainedScreenBody({
   // decide whether a #1/#6 remount needs the "破棄して読み込みますか？" confirm.
   // Chain is always mounted (all tabs at once), so this keeps the shared flag
   // current no matter which tab is visible.
+  // §1-109: a clip's filled Reference card counts too, so the remount confirm
+  // is asked before a right-click would silently drop it.
+  const chainDirty = form.isDirty || referenceView.anyFilled;
   useEffect(() => {
-    publishChainDirty(form.isDirty);
-  }, [form.isDirty]);
+    publishChainDirty(chainDirty);
+  }, [chainDirty]);
 
   // I8 §3-4 / §6: auto-load the routed material ONCE on this remount. #1
   // `extend-video` loads the selected video into the source_video slot (V2V
@@ -913,11 +1001,27 @@ function ChainedScreenBody({
   // 台帳 §1-104 / §1-106: the request this screen sends — the form's, minus
   // every LoRA's `audio_strength` on a base model whose LoRAs have one strength
   // only (Create's `buildSubmission` applies the same rule).
+  // §1-109: with References on, each clip whose cards make a non-empty body
+  // gets its own `references` (`buildReferenceBody` is empty off H3 and on
+  // FL2VA, so neither ever receives the key). `buildRequest` maps `clips` one
+  // to one, so the index pairs a request clip with its form clip.
   const buildRequest = form.buildRequest;
+  const formClips = form.clips;
+  const referenceBodies = referenceView.bodies;
   const buildSubmission = useCallback((): GenerateChainRequest => {
     const built = buildRequest();
-    return loraAudioHidden && built.loras ? { ...built, loras: omitLoraAudioStrength(built.loras) } : built;
-  }, [buildRequest, loraAudioHidden]);
+    const withLoras =
+      loraAudioHidden && built.loras ? { ...built, loras: omitLoraAudioStrength(built.loras) } : built;
+    if (!referencesOn) return withLoras;
+    return {
+      ...withLoras,
+      clips: withLoras.clips.map((clip, i) => {
+        const clipId = formClips[i]?.id;
+        const references = clipId !== undefined ? referenceBodies[clipId] : undefined;
+        return references && references.length > 0 ? { ...clip, references } : clip;
+      }),
+    };
+  }, [buildRequest, loraAudioHidden, referencesOn, formClips, referenceBodies]);
 
   const inFlightRef = useRef(false);
   const handleGenerate = useCallback(async () => {
@@ -975,7 +1079,7 @@ function ChainedScreenBody({
   useRepeatRunDriver(repeat, {
     jobs: jobsCtx.jobs,
     submitPhase: submitState.phase,
-    canSubmit: form.isValid,
+    canSubmit: form.isValid && !referenceUploading,
     getFingerprint: getRequestFingerprint,
     send: sendRepeat,
     onSettingsChanged: onRepeatSettingsChanged,
@@ -1160,7 +1264,22 @@ function ChainedScreenBody({
           imageUnavailable={startImageUnavailable}
         />
 
-        <ClipsSection form={form} disabled={disabled} tokenCounts={clipTokens?.clips ?? null} tokenLimit={promptTokenLimit} />
+        <ClipsSection
+          form={form}
+          disabled={disabled}
+          tokenCounts={clipTokens?.clips ?? null}
+          tokenLimit={promptTokenLimit}
+          references={{
+            isH3,
+            cardsMounted: referenceCardsMounted,
+            rules: referenceRulesRef.current,
+            on: referencesOn,
+            onToggle: setReferencesOn,
+            nativeBridge,
+            register: registerClipReferences,
+            unregister: unregisterClipReferences,
+          }}
+        />
 
         {/* 素材（末尾）: directly after the clip list (plan §2-H) — the START
             material is above the list, the END material below it, so the two
@@ -1328,7 +1447,7 @@ function ChainedScreenBody({
       <div className="generation-column">
         <GenerateButtonBar
           label={repeating ? strings.repeatRun.stopButton(repeat.remaining) : generateLabel}
-          disabled={repeating ? false : submitting || serverBusy || !form.isValid}
+          disabled={repeating ? false : submitting || serverBusy || !form.isValid || referenceUploading}
           onGenerate={
             repeating
               ? repeat.stop
@@ -1350,7 +1469,17 @@ function ChainedScreenBody({
               : `${strings.chained.totalFramesLabel(form.totalFrames, MAX_CHAIN_TOTAL_FRAMES)} — ${form.estimateLabel}`
           }
         />
-        <GenerateReasonsNote reasons={form.validityReasons} messages={generateReasonMessages} />
+        <GenerateReasonsNote
+          reasons={referenceUploading ? [...form.validityReasons, "referenceCardUploading"] : form.validityReasons}
+          messages={generateReasonMessages}
+        />
+        {/* §1-109: H3 only, informational like Create's — one paragraph per
+            sentence, never a reason to disable Generate. */}
+        {referenceNoticeCodes.map((code) => (
+          <p key={code} className="warning-banner warning-banner-mild" role="status">
+            {strings.single.reference.notices[code]}
+          </p>
+        ))}
         {submitState.phase === "error" && (
           <div className="card card-error">
             <p className="error-code">{submitState.code}</p>
@@ -1375,21 +1504,52 @@ function ChainedScreenBody({
   );
 }
 
+/** §1-109: what `ClipsSection` needs for the per-clip Reference cards. */
+interface ClipsSectionReferences {
+  /** The loaded base model takes references: the checkbox and accordions show. */
+  isH3: boolean;
+  /** H3 has been seen: every clip keeps a `ClipReferences` mounted. */
+  cardsMounted: boolean;
+  rules: ReferenceRules;
+  on: boolean;
+  onToggle: (on: boolean) => void;
+  nativeBridge?: NativeBridge | undefined;
+  register: (clipId: string, entry: ClipReferenceEntry) => void;
+  unregister: (clipId: string) => void;
+}
+
 function ClipsSection({
   form,
   disabled,
   tokenCounts,
   tokenLimit,
+  references,
 }: {
   form: UseChainFormResult;
   disabled: boolean;
   tokenCounts: readonly number[] | null;
   tokenLimit: number | null | undefined;
+  references: ClipsSectionReferences;
 }) {
   const strings = useStrings();
   return (
     <div className="field">
-      <span className="field-label">{strings.chained.clipsHeading}</span>
+      {/* §1-109: the References checkbox at the heading's right end (H3 only)
+          stands in for every clip accordion's Enable. Default off. */}
+      <div className="clips-heading-row">
+        <span className="field-label">{strings.chained.clipsHeading}</span>
+        {references.isH3 && (
+          <label className="field field-inline">
+            <input
+              type="checkbox"
+              checked={references.on}
+              disabled={disabled}
+              onChange={(e) => references.onToggle(e.target.checked)}
+            />
+            <span>{strings.chained.referencesToggleLabel}</span>
+          </label>
+        )}
+      </div>
       <ul className="clip-list">
         {/* §1-16 長尺A2V: `audioWindow` is the per-clip 🎵 badge's data. The
             windows are computed for the WHOLE list at once (each depends on
@@ -1412,6 +1572,22 @@ function ClipsSection({
             onPromptChange={(value) => form.setClipPrompt(clip.id, value)}
             onNumFramesChange={(value, snap) => form.setClipNumFrames(clip.id, value, snap)}
             onRemove={() => form.removeClip(clip.id)}
+            // §1-109: mounted (not drawn) off H3 too once H3 was seen, so the
+            // cards survive H3 -> LTX -> H3; drawn only while H3 + References on.
+            referencesSlot={
+              references.cardsMounted ? (
+                <ClipReferences
+                  clipId={clip.id}
+                  rules={references.rules}
+                  referencesOn={references.isH3 && references.on}
+                  nativeBridge={references.nativeBridge}
+                  disabled={disabled}
+                  onAppendTag={(tag) => form.setClipPrompt(clip.id, appendReferenceTag(clip.prompt, tag))}
+                  register={references.register}
+                  unregister={references.unregister}
+                />
+              ) : undefined
+            }
           />
         ))}
       </ul>

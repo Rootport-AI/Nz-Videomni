@@ -1515,6 +1515,35 @@ class PipelineManager:
                 except (video_io.FFmpegError, OSError):
                     pass
 
+            # Reference (Ref2VA per clip, MiniMax H3 only; an LTX family's
+            # CHAIN_REJECT_TABLE refused ``clips[i].references`` before the job
+            # was created). The API layer only checked every upload exists;
+            # this resolves each one in its kind's store for the runner hop
+            # (one path list per clip, each in the clip's request order) and
+            # records the app's side of metadata["references"] (per clip; None
+            # for a clip without references). Only when some clip has
+            # references: the keyword is H3Runner's alone, so a chain without
+            # any calls every runner with the thirteen shared keywords.
+            runner_extra: dict = {}
+            references_provenance = None
+            if any(clip.references for clip in chain.clips):
+                reference_stores = {
+                    "picture": self.upload_store,
+                    "video": self.video_upload_store,
+                    "audio": self.audio_upload_store,
+                }
+                runner_extra["clip_reference_paths"] = [
+                    [reference_stores[ref.kind].path_for(ref.id) for ref in clip.references]
+                    for clip in chain.clips
+                ]
+                references_provenance = [
+                    [
+                        {"kind": ref.kind, "slot": ref.slot, "id": ref.id, "max_sec": ref.max_sec}
+                        for ref in clip.references
+                    ] if clip.references else None
+                    for clip in chain.clips
+                ]
+
             # Console job-info line (owner requirement): base weight + LoRAs +
             # shared prompt (a clip's own prompt, where set, is appended to it for
             # that clip's stage 1; stage 2 uses it alone). Mirrors run_job so
@@ -1662,6 +1691,9 @@ class PipelineManager:
                 lora_paths=lora_paths,
                 reference_video_path=reference_video_path,
                 seed=seed,
+                # Only when set: the LTX runners' generate_chain has no such
+                # keyword (the run_job precedent).
+                **runner_extra,
             )
 
             elapsed = time.time() - started
@@ -1703,6 +1735,7 @@ class PipelineManager:
                     retake_provenance=retake_provenance,
                     end_source_provenance=end_source_provenance,
                     reference_provenance=reference_provenance,
+                    references_provenance=references_provenance,
                     attention_used=outcome.attention_used,
                     block_swap_prefetch_used=outcome.block_swap_prefetch_used,
                     keep_resident_used=outcome.keep_resident_used,
@@ -1766,6 +1799,7 @@ class PipelineManager:
         v2v_provenance=None, a2v_provenance=None, retake_provenance=None,
         end_source_provenance=None,
         reference_provenance=None,
+        references_provenance=None,
         attention_used=None,
         block_swap_prefetch_used=None, keep_resident_used=None,
         keep_resident_embeddings_used=None,
@@ -1894,6 +1928,27 @@ class PipelineManager:
         h3 = cm.get("h3")
         if h3 is not None:
             metadata["h3"] = h3
+        # Reference (Ref2VA per clip, additive, MiniMax H3 only): one entry per
+        # clip — the ENGINE's counts (``done.chain.clips[i].references``:
+        # pictures, videos, audios) beside the APP's provenance under
+        # ``inputs`` ([{kind, slot, id, max_sec}], the clip's request order),
+        # the single path's shape — or None for a clip without references. A
+        # chain where no clip has references carries no ``references`` key.
+        # Not to be confused with ``reference_provenance`` (the IC-LoRA
+        # reference video, ``ic_lora`` below).
+        if references_provenance is not None:
+            engine_clips = cm.get("clips") or []
+            clip_blocks: list[dict | None] = []
+            for i, inputs in enumerate(references_provenance):
+                if inputs is None:
+                    clip_blocks.append(None)
+                    continue
+                engine_clip = engine_clips[i] if i < len(engine_clips) else None
+                engine_counts = (
+                    engine_clip.get("references") if isinstance(engine_clip, dict) else None
+                )
+                clip_blocks.append({**(engine_counts or {}), "inputs": inputs})
+            metadata["references"] = {"clips": clip_blocks}
         # Clip-wise IC-LoRA reference (additive): only present when a reference
         # video was actually used, so a normal (or style-loras-only) chain
         # carries no ``ic_lora`` key. Mirrors _write_metadata's single-generate

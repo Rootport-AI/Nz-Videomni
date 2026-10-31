@@ -1,0 +1,53 @@
+ok   compose trims both ends, one space, skips empty parts
+ok   prompts_c.json (G-1): shared + own recompose to the 3 prompts (exact strings)
+ok   prompts_c2.json (G-1b): shared + own recompose to the 3 prompts (exact strings)
+ok   prompts_c3.json (G-2): shared + own recompose to the 3 prompts (exact strings)
+ok   G-1: shared = clip 0's prompt, clips 1, 2 carry an appended part
+ok   G-1b: shared = clip 0's prompt (the difference per clip is appended)
+ok   G-2: the later prompts add a sentence inside, so shared is only the leading sentence and every clip carries the rest
+ok   G-1's clip-0 prompt is the fingerprint's G5 prompt (and the measurement script's clip-0 prompt_sha)
+ok   split_common_prefix refuses prompts with no common leading part
+skip (product not importable here: ModuleNotFoundError): compare with api.models.compose_clip_prompt
+ok   g_ref2va_gate.json is comparable: condition, prompts, prompt_sha, one picture in slot 1, file_sha256
+ok   g_ref2va_gate.json: 3 clips with v_sha256 / a_sha256 (64 hex)
+ok   validate_reference catches another condition
+ok   validate_reference catches other prompts
+ok   both reference pictures exist
+ok   the old man's picture is byte-identical to the measurement's (file_sha256)
+ok   g_c0.json (G-C0's product record): mp4 sha256 4a98be08..., same shared prompt and clip prompts as G-1
+ok   G-1 chain body: G-C0's conditions, no references
+ok   G-1 single body: the fingerprint's conditions (640x384, 124 f, sdpa, 20 steps, seed 42, embed false)
+ok   G-1b body: every clip has references=[{kind: picture, id, slot: 1}]; prompts from prompts_c2.json
+ok   G-2 body: clip 0 one picture, clips 1 and 2 two pictures (slots 1, 2); 1344x768 sage; prompts from prompts_c3.json
+ok   expected reference rows: 247 per picture at 640x384, 1014 at 1344x768
+ok   expected frames: 3 clips = 328
+ok   the measurement's ref_video for one picture at 640x384 is 247
+ok   evaluate G-1b: a consistent run passes
+ok   evaluate G-1b: one differing audio sha256 fails the first criterion
+ok   evaluate G-1b: no comparison record fails
+ok   evaluate G-1b: ref_video not equal to the picture rows fails
+ok   evaluate G-1b: no metadata.references fails
+ok   evaluate G-1b: a wrong input in metadata.references fails
+ok   evaluate G-1b: a clip record without references fails
+ok   evaluate G-1b: a request that lost a clip's references fails
+ok   evaluate G-1b: the FL2VA role loaded instead of Ref2VA fails
+ok   evaluate G-1b: head_equals_prev_tail false fails
+ok   evaluate G-1b: 327 frames fails
+ok   evaluate G-1b: per-clip records found under chain.clips as well
+ok   evaluate G-2: pictures 1, 2, 2 and ref_video 1014, 2028, 2028 pass
+ok   evaluate G-2: clip 0 with 2 pictures in the record fails
+ok   evaluate G-2: ref_video 1014 for a clip with two pictures fails
+ok   evaluate G-1: fingerprint 0da6111c... and G-C0's mp4 sha256 4a98be08... pass
+ok   evaluate G-1: a different single fingerprint fails
+ok   evaluate G-1: a different chain mp4 sha256 fails
+ok   evaluate G-1: a references record in a chain without references fails
+ok   evaluate G-1: the Ref2VA role loaded instead of FL2VA fails
+ok   monotonic: a rising trace passes, progress going down is caught
+ok   compare_latents: equal -> none; a missing clip is caught
+ok   sha_text is sha256 of the UTF-8 bytes
+ok   transformer_role reads the MiniMaxH3 entry of GET /models
+ok   the Ref2VA registered name is the stem of an existing weight file
+ok   sha256_file
+ok   ProcSampler: this process tree has a working set 0.02 GiB and a commit 0.02 GiB
+SELFCHECK PASS (50/50)
+SELFCHECK PASS

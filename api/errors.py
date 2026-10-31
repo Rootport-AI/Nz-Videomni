@@ -92,14 +92,21 @@ def source_audio_not_found(audio_id: str) -> APIError:
     return APIError("SOURCE_AUDIO_NOT_FOUND", f"source_audio.audio_id not found: {audio_id}", 404)
 
 
-def reference_not_found(index: int, ref_id: str, kind: str, slot: int) -> APIError:
+def reference_not_found(
+    index: int, ref_id: str, kind: str, slot: int, clip_index: int | None = None
+) -> APIError:
     """Reference (Ref2VA, MiniMax H3): ``references[index].id`` does not resolve
     to an upload of its own kind's store. The stores' own 404s name other
     fields (image_id, reference_video_id, source_audio), so the miss gets its
-    own stable code naming the entry."""
+    own stable code naming the entry.
+
+    ``clip_index`` (``/generate/chain`` only) names the clip whose entry
+    missed: the message then reads ``clips[i].references[j].id not found: …``.
+    Left out (single ``/generate``), the message is unchanged."""
+    field = "references" if clip_index is None else f"clips[{clip_index}].references"
     return APIError(
         "REFERENCE_NOT_FOUND",
-        f"references[{index}].id not found: {ref_id} ({kind} slot {slot})",
+        f"{field}[{index}].id not found: {ref_id} ({kind} slot {slot})",
         404,
     )
 

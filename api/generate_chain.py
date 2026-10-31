@@ -25,7 +25,7 @@ from api.errors import (
     source_audio_not_found,
     source_video_not_found,
 )
-from api.generate import spawn_job_thread
+from api.generate import check_references_exist, spawn_job_thread
 from api.models import GenerateChainRequest, GenerateChainResponse
 from services import engines
 
@@ -69,6 +69,16 @@ def generate_chain(
     # them; the model validator already enforces that).
     for ci in request.clips[0].conditioning_images:
         context.upload_store.path_for(ci.image_id)  # raises IMAGE_NOT_FOUND
+
+    # Reference (Ref2VA, MiniMax H3): each clip's references must name uploads
+    # of their own kind's store (404 REFERENCE_NOT_FOUND naming
+    # clips[i].references[j]), before a job is reserved. A check only — the
+    # job resolves the paths itself (run_chain_job, from the stored chain
+    # request). An LTX engine never gets here (its CHAIN_REJECT_TABLE refused
+    # the field above); the counts and slots were checked by
+    # validate_chain_for_family.
+    for clip_index, clip in enumerate(request.clips):
+        check_references_exist(context, clip.references, clip_index=clip_index)
 
     # V2V continuation: resolve the source video (404) and preflight it (422 for
     # too-short) BEFORE reserving a job — same up-front-failure discipline as the

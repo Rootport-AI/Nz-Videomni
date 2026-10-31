@@ -110,6 +110,9 @@ export function buildChainReasonMessages(
     referenceNeedsLoras: strings.single.generateReasons.referenceNeedsLoras,
     controlLoraNeedsReference: strings.single.generateReasons.attachReferenceVideo,
     referenceUploading: strings.single.generateReasons.referenceUploading,
+    // §1-109: a clip's Reference card that will be sent is still uploading —
+    // composed by `ChainedScreen` (not a `validityReasons` code), Create's line.
+    referenceCardUploading: strings.single.generateReasons.referenceCardUploading,
     referenceNotReady: strings.chained.generateReasons.referenceNotReady,
     // §1-15 W4 (2026-08-11): the reference slot's own trim failure. Chain-
     // specific copy rather than Create's: it sits next to `referenceNotReady`

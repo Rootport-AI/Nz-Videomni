@@ -337,6 +337,11 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (VRAM 16GB mode), the single path's row on the chain
     # schema. None (the family default) and False pass.
     ("vram16_mode", "vram16_mode", lambda r: r.vram16_mode is True),
+    # MiniMax H3 only (Ref2VA per clip). A clip's default is []. LAST, so the
+    # existing first-offender order is unchanged; ``clips`` is also honoured
+    # (the prompts, lengths and clip-0 images), the overlap this adapter's
+    # audit allows.
+    ("clips", "references", lambda r: any(clip.references for clip in r.clips)),
 )
 
 #: The ignore-and-log half. Field-for-field the same as

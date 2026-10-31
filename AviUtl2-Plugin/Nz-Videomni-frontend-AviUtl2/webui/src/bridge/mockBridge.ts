@@ -656,6 +656,19 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
         return Array.isArray(images) && images.length > 0;
       }),
   },
+  // §1-109: a clip's own Reference cards (MiniMax H3 only — both LTX engines
+  // declare `references`). Last, like the real `CHAIN_REJECT_TABLE` row, and
+  // inside `clips` again, hence its own predicate.
+  {
+    field: "clips",
+    feature: "references",
+    isSet: (v) =>
+      Array.isArray(v) &&
+      v.some((clip) => {
+        const refs = (clip as { references?: unknown } | null)?.references;
+        return Array.isArray(refs) && refs.length > 0;
+      }),
+  },
 ];
 
 const MOCK_DEFAULT_BASE_MODEL = "LTX23";
@@ -2119,6 +2132,14 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         "clips",
         "at least 2 clips are required when none of source_video/source_audio/retake/reference_video_id/end_source is set",
       );
+    }
+    // §1-109: a clip's `references` (an engine that refuses them was answered
+    // above) — the single route's shape check, per clip.
+    for (const [i, clip] of clips.entries()) {
+      const refs = (clip as { references?: unknown } | null)?.references;
+      if (refs == null) continue;
+      const shapeError = mockReferencesShapeError(refs);
+      if (shapeError !== null) return validationError(`clips.${i}.references`, `clips[${i}]: ${shapeError}`);
     }
     // NAG (2026-07-28): mirrors the real backend's 422 for "enabled but no
     // negative prompt" (`shell/nagSettings.ts`'s `isNagNegativeEmpty` is the

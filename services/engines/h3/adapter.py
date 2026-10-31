@@ -24,7 +24,7 @@ facts that are genuinely different:
 THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
 Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
 mock, a variable category set): ``H3Runner`` subclasses ``LTXRunner``, the mock
-is 2.3's plus the A2V and reference records (``_MockBackendH3``); ``generate`` also forwards ``source_audio_path`` and ``reference_paths``, and the categories are the same four words.
+is 2.3's plus the A2V and reference records (``_MockBackendH3``); ``generate`` also forwards ``source_audio_path`` and ``reference_paths``, ``generate_chain`` also forwards ``clip_reference_paths``, and the categories are the same four words.
 
 THE WORKER PROTOCOL (Docs/MINIMAX_H3_DESIGN.md §8): ``load`` carries the four
 paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
@@ -44,7 +44,9 @@ ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``audio_encode``, is a phase in ``done.h3.phases`` only), and a stage name the
 reader does not know holds the bar where it is.
 ``generate_chain`` carries the same keys minus ``num_frames`` / ``images`` /
-``source_audio`` / ``references``, plus ``clips`` (``[{prompt, num_frames}]``);
+``source_audio`` / ``references``, plus ``clips`` (``[{prompt, num_frames,
+references?}]``; a clip's ``references`` is the single op's shape and rides
+only on a clip that has some — an absent key is "no references");
 its ``done`` is the generate one (``num_frames`` = the whole timeline) plus
 ``chain``, and its progress events add ``outer_index`` / ``outer_total`` (the
 clip) to ``encode`` and ``stage1_denoise``, read as the one-band chain
@@ -309,7 +311,8 @@ GOVERNED_FIELDS: dict[str, str] = {
 # --------------------------------------------------------------------------- #
 #
 # The chain runs T2V clips only (裁定 84; 第 1 弾): every head / end / audio
-# source the chain schema can carry is refused, and so is a start image. The
+# source the chain schema can carry is refused, and so is a start image (a
+# clip's own references, 裁定 87, ride inside ``clips``). The
 # same four tables as the LTX 2.5 adapter's chain tables, held against
 # ``GenerateChainRequest.model_fields`` by tests/test_engine_h3_adapter.py.
 
@@ -323,7 +326,7 @@ def _chain_start_image(r: GenerateChainRequest) -> bool:
 #: same "differs from the default" discipline as :data:`REJECT_TABLE`.
 #: ``chain_start_image`` is the one feature name only the chain has (the
 #: Chained screen's start image and the i2v-long batch, which puts each row's
-#: image on clip 0). ``clips`` is also HONOURED (the prompts and lengths): the
+#: image on clip 0). ``clips`` is also HONOURED (the prompts, lengths and per-clip references): the
 #: audit allows exactly this overlap, as it allows ``conditioning_images`` on
 #: the single path.
 CHAIN_REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateChainRequest], bool]], ...] = (
@@ -352,7 +355,7 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 
 #: Fields the chain ACTS ON: ``chain.<field>`` reads in
 #: :meth:`_RealBackendH3.generate_chain` (``prompt`` and ``clips`` become the
-#: per-clip ``{prompt, num_frames}`` list, ``prompt`` alone also the top-level
+#: per-clip ``{prompt, num_frames[, references]}`` list, ``prompt`` alone also the top-level
 #: ``prompt``; ``loras`` arrive resolved as ``lora_paths``), except
 #: ``crop_output`` (the app-side centre-crop) and ``embed_mp4_metadata`` (the
 #: app-side recipe embed).
@@ -471,11 +474,13 @@ def reject_chain(request: GenerateChainRequest) -> None:
 
 class _ClipView:
     """One clip of a chain as :meth:`RequestRules.violation` reads a request:
-    the chain's shared fields plus this clip's ``num_frames`` (no references).
-    A copy of only the fields ``violation`` reads; add one here if the rules
-    ever read another."""
+    the chain's shared fields plus this clip's ``num_frames`` and its own
+    ``references`` (empty for the request-wide check). A copy of only the
+    fields ``violation`` reads; add one here if the rules ever read another."""
 
-    def __init__(self, chain: GenerateChainRequest, num_frames: int) -> None:
+    def __init__(
+        self, chain: GenerateChainRequest, num_frames: int, references: list | None = None
+    ) -> None:
         self.width = chain.width
         self.height = chain.height
         self.num_frames = num_frames
@@ -483,14 +488,14 @@ class _ClipView:
         self.num_inference_steps = chain.num_inference_steps
         self.shift_video = chain.shift_video
         self.shift_audio = chain.shift_audio
-        self.references: list = []
+        self.references: list = list(references) if references else []
 
 
 def validate_chain(request: GenerateChainRequest) -> None:
     """This family's numeric rules for a chain; raises ``ValueError``. Writes the
     defaults back (steps when omitted per ``model_fields_set``, shifts, VRAM 16GB
     mode), checks the request-wide fields once, then each clip's ``num_frames``
-    (``clips[i]: ``), then the timeline (clips[i], i >= 1, at least 39 frames).
+    and ``references`` counts / slots (``clips[i]: ``), then the timeline (clips[i], i >= 1, at least 39 frames).
     """
     if "num_inference_steps" not in request.model_fields_set:
         request.num_inference_steps = None
@@ -501,9 +506,11 @@ def validate_chain(request: GenerateChainRequest) -> None:
     if message is not None:
         raise ValueError(message)
     # Each clip: with the request-wide fields already good, only its
-    # num_frames can fire here.
+    # num_frames and its own references (counts / slots) can fire here.
     for i, clip in enumerate(request.clips):
-        message = REQUEST_RULES.violation(_ClipView(request, clip.num_frames))
+        message = REQUEST_RULES.violation(
+            _ClipView(request, clip.num_frames, references=clip.references)
+        )
         if message is not None:
             raise ValueError(f"clips[{i}]: {message}")
     h3_chain_math.compute_h3_chain_layout([clip.num_frames for clip in request.clips])
@@ -555,7 +562,9 @@ _DONE_FACTS = (
 def _reference_payload(request: GenerateRequest, reference_paths: list[Path] | None) -> list[dict]:
     """``request.references`` with each upload's resolved path, as the worker
     takes them: ``{kind, path, slot}`` plus ``max_sec`` when the request set it.
-    ``[]`` for a job without references."""
+    ``[]`` for a job without references. ``request`` is anything with
+    ``references``: a single :class:`GenerateRequest` or one chain clip
+    (:class:`ChainClip`, via :func:`_clip_reference_payloads`)."""
     paths = reference_paths or []
     if len(paths) != len(request.references):
         raise RuntimeError(
@@ -571,8 +580,32 @@ def _reference_payload(request: GenerateRequest, reference_paths: list[Path] | N
     return entries
 
 
+def _clip_reference_payloads(
+    chain: GenerateChainRequest, clip_reference_paths: list[list[Path]] | None
+) -> list[list[dict]]:
+    """Each clip's ``references`` with the resolved paths, as the worker takes
+    them (:func:`_reference_payload` per clip: ``{kind, path, slot}`` plus
+    ``max_sec`` when the clip set it); ``[]`` for a clip without references.
+    ``clip_reference_paths`` is one path list per clip (``None`` = no clip has
+    references); a count that does not match raises ``RuntimeError``."""
+    if clip_reference_paths is None:
+        clip_reference_paths = [[] for _ in chain.clips]
+    if len(clip_reference_paths) != len(chain.clips):
+        raise RuntimeError(
+            f"MiniMax H3: {len(chain.clips)} clip(s) in the chain but "
+            f"{len(clip_reference_paths)} reference path list(s) resolved"
+        )
+    return [
+        _reference_payload(clip, paths) if clip.references else []
+        for clip, paths in zip(chain.clips, clip_reference_paths)
+    ]
+
+
 def _reference_counts(request: GenerateRequest) -> dict[str, int]:
-    """The worker's ``done.h3.references`` summary, counted from the request."""
+    """The worker's ``done.h3.references`` summary, counted from the request.
+    ``request`` is anything with ``references``: a single
+    :class:`GenerateRequest` or one chain clip (:class:`ChainClip`; the mock's
+    ``done.chain.clips[i].references``)."""
     kinds = [ref.kind for ref in request.references]
     return {
         "pictures": kinds.count("picture"),
@@ -846,20 +879,29 @@ class _RealBackendH3(_RealBackend):
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
+        clip_reference_paths: list[list[Path]] | None = None,
     ) -> GenerationOutcome:
         """A T2V chain via the worker's ``generate_chain`` op (裁定 84).
 
-        THE CALL SHAPE IS LTX's (``PipelineManager.run_chain_job`` passes the
-        same thirteen keywords to every runner). Only ``lora_paths`` and
-        ``seed`` are used: the material keywords belong to chain shapes
-        :func:`reject_chain` refuses (re-checked here as the backstop, before
-        the load).
+        THE CALL SHAPE IS LTX's thirteen keywords (``PipelineManager.run_chain_job``
+        passes them to every runner) plus the H3-only ``clip_reference_paths``
+        (:meth:`H3Runner.generate_chain`). Only ``lora_paths``, ``seed`` and
+        ``clip_reference_paths`` are used: the material keywords belong to
+        chain shapes :func:`reject_chain` refuses (re-checked here as the
+        backstop, before the load).
+
+        ``clip_reference_paths`` is each clip's ``references`` resolved by each
+        kind's upload store (``PipelineManager.run_chain_job``): one path list
+        per clip, in the clip's request order; ``None`` when no clip has
+        references.
 
         The payload is the single ``generate`` one minus ``num_frames`` /
         ``images`` / ``source_audio`` / ``references``, plus ``clips``
         (``[{prompt, num_frames}]``; each prompt is the shared one with the
-        clip's own appended, :meth:`GenerateChainRequest.clip_prompt`). Key set
-        and order are pinned by ``GOLDEN_CHAIN_KEYS_H3`` in
+        clip's own appended, :meth:`GenerateChainRequest.clip_prompt`). A clip
+        with references also carries ``references`` (the single op's
+        ``{kind, path, slot, max_sec?}``); a clip without any carries no such
+        key. Key set and order are pinned by ``GOLDEN_CHAIN_KEYS_H3`` in
         tests/test_engine_h3_adapter.py.
         """
         chain = chain_request
@@ -887,6 +929,10 @@ class _RealBackendH3(_RealBackend):
             {"prompt": chain.clip_prompt(i), "num_frames": chain.clips[i].num_frames}
             for i in range(len(chain.clips))
         ]
+        # references: only on a clip that has some (an absent key = none).
+        for entry, references in zip(clips, _clip_reference_payloads(chain, clip_reference_paths)):
+            if references:
+                entry["references"] = references
 
         # crop_output: the worker writes the full-size mp4 to a temp file and
         # the app's ffmpeg helper centre-crops it into output.mp4 (as on LTX).
@@ -1101,6 +1147,7 @@ class _MockBackendH3(_MockBackend):
         lora_paths: list[ResolvedLora] | None = None,
         reference_video_path: Path | None = None,
         seed: int | None = None,
+        clip_reference_paths: list[list[Path]] | None = None,
     ) -> GenerationOutcome:
         """A synthetic H3 chain: ONE mp4 of the whole timeline (``F_total`` =
         the clips minus 22 per seam, ``h3_chain_math``) and the layout as
@@ -1108,11 +1155,16 @@ class _MockBackendH3(_MockBackend):
         Progress is ``stage1_denoise`` per clip with its ``clip`` /
         ``clip_count``, on the real chain's one band. The material keywords
         are accepted for the shared signature and ignored (the request fields
-        behind them are refused by :func:`reject_chain`)."""
+        behind them are refused by :func:`reject_chain`).
+        ``clip_reference_paths`` gets the real backend's resolution check, and
+        a clip with references records their counts as
+        ``done.chain.clips[i].references`` (``{pictures, videos, audios}``), as
+        the real worker does."""
         if not self._loaded:
             self.load()
 
         chain = chain_request
+        clip_references = _clip_reference_payloads(chain, clip_reference_paths)
         seed = int(seed) if seed is not None else resolve_seed(chain.seed)
         layout = h3_chain_math.compute_h3_chain_layout([c.num_frames for c in chain.clips])
         gpu_info.reset_peak_vram()
@@ -1166,6 +1218,9 @@ class _MockBackendH3(_MockBackend):
             }
             for i in range(n_clips)
         ]
+        for i, references in enumerate(clip_references):
+            if references:
+                done_chain["clips"][i]["references"] = _reference_counts(chain.clips[i])
         done_chain["h3"] = {
             "overlap_frames": layout.overlap_frames,
             "inject_clean": 1.0,
@@ -1186,7 +1241,8 @@ class H3Runner(LTXRunner):
     """Facade for the MiniMax H3 engine family (the class attributes are the
     only per-family facts; everything else is ``LTXRunner``'s, except
     :meth:`generate`, which also forwards the H3-only ``source_audio_path`` and
-    ``reference_paths``)."""
+    ``reference_paths``, and :meth:`generate_chain`, which also forwards the
+    H3-only ``clip_reference_paths``)."""
 
     _REAL_BACKEND_CLS = _RealBackendH3
     _MOCK_BACKEND_CLS = _MockBackendH3
@@ -1227,4 +1283,51 @@ class H3Runner(LTXRunner):
             inpaint_mask_path=inpaint_mask_path,
             source_audio_path=source_audio_path,
             reference_paths=reference_paths,
+        )
+
+    def generate_chain(
+        self,
+        chain_request,
+        output_dir: Path,
+        progress_callback: ProgressCallback | None = None,
+        clip0_conditioning_paths: list[Path] | None = None,
+        source_tail_path: Path | None = None,
+        source_context_frames: int | None = None,
+        source_audio_path: Path | None = None,
+        retake_window_path: Path | None = None,
+        end_source_path: Path | None = None,
+        end_source_context_frames: int | None = None,
+        end_source_strength: float | None = None,
+        lora_paths: list[ResolvedLora] | None = None,
+        reference_video_path: Path | None = None,
+        seed: int | None = None,
+        clip_reference_paths: list[list[Path]] | None = None,
+    ) -> GenerationOutcome:
+        """``LTXRunner.generate_chain`` (the thirteen keywords every runner
+        takes) plus ``clip_reference_paths`` (each clip's resolved Ref2VA
+        uploads, one path list per clip in request order; ``None`` when no
+        clip has references), passed to the backend. The thirteen-keyword
+        contract of ``LTXRunner.generate_chain`` itself is unchanged:
+        ``PipelineManager.run_chain_job`` adds the keyword only when a clip has
+        references, and only an H3 chain can (both LTX families refuse
+        ``clips[i].references``)."""
+        if self._backend is None or not self._backend.loaded:
+            self.load()
+        assert self._backend is not None
+        return self._backend.generate_chain(
+            chain_request,
+            output_dir=output_dir,
+            progress_callback=progress_callback,
+            clip0_conditioning_paths=clip0_conditioning_paths,
+            source_tail_path=source_tail_path,
+            source_context_frames=source_context_frames,
+            source_audio_path=source_audio_path,
+            retake_window_path=retake_window_path,
+            end_source_path=end_source_path,
+            end_source_context_frames=end_source_context_frames,
+            end_source_strength=end_source_strength,
+            lora_paths=lora_paths,
+            reference_video_path=reference_video_path,
+            seed=seed,
+            clip_reference_paths=clip_reference_paths,
         )

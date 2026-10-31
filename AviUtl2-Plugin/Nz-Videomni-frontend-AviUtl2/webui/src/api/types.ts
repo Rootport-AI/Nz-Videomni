@@ -364,6 +364,10 @@ export interface ChainClip {
   prompt?: string;
   num_frames: number;
   conditioning_images?: ConditioningImage[];
+  /** §1-109: this clip's own Reference cards (MiniMax H3 only; the same
+   * element shape as {@link GenerateRequest.references}). Omitted when the
+   * clip has none — LTX refuses any non-empty list with 422. */
+  references?: ReferenceInputBody[];
 }
 
 /** V2V continuation source (Docs/API_REFERENCE.md §5.2 `SourceVideoSpec`).

@@ -17,6 +17,14 @@
    * cramped inner scrollbar. */
 }
 
+/* §1-109: the Clips heading with the References checkbox at its right end
+ * (MiniMax H3 only). */
+.clips-heading-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .clip-card {
   display: flex;
   flex-direction: column;

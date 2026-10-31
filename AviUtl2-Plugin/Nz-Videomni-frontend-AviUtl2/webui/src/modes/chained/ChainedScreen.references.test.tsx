@@ -214,7 +214,7 @@ describe("ChainedScreen — §1-109 per-clip References", () => {
   );
 
   it(
-    "H3: off by default; on shows one embedded accordion per clip (no Enable, no ON badge, no Audio to video)",
+    "H3: off by default; on shows one embedded accordion per clip (no Enable, no ON badge while empty, no Audio to video)",
     async () => {
       renderChain();
       await waitForClips();
@@ -241,6 +241,10 @@ describe("ChainedScreen — §1-109 per-clip References", () => {
       setReferences(true);
       pickPicture(clipCard(1), 2);
       await waitForReady(1, 2);
+
+      // The ON badge follows the clip's own count (n ≥ 1).
+      expect(within(clipCard(1)).getByText(en.single.reference.onBadge)).toBeInTheDocument();
+      expect(within(clipCard(0)).queryByText(en.single.reference.onBadge)).toBeNull();
 
       const slot = within(clipCard(1)).getByTestId("ref-slot-picture-2");
       fireEvent.click(within(slot).getByRole("button", { name: en.single.reference.tagButton }));

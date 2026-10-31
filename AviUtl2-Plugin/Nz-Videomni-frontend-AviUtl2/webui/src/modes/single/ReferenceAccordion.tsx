@@ -9,7 +9,7 @@ import {
 } from "../../shell/useFileDrop";
 import { AUDIO_PLACEHOLDER_DATA_URL, VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
 import { formatSecondsLabel } from "./paramUtils";
-import { REFERENCE_KINDS, effectiveA2vSlot, referenceTag } from "./referenceRules";
+import { REFERENCE_KINDS, declaredA2vSlot, referenceTag } from "./referenceRules";
 import type { ReferenceKind, ReferenceSlot, ReferenceSlotUse, ReferenceSlotsApi } from "./referenceRules";
 import "../../styles/formAccordion.css";
 import "./ReferenceAccordion.css";
@@ -40,10 +40,11 @@ export interface ReferenceAccordionProps {
   nativeBridge?: NativeBridge | undefined;
   /** A submit in flight: every control is locked (the form's `disabled`). */
   disabled?: boolean | undefined;
-  /** §1-109: one Chained clip's accordion. The Enable checkbox, the ON badge
-   * and the Audios cards' "Audio to video" / Strength / too-short warning are
+  /** §1-109: one Chained clip's accordion. The Enable checkbox and the Audios
+   * cards' "Audio to video" / Strength / too-short warning are
    * not drawn — the screen-wide References checkbox stands in for Enable, and
-   * a chain has no A2V card. Default `false` (Create, unchanged). */
+   * a chain has no A2V card. The ON badge shows while at least one card is
+   * counted. Default `false` (Create, unchanged). */
   embedded?: boolean | undefined;
 }
 
@@ -92,10 +93,11 @@ function ReferenceSlotCard({
     resetErrorSignal: dropResetToken,
   });
 
-  // Enable off, left out by a rule, or an A2V card in effect elsewhere (then
-  // every other card is grey, empty ones included).
-  const a2vInEffect = effectiveA2vSlot(api.state) !== null;
-  const grey = !api.state.enabled || use.ignored !== null || (a2vInEffect && !use.isA2v);
+  // Enable off, left out by a rule, or an A2V card declared elsewhere (then
+  // every other card is grey, empty ones included — even while the checked
+  // card itself is still empty).
+  const a2vDeclared = declaredA2vSlot(api.state) !== null;
+  const grey = !api.state.enabled || use.ignored !== null || (a2vDeclared && !use.isA2v);
   const className = [
     "field",
     "source-section",
@@ -204,11 +206,12 @@ function ReferenceSlotCard({
 
       {kind === "audio" && !embedded && a2v && (
         <>
-          <label className="field field-inline">
+          <label className="field field-inline ref-a2v-toggle">
+            {/* Enable off overrides the check: disabled, its state kept. */}
             <input
               type="checkbox"
               checked={isA2vChecked}
-              disabled={disabled}
+              disabled={disabled || !api.state.enabled}
               onChange={(e) => api.setA2vSlot(e.target.checked ? slot.slot : null)}
             />
             <span>{t.audioToVideoLabel}</span>
@@ -223,7 +226,7 @@ function ReferenceSlotCard({
                   max={a2v.strengthMax}
                   step={a2v.strengthStep}
                   value={a2v.strength}
-                  disabled={disabled}
+                  disabled={disabled || !api.state.enabled}
                   aria-label={strings.single.sourceAudio.strengthLabel}
                   data-testid="source-audio-strength"
                   onChange={(e) => a2v.onStrengthChange(Number(e.target.value))}
@@ -331,12 +334,15 @@ export function ReferenceAccordion({
   }, [openSignal]);
 
   const { summary, rules, state } = api;
+  // Create: Enable. Embedded (a Chained clip, no Enable of its own): at least
+  // one card counted — the numerator of `n/maxTotal`.
+  const badgeOn = embedded ? summary.filled.total > 0 : state.enabled;
 
   return (
     <details className="form-accordion ref-accordion" ref={detailsRef}>
       <summary className="form-accordion-summary">
         {t.heading}
-        {!embedded && state.enabled && <span className="nag-on-badge">{t.onBadge}</span>}
+        {badgeOn && <span className="nag-on-badge">{t.onBadge}</span>}
         <span
           className={`ref-summary-count${summary.over.total ? " field-hint-error ref-over" : ""}`}
           data-testid="ref-total-count"

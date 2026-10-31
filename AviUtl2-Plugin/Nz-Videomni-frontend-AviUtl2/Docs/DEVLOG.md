@@ -5852,3 +5852,43 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 差分の敵対的レビュー（Opus）: Critical 0・Major 0・Minor 7・Nit 2 → 全件採用（`prefillSeed` の fps の落とし先・DURATION を縮小の守りへ通す・#4 の上限を種のフレーム数で数える・`materialWatch` を連番で守る・古いコメントの訂正・テストの追加・本記録の訂正）。
 - 配置: aux2（1,557,504 バイト・2026-10-31 22:46）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `f883ab5d…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。
 - 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §188。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（G-1〜G-9）。
+
+## 157. H3 の Reference の規則の整理（Enable が親・Audio to video は宣言で灰色・空なら Generate を止める）・Chained の埋め込み Reference の【🔴ON】・NAG の注意文の短縮（バックエンド台帳 §1-117 ほか。2026-10-31）
+
+### 157.1 結論
+
+- **H3 の Reference アコーディオンでは、Enable が「Audio to video」より優先します。** 「Audio to video」のチェックを入れた状態を、ここでは「宣言」と呼びます（Enable が on で、音声のカードのチェックが入っている状態）。宣言したカードの音声のアップロードが済んでいれば、その音声が A2V に使われます（「効く」）。規則は上から順に当てはめます。
+
+| 状態 | 挙動 |
+|---|---|
+| Enable が off | すべてのカードが灰色。「Audio to video」のチェックは押せなくなり（カーソルは 🚫・文字は暗く）、チェックの状態は残る。A2V は走らない。チェック済みのカードは枚数・秒数に数えない |
+| Enable が on・チェック済み・音声のアップロードが済んでいる | 他のすべてのカード（空のカードも含む）が灰色。チェック済みのカードは数えない。音声は A2V に使われる（Strength も効く） |
+| Enable が on・チェック済み・カードが空かアップロードに失敗 | 他のすべてのカードが灰色。Generate を押せなくし、黄色い注意文「Audio to video に使う音声を入力してください。」／「Add the audio to use for Audio to video.」を出す |
+| Enable が on・チェック済み・アップロード中 | 他のすべてのカードが灰色。Generate を押せなくし、既存の注意文「参照ファイルのアップロード完了を待ってください。」を出す |
+| Enable が on・チェックなし | 従来どおり、枚数と秒数の規則で使うカードを決める |
+
+- **🔁 でチェック済みのカードを空にしても、チェックは残ります。** 空になったカードは上の表の 3 行目の状態になります。
+- **Chained の各クリップの Reference アコーディオンに【🔴ON】を出します。** 条件は、そのクリップで数えられたカードが 1 枚以上（見出しの `n/12` の n が 1 以上）のときです。見た目は Single と同じ部品です。
+- **NAG（ネガティブプロンプト）が使えないベースモデルでの注意文を短くしました。** ja「このベースモデルでは、ネガティブプロンプトは未対応です。」／en「Negative prompts are not supported on this base model.」
+
+### 157.2 何を変えたか
+
+- **`modes/single/referenceRules.ts`（規則の正本）。** `declaredA2vSlot(state)`（Enable が on ならチェック済みのカードの番号・off なら `null`）を足し、`effectiveA2vSlot` は「宣言していて、そのカードのアップロードが済んでいる」と書き直しました（意味は変えていません）。`summarizeReference` は、チェック済みのカード（`state.a2vSlot`）を Enable やアップロードの状態に関係なく数から外します。`isA2v` は宣言したカードに、空のときも立てます。`used` が真になるのは効いているときだけです。他のカードをまとめて外す理由（`wholesale`）は、Enable が off なら `disabled`、宣言していれば `a2vExclusive` です。`referenceSendUploading` は、宣言したカードがアップロード中のときも真を返します（A2V の音声は `references` ではなく `form.sourceAudio` の経路で送るので、これが無いと T2V のまま送られてしまうため）。H3 以外では返しません。FL2VA でも A2V は効くので、FL2VA でも待ちます。
+- **引き算。** 状態遷移関数の `clear` から、チェック済みのカードを空にしたときにチェックを外す処理（`dropA2v`）を削除しました。音声の枠数が減ったときにはみ出したチェックを外す `resize` の処理は残しています。
+- **`modes/single/ReferenceAccordion.tsx`・`ReferenceAccordion.css`。** カードを灰色にする条件を「Enable が off・規則で外れた・ほかのカードで宣言している」にしました。「Audio to video」のチェックは Enable が off のとき押せなくし、ラベルに `ref-a2v-toggle` を付けて、押せないときの見た目（カーソル `not-allowed`・不透明度 0.4。`ToolboxScreen.css` のラジオボタンと同じ）を当てました。Strength は従来どおりチェック済みのカードの下に出ますが、Enable が off のときはチェックと同じく動かせません。見出しの【🔴ON】は、Single では Enable が on のとき、Chained の埋め込みでは数えられたカードが 1 枚以上のときに出します。
+- **`modes/single/SingleScreen.tsx`。** Generate を止める理由 `referenceA2vAudioMissing`（H3・宣言している・アップロード中でない・宣言したカードの音声がまだ `form.sourceAudio` に写されていない）を、ボタンを押せなくする条件と注意文の一覧の両方に足しました。「写されていない」で判定するのは、カードのアップロードが済んでから `useReferenceA2vSync` が音声を写すまでの 1 描画の間に、音声の無い T2V が送られないようにするためです。「参照が無い」などの通知（`referenceNotices`）には、効いているかではなく宣言しているかを渡します（宣言中は「参照ファイルがありません」を出さない）。
+- **`i18n/strings.ts`。** `single.generateReasons.referenceA2vAudioMissing` を en／ja に足し、`nag.unavailableOnBaseModel` を上の文に替えました。
+
+### 157.3 テスト
+
+- 書き換え: `referenceRules.test.ts`（チェック済みのカードを空にしてもチェックが残る・Enable が off でもチェック済みのカードは数えない・アップロード中のカードを宣言すると、効いてはいないが他のカードは外れ、Generate が待つ〔H3 のみ・FL2VA でも・Enable が off なら待たない〕）、`useReferenceSlots.test.ts`（🔁 でチェックが残る）、`ReferenceAccordion.test.tsx`（チェック済みのカードが空でも他のカードが灰色・埋め込みの試験からバッジの断定を分けた）、`SingleScreen.reference.test.tsx`（Enable が off ではチェックが押せず、チェックは残り、`source_audio` は送られない）、`AppShell.minimaxH3.test.tsx`（Enable を入れてからチェックする・NAG の注意文）、`ClipReferences.test.tsx`・`ChainedScreen.references.test.tsx`（題名を「空のときはバッジ無し」に）。
+- 追加: `declaredA2vSlot` の場合分け、空のカード・アップロードに失敗したカードを宣言したときの数と灰色、Enable が off ではチェックと Strength が押せず状態が残る、埋め込みのバッジ（空なら無し・1 枚で有り・アップロード中も有り・🔁 で消える）、Chained で絵を入れたクリップにだけバッジが出る、空のカードを宣言すると Generate が開いていた状態から止まって注意文が出る（Enable を off にすると Generate が開き、チェックは押せなくなる）、先にチェックしてから音声を入れると、アップロード中は待ちの注意文・済めば `source_audio` 付きで `references` 無しで送られ、🔁 で空にすると注意文が戻りチェックは残る。
+
+### 157.4 門の結果
+
+- WebUI: `npm run typecheck` 0 エラー・`npm run lint` 0 エラー／32 警告（これまでと同数）。`npx vitest run --exclude "**/backend.integration.test.ts"` は 179 ファイル・3,544 テストで、全件を 2 回通して全件合格。
+- ネイティブ・バックエンド: 変更なしのため再実行していない。
+- 差分の敵対的レビュー（Opus）: Critical 0・Major 0・Minor 4（テストの弱さ 3・設計正本の記述の食い違い 1）・Nit 4 → 全件採用（テストの強化・`ignored` のコメント・設計正本の訂正・下の監督の裁定 2 件の記録）。
+- 監督の裁定（オーナーが覆してよい）: ① Enable=off のときは Strength のスライダーも無効にする（表示はする）。② 宣言したカードの音声がアップロード済みになってから `form.sourceAudio` に写るまでの一瞬に Generate が押せて T2V が送られる隙（従来からあった）を、写し終わるまで注意を出し続けて塞いだ。
+- 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §189、規則の決定は設計正本 `Docs/MINIMAX_H3_DESIGN.md` 裁定 88。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（§1-117 の G-1〜G-8）。
+- 配置: aux2（1,557,504 バイト・2026-10-31 23:16）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `e5e64e3a…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。

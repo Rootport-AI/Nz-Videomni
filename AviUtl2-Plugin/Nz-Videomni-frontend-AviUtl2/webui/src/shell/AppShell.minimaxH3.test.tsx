@@ -148,18 +148,22 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 
       // Reference video hidden. §1-107: H3 publishes `reference`, so the A2V
       // accordion gives way to the Reference accordion, whose Audios cards carry
-      // the "Audio to video" tick; ticking one brings up the Strength slider
-      // (served `constraints.source_audio`) under that card.
+      // the "Audio to video" tick (disabled until Enable is on, §1-117); ticking
+      // one brings up the Strength slider (served `constraints.source_audio`)
+      // under that card.
       expect(within(panel).queryByText("Reference video (IC-LoRA)")).not.toBeInTheDocument();
       expect(within(panel).queryByText("Audio to video (A2V)")).not.toBeInTheDocument();
       expect(within(panel).getByText("Reference", { selector: "summary" })).toBeInTheDocument();
       const audioCard = within(panel).getByTestId("ref-slot-audio-1");
       expect(within(audioCard).queryByTestId("source-audio-strength")).not.toBeInTheDocument();
-      await userEvent.setup().click(within(audioCard).getByRole("checkbox", { name: "Audio to video", hidden: true }));
+      expect(within(audioCard).getByRole("checkbox", { name: "Audio to video", hidden: true })).toBeDisabled();
+      const user = userEvent.setup();
+      await user.click(within(panel).getByRole("checkbox", { name: "Enable", hidden: true }));
+      await user.click(within(audioCard).getByRole("checkbox", { name: "Audio to video", hidden: true }));
       expect(within(audioCard).getByTestId("source-audio-strength")).toBeInTheDocument();
 
       // Negative Prompt accordion greyed with its note; the switch is disabled.
-      expect(screen.getByText(/Negative prompts \(NAG\/VSF\) are not available/)).toBeInTheDocument();
+      expect(screen.getByText("Negative prompts are not supported on this base model.")).toBeInTheDocument();
       expect(screen.getByRole("checkbox", { name: /non-cfg negative/i })).toBeDisabled();
 
       // No comfort marker; DURATION on 17n+5 with a 17 step; fps fixed at 24.

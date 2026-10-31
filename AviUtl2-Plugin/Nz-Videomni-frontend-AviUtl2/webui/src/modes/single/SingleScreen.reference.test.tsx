@@ -20,7 +20,10 @@ import { SingleScreen } from "./SingleScreen";
 //  - an Audios card ticked "Audio to video" (Enable on) reaches `/generate` as
 //    the usual `source_audio {audio_id, strength}`, through `form.sourceAudio`,
 //    and no `references` (A2V is exclusive);
-//  - Enable off: the tick does nothing, no `source_audio`, no `references`;
+//  - Enable off: the tick does nothing (the checkbox is disabled, its check
+//    kept), no `source_audio`, no `references`;
+//  - Enable on + a tick on an empty card: Generate stops with its reason; on
+//    a card still uploading, with the upload-wait reason (§1-117);
 //  - Enable on: the used cards go out as `references` (not on FL2VA, never
 //    off H3), a still-uploading card that would be sent blocks Generate, and
 //    the role / empty notices show under Generate;
@@ -254,7 +257,7 @@ describe("SingleScreen — §1-107 Reference accordion", () => {
   );
 
   it(
-    "Enable off: the ticked Audio to video does nothing, no source_audio",
+    "Enable off: the ticked Audio to video does nothing (disabled, still checked), no source_audio",
     async () => {
       const { postsTo } = renderCreate(H3_CONSTRAINTS);
       await waitForCard("ref-slot-audio-1");
@@ -262,8 +265,13 @@ describe("SingleScreen — §1-107 Reference accordion", () => {
         dispatchCreateCommand({ type: "addReferenceAudio", filePath: "C:\\a\\bg.wav", fileName: "bg.wav" });
       });
       await waitForReady("ref-slot-audio-1");
+      fireEvent.click(screen.getByRole("checkbox", { name: "Enable" }));
       fireEvent.click(within(slot("ref-slot-audio-1")).getByRole("checkbox", { name: "Audio to video" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Enable" }));
       expect(screen.getByRole("checkbox", { name: "Enable" })).not.toBeChecked();
+      const a2vBox = within(slot("ref-slot-audio-1")).getByRole("checkbox", { name: "Audio to video" });
+      expect(a2vBox).toBeDisabled();
+      expect(a2vBox).toBeChecked();
 
       await clickGenerateOnH3Grid();
       await waitFor(() => expect(postsTo("/api/v1/generate")).toHaveLength(1));
@@ -294,6 +302,24 @@ const NOTICE = {
   none: "There are no reference files.",
 };
 const CARD_UPLOADING = "Wait for the reference file upload to finish.";
+const A2V_AUDIO_MISSING = "Add the audio to use for Audio to video.";
+
+const generateButton = () => document.querySelector<HTMLButtonElement>(".generate-button")!;
+
+/** Puts the form on H3's 17n+5 grid (as `clickGenerateOnH3Grid` does) and
+ * waits for Generate to open, without clicking it. */
+async function putOnH3Grid() {
+  await waitFor(
+    () => {
+      const duration = document.querySelector<HTMLInputElement>("input[type=number][step='17']")!;
+      fireEvent.change(duration, { target: { value: "277" } });
+      fireEvent.blur(duration);
+      expect(duration.value).toBe("277");
+      expect(generateButton()).toBeEnabled();
+    },
+    { timeout: 5_000 },
+  );
+}
 
 function openReference() {
   const summary = screen.getByText("Reference", { selector: "summary" });
@@ -477,6 +503,67 @@ describe("SingleScreen — §1-107 Reference body and notices", () => {
       act(() => nativeBridge.releaseUploads());
       await waitForReady("ref-slot-picture-1");
       expect(screen.queryByText(CARD_UPLOADING)).not.toBeInTheDocument();
+    },
+    15_000,
+  );
+
+  it(
+    "Audio to video ticked on an empty card: Generate is disabled with its reason; Enable off lifts it (§1-117)",
+    async () => {
+      renderCreate(H3_CONSTRAINTS, "a cat");
+      await waitForCard("ref-slot-audio-1");
+      openReference();
+      setEnabled(true);
+      await putOnH3Grid();
+      expect(screen.queryByText(A2V_AUDIO_MISSING)).not.toBeInTheDocument();
+      fireEvent.click(within(slot("ref-slot-audio-1")).getByRole("checkbox", { name: "Audio to video" }));
+      expect(await screen.findByText(A2V_AUDIO_MISSING)).toBeInTheDocument();
+      expect(generateButton()).toBeDisabled();
+      // Every other card is grey, the empty ticked one is not.
+      expect(slot("ref-slot-picture-1")).toHaveClass("ref-slot-ignored");
+      expect(slot("ref-slot-audio-1")).not.toHaveClass("ref-slot-ignored");
+
+      setEnabled(false);
+      await waitFor(() => expect(screen.queryByText(A2V_AUDIO_MISSING)).not.toBeInTheDocument());
+      expect(generateButton()).toBeEnabled();
+      expect(within(slot("ref-slot-audio-1")).getByRole("checkbox", { name: "Audio to video" })).toBeDisabled();
+    },
+    15_000,
+  );
+
+  it(
+    "Audio to video ticked, then the audio attached: waits while uploading, sends source_audio once ready, 🔁 brings the reason back (§1-117)",
+    async () => {
+      const { nativeBridge, postsTo } = renderCreate(H3_CONSTRAINTS, "a cat", { holdUploads: true });
+      await waitForCard("ref-slot-audio-1");
+      openReference();
+      setEnabled(true);
+      fireEvent.click(within(slot("ref-slot-audio-1")).getByRole("checkbox", { name: "Audio to video" }));
+      act(() => {
+        dispatchCreateCommand({ type: "addReferenceAudio", filePath: "C:\\a\\bg.wav", fileName: "bg.wav" });
+      });
+      await waitFor(() => expect(slot("ref-slot-audio-1").querySelector(".keyframe-spinner")).not.toBeNull());
+      expect(await screen.findByText(CARD_UPLOADING)).toBeInTheDocument();
+      expect(screen.queryByText(A2V_AUDIO_MISSING)).not.toBeInTheDocument();
+      expect(generateButton()).toBeDisabled();
+
+      act(() => nativeBridge.releaseUploads());
+      await waitForReady("ref-slot-audio-1");
+      await waitFor(() => expect(screen.queryByText(CARD_UPLOADING)).not.toBeInTheDocument());
+      expect(screen.queryByText(A2V_AUDIO_MISSING)).not.toBeInTheDocument();
+
+      await clickGenerateOnH3Grid();
+      await waitFor(() => expect(postsTo("/api/v1/generate")).toHaveLength(1));
+      const body = postsTo("/api/v1/generate")[0]!;
+      expect((body.source_audio as { audio_id: unknown }).audio_id).toMatch(/^mock-audio-/);
+      expect(body).not.toHaveProperty("references");
+
+      // The form is locked while the submit is in flight; 🔁 opens once it lands.
+      const clearButton = within(slot("ref-slot-audio-1")).getByRole("button", { name: /clear this card/i });
+      await waitFor(() => expect(clearButton).toBeEnabled());
+      fireEvent.click(clearButton);
+      expect(await screen.findByText(A2V_AUDIO_MISSING)).toBeInTheDocument();
+      expect(within(slot("ref-slot-audio-1")).getByRole("checkbox", { name: "Audio to video" })).toBeChecked();
     },
     15_000,
   );

@@ -72,3 +72,11 @@
 .ref-slot-name {
   overflow-wrap: anywhere;
 }
+
+/* "Audio to video" while Enable is off: disabled (its check kept), like the
+ * disabled radios in ToolboxScreen.css. */
+.ref-a2v-toggle input:disabled,
+.ref-a2v-toggle input:disabled + span {
+  cursor: not-allowed;
+  opacity: 0.4;
+}

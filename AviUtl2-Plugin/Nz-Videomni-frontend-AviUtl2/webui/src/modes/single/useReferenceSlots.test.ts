@@ -393,7 +393,7 @@ describe("useReferenceSlots — pick / attachToFirstEmpty / clear", () => {
     expect(slots[3]).toBe(2);
   });
 
-  it("clear of the A2V slot unchecks it; setEnabled / setA2vSlot pass through", async () => {
+  it("clear of the A2V slot keeps the tick (§1-117); setEnabled / setA2vSlot pass through", async () => {
     const bridge = bridgeWithClips();
     const { result } = renderHook(() => useReferenceSlots(RULES, { nativeBridge: bridge }));
 
@@ -409,7 +409,7 @@ describe("useReferenceSlots — pick / attachToFirstEmpty / clear", () => {
     expect(result.current.summary.slotUse.audio[1]!.isA2v).toBe(true);
 
     act(() => result.current.clear("audio", 2));
-    expect(result.current.state.a2vSlot).toBeNull();
+    expect(result.current.state.a2vSlot).toBe(2);
     expect(result.current.state.slots.audio[1]!.status).toBe("empty");
   });
 });

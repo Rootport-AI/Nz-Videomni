@@ -4,6 +4,7 @@ import {
   buildReferenceBody,
   countUsedReferences,
   createInitialState,
+  declaredA2vSlot,
   effectiveA2vSlot,
   firstEmptySlot,
   referenceNotices,
@@ -79,12 +80,26 @@ describe("referenceRules — state", () => {
     expect(s.slots.video[1]?.status).toBe("empty");
   });
 
-  it("clearing the checked audio slot unchecks A2V", () => {
+  it("clearing the checked audio slot keeps the tick (§1-117)", () => {
     let s = run(put(enabled(), "audio", 2), { type: "setA2vSlot", slot: 2 });
     expect(s.a2vSlot).toBe(2);
     s = run(s, { type: "clear", kind: "audio", slot: 2 });
-    expect(s.a2vSlot).toBeNull();
+    expect(s.a2vSlot).toBe(2);
     expect(s.slots.audio[1]?.status).toBe("empty");
+  });
+
+  it("declaredA2vSlot: the checked slot while Enable is on, filled or not; effectiveA2vSlot: once ready", () => {
+    const empty = run(enabled(), { type: "setA2vSlot", slot: 2 });
+    expect(declaredA2vSlot(empty)).toBe(2);
+    expect(effectiveA2vSlot(empty)).toBeNull();
+    const ready = put(empty, "audio", 2);
+    expect(declaredA2vSlot(ready)).toBe(2);
+    expect(effectiveA2vSlot(ready)).toBe(2);
+    const off = run(ready, { type: "setEnabled", enabled: false });
+    expect(off.a2vSlot).toBe(2);
+    expect(declaredA2vSlot(off)).toBeNull();
+    expect(effectiveA2vSlot(off)).toBeNull();
+    expect(declaredA2vSlot(enabled())).toBeNull();
   });
 
   it("resize keeps the existing slots that still fit and adds/drops the rest", () => {
@@ -197,19 +212,46 @@ describe("referenceRules — summarizeReference", () => {
     expect(sum.slotUse.audio[0]).toMatchObject({ isA2v: true, truncated: false, tooShort: false });
   });
 
-  it("Enable off: the checked A2V slot is an ordinary (left-out) card and counts", () => {
-    let s = put(enabled(), "audio", 1, 20);
+  it("Enable off: the checked A2V slot is never counted, and not used", () => {
+    let s = put(put(enabled(), "audio", 1, 20), "audio", 2, 4);
     s = run(s, { type: "setA2vSlot", slot: 1 }, { type: "setEnabled", enabled: false });
     expect(effectiveA2vSlot(s)).toBeNull();
     const sum = summarizeReference(s, RULES);
-    expect(sum.filled.audio).toBe(1);
-    expect(sum.seconds.audio).toBe(20);
-    expect(sum.over.audioSec).toBe(true);
-    expect(sum.slotUse.audio[0]).toMatchObject({ isA2v: false, ignored: "disabled" });
+    expect(sum.filled).toEqual({ total: 1, picture: 0, video: 0, audio: 1 });
+    expect(sum.seconds.audio).toBe(4);
+    expect(sum.over.audioSec).toBe(false);
+    expect(sum.slotUse.audio[0]).toMatchObject({ used: false, isA2v: false, ignored: null });
+    expect(sum.slotUse.audio[1]).toMatchObject({ used: false, ignored: "disabled" });
   });
 
-  it("A2V on a slot still uploading is not in effect yet", () => {
-    let s = run(enabled(), {
+  it("A2V declared on an empty slot: every other card is left out, the ticked card is not counted", () => {
+    const s = run(put(put(enabled(), "picture", 1), "audio", 2, 4), { type: "setA2vSlot", slot: 1 });
+    expect(effectiveA2vSlot(s)).toBeNull();
+    const sum = summarizeReference(s, RULES);
+    expect(sum.slotUse.audio[0]).toMatchObject({ used: false, isA2v: true, ignored: null });
+    expect(sum.slotUse.picture[0]?.ignored).toBe("a2vExclusive");
+    expect(sum.slotUse.audio[1]?.ignored).toBe("a2vExclusive");
+    expect(sum.filled).toEqual({ total: 2, picture: 1, video: 0, audio: 1 });
+  });
+
+  it("A2V declared on a slot whose upload failed: not used, every other card left out", () => {
+    let s = run(put(enabled(), "picture", 1), {
+      type: "attachStart",
+      kind: "audio",
+      slot: 1,
+      filePath: "C:\\a.wav",
+      fileName: "a.wav",
+    });
+    s = run(s, { type: "setA2vSlot", slot: 1 }, { type: "attachFail", kind: "audio", slot: 1, errorCode: "UPLOAD_FAILED" });
+    expect(s.slots.audio[0]?.status).toBe("error");
+    expect(effectiveA2vSlot(s)).toBeNull();
+    const sum = summarizeReference(s, RULES);
+    expect(sum.slotUse.audio[0]).toMatchObject({ used: false, isA2v: true, ignored: null });
+    expect(sum.slotUse.picture[0]?.ignored).toBe("a2vExclusive");
+  });
+
+  it("A2V on a slot still uploading is not in effect yet, but leaves out every other card and blocks Generate", () => {
+    let s = run(put(enabled(), "picture", 1), {
       type: "attachStart",
       kind: "audio",
       slot: 1,
@@ -218,6 +260,17 @@ describe("referenceRules — summarizeReference", () => {
     });
     s = run(s, { type: "setA2vSlot", slot: 1 });
     expect(effectiveA2vSlot(s)).toBeNull();
+    const sum = summarizeReference(s, RULES);
+    expect(sum.slotUse.audio[0]).toMatchObject({ used: false, isA2v: true });
+    expect(sum.slotUse.picture[0]?.ignored).toBe("a2vExclusive");
+    expect(sum.filled.audio).toBe(0);
+    // The audio rides `form.sourceAudio`, on FL2VA too; never off H3.
+    expect(referenceSendUploading(sum, s.slots, "ref2va", true)).toBe(true);
+    expect(referenceSendUploading(sum, s.slots, "fl2va", true)).toBe(true);
+    expect(referenceSendUploading(sum, s.slots, "ref2va", false)).toBe(false);
+    // Enable off overrides the check: nothing waits.
+    const off = run(s, { type: "setEnabled", enabled: false });
+    expect(referenceSendUploading(summarizeReference(off, RULES), off.slots, "ref2va", true)).toBe(false);
   });
 
   it("under 2 seconds: warned, still used — also when a truncation makes it short", () => {
@@ -422,7 +475,7 @@ describe("referenceRules — referenceNotices (§1-107)", () => {
     expect(n("ref2va", true, false, 0)).toEqual(["noReferences"]);
   });
 
-  it("A2V in effect: neither ① nor ③", () => {
+  it("A2V declared: neither ① nor ③", () => {
     expect(n("fl2va", true, true, 0)).toEqual([]);
     expect(n(null, true, true, 0)).toEqual([]);
   });

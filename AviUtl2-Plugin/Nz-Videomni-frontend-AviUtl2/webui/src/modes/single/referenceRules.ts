@@ -72,9 +72,12 @@ export type ReferenceIgnoreReason = "disabled" | "a2vExclusive" | "overTotal" | 
 
 export interface ReferenceSlotUse {
   /** The slot's content goes into the generation: filled, not ignored (the
-   * effective A2V slot counts as used — through the A2V path). */
+   * effective A2V slot — {@link effectiveA2vSlot} — counts as used, through
+   * the A2V path). */
   used: boolean;
-  /** Set only on a filled slot (`uploading | ready`) that is left out. */
+  /** Set only on a filled slot (`uploading | ready`) that is left out. The
+   * checked A2V slot never carries `ignored`; it is left out of the counts by
+   * construction. */
   ignored: ReferenceIgnoreReason | null;
   /** Seconds actually used (after truncation). `null` for a picture, an
    * unknown length, an ignored slot or the A2V slot. */
@@ -86,17 +89,17 @@ export interface ReferenceSlotUse {
   /** A ready video/audio whose length could not be measured: not counted in
    * the seconds, warned about. */
   durationUnknown: boolean;
-  /** The effective A2V slot ({@link effectiveA2vSlot}): outside every count
-   * and rule here (its shortness is `audioPrecheck`'s business). */
+  /** The declared A2V slot ({@link declaredA2vSlot}), filled or not: every
+   * other card is left out (its shortness is `audioPrecheck`'s business). */
   isA2v: boolean;
 }
 
 export interface ReferenceSummary {
-  /** Filled slots (`uploading | ready`) excluding the effective A2V slot —
+  /** Filled slots (`uploading | ready`) excluding the checked A2V slot —
    * ignored ones included. The `n` of `n/maxTotal` and each row's `n/max…`. */
   filled: { total: number; picture: number; video: number; audio: number };
   /** Raw total seconds of the filled videos / audios (ignored ones included,
-   * the A2V slot and unknown lengths excluded). The `n` of `n/15s`. */
+   * the checked A2V slot and unknown lengths excluded). The `n` of `n/15s`. */
   seconds: { video: number; audio: number };
   /** Numerator > denominator, for the red bold counters. */
   over: {
@@ -138,7 +141,8 @@ export interface ReferenceSlotsApi {
   ): Promise<void>;
   /** `ui.pickFile` then {@link attach}; a CANCELLED dialog does nothing. */
   pick(kind: ReferenceKind, slot: number): Promise<void>;
-  /** Empties the slot (numbers are not packed); unchecks A2V if it was it. */
+  /** Empties the slot (numbers are not packed); an "Audio to video" check
+   * on it stays. */
   clear(kind: ReferenceKind, slot: number): void;
   /** Attaches into {@link firstEmptySlot}; returns that slot, or `null` (and
    * attaches nothing) when every slot of the kind is filled. */
@@ -269,11 +273,8 @@ export function referenceReducer(state: ReferenceState, action: ReferenceAction)
       return replaceSlot(state, action.kind, action.slot, (s) =>
         s.status !== "uploading" ? s : { ...s, status: "error", errorCode: action.errorCode },
       );
-    case "clear": {
-      const cleared = replaceSlot(state, action.kind, action.slot, (s) => emptySlot(s.kind, s.slot));
-      const dropA2v = action.kind === "audio" && cleared.a2vSlot === action.slot;
-      return dropA2v ? { ...cleared, a2vSlot: null } : cleared;
-    }
+    case "clear":
+      return replaceSlot(state, action.kind, action.slot, (s) => emptySlot(s.kind, s.slot));
     case "setEnabled":
       return state.enabled === action.enabled ? state : { ...state, enabled: action.enabled };
     case "setA2vSlot":
@@ -309,11 +310,20 @@ export function firstEmptySlot(slots: readonly ReferenceSlot[]): number | null {
   return found ? found.slot : null;
 }
 
-/** The audio slot that rides the A2V path: Enable on, its box checked, and
- * its upload ready. Otherwise `null`. */
+/** The audio slot whose "Audio to video" box is checked, while Enable is on
+ * (Enable off overrides the check, which is kept). Otherwise `null`. The card
+ * may be empty, uploading or failed: every other card is left out all the
+ * same, and Generate waits or stops until its audio is ready. */
+export function declaredA2vSlot(state: ReferenceState): number | null {
+  return state.enabled ? state.a2vSlot : null;
+}
+
+/** The {@link declaredA2vSlot} once its upload is ready — the audio that rides
+ * the A2V path. Otherwise `null`. */
 export function effectiveA2vSlot(state: ReferenceState): number | null {
-  if (!state.enabled || state.a2vSlot === null) return null;
-  return state.slots.audio[state.a2vSlot - 1]?.status === "ready" ? state.a2vSlot : null;
+  const declared = declaredA2vSlot(state);
+  if (declared === null) return null;
+  return state.slots.audio[declared - 1]?.status === "ready" ? declared : null;
 }
 
 const TAG_NAMES: Record<ReferenceKind, string> = { picture: "Picture", video: "Video", audio: "Audio" };
@@ -350,9 +360,12 @@ function blankUse(): ReferenceSlotUse {
 /**
  * Applies the rules in order; a slot left out at one step is not counted by
  * the later ones:
- *  0. the effective A2V slot is outside every count and rule;
+ *  0. the checked A2V slot (`state.a2vSlot`) is outside every count and rule,
+ *     whatever Enable and its upload status (it is `used` only when
+ *     {@link effectiveA2vSlot});
  *  1. `disabled` — Enable off leaves out every filled slot;
- *  2. `a2vExclusive` — an effective A2V slot leaves out every other one;
+ *  2. `a2vExclusive` — a declared A2V slot ({@link declaredA2vSlot}) leaves
+ *     out every other one, even while the checked card is empty;
  *  3. `overTotal` — by input order (`addedAt`), slots past `maxTotal`;
  *  4. `overDuration` — videos and audios separately, in slot-number order,
  *     cumulating seconds: nothing left → left out, less left than the clip →
@@ -363,8 +376,9 @@ function blankUse(): ReferenceSlotUse {
  * not (never on the A2V slot); `truncated` only on slots that survive 1–4.
  */
 export function summarizeReference(state: ReferenceState, rules: ReferenceRules): ReferenceSummary {
-  const a2v = effectiveA2vSlot(state);
-  const isA2vSlot = (s: ReferenceSlot) => s.kind === "audio" && s.slot === a2v;
+  const declared = declaredA2vSlot(state);
+  const effective = effectiveA2vSlot(state);
+  const isCheckedSlot = (s: ReferenceSlot) => s.kind === "audio" && s.slot === state.a2vSlot;
 
   const uses = new Map<ReferenceSlot, ReferenceSlotUse>();
   const slotUse = {} as Record<ReferenceKind, ReferenceSlotUse[]>;
@@ -377,15 +391,15 @@ export function summarizeReference(state: ReferenceState, rules: ReferenceRules)
   }
   const slotUseOf = (s: ReferenceSlot): ReferenceSlotUse => uses.get(s) ?? blankUse();
 
-  // 0. Counted slots: filled, not the A2V slot.
+  // 0. Counted slots: filled, not the checked A2V slot.
   const counted: ReferenceSlot[] = [];
   for (const kind of REFERENCE_KINDS) {
     for (const s of state.slots[kind]) {
-      if (!isFilled(s)) continue;
-      if (isA2vSlot(s)) {
-        Object.assign(slotUseOf(s), { used: true, isA2v: true });
+      if (isCheckedSlot(s)) {
+        Object.assign(slotUseOf(s), { used: s.slot === effective, isA2v: s.slot === declared });
         continue;
       }
+      if (!isFilled(s)) continue;
       counted.push(s);
     }
   }
@@ -397,8 +411,12 @@ export function summarizeReference(state: ReferenceState, rules: ReferenceRules)
     if (s.kind !== "picture" && s.durationSec !== null) seconds[s.kind] += s.durationSec;
   }
 
-  // 1–2. Everything out when disabled, or when an A2V slot is in effect.
-  const wholesale: ReferenceIgnoreReason | null = !state.enabled ? "disabled" : a2v !== null ? "a2vExclusive" : null;
+  // 1–2. Everything out when disabled, or when an A2V slot is declared.
+  const wholesale: ReferenceIgnoreReason | null = !state.enabled
+    ? "disabled"
+    : declared !== null
+      ? "a2vExclusive"
+      : null;
   if (wholesale !== null) {
     for (const s of counted) slotUseOf(s).ignored = wholesale;
   } else {
@@ -465,7 +483,7 @@ export function summarizeReference(state: ReferenceState, rules: ReferenceRules)
  * so this is what keeps LTX from receiving `references` and answering 422)
  * and while an FL2VA transformer is loaded (its notice says the references
  * are ignored, so they are not sent). A Hybrid or an unrecognised file
- * (`role === null`) sends them. Enable off and an effective A2V slot are
+ * (`role === null`) sends them. Enable off and a declared A2V slot are
  * already folded into `used` / `isA2v` by {@link summarizeReference}.
  */
 function sentSlots(
@@ -505,7 +523,8 @@ export function buildReferenceBody(
   return body;
 }
 
-/** A card {@link buildReferenceBody} would send is still uploading — the
+/** A card {@link buildReferenceBody} would send, or the declared A2V card
+ * (its audio rides `form.sourceAudio`, on FL2VA too), is still uploading — the
  * generation waits for it (like a keyframe upload). Cards that would not be
  * sent (LTX, FL2VA, Enable off, left out by a rule) never block. */
 export function referenceSendUploading(
@@ -514,6 +533,7 @@ export function referenceSendUploading(
   role: TransformerRole | null,
   isH3: boolean,
 ): boolean {
+  if (isH3 && slots.audio.some((s, i) => summary.slotUse.audio[i]?.isA2v && s.status === "uploading")) return true;
   return sentSlots(summary, slots, role, isH3).some(({ slot }) => slot.status === "uploading");
 }
 
@@ -524,7 +544,7 @@ export interface ReferenceNoticeInput {
   role: TransformerRole | null;
   /** The accordion's Enable. */
   enabled: boolean;
-  /** An effective "Audio to video" slot ({@link effectiveA2vSlot}). */
+  /** A declared "Audio to video" slot ({@link declaredA2vSlot}). */
   a2vActive: boolean;
   /** Used cards, the A2V slot excluded. */
   usedCount: number;

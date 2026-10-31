@@ -250,10 +250,9 @@ describe("ReferenceAccordion", () => {
     expect(screen.getByTestId("ref-slot-picture-1")).not.toHaveClass("ref-slot-ignored");
   });
 
-  it("greys every card but the A2V one while A2V is in effect, empty cards included", () => {
+  it("greys every card but the A2V one while A2V is declared, even with the ticked card empty (§1-117)", () => {
     let state = enabled(createInitialState(RULES));
     state = fill(state, "picture", 1);
-    state = fill(state, "audio", 2, 5);
     state = referenceReducer(state, { type: "setA2vSlot", slot: 2 });
     renderAccordion(makeApi(state));
     expect(screen.getByTestId("ref-slot-audio-2")).not.toHaveClass("ref-slot-ignored");
@@ -261,6 +260,21 @@ describe("ReferenceAccordion", () => {
     expect(screen.getByTestId("ref-slot-picture-2")).toHaveClass("ref-slot-ignored");
     expect(screen.getByTestId("ref-slot-video-1")).toHaveClass("ref-slot-ignored");
     expect(screen.getByTestId("ref-slot-audio-1")).toHaveClass("ref-slot-ignored");
+  });
+
+  it("Enable off: the Audio to video checkbox is disabled and keeps its check (§1-117)", () => {
+    let state = enabled(createInitialState(RULES));
+    state = fill(state, "audio", 1, 5);
+    state = referenceReducer(state, { type: "setA2vSlot", slot: 1 });
+    state = referenceReducer(state, { type: "setEnabled", enabled: false });
+    renderAccordion(makeApi(state));
+    const box = within(screen.getByTestId("ref-slot-audio-1")).getByRole("checkbox", { name: /audio to video/i });
+    expect(box).toBeDisabled();
+    expect(box).toBeChecked();
+    expect(box.closest("label")).toHaveClass("ref-a2v-toggle");
+    expect(within(screen.getByTestId("ref-slot-audio-2")).getByRole("checkbox")).toBeDisabled();
+    // Strength stays shown under the ticked card, disabled like the tick.
+    expect(within(screen.getByTestId("ref-slot-audio-1")).getByTestId("source-audio-strength")).toBeDisabled();
   });
 
   it("locks every control while a submit is in flight", () => {
@@ -385,20 +399,48 @@ describe("ReferenceAccordion", () => {
   });
 
   // §1-109: one Chained clip's copy.
-  it("embedded: no Enable, no ON badge, no Audio to video / Strength — the rows and the pen as usual", () => {
+  it("embedded: no Enable, no Audio to video / Strength — the rows and the pen as usual", () => {
     let state = enabled(createInitialState(RULES));
     state = fill(state, "audio", 1, 5);
     state = fill(state, "picture", 1);
     const onAppendTag = vi.fn();
     renderAccordion(makeApi({ ...state, a2vSlot: 1 }), { embedded: true, a2v: undefined, onAppendTag });
     expect(screen.queryByRole("checkbox", { name: /enable/i })).toBeNull();
-    expect(screen.queryByText("【🔴ON】")).toBeNull();
     expect(screen.queryByRole("checkbox", { name: "Audio to video" })).toBeNull();
     expect(screen.queryByTestId("source-audio-strength")).toBeNull();
     expect(screen.getByTestId("ref-row-audio")).toBeInTheDocument();
     expect(screen.getByTestId("ref-total-count")).toHaveTextContent("1/12");
     fireEvent.click(within(screen.getByTestId("ref-slot-picture-1")).getByRole("button", { name: /add this tag/i }));
     expect(onAppendTag).toHaveBeenCalledWith("<Picture 1>");
+  });
+
+  it("embedded: the ON badge shows while at least one card is counted (the n of n/12)", () => {
+    const empty = enabled(createInitialState(RULES));
+    const { unmount } = renderAccordion(makeApi(empty), { embedded: true, a2v: undefined });
+    expect(screen.queryByText("【🔴ON】")).toBeNull();
+    unmount();
+    const filled = fill(empty, "picture", 1);
+    const second = renderAccordion(makeApi(filled), { embedded: true, a2v: undefined });
+    expect(screen.getByText("【🔴ON】")).toBeInTheDocument();
+    expect(screen.getByTestId("ref-total-count")).toHaveTextContent("1/12");
+    second.unmount();
+
+    // An upload in flight counts too; a clear takes the badge away again.
+    const uploading = referenceReducer(empty, {
+      type: "attachStart",
+      kind: "video",
+      slot: 1,
+      filePath: "C:\\x\\v.mp4",
+      fileName: "v.mp4",
+    });
+    const third = renderAccordion(makeApi(uploading), { embedded: true, a2v: undefined });
+    expect(screen.getByText("【🔴ON】")).toBeInTheDocument();
+    third.unmount();
+    renderAccordion(makeApi(referenceReducer(uploading, { type: "clear", kind: "video", slot: 1 })), {
+      embedded: true,
+      a2v: undefined,
+    });
+    expect(screen.queryByText("【🔴ON】")).toBeNull();
   });
 
   it("not embedded (the default): Enable, the ON badge and Audio to video are drawn as before", () => {

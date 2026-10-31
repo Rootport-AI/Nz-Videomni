@@ -549,9 +549,10 @@ export const en = {
     heading: "Negative Prompt",
     /** Shown inside the greyed accordion while the loaded
      * base model's engine cannot run NAG/VSF (`nag` in its
-     * `unsupported_features`). Nothing from this panel is sent meanwhile. */
-    unavailableOnBaseModel:
-      "Negative prompts (NAG/VSF) are not available on the selected base model, so these settings are not sent. Switch the base model in the header to use them.",
+     * `unsupported_features`). Nothing from this panel is sent meanwhile;
+     * the sentence only says the base model does not support it (owner
+     * wording, 2026-10-31). */
+    unavailableOnBaseModel: "Negative prompts are not supported on this base model.",
     onBadge: "【🔴ON】",
     textLabel: "Negative prompt",
     enableLabel: "non-CFG Negative",
@@ -1774,6 +1775,10 @@ export const en = {
       referenceUploading: "Wait for the reference video upload to finish.",
       /** §1-107: a Reference card that will be sent is still uploading. */
       referenceCardUploading: "Wait for the reference file upload to finish.",
+      /** §1-117: "Audio to video" is checked (Enable on) but its card holds no
+       * ready audio (empty or failed; an upload in flight is
+       * `referenceCardUploading`). */
+      referenceA2vAudioMissing: "Add the audio to use for Audio to video.",
       /** NAG (2026-07-28): shown when "non-CFG Negative" is enabled but the
        * shared negative-prompt text is empty/whitespace-only — mirrors the
        * backend's own 422 for the same combination. */
@@ -2763,8 +2768,7 @@ export const ja: Strings = {
   },
   nag: {
     heading: "ネガティブプロンプト",
-    unavailableOnBaseModel:
-      "選択中のベースモデルではネガティブプロンプト（NAG/VSF）を使えないため、ここの設定は送信されません。使うには、上のベースモデルを切り替えてください。",
+    unavailableOnBaseModel: "このベースモデルでは、ネガティブプロンプトは未対応です。",
     onBadge: "【🔴ON】",
     textLabel: "ネガティブプロンプト",
     enableLabel: "non-CFG Negative",
@@ -3416,6 +3420,7 @@ export const ja: Strings = {
       audioUploading: "音声のアップロード完了を待ってください。",
       referenceUploading: "参照動画のアップロード完了を待ってください。",
       referenceCardUploading: "参照ファイルのアップロード完了を待ってください。",
+      referenceA2vAudioMissing: "Audio to video に使う音声を入力してください。",
       nagNegativeEmpty: "ネガティブプロンプトを入力するか、「non-CFG Negative」をオフにしてください。",
       referenceTrimFailed:
         "参照動画の範囲切り出しが適用されませんでした。プラグインが古い可能性があります。プラグインを更新するか、ファイルを選び直すと全体を使って実行できます。",

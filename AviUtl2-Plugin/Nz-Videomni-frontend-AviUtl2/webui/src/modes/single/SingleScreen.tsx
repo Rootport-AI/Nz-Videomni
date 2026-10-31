@@ -47,7 +47,7 @@ import {
   appendReferenceTag,
   buildReferenceBody,
   countUsedReferences,
-  effectiveA2vSlot,
+  declaredA2vSlot,
   referenceNotices,
   referenceSendUploading,
   type ReferenceAttachOptions,
@@ -513,6 +513,20 @@ function SingleScreenBody({
     () => buildReferenceBody(referenceSummary, referenceSlots, transformerRole, isH3Reference),
     [referenceSummary, referenceSlots, transformerRole, isH3Reference],
   );
+  // §1-117: "Audio to video" checked (Enable on) is the declared slot. Until
+  // its audio is adopted into `form.sourceAudio` (by `useReferenceA2vSync`,
+  // one render after the card turns ready) Generate stops: an upload in flight
+  // is `referenceCardUploading`; anything else (empty / failed / not adopted
+  // yet) is `referenceA2vAudioMissing` — so no plain T2V slips out between.
+  const referenceA2vDeclared = declaredA2vSlot(reference.state);
+  const referenceA2vSlot =
+    referenceA2vDeclared !== null ? reference.state.slots.audio[referenceA2vDeclared - 1] : undefined;
+  const referenceA2vAdopted =
+    form.sourceAudio.state.status === "ready" &&
+    referenceA2vSlot?.id != null &&
+    form.sourceAudio.state.id === referenceA2vSlot.id;
+  const referenceA2vAudioMissing =
+    isH3Reference && referenceA2vDeclared !== null && referenceA2vSlot?.status !== "uploading" && !referenceA2vAdopted;
   const referenceCardUploading = referenceSendUploading(
     referenceSummary,
     referenceSlots,
@@ -523,7 +537,7 @@ function SingleScreenBody({
     ? referenceNotices({
         role: transformerRole,
         enabled: reference.state.enabled,
-        a2vActive: effectiveA2vSlot(reference.state) !== null,
+        a2vActive: referenceA2vDeclared !== null,
         usedCount: countUsedReferences(referenceSummary),
       })
     : [];
@@ -1168,6 +1182,8 @@ function SingleScreenBody({
     // §1-107: a Reference card that will be sent is still uploading (like a
     // keyframe upload; cards that are not sent never block).
     referenceCardUploading ||
+    // §1-117: "Audio to video" checked with no audio in its card.
+    referenceA2vAudioMissing ||
     // Keyframe timeline rework: an out-of-range keyframe blocks submit until
     // the user resolves it (moves/removes the pin or lengthens the duration).
     hasOverflowKeyframes;
@@ -1195,6 +1211,7 @@ function SingleScreenBody({
     ...(referenceUploading && !referenceClosed ? ["referenceUploading"] : []),
     ...(form.isICLora && form.referenceVideo.state.status !== "ready" ? ["referenceNotReady"] : []),
     ...(referenceCardUploading ? ["referenceCardUploading"] : []),
+    ...(referenceA2vAudioMissing ? ["referenceA2vAudioMissing"] : []),
     ...(hasOverflowKeyframes ? ["overflowKeyframes"] : []),
   ];
 
@@ -1228,6 +1245,7 @@ function SingleScreenBody({
     audioUploading: strings.single.generateReasons.audioUploading,
     referenceUploading: strings.single.generateReasons.referenceUploading,
     referenceCardUploading: strings.single.generateReasons.referenceCardUploading,
+    referenceA2vAudioMissing: strings.single.generateReasons.referenceA2vAudioMissing,
     overflowKeyframes: strings.single.keyframes.outOfRangeGenerateHint,
     // §1-6 拡張 (2026-08-01): a reference-video range cut was requested but the
     // response did not confirm it (old plugin / no ffmpeg), so the stored upload

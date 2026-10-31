@@ -1,0 +1,43 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261031023213
+Username: DESKTOP-1I1LT65\phenotype nezu
+RunAs User: DESKTOP-1I1LT65\phenotype nezu
+Configuration Name: 
+Machine: DESKTOP-1I1LT65 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File Docs\Outputs-archive\h3-refchain-2026-10-31\run_cr.ps1
+Process ID: 36816
+PSVersion: 5.1.26100.9711
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9711
+BuildVersion: 10.0.26100.9711
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+--- nvidia-smi (compute processes) ---
+
+
+weights, pictures, venv, weight_identity.json, scripts: present
+RAM 63.8 GB + page file allocated 75.9 GB = commit limit about 139.7 GB
+[02:32:13] selfcheck: --selfcheck
+    exit 0 in 3.8 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\selfcheck.json
+[02:32:17] g_fl2va_gate: --name g_fl2va_gate --fingerprint --transformer models\MiniMaxH3\Weights\minimax_h3_fl2va_pruned_int8_convrot.safetensors --width 640 --height 384 --attention sdpa --clips 3 --recheck-clip0
+    exit 0 in 515.5 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\g_fl2va_gate.json
+[02:40:52] g_ref2va_gate: --name g_ref2va_gate --product-recheck --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompts Docs\Outputs-archive\h3-refchain-2026-10-31\prompts_c2.json --refs Docs\Outputs-archive\h3-refchain-2026-10-31\refs_c2.json --width 640 --height 384 --attention sdpa --clips 3 --recheck-clip0
+    exit 0 in 701.7 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\g_ref2va_gate.json
+[02:52:34] c0_fl2va: --name c0_fl2va --transformer models\MiniMaxH3\Weights\minimax_h3_fl2va_pruned_int8_convrot.safetensors --prompts Docs\Outputs-archive\h3-refchain-2026-10-31\prompts_c0.json --width 1344 --height 768 --attention sage --clips 3 --save-latents
+    exit 0 in 1299.5 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\c0_fl2va.json
+[03:14:14] c1_ref2va_noref: --name c1_ref2va_noref --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompts Docs\Outputs-archive\h3-refchain-2026-10-31\prompts_c0.json --width 1344 --height 768 --attention sage --clips 3 --save-latents
+    exit 0 in 1298.7 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\c1_ref2va_noref.json
+[03:35:52] c2_ref2va_same: --name c2_ref2va_same --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompts Docs\Outputs-archive\h3-refchain-2026-10-31\prompts_c2.json --refs Docs\Outputs-archive\h3-refchain-2026-10-31\refs_c2.json --width 1344 --height 768 --attention sage --clips 3 --save-latents
+    exit 0 in 1390.4 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\c2_ref2va_same.json
+[03:59:03] c3_ref2va_perclip: --name c3_ref2va_perclip --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompts Docs\Outputs-archive\h3-refchain-2026-10-31\prompts_c3.json --refs Docs\Outputs-archive\h3-refchain-2026-10-31\refs_c3.json --reuse-clip0 Docs\Outputs-archive\h3-refchain-2026-10-31\c2_ref2va_same.json --width 1344 --height 768 --attention sage --clips 3 --save-latents
+    exit 0 in 1025.9 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\c3_ref2va_perclip.json
+[04:16:09] analysis: --out-dir S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31
+    exit 0 in 23.9 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\analysis.json
+**********************
+Windows PowerShell transcript end
+End time: 20261031041633
+**********************

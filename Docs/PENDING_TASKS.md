@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-10-30
+- 作成: 2026-07-15／最終更新: 2026-10-31
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -29,11 +29,12 @@
 - **前提**: 事前調査が要る。H3 の「ControlNet」が何者か（参照行で動く IC-LoRA 型か、別の網か、コミュニティの配布物があるか）を一次資料で確かめる。Ref2VA の参照行の仕組み（実装済み。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2）に乗る可能性が高い。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
 
-### 1-109. MiniMax H3 の参照付き Chained（vLLM-Omni 型）（起票：2026-10-19）
+### 1-109. MiniMax H3 の参照付き Chained（起票：2026-10-19）
 
-- **概要**: rolling window〔窓をずらしながら生成〕に、前の窓の潜在の末尾を追加の条件（固定でなくガイド）として投入し、`temporal_offset` で RoPE〔位置の埋め込み〕の時間座標を動画全体で連続させる。
+- **概要**: 既存の固定行方式の連結（[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3・裁定 84・85）を Ref2VA の重みに広げ、Chained の各クリップに Single と同じ見た目の Reference アコーディオンでクリップごとの参照を入れる。共通の参照は無し。Audios の「Audio to video」は出さない。右クリックは Single のみのまま。重みの切り替えと注意文の規則は Single と同じ。vLLM-Omni 型（ガイド方式＋時刻の連続）は採らない（オーナー裁定 2026-10-31）。
 - **前提**: H3 の Chained（実装済み・オーナーの実機確認に合格。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-262）と、Ref2VA の参照行（実装済み。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2。参照の時刻は文章の直後から積み上げ、目的の映像の原点を後ろへずらす形）。
-- **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
+- **留意**: 計測と所見は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185。C2〔同じ参照を全クリップに入れる形。本番で最も起こりやすい使い方〕の継ぎ目の所見（§185.6）には、裁定 86（設計正本）: 対処しない。事象は §3-263。次は UI/UX ディスカッション → 実装計画。
+- **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。一次資料の追補は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.12。
 
 ### 1-113. 右クリックメニューから、動画の音声で a2v および long a2v を削除する（起票：2026-10-28）
 
@@ -51,7 +52,7 @@
 ### 1-115. Reference とキーフレーム入力の併用（起票：2026-10-28）
 
 - **概要**: Ref2VA の重みで参照画像とキーフレーム（先頭フレームの画像）を一緒に入れると、生成は最後まで走るが、出力の先頭フレームがキーフレームの画像に固定されない。併用で先頭フレームを固定できるようにする。事象と条件は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.4（G-R5）。
-- **前提**: 本製品の実装の不具合か、Ref2VA の重みの性質かが分かっていない。ComfyUI の公式の雛形「Multiframe Reference」は Ref2VA とキーフレーム（`MiniMaxH3AddGuide`）の併用で動くとされるので、実装側の疑いが残る。着手時は、まず条件行の時間の原点（参照の後ろの `cursor`）と、ComfyUI の `MiniMaxH3AddGuide` の組み方を突き合わせる。
+- **前提**: 本製品の実装の不具合か、Ref2VA の重みの性質かが分かっていない。ComfyUI の公式の雛形「Multiframe Reference」は、フレーム 0 を AddGuide で固定していない（研究ノート §16.12）。vLLM-Omni の実測（Ref2VA は条件行の末尾を緩くしか追わない。同 §16.12）と合わせると、重みの性質である可能性がある（推測）。着手時は、まず条件行の時間の原点（参照の後ろの `cursor`）と、ComfyUI の `MiniMaxH3AddGuide` の組み方を突き合わせる。
 - **留意**: 応急処置はしない（裁定 82）。操作パネルは併用を許したまま送る。仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2。
 - **出典**: 設計正本 裁定 82（オーナー裁定 2026-10-28）。GPU 検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.4。
 
@@ -359,6 +360,14 @@
 - **概要**: H3 の Chained（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-262。第 1 弾）では、LTX の定数と推定式で出している「Est.」（推定時間）を隠し、「出力の合計長」だけを H3 の式（各クリップの長さの合計 − 22×(本数−1)）で出す。H3 用の推定時間は、快適上限の較正などで情報（1 ステップの秒数・復号の秒数の画角と長さへの依存）が集まってから出す。
 - **前提**: 推定の材料が無い（H3 の連結の 1 ステップの秒数は記録簿 §183.4・§184.6 の数点だけ）。較正は台帳 §1-95 の領分。
 - **出典**: [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 裁定 85、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183。
+
+#### 3-263. Ref2VA の参照付き連結で、新しい区間がショット切り替えになる事象（対処せず記録。再訪条件つき）（起票：2026-10-31）
+
+- **概要**: Ref2VA の重みで参照を付けた連結（固定行方式。§1-109）では、新しい区間の展開が人物の向きや場所を変える内容（例: 振り返って歩き去る）だと、続きを描かずに新しいショットへ切り替わることがある。固定行はビット一致で効いており、参照も効いている。切り分け（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185.9）で、原因は追記の展開であり、参照の枚数ではないと分かった。展開が前の区間の構図から続く内容なら連続する。オーナー裁定 86 で**対処しない**（先行事例の vLLM-Omni も対処せず注意にとどめている）。§1-109 は、この事象を既知の限界として実装へ進む。
+- **前提**: 既知の限界として、使い方の注意を §1-109 の実装時に設計正本 §3.3 と README に書く。対処の候補（実装はしない）は、`VERIFICATION_LOG.md` §185.7（時刻の連続・LongMedia 型の条件行の併用・公式の参照動画の作法）。
+- **再訪条件**: 次のいずれか。(1) 利用者から、継ぎ目のカットの報告が重なったとき。(2) 先行事例（vLLM-Omni・LongMedia・H3 Continuum）に、この事象への対処の実装が現れたとき。(3) 公式の Ref2VA の連結の作法が分かったとき。
+- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 裁定 86、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185.5・§185.9、研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.12。
+- **状態**: 将来の研究課題（対処しない。再訪条件が成立したら読み返す）。
 
 ---
 

@@ -1,0 +1,34 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261031092700
+Username: DESKTOP-1I1LT65\phenotype nezu
+RunAs User: DESKTOP-1I1LT65\phenotype nezu
+Configuration Name: 
+Machine: DESKTOP-1I1LT65 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File Docs\Outputs-archive\h3-refchain-2026-10-31\run_cr_b.ps1
+Process ID: 55776
+PSVersion: 5.1.26100.9711
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9711
+BuildVersion: 10.0.26100.9711
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+--- nvidia-smi (compute processes) ---
+
+
+weights, pictures, venv, weight_identity.json, scripts: present
+RAM 63.8 GB + page file allocated 75.9 GB = commit limit about 139.7 GB
+[09:27:00] c4_ref2va_same_stayprompt: --name c4_ref2va_same_stayprompt --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompts Docs\Outputs-archive\h3-refchain-2026-10-31\prompts_c4.json --refs Docs\Outputs-archive\h3-refchain-2026-10-31\refs_c2.json --reuse-clip0 Docs\Outputs-archive\h3-refchain-2026-10-31\c2_ref2va_same.json --width 1344 --height 768 --attention sage --clips 3 --save-latents
+    exit 0 in 1037.1 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\c4_ref2va_same_stayprompt.json
+[09:44:17] c5_ref2va_perclip_walkprompt: --name c5_ref2va_perclip_walkprompt --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompts Docs\Outputs-archive\h3-refchain-2026-10-31\prompts_c5.json --refs Docs\Outputs-archive\h3-refchain-2026-10-31\refs_c3.json --reuse-clip0 Docs\Outputs-archive\h3-refchain-2026-10-31\c2_ref2va_same.json --width 1344 --height 768 --attention sage --clips 3 --save-latents
+    exit 0 in 1100.8 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\c5_ref2va_perclip_walkprompt.json
+[10:02:38] analysis: --out-dir S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31
+    exit 1 in 14.5 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\analysis.json
+analysis exit 1
+**********************
+Windows PowerShell transcript end
+End time: 20261031100253
+**********************

@@ -1,0 +1,10 @@
+reports: ['c0_fl2va', 'c1_ref2va_noref', 'c2_ref2va_same', 'c3_ref2va_perclip', 'c4_ref2va_same_stayprompt', 'c5_ref2va_perclip_walkprompt', 'g_fl2va_gate', 'g_ref2va_gate']
+c0_fl2va/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-refchain-2026-10-31\c0_fl2va\once.mp4
+c1_ref2va_noref/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-refchain-2026-10-31\c1_ref2va_noref\once.mp4
+c2_ref2va_same/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-refchain-2026-10-31\c2_ref2va_same\once.mp4
+c3_ref2va_perclip/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-refchain-2026-10-31\c3_ref2va_perclip\once.mp4
+c4_ref2va_same_stayprompt/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-refchain-2026-10-31\c4_ref2va_same_stayprompt\once.mp4
+c5_ref2va_perclip_walkprompt/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-refchain-2026-10-31\c5_ref2va_perclip_walkprompt\once.mp4
+g_fl2va_gate/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-refchain-2026-10-31\g_fl2va_gate\once.mp4
+g_ref2va_gate/once: reading S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-refchain-2026-10-31\g_ref2va_gate\once.mp4
+wrote Docs\Outputs-archive\h3-refchain-2026-10-31\analysis_summary.csv (16 rows, 16 expected)

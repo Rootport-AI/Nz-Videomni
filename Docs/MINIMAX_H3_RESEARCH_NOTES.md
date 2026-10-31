@@ -1021,31 +1021,105 @@ ComfyUI は commit `0df1646a9cd71d4c990a87014fb37797a2956ead`（2026-10-28）。
 | H3 Continuum | MIT | 参考にできる |
 | LongMedia | Apache-2.0 | 参考にできる |
 | vLLM-Omni | Apache-2.0 | 参考にできる |
-| ttulttul/ComfyUI-Minimax-H3-Continuation | MIT | 参考にできる（README のみ読んだ） |
+| ttulttul/ComfyUI-Minimax-H3-Continuation | MIT | 参考にできる（README と `docs/LEARNINGS.md` を読んだ） |
 | DiffSynth-Studio | Apache-2.0 | 移植できる（設計正本 裁定 17） |
 | ComfyUI 本体 | GPL-3.0 | 仕様として読むだけ。コードは写さない |
 
 ### 16.10 未確認
 
-1. Ref2VA の重みでの Masked 方式（H3 Continuum に検証の記述が無い）。
+1. Ref2VA の重みでの Masked 方式（H3 Continuum に検証の記述が無い）。→ 本製品で計測した。VERIFICATION_LOG §185。
 2. 継ぎ目の品質の数値の報告（どの実装にも無い）。
 3. H3 Continuum が重なりの切り落としを選んだ理由（原文が無い）。
 4. 焼け（課題 #13）が Masked 方式の何に起因するか。
-5. vLLM-Omni の guide 方式が Ref2VA 専用である理由（文章による説明が無い）。
+5. vLLM-Omni の guide 方式が Ref2VA 専用である理由（文章による説明は無く、実装範囲の制限と見られる。推測。§16.12）。
 6. 公式 I2V 継続の雛形の実体（Desktop 版だけの機能らしい。推測）。
 
 ### 16.11 出典の一覧
 
 | 出典 | 版 | 読んだ場所 |
 |---|---|---|
-| ukr8b3g-cmyk/ComfyUI-H3-Continuum（MIT） | 3.10.2・`d04977f1a06e840d95a1787c2d46d33ddf377b69` | `CHANGELOG.md` L331-L332・`constants.py`・`temporal.py`・`state.py`・`v2/session.py`・`v2/sequence.py`・`v3/masked_continuation.py`・`v3/driving_nodes.py`・`v3/assembly_v35.py`・`layout_adapter.py`・`docs/ARCHITECTURE.md`・`docs/USER_GUIDE.md`。課題 #13・#19・#24・#33。Release v3.6.0 |
-| vizart-vj/ComfyUI-MiniMax-H3-LongMedia（Apache-2.0） | 0.6.63・`409e4cb03c85cf455bf195d5185d106c0d821487` | `nodes.py`・`latent_ops.py`・`temporal_positioning.py`・`docs/RELEASE_NOTES_0.6.40_EN.md`・`docs/PARAMETER_REFERENCE_EN.md`・`docs/ARCHITECTURE_EN.md` |
-| vllm-project/vllm-omni（Apache-2.0） | `8d4b2789acd7e5cf0ac68a0f3f219327622bbdfe` | `vllm_omni/diffusion/models/minimax_h3/` の `continuation.py`・`packed_sequence.py`・`vae_temporal.py`・`pipeline_minimax_h3.py`、`recipes/MiniMaxAI/MiniMax-H3.md` |
-| ttulttul/ComfyUI-Minimax-H3-Continuation（MIT） | `e1768d5f` | README のみ |
-| Comfy-Org/ComfyUI（GPL-3.0） | `0df1646a9cd71d4c990a87014fb37797a2956ead` | `comfy/ldm/minimax/model.py`・`vae.py`・`comfy/model_base.py`・`comfy_extras/nodes_minimax_h3.py`・`nodes_latent.py`・`comfy/nested_tensor.py` |
-| Comfy-Org/docs | `161b02726831525bc3ee8689694194d818100138`（旧版）・`710728e` | `minimax-h3.mdx` |
-| Comfy-Org/workflow_templates | main（最終コミット `e7cd011d`） | `templates/video_minimax_h3_i2v_continuation.json` |
-| modelscope/DiffSynth-Studio（Apache-2.0） | `e5a44c42776978457b61d51d595a1f6746c3d87a`（§15.1 と同じ） | Retake の記述は設計正本 §3.1 による |
+| ukr8b3g-cmyk/ComfyUI-H3-Continuum（MIT） | 3.10.2・`d04977f1a06e840d95a1787c2d46d33ddf377b69` | `CHANGELOG.md` L331-L332・`constants.py`・`temporal.py`・`state.py`・`v2/session.py`・`v2/sequence.py`・`v3/masked_continuation.py`・`v3/driving_nodes.py`・`v3/assembly_v35.py`・`layout_adapter.py`・`docs/ARCHITECTURE.md`・`docs/USER_GUIDE.md`。課題 #13・#19・#24・#33。Release v3.6.0。追補（§16.12）は `0cc94207e70a98f2d560b9f888864b5687ec4415`（2026-10-29。差は Run のロックの修正）で、`docs/AB_TEST_LOG_JA.md`・`docs/VALIDATION_RESULTS.md`・`docs/V39_REFERENCE_INLINE.md`・`docs/README_HISTORY.md`・`docs/USER_GUIDE.md`・`examples/*.json`・課題 #15・#21 も読んだ |
+| vizart-vj/ComfyUI-MiniMax-H3-LongMedia（Apache-2.0） | 0.6.63・`409e4cb03c85cf455bf195d5185d106c0d821487` | `nodes.py`・`latent_ops.py`・`temporal_positioning.py`・`docs/RELEASE_NOTES_0.6.40_EN.md`・`docs/PARAMETER_REFERENCE_EN.md`・`docs/ARCHITECTURE_EN.md`。追補（§16.12）で `CHANGELOG.md`・`docs/MODES_GUIDE_EN.md`・`workflows/README_EN.md`・`docs/RELEASE_NOTES_0.6.61_EN.md`・`0.6.62`・`workflows/*.json` も読んだ |
+| vllm-project/vllm-omni（Apache-2.0） | `8d4b2789acd7e5cf0ac68a0f3f219327622bbdfe`。追補（§16.12）は `1c8d26d03fc27d1c104010489fcd6fda309908b5`（PR #7838 `139a47a5`・#8460 `198c2105`・#9342 `b5a6fd83`） | `vllm_omni/diffusion/models/minimax_h3/` の `continuation.py`・`packed_sequence.py`・`vae_temporal.py`・`pipeline_minimax_h3.py`、`recipes/MiniMaxAI/MiniMax-H3.md`。追補（§16.12）で `docs/serving/videos_api.md`・`vllm_omni/model_executor/models/minimax_h3/long_video.py`・`vllm_omni/diffusion/models/minimax_h3/latent_mask.py` も読んだ |
+| ttulttul/ComfyUI-Minimax-H3-Continuation（MIT） | `e1768d5f`（フルは `e1768d5fdfc6f9519d2090dcf78458c2d9625f80`） | README。追補（§16.12）で `docs/LEARNINGS.md`・`example_workflows/guided_continuation.json` も読んだ |
+| Comfy-Org/ComfyUI（GPL-3.0） | `0df1646a9cd71d4c990a87014fb37797a2956ead` | `comfy/ldm/minimax/model.py`・`vae.py`・`comfy/model_base.py`・`comfy_extras/nodes_minimax_h3.py`・`nodes_latent.py`・`comfy/nested_tensor.py`。追補（§16.12）は `b5a432157de6b8884f81104cd02926adf4d597e4`（2026-10-29）で、`comfy_extras/nodes_minimax_h3.py` の履歴・PR #15375・#15988・課題 #16589・#16673 を仕様として読んだ |
+| Comfy-Org/docs | `161b02726831525bc3ee8689694194d818100138`（旧版）・`710728e` | `minimax-h3.mdx`。追補（§16.12）は main（2026-10-31 取得）の `tutorials/video/minimax/minimax-h3-multiframe.mdx` |
+| Comfy-Org/workflow_templates | main（最終コミット `e7cd011d`） | `templates/video_minimax_h3_i2v_continuation.json`。追補（§16.12）は main（2026-10-31 取得）の `templates/video_minimax_h3_multiframe_reference.json` |
+| modelscope/DiffSynth-Studio（Apache-2.0） | `e5a44c42776978457b61d51d595a1f6746c3d87a`（§15.1 と同じ） | Retake の記述は設計正本 §3.1 による。追補（§16.12）は `diffsynth/pipelines/minimax_h3_audio_video.py` の最終コミット `5c3abf5c3e918baa94458036df6dd994beedc0a5`（main は `543bf843411a32e1520301a5f8a09e2c0ae27a1d`） |
 | 本製品 | dev（2026-10-29） | `engine_h3/` の `pipeline_h3.py`・`denoise_mask.py`・`rope.py`・`video_vae.py`・`audio_vae.py`・`constants.py`・`media_out.py`・`worker.py` |
 
 URL の書式は `https://github.com/<repo>/blob/<commit>/<path>#L<n>`。調査の報告の原本は、作業場の `h3chain\R1_continuum.md`・`R2_others.md`・`R3_engine.md`。
+
+### 16.12 追補（2026-10-31）
+
+台帳 §1-109（Ref2VA の重みでの Chained と参照の併用）の計測の前に、Ref2VA の重みで「固定行の連結」と「参照行」が同時に効くかを、一次資料で追加調査した。コードは浅く複製して読んだだけで、実行していない。ComfyUI 本体（GPL-3.0）は仕様として読み、コードは写していない。**本製品の計測の結果は VERIFICATION_LOG §185 を参照。本節には本製品の数値を書かない。**
+
+**結論**
+
+1. **仮説（Ref2VA の重みでも、固定行の連結と参照行が同時に効く）を直接裏付ける記録は、見つからなかった。** 「その形で作れる」前例はあるが、「その形で品質が出る」ことを示す記録は無い。
+2. 支持する材料は LongMedia の主力の雛形（Ref2VA の重み＋クリップごとの参照＋固定行）。懸念する材料は vLLM-Omni の実測（Ref2VA の重みは、条件行として渡した前の末尾を緩くしか追わない）。
+3. したがって判定は GPU の実験でしか付かず、本製品で計測した（§185）。
+
+**vLLM-Omni（Apache-2.0）**
+
+- **PR #9342**「Continue a previous video from cached latents across requests」（2026-10-30。https://github.com/vllm-project/vllm-omni/pull/9342 ）。別の要求で終わったクリップの潜在を保存し、次の要求の先頭に置いて続ける機能。置き方は**条件行**（フレーム 0 の映像＋音声のタイムラインガイド）で、マスクした目的の行ではない。
+  - PR 本文の Known limits（原文）: 「The Ref2VA checkpoint follows the tail loosely (seam about 11 dB), so T2VA/FL2VA continuations are recommended.」。Ref2VA で同じクリップを続けた例の継ぎ目の PSNR〔画素の一致度。大きいほど似ている〕は約 11 dB で、「a visible cut」と書かれている。FL2VA の重みでの続きは 19.8〜32.9 dB。
+  - 利用者向けの文書 `docs/serving/videos_api.md` L466-L470 にも同じ内容がある。
+  - **測ったのは条件行の方式で、本製品の固定行の方式ではない。** 固定行なら重なりの区間は前のクリップとビット一致する。問題になるのは、固定した区間の直後の、新しく作る最初のフレームがつながるかである。
+  - 条件は 4×H200・1344×768・124 フレーム・seed 42。動画は添付されていない。
+- **PR #7838**（Ref2VA 専用の長尺の継続。2026-09-20。https://github.com/vllm-project/vllm-omni/pull/7838 ）と **PR #8460**（タイムラインガイド。2026-10-11。https://github.com/vllm-project/vllm-omni/pull/8460 ）の経緯:
+  - PR #7838 の本文には Ref2VA 専用という**制約だけがあり、理由の文章は無い**。検証は CPU の回帰試験だけで、画質や継ぎ目の測定は無い。
+  - 当時のガイドの区画（`latent_guide`）は、Ref2VA 系の配置関数にしか受け口が無かった。PR #8460 で、ガイドが全タスクに使えるようになった。
+  - PR #9342 は、この全タスク向けの経路で継続を作り、FL2VA のほうがよく追うと実測した。
+  - **判断: Ref2VA 専用は、最初の実装が Ref2VA の配置関数にだけ受け口を作ったことによる実装範囲の制限で、モデルの性質による理由は書かれていない（推測）。** 要求の中の長尺の継続（`long_video`）は今も Ref2VA 専用のままである。
+  - 継続の元になった ttulttul の実装は FL2VA の重みで作られている。
+
+**ttulttul/ComfyUI-Minimax-H3-Continuation（MIT。vLLM-Omni の方式の元）**
+
+- 雛形の重みは FL2VA（`example_workflows/guided_continuation.json`）。条件行の方式は FL2VA で手で確かめて成功した、と書く（`docs/LEARNINGS.md`）。
+- **固定行（マスクした重なり）の方式は、試したうえで捨てている**（`docs/LEARNINGS.md` L3-L11）。潜在を硬くつなぐと復号後に継ぎ目でちらつきや崩れが出ることがある、線形の混ぜ合わせには「visual confetti」が残った、と書く（同 L43-L70）。
+  - **時期に注意。** この実験は 2026-08-16〜17。ComfyUI 本体が H3 の行ごとの時刻のマスクを入れたのは PR #15375（2026-08-17）で、その後に PR #15988（2026-09-09）でマスクの速度の換算を直した。ttulttul の結論は、行ごとの時刻が無い時期の外側からのマスクに対するもので、本製品の固定行（行の時刻を止め〔映像は 0.999・音声は 1.0〕て毎ステップ注入する）とは仕組みが違う（推測。日付と記述からの判断）。
+
+**LongMedia（vizart-vj/ComfyUI-MiniMax-H3-LongMedia、Apache-2.0。版は §16.11）**
+
+- **主力の雛形が Ref2VA の重み＋クリップごとの連結である。** `workflows/MiniMax-H3-LongMedia-Director-Unified.json` の重みは Ref2VA、Setup の値は `ref2va`・`multiclip`・重なり 22。`workflows/README_EN.md` が「Primary LongMedia Director workflow」と呼ぶ。推奨の組み方は `docs/MODES_GUIDE_EN.md` L268-L281。
+- **連結は固定行。** 2 本目以降は、前のクリップの生成済みの潜在の末尾を目的の先頭に写し、そこのマスクを 0 にする（`nodes.py` L24241-L24246 付近）。コメント（L24237-L24240）に、**条件行だけ（新しい先頭＋ガイド）では 2 本目以降で動きが強まったので、固定行に移った**という記録がある。
+- 違い: `segmented` は固定行だけ。`multiclip` は固定行に加えて、同じ末尾を条件行のキーフレームとしても足す。
+- **参照はクリップをまたいで効かせる設計。** CHANGELOG 0.6.62 に、人物の参照が MultiClip の境目をまたいで効くよう、対象の映像の問い合わせだけ、参照の注意の配分を、持ち越した長い参照の流れと釣り合わせた、とある。持ち越した動きの文脈に人物の参照が負ける問題を、作者が認めて手当てしたと読める（推測）。
+- 継ぎ目の品質の数値は無い。0.6.61・0.6.62 のリリースノートは「No live ComfyUI/GPU render was available」と書く。
+
+**H3 Continuum（ukr8b3g-cmyk/ComfyUI-H3-Continuum、MIT）**
+
+- **「Reference Context」の正体は、前のクリップの末尾を、参照と同じ種類の条件行の塊として足す旧方式である。** チャンクごとに利用者の参照を入れ直す機能ではない（`CHANGELOG.md` 3.6.0・`docs/README_HISTORY.md` L215）。現在の振り分けでは、Balanced の 22 フレーム＋音声の継続は Masked AV、それ以外は Reference Context に落ちる（`docs/USER_GUIDE.md` L321）。
+- **Masked AV＋参照画像＋参照音声の GPU の合格の記録はある**（`CHANGELOG.md` 3.6.0）が、重みの名前は書かれていない。合格の観点は音声の聴感が中心で、映像の継ぎ目と参照の効きは書かれていない。
+- Ref2VA の重みでの連結の記録は、Masked AV より前の版（V3.2.1・V3.3.0）のものだけで、持ち越しは旧方式（推測）。`docs/AB_TEST_LOG_JA.md` の Ref2VA＋参照 2 枚の連結は「技術 PASS、実用可能」と目視で判定された。継ぎ目の評価の記述は無い。
+- **V3.9 のチャンクごとの参照**（`docs/V39_REFERENCE_INLINE.md`）: `Reference Use = All chunks`（全チャンク同じ）と `Per chunk`（チャンクごとに違う）がある。参照を外しても、持ち越した映像から人物が消えるとは限らない、という注意がある。**GPU の合格の前**であり、雛形の重みは FL2VA（Continuum は FL2VA の重みにも参照を入れる）。
+- 課題 #33（V3.9 でチャンク 2 の指示に従わない）は「No root cause confirmed」。**Ref2VA＋Masked で継ぎ目・焼け・参照が効かない、と名指しした報告は見当たらなかった。**
+
+**ComfyUI の公式の雛形と文書**
+
+- 公式の雛形「Multiframe Reference」（`Comfy-Org/workflow_templates` の `templates/video_minimax_h3_multiframe_reference.json`）: 重みは Ref2VA。参照画像は 1 枚。`MiniMaxH3AddGuide` を 3 つ直列につなぎ、位置は **1.5 秒・3 秒・5 秒**（フレーム 36・72・120）。**フレーム 0 に AddGuide は置かない。** 先頭フレームは `<Picture 1>` を「the first frame of [Shot 1]」とプロンプトの文で指定する。公式の文書 `minimax-h3-multiframe.mdx` も、`<Picture 1>` を「the identity lock and the first frame」と説明する。
+- したがって、この雛形は「Ref2VA＋AddGuide の併用」の例だが、**先頭フレームを条件行で固定する例ではない。**
+- ComfyUI 本体の課題（「ref2va」で検索）に、「Ref2VA で先頭フレームのガイドが効かない」「参照とマスクの併用」「継続」を扱う題名は見当たらなかった。
+
+**MiniMax 公式と DiffSynth-Studio**
+
+- 公式 README（`MiniMax-AI/MiniMax-H3`）: FL2VA は先頭・末尾の画像 0〜2 枚を受ける。Ref2VA はマルチモーダルな参照（画像 9・動画 3・音声 3、合計 12）を受ける。**Ref2VA の行に先頭・末尾のフレームの入力は無い。** 2 つの重みの DiT の設定ファイルは同一で、構造は同じ、値だけが違う。Ref2VA が先頭フレームの条件を学習していないという記述は、公式には見当たらない。技術報告は見つからなかった。
+- **公式の Ref2VA の連結の作法は、前の動画を参照動画 `<Video N>` として渡すこと**である（`skills/h3-prompt-writing/references/ref-en.txt`。`<Video N>` は「an editing source, continuation starting point, or whole-video temporal structure」）。条件行や固定行ではない。本製品の固定行とは別の道だが、Ref2VA の重みが学習した形に近い可能性がある（推測）。
+- 公式 API は、参照を渡したときに先頭・末尾のフレームを同時に受けない（「Image-to-video and reference-to-video are mutually exclusive」）。
+- **二次資料**（公式ではない。出典の記載が無い）: 混合重みの配布ページ（smhfacct/Minimax-H3-fl2va-ref2va-hybrid-models）は、FL2VA と Ref2VA の差が、ブロックごとの `adaln_proj`（時刻の変調の重み）にほぼ集中していると書く。事実なら、時刻 0.999 で固定した行の扱いが 2 つの重みで違うことの説明がつくが、**裏付けは無い**（推測）。
+- DiffSynth-Studio: Retake（区間の描き直し）と参照は、コードの上では同時に渡せる（併用を拒む検査は見当たらない）。ただし**併用の例と記述は無い**。Retake の例は FL2VA の区画の重みである。
+
+**§1-115（Ref2VA で参照とキーフレームを併用すると先頭フレームが固定されない）との関係**
+
+- 公式の雛形がフレーム 0 を固定していないこと、vLLM-Omni の実測で Ref2VA が条件行の末尾を緩くしか追わないことから、§1-115 は本製品の不具合でなく**重みの性質である可能性が高まった**（推測）。
+
+**追補の出典**（§16.11 に無いもの。それ以外の版は §16.11 の表に足した）
+
+| 出典 | 版 | 読んだ場所 |
+|---|---|---|
+| MiniMax-AI/MiniMax-H3 | `199b7d0e1fd95e7b3eafa8c15eca692534142427`（2026-10-28） | `README.md`・`FL2VA/`・`Ref2VA/` の `transformer/config.json`・`transformer_ref/config.json`・`Ref2VA/model_index.json`・`skills/h3-prompt-writing/references/ref-en.txt` |
+| MiniMax 公式 API | 2026-10-31 取得 | https://platform.minimax.io/docs/api-reference/video-generation-v2-create |
+| 二次資料: smhfacct/Minimax-H3-fl2va-ref2va-hybrid-models | 2026-10-31 取得 | モデルカード（公式ではない。出典の記載なし） |
+
+調査の報告の原本は、作業場の `h3refchain\R3_primary_sources.md`（セッション限り）。

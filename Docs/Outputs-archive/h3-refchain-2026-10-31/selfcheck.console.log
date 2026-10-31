@@ -1,0 +1,93 @@
+PASS  0 CPU only (CUDA_VISIBLE_DEVICES='-1')
+PASS  0 analyze_refchain from this folder (analyze_refchain.py); h3-chain-2026-10-29 not on sys.path; analyze_chain not imported
+PASS  1 geometry O22: S=[102, 204] J=[124, 226] J_lat=[37, 67] ka=[37, 37] F=328 T'=97 A=547 (excess +0)
+PASS  1 geometry O5: S=[119, 238] J=[124, 243] J_lat=[37, 72] ka=[9, 8] F=362 T'=107 A=604 (excess +1)
+PASS  1 geometry O39: S=[85, 170] J=[124, 209] J_lat=[37, 62] ka=[65, 66] F=294 T'=87 A=490 (excess +0)
+PASS  1 round(n*5/3) (exact) == constants.audio_latents(n) for n < 3000
+PASS  2 sweep F 22..481 x O 5/22/39 x N 2..6: 390 valid, 30 refused, invariant failures []
+PASS  3 build_fix s=1: shapes, head = previous tail, zeros past k / ka, mask values 0 / 1, ka=0 -> no audio mask
+PASS  4 video_mask: rows = per x grid; default inject 0.999/0.001; inject_clean=1.0 -> inject == clean; DM.VIDEO_INJECT_CLEAN stays 0.999 (no module patch)
+PASS  5 dit_input / state_velocity / euler_step / finish: m=0 rows end == clean
+PASS  6 concat: cat(prev, cur[k:]) == cat(prev[:-k], cur); lengths 97 / 547; concat[J_lat_i] = clip i's latent k (the first new one)
+PASS  a --refs: per clip in the engine's order, file sha256, absolute path for the request and repo-relative '/' path for the record, none -> []; refused: element count, missing file, repeated slot, unknown kind, slot 0 / bool, empty path
+PASS  a archive inputs: refs_c2 [1, 1, 1] / refs_c3 [1, 2, 2] pass validate_request; prompts 3 each, C3 clip 0 == C2 clip 0 (the reuse), the cards only in C2 / C3
+[cr_chain] clip 0: seed 42, 1 reference(s), fix none
+[cr_chain] clip 1: seed 43, 2 reference(s), fix k=7 ka=37
+[cr_chain] clip 2: seed 44, 2 reference(s), fix k=7 ka=37
+{"name": "fake_c3", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.46}
+PASS  b fake run with per-clip references: exit 0; _denoise got refs rows [(('picture', 10),), (('picture', 10), ('picture', 20)), (('picture', 10), ('picture', 20)), (('picture', 10),), (('picture', 10),)] and video_inject_clean [1.0]; each clip its own references (absolute paths); recheck and G-R's generate / _decode from req_clip0 (with its reference); _decode -> generate -> release; refs_and_fix ok on every clip
+[cr_chain] clip 0: seed 42, 0 reference(s), fix none
+[cr_chain] clip 1: seed 43, 0 reference(s), fix k=7 ka=37
+[cr_chain] clip 2: seed 44, 0 reference(s), fix k=7 ka=37
+{"name": "fake_c0", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.27}
+PASS  b fake run without references: no reference_encode, refs None to _denoise, no ref_video key, video_inject_clean 1.0
+[cr_chain] clip 0: seed 42, 1 reference(s), fix none
+[cr_chain] clip 1: seed 43, 1 reference(s), fix k=7 ka=37
+[cr_chain] clip 2: seed 44, 1 reference(s), fix k=7 ka=37
+{"name": "fake_gr_bad", "ok": false, "error": null, "mismatch": ["product_recheck"], "seconds_total": 0.4}
+PASS  b G-R sha mismatch -> exit 2 'product_recheck'; refs_and_fix refuses ref_video != rows, inject_clean != 1, mask min != 0 (clip >= 1), a missing record, ref_video without references
+[cr_chain] clip 0: seed 42, 1 reference(s), fix none
+[cr_chain] clip 1: seed 43, 1 reference(s), fix k=7 ka=37
+[cr_chain] clip 2: seed 44, 1 reference(s), fix k=7 ka=37
+{"name": "fake_c2", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.36}
+[cr_chain] clip 0 reused from C:\Users\phenotype nezu\AppData\Local\Temp\tmpw52brgi1\fake_c2\clip0.pt
+[cr_chain] clip 1: seed 43, 2 reference(s), fix k=7 ka=37
+[cr_chain] clip 2: seed 44, 2 reference(s), fix k=7 ka=37
+{"name": "fake_c3r", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.3}
+{"name": "fake_c3x", "ok": false, "error": "ValueError: reuse-clip0 refused: clip0_references: source [{'kind': 'picture', 'slot': 1, 'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/gentleman.png', 'file_sha256': '4d3ededb7d1b6d4a88fa14015b4a552b176b2139363c548c7aa047151e7b6a53'}] != [{'kind': 'picture', 'slot': 2, 'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/girl.png', 'file_sha256': '5769464ac8b07e731115371fe900a4c5e2e1dd2b15765ff13c7c40132f7fd996'}]; the source's clips[0].references differ from this run's clip-0 references", "mismatch": [], "seconds_total": 0.01}
+Traceback (most recent call last):
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\cr_chain.py", line 861, in run
+    reuse = load_clip0(src, args, prompts[0], weights, refs, shape_v, shape_a)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\cr_chain.py", line 592, in load_clip0
+    raise ValueError("reuse-clip0 refused: " + "; ".join(problems))
+ValueError: reuse-clip0 refused: clip0_references: source [{'kind': 'picture', 'slot': 1, 'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/gentleman.png', 'file_sha256': '4d3ededb7d1b6d4a88fa14015b4a552b176b2139363c548c7aa047151e7b6a53'}] != [{'kind': 'picture', 'slot': 2, 'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/girl.png', 'file_sha256': '5769464ac8b07e731115371fe900a4c5e2e1dd2b15765ff13c7c40132f7fd996'}]; the source's clips[0].references differ from this run's clip-0 references
+
+{"name": "fake_c3w", "ok": false, "error": "ValueError: reuse-clip0 refused: weights: source {'transformer': {'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/fake_transformer.safetensors', 'bytes': 7}, 'text_encoder': {'path': 'models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors', 'bytes': 27141342152}, 'video_vae': {'path': 'models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors', 'bytes': 5207808496}, 'audio_vae': {'path': 'models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors', 'bytes': 605254808}, 'tokenizer_dir': {'path': 'models/MiniMaxH3/TextEncoder/qwen3vl_tokenizer', 'bytes': None}} != {'transformer': {'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/other_transformer.safetensors', 'bytes': 7}, 'text_encoder': {'path': 'models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors', 'bytes': 27141342152}, 'video_vae': {'path': 'models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors', 'bytes': 5207808496}, 'audio_vae': {'path': 'models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors', 'bytes': 605254808}, 'tokenizer_dir': {'path': 'models/MiniMaxH3/TextEncoder/qwen3vl_tokenizer', 'bytes': None}}", "mismatch": [], "seconds_total": 0.0}
+Traceback (most recent call last):
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\cr_chain.py", line 861, in run
+    reuse = load_clip0(src, args, prompts[0], weights, refs, shape_v, shape_a)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\cr_chain.py", line 592, in load_clip0
+    raise ValueError("reuse-clip0 refused: " + "; ".join(problems))
+ValueError: reuse-clip0 refused: weights: source {'transformer': {'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/fake_transformer.safetensors', 'bytes': 7}, 'text_encoder': {'path': 'models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors', 'bytes': 27141342152}, 'video_vae': {'path': 'models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors', 'bytes': 5207808496}, 'audio_vae': {'path': 'models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors', 'bytes': 605254808}, 'tokenizer_dir': {'path': 'models/MiniMaxH3/TextEncoder/qwen3vl_tokenizer', 'bytes': None}} != {'transformer': {'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/other_transformer.safetensors', 'bytes': 7}, 'text_encoder': {'path': 'models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors', 'bytes': 27141342152}, 'video_vae': {'path': 'models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors', 'bytes': 5207808496}, 'audio_vae': {'path': 'models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors', 'bytes': 605254808}, 'tokenizer_dir': {'path': 'models/MiniMaxH3/TextEncoder/qwen3vl_tokenizer', 'bytes': None}}
+
+{"name": "fake_c3n", "ok": false, "error": "ValueError: reuse-clip0 refused: clip0_references: source [{'kind': 'picture', 'slot': 1, 'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/gentleman.png', 'file_sha256': '4d3ededb7d1b6d4a88fa14015b4a552b176b2139363c548c7aa047151e7b6a53'}] != []; the source's clips[0].references differ from this run's clip-0 references", "mismatch": [], "seconds_total": 0.0}
+Traceback (most recent call last):
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\cr_chain.py", line 861, in run
+    reuse = load_clip0(src, args, prompts[0], weights, refs, shape_v, shape_a)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\cr_chain.py", line 592, in load_clip0
+    raise ValueError("reuse-clip0 refused: " + "; ".join(problems))
+ValueError: reuse-clip0 refused: clip0_references: source [{'kind': 'picture', 'slot': 1, 'path': 'C:/Users/phenotype nezu/AppData/Local/Temp/tmpw52brgi1/gentleman.png', 'file_sha256': '4d3ededb7d1b6d4a88fa14015b4a552b176b2139363c548c7aa047151e7b6a53'}] != []; the source's clips[0].references differ from this run's clip-0 references
+
+PASS  c reuse: C2 -> C3 accepted (clip 0 references copied, references_source reused, seeds [43, 44]); refused: other clip-0 references, other transformer path, none
+{"name": "fake_fp", "ok": false, "error": "ValueError: --fingerprint refused: width: 64 != 640; height: 64 != 384; clip_frames: 73 != 124; attention: 'sage' != 'sdpa'; transformer is not FL2VA (C:\\Users\\PHENOT~1\\AppData\\Local\\Temp\\tmpw52brgi1\\fake_transformer.safetensors)", "mismatch": [], "seconds_total": 0.0}
+Traceback (most recent call last):
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\cr_chain.py", line 850, in run
+    raise ValueError("--fingerprint refused: " + "; ".join(problems))
+ValueError: --fingerprint refused: width: 64 != 640; height: 64 != 384; clip_frames: 73 != 124; attention: 'sage' != 'sdpa'; transformer is not FL2VA (C:\Users\PHENOT~1\AppData\Local\Temp\tmpw52brgi1\fake_transformer.safetensors)
+
+PASS  c refusals: geometry off the grid; --fingerprint off FP_COND / not FL2VA / with references; load_clip0 refuses another prompt, a latent sha and a clip-0 reference record mismatch, accepts the match
+{"name": "fake_not", "ok": false, "error": "ValueError: --transformer not found: C:\\Users\\PHENOT~1\\AppData\\Local\\Temp\\tmpw52brgi1\\missing.safetensors", "mismatch": [], "seconds_total": 0.0}
+Traceback (most recent call last):
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\cr_chain.py", line 843, in run
+    weights = weights_record(args.transformer)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-2026-10-31\cr_chain.py", line 372, in weights_record
+    raise ValueError(f"--transformer not found: {transformer}")
+ValueError: --transformer not found: C:\Users\PHENOT~1\AppData\Local\Temp\tmpw52brgi1\missing.safetensors
+
+PASS  f --transformer: a missing file refused; weight_identity.json: a matching entry -> sha256_cached, a stale mtime or no file -> not recorded (no refusal); the repo's FL2VA entry: e889202c41da
+PASS  d product contract: _denoise (refs, video_inject_clean, sequence.ref_video, mask.video.inject_clean), _encode (refs keyword), _encode_references (7 parameters), _read_references / _te_references (static) / _build_video_encoder / generate(req), H3GenerateRequest.references, H3ReferenceInput (kind, path, slot, max_sec), _decode's vae_source, generate's h3.phases, encode_steps(refs) == 4
+PASS  e seam PSNR: identical frames -> 99.0; dY 2 -> 42.110 dB; planted seam psnr_J 14.506, median 42.110, drop 27.604; J-1 / J+1 excluded; window clipped at both ends (None when empty); latent ratio at the planted jump 11.000 (= 1.1 / 0.1); no inf in the JSON
+skip g_timeout.json: not a cr_chain report
+reports: ['c9_synthetic']
+c9_synthetic/once: reading C:\Users\PHENOT~1\AppData\Local\Temp\tmph_voh4ls\synthetic.mp4
+wrote C:\Users\PHENOT~1\AppData\Local\Temp\tmph_voh4ls\analysis_summary.csv (1 rows, 1 expected)
+PASS  12 analyze_refchain reads the synthetic mp4: 46 frames, 61440 samples (~61333), the planted jump found at t=30
+PASS  12 seam_metrics (torch) == analyze_refchain.stats_from_rgb (numpy) on the same frames (max rel 4.0e-16; jump ratio 66.21)
+PASS  12 analyze_refchain.analyze: c*_*.json / g_*.json read (a timeout report skipped), 1 row = conditions x seams; ratio_lat_J / psnr_drop copied from seam_metrics; curve and audio CSVs
+PASS  12 audio_seam: 20 RMS windows, planted click ratio 99.6
+SELFCHECK PASS (25/25)
+SELFCHECK PASS

@@ -197,6 +197,37 @@ describe("mockBridge — MiniMax H3", () => {
     expect((await generate(bridge, { ...BODY, references })).status).toBe(202);
   });
 
+  // §1-109: a clip's own `references` on POST /generate/chain.
+  it("refuses a clip's `references` on LTX with 422 FEATURE_UNSUPPORTED; H3 checks each clip's shape", async () => {
+    const references = [{ kind: "picture", id: "mock-image-1", slot: 1 }];
+    for (const id of ["LTX23", "LTX25"]) {
+      // A fresh fixture per engine: the accepted chain below leaves a job running.
+      const bridge = createMockBridge({ delayMs: 0 });
+      if (id !== "LTX23") expect((await load(bridge, id)).status).toBe(200);
+      const res = await chain(bridge, {}, [{ num_frames: 121 }, { num_frames: 121, references }]);
+      expect(res.status, id).toBe(422);
+      const error = (res.body as { error: { code: string; message: string } }).error;
+      expect(error.code, id).toBe("FEATURE_UNSUPPORTED");
+      expect(error.message, id).toContain("'references'");
+      // An empty list is not a request.
+      expect((await chain(bridge, {}, [{ num_frames: 121, references: [] }, { num_frames: 121 }])).status, id).toBe(
+        202,
+      );
+    }
+
+    const bridge = createMockBridge({ delayMs: 0 });
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    const bad = await chain(bridge, {}, [{ num_frames: 124 }, { num_frames: 124, references: [{ kind: "image", id: "x", slot: 1 }] }]);
+    expect(bad.status).toBe(422);
+    expect((await chain(bridge, {}, [{ num_frames: 124, references: "nope" }, { num_frames: 124 }])).status).toBe(422);
+    // An empty list passes the shape check on H3 too (a fresh fixture: the
+    // accepted chain below leaves a job running).
+    const fresh = createMockBridge({ delayMs: 0 });
+    expect((await load(fresh, "MiniMaxH3")).status).toBe(200);
+    expect((await chain(fresh, {}, [{ num_frames: 124, references: [] }, { num_frames: 124 }])).status).toBe(202);
+    expect((await chain(bridge, {}, [{ num_frames: 124 }, { num_frames: 124, references }])).status).toBe(202);
+  });
+
   it("publishes `transformer_role` for the active H3 from the selected transformer's name (null otherwise)", async () => {
     const bridge = createMockBridge({ delayMs: 0 });
     const roleOf = async (id: string) => (await listModels(bridge)).find((b) => b.id === id)?.transformer_role;

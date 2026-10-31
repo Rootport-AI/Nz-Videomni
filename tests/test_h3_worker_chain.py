@@ -39,7 +39,7 @@ def test_chain_fields():
     assert worker._CHAIN_FIELDS == (
         worker._GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}
     ) | {"clips"}
-    assert worker._CHAIN_CLIP_FIELDS == frozenset({"prompt", "num_frames"})
+    assert worker._CHAIN_CLIP_FIELDS == frozenset({"prompt", "num_frames", "references"})
     assert "prompt" in worker._CHAIN_FIELDS and "loras" in worker._CHAIN_FIELDS
 
 
@@ -48,6 +48,35 @@ def test_chain_clips_valid_and_inner_keys_ignored():
                                                     {"prompt": "y", "num_frames": 39}]})
     assert clips == [H3ChainClipSpec("x", 124), H3ChainClipSpec("y", 39)]
     assert ignored == ["image", "seed"]
+
+
+def test_chain_clips_references_are_each_clips_own():
+    from engine_h3.pipeline_h3 import H3ReferenceInput
+
+    clips, ignored = worker._chain_clips({"clips": [
+        {"prompt": "x", "num_frames": 124,
+         "references": [{"kind": "picture", "path": "p.png", "slot": 1, "id": "u1"},
+                        {"kind": "audio", "path": "a.wav", "slot": 2, "max_sec": 3}]},
+        {"prompt": "y", "num_frames": 39, "references": None},
+        {"prompt": "z", "num_frames": 39, "references": []},
+    ]})
+    assert clips[0].references == (H3ReferenceInput("picture", "p.png", 1), H3ReferenceInput("audio", "a.wav", 2, 3.0))
+    assert clips[1].references == () and clips[2].references == ()
+    assert ignored == ["references[].id"]
+
+
+@pytest.mark.parametrize("bad", [
+    {"prompt": "x", "num_frames": 124, "references": {"kind": "picture"}},
+    {"prompt": "x", "num_frames": 124, "references": [{"kind": "picture", "slot": 1}]},
+    {"prompt": "x", "num_frames": 124, "references": [{"kind": "picture", "path": "p.png", "slot": "1"}]},
+    {"prompt": "x", "num_frames": 124, "references": [{"kind": "video", "path": "v.mp4", "slot": 1, "max_sec": True}]},
+    {"prompt": "x", "num_frames": 124, "references": [{"kind": "video", "path": "v.mp4", "slot": 1, "max_sec": "3"}]},
+    {"prompt": "x", "num_frames": 124,
+     "references": [{"kind": "audio", "path": "a.wav", "slot": 1, "max_sec": float("nan")}]},
+])
+def test_chain_clips_malformed_references_are_refused(bad):
+    with pytest.raises(ValueError, match="references"):
+        worker._chain_clips({"clips": [bad]})
 
 
 @pytest.mark.parametrize("bad", [
@@ -120,6 +149,18 @@ def test_do_generate_chain_defaults_and_ignored_keys(monkeypatch):
     assert base.images == () and base.source_audio is None and base.references == ()
     line = next(line for line in logs if line.startswith("generate_chain:"))
     assert "ignored keys: images, num_frames, overlap_frames, references, source_audio, clips[].x" in line
+
+
+def test_do_generate_chain_passes_clip_references(monkeypatch):
+    seen, logs, _events = _capture(monkeypatch)
+    ref = {"kind": "picture", "path": "p.png", "slot": 1, "foo": 0}
+    msg = {**BASE, "clips": [{**CLIPS[0], "references": [ref]}, CLIPS[1]], "references": [ref]}
+    worker._do_generate_chain(msg)
+    spec = seen[0][0]
+    assert [len(c.references) for c in spec.clips] == [1, 0] and spec.clips[0].references[0].path == "p.png"
+    assert spec.base.references == ()                    # the top-level references stay ignored
+    line = next(line for line in logs if line.startswith("generate_chain:"))
+    assert "ignored keys: references, clips[].references[].foo" in line
 
 
 def test_do_generate_chain_degraded_attention(monkeypatch):

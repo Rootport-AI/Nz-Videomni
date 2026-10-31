@@ -243,6 +243,11 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (VRAM 16GB mode), the single path's row on the chain
     # schema. None (the family default) and False pass.
     ("vram16_mode", "vram16_mode", lambda r: r.vram16_mode is True),
+    # MiniMax H3 only (Ref2VA per clip). A clip's default is []. LAST, so the
+    # existing first-offender order is unchanged; ``clips`` is also honoured
+    # (the prompts, lengths and clip-0 images) — the same overlap LTX 2.5's
+    # audit allows (2.3 has no such audit).
+    ("clips", "references", lambda r: any(clip.references for clip in r.clips)),
 )
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.
@@ -517,8 +522,8 @@ def _progress_frac(
 
     ``one_stage`` on a chain (MiniMax H3's): one band, no Stage 2. Each clip's
     ``encode`` holds the bar at its clip's start (``0.05 + 0.85 *
-    outer_index/outer_total``; the encode steps repeat 0..3 per clip, so they
-    must not move it within the clip), ``stage1_denoise`` fills 0.05..0.90
+    outer_index/outer_total``; the encode steps repeat 0..3 per clip, 0..4 for
+    a clip with references, so they must not move it within the clip), ``stage1_denoise`` fills 0.05..0.90
     across all clips, and the one ``decode`` of the whole timeline moves it
     0.90..0.99 so a long decode does not look stalled.
     """

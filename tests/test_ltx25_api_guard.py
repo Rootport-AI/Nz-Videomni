@@ -518,6 +518,10 @@ def test_the_reject_table_and_this_suite_cover_the_same_fields():
 # --------------------------------------------------------------------------- #
 
 
+#: 拒否表の欄 -> 機能名(LTX 2.5 の表)。
+_CHAIN_FEATURE_OF = {f: feat for f, feat, _p in ltx25.CHAIN_REJECT_TABLE}
+
+
 @pytest.mark.parametrize("field", sorted(CHAIN_OVERRIDES))
 def test_ltx25_refuses_every_field_in_the_chain_reject_table(two_family_client, field):
     """chain系の拒否は**フィールド単位**である(§3-102)。V2V・A2V・Retake・
@@ -535,15 +539,23 @@ def test_ltx25_refuses_every_field_in_the_chain_reject_table(two_family_client, 
     assert r.status_code == 422, f"{field}: {r.text}"
     error = r.json()["error"]
     assert error["code"] == "FEATURE_UNSUPPORTED"
-    if field in ltx23.H3_ONLY_REFUSALS:
-        assert error["detail"] == ltx23.H3_ONLY_REFUSALS[field]
+    # 表は欄の名前で引く。機能名が欄の名前と違う行(``clips`` の ``references``)
+    # があるので、H3 専用かどうかは機能名で判定する。
+    feature = _CHAIN_FEATURE_OF[field]
+    if feature in ltx23.H3_ONLY_REFUSALS:
+        assert error["detail"] == ltx23.H3_ONLY_REFUSALS[feature]
     else:
         assert "LTX 2.3" in error["detail"]
     assert _job_count(two_family_client) == before
 
 
+
 @pytest.mark.parametrize(
-    "field", sorted(set(CHAIN_OVERRIDES) - set(ltx23.H3_ONLY_REFUSALS))
+    "field",
+    sorted(
+        field for field in CHAIN_OVERRIDES
+        if _CHAIN_FEATURE_OF[field] not in ltx23.H3_ONLY_REFUSALS
+    ),
 )
 def test_ltx23_accepts_every_chain_field_the_2_5_engine_refuses(two_family_client, field):
     """対の検証。ガードが系統を見ずに効いていたら、ここが落ちる。
@@ -1056,7 +1068,8 @@ def test_no_chain_mode_is_refused_any_more():
         "nag_enabled",
     }
     # vram16_mode は MiniMax H3 専用(台帳 §1-106)で、両方の LTX が断る。
-    assert refused == {"pipeline", "vae_mode", "vram16_mode"}
+    # clips の行(クリップごとの references。台帳 §1-109)も同じ。
+    assert refused == {"pipeline", "vae_mode", "vram16_mode", "clips"}
 
 
 @pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_RETAKE))

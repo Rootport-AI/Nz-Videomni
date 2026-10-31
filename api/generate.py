@@ -57,6 +57,25 @@ def spawn_job_thread(target, job: JobRecord) -> None:
         raise
 
 
+def check_references_exist(context: AppContext, refs, *, clip_index: int | None = None) -> None:
+    """Reference (Ref2VA, MiniMax H3): every ``refs[j].id`` must name an upload
+    of its own kind's store; the first miss raises REFERENCE_NOT_FOUND (404)
+    naming the entry. A check only: no path is resolved for later use (the
+    job resolves its own from the stored request). Shared with
+    /generate/chain, which passes ``clip_index`` so the message names
+    ``clips[i].references[j]``; the single /generate leaves it out."""
+    reference_stores = {
+        "picture": context.upload_store,
+        "video": context.video_upload_store,
+        "audio": context.audio_upload_store,
+    }
+    for index, ref in enumerate(refs):
+        try:
+            reference_stores[ref.kind].path_for(ref.id)
+        except APIError:
+            raise reference_not_found(index, ref.id, ref.kind, ref.slot, clip_index=clip_index)
+
+
 @router.post(
     "/generate",
     response_model=GenerateResponse,
@@ -123,16 +142,7 @@ def generate(
     # the miss is answered as REFERENCE_NOT_FOUND naming the entry. An LTX
     # engine never gets here (its REJECT_TABLE refused the field above), and
     # the counts and slots were checked by validate_for_family.
-    reference_stores = {
-        "picture": context.upload_store,
-        "video": context.video_upload_store,
-        "audio": context.audio_upload_store,
-    }
-    for index, ref in enumerate(request.references):
-        try:
-            reference_stores[ref.kind].path_for(ref.id)
-        except APIError:
-            raise reference_not_found(index, ref.id, ref.kind, ref.slot)
+    check_references_exist(context, request.references)
 
     # IC-LoRA: validate the reference video + adapter names up front, the same
     # way conditioning image_ids are checked (fail at job creation, not deep in

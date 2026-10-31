@@ -88,7 +88,7 @@ interface FeatureUiEntry {
  *    `reference_video_id` (§3-102, LTX 2.5 Chained's first stage — once an
  *    engine can chain, the tab is live and the panels it still cannot feed have
  *    to grey on their own).
- *  - **chain_start_image** (§1-106, MiniMax H3's text-only chain) is the
+ *  - **chain_start_image** (§1-106, MiniMax H3's chain, which takes no opening image) is the
  *    request field `clips[0].conditioning_images`: it closes the image half of
  *    the Chain screen's SOURCE card, and the Batch i2v-long section with it —
  *    every row of that section puts its image on clip 0.

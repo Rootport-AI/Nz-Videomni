@@ -7,9 +7,13 @@ Runs in ``.venv-engine-h3`` through the engine-venv runner::
 CPU only, no weights. (1) a pipeline whose ``_encode`` / ``_denoise`` /
 ``_decode`` are stubs: the call order, the per-clip requests, the fixed heads,
 the progress and the release (the measurement script's self-check 9,
-Docs/Outputs-archive/h3-chain-2026-10-29/c_chain.py, ported); (2) the REAL
-``_denoise`` on the tiny DiT of tests/test_h3_engine.py: the fixed rows end as
-the clean latents bit for bit and are injected as the latents themselves.
+Docs/Outputs-archive/h3-chain-2026-10-29/c_chain.py, ported); (2) the per-clip
+Ref2VA references (台帳 §1-109) through the REAL ``_encode`` /
+``_read_references`` / ``_encode_references`` with stand-in encoders
+(tests/test_h3_engine.py's ``_ref_job``, as a chain); (3) the REAL ``_denoise``
+on the tiny DiT of tests/test_h3_engine.py: the fixed rows end as the clean
+latents bit for bit and are injected as the latents themselves, also next to
+reference rows.
 """
 
 from __future__ import annotations
@@ -108,6 +112,16 @@ def test_clip_requests_replace_prompt_frames_seed_and_keep():
     assert [(r.prompt, r.num_frames, r.seed, r.keep_resident) for r in reqs] == [
         ("clip 0", 124, 100, True), ("clip 1", 39, 101, True)]
     assert all(r.width == 96 and r.output_path == "out/chain.mp4" and r.num_inference_steps == 4 for r in reqs)
+    assert all(r.references == () for r in reqs)
+
+
+def test_clip_requests_carry_each_clips_own_references():
+    ref = P.H3ReferenceInput("picture", "p.png", 1)
+    spec = CH.H3ChainSpec(base=_base(), seed=1, clips=(
+        CH.H3ChainClipSpec("a", 124, references=(ref,)), CH.H3ChainClipSpec("b", 39)))
+    reqs = CH.clip_requests(spec)
+    assert [r.references for r in reqs] == [(ref,), ()]
+    assert spec.base.references == ()
 
 
 def test_carry_fix_head_is_the_tail_and_the_rest_generated():
@@ -238,6 +252,7 @@ def test_head_that_is_not_the_tail_is_refused(monkeypatch):
     ((124,), {}, r"2\.\.24 clips"),
     ((124, 125), {}, "17n\\+5"),
     ((124, 124), {"images": (P.H3ImageInput(path="a.png"),)}, "T2V"),
+    ((124, 124), {"references": (P.H3ReferenceInput("picture", "p.png", 1),)}, "参照はクリップごと"),
     ((124, 124), {"width": 100}, "32 の倍数"),
 ])
 def test_refused_before_any_stage(monkeypatch, frames, kw, match):
@@ -246,6 +261,168 @@ def test_refused_before_any_stage(monkeypatch, frames, kw, match):
     with pytest.raises(ValueError, match=match):
         CH.run_chain_h3(pipe, _spec(frames=frames, keep_resident=True, **kw), _progress_into(rec), lambda m: None)
     assert rec.calls == [("release",)] and rec.released == 1   # no stage ran
+
+
+# --------------------------------------------------------------------------- #
+# per-clip references through the REAL reference steps (台帳 §1-109)
+# --------------------------------------------------------------------------- #
+
+def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), samples=2000, seen=None, decoded=None):
+    """``run_chain_h3`` through the REAL ``_encode`` / ``_read_references`` /
+    ``_te_references`` / ``_encode_references`` with a stand-in text encoder,
+    video encoder, audio encoder and loader (``samples`` long) and video reader
+    (as tests/test_h3_engine.py's ``_ref_job``); the denoise (keeping the fixed
+    head) and the decode are stubs. 64 x 64. ``clip_refs``: per clip, ``(kind,
+    slot, max_sec)`` entries. ``seen`` / ``decoded``: lists to record the denoise
+    kwargs / the decode calls into (also readable after a failure). Returns
+    ``(done, te_calls, encode progress, denoise kwargs per clip, builds)``."""
+    import numpy as np
+    from PIL import Image
+    from test_h3_engine import _a2v_fakes
+
+    from engine_h3 import reference as RM
+    from engine_h3 import text_encoder as TE
+    from engine_h3 import video_vae as VV
+
+    _a2v_fakes(monkeypatch, samples=samples)
+    te_calls, progress = [], []
+    seen = [] if seen is None else seen
+    decoded = [] if decoded is None else decoded
+    builds = {"video": 0}
+
+    class FakeTE:
+        def __init__(self, *a, **k):
+            self.read_report = {}
+
+        def load(self):
+            return {}
+
+        def encode(self, prompt, images=(), *, refs=None):
+            te_calls.append({"prompt": prompt, "images": len(images),
+                             "refs": None if refs is None else [(r.kind, r.slot) for r in refs]})
+            self.read_report = {"vision_tokens": 0}
+            if refs is not None:
+                self.read_report["references"] = [
+                    {"kind": r.kind, "slot": r.slot, "vision_tokens": 5 * r.slot} for r in refs if r.kind == "picture"
+                ]
+            return torch.zeros(3, 8), torch.ones(3, dtype=torch.long)
+
+        def release(self):
+            pass
+
+    class FakeVideoEncoder:
+        def encode(self, x, tiled=True):
+            return torch.zeros((1, 24, 1, x.shape[-2] // 16, x.shape[-1] // 16))
+
+        def encode_clips(self, frames, *, device, tiled=True):
+            vt = (int(frames.shape[0]) - 5) // 17 * 5 + 2
+            return torch.zeros((1, 24, vt, frames.shape[1] // 16, frames.shape[2] // 16))
+
+    def build_video(cls, *a, **k):
+        builds["video"] += 1
+        return FakeVideoEncoder()
+
+    def read_video(path, *, num_frames, max_sec=None):
+        info = {"source_size": [64, 32], "size": [64, 32], "source_fps": 24.0, "source_frames": 24, "used_frames": 22}
+        return np.zeros((22, 32, 64, 3), np.uint8), info
+
+    monkeypatch.setattr(TE, "H3TextEncoder", FakeTE)
+    monkeypatch.setattr(VV.H3VideoEncoder, "from_file", classmethod(build_video))
+    monkeypatch.setattr(RM, "read_reference_video", read_video)
+    pipe = P.H3Pipeline(P.H3Paths("t", "te", "vv", "av", "tok"), P.H3LoadOptions(), device="cpu",
+                        progress=lambda *a, **k: None, log=lambda m: None)
+    pipe._dit_cfg = object()
+
+    def denoise(req, h, t, phases, entry, **kw):
+        seen.append(kw)
+        video = torch.randn(1, CH_LAT, P.latent_frames(req.num_frames), LH, LW,
+                            generator=torch.Generator().manual_seed(int(req.seed)))
+        audio = torch.randn(2, CH_AUD, P.audio_latents(req.num_frames))
+        for fix, out in ((kw.get("video_fix"), video), (kw.get("audio_fix"), audio)):
+            if fix is not None:
+                n = sum(1 for v in fix[1] if v == 0.0)
+                out[:, :, :n] = fix[0][:, :, :n]
+        return video, audio, "on"
+
+    monkeypatch.setattr(pipe, "_denoise", denoise)
+    monkeypatch.setattr(pipe, "_decode", lambda req, v, a, entry, **kw: decoded.append(req) or 1)
+    monkeypatch.setattr(pipe, "release_resident", lambda: None)
+    clips = []
+    for i, (n, refs) in enumerate(zip(frames, clip_refs)):
+        inputs = []
+        for kind, slot, max_sec in refs:
+            path = tmp_path / (f"c{i}-{kind}{slot}.png" if kind == "picture" else f"c{i}-{kind}{slot}.bin")
+            if kind == "picture":
+                Image.new("RGB", (128, 64), (90,) * 3).save(path)
+            else:
+                path.write_bytes(b"x")
+            inputs.append(P.H3ReferenceInput(kind, str(path), slot, max_sec))
+        clips.append(CH.H3ChainClipSpec(f"clip {i}", n, references=tuple(inputs)))
+    base = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=frames[0], output_path="o.mp4")
+    done = CH.run_chain_h3(pipe, CH.H3ChainSpec(base=base, clips=tuple(clips), seed=1),
+                           lambda stage, i, total, **kw: progress.append((stage, i, total, kw)), lambda m: None)
+    return done, te_calls, [p for p in progress if p[0] == "encode"], seen, builds
+
+
+def test_chain_clip_references_go_through_the_reference_steps(monkeypatch, tmp_path):
+    """Clip 0: a video and a picture reference; clip 1: none (as before); clip 2: an
+    audio reference only (no video encoder). Each clip's references reach its own
+    text encoder and denoise, next to the fixed head, with the chain's coefficient."""
+    clip_refs = [[("video", 1, None), ("picture", 1, None)], [], [("audio", 1, None)]]
+    done, te_calls, progress, kw, builds = _ref_chain_job(monkeypatch, tmp_path, clip_refs)
+    assert te_calls == [
+        {"prompt": "clip 0", "images": 0, "refs": [("picture", 1), ("video", 1)]},
+        {"prompt": "clip 1", "images": 0, "refs": None},          # the TE is called as before
+        {"prompt": "clip 2", "images": 0, "refs": [("audio", 1)]},
+    ]
+    assert builds["video"] == 1                                   # clip 0's own; clip 2 has no visual reference
+    assert [None if k["refs"] is None else [s.kind for s, _r in k["refs"]] for k in kw] == [
+        ["picture", "video"], None, ["audio"]]
+    assert all(k["video_inject_clean"] == CH.CHAIN_INJECT_CLEAN == 1.0 for k in kw)
+    assert kw[0]["video_fix"] is None and kw[1]["video_fix"] is not None and kw[2]["video_fix"] is not None
+    for k in kw:
+        for shape, rows in k["refs"] or ():
+            assert rows.device.type == "cpu" and rows.dtype == torch.float32 and rows.shape[0] == shape.rows
+    # encode: 3 (TE) + 1 (references) = 4 steps for a clip with references, 3 without;
+    # the reference step is the last one and carries the clip's position.
+    for i, want in enumerate((4, 3, 4)):
+        lines = [p for p in progress if p[3]["outer_index"] == i]
+        assert {total for _s, _i, total, _k in lines} == {want} and lines[-1][1:3] == (want, want)
+    phases = done["h3"]["phases"]["clips"]
+    assert [list(p) for p in phases] == [
+        ["encode", "reference_encode", "denoise"], ["encode", "denoise"], ["encode", "reference_encode", "denoise"]]
+    assert [(r["kind"], r["slot"]) for r in phases[0]["reference_encode"]["references"]] == [("picture", 1), ("video", 1)]
+    assert phases[0]["reference_encode"]["references"][0]["vision_tokens"] == 5
+    assert [(r["kind"], r["slot"]) for r in phases[2]["reference_encode"]["references"]] == [("audio", 1)]
+    clips = done["chain"]["clips"]
+    assert [c.get("references") for c in clips] == [
+        {"pictures": 1, "videos": 1, "audios": 0}, None, {"pictures": 0, "videos": 0, "audios": 1}]
+    assert [list(c["seconds"]) for c in clips] == [
+        ["encode", "reference_encode", "denoise"], ["encode", "denoise"], ["encode", "reference_encode", "denoise"]]
+    assert list(clips[1]) == ["prompt_sha256", "seconds", "latents_sha256", "head_equals_prev_tail"]
+    assert list(clips[0]) == list(clips[1]) + ["references"]
+    assert [c["head_equals_prev_tail"] for c in clips] == [None, True, True]
+    assert "references" not in done["h3"]                         # the counts are per clip only
+
+
+def test_chain_without_references_is_as_before(monkeypatch, tmp_path):
+    done, te_calls, progress, kw, builds = _ref_chain_job(monkeypatch, tmp_path, [[], []], frames=(124, 39))
+    assert [c["refs"] for c in te_calls] == [None, None] and builds["video"] == 0
+    assert all(k["refs"] is None for k in kw)
+    assert {total for _s, _i, total, _k in progress} == {3}
+    assert all(list(p) == ["encode", "denoise"] for p in done["h3"]["phases"]["clips"])
+    assert all("references" not in c and set(c["seconds"]) == {"encode", "denoise"} for c in done["chain"]["clips"])
+
+
+def test_chain_clip_reference_failure_is_that_clips(monkeypatch, tmp_path):
+    """A reference that cannot be used (an audio shorter than one latent) is refused
+    at its own clip, not read ahead: clip 0 ran, nothing is decoded."""
+    seen, decoded = [], []
+    with pytest.raises(ValueError, match="参照音声が短すぎます"):
+        _ref_chain_job(monkeypatch, tmp_path, [[], [("audio", 1, None)]], frames=(124, 39), samples=640,
+                       seen=seen, decoded=decoded)
+    assert len(seen) == 1 and seen[0]["refs"] is None     # only clip 0's denoise ran
+    assert decoded == []
 
 
 # --------------------------------------------------------------------------- #
@@ -334,3 +511,61 @@ def test_real_denoise_in_a_chain_carries_the_tail(monkeypatch, tmp_path):
     assert video.shape[2] == 12 and audio.shape[2] == 65  # T'(39) = 12, all of clip 0 is clip 1's head
     assert done["h3"]["phases"]["clips"][1]["denoise"]["mask"]["video"]["inject_clean"] == 1.0
     assert pipe._resident is not None and "dit" in pipe._resident
+
+
+def test_real_denoise_in_a_chain_with_references(monkeypatch, tmp_path):
+    """Two clips with references (one of each kind, as ``_encode_references`` hands
+    them over) through run_chain_h3 with the real denoise: the reference rows are in
+    each clip's sequence, clip 1's head still comes back as clip 0's tail bit for
+    bit with the chain's coefficient, and the references reach the latents."""
+    from test_h3_engine import TEXT, _fake_int8, _tiny_pipe_and_dit, _tiny_refs
+
+    _fake_int8(monkeypatch)
+    pipe, dit = _tiny_pipe_and_dit(tmp_path)
+    pipe._dit_cfg = dit.cfg
+    pipe._resident = {"dit": dit, "cfg": dit.cfg}
+    text = torch.randn(5, TEXT, generator=torch.Generator().manual_seed(3)).to(torch.bfloat16)
+    calls = []
+
+    def encode(prompt, phases, images=(), *, has_cond, has_audio=False, refs=None):
+        return text, torch.ones(5, dtype=torch.long)
+
+    def encode_references(media, entry, index, total, enc, te_refs=()):
+        calls.append((len(media), index, total, enc is not None))
+        entry["references"] = []
+        return _tiny_refs()
+
+    monkeypatch.setattr(pipe, "_encode", encode)
+    monkeypatch.setattr(pipe, "_decode", lambda req, video, audio, entry, keep=False, source_wave=None: 1)
+    monkeypatch.setattr(pipe, "_read_references", lambda req: [{"kind": r.kind} for r in req.references])
+    monkeypatch.setattr(pipe, "_te_references", lambda media: [])
+    monkeypatch.setattr(pipe, "_build_video_encoder", lambda: object())
+    monkeypatch.setattr(pipe, "_encode_references", encode_references)
+    refs = []
+    for kind in ("picture", "video", "audio"):
+        path = tmp_path / f"r.{kind}"
+        path.write_bytes(b"x")
+        refs.append(P.H3ReferenceInput(kind, str(path), 1))
+
+    def run(with_refs):
+        clip_refs = tuple(refs) if with_refs else ()
+        spec = CH.H3ChainSpec(
+            base=P.H3GenerateRequest(prompt="p", seed=0, width=64, height=64, num_frames=22, output_path="o.mp4",
+                                     num_inference_steps=2, keep_resident=True),
+            clips=(CH.H3ChainClipSpec("a", 22, references=clip_refs), CH.H3ChainClipSpec("b", 39, references=clip_refs)),
+            seed=11,
+        )
+        return CH.run_chain_h3(pipe, spec, lambda *a, **k: None, lambda m: None)
+
+    done = run(True)
+    assert calls == [(3, 4, 4, True)] * 2
+    clips = done["chain"]["clips"]
+    assert [c["head_equals_prev_tail"] for c in clips] == [None, True]
+    assert all(c["references"] == {"pictures": 1, "videos": 1, "audios": 1} for c in clips)
+    for p in done["h3"]["phases"]["clips"]:
+        seq = p["denoise"]["sequence"]
+        assert (seq["ref_video"], seq["ref_audio"]) == (4, 6)
+    assert done["h3"]["phases"]["clips"][1]["denoise"]["mask"]["video"]["inject_clean"] == 1.0
+    plain = run(False)
+    assert plain["chain"]["clips"][0]["latents_sha256"] != clips[0]["latents_sha256"]
+    assert "ref_video" not in plain["h3"]["phases"]["clips"][0]["denoise"]["sequence"]

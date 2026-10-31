@@ -29,13 +29,6 @@
 - **前提**: 事前調査が要る。H3 の「ControlNet」が何者か（参照行で動く IC-LoRA 型か、別の網か、コミュニティの配布物があるか）を一次資料で確かめる。Ref2VA の参照行の仕組み（実装済み。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2）に乗る可能性が高い。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
 
-### 1-109. MiniMax H3 の参照付き Chained（起票：2026-10-19）
-
-- **概要**: 既存の固定行方式の連結（[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3・裁定 84・85）を Ref2VA の重みに広げ、Chained の各クリップに Single と同じ見た目の Reference アコーディオンでクリップごとの参照を入れる。共通の参照は無し。Audios の「Audio to video」は出さない。右クリックは Single のみのまま。重みの切り替えと注意文の規則は Single と同じ。vLLM-Omni 型（ガイド方式＋時刻の連続）は採らない（オーナー裁定 2026-10-31）。
-- **前提**: H3 の Chained（実装済み・オーナーの実機確認に合格。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-262）と、Ref2VA の参照行（実装済み。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2。参照の時刻は文章の直後から積み上げ、目的の映像の原点を後ろへずらす形）。
-- **留意**: 計測と所見は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185。C2〔同じ参照を全クリップに入れる形。本番で最も起こりやすい使い方〕の継ぎ目の所見（§185.6）には、裁定 86（設計正本）: 対処しない。事象は §3-263。次は UI/UX ディスカッション → 実装計画。
-- **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。一次資料の追補は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.12。
-
 ### 1-113. 右クリックメニューから、動画の音声で a2v および long a2v を削除する（起票：2026-10-28）
 
 - **概要**: 右クリックメニューの #3「この動画の音声で a2v」と #17「この動画の音声で long a2v」を削除する。代わりに、音声の入力欄のカードが動画も受け入れ、動画から音声を分離する処理を操作パネルの UI へ移す。LTX 系も同様にする。
@@ -167,9 +160,9 @@
 
 #### 3-259. MCP と Gradio の Ref2VA（参照素材からの生成）の受け口（起票：2026-10-28）
 
-- **概要**: MiniMax H3 の Ref2VA を、MCP の生成の道具と Gradio の Generate タブからも使えるようにする（いまは API と AviUtl2 の操作パネルだけ）。
+- **概要**: MiniMax H3 の Ref2VA を、MCP の生成の道具と Gradio の Generate タブからも使えるようにする（いまは API と AviUtl2 の操作パネルだけ）。**連結（Chained）の各クリップの参照（旧 §1-109〔CLOSED 3-264〕）も含める**（MCP の `submit_chain` は `clips[i].references` を受けず、Gradio の Chain タブは LTX 専用）。
 - **前提**: API は `POST /generate` の `references`（仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2）で確定している。MCP は画像・動画・音声の 3 種のアップロードの id と、プロンプトの札（`<Picture n>` など）の書き方、Ref2VA の重みを読み込む必要（`GET /models` の `transformer_role`）の案内が要る。Gradio は H3 の整理（§3-243）と合わせて扱う。
-- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2・裁定 82。
+- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2・§3.3（参照付きの連結）・裁定 82・裁定 87、`MCP_SERVER_DESIGN.md` D32。
 
 ### 研究課題（上の改修項目より優先度が下）
 
@@ -363,8 +356,8 @@
 
 #### 3-263. Ref2VA の参照付き連結で、新しい区間がショット切り替えになる事象（対処せず記録。再訪条件つき）（起票：2026-10-31）
 
-- **概要**: Ref2VA の重みで参照を付けた連結（固定行方式。§1-109）では、新しい区間の展開が人物の向きや場所を変える内容（例: 振り返って歩き去る）だと、続きを描かずに新しいショットへ切り替わることがある。固定行はビット一致で効いており、参照も効いている。切り分け（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185.9）で、原因は追記の展開であり、参照の枚数ではないと分かった。展開が前の区間の構図から続く内容なら連続する。オーナー裁定 86 で**対処しない**（先行事例の vLLM-Omni も対処せず注意にとどめている）。§1-109 は、この事象を既知の限界として実装へ進む。
-- **前提**: 既知の限界として、使い方の注意を §1-109 の実装時に設計正本 §3.3 と README に書く。対処の候補（実装はしない）は、`VERIFICATION_LOG.md` §185.7（時刻の連続・LongMedia 型の条件行の併用・公式の参照動画の作法）。
+- **概要**: Ref2VA の重みで参照を付けた連結（固定行方式。旧 §1-109〔CLOSED 3-264〕）では、新しい区間の展開が人物の向きや場所を変える内容（例: 振り返って歩き去る）だと、続きを描かずに新しいショットへ切り替わることがある。固定行はビット一致で効いており、参照も効いている。切り分け（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185.9）で、原因は追記の展開であり、参照の枚数ではないと分かった。展開が前の区間の構図から続く内容なら連続する。オーナー裁定 86 で**対処しない**（先行事例の vLLM-Omni も対処せず注意にとどめている）。旧 §1-109〔参照付きの連結。CLOSED 3-264〕は、この事象を既知の限界とする。
+- **前提**: 既知の限界として、使い方の注意を設計正本 §3.3 の「参照付きの連結」と README に書いてある。対処の候補（実装はしない）は、`VERIFICATION_LOG.md` §185.7（時刻の連続・LongMedia 型の条件行の併用・公式の参照動画の作法）。
 - **再訪条件**: 次のいずれか。(1) 利用者から、継ぎ目のカットの報告が重なったとき。(2) 先行事例（vLLM-Omni・LongMedia・H3 Continuum）に、この事象への対処の実装が現れたとき。(3) 公式の Ref2VA の連結の作法が分かったとき。
 - **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 裁定 86、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185.5・§185.9、研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.12。
 - **状態**: 将来の研究課題（対処しない。再訪条件が成立したら読み返す）。

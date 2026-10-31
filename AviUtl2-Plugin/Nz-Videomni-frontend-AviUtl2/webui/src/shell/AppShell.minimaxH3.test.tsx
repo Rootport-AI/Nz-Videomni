@@ -7,6 +7,7 @@ import { resetCreateLiveCommands } from "../timeline/createLiveCommands";
 import { resetProvisionalReservation } from "../timeline/provisionalReservation";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { NativeBridge } from "../bridge";
+import type { ModelsResponse } from "../api/types";
 import { AppShell } from "./AppShell";
 
 // MiniMax H3 第 2 弾 (2026-10-17) — 2c-G1, end to end through the fixture
@@ -834,6 +835,61 @@ describe("AppShell — MiniMax H3 Chained (§1-106)", () => {
       await screen.findByText(/An opening image for clip 1 cannot be used/, {}, { timeout: 5_000 });
       expect(requestSpy.mock.calls.some((c) => c[0] === "timeline.captureFrame")).toBe(false);
       expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+    },
+    20_000,
+  );
+});
+
+// ── §1-109: the per-clip References on H3's Chained tab, end to end ──
+// `transformerRole` reaches the Chained screen from `GET /models` (the
+// fixture's H3 transformer is "default", so the role is patched into the
+// response here): Ref2VA with References off shows ②, on with no card ③.
+describe("AppShell — MiniMax H3 Chained References (§1-109)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    resetProvisionalReservation();
+    resetCreateLiveCommands();
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  const REF2VA_NOTICE =
+    "A Ref2VA model is loaded. When no references are used, an FL2VA model or a Hybrid model is more accurate.";
+  const NONE_NOTICE = "There are no reference files.";
+
+  it(
+    "LTX 2.3 has no References checkbox; H3 (Ref2VA) has it off with ②, and on with ③",
+    async () => {
+      const bridge = createMockBridge({ delayMs: 0 });
+      const realRequest = bridge.request.bind(bridge);
+      vi.spyOn(bridge, "request").mockImplementation((async (method: string, params: unknown) => {
+        const res = await (realRequest as (m: string, p: unknown) => Promise<unknown>)(method, params);
+        if (method === "backend.request" && (params as { path?: string }).path === "/api/v1/models") {
+          const body = (res as { body: ModelsResponse }).body;
+          for (const block of body.base_models ?? []) {
+            if (block.active && block.engine_family === "h3") block.transformer_role = "ref2va";
+          }
+        }
+        return res;
+      }) as typeof bridge.request);
+      await renderApp(bridge);
+      await userEvent.setup().click(screen.getByRole("tab", { name: "Chained" }));
+      await waitFor(() => expect(within(singlePanel()).getByText("Clips")).toBeInTheDocument(), { timeout: 5_000 });
+      expect(within(singlePanel()).queryByRole("checkbox", { name: "References" })).toBeNull();
+      expect(within(singlePanel()).queryByText(REF2VA_NOTICE)).toBeNull();
+
+      await switchTo("MiniMaxH3");
+      const box = await within(singlePanel()).findByRole("checkbox", { name: "References" }, { timeout: 5_000 });
+      expect(box).not.toBeChecked();
+      await waitFor(() => expect(within(singlePanel()).getByText(REF2VA_NOTICE)).toBeInTheDocument(), { timeout: 5_000 });
+      expect(within(singlePanel()).queryByText(NONE_NOTICE)).toBeNull();
+
+      fireEvent.click(box);
+      await waitFor(() => expect(within(singlePanel()).getByText(NONE_NOTICE)).toBeInTheDocument(), { timeout: 5_000 });
+      expect(within(singlePanel()).queryByText(REF2VA_NOTICE)).toBeNull();
+      expect(singlePanel().querySelectorAll(".clip-card .ref-accordion")).toHaveLength(2);
     },
     20_000,
   );

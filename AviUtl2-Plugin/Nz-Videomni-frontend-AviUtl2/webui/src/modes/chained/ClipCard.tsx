@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useStrings } from "../../i18n/LanguageContext";
 import { TokenCounter, isOverTokenLimit } from "../../shell/TokenCounter";
 import { DurationField } from "../single/CommonGenerationFields";
@@ -35,6 +36,10 @@ export interface ClipCardProps {
   /** Ruling 84-6: show the one-line audio note under the duration
    * (`useChainForm.clipAudioDriftFlags[index]`). Omitted = hidden. */
   showAudioDriftNote?: boolean | undefined;
+  /** §1-109: drawn last in the card — the clip's Reference accordion
+   * (`ClipReferences`), supplied by the caller. The card itself knows nothing
+   * about references. Omitted = nothing. */
+  referencesSlot?: ReactNode | undefined;
 }
 
 /** One clip's card in Chain mode's clip list: an optional per-clip prompt
@@ -59,6 +64,7 @@ export function ClipCard({
   tokenLimit,
   frameLimits = { min: MIN_CLIP_NUM_FRAMES, max: MAX_CLIP_NUM_FRAMES, step: LTX_FRAME_GRID.step },
   showAudioDriftNote = false,
+  referencesSlot,
 }: ClipCardProps) {
   const strings = useStrings();
   return (
@@ -113,6 +119,7 @@ export function ClipCard({
         hint={formatDurationHint(clip.numFrames, frameRate)}
       />
       {showAudioDriftNote && <p className="clip-note">{strings.chained.audioDriftNote}</p>}
+      {referencesSlot}
     </li>
   );
 }

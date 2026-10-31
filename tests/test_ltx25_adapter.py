@@ -900,6 +900,14 @@ CHAIN_OVERRIDES: dict[str, dict] = {
     "vae_mode": {"vae_mode": "prune_vaed"},
     # MiniMax H3 only (VRAM 16GB mode), on the chain schema too (台帳 §1-106).
     "vram16_mode": {"vram16_mode": True},
+    # MiniMax H3 only (Ref2VA per clip, 台帳 §1-109): keyed by the FIELD the
+    # row reads (``clips``); its feature name is ``references``.
+    "clips": {
+        "clips": [
+            {"num_frames": 25},
+            {"num_frames": 25, "references": [{"kind": "picture", "id": "img-1", "slot": 1}]},
+        ]
+    },
 }
 
 
@@ -1205,8 +1213,9 @@ def test_no_chain_mode_is_refused_any_more():
     # ...and what remains really is only the engine-level half. ``nag_enabled``
     # left it with the NAG/VSF increment, which is asserted by its own
     # acceptance test below rather than only by this set shrinking.
-    # ``vram16_mode`` is MiniMax H3's (台帳 §1-106), refused by both LTX.
-    assert refused == {"pipeline", "vae_mode", "vram16_mode"}
+    # ``vram16_mode`` is MiniMax H3's (台帳 §1-106), refused by both LTX, and
+    # so is the ``clips`` row (a clip's ``references``, 台帳 §1-109).
+    assert refused == {"pipeline", "vae_mode", "vram16_mode", "clips"}
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))
@@ -3244,12 +3253,27 @@ def test_every_generate_chain_request_field_is_classified():
     )
 
 
+#: The one chain field allowed in two tables (the MiniMax H3 adapter's audit
+#: has the same allowance): ``clips`` is HONOURED (the prompts, lengths and
+#: clip-0 images) AND refused when a clip carries ``references`` (Ref2VA,
+#: MiniMax H3 only, 台帳 §1-109) — the refusal reads a nested field, so it can
+#: only be stated on the top-level field that holds it.
+_ALLOWED_CHAIN_OVERLAP = {"clips"}
+
+
 def test_the_four_chain_classifications_do_not_overlap():
     seen: dict[str, str] = {}
+    overlaps: set[str] = set()
     for label, produce in _CHAIN_CLASSIFICATIONS.items():
         for field in produce():
+            if field in _ALLOWED_CHAIN_OVERLAP and field in seen:
+                overlaps.add(field)
+                continue
             assert field not in seen, f"{field} is in both {seen[field]} and {label}"
             seen[field] = label
+    assert overlaps == _ALLOWED_CHAIN_OVERLAP
+    refused = {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert _ALLOWED_CHAIN_OVERLAP <= refused & set(ltx25.CHAIN_HONOURED_FIELDS)
 
 
 def test_no_chain_classification_names_a_field_the_schema_does_not_have():
@@ -3281,12 +3305,19 @@ def test_the_nested_chain_clip_fields_are_all_accounted_for():
     honoured, which is a promise about ``ChainClip``'s OWN fields too — so they
     get named here, and a new one fails this test rather than being silently
     dropped from the payload the worker receives."""
-    assert set(ChainClip.model_fields) == {"prompt", "num_frames", "conditioning_images"}
-    # ...and each of the three really is read when the payload is built.
+    assert set(ChainClip.model_fields) == {
+        "prompt", "num_frames", "conditioning_images", "references",
+    }
+    # ...and each of the three honoured ones really is read when the payload
+    # is built.
     source = inspect.getsource(ltx25._RealBackend25.generate_chain)
     assert "clip_prompt" in source  # prompt (the shared one + the clip's own)
     assert "num_frames" in source
     assert "conditioning_images" in source
+    # ``references`` is the refused one (MiniMax H3 only): the chain reject
+    # table's last row, never read into the payload.
+    assert ("clips", "references") == ltx25.CHAIN_REJECT_TABLE[-1][:2]
+    assert "references" not in source
 
 
 #: Honoured fields that the ADAPTER never reads, exempt from the two "declared

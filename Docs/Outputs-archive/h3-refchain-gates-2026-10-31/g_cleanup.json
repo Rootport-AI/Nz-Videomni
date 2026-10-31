@@ -1,0 +1,98 @@
+{
+  "gate": "cleanup",
+  "ok": true,
+  "status_before": {
+    "server": "running",
+    "version": "0.4.0",
+    "host": "127.0.0.1",
+    "port": 18629,
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled",
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "gpu": {
+      "available": false,
+      "name": null,
+      "vram_total_mb": 0,
+      "vram_used_mb": 0,
+      "vram_free_mb": 0
+    },
+    "vram_optimization": {
+      "low_vram_mode": true,
+      "low_vram_profile": "16gb_safe",
+      "fp8_transformer": true,
+      "cpu_offload_text_encoder": true,
+      "vae_tiling": true,
+      "attention_tiling": false,
+      "block_swap": true,
+      "low_vram_disabled_required": false
+    },
+    "acceleration": {
+      "attention_backends": [
+        "sdpa",
+        "sage"
+      ],
+      "sage_available": true,
+      "block_swap_prefetch_available": true
+    },
+    "tracking": {
+      "available": true
+    },
+    "queue": {
+      "mode": "single_job_in_memory",
+      "pending": 0,
+      "running": 0,
+      "completed": 4,
+      "failed": 0
+    }
+  },
+  "unload": {
+    "pipeline_loaded": false,
+    "state": "unloaded"
+  },
+  "status_after": {
+    "server": "running",
+    "version": "0.4.0",
+    "host": "127.0.0.1",
+    "port": 18629,
+    "pipeline_loaded": false,
+    "pipeline_type": null,
+    "state": "unloaded",
+    "base_model": "MiniMaxH3",
+    "gpu": {
+      "available": false,
+      "name": null,
+      "vram_total_mb": 0,
+      "vram_used_mb": 0,
+      "vram_free_mb": 0
+    },
+    "vram_optimization": {
+      "low_vram_mode": true,
+      "low_vram_profile": "16gb_safe",
+      "fp8_transformer": true,
+      "cpu_offload_text_encoder": true,
+      "vae_tiling": true,
+      "attention_tiling": false,
+      "block_swap": true,
+      "low_vram_disabled_required": false
+    },
+    "acceleration": {
+      "attention_backends": [
+        "sdpa",
+        "sage"
+      ],
+      "sage_available": true,
+      "block_swap_prefetch_available": true
+    },
+    "tracking": {
+      "available": true
+    },
+    "queue": {
+      "mode": "single_job_in_memory",
+      "pending": 0,
+      "running": 0,
+      "completed": 4,
+      "failed": 0
+    }
+  }
+}

@@ -5660,6 +5660,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **BRIDGE_CONTRACT は不変です（v17 のまま）。** 変更は `webui/src/` だけで、native は触っていません。
 - 設計の正本は [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.3 と裁定 84・85、門の記録は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §183・§184、台帳は `PENDING_TASKS_CLOSED.md` 3-262 です（バックエンド側の仕組みはここに写しません）。
 
+> **更新（2026-10-31）**: ここで閉じた参照動画は IC-LoRA のもの。Ref2VA の参照はクリップごとに入れられる（§154）。
+
 ### 153.2 設計上の判断
 
 - **画面はエンジン id を読まない。** 固定の重なりモードに入る条件は `constraints.chain` が在ることだけです。この 1 つの条件が「重なりが固定」と「Stage-2 がない」を兼ねています（コード内のコメントにも明記）。両者が別々になったら条件を分けます。
@@ -5712,3 +5714,62 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 153.8 状態
 
 - ビルド・デプロイ済みです（SHA-256 の 3 値が一致: `72C78BDB…`）。オーナーの実機確認（G-C3）に合格しました。台帳は CLOSED 3-262 です。
+
+## 154. MiniMax H3 の参照付き Chained〔クリップごとの Reference〕 — Chained の各クリップに Reference アコーディオン・`References` のチェック・クリップごとの `references` の送信（バックエンド台帳 CLOSED 3-264。2026-10-31）
+
+### 154.1 結論
+
+- **MiniMax H3 の Chained で、クリップごとに参照素材（Ref2VA）を入れられるようになりました。** `Clips` の見出しの右端に `References` のチェック（既定はオフ）が出て、オンにすると各クリップの下に Single と同じ Reference アコーディオンが出ます。Enable のチェック・【🔴ON】の表示・Audios カードの「Audio to video」と Strength は出しません（連結は A2V を受けないため）。
+- 送るのは、H3 を選んでいて、`References` がオンで、重みが FL2VA でないときだけです。使われるカードがあるクリップにだけ、そのクリップの `clips[i].references` を付けます。LTX のときは、H3 で入れた参照が残っていても送りません。
+- 注意文 ①②③ は Single と同じ文言を、Generate の下に 1 か所だけ出します。③ は全クリップの使われるカードが 0 件のときだけです。
+- **BRIDGE_CONTRACT は不変です（v17 のまま）。** 変更は `webui/src/` だけで、native は触っていません。
+- 設計の正本は [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.3 の「参照付きの連結」と裁定 87、API は [`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.2b (h) と本書の [`API_REFERENCE.md`](API_REFERENCE.md)、門の記録は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §186、台帳は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-264 です（バックエンド側の仕組みはここに写しません）。
+
+### 154.2 設計上の判断
+
+- **状態の持ち方は案 A。** クリップ 1 枚につき部品 `ClipReferences`（`modes/chained/ClipReferences.tsx`）を 1 つ、`key={clip.id}` で置き、中で Single と同じ `useReferenceSlots` を呼びます。画面（`ChainedScreenBody`）は各部品が上げてくる要約（`summary` と `slots`）の登録表だけを読み、クリップごとの本文（`buildReferenceBody`）・アップロード中（`referenceSendUploading`）・使用数（`countUsedReferences`）を計算します。採らなかった案は 3 つです。(1) `useReferenceSlots` をクリップの id をキーにした 1 本の reducer に作り直す（Single のフックと既存テストを壊す）。(2) 参照の状態を `useChainForm` に持たせる（すでに大きなフォームに、画面の部品の状態を足すことになる）。(3) `api` を上書きして `enabled` と `a2vSlot` を差し替える（次の `setEnabled(true)` 1 回で足りる）。
+- **マウント時に `setEnabled(true)` を 1 回呼ぶ。** 埋め込みのアコーディオンは Enable のチェックを描かないので、一度オンにすれば戻りません。出し入れは画面全体の `References` が決めます（`useReferenceSlots` が持つ「使われるカードは Enable がオン」という規則に、そのまま乗れます）。`a2vSlot` は初期値の `null` のまま（A2V のチェックも描かないので `setA2vSlot` は呼ばれません）。
+- **親への登録は `useLayoutEffect`。** 描画の前に届くので、アップロードを始めた直後やカードを消した直後に、古い本文のまま送ってしまいません。登録の effect と解除の effect は別々にして、状態が変わったときは登録し直すだけ、クリップが消えるときだけ鍵を消します。登録関数は `useCallback` で安定させ、関数型の更新で「中身が同じなら同じオブジェクトを返す」ので、無限の再描画は起きません。`rules`（`constraints.reference`）は Single と同じ作法で `useRef` に保持し（H3 → LTX → H3 でカードの中身を保つ）、`referenceCardsMounted`（H3 を一度見るまで部品を置かない）は計画に無い追加ですが、H3 を見る前は保持するものが無いので維持しました。
+- **`embedded`（`ReferenceAccordion.tsx`）。** 既定は偽で、Single の描画は変わりません。真のとき、Enable のチェックと【🔴ON】の表示と Audios カードの A2V の欄（チェック・Strength・短すぎ警告）を描きません。`a2v` は任意にしました（`embedded` のとき不要）。`ClipCard` は `referencesSlot` を受けて `.clip-note` の後ろに描くだけで、参照の状態は知りません。
+- **`isH3` を `buildReferenceBody` に渡す理由。** `buildReferenceBody(summary, slots, role, isH3)` は `!isH3` と FL2VA で空を返します。保持した規則ではなく、今の `constraints.reference` の有無から求めた `isH3` を渡しているので、H3 で参照を入れてから LTX に切り替えても、本文に `references` は載りません（載ると 422 になり、行ごと隠れているので画面から直せなくなります）。H3 に戻すと中身が残っています。
+- **③ の規則。** `usedCount` は全クリップの合計で、`referenceNotices` の `enabled` には画面全体の `References` を渡します。一部のクリップだけが 0 件のときは ③ を出しません。種別なし（Hybrid）では ①② を出しません（Single と同じ）。
+- **アップロード待ちは画面側の合成。** `isH3 && References がオン && いずれかのクリップが uploading` のとき、送信ボタンの `disabled` と `useRepeatRunDriver` の `canSubmit` を止め、`GenerateReasonsNote` の理由の一覧に `referenceCardUploading` を足して渡します。`form.validityReasons` は触りません（バッチ i2v-long が読むため）。
+- **dirty。** `publishChainDirty(form.isDirty || いずれかのクリップに埋まったカードがある)`。参照だけを入れた状態で右クリックから Chained を作り直そうとしても、「破棄して読み込みますか？」の確認が出ます。
+- **送信は `buildSubmission` の後処理。** `useChainForm.ts`・`chainUtils.ts`・`useReferenceSlots.ts`・`referenceRules.ts` は無改修です。`buildRequest` は `clips` を 1 対 1 に写すので、`form.clips[i].id` と `built.clips[i]` を添字で対応させます。本文が空のクリップには鍵を出しません。繰り返し実行の指紋は本文の JSON から作るので、参照の変更に自動で追従します。
+- **クリップの削除・音声合わせでの脱落・本数調整はアンマウントになる**ので、参照も自動で捨てられます。
+- **✒ ボタン**は、そのクリップの追記欄に `<Picture n>` の札を足します（n はそのクリップのカード番号）。追記欄を変えるので、クリップの `intact` は偽になります（既存の追記欄の編集と同じ）。
+- **`transformerRole` を `ChainedScreen` に渡す。** `AppShell.tsx` が `baseModels.activeTransformerRole` を渡します（Single と同じ）。
+- **閉じた `<details>` の中身も組み立てられる**ので、24 クリップで `References` をオンにしたときの操作感は、G-4 では 3 クリップまでで確認し、24 クリップは検証しません（オーナー判断。現実的に推奨されない本数。記録簿 §186.8）。遅延描画は入れていません。
+- **mock（`bridge/mockBridge.ts`）。** `POST /generate/chain` で、LTX 2.3／2.5 は、いずれかのクリップに `references` があれば 422 `FEATURE_UNSUPPORTED`（機能名 `references`）。H3 はクリップごとに形を検査します。
+
+### 154.3 テスト
+
+- 新規は `modes/chained/ClipReferences.test.tsx`（登録と解除・オフでは何も描かない・同じ状態では登録し直さない）と `modes/chained/ChainedScreen.references.test.tsx`（LTX ではチェックもアコーディオンも無い・H3 の既定オフとオンの描画・送信の本文の添字と ✒・オフでは送らず保持・H3 → LTX で本文に `references` が無く戻ると残る・FL2VA で ①・Ref2VA で ② と ③ の規則・アップロード待ち・dirty・クリップ削除で消える・24 クリップで再描画の回数に上限）です。
+- 更新は `modes/single/ReferenceAccordion.test.tsx`（`embedded` の描画と既定の描画）・`shell/AppShell.minimaxH3.test.tsx`（模擬サーバーの `GET /models` だけから、LTX にチェックが無く、H3 の Ref2VA でオフは ②・オンは ③ になる通し）・`bridge/mockBridge.h3.test.ts`（連結の `references` の 422 と形検査）です。
+- 散発的な失敗への対処は、待ちの長い `waitFor` に `{ timeout: 5_000 }` を付けました（台帳 §3-238 の型。153.5 と同じ作法）。
+
+### 154.4 門の結果
+
+- `npm run typecheck` は 0 エラー。`npx vitest run --exclude "**/backend.integration.test.ts"` は 180 ファイル・3539 件合格。`npm run lint` は 0 エラー（警告 32 件は、今回触っていない既存のファイルのもの）。
+
+### 154.5 差分のレビューと採否
+
+- 実装差分のレビュー（操作パネル）: Critical 0・Major 0・Minor 4・Nit 5。裁定（位置・既定オフ・非表示と保持・A2V なし・注意文・送信の条件・✒・クリップ削除・右クリック不変・LTX での非表示）はすべて一致でした。バックエンドの差分レビュー 2 本と計画段階のレビューの採否は、記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §186.2・§186.4 が正本です（ここには操作パネルの分だけ書きます）。
+
+  | 指摘 | 内容 | 採否 |
+  |---|---|---|
+  | m-1 | `References` のラベルのクラスが `field-inline` だけで、横並びにならない（計画の書き漏れ。コード内の他の箇所は `field field-inline`） | 採用 |
+  | m-2 | 多くの `waitFor` と AppShell の通しテストが既定の 1 秒で待っている | 採用（`{ timeout: 5_000 }`） |
+  | m-3 | 登録の effect が毎回、解除を挟むので、「同じなら同じオブジェクト」の判定に届かない | 採用（登録と解除の effect を分けた） |
+  | m-4 | 参照の塊（約 50 行）をフックに分ける | 棄却（計画の方針は「親で計算」。整理は範囲外） |
+  | n-1 | `referenceCardsMounted` は計画に無い追加 | 維持（H3 を見る前は保持するものが無く妥当と判断。計画の文言に合わせる注記を 154.2 に残した） |
+  | n-2 | `NO_REFERENCE_RULES` が Single と重複 | 注記のみ（`referenceRules.ts` を無改修にする制約のため共有できない） |
+  | n-3 | `a2v` の任意化で、Single が渡し忘れても型で捕まらない | 棄却（判別共用体は過剰設計になりうる） |
+  | n-4 | `ClipReferences.test.tsx` に何も検査しない `expect` がある（検査していない行） | 採用 |
+  | n-5 | mock のテストに「H3 で空配列なら 202」が無い | 採用 |
+
+### 154.6 状態と残り
+
+- **完結しました。** オーナーの実機確認 G-4 に全項目合格（記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §186.8）、バックエンド台帳は CLOSED 3-264。GPU の門は §186.6。デプロイ済みです（aux2 は 1,559,040 バイト・SHA-256 の先頭 `732cc77f`（G-4 はこの配置で確認。その後、文言の監査〔右クリック #19 の案内を「IC-LoRA の参照動画」と限定〕を反映して再配置し、先頭は `d78299d3`・バイト数は同じ）。実機と配布コピーとビルド成果物の 3 つが一致）。
+- 右クリックの補足: H3 単独では、右クリックから Chained を作り直す入口はありません（Chained 系の 7 つの入口は、すべて H3 では閉じたパネル行きで、確認より前に案内で断られます）。「破棄して読み込みますか？」の確認が効くのは、LTX に切り替えた後だけです（§186.8）。
+- `shell/AppShell.minimaxH3.test.tsx` の既存の 2 テストは、全件実行で散発的に落ちることがあります。今回の追加が無くても起きるので（台帳 §3-238 の型。回数は記録簿 §186.5）、製品の不具合として個別には起票していません。

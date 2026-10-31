@@ -439,7 +439,7 @@ class SingleSourceAudioSpec(BaseModel):
 
 
 class ReferenceInput(BaseModel):
-    """One Reference (Ref2VA) input of a single generate (optional, MiniMax H3 only).
+    """One Reference (Ref2VA) input of a single generate or of one chain clip (``ChainClip.references``) (optional, MiniMax H3 only).
 
     ``id`` is an existing upload of the store ``kind`` names: an ``image_id``
     from POST /upload/image (``picture``), a ``video_id`` from POST
@@ -921,11 +921,17 @@ class ChainClip(BaseModel):
     conditioning images (minimal I2V start / keyframes) — clips 1..N are the
     later segments of one continuous masked AV-latent timeline (they inherit
     continuity from the previous segment's frozen overlap latents, not images).
+    ``references`` is the exception: ANY clip may carry its own Reference
+    (Ref2VA) inputs (ADDITIVE/optional, MiniMax H3 only; both LTX families
+    answer 422 FEATURE_UNSUPPORTED). They condition that clip's segment only
+    (no reference is shared across clips); the counts and slot ranges are the
+    family's, per clip. ``[]`` = none. See :class:`ReferenceInput`.
     """
 
     prompt: str | None = Field(None)
     num_frames: int = Field(49, ge=9, le=481)
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
+    references: list[ReferenceInput] = Field(default_factory=list)
 
 
 class SourceVideoSpec(BaseModel):
@@ -1594,6 +1600,17 @@ class GenerateChainRequest(BaseModel):
                     f"clips[{i}]: at most {MAX_CONDITIONING_IMAGES} conditioning images "
                     "are supported"
                 )
+            # References: one material per (kind, slot) within a clip (the same
+            # rule as GenerateRequest's). The counts and the slot ranges are
+            # the family's (RequestRules.violation, per clip).
+            seen_slots: set[tuple[str, int]] = set()
+            for ref in clip.references:
+                if (ref.kind, ref.slot) in seen_slots:
+                    raise ValueError(
+                        f"clips[{i}]: references has two {ref.kind} entries for slot "
+                        f"{ref.slot} (each card number appears once per kind)"
+                    )
+                seen_slots.add((ref.kind, ref.slot))
 
         # The stage-2 window checks below stay on the schema (the schema tests
         # build the model directly for them). Stage-2 window preset -> the
@@ -1774,6 +1791,13 @@ class GenerateChainRequest(BaseModel):
         from.
         ``end_source`` follows that same precedent for the same reasons.
 
+        ``references`` is transcribed from clip ``index``, so the per-clip
+        record names what that clip sent. The stored record is built for clip
+        0 only (``create_chain_if_idle``), so — like ``conditioning_images`` —
+        it keeps clip 0's references alone; the
+        authoritative copy of every clip's is ``JobRecord.chain_request``,
+        which ``run_chain_job`` resolves the paths from.
+
         ``prompt`` is the chain's shared ``prompt`` exactly as sent (not
         trimmed, no clip prompt appended), so the stored record shows what the
         client wrote for the whole chain. The worker payload does not read it:
@@ -1810,6 +1834,7 @@ class GenerateChainRequest(BaseModel):
             seed=self.seed,
             pipeline=self.pipeline,
             conditioning_images=clip.conditioning_images if index == 0 else [],
+            references=clip.references,
         )
 
 

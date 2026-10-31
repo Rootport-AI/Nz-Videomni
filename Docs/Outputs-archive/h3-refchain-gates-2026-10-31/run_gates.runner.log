@@ -1,0 +1,46 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261031152851
+Username: DESKTOP-1I1LT65\phenotype nezu
+RunAs User: DESKTOP-1I1LT65\phenotype nezu
+Configuration Name: 
+Machine: DESKTOP-1I1LT65 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File Docs\Outputs-archive\h3-refchain-gates-2026-10-31\run_gates.ps1
+Process ID: 53328
+PSVersion: 5.1.26100.9711
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9711
+BuildVersion: 10.0.26100.9711
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+--- nvidia-smi (compute processes) ---
+
+
+weights (FL2VA, Ref2VA), venvs, scripts, pictures, records: present
+config.yaml model.backend: auto (must be auto or real; g_refchain.py also refuses a backend that looks mock)
+RAM 63.8 GB + page file allocated 75.9 GB = commit limit about 139.7 GB (the gates expect about 35 GB)
+PS>TerminatingError(Invoke-RestMethod): "リモート サーバーに接続できません。"
+[15:28:54] g_selfcheck: --selfcheck
+    exit 0 in 0.2 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-gates-2026-10-31\g_selfcheck.json
+starting the backend on port 18629
+PS>TerminatingError(Invoke-RestMethod): "リモート サーバーに接続できません。"
+backend: state=unloaded base_model=MiniMaxH3 pipeline_loaded=False
+[15:28:58] g_1: G-1 --base-url http://127.0.0.1:18629/api/v1 --backend-pid 28956
+    exit 0 in 555.1 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-gates-2026-10-31\g_1.json
+[15:38:13] g_1b: G-1b --base-url http://127.0.0.1:18629/api/v1 --backend-pid 28956
+    exit 0 in 425.4 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-gates-2026-10-31\g_1b.json
+[15:45:18] g_2: G-2 --base-url http://127.0.0.1:18629/api/v1 --backend-pid 28956
+    exit 0 in 1502.5 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-gates-2026-10-31\g_2.json
+all gates finished
+[16:10:21] g_cleanup: cleanup --base-url http://127.0.0.1:18629/api/v1
+    exit 0 in 1.5 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-refchain-gates-2026-10-31\g_cleanup.json
+backend stopped
+state.json put back
+
+**********************
+Windows PowerShell transcript end
+End time: 20261031161023
+**********************

@@ -370,4 +370,28 @@ describe("ReferenceAccordion", () => {
     );
     expect(details.open).toBe(true);
   });
+
+  // §1-109: one Chained clip's copy.
+  it("embedded: no Enable, no ON badge, no Audio to video / Strength — the rows and the pen as usual", () => {
+    let state = enabled(createInitialState(RULES));
+    state = fill(state, "audio", 1, 5);
+    state = fill(state, "picture", 1);
+    const onAppendTag = vi.fn();
+    renderAccordion(makeApi({ ...state, a2vSlot: 1 }), { embedded: true, a2v: undefined, onAppendTag });
+    expect(screen.queryByRole("checkbox", { name: /enable/i })).toBeNull();
+    expect(screen.queryByText("【🔴ON】")).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Audio to video" })).toBeNull();
+    expect(screen.queryByTestId("source-audio-strength")).toBeNull();
+    expect(screen.getByTestId("ref-row-audio")).toBeInTheDocument();
+    expect(screen.getByTestId("ref-total-count")).toHaveTextContent("1/12");
+    fireEvent.click(within(screen.getByTestId("ref-slot-picture-1")).getByRole("button", { name: /add this tag/i }));
+    expect(onAppendTag).toHaveBeenCalledWith("<Picture 1>");
+  });
+
+  it("not embedded (the default): Enable, the ON badge and Audio to video are drawn as before", () => {
+    renderAccordion(makeApi(enabled(createInitialState(RULES))));
+    expect(screen.getByRole("checkbox", { name: /enable/i })).toBeInTheDocument();
+    expect(screen.getByText("【🔴ON】")).toBeInTheDocument();
+    expect(screen.getAllByRole("checkbox", { name: "Audio to video" })).toHaveLength(3);
+  });
 });

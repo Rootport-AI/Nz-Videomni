@@ -3143,3 +3143,13 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **状態**: 完結（日付 2026-10-30）。コミットのハッシュは git の履歴を正とする。
 - **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3 と裁定 85、契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.104）§6.2b (h)、操作パネルはフロントエンドの `Docs/DEVLOG.md` §153。
 - **残課題**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-261（H3 の Chained の推定時間）・§4-44（重なりの選択）・§4-45（長い連結での焼け）・§4-46（10 連結超での音声と映像のわずかなズレ）。
+
+### 3-264. MiniMax H3 の参照付き Chained（クリップごとの Reference アコーディオン）（起票：2026-10-19、クローズ：2026-10-31）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-109 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-109（2026-10-19 起票）。**同書側は欠番**。番号は、同書 §3 の生きた項目（3-263）を飛ばした次の空き番号である。
+- **到達条件**: 固定行方式の連結（CLOSED 3-262）を Ref2VA の重みにも対応させ、Chained の各クリップに Single と同じ見た目の Reference アコーディオンでクリップごとの参照（画像・動画・音声）を入れて生成できること。**達成した。**
+- **何が完了したか**: 連結の各クリップに `references` を付けられるようにした（エンジンはクリップごとに参照を読み、符号化して捨て、固定行と同時にノイズ除去する。LTX は 422 で断る）。操作パネルは `Clips` の見出しの右端の `References` のチェック（既定オフ）と、クリップごとの Reference アコーディオン、注意文 ①②③、アップロード待ちの門を持つ。共通の参照・Audios の A2V は作っていない。
+- **合格の根拠**: 計測と裁定 86 は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185、計画の敵対的レビュー・差分レビュー・機械の門・GPU の門（G-1・G-1b・G-2）・オーナーの実機確認（G-4）は同 §186。
+- **状態**: 完結（日付 2026-10-31）。コミットのハッシュは git の履歴を正とする。
+- **正本・出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3 の「参照付きの連結」と裁定 86・87、契約 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md)（v0.5.105）§6.2b (h)、操作パネルはフロントエンドの `Docs/DEVLOG.md` §154。
+- **残課題**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-259（MCP と Gradio の受け口。連結の参照も含む）・§3-263（新しい区間の展開によるショット切り替わり。既知の限界）・§3-238（散発的なテスト失敗）。

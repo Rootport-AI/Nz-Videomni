@@ -34,11 +34,17 @@ export interface ReferenceAccordionProps {
   openSignal: number;
   /** The pen button: appends the card's tag (`<Picture 1>`) to the prompt. */
   onAppendTag: (tag: string) => void;
-  a2v: ReferenceAccordionA2v;
+  /** The Audios cards' A2V side. Not needed when {@link embedded}. */
+  a2v?: ReferenceAccordionA2v | undefined;
   /** Test/DI seam for the drop zones; defaults to the app-wide bridge. */
   nativeBridge?: NativeBridge | undefined;
   /** A submit in flight: every control is locked (the form's `disabled`). */
   disabled?: boolean | undefined;
+  /** §1-109: one Chained clip's accordion. The Enable checkbox, the ON badge
+   * and the Audios cards' "Audio to video" / Strength / too-short warning are
+   * not drawn — the screen-wide References checkbox stands in for Enable, and
+   * a chain has no A2V card. Default `false` (Create, unchanged). */
+  embedded?: boolean | undefined;
 }
 
 const ACCEPT: Record<ReferenceKind, readonly string[]> = {
@@ -55,14 +61,16 @@ function ReferenceSlotCard({
   onAppendTag,
   nativeBridge,
   disabled,
+  embedded,
 }: {
   slot: ReferenceSlot;
   use: ReferenceSlotUse;
   api: ReferenceSlotsApi;
-  a2v: ReferenceAccordionA2v;
+  a2v: ReferenceAccordionA2v | undefined;
   onAppendTag: (tag: string) => void;
   nativeBridge?: NativeBridge | undefined;
   disabled: boolean;
+  embedded: boolean;
 }) {
   const strings = useStrings();
   const t = strings.single.reference;
@@ -194,7 +202,7 @@ function ReferenceSlotCard({
       {use.durationUnknown && <p className="warning-banner warning-banner-mild">{t.durationUnknownWarning}</p>}
       {slot.trimFailed && <p className="warning-banner warning-banner-mild">{t.trimFailedWarning}</p>}
 
-      {kind === "audio" && (
+      {kind === "audio" && !embedded && a2v && (
         <>
           <label className="field field-inline">
             <input
@@ -243,13 +251,15 @@ function ReferenceRow({
   onAppendTag,
   nativeBridge,
   disabled,
+  embedded,
 }: {
   kind: ReferenceKind;
   api: ReferenceSlotsApi;
-  a2v: ReferenceAccordionA2v;
+  a2v: ReferenceAccordionA2v | undefined;
   onAppendTag: (tag: string) => void;
   nativeBridge?: NativeBridge | undefined;
   disabled: boolean;
+  embedded: boolean;
 }) {
   const t = useStrings().single.reference;
   const { summary, rules, state } = api;
@@ -286,6 +296,7 @@ function ReferenceRow({
               onAppendTag={onAppendTag}
               nativeBridge={nativeBridge}
               disabled={disabled}
+              embedded={embedded}
             />
           );
         })}
@@ -299,6 +310,7 @@ function ReferenceRow({
  * (Pictures / Videos / Audios) of horizontally scrolling cards. Presentation
  * only: every value and mutation goes through `api` (`useReferenceSlots`).
  * `<details>` is uncontrolled (like `NagAccordion`); `openSignal` opens it.
+ * §1-109: `embedded` is one Chained clip's copy (see the prop).
  */
 export function ReferenceAccordion({
   api,
@@ -307,6 +319,7 @@ export function ReferenceAccordion({
   a2v,
   nativeBridge,
   disabled = false,
+  embedded = false,
 }: ReferenceAccordionProps) {
   const t = useStrings().single.reference;
   const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -323,7 +336,7 @@ export function ReferenceAccordion({
     <details className="form-accordion ref-accordion" ref={detailsRef}>
       <summary className="form-accordion-summary">
         {t.heading}
-        {state.enabled && <span className="nag-on-badge">{t.onBadge}</span>}
+        {!embedded && state.enabled && <span className="nag-on-badge">{t.onBadge}</span>}
         <span
           className={`ref-summary-count${summary.over.total ? " field-hint-error ref-over" : ""}`}
           data-testid="ref-total-count"
@@ -332,15 +345,17 @@ export function ReferenceAccordion({
         </span>
       </summary>
       <div className="form-accordion-body">
-        <label className="field field-inline">
-          <input
-            type="checkbox"
-            checked={state.enabled}
-            disabled={disabled}
-            onChange={(e) => api.setEnabled(e.target.checked)}
-          />
-          <span className="field-label">{t.enableLabel}</span>
-        </label>
+        {!embedded && (
+          <label className="field field-inline">
+            <input
+              type="checkbox"
+              checked={state.enabled}
+              disabled={disabled}
+              onChange={(e) => api.setEnabled(e.target.checked)}
+            />
+            <span className="field-label">{t.enableLabel}</span>
+          </label>
+        )}
         {REFERENCE_KINDS.map((kind) => (
           <ReferenceRow
             key={kind}
@@ -350,6 +365,7 @@ export function ReferenceAccordion({
             onAppendTag={onAppendTag}
             nativeBridge={nativeBridge}
             disabled={disabled}
+            embedded={embedded}
           />
         ))}
       </div>

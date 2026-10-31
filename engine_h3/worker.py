@@ -72,14 +72,17 @@ Protocol (one JSON object per line; parent -> worker):
    [keep_resident], [attention_backend], [block_swap_prefetch], [vram16_mode],
    [loras]}
       One T2V chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
-      of ``{"prompt", "num_frames"}`` (2..24 clips; each prompt is the clip's
-      whole text, the top-level ``prompt`` is not used), clip i runs with seed
-      ``seed + i``, and the clips are joined on a fixed 22-frame overlap into
-      ONE mp4 at ``output_path``. The other keys mean what they mean for
-      ``generate`` and apply to every clip (the LoRA too). ``images`` /
-      ``source_audio`` / ``references`` and any other key are logged and
-      ignored, as are unknown keys inside a clip. A failure is reported with
-      ``error`` and the process stays alive.
+      of ``{"prompt", "num_frames", [references]}`` (2..24 clips; each prompt is
+      the clip's whole text, the top-level ``prompt`` is not used), clip i runs
+      with seed ``seed + i``, and the clips are joined on a fixed 22-frame
+      overlap into ONE mp4 at ``output_path``. ``clips[i].references`` (台帳
+      §1-109): that clip's own Ref2VA references, the entries of ``generate``'s
+      ``references`` (absent / null / [] = none; unknown inner keys are logged
+      as ``clips[].references[].<key>`` and ignored). The other keys mean what
+      they mean for ``generate`` and apply to every clip (the LoRA too). The
+      top-level ``images`` / ``source_audio`` / ``references`` and any other key
+      are logged and ignored, as are unknown keys inside a clip. A failure is
+      reported with ``error`` and the process stays alive.
   {"op": "shutdown"}
   Before load an unknown op is only logged (an ``error`` there would be read
   as the reply to the next ``load``); after load it is answered with ``error``.
@@ -118,6 +121,8 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             A chain's ``done`` has the same keys plus ``chain`` (the layout of
             ``h3_chain_math.H3ChainLayout.to_dict()``, ``seeds``, ``clips``:
             prompt_sha256 / seconds / latents_sha256 / head_equals_prev_tail,
+            plus, for a clip with references only, ``references``
+            ({pictures, videos, audios} counts) and ``seconds.reference_encode``,
             and ``h3``: overlap_frames / inject_clean / decode); its
             ``num_frames`` is the timeline's, ``h3.phases`` is
             ``{clips: [...], decode}`` and ``h3.loras`` is clip 0's.
@@ -242,8 +247,8 @@ _REFERENCE_FIELDS = frozenset({"kind", "path", "slot", "max_sec"})
 #: job's, less what a T2V chain has no use for (the frame count is per clip),
 #: plus ``clips``.
 _CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}) | {"clips"}
-#: The keys of one ``clips`` entry this engine reads.
-_CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames"})
+#: The keys of one ``clips`` entry this engine reads (``references``: 台帳 §1-109).
+_CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames", "references"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -547,6 +552,8 @@ def _chain_clips(msg: dict) -> tuple[list, list[str]]:
     The shape (a list of objects with a string ``prompt`` and an integer
     ``num_frames``) is checked here; the count, the frame grid and the lengths
     are ``h3_chain_math``'s, the prompt the pipeline's ``validate_request``.
+    Each entry's ``references`` is read by :func:`_references` (its ignored
+    inner keys come back as ``references[].<key>``).
     """
     from engine_h3.chain_h3 import H3ChainClipSpec  # noqa: PLC0415
 
@@ -562,8 +569,10 @@ def _chain_clips(msg: dict) -> tuple[list, list[str]]:
             raise ValueError(f"clips の prompt は文字列で渡してください（{prompt!r}）")
         if isinstance(frames, bool) or not isinstance(frames, int):
             raise ValueError(f"clips の num_frames は整数で渡してください（{frames!r}）")
+        references, ref_ignored = _references(entry)
         ignored |= {k for k in entry if k not in _CHAIN_CLIP_FIELDS}
-        out.append(H3ChainClipSpec(prompt=prompt, num_frames=frames))
+        ignored |= {f"references[].{k}" for k in ref_ignored}
+        out.append(H3ChainClipSpec(prompt=prompt, num_frames=frames, references=references))
     return out, sorted(ignored)
 
 

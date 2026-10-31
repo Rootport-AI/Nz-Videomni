@@ -1,5 +1,8 @@
 """MiniMax H3 chain: several T2V clips joined by carrying latents over (台帳 §1-106).
 
+A clip may carry its own Ref2VA references (台帳 §1-109): they go through the
+single job's reference stage for that clip only; a clip without any runs as before.
+
 The mechanism is Docs/MINIMAX_H3_DESIGN.md §3.3; the geometry is
 ``h3_chain_math`` at the repository root, shared with the app. Each clip's
 fixed head is self-checked against the previous tail with ``torch.equal``.
@@ -28,15 +31,20 @@ CHAIN_INJECT_CLEAN = 1.0
 
 @dataclass(frozen=True)
 class H3ChainClipSpec:
+    """One clip: its whole prompt, its frame count and its own Ref2VA references
+    (台帳 §1-109; empty = none)."""
+
     prompt: str
     num_frames: int
+    references: tuple[P.H3ReferenceInput, ...] = ()
 
 
 @dataclass
 class H3ChainSpec:
     """``base``: the settings every clip shares; its ``prompt`` / ``num_frames``
     / ``seed`` are replaced per clip and its ``output_path`` is the chain's mp4.
-    T2V only: ``base`` carries no images, source audio or references."""
+    T2V only: ``base`` carries no images, source audio or references (a clip's
+    references are its own, ``H3ChainClipSpec.references``)."""
 
     base: P.H3GenerateRequest
     clips: tuple[H3ChainClipSpec, ...]
@@ -75,11 +83,11 @@ def carry_fix(prev_video: torch.Tensor, prev_audio: torch.Tensor, t_lat: int, a_
 
 
 def clip_requests(spec: H3ChainSpec) -> list[P.H3GenerateRequest]:
-    """Clip i's request: ``base`` with its prompt, frames, ``seed + i`` and ``keep_resident=True``."""
+    """Clip i's request: ``base`` with its prompt, frames, references, ``seed + i`` and ``keep_resident=True``."""
     return [
         dataclasses.replace(
             spec.base, prompt=clip.prompt, num_frames=int(clip.num_frames), seed=int(spec.seed) + i,
-            keep_resident=True,
+            keep_resident=True, references=tuple(clip.references),
         )
         for i, clip in enumerate(spec.clips)
     ]
@@ -87,7 +95,7 @@ def clip_requests(spec: H3ChainSpec) -> list[P.H3GenerateRequest]:
 
 def _check_t2v(base: P.H3GenerateRequest) -> None:
     if base.images or base.source_audio is not None or base.references:
-        raise ValueError("連結は T2V だけです（キーフレーム・音声・参照は付けられません）")
+        raise ValueError("連結は T2V だけです（共通設定（base）にはキーフレーム・音声・参照は付けられません。参照はクリップごとに付けます）")
 
 
 def run_chain_h3(
@@ -103,6 +111,11 @@ def run_chain_h3(
     ``outer_total`` = the clip count; the decode's progress goes through the
     pipeline's original ``_progress``, with no outer position. Returns the
     single job's ``done`` fields (``num_frames`` = the timeline's) plus ``chain``.
+
+    A clip with references runs the single job's reference steps (``generate``
+    without key frames): read before its text encoder, encoded after it in a
+    ``reference_encode`` phase by a video encoder built for this clip only, and
+    handed to its denoise next to the fixed head.
     """
     if pipe._dit_cfg is None:
         raise RuntimeError("generate before load")
@@ -143,19 +156,40 @@ def run_chain_h3(
             pipe._progress = functools.partial(progress, outer_index=i, outer_total=n)
             try:
                 with torch.no_grad():
+                    # Ref2VA (台帳 §1-109): the clip's references are read on the CPU
+                    # before its text encoder, as in a single job; none = as before.
+                    media = pipe._read_references(req)
+                    encode_total = P.encode_steps(has_cond=False, has_audio=False, has_refs=bool(media))
                     with phases.phase("encode") as entry:
-                        hidden, tags = pipe._encode(req.prompt, phases, images=(), has_cond=False)
+                        hidden, tags = pipe._encode(
+                            req.prompt, phases, images=(), has_cond=False, refs=pipe._te_references(media),
+                        )
                         entry["text_tokens"] = int(hidden.shape[0])
+                    ref_rows = None
+                    ref_counts = None
+                    if media:
+                        with phases.phase("reference_encode") as entry:
+                            # This clip's own video encoder (only for a picture / video
+                            # reference), dropped once its references are encoded.
+                            enc = pipe._build_video_encoder() if any(m["kind"] != "audio" for m in media) else None
+                            te_refs = phases.data["encode"].get("te_read", {}).get("references", [])
+                            ref_rows = pipe._encode_references(media, entry, encode_total, encode_total, enc, te_refs)
+                            enc = None
+                            P._free_cuda()
+                        media = None   # encoded: drop the read media before the denoise, as a single job
+                        counts = {kind: sum(1 for s, _r in ref_rows if s.kind == kind) for kind in P.REFERENCE_KINDS}
+                        ref_counts = {"pictures": counts["picture"], "videos": counts["video"], "audios": counts["audio"]}
                     with phases.phase("denoise") as entry:
                         video, audio, prefetch_used = pipe._denoise(
                             req, hidden, tags, phases, entry, keep=True,
                             lora_report=lora_report if i == 0 else None,
-                            video_fix=video_fix, audio_fix=audio_fix, video_inject_clean=CHAIN_INJECT_CLEAN,
+                            video_fix=video_fix, audio_fix=audio_fix, refs=ref_rows,
+                            video_inject_clean=CHAIN_INJECT_CLEAN,
                         )
                     video, audio = video.cpu(), audio.cpu()
             finally:
                 pipe._progress = original_progress
-            del hidden, tags, video_fix, audio_fix
+            del hidden, tags, video_fix, audio_fix, media, ref_rows
             P._free_cuda()
             if int(video.shape[2]) != layout.clip_latent_frames[i] or int(audio.shape[2]) != layout.clip_audio_latents[i]:
                 raise RuntimeError(
@@ -171,15 +205,19 @@ def run_chain_h3(
                 )
                 if not head_equal:
                     raise RuntimeError(f"chain: clip {i + 1}'s fixed head is not the previous clip's tail")
-            clip_records.append({
+            seconds = {"encode": phases.data.get("encode", {}).get("seconds")}
+            if ref_counts is not None:
+                seconds["reference_encode"] = phases.data.get("reference_encode", {}).get("seconds")
+            seconds["denoise"] = phases.data.get("denoise", {}).get("seconds")
+            record = {
                 "prompt_sha256": _sha_text(req.prompt),
-                "seconds": {
-                    "encode": phases.data.get("encode", {}).get("seconds"),
-                    "denoise": phases.data.get("denoise", {}).get("seconds"),
-                },
+                "seconds": seconds,
                 "latents_sha256": {"video": latents_sha256(video), "audio": latents_sha256(audio)},
                 "head_equals_prev_tail": head_equal,
-            })
+            }
+            if ref_counts is not None:
+                record["references"] = ref_counts   # only for a clip with references
+            clip_records.append(record)
             if i == 0:
                 video_cat, audio_cat = video, audio
             else:

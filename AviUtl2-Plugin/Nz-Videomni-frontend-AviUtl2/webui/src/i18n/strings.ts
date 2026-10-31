@@ -591,7 +591,7 @@ export const en = {
       endSource:
         "End source is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach an end material.",
       referenceVideo:
-        "Reference video (control IC-LoRA) is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach a reference.",
+        "Reference video (control IC-LoRA) is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach an IC-LoRA reference.",
       /** §1-106: clip 1's opening IMAGE (feature `chain_start_image`). Shown
        * above the SOURCE card, which then greys as a whole when the video half
        * is closed too (MiniMax H3: the chain starts from text). */
@@ -605,6 +605,9 @@ export const en = {
       placeholder: "Choose a preset…",
     },
     clipsHeading: "Clips",
+    /** §1-109: the checkbox at the right end of the Clips heading (MiniMax H3
+     * only) that shows every clip's Reference accordion and sends its cards. */
+    referencesToggleLabel: "References",
     addClipButton: "Add clip",
     removeClipButton: "Remove clip",
     clipLabel: (index: number): string => `Clip ${index + 1}`,
@@ -2812,7 +2815,7 @@ export const ja: Strings = {
       endSource:
         "素材（末尾）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。末尾の素材を読み込むには、上のベースモデルを切り替えてください。",
       referenceVideo:
-        "参照動画（制御系IC-LoRA）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。参照動画を読み込むには、上のベースモデルを切り替えてください。",
+        "参照動画（制御系IC-LoRA）は、選択中のベースモデルでは使えません。連結生成そのものは使えます。IC-LoRA の参照動画を読み込むには、上のベースモデルを切り替えてください。",
       startImage:
         "クリップ1の開始画像は、選択中のベースモデルでは使えません（プロンプトから連結します）。連結生成そのものは使えます。画像から始めるには、上のベースモデルを切り替えてください。",
     },
@@ -2821,6 +2824,7 @@ export const ja: Strings = {
       placeholder: "プリセットを選択…",
     },
     clipsHeading: "クリップ",
+    referencesToggleLabel: "References",
     addClipButton: "クリップを追加",
     removeClipButton: "クリップを削除",
     clipLabel: (index: number): string => `クリップ ${index + 1}`,

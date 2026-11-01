@@ -5928,6 +5928,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 機械の門（2026-11-01）: `npm run typecheck` エラー 0・`npm run lint` エラー 0／警告 32（従来どおり）・`npx vitest run --exclude "**/backend.integration.test.ts"` 179 ファイル・3,552 件合格・失敗 0（最終実行。レビュー中は既知の時間依存の ✒ の試験が単独 10 回中 2 回落ちた。台帳 §3-238）。差分の敵対的レビュー（Opus）は Critical 0・Major 0・Minor 3・Nit 3 で全採用。配置: aux2（1,558,528 バイト・2026-11-01 12:20）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `05272968…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。記録簿 `VERIFICATION_LOG.md` §190、台帳 §2 の §1-113（G-7〜G-9・G-11 の再確認待ち）。
 
+オーナーの実機確認（2026-11-01）: G-7・G-11 合格。
+
 ## 159. 無音の音声トラックをサーバーの前検査で断る（操作パネルの変更なし。2026-11-01）
 
 ### 159.1 結論
@@ -5953,3 +5955,5 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 159.4 門の結果
 
 機械の門（2026-11-01）: バックエンド pytest 全件 3,774 合格・28 skip・失敗 1（`tests/test_mcp_registration.py` の「バックエンドが居ない」前提の試験。オーナーの本物のバックエンドが起動中のため。本弾と無関係）、関係 9 ファイルの部分実行 386 合格・2 skip。`npm run typecheck` エラー 0（操作パネルは不変。aux2 の再ビルドなし）。差分の敵対的レビュー（Opus）は Critical 0・Major 0・Minor 1・Nit 3 で全採用。記録簿 `VERIFICATION_LOG.md` §191、台帳 §2 の §1-113（G-8a／G-8b／G-9a／G-9b の確認待ち）。
+
+オーナーの実機確認（2026-11-01）: G-8a／G-8b／G-9a／G-9b 全合格。§1-113 は CLOSED 3-267。

@@ -1019,8 +1019,13 @@ export function useGenerationForm(
 
   // A2V-only: gates on whether the attached wav's MEASURED duration is long
   // enough for `values.numFrames` (`chainUtils.audioLengthPrecheck`). `null`
-  // outside A2V, or before any wav duration was measured — folded into
-  // `isValid` below and surfaced standalone for the "audio too short" warning.
+  // outside A2V, or whenever no duration is known — folded into `isValid`
+  // below and surfaced standalone for the "audio too short" warning.
+  // Rule: an unmeasurable track (non-wav such as mp3/mp4, a probe failure, or
+  // a wav still being probed) is NEVER blocked here (`null` never pushes
+  // `audioTooShort`); the server's preflight (422 `SOURCE_AUDIO_TOO_SHORT`)
+  // decides — the same rule as Chained's `audioLengthKnown` in
+  // `modes/chained/useChainForm.ts`.
   // On the `/generate` route the need is plain time (`./audioFit`).
   const audioPrecheck = useMemo<AudioLengthPrecheckResult | null>(() => {
     if (!isA2v || audioDurationSec == null) return null;
@@ -1077,10 +1082,13 @@ export function useGenerationForm(
 
   // W7: build the same gate set as `isValid` used to be, but as a reason-code
   // list so the UI can tell the user exactly what to fix. Each sub-boolean
-  // expression is UNCHANGED from the old AND-chain (regression-safe); a failing
+  // expression is UNCHANGED from the old AND-chain (regression-safe) — except
+  // the A2V audio gate, changed 2026-11-01 for ledger §1-113 G-7; a failing
   // gate just pushes its code. `isValid` is then simply "no reasons".
-  //  - A2V's `(!isA2v || audioPrecheck.ok)` term is pushed in its negated
-  //    (De Morgan) form `isA2v && !audioPrecheck.ok` — logically identical.
+  //  - A2V's audio gate pushes `audioTooShort` only when a MEASURED duration
+  //    is too short (`audioPrecheck !== null && !audioPrecheck.ok`; it is
+  //    always `null` outside A2V). An unknown length (`null`) does not block —
+  //    the server's preflight decides (see `audioPrecheck`'s comment above).
   //  - `isReferenceValid` is split back into its two constituent gates
   //    (`referenceVideoNeedsLoras` / `controlLoraNeedsReferenceVideo`) so each
   //    gets its own specific instruction.
@@ -1091,7 +1099,7 @@ export function useGenerationForm(
   if (!isValidPrompt(prompt)) validityReasons.push("promptEmpty");
   if (!dimensionsOnGrid) validityReasons.push("dimensionsOffGrid");
   if (!numFramesOnGrid) validityReasons.push("numFramesOffGrid");
-  if (isA2v && !(audioPrecheck?.ok ?? false)) validityReasons.push("audioTooShort");
+  if (audioPrecheck !== null && !audioPrecheck.ok) validityReasons.push("audioTooShort");
   if (referenceVideoNeedsLoras) validityReasons.push("referenceNeedsLoras");
   if (controlLoraNeedsReferenceVideo) validityReasons.push("controlNeedsReference");
   if (!isCropOutputValid(cropOutput, values.width, values.height)) validityReasons.push("cropInvalid");

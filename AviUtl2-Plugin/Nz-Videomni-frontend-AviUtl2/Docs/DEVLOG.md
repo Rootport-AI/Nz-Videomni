@@ -5895,3 +5895,35 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §189、規則の決定は設計正本 `Docs/MINIMAX_H3_DESIGN.md` 裁定 88。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（§1-117 の G-1〜G-8）。
 - 配置: aux2（1,557,504 バイト・2026-10-31 23:16）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `e5e64e3a…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。
 - オーナーの実機確認（2026-11-01）: G-1〜G-8 すべて合格。
+
+## 158. Single の Generate の門: 長さ不明の音声を止めない（§1-113 G-7 の修正）・右クリック起点の縮小の確認の文言（2026-11-01）
+
+### 158.1 結論
+
+- **Single タブで、長さを測れない音声（mp3・mp4 などの動画の容器）を入れても Generate ボタンが押せるようになりました。** 音声が足りるかどうかは、サーバーの事前検査（生成を始める前にサーバーが行う検査。短すぎれば 422 `SOURCE_AUDIO_TOO_SHORT` で断る）が決めます。Chained タブと同じ規則です。事前検査はファイルの容器としての長さを読むので、動画の容器より音声トラックのほうが短い mp4 は事前検査を通ることがあり、その場合はエンジン自身の既存の検査が最後に止めます。
+- 原因は、Generate の門の 1 行が「長さ不明」を「短すぎる」と同じに扱っていたことです。モノレポ統合のときからある行で、mp3 でも同じく止まっていました（右クリック仕様書 §3-4 #7 の「mp3 や動画は自動調整なしでそのまま受け入れる」と食い違っていた）。バックエンド台帳 `PENDING_TASKS.md` §1-113 の実機確認 G-7（mp4 をカードに入れると Generate が止まる）で見つかりました。
+- **右クリックが決めたフレーム数のせいでキーフレームが範囲外になるとき、確認の窓は右クリック用の文言を出します。** 題名「フレーム数を自動調整しますか？」、本文「右クリックの自動設定で、フレーム数を N フレームに調整します。範囲外になるキーフレーム M 枚が削除されます。」。オーナー裁定 B（§1-114 G-7）のとおり、素材はどちらを選んでも入り、尋ねるのは Frames の調整だけです（キャンセルで Frames は右クリック前の値に戻る）。
+- 仕様書は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第 32 版（§3-4 #7・§5-12）です。
+
+### 158.2 何を変えたか
+
+- **`modes/single/useGenerationForm.ts`。** `validityReasons` の音声の行を `if (audioPrecheck !== null && !audioPrecheck.ok) validityReasons.push("audioTooShort")` にしました（`audioPrecheck` は A2V でなければ `null` なので、`isA2v` の項は不要）。測った長さが短すぎるときだけ止め、長さ不明（wav 以外・計測の失敗・計測中）は止めません。`audioPrecheck` と `validityReasons` の上の注釈を、この規則と Chained の `audioLengthKnown` への参照に書き直しました。副作用: wav を入れた直後、計測が終わるまでの一瞬だけ Generate が押せます（短すぎればサーバーの事前検査で止まる。足りていれば、自動調整前の Frames のまま送られる）。
+- **`modes/single/useDurationShrinkGuard.ts`。** 確認の状態 `PendingShrink` に任意の `origin?: "prefill"` を足し、`onDurationCommit(value, snap, origin?)` で受けて載せます（`exactOptionalPropertyTypes` が有効なので、手入力のときは鍵ごと載せない）。新しい `kind` は作っていません（`cancelShrink` が `kind === "duration"` を見て Frames を戻すため）。
+- **`modes/single/SingleScreen.tsx`。** 右クリックの種と「プロジェクト」の上書きの両方が通る `applyNumFrames` が `onDurationCommit(value, true, "prefill")` を呼びます。`KeyframeShrinkModal` に `origin` を渡します。
+- **`modes/single/KeyframeShrinkModal.tsx`・`i18n/strings.ts`。** 任意の `origin` を受け、`"prefill"` なら `prefillTitle`／`prefillBody` を出します（en「Adjust the frame count automatically?」／「The right-click will set the frame count to N frames. M keyframe(s) outside the new range will be deleted.」）。#4 のフレーム数は快適上限で決まり素材の長さではないので、本文はフレーム数の由来に触れません。
+- 既知の限界（直さない。仕様書 §5-12 に記載）: ① Settings「プロジェクト」の非同期の上書きが、同じ確認をもう一度出したり先の確認を上書きしたりすることがある。② #7 は、抽出した wav の計測が終わると自動調整が確認を通さずに Frames を書き直すので、キャンセルしても後から縮んだ値に戻ることがある（手で短い wav を選んだときと同じ、以前からの挙動）。
+- 触っていないもの: ネイティブの `fs.probeAudioDuration`、自動調整の規則（wav だけ）。
+
+### 158.3 テスト
+
+- `useGenerationForm.test.ts`: mp3（長さ不明）を付け、`fs.probeAudioDuration` が呼ばれて答えが返り終わってから、`validityReasons` に `audioTooShort` が無く `isValid` が真で、Frames も変わらないこと。計測を待たずに確かめると修正前でも通りうるので、ブリッジの呼び出しを記録して待ちます。修正前の行に戻すと失敗することを確かめました。
+- `SingleScreen.sourceAudio.test.tsx`: A2V カードの 📁 で mp4 を選び、計測が済んだあと Generate が押せて要求が送られること（修正前の行では失敗）。
+- `useDurationShrinkGuard.test.ts`: `"prefill"` のときは `pendingShrink` に `origin` が載り、キャンセルで右クリック前の値に戻ること・手入力のときは `origin` の鍵が無いこと。
+- `KeyframeShrinkModal.test.tsx`: `origin="prefill"` で新しい題名と本文・無ければ従来の文言のまま。
+- `KeyframesPanel.test.tsx`（縮小の守りの組み合わせの試験台）: 右クリックと同じ組（`onDurationChange` → `onDurationCommit(…, "prefill")`）で新しい文言が出て、キャンセルで Frames が元に戻りキーフレームが残ること。
+- `SingleScreen.prefill.test.tsx`: 配線の確認。キーフレームを 2 枚置き（2 枚目は後ろ）、約 1 秒のリボンの #2 を `prefillMaterial` で送ると新しい文言の確認が出て、キャンセルで Frames が元に戻り、参照動画のアップロードは送られていること（`SingleScreen` が `"prefill"` を渡さないと失敗することを確かめました）。
+- `SingleScreen.reference.test.tsx`（前提の現行化）: Generate が押せることは、音声の長さの計測（`fs.probeAudioDuration`）が終わったことを意味しなくなりました。そのため、Frames を入れて Generate を押す補助関数（`clickGenerateOnH3Grid`・`putOnH3Grid`・`clickGenerateOnLtxGrid`）は、音声が付いているときは計測が呼ばれて答えが返り終わるのを待ってから押すようにしました。試験の確かめる内容は変えていません（修正の直後、この待ちが無いために全件の実行で半分ほど失敗していました）。
+
+### 158.4 門の結果
+
+機械の門（2026-11-01）: `npm run typecheck` エラー 0・`npm run lint` エラー 0／警告 32（従来どおり）・`npx vitest run --exclude "**/backend.integration.test.ts"` 179 ファイル・3,552 件合格・失敗 0（最終実行。レビュー中は既知の時間依存の ✒ の試験が単独 10 回中 2 回落ちた。台帳 §3-238）。差分の敵対的レビュー（Opus）は Critical 0・Major 0・Minor 3・Nit 3 で全採用。配置: aux2（1,558,528 バイト・2026-11-01 12:20）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `05272968…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。記録簿 `VERIFICATION_LOG.md` §190、台帳 §2 の §1-113（G-7〜G-9・G-11 の再確認待ち）。

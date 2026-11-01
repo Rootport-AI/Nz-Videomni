@@ -226,11 +226,24 @@ function GuardHarness({ nativeBridge }: { nativeBridge: NativeBridge }) {
       <button type="button" disabled={hasOverflow}>
         Generate
       </button>
+      {/* Stands in for `SingleScreen`'s `applyNumFrames` (a right-click
+          prefill seeding Frames): the same live-apply + commit pair, with the
+          commit marked `"prefill"`. */}
+      <button
+        type="button"
+        onClick={() => {
+          guard.onDurationChange(9, true);
+          guard.onDurationCommit(9, true, "prefill");
+        }}
+      >
+        Prefill seed 9
+      </button>
       {hasOverflow && <p className="warning-banner">{strings.single.keyframes.outOfRangeGenerateHint}</p>}
       {guard.pendingShrink && (
         <KeyframeShrinkModal
           pendingNumFrames={guard.pendingShrink.pendingNumFrames}
           overflowCount={guard.pendingShrink.overflowIds.length}
+          origin={guard.pendingShrink.origin}
           onApply={guard.confirmShrink}
           onCancel={guard.cancelShrink}
         />
@@ -288,6 +301,32 @@ describe("KeyframesPanel + duration-shrink guard (SingleScreen wiring)", () => {
     // The stranded keyframe is gone, the modal dismissed, Generate re-enabled.
     expect(container.querySelector(".kfc-card")).toBeNull();
     expect(screen.queryByText(/shorten duration/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /generate/i })).toBeEnabled();
+  });
+
+  // 2026-11-01 (§1-114 G-7, ruling B): a right-click prefill's seed goes
+  // through the same pair, committed with `"prefill"` — the modal asks about
+  // the automatic frame-count adjustment; cancel restores Frames as before.
+  it("a prefill-origin shrink shows the automatic-adjustment wording, and cancel restores Frames", () => {
+    const { container } = renderGuardHarness();
+    seedKeyframeAt41(container);
+
+    fireEvent.click(screen.getByRole("button", { name: "Prefill seed 9" }));
+
+    expect(screen.getByRole("heading", { name: "Adjust the frame count automatically?" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The right-click will set the frame count to 9 frames. 1 keyframe(s) outside the new range will be deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/shorten duration/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    const durationInput = within(container.querySelector('[data-testid="duration"]') as HTMLElement).getByRole("spinbutton");
+    expect((durationInput as HTMLInputElement).value).toBe("49");
+    expect(container.querySelectorAll(".kfc-card")).toHaveLength(1);
+    expect(screen.queryByText("Adjust the frame count automatically?")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate/i })).toBeEnabled();
   });
 

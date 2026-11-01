@@ -1539,6 +1539,42 @@ describe("useGenerationForm — validityReasons (W7)", () => {
     expect(result.current.isValid).toBe(false);
   });
 
+  // §1-113 G-7 (2026-11-01): an audio whose length cannot be measured here
+  // (non-wav such as mp3/mp4 — the native probe answers `isWav: false`) must
+  // NOT block Generate; the server's preflight (422 `SOURCE_AUDIO_TOO_SHORT`)
+  // decides, same as Chained's `audioLengthKnown` rule. The assertion waits
+  // until the probe has actually been called AND settled — asserting before
+  // that would pass even with the old "unknown = too short" line.
+  it("does not report audioTooShort for an unmeasurable (non-wav) audio once the probe has settled", async () => {
+    const mockFs = createMockFs({
+      folders: {
+        "C:\\Users\\mock\\Downloads": [{ name: "song.mp3", sizeBytes: 4_096, mtimeMs: 0 }],
+      },
+    });
+    const probes: Promise<unknown>[] = [];
+    const bridge = recordsAudioProbes(createMockBridge({ delayMs: 0, fs: mockFs }), probes);
+    const { result } = renderHook(() =>
+      useGenerationForm(FALLBACK_APP_CONFIG, "a music video", { nativeBridge: bridge }),
+    );
+    const framesBefore = result.current.values.numFrames;
+
+    await act(async () => {
+      await result.current.attachSourceAudioByPath("C:\\Users\\mock\\Downloads\\song.mp3", "song.mp3");
+    });
+    await waitFor(() => expect(result.current.isA2v).toBe(true));
+    await waitFor(() => expect(probes).toHaveLength(1));
+    await act(async () => {
+      await Promise.allSettled(probes);
+    });
+
+    expect(result.current.audioPrecheck).toBeNull();
+    expect(result.current.validityReasons).not.toContain("audioTooShort");
+    expect(result.current.validityReasons).toEqual([]);
+    expect(result.current.isValid).toBe(true);
+    // No auto-adjust for a non-wav (the rule stays wav-only).
+    expect(result.current.values.numFrames).toBe(framesBefore);
+  });
+
   // §1-6 拡張 (2026-08-01): #2 IC-LoRA の参照動画もリボン範囲で切り出すように
   // なったので、切り出しを頼んだのに `trimmed: true` が返らなかった場合は
   // Generate を止める。Chain 側 `sourceTrimFailed` と同型。
@@ -1605,6 +1641,22 @@ describe("useGenerationForm — validityReasons (W7)", () => {
     expect(result.current.isValid).toBe(false);
   });
 });
+
+/**
+ * §1-113 G-7: passes every call through to `inner`, but records each
+ * `fs.probeAudioDuration` promise in `sink` so a test can wait until the
+ * audio-length probe has really been made and has settled.
+ */
+function recordsAudioProbes(inner: NativeBridge, sink: Promise<unknown>[]): NativeBridge {
+  return {
+    ...inner,
+    request<M extends BridgeMethod>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
+      const pending = inner.request(method, params);
+      if (method === "fs.probeAudioDuration") sink.push(pending);
+      return pending;
+    },
+  };
+}
 
 /**
  * §1-6 拡張: a stand-in for an OLD native build (or any backend that cannot cut)

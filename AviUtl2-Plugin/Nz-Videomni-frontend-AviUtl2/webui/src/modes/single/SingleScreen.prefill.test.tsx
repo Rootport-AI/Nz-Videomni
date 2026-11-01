@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { createMockBridge } from "../../bridge/mockBridge";
@@ -168,6 +168,49 @@ describe("SingleScreen — #2 reference-video ribbon trim (§1-6 拡張)", () =>
     for (const [, params] of uploadCalls(requestSpy)) {
       expect(Object.keys(params as object).sort()).toEqual(["filePath", "kind"]);
     }
+  });
+});
+
+/** A #2 selection whose ribbon is about 1 s long (30 inclusive frames @30fps)
+ * and covers the whole backing file — short enough that the seeded Frames
+ * lands well below the form's default. */
+function selectionOneSecond(filePath: string): TimelineSelection {
+  const base = selectionWholeFile(filePath);
+  const item = base.selected[0]!;
+  return { ...base, rangeEnd: 29, selected: [{ ...item, frameEnd: 29, mediaDurationSec: 1 }] };
+}
+
+// 2026-11-01 (台帳 §1-114 G-7, ruling B): a right-click whose Frames seed
+// would strand a keyframe asks with the right-click wording ("Adjust the frame
+// count automatically?"). Cancel restores Frames only — the material is
+// attached either way.
+describe("SingleScreen — right-click shrink confirmation wording (§1-114 G-7)", () => {
+  it("a #2 seed that strands a keyframe raises the prefill-worded modal; cancel restores Frames and the reference video is still uploaded", async () => {
+    // The fps axis on `material` (the size axis already defaults to it), so no
+    // async `project` overwrite re-applies Frames during the test.
+    window.localStorage.setItem(PREFILL_FPS_POLICY_STORAGE_KEY, "material");
+    const { requestSpy } = await renderCreate();
+    const frames = () => document.querySelector<HTMLInputElement>("input[type=number][step='8']")!;
+    const framesBefore = frames().value;
+
+    // Two keyframes: the first at 0, the second later on the timeline (see
+    // `KeyframesPanel.test.tsx`'s "second add lands at the rounded midpoint").
+    fireEvent.click(screen.getByRole("button", { name: /add keyframe/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add keyframe/i }));
+
+    prefillReferenceVideo(selectionOneSecond("C:\\v\\short.mp4"));
+
+    expect(await screen.findByRole("heading", { name: "Adjust the frame count automatically?" })).toBeInTheDocument();
+    expect(screen.queryByText("Shorten duration?")).not.toBeInTheDocument();
+    expect(Number(frames().value)).toBeLessThan(Number(framesBefore));
+
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^cancel$/i }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(frames().value).toBe(framesBefore);
+    // The material went in regardless of the answer (ruling B).
+    await waitFor(() => expect(uploadCalls(requestSpy).length).toBeGreaterThan(0), { timeout: 5_000 });
+    expect(uploadCalls(requestSpy)[0]![1]).toMatchObject({ kind: "video", filePath: "C:\\v\\short.mp4" });
   });
 });
 

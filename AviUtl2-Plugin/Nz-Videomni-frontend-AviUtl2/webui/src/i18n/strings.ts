@@ -1614,11 +1614,20 @@ export const en = {
       outOfRangeGenerateHint:
         "Some keyframes are beyond the current duration. Shorten, move, or remove them to generate.",
       /** Keyframe timeline rework (2026-07-18): confirmation modal shown when
-       * shortening the duration would delete out-of-range keyframes. */
+       * shortening the duration would delete out-of-range keyframes.
+       * `prefillTitle`/`prefillBody` (2026-11-01): the same dialog when the
+       * shrink comes from a right-click prefill seeding the frame count
+       * (`PendingShrink.origin === "prefill"`) — the material is attached
+       * either way; only the frame-count adjustment is asked. The body stays
+       * neutral about WHY that count was chosen (it may come from the
+       * material's length or from the comfort ceiling). */
       shrinkModal: {
         title: "Shorten duration?",
         body: (numFrames: number, count: number): string =>
           `Shortening the duration to ${numFrames} frames will delete ${count} keyframe(s) that fall outside the new range.`,
+        prefillTitle: "Adjust the frame count automatically?",
+        prefillBody: (numFrames: number, count: number): string =>
+          `The right-click will set the frame count to ${numFrames} frames. ${count} keyframe(s) outside the new range will be deleted.`,
         applyButton: "Apply",
         cancelButton: "Cancel",
       },
@@ -3325,6 +3334,9 @@ export const ja: Strings = {
         title: "尺を短くしますか？",
         body: (numFrames: number, count: number): string =>
           `尺を ${numFrames} フレームに縮めると、範囲外になるキーフレーム ${count} 枚が削除されます。`,
+        prefillTitle: "フレーム数を自動調整しますか？",
+        prefillBody: (numFrames: number, count: number): string =>
+          `右クリックの自動設定で、フレーム数を ${numFrames} フレームに調整します。範囲外になるキーフレーム ${count} 枚が削除されます。`,
         applyButton: "適用",
         cancelButton: "キャンセル",
       },

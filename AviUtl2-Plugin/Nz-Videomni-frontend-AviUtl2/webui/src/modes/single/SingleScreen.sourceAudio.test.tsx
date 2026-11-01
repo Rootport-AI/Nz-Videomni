@@ -38,12 +38,19 @@ function Providers({ children, nativeBridge }: { children: ReactNode; nativeBrid
   );
 }
 
-async function renderWithAudio(constraints: typeof H3_CONSTRAINTS | undefined) {
-  // A 20 s wav, so the audio covers the form's default duration.
+async function renderWithAudio(constraints: typeof H3_CONSTRAINTS | undefined, pickFileName = "bg.wav") {
+  // A 20 s wav, so the audio covers the form's default duration. Any other
+  // name (e.g. an mp4) has no measurable length (`fs.probeAudioDuration`
+  // answers `isWav: false`).
   const fs = createMockFs({
-    folders: { "C:\\Users\\mock\\Pictures": [{ name: "bg.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 20 }] },
+    folders: {
+      "C:\\Users\\mock\\Pictures": [
+        { name: "bg.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 20 },
+        { name: "clip.mp4", sizeBytes: 4_096, mtimeMs: 0 },
+      ],
+    },
   });
-  const nativeBridge = createMockBridge({ delayMs: 0, fs, pickFileName: "bg.wav" });
+  const nativeBridge = createMockBridge({ delayMs: 0, fs, pickFileName });
   // Submissions go through the app-wide singleton client, so spy on that.
   const requestSpy = vi.spyOn(appBridge, "request");
   render(
@@ -65,9 +72,11 @@ async function renderWithAudio(constraints: typeof H3_CONSTRAINTS | undefined) {
     requestSpy.mock.calls
       .filter((c) => c[0] === "backend.request" && (c[1] as { path?: string }).path === path)
       .map((c) => (c[1] as { body: Record<string, unknown> }).body);
+  // The audio-length probe goes through the screen's own native bridge.
+  const nativeSpy = vi.spyOn(nativeBridge, "request");
   fireEvent.click(await screen.findByRole("button", { name: /choose audio file/i }));
   await waitFor(() => expect(screen.getByRole("button", { name: /remove audio/i })).toBeEnabled(), { timeout: 5_000 });
-  return { postsTo };
+  return { postsTo, nativeSpy };
 }
 
 async function clickGenerate() {
@@ -117,6 +126,25 @@ describe("SingleScreen — single-clip A2V routing", () => {
 
       await waitFor(() => expect(postsTo("/api/v1/generate/chain")).toHaveLength(1));
       expect(postsTo("/api/v1/generate")).toHaveLength(0);
+    },
+    15_000,
+  );
+
+  // §1-113 G-7 (2026-11-01): an mp4 (length unknown here — only a wav's header
+  // is measured) must not lock Generate; the server's preflight (422
+  // `SOURCE_AUDIO_TOO_SHORT`) decides. Before the fix the unknown length was
+  // treated as "too short" and Generate stayed disabled forever.
+  it(
+    "an mp4 on the A2V card (length unknown) leaves Generate enabled and the request is sent",
+    async () => {
+      const { postsTo, nativeSpy } = await renderWithAudio(undefined, "clip.mp4");
+      // Wait for the length probe to have been made, then for it to settle.
+      await waitFor(() => expect(nativeSpy.mock.calls.some((c) => c[0] === "fs.probeAudioDuration")).toBe(true));
+      const probeIndex = nativeSpy.mock.calls.findIndex((c) => c[0] === "fs.probeAudioDuration");
+      await nativeSpy.mock.results[probeIndex]!.value;
+      await clickGenerate();
+
+      await waitFor(() => expect(postsTo("/api/v1/generate/chain")).toHaveLength(1));
     },
     15_000,
   );

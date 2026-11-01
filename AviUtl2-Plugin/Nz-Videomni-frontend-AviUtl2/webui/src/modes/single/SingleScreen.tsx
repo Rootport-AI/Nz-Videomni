@@ -656,10 +656,12 @@ function SingleScreenBody({
   const prefillSeqRef = useRef(0);
   // The DURATION shrink guard (declared further down), read at dispatch time:
   // a right-click's DURATION goes through the same live-apply + confirm-before-
-  // deleting-stranded-keyframes path as a hand edit of the Frames field.
+  // deleting-stranded-keyframes path as a hand edit of the Frames field
+  // (committed with `origin: "prefill"` so the modal asks about the automatic
+  // frame-count adjustment rather than "shorten the duration?").
   const shrinkGuardRef = useRef<{
     onDurationChange: (value: number, snap: boolean) => void;
-    onDurationCommit: (value: number, snap: boolean) => void;
+    onDurationCommit: (value: number, snap: boolean, origin?: "prefill") => void;
   } | null>(null);
   // W6: the append path (new frame-0 card, or #11's tail card) is watched by
   // `beforeIds` diff (the card that wasn't there before); the replace path
@@ -687,6 +689,9 @@ function SingleScreenBody({
       const seq = prefillSeqRef.current;
       // DURATION from a right-click: the Frames field's own edit pair (apply
       // live, then raise the shrink modal if a keyframe would be stranded).
+      // `"prefill"` words that modal as the right-click's automatic frame-count
+      // adjustment; the material is attached whatever the answer (cancel only
+      // restores Frames).
       const applyNumFrames = (value: number) => {
         const guard = shrinkGuardRef.current;
         if (!guard) {
@@ -694,7 +699,7 @@ function SingleScreenBody({
           return;
         }
         guard.onDurationChange(value, true);
-        guard.onDurationCommit(value, true);
+        guard.onDurationCommit(value, true, "prefill");
       };
 
       // (1) The same pure function (and the same inputs) `AppShell` sizes the
@@ -1398,6 +1403,7 @@ function SingleScreenBody({
         <KeyframeShrinkModal
           pendingNumFrames={shrinkGuard.pendingShrink.pendingNumFrames}
           overflowCount={shrinkGuard.pendingShrink.overflowIds.length}
+          origin={shrinkGuard.pendingShrink.origin}
           onApply={shrinkGuard.confirmShrink}
           onCancel={shrinkGuard.cancelShrink}
         />

@@ -29,6 +29,28 @@ describe("KeyframeShrinkModal", () => {
     expect(screen.getByText(/3/)).toBeInTheDocument();
   });
 
+  // 2026-11-01 (§1-114 G-7, ruling B): a right-click prefill's shrink asks
+  // about the automatic frame-count adjustment instead of "shorten?".
+  it('origin="prefill": shows the automatic-adjustment title and body', () => {
+    renderModal({ pendingNumFrames: 25, overflowCount: 1, origin: "prefill" });
+    expect(screen.getByRole("heading", { name: "Adjust the frame count automatically?" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The right-click will set the frame count to 25 frames. 1 keyframe(s) outside the new range will be deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Shorten duration?")).not.toBeInTheDocument();
+  });
+
+  it("without origin: keeps the manual-edit title and body unchanged", () => {
+    renderModal({ pendingNumFrames: 25, overflowCount: 1 });
+    expect(screen.getByRole("heading", { name: "Shorten duration?" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Shortening the duration to 25 frames will delete 1 keyframe(s) that fall outside the new range."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Adjust the frame count automatically?")).not.toBeInTheDocument();
+  });
+
   it("calls onApply when the apply button is clicked", () => {
     const { onApply, onCancel } = renderModal();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));

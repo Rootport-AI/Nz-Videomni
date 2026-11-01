@@ -20366,3 +20366,69 @@ GPU の使用はオーナーの了承を得た。台本・自己検査の結果�
 - G-4: アップロードが速すぎて「参照ファイルのアップロード完了を待ってください」の表示は目視できなかった。問題なしとされた。
 - G-8: LTX がネガティブプロンプトに対応していることを確認した（想定どおり）。
 - 台帳 §1-117 は節ごと削除し、CLOSED 3-265 へ移した。main へのマージは、§1-113 の残りの修正のあとに dev から行う。
+
+## 190. ★台帳 §1-113 G-7 の修正（長さ不明の音声で Generate を止めない）と右クリック起点の縮小の確認の文言（裁定 B）・計画と差分の敵対的レビュー（全採用）・機械の門（2026-11-01）
+
+### 190.1 結論
+
+- **実装は完了し、機械の門（コンピューターだけで回せる検査）は合格した。オーナーの実機確認は未了で、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の §1-113 の G-7〜G-9 の再確認と、新しい G-11 に載せた（190.7）。**
+- 修正は 2 件。(1) 音声の長さが測れないとき、Single タブの Generate を止めないようにした（G-7 の不合格の原因。記録簿 §187.8）。(2) 右クリックから素材を送ったときの縮小の確認に、専用の文言を出すようにした（§1-114 の残課題。オーナー裁定 B）。
+- バックエンドとネイティブは変更していない。右クリック仕様書 `RIGHTCLICK_REDESIGN_SPEC.md` は第 32 版（§3-4 の #7 と §5-12）、フロントエンドの判断は `Docs/DEVLOG.md` §158 に書いた。
+
+### 190.2 G-7 の原因と修正
+
+- 原因: `webui/src/modes/single/useGenerationForm.ts` の Generate の門に、長さが測れない音声（`audioPrecheck` が `null`）を「短すぎる」と同じに扱う 1 行があった。wav 以外（mp3・動画の容器）と、長さを測っている最中の音声はすべて長さ不明になるので、mp4 を入れると「音声が短すぎます」で止まった。この 1 行はモノレポ統合時からあり、mp3 でも止まっていた。仕様書「mp3や動画は自動調整なしでそのまま受け入れます」の記述とも矛盾していた。
+- 修正: 「`audioPrecheck !== null` かつ `!audioPrecheck.ok` のときだけ」`audioTooShort` で止める。長さが測れない音声は止めず、サーバーの前検査（422 `SOURCE_AUDIO_TOO_SHORT`）が決める。これは Chained の `audioLengthKnown`（`useChainForm.ts`）と同じ規則。
+- 前検査は容器（ファイル全体）の長さを読む。容器より音声トラックが短い動画は前検査を通るので、その場合はエンジンの既存の検査が最後の砦になる。
+- 副作用: wav を入れた直後、計測が終わるまでの一瞬だけ Generate が押せる。短すぎれば前検査で止まり、足りていれば自動調整の前の Frames のまま送られる。
+- 触っていないもの: ネイティブの `fs.probeAudioDuration`（mp4 には正しく「測れない」を返していた）、LTX のカードへの動画情報の取得の追加（第 1 弾のレビューで過剰設計として棄却済み）、自動調整の規則（wav だけ）。
+
+### 190.3 縮小の確認の文言（裁定 B）
+
+- 方針（裁定 B）: 素材は入れたうえで、Frames の調整だけを尋ねる。
+- 配線: `useDurationShrinkGuard.ts` の `PendingShrink` に任意の `origin?: "prefill"` を足し、`onDurationCommit(value, snap, origin?)` で受ける。`SingleScreen.tsx` の `applyNumFrames`（右クリックの受け手と「プロジェクト」ポリシーの上書きの両方が使う）が `"prefill"` を渡す。`KeyframeShrinkModal.tsx` は `"prefill"` のとき文言を切り替える。新しい `kind` は作っていない。
+- 文言（`strings.single.keyframes.shrinkModal` の `prefillTitle`・`prefillBody`）:
+  - 題名: 「フレーム数を自動調整しますか？」（英語: Adjust the frame count automatically?）
+  - 本文: 「右クリックの自動設定で、フレーム数を n フレームに調整します。範囲外になるキーフレーム m 枚が削除されます。」（英語: The right-click will set the frame count to n frames. m keyframe(s) outside the new range will be deleted.）
+  - 右クリック #4 は素材の長さでなく快適上限で決まるので、本文は由来を言わない中立な文にした。
+- 挙動: 適用は Frames を新しい値にして範囲外のキーフレームを削除する。キャンセルは Frames を元のままにする。素材はどちらでも入る。
+
+### 190.4 敵対的レビュー（Opus・2026-11-01）
+
+- 計画のレビュー: Medium 2・Low 4・Nit 2。**全件採用した**（計画 §9.6）。主な反映は、#7 の自動調整が確認を通らないことを既知の限界として記録したこと、本文を中立な文にしたこと、`exactOptionalPropertyTypes`（任意の項目に `undefined` を入れない型の設定）への対応、計測の完了を待つ試験にしたこと、容器より短い音声トラックの場合に「短すぎれば 422」と言い過ぎないこと。
+- 差分のレビュー: Critical 0・Major 0・Minor 3・Nit 3。**全件採用した**。内容は、コメントの現行化・副作用の言い回し・試験の計数を描画ごとにすること・仕様書の文の順序・設定名「プロジェクト」の表記・末尾の空行。
+
+### 190.5 追加・更新した試験
+
+- `useGenerationForm.test.ts`: mp3（長さ不明）を付け、計測の完了を待ってから `audioTooShort` が無く `isValid` が真になること。
+- `SingleScreen.sourceAudio.test.tsx`: mp4 を 📁 で選んだとき Generate が送れること。
+- `KeyframeShrinkModal.test.tsx`・`useDurationShrinkGuard.test.ts`・`KeyframesPanel.test.tsx`: 新しい題名と本文、`origin` の受け渡し、キャンセルで Frames が元のままであること。
+- `SingleScreen.prefill.test.tsx`: キーフレーム 2 枚と約 1 秒のリボンの #2 を送ると新しい題名の確認が出ること、キャンセルで Frames が戻ること、参照動画は送られていること。
+- `SingleScreen.reference.test.tsx`: 補助関数は「Generate が押せる＝計測済み」という前提が崩れたので、計測の完了を待つように現行化した（確認する内容は変えていない）。
+
+### 190.6 機械の門（2026-11-01）
+
+| 門 | 結果 |
+|---|---|
+| WebUI の型検査 `npm run typecheck` | 0 エラー |
+| WebUI の `npm run lint` | 0 エラー・32 警告（これまでと同数） |
+| WebUI のテスト `npx vitest run --exclude "**/backend.integration.test.ts"` | 179 ファイル・3,552 テスト。最後の全件実行で全件合格 |
+| ネイティブ・バックエンド | 変更なしのため再実行しない |
+
+- 既知の不安定な試験: レビューの途中、`SingleScreen.reference.test.tsx` の ✒ の試験が単独 10 回のうち 2 回失敗した。今回の変更より前からある現象で、台帳 §3-238 に載っている。
+- 埋め込みの WebUI が変わったので aux2 は作り直して配置した。ハッシュは監督がフロントエンド `Docs/DEVLOG.md` §158.4 に追記する。
+
+### 190.7 既知の限界とオーナーの実機の門（未）
+
+既知の限界（直さない）:
+
+- 「プロジェクト」ポリシーの非同期の上書きが、後から同じ確認をもう一度出すことがある。
+- 右クリック #7 は、抽出した wav の計測が終わると、自動調整が確認を通さずに Frames を書き直す。確認をキャンセルしても、計測が後から終われば Frames は縮んだ値に戻る。手動で短い wav を選んだときも同じで、以前からの挙動。そのため文言の確認は #2 か #4 で行う。
+
+台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の §1-113 に、次の確認を載せた。
+
+- G-7: mp4 をドロップ、または 📁 で選択 → Generate が押せて生成が走る（LTX・H3）。
+- G-8: 音声の無い mp4 を A2V カードに入れて Generate → 422 で止まる。
+- G-9: 同じ mp4 を H3 の Audios カード（参照）に入れて Generate → 422 `REFERENCE_AUDIO_NO_STREAM` で止まる。
+- G-11（縮小の確認の文言）: #2 の短いリボンか #4 で送る → 新しい題名と本文の確認が出る。キャンセルしても素材は入ったままで、Frames は元のまま。
+- 合格後は §1-113 を CLOSED 3-267 へ移し、dev から main へマージする。

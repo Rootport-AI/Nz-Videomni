@@ -48,6 +48,20 @@ const H3_CONSTRAINTS = resolveGenerationConstraints({
 
 const notes: { kind: string; message: string }[] = [];
 
+/** Counts of `fs.probeAudioDuration` calls: how many were made and how many
+ * have settled. Since §1-113 G-7 (2026-11-01) an attached audio whose length
+ * is not yet measured no longer blocks Generate, so "Generate is enabled" no
+ * longer means "the wav probe has finished" — the grid helpers below wait on
+ * these counts instead. */
+interface AudioProbeCounts {
+  called: number;
+  settled: number;
+}
+
+/** The counts of the LATEST `renderCreate`. Each render gets its own object,
+ * so a late callback from an earlier test only touches that test's counts. */
+let currentAudioProbes: AudioProbeCounts = { called: 0, settled: 0 };
+
 function Providers({ children, nativeBridge }: { children: ReactNode; nativeBridge: ReturnType<typeof createMockBridge> }) {
   return (
     <LanguageProvider>
@@ -108,6 +122,24 @@ function renderCreate(
     },
   });
   const nativeBridge = createMockBridge({ delayMs: 0, fs, holdUploads: options.holdUploads ?? false });
+  // Count the audio-length probes (see `audioProbes`). "Settled" is marked a
+  // macrotask later, so the form's own reaction to the answer (the wav
+  // auto-adjust of Frames) has already run when a helper sees it.
+  const audioProbes: AudioProbeCounts = { called: 0, settled: 0 };
+  currentAudioProbes = audioProbes;
+  const innerRequest = nativeBridge.request.bind(nativeBridge);
+  vi.spyOn(nativeBridge, "request").mockImplementation(((method: string, params: unknown) => {
+    const pending = (innerRequest as (m: string, p: unknown) => Promise<unknown>)(method, params);
+    if (method === "fs.probeAudioDuration") {
+      audioProbes.called += 1;
+      void pending.finally(() => {
+        setTimeout(() => {
+          audioProbes.settled += 1;
+        }, 0);
+      }).catch(() => {});
+    }
+    return pending;
+  }) as typeof nativeBridge.request);
   // Submissions go through the app-wide singleton client, so spy on that.
   const requestSpy = vi.spyOn(appBridge, "request");
   const tree = (next: GenerationConstraints | undefined, role: TransformerRole | null) => (
@@ -145,14 +177,26 @@ async function waitForReady(id: string) {
   );
 }
 
+/** True once the form's audio (if any) has had its length probe made and
+ * settled — the A2V mode badge shows exactly while an audio is attached and
+ * ready, which is when the form probes it. */
+function audioProbeDone(): boolean {
+  const a2v = Array.from(document.querySelectorAll(".mode-badge")).some((b) => b.textContent === "A2V");
+  if (a2v && currentAudioProbes.called === 0) return false;
+  return currentAudioProbes.settled === currentAudioProbes.called;
+}
+
 async function clickGenerateOnH3Grid() {
   // Without an AviUtl2 selection the form starts off H3's 17n+5 grid; type a
-  // valid length, re-applied until Generate opens (the wav probe may re-seed it).
+  // valid length, re-applied until Generate opens AND the wav probe (which may
+  // re-seed Frames) has settled — an enabled Generate alone no longer implies
+  // the probe is done (§1-113 G-7).
   await waitFor(
     () => {
       const duration = document.querySelector<HTMLInputElement>("input[type=number][step='17']")!;
       fireEvent.change(duration, { target: { value: "277" } });
       fireEvent.blur(duration);
+      expect(audioProbeDone()).toBe(true);
       expect(duration.value).toBe("277");
       expect(screen.getByRole("button", { name: /^generate$/i })).toBeEnabled();
     },
@@ -314,6 +358,7 @@ async function putOnH3Grid() {
       const duration = document.querySelector<HTMLInputElement>("input[type=number][step='17']")!;
       fireEvent.change(duration, { target: { value: "277" } });
       fireEvent.blur(duration);
+      expect(audioProbeDone()).toBe(true);
       expect(duration.value).toBe("277");
       expect(generateButton()).toBeEnabled();
     },
@@ -342,6 +387,7 @@ async function clickGenerateOnLtxGrid() {
       const duration = document.querySelector<HTMLInputElement>("input[type=number][step='8']")!;
       fireEvent.change(duration, { target: { value: "121" } });
       fireEvent.blur(duration);
+      expect(audioProbeDone()).toBe(true);
       expect(duration.value).toBe("121");
       expect(screen.getByRole("button", { name: /^generate$/i })).toBeEnabled();
     },

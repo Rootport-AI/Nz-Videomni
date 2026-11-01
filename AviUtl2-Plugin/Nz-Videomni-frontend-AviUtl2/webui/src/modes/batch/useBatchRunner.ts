@@ -1,12 +1,12 @@
 /**
  * バッチA2VのReactラッパー。バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02（2026-09-02）以降、**ランナーを`useRef`で
  * 持たない**——実体は`runtime.ts`のモジュールレベル・シングルトンで、このフックは
- * 購読するだけ。そのためCreate画面が`key`リマウントされても、マウント時に現在の
+ * 購読するだけ。そのためCreate画面がリマウントされても、マウント時に現在の
  * 状態と行へ自動的に再接続する（新しいランナーは作られない）。
  *
  * The React face of Batch A2V. The runner is NOT owned by a `useRef` here: it
  * lives in `runtime.ts`'s module-level singleton and this hook merely
- * subscribes, so a `key`-remounted Create screen re-attaches to a batch that is
+ * subscribes, so a remounted Create screen re-attaches to a batch that is
  * already running (state, rows and the folders it runs against included)
  * instead of silently orphaning it.
  *
@@ -88,7 +88,7 @@ export interface UseBatchRunnerResult {
    * The shared run lock is taken inside `runtime.run()` (before the runner's
    * `start()`) and handed back from the run promise itself, NOT from a React
    * effect — so it still comes back when this hook has already been unmounted
-   * (a `remountTokens` remount of the Create screen mid-run). */
+   * (a remount of the Create screen mid-run). */
   run: (params: RunBatchParams, onRowsChanged?: (rows: BatchRow[]) => void) => void;
   /** Graceful stop: no further rows are submitted, but the clip generating
    * right now runs to completion and is still saved. */

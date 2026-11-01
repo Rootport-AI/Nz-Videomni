@@ -149,8 +149,7 @@
 
 ### `/upload/audio`
 
-- 最大 50MB。
-- 対応拡張子：`.wav` / `.mp3` / `.m4a` / `.aac` / `.flac` / `.ogg`。
+- 上限と対応拡張子の 2026-11-01 時点の正本は [`API_REFERENCE.md`](API_REFERENCE.md) §3.11。
 - コーデック妥当性の検査は、保存後の ffprobe preflight まで先送り（アップロード時点では通る）。
 
 ### IC-LoRA（`reference_video_id`）
@@ -263,7 +262,7 @@ join（続き生成の結合）：
 - 特定オブジェクトだけの音は、他レイヤーを `set_layer_enable` 等で一時無効化してレンダリングする間接手段が要る。
 - オブジェクト単位の音声取得 API は無い。
 
-含意：Aud2Vid の抽出方式2通り（ミックス／対象のみ）は、この API 特性がそのまま根拠。「対象のみ」は他レイヤー一時無効化 → レンダリング → 復元、の手順で実装。
+含意：2026-11-01 時点の正本は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) §3-4 #7（抽出は「対象のみ」の1方式だけ）。
 
 ---
 

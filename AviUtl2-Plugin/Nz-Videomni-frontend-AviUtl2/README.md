@@ -122,7 +122,7 @@ cannot run is greyed out. One line per screen here — the details are in
 - **Connection settings**: the backend base URL is a persisted runtime
   setting (`settings.get` / `settings.set`, `%LOCALAPPDATA%\NzVideomni\
   settings.json`), not compiled in.
-- **Native bridge contract v17**: beyond the request/response envelope and
+- **Native bridge contract v18**: beyond the request/response envelope and
   `ping` / `getEditInfo` / `backend.request` / `backend.downloadVideo` /
   `backend.uploadFile` / `timeline.*`, v6 added `ui.pickFolder`,
   `fs.listFiles`, `fs.probeAudioDuration`, and a `destDir` / `fileName` /
@@ -140,25 +140,27 @@ cannot run is greyed out. One line per screen here — the details are in
   manifest (2026-07-18, batch A2V went stateless — see `Docs/DEVLOG.md` §26).
   v8 adds the right-click-redesign RPCs (`timeline.getSelection` extensions,
   `timeline.insertProvisional`, `timeline.insertMediaForJob`, etc.) — see
-  `Docs/BRIDGE_CONTRACT.md` §4.14.1. v9–v17: see `Docs/BRIDGE_CONTRACT.md` §8
+  `Docs/BRIDGE_CONTRACT.md` §4.14.1. v9–v18: see `Docs/BRIDGE_CONTRACT.md` §8
   (v14 adds `usedFallback` to `timeline.insertMedia` and the one `layer_max+1`
   retreat; v15 adds `fps` to the `fs.probeMediaInfo` result, which is 0 by
   rule for mkv / webm; v16 adds `kind` / `color` to `backend.downloadVideo`
   (the Alpha Gen exits: `<jobId>_rgba.mov` / `<jobId>_chroma_<color>.mp4`);
-  v17 lets `ui.makeThumbnail` take a video (its first frame)).
+  v17 lets `ui.makeThumbnail` take a video (its first frame); v18 adds the
+  `audioOrVideo` kind to `ui.pickFile`).
   See `Docs/BRIDGE_CONTRACT.md` for the full method/error reference.
 - **`.au2pkg.zip` packaging**: `scripts/package.ps1` bundles the
   single-file-embedded `NzVideomni.aux2` plus `Language/*.aul2` (and
   `package.ini` / `package.txt`) into `dist/NzVideomni-<version>.au2pkg.zip` in
   the layout AviUtl2 expects (`Plugin/NzVideomni/`, `Language/`).
 - **Generation fps is always a whole number**: whichever of the three fps
-  sources feeds a form (material, project, or the backend defaults) and
+  sources feeds a form (material, project, or the panel's current value,
+  which starts from the backend defaults) and
   however it gets there (right-click prefill, manual edit, or lazy init),
   the value sent to the backend is an integer in `[1, 60]` — every entry
   point rounds through `snapFrameRate` (`webui/src/modes/single/paramUtils.ts`,
-  §3-71/§3-72 in `Docs/PENDING_TASKS.md`). Only a right-click prefill that
+  §3-71/§3-72 in `Docs/PENDING_TASKS_CLOSED.md`). Only a right-click prefill that
   actually changed the value surfaces a one-shot toast; manual edits and
-  mount overwrites round silently.
+  project overwrites (per right-click on Create) round silently.
 
 ## Directory layout
 

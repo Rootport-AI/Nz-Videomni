@@ -107,8 +107,8 @@ export const MOCK_CONFIG_BODY = {
     normalize_to_png: true,
     max_video_size_mb: 200,
     allowed_video_extensions: [".mp4", ".mov", ".webm", ".mkv"],
-    max_audio_size_mb: 50,
-    allowed_audio_extensions: [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"],
+    max_audio_size_mb: 200,
+    allowed_audio_extensions: [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".mp4", ".mov", ".webm", ".mkv"],
   },
   limits: {
     max_width: 1920,

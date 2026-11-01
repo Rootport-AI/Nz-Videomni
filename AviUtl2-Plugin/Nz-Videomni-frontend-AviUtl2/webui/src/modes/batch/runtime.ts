@@ -3,9 +3,9 @@
  * 入力（フォルダ・スキャン由来の派生状態）・購読機構をすべてモジュールレベルで
  * 持つシングルトン。
  *
- * こうする理由: Create画面は右クリックのintentルーティングで`remountTokens`に
- * よる`key`リマウントが起きる（`shell/AppShell.tsx`）。フック内の`useRef`に
- * ランナーを持たせると、そのリマウントで走行中バッチが孤児化し、走行は裏で続く
+ * こうする理由: Create画面はかつて右クリックのintentルーティングで`key`リマウント
+ * されていた（台帳§1-114〔2026-10-31〕まで。`shell/AppShell.tsx`）。フック内の
+ * `useRef`にランナーを持たせると、リマウントやアンマウントで走行中バッチが孤児化し、走行は裏で続く
  * のにUIからは「実行していない」ように見え、Stopも行の進捗も消える。
  * モジュールレベルに置けば、リマウント後のセクションは購読し直すだけで走行中
  * バッチへ再接続できる（バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02・2026-09-02）。出典は
@@ -15,11 +15,12 @@
  * row snapshot, the inputs the run was started with and the subscriber list all
  * live at module level, not inside a hook.
  *
- * Why: the Create screen is `key`-remounted by the right-click intent routing
- * (`AppShell`'s `remountTokens`). With a `useRef`-owned runner, that remount
+ * Why: the Create screen used to be `key`-remounted by the right-click intent
+ * routing (until §1-114, 2026-10-31). With a `useRef`-owned runner, that remount
  * orphaned an in-flight batch — the run kept submitting rows while the UI
  * showed "not running", with no Stop button and no row progress. Module-level
- * state means a remounted section merely re-subscribes and is back in sync.
+ * state still means any remounted section merely re-subscribes and is back in
+ * sync.
  *
  * Lock protocol (see `shell/runLock.ts`) — identical to Batch i2v-long's:
  * - {@link BatchA2vRuntime.run} acquires BEFORE calling the runner (that is the

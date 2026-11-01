@@ -47,7 +47,7 @@
 
 - **概要**: H3 の Chained では A2V（音声から動画を作る機能）が灰色で、右クリック #18 は「音声から生成（A2V）は、選択中のベースモデルでは使えません。…」の案内で断る。H3 でも long a2v（長い音声 1 本を区間に分けて連結生成する機能）を使えるようにする。方向は 2 つある（オーナー案 2026-11-01）。① 「音声から動画（A2V）」のアコーディオンを「長い音声から動画（LONG A2V）」に改名し、Generate を押した時点で、各クリップの Reference アコーディオンの Audios カードに、そのクリップに該当する区間の音声が入った状態にする（音声を分割する前に、各クリップのフレーム数を調整できる）。② 右クリックで Chained に送った時点でクリップごとに分割し、各クリップカードの Reference アコーディオンの Audios カードに入れる（クリックの数が減る）。挙動は着手時に決める。
 - **前提**: H3 の Chained の仕組みは [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3（参照付きの連結・裁定 87）、Single の A2V は同 §3.1（裁定 74）。
-- **出典**: オーナー指示 2026-11-01（§1-113 の実機確認 G-5 から起票。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §187.8）。
+- **出典**: オーナー指示 2026-11-01（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-267 の実機確認 G-5 から起票。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §187.8）。
 
 ## 3. 将来の研究課題
 
@@ -467,12 +467,12 @@
 - **何が塞いでいるか**: **SDKの`register_object_menu`にオブジェクト種別を絞る引数が存在しない**ため（`plugin2.h`で確認済み）、仕様どおりの挙動である。AviUtl2本体側にフィルタ引数が追加されたときに再訪する。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-20、`AviUtl_ExEdit2 SDK`の`plugin2.h`。
 
-### 4-21. 音声抽出のsolo分離（対象レイヤー単独化）
+### 4-21. solo録り（そのオブジェクトのレイヤーだけを鳴らす抽出）での他レイヤー音の混入
 
-- **再訪条件**: ユーザーから「mix経路では不要な音が混ざる」という具体的な不満・要望が出たとき。
-- **概要**: タイムライン右クリックの「動画の音声をa2v（音声から動画生成）へ送る」で、対象レイヤー以外を自動無効化して単独音声を抽出するsolo分離モード。
-- **何が塞いでいるか**: 実機検証済みのmix経路（タイムライン全体の音をそのまま録る）で実用上十分であり、不要な音はユーザーがレイヤーを手動無効化すれば代替できる。solo分離は実機未検証・コミュニティ参考実装なしでリスクが高く、需要も未確認。
-- **出典**: [`DEVLOG.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/DEVLOG.md) §33.6。
+- **再訪条件**: ユーザーから「solo録りでも他のレイヤーの音が混ざる」という具体的な不満・要望が出たとき。
+- **概要**: 右クリックの音声抽出（#7・#18）のsolo録りでも、構成によっては他のレイヤーの音が混ざりうる。
+- **何が塞いでいるか**: レイヤーをまたぐ音声効果などの構成による理屈のうえの余地で、オーナー裁定で許容している（正本は[`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) §3-4 #18）。
+- **出典**: [`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) §3-4 #18、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-267。
 
 ### 4-22. SageAttentionを既定にするかどうかの再検討（起票：2026-08-01）
 

@@ -1010,7 +1010,7 @@ MiniMax H3 には、2 種類の重みがあります。**FL2VA**（先頭と末�
 4. **プロンプトに、カードのタイトルと同じ札（`<Picture 1>`・`<Video 1>`・`<Audio 1>` など）を書いて、その素材が何なのかを説明します**（例: 「`<Picture 1>` の老紳士が `<Picture 2>` の宇宙船の艦橋で…」）。カードの ✒ ボタンで、その札をプロンプトに追記できます。
 5. **生成します。** ステップ数は既定の 20（参照を強く効かせたいときは 25 前後）が勧められています。**4 ステップの Turbo LoRA では、参照がほとんど効きません。**
 
-- **生成ボタンの下に出る注意**（琥珀色。どれも生成は止めません）:
+- **生成ボタンの下に出る注意**（琥珀色。どれも生成は止めません。ただし、空のカードで「Audio to video」をチェックしたときは生成が止まります。[`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) 裁定 88）:
   - 「FL2VA モデルがロードされています。参照資料は無視されます。…」: FL2VA の重みのまま Reference をオンにしています。このときの参照は送られません。上の 1 で Ref2VA を読み込んでください。
   - 「Ref2VA モデルがロードされています。参照資料を使わない場合、…」: Ref2VA の重みで Reference がオフです。参照を使わないなら、FL2VA に戻したほうが良い結果になります。
   - 「参照ファイルがありません。」: Reference がオンなのに、使えるカードが 1 枚もありません（このまま生成すると、参照なしで作られます）。
@@ -1021,7 +1021,6 @@ MiniMax H3 には、2 種類の重みがあります。**FL2VA**（先頭と末�
 - **ただし、参照とキーフレームを併用すると、現状では先頭フレームがキーフレームの画像に固定されません**（生成は最後まで走ります。台帳 `Docs/PENDING_TASKS.md` §1-115 に記録してあります）。
 - **費用の目安**（1344×768・124 フレーム・20 ステップ・VRAM 16GB mode オン・VRAM 16GB の GPU）: 参照画像 1 枚で約 18 分、参照動画 1 本（5 秒）で約 70 分でした。プロンプトを読む部分（テキストエンコーダー）の段は、参照動画を使っても VRAM 16GB に収まります。1 ステップの秒数など詳しい数値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §180 と §182 にあります。
 - 参照動画は先頭から使われ、映像だけが参照になります（参照動画の音声は使いません。声を参照したいときは Audios のカードに音声を入れてください）。動画の回転の情報は読みません。
-- タイムラインの画像を右クリックして「この画像から動画を生成 (i2v)」を使うと、Single タブが作り直されて Reference の中身が消えます（直す予定です）。
 - API では `POST /generate` の `references`（正本は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.2）を使います。**Gradio UI と MCP にはまだ入口がありません。**
 
 **参照付きの連結（Chained の `References`）**
@@ -1103,7 +1102,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `list_loras` | 選択中のベースモデルで使える LoRA を一覧する（`GET /loras`。MiniMax H3 では `models/MiniMaxH3/LoRA/` の LoRA） |
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
-| `upload_audio` | ローカルの音声ファイルをアップロードする（A2V用） |
+| `upload_audio` | ローカルの音声ファイル（動画ファイルの音声トラックも可）をアップロードする（A2V用） |
 | `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）に加え、**画角拡張（Outpainting）の6引数**も指定できる |
 | `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（連結生成には無い項目のため）に加え、**撮り直し（Retake）の5引数**と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる |
 | `submit_alpha_gen` | Alpha Gen（動画から白黒のマット動画を作る）のジョブを登録する（`POST /generate/alpha`）。**LTX 2.5 専用**。1 段原寸モードが既定で、`light_mode` で軽量モード（既存の 2 段の経路）になる |

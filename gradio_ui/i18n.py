@@ -380,7 +380,7 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_msg_join_failed": "Failed to create the joined version: {err}",
         # --- A2V audio: a2v_lbl_audio labels the audio field of the Generate
         # tab's Audio-to-Video accordion ---
-        "a2v_lbl_audio": "Source audio (wav/mp3/m4a/aac/flac/ogg, max 50 MB)",
+        "a2v_lbl_audio": "Source audio (wav/mp3/m4a/aac/flac/ogg, max 200 MB)",
         # --- A2V flow messages (the Generate-tab A2V flow and the chain
         # handler's A2V branch) ---
         "a2v_msg_audio_required": "Please select a source audio file for A2V.",
@@ -914,7 +914,7 @@ LABELS: dict[str, dict[str, str]] = {
         "v2v_msg_join_failed": "結合版の作成に失敗しました: {err}",
         # --- A2V audio: a2v_lbl_audio labels the audio field of the Generate
         # tab's Audio-to-Video accordion ---
-        "a2v_lbl_audio": "元音声 (wav/mp3/m4a/aac/flac/ogg・最大50MB)",
+        "a2v_lbl_audio": "元音声 (wav/mp3/m4a/aac/flac/ogg・最大200MB)",
         # --- A2V flow messages (the Generate-tab A2V flow and the chain
         # handler's A2V branch) ---
         "a2v_msg_audio_required": "A2Vに使う元音声を選択してください。",

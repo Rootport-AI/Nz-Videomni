@@ -217,7 +217,7 @@ def test_chain_style_lora_with_source_audio_completes(chain_lora_client, tmp_pat
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(16000)
-        w.writeframes(struct.pack("<%dh" % n, *([0] * n)))
+        w.writeframes(struct.pack("<%dh" % n, *[1000 if (i // 40) % 2 == 0 else -1000 for i in range(n)]))
     up = chain_lora_client.post(
         "/api/v1/upload/audio",
         files={"file": ("voice.wav", wav.read_bytes(), "audio/wav")},

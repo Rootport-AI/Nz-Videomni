@@ -20432,3 +20432,69 @@ GPU の使用はオーナーの了承を得た。台本・自己検査の結果�
 - G-9: 同じ mp4 を H3 の Audios カード（参照）に入れて Generate → 422 `REFERENCE_AUDIO_NO_STREAM` で止まる。
 - G-11（縮小の確認の文言）: #2 の短いリボンか #4 で送る → 新しい題名と本文の確認が出る。キャンセルしても素材は入ったままで、Frames は元のまま。
 - 合格後は §1-113 を CLOSED 3-267 へ移し、dev から main へマージする。
+
+## 191. ★無音の音声トラックをサーバーの前検査で断る（案 A。右クリックの無音拒否と設計を揃える。§1-113 G-8／G-9 の切り分けから）・計画と差分の敵対的レビュー（全採用）・機械の門（2026-11-01）
+
+### 191.1 結論
+
+- **実装は完了し、機械の門（コンピューターだけで回せる検査）は合格した。オーナーの実機確認は未了で、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の §1-113 の G-8a／G-8b／G-9a／G-9b に載せた（191.7）。**
+- 変更はバックエンドのサーバーの前検査だけ。音声トラックはあるが全サンプルが 0（完全な無音）の動画・音声を、422 で断るようにした。右クリックの無音拒否（ネイティブの `kAudioSilenceThreshold`）と設計を揃えた。
+- 操作パネルは変更していない（サーバーの message をそのまま表示する）。仕様書は v0.5.108。Gradio の補助文と MCP は対象外（MCP は docstring に 1 句だけ足した）。
+
+### 191.2 切り分けの事実（§1-113 の実機確認 G-8／G-9）
+
+- G-8／G-9 で使った mp4 は、音声トラックはあるが全サンプルが 0 だった（AAC。ピークは −∞dBFS〔デシベル・フルスケール〕。`volumedetect`〔ffmpeg の音量測定フィルター〕の最大は −91.0dB）。ジョブ `4d05794f`・`fba7f32b` はどちらも `source_audio` として送られ、無音の動画が生成された。
+- 前検査は「音声の流れ（トラック）が無い」ときだけ断っていた。この mp4 には流れがあるので通った。つまり G-8／G-9 の不合格ではなく、確認に使った素材が「流れの無い mp4」ではなかった。
+- 監督が、音声トラックの無い素材 `uploads/audios/a754b4a2-ae01-4eb1-9978-4533a4fa5846/noaudio.mp4`（8,059,310 バイト）を ffmpeg の `-c copy -an` で作った（使い捨て。スクリプトは保存していない。`path_for` の `input.*` には当たらない）。
+
+### 191.3 設計
+
+- `services/video_io.py` に `audio_is_digitally_silent(path)` を足した。内部の `_audio_max_volume_db` が `ffmpeg -map 0:a:0 -af volumedetect` を走らせ、stderr（標準エラー出力）の最後の `max_volume` を UTF-8 で読む。測れなかったときは「無音ではない」として通す。
+- 閾値は `AUDIO_SILENT_MAX_VOLUME_DB = -90.5`。16bit 換算で全ゼロは −91.0dB、最小の非ゼロ（1/32768）は −90.3dB なので、16bit の分解能ではネイティブの閾値と同じ意味になる。
+- 3 つの呼び出し元の、既存の「流れが無い」の行の直後に 1 行ずつ足した。検査の順は「流れが無い → 無音 → 長さ」。
+  - `preflight_source_audio`（連結）
+  - `preflight_single_source_audio`（H3 の単発）
+  - `check_references_exist`（参照。単発・連結）
+- 新しいエラーコード（422）: `SOURCE_AUDIO_SILENT`（message は "source audio track is digitally silent (all samples are zero)"）と `REFERENCE_AUDIO_SILENT`。
+
+### 191.4 敵対的レビューと採否
+
+- 計画のレビュー（Opus。実測つき）: High 1・Medium 2・Low 6。**全件採用した**（計画 §10.6）。
+  - High 1: ffmpeg の stderr を既定の文字コード（cp932）で読むと、日本語のメタデータで `UnicodeDecodeError` になる。`encoding="utf-8", errors="replace"` で読むようにした。
+  - Medium 2: `-vn` は既定の音声の流れを測るので、エンジンが使う最初の流れと食い違う（2 トラックで再現）。`-map 0:a:0` にした。もう 1 件は連結の試験の尺。
+  - Low 6: 閾値の説明の言い方など。
+- 差分のレビュー（Opus）: Critical 0・Major 0・Minor 1・Nit 3。**全件採用した**。
+  - Minor 1: 日本語メタデータの試験が、修正が無くても通ってしまう。正弦波で「無音ではない」を assert し、`stderr is None` は「測れない」扱いにした。
+  - Nit 3: docstring、`API_REFERENCE.md` §3.13、仕様書の検査の順にコード名を書く。
+
+### 191.5 追加・更新した試験
+
+- 既存の「全サンプル 0 の wav」を正常な音声として使っていた 7 ファイルの固定具を、振幅 1000 の矩形波に直した（無音を断るようになったため）。対象は `test_a2v_chain`・`test_h3_a2v_api`・`test_chain_lora`・`test_chain_reference`・`test_ltx25_api_guard`・`test_mcp_tools_generate`・`test_gradio_batch_fullstack`。
+- 新規: `test_video_io.py` の単体 5 件（無音の mp4・正弦波・流れ無し・日本語メタデータ・2 トラック）。連結の `source_audio` が無音 → 422、H3 の単発 → 422、参照（単発・連結）→ 422。
+- レビューでの検証: `audio_is_digitally_silent` を偽に固定すると、4 件の API の試験が 202 で落ちる（修正を本当に見ている）。
+- 実ファイル: `input.mp4` → 真（−91.0dB）、`noaudio.mp4` → 偽（測れない）。
+
+### 191.6 機械の門（2026-11-01）
+
+| 門 | 結果 |
+|---|---|
+| バックエンドの pytest 全件 | 3,774 合格・28 skip・失敗 1 |
+| 9 ファイルの部分実行 | 385 合格・2 skip |
+| WebUI の型検査 `npm run typecheck` | 0 エラー（フロントエンドは不変） |
+
+- 失敗 1 件は `tests/test_mcp_registration.py` の「バックエンドが居ない」前提の試験。オーナーの本物のバックエンドが 127.0.0.1:18620 で起動中のため落ちた。本弾とは無関係。
+- 注意: `pyproject.toml` の `addopts` にすでに `-q` があるので、コマンドにさらに `-q` を足すと `-qq` になり、集計行が表示されなくなる。
+
+### 191.7 既知の限界とオーナーの実機の門（未）
+
+既知の限界（直さない）:
+
+- 容器（ファイル全体）より音声トラックが短い動画は、長さの前検査を通る。エンジンの既存の検査が最後の砦になる。
+- 無音かどうかは全体のピークで判定する。使われる区間だけが無音の場合は通る。
+
+台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の §1-113 に、G-8 と G-9 を次の 4 件に置き換えて載せた。
+
+- G-8a: 音声トラックの無い mp4（`noaudio.mp4`）を A2V カードに入れて Generate → 422 で止まる。既存のコード `SOURCE_AUDIO_TOO_SHORT` で、表示される文 "source audio is shorter than the requested video length" は、流れが無い場合も同じ（従来どおり）。
+- G-8b: 無音トラックの mp4（元の `input.mp4`）を A2V カードに入れて Generate → 422 `SOURCE_AUDIO_SILENT` で止まる。
+- G-9a: `noaudio.mp4` を H3 の Audios カード（Enable をオン、Audio to video をオフ＝参照）に入れて Generate → 422 `REFERENCE_AUDIO_NO_STREAM`。
+- G-9b: 元の `input.mp4` を同じ条件で → 422 `REFERENCE_AUDIO_SILENT`。

@@ -732,7 +732,7 @@ def _make_wav(path: Path, *, seconds: float = 3.0, sr: int = 16000, channels: in
         w.setnchannels(channels)
         w.setsampwidth(2)
         w.setframerate(sr)
-        w.writeframes(struct.pack("<%dh" % (n * channels), *([0] * (n * channels))))
+        w.writeframes(struct.pack("<%dh" % (n * channels), *[1000 if (i // 40) % 2 == 0 else -1000 for i in range(n * channels)]))
     return path
 
 

@@ -12,6 +12,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -647,6 +648,77 @@ def has_audio_stream(path: Path) -> bool:
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     return proc.returncode == 0 and proc.stdout.strip() != ""
+
+
+# Peak level (dBFS, as ffmpeg's ``volumedetect`` reports it) below which an
+# audio track counts as digitally silent. ``volumedetect`` measures at 16-bit
+# resolution: an all-zero track reads -91.0 dB and the smallest non-zero
+# 16-bit sample (1/32768) reads -90.3 dB, so -90.5 separates "every sample is
+# zero" from "anything at all". This matches the native right-click
+# extraction's ``kAudioSilenceThreshold`` (1/32768, bridge_core.h) AT 16-BIT
+# RESOLUTION; a difference smaller than one 16-bit step is ignored.
+AUDIO_SILENT_MAX_VOLUME_DB = -90.5
+
+_MAX_VOLUME_RE = re.compile(r"max_volume:\s*(-?(?:inf|[0-9.]+))\s*dB")
+
+
+def _audio_max_volume_db(path: Path) -> float | None:
+    """Peak level (dB) of the FIRST audio stream of ``path`` via ffmpeg's
+    ``volumedetect``, or ``None`` when it cannot be measured.
+
+    ``-map 0:a:0`` (not ``-vn``): the engines decode the first audio stream,
+    while ``-vn`` would let ffmpeg pick the *default* one, which differs on a
+    file with several audio tracks. The LAST ``max_volume`` line is read
+    because ffmpeg can print an earlier block with ``n_samples: 0`` only.
+    stderr is decoded as UTF-8 with replacement (as :func:`embed_comment_tag`
+    does): the console default (cp932 here) raises ``UnicodeDecodeError`` on
+    Japanese metadata echoed by ffmpeg.
+
+    ``None``: ffmpeg missing, a non-zero exit (e.g. no audio stream), stderr
+    that could not be read, or an unparsable value. A clean exit with no ``max_volume`` line at all means
+    the track decoded to zero samples, reported as ``-inf`` (silent).
+    """
+    exe = shutil.which("ffmpeg")
+    if not exe:
+        return None
+    cmd = [
+        exe,
+        "-hide_banner",
+        "-nostats",
+        "-i",
+        str(path),
+        "-map",
+        "0:a:0",
+        "-af",
+        "volumedetect",
+        "-f",
+        "null",
+        "-",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if proc.returncode != 0 or proc.stderr is None:
+        return None
+    matches = _MAX_VOLUME_RE.findall(proc.stderr)
+    if not matches:
+        return float("-inf")
+    try:
+        return float(matches[-1])
+    except ValueError:
+        return None
+
+
+def audio_is_digitally_silent(path: Path) -> bool:
+    """True when the first audio stream of ``path`` is digitally silent (every
+    sample is zero at 16-bit resolution; see :data:`AUDIO_SILENT_MAX_VOLUME_DB`).
+
+    An unmeasurable file (no ffmpeg, no audio stream, unreadable) answers
+    ``False`` -- it is let through, the same rule as :func:`probe_duration`
+    returning ``None``; a missing stream is :func:`has_audio_stream`'s job.
+    """
+    peak = _audio_max_volume_db(path)
+    if peak is None:
+        return False
+    return peak < AUDIO_SILENT_MAX_VOLUME_DB
 
 
 def probe_duration(path: Path) -> float | None:

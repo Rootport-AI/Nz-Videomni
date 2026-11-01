@@ -783,3 +783,82 @@ def test_join_v2v_handle_silent_source_skips_loudness_match(tmp_path):
     assert info["source_lufs"] is None
     assert info["continuation_lufs_before"] is None
     assert "loudness_skip_reason" in info
+
+
+# --------------------------------------------------------------------------- #
+# audio_is_digitally_silent (the A2V / audio-reference preflight's silence test)
+# --------------------------------------------------------------------------- #
+
+
+def _need_ffmpeg() -> None:
+    import shutil
+
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not on PATH")
+
+
+def _run_ffmpeg(cmd: list[str]) -> None:
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg fixture build failed: {proc.stderr[-2000:]}")
+
+
+def test_audio_is_digitally_silent_true_for_an_all_zero_track(tmp_path):
+    _need_ffmpeg()
+    clip = tmp_path / "zero.mp4"
+    _make_v2v_clip(clip, num_frames=24, fps=24.0, silent=True)
+    assert video_io.has_audio_stream(clip)
+    assert video_io.audio_is_digitally_silent(clip) is True
+
+
+def test_audio_is_digitally_silent_false_for_a_tone(tmp_path):
+    _need_ffmpeg()
+    clip = tmp_path / "sine.mp4"
+    _make_v2v_clip(clip, num_frames=24, fps=24.0)
+    assert video_io.audio_is_digitally_silent(clip) is False
+
+
+def test_audio_is_digitally_silent_false_when_there_is_no_audio_stream(tmp_path):
+    # Unmeasurable -> let through; the missing stream is has_audio_stream's job.
+    _need_ffmpeg()
+    clip = tmp_path / "noaudio.mp4"
+    _make_v2v_clip(clip, num_frames=24, fps=24.0, with_audio=False)
+    assert video_io.audio_is_digitally_silent(clip) is False
+
+
+@pytest.mark.parametrize(("source", "silent"), [
+    ("sine=frequency=440:sample_rate=48000", False),
+    ("anullsrc=channel_layout=stereo:sample_rate=48000", True),
+])
+def test_audio_is_digitally_silent_reads_japanese_metadata(tmp_path, source, silent):
+    # ffmpeg echoes the title on stderr. Decoded with the console default
+    # (cp932) the read fails and stderr comes back None; the tone case pins
+    # that the UTF-8 read really measures (a failed read must not look silent).
+    _need_ffmpeg()
+    clip = tmp_path / "titled.mp4"
+    _run_ffmpeg([
+        video_io.ffmpeg_path(), "-y",
+        "-f", "lavfi", "-i", "color=c=red:s=64x64:r=24",
+        "-f", "lavfi", "-i", source,
+        "-t", "1", "-metadata", "title=歌🎵ﾃｽﾄ",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(clip),
+    ])
+    assert video_io.audio_is_digitally_silent(clip) is silent
+
+
+def test_audio_is_digitally_silent_measures_the_first_audio_stream(tmp_path):
+    # a:0 is all zeros, a:1 is a tone marked "default". The engines decode the
+    # first audio stream, so the file is silent; ``-vn`` would have measured
+    # the default (a:1) and let it through.
+    _need_ffmpeg()
+    clip = tmp_path / "two_tracks.mp4"
+    _run_ffmpeg([
+        video_io.ffmpeg_path(), "-y",
+        "-f", "lavfi", "-i", "color=c=red:s=64x64:r=24",
+        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+        "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+        "-map", "0:v", "-map", "1:a", "-map", "2:a", "-t", "1",
+        "-disposition:a:0", "0", "-disposition:a:1", "default",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(clip),
+    ])
+    assert video_io.audio_is_digitally_silent(clip) is True

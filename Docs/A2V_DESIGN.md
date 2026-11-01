@@ -72,7 +72,7 @@
   - `source_audio` 有り時のみ `clips` の min を 1 に緩和（無し時は従来通り＝旧クライアント不変）。**2026-08-10 追記: 上限側の「ちょうど1個」制約は撤廃済み（1〜24 個）。**
   - **`source_audio` と `source_video` は排他**（422・V2V と A2V を同時に混ぜない・v1 スコープ）。
   - `source_audio` と `conditioning_images` の**併用は許可**（Q2）。
-  - エラーコード追加: `SOURCE_AUDIO_NOT_FOUND`（404・`audio_id` 不在）／`SOURCE_AUDIO_TOO_SHORT`（422・音声がタイムライン尺に足りない＝**動画尺が主・切り詰めのみ**の帰結）。
+  - エラーコード追加: `SOURCE_AUDIO_NOT_FOUND`（404・`audio_id` 不在）／`SOURCE_AUDIO_TOO_SHORT`（422・音声がタイムライン尺に足りない＝**動画尺が主・切り詰めのみ**の帰結）。2026-11-01 に `SOURCE_AUDIO_SILENT`（422・音声トラックはあるが全サンプルが 0 の無音）を追加。
 - v1 では**トリミング指定（`audio_start_time`／`audio_max_duration`）は非露出**（Q2）。
 
 ### 2.2 幾何（chain_math を単一情報源として拡張・構造変更なし）
@@ -98,7 +98,7 @@
 
 ### 2.4 app 側（services / metadata / mock）
 
-- `services/pipeline_manager.py` に `preflight_source_audio` を追加＝ **ffprobe で音声尺 ≥ タイムライン尺**を事前検査（V2V の ffprobe preflight :202 前例）。不足時は `SOURCE_AUDIO_TOO_SHORT`（422）。
+- `services/pipeline_manager.py` に `preflight_source_audio` を追加＝ **ffprobe で音声尺 ≥ タイムライン尺**を事前検査（V2V の ffprobe preflight :202 前例）。不足時は `SOURCE_AUDIO_TOO_SHORT`（422）。2026-11-01 から、音声の流れの有無の直後・長さの検査の前に `video_io.audio_is_digitally_silent`（ffmpeg の `volumedetect` で最初の音声の流れのピークを測り、−90.5dB 未満＝16bit 換算で全サンプルが 0 なら真。測れなければ偽）で無音も検査し、無音なら `SOURCE_AUDIO_SILENT`（422）。
 - `services/ltx_runner.py` `_RealBackend` payload に `audio_source` ブロックを追加（V2V payload :1051-1057 前例）。`_MockBackend`（:367）に A2V 対応（GPU 無し pytest で API 契約を固定）。
 - `metadata.json` に**加算的 `a2v` ブロック**（`source_audio_id`・音声尺・切り詰め有無等）。既存キーは不変。
 

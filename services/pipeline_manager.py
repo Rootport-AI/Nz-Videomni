@@ -23,6 +23,7 @@ from api.errors import (
     pipeline_load_failed,
     pipeline_loading,
     retake_window_out_of_range,
+    source_audio_silent,
     source_audio_too_short,
     source_video_too_short,
 )
@@ -1345,6 +1346,10 @@ class PipelineManager:
         fewer than that is rejected (422 SOURCE_AUDIO_TOO_SHORT). Video length is
         authoritative — audio is truncated, never padded (matches upstream a2vid
         and the engine's ``a2v_avail < a_total`` guard). No fps resample is done.
+
+        Order: no audio stream (422 SOURCE_AUDIO_TOO_SHORT) → a digitally silent
+        track, every sample zero (422 SOURCE_AUDIO_SILENT,
+        ``video_io.audio_is_digitally_silent``; unmeasurable passes) → length.
         """
         src_path = self.audio_upload_store.path_for(source_audio.audio_id)
         required = chain_math.audio_latents_required(
@@ -1353,6 +1358,13 @@ class PipelineManager:
         if not video_io.has_audio_stream(src_path):
             raise source_audio_too_short(
                 detail=f"no decodable audio stream in upload {source_audio.audio_id}"
+            )
+        if video_io.audio_is_digitally_silent(src_path):
+            raise source_audio_silent(
+                detail=(
+                    f"audio track of upload {source_audio.audio_id} is digitally "
+                    "silent (all samples are zero)"
+                )
             )
         duration = video_io.probe_duration(src_path)
         if duration is None:
@@ -1387,6 +1399,11 @@ class PipelineManager:
         engine's own length guard. Returns the ffprobe facts
         ``{"duration_sec", "sample_rate", "channels"}`` (each ``None`` when
         unmeasured). The chain's :meth:`preflight_source_audio` is separate.
+
+        Order (same as the chain's): no audio stream (422
+        SOURCE_AUDIO_TOO_SHORT) → a digitally silent track, every sample zero
+        (422 SOURCE_AUDIO_SILENT, ``video_io.audio_is_digitally_silent``;
+        unmeasurable passes) → length (422 SOURCE_AUDIO_TOO_SHORT).
         """
         src_path = self.audio_upload_store.path_for(source_audio.audio_id)
         if not video_io.has_audio_stream(src_path):
@@ -1394,6 +1411,13 @@ class PipelineManager:
                 detail=(
                     f"アップロードされた音声（{source_audio.audio_id}）に"
                     "読み取れる音声の流れがありません。"
+                )
+            )
+        if video_io.audio_is_digitally_silent(src_path):
+            raise source_audio_silent(
+                detail=(
+                    f"アップロードされた音声（{source_audio.audio_id}）の"
+                    "音声トラックは無音です（全サンプルが 0）。"
                 )
             )
         facts = _probe_source_audio(src_path)

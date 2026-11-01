@@ -5927,3 +5927,29 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 158.4 門の結果
 
 機械の門（2026-11-01）: `npm run typecheck` エラー 0・`npm run lint` エラー 0／警告 32（従来どおり）・`npx vitest run --exclude "**/backend.integration.test.ts"` 179 ファイル・3,552 件合格・失敗 0（最終実行。レビュー中は既知の時間依存の ✒ の試験が単独 10 回中 2 回落ちた。台帳 §3-238）。差分の敵対的レビュー（Opus）は Critical 0・Major 0・Minor 3・Nit 3 で全採用。配置: aux2（1,558,528 バイト・2026-11-01 12:20）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `05272968…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。記録簿 `VERIFICATION_LOG.md` §190、台帳 §2 の §1-113（G-7〜G-9・G-11 の再確認待ち）。
+
+## 159. 無音の音声トラックをサーバーの前検査で断る（操作パネルの変更なし。2026-11-01）
+
+### 159.1 結論
+
+- **音声トラックはあるが全サンプルが 0（デジタルな無音）の音声を、サーバーが生成を始める前に 422 で断るようになりました。** バックエンド台帳 `PENDING_TASKS.md` §1-113 の実機確認で、無音の mp4 を A2V の音声に入れると無音の動画ができていたためです（オーナー裁定 2026-11-01: 案 A）。これまでの事前検査は、音声の流れ（トラック）そのものが無いときだけ断っていました。
+- 対象は 3 か所です。A2V の元音声（連結と MiniMax H3 の単発）は 422 `SOURCE_AUDIO_SILENT`、MiniMax H3 の Reference の音声の参照（単発と連結）は 422 `REFERENCE_AUDIO_SILENT`。検査の順は「流れが無い → 無音 → 長さ」で、流れが無いときのコード（`SOURCE_AUDIO_TOO_SHORT`・`REFERENCE_AUDIO_NO_STREAM`）は変わりません。
+- 閾値は、右クリックの抽出の無音拒否（ピーク振幅が 1/32768 未満）と 16bit の分解能で同じです。右クリックは抽出の時点で自分で断り、手で入れたファイルはサーバーが断る、という分担になりました。
+- **操作パネルの変更はありません。** 操作パネルはサーバーのエラーの `message` をそのまま表示します。仕様書は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第 33 版（§3-4 #7）です。
+
+### 159.2 何を変えたか
+
+- **`services/video_io.py`。** `audio_is_digitally_silent(path)` を足しました。ffmpeg の `volumedetect` で最初の音声の流れ（`-map 0:a:0`。エンジンが復号するのと同じ流れ）のピークを測り、`AUDIO_SILENT_MAX_VOLUME_DB = -90.5` 未満なら真です。`volumedetect` は 16bit 換算で測るので、全サンプルが 0 なら −91.0dB、16bit の最小の非ゼロ（1/32768）なら −90.3dB になります。測れないとき（ffmpeg が無い・流れが無い・読めない）は偽を返して通します。ffmpeg の出力は UTF-8 として読みます（既定の文字コードでは、日本語のメタデータで読み取りが失敗するため）。
+- **`api/errors.py`。** `source_audio_silent` と `reference_audio_silent` を足しました。
+- **`services/pipeline_manager.py`（`preflight_source_audio`・`preflight_single_source_audio`）と `api/generate.py`（`check_references_exist`）。** 既存の「流れが無い」の検査の直後に、無音の検査を 1 つずつ足しました。
+- 文書: バックエンド仕様書 v0.5.108（§6.2・§6.2b (h)・§6.8）、[`API_REFERENCE.md`](API_REFERENCE.md)、`Docs/A2V_DESIGN.md`、`Docs/MINIMAX_H3_DESIGN.md` §3.2、MCP の `submit_generate` の説明。
+
+### 159.3 テスト
+
+- `tests/test_video_io.py`: 無音（`anullsrc`）は真、正弦波は偽、音声の流れの無い動画は偽（測れないので通す）、日本語のメタデータ付きの無音は真（読み取りが失敗しない）、音声の流れが 2 本で 1 本目が無音・2 本目が「既定」の正弦波なら真（最初の流れを測っている）。
+- `tests/test_a2v_chain.py`（連結の元音声。3 秒の無音 mp4）・`tests/test_h3_a2v_api.py`（H3 の単発）→ 422 `SOURCE_AUDIO_SILENT`。`tests/test_h3_ref_api.py`（音声の参照。単発と連結）→ 422 `REFERENCE_AUDIO_SILENT`。
+- 既存の試験の現行化: 前検査に届く 7 ファイルの試験用の wav を、全サンプル 0 から振幅 1000 の矩形波に変えました（無音のままだと新しい検査で 422 になるため）。試験用の mp4 を作る補助関数（2 か所）は、音声の種類を `"sine"`／`"zero"`／`"none"` で選べるようにし、「流れが無い」の意味だったファイル名 `silent.mp4`・`silent_video.mp4` を `noaudio.mp4` に改めました。
+
+### 159.4 門の結果
+
+機械の門（2026-11-01）: バックエンド pytest 全件 3,774 合格・28 skip・失敗 1（`tests/test_mcp_registration.py` の「バックエンドが居ない」前提の試験。オーナーの本物のバックエンドが起動中のため。本弾と無関係）、関係 9 ファイルの部分実行 386 合格・2 skip。`npm run typecheck` エラー 0（操作パネルは不変。aux2 の再ビルドなし）。差分の敵対的レビュー（Opus）は Critical 0・Major 0・Minor 1・Nit 3 で全採用。記録簿 `VERIFICATION_LOG.md` §191、台帳 §2 の §1-113（G-8a／G-8b／G-9a／G-9b の確認待ち）。

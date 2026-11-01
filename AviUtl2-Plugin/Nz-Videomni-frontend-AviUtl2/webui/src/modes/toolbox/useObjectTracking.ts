@@ -182,7 +182,7 @@ export function useObjectTracking({
 
   // Fire once per mount. `AppShell` bumps `remountTokens.toolbox` on every
   // routed 追尾, so a fresh mount IS the "start a run" signal — the same
-  // one-shot `initialIntent` + remount arrangement every other screen uses,
+  // one-shot `initialIntent` + remount arrangement Chained/Edit use,
   // and the reason this needs no prop-following effect. The ref additionally
   // makes a StrictMode double-invoke (or any future re-run of this effect)
   // harmless: a second `trackObject` would only earn a `TRACK_BUSY`.

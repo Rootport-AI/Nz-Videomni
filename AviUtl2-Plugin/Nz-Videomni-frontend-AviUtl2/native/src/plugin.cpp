@@ -374,7 +374,8 @@ void OnMenuInvokedParam(void* param) {
 // audioToVideo: the WebUI extracts the ribbon's audio (solo) and attaches it
 // to the whole clip chain instead of a single generation. (The video-sound
 // items videoAudioToVideo / videoAudioToLongA2v were removed from the object
-// menu in contract v18; the audio is now picked in the panels.)
+// menu in contract v18; the audio is now picked in the panels, and
+// audioToVideo / audioToLongA2v accept video objects too.)
 // referenceVideoChain (ledger 1-15 W4, 2026-08-11) is the same idea applied to
 // the IC-LoRA reference: referenceVideo sends the clip to the Single tab's
 // reference slot, referenceVideoChain sends it to the Chained tab's, so one

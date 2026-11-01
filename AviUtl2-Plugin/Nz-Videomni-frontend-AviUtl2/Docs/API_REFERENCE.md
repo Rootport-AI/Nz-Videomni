@@ -75,6 +75,7 @@
 | `REFERENCE_VIDEO_NOT_FOUND` / `SOURCE_VIDEO_NOT_FOUND` / `SOURCE_AUDIO_NOT_FOUND` / `END_SOURCE_NOT_FOUND` / `REFERENCE_NOT_FOUND` | 404 | アップロードIDが解決できない(`END_SOURCE_NOT_FOUND`は動画素材のみ、§5.2。`REFERENCE_NOT_FOUND`はMiniMax H3の`references[i].id`で、2026-10-28追加、§5.1) |
 | `SOURCE_VIDEO_TOO_SHORT` / `SOURCE_AUDIO_TOO_SHORT` / `END_SOURCE_TOO_SHORT` | 422 | 素材が短すぎる(`END_SOURCE_TOO_SHORT`は動画素材のみ、§5.2) |
 | `SOURCE_AUDIO_SILENT` / `REFERENCE_AUDIO_SILENT` | 422 | 音声トラックはあるが全サンプルが0(無音)。`SOURCE_AUDIO_SILENT`はA2Vの元音声、`REFERENCE_AUDIO_SILENT`はMiniMax H3の音声の参照(§5.1)。2026-11-01追加 |
+| `REFERENCE_AUDIO_NO_STREAM` | 422 | MiniMax H3の音声の参照に音声トラックが無い(§5.1。A2Vの元音声では同じ場合に`SOURCE_AUDIO_TOO_SHORT`)。2026-10-31追加 |
 | `LORA_NOT_FOUND` | 404 | 未登録LoRA名 |
 | `LORA_REQUIRES_REFERENCE` | 422 | 制御LoRAに参照動画が無い |
 | `REFERENCE_REQUIRES_CONTROL_LORA` | 422 | 参照動画が指定されているのに制御系LoRAが1本も無い（`LORA_REQUIRES_REFERENCE`の逆方向。単発・チェーン共通。2026-08-03新設） |
@@ -332,7 +333,7 @@ multipart `file`。A2V音声用。
 
 - 応答 `UploadAudioResponse`(`api/models.py::UploadAudioResponse`): `{audio_id, original_filename, stored_path, content_type, size_bytes}`。
 - `audio_id` を `/generate/chain` の `source_audio.audio_id` に渡す（MiniMax H3 は `/generate` の `source_audio.audio_id` にも。§5.1）。
-- 制約: max 200MB、`.wav/.mp3/.m4a/.aac/.flac/.ogg`と動画の容器`.mp4/.mov/.webm/.mkv`（動画の容器は音声トラックだけを使う。音声トラックの無い動画は生成の事前検査で422 `SOURCE_AUDIO_TOO_SHORT`、音声トラックはあるが全サンプルが0の無音のものは422 `SOURCE_AUDIO_SILENT`）(`config.yaml`の`upload.max_audio_size_mb`／`upload.allowed_audio_extensions`)。
+- 制約: max 200MB、`.wav/.mp3/.m4a/.aac/.flac/.ogg`と動画の容器`.mp4/.mov/.webm/.mkv`（動画の容器は音声トラックだけを使う。音声トラックの無い動画は生成の事前検査で422 `SOURCE_AUDIO_TOO_SHORT`、音声トラックはあるが全サンプルが0の無音のものは422 `SOURCE_AUDIO_SILENT`。参照としての検査は §2・§5.1）(`config.yaml`の`upload.max_audio_size_mb`／`upload.allowed_audio_extensions`)。
 
 ### 3.12 `POST /generate`(`api/generate.py::generate`)— 認証あり — 中核
 

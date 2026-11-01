@@ -395,7 +395,7 @@ export function useBatchForm(
   const serverBusy = deps.serverBusy ?? false;
 
   // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02（2026-09-02）: ランナーはモジュールレベルのシングルトン
-  // (`runtime.ts`) なので、走行中にCreate画面が`key`リマウントされても走行は
+  // (`runtime.ts`) なので、走行中にCreate画面がマウントし直されても走行は
   // 生き続ける。このフックは購読するだけ——だから`useBatchRunner`は他の
   // `useState`より前で呼び、下の遅延初期化子がその場でスナップショットを
   // 読めるようにしている。

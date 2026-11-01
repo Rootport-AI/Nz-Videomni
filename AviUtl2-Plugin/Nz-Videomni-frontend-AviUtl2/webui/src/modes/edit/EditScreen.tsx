@@ -128,7 +128,7 @@ export interface EditScreenProps {
  * The sub-tab selection is plain `useState` — deliberately NOT lifted to
  * `AppShell`. W0 (共通スパイン) made Edit a right-click destination, so a route
  * CAN pre-select a sub-tab; it does so through the one-shot `initialIntent` +
- * remount arrangement every other screen already uses (a lazy `useState`
+ * remount arrangement Chained uses too (a lazy `useState`
  * initializer, never a prop-following effect), which needs no shell-level
  * state. The selection survives a main-tab switch anyway, since `AppShell`
  * keeps every mode screen mounted and merely hides the inactive ones.

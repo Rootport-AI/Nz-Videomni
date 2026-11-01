@@ -35,11 +35,13 @@ MODE_NONE = "none"
 MODE_V2V = "v2v"
 MODE_A2V = "a2v"
 
-# A2V source-audio precheck fallbacks used when /config is unavailable (mirrors
-# config.py UploadConfig.allowed_audio_extensions / max_audio_size_mb). Kept
-# here since only the chain flow consumes them.
+# A2V source-audio precheck fallbacks used when /config is unavailable. Kept
+# here since only the chain flow consumes them. The size mirrors the server
+# default (config.py UploadConfig.max_audio_size_mb); the extensions stay
+# audio-only on purpose, since the Gradio picker accepts audio files only (the
+# server also takes video containers).
 _FALLBACK_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
-_FALLBACK_MAX_AUDIO_MB = 50
+_FALLBACK_MAX_AUDIO_MB = 200
 
 # Acceleration: block-swap prefetch checkbox default. Default-on was approved
 # by the owner after the real-device gate (bit-exact output + VRAM headroom)

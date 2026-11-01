@@ -549,9 +549,10 @@ export const en = {
     heading: "Negative Prompt",
     /** Shown inside the greyed accordion while the loaded
      * base model's engine cannot run NAG/VSF (`nag` in its
-     * `unsupported_features`). Nothing from this panel is sent meanwhile. */
-    unavailableOnBaseModel:
-      "Negative prompts (NAG/VSF) are not available on the selected base model, so these settings are not sent. Switch the base model in the header to use them.",
+     * `unsupported_features`). Nothing from this panel is sent meanwhile;
+     * the sentence only says the base model does not support it (owner
+     * wording, 2026-10-31). */
+    unavailableOnBaseModel: "Negative prompts are not supported on this base model.",
     onBadge: "【🔴ON】",
     textLabel: "Negative prompt",
     enableLabel: "non-CFG Negative",
@@ -1613,11 +1614,20 @@ export const en = {
       outOfRangeGenerateHint:
         "Some keyframes are beyond the current duration. Shorten, move, or remove them to generate.",
       /** Keyframe timeline rework (2026-07-18): confirmation modal shown when
-       * shortening the duration would delete out-of-range keyframes. */
+       * shortening the duration would delete out-of-range keyframes.
+       * `prefillTitle`/`prefillBody` (2026-11-01): the same dialog when the
+       * shrink comes from a right-click prefill seeding the frame count
+       * (`PendingShrink.origin === "prefill"`) — the material is attached
+       * either way; only the frame-count adjustment is asked. The body stays
+       * neutral about WHY that count was chosen (it may come from the
+       * material's length or from the comfort ceiling). */
       shrinkModal: {
         title: "Shorten duration?",
         body: (numFrames: number, count: number): string =>
           `Shortening the duration to ${numFrames} frames will delete ${count} keyframe(s) that fall outside the new range.`,
+        prefillTitle: "Adjust the frame count automatically?",
+        prefillBody: (numFrames: number, count: number): string =>
+          `The right-click will set the frame count to ${numFrames} frames. ${count} keyframe(s) outside the new range will be deleted.`,
         applyButton: "Apply",
         cancelButton: "Cancel",
       },
@@ -1774,6 +1784,10 @@ export const en = {
       referenceUploading: "Wait for the reference video upload to finish.",
       /** §1-107: a Reference card that will be sent is still uploading. */
       referenceCardUploading: "Wait for the reference file upload to finish.",
+      /** §1-117: "Audio to video" is checked (Enable on) but its card holds no
+       * ready audio (empty or failed; an upload in flight is
+       * `referenceCardUploading`). */
+      referenceA2vAudioMissing: "Add the audio to use for Audio to video.",
       /** NAG (2026-07-28): shown when "non-CFG Negative" is enabled but the
        * shared negative-prompt text is empty/whitespace-only — mirrors the
        * backend's own 422 for the same combination. */
@@ -1979,14 +1993,6 @@ export const en = {
      * `typeMismatch` above so the two read alike. */
     typeMismatchAny: (selected: string, required: readonly string[]): string =>
       `The selected object is a ${selected}. This action requires a ${required.join(" or ")}.`,
-    /** I6 §4-3 near-neighbor guidance: a video was selected for the audio-object
-     * a2v (#7); point the user at the video-audio a2v (#3) instead. */
-    useVideoAudioInstead:
-      `To use this video's sound, choose "🎬 Audio-to-video from this video's sound".`,
-    /** §4-3 near-neighbor guidance, 台帳§1-16: the same mistake on the LONG-form
-     * audio item — point at its own video sibling, not at the single-shot #3. */
-    useVideoAudioLongInstead:
-      `To use this video's sound, choose "🎬 Long a2v from this video's sound".`,
     /** I6 §4-5: the #1/#2 source/reference video is shorter than the length
      * floor. `requiredSeconds` is the exact threshold; shown rounded up. */
     videoTooShort: (requiredSeconds: number): string =>
@@ -2034,32 +2040,24 @@ export const en = {
     /** I9 §3-6 #10: the `timeline.captureFrame` round trip failed (or KEYFRAMES
      * was already full), so no frame could be captured. */
     captureFrameFailed: "Could not capture the current frame.",
-    /** I10 §3-4 #3: shown while the video's sound is being extracted to a wav
-     * (a few seconds). Bundles the mix-path explanation so the user knows the
-     * timeline mixdown — not just the selected object — is what gets captured
-     * (the note area shows one message at a time). */
-    extractingAudio: "Extracting audio… This extracts the sound as it actually plays on the timeline.",
-    /** I10 §3-4 #3 receipt: the extracted wav is now loaded into the audio slot
-     * (the temp wav's own name is opaque, so this reads more naturally than the
-     * shared loadedFromRightClick copy). */
-    loadedVideoAudio: "Loaded the video's audio.",
-    /** 台帳§1-16 🎵 audio-to-long-a2v: shown while the AUDIO OBJECT's own ribbon
-     * range is being cut to a wav. Distinct from `extractingAudio` because this
-     * one runs in SOLO mode — only the selected object's layer is audible — so
-     * the mix-path sentence that note bundles would be actively wrong here. */
-    extractingObjectAudio: "Extracting audio… This cuts the selected audio object's range.",
-    /** 台帳§1-16 🎵 receipt: the solo-extracted wav is now in Chain's audio slot
-     * (the temp wav's own name is opaque, hence not `loadedFromRightClick`). */
-    loadedObjectAudio: "Loaded the audio object's sound.",
-    /** I10 §3-4 #3 failure — the range was silent (EXTRACT_FAILED, "…silent
-     * range"): a muted/disabled layer usually explains it. */
+    /** §3-4 #7/#18 (§1-113, 2026-10-31): shown while the selected audio OR video
+     * object's own ribbon range is being rendered to a wav in SOLO mode (only
+     * the object's layer audible; `timeline/extractObjectAudio.ts`). Worded
+     * neutrally because both object kinds reach it. */
+    extractingObjectAudio: "Extracting the selected object's sound… (its ribbon range only)",
+    /** §3-4 #7/#18 receipt: the solo-extracted wav is now in the audio slot (the
+     * temp wav's own name is opaque, hence not `loadedFromRightClick`). */
+    loadedObjectAudio: "Loaded the object's sound.",
+    /** §3-4 #7/#18 failure — the range was silent (EXTRACT_FAILED, "…silent
+     * range"): a muted/disabled layer, or a video object whose sound is off or
+     * split to another layer, usually explains it. */
     audioExtractSilent:
       "The selected range has no audible sound, so nothing could be extracted. Check for muted or disabled layers.",
-    /** I10 §3-4 #3 failure — extraction ran too long (EXTRACT_FAILED, per-frame
+    /** §3-4 #7/#18 failure — extraction ran too long (EXTRACT_FAILED, per-frame
      * "audio render failed…", whose dominant cause is the worker's render
      * timeout). */
     audioExtractTimeout: "Audio extraction took too long and was aborted.",
-    /** I10 §3-4 #3 failure — any other EXTRACT_FAILED (setup failure, wav write
+    /** §3-4 #7/#18 failure — any other EXTRACT_FAILED (setup failure, wav write
      * failure, or an unclassifiable message). */
     audioExtractFailed: "Audio extraction failed.",
     /** I11 §3-4 #8: the right-clicked text object's body is empty, so nothing is
@@ -2079,12 +2077,6 @@ export const en = {
      * `keyframeLimitReached` twin). `kindLabel` is the row's title. */
     referenceSlotsFull: (kindLabel: string): string =>
       `The Reference ${kindLabel} cards are full. Clear a card with 🔁 and try again.`,
-    /** §1-107: #3 (a2v from a video's sound) is refused on MiniMax H3, whose
-     * A2V lives on the Reference accordion's Audios cards. Points at the 📁
-     * button rather than another right-click, so the two notes never send the
-     * user round in a circle. */
-    videoAudioA2vUseReference:
-      "On MiniMax H3, add the audio with 📁 on a Reference Audios card, then tick Audio to video.",
     /** I11 §3-4 #5 receipt: the right-clicked image was appended to a keyframe.
      * `fileName` names the loaded file (the visible new card is the primary
      * feedback; this reinforces it). */
@@ -2199,7 +2191,8 @@ export const en = {
    * they stay separate copy rather than one generic message. */
   dnd: {
     unsupportedVideo: "Unsupported file type. Choose a video (.mp4, .mov, .webm, .mkv).",
-    unsupportedAudio: "Unsupported file type. Choose an audio file (.wav, .mp3, .m4a, .aac, .flac, .ogg).",
+    unsupportedAudio:
+      "Unsupported file type. Choose an audio file (.wav, .mp3, .m4a, .aac, .flac, .ogg) or a video file (.mp4, .mov, .webm, .mkv); only its sound is used.",
     unsupportedSource:
       "Unsupported file type. Choose an image (.png, .jpg, .jpeg, .webp) or a video (.mp4, .mov, .webm, .mkv).",
     /** Keyframe timeline rework (2026-07-18): image-only drop target's
@@ -2237,11 +2230,11 @@ export const en = {
     rightClickMenuHeading: "Right-click menu:",
     prefillSizePolicyLabel: "Match Gen video size to the...",
     prefillFpsPolicyLabel: "Match Gen video FPS to the...",
-    prefillPolicyDefaults: "Dev",
+    prefillPolicyPanel: "panel",
     prefillPolicyProject: "project",
     prefillPolicyMaterial: "materials",
-    /** X6: tooltip on both axes' "Dev" button (its label is intentionally terse). */
-    prefillPolicyDevTooltip: "Developmental defaults",
+    /** 台帳 §1-114: tooltip on both axes' "panel" button (it replaced "Dev"). */
+    prefillPolicyPanelTooltip: "Keep the values currently set in the panel",
     /** Acceleration (2026-07-31, backend §43): five rows, all of them REAL as
      * of 2026-08-05, when the VAE row (the last mock) went live with backend
      * §52 (see `shell/accelerationSettings.ts`). The attention buttons' own
@@ -2784,8 +2777,7 @@ export const ja: Strings = {
   },
   nag: {
     heading: "ネガティブプロンプト",
-    unavailableOnBaseModel:
-      "選択中のベースモデルではネガティブプロンプト（NAG/VSF）を使えないため、ここの設定は送信されません。使うには、上のベースモデルを切り替えてください。",
+    unavailableOnBaseModel: "このベースモデルでは、ネガティブプロンプトは未対応です。",
     onBadge: "【🔴ON】",
     textLabel: "ネガティブプロンプト",
     enableLabel: "non-CFG Negative",
@@ -3342,6 +3334,9 @@ export const ja: Strings = {
         title: "尺を短くしますか？",
         body: (numFrames: number, count: number): string =>
           `尺を ${numFrames} フレームに縮めると、範囲外になるキーフレーム ${count} 枚が削除されます。`,
+        prefillTitle: "フレーム数を自動調整しますか？",
+        prefillBody: (numFrames: number, count: number): string =>
+          `右クリックの自動設定で、フレーム数を ${numFrames} フレームに調整します。範囲外になるキーフレーム ${count} 枚が削除されます。`,
         applyButton: "適用",
         cancelButton: "キャンセル",
       },
@@ -3437,6 +3432,7 @@ export const ja: Strings = {
       audioUploading: "音声のアップロード完了を待ってください。",
       referenceUploading: "参照動画のアップロード完了を待ってください。",
       referenceCardUploading: "参照ファイルのアップロード完了を待ってください。",
+      referenceA2vAudioMissing: "Audio to video に使う音声を入力してください。",
       nagNegativeEmpty: "ネガティブプロンプトを入力するか、「non-CFG Negative」をオフにしてください。",
       referenceTrimFailed:
         "参照動画の範囲切り出しが適用されませんでした。プラグインが古い可能性があります。プラグインを更新するか、ファイルを選び直すと全体を使って実行できます。",
@@ -3556,9 +3552,6 @@ export const ja: Strings = {
       `選択されているのは${selected}です。この操作には${required}が必要です。`,
     typeMismatchAny: (selected: string, required: readonly string[]): string =>
       `選択されているのは${selected}です。この操作には${required.join("か")}が必要です。`,
-    useVideoAudioInstead: "動画の音声を使うには『🎬 この動画の音声でa2v』を選んでください。",
-    useVideoAudioLongInstead:
-      "動画の音声を使うには『🎬 この動画の音声でlong a2v』を選んでください。",
     videoTooShort: (requiredSeconds: number): string =>
       `この動画は短すぎます。約${Math.ceil(requiredSeconds)}秒以上の動画が必要です。`,
     rangeNotSelected:
@@ -3574,10 +3567,8 @@ export const ja: Strings = {
     sourceFileMissing: "素材ファイルが見つかりません（移動または削除された可能性があります）。",
     capturedFrameToKeyframe: "現在フレームをキーフレームに取り込みました。",
     captureFrameFailed: "現在フレームの取り込みに失敗しました。",
-    extractingAudio: "音声を抽出しています…（タイムラインで実際に鳴っている音を抽出します）",
-    loadedVideoAudio: "動画の音声を読み込みました。",
-    extractingObjectAudio: "音声を切り出しています…（選択した音声オブジェクトの範囲を切り出します）",
-    loadedObjectAudio: "音声オブジェクトの音を読み込みました。",
+    extractingObjectAudio: "選択したオブジェクトの音声を抽出しています…（リボンの範囲だけ）",
+    loadedObjectAudio: "オブジェクトの音声を読み込みました。",
     audioExtractSilent:
       "選択範囲の音声が無音のため抽出できませんでした（ミュートやレイヤー無効化を確認してください）。",
     audioExtractTimeout: "音声の抽出に時間がかかりすぎたため中断しました。",
@@ -3588,8 +3579,6 @@ export const ja: Strings = {
     keyframeLimitReached: "キーフレームの上限に達しました。",
     referenceSlotsFull: (kindLabel: string): string =>
       `Reference の ${kindLabel} のカードが満杯です。🔁 でカードを空けてから、もう一度お試しください。`,
-    videoAudioA2vUseReference:
-      "MiniMax H3 では、Reference の Audios カードの 📁 から音声を入れ、Audio to video にチェックを入れてください。",
     appendedImageToKeyframe: (fileName: string): string =>
       `画像をキーフレームに追記しました: ${fileName}`,
     trackingUnavailable:
@@ -3636,7 +3625,8 @@ export const ja: Strings = {
   },
   dnd: {
     unsupportedVideo: "対応していないファイル形式です。動画（.mp4, .mov, .webm, .mkv）を選択してください。",
-    unsupportedAudio: "対応していないファイル形式です。音声ファイル（.wav, .mp3, .m4a, .aac, .flac, .ogg）を選択してください。",
+    unsupportedAudio:
+      "対応していないファイル形式です。音声ファイル（.wav, .mp3, .m4a, .aac, .flac, .ogg）か動画ファイル（.mp4, .mov, .webm, .mkv。音声だけを使います）を選択してください。",
     unsupportedSource:
       "対応していないファイル形式です。画像（.png, .jpg, .jpeg, .webp）または動画（.mp4, .mov, .webm, .mkv）を選択してください。",
     unsupportedImage: "対応していないファイル形式です。画像ファイル（.png、.jpg、.jpeg、.webp）をドロップしてください。",
@@ -3652,10 +3642,10 @@ export const ja: Strings = {
     rightClickMenuHeading: "右クリックからの動画生成時:",
     prefillSizePolicyLabel: "サイズはどれに合わせる？",
     prefillFpsPolicyLabel: "fpsはどれに合わせる？",
-    prefillPolicyDefaults: "開発用",
+    prefillPolicyPanel: "操作パネル",
     prefillPolicyProject: "プロジェクト",
     prefillPolicyMaterial: "素材",
-    prefillPolicyDevTooltip: "開発用の既定値",
+    prefillPolicyPanelTooltip: "操作パネルに今設定されている値を保つ",
     accelerationHeading: "生成の高速化:",
     accelFusedGgufKernelLabel: "GGUF脱量子化カーネルの1本化",
     accelFusedGgufKernelOn: "ON",

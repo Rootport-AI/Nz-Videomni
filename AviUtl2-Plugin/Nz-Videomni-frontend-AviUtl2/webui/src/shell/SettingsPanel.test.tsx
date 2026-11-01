@@ -252,9 +252,17 @@ describe("SettingsPanel", () => {
     const sizeGroup = within(screen.getByRole("group", { name: "Match Gen video size to the..." }));
     const fpsGroup = within(screen.getByRole("group", { name: "Match Gen video FPS to the..." }));
 
-    // The renamed "Dev" (defaults) label appears in both groups.
-    expect(sizeGroup.getByRole("button", { name: "Dev" })).toBeInTheDocument();
-    expect(fpsGroup.getByRole("button", { name: "Dev" })).toBeInTheDocument();
+    // 台帳 §1-114: "panel" (keep the panel's values) replaced "Dev" in both
+    // groups, with its tooltip.
+    expect(sizeGroup.queryByRole("button", { name: "Dev" })).not.toBeInTheDocument();
+    expect(sizeGroup.getByRole("button", { name: "panel" })).toHaveAttribute(
+      "title",
+      "Keep the values currently set in the panel",
+    );
+    expect(fpsGroup.getByRole("button", { name: "panel" })).toHaveAttribute(
+      "title",
+      "Keep the values currently set in the panel",
+    );
 
     // Size default is "material"; fps default is "project" — each group's own
     // pressed button reflects its own axis, independently.
@@ -284,16 +292,16 @@ describe("SettingsPanel", () => {
     await waitFor(() => {
       expect(sizeGroup.getByRole("button", { name: "project" })).toHaveAttribute("aria-pressed", "true");
     });
-    // ...and the fps axis to "Dev" (defaults).
-    await user.click(fpsGroup.getByRole("button", { name: "Dev" }));
+    // ...and the fps axis to "panel".
+    await user.click(fpsGroup.getByRole("button", { name: "panel" }));
     await waitFor(() => {
-      expect(fpsGroup.getByRole("button", { name: "Dev" })).toHaveAttribute("aria-pressed", "true");
+      expect(fpsGroup.getByRole("button", { name: "panel" })).toHaveAttribute("aria-pressed", "true");
     });
 
     expect(window.localStorage.getItem(PREFILL_SIZE_POLICY_STORAGE_KEY)).toBe("project");
-    expect(window.localStorage.getItem(PREFILL_FPS_POLICY_STORAGE_KEY)).toBe("defaults");
+    expect(window.localStorage.getItem(PREFILL_FPS_POLICY_STORAGE_KEY)).toBe("panel");
     expect(readStoredSizePolicy()).toBe("project");
-    expect(readStoredFpsPolicy()).toBe("defaults");
+    expect(readStoredFpsPolicy()).toBe("panel");
 
     // §3-13: the fps axis's "materials" is a real, clickable choice now — it
     // presses and persists like any other, where X1 left it inert.

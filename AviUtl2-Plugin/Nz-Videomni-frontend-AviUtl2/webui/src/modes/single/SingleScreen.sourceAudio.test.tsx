@@ -14,7 +14,7 @@ import { SingleScreen } from "./SingleScreen";
 // Single-clip A2V routing: an engine that publishes `constraints.source_audio`
 // (MiniMax H3) submits the card through `/generate` with
 // `source_audio: {audio_id, strength}`; one that does not (LTX) keeps the
-// chain submission. The audio arrives as a carried-over prefill slot.
+// chain submission. The audio is attached through the A2V card's 📁 button.
 
 const H3_CONSTRAINTS = resolveGenerationConstraints({
   num_frames: { step: 17, offset: 5, min: 22, max: 481 },
@@ -38,10 +38,19 @@ function Providers({ children, nativeBridge }: { children: ReactNode; nativeBrid
   );
 }
 
-function renderWithAudio(constraints: typeof H3_CONSTRAINTS | undefined) {
-  // A 20 s wav, so the audio covers the form's default duration.
-  const fs = createMockFs({ folders: { "C:\\a": [{ name: "bg.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 20 }] } });
-  const nativeBridge = createMockBridge({ delayMs: 0, fs });
+async function renderWithAudio(constraints: typeof H3_CONSTRAINTS | undefined, pickFileName = "bg.wav") {
+  // A 20 s wav, so the audio covers the form's default duration. Any other
+  // name (e.g. an mp4) has no measurable length (`fs.probeAudioDuration`
+  // answers `isWav: false`).
+  const fs = createMockFs({
+    folders: {
+      "C:\\Users\\mock\\Pictures": [
+        { name: "bg.wav", sizeBytes: 4_096, mtimeMs: 0, durationSec: 20 },
+        { name: "clip.mp4", sizeBytes: 4_096, mtimeMs: 0 },
+      ],
+    },
+  });
+  const nativeBridge = createMockBridge({ delayMs: 0, fs, pickFileName });
   // Submissions go through the app-wide singleton client, so spy on that.
   const requestSpy = vi.spyOn(appBridge, "request");
   render(
@@ -50,22 +59,6 @@ function renderWithAudio(constraints: typeof H3_CONSTRAINTS | undefined) {
         prompt="a cat riding a skateboard"
         baseUrl={null}
         constraints={constraints}
-        initialIntent={{
-          intent: "audio-to-video",
-          targetMode: "single",
-          selection: {
-            hasRange: true,
-            rangeStart: 0,
-            rangeEnd: 120,
-            selected: [],
-            cursorFrame: 0,
-            cursorLayer: 1,
-            rate: 30,
-            scale: 1,
-            sampleRate: 44100,
-          },
-          carryOver: { sourceAudio: { id: "aud-123", fileName: "bg.wav", filePath: "C:\\a\\bg.wav" } },
-        }}
         nativeBridge={nativeBridge}
         highlightedJobId={null}
         onJobSubmitted={() => {}}
@@ -79,7 +72,11 @@ function renderWithAudio(constraints: typeof H3_CONSTRAINTS | undefined) {
     requestSpy.mock.calls
       .filter((c) => c[0] === "backend.request" && (c[1] as { path?: string }).path === path)
       .map((c) => (c[1] as { body: Record<string, unknown> }).body);
-  return { postsTo };
+  // The audio-length probe goes through the screen's own native bridge.
+  const nativeSpy = vi.spyOn(nativeBridge, "request");
+  fireEvent.click(await screen.findByRole("button", { name: /choose audio file/i }));
+  await waitFor(() => expect(screen.getByRole("button", { name: /remove audio/i })).toBeEnabled(), { timeout: 5_000 });
+  return { postsTo, nativeSpy };
 }
 
 async function clickGenerate() {
@@ -96,10 +93,10 @@ describe("SingleScreen — single-clip A2V routing", () => {
   it(
     "with constraints.source_audio: /generate carries source_audio {audio_id, strength} (the slider's value) and no chain-only fields",
     async () => {
-      const { postsTo } = renderWithAudio(H3_CONSTRAINTS);
+      const { postsTo } = await renderWithAudio(H3_CONSTRAINTS);
       fireEvent.change(await screen.findByTestId("source-audio-strength"), { target: { value: "0.5" } });
-      // Without an AviUtl2 selection the prefill leaves DURATION at 273 (off H3's 17n+5 grid)
-      // until the wav probe has settled (it re-seeds DURATION once); type a valid one, re-applied until Generate opens.
+      // The wav probe re-seeds DURATION once it settles; type a valid one,
+      // re-applied until Generate opens.
       await waitFor(() => {
         const duration = document.querySelector<HTMLInputElement>("input[type=number][step='17']")!;
         fireEvent.change(duration, { target: { value: "277" } });
@@ -111,7 +108,7 @@ describe("SingleScreen — single-clip A2V routing", () => {
 
       await waitFor(() => expect(postsTo("/api/v1/generate")).toHaveLength(1));
       const body = postsTo("/api/v1/generate")[0]!;
-      expect(body.source_audio).toEqual({ audio_id: "aud-123", strength: 0.5 });
+      expect(body.source_audio).toEqual({ audio_id: expect.stringMatching(/^mock-audio-/), strength: 0.5 });
       for (const key of ["clips", "stage2_window", "overlap_frames", "overlap_strength", "chunked_upsample", "pipeline"]) {
         expect(body, key).not.toHaveProperty(key);
       }
@@ -123,12 +120,31 @@ describe("SingleScreen — single-clip A2V routing", () => {
   it(
     "without it (LTX): the A2V card still goes through /generate/chain, as before",
     async () => {
-      const { postsTo } = renderWithAudio(undefined);
+      const { postsTo } = await renderWithAudio(undefined);
       expect(screen.queryByTestId("source-audio-strength")).not.toBeInTheDocument();
       await clickGenerate();
 
       await waitFor(() => expect(postsTo("/api/v1/generate/chain")).toHaveLength(1));
       expect(postsTo("/api/v1/generate")).toHaveLength(0);
+    },
+    15_000,
+  );
+
+  // §1-113 G-7 (2026-11-01): an mp4 (length unknown here — only a wav's header
+  // is measured) must not lock Generate; the server's preflight (422
+  // `SOURCE_AUDIO_TOO_SHORT`) decides. Before the fix the unknown length was
+  // treated as "too short" and Generate stayed disabled forever.
+  it(
+    "an mp4 on the A2V card (length unknown) leaves Generate enabled and the request is sent",
+    async () => {
+      const { postsTo, nativeSpy } = await renderWithAudio(undefined, "clip.mp4");
+      // Wait for the length probe to have been made, then for it to settle.
+      await waitFor(() => expect(nativeSpy.mock.calls.some((c) => c[0] === "fs.probeAudioDuration")).toBe(true));
+      const probeIndex = nativeSpy.mock.calls.findIndex((c) => c[0] === "fs.probeAudioDuration");
+      await nativeSpy.mock.results[probeIndex]!.value;
+      await clickGenerate();
+
+      await waitFor(() => expect(postsTo("/api/v1/generate/chain")).toHaveLength(1));
     },
     15_000,
   );

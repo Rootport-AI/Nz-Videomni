@@ -1863,7 +1863,9 @@ export function useChainForm(
   const pickAudio = useCallback(async () => {
     let picked: { filePath: string; fileName: string };
     try {
-      picked = await nativeBridge.request("ui.pickFile", { kind: "audio" });
+      // 台帳 §1-113: the dialog also offers video files (only their sound is
+      // used); the upload itself stays `kind: "audio"` (`/upload/audio`).
+      picked = await nativeBridge.request("ui.pickFile", { kind: "audioOrVideo" });
     } catch (err) {
       const code = errorCodeOf(err);
       // CANCELLED (user dismissed the dialog) leaves the slot untouched,

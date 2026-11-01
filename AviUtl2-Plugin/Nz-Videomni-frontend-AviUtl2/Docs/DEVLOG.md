@@ -5773,3 +5773,187 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **完結しました。** オーナーの実機確認 G-4 に全項目合格（記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §186.8）、バックエンド台帳は CLOSED 3-264。GPU の門は §186.6。デプロイ済みです（aux2 は 1,559,040 バイト・SHA-256 の先頭 `732cc77f`（G-4 はこの配置で確認。その後、文言の監査〔右クリック #19 の案内を「IC-LoRA の参照動画」と限定〕を反映して再配置し、先頭は `d78299d3`・バイト数は同じ）。実機と配布コピーとビルド成果物の 3 つが一致）。
 - 右クリックの補足: H3 単独では、右クリックから Chained を作り直す入口はありません（Chained 系の 7 つの入口は、すべて H3 では閉じたパネル行きで、確認より前に案内で断られます）。「破棄して読み込みますか？」の確認が効くのは、LTX に切り替えた後だけです（§186.8）。
 - `shell/AppShell.minimaxH3.test.tsx` の既存の 2 テストは、全件実行で散発的に落ちることがあります。今回の追加が無くても起きるので（台帳 §3-238 の型。回数は記録簿 §186.5）、製品の不具合として個別には起票していません。
+
+## 155. 右クリック #3・#17 の削除・#7／#18 の動画オブジェクト受け入れ・音声の入力欄の動画ファイル受け入れ（バックエンド台帳 `PENDING_TASKS.md` §1-113。2026-10-31）
+
+### 155.1 結論
+
+- **右クリックの #3（🎬 この動画の音声でa2v）と #17（🎬 この動画の音声でlong a2v）を削除しました。** オブジェクトメニューは 19 項目から 17 項目になります（native のメニュー表 `kObjectMenuItems` と言語ファイルは native 側の担当）。番号は詰めず欠番にしています。
+- **代わりに #7（🎵 この音声を参照入力〔またはa2v〕する）と #18（🎵 この音声からlong a2v）が、動画オブジェクトも受け付けます**（必須種別＝音声または動画。メニューの文言と絵文字は変えていません）。どちらも、選択オブジェクトのリボンの範囲の音声を solo 録り（そのオブジェクトのレイヤーだけを鳴らす）で wav にして、音声の入力欄へ入れます。#7 は LTX では Single の A2V カード、MiniMax H3 では Reference の Audios カードへ入り、#18 は Chained の音声カードへ入ります。mix 録り（タイムライン全体で鳴っている音を録る経路）は無くなりました。
+- **3 つの音声の入力欄（LTX の Single の A2V カード・H3 の Reference の Audios カード・Chained の音声カード）が、ドラッグ＆ドロップと 📁 で動画ファイル（.mp4 .mov .webm .mkv）も受けます。** 使うのは音声だけです。アップロード先は従来どおり `/upload/audio` で、バックエンドがこの 4 つの容器を受け、上限を 200MB にしました（バックエンド側の担当。記録はバックエンドの記録簿）。バッチ a2v は対象外です。音声の参照のファイルに復号できる音声の流れが無ければ、バックエンドが 422 `REFERENCE_AUDIO_NO_STREAM` で断ります（`/generate`・`/generate/chain` の両方。オーナー裁定 2026-10-31）。Chained に埋め込まれたクリップごとの Reference の Audios カードも同じ部品なので、動画ファイルを受けます。
+- 📁 のダイアログの種類に `audioOrVideo` を足しました（ブリッジ契約 v18。`imageOrVideo` と同じ作り。native 側の担当）。
+- 仕様書は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第 30 版（§3-4・§3-5・§4-3・第 8 節ほか）です。
+
+### 155.2 何を変えたか
+
+- **抽出を 1 つの関数に。** 新規の `timeline/extractObjectAudio.ts` の `extractObjectAudio(bridge, item)` が `timeline.extractAudio` を `{ layer, frameStart, frameCount: frameEnd - frameStart + 1, audioMode: "solo", soloKeepLayers: [layer] }` で呼び、`{ filePath, fileName, durationSec }` を返します。受け口の 3 か所（`modes/single/SingleScreen.tsx` の #7・`shell/AppShell.tsx` の H3 の #7・`modes/chained/ChainedScreen.tsx` の #18）がこれを呼びます。失敗の分類（無音・時間切れ・その他）は `classifyExtractAudioError` と `extractAudioFailureNote` にまとめ、Single と Chained で重複していた正規表現を消しました。
+- **抽出は直列に実行します。** solo 録りは他のレイヤーを一時的に無効にして、終わったら元の状態へ戻します。2 つの抽出が重なると互いの「元の状態」を取り違えてレイヤーが無効のまま残りうるので、モジュール内の Promise の連鎖で 1 件ずつ実行します（前の抽出が失敗しても連鎖は止まりません）。物体追尾やマスク描画とは調停していません（#18 に元からある既知の限界のまま）。
+- **H3 の #7。** 抽出してから `addReferenceAudio` で Audios カードへ入れます（型は不変。秒数は受け手が wav のヘッダから読みます）。#3 を案内で断る分岐と文言 `notes.videoAudioA2vUseReference` は消しました。
+- **`a2vSeedMaxFrames` を削除。** #7 が元ファイルを丸ごとアップロードしていたころ、wav の長さからの Frames の提案をリボンの長さで抑えていた仕組み（`useGenerationForm.ts` の `a2vSeedMaxFrames`・`a2vSeedCapPathRef`、`SingleScreen.tsx` の種）です。いまは抽出した wav の長さがリボンの長さそのものなので不要になりました。Frames の自動調整は従来どおり wav だけで、動画ファイルの長さを測って合わせる処理は入れていません（容器の長さと音声の長さが違いうるため）。
+- **ガード。** `menuRouting.ts` の #7・#18 の `requiredKind` を `["audio", "video"]` にし、動画オブジェクトを #3・#17 へ導いていた特例（`menuSelection.ts` の `VIDEO_FOR_AUDIO_ACTION_NOTE` と注意の種類 2 つ・文言 2 つ）を消しました。画像などには既存の `typeMismatchAny` が「音声か動画」と案内します。
+- **📁 の種類とアップロードの種類を分けました。** native の `backend.uploadFile` は `image|video|audio` しか受けないためです。`useSourceUpload` に `pickKind`（`pick()` だけが読む）を足し、LTX の A2V カードは `audioOrVideo` を渡します。`useReferenceSlots.ts` は `UPLOAD_KIND` とは別に `PICK_KIND` を持ち、`useChainForm.ts` の `pickAudio` も `audioOrVideo` です。ドラッグ＆ドロップの受け付けは `shell/useFileDrop.ts` の `SOURCE_AUDIO_INPUT_EXTENSIONS`（音声 6 種＋動画 4 種）で、`strings.dnd.unsupportedAudio` に動画の拡張子を足しました。
+- **文言。** mix 用の `notes.extractingAudio`・`notes.loadedVideoAudio` を消し、`notes.extractingObjectAudio`・`notes.loadedObjectAudio` を動画オブジェクトにも合う中立な文に改めました。
+- **引き算。** 製品コードから使われていなかった `timeline/cutoutAndUpload.ts` とその試験を消しました。削除した 2 つの intent（`video-audio-to-video`・`video-audio-to-long-a2v`）への参照は、文字列のキーで型検査に掛からないので、`webui/src` を検索して 0 件にしました。
+- mock（`bridge/mockBridge.ts`）の `ui.pickFile` は `audioOrVideo` で `picked-audio-N.wav` を返します（音声の種類と同じ名前）。
+- **`timeline.extractAudio` を `NO_LOCAL_TIMEOUT_METHODS` へ入れました（2026-10-31）。** native が 1 フレームごとに 10 秒で描画を打ち切るので、WebUI 側の 10 秒で先に切ると、native がソロ中のまま描画している間に `extractObjectAudio.ts` の直列化が解けてしまうためです。`BridgeError` の `TIMEOUT` も「時間切れ」に分類します。
+
+### 155.3 テスト
+
+- 新規は `timeline/extractObjectAudio.test.ts`（要求の形・直列化の順序・失敗が連鎖を止めない・分類の表）。
+- 書き換えは `App.prefill.test.tsx`（#7 が音声オブジェクトでも動画オブジェクトでも solo で抽出して wav を添付する・3 つの失敗の注意・#18 が動画オブジェクトを solo で抽出する）・`shell/AppShell.minimaxH3.test.tsx`（H3 の #7 が抽出してから Audios カードへ入る・動画オブジェクトでも入る・無音の注意）・`timeline/menuSelection.test.ts`（種別の表を受け付ける種類の集合で判定・#7／#18 は動画を通し画像を「音声か動画」で断る）・`timeline/menuRouting.test.ts`・`timeline/prefillSeed.test.ts`。
+- 追加は 3 つのカードの mp4 のドロップと `audioOrVideo` の 📁（アップロードの `kind` は `audio` のまま）: `modes/single/GenerationForm.sourceAudio.test.tsx`・`modes/single/ReferenceAccordion.test.tsx`・`modes/single/useReferenceSlots.test.ts`・`modes/chained/ChainAudioPanel.test.tsx`。
+- 削除は #3・#17 の試験と `a2vSeedMaxFrames` の試験（`modes/single/useGenerationForm.test.ts`）・`timeline/cutoutAndUpload.test.ts`。
+
+### 155.4 門の結果
+
+- WebUI: `npm run typecheck` 0 エラー・`npm run lint` 0 エラー／32 警告（これまでと同数）・`npx vitest run --exclude "**/backend.integration.test.ts"` 180 ファイル・3,538 テスト合格・失敗 0。
+- ネイティブ: doctest 402 ケース・2,090 アサーション・失敗 0・スキップ 7・コンパイラーの警告なし。
+- バックエンド: pytest 3,766 件合格・28 件スキップ・失敗 0（進捗表示の . と s を数えた値。要約行は出力されない設定のため）。H3 の仮想環境の `tests/test_h3_audio_encoder.py` は 20 件合格。
+- 配置: `build/ninja-release/NzVideomni.aux2` 1,556,992 バイト（2026-10-31 21:04:10）を、実機の `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2` と配布用の複製 `AviUtl2-Plugin\NzVideomni.aux2` へ置いた。3 つとも sha256 は `5617683927601CFEDCA14869F76040605D0E2094529C0D0138409CF27751D0E3` で一致。言語ファイルは実機の `data\Language` へ複製した。
+- オーナー裁定 2 件（2026-10-31）: ① `timeline.extractAudio` を WebUI の 10 秒の時間切れの対象外にした（155.2）。② 音声の参照への事前検査 `REFERENCE_AUDIO_NO_STREAM` を足した（155.1）。
+- 既知の限界（直さない）: H3 の #7 は空きカードの確認より先に抽出する・待ちの間に `baseModels` が古くなりうる・追尾やマスク描画の「1 ジョブの枠」を抽出は取らない。`SingleScreen.reference.test.tsx` の「✒ appends the card's tag … right-clicked video opens the accordion」は単独実行 9 回中 2 回失敗したが、変更していない `addReferenceVideo` の経路で、台帳 §3-238 と同種であり退行ではない。
+- 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §187。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（G-1〜G-10）。
+- オーナーの実機確認（2026-11-01）: G-7 が不合格（mp4 を A2V／Audios カードに入れると、長さが不明なのに「音声が短すぎます」で Generate が止まる）。G-1〜G-6・G-10 は合格、G-8・G-9 は G-7 の修正後に再確認する。原因は `useGenerationForm.ts` の `audioTooShort` の条件で、記録簿 `Docs/VERIFICATION_LOG.md` §187.8 に書いた。
+
+## 156. 右クリックの Single 行き（#2・#4・#7）を作り直し無しのライブ経路へ・Settings「開発用」→「操作パネル」・反対スロットの持ち越しの削除（バックエンド台帳 §1-114。2026-10-31）
+
+### 156.1 結論
+
+- **右クリックの #2（この動画を参照入力）・#4（この画像から動画を生成）・#7（この音声を参照入力〔またはa2v〕する）で、Single の操作パネルを作り直さなくなりました。** 3 項目はライブ命令 `prefillMaterial` で、常にマウントされている Single 画面へ届きます。プロンプト・設定・ほかの欄（キーフレーム・参照動画・音声・H3 の Reference のカード）はそのまま残ります。
+- **#4 は、すでに frame 0 のキーフレームがあれば、そのカードの画像を置き換えます**（位置と強さは保ちます）。無ければ従来どおり frame 0 に足します（上限いっぱいなら「キーフレームの上限」の案内）。
+- **幅・高さ・fps・フレーム数の種は、従来どおり Settings「右クリックからの動画生成時」に従って上書きします。** 「プロジェクトに合わせる」の上書き（`getEditInfo`）は、右クリック 1 回につき 1 回走ります。
+- **Settings の「開発用（Dev）」を廃止し、「操作パネル（panel）」＝操作パネルに今設定されている値を保つ、に置き換えました。** ツールチップは「操作パネルに今設定されている値を保つ」／「Keep the values currently set in the panel」です。保存済みの旧値 `"defaults"` は読み捨てて、その軸の既定値（サイズ＝素材・fps＝プロジェクト）に戻ります（移行処理は作っていません）。Chained 行きの項目は今も作り直すので、Chained での「操作パネルの値」は作り直した直後の既定値です（破棄の確認に同意したうえでの読み込みなので矛盾しません）。
+- **反対スロットの持ち越し（W5 の carryOver）を削除しました。** 作り直しが無いので、反対側の欄はもともと消えません。Chained・Edit は持ち越しを使っていなかったので、ほかのタブへの影響はありません（型検査で確認）。
+- H3 の #2・#7（Reference のカードへ入る `addReferenceVideo`／`addReferenceAudio`）は変えていません。
+- 仕様書は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第 31 版（§3-4・§5-13・§5-15・§7-2）です。
+
+### 156.2 何を変えたか
+
+- **`AppShell.handleRoute` の Step 6。** 行き先が Single のときは `setPendingIntent`／`remountTokens` を触らず、`dispatchCreateCommand({ type: "prefillMaterial", intent, selection })` を送ります。Step 2（タイムラインとの照合）・Step 5（生成中の予約の門）・Step 7〜8（仮オブジェクトの配置）は今のままです。`singleIntent`・`<SingleScreen>` の `key`・`initialIntent`・`remountTokens` の `single` を消しました（ほかのモードの数は残しています）。
+- **Step 7（仮オブジェクトの長さ）。** 行き先が Single のときだけ、公開済みのフォームの値（`getPublishedFormValues()`）を `resolvePrefillSeed` の `panel` として渡します。Chained・Edit には渡しません（それぞれの画面の計算と一致させる R-4 の規約）。種がフレーム数や fps を決めなかったとき（例: 快適上限の無いベースモデルの #4）の落とし先も、Single では「設定の既定値」から「公開済みのフォームの値」に変えました。作り直しが無いので、フォームはその値を保つからです（リボンと操作パネルを食い違わせないため）。
+- **`timeline/prefillSeed.ts`。** ポリシーの型は `"panel" | "project" | "material"` です。`panel?: { width, height, frameRate }` を受け、サイズ軸が `panel` なら素材の寸法を使わず、パネルの幅・高さを `deriveGenerationParams` の「プロジェクト」の入力として通します（#2 の IC-LoRA では従来どおり 128 の倍数へ丸まる。`panel` が無ければ `config.generation_defaults`）。この経路では「プロジェクト設定 W×H に合わせて決定」の注記（`notes` の先頭）を落とします。fps 軸が `panel` ならパネルの fps です（固定 fps のエンジンは従来どおり固定値が優先）。
+- **`modes/single/SingleScreen.tsx`。** 既存の `subscribeCreateCommands` の受け手に `prefillMaterial` を足しました。購読は一度きりなので、値は毎描画で更新する `prefillCtxRef`（フォーム・キーフレーム・2 つのポリシー・config・ベースモデルの規則など）から読みます。処理は (1) 今のフォームの値を `panel` にして種を計算 → (2) `setWidth`／`setHeight`／`setFrameRate`／`setNumFrames` で適用し、注記を `resolutionNotes` の state へ・fps を丸めたらトースト → (3) どちらかの軸が「プロジェクト」なら、旧マウント効果の本体を関数にした `applyProjectOverwrite` を呼ぶ（命令ごとの連番で、後から戻った古い `getEditInfo` の答えは捨てる。setter は答えが戻った時点のものを読む）→ (4) 素材を付ける（#2 は従来どおりリボンの範囲で切ってアップロード・#7 は solo 抽出して音声欄へ・#4 は frame 0 の置き換えか追加）→ (5) 受領の案内と、失敗の監視（state `materialWatch`。参照動画・音声は欄の状態、キーフレームは置き換えたカードの id か、追加で増えた 1 枚を見る。`items[0]` は見ない）→ (6) アコーディオンを開く、の順です。
+- **アコーディオン。** `GenerationForm` の `autoOpenReference`／`autoOpenA2v`（マウント時に 1 回だけ開く）を、数が変わるたびに開く `referenceOpenSignal`／`a2vOpenSignal` に替えました（Reference アコーディオンの `openSignal` と同じ作り。初回の描画では開かない）。#2 は IC-LoRA 欄、#7 は A2V 欄を開きます。
+- **引き算。** `SingleScreen` の `initialIntent` 由来の一度きりの処理（`isICLora` の初期値・種の `useMemo`・fps のトーストの効果・「プロジェクト」上書きのマウント効果・素材の自動読み込みのマウント効果・持ち越しの読み取り・`publishSourceSlots` の効果）、`useGenerationForm` の第 4 引数 `GenerationFormInitial`（`seedICLora`・`carry*` を含む。`icLoraActive` は従来どおり動的）、`timeline/generationPrefill.ts` の `carryOver`、`timeline/provisionalReservation.ts` の `publishSourceSlots`／`getPublishedSourceSlots`／`PublishedSourceSlots`、`modes/chained/useSourceUpload.ts` の `initial` シード（利用者は持ち越しだけだった）を消しました。`GenerationPrefill` 型は Chained・Edit が使うので残しています。
+- **文言。** `settings.prefillPolicyDefaults`（en「Dev」／ja「開発用」）を `prefillPolicyPanel`（en「panel」／ja「操作パネル」）に、`prefillPolicyDevTooltip` を `prefillPolicyPanelTooltip` に替えました。
+- 作り直しが無くなったので、Single で連続生成（Repeat count）中に #2・#4・#7 を右クリックしても、連続生成は止まらなくなりました（以前は作り直しで止まっていた）。設定が変わると、既存の「設定が変わりました」のトーストが出ます。
+- **縮める確認は右クリックの種にも掛かります。** 右クリックが決めたフレーム数（種と「プロジェクト」の上書きの両方）は、Frames 欄を手で変えたときと同じ `useDurationShrinkGuard` の組（`onDurationChange` → `onDurationCommit`）を通します。今あるキーフレームが新しい長さの外へはみ出すときは、手入力と同じ確認（`KeyframeShrinkModal`）が出ます。#4 の枚数の上限も、この右クリックが決めたフレーム数で数えます。
+- 既知の限界（直さない）: Single の本体が `/config` を読み込んでいる最中（起動直後・config の再試行中）に届いた右クリックは、H3 の #2・#7 のライブ経路と同じく受け手がいないので捨てられます。以前は `pendingIntent` が残っていて、読み込み後に適用されていました。
+
+### 156.3 テスト
+
+- 書き換え: `App.prefill.test.tsx`（#2・#4 が入力済みのプロンプトとキーフレームのカードを消さない・#4 が frame 0 のカードの画像を置き換えて他のカードを残す・W5 の持ち越し 2 件は「作り直しが無いので反対側の欄が残る」に・M-1 は作り直しが無い前提に単純化・`pinMaterialPolicies` の fps は「panel」）、`App.prefillPolicy.test.tsx`（「panel」で幅・高さ・fps が右クリック前の手入力の値のまま残る・「プロジェクト」の上書きが右クリック 1 回につき 1 回走り、その間の手入力は次の右クリックまで残る）、`shell/SettingsPanel.test.tsx`・`shell/PrefillPolicyContext.test.tsx`（保存済みの `"defaults"` が既定値へ戻る）、`timeline/prefillSeed.test.ts`（`panel` の分岐・#2 の 128 丸め・注記の削除・フレーム数がパネルの値から計算される）、`modes/single/useGenerationForm.test.ts`・`useGenerationForm.h3.test.ts`・`modes/batch/buildI2vGeneratePayload.test.ts`（第 4 引数を setter に置き換え）、`modes/single/GenerationForm.accordion.test.tsx`（数で開く・マウントでは開かない・利用者が閉じたら次の数まで閉じたまま）、`modes/single/SingleScreen.prefill.test.tsx`（R1・R2 を描画済みの Single への `prefillMaterial` の送信で）、`modes/single/SingleScreen.sourceAudio.test.tsx`（音声は 📁 で付ける）。
+- 追加: `shell/AppShell.minimaxH3.test.tsx` に「H3 の #4 で Reference のカードとプロンプトが残り、仮オブジェクトは操作パネルの今のフレーム数で予約される」、`timeline/createLiveCommands.test.ts` に `prefillMaterial` の受け渡し、`modes/single/SingleScreen.prefill.test.tsx` に「2 回続けた右クリックで、古い `getEditInfo` の答えが後から戻っても捨てる」、`App.prefill.test.tsx` に「上限いっぱいで frame 0 が空いているときの #4 は上限の案内だけ」「frame 0 の置き換えのアップロードが失敗すると素材が見つからない案内」「#2 で IC-LoRA 欄・#7 で A2V 欄が開く」。
+- 削除: `modes/single/SingleScreen.carryOver.test.tsx`、`modes/chained/useSourceUpload.test.ts` の `initial` の 3 件。
+
+### 156.4 門の結果
+
+- WebUI: `npm run typecheck` 0 エラー・`npm run lint` 0 エラー／32 警告（これまでと同数）。`npx vitest run --exclude "**/backend.integration.test.ts"` は 179 ファイル・3,537 テスト。1 回目と 2 回目は各 1 件が失敗し、3 回目は全件合格。失敗したのは本テーマが触れていない時間の隙間に頼るテストで、どちらも単独では通る: `SingleScreen.reference.test.tsx` の「✒ appends the card's tag … right-clicked video opens the accordion」（変更前の HEAD の複製でも 8 回中 1 回失敗）と `AlphaControls.test.tsx` の「from the matte, with no MOV yet …」。台帳 §3-238 に追記した。
+- ネイティブ・バックエンド: 変更なしのため再実行していない。
+- 差分の敵対的レビュー（Opus）: Critical 0・Major 0・Minor 7・Nit 2 → 全件採用（`prefillSeed` の fps の落とし先・DURATION を縮小の守りへ通す・#4 の上限を種のフレーム数で数える・`materialWatch` を連番で守る・古いコメントの訂正・テストの追加・本記録の訂正）。
+- 配置: aux2（1,557,504 バイト・2026-10-31 22:46）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `f883ab5d…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。
+- 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §188。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（G-1〜G-9）。
+- オーナーの実機確認（2026-11-01）: G-1〜G-9 すべて合格。縮小の確認の窓の文言は、右クリックが原因のとき変える方針で、次の修正の弾で実装する。
+
+## 157. H3 の Reference の規則の整理（Enable が親・Audio to video は宣言で灰色・空なら Generate を止める）・Chained の埋め込み Reference の【🔴ON】・NAG の注意文の短縮（バックエンド台帳 §1-117 ほか。2026-10-31）
+
+### 157.1 結論
+
+- **H3 の Reference アコーディオンでは、Enable が「Audio to video」より優先します。** 「Audio to video」のチェックを入れた状態を、ここでは「宣言」と呼びます（Enable が on で、音声のカードのチェックが入っている状態）。宣言したカードの音声のアップロードが済んでいれば、その音声が A2V に使われます（「効く」）。規則は上から順に当てはめます。
+
+| 状態 | 挙動 |
+|---|---|
+| Enable が off | すべてのカードが灰色。「Audio to video」のチェックは押せなくなり（カーソルは 🚫・文字は暗く）、チェックの状態は残る。A2V は走らない。チェック済みのカードは枚数・秒数に数えない |
+| Enable が on・チェック済み・音声のアップロードが済んでいる | 他のすべてのカード（空のカードも含む）が灰色。チェック済みのカードは数えない。音声は A2V に使われる（Strength も効く） |
+| Enable が on・チェック済み・カードが空かアップロードに失敗 | 他のすべてのカードが灰色。Generate を押せなくし、黄色い注意文「Audio to video に使う音声を入力してください。」／「Add the audio to use for Audio to video.」を出す |
+| Enable が on・チェック済み・アップロード中 | 他のすべてのカードが灰色。Generate を押せなくし、既存の注意文「参照ファイルのアップロード完了を待ってください。」を出す |
+| Enable が on・チェックなし | 従来どおり、枚数と秒数の規則で使うカードを決める |
+
+- **🔁 でチェック済みのカードを空にしても、チェックは残ります。** 空になったカードは上の表の 3 行目の状態になります。
+- **Chained の各クリップの Reference アコーディオンに【🔴ON】を出します。** 条件は、そのクリップで数えられたカードが 1 枚以上（見出しの `n/12` の n が 1 以上）のときです。見た目は Single と同じ部品です。
+- **NAG（ネガティブプロンプト）が使えないベースモデルでの注意文を短くしました。** ja「このベースモデルでは、ネガティブプロンプトは未対応です。」／en「Negative prompts are not supported on this base model.」
+
+### 157.2 何を変えたか
+
+- **`modes/single/referenceRules.ts`（規則の正本）。** `declaredA2vSlot(state)`（Enable が on ならチェック済みのカードの番号・off なら `null`）を足し、`effectiveA2vSlot` は「宣言していて、そのカードのアップロードが済んでいる」と書き直しました（意味は変えていません）。`summarizeReference` は、チェック済みのカード（`state.a2vSlot`）を Enable やアップロードの状態に関係なく数から外します。`isA2v` は宣言したカードに、空のときも立てます。`used` が真になるのは効いているときだけです。他のカードをまとめて外す理由（`wholesale`）は、Enable が off なら `disabled`、宣言していれば `a2vExclusive` です。`referenceSendUploading` は、宣言したカードがアップロード中のときも真を返します（A2V の音声は `references` ではなく `form.sourceAudio` の経路で送るので、これが無いと T2V のまま送られてしまうため）。H3 以外では返しません。FL2VA でも A2V は効くので、FL2VA でも待ちます。
+- **引き算。** 状態遷移関数の `clear` から、チェック済みのカードを空にしたときにチェックを外す処理（`dropA2v`）を削除しました。音声の枠数が減ったときにはみ出したチェックを外す `resize` の処理は残しています。
+- **`modes/single/ReferenceAccordion.tsx`・`ReferenceAccordion.css`。** カードを灰色にする条件を「Enable が off・規則で外れた・ほかのカードで宣言している」にしました。「Audio to video」のチェックは Enable が off のとき押せなくし、ラベルに `ref-a2v-toggle` を付けて、押せないときの見た目（カーソル `not-allowed`・不透明度 0.4。`ToolboxScreen.css` のラジオボタンと同じ）を当てました。Strength は従来どおりチェック済みのカードの下に出ますが、Enable が off のときはチェックと同じく動かせません。見出しの【🔴ON】は、Single では Enable が on のとき、Chained の埋め込みでは数えられたカードが 1 枚以上のときに出します。
+- **`modes/single/SingleScreen.tsx`。** Generate を止める理由 `referenceA2vAudioMissing`（H3・宣言している・アップロード中でない・宣言したカードの音声がまだ `form.sourceAudio` に写されていない）を、ボタンを押せなくする条件と注意文の一覧の両方に足しました。「写されていない」で判定するのは、カードのアップロードが済んでから `useReferenceA2vSync` が音声を写すまでの 1 描画の間に、音声の無い T2V が送られないようにするためです。「参照が無い」などの通知（`referenceNotices`）には、効いているかではなく宣言しているかを渡します（宣言中は「参照ファイルがありません」を出さない）。
+- **`i18n/strings.ts`。** `single.generateReasons.referenceA2vAudioMissing` を en／ja に足し、`nag.unavailableOnBaseModel` を上の文に替えました。
+
+### 157.3 テスト
+
+- 書き換え: `referenceRules.test.ts`（チェック済みのカードを空にしてもチェックが残る・Enable が off でもチェック済みのカードは数えない・アップロード中のカードを宣言すると、効いてはいないが他のカードは外れ、Generate が待つ〔H3 のみ・FL2VA でも・Enable が off なら待たない〕）、`useReferenceSlots.test.ts`（🔁 でチェックが残る）、`ReferenceAccordion.test.tsx`（チェック済みのカードが空でも他のカードが灰色・埋め込みの試験からバッジの断定を分けた）、`SingleScreen.reference.test.tsx`（Enable が off ではチェックが押せず、チェックは残り、`source_audio` は送られない）、`AppShell.minimaxH3.test.tsx`（Enable を入れてからチェックする・NAG の注意文）、`ClipReferences.test.tsx`・`ChainedScreen.references.test.tsx`（題名を「空のときはバッジ無し」に）。
+- 追加: `declaredA2vSlot` の場合分け、空のカード・アップロードに失敗したカードを宣言したときの数と灰色、Enable が off ではチェックと Strength が押せず状態が残る、埋め込みのバッジ（空なら無し・1 枚で有り・アップロード中も有り・🔁 で消える）、Chained で絵を入れたクリップにだけバッジが出る、空のカードを宣言すると Generate が開いていた状態から止まって注意文が出る（Enable を off にすると Generate が開き、チェックは押せなくなる）、先にチェックしてから音声を入れると、アップロード中は待ちの注意文・済めば `source_audio` 付きで `references` 無しで送られ、🔁 で空にすると注意文が戻りチェックは残る。
+
+### 157.4 門の結果
+
+- WebUI: `npm run typecheck` 0 エラー・`npm run lint` 0 エラー／32 警告（これまでと同数）。`npx vitest run --exclude "**/backend.integration.test.ts"` は 179 ファイル・3,544 テストで、全件を 2 回通して全件合格。
+- ネイティブ・バックエンド: 変更なしのため再実行していない。
+- 差分の敵対的レビュー（Opus）: Critical 0・Major 0・Minor 4（テストの弱さ 3・設計正本の記述の食い違い 1）・Nit 4 → 全件採用（テストの強化・`ignored` のコメント・設計正本の訂正・下の監督の裁定 2 件の記録）。
+- 監督の裁定（オーナーが覆してよい）: ① Enable=off のときは Strength のスライダーも無効にする（表示はする）。② 宣言したカードの音声がアップロード済みになってから `form.sourceAudio` に写るまでの一瞬に Generate が押せて T2V が送られる隙（従来からあった）を、写し終わるまで注意を出し続けて塞いだ。
+- 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §189、規則の決定は設計正本 `Docs/MINIMAX_H3_DESIGN.md` 裁定 88。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（§1-117 の G-1〜G-8）。
+- 配置: aux2（1,557,504 バイト・2026-10-31 23:16）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `e5e64e3a…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。
+- オーナーの実機確認（2026-11-01）: G-1〜G-8 すべて合格。
+
+## 158. Single の Generate の門: 長さ不明の音声を止めない（§1-113 G-7 の修正）・右クリック起点の縮小の確認の文言（2026-11-01）
+
+### 158.1 結論
+
+- **Single タブで、長さを測れない音声（mp3・mp4 などの動画の容器）を入れても Generate ボタンが押せるようになりました。** 音声が足りるかどうかは、サーバーの事前検査（生成を始める前にサーバーが行う検査。短すぎれば 422 `SOURCE_AUDIO_TOO_SHORT` で断る）が決めます。Chained タブと同じ規則です。事前検査はファイルの容器としての長さを読むので、動画の容器より音声トラックのほうが短い mp4 は事前検査を通ることがあり、その場合はエンジン自身の既存の検査が最後に止めます。
+- 原因は、Generate の門の 1 行が「長さ不明」を「短すぎる」と同じに扱っていたことです。モノレポ統合のときからある行で、mp3 でも同じく止まっていました（右クリック仕様書 §3-4 #7 の「mp3 や動画は自動調整なしでそのまま受け入れる」と食い違っていた）。バックエンド台帳 `PENDING_TASKS.md` §1-113 の実機確認 G-7（mp4 をカードに入れると Generate が止まる）で見つかりました。
+- **右クリックが決めたフレーム数のせいでキーフレームが範囲外になるとき、確認の窓は右クリック用の文言を出します。** 題名「フレーム数を自動調整しますか？」、本文「右クリックの自動設定で、フレーム数を N フレームに調整します。範囲外になるキーフレーム M 枚が削除されます。」。オーナー裁定 B（§1-114 G-7）のとおり、素材はどちらを選んでも入り、尋ねるのは Frames の調整だけです（キャンセルで Frames は右クリック前の値に戻る）。
+- 仕様書は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第 32 版（§3-4 #7・§5-12）です。
+
+### 158.2 何を変えたか
+
+- **`modes/single/useGenerationForm.ts`。** `validityReasons` の音声の行を `if (audioPrecheck !== null && !audioPrecheck.ok) validityReasons.push("audioTooShort")` にしました（`audioPrecheck` は A2V でなければ `null` なので、`isA2v` の項は不要）。測った長さが短すぎるときだけ止め、長さ不明（wav 以外・計測の失敗・計測中）は止めません。`audioPrecheck` と `validityReasons` の上の注釈を、この規則と Chained の `audioLengthKnown` への参照に書き直しました。副作用: wav を入れた直後、計測が終わるまでの一瞬だけ Generate が押せます（短すぎればサーバーの事前検査で止まる。足りていれば、自動調整前の Frames のまま送られる）。
+- **`modes/single/useDurationShrinkGuard.ts`。** 確認の状態 `PendingShrink` に任意の `origin?: "prefill"` を足し、`onDurationCommit(value, snap, origin?)` で受けて載せます（`exactOptionalPropertyTypes` が有効なので、手入力のときは鍵ごと載せない）。新しい `kind` は作っていません（`cancelShrink` が `kind === "duration"` を見て Frames を戻すため）。
+- **`modes/single/SingleScreen.tsx`。** 右クリックの種と「プロジェクト」の上書きの両方が通る `applyNumFrames` が `onDurationCommit(value, true, "prefill")` を呼びます。`KeyframeShrinkModal` に `origin` を渡します。
+- **`modes/single/KeyframeShrinkModal.tsx`・`i18n/strings.ts`。** 任意の `origin` を受け、`"prefill"` なら `prefillTitle`／`prefillBody` を出します（en「Adjust the frame count automatically?」／「The right-click will set the frame count to N frames. M keyframe(s) outside the new range will be deleted.」）。#4 のフレーム数は快適上限で決まり素材の長さではないので、本文はフレーム数の由来に触れません。
+- 既知の限界（直さない。仕様書 §5-12 に記載）: ① Settings「プロジェクト」の非同期の上書きが、同じ確認をもう一度出したり先の確認を上書きしたりすることがある。② #7 は、抽出した wav の計測が終わると自動調整が確認を通さずに Frames を書き直すので、キャンセルしても後から縮んだ値に戻ることがある（手で短い wav を選んだときと同じ、以前からの挙動）。
+- 触っていないもの: ネイティブの `fs.probeAudioDuration`、自動調整の規則（wav だけ）。
+
+### 158.3 テスト
+
+- `useGenerationForm.test.ts`: mp3（長さ不明）を付け、`fs.probeAudioDuration` が呼ばれて答えが返り終わってから、`validityReasons` に `audioTooShort` が無く `isValid` が真で、Frames も変わらないこと。計測を待たずに確かめると修正前でも通りうるので、ブリッジの呼び出しを記録して待ちます。修正前の行に戻すと失敗することを確かめました。
+- `SingleScreen.sourceAudio.test.tsx`: A2V カードの 📁 で mp4 を選び、計測が済んだあと Generate が押せて要求が送られること（修正前の行では失敗）。
+- `useDurationShrinkGuard.test.ts`: `"prefill"` のときは `pendingShrink` に `origin` が載り、キャンセルで右クリック前の値に戻ること・手入力のときは `origin` の鍵が無いこと。
+- `KeyframeShrinkModal.test.tsx`: `origin="prefill"` で新しい題名と本文・無ければ従来の文言のまま。
+- `KeyframesPanel.test.tsx`（縮小の守りの組み合わせの試験台）: 右クリックと同じ組（`onDurationChange` → `onDurationCommit(…, "prefill")`）で新しい文言が出て、キャンセルで Frames が元に戻りキーフレームが残ること。
+- `SingleScreen.prefill.test.tsx`: 配線の確認。キーフレームを 2 枚置き（2 枚目は後ろ）、約 1 秒のリボンの #2 を `prefillMaterial` で送ると新しい文言の確認が出て、キャンセルで Frames が元に戻り、参照動画のアップロードは送られていること（`SingleScreen` が `"prefill"` を渡さないと失敗することを確かめました）。
+- `SingleScreen.reference.test.tsx`（前提の現行化）: Generate が押せることは、音声の長さの計測（`fs.probeAudioDuration`）が終わったことを意味しなくなりました。そのため、Frames を入れて Generate を押す補助関数（`clickGenerateOnH3Grid`・`putOnH3Grid`・`clickGenerateOnLtxGrid`）は、音声が付いているときは計測が呼ばれて答えが返り終わるのを待ってから押すようにしました。試験の確かめる内容は変えていません（修正の直後、この待ちが無いために全件の実行で半分ほど失敗していました）。
+
+### 158.4 門の結果
+
+機械の門（2026-11-01）: `npm run typecheck` エラー 0・`npm run lint` エラー 0／警告 32（従来どおり）・`npx vitest run --exclude "**/backend.integration.test.ts"` 179 ファイル・3,552 件合格・失敗 0（最終実行。レビュー中は既知の時間依存の ✒ の試験が単独 10 回中 2 回落ちた。台帳 §3-238）。差分の敵対的レビュー（Opus）は Critical 0・Major 0・Minor 3・Nit 3 で全採用。配置: aux2（1,558,528 バイト・2026-11-01 12:20）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `05272968…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。記録簿 `VERIFICATION_LOG.md` §190、台帳 §2 の §1-113（G-7〜G-9・G-11 の再確認待ち）。
+
+オーナーの実機確認（2026-11-01）: G-7・G-11 合格。
+
+## 159. 無音の音声トラックをサーバーの前検査で断る（操作パネルの変更なし。2026-11-01）
+
+### 159.1 結論
+
+- **音声トラックはあるが全サンプルが 0（デジタルな無音）の音声を、サーバーが生成を始める前に 422 で断るようになりました。** バックエンド台帳 `PENDING_TASKS.md` §1-113 の実機確認で、無音の mp4 を A2V の音声に入れると無音の動画ができていたためです（オーナー裁定 2026-11-01: 案 A）。これまでの事前検査は、音声の流れ（トラック）そのものが無いときだけ断っていました。
+- 対象は 3 か所です。A2V の元音声（連結と MiniMax H3 の単発）は 422 `SOURCE_AUDIO_SILENT`、MiniMax H3 の Reference の音声の参照（単発と連結）は 422 `REFERENCE_AUDIO_SILENT`。検査の順は「流れが無い → 無音 → 長さ」で、流れが無いときのコード（`SOURCE_AUDIO_TOO_SHORT`・`REFERENCE_AUDIO_NO_STREAM`）は変わりません。
+- 閾値は、右クリックの抽出の無音拒否（ピーク振幅が 1/32768 未満）と 16bit の分解能で同じです。右クリックは抽出の時点で自分で断り、手で入れたファイルはサーバーが断る、という分担になりました。
+- **操作パネルの変更はありません。** 操作パネルはサーバーのエラーの `message` をそのまま表示します。仕様書は [`RIGHTCLICK_REDESIGN_SPEC.md`](RIGHTCLICK_REDESIGN_SPEC.md) 第 33 版（§3-4 #7）です。
+
+### 159.2 何を変えたか
+
+- **`services/video_io.py`。** `audio_is_digitally_silent(path)` を足しました。ffmpeg の `volumedetect` で最初の音声の流れ（`-map 0:a:0`。エンジンが復号するのと同じ流れ）のピークを測り、`AUDIO_SILENT_MAX_VOLUME_DB = -90.5` 未満なら真です。`volumedetect` は 16bit 換算で測るので、全サンプルが 0 なら −91.0dB、16bit の最小の非ゼロ（1/32768）なら −90.3dB になります。測れないとき（ffmpeg が無い・流れが無い・読めない）は偽を返して通します。ffmpeg の出力は UTF-8 として読みます（既定の文字コードでは、日本語のメタデータで読み取りが失敗するため）。
+- **`api/errors.py`。** `source_audio_silent` と `reference_audio_silent` を足しました。
+- **`services/pipeline_manager.py`（`preflight_source_audio`・`preflight_single_source_audio`）と `api/generate.py`（`check_references_exist`）。** 既存の「流れが無い」の検査の直後に、無音の検査を 1 つずつ足しました。
+- 文書: バックエンド仕様書 v0.5.108（§6.2・§6.2b (h)・§6.8）、[`API_REFERENCE.md`](API_REFERENCE.md)、`Docs/A2V_DESIGN.md`、`Docs/MINIMAX_H3_DESIGN.md` §3.2、MCP の `submit_generate` の説明。
+
+### 159.3 テスト
+
+- `tests/test_video_io.py`: 無音（`anullsrc`）は真、正弦波は偽、音声の流れの無い動画は偽（測れないので通す）、日本語のメタデータ付きの無音は真（読み取りが失敗しない）、音声の流れが 2 本で 1 本目が無音・2 本目が「既定」の正弦波なら真（最初の流れを測っている）。
+- `tests/test_a2v_chain.py`（連結の元音声。3 秒の無音 mp4）・`tests/test_h3_a2v_api.py`（H3 の単発）→ 422 `SOURCE_AUDIO_SILENT`。`tests/test_h3_ref_api.py`（音声の参照。単発と連結）→ 422 `REFERENCE_AUDIO_SILENT`。
+- 既存の試験の現行化: 前検査に届く 7 ファイルの試験用の wav を、全サンプル 0 から振幅 1000 の矩形波に変えました（無音のままだと新しい検査で 422 になるため）。試験用の mp4 を作る補助関数（2 か所）は、音声の種類を `"sine"`／`"zero"`／`"none"` で選べるようにし、「流れが無い」の意味だったファイル名 `silent.mp4`・`silent_video.mp4` を `noaudio.mp4` に改めました。
+
+### 159.4 門の結果
+
+機械の門（2026-11-01）: バックエンド pytest 全件 3,774 合格・28 skip・失敗 1（`tests/test_mcp_registration.py` の「バックエンドが居ない」前提の試験。オーナーの本物のバックエンドが起動中のため。本弾と無関係）、関係 9 ファイルの部分実行 386 合格・2 skip。`npm run typecheck` エラー 0（操作パネルは不変。aux2 の再ビルドなし）。差分の敵対的レビュー（Opus）は Critical 0・Major 0・Minor 1・Nit 3 で全採用。記録簿 `VERIFICATION_LOG.md` §191、台帳 §2 の §1-113（G-8a／G-8b／G-9a／G-9b の確認待ち）。
+
+オーナーの実機確認（2026-11-01）: G-8a／G-8b／G-9a／G-9b 全合格。§1-113 は CLOSED 3-267。

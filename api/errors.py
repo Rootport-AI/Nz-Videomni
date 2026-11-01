@@ -111,12 +111,60 @@ def reference_not_found(
     )
 
 
+def reference_audio_no_stream(
+    index: int, ref_id: str, clip_index: int | None = None
+) -> APIError:
+    """Reference (Ref2VA, MiniMax H3): the ``kind == "audio"`` entry resolves to
+    an upload (POST /upload/audio also takes a video container) that holds no
+    decodable audio stream. Rejected up front (422) instead of failing late
+    inside the engine. ``clip_index`` is as in :func:`reference_not_found`."""
+    field = "references" if clip_index is None else f"clips[{clip_index}].references"
+    return APIError(
+        "REFERENCE_AUDIO_NO_STREAM",
+        f"reference audio has no decodable audio stream: {ref_id}",
+        422,
+        detail=f"{field}[{index}]",
+    )
+
+
+def reference_audio_silent(
+    index: int, ref_id: str, clip_index: int | None = None
+) -> APIError:
+    """Reference (Ref2VA, MiniMax H3): the ``kind == "audio"`` entry has an
+    audio stream, but it is digitally silent (every sample is zero; see
+    ``video_io.audio_is_digitally_silent``). Rejected up front (422), checked
+    right after :func:`reference_audio_no_stream`. ``clip_index`` is as in
+    :func:`reference_not_found`."""
+    field = "references" if clip_index is None else f"clips[{clip_index}].references"
+    return APIError(
+        "REFERENCE_AUDIO_SILENT",
+        f"reference audio track is digitally silent (all samples are zero): {ref_id}",
+        422,
+        detail=f"{field}[{index}]",
+    )
+
+
+def source_audio_silent(detail: str | None = None) -> APIError:
+    """A2V: the uploaded source audio has an audio stream, but it is digitally
+    silent (every sample is zero; see ``video_io.audio_is_digitally_silent``),
+    so it would drive a silent video. Rejected up front (422) before any GPU
+    work, checked after the no-stream case and before the length check."""
+    return APIError(
+        "SOURCE_AUDIO_SILENT",
+        "source audio track is digitally silent (all samples are zero)",
+        422,
+        detail=detail,
+    )
+
+
 def source_audio_too_short(detail: str | None = None) -> APIError:
     """A2V: the uploaded source audio is shorter than the video it must drive —
     the chain timeline (``/generate/chain``) or the single clip (MiniMax H3's
-    ``/generate``) — or has no decodable audio stream (video length is
-    authoritative; audio is truncated, never padded). Rejected up front (422)
-    before any GPU work — mirrors :func:`source_video_too_short`."""
+    ``/generate``) — or has no decodable audio stream at all (that case still
+    uses this code; a stream that is present but digitally silent is
+    :func:`source_audio_silent`). Video length is authoritative; audio is
+    truncated, never padded. Rejected up front (422) before any GPU work —
+    mirrors :func:`source_video_too_short`."""
     return APIError(
         "SOURCE_AUDIO_TOO_SHORT",
         "source audio is shorter than the requested video length",

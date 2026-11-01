@@ -47,6 +47,13 @@ export interface PendingShrink {
   kind: "duration" | "preset";
   /** Set iff `kind === "preset"`. */
   presetName?: string;
+  /** Set (only ever with `kind === "duration"`) when the shrink came from a
+   * right-click prefill seeding the frame count rather than from a manual
+   * DURATION edit — the modal then asks about the automatic frame-count
+   * adjustment instead of "shorten the duration?". Absent otherwise. Apply /
+   * cancel behave exactly as for a manual edit (cancel restores the pre-seed
+   * value); the material the right-click attached stays attached either way. */
+  origin?: "prefill";
   pendingNumFrames: number;
   overflowIds: string[];
 }
@@ -69,8 +76,11 @@ export interface UseDurationShrinkGuardResult {
    * that didn't shrink anything; Generate's own out-of-range guard/reason
    * hint is what's responsible for a pre-existing stray pin. Either way
    * `value` is NOT re-applied here since `onDurationChange` already applied
-   * it live. */
-  onDurationCommit: (value: number, snap: boolean) => void;
+   * it live. `origin: "prefill"` marks a commit made by a right-click
+   * prefill's frame-count seed (not by the user editing DURATION); it is
+   * only carried into `pendingShrink.origin` so the modal can word itself
+   * accordingly — the shrink/overflow logic is identical. */
+  onDurationCommit: (value: number, snap: boolean, origin?: "prefill") => void;
   /** Call when the user picks a generation preset. Applies it immediately if
    * it doesn't shrink the placeable grid past any existing keyframe;
    * otherwise raises `pendingShrink` and withholds the preset (unlike the
@@ -115,7 +125,7 @@ export function useDurationShrinkGuard(deps: DurationShrinkGuardDeps): UseDurati
   );
 
   const onDurationCommit = useCallback(
-    (value: number, snap: boolean) => {
+    (value: number, snap: boolean, origin?: "prefill") => {
       void snap; // Overflow is position-based only; the snap flag doesn't affect it.
 
       // m2 fix: only a commit that actually shrank the value THIS edit
@@ -145,7 +155,14 @@ export function useDurationShrinkGuard(deps: DurationShrinkGuardDeps): UseDurati
       // Recomputing and overwriting on every call (rather than bailing when
       // pendingShrink is already set) keeps duplicate commits — e.g. a
       // pointerup immediately followed by a blur on the same field — idempotent.
-      setPendingShrink({ kind: "duration", pendingNumFrames: value, overflowIds: overflow.map((item) => item.id) });
+      // `exactOptionalPropertyTypes`: omit `origin` entirely rather than set it
+      // to `undefined` for a manual edit.
+      setPendingShrink({
+        kind: "duration",
+        ...(origin ? { origin } : {}),
+        pendingNumFrames: value,
+        overflowIds: overflow.map((item) => item.id),
+      });
     },
     [items, multiple, offset],
   );

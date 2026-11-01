@@ -31,6 +31,7 @@ import { rekeySourceLocation } from "../../timeline/sourceLocationMap";
 import { decideSourceTrim } from "../../timeline/sourceTrim";
 import type { SourceTrimDecision } from "../../timeline/sourceTrim";
 import { tailAlignedStartFrame } from "../../timeline/tailAlign";
+import { extractAudioFailureNote, extractObjectAudio } from "../../timeline/extractObjectAudio";
 import { fileNameFromPath } from "../single/keyframeUtils";
 import {
   CropOutputField,
@@ -442,8 +443,8 @@ function ChainedScreenBody({
     // reservation length uses, so a placed provisional's ribbon matches the
     // remounted Chain form (owner requirement 2026-07-21 #1). Every Chain prefill
     // (#1 extend-video / #6 image-to-clip-chain / #12 current-frame-to-clip-chain
-    // / 台帳§1-16's two long-a2v items) is the `comfortCeiling` DURATION policy —
-    // no Chain intent is materialClampedToCeiling, including the long-a2v pair,
+    // / 台帳§1-16's long-a2v item) is the `comfortCeiling` DURATION policy —
+    // no Chain intent is materialClampedToCeiling, including long-a2v,
     // whose track length re-lays the WHOLE clip list through the audio auto-fit
     // instead of clamping clip 0 — so the seed's `numFrames` is that
     // resolution's comfort ceiling. `defaults` ignores the material's real
@@ -749,7 +750,6 @@ function ChainedScreenBody({
       intent !== "extend-video" &&
       intent !== "image-to-clip-chain" &&
       intent !== "current-frame-to-clip-chain" &&
-      intent !== "video-audio-to-long-a2v" &&
       intent !== "audio-to-long-a2v" &&
       intent !== "reference-video-chain" &&
       // 素材（末尾）: 🎬🖼️「これで終わる動画を作る」. Forgetting this line is a
@@ -762,63 +762,36 @@ function ChainedScreenBody({
     }
     autoLoadConsumedRef.current = true;
 
-    // 台帳§1-16 長尺A2V: the two right-click audio items. Both cut the SELECTED
-    // OBJECT'S RIBBON RANGE to a temp wav through `timeline.extractAudio` and
-    // hand it to Chain's audio slot, which then auto-fits the clip list to the
-    // measured length (exactly once — `useChainForm` keys that on the upload id).
-    // They differ only in what is recorded:
-    //  - 🎬 `video-audio-to-long-a2v` uses the MIX path, the same semantics as
-    //    Create's #3 `videoAudioToVideo`: the sound as it actually plays on the
-    //    timeline over that range.
-    //  - 🎵 `audio-to-long-a2v` uses SOLO, keeping only the selected object's
-    //    own layer. This is deliberately NOT #7's "upload the backing file
-    //    whole": going through extraction is what makes a TRIMMED audio object
-    //    contribute exactly the seconds its ribbon shows.
-    // Kept as their own async routine (like SingleScreen's #3) because of the
-    // "extracting…" note and the native-specific failure branches.
-    if (intent === "video-audio-to-long-a2v" || intent === "audio-to-long-a2v") {
+    // 台帳§1-16 長尺A2V (#18, 台帳 §1-113 で動画オブジェクトも受ける): the selected
+    // audio OR video object's own sound over its ribbon range is rendered to a
+    // temp wav in SOLO mode (`timeline/extractObjectAudio.ts`, only the object's
+    // layer kept audible) and handed to Chain's audio slot, which then auto-fits
+    // the clip list to the measured length (exactly once — `useChainForm` keys
+    // that on the upload id). Going through extraction is what makes a TRIMMED
+    // object contribute exactly the seconds its ribbon shows. Kept as its own
+    // async routine because of the "extracting…" note and the native-specific
+    // failure branches.
+    if (intent === "audio-to-long-a2v") {
       const item = initialIntent?.selection?.selected[0];
       if (!item) {
         showNote("warning", strings.notes.sourceFileMissing);
         return;
       }
-      const isMix = intent === "video-audio-to-long-a2v";
       void (async () => {
-        // frameEnd is INCLUSIVE (native's `FindObjectByJob` walks with
-        // `next = frameEnd + 1`), so the ribbon spans [frameStart, frameEnd].
-        const frameCount = item.frameEnd - item.frameStart + 1;
-        showNote("info", isMix ? strings.notes.extractingAudio : strings.notes.extractingObjectAudio);
-        const bridge = nativeBridge ?? defaultBridge;
+        showNote("info", strings.notes.extractingObjectAudio);
         try {
-          const extracted = await bridge.request("timeline.extractAudio", {
-            layer: item.layer,
-            frameStart: item.frameStart,
-            frameCount,
-            ...(isMix
-              ? { audioMode: "mix" as const, soloKeepLayers: [] }
-              : { audioMode: "solo" as const, soloKeepLayers: [item.layer] }),
-          });
-          showNote("info", isMix ? strings.notes.loadedVideoAudio : strings.notes.loadedObjectAudio);
+          const { filePath, fileName, durationSec } = await extractObjectAudio(
+            nativeBridge ?? defaultBridge,
+            item,
+          );
+          showNote("info", strings.notes.loadedObjectAudio);
           autoLoadPendingRef.current = true;
           // `durationSec` is native's EXACT length for the wav it just wrote, so
           // it is handed over as `knownDurationSec` — tier 1 of the hook's
           // three-tier length resolution, which then skips every `fs.probe*`.
-          void form.attachAudioByPath(extracted.filePath, fileNameFromPath(extracted.filePath), {
-            knownDurationSec: extracted.durationSec,
-          });
+          void form.attachAudioByPath(filePath, fileName, { knownDurationSec: durationSec });
         } catch (err) {
-          // Same three failure branches as SingleScreen's #3: native returns one
-          // `EXTRACT_FAILED` code for everything and only the message tells the
-          // silent range / render-timeout / setup cases apart
-          // (`native/src/bridge.cpp`'s `ExtractAudioWorker`).
-          const message = err instanceof Error ? err.message : "";
-          if (/silent range|no audio stream/i.test(message)) {
-            showNote("warning", strings.notes.audioExtractSilent);
-          } else if (/render failed/i.test(message)) {
-            showNote("warning", strings.notes.audioExtractTimeout);
-          } else {
-            showNote("warning", strings.notes.audioExtractFailed);
-          }
+          showNote("warning", extractAudioFailureNote(err, strings.notes));
         }
       })();
       return;
@@ -827,8 +800,8 @@ function ChainedScreenBody({
     // W5 #12 (current-frame-to-clip-chain): unlike #1/#6, this layer item has NO
     // selected object. It CAPTURES the current timeline frame and loads that PNG
     // as clip 0's opening keyframe (the same start-frame slot #6 uses). The
-    // capture is async, so it runs as its own routine (mirroring SingleScreen's
-    // videoAudioToVideo shape); the fresh remount guarantees sourceVideo is idle,
+    // capture is async, so it runs as its own routine (mirroring the #18
+    // extraction branch above); the fresh remount guarantees sourceVideo is idle,
     // so the form stays in "scratch" mode and buildRequest injects startFrame.
     if (intent === "current-frame-to-clip-chain") {
       void (async () => {
@@ -938,8 +911,8 @@ function ChainedScreenBody({
   // that errors won't re-trigger it). #6 image-to-clip-chain and #12
   // current-frame-to-clip-chain both feed the start-frame slot, so its status is
   // the terminal signal for either; only #1 extend-video watches sourceVideo.
-  // 台帳§1-16: the two long-a2v intents feed the AUDIO slot instead, so they
-  // watch that one — the extraction itself already reported its own failures
+  // 台帳§1-16: the long-a2v intent feeds the AUDIO slot instead, so it
+  // watches that one — the extraction itself already reported its own failures
   // above, and this covers the upload of the extracted wav failing afterwards.
   // §1-15 W4: `reference-video-chain` feeds the REFERENCE slot, so it watches
   // that one — same one-shot receipt/failure contract as every branch above.
@@ -947,7 +920,7 @@ function ChainedScreenBody({
   const autoLoadStatus =
     autoLoadIntent === "extend-video"
       ? form.sourceVideo.state.status
-      : autoLoadIntent === "video-audio-to-long-a2v" || autoLoadIntent === "audio-to-long-a2v"
+      : autoLoadIntent === "audio-to-long-a2v"
         ? form.sourceAudio.state.status
         : autoLoadIntent === "reference-video-chain"
           ? form.referenceVideo.state.status
@@ -1120,14 +1093,13 @@ function ChainedScreenBody({
   // regression this fixes — do NOT downgrade this to a plain `useEffect`).
   //
   // Both flags now have a real firing path, and both are handled by the
-  // auto-load effect above: `autoOpenAudio` by 台帳§1-16's two long-a2v
-  // right-click intents, `autoOpenReference` by §1-15 W4's
+  // auto-load effect above: `autoOpenAudio` by 台帳§1-16's long-a2v
+  // right-click intent, `autoOpenReference` by §1-15 W4's
   // `reference-video-chain` (2026-08-11).
   const audioAccordionRef = useRef<HTMLDetailsElement>(null);
   const referenceAccordionRef = useRef<HTMLDetailsElement>(null);
   const endSourceAccordionRef = useRef<HTMLDetailsElement>(null);
-  const autoOpenAudio =
-    initialIntent?.intent === "video-audio-to-long-a2v" || initialIntent?.intent === "audio-to-long-a2v";
+  const autoOpenAudio = initialIntent?.intent === "audio-to-long-a2v";
   const autoOpenReference = initialIntent?.intent === "reference-video-chain";
   // 素材（末尾）: 🎬🖼️「これで終わる動画を作る」 lands material in the end
   // accordion, so it opens on mount rather than hiding where the material went.

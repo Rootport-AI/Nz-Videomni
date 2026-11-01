@@ -44,9 +44,10 @@ MANIFEST_NAME = "batch_a2v_manifest.csv"
 # even after retrying ``os.replace`` — see write_manifest_atomic().
 AUTOSAVE_NAME = "batch_a2v_manifest.autosave.csv"
 
-# Same set as the default of config.UploadConfig.allowed_audio_extensions
-# (kept as a literal constant here rather than read from the config — the
-# batch scan step never talks to the API/config layer).
+# The batch scan keeps the AUDIO-ONLY set on purpose (the default of
+# config.UploadConfig.allowed_audio_extensions now also lists video containers
+# for /upload/audio). A literal constant here rather than read from the config —
+# the batch scan step never talks to the API/config layer.
 ALLOWED_AUDIO_EXTENSIONS = (".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg")
 
 # Row status values (Docs/BATCH_A2V_CSV_SPEC.md §3.2).

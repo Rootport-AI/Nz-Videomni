@@ -257,15 +257,6 @@ export type MenuGuardNote =
    * or more kinds; a one-element set still uses `typeMismatch` so no existing
    * message changes. */
   | { noteKind: "typeMismatchAny"; selected: MaterialKind; required: readonly MaterialKind[] }
-  /** §4-3 near-neighbor special case: a video was selected for #7
-   * "audio-to-video from an audio object"; steer the user to #3. */
-  | { noteKind: "useVideoAudioInstead" }
-  /** §4-3 near-neighbor, 台帳§1-16 (2026-08-10): the same mistake made on the
-   * LONG-form audio item (`audioToLongA2v`); steer the user to its own video
-   * sibling `videoAudioToLongA2v` rather than to the single-shot #3. A distinct
-   * variant (not a payload on the one above) because the two point at two
-   * different menu entries, and the copy must name the right one. */
-  | { noteKind: "useVideoAudioLongInstead" }
   /** §4-5: source/reference video shorter than the action's length floor. */
   | { noteKind: "videoTooShort"; requiredSeconds: number }
   /** W0 §4 範囲系: the action's input IS the user's selected frame range
@@ -291,24 +282,6 @@ export type MenuGuardResult =
   | { ok: false; note: MenuGuardNote };
 
 /**
- * §4-3 近傍アクション対応表 (台帳§1-16 で一般化): the actions that REQUIRE an
- * audio object, each mapped to the note that steers a mis-selected VIDEO to the
- * sibling item which extracts that video's sound.
- *
- * Before §1-16 this was a single `route.action === "audioToVideo"` literal
- * inline in the guard. Now that the audio-required set has two members — #7
- * `audioToVideo` (→ #3, single shot) and `audioToLongA2v` (→
- * `videoAudioToLongA2v`, the clip chain) — the pairing lives in one table so
- * adding a third audio item cannot silently fall back to the bare
- * `typeMismatch` note. Actions absent from this table get that generic note,
- * which stays the right answer for every other kind mismatch.
- */
-const VIDEO_FOR_AUDIO_ACTION_NOTE: Readonly<Record<string, MenuGuardNote>> = {
-  audioToVideo: { noteKind: "useVideoAudioInstead" },
-  audioToLongA2v: { noteKind: "useVideoAudioLongInstead" },
-};
-
-/**
  * Pure: normalize a route's `requiredKind` into the SET of kinds that pass
  * (素材（末尾）2026-08-15). `null` → `[]` (no kind is being required — the
  * layer-menu exemption, which `guardMenuSelection` has already short-circuited
@@ -327,7 +300,7 @@ export function requiredKindsOf(required: MenuRequiredKind): readonly MaterialKi
 /**
  * Pure integrated guard for a routed object-menu command (§4). Runs, in order:
  *  (a) multiple-selection (§4-2), (b) undeterminable kind (§4-3), (c) required-
- *  kind mismatch with the near-neighbor special case (§4-3), (d) the
+ *  kind mismatch (§4-3), (d) the
  *  #1/#2 length guard (§4-5), and (e) W0's range guard for `retakeRange`.
  *  Returns `{ ok: true }` when the action may
  *  proceed, else `{ ok: false, note }` with the note to surface — and NO
@@ -357,14 +330,6 @@ export function guardMenuSelection(route: MenuRoute, selection: TimelineSelectio
   // the single-kind entries that is byte-for-byte the old equality test.
   const requiredKinds = requiredKindsOf(route.requiredKind);
   if (!requiredKinds.includes(kind)) {
-    // Near-neighbor special case: a VIDEO selected for an audio-required action.
-    // Both audio items have a video sibling that does the right thing with a
-    // video's sound, so instead of the bare mismatch note we name that sibling
-    // (台帳§1-16 generalized this from the single `audioToVideo` literal).
-    if (kind === "video") {
-      const near = VIDEO_FOR_AUDIO_ACTION_NOTE[route.action];
-      if (near) return { ok: false, note: near };
-    }
     // One accepted kind keeps the original single-kind copy; two or more need
     // the enumerating variant (see `typeMismatchAny`'s doc).
     const [onlyKind] = requiredKinds;
@@ -433,8 +398,7 @@ export function guardMenuSelection(route: MenuRoute, selection: TimelineSelectio
   // selected there is no window to retake, and every downstream step (the
   // placement系統 "D" head-alignment, W3's window math) would silently fall back
   // to frame 0. So refuse up front,同じく破壊的動作なしで. Keyed on the action
-  // name, matching the (c) near-neighbor special case's inline style rather than
-  // introducing a second metadata table.
+  // name inline rather than introducing a second metadata table.
   //
   // This wakes `timeline.getSelection`'s `hasRange` — filled by native from
   // `EDIT_SECTION::info->select_range_start/end` (`native/src/bridge.cpp`) since
@@ -557,10 +521,6 @@ export function formatMenuGuardNote(note: MenuGuardNote, notes: NotesStrings): s
         notes.kindName(note.selected),
         note.required.map((kind) => notes.kindName(kind)),
       );
-    case "useVideoAudioInstead":
-      return notes.useVideoAudioInstead;
-    case "useVideoAudioLongInstead":
-      return notes.useVideoAudioLongInstead;
     case "videoTooShort":
       return notes.videoTooShort(note.requiredSeconds);
     case "rangeNotSelected":

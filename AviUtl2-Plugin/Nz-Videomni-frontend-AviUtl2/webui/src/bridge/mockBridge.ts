@@ -1078,7 +1078,7 @@ export interface MockBridgeOptions {
   failCutoutRange?: "NO_EDIT_HANDLE" | "CUTOUT_FAILED";
   /** Contract v5: when set, `timeline.extractAudio` rejects with this code. */
   failExtractAudio?: "NO_EDIT_HANDLE" | "EXTRACT_FAILED";
-  /** I10 §3-4 #3: overrides the thrown `BridgeError` message when
+  /** §3-4 #7/#18: overrides the thrown `BridgeError` message when
    * `failExtractAudio` is set, so a test can reproduce native's distinct
    * `EXTRACT_FAILED` reason strings ("…silent range" / "audio render failed at
    * frame N" / a setup failure) that the WebUI classifies into the silence /
@@ -2562,9 +2562,13 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     // default extension when the caller doesn't override `pickFileName` —
     // default to an image ("png") like the plain "image" kind. Tests that need
     // deterministic image/video routing always pass `pickFileName` explicitly
-    // (e.g. "clip.mp4") rather than relying on this default.
-    const ext = params.kind === "video" ? "mp4" : params.kind === "audio" ? "wav" : "png";
-    const fileName = options.pickFileName ?? `picked-${params.kind}-${pickFileCounter}.${ext}`;
+    // (e.g. "clip.mp4") rather than relying on this default. "audioOrVideo"
+    // (the audio cards' picker, 台帳 §1-113) defaults to the same file the plain
+    // "audio" kind returns (`picked-audio-N.wav`), so the audio cards' tests
+    // keep one fixture name whichever kind the card asks for.
+    const nameKind = params.kind === "audioOrVideo" ? "audio" : params.kind;
+    const ext = nameKind === "video" ? "mp4" : nameKind === "audio" ? "wav" : "png";
+    const fileName = options.pickFileName ?? `picked-${nameKind}-${pickFileCounter}.${ext}`;
     return {
       filePath: `C:\\Users\\mock\\Pictures\\${fileName}`,
       fileName,

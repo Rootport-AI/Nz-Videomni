@@ -131,6 +131,31 @@ describe("ChainAudioPanel (§1-16 長尺A2V)", () => {
       expect(container.querySelector(".keyframe-thumb img")).toBeNull();
     });
 
+    // 台帳 §1-113: the audio card also takes a video file (only its sound is
+    // used). The upload still goes up as kind "audio" (`/upload/audio`).
+    it("accepts a dropped .mp4 and uploads it as audio", async () => {
+      const { container, nativeBridge } = setup({ probeMediaInfoDurationSec: 8 });
+      const spy = vi.spyOn(nativeBridge, "request");
+
+      dropAudio(container, "clip.mp4");
+
+      await waitFor(() => expect(screen.getByText("clip.mp4")).toBeInTheDocument());
+      expect(spy).toHaveBeenCalledWith("backend.uploadFile", expect.objectContaining({ kind: "audio" }));
+      expect(container.querySelector(".field-hint-error")).toBeNull();
+    });
+
+    it("📁 asks the native dialog for audio OR video, and uploads the pick as audio", async () => {
+      const user = userEvent.setup();
+      const { nativeBridge } = setup({ pickFileName: "clip.mov", probeMediaInfoDurationSec: 8 });
+      const spy = vi.spyOn(nativeBridge, "request");
+
+      await user.click(screen.getByRole("button", { name: t.chooseButton }));
+
+      await waitFor(() => expect(screen.getByText("clip.mov")).toBeInTheDocument());
+      expect(spy).toHaveBeenCalledWith("ui.pickFile", { kind: "audioOrVideo" });
+      expect(spy).toHaveBeenCalledWith("backend.uploadFile", expect.objectContaining({ kind: "audio" }));
+    });
+
     it("rejects a non-audio drop inline and leaves the slot empty", async () => {
       const { container } = setup();
 

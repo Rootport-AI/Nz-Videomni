@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bridge as appBridge, TIMELINE_MENU_INVOKED_EVENT } from "../bridge";
 import type { ResultOf } from "../bridge";
 import { resetCreateLiveCommands } from "../timeline/createLiveCommands";
+import { resetExtractObjectAudioChain } from "../timeline/extractObjectAudio";
 import { resetProvisionalReservation } from "../timeline/provisionalReservation";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { NativeBridge } from "../bridge";
@@ -98,6 +99,7 @@ async function switchTo(id: string) {
 describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    resetExtractObjectAudioChain();
   });
   afterEach(() => {
     window.localStorage.clear();
@@ -146,18 +148,22 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 
       // Reference video hidden. §1-107: H3 publishes `reference`, so the A2V
       // accordion gives way to the Reference accordion, whose Audios cards carry
-      // the "Audio to video" tick; ticking one brings up the Strength slider
-      // (served `constraints.source_audio`) under that card.
+      // the "Audio to video" tick (disabled until Enable is on, §1-117); ticking
+      // one brings up the Strength slider (served `constraints.source_audio`)
+      // under that card.
       expect(within(panel).queryByText("Reference video (IC-LoRA)")).not.toBeInTheDocument();
       expect(within(panel).queryByText("Audio to video (A2V)")).not.toBeInTheDocument();
       expect(within(panel).getByText("Reference", { selector: "summary" })).toBeInTheDocument();
       const audioCard = within(panel).getByTestId("ref-slot-audio-1");
       expect(within(audioCard).queryByTestId("source-audio-strength")).not.toBeInTheDocument();
-      await userEvent.setup().click(within(audioCard).getByRole("checkbox", { name: "Audio to video", hidden: true }));
+      expect(within(audioCard).getByRole("checkbox", { name: "Audio to video", hidden: true })).toBeDisabled();
+      const user = userEvent.setup();
+      await user.click(within(panel).getByRole("checkbox", { name: "Enable", hidden: true }));
+      await user.click(within(audioCard).getByRole("checkbox", { name: "Audio to video", hidden: true }));
       expect(within(audioCard).getByTestId("source-audio-strength")).toBeInTheDocument();
 
       // Negative Prompt accordion greyed with its note; the switch is disabled.
-      expect(screen.getByText(/Negative prompts \(NAG\/VSF\) are not available/)).toBeInTheDocument();
+      expect(screen.getByText("Negative prompts are not supported on this base model.")).toBeInTheDocument();
       expect(screen.getByRole("checkbox", { name: /non-cfg negative/i })).toBeDisabled();
 
       // No comfort marker; DURATION on 17n+5 with a 17 step; fps fixed at 24.
@@ -434,6 +440,7 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
     beforeEach(() => {
       resetProvisionalReservation();
       resetCreateLiveCommands();
+      resetExtractObjectAudioChain();
     });
 
     /** A video object whose ribbon is frames 30..119 @30fps of a 10.7 s file,
@@ -526,7 +533,8 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
         expect(within(card("ref-slot-video-2")).getByText("two.mp4")).toBeInTheDocument();
         expect(within(card("ref-slot-video-1")).getByText("one.mp4")).toBeInTheDocument();
 
-        // #7 → Audios card 1.
+        // #7 → the object's ribbon range is extracted (solo) and the wav lands in
+        // Audios card 1 (台帳 §1-113).
         act(() => {
           bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
             action: "audioToVideo",
@@ -534,7 +542,15 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
           });
         });
         await waitForCardReady("ref-slot-audio-1");
-        expect(within(card("ref-slot-audio-1")).getByText("voice.wav")).toBeInTheDocument();
+        expect(requestSpy).toHaveBeenCalledWith("timeline.extractAudio", {
+          layer: 1,
+          frameStart: 30,
+          frameCount: 90,
+          audioMode: "solo",
+          soloKeepLayers: [1],
+        });
+        expect(within(card("ref-slot-audio-1")).getByText(/^extract_1_30_\d+\.wav$/)).toBeInTheDocument();
+        expect(screen.getByText(/loaded the object's sound/i)).toBeInTheDocument();
         expect(within(card("ref-slot-video-1")).getByText("one.mp4")).toBeInTheDocument();
         expect((screen.getByPlaceholderText(/describe the video/i) as HTMLTextAreaElement).value).toBe(
           "a cat on a skateboard",
@@ -569,13 +585,14 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 
         await switchTo("MiniMaxH3");
         await waitForCardReady("ref-slot-audio-1");
-        expect(within(card("ref-slot-audio-1")).getByText("voice.wav")).toBeInTheDocument();
+        expect(within(card("ref-slot-audio-1")).getByText(/^extract_1_30_\d+\.wav$/)).toBeInTheDocument();
+        expect(screen.getByText(/loaded the object's sound/i)).toBeInTheDocument();
       },
       25_000,
     );
 
     it(
-      "H3: #3 (a2v from a video's sound) is refused with a pointer to the Audios card",
+      "H3: #7 on a VIDEO object extracts its own sound and lands in the Audios card (never the Videos card)",
       async () => {
         const bridge = createMockBridge({ delayMs: 0 });
         const requestSpy = vi.spyOn(bridge, "request");
@@ -585,19 +602,100 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 
         act(() => {
           bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
-            action: "videoAudioToVideo",
+            action: "audioToVideo",
             selection: trimmedVideoSelection("C:\\v\\one.mp4"),
           });
         });
-        await screen.findByText(
-          "On MiniMax H3, add the audio with 📁 on a Reference Audios card, then tick Audio to video.",
-          {},
-          { timeout: 5_000 },
+        await waitForCardReady("ref-slot-audio-1");
+        expect(within(card("ref-slot-audio-1")).getByText(/^extract_1_30_\d+\.wav$/)).toBeInTheDocument();
+        expect(screen.getByText(/loaded the object's sound/i)).toBeInTheDocument();
+        expect(requestSpy).toHaveBeenCalledWith(
+          "backend.uploadFile",
+          expect.objectContaining({ kind: "audio", filePath: expect.stringContaining("extract_1_30_") }),
         );
-        // Refused: no audio was extracted.
-        expect(requestSpy.mock.calls.some((c) => c[0] === "timeline.extractAudio")).toBe(false);
+        expect(requestSpy).not.toHaveBeenCalledWith("backend.uploadFile", expect.objectContaining({ kind: "video" }));
       },
       20_000,
+    );
+
+    it(
+      "H3: #7 shows the silence note and fills no card when the extraction is silent",
+      async () => {
+        const bridge = createMockBridge({
+          delayMs: 0,
+          failExtractAudio: "EXTRACT_FAILED",
+          extractAudioErrorMessage: "no audio stream present (silent range)",
+        });
+        const requestSpy = vi.spyOn(bridge, "request");
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(card("ref-slot-audio-1")).toBeInTheDocument());
+
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "audioToVideo",
+            selection: trimmedVideoSelection("C:\\v\\one.mp4"),
+          });
+        });
+        await screen.findByText(/no audible sound/i, undefined, { timeout: 5_000 });
+        expect(requestSpy).not.toHaveBeenCalledWith("backend.uploadFile", expect.anything());
+      },
+      20_000,
+    );
+
+    it(
+      "H3: #4 keeps the Reference cards and the prompt, and reserves the seat at the panel's own DURATION (台帳 §1-114: no remount)",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        const requestSpy = vi.spyOn(bridge, "request");
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(card("ref-slot-video-1")).toBeInTheDocument());
+        const user = userEvent.setup();
+        await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat on a skateboard");
+
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "referenceVideo",
+            selection: trimmedVideoSelection("C:\\v\\one.mp4"),
+          });
+        });
+        await waitForCardReady("ref-slot-video-1");
+
+        // Hand-set DURATION to a value on H3's 17n+5 grid that no seed produces.
+        // H3 has no comfort line, so #4's seed leaves DURATION alone and the
+        // provisional must be reserved at the panel's own value.
+        fireEvent.change(durationNumber(), { target: { value: "277" } });
+        fireEvent.blur(durationNumber());
+        await waitFor(() => expect(durationNumber().value).toBe("277"));
+
+        // #4 on an image object: the image becomes the frame-0 keyframe, and the
+        // Reference card and the prompt are untouched.
+        const image = trimmedVideoSelection("C:\\i\\a.png");
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+            action: "imageToVideo",
+            selection: { ...image, selected: [{ ...image.selected[0]!, effectName: "画像ファイル" }] },
+          });
+        });
+        await screen.findByText(/loaded from a right-click: a\.png/i, undefined, { timeout: 5_000 });
+        await waitFor(() => expect(within(singlePanel()).getByAltText("a.png")).toBeInTheDocument(), {
+          timeout: 5_000,
+        });
+        expect(within(card("ref-slot-video-1")).getByText("one.mp4")).toBeInTheDocument();
+        expect((screen.getByPlaceholderText(/describe the video/i) as HTMLTextAreaElement).value).toBe(
+          "a cat on a skateboard",
+        );
+        expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+        await waitFor(() =>
+          expect(requestSpy).toHaveBeenCalledWith(
+            "timeline.insertProvisional",
+            expect.objectContaining({ placement: "A", numFrames: 277 }),
+          ),
+        );
+        expect(durationNumber().value).toBe("277");
+      },
+      25_000,
     );
 
     it(

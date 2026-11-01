@@ -273,7 +273,8 @@ async def submit_generate(
         固定し、出力には元の音声波形をそのまま付けます。1.0 未満ではモデルが
         音声を解釈し直し、出力の音声はモデルが作ったものになります。**
       * 動画の長さが優先で、音声は動画の長さに切られます（足されません）。
-        短すぎる音声は 422 SOURCE_AUDIO_TOO_SHORT です。
+        短すぎる音声は 422 SOURCE_AUDIO_TOO_SHORT、全サンプルが 0 の無音の
+        音声トラックは 422 SOURCE_AUDIO_SILENT です。
       * ``source_audio_strength`` だけを指定するとエラーです（HTTP を呼ぶ前に
         弾きます）。
 

@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMockBridge } from "./bridge/mockBridge";
 import { TIMELINE_MENU_INVOKED_EVENT } from "./bridge";
 import type { MockBridgeOptions, ResultOf } from "./bridge";
+import type { PrefillResolutionPolicy } from "./shell/PrefillPolicyContext";
 import { AppShell } from "./shell/AppShell";
 import {
   PREFILL_SIZE_POLICY_STORAGE_KEY,
@@ -76,11 +77,10 @@ function imageSel(
 const panel = () => screen.getByRole("tabpanel");
 const fpsInput = () => within(panel()).getByRole("spinbutton", { name: /fps/i }) as HTMLInputElement;
 
-type Policy = "defaults" | "project" | "material";
-function setSizePolicy(policy: Policy): void {
+function setSizePolicy(policy: PrefillResolutionPolicy): void {
   window.localStorage.setItem(PREFILL_SIZE_POLICY_STORAGE_KEY, policy);
 }
-function setFpsPolicy(policy: Policy): void {
+function setFpsPolicy(policy: PrefillResolutionPolicy): void {
   window.localStorage.setItem(PREFILL_FPS_POLICY_STORAGE_KEY, policy);
 }
 
@@ -189,26 +189,66 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
   );
 
   it(
-    "① size=defaults × fps=defaults: config generation_defaults width/height/fps, material ignored",
+    "① size=panel × fps=panel (台帳 §1-114): the panel's current width/height/fps are kept, the material ignored",
     async () => {
-      setSizePolicy("defaults");
-      setFpsPolicy("defaults");
-      const bridge = await renderReady({ delayMs: 0 });
+      setSizePolicy("panel");
+      setFpsPolicy("panel");
+      const bridge = await renderReady({ delayMs: 0, editInfo: { width: 1024, height: 512, rate: 60, scale: 1 } });
+
+      // Hand-set the panel to values no other candidate produces: 960x448 / 30
+      // (material 832x640 / 29.97->30 is avoided by giving the material 25fps,
+      // project 1024x512/60, config 1280x768/24).
+      fireEvent.change(within(panel()).getByRole("slider", { name: /width/i }), { target: { value: "960" } });
+      fireEvent.change(within(panel()).getByRole("slider", { name: /height/i }), { target: { value: "448" } });
+      fireEvent.change(fpsInput(), { target: { value: "30" } });
+      fireEvent.blur(fpsInput());
+      expect(fpsInput().value).toBe("30");
+
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, {
+          action: "imageToVideo",
+          selection: imageSel(800, 600, 25, 1, 25),
+        });
+      });
+      // The receipt note is shown by the same handler right after the seed is
+      // applied, so once it is up the seed has landed.
+      await screen.findByText(/loaded from a right-click: a\.png/i, undefined, { timeout: 5_000 });
+
+      expect((within(panel()).getByRole("slider", { name: /width/i }) as HTMLInputElement).value).toBe("960");
+      expect((within(panel()).getByRole("slider", { name: /height/i }) as HTMLInputElement).value).toBe("448");
+      expect(fpsInput().value).toBe("30");
+      expect(within(panel()).queryByDisplayValue("832")).not.toBeInTheDocument();
+      expect(within(panel()).queryByDisplayValue("1024")).not.toBeInTheDocument();
+    },
+    15_000,
+  );
+
+  it(
+    "② project runs once per right-click: a later hand edit is overwritten again only by the next right-click (台帳 §1-114)",
+    async () => {
+      setSizePolicy("project");
+      setFpsPolicy("project");
+      const bridge = await renderReady({ delayMs: 0, editInfo: { width: 1024, height: 512, rate: 60, scale: 1 } });
+      const spy = vi.spyOn(bridge, "request");
+      const editInfoCalls = () => spy.mock.calls.filter((call) => call[0] === "getEditInfo").length;
+      const widthSlider = () => within(panel()).getByRole("slider", { name: /width/i }) as HTMLInputElement;
 
       act(() => {
         bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageToVideo", selection: imageSel(800, 600, 30, 1) });
       });
+      await waitFor(() => expect(widthSlider().value).toBe("1024"), { timeout: 5_000 });
+      expect(editInfoCalls()).toBe(1);
 
-      // Config defaults (mock): 1280x768, fps 24 — the material 832x640/30 is ignored.
-      await waitFor(
-        () => {
-          expect(within(panel()).getAllByDisplayValue("1280").length).toBeGreaterThan(0);
-          expect(within(panel()).getAllByDisplayValue("768").length).toBeGreaterThan(0);
-        },
-        { timeout: 5_000 },
-      );
-      expect(within(panel()).queryByDisplayValue("832")).not.toBeInTheDocument();
-      expect(fpsInput().value).toBe("24");
+      // A hand edit afterwards stays: nothing re-applies the project on its own.
+      fireEvent.change(widthSlider(), { target: { value: "640" } });
+      expect(widthSlider().value).toBe("640");
+
+      // The next right-click runs the overwrite again (once).
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageToVideo", selection: imageSel(800, 600, 30, 1) });
+      });
+      await waitFor(() => expect(widthSlider().value).toBe("1024"), { timeout: 5_000 });
+      expect(editInfoCalls()).toBe(2);
     },
     15_000,
   );
@@ -242,7 +282,7 @@ describe("App / right-click prefill size & fps policies (W1)", () => {
     "② size=project with acceleration all-on: DURATION is RE-derived at the project's own resolution using the SMART ceiling (1280x768 -> 345, not the legacy 273)",
     async () => {
       // Post-review fix A-1 (2026-08-31): `SingleScreen.tsx`'s size=project
-      // mount effect must recompute the smart ceiling at the OVERWRITTEN
+      // overwrite must recompute the smart ceiling at the OVERWRITTEN
       // (project) width/height, not reuse whatever `resolvePrefillSeed`
       // resolved at the material's geometry — see the comment above
       // `smartCeiling` in that file. All five Acceleration toggles on selects

@@ -42,7 +42,7 @@ def _wav(path, seconds: float, sr: int = 44100):
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(sr)
-        w.writeframes(struct.pack("<%dh" % n, *([0] * n)))
+        w.writeframes(struct.pack("<%dh" % n, *[1000 if (i // 40) % 2 == 0 else -1000 for i in range(n)]))
     return path
 
 
@@ -101,6 +101,27 @@ def test_audio_shorter_than_the_video_is_422(three_family_client, tmp_path):
     assert error["code"] == "SOURCE_AUDIO_TOO_SHORT"
     assert error["message"] == "source audio is shorter than the requested video length"
     assert "0.917" in error["detail"]  # the length the 22-frame clip needs
+    assert len(three_family_client.get("/api/v1/jobs").json()) == before
+
+
+def test_digitally_silent_audio_track_is_422(three_family_client, tmp_path):
+    """A present but all-zero audio track (here an mp4 from ``anullsrc``) is
+    refused before the length check; 1 s covers the 22-frame clip."""
+    import shutil
+
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not on PATH")
+    from test_h3_ref_api import _make_mp4, _upload_mp4_as_audio
+
+    _activate(three_family_client, "MiniMaxH3")
+    audio_id = _upload_mp4_as_audio(three_family_client, _make_mp4(tmp_path / "zero.mp4", audio="zero"))
+    before = len(three_family_client.get("/api/v1/jobs").json())
+    r = three_family_client.post("/api/v1/generate", json={**BODY, "source_audio": {"audio_id": audio_id}})
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "SOURCE_AUDIO_SILENT"
+    assert error["message"] == "source audio track is digitally silent (all samples are zero)"
+    assert audio_id in error["detail"]
     assert len(three_family_client.get("/api/v1/jobs").json()) == before
 
 

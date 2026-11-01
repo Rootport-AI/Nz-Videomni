@@ -23,8 +23,10 @@ from api.errors import (
     outpaint_preprocess_conflict,
     outpaint_source_mismatch,
     outpaint_source_too_short,
-    reference_requires_control_lora,
+    reference_audio_no_stream,
+    reference_audio_silent,
     reference_not_found,
+    reference_requires_control_lora,
     reference_resolution_invalid,
     source_audio_not_found,
 )
@@ -35,7 +37,7 @@ from api.models import (
     JobStatus,
     round_up_128,
 )
-from services import engines
+from services import engines, video_io
 from services.job_store import JobRecord, now_iso
 
 router = APIRouter()
@@ -74,6 +76,16 @@ def check_references_exist(context: AppContext, refs, *, clip_index: int | None 
             reference_stores[ref.kind].path_for(ref.id)
         except APIError:
             raise reference_not_found(index, ref.id, ref.kind, ref.slot, clip_index=clip_index)
+        # An audio upload may be a video container (POST /upload/audio): its
+        # audio stream is all the engine uses, so a file without one is
+        # refused here (422) rather than late inside the engine; so is one
+        # whose audio track is digitally silent (every sample zero).
+        if ref.kind == "audio":
+            path = reference_stores["audio"].path_for(ref.id)
+            if not video_io.has_audio_stream(path):
+                raise reference_audio_no_stream(index, ref.id, clip_index=clip_index)
+            if video_io.audio_is_digitally_silent(path):
+                raise reference_audio_silent(index, ref.id, clip_index=clip_index)
 
 
 @router.post(

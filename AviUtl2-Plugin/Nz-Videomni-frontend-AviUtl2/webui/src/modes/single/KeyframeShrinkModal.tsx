@@ -7,6 +7,12 @@ export interface KeyframeShrinkModalProps {
   pendingNumFrames: number;
   /** How many keyframes fall outside `[0, pendingNumFrames)` and would be deleted. */
   overflowCount: number;
+  /** `"prefill"` when the shrink was raised by a right-click prefill seeding
+   * the frame count (`PendingShrink.origin`): the dialog then asks about the
+   * automatic frame-count adjustment (`prefillTitle`/`prefillBody`) instead of
+   * the manual "shorten the duration?" wording. Absent for a manual edit or a
+   * preset. */
+  origin?: "prefill" | undefined;
   onApply: () => void;
   onCancel: () => void;
 }
@@ -26,10 +32,11 @@ export interface KeyframeShrinkModalProps {
  *
  * Visibility is entirely the caller's responsibility — this component always
  * renders itself once mounted; the parent conditionally mounts/unmounts it. */
-export function KeyframeShrinkModal({ pendingNumFrames, overflowCount, onApply, onCancel }: KeyframeShrinkModalProps) {
+export function KeyframeShrinkModal({ pendingNumFrames, overflowCount, origin, onApply, onCancel }: KeyframeShrinkModalProps) {
   const strings = useStrings();
   const t = strings.single.keyframes.shrinkModal;
   const titleId = "kfm-shrink-modal-title";
+  const fromPrefill = origin === "prefill";
   const applyButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -50,9 +57,11 @@ export function KeyframeShrinkModal({ pendingNumFrames, overflowCount, onApply, 
     <div className="kfm-overlay" role="presentation" onClick={onCancel}>
       <div className="kfm-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => e.stopPropagation()}>
         <h2 id={titleId} className="kfm-title">
-          {t.title}
+          {fromPrefill ? t.prefillTitle : t.title}
         </h2>
-        <p className="kfm-body">{t.body(pendingNumFrames, overflowCount)}</p>
+        <p className="kfm-body">
+          {fromPrefill ? t.prefillBody(pendingNumFrames, overflowCount) : t.body(pendingNumFrames, overflowCount)}
+        </p>
         <div className="kfm-actions">
           <button type="button" className="kfm-cancel-button" onClick={onCancel}>
             {t.cancelButton}

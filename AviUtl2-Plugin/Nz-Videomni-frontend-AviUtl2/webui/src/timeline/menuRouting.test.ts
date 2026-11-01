@@ -30,12 +30,10 @@ const EXPECTED: Array<{
   // requiredKind / placement as the item it mirrors; only the target mode
   // (chained) and the intent differ — exactly like the §1-16 pair below.
   { action: "referenceVideoChain", targetMode: "chained", intent: "reference-video-chain", needsSelection: true, requiredKind: "video", placement: "B" },
-  { action: "videoAudioToVideo", targetMode: "single", intent: "video-audio-to-video", needsSelection: true, requiredKind: "video", placement: "B" },
   // 台帳§1-16 長尺A2V (2026-08-10): the two Chain-targeted a2v siblings. Same
-  // requiredKind / placement as the #3/#7 items they mirror; only the target
+  // requiredKind / placement as the #7 items they mirror; only the target
   // mode (chained) and the intent differ.
-  { action: "videoAudioToLongA2v", targetMode: "chained", intent: "video-audio-to-long-a2v", needsSelection: true, requiredKind: "video", placement: "B" },
-  { action: "audioToLongA2v", targetMode: "chained", intent: "audio-to-long-a2v", needsSelection: true, requiredKind: "audio", placement: "B" },
+  { action: "audioToLongA2v", targetMode: "chained", intent: "audio-to-long-a2v", needsSelection: true, requiredKind: ["audio", "video"], placement: "B" },
   { action: "imageToVideo", targetMode: "single", intent: "image-to-video", needsSelection: true, requiredKind: "image", placement: "A" },
   { action: "addImageKeyframe", targetMode: "single", intent: "add-image-keyframe", needsSelection: true, requiredKind: "image", placement: null },
   { action: "imageToClipChain", targetMode: "chained", intent: "image-to-clip-chain", needsSelection: true, requiredKind: "image", placement: "A" },
@@ -43,7 +41,7 @@ const EXPECTED: Array<{
   // whose requiredKind is a SET — it accepts a video or an image. The row-level
   // assertion below uses `toEqual`, so the array compares structurally.
   { action: "endWithThis", targetMode: "chained", intent: "end-with-this", needsSelection: true, requiredKind: ["video", "image"], placement: "E" },
-  { action: "audioToVideo", targetMode: "single", intent: "audio-to-video", needsSelection: true, requiredKind: "audio", placement: "B" },
+  { action: "audioToVideo", targetMode: "single", intent: "audio-to-video", needsSelection: true, requiredKind: ["audio", "video"], placement: "B" },
   { action: "appendText", targetMode: "single", intent: "append-text", needsSelection: true, requiredKind: "text", placement: "B" },
   // W2 ⬇ object quick-insert: position/type-check exempt (requiredKind null),
   // no placement (early-return replace-insert, no provisional reserved).
@@ -107,13 +105,15 @@ describe("routeMenuAction", () => {
     expect(knownMenuActions().sort()).toEqual(EXPECTED.map((e) => e.action).sort());
   });
 
-  it("exposes exactly the twenty-four actions (19 object + 5 layer)", () => {
+  it("exposes exactly the twenty-two actions (17 object + 5 layer)", () => {
     // 素材（末尾）(2026-08-15) added the 15th object item, `endWithThis`;
     // §3-54 (2026-09-11) added the 16th, `trackObject` (右クリック #21);
     // §3-55 (2026-09-14) added the 17th and 18th together,
     // `inpaintPartialFilter`/`inpaintVideo` (右クリック #22/#23);
-    // Alpha Gen 第 2 弾 (2026-10-13) added the 19th, `alphaGenVideo` (#24).
-    expect(knownMenuActions()).toHaveLength(24);
+    // Alpha Gen 第 2 弾 (2026-10-13) added the 19th, `alphaGenVideo` (#24);
+    // 台帳 §1-113 (2026-10-31) removed #3 and #17, the two "a2v from this
+    // video's sound" items (19 → 17).
+    expect(knownMenuActions()).toHaveLength(22);
   });
 });
 
@@ -149,7 +149,6 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       "extendVideo",
       "referenceVideo",
       "referenceVideoChain",
-      "videoAudioToVideo",
       "imageToVideo",
       "addImageKeyframe",
       "imageToClipChain",
@@ -198,7 +197,6 @@ describe("MENU_ROUTING_TABLE invariants", () => {
     expect(MENU_ROUTING_TABLE.currentFrameToClipChain?.targetMode).toBe("chained");
     // audioToVideo was corrected from chain -> create in the redesign (§7-1).
     expect(MENU_ROUTING_TABLE.audioToVideo?.targetMode).toBe("single");
-    expect(MENU_ROUTING_TABLE.videoAudioToVideo?.targetMode).toBe("single");
   });
 
   it("gives every object-menu command a concrete requiredKind and the layer pair null (§4/§3-6)", () => {
@@ -207,11 +205,9 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       extendVideo: "video",
       referenceVideo: "video",
       referenceVideoChain: "video",
-      videoAudioToVideo: "video",
       imageToVideo: "image",
       addImageKeyframe: "image",
       imageToClipChain: "image",
-      audioToVideo: "audio",
       appendText: "text",
       // W0 Edit-系: both operate on a video object.
       outpaintVideo: "video",
@@ -236,6 +232,9 @@ describe("MENU_ROUTING_TABLE invariants", () => {
     // ...and it is a real check, not the layer-menu exemption: an array means
     // "one of these", null means "no check at all".
     expect(MENU_ROUTING_TABLE.endWithThis?.requiredKind).not.toBeNull();
+    // 台帳 §1-113: #7/#18 accept an audio OR a video object.
+    expect(MENU_ROUTING_TABLE.audioToVideo?.requiredKind).toEqual(["audio", "video"]);
+    expect(MENU_ROUTING_TABLE.audioToLongA2v?.requiredKind).toEqual(["audio", "video"]);
     // The four layer commands are exempt from the type check.
     expect(MENU_ROUTING_TABLE.textToVideoHere?.requiredKind).toBeNull();
     expect(MENU_ROUTING_TABLE.imageFromCurrentFrame?.requiredKind).toBeNull();
@@ -248,7 +247,6 @@ describe("MENU_ROUTING_TABLE invariants", () => {
       extendVideo: "A",
       referenceVideo: "B",
       referenceVideoChain: "B",
-      videoAudioToVideo: "B",
       imageToVideo: "A",
       addImageKeyframe: null, // #5 branches on live keyframe count at append time
       imageToClipChain: "A",
@@ -311,9 +309,8 @@ describe("targetModeForIntent", () => {
   });
 
   it("keeps the Single-系 DURATION flows on single, and retake/end-with-this off it", () => {
-    // The four intents that actually carry a DURATION policy...
+    // The three intents that actually carry a DURATION policy...
     expect(targetModeForIntent("reference-video")).toBe("single"); // #2
-    expect(targetModeForIntent("video-audio-to-video")).toBe("single"); // #3
     expect(targetModeForIntent("image-to-video")).toBe("single"); // #4
     expect(targetModeForIntent("audio-to-video")).toBe("single"); // #7
     // ...and the two that must NOT pick up Create's per-clip comfort ceiling.

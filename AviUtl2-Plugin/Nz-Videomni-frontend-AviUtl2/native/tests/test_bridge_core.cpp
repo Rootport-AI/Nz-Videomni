@@ -915,10 +915,10 @@ TEST_CASE("CaptureFileName combines the frame number with a unique suffix") {
 // ui.pickFile parsing / filter spec
 // ---------------------------------------------------------------------------
 
-TEST_CASE("ParsePickFileKind accepts image/video/audio/imageOrVideo and rejects others") {
+TEST_CASE("ParsePickFileKind accepts image/video/audio/imageOrVideo/audioOrVideo and rejects others") {
     std::string kind;
     std::string err;
-    for (const char* k : {"image", "video", "audio", "imageOrVideo"}) {
+    for (const char* k : {"image", "video", "audio", "imageOrVideo", "audioOrVideo"}) {
         const json params = {{"kind", k}};
         CHECK(nzvideomni::ParsePickFileKind(params, &kind, &err));
         CHECK(kind == k);
@@ -960,6 +960,18 @@ TEST_CASE("PickFileFilter for imageOrVideo leads with a combined filter, then im
     CHECK(combo[0].pattern == "*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.mov;*.webm;*.mkv");
     CHECK(combo[0].label.find(combo[0].pattern) != std::string::npos);
     CHECK(combo[1].pattern == "*.png;*.jpg;*.jpeg;*.webp");
+    CHECK(combo[2].pattern == "*.mp4;*.mov;*.webm;*.mkv");
+    CHECK(combo[3].pattern == "*.*");
+    CHECK(combo[3].label == "All files (*.*)");
+}
+
+TEST_CASE("PickFileFilter for audioOrVideo leads with a combined filter, then audio-only/video-only/All files") {
+    const std::vector<PickFileFilterEntry> combo = nzvideomni::PickFileFilter("audioOrVideo");
+    REQUIRE(combo.size() == 4);
+    CHECK(combo[0].pattern == "*.wav;*.mp3;*.m4a;*.aac;*.flac;*.ogg;*.mp4;*.mov;*.webm;*.mkv");
+    CHECK(combo[0].label ==
+          "Audio or video files (*.wav;*.mp3;*.m4a;*.aac;*.flac;*.ogg;*.mp4;*.mov;*.webm;*.mkv)");
+    CHECK(combo[1].pattern == "*.wav;*.mp3;*.m4a;*.aac;*.flac;*.ogg");
     CHECK(combo[2].pattern == "*.mp4;*.mov;*.webm;*.mkv");
     CHECK(combo[3].pattern == "*.*");
     CHECK(combo[3].label == "All files (*.*)");

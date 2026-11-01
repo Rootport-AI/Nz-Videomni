@@ -164,12 +164,11 @@ function route(action: string): MenuRoute {
 }
 
 const OBJECT_ACTIONS = [
-  "extendVideo", "referenceVideo", "videoAudioToVideo", "imageToVideo",
+  "extendVideo", "referenceVideo", "imageToVideo",
   "addImageKeyframe", "imageToClipChain", "audioToVideo", "appendText",
-  // 台帳§1-16 長尺A2V (2026-08-10). `audioToLongA2v` is the SECOND member of the
-  // audio-required set, so the shared matrix below now exercises the near-
-  // neighbor rescue on both of them (see NEAR_NEIGHBOR_NOTE).
-  "videoAudioToLongA2v", "audioToLongA2v",
+  // 台帳§1-16 長尺A2V (2026-08-10). Like #7 it accepts an audio OR a video
+  // object (台帳 §1-113), so the matrix below covers a two-kind set too.
+  "audioToLongA2v",
   // W0 Edit-系 (2026-08-09). `makeSelection` defaults to `hasRange: true`, so
   // the (e) range guard never fires in the shared kind/multi-select matrices
   // below — exactly right: those exercise (a)-(c), and (e) has its own describe.
@@ -181,15 +180,6 @@ const OBJECT_ACTIONS = [
   "trackObject",
 ] as const;
 const ALL_KINDS: MaterialKind[] = ["video", "image", "audio", "text", "partialFilter"];
-
-/** §4-3 近傍アクション: audio-required action -> the note a mis-selected VIDEO
- * gets instead of the bare `typeMismatch`. Mirrors the production table
- * (`VIDEO_FOR_AUDIO_ACTION_NOTE`), kept here as an independent expectation so a
- * silent change to the pairing fails. */
-const NEAR_NEIGHBOR_NOTE: Record<string, string> = {
-  audioToVideo: "useVideoAudioInstead",
-  audioToLongA2v: "useVideoAudioLongInstead",
-};
 
 describe("classifySelectionKind", () => {
   it("maps each native effectName to its kind", () => {
@@ -247,73 +237,48 @@ describe("guardMenuSelection — required-kind matrix (§4-3)", () => {
   // Table-driven: every object action × every kind. A long (10s) media duration
   // keeps the #1/#2 length guard out of the way so this isolates the type check.
   for (const action of OBJECT_ACTIONS) {
-    const required = route(action).requiredKind;
+    const required = requiredKindsOf(route(action).requiredKind);
     for (const kind of ALL_KINDS) {
       it(`${action} + ${kind}`, () => {
         const sel = makeSelection({ selected: [makeItem(EFFECT_BY_KIND[kind], 10)] });
         const r = guardMenuSelection(route(action), sel);
-        if (kind === required) {
+        if (required.includes(kind)) {
           expect(r.ok).toBe(true);
-        } else if (kind === "video" && NEAR_NEIGHBOR_NOTE[action]) {
-          // The near-neighbor special cases (§4-3): a video selected for an
-          // audio-required action steers to that action's own video sibling.
-          expect(r.ok).toBe(false);
-          if (!r.ok) expect(r.note.noteKind).toBe(NEAR_NEIGHBOR_NOTE[action]);
+        } else if (required.length === 1) {
+          expect(r).toEqual({ ok: false, note: { noteKind: "typeMismatch", selected: kind, required: required[0] } });
         } else {
-          expect(r.ok).toBe(false);
-          if (!r.ok && r.note.noteKind === "typeMismatch") {
-            expect(r.note.selected).toBe(kind);
-            expect(r.note.required).toBe(required);
-          } else {
-            throw new Error(`expected typeMismatch for ${action}+${kind}`);
-          }
+          expect(r).toEqual({ ok: false, note: { noteKind: "typeMismatchAny", selected: kind, required } });
         }
       });
     }
   }
 });
 
-describe("guardMenuSelection — near-neighbor special case (§4-3)", () => {
-  it("steers a video selected for #7 audioToVideo to the video-audio a2v", () => {
-    const sel = makeSelection({ selected: [makeItem(EFFECT_NAME_VIDEO, 10)] });
-    const r = guardMenuSelection(route("audioToVideo"), sel);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.note.noteKind).toBe("useVideoAudioInstead");
-  });
+describe("guardMenuSelection — #7 / #18 accept an audio or a video object (台帳 §1-113)", () => {
+  for (const action of ["audioToVideo", "audioToLongA2v"]) {
+    it(`${action} passes with a video object`, () => {
+      const sel = makeSelection({ selected: [makeItem(EFFECT_NAME_VIDEO, 10)] });
+      expect(guardMenuSelection(route(action), sel)).toEqual({ ok: true });
+    });
 
-  it("is the ONLY near-neighbor: a video for #3 videoAudioToVideo just passes", () => {
-    const sel = makeSelection({ selected: [makeItem(EFFECT_NAME_VIDEO, 10)] });
-    expect(guardMenuSelection(route("videoAudioToVideo"), sel).ok).toBe(true);
-  });
+    it(`${action} passes with an audio object`, () => {
+      const sel = makeSelection({ selected: [makeItem(EFFECT_NAME_AUDIO, 10)] });
+      expect(guardMenuSelection(route(action), sel)).toEqual({ ok: true });
+    });
 
-  // 台帳§1-16 長尺A2V: the rescue is a two-row table now, not a single literal.
-  it("steers a video selected for 🎵 audioToLongA2v to the LONG video sibling (not #3)", () => {
-    const sel = makeSelection({ selected: [makeItem(EFFECT_NAME_VIDEO, 10)] });
-    const r = guardMenuSelection(route("audioToLongA2v"), sel);
-    expect(r.ok).toBe(false);
-    // Deliberately asserts the LONG variant: steering to the single-shot #3
-    // would send the user to a different feature.
-    if (!r.ok) expect(r.note.noteKind).toBe("useVideoAudioLongInstead");
-  });
+    it(`${action} refuses an image object with "audio or video"`, () => {
+      const sel = makeSelection({ selected: [makeItem(EFFECT_NAME_IMAGE)] });
+      expect(guardMenuSelection(route(action), sel)).toEqual({
+        ok: false,
+        note: { noteKind: "typeMismatchAny", selected: "image", required: ["audio", "video"] },
+      });
+    });
+  }
 
-  it("🎬 videoAudioToLongA2v with an AUDIO object is a plain typeMismatch (no reverse rescue)", () => {
-    const sel = makeSelection({ selected: [makeItem(EFFECT_NAME_AUDIO, 10)] });
-    const r = guardMenuSelection(route("videoAudioToLongA2v"), sel);
-    expect(r.ok).toBe(false);
-    if (!r.ok && r.note.noteKind === "typeMismatch") {
-      expect(r.note.selected).toBe("audio");
-      expect(r.note.required).toBe("video");
-    } else {
-      throw new Error("expected typeMismatch");
-    }
-  });
-
-  it("🎬 videoAudioToLongA2v passes with a video and has no length floor", () => {
-    // The long-a2v items have no §4-5 floor (only #1/#2 do), so even a 2-frame
-    // ribbon passes the guard — the audio panel's own gates take over later.
+  it("has no length floor (a 2-frame ribbon passes)", () => {
     const sel = makeSelection({ selected: [makeItem(EFFECT_NAME_VIDEO, 0.05)] });
-    expect(guardMenuSelection(route("videoAudioToLongA2v"), sel).ok).toBe(true);
-    expect(lengthFloorForAction("videoAudioToLongA2v")).toBeNull();
+    expect(guardMenuSelection(route("audioToLongA2v"), sel).ok).toBe(true);
+    expect(lengthFloorForAction("audioToVideo")).toBeNull();
     expect(lengthFloorForAction("audioToLongA2v")).toBeNull();
   });
 });
@@ -502,10 +467,10 @@ describe("guardMenuSelection — length guard (§4-5)", () => {
     expect(guardMenuSelection(route("referenceVideo"), sel).ok).toBe(true);
   });
 
-  it("does not apply a length guard to other video actions (#3 videoAudioToVideo)", () => {
-    // A very short span for #3 is fine — only #1/#2 have a length floor.
+  it("does not apply a length guard to other video actions (#7 audioToVideo)", () => {
+    // A very short span for #7 is fine — only #1/#2 have a length floor.
     const sel = videoSpan(2);
-    expect(guardMenuSelection(route("videoAudioToVideo"), sel).ok).toBe(true);
+    expect(guardMenuSelection(route("audioToVideo"), sel).ok).toBe(true);
   });
 });
 
@@ -524,9 +489,6 @@ describe("formatMenuGuardNote", () => {
     { noteKind: "typeMismatch", selected: "audio", required: "video" },
     // 素材（末尾）: the multi-kind variant.
     { noteKind: "typeMismatchAny", selected: "audio", required: ["video", "image"] },
-    { noteKind: "useVideoAudioInstead" },
-    // 台帳§1-16: the long-form near-neighbor variant.
-    { noteKind: "useVideoAudioLongInstead" },
     { noteKind: "videoTooShort", requiredSeconds: V2V_MIN_DURATION_SEC },
     // W0 範囲系. `rangeTooShort` is reserved by W0 and raised by W3, so this
     // format test is currently its ONLY caller — deliberate, so the copy and the

@@ -111,6 +111,45 @@ describe("useDurationShrinkGuard", () => {
     });
   });
 
+  // 2026-11-01 (§1-114 G-7, ruling B): a right-click prefill's frame-count
+  // seed commits with `origin: "prefill"`, carried into `pendingShrink` so the
+  // modal words itself as the automatic adjustment. A manual commit carries
+  // no `origin` key at all (`exactOptionalPropertyTypes`).
+  it("a prefill-origin shrink carries origin: \"prefill\" in pendingShrink; cancel still restores the pre-seed value", () => {
+    const deps = makeDeps({ numFrames: 41, items: [makeItem("a", 33)] });
+    const { result } = renderHook((props: DurationShrinkGuardDeps) => useDurationShrinkGuard(props), {
+      initialProps: deps,
+    });
+
+    act(() => result.current.onDurationChange(17, true));
+    act(() => result.current.onDurationCommit(17, true, "prefill"));
+
+    expect(result.current.pendingShrink).toEqual({
+      kind: "duration",
+      origin: "prefill",
+      pendingNumFrames: 17,
+      overflowIds: ["a"],
+    });
+
+    act(() => result.current.cancelShrink());
+    expect(deps.setNumFrames).toHaveBeenNthCalledWith(2, 41, false);
+    expect(result.current.pendingShrink).toBeNull();
+    expect(deps.removeKeyframe).not.toHaveBeenCalled();
+  });
+
+  it("a manual shrink commit (no origin) leaves origin absent from pendingShrink", () => {
+    const deps = makeDeps({ numFrames: 41, items: [makeItem("a", 33)] });
+    const { result } = renderHook((props: DurationShrinkGuardDeps) => useDurationShrinkGuard(props), {
+      initialProps: deps,
+    });
+
+    act(() => result.current.onDurationChange(17, true));
+    act(() => result.current.onDurationCommit(17, true));
+
+    expect(result.current.pendingShrink).not.toBeNull();
+    expect(result.current.pendingShrink).not.toHaveProperty("origin");
+  });
+
   it("duration increase (value grows) passes through with no overflow", () => {
     const deps = makeDeps({ numFrames: 41, items: [makeItem("a", 33)] });
     const { result } = renderHook((props: DurationShrinkGuardDeps) => useDurationShrinkGuard(props), {

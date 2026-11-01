@@ -7,7 +7,6 @@ import { resolveGenerationConstraints } from "../../shell/generationConstraints"
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { FALLBACK_APP_CONFIG } from "./defaultConfig";
 import { useGenerationForm } from "./useGenerationForm";
-import type { GenerationFormInitial } from "./useGenerationForm";
 
 // MiniMax H3 第 2 弾 (2026-10-17): Create's form under the served constraints.
 // Every pre-existing `useGenerationForm` test omits `constraints` and so pins
@@ -36,20 +35,23 @@ const LTX = resolveGenerationConstraints(LTX_BLOCK);
 function renderForm(
   constraints: GenerationConstraints | undefined,
   engineFamily: string | undefined,
-  initial: GenerationFormInitial = {},
   config: AppConfig = FALLBACK_APP_CONFIG,
 ) {
   const nativeBridge = createMockBridge({ delayMs: 0 });
   return renderHook(
     ({ c, family }: { c: GenerationConstraints | undefined; family: string | undefined }) =>
-      useGenerationForm(config, "a prompt", { nativeBridge, constraints: c, engineFamily: family }, initial),
+      useGenerationForm(config, "a prompt", { nativeBridge, constraints: c, engineFamily: family }),
     { initialProps: { c: constraints, family: engineFamily } },
   );
 }
 
 describe("useGenerationForm — MiniMax H3 constraints", () => {
-  it("seeds DURATION on 17n+5, fps at the fixed 24 and the sampling defaults", () => {
-    const { result } = renderForm(H3, "h3", { frameRate: 30, numFrames: 121 });
+  it("snaps DURATION onto 17n+5, pins fps at the fixed 24 and seeds the sampling defaults", () => {
+    const { result } = renderForm(H3, "h3");
+    act(() => {
+      result.current.setFrameRate(30);
+      result.current.setNumFrames(121);
+    });
     expect(result.current.values.numFrames).toBe(124);
     expect(result.current.values.frameRate).toBe(24);
     expect(result.current.fixedFrameRate).toBe(24);
@@ -126,7 +128,11 @@ describe("useGenerationForm — MiniMax H3 constraints", () => {
   });
 
   it("follows a base-model switch: re-snaps, pins fps and resets the sliders to the new defaults", () => {
-    const { result, rerender } = renderForm(LTX, "ltx", { frameRate: 30, numFrames: 121 });
+    const { result, rerender } = renderForm(LTX, "ltx");
+    act(() => {
+      result.current.setFrameRate(30);
+      result.current.setNumFrames(121);
+    });
     expect(result.current.values.numFrames).toBe(121);
     expect(result.current.values.frameRate).toBe(30);
 
@@ -155,10 +161,10 @@ describe("useGenerationForm — MiniMax H3 constraints", () => {
           FALLBACK_APP_CONFIG,
           "a prompt",
           { nativeBridge, constraints: c, engineFamily: closed ? "h3" : "ltx", controlLora, referenceVideoUnavailable: closed },
-          { carryReferenceVideo: { id: "mock-video-1", fileName: "ref.mp4", filePath: "C:\ref.mp4" } },
         ),
       { initialProps: { closed: false, c: LTX } },
     );
+    act(() => result.current.referenceVideo.adopt({ id: "mock-video-1", fileName: "ref.mp4", filePath: "C:\ref.mp4" }));
     // On LTX both are live: IC-LoRA mode, and the request carries them.
     expect(result.current.isICLora).toBe(true);
     let body = result.current.toGenerateRequest();

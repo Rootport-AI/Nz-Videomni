@@ -183,11 +183,11 @@ export function SettingsPanel({
   ];
   // W1: right-click prefill size/fps policies — two independent toggles now
   // (localStorage-only, like the theme toggle). Each offers the same three
-  // choices; order mirrors the spec's ①②③ reading (defaults → project →
+  // choices; order mirrors the spec's ①②③ reading (panel → project →
   // material) rather than the storage/default order.
   const { sizePolicy, setSizePolicy, fpsPolicy, setFpsPolicy } = usePrefillPolicy();
   const prefillPolicyOptions: ReadonlyArray<{ policy: PrefillResolutionPolicy; label: string }> = [
-    { policy: "defaults", label: strings.settings.prefillPolicyDefaults },
+    { policy: "panel", label: strings.settings.prefillPolicyPanel },
     { policy: "project", label: strings.settings.prefillPolicyProject },
     { policy: "material", label: strings.settings.prefillPolicyMaterial },
   ];
@@ -318,7 +318,7 @@ export function SettingsPanel({
                 type="button"
                 className={`mode-tab${sizePolicy === option ? " mode-tab--active" : ""}`}
                 aria-pressed={sizePolicy === option}
-                title={option === "defaults" ? strings.settings.prefillPolicyDevTooltip : undefined}
+                title={option === "panel" ? strings.settings.prefillPolicyPanelTooltip : undefined}
                 onClick={() => setSizePolicy(option)}
               >
                 {label}
@@ -340,7 +340,7 @@ export function SettingsPanel({
                 type="button"
                 className={`mode-tab${fpsPolicy === option ? " mode-tab--active" : ""}`}
                 aria-pressed={fpsPolicy === option}
-                title={option === "defaults" ? strings.settings.prefillPolicyDevTooltip : undefined}
+                title={option === "panel" ? strings.settings.prefillPolicyPanelTooltip : undefined}
                 onClick={() => setFpsPolicy(option)}
               >
                 {label}

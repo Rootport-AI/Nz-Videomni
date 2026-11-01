@@ -66,7 +66,7 @@ describe("ClipReferences", () => {
     expect(unregister).toHaveBeenLastCalledWith("clip-a");
   });
 
-  it("draws nothing while off, and the embedded accordion (no Enable) while on", () => {
+  it("draws nothing while off, and the embedded accordion (no Enable; no ON badge while empty) while on", () => {
     const { container, rerender } = renderClip();
     expect(container.querySelector(".ref-accordion")).toBeNull();
     rerender({ referencesOn: true });

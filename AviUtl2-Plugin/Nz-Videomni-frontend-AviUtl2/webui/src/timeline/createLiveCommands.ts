@@ -2,14 +2,13 @@
  * A minimal live-command channel from `AppShell.handleRoute` to the
  * always-mounted Create screen (RIGHTCLICK_REDESIGN_SPEC.md §3-6 #10, §7-2).
  *
- * Most right-click routes deliver their intent through a REMOUNT (a fresh
- * `pendingIntent` + a bumped per-mode remount token), which the target screen
- * consumes once in a mount effect. But the two keep-panel-state items — ✨
- * (#9) and 📷 (#10, D3 decision) — must NOT remount Create, so there is no
- * remount for a `pendingIntent` to ride. #9 needs nothing delivered to the
- * mounted form (it only reserves a provisional). #10 DOES: it must tell the
- * live Create screen to grab the current timeline frame into KEYFRAMES,
- * WITHOUT wiping the form state the user already has.
+ * The Chained / Edit right-click routes deliver their intent through a REMOUNT
+ * (a fresh `pendingIntent` + a bumped per-mode remount token), which the target
+ * screen consumes once in a mount effect. Create is never remounted by a
+ * right-click: the keep-panel-state items ✨ (#9) and 📷 (#10, D3 decision)
+ * and, since 台帳 §1-114 (2026-10-31), the material items #2/#4/#7
+ * (`prefillMaterial`) all reach the live screen through this channel, WITHOUT
+ * wiping the form state the user already has.
  *
  * This is the smallest shared mechanism for that: a module-level subscription
  * store, mirroring the module-level shared-reference pattern
@@ -22,6 +21,8 @@
  *
  * Side-effect-free and React-free so it can be unit-tested in isolation.
  */
+
+import type { GenerationPrefill } from "./generationPrefill";
 
 /** A command delivered to the mounted Create screen. Discriminated on `type`:
  *  - `captureFrameToKeyframe` (#10): grab the current timeline frame into a new
@@ -49,7 +50,13 @@
  *    cards survive). `filePath` is `null` when native could not resolve the
  *    object's file (→ the §6-2 missing-material note). The video variant
  *    carries the ribbon's trim window (`trimQuery`) and the trimmed length
- *    (`durationSec`), both omitted when no trim applies. Enable is untouched. */
+ *    (`durationSec`), both omitted when no trim applies. Enable is untouched.
+ *  - `prefillMaterial` (台帳 §1-114, #2/#4/#7 on every base model except the
+ *    H3 #2/#7 above): re-seed width/height/fps/DURATION per the Settings
+ *    policies and attach the selected material (#2 reference video, #4 frame-0
+ *    keyframe — replacing an existing frame-0 card, #7 the object's solo-rendered
+ *    sound) WITHOUT remounting Create, so the prompt and every other slot
+ *    survive. `selection` is the file-path-completed routed selection. */
 export type CreateLiveCommand =
   | { type: "captureFrameToKeyframe" }
   | { type: "addCaptureAsKeyframe" }
@@ -62,7 +69,15 @@ export type CreateLiveCommand =
       trimQuery?: Record<string, string>;
       durationSec?: number;
     }
-  | { type: "addReferenceAudio"; filePath: string | null; fileName: string };
+  | { type: "addReferenceAudio"; filePath: string | null; fileName: string }
+  | {
+      type: "prefillMaterial";
+      intent: PrefillMaterialIntent;
+      selection: GenerationPrefill["selection"];
+    };
+
+/** The three Single-bound material intents `prefillMaterial` carries. */
+export type PrefillMaterialIntent = "reference-video" | "image-to-video" | "audio-to-video";
 
 type CreateCommandListener = (command: CreateLiveCommand) => void;
 

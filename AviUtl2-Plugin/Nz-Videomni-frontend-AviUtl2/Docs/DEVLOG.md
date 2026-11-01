@@ -5813,6 +5813,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - オーナー裁定 2 件（2026-10-31）: ① `timeline.extractAudio` を WebUI の 10 秒の時間切れの対象外にした（155.2）。② 音声の参照への事前検査 `REFERENCE_AUDIO_NO_STREAM` を足した（155.1）。
 - 既知の限界（直さない）: H3 の #7 は空きカードの確認より先に抽出する・待ちの間に `baseModels` が古くなりうる・追尾やマスク描画の「1 ジョブの枠」を抽出は取らない。`SingleScreen.reference.test.tsx` の「✒ appends the card's tag … right-clicked video opens the accordion」は単独実行 9 回中 2 回失敗したが、変更していない `addReferenceVideo` の経路で、台帳 §3-238 と同種であり退行ではない。
 - 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §187。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（G-1〜G-10）。
+- オーナーの実機確認（2026-11-01）: G-7 が不合格（mp4 を A2V／Audios カードに入れると、長さが不明なのに「音声が短すぎます」で Generate が止まる）。G-1〜G-6・G-10 は合格、G-8・G-9 は G-7 の修正後に再確認する。原因は `useGenerationForm.ts` の `audioTooShort` の条件で、記録簿 `Docs/VERIFICATION_LOG.md` §187.8 に書いた。
 
 ## 156. 右クリックの Single 行き（#2・#4・#7）を作り直し無しのライブ経路へ・Settings「開発用」→「操作パネル」・反対スロットの持ち越しの削除（バックエンド台帳 §1-114。2026-10-31）
 
@@ -5852,6 +5853,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 差分の敵対的レビュー（Opus）: Critical 0・Major 0・Minor 7・Nit 2 → 全件採用（`prefillSeed` の fps の落とし先・DURATION を縮小の守りへ通す・#4 の上限を種のフレーム数で数える・`materialWatch` を連番で守る・古いコメントの訂正・テストの追加・本記録の訂正）。
 - 配置: aux2（1,557,504 バイト・2026-10-31 22:46）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `f883ab5d…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。
 - 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §188。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（G-1〜G-9）。
+- オーナーの実機確認（2026-11-01）: G-1〜G-9 すべて合格。縮小の確認の窓の文言は、右クリックが原因のとき変える方針で、次の修正の弾で実装する。
 
 ## 157. H3 の Reference の規則の整理（Enable が親・Audio to video は宣言で灰色・空なら Generate を止める）・Chained の埋め込み Reference の【🔴ON】・NAG の注意文の短縮（バックエンド台帳 §1-117 ほか。2026-10-31）
 
@@ -5892,3 +5894,4 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 監督の裁定（オーナーが覆してよい）: ① Enable=off のときは Strength のスライダーも無効にする（表示はする）。② 宣言したカードの音声がアップロード済みになってから `form.sourceAudio` に写るまでの一瞬に Generate が押せて T2V が送られる隙（従来からあった）を、写し終わるまで注意を出し続けて塞いだ。
 - 詳細はバックエンドの記録簿 `Docs/VERIFICATION_LOG.md` §189、規則の決定は設計正本 `Docs/MINIMAX_H3_DESIGN.md` 裁定 88。オーナーの実機確認は台帳 `Docs/PENDING_TASKS.md` §2 のチェックリスト（§1-117 の G-1〜G-8）。
 - 配置: aux2（1,557,504 バイト・2026-10-31 23:16）を `scripts\build.ps1` → `scripts\deploy.ps1` で実機（`data\Plugin\NzVideomni\`）と配布コピー（`AviUtl2-Plugin\NzVideomni.aux2`）へ置いた。3 か所とも sha256 `e5e64e3a…` で一致。native の doctest は 402 件合格・失敗 0・警告 0（変更は埋め込みの webui だけ）。
+- オーナーの実機確認（2026-11-01）: G-1〜G-8 すべて合格。

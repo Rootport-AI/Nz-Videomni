@@ -45,10 +45,12 @@ ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 reader does not know holds the bar where it is.
 ``generate_chain`` carries the same keys minus ``num_frames`` / ``images`` /
 ``source_audio`` / ``references``, plus ``clips`` (``[{prompt, num_frames,
-references?}]``; a clip's ``references`` is the single op's shape and rides
-only on a clip that has some — an absent key is "no references");
+images?, references?}]``; clip 0's ``images`` and a clip's ``references``
+are the single op's shapes and ride only on a clip that has some — an
+absent key is "none") and, for a V2V chain, ``source`` (``{path,
+context_frames}``, the input video's tail the app cut);
 its ``done`` is the generate one (``num_frames`` = the whole timeline) plus
-``chain``, and its progress events add ``outer_index`` / ``outer_total`` (the
+``chain`` (with ``v2v`` for a V2V chain), and its progress events add ``outer_index`` / ``outer_total`` (the
 clip) to ``encode`` and ``stage1_denoise``, read as the one-band chain
 (``_read_chain_events(one_stage=True)``).
 

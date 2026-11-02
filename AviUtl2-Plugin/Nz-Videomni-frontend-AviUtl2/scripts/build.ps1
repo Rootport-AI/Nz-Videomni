@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Configure and build the Nz-Videomni native plugin (.aux2) and its test exe.
+    Configure and build the Nz-Videomni native plugin (.aux2) and its test exe,
+    then copy the .aux2 over the monorepo's distribution copy (see -NoDistCopy).
 
 .DESCRIPTION
     Uses the Ninja + MSVC (vcvars) toolchain, which is the working path on this
@@ -38,7 +39,9 @@
     NzVideomni.aux2 has no UI resource of its own; it falls back to the native
     on-disk folder-mapping path in webview_host.cpp (see that file for the
     fallback's behavior) and is not accepted by scripts\deploy.ps1, which
-    requires an embedded build (see deploy.ps1's header comment). Use this
+    requires an embedded build (see deploy.ps1's header comment). The
+    distribution copy step is skipped automatically with it, so this UI-less
+    build never replaces the distribution copy. Use this
     only for native-only debugging where npm/webui aren't available or
     needed. Combining -NoEmbedWebui with -EmbedWebui is an error.
 
@@ -64,7 +67,8 @@
 .PARAMETER NoDistCopy
     Skip the final step that copies the built NzVideomni.aux2 over the
     distribution copy (the monorepo's AviUtl2-Plugin\NzVideomni.aux2, the same
-    place scripts\deploy.ps1 defaults -DistDir to). By default it is copied.
+    place scripts\deploy.ps1 defaults -DistDir to). By default it is copied,
+    except with -NoEmbedWebui, where it is always skipped.
 #>
 [CmdletBinding()]
 param(
@@ -226,7 +230,9 @@ if (-not (Test-Path $aux2)) { throw "Expected artifact not found: $aux2" }
 Write-Host ""
 Write-Host "Build succeeded: $aux2"
 
-if (-not $NoDistCopy) {
+if ($NoEmbedWebui) {
+    Write-Host "Distribution copy skipped (no embedded Web UI)"
+} elseif (-not $NoDistCopy) {
     # Same location deploy.ps1 uses for -DistDir; AviUtl2 never locks this copy.
     $distAux2 = Join-Path (Split-Path -Parent $RepoRoot) "NzVideomni.aux2"
     Copy-Item -Path $aux2 -Destination $distAux2 -Force

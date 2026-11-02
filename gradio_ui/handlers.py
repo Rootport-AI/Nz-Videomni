@@ -1377,7 +1377,7 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
             return
 
         # --- V2V prechecks (zero API calls on violation; mirrors the API's
-        # SourceVideoSpec + cross-validators) ---
+        # LTX checks: SourceVideoSpec's cap + validate_ltx_chain) ---
         upload_cfg = (config or {}).get("upload") or {}
         if mode == MODE_V2V:
             err = check_v2v_context(context_frames, clip_frames[0], lang, config)

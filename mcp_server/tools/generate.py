@@ -803,7 +803,7 @@ async def submit_chain(
       * ``source_video_id`` と ``source_audio_id`` は同時に指定できません
         （このツールがPOST前にエラーにします）。
       * ``source_video_id`` を使う場合、アップロード動画の末尾
-        ``source_video_context_frames`` フレーム（8n+1、既定73）がクリップ0の
+        ``source_video_context_frames`` フレーム（LTX は 8n+1。既定73）がクリップ0の
         先頭として凍結されます。クリップ0には ``conditioning_images`` を
         同時指定できません（先頭が既に元動画で埋まっているため）。
       * ``source_audio_id`` を使う場合、アップロード音声に映像が同期するよう
@@ -942,7 +942,8 @@ async def submit_chain(
             ``overlap_strength`` も同じく無視される）。
         overlap_strength: 重なり部分の強度（0〜1）。
         source_video_id: V2V継続元の動画ID（``upload_video`` で取得）。
-        source_video_context_frames: 元動画から凍結するフレーム数（8n+1）。
+        source_video_context_frames: 元動画から凍結するフレーム数（LTX は
+            8n+1。MiniMax H3 は 22 だけ）。
         source_audio_id: A2V駆動音声のID（``upload_audio`` で取得）。
         loras: 適用するIC-LoRAアダプタのリスト。各要素の ``audio_strength``
             は映像軸（``strength``）とは独立した音声軸の適用強度（省略可、

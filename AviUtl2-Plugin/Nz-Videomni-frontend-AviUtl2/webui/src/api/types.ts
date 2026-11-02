@@ -371,9 +371,10 @@ export interface ChainClip {
 }
 
 /** V2V continuation source (Docs/API_REFERENCE.md §5.2 `SourceVideoSpec`).
- * `context_frames` must be 8n+1 in `[v2v_context_frames_min,
- * v2v_context_frames_max]` and strictly less than `clips[0].num_frames`
- * (`api/models.py:219-259`). */
+ * `context_frames` follows the base model's rule: on LTX 8n+1 in
+ * `[v2v_context_frames_min, v2v_context_frames_max]` and strictly less than
+ * `clips[0].num_frames`; on MiniMax H3 exactly
+ * `constraints.chain.overlap_frames` (22). */
 export interface SourceVideoSpec {
   video_id: string;
   context_frames: number;

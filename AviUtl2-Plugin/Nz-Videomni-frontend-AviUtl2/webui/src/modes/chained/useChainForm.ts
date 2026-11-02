@@ -676,7 +676,7 @@ export interface UseChainFormResult {
    * `overlapFrames` (= `8 * overlapFrames + 1`), the exact threshold behind the
    * `clipTooShortForOverlap` validity reason. Exposed so `ChainedScreen` can
    * interpolate it into the Generate-disabled note (`n`). §1-106: in the
-   * fixed-overlap mode it is the floor of every clip AFTER the first
+   * fixed-overlap mode it is the floor of every clip AFTER the first (and of clip 0 when a source video is attached, since §1-121)
    * (`overlap + grid step`, 39 on MiniMax H3). */
   minFramesForOverlap: number;
 

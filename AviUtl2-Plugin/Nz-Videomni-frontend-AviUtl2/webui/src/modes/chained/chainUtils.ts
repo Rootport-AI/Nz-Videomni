@@ -755,8 +755,9 @@ export function chainLayoutError(
   return null;
 }
 
-/** V2V `context_frames` validity (Docs/API_REFERENCE.md §5.2
- * `SourceVideoSpec`): 8n+1, within `[min, max]` from
+/** LTX's V2V `context_frames` validity (Docs/API_REFERENCE.md §5.2
+ * `SourceVideoSpec`; `useChainForm` skips it for a fixed-overlap base model
+ * such as MiniMax H3): 8n+1, within `[min, max]` from
  * `config.limits.v2v_context_frames_min/max`, and strictly less than
  * `clips[0].num_frames` — a source can't "carry over" more frames than the
  * very first clip is going to produce. */

@@ -188,15 +188,28 @@ export interface ChainedScreenProps {
    * is also what an older server (no `unsupported_features`) produces.
    *
    * Material attached before a switch stays visible; Generate is blocked by
-   * `materialInClosedPanel` and the clear button stays live. */
+   * `materialInClosedPanel` and the clear button stays live — except in a
+   * panel that is also HIDDEN (below), whose material reads as absent. */
   v2vUnavailable?: boolean | undefined;
   a2vUnavailable?: boolean | undefined;
   endSourceUnavailable?: boolean | undefined;
   referenceUnavailable?: boolean | undefined;
   /** §1-106 (`chain_start_image`): clip 0's opening IMAGE — the image half of
-   * the SOURCE card — is closed on the loaded base model (MiniMax H3 chains
-   * from text). Same finished-boolean contract as the flags above. */
+   * the SOURCE card — is closed on the loaded base model. No shipped engine
+   * publishes it since 台帳 §1-121. Same finished-boolean contract as the
+   * flags above. */
   startImageUnavailable?: boolean | undefined;
+  /** 台帳 §1-121: the closed parts the feature table HIDES outright
+   * (`featureScope.chainPanelsHiddenFor`; MiniMax H3) — the 素材（末尾） and
+   * IC-LoRA accordions are not rendered, and the SOURCE card's opening-image
+   * strength slider is not either. Material left in a hidden panel (attached
+   * on another base model) reads as absent: it neither blocks Generate nor
+   * rides on the request, and comes back on a switch to a base model that
+   * shows the panel. A hidden opening-image strength is not sent. Omitted =
+   * nothing hidden. */
+  endSourceHidden?: boolean | undefined;
+  referenceHidden?: boolean | undefined;
+  startImageStrengthHidden?: boolean | undefined;
   /** §1-106 (`chain_start_image`): the Batch i2v-long section (every row puts
    * its image on clip 0) is closed — not rendered at all. */
   batchI2vLongUnavailable?: boolean | undefined;
@@ -249,6 +262,9 @@ export function ChainedScreen({
   endSourceUnavailable,
   referenceUnavailable,
   startImageUnavailable,
+  endSourceHidden,
+  referenceHidden,
+  startImageStrengthHidden,
   batchI2vLongUnavailable,
   loraAudioHidden,
   constraints,
@@ -290,6 +306,9 @@ export function ChainedScreen({
       endSourceUnavailable={endSourceUnavailable}
       referenceUnavailable={referenceUnavailable}
       startImageUnavailable={startImageUnavailable}
+      endSourceHidden={endSourceHidden}
+      referenceHidden={referenceHidden}
+      startImageStrengthHidden={startImageStrengthHidden}
       batchI2vLongUnavailable={batchI2vLongUnavailable}
       loraAudioHidden={loraAudioHidden}
       constraints={constraints}
@@ -326,6 +345,9 @@ interface ChainedScreenBodyProps {
   endSourceUnavailable?: boolean | undefined;
   referenceUnavailable?: boolean | undefined;
   startImageUnavailable?: boolean | undefined;
+  endSourceHidden?: boolean | undefined;
+  referenceHidden?: boolean | undefined;
+  startImageStrengthHidden?: boolean | undefined;
   batchI2vLongUnavailable?: boolean | undefined;
   loraAudioHidden?: boolean | undefined;
   constraints?: GenerationConstraints | undefined;
@@ -360,6 +382,9 @@ function ChainedScreenBody({
   endSourceUnavailable = false,
   referenceUnavailable = false,
   startImageUnavailable = false,
+  endSourceHidden = false,
+  referenceHidden = false,
+  startImageStrengthHidden = false,
   batchI2vLongUnavailable = false,
   loraAudioHidden = false,
   constraints,
@@ -506,6 +531,11 @@ function ChainedScreenBody({
         a2v: a2vUnavailable,
         endSource: endSourceUnavailable,
         reference: referenceUnavailable,
+      },
+      hiddenPanels: {
+        endSource: endSourceHidden,
+        reference: referenceHidden,
+        startImageStrength: startImageStrengthHidden,
       },
     },
     initialCommon,
@@ -1217,10 +1247,12 @@ function ChainedScreenBody({
             VIDEO is out of scope — clip 0's opening IMAGE is part of chained
             generation proper and must stay attachable. So `disabled` is left
             alone and `videoUnavailable` closes just that half. */}
-        {/* §1-106: with the IMAGE half closed too (`chain_start_image` —
-            MiniMax H3 chains from text) the card greys as a whole, and the
-            image line replaces the video one (whose "the opening image is
-            unaffected" would no longer be true). */}
+        {/* §1-106: with the IMAGE half closed too (`chain_start_image`) the
+            card greys as a whole, and the image line replaces the video one
+            (whose "the opening image is unaffected" would no longer be true).
+            No shipped engine closes either half since 台帳 §1-121 — MiniMax
+            H3's chain takes a source video and an opening image too, so both
+            banners are the mechanism for a server that publishes the names. */}
         {v2vUnavailable && !startImageUnavailable && (
           <p className="warning-banner">{strings.chained.unavailableOnBaseModel.sourceVideo}</p>
         )}
@@ -1234,6 +1266,7 @@ function ChainedScreenBody({
           mediaSize={form.sourceMediaSize}
           videoUnavailable={v2vUnavailable}
           imageUnavailable={startImageUnavailable}
+          imageStrengthHidden={startImageStrengthHidden}
         />
 
         <ClipsSection
@@ -1258,22 +1291,25 @@ function ChainedScreenBody({
             read in the order the output plays. Same accordion treatment as the
             two cards below (`showHeading={false}`; the heading lives in the
             `<summary>`), and the same mount-time auto-open ref for the
-            right-click intent that lands material inside it. */}
-        <details className="form-accordion" ref={endSourceAccordionRef}>
-          <summary className="form-accordion-summary">{strings.chained.endSource.heading}</summary>
-          <div className="form-accordion-body">
-            {endSourceUnavailable && (
-              <p className="warning-banner">{strings.chained.unavailableOnBaseModel.endSource}</p>
-            )}
-            <ChainEndSourcePanel
-              form={form}
-              disabled={disabled}
-              unavailable={endSourceUnavailable}
-              nativeBridge={nativeBridge}
-              showHeading={false}
-            />
-          </div>
-        </details>
+            right-click intent that lands material inside it. 台帳 §1-121: not
+            rendered at all where the feature table hides it (MiniMax H3). */}
+        {!endSourceHidden && (
+          <details className="form-accordion" ref={endSourceAccordionRef}>
+            <summary className="form-accordion-summary">{strings.chained.endSource.heading}</summary>
+            <div className="form-accordion-body">
+              {endSourceUnavailable && (
+                <p className="warning-banner">{strings.chained.unavailableOnBaseModel.endSource}</p>
+              )}
+              <ChainEndSourcePanel
+                form={form}
+                disabled={disabled}
+                unavailable={endSourceUnavailable}
+                nativeBridge={nativeBridge}
+                showHeading={false}
+              />
+            </div>
+          </details>
+        )}
 
         {/* W3 レイアウト再構成 (2026-08-11): §1-15 参照動画 then §1-16 長尺A2V,
             each collapsed inside its own accordion (owner order: reference
@@ -1281,22 +1317,25 @@ function ChainedScreenBody({
             layout). `showHeading={false}` on the panel: the heading now lives
             in the `<summary>` instead. `ref` feeds the mount-time auto-open
             effect above (right-click prefills that land material inside one
-            of these should open it, not hide it). */}
-        <details className="form-accordion" ref={referenceAccordionRef}>
-          <summary className="form-accordion-summary">{strings.chained.referenceVideo.heading}</summary>
-          <div className="form-accordion-body">
-            {referenceUnavailable && (
-              <p className="warning-banner">{strings.chained.unavailableOnBaseModel.referenceVideo}</p>
-            )}
-            <ChainReferencePanel
-              form={form}
-              disabled={disabled}
-              unavailable={referenceUnavailable}
-              nativeBridge={nativeBridge}
-              showHeading={false}
-            />
-          </div>
-        </details>
+            of these should open it, not hide it). 台帳 §1-121: not rendered at
+            all where the feature table hides it (IC-LoRA is LTX's own). */}
+        {!referenceHidden && (
+          <details className="form-accordion" ref={referenceAccordionRef}>
+            <summary className="form-accordion-summary">{strings.chained.referenceVideo.heading}</summary>
+            <div className="form-accordion-body">
+              {referenceUnavailable && (
+                <p className="warning-banner">{strings.chained.unavailableOnBaseModel.referenceVideo}</p>
+              )}
+              <ChainReferencePanel
+                form={form}
+                disabled={disabled}
+                unavailable={referenceUnavailable}
+                nativeBridge={nativeBridge}
+                showHeading={false}
+              />
+            </div>
+          </details>
+        )}
 
         <details className="form-accordion" ref={audioAccordionRef}>
           <summary className="form-accordion-summary">{strings.chained.sourceAudio.heading}</summary>

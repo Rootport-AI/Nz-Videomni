@@ -22,6 +22,7 @@ import { accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { STAGE2_WINDOW_DEFAULT } from "../../shell/tokenBudget";
 import type { Stage2Window } from "../../shell/tokenBudget";
+import { omitStrength } from "../single/keyframeUtils";
 import { clamp, LTX_FRAME_GRID, snapNumFrames } from "../single/paramUtils";
 import type { FrameGrid } from "../single/paramUtils";
 import { samplingRequestFields } from "../single/samplingValues";
@@ -292,7 +293,9 @@ export function audioDriftSeamFlags(lengths: readonly number[], overlap: number)
 /** The shortest a clip after the first may be in a fixed-overlap chain: the
  * overlap plus one grid step (`22 + 17 = 39` on MiniMax H3) — a clip has to
  * generate SOMETHING beyond the head it copies from the previous clip. The
- * first clip only needs the grid's own floor. */
+ * first clip only needs the grid's own floor — unless a source video is
+ * attached (台帳 §1-121): its tail is then clip 0's copied head, so clip 0
+ * needs this minimum too. */
 export function minClipFramesForFixedOverlap(overlap: number, grid: FrameGrid): number {
   return overlap + grid.step;
 }
@@ -934,6 +937,11 @@ export interface BuildChainRequestParams {
    * request. `null`/omitted (LTX) sends none of the three. */
   sampling?: SamplingValues | null;
   clips: ChainClipInput[];
+  /** 台帳 §1-121: `true` while the loaded base model has no keyframe strength
+   * (`keyframe_strength` — MiniMax H3, which 422s any value): clip 0's images
+   * go out without the `strength` key (`keyframeUtils.omitStrength`, Create's
+   * rule). Omitted/`false` = LTX, byte-identical to before. */
+  omitStartImageStrength?: boolean;
   sourceVideo?: SourceVideoInput | null;
   /** §1-16 long-form A2V (`GenerateChainRequest.source_audio`). `null`/
    * `undefined` omits the field entirely, matching every other optional field
@@ -1003,7 +1011,9 @@ export function buildChainRequest(params: BuildChainRequestParams): GenerateChai
     const out: ChainClip = { num_frames: clip.numFrames };
     if (clip.prompt.trim().length > 0) out.prompt = clip.prompt;
     if (index === 0 && clip.conditioningImages && clip.conditioningImages.length > 0) {
-      out.conditioning_images = clip.conditioningImages;
+      out.conditioning_images = params.omitStartImageStrength
+        ? omitStrength(clip.conditioningImages)
+        : clip.conditioningImages;
     }
     return out;
   });

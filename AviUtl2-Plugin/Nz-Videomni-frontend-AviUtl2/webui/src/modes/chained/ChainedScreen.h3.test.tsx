@@ -1,8 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
+import { apiClient } from "../../api/client";
+import { bridge } from "../../bridge";
 import { createMockBridge } from "../../bridge/mockBridge";
+import type { MockBridgeOptions } from "../../bridge/mockBridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
 import { en } from "../../i18n/strings";
 import { JobsProvider } from "../../jobs/JobsContext";
@@ -31,14 +34,18 @@ const H3: GenerationConstraints = resolveGenerationConstraints({
   chain: { overlap_frames: 22 },
 });
 
+/** 台帳 §1-121: what `AppShell` derives from MiniMax H3's list — the SOURCE
+ * card (V2V and the opening image) and Batch i2v-long are open; A2V greys; End
+ * source and IC-LoRA are closed AND hidden, and so is the opening image's
+ * strength. */
 const H3_PROPS: Partial<ChainedScreenProps> = {
   constraints: H3,
-  v2vUnavailable: true,
   a2vUnavailable: true,
   endSourceUnavailable: true,
   referenceUnavailable: true,
-  startImageUnavailable: true,
-  batchI2vLongUnavailable: true,
+  endSourceHidden: true,
+  referenceHidden: true,
+  startImageStrengthHidden: true,
   loraAudioHidden: true,
 };
 
@@ -72,10 +79,31 @@ function screenWith(nativeBridge: ReturnType<typeof createMockBridge>, extra: Pa
   );
 }
 
-function renderChain(extra: Partial<ChainedScreenProps> = {}) {
-  const nativeBridge = createMockBridge({ delayMs: 0 });
+function renderChain(extra: Partial<ChainedScreenProps> = {}, options: Omit<MockBridgeOptions, "delayMs"> = {}) {
+  const nativeBridge = createMockBridge({ delayMs: 0, ...options });
   return render(screenWith(nativeBridge, extra));
 }
+
+const CHAIN_PATH = "/api/v1/generate/chain";
+
+/** The body of the last `POST /generate/chain` sent through the app-wide
+ * `bridge` (submissions go through it, not the screen's `nativeBridge`). */
+function lastChainBody(spy: { mock: { calls: unknown[][] } }): Record<string, unknown> {
+  const calls = spy.mock.calls.filter(
+    (c) => c[0] === "backend.request" && (c[1] as { path?: string }).path === CHAIN_PATH,
+  );
+  const last = calls[calls.length - 1];
+  return ((last?.[1] as { body?: Record<string, unknown> } | undefined)?.body ?? {}) as Record<string, unknown>;
+}
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  // Leave no job running on the app-wide fixture for the next file.
+  for (let i = 0; i < 50; i += 1) {
+    const jobs = await apiClient.listJobs();
+    if (jobs.every((j) => j.status !== "queued" && j.status !== "running")) return;
+  }
+});
 
 describe("ChainedScreen — fixed-overlap mode (§1-106)", () => {
   it("hides the seam blend, chunked upsample, stage-2 window, CFG row and the Total/Est. line", async () => {
@@ -93,15 +121,78 @@ describe("ChainedScreen — fixed-overlap mode (§1-106)", () => {
     expect(container.querySelector(".size-marker")).toBeNull();
   });
 
-  it("closes the SOURCE card whole, shows the opening-image line (not the video one) and drops Batch i2v-long", async () => {
+  it("台帳 §1-121: opens the SOURCE card (image or video, no strength slider), keeps Batch i2v-long, hides End source and IC-LoRA", async () => {
     const { container } = renderChain(H3_PROPS);
     await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
-    expect(screen.getByText(en.chained.unavailableOnBaseModel.startImage)).toBeInTheDocument();
+    expect(screen.queryByText(en.chained.unavailableOnBaseModel.startImage)).not.toBeInTheDocument();
     expect(screen.queryByText(en.chained.unavailableOnBaseModel.sourceVideo)).not.toBeInTheDocument();
     const source = container.querySelector(".source-section") as HTMLElement;
-    expect(within(source).getByRole("button", { name: en.chained.sourceInput.chooseImageOnlyButton })).toBeDisabled();
-    expect(container.querySelector("details.batch-section")).toBeNull();
-    expect(screen.queryByText(en.batchI2vLong.heading)).not.toBeInTheDocument();
+    expect(within(source).getByRole("button", { name: en.chained.sourceInput.chooseButton })).toBeEnabled();
+    expect(within(source).queryByText(en.chained.sourceInput.strengthLabel)).not.toBeInTheDocument();
+    expect(source.querySelector("input[type='range']")).toBeNull();
+    expect(container.querySelector("details.batch-section")).not.toBeNull();
+    // Hidden, not greyed: no accordion, no reason line.
+    expect(screen.queryByText(en.chained.endSource.heading)).not.toBeInTheDocument();
+    expect(screen.queryByText(en.chained.referenceVideo.heading)).not.toBeInTheDocument();
+    expect(container.querySelector(".chain-end-source-pick")).toBeNull();
+    expect(container.querySelector(".chain-reference-pick")).toBeNull();
+    expect(screen.queryByText(en.chained.unavailableOnBaseModel.endSource)).not.toBeInTheDocument();
+    expect(screen.queryByText(en.chained.unavailableOnBaseModel.referenceVideo)).not.toBeInTheDocument();
+    // A2V still greys with its reason.
+    expect(screen.getByText(en.chained.unavailableOnBaseModel.sourceAudio)).toBeInTheDocument();
+  });
+
+  it(
+    "台帳 §1-121: a source video re-fits clip 0 to 39, shows a read-only 22 (no slider) and sends context_frames 22",
+    async () => {
+      const requestSpy = vi.spyOn(bridge, "request");
+      const { container } = renderChain(H3_PROPS, { pickFileName: "clip.mp4" });
+      await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
+      const clip0 = () => container.querySelectorAll<HTMLInputElement>(".clip-card input[type='number']")[0]!;
+      fireEvent.change(clip0(), { target: { value: "22" } });
+      await waitFor(() => expect(clip0().value).toBe("22"));
+
+      const user = userEvent.setup();
+      const source = container.querySelector(".source-section") as HTMLElement;
+      await user.click(within(source).getByRole("button", { name: en.chained.sourceInput.chooseButton }));
+      await screen.findByText(en.chained.sourceVideo.contextFramesHint(22), {}, { timeout: 5_000 });
+      await waitFor(() => expect(clip0().value).toBe("39"));
+      // No slider: the label and the number 22 alone.
+      expect(source.querySelector("input[type='range']")).toBeNull();
+      const row = within(source).getByText(en.chained.sourceVideo.contextFramesLabel).closest("label") as HTMLElement;
+      expect(row.textContent).toContain("22");
+
+      const generate = screen.getByRole("button", { name: /^generate$/i });
+      await waitFor(() => expect(generate).toBeEnabled(), { timeout: 5_000 });
+      await user.click(generate);
+      await waitFor(() => expect(lastChainBody(requestSpy)).toHaveProperty("source_video"));
+      const body = lastChainBody(requestSpy);
+      expect(body.source_video).toEqual({ video_id: expect.any(String), context_frames: 22 });
+      const clips = body.clips as Array<Record<string, unknown>>;
+      expect(clips[0]?.num_frames).toBe(39);
+      expect(clips[0]).not.toHaveProperty("conditioning_images");
+    },
+    20_000,
+  );
+
+  it("台帳 §1-121: an opening image is sent without `strength`", async () => {
+    const requestSpy = vi.spyOn(bridge, "request");
+    const { container } = renderChain(H3_PROPS, { pickFileName: "start.png" });
+    await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
+    const user = userEvent.setup();
+    const source = container.querySelector(".source-section") as HTMLElement;
+    await user.click(within(source).getByRole("button", { name: en.chained.sourceInput.chooseButton }));
+    await waitFor(() => expect(container.querySelector(".source-section img")).not.toBeNull(), { timeout: 5_000 });
+    expect(source.querySelector("input[type='range']")).toBeNull();
+
+    const generate = screen.getByRole("button", { name: /^generate$/i });
+    await waitFor(() => expect(generate).toBeEnabled(), { timeout: 5_000 });
+    await user.click(generate);
+    await waitFor(() => expect(lastChainBody(requestSpy)).toHaveProperty("clips"));
+    const clips = lastChainBody(requestSpy).clips as Array<{ conditioning_images?: Array<Record<string, unknown>> }>;
+    expect(clips[0]?.conditioning_images).toHaveLength(1);
+    expect(clips[0]?.conditioning_images?.[0]).toMatchObject({ frame_idx: 0 });
+    expect(clips[0]?.conditioning_images?.[0]).not.toHaveProperty("strength");
   });
 
   it("steps the clip durations by 17 and pins fps", async () => {
@@ -136,6 +227,9 @@ describe("ChainedScreen — fixed-overlap mode (§1-106)", () => {
   it("a closed panel keeps its clear button: leftover material can be removed and the reason goes away", async () => {
     // An opening image attached while the panel was open (LTX), then the base
     // model switches to one that closes it (same screen instance, as in the app).
+    // 台帳 §1-121: no shipped engine closes the SOURCE card any more, so the
+    // closing flags are the MECHANISM's (`v2vUnavailable` + `startImageUnavailable`,
+    // greyed — not hidden) on top of H3's props.
     const nativeBridge = createMockBridge({ delayMs: 0 });
     const { container, rerender } = render(screenWith(nativeBridge, {}));
     await screen.findByText(/^clip 1$/i, {}, { timeout: 5_000 });
@@ -144,16 +238,17 @@ describe("ChainedScreen — fixed-overlap mode (§1-106)", () => {
     await user.click(within(source()).getByRole("button", { name: en.chained.sourceInput.chooseButton }));
     await waitFor(() => expect(container.querySelector(".source-section img")).not.toBeNull(), { timeout: 5_000 });
 
-    rerender(screenWith(nativeBridge, H3_PROPS));
+    rerender(screenWith(nativeBridge, { ...H3_PROPS, v2vUnavailable: true, startImageUnavailable: true }));
     const reason = en.chained.generateReasons.materialInClosedPanel;
-    await screen.findByText(reason);
+    // Under Generate and in Batch i2v-long's own list (the section is open on H3).
+    await waitFor(() => expect(screen.getAllByText(reason).length).toBeGreaterThan(0));
     expect(screen.getByRole("button", { name: /^generate$/i })).toBeDisabled();
     // Adding is closed, clearing is not.
     expect(within(source()).getByRole("button", { name: en.chained.sourceInput.changeButton })).toBeDisabled();
     const clear = within(source()).getByRole("button", { name: en.chained.sourceInput.clearButton });
     expect(clear).toBeEnabled();
     await user.click(clear);
-    await waitFor(() => expect(screen.queryByText(reason)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryAllByText(reason)).toHaveLength(0));
     expect(screen.getByRole("button", { name: /^generate$/i })).toBeEnabled();
   });
 });

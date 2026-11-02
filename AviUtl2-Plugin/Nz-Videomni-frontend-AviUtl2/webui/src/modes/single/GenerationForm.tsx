@@ -6,7 +6,7 @@ import { selectableControlLoraNames } from "../../lora/controlLoras";
 import { LORA_STRENGTH_MAX, LORA_STRENGTH_MIN } from "../../lora/loraTags";
 import { AUDIO_PLACEHOLDER_DATA_URL, VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
 import { SOURCE_AUDIO_INPUT_EXTENSIONS, useFileDrop } from "../../shell/useFileDrop";
-import type { SingleSectionsDisabled } from "../../shell/featureScope";
+import type { SingleSectionsDisabled, SingleSectionsHidden } from "../../shell/featureScope";
 import {
   CropOutputField,
   DurationField,
@@ -89,11 +89,14 @@ export interface GenerationFormProps {
   a2vOpenSignal?: number | undefined;
   /** The parts of this form the loaded base model's engine
    * cannot use (`featureScope.singleSectionsDisabledFor`, threaded down from
-   * `AppShell` as finished booleans). The reference-video accordion is HIDDEN
-   * (IC-LoRA is LTX's own mechanism); the A2V accordion greys with a note; the
-   * two keyframe flags are handed to `KeyframesPanel`. Omitted = everything
-   * usable (both LTX engines). */
+   * `AppShell` as finished booleans). The A2V accordion greys with a note.
+   * Omitted = everything usable (both LTX engines). */
   sectionsUnavailable?: SingleSectionsDisabled | undefined;
+  /** 台帳 §1-121: the parts the feature table HIDES
+   * (`featureScope.singleSectionsHiddenFor`): the reference-video accordion
+   * (IC-LoRA is LTX's own mechanism) and each keyframe card's strength row
+   * (handed to `KeyframesPanel`). Omitted = nothing hidden. */
+  sectionsHidden?: SingleSectionsHidden | undefined;
   /** `constraints.source_audio` of the loaded base model (H3 publishes it, LTX
    * does not). Non-null = the single-generate A2V route is active: the A2V
    * card shows the Strength slider and the Chained-only clip note is hidden. */
@@ -131,6 +134,7 @@ export function GenerationForm({
   referenceOpenSignal = 0,
   a2vOpenSignal = 0,
   sectionsUnavailable,
+  sectionsHidden,
   singleSourceAudio,
   sourceAudioStrength,
   onSourceAudioStrengthChange,
@@ -282,7 +286,7 @@ export function GenerationForm({
         frameIdxMultiple={frameIdxMultiple}
         gridOffset={gridOffset}
         disabled={disabled}
-        strengthUnavailable={sectionsUnavailable?.keyframeStrength}
+        strengthUnavailable={sectionsHidden?.keyframeStrength}
       />
 
       {/* §1-107: MiniMax H3's Reference accordion, right under the
@@ -302,8 +306,8 @@ export function GenerationForm({
           (no exclusivity): both accordions stay fully usable at once (see
           `ReferenceVideoSection`). */}
       {/* HIDDEN (not greyed) while the loaded base model's engine cannot take
-          a reference video (`reference_video`). */}
-      {!sectionsUnavailable?.referenceVideo && (
+          a reference video — the feature table's `hides` (台帳 §1-121). */}
+      {!sectionsHidden?.referenceVideo && (
         <details className="form-accordion" ref={referenceDetailsRef}>
           <summary className="form-accordion-summary">{strings.single.referenceVideo.heading}</summary>
           <div className="form-accordion-body">

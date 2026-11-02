@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { BaseModelConstraints } from "../../api/types";
 import { createMockBridge } from "../../bridge/mockBridge";
@@ -8,7 +8,7 @@ import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
 import { buildChainReasonMessages } from "./generateReasonMessages";
 import { useChainForm } from "./useChainForm";
-import type { ChainUnavailablePanels, UseChainFormDeps } from "./useChainForm";
+import type { ChainHiddenPanels, ChainUnavailablePanels, UseChainFormDeps } from "./useChainForm";
 
 // §1-106: Chained's form under the served constraints. Every pre-existing
 // `useChainForm` test omits `constraints` and so pins the LTX side; this file
@@ -35,7 +35,11 @@ const LTX_BLOCK: BaseModelConstraints = {
 const H3 = resolveGenerationConstraints(H3_BLOCK);
 const LTX = resolveGenerationConstraints(LTX_BLOCK);
 
-const H3_CLOSED: ChainUnavailablePanels = { v2v: true, startImage: true, a2v: true, endSource: true, reference: true };
+/** 台帳 §1-121: what `AppShell` derives from MiniMax H3's list — the SOURCE card
+ * (V2V and the opening image) is open; A2V greys; End source and IC-LoRA are
+ * closed AND hidden, and the opening image's strength is hidden. */
+const H3_CLOSED: ChainUnavailablePanels = { a2v: true, endSource: true, reference: true };
+const H3_HIDDEN: ChainHiddenPanels = { endSource: true, reference: true, startImageStrength: true };
 
 function renderForm(constraints: GenerationConstraints | undefined, extra: Partial<UseChainFormDeps> = {}) {
   const nativeBridge = createMockBridge({ delayMs: 0 });
@@ -131,7 +135,7 @@ describe("useChainForm — MiniMax H3 constraints (§1-106)", () => {
   });
 
   it("raises no LTX-geometry reason on a plain H3 chain", () => {
-    const { result } = renderForm(H3, { unavailablePanels: H3_CLOSED });
+    const { result } = renderForm(H3, { unavailablePanels: H3_CLOSED, hiddenPanels: H3_HIDDEN });
     expect(result.current.validityReasons).toEqual([]);
     expect(result.current.isValid).toBe(true);
   });
@@ -199,6 +203,131 @@ describe("useChainForm — material left in a closed panel (§1-106)", () => {
     act(() => result.current.clearSource());
     expect(result.current.validityReasons).not.toContain("materialInClosedPanel");
     expect(result.current.isValid).toBe(true);
+  });
+});
+
+describe("useChainForm — MiniMax H3 V2V and the opening image (台帳 §1-121)", () => {
+  async function attachVideo(result: { current: ReturnType<typeof useChainForm> }) {
+    await act(async () => {
+      await result.current.attachSourceByPath("C:\\v\\clip.mp4", "clip.mp4");
+    });
+    await waitFor(() => expect(result.current.sourceVideo.state.status).toBe("ready"));
+  }
+
+  it("carries over the fixed 22 frames: no range to choose, clip 0 re-fit to 39, output Σ − 22 × n", async () => {
+    const { result } = renderForm(H3, { unavailablePanels: H3_CLOSED, hiddenPanels: H3_HIDDEN });
+    const [c0, c1] = result.current.clips;
+    act(() => {
+      result.current.setClipNumFrames(c0!.id, 22);
+      result.current.setClipNumFrames(c1!.id, 124);
+    });
+    expect(result.current.contextFrames).toBe(22);
+    expect(result.current.contextFramesLimits).toEqual({ min: 22, max: 22 });
+
+    await attachVideo(result);
+    // 22 + one 17 step.
+    expect(result.current.clips[0]!.numFrames).toBe(39);
+    expect(result.current.isContextFramesValid).toBe(true);
+    // 39 + 124 − 22 (seam) − 22 (the carried-over head, cut off the file).
+    expect(result.current.outputFrames).toBe(119);
+    expect(result.current.validityReasons).toEqual([]);
+
+    const req = result.current.buildRequest();
+    expect(req.source_video).toEqual({ video_id: result.current.sourceVideo.state.id, context_frames: 22 });
+    expect(req.clips[0]).not.toHaveProperty("conditioning_images");
+  });
+
+  it("with a source video clip 0 needs the 39-frame minimum too, and one clip is a valid chain", async () => {
+    const { result } = renderForm(H3, { unavailablePanels: H3_CLOSED, hiddenPanels: H3_HIDDEN });
+    await attachVideo(result);
+    act(() => result.current.removeClip(result.current.clips[1]!.id));
+    act(() => result.current.setClipNumFrames(result.current.clips[0]!.id, 56));
+    expect(result.current.clips).toHaveLength(1);
+    expect(result.current.validityReasons).toEqual([]);
+    expect(result.current.outputFrames).toBe(34);
+    act(() => result.current.setClipNumFrames(result.current.clips[0]!.id, 22));
+    expect(result.current.validityReasons).toContain("clipTooShortForOverlap");
+    // Without the source, clip 0 alone may be 22 again (the scratch rule).
+    act(() => result.current.clearSource());
+    expect(result.current.validityReasons).not.toContain("clipTooShortForOverlap");
+  });
+
+  it("the source-too-short line names the fixed count instead of asking to lower it (en and ja)", () => {
+    const params = { minFramesForOverlap: 39, minClips: 1, fixedOverlapFrames: 22 };
+    expect(buildChainReasonMessages(en, params).sourceVideoTooShortForContext).toBe(
+      en.chained.generateReasons.sourceVideoTooShortForFixedContext(22),
+    );
+    expect(buildChainReasonMessages(ja, params).sourceVideoTooShortForContext).toContain("22");
+    // LTX keeps its sentence.
+    expect(buildChainReasonMessages(en, { minFramesForOverlap: 25, minClips: 2 }).sourceVideoTooShortForContext).toBe(
+      en.chained.generateReasons.sourceVideoTooShortForContext,
+    );
+  });
+
+  it("sends the opening image without `strength` while the strength is hidden; LTX keeps sending it", async () => {
+    for (const [hidden, expectStrength] of [
+      [H3_HIDDEN, false],
+      [{} as ChainHiddenPanels, true],
+    ] as const) {
+      const { result } = renderForm(hidden === H3_HIDDEN ? H3 : undefined, { hiddenPanels: hidden });
+      await act(async () => {
+        await result.current.attachSourceByPath("C:\\img\\start.png", "start.png");
+      });
+      await waitFor(() => expect(result.current.startFrame.items[0]?.status).toBe("ready"));
+      expect(result.current.omitStartImageStrength).toBe(!expectStrength);
+      const image = result.current.buildRequest().clips[0]!.conditioning_images![0]!;
+      expect(image.frame_idx).toBe(0);
+      expect("strength" in image).toBe(expectStrength);
+    }
+  });
+
+  it("End source and IC-LoRA material left in a HIDDEN panel reads as absent, and comes back on LTX", async () => {
+    const nativeBridge = createMockBridge({ delayMs: 0 });
+    const { result, rerender } = renderHook(
+      ({ c, closed, hidden }: { c: GenerationConstraints | undefined; closed: ChainUnavailablePanels; hidden: ChainHiddenPanels }) =>
+        useChainForm(FALLBACK_APP_CONFIG, "a cat", {
+          nativeBridge,
+          constraints: c,
+          unavailablePanels: closed,
+          hiddenPanels: hidden,
+        }),
+      { initialProps: { c: undefined as GenerationConstraints | undefined, closed: {}, hidden: {} } },
+    );
+    // Attached on LTX: an end image, a reference video and a control LoRA.
+    await act(async () => {
+      await result.current.attachEndSourceByPath("C:\\i\\tail.png", "tail.png");
+    });
+    await waitFor(() => expect(result.current.endSourceStatus).toBe("ready"));
+    await act(async () => {
+      await result.current.attachReferenceByPath("C:\\ref\\control.mp4", "control.mp4");
+    });
+    await waitFor(() => expect(result.current.referenceVideo.state.status).toBe("ready"));
+    act(() => result.current.setControlLora({ name: "canny-control", strength: 1 }));
+    expect(result.current.hasEndSource).toBe(true);
+    expect(result.current.hasReferenceVideo).toBe(true);
+
+    // The switch to MiniMax H3: both panels hidden — nothing blocks Generate and
+    // nothing of it rides on the request.
+    rerender({ c: H3, closed: H3_CLOSED, hidden: H3_HIDDEN });
+    expect(result.current.hasEndSource).toBe(false);
+    expect(result.current.hasReferenceVideo).toBe(false);
+    expect(result.current.controlLora).toBeNull();
+    expect(result.current.validityReasons).not.toContain("materialInClosedPanel");
+    expect(result.current.validityReasons).toEqual([]);
+    expect(result.current.isValid).toBe(true);
+    const req = result.current.buildRequest();
+    for (const key of ["end_source", "reference_video_id", "conditioning_attention_strength", "reference_video_strength", "loras"]) {
+      expect(req).not.toHaveProperty(key);
+    }
+    // The clip list was not re-laid by the switch.
+    expect(result.current.clips).toHaveLength(2);
+
+    // Back on LTX the stored material is there again.
+    rerender({ c: undefined, closed: {}, hidden: {} });
+    expect(result.current.hasEndSource).toBe(true);
+    expect(result.current.hasReferenceVideo).toBe(true);
+    expect(result.current.controlLora).toEqual({ name: "canny-control", strength: 1 });
+    expect(result.current.validityReasons).toContain("endSourceConflictsWithReference");
   });
 });
 

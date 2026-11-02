@@ -20,10 +20,14 @@ import type { AppMode } from "./AppShell";
  * and return shapes on purpose: §3-135's WP3 was a pure equivalence refactor,
  * and their tests moved across unchanged as the proof.
  *
- * What this module deliberately does NOT decide: how the closing LOOKS. Greyed
- * vs. hidden, the wording of the note, whether a sub-tab selection falls back to
- * its sibling — all of that stays in the screen that renders it. This table only
- * says WHICH part closes.
+ * What this module deliberately does NOT decide: how a GREYED part looks — the
+ * wording of the note, whether a sub-tab selection falls back to its sibling —
+ * all of that stays in the screen that renders it. Since 台帳 §1-121 the table
+ * says one thing more than WHICH part closes: whether a closed part VANISHES.
+ * A row lists the parts it greys in `disables` and the parts it hides in
+ * `hides` (one part sits in one list or the other, never both), so "is this
+ * part hidden on that engine?" is answered here rather than by a screen-side
+ * condition.
  */
 
 /** The "real UI part" a feature name closes. The ids are defined here and
@@ -50,13 +54,31 @@ export type UiTarget =
   | "settingsRow.vae"
   | "settingsRow.keepResidentEmbeddings"
   | "settingsRow.vram16"
-  | "settingsRow.fusedGgufDequantKernel";
+  | "settingsRow.fusedGgufDequantKernel"
+  | "chainPanel.startImageStrength";
+
+/** 台帳 §1-121: the parts a row may HIDE (rather than grey). A closed list, so
+ * a new hidden part is a deliberate addition here, and every screen that
+ * renders one of them reads the matching `*HiddenFor` boolean. */
+export type HideableTarget =
+  | "chainPanel.endSource"
+  | "chainPanel.reference"
+  | "createSection.referenceVideo"
+  | "createSection.keyframeStrength"
+  | "chainPanel.startImageStrength";
 
 interface FeatureUiEntry {
-  /** The UI parts to close while this feature is unavailable. A disjunction —
-   * if ANY ONE of the features that list a target is unsupported, that target
-   * closes. */
-  readonly disables: readonly UiTarget[];
+  /** The UI parts to close (grey) while this feature is unavailable. A
+   * disjunction — if ANY ONE of the features that list a target is
+   * unsupported, that target closes. */
+  readonly disables?: readonly UiTarget[];
+  /** 台帳 §1-121: the UI parts to HIDE while this feature is unavailable —
+   * the same disjunction. A hidden part is also a closed one
+   * ({@link disabledUiTargets} answers the union), so every path that drops a
+   * closed part's field from a request keeps working; {@link hiddenUiTargets}
+   * answers the hidden ones alone. A part sits in `disables` or in `hides`,
+   * never both (pinned by `featureScope.test.ts`). */
+  readonly hides?: readonly HideableTarget[];
   /** Cleanup: having hidden a row, write this saved acceleration field back to
    * the SERVER default (the defaults themselves live in
    * `ACCELERATION_DEFAULTS` — only the field NAME belongs here). Hiding a row
@@ -87,11 +109,15 @@ interface FeatureUiEntry {
  *    because each panel IS one request field: `source_video`, `end_source`,
  *    `reference_video_id` (§3-102, LTX 2.5 Chained's first stage — once an
  *    engine can chain, the tab is live and the panels it still cannot feed have
- *    to grey on their own).
- *  - **chain_start_image** (§1-106, MiniMax H3's chain, which takes no opening image) is the
- *    request field `clips[0].conditioning_images`: it closes the image half of
- *    the Chain screen's SOURCE card, and the Batch i2v-long section with it —
- *    every row of that section puts its image on clip 0.
+ *    to grey on their own). `end_source` and `reference_video` HIDE their
+ *    panel instead (台帳 §1-121, MiniMax H3: its End source is deferred, and
+ *    IC-LoRA is LTX's own mechanism); `v2v` still greys.
+ *  - **chain_start_image** (§1-106) is the request field
+ *    `clips[0].conditioning_images`: it closes the image half of the Chain
+ *    screen's SOURCE card, and the Batch i2v-long section with it — every row
+ *    of that section puts its image on clip 0. Since 台帳 §1-121 no shipped
+ *    engine publishes it (MiniMax H3's chain takes an opening image too); the
+ *    row stays as the translation of a server feature name.
  *  - **retake / outpaint / inpaint** are the three Edit sub-tabs. Note the
  *    SERVER's features are `outpaint`/`inpaint` (that is what a request field
  *    and a 422 say) while the sub-tabs are `outpainting`/`inpainting`; this
@@ -107,7 +133,7 @@ interface FeatureUiEntry {
  *    of Single:
  *     - `reference_video` also takes Create's reference-video (IC-LoRA)
  *       accordion — the same request field (`reference_video_id`) as Chain's
- *       panel. Create HIDES it (IC-LoRA is LTX's own mechanism).
+ *       panel. HIDDEN, like Chain's panel (IC-LoRA is LTX's own mechanism).
  *     - `chain` also takes Create's A2V card: an attached audio turns a Create
  *       submit into `POST /generate/chain`, so a base model that cannot chain
  *       cannot run it either. Greyed — unless the engine publishes
@@ -121,6 +147,9 @@ interface FeatureUiEntry {
  *       shell stops sending `strength` at the same time
  *       (`keyframeUtils.omitStrength`): the engine has no keyframe strength,
  *       and omitted is what the job record then shows (not a stand-in 1.0).
+ *       台帳 §1-121: it hides the Chain screen's opening-image strength slider
+ *       too, and Chain / Batch i2v-long stop sending clip 0's `strength` the
+ *       same way.
  *    LTX publishes none of these names, so none of this reaches it.
  *  - **lora_audio_strength** (台帳 §1-104) is scoped like `keyframe_strength`:
  *    published by MiniMax H3, whose LoRAs have one strength only. It HIDES
@@ -162,11 +191,11 @@ export const FEATURE_UI = {
   alpha_gen: { disables: ["editSubTab.alphaGen"] },
   v2v: { disables: ["chainPanel.v2v"] },
   a2v: { disables: ["chainPanel.a2v", "createSection.batchA2v"] },
-  end_source: { disables: ["chainPanel.endSource"] },
+  end_source: { hides: ["chainPanel.endSource"] },
   chain_start_image: { disables: ["chainPanel.startImage", "chainSection.batchI2vLong"] },
-  reference_video: { disables: ["chainPanel.reference", "createSection.referenceVideo"] },
+  reference_video: { hides: ["chainPanel.reference", "createSection.referenceVideo"] },
   nag: { disables: ["shell.nag"] },
-  keyframe_strength: { disables: ["createSection.keyframeStrength"] },
+  keyframe_strength: { hides: ["createSection.keyframeStrength", "chainPanel.startImageStrength"] },
   lora_audio_strength: { disables: ["promptBar.loraAudioStrength"] },
   prune_vaed: { disables: ["settingsRow.vae"], resets: "vaeMode" },
   keep_resident_embeddings: {
@@ -185,7 +214,7 @@ export const FEATURE_UI = {
 // older than the server it talks to more often than the reverse, so an unknown
 // name is the ordinary case, not an error — and a feature with no UI target at
 // all (`two_stage_hq`, `loras`, `sage_attention`, …) is simply absent
-// from the table rather than listed with an empty `disables`. (`loras` itself
+// from the table rather than listed with an empty `disables` / `hides`. (`loras` itself
 // has no UI target; its per-LoRA audio strength does — `lora_audio_strength`.)
 
 /** A `Map`, not the plain object: looking `FEATURE_UI` up with an arbitrary
@@ -220,7 +249,9 @@ const CONTAINER_TARGETS: ReadonlyArray<{ target: UiTarget; whenAll: readonly UiT
 ];
 
 /**
- * Every UI part the loaded base model's `unsupported_features` closes.
+ * Every UI part the loaded base model's `unsupported_features` closes — the
+ * greyed ones and (台帳 §1-121) the hidden ones alike: hidden is a way of
+ * being closed.
  *
  * Unknown names are ignored rather than treated as suspicious — see the note
  * under {@link FEATURE_UI}. That is what makes a backend older than §3-98 P5
@@ -232,12 +263,24 @@ export function disabledUiTargets(unsupportedFeatures: readonly string[]): Reado
   for (const name of unsupportedFeatures) {
     const entry = FEATURE_UI_BY_NAME.get(name);
     if (!entry) continue;
-    for (const target of entry.disables) disabled.add(target);
+    for (const target of entry.disables ?? []) disabled.add(target);
+    for (const target of entry.hides ?? []) disabled.add(target);
   }
   for (const { target, whenAll } of CONTAINER_TARGETS) {
     if (whenAll.every((t) => disabled.has(t))) disabled.add(target);
   }
   return disabled;
+}
+
+/** 台帳 §1-121: the UI parts the loaded base model's `unsupported_features`
+ * HIDES — a subset of {@link disabledUiTargets}. Unknown names are ignored the
+ * same way. */
+export function hiddenUiTargets(unsupportedFeatures: readonly string[]): ReadonlySet<HideableTarget> {
+  const hidden = new Set<HideableTarget>();
+  for (const name of unsupportedFeatures) {
+    for (const target of FEATURE_UI_BY_NAME.get(name)?.hides ?? []) hidden.add(target);
+  }
+  return hidden;
 }
 
 /** The saved acceleration fields that must go back to their server default
@@ -332,6 +375,31 @@ export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): 
   };
 }
 
+/** 台帳 §1-121: the Chain-screen parts an engine's feature scope HIDES (each
+ * is also closed in {@link ChainPanelsDisabled}), keyed the way
+ * `ChainedScreen`'s props are. */
+export interface ChainPanelsHidden {
+  /** `ChainEndSourcePanel`'s accordion — 素材（末尾） (`end_source`). */
+  endSource: boolean;
+  /** `ChainReferencePanel`'s accordion — the IC-LoRA reference
+   * (`reference_video`). */
+  reference: boolean;
+  /** The SOURCE card's opening-image strength slider; clip 0's images are then
+   * sent without `strength` (`keyframe_strength`). */
+  startImageStrength: boolean;
+}
+
+/** Which of {@link ChainPanelsHidden}'s parts `unsupportedFeatures` hides —
+ * all `false` for the ordinary case. */
+export function chainPanelsHiddenFor(unsupportedFeatures: readonly string[]): ChainPanelsHidden {
+  const hidden = hiddenUiTargets(unsupportedFeatures);
+  return {
+    endSource: hidden.has("chainPanel.endSource"),
+    reference: hidden.has("chainPanel.reference"),
+    startImageStrength: hidden.has("chainPanel.startImageStrength"),
+  };
+}
+
 /** The Edit-screen sub-tabs an engine's feature scope can take down
  * individually, keyed the way `EditScreen`'s `subTabsDisabled` prop is. */
 export interface EditSubTabsDisabled {
@@ -401,10 +469,10 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
 }
 
 /** The parts of Create (Single) an engine's feature scope can close. Keyed
- * the way `SingleScreen`'s `sectionsUnavailable` prop is.
- * How each one closes is the screen's business (see {@link FEATURE_UI}'s
- * notes): the reference video and the keyframe strength are hidden, the rest
- * grey. */
+ * the way `SingleScreen`'s `sectionsUnavailable` prop is. Which of them
+ * VANISH is {@link SingleSectionsHidden}'s answer (台帳 §1-121: the table's
+ * `hides`); "closed" is what the screen reads to treat a part's material as
+ * absent. */
 export interface SingleSectionsDisabled {
   /** The reference-video (IC-LoRA) accordion (`reference_video`). */
   referenceVideo: boolean;
@@ -445,6 +513,26 @@ export function singleSectionsDisabledFor(
     referenceVideo: disabled.has("createSection.referenceVideo"),
     a2v: a2vRouteFor(unsupportedFeatures, singleA2vAvailable) === null,
     keyframeStrength: disabled.has("createSection.keyframeStrength"),
+  };
+}
+
+/** 台帳 §1-121: the parts of Create (Single) an engine's feature scope HIDES
+ * (each is also closed in {@link SingleSectionsDisabled}), keyed the way
+ * `SingleScreen`'s `sectionsHidden` prop is. */
+export interface SingleSectionsHidden {
+  /** The reference-video (IC-LoRA) accordion (`reference_video`). */
+  referenceVideo: boolean;
+  /** Each keyframe card's strength row (`keyframe_strength`). */
+  keyframeStrength: boolean;
+}
+
+/** Which of {@link SingleSectionsHidden}'s parts `unsupportedFeatures` hides —
+ * all `false` for the ordinary case (both LTX engines). */
+export function singleSectionsHiddenFor(unsupportedFeatures: readonly string[]): SingleSectionsHidden {
+  const hidden = hiddenUiTargets(unsupportedFeatures);
+  return {
+    referenceVideo: hidden.has("createSection.referenceVideo"),
+    keyframeStrength: hidden.has("createSection.keyframeStrength"),
   };
 }
 

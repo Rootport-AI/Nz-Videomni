@@ -688,7 +688,7 @@ def pipeline_loading(detail: str | None = None) -> APIError:
     )
 
 
-def request_validation_failed(message: str) -> APIError:
+def request_validation_failed(message: str, loc: tuple[str, ...] = ("body",)) -> APIError:
     """A request breaks a numeric rule of the ACTIVE engine family.
 
     THE SAME 422 A PYDANTIC VALIDATOR WOULD HAVE PRODUCED, field for field —
@@ -702,12 +702,16 @@ def request_validation_failed(message: str) -> APIError:
     the endpoint; the shape is the pydantic one so that every client parses
     them the same way as any other 422 (Gradio's ``format_api_error``, the MCP
     server, the AviUtl2 panel).
+
+    ``loc`` defaults to the request body. A rule moved out of a NESTED model's
+    validator passes that model's location (e.g. ``("body", "source_video")``)
+    so its 422 keeps the ``loc`` pydantic gave it.
     """
     return APIError(
         "VALIDATION_ERROR",
         "Request validation failed",
         422,
-        detail=[{"loc": ["body"], "msg": f"Value error, {message}", "type": "value_error"}],
+        detail=[{"loc": list(loc), "msg": f"Value error, {message}", "type": "value_error"}],
     )
 
 

@@ -55,9 +55,10 @@ def check_chain_total(clip_frames, fps, overlap_frames, lang: str = _DEFAULT_LAN
     return None
 
 
-# V2V context_frames bounds — MIRRORS api/models.py SourceVideoSpec
-# (validate_context_frames: 8n+1, [min, max]) + the request-level cross-check
-# (context_frames < clips[0].num_frames). The fallback bounds match
+# V2V context_frames bounds — MIRRORS the server's LTX checks: the max in
+# api/models.py SourceVideoSpec.validate_context_frames, and the min, 8n+1 and
+# context_frames < clips[0].num_frames in services/engines/ltx/chain_rules.py
+# validate_ltx_chain. The fallback bounds match
 # config.LimitsConfig defaults; the live values come from /config limits.
 V2V_CONTEXT_MIN_FALLBACK = 25
 V2V_CONTEXT_MAX_FALLBACK = 145

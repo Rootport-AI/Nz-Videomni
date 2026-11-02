@@ -68,6 +68,9 @@ export type BatchI2vLongRunnerState = "idle" | "running" | "stopping";
  */
 export interface I2vLongRunnerSettings {
   promptMode: PromptMode;
+  /** 台帳 §1-121: send each row's image without `strength` (the Chain form's
+   * `omitStartImageStrength` when the run started). Omitted = strength 1.0. */
+  omitStrength?: boolean | undefined;
 }
 
 export interface I2vLongRunnerStartParams {
@@ -280,6 +283,7 @@ export class BatchI2vLongRunner {
         imageId,
         rowPrompt: row.prompt,
         promptMode: params.settings.promptMode,
+        omitStrength: params.settings.omitStrength,
       });
 
       const jobId = await this.submitWithRetry(payload as unknown as object, params.jobBusyBackoffMs ?? DEFAULT_JOB_BUSY_BACKOFF_MS);

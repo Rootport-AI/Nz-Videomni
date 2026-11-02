@@ -141,12 +141,13 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 
       // The Edit tab greys — see the dedicated case below for the four
       // sub-tabs behind it. §1-106: the Chained tab stays live now (H3
-      // chains from text; see the Chained block at the end of this file).
+      // chains; see the Chained block at the end of this file).
       expect(screen.getByRole("tab", { name: "Chained" })).not.toBeDisabled();
       expect(screen.getByRole("tab", { name: "Edit" })).toBeDisabled();
       expect(screen.getByRole("tab", { name: "Single" })).not.toBeDisabled();
 
-      // Reference video hidden. §1-107: H3 publishes `reference`, so the A2V
+      // Reference video hidden (台帳 §1-121: by the feature table's `hides`,
+      // `reference_video`). §1-107: H3 publishes `reference`, so the A2V
       // accordion gives way to the Reference accordion, whose Audios cards carry
       // the "Audio to video" tick (disabled until Enable is on, §1-117); ticking
       // one brings up the Strength slider (served `constraints.source_audio`)
@@ -721,8 +722,9 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
 // ── §1-106: MiniMax H3's Chained tab, from the fixture's GET /models alone ──
 // No engine id is read anywhere: the screen follows `constraints` (17n+5 clips,
 // 24fps, the sampling sliders, `chain.overlap_frames`) and the booleans
-// `unsupported_features` turns into (v2v / end_source / a2v / reference_video /
-// chain_start_image).
+// `unsupported_features` turns into (end_source / a2v / reference_video /
+// keyframe_strength — 台帳 §1-121: `v2v` and `chain_start_image` left, and
+// end_source / reference_video hide their accordions rather than grey them).
 describe("AppShell — MiniMax H3 Chained (§1-106)", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -791,12 +793,22 @@ describe("AppShell — MiniMax H3 Chained (§1-106)", () => {
       expect(fps).toBeDisabled();
       expect(fps.value).toBe("24");
 
-      // The material it cannot take: the opening image (the SOURCE card greys
-      // whole) and Batch i2v-long (not rendered); the three accordions grey.
-      expect(within(panel).getByText(/An opening image for clip 1 cannot be used/)).toBeInTheDocument();
-      expect(within(panel).queryByText("Batch i2v-long (prototype)")).not.toBeInTheDocument();
-      expect(within(panel).getByText(/End source is not available/)).toBeInTheDocument();
-      expect(within(panel).getByText(/Reference video \(control IC-LoRA\) is not available/)).toBeInTheDocument();
+      // 台帳 §1-121: the SOURCE card is open for both halves (V2V and the
+      // opening image), with no reason line, and Batch i2v-long is back.
+      const source = panel.querySelector(".source-section") as HTMLElement;
+      expect(within(source).getByRole("button", { name: "Choose image or video…", hidden: true })).not.toBeDisabled();
+      expect(within(panel).queryByText(/An opening image for clip 1 cannot be used/)).not.toBeInTheDocument();
+      expect(within(panel).queryByText(/A source VIDEO cannot be used/)).not.toBeInTheDocument();
+      expect(within(panel).getByText("Batch i2v-long (prototype)")).toBeInTheDocument();
+      // No keyframe strength on H3: the opening image's strength slider is not
+      // rendered (the SOURCE card's only range input with nothing attached).
+      expect(source.querySelector("input[type='range']")).toBeNull();
+      // End source and IC-LoRA are HIDDEN — not in the DOM at all, no reason line.
+      expect(panel.querySelector(".chain-end-source-pick")).toBeNull();
+      expect(panel.querySelector(".chain-reference-pick")).toBeNull();
+      expect(within(panel).queryByText(/End source is not available/)).not.toBeInTheDocument();
+      expect(within(panel).queryByText(/Reference video \(control IC-LoRA\) is not available/)).not.toBeInTheDocument();
+      // A2V still greys with its reason.
       expect(within(panel).getByText(/Generating from an audio track \(A2V\) is not available/)).toBeInTheDocument();
     },
     20_000,
@@ -884,7 +896,7 @@ describe("AppShell — MiniMax H3 Chained (§1-106)", () => {
   );
 
   it(
-    "MiniMax H3: Chained right-click entries into closed panels are refused with one note and nothing else",
+    "MiniMax H3: Chained right-click entries into closed panels are refused with one note and nothing else; #1 is not",
     async () => {
       const bridge = createMockBridge({ delayMs: 0 });
       const requestSpy = vi.spyOn(bridge, "request");
@@ -918,21 +930,36 @@ describe("AppShell — MiniMax H3 Chained (§1-106)", () => {
         scale: 1,
         sampleRate: 44100,
       };
+      // 台帳 §1-121: the two closed (hidden) Chain panels still refuse their
+      // right-click entries — End source and the IC-LoRA reference.
       act(() => {
-        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "extendVideo", selection });
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "endWithThis", selection });
       });
-      await screen.findByText(/A source VIDEO cannot be used on the selected base model/, {}, { timeout: 5_000 });
+      await screen.findByText(/End source is not available on the selected base model/, {}, { timeout: 5_000 });
       // Nothing else: still on Single, nothing uploaded, no provisional placed.
       expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
       expect(requestSpy.mock.calls.some((c) => c[0] === "backend.uploadFile")).toBe(false);
       expect(requestSpy.mock.calls.some((c) => String(c[0]).startsWith("timeline.place"))).toBe(false);
 
       act(() => {
-        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "currentFrameToClipChain", selection });
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "referenceVideoChain", selection });
       });
-      await screen.findByText(/An opening image for clip 1 cannot be used/, {}, { timeout: 5_000 });
-      expect(requestSpy.mock.calls.some((c) => c[0] === "timeline.captureFrame")).toBe(false);
+      await screen.findByText(/Reference video \(control IC-LoRA\) is not available on the selected base model/, {}, {
+        timeout: 5_000,
+      });
       expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+      expect(requestSpy.mock.calls.some((c) => c[0] === "backend.uploadFile")).toBe(false);
+
+      // #1 (extend the video) opens now, and its length floor is H3's 22
+      // carried-over frames (≈ 0.92 s): this 2-second clip — refused on LTX's
+      // 73-frame floor (≈ 3.04 s) — lands on the Chained tab.
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "extendVideo", selection });
+      });
+      await waitFor(() => expect(screen.getByRole("tab", { name: "Chained" })).toHaveAttribute("aria-selected", "true"), {
+        timeout: 5_000,
+      });
+      expect(screen.queryByText(/A source VIDEO cannot be used on the selected base model/)).not.toBeInTheDocument();
     },
     20_000,
   );

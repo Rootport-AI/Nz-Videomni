@@ -563,10 +563,11 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   // `FEATURE_UI`.
   // 台帳 §1-104: `loras` left (H3 runs Style / Turbo LoRAs now) and
   // `lora_audio_strength` joined at the end (one strength per LoRA).
-  // §1-106: `chain` LEFT (H3 chains from text now) and the chain material it
-  // cannot take joined in its place: `v2v`, `end_source`, `a2v` (the chain's
-  // audio panel and Batch A2V) and `chain_start_image` (clip 0's opening image
-  // and Batch i2v-long).
+  // §1-106: `chain` LEFT (H3 chains now) and the chain material it
+  // cannot take joined in its place. 台帳 §1-121: `v2v` and `chain_start_image`
+  // left again (H3's chain continues a source video and starts from an
+  // opening image), leaving `end_source` and `a2v` (the chain's audio panel
+  // and Batch A2V).
   MiniMaxH3: [
     "reference_video",
     "nag",
@@ -578,10 +579,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "prune_vaed",
     "keep_resident_embeddings",
     "keyframe_strength",
-    "v2v",
     "end_source",
     "a2v",
-    "chain_start_image",
     "retake",
     // 台帳 §1-100: no GGUF weights, so the server IGNORES the field (no 422) — hides the Settings row only.
     "fused_gguf_dequant_kernel",
@@ -641,19 +640,25 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
   // correctly (`false` is not a request, `true` is), unlike the two
   // string-valued rows above it.
   { field: "keep_resident_embeddings", feature: "keep_resident_embeddings" },
-  // §1-106: the two chain features MiniMax H3 publishes that no row above
-  // carried — the end source, and clip 0's opening image (which lives INSIDE
-  // `clips`, hence a predicate of its own: a clip list is always non-empty, so
-  // the shared test would refuse every chain).
+  // §1-106: the end source, a chain feature MiniMax H3 publishes that no row
+  // above carried.
   { field: "end_source", feature: "end_source" },
+  // 台帳 §1-121: the real H3 `CHAIN_REJECT_TABLE` dropped its opening-image row
+  // (`chain_start_image`) and refuses a clip image's `strength` instead — it
+  // lives INSIDE `clips`, hence a predicate of its own (a clip list is always
+  // non-empty, so the shared test would refuse every chain). LTX publishes no
+  // `keyframe_strength`, so its chains are untouched.
   {
     field: "clips",
-    feature: "chain_start_image",
+    feature: "keyframe_strength",
     isSet: (v) =>
       Array.isArray(v) &&
       v.some((clip) => {
         const images = (clip as { conditioning_images?: unknown } | null)?.conditioning_images;
-        return Array.isArray(images) && images.length > 0;
+        return (
+          Array.isArray(images) &&
+          images.some((image) => (image as { strength?: unknown } | null)?.strength != null)
+        );
       }),
   },
   // §1-109: a clip's own Reference cards (MiniMax H3 only — both LTX engines

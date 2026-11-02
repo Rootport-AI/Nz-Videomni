@@ -19,11 +19,18 @@ PyAV writer that follows the same recipe (read, not imported):
   F / 24 seconds (R2 (3)-15).
 
 A failed write removes the partial file.
+
+The chain's video-to-video (台帳 §1-121) adds two helpers: :func:`cut_head`
+trims the input video's context off the decoded timeline (frames, and the
+matching audio with a short fade-in), and :func:`write_wav_pcm16` writes the
+untrimmed audio as the JOIN's audio handle (the H3 venv has no scipy; the
+JOIN reads the wav through ffmpeg, so plain PCM is enough).
 """
 
 from __future__ import annotations
 
 import os
+import wave
 from fractions import Fraction
 from pathlib import Path
 
@@ -154,6 +161,60 @@ def write_mp4(path: str, frames: torch.Tensor, *, fps: int, audio: torch.Tensor 
 def audio_keep_samples(available: int, *, num_frames: int, fps: int, sample_rate: int) -> int:
     """Samples kept: the video's duration ``round(F * sample_rate / fps)``, never more than given (no padding)."""
     return min(int(available), round(num_frames * sample_rate / fps))
+
+
+def cut_head(frames: torch.Tensor, wav: torch.Tensor, *, trim_frames: int, num_frames: int, fps: int, sr: int,
+             fade_seconds: float = 0.030) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+    """Trim the first ``trim_frames`` frames and their audio off a decoded timeline.
+
+    ``frames``: uint8 [F, H, W, 3]; ``wav``: float [2, N] for the ``num_frames``
+    timeline (the decoder may give up to half a latent more). Returns
+    ``(frames[trim_frames:], wav_full_kept, wav_new, info)``: ``wav_full_kept``
+    is ``wav`` cut to the timeline's length (:func:`audio_keep_samples`; the
+    audio handle), ``wav_new`` is it without the first
+    ``round(trim_frames * sr / fps)`` samples and with a linear fade-in over
+    ``min(round(fade_seconds * sr), its length)`` samples (none when that is
+    1 or less). ``info``: ``trimmed_px``, ``trimmed_audio_samples``,
+    ``audio_fade_in_samples``. Pure; the inputs are not modified.
+    """
+    trim_frames = int(trim_frames)
+    keep = audio_keep_samples(int(wav.shape[-1]), num_frames=int(num_frames), fps=int(fps), sample_rate=int(sr))
+    wav_full_kept = wav[:, :keep]
+    n_trim_a = round(trim_frames * int(sr) / int(fps))
+    wav_new = wav_full_kept[:, n_trim_a:].clone()
+    fade_n = min(round(float(fade_seconds) * int(sr)), int(wav_new.shape[-1]))
+    if fade_n > 1:
+        ramp = torch.linspace(0.0, 1.0, fade_n, dtype=wav_new.dtype)
+        wav_new[:, :fade_n] = wav_new[:, :fade_n] * ramp
+    else:
+        fade_n = 0
+    info = {"trimmed_px": trim_frames, "trimmed_audio_samples": int(n_trim_a), "audio_fade_in_samples": int(fade_n)}
+    return frames[trim_frames:], wav_full_kept, wav_new, info
+
+
+def write_wav_pcm16(path: str, wav: torch.Tensor, sr: int) -> None:
+    """Write ``wav`` (float [2, N], -1..1) as a 16-bit stereo PCM wav at ``sr`` Hz.
+
+    Clamped to +-1 and scaled by 32767, as the mp4's audio (:func:`_write_audio`).
+    Creates the folder; a failed write removes the partial file.
+    """
+    if wav.ndim != 2 or wav.shape[0] != 2:
+        raise ValueError(f"write_wav_pcm16: wav は [2, N] が必要です（{tuple(wav.shape)}）")
+    pcm = (wav.detach().cpu().to(torch.float32).clamp(-1.0, 1.0) * 32767.0).round_().to(torch.int16)
+    data = pcm.t().contiguous().numpy().tobytes()      # interleaved L R L R ...
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    ok = False
+    try:
+        with wave.open(str(out), "wb") as w:
+            w.setnchannels(2)
+            w.setsampwidth(2)
+            w.setframerate(int(sr))
+            w.writeframes(data)
+        ok = True
+    finally:
+        if not ok:
+            out.unlink(missing_ok=True)
 
 
 def _write_audio(container, audio_stream, audio: torch.Tensor, *, num_frames: int, fps: int,

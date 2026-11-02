@@ -39,8 +39,10 @@ export interface ChainReasonMessageParams {
   stage2MaxContextFrames?: number;
   /** §1-106: `UseChainFormResult.fixedOverlapFrames` — non-null in the
    * fixed-overlap mode, where `clipTooShortForOverlap` gets its own sentence
-   * (there is no seam-blend setting to name). Optional for the same reason as
-   * `stage2MaxContextFrames`; omitted/`null` = the LTX sentence. */
+   * (there is no seam-blend setting to name), and (台帳 §1-121)
+   * `sourceVideoTooShortForContext` too (there is no carried-over frame count
+   * to lower). Optional for the same reason as `stage2MaxContextFrames`;
+   * omitted/`null` = the LTX sentences. */
   fixedOverlapFrames?: number | null;
   // 素材（末尾）v2 (2026-08-15): `stage2MaxEndContextFrames` and
   // `endContextRequiredLastClipFrames` were removed from this params object
@@ -85,7 +87,10 @@ export function buildChainReasonMessages(
     // §1-6 (source trim): both lines describe the SOURCE VIDEO's material, and
     // both name a concrete way out (shorten the carry-over / lengthen the
     // range; update the plugin / re-pick the file).
-    sourceVideoTooShortForContext: strings.chained.generateReasons.sourceVideoTooShortForContext,
+    sourceVideoTooShortForContext:
+      fixedOverlapFrames !== null
+        ? strings.chained.generateReasons.sourceVideoTooShortForFixedContext(fixedOverlapFrames)
+        : strings.chained.generateReasons.sourceVideoTooShortForContext,
     sourceTrimFailed: strings.chained.generateReasons.sourceTrimFailed,
     // §1-14/§3-57: also a source-video line (it only fires with one attached),
     // so it joins CHAIN_SOURCE_REASON_CODES below.

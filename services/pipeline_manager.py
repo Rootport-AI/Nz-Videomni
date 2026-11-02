@@ -1137,8 +1137,10 @@ class PipelineManager:
         SOURCE_VIDEO_TOO_SHORT) when it cannot supply the requested
         ``context_frames`` tail after resampling to ``request_frame_rate``. The
         video_id is assumed already resolved (the endpoint 404s first). Geometry
-        bounds (8n+1, the schema's ``v2v_context_frames_min``/``_max`` range,
-        context < clip-0) are enforced by the schema.
+        bounds are enforced before this runs: the ``v2v_context_frames_max`` cap
+        by the schema, and the family's own rules by
+        ``services.engines.validate_chain_for_family`` (on LTX: 8n+1, the
+        ``v2v_context_frames_min`` floor, context < clip-0).
         """
         src_path = self.video_upload_store.path_for(source_video.video_id)
         n_src = video_io.frame_count(src_path)

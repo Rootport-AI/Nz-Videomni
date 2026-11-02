@@ -14,7 +14,7 @@ import { useToasts } from "../../shell/ToastContext";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
 import { BatchSection } from "../batch/BatchSection";
 import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from "../../shell/comfortTable";
-import type { SingleSectionsDisabled } from "../../shell/featureScope";
+import type { SingleSectionsDisabled, SingleSectionsHidden } from "../../shell/featureScope";
 import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { computeTargetNumFrames } from "../../timeline/deriveDuration";
@@ -279,8 +279,13 @@ export interface SingleScreenProps {
   constraints?: GenerationConstraints | undefined;
   /** The parts of Create the loaded base model's engine
    * cannot use (`featureScope.singleSectionsDisabledFor`), as finished
-   * booleans. Omitted = everything usable. */
+   * booleans. Omitted = everything usable. A closed part's material reads as
+   * absent (nothing of it is sent). */
   sectionsUnavailable?: SingleSectionsDisabled | undefined;
+  /** 台帳 §1-121: the closed parts that are also HIDDEN
+   * (`featureScope.singleSectionsHiddenFor`) — passed through to
+   * `GenerationForm`. Omitted = nothing hidden. */
+  sectionsHidden?: SingleSectionsHidden | undefined;
   /** 台帳 §1-104: the loaded base model's LoRAs have one strength only
    * (`featureScope.loraAudioStrengthHiddenFor`), so `audio_strength` is left
    * out of every `loras[]` entry. Omitted = sent as typed. */
@@ -319,6 +324,7 @@ export function SingleScreen({
   batchUnavailable,
   constraints,
   sectionsUnavailable,
+  sectionsHidden,
   loraAudioHidden,
   loraUnsupportedNotice,
   onPromptChange,
@@ -351,6 +357,7 @@ export function SingleScreen({
       batchUnavailable={batchUnavailable}
       constraints={constraints}
       sectionsUnavailable={sectionsUnavailable}
+      sectionsHidden={sectionsHidden}
       loraAudioHidden={loraAudioHidden}
       loraUnsupportedNotice={loraUnsupportedNotice}
       onPromptChange={onPromptChange}
@@ -378,6 +385,7 @@ interface SingleScreenBodyProps {
   batchUnavailable?: boolean | undefined;
   constraints?: GenerationConstraints | undefined;
   sectionsUnavailable?: SingleSectionsDisabled | undefined;
+  sectionsHidden?: SingleSectionsHidden | undefined;
   loraAudioHidden?: boolean | undefined;
   loraUnsupportedNotice?: boolean | undefined;
   onPromptChange?: Dispatch<SetStateAction<string>> | undefined;
@@ -403,6 +411,7 @@ function SingleScreenBody({
   batchUnavailable = false,
   constraints,
   sectionsUnavailable,
+  sectionsHidden,
   loraAudioHidden = false,
   loraUnsupportedNotice = false,
   onPromptChange,
@@ -1307,6 +1316,7 @@ function SingleScreenBody({
           referenceOpenSignal={icLoraOpenSignal}
           a2vOpenSignal={a2vOpenSignal}
           sectionsUnavailable={sectionsUnavailable}
+          sectionsHidden={sectionsHidden}
           singleSourceAudio={form.singleSourceAudio}
           sourceAudioStrength={form.sourceAudioStrength}
           onSourceAudioStrengthChange={form.setSourceAudioStrength}

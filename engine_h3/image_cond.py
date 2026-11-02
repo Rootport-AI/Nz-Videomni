@@ -48,6 +48,16 @@ def load_canvas_image(path: str, width: int, height: int) -> tuple[Image.Image, 
     src_w, src_h = img.size
     if src_w < 1 or src_h < 1:
         raise ValueError(f"キーフレームの画像の大きさが不正です（{src_w}×{src_h}）: {path}")
+    return cover_crop(img, width, height), (src_w, src_h)
+
+
+def cover_crop(img: Image.Image, width: int, height: int) -> Image.Image:
+    """``img`` scaled to cover ``width`` x ``height`` (aspect kept, LANCZOS), then
+    its centre cut out (module docstring). Shared by the key frames and the
+    chain's input video frames (engine_h3.source_tail). ``img`` must be at least
+    1 x 1; it is not resampled when it already has the canvas size."""
+    width, height = int(width), int(height)
+    src_w, src_h = img.size
     scale = max(height / src_h, width / src_w)
     new_h = math.ceil(src_h * scale)
     new_w = math.ceil(src_w * scale)
@@ -55,7 +65,7 @@ def load_canvas_image(path: str, width: int, height: int) -> tuple[Image.Image, 
         img = img.resize((new_w, new_h), Image.LANCZOS)
     top = (new_h - height) // 2
     left = (new_w - width) // 2
-    return img.crop((left, top, left + width, top + height)), (src_w, src_h)
+    return img.crop((left, top, left + width, top + height))
 
 
 def canvas_to_tensor(img: Image.Image) -> torch.Tensor:

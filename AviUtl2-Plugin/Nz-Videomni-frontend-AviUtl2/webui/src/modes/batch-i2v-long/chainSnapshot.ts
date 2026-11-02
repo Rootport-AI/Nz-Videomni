@@ -51,6 +51,12 @@ export interface ChainSnapshotSource {
    * shorter than the Chain screen's own predicted output said. Optional for the
    * same reason as {@link hasSourceAudio}. */
   hasEndSource?: boolean;
+  /** 台帳 §1-121: `true` while the loaded base model has no keyframe strength
+   * — every row's clip-0 image then goes out without `strength`
+   * (`buildRowPayload`'s `omitStrength`), the way the Chain form sends its own
+   * opening image. Optional for the same reason as {@link hasSourceAudio}: an
+   * omitted value reads as "strength sent". */
+  omitStartImageStrength?: boolean;
   /** The clip list — read only for its length, by `chainSummary` in
    * `BatchI2vLongSection.tsx` (the clip-count readout). The `clips < 2`
    * judgement (a source-less chain needs at least 2 clips, or it 422s) is made

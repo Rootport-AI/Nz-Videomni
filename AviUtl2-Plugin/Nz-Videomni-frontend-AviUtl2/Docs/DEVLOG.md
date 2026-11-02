@@ -5661,6 +5661,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 設計の正本は [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.3 と裁定 84・85、門の記録は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §183・§184、台帳は `PENDING_TASKS_CLOSED.md` 3-262 です（バックエンド側の仕組みはここに写しません）。
 
 > **更新（2026-10-31）**: ここで閉じた参照動画は IC-LoRA のもの。Ref2VA の参照はクリップごとに入れられる（§154）。
+>
+> **更新（2026-11-02）**: 源入力パネル（動画と画像）・バッチ i2v-long・右クリックの #1・#6・#12 は H3 でも開いた。素材（末尾）と IC-LoRA の参照動画は、灰色ではなく非表示にした（§160）。
 
 ### 153.2 設計上の判断
 
@@ -5957,3 +5959,76 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 機械の門（2026-11-01）: バックエンド pytest 全件 3,774 合格・28 skip・失敗 1（`tests/test_mcp_registration.py` の「バックエンドが居ない」前提の試験。オーナーの本物のバックエンドが起動中のため。本弾と無関係）、関係 9 ファイルの部分実行 386 合格・2 skip。`npm run typecheck` エラー 0（操作パネルは不変。aux2 の再ビルドなし）。差分の敵対的レビュー（Opus）は Critical 0・Major 0・Minor 1・Nit 3 で全採用。記録簿 `VERIFICATION_LOG.md` §191、台帳 §2 の §1-113（G-8a／G-8b／G-9a／G-9b の確認待ち）。
 
 オーナーの実機確認（2026-11-01）: G-8a／G-8b／G-9a／G-9b 全合格。§1-113 は CLOSED 3-267。
+
+## 160. MiniMax H3 の Chained の V2V〔入力した動画の続き〕と冒頭画像〔i2v〕 — 機能の表で「隠す」部位を管理・隠したパネルの素材は無いものとして読む・固定の文脈 22 フレーム・強度を送らない・右クリック #1 の長さの下限（バックエンド台帳 `PENDING_TASKS.md` §1-121。2026-11-02）
+
+### 160.1 結論
+
+- **MiniMax H3 の Chained で、素材（冒頭）に動画を置く V2V と、画像を置く冒頭画像（i2v）が使えるようになりました。** 右クリックの #1（この動画の続きを生成）・#6・#12（画像／現在フレームを冒頭へ）も、H3 で通ります。バッチ i2v-long も開きます。
+- **H3 では、素材（末尾）と IC-LoRA の参照動画のパネルを灰色ではなく隠します。** キーフレームの強度のスライダー（Single と、Chained の冒頭画像）も隠し、要求に `strength` を載せません。
+- **引き継ぐフレーム数は 22 に固定します。** スライダーは出さず、「22」を読み取り専用で出します。要求には `context_frames: 22` を明示して送ります。
+- LTX の Chained の見た目と送信本文は変わりません（要求のバイト一致のテストは不変）。BRIDGE_CONTRACT は不変で、native と aux2 は触っていません。
+- 設計の正本は [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.3 の「入力動画からの続き（V2V）」「クリップ 0 の冒頭画像（i2v）」と裁定 90、API の形はバックエンド仕様書 §6.2b (h)、門の記録は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §193 です（バックエンド側の仕組みはここに写しません）。
+
+### 160.2 機能の表に「隠す」部位を足した（`shell/featureScope.ts`）
+
+- **オーナー裁定（2026-11-02）**: 非表示の規則は、機能の表（`FEATURE_UI`）の行で管理します。サーバー側の表には見せ方を載せません。
+- `FEATURE_UI` の行に、任意の `hides`（隠す部位）を足しました。隠せる部位は型 `HideableTarget` で限定し、新しく隠す部位はここへ意図して足す形にしました。今の行は次の 3 つです。
+
+  | 機能名 | 隠す部位 |
+  |---|---|
+  | `end_source` | `chainPanel.endSource`（Chained の素材（末尾）） |
+  | `reference_video` | `chainPanel.reference`（Chained の IC-LoRA）・`createSection.referenceVideo`（Single の IC-LoRA。画面側の条件で隠していたものを表へ移した） |
+  | `keyframe_strength` | `createSection.keyframeStrength`（Single の強度の行）・`chainPanel.startImageStrength`（Chained の冒頭画像の強度） |
+
+- **隠す部位は閉じる部位にも含めます**（`disabledUiTargets` が両方を返す）。閉じた部位の欄を要求から落とす既存の経路が、そのまま動き続けるためです。隠す部位だけは `hiddenUiTargets` が返します。
+- **1 つの部位は `disables`（灰色）か `hides`（非表示）のどちらか一方です**。表の健全性テスト（`featureScope.test.ts`）で固めました。
+- 新しい写像 `chainPanelsHiddenFor`（`endSource`・`reference`・`startImageStrength`）と `singleSectionsHiddenFor` を足し、`AppShell.tsx` が計算して `ChainedScreen`・`SingleScreen` へ渡します。`ChainedScreen` は素材（末尾）と IC-LoRA の `<details>` を、隠すときは描きません。
+- `v2v` と `chain_start_image` の行は残しました（今はどの系統も公開しませんが、サーバーの機能名の語彙として有効なため）。届かなくなった文言 `unavailableOnBaseModel.sourceVideo`／`.startImage` も書き換えていません。
+
+### 160.3 隠したパネルの素材は「無いもの」として読む（`modes/chained/useChainForm.ts`）
+
+- **問題（計画のレビューの重要 1）**: LTX で素材（末尾）や IC-LoRA の参照動画を付けてから H3 へ切り替えると、隠したパネルに素材が残ります。従来の理由コード `materialInClosedPanel` は Generate を止めますが、外すボタンはパネルの中にしかないので、パネルと一緒に消えて利用者が解消できなくなります。
+- **対応**: Single の前例（`useGenerationForm` が、使えない参照動画を `null` に畳む）に倣い、`useChainForm` が、隠した部位の素材（末尾の素材・IC-LoRA の参照動画・同じパネルで選んだ制御 LoRA）を 1 か所で「無いもの」に畳みます。以降の門と要求はその値を読むので、Generate は止まらず、要求にも載りません。
+- **素材の状態そのものは残します。** LTX へ戻せば、パネルと一緒に素材も再び見えます。ベースモデルの切り替えでパネルが隠れたことは「素材を外した」ことではないので、クリップの並びの組み直しは、素材の欄そのものの状態の変化だけで起こします。
+- 灰色の `v2v` パネルなど、隠さずに閉じるパネルの扱い（`materialInClosedPanel`）は従来どおりです。
+
+### 160.4 固定の文脈（H3 の V2V）
+
+- `constraints.chain` があるとき（H3）は、引き継ぐフレーム数 `contextFrames` を `constraints.chain.overlap_frames`（22）に固定し、範囲も `{min: 22, max: 22}` にします。利用者が LTX で選んだ値は、その下に保ったまま触りません（LTX へ戻すと元の値に戻る）。
+- `SourceInputPanel` は、範囲の最小と最大が違うときだけスライダーを描き、固定なら「22」を読み取り専用で出します。
+- **固定モードでは、LTX の文脈の検査（8n+1・範囲・クリップ 0 より小さい）を行いません**（計画のレビューの過剰設計 (d)）。値はサーバーの固定値で、クリップ 0 が小さすぎることは次の規則が捕まえるためです。
+- 固定行を持つクリップの最小値の規則（重なり＋格子の 1 歩。H3 では 39）を、入力動画があるときはクリップ 0 にも当てます。
+- 動画を付けたときのクリップ 0 の再調整は「引き継ぐフレーム数＋格子の 1 歩」です（LTX は従来どおり 73＋8＝81、H3 は 22＋17＝39）。
+- 出力の合計長の表示は、固定モードで入力動画があるとき 22 を引きます。
+- 要求は `source_video: {video_id, context_frames: 22}` を明示で送ります（サーバーは省略でも 22 を書き戻しますが、送る値と画面の表示をそろえるため）。
+
+### 160.5 強度を送らない
+
+- H3 にはキーフレームの強度がありません（設計正本 裁定 57）。連結でも、強度を送るとサーバーは `keyframe_strength` で断ります。
+- `keyframe_strength` が閉じているときは、Chained の冒頭画像の強度のスライダーを隠し、クリップ 0 の画像から `strength` を落とします（`useChainForm` の `omitStartImageStrength`）。バッチ i2v-long も各行の画像から `strength` を落とします（従来は `strength: 1.0` を固定で送っていた。`buildI2vLongPayload.ts`）。Single の既存の `omitStrength` と同じ扱いです。
+
+### 160.6 右クリック #1 の長さの下限（`timeline/menuSelection.ts`）
+
+- 従来、#1（この動画の続きを生成）の長さの下限は 73 フレーム（`V2V_MIN_DURATION_SEC = 73/24`）の固定でした。H3 では 22 フレームしか引き継がないので、短い動画が不当に断られます（計画のレビューの軽微 8）。
+- `guardMenuSelection` に任意の第 3 引数（選択肢 `MenuGuardOptions` の `v2vContextFrames`＝引き継ぐフレーム数）を足し、`AppShell.tsx` が `constraints.chain.overlap_frames` を渡します。H3 では 22 フレーム（約 0.92 秒）以上の動画を受け、`constraints.chain` が無い LTX は従来どおり 73 フレームです。
+- #6・#12（画像・現在フレームを冒頭へ）は、`chain_start_image` が公開から消えたので、右クリックの入口の門（`CHAIN_INTENT_PANELS`）を変えずに通ります。門の表も変えていません。
+
+### 160.7 文言
+
+- H3 で届く 2 つの文を直しました（計画のレビューの軽微 9）。
+  - `clipTooShortForFixedOverlap`: 「2本目以降のクリップ（元動画を付けたときは1本目も）は n フレーム以上にしてください（前の映像との重なりは固定です）。」
+  - 固定モード用に `sourceVideoTooShortForFixedContext` を足しました: 「元動画の使用範囲が短すぎます。このベースモデルは元動画から n フレームを引き継ぎます。範囲を長くするか、長い動画を使ってください。」（LTX の文は「引き継ぐフレーム数を下げて」と案内しますが、H3 では下げられないため）。
+- 「H3 の連結は文章から始まる」と書いていたコード内のコメントを現行化しました。
+- 操作パネルのモックの橋（`bridge/mockBridge.ts`）は、H3 の `unsupported_features` から `v2v`・`chain_start_image` を外しました（計画のレビューの重要 2）。
+
+### 160.8 採らなかった案
+
+- **隠す部位を、表の行ではなく部位の集合（「隠す部位の一覧」）で持つ**（計画のレビューの過剰設計 (b)）: オーナー裁定の「表の行で管理する」に合わせました。差は僅かです。
+- **届かなくなる文言と表の行を消す・書き換える**: サーバーの機能名の語彙として残します（過剰設計 (c) の一部採用）。
+- **固定モードでも文脈とクリップ 0 の比較を残す**: クリップ 0 の最小値の規則と重複します（過剰設計 (d)）。
+
+### 160.9 テストと門
+
+- 主なテスト: `featureScope.test.ts`（H3 の一覧・`hides` の健全性・閉じる部位に隠す部位が含まれること）、`AppShell.featureScope.test.tsx`（LTX では何も隠さない）、`AppShell.minimaxH3.test.tsx`（Chained で素材カードが開き、素材（末尾）と IC-LoRA が DOM に無い・バッチ i2v-long が見える・Single は表経由で隠れる）、`ChainedScreen.h3.test.tsx`（動画を付けるとクリップ 0 が 39 へ・スライダーが無い・要求に `{video_id, context_frames: 22}`・強度なし）、`useChainForm.h3.test.ts`（出力の合計 −22・1 本の V2V・隠した素材が Generate を止めない）、`buildI2vLongPayload.test.ts`、`menuSelection.test.ts`（既定の 73 は不変）、`mockBridge.h3.test.ts`、`generationConstraints.test.ts`。
+- 門: `npm run typecheck` と `npx vitest run --exclude "**/backend.integration.test.ts"` の全件に合格（件数と、初回の全件で時限切れが 1 件出た経緯は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §193.5）。GPU の門とオーナーの実機確認は、バックエンド台帳 `PENDING_TASKS.md` §2 の §1-121 です。

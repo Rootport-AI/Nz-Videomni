@@ -167,8 +167,22 @@ export const GEN_FPS = 24;
  * shorter than 73 frames hits the 422 at the prefilled default, and the spec's
  * §4-5 intent is to prevent that known rejection before Generate. 73 / 24 ≈
  * 3.04s.
+ *
+ * 台帳 §1-121: this is the DEFAULT. A base model whose chain seam is fixed by the
+ * server (MiniMax H3: `constraints.chain.overlap_frames` = 22) carries over
+ * exactly that many frames, so the shell passes it as
+ * {@link MenuGuardOptions.v2vContextFrames} and the floor becomes 22 / 24.
  */
 export const V2V_MIN_DURATION_SEC = 73 / GEN_FPS;
+
+/** Optional inputs to {@link guardMenuSelection} that depend on the loaded
+ * base model. Omitted = the LTX defaults. */
+export interface MenuGuardOptions {
+  /** 台帳 §1-121: the number of source frames #1 `extendVideo`'s V2V carries
+   * over — its length floor is this many frames at {@link GEN_FPS}. Omitted =
+   * 73 ({@link V2V_MIN_DURATION_SEC}). */
+  v2vContextFrames?: number | undefined;
+}
 
 /**
  * #2 `referenceVideo` (IC-LoRA) minimum reference duration.
@@ -310,7 +324,11 @@ export function requiredKindsOf(required: MenuRequiredKind): readonly MaterialKi
  * Layer-menu commands (#9/#10, `requiredKind: null`) generate at a position and
  * are exempt from every selection check (§3-6), so they always pass here.
  */
-export function guardMenuSelection(route: MenuRoute, selection: TimelineSelection): MenuGuardResult {
+export function guardMenuSelection(
+  route: MenuRoute,
+  selection: TimelineSelection,
+  opts: MenuGuardOptions = {},
+): MenuGuardResult {
   // Layer-menu items operate on a position, not a selection — exempt (§3-6).
   if (route.requiredKind === null) return { ok: true };
 
@@ -383,7 +401,7 @@ export function guardMenuSelection(route: MenuRoute, selection: TimelineSelectio
   // `endWithThis`) — see {@link END_SOURCE_DURATION_MARGIN_SEC} for why a
   // container duration needs it. Every pre-existing action gets a margin of 0,
   // i.e. the byte-identical comparison it had before.
-  const minSeconds = lengthFloorForAction(route.action);
+  const minSeconds = lengthFloorForAction(route.action, opts);
   if (minSeconds !== null && item && kind === "video") {
     const decision = decideSourceTrim(item, selection);
     const measured = decision.trim ? decision.durationSec : item.mediaDurationSec;
@@ -467,11 +485,12 @@ export function retakeRangeTooShort(selection: TimelineSelection): number | null
  * no length guard (only #1 `extendVideo`, the two IC-LoRA items —
  * `referenceVideo` and 台帳§1-15 W4's `referenceVideoChain` — and 素材（末尾）'s
  * `endWithThis` do). Pure. NOTE the floor is only ever applied to VIDEO
- * material; see the (d) block in `guardMenuSelection`. */
-export function lengthFloorForAction(action: string): number | null {
+ * material; see the (d) block in `guardMenuSelection`. `opts` only moves
+ * `extendVideo`'s floor (台帳 §1-121). */
+export function lengthFloorForAction(action: string, opts: MenuGuardOptions = {}): number | null {
   switch (action) {
     case "extendVideo":
-      return V2V_MIN_DURATION_SEC;
+      return opts.v2vContextFrames !== undefined ? opts.v2vContextFrames / GEN_FPS : V2V_MIN_DURATION_SEC;
     // 素材（末尾）v2 (2026-08-15): 25 frames ≈ 1s — the owner-picked usefulness
     // floor, NOT a geometry one (the band is derived from the material now, so
     // no preset can out-run it). See END_SOURCE_MIN_DURATION_SEC's own doc.

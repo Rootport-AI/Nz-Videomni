@@ -1134,6 +1134,57 @@ class H3Pipeline:
         self._progress("encode", index, total)
         return clean
 
+    # -- the chain's input video (video-to-video, 台帳 §1-121) --------------------
+
+    def _encode_source_tail(
+        self, frames_u8, wave: torch.Tensor | None, entry: dict, index: int, total: int,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """The chain's input video tail -> its clean latents on the CPU, float32:
+        ``(video [1, 24, T', lh, lw], audio [2, 32, freeze_ka] or None)``.
+
+        ``frames_u8``: CPU uint8 ``[F, H, W, 3]`` already on the canvas
+        (``engine_h3.source_tail.read_source_tail``); ``wave``: its waveform
+        ``[2, N]`` at 32 kHz, or None when the file has no audio. The video goes
+        through a video encoder built for this step only (``encode_clips``, one
+        17-frame clip at a time on the device), dropped before returning, as
+        the key frames' encoder. The audio: ``freeze_ka = min(round(F * 5/3),
+        N // 800)`` latents through :meth:`_encode_audio` -- the floor on
+        purpose, because the audio encoder pads the right end with zeros and a
+        latent past the last whole hop would freeze partly silent audio. No
+        audio, or less than one hop of it, gives None (the audio is generated
+        freely). One step of the ``encode`` stage (``index`` of ``total``).
+        Writes ``frames_read``, ``canvas``, ``latent_shape``,
+        ``source_had_audio``, ``freeze_ka`` and ``encoded_samples`` into ``entry``.
+        """
+        num_frames = int(frames_u8.shape[0])
+        enc = self._build_video_encoder()
+        try:
+            z = enc.encode_clips(frames_u8, device=self.device, tiled=True)   # [1, 24, T', lh, lw] f32
+            want = (1, 24, latent_frames(num_frames))
+            if z.dim() != 5 or tuple(z.shape[:3]) != want:
+                raise RuntimeError(f"source encode: unexpected video latent shape {list(z.shape)}, expected {list(want)}")
+            video = z.to(torch.float32).cpu().contiguous()
+            entry["latent_shape"] = [int(v) for v in z.shape]
+            del z
+        finally:
+            del enc
+            _free_cuda()
+        freeze_ka = 0 if wave is None else min(audio_latents(num_frames), int(wave.shape[-1]) // AUDIO_HOP)
+        audio = None
+        encoded_samples = 0
+        if freeze_ka > 0:
+            audio_entry: dict = {}
+            audio = self._encode_audio(wave, freeze_ka, audio_entry, index, total).to(torch.float32).cpu().contiguous()
+            encoded_samples = int(audio_entry["encoded_samples"])
+        else:
+            self._progress("encode", index, total)
+        entry["frames_read"] = num_frames
+        entry["canvas"] = [int(frames_u8.shape[2]), int(frames_u8.shape[1])]
+        entry["source_had_audio"] = wave is not None
+        entry["freeze_ka"] = int(freeze_ka)
+        entry["encoded_samples"] = encoded_samples
+        return video, audio
+
     # -- stage 2: denoise (progress ``stage1_denoise``) --------------------------
 
     def _build_dit(self, entry: dict):
@@ -1578,11 +1629,20 @@ class H3Pipeline:
 
     def _decode(
         self, req, video_lat: torch.Tensor, audio_lat: torch.Tensor, entry: dict, keep=False, source_wave=None,
+        *, trim_head: int = 0, handle_path: str | None = None,
     ) -> int:
         """Video decoder, audio VAE, mp4. ``source_wave`` (A2V at strength 1.0):
         the source waveform ``[2, N]`` float32 goes into the mp4 instead of the
         decoded audio, and the audio VAE is neither built nor touched (a kept
-        one stays as it is)."""
+        one stays as it is).
+
+        ``trim_head`` (the chain's video-to-video, 台帳 §1-121): the first
+        ``trim_head`` decoded frames and their audio are cut off before the mp4
+        is written (``media_out.cut_head``; ``req.num_frames`` is still the
+        decoded timeline's length). The untrimmed audio, cut to the timeline,
+        is first written to ``handle_path`` as a 16-bit wav (the JOIN's audio
+        handle); a failure there is logged and leaves ``entry["audio_handle"]``
+        None, never fails the job. 0 (the default) = as before."""
         from engine_h3.audio_vae import H3AudioVAE  # noqa: PLC0415
         from engine_h3.media_out import audio_keep_samples, write_mp4  # noqa: PLC0415
         from engine_h3.video_vae import H3VideoDecoder  # noqa: PLC0415
@@ -1631,6 +1691,30 @@ class H3Pipeline:
                 _free_cuda()
         self._progress("decode", 2, 3)
 
+        wav_samples = int(wav.shape[-1])
+        if trim_head > 0:
+            from engine_h3.media_out import cut_head, write_wav_pcm16  # noqa: PLC0415
+
+            decoded_frames = int(frames.shape[0])
+            frames, wav_full, wav, trim_info = cut_head(
+                frames, wav, trim_frames=int(trim_head), num_frames=decoded_frames, fps=int(req.frame_rate),
+                sr=AUDIO_SAMPLE_RATE,
+            )
+            handle = None
+            if handle_path is not None:
+                try:
+                    write_wav_pcm16(str(handle_path), wav_full, AUDIO_SAMPLE_RATE)
+                    handle = os.path.basename(str(handle_path))
+                except Exception as exc:  # noqa: BLE001 -- the handle never fails the job (the LTX rule)
+                    self._log(f"decode: audio handle not written (ignored; JOIN falls back to a plain fade): {exc!r}")
+            del wav_full
+            # Only for a trimmed decode: every other job's decode record is unchanged.
+            entry["decoded_frames"] = decoded_frames
+            entry["trimmed_frames"] = int(trim_info["trimmed_px"])
+            entry["trimmed_audio_samples"] = int(trim_info["trimmed_audio_samples"])
+            entry["audio_fade_in_samples"] = int(trim_info["audio_fade_in_samples"])
+            entry["audio_handle"] = handle
+
         # write_mp4 creates the output folder (one place for that).
         size = write_mp4(str(req.output_path), frames, fps=int(req.frame_rate), audio=wav, sample_rate=AUDIO_SAMPLE_RATE)
         # What the mp4 holds: write_mp4 cuts the audio to the video's length,
@@ -1639,9 +1723,9 @@ class H3Pipeline:
             int(wav.shape[-1]), num_frames=int(frames.shape[0]), fps=int(req.frame_rate), sample_rate=AUDIO_SAMPLE_RATE,
         ))
         if source_wave is None:
-            entry["audio_samples_decoded"] = int(wav.shape[-1])
+            entry["audio_samples_decoded"] = wav_samples
         else:
-            entry["audio_samples_source"] = int(wav.shape[-1])
+            entry["audio_samples_source"] = wav_samples
         entry["frames"] = int(frames.shape[0])
         self._progress("decode", 3, 3)
         return size

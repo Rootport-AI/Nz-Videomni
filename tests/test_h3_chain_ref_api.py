@@ -95,16 +95,18 @@ def test_both_ltx_chain_tables_refuse_clip_references_last():
 
 def test_the_nested_chain_clip_fields_are_all_accounted_for_on_h3():
     """The H3 twin of LTX 2.5's nested audit: the chain audit sees only the
-    top level, and ``clips`` is classified as honoured (and refused for a start
-    image), which is a promise about ``ChainClip``'s own fields too."""
+    top level, and ``clips`` is classified as honoured (and refused for a key
+    frame's strength), which is a promise about ``ChainClip``'s own fields too."""
     assert set(ChainClip.model_fields) == {"prompt", "num_frames", "conditioning_images", "references"}
     source = inspect.getsource(h3._RealBackendH3.generate_chain)
     assert "chain.clip_prompt(i)" in source  # prompt (the shared one + the clip's own)
     assert "num_frames" in source
     assert "_clip_reference_payloads(chain, clip_reference_paths)" in source  # references
-    # conditioning_images is the refused one (``chain_start_image``), never read.
-    assert ("clips", "chain_start_image") == h3.CHAIN_REJECT_TABLE[0][:2]
-    assert "conditioning_images" not in source
+    # conditioning_images: clip 0's key frames are read (台帳 §1-121); only a
+    # strength is refused, by the last row (``keyframe_strength``).
+    assert "chain.clips[0].conditioning_images" in source
+    assert ("source_audio", "a2v") == h3.CHAIN_REJECT_TABLE[0][:2]
+    assert ("clips", "keyframe_strength") == h3.CHAIN_REJECT_TABLE[-1][:2]
 
 
 # --------------------------------------------------------------------------- #

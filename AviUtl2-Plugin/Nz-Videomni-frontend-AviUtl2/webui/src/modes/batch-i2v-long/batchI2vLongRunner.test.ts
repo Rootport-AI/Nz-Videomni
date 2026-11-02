@@ -523,6 +523,27 @@ describe("BatchI2vLongRunner", () => {
       ]);
     });
 
+    it("台帳 §1-121: settings.omitStrength なら各行の clip0 画像に strength を付けずに送る", async () => {
+      const fs = createMockFs();
+      const base = createMockBridge({ delayMs: 0, fs });
+      const { wrapped, chainBodies } = captureChainBridge(base);
+      const runner = new BatchI2vLongRunner(wrapped);
+
+      await runner.start({
+        imgDir: IMG_DIR,
+        outDir: OUT_DIR,
+        template: template(),
+        settings: { promptMode: "add", omitStrength: true },
+        rows: [makeRow(1, "a.png", "Waiting")],
+      });
+
+      const images = (chainBodies[0]?.clips as Array<{ conditioning_images?: Array<Record<string, unknown>> }>)[0]
+        ?.conditioning_images;
+      expect(images).toHaveLength(1);
+      expect(images?.[0]).not.toHaveProperty("strength");
+      expect(images?.[0]).toMatchObject({ frame_idx: 0 });
+    });
+
     it("replaceモードでは行プロンプトが共通プロンプトを丸ごと置き換える（空の行は除く）", async () => {
       const fs = createMockFs();
       const base = createMockBridge({ delayMs: 0, fs });

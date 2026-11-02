@@ -627,7 +627,9 @@ _CHAR_BASE = {
     "clips": [{"num_frames": 25}, {"num_frames": 25}],
 }
 
-_CHAR_CASES: dict[str, tuple[dict, str]] = {
+# Each case is (overrides, message) or (overrides, message, loc); loc defaults
+# to ["body"] (a validator on the request itself).
+_CHAR_CASES: dict[str, tuple] = {
     "width_64": ({"width": 352}, "width must be a multiple of 64"),
     "height_64": ({"height": 300}, "height must be a multiple of 64"),
     "distilled_steps": (
@@ -694,6 +696,35 @@ _CHAR_CASES: dict[str, tuple[dict, str]] = {
         "first stage-2 window, leaving nothing to generate). Shorten context_frames or "
         "choose a wider stage2_window.",
     ),
+    # source_video.context_frames (§3.2): the nested SourceVideoSpec checks
+    # carry loc ["body", "source_video"]; the clip-0 comparison carries ["body"].
+    "v2v_context_min": (
+        {"source_video": {"video_id": "v", "context_frames": 17}},
+        "source_video.context_frames must be >= 25",
+        ["body", "source_video"],
+    ),
+    "kept_v2v_context_max": (
+        {
+            "clips": [{"num_frames": 169}, {"num_frames": 25}],
+            "source_video": {"video_id": "v", "context_frames": 153},
+        },
+        "source_video.context_frames must be <= 145 "
+        "(the cap is LimitsConfig.v2v_context_frames_max in config.py)",
+        ["body", "source_video"],
+    ),
+    "v2v_context_8n1": (
+        {
+            "clips": [{"num_frames": 49}, {"num_frames": 25}],
+            "source_video": {"video_id": "v", "context_frames": 30},
+        },
+        "source_video.context_frames must be 8n+1",
+        ["body", "source_video"],
+    ),
+    "v2v_context_vs_clip0": (
+        {"source_video": {"video_id": "v", "context_frames": 25}},
+        "source_video.context_frames (25) must be < clips[0].num_frames (25) so a NEW "
+        "tail remains to generate",
+    ),
     "kept_crop": ({"crop_output": {"width": 400, "height": 200}}, "crop_output.width must be <= width"),
     "kept_clip_count": ({"clips": [{"num_frames": 25}]}, "chain requires at least 2 clips"),
     "kept_nag": ({"nag_enabled": True}, "nag_enabled requires a non-empty negative_prompt"),
@@ -715,7 +746,8 @@ def test_ltx_chain_422_body_is_pinned(three_family_client, family, case):
     if family != "LTX23":
         r = client.post("/api/v1/pipeline/load", json={"base_model": family})
         assert r.status_code == 200, r.text
-    overrides, message = _CHAR_CASES[case]
+    overrides, message, *rest = _CHAR_CASES[case]
+    loc = rest[0] if rest else ["body"]
     r = client.post("/api/v1/generate/chain", json={**_CHAR_BASE, **overrides})
     assert r.status_code == 422, r.text
     assert r.json() == {
@@ -723,7 +755,7 @@ def test_ltx_chain_422_body_is_pinned(three_family_client, family, case):
             "code": "VALIDATION_ERROR",
             "message": "Request validation failed",
             "detail": [
-                {"loc": ["body"], "msg": f"Value error, {message}", "type": "value_error"}
+                {"loc": loc, "msg": f"Value error, {message}", "type": "value_error"}
             ],
         }
     }

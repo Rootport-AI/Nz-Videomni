@@ -1,0 +1,5 @@
+> **このファイルは実機の `outputs/comfort-calib-h3-2026-11-01/git_state_end_night3.txt`（git追跡外）のスナップショットである（2026-11-02複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+night3 end
+Mon Nov  2 11:46:11     2026
+05ee80bb6205f8a7441dfed677e5cf6ca9428bbe

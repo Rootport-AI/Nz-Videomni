@@ -3178,3 +3178,12 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **合格の根拠**: オーナーの実機確認で、G-1〜G-6・G-10 が合格（2026-11-01）。G-7 は第 4 弾の修正のあとに合格、G-11 も合格した（記録簿 §190.7）。バックエンドを再起動したうえで、G-8a は音声トラックの無い `noaudio.mp4` を A2V カードに入れて 422 `SOURCE_AUDIO_TOO_SHORT`（"shorter than the requested video length"）、G-8b は無音トラックの `input.mp4` で 422 `SOURCE_AUDIO_SILENT`、G-9a は同じ `noaudio.mp4` を H3 の Audios カード（Enable をオン、Audio to video をオフ）に入れて 422 `REFERENCE_AUDIO_NO_STREAM`、G-9b は同じ `input.mp4` で 422 `REFERENCE_AUDIO_SILENT` と、いずれも想定どおり止まった（記録簿 §191.7）。
 - **派生**: G-5 の確認で、H3 の Chained では A2V が使えないことが分かり、[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-120 として起票した。
 - **状態**: 完結（日付 2026-11-01）。main へのマージは未了で、監督が行う。コミットのハッシュは git の履歴を正とする。
+
+### 3-268. MiniMax H3（Turbo なし・int8 ConvRot）の快適上限の較正（起票：2026-10-17、クローズ：2026-11-02）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-95 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-95（2026-10-17 起票）。**同書側は欠番**。
+- **到達条件**: 測って線を決め、行の形を提案し、文書に書く（記述子・種別判定・操作パネルの手当ては含めない。オーナー裁定 2026-11-01）。製品コードは 1 行も変えない。**達成した。** ただし行の形（`requires` の鍵・`single_budget` の値・種別）は、オーナー裁定（2026-11-02）で本項では決めず、事実を書くところまでとした。
+- **何が完了したか**: MiniMax H3（int8 ConvRot・VRAM 16GB mode on）の Single を、2 夜と昼の 1 点で測った。結論は、映像＋条件行の 1 本の線で全点が分かれ、1280×768 は梯子の上限の 481 フレームまで快適で、境界は OOM（GPU メモリ不足）であり退避は出なかった、というもの。attention（sage／sdpa）で境界は動かなかった。数値と表は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §192、設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 89。一次記録は `outputs/comfort-calib-h3-2026-11-01/RESULTS.md`（複写: [`Docs/Outputs-archive/comfort-calib-h3-2026-11-01/`](Outputs-archive/comfort-calib-h3-2026-11-01/)）。
+- **合格の根拠**: 完了したジョブ 32 本（計測点 32 のうち完了した 24・煙の点 1・捨てラン 7）すべてで `used_matches_request` が真。RESULTS §3 の計測点 32 行の 5 列を `run.json` と機械で突き合わせて差 0（RESULTS §3 の自己点検）。基準点 7 本は正常（RESULTS §9）。OOM は結果であって失敗ではなく、コミット量の停止線（95%）には届かなかった。
+- **派生**: マーカーの設置と行の形の討論は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-119（起票済み）。
+- **状態**: 完結（日付 2026-11-02）。main へのマージは未了で、監督が行う。コミットのハッシュは git の履歴を正とする。

@@ -1,0 +1,99 @@
+> **このファイルは実機の `outputs/comfort-calib-h3-2026-11-01/progress.md`（git追跡外）のスナップショットである（2026-11-02複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+# progress（§1-95 H3 の快適上限の較正）
+
+- 夜 1・T0＝最初の load の時刻: 2026-11-01 01:46:34
+- 待機中 SM 約 31%・GPU 使用 2,677MiB（01:55。監督確認・外部の負荷＝開いたままの AviUtl2 など）
+- 3 点確認（2026-11-01 01:46:34）: 待ち行列 pending 0・running 0／commit_log.csv 最終行 01:46:17（確認時刻 01:46:18）／bash.exe は commit_monitor.ps1 のみ・drive2 なし
+
+- 2026-11-01 01:46:34 load 開始（MiniMaxH3・--transformer default）
+- 2026-11-01 01:46:43 load 完了（9.4 秒・transformer=default・worker log: minimax_h3_fl2va_pruned_int8_convrot.safetensors）→ idle-calib 3 分 開始
+- 2026-11-01 idle-calib 3 分 完了（01:50:14。共有 中央値 118.6MB・専有 910.9MB・SM 中央値 45%・rxpci 中央値 887）
+- 2026-11-01 01:50:30 smoke: mk.sh → preflight エラー 0・警告 3（attention・steps・seed）
+- 2026-11-01 01:50:34 smoke 開始（drive2_smoke.log）
+- 2026-11-01 01:51:37 smoke 終了（ジョブ 58.2 秒・completed）。判定 smoke（denoise 標本 7・decode 標本 8 で判定不能＝煙の点としては想定内）。照合 ok。共有の中央値 encode 200.0／denoise 1215.2／decode 1215.2 MB。コミットの最大 52.23GiB（37.6%）。弾 0 の残りは監督の合図待ち
+- 2026-11-01 01:55:29 b720 開始（基準点 1280×768×56・sage・K=1・4 ステップ）
+- 2026-11-01 01:57:24 b720 終了 01:56:56（82 秒）。判定 baseline・照合 ok・denoise 1232.4MB n=31／decode 1232.4MB n=19（標本足りる）・S=18464・video+cond=17280・s/step 8.045・cap 13999・コミット最大 52.62GiB
+- 2026-11-01 01:59:26 t720_off 開始（345・LoRA なし。s720 の 345 を兼ねる）
+- 2026-11-01 02:07:58 t720_off 終了（507 秒）。判定 comfortable・照合 ok・denoise Δ−29.3 n=369／decode Δ−29.1 n=105・video+cond=98880・S=101028・s/step 92.8・cap 13999・コミット最大 57.54GiB（41.4%）→ s720 の L=345
+- 2026-11-01 02:10:28 t720_turbo 開始（345・Turbo 0.8・4 ステップ）
+- 2026-11-01 02:19:34 t720_turbo 終了（540 秒）。判定 comfortable・照合 ok・denoise Δ−67.0 n=411／decode Δ−61.4 n=97・s/step 103.4（off 92.8）・inactive_split 2730（off 2736）・コミット最大 59.56GiB（42.9%）
+- 2026-11-01 02:22:05 s720_481 開始（481・2 分探索の出発点）
+- 2026-11-01 02:35:29 s720_481 終了（798 秒）。判定 comfortable・照合 ok・denoise Δ−49.3 n=631／decode Δ−39.9 n=136・video+cond=137280・S=139882・s/step 158.3・cap 13999・num_alloc_retries 3・inactive_split 8415・コミット最大 62.34GiB（44.9%）→ s720_481_r2 へ
+- 2026-11-01 02:37:59 s720_481_r2 開始（481・2 回目）
+- 2026-11-01 02:51:26 s720_481_r2 終了（801 秒）。判定 comfortable・照合 ok・denoise Δ−47.9 n=628／decode Δ−47.5 n=140・s/step 157.6・retries 3・コミット最大 60.49GiB（43.5%）→ **s720 の c＝481（上限まで快適・2 回）・U なし**。探索終了 02:51（04:46 より前 → s720_20x は 20 ステップの版）
+- 2026-11-01 02:53:58 b720x 開始（sdpa の基準点 56）
+- 2026-11-01 02:55:47 b720x 終了（104 秒）。判定 baseline・照合 ok・denoise 1198.5MB n=55／decode 1198.4MB n=18・s/step 14.1・コミット最大 49.46GiB
+- 2026-11-01 02:58:19 s720x_481_20 開始（c=481・sdpa・20 ステップ）
+- 2026-11-01 05:58:25 s720x_481_20 打ち切り（較正台の時間切れ 10,800 秒。ジョブはサーバー側で 19/20 ステップを実行中）。sdpa の 1 ステップ 550.6 秒（log）で、20 ステップ＝約 11,000 秒が auto の上限を超えた。denoise Δ−50.7 n=10428・plateau false（19 ステップまで）・decode n=0 → **判定不能として数えない**。代わりに時間の関門の代替（sdpa・4 ステップの c）を取る
+- 2026-11-01 06:04:37 s720x_481_20 のジョブがサーバー側で完了（job ab0f33be・status completed・error なし。outputs/ab0f33be…/metadata.json より: denoise 11,024.9 秒・s/step(meta) 550.7・peak 8600MB／reserved 13708MB・cap 13999・num_ooms 0・retries 3・inactive_split 8415・prefetch on・照合の鍵は送った条件どおり・コミット山 40.07GiB・decode 134.1 秒）。run.json は時間切れの時点のまま（decode 窓の標本なし）＝判定には使わない
+- 2026-11-01 06:07:07 s720x_481 開始（c=481・sdpa・4 ステップ（20 ステップの代替））
+- 2026-11-01 06:46:39 s720x_481 終了（2366 秒）。判定 comfortable・照合 ok・denoise Δ−42.3 n=2193／decode Δ−31.0 n=134・s/step 550.4（sage の約 3.5 倍）・retries 3・コミット最大 58.20GiB → sdpa の c＝481・U なし
+- 2026-11-01 06:49:11 b720k 開始（K=10 の基準点 56）
+- 2026-11-01 06:51:02 b720k 終了（106 秒）。判定 baseline・照合 ok（images_used 10）・denoise 1190.1MB n=49／decode 1190.1MB n=18・video+cond=25920・text=1966・s/step 12.6・コミット最大 49.84GiB
+- 2026-11-01 06:53:33 k720_481 開始（c=481・K=10）
+- 2026-11-01 07:07:53 k720_481 終了（855 秒）。判定 comfortable・照合 ok・denoise Δ−31.6 n=680／decode Δ−6.5 n=133・video+cond=145920・S=149490・s/step 170.9・retries 1・inactive_split 5611・コミット最大 57.66GiB → K=10 の c＝481
+- 2026-11-01 07:08:11 終わりの手順 開始（restore-state）
+- 2026-11-01 07:08:57 restore-state（LTX23・default）→ state.json と original_state.json 一致 → unload（pipeline_loaded false）→ 3 点確認（待ち行列 空・commit_log 最終行 07:08:47／確認 07:08:49・drive2 なし）
+- 2026-11-01 07:09:15 集計: report_output.txt・make_results_output.txt・sum_output.txt・commit_table.md・digest_output.txt を出力。夜 1 終了
+- 夜 2・T0＝最初の load の時刻: 2026-11-01 23:11:45
+- 3 点確認（2026-11-01 23:10:52）: 待ち行列 pending 0・running 0／commit_log.csv 最終行 23:10:49（確認時刻 23:10:52）／bash.exe は commit_monitor.ps1 のみ・drive2 なし（各 drive2_*.log の最終行は夜 1 の ALL DONE）
+- 2026-11-01 23:11:45 準備: drive2.sh の点の行の --job-timeout を "${JOB_TIMEOUT:-auto}" に（harness_diff.txt 末尾・README §5）。README §3 の 3／6 の「開始時は PulpCut の Turbo 版」の誤りを直した
+- 2026-11-01 23:11:45 load 開始（MiniMaxH3・--transformer default）
+- 2026-11-01 23:11:53 load 完了（0.0 秒＝既に読み込み済み・transformer check default/default/default）→ idle-calib 3 分 開始
+- 2026-11-01 idle-calib 3 分 完了（23:14:57。共有 中央値 83.4MB・専有 1090.8MB・SM 中央値 6%・rxpci 中央値 188）
+- 2026-11-01 23:15:15 s720_20: mk.sh → preflight エラー 0・警告 2（attention・seed。20 ステップは利用者の既定なので steps の警告なし）
+- 2026-11-01 23:15:15 s720_20 開始（1280×768×481・sage・20 ステップ・K=1・基準点 b720・JOB_TIMEOUT 28800）
+- 2026-11-02 00:11:06 s720_20 終了（3344 秒）。判定 comfortable・照合 ok・denoise Δ−33.5 n=3149／decode Δ−3.8 n=147・video+cond=137280・S=139882・s/step 157.9・cap 14033・peak 9088／reserved 12992・retries 2・inactive_split 6048・prefetch on・コミット最大 61.81GiB（44.0%）→ **1280×768 の c＝481 は 20 ステップでも快適**。次は b1080
+- 2026-11-02 00:13:36 b1080 開始（1920×1088×56・sage・4 ステップ・K=1・基準点 FIRST・JOB_TIMEOUT 14400）
+- 2026-11-02 00:16:17 b1080 終了（156 秒）。判定 baseline・照合 ok・denoise 1217.5MB n=84／decode 1230.5MB n=37（標本足りる・過去の帯の中）・video+cond=36720・S=38984・text=2078・s/step 21.6・cap 14001・peak 8142／reserved 10458・inactive_split 951・retries 0・コミット最大 56.43GiB（40.2%）→ s1080_243（2 分探索の出発点）
+- 2026-11-02 00:18:47 s1080_243 開始（1920×1088×243・sage・4 ステップ・K=1・2 分探索の出発点・基準点 b1080・JOB_TIMEOUT 14400）
+- 2026-11-02 00:34:32 s1080_243 終了（940 秒）。判定 comfortable・照合 ok・denoise Δ−19.3 n=749／decode Δ−16.2 n=156・video+cond=148920・S=151808・s/step 188.0・cap 14001・peak 9690／reserved 13938・retries 2・inactive_split 6461・コミット最大 62.45GiB（44.5%）→ 快適。次は 243 と 498（481 の 1 つ上）の中点 370.5。362 と 379 が等距離なので低い方の 362（安全側。OOM と復帰の手間を避ける）
+- 2026-11-02 00:37:02 s1080_362 開始（1920×1088×362・sage・4 ステップ・K=1・基準点 b1080・JOB_TIMEOUT 14400）
+- 2026-11-02 00:37:50 s1080_362 終了（42 秒）。**OOM（ノイズ除去の 0 ステップ目・VRAM 16GB mode の上限での OOM・『Tried to allocate 2.24 GiB … 13.67 GiB allowed; 9.20 GiB allocated, 3.01 GiB reserved but unallocated』）**。較正台は job.error=null の瞬間を読んで failed と記録した（サーバーは status=failed を先に立て、error を後で書く競合）。GET /jobs/e4bb820b… を取り直すと error='GPU_OOM: … VRAM 16GB mode でも …'。runs/s1080_362/job.json をサーバーの取り直しで置き換え（元は job_harness_read.json・run_before_reanalyse.json に退避）、復帰の idle-calib の前に calib.py reanalyse --label s1080_362 → verdict_v3dprime=oom・oom_vram16=True。video+cond=220320・S 推定 223604（text は s1080_243 から）。パイプラインは unload 済み。上限での OOM なので U は 1 回で確定 → 362 は非快適。次は 243 と 362 の中点 302.5。294 と 311 が等距離なので低い方の 294
+- 2026-11-02 00:40:20 s1080_294 開始（1920×1088×294・sage・4 ステップ・K=1・基準点 b1080・JOB_TIMEOUT 14400・OOM の後なので drive2 が復帰を挟む）
+- 2026-11-02 00:49:42 s1080_294 終了（293 秒。前に復帰 00:40:20〜00:42:14・捨てラン warm_rec1102004127 completed・冷却 150 秒）。**OOM（ノイズ除去の 1 ステップ目・VRAM 16GB mode の上限での OOM・『Tried to allocate 1.83 GiB … 13.67 GiB allowed; 7.92 GiB allocated, 4.83 GiB reserved but unallocated』）**。s1080_362 と同じ競合で較正台は failed と記録 → job.json をサーバーの取り直しで置き換え（元は job_harness_read.json）→ reanalyse → verdict_v3dprime=oom・oom_vram16=True。denoise は 252 標本 Δ−18.9 まで退避なし。video+cond=179520。S の推定 180778 は text=278 を捨てラン（640×384）から取っており誤り（text の行数は解像度で変わる: 640×384=278・1280×768=998・1920×1088=2078）。1920×1088 の text 2078 で直すと S=177480+2040+980+2078=182578。上限での OOM なので 1 回で確定 → 294 は非快適。次は 243 と 294 の中点 268.5。260 と 277 が等距離なので低い方の 260
+- 2026-11-02 00:52:12 s1080_260 開始（1920×1088×260・sage・4 ステップ・K=1・基準点 b1080・JOB_TIMEOUT 14400・OOM の後なので drive2 が復帰を挟む）
+- 2026-11-02 01:13:17 s1080_260 終了（976 秒。前に復帰 00:52:12〜00:54:25・捨てラン warm_rec1102005324・冷却 150 秒）。判定 comfortable・照合 ok・denoise Δ−61.1 n=787／decode Δ−54.3 n=153・video+cond=159120・S=162064・s/step 197.5・cap 13999・peak 10189／reserved 13842・retries 2・inactive_split 4689・コミット最大 59.25GiB（42.2%）→ 快適。次は 260 と 294 の中点 277
+- 2026-11-02 01:15:48 s1080_277 開始（1920×1088×277・sage・4 ステップ・K=1・基準点 b1080・JOB_TIMEOUT 14400）
+- 2026-11-02 01:20:11 s1080_277 終了（259 秒）。**OOM（ノイズ除去の 1 ステップ目・VRAM 16GB mode の上限での OOM・『Tried to allocate 1.73 GiB … 13.67 GiB allowed; 7.60 GiB allocated, 4.64 GiB reserved but unallocated』）**。同じ競合 → job.json をサーバーの取り直しで置き換え → reanalyse → verdict_v3dprime=oom・oom_vram16=True。denoise は 220 標本 Δ−62.6 まで退避なし。video+cond=169320・S 推定 172322（text 2078 は s1080_260 から＝正しい）。上限での OOM なので 1 回で確定 → **U＝277**。c の候補＝260 → s1080_260_r2（2 回目）へ
+- 2026-11-02 01:22:44 s1080_260_r2 開始（1920×1088×260・sage・4 ステップ・K=1・c の 2 回目・基準点 b1080・JOB_TIMEOUT 14400・OOM の後なので drive2 が復帰を挟む）
+- 2026-11-02 01:43:29 s1080_260_r2 終了（977 秒。前に復帰 01:22:44〜01:24:37・捨てラン warm_rec1102012350・冷却 150 秒）。判定 comfortable・照合 ok・denoise Δ−49.3 n=787／decode Δ−54.5 n=153・video+cond=159120・S=162064・s/step 197.6・cap 13999・peak 10189／reserved 13842・retries 2・inactive_split 4689・コミット最大 58.75GiB（41.9%）→ **s1080 の c＝260（2 回快適）・U＝277（上限での OOM・1 回）**。探索の経過: 243 快適 → 362 OOM → 294 OOM → 260 快適 → 277 OOM → 260 快適（2 回目）。次は s1080_260_20
+- 2026-11-02 01:46:01 s1080_260_20 開始（1920×1088×260・sage・20 ステップ・K=1・c の 20 ステップの確認・基準点 b1080・JOB_TIMEOUT 28800）
+- 2026-11-02 02:54:59 s1080_260_20 終了（4133 秒）。判定 comfortable・照合 ok・denoise Δ−53.4 n=3934／decode Δ−50.0 n=153・video+cond=159120・S=162064・s/step 197.3・cap 13999・peak 10189／reserved 13842・retries 2・inactive_split 4689・prefetch on・コミット最大 59.29GiB（42.2%）→ **1920×1088 の c＝260 は 20 ステップでも快適**。順 5: 監督へ SubagentHandback（再開の指示まで GPU を使わない）
+- 2026-11-02 03:01:00 監督の再開の指示: 順 6 以降を再開。sdpa の U（277）は原則省く。条件: x1080_260 の h3.phases.denoise の reserved・inactive_split が sage 260（13842・4689）より 300MiB 以上低い、または retries が 2 と違えば x1080_277 を 1 本取る。OOM の読み取りの競合は refetch.sh → reanalyse を続ける
+- 2026-11-02 03:01:00 b1080x 開始（1920×1088×56・sdpa・4 ステップ・K=1・基準点 FIRST・JOB_TIMEOUT 14400）
+- 2026-11-02 03:06:18 b1080x 終了（267 秒）。判定 baseline・照合 ok・denoise 1209.5MB n=196／decode 1216.8MB n=34（標本足りる・過去の帯の中）・video+cond=36720・S=38984・s/step 49.8（sage の b1080 21.6 の約 2.3 倍）・cap 13999・denoise peak 4359／reserved 6266・retries 0・inactive_split 2034・コミット最大 52.05 GiB 37.1% → x1080_260
+- 2026-11-02 03:08:02 x1080_260 開始（1920×1088×260・sdpa・4 ステップ・K=1・基準点 b1080x・JOB_TIMEOUT 28800）
+- 2026-11-02 04:00:20 x1080_260 終了（3132 秒）。判定 comfortable・照合 ok・denoise Δ−45.7 n=2937／decode Δ−48.6 n=153・video+cond=159120・S=162064・s/step 737.0（sage 197.5 の約 3.7 倍）・cap 13999・denoise peak 9562（sage 10189）・コミット最大 58.76GiB（41.9%）→ sdpa の c＝260。**U の条件の判断**: h3.phases.denoise の sdpa／sage 260 = peak_vram_reserved_mb 13842／13842（差 0）・num_alloc_retries 2／2（同じ）・inactive_split_peak_mib 4689／4689（差 0）→ 300MiB 以上低い値も retries の違いもないので **x1080_277 は取らず U は省いたまま確定**。次は b1080k
+- 2026-11-02 04:02:51 b1080k 開始（1920×1088×56・sage・4 ステップ・K=10・基準点 FIRST・JOB_TIMEOUT 14400）
+- 2026-11-02 04:07:11 b1080k 終了（235 秒）。判定 baseline・照合 ok（images_used 10）・denoise 1196.6MB n=147／decode 1185.8MB n=34（帯の中）・video+cond=55080・S=59392・text=4126・s/step 37.2・cap 13999・denoise peak 5274／reserved 6724・retries 0・inactive_split 1811・コミット最大 52.53 GiB 37.4% → k1080_260
+- 2026-11-02 04:09:22 k1080_260 開始（1920×1088×260・sage・4 ステップ・K=10・c・基準点 b1080k・JOB_TIMEOUT 14400）
+- 2026-11-02 04:14:29 k1080_260 終了（301 秒）。**OOM（ノイズ除去の 1 ステップ目・VRAM 16GB mode の上限での OOM・『Tried to allocate 1.83 GiB … 13.67 GiB allowed; 7.96 GiB allocated, 4.02 GiB reserved but unallocated』）**。今回は較正台が error を読めた（verdict_v3dprime=oom・oom_vram16=True。refetch は不要）。denoise は 243 標本 Δ−28.0 まで退避なし。video+cond=177480・S 推定 182472（text 4126 は b1080k から）・コミット最大 58.58GiB（41.7%）→ 非快適。1 段下の k1080_243 へ（下りの 1 点目）
+- 2026-11-02 04:17:00 k1080_243 開始（1920×1088×243・sage・4 ステップ・K=10・下り 1 点目・基準点 b1080k・JOB_TIMEOUT 14400・OOM の後なので復帰を挟む）
+- 2026-11-02 04:39:24 k1080_243 終了（1075 秒。前に復帰 04:17:00〜04:18:53・捨てラン warm_rec1102041806・冷却 150 秒）。判定 comfortable・照合 ok・denoise Δ−24.4 n=878／decode Δ+0.6 n=143・video+cond=167280・S=172216・s/step 220.5・cap 13999・denoise peak 10731／reserved 13576・retries 2・inactive_split 5311・コミット最大 58.42GiB（41.6%）→ **K=10 の c＝243（K=1 の 260 から 1 段下）**。次は b1440
+- 2026-11-02 04:41:54 b1440 開始（2560×1472×56・sage・4 ステップ・K=1・基準点 FIRST・JOB_TIMEOUT 14400）
+- 2026-11-02 04:46:44 b1440 終了（285 秒）。判定 baseline・照合 ok・denoise 1189.5MB n=191／decode 1212.8MB n=57（帯の中）・video+cond=66240・S=70144・text=3718・s/step 48.3・cap 13999・denoise peak 5743／reserved 8576・retries 0・inactive_split 2173・コミット最大 53.59GiB（38.2%）→ s1440_107（2 分探索の出発点）
+- 2026-11-02 04:49:15 s1440_107 開始（2560×1472×107・sage・4 ステップ・K=1・2 分探索の出発点・基準点 b1440・JOB_TIMEOUT 14400）
+- 2026-11-02 05:00:10 s1440_107 終了（650 秒）。判定 comfortable・照合 ok・denoise Δ−5.0 n=503／decode Δ+1.4 n=108・video+cond=121440・S=125514・s/step 126.3・cap 13999・denoise peak 8442／reserved 12488・retries 1・inactive_split 3762・コミット最大 57.43GiB（40.9%）→ 快適。次は 107 と 498（481 の 1 つ上）の中点 302.5。294 と 311 が等距離なので低い方の 294
+- 2026-11-02 05:02:42 s1440_294 開始（2560×1472×294・sage・4 ステップ・K=1・基準点 b1440・JOB_TIMEOUT 14400）
+- 2026-11-02 05:03:25 s1440_294 終了（38 秒）。**OOM（ノイズ除去の 0 ステップ目・VRAM 16GB mode の上限での OOM・『Tried to allocate 3.21 GiB … 13.67 GiB allowed; 9.20 GiB allocated, 1.47 GiB reserved but unallocated』）**。競合で failed と記録 → refetch.sh（job.json の置き換え → reanalyse）→ verdict_v3dprime=oom・oom_vram16=True。video+cond=323840・S 推定 328538（text 3718 は s1440_107 から＝正しい）・コミット最大 47.31GiB（33.7%）→ 上限での OOM なので 1 回で確定・非快適。次は 107 と 294 の中点 200.5。192 と 209 が等距離なので低い方の 192
+- 2026-11-02 05:05:56 s1440_192 開始（2560×1472×192・sage・4 ステップ・K=1・基準点 b1440・JOB_TIMEOUT 14400・OOM の後なので復帰を挟む）
+- 2026-11-02 05:11:06 s1440_192 終了（42 秒。前に復帰 05:05:56〜05:07:48・捨てラン warm_rec1102050702・冷却 150 秒）。**OOM（ノイズ除去の 0 ステップ目・VRAM 16GB mode の上限での OOM・『Tried to allocate 2.18 GiB … 13.67 GiB allowed; 9.05 GiB allocated, 4.31 GiB reserved but unallocated』）**。競合 → refetch.sh → verdict_v3dprime=oom・oom_vram16=True。video+cond=213440。S 推定 214358 は text=278（捨てラン）を拾っており誤り。2560×1472 の text 3718 で直すと S=209760+3680+640+3718=217798。コミット最大 58.44GiB（41.6%）→ 非快適（1 回で確定）。次は 107 と 192 の中点 149.5。141 と 158 が等距離なので低い方の 141
+- 2026-11-02 05:13:38 s1440_141 開始（2560×1472×141・sage・4 ステップ・K=1・基準点 b1440・JOB_TIMEOUT 14400・OOM の後なので復帰を挟む）
+- 2026-11-02 05:34:16 s1440_141 終了（971 秒。前に復帰 05:13:38〜05:15:31・捨てラン warm_rec1102051444・冷却 150 秒）。判定 comfortable・照合 ok・denoise Δ−19.1 n=788／decode Δ+0.8 n=143・video+cond=158240・S=162428・s/step 197.9・cap 14001・denoise peak 10241／reserved 13684・retries 2・inactive_split 4500・コミット最大 58.67GiB（41.8%）→ 快適。次は 141 と 192 の中点 166.5。158 と 175 が等距離なので低い方の 158
+- 2026-11-02 05:36:47 s1440_158 開始（2560×1472×158・sage・4 ステップ・K=1・基準点 b1440・JOB_TIMEOUT 14400）
+- 2026-11-02 05:41:35 s1440_158 終了（283 秒）。**OOM（ノイズ除去の 1 ステップ目・VRAM 16GB mode の上限での OOM・『Tried to allocate 1.81 GiB … 13.67 GiB allowed; 7.90 GiB allocated, 4.66 GiB reserved but unallocated』）**。競合 → refetch.sh → verdict_v3dprime=oom・oom_vram16=True。denoise は 240 標本 Δ−26.8 まで退避なし。video+cond=176640・S 推定 180884（text 3718＝正しい）・コミット最大 59.33GiB（42.3%）→ 上限での OOM なので 1 回で確定 → **U＝158**。c の候補＝141 → s1440_141_r2
+- 2026-11-02 05:44:06 s1440_141_r2 開始（2560×1472×141・sage・4 ステップ・K=1・c の 2 回目・基準点 b1440・JOB_TIMEOUT 14400・OOM の後なので復帰を挟む）
+- 2026-11-02 06:04:46 s1440_141_r2 終了（971 秒。前に復帰 05:44:06〜05:45:59・捨てラン warm_rec1102054512・冷却 150 秒）。判定 comfortable・照合 ok・denoise Δ−16.0 n=789／decode Δ+11.7 n=143・video+cond=158240・S=162428・s/step 198.0・cap 14001・denoise peak 10241／reserved 13684・retries 2・inactive_split 4500・コミット最大 58.71GiB（41.8%）→ **s1440 の c＝141（2 回快適）・U＝158（上限での OOM・1 回）**。探索の経過: 107 快適 → 294 OOM → 192 OOM → 141 快適 → 158 OOM → 141 快適（2 回目）
+- 2026-11-02 06:05:05 終わりの手順 開始（restore-state）
+- 2026-11-02 06:05:20 restore-state（MiniMaxH3・default）→ state.json と original_state.json 一致（active・selections とも。LTX23 sulphur_distil_fp8mixed）→ unload（pipeline_loaded false）→ 3 点確認（待ち行列 空・commit_log 最終行 06:05:18／確認 06:05:20・bash.exe は commit_monitor のみ・drive2 なし）
+- 2026-11-02 06:05:42 集計: report_output.txt（夜 1＋夜 2 の全点）・make_results_output.txt・sum_output.txt（全ラベル）・commit_table.md・digest_output.txt を出力。git_state_end_night2.txt（HEAD 05ee80b）。夜 2 終了
+- 2026-11-02 10:31:29 夜 3（追加 1 点 s1440_141_20）引き継ぎの 3 点確認: status 待ち行列 空（pending 0・running 0）・pipeline_loaded false（base_model MiniMaxH3）・直前の drive2_s1440.log 最終行 [2026-11-02 06:04:46] ALL DONE・bash.exe の計測プロセス なし（commit_monitor.ps1 は稼働中）
+- 2026-11-02 10:31:29 load 開始（MiniMaxH3・--transformer default）
+- 2026-11-02 10:31:38 load 完了（7.6 秒・transformer check default/default/default）→ idle-calib 3 分 開始
+- 2026-11-02 idle-calib 3 分 完了（10:34:45。共有 中央値 103.3MB・専有 921.2MB・SM 中央値 0%・rxpci 中央値 0）
+- 2026-11-02 10:35:16 s1440_141_20 開始（2560×1472×141・sage・20 ステップ・K=1・c の 20 ステップの確認・基準点 b1440・JOB_TIMEOUT 28800。plan は p_s1440_141_r2 と label・steps・purpose のみ差・preflight 警告は attention と seed の 2 つ）
+- 2026-11-02 11:44:34 s1440_141_20 終了（4152 秒）。判定 comfortable・照合 ok・denoise Δ−31.9 n=3946／decode Δ+74.9 n=144・video+cond=158240・S=162428・s/step 197.9・cap 14015・peak 10835（denoise 10242）／reserved 14848（denoise 13730）・retries 2・inactive_split 4544・prefetch on・コミット最大 61.95GiB（44.1%）→ **2560×1472 の c＝141 は 20 ステップでも快適**
+- 2026-11-02 11:45:11 終わりの手順 開始（restore-state）
+- 2026-11-02 11:45:21 restore-state（MiniMaxH3・default）→ state.json と original_state.json 一致（active・selections とも。LTX23 sulphur_distil_fp8mixed）→ unload（pipeline_loaded false）→ 3 点確認（待ち行列 空・commit_log 最終行 11:45:20・bash.exe は確認用のシェルのみ・drive2／rp.sh なし）。集計は更新していない（監督が別に行う）

@@ -20502,3 +20502,47 @@ GPU の使用はオーナーの了承を得た。台本・自己検査の結果�
 - G-9b: 元の `input.mp4` を同じ条件で → 422 `REFERENCE_AUDIO_SILENT`。
 
 オーナーの実機確認の結果（2026-11-01、バックエンドの再起動後）: G-8a（422 `SOURCE_AUDIO_TOO_SHORT`）・G-8b（422 `SOURCE_AUDIO_SILENT`）・G-9a（422 `REFERENCE_AUDIO_NO_STREAM`）・G-9b（422 `REFERENCE_AUDIO_SILENT`）の 4 件すべて合格。
+
+## 192. ★台帳 §1-95 MiniMax H3 の快適上限の較正（Turbo なし・int8 ConvRot・VRAM 16GB mode on）・2 夜＋昼 1 点・32 計測点・裁定 89（2026-11-01〜02）
+
+### 192.1 結論
+
+- **較正は完了した。製品コード・記述子・操作パネルは 1 行も変えていない。** 配信値は未変更で、反映は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-119 で行う。
+- 快適でなかった点はすべて VRAM 16GB mode の上限での OOM（GPU メモリ不足）で、共有メモリへの退避も先読みの降格も出なかった。映像＋条件行で完走の最大と OOM の最小の間に 1 本の線が引け、1280×768 は梯子の上限の 481 フレームまで快適だった。attention（sage／sdpa）で境界は動かなかった。数値と表は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17 が正本である。
+- 行の形（`requires` の鍵・`single_budget` の値・種別）はオーナー裁定で本項では決めず、§1-119 の討論に回した。台帳は CLOSED 3-268。
+
+### 192.2 目的と裁定
+
+- 目的: 台帳 §1-95 の到達条件「測って線を決め、行の形を提案し、文書に書く」。製品コードは変えない。
+- 裁定 89（[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2）: 2026-11-01 の 9 件（線は Turbo なしで定義・範囲は Single・VRAM 16GB mode off は測らない・キーフレーム 1 枚と 10 枚・種別は推奨案を提案〔2026-11-02 の (2) で取り消し。種別は §1-119 で決める〕・m×n ≥ 2³¹ は未実測と記録・GPU は夜間で弾ごとに了承・attention は sage を主で sdpa を照合・記述子への追記は §1-119 と同じコミット。行の形は文書に書くとした点は 2026-11-02 の (2) で取り消し、§1-119 の討論へ）と、2026-11-02 の 5 件（結論の形は (a)(c)(d)・行の形は本項で決めない・K=10 は事実のみ・sdpa の行は分けない・2560×1472 の 20 ステップは昼に取った）。
+
+### 192.3 方法
+
+- **較正台**: `outputs/comfort-calib-h3-2026-11-01/`（git 管理外）。`outputs/comfort-calib-2026-10-04/` のコードを複製し、H3 向けに拡張した（差分は `harness_diff.txt`）。要求は 11 個の鍵だけを送り（LTX の加速の鍵・`keep_resident`・`vram16_mode` は送らない＝製品の既定）、`used_matches_request` で全点を照合した。
+- **判定規則 v3″**: 快適 = 完了し、OOM・退避（`denoise`／`decode` の窓の共有メモリが基準点より +300MB 以上）・先読みの降格のどれにも当たらない。線の軸は映像＋条件行。詳細は快適上限表 §17.2。
+- **腕と順序**: 夜 1（1280×768。基準点・Turbo の増分・K=1 と 10・sdpa）、夜 2（1280×768 の 20 ステップ・1920×1088・2560×1472）、昼 3（2560×1472 の 20 ステップ 1 点）。計測点は 32（夜 1 が 10・夜 2 が 21・昼 3 が 1）。ほかに煙の点 1 と復帰の捨てラン 7 を挟んだ。
+
+### 192.4 結果
+
+表・式・要点は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17.4〜§17.5 が正本である（件数や値はここに書き写さない）。全点の値は RESULTS §3。
+
+### 192.5 証明（一次記録）
+
+- 数値の正本: `outputs/comfort-calib-h3-2026-11-01/RESULTS.md`。点ごとの記録は `runs/<label>/run.json`、時系列は `progress.md`、集計は `report_output.txt`・`commit_table.md`。
+- 複写: [`Docs/Outputs-archive/comfort-calib-h3-2026-11-01/`](Outputs-archive/comfort-calib-h3-2026-11-01/)（`runs/` は複写していない）。
+- RESULTS §3 の計測点 32 行の 5 列は、`run.json` と機械で突き合わせて差 0 を確認した（RESULTS §3 の自己点検）。
+
+### 192.6 台帳と文書
+
+- 台帳: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-268 を新設し、[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-95 を外した。派生は §1-119（起票済み。前提を書き直した）。
+- 文書: [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17 を新設し、§1.1 に 1 文を足した。[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) に裁定 89 を足し、§13 の 2 項を現行化した。
+
+### 192.7 申し送り
+
+1. **較正台の読み取りの競合**: サーバーは `status=failed` を先に立てて `error` を後で書くので、その間に読むと `error` が空の failed と記録される。OOM の 6 点がこれに当たり、サーバーから取り直して `calib.py reanalyse` で判定を直した。`calib.py` は変えていない（RESULTS §10 の 3）。
+2. **OOM の点の S の推定**: 「同じプロンプトの最新の完了点の text 行数」で推定するので、捨てランの text（640×384＝278）を拾う。s1080_294 と s1440_192 は手で訂正した（RESULTS §10 の 5）。線の軸の映像＋条件行は text を含まないので影響しない。
+3. **コミット上限**: 実測は 138.9〜140.3GiB で、計画の 143GiB は誤りだった。
+4. **s1440_294 の落ちた場所**: `engine_h3/dit.py:551` の埋め込み（`embed_rows`）。ほかの 6 点は `engine_h3/lowvram.py:178`。
+5. **`drive2.sh` の `--job-timeout`**: 環境変数 `JOB_TIMEOUT` で変えられるようにした。sdpa の 20 ステップの点が自動の 10,800 秒に収まらず、数えない点になったため。
+6. **夜 1 の HEAD**: `6ed8b1f`。開始時には記録しておらず、監督が後から確かめて `git_state_start_night1.txt` に書いた。
+7. **`calib/calibration.json`**: idle-calib が上書きする（判定には影響しない）。

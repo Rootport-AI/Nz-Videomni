@@ -1,0 +1,2240 @@
+> **このファイルは実機の `outputs/comfort-calib-h3-2026-11-01/harness_diff.txt`（git追跡外）のスナップショットである（2026-11-02複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+# diff -u comfort-calib-2026-10-04 -> comfort-calib-h3-2026-11-01 (code files only; regenerated 2026-11-01 after the supervisor's rulings)
+--- comfort-calib-2026-10-04/calib.py	2026-10-05 20:46:48.981037100 +0900
++++ comfort-calib-h3-2026-11-01/calib.py	2026-11-01 01:29:54.478128200 +0900
+@@ -2,6 +2,16 @@
+ # -*- coding: utf-8 -*-
+ r"""VRAM comfort-limit calibration harness (2026-09-04, 2nd campaign; copy for the 2026-10-03 P1 campaign).
+ 
++H3 COPY (2026-11-01, 台帳 §1-95, plan snug-booping-sphinx.md §2.4): copied from
++outputs/comfort-calib-2026-10-04/ and extended for MiniMax H3 (descriptor id
++``MiniMaxH3``, family id ``h3``).  Every H3 path is a SEPARATE function chosen
++by ``is_h3(point)`` -- token_counts_h3 / build_request_h3 / used_check_h3 /
++analyse_h3 / check_point_h3 -- so the LTX paths below stay byte-identical to
++the 10-04 bench.  H3 verdict = v3'' (``verdict_v3dprime``): OOM / plateau in
++the denoise or decode window (+300 MB over the same arm's baseline) /
++prefetch degraded -> not comfortable.  ``run --dry-run`` prints the request
++bodies without a server.
++
+ Copied from outputs/comfort-calib-2026-08-31/calib.py and extended for
+ §3-133 (reference-conditioned single shot) and §3-134 (canvas extension /
+ outpainting).  The 2026-08-31 bench is READ-ONLY history and is never edited.
+@@ -77,7 +87,10 @@
+ ROOT = HERE.parents[1]                      # ...\Nz-Videomni
+ LOGS = ROOT / "logs"
+ SERVER_LOG = LOGS / "server.log"
+-WORKER_LOGS = {"ltx23": LOGS / "ltx_worker.log", "ltx25": LOGS / "ltx25_worker.log"}
++WORKER_LOGS = {"ltx23": LOGS / "ltx_worker.log", "ltx25": LOGS / "ltx25_worker.log",
++               # H3 (2026-11-01): services/engines/h3/adapter.py _LOG_NAME.  No
++               # PHASE / tqdm rows; tailed for the OOM evidence only.
++               "h3": LOGS / "h3_worker.log"}
+ OUTPUTS = ROOT / "outputs"
+ RUN_PS1 = ROOT / "run.ps1"
+ 
+@@ -181,6 +194,52 @@
+ # PCIe: record the share of samples above this rate as well as p90/max.
+ PCIE_HEAVY_MB_S = 5000.0
+ 
++# === MiniMax H3 (2026-11-01, 台帳 §1-95) =====================================
++# Descriptor id / family id.  Only MiniMaxH3 points take the H3 paths.
++H3_BASE_MODEL = "MiniMaxH3"
++# Request rules: services/engines/h3/adapter.py REQUEST_RULES (32 multiple,
++# 17n+5 frames from 22 to 481, 24 fps fixed, steps 1..50).
++H3_DIMENSION_MULTIPLE = 32
++H3_FRAMES_STEP = 17
++H3_FRAMES_OFFSET = 5
++H3_FRAMES_MIN = 22
++H3_FRAMES_MAX = 481
++H3_STEPS_MIN, H3_STEPS_MAX = 1, 50
++H3_MAX_KEYFRAMES = 10
++H3_AUDIO_LATENTS_PER_SECOND = 40          # engine_h3/constants.py audio_latents()
++# The user's defaults (plan §2.1): API / adapter / operation panel / Gradio.
++# A point that differs from these gets a preflight WARNING (plan §2.4-11).
++H3_USER_DEFAULTS = {"attention_backend": "sdpa", "block_swap_prefetch": True,
++                    "num_inference_steps": 20, "seed": -1, "loras": []}
++# The only LoRA this campaign may attach (the Turbo increment arm, plan §2.1).
++H3_TURBO_LORA = "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16"
++H3_ALLOWED_LORAS = {H3_TURBO_LORA}
++# The only accel keys an H3 request carries.  The LTX ones
++# (fused_gguf_dequant_kernel / vae_mode / keep_resident_embeddings) and
++# keep_resident / vram16_mode are NOT sent (= the user's defaults).
++H3_ACCEL_KEYS = ("attention_backend", "block_swap_prefetch")
++# The windows v3'' judges, and the one it only records (plan §2.2).
++H3_JUDGED_WINDOWS = ("denoise", "decode")
++H3_RECORDED_WINDOWS = ("encode",)
++# server.log labels (prefix "generate"; services/engines/ltx/adapter.py
++# _CHAIN_STAGE_LABELS, used by the H3 adapter's _read_worker_events).
++H3_STAGE_LABELS = {"encode": "text encode", "denoise": "stage-1 denoise",
++                   "decode": "VAE decode"}
++# job.error of an OOM: api/errors.py gpu_oom -> "GPU_OOM: ... (detail)".  The
++# VRAM 16GB mode cap's own message (engine_h3/pipeline_h3.py VRAM16_OOM_MESSAGE)
++# is matched on its first, distinctive clause.
++H3_OOM_PREFIX = "GPU_OOM:"
++H3_VRAM16_OOM_NEEDLE = "VRAM 16GB mode でも GPU メモリが足りません"
++# Per-point poll timeout (plan §2.4-9): 4-step points 7,200 s, 20-step 10,800 s.
++H3_JOB_TIMEOUT_SHORT_S = 7200.0
++H3_JOB_TIMEOUT_LONG_S = 10800.0
++H3_SHORT_STEPS_MAX = 4
++# The baseline's denoise shared median, past band (§168 / §169).  Different
++# bench and window, so it only WARNS (plan §2.2 "基準点").
++H3_BASELINE_PAST_BAND_MB = (1170.0, 1237.0)
++# Placeholder written into a --dry-run body instead of a real image_id.
++DRY_RUN_IMAGE_ID = "<image_id: POST /upload/image of %s sha256=%s>"
++
+ 
+ # === small helpers ==========================================================
+ def now_iso() -> str:
+@@ -330,6 +389,57 @@
+     return record["video_id"], dict(record, source="uploaded")
+ 
+ 
++# --- H3 keyframe image (2026-11-01) -------------------------------------------
++def sha256_of(path: Path) -> str:
++    import hashlib
++    digest = hashlib.sha256()
++    with open(path, "rb") as fh:
++        for block in iter(lambda: fh.read(1 << 20), b""):
++            digest.update(block)
++    return digest.hexdigest()
++
++
++def keyframe_image_path(point: dict):
++    """The point's keyframe image as an absolute path (relative = to HERE), or None."""
++    name = (point.get("keyframes") or {}).get("image_path")
++    if not name:
++        return None
++    path = Path(name)
++    return path if path.is_absolute() else HERE / path
++
++
++def resolve_keyframe_image(point: dict, cache: dict, refresh: bool = False):
++    """``(image_id, record)`` for an H3 point's keyframe image.
++
++    Uploaded ONCE per (path, sha256) and the id reused by every later point
++    (services/upload_store.py 82-92: an image_id stays valid until the file is
++    removed).  ``refresh`` drops the remembered id and uploads again -- used
++    when a submit answered IMAGE_NOT_FOUND (the uploads store was cleaned).
++    """
++    path = keyframe_image_path(point)
++    if path is None:
++        raise ValueError("point %r: keyframes.image_path is missing" % point.get("label"))
++    if not path.exists():
++        raise FileNotFoundError("keyframe image not found: %s" % path)
++    digest = sha256_of(path)
++    key = "image|%s|%s" % (path.name, digest)
++    if not refresh and key in cache and cache[key].get("image_id"):
++        return cache[key]["image_id"], dict(cache[key], source="cache")
++    say("  uploading keyframe image %s (sha256 %s)" % (path.name, digest[:16]))
++    code, resp = api_multipart("/upload/image", "file", path, "image/png")
++    if code >= 400 or not resp or not resp.get("image_id"):
++        raise RuntimeError("image upload failed %s: %s"
++                           % (code, json.dumps(resp, ensure_ascii=False)[:400]))
++    record = {"image_id": resp["image_id"], "image_path": str(path), "sha256": digest,
++              "uploaded_at": now_iso(), "width": resp.get("width"),
++              "height": resp.get("height"), "stored_path": resp.get("stored_path")}
++    cache[key] = record
++    save_upload_cache(cache)
++    say("  keyframe image uploaded: image_id=%s %sx%s"
++        % (record["image_id"], record["width"], record["height"]))
++    return record["image_id"], dict(record, source="uploaded")
++
++
+ def port_open() -> bool:
+     sock = socket.socket()
+     sock.settimeout(0.5)
+@@ -1249,7 +1359,60 @@
+     return out
+ 
+ 
++def is_h3(point: dict) -> bool:
++    return point.get("base_model") == H3_BASE_MODEL
++
++
++def engine_tag_of(point: dict) -> str:
++    """The worker-log tag for this point's engine: ltx23 / ltx25 / h3."""
++    if is_h3(point):
++        return "h3"
++    return "ltx25" if point.get("base_model") == "LTX25" else "ltx23"
++
++
++def h3_latent_frames(frames: int) -> int:
++    """17n+5 pixel frames -> 5n+2 latent frames (engine_h3/constants.py)."""
++    return (int(frames) - H3_FRAMES_OFFSET) // H3_FRAMES_STEP * 5 + 2
++
++
++def h3_frame_idx(frames: int, count: int) -> list:
++    """The K keyframes' frame_idx (plan §2.1): K=1 -> [0];
++    otherwise round(i*(F-1)/(K-1)) for i = 0..K-1 (Python round)."""
++    count = int(count)
++    if count <= 1:
++        return [0]
++    return [int(round(i * (int(frames) - 1) / (count - 1))) for i in range(count)]
++
++
++def token_counts_h3(point: dict) -> dict:
++    """H3 token counts from the geometry (the real S comes from metadata's
++    ``h3.phases.denoise.sequence``).  The line's axis is video + cond (plan
++    §2.2).  ``stage2_tokens`` is kept as an alias of video+cond so the shared
++    printing code reads one key for every engine."""
++    width, height = int(point["width"]), int(point["height"])
++    frames = int(point["num_frames"])
++    gw, gh = width // 32, height // 32
++    latent = h3_latent_frames(frames)
++    k = len((point.get("keyframes") or {}).get("frame_idx") or [])
++    a_lat = int(round(frames / FRAME_RATE * H3_AUDIO_LATENTS_PER_SECOND))
++    video = gw * gh * latent
++    cond = k * gw * gh
++    return {
++        "engine": "h3",
++        "width_tokens": gw, "height_tokens": gh, "grid": [gh, gw],
++        "latent_frames": latent, "keyframes": k,
++        "video_tokens": video, "cond_tokens": cond,
++        "video_plus_cond": video + cond,
++        "audio_latents": a_lat, "audio_rows": 2 * a_lat,
++        "total_pixel_frames": frames,
++        "stage2_tokens": video + cond,
++        "decode_chunks_expected": None,
++    }
++
++
+ def token_counts(point: dict) -> dict:
++    if is_h3(point):
++        return token_counts_h3(point)
+     width, height = int(point["width"]), int(point["height"])
+     kind = point.get("kind", "single")
+     wt, ht = width // 32, height // 32
+@@ -1276,7 +1439,41 @@
+     return counts
+ 
+ 
++def h3_accel(point: dict) -> dict:
++    """The two accel keys an H3 point sends (plan file ``accel``, else the user default)."""
++    accel = {key: H3_USER_DEFAULTS[key] for key in H3_ACCEL_KEYS}
++    accel.update({k: v for k, v in (point.get("accel") or {}).items() if k in H3_ACCEL_KEYS})
++    return accel
++
++
++def build_request_h3(point: dict, image_id=None):
++    """The H3 /generate body (plan §2.4-4).  Sent keys: prompt, width, height,
++    num_frames, frame_rate, seed, attention_backend, block_swap_prefetch,
++    num_inference_steps, loras, conditioning_images ({image_id, frame_idx},
++    NO strength -- the adapter 422s one).  NOT sent: the LTX accel keys,
++    keep_resident, vram16_mode (= the user's defaults: off / on)."""
++    accel = h3_accel(point)
++    frame_idx = (point.get("keyframes") or {}).get("frame_idx") or []
++    body = {
++        "prompt": point.get("prompt") or "",
++        "width": int(point["width"]), "height": int(point["height"]),
++        "num_frames": int(point["num_frames"]),
++        "frame_rate": float(point.get("frame_rate", FRAME_RATE)),
++        "seed": int(point.get("seed", DEFAULT_SEED)),
++        "attention_backend": accel["attention_backend"],
++        "block_swap_prefetch": bool(accel["block_swap_prefetch"]),
++        "num_inference_steps": int(point["num_inference_steps"]),
++        "loras": [{"name": spec["name"], "strength": float(spec.get("strength", 1.0))}
++                  for spec in (point.get("loras") or [])],
++        "conditioning_images": [{"image_id": image_id, "frame_idx": int(n)}
++                                for n in frame_idx],
++    }
++    return "/generate", body
++
++
+ def build_request(point: dict, video_id=None):
++    if is_h3(point):
++        return build_request_h3(point, image_id=video_id)
+     accel = dict(DEFAULT_ACCEL)
+     accel.update(point.get("accel") or {})
+     kind = point.get("kind", "single")
+@@ -1405,6 +1602,82 @@
+     return "off" if vae_mode == "default" else "on"
+ 
+ 
++def h3_used_from_meta(meta: dict) -> dict:
++    """The H3 *_used facts, each read from where metadata.json actually puts it.
++
++    Top level: attention_used / block_swap_prefetch_used / keep_resident_used /
++    vram16_mode_used (services/engines/h3/adapter.py GenerationOutcome).  Under
++    ``h3`` (adapter ``_DONE_FACTS`` + the worker's own block,
++    engine_h3/pipeline_h3.py 838-867): images_used, num_inference_steps, loras
++    (ONLY on a LoRA job -- absent otherwise, pipeline_h3.py 839-840; the entries'
++    ``name`` is the FILE name), phases.denoise.dit_source.  The transformer is
++    models.selection.transformer.name (as on LTX).
++    """
++    h3 = meta.get("h3") or {}
++    denoise = ((h3.get("phases") or {}).get("denoise")) or {}
++    loras = h3.get("loras")
++    selection = (meta.get("models") or {}).get("selection") or {}
++    return {
++        "vram16_mode_used": meta.get("vram16_mode_used"),
++        "attention_used": meta.get("attention_used"),
++        "keep_resident_used": meta.get("keep_resident_used"),
++        "block_swap_prefetch_used": meta.get("block_swap_prefetch_used"),
++        "images_used": h3.get("images_used"),
++        "num_inference_steps": h3.get("num_inference_steps"),
++        "dit_source": denoise.get("dit_source"),
++        "loras": (None if loras is None else
++                  [{"name": Path(str(e.get("name"))).stem,
++                    "strength": e.get("strength")} for e in loras
++                   if isinstance(e, dict)]),
++        "loras_present_in_metadata": loras is not None,
++        "transformer_used": (selection.get("transformer") or {}).get("name"),
++    }
++
++
++def used_check_h3(point: dict, used: dict, completed: bool = True) -> dict:
++    """H3's *_used cross-check (plan §2.4-7).  Unlike LTX's ``used_check`` a
++    None is a MISMATCH, never skipped -- with one documented exception:
++    ``loras`` is absent from metadata on a job without LoRA (the engine writes
++    ``h3.loras`` only when the request had some), so absent == [] is the
++    specification there.  A job that did not complete wrote no metadata.json
++    (§4-31), so the check is not applicable (``ok`` None) rather than failed.
++    """
++    accel = h3_accel(point)
++    want_loras = [{"name": spec["name"], "strength": float(spec.get("strength", 1.0))}
++                  for spec in (point.get("loras") or [])]
++    want = {
++        "vram16_mode_used": "on",
++        "attention_used": accel["attention_backend"],
++        "keep_resident_used": "off",
++        # block_swap_prefetch_used is NOT checked here (監督裁定 2026-11-01): the
++        # check asks "were the conditions sent honoured", and a prefetch that
++        # fell back to the synchronous path is a RESULT -- v3'' counts it as
++        # ``prefetch_degraded`` (not comfortable) instead.
++        "images_used": len((point.get("keyframes") or {}).get("frame_idx") or []),
++        "loras": want_loras,
++        "num_inference_steps": int(point["num_inference_steps"]),
++        "dit_source": "file",
++        "transformer_used": point.get("transformer") or "default",
++    }
++    if not completed:
++        return {"expected": want, "mismatches": {}, "ok": None,
++                "not_applicable": "job did not complete: no metadata.json"}
++    mismatches = {}
++    for key, value in want.items():
++        actual = used.get(key)
++        if key == "loras":
++            if actual is None and not used.get("loras_present_in_metadata"):
++                actual = []          # absent == no LoRA (pipeline_h3.py 839-840)
++            actual_cmp = [(e.get("name"), rnd(e.get("strength"), 4)) for e in actual]
++            want_cmp = [(e["name"], rnd(e["strength"], 4)) for e in value]
++            if actual_cmp != want_cmp:
++                mismatches[key] = {"requested": value, "used": actual}
++            continue
++        if actual is None or actual != value:
++            mismatches[key] = {"requested": value, "used": actual}
++    return {"expected": want, "mismatches": mismatches, "ok": not mismatches}
++
++
+ def used_check(point: dict, used: dict) -> dict:
+     """Compare the server's *_used report against what we asked for.
+ 
+@@ -1479,11 +1752,372 @@
+     return job
+ 
+ 
++def manifest_records() -> list:
++    rows = []
++    if MANIFEST.exists():
++        for line in MANIFEST.read_text(encoding="utf-8").splitlines():
++            line = line.strip()
++            if not line:
++                continue
++            try:
++                rows.append(json.loads(line))
++            except Exception:
++                continue
++    return rows
++
++
++def baseline_v3dprime_from_manifest(label) -> dict:
++    """The H3 baseline's window medians (``v3dprime.windows``), latest completed run."""
++    out = {}
++    if not label:
++        return out
++    for rec in manifest_records():
++        if rec.get("label") != label or rec.get("status") != "completed":
++            continue
++        wins = ((rec.get("v3dprime") or {}).get("windows")) or {}
++        out = {name: {"shared_median_mb": w.get("shared_median_mb"),
++                      "wddm_samples": w.get("wddm_samples")}
++               for name, w in wins.items() if isinstance(w, dict)}
++    return out
++
++
++def h3_text_rows_from_manifest(prompt):
++    """For an OOM point (no metadata.json): the text row count of the latest
++    COMPLETED H3 point with the same prompt (plan §2.2: S is computed)."""
++    found = None
++    for rec in manifest_records():
++        if rec.get("status") != "completed" or rec.get("base_model") != H3_BASE_MODEL:
++            continue
++        if ((rec.get("request_sent") or {}).get("prompt")) != prompt:
++            continue
++        text = (((rec.get("h3") or {}).get("sequence")) or {}).get("text")
++        if text is not None:
++            found = {"text": text, "from_label": rec.get("label")}
++    return found
++
++
++def h3_worker_load_state(upto=None) -> dict:
++    """The worker's LAST load before this job, read from logs/h3_worker.log up
++    to byte ``upto`` (the size when the job was submitted): the
++    ``load: transformer_path OK ... <path>`` line and the ``LOAD_OK {...}``
++    options (blocks_on_gpu / attention_backend / block_swap_prefetch /
++    deterministic -- the LOAD defaults; the per-job values are on the job's own
++    ``generate:`` line).  Copied into run.json so an OOM point (no
++    metadata.json) still shows which weights and options it ran with."""
++    path = WORKER_LOGS["h3"]
++    out = {"log": str(path), "upto_bytes": upto, "transformer_path_line": None,
++           "transformer_path": None, "load_ok_options": None, "load_ok_device": None}
++    if not path.exists():
++        return out
++    with open(path, "rb") as fh:
++        data = fh.read() if upto is None else fh.read(int(upto))
++    for line in data.decode("utf-8", "replace").splitlines():
++        if "load: transformer_path OK" in line:
++            out["transformer_path_line"] = line.strip()
++            out["transformer_path"] = line.strip().split(") ", 1)[-1] if ") " in line else None
++        elif "LOAD_OK {" in line:
++            try:
++                payload = json.loads(line[line.index("{"):])
++                out["load_ok_options"] = payload.get("options")
++                out["load_ok_device"] = payload.get("device")
++            except Exception:
++                out["load_ok_options"] = {"unparsed": line.strip()[:400]}
++    return out
++
++
++def h3_stage_window(events: list, name: str) -> dict:
++    """One H3 stage's span from server.log: [the "started" line -> the last line].
++
++    The H3 worker emits each stage's index-0 event BEFORE any work (encode
++    index 0, ``stage1_denoise`` 0/N before step 1, decode 0), so the started
++    line opens the window and the final line closes it: ``text encode`` ends
++    on ``5/4`` with keyframes (any K; engine_h3 encode_steps) / ``4/3`` for T2V,
++    ``stage-1 denoise`` on ``N/N``, ``VAE decode`` on ``4/3 steps`` (after the
++    mp4 write).  Lines in between are thinned to one per 2 s, but the first
++    and the last always appear (ltx/adapter.py _log_stage_progress).
++    Because the denoise started line comes before step 1, the per-step time
++    is ``elapsed / last_done`` -- NOT the LTX ``elapsed / (last_done - 1)``
++    of :func:`stage_groups`'s own ``sec_per_step``.
++    """
++    groups = stage_groups(events, H3_STAGE_LABELS[name])
++    if not groups:
++        return {"name": name, "label": H3_STAGE_LABELS[name], "found": False,
++                "start": None, "end": None}
++    grp = groups[-1]
++    done, total = grp.get("last_done"), grp.get("total")
++    elapsed = grp.get("log_elapsed")
++    out = {"name": name, "label": H3_STAGE_LABELS[name], "found": True,
++           "groups_seen": len(groups),
++           "start": grp["start_t"], "end": grp["end_t"],
++           "start_iso": grp["start_iso"], "end_iso": grp["end_iso"],
++           "lines": grp["lines"], "last_done": done, "total": total,
++           "log_elapsed_s": elapsed,
++           "completed": bool(done is not None and total and done >= total)}
++    if name == "denoise":
++        out["sec_per_step_log"] = (rnd(elapsed / done, 3)
++                                   if (elapsed is not None and done) else None)
++    return out
++
++
++def analyse_h3(point: dict, monitors, job: dict, t_start: float,
++               t_end: float, calib: dict, server_text: str) -> dict:
++    """v3'' for one H3 point (plan §2.2).  Windows: denoise + decode judged,
++    encode recorded only.  OOM / plateau / prefetch degraded -> not comfortable."""
++    run_dir = monitors.out_dir
++    counts = token_counts_h3(point)
++    wddm = read_wddm(monitors.wddm_csv)
++    dmon = read_dmon(monitors.dmon_txt)
++    tail = [r for r in monitors.tail_rows() if r["log"] == "h3"]
++    events = read_server_events(server_text)
++
++    job_id = job.get("job_id")
++    status = job.get("status")
++    error = job.get("error") or ""
++    completed = status == "completed"
++    meta, meta_path = {}, None
++    if job_id:
++        candidate = OUTPUTS / job_id / "metadata.json"
++        if candidate.exists():
++            meta_path = candidate
++            try:
++                meta = json.loads(candidate.read_text(encoding="utf-8"))
++                (run_dir / "metadata.json").write_text(
++                    json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
++            except Exception:
++                meta = {}
++
++    # -- windows -------------------------------------------------------------
++    spans = {name: h3_stage_window(events, name) for name in H3_STAGE_LABELS}
++    stats = {name: window_stats(wddm, dmon, span["start"], span["end"], calib)
++             for name, span in spans.items()}
++    is_baseline = not point.get("baseline_label")
++    base = baseline_v3dprime_from_manifest(point.get("baseline_label"))
++    windows = {}
++    for name in H3_JUDGED_WINDOWS + H3_RECORDED_WINDOWS:
++        win = stats[name]
++        samples = win.get("wddm_samples") or 0
++        median = win.get("shared_median_mb")
++        base_median = (base.get(name) or {}).get("shared_median_mb")
++        judged = name in H3_JUDGED_WINDOWS
++        enough = bool(win.get("evaluated") and samples >= MIN_WINDOW_SAMPLES
++                      and median is not None)
++        decidable = bool(judged and enough and base_median is not None)
++        if not win.get("evaluated"):
++            reason = "window not found"
++        elif samples < MIN_WINDOW_SAMPLES:
++            reason = "fewer than %d WDDM samples" % MIN_WINDOW_SAMPLES
++        elif not judged:
++            reason = "recorded only (plan §2.2)"
++        elif is_baseline:
++            reason = "baseline point"
++        elif base_median is None:
++            reason = "no baseline for this window"
++        else:
++            reason = None
++        windows[name] = {
++            "judged": judged,
++            "shared_median_mb": median,
++            "shared_peak_mb": win.get("shared_peak_mb"),
++            "baseline_shared_median_mb": base_median,
++            "delta_mb": (rnd(median - base_median, 1)
++                         if (median is not None and base_median is not None) else None),
++            "wddm_samples": samples,
++            "enough_samples": enough,
++            "seconds": win.get("seconds"),
++            "decidable": decidable,
++            "reason_undecidable": None if decidable else reason,
++            "plateau": (median > base_median + RELATIVE_PLATEAU_MB) if decidable else None,
++            "start_iso": spans[name].get("start_iso"),
++            "end_iso": spans[name].get("end_iso"),
++        }
++
++    # -- facts from metadata.json ------------------------------------------
++    used = h3_used_from_meta(meta)
++    check = used_check_h3(point, used, completed=completed and bool(meta))
++    h3 = meta.get("h3") or {}
++    phases = h3.get("phases") or {}
++    denoise = phases.get("denoise") or {}
++    steps = h3.get("num_inference_steps") or point.get("num_inference_steps")
++    read_s = (denoise.get("dit") or {}).get("read_seconds")
++    sec_per_step_meta = None
++    if denoise.get("seconds") is not None and steps:
++        sec_per_step_meta = rnd((float(denoise["seconds"]) - float(read_s or 0.0))
++                                / float(steps), 3)
++    sequence = denoise.get("sequence")
++    sequence_estimate = None
++    if sequence is None:
++        text = h3_text_rows_from_manifest(point.get("prompt"))
++        sequence_estimate = {
++            "video": counts["video_tokens"], "cond": counts["cond_tokens"],
++            "audio": counts["audio_rows"],
++            "text": (text or {}).get("text"),
++            "text_from_label": (text or {}).get("from_label"),
++            "total": (counts["video_tokens"] + counts["cond_tokens"] + counts["audio_rows"]
++                      + text["text"]) if text else None,
++            "source": "computed from the geometry (no metadata.json); text rows from "
++                      "the latest completed point with the same prompt",
++        }
++    facts = {
++        "phase_seconds": {n: (phases.get(n) or {}).get("seconds")
++                          for n in ("encode", "image_encode", "denoise", "decode")},
++        "phase_peak_vram_mb": {n: (phases.get(n) or {}).get("peak_vram_mb")
++                               for n in ("encode", "image_encode", "denoise", "decode")},
++        "phase_peak_vram_reserved_mb": {n: (phases.get(n) or {}).get("peak_vram_reserved_mb")
++                                        for n in ("encode", "image_encode", "denoise", "decode")},
++        "dit_read_seconds": read_s,
++        "dit_source": denoise.get("dit_source"),
++        "sec_per_step_meta": sec_per_step_meta,
++        "sec_per_step_meta_definition": "(h3.phases.denoise.seconds - "
++                                        "h3.phases.denoise.dit.read_seconds) / steps",
++        "sec_per_step_log": spans["denoise"].get("sec_per_step_log"),
++        "sequence": sequence,
++        "sequence_estimate": sequence_estimate,
++        "vram16": denoise.get("vram16"),
++        "commit_peak_gib": h3.get("commit_peak_gib"),
++        "rss_peak_gib": h3.get("rss_peak_gib"),
++        "num_inference_steps": h3.get("num_inference_steps"),
++        "images_used": h3.get("images_used"),
++        "loras": h3.get("loras"),
++    }
++
++    # -- v3'' ----------------------------------------------------------------
++    oom = error.startswith(H3_OOM_PREFIX)
++    oom_vram16 = bool(oom and H3_VRAM16_OOM_NEEDLE in error)
++    prefetch_used = used.get("block_swap_prefetch_used")
++    prefetch_requested = bool(h3_accel(point)["block_swap_prefetch"])
++    prefetch_degraded = None
++    if completed and meta:
++        prefetch_degraded = bool(prefetch_requested and prefetch_used != "on")
++    reasons = []
++    if is_baseline:
++        verdict = "smoke" if point.get("smoke") else "baseline"
++    elif not completed:
++        verdict = "oom" if oom else (status or "unknown")
++        if oom:
++            reasons.append("oom_vram16" if oom_vram16 else "oom")
++    else:
++        for name in H3_JUDGED_WINDOWS:
++            if windows[name]["plateau"]:
++                reasons.append("plateau:%s" % name)
++        if prefetch_degraded:
++            reasons.append("prefetch_degraded")
++        if reasons:
++            verdict = "uncomfortable"
++        elif all(windows[n]["decidable"] for n in H3_JUDGED_WINDOWS):
++            verdict = "comfortable"
++        else:
++            verdict = "undecidable"
++    comfortable = True if verdict == "comfortable" else (
++        False if verdict in ("uncomfortable", "oom") else None)
++
++    # baseline health (plan §2.2): both judged windows need >= 10 samples, and
++    # the denoise median is compared with the past band (a warning only).
++    baseline_health = None
++    if is_baseline:
++        dn = windows["denoise"]["shared_median_mb"]
++        low, high = H3_BASELINE_PAST_BAND_MB
++        baseline_health = {
++            "windows_have_enough_samples": all(windows[n]["enough_samples"]
++                                               for n in H3_JUDGED_WINDOWS),
++            "denoise_median_mb": dn,
++            "past_band_mb": [low, high],
++            "outside_past_band_by_300mb": (None if dn is None else
++                                           bool(dn < low - RELATIVE_PLATEAU_MB
++                                                or dn > high + RELATIVE_PLATEAU_MB)),
++            "note": "warning only: different bench and window from §168/§169",
++        }
++
++    evidence = [r["text"] for r in tail
++                if ("out of memory" in r["text"].lower() or "OutOfMemory" in r["text"]
++                    or "VRAM 16GB" in r["text"])][:30]
++    # 監督裁定 2026-11-01: the conditions the worker actually ran with, readable
++    # afterwards even for an OOM point (no metadata.json): the job's own
++    # ``generate:`` line (seed / geometry / attention / prefetch / vram16 /
++    # images / loras) from the tail, and the last load's transformer path +
++    # LOAD_OK options (snapshot taken by cmd_run at submit time).
++    generate_lines = [r["text"] for r in tail if "] generate:" in r["text"]
++                      or r["text"].startswith("generate:")]
++    worker_conditions = {
++        "generate_line": generate_lines[-1] if generate_lines else None,
++        "load": point.get("_h3_worker_load"),
++        "request_sent": "see request_sent (= runs/<label>/request.json body)",
++    }
++    v3dp = {
++        "protocol": "v3'' (2026-11-01, plan snug-booping-sphinx §2.2)",
++        "min_window_samples": MIN_WINDOW_SAMPLES,
++        "relative_plateau_mb": RELATIVE_PLATEAU_MB,
++        "is_baseline": is_baseline,
++        "baseline_label": point.get("baseline_label"),
++        "oom": oom, "oom_vram16": oom_vram16,
++        "prefetch_degraded": prefetch_degraded,
++        "windows": windows,
++        "reasons": reasons,
++        "comfortable": comfortable,
++        "verdict": verdict,
++        "baseline_health": baseline_health,
++    }
++    vram_opt = meta.get("vram_optimization") or {}
++    result = job.get("result") or {}
++    return {
++        "label": point["label"], "kind": point.get("kind", "single"),
++        "base_model": point.get("base_model"), "engine": "h3",
++        "status": status, "job_id": job_id, "error": job.get("error"),
++        "geometry": {"width": point["width"], "height": point["height"],
++                     "num_frames": point.get("num_frames"),
++                     "keyframes": point.get("keyframes"),
++                     "loras": point.get("loras"),
++                     "num_inference_steps": point.get("num_inference_steps"),
++                     "attention_backend": h3_accel(point)["attention_backend"],
++                     "seed": point.get("seed", DEFAULT_SEED)},
++        "tokens": counts,
++        "wall": {"start_iso": iso(t_start), "end_iso": iso(t_end),
++                 "start_epoch": rnd(t_start, 3), "end_epoch": rnd(t_end, 3),
++                 "seconds": rnd(t_end - t_start, 2)},
++        "request_sent": point.get("_request_sent"),
++        "keyframe_image_used": point.get("_keyframe_image_used"),
++        "used": used,
++        "used_matches_request": check,
++        "metadata": {
++            "peak_vram_mb": vram_opt.get("peak_vram_mb"),
++            "peak_vram_reserved_mb": meta.get("peak_vram_reserved_mb"),
++            "generation_time_seconds": meta.get("generation_time_seconds"),
++            "seed_used": meta.get("seed_used"),
++            "backend": meta.get("backend"),
++            "base_model": (meta.get("models") or {}).get("base_model"),
++            "models_selection": (meta.get("models") or {}).get("selection"),
++            "output_path": (meta.get("output") or {}).get("path") or result.get("output_path"),
++            "metadata_path": str(meta_path) if meta_path else None,
++        },
++        "h3": facts,
++        "h3_spans": {name: {k: v for k, v in span.items() if k not in ("start", "end")}
++                     for name, span in spans.items()},
++        "vram": {
++            "job": window_stats(wddm, dmon, t_start, t_end, calib),
++            "encode_window": stats["encode"],
++            "denoise_window": stats["denoise"],
++            "decode_window": stats["decode"],
++            "wddm_rows": len(wddm), "dmon_rows": len(dmon),
++            "wddm_interval_ms_median": rnd(med([r["dt_ms"] for r in wddm[1:]]), 1),
++            "worker_tail_rows": len(tail),
++        },
++        "worker_log_evidence": evidence,
++        "worker_conditions": worker_conditions,
++        "worker_tail_last": [r["text"] for r in tail[-20:]] if not completed else None,
++        "v3dprime": v3dp,
++        "verdict_v3dprime": verdict,
++        "baseline_v3dprime": base,
++        "calibration_used": {k: calib.get(k) for k in
++                             ("shared_p95_mb", "dedicated_p95_mb", "rxpci_p95", "txpci_p95")},
++    }
++
++
+ def analyse(point: dict, monitors: Monitors, job: dict, t_start: float,
+             t_end: float, calib: dict, server_text: str) -> dict:
++    if is_h3(point):
++        return analyse_h3(point, monitors, job, t_start, t_end, calib, server_text)
+     run_dir = monitors.out_dir
+     counts = token_counts(point)
+-    engine_tag = "ltx25" if point.get("base_model") == "LTX25" else "ltx23"
++    engine_tag = engine_tag_of(point)   # ltx23 / ltx25 here (h3 returned above)
+ 
+     wddm = read_wddm(monitors.wddm_csv)
+     dmon = read_dmon(monitors.dmon_txt)
+@@ -2054,7 +2688,56 @@
+         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+ 
+ 
++def job_timeout_for(point: dict, arg) -> float:
++    """``--job-timeout auto`` (plan §2.4-9): H3 4-step points 7,200 s, longer
++    ones 10,800 s; LTX points keep the old 7,200 s.  A number is used as is."""
++    if str(arg).lower() != "auto":
++        return float(arg)
++    if is_h3(point):
++        steps = int(point.get("num_inference_steps") or H3_USER_DEFAULTS["num_inference_steps"])
++        return H3_JOB_TIMEOUT_SHORT_S if steps <= H3_SHORT_STEPS_MAX else H3_JOB_TIMEOUT_LONG_S
++    return 7200.0
++
++
++def apply_label_suffix(plan: list, suffix: str) -> list:
++    """``run --label-suffix``: a recovery warm-up re-runs the SAME plan file
++    under a fresh label (runs/<label>/ is never overwritten)."""
++    if not suffix:
++        return plan
++    for point in plan:
++        point["label"] = point["label"] + suffix
++    return plan
++
++
++def cmd_run_dry(args) -> int:
++    """``run --dry-run``: no server, no GPU.  Prints and saves each point's
++    request body (the H3 image_id is a placeholder naming the file + sha256)."""
++    plan_path = Path(args.plan)
++    if not plan_path.is_absolute():
++        plan_path = HERE / plan_path
++    plan = apply_label_suffix(load_plan(plan_path), args.label_suffix)
++    out_dir = HERE / "dryrun"
++    out_dir.mkdir(parents=True, exist_ok=True)
++    for point in plan:
++        image_id = None
++        if is_h3(point) and (point.get("keyframes") or {}).get("frame_idx"):
++            path = keyframe_image_path(point)
++            digest = sha256_of(path) if path and path.exists() else "MISSING"
++            image_id = DRY_RUN_IMAGE_ID % (path.name if path else None, digest)
++        path_, body = build_request(point, video_id=image_id)
++        record = {"label": point["label"], "endpoint": path_, "body": body,
++                  "job_timeout_s": job_timeout_for(point, args.job_timeout),
++                  "tokens": token_counts(point)}
++        (out_dir / ("%s.request.json" % point["label"])).write_text(
++            json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
++        print(json.dumps(record, indent=2, ensure_ascii=False))
++    say("dry-run: %d point(s) -> %s" % (len(plan), out_dir))
++    return 0
++
++
+ def cmd_run(args) -> int:
++    if getattr(args, "dry_run", False):
++        return cmd_run_dry(args)
+     if not port_open():
+         say("server is not running (calib.py server start)")
+         return 1
+@@ -2068,6 +2751,7 @@
+     plan = json.loads(plan_path.read_text(encoding="utf-8"))
+     if isinstance(plan, dict):
+         plan = plan.get("points", [])
++    plan = apply_label_suffix(plan, args.label_suffix)
+     luid = discover_luid(refresh=args.refresh_luid)["chosen_luid"]
+     cooldown = float(args.cooldown)
+     say("plan %s: %d point(s); LUID %s; cooldown %.0fs between points"
+@@ -2086,11 +2770,21 @@
+         run_dir = RUNS / label
+         run_dir.mkdir(parents=True, exist_ok=True)
+         counts = token_counts(point)
+-        say("=== %s (%s %dx%d %s) stage2 tokens=%d ref tokens=%s decode chunks(exp)=%d ==="
+-            % (label, point.get("kind", "single"), point["width"], point["height"],
+-               point.get("num_frames") or point.get("clips"),
+-               counts["stage2_tokens"], counts.get("reference_tokens"),
+-               counts["decode_chunks_expected"]))
++        if is_h3(point):
++            say("=== %s (H3 %dx%d/%sf K=%d steps=%s attn=%s loras=%s) video+cond tokens=%d "
++                "(video %d + cond %d) timeout=%.0fs ==="
++                % (label, point["width"], point["height"], point.get("num_frames"),
++                   counts["keyframes"], point.get("num_inference_steps"),
++                   h3_accel(point)["attention_backend"],
++                   [s.get("name") for s in point.get("loras") or []],
++                   counts["video_plus_cond"], counts["video_tokens"], counts["cond_tokens"],
++                   job_timeout_for(point, args.job_timeout)))
++        else:
++            say("=== %s (%s %dx%d %s) stage2 tokens=%d ref tokens=%s decode chunks(exp)=%d ==="
++                % (label, point.get("kind", "single"), point["width"], point["height"],
++                   point.get("num_frames") or point.get("clips"),
++                   counts["stage2_tokens"], counts.get("reference_tokens"),
++                   counts["decode_chunks_expected"]))
+ 
+         # The requested base model must already be loaded -- never swap mid-plan.
+         code, status = api("GET", "/status", timeout=60)
+@@ -2131,9 +2825,25 @@
+                 append_manifest(record)
+                 continue
+             point["_reference_used"] = upload_rec
++        if is_h3(point) and (point.get("keyframes") or {}).get("frame_idx"):
++            try:
++                video_id, upload_rec = resolve_keyframe_image(point, upload_cache)
++            except Exception as exc:
++                say("  KEYFRAME IMAGE FAILED: %s: %s" % (type(exc).__name__, exc))
++                record = {"label": label, "status": "image_upload_failed",
++                          "error": "%s: %s" % (type(exc).__name__, exc)}
++                (run_dir / "run.json").write_text(
++                    json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
++                append_manifest(record)
++                continue
++            point["_keyframe_image_used"] = upload_rec
+ 
+         path, body = build_request(point, video_id=video_id)
+         point["_request_sent"] = body
++        if is_h3(point):
++            h3_log = WORKER_LOGS["h3"]
++            point["_h3_worker_load"] = h3_worker_load_state(
++                h3_log.stat().st_size if h3_log.exists() else None)
+         (run_dir / "point.json").write_text(
+             json.dumps(point, indent=2, ensure_ascii=False), encoding="utf-8")
+         (run_dir / "request.json").write_text(
+@@ -2144,6 +2854,24 @@
+         monitors.start()
+         t_start = time.time()
+         code, resp = api("POST", path, body, timeout=300)
++        if (is_h3(point) and code == 404
++                and "IMAGE_NOT_FOUND" in json.dumps(resp, ensure_ascii=False)):
++            # The uploads store dropped the remembered image (it is a temporary
++            # store): upload once more and resubmit ONCE.
++            say("  IMAGE_NOT_FOUND for the cached image_id -> re-upload and resubmit once")
++            try:
++                video_id, upload_rec = resolve_keyframe_image(point, upload_cache, refresh=True)
++                point["_keyframe_image_used"] = upload_rec
++                path, body = build_request(point, video_id=video_id)
++                point["_request_sent"] = body
++                (run_dir / "point.json").write_text(
++                    json.dumps(point, indent=2, ensure_ascii=False), encoding="utf-8")
++                (run_dir / "request.json").write_text(
++                    json.dumps({"endpoint": path, "body": body}, indent=2, ensure_ascii=False),
++                    encoding="utf-8")
++                code, resp = api("POST", path, body, timeout=300)
++            except Exception as exc:
++                code, resp = 599, {"raw": "re-upload failed: %s: %s" % (type(exc).__name__, exc)}
+         if code >= 400 or not resp or not resp.get("job_id"):
+             monitors.stop()
+             monitors.slice_server_log()
+@@ -2156,7 +2884,7 @@
+             continue
+         job_id = resp["job_id"]
+         say("  job %s submitted" % job_id)
+-        job = poll_job(job_id, timeout=float(args.job_timeout))
++        job = poll_job(job_id, timeout=job_timeout_for(point, args.job_timeout))
+         t_end = time.time()
+         monitors.stop()
+         server_text = monitors.slice_server_log()
+@@ -2172,6 +2900,25 @@
+         (run_dir / "run.json").write_text(json.dumps(record, indent=2, ensure_ascii=False),
+                                           encoding="utf-8")
+         append_manifest(record)
++        if is_h3(point):
++            v = record.get("v3dprime") or {}
++            facts = record.get("h3") or {}
++            say("  %s: %s v3''=%s reasons=%s oom=%s(vram16=%s) prefetch_degraded=%s "
++                "sec/step(meta)=%s cap_mib=%s used_ok=%s %s err=%s"
++                % (label, record.get("status"), record.get("verdict_v3dprime"),
++                   v.get("reasons"), v.get("oom"), v.get("oom_vram16"),
++                   v.get("prefetch_degraded"), facts.get("sec_per_step_meta"),
++                   (facts.get("vram16") or {}).get("cap_mib"),
++                   (record.get("used_matches_request") or {}).get("ok"),
++                   (record.get("used_matches_request") or {}).get("mismatches") or "",
++                   record.get("error")))
++            say("  windows: %s" % ", ".join(
++                "%s:med=%s base=%s delta=%s n=%s dec=%s plat=%s"
++                % (n, w.get("shared_median_mb"), w.get("baseline_shared_median_mb"),
++                   w.get("delta_mb"), w.get("wddm_samples"), w.get("decidable"),
++                   w.get("plateau"))
++                for n, w in (v.get("windows") or {}).items()))
++            continue
+         s2 = record.get("stage2") or {}
+         dec = record.get("decode") or {}
+         vram = record.get("vram") or {}
+@@ -2245,8 +2992,141 @@
+     return labels
+ 
+ 
++# Plan keys an H3 point must not carry (LTX-only, or keys this campaign leaves
++# at the user's default by NOT sending them).
++H3_FORBIDDEN_POINT_KEYS = ("clips", "stage2_window", "chunked_upsample", "audio_id",
++                           "outpaint", "reference", "reference_downscale_factor",
++                           "keep_resident", "vram16_mode", "shift_video", "shift_audio")
++
++
++def check_point_h3(point: dict, labels: set) -> dict:
++    """All offline checks for one H3 plan point (plan §2.4-3 / -11).
++    One flat rule per line.  errors = the request would 422 or measure the
++    wrong thing; warnings = the point differs from the user's default
++    (plan §2.1: attention, steps, seed -- and the Turbo arm's LoRA)."""
++    label = point.get("label")
++    kind = point.get("kind", "single")
++    width, height = int(point.get("width") or 0), int(point.get("height") or 0)
++    frames = int(point.get("num_frames") or 0)
++    errors, warnings = [], []
++
++    if kind != "single":
++        errors.append("kind %r: H3 points are single /generate shots only" % kind)
++    if width <= 0 or width % H3_DIMENSION_MULTIPLE:
++        errors.append("width %d is not a positive multiple of %d" % (width, H3_DIMENSION_MULTIPLE))
++    if height <= 0 or height % H3_DIMENSION_MULTIPLE:
++        errors.append("height %d is not a positive multiple of %d" % (height, H3_DIMENSION_MULTIPLE))
++    if (frames - H3_FRAMES_OFFSET) % H3_FRAMES_STEP:
++        errors.append("num_frames %d is not 17n+5" % frames)
++    if not H3_FRAMES_MIN <= frames <= H3_FRAMES_MAX:
++        errors.append("num_frames %d is outside [%d, %d]" % (frames, H3_FRAMES_MIN, H3_FRAMES_MAX))
++    if float(point.get("frame_rate", FRAME_RATE)) != FRAME_RATE:
++        errors.append("frame_rate %s is not the fixed 24" % point.get("frame_rate"))
++    steps = point.get("num_inference_steps")
++    if steps is None:
++        errors.append("num_inference_steps is not declared")
++    elif not H3_STEPS_MIN <= int(steps) <= H3_STEPS_MAX:
++        errors.append("num_inference_steps %s is outside [%d, %d]" % (steps, H3_STEPS_MIN, H3_STEPS_MAX))
++    for key in H3_FORBIDDEN_POINT_KEYS:
++        if key in point:
++            errors.append("an H3 point must not carry %r" % key)
++    accel_block = point.get("accel") or {}
++    extra = sorted(k for k in accel_block if k not in H3_ACCEL_KEYS)
++    if extra:
++        errors.append("accel carries %s; H3 sends only %s" % (extra, list(H3_ACCEL_KEYS)))
++    accel = h3_accel(point)
++    if accel["attention_backend"] not in ("sage", "sdpa"):
++        errors.append("attention_backend %r is not sage/sdpa" % accel["attention_backend"])
++    if accel["block_swap_prefetch"] is not True:
++        errors.append("block_swap_prefetch must be true (the user default)")
++
++    kf = point.get("keyframes") or {}
++    frame_idx = [int(n) for n in (kf.get("frame_idx") or [])]
++    if not frame_idx:
++        errors.append("keyframes.frame_idx is empty (this campaign is I2V only, plan §1 裁定 2)")
++    if len(frame_idx) > H3_MAX_KEYFRAMES:
++        errors.append("%d keyframes exceeds the cap %d" % (len(frame_idx), H3_MAX_KEYFRAMES))
++    if len(set(frame_idx)) != len(frame_idx):
++        errors.append("keyframes.frame_idx has duplicates %s" % frame_idx)
++    if any(not 0 <= n <= frames - 1 for n in frame_idx):
++        errors.append("keyframes.frame_idx %s leaves [0, %d]" % (frame_idx, frames - 1))
++    if frame_idx and frame_idx != h3_frame_idx(frames, len(frame_idx)):
++        errors.append("keyframes.frame_idx %s != the plan's formula %s"
++                      % (frame_idx, h3_frame_idx(frames, len(frame_idx))))
++    if "strength" in kf:
++        errors.append("keyframes carry a strength (H3 has none; the adapter 422s it)")
++    image = keyframe_image_path(point)
++    if frame_idx and (image is None or not image.exists()):
++        errors.append("keyframes.image_path %r does not exist" % kf.get("image_path"))
++
++    loras = point.get("loras") or []
++    for spec in loras:
++        if spec.get("name") not in H3_ALLOWED_LORAS:
++            errors.append("lora %r is outside this campaign's set %s"
++                          % (spec.get("name"), sorted(H3_ALLOWED_LORAS)))
++        strength = float(spec.get("strength", 1.0))
++        if not 0.0 < strength <= 2.0:
++            errors.append("lora strength %s is outside (0, 2]" % strength)
++
++    exempt = bool(point.get("smoke") or point.get("is_baseline"))
++    base = point.get("baseline_label")
++    if base:
++        if base not in labels:
++            errors.append("baseline_label %r resolves to no known point" % base)
++        if base == label:
++            errors.append("baseline_label points at the point itself")
++    elif not exempt:
++        errors.append("baseline_label is missing (declare is_baseline/smoke if "
++                      "this point IS a baseline)")
++    if point.get("base_model") != H3_BASE_MODEL:
++        errors.append("base_model %r is not %s" % (point.get("base_model"), H3_BASE_MODEL))
++    if not point.get("transformer"):
++        errors.append("transformer is not declared (name the registered file, or "
++                      "'default')")
++    if not point.get("prompt"):
++        errors.append("prompt is not pinned (the F0 prompt, plan §2.1)")
++
++    # --- the user's defaults (plan §2.1 / §2.4-11) -> warnings ------------
++    if accel["attention_backend"] != H3_USER_DEFAULTS["attention_backend"]:
++        warnings.append("attention_backend=%s differs from the user default %s (裁定 8)"
++                        % (accel["attention_backend"], H3_USER_DEFAULTS["attention_backend"]))
++    if steps is not None and int(steps) != H3_USER_DEFAULTS["num_inference_steps"]:
++        warnings.append("num_inference_steps=%s differs from the user default %d "
++                        "(no effect on VRAM, plan §1)" % (steps, H3_USER_DEFAULTS["num_inference_steps"]))
++    if int(point.get("seed", DEFAULT_SEED)) != H3_USER_DEFAULTS["seed"]:
++        warnings.append("seed=%s pinned; the user default is -1 (reproducibility; no "
++                        "effect on VRAM)" % point.get("seed", DEFAULT_SEED))
++    if loras:
++        warnings.append("loras=%s differ from the user default [] (the Turbo increment "
++                        "arm only)" % [(s.get("name"), s.get("strength")) for s in loras])
++
++    counts = token_counts_h3(point) if (width and height and frames) else {}
++    return {
++        "label": label, "kind": kind, "base_model": point.get("base_model"),
++        "transformer": point.get("transformer"),
++        "geometry": "%dx%d/%df" % (width, height, frames),
++        "latent_frames": counts.get("latent_frames"),
++        "video_tokens": counts.get("video_tokens"),
++        "cond_tokens": counts.get("cond_tokens"),
++        "video_plus_cond": counts.get("video_plus_cond"),
++        "audio_rows": counts.get("audio_rows"),
++        "keyframes": len(frame_idx), "frame_idx": frame_idx,
++        "keyframe_image": str(image) if image else None,
++        "keyframe_image_sha256": sha256_of(image) if (image and image.exists()) else None,
++        "num_inference_steps": steps,
++        "loras": loras,
++        "job_timeout_s": job_timeout_for(point, "auto"),
++        "baseline_label": base, "is_baseline": bool(point.get("is_baseline")),
++        "smoke": bool(point.get("smoke")),
++        "accel": accel,
++        "ok": not errors, "errors": errors, "warnings": warnings,
++    }
++
++
+ def check_point(point: dict, labels: set) -> dict:
+     """All offline checks for one plan point. One flat rule per line."""
++    if is_h3(point):
++        return check_point_h3(point, labels)
+     kind = point.get("kind", "single")
+     label = point.get("label")
+     width, height = int(point["width"]), int(point["height"])
+@@ -2533,6 +3413,60 @@
+ 
+ 
+ # === report =================================================================
++H3_REPORT_COLS = ["label", "transformer", "attn", "geometry", "K", "steps", "loras",
++                  "status", "v3''", "reasons", "oom", "oom vram16", "prefetch degr",
++                  "video+cond", "S total", "text", "cap MiB", "s/step meta", "s/step log",
++                  "denoise s", "dit read s", "decode s",
++                  "den Δ MB", "den n", "dec Δ MB", "dec n", "enc med MB", "enc n",
++                  "den peak MB", "den res MB", "dec res MB", "inact split MiB",
++                  "alloc retries", "commit peak GiB", "used ok", "baseline"]
++
++
++def h3_report_cells(label: str, rec: dict) -> list:
++    """One H3 row for ``report`` (and make_results): every column plan §2.4-13 names."""
++    geo = rec.get("geometry") or {}
++    tok = rec.get("tokens") or {}
++    facts = rec.get("h3") or {}
++    v = rec.get("v3dprime") or {}
++    wins = v.get("windows") or {}
++    seq = facts.get("sequence") or facts.get("sequence_estimate") or {}
++    vr = facts.get("vram16") or {}
++    ps = facts.get("phase_seconds") or {}
++    pk = facts.get("phase_peak_vram_mb") or {}
++    pr = facts.get("phase_peak_vram_reserved_mb") or {}
++    um = rec.get("used_matches_request") or {}
++    w = lambda n, k: (wins.get(n) or {}).get(k)
++    return [label, (rec.get("used") or {}).get("transformer_used"),
++            geo.get("attention_backend"),
++            "%sx%s/%sf" % (geo.get("width"), geo.get("height"), geo.get("num_frames")),
++            tok.get("keyframes"), geo.get("num_inference_steps"),
++            ",".join("%s@%s" % (s.get("name"), s.get("strength"))
++                     for s in geo.get("loras") or []) or "-",
++            rec.get("status"), rec.get("verdict_v3dprime"),
++            ";".join(v.get("reasons") or []) or "-",
++            v.get("oom"), v.get("oom_vram16"), v.get("prefetch_degraded"),
++            tok.get("video_plus_cond"), seq.get("total"), seq.get("text"),
++            vr.get("cap_mib"), facts.get("sec_per_step_meta"), facts.get("sec_per_step_log"),
++            ps.get("denoise"), facts.get("dit_read_seconds"), ps.get("decode"),
++            w("denoise", "delta_mb"), w("denoise", "wddm_samples"),
++            w("decode", "delta_mb"), w("decode", "wddm_samples"),
++            w("encode", "shared_median_mb"), w("encode", "wddm_samples"),
++            pk.get("denoise"), pr.get("denoise"), pr.get("decode"),
++            vr.get("inactive_split_peak_mib"), vr.get("num_alloc_retries"),
++            facts.get("commit_peak_gib"), um.get("ok"),
++            v.get("baseline_label") or ("(smoke)" if rec.get("verdict_v3dprime") == "smoke"
++                                        else "(baseline)")]
++
++
++def report_h3(rows: dict) -> None:
++    print("| " + " | ".join(H3_REPORT_COLS) + " |")
++    print("|" + "---|" * len(H3_REPORT_COLS))
++    for label, rec in rows.items():
++        cells = h3_report_cells(label, rec)
++        print("| " + " | ".join("" if c is None else str(c) for c in cells) + " |")
++    print()
++
++
+ def cmd_report(args) -> int:
+     if not MANIFEST.exists():
+         say("no manifest.jsonl yet")
+@@ -2547,6 +3481,14 @@
+         except Exception:
+             continue
+         latest[rec.get("label")] = rec
++    # H3 (2026-11-01, plan §2.4-13): its own table, then the LTX one only if
++    # the manifest holds LTX rows at all.
++    h3_rows = {k: v for k, v in latest.items() if v.get("base_model") == H3_BASE_MODEL}
++    latest = {k: v for k, v in latest.items() if v.get("base_model") != H3_BASE_MODEL}
++    if h3_rows:
++        report_h3(h3_rows)
++    if not latest:
++        return 0
+     # T6d (2026-09-14): "transformer" sits next to "base" -- this campaign's
+     # whole point is that two rows can share a base model and still be two
+     # different models.
+@@ -2617,7 +3559,7 @@
+     p.set_defaults(func=cmd_server_stop)
+ 
+     p = sub.add_parser("load")
+-    p.add_argument("--base-model", required=True, choices=["LTX23", "LTX25"])
++    p.add_argument("--base-model", required=True, choices=["LTX23", "LTX25", H3_BASE_MODEL])
+     p.add_argument("--transformer", default=None,
+                    help="registered transformer NAME to select (T2, 2026-09-14); "
+                         "omit to leave the current selection alone, pass "
+@@ -2626,7 +3568,7 @@
+     p.set_defaults(func=cmd_load)
+ 
+     p = sub.add_parser("restore-state")
+-    p.add_argument("--base-model", default=None, choices=["LTX23", "LTX25"])
++    p.add_argument("--base-model", default=None, choices=["LTX23", "LTX25", H3_BASE_MODEL])
+     p.add_argument("--transformer", default=None,
+                    help="override the transformer to restore; the default is "
+                         "whatever original_state.json remembered (T2/T4)")
+@@ -2640,7 +3582,15 @@
+ 
+     p = sub.add_parser("run")
+     p.add_argument("--plan", required=True)
+-    p.add_argument("--job-timeout", default=7200)
++    p.add_argument("--job-timeout", default="auto",
++                   help="seconds, or 'auto' (H3: 7200 for <=4 steps, 10800 "
++                        "otherwise; LTX: 7200) -- plan §2.4-9")
++    p.add_argument("--dry-run", action="store_true",
++                   help="no server: print + save each point's request body to "
++                        "dryrun/<label>.request.json")
++    p.add_argument("--label-suffix", default="",
++                   help="append to every label of the plan (a recovery warm-up "
++                        "re-runs the warm plan under a fresh label)")
+     p.add_argument("--refresh-luid", action="store_true")
+     p.add_argument("--cooldown", type=float, default=COOLDOWN_SECONDS,
+                    help="seconds to wait BETWEEN points (default %d; §84.6-5 "
+--- comfort-calib-2026-10-04/mkplan.py	2026-10-03 15:19:16.963461200 +0900
++++ comfort-calib-h3-2026-11-01/mkplan.py	2026-11-01 01:19:40.842902200 +0900
+@@ -33,6 +33,18 @@
+             --transformer redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K \
+             --accel allon
+ 
++H3 (2026-11-01, 台帳 §1-95, plan snug-booping-sphinx.md §2.4-12): one
++MiniMaxH3 single shot per call (mk.sh is the usual way in):
++
++  mkplan.py --out p_s720_481.json --label s720_481 --base-model MiniMaxH3 \
++            --transformer default --attention sage --width 1280 --height 768 \
++            --frames 481 --steps 4 --keyframes 1 --baseline b720
++
++  ``--keyframes K`` writes frame_idx = round(i*(F-1)/(K-1)) (K=1 -> [0]) and the
++  campaign's keyframe image; ``--turbo`` attaches the Turbo LoRA at 0.8;
++  ``--smoke`` marks a warm-up / smoke point (no baseline needed); the F0
++  prompt is read from outputs/h3-vram16-gates/f0_prompt.txt and pinned.
++
+ Always run ``calib.py preflight --plan plans\<file>`` afterwards.
+ """
+ from __future__ import annotations
+@@ -89,6 +101,59 @@
+ ])
+ 
+ 
++# --- MiniMax H3 (2026-11-01) -------------------------------------------------
++H3_BASE_MODEL = "MiniMaxH3"
++H3_PROMPT_FILE = HERE.parent / "h3-vram16-gates" / "f0_prompt.txt"
++# The keyframe image: a copy of the F0 image (uploads/71c540dc-.../input.png,
++# outputs/h3-vram16-gates/g4.sh) kept inside this bench so a cleaned uploads/
++# store cannot take it away.  Relative to this folder; README §2 has its sha256.
++H3_KEYFRAME_IMAGE = "keyframe_f0.png"
++H3_TURBO_LORA = "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16"
++H3_TURBO_STRENGTH = 0.8
++
++
++def h3_frame_idx(frames: int, count: int) -> list:
++    """Same formula as calib.h3_frame_idx (plan §2.1)."""
++    if count <= 1:
++        return [0]
++    return [int(round(i * (frames - 1) / (count - 1))) for i in range(count)]
++
++
++def h3_prompt() -> str:
++    return H3_PROMPT_FILE.read_text(encoding="utf-8").strip()
++
++
++def make_point_h3(label, args, *, width, height, frames, baseline=None,
++                  is_baseline=False):
++    p = OrderedDict()
++    p["label"] = label
++    p["kind"] = "single"
++    p["base_model"] = H3_BASE_MODEL
++    p["transformer"] = args.transformer
++    p["width"] = width
++    p["height"] = height
++    p["num_frames"] = int(frames)
++    p["frame_rate"] = FRAME_RATE
++    p["seed"] = args.seed
++    p["prompt"] = h3_prompt()
++    p["num_inference_steps"] = int(args.steps)
++    p["accel"] = OrderedDict([("attention_backend", args.attention),
++                              ("block_swap_prefetch", True)])
++    p["keyframes"] = OrderedDict([("image_path", H3_KEYFRAME_IMAGE),
++                                  ("frame_idx", h3_frame_idx(int(frames), args.keyframes))])
++    p["loras"] = ([OrderedDict([("name", H3_TURBO_LORA), ("strength", H3_TURBO_STRENGTH)])]
++                  if args.turbo else [])
++    p["purpose"] = args.purpose
++    p["tier"] = args.tier
++    if args.smoke:
++        p["smoke"] = True
++    elif is_baseline:
++        p["is_baseline"] = True
++    else:
++        p["baseline_label"] = baseline
++    return p
++
++
+ def taken() -> set:
+     """Every label this campaign has already spent GPU time on."""
+     used = {d.name for d in RUNS.glob("*") if (d / "run.json").exists()}
+@@ -157,7 +222,17 @@
+                     help="e.g. q6_s_720 / q6_c / q6_allon_1080")
+     ap.add_argument("--transformer", required=True,
+                     help="registered GGUF name, or 'default' for the official one")
+-    ap.add_argument("--base-model", choices=["LTX23", "LTX25"], default="LTX25")
++    ap.add_argument("--base-model", choices=["LTX23", "LTX25", H3_BASE_MODEL],
++                    default="LTX25")
++    # H3 only (2026-11-01)
++    ap.add_argument("--attention", choices=["sage", "sdpa"], default="sage",
++                    help="H3 only: attention_backend")
++    ap.add_argument("--steps", type=int, default=4, help="H3 only: num_inference_steps")
++    ap.add_argument("--keyframes", type=int, default=1, help="H3 only: K (1..10)")
++    ap.add_argument("--turbo", action="store_true",
++                    help="H3 only: attach the Turbo LoRA at %.1f" % H3_TURBO_STRENGTH)
++    ap.add_argument("--smoke", action="store_true",
++                    help="H3 only: a smoke / warm-up point (no baseline)")
+     ap.add_argument("--width", type=int, help="single only")
+     ap.add_argument("--height", type=int, help="single only")
+     ap.add_argument("--frames", type=int, nargs="+", help="single only: the rungs")
+@@ -203,8 +278,10 @@
+         raise SystemExit("give --label-prefix or --label")
+     if args.label and len(rungs) != 1:
+         raise SystemExit("--label names exactly one rung (got %d)" % len(rungs))
+-    if not args.baseline and not args.baseline_first:
+-        raise SystemExit("give --baseline <label> or --baseline-first")
++    if not args.baseline and not args.baseline_first and not args.smoke:
++        raise SystemExit("give --baseline <label> or --baseline-first (or --smoke)")
++    if args.base_model == H3_BASE_MODEL and args.kind != "single":
++        raise SystemExit("H3 points are single shots only")
+ 
+     busy = taken()
+     points, clashes = [], []
+@@ -225,6 +302,12 @@
+             own_baseline = label
+         if label in busy:
+             clashes.append(label)
++        if args.base_model == H3_BASE_MODEL:
++            points.append(make_point_h3(label, args, width=width, height=height,
++                                        frames=frames,
++                                        baseline=args.baseline or own_baseline,
++                                        is_baseline=is_baseline))
++            continue
+         points.append(make_point(label, args, width=width, height=height,
+                                  frames=frames, clips=args.clips,
+                                  baseline=args.baseline or own_baseline,
+@@ -246,6 +329,13 @@
+                                         [c["num_frames"] for c in p["clips"]])
+                     if p["kind"] == "chain"
+                     else "%dx%d/%df" % (p["width"], p["height"], p["num_frames"]))
++        if p["base_model"] == H3_BASE_MODEL:
++            print("  %-26s %-28s transformer=%s attn=%s steps=%d K=%d frame_idx=%s loras=%s baseline=%s"
++                  % (p["label"], geometry, p["transformer"], p["accel"]["attention_backend"],
++                     p["num_inference_steps"], len(p["keyframes"]["frame_idx"]),
++                     p["keyframes"]["frame_idx"], [l["name"] for l in p["loras"]],
++                     p.get("baseline_label") or ("(smoke)" if p.get("smoke") else "(is_baseline)")))
++            continue
+         print("  %-26s %-28s transformer=%s accel=%s baseline=%s"
+               % (p["label"], geometry, p["transformer"],
+                  "allon" if "accel" in p else "server default",
+--- comfort-calib-2026-10-04/make_results.py	2026-10-03 15:19:16.969746600 +0900
++++ comfort-calib-h3-2026-11-01/make_results.py	2026-11-01 01:24:57.057953600 +0900
+@@ -202,14 +202,60 @@
+         print("- 実行した点の数（再走を含む延べ）: **%d**\n" % len(rows))
+ 
+ 
++# --- MiniMax H3 (2026-11-01, plan §2.4-13) ---------------------------------
++def section_h3(recs):
++    """Every H3 point: v3'' verdict, OOM kind, prefetch degrade, video+cond, S,
++    cap_mib, s/step, per-window delta -- read from run.json via calib's own
++    row builder, so ``report`` and this table cannot drift apart."""
++    sys.path.insert(0, str(HERE))
++    import calib  # noqa: E402
++    print("### MiniMax H3 の全計測点（判定 v3″）\n")
++    print("| " + " | ".join(calib.H3_REPORT_COLS) + " |")
++    print("|" + "---|" * len(calib.H3_REPORT_COLS))
++    for L, r in recs.items():
++        cells = calib.h3_report_cells(L, r)
++        print("| " + " | ".join("—" if c is None else str(c) for c in cells) + " |")
++    print()
++    print("### MiniMax H3 の窓ごとの判定（基準比・+300MB が線。encode は記録だけ）\n")
++    for L, r in recs.items():
++        v = r.get("v3dprime") or {}
++        wins = v.get("windows") or {}
++        print("**`%s`** — v3″=`%s`（基準 `%s`・理由 %s・照合 %s）" % (
++            L, r.get("verdict_v3dprime"), v.get("baseline_label") or "—",
++            ", ".join(v.get("reasons") or []) or "—",
++            "ok" if g(r, "used_matches_request", "ok") else
++            "**NG %s**" % json.dumps(g(r, "used_matches_request", "mismatches"), ensure_ascii=False)
++            if g(r, "used_matches_request", "ok") is False else "対象外"))
++        print()
++        if not wins:
++            continue
++        print("| 窓 | 判定に使う | 標本 | 中央値 MB | 基準 MB | 基準比 MB | 判定可 | 天井 |")
++        print("|---|---|---:|---:|---:|---:|---|---|")
++        for name, w in wins.items():
++            print("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
++                name, fmt(w.get("judged")), fmt(w.get("wddm_samples")),
++                fmt(w.get("shared_median_mb")), fmt(w.get("baseline_shared_median_mb")),
++                fmt(w.get("delta_mb")),
++                "○" if w.get("decidable") else "× %s" % (w.get("reason_undecidable") or ""),
++                "**超**" if w.get("plateau") else ("—" if not w.get("decidable") else "下")))
++        print()
++
++
+ SECTIONS = {"points": section_points, "accel": section_accel,
+             "windows": section_windows, "timing": section_timing}
+ 
+ if __name__ == "__main__":
+     recs = load_runs()
+-    want = [a.lstrip("-") for a in sys.argv[1:]] or list(SECTIONS) + ["wall"]
++    h3_recs = {L: r for L, r in recs.items() if r.get("engine") == "h3"
++               or r.get("base_model") == "MiniMaxH3"}
++    recs = {L: r for L, r in recs.items() if L not in h3_recs}
++    want = [a.lstrip("-") for a in sys.argv[1:]] or ["h3"] + list(SECTIONS) + ["wall"]
+     for name in want:
+-        if name in SECTIONS:
+-            SECTIONS[name](recs)
++        if name == "h3":
++            if h3_recs:
++                section_h3(h3_recs)
++        elif name in SECTIONS:
++            if recs:
++                SECTIONS[name](recs)
+         elif name == "wall":
+             section_wall()
+--- comfort-calib-2026-10-04/drive2.sh	2026-10-04 02:09:19.699171900 +0900
++++ comfort-calib-h3-2026-11-01/drive2.sh	2026-11-01 01:20:06.003244500 +0900
+@@ -1,25 +1,51 @@
+ #!/bin/bash
+ # Per-point driver: runs one plan file (one point) at a time; after each point, checks the commit peak
+ # recorded during that point; if the peak reached 95% of the limit, stops and does not start the next.
++# H3 (2026-11-01, plan §2.4-8/-9): before each point, if GET /status says pipeline_loaded=false
++# (an OOM unloads the pipeline), recover: calib.py load -> idle-calib --minutes 1 -> the warm plan
++# ($WARM_PLAN, default plans/p_warm.json) under a fresh label suffix.  --job-timeout auto
++# (7,200 s for <=4 steps, 10,800 s otherwise).
+ # usage: drive2.sh <log> <plan.json> [<plan.json> ...]
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-01" || exit 2
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ LOG="$1"; shift
+-CSV="S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04/commit_log.csv"
++CSV="S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-01/commit_log.csv"
+ PY="../../.venv/Scripts/python.exe"
++BASE_MODEL="${BASE_MODEL:-MiniMaxH3}"
++TRANSFORMER="${TRANSFORMER:-default}"
++WARM_PLAN="${WARM_PLAN:-plans/p_warm.json}"
+ say(){ echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+ queue_empty(){ curl -s -m 10 http://127.0.0.1:18620/api/v1/status | "$PY" -c "import sys,json; q=json.load(sys.stdin)['queue']; sys.exit(0 if q['pending']==0 and q['running']==0 else 1)"; }
++# exit 0 = loaded, 1 = not loaded, 2 = could not read /status
++pipeline_loaded(){ curl -s -m 10 http://127.0.0.1:18620/api/v1/status | "$PY" -c "import sys,json
++try: s=json.load(sys.stdin)
++except Exception: sys.exit(2)
++sys.exit(0 if s.get('pipeline_loaded') is True else 1)"; }
++recover(){
++  say "RECOVER: pipeline_loaded=false before $1 -> load $BASE_MODEL/$TRANSFORMER, idle-calib 1 min, warm-up"
++  "$PY" calib.py load --base-model "$BASE_MODEL" --transformer "$TRANSFORMER" >> recover_output.txt 2>&1 || { say "ABORT: recovery load failed (recover_output.txt)"; exit 7; }
++  "$PY" calib.py idle-calib --minutes 1 >> recover_output.txt 2>&1 || { say "ABORT: recovery idle-calib failed"; exit 7; }
++  [ -f "$WARM_PLAN" ] || { say "ABORT: warm plan $WARM_PLAN missing"; exit 7; }
++  sfx="_rec$(date '+%m%d%H%M%S')"
++  "$PY" calib.py run --plan "$WARM_PLAN" --label-suffix "$sfx" --job-timeout auto --cooldown 150 >> "run_warm${sfx}_output.txt" 2>&1
++  say "recovered: warm-up $(basename "$WARM_PLAN" .json)$sfx rc=$?"
++  pipeline_loaded || { say "ABORT: still not loaded after the recovery"; exit 7; }
++  say "cool-down 150 s after the recovery warm-up"; sleep 150
++}
+ first=1
+ for plan in "$@"; do
+   if [ $first -eq 0 ]; then say "cool-down 150 s before $plan"; sleep 150; fi
+   first=0
+   for i in $(seq 1 120); do queue_empty && break; sleep 10; done
+   queue_empty || { say "ABORT: queue not empty before $plan"; exit 3; }
++  pipeline_loaded; pl=$?
++  [ $pl -eq 2 ] && { say "ABORT: cannot read GET /status before $plan"; exit 3; }
++  [ $pl -eq 1 ] && recover "$plan"
+   start=$(date '+%Y-%m-%d %H:%M:%S')
+   age=$(( $(date +%s) - $(date -d "$(tail -1 "$CSV" | cut -d, -f1)" +%s) ))
+   [ "$age" -le 10 ] || { say "ABORT: commit monitor stale (${age}s) before $plan"; exit 6; }
+   say "run $plan (commit now $(tail -1 "$CSV" | awk -F, '{print $4}')%)"
+-  "$PY" calib.py run --plan "$plan" --job-timeout 3600 --cooldown 150 >> "run_$(basename "$plan" .json)_output.txt" 2>&1
++  "$PY" calib.py run --plan "$plan" --job-timeout auto --cooldown 150 >> "run_$(basename "$plan" .json)_output.txt" 2>&1
+   rc=$?
+   peak=$(awk -F, -v s="$start" '$1>=s && $2+0>m {m=$2+0; p=$4} END{printf "%.2f GiB %s%%", m, p}' "$CSV")
+   say "done $plan rc=$rc peak=$peak"
+--- comfort-calib-2026-10-04/commit_table.py	2026-10-04 02:09:19.699171900 +0900
++++ comfort-calib-h3-2026-11-01/commit_table.py	2026-11-01 01:20:55.445247600 +0900
+@@ -2,7 +2,7 @@
+ """Table 5 helper: per-point commit peak (from the drivers' 'done ... peak=' lines) joined with the
+ rule-v3 verdict from runs/<label>/run.json. Read-only. Usage: python commit_table.py > commit_table.md"""
+ import glob, io, json, re, os, sys
+-D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04"
++D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-01"
+ rows = {}
+ for log in sorted(glob.glob(os.path.join(D, "drive*.log"))):
+     for line in io.open(log, encoding="utf-8", errors="replace"):
+@@ -15,7 +15,13 @@
+     if not fs: return ("", "", "", "")
+     r = json.load(io.open(fs[0], encoding="utf-8")); v = r.get("v3prime", {}); w = v.get("windows") or {}
+     um = r.get("used_matches_request") or {}
+-    return (v.get("verdict", ""), w.get("stage2", {}).get("delta_mb"), w.get("restore", {}).get("delta_mb"), "ok" if um.get("ok") else ("MISMATCH:" + ",".join(um.get("mismatches", {}).keys()) if um else ""))
++    used = "ok" if um.get("ok") else ("MISMATCH:" + ",".join(um.get("mismatches", {}).keys()) if um else "")
++    if r.get("engine") == "h3":
++        # H3 (2026-11-01): v3'' -- the two columns carry the denoise / decode deltas.
++        v = r.get("v3dprime") or {}; w = v.get("windows") or {}
++        if um.get("ok") is None and um: used = "n/a"
++        return (v.get("verdict", ""), w.get("denoise", {}).get("delta_mb"), w.get("decode", {}).get("delta_mb"), used)
++    return (v.get("verdict", ""), w.get("stage2", {}).get("delta_mb"), w.get("restore", {}).get("delta_mb"), used)
+ # map plan file -> label via plans/*.json
+ lab = {}
+ for f in glob.glob(os.path.join(D, "plans", "*.json")) + glob.glob(os.path.join(D, "plans", "fragments", "*.json")):
+@@ -23,7 +29,7 @@
+         d = json.load(io.open(f, encoding="utf-8")); pts = d if isinstance(d, list) else d.get("points", d.get("runs", []))
+         if pts: lab[os.path.splitext(os.path.basename(f))[0]] = pts[0].get("label")
+     except Exception: pass
+-print("| plan | label | v3' | stage2 Δ MB | restore Δ MB | used | commit peak GiB | % of limit |")
++print("| plan | label | v3' (H3: v3'') | stage2 Δ MB (H3: denoise) | restore Δ MB (H3: decode) | used | commit peak GiB | % of limit |")
+ print("|---|---|---|---|---|---|---|---|")
+ for plan, r in rows.items():
+     label = lab.get(plan, plan)
+--- comfort-calib-2026-10-04/digest.py	2026-10-04 02:09:19.699671900 +0900
++++ comfort-calib-h3-2026-11-01/digest.py	2026-11-01 01:25:33.092913700 +0900
+@@ -2,7 +2,7 @@
+ """Digest for the docs agent: one row per run (manifest order): label, base, transformer used, accel (from used),
+ geometry, stage2 tokens, rule-v3 verdict, stage2/restore deltas, used-check, commit peak (from driver logs). Read-only."""
+ import glob, io, json, os, re
+-D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04"
++D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-01"
+ peaks = {}
+ for log in glob.glob(os.path.join(D, "drive*.log")):
+     for line in io.open(log, encoding="utf-8", errors="replace"):
+@@ -15,7 +15,7 @@
+         for p in pts: lab2plan[p.get("label")] = os.path.splitext(os.path.basename(f))[0]
+     except Exception: pass
+ f = lambda x: ("%+.1f" % x) if isinstance(x, (int, float)) else ""
+-print("| # | label | base | transformer_used | accel(used) | geometry | stage2 tokens | v3' | stage2 Δ MB | restore Δ MB | used-check | commit peak |")
++print("| # | label | base | transformer_used | accel(used) | geometry | stage2 tokens (H3: video+cond) | v3' (H3: v3'') | stage2 Δ MB (H3: denoise) | restore Δ MB (H3: decode) | used-check | commit peak |")
+ print("|---|---|---|---|---|---|---|---|---|---|---|---|")
+ i = 0
+ for line in io.open(os.path.join(D, "manifest.jsonl"), encoding="utf-8"):
+@@ -27,5 +27,13 @@
+     used = "ok" if um.get("ok") else ("MISMATCH " + ",".join(f"{k}={v2.get('used')}" for k, v2 in (um.get("mismatches") or {}).items()) if um else "")
+     accel = f"attn={u.get('attention_used')} kr={u.get('keep_resident_used')} vae={u.get('vae_mode_used')}"
+     geo = f"{g.get('width')}x{g.get('height')}" + (f"/{g.get('num_frames')}f" if g.get("num_frames") else "") + (f" clips={g.get('clips')} win={g.get('stage2_window') or 'standard'}" if g.get("clips") else "")
++    if m.get("engine") == "h3":
++        # H3 (2026-11-01): v3'' verdict; the two delta columns are denoise / decode.
++        v = m.get("v3dprime") or {}; w = v.get("windows") or {}
++        w = {"stage2": w.get("denoise") or {}, "restore": w.get("decode") or {}}
++        accel = f"attn={u.get('attention_used')} prefetch={u.get('block_swap_prefetch_used')} kr={u.get('keep_resident_used')} vram16={u.get('vram16_mode_used')}"
++        t = {"stage2_tokens": t.get("video_plus_cond")}
++        geo += f" K={(m.get('tokens') or {}).get('keyframes')} steps={g.get('num_inference_steps')}"
++        if um and um.get("ok") is None: used = "n/a (job did not complete)"
+     i += 1
+     print(f"| {i} | {label} | {m.get('base_model')} | {u.get('transformer_used')} | {accel} | {geo} | {t.get('stage2_tokens')} | {v.get('verdict','')} | {f(w.get('stage2',{}).get('delta_mb'))} | {f(w.get('restore',{}).get('delta_mb'))} | {used} | {peaks.get(lab2plan.get(label,''),'')} |")
+--- comfort-calib-2026-10-04/mk.sh	2026-10-04 02:09:19.698660300 +0900
++++ comfort-calib-h3-2026-11-01/mk.sh	2026-11-01 01:20:05.975563000 +0900
+@@ -1,16 +1,18 @@
+ #!/bin/bash
+-# helper: mk.sh <label> <LTX23|LTX25> <transformer> <allon|default> <W> <H> <frames|-> <baseline label|FIRST> [chain clip frames...]
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
++# helper (H3, 2026-11-01, plan §2.4-12):
++#   mk.sh <label> MiniMaxH3 <transformer> <sage|sdpa> <W> <H> <frames> <steps> <K> [turbo] <baseline label|FIRST|SMOKE>
++# FIRST = this point IS its arm's baseline; SMOKE = a smoke / warm-up point (no baseline).
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-01" || exit 2
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ PY="../../.venv/Scripts/python.exe"
+-label=$1; base=$2; tr=$3; accel=$4; W=$5; H=$6; F=$7; bl=$8; shift 8
+-if [ "$bl" = FIRST ]; then BL=(--baseline-first); else BL=(--baseline "$bl"); fi
+-if [ "$F" = "-" ]; then
+-  K=(--kind chain --sizes ${W}x${H} --clips "$@" --stage2-window standard --chunked-upsample)
+-else
+-  K=(--width $W --height $H --frames $F)
+-fi
+-"$PY" mkplan.py --out "p_${label}.json" --label "$label" --base-model $base --transformer "$tr" --accel $accel "${K[@]}" "${BL[@]}" --tier P2 --purpose "P2 $label" || exit 1
++label=$1; base=$2; tr=$3; attn=$4; W=$5; H=$6; F=$7; ST=$8; K=$9; shift 9
++TU=()
++if [ "$1" = turbo ]; then TU=(--turbo); shift; fi
++bl=$1
++[ "$base" = MiniMaxH3 ] || { echo "mk.sh: this bench's mk.sh is H3-only (got base model $base)"; exit 1; }
++[ -n "$bl" ] || { echo "mk.sh: missing <baseline label|FIRST|SMOKE>"; exit 1; }
++if [ "$bl" = FIRST ]; then BL=(--baseline-first); elif [ "$bl" = SMOKE ]; then BL=(--smoke); else BL=(--baseline "$bl"); fi
++"$PY" mkplan.py --out "p_${label}.json" --label "$label" --base-model $base --transformer "$tr" --attention $attn --width $W --height $H --frames $F --steps $ST --keyframes $K "${TU[@]}" "${BL[@]}" --tier H3 --purpose "H3 $label" || exit 1
+ "$PY" calib.py preflight --plan "plans/p_${label}.json" > "preflight_${label}_output.txt" 2>&1; rc=$?
+ tail -3 "preflight_${label}_output.txt"; echo preflight_rc=$rc
+ echo $rc > "preflight_${label}.rc"
+--- comfort-calib-2026-10-04/rp.sh	2026-10-04 02:09:19.698660300 +0900
++++ comfort-calib-h3-2026-11-01/rp.sh	2026-11-01 01:13:43.267061500 +0900
+@@ -1,5 +1,5 @@
+ #!/bin/bash
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-01" || exit 2
+ [ "$(cat "preflight_$1.rc" 2>/dev/null)" = 0 ] || { echo "ABORT: preflight rc != 0 for $1"; exit 5; }
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ arm=${1%%_*}
+--- comfort-calib-2026-10-04/cool.sh	2026-10-04 02:09:19.699171900 +0900
++++ comfort-calib-h3-2026-11-01/cool.sh	2026-11-01 01:13:43.276708100 +0900
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ # wait until 150 s after the last "done" line of any drive2 log
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-01" || exit 2
+ last=$(grep -h "\] done " drive2_*.log | sort | tail -1 | sed 's/^\[\([^]]*\)\].*/\1/')
+ t=$(( $(date -d "$last" +%s) + 150 ))
+ until [ "$(date +%s)" -ge "$t" ]; do sleep 3; done
+--- comfort-calib-2026-10-04/wait.sh	2026-10-04 02:09:19.699171900 +0900
++++ comfort-calib-h3-2026-11-01/wait.sh	2026-11-01 01:13:43.272630400 +0900
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ # wait (max 570 s) for rp_<label>.txt to show the summary line
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-2026-10-04" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-01" || exit 2
+ f="rp_$1.txt"; t=$(( $(date +%s) + 570 ))
+ until { grep -q "^$1 \|ABORT\|STOP\|Traceback" "$f" 2>/dev/null; } || [ "$(date +%s)" -ge "$t" ]; do sleep 5; done
+ cat "$f"; tail -1 commit_log.csv
+--- comfort-calib-2026-10-04/sum.py	2026-10-04 02:09:36.690965100 +0900
++++ comfort-calib-h3-2026-11-01/sum.py	2026-11-01 01:20:23.265963700 +0900
+@@ -1,6 +1,24 @@
+ import json,sys
++# H3 (2026-11-01, plan §2.4-13): an H3 run.json (engine == "h3") prints its v3'' summary;
++# anything else keeps the 10-04 LTX lines below unchanged.
++def h3(lab, r):
++    v=r.get('v3dprime') or {}; f=r.get('h3') or {}; t=r.get('tokens') or {}; g=r.get('geometry') or {}
++    seq=f.get('sequence') or f.get('sequence_estimate') or {}; vr=f.get('vram16') or {}; um=r.get('used_matches_request') or {}
++    print(lab, r.get('status'), "v3''=", r.get('verdict_v3dprime'), 'reasons=', v.get('reasons'), 'oom=', v.get('oom'), 'oom_vram16=', v.get('oom_vram16'),
++          'prefetch_degraded=', v.get('prefetch_degraded'), 'wall=%.0fs'%((r.get('wall') or {}).get('seconds') or 0),
++          'used_ok=', um.get('ok'), um.get('mismatches'), 'err=', r.get('error'))
++    print('   %sx%s/%sf K=%s steps=%s attn=%s loras=%s video+cond=%s S=%s text=%s cap_mib=%s s/step(meta)=%s s/step(log)=%s dit_read=%s commit_peak=%s inactive_split=%s retries=%s'%(
++          g.get('width'), g.get('height'), g.get('num_frames'), t.get('keyframes'), g.get('num_inference_steps'), g.get('attention_backend'),
++          [s.get('name') for s in g.get('loras') or []], t.get('video_plus_cond'), seq.get('total'), seq.get('text'), vr.get('cap_mib'),
++          f.get('sec_per_step_meta'), f.get('sec_per_step_log'), f.get('dit_read_seconds'), f.get('commit_peak_gib'),
++          vr.get('inactive_split_peak_mib'), vr.get('num_alloc_retries')))
++    for n,w in (v.get('windows') or {}).items():
++        print('   %-10s med=%s base=%s delta=%s n=%s dec=%s plat=%s judged=%s s=%s'%(n,w.get('shared_median_mb'),w.get('baseline_shared_median_mb'),w.get('delta_mb'),w.get('wddm_samples'),w.get('decidable'),w.get('plateau'),w.get('judged'),w.get('seconds')))
++    if v.get('baseline_health'): print('   baseline_health', json.dumps(v['baseline_health'], ensure_ascii=False))
+ for lab in sys.argv[1:]:
+     r=json.load(open('runs/%s/run.json'%lab,encoding='utf-8'))
++    if r.get('engine')=='h3':
++        h3(lab, r); continue
+     v=r.get('v3prime') or {}
+     rq=r.get('request_sent') or {}; print('   cu=',rq.get('chunked_upsample'),'s2w=',rq.get('stage2_window'),'stage2_s=',(r.get('stage2') or {}).get('seconds'),'wall_s=',(r.get('wall') or {}).get('seconds'),'gap_mid_s=',((v.get('windows') or {}).get('s23_gap_mid') or {}).get('seconds'))
+     print(lab, r.get('status'), 'v3=',r.get('verdict_v3prime'), 'wall=%.0fs'%((r.get('wall') or {}).get('seconds') or 0), 'used_ok=',(r.get('used_matches_request') or {}).get('ok'), (r.get('used_matches_request') or {}).get('mismatches'), 'err=',r.get('error'))
+--- comfort-calib-2026-10-04/selftest/parser_selftest.py	2026-10-03 15:19:17.050858400 +0900
++++ comfort-calib-h3-2026-11-01/selftest/parser_selftest.py	2026-11-01 01:30:55.002032700 +0900
+@@ -300,216 +300,426 @@
+                             "num_frames"] + list(calib.ACCEL_KEYS)))
+ 
+ # ===========================================================================
+-# H -- THIS campaign's own arms (T1, 2026-09-27, §3-168 C-4: the comfort line
+-# on the int8/w4a8 safetensors transformers, alongside the two remaining fp8
+-# arms -- all Tier A plan files, prep only, no run has happened yet).
+-# Rewritten against THIS campaign's plan files, exactly as the 09-14, 09-17,
+-# 09-25 and 09-26 section H were rewritten against their own: the expected
+-# values below are c4_procedure_v2.md §2's table (labels, geometry, latent
+-# frames, tokens, baseline pairing, registered transformer name, accel), read
+-# off the points this campaign will actually run and never refitted to
+-# whatever mkplan.py happened to emit. Tier B/C files do not exist yet (they
+-# are written after Tier A has been read, same as every earlier campaign) and
+-# are checked by eye on mkplan's output line (procedure v2 §5).
+-#
+-# What is different from the 09-26 section H this was copied from:
+-#   * seven arms instead of two -- u_/r_/h_ = LTX 2.5 uncensored fp8 /
+-#     REDGraft mixed int8+w4a8 / int8_convrot (all-on); f_/x_/j_/k_ = LTX 2.3
+-#     fp8mixed / silveroxides int8mixedtensorwise / w4a8 / Kijai
+-#     int8_convrot ("_d" points: server-default accel, diagnostic -- no
+-#     product line exists for LTX 2.3's default configuration, c4_procedure_v2
+-#     §0-4). j_ carries BOTH an all-on and a "_d" variant because its entry
+-#     gate (G-C) is only decided once its own warm-up + baseline have run;
+-#   * no chain points at all (c4_procedure_v2.md §2: "連結・896×1152は測らな
+-#     い"), so the 09-26 section's chain-only checks (window-name guard,
+-#     CHAIN_KEYS body shape, clip baselines) are dropped;
+-#   * old H(5)'s job-ID cross-check against a REAL metadata.json is REMOVED
+-#     (v1 §11 軽微2 / v2 §5's own instruction): none of these seven
+-#     transformers has actually run yet under this campaign, so there is no
+-#     real completed job to quote. What is kept plays the same role T5a
+-#     (check_point's "transformer is not declared" error) and used_check
+-#     already played together in the 09-26 section: that a point declares the
+-#     exact registered name for its arm, and that used_check flags every
+-#     OTHER name -- a sibling arm's name, a Q6_K control, or the official
+-#     "default" -- as a mismatch.
+-print("\nH. this campaign's arms (int8/w4a8/fp8 safetensors transformers, "
+-      "Tier A plan files, C-4 prep -- no run has happened yet)")
+-
+-PLAN_FILES = sorted(p.name for p in calib.PLANS_DIR.glob("p_*.json"))
+-POINTS = {}
+-for plan_name in PLAN_FILES:
+-    for p in json.loads((calib.PLANS_DIR / plan_name).read_text(encoding="utf-8")):
+-        POINTS[p["label"]] = p
+-
+-U_NAME = "ltx25_uncensored_v1.1-fp8_scaled"
+-R_NAME = "redgraftLTX25Fast2K_ltx25RedgraftNSFW"
+-H_NAME = "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot"
+-F_NAME = "sulphur_distil_fp8mixed"
+-X_NAME = "ltx-2.3-22b-distilled-1.1_int8mixedtensorwise"
+-J_NAME = "ltx-2.3-22b-distilled-1.1_w4a8"
+-K_NAME = "ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot"
+-Q6_23 = "Sulphur-2-base-distil-Q6_K"
+-Q6_25 = "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K"
+-
+-ALLON_23 = {"attention_backend": "sage", "block_swap_prefetch": True,
+-            "keep_resident": True, "fused_gguf_dequant_kernel": True,
+-            "vae_mode": "prune_vaed", "keep_resident_embeddings": False}
+-ALLON_25 = {"attention_backend": "sage", "block_swap_prefetch": True,
+-            "keep_resident": True, "fused_gguf_dequant_kernel": True,
+-            "vae_mode": "default", "keep_resident_embeddings": True}
+-
+-# label: (base_model, W, H, frames, latent, tokens, baseline label or None,
+-#         transformer, accel_declared -- None for a "_d" (server-default)
+-#         point, since mkplan writes NO accel block for --accel default; the
+-#         all-on dict for an all-on point) -- c4_procedure_v2.md §2's table.
+-TABLE = {
+-    # u_ -- LTX 2.5 uncensored fp8, all-on
+-    "u_warm":         ("LTX25", 768, 512, 121, 16, 6144, None, U_NAME, ALLON_25),
+-    "u_s_1080_b89":   ("LTX25", 1920, 1088, 89, 12, 24480, None, U_NAME, ALLON_25),
+-    "u_s_1080_145":   ("LTX25", 1920, 1088, 145, 19, 38760, "u_s_1080_b89", U_NAME, ALLON_25),
+-    "u_s_1080_153":   ("LTX25", 1920, 1088, 153, 20, 40800, "u_s_1080_b89", U_NAME, ALLON_25),
+-    # r_ -- REDGraft LTX 2.5 mixed int8/w4a8, all-on (.part at prep time, 2026-09-27)
+-    "r_warm":         ("LTX25", 768, 512, 121, 16, 6144, None, R_NAME, ALLON_25),
+-    "r_s_1080_b89":   ("LTX25", 1920, 1088, 89, 12, 24480, None, R_NAME, ALLON_25),
+-    "r_s_1080_153":   ("LTX25", 1920, 1088, 153, 20, 40800, "r_s_1080_b89", R_NAME, ALLON_25),
+-    "r_s_1080_161":   ("LTX25", 1920, 1088, 161, 21, 42840, "r_s_1080_b89", R_NAME, ALLON_25),
+-    "r_s_720_b169":   ("LTX25", 1280, 768, 169, 22, 21120, None, R_NAME, ALLON_25),
+-    # h_ -- LTX 2.5 int8_convrot (official replica), all-on (.part at prep time, 2026-09-27)
+-    "h_warm":         ("LTX25", 768, 512, 121, 16, 6144, None, H_NAME, ALLON_25),
+-    "h_s_1080_b89":   ("LTX25", 1920, 1088, 89, 12, 24480, None, H_NAME, ALLON_25),
+-    "h_s_1080_145":   ("LTX25", 1920, 1088, 145, 19, 38760, "h_s_1080_b89", H_NAME, ALLON_25),
+-    "h_s_1080_153":   ("LTX25", 1920, 1088, 153, 20, 40800, "h_s_1080_b89", H_NAME, ALLON_25),
+-    # f_ -- LTX 2.3 fp8mixed, server-default (diagnostic; all-on already known
+-    # to overflow commit for this weight class, cf. -26's f_s_1080_161 stop)
+-    "f_warm_d":       ("LTX23", 768, 512, 121, 16, 6144, None, F_NAME, None),
+-    "f_s_1080_b89_d": ("LTX23", 1920, 1088, 89, 12, 24480, None, F_NAME, None),
+-    "f_s_1080_121_d": ("LTX23", 1920, 1088, 121, 16, 32640, "f_s_1080_b89_d", F_NAME, None),
+-    "f_s_1080_129_d": ("LTX23", 1920, 1088, 129, 17, 34680, "f_s_1080_b89_d", F_NAME, None),
+-    # x_ -- LTX 2.3 silveroxides int8 (int8mixedtensorwise), server-default
+-    "x_warm_d":       ("LTX23", 768, 512, 121, 16, 6144, None, X_NAME, None),
+-    "x_s_1080_b89_d": ("LTX23", 1920, 1088, 89, 12, 24480, None, X_NAME, None),
+-    "x_s_1080_121_d": ("LTX23", 1920, 1088, 121, 16, 32640, "x_s_1080_b89_d", X_NAME, None),
+-    "x_s_1080_129_d": ("LTX23", 1920, 1088, 129, 17, 34680, "x_s_1080_b89_d", X_NAME, None),
+-    # j_ -- LTX 2.3 w4a8, entry-gate G-C: both an all-on and a server-default
+-    # variant are pre-made; only one is actually run (README §4 / §7).
+-    "j_warm":         ("LTX23", 768, 512, 121, 16, 6144, None, J_NAME, ALLON_23),
+-    "j_s_1080_b89":   ("LTX23", 1920, 1088, 89, 12, 24480, None, J_NAME, ALLON_23),
+-    "j_s_1080_145":   ("LTX23", 1920, 1088, 145, 19, 38760, "j_s_1080_b89", J_NAME, ALLON_23),
+-    "j_s_1080_161":   ("LTX23", 1920, 1088, 161, 21, 42840, "j_s_1080_b89", J_NAME, ALLON_23),
+-    "j_warm_d":       ("LTX23", 768, 512, 121, 16, 6144, None, J_NAME, None),
+-    "j_s_1080_b89_d": ("LTX23", 1920, 1088, 89, 12, 24480, None, J_NAME, None),
+-    "j_s_1080_129_d": ("LTX23", 1920, 1088, 129, 17, 34680, "j_s_1080_b89_d", J_NAME, None),
+-    "j_s_1080_145_d": ("LTX23", 1920, 1088, 145, 19, 38760, "j_s_1080_b89_d", J_NAME, None),
+-    # k_ -- LTX 2.3 Kijai int8_convrot (transformer-only), server-default; P4/optional
+-    "k_warm_d":       ("LTX23", 768, 512, 121, 16, 6144, None, K_NAME, None),
+-    "k_s_1080_b89_d": ("LTX23", 1920, 1088, 89, 12, 24480, None, K_NAME, None),
+-    "k_s_1080_121_d": ("LTX23", 1920, 1088, 121, 16, 32640, "k_s_1080_b89_d", K_NAME, None),
+-    "k_s_1080_129_d": ("LTX23", 1920, 1088, 129, 17, 34680, "k_s_1080_b89_d", K_NAME, None),
+-}
+-
+-# (0) the shape of the campaign: 33 labels, one point per file, no _r2 reruns
+-# yet (those are Tier B, made only after Tier A has been read).
+-check("H: the plan files hold exactly the §2 Tier A labels",
+-      sorted(POINTS), sorted(TABLE))
+-check("H: 33 plan files, one point each, 33 labels total",
+-      (len(PLAN_FILES), len(POINTS)), (33, 33))
+-
+-# (1) no chain points this campaign (v2 §2: "連結・896×1152は測らない").
+-check("H: every point is a single shot (no chains this campaign)",
+-      sorted({p.get("kind", "single") for p in POINTS.values()}), ["single"])
+-
+-for label, row in sorted(TABLE.items()):
+-    (bm, w, h, frames, latent, tokens, baseline, transformer, accel) = row
+-    p = POINTS[label]
+-    accel_effective = accel if accel is not None else calib.DEFAULT_ACCEL
+-    counts = calib.token_counts(p)
+-    check("H: %s geometry" % label,
+-          (p["base_model"], p["kind"], p["width"], p["height"],
+-           p["num_frames"], p["frame_rate"], p["seed"]),
+-          (bm, "single", w, h, frames, 24.0, 12345))
+-    check("H: %s stage-2 latent frames / tokens" % label,
+-          (counts["stage2_latent_frames"], counts["stage2_tokens"]),
+-          (latent, tokens))
+-    # (3) baseline pairing: same geometry, same arm's transformer, fewer frames.
+-    if baseline is None:
+-        check("H: %s is a baseline" % label,
+-              (p.get("is_baseline"), p.get("baseline_label")), (True, None))
+-    else:
+-        b = POINTS[baseline]
+-        check("H: %s -> baseline %s (same geometry+transformer, fewer frames)"
+-              % (label, baseline),
+-              (p.get("baseline_label"), b["kind"], b["width"], b["height"],
+-               b["base_model"], b["transformer"],
+-               b["num_frames"] < p["num_frames"]),
+-              (baseline, "single", w, h, bm, transformer, True))
+-    # (2) the declared condition: registered name + accel block + prompt.
+-    if bm == "LTX23":
+-        check("H: %s declares its registered name + accel, no prompt key" % label,
+-              (p["transformer"], p.get("accel"), "prompt" in p),
+-              (transformer, accel, False))
+-    else:
+-        check("H: %s declares its registered name + accel + PROMPT_25" % label,
+-              (p["transformer"], p.get("accel"), p.get("prompt")),
+-              (transformer, accel, calib.PROMPT_25))
+-
+-# (4) build_request for one representative point of each arm/variant: no
+-# transformer leaks into the body, the accel and the arm's prompt go as
+-# planned, and the endpoint is always /generate (no chains this campaign).
+-SINGLE_KEYS = sorted(["prompt", "width", "height", "frame_rate", "seed",
+-                      "num_frames"] + list(calib.ACCEL_KEYS))
+-for label in ("u_s_1080_b89", "r_s_1080_b89", "r_s_720_b169", "h_s_1080_b89",
+-              "f_s_1080_b89_d", "x_s_1080_b89_d", "j_s_1080_b89",
+-              "j_s_1080_b89_d", "k_s_1080_b89_d"):
+-    bm, w, h, frames, latent, tokens, baseline, transformer, accel = TABLE[label]
+-    accel_effective = accel if accel is not None else calib.DEFAULT_ACCEL
+-    prompt = calib.PROMPT_25 if bm == "LTX25" else calib.PROMPT_23
+-    path_c, body_c = calib.build_request(POINTS[label])
+-    check("H: %s endpoint" % label, path_c, "/generate")
+-    check("H: %s body num_frames" % label, body_c["num_frames"], frames)
+-    check("H: %s body carries the planned accel" % label,
+-          {k: body_c[k] for k in calib.ACCEL_KEYS}, accel_effective)
+-    check("H: %s body prompt" % label, body_c["prompt"], prompt)
+-    check("H: %s body carries no transformer" % label,
+-          "transformer" in body_c, False)
+-    check("H: %s body keys" % label, sorted(body_c), SINGLE_KEYS)
+-
+-# (5) used_check expects the REGISTERED NAME each arm's point declared (T5a +
+-# used_check play the role the 09-26 section's real-job cross-check played;
+-# no real job exists yet for any of these seven transformers, so nothing here
+-# reads runs/ or OUTPUTS -- see the note at the top of this section).
+-REPRESENTATIVE = {U_NAME: "u_s_1080_b89", R_NAME: "r_s_1080_b89",
+-                   H_NAME: "h_s_1080_b89", F_NAME: "f_s_1080_b89_d",
+-                   X_NAME: "x_s_1080_b89_d", J_NAME: "j_s_1080_b89",
+-                   K_NAME: "k_s_1080_b89_d"}
+-for name, label in REPRESENTATIVE.items():
+-    check("H: %s (%s) expects its own registered name" % (label, name),
+-          calib.used_check(POINTS[label], {})["expected"]["transformer_used"],
+-          name)
+-    check("H: %s + its own name in transformer_used -> clean" % label,
+-          calib.used_check(POINTS[label],
+-                           {"transformer_used": name})["ok"], True)
+-    for other_name in (Q6_23, Q6_25, "default"):
+-        check("H: %s that ran on %s is flagged" % (label, other_name),
+-              sorted(calib.used_check(
+-                  POINTS[label], {"transformer_used": other_name})["mismatches"]),
+-              ["transformer_used"])
+-# cross-arm mix-up: a 2.3 w4a8 point that actually ran on the 2.3 int8mixed-
+-# tensorwise weights (two different registered names, same base model).
+-check("H: j_s_1080_b89 that ran on x_'s name is flagged",
+-      sorted(calib.used_check(
+-          POINTS["j_s_1080_b89"], {"transformer_used": X_NAME})["mismatches"]),
++# H -- MiniMax H3 (2026-11-01, 台帳 §1-95, plan snug-booping-sphinx.md §2.4).
++# Rewritten for THIS bench, as every campaign rewrote its own section H (the
++# 10-04 section H read the 09-27 plan files and stopped on a KeyError here).
++# What it pins: the three H3 windows on a HAND-MADE server.log slice (their
++# bounds and the per-step division), the same windows on a REAL H3 job of
++# logs/server.log (job 6a0b72f3, 2026-10-31 -- the format the adapter writes
++# today), the v3'' verdicts end to end through analyse_h3 on fake instruments,
++# the *_used cross-check (None = mismatch; the LoRA-free job's absent loras),
++# the request body, the token counts, check_point_h3's errors and warnings, and
++# the job-timeout rule.
++import os
++import shutil
++import tempfile
++
++print("\nH. MiniMax H3 (v3'' windows, verdicts, used-check, request, preflight)")
++
++
++def server_lines(t0, spec):
++    """``spec`` = [(seconds after t0, "logger: message"), ...] -> server.log text."""
++    out = []
++    for dt, msg in spec:
++        stamp = t0 + dt
++        whole = int(stamp)
++        ms = int(round((stamp - whole) * 1000))
++        if ms == 1000:
++            whole, ms = whole + 1, 0
++        out.append("%s,%03d INFO %s" % (
++            calib.datetime.fromtimestamp(whole).strftime("%Y-%m-%d %H:%M:%S"), ms, msg))
++    return "\n".join(out) + "\n"
++
++
++T0 = calib.parse_local("2026-11-01 10:00:00", "%Y-%m-%d %H:%M:%S")
++JOB_SPEC = [
++    (0.0, "ltx.pipeline: Job H3FAKE start mode=i2v 1280x768 frames=481 steps=4 fps=24 seed=12345"),
++    (0.1, "ltx.runner: generate text encode started (4 steps)"),
++    (12.0, "ltx.runner: generate text encode 2/4 steps (0.08 step/s, 11.9s elapsed)"),
++    (30.0, "ltx.runner: generate text encode 4/4 steps (5.85 step/s, 29.9s elapsed)"),
++    (31.1, "ltx.runner: generate text encode 5/4 steps (1.31 step/s, 31.0s elapsed)"),
++    (45.0, "ltx.runner: generate stage-1 denoise started (4 steps)"),
++    (60.0, "ltx.runner: generate stage-1 denoise 1/4 steps (0.07 step/s, 15.0s elapsed)"),
++    (75.0, "ltx.runner: generate stage-1 denoise 2/4 steps (0.07 step/s, 30.0s elapsed)"),
++    (90.0, "ltx.runner: generate stage-1 denoise 3/4 steps (0.07 step/s, 45.0s elapsed)"),
++    (105.0, "ltx.runner: generate stage-1 denoise 4/4 steps (0.07 step/s, 60.0s elapsed)"),
++    (106.0, "ltx.runner: generate VAE decode started (3 steps)"),
++    (130.0, "ltx.runner: generate VAE decode 2/3 steps (0.04 step/s, 24.0s elapsed)"),
++    (130.5, "ltx.runner: generate VAE decode 3/3 steps (2.00 step/s, 24.5s elapsed)"),
++    (132.0, "ltx.runner: generate VAE decode 4/3 steps (0.67 step/s, 26.0s elapsed)"),
++    (132.4, "ltx.pipeline: Job H3FAKE done in 132.4s peak_vram=9000MB -> completed"),
++]
++H3_SLICE = server_lines(T0, JOB_SPEC)
++
++# (1) the three windows on the hand-made slice -----------------------------
++ev = calib.read_server_events(H3_SLICE)
++w_enc = calib.h3_stage_window(ev, "encode")
++w_den = calib.h3_stage_window(ev, "denoise")
++w_dec = calib.h3_stage_window(ev, "decode")
++check("H(1): encode start = 'started' line", calib.iso(w_enc["start"]), "2026-11-01 10:00:00.100")
++check("H(1): encode end = the 5/4 line", calib.iso(w_enc["end"]), "2026-11-01 10:00:31.100")
++check("H(1): encode last_done/total", (w_enc["last_done"], w_enc["total"]), (5, 4))
++check("H(1): denoise start = 'started' (step-0 event, before step 1)",
++      calib.iso(w_den["start"]), "2026-11-01 10:00:45.000")
++check("H(1): denoise end = the N/N line", calib.iso(w_den["end"]), "2026-11-01 10:01:45.000")
++check("H(1): denoise sec/step = elapsed / N (not / (N-1))", w_den["sec_per_step_log"], 15.0)
++check("H(1): denoise completed", w_den["completed"], True)
++check("H(1): decode start", calib.iso(w_dec["start"]), "2026-11-01 10:01:46.000")
++check("H(1): decode end = the 4/3 line (after the mp4 write)",
++      calib.iso(w_dec["end"]), "2026-11-01 10:02:12.000")
++check("H(1): decode last_done/total", (w_dec["last_done"], w_dec["total"]), (4, 3))
++# a T2V encode ends on 4/3 (no image encode): still the last line
++t2v = calib.read_server_events(server_lines(T0, [
++    (0.0, "ltx.runner: generate text encode started (3 steps)"),
++    (20.7, "ltx.runner: generate text encode 3/3 steps (0.10 step/s, 20.7s elapsed)"),
++    (20.9, "ltx.runner: generate text encode 4/3 steps (5.35 step/s, 20.9s elapsed)")]))
++check("H(1): T2V encode ends on 4/3", calib.h3_stage_window(t2v, "encode")["last_done"], 4)
++check("H(1): a missing stage is 'not found'",
++      calib.h3_stage_window(calib.read_server_events(""), "denoise")["found"], False)
++
++# (2) the same windows on a REAL H3 job (logs/server.log) -------------------
++server_text = (LOGS / "server.log").read_text(encoding="utf-8", errors="replace")
++REAL_JOB = "6a0b72f3-e85e-44f8-bf24-cab985ef3a00"
++end = server_text.index("Job %s done in" % REAL_JOB)
++hit = server_text.index("Job %s start" % REAL_JOB)
++start = server_text.rindex("\n", 0, hit) + 1
++real = calib.read_server_events(server_text[start:end])
++r_enc = calib.h3_stage_window(real, "encode")
++r_den = calib.h3_stage_window(real, "denoise")
++r_dec = calib.h3_stage_window(real, "decode")
++check("H(2): real encode span", (calib.iso(r_enc["start"]), calib.iso(r_enc["end"])),
++      ("2026-10-31 23:38:07.581", "2026-10-31 23:38:39.531"))
++check("H(2): real encode ends 5/4", (r_enc["last_done"], r_enc["total"]), (5, 4))
++check("H(2): real denoise span", (calib.iso(r_den["start"]), calib.iso(r_den["end"])),
++      ("2026-10-31 23:38:52.744", "2026-10-31 23:39:39.796"))
++check("H(2): real denoise sec/step = 47.0 / 4", r_den["sec_per_step_log"], 11.75)
++check("H(2): real decode span", (calib.iso(r_dec["start"]), calib.iso(r_dec["end"])),
++      ("2026-10-31 23:39:40.430", "2026-10-31 23:40:09.774"))
++check("H(2): real decode ends 4/3", (r_dec["last_done"], r_dec["total"]), (4, 3))
++# token counts against that job's own metadata.json sequence (1280x768x90)
++real_meta = json.loads((calib.OUTPUTS / REAL_JOB / "metadata.json").read_text(encoding="utf-8"))
++real_seq = real_meta["h3"]["phases"]["denoise"]["sequence"]
++real_tok = calib.token_counts_h3({"base_model": "MiniMaxH3", "width": 1280, "height": 768,
++                                  "num_frames": 90, "keyframes": {"frame_idx": []}})
++check("H(2): latent frames == metadata", real_tok["latent_frames"], real_seq["latent_frames"])
++check("H(2): video tokens == metadata", real_tok["video_tokens"], real_seq["video"])
++check("H(2): audio rows == metadata", real_tok["audio_rows"], real_seq["audio"])
++check("H(2): grid == metadata", real_tok["grid"], real_seq["grid"])
++check("H(2): h3_used_from_meta reads the real keys",
++      {k: v for k, v in calib.h3_used_from_meta(real_meta).items()
++       if k in ("vram16_mode_used", "attention_used", "dit_source", "images_used",
++                "num_inference_steps", "loras")},
++      {"vram16_mode_used": "on", "attention_used": "sage", "dit_source": "file",
++       "images_used": 0, "num_inference_steps": 4, "loras": None})
++check("H(2): dit.read_seconds lives at h3.phases.denoise.dit.read_seconds",
++      real_meta["h3"]["phases"]["denoise"]["dit"]["read_seconds"], 12.28)
++
++# the worker's last load (real logs/h3_worker.log): path + LOAD_OK options
++H3LOG = LOGS / "h3_worker.log"
++# a BYTE offset, as cmd_run records it (st_size): read bytes, not text (newline
++# translation would shift the offset into the middle of a line)
++cut = H3LOG.read_bytes().find(b"[h3_worker] generate: seed=1000724571")
++ld = calib.h3_worker_load_state(cut)
++check("H(2): last load before job 6a0b72f3 = the PulpCut file",
++      ld["transformer_path"].rsplit("\\", 1)[-1],
++      "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors")
++check("H(2): LOAD_OK options parsed",
++      sorted(ld["load_ok_options"]), ["attention_backend", "block_swap_prefetch",
++                                      "blocks_on_gpu", "deterministic"])
++
++# (3) token counts and frame_idx ---------------------------------------------
++P481 = {"base_model": "MiniMaxH3", "width": 1280, "height": 768, "num_frames": 481,
++        "keyframes": {"frame_idx": [0]}}
++tok = calib.token_counts_h3(P481)
++check("H(3): 1280x768x481 latent = (476//17)*5+2", tok["latent_frames"], 142)
++check("H(3): 1280x768x481 video = 40*24*142", tok["video_tokens"], 136320)
++check("H(3): K=1 cond = one grid", tok["cond_tokens"], 960)
++check("H(3): line axis video+cond", tok["video_plus_cond"], 137280)
++check("H(3): K=10 cond = 10 grids", calib.token_counts_h3(
++    dict(P481, keyframes={"frame_idx": calib.h3_frame_idx(481, 10)}))["cond_tokens"], 9600)
++check("H(3): frame_idx K=10 F=56", calib.h3_frame_idx(56, 10),
++      [0, 6, 12, 18, 24, 31, 37, 43, 49, 55])
++check("H(3): frame_idx K=1", calib.h3_frame_idx(481, 1), [0])
++check("H(3): frame_idx K=10 F=481 ends on F-1", calib.h3_frame_idx(481, 10)[-1], 480)
++
++# (4) request bodies from the bench's own sample plan files ---------------
++SAMPLES = {}
++for plan_file in sorted(calib.PLANS_DIR.glob("p_*.json")):
++    for p in json.loads(plan_file.read_text(encoding="utf-8")):
++        SAMPLES[p["label"]] = p
++H3_BODY_KEYS = sorted(["prompt", "width", "height", "num_frames", "frame_rate", "seed",
++                       "attention_backend", "block_swap_prefetch", "num_inference_steps",
++                       "loras", "conditioning_images"])
++F0_PROMPT = (calib.OUTPUTS / "h3-vram16-gates" / "f0_prompt.txt").read_text(encoding="utf-8").strip()
++for label in ("b720", "s720_481", "k720_345", "t720_turbo"):
++    if label not in SAMPLES:
++        check("H(4): sample plan %s exists" % label, False, True)
++        continue
++    path_h, body_h = calib.build_request(SAMPLES[label], video_id="IMG-1")
++    check("H(4): %s endpoint" % label, path_h, "/generate")
++    check("H(4): %s body keys (no LTX accel / keep_resident / vram16_mode)" % label,
++          sorted(body_h), H3_BODY_KEYS)
++    check("H(4): %s prompt = F0" % label, body_h["prompt"], F0_PROMPT)
++    check("H(4): %s conditioning_images carry no strength" % label,
++          [sorted(c) for c in body_h["conditioning_images"]],
++          [["frame_idx", "image_id"]] * len(body_h["conditioning_images"]))
++check("H(4): k720_345 frame_idx", [c["frame_idx"] for c in calib.build_request(
++    SAMPLES["k720_345"], video_id="IMG-1")[1]["conditioning_images"]],
++      calib.h3_frame_idx(345, 10))
++check("H(4): k720_345 reuses ONE image_id for all 10", {c["image_id"] for c in calib.build_request(
++    SAMPLES["k720_345"], video_id="IMG-1")[1]["conditioning_images"]}, {"IMG-1"})
++check("H(4): t720_turbo loras", calib.build_request(SAMPLES["t720_turbo"], video_id="IMG-1")[1]["loras"],
++      [{"name": calib.H3_TURBO_LORA, "strength": 0.8}])
++check("H(4): b720 attention/prefetch/steps",
++      [calib.build_request(SAMPLES["b720"], video_id="IMG-1")[1][k]
++       for k in ("attention_backend", "block_swap_prefetch", "num_inference_steps", "seed")],
++      ["sage", True, 4, 12345])
++
++# (5) check_point_h3 errors and warnings ----------------------------------
++labels = set(SAMPLES)
++row = calib.check_point(SAMPLES["s720_481"], labels)
++check("H(5): s720_481 passes", row["ok"], True)
++check("H(5): s720_481 warnings = attention / steps / seed (plan §2.1)",
++      [w.split("=")[0].split()[0] for w in row["warnings"]],
++      ["attention_backend", "num_inference_steps", "seed"])
++check("H(5): t720_turbo adds the LoRA warning",
++      [w.split("=")[0].split()[0] for w in calib.check_point(SAMPLES["t720_turbo"], labels)["warnings"]],
++      ["attention_backend", "num_inference_steps", "seed", "loras"])
++
++
++def errs(**over):
++    p = json.loads(json.dumps(SAMPLES["s720_481"]))
++    for k, v in over.items():
++        if v is None:
++            p.pop(k, None)
++        else:
++            p[k] = v
++    return calib.check_point(p, labels)["errors"]
++
++
++check("H(5): 8n+1 frames (57) is not 17n+5", any("17n+5" in e for e in errs(num_frames=57)), True)
++check("H(5): 482 frames leaves [22, 481]", any("outside [22, 481]" in e for e in errs(num_frames=482)), True)
++check("H(5): width 1000 not a 32 multiple", any("multiple of 32" in e for e in errs(width=1000)), True)
++check("H(5): steps 0 refused", any("num_inference_steps" in e for e in errs(num_inference_steps=0)), True)
++check("H(5): an LTX accel key refused",
++      any("H3 sends only" in e for e in errs(accel={"attention_backend": "sage", "block_swap_prefetch": True,
++                                                     "fused_gguf_dequant_kernel": True})), True)
++check("H(5): keep_resident key refused", any("keep_resident" in e for e in errs(keep_resident=False)), True)
++check("H(5): duplicate frame_idx refused",
++      any("duplicates" in e for e in errs(keyframes={"image_path": "keyframe_f0.png", "frame_idx": [0, 0]})), True)
++check("H(5): keyframe strength refused",
++      any("strength" in e for e in errs(keyframes={"image_path": "keyframe_f0.png", "frame_idx": [0],
++                                                    "strength": 0.8})), True)
++check("H(5): missing keyframe image refused",
++      any("does not exist" in e for e in errs(keyframes={"image_path": "nope.png", "frame_idx": [0]})), True)
++check("H(5): a foreign LoRA refused",
++      any("outside this campaign" in e for e in errs(loras=[{"name": "x", "strength": 1.0}])), True)
++check("H(5): unknown baseline refused",
++      any("resolves to no known point" in e for e in errs(baseline_label="nope")), True)
++check("H(5): the LTX 8n+1 / 401 / LTX23-25 rules are NOT applied to H3",
++      [e for e in errs() if "8n+1" in e or "source clip" in e or "LTX23/LTX25" in e], [])
++
++# (6) job timeouts ----------------------------------------------------------
++check("H(6): 4-step point -> 7200 s", calib.job_timeout_for(SAMPLES["s720_481"], "auto"), 7200.0)
++check("H(6): 20-step point -> 10800 s",
++      calib.job_timeout_for(dict(SAMPLES["s720_481"], num_inference_steps=20), "auto"), 10800.0)
++check("H(6): a number is used as is", calib.job_timeout_for(SAMPLES["s720_481"], "3600"), 3600.0)
++
++# (7) used_check_h3 ---------------------------------------------------------
++GOOD = {"vram16_mode_used": "on", "attention_used": "sage", "keep_resident_used": "off",
++        "block_swap_prefetch_used": "on", "images_used": 1, "num_inference_steps": 4,
++        "dit_source": "file", "loras": None, "loras_present_in_metadata": False,
++        "transformer_used": "default"}
++P = SAMPLES["s720_481"]
++check("H(7): all good -> ok", calib.used_check_h3(P, GOOD)["ok"], True)
++check("H(7): a None (dit_source missing) is a MISMATCH, not skipped",
++      sorted(calib.used_check_h3(P, dict(GOOD, dit_source=None))["mismatches"]), ["dit_source"])
++check("H(7): prefetch off is NOT a used-check mismatch (a result: v3'' prefetch_degraded)",
++      calib.used_check_h3(P, dict(GOOD, block_swap_prefetch_used="off"))["ok"], True)
++check("H(7): block_swap_prefetch_used is not among the checked keys",
++      "block_swap_prefetch_used" in calib.used_check_h3(P, GOOD)["expected"], False)
++check("H(7): resident DiT -> mismatch", sorted(calib.used_check_h3(
++    P, dict(GOOD, dit_source="resident"))["mismatches"]), ["dit_source"])
++check("H(7): images_used 0 on a K=1 point -> mismatch", sorted(calib.used_check_h3(
++    P, dict(GOOD, images_used=0))["mismatches"]), ["images_used"])
++check("H(7): sdpa used on a sage point -> mismatch", sorted(calib.used_check_h3(
++    P, dict(GOOD, attention_used="sdpa"))["mismatches"]), ["attention_used"])
++check("H(7): the wrong transformer -> mismatch", sorted(calib.used_check_h3(
++    P, dict(GOOD, transformer_used="PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot"))["mismatches"]),
+       ["transformer_used"])
+-check("H: a missing transformer_used is skipped, not flagged",
+-      calib.used_check(POINTS["u_s_1080_b89"],
+-                       {"transformer_used": None})["ok"], True)
+-
+-# T5a: preflight makes an undeclared point an ERROR (check_point, not used_check).
+-p_bare = {k: v for k, v in POINTS["u_s_1080_b89"].items() if k != "transformer"}
+-check("H: preflight makes an undeclared point an ERROR",
+-      [e for e in calib.check_point(p_bare, set(POINTS))["errors"]
+-       if "transformer" in e],
+-      ["transformer is not declared (name the registered GGUF, or 'default' "
+-       "for the official weights)"])
++T = SAMPLES["t720_turbo"]
++TURBO_USED = dict(GOOD, loras_present_in_metadata=True, loras=[
++    {"name": calib.H3_TURBO_LORA, "strength": 0.8}])
++check("H(7): Turbo point with the Turbo report -> ok", calib.used_check_h3(T, TURBO_USED)["ok"], True)
++check("H(7): Turbo point whose metadata has no loras -> mismatch",
++      sorted(calib.used_check_h3(T, GOOD)["mismatches"]), ["loras"])
++check("H(7): LoRA-free point with a LoRA report -> mismatch",
++      sorted(calib.used_check_h3(P, TURBO_USED)["mismatches"]), ["loras"])
++check("H(7): a failed job is not applicable (ok None)",
++      calib.used_check_h3(P, {}, completed=False)["ok"], None)
++
++# (8) analyse_h3 end to end on fake instruments -----------------------------
++class FakeMon:
++    def __init__(self, d, rows=()):
++        self.out_dir = d
++        self.wddm_csv = d / "wddm.csv"
++        self.dmon_txt = d / "dmon.txt"
++        self._rows = list(rows)
++
++    def tail_rows(self):
++        return self._rows
++
++
++def write_wddm(d, shared_of, t_from, t_to):
++    lines = ["timestamp,dedicated_mb,shared_mb,dt_ms"]
++    t = t_from
++    while t <= t_to:
++        stamp = calib.datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
++        lines.append("%s,%.1f,%.1f,1000.0" % (stamp, 9000.0, shared_of(t - T0)))
++        t += 1.0
++    (d / "wddm.csv").write_text("\n".join(lines) + "\n", encoding="ascii")
++    (d / "dmon.txt").write_text("", encoding="ascii")
++
++
++def shared_profile(enc, den, dec):
++    def f(dt):
++        if 0.1 <= dt <= 31.1:
++            return enc
++        if 45.0 <= dt <= 105.0:
++            return den
++        if 106.0 <= dt <= 132.0:
++            return dec
++        return 600.0
++    return f
++
++
++def fake_meta(prefetch="on", loras=None):
++    h3 = {"num_inference_steps": 4, "images_used": 1, "commit_peak_gib": 40.1,
++          "phases": {"encode": {"seconds": 31.0}, "image_encode": {"seconds": 1.0},
++                     "denoise": {"seconds": 80.0, "dit": {"read_seconds": 20.0},
++                                 "dit_source": "file", "peak_vram_mb": 9000,
++                                 "peak_vram_reserved_mb": 11000,
++                                 "sequence": {"text": 37, "cond": 960, "audio": 1604,
++                                              "video": 136320, "total": 138921,
++                                              "latent_frames": 142, "audio_latents": 802,
++                                              "grid": [24, 40]},
++                                 "vram16": {"cap_mib": 13900, "num_alloc_retries": 0,
++                                            "num_ooms": 0, "inactive_split_peak_mib": 1500}},
++                     "decode": {"seconds": 26.0, "peak_vram_reserved_mb": 7000}}}
++    if loras is not None:
++        h3["loras"] = loras
++    return {"attention_used": "sage", "block_swap_prefetch_used": prefetch,
++            "keep_resident_used": "off", "vram16_mode_used": "on",
++            "peak_vram_reserved_mb": 11000, "vram_optimization": {"peak_vram_mb": 9000},
++            "models": {"selection": {"transformer": {"name": "default"}}}, "h3": h3}
++
++
++tmp = Path(tempfile.mkdtemp(prefix="h3_selftest_"))
++saved = (calib.OUTPUTS, calib.MANIFEST)
++try:
++    calib.OUTPUTS = tmp / "outputs"
++    calib.MANIFEST = tmp / "manifest.jsonl"
++    CAL = {"shared_p95_mb": 150.0}
++
++    def run_case(name, point, shared, status="completed", error=None, meta=None,
++                 slice_text=H3_SLICE, tail=()):
++        d = tmp / name
++        d.mkdir(parents=True)
++        write_wddm(d, shared, T0 - 2, T0 + 134)
++        job = {"job_id": "job-" + name, "status": status, "error": error}
++        if meta is not None:
++            (calib.OUTPUTS / job["job_id"]).mkdir(parents=True)
++            (calib.OUTPUTS / job["job_id"] / "metadata.json").write_text(
++                json.dumps(meta), encoding="utf-8")
++        point = json.loads(json.dumps(point))
++        point["_request_sent"] = calib.build_request(point, video_id="IMG-1")[1]
++        rec = calib.analyse(point, FakeMon(d, tail), job, T0 - 1, T0 + 133, CAL, slice_text)
++        calib.append_manifest(rec)
++        return rec
++
++    base_pt = dict(SAMPLES["s720_481"], label="hb", baseline_label=None, is_baseline=True)
++    base_pt.pop("baseline_label")
++    rb = run_case("hb", base_pt, shared_profile(900.0, 1200.0, 1100.0), meta=fake_meta())
++    check("H(8): baseline verdict", rb["verdict_v3dprime"], "baseline")
++    check("H(8): baseline engine tag", rb["engine"], "h3")
++    check("H(8): baseline denoise median", rb["v3dprime"]["windows"]["denoise"]["shared_median_mb"], 1200.0)
++    check("H(8): baseline denoise samples (60 s at 1 Hz)",
++          rb["v3dprime"]["windows"]["denoise"]["wddm_samples"], 61)
++    check("H(8): baseline health: both windows have >= 10 samples",
++          rb["v3dprime"]["baseline_health"]["windows_have_enough_samples"], True)
++    check("H(8): baseline health: 1200 inside the past band +-300",
++          rb["v3dprime"]["baseline_health"]["outside_past_band_by_300mb"], False)
++    check("H(8): used ok on the baseline", rb["used_matches_request"]["ok"], True)
++    check("H(8): sec/step meta = (80 - 20) / 4", rb["h3"]["sec_per_step_meta"], 15.0)
++    check("H(8): sec/step log", rb["h3"]["sec_per_step_log"], 15.0)
++    check("H(8): cap_mib recorded", rb["h3"]["vram16"]["cap_mib"], 13900)
++
++    mp = dict(SAMPLES["s720_481"], label="hm1", baseline_label="hb")
++    r1 = run_case("hm1", mp, shared_profile(900.0, 1300.0, 1150.0), meta=fake_meta())
++    check("H(8): +100 MB -> comfortable", r1["verdict_v3dprime"], "comfortable")
++    check("H(8): denoise delta", r1["v3dprime"]["windows"]["denoise"]["delta_mb"], 100.0)
++    check("H(8): decode delta", r1["v3dprime"]["windows"]["decode"]["delta_mb"], 50.0)
++    check("H(8): encode is recorded, never judged",
++          (r1["v3dprime"]["windows"]["encode"]["judged"], r1["v3dprime"]["windows"]["encode"]["decidable"]),
++          (False, False))
++    r2 = run_case("hm2", dict(mp, label="hm2"), shared_profile(5000.0, 1550.0, 1150.0), meta=fake_meta())
++    check("H(8): denoise +350 MB -> uncomfortable plateau:denoise",
++          (r2["verdict_v3dprime"], r2["v3dprime"]["reasons"]), ("uncomfortable", ["plateau:denoise"]))
++    check("H(8): a huge ENCODE median does not judge", r2["v3dprime"]["windows"]["encode"]["plateau"], None)
++    r3 = run_case("hm3", dict(mp, label="hm3"), shared_profile(900.0, 1200.0, 1450.0), meta=fake_meta())
++    check("H(8): decode +350 MB -> plateau:decode", r3["v3dprime"]["reasons"], ["plateau:decode"])
++    r4 = run_case("hm4", dict(mp, label="hm4"), shared_profile(900.0, 1200.0, 1100.0),
++                  meta=fake_meta(prefetch="off"))
++    check("H(8): prefetch off -> uncomfortable prefetch_degraded",
++          (r4["verdict_v3dprime"], r4["v3dprime"]["reasons"], r4["v3dprime"]["prefetch_degraded"]),
++          ("uncomfortable", ["prefetch_degraded"], True))
++    check("H(8): ... while the used-check stays ok (the conditions sent were honoured)",
++          r4["used_matches_request"]["ok"], True)
++    oom_err = ("GPU_OOM: CUDA out of memory during generation (%s)" % calib.H3_VRAM16_OOM_NEEDLE
++               + " (CUDA out of memory)。解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください)")
++    oom_slice = server_lines(T0, JOB_SPEC[:7])
++    gen_line = ("[h3_worker] generate: seed=12345 1280x768 frames=481 steps=4 shift=12.0/3.0 "
++                "attention=sage images=1 keep_resident=False prefetch=True vram16=True loras=[] -> x")
++    r5 = run_case("hm5", dict(mp, label="hm5", _h3_worker_load={"transformer_path": "P"}),
++                  shared_profile(900.0, 1200.0, 1100.0), status="failed", error=oom_err,
++                  slice_text=oom_slice, tail=[{"t": T0 + 1, "log": "h3", "text": gen_line}])
++    check("H(8): OOM point keeps the worker's generate line and load state",
++          (r5["worker_conditions"]["generate_line"], r5["worker_conditions"]["load"]),
++          (gen_line, {"transformer_path": "P"}))
++    check("H(8): OOM at the cap -> verdict oom, oom_vram16",
++          (r5["verdict_v3dprime"], r5["v3dprime"]["oom"], r5["v3dprime"]["oom_vram16"],
++           r5["v3dprime"]["comfortable"]), ("oom", True, True, False))
++    check("H(8): OOM -> used-check not applicable", r5["used_matches_request"]["ok"], None)
++    check("H(8): OOM -> S computed, text rows from the completed point with the same prompt",
++          (r5["h3"]["sequence_estimate"]["video"], r5["h3"]["sequence_estimate"]["cond"],
++           r5["h3"]["sequence_estimate"]["audio"], r5["h3"]["sequence_estimate"]["text"],
++           r5["h3"]["sequence_estimate"]["total"]),
++          (136320, 960, 1604, 37, 136320 + 960 + 1604 + 37))
++    r6 = run_case("hm6", dict(mp, label="hm6"), shared_profile(900.0, 1200.0, 1100.0),
++                  status="failed", error="GPU_OOM: CUDA out of memory during generation (decode)")
++    check("H(8): an OOM without the cap message -> oom, not oom_vram16",
++          (r6["verdict_v3dprime"], r6["v3dprime"]["oom_vram16"]), ("oom", False))
++    short_spec = JOB_SPEC[:11] + [
++        (110.0, "ltx.runner: generate VAE decode 2/3 steps (0.04 step/s, 4.0s elapsed)"),
++        (114.0, "ltx.runner: generate VAE decode 4/3 steps (0.67 step/s, 8.0s elapsed)")]
++    r7 = run_case("hm7", dict(mp, label="hm7"), shared_profile(900.0, 1200.0, 1100.0),
++                  meta=fake_meta(), slice_text=server_lines(T0, short_spec))
++    check("H(8): an 8 s decode window (< 10 samples) -> undecidable",
++          (r7["verdict_v3dprime"], r7["v3dprime"]["windows"]["decode"]["reason_undecidable"]),
++          ("undecidable", "fewer than 10 WDDM samples"))
++    rt = run_case("hm8", dict(SAMPLES["t720_turbo"], label="hm8", baseline_label="hb"),
++                  shared_profile(900.0, 1200.0, 1100.0),
++                  meta=fake_meta(loras=[{"name": calib.H3_TURBO_LORA + ".safetensors",
++                                         "strength": 0.8, "pairs_applied": 1, "skipped": []}]))
++    check("H(8): Turbo point: the file-name report matches the registered name",
++          rt["used_matches_request"]["ok"], True)
++    # report / make_results row builder does not crash on any of these
++    cells = [calib.h3_report_cells(r["label"], r) for r in (rb, r1, r2, r4, r5, r7, rt)]
++    check("H(8): report rows have every column",
++          {len(c) for c in cells}, {len(calib.H3_REPORT_COLS)})
++finally:
++    calib.OUTPUTS, calib.MANIFEST = saved
++    shutil.rmtree(tmp, ignore_errors=True)
+ 
+ # ===========================================================================
+ print("\n%d check(s), %d failure(s)" % (CHECKS, len(FAILURES)))
+--- /dev/null	2026-11-01 01:31:04.000000000 +0900
++++ comfort-calib-h3-2026-11-01/selftest/dryrun_validate.py	2026-11-01 01:24:28.232369700 +0900
+@@ -0,0 +1,42 @@
++# -*- coding: utf-8 -*-
++r"""Offline: feed every dryrun/<label>.request.json body to the PRODUCT's own
++request validators (api.models.GenerateRequest -> h3 adapter reject_unsupported
++-> services.engines.validate_for_family("h3", ...)), in the order
++api/generate.py uses them.  No server, no GPU.  The image_id placeholder is
++swapped for a dummy id (existence is checked by the endpoint, not here).
++
++  ..\..\..\.venv\Scripts\python.exe selftest\dryrun_validate.py
++"""
++import json
++import sys
++from pathlib import Path
++
++HERE = Path(__file__).resolve().parent
++BENCH = HERE.parent
++ROOT = BENCH.parents[1]
++sys.path.insert(0, str(ROOT))
++
++from api.models import GenerateRequest  # noqa: E402
++from services.engines import validate_for_family  # noqa: E402
++from services.engines.h3 import adapter as h3_adapter  # noqa: E402
++
++fails = 0
++for f in sorted((BENCH / "dryrun").glob("*.request.json")):
++    rec = json.loads(f.read_text(encoding="utf-8"))
++    body = json.loads(json.dumps(rec["body"]))
++    for ci in body.get("conditioning_images") or []:
++        ci["image_id"] = "00000000-0000-0000-0000-000000000000"
++    try:
++        req = GenerateRequest(**body)
++        h3_adapter.reject_unsupported(req)
++        validate_for_family("h3", req)
++        print("ok   %-12s steps=%s vram16_mode=%s keep_resident=%s shifts=%s/%s frame_idx=%s strengths=%s"
++              % (rec["label"], req.num_inference_steps, req.vram16_mode, req.keep_resident,
++                 req.shift_video, req.shift_audio,
++                 [c.frame_idx for c in req.conditioning_images],
++                 sorted({c.strength for c in req.conditioning_images}, key=str)))
++    except Exception as exc:  # noqa: BLE001
++        fails += 1
++        print("FAIL %-12s %s: %s" % (rec["label"], type(exc).__name__, exc))
++print("%d failure(s)" % fails)
++sys.exit(1 if fails else 0)
+
+2026-11-01 夜 2: drive2.sh の点の行の --job-timeout を環境変数 JOB_TIMEOUT（既定 auto）に。48 行目 `"$PY" calib.py run --plan "$plan" --job-timeout auto --cooldown 150 ...` を `--job-timeout "${JOB_TIMEOUT:-auto}"` に変えた（復帰の捨てランの行は auto のまま）。理由: 夜 1 で sdpa・20 ステップの点（s720x_481_20）が auto の 10,800 秒に収まらず較正台の時間切れになった（sdpa の 1 ステップは sage の約 3.5 倍）。calib.py の job_timeout_for() は auto 以外の値を秒としてそのまま使う。使い方: `JOB_TIMEOUT=28800 bash rp.sh <label>`。

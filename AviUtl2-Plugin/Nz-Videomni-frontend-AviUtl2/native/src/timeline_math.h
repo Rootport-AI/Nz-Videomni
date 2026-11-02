@@ -60,7 +60,7 @@ inline constexpr int kMaxChainTotalPixelFrames = 8 * 481;  // 3848 (sanity cap)
 inline constexpr int kStage2VTile = 22;
 // px_from_v_latent(22) = 169 -> largest 8n+1 source context that FITS tile 0 on
 // the standard window; the UI config layer bounds context_frames further to
-// [25, 145] (SourceVideoSpec), NOT enforced here (this replicates chain_math's
+// [25, 145] (LTX's server rules), NOT enforced here (this replicates chain_math's
 // invariant).
 inline constexpr int kV2VContextConfigMin = 25;
 inline constexpr int kV2VContextConfigMax = 145;

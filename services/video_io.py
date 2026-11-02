@@ -4,6 +4,11 @@ This module is the app layer's single place that shells out to ffmpeg: it
 applies the optional centered crop to ``output.mp4``, encodes the mock
 backend's PIL frames, cuts, pads, joins, composites (Alpha Gen exit) and probes
 mp4 files, and writes ``metadata.json``.
+
+Every ffmpeg / ffprobe ``subprocess.run`` here decodes its output as UTF-8
+with ``errors="replace"``: the console default (cp932 on a Japanese Windows)
+raises ``UnicodeDecodeError`` on the non-ASCII text ffmpeg echoes (an
+embedded Japanese prompt, a path), which leaves ``stderr`` as ``None``.
 """
 
 from __future__ import annotations
@@ -670,9 +675,6 @@ def _audio_max_volume_db(path: Path) -> float | None:
     while ``-vn`` would let ffmpeg pick the *default* one, which differs on a
     file with several audio tracks. The LAST ``max_volume`` line is read
     because ffmpeg can print an earlier block with ``n_samples: 0`` only.
-    stderr is decoded as UTF-8 with replacement (as :func:`embed_comment_tag`
-    does): the console default (cp932 here) raises ``UnicodeDecodeError`` on
-    Japanese metadata echoed by ffmpeg.
 
     ``None``: ffmpeg missing, a non-zero exit (e.g. no audio stream), stderr
     that could not be read, or an unparsable value. A clean exit with no ``max_volume`` line at all means
@@ -1436,8 +1438,6 @@ def _loudnorm_measure(exe: str, path: Path) -> dict[str, float]:
         "null",
         "-",
     ]
-    # Decode as UTF-8: stderr echoes the input metadata block (e.g. a Japanese
-    # prompt); the cp932 default raises and leaves proc.stderr None.
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(f"ffmpeg loudnorm measure failed (code {proc.returncode}): {proc.stderr[-2000:]}")

@@ -161,9 +161,9 @@ export const GEN_FPS = 24;
  * `422 SOURCE_VIDEO_TOO_SHORT` before any GPU work
  * (Nz-Videomni/api/errors.py:76-85 `source_video_too_short`). The Chain
  * screen the right-click lands on defaults `context_frames` to
- * `v2v_context_frames_default = 73` (Nz-Videomni/config.py:236, also
- * config.yaml). We therefore guard at the *default* (73 frames), not the
- * absolute floor (`v2v_context_frames_min = 25`, config.py:237): a source
+ * `v2v_context_frames_default = 73` (Nz-Videomni/config.py `LimitsConfig`,
+ * also config.yaml). We therefore guard at the *default* (73 frames), not the
+ * absolute floor (LTX's `v2v_context_frames_min = 25`): a source
  * shorter than 73 frames hits the 422 at the prefilled default, and the spec's
  * §4-5 intent is to prevent that known rejection before Generate. 73 / 24 ≈
  * 3.04s.
@@ -188,12 +188,12 @@ export interface MenuGuardOptions {
  * #2 `referenceVideo` (IC-LoRA) minimum reference duration.
  *
  * TODO(要バックエンド照合): the backend does NOT validate reference-video length.
- * `api/generate.py` only 404s a missing `reference_video_id`
- * (Nz-Videomni/api/generate.py:57-58); there is no up-front frame-count
+ * `api/generate.py` only 404s a missing `reference_video_id`;
+ * there is no up-front frame-count
  * check, so a too-short reference crashes deep inside the pipeline (spec §4-5:
  * "サーバー側は入力の長さを検査しません"). No confirmed backend constant exists.
  * Conservative placeholder: reuse the documented `v2v_context_frames_min`
- * (25 frames, config.py:237 / config.yaml:176) as a ~1s UX floor for the
+ * (25 frames, config.py `LimitsConfig`) as a ~1s UX floor for the
  * similarly conditioning-video role. Revisit if/when the backend adds an
  * explicit reference-length check. 25 / 24 ≈ 1.04s.
  *

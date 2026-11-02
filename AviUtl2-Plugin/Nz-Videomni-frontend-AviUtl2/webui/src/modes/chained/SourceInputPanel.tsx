@@ -48,7 +48,9 @@ export interface SourceInputPanelProps {
    * switched) goes dead. Everything the image half needs — choose, clear,
    * strength, the thumbnail — stays live, because that half IS in scope.
    * `ChainedScreen` renders the sentence explaining it directly above the
-   * card. Omitted -> no restriction. */
+   * card. Omitted -> no restriction. No shipped engine publishes `v2v` since
+   * 台帳 §1-121 (MiniMax H3's chain continues a source video too); the prop
+   * is the mechanism. */
   videoUnavailable?: boolean | undefined;
   /** §1-106 (`chain_start_image`): closes clip 0's opening image (strength
    * slider dead; an attached image keeps its thumbnail so it can be cleared).

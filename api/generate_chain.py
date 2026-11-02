@@ -48,7 +48,7 @@ def generate_chain(
     # THIS request, and which of them an engine can serve is a FIELD-BY-FIELD
     # answer, not one blanket yes/no. Hence the body is passed. The fields each
     # engine refuses are listed in its adapter's ``CHAIN_REJECT_TABLE``. A
-    # DEFAULT chain passes on both engines, because every predicate in both
+    # DEFAULT chain passes on every engine, because every predicate in those
     # tables tests "differs from the default".
     #
     # STAYS AHEAD OF THE UPLOAD LOOKUPS BELOW. "This engine cannot do that" is a
@@ -61,7 +61,7 @@ def generate_chain(
     # a 422 of the pydantic shape. AFTER the feature scope (what the engine
     # cannot do comes first) and BEFORE the upload lookups (a malformed request
     # is answered without touching the stores). Also writes the family's
-    # defaults back (MiniMax H3's steps / shifts / VRAM 16GB mode), so the job
+    # defaults back (MiniMax H3's steps / shifts / VRAM 16GB mode / source_video.context_frames), so the job
     # record, the log and the adapter see numbers.
     engines.validate_chain_for_family(family, request)
 

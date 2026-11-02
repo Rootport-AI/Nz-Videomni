@@ -104,7 +104,7 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             (there is no stage2: the app adapter, services/engines/h3/adapter.py,
             reads these with ``_read_worker_events(one_stage=True)``, as Alpha
             Gen does; ``encode`` counts 3 steps, +1 when the job has any
-            key frame, +1 when it has references, +1 when it encodes a source_audio
+            key frame (on a chain's clip 0, also a ``source``), +1 when it has references, +1 when it encodes a source_audio
             (strength > 0); the reference and the audio encodings are one
             ``encode`` step each, and ``reference_encode`` / ``audio_encode`` are only phase names in
             ``done.h3.phases``, not a progress stage)
@@ -130,8 +130,11 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             prompt_sha256 / seconds / latents_sha256 / head_equals_prev_tail,
             plus, for a clip with references only, ``references``
             ({pictures, videos, audios} counts) and ``seconds.reference_encode``,
-            and ``h3``: overlap_frames / inject_clean / decode); its
-            ``num_frames`` is the timeline's, ``h3.phases`` is
+            and ``h3``: overlap_frames / inject_clean / decode; with a
+            ``source``, also ``v2v``: the LTX chain's sixteen keys, whose
+            ``audio_handle_filename`` names the ``<stem>_audio_handle.wav``
+            written next to the mp4); its
+            ``num_frames`` is the timeline's (before the V2V trim), ``h3.phases`` is
             ``{clips: [...], decode}`` and ``h3.loras`` is clip 0's.
   error     {detail}
 STDERR carries the human log, prefixed ``[h3_worker]``.

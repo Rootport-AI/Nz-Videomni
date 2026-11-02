@@ -197,7 +197,7 @@ Elsewhere in the monorepo:
 
 ```
 ..\NzVideomni.aux2        The built plugin, tracked in git and shipped to users
-                          (deploy.ps1 refreshes it; see Deploy below)
+                          (build.ps1 and deploy.ps1 refresh it; see Build)
 ..\..\                    Backend (main.py, api/, services/, engine/, ...)
 ..\..\Docs\               Project-wide docs and the task ledger
                           (PENDING_TASKS.md)
@@ -233,6 +233,10 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Config Release -RunT
 > below for how to run the full suite, `"integration"` included.
 
 Output: `build\ninja-release\NzVideomni.aux2` and `build\ninja-release\NzVideomni_tests.exe`.
+A successful build also copies `NzVideomni.aux2` over the monorepo's
+distribution copy (`..\NzVideomni.aux2`), also while AviUtl2 is running;
+`-NoDistCopy` skips that; the distribution copy is skipped automatically
+with `-NoEmbedWebui`.
 The Web UI (`webui\` `npm run build:single` -> `webui\dist-single\index.html`)
 is built automatically and compiled into the DLL as an RCDATA resource
 (`-DNZVIDEOMNI_EMBED_WEBUI=ON`), so `NzVideomni.aux2` serves its UI from memory and
@@ -307,9 +311,10 @@ switch).
    so it works on any clone path without an override; pass `-DistDir`
    explicitly only to send the copy somewhere else.
    **Forgetting this copy means users keep getting the old plugin**, which is
-   why deploy.ps1 does it automatically rather than leaving it to a later
-   manual step. (Skipped automatically when the build carries a `[PROBE]`
-   marker, so instrumented builds never leak into the distribution copy.)
+   why `build.ps1` (see Build) and deploy.ps1 both refresh it automatically
+   rather than leaving it to a later manual step. (deploy.ps1 skips it for a
+   build carrying a `[PROBE]` marker; `build.ps1` copies every successful
+   embedded build.)
 
 Pass an empty string to either flag to skip that destination.
 

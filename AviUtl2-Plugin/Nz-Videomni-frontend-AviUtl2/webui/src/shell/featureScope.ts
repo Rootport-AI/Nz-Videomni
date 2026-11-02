@@ -27,7 +27,8 @@ import type { AppMode } from "./AppShell";
  * A row lists the parts it greys in `disables` and the parts it hides in
  * `hides` (one part sits in one list or the other, never both), so "is this
  * part hidden on that engine?" is answered here rather than by a screen-side
- * condition.
+ * condition. (The Settings rows and the LoRA chips' audio toggle are older
+ * than `hides`: they are `disables` targets their screens render hidden.)
  */
 
 /** The "real UI part" a feature name closes. The ids are defined here and
@@ -111,7 +112,8 @@ interface FeatureUiEntry {
  *    engine can chain, the tab is live and the panels it still cannot feed have
  *    to grey on their own). `end_source` and `reference_video` HIDE their
  *    panel instead (台帳 §1-121, MiniMax H3: its End source is deferred, and
- *    IC-LoRA is LTX's own mechanism); `v2v` still greys.
+ *    IC-LoRA is LTX's own mechanism); `v2v` still greys (no shipped engine
+ *    publishes it since 台帳 §1-121).
  *  - **chain_start_image** (§1-106) is the request field
  *    `clips[0].conditioning_images`: it closes the image half of the Chain
  *    screen's SOURCE card, and the Batch i2v-long section with it — every row

@@ -24,11 +24,8 @@ def validate_ltx_chain(request: "GenerateChainRequest") -> None:
     """Raise ``ValueError`` with the message of the first LTX rule ``request`` breaks.
 
     In order: the V2V source's ``context_frames`` (at least
-    ``v2v_context_frames_min`` and 8n+1 — moved here from ``SourceVideoSpec``
-    and raised directly as the 422 with that model's ``loc ["body",
-    "source_video"]``, an ``APIError`` that ``validate_chain_for_family``'s
-    ``except ValueError`` lets through; then shorter than clip 0, moved from
-    ``GenerateChainRequest``, ``loc ["body"]``), the 64 multiple, the distilled pipeline's 8 steps / CFG 1.0,
+    ``v2v_context_frames_min`` and 8n+1, ``loc ["body", "source_video"]``;
+    then shorter than clip 0, ``loc ["body"]``), the 64 multiple, the distilled pipeline's 8 steps / CFG 1.0,
     then per clip the 8n+1 grid, the overlap against the clip's stage-1 latent
     frames and the keyframes snapped onto LTX's grid (written back in place),
     then the whole timeline's geometry (``chain_math.compute_chain_layout``)

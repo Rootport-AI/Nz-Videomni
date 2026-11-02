@@ -88,7 +88,7 @@ def encode_frames_to_mp4(
             str(output_path),
         ]
 
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if proc.returncode != 0:
             raise FFmpegError(f"ffmpeg failed (code {proc.returncode}): {proc.stderr[-2000:]}")
         return output_path
@@ -129,7 +129,7 @@ def crop_mp4(input_path: Path, output_path: Path, width: int, height: int) -> Pa
         "copy",
         str(output_path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(f"ffmpeg crop failed (code {proc.returncode}): {proc.stderr[-2000:]}")
     return output_path
@@ -234,7 +234,7 @@ def pad_green_mp4(
             "-frames:v", str(int(num_frames)),
             str(output_path),
         ]
-        return subprocess.run(cmd, capture_output=True, text=True)
+        return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     proc = _run(["-c:v", "libx264rgb", "-pix_fmt", "rgb24", "-crf", "0"])
     if proc.returncode != 0:
@@ -309,7 +309,7 @@ def finalize_alpha_matte(
         *rate,
         str(preview_mp4),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(
             f"ffmpeg alpha-matte finalize failed (code {proc.returncode}): {proc.stderr[-2000:]}"
@@ -428,7 +428,7 @@ def compose_alpha_rgba(
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-r", fps,
         str(preview_mp4),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(
             f"ffmpeg alpha rgba compose failed (code {proc.returncode}): {proc.stderr[-2000:]}"
@@ -471,7 +471,7 @@ def compose_alpha_chroma(
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-r", fps,
         str(out_mp4),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(
             f"ffmpeg alpha chroma compose failed (code {proc.returncode}): {proc.stderr[-2000:]}"
@@ -605,7 +605,7 @@ def fill_mask_green_mp4(
     ]
 
     def _run(vcodec: list[str]) -> subprocess.CompletedProcess:
-        return subprocess.run(base + vcodec + [str(out)], capture_output=True, text=True)
+        return subprocess.run(base + vcodec + [str(out)], capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     codec = "libx264rgb"
     proc = _run(["-c:v", "libx264rgb", "-pix_fmt", "rgb24", "-crf", "0"])
@@ -646,7 +646,7 @@ def has_audio_stream(path: Path) -> bool:
         "csv=p=0",
         str(path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return proc.returncode == 0 and proc.stdout.strip() != ""
 
 
@@ -736,7 +736,7 @@ def probe_duration(path: Path) -> float | None:
         "json",
         str(path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         return None
     try:
@@ -782,7 +782,7 @@ def probe_fps_rational(path: Path) -> tuple[str, float] | None:
         "json",
         str(path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         return None
     try:
@@ -828,7 +828,7 @@ def probe_audio_stream(path: Path) -> tuple[int | None, int | None]:
         "json",
         str(path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         return None, None
     try:
@@ -883,7 +883,7 @@ def cut_tail_mp4(
             "-c:a", "aac",
             str(tmp_resampled),
         ]
-        proc = subprocess.run(rs_cmd, capture_output=True, text=True)
+        proc = subprocess.run(rs_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if proc.returncode != 0:
             raise FFmpegError(f"ffmpeg fps-resample failed (code {proc.returncode}): {proc.stderr[-2000:]}")
         work = tmp_resampled
@@ -914,7 +914,7 @@ def cut_tail_mp4(
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(fps),
             str(out),
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if proc.returncode != 0:
             raise FFmpegError(f"ffmpeg tail-cut failed (code {proc.returncode}): {proc.stderr[-2000:]}")
     finally:
@@ -1008,7 +1008,7 @@ def cut_range_mp4(
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(source_fps),
         str(out),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(f"ffmpeg range-cut failed (code {proc.returncode}): {proc.stderr[-2000:]}")
 
@@ -1085,7 +1085,7 @@ def cut_window_mp4(
             "-c:a", "aac", "-b:a", "192k",
             str(tmp_resampled),
         ]
-        proc = subprocess.run(rs_cmd, capture_output=True, text=True)
+        proc = subprocess.run(rs_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if proc.returncode != 0:
             raise FFmpegError(
                 f"ffmpeg fps-resample failed (code {proc.returncode}): {proc.stderr[-2000:]}"
@@ -1124,7 +1124,7 @@ def cut_window_mp4(
                 "-fps_mode", "cfr", "-r", str(fps),
                 str(out),
             ]
-            return subprocess.run(cmd, capture_output=True, text=True)
+            return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
         # PCM first; fall back to AAC 192k when this ffmpeg/container pair
         # refuses it (decided by the actual build, never guessed).
@@ -1210,7 +1210,7 @@ def still_image_mp4(
         "-fps_mode", "cfr", "-r", str(fps),
         str(out),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(
             f"ffmpeg still-image encode failed (code {proc.returncode}): "
@@ -1303,7 +1303,7 @@ def concat_mp4s(
         "-1",
         str(output_path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(f"ffmpeg concat failed (code {proc.returncode}): {proc.stderr[-2000:]}")
     return output_path
@@ -1326,7 +1326,7 @@ def probe_resolution(path: Path) -> tuple[int, int] | None:
         "json",
         str(path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         return None
     try:
@@ -1363,7 +1363,7 @@ def frame_count(mp4: Path) -> int:
         "default=nokey=1:noprint_wrappers=1",
         str(mp4),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(f"ffprobe frame_count failed (code {proc.returncode}): {proc.stderr[-2000:]}")
     try:
@@ -1396,7 +1396,7 @@ def extract_frame_at(mp4: Path, frame_index: int, out_png: Path) -> Path:
         "1",
         str(out_png),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(f"ffmpeg extract_frame_at failed (code {proc.returncode}): {proc.stderr[-2000:]}")
     if not out_png.exists():
@@ -1436,7 +1436,9 @@ def _loudnorm_measure(exe: str, path: Path) -> dict[str, float]:
         "null",
         "-",
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    # Decode as UTF-8: stderr echoes the input metadata block (e.g. a Japanese
+    # prompt); the cp932 default raises and leaves proc.stderr None.
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(f"ffmpeg loudnorm measure failed (code {proc.returncode}): {proc.stderr[-2000:]}")
     text = proc.stderr
@@ -1512,7 +1514,7 @@ def normalize_clip(src: Path, out: Path, width: int, height: int, fps: float) ->
         "-c:a", "aac",
         str(out),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(
             f"ffmpeg normalize_clip failed (code {proc.returncode}): {proc.stderr[-2000:]}"
@@ -1795,7 +1797,7 @@ def join_v2v(
         "-1",
         str(out),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FFmpegError(f"ffmpeg join_v2v failed (code {proc.returncode}): {proc.stderr[-2000:]}")
 

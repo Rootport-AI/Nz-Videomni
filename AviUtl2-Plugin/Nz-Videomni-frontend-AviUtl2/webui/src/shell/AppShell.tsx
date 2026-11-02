@@ -69,11 +69,13 @@ import {
   batchA2vDisabledFor,
   batchI2vLongDisabledFor,
   chainPanelsDisabledFor,
+  chainPanelsHiddenFor,
   editSubTabsDisabledFor,
   loraAudioStrengthHiddenFor,
   nagDisabledFor,
   settingsRowsHiddenFor,
   singleSectionsDisabledFor,
+  singleSectionsHiddenFor,
 } from "./featureScope";
 import type { ChainPanelsDisabled } from "./featureScope";
 import { frameLimitsFor } from "./generationConstraints";
@@ -703,7 +705,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // guard. On any failure, show the guidance note and do NOTHING else — no tab switch, no remount, no reservation, no
     // prefill (§4 "破壊的な動作をしない"). Layer-menu items (#9/#10,
     // requiredKind null) always pass the guard.
-    const guard = guardMenuSelection(route, command.selection);
+    // 台帳 §1-121: #1's length floor follows the loaded base model's carried-over
+    // frame count — a server-fixed seam (MiniMax H3: 22) is what its V2V
+    // carries over; LTX keeps the slider's default (73).
+    const guard = guardMenuSelection(route, command.selection, {
+      v2vContextFrames: baseModels.activeConstraints.chain?.overlapFrames,
+    });
     if (!guard.ok) {
       showNote("warning", formatMenuGuardNote(guard.note, strings.notes));
       return;
@@ -1615,6 +1622,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // `ChainedScreen` receives finished booleans and never reasons about engines
   // itself (the shell's standing rule for feature scope).
   const chainPanels = chainPanelsDisabledFor(baseModels.unsupportedFeatures);
+  // 台帳 §1-121: the closed parts that VANISH rather than grey (the feature
+  // table's `hides`); each is also closed in `chainPanels`.
+  const chainHidden = chainPanelsHiddenFor(baseModels.unsupportedFeatures);
 
   // Same arrangement one level down inside Edit: the tab survives as long as
   // ONE of its sub-tabs runs here (`shell/featureScope.ts`'s
@@ -1633,6 +1643,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // submit (capability-driven — the engine id is never read).
   const singleA2vAvailable = baseModels.activeConstraints.singleSourceAudio != null;
   const singleSections = singleSectionsDisabledFor(baseModels.unsupportedFeatures, singleA2vAvailable);
+  const singleHidden = singleSectionsHiddenFor(baseModels.unsupportedFeatures);
   const nagUnavailable = nagDisabledFor(baseModels.unsupportedFeatures);
   const nagForRequests = effectiveNag(nagControls.nag, !nagUnavailable);
   // 台帳 §1-104: an engine whose LoRAs have one strength only hides each
@@ -1802,6 +1813,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  the Create sections its engine closes. */
               constraints={baseModels.activeConstraints}
               sectionsUnavailable={singleSections}
+              sectionsHidden={singleHidden}
               loraAudioHidden={loraAudioHidden}
               loraUnsupportedNotice={loraUnsupportedNotice}
             />
@@ -1843,6 +1855,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               /* §1-106: clip 0's opening image, and the Batch i2v-long
                  section that puts an image on clip 0 for every row. */
               startImageUnavailable={chainPanels.startImage}
+              /* 台帳 §1-121: the parts the feature table hides outright. */
+              endSourceHidden={chainHidden.endSource}
+              referenceHidden={chainHidden.reference}
+              startImageStrengthHidden={chainHidden.startImageStrength}
               batchI2vLongUnavailable={batchI2vLongDisabledFor(baseModels.unsupportedFeatures)}
               /* §1-106: the same `audio_strength` rule as Create, and the loaded
                  base model's numeric rules (clip grid, size multiple, fixed

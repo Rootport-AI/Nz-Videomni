@@ -52,9 +52,15 @@ export interface SourceInputPanelProps {
   videoUnavailable?: boolean | undefined;
   /** §1-106 (`chain_start_image`): closes clip 0's opening image (strength
    * slider dead; an attached image keeps its thumbnail so it can be cleared).
-   * With `videoUnavailable` too, the whole card closes via `closed`. Not meant
-   * alone: an engine publishing `chain_start_image` publishes `v2v` too. */
+   * With `videoUnavailable` too, the whole card closes via `closed`. No shipped
+   * engine publishes the name since 台帳 §1-121 (MiniMax H3's chain takes an
+   * opening image and a source video too); the prop is the mechanism. */
   imageUnavailable?: boolean | undefined;
+  /** 台帳 §1-121 (`keyframe_strength`, MiniMax H3): the loaded base model has
+   * no keyframe strength — the image half's strength slider is not rendered
+   * (the request then carries no `strength`, `useChainForm`'s side). Omitted ->
+   * shown. */
+  imageStrengthHidden?: boolean | undefined;
 }
 
 /** Chain's unified source-input slot (task brief "Chainのソース入力欄一本
@@ -84,6 +90,7 @@ export function SourceInputPanel({
   mediaSize,
   videoUnavailable = false,
   imageUnavailable = false,
+  imageStrengthHidden = false,
 }: SourceInputPanelProps) {
   // §1-106: both halves closed = the card takes no material at all. Everything
   // that adds or edits reads `closed`; the clear button reads `disabled` alone.
@@ -112,6 +119,10 @@ export function SourceInputPanel({
   // omitting) a `<p>` per state — is what keeps the panel from reflowing on
   // every unselected/image/video transition.
   const noteText = kind === "video" ? svt.contextFramesHint(form.contextFrames) : kind === "image" ? " " : t.none;
+
+  // 台帳 §1-121: a server-fixed carry-over (MiniMax H3: min === max === 22)
+  // has nothing to choose — a read-only number in the slider's row instead.
+  const contextFramesAdjustable = form.contextFramesLimits.min < form.contextFramesLimits.max;
 
   // Owner redesign (2026-07-18): the whole SOURCE card is the drop target now
   // (not just a `DropZone`-wrapped button row) — mirrors KeyframeCard.tsx's
@@ -205,18 +216,20 @@ export function SourceInputPanel({
           {kind === "video" ? (
             <label className="field field-inline">
               <span className="field-label">{svt.contextFramesLabel}</span>
-              <input
-                type="range"
-                min={form.contextFramesLimits.min}
-                max={form.contextFramesLimits.max}
-                step={8}
-                value={form.contextFrames}
-                disabled={closed || videoUnavailable || videoState.status !== "ready"}
-                onChange={(e) => form.setContextFrames(Number(e.target.value))}
-              />
+              {contextFramesAdjustable && (
+                <input
+                  type="range"
+                  min={form.contextFramesLimits.min}
+                  max={form.contextFramesLimits.max}
+                  step={8}
+                  value={form.contextFrames}
+                  disabled={closed || videoUnavailable || videoState.status !== "ready"}
+                  onChange={(e) => form.setContextFrames(Number(e.target.value))}
+                />
+              )}
               <span className="field-hint">{form.contextFrames}</span>
             </label>
-          ) : (
+          ) : imageStrengthHidden ? null : (
             <label className="field field-inline">
               <span className="field-label">{t.strengthLabel}</span>
               <input

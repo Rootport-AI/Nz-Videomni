@@ -70,18 +70,25 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
    [keep_resident], [attention_backend], [block_swap_prefetch], [vram16_mode],
-   [loras]}
-      One T2V chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
-      of ``{"prompt", "num_frames", [references]}`` (2..24 clips; each prompt is
-      the clip's whole text, the top-level ``prompt`` is not used), clip i runs
-      with seed ``seed + i``, and the clips are joined on a fixed 22-frame
-      overlap into ONE mp4 at ``output_path``. ``clips[i].references`` (台帳
-      §1-109): that clip's own Ref2VA references, the entries of ``generate``'s
-      ``references`` (absent / null / [] = none; unknown inner keys are logged
-      as ``clips[].references[].<key>`` and ignored). The other keys mean what
-      they mean for ``generate`` and apply to every clip (the LoRA too). The
-      top-level ``images`` / ``source_audio`` / ``references`` and any other key
-      are logged and ignored, as are unknown keys inside a clip. A failure is
+   [loras], [source]}
+      One chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
+      of ``{"prompt", "num_frames", [references], [images]}`` (2..24 clips, 1..24
+      with a ``source``; each prompt is the clip's whole text, the top-level
+      ``prompt`` is not used), clip i runs with seed ``seed + i``, and the clips
+      are joined on a fixed 22-frame overlap into ONE mp4 at ``output_path``.
+      ``clips[i].references`` (台帳 §1-109): that clip's own Ref2VA references,
+      the entries of ``generate``'s ``references`` (absent / null / [] = none;
+      unknown inner keys are logged as ``clips[].references[].<key>`` and
+      ignored). ``clips[i].images`` (台帳 §1-121, clip 0 only): that clip's key
+      frames, the entries of ``generate``'s ``images`` (unknown inner keys
+      logged as ``clips[].images[].<key>``). ``source`` (台帳 §1-121): absent /
+      null = none, else ``{"path", "context_frames"}``, the app's cut of an
+      input video's last 22 frames, whose latents become clip 0's fixed head
+      (video-to-video; the mp4 then lacks those 22 frames; unknown inner keys
+      logged as ``source.<key>``). The other keys mean what they mean for
+      ``generate`` and apply to every clip (the LoRA too). The top-level
+      ``images`` / ``source_audio`` / ``references`` and any other key are
+      logged and ignored, as are unknown keys inside a clip. A failure is
       reported with ``error`` and the process stays alive.
   {"op": "shutdown"}
   Before load an unknown op is only logged (an ``error`` there would be read
@@ -244,11 +251,14 @@ _SOURCE_AUDIO_FIELDS = frozenset({"path", "strength"})
 #: The keys of one ``references`` entry this engine reads (Ref2VA, 台帳 §1-107).
 _REFERENCE_FIELDS = frozenset({"kind", "path", "slot", "max_sec"})
 #: The generate_chain payload's keys this engine reads (台帳 §1-106): the single
-#: job's, less what a T2V chain has no use for (the frame count is per clip),
-#: plus ``clips``.
-_CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}) | {"clips"}
-#: The keys of one ``clips`` entry this engine reads (``references``: 台帳 §1-109).
-_CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames", "references"})
+#: job's, less what is per clip or unused (the frame count, the key frames and
+#: references are per clip), plus ``clips`` and the input video ``source`` (台帳 §1-121).
+_CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}) | {"clips", "source"}
+#: The keys of one ``clips`` entry this engine reads (``references``: 台帳 §1-109;
+#: ``images``: 台帳 §1-121, clip 0 only).
+_CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames", "images", "references"})
+#: The keys of ``source`` this engine reads (台帳 §1-121).
+_SOURCE_FIELDS = frozenset({"path", "context_frames"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -553,7 +563,9 @@ def _chain_clips(msg: dict) -> tuple[list, list[str]]:
     ``num_frames``) is checked here; the count, the frame grid and the lengths
     are ``h3_chain_math``'s, the prompt the pipeline's ``validate_request``.
     Each entry's ``references`` is read by :func:`_references` (its ignored
-    inner keys come back as ``references[].<key>``).
+    inner keys come back as ``references[].<key>``) and its ``images`` by
+    :func:`_images` (``images[].<key>``); which clip may carry images is the
+    chain's ``_check_spec``.
     """
     from engine_h3.chain_h3 import H3ChainClipSpec  # noqa: PLC0415
 
@@ -570,23 +582,50 @@ def _chain_clips(msg: dict) -> tuple[list, list[str]]:
         if isinstance(frames, bool) or not isinstance(frames, int):
             raise ValueError(f"clips の num_frames は整数で渡してください（{frames!r}）")
         references, ref_ignored = _references(entry)
+        images, image_ignored = _images(entry)
         ignored |= {k for k in entry if k not in _CHAIN_CLIP_FIELDS}
         ignored |= {f"references[].{k}" for k in ref_ignored}
-        out.append(H3ChainClipSpec(prompt=prompt, num_frames=frames, references=references))
+        ignored |= {f"images[].{k}" for k in image_ignored}
+        out.append(H3ChainClipSpec(prompt=prompt, num_frames=frames, references=references, images=images))
     return out, sorted(ignored)
 
 
+def _chain_source(msg: dict) -> tuple:
+    """``source`` -> ``(H3ChainSource | None, ignored inner keys)``.
+
+    Absent / null = no input video. The shape (an object with a non-empty
+    string ``path`` and an integer ``context_frames``) is checked here; the
+    value (22) and the file itself are the chain's.
+    """
+    from engine_h3.chain_h3 import H3ChainSource  # noqa: PLC0415
+
+    raw = msg.get("source")
+    if raw is None:
+        return None, []
+    if not isinstance(raw, dict):
+        raise ValueError(f"source はオブジェクトで渡してください（{type(raw).__name__}）")
+    path, frames = raw.get("path"), raw.get("context_frames")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError(f"source には空でない文字列の path が必要です（{path!r}）")
+    if isinstance(frames, bool) or not isinstance(frames, int):
+        raise ValueError(f"source の context_frames は整数で渡してください（{frames!r}）")
+    ignored = sorted(k for k in raw if k not in _SOURCE_FIELDS)
+    return H3ChainSource(path=path, context_frames=frames), ignored
+
+
 def _do_generate_chain(msg: dict) -> None:
-    """Run one T2V chain (台帳 §1-106); the mp4 is written by this process to ``msg['output_path']``."""
+    """Run one chain (台帳 §1-106 / §1-121); the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
         raise RuntimeError("generate before load")
     from engine_h3.chain_h3 import H3ChainSpec, run_chain_h3  # noqa: PLC0415
 
     clips, clip_ignored = _chain_clips(msg)
     loras, lora_ignored = _loras(msg)
+    source, source_ignored = _chain_source(msg)
     ignored = sorted(k for k in msg if k not in _CHAIN_FIELDS)
     ignored += [f"clips[].{k}" for k in clip_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
+    ignored += [f"source.{k}" for k in source_ignored]
     # The shared settings, read by the single job's rules. The prompt and the
     # frame count are each clip's; ``clips[0]``'s stand in for them here.
     base_msg = {k: v for k, v in msg.items() if k in _CHAIN_FIELDS}
@@ -598,14 +637,16 @@ def _do_generate_chain(msg: dict) -> None:
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
     base.attention_backend = effective
-    spec = H3ChainSpec(base=base, clips=tuple(clips), seed=base.seed)
+    spec = H3ChainSpec(base=base, clips=tuple(clips), seed=base.seed, source=source)
     _log(
         f"generate_chain: seed={base.seed} {base.width}x{base.height} clips={[c.num_frames for c in clips]} "
         f"steps={base.num_inference_steps} shift={base.shift_video}/{base.shift_audio} "
         f"attention={effective} keep_resident={base.keep_resident} "
         f"prefetch={base.block_swap_prefetch} vram16={base.vram16_mode} "
         f"loras={[(Path(item.path).name, item.strength) for item in base.loras]} "
-        f"-> {base.output_path}"
+        + (f"images={[len(c.images) for c in clips]} " if any(c.images for c in clips) else "")
+        + (f"source={(Path(source.path).name, source.context_frames)} " if source is not None else "")
+        + f"-> {base.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
     )
     result = run_chain_h3(_PIPE, spec, _emit_progress, _log)

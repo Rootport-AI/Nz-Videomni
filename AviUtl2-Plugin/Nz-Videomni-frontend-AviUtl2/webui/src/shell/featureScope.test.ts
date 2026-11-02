@@ -5,13 +5,16 @@ import {
   batchA2vDisabledFor,
   batchI2vLongDisabledFor,
   chainPanelsDisabledFor,
+  chainPanelsHiddenFor,
   disabledModesFor,
   disabledUiTargets,
   editSubTabsDisabledFor,
   FEATURE_UI,
+  hiddenUiTargets,
   loraAudioStrengthHiddenFor,
   settingsRowsHiddenFor,
   singleSectionsDisabledFor,
+  singleSectionsHiddenFor,
 } from "./featureScope";
 
 /** The set as a sorted array, so a comparison reads as a value rather than as a
@@ -47,13 +50,78 @@ describe("FEATURE_UI (the declaration table)", () => {
     );
   });
 
+  /** Each row read through the entry's optional shape (a row may list only
+   * `disables`, only `hides`, or both). */
+  const rows = Object.entries(FEATURE_UI) as Array<
+    [string, { readonly disables?: readonly string[]; readonly hides?: readonly string[] }]
+  >;
+
   it("gives every row at least one target to close", () => {
-    // A row with an empty `disables` would be a feature name that reads as
-    // "handled" while closing nothing — the one failure mode of a table this
-    // shape. A feature with no UI consequence belongs OUT of the table.
-    for (const [name, entry] of Object.entries(FEATURE_UI)) {
-      expect(entry.disables.length, name).toBeGreaterThan(0);
+    // A row with an empty `disables` AND `hides` would be a feature name that
+    // reads as "handled" while closing nothing — the one failure mode of a
+    // table this shape. A feature with no UI consequence belongs OUT of the table.
+    for (const [name, entry] of rows) {
+      expect((entry.disables?.length ?? 0) + (entry.hides?.length ?? 0), name).toBeGreaterThan(0);
     }
+  });
+
+  it("台帳 §1-121: lists each target under `disables` OR `hides` across the whole table, never both", () => {
+    // A part that one feature greys and another hides would have no single
+    // answer to "how does it close?" — the table's one rule for `hides`.
+    const greyed = new Set(rows.flatMap(([, entry]) => entry.disables ?? []));
+    const hidden = new Set(rows.flatMap(([, entry]) => entry.hides ?? []));
+    expect([...hidden].filter((target) => greyed.has(target))).toEqual([]);
+    expect(hidden.size).toBeGreaterThan(0);
+  });
+});
+
+describe("hiddenUiTargets / the hidden mappers (台帳 §1-121)", () => {
+  it("hides nothing for the ordinary case, nor for unknown names", () => {
+    expect([...hiddenUiTargets([])]).toEqual([]);
+    expect([...hiddenUiTargets(["two_stage_hq", "constructor", "__proto__", "v2v", "chain_start_image"])]).toEqual([]);
+    expect(chainPanelsHiddenFor([])).toEqual({ endSource: false, reference: false, startImageStrength: false });
+    expect(singleSectionsHiddenFor([])).toEqual({ referenceVideo: false, keyframeStrength: false });
+  });
+
+  it("maps each hiding feature onto its own parts", () => {
+    expect(chainPanelsHiddenFor(["end_source"])).toEqual({ endSource: true, reference: false, startImageStrength: false });
+    expect(chainPanelsHiddenFor(["reference_video"])).toEqual({
+      endSource: false,
+      reference: true,
+      startImageStrength: false,
+    });
+    expect(chainPanelsHiddenFor(["keyframe_strength"])).toEqual({
+      endSource: false,
+      reference: false,
+      startImageStrength: true,
+    });
+    expect(singleSectionsHiddenFor(["reference_video"])).toEqual({ referenceVideo: true, keyframeStrength: false });
+    expect(singleSectionsHiddenFor(["keyframe_strength"])).toEqual({ referenceVideo: false, keyframeStrength: true });
+  });
+
+  it("a hidden part is a closed part too (the request-side paths keep reading `disabledUiTargets`)", () => {
+    for (const name of ["end_source", "reference_video", "keyframe_strength"]) {
+      const disabled = disabledUiTargets([name]);
+      for (const target of hiddenUiTargets([name])) expect(disabled.has(target), `${name}: ${target}`).toBe(true);
+    }
+    expect(singleSectionsDisabledFor(["reference_video", "keyframe_strength"])).toMatchObject({
+      referenceVideo: true,
+      keyframeStrength: true,
+    });
+  });
+
+  it("MiniMax H3's list hides the End source and IC-LoRA accordions, the opening-image strength and Create's two parts", () => {
+    const h3 = ["reference_video", "nag", "keyframe_strength", "end_source", "a2v", "retake", "lora_audio_strength"];
+    expect(chainPanelsHiddenFor(h3)).toEqual({ endSource: true, reference: true, startImageStrength: true });
+    expect(singleSectionsHiddenFor(h3)).toEqual({ referenceVideo: true, keyframeStrength: true });
+    // `a2v` and `nag` grey rather than hide, so they are not in the hidden set.
+    expect([...hiddenUiTargets(h3)].sort()).toEqual([
+      "chainPanel.endSource",
+      "chainPanel.reference",
+      "chainPanel.startImageStrength",
+      "createSection.keyframeStrength",
+      "createSection.referenceVideo",
+    ]);
   });
 });
 
@@ -308,16 +376,17 @@ describe("chainPanelsDisabledFor", () => {
     });
   });
 
-  it("§1-106: MiniMax H3's chain scope closes every material panel, the tab stays live", () => {
-    const h3 = ["reference_video", "nag", "keyframe_strength", "v2v", "end_source", "a2v", "chain_start_image", "retake"];
+  it("台帳 §1-121: MiniMax H3's chain scope opens the SOURCE card (video and image), closes the other three", () => {
+    const h3 = ["reference_video", "nag", "keyframe_strength", "end_source", "a2v", "retake"];
     expect(chainPanelsDisabledFor(h3)).toEqual({
-      v2v: true,
+      v2v: false,
       a2v: true,
       endSource: true,
       reference: true,
-      startImage: true,
+      startImage: false,
     });
     expect(disabledModesFor(h3)).not.toContain("chained");
+    expect(batchI2vLongDisabledFor(h3)).toBe(false);
   });
 
   it("ignores names it has never heard of", () => {

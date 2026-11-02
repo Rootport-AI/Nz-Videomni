@@ -300,6 +300,19 @@ describe("buildRowPayload", () => {
     expect("conditioning_images" in request.clips[1]!).toBe(false);
   });
 
+  it("台帳 §1-121: omitStrength なら clip0 の画像に strength キーそのものを付けない（未指定は従来どおり 1.0）", () => {
+    const omitted = buildRowPayload(template, { imageId: "img-row-1", rowPrompt: "", promptMode: "add", omitStrength: true });
+    expect(omitted.clips[0]?.conditioning_images).toEqual([{ image_id: "img-row-1", frame_idx: 0 }]);
+    expect("strength" in omitted.clips[0]!.conditioning_images![0]!).toBe(false);
+    const explicitFalse = buildRowPayload(template, {
+      imageId: "img-row-1",
+      rowPrompt: "",
+      promptMode: "add",
+      omitStrength: false,
+    });
+    expect(explicitFalse).toEqual(withImage("img-row-1"));
+  });
+
   it("行プロンプトをmodeに従って共通プロンプトへ合成する（3分岐）", () => {
     expect(buildRowPayload(template, { imageId: "i", rowPrompt: "in the rain", promptMode: "add" }).prompt).toBe(
       "a cat in the rain",

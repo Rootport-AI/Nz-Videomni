@@ -533,6 +533,7 @@ export function useBatchI2vLongForm(
   // --- Run -------------------------------------------------------------------
 
   const { pollIntervalMs, jobBusyBackoffMs } = deps;
+  const omitStrength = chain.omitStartImageStrength ?? false;
   const start = useCallback(() => {
     if (!canStart || imgDir === null || outDir === null) return;
     // Snapshot by value: `templatePreview` is a fresh plain object from
@@ -546,14 +547,15 @@ export function useBatchI2vLongForm(
         template: templatePreview,
         // Frozen with the template: flipping the radio mid-run must not change
         // how the rows still queued behind it are composed.
-        settings: { promptMode },
+        // 台帳 §1-121: the strength rule is frozen with the template too.
+        settings: { promptMode, ...(omitStrength ? { omitStrength: true } : {}) },
         rows,
         ...(pollIntervalMs !== undefined ? { pollIntervalMs } : {}),
         ...(jobBusyBackoffMs !== undefined ? { jobBusyBackoffMs } : {}),
       },
       setRows,
     );
-  }, [canStart, imgDir, outDir, templatePreview, promptMode, rows, runner, pollIntervalMs, jobBusyBackoffMs]);
+  }, [canStart, imgDir, outDir, templatePreview, promptMode, omitStrength, rows, runner, pollIntervalMs, jobBusyBackoffMs]);
 
   const summary = useMemo<I2vLongSummary>(() => {
     const counts: I2vLongSummary = { total: rows.length, waiting: 0, generating: 0, done: 0, failed: 0 };

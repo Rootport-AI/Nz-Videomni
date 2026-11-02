@@ -25,6 +25,17 @@ off, and the concatenated audio can end one latent longer or shorter than
 ``round(F_total * 5/3)`` (``audio_latent_excess`` in -1..+1; the mp4 writer
 cuts or keeps the audio at the video's length). Both are accepted and
 recorded (裁定 84-6); ``audio_drift_flags`` tells the UI which seams drift.
+
+Video-to-video (``source_video=True``, 台帳 §1-121): the tail of an input
+video, 22 frames, is clip 0's fixed head. It is a leading segment that
+overlaps clip 0 by exactly the fixed overlap, so it adds no frame to the
+timeline: ``S_i``, ``J_i``, ``ka_i``, the drift flags, the totals and the
+junctions are those of the same clips without it, all on the timeline BEFORE
+the 22 context frames are trimmed off the delivered mp4 (the LTX chain's
+convention). The layout then also carries the LTX chain's V2V fields
+(``source_context_px`` ... ``new_frames_px``), and only then ``to_dict()``
+appends them as ``"v2v"``. With a source a chain may have a single clip, and
+clip 0 needs one new latent frame past its head (39 frames, as a later clip).
 """
 
 from __future__ import annotations
@@ -68,6 +79,8 @@ H3_CHAIN_OVERLAP_LATENTS = _latent_frames(H3_CHAIN_OVERLAP_FRAMES)
 #: Clip i >= 1 needs at least one new latent frame past its fixed head:
 #: T'_i - k >= 1, i.e. F_i >= overlap + 17 (39).
 H3_CHAIN_MIN_NEXT_FRAMES = H3_CHAIN_OVERLAP_FRAMES + _FRAMES_STEP
+#: The clip count a chain with an input video accepts (one clip continues it).
+H3_CHAIN_MIN_CLIPS_WITH_SOURCE = 1
 
 
 @dataclass(frozen=True)
@@ -96,13 +109,22 @@ class H3ChainLayout:
     # before the new content (the boundary is J / J+1), and the +-1 spread.
     segment_seam_junctions: list[int] = field(default_factory=list)
     all_junctions: list[int] = field(default_factory=list)
+    # Video-to-video (an input video's tail is clip 0's fixed head), the LTX
+    # chain layout's fields with the same meaning; None / 0 without a source,
+    # where ``new_frames_px`` is simply the whole timeline.
+    source_context_px: int | None = None      # the context frames (22)
+    n_ctx_v: int = 0                          # their video latent frames (7)
+    n_ctx_a: int = 0                          # their audio latents, round(22 * 5/3) (37)
+    trim_px: int = 0                          # frames trimmed off the front of the mp4
+    v2v_context_junction_px: int | None = None   # last context frame (the boundary is it / +1)
+    new_frames_px: int = 0                    # frames delivered (after the trim)
 
     @property
     def n_clips(self) -> int:
         return len(self.clip_frames)
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             # The keys services/pipeline_manager.py reads from an LTX layout, same meaning.
             "total_px": self.total_frames,
             "segment_seam_junctions": list(self.segment_seam_junctions),
@@ -127,21 +149,40 @@ class H3ChainLayout:
             "audio_head_shift_latents": list(self.audio_head_shift_latents),
             "audio_drift_flags": list(self.audio_drift_flags),
         }
+        if self.source_context_px is not None:
+            # Only with an input video: a plain chain's dict is unchanged.
+            out["v2v"] = {
+                "source_context_px": self.source_context_px,
+                "n_ctx_v": self.n_ctx_v,
+                "n_ctx_a": self.n_ctx_a,
+                "trim_px": self.trim_px,
+                "v2v_context_junction_px": self.v2v_context_junction_px,
+                "new_frames_px": self.new_frames_px,
+            }
+        return out
 
 
-def _check_clip_frames(clip_frames) -> list[int]:
+def _check_clip_frames(clip_frames, source_video: bool = False) -> list[int]:
     frames = list(clip_frames)
     n = len(frames)
-    if not H3_CHAIN_MIN_CLIPS <= n <= H3_CHAIN_MAX_CLIPS:
-        raise ValueError(f"chain needs {H3_CHAIN_MIN_CLIPS}..{H3_CHAIN_MAX_CLIPS} clips (got {n})")
+    least_clips = H3_CHAIN_MIN_CLIPS_WITH_SOURCE if source_video else H3_CHAIN_MIN_CLIPS
+    if not least_clips <= n <= H3_CHAIN_MAX_CLIPS:
+        raise ValueError(f"chain needs {least_clips}..{H3_CHAIN_MAX_CLIPS} clips (got {n})")
     out: list[int] = []
     for i, f in enumerate(frames):
         if isinstance(f, bool) or not isinstance(f, int):
             raise ValueError(f"clips[{i}]: num_frames must be an integer ({f!r})")
         if f < _FRAMES_OFFSET or (f - _FRAMES_OFFSET) % _FRAMES_STEP:
             raise ValueError(f"clips[{i}]: num_frames must be 17n+5")
-        least = _MIN_FIRST_FRAMES if i == 0 else H3_CHAIN_MIN_NEXT_FRAMES
+        # A clip with a fixed head (every clip i >= 1, and clip 0 with a source)
+        # needs one new latent frame past it.
+        least = H3_CHAIN_MIN_NEXT_FRAMES if (i > 0 or source_video) else _MIN_FIRST_FRAMES
         if f < least:
+            if i == 0 and source_video:
+                raise ValueError(
+                    f"clips[0]: num_frames must be at least {least} "
+                    f"(source context {H3_CHAIN_OVERLAP_FRAMES} + one grid step)"
+                )
             if i == 0:
                 raise ValueError(f"clips[0]: num_frames must be at least {least}")
             raise ValueError(
@@ -160,7 +201,7 @@ def _spread(junctions: list[int], total: int) -> list[int]:
     return sorted(x for x in out if 0 <= x < total - 1)
 
 
-def compute_h3_chain_layout(clip_frames) -> H3ChainLayout:
+def compute_h3_chain_layout(clip_frames, *, source_video: bool = False) -> H3ChainLayout:
     """The chain's geometry for ``clip_frames`` (one 17n+5 count per clip, 2..24 clips).
 
     Raises ValueError (English, the 422 message; a clip's is prefixed with
@@ -168,8 +209,12 @@ def compute_h3_chain_layout(clip_frames) -> H3ChainLayout:
     frames, a later clip shorter than 39 frames (it would have no new latent
     frame past its fixed head), a clip count outside 2..24 or a timeline
     longer than 11,544 frames.
+
+    ``source_video``: an input video's 22-frame tail is clip 0's fixed head
+    (module docstring): 1..24 clips, ``clips[0]`` at least 39 frames, and the
+    V2V fields are filled. Everything else is the same as without it.
     """
-    frames = _check_clip_frames(clip_frames)
+    frames = _check_clip_frames(clip_frames, source_video)
     overlap, k = H3_CHAIN_OVERLAP_FRAMES, H3_CHAIN_OVERLAP_LATENTS
     total = sum(frames) - overlap * (len(frames) - 1)
     if total > H3_CHAIN_MAX_TOTAL_FRAMES:
@@ -202,6 +247,16 @@ def compute_h3_chain_layout(clip_frames) -> H3ChainLayout:
         raise AssertionError(f"T'_total {t_total} != latent_frames({total})")
     expected = _audio_latents(total)
     junctions = [j - 1 for j in news]
+    v2v: dict = {"new_frames_px": total}
+    if source_video:
+        v2v = {
+            "source_context_px": overlap,
+            "n_ctx_v": k,
+            "n_ctx_a": _audio_latents(overlap),
+            "trim_px": overlap,
+            "v2v_context_junction_px": overlap - 1,
+            "new_frames_px": total - overlap,
+        }
     return H3ChainLayout(
         clip_frames=frames,
         clip_latent_frames=t_lat,
@@ -219,4 +274,5 @@ def compute_h3_chain_layout(clip_frames) -> H3ChainLayout:
         audio_drift_flags=[False] + [x != 0.0 for x in shift],
         segment_seam_junctions=junctions,
         all_junctions=_spread(junctions, total),
+        **v2v,
     )

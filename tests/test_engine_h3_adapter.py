@@ -188,7 +188,10 @@ def test_t2v_and_keyframe_i2v_are_accepted():
 
 def test_unsupported_features_is_both_reject_tables_plus_fused_kernel():
     # 台帳 §1-106: ``chain`` is no longer published (the Chained tab opens);
-    # the chain shapes H3 does not run are named one by one instead.
+    # the chain shapes H3 does not run are named one by one instead. 台帳
+    # §1-121: ``v2v`` and ``chain_start_image`` are no longer among them (the
+    # chain runs an input video and clip 0's key frames); the chain's
+    # ``keyframe_strength`` row is the single path's name, listed once.
     assert h3.UNSUPPORTED_FEATURES == (
         "reference_video",
         "nag",
@@ -200,8 +203,6 @@ def test_unsupported_features_is_both_reject_tables_plus_fused_kernel():
         "prune_vaed",
         "keep_resident_embeddings",
         "keyframe_strength",
-        "chain_start_image",
-        "v2v",
         "a2v",
         "end_source",
         "retake",
@@ -910,9 +911,38 @@ def test_get_loras_follows_the_base_model(three_family_client, tmp_path):
     assert not {"style-a", "odd"} & {row["name"] for row in body["loras"]}
 
 
-def test_h3_refuses_a_chain_start_image_over_http(three_family_client):
-    """A start image is refused as FEATURE_UNSUPPORTED before the image lookup
-    (the id does not exist), and LTX's 49-frame clips are a numeric 422."""
+def test_h3_accepts_a_chain_start_image_over_http(three_family_client, png_bytes):
+    """台帳 §1-121: clip 0's key frames run on H3 (no ``chain_start_image``
+    refusal any more); LTX's 49-frame clips are still a numeric 422."""
+    _activate(three_family_client, "MiniMaxH3")
+    up = three_family_client.post(
+        "/api/v1/upload/image", files={"file": ("first.png", png_bytes, "image/png")}
+    )
+    image_id = up.json()["image_id"]
+    r = three_family_client.post(
+        "/api/v1/generate/chain",
+        json={
+            "prompt": PROMPT,
+            "width": 640,
+            "height": 384,
+            "clips": [
+                {"num_frames": 124, "conditioning_images": [{"image_id": image_id, "frame_idx": 0}]},
+                {"num_frames": 124},
+            ],
+        },
+    )
+    assert r.status_code == 202, r.text
+    r = three_family_client.post(
+        "/api/v1/generate/chain",
+        json={"prompt": PROMPT, "clips": [{"num_frames": 49}, {"num_frames": 49}]},
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_h3_refuses_a_chain_key_frame_strength_over_http(three_family_client):
+    """A key frame's strength is refused as FEATURE_UNSUPPORTED before the image
+    lookup (the id does not exist), with the single path's sentence."""
     _activate(three_family_client, "MiniMaxH3")
     r = three_family_client.post(
         "/api/v1/generate/chain",
@@ -921,20 +951,20 @@ def test_h3_refuses_a_chain_start_image_over_http(three_family_client):
             "width": 640,
             "height": 384,
             "clips": [
-                {"num_frames": 124, "conditioning_images": [{"image_id": "nope", "frame_idx": 0}]},
+                {
+                    "num_frames": 124,
+                    "conditioning_images": [{"image_id": "nope", "frame_idx": 0, "strength": 0.8}],
+                },
                 {"num_frames": 124},
             ],
         },
     )
     assert r.status_code == 422, r.text
-    assert r.json()["error"]["code"] == "FEATURE_UNSUPPORTED"
-    assert "'chain_start_image'" in r.json()["error"]["message"]
-    r = three_family_client.post(
-        "/api/v1/generate/chain",
-        json={"prompt": PROMPT, "clips": [{"num_frames": 49}, {"num_frames": 49}]},
-    )
-    assert r.status_code == 422, r.text
-    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
+    error = r.json()["error"]
+    assert error["code"] == "FEATURE_UNSUPPORTED"
+    assert "'keyframe_strength'" in error["message"]
+    assert error["detail"] == h3._refusal_detail("clips", "keyframe_strength")
+    assert error["detail"] == "MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。"
 
 
 def test_ltx_request_shapes_still_pass_on_ltx_after_h3(three_family_client):
@@ -1070,8 +1100,8 @@ _CHAIN_CLASSIFICATIONS = {
     "governed (CHAIN_GOVERNED_FIELDS)": lambda: set(h3.CHAIN_GOVERNED_FIELDS),
 }
 
-#: The one chain field allowed in two tables: honoured (the prompts and
-#: lengths) AND refused (a start image).
+#: The one chain field allowed in two tables: honoured (the prompts, lengths,
+#: clip 0's key frames and references) AND refused (a key frame's strength).
 _ALLOWED_CHAIN_OVERLAP = {"clips"}
 
 
@@ -1122,8 +1152,6 @@ def test_chain_ignored_fields_are_really_not_read_by_generate_chain():
 
 #: One request per chain reject-table row (keyed by FEATURE).
 CHAIN_OVERRIDES_H3: dict[str, dict] = {
-    "chain_start_image": {"clips": [{"num_frames": 124, "conditioning_images": [_IMG]}, {"num_frames": 124}]},
-    "v2v": {"source_video": {"video_id": "vid-1", "context_frames": 73}},
     "a2v": {"source_audio": {"audio_id": "aud-1"}},
     "end_source": {"end_source": {"video_id": "vid-1", "context_frames": 72}},
     "retake": {
@@ -1136,6 +1164,12 @@ CHAIN_OVERRIDES_H3: dict[str, dict] = {
     "guidance_scale": {"guidance_scale": 3.0},
     "prune_vaed": {"vae_mode": "prune_vaed"},
     "keep_resident_embeddings": {"keep_resident_embeddings": True},
+    "keyframe_strength": {
+        "clips": [
+            {"num_frames": 124, "conditioning_images": [{**_IMG, "strength": 0.5}]},
+            {"num_frames": 124},
+        ]
+    },
 }
 
 
@@ -1313,6 +1347,178 @@ def test_generate_chain_payload_keep_resident_and_loras(tmp_path):
     payload = captured[0]
     assert list(payload) == GOLDEN_CHAIN_KEYS_H3 + ["keep_resident"]
     assert payload["loras"] == [{"path": str(tmp_path / "turbo.safetensors"), "strength": 1.0}]
+
+
+#: The V2V payload: the plain golden plus the input video's tail after ``clips``.
+GOLDEN_CHAIN_KEYS_H3_V2V = GOLDEN_CHAIN_KEYS_H3 + ["source"]
+
+
+def test_generate_chain_payload_v2v_golden(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    chain = _validated_chain(
+        source_video={"video_id": "vid-1"},
+        clips=[{"num_frames": 56}, {"num_frames": 39}],
+    )
+    tail = tmp_path / "job" / "_source_tail.mp4"
+    be.generate_chain(
+        chain, tmp_path / "job", seed=42,
+        source_tail_path=tail, source_context_frames=chain.source_video.context_frames,
+    )
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_H3_V2V
+    assert payload["source"] == {"path": str(tail), "context_frames": 22}
+    assert all(list(clip) == ["prompt", "num_frames"] for clip in payload["clips"])
+    # keep_resident still rides after it, only when True.
+    captured.clear()
+    be.generate_chain(
+        _validated_chain(source_video={"video_id": "vid-1"}, keep_resident=True,
+                         clips=[{"num_frames": 56}, {"num_frames": 39}]),
+        tmp_path / "job", seed=42, source_tail_path=tail, source_context_frames=22,
+    )
+    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_H3_V2V + ["keep_resident"]
+
+
+def test_generate_chain_v2v_needs_the_cut_tail(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    chain = _validated_chain(source_video={"video_id": "vid-1"}, clips=[{"num_frames": 39}])
+    with pytest.raises(RuntimeError, match="no source tail"):
+        be.generate_chain(chain, tmp_path / "job", seed=1, source_context_frames=22)
+    assert captured == []
+
+
+def test_generate_chain_payload_clip0_images_golden(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    first, middle = tmp_path / "first.png", tmp_path / "middle.png"
+    chain = _validated_chain(
+        clips=[
+            {
+                "num_frames": 124,
+                "conditioning_images": [
+                    {"image_id": "img-1", "frame_idx": 0},
+                    {"image_id": "img-2", "frame_idx": 60},
+                ],
+                "references": [{"kind": "picture", "id": "img-3", "slot": 1}],
+            },
+            {"num_frames": 124},
+        ]
+    )
+    pic = tmp_path / "pic.png"
+    be.generate_chain(
+        chain, tmp_path / "job", seed=42,
+        clip0_conditioning_paths=[first, middle], clip_reference_paths=[[pic], []],
+    )
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_H3
+    clip0, clip1 = payload["clips"]
+    assert list(clip0) == ["prompt", "num_frames", "images", "references"]
+    assert clip0["images"] == [
+        {"path": str(first), "frame_idx": 0},
+        {"path": str(middle), "frame_idx": 60},
+    ]
+    assert list(clip1) == ["prompt", "num_frames"]
+
+
+def test_chain_key_frames_are_snapped_as_on_the_single_path():
+    # H3's grid is every frame: a position past the end becomes F-1, and two
+    # images on one position are refused with the clip's prefix.
+    chain = _validated_chain(
+        clips=[
+            {"num_frames": 124, "conditioning_images": [_IMG, {"image_id": "img-2", "frame_idx": 500}]},
+            {"num_frames": 124},
+        ]
+    )
+    assert [ci.frame_idx for ci in chain.clips[0].conditioning_images] == [0, 123]
+    assert [ci.strength for ci in chain.clips[0].conditioning_images] == [None, None]
+    with pytest.raises(APIError) as ei:
+        _validated_chain(
+            clips=[
+                {"num_frames": 124, "conditioning_images": [_IMG, {"image_id": "img-2", "frame_idx": 0}]},
+                {"num_frames": 124},
+            ]
+        )
+    assert ei.value.detail[0]["msg"] == (
+        "Value error, clips[0]: two conditioning images at frame_idx 0 "
+        "(the start frame can only be set once)"
+    )
+
+
+def test_chain_source_context_frames_is_22_written_back_or_refused():
+    chain = _validated_chain(source_video={"video_id": "vid-1"}, clips=[{"num_frames": 39}])
+    assert chain.source_video.context_frames == 22
+    chain = _validated_chain(
+        source_video={"video_id": "vid-1", "context_frames": 22}, clips=[{"num_frames": 39}]
+    )
+    assert chain.source_video.context_frames == 22
+    with pytest.raises(APIError) as ei:
+        _validated_chain(
+            source_video={"video_id": "vid-1", "context_frames": 73}, clips=[{"num_frames": 124}]
+        )
+    assert ei.value.code == "VALIDATION_ERROR"
+    assert ei.value.detail == [{
+        "loc": ["body"],
+        "msg": "Value error, source_video.context_frames must be 22 on MiniMax H3 "
+               "(the chain's fixed 22-frame overlap); send 22 or omit it",
+        "type": "value_error",
+    }]
+    # With a source, clip 0 must reach past the 22-frame context too.
+    with pytest.raises(APIError) as ei:
+        _validated_chain(source_video={"video_id": "vid-1"}, clips=[{"num_frames": 22}])
+    assert ei.value.detail[0]["msg"] == (
+        "Value error, clips[0]: num_frames must be at least 39 (source context 22 + one grid step)"
+    )
+
+
+_V2V_LAYOUT = h3_chain_math.compute_h3_chain_layout([56, 39], source_video=True)
+
+#: The worker's ``done`` for a V2V chain: ``chain.v2v`` (the LTX chain's sixteen
+#: keys) after ``h3``, as engine_h3/chain_h3.py places it.
+CHAIN_DONE_EVENT_V2V = {
+    **DONE_EVENT,
+    "num_frames": _V2V_LAYOUT.total_frames,
+    "h3": {"phases": {"clips": [{"encode": 1.0}], "decode": {"seconds": 2.0}}, "loras": []},
+    "chain": {
+        **{k: v for k, v in _V2V_LAYOUT.to_dict().items() if k != "v2v"},
+        "seeds": [42, 43],
+        "clips": [
+            {"prompt_sha256": "ab" * 32, "seconds": None, "latents_sha256": None,
+             "head_equals_prev_tail": True}
+            for _ in range(2)
+        ],
+        "h3": {"overlap_frames": 22, "inject_clean": 1.0, "decode": "once"},
+        "v2v": {
+            **_V2V_LAYOUT.to_dict()["v2v"],
+            "context_frames": 22,
+            "freeze_ka": 37,
+            "trimmed_px": 22,
+            "trimmed_audio_samples": 29333,
+            "audio_fade_in_samples": 960,
+            "source_had_audio": True,
+            "audio_head_frozen": True,
+            "decoded_frames_px": _V2V_LAYOUT.total_frames,
+            "audio_handle_filename": "output_audio_handle.wav",
+            "handle_context_seconds": round(22 / 24, 6),
+        },
+    },
+}
+
+
+def test_generate_chain_relays_the_v2v_block(tmp_path):
+    be = _capturing_backend([], CHAIN_DONE_EVENT_V2V)
+    chain = _validated_chain(
+        source_video={"video_id": "vid-1"}, clips=[{"num_frames": 56}, {"num_frames": 39}]
+    )
+    out = be.generate_chain(
+        chain, tmp_path / "job", seed=42,
+        source_tail_path=tmp_path / "tail.mp4", source_context_frames=22,
+    )
+    cm = out.chain_metadata
+    assert cm["v2v"] == CHAIN_DONE_EVENT_V2V["chain"]["v2v"]
+    assert len(cm["v2v"]) == 16
+    assert cm["v2v"]["new_frames_px"] == _V2V_LAYOUT.total_frames - 22
+    assert cm["architecture"] == h3.H3_CHAIN_ARCHITECTURE
 
 
 def test_generate_chain_relays_the_done_event(tmp_path):

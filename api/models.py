@@ -45,11 +45,13 @@ from services.engines.ltx.request_rules import (
 )
 
 # Pydantic-declared DEFAULTS only (no config.yaml file I/O) — the single place
-# api/models.py sources the V2V and end-source context_frames bounds from, so
-# these validators judge by config.py's defaults. GET /config advertises the
-# values read from config.yaml, so a config.yaml override of these keys changes
-# what is advertised but not what is validated. See
-# SourceVideoSpec.validate_context_frames and EndSourceSpec.validate_end_source.
+# the V2V and end-source context_frames bounds are sourced from, so these
+# validators judge by config.py's defaults. GET /config advertises the values
+# read from config.yaml, so a config.yaml override of these keys changes what is
+# advertised but not what is validated. See SourceVideoSpec.validate_context_frames,
+# EndSourceSpec.validate_end_source and the LTX family's V2V checks
+# (services/engines/ltx/chain_rules.py validate_ltx_chain, which reads the V2V
+# minimum from here).
 _LIMITS_DEFAULTS = LimitsConfig()
 
 # Outpainting: the smallest keep-rectangle side we accept.
@@ -939,14 +941,18 @@ class SourceVideoSpec(BaseModel):
 
     ``video_id`` is an existing upload from POST /upload/video (reuses the
     reference-video store). ``context_frames`` is the source *tail* span (pixel
-    frames, 8n+1) that is VAE-encoded and frozen as clip-0's head; the delivered
+    frames, 8n+1 on LTX) that is VAE-encoded and frozen as clip-0's head; the delivered
     mp4 is the NEW part only (the context is trimmed off the front server-side).
 
-    ``context_frames`` is bounded [``v2v_context_frames_min``,
-    ``v2v_context_frames_max``] of :class:`config.LimitsConfig`'s defaults
+    Only the upper bound ``v2v_context_frames_max`` of
+    :class:`config.LimitsConfig`'s defaults is checked here
     (``_LIMITS_DEFAULTS``, which does not read ``config.yaml``; ``GET /config``
     advertises the ``config.yaml`` values, so the two diverge if
-    ``config.yaml`` overrides these keys). The max is a conservative ceiling
+    ``config.yaml`` overrides these keys). The lower bound
+    ``v2v_context_frames_min``, the 8n+1 grid and
+    ``context_frames < clips[0].num_frames`` are LTX's rules and live in
+    ``services/engines/ltx/chain_rules.py`` ``validate_ltx_chain`` (their 422
+    bodies are unchanged, pinned by tests/test_chain.py). The max is a conservative ceiling
     for the default stage-2 window, inside the HARD invariant enforced by
     :func:`chain_math.compute_chain_layout`: the frozen video head
     (``n_ctx_v = (context_frames-1)//8+1``) must fit inside stage-2 TILE 0
@@ -957,7 +963,6 @@ class SourceVideoSpec(BaseModel):
     below the max; GenerateChainRequest's validator checks
     ``chain_math.stage2_max_context_px(v_tile)`` per request. Do NOT raise this
     cap without re-checking multi-tile freeze behaviour first.
-    ``context_frames < clips[0].num_frames`` is cross-validated on the request.
     """
 
     video_id: str = Field(..., min_length=1)
@@ -966,17 +971,12 @@ class SourceVideoSpec(BaseModel):
     @model_validator(mode="after")
     def validate_context_frames(self) -> "SourceVideoSpec":
         cf = self.context_frames
-        cf_min = _LIMITS_DEFAULTS.v2v_context_frames_min
         cf_max = _LIMITS_DEFAULTS.v2v_context_frames_max
-        if cf < cf_min:
-            raise ValueError(f"source_video.context_frames must be >= {cf_min}")
         if cf > cf_max:
             raise ValueError(
                 f"source_video.context_frames must be <= {cf_max} "
                 "(the cap is LimitsConfig.v2v_context_frames_max in config.py)"
             )
-        if (cf - 1) % 8 != 0:
-            raise ValueError("source_video.context_frames must be 8n+1")
         return self
 
 
@@ -1464,8 +1464,9 @@ class GenerateChainRequest(BaseModel):
     @model_validator(mode="after")
     def validate_chain_constraints(self) -> "GenerateChainRequest":
         # The family's numeric rules (LTX: the 64 multiple, the distilled 8
-        # steps / CFG 1.0, 8n+1 and the overlap per clip, the keyframe grid, the
-        # timeline geometry and its cap) are not checked here: they run once
+        # steps / CFG 1.0, the V2V source_video.context_frames minimum / 8n+1 /
+        # clip-0 comparison, 8n+1 and the overlap per clip, the keyframe grid,
+        # the timeline geometry and its cap) are not checked here: they run once
         # the active family is known (services.engines.validate_chain_for_family;
         # LTX's are services/engines/ltx/chain_rules.py).
         if self.crop_output is not None:
@@ -1568,15 +1569,10 @@ class GenerateChainRequest(BaseModel):
         ):
             raise ValueError("chain requires at least 2 clips")
 
-        # V2V continuation cross-validation (all 422 at request time):
+        # V2V continuation cross-validation (all 422 at request time; the
+        # ``context_frames < clips[0].num_frames`` check is LTX's and lives in
+        # services/engines/ltx/chain_rules.py validate_ltx_chain):
         if self.source_video is not None:
-            cf = self.source_video.context_frames
-            clip0 = self.clips[0].num_frames
-            if cf >= clip0:
-                raise ValueError(
-                    f"source_video.context_frames ({cf}) must be < clips[0].num_frames "
-                    f"({clip0}) so a NEW tail remains to generate"
-                )
             # The frozen source head occupies clip-0's first latent frames, so the
             # start-frame slot is taken by the source — clip 0 cannot also carry
             # conditioning images.

@@ -333,6 +333,28 @@ describe("guardMenuSelection — length guard (§4-5)", () => {
     }
   });
 
+  it("台帳 §1-121: extendVideo's floor follows a server-fixed carry-over (22 frames ≈ 0.92 s)", () => {
+    const opts = { v2vContextFrames: 22 };
+    expect(lengthFloorForAction("extendVideo", opts)).toBe(22 / 24);
+    // A 2-second clip — under LTX's 73-frame floor — passes on 22 …
+    const twoSeconds = makeSelection({ selected: [makeItem(EFFECT_NAME_VIDEO, 2)] });
+    expect(guardMenuSelection(route("extendVideo"), twoSeconds).ok).toBe(false);
+    expect(guardMenuSelection(route("extendVideo"), twoSeconds, opts).ok).toBe(true);
+    // … and just under 22 frames is refused, quoting that floor.
+    const short = makeSelection({ selected: [makeItem(EFFECT_NAME_VIDEO, 22 / 24 - 0.01)] });
+    const r = guardMenuSelection(route("extendVideo"), short, opts);
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.note.noteKind === "videoTooShort") {
+      expect(r.note.requiredSeconds).toBe(22 / 24);
+    } else {
+      throw new Error("expected videoTooShort");
+    }
+    // The option moves #1's floor only.
+    expect(lengthFloorForAction("referenceVideo", opts)).toBe(lengthFloorForAction("referenceVideo"));
+    // Omitted = the LTX default.
+    expect(lengthFloorForAction("extendVideo", {})).toBe(V2V_MIN_DURATION_SEC);
+  });
+
   // §1-6: #1 now measures "the material that will actually be uploaded", i.e.
   // `decideSourceTrim`'s window when a trim applies. Today's bridge reports no
   // playback position, so every case ABOVE (and every real right-click) keeps

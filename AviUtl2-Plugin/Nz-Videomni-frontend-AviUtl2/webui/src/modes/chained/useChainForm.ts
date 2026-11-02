@@ -190,6 +190,15 @@ export interface UseChainFormDeps {
    * `materialInClosedPanel` instead of reaching the server as a 422. Omitted =
    * nothing closed. */
   unavailablePanels?: ChainUnavailablePanels | undefined;
+  /** 台帳 §1-121: the closed parts that are also HIDDEN (finished booleans
+   * from `AppShell`, `featureScope.chainPanelsHiddenFor`). A hidden panel's
+   * material reads as ABSENT — the stored state is kept (a switch back to a
+   * base model that shows the panel shows it again), but no gate sees it and
+   * no request carries it, the way Create folds a closed reference video
+   * (`useGenerationForm`'s `referenceVideoUnavailable`). Without the fold the
+   * leftover would raise `materialInClosedPanel` with its clear button hidden
+   * along with the panel. Omitted = nothing hidden. */
+  hiddenPanels?: ChainHiddenPanels | undefined;
 }
 
 /** §1-106: see {@link UseChainFormDeps.unavailablePanels}. Each flag closes
@@ -201,6 +210,17 @@ export interface ChainUnavailablePanels {
   a2v?: boolean | undefined;
   endSource?: boolean | undefined;
   reference?: boolean | undefined;
+}
+
+/** 台帳 §1-121: see {@link UseChainFormDeps.hiddenPanels}. `endSource` /
+ * `reference` fold that slot's material to absent (the IC-LoRA reference
+ * together with the control-LoRA selection made in the same panel);
+ * `startImageStrength` sends clip 0's images without `strength`
+ * ({@link UseChainFormResult.omitStartImageStrength}). */
+export interface ChainHiddenPanels {
+  endSource?: boolean | undefined;
+  reference?: boolean | undefined;
+  startImageStrength?: boolean | undefined;
 }
 
 const EMPTY_CONTROL_LORA_NAMES: ReadonlySet<string> = new Set();
@@ -669,6 +689,11 @@ export interface UseChainFormResult {
    * stage-2 comfort guide); the four LTX seam fields are left out of the
    * request. */
   fixedOverlapFrames: number | null;
+  /** 台帳 §1-121: `true` while the loaded base model has no keyframe strength
+   * (`UseChainFormDeps.hiddenPanels.startImageStrength`) — clip 0's images go
+   * out without `strength`. Read by Batch i2v-long too, whose rows put their
+   * image on clip 0. */
+  omitStartImageStrength: boolean;
   /** Every clip card's duration slider: the grid step and the bounds
    * (`constraints.num_frames`, capped at {@link MAX_CLIP_NUM_FRAMES}). */
   clipFrameLimits: { min: number; max: number; step: number };
@@ -1227,6 +1252,10 @@ export function useChainForm(
   const fixedFps = fixedFrameRate(rules);
   const fixedOverlapFrames = rules.chain?.overlapFrames ?? null;
   const unavailablePanels = deps.unavailablePanels;
+  // 台帳 §1-121: the hidden panels (see `UseChainFormDeps.hiddenPanels`).
+  const endSourceHidden = deps.hiddenPanels?.endSource ?? false;
+  const referenceHidden = deps.hiddenPanels?.reference ?? false;
+  const omitStartImageStrength = deps.hiddenPanels?.startImageStrength ?? false;
 
   // ── §1-15 参照動画: declared FIRST because the width/height grid depends on
   // it. A reference video (or a control LoRA, which mandates one) puts the
@@ -1235,11 +1264,17 @@ export function useChainForm(
   // able to read this slot's state. Everything else about the slot (pick/
   // attach/clear/probe/gates) lives further down with the audio slot.
   const referenceVideo = useSourceUpload("video", { nativeBridge });
-  const referenceVideoId = referenceVideo.state.id;
+  // 台帳 §1-121: a HIDDEN reference panel folds its upload to "none" here, the
+  // ONE place — every gate and the request builder below read this local
+  // (Create's `referenceVideoId` fold, verbatim).
+  const referenceVideoId = referenceHidden ? null : referenceVideo.state.id;
   /** Chain's OWN control-LoRA selection — NOT `AppShell`'s (Create-only) one;
    * see the field's doc comment on `UseChainFormResult` for why they are
    * deliberately separate states. */
-  const [controlLora, setControlLora] = useState<ControlLoraSelection | null>(null);
+  const [storedControlLora, setControlLora] = useState<ControlLoraSelection | null>(null);
+  // 台帳 §1-121: the control-LoRA selection lives in the same (hidden) panel,
+  // so it folds with the reference video — Create's `controlLora` fold.
+  const controlLora = referenceHidden ? null : storedControlLora;
   const setControlLoraStrength = useCallback(
     (raw: number) => {
       setControlLora((prev) => (prev === null ? prev : { name: prev.name, strength: clampLoraStrength(raw) }));
@@ -1427,16 +1462,28 @@ export function useChainForm(
     ),
   );
 
+  // 台帳 §1-121: in the fixed-overlap mode the carried-over frame count is the
+  // server's seam (MiniMax H3: 22) — `{min, max}` collapse onto it and the
+  // user's own (LTX) value is kept untouched underneath, for a switch back.
   const contextFramesLimits = useMemo(
-    () => ({ min: config.limits.v2v_context_frames_min, max: config.limits.v2v_context_frames_max }),
-    [config.limits.v2v_context_frames_min, config.limits.v2v_context_frames_max],
+    () =>
+      fixedOverlapFrames !== null
+        ? { min: fixedOverlapFrames, max: fixedOverlapFrames }
+        : { min: config.limits.v2v_context_frames_min, max: config.limits.v2v_context_frames_max },
+    [fixedOverlapFrames, config.limits.v2v_context_frames_min, config.limits.v2v_context_frames_max],
   );
-  const [contextFrames, setContextFramesState] = useState(() =>
+  const [userContextFrames, setContextFramesState] = useState(() =>
     snapContextFrames(config.limits.v2v_context_frames_default, config.limits.v2v_context_frames_min, config.limits.v2v_context_frames_max),
   );
+  const contextFrames = fixedOverlapFrames ?? userContextFrames;
+  // Snapped against the CONFIG range (never the fixed one), so the user's
+  // value stays an LTX value whatever base model is loaded.
   const setContextFrames = useCallback(
-    (raw: number) => setContextFramesState(snapContextFrames(raw, contextFramesLimits.min, contextFramesLimits.max)),
-    [contextFramesLimits.min, contextFramesLimits.max],
+    (raw: number) =>
+      setContextFramesState(
+        snapContextFrames(raw, config.limits.v2v_context_frames_min, config.limits.v2v_context_frames_max),
+      ),
+    [config.limits.v2v_context_frames_min, config.limits.v2v_context_frames_max],
   );
 
   // NOTE the source-attach clip re-fit effect is NOT here any more: its "cleared"
@@ -2031,7 +2078,9 @@ export function useChainForm(
   // selection were declared at the top of this hook — see there for why) ──────
   const referenceUploadPath = referenceVideo.uploadPath;
   const referenceClear = referenceVideo.clear;
-  const referenceStatus = referenceVideo.state.status;
+  // 台帳 §1-121: a hidden panel's upload reads as never attached (see
+  // `referenceVideoId`'s fold above).
+  const referenceStatus: SourceUploadStatus = referenceHidden ? "idle" : referenceVideo.state.status;
   const referenceFilePath = referenceVideo.state.filePath;
   /** Attach intent, not upload completion — same rule as `hasSourceAudio`. */
   const hasReferenceVideo = referenceStatus !== "idle";
@@ -2188,7 +2237,7 @@ export function useChainForm(
   /** The two sub-slots' statuses unified. `"empty"` (a `useKeyframes` card with
    * no image, which only `addEmpty` creates and this slot never calls) is folded
    * into `"uploading"` — an unfinished card is never treated as ready. */
-  const endSourceStatus: SourceUploadStatus =
+  const endSourceAttachStatus: SourceUploadStatus =
     endSourceKind === "video"
       ? endSourceVideoStatus
       : endSourceKind === "image"
@@ -2198,6 +2247,9 @@ export function useChainForm(
             ? "error"
             : "uploading"
         : "idle";
+  /** 台帳 §1-121: a HIDDEN end panel's material reads as never attached — the
+   * ONE place it is folded; every gate and the request read these two. */
+  const endSourceStatus: SourceUploadStatus = endSourceHidden ? "idle" : endSourceAttachStatus;
   /** Attach intent, not upload completion — same rule as `hasSourceAudio`. */
   const hasEndSource = endSourceStatus !== "idle";
 
@@ -2344,7 +2396,9 @@ export function useChainForm(
         const fitted = fitClipsToBounds(prevClips, MIN_CLIPS_WITH_SOURCE, MAX_CLIPS, defaultClipNumFrames);
         const first = fitted[0];
         if (first && first.numFrames <= contextFrames) {
-          const bumped = snapClipNumFrames(contextFrames + 8);
+          // One grid step past the carried-over frames, on the loaded grid:
+          // LTX 73 + 8 → 81 (as always), MiniMax H3 22 + 17 → 39.
+          const bumped = snapClipNumFrames(contextFrames + clipGrid.step, clipMax, clipGrid, clipMin);
           return fitted.map((clip, index) => (index === 0 ? { ...clip, numFrames: bumped } : clip));
         }
         return fitted;
@@ -2355,7 +2409,7 @@ export function useChainForm(
       );
     }
     // `uploading`/`error` transitions intentionally do nothing here.
-  }, [sourceStatus, contextFrames, defaultClipNumFrames, hasEndSource]);
+  }, [sourceStatus, contextFrames, defaultClipNumFrames, hasEndSource, clipGrid, clipMax, clipMin]);
 
   // Clip re-fit on the end slot's CLEAR transition only.
   //
@@ -2368,19 +2422,23 @@ export function useChainForm(
   //  - 添付→idle (cleared): re-fit to the current floor, which pads a
   //    single-clip chain back up to the from-scratch 2-clip minimum. The mirror
   //    of the source effect's own cleared arm above.
-  const prevEndSourceStatus = useRef<SourceUploadStatus>(endSourceStatus);
+  //
+  // 台帳 §1-121: keyed on the slot's OWN status, not the hidden-panel fold —
+  // a base-model switch that hides the panel is not a clear, and must not
+  // re-lay the clip list (a switch back would then find a different chain).
+  const prevEndSourceStatus = useRef<SourceUploadStatus>(endSourceAttachStatus);
   useEffect(() => {
     const prev = prevEndSourceStatus.current;
-    prevEndSourceStatus.current = endSourceStatus;
-    if (prev === endSourceStatus) return;
+    prevEndSourceStatus.current = endSourceAttachStatus;
+    if (prev === endSourceAttachStatus) return;
 
-    if (endSourceStatus === "idle" && prev !== "idle") {
+    if (endSourceAttachStatus === "idle" && prev !== "idle") {
       setClips((prevClips) =>
         fitClipsToBounds(prevClips, minClipsForChain(hasSourceVideo), MAX_CLIPS, defaultClipNumFrames),
       );
     }
     // `ready`/`uploading`/`error` transitions intentionally do nothing here.
-  }, [endSourceStatus, hasSourceVideo, defaultClipNumFrames]);
+  }, [endSourceAttachStatus, hasSourceVideo, defaultClipNumFrames]);
 
   /** §3-90: the REVERSE-order chain — end material, 2+ clips, and NO start
    * source. Mirrors the server's own mode decision (`chain_math.py`'s "THE ONE
@@ -2433,12 +2491,13 @@ export function useChainForm(
   }, [isReverseEndSource, reverseEntryOverlap, setOverlapFrames]);
 
   const firstClipNumFrames = clips[0]?.numFrames ?? 0;
-  const contextFramesValid = isContextFramesValid(
-    contextFrames,
-    contextFramesLimits.min,
-    contextFramesLimits.max,
-    firstClipNumFrames,
-  );
+  // 台帳 §1-121: the fixed-overlap mode skips LTX's three context checks
+  // (8n+1, range, "< clip 0") — the value is the server's own, and clip 0's
+  // minimum (`clipsMeetOverlapMinimum`, overlap + one grid step) already
+  // keeps it below clip 0.
+  const contextFramesValid =
+    fixedOverlapFrames !== null ||
+    isContextFramesValid(contextFrames, contextFramesLimits.min, contextFramesLimits.max, firstClipNumFrames);
 
   const totalFrames = computeTotalFrames(clips);
   const totalFramesValid = isTotalFramesValid(totalFrames);
@@ -2521,13 +2580,16 @@ export function useChainForm(
   // last clip's window instead of being appended after it, so the delivered file
   // is exactly as long with end material as without it.
   // §1-106: a server-fixed seam is plain pixel arithmetic — `Σ − overlap ×
-  // (n − 1)` — rather than the LTX latent copy (a fixed-overlap base model
-  // has no V2V either, so there is no context term to subtract).
+  // (n − 1)` — rather than the LTX latent copy. 台帳 §1-121: with a source
+  // video the carried-over frames are cut off the delivered file, like LTX's.
   const outputFrames =
     fixedOverlapFrames !== null
-      ? computeFixedOverlapOutputFrames(
-          clips.map((clip) => clip.numFrames),
-          fixedOverlapFrames,
+      ? Math.max(
+          0,
+          computeFixedOverlapOutputFrames(
+            clips.map((clip) => clip.numFrames),
+            fixedOverlapFrames,
+          ) - (hasSourceVideo ? contextFrames : 0),
         )
       : computeOutputFrames(
           clips.map((clip) => clip.numFrames),
@@ -2570,10 +2632,13 @@ export function useChainForm(
   // §1-106: the fixed-overlap mode has its own rule — every clip AFTER the
   // first must reach `overlap + grid step` (39 on MiniMax H3; the server's
   // own floor), the first only the grid's (already the slider's minimum).
+  // 台帳 §1-121: with a source video clip 0 carries the source's tail as its
+  // head, so it needs the same minimum.
   const minFramesForOverlap =
     fixedOverlapFrames !== null ? minClipFramesForFixedOverlap(fixedOverlapFrames, clipGrid) : 8 * overlapFrames + 1;
   const clipsMeetOverlapMinimum = clips.every(
-    (clip, index) => (fixedOverlapFrames !== null && index === 0) || clip.numFrames >= minFramesForOverlap,
+    (clip, index) =>
+      (fixedOverlapFrames !== null && index === 0 && !hasSourceVideo) || clip.numFrames >= minFramesForOverlap,
   );
   // Ruling 84-6: the seams that do not land on an audio-latent boundary
   // (fixed-overlap mode only — LTX's own seams are blended, not placed).
@@ -2870,7 +2935,7 @@ export function useChainForm(
   // it holds, so this sits with the slot's other state codes rather than with
   // the cross-field rules below. Mirrors `sourceTrimFailed` above and Create's
   // `referenceTrimFailed`; only the right-click route can ever arm it.
-  if (referenceVideo.state.trimFailed) validityReasons.push("referenceTrimFailed");
+  if (!referenceHidden && referenceVideo.state.trimFailed) validityReasons.push("referenceTrimFailed");
   if (referenceNeedsLoras) validityReasons.push("referenceNeedsLoras");
   if (controlLoraNeedsReference) validityReasons.push("controlLoraNeedsReference");
   if (depthChainUnsupported) validityReasons.push("depthChainUnsupported");
@@ -2882,14 +2947,16 @@ export function useChainForm(
   if (hasEndSource && hasReferenceVideo) validityReasons.push("endSourceConflictsWithReference");
   if (endSourceStatus === "uploading") validityReasons.push("endSourceUploading");
   if (endSourceStatus === "error") validityReasons.push("endSourceNotReady");
-  if (endSourceVideo.state.trimFailed) validityReasons.push("endSourceTrimFailed");
+  if (!endSourceHidden && endSourceVideo.state.trimFailed) validityReasons.push("endSourceTrimFailed");
   // The two length answers are mutually exclusive by construction (one
   // `endSourceLengthIssue`), so the note never offers two contradictory fixes.
   if (endSourceTooShort) validityReasons.push("endSourceTooShort");
   if (endSourceLengthUnknown) validityReasons.push("endSourceLengthUnknown");
   if (endSourceNeedsOverlap) validityReasons.push("endSourceNeedsOverlap");
   if (endSourceAudioOverlapBudget) validityReasons.push("endSourceAudioOverlapBudget");
-  // §1-106 `materialInClosedPanel`: attach INTENT counts.
+  // §1-106 `materialInClosedPanel`: attach INTENT counts. 台帳 §1-121: a
+  // HIDDEN panel's material is already folded to absent above, so it never
+  // fires here (its clear button is hidden with the panel).
   if (
     (unavailablePanels?.v2v && hasSourceVideo) ||
     (unavailablePanels?.startImage && startFrame.items.length > 0) ||
@@ -3008,6 +3075,7 @@ export function useChainForm(
     // carries `source_video` and `end_source` at the same time and the server
     // picks the mode from the pair.
     const endSource: EndSourceInput | null =
+      hasEndSource &&
       endSourceId !== null &&
       endSourceKind !== null &&
       endContextFrames !== null &&
@@ -3035,6 +3103,8 @@ export function useChainForm(
       fixedOverlap: fixedOverlapFrames !== null,
       sampling,
       clips: clipInputs,
+      // 台帳 §1-121: no keyframe strength on the loaded base model.
+      omitStartImageStrength,
       sourceVideo: sourceVideo.state.id ? { videoId: sourceVideo.state.id, contextFrames } : null,
       // §1-16: `source_audio` and `source_video` are mutually exclusive
       // server-side. Generate is already blocked on the pair
@@ -3077,6 +3147,7 @@ export function useChainForm(
     hasSourceVideo,
     hasSourceAudio,
     hasReferenceVideo,
+    hasEndSource,
     endSourceKind,
     endSourceVideo.state.id,
     endSourceImageItem,
@@ -3089,6 +3160,7 @@ export function useChainForm(
     acceleration,
     fixedOverlapFrames,
     sampling,
+    omitStartImageStrength,
   ]);
 
   return {
@@ -3124,6 +3196,7 @@ export function useChainForm(
     setEndSourceStrength,
     minFramesForOverlap,
     fixedOverlapFrames,
+    omitStartImageStrength,
     clipFrameLimits: { min: clipMin, max: clipMax, step: clipGrid.step },
     fixedFrameRate: fixedFps,
     sampling,

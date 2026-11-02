@@ -10,7 +10,16 @@ import {
 } from "../modes/single/paramUtils";
 import { floorToFrameGrid } from "../timeline/deriveDuration";
 import { comfortProfileMissing } from "./comfortTable";
-import { disabledModesFor, editSubTabsDisabledFor, nagDisabledFor, singleSectionsDisabledFor } from "./featureScope";
+import {
+  batchI2vLongDisabledFor,
+  chainPanelsDisabledFor,
+  chainPanelsHiddenFor,
+  disabledModesFor,
+  editSubTabsDisabledFor,
+  nagDisabledFor,
+  singleSectionsDisabledFor,
+  singleSectionsHiddenFor,
+} from "./featureScope";
 import {
   fixedFrameRate,
   frameLimitsFor,
@@ -48,8 +57,10 @@ const LTX: BaseModelConstraints = {
 
 /** MiniMax H3's `unsupported_features`, derived the way the plan's §3.4 says
  * the adapter derives it, plus `retake` (supervisor ruling 2026-10-17).
- * §1-106: `chain` left (H3 chains from text) and the chain material it cannot
- * take joined: `v2v`, `end_source`, `a2v`, `chain_start_image`. */
+ * §1-106: `chain` left (H3 chains) and the chain material it cannot
+ * take joined. 台帳 §1-121: `v2v` and `chain_start_image` left again (its chain
+ * continues a source video and starts from an opening image), leaving
+ * `end_source` and `a2v`. */
 const H3_UNSUPPORTED = [
   "loras",
   "reference_video",
@@ -62,10 +73,8 @@ const H3_UNSUPPORTED = [
   "prune_vaed",
   "keep_resident_embeddings",
   "keyframe_strength",
-  "v2v",
   "end_source",
   "a2v",
-  "chain_start_image",
   "retake",
   "fused_gguf_dequant_kernel",
 ];
@@ -233,6 +242,24 @@ describe("MiniMax H3's feature names on screen", () => {
       keyframeStrength: true,
     });
     expect(nagDisabledFor(H3_UNSUPPORTED)).toBe(true);
+    // 台帳 §1-121: both of those Create parts are HIDDEN, not greyed.
+    expect(singleSectionsHiddenFor(H3_UNSUPPORTED)).toEqual({ referenceVideo: true, keyframeStrength: true });
+  });
+
+  it("台帳 §1-121: opens the Chain SOURCE card and Batch i2v-long, hides End source / IC-LoRA / the image strength", () => {
+    expect(chainPanelsDisabledFor(H3_UNSUPPORTED)).toEqual({
+      v2v: false,
+      a2v: true,
+      endSource: true,
+      reference: true,
+      startImage: false,
+    });
+    expect(chainPanelsHiddenFor(H3_UNSUPPORTED)).toEqual({
+      endSource: true,
+      reference: true,
+      startImageStrength: true,
+    });
+    expect(batchI2vLongDisabledFor(H3_UNSUPPORTED)).toBe(false);
   });
 
   it("a base model that publishes `chain` loses the Chained tab (and Create's chain-routed A2V card)", () => {
@@ -252,6 +279,8 @@ describe("MiniMax H3's feature names on screen", () => {
         keyframeStrength: false,
       });
       expect(nagDisabledFor(list)).toBe(false);
+      expect(singleSectionsHiddenFor(list)).toEqual({ referenceVideo: false, keyframeStrength: false });
+      expect(chainPanelsHiddenFor(list)).toEqual({ endSource: false, reference: false, startImageStrength: false });
     }
   });
 });

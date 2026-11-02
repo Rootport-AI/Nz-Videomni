@@ -1082,7 +1082,8 @@ def verify() -> None:
     )
     # The decode chunking chain25 shares with the encode. 80/24 is a stride of 56
     # frames, which is what makes a V2V trim (``context_frames``, bounded by
-    # ``SourceVideoSpec.validate_context_frames``) land ACROSS chunk
+    # ``SourceVideoSpec.validate_context_frames`` and LTX's
+    # ``validate_ltx_chain``) land ACROSS chunk
     # boundaries -- the reason `_drop_leading_frames` exists at all.
     default_tiles = TileSizeConfig.default()
     if (default_tiles.frames.tile_size, default_tiles.frames.overlap) != (80, 24):

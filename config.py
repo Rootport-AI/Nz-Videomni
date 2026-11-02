@@ -355,9 +355,10 @@ class LimitsConfig(BaseModel):
     # キーは "WxH" 生成サイズ文字列（client が引きやすい形式）。
     spill_free_frames: dict[str, int] = Field(default_factory=dict)
     # V2V continuation (POST /generate/chain source_video.context_frames). Bounds
-    # advertised via /config so a UI can build the control. context_frames is 8n+1;
-    # the 145 max is a conservative cap (keeps the frozen head inside one
-    # stage-2 tile — see api.models.SourceVideoSpec). Defaulted so a
+    # advertised via /config so a UI can build the control. On LTX context_frames
+    # is 8n+1 and the min is checked by services/engines/ltx/chain_rules.py; the
+    # 145 max is a conservative cap checked by the schema (keeps the frozen head
+    # inside one stage-2 tile — see api.models.SourceVideoSpec). Defaulted so a
     # config.yaml without these keys parses.
     v2v_context_frames_default: int = 73
     v2v_context_frames_min: int = 25

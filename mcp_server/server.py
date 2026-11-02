@@ -48,10 +48,15 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   FEATURE_UNSUPPORTED です。H3 は単発の T2V と I2V（キーフレームは最大 10 枚・
   frame_idx は 0〜num_frames−1 の任意のフレーム・strength は指定しない）
   と単発の A2V（submit_generate の source_audio_id と
-  source_audio_strength。H3 専用）と、T2V のクリップの連結（submit_chain。
+  source_audio_strength。H3 専用）と、クリップの連結（submit_chain。
   重なりは 22 フレーム固定・2 本目以降は 39 フレーム以上。ステップ数と shift は
   既定の 20 / 12 / 3 で動き、MCP からは変えられません）に対応します。連結の
-  冒頭画像・V2V・A2V・素材（末尾）・撮り直し、reference_video_id・
+  冒頭画像（clips[0].conditioning_images。strength は指定しない。指定すると
+  422 FEATURE_UNSUPPORTED の keyframe_strength）も使えます。V2V
+  （source_video_id）は H3 では引き継ぐフレーム数が 22 固定なので、
+  source_video_context_frames=22 を指定してください（既定の 73 のままでは
+  422 VALIDATION_ERROR。入力動画があればクリップ 0 は 39 フレーム以上で、
+  1 本でも可）。連結の A2V・素材（末尾）・撮り直し、reference_video_id・
   nag_enabled なども 422 FEATURE_UNSUPPORTED になります（使えない機能は
   unsupported_features を見てください）。H3 でも submit_generate の loras（スタイル LoRA・
   Turbo LoRA。名前は H3 を選んでいるときの list_loras で確認）は使えます。

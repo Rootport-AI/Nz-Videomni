@@ -10,6 +10,7 @@ not just "some frame came back".
 
 from __future__ import annotations
 
+import math
 import subprocess
 import wave
 
@@ -844,6 +845,30 @@ def test_audio_is_digitally_silent_reads_japanese_metadata(tmp_path, source, sil
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(clip),
     ])
     assert video_io.audio_is_digitally_silent(clip) is silent
+
+
+def test_join_v2v_loudness_match_reads_japanese_metadata(tmp_path):
+    # Without UTF-8 decoding, loudnorm's stderr (which echoes the metadata
+    # block) fails to decode as cp932, proc.stderr is None and the join dies.
+    _need_ffmpeg()
+    src = tmp_path / "src.mp4"
+    cont = tmp_path / "cont.mp4"
+    _make_v2v_clip(src, num_frames=48, fps=24.0)
+    _make_v2v_clip(cont, num_frames=48, fps=24.0, freq=660.0)
+    titled = []
+    for clip in (src, cont):
+        dst = tmp_path / f"titled_{clip.name}"
+        _run_ffmpeg([
+            video_io.ffmpeg_path(), "-y", "-i", str(clip), "-c", "copy",
+            "-metadata", "comment=コスプレイヤーの日本人女性が歩く🎵", str(dst),
+        ])
+        titled.append(dst)
+    stats = video_io._loudnorm_measure(video_io.ffmpeg_path(), titled[0])
+    assert math.isfinite(float(stats["input_i"]))
+    out = tmp_path / "joined.mp4"
+    video_io.join_v2v(titled[0], titled[1], out, loudness_match=True)
+    assert out.exists()
+    assert video_io.has_audio_stream(out)
 
 
 def test_audio_is_digitally_silent_measures_the_first_audio_stream(tmp_path):

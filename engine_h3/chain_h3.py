@@ -1,7 +1,15 @@
-"""MiniMax H3 chain: several T2V clips joined by carrying latents over (台帳 §1-106).
+"""MiniMax H3 chain: several clips joined by carrying latents over (台帳 §1-106).
 
 A clip may carry its own Ref2VA references (台帳 §1-109): they go through the
 single job's reference stage for that clip only; a clip without any runs as before.
+
+Video-to-video and a start image (台帳 §1-121): an input video's last 22
+frames (cut by the app, ``H3ChainSpec.source``) are encoded and become clip
+0's fixed head exactly as a previous clip's tail would (裁定 84-5 keeps the
+head's source replaceable); the decoded timeline then loses those 22 frames
+and their audio, and the untrimmed audio is kept as the JOIN's handle wav.
+Clip 0 may instead carry key frames (``H3ChainClipSpec.images``), handled as
+in a single I2V job. The two are exclusive.
 
 The mechanism is Docs/MINIMAX_H3_DESIGN.md §3.3; the geometry is
 ``h3_chain_math`` at the repository root, shared with the app. Each clip's
@@ -19,11 +27,12 @@ import hashlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 
 from engine_h3 import pipeline_h3 as P
-from h3_chain_math import H3ChainLayout, compute_h3_chain_layout
+from h3_chain_math import H3_CHAIN_OVERLAP_FRAMES, H3ChainLayout, compute_h3_chain_layout
 
 #: The video fixed rows' injection coefficient (裁定 84-2: the latents themselves).
 CHAIN_INJECT_CLEAN = 1.0
@@ -31,24 +40,38 @@ CHAIN_INJECT_CLEAN = 1.0
 
 @dataclass(frozen=True)
 class H3ChainClipSpec:
-    """One clip: its whole prompt, its frame count and its own Ref2VA references
-    (台帳 §1-109; empty = none)."""
+    """One clip: its whole prompt, its frame count, its own Ref2VA references
+    (台帳 §1-109; empty = none) and its key frames (clip 0 only, 台帳 §1-121;
+    empty = none)."""
 
     prompt: str
     num_frames: int
     references: tuple[P.H3ReferenceInput, ...] = ()
+    images: tuple[P.H3ImageInput, ...] = ()
+
+
+@dataclass(frozen=True)
+class H3ChainSource:
+    """The input video of a video-to-video chain (台帳 §1-121): the app's cut of
+    its last ``context_frames`` frames at 24 fps (with its audio, if any)."""
+
+    path: str
+    context_frames: int
 
 
 @dataclass
 class H3ChainSpec:
     """``base``: the settings every clip shares; its ``prompt`` / ``num_frames``
     / ``seed`` are replaced per clip and its ``output_path`` is the chain's mp4.
-    T2V only: ``base`` carries no images, source audio or references (a clip's
-    references are its own, ``H3ChainClipSpec.references``)."""
+    ``base`` carries no images, source audio or references (a clip's key frames
+    and references are its own, ``H3ChainClipSpec``). ``source``: the input
+    video whose tail is clip 0's fixed head (None = the chain starts from text,
+    or from clip 0's key frames)."""
 
     base: P.H3GenerateRequest
     clips: tuple[H3ChainClipSpec, ...]
     seed: int
+    source: H3ChainSource | None = None
 
 
 def _sha_text(text: str) -> str:
@@ -60,42 +83,81 @@ def latents_sha256(t: torch.Tensor) -> str:
     return hashlib.sha256(t.detach().to(torch.float32).cpu().contiguous().numpy().tobytes()).hexdigest()
 
 
-def carry_fix(prev_video: torch.Tensor, prev_audio: torch.Tensor, t_lat: int, a_lat: int, k: int, ka: int):
+def carry_fix(prev_video: torch.Tensor, prev_audio: torch.Tensor | None, t_lat: int, a_lat: int, k: int, ka: int):
     """``(video_fix, audio_fix)`` for a clip of ``t_lat`` video / ``a_lat`` audio latents.
 
     The head is ``prev_video[:, :, -k:]`` / ``prev_audio[:, :, -ka:]`` at mask
     value 0, the rest generated (value 1; its clean part is zero and unused).
     Where the tail comes from is the caller's: the previous clip's video
-    latents and the concatenated audio here (裁定 84-5 keeps the source
-    replaceable). CPU float32.
+    latents and the concatenated audio, or the input video's encoded tail
+    (裁定 84-5 keeps the source replaceable). ``prev_audio`` None (an input
+    video without audio) gives ``audio_fix`` None: the audio is generated
+    freely. CPU float32.
     """
     shape_v = tuple(prev_video.shape[:2]) + (int(t_lat),) + tuple(prev_video.shape[3:])
-    shape_a = tuple(prev_audio.shape[:2]) + (int(a_lat),)
     clean_v = torch.zeros(shape_v, dtype=torch.float32)
-    clean_a = torch.zeros(shape_a, dtype=torch.float32)
     if k > 0:
         clean_v[:, :, :k] = prev_video[:, :, -k:].to(torch.float32)
+    per_v = [0.0] * k + [1.0] * (int(t_lat) - k)
+    if prev_audio is None:
+        return (clean_v, per_v), None
+    shape_a = tuple(prev_audio.shape[:2]) + (int(a_lat),)
+    clean_a = torch.zeros(shape_a, dtype=torch.float32)
     if ka > 0:
         clean_a[:, :, :ka] = prev_audio[:, :, -ka:].to(torch.float32)
-    per_v = [0.0] * k + [1.0] * (int(t_lat) - k)
     per_a = [0.0] * ka + [1.0] * (int(a_lat) - ka)
     return (clean_v, per_v), (clean_a, per_a)
 
 
 def clip_requests(spec: H3ChainSpec) -> list[P.H3GenerateRequest]:
-    """Clip i's request: ``base`` with its prompt, frames, references, ``seed + i`` and ``keep_resident=True``."""
+    """Clip i's request: ``base`` with its prompt, frames, references, key frames,
+    ``seed + i`` and ``keep_resident=True``."""
     return [
         dataclasses.replace(
             spec.base, prompt=clip.prompt, num_frames=int(clip.num_frames), seed=int(spec.seed) + i,
-            keep_resident=True, references=tuple(clip.references),
+            keep_resident=True, references=tuple(clip.references), images=tuple(clip.images),
         )
         for i, clip in enumerate(spec.clips)
     ]
 
 
-def _check_t2v(base: P.H3GenerateRequest) -> None:
+def _check_spec(spec: H3ChainSpec) -> None:
+    """The chain's own shape, refused in Japanese before anything is read or loaded."""
+    base = spec.base
     if base.images or base.source_audio is not None or base.references:
-        raise ValueError("連結は T2V だけです（共通設定（base）にはキーフレーム・音声・参照は付けられません。参照はクリップごとに付けます）")
+        raise ValueError(
+            "連結の共通設定（base）にはキーフレーム・音声・参照は付けられません"
+            "（冒頭画像はクリップ 0 に、参照はクリップごとに付けます）"
+        )
+    for i, clip in enumerate(spec.clips):
+        if i > 0 and clip.images:
+            raise ValueError(f"連結のキーフレーム（冒頭画像）はクリップ 0 にだけ付けられます（clips[{i}]）")
+    source = spec.source
+    if source is None:
+        return
+    if spec.clips and spec.clips[0].images:
+        raise ValueError("入力動画の続き（V2V）とクリップ 0 のキーフレームは同時には使えません")
+    if int(source.context_frames) != H3_CHAIN_OVERLAP_FRAMES:
+        raise ValueError(
+            f"入力動画から引き継ぐフレーム数は {H3_CHAIN_OVERLAP_FRAMES} 固定です（{source.context_frames}）"
+        )
+
+
+def _load_key_frames(req: P.H3GenerateRequest):
+    """A clip's key frames as a single I2V job reads them (``H3Pipeline.generate``):
+    ``(canvases, frame indices, source sizes)``, in ascending frame order."""
+    images = sorted(req.images or (), key=lambda img: int(img.frame_idx))
+    cond_frame_idx = [int(img.frame_idx) for img in images]
+    canvases: list = []
+    source_size: list[list[int]] = []
+    if images:
+        from engine_h3.image_cond import load_canvas_image  # noqa: PLC0415
+
+        for img in images:
+            canvas, size = load_canvas_image(img.path, int(req.width), int(req.height))
+            canvases.append(canvas)
+            source_size.append([int(size[0]), int(size[1])])
+    return canvases, cond_frame_idx, source_size
 
 
 def run_chain_h3(
@@ -116,6 +178,14 @@ def run_chain_h3(
     without key frames): read before its text encoder, encoded after it in a
     ``reference_encode`` phase by a video encoder built for this clip only, and
     handed to its denoise next to the fixed head.
+
+    With ``spec.source`` (video-to-video) the input video's tail is read on the
+    CPU before anything else, encoded in clip 0's ``source_encode`` phase (the
+    ``encode`` stage's 4th step) and becomes clip 0's fixed head; the decode
+    trims it off and writes ``<stem>_audio_handle.wav``, and ``chain`` gains
+    ``v2v``. Clip 0's key frames (``images``) run the single I2V job's steps:
+    read before its text encoder, the first / last frame to the vision tower
+    (none with references; 裁定 59), encoded in an ``image_encode`` phase.
     """
     if pipe._dit_cfg is None:
         raise RuntimeError("generate before load")
@@ -131,17 +201,42 @@ def run_chain_h3(
     prefetch_used = "off"
     size_bytes = 0
     layout: H3ChainLayout | None = None
+    source = spec.source
+    v2v_runtime: dict = {}
     try:
-        _check_t2v(base)
-        layout = compute_h3_chain_layout([c.num_frames for c in spec.clips])
+        _check_spec(spec)
+        layout = compute_h3_chain_layout([c.num_frames for c in spec.clips], source_video=source is not None)
         requests = clip_requests(spec)
         for req in requests:
             P.validate_request(req)
         n = len(requests)
         k = layout.overlap_latents
         video_cat = audio_cat = prev_video = None
+        src_frames = src_wave = src_info = None
+        if source is not None:
+            # The input video's tail, read on the CPU before any model (a bad file
+            # costs no text-encoder read); its audio only when it has some.
+            from engine_h3.source_tail import has_audio_stream, read_source_tail  # noqa: PLC0415
+
+            src_frames, src_info = read_source_tail(
+                source.path, int(base.width), int(base.height), int(layout.source_context_px),
+            )
+            if has_audio_stream(source.path):
+                from engine_h3.source_audio import load_source_waveform  # noqa: PLC0415
+
+                try:
+                    src_wave, _wave_info = load_source_waveform(
+                        source.path, keep_samples=1, read_samples=int(layout.n_ctx_a) * P.AUDIO_HOP,
+                    )
+                except ValueError as exc:
+                    # An audio track that ends before the context window has no samples
+                    # to freeze: generate the audio freely, as for a file without audio.
+                    src_wave = None
+                    log(f"chain: input video audio not usable, generating audio freely ({exc})")
+            v2v_runtime["source_had_audio"] = src_wave is not None
         for i, req in enumerate(requests):
-            ka = layout.audio_overlap_latents[i - 1] if i else 0
+            from_source = i == 0 and source is not None
+            ka = layout.audio_overlap_latents[i - 1] if i else 0   # clip 0 with a source: set by its encode
             P._free_cuda()
             phases = P._Phases(cuda=cuda)
             clip_phases.append(phases)
@@ -151,20 +246,54 @@ def run_chain_h3(
                     prev_video, audio_cat, layout.clip_latent_frames[i], layout.clip_audio_latents[i], k, ka,
                 )
             log(f"chain: clip {i + 1}/{n} seed={req.seed} frames={req.num_frames} "
-                + (f"fixed head k={k} ka={ka}" if i else "no fixed head"))
+                + (f"fixed head k={k} ka={ka}" if i else
+                   "fixed head from the input video" if from_source else "no fixed head"))
             original_progress = pipe._progress
             pipe._progress = functools.partial(progress, outer_index=i, outer_total=n)
             try:
                 with torch.no_grad():
+                    # Key frames (clip 0 only, 台帳 §1-121): read on the CPU before the
+                    # text encoder, as in a single I2V job. Only the first and the last
+                    # frame go to the vision tower (裁定 59); none with references.
+                    canvases, cond_frame_idx, source_size = _load_key_frames(req)
+                    last = int(req.num_frames) - 1
+                    vision_images = [c for m, c in zip(cond_frame_idx, canvases) if m in (0, last)]
                     # Ref2VA (台帳 §1-109): the clip's references are read on the CPU
                     # before its text encoder, as in a single job; none = as before.
                     media = pipe._read_references(req)
-                    encode_total = P.encode_steps(has_cond=False, has_audio=False, has_refs=bool(media))
+                    if media:
+                        vision_images = []
+                    # The key frames' VAE step (4th of the encode stage) also counts the
+                    # input video's encode; the two never meet in one clip.
+                    has_cond = bool(canvases) or from_source
+                    encode_total = P.encode_steps(has_cond=has_cond, has_audio=False, has_refs=bool(media))
                     with phases.phase("encode") as entry:
                         hidden, tags = pipe._encode(
-                            req.prompt, phases, images=(), has_cond=False, refs=pipe._te_references(media),
+                            req.prompt, phases, images=vision_images, has_cond=has_cond,
+                            refs=pipe._te_references(media),
                         )
                         entry["text_tokens"] = int(hidden.shape[0])
+                    cond_clean = None
+                    if canvases:
+                        with phases.phase("image_encode") as entry:
+                            cond_clean = pipe._encode_image(canvases, entry, 4, encode_total)
+                            entry["vision_tokens"] = int(phases.data["encode"].get("te_read", {}).get("vision_tokens", 0))
+                            entry["canvas"] = [int(req.width), int(req.height)]
+                            entry["source_size"] = source_size
+                    del canvases, vision_images
+                    if from_source:
+                        with phases.phase("source_encode") as entry:
+                            entry["source_size"] = src_info["source_size"]
+                            src_video, src_audio = pipe._encode_source_tail(src_frames, src_wave, entry, 4, encode_total)
+                            ka = int(entry["freeze_ka"])
+                        src_frames = src_wave = None
+                        v2v_runtime["freeze_ka"] = ka
+                        # The input video's tail is clip 0's fixed head, as a previous clip's.
+                        prev_video, audio_cat = src_video, src_audio
+                        video_fix, audio_fix = carry_fix(
+                            prev_video, audio_cat, layout.clip_latent_frames[0], layout.clip_audio_latents[0], k, ka,
+                        )
+                        del src_video, src_audio
                     ref_rows = None
                     ref_counts = None
                     if media:
@@ -181,7 +310,8 @@ def run_chain_h3(
                         ref_counts = {"pictures": counts["picture"], "videos": counts["video"], "audios": counts["audio"]}
                     with phases.phase("denoise") as entry:
                         video, audio, prefetch_used = pipe._denoise(
-                            req, hidden, tags, phases, entry, keep=True,
+                            req, hidden, tags, phases, entry,
+                            cond_clean=cond_clean, cond_frame_idx=cond_frame_idx, keep=True,
                             lora_report=lora_report if i == 0 else None,
                             video_fix=video_fix, audio_fix=audio_fix, refs=ref_rows,
                             video_inject_clean=CHAIN_INJECT_CLEAN,
@@ -189,7 +319,7 @@ def run_chain_h3(
                     video, audio = video.cpu(), audio.cpu()
             finally:
                 pipe._progress = original_progress
-            del hidden, tags, video_fix, audio_fix, media, ref_rows
+            del hidden, tags, video_fix, audio_fix, media, ref_rows, cond_clean
             P._free_cuda()
             if int(video.shape[2]) != layout.clip_latent_frames[i] or int(audio.shape[2]) != layout.clip_audio_latents[i]:
                 raise RuntimeError(
@@ -197,15 +327,20 @@ def run_chain_h3(
                     f"{layout.clip_latent_frames[i]} video / {layout.clip_audio_latents[i]} audio latents"
                 )
             head_equal = None
-            if i:
-                # Self-check: the fixed head must come back as the previous tail bit for bit
-                # (denoise_mask.finish puts the m = 0 rows back to their clean latents).
+            if i or from_source:
+                # Self-check: the fixed head must come back as the previous tail (or the
+                # input video's) bit for bit (denoise_mask.finish puts the m = 0 rows
+                # back to their clean latents).
                 head_equal = bool(torch.equal(video[:, :, :k], prev_video[:, :, -k:])) and (
                     ka == 0 or bool(torch.equal(audio[:, :, :ka], audio_cat[:, :, -ka:]))
                 )
                 if not head_equal:
-                    raise RuntimeError(f"chain: clip {i + 1}'s fixed head is not the previous clip's tail")
+                    tail = "the input video's tail" if from_source else "the previous clip's tail"
+                    raise RuntimeError(f"chain: clip {i + 1}'s fixed head is not {tail}")
             seconds = {"encode": phases.data.get("encode", {}).get("seconds")}
+            for name in ("image_encode", "source_encode"):
+                if name in phases.data:   # only for a clip with key frames / the input video
+                    seconds[name] = phases.data[name].get("seconds")
             if ref_counts is not None:
                 seconds["reference_encode"] = phases.data.get("reference_encode", {}).get("seconds")
             seconds["denoise"] = phases.data.get("denoise", {}).get("seconds")
@@ -219,7 +354,7 @@ def run_chain_h3(
                 record["references"] = ref_counts   # only for a clip with references
             clip_records.append(record)
             if i == 0:
-                video_cat, audio_cat = video, audio
+                video_cat, audio_cat = video, audio   # with a source: its head is already in it
             else:
                 video_cat = torch.cat([video_cat, video[:, :, k:]], dim=2)
                 audio_cat = torch.cat([audio_cat, audio[:, :, ka:]], dim=2)
@@ -240,9 +375,18 @@ def run_chain_h3(
         with torch.no_grad():
             with decode_phases.phase("decode") as entry:
                 # The decoders compute on the latents' device: hand them over on the pipeline's.
-                size_bytes = pipe._decode(
-                    out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
-                )
+                if source is None:
+                    size_bytes = pipe._decode(
+                        out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
+                    )
+                else:
+                    # Video-to-video: the input video's context frames are cut off the
+                    # mp4, and the untrimmed audio is kept beside it for the JOIN.
+                    out = Path(str(base.output_path))
+                    size_bytes = pipe._decode(
+                        out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
+                        trim_head=int(layout.trim_px), handle_path=str(out.with_name(out.stem + "_audio_handle.wav")),
+                    )
         del video_cat, audio_cat
         ok = True
     finally:
@@ -257,6 +401,31 @@ def run_chain_h3(
     }
     if base.loras:
         h3["loras"] = lora_report   # clip 0's: every clip attaches the same files
+    chain = layout.to_dict()
+    v2v_layout = chain.pop("v2v", None)
+    chain.update({
+        "seeds": [int(spec.seed) + i for i in range(len(spec.clips))],
+        "clips": clip_records,
+        "h3": {"overlap_frames": layout.overlap_frames, "inject_clean": CHAIN_INJECT_CLEAN, "decode": "once"},
+    })
+    if source is not None:
+        # Only with an input video, last: a plain chain's block is unchanged. The
+        # layout's six keys plus the run's, the LTX chain's sixteen.
+        dec = decode_phases.data.get("decode", {})
+        freeze_ka = int(v2v_runtime["freeze_ka"])
+        chain["v2v"] = {
+            **v2v_layout,
+            "context_frames": int(source.context_frames),
+            "freeze_ka": freeze_ka,
+            "trimmed_px": int(dec["trimmed_frames"]),
+            "trimmed_audio_samples": int(dec["trimmed_audio_samples"]),
+            "audio_fade_in_samples": int(dec["audio_fade_in_samples"]),
+            "source_had_audio": bool(v2v_runtime["source_had_audio"]),
+            "audio_head_frozen": freeze_ka > 0,
+            "decoded_frames_px": int(dec["decoded_frames"]),
+            "audio_handle_filename": dec["audio_handle"],
+            "handle_context_seconds": round(int(layout.trim_px) / int(base.frame_rate), 6),
+        }
     return {
         "seed_used": int(spec.seed),
         "sampler": pipe.sampler,
@@ -278,12 +447,7 @@ def run_chain_h3(
         "block_swap_prefetch_used": prefetch_used,
         "keep_resident_used": "on" if keep else "off",
         "vram16_mode_used": "on" if base.vram16_mode else "off",
-        "images_used": 0,
+        "images_used": sum(len(c.images) for c in spec.clips),
         "h3": h3,
-        "chain": {
-            **layout.to_dict(),
-            "seeds": [int(spec.seed) + i for i in range(len(spec.clips))],
-            "clips": clip_records,
-            "h3": {"overlap_frames": layout.overlap_frames, "inject_clean": CHAIN_INJECT_CLEAN, "decode": "once"},
-        },
+        "chain": chain,
     }

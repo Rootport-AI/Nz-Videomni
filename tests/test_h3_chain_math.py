@@ -204,3 +204,59 @@ def test_the_cap_is_inclusive_of_the_largest_grid_total():
     lay = compute_h3_chain_layout([5768, 5785])
     assert lay.total_frames == 11531
     assert compute_h3_chain_layout([481] * 24).total_frames == 481 * 24 - 22 * 23
+
+
+# --------------------------------------------------------------------------- #
+# video-to-video: an input video's 22-frame tail as clip 0's fixed head (台帳 §1-121)
+# --------------------------------------------------------------------------- #
+
+V2V_KEYS = ["source_context_px", "n_ctx_v", "n_ctx_a", "trim_px", "v2v_context_junction_px", "new_frames_px"]
+
+
+def test_v2v_adds_no_frame_and_only_the_v2v_block():
+    for frames in ([56, 39], [124, 124, 124], [141, 107], [39, 39, 39]):
+        plain = compute_h3_chain_layout(frames)
+        v2v = compute_h3_chain_layout(frames, source_video=True)
+        d = v2v.to_dict()
+        block = d.pop("v2v")
+        assert d == plain.to_dict()                        # the same geometry, the same key order
+        assert list(block) == V2V_KEYS
+        assert block == {"source_context_px": 22, "n_ctx_v": 7, "n_ctx_a": 37, "trim_px": 22,
+                         "v2v_context_junction_px": 21, "new_frames_px": plain.total_frames - 22}
+        assert v2v.new_frames_px == plain.total_frames - 22
+
+
+def test_plain_layout_has_no_v2v_block():
+    lay = compute_h3_chain_layout([124, 39])
+    assert "v2v" not in lay.to_dict() and list(lay.to_dict())[-1] == "audio_drift_flags"
+    assert (lay.source_context_px, lay.n_ctx_v, lay.n_ctx_a, lay.trim_px, lay.v2v_context_junction_px) == (
+        None, 0, 0, 0, None)
+    assert lay.new_frames_px == lay.total_frames == 141
+
+
+def test_v2v_single_clip():
+    lay = compute_h3_chain_layout([39], source_video=True)
+    assert (lay.total_frames, lay.total_latent_frames, lay.total_audio_latents) == (39, 12, 65)
+    assert lay.seam_start_frames == [] and lay.segment_seam_junctions == [] and lay.all_junctions == []
+    assert lay.audio_drift_flags == [False]
+    assert lay.to_dict()["v2v"]["new_frames_px"] == 17
+    with pytest.raises(ValueError, match=r"^chain needs 2\.\.24 clips \(got 1\)$"):
+        compute_h3_chain_layout([39])                      # without a source: still refused
+
+
+@pytest.mark.parametrize("frames, match", [
+    ([22, 39], r"^clips\[0\]: num_frames must be at least 39 \(source context 22 \+ one grid step\)$"),
+    ([22], r"^clips\[0\]: num_frames must be at least 39 \(source context 22 "),
+    ([], r"^chain needs 1\.\.24 clips \(got 0\)$"),
+    ([124] * 25, r"^chain needs 1\.\.24 clips \(got 25\)$"),
+    ([39, 22], r"^clips\[1\]: num_frames must be at least 39 \(overlap 22 \+ one grid step\)$"),
+    ([40, 39], r"^clips\[0\]: num_frames must be 17n\+5$"),
+])
+def test_v2v_refusals(frames, match):
+    with pytest.raises(ValueError, match=match):
+        compute_h3_chain_layout(frames, source_video=True)
+
+
+def test_v2v_clip_0_at_39_is_accepted():
+    assert compute_h3_chain_layout([39, 39], source_video=True).total_frames == 56
+    assert compute_h3_chain_layout([22, 39]).total_frames == 39   # without a source 22 stays fine

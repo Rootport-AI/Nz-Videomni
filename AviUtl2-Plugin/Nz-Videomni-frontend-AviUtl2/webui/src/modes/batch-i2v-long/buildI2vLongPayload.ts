@@ -189,6 +189,12 @@ export interface BuildRowPayloadParams {
   /** The panel's single add/replace radio — one mode for the whole batch, one
    * text per row (Batch A2V's arrangement exactly). */
   promptMode: PromptMode;
+  /** 台帳 §1-121: the loaded base model has no keyframe strength
+   * (`keyframe_strength` — MiniMax H3 422s any value), so the row's image goes
+   * out without the `strength` key — the Chain form's own
+   * `omitStartImageStrength`, frozen with the run. Omitted/`false` = the full
+   * strength 1.0 as before. */
+  omitStrength?: boolean | undefined;
 }
 
 /**
@@ -198,7 +204,8 @@ export interface BuildRowPayloadParams {
  *   rowPrompt, promptMode)` — so every image can carry its own text;
  * - clip 0 — and only clip 0 (Docs/API_REFERENCE.md §5.2: 「clip 0 のみ画像を
  *   持てる」; the server 422s a `conditioning_images` on any later clip) —
- *   carries this row's image as its single frame-0 keyframe at full strength.
+ *   carries this row's image as its single frame-0 keyframe at full strength
+ *   (台帳 §1-121: or with no `strength` key at all under `omitStrength`).
  *
  * 案A（驚き最小）is unchanged by the 2026-07-30 row-prompt redesign: the
  * composition touches the chain-wide prompt ONLY, never a clip's own `prompt`.
@@ -215,10 +222,13 @@ export interface BuildRowPayloadParams {
  */
 export function buildRowPayload(
   template: GenerateChainRequest,
-  { imageId, rowPrompt, promptMode }: BuildRowPayloadParams,
+  { imageId, rowPrompt, promptMode, omitStrength = false }: BuildRowPayloadParams,
 ): GenerateChainRequest {
+  const image = omitStrength
+    ? { image_id: imageId, frame_idx: 0 }
+    : { image_id: imageId, frame_idx: 0, strength: 1.0 };
   const clips = template.clips.map((clip, index) =>
-    index === 0 ? { ...clip, conditioning_images: [{ image_id: imageId, frame_idx: 0, strength: 1.0 }] } : clip,
+    index === 0 ? { ...clip, conditioning_images: [image] } : clip,
   );
   return { ...template, prompt: composeBatchPrompt(template.prompt, rowPrompt, promptMode), clips };
 }

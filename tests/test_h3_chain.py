@@ -13,7 +13,9 @@ Ref2VA references (台帳 §1-109) through the REAL ``_encode`` /
 (tests/test_h3_engine.py's ``_ref_job``, as a chain); (3) the REAL ``_denoise``
 on the tiny DiT of tests/test_h3_engine.py: the fixed rows end as the clean
 latents bit for bit and are injected as the latents themselves, also next to
-reference rows.
+reference rows; (4) video-to-video and clip 0's key frames (台帳 §1-121) on the
+stubbed pipeline: the input video's latents as clip 0's fixed head, the trimmed
+decode, the ``v2v`` block, the I2V steps of clip 0 and the chain's refusals.
 """
 
 from __future__ import annotations
@@ -85,8 +87,12 @@ def _stub_pipe(monkeypatch, rec: _Recorder, *, device="cpu", fail_at=None, break
             video[:, :, 0] += 1.0
         return video, audio, "on"
 
-    def decode(req, video, audio, entry, keep=False, source_wave=None):
-        rec.calls.append(("decode", req, video, audio, keep))
+    def decode(req, video, audio, entry, keep=False, source_wave=None, **kw):
+        rec.calls.append(("decode", req, video, audio, keep, kw))
+        if kw.get("trim_head"):
+            # What the real _decode records for a trimmed decode (tests/test_h3_source_tail.py).
+            entry.update(decoded_frames=req.num_frames, trimmed_frames=kw["trim_head"], trimmed_audio_samples=29333,
+                         audio_fade_in_samples=960, audio_handle="chain_audio_handle.wav")
         pipe._progress("decode", 3, 3)
         return 1234
 
@@ -181,7 +187,7 @@ def test_run_chain_order_requests_heads_and_decode(monkeypatch, keep):
     assert dec[1].num_frames == layout.total_frames == 328 and dec[1].output_path == "out/chain.mp4"
     assert dec[2].device == pipe.device and dec[3].device == pipe.device
     assert tuple(dec[2].shape) == (1, CH_LAT, 97, LH, LW) and tuple(dec[3].shape) == (2, CH_AUD, 547)
-    assert dec[4] is keep
+    assert dec[4] is keep and dec[5] == {}             # a plain chain: no trim, no handle
 
     # Progress: the clips' lines carry their position, the decode's none; the original is back.
     assert pipe._progress is original
@@ -251,7 +257,7 @@ def test_head_that_is_not_the_tail_is_refused(monkeypatch):
     ((124, 22), {}, r"clips\[1\]: num_frames must be at least 39"),
     ((124,), {}, r"2\.\.24 clips"),
     ((124, 125), {}, "17n\\+5"),
-    ((124, 124), {"images": (P.H3ImageInput(path="a.png"),)}, "T2V"),
+    ((124, 124), {"images": (P.H3ImageInput(path="a.png"),)}, "共通設定"),
     ((124, 124), {"references": (P.H3ReferenceInput("picture", "p.png", 1),)}, "参照はクリップごと"),
     ((124, 124), {"width": 100}, "32 の倍数"),
 ])
@@ -569,3 +575,292 @@ def test_real_denoise_in_a_chain_with_references(monkeypatch, tmp_path):
     plain = run(False)
     assert plain["chain"]["clips"][0]["latents_sha256"] != clips[0]["latents_sha256"]
     assert "ref_video" not in plain["h3"]["phases"]["clips"][0]["denoise"]["sequence"]
+
+
+# --------------------------------------------------------------------------- #
+# video-to-video and clip 0's key frames (台帳 §1-121)
+# --------------------------------------------------------------------------- #
+
+SRC_SEED = 999
+
+
+def _source_stubs(monkeypatch, pipe, rec, *, samples=29333):
+    """The input video's reading (``samples`` of audio; None = a file without audio)
+    and ``_encode_source_tail`` as stubs. The stub's latents are seeded with
+    SRC_SEED; its ``freeze_ka`` is the real rule (tests/test_h3_source_tail.py)."""
+    import numpy as np
+
+    from engine_h3 import source_audio as SA
+    from engine_h3 import source_tail as ST
+
+    def read_tail(path, width, height, frames):
+        rec.calls.append(("read_source", path, width, height, frames))
+        return np.zeros((frames, height, width, 3), np.uint8), {"source_size": [1920, 1080], "frames_read": frames}
+
+    def load_wave(path, *, keep_samples, read_samples):
+        rec.calls.append(("read_source_audio", path, keep_samples, read_samples))
+        return torch.zeros(2, samples), {}
+
+    def encode_source_tail(frames, wave, entry, index, total):
+        rec.calls.append(("source_encode", tuple(frames.shape), None if wave is None else int(wave.shape[-1]),
+                          index, total))
+        g = torch.Generator().manual_seed(SRC_SEED)
+        video = torch.randn(1, CH_LAT, 7, LH, LW, generator=g)
+        freeze = 0 if wave is None else min(37, int(wave.shape[-1]) // 800)
+        audio = torch.randn(2, CH_AUD, freeze, generator=g) if freeze else None
+        rec.source_latents = (video, audio)
+        entry.update(frames_read=int(frames.shape[0]), freeze_ka=freeze, source_had_audio=wave is not None)
+        pipe._progress("encode", index, total)
+        return video, audio
+
+    monkeypatch.setattr(ST, "read_source_tail", read_tail)
+    monkeypatch.setattr(ST, "has_audio_stream", lambda path: samples is not None)
+    monkeypatch.setattr(SA, "load_source_waveform", load_wave)
+    monkeypatch.setattr(pipe, "_encode_source_tail", encode_source_tail)
+
+
+def _v2v_spec(frames=(56, 39), context=22, **kw):
+    spec = _spec(frames=frames, **kw)
+    spec.source = CH.H3ChainSource(path="in/tail.mp4", context_frames=context)
+    return spec
+
+
+#: The chain's v2v block: the layout's six keys, then the run's (the LTX chain's sixteen).
+GOLDEN_V2V_KEYS = [
+    "source_context_px", "n_ctx_v", "n_ctx_a", "trim_px", "v2v_context_junction_px", "new_frames_px",
+    "context_frames", "freeze_ka", "trimmed_px", "trimmed_audio_samples", "audio_fade_in_samples",
+    "source_had_audio", "audio_head_frozen", "decoded_frames_px", "audio_handle_filename", "handle_context_seconds",
+]
+
+
+def test_carry_fix_without_audio_gives_no_audio_fix():
+    pv = torch.randn(1, CH_LAT, 7, LH, LW)
+    (cv, per_v), audio_fix = CH.carry_fix(pv, None, 17, 93, 7, 0)
+    assert audio_fix is None
+    assert torch.equal(cv[:, :, :7], pv) and per_v == [0.0] * 7 + [1.0] * 10
+
+
+def test_v2v_source_is_clip_0s_fixed_head(monkeypatch):
+    rec = _Recorder()
+    pipe, original = _stub_pipe(monkeypatch, rec)
+    _source_stubs(monkeypatch, pipe, rec)
+    done = CH.run_chain_h3(pipe, _v2v_spec(keep_resident=True), _progress_into(rec), lambda m: None)
+    layout = compute_h3_chain_layout([56, 39], source_video=True)
+
+    kinds = [c[0] for c in rec.calls]
+    # The tail (and its audio) is read before any model; its encode follows clip 0's text encoder.
+    assert kinds == ["read_source", "read_source_audio", "encode", "source_encode", "denoise",
+                     "encode", "denoise", "decode"]
+    assert rec.calls[0] == ("read_source", "in/tail.mp4", 96, 64, 22)
+    assert rec.calls[1] == ("read_source_audio", "in/tail.mp4", 1, 37 * 800)
+    enc = [c for c in rec.calls if c[0] == "encode"]
+    assert [c[3] for c in enc] == [True, False]              # clip 0 counts the VAE step
+    assert rec.calls[3] == ("source_encode", (22, 64, 96, 3), 29333, 4, 4)
+
+    # Clip 0's fixed head is the input video's latents: all 7 video, 36 audio (floor).
+    src_v, src_a = rec.source_latents
+    den = [c for c in rec.calls if c[0] == "denoise"]
+    (cv0, per_v0), (ca0, per_a0) = den[0][2]["video_fix"], den[0][2]["audio_fix"]
+    assert torch.equal(cv0[:, :, :7], src_v) and bool((cv0[:, :, 7:] == 0).all())
+    assert torch.equal(ca0[:, :, :36], src_a) and bool((ca0[:, :, 36:] == 0).all())
+    assert per_v0 == [0.0] * 7 + [1.0] * 10 and per_a0 == [0.0] * 36 + [1.0] * (93 - 36)
+    assert den[0][2]["video_inject_clean"] == 1.0
+    # Clip 1: as before, from clip 0's output.
+    assert len([v for v in den[1][2]["video_fix"][1] if v == 0.0]) == 7
+    assert [c["head_equals_prev_tail"] for c in done["chain"]["clips"]] == [True, True]
+
+    # The decode: the whole timeline, trimmed by 22, with the handle beside the mp4.
+    dec = next(c for c in rec.calls if c[0] == "decode")
+    assert dec[1].num_frames == layout.total_frames == 73
+    assert dec[5] == {"trim_head": 22, "handle_path": str(__import__("pathlib").Path("out/chain_audio_handle.wav"))}
+
+    # Progress: clip 0's encode counts 4 steps, the source encode being the 4th.
+    clip0 = [p for p in rec.progress if p[0] == "encode" and p[3]["outer_index"] == 0]
+    clip1 = [p for p in rec.progress if p[0] == "encode" and p[3]["outer_index"] == 1]
+    assert clip0[-1][1:3] == (4, 4) and clip1[-1][1:3] == (3, 3)
+    assert pipe._progress is original
+
+    # done: num_frames is the timeline's; chain = the plain keys, then v2v.
+    assert done["num_frames"] == 73 and done["images_used"] == 0
+    chain = done["chain"]
+    plain = layout.to_dict()
+    v2v_layout = plain.pop("v2v")
+    assert list(chain) == list(plain) + ["seeds", "clips", "h3", "v2v"]
+    assert {k: chain[k] for k in plain} == plain
+    assert list(chain["v2v"]) == GOLDEN_V2V_KEYS
+    assert chain["v2v"] == {
+        **v2v_layout, "context_frames": 22, "freeze_ka": 36, "trimmed_px": 22, "trimmed_audio_samples": 29333,
+        "audio_fade_in_samples": 960, "source_had_audio": True, "audio_head_frozen": True,
+        "decoded_frames_px": 73, "audio_handle_filename": "chain_audio_handle.wav",
+        "handle_context_seconds": round(22 / 24, 6),
+    }
+    assert v2v_layout == {"source_context_px": 22, "n_ctx_v": 7, "n_ctx_a": 37, "trim_px": 22,
+                          "v2v_context_junction_px": 21, "new_frames_px": 51}
+    assert list(chain["clips"][0]["seconds"]) == ["encode", "source_encode", "denoise"]
+    assert list(chain["clips"][1]["seconds"]) == ["encode", "denoise"]
+    assert list(done["h3"]["phases"]["clips"][0]) == ["encode", "source_encode", "denoise"]
+
+
+def test_v2v_single_clip(monkeypatch):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _source_stubs(monkeypatch, pipe, rec)
+    done = CH.run_chain_h3(pipe, _v2v_spec(frames=(39,)), _progress_into(rec), lambda m: None)
+    assert done["num_frames"] == 39 and done["chain"]["v2v"]["new_frames_px"] == 17
+    assert [c["head_equals_prev_tail"] for c in done["chain"]["clips"]] == [True]
+
+
+@pytest.mark.parametrize("samples, freeze", [(None, 0), (500, 0), (20000, 25)])
+def test_v2v_without_or_with_short_audio(monkeypatch, samples, freeze):
+    """No audio stream: nothing read, no audio head (the audio is generated freely).
+    Audio shorter than the context: only the whole hops are frozen (``freeze_ka`` < 37)."""
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _source_stubs(monkeypatch, pipe, rec, samples=samples)
+    done = CH.run_chain_h3(pipe, _v2v_spec(), _progress_into(rec), lambda m: None)
+    assert ("read_source_audio" in [c[0] for c in rec.calls]) == (samples is not None)
+    den = [c for c in rec.calls if c[0] == "denoise"]
+    if freeze:
+        assert den[0][2]["audio_fix"][1] == [0.0] * freeze + [1.0] * (93 - freeze)
+        assert torch.equal(den[0][2]["audio_fix"][0][:, :, :freeze], rec.source_latents[1])
+    else:
+        assert den[0][2]["audio_fix"] is None
+    assert den[0][2]["video_fix"] is not None and den[1][2]["audio_fix"] is not None
+    v2v = done["chain"]["v2v"]
+    assert (v2v["freeze_ka"], v2v["audio_head_frozen"], v2v["source_had_audio"]) == (
+        freeze, freeze > 0, samples is not None)
+    assert [c["head_equals_prev_tail"] for c in done["chain"]["clips"]] == [True, True]
+
+
+def test_v2v_audio_track_without_decodable_samples_is_generated_freely(monkeypatch):
+    """An audio stream that yields no sample (it ends before the context window) is not
+    a failure: the audio is generated freely, as for a file without audio."""
+    from engine_h3 import source_audio as SA
+
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _source_stubs(monkeypatch, pipe, rec)
+
+    def no_samples(path, *, keep_samples, read_samples):
+        raise ValueError("1 サンプルも読めませんでした")
+
+    monkeypatch.setattr(SA, "load_source_waveform", no_samples)
+    logs: list[str] = []
+    done = CH.run_chain_h3(pipe, _v2v_spec(), _progress_into(rec), logs.append)
+    den = [c for c in rec.calls if c[0] == "denoise"]
+    assert den[0][2]["audio_fix"] is None and den[1][2]["audio_fix"] is not None
+    v2v = done["chain"]["v2v"]
+    assert v2v["source_had_audio"] is False and v2v["freeze_ka"] == 0 and v2v["audio_head_frozen"] is False
+    assert any("generating audio freely" in m for m in logs)
+
+
+def test_v2v_head_that_is_not_the_source_is_refused(monkeypatch):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec, break_head=True)
+    _source_stubs(monkeypatch, pipe, rec)
+    with pytest.raises(RuntimeError, match="input video's tail"):
+        CH.run_chain_h3(pipe, _v2v_spec(), _progress_into(rec), lambda m: None)
+
+
+def _key_frame_files(tmp_path, frames):
+    from PIL import Image
+
+    out = []
+    for n in frames:
+        path = tmp_path / f"k{n}.png"
+        Image.new("RGB", (128, 64), (n % 256,) * 3).save(path)
+        out.append(P.H3ImageInput(path=str(path), frame_idx=n))
+    return tuple(out)
+
+
+def _image_stub(monkeypatch, pipe, rec):
+    def encode_image(images, entry, index, total, enc=None):
+        rec.calls.append(("image_encode", [im.size for im in images], index, total))
+        pipe._progress("encode", index, total)
+        return torch.ones(len(images) * 4, 96)
+
+    monkeypatch.setattr(pipe, "_encode_image", encode_image)
+
+
+def test_i2v_clip_0_runs_the_single_jobs_key_frame_steps(monkeypatch, tmp_path):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _image_stub(monkeypatch, pipe, rec)
+    images = _key_frame_files(tmp_path, (55, 0, 20))     # any order: sorted by frame
+    spec = _spec(frames=(56, 39))
+    spec.clips = (dataclasses_replace(spec.clips[0], images=images), spec.clips[1])
+    done = CH.run_chain_h3(pipe, spec, _progress_into(rec), lambda m: None)
+    kinds = [c[0] for c in rec.calls]
+    assert kinds == ["encode", "image_encode", "denoise", "encode", "denoise", "release", "decode", "release"]
+    enc = [c for c in rec.calls if c[0] == "encode"]
+    assert len(enc[0][2]) == 2 and enc[0][3] is True      # the first and the last frame to the vision tower
+    assert enc[1][2] == () and enc[1][3] is False
+    assert rec.calls[1] == ("image_encode", [(96, 64)] * 3, 4, 4)
+    den = [c for c in rec.calls if c[0] == "denoise"]
+    assert den[0][2]["cond_frame_idx"] == [0, 20, 55] and den[0][2]["cond_clean"].shape == (12, 96)
+    assert den[0][2]["video_fix"] is None
+    assert den[1][2]["cond_clean"] is None and den[1][2]["cond_frame_idx"] == []
+    assert done["images_used"] == 3
+    clips = done["chain"]["clips"]
+    assert list(clips[0]["seconds"]) == ["encode", "image_encode", "denoise"]
+    assert [c["head_equals_prev_tail"] for c in clips] == [None, True]
+    image_entry = done["h3"]["phases"]["clips"][0]["image_encode"]
+    assert image_entry["canvas"] == [96, 64] and image_entry["source_size"] == [[128, 64]] * 3
+    assert "v2v" not in done["chain"]
+    dec = next(c for c in rec.calls if c[0] == "decode")
+    assert dec[5] == {}
+
+
+def test_i2v_clip_0_with_references_sends_no_vision_images(monkeypatch, tmp_path):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _image_stub(monkeypatch, pipe, rec)
+    monkeypatch.setattr(pipe, "_read_references", lambda req: [{"kind": "audio"}] if req.references else [])
+    monkeypatch.setattr(pipe, "_te_references", lambda media: [])
+
+    def encode_references(media, entry, index, total, enc, te_refs=()):
+        rec.calls.append(("reference_encode", index, total))
+        return []
+
+    monkeypatch.setattr(pipe, "_encode_references", encode_references)
+    ref_path = tmp_path / "a.wav"
+    ref_path.write_bytes(b"x")
+    spec = _spec(frames=(56, 39))
+    spec.clips = (dataclasses_replace(spec.clips[0], images=_key_frame_files(tmp_path, (0, 55)),
+                                      references=(P.H3ReferenceInput("audio", str(ref_path), 1),)), spec.clips[1])
+    CH.run_chain_h3(pipe, spec, _progress_into(rec), lambda m: None)
+    enc = [c for c in rec.calls if c[0] == "encode"]
+    assert enc[0][2] == () and enc[0][3] is True
+    assert [c for c in rec.calls if c[0] in ("image_encode", "reference_encode")] == [
+        ("image_encode", [(96, 64)] * 2, 4, 5), ("reference_encode", 5, 5)]
+
+
+def dataclasses_replace(obj, **kw):
+    import dataclasses
+
+    return dataclasses.replace(obj, **kw)
+
+
+def _with_images(spec, i, tmp_path, frames=(0,)):
+    clips = list(spec.clips)
+    clips[i] = dataclasses_replace(clips[i], images=_key_frame_files(tmp_path, frames))
+    spec.clips = tuple(clips)
+    return spec
+
+
+@pytest.mark.parametrize("make, match", [
+    (lambda tp: _with_images(_spec(frames=(56, 39)), 1, tp), r"クリップ 0 にだけ.*clips\[1\]"),
+    (lambda tp: _with_images(_v2v_spec(), 0, tp), "同時には使えません"),
+    (lambda tp: _v2v_spec(context=21), "22 固定です（21）"),
+    (lambda tp: _v2v_spec(context=73), "22 固定です（73）"),
+    (lambda tp: _v2v_spec(frames=(22, 39)), r"clips\[0\]: num_frames must be at least 39 \(source context 22"),
+    (lambda tp: _v2v_spec(frames=()), r"chain needs 1\.\.24 clips \(got 0\)"),
+    (lambda tp: _with_images(_spec(frames=(56, 39)), 0, tp, frames=(56,)), "0〜55"),
+])
+def test_v2v_and_i2v_refused_before_any_stage(monkeypatch, tmp_path, make, match):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _source_stubs(monkeypatch, pipe, rec)
+    with pytest.raises(ValueError, match=match):
+        CH.run_chain_h3(pipe, make(tmp_path), _progress_into(rec), lambda m: None)
+    assert rec.calls == [("release",)]                   # nothing read, no stage ran

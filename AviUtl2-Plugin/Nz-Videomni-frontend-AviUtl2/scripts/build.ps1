@@ -60,6 +60,11 @@
 .PARAMETER EmbeddedHtml
     When embedding, embed this single-file HTML instead of
     webui\dist-single\index.html (passed through to NZVIDEOMNI_WEBUI_SINGLE_HTML).
+
+.PARAMETER NoDistCopy
+    Skip the final step that copies the built NzVideomni.aux2 over the
+    distribution copy (the monorepo's AviUtl2-Plugin\NzVideomni.aux2, the same
+    place scripts\deploy.ps1 defaults -DistDir to). By default it is copied.
 #>
 [CmdletBinding()]
 param(
@@ -70,7 +75,8 @@ param(
     [switch]$EmbedWebui,
     [switch]$NoEmbedWebui,
     [switch]$SkipWebuiBuild,
-    [string]$EmbeddedHtml
+    [string]$EmbeddedHtml,
+    [switch]$NoDistCopy
 )
 
 if ($EmbedWebui -and $NoEmbedWebui) {
@@ -219,6 +225,13 @@ $aux2 = Join-Path $buildDir "NzVideomni.aux2"
 if (-not (Test-Path $aux2)) { throw "Expected artifact not found: $aux2" }
 Write-Host ""
 Write-Host "Build succeeded: $aux2"
+
+if (-not $NoDistCopy) {
+    # Same location deploy.ps1 uses for -DistDir; AviUtl2 never locks this copy.
+    $distAux2 = Join-Path (Split-Path -Parent $RepoRoot) "NzVideomni.aux2"
+    Copy-Item -Path $aux2 -Destination $distAux2 -Force
+    Write-Host "Distribution copy updated: $distAux2"
+}
 
 if ($RunTests) {
     # Runs the exe directly (not ctest) with the "integration" suite excluded,

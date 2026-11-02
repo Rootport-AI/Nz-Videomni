@@ -595,7 +595,8 @@ export const en = {
         "Reference video (control IC-LoRA) is not available on the selected base model. Chained generation itself still works — switch the base model in the header to attach an IC-LoRA reference.",
       /** §1-106: clip 1's opening IMAGE (feature `chain_start_image`). Shown
        * above the SOURCE card, which then greys as a whole when the video half
-       * is closed too (MiniMax H3: the chain starts from text). */
+       * is closed too. No shipped engine publishes the name since 台帳 §1-121
+       * (MiniMax H3's chain takes an opening image too). */
       startImage:
         "An opening image for clip 1 cannot be used on the selected base model — the chain starts from the prompt. Chained generation itself still works; switch the base model in the header to start from an image.",
     },
@@ -989,6 +990,10 @@ export const en = {
        * is shorter than `context_frames` (the server would 422). */
       sourceVideoTooShortForContext:
         "The range used from the source video is too short for the number of carried-over frames. Use a longer range, or lower the carried-over frame count.",
+      /** 台帳 §1-121: the same gate where the carried-over frame count is fixed
+       * by the base model (MiniMax H3: 22) — there is no count to lower. */
+      sourceVideoTooShortForFixedContext: (frames: number): string =>
+        `The range used from the source video is too short: this base model carries over ${frames} frames. Use a longer range or a longer video.`,
       /** §1-6: the trim was requested but not applied — the stored upload is the
        * whole file, so generating would continue from the wrong footage. */
       sourceTrimFailed:
@@ -1058,9 +1063,10 @@ export const en = {
         "This end source's clip lengths leave no audio overlap budget for the joins. Raise the seam blend width.",
       /** §1-106: the fixed-seam twin of `clipTooShortForOverlap` (no seam
        * blend setting exists there to blame) — every clip after the first
-       * must reach `n` frames. */
+       * must reach `n` frames; 台帳 §1-121: the first one too while a source
+       * video is attached. */
       clipTooShortForFixedOverlap: (n: number): string =>
-        `Make every clip after the first at least ${n} frames long (the seam to the previous clip is fixed).`,
+        `Make every clip that continues earlier footage at least ${n} frames long — every clip after the first, and the first too when a source video is attached (the overlap with that footage is fixed).`,
       /** §1-106: material left in a panel the selected base model has
        * closed (attached before a base-model switch). */
       materialInClosedPanel:
@@ -2954,6 +2960,8 @@ export const ja: Strings = {
         `現在のつなぎ目ブレンド設定では、各クリップは${n}フレーム以上が必要です`,
       sourceVideoTooShortForContext:
         "元動画の使用範囲が、引き継ぎフレーム数に対して短すぎます。範囲を長くするか、引き継ぎフレーム数を下げてください。",
+      sourceVideoTooShortForFixedContext: (frames: number): string =>
+        `元動画の使用範囲が短すぎます。このベースモデルは元動画から ${frames} フレームを引き継ぎます。範囲を長くするか、長い動画を使ってください。`,
       sourceTrimFailed:
         "元動画の範囲切り出しが適用されませんでした。プラグインが古い可能性があります。プラグインを更新するか、ファイルを選び直すと全体を使って実行できます。",
       contextFramesTooLongForWindow: (maxFrames: number): string =>
@@ -2984,7 +2992,7 @@ export const ja: Strings = {
       endSourceAudioOverlapBudget:
         "このクリップ構成では、素材（末尾）のつなぎ目に必要な音声のりしろが足りません。ブレンド幅を上げてください。",
       clipTooShortForFixedOverlap: (n: number): string =>
-        `2本目以降のクリップは${n}フレーム以上にしてください（前のクリップとの重なりは固定です）。`,
+        `2本目以降のクリップ（元動画を付けたときは1本目も）は${n}フレーム以上にしてください（前の映像との重なりは固定です）。`,
       materialInClosedPanel:
         "このベースモデルでは使えない素材が残っています。外してください。",
     },

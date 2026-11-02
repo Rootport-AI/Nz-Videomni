@@ -1490,7 +1490,8 @@ def _drop_leading_frames(
     it does: decode chunks advance by the temporal tile minus its overlap (the
     stride ``ltxcore_compat.verify()`` checks at startup) while ``trim_px`` is
     the V2V ``context_frames`` (8n+1, bounded by
-    ``SourceVideoSpec.validate_context_frames``), so the boundary essentially
+    ``SourceVideoSpec.validate_context_frames`` and
+    ``services.engines.ltx.chain_rules.validate_ltx_chain``), so the boundary essentially
     never coincides. Chunks the trim consumes entirely are skipped rather than
     yielded empty -- the mp4 encoder reads the frame size off the FIRST chunk
     it receives, so a zero-frame first chunk would take the width and height

@@ -256,26 +256,29 @@ describe("AppShell — base-model feature scope", () => {
     // WIRING — a published name reaches `chainPanelsDisabledFor`, greys ITS
     // panel and prints ITS reason — not today's list (`bridge/mockBridge.test.ts`
     // owns that, against the server's own `UNSUPPORTED_FEATURES`).
-    const { select, container } = await renderApp(AS_LTX25, ["end_source"]);
+    // 台帳 §1-121: `a2v`, since `end_source` now HIDES its panel (the test
+    // below) rather than greying it.
+    const { select, container } = await renderApp(AS_LTX25, ["a2v"]);
+    const audioPick = () => chainForm(container).querySelector(".chain-audio-pick") as HTMLButtonElement;
 
-    expect(chainPicks(container).every((b) => b != null)).toBe(true);
-    expect(chainPicks(container).every((b) => b.disabled)).toBe(false);
+    expect(audioPick()).not.toBeNull();
+    expect(audioPick().disabled).toBe(false);
 
     await switchToLtx25(select);
 
-    await waitFor(() => expect(chainPicks(container).every((b) => b.disabled)).toBe(true));
+    await waitFor(() => expect(audioPick().disabled).toBe(true));
 
     // A greyed control with no stated reason is what these lines exist to
     // prevent — one per panel, each naming ITS OWN material rather than a
     // generic "unsupported".
     const form = within(chainForm(container));
-    expect(form.getByText(/End source is not available/i)).toBeInTheDocument();
+    expect(form.getByText(/Generating from an audio track \(A2V\) is not available/i)).toBeInTheDocument();
     // …and NOT the other three. A reason line that appeared for a material
     // nobody refused would tell the user to switch base models for something
     // that works — the greying must be keyed on the NAME, not on "some
     // restriction exists".
     expect(form.queryByText(/source VIDEO cannot be used on the selected base model/i)).toBeNull();
-    expect(form.queryByText(/Generating from an audio track \(A2V\) is not available/i)).toBeNull();
+    expect(form.queryByText(/End source is not available/i)).toBeNull();
     expect(form.queryByText(/Reference video \(control IC-LoRA\) is not available/i)).toBeNull();
 
     // …and the rest of the Chain form is untouched: the tab is live because the
@@ -284,6 +287,21 @@ describe("AppShell — base-model feature scope", () => {
     // role queries skip hidden subtrees. The text is the way in.
     const addClip = form.getByText(/add clip/i).closest("button") as HTMLButtonElement;
     expect(addClip.disabled).toBe(false);
+  });
+
+  it("台帳 §1-121: HIDES a Chain material panel the table hides — no control, no reason line", async () => {
+    // Synthetic again (the mechanism, not today's list): `end_source` is in the
+    // table's `hides`, so its accordion leaves the DOM instead of greying.
+    const { select, container } = await renderApp(AS_LTX25, ["end_source"]);
+    expect(chainPicks(container).every((b) => b != null)).toBe(true);
+
+    await switchToLtx25(select);
+
+    await waitFor(() => expect(chainForm(container).querySelector(".chain-end-source-pick")).toBeNull());
+    const form = within(chainForm(container));
+    expect(form.queryByText(/End source is not available/i)).toBeNull();
+    // The other panels stay where they were.
+    expect(openPicks(container).every((b) => b != null && !b.disabled)).toBe(true);
   });
 
   it("greys NO Chain material panel on LTX 2.5 — the End-source increment took the last", async () => {

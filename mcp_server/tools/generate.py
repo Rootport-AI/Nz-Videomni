@@ -756,7 +756,7 @@ async def submit_chain(
     同じシードでも生成結果の細部が変わります。** エコーはチェーン全体の畳み込み
     で、どこか1回でも降格すれば ``"sage->sdpa"`` になります。
 
-    **MiniMax H3 でも連結生成（T2V のクリップの連結だけ）が使えます**。前の
+    **MiniMax H3 でも連結生成が使えます**。前の
     クリップの末尾 22 フレーム（固定）を次のクリップの先頭に引き継ぎます。
     各クリップの ``num_frames`` は 17n+5 で、1 本目は 22 以上・2 本目以降は 39
     以上、幅と高さは 32 の倍数、``frame_rate`` は 24 です。ステップ数と shift と
@@ -764,7 +764,11 @@ async def submit_chain(
     shift 12 / 3・VRAM 16GB mode on）で動きます（Turbo LoRA の 8 ステップは
     指定できません）。``overlap_frames`` / ``overlap_strength`` /
     ``stage2_window`` / ``chunked_upsample`` は H3 では無視されます。
-    ``clips[0].conditioning_images``（冒頭画像）・``source_video_id``・
+    ``clips[0].conditioning_images``（冒頭画像）は H3 でも使えます（``strength``
+    は指定しない。指定すると 422 FEATURE_UNSUPPORTED の ``keyframe_strength``）。
+    ``source_video_id``（V2V）は H3 では引き継ぐフレーム数が 22 固定なので、
+    ``source_video_context_frames=22`` を指定してください（既定の 73 のままでは
+    422 VALIDATION_ERROR。入力動画があればクリップ 0 は 39 以上で、1 本でも可）。
     ``source_audio_id``・``end_source_*``・``retake_*``・``reference_video_id``・
     ``nag_enabled`` などは H3 では 422 FEATURE_UNSUPPORTED です。
 

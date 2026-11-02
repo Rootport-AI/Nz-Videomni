@@ -15,14 +15,6 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-### 1-95. MiniMax H3（Turbo なし・int8 ConvRot）の快適上限の較正（起票：2026-10-17）
-
-- **概要**: MiniMax H3 では快適上限マーカーを非表示にしている。本項で、MiniMax H3（Turbo なし・int8 ConvRot）について快適上限を較正し、記述子（manifest）の `comfort` に行を足して配信する。較正が済むまで記述子に `comfort` の行は持たせない。
-- **前提**: なし。復号の VRAM は直っている（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.3 の 2a-G5）。ノイズ除去の段の VRAM の溢れは VRAM 16GB mode で解消している（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169）。判定規則と計測の作法は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §4.2（快適の判定規則）と §16（直近の較正）。GPU を使う実測は弾ごとにまとめてオーナーの了承を得る。
-- **留意**: Turbo（少ないステップ数で生成するための蒸留 LoRA）は実装済み（CLOSED 3-251）。LoRA なしの 1 本は長いので、較正の計画では Turbo を使うかどうかを決める。`transformer_weight_class` は MiniMax H3 では常に `null`（`services/weight_class.py`）で、快適上限の表の行は種別（`requires.weight_class`）が必須なので、このまま行を足しても操作パネルの照合でどの行にも当たらない。較正の計画で種別の扱い（判定を広げて int8 ConvRot を `"8bit"` とする／種別なしの行を許す／別の種別名を足す）を決める。
-- **留意**: ① 較正は製品の既定＝**VRAM 16GB mode on** で測る（off は参考）。条件にはキーフレームの枚数も入る（条件行が K×grid 行増える。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13）。② 線は速度ではなく、共有メモリへの退避（spill）そのものの量で引く（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.1 の裁定 3）。③ ただし on ではノイズ除去に割り当て器の上限が掛かるので、境界は退避ではなく「上限での OOM」か「復号の段（上限なし）の退避」として現れる。判定規則 v3（窓の共有メモリの中央値）をどう読み替えるかは、較正の計画で決める。④ `m×n ≥ 2³¹` の実測（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §13 から預けた件）は、on では行の塊で分割されるので起きず、off でだけ届きうる（算術による推測: off の fc1 は S × 28,672 で、S ≥ 約 74,900 行で届く。on の最大の行列積は out_proj の S × 5,376 で、S ≥ 約 40 万行が要る）。扱いは計画で決める。記録は同 §169。
-- **出典**: [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §10（2026-10-17 の裁定）。
-
 ### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19）
 
 - **概要**: 姿勢（DWpose）と深度（Depth）による制御。
@@ -46,10 +38,11 @@
 
 ### 1-119. MiniMax H3 の Single タブに快適上限マーカーを設置する（起票：2026-11-01）
 
-- **概要**: §1-95（較正）の結果を受けて、記述子 `scripts/manifests/40-minimaxh3.json` の `comfort` に行を足し、種別の判定（`services/weight_class.py`。H3 の int8 ConvRot を `"8bit"` とする案）を広げ、操作パネルの Single タブで MiniMax H3 にも快適上限マーカー（フレーム数スライダーの「ここを超えると遅くなる」の印）を出す。§1-95 の範囲は「測って線を決め、行の形を提案し、文書に書く」までで、記述子・種別判定・操作パネルの手当てはすべて本項で行う（オーナー裁定 2026-11-01。記述子に行を足した時点で操作パネルが LTX の式かレガシー表で誤った印を出すため、3 つを同じコミットで行う）。
-- **前提**: §1-95 の完了（線の値・行の形・種別の扱いが [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17 に書かれていること）。
-- **留意**: 操作パネルのトークンの式と逆算式は LTX の格子（フレーム数 8n+1・潜在フレーム＝(F−1)÷temporal_factor+1。[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.2・§1.3）で書かれている。H3 の格子はフレーム数 17n+5 で、注意の系列は映像の潜在に音声とテキストの行が足される（製品の形 896×1152×124 フレームで S＝39,764。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5）。記述子の `spatial_factor`／`temporal_factor` だけでは H3 の線を表せない可能性があるので、式の置き方は §1-95 の結果を見てから決める。また、系統の表はあるが行が一致しないときの落ち先は LTX の `spill_free_frames`（操作パネル `shell/comfortTable.ts`）で、H3 には合わないので、落ち先の扱いも本項で決める。
-- **出典**: §1-95 の成果物（較正の一次記録・[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) の H3 の節・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) の較正の節）。オーナー指示 2026-11-01。
+- **概要**: 較正（CLOSED 3-268）の結果を受けて、記述子 `scripts/manifests/40-minimaxh3.json` の `comfort` に行を足し、種別の判定（`services/weight_class.py`。H3 の int8 ConvRot を `"8bit"` とする案は較正の時点の推奨案で、決めるのは本項）を広げ、操作パネルの Single タブで MiniMax H3 にも快適上限マーカー（LTX では「ここを超えると遅くなる」の印。H3 では超えると OOM で失敗する〔快適上限表 §17.5 の (d)〕。文言は本項で決める）を出す。較正の範囲は「測って、線の材料と条件ごとの事実を文書に書く」まで（行の形の提案は 2026-11-02 の裁定で本項へ回した）で、記述子・種別判定・操作パネルの手当てはすべて本項で行う（オーナー裁定 2026-11-01。記述子に行を足した時点で操作パネルが LTX の式かレガシー表で誤った印を出すため、3 つを同じコミットで行う）。
+- **前提**: CLOSED 3-268 の完了（線の値と条件ごとの事実が [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17 に書かれていること）。行の形・種別の扱い・K の扱い・マーカーの文言は本項の討論で決める。
+- **留意**: 操作パネルのトークンの式と逆算式は LTX の格子（フレーム数 8n+1・潜在フレーム＝(F−1)÷temporal_factor+1。[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.2・§1.3）で書かれている。H3 の格子はフレーム数 17n+5 で、注意の系列は映像の潜在に音声とテキストの行が足される（製品の形 896×1152×124 フレームで S＝39,764。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5）。記述子の `spatial_factor`／`temporal_factor` だけでは H3 の線を表せない可能性があるので、式の置き方は較正の結果（快適上限表 §17）を見てから決める。また、系統の表はあるが行が一致しないときの落ち先は LTX の `spill_free_frames`（操作パネル `shell/comfortTable.ts`）で、H3 には合わないので、落ち先の扱いも本項で決める。
+- **留意**: 製品側の `scripts/manifests/40-minimaxh3.json` の `_note` と `tests/test_comfort_budgets.py` は §1-95 を指しているので、本項の同じコミットで直す。
+- **出典**: 較正の成果物（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-268・[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17・[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §192）。オーナー指示 2026-11-01。
 
 ### 1-120. MiniMax H3 での long a2v（連結生成に音声を 1 本添付して生成する機能）対応（起票：2026-11-01）
 
@@ -116,7 +109,7 @@
 
 - **概要**: VRAM 16GB mode のヘッド群を現行の 8 から 14 または 28 へ広げると 1 ステップが速くなる（A-G5 の実測）が、割り当てが増えて快適上限のフレーム数を下げる可能性がある。再評価して採否を決める。
 - **判断材料**: 20 ステップ換算の短縮と VRAM の増加は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.2 の表。採用の条件は、快適上限の低下が 20% 以上なら考え直すこと、LTX 2.3〜2.5 と同じ水準のフレーム数を保つことを優先すること、費用対効果は同 §14.6 の基準で見ること。qkv の量子化を 1 ブロック 1 回にした後は、広げる得が同 §14.2 の表より小さくなる見込み（推測。新しい群 8 の速さは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177）。利用者向けのつまみは増やさない方針（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.7）との兼ね合いも着手時に再検討する（オーナー指示）。
-- **前提**: §1-95（現行のヘッド群 8 の快適上限の較正）の完了。
+- **前提**: 現行のヘッド群 8 の快適上限の較正は完了している（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-268。結果は [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169.3（A-G5）・§169.7、[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5（`VRAM16_HEAD_GROUP`）、研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.2。
 
 #### 3-246. MiniMax H3 の INT8 ConvRot カーネル高速化（起票：2026-10-21）
@@ -343,7 +336,7 @@
 #### 3-261. MiniMax H3 の Chained の推定時間（Est.）の表示（起票：2026-10-29）
 
 - **概要**: H3 の Chained（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-262。第 1 弾）では、LTX の定数と推定式で出している「Est.」（推定時間）を隠し、「出力の合計長」だけを H3 の式（各クリップの長さの合計 − 22×(本数−1)）で出す。H3 用の推定時間は、快適上限の較正などで情報（1 ステップの秒数・復号の秒数の画角と長さへの依存）が集まってから出す。
-- **前提**: 推定の材料が無い（H3 の連結の 1 ステップの秒数は記録簿 §183.4・§184.6 の数点だけ）。較正は台帳 §1-95 の領分。
+- **前提**: 推定の材料が無い（H3 の連結の 1 ステップの秒数は記録簿 §183.4・§184.6 の数点だけ）。Single の較正は完了している（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-268。[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17）。Chained の較正は未実施（同 §17.6・§17.7）。
 - **出典**: [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §2 裁定 85、[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183。
 
 #### 3-263. Ref2VA の参照付き連結で、新しい区間がショット切り替えになる事象（対処せず記録。再訪条件つき）（起票：2026-10-31）

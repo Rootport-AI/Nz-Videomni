@@ -1,0 +1,71 @@
+このファイルは `outputs/h3-frag-fix-2026-11-04/preconditions.txt` の複写です（2026-11-04）。
+
+date: 2026-11-04 01:10:53
+== git branch --show-current
+dev
+== git log --oneline -1
+bcf0caa MiniMax H3: テキストエンコーダーの段のセグメントが GPU に返らない件を直す（台帳 §1-271）
+== git status --short (empty below = clean)
+== nvidia-smi memory.used MiB
+610
+== python processes (Get-CimInstance; empty = none)
+== worker orphans (engine.worker / engine_h3.worker)
+
+
+ProcessId : 64436
+Name      : bash.exe
+
+ProcessId : 33012
+Name      : bash.exe
+
+ProcessId : 38200
+Name      : bash.exe
+
+
+
+== AviUtl2
+Wed Nov  4 01:10:54 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 610.88                 KMD Version: 610.88        CUDA UMD Version: 13.3     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4070 ...  WDDM  |   00000000:01:00.0  On |                  N/A |
+|  0%   42C    P8              6W /  285W |     615MiB /  16376MiB |      1%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            1948    C+G   ...cw5n1h2txyewy\WidgetBoard.exe      N/A      |
+|    0   N/A  N/A            7772    C+G   ...5n1h2txyewy\TextInputHost.exe      N/A      |
+|    0   N/A  N/A           12016    C+G   ...indows\System32\ShellHost.exe      N/A      |
+|    0   N/A  N/A           12636    C+G   ...2txyewy\CrossDeviceResume.exe      N/A      |
+|    0   N/A  N/A           12880    C+G   ...cord\app-1.0.9266\Discord.exe      N/A      |
+|    0   N/A  N/A           13200    C+G   ...em32\ApplicationFrameHost.exe      N/A      |
+|    0   N/A  N/A           14348    C+G   ..._cw5n1h2txyewy\SearchHost.exe      N/A      |
+|    0   N/A  N/A           14372    C+G   ...y\StartMenuExperienceHost.exe      N/A      |
+|    0   N/A  N/A           14468    C+G   ...lus\logioptionsplus_agent.exe      N/A      |
+|    0   N/A  N/A           16372    C+G   ...ot\Application\copilotapp.exe      N/A      |
+|    0   N/A  N/A           18128    C+G   ...IA app\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           18404    C+G   ...IA app\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           19508    C+G   ....0.4314.58\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           20308    C+G   ...App_cw5n1h2txyewy\LockApp.exe      N/A      |
+|    0   N/A  N/A           24668    C+G   ...se 3 Host\Razer Synapse 3.exe      N/A      |
+|    0   N/A  N/A           26232    C+G   ....0.4314.58\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           27428    C+G   ...4__8wekyb3d8bbwe\ms-teams.exe      N/A      |
+|    0   N/A  N/A           27880    C+G   ...\slack\app-4.51.180\slack.exe      N/A      |
+|    0   N/A  N/A           29212    C+G   ...\slack\app-4.51.180\slack.exe      N/A      |
+|    0   N/A  N/A           31072    C+G   ...__kzh8wxbdkxb8p\DCv2\DCv2.exe      N/A      |
+|    0   N/A  N/A           40188    C+G   ...8bbwe\PhoneExperienceHost.exe      N/A      |
+|    0   N/A  N/A           47960    C+G   ...xyewy\ShellExperienceHost.exe      N/A      |
+|    0   N/A  N/A           53264    C+G   ...ms\Microsoft VS Code\Code.exe      N/A      |
+|    0   N/A  N/A           60528    C+G   ...ntrolPanel\SystemSettings.exe      N/A      |
+|    0   N/A  N/A           64160    C+G   ...al\Programs\Notion\Notion.exe      N/A      |
++-----------------------------------------------------------------------------------------+
+note: the 3 bash.exe matches above are this check's own shell (their command line contains the search pattern itself); no python.exe and no worker process exists.

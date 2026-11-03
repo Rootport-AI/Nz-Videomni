@@ -1,0 +1,4 @@
+このファイルは `outputs/h3-frag-fix-2026-11-04/4e_old_name.txt` の複写です（2026-11-04）。
+
+<string>:1: UserWarning: expandable_segments not supported on this platform (Triggered internally at C:\actions-runner\_work\pytorch\pytorch\c10/cuda/CUDAAllocatorConfig.h:40.)
+{"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True", "max_split_size": -1, "garbage_collection_threshold": 0.0, "expandable_segments": false, "pinned_num_register_threads": 1, "release_lock_on_cudamalloc": false, "pinned_use_cuda_host_register": false, "graph_capture_record_stream_reuse": false, "max_round_threshold": -1, "max_cached_size": -1, "roundup_power2_divisions": {"1": 0, "2": 0, "4": 0, "8": 0, "16": 0, "32": 0, "64": 0, "128": 0, "256": 0, "512": 0, "1024": 0, "2048": 0, "4096": 0, "8192": 0, "16384": 0, "32768": 0}}

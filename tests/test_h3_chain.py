@@ -445,9 +445,9 @@ def test_real_denoise_fixed_rows_are_clean_and_injected_as_is(monkeypatch, tmp_p
     seen_video = []
     real_embed = dit.embed_rows
 
-    def embed(text_refined, audio_rows, video_rows, cond_rows=None):
+    def embed(text_refined, audio_rows, video_rows, cond_rows=None, **kw):
         seen_video.append(video_rows.clone())
-        return real_embed(text_refined, audio_rows, video_rows, cond_rows=cond_rows)
+        return real_embed(text_refined, audio_rows, video_rows, cond_rows=cond_rows, **kw)
 
     monkeypatch.setattr(dit, "embed_rows", embed)
     per = [0.0, 0.0, 0.0] + [1.0] * 4

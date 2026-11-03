@@ -1,0 +1,15 @@
+このファイルは `outputs/h3-frag-fix-2026-11-04/postconditions.txt` の複写です（2026-11-04）。
+
+date: 2026-11-04 01:36:38
+== nvidia-smi memory.used MiB
+591
+== python processes (empty = none)
+== git branch / HEAD
+dev
+bcf0caa MiniMax H3: テキストエンコーダーの段のセグメントが GPU に返らない件を直す（台帳 §1-271）
+== git status --short (empty below = clean)
+ M Docs/COMFORT_LIMIT_TABLE.md
+ M Docs/MINIMAX_H3_DESIGN.md
+ M Docs/VERIFICATION_LOG.md
+?? Docs/Outputs-archive/h3-frag-fix-2026-11-04/
+== end

@@ -1,0 +1,61 @@
+このファイルは `outputs/h3-frag-fix-2026-11-04/g3/compare.txt` の複写です（2026-11-04）。
+
+## off
+| sha256 | 0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9 | 0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9 |
+| size_bytes | 854334 | 854334 |
+| rounds | 1 | 1 |
+| load_seconds | 2.22 | 2.69 |
+| done.seconds | 142.93 | 142.7 |
+| peak_vram_mb | 6677 | 6677 |
+| peak_vram_reserved_mb | 7590 | 7590 |
+| rss_peak_gib | 22.12 | 22.23 |
+| commit_peak_gib | 34.53 | 34.51 |
+| encode.seconds | 20.47 | 22.4 |
+| encode.peak_vram_mb | 1971 | 1493 |
+| encode.peak_vram_reserved_mb | 1988 | 1510 |
+| denoise.seconds | 110.31 | 108.36 |
+| denoise.peak_vram_mb | 6677 | 6677 |
+| denoise.peak_vram_reserved_mb | 7590 | 7590 |
+| decode.seconds | 12.02 | 11.81 |
+| decode.peak_vram_mb | 5065 | 5065 |
+| decode.peak_vram_reserved_mb | 5382 | 5382 |
+| denoise.seconds/20 | 5.516 | 5.418 |
+| dit.read_seconds | 10.94 | 12.06 |
+| prefetch_sync_miss_total | 19.0 | 19.0 |
+| prefetch_wait_ms_mean | 3168.7 | 3055.9 |
+vram16 prev: null
+vram16 new : null
+## on
+| sha256 | 0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9 | 0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9 |
+| size_bytes | 854334 | 854334 |
+| rounds | 1 | 1 |
+| load_seconds | 2.59 | 2.86 |
+| done.seconds | 144.72 | 136.81 |
+| peak_vram_mb | 5065 | 5065 |
+| peak_vram_reserved_mb | 5382 | 5382 |
+| rss_peak_gib | 22.12 | 22.25 |
+| commit_peak_gib | 30.81 | 30.53 |
+| encode.seconds | 17.23 | 17.87 |
+| encode.peak_vram_mb | 1971 | 1493 |
+| encode.peak_vram_reserved_mb | 1988 | 1510 |
+| denoise.seconds | 115.48 | 107.19 |
+| denoise.peak_vram_mb | 3779 | 3779 |
+| denoise.peak_vram_reserved_mb | 3790 | 3790 |
+| decode.seconds | 11.87 | 11.61 |
+| decode.peak_vram_mb | 5065 | 5065 |
+| decode.peak_vram_reserved_mb | 5382 | 5382 |
+| denoise.seconds/20 | 5.774 | 5.359 |
+| dit.read_seconds | 11.59 | 11.62 |
+| prefetch_sync_miss_total | 19.0 | 19.0 |
+| prefetch_wait_ms_mean | 3504.3 | 3182.4 |
+vram16 prev: {"cap_fraction": 0.8565, "cap_mib": 14025, "blocks_on_gpu": 4, "head_group": 8, "row_chunk": 4096, "text_modules": "meta", "num_alloc_retries": 0, "num_ooms": 0, "inactive_split_peak_mib": 450}
+vram16 new : {"cap_fraction": 0.8565, "cap_mib": 14025, "blocks_on_gpu": 4, "head_group": 8, "row_chunk": 4096, "qkv_quant_shared": true, "text_modules": "meta", "num_alloc_retries": 0, "num_ooms": 0, "inactive_split_peak_mib": 147}
+## step times off
+steps: [3.98, 4.75, 4.73, 4.75, 4.76, 4.75, 4.76, 4.76, 4.76, 4.76, 4.78, 4.76, 4.77, 4.79, 4.77, 4.77, 4.78, 4.78, 4.76, 4.76]
+step0: 3.98  steps1..: mean 4.763 min 4.73 max 4.79
+## step times on
+steps: [4.79, 4.71, 4.72, 4.71, 4.75, 4.72, 4.74, 4.73, 4.74, 4.72, 4.73, 4.73, 4.73, 4.73, 4.75, 4.73, 4.74, 4.77, 4.74, 4.71]
+step0: 4.79  steps1..: mean 4.732 min 4.71 max 4.77
+0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9 *outputs/h3-frag-fix-2026-11-04/g3/g3_off.mp4
+0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9 *outputs/h3-frag-fix-2026-11-04/g3/g3_on.mp4
+0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9 *outputs/h3-vram16-gates/g3_on.mp4

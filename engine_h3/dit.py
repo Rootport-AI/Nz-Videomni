@@ -524,6 +524,7 @@ class H3DiT(nn.Module):
         *,
         ref_video_rows: torch.Tensor | None = None,
         ref_audio_rows: torch.Tensor | None = None,
+        vram16=None,
     ) -> torch.Tensor:
         """Packed tokens [S, hidden] bf16 in the order
         ``[text | cond | ref_video | ref_audio | audio | video]`` (``H3SeqLayout``).
@@ -539,7 +540,16 @@ class H3DiT(nn.Module):
         reference rows (projected like video rows) and the standalone audio
         reference rows (projected like audio rows). ``None`` / empty adds
         nothing, so a job without references packs the same tensor as before.
+
+        ``vram16``: VRAM 16GB mode's plan (``engine_h3.lowvram``), None = off.
         """
+        if vram16 is not None:
+            from engine_h3 import lowvram  # noqa: PLC0415
+
+            return lowvram.embed_rows_packed(
+                self, text_refined, audio_rows, video_rows, cond_rows,
+                ref_video_rows=ref_video_rows, ref_audio_rows=ref_audio_rows,
+            )
         parts = [text_refined.to(torch.bfloat16)]
         if cond_rows is not None and cond_rows.shape[0] > 0:
             parts.append(_linear_f32(cond_rows, self.video_patch_proj).to(torch.bfloat16))

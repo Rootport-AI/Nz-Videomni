@@ -186,6 +186,33 @@ def block_forward(
                       lambda r0, r1: _dit._gate(x2[r0:r1], gate_mlp, m[r0:r1], adaln_index[r0:r1]))
 
 
+def embed_rows_packed(dit, text_refined, audio_rows, video_rows, cond_rows, *, ref_video_rows, ref_audio_rows):
+    """``H3DiT.embed_rows`` written straight into one preallocated bf16 output.
+
+    The same matmuls are called once each with the same shapes, and each
+    f32 -> bf16 result is copied into its rows of the output: no ``torch.cat``
+    and no intermediate bf16 parts.
+    """
+    parts = [(text_refined, None)]
+    for rows, proj in (
+        (cond_rows, dit.video_patch_proj),
+        (ref_video_rows, dit.video_patch_proj),
+        (ref_audio_rows, dit.audio_patch_proj),
+    ):
+        if rows is not None and rows.shape[0] > 0:
+            parts.append((rows, proj))
+    parts.append((audio_rows, dit.audio_patch_proj))
+    parts.append((video_rows, dit.video_patch_proj))
+    total = sum(rows.shape[0] for rows, _ in parts)
+    out = torch.empty((total, dit.cfg.hidden_size), dtype=torch.bfloat16, device=video_rows.device)
+    r0 = 0
+    for rows, proj in parts:
+        r1 = r0 + rows.shape[0]
+        out[r0:r1].copy_(rows if proj is None else _dit._linear_f32(rows, proj))
+        r0 = r1
+    return out
+
+
 def final_rows_chunked(dit, x: torch.Tensor, t_emb: torch.Tensor, time_index: torch.Tensor, layout, plan: Vram16Plan):
     """``H3DiT.final_rows`` with the norm and the modulation per row chunk.
 

@@ -2024,6 +2024,40 @@ def test_vram16_final_rows_matches_off(tmp_path):
         assert g.dtype == torch.float32 and torch.equal(g, w)
 
 
+def test_vram16_embed_rows_matches_off(monkeypatch, tmp_path):
+    """The packed embedding equals the off ``torch.cat`` bit for bit, with and
+    without the condition / reference parts; the off call never reaches lowvram."""
+    from engine_h3 import lowvram
+    from engine_h3.lowvram import Vram16Plan
+
+    dit = _tiny_vram16_dit(tmp_path)
+    g = torch.Generator().manual_seed(7)
+    v_in, a_in = dit.video_patch_proj.in_features, dit.audio_patch_proj.in_features
+    text = torch.randn(5, HID, generator=g).to(torch.bfloat16)
+    audio = torch.randn(8, a_in, generator=g)
+    video = torch.randn(28, v_in, generator=g)
+    cond = torch.randn(4, v_in, generator=g)
+    ref_v = torch.randn(6, v_in, generator=g)
+    ref_a = torch.randn(3, a_in, generator=g)
+
+    def boom(*a, **k):
+        raise AssertionError("the off path must not reach engine_h3.lowvram")
+
+    cases = (
+        (cond, dict(ref_video_rows=ref_v, ref_audio_rows=ref_a), 5 + 4 + 6 + 3 + 8 + 28),
+        (None, {}, 5 + 8 + 28),
+        (torch.empty(0, v_in), {}, 5 + 8 + 28),
+    )
+    with torch.no_grad():
+        for cond_rows, ref_kw, s in cases:
+            monkeypatch.setattr(lowvram, "embed_rows_packed", boom)
+            want = dit.embed_rows(text, audio, video, cond_rows, **ref_kw)
+            monkeypatch.undo()
+            got = dit.embed_rows(text, audio, video, cond_rows, **ref_kw, vram16=Vram16Plan())
+            assert got.dtype == torch.bfloat16 and got.shape == (s, HID)
+            assert torch.equal(got, want)
+
+
 def test_vram16_dit_forward_matches_off_and_frees_the_embedding(monkeypatch, tmp_path):
     """On == off bit for bit; the box is emptied and the embedding is gone before
     block 1 runs; an off forward afterwards clears every block's plan."""
@@ -3159,10 +3193,10 @@ def test_denoise_kept_rows_feed_inject_and_end_clean(monkeypatch, tmp_path):
     real_embed = dit.embed_rows
     real_time_rows = P.time_rows
 
-    def embed(text_refined, audio_rows, video_rows, cond_rows=None):
+    def embed(text_refined, audio_rows, video_rows, cond_rows=None, **kw):
         seen_audio.append(audio_rows.clone())
         seen_video.append(video_rows.clone())
-        return real_embed(text_refined, audio_rows, video_rows, cond_rows=cond_rows)
+        return real_embed(text_refined, audio_rows, video_rows, cond_rows=cond_rows, **kw)
 
     def time_rows(layout, t_v, t_a, device=None, **kw):
         out = real_time_rows(layout, t_v, t_a, device=device, **kw)
@@ -3517,7 +3551,7 @@ def test_denoise_with_a_picture_a_video_and_an_audio_reference(monkeypatch, tmp_
     real_time_rows = P.time_rows
 
     def embed(text_refined, audio_rows, video_rows, cond_rows=None, **kw):
-        seen.append({k: (None if v is None else v.clone()) for k, v in kw.items()})
+        seen.append({k: (v.clone() if isinstance(v, torch.Tensor) else v) for k, v in kw.items()})
         return real_embed(text_refined, audio_rows, video_rows, cond_rows=cond_rows, **kw)
 
     def time_rows(layout, t_v, t_a, device=None, **kw):

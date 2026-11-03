@@ -557,6 +557,13 @@ def _free_cuda() -> None:
         torch.cuda.empty_cache()
 
 
+def _vram16_release(dev: torch.device) -> None:
+    """VRAM 16GB mode on: hand the wholly free segments left by the large float32
+    temporaries back to the GPU (MINIMAX_H3_DESIGN.md §6.5)."""
+    if dev.type == "cuda":
+        torch.cuda.empty_cache()
+
+
 #: VRAM 16GB mode: the allocator counters recorded as differences over the denoise.
 _VRAM16_COUNTERS = ("num_alloc_retries", "num_ooms")
 
@@ -1545,8 +1552,10 @@ class H3Pipeline:
                 # ever updates them).
                 tokens = dit.embed_rows(
                     text_refined, audio_to_rows(dit_input(audio, am)), patchify_video(dit_input(video, vm)),
-                    cond_rows=cond, **ref_kw,
+                    cond_rows=cond, **ref_kw, vram16=vram16,
                 )
+                if vram16 is not None:
+                    _vram16_release(dev)
                 box = None
                 if vram16 is not None:
                     # Handed over in a box: no name here keeps the embedding alive.
@@ -1564,6 +1573,8 @@ class H3Pipeline:
                     tokens_box=box,
                 )
                 del tokens
+                if vram16 is not None:
+                    _vram16_release(dev)
                 v_video = unpatchify_video(v_video_rows.to(dev), t_lat, gh, gw)
                 v_audio = rows_to_audio(v_audio_rows.to(dev), a_lat)
                 v_video = state_velocity(v_video, video, vm, float(sig_v[i]))

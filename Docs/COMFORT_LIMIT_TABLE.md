@@ -1040,7 +1040,7 @@ LTX 2.3 標準・LTX 2.5 標準の単発は第15.2節のままです（今回は
 
 ## 17. MiniMax H3（Turbo なし・int8 ConvRot・VRAM 16GB mode on）の実測 — 配信値は未変更（2026-11-01〜02）
 
-> **2026-11-04 の修正（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-270・§1-271。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §195）で境界を決める仕組みが変わりました。本節の値は修正前のコードで測ったもので、再較正は未実施です。**
+> **2026-11-04 の修正（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-270・1-271。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §195）で境界を決める仕組みが変わりました。本節の値は修正前のコードで測ったもので、再較正は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-274 です。**
 
 > **反映は別途検討です（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-119）。本節の数値は製品が配る値ではありません。** MiniMax H3 の記述子（`scripts/manifests/40-minimaxh3.json`）は `comfort` を持たないままで、第1.1節の表にも行を足していません。製品コード・記述子・操作パネルは、この実測では1バイトも変えていません。
 
@@ -1131,7 +1131,7 @@ gh＝高さ÷32、gw＝幅÷32、F＝フレーム数とする。video・cond・a
 
 ## 18. MiniMax H3 の Reference（参照素材）つきの実測と、境界を決める仕組み — 配信値は未変更（2026-11-03）
 
-> **2026-11-04 の修正（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-270・§1-271。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §195）で境界を決める仕組みが変わりました。本節の値と仕組みの説明は修正前のコードで測ったもので、再較正は未実施です。**
+> **2026-11-04 の修正（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-270・1-271。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §195）で境界を決める仕組みが変わりました。本節の値と仕組みの説明は修正前のコードで測ったもので、再較正は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-274 です。**
 
 > **反映は別途検討です（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-119）。本節の数値は製品が配る値ではありません。** MiniMax H3 の記述子は `comfort` を持たないままで、第1.1節の表にも行を足していません。製品コード・記述子・操作パネルは、この実測では変えていません。
 
@@ -1204,7 +1204,7 @@ DiT に入る列は `[text | cond | ref_video | ref_audio | audio | video]` で�
 
 - **キーフレームと参照の併用**: 条件行は参照の行と同じく映像以外の行なので、実効の重さも参照の行と同じ側（当てはめで 0.59〜0.60）に入るはずです。第17節のキーフレーム 10 枚の点も、この当てはめに乗っています。併用したときの品質の問題（台帳 §1-115）は別の話です。
 - **Chained の参照つき**: クリップごとに同じノイズ除去を回すので、クリップ 1 本の行の内訳が Single の境界に収まることが条件になるはずです（第17.6節と同じ考え方）。
-- **穴をなくした場合**: ステップの境目の float32 の 2 本の確保の仕方を変えると（台帳 §1-270）、境界が上がり、線の形も変わる見込みです。そのときは第17節と本節の較正をやり直す必要があります。
+- **穴をなくした場合**: ステップの境目の float32 の 2 本の確保の仕方を変えると（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-270。2026-11-04 に実施。再較正は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-274）、境界が上がり、線の形も変わる見込みです。そのときは第17節と本節の較正をやり直す必要があります。
 
 ### 18.6 留保
 

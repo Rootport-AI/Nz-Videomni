@@ -85,6 +85,18 @@
 - **留意**: ① 共同注意では負の行は約 4 万行の映像・音声とも softmax を分け合うので、LTX の scale では効きが弱い可能性があり、scale は取り直し。② H3 ではテキストの行も層ごとに更新されるので、負の行が自分の反転した V を見て育つ挙動が崩れないかを確かめる（負の行を見えなくするマスクは 1 系列マスクなしの設計と Sage の経路を壊すので避ける）。③ 操作パネルは H3 のとき方式を VSF に固定し、NAG は灰色のまま（裁定 35）。④ 最小実装で試し、効かなければ負のプロンプトは見送る（NAG は §4-48）。
 - **出典**: オーナー指示 2026-11-02（監督の見立てを含む）。
 
+### 1-270. MiniMax H3 のノイズ除去のステップの境目で、映像の行だけの float32 の張量 2 本が作るセグメントの穴をなくす（起票：2026-11-03）
+
+- **概要**: VRAM 16GB mode のノイズ除去では、ステップの境目で映像の行だけが持つ float32 の張量 2 本（`engine_h3/dit.py:551` の埋め込みの映像の射影と、`engine_h3/lowvram.py:203` 付近の最終層の出力バッファ `buf`。どちらも [映像の行, 5376]）が、それぞれ大きなセグメント（割り当て器が GPU から一度に確保する連続した領域）を作ります。次のステップでそこに S 行（DiT に入る行の総数）の張量が 1 本ずつ入った残りが、S 行の張量の入らない穴として閉じ込められ、参照なしの OOM の点では予約済みの空きの約 7 割がこの穴でした。分割して確保する、ステップの境目で GPU に返す、などで穴をなくします。
+- **判断材料**: 仕組みと内訳は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §194.11（一次記録の `MECHANISM_ANALYSIS.md` §2.5・§4.3、`mem_history/MEM_HISTORY_REPORT.md` §0〜§3）。最終層の float32 の連続バッファは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5 の「何をするか」#6 の置き方で、同 §6.5 の数値の約束（ビット一致）を守る形で変えます。穴が無くなれば境界は上がる見込みですが、量は測っていません。直すと快適上限の線が動くので、Single の較正（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17）と参照つきの較正（同 §18）のやり直しが要り、マーカー（§1-119）の値にも響きます。
+- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-122（参照つきの快適上限の較正）の仕組みの考察。オーナー指示 2026-11-03。
+
+### 1-271. MiniMax H3 のテキストエンコーダーの段のセグメントが GPU に返らない件（起票：2026-11-03）
+
+- **概要**: TE（テキストエンコーダー）の段の終わりの `empty_cache` でも、TE の段のセグメントの一部が GPU に返らず、ノイズ除去の間も残って予約済みの空きを抱えます。① 埋め込みの表を読み込んだセグメントの先頭に、最初の行列積で置かれる約 8.5MB（8,519,680 バイト）の作業領域（cuBLAS〔行列積のライブラリ〕の作業領域と推定）が解放されずに残る。② 参照が多いときは、`text_hidden` が TE の段の大きなセグメントに置かれたまま、ノイズ除去の終わりまでそのセグメントを残す。どちらもなくせるかを調べます。
+- **判断材料**: 内訳は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §194.11（一次記録の `mem_history/MEM_HISTORY_REPORT.md` §0・§2.3・§4、`MECHANISM_ANALYSIS.md` §1.5）。この残りは参照の行の実効の重さを押し上げる向きに効きます。作業領域を TE の段より前に確保する、`text_hidden` を小さなセグメントへ写してから TE の段を片付ける、などが考えられます（確かめていません）。直すと境界が動くので、§1-270 と同じく再較正が要ります。
+- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-122（参照つきの快適上限の較正）の仕組みの考察。オーナー指示 2026-11-03。
+
 ## 3. 将来の研究課題
 
 調査・検討段階の大きめのテーマ。着手時期は未定。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
@@ -193,21 +205,9 @@
 - **判断材料**: 1 回の試行で、入力の末尾の BGM が続きに引き継がれず、継ぎ目直後はセリフで、BGM は後からフェードインした。コードの不具合は無い（観測とコードの確認は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193.10）。幾何は `h3_chain_math.py` の `compute_h3_chain_layout(source_video=)` で、22 以外にするなら 17n+5 の格子に乗る長さになり、固定する潜在の数が変わる。LTX の V2V の文脈の既定は 73 フレーム。連結の重なりを選べるようにする案は §4-44。
 - **出典**: オーナー所見 2026-11-02、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193.10。
 
-#### 3-270. MiniMax H3 のノイズ除去のステップの境目で、映像の行だけの float32 の張量 2 本が作るセグメントの穴をなくす（起票：2026-11-03）
-
-- **概要**: VRAM 16GB mode のノイズ除去では、ステップの境目で映像の行だけが持つ float32 の張量 2 本（`engine_h3/dit.py:551` の埋め込みの映像の射影と、`engine_h3/lowvram.py:203` 付近の最終層の出力バッファ `buf`。どちらも [映像の行, 5376]）が、それぞれ大きなセグメント（割り当て器が GPU から一度に確保する連続した領域）を作ります。次のステップでそこに S 行（DiT に入る行の総数）の張量が 1 本ずつ入った残りが、S 行の張量の入らない穴として閉じ込められ、参照なしの OOM の点では予約済みの空きの約 7 割がこの穴でした。分割して確保する、ステップの境目で GPU に返す、などで穴をなくします。
-- **判断材料**: 仕組みと内訳は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §194.11（一次記録の `MECHANISM_ANALYSIS.md` §2.5・§4.3、`mem_history/MEM_HISTORY_REPORT.md` §0〜§3）。最終層の float32 の連続バッファは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.5 の「何をするか」#6 の置き方で、同 §6.5 の数値の約束（ビット一致）を守る形で変えます。穴が無くなれば境界は上がる見込みですが、量は測っていません。直すと快適上限の線が動くので、Single の較正（[`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17）と参照つきの較正（同 §18）のやり直しが要り、マーカー（§1-119）の値にも響きます。
-- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-122（参照つきの快適上限の較正）の仕組みの考察。オーナー指示 2026-11-03。
-
-#### 3-271. MiniMax H3 のテキストエンコーダーの段のセグメントが GPU に返らない件（起票：2026-11-03）
-
-- **概要**: TE（テキストエンコーダー）の段の終わりの `empty_cache` でも、TE の段のセグメントの一部が GPU に返らず、ノイズ除去の間も残って予約済みの空きを抱えます。① 埋め込みの表を読み込んだセグメントの先頭に、最初の行列積で置かれる約 8.5MB（8,519,680 バイト）の作業領域（cuBLAS〔行列積のライブラリ〕の作業領域と推定）が解放されずに残る。② 参照が多いときは、`text_hidden` が TE の段の大きなセグメントに置かれたまま、ノイズ除去の終わりまでそのセグメントを残す。どちらもなくせるかを調べます。
-- **判断材料**: 内訳は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §194.11（一次記録の `mem_history/MEM_HISTORY_REPORT.md` §0・§2.3・§4、`MECHANISM_ANALYSIS.md` §1.5）。この残りは参照の行の実効の重さを押し上げる向きに効きます。作業領域を TE の段より前に確保する、`text_hidden` を小さなセグメントへ写してから TE の段を片付ける、などが考えられます（確かめていません）。直すと境界が動くので、§3-270 と同じく再較正が要ります。
-- **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-122（参照つきの快適上限の較正）の仕組みの考察。オーナー指示 2026-11-03。
-
 #### 3-272. MiniMax H3 のワーカーで PyTorch の割り当て器の設定が使えるかの確認（起票：2026-11-03）
 
-- **概要**: `PYTORCH_CUDA_ALLOC_CONF`（expandable segments・`max_split_size_mb`・`garbage_collection_threshold` など）は、いまリポジトリのどこでも設定していません。境界が断片化で決まる（§3-270・§3-271）ので、割り当て器の設定で穴を減らせるかを確かめます。
+- **概要**: `PYTORCH_CUDA_ALLOC_CONF`（expandable segments・`max_split_size_mb`・`garbage_collection_threshold` など）は、いまリポジトリのどこでも設定していません。境界が断片化で決まる（§1-270・§1-271）ので、割り当て器の設定で穴を減らせるかを確かめます。
 - **判断材料**: まず Windows で使えるかを確かめます。expandable segments は Windows では効かない（警告が出るだけ）と、`engine/transformer/block_swap_prefetch.py` の説明と [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-112 にあります（H3 のワーカーの torch〔CUDA 13 版〕で同じかは確かめていません）。設定はプロセス全体に効くので、VRAM 16GB mode の上限とブロック交換の受け皿との相互作用も見ます。一次記録の `MECHANISM_ANALYSIS.md` §1.4、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §194.11。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-122（参照つきの快適上限の較正）の仕組みの考察。オーナー指示 2026-11-03。
 

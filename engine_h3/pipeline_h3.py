@@ -353,6 +353,18 @@ def require_fp32_matmul() -> None:
         )
 
 
+def pin_cublas_workspace(device: torch.device) -> None:
+    """One tiny matmul before anything else is on the GPU, so the cuBLAS workspace
+    (taken from the caching allocator on the first GEMM and kept for the process)
+    gets its own 20MiB segment instead of pinning the text encoder's 1.4GiB one
+    (VERIFICATION_LOG §194.11). CPU: nothing to do."""
+    if device.type != "cuda":
+        return
+    a = torch.ones((8, 8), dtype=torch.float32, device=device)
+    torch.mm(a, a)
+    del a
+
+
 def time_rows(
     layout, t_video: float, t_audio: float, device=None, *,
     audio_t: torch.Tensor | None = None, video_t: torch.Tensor | None = None,
@@ -660,6 +672,7 @@ class H3Pipeline:
             self._log(f"int8: qkv quantization NOT shared ({why}); "
                       "VRAM 16GB mode quantizes the qkv input once per head-group slice, as before")
         require_fp32_matmul()
+        pin_cublas_workspace(self.device)
 
         if self.options.deterministic:
             torch.backends.cudnn.deterministic = True
@@ -894,7 +907,10 @@ class H3Pipeline:
         audio (A2V); ``refs``: the Ref2VA references as the text encoder takes
         them (``RefMedia``, in presentation order; None / empty = none, and then
         the encoder is called exactly as before). Together they decide the
-        stage's step count."""
+        stage's step count.
+
+        The result is returned on the CPU, so no text encoder tensor stays in a
+        GPU segment; the denoise moves it with ``.to(dev)`` when it uses it."""
         from engine_h3.text_encoder import H3TextEncoder  # noqa: PLC0415
 
         images = list(images)
@@ -916,6 +932,7 @@ class H3Pipeline:
                 hidden, tags = te.encode(prompt, images=images, refs=refs)
             else:
                 hidden, tags = te.encode(prompt, images=images)
+            hidden, tags = hidden.to("cpu"), tags.to("cpu")
             phases.data["encode"]["te_read"] = te.read_report
             self._progress("encode", 2, total)
         finally:

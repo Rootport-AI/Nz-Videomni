@@ -1,0 +1,53 @@
+> **このファイルは実機の `outputs/comfort-calib-h3-ref-2026-11-03/check_results_output.txt`（git追跡外）のスナップショットである（2026-11-03複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+check_results.py  (RESULTS.md vs runs/*/run.json, job.json, drive2_*.log, commit_log.csv)
+tables checked: bands, compare, kinds, oom, pairs, points, recover, repro, stages, timeline, weighted
+cells compared: 1167
+differences: 0
+run directories missing from the point tables: none
+
+completed runs (incl. warm_rec): 17  failed: 4
+  predict diff 0 on all 7 rows      : True
+  used_matches_request.ok true      : True
+  transformer_used Ref2VA           : True
+  prefetch_degraded false           : True
+  block_swap_prefetch_used on       : True
+  vram16 on / keep_resident off / images 0: True
+  cap_mib range                     : 13999 - 14025
+  max delta denoise/decode          : (27.3, 'v1080_243_3s_20', 'decode')
+  max delta encode                  : (80.7, 'i1080_243_p9', 'encode')
+  OOM points, stage                 : [('i1080_243_p9', 'denoise'), ('r1080_277', 'denoise'), ('r1080_277b', 'denoise'), ('v720_345_15s', 'denoise')]
+  request keys identical (21 runs)  : True
+
+facts quoted in the text (§1・§5・§9 の 6):
+  True  前回 s1080_260: 判定 comfortable・映像 157080・条件行 2040
+  True  前回 s1080_277: 判定 oom・映像 167280・条件行 2040
+  True  前回 k1080_243: 判定 comfortable・映像 146880・条件行 20400
+  True  今回 r1080_260: 判定 comfortable・映像 157080・条件行 0
+  True  今回 r1080_277: 判定 oom・映像 167280・条件行 0
+  True  今回 r1080_277b: 判定 oom・映像 167280・条件行 0
+  True  minimax_h3_fl2va_pruned_int8_convrot: 732 tensors・19.53 GiB・受け皿 6 x 371.1 MB
+  True  minimax_h3_ref2va_pruned_int8_convrot: 732 tensors・19.53 GiB・受け皿 6 x 371.1 MB
+  True  comfy-kitchen の版 0.2.37
+  True  engine_h3/lowvram.py:168 は a = attn.out_proj(o)
+  True  progress.md に誤記 torch/cuda/__init__.py:2190 が 2 か所
+  True  履歴 r1080_277: 予約済みの空き 4.734GiB
+  True  履歴 r1080_277: Nv f32 の 2 つの空き 3.334GiB・70.4%
+  True  履歴 r1080_277: ブロックの中のセグメントの空き 0
+  True  Nv f32 = 167,280×21,504 = 3,430.5MiB
+  True  Nv f32 のセグメント 2 つ: 各 3,432MiB・使用 1,725.1MiB（＝S·U）・穴 1,706.9MiB
+  True  穴は S·U より 18.1MiB 小さい
+  True  S·U が 2 本入るのは S ≤ 167,350
+  True  TE の段の埋め込みの表のセグメント 1,484MiB
+  True  報告書: cuBLAS の作業領域とみられる 8,519,680 バイト
+  True  報告書: ステップ 0 は 212.1 秒・TE の段 27.8%・i1080 の TE 42.3%
+  True  予約＋要求 = 12,460＋1,726 = 14,186MiB・上限 14,025MiB
+  True  TE の段と前処理のセグメント 3,870MiB
+  True  observer の時刻 12:16:44
+  True  時刻: r1080 12:12:07 開始・12:12:25 生成・12:16:51 終了／i1080 12:20:51〜12:28:30
+  True  終了の確認 12:30:06・660MiB・git の変更 0
+  True  前提の確認 12:09:37（報告書）
+  True  履歴 i1080: Nv f32 の 2 つ 2.19GiB・各 3,014MiB・穴 各 1,122MiB
+  True  履歴 i1080: text_encoder.py:191 のセグメント 578MiB
+  True  報告書: i1080 の上限 14,015MiB・o 2,524MiB・予約 14,002MiB
+  True  MECHANISM の訂正値 163,452〜167,258・22 行下

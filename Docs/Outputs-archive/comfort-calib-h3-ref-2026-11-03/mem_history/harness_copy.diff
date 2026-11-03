@@ -1,0 +1,58 @@
+40c40
+< ROOT = HERE.parents[1]                      # Nz-Videomni
+---
+> ROOT = HERE.parents[2]                      # Nz-Videomni（写し 2026-11-03: mem_history/ は 1 段深いので parents[2]）
+52a53
+> LOAD_ATTENTION = "sdpa"   # 写し 2026-11-03: 製品の load の値（adapter.py:726）
+354a356,358
+>     p.add_argument("--ref-picture", default=None,
+>                    help="写し 2026-11-03: Ref2VA の画像の参照。製品の adapter._reference_payload と同じ {kind:picture, path, slot}")
+>     p.add_argument("--ref-picture-count", type=int, default=0, help="--ref-picture を slot 1..N に同じファイルで置く")
+376c380
+<     for name in ("image", "prompt_file"):
+---
+>     for name in ("image", "prompt_file", "ref_picture"):
+555c559,560
+<             "attention_backend": args.attention_backend, "block_swap_prefetch": True, "deterministic": bool(args.deterministic),
+---
+>             # 写し 2026-11-03: 製品の load と同じ "sdpa"（services/engines/h3/adapter.py:726）。ジョブの値は generate で送る
+>             "attention_backend": LOAD_ATTENTION, "block_swap_prefetch": True, "deterministic": bool(args.deterministic),
+618a624,626
+>         if args.ref_picture and args.ref_picture_count > 0:
+>             gen_msg["references"] = [{"kind": "picture", "path": args.ref_picture, "slot": k}
+>                                      for k in range(1, args.ref_picture_count + 1)]
+623a632,659
+>         # 写し 2026-11-03: OOM の observer。元の snapshot_error.pickle は例外が _denoise の finally
+>         # （受け皿の返却・empty_cache）を抜けた後に書くので、OOM の瞬間の並びではない。
+>         # observer は割り当て器が OOM を投げる直前（丸ごと空いたセグメントを返して再試行した後）に呼ばれる。
+>         oom_seen = {"n": 0}
+> 
+>         def oom_observer(device, alloc, device_alloc, device_free):
+>             oom_seen["n"] += 1
+>             if oom_seen["n"] > 1:
+>                 return
+>             o: dict = {"iso": now_iso(), "device": device, "alloc_bytes": alloc,
+>                        "device_alloc_bytes": device_alloc, "device_free_bytes": device_free}
+>             try:
+>                 o["memory_stats"] = mem_stats(torch)
+>             except Exception as exc_s:  # noqa: BLE001
+>                 o["memory_stats_error"] = repr(exc_s)
+>             if hist_on:
+>                 try:
+>                     snap_o = out_dir / "snapshot_oom.pickle"
+>                     t_o = time.perf_counter()
+>                     torch.cuda.memory._dump_snapshot(str(snap_o))
+>                     o["snapshot"] = {"path": snap_o.name, "bytes": snap_o.stat().st_size,
+>                                      "seconds": round(time.perf_counter() - t_o, 2)}
+>                 except Exception as exc_d:  # noqa: BLE001
+>                     o["snapshot_error"] = repr(exc_d)
+>             rec["oom_observer"] = o
+>             write_json(out_dir / "oom_observer.json", o)
+> 
+>         torch._C._cuda_attach_out_of_memory_observer(oom_observer)
+720,721c756,757
+<         if opts.get("attention_backend") != args.attention_backend:
+<             mismatch.append(f"build_report.attention_backend={opts.get('attention_backend')} != {args.attention_backend}")
+---
+>         if opts.get("attention_backend") != LOAD_ATTENTION:
+>             mismatch.append(f"build_report.attention_backend={opts.get('attention_backend')} != {LOAD_ATTENTION}")

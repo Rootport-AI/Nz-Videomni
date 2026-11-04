@@ -177,21 +177,34 @@ def blocked_causal_attention(query, key, value, *, scale, block=TEXT_ATTENTION_Q
     (which fell back to math anyway), and no future kernel choice can change
     them silently. At most a (block + min_tail - 1, N) score table exists at a
     time, not (N, N).
+
+    The blocks are computed tallest first (a merged tail is up to block +
+    min_tail - 1 rows): the allocator is then expected to carve its largest
+    segment first and serve the 512-row blocks from it (台帳 §1-275; measured in
+    VERIFICATION_LOG §197). The rows' values do not depend on the order.
     """
     n_q, n_kv = query.shape[2], key.shape[2]
     kv_idx = torch.arange(n_kv, device=query.device)
-    outs = []
+    blocks = []                      # (s, e) in row order; the boundaries are unchanged
     s = 0
+    while s < n_q:
+        e = min(s + block, n_q)
+        if n_q - e < min_tail:       # a short tail: make this the last block (at most block + min_tail - 1 rows)
+            e = n_q
+        blocks.append((s, e))
+        s = e
+    # Tallest block first (stable: ties keep row order). Each block's rows depend only on its own
+    # q rows and the full k / v, so the order cannot change a single bit; it only decides which
+    # block's temporaries the allocator carves its segments for first (台帳 §1-275, §197).
+    order = sorted(range(len(blocks)), key=lambda i: blocks[i][1] - blocks[i][0], reverse=True)
+    outs = [None] * len(blocks)
     with sdpa_kernel([SDPBackend.MATH]):
-        while s < n_q:
-            e = min(s + block, n_q)
-            if n_q - e < min_tail:   # a short tail: make this the last block (at most block + min_tail - 1 rows)
-                e = n_q
+        for i in order:
+            s, e = blocks[i]
             mask = torch.arange(s, e, device=query.device)[:, None] >= kv_idx[None, :]
-            outs.append(F.scaled_dot_product_attention(
+            outs[i] = F.scaled_dot_product_attention(
                 query[:, :, s:e], key, value, attn_mask=mask, is_causal=False, enable_gqa=True, scale=scale,
-            ))
-            s = e
+            )
     return torch.cat(outs, dim=2)
 
 

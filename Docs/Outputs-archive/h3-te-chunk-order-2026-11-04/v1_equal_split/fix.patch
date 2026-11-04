@@ -1,0 +1,118 @@
+diff --git a/engine_h3/text_encoder.py b/engine_h3/text_encoder.py
+index 0bd239f..6e1c0b8 100644
+--- a/engine_h3/text_encoder.py
++++ b/engine_h3/text_encoder.py
+@@ -73,6 +73,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
+ 
+ import h3_format
+ from engine_h3.constants import MODALITY_TEXT, MODALITY_VIDEO, REFERENCE_KINDS
++from engine_h3.lowvram import row_chunks
+ from engine_h3.quant_linear import swap_in_int8_linears
+ from engine_h3.sft_load import drop_to_meta, load_mapped_to, move_module_tree
+ 
+@@ -157,41 +158,39 @@ VISION_ROPE_THETA = 10000.0
+ 
+ #: The name the text side's attention function is registered under (``AttentionInterface``).
+ H3_TEXT_ATTENTION = "nz_h3_blocked_math"
+-#: Query rows per block in ``blocked_causal_attention`` (the size measured in VERIFICATION_LOG §181). Not a setting.
++#: Query rows per block in ``blocked_causal_attention`` (the size measured in
++#: VERIFICATION_LOG §181): the rows are cut into ``ceil(N / 512)`` equal blocks
++#: (``lowvram.row_chunks``), so for N > 512 every block has 256-512 rows, and N <= 512 is
++#: one block. Blocks of 1, 2, 4, 8, 12 and 16 rows did not match stock SDPA bit for bit
++#: (probably a different cuBLAS kernel for small M); every height in 17-23 and 64-575 did,
++#: on dummy (1,64,N,128)/(1,8,N,128) inputs at N = 3,123 / 4,100 / 6,148
++#: (VERIFICATION_LOG §182.6). Equal blocks all fall in that range, so no rule folding a
++#: short tail into the block before it is needed; and the blocks all have (nearly) one
++#: size, so the allocator is expected to reuse one score table's segment for every block
++#: (the point of 台帳 §1-275; measured in VERIFICATION_LOG §197). Not a setting. If
++#: ``row_chunks`` is ever changed for the DiT's sake, the TE's numbers may change too: the
++#: CPU test pins the block heights.
+ TEXT_ATTENTION_QUERY_BLOCK = 512
+-#: A last block shorter than this is folded into the block before it. Blocks of 1, 2, 4, 8,
+-#: 12 and 16 rows did not match stock SDPA bit for bit (probably a different cuBLAS kernel
+-#: for small M); every height in 17-23 and 64-575 did, on dummy (1,64,N,128)/(1,8,N,128)
+-#: inputs at N = 3,123 / 4,100 / 6,148 (VERIFICATION_LOG §182). 64 keeps a margin. Not a
+-#: setting.
+-TEXT_ATTENTION_MIN_TAIL = 64
+ 
+ 
+-def blocked_causal_attention(query, key, value, *, scale, block=TEXT_ATTENTION_QUERY_BLOCK,
+-                             min_tail=TEXT_ATTENTION_MIN_TAIL):
+-    """Causal GQA attention, query rows in blocks of ``block`` against the full key / value.
++def blocked_causal_attention(query, key, value, *, scale, block=TEXT_ATTENTION_QUERY_BLOCK):
++    """Causal GQA attention, query rows in ``ceil(N / block)`` equal blocks
++    (``lowvram.row_chunks``) against the full key / value.
+ 
+     The mask slice keeps the rows' absolute positions (``is_causal=True`` on a
+     block would align the triangle top-left, wrong for every block but the
+     first). The math kernel is forced: it gives the numbers stock SDPA gave
+     (which fell back to math anyway), and no future kernel choice can change
+-    them silently. At most a (block + min_tail - 1, N) score table exists at a
+-    time, not (N, N).
++    them silently. At most a (block, N) score table exists at a time, not (N, N).
+     """
+-    n_q, n_kv = query.shape[2], key.shape[2]
+-    kv_idx = torch.arange(n_kv, device=query.device)
++    kv_idx = torch.arange(key.shape[2], device=query.device)
+     outs = []
+-    s = 0
+     with sdpa_kernel([SDPBackend.MATH]):
+-        while s < n_q:
+-            e = min(s + block, n_q)
+-            if n_q - e < min_tail:   # a short tail: make this the last block (at most block + min_tail - 1 rows)
+-                e = n_q
++        for s, e in row_chunks(query.shape[2], block):
+             mask = torch.arange(s, e, device=query.device)[:, None] >= kv_idx[None, :]
+             outs.append(F.scaled_dot_product_attention(
+                 query[:, :, s:e], key, value, attn_mask=mask, is_causal=False, enable_gqa=True, scale=scale,
+             ))
+-            s = e
+     return torch.cat(outs, dim=2)
+ 
+ 
+diff --git a/tests/test_h3_engine.py b/tests/test_h3_engine.py
+index 8d617e7..f9918e9 100644
+--- a/tests/test_h3_engine.py
++++ b/tests/test_h3_engine.py
+@@ -655,8 +655,10 @@ def test_te_direct_read_with_vision_matches_the_loaded_model(tmp_path):
+ def test_blocked_causal_attention_matches_causal_sdpa(monkeypatch):
+     """Query blocks against the full key / value with absolute-position mask slices equal
+     plain causal GQA attention (close, not bit for bit: the CPU fp32 math adds in a
+-    block-dependent order; bit equality is the GPU gate's job). A tail shorter than
+-    ``min_tail`` is folded into the block before it (block heights recorded per call)."""
++    block-dependent order; bit equality is the GPU gate's job). The rows are cut into
++    ``ceil(N / block)`` equal blocks (``lowvram.row_chunks``; block heights recorded per
++    call and pinned here, so a change to ``row_chunks`` that would move the TE's numbers
++    shows up)."""
+     import torch.nn.functional as F
+ 
+     from engine_h3.text_encoder import blocked_causal_attention
+@@ -670,10 +672,13 @@ def test_blocked_causal_attention_matches_causal_sdpa(monkeypatch):
+ 
+     torch.manual_seed(0)
+     cases = (
+-        (1100, {}, [512, 512, 76]),                    # ragged, 76 >= 64: not folded
+-        (1087, {}, [512, 575]),                        # tail 63 folded
+-        (1088, {}, [512, 512, 64]),                    # tail 64 not folded
+-        (5, {"block": 2, "min_tail": 0}, [2, 2, 1]),   # the mask alignment on a tiny shape
++        (1100, {}, [367, 367, 366]),         # ragged
++        (1087, {}, [363, 362, 362]),         # the old rule folded a 63-row tail here
++        (1088, {}, [363, 363, 362]),         # the old rule's folding boundary
++        (512, {}, [512]),                    # one block
++        (513, {}, [257, 256]),               # one block to two; the smallest is 256
++        (575, {}, [288, 287]),               # the top of the 513-575 band
++        (5, {"block": 2}, [2, 2, 1]),        # the mask alignment on a tiny shape
+     )
+     for n, kw, want_heights in cases:
+         q = torch.randn(1, 4, n, 16)
+@@ -685,6 +690,10 @@ def test_blocked_causal_attention_matches_causal_sdpa(monkeypatch):
+         got = blocked_causal_attention(q, k, v, scale=0.25, **kw)
+         monkeypatch.undo()
+         assert heights == want_heights
++        assert sum(heights) == n
++        assert max(heights) - min(heights) <= 1
++        if not kw and n > 512:
++            assert min(heights) >= 256
+         assert got.shape == want.shape
+         assert torch.allclose(got, want, rtol=1e-5, atol=1e-6)
+ 

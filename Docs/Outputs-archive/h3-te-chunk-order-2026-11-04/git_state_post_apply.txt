@@ -1,0 +1,10 @@
+> **このファイルは実機の `outputs/h3-te-equal-chunks-2026-11-04/git_state_post_apply.txt`（git追跡外）のスナップショットである（2026-11-05複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+S2' applied 2026-11-04 22:53:29
+HEAD=7669e01b11649f1c1fc709b2722806dd1467db9d
+porcelain:
+ M engine_h3/text_encoder.py
+ M tests/test_h3_engine.py
+text_encoder.py hash_object=7527412564652d354afbde5c6cca67a6ec56c04a head_blob=0bd239fc516f3233a0ddc5461c7bcfa91a209dd8 sha256_lf=c72e90338c9b56b6e7f8b7fe5591dc44ea58791b3582a0a29cc5020c3f024a84
+fix_v2.patch sha256=711ba433bb995d5196467f79533476efb7a8156787e8930f4f032a41b19c8322
+applied diff sha256=711ba433bb995d5196467f79533476efb7a8156787e8930f4f032a41b19c8322

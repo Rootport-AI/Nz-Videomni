@@ -1,0 +1,13 @@
+> **このファイルは実機の `outputs/comfort-calib-h3-2026-11-04-te/git_state_recalib_start.txt`（git追跡外）のスナップショットである（2026-11-05複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+recalib start 2026-11-04 23:29:41
+HEAD=7669e01b11649f1c1fc709b2722806dd1467db9d
+porcelain:
+ M engine_h3/text_encoder.py
+ M tests/test_h3_engine.py
+text_encoder.py hash_object=7527412564652d354afbde5c6cca67a6ec56c04a
+fix_v2.patch sha256=711ba433bb995d5196467f79533476efb7a8156787e8930f4f032a41b19c8322
+server: run.ps1 shell 42140 / python 1160 / python 56952 (listening 18620), all created 2026-11-04 23:27:29 = after fix_v2 applied (S2' ~22:53)
+aviutl2 pid 60632 started 2026-11-04 23:27:36
+gpu idle (unloaded, AviUtl2 + panel open): 1006 MiB
+luid dedicated_mb=1006.6 (11-04: 882.3)

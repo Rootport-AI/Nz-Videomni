@@ -1,0 +1,64 @@
+> **このファイルは実機の `outputs/h3-te-equal-chunks-2026-11-04/git_state_pre.txt`（git追跡外）のスナップショットである（2026-11-05複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+S0 precheck 2026-11-04 22:53:03
+--- nvidia-smi compute-apps list (WDDM: drawing-only apps appear with [N/A])
+2120, [Insufficient Permissions], [N/A]
+12300, C:\Windows\System32\ShellHost.exe, [N/A]
+13016, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\CrossDeviceResume.exe, [N/A]
+14376, C:\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\StartMenuExperienceHost.exe, [N/A]
+14352, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\SearchHost.exe, [N/A]
+17564, C:\Program Files (x86)\Microsoft\EdgeWebView\Application\156.0.4314.58\msedgewebview2.exe, [N/A]
+17516, C:\Windows\SystemApps\Microsoft.LockApp_cw5n1h2txyewy\LockApp.exe, [N/A]
+19064, [Insufficient Permissions], [N/A]
+14184, C:\Program Files\LogiOptionsPlus\logioptionsplus_agent.exe, [N/A]
+19848, C:\Program Files\NVIDIA Corporation\NVIDIA app\CEF\NVIDIA Overlay.exe, [N/A]
+19752, C:\Program Files\NVIDIA Corporation\NVIDIA app\CEF\NVIDIA Overlay.exe, [N/A]
+23308, C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TextInputHost.exe, [N/A]
+24200, C:\Users\phenotype nezu\AppData\Local\Discord\app-1.0.9266\Discord.exe, [N/A]
+27624, C:\Program Files (x86)\Microsoft\EdgeWebView\Application\156.0.4314.58\msedgewebview2.exe, [N/A]
+27984, C:\Program Files\WindowsApps\MSTeams_26276.513.5241.9675_x64__8wekyb3d8bbwe\ms-teams.exe, [N/A]
+28560, C:\Users\phenotype nezu\AppData\Local\slack\app-4.51.180\slack.exe, [N/A]
+29156, C:\Users\phenotype nezu\AppData\Local\slack\app-4.51.180\slack.exe, [N/A]
+33460, C:\Program Files\WindowsApps\9426MICRO-STARINTERNATION.MSICenter_2.0.75.0_x64__kzh8wxbdkxb8p\DCv2\DCv2.exe, [N/A]
+25744, C:\Program Files (x86)\Razer\Synapse3\WPFUI\Framework\Razer Synapse 3 Host\Razer Synapse 3.exe, [N/A]
+15244, C:\Program Files\WindowsApps\MicrosoftWindows.Client.WebExperience_526.21100.40.0_x64__cw5n1h2txyewy\WidgetBoard.exe, [N/A]
+8488, C:\Users\phenotype nezu\AppData\Local\Programs\Microsoft VS Code\Code.exe, [N/A]
+33548, C:\Users\phenotype nezu\AppData\Local\Programs\Notion\Notion.exe, [N/A]
+23088, C:\Windows\System32\ApplicationFrameHost.exe, [N/A]
+25048, C:\Windows\ImmersiveControlPanel\SystemSettings.exe, [N/A]
+10748, C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy\ShellExperienceHost.exe, [N/A]
+32756, C:\Program Files (x86)\Microsoft\Copilot\Application\copilotapp.exe, [N/A]
+32028, C:\Program Files (x86)\Microsoft\Copilot\Application\undocked_copilot\copilotapphost.exe, [N/A]
+47448, C:\Program Files\WindowsApps\Microsoft.YourPhone_1.26092.119.0_x64__8wekyb3d8bbwe\PhoneExperienceHost.exe, [N/A]
+49336, C:\Program Files\Google\Chrome\Application\chrome.exe, [N/A]
+23876, [Insufficient Permissions], [N/A]
+OK  no python.exe in the compute-apps list
+OK  no process with a numeric used_memory
+gpu_used_mib=942
+OK  GPU memory.used < 1200 MiB (idle level)
+--- aviutl2 (expect none)
+<none>
+OK  aviutl2 not running
+--- git
+HEAD=7669e01b11649f1c1fc709b2722806dd1467db9d
+OK  HEAD is 7669e01
+porcelain_lines=0
+OK  git status --porcelain is empty
+--- engine_h3/text_encoder.py (pre-fix = same as HEAD)
+text_encoder.py sha256_raw=49c82beb1292a0c85cb9af2199004ad3b962e4210327da215e5d412830e281dc sha256_lf=aff58cc746ea9ba85eeff52079dc6760e571ccef80162eb434832fbbe5d2e33a hash_object=0bd239fc516f3233a0ddc5461c7bcfa91a209dd8 head_blob=0bd239fc516f3233a0ddc5461c7bcfa91a209dd8
+sha256_head_blob=aff58cc746ea9ba85eeff52079dc6760e571ccef80162eb434832fbbe5d2e33a
+note: core.autocrlf=true; the working tree has CRLF, so sha256_raw != sha256_head_blob even when unchanged; judged by sha256_lf and hash_object
+OK  text_encoder.py sha256 (CR removed) == sha256 of git show HEAD:engine_h3/text_encoder.py
+OK  git hash-object text_encoder.py == HEAD blob
+--- the Japanese prompt of S1-c/S3-d reaches Python unchanged (CPU, argv round trip)
+prompt_chars_python=47
+OK  prompt bytes identical on the Python side
+--- fix_v2.patch
+fix_v2.patch sha256=711ba433bb995d5196467f79533476efb7a8156787e8930f4f032a41b19c8322
+fix_v2.patch.sha256.txt=711ba433bb995d5196467f79533476efb7a8156787e8930f4f032a41b19c8322
+OK  fix_v2.patch sha256 matches fix_v2.patch.sha256.txt
+--- git apply --check fix_v2.patch (read only)
+Checking patch engine_h3/text_encoder.py...
+Checking patch tests/test_h3_engine.py...
+OK  git apply --check fix_v2.patch
+S0 result: ALL_OK

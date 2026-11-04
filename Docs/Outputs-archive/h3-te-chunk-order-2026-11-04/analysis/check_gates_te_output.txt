@@ -1,0 +1,92 @@
+> **このファイルは実機の `outputs/h3-te-equal-chunks-2026-11-04/analysis/check_gates_te_output.txt`（git追跡外）のスナップショットである（2026-11-05複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+G5: tokens 41・TE 予約／山 1510／1493 MiB・TE 秒 17.9
+worker pre: read_s 134.08・encode_s(te_read) 147.32・commit_process_peak 20.26 GiB
+worker post: read_s 108.12・encode_s(te_read) 119.66・commit_process_peak 16.16 GiB
+OK  T4 N=513 equal | True | True
+OK  T4 N=513 differing_row_count | 0 | 0
+OK  T4 N=513 max_abs_diff | 0.0 | 0.0
+OK  T4 N=544 equal | True | True
+OK  T4 N=544 differing_row_count | 0 | 0
+OK  T4 N=544 max_abs_diff | 0.0 | 0.0
+OK  T4 N=575 equal | True | True
+OK  T4 N=575 differing_row_count | 0 | 0
+OK  T4 N=575 max_abs_diff | 0.0 | 0.0
+OK  T4 N=576 equal | True | True
+OK  T4 N=576 differing_row_count | 0 | 0
+OK  T4 N=576 max_abs_diff | 0.0 | 0.0
+OK  T4 N=998 equal | True | True
+OK  T4 N=998 differing_row_count | 0 | 0
+OK  T4 N=998 max_abs_diff | 0.0 | 0.0
+OK  T4 N=1087 equal | True | True
+OK  T4 N=1087 differing_row_count | 0 | 0
+OK  T4 N=1087 max_abs_diff | 0.0 | 0.0
+OK  T4 N=1088 equal | True | True
+OK  T4 N=1088 differing_row_count | 0 | 0
+OK  T4 N=1088 max_abs_diff | 0.0 | 0.0
+OK  T4 N=1100 equal | True | True
+OK  T4 N=1100 differing_row_count | 0 | 0
+OK  T4 N=1100 max_abs_diff | 0.0 | 0.0
+OK  T4 N=2078 equal | True | True
+OK  T4 N=2078 differing_row_count | 0 | 0
+OK  T4 N=2078 max_abs_diff | 0.0 | 0.0
+OK  T4 N=3123 equal | True | True
+OK  T4 N=3123 differing_row_count | 0 | 0
+OK  T4 N=3123 max_abs_diff | 0.0 | 0.0
+OK  T4 N=3718 equal | True | True
+OK  T4 N=3718 differing_row_count | 0 | 0
+OK  T4 N=3718 max_abs_diff | 0.0 | 0.0
+OK  T4 N=4100 equal | True | True
+OK  T4 N=4100 differing_row_count | 0 | 0
+OK  T4 N=4100 max_abs_diff | 0.0 | 0.0
+OK  T4 N=6148 equal | True | True
+OK  T4 N=6148 differing_row_count | 0 | 0
+OK  T4 N=6148 max_abs_diff | 0.0 | 0.0
+OK  pictures9 bit_identical | True | True
+OK  pictures9 tokens_match_expected | True | True
+OK  pictures9 tokens | 9258 | 9258
+OK  pictures9 num_ooms | 0 | 0
+OK  pictures9 attention_calls | 0 | 0
+OK  pictures9 retries pre | 0 | 0
+OK  pictures9 retries post | 0 | 0
+OK  pictures9 reserved pre | 8914.0 | 8914.0
+OK  pictures9 reserved post | 6912.0 | 6912.0
+OK  pictures9 encode s pre | 45.33 | 45.33
+OK  pictures9 encode s post | 38.49 | 38.49
+OK  video15 bit_identical | True | True
+OK  video15 tokens_match_expected | True | True
+OK  video15 tokens | 16314 | 16314
+OK  video15 num_ooms | 0 | 0
+OK  video15 attention_calls | 0 | 0
+OK  video15 retries pre | 0 | 0
+OK  video15 retries post | 0 | 0
+OK  video15 reserved pre | 10384.0 | 10384.0
+OK  video15 reserved post | 10384.0 | 10384.0
+OK  video15 encode s pre | 97.03 | 97.03
+OK  video15 encode s post | 96.36 | 96.36
+OK  worker pre peak_vram_reserved_mb | 16074 | 16074
+OK  worker post peak_vram_reserved_mb | 12070 | 12070
+OK  worker pre peak_vram_mb | 9978 | 9978
+OK  worker post peak_vram_mb | 9698 | 9698
+OK  worker pre seconds | 152.49 | 152.49
+OK  worker post seconds | 124.24 | 124.24
+OK  worker pre tokens | 18462 | 18462
+OK  worker post tokens | 18462 | 18462
+OK  sha256 pre_i1080.mp4（ファイルを読み直して計算） | e5c6ac9e4c9c3bffc0dc370ab6e3184c3e7aa273ffb9b2aacf3024e945c7abbe | e5c6ac9e4c9c3bffc0dc370ab6e3184c3e7aa273ffb9b2aacf3024e945c7abbe
+OK  sha256 post_i1080.mp4（ファイルを読み直して計算） | e5c6ac9e4c9c3bffc0dc370ab6e3184c3e7aa273ffb9b2aacf3024e945c7abbe | e5c6ac9e4c9c3bffc0dc370ab6e3184c3e7aa273ffb9b2aacf3024e945c7abbe
+OK  G5 sha256（ファイルを読み直して計算） | 0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9 | 0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9
+
+項目数 72・不一致 0
+
+## 第 1 版（v1_equal_split/）の t2
+pictures9 tokens 9258 bit_identical False tokens_not_identical 6818 max_abs_diff 42.015625 mean_abs_diff 0.0984 min_cos 0.6883 @ 2812 reserved 6574.0 alloc 4962.6 encode_s 45.08
+video15 tokens 16314 bit_identical False tokens_not_identical 3051 max_abs_diff 38.5 mean_abs_diff 0.0213 min_cos 0.7354 @ 15140 reserved 10366.0 alloc 8570.1 encode_s 96.29
+pre pictures9 reserved 8914.0 alloc 5306.2 pre_decoder reserved 3510.0 min_free_pre 6125.0
+pre video15 reserved 10384.0 alloc 8592.0 pre_decoder reserved 5284.0 min_free_pre 4655.0
+post pictures9 reserved 6912.0 alloc 5170.9 min_free_pre 8127.0 min_cos 0.9999988079071045
+post video15 reserved 10384.0 alloc 8592.0 min_free_pre 4655.0 min_cos 0.9999985098838806
+第 1 版 T4: equal 真 13／13・differing_row_count の和 0
+
+## 主メモリのコミットの山
+h3-te-equal-chunks-2026-11-04\commit_log.csv 行数 847 山 {'time': '2026-11-04 22:02:46', 'committed_gib': '59.34', 'limit_gib': '138.78', 'pct': '42.8'}
+comfort-calib-h3-2026-11-04-te\commit_log.csv 行数 3335 山 {'time': '2026-11-05 00:17:27', 'committed_gib': '66.09', 'limit_gib': '138.78', 'pct': '47.6'}

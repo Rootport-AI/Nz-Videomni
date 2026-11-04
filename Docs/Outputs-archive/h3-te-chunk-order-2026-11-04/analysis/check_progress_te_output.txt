@@ -1,0 +1,218 @@
+> **このファイルは実機の `outputs/h3-te-equal-chunks-2026-11-04/analysis/check_progress_te_output.txt`（git追跡外）のスナップショットである（2026-11-05複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+OK  warm_fl | 判定 | smoke | smoke | True
+OK  warm_fl | 時刻 start（run.json−progress 秒） | 23:33:33 | 23:33:36 | True | 3
+OK  warm_fl | 時刻 end（run.json−progress 秒） | 23:34:26 | 23:34:24 | True | -2
+OK  warm_fl | S predict | 4784.0 | 4784 | True
+OK  warm_fl | S 実測 | 4784.0 | 4784 | True
+OK  warm_fl | text | 278.0 | 278 | True
+OK  warm_fl | cap | 14023.0 | 14023 | True
+OK  warm_fl | cap（11-04） | 14023.0 | 14023 | True
+OK  warm_fl | retries | 0.0 | 0 | True
+OK  warm_fl | inactive_split | 92.0 | 92 | True
+OK  warm_fl | used_ok | 1.0 | 1.0 | True
+OK  warm_fl | TE 秒 | 19.15 | 19.15 | True
+OK  warm_fl | TE 山 | 2648.0 | 2648 | True
+OK  b1080 | 判定 | baseline | baseline | True
+OK  b1080 | 時刻 start（run.json−progress 秒） | 23:36:58 | 23:37:00 | True | 2
+OK  b1080 | 時刻 end（run.json−progress 秒） | 23:39:33 | 23:39:31 | True | -2
+OK  b1080 | S predict | 38984.0 | 38984 | True
+OK  b1080 | S 実測 | 38984.0 | 38984 | True
+OK  b1080 | text | 2078.0 | 2078 | True
+OK  b1080 | cap | 13999.0 | 13999 | True
+OK  b1080 | retries | 0.0 | 0 | True
+OK  b1080 | inactive_split | 616.0 | 616 | True
+OK  b1080 | used_ok | 1.0 | 1.0 | True
+OK  b1080 | 基準 denoise 中央値 | 1260.4 | 1260.4 | True
+OK  b1080 | 1 ステップ秒 meta | 20.5 | 20.515 | True
+OK  s1080_345 | 判定 | comfortable | comfortable | True
+OK  s1080_345 | 判定（11-04） | comfortable | comfortable | True
+OK  s1080_345 | 時刻 start（run.json−progress 秒） | 23:42:05 | 23:42:08 | True | 3
+OK  s1080_345 | 時刻 end（run.json−progress 秒） | 00:08:27 | 00:08:25 | True | -2
+OK  s1080_345 | S predict | 213348.0 | 213348 | True
+OK  s1080_345 | S 実測 | 213348.0 | 213348 | True
+OK  s1080_345 | text | 2078.0 | 2078 | True
+OK  s1080_345 | cap | 13999.0 | 13999 | True
+OK  s1080_345 | retries | 9.0 | 9 | True
+OK  s1080_345 | inactive_split | 4778.0 | 4778 | True
+OK  s1080_345 | used_ok | 1.0 | 1.0 | True
+OK  s1080_345 | Δ denoise | -84.8 | -84.8 | True
+OK  s1080_345 | 標本 denoise | 1331.0 | 1331 | True
+OK  s1080_345 | Δ decode | -65.6 | -65.6 | True
+OK  s1080_345 | denoise 予約 | 13486.0 | 13486 | True
+OK  s1080_345 | denoise 山 | 12669.0 | 12669 | True
+OK  s1080_345 | denoise 予約（11-04） | 13486.0 | 13486 | True
+OK  s1080_345 | denoise 山（11-04） | 12669.0 | 12669 | True
+OK  s1080_345 | decode 予約 | 10548.0 | 10548 | True
+OK  s1080_345 | decode 山 | 8271.0 | 8271 | True
+OK  s1080_345 | 1 ステップ秒 meta | 333.8 | 333.752 | True
+OK  s1080_362 | 判定 | oom | oom | True
+OK  s1080_362 | 判定（11-04） | oom | oom | True
+OK  s1080_362 | OOM 要求 | 2.99 | 2.99 | True
+OK  s1080_362 | OOM 空き | 3.89 | 3.89 | True
+OK  s1080_362 | OOM 許可 | 13.67 | 13.67 | True
+OK  s1080_362 | OOM 割り当て | 6.94 | 6.94 | True
+OK  s1080_362 | OOM 予約済みの空き | 3.84 | 3.84 | True
+OK  s1080_362 | OOM 文言（11-04 と同一） | {'tried': '2.99 GiB', 'free': '3.89 GiB', 'allowed': '13.67 GiB', 'allocated': '6.94 GiB', 'reserved_unalloc': '3.84 GiB'} | {'tried': '2.99 GiB', 'free': '3.89 GiB', 'allowed': '13.67 GiB', 'allocated': '6.94 GiB', 'reserved_unalloc': '3.84 GiB'} | True
+OK  s1080_362 | 時刻 start（run.json−progress 秒） | 00:10:57 | 00:11:00 | True | 3
+OK  s1080_362 | 時刻 end（run.json−progress 秒） | 00:17:47 | 00:17:45 | True | -2
+OK  s1080_362 | S predict | 223604.0 | 223604 | True
+OK  s1080_362 | S 実測 | 223604.0 | 223604 | True
+OK  s1080_362 | text | 2078.0 | 2078 | True
+OK  s1080_362 | cap | None | None | True
+OK  s1080_362 | retries | None | None | True
+OK  s1080_362 | inactive_split | None | None | True
+OK  s1080_362 | used_ok | None | None | True
+OK  s1080_362 | Δ denoise | -87.9 | -87.9 | True
+OK  s1080_362 | 標本 denoise | 362.0 | 362 | True
+OK  s1080_362 | 1 ステップ秒 log | 362.9 | 362.9 | True
+OK  warm_fl_rec1105002124 | 判定 | smoke | smoke | True
+NG  warm_fl_rec1105002124 | 時刻 start（run.json−progress 秒） | 00:20:18 | 00:21:27 | False | 69
+OK  warm_fl_rec1105002124 | 時刻 end（run.json−progress 秒） | 00:22:19 | 00:22:17 | True | -2
+OK  warm_fl_rec1105002124 | S predict | 4784.0 | 4784 | True
+OK  warm_fl_rec1105002124 | S 実測 | 4784.0 | 4784 | True
+OK  warm_fl_rec1105002124 | text | 278.0 | 278 | True
+OK  warm_fl_rec1105002124 | cap | 14023.0 | 14023 | True
+NG  warm_fl_rec1105002124 | retries | None | 0 | False
+NG  warm_fl_rec1105002124 | inactive_split | None | 92 | False
+OK  warm_fl_rec1105002124 | used_ok | 1.0 | 1.0 | True
+OK  b1440 | 判定 | baseline | baseline | True
+OK  b1440 | 時刻 start（run.json−progress 秒） | 00:24:50 | 00:24:52 | True | 2
+OK  b1440 | 時刻 end（run.json−progress 秒） | 00:29:40 | 00:29:37 | True | -3
+OK  b1440 | S predict | 70144.0 | 70144 | True
+OK  b1440 | S 実測 | 70144.0 | 70144 | True
+OK  b1440 | text | 3718.0 | 3718 | True
+OK  b1440 | cap | 14001.0 | 14001 | True
+OK  b1440 | retries | 0.0 | 0 | True
+OK  b1440 | inactive_split | 1233.0 | 1233 | True
+OK  b1440 | used_ok | 1.0 | 1.0 | True
+OK  b1440 | 基準 denoise 中央値 | 1201.9 | 1201.9 | True
+OK  b1440 | decode 予約 | 14800.0 | 14800 | True
+OK  b1440 | decode 山 | 10768.0 | 10768 | True
+OK  b1440 | 1 ステップ秒 meta | 48.4 | 48.385 | True
+OK  s1440_192 | 判定 | comfortable | comfortable | True
+OK  s1440_192 | 判定（11-04） | comfortable | comfortable | True
+OK  s1440_192 | 時刻 start（run.json−progress 秒） | 00:32:13 | 00:32:15 | True | 2
+OK  s1440_192 | 時刻 end（run.json−progress 秒） | 00:58:41 | 00:58:37 | True | -4
+OK  s1440_192 | S predict | 217798.0 | 217798 | True
+OK  s1440_192 | S 実測 | 217798.0 | 217798 | True
+OK  s1440_192 | text | 3718.0 | 3718 | True
+OK  s1440_192 | cap | 14001.0 | 14001 | True
+OK  s1440_192 | retries | 9.0 | 9 | True
+OK  s1440_192 | inactive_split | 4905.0 | 4905 | True
+OK  s1440_192 | used_ok | 1.0 | 1.0 | True
+OK  s1440_192 | Δ denoise | -33.6 | -33.6 | True
+OK  s1440_192 | 標本 denoise | 1348.0 | 1348 | True
+OK  s1440_192 | Δ decode | 61.4 | 61.4 | True
+OK  s1440_192 | denoise 予約 | 13764.0 | 13764 | True
+OK  s1440_192 | denoise 山 | 12905.0 | 12905 | True
+OK  s1440_192 | decode 予約 | 14858.0 | 14858 | True
+OK  s1440_192 | decode 山 | 10874.0 | 10874 | True
+OK  s1440_192 | 1 ステップ秒 meta | 338.1 | 338.132 | True
+OK  s1440_209 | 判定 | oom | oom | True
+OK  s1440_209 | 判定（11-04） | oom | oom | True
+OK  s1440_209 | OOM 要求 | 462.0 | 462.0 | True
+OK  s1440_209 | OOM 空き | 1.23 | 1.23 | True
+OK  s1440_209 | OOM 許可 | 13.67 | 13.67 | True
+OK  s1440_209 | OOM 割り当て | 12.8 | 12.8 | True
+OK  s1440_209 | OOM 予約済みの空き | 552.25 | 552.25 | True
+OK  s1440_209 | OOM 空き（11-04） | 1.22 | 1.22 | True
+OK  s1440_209 | 時刻 start（run.json−progress 秒） | 01:01:12 | 01:01:15 | True | 3
+OK  s1440_209 | 時刻 end（run.json−progress 秒） | 01:01:57 | 01:01:55 | True | -2
+OK  s1440_209 | S predict | 236254.0 | 236254 | True
+OK  s1440_209 | S 実測 | 236254.0 | 236254 | True
+OK  s1440_209 | text | 3718.0 | 3718 | True
+OK  s1440_209 | cap | None | None | True
+OK  s1440_209 | retries | None | None | True
+OK  s1440_209 | inactive_split | None | None | True
+OK  s1440_209 | used_ok | None | None | True
+OK  warm | 判定 | smoke | smoke | True
+OK  warm | 時刻 start（run.json−progress 秒） | 01:08:05 | 01:08:07 | True | 2
+OK  warm | 時刻 end（run.json−progress 秒） | 01:09:02 | 01:08:59 | True | -3
+OK  warm | S predict | 4296.0 | 4296 | True
+OK  warm | S 実測 | 4296.0 | 4296 | True
+OK  warm | text | 30.0 | 30 | True
+OK  warm | cap | 14025.0 | 14025 | True
+OK  warm | cap（11-04） | 14025.0 | 14025 | True
+OK  warm | retries | 0.0 | 0 | True
+OK  warm | inactive_split | 107.0 | 107 | True
+OK  warm | used_ok | 1.0 | 1.0 | True
+OK  b720r | 判定 | baseline | baseline | True
+OK  b720r | 時刻 start（run.json−progress 秒） | 01:11:33 | 01:11:35 | True | 2
+OK  b720r | 時刻 end（run.json−progress 秒） | 01:12:52 | 01:12:50 | True | -2
+OK  b720r | S predict | 16536.0 | 16536 | True
+OK  b720r | S 実測 | 16536.0 | 16536 | True
+OK  b720r | text | 30.0 | 30 | True
+OK  b720r | cap | 14001.0 | 14001 | True
+OK  b720r | retries | 0.0 | 0 | True
+OK  b720r | inactive_split | 308.0 | 308 | True
+OK  b720r | used_ok | 1.0 | 1.0 | True
+OK  b720r | 基準 denoise 中央値 | 1176.9 | 1176.9 | True
+OK  b720r | 1 ステップ秒 meta | 6.36 | 6.36 | True
+OK  b1080r | 判定 | baseline | baseline | True
+OK  b1080r | 時刻 start（run.json−progress 秒） | 01:15:22 | 01:15:25 | True | 3
+OK  b1080r | 時刻 end（run.json−progress 秒） | 01:17:39 | 01:17:37 | True | -2
+OK  b1080r | S predict | 34896.0 | 34896 | True
+OK  b1080r | S 実測 | 34896.0 | 34896 | True
+OK  b1080r | text | 30.0 | 30 | True
+OK  b1080r | cap | 14001.0 | 14001 | True
+OK  b1080r | retries | 0.0 | 0 | True
+OK  b1080r | inactive_split | 619.0 | 619 | True
+OK  b1080r | used_ok | 1.0 | 1.0 | True
+OK  b1080r | 基準 denoise 中央値 | 1192.0 | 1192.0 | True
+OK  b1080r | 1 ステップ秒 meta | 17.15 | 17.15 | True
+OK  v720_379_15s | 判定 | comfortable | comfortable | True
+OK  v720_379_15s | 判定（11-04） | comfortable | comfortable | True
+OK  v720_379_15s | 時刻 start（run.json−progress 秒） | 01:20:11 | 01:20:14 | True | 3
+OK  v720_379_15s | 時刻 end（run.json−progress 秒） | 01:51:31 | 01:51:28 | True | -3
+OK  v720_379_15s | S predict | 226881.0 | 226881 | True
+OK  v720_379_15s | S 実測 | 226881.0 | 226881 | True
+OK  v720_379_15s | text | 15281.0 | 15281 | True
+OK  v720_379_15s | cap | 13999.0 | 13999 | True
+OK  v720_379_15s | retries | 8.0 | 8 | True
+OK  v720_379_15s | inactive_split | 3940.0 | 3940 | True
+OK  v720_379_15s | used_ok | 1.0 | 1.0 | True
+OK  v720_379_15s | Δ denoise | -31.4 | -31.4 | True
+OK  v720_379_15s | 標本 denoise | 1445.0 | 1445 | True
+OK  v720_379_15s | Δ decode | -11.9 | -11.9 | True
+OK  v720_379_15s | Δ encode | -10.2 | -10.2 | True
+OK  v720_379_15s | denoise 予約 | 13910.0 | 13910 | True
+OK  v720_379_15s | denoise 山 | 13462.0 | 13462 | True
+OK  v720_379_15s | TE 予約 | 9442.0 | 9442 | True
+OK  v720_379_15s | TE 山 | 8079.0 | 8079 | True
+OK  v720_379_15s | TE 秒 | 88.5 | 88.53 | True
+OK  v720_379_15s | 参照の符号化 秒 | 203.1 | 203.07 | True
+OK  i1080_243_p9 | 判定 | comfortable | comfortable | True
+OK  i1080_243_p9 | 判定（11-04） | comfortable | comfortable | True
+OK  i1080_243_p9 | 時刻 start（run.json−progress 秒） | 01:54:02 | 01:54:05 | True | 3
+OK  i1080_243_p9 | 時刻 end（run.json−progress 秒） | 02:15:43 | 02:15:40 | True | -3
+OK  i1080_243_p9 | S predict | 184512.0 | 184512 | True
+OK  i1080_243_p9 | S 実測 | 184512.0 | 184512 | True
+OK  i1080_243_p9 | text | 18462.0 | 18462 | True
+OK  i1080_243_p9 | cap | 13999.0 | 13999 | True
+OK  i1080_243_p9 | retries | 8.0 | 8 | True
+OK  i1080_243_p9 | inactive_split | 4955.0 | 4955 | True
+OK  i1080_243_p9 | used_ok | 1.0 | 1.0 | True
+OK  i1080_243_p9 | Δ denoise | -34.4 | -34.4 | True
+OK  i1080_243_p9 | 標本 denoise | 994.0 | 994 | True
+OK  i1080_243_p9 | Δ decode | -7.8 | -7.8 | True
+OK  i1080_243_p9 | Δ encode | -0.1 | -0.1 | True
+OK  i1080_243_p9 | 標本 encode | 140.0 | 140 | True
+OK  i1080_243_p9 | Δ encode（11-04） | 1165.4 | 1165.4 | True
+OK  i1080_243_p9 | denoise 予約 | 13514.0 | 13514 | True
+OK  i1080_243_p9 | denoise 山 | 11425.0 | 11425 | True
+OK  i1080_243_p9 | denoise 予約（11-04） | 13514.0 | 13514 | True
+OK  i1080_243_p9 | denoise 山（11-04） | 11425.0 | 11425 | True
+OK  i1080_243_p9 | decode 予約 | 10514.0 | 10514 | True
+OK  i1080_243_p9 | decode 山 | 8226.0 | 8226 | True
+OK  i1080_243_p9 | TE 予約 | 12070.0 | 12070 | True
+OK  i1080_243_p9 | TE 山 | 9698.0 | 9698 | True
+OK  i1080_243_p9 | TE 秒 | 123.8 | 123.77 | True
+OK  i1080_243_p9 | TE 予約（11-04） | 16074.0 | 16074 | True
+OK  i1080_243_p9 | TE 山（11-04） | 9978.0 | 9978 | True
+OK  i1080_243_p9 | TE 秒（11-04） | 150.9 | 150.93 | True
+
+項目数 211・不一致 3
+不一致: ('warm_fl_rec1105002124', '時刻 start（run.json−progress 秒）', '00:20:18', '00:21:27', False, 69)
+不一致: ('warm_fl_rec1105002124', 'retries', None, 0, False)
+不一致: ('warm_fl_rec1105002124', 'inactive_split', None, 92, False)

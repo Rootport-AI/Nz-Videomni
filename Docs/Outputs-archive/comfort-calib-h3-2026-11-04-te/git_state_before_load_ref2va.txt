@@ -1,0 +1,6 @@
+> **このファイルは実機の `outputs/comfort-calib-h3-2026-11-04-te/git_state_before_load_ref2va.txt`（git追跡外）のスナップショットである（2026-11-05複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+2026-11-05 01:02:40 HEAD=7669e01b11649f1c1fc709b2722806dd1467db9d
+ M engine_h3/text_encoder.py
+ M tests/test_h3_engine.py
+text_encoder.py hash_object=7527412564652d354afbde5c6cca67a6ec56c04a

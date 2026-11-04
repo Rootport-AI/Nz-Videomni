@@ -656,35 +656,38 @@ def test_blocked_causal_attention_matches_causal_sdpa(monkeypatch):
     """Query blocks against the full key / value with absolute-position mask slices equal
     plain causal GQA attention (close, not bit for bit: the CPU fp32 math adds in a
     block-dependent order; bit equality is the GPU gate's job). A tail shorter than
-    ``min_tail`` is folded into the block before it (block heights recorded per call)."""
+    ``min_tail`` is folded into the block before it, and the tallest block is computed
+    first (ties keep row order); each call's (start row, height) is recorded in call
+    order, so the boundaries and the order are both pinned."""
     import torch.nn.functional as F
 
     from engine_h3.text_encoder import blocked_causal_attention
 
     original = F.scaled_dot_product_attention
-    heights = []
+    calls = []
 
     def recording_sdpa(query, *args, **kwargs):
-        heights.append(query.shape[2])
+        calls.append((query.storage_offset() // query.stride(2), query.shape[2]))
         return original(query, *args, **kwargs)
 
     torch.manual_seed(0)
     cases = (
-        (1100, {}, [512, 512, 76]),                    # ragged, 76 >= 64: not folded
-        (1087, {}, [512, 575]),                        # tail 63 folded
-        (1088, {}, [512, 512, 64]),                    # tail 64 not folded
-        (5, {"block": 2, "min_tail": 0}, [2, 2, 1]),   # the mask alignment on a tiny shape
+        (1100, {}, [(0, 512), (512, 512), (1024, 76)]),                # ragged, 76 >= 64: not folded
+        (1087, {}, [(512, 575), (0, 512)]),                            # tail 63 folded; tallest first
+        (1088, {}, [(0, 512), (512, 512), (1024, 64)]),                # tail 64 not folded
+        (2111, {}, [(1536, 575), (0, 512), (512, 512), (1024, 512)]),  # a folded last block goes first
+        (5, {"block": 2, "min_tail": 0}, [(0, 2), (2, 2), (4, 1)]),    # the mask alignment on a tiny shape
     )
-    for n, kw, want_heights in cases:
+    for n, kw, want_calls in cases:
         q = torch.randn(1, 4, n, 16)
         k = torch.randn(1, 2, n, 16)
         v = torch.randn(1, 2, n, 16)
         want = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=True, scale=0.25)
-        heights.clear()
+        calls.clear()
         monkeypatch.setattr(torch.nn.functional, "scaled_dot_product_attention", recording_sdpa)
         got = blocked_causal_attention(q, k, v, scale=0.25, **kw)
         monkeypatch.undo()
-        assert heights == want_heights
+        assert calls == want_calls
         assert got.shape == want.shape
         assert torch.allclose(got, want, rtol=1e-5, atol=1e-6)
 

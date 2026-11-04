@@ -1,0 +1,215 @@
+--- 11-03/calib.py
++++ 11-04-patch/calib.py
+@@ -1673,8 +1673,17 @@
+     video = gw * gh * latent
+     cond = k * gw * gh
+     refs = reference_rows_h3(point)
++    # 2026-11-04 (K>0 restored): the first and the last key frame also go to the
++    # vision tower, each as "<Picture i>: " + start + gh*gw image tokens + end
++    # (engine_h3/pipeline_h3.py "Only the first and the last frame", none when
++    # the point has references; COMFORT_LIMIT_TABLE §17.3: + (gh*gw + 8) each).
++    last = frames - 1
++    vision_kf = ([] if point.get("references") else
++                 [n for n in (point.get("keyframes") or {}).get("frame_idx") or [] if int(n) in (0, last)])
++    kf_labels = [text_tokens(PICTURE_LABEL.format(i + 1)) for i in range(len(vision_kf))]
++    text_kf = sum((t if t is not None else 6) + 2 + gw * gh for t in kf_labels)
+     prompt_tokens = text_tokens(point.get("prompt") or "") if point.get("prompt") else None
+-    text = None if prompt_tokens is None else prompt_tokens + refs["text_refs"]
++    text = None if prompt_tokens is None else prompt_tokens + refs["text_refs"] + text_kf
+     vcr = video + cond + refs["ref_video"] + refs["ref_audio"]
+     predict = {"video": video, "cond": cond, "ref_video": refs["ref_video"],
+                "ref_audio": refs["ref_audio"], "audio": 2 * a_lat,
+@@ -1692,7 +1701,8 @@
+         "decode_chunks_expected": None,
+         "references": refs["items"],
+         "prompt_tokens": prompt_tokens,
+-        "text_estimate_source": ("tokenizer" if (prompt_tokens is not None and refs["text_exact"])
++        "text_estimate_source": ("tokenizer" if (prompt_tokens is not None and refs["text_exact"]
++                                                 and all(t is not None for t in kf_labels))
+                                  else "fallback label lengths" if prompt_tokens is not None
+                                  else None),
+         "predict": predict,
+@@ -1735,7 +1745,7 @@
+     return accel
+ 
+ 
+-def build_request_h3(point: dict, ref_ids=None):
++def build_request_h3(point: dict, ref_ids=None, image_id=None):
+     """The H3 /generate body.  Sent keys (2026-11-03, plan §2.5-3): prompt,
+     width, height, num_frames, frame_rate, seed, attention_backend,
+     block_swap_prefetch, num_inference_steps, loras, references
+@@ -1746,7 +1756,12 @@
+ 
+     ``ref_ids``: ``{(kind, slot): id}`` from the uploads, or one string used
+     for every reference (tests), or None (a --dry-run placeholder naming the
+-    endpoint, the file and its sha256)."""
++    endpoint, the file and its sha256).
++
++    2026-11-04 (K>0 restored from the 2026-11-01 bench): a point with
++    keyframes also sends ``conditioning_images`` ({image_id, frame_idx}, NO
++    strength -- the adapter 422s one); a K=0 body is unchanged.  ``image_id``
++    None = the --dry-run placeholder (DRY_RUN_IMAGE_ID)."""
+     accel = h3_accel(point)
+     refs = []
+     for ref in point.get("references") or []:
+@@ -1776,12 +1791,20 @@
+                   for spec in (point.get("loras") or [])],
+         "references": refs,
+     }
++    frame_idx = (point.get("keyframes") or {}).get("frame_idx") or []
++    if frame_idx:
++        if image_id is None:
++            path = keyframe_image_path(point)
++            image_id = DRY_RUN_IMAGE_ID % (path.name if path else None,
++                                           sha256_of(path) if path and path.exists() else "MISSING")
++        body["conditioning_images"] = [{"image_id": image_id, "frame_idx": int(n)}
++                                       for n in frame_idx]
+     return "/generate", body
+ 
+ 
+-def build_request(point: dict, video_id=None):
++def build_request(point: dict, video_id=None, image_id=None):
+     if is_h3(point):
+-        return build_request_h3(point, ref_ids=video_id)
++        return build_request_h3(point, ref_ids=video_id, image_id=image_id)
+     accel = dict(DEFAULT_ACCEL)
+     accel.update(point.get("accel") or {})
+     kind = point.get("kind", "single")
+@@ -3331,8 +3354,24 @@
+                 append_manifest(record)
+                 continue
+             point["_reference_uploads_used"] = upload_rec
++        # 2026-11-04 (K>0 restored from the 2026-11-01 bench): the keyframe image
++        # is uploaded once per (file, sha256) and its image_id reused.  K>0 and
++        # references never come together (preflight refuses it).
++        image_id = None
++        if is_h3(point) and (point.get("keyframes") or {}).get("frame_idx"):
++            try:
++                image_id, upload_rec = resolve_keyframe_image(point, upload_cache)
++            except Exception as exc:
++                say("  KEYFRAME IMAGE FAILED: %s: %s" % (type(exc).__name__, exc))
++                record = {"label": label, "status": "image_upload_failed",
++                          "error": "%s: %s" % (type(exc).__name__, exc)}
++                (run_dir / "run.json").write_text(
++                    json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
++                append_manifest(record)
++                continue
++            point["_keyframe_image_used"] = upload_rec
+ 
+-        path, body = build_request(point, video_id=video_id)
++        path, body = build_request(point, video_id=video_id, image_id=image_id)
+         point["_request_sent"] = body
+         if is_h3(point):
+             h3_log = WORKER_LOGS["h3"]
+@@ -3366,6 +3405,24 @@
+                 code, resp = api("POST", path, body, timeout=300)
+             except Exception as exc:
+                 code, resp = 599, {"raw": "re-upload failed: %s: %s" % (type(exc).__name__, exc)}
++        elif (is_h3(point) and code == 404 and image_id is not None
++                and "IMAGE_NOT_FOUND" in json.dumps(resp, ensure_ascii=False)):
++            # The uploads store dropped the remembered keyframe image (it is a
++            # temporary store): upload once more and resubmit ONCE.
++            say("  IMAGE_NOT_FOUND for the cached image_id -> re-upload and resubmit once")
++            try:
++                image_id, upload_rec = resolve_keyframe_image(point, upload_cache, refresh=True)
++                point["_keyframe_image_used"] = upload_rec
++                path, body = build_request(point, video_id=video_id, image_id=image_id)
++                point["_request_sent"] = body
++                (run_dir / "point.json").write_text(
++                    json.dumps(point, indent=2, ensure_ascii=False), encoding="utf-8")
++                (run_dir / "request.json").write_text(
++                    json.dumps({"endpoint": path, "body": body}, indent=2, ensure_ascii=False),
++                    encoding="utf-8")
++                code, resp = api("POST", path, body, timeout=300)
++            except Exception as exc:
++                code, resp = 599, {"raw": "re-upload failed: %s: %s" % (type(exc).__name__, exc)}
+         if code >= 400 or not resp or not resp.get("job_id"):
+             monitors.stop()
+             monitors.slice_server_log()
+@@ -3542,11 +3599,11 @@
+ 
+     kf = point.get("keyframes") or {}
+     frame_idx = [int(n) for n in (kf.get("frame_idx") or [])]
+-    # 2026-11-03 (裁定 3): K=0 -- the body carries no conditioning_images, so a
+-    # point with keyframes would silently measure something else.
+-    if frame_idx:
+-        errors.append("keyframes %s given; this campaign is K=0 (裁定 3) and sends no "
+-                      "conditioning_images" % frame_idx)
++    # 2026-11-04: K>0 is sent again (conditioning_images); K>0 together with
++    # references is refused (one arm or the other: FL2VA K>0, Ref2VA K=0).
++    if frame_idx and point.get("references"):
++        errors.append("keyframes %s and references given together; a point is either "
++                      "K>0 (FL2VA) or references (Ref2VA, K=0)" % frame_idx)
+     if len(frame_idx) > H3_MAX_KEYFRAMES:
+         errors.append("%d keyframes exceeds the cap %d" % (len(frame_idx), H3_MAX_KEYFRAMES))
+     if len(set(frame_idx)) != len(frame_idx):
+--- 11-03/selftest/parser_selftest.py
++++ 11-04-patch/selftest/parser_selftest.py
+@@ -437,6 +437,20 @@
+ check("H(3): line axis video+cond", tok["video_plus_cond"], 137280)
+ check("H(3): K=10 cond = 10 grids", calib.token_counts_h3(
+     dict(P481, keyframes={"frame_idx": calib.h3_frame_idx(481, 10)}))["cond_tokens"], 9600)
++# 2026-11-04 (K>0 restored): text = prompt + (gh*gw + 8) for the first and the
++# last key frame only (middle ones are cond rows only).  Expected values are
++# the 2026-11-01 campaign's measured text / S (COMFORT_LIMIT_TABLE §17.3-§17.4).
++K1_1080 = dict(P481, width=1920, height=1088, num_frames=277,
++               prompt=(calib.OUTPUTS / "h3-vram16-gates" / "f0_prompt.txt").read_text(encoding="utf-8").strip())
++pk = calib.token_counts_h3(K1_1080)["predict"]
++check("H(3): K=1 1920x1088x277 text 2,078 / S 172,322 (11-01 s1080_277)",
++      (pk["text_estimate"], pk["vc"], pk["S_estimate"]), (2078, 169320, 172322))
++pk = calib.token_counts_h3(dict(K1_1080, num_frames=243,
++                                keyframes={"frame_idx": calib.h3_frame_idx(243, 10)}))["predict"]
++check("H(3): K=10 1920x1088x243 text 4,126 (first+last only) / S 172,216",
++      (pk["text_estimate"], pk["vc"], pk["S_estimate"]), (4126, 167280, 172216))
++check("H(3): K=0 adds no key-frame text", calib.token_counts_h3(
++    dict(K1_1080, keyframes={"frame_idx": []}))["predict"]["text_estimate"], 30)
+ check("H(3): frame_idx K=10 F=56", calib.h3_frame_idx(56, 10),
+       [0, 6, 12, 18, 24, 31, 37, 43, 49, 55])
+ check("H(3): frame_idx K=1", calib.h3_frame_idx(481, 1), [0])
+@@ -470,6 +484,18 @@
+     check("H(4): %s prompt = F0" % label, body_h["prompt"], F0_PROMPT)
+     check("H(4): %s transformer = Ref2VA, never in the body" % label,
+           (SAMPLES[label]["transformer"], "transformer" in body_h), (REF2VA, False))
++# 2026-11-04 (K>0 restored): a K=1 point (no references) adds conditioning_images.
++KF_POINT = dict(SAMPLES["r1080_277"], transformer="default",
++                keyframes={"image_path": "keyframe_f0.png", "frame_idx": [0]})
++kb = calib.build_request(KF_POINT, image_id="IMG-K")[1]
++check("H(4): K=1 body keys = K=0 keys + conditioning_images",
++      sorted(kb), sorted(H3_BODY_KEYS + ["conditioning_images"]))
++check("H(4): K=1 conditioning_images = [{image_id, frame_idx}] (no strength)",
++      kb["conditioning_images"], [{"image_id": "IMG-K", "frame_idx": 0}])
++check("H(4): K=1 dry-run placeholder names the keyframe file / sha256",
++      calib.build_request(KF_POINT)[1]["conditioning_images"][0]["image_id"],
++      "<image_id: POST /upload/image of keyframe_f0.png sha256="
++      "2c9ec216185440c91aa4fd804b0a403dcccd4fb3c587277e624c126eb99e698a>")
+ check("H(4): i1080_243_p9 slots 1..9 reuse ONE image_id",
+       [(r["kind"], r["slot"], r["id"]) for r in
+        calib.build_request(SAMPLES["i1080_243_p9"], video_id={("picture", i): "IMG" for i in range(1, 10)})[1]["references"]],
+@@ -531,9 +557,12 @@
+       any("H3 sends only" in e for e in errs(accel={"attention_backend": "sage", "block_swap_prefetch": True,
+                                                      "fused_gguf_dequant_kernel": True})), True)
+ check("H(5): keep_resident key refused", any("keep_resident" in e for e in errs(keep_resident=False)), True)
+-check("H(5): K=0 allowed (no keyframes block) and keyframes refused (裁定 3)",
++check("H(5): K=0 allowed (no keyframes block); K>0 with references refused; K>0 alone allowed",
+       ([e for e in errs() if "keyframes" in e],
+-       any("K=0" in e for e in errs(keyframes={"image_path": "x.png", "frame_idx": [0]}))), ([], True))
++       any("references given together" in e
++           for e in errs(keyframes={"image_path": "keyframe_f0.png", "frame_idx": [0]})),
++       errs(keyframes={"image_path": "keyframe_f0.png", "frame_idx": [0]}, references=[],
++            transformer="default", predict=None)), ([], True, []))
+ check("H(5): 10 pictures exceed the cap 9",
+       any("exceed the cap 9" in e for e in errs(references=[pic(i) for i in range(1, 11)])), True)
+ check("H(5): picture slot 10 outside 1..9",
+@@ -587,6 +616,12 @@
+       calib.used_check_h3(P1S, dict(GOOD, block_swap_prefetch_used="off"))["ok"], True)
+ check("H(7): images_used 1 on a K=0 point -> mismatch", sorted(calib.used_check_h3(
+     P1S, dict(GOOD, images_used=1))["mismatches"]), ["images_used"])
++KF_S = dict(KF_POINT, _request_sent=kb)
++KF_GOOD = dict(GOOD, images_used=1, references=None, transformer_used="default")
++check("H(7): K=1 point with images_used 1 -> ok; 0 -> mismatch",
++      (calib.used_check_h3(KF_S, KF_GOOD)["ok"],
++       sorted(calib.used_check_h3(KF_S, dict(KF_GOOD, images_used=0))["mismatches"])),
++      (True, ["images_used"]))
+ check("H(7): sdpa used on a sage point -> mismatch", sorted(calib.used_check_h3(
+     P1S, dict(GOOD, attention_used="sdpa"))["mismatches"]), ["attention_used"])
+ check("H(7): the FL2VA transformer -> mismatch", sorted(calib.used_check_h3(

@@ -1472,6 +1472,12 @@ export const en = {
      * below (same wording for the same kind of warning) — a text-anchored
      * search for this string will hit both keys. */
     comfortWarningSmart: "Generation may slow down because of VRAM overflow.",
+    /** Ledger §1-119: shown INSTEAD of the two above while the marker is
+     * MiniMax H3's sequence-rows line (`useGenerationForm`'s
+     * `isComfortMarkerRowsLine`, picked in `GenerationForm`). H3's comfort
+     * boundary is a generation failure (out of VRAM), not a slowdown — the
+     * backend's `Docs/COMFORT_LIMIT_TABLE.md` §17 / §18. */
+    comfortWarningOutOfMemory: "Beyond this point generation is expected to fail (out of VRAM).",
     size: {
       label: "Size",
       width: "Width",
@@ -3254,6 +3260,11 @@ export const ja: Strings = {
     // 予算の警告——`shell/outpaintBudget.ts` の `resolveOutpaintComfortBudget`
     // 参照）。
     comfortWarningSmart: "VRAM溢れにより生成が遅くなる可能性があります。",
+    // 台帳 §1-119: マーカーが MiniMax H3 の行数の線（`useGenerationForm` の
+    // `isComfortMarkerRowsLine`。選択は `GenerationForm`）のときは上の2つの
+    // 代わりにこちらを出す——H3 の快適上限の境界は遅延ではなく生成の失敗
+    // （VRAM 不足）であるため（バックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §17・§18）。
+    comfortWarningOutOfMemory: "これを超えるとVRAM不足で生成に失敗する見込みです。",
     size: {
       label: "サイズ",
       width: "幅",

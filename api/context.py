@@ -214,7 +214,8 @@ def build_comfort_budgets(
     that does not validate as :class:`EngineComfortProfile`, a row whose
     ``requires.weight_class`` is missing or not one of ``WEIGHT_CLASSES``, or
     two descriptors of the same family both carrying ``comfort`` raise
-    :class:`RuntimeError`.
+    :class:`RuntimeError`. A profile with no ``rows`` and only
+    ``single_rows_budget`` (a rows-line family, MiniMax H3) is valid.
     """
     budgets: dict[str, EngineComfortProfile] = {}
     for base_id, descriptor in base_models.items():

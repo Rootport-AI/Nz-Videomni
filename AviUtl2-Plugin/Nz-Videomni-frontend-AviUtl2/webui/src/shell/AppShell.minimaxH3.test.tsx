@@ -20,7 +20,8 @@ import { AppShell } from "./AppShell";
 //  - hide Create's reference video and the keyframe strength, grey its A2V
 //    card and the Negative Prompt accordion (台帳 §1-97: keyframes at any
 //    frame, so the second keyframe stays open),
-//  - drop the comfort marker,
+//  - draw the comfort marker off H3's sequence-rows line (台帳 §1-119: the
+//    served `single_rows_budget`, moved by the size and the composition),
 //  - snap DURATION onto 17n+5 and pin fps at 24,
 // and the request it sends must carry the three sampling values and no NAG.
 
@@ -167,8 +168,10 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       expect(screen.getByText("Negative prompts are not supported on this base model.")).toBeInTheDocument();
       expect(screen.getByRole("checkbox", { name: /non-cfg negative/i })).toBeDisabled();
 
-      // No comfort marker; DURATION on 17n+5 with a 17 step; fps fixed at 24.
-      expect(createMarker()).toBeNull();
+      // The rows-line marker (台帳 §1-119): 1280x768 with no keyframe and no
+      // Reference card sent (the A2V tick leaves every other card out) fits up
+      // to the 481 ceiling. DURATION on 17n+5 with a 17 step; fps fixed at 24.
+      expect(createMarker()).toBe("481");
       const frames = Number(durationNumber().value);
       expect((frames - 5) % 17).toBe(0);
       expect(frames).toBeGreaterThanOrEqual(22);
@@ -645,7 +648,7 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
     );
 
     it(
-      "H3: #4 keeps the Reference cards and the prompt, and reserves the seat at the panel's own DURATION (台帳 §1-114: no remount)",
+      "H3: #4 keeps the Reference cards and the prompt, and seeds DURATION at the rows line (台帳 §1-114: no remount; §1-119)",
       async () => {
         const bridge = createMockBridge({ delayMs: 0 });
         const requestSpy = vi.spyOn(bridge, "request");
@@ -664,8 +667,9 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
         await waitForCardReady("ref-slot-video-1");
 
         // Hand-set DURATION to a value on H3's 17n+5 grid that no seed produces.
-        // H3 has no comfort line, so #4's seed leaves DURATION alone and the
-        // provisional must be reserved at the panel's own value.
+        // #4's seed then rewrites it with the rows line at the seed's size, one
+        // keyframe and no Reference card (台帳 §1-119): 481 here, and the
+        // provisional is reserved at that value.
         fireEvent.change(durationNumber(), { target: { value: "277" } });
         fireEvent.blur(durationNumber());
         await waitFor(() => expect(durationNumber().value).toBe("277"));
@@ -691,12 +695,90 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
         await waitFor(() =>
           expect(requestSpy).toHaveBeenCalledWith(
             "timeline.insertProvisional",
-            expect.objectContaining({ placement: "A", numFrames: 277 }),
+            expect.objectContaining({ placement: "A", numFrames: 481 }),
           ),
         );
-        expect(durationNumber().value).toBe("277");
+        expect(durationNumber().value).toBe("481");
       },
       25_000,
+    );
+
+    /** A cursor-only selection (#9 / #10 read no object). */
+    function cursorSelection(): ResultOf<"timeline.getSelection"> {
+      return {
+        hasRange: false,
+        rangeStart: 0,
+        rangeEnd: 0,
+        selected: [],
+        cursorFrame: 360,
+        cursorLayer: 4,
+        rate: 30,
+        scale: 1,
+        sampleRate: 44100,
+      };
+    }
+
+    /** Sets Create's width/height through the two sliders. */
+    function setPanelSize(width: number, height: number) {
+      const panel = singlePanel();
+      fireEvent.change(within(panel).getByRole("slider", { name: /width/i }), { target: { value: String(width) } });
+      fireEvent.change(within(panel).getByRole("slider", { name: /height/i }), { target: { value: String(height) } });
+    }
+
+    it(
+      "H3: #9 at 1920x1088 sets DURATION to the rows line without a keyframe (362) (台帳 §1-119)",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        const requestSpy = vi.spyOn(bridge, "request");
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+        setPanelSize(1920, 1088);
+        await waitFor(() => expect(createMarker()).toBe("362"));
+
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "textToVideoHere", selection: cursorSelection() });
+        });
+        await waitFor(
+          () =>
+            expect(requestSpy).toHaveBeenCalledWith(
+              "timeline.insertProvisional",
+              expect.objectContaining({ numFrames: 362 }),
+            ),
+          { timeout: 5_000 },
+        );
+        await waitFor(() => expect(durationNumber().value).toBe("362"));
+      },
+      20_000,
+    );
+
+    it(
+      "H3: #10 at 1920x1088 sets DURATION to the rows line with one keyframe (345) (台帳 §1-119)",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        const requestSpy = vi.spyOn(bridge, "request");
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+        setPanelSize(1920, 1088);
+        await waitFor(() => expect(createMarker()).toBe("362"));
+
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "imageFromCurrentFrame", selection: cursorSelection() });
+        });
+        await waitFor(
+          () =>
+            expect(requestSpy).toHaveBeenCalledWith(
+              "timeline.insertProvisional",
+              expect.objectContaining({ numFrames: 345 }),
+            ),
+          { timeout: 5_000 },
+        );
+        await waitFor(() => expect(durationNumber().value).toBe("345"));
+        // The captured card makes the form's own marker agree.
+        await waitFor(() => expect(createMarker()).toBe("345"), { timeout: 5_000 });
+      },
+      20_000,
     );
 
     it(

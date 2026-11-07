@@ -174,6 +174,7 @@ export function GenerationForm({
     spillThresholdFrames,
     isOverSpillThreshold,
     isComfortMarkerSmart,
+    isComfortMarkerRowsLine,
   } = form;
   const keyframeCount = keyframes.conditioningImages.length;
   // A2V+IC-LoRA combined mode: the two are no longer mutually exclusive, so
@@ -252,8 +253,15 @@ export function GenerationForm({
         // about how much generation slows down past the threshold, so the
         // copy is picked by which one is currently active
         // (`form.isComfortMarkerSmart`) — see `useGenerationForm`'s own doc
-        // comment on `isComfortMarkerSmart`.
-        spillWarningText={isComfortMarkerSmart ? strings.single.comfortWarningSmart : strings.single.spillWarning}
+        // comment on `isComfortMarkerSmart`. Ledger §1-119: MiniMax H3's
+        // sequence-rows line marks a failure (out of VRAM), not a slowdown.
+        spillWarningText={
+          isComfortMarkerRowsLine
+            ? strings.single.comfortWarningOutOfMemory
+            : isComfortMarkerSmart
+              ? strings.single.comfortWarningSmart
+              : strings.single.spillWarning
+        }
       />
 
       <FrameRateSeedFields

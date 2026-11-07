@@ -1584,7 +1584,7 @@ export function useChainForm(
       // since the server's `spill_free_frames` map is keyed by the preset's
       // documented resolution.
       // §1-106: `spill_free_frames` is LTX's calibrated comfort ceiling, so a
-      // fixed-overlap base model (no comfort line, like Create's H3) takes the
+      // fixed-overlap base model (no comfort line) takes the
       // preset's own length, pulled onto its grid. LTX's path is unchanged.
       const recommended = recommendedClipFrames(
         preset.width,

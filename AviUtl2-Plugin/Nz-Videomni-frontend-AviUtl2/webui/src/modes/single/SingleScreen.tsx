@@ -13,12 +13,24 @@ import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { useToasts } from "../../shell/ToastContext";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
 import { BatchSection } from "../batch/BatchSection";
-import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from "../../shell/comfortTable";
+import {
+  comfortFramesForBudget,
+  resolveComfortRow,
+  resolveSequenceRowsBudget,
+  singleLegacySpillTable,
+} from "../../shell/comfortTable";
+import { H3_NO_CONDITIONING, h3ComfortFrames } from "../../shell/h3SequenceRows";
+import type { H3SequenceShape } from "../../shell/h3SequenceRows";
 import type { SingleSectionsDisabled, SingleSectionsHidden } from "../../shell/featureScope";
 import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { computeTargetNumFrames } from "../../timeline/deriveDuration";
-import { DURATION_POLICY_BY_INTENT, materialDurationForIntent, resolvePrefillSeed } from "../../timeline/prefillSeed";
+import {
+  DURATION_POLICY_BY_INTENT,
+  materialDurationForIntent,
+  resolvePrefillSeed,
+  seedKeyframeCount,
+} from "../../timeline/prefillSeed";
 import type { TimelineSelection } from "../../timeline/menuSelection";
 import type { PrefillResolutionPolicy } from "../../shell/PrefillPolicyContext";
 import { extractAudioFailureNote, extractObjectAudio } from "../../timeline/extractObjectAudio";
@@ -50,6 +62,7 @@ import {
   declaredA2vSlot,
   referenceNotices,
   referenceSendUploading,
+  sequenceReferences,
   type ReferenceAttachOptions,
   type ReferenceKind,
   type ReferenceRules,
@@ -157,29 +170,47 @@ async function applyProjectOverwrite(a: ProjectOverwriteArgs): Promise<void> {
     // caller that does not thread the Settings state cannot say what would
     // effectively run, so it keeps the legacy ceiling.
     // No comfort line at all for an engine the served table has no profile
-    // for — only the grid snap remains.
-    const noComfortLine = comfortProfileMissing(config.limits, engineFamily);
+    // for — only the grid snap remains. A sequence-rows engine (MiniMax H3,
+    // ledger §1-119) takes its rows line with the seed's keyframe count and no
+    // Reference card, whatever the acceleration settings, and never falls to
+    // the legacy lookup (`singleLegacySpillTable`); the `acceleration` gate
+    // applies to the LTX token line only.
+    const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily);
+    const spillFreeFrames = singleLegacySpillTable(config.limits, engineFamily);
     const frameLimits = frameLimitsFor(rules, config.limits.max_num_frames);
     const comfortRow =
-      acceleration && !noComfortLine
+      rowsBudget === null && acceleration && spillFreeFrames !== null
         ? resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable ?? null, weightClass)
         : null;
-    const smartCeiling = comfortRow
-      ? comfortFramesForBudget(
-          effectiveWidth,
-          effectiveHeight,
-          comfortRow.singleBudget,
-          frameLimits.minNumFrames,
-          frameLimits.maxNumFrames,
-          comfortRow.spatialFactor,
-          comfortRow.temporalFactor,
-        )
-      : null;
+    const smartCeiling =
+      rowsBudget !== null
+        ? h3ComfortFrames(
+            {
+              width: effectiveWidth,
+              height: effectiveHeight,
+              keyframeCount: seedKeyframeCount(a.intent),
+              references: H3_NO_CONDITIONING.references,
+            },
+            rowsBudget,
+            frameLimits.minNumFrames,
+            frameLimits.maxNumFrames,
+          )
+        : comfortRow
+          ? comfortFramesForBudget(
+              effectiveWidth,
+              effectiveHeight,
+              comfortRow.singleBudget,
+              frameLimits.minNumFrames,
+              frameLimits.maxNumFrames,
+              comfortRow.spatialFactor,
+              comfortRow.temporalFactor,
+            )
+          : null;
     const target = computeTargetNumFrames({
       policy,
       width: effectiveWidth,
       height: effectiveHeight,
-      spillFreeFrames: noComfortLine ? null : config.limits.spill_free_frames,
+      spillFreeFrames,
       minNumFrames: frameLimits.minNumFrames,
       maxNumFrames: frameLimits.maxNumFrames,
       frameGrid: rules.frameGrid,
@@ -475,27 +506,9 @@ function SingleScreenBody({
   // the `prefillMaterial` live command below — ordinary edits/presets are
   // unchanged.
   const { sizePolicy, fpsPolicy } = usePrefillPolicy();
-  const form = useGenerationForm(config, prompt, {
-    nativeBridge,
-    controlLora,
-    setControlLora,
-    controlLoraNames,
-    nag,
-    acceleration,
-    sageAvailable,
-    engineFamily,
-    weightClass,
-    constraints,
-    referenceVideoUnavailable: sectionsUnavailable?.referenceVideo,
-  });
-  // 台帳 §1-114: what the latest `prefillMaterial` seed decided about the size
-  // (`deriveGenerationParams`'s notes), shown in the IC-LoRA block. Empty until
-  // a right-click arrives.
-  const [resolutionNotes, setResolutionNotes] = useState<string[] | undefined>(undefined);
-  // Right-click redesign W2: counters the `prefillMaterial` handler bumps to
-  // open the IC-LoRA (#2) / A2V (#7) accordion where the material landed.
-  const [icLoraOpenSignal, setIcLoraOpenSignal] = useState(0);
-  const [a2vOpenSignal, setA2vOpenSignal] = useState(0);
+  // Ledger §1-119: the keyframe and Reference hooks run BEFORE the form,
+  // because the form's comfort marker counts their cards (`sequenceShape`).
+  // Neither reads the form.
   const keyframes = useKeyframes(config, { nativeBridge });
 
   // §1-107: MiniMax H3's Reference accordion. Shown only while the
@@ -510,14 +523,48 @@ function SingleScreenBody({
   const lastReferenceRulesRef = useRef<ReferenceRules>(NO_REFERENCE_RULES);
   if (liveReferenceRules !== null) lastReferenceRulesRef.current = liveReferenceRules;
   const reference = useReferenceSlots(lastReferenceRulesRef.current, { nativeBridge });
-  useReferenceA2vSync(reference, form.sourceAudio, liveReferenceRules !== null);
-  const [referenceOpenSignal, setReferenceOpenSignal] = useState(0);
-  // §1-107: the `references` body and its upload gate. `liveReferenceRules`
-  // (not the kept `lastReferenceRulesRef`) decides "H3", so the cards left
-  // Enabled on a trip through LTX are never sent there.
+  // §1-107: `liveReferenceRules` (not the kept `lastReferenceRulesRef`)
+  // decides "H3", so the cards left Enabled on a trip through LTX are never
+  // sent there.
   const isH3Reference = liveReferenceRules !== null;
   const referenceSummary = reference.summary;
   const referenceSlots = reference.state.slots;
+  // Ledger §1-119: the composition the sequence-rows marker (MiniMax H3)
+  // counts — the keyframe cards sent or still uploading, and the Reference
+  // cards `buildReferenceBody` sends (uploading ones included).
+  const keyframeItems = keyframes.items;
+  const sequenceShape = useMemo<H3SequenceShape>(
+    () => ({
+      keyframeCount: keyframeItems.filter((item) => item.status === "ready" || item.status === "uploading").length,
+      references: sequenceReferences(referenceSummary, referenceSlots, transformerRole, isH3Reference),
+    }),
+    [keyframeItems, referenceSummary, referenceSlots, transformerRole, isH3Reference],
+  );
+  const form = useGenerationForm(config, prompt, {
+    nativeBridge,
+    controlLora,
+    setControlLora,
+    controlLoraNames,
+    nag,
+    acceleration,
+    sageAvailable,
+    engineFamily,
+    weightClass,
+    constraints,
+    referenceVideoUnavailable: sectionsUnavailable?.referenceVideo,
+    sequenceShape,
+  });
+  // 台帳 §1-114: what the latest `prefillMaterial` seed decided about the size
+  // (`deriveGenerationParams`'s notes), shown in the IC-LoRA block. Empty until
+  // a right-click arrives.
+  const [resolutionNotes, setResolutionNotes] = useState<string[] | undefined>(undefined);
+  // Right-click redesign W2: counters the `prefillMaterial` handler bumps to
+  // open the IC-LoRA (#2) / A2V (#7) accordion where the material landed.
+  const [icLoraOpenSignal, setIcLoraOpenSignal] = useState(0);
+  const [a2vOpenSignal, setA2vOpenSignal] = useState(0);
+  useReferenceA2vSync(reference, form.sourceAudio, liveReferenceRules !== null);
+  const [referenceOpenSignal, setReferenceOpenSignal] = useState(0);
+  // §1-107: the `references` body and its upload gate.
   const referenceBody = useMemo(
     () => buildReferenceBody(referenceSummary, referenceSlots, transformerRole, isH3Reference),
     [referenceSummary, referenceSlots, transformerRole, isH3Reference],

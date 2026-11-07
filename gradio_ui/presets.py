@@ -70,7 +70,8 @@ def compute_spill_warning(width, height, num_frames, config: dict | None,
 
     ``spill_free_frames`` is LTX's table, so the warning is also hidden when
     the loaded engine family (``engine_family``, from GET /models) has no
-    ``limits.comfort_budgets`` table at all -- see
+    ``limits.comfort_budgets`` table at all, or is a rows-line family
+    (``single_rows_budget``) -- see
     :func:`gradio_ui.constraints.comfort_table_missing`."""
     if comfort_table_missing(config, engine_family):
         return gr.update(value="", visible=False)

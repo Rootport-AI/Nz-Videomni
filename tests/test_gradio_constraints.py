@@ -27,7 +27,7 @@ from gradio_ui.constraints import (
 from gradio_ui.handlers import make_generate_handler
 from gradio_ui.i18n import LABELS
 from gradio_ui.presets import KF_MAX_SLOTS, compute_spill_warning
-from gradio_ui.ui import build_ui
+from gradio_ui.ui import build_spill_rows, build_ui
 
 #: The H3 block exactly as PLAN §3.3 fixes it.
 H3_CONSTRAINTS = {
@@ -239,6 +239,30 @@ def test_spill_warning_hidden_for_a_family_without_a_comfort_table():
     assert comfort_table_missing({"limits": {}}, "h3") is False
     assert compute_spill_warning(1280, 768, 321, cfg, "en", "ltx")["visible"] is True
     assert compute_spill_warning(1280, 768, 321, cfg, "en", "h3")["visible"] is False
+
+
+def test_spill_warning_hidden_for_a_rows_line_family():
+    # Without ``rows``, and as served (``model_dump`` fills ``rows: []``).
+    for h3_profile in (
+        {"single_rows_budget": 219516},
+        {"spatial_factor": 32, "temporal_factor": 8, "rows": [],
+         "outpaint_budget": None, "single_rows_budget": 219516},
+    ):
+        cfg = {"limits": {"spill_free_frames": {"1280x768": 257},
+                          "comfort_budgets": {"h3": h3_profile}}}
+        assert comfort_table_missing(cfg, "h3") is True
+        assert compute_spill_warning(1280, 768, 321, cfg, "en", "h3")["visible"] is False
+        assert build_spill_rows(cfg, "h3") == []
+
+
+def test_ltx_profile_served_with_a_null_rows_line_keeps_the_spill_warning():
+    """The server serves ``single_rows_budget: None`` on the LTX profiles too:
+    the judgment is on the value, not on the key."""
+    cfg = {"limits": {"spill_free_frames": {"1280x768": 257},
+                      "comfort_budgets": {"ltx": {"rows": [{}], "single_rows_budget": None}}}}
+    assert comfort_table_missing(cfg, "ltx") is False
+    assert compute_spill_warning(1280, 768, 321, cfg, "en", "ltx")["visible"] is True
+    assert build_spill_rows(cfg, "ltx") == [["1280x768", 257]]
 
 
 # --------------------------------------------------------------- wiring ---

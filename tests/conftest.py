@@ -302,6 +302,7 @@ H3_BASE_MODEL_ID = "MiniMaxH3"
 
 def h3_base_model_descriptor() -> dict:
     """The shipped MiniMax H3 descriptor's shape (scripts/manifests/40-minimaxh3.json)."""
+    # Synthetic: carries no ``comfort``, unlike the shipped one (``single_rows_budget``).
     root = H3_BASE_MODEL_ID
     return {
         "schema": 2,

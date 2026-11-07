@@ -14,6 +14,7 @@
  */
 
 import type { ReferenceInputBody, TransformerRole } from "../../api/types";
+import type { H3SequenceReference } from "../../shell/h3SequenceRows";
 
 export type ReferenceKind = "picture" | "video" | "audio";
 
@@ -521,6 +522,23 @@ export function buildReferenceBody(
     body.push(entry);
   }
   return body;
+}
+
+/**
+ * Ledger §1-119: the cards of {@link sentSlots} as the comfort marker counts
+ * them (`shell/h3SequenceRows.ts`) — uploading cards included, since Generate
+ * waits for them. A picture has no seconds; a video or an audio carries its
+ * `usedSec` (the truncated length when cut short, `null` when unknown).
+ */
+export function sequenceReferences(
+  summary: ReferenceSummary,
+  slots: Record<ReferenceKind, ReferenceSlot[]>,
+  role: TransformerRole | null,
+  isH3: boolean,
+): H3SequenceReference[] {
+  return sentSlots(summary, slots, role, isH3).map(({ slot, use }) =>
+    slot.kind === "picture" ? { kind: "image", seconds: null } : { kind: slot.kind, seconds: use.usedSec },
+  );
 }
 
 /** A card {@link buildReferenceBody} would send, or the declared A2V card

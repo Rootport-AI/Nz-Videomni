@@ -5,6 +5,7 @@ import { createMockBridge, createMockFs } from "../../bridge/mockBridge";
 import { suggestFramesForAudio } from "../chained/chainUtils";
 import { resolveGenerationConstraints } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
+import type { H3SequenceShape } from "../../shell/h3SequenceRows";
 import { FALLBACK_APP_CONFIG } from "./defaultConfig";
 import { useGenerationForm } from "./useGenerationForm";
 
@@ -32,16 +33,23 @@ const LTX_BLOCK: BaseModelConstraints = {
 const H3 = resolveGenerationConstraints(H3_BLOCK);
 const LTX = resolveGenerationConstraints(LTX_BLOCK);
 
+interface FormProps {
+  c: GenerationConstraints | undefined;
+  family: string | undefined;
+  shape?: H3SequenceShape | undefined;
+}
+
 function renderForm(
   constraints: GenerationConstraints | undefined,
   engineFamily: string | undefined,
   config: AppConfig = FALLBACK_APP_CONFIG,
 ) {
   const nativeBridge = createMockBridge({ delayMs: 0 });
+  const initialProps: FormProps = { c: constraints, family: engineFamily };
   return renderHook(
-    ({ c, family }: { c: GenerationConstraints | undefined; family: string | undefined }) =>
-      useGenerationForm(config, "a prompt", { nativeBridge, constraints: c, engineFamily: family }),
-    { initialProps: { c: constraints, family: engineFamily } },
+    ({ c, family, shape }: FormProps) =>
+      useGenerationForm(config, "a prompt", { nativeBridge, constraints: c, engineFamily: family, sequenceShape: shape }),
+    { initialProps },
   );
 }
 
@@ -81,10 +89,46 @@ describe("useGenerationForm — MiniMax H3 constraints", () => {
     expect(result.current.values.frameRate).toBe(24);
   });
 
-  it("draws no comfort marker for an engine the served table has no profile for", () => {
+  // Ledger §1-119: H3's profile carries the sequence-rows line, so the marker
+  // follows the size and the composition (`shell/h3SequenceRows.ts`).
+  it("draws the sequence-rows marker off the size and the composition", () => {
+    const { result, rerender } = renderForm(H3, "h3");
+    act(() => {
+      result.current.setWidth(1280);
+      result.current.setHeight(768);
+    });
+    expect(result.current.spillThresholdFrames).toBe(481);
+    expect(result.current.isComfortMarkerRowsLine).toBe(true);
+
+    act(() => {
+      result.current.setWidth(1920);
+      result.current.setHeight(1088);
+    });
+    expect(result.current.spillThresholdFrames).toBe(362);
+
+    rerender({ c: H3, family: "h3", shape: { keyframeCount: 1, references: [] } });
+    expect(result.current.spillThresholdFrames).toBe(345);
+    act(() => result.current.setNumFrames(362));
+    expect(result.current.isOverSpillThreshold).toBe(true);
+    expect(result.current.isComfortMarkerRowsLine).toBe(true);
+  });
+
+  it("moves the marker with a Reference video: 1280x768 with a 15 s video is 345", () => {
+    const { result, rerender } = renderForm(H3, "h3");
+    act(() => {
+      result.current.setWidth(1280);
+      result.current.setHeight(768);
+    });
+    rerender({ c: H3, family: "h3", shape: { keyframeCount: 0, references: [{ kind: "video", seconds: 15 }] } });
+    expect(result.current.spillThresholdFrames).toBe(345);
+  });
+
+  it("draws no marker for a size below one cell, without falling to the LTX table", () => {
     const { result } = renderForm(H3, "h3");
+    act(() => result.current.setWidth(0, false));
     expect(result.current.spillThresholdFrames).toBeNull();
     expect(result.current.isOverSpillThreshold).toBe(false);
+    expect(result.current.isComfortMarkerRowsLine).toBe(false);
   });
 
   it("keeps the LTX fallback marker for an LTX row miss (M-6)", () => {

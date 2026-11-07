@@ -27,6 +27,8 @@ import { SingleScreen } from "./SingleScreen";
 //  - Enable on: the used cards go out as `references` (not on FL2VA, never
 //    off H3), a still-uploading card that would be sent blocks Generate, and
 //    the role / empty notices show under Generate;
+//  - 台帳 §1-119: with the `h3` engine family, the comfort marker counts the
+//    Reference cards sent (a 15 s video moves it from 481 to 345);
 // and with LTX's constraints Create is exactly as before.
 
 const H3_CONSTRAINTS = resolveGenerationConstraints({
@@ -82,11 +84,13 @@ function Harness({
   nativeBridge,
   initialPrompt,
   transformerRole = null,
+  engineFamily,
 }: {
   constraints: GenerationConstraints | undefined;
   nativeBridge: ReturnType<typeof createMockBridge>;
   initialPrompt: string;
   transformerRole?: TransformerRole | null;
+  engineFamily?: string | undefined;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   return (
@@ -98,6 +102,7 @@ function Harness({
         baseUrl={null}
         constraints={constraints}
         transformerRole={transformerRole}
+        engineFamily={engineFamily}
         nativeBridge={nativeBridge}
         highlightedJobId={null}
         onJobSubmitted={() => {}}
@@ -112,7 +117,7 @@ function Harness({
 function renderCreate(
   constraints: GenerationConstraints | undefined,
   initialPrompt = "a cat riding a skateboard",
-  options: { transformerRole?: TransformerRole | null; holdUploads?: boolean } = {},
+  options: { transformerRole?: TransformerRole | null; holdUploads?: boolean; engineFamily?: string } = {},
 ) {
   // A 20 s wav, so the audio covers the form's default duration.
   const fs = createMockFs({
@@ -144,7 +149,13 @@ function renderCreate(
   const requestSpy = vi.spyOn(appBridge, "request");
   const tree = (next: GenerationConstraints | undefined, role: TransformerRole | null) => (
     <Providers nativeBridge={nativeBridge}>
-      <Harness constraints={next} nativeBridge={nativeBridge} initialPrompt={initialPrompt} transformerRole={role} />
+      <Harness
+        constraints={next}
+        nativeBridge={nativeBridge}
+        initialPrompt={initialPrompt}
+        transformerRole={role}
+        engineFamily={options.engineFamily}
+      />
     </Providers>
   );
   const view = render(tree(constraints, options.transformerRole ?? null));
@@ -215,6 +226,31 @@ afterEach(() => {
 });
 
 describe("SingleScreen — §1-107 Reference accordion", () => {
+  it(
+    "台帳 §1-119: on h3 the comfort marker moves from 481 to 345 once Enable sends a 15 s video",
+    async () => {
+      renderCreate(H3_CONSTRAINTS, "a cat", { engineFamily: "h3" });
+      await waitForCard("ref-slot-video-1");
+      const marker = () => document.querySelector("datalist#spill-tick option")?.getAttribute("value") ?? null;
+      await waitFor(() => expect(marker()).toBe("481"));
+
+      act(() => {
+        dispatchCreateCommand({
+          type: "addReferenceVideo",
+          filePath: "C:\v\clip.mp4",
+          fileName: "clip.mp4",
+          durationSec: 15,
+        });
+      });
+      await waitForReady("ref-slot-video-1");
+      // Enable off: the card is not sent, so the marker stays.
+      expect(marker()).toBe("481");
+      setEnabled(true);
+      await waitFor(() => expect(marker()).toBe("345"));
+    },
+    15_000,
+  );
+
   it(
     "✒ appends the card's tag to the prompt with one space, and a right-clicked video opens the accordion",
     async () => {

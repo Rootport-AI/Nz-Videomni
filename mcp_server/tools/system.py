@@ -65,7 +65,9 @@ async def get_config() -> dict[str, Any]:
         設定オブジェクト全体（server / model / vram / limits / upload / output
         などのセクション）。``limits.comfort_budgets`` は快適上限（VRAM が
         共有メモリへ溢れない目安）の助言値で、行は重みの種別
-        ``weight_class`` で分かれます。読み方と経緯は
+        ``weight_class`` で分かれます。MiniMax H3 の系統は行を持たず
+        ``single_rows_budget``（DiT に入る総行数の線。超えると VRAM 不足で
+        失敗する見込み）だけを持ちます。読み方と経緯は
         ``Docs/COMFORT_LIMIT_TABLE.md`` 第 1 節。
     """
     client = get_client()

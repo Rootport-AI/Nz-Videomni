@@ -7,8 +7,10 @@ import { ACCELERATION_DEFAULTS } from "./accelerationSettings";
 import {
   comfortFramesForBudget,
   resolveComfortRow,
+  resolveSequenceRowsBudget,
   resolveSingleComfortBudget,
   SINGLE_COMFORT_TOKEN_BUDGET,
+  singleLegacySpillTable,
 } from "./comfortTable";
 
 /** All five toggles at the all-on configuration the `ltx` row requires —
@@ -365,6 +367,55 @@ describe("resolveComfortRow", () => {
         chainBudget: 40000,
       });
     });
+  });
+});
+
+// Ledger §1-119: the sequence-rows line (MiniMax H3) and the legacy fallback.
+/** The served limits with an `h3` profile whose line is `single_rows_budget`. */
+function limitsWithH3Budget(single_rows_budget: number | null): AppLimits {
+  return limitsWith({
+    comfort_budgets: {
+      ...FALLBACK_APP_CONFIG.limits.comfort_budgets,
+      h3: { spatial_factor: 32, temporal_factor: 8, rows: [], single_rows_budget },
+    },
+  });
+}
+
+describe("resolveSequenceRowsBudget", () => {
+  it("returns the h3 line from the served table", () => {
+    expect(resolveSequenceRowsBudget(limitsWith(), "h3")).toBe(219516);
+  });
+
+  it("returns null for LTX, an unknown or missing family, no table, and an unusable value", () => {
+    for (const family of ["ltx", "ltx25", "wan", "", undefined, "constructor"]) {
+      expect(resolveSequenceRowsBudget(limitsWith(), family)).toBeNull();
+    }
+    expect(resolveSequenceRowsBudget(limitsWithoutTable(), "h3")).toBeNull();
+    for (const bad of [0, -1, Number.NaN]) {
+      expect(resolveSequenceRowsBudget(limitsWithH3Budget(bad), "h3")).toBeNull();
+    }
+  });
+});
+
+describe("singleLegacySpillTable", () => {
+  it("returns the legacy table for ltx, also when the profile is served with single_rows_budget: null", () => {
+    expect(singleLegacySpillTable(limitsWith(), "ltx")).toEqual(FALLBACK_APP_CONFIG.limits.spill_free_frames);
+    const served = limitsWith({
+      comfort_budgets: {
+        ltx: { spatial_factor: 32, temporal_factor: 8, rows: [], outpaint_budget: null, single_rows_budget: null },
+      },
+    });
+    expect(singleLegacySpillTable(served, "ltx")).toEqual(FALLBACK_APP_CONFIG.limits.spill_free_frames);
+  });
+
+  it("returns null for h3, also when its value is unusable (0), and for a family without a profile", () => {
+    expect(singleLegacySpillTable(limitsWith(), "h3")).toBeNull();
+    expect(singleLegacySpillTable(limitsWithH3Budget(0), "h3")).toBeNull();
+    expect(singleLegacySpillTable(limitsWith(), "wan")).toBeNull();
+  });
+
+  it("returns the legacy table with no served table at all", () => {
+    expect(singleLegacySpillTable(limitsWithoutTable(), "h3")).toEqual(FALLBACK_APP_CONFIG.limits.spill_free_frames);
   });
 });
 

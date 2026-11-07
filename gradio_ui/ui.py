@@ -145,7 +145,8 @@ def build_spill_rows(config: dict | None,
 
     ``spill_free_frames`` is LTX's table, so it is empty when the loaded engine
     family (``engine_family``, from GET /models) has no
-    ``limits.comfort_budgets`` table -- the same judgment as the Generate
+    ``limits.comfort_budgets`` table or is a rows-line family
+    (``single_rows_budget``) -- the same judgment as the Generate
     tab's spill warning (:func:`gradio_ui.constraints.comfort_table_missing`).
     An unknown family (``None`` / ``""``) keeps the LTX rows."""
     if comfort_table_missing(config, engine_family):
@@ -1400,7 +1401,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # Top-bar Refresh also refreshes the Settings config viewer + spill table.
         # The Settings spill-free table is LTX's: the three /config wirings
         # take gen_scope_state as their last input and build it for the loaded
-        # family (empty without a comfort_budgets table); a change of the
+        # family (empty without a comfort_budgets table or for a rows-line
+        # family, single_rows_budget); a change of the
         # loaded base model rebuilds it from the held config (below).
         def _spill_table_for_scope(cfg_v, scope_v):
             return gr.update(value=build_spill_rows(cfg_v, _family(scope_v)))

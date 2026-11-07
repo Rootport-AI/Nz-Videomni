@@ -138,6 +138,9 @@ export const MOCK_CONFIG_BODY = {
     // 4bit と Q6_K に既定構成の行が無いのは意図で、8bit 行は種別だけで一致する
     // （理由は defaultConfig.ts 側のコメント）。`outpaint_budget`（§3-135）の
     // 位置づけと、BE↔FE の数値一致が自動突き合わせされない件も同じコメント。
+    // 形はサーバの `model_dump()` と同じではない：`null` の鍵（`outpaint_budget`・
+    // `single_rows_budget`）は書かずに省く。`h3`（§1-119）は `rows` を持たず
+    // 行数の線 `single_rows_budget` だけを持つ。
     comfort_budgets: {
       ltx: {
         spatial_factor: 32,
@@ -183,6 +186,7 @@ export const MOCK_CONFIG_BODY = {
         ],
         outpaint_budget: 46080,
       },
+      h3: { spatial_factor: 32, temporal_factor: 8, rows: [], single_rows_budget: 219516 },
     },
   },
   output: { dir: "./outputs", format: "mp4", save_metadata_json: true, keep_raw_frames: false },
@@ -337,9 +341,10 @@ const MOCK_BASE_MODELS = [
   { id: "LTX23", display_name: "LTX 2.3", engine_family: "ltx" },
   { id: "LTX25", display_name: "LTX 2.5", engine_family: "ltx25" },
   // A base model whose numeric rules differ from LTX's
-  // (`MOCK_CONSTRAINTS_BY_FAMILY.h3`). It has NO profile in
-  // `MOCK_CONFIG_BODY.limits.comfort_budgets`, exactly like the real server
-  // (its descriptor carries no `comfort`), so the comfort marker disappears.
+  // (`MOCK_CONSTRAINTS_BY_FAMILY.h3`). Its profile in
+  // `MOCK_CONFIG_BODY.limits.comfort_budgets` carries no rows, only the
+  // sequence-rows line `single_rows_budget`, exactly like the real server
+  // (ledger §1-119), so the comfort marker follows the composition.
   { id: "MiniMaxH3", display_name: "MiniMax H3", engine_family: "h3" },
 ] as const;
 

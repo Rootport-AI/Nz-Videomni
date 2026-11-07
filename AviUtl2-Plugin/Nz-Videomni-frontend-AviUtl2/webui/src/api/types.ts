@@ -974,11 +974,12 @@ export interface AppLimits {
    * 値を直接参照してはならない。 */
   single_comfort_token_budget?: number;
   /** 快適上限マーカーの配信テーブル（2026-08-31）。エンジン系統 id
-   * （`BaseModelBlock.engine_family`。`"ltx"`／`"ltx25"`）→ そのエンジンの
+   * （`BaseModelBlock.engine_family`。`"ltx"`／`"ltx25"`／`"h3"`）→ そのエンジンの
    * プロファイル。将来のモデル追加・高速化トグル追加に**行の追加だけ**で
    * 対応するための骨格で、フロントは条件をハードコードしない。
    *
-   * **読む側は必ず `shell/comfortTable.ts` の `resolveComfortRow` を通すこと。**
+   * **読む側は必ず `shell/comfortTable.ts` の `resolveComfortRow`（行数の線は
+   * `resolveSequenceRowsBudget`）を通すこと。**
    * 生の `rows` を自前で走査してはならない——実効の高速化設定への写像
    * （sage の3値・keepResident の畳み込み）と、不正値の正規化（予算が正の
    * 有限数でなければミラー定数／`spatial_factor` < 1 → 32／
@@ -987,7 +988,10 @@ export interface AppLimits {
    * **一致する行が無い（＝`resolveComfortRow` が `null`）のは異常ではなく
    * 正常な状態**で、呼び手はレガシーの {@link AppLimits.spill_free_frames}
    * へ落ちる（ただし表にその系統のプロファイル自体が無いときは、Create と
-   * 右クリックの事前入力はマーカーを出さない——`comfortTable.comfortProfileMissing`）。
+   * 右クリックの事前入力はマーカーを出さない。プロファイルが
+   * {@link EngineComfortProfile.single_rows_budget} を持つ系統〔MiniMax H3〕は
+   * その行数の線でマーカーを引き、レガシー表へは落ちない——どちらも
+   * `comfortTable.singleLegacySpillTable`）。
    * とくに LTX 2.3 の 4bit と Q6_K の既定構成は**意図的に**行を持たない
    * （8bit 行は条件が種別だけなので、8bit なら既定構成でも一致する）：素の VAE
    * デコーダのせいで快適境界がトークン数に対して単調でなく（境界がデコードの
@@ -1035,8 +1039,10 @@ export interface EngineComfortProfile {
   /** 潜在フレーム1つあたりの画素フレーム数（`8n+1` グリッドの `n` 係数）。
    * 現行は 8。 */
   temporal_factor: number;
-  /** 上から順に評価される条件行。空配列は「このエンジンに賢い線は無い」＝
-   * 常にレガシー表へ落ちる、という正当な状態。 */
+  /** 上から順に評価される条件行。空配列は「このエンジンにトークンの賢い線は
+   * 無い」という正当な状態で、Create はレガシー表へ落ちる——ただし
+   * {@link single_rows_budget} が `null` でない系統（MiniMax H3）は落ちず、
+   * 行数の線でマーカーを引く。 */
   rows: ComfortRow[];
   /** 画角拡張（Outpainting、Edit タブ）の快適トークン予算。**{@link rows} の外に
    * ある固定線**で、加速構成には連動しない（オーナー裁定 J1・2026-09-05）。
@@ -1047,6 +1053,15 @@ export interface EngineComfortProfile {
    *
    * 数値の正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §9。 */
   outpaint_budget?: number | null;
+  /** 台帳 §1-119: 単発（Single）の行数の線——DiT に入る総行数 S の上限
+   * （MiniMax H3。超えると VRAM 不足で失敗する見込み）。`null` でなければ
+   * 「行数の線で表す系統」で、{@link rows} の照合もレガシー表への落ちも
+   * 行わない。サーバは LTX のプロファイルにも `null` で配る。
+   *
+   * 読む側は必ず `shell/comfortTable.ts` の `resolveSequenceRowsBudget`／
+   * `singleLegacySpillTable` を通すこと。数値の正本はバックエンドの
+   * `Docs/COMFORT_LIMIT_TABLE.md` §17・§18。 */
+  single_rows_budget?: number | null;
 }
 
 /** One entry of `AppConfig.model.ic_loras` (Docs/API_REFERENCE.md §3.2) — a

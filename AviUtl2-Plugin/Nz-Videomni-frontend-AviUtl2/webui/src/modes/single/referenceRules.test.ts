@@ -11,6 +11,7 @@ import {
   referenceReducer,
   referenceSendUploading,
   referenceTag,
+  sequenceReferences,
   summarizeReference,
 } from "./referenceRules";
 import type { ReferenceAction, ReferenceKind, ReferenceRules, ReferenceState } from "./referenceRules";
@@ -456,6 +457,40 @@ describe("referenceRules — the /generate body (§1-107)", () => {
     expect(countUsedReferences(summarizeReference(s, RULES))).toBe(2);
     const a2v = run(put(s, "audio", 1), { type: "setA2vSlot", slot: 1 });
     expect(countUsedReferences(summarizeReference(a2v, RULES))).toBe(0);
+  });
+});
+
+describe("referenceRules — sequenceReferences (§1-119)", () => {
+  const refs = (s: ReferenceState, role: "fl2va" | "ref2va" | null = null, isH3 = true) =>
+    sequenceReferences(summarizeReference(s, RULES), s.slots, role, isH3);
+
+  it("the sent cards in body order: a picture without seconds, a video / audio with its used seconds", () => {
+    const s = put(put(put(enabled(), "audio", 1, 4), "video", 1, 6), "picture", 2);
+    expect(refs(s)).toEqual([
+      { kind: "image", seconds: null },
+      { kind: "video", seconds: 6 },
+      { kind: "audio", seconds: 4 },
+    ]);
+  });
+
+  it("empty off H3, with FL2VA loaded, with Enable off and while an A2V slot is declared", () => {
+    const on = put(enabled(), "picture", 1);
+    expect(refs(on, null, false)).toEqual([]);
+    expect(refs(on, "fl2va")).toEqual([]);
+    expect(refs(run(on, { type: "setEnabled", enabled: false }))).toEqual([]);
+    expect(refs(run(on, { type: "setA2vSlot", slot: 1 }))).toEqual([]);
+    expect(refs(run(put(on, "audio", 1, 5), { type: "setA2vSlot", slot: 1 }))).toEqual([]);
+  });
+
+  it("a truncated card carries its used seconds, an unknown length null, and an uploading card is included", () => {
+    let s = put(put(put(enabled(), "video", 1, 10), "video", 2, 8), "audio", 1, null);
+    s = run(s, { type: "attachStart", kind: "video", slot: 3, filePath: "C:\v3", fileName: "v3" });
+    expect(refs(s)).toEqual([
+      { kind: "video", seconds: 10 },
+      { kind: "video", seconds: 5 },
+      { kind: "video", seconds: null },
+      { kind: "audio", seconds: null },
+    ]);
   });
 });
 

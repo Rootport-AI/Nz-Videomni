@@ -22,7 +22,14 @@ import { isNagNegativeEmpty, NAG_OFF, nagRequestFields } from "../../shell/nagSe
 import type { NagSettings } from "../../shell/nagSettings";
 import { accelerationRequestFields, ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
-import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from "../../shell/comfortTable";
+import {
+  comfortFramesForBudget,
+  resolveComfortRow,
+  resolveSequenceRowsBudget,
+  singleLegacySpillTable,
+} from "../../shell/comfortTable";
+import { H3_NO_CONDITIONING, h3ComfortFrames } from "../../shell/h3SequenceRows";
+import type { H3SequenceShape } from "../../shell/h3SequenceRows";
 import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import type { SamplingConstraints } from "../../api/types";
@@ -193,6 +200,11 @@ export interface UseGenerationFormDeps {
    * back. Style `<lora:…>` tags in the prompt are untouched (the server's 422
    * covers them). Omitted = available. */
   referenceVideoUnavailable?: boolean | undefined;
+  /** Ledger §1-119: the keyframe cards and Reference cards the generation
+   * sends, which move the comfort marker of a sequence-rows engine (MiniMax
+   * H3 — `shell/h3SequenceRows.ts`). Owned by `SingleScreen`. Omitted =
+   * `H3_NO_CONDITIONING` (no keyframes, no Reference cards). LTX ignores it. */
+  sequenceShape?: H3SequenceShape | undefined;
 }
 
 function noopSetControlLora(): void {
@@ -233,6 +245,11 @@ export interface UseGenerationFormResult {
    * for which branch produced the current value — it drives which warning
    * copy is shown past the threshold.
    *
+   * Ledger §1-119: on a sequence-rows engine (MiniMax H3) it is instead the
+   * largest grid value whose DiT row count fits the served line, computed off
+   * the size and `deps.sequenceShape` (`shell/h3SequenceRows.ts`), with no
+   * fallback — see {@link isComfortMarkerRowsLine}.
+   *
    * This same value is the ceiling the A2V wav auto-adjust clamps its
    * suggestion at, so the marker and the auto-adjusted DURATION can never
    * disagree. */
@@ -247,8 +264,16 @@ export interface UseGenerationFormResult {
    * which warning copy `GenerationForm` shows once `isOverSpillThreshold` is
    * true — `strings.single.comfortWarningSmart` here, `strings.single.spillWarning`
    * otherwise — since the two warnings claim different (and not both always
-   * true) things about how much generation slows down. */
+   * true) things about how much generation slows down. On a sequence-rows
+   * engine `isComfortMarkerRowsLine` takes precedence and the copy is
+   * `strings.single.comfortWarningOutOfMemory`. */
   isComfortMarkerSmart: boolean;
+  /** Ledger §1-119: true while `spillThresholdFrames` is the sequence-rows line
+   * (MiniMax H3), whose boundary is a generation failure (out of VRAM) rather
+   * than a slowdown — `GenerationForm` then shows
+   * `strings.single.comfortWarningOutOfMemory`. Such an engine never falls back
+   * to `spill_free_frames`: an underivable marker is simply absent. */
+  isComfortMarkerRowsLine: boolean;
   /** Rough estimate (see `estimateUtils.ts`) in seconds, for the current
    * width/height/numFrames. */
   estimateSeconds: number;
@@ -694,32 +719,48 @@ export function useGenerationForm(
   // in its temporal dead zone.
   //
   // An engine the served table has NO profile for has no
-  // comfort line at all — `noComfortLine` drops the marker, its warning and the
-  // A2V cap rather than falling back to the LTX `spill_free_frames` lookup
-  // (`comfortTable.comfortProfileMissing` says why only that case does).
-  const noComfortLine = comfortProfileMissing(config.limits, engineFamily);
+  // comfort line at all — `legacySpillTable` is `null`, which drops the marker,
+  // its warning and the A2V cap rather than falling back to the LTX
+  // `spill_free_frames` lookup. A sequence-rows engine (MiniMax H3, ledger
+  // §1-119) draws its rows line off the form's composition (`sequenceShape`),
+  // whatever the acceleration settings, and never falls back either
+  // (`comfortTable.singleLegacySpillTable`).
+  const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily);
+  const legacySpillTable = singleLegacySpillTable(config.limits, engineFamily);
+  const sequenceShape = deps.sequenceShape ?? H3_NO_CONDITIONING;
   const comfortRow = useMemo(
     () => resolveComfortRow(config.limits, engineFamily, acceleration, sageAvailable, weightClass),
     [config.limits, engineFamily, acceleration, sageAvailable, weightClass],
   );
-  const smartComfortFrames = comfortRow
-    ? comfortFramesForBudget(
-        values.width,
-        values.height,
-        comfortRow.singleBudget,
-        limits.minNumFrames,
-        limits.maxNumFrames,
-        comfortRow.spatialFactor,
-        comfortRow.temporalFactor,
-      )
-    : null;
+  const smartComfortFrames =
+    rowsBudget !== null
+      ? h3ComfortFrames(
+          { width: values.width, height: values.height, ...sequenceShape },
+          rowsBudget,
+          limits.minNumFrames,
+          limits.maxNumFrames,
+        )
+      : comfortRow
+        ? comfortFramesForBudget(
+            values.width,
+            values.height,
+            comfortRow.singleBudget,
+            limits.minNumFrames,
+            limits.maxNumFrames,
+            comfortRow.spatialFactor,
+            comfortRow.temporalFactor,
+          )
+        : null;
   // `??`, not a ternary on `comfortRow`: a matched row whose smart derivation
   // still yields `null` (a hand-typed 0/blank width) falls back to the legacy
-  // lookup exactly as it did before, rather than blanking the marker.
-  const spillThresholdFrames = noComfortLine
-    ? null
-    : (smartComfortFrames ?? resolveSpillFreeFrames(config.limits.spill_free_frames, values.width, values.height));
+  // lookup exactly as it did before, rather than blanking the marker. On a
+  // sequence-rows engine `legacySpillTable` is `null`, so there is no fallback.
+  const spillThresholdFrames =
+    legacySpillTable === null
+      ? smartComfortFrames
+      : (smartComfortFrames ?? resolveSpillFreeFrames(legacySpillTable, values.width, values.height));
   const isComfortMarkerSmart = smartComfortFrames !== null;
+  const isComfortMarkerRowsLine = rowsBudget !== null && smartComfortFrames !== null;
   const isOverSpillThreshold = spillThresholdFrames !== null && values.numFrames > spillThresholdFrames;
 
   const [gettingSize, setGettingSize] = useState(false);
@@ -994,8 +1035,9 @@ export function useGenerationForm(
       // of at the coarser legacy value. (E4 of the 2026-08-31 calibration
       // measured A2V against T2V at identical geometry and found every metric
       // within ±0.3%, so Create's single-shot line applies to A2V unchanged.)
-      // Both the smart ceiling and the `spill_free_frames` entries are valid
-      // 8n+1 values, so clamping down to one keeps `suggested` on-grid.
+      // The smart ceiling, the rows line's and the `spill_free_frames` entries
+      // are all values on the loaded engine's grid, so clamping down to one
+      // keeps `suggested` on-grid.
       if (spillThresholdFrames !== null && suggested > spillThresholdFrames) suggested = spillThresholdFrames;
       // No separate ribbon cap (§1-113): the #7 right-click wav is rendered
       // from exactly the ribbon range (`timeline/extractObjectAudio.ts`), so
@@ -1260,6 +1302,7 @@ export function useGenerationForm(
     spillThresholdFrames,
     isOverSpillThreshold,
     isComfortMarkerSmart,
+    isComfortMarkerRowsLine,
     estimateSeconds,
     estimateLabel,
     isICLora: icLoraActive,

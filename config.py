@@ -298,12 +298,13 @@ class EngineComfortProfile(BaseModel):
     (``services.engines.FAMILY_BY_ID`` — "ltx"/"ltx25" — is the id source of
     truth).
 
-    ``spatial_factor``/``temporal_factor`` are the token formula's divisors,
+    ``spatial_factor``/``temporal_factor`` are LTX's token formula's divisors,
     same formula as ``chain_comfort_token_budget``/``single_comfort_token_budget``
     below: a token is (width // spatial_factor) * (height // spatial_factor)
     per temporal_factor latent frames. Carried per-profile (not a global
     constant) so a future model with a different latent compression ratio can
-    override them without touching the client's formula.
+    override them without touching the client's formula. A rows-line family
+    (``single_rows_budget`` set) does not use them.
 
     ``outpaint_budget`` is the Outpainting (Edit tab) comfort-token budget
     for this family — a fixed per-family line that deliberately does NOT
@@ -320,15 +321,27 @@ class EngineComfortProfile(BaseModel):
     ``LimitsConfig.comfort_budgets``). Single source of truth for the
     numbers: Docs/COMFORT_LIMIT_TABLE.md §9.
 
+    ``single_rows_budget`` is the Single tab's sequence-rows line S (the total
+    number of rows entering the DiT; MiniMax H3). When it is set (not
+    ``None``), the family is a rows-line family: it carries no ``rows``, and
+    the client neither matches LTX's rows nor falls back to
+    ``spill_free_frames`` for it. Advisory-only — the server never reads it.
+    Single source of truth for the value and the formula:
+    Docs/COMFORT_LIMIT_TABLE.md §17 / §18.
+
     The profiles are not defined in code: each base-model manifest's
     ``comfort`` block (``scripts/manifests/*.json``) is validated against this
     model at startup by ``api/context.py``'s ``build_comfort_budgets``.
+    pydantic's default ``extra='ignore'`` applies, so a manifest key that is
+    not declared on this class is silently dropped and never reaches
+    ``/config``: a new key must be added here.
     """
 
     spatial_factor: int = 32
     temporal_factor: int = 8
     rows: list[ComfortRow] = Field(default_factory=list)
     outpaint_budget: int | None = None
+    single_rows_budget: int | None = Field(default=None, gt=0)
 
 
 # キーフレーム画像（conditioning_images）の枚数上限。設定項目ではなく契約定数で、

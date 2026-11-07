@@ -7,8 +7,9 @@ import { resolvePrefillSeed } from "./prefillSeed";
 
 // MiniMax H3 第 2 弾 (2026-10-17): the right-click seeds that land in Create
 // follow the loaded base model's rules — the 17n+5 grid, the 32 multiple, the
-// fixed 24 fps — and, with no comfort profile for the engine, only snap onto
-// the grid (no comfort ceiling, no LTX lookup).
+// fixed 24 fps. Ledger §1-119: H3's comfort profile is the sequence-rows line,
+// so the ceiling is `h3ComfortFrames` at the seed's size with the intent's
+// keyframe count and no Reference card — never the LTX lookup.
 
 type Selection = ResultOf<"timeline.getSelection">;
 
@@ -67,15 +68,19 @@ function seed(intent: string, sel: Selection, withH3: boolean) {
 }
 
 describe("resolvePrefillSeed — MiniMax H3 rules", () => {
-  it("#4 image-to-video: size on 32, fps pinned at 24 (no snap toast), DURATION left to the form", () => {
+  it("#4 image-to-video: size on 32, fps pinned at 24 (no snap toast), DURATION at the rows line", () => {
     const s = seed("image-to-video", selection({ mediaFps: 29.97 }), true);
     expect(s.derived.width).toBe(1312);
     expect(s.derived.height).toBe(768);
     expect(s.frameRate).toBe(24);
     expect(s.frameRateSnappedFrom).toBeUndefined();
-    // No comfort line for H3 → the comfortCeiling policy resolves nothing and
-    // the form keeps its own (grid-snapped) DURATION.
-    expect(s.numFrames).toBeUndefined();
+    // 1312x768 with one keyframe fits the rows line up to the ceiling.
+    expect(s.numFrames).toBe(481);
+  });
+
+  it("#4 image-to-video at 1920x1088 seeds 345, at 2560x1472 seeds 192 (one keyframe)", () => {
+    expect(seed("image-to-video", selection({ mediaWidth: 1920, mediaHeight: 1088 }), true).numFrames).toBe(345);
+    expect(seed("image-to-video", selection({ mediaWidth: 2560, mediaHeight: 1472 }), true).numFrames).toBe(192);
   });
 
   it("the same seed on LTX keeps its old answers (64 grid, material fps, a comfort ceiling)", () => {
@@ -86,10 +91,12 @@ describe("resolvePrefillSeed — MiniMax H3 rules", () => {
     expect(((s.numFrames ?? 0) - 1) % 8).toBe(0);
   });
 
-  it("#7 audio-to-video: the material length floors onto 17n+5 with no comfort cap", () => {
+  it("#7 audio-to-video: the material length floors onto 17n+5 below the rows line", () => {
     // The span (600 project frames at 30 fps = 20 s) at the fixed 24 fps is
-    // 480 frames → floored onto 17n+5 = 464. An LTX-style comfort cap at this
-    // size would sit far lower (the same span on LTX lands well below it).
+    // 480 frames → floored onto 17n+5 = 464. The rows line at 1312x768 (no
+    // keyframe) is the 481 ceiling, so it does not cap; an LTX-style comfort
+    // cap at this size would sit far lower (the same span on LTX lands well
+    // below it).
     const sel = selection({ effectName: "音声ファイル", frameEnd: 599 });
     const s = seed("audio-to-video", sel, true);
     expect(s.frameRate).toBe(24);

@@ -704,6 +704,18 @@ describe("MOCK_CONFIG_BODY.limits <-> FALLBACK_APP_CONFIG.limits parity (B-1)", 
     expect(profile.rows.map((row) => row.alpha_gen_budget)).toEqual([23460, 19380, 21672]);
     expect(MOCK_CONFIG_BODY.limits.comfort_budgets.ltx.rows.every((row) => !("alpha_gen_budget" in row))).toBe(true);
   });
+
+  it("h3: no rows, only the sequence-rows line (台帳 §1-119)", () => {
+    // Mirrors `scripts/manifests/40-minimaxh3.json`'s `comfort`. The `null`
+    // keys the server's `model_dump()` also sends (`outpaint_budget`) are
+    // omitted here, as everywhere in this fixture.
+    expect(MOCK_CONFIG_BODY.limits.comfort_budgets.h3).toEqual({
+      spatial_factor: 32,
+      temporal_factor: 8,
+      rows: [],
+      single_rows_budget: 219516,
+    });
+  });
 });
 
 // Alpha Gen 第 2 弾: contract v15's `fps` on `fs.probeMediaInfo`.

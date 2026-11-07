@@ -36,7 +36,13 @@ import { snapFrameRate } from "../modes/single/paramUtils";
 import { STAGE2_WINDOW_DEFAULT, STAGE2_WINDOW_PRESETS } from "../shell/tokenBudget";
 import type { PrefillResolutionPolicy } from "../shell/PrefillPolicyContext";
 import type { AccelerationSettings } from "../shell/accelerationSettings";
-import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from "../shell/comfortTable";
+import {
+  comfortFramesForBudget,
+  resolveComfortRow,
+  resolveSequenceRowsBudget,
+  singleLegacySpillTable,
+} from "../shell/comfortTable";
+import { H3_NO_CONDITIONING, h3ComfortFrames } from "../shell/h3SequenceRows";
 import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../shell/generationConstraints";
 import type { GenerationConstraints } from "../shell/generationConstraints";
 import { computeTargetNumFrames } from "./deriveDuration";
@@ -207,6 +213,16 @@ export function selectedRangeFramesForIntent(
   if (intent !== "retake" || !selection.hasRange) return undefined;
   const frames = selectionRangeFrames(selection);
   return frames > 0 ? frames : undefined;
+}
+
+/** Ledger §1-119: the keyframe cards a right-click seed's DURATION counts on
+ * the sequence-rows line — 1 for the intents that land an image on frame 0
+ * (#4 `image-to-video`, #10 `image-from-frame`; `SingleScreen`'s
+ * `prefillMaterial` / `captureFrameToKeyframe`), 0 for every other. A seed
+ * counts no Reference card (on H3 #2 and #7 go to the Reference cards and never
+ * reach a seed — `AppShell`). */
+export function seedKeyframeCount(intent: string): number {
+  return intent === "image-to-video" || intent === "image-from-frame" ? 1 : 0;
 }
 
 export interface ResolvePrefillSeedArgs {
@@ -437,7 +453,7 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // Smart comfort marker (2026-08-31): only the SINGLE screen's flows share
   // Create's per-clip comfort line — a Chain-targeted intent's DURATION is a
   // per-CLIP length inside a chain, a different quantity, so it keeps the
-  // legacy table. `acceleration` gates the whole thing because a caller that
+  // legacy table. `acceleration` gates the LTX token line because a caller that
   // does not thread the Settings state cannot say what would effectively run,
   // and guessing would move seeds for callers that never opted in.
   //
@@ -446,38 +462,56 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // DURATION and the marker that appears next to it agree.
   // An engine the served comfort table has no profile for
   // has NO comfort line — neither the smart one nor the legacy LTX lookup — so
-  // the seed only snaps onto the grid (`comfortProfileMissing`).
-  const noComfortLine = singleTarget && comfortProfileMissing(config.limits, engineFamily);
+  // the seed only snaps onto the grid; a sequence-rows engine (MiniMax H3,
+  // ledger §1-119) takes its rows line, independent of the acceleration
+  // settings, and never falls to the legacy lookup either
+  // (`singleLegacySpillTable`). `acceleration` gates the LTX branch only.
+  const rowsBudget = singleTarget ? resolveSequenceRowsBudget(config.limits, engineFamily) : null;
+  const spillFreeFrames = singleTarget
+    ? singleLegacySpillTable(config.limits, engineFamily)
+    : config.limits.spill_free_frames;
   const smartCeiling =
-    singleTarget && acceleration && !noComfortLine
-      ? (() => {
-          const row = resolveComfortRow(
-            config.limits,
-            engineFamily,
-            acceleration,
-            sageAvailable ?? null,
-            weightClass,
-          );
-          return row
-            ? comfortFramesForBudget(
-                derived.width,
-                derived.height,
-                row.singleBudget,
-                frameLimits.minNumFrames,
-                frameLimits.maxNumFrames,
-                row.spatialFactor,
-                row.temporalFactor,
-              )
-            : null;
-        })()
-      : null;
+    rowsBudget !== null
+      ? h3ComfortFrames(
+          {
+            width: derived.width,
+            height: derived.height,
+            keyframeCount: seedKeyframeCount(intent),
+            references: H3_NO_CONDITIONING.references,
+          },
+          rowsBudget,
+          frameLimits.minNumFrames,
+          frameLimits.maxNumFrames,
+        )
+      : singleTarget && acceleration && spillFreeFrames !== null
+        ? (() => {
+            const row = resolveComfortRow(
+              config.limits,
+              engineFamily,
+              acceleration,
+              sageAvailable ?? null,
+              weightClass,
+            );
+            return row
+              ? comfortFramesForBudget(
+                  derived.width,
+                  derived.height,
+                  row.singleBudget,
+                  frameLimits.minNumFrames,
+                  frameLimits.maxNumFrames,
+                  row.spatialFactor,
+                  row.temporalFactor,
+                )
+              : null;
+          })()
+        : null;
 
   const targetNumFrames =
     computeTargetNumFrames({
       policy,
       width: derived.width,
       height: derived.height,
-      spillFreeFrames: noComfortLine ? null : config.limits.spill_free_frames,
+      spillFreeFrames,
       minNumFrames: frameLimits.minNumFrames,
       maxNumFrames: frameLimits.maxNumFrames,
       frameGrid: rules.frameGrid,

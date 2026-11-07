@@ -242,13 +242,21 @@ def single_scope_updates(constraints: dict, lang: str = _DEFAULT_LANG) -> tuple:
 
 def comfort_table_missing(config: dict | None, engine_family: str | None) -> bool:
     """True when the served ``limits.comfort_budgets`` has no table for the
-    loaded engine family -- the one case the Single tab drops its spill-free
-    warning (the ``spill_free_frames`` table is LTX's). An unknown family, or a
-    server that serves no ``comfort_budgets`` at all, is NOT "missing": the
-    LTX behaviour stays."""
+    loaded engine family, or when that family's profile carries a
+    ``single_rows_budget`` that is not ``None`` (a rows-line family, MiniMax
+    H3) -- the cases the Single tab drops its spill-free warning (the
+    ``spill_free_frames`` table is LTX's). LTX's ``spill_free_frames``
+    warning is not shown for a rows-line family; Gradio builds no H3 marker.
+    The judgment is on the value, not on the key: the server serves
+    ``single_rows_budget: None`` on the LTX profiles too. An unknown family,
+    or a server that serves no ``comfort_budgets`` at all, is NOT "missing":
+    the LTX behaviour stays."""
     if not engine_family:
         return False
     table = ((config or {}).get("limits") or {}).get("comfort_budgets")
     if not isinstance(table, dict):
         return False
-    return not table.get(engine_family)
+    profile = table.get(engine_family)
+    if not profile:
+        return True
+    return profile.get("single_rows_budget") is not None

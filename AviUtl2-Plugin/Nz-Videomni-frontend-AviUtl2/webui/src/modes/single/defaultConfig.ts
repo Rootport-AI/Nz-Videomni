@@ -75,7 +75,9 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
     // 快適上限マーカーの配信テーブル。正本はバックエンドのマニフェスト
     // `scripts/manifests/*.json` の `comfort`（値の根拠は
     // `Docs/COMFORT_LIMIT_TABLE.md` 第1節。`comfort` の無い系統はプロファイルが
-    // 無く、マーカーを出さない＝`shell/comfortTable.ts` の `comfortProfileMissing`）；ここはオフラインフォールバック用の
+    // 無く、マーカーを出さない。`h3` は `rows` を持たず行数の線
+    // `single_rows_budget`（同 §17・§18）だけを持ち、レガシー表へは落ちない
+    // ＝どちらも `shell/comfortTable.ts` の `singleLegacySpillTable`）；ここはオフラインフォールバック用の
     // ミラーで、`bridge/mockBridge.ts` の `MOCK_CONFIG_BODY.limits.comfort_budgets`
     // と同内容でなければならない。どの行も `requires.weight_class` を持つ
     // （種別が分からないあいだはどの行にも一致しない）。
@@ -139,6 +141,7 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
         ],
         outpaint_budget: 46080,
       },
+      h3: { spatial_factor: 32, temporal_factor: 8, rows: [], single_rows_budget: 219516 },
     },
   },
   upload: {

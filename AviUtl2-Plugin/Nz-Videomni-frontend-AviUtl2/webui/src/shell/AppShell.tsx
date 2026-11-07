@@ -22,7 +22,7 @@ import { formatMenuGuardNote, guardMenuSelection } from "../timeline/menuSelecti
 import type { TimelineSelection } from "../timeline/menuSelection";
 import { END_SOURCE_CONTEXT_FRAMES, tailAlignedStartFrame } from "../timeline/tailAlign";
 import { computeTargetNumFrames } from "../timeline/deriveDuration";
-import { resolvePrefillSeed } from "../timeline/prefillSeed";
+import { resolvePrefillSeed, seedKeyframeCount } from "../timeline/prefillSeed";
 import { dispatchCreateCommand } from "../timeline/createLiveCommands";
 import { decideSourceTrim, trimQuery } from "../timeline/sourceTrim";
 import { fileNameFromPath } from "../modes/single/keyframeUtils";
@@ -63,7 +63,13 @@ import { ThemeProvider } from "./ThemeContext";
 import { ToastProvider, useToasts } from "./ToastContext";
 import { Toasts } from "./Toasts";
 import { blockSwapPrefetchAvailability, sageAvailability } from "./accelerationSettings";
-import { comfortFramesForBudget, comfortProfileMissing, resolveComfortRow } from "./comfortTable";
+import {
+  comfortFramesForBudget,
+  resolveComfortRow,
+  resolveSequenceRowsBudget,
+  singleLegacySpillTable,
+} from "./comfortTable";
+import { H3_NO_CONDITIONING, h3ComfortFrames } from "./h3SequenceRows";
 import {
   accelerationResetsFor,
   batchA2vDisabledFor,
@@ -1031,13 +1037,19 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     //
     // The loaded base model's own frame floor/ceiling and
     // grid, and — for an engine the served comfort table has no profile for —
-    // no ceiling at all (`comfortProfileMissing`), so #9/#10 leave DURATION as
-    // the live form already holds it (on the grid) instead of rewriting it
-    // with the LTX lookup.
+    // no ceiling at all, so #9/#10 leave DURATION as the live form already
+    // holds it (on the grid) instead of rewriting it with the LTX lookup. A
+    // sequence-rows engine (MiniMax H3, ledger §1-119) takes its rows line with
+    // the item's keyframe count and no Reference card, and never falls to the
+    // LTX lookup either (`singleLegacySpillTable`).
     const cursorItemFrameLimits = frameLimitsFor(baseModels.activeConstraints, config.limits.max_num_frames);
-    const cursorItemNoComfortLine = comfortProfileMissing(config.limits, baseModels.activeEngineFamily);
+    const cursorItemRowsBudget = resolveSequenceRowsBudget(config.limits, baseModels.activeEngineFamily);
+    const cursorItemSpillFreeFrames = singleLegacySpillTable(config.limits, baseModels.activeEngineFamily);
     const cursorItemComfortRow =
-      (intent === "text-to-video" || intent === "image-from-frame") && publishedForKeepState && !cursorItemNoComfortLine
+      (intent === "text-to-video" || intent === "image-from-frame") &&
+      publishedForKeepState &&
+      cursorItemRowsBudget === null &&
+      cursorItemSpillFreeFrames !== null
         ? resolveComfortRow(
             config.limits,
             baseModels.activeEngineFamily,
@@ -1047,24 +1059,36 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           )
         : null;
     const cursorItemSmartCeiling =
-      cursorItemComfortRow && publishedForKeepState
-        ? comfortFramesForBudget(
-            publishedForKeepState.width,
-            publishedForKeepState.height,
-            cursorItemComfortRow.singleBudget,
+      (intent === "text-to-video" || intent === "image-from-frame") && publishedForKeepState && cursorItemRowsBudget !== null
+        ? h3ComfortFrames(
+            {
+              width: publishedForKeepState.width,
+              height: publishedForKeepState.height,
+              keyframeCount: seedKeyframeCount(intent),
+              references: H3_NO_CONDITIONING.references,
+            },
+            cursorItemRowsBudget,
             cursorItemFrameLimits.minNumFrames,
             cursorItemFrameLimits.maxNumFrames,
-            cursorItemComfortRow.spatialFactor,
-            cursorItemComfortRow.temporalFactor,
           )
-        : null;
+        : cursorItemComfortRow && publishedForKeepState
+          ? comfortFramesForBudget(
+              publishedForKeepState.width,
+              publishedForKeepState.height,
+              cursorItemComfortRow.singleBudget,
+              cursorItemFrameLimits.minNumFrames,
+              cursorItemFrameLimits.maxNumFrames,
+              cursorItemComfortRow.spatialFactor,
+              cursorItemComfortRow.temporalFactor,
+            )
+          : null;
     const cursorItemCeilingNumFrames =
       (intent === "text-to-video" || intent === "image-from-frame") && publishedForKeepState
         ? computeTargetNumFrames({
             policy: "comfortCeiling",
             width: publishedForKeepState.width,
             height: publishedForKeepState.height,
-            spillFreeFrames: cursorItemNoComfortLine ? null : config.limits.spill_free_frames,
+            spillFreeFrames: cursorItemSpillFreeFrames,
             minNumFrames: cursorItemFrameLimits.minNumFrames,
             maxNumFrames: cursorItemFrameLimits.maxNumFrames,
             frameGrid: baseModels.activeConstraints.frameGrid,

@@ -736,6 +736,7 @@ def test_switch_to_h3_runs_the_h3_precheck_and_weight_class_is_null(three_family
     assert three_family_client.app_context.pipeline_manager.active_engine_family == "h3"
     assert _base(three_family_client, "MiniMaxH3")["transformer_weight_class"] is None
     limits = three_family_client.get("/api/v1/config").json()["limits"]
+    # The synthetic descriptor (conftest) carries no ``comfort``, unlike the shipped one.
     assert "h3" not in (limits.get("comfort_budgets") or {})
 
 

@@ -205,7 +205,10 @@ describe("comfortProfileMissing", () => {
   const limits = FALLBACK_APP_CONFIG.limits;
 
   it("is true only for a known family the served table has no profile for", () => {
-    expect(comfortProfileMissing(limits, "h3")).toBe(true);
+    // Ledger §1-119: H3 has a profile (the sequence-rows line), so a made-up
+    // family pins the "no profile" case.
+    expect(comfortProfileMissing(limits, "wan")).toBe(true);
+    expect(comfortProfileMissing(limits, "h3")).toBe(false);
     expect(comfortProfileMissing(limits, "ltx")).toBe(false);
     expect(comfortProfileMissing(limits, "ltx25")).toBe(false);
   });

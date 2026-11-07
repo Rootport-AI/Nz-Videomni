@@ -131,9 +131,9 @@ function usableAlphaGenBudget(published: number | null | undefined): number | nu
  * configuration, or `null` when there is none — in which case the caller falls
  * back to the legacy `AppLimits.spill_free_frames` lookup
  * (`modes/single/spillUtils.resolveSpillFreeFrames` for Create,
- * `shell/tokenBudget.resolveChainComfortBudget` for Chained), except when the
- * table has no profile for the engine at all — Create and its right-click
- * seeds then draw no line ({@link comfortProfileMissing}).
+ * `shell/tokenBudget.resolveChainComfortBudget` for Chained), except where
+ * {@link singleLegacySpillTable} returns `null` for Create and its right-click
+ * seeds (no profile for the engine, or a sequence-rows profile).
  *
  * **`null` is a normal, expected outcome, not an error.** LTX 2.3's DEFAULT
  * configuration deliberately has no row for the 4bit and Q6_K weight classes:
@@ -226,9 +226,11 @@ export function resolveComfortRow(
  * server's way of saying "this engine has no comfort line" (its descriptor
  * has no `comfort`).
  *
- * This is the ONLY case in which Create and its right-click seeds drop the
- * marker altogether instead of falling back to the legacy LTX lookup
- * (`spill_free_frames`). The other two `null`s {@link resolveComfortRow} can
+ * Together with a sequence-rows profile (ledger §1-119), this is the case in
+ * which Create and its right-click seeds never fall back to the legacy LTX
+ * lookup (`spill_free_frames`) — both are folded into
+ * {@link singleLegacySpillTable}, which the consumers call instead of this. The
+ * other two `null`s {@link resolveComfortRow} can
  * answer keep their fallback, deliberately: no table at all / engine unknown is
  * an older backend or the moment before `GET /models` lands, and a profile
  * whose rows all miss is an LTX configuration the table does not cover — both
@@ -237,6 +239,41 @@ export function comfortProfileMissing(limits: AppLimits, engineFamily: string | 
   const table = limits.comfort_budgets;
   if (!table || engineFamily === undefined || engineFamily === "") return false;
   return !Object.prototype.hasOwnProperty.call(table, engineFamily);
+}
+
+/** The served profile for `engineFamily` (own keys only), or `undefined`. */
+function servedProfile(limits: AppLimits, engineFamily: string | undefined) {
+  const table = limits.comfort_budgets;
+  if (!table || engineFamily === undefined || engineFamily === "") return undefined;
+  return Object.prototype.hasOwnProperty.call(table, engineFamily) ? table[engineFamily] : undefined;
+}
+
+/** Ledger §1-119: the sequence-rows line (S, the DiT's total rows — MiniMax
+ * H3) when the engine's profile publishes one, as a positive finite number.
+ * `null` with no table, an unknown family, a missing profile, a `null`/absent
+ * value (every LTX profile is served with `single_rows_budget: null`) or an
+ * unusable one (0, negative, NaN). The caller then derives the marker with
+ * `shell/h3SequenceRows.ts`'s `h3ComfortFrames`. */
+export function resolveSequenceRowsBudget(limits: AppLimits, engineFamily: string | undefined): number | null {
+  const budget = servedProfile(limits, engineFamily)?.single_rows_budget;
+  return typeof budget === "number" && Number.isFinite(budget) && budget > 0 ? budget : null;
+}
+
+/** The legacy LTX table (`spill_free_frames`) Create and its right-click seeds
+ * may fall back to, or `null` when they must not: the engine has no profile
+ * ({@link comfortProfileMissing}), or its profile's `single_rows_budget` is not
+ * `null` — a sequence-rows engine, whose marker is either the rows line or
+ * nothing, whatever the value's validity (an unusable value draws no marker
+ * rather than an 8n+1 one). Decided on the value, NOT on the key's presence:
+ * the server sends the key on LTX profiles too, as `null`. */
+export function singleLegacySpillTable(
+  limits: AppLimits,
+  engineFamily: string | undefined,
+): AppLimits["spill_free_frames"] | null {
+  if (comfortProfileMissing(limits, engineFamily)) return null;
+  const rowsBudget = servedProfile(limits, engineFamily)?.single_rows_budget;
+  if (rowsBudget !== null && rowsBudget !== undefined) return null;
+  return limits.spill_free_frames;
 }
 
 /** The comfortable `num_frames` ceiling at `width x height`, by inverting the

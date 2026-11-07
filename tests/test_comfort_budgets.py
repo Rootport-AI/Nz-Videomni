@@ -9,6 +9,8 @@ Pins the SHIPPED rows (Docs/COMFORT_LIMIT_TABLE.md §1): every row carries
 ``requires.weight_class``; LTX 2.3's 4bit and Q6_K rows exist only for the
 all-five-toggles-on configuration (the default configuration falls back to
 ``spill_free_frames``), its 8bit row and all LTX 2.5 rows are unconditional.
+MiniMax H3 carries no rows, only the sequence-rows line ``single_rows_budget``
+(Docs/COMFORT_LIMIT_TABLE.md §17 / §18).
 """
 
 from __future__ import annotations
@@ -63,14 +65,29 @@ def _rows(profile) -> list[tuple[dict, int, int]]:
 
 def test_family_id_set_matches_engine_registry():
     """Every key of the table is an engine family id
-    (services.engines.FAMILY_BY_ID). A family may have NO table: MiniMax H3
-    ships without ``comfort`` until it is calibrated (台帳 §1-95), and the
-    screens then show no marker for it. The LTX families keep theirs."""
+    (services.engines.FAMILY_BY_ID). All three shipped families carry one:
+    the LTX families their token rows, MiniMax H3 its sequence-rows line
+    (台帳 §1-119)."""
     from services.engines import FAMILY_BY_ID
 
     shipped = set(_shipped())
     assert shipped <= set(FAMILY_BY_ID)
-    assert {"ltx", "ltx25"} <= shipped
+    assert {"ltx", "ltx25", "h3"} <= shipped
+
+
+def test_h3_profile_is_a_rows_line_only():
+    """MiniMax H3: the S line 219,516 (Docs/COMFORT_LIMIT_TABLE.md §17 / §18),
+    no token rows, no outpaint line."""
+    profile = _shipped()["h3"]
+    assert profile.single_rows_budget == 219516
+    assert profile.rows == []
+    assert profile.outpaint_budget is None
+
+
+def test_ltx_profiles_carry_no_rows_line():
+    budgets = _shipped()
+    for family_id in ("ltx", "ltx25"):
+        assert budgets[family_id].single_rows_budget is None
 
 
 def test_ltx_rows():
@@ -146,6 +163,12 @@ def test_engine_comfort_profile_defaults_outpaint_budget_to_none():
     assert EngineComfortProfile().outpaint_budget is None
 
 
+def test_engine_comfort_profile_defaults_single_rows_budget_to_none():
+    from config import EngineComfortProfile
+
+    assert EngineComfortProfile().single_rows_budget is None
+
+
 # --- config.yaml can no longer override it ------------------------------------ #
 
 
@@ -212,12 +235,36 @@ def test_descriptor_comfort_reaches_get_config(tmp_path: Path):
     # model_dump fills the optional row key the synthetic block leaves out
     expected = copy.deepcopy(COMFORT)
     expected["rows"][0]["alpha_gen_budget"] = None
+    expected["single_rows_budget"] = None
     assert limits["comfort_budgets"] == {"ltx": expected}
     # a bool survives JSON -> pydantic -> model_dump as a real bool
     assert limits["comfort_budgets"]["ltx"]["rows"][0]["requires"]["keep_resident"] is True
     # the compatibility values keep flowing unchanged
     assert limits["chain_comfort_token_budget"] == 40000
     assert limits["single_comfort_token_budget"] == 44880
+
+
+def test_rows_line_reaches_get_config(tmp_path: Path):
+    """``single_rows_budget`` is declared on the profile: without that,
+    pydantic's ``extra='ignore'`` would drop it before ``/config``."""
+    app = _boot(tmp_path, [_with_comfort({"single_rows_budget": 219516})])
+    with TestClient(app) as c:
+        limits = c.get("/api/v1/config").json()["limits"]
+    assert limits["comfort_budgets"] == {
+        "ltx": {
+            "spatial_factor": 32,
+            "temporal_factor": 8,
+            "rows": [],
+            "outpaint_budget": None,
+            "single_rows_budget": 219516,
+        }
+    }
+
+
+@pytest.mark.parametrize("value", [0, -1, "lots"], ids=["zero", "negative", "not-a-number"])
+def test_bad_single_rows_budget_fails_startup(tmp_path: Path, value):
+    with pytest.raises(RuntimeError, match="LTX23: comfort"):
+        _boot(tmp_path, [_with_comfort({"single_rows_budget": value})])
 
 
 @pytest.mark.parametrize(

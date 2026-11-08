@@ -1,0 +1,1906 @@
+{
+  "script": "h3_retake_gate.py",
+  "started_at": "2026-11-08T14:38:10+09:00",
+  "args": {
+    "material": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+    "start_sec": 2.0,
+    "frames": 481,
+    "width": 640,
+    "height": 384,
+    "seed": 1234,
+    "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+    "strengths": [
+      0.0
+    ],
+    "base_url": "http://127.0.0.1:18620",
+    "transformer": "default",
+    "attention": "sdpa",
+    "out_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\extra-long",
+    "label": "long481-s0",
+    "skip_load": true,
+    "dry_run": false,
+    "load_timeout_sec": 900.0,
+    "job_timeout_sec": 3600.0,
+    "repo": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni",
+    "mcp_python": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe"
+  },
+  "material": {
+    "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+    "probe": {
+      "ok": true,
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+      "format_duration": 30.0,
+      "video": {
+        "codec": "h264",
+        "width": 1920,
+        "height": 1080,
+        "fps": 24.0,
+        "nb_frames": 720,
+        "nb_read_frames": null,
+        "duration": 30.0
+      },
+      "audio": {
+        "codec": "aac",
+        "sample_rate": 44100,
+        "channels": 2,
+        "duration": 29.976871
+      }
+    }
+  },
+  "geometry": {
+    "start_sec": 2.0,
+    "start_frame": 48,
+    "frames": 481,
+    "width": 640,
+    "height": 384,
+    "size_source": "引数",
+    "seed": 1234,
+    "attention": "sdpa",
+    "fps": 24.0,
+    "glue_frames": 22,
+    "upload_seconds": 30.0,
+    "window_end_sec": 22.041666666666668
+  },
+  "warnings": [],
+  "conditions": [
+    {
+      "label": "long481-s0",
+      "strength": 0.0,
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\extra-long\\long481-s0",
+      "started_at": "2026-11-08T14:38:14+09:00",
+      "tool_args": {
+        "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "clips": [
+          {
+            "num_frames": 481
+          }
+        ],
+        "width": 640,
+        "height": 384,
+        "frame_rate": 24.0,
+        "seed": 1234,
+        "attention_backend": "sdpa",
+        "retake_video_id": "c4e23457-5c74-444a-95e3-7b0b781cab91",
+        "retake_window_start_sec": 2.0,
+        "retake_audio_strength": 0.0
+      },
+      "status": "completed",
+      "error": null,
+      "submit_response": {
+        "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+        "status": "running",
+        "created_at": "2026-11-08T05:38:17Z",
+        "num_clips": 1,
+        "next": "wait_for_job(job_id) を呼ぶ"
+      },
+      "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+      "wait": {
+        "calls": 15,
+        "seconds": 1005.1,
+        "samples": [
+          {
+            "t": 45.0,
+            "status": "running",
+            "progress": 0.05,
+            "stage": "encode",
+            "current_step": null
+          },
+          {
+            "t": 70.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 120.0,
+            "status": "running",
+            "progress": 0.05,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 165.0,
+            "status": "running",
+            "progress": 0.092,
+            "stage": "stage1_denoise",
+            "current_step": 1
+          },
+          {
+            "t": 210.0,
+            "status": "running",
+            "progress": 0.135,
+            "stage": "stage1_denoise",
+            "current_step": 2
+          },
+          {
+            "t": 255.1,
+            "status": "running",
+            "progress": 0.177,
+            "stage": "stage1_denoise",
+            "current_step": 3
+          },
+          {
+            "t": 305.1,
+            "status": "running",
+            "progress": 0.22,
+            "stage": "stage1_denoise",
+            "current_step": 4
+          },
+          {
+            "t": 325.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 380.1,
+            "status": "running",
+            "progress": 0.305,
+            "stage": "stage1_denoise",
+            "current_step": 6
+          },
+          {
+            "t": 385.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 435.1,
+            "status": "running",
+            "progress": 0.347,
+            "stage": "stage1_denoise",
+            "current_step": 7
+          },
+          {
+            "t": 480.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 535.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 590.1,
+            "status": "running",
+            "progress": 0.518,
+            "stage": "stage1_denoise",
+            "current_step": 11
+          },
+          {
+            "t": 635.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+          },
+          {
+            "t": 690.1,
+            "status": "running",
+            "progress": 0.603,
+            "stage": "stage1_denoise",
+            "current_step": 13
+          },
+          {
+            "t": 735.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 785.1,
+            "status": "running",
+            "progress": 0.688,
+            "stage": "stage1_denoise",
+            "current_step": 15
+          },
+          {
+            "t": 835.1,
+            "status": "running",
+            "progress": 0.73,
+            "stage": "stage1_denoise",
+            "current_step": 16
+          },
+          {
+            "t": 850.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 900.1,
+            "status": "running",
+            "progress": 0.815,
+            "stage": "stage1_denoise",
+            "current_step": 18
+          },
+          {
+            "t": 930.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+          },
+          {
+            "t": 980.1,
+            "status": "running",
+            "progress": 0.93,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 985.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 1005.1,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": 1,
+        "clip_count": 1,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-08T05:38:17Z",
+        "started_at": "2026-11-08T05:38:17Z",
+        "completed_at": "2026-11-08T05:54:58Z",
+        "error": null,
+        "request": {
+          "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 640,
+          "height": 384,
+          "crop_output": null,
+          "num_frames": 481,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 1234,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/7c24d979-c20d-4f10-bca1-cf4aba40dbd5/video",
+          "duration_seconds": 20.042,
+          "resolution": "640x384",
+          "file_size_bytes": 3746872,
+          "generation_time_seconds": 1000.56,
+          "seed_used": 1234,
+          "output_path": "outputs/7c24d979-c20d-4f10-bca1-cf4aba40dbd5/output.mp4",
+          "metadata_path": "outputs/7c24d979-c20d-4f10-bca1-cf4aba40dbd5/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 15.0
+      },
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\extra-long\\long481-s0\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5\\output.mp4",
+        "size_bytes": 3761719,
+        "clobbered": false
+      },
+      "job_video_path": {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5\\output.mp4",
+        "exists": true,
+        "size_bytes": 3761719,
+        "status": "completed"
+      },
+      "metadata_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5\\metadata.json",
+      "metadata_summary": {
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "vram16_mode_used": "on",
+        "generation_time_seconds": 1000.56,
+        "seed": null,
+        "models": {
+          "base_model": "MiniMaxH3",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "minimax_h3_video_vae_fp16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "minimax_h3_audio_vae_fp32.safetensors"
+            }
+          }
+        }
+      },
+      "metadata_retake": {
+        "window_px": 481,
+        "head_px": 22,
+        "tail_px": 22,
+        "n_head_v": 7,
+        "n_tail_v": 7,
+        "n_head_a": 36,
+        "n_tail_a": 35,
+        "free_middle_px": [
+          22,
+          459
+        ],
+        "audio_strength": 0.0,
+        "source_had_audio": true,
+        "audio_frozen": true,
+        "muxed_original_waveform": false,
+        "decoded_frames_px": 481,
+        "retake_video_id": "c4e23457-5c74-444a-95e3-7b0b781cab91",
+        "source_fps": 24.0,
+        "resampled": false,
+        "window_start_sec": 2.0,
+        "window_start_frame": 48,
+        "written_frames": 481,
+        "upload_has_audio": true
+      },
+      "retake_picks": {
+        "audio_strength": 0.0,
+        "muxed_original_waveform": false,
+        "decoded_frames_px": 481,
+        "source_had_audio": true,
+        "audio_frozen": true,
+        "n_head_v": 7,
+        "n_tail_v": 7,
+        "n_head_a": 36,
+        "n_tail_a": 35,
+        "window_start_frame": 48,
+        "written_frames": 481,
+        "upload_has_audio": true,
+        "source_fps": 24.0,
+        "resampled": false
+      },
+      "output_probe": {
+        "ok": true,
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\extra-long\\long481-s0\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5.mp4",
+        "format_duration": 20.042,
+        "video": {
+          "codec": "h264",
+          "width": 640,
+          "height": 384,
+          "fps": 24.0,
+          "nb_frames": 481,
+          "nb_read_frames": 481,
+          "duration": 20.041667
+        },
+        "audio": {
+          "codec": "aac",
+          "sample_rate": 32000,
+          "channels": 2,
+          "duration": 20.042
+        }
+      },
+      "window_ref": {
+        "kind": "job_retake_window",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5\\_retake_window.mp4"
+      },
+      "window_ref_probe": {
+        "ok": true,
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5\\_retake_window.mp4",
+        "format_duration": 20.041667,
+        "video": {
+          "codec": "h264",
+          "width": 1920,
+          "height": 1080,
+          "fps": 24.0,
+          "nb_frames": 481,
+          "nb_read_frames": 481,
+          "duration": 20.041667
+        },
+        "audio": {
+          "codec": "pcm_s16le",
+          "sample_rate": 44100,
+          "channels": 2,
+          "duration": 20.018526
+        }
+      },
+      "psnr": {
+        "band_frames": 22,
+        "output_frames": 481,
+        "ref_frames": 481,
+        "head": {
+          "out_frames": [
+            0,
+            22
+          ],
+          "ref_frames": [
+            0,
+            22
+          ],
+          "ok": true,
+          "frames_compared": 22,
+          "per_frame_psnr_avg": [
+            27.33,
+            27.5,
+            27.28,
+            27.34,
+            27.36,
+            27.36,
+            27.21,
+            27.23,
+            27.18,
+            27.3,
+            27.27,
+            27.39,
+            27.3,
+            27.29,
+            27.28,
+            27.41,
+            27.28,
+            27.42,
+            27.09,
+            27.59,
+            27.73,
+            27.52
+          ],
+          "summary": {
+            "y": 25.678201,
+            "u": 39.441247,
+            "v": 39.279789,
+            "avg": 27.347071,
+            "min": 27.086926,
+            "max": 27.730643
+          },
+          "min_psnr_avg": 27.09,
+          "identical_frames": 0
+        },
+        "tail": {
+          "out_frames": [
+            459,
+            481
+          ],
+          "ref_frames": [
+            459,
+            481
+          ],
+          "ok": true,
+          "frames_compared": 22,
+          "per_frame_psnr_avg": [
+            27.36,
+            27.06,
+            27.59,
+            27.83,
+            27.59,
+            27.64,
+            27.66,
+            27.41,
+            27.47,
+            27.73,
+            27.47,
+            27.48,
+            27.55,
+            27.32,
+            27.36,
+            27.33,
+            27.59,
+            27.67,
+            27.38,
+            27.43,
+            27.75,
+            27.71
+          ],
+          "summary": {
+            "y": 25.840389,
+            "u": 39.714142,
+            "v": 39.750187,
+            "avg": 27.513564,
+            "min": 27.061123,
+            "max": 27.828258
+          },
+          "min_psnr_avg": 27.06,
+          "identical_frames": 0
+        }
+      },
+      "finished_at": "2026-11-08T14:55:07+09:00"
+    }
+  ],
+  "mcp": {
+    "python": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+    "cwd": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni",
+    "LTX_MCP_BASE_URL": "http://127.0.0.1:18620",
+    "stderr_log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\extra-long\\mcp_server.stderr.log",
+    "calls": [
+      {
+        "at": "2026-11-08T14:38:10+09:00",
+        "tool": "backend_status",
+        "args": {},
+        "seconds": 0.16,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:38:11+09:00",
+        "tool": "backend_status",
+        "args": {},
+        "seconds": 0.01,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:38:11+09:00",
+        "tool": "list_models",
+        "args": {},
+        "seconds": 0.02,
+        "ok": true,
+        "result": {
+          "categories": {
+            "transformer": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                },
+                {
+                  "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+                  "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta4_int8",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta5_3185154",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "minimax_h3_ref2va_pruned_int8_convrot",
+                  "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+                  "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                }
+              ]
+            },
+            "text_encoder": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "video_vae": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "audio": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            }
+          },
+          "active_base_model": "MiniMaxH3",
+          "base_models": [
+            {
+              "id": "LTX23",
+              "display_name": "LTX 2.3",
+              "engine_family": "ltx",
+              "active": false,
+              "installed": true,
+              "present": true,
+              "missing_categories": [],
+              "unsupported_features": [
+                "keep_resident_embeddings",
+                "alpha_gen",
+                "vram16_mode",
+                "source_audio",
+                "references"
+              ],
+              "constraints": {
+                "num_frames": {
+                  "step": 8,
+                  "offset": 1,
+                  "min": 9,
+                  "max": 481
+                },
+                "dimension_multiple": 64,
+                "frame_rate": {
+                  "min": 1.0,
+                  "max": 60.0
+                },
+                "sampling": null,
+                "keyframes": {
+                  "step": 8,
+                  "offset": 1
+                },
+                "prompt_token_limit": 1024
+              },
+              "category_order": [
+                "transformer",
+                "text_encoder",
+                "video_vae",
+                "audio"
+              ],
+              "transformer_weight_class": null,
+              "transformer_role": null,
+              "categories": {
+                "transformer": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    },
+                    {
+                      "name": "10Eros-v1.2-Q4_K_M",
+                      "path": "models/LTX23/Weights/10Eros-v1.2-Q4_K_M.gguf",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "Sulphur-2-base-distil-Q6_K",
+                      "path": "models/LTX23/Weights/Sulphur-2-base-distil-Q6_K.gguf",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "ltx-2.3-22b-distilled-1.1_int8mixedtensorwise",
+                      "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_int8mixedtensorwise.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot",
+                      "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "ltx-2.3-22b-distilled-1.1_w4a8",
+                      "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_w4a8.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "sulphur_distil_fp8mixed",
+                      "path": "models/LTX23/Weights/sulphur_distil_fp8mixed.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    }
+                  ]
+                },
+                "text_encoder": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "video_vae": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX23/VAE/LTX23_video_vae_bf16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "audio": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "LTX25",
+              "display_name": "LTX 2.5",
+              "engine_family": "ltx25",
+              "active": false,
+              "installed": true,
+              "present": true,
+              "missing_categories": [],
+              "unsupported_features": [
+                "two_stage_hq",
+                "prune_vaed",
+                "vram16_mode",
+                "source_audio",
+                "references"
+              ],
+              "constraints": {
+                "num_frames": {
+                  "step": 8,
+                  "offset": 1,
+                  "min": 9,
+                  "max": 481
+                },
+                "dimension_multiple": 64,
+                "frame_rate": {
+                  "min": 1.0,
+                  "max": 60.0
+                },
+                "sampling": null,
+                "keyframes": {
+                  "step": 8,
+                  "offset": 1
+                },
+                "prompt_token_limit": 1024
+              },
+              "category_order": [
+                "transformer",
+                "text_encoder",
+                "video_vae",
+                "audio"
+              ],
+              "transformer_weight_class": null,
+              "transformer_role": null,
+              "categories": {
+                "transformer": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    },
+                    {
+                      "name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot",
+                      "path": "models/LTX25/Weights/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "ltx25_uncensored_v1.1-fp8_scaled",
+                      "path": "models/LTX25/Weights/ltx25_uncensored_v1.1-fp8_scaled.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW",
+                      "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K",
+                      "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K.gguf",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    }
+                  ]
+                },
+                "text_encoder": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "video_vae": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "audio": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "MiniMaxH3",
+              "display_name": "MiniMax H3",
+              "engine_family": "h3",
+              "active": true,
+              "installed": true,
+              "present": true,
+              "missing_categories": [],
+              "unsupported_features": [
+                "reference_video",
+                "nag",
+                "two_stage_hq",
+                "guidance_scale",
+                "outpaint",
+                "inpaint",
+                "alpha_gen",
+                "prune_vaed",
+                "keep_resident_embeddings",
+                "keyframe_strength",
+                "a2v",
+                "end_source",
+                "fused_gguf_dequant_kernel",
+                "lora_audio_strength"
+              ],
+              "constraints": {
+                "num_frames": {
+                  "step": 17,
+                  "offset": 5,
+                  "min": 22,
+                  "max": 481
+                },
+                "dimension_multiple": 32,
+                "frame_rate": {
+                  "min": 24.0,
+                  "max": 24.0
+                },
+                "sampling": {
+                  "num_inference_steps": {
+                    "min": 1,
+                    "max": 50,
+                    "step": 1,
+                    "default": 20
+                  },
+                  "shift_video": {
+                    "min": 1,
+                    "max": 20,
+                    "step": 0.1,
+                    "default": 12
+                  },
+                  "shift_audio": {
+                    "min": 1,
+                    "max": 20,
+                    "step": 0.1,
+                    "default": 3
+                  }
+                },
+                "keyframes": {
+                  "step": 1,
+                  "offset": 0
+                },
+                "prompt_token_limit": null,
+                "source_audio": {
+                  "strength": {
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.05,
+                    "default": 0.5
+                  }
+                },
+                "reference": {
+                  "max_images": 9,
+                  "max_videos": 3,
+                  "max_audios": 3,
+                  "max_total": 12,
+                  "video_total_sec": 15.0,
+                  "audio_total_sec": 15.0,
+                  "clip_min_sec": 2.0
+                },
+                "chain": {
+                  "overlap_frames": 22
+                },
+                "retake": {
+                  "audio_strength": {
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.05,
+                    "default": 0.0
+                  }
+                }
+              },
+              "category_order": [
+                "transformer",
+                "text_encoder",
+                "video_vae",
+                "audio"
+              ],
+              "transformer_weight_class": null,
+              "transformer_role": "fl2va",
+              "categories": {
+                "transformer": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    },
+                    {
+                      "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+                      "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "h3ErosMax_beta4_int8",
+                      "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+                      "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "h3ErosMax_beta5_3185154",
+                      "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "minimax_h3_ref2va_pruned_int8_convrot",
+                      "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+                      "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    }
+                  ]
+                },
+                "text_encoder": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "video_vae": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "audio": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "at": "2026-11-08T14:38:11+09:00",
+        "tool": "upload_video",
+        "args": {
+          "file_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+          "max_frames": 100000
+        },
+        "seconds": 3.28,
+        "ok": true,
+        "result": {
+          "video_id": "c4e23457-5c74-444a-95e3-7b0b781cab91",
+          "original_filename": "H3-Ref-1080p-30s.mp4",
+          "stored_path": "uploads/videos/c4e23457-5c74-444a-95e3-7b0b781cab91/input.mp4",
+          "content_type": "video/mp4",
+          "size_bytes": 23715262,
+          "trimmed": false,
+          "frame_count": 720,
+          "fps": 24.0
+        }
+      },
+      {
+        "at": "2026-11-08T14:38:14+09:00",
+        "tool": "submit_chain",
+        "args": {
+          "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+          "clips": [
+            {
+              "num_frames": 481
+            }
+          ],
+          "width": 640,
+          "height": 384,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sdpa",
+          "retake_video_id": "c4e23457-5c74-444a-95e3-7b0b781cab91",
+          "retake_window_start_sec": 2.0,
+          "retake_audio_strength": 0.0
+        },
+        "seconds": 3.16,
+        "ok": true,
+        "result": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "status": "running",
+          "created_at": "2026-11-08T05:38:17Z",
+          "num_clips": 1,
+          "next": "wait_for_job(job_id) を呼ぶ"
+        }
+      },
+      {
+        "at": "2026-11-08T14:38:17+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:39:02+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 25.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:39:32+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:40:17+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:41:02+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:41:47+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.06,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:42:32+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 49.98,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:43:22+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 20.02,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:43:47+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 50.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:44:37+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 5.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:44:47+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:45:32+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:46:22+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 50.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:47:17+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 49.98,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:48:07+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+      },
+      {
+        "at": "2026-11-08T14:48:57+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 50.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:49:47+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:50:37+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:51:22+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 50.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:52:12+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 14.98,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:52:32+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:53:17+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 29.98,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+      },
+      {
+        "at": "2026-11-08T14:53:52+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:54:37+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 5.02,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:54:47+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 15.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:55:02+09:00",
+        "tool": "save_job_video",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5",
+          "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\extra-long\\long481-s0",
+          "no_clobber": true,
+          "which": "output"
+        },
+        "seconds": 0.0,
+        "ok": true,
+        "result": {
+          "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\extra-long\\long481-s0\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5.mp4",
+          "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5\\output.mp4",
+          "size_bytes": 3761719,
+          "clobbered": false
+        }
+      },
+      {
+        "at": "2026-11-08T14:55:02+09:00",
+        "tool": "get_job_video_path",
+        "args": {
+          "job_id": "7c24d979-c20d-4f10-bca1-cf4aba40dbd5"
+        },
+        "seconds": 0.02,
+        "ok": true,
+        "result": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\7c24d979-c20d-4f10-bca1-cf4aba40dbd5\\output.mp4",
+          "exists": true,
+          "size_bytes": 3761719,
+          "status": "completed"
+        }
+      }
+    ],
+    "server_info": {
+      "name": "nz-videomni",
+      "version": "1.28.1",
+      "protocol": "2025-11-25"
+    }
+  },
+  "tool_schema_check": {
+    "tool_count": 25,
+    "tools": [
+      "backend_status",
+      "cancel_job",
+      "delete_job",
+      "get_config",
+      "get_job_matte_path",
+      "get_job_video_path",
+      "get_joined_video_path",
+      "get_mp4_info",
+      "job_status",
+      "join_job",
+      "list_jobs",
+      "list_loras",
+      "list_models",
+      "load_pipeline",
+      "plan_a2v_batch",
+      "purge_terminal_jobs",
+      "save_job_video",
+      "submit_alpha_gen",
+      "submit_chain",
+      "submit_generate",
+      "unload_pipeline",
+      "upload_audio",
+      "upload_image",
+      "upload_video",
+      "wait_for_job"
+    ],
+    "problems": [],
+    "warnings": [],
+    "submit_chain_properties": [
+      "attention_backend",
+      "block_swap_prefetch",
+      "chunked_upsample",
+      "clips",
+      "conditioning_attention_strength",
+      "crop_height",
+      "crop_width",
+      "embed_mp4_metadata",
+      "end_source_context_frames",
+      "end_source_image_id",
+      "end_source_strength",
+      "end_source_video_id",
+      "frame_rate",
+      "fused_gguf_dequant_kernel",
+      "height",
+      "keep_resident",
+      "keep_resident_embeddings",
+      "loras",
+      "nag_alpha",
+      "nag_enabled",
+      "nag_scale",
+      "nag_tau",
+      "neg_method",
+      "negative_prompt",
+      "overlap_frames",
+      "overlap_strength",
+      "prompt",
+      "reference_video_id",
+      "reference_video_strength",
+      "retake_audio_strength",
+      "retake_head_px",
+      "retake_regenerate_audio",
+      "retake_tail_px",
+      "retake_video_id",
+      "retake_window_start_sec",
+      "seed",
+      "source_audio_id",
+      "source_video_context_frames",
+      "source_video_id",
+      "stage2_window",
+      "vae_mode",
+      "vsf_scale",
+      "width"
+    ],
+    "submit_chain_required": [
+      "prompt",
+      "clips"
+    ],
+    "ok": true
+  },
+  "status_before": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 4,
+        "failed": 0
+      }
+    }
+  },
+  "load": {
+    "requested": {
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default"
+      },
+      "wait_sec": 45
+    },
+    "responses": [],
+    "status_polls": 1,
+    "skipped": true,
+    "last_status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 4,
+        "failed": 0
+      }
+    },
+    "seconds": 0.0
+  },
+  "models_after_load": {
+    "base_model_entry": {
+      "id": "MiniMaxH3",
+      "display_name": "MiniMax H3",
+      "engine_family": "h3",
+      "active": true,
+      "installed": true,
+      "present": true,
+      "missing_categories": [],
+      "unsupported_features": [
+        "reference_video",
+        "nag",
+        "two_stage_hq",
+        "guidance_scale",
+        "outpaint",
+        "inpaint",
+        "alpha_gen",
+        "prune_vaed",
+        "keep_resident_embeddings",
+        "keyframe_strength",
+        "a2v",
+        "end_source",
+        "fused_gguf_dequant_kernel",
+        "lora_audio_strength"
+      ],
+      "constraints": {
+        "num_frames": {
+          "step": 17,
+          "offset": 5,
+          "min": 22,
+          "max": 481
+        },
+        "dimension_multiple": 32,
+        "frame_rate": {
+          "min": 24.0,
+          "max": 24.0
+        },
+        "sampling": {
+          "num_inference_steps": {
+            "min": 1,
+            "max": 50,
+            "step": 1,
+            "default": 20
+          },
+          "shift_video": {
+            "min": 1,
+            "max": 20,
+            "step": 0.1,
+            "default": 12
+          },
+          "shift_audio": {
+            "min": 1,
+            "max": 20,
+            "step": 0.1,
+            "default": 3
+          }
+        },
+        "keyframes": {
+          "step": 1,
+          "offset": 0
+        },
+        "prompt_token_limit": null,
+        "source_audio": {
+          "strength": {
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.5
+          }
+        },
+        "reference": {
+          "max_images": 9,
+          "max_videos": 3,
+          "max_audios": 3,
+          "max_total": 12,
+          "video_total_sec": 15.0,
+          "audio_total_sec": 15.0,
+          "clip_min_sec": 2.0
+        },
+        "chain": {
+          "overlap_frames": 22
+        },
+        "retake": {
+          "audio_strength": {
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.0
+          }
+        }
+      },
+      "category_order": [
+        "transformer",
+        "text_encoder",
+        "video_vae",
+        "audio"
+      ],
+      "transformer_weight_class": null,
+      "transformer_role": "fl2va",
+      "categories": {
+        "transformer": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            },
+            {
+              "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta4_int8",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta5_3185154",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "minimax_h3_ref2va_pruned_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+              "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            }
+          ]
+        },
+        "text_encoder": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "video_vae": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "audio": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        }
+      }
+    },
+    "transformer_role": "fl2va",
+    "transformer_weight_class": null
+  },
+  "upload": {
+    "video_id": "c4e23457-5c74-444a-95e3-7b0b781cab91",
+    "original_filename": "H3-Ref-1080p-30s.mp4",
+    "stored_path": "uploads/videos/c4e23457-5c74-444a-95e3-7b0b781cab91/input.mp4",
+    "content_type": "video/mp4",
+    "size_bytes": 23715262,
+    "trimmed": false,
+    "frame_count": 720,
+    "fps": 24.0
+  },
+  "finished_at": "2026-11-08T14:55:07+09:00",
+  "exit_code": 0
+}

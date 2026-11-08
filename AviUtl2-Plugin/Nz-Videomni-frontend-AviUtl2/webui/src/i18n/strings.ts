@@ -250,6 +250,13 @@ export const en = {
       /** §1-123: {@link noticeSilentAudio}'s twin for the Strength slider. */
       noticeSilentAudioStrength:
         "With Strength at 0, sound may be added to parts that were silent.",
+      /** §1-123: the yellow note shown instead of the red error card only when
+       * the server answers 422 `RETAKE_VIDEO_NO_AUDIO` (the material has no
+       * audio track at all). Separate from {@link noticeSilentAudio}, which is
+       * about a track that exists but is silent in this section. */
+      noAudioWarning: "This video has no audio track. Set “What to redo” to “Picture and sound”.",
+      /** §1-123: {@link noAudioWarning}'s twin for the Strength slider (MiniMax H3). */
+      noAudioStrengthWarning: "This video has no audio track. Set “Audio Strength” to 0.",
       /** checkStale: the timeline moved between the right-click and Generate.
        * A warning only — it never blocks. */
       staleWarning:
@@ -2602,6 +2609,8 @@ export const ja: Strings = {
       noticeSilentAudio:
         "この区間に音が入っていない素材で「映像と音声」を選ぶと、無音だった部分に音が付きます。無音のままにしたいときは「映像のみ」を選んでください。",
       noticeSilentAudioStrength: "Strength を 0 にすると、無音だった区間に音が付くことがあります。",
+      noAudioWarning: "この動画には音声トラックがありません。「撮り直す対象」を「映像と音声」にしてください。",
+      noAudioStrengthWarning: "この動画には音声トラックがありません。「音声の Strength」を 0 にしてください。",
       staleWarning:
         "このパネルを開いてから、タイムラインの選択が変わりました。撮り直されるのは、ここに表示されている範囲です。",
       generateButton: "選択範囲を撮り直す",

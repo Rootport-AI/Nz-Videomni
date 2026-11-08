@@ -912,7 +912,7 @@ async def submit_chain(
           そのまま使い戻します（頭と尾の糊しろは常に元の音声で固定）。
           音声トラックの無い動画を撮り直すときは ``retake_audio_strength=0``
           を明示してください（省略すると既定0.5が書き戻され、元の音声が
-          無いので422 ``RETAKE_WINDOW_OUT_OF_RANGE``）。
+          無いので422 ``RETAKE_VIDEO_NO_AUDIO``）。
           ``retake_regenerate_audio=False`` はH3では422です（代わりに
           ``retake_audio_strength=1.0``）。
       * 納品されるmp4は**窓まるごと**で、糊しろはトリムされていません。この
@@ -920,7 +920,8 @@ async def submit_chain(
         品質の継ぎ目を編集点ではなく窓の外側の縁へ追い出す仕組みです。
       * ``retake_regenerate_audio`` を False にすると、窓の**元の波形**を
         そのまま使い戻します（ボコーダをスキップします。LTX のみ。H3では422）。
-        この場合、元動画に音声トラックが実際に無いと422で拒否されます。
+        この場合、元動画に音声トラックが実際に無いと422
+        ``RETAKE_VIDEO_NO_AUDIO`` で拒否されます。
       * ``source_video_id`` / ``source_audio_id`` / ``reference_video_id`` /
         ``end_source_video_id`` / ``end_source_image_id`` /
         ``clips[0].conditioning_images`` とは**すべて排他**です（いずれも1本の
@@ -1039,13 +1040,13 @@ async def submit_chain(
             H3 は22固定で指定しない（22以外は422）。
         retake_regenerate_audio: 窓の音声を作り直すか（既定True）。Falseにすると
             元の波形をそのまま使い戻します（LTX のみ。元動画に音声トラックが
-            無いと422。H3 ではFalseが422——代わりに
+            無いと422 ``RETAKE_VIDEO_NO_AUDIO``。H3 ではFalseが422——代わりに
             ``retake_audio_strength=1.0``）。
         retake_audio_strength: **H3 専用**。窓の真ん中の音声の強さ（0〜1）。
             0で作り直し、1.0で元の波形をそのまま戻します。既定はNone（送らず、
             サーバーの既定0.5）。音声トラックの無い動画では0を明示してください
             （省略すると既定0.5で元の音声が要ると判定され、422
-            ``RETAKE_WINDOW_OUT_OF_RANGE``）。範囲の検査はサーバーが行います。
+            ``RETAKE_VIDEO_NO_AUDIO``）。範囲の検査はサーバーが行います。
             LTX で指定すると422です。
         embed_mp4_metadata: submit_generate と同じ意味（**既定True**。完成した
             連結動画の ``output.mp4`` に生成条件を書き込みます。既定のままなら

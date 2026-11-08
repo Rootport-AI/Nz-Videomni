@@ -611,12 +611,18 @@ export function EditScreen({
                 disabled={retakeSubmitting || serverBusy || !retakeForm.isValid}
                 onGenerate={() => void handleRetakeGenerate()}
               />
-              {retakeSubmitState.phase === "error" && (
-                <div className="card card-error">
-                  <p className="error-code">{retakeSubmitState.code}</p>
-                  <p>{retakeSubmitState.message}</p>
-                </div>
-              )}
+              {/* 素材に音声トラックが無い 422 だけは、赤いカードの代わりに直し方の黄色の注意を出す。 */}
+              {retakeSubmitState.phase === "error" &&
+                (retakeSubmitState.code === "RETAKE_VIDEO_NO_AUDIO" ? (
+                  <p className="warning-banner warning-banner-mild" role="status">
+                    {retakeForm.audioStrengthRange !== null ? tr.noAudioStrengthWarning : tr.noAudioWarning}
+                  </p>
+                ) : (
+                  <div className="card card-error">
+                    <p className="error-code">{retakeSubmitState.code}</p>
+                    <p>{retakeSubmitState.message}</p>
+                  </div>
+                ))}
               <GenerateReasonsNote reasons={retakeForm.validityReasons} messages={retakeReasonMessages} />
             </>
           )}

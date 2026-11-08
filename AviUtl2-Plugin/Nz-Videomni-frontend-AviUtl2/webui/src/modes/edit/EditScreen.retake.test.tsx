@@ -354,6 +354,25 @@ describe("EditScreen — Retake の通し", () => {
     await waitFor(() => expect(bridgeCalls(request, "timeline.deleteProvisionalByJob")).toHaveLength(1));
     // 席が残ったままにならない = 以後の生成がブロックされない。
     expect(bridgeCalls(request, "timeline.updateProvisionalReservation")).toHaveLength(0);
+    // 専用コード以外は従来どおり赤いカードにコードを出す。
+    expect(await screen.findByText("VALIDATION_ERROR")).toHaveClass("error-code");
+  });
+
+  it("422 RETAKE_VIDEO_NO_AUDIO では赤いカードの代わりに黄色の注意を出す", async () => {
+    const user = userEvent.setup();
+    renderRetake(RETAKE_INTENT, {
+      chainResponse: {
+        status: 422,
+        body: { error: { code: "RETAKE_VIDEO_NO_AUDIO", message: "no audio", detail: "…" } },
+      },
+    });
+    const button = await screen.findByRole("button", { name: "Redo the selected range" });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+
+    const note = await screen.findByText(en.edit.retake.noAudioWarning);
+    expect(note).toHaveClass("warning-banner", "warning-banner-mild");
+    expect(document.querySelector(".error-code")).toBeNull();
   });
 
   it("手動でタブを開いただけなら案内文だけで、生成ボタンは出ない", () => {
@@ -561,8 +580,8 @@ describe("EditScreen — Retake（MiniMax H3・§1-123）", () => {
     retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
   });
 
-  function renderH3() {
-    const nativeBridge = createBridge();
+  function renderH3(options: BridgeOptions = {}) {
+    const nativeBridge = createBridge(options);
     render(
       <LanguageProvider>
         <ToastProvider>
@@ -635,5 +654,22 @@ describe("EditScreen — Retake（MiniMax H3・§1-123）", () => {
     expect(body).not.toHaveProperty("overlap_strength");
     expect(body).not.toHaveProperty("stage2_window");
     expect(body.retake).not.toHaveProperty("regenerate_audio");
+  });
+
+  it("422 RETAKE_VIDEO_NO_AUDIO では Strength 版の黄色の注意を出す", async () => {
+    const user = userEvent.setup();
+    renderH3({
+      chainResponse: {
+        status: 422,
+        body: { error: { code: "RETAKE_VIDEO_NO_AUDIO", message: "no audio", detail: "…" } },
+      },
+    });
+    const button = await screen.findByRole("button", { name: "Redo the selected range" });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+
+    const note = await screen.findByText(en.edit.retake.noAudioStrengthWarning);
+    expect(note).toHaveClass("warning-banner", "warning-banner-mild");
+    expect(document.querySelector(".error-code")).toBeNull();
   });
 });

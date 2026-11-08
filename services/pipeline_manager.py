@@ -22,6 +22,7 @@ from api.errors import (
     inpaint_window_out_of_range,
     pipeline_load_failed,
     pipeline_loading,
+    retake_video_no_audio,
     retake_window_out_of_range,
     source_audio_silent,
     source_audio_too_short,
@@ -1259,7 +1260,8 @@ class PipelineManager:
             not retake.regenerate_audio or (retake.audio_strength or 0) > 0
         )
         if uses_original_audio and not video_io.has_audio_stream(src_path):
-            raise retake_window_out_of_range(
+            raise retake_video_no_audio(
+                retake.video_id,
                 detail=(
                     "the retake uses the window's ORIGINAL audio "
                     "(regenerate_audio=false or audio_strength > 0), "

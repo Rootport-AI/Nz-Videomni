@@ -175,7 +175,7 @@ def test_h3_strength_above_zero_on_a_silent_upload_is_422(three_family_client, t
     vid = _upload_window_source(three_family_client, tmp_path, audio=False)
     r = _post_h3(three_family_client, video_id=vid, audio_strength=0.5)
     assert r.status_code == 422, r.text
-    assert "RETAKE_WINDOW_OUT_OF_RANGE" in r.text
+    assert "RETAKE_VIDEO_NO_AUDIO" in r.text
     assert "no audio stream" in r.text
 
 
@@ -258,5 +258,5 @@ def test_h3_omitted_strength_on_a_silent_upload_is_422(three_family_client, tmp_
     vid = _upload_window_source(three_family_client, tmp_path, audio=False)
     r = _post_h3(three_family_client, 73, video_id=vid)
     assert r.status_code == 422, r.text
-    assert "RETAKE_WINDOW_OUT_OF_RANGE" in r.text
+    assert "RETAKE_VIDEO_NO_AUDIO" in r.text
     assert "has no audio stream" in r.json()["error"]["detail"]

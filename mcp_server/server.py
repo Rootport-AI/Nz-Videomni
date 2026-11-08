@@ -190,7 +190,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   音声を作り直し、1.0 で元の波形をそのまま戻します。LTX で指定すると 422 です。
   音声トラックの無い動画を撮り直すときは retake_audio_strength=0 を明示します
   （省略すると既定 0.5 が書き戻され、元の音声が無いので 422
-  RETAKE_WINDOW_OUT_OF_RANGE）。
+  RETAKE_VIDEO_NO_AUDIO）。
   retake_regenerate_audio=False は LTX 用で、H3 では 422 です（代わりに
   retake_audio_strength=1.0）。
   source_video_id / source_audio_id / reference_video_id / end_source_* /

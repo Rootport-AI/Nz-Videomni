@@ -270,7 +270,7 @@ def test_keeping_the_original_audio_of_a_silent_upload_is_422(client, tmp_path):
     r = _post(client, [{"num_frames": 169}],
               retake=_retake(video_id=vid, regenerate_audio=False))
     assert r.status_code == 422, r.text
-    assert "RETAKE_WINDOW_OUT_OF_RANGE" in r.text
+    assert "RETAKE_VIDEO_NO_AUDIO" in r.text
     assert "no audio stream" in r.text
 
 

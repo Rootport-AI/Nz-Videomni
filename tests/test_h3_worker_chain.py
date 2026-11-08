@@ -37,8 +37,9 @@ GOLDEN_CHAIN_CLIP_KEYS = ["prompt_sha256", "seconds", "latents_sha256", "head_eq
 
 def test_chain_fields():
     assert worker._CHAIN_FIELDS == (
-        worker._GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}
+        worker._GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references", "nag"}
     ) | {"clips", "source", "retake"}
+    assert "nag" not in worker._CHAIN_FIELDS   # the negative prompt is the single job's only (台帳 §1-127)
     assert worker._CHAIN_CLIP_FIELDS == frozenset({"prompt", "num_frames", "images", "references"})
     assert worker._SOURCE_FIELDS == frozenset({"path", "context_frames"})
     assert worker._RETAKE_FIELDS == frozenset({"path", "audio_strength"})
@@ -208,14 +209,15 @@ def test_do_generate_chain_builds_the_spec(monkeypatch):
 def test_do_generate_chain_defaults_and_ignored_keys(monkeypatch):
     seen, logs, _events = _capture(monkeypatch)
     msg = {**BASE, "num_frames": 124, "images": [{"path": "a.png"}], "source_audio": {"path": "a.wav"},
-           "references": [], "overlap_frames": 3, "clips": [{**CLIPS[0], "x": 1}, CLIPS[1]]}
+           "references": [], "overlap_frames": 3, "clips": [{**CLIPS[0], "x": 1}, CLIPS[1]],
+           "nag": {"negative_prompt": "x", "method": "vsf", "vsf_scale": 3.0}}
     worker._do_generate_chain(msg)
     base = seen[0][0].base
     assert (base.num_inference_steps, base.shift_video, base.shift_audio) == (20, 12.0, 3.0)
     assert (base.keep_resident, base.vram16_mode, base.loras) == (False, False, ())
     assert base.images == () and base.source_audio is None and base.references == ()
     line = next(line for line in logs if line.startswith("generate_chain:"))
-    assert "ignored keys: images, num_frames, overlap_frames, references, source_audio, clips[].x" in line
+    assert "ignored keys: images, nag, num_frames, overlap_frames, references, source_audio, clips[].x" in line
 
 
 def test_do_generate_chain_passes_clip_references(monkeypatch):

@@ -1113,6 +1113,8 @@ GOLDEN_GENERATE_KEYS = [
 GOLDEN_GENERATE_OPTIONAL_KEYS = ["source_audio"]
 #: Ref2VA's ``references`` (台帳 §1-107), sent only when used, after the keys above.
 GOLDEN_GENERATE_REFERENCE_KEYS = ["references"]
+#: VSF's ``nag`` (台帳 §1-127), sent only when used, after the keys above.
+GOLDEN_GENERATE_NAG_KEYS = ["nag"]
 GOLDEN_DONE_KEYS = [
     "seed_used", "sampler", "num_inference_steps", "shift_video", "shift_audio",
     "peak_vram_mb", "peak_vram_reserved_mb", "rss_peak_gib", "commit_gib", "commit_peak_gib", "seconds",
@@ -1148,12 +1150,19 @@ def test_golden_generate_message_keys():
     msg = worker._selftest_generate_message(_selftest_args(), "o.mp4")
     assert list(msg) == GOLDEN_GENERATE_KEYS            # a job without the optional keys: as before
     assert worker._GENERATE_FIELDS == frozenset(
-        GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS + GOLDEN_GENERATE_REFERENCE_KEYS)
+        GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS + GOLDEN_GENERATE_REFERENCE_KEYS
+        + GOLDEN_GENERATE_NAG_KEYS)
     args = _selftest_args()
     args.source_audio, args.audio_strength = "a.wav", 0.5
     msg = worker._selftest_generate_message(args, "o.mp4")
     assert list(msg) == GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS
     assert msg["source_audio"] == {"path": "a.wav", "strength": 0.5}
+    args = _selftest_args()
+    assert (args.negative_prompt, args.vsf_scale) == (None, 1.5)
+    args.negative_prompt, args.vsf_scale = "blurry", 3.0
+    msg = worker._selftest_generate_message(args, "o.mp4")
+    assert list(msg) == GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_NAG_KEYS
+    assert msg["nag"] == {"negative_prompt": "blurry", "method": "vsf", "vsf_scale": 3.0}
 
 
 def test_golden_done_keys(monkeypatch, tmp_path):
@@ -1359,7 +1368,7 @@ def test_condition_noise_is_one_draw_shared_by_every_block():
         noisy_condition(torch.zeros(grid + 1, 96), grid, generator_after_video_and_audio())
 
 
-def _keyframe_job(monkeypatch, tmp_path, frames):
+def _keyframe_job(monkeypatch, tmp_path, frames, negative_prompt="", vsf_report=None):
     """Run ``generate`` with key frames at ``frames`` (64 x 64, 124 frames) through the
     REAL ``_encode`` / ``_encode_image`` with a stand-in text encoder and VAE
     encoder; returns (what the TE was given, the encode progress, the denoise's
@@ -1405,12 +1414,14 @@ def _keyframe_job(monkeypatch, tmp_path, frames):
 
     def denoise(req, h, t, phases, entry, **kw):
         denoise_kw.update(kw)
+        if vsf_report is not None:
+            kw["vsf_report"].update(vsf_report)
         return torch.zeros(1), torch.zeros(1), "on"
 
     monkeypatch.setattr(pipe, "_denoise", denoise)
     monkeypatch.setattr(pipe, "_decode", lambda req, v, a, entry, **kw: 1)
     req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=124, output_path="o.mp4",
-                              images=tuple(images))
+                              images=tuple(images), negative_prompt=negative_prompt)
     done = pipe.generate(req)
     return te_images, [p for p in progress if p[0] == "encode"], denoise_kw, done
 
@@ -3639,7 +3650,7 @@ def test_denoise_with_a2v_and_an_audio_reference(monkeypatch, tmp_path):
     assert torch.equal(audio[:, :, :10], clean_a[:, :, :10])               # the kept latents end clean
 
 
-def _ref_job(monkeypatch, tmp_path, references, frames=()):
+def _ref_job(monkeypatch, tmp_path, references, frames=(), negative_prompt=""):
     """``generate`` through the REAL ``_encode`` / ``_encode_image`` / ``_read_references`` /
     ``_encode_references`` with a stand-in text encoder, video encoder, audio encoder and
     loader (``_a2v_fakes``, 2,000 samples) and video reader; the denoise and the decode
@@ -3720,7 +3731,7 @@ def _ref_job(monkeypatch, tmp_path, references, frames=()):
             path.write_bytes(b"x")
         refs.append(P.H3ReferenceInput(kind, str(path), slot, max_sec))
     req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=22, output_path="o.mp4",
-                              images=tuple(images), references=tuple(refs))
+                              images=tuple(images), references=tuple(refs), negative_prompt=negative_prompt)
     done = pipe.generate(req)
     return done, te_calls, [p for p in progress if p[0] == "encode"], seen, builds
 
@@ -3759,6 +3770,16 @@ def test_references_sorted_key_frames_kept_off_the_vision_tower(monkeypatch, tmp
     assert list(done) == GOLDEN_DONE_KEYS and list(done["h3"]) == GOLDEN_H3_KEYS + ["references"]
     for shape, rows in kw["refs"]:
         assert rows.device.type == "cpu" and rows.dtype == torch.float32 and rows.shape[0] == shape.rows
+
+
+def test_references_with_a_negative_prompt_progress(monkeypatch, tmp_path):
+    _done, te_calls, progress, _kw, _b = _ref_job(monkeypatch, tmp_path, [("picture", 1, None)],
+                                                  negative_prompt="cars")
+    assert te_calls[-1] == {"images": 0, "refs": None}         # the negative forward: text only
+    assert progress == [("encode", i, 5) for i in range(6)]
+    _done, _te, progress, _kw, _b = _ref_job(monkeypatch, tmp_path, [("picture", 1, None)], frames=(0, 21),
+                                             negative_prompt="cars")
+    assert progress == [("encode", i, 6) for i in range(7)]
 
 
 def test_audio_only_references_build_no_video_encoder(monkeypatch, tmp_path):
@@ -3826,3 +3847,332 @@ def test_request_validation_references(tmp_path):
     for refs, match in bad:
         with pytest.raises(ValueError, match=match):
             validate_request(H3GenerateRequest(**ok, references=refs))
+
+
+# --------------------------------------------------------------------------- #
+# VSF: the negative prompt by Value Sign Flip (台帳 §1-127)
+# --------------------------------------------------------------------------- #
+
+_VSF_BASE = {"prompt": "p", "seed": 1, "width": 640, "height": 384, "num_frames": 124, "output_path": "o.mp4"}
+
+
+def test_worker_nag_parse():
+    from engine_h3 import worker
+
+    assert worker._nag({}) == ("", 1.5, [])
+    assert worker._nag({"nag": None}) == ("", 1.5, [])
+    assert worker._nag({"nag": {"negative_prompt": "cars", "method": "vsf", "vsf_scale": 3}}) == ("cars", 3.0, [])
+    assert worker._nag({"nag": {"negative_prompt": "cars", "method": "vsf"}}) == ("cars", 1.5, [])
+    assert worker._nag({"nag": {"negative_prompt": "cars", "method": "vsf", "vsf_scale": None}})[1] == 1.5
+    assert worker._nag({"nag": {"negative_prompt": "c", "method": "vsf", "vsf_scale": 0}})[1] == 0.0
+    assert worker._nag({"nag": {"negative_prompt": "c", "method": "vsf", "vsf_scale": 10}})[1] == 10.0
+    got = worker._nag({"nag": {"negative_prompt": "c", "method": "vsf", "scale": 11, "tau": 2.5}})
+    assert got == ("c", 1.5, ["scale", "tau"])
+    bad = [
+        ("cars", "オブジェクト"),
+        ({"negative_prompt": "c", "method": "nag"}, "VSF 方式だけ"),
+        ({"negative_prompt": "c"}, "VSF 方式だけ"),
+        ({"negative_prompt": "", "method": "vsf"}, "negative_prompt"),
+        ({"negative_prompt": "   ", "method": "vsf"}, "negative_prompt"),
+        ({"negative_prompt": 3, "method": "vsf"}, "negative_prompt"),
+        ({"method": "vsf"}, "negative_prompt"),
+    ]
+    for scale in (-0.1, 10.1, float("nan"), float("inf"), "3", True):
+        bad.append(({"negative_prompt": "c", "method": "vsf", "vsf_scale": scale}, "vsf_scale"))
+    for raw, match in bad:
+        with pytest.raises(ValueError, match=match):
+            worker._nag({"nag": raw})
+
+
+def test_worker_generate_request_never_reads_nag():
+    """The parsed values come in as arguments (``_do_generate``); a message's ``nag``
+    alone leaves the request without a negative prompt (the chain's shared request)."""
+    from engine_h3 import worker
+
+    msg = {**_VSF_BASE, "nag": {"negative_prompt": "cars", "method": "vsf", "vsf_scale": 3}}
+    req = worker._generate_request(msg)
+    assert (req.negative_prompt, req.vsf_scale) == ("", 1.5)
+    req = worker._generate_request(msg, negative_prompt="cars", vsf_scale=3.0)
+    assert (req.negative_prompt, req.vsf_scale) == ("cars", 3.0)
+
+
+def test_worker_do_generate_nag(monkeypatch):
+    from engine_h3 import worker
+
+    seen, logs = [], []
+
+    class FakePipe:
+        def generate(self, req):
+            seen.append(req)
+            return {}
+
+    monkeypatch.setattr(worker, "_PIPE", FakePipe())
+    monkeypatch.setattr(worker, "_ATTENTION", ("sdpa", False))
+    monkeypatch.setattr(worker, "_emit", lambda event, **f: None)
+    monkeypatch.setattr(worker, "_log", logs.append)
+    worker._do_generate(dict(_VSF_BASE))
+    assert seen[-1].negative_prompt == "" and "neg=off" in logs[-1]
+    worker._do_generate({**_VSF_BASE, "nag": {"negative_prompt": "cars", "method": "vsf", "vsf_scale": 3, "x": 1}})
+    assert (seen[-1].negative_prompt, seen[-1].vsf_scale) == ("cars", 3.0)
+    assert "neg=vsf(scale=3.0)" in logs[-1] and "nag.x" in logs[-1]
+    with pytest.raises(ValueError, match="VSF 方式だけ"):
+        worker._do_generate({**_VSF_BASE, "nag": {"negative_prompt": "cars", "method": "nag"}})
+    assert len(seen) == 2   # refused before the pipeline
+
+
+def test_encode_steps_with_negative_prompt():
+    from engine_h3.pipeline_h3 import encode_steps
+
+    for cond in (False, True):
+        for audio in (False, True):
+            for refs in (False, True):
+                for neg in (False, True):
+                    want = 3 + int(neg) + int(cond) + int(refs) + int(audio)
+                    assert encode_steps(has_cond=cond, has_audio=audio, has_refs=refs, has_neg=neg) == want
+    assert encode_steps(has_cond=False, has_audio=False) == 3   # the default: as before
+
+
+def test_request_validation_vsf_scale():
+    from engine_h3.pipeline_h3 import H3GenerateRequest, validate_request
+
+    assert (H3GenerateRequest(**_VSF_BASE).negative_prompt, H3GenerateRequest(**_VSF_BASE).vsf_scale) == ("", 1.5)
+    for s in (0.0, 1.5, 10.0, 3):
+        validate_request(H3GenerateRequest(**_VSF_BASE, negative_prompt="n", vsf_scale=s))
+    for s, match in ((-0.1, "0〜10"), (10.01, "0〜10"), (float("nan"), "0〜10"), (float("inf"), "0〜10"),
+                     ("x", "数値")):
+        with pytest.raises(ValueError, match=match):
+            validate_request(H3GenerateRequest(**_VSF_BASE, negative_prompt="n", vsf_scale=s))
+
+
+def test_vsf_t2v_encodes_the_negative_prompt_second(monkeypatch, tmp_path):
+    report = {"rows": [5, 8], "scale": 3.0, "m_neg": 0.01, "m_text": 0.02}
+    te_images, progress, kw, done = _keyframe_job(monkeypatch, tmp_path, [], negative_prompt="cars",
+                                                  vsf_report=report)
+    assert te_images == [[], []]                          # the second call: text only
+    assert progress == [("encode", i, 4) for i in range(5)]
+    assert tuple(kw["negative_hidden"].shape) == (3, 8) and kw["negative_hidden"].device.type == "cpu"
+    assert kw["vsf_scale"] == 1.5 and isinstance(kw["vsf_report"], dict)
+    encode = done["h3"]["phases"]["encode"]
+    assert (encode["text_tokens"], encode["negative_tokens"]) == (3, 3)
+    assert "te_read_negative" in encode and "vsf" in done["h3"]
+    assert done["h3"]["vsf"] == report                  # the dict the denoise filled rides as is
+
+
+def test_vsf_key_frames_keep_the_positive_read_report(monkeypatch, tmp_path):
+    te_images, progress, kw, done = _keyframe_job(monkeypatch, tmp_path, [0, 123], negative_prompt="cars")
+    assert te_images == [[10, 133], []]
+    # encode: 3 (TE) + negative + key frames = 5 steps; the image encode is step 5.
+    assert {total for _s, _i, total in progress} == {5}
+    assert [i for _s, i, _t in progress] == [0, 1, 2, 3, 4, 5]
+    encode = done["h3"]["phases"]["encode"]
+    assert encode["te_read"] == {"vision_tokens": 14}           # not overwritten by the negative forward
+    assert encode["te_read_negative"] == {"vision_tokens": 0}
+    assert done["h3"]["phases"]["image_encode"]["vision_tokens"] == 14
+
+
+def test_vsf_off_job_is_unchanged(monkeypatch, tmp_path):
+    _te, progress, kw, done = _keyframe_job(monkeypatch, tmp_path, [])
+    assert progress == [("encode", i, 3) for i in range(4)]
+    assert kw["negative_hidden"] is None
+    assert "vsf" not in done["h3"] and list(done["h3"]) == GOLDEN_H3_KEYS
+    encode = done["h3"]["phases"]["encode"]
+    assert "negative_tokens" not in encode and "te_read_negative" not in encode
+
+
+def _vsf_forward_inputs(dit, pos=5, neg=3, scale=3.0):
+    """``_tiny_forward_inputs`` with ``pos + neg`` text rows, the last ``neg`` negative."""
+    from engine_h3.vsf import H3Vsf
+
+    tokens, kw = _tiny_forward_inputs(dit, text=pos + neg)
+    return tokens, kw, H3Vsf(slice(pos, pos + neg), scale)
+
+
+def test_vsf_probe_query_rows():
+    from engine_h3.vsf import probe_query_rows
+
+    rows = probe_query_rows(slice(13, 41))
+    assert rows.tolist() == list(range(13, 41))           # 28 rows < 256: every row
+    rows = probe_query_rows(slice(100, 10100))
+    assert rows.numel() == 256 and rows.dtype == torch.long
+    assert int(rows[0]) == 100 and int(rows[-1]) < 10100 and bool((rows[1:] > rows[:-1]).all())
+    assert probe_query_rows(slice(5, 5)).numel() == 0
+
+
+def test_vsf_none_is_the_plain_forward(monkeypatch, tmp_path):
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit)
+    with torch.no_grad():
+        want = dit(tokens, **kw)
+        got = dit(tokens, vsf=None, vsf_probe=None, **kw)
+    assert all(b.attn.vsf is None and b.attn.vsf_probe is None for b in dit.blocks)
+    for g, w in zip(got, want):
+        assert torch.equal(g, w)
+
+
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("head_group, row_chunk", [(3, 16), (1, 7), (4, 4096), (2, 41)])
+def test_vsf_on_matches_off(monkeypatch, tmp_path, head_group, row_chunk, shared):
+    """With the flip, VRAM 16GB mode is the off path bit for bit (sdpa), and the
+    flip does change the result."""
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    if shared:
+        _fake_shared_quant(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw, vsf = _vsf_forward_inputs(dit)
+    with torch.no_grad():
+        plain = dit(tokens, **kw)
+        want = dit(tokens, vsf=vsf, **kw)
+        got = dit(None, tokens_box=[tokens.clone()], vram16=Vram16Plan(head_group=head_group, row_chunk=row_chunk),
+                  vsf=vsf, **kw)
+    for g, w, p in zip(got, want, plain):
+        assert torch.isfinite(w).all() and torch.equal(g, w)
+    assert not torch.equal(want[0], plain[0])
+
+
+@pytest.mark.parametrize("vram16", [False, True])
+def test_vsf_flips_only_the_negative_values(monkeypatch, tmp_path, vram16):
+    from engine_h3 import dit as D
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw, vsf = _vsf_forward_inputs(dit, scale=2.5)
+    seen = []
+    real = D._attention
+
+    def spy(q, k, v, backend):
+        seen.append((q.clone(), k.clone(), v.clone()))
+        return real(q, k, v, backend)
+
+    monkeypatch.setattr(D, "_attention", spy)
+    plan = Vram16Plan(head_group=4, row_chunk=4096) if vram16 else None   # one head group: one call per block
+    with torch.no_grad():
+        dit(tokens.clone(), vram16=plan, **kw)
+        dit(tokens.clone(), vram16=plan, vsf=vsf, **kw)
+    (q0, k0, v0), (q1, k1, v1) = seen[0], seen[len(dit.blocks)]   # block 0 of each forward
+    assert torch.equal(q0, q1) and torch.equal(k0, k1)
+    rows = vsf.rows
+    assert torch.equal(v1[rows], v0[rows].mul(-2.5))
+    assert torch.equal(v1[:rows.start], v0[:rows.start]) and torch.equal(v1[rows.stop:], v0[rows.stop:])
+
+
+def test_vsf_leaves_the_refiner_and_is_cleared_by_the_next_forward(monkeypatch, tmp_path):
+    from engine_h3.vsf import H3VsfProbe, probe_query_rows
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path, layers=3)
+    tokens, kw, vsf = _vsf_forward_inputs(dit)
+    text = torch.randn(6, dit.cfg.text_dim, generator=torch.Generator().manual_seed(9)).to(torch.bfloat16)
+    probe = H3VsfProbe(probe_query_rows(kw["layout"].video), vsf.rows, slice(0, vsf.rows.start))
+    with torch.no_grad():
+        refined = dit.refine_text(text)
+        plain = dit(tokens, **kw)
+        dit(tokens, vsf=vsf, vsf_probe=probe, **kw)
+        assert all(b.attn.vsf is vsf for b in dit.blocks)
+        assert dit.blocks[0].attn.vsf_probe is probe
+        assert all(b.attn.vsf_probe is None for b in dit.blocks[1:])
+        assert all(b.attn.vsf is None and b.attn.vsf_probe is None for b in dit.token_refiner.blocks)
+        assert torch.equal(dit.refine_text(text), refined)
+        again = dit(tokens, **kw)
+    assert all(b.attn.vsf is None and b.attn.vsf_probe is None for b in dit.blocks)
+    for a, p in zip(again, plain):
+        assert torch.equal(a, p)
+
+
+def test_vsf_rows_must_be_the_tail_of_the_text(monkeypatch, tmp_path):
+    from engine_h3.vsf import H3Vsf
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw = _tiny_forward_inputs(dit, text=8)
+    for rows in (slice(5, 7), slice(0, 8), slice(8, 8), slice(5, 9), slice(9, 12)):
+        with pytest.raises(ValueError, match="末尾"):
+            dit(tokens, vsf=H3Vsf(rows, 1.5), **kw)
+
+
+def test_vsf_probe_matches_softmax_and_on_equals_off(monkeypatch, tmp_path):
+    from engine_h3 import dit as D
+    from engine_h3.lowvram import Vram16Plan
+    from engine_h3.vsf import H3VsfProbe, probe_query_rows
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    tokens, kw, vsf = _vsf_forward_inputs(dit)
+    layout = kw["layout"]
+    text_rows = slice(0, vsf.rows.start)
+    seen = []
+    real = D._attention
+
+    def spy(q, k, v, backend):
+        seen.append((q.clone(), k.clone()))
+        return real(q, k, v, backend)
+
+    monkeypatch.setattr(D, "_attention", spy)
+
+    def probe():
+        return H3VsfProbe(probe_query_rows(layout.video), vsf.rows, text_rows)
+
+    off, on = probe(), probe()
+    with torch.no_grad():
+        dit(tokens, vsf=vsf, vsf_probe=off, **kw)
+        dit(None, tokens_box=[tokens.clone()], vram16=Vram16Plan(head_group=3, row_chunk=16), vsf=vsf,
+            vsf_probe=on, **kw)
+    q, k = seen[0]   # block 0 of the off forward: [S, 4, D]
+    idx = probe_query_rows(layout.video)
+    neg, txt = [], []
+    for h in range(q.shape[1]):
+        p = torch.softmax(q[idx, h].float() @ k[:, h].float().T * q.shape[2] ** -0.5, dim=-1)
+        neg.append(float(p[:, vsf.rows].sum(-1).mean()))
+        txt.append(float(p[:, text_rows].sum(-1).mean()))
+    got = off.result()
+    assert set(got) == {"m_neg", "m_text"}
+    assert got["m_neg"] == pytest.approx(sum(neg) / len(neg), rel=1e-5)
+    assert got["m_text"] == pytest.approx(sum(txt) / len(txt), rel=1e-5)
+    assert 0.0 < got["m_neg"] < 1.0 and 0.0 < got["m_neg"] + got["m_text"] <= 1.0 + 1e-6
+    assert on.result() == got                                  # same numbers, head order fixed
+    with pytest.raises(RuntimeError):
+        probe().result()                                       # nothing observed
+
+
+@pytest.mark.parametrize("vram16", [False, True])
+def test_vsf_denoise_job(monkeypatch, tmp_path, vram16):
+    """The REAL ``_denoise`` on the tiny DiT: the negative rows are appended to the
+    text, the probe runs once (step 0, block 0) and fills the report; an off job
+    has neither the sequence key nor a report."""
+    from engine_h3 import vsf as V
+
+    _dit, run = _tiny_denoiser(monkeypatch, tmp_path)
+    neg = torch.randn(3, TEXT, generator=torch.Generator().manual_seed(8)).to(torch.bfloat16)
+    observed = []
+    real = V.H3VsfProbe.observe
+
+    def count(self, q, k, head0):
+        observed.append(head0)
+        return real(self, q, k, head0)
+
+    monkeypatch.setattr(V.H3VsfProbe, "observe", count)
+    report = {}
+    v_on, a_on, entry = run(steps=2, vram16=vram16, negative_hidden=neg, vsf_scale=3.0, vsf_report=report)
+    assert observed == [0]                                     # 1 head, one forward
+    seq = entry["sequence"]
+    assert (seq["text"], seq["negative"]) == (8, 3) and seq["total"] == 8 + 2 * 37 + 7 * 4
+    assert list(report) == ["rows", "scale", "m_neg", "m_text"]
+    assert report["rows"] == [5, 8] and report["scale"] == 3.0
+    assert 0.0 <= report["m_neg"] and 0.0 <= report["m_neg"] + report["m_text"] <= 1.0 + 1e-6
+    assert torch.isfinite(v_on).all() and torch.isfinite(a_on).all()
+    off_report = {}
+    v_off, _a, e_off = run(steps=2, vram16=vram16, vsf_report=off_report)
+    assert "negative" not in e_off["sequence"] and e_off["sequence"]["text"] == 5 and off_report == {}
+    assert not torch.equal(v_on, v_off)
+
+
+def test_vsf_denoise_on_matches_off(monkeypatch, tmp_path):
+    _dit, run = _tiny_denoiser(monkeypatch, tmp_path)
+    neg = torch.randn(3, TEXT, generator=torch.Generator().manual_seed(8)).to(torch.bfloat16)
+    r_off, r_on = {}, {}
+    v0, a0, _e = run(steps=2, negative_hidden=neg, vsf_scale=3.0, vsf_report=r_off)
+    v1, a1, _e = run(steps=2, vram16=True, negative_hidden=neg, vsf_scale=3.0, vsf_report=r_on)
+    assert torch.equal(v0, v1) and torch.equal(a0, a1) and r_on == r_off

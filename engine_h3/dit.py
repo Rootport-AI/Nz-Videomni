@@ -68,7 +68,9 @@ With a plan, ``H3DiTBlock.forward`` and ``H3DiT.final_rows`` hand over to
 ``engine_h3.lowvram`` at their first line; the off path below that line is
 unchanged. ``H3DiT.forward`` additionally takes ``tokens_box`` so that the
 caller holds no reference to the token embedding (Docs/MINIMAX_H3_DESIGN.md
-§6.5).
+§6.5). The negative prompt's V sign flip (``H3Attention.vsf``, 台帳 §1-127) is
+the same function (``engine_h3.vsf.flip_values``) on the off path and in VRAM
+16GB mode.
 
 The model is built under ``with torch.device("meta"):``; ``swap_in_int8_linears``
 (``engine_h3.quant_linear``) then replaces the four quantized Linears of each
@@ -88,6 +90,7 @@ import torch.nn.functional as F
 from engine_h3.constants import ATTENTION_BACKENDS, MODALITY_AUDIO, MODALITY_TEXT, MODALITY_VIDEO
 from engine_h3.quant_linear import H3Int8Linear
 from engine_h3.rope import apply_rope
+from engine_h3.vsf import flip_values
 from h3_format import H3DiTConfig
 
 #: AdaLN rows per timestep: one per modality tag (0 video, 1 text, 2 audio).
@@ -246,6 +249,11 @@ class H3Attention(nn.Module):
     attention -> out_proj. ``inner = heads * head_dim`` (7168) is larger than
     the hidden size (5376) in H3; that is the checkpoint's shape, not a bug."""
 
+    #: VSF: a ``vsf.H3Vsf`` set by ``H3DiT.forward`` (None = no negative prompt).
+    vsf = None
+    #: VSF's measurement: a ``vsf.H3VsfProbe`` on block 0 of one forward, else None.
+    vsf_probe = None
+
     def __init__(self, hidden: int, heads: int, head_dim: int) -> None:
         super().__init__()
         self.heads = heads
@@ -264,11 +272,15 @@ class H3Attention(nn.Module):
         s = x.shape[0]
         qkv = self.qkv_proj(x).view(s, 3, self.heads, self.head_dim)
         q, k, v = qkv.unbind(dim=1)
+        if self.vsf is not None:
+            flip_values(v, self.vsf)
         q = self.q_norm(q)
         k = self.k_norm(k)
         if rope_cos is not None:
             q = apply_rope(q, rope_cos, rope_sin)
             k = apply_rope(k, rope_cos, rope_sin)
+        if self.vsf_probe is not None:
+            self.vsf_probe.observe(q, k, head0=0)
         out = _attention(q, k, v, self.attention_backend)
         return self.out_proj(out.reshape(s, self.heads * self.head_dim))
 
@@ -616,6 +628,8 @@ class H3DiT(nn.Module):
         attention_backend: str = "sdpa",
         vram16=None,
         tokens_box: list | None = None,
+        vsf=None,
+        vsf_probe=None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """One model evaluation. Returns (v_video [Nv, 96], v_audio [Na, 32]) float32,
         the data-direction velocity (x0 = x + sigma * v).
@@ -624,6 +638,9 @@ class H3DiT(nn.Module):
         = off. ``tokens_box``: with ``tokens=None``, a one-item list holding the
         tokens; it is emptied here, so that with ``vram16`` the embedding is freed
         as soon as block 0 is done (the caller keeps no reference to it).
+        ``vsf``: the negative prompt's rows and flip (``engine_h3.vsf.H3Vsf``),
+        None = no negative prompt; its rows must be the tail of ``layout.text``.
+        ``vsf_probe``: an ``engine_h3.vsf.H3VsfProbe`` observed in block 0, or None.
         """
         if tokens is None:
             tokens = tokens_box.pop()
@@ -638,9 +655,17 @@ class H3DiT(nn.Module):
                 raise ValueError(f"H3DiT: {name} は [{s}, 96] が必要です（{list(t.shape)}）")
         if attention_backend not in ATTENTION_BACKENDS:
             raise ValueError(f"H3DiT: attention_backend は {ATTENTION_BACKENDS} のどれかです（{attention_backend!r}）")
-        for block in self.blocks:
+        if vsf is not None and not (
+            vsf.rows.stop == layout.text.stop and layout.text.start < vsf.rows.start < vsf.rows.stop
+        ):
+            raise ValueError(
+                f"H3DiT: ネガティブプロンプトの行 {vsf.rows} がテキスト区画 {layout.text} の末尾に収まりません"
+            )
+        for i, block in enumerate(self.blocks):
             block.attn.attention_backend = attention_backend
             block.vram16 = vram16  # every forward, None too: a kept DiT must not carry it over
+            block.attn.vsf = vsf  # None too, for the same reason
+            block.attn.vsf_probe = vsf_probe if i == 0 else None
 
         t_emb = self.adaln_embed(t_unique)
         time_index = time_index.to(device=t_emb.device, dtype=torch.long)

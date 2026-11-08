@@ -264,7 +264,7 @@
   - **総フレーム数の上限は範囲外（オーナー裁定）**: 連結の全長に比例する要求（音声の復号の一括・主メモリ）は印に入れず、較正もしない（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-49）。FL2VA の連結と、固定行つきクリップの OOM の側は測っていない（快適上限表 §19.6）。
   - **進め方（オーナー裁定）**: 裁定 94 と同じ（計画 → 敵対的レビュー → 了承）。較正は一夜で回し、GPU を使うときはオーナーに声をかける。
   - **状態**: 完結（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-276。記録簿 §199）。
-- **裁定 96 【オーナー裁定・監督裁定】**: H3 の Retake（入力動画の指定した区間だけを描き直す機能）を開いたときの裁定（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-123。2026-11-08）です。仕組みの正本は §3.4、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §163、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D33 にあります。計画の敵対的レビューの採否・実装差分のレビュー・門は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §200 にだけ書きます（本書には写しません）。
+- **裁定 96 【オーナー裁定・監督裁定】**: H3 の Retake（入力動画の指定した区間だけを描き直す機能）を開いたときの裁定（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-123。2026-11-08）です。仕組みの正本は §3.4、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §163、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D33 にあります。計画の敵対的レビューの採否・実装差分のレビュー・門は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §200 にだけ書きます（本書には写しません）。
   - **範囲（オーナー裁定）**: エンジン・API・操作パネル（Edit タブの Retake のサブタブを開き、右クリックから送れるようにする）・MCP。Gradio は外す（Retake の画面がもともと無いため）。
   - **凍結フレーム数（オーナー裁定）**: 窓の頭も尾も 22 フレームの固定（Chained の重なりと同じ）。設定項目にしない。
   - **固定行の時刻（オーナー裁定）**: 連結・V2V と同じく、潜在そのまま・時刻 0.999（裁定 84-2）。新しい計測は足さない。台帳 §1-123 の起票時の前提「時刻 1.0（DiffSynth の Retake の作法）」は、これに合わせて書き直した。
@@ -279,7 +279,7 @@
   - **のりしろの表示は `constraints.chain.overlap_frames` を読む（監督の裁定）**: 既存の値から導けるものに、配信の項目を足さない。
   - **スキーマの既定 25／24 は残す（監督の裁定）**: H3 は `model_fields_set` で省略を見分けて 22 を書き戻す（裁定 90 の `context_frames` と同じ形）。LTX の送信本文と既定は変わらない。
   - **レビューで「削る」を採った判断（監督の裁定）**: LTX の `audio_strength` は拒否表ではなく LTX の系統の規則の 1 行で断る（拒否表の不変条件と既存のテストを動かさない）。窓の音声は読めた分だけ凍結し、全長を求めるのは Strength 1.0 だけにする。記録の鍵は LTX の Retake の名前を使い、`freeze_proof` などの新しい鍵を作らない。配信は `constraints.retake.audio_strength` だけで、窓の下限・上限・のりしろの欄は足さない。
-  - **状態**: 実装済み・GPU の門は全本完走（記録簿 §200.7・§200.9）・オーナーの目視は済み（§200.9）・AviUtl2 の実機でのテスト待ち（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の §1-123）。
+  - **状態**: 完結（2026-11-08。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-123。GPU の門・目視・実機の全項目合格。記録簿 §200.7・§200.9〜§200.11）。プロンプトの効きやすい条件は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-277。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -791,6 +791,7 @@ MCP の `submit_chain` は `retake_audio_strength` を受け、のりしろの 2
 - **尾の固定は H3 では Retake が初めて**である（連結も V2V も頭だけを固定する）。GPU の門は全本完走した（記録簿 §200.7・§200.9）。オーナーの目視・試聴の結果と、それを受けた s の既定 0.5 は記録簿 §200.9 にある（裁定 96）。
 - **長い窓では、描き直す真ん中に場面のカットが入ることがある（対処しない）**: 481 フレームの窓（真ん中は約 18 秒）で、真ん中の内側に H3 がカメラのカットを入れ、別の部屋・別の人物の場面へ移ってから元に似た場面へ戻る例が出た。カットの位置は固定の境・素材のつなぎ目・潜在の塊の境のどれとも一致せず、頭と尾の潜在はビット一致で継ぎ目は自然だったので、凍結の仕組みの不具合ではなく H3 の生成の性質と見ている（記録簿の §183〔連結〕・§185〔Ref2VA の連結〕と同じ種類）。真ん中が長く手がかりが両端の潜在とプロンプトだけになること、s＝0 で真ん中の音声が別物になることが、それを引き出した条件と見られる。s＝0.5 では部屋も机も元のまま残った。位置・条件・静止画の所見と仮説は記録簿 §200.9。**実用の指針**: 描き直す区間は短くし、s は 0 より上にする。
 - **音声の無い動画では s を 0 にする**: s の既定 0.5 のまま送ると、事前検査が 422 で断る（元の音声が無いので寄せられない。裁定 96）。この 422 は専用のエラーコード `RETAKE_VIDEO_NO_AUDIO` で、操作パネルは黄色の注意で Strength を 0 にするよう案内する（`detail` は読まない。音声の有無の事前判定は作らない）。
+- **短い窓と Turbo の 4 ステップでは、プロンプトが効きにくいことがある（仮説）**: プロンプトはエンジンまで届いている（記録簿 §200.11）。描き直す真ん中が短いと両端の固定行の影響が相対的に強く、Turbo の 4 ステップではノイズ除去の回数が少ないので、文が内容を変える余地が小さいと見ている（未検証）。比べる条件と暫定の使い方は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-277。
 
 ### 採らなかった案
 
@@ -1167,7 +1168,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | 連結（Chained。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-262。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §183〜§184、操作パネルはフロントエンド `Docs/DEVLOG.md` §153） | 第 1 弾は T2V の連結だけ。幾何・エンジン・ワーカー／API・系統の規則・進捗・mock／操作パネルの 3 本を並行で作り、機械の門・GPU の門・オーナーの実機確認に合格した（記録簿 §184。§3.3・裁定 85） |
 | 参照付きの連結（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-264。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §186、操作パネルはフロントエンド `Docs/DEVLOG.md` §154） | エンジン（クリップのループに参照の段）・アプリ（スキーマ・404・系統の規則・LTX の 422・ワーカーへのペイロード・記録）・操作パネル（クリップごとの Reference アコーディオン）の 3 本を並行で作った。差分のレビュー・機械の門・GPU の門の結果は記録簿 §186（裁定 87・§3.3） |
 | V2V と冒頭画像の連結（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-121。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193、操作パネルはフロントエンド `Docs/DEVLOG.md` §160） | 弾 1＝幾何・エンジン・ワーカー、弾 2＝API・アダプタ・系統の規則、弾 3＝操作パネル、弾 4＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §193（裁定 90・§3.3） |
-| Retake（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-123。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §200、操作パネルはフロントエンド `Docs/DEVLOG.md` §163） | 弾 1＝幾何、弾 2＝エンジンとワーカー、弾 3＝API・アダプタ・モック・配信、弾 4＝操作パネル、弾 5＝MCP、弾 6＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §200（裁定 96・§3.4） |
+| Retake（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-123。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §200、操作パネルはフロントエンド `Docs/DEVLOG.md` §163） | 弾 1＝幾何、弾 2＝エンジンとワーカー、弾 3＝API・アダプタ・モック・配信、弾 4＝操作パネル、弾 5＝MCP、弾 6＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §200（裁定 96・§3.4） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限のマーカーは、Single と Chained の各クリップに総行数の線で出す（裁定 94・95。第 2 弾の時点では較正の前で、記述子に `comfort` を持たせず、マーカーを出していなかった）。

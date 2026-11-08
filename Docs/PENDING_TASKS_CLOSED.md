@@ -3295,3 +3295,13 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **一次記録**: `outputs/comfort-calib-h3-chain-2026-11-08/`（git 管理外）と複写 [`Docs/Outputs-archive/comfort-calib-h3-chain-2026-11-08/`](Outputs-archive/comfort-calib-h3-chain-2026-11-08/)。中身と複写の範囲は記録簿 §199.9。
 - **派生**: 総フレーム数の上限（音声の復号の一括・主メモリ）は [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-49（2026-11-08 起票）。
 - **状態**: 完結（日付 2026-11-08）。コミットのハッシュは git の履歴を正とします。
+
+### 1-123. MiniMax H3 の Retake（区間の描き直し）（起票：2026-11-02、クローズ：2026-11-08）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-123 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-123（2026-11-02 起票。実装の後は同書 §2 の確認項目）。**同書側は欠番**。採番規定の変更（本書冒頭。オーナー裁定 2026-11-02）により、番号を変えずに持ち込みました。
+- **到達条件**: 入力動画の指定した区間だけを描き直す Retake を、MiniMax H3 でも使えるようにする（エンジン・API・操作パネル・MCP。Gradio は Retake の画面がもともと無いので含めない）。**達成しました。**
+- **何が完了したか**: H3 の連結（`POST /generate/chain`）が `retake` を受けます。窓の頭と尾の 22 フレームを固定行（潜在そのまま・時刻 0.999）にして真ん中だけを描き直し、真ん中の音声は Strength（`retake.audio_strength`。H3 だけ。既定 0.5）で元の音声へ寄せます。音声の無い素材を Strength 0 より上で送ったときの 422 は専用コード `RETAKE_VIDEO_NO_AUDIO` で返し、操作パネルは黄色の注意で Strength を 0 にするよう案内します。仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.4・裁定 96、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.112〜v0.5.114、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §163・§164、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D33 です。
+- **合格の根拠**: 同書 §2 のチェックリストの全項目が合格しました（オーナー確認 2026-11-08）。GPU の門の動画（Strength 0／0.5／1.0・音声の無い素材・長い窓・長い窓の Strength 0.5）は継ぎ目が自然で、Strength の既定は 0.5 に決めました（記録簿 §200.9）。AviUtl2 の実機の 7 項目（Edit タブ・右クリックから Retake の完走・Strength のスライダー・重ねて継ぎ目とずれが無い・Outpainting と Inpainting の案内・LTX へ切り替えて Retake 1 本の完走・音声の無い動画を 0.5 のまま送ると黄色の注意が出て 0 で送れる）も合格です（記録簿 §200.10・§200.11）。
+- **記録の所在**: 記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §200（200.7 GPU の門・200.9 目視と既定 0.5・200.10 専用コードと実機・200.11 プロンプトの届き方の確認とクローズ）。門の台本と記録の写しは [`Outputs-archive/h3-retake-2026-11-08/`](Outputs-archive/h3-retake-2026-11-08/README.md)、動画の所在は記録簿 §200.7。
+- **派生**: 長い窓で真ん中に場面のカットが入ることがあるのは、既知の限界にしました（設計正本 §3.4）。プロンプトが効きやすい条件の探索は [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-277（2026-11-08 起票）。
+- **状態**: 完結（日付 2026-11-08）。コミットのハッシュは git の履歴を正とします。

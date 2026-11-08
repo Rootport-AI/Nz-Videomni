@@ -87,10 +87,10 @@ _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT = 5
 _OUTPAINT_LORA_NAME = "in-outpainting"
 _OUTPAINT_LORA_STRENGTH = 1.0
 
-# 撮り直し（Retake）の補助引数の既定値。正本は ``api/models.py`` の
-# ``RetakeSpec``（head_px=25 / tail_px=24 / regenerate_audio=True）。
-_RETAKE_HEAD_PX_DEFAULT = 25
-_RETAKE_TAIL_PX_DEFAULT = 24
+# 撮り直し（Retake）の補助引数の既定値。head_px / tail_px / audio_strength は
+# 既定を持たず（None＝送らない）、系統ごとの既定（LTX 25/24・H3 22）はサーバーが
+# 決める。regenerate_audio だけ ``RetakeSpec`` と同じ True を毎回送る
+# （H3 は true を断らない）。
 _RETAKE_REGENERATE_AUDIO_DEFAULT = True
 
 
@@ -711,9 +711,10 @@ async def submit_chain(
     end_source_strength: float = 1.0,
     retake_video_id: str | None = None,
     retake_window_start_sec: float | None = None,
-    retake_head_px: int = _RETAKE_HEAD_PX_DEFAULT,
-    retake_tail_px: int = _RETAKE_TAIL_PX_DEFAULT,
+    retake_head_px: int | None = None,
+    retake_tail_px: int | None = None,
     retake_regenerate_audio: bool = _RETAKE_REGENERATE_AUDIO_DEFAULT,
+    retake_audio_strength: float | None = None,
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT,
     stage2_window: Literal[
         "standard", "high_resolution", "full_length",
@@ -880,7 +881,9 @@ async def submit_chain(
         第2の引数は意図的に存在しません（食い違いを作らないため）。
         受理される範囲は **[73, 上限] フレーム**で、上限は ``stage2_window``
         で変わります（上の「Stage-2 の窓」の節を参照）。``get_config`` の
-        ``limits.retake_window_max_frames`` は既定窓（standard）の値です。
+        ``limits.retake_window_max_frames`` は LTX の既定窓（standard）の値です。
+        H3 の窓は ``limits.retake_window_min_frames``（73）から
+        ``list_models`` の ``constraints.num_frames.max``（481）までです。
         ``clips`` はちょうど1件にしてください。
       * ``retake_window_start_sec`` は**必須**です（0以上の秒数）。
         ``retake_video_id`` を指定して ``retake_window_start_sec`` を省略すると、
@@ -890,18 +893,31 @@ async def submit_chain(
         ``frame_count`` と ``fps`` が実測されて返ります（``max_frames`` は
         「先頭Nフレームだけ残す」引数でもあるので、測るだけのときは元の尺より
         確実に大きい値を渡してください）。
-      * ``retake_head_px``（既定25）と ``retake_tail_px``（既定24）は、窓の
-        前後で凍結したまま残す「糊しろ」のフレーム数です。**``retake_head_px``
-        は 8n+1、``retake_tail_px`` は 8の倍数でなければなりません**——映像VAEが
-        因果的で、窓の両端が別の潜在グリッドに乗るためです。
-        **既定の25/24は較正済みの推奨値であり、広くすれば良いというものでは
-        ありません**（49/48は音声の継ぎ目をむしろ弱めることが実測されています）。
+      * ``retake_head_px`` と ``retake_tail_px`` は、窓の前後で凍結したまま
+        残す「糊しろ」のフレーム数です。**指定しなければ送らず、サーバーが
+        系統ごとの既定を使います**（LTX は 25/24、H3 は 22）。
+      * 系統ごとの違い:
+        - **LTX（2.3 / 2.5）**: 窓長は **8n+1**・[73, 上限]（上限は
+          ``stage2_window`` で変わる）。糊しろは ``retake_head_px`` が 8n+1、
+          ``retake_tail_px`` が 8の倍数（既定25/24）——映像VAEが因果的で、窓の
+          両端が別の潜在グリッドに乗るためです。**既定の25/24は較正済みの
+          推奨値であり、広くすれば良いというものではありません**（49/48は
+          音声の継ぎ目をむしろ弱めることが実測されています）。
+          ``retake_audio_strength`` を指定すると422です。
+        - **MiniMax H3**: 窓長は **17n+5**・[73, 481]（``list_models`` の
+          ``constraints.num_frames.max`` が481）。糊しろは **22固定**で、
+          ``retake_head_px`` / ``retake_tail_px`` は指定しません（22以外を
+          指定すると422）。音声は ``retake_audio_strength``（0〜1、既定0）で
+          決まります——0で窓の真ん中の音声を作り直し、1.0で元の波形を
+          そのまま使い戻します（頭と尾の糊しろは常に元の音声で固定）。
+          ``retake_regenerate_audio=False`` はH3では422です（代わりに
+          ``retake_audio_strength=1.0``）。
       * 納品されるmp4は**窓まるごと**で、糊しろはトリムされていません。この
         糊しろが、タイムライン上で元動画へ重ね直すための「のりしろ」であり、
         品質の継ぎ目を編集点ではなく窓の外側の縁へ追い出す仕組みです。
       * ``retake_regenerate_audio`` を False にすると、窓の**元の波形**を
-        そのまま使い戻します（ボコーダをスキップします）。この場合、元動画に
-        音声トラックが実際に無いと422で拒否されます。
+        そのまま使い戻します（ボコーダをスキップします。LTX のみ。H3では422）。
+        この場合、元動画に音声トラックが実際に無いと422で拒否されます。
       * ``source_video_id`` / ``source_audio_id`` / ``reference_video_id`` /
         ``end_source_video_id`` / ``end_source_image_id`` /
         ``clips[0].conditioning_images`` とは**すべて排他**です（いずれも1本の
@@ -1010,13 +1026,22 @@ async def submit_chain(
             を指定するなら必須**です（省略するとPOST前にエラーになります）。
             ``upload_video(max_frames=...)`` が返す ``frame_count`` / ``fps``
             から算出してください。
-        retake_head_px: 窓の先頭で凍結したまま残す糊しろのフレーム数
-            （**8n+1**、既定25）。
-        retake_tail_px: 窓の末尾で凍結したまま残す糊しろのフレーム数
-            （**8の倍数**、既定24）。**既定の25/24は較正済みの推奨値で、
-            広げれば良いというものではありません。**
+        retake_head_px: 窓の先頭で凍結したまま残す糊しろのフレーム数。
+            既定はNone（送らない。サーバーが LTX 25 / H3 22 を使う）。
+            LTX では**8n+1**。**H3 は22固定で指定しない**（22以外は422）。
+            **既定の25/24は較正済みの推奨値で、広げれば良いというものでは
+            ありません。**
+        retake_tail_px: 窓の末尾で凍結したまま残す糊しろのフレーム数。
+            既定はNone（送らない。LTX 24 / H3 22）。LTX では**8の倍数**。
+            H3 は22固定で指定しない（22以外は422）。
         retake_regenerate_audio: 窓の音声を作り直すか（既定True）。Falseにすると
-            元の波形をそのまま使い戻します（元動画に音声トラックが無いと422）。
+            元の波形をそのまま使い戻します（LTX のみ。元動画に音声トラックが
+            無いと422。H3 ではFalseが422——代わりに
+            ``retake_audio_strength=1.0``）。
+        retake_audio_strength: **H3 専用**。窓の真ん中の音声の強さ（0〜1）。
+            0で作り直し、1.0で元の波形をそのまま戻します。既定はNone（送らず、
+            サーバーの既定0）。範囲の検査はサーバーが行います。LTX で指定
+            すると422です。
         embed_mp4_metadata: submit_generate と同じ意味（**既定True**。完成した
             連結動画の ``output.mp4`` に生成条件を書き込みます。既定のままなら
             送信しません）。
@@ -1038,13 +1063,15 @@ async def submit_chain(
         )
     if not retake_video_id and (
         retake_window_start_sec is not None
-        or retake_head_px != _RETAKE_HEAD_PX_DEFAULT
-        or retake_tail_px != _RETAKE_TAIL_PX_DEFAULT
+        or retake_head_px is not None
+        or retake_tail_px is not None
         or retake_regenerate_audio != _RETAKE_REGENERATE_AUDIO_DEFAULT
+        or retake_audio_strength is not None
     ):
         raise ToolError(
             "RETAKE_ARGS_WITHOUT_VIDEO_ID: retake_window_start_sec / "
-            "retake_head_px / retake_tail_px / retake_regenerate_audio を指定する"
+            "retake_head_px / retake_tail_px / retake_regenerate_audio / "
+            "retake_audio_strength を指定する"
             "には retake_video_id も指定してください（撮り直しでなければ"
             "これらの指定は無視されます）"
         )
@@ -1140,19 +1167,23 @@ async def submit_chain(
         }
     # 撮り直し（設計判断は ``Docs/MCP_SERVER_DESIGN.md`` §2 の D19）。
     # end_source と同型に「使うときだけネストを丸ごと足す」。
-    # 5キーは既定値のままでも全部入れる -- RetakeSpec 側の既定と同じ値なので
-    # 送信しても意味は変わらず、ネストの形が呼び出しごとに揺れないほうが
-    # metadata の突き合わせが読みやすいため（end_source と同じ作法）。
+    # video_id / window_start_sec / regenerate_audio の3キーは常に入れる。
+    # head_px / tail_px / audio_strength は None のとき載せない（系統ごとの
+    # 既定はサーバーが決める。LTX の25/24をここで送るとH3では22以外で422）。
     # ``window_start_sec`` が None のまま来ることは無い（上のPOST前チェックで
     # 弾いている）。
     if retake_video_id:
         payload["retake"] = {
             "video_id": retake_video_id,
             "window_start_sec": retake_window_start_sec,
-            "head_px": retake_head_px,
-            "tail_px": retake_tail_px,
             "regenerate_audio": retake_regenerate_audio,
         }
+        if retake_head_px is not None:
+            payload["retake"]["head_px"] = retake_head_px
+        if retake_tail_px is not None:
+            payload["retake"]["tail_px"] = retake_tail_px
+        if retake_audio_strength is not None:
+            payload["retake"]["audio_strength"] = retake_audio_strength
 
     if loras:
         payload["loras"] = [lora.model_dump(exclude_none=True) for lora in loras]

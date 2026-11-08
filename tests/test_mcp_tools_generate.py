@@ -1516,14 +1516,15 @@ def test_submit_chain_retake_body_exact():
     )
 
     body = captured["body"]
-    # Defaults for head/tail/regenerate_audio are still spelled out on the wire.
+    # head_px / tail_px / audio_strength are omitted unless given (the server
+    # picks per-family defaults: LTX 25/24, H3 22).
     assert body["retake"] == {
         "video_id": "v-1",
         "window_start_sec": 2.5,
-        "head_px": 25,
-        "tail_px": 24,
         "regenerate_audio": True,
     }
+    for key in ("head_px", "tail_px", "audio_strength"):
+        assert key not in body["retake"]
     # The window length has exactly one source: clips[0].num_frames.
     assert body["clips"] == [{"num_frames": 121}]
 
@@ -1550,6 +1551,7 @@ def test_submit_chain_retake_non_default_glue_and_audio_in_body():
             retake_head_px=33,  # 8n+1
             retake_tail_px=32,  # multiple of 8
             retake_regenerate_audio=False,
+            retake_audio_strength=0.5,
         )
     )
 
@@ -1559,6 +1561,7 @@ def test_submit_chain_retake_non_default_glue_and_audio_in_body():
         "head_px": 33,
         "tail_px": 32,
         "regenerate_audio": False,
+        "audio_strength": 0.5,
     }
 
 
@@ -1592,6 +1595,7 @@ def test_submit_chain_retake_without_window_start_raises_before_any_http_call():
         {"retake_head_px": 33},
         {"retake_tail_px": 32},
         {"retake_regenerate_audio": False},
+        {"retake_audio_strength": 0.5},
     ],
 )
 def test_submit_chain_retake_helper_args_without_video_id_raise_before_any_http_call(kwargs):
@@ -1627,10 +1631,14 @@ def test_submit_chain_input_schema_exposes_retake_arguments():
         "retake_head_px",
         "retake_tail_px",
         "retake_regenerate_audio",
+        "retake_audio_strength",
     ):
         assert name in props, f"{name} missing from submit_chain schema"
-    assert props["retake_head_px"]["default"] == 25
-    assert props["retake_tail_px"]["default"] == 24
+    # Optional with an explicit null default (None = the family's own value),
+    # not merely a missing default.
+    for name in ("retake_head_px", "retake_tail_px", "retake_audio_strength"):
+        assert "default" in props[name] and props[name]["default"] is None, name
+        assert name not in tool.inputSchema.get("required", []), name
     assert props["retake_regenerate_audio"]["default"] is True
     # No usable default for the window start (owner ruling): the schema must not
     # advertise a 0.0 an agent would read as "fine to omit".

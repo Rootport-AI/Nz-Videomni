@@ -83,7 +83,7 @@ import {
   singleSectionsDisabledFor,
   singleSectionsHiddenFor,
 } from "./featureScope";
-import type { ChainPanelsDisabled } from "./featureScope";
+import type { ChainPanelsDisabled, EditSubTabsDisabled } from "./featureScope";
 import { frameLimitsFor } from "./generationConstraints";
 import { snapNumFrames } from "../modes/single/paramUtils";
 import { effectiveNag } from "./nagSettings";
@@ -130,6 +130,22 @@ const CHAIN_INTENT_PANELS: Readonly<
   "reference-video-chain": { panel: "reference", note: "referenceVideo" },
   "end-with-this": { panel: "endSource", note: "endSource" },
   "audio-to-long-a2v": { panel: "a2v", note: "sourceAudio" },
+};
+
+/** §1-123: the Edit right-click entries, each with the ONE sub-tab it lands
+ * on. `handleRoute` refuses an entry whose sub-tab the loaded base model has
+ * closed with that sub-tab's line (`strings.edit.unavailableOnBaseModel`) and
+ * nothing else — the same shape as {@link CHAIN_INTENT_PANELS}, because the
+ * Edit TAB stays live while some of its sub-tabs are grey (MiniMax H3: only
+ * Retake is live; LTX 2.3: Alpha Gen is grey), so Step 0 alone would let the
+ * entry through to a form that would only 422. Keyed by sub-tab, never by
+ * engine. */
+const EDIT_INTENT_SUB_TABS: Readonly<Record<string, keyof EditSubTabsDisabled>> = {
+  outpaint: "outpainting",
+  retake: "retake",
+  "inpaint-mask": "inpainting",
+  "inpaint-target": "inpainting",
+  "alpha-gen": "alphaGen",
 };
 
 /** W3 (⬇ "insert the latest generation result here"): pick the most recently
@@ -722,16 +738,17 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       return;
     }
 
-    // ── Alpha Gen 第 2 弾: Step 0 refuses a route whose whole MODE is grey; the
-    // Alpha Gen sub-tab can be grey while Edit itself stays live (LTX 2.3), so
-    // its right-click is refused here in the same §4 shape — a note and nothing
-    // else. Computed in place rather than read from `editSubTabs` below: that
+    // ── Step 0 for Edit's sub-tabs (Alpha Gen 第 2 弾, generalised in §1-123):
+    // Step 0 refuses a route whose whole MODE is grey; a sub-tab can be grey
+    // while Edit itself stays live (LTX 2.3: Alpha Gen; MiniMax H3: everything
+    // but Retake), so its right-click is refused here in the same §4 shape — a
+    // note and nothing else (see `EDIT_INTENT_SUB_TABS`). Placed after the
+    // selection guard and ahead of the Inpainting/Outpainting/Retake handling
+    // below. Computed in place rather than read from `editSubTabs` below: that
     // const is declared after this callback is created.
-    if (
-      action === "alphaGenVideo" &&
-      editSubTabsDisabledFor(baseModels.unsupportedFeatures).alphaGen
-    ) {
-      showNote("warning", strings.edit.unavailableOnBaseModel.alphaGen);
+    const editSubTab = target === "edit" ? EDIT_INTENT_SUB_TABS[intent] : undefined;
+    if (editSubTab && editSubTabsDisabledFor(baseModels.unsupportedFeatures)[editSubTab]) {
+      showNote("warning", strings.edit.unavailableOnBaseModel[editSubTab]);
       return;
     }
 
@@ -1932,6 +1949,13 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               sageAvailable={sageAvail}
               engineLabel={activeEngineLabel}
               loraRefreshKey={baseModels.active}
+              /* §1-123: the Retake form follows the loaded base model's rules
+                 (window grid, size multiple, fixed fps, sampling, and the H3
+                 shape via `constraints.retake`) and drops the LoRA audio
+                 strength where the engine has none — the same two inputs
+                 Chained takes. */
+              constraints={baseModels.activeConstraints}
+              loraAudioHidden={loraAudioHidden}
             />
           </div>
           <div role="tabpanel" hidden={mode !== "inventory"}>

@@ -36,10 +36,24 @@ convention). The layout then also carries the LTX chain's V2V fields
 (``source_context_px`` ... ``new_frames_px``), and only then ``to_dict()``
 appends them as ``"v2v"``. With a source a chain may have a single clip, and
 clip 0 needs one new latent frame past its head (39 frames, as a later clip).
+
+Retake (``retake=True``, 台帳 §1-123): the one clip IS a window cut out of an
+input video, and only its middle is redrawn. The window's first and last 22
+frames (``k`` = 7 video latents each, indices ``[0, 7)`` and ``[T' - 7, T')``)
+are fixed rows; the free middle is ``T' - 14`` latents, so the window needs
+``F >= 73``. The audio's fixed head is ``h_a = floor(22 * 5/3)`` (36) latents,
+its fixed tail starts at ``ts_a = ceil((F - 22) * 5/3)`` and ends (exclusive)
+where the encoder's output does, ``min(A, samples // 800)`` (a latent holding
+the right zero padding stays free); the layout carries the nominal end from
+``round(F * 4000/3)`` samples, the engine uses what it actually reads. The
+window has no seam: the rest is a one-clip chain (``total_px`` = F). The layout
+then also carries the LTX chain's retake fields (``window_px`` ...
+``free_middle_px``), and only then ``to_dict()`` appends them as ``"retake"``.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from fractions import Fraction
 
@@ -81,6 +95,13 @@ H3_CHAIN_OVERLAP_LATENTS = _latent_frames(H3_CHAIN_OVERLAP_FRAMES)
 H3_CHAIN_MIN_NEXT_FRAMES = H3_CHAIN_OVERLAP_FRAMES + _FRAMES_STEP
 #: The clip count a chain with an input video accepts (one clip continues it).
 H3_CHAIN_MIN_CLIPS_WITH_SOURCE = 1
+#: The shortest retake window: 17 * 4 + 5, the least 17n+5 count that leaves a
+#: free middle of 8 video latents past the fixed head (7) and tail (7). The
+#: LTX retake's minimum is also 73, from its own grid (a different reason).
+H3_RETAKE_MIN_FRAMES = 73
+#: Audio samples per audio latent at 32 kHz (40 latents per second), and per frame (32000 / 24).
+H3_AUDIO_SAMPLES_PER_LATENT = 800
+H3_AUDIO_SAMPLES_PER_FRAME = Fraction(4000, 3)
 
 
 @dataclass(frozen=True)
@@ -118,6 +139,18 @@ class H3ChainLayout:
     trim_px: int = 0                          # frames trimmed off the front of the mp4
     v2v_context_junction_px: int | None = None   # last context frame (the boundary is it / +1)
     new_frames_px: int = 0                    # frames delivered (after the trim)
+    # Retake (the window's head and tail are fixed, the middle is redrawn), the
+    # LTX chain layout's retake keys with the same meaning; None / 0 without it.
+    retake_window_px: int | None = None       # the window, F (the whole one clip)
+    retake_head_px: int = 0                   # the fixed head frames (22)
+    retake_tail_px: int = 0                   # the fixed tail frames (22)
+    retake_n_head_v: int = 0                  # their video latents: [0, 7)
+    retake_n_tail_v: int = 0                  # ... and [T' - 7, T')
+    retake_n_head_a: int = 0                  # the audio head, floor(22 * 5/3) (36)
+    retake_n_tail_a: int = 0                  # the audio tail, nominal: max(0, te_a - ts_a),
+    #                                           te_a = min(A, round(F * 4000/3) // 800), exclusive
+    # Not in to_dict(): the audio tail's first latent for the engine and the mock.
+    retake_audio_tail_start: int = 0          # ts_a = ceil((F - 22) * 5/3)
 
     @property
     def n_clips(self) -> int:
@@ -159,13 +192,27 @@ class H3ChainLayout:
                 "v2v_context_junction_px": self.v2v_context_junction_px,
                 "new_frames_px": self.new_frames_px,
             }
+        if self.retake_window_px is not None:
+            # Only for a retake: a plain chain's dict is unchanged.
+            out["retake"] = {
+                "window_px": self.retake_window_px,
+                "head_px": self.retake_head_px,
+                "tail_px": self.retake_tail_px,
+                "n_head_v": self.retake_n_head_v,
+                "n_tail_v": self.retake_n_tail_v,
+                "n_head_a": self.retake_n_head_a,
+                "n_tail_a": self.retake_n_tail_a,
+                # The PIXEL-domain span that is redrawn, [head_px, window_px - tail_px)
+                # (the LTX chain's 2-list).
+                "free_middle_px": [self.retake_head_px, self.retake_window_px - self.retake_tail_px],
+            }
         return out
 
 
-def _check_clip_frames(clip_frames, source_video: bool = False) -> list[int]:
+def _check_clip_frames(clip_frames, source_video: bool = False, retake: bool = False) -> list[int]:
     frames = list(clip_frames)
     n = len(frames)
-    least_clips = H3_CHAIN_MIN_CLIPS_WITH_SOURCE if source_video else H3_CHAIN_MIN_CLIPS
+    least_clips = H3_CHAIN_MIN_CLIPS_WITH_SOURCE if (source_video or retake) else H3_CHAIN_MIN_CLIPS
     if not least_clips <= n <= H3_CHAIN_MAX_CLIPS:
         raise ValueError(f"chain needs {least_clips}..{H3_CHAIN_MAX_CLIPS} clips (got {n})")
     out: list[int] = []
@@ -201,7 +248,9 @@ def _spread(junctions: list[int], total: int) -> list[int]:
     return sorted(x for x in out if 0 <= x < total - 1)
 
 
-def compute_h3_chain_layout(clip_frames, *, source_video: bool = False) -> H3ChainLayout:
+def compute_h3_chain_layout(
+    clip_frames, *, source_video: bool = False, retake: bool = False
+) -> H3ChainLayout:
     """The chain's geometry for ``clip_frames`` (one 17n+5 count per clip, 2..24 clips).
 
     Raises ValueError (English, the 422 message; a clip's is prefixed with
@@ -213,8 +262,23 @@ def compute_h3_chain_layout(clip_frames, *, source_video: bool = False) -> H3Cha
     ``source_video``: an input video's 22-frame tail is clip 0's fixed head
     (module docstring): 1..24 clips, ``clips[0]`` at least 39 frames, and the
     V2V fields are filled. Everything else is the same as without it.
+
+    ``retake``: the one clip is a window of an input video whose head and tail
+    are fixed (module docstring): exactly one clip of at least 73 frames, not
+    together with ``source_video``, and the retake fields are filled.
+    Everything else is the same as a one-clip chain.
     """
-    frames = _check_clip_frames(clip_frames, source_video)
+    if retake and source_video:
+        raise ValueError("retake cannot be combined with an input video (source_video)")
+    frames = _check_clip_frames(clip_frames, source_video, retake)
+    if retake:
+        if len(frames) != 1:
+            raise ValueError(f"retake needs exactly 1 clip (got {len(frames)})")
+        if frames[0] < H3_RETAKE_MIN_FRAMES:
+            raise ValueError(
+                f"clips[0]: retake window ({frames[0]}) must be at least {H3_RETAKE_MIN_FRAMES} frames "
+                f"(head {H3_CHAIN_OVERLAP_FRAMES} + tail {H3_CHAIN_OVERLAP_FRAMES} + a free middle)"
+            )
     overlap, k = H3_CHAIN_OVERLAP_FRAMES, H3_CHAIN_OVERLAP_LATENTS
     total = sum(frames) - overlap * (len(frames) - 1)
     if total > H3_CHAIN_MAX_TOTAL_FRAMES:
@@ -257,6 +321,22 @@ def compute_h3_chain_layout(clip_frames, *, source_video: bool = False) -> H3Cha
             "v2v_context_junction_px": overlap - 1,
             "new_frames_px": total - overlap,
         }
+    rt: dict = {}
+    if retake:
+        window = frames[0]
+        tail_start = math.ceil(Fraction(window - overlap) * _AUDIO_PER_FRAME)
+        samples = round(window * H3_AUDIO_SAMPLES_PER_FRAME)   # a third never ties
+        tail_end = min(a_lat[0], samples // H3_AUDIO_SAMPLES_PER_LATENT)
+        rt = {
+            "retake_window_px": window,
+            "retake_head_px": overlap,
+            "retake_tail_px": overlap,
+            "retake_n_head_v": k,
+            "retake_n_tail_v": k,
+            "retake_n_head_a": math.floor(Fraction(overlap) * _AUDIO_PER_FRAME),
+            "retake_n_tail_a": max(0, tail_end - tail_start),
+            "retake_audio_tail_start": tail_start,
+        }
     return H3ChainLayout(
         clip_frames=frames,
         clip_latent_frames=t_lat,
@@ -275,4 +355,5 @@ def compute_h3_chain_layout(clip_frames, *, source_video: bool = False) -> H3Cha
         segment_seam_junctions=junctions,
         all_junctions=_spread(junctions, total),
         **v2v,
+        **rt,
     )

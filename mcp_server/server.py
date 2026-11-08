@@ -56,7 +56,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   （source_video_id）は H3 では引き継ぐフレーム数が 22 固定なので、
   source_video_context_frames=22 を指定してください（既定の 73 のままでは
   422 VALIDATION_ERROR。入力動画があればクリップ 0 は 39 フレーム以上で、
-  1 本でも可）。連結の A2V・素材（末尾）・撮り直し、reference_video_id・
+  1 本でも可）。撮り直し（Retake）は H3 でも使えます（下の「撮り直し」の節）。
+  連結の A2V・素材（末尾）、reference_video_id・
   nag_enabled なども 422 FEATURE_UNSUPPORTED になります（使えない機能は
   unsupported_features を見てください）。H3 でも submit_generate の loras（スタイル LoRA・
   Turbo LoRA。名前は H3 を選んでいるときの list_loras で確認）は使えます。
@@ -96,10 +97,10 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   vae_mode（既定値以外）だけです（keep_resident・attention_backend・
   nag_enabled は submit_chain でも使えます）。keep_resident_embeddings は
   submit_chain でも LTX 2.5 専用で、LTX 2.3 では 422 になります。
-  撮り直し（Retake）は submit_chain の引数（retake_* の 5 引数）、画角拡張
+  撮り直し（Retake）は submit_chain の引数（retake_* の 6 引数）、画角拡張
   （Outpainting）は submit_generate の引数（outpaint_* の 6 引数）で、
-  どちらも LTX 2.3 / LTX 2.5 のどちらでも使えます。下の専用の節を
-  読んでください。
+  どちらも LTX 2.3 / LTX 2.5 で使えます（撮り直しは H3 でも使えます）。
+  下の専用の節を読んでください。
   ほかに知っておくとよい引数とツール（詳細は各ツールの説明）:
   submit_chain の stage2_window は Stage-2 の窓の名前です
   （chain_math.STAGE2_WINDOW_PRESETS の名前から選ぶ。既定は standard）。
@@ -160,16 +161,19 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   **なおこの組み合わせは実験的な機能で、最後のクリップを長くすると映像がほぼ
   静止する時間が出ることがあります。**
 
-■ 撮り直し（Retake）— submit_chain の retake_* の 5 引数
+■ 撮り直し（Retake）— submit_chain の retake_* の 6 引数
   既に手元にある動画の「まん中」だけを作り直す機能です（時間方向の
   inpainting）。retake_video_id（upload_video で取得）と
   retake_window_start_sec（作り直す窓の開始秒）を指定すると、サーバーが
   その窓だけを切り出して作り直し、窓まるごとを返します。
   **窓の長さを決めるのは clips[0].num_frames ただ1つで、長さを表す第2の
-  引数は存在しません。** clips はちょうど1件・窓長は [73, 上限] フレーム
-  です。上限は stage2_window で変わります（8×潜在フレーム数−7。standard で
-  169、high_resolution で 145、w61 で 481）。get_config の
-  limits.retake_window_max_frames は既定窓（standard）の値です。
+  引数は存在しません。** clips はちょうど1件です。窓長は系統ごとに違います。
+  LTX は 8n+1 で [73, 上限] フレーム（上限は stage2_window で変わる。
+  8×潜在フレーム数−7。standard で 169、high_resolution で 145、w61 で 481）。
+  H3 は 17n+5 で [73, 481] フレームです。get_config の
+  limits.retake_window_max_frames は LTX の既定窓（standard）の値で、H3 の窓は
+  limits.retake_window_min_frames（73）から list_models の
+  constraints.num_frames.max（481）までです。
   **retake_window_start_sec には既定値がありません**——retake_video_id を
   指定して省略すると、submit_chain がPOST前にエラーにします。
   **窓の開始秒を決める下調べには upload_video(file_path, max_frames=...)
@@ -177,8 +181,18 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   frame_count と fps が実測されて返ります（max_frames は「先頭Nフレームだけ
   残す」引数でもあるので、測るだけのときは元の尺より確実に大きい値を
   渡してください）。
-  糊しろの retake_head_px（8n+1・既定25）と retake_tail_px（8の倍数・
-  既定24）は較正済みの推奨値で、**広げれば良いというものではありません**。
+  糊しろ（頭と尾で凍結する区間）は系統ごとに違います。LTX は retake_head_px
+  （8n+1・既定25）と retake_tail_px（8の倍数・既定24）で、較正済みの推奨値
+  なので**広げれば良いというものではありません**。H3 は 22 固定で、
+  retake_head_px / retake_tail_px を指定しません（22 以外は 422）。どちらも
+  指定しなければ送らず、サーバーが系統ごとの既定を使います。
+  音声: H3 は retake_audio_strength（0〜1、既定 0.5）で決まります。0 で真ん中の
+  音声を作り直し、1.0 で元の波形をそのまま戻します。LTX で指定すると 422 です。
+  音声トラックの無い動画を撮り直すときは retake_audio_strength=0 を明示します
+  （省略すると既定 0.5 が書き戻され、元の音声が無いので 422
+  RETAKE_VIDEO_NO_AUDIO）。
+  retake_regenerate_audio=False は LTX 用で、H3 では 422 です（代わりに
+  retake_audio_strength=1.0）。
   source_video_id / source_audio_id / reference_video_id / end_source_* /
   clips[0].conditioning_images とはすべて排他です。
 

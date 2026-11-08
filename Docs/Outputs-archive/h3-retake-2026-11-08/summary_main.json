@@ -1,0 +1,3585 @@
+{
+  "script": "h3_retake_gate.py",
+  "started_at": "2026-11-08T13:33:21+09:00",
+  "args": {
+    "material": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-ref-calibration\\H3-Ref-1080p-15s.mp4",
+    "start_sec": 4.0,
+    "frames": 124,
+    "width": 1280,
+    "height": 736,
+    "seed": 1234,
+    "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+    "strengths": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "base_url": "http://127.0.0.1:18620",
+    "transformer": "default",
+    "attention": "sdpa",
+    "out_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08",
+    "label": null,
+    "skip_load": false,
+    "dry_run": false,
+    "load_timeout_sec": 900.0,
+    "job_timeout_sec": 3600.0,
+    "repo": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni",
+    "mcp_python": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe"
+  },
+  "material": {
+    "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-ref-calibration\\H3-Ref-1080p-15s.mp4",
+    "probe": {
+      "ok": true,
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-ref-calibration\\H3-Ref-1080p-15s.mp4",
+      "format_duration": 15.0,
+      "video": {
+        "codec": "h264",
+        "width": 1920,
+        "height": 1080,
+        "fps": 24.0,
+        "nb_frames": 360,
+        "nb_read_frames": null,
+        "duration": 15.0
+      },
+      "audio": {
+        "codec": "aac",
+        "sample_rate": 44100,
+        "channels": 2,
+        "duration": 14.976871
+      }
+    }
+  },
+  "geometry": {
+    "start_sec": 4.0,
+    "start_frame": 96,
+    "frames": 124,
+    "width": 1280,
+    "height": 736,
+    "size_source": "引数",
+    "seed": 1234,
+    "attention": "sdpa",
+    "fps": 24.0,
+    "glue_frames": 22,
+    "upload_seconds": 15.0,
+    "window_end_sec": 9.166666666666668
+  },
+  "warnings": [],
+  "conditions": [
+    {
+      "label": "s0",
+      "strength": 0.0,
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0",
+      "started_at": "2026-11-08T13:33:26+09:00",
+      "tool_args": {
+        "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "clips": [
+          {
+            "num_frames": 124
+          }
+        ],
+        "width": 1280,
+        "height": 736,
+        "frame_rate": 24.0,
+        "seed": 1234,
+        "attention_backend": "sdpa",
+        "retake_video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+        "retake_window_start_sec": 4.0,
+        "retake_audio_strength": 0.0
+      },
+      "status": "completed",
+      "error": null,
+      "submit_response": {
+        "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+        "status": "running",
+        "created_at": "2026-11-08T04:33:28Z",
+        "num_clips": 1,
+        "next": "wait_for_job(job_id) を呼ぶ"
+      },
+      "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+      "wait": {
+        "calls": 15,
+        "seconds": 955.4,
+        "samples": [
+          {
+            "t": 30.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+          },
+          {
+            "t": 80.0,
+            "status": "running",
+            "progress": 0.05,
+            "stage": "encode",
+            "current_step": null
+          },
+          {
+            "t": 125.0,
+            "status": "running",
+            "progress": 0.05,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 150.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 200.1,
+            "status": "running",
+            "progress": 0.135,
+            "stage": "stage1_denoise",
+            "current_step": 2
+          },
+          {
+            "t": 245.1,
+            "status": "running",
+            "progress": 0.177,
+            "stage": "stage1_denoise",
+            "current_step": 3
+          },
+          {
+            "t": 260.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 270.2,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+          },
+          {
+            "t": 305.2,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+          },
+          {
+            "t": 325.2,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+          },
+          {
+            "t": 375.2,
+            "status": "running",
+            "progress": 0.305,
+            "stage": "stage1_denoise",
+            "current_step": 6
+          },
+          {
+            "t": 420.2,
+            "status": "running",
+            "progress": 0.347,
+            "stage": "stage1_denoise",
+            "current_step": 7
+          },
+          {
+            "t": 440.2,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 490.3,
+            "status": "running",
+            "progress": 0.432,
+            "stage": "stage1_denoise",
+            "current_step": 9
+          },
+          {
+            "t": 535.3,
+            "status": "running",
+            "progress": 0.475,
+            "stage": "stage1_denoise",
+            "current_step": 10
+          },
+          {
+            "t": 585.3,
+            "status": "running",
+            "progress": 0.518,
+            "stage": "stage1_denoise",
+            "current_step": 11
+          },
+          {
+            "t": 630.3,
+            "status": "running",
+            "progress": 0.56,
+            "stage": "stage1_denoise",
+            "current_step": 12
+          },
+          {
+            "t": 680.3,
+            "status": "running",
+            "progress": 0.645,
+            "stage": "stage1_denoise",
+            "current_step": 14
+          },
+          {
+            "t": 725.3,
+            "status": "running",
+            "progress": 0.688,
+            "stage": "stage1_denoise",
+            "current_step": 15
+          },
+          {
+            "t": 770.3,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 800.3,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 850.4,
+            "status": "running",
+            "progress": 0.815,
+            "stage": "stage1_denoise",
+            "current_step": 18
+          },
+          {
+            "t": 865.4,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 880.4,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 930.4,
+            "status": "running",
+            "progress": 0.93,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 955.4,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": 1,
+        "clip_count": 1,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-08T04:33:28Z",
+        "started_at": "2026-11-08T04:33:28Z",
+        "completed_at": "2026-11-08T04:49:22Z",
+        "error": null,
+        "request": {
+          "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1280,
+          "height": 736,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 1234,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/503cb4d0-78f6-4677-a31f-47912515356c/video",
+          "duration_seconds": 5.167,
+          "resolution": "1280x736",
+          "file_size_bytes": 2685070,
+          "generation_time_seconds": 953.96,
+          "seed_used": 1234,
+          "output_path": "outputs/503cb4d0-78f6-4677-a31f-47912515356c/output.mp4",
+          "metadata_path": "outputs/503cb4d0-78f6-4677-a31f-47912515356c/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 25.01600000000326
+      },
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0\\503cb4d0-78f6-4677-a31f-47912515356c.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\503cb4d0-78f6-4677-a31f-47912515356c\\output.mp4",
+        "size_bytes": 2696294,
+        "clobbered": false
+      },
+      "job_video_path": {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\503cb4d0-78f6-4677-a31f-47912515356c\\output.mp4",
+        "exists": true,
+        "size_bytes": 2696294,
+        "status": "completed"
+      },
+      "metadata_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\503cb4d0-78f6-4677-a31f-47912515356c\\metadata.json",
+      "metadata_summary": {
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "vram16_mode_used": "on",
+        "generation_time_seconds": 953.96,
+        "seed": null,
+        "models": {
+          "base_model": "MiniMaxH3",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "minimax_h3_video_vae_fp16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "minimax_h3_audio_vae_fp32.safetensors"
+            }
+          }
+        }
+      },
+      "metadata_retake": {
+        "window_px": 124,
+        "head_px": 22,
+        "tail_px": 22,
+        "n_head_v": 7,
+        "n_tail_v": 7,
+        "n_head_a": 36,
+        "n_tail_a": 36,
+        "free_middle_px": [
+          22,
+          102
+        ],
+        "audio_strength": 0.0,
+        "source_had_audio": true,
+        "audio_frozen": true,
+        "muxed_original_waveform": false,
+        "decoded_frames_px": 124,
+        "retake_video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+        "source_fps": 24.0,
+        "resampled": false,
+        "window_start_sec": 4.0,
+        "window_start_frame": 96,
+        "written_frames": 124,
+        "upload_has_audio": true
+      },
+      "retake_picks": {
+        "audio_strength": 0.0,
+        "muxed_original_waveform": false,
+        "decoded_frames_px": 124,
+        "source_had_audio": true,
+        "audio_frozen": true,
+        "n_head_v": 7,
+        "n_tail_v": 7,
+        "n_head_a": 36,
+        "n_tail_a": 36,
+        "window_start_frame": 96,
+        "written_frames": 124,
+        "upload_has_audio": true,
+        "source_fps": 24.0,
+        "resampled": false
+      },
+      "output_probe": {
+        "ok": true,
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0\\503cb4d0-78f6-4677-a31f-47912515356c.mp4",
+        "format_duration": 5.167,
+        "video": {
+          "codec": "h264",
+          "width": 1280,
+          "height": 736,
+          "fps": 24.0,
+          "nb_frames": 124,
+          "nb_read_frames": 124,
+          "duration": 5.166667
+        },
+        "audio": {
+          "codec": "aac",
+          "sample_rate": 32000,
+          "channels": 2,
+          "duration": 5.167
+        }
+      },
+      "window_ref": {
+        "kind": "job_retake_window",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\503cb4d0-78f6-4677-a31f-47912515356c\\_retake_window.mp4"
+      },
+      "window_ref_probe": {
+        "ok": true,
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\503cb4d0-78f6-4677-a31f-47912515356c\\_retake_window.mp4",
+        "format_duration": 5.166667,
+        "video": {
+          "codec": "h264",
+          "width": 1920,
+          "height": 1080,
+          "fps": 24.0,
+          "nb_frames": 124,
+          "nb_read_frames": 124,
+          "duration": 5.166667
+        },
+        "audio": {
+          "codec": "pcm_s16le",
+          "sample_rate": 44100,
+          "channels": 2,
+          "duration": 5.166667
+        }
+      },
+      "psnr": {
+        "band_frames": 22,
+        "output_frames": 124,
+        "ref_frames": 124,
+        "head": {
+          "out_frames": [
+            0,
+            22
+          ],
+          "ref_frames": [
+            0,
+            22
+          ],
+          "ok": true,
+          "frames_compared": 22,
+          "per_frame_psnr_avg": [
+            33.02,
+            32.53,
+            32.57,
+            32.61,
+            32.78,
+            32.64,
+            32.62,
+            32.37,
+            32.75,
+            32.68,
+            32.7,
+            32.83,
+            32.94,
+            33.04,
+            32.86,
+            32.98,
+            32.84,
+            33.24,
+            32.78,
+            32.91,
+            32.74,
+            33.05
+          ],
+          "summary": {
+            "y": 31.157482,
+            "u": 43.171616,
+            "v": 43.624147,
+            "avg": 32.790488,
+            "min": 32.374503,
+            "max": 33.241098
+          },
+          "min_psnr_avg": 32.37,
+          "identical_frames": 0
+        },
+        "tail": {
+          "out_frames": [
+            102,
+            124
+          ],
+          "ref_frames": [
+            102,
+            124
+          ],
+          "ok": true,
+          "frames_compared": 22,
+          "per_frame_psnr_avg": [
+            32.97,
+            33.17,
+            33.04,
+            33.48,
+            33.32,
+            32.96,
+            32.85,
+            33.39,
+            33.23,
+            32.97,
+            33.05,
+            33.21,
+            33.18,
+            33.03,
+            32.94,
+            33.3,
+            33.32,
+            33.46,
+            32.53,
+            32.95,
+            33.39,
+            33.48
+          ],
+          "summary": {
+            "y": 31.518458,
+            "u": 43.084462,
+            "v": 43.644283,
+            "avg": 33.139397,
+            "min": 32.532595,
+            "max": 33.478369
+          },
+          "min_psnr_avg": 32.53,
+          "identical_frames": 0
+        }
+      },
+      "finished_at": "2026-11-08T13:49:25+09:00"
+    },
+    {
+      "label": "s0.5",
+      "strength": 0.5,
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0.5",
+      "started_at": "2026-11-08T13:49:25+09:00",
+      "tool_args": {
+        "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "clips": [
+          {
+            "num_frames": 124
+          }
+        ],
+        "width": 1280,
+        "height": 736,
+        "frame_rate": 24.0,
+        "seed": 1234,
+        "attention_backend": "sdpa",
+        "retake_video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+        "retake_window_start_sec": 4.0,
+        "retake_audio_strength": 0.5
+      },
+      "status": "completed",
+      "error": null,
+      "submit_response": {
+        "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+        "status": "running",
+        "created_at": "2026-11-08T04:49:27Z",
+        "num_clips": 1,
+        "next": "wait_for_job(job_id) を呼ぶ"
+      },
+      "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+      "wait": {
+        "calls": 16,
+        "seconds": 955.4,
+        "samples": [
+          {
+            "t": 45.0,
+            "status": "running",
+            "progress": 0.05,
+            "stage": "encode",
+            "current_step": null
+          },
+          {
+            "t": 130.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 160.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 215.1,
+            "status": "running",
+            "progress": 0.135,
+            "stage": "stage1_denoise",
+            "current_step": 2
+          },
+          {
+            "t": 260.1,
+            "status": "running",
+            "progress": 0.177,
+            "stage": "stage1_denoise",
+            "current_step": 3
+          },
+          {
+            "t": 265.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 280.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+          },
+          {
+            "t": 330.1,
+            "status": "running",
+            "progress": 0.263,
+            "stage": "stage1_denoise",
+            "current_step": 5
+          },
+          {
+            "t": 335.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+          },
+          {
+            "t": 360.2,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 375.2,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 425.2,
+            "status": "running",
+            "progress": 0.347,
+            "stage": "stage1_denoise",
+            "current_step": 7
+          },
+          {
+            "t": 435.2,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 485.2,
+            "status": "running",
+            "progress": 0.432,
+            "stage": "stage1_denoise",
+            "current_step": 9
+          },
+          {
+            "t": 515.2,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 565.2,
+            "status": "running",
+            "progress": 0.518,
+            "stage": "stage1_denoise",
+            "current_step": 11
+          },
+          {
+            "t": 610.3,
+            "status": "running",
+            "progress": 0.56,
+            "stage": "stage1_denoise",
+            "current_step": 12
+          },
+          {
+            "t": 655.3,
+            "status": "running",
+            "progress": 0.603,
+            "stage": "stage1_denoise",
+            "current_step": 13
+          },
+          {
+            "t": 700.3,
+            "status": "running",
+            "progress": 0.645,
+            "stage": "stage1_denoise",
+            "current_step": 14
+          },
+          {
+            "t": 745.3,
+            "status": "running",
+            "progress": 0.688,
+            "stage": "stage1_denoise",
+            "current_step": 15
+          },
+          {
+            "t": 770.4,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 820.4,
+            "status": "running",
+            "progress": 0.772,
+            "stage": "stage1_denoise",
+            "current_step": 17
+          },
+          {
+            "t": 830.4,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 880.4,
+            "status": "running",
+            "progress": 0.858,
+            "stage": "stage1_denoise",
+            "current_step": 19
+          },
+          {
+            "t": 925.4,
+            "status": "running",
+            "progress": 0.93,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 955.4,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": 1,
+        "clip_count": 1,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-08T04:49:27Z",
+        "started_at": "2026-11-08T04:49:27Z",
+        "completed_at": "2026-11-08T05:05:22Z",
+        "error": null,
+        "request": {
+          "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1280,
+          "height": 736,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 1234,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/be5a3fea-9382-4c72-8191-0c9f4621548d/video",
+          "duration_seconds": 5.167,
+          "resolution": "1280x736",
+          "file_size_bytes": 2774775,
+          "generation_time_seconds": 954.98,
+          "seed_used": 1234,
+          "output_path": "outputs/be5a3fea-9382-4c72-8191-0c9f4621548d/output.mp4",
+          "metadata_path": "outputs/be5a3fea-9382-4c72-8191-0c9f4621548d/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 30.0
+      },
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0.5\\be5a3fea-9382-4c72-8191-0c9f4621548d.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\be5a3fea-9382-4c72-8191-0c9f4621548d\\output.mp4",
+        "size_bytes": 2786001,
+        "clobbered": false
+      },
+      "job_video_path": {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\be5a3fea-9382-4c72-8191-0c9f4621548d\\output.mp4",
+        "exists": true,
+        "size_bytes": 2786001,
+        "status": "completed"
+      },
+      "metadata_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\be5a3fea-9382-4c72-8191-0c9f4621548d\\metadata.json",
+      "metadata_summary": {
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "vram16_mode_used": "on",
+        "generation_time_seconds": 954.98,
+        "seed": null,
+        "models": {
+          "base_model": "MiniMaxH3",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "minimax_h3_video_vae_fp16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "minimax_h3_audio_vae_fp32.safetensors"
+            }
+          }
+        }
+      },
+      "metadata_retake": {
+        "window_px": 124,
+        "head_px": 22,
+        "tail_px": 22,
+        "n_head_v": 7,
+        "n_tail_v": 7,
+        "n_head_a": 36,
+        "n_tail_a": 36,
+        "free_middle_px": [
+          22,
+          102
+        ],
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_frozen": true,
+        "muxed_original_waveform": false,
+        "decoded_frames_px": 124,
+        "retake_video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+        "source_fps": 24.0,
+        "resampled": false,
+        "window_start_sec": 4.0,
+        "window_start_frame": 96,
+        "written_frames": 124,
+        "upload_has_audio": true
+      },
+      "retake_picks": {
+        "audio_strength": 0.5,
+        "muxed_original_waveform": false,
+        "decoded_frames_px": 124,
+        "source_had_audio": true,
+        "audio_frozen": true,
+        "n_head_v": 7,
+        "n_tail_v": 7,
+        "n_head_a": 36,
+        "n_tail_a": 36,
+        "window_start_frame": 96,
+        "written_frames": 124,
+        "upload_has_audio": true,
+        "source_fps": 24.0,
+        "resampled": false
+      },
+      "output_probe": {
+        "ok": true,
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0.5\\be5a3fea-9382-4c72-8191-0c9f4621548d.mp4",
+        "format_duration": 5.167,
+        "video": {
+          "codec": "h264",
+          "width": 1280,
+          "height": 736,
+          "fps": 24.0,
+          "nb_frames": 124,
+          "nb_read_frames": 124,
+          "duration": 5.166667
+        },
+        "audio": {
+          "codec": "aac",
+          "sample_rate": 32000,
+          "channels": 2,
+          "duration": 5.167
+        }
+      },
+      "window_ref": {
+        "kind": "job_retake_window",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\be5a3fea-9382-4c72-8191-0c9f4621548d\\_retake_window.mp4"
+      },
+      "window_ref_probe": {
+        "ok": true,
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\be5a3fea-9382-4c72-8191-0c9f4621548d\\_retake_window.mp4",
+        "format_duration": 5.166667,
+        "video": {
+          "codec": "h264",
+          "width": 1920,
+          "height": 1080,
+          "fps": 24.0,
+          "nb_frames": 124,
+          "nb_read_frames": 124,
+          "duration": 5.166667
+        },
+        "audio": {
+          "codec": "pcm_s16le",
+          "sample_rate": 44100,
+          "channels": 2,
+          "duration": 5.166667
+        }
+      },
+      "psnr": {
+        "band_frames": 22,
+        "output_frames": 124,
+        "ref_frames": 124,
+        "head": {
+          "out_frames": [
+            0,
+            22
+          ],
+          "ref_frames": [
+            0,
+            22
+          ],
+          "ok": true,
+          "frames_compared": 22,
+          "per_frame_psnr_avg": [
+            33.02,
+            32.53,
+            32.57,
+            32.61,
+            32.78,
+            32.64,
+            32.62,
+            32.37,
+            32.75,
+            32.7,
+            32.7,
+            32.83,
+            32.93,
+            33.06,
+            32.85,
+            32.98,
+            32.84,
+            33.25,
+            32.78,
+            32.91,
+            32.78,
+            33.01
+          ],
+          "summary": {
+            "y": 31.159364,
+            "u": 43.172888,
+            "v": 43.618391,
+            "avg": 32.792256,
+            "min": 32.374503,
+            "max": 33.251295
+          },
+          "min_psnr_avg": 32.37,
+          "identical_frames": 0
+        },
+        "tail": {
+          "out_frames": [
+            102,
+            124
+          ],
+          "ref_frames": [
+            102,
+            124
+          ],
+          "ok": true,
+          "frames_compared": 22,
+          "per_frame_psnr_avg": [
+            32.92,
+            33.14,
+            33.06,
+            33.44,
+            33.33,
+            33.01,
+            32.84,
+            33.41,
+            33.24,
+            32.94,
+            33.05,
+            33.26,
+            33.18,
+            33.02,
+            32.94,
+            33.29,
+            33.32,
+            33.47,
+            32.53,
+            32.93,
+            33.41,
+            33.49
+          ],
+          "summary": {
+            "y": 31.518822,
+            "u": 43.09131,
+            "v": 43.652512,
+            "avg": 33.139986,
+            "min": 32.532124,
+            "max": 33.490124
+          },
+          "min_psnr_avg": 32.53,
+          "identical_frames": 0
+        }
+      },
+      "finished_at": "2026-11-08T14:05:24+09:00"
+    },
+    {
+      "label": "s1.0",
+      "strength": 1.0,
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s1.0",
+      "started_at": "2026-11-08T14:05:24+09:00",
+      "tool_args": {
+        "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "clips": [
+          {
+            "num_frames": 124
+          }
+        ],
+        "width": 1280,
+        "height": 736,
+        "frame_rate": 24.0,
+        "seed": 1234,
+        "attention_backend": "sdpa",
+        "retake_video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+        "retake_window_start_sec": 4.0,
+        "retake_audio_strength": 1.0
+      },
+      "status": "completed",
+      "error": null,
+      "submit_response": {
+        "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+        "status": "running",
+        "created_at": "2026-11-08T05:05:26Z",
+        "num_clips": 1,
+        "next": "wait_for_job(job_id) を呼ぶ"
+      },
+      "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+      "wait": {
+        "calls": 17,
+        "seconds": 955.0,
+        "samples": [
+          {
+            "t": 45.0,
+            "status": "running",
+            "progress": 0.05,
+            "stage": "encode",
+            "current_step": null
+          },
+          {
+            "t": 140.0,
+            "status": "running",
+            "progress": 0.05,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 190.0,
+            "status": "running",
+            "progress": 0.092,
+            "stage": "stage1_denoise",
+            "current_step": 1
+          },
+          {
+            "t": 235.0,
+            "status": "running",
+            "progress": 0.135,
+            "stage": "stage1_denoise",
+            "current_step": 2
+          },
+          {
+            "t": 285.0,
+            "status": "running",
+            "progress": 0.22,
+            "stage": "stage1_denoise",
+            "current_step": 4
+          },
+          {
+            "t": 330.0,
+            "status": "running",
+            "progress": 0.263,
+            "stage": "stage1_denoise",
+            "current_step": 5
+          },
+          {
+            "t": 375.0,
+            "status": "running",
+            "progress": 0.305,
+            "stage": "stage1_denoise",
+            "current_step": 6
+          },
+          {
+            "t": 415.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 470.0,
+            "status": "running",
+            "progress": 0.39,
+            "stage": "stage1_denoise",
+            "current_step": 8
+          },
+          {
+            "t": 515.0,
+            "status": "running",
+            "progress": 0.432,
+            "stage": "stage1_denoise",
+            "current_step": 9
+          },
+          {
+            "t": 560.0,
+            "status": "running",
+            "progress": 0.518,
+            "stage": "stage1_denoise",
+            "current_step": 11
+          },
+          {
+            "t": 605.0,
+            "status": "running",
+            "progress": 0.56,
+            "stage": "stage1_denoise",
+            "current_step": 12
+          },
+          {
+            "t": 650.0,
+            "status": "running",
+            "progress": 0.603,
+            "stage": "stage1_denoise",
+            "current_step": 13
+          },
+          {
+            "t": 700.0,
+            "status": "running",
+            "progress": 0.645,
+            "stage": "stage1_denoise",
+            "current_step": 14
+          },
+          {
+            "t": 730.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+          },
+          {
+            "t": 780.0,
+            "status": "running",
+            "progress": 0.73,
+            "stage": "stage1_denoise",
+            "current_step": 16
+          },
+          {
+            "t": 790.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 840.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 885.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+          },
+          {
+            "t": 935.0,
+            "status": "running",
+            "progress": 0.93,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 955.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": 1,
+        "clip_count": 1,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-08T05:05:26Z",
+        "started_at": "2026-11-08T05:05:26Z",
+        "completed_at": "2026-11-08T05:21:19Z",
+        "error": null,
+        "request": {
+          "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1280,
+          "height": 736,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 1234,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/e517254f-529a-4161-8ac9-b9e90f824ccc/video",
+          "duration_seconds": 5.167,
+          "resolution": "1280x736",
+          "file_size_bytes": 2646343,
+          "generation_time_seconds": 953.43,
+          "seed_used": 1234,
+          "output_path": "outputs/e517254f-529a-4161-8ac9-b9e90f824ccc/output.mp4",
+          "metadata_path": "outputs/e517254f-529a-4161-8ac9-b9e90f824ccc/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 20.0
+      },
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s1.0\\e517254f-529a-4161-8ac9-b9e90f824ccc.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\e517254f-529a-4161-8ac9-b9e90f824ccc\\output.mp4",
+        "size_bytes": 2657612,
+        "clobbered": false
+      },
+      "job_video_path": {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\e517254f-529a-4161-8ac9-b9e90f824ccc\\output.mp4",
+        "exists": true,
+        "size_bytes": 2657612,
+        "status": "completed"
+      },
+      "metadata_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\e517254f-529a-4161-8ac9-b9e90f824ccc\\metadata.json",
+      "metadata_summary": {
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "vram16_mode_used": "on",
+        "generation_time_seconds": 953.43,
+        "seed": null,
+        "models": {
+          "base_model": "MiniMaxH3",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "minimax_h3_video_vae_fp16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "minimax_h3_audio_vae_fp32.safetensors"
+            }
+          }
+        }
+      },
+      "metadata_retake": {
+        "window_px": 124,
+        "head_px": 22,
+        "tail_px": 22,
+        "n_head_v": 7,
+        "n_tail_v": 7,
+        "n_head_a": 36,
+        "n_tail_a": 36,
+        "free_middle_px": [
+          22,
+          102
+        ],
+        "audio_strength": 1.0,
+        "source_had_audio": true,
+        "audio_frozen": true,
+        "muxed_original_waveform": true,
+        "decoded_frames_px": 124,
+        "retake_video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+        "source_fps": 24.0,
+        "resampled": false,
+        "window_start_sec": 4.0,
+        "window_start_frame": 96,
+        "written_frames": 124,
+        "upload_has_audio": true
+      },
+      "retake_picks": {
+        "audio_strength": 1.0,
+        "muxed_original_waveform": true,
+        "decoded_frames_px": 124,
+        "source_had_audio": true,
+        "audio_frozen": true,
+        "n_head_v": 7,
+        "n_tail_v": 7,
+        "n_head_a": 36,
+        "n_tail_a": 36,
+        "window_start_frame": 96,
+        "written_frames": 124,
+        "upload_has_audio": true,
+        "source_fps": 24.0,
+        "resampled": false
+      },
+      "output_probe": {
+        "ok": true,
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s1.0\\e517254f-529a-4161-8ac9-b9e90f824ccc.mp4",
+        "format_duration": 5.167,
+        "video": {
+          "codec": "h264",
+          "width": 1280,
+          "height": 736,
+          "fps": 24.0,
+          "nb_frames": 124,
+          "nb_read_frames": 124,
+          "duration": 5.166667
+        },
+        "audio": {
+          "codec": "aac",
+          "sample_rate": 32000,
+          "channels": 2,
+          "duration": 5.167
+        }
+      },
+      "window_ref": {
+        "kind": "job_retake_window",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\e517254f-529a-4161-8ac9-b9e90f824ccc\\_retake_window.mp4"
+      },
+      "window_ref_probe": {
+        "ok": true,
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\e517254f-529a-4161-8ac9-b9e90f824ccc\\_retake_window.mp4",
+        "format_duration": 5.166667,
+        "video": {
+          "codec": "h264",
+          "width": 1920,
+          "height": 1080,
+          "fps": 24.0,
+          "nb_frames": 124,
+          "nb_read_frames": 124,
+          "duration": 5.166667
+        },
+        "audio": {
+          "codec": "pcm_s16le",
+          "sample_rate": 44100,
+          "channels": 2,
+          "duration": 5.166667
+        }
+      },
+      "psnr": {
+        "band_frames": 22,
+        "output_frames": 124,
+        "ref_frames": 124,
+        "head": {
+          "out_frames": [
+            0,
+            22
+          ],
+          "ref_frames": [
+            0,
+            22
+          ],
+          "ok": true,
+          "frames_compared": 22,
+          "per_frame_psnr_avg": [
+            33.02,
+            32.53,
+            32.57,
+            32.61,
+            32.78,
+            32.64,
+            32.62,
+            32.37,
+            32.75,
+            32.69,
+            32.7,
+            32.83,
+            32.93,
+            33.06,
+            32.85,
+            33.01,
+            32.84,
+            33.24,
+            32.79,
+            32.91,
+            32.79,
+            33.07
+          ],
+          "summary": {
+            "y": 31.163129,
+            "u": 43.177801,
+            "v": 43.623016,
+            "avg": 32.79605,
+            "min": 32.374503,
+            "max": 33.244832
+          },
+          "min_psnr_avg": 32.37,
+          "identical_frames": 0
+        },
+        "tail": {
+          "out_frames": [
+            102,
+            124
+          ],
+          "ref_frames": [
+            102,
+            124
+          ],
+          "ok": true,
+          "frames_compared": 22,
+          "per_frame_psnr_avg": [
+            32.98,
+            33.2,
+            33.06,
+            33.46,
+            33.35,
+            33.01,
+            32.84,
+            33.43,
+            33.22,
+            32.95,
+            33.05,
+            33.26,
+            33.17,
+            33.02,
+            32.94,
+            33.31,
+            33.33,
+            33.45,
+            32.53,
+            32.95,
+            33.4,
+            33.47
+          ],
+          "summary": {
+            "y": 31.526044,
+            "u": 43.133454,
+            "v": 43.650132,
+            "avg": 33.147653,
+            "min": 32.52986,
+            "max": 33.472635
+          },
+          "min_psnr_avg": 32.53,
+          "identical_frames": 0
+        }
+      },
+      "finished_at": "2026-11-08T14:21:22+09:00"
+    }
+  ],
+  "mcp": {
+    "python": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+    "cwd": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni",
+    "LTX_MCP_BASE_URL": "http://127.0.0.1:18620",
+    "stderr_log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\mcp_server.stderr.log",
+    "calls": [
+      {
+        "at": "2026-11-08T13:33:21+09:00",
+        "tool": "backend_status",
+        "args": {},
+        "seconds": 0.16,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:33:21+09:00",
+        "tool": "load_pipeline",
+        "args": {
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default"
+          },
+          "wait_sec": 45
+        },
+        "seconds": 3.09,
+        "ok": true,
+        "result": {
+          "pipeline_loaded": true,
+          "pipeline_type": "distilled",
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default",
+            "text_encoder": "default",
+            "video_vae": "default",
+            "audio": "default"
+          },
+          "finished": true
+        }
+      },
+      {
+        "at": "2026-11-08T13:33:25+09:00",
+        "tool": "backend_status",
+        "args": {},
+        "seconds": 0.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:33:25+09:00",
+        "tool": "list_models",
+        "args": {},
+        "seconds": 0.03,
+        "ok": true,
+        "result": {
+          "categories": {
+            "transformer": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                },
+                {
+                  "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+                  "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta4_int8",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta5_3185154",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "minimax_h3_ref2va_pruned_int8_convrot",
+                  "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+                  "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                }
+              ]
+            },
+            "text_encoder": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "video_vae": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "audio": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            }
+          },
+          "active_base_model": "MiniMaxH3",
+          "base_models": [
+            {
+              "id": "LTX23",
+              "display_name": "LTX 2.3",
+              "engine_family": "ltx",
+              "active": false,
+              "installed": true,
+              "present": true,
+              "missing_categories": [],
+              "unsupported_features": [
+                "keep_resident_embeddings",
+                "alpha_gen",
+                "vram16_mode",
+                "source_audio",
+                "references"
+              ],
+              "constraints": {
+                "num_frames": {
+                  "step": 8,
+                  "offset": 1,
+                  "min": 9,
+                  "max": 481
+                },
+                "dimension_multiple": 64,
+                "frame_rate": {
+                  "min": 1.0,
+                  "max": 60.0
+                },
+                "sampling": null,
+                "keyframes": {
+                  "step": 8,
+                  "offset": 1
+                },
+                "prompt_token_limit": 1024
+              },
+              "category_order": [
+                "transformer",
+                "text_encoder",
+                "video_vae",
+                "audio"
+              ],
+              "transformer_weight_class": null,
+              "transformer_role": null,
+              "categories": {
+                "transformer": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    },
+                    {
+                      "name": "10Eros-v1.2-Q4_K_M",
+                      "path": "models/LTX23/Weights/10Eros-v1.2-Q4_K_M.gguf",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "Sulphur-2-base-distil-Q6_K",
+                      "path": "models/LTX23/Weights/Sulphur-2-base-distil-Q6_K.gguf",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "ltx-2.3-22b-distilled-1.1_int8mixedtensorwise",
+                      "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_int8mixedtensorwise.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot",
+                      "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "ltx-2.3-22b-distilled-1.1_w4a8",
+                      "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_w4a8.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "sulphur_distil_fp8mixed",
+                      "path": "models/LTX23/Weights/sulphur_distil_fp8mixed.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    }
+                  ]
+                },
+                "text_encoder": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "video_vae": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX23/VAE/LTX23_video_vae_bf16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "audio": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "LTX25",
+              "display_name": "LTX 2.5",
+              "engine_family": "ltx25",
+              "active": false,
+              "installed": true,
+              "present": true,
+              "missing_categories": [],
+              "unsupported_features": [
+                "two_stage_hq",
+                "prune_vaed",
+                "vram16_mode",
+                "source_audio",
+                "references"
+              ],
+              "constraints": {
+                "num_frames": {
+                  "step": 8,
+                  "offset": 1,
+                  "min": 9,
+                  "max": 481
+                },
+                "dimension_multiple": 64,
+                "frame_rate": {
+                  "min": 1.0,
+                  "max": 60.0
+                },
+                "sampling": null,
+                "keyframes": {
+                  "step": 8,
+                  "offset": 1
+                },
+                "prompt_token_limit": 1024
+              },
+              "category_order": [
+                "transformer",
+                "text_encoder",
+                "video_vae",
+                "audio"
+              ],
+              "transformer_weight_class": null,
+              "transformer_role": null,
+              "categories": {
+                "transformer": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    },
+                    {
+                      "name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot",
+                      "path": "models/LTX25/Weights/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "ltx25_uncensored_v1.1-fp8_scaled",
+                      "path": "models/LTX25/Weights/ltx25_uncensored_v1.1-fp8_scaled.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW",
+                      "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K",
+                      "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K.gguf",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    }
+                  ]
+                },
+                "text_encoder": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "video_vae": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "audio": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "MiniMaxH3",
+              "display_name": "MiniMax H3",
+              "engine_family": "h3",
+              "active": true,
+              "installed": true,
+              "present": true,
+              "missing_categories": [],
+              "unsupported_features": [
+                "reference_video",
+                "nag",
+                "two_stage_hq",
+                "guidance_scale",
+                "outpaint",
+                "inpaint",
+                "alpha_gen",
+                "prune_vaed",
+                "keep_resident_embeddings",
+                "keyframe_strength",
+                "a2v",
+                "end_source",
+                "fused_gguf_dequant_kernel",
+                "lora_audio_strength"
+              ],
+              "constraints": {
+                "num_frames": {
+                  "step": 17,
+                  "offset": 5,
+                  "min": 22,
+                  "max": 481
+                },
+                "dimension_multiple": 32,
+                "frame_rate": {
+                  "min": 24.0,
+                  "max": 24.0
+                },
+                "sampling": {
+                  "num_inference_steps": {
+                    "min": 1,
+                    "max": 50,
+                    "step": 1,
+                    "default": 20
+                  },
+                  "shift_video": {
+                    "min": 1,
+                    "max": 20,
+                    "step": 0.1,
+                    "default": 12
+                  },
+                  "shift_audio": {
+                    "min": 1,
+                    "max": 20,
+                    "step": 0.1,
+                    "default": 3
+                  }
+                },
+                "keyframes": {
+                  "step": 1,
+                  "offset": 0
+                },
+                "prompt_token_limit": null,
+                "source_audio": {
+                  "strength": {
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.05,
+                    "default": 0.5
+                  }
+                },
+                "reference": {
+                  "max_images": 9,
+                  "max_videos": 3,
+                  "max_audios": 3,
+                  "max_total": 12,
+                  "video_total_sec": 15.0,
+                  "audio_total_sec": 15.0,
+                  "clip_min_sec": 2.0
+                },
+                "chain": {
+                  "overlap_frames": 22
+                },
+                "retake": {
+                  "audio_strength": {
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.05,
+                    "default": 0.0
+                  }
+                }
+              },
+              "category_order": [
+                "transformer",
+                "text_encoder",
+                "video_vae",
+                "audio"
+              ],
+              "transformer_weight_class": null,
+              "transformer_role": "fl2va",
+              "categories": {
+                "transformer": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    },
+                    {
+                      "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+                      "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "h3ErosMax_beta4_int8",
+                      "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+                      "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "h3ErosMax_beta5_3185154",
+                      "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "minimax_h3_ref2va_pruned_int8_convrot",
+                      "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    },
+                    {
+                      "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+                      "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+                      "is_default": false,
+                      "exists": true,
+                      "source": "scan"
+                    }
+                  ]
+                },
+                "text_encoder": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "video_vae": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                },
+                "audio": {
+                  "default": "default",
+                  "active": "default",
+                  "entries": [
+                    {
+                      "name": "default",
+                      "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+                      "is_default": true,
+                      "exists": true,
+                      "source": "config"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "at": "2026-11-08T13:33:25+09:00",
+        "tool": "upload_video",
+        "args": {
+          "file_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-ref-calibration\\H3-Ref-1080p-15s.mp4",
+          "max_frames": 100000
+        },
+        "seconds": 1.73,
+        "ok": true,
+        "result": {
+          "video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+          "original_filename": "H3-Ref-1080p-15s.mp4",
+          "stored_path": "uploads/videos/428a07e5-9425-4fa6-b299-310d525c48af/input.mp4",
+          "content_type": "video/mp4",
+          "size_bytes": 11858295,
+          "trimmed": false,
+          "frame_count": 360,
+          "fps": 24.0
+        }
+      },
+      {
+        "at": "2026-11-08T13:33:26+09:00",
+        "tool": "submit_chain",
+        "args": {
+          "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+          "clips": [
+            {
+              "num_frames": 124
+            }
+          ],
+          "width": 1280,
+          "height": 736,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sdpa",
+          "retake_video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+          "retake_window_start_sec": 4.0,
+          "retake_audio_strength": 0.0
+        },
+        "seconds": 1.66,
+        "ok": true,
+        "result": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "status": "running",
+          "created_at": "2026-11-08T04:33:28Z",
+          "num_clips": 1,
+          "next": "wait_for_job(job_id) を呼ぶ"
+        }
+      },
+      {
+        "at": "2026-11-08T13:33:28+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 30.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+      },
+      {
+        "at": "2026-11-08T13:34:03+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:34:48+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:35:33+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 25.03,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:36:03+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:36:48+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:37:33+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 15.02,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:37:53+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 5.02,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+      },
+      {
+        "at": "2026-11-08T13:38:03+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 30.03,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+      },
+      {
+        "at": "2026-11-08T13:38:38+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 15.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+      },
+      {
+        "at": "2026-11-08T13:38:58+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:39:43+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:40:28+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 20.02,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:40:53+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:41:38+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.05,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:42:23+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 50.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:43:13+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:43:58+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 49.99,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:44:48+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.01,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:45:33+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:46:23+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 25.02,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:46:53+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:47:38+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 15.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:47:58+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 10.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:48:13+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:48:58+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 25.02,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:49:23+09:00",
+        "tool": "save_job_video",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c",
+          "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0",
+          "no_clobber": true,
+          "which": "output"
+        },
+        "seconds": 0.02,
+        "ok": true,
+        "result": {
+          "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0\\503cb4d0-78f6-4677-a31f-47912515356c.mp4",
+          "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\503cb4d0-78f6-4677-a31f-47912515356c\\output.mp4",
+          "size_bytes": 2696294,
+          "clobbered": false
+        }
+      },
+      {
+        "at": "2026-11-08T13:49:23+09:00",
+        "tool": "get_job_video_path",
+        "args": {
+          "job_id": "503cb4d0-78f6-4677-a31f-47912515356c"
+        },
+        "seconds": 0.01,
+        "ok": true,
+        "result": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\503cb4d0-78f6-4677-a31f-47912515356c\\output.mp4",
+          "exists": true,
+          "size_bytes": 2696294,
+          "status": "completed"
+        }
+      },
+      {
+        "at": "2026-11-08T13:49:25+09:00",
+        "tool": "submit_chain",
+        "args": {
+          "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+          "clips": [
+            {
+              "num_frames": 124
+            }
+          ],
+          "width": 1280,
+          "height": 736,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sdpa",
+          "retake_video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+          "retake_window_start_sec": 4.0,
+          "retake_audio_strength": 0.5
+        },
+        "seconds": 1.64,
+        "ok": true,
+        "result": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "status": "running",
+          "created_at": "2026-11-08T04:49:27Z",
+          "num_clips": 1,
+          "next": "wait_for_job(job_id) を呼ぶ"
+        }
+      },
+      {
+        "at": "2026-11-08T13:49:27+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.01,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:50:12+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.05,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:50:57+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 40.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:51:42+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 25.03,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:52:12+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 50.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:53:02+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:53:47+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 5.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:53:57+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 10.03,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+      },
+      {
+        "at": "2026-11-08T13:54:12+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.01,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:54:57+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 5.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+      },
+      {
+        "at": "2026-11-08T13:55:07+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 20.03,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:55:32+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 10.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:55:47+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:56:32+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 10.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:56:47+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:57:32+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 30.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T13:58:07+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:58:52+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.01,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T13:59:37+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.05,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:00:22+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:01:07+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:01:52+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 25.03,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:02:22+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:03:07+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 10.01,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:03:22+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:04:07+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.02,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:04:52+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 30.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:05:22+09:00",
+        "tool": "save_job_video",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d",
+          "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0.5",
+          "no_clobber": true,
+          "which": "output"
+        },
+        "seconds": 0.02,
+        "ok": true,
+        "result": {
+          "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s0.5\\be5a3fea-9382-4c72-8191-0c9f4621548d.mp4",
+          "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\be5a3fea-9382-4c72-8191-0c9f4621548d\\output.mp4",
+          "size_bytes": 2786001,
+          "clobbered": false
+        }
+      },
+      {
+        "at": "2026-11-08T14:05:22+09:00",
+        "tool": "get_job_video_path",
+        "args": {
+          "job_id": "be5a3fea-9382-4c72-8191-0c9f4621548d"
+        },
+        "seconds": 0.0,
+        "ok": true,
+        "result": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\be5a3fea-9382-4c72-8191-0c9f4621548d\\output.mp4",
+          "exists": true,
+          "size_bytes": 2786001,
+          "status": "completed"
+        }
+      },
+      {
+        "at": "2026-11-08T14:05:24+09:00",
+        "tool": "submit_chain",
+        "args": {
+          "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+          "clips": [
+            {
+              "num_frames": 124
+            }
+          ],
+          "width": 1280,
+          "height": 736,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sdpa",
+          "retake_video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+          "retake_window_start_sec": 4.0,
+          "retake_audio_strength": 1.0
+        },
+        "seconds": 1.66,
+        "ok": true,
+        "result": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "status": "running",
+          "created_at": "2026-11-08T05:05:26Z",
+          "num_clips": 1,
+          "next": "wait_for_job(job_id) を呼ぶ"
+        }
+      },
+      {
+        "at": "2026-11-08T14:05:26+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.03,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:06:11+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 49.99,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:07:01+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.01,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:07:46+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 49.99,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:08:36+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.01,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:09:21+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 49.99,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:10:11+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:10:56+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.01,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:11:41+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 40.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:12:26+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 49.99,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:13:16+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:14:01+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:14:46+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:15:31+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:16:16+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 50.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:17:06+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 30.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+      },
+      {
+        "at": "2026-11-08T14:17:41+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.01,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:18:26+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 10.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:18:41+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 44.99,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:19:31+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 40.0,
+        "ok": false,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+      },
+      {
+        "at": "2026-11-08T14:20:16+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 45.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:21:01+09:00",
+        "tool": "wait_for_job",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "timeout_sec": 45,
+          "poll_interval_sec": 5.0
+        },
+        "seconds": 20.0,
+        "ok": true
+      },
+      {
+        "at": "2026-11-08T14:21:21+09:00",
+        "tool": "save_job_video",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc",
+          "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s1.0",
+          "no_clobber": true,
+          "which": "output"
+        },
+        "seconds": 0.0,
+        "ok": true,
+        "result": {
+          "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\s1.0\\e517254f-529a-4161-8ac9-b9e90f824ccc.mp4",
+          "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\e517254f-529a-4161-8ac9-b9e90f824ccc\\output.mp4",
+          "size_bytes": 2657612,
+          "clobbered": false
+        }
+      },
+      {
+        "at": "2026-11-08T14:21:21+09:00",
+        "tool": "get_job_video_path",
+        "args": {
+          "job_id": "e517254f-529a-4161-8ac9-b9e90f824ccc"
+        },
+        "seconds": 0.01,
+        "ok": true,
+        "result": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\e517254f-529a-4161-8ac9-b9e90f824ccc\\output.mp4",
+          "exists": true,
+          "size_bytes": 2657612,
+          "status": "completed"
+        }
+      }
+    ],
+    "server_info": {
+      "name": "nz-videomni",
+      "version": "1.28.1",
+      "protocol": "2025-11-25"
+    }
+  },
+  "tool_schema_check": {
+    "tool_count": 25,
+    "tools": [
+      "backend_status",
+      "cancel_job",
+      "delete_job",
+      "get_config",
+      "get_job_matte_path",
+      "get_job_video_path",
+      "get_joined_video_path",
+      "get_mp4_info",
+      "job_status",
+      "join_job",
+      "list_jobs",
+      "list_loras",
+      "list_models",
+      "load_pipeline",
+      "plan_a2v_batch",
+      "purge_terminal_jobs",
+      "save_job_video",
+      "submit_alpha_gen",
+      "submit_chain",
+      "submit_generate",
+      "unload_pipeline",
+      "upload_audio",
+      "upload_image",
+      "upload_video",
+      "wait_for_job"
+    ],
+    "problems": [],
+    "warnings": [],
+    "submit_chain_properties": [
+      "attention_backend",
+      "block_swap_prefetch",
+      "chunked_upsample",
+      "clips",
+      "conditioning_attention_strength",
+      "crop_height",
+      "crop_width",
+      "embed_mp4_metadata",
+      "end_source_context_frames",
+      "end_source_image_id",
+      "end_source_strength",
+      "end_source_video_id",
+      "frame_rate",
+      "fused_gguf_dequant_kernel",
+      "height",
+      "keep_resident",
+      "keep_resident_embeddings",
+      "loras",
+      "nag_alpha",
+      "nag_enabled",
+      "nag_scale",
+      "nag_tau",
+      "neg_method",
+      "negative_prompt",
+      "overlap_frames",
+      "overlap_strength",
+      "prompt",
+      "reference_video_id",
+      "reference_video_strength",
+      "retake_audio_strength",
+      "retake_head_px",
+      "retake_regenerate_audio",
+      "retake_tail_px",
+      "retake_video_id",
+      "retake_window_start_sec",
+      "seed",
+      "source_audio_id",
+      "source_video_context_frames",
+      "source_video_id",
+      "stage2_window",
+      "vae_mode",
+      "vsf_scale",
+      "width"
+    ],
+    "submit_chain_required": [
+      "prompt",
+      "clips"
+    ],
+    "ok": true
+  },
+  "status_before": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": false,
+      "pipeline_type": null,
+      "state": "unloaded",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0
+      }
+    }
+  },
+  "load": {
+    "requested": {
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default"
+      },
+      "wait_sec": 45
+    },
+    "responses": [
+      {
+        "pipeline_loaded": true,
+        "pipeline_type": "distilled",
+        "state": "ready",
+        "base_model": "MiniMaxH3",
+        "models": {
+          "transformer": "default",
+          "text_encoder": "default",
+          "video_vae": "default",
+          "audio": "default"
+        },
+        "finished": true
+      }
+    ],
+    "status_polls": 1,
+    "last_status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0
+      }
+    },
+    "seconds": 3.1
+  },
+  "models_after_load": {
+    "base_model_entry": {
+      "id": "MiniMaxH3",
+      "display_name": "MiniMax H3",
+      "engine_family": "h3",
+      "active": true,
+      "installed": true,
+      "present": true,
+      "missing_categories": [],
+      "unsupported_features": [
+        "reference_video",
+        "nag",
+        "two_stage_hq",
+        "guidance_scale",
+        "outpaint",
+        "inpaint",
+        "alpha_gen",
+        "prune_vaed",
+        "keep_resident_embeddings",
+        "keyframe_strength",
+        "a2v",
+        "end_source",
+        "fused_gguf_dequant_kernel",
+        "lora_audio_strength"
+      ],
+      "constraints": {
+        "num_frames": {
+          "step": 17,
+          "offset": 5,
+          "min": 22,
+          "max": 481
+        },
+        "dimension_multiple": 32,
+        "frame_rate": {
+          "min": 24.0,
+          "max": 24.0
+        },
+        "sampling": {
+          "num_inference_steps": {
+            "min": 1,
+            "max": 50,
+            "step": 1,
+            "default": 20
+          },
+          "shift_video": {
+            "min": 1,
+            "max": 20,
+            "step": 0.1,
+            "default": 12
+          },
+          "shift_audio": {
+            "min": 1,
+            "max": 20,
+            "step": 0.1,
+            "default": 3
+          }
+        },
+        "keyframes": {
+          "step": 1,
+          "offset": 0
+        },
+        "prompt_token_limit": null,
+        "source_audio": {
+          "strength": {
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.5
+          }
+        },
+        "reference": {
+          "max_images": 9,
+          "max_videos": 3,
+          "max_audios": 3,
+          "max_total": 12,
+          "video_total_sec": 15.0,
+          "audio_total_sec": 15.0,
+          "clip_min_sec": 2.0
+        },
+        "chain": {
+          "overlap_frames": 22
+        },
+        "retake": {
+          "audio_strength": {
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.0
+          }
+        }
+      },
+      "category_order": [
+        "transformer",
+        "text_encoder",
+        "video_vae",
+        "audio"
+      ],
+      "transformer_weight_class": null,
+      "transformer_role": "fl2va",
+      "categories": {
+        "transformer": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            },
+            {
+              "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta4_int8",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta5_3185154",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "minimax_h3_ref2va_pruned_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+              "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            }
+          ]
+        },
+        "text_encoder": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "video_vae": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "audio": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        }
+      }
+    },
+    "transformer_role": "fl2va",
+    "transformer_weight_class": null
+  },
+  "upload": {
+    "video_id": "428a07e5-9425-4fa6-b299-310d525c48af",
+    "original_filename": "H3-Ref-1080p-15s.mp4",
+    "stored_path": "uploads/videos/428a07e5-9425-4fa6-b299-310d525c48af/input.mp4",
+    "content_type": "video/mp4",
+    "size_bytes": 11858295,
+    "trimmed": false,
+    "frame_count": 360,
+    "fps": 24.0
+  },
+  "finished_at": "2026-11-08T14:21:22+09:00",
+  "exit_code": 0
+}

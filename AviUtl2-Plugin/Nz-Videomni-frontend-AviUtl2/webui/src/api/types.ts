@@ -393,6 +393,10 @@ export interface SourceVideoSpec {
  * `high_resolution`・`w25`…`w61`）を選べ、Retake の窓の上限は
  * `8 * vTile - 7`（standard 169 … w61 481。窓はどの段でもタイル 1 枚）。
  * `stage2_window="full_length"` との併用はサーバが 422 で弾く（§1-19）。
+ *
+ * §1-123 MiniMax H3（`constraints.retake` を配信するエンジン）: 糊代はサーバーが
+ * 頭尾とも 22 に固定し（やはり送らない）、窓は 17n+5・[73, 481]。Stage-2 は無く、
+ * 音声は `regenerate_audio` の代わりに `audio_strength` で指定する。
  */
 export interface RetakeSpec {
   /** `POST /upload/video` の `video_id`。 */
@@ -404,8 +408,16 @@ export interface RetakeSpec {
    * `modes/edit/useRetakeForm.ts` の `buildRequest` が 1 箇所で行う。
    */
   window_start_sec: number;
-  /** 音声も作り直すか。`false` なら元の波形をそのまま乗せ直す。 */
-  regenerate_audio: boolean;
+  /** 音声も作り直すか。`false` なら元の波形をそのまま乗せ直す。省略時はサーバー既定
+   * （`true`）。§1-123: `constraints.retake` を配信するエンジン（MiniMax H3）では
+   * 送らない（`false` の明示は 422）。 */
+  regenerate_audio?: boolean;
+  /**
+   * §1-123: 窓の真ん中の音声の Strength（0〜1。0＝作り直す、1＝元の波形のまま）。
+   * `constraints.retake` を配信するエンジン（MiniMax H3）だけが受け、そのときは
+   * `regenerate_audio` の代わりにこちらを送る。LTX は受けない（明示すると 422）。
+   */
+  audio_strength?: number;
 }
 
 /**
@@ -1343,6 +1355,12 @@ export interface BaseModelConstraints {
    * the Chained screen keeps its own seam-blend controls (LTX, or a backend
    * that predates the key). */
   chain?: { overlap_frames: number } | null;
+  /** §1-123: present only for an engine whose Retake takes a middle-audio
+   * Strength (MiniMax H3), with the slider's range, step and default. Its
+   * presence switches the Retake screen into that engine's shape (Strength
+   * slider instead of the audio radio, no Stage-2 window). Absent/`null` =
+   * the LTX Retake (or a backend that predates the key). */
+  retake?: { audio_strength: SamplingParamConstraint } | null;
 }
 
 /** `BaseModelConstraints.reference`: the flat seven limits (supervisor ruling

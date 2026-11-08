@@ -23,7 +23,8 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 def validate_ltx_chain(request: "GenerateChainRequest") -> None:
     """Raise ``ValueError`` with the message of the first LTX rule ``request`` breaks.
 
-    In order: the V2V source's ``context_frames`` (at least
+    In order: a retake's ``audio_strength`` (a MiniMax H3 field; LTX's is
+    ``regenerate_audio``), the V2V source's ``context_frames`` (at least
     ``v2v_context_frames_min`` and 8n+1, ``loc ["body", "source_video"]``;
     then shorter than clip 0, ``loc ["body"]``), the 64 multiple, the distilled pipeline's 8 steps / CFG 1.0,
     then per clip the 8n+1 grid, the overlap against the clip's stage-1 latent
@@ -37,6 +38,11 @@ def validate_ltx_chain(request: "GenerateChainRequest") -> None:
     nested validator gave it. That passes through ``validate_chain_for_family``'s
     ``except ValueError`` by design.
     """
+    if request.retake is not None and request.retake.audio_strength is not None:
+        raise ValueError(
+            "retake.audio_strength is only accepted by MiniMax H3; LTX uses "
+            "retake.regenerate_audio"
+        )
     if request.source_video is not None:
         cf = request.source_video.context_frames
         # The same config.py defaults the schema's cap reads (no config.yaml).

@@ -2,6 +2,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../../bridge";
 import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import { resolveGenerationConstraints } from "../../shell/generationConstraints";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import type { TimelineSelection } from "../../timeline/menuSelection";
@@ -812,5 +814,247 @@ describe("sameRetakeSelection", () => {
     const empty = makeSelection();
     empty.selected = [];
     expect(sameRetakeSelection(empty, makeSelection())).toBe(false);
+  });
+});
+
+/**
+ * §1-123 MiniMax H3: `constraints.retake` を配信するベースモデルでは、Retake の
+ * フォームが配信の規則（17n+5・縦横 32・fps 24 固定・サンプリング）に従い、
+ * 要求から継ぎ目・Stage-2・`regenerate_audio` を外して `retake.audio_strength`
+ * を載せる。LTX の規則（`constraints` 省略）は上の各テストがそのまま押さえている。
+ */
+describe("useRetakeForm — MiniMax H3（§1-123）", () => {
+  afterEach(() => {
+    clearRetakeCarryOver();
+    resetProvisionalReservation();
+  });
+
+  const H3 = resolveGenerationConstraints({
+    num_frames: { step: 17, offset: 5, min: 22, max: 481 },
+    dimension_multiple: 32,
+    frame_rate: { min: 24, max: 24 },
+    sampling: {
+      num_inference_steps: { min: 1, max: 50, step: 1, default: 20 },
+      shift_video: { min: 1, max: 20, step: 0.1, default: 12 },
+      shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
+    },
+    chain: { overlap_frames: 22 },
+    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+  });
+
+  function renderWith(
+    intent: GenerationPrefill | undefined,
+    constraints: GenerationConstraints | undefined,
+    extra: { prompt?: string; loraAudioHidden?: boolean } = {},
+  ) {
+    const nativeBridge = createBridge();
+    const view = renderHook(() =>
+      useRetakeForm({
+        prompt: extra.prompt ?? "a cat",
+        nativeBridge,
+        ...(intent ? { initialIntent: intent } : {}),
+        ...(constraints ? { constraints } : {}),
+        ...(extra.loraAudioHidden !== undefined ? { loraAudioHidden: extra.loraAudioHidden } : {}),
+      }),
+    );
+    return { ...view, nativeBridge };
+  }
+
+  /** 30 秒の素材をまるごと再生しているリボン（窓の上限 481 を素材に収めるため）。 */
+  function longIntent(): GenerationPrefill {
+    const selection = makeSelection();
+    const item = {
+      ...selection.selected[0]!,
+      frameEnd: 899,
+      mediaDurationSec: 30,
+      playbackStartSec: 0,
+      playbackEndSec: 30,
+    };
+    return makeIntent({ ...selection, selected: [item] });
+  }
+
+  it("要求の形: 継ぎ目・Stage-2・regenerate_audio が無く、サンプリング 3 項目と retake.audio_strength がある", async () => {
+    const { result } = renderWith(makeIntent(), H3);
+    await waitReady(result);
+    const body = result.current.buildRequest();
+    // 選択 5.0 秒 @24fps = 120 → 17n+5 へ切り下げて 107。
+    expect(body).toMatchObject({
+      frame_rate: 24,
+      clips: [{ num_frames: 107 }],
+      num_inference_steps: 20,
+      shift_video: 12,
+      shift_audio: 3,
+      retake: { video_id: "vid-1", audio_strength: 0.5 },
+    });
+    expect(body).not.toHaveProperty("overlap_frames");
+    expect(body).not.toHaveProperty("overlap_strength");
+    expect(body).not.toHaveProperty("stage2_window");
+    expect(body.retake).not.toHaveProperty("regenerate_audio");
+    expect(body.retake).not.toHaveProperty("head_px");
+    expect(body.retake).not.toHaveProperty("tail_px");
+  });
+
+  it("Stage-2 を選んでいても H3 では stage2_window を送らない", async () => {
+    const { result } = renderWith(makeIntent(), H3);
+    await waitReady(result);
+    act(() => result.current.setStage2Window("high_resolution"));
+    expect(result.current.buildRequest()).not.toHaveProperty("stage2_window");
+  });
+
+  it("Strength とサンプリングの値が要求に載る（範囲へ丸める）", async () => {
+    const { result } = renderWith(makeIntent(), H3);
+    await waitReady(result);
+    expect(result.current.audioStrengthRange).toEqual({ min: 0, max: 1, step: 0.05, default: 0.5 });
+    act(() => {
+      result.current.setAudioStrength(0.25);
+      result.current.setSamplingValue("numInferenceSteps", 30.4);
+    });
+    let body = result.current.buildRequest();
+    expect(body.retake?.audio_strength).toBe(0.25);
+    expect(body.num_inference_steps).toBe(30);
+    act(() => result.current.setAudioStrength(3));
+    body = result.current.buildRequest();
+    expect(body.retake?.audio_strength).toBe(1);
+  });
+
+  it("縦横は 32 の倍数へ丸める（LTX は 64）", () => {
+    const h3 = renderWith(makeIntent(), H3);
+    expect(h3.result.current.dimensionMultiple).toBe(32);
+    act(() => h3.result.current.setWidth(1000));
+    expect(h3.result.current.width).toBe(992);
+    act(() => h3.result.current.setWidth(1016, false));
+    expect(h3.result.current.validityReasons).toContain("dimensionsOffGrid");
+    act(() => h3.result.current.setWidth(1056, false)); // 32 の倍数（64 の倍数ではない）
+    expect(h3.result.current.validityReasons).not.toContain("dimensionsOffGrid");
+    h3.unmount();
+
+    const ltx = renderWith(makeIntent(), undefined);
+    expect(ltx.result.current.dimensionMultiple).toBe(64);
+    act(() => ltx.result.current.setWidth(1000));
+    expect(ltx.result.current.width).toBe(1024);
+  });
+
+  it("fps は 24 に固定され、欄を動かしても ❌ で戻しても送信値は 24", async () => {
+    const { result } = renderWith(makeIntent(), H3);
+    await waitReady(result);
+    expect(result.current.fixedFrameRate).toBe(24);
+    act(() => result.current.setFrameRate(30));
+    expect(result.current.frameRate).toBe(24);
+    expect(result.current.buildRequest().frame_rate).toBe(24);
+    act(() => result.current.clearAll());
+    expect(result.current.frameRate).toBe(24);
+  });
+
+  it("窓は 73〜481（下限は config、上限は constraints.maxNumFrames）で 17n+5 の上に乗る", () => {
+    const { result } = renderWith(longIntent(), H3);
+    expect(result.current.minWindowFrames).toBe(73);
+    expect(result.current.maxWindowFrames).toBe(481);
+    expect(result.current.windowGrid).toEqual({ step: 17, offset: 5 });
+    act(() => result.current.setWindow({ startFrame: 0, frames: 600 }));
+    expect(result.current.windowFrames).toBe(481);
+    act(() => result.current.setWindow({ startFrame: 0, frames: 10 }));
+    expect(result.current.windowFrames).toBe(73);
+    act(() => result.current.setWindow({ startFrame: 0, frames: 200 }));
+    expect(result.current.windowFrames).toBe(192); // 17·11 + 5
+    // Stage-2 の選択は H3 の上限に効かない。
+    act(() => result.current.setStage2Window("w61"));
+    expect(result.current.maxWindowFrames).toBe(481);
+  });
+
+  it("のりしろの表示は配信の constraints.chain.overlap_frames（22／22）", () => {
+    const { result } = renderWith(makeIntent(), H3);
+    expect(result.current.glueHeadFrames).toBe(22);
+    expect(result.current.glueTailFrames).toBe(22);
+  });
+
+  it("🔁 の持ち越しに audioStrength が入る", async () => {
+    const first = renderWith(makeIntent(), H3);
+    await waitReady(first.result);
+    act(() => first.result.current.setAudioStrength(0.25));
+    act(() => first.result.current.resetSource());
+    first.unmount();
+
+    const second = renderWith(makeIntent(), H3);
+    expect(second.result.current.audioStrength).toBe(0.25);
+    await waitReady(second.result);
+    expect(second.result.current.buildRequest().retake?.audio_strength).toBe(0.25);
+  });
+
+  it("LTX で 🔁 したあと H3 で右クリックしても、持ち越しの fps と regenerateAudio=false は送信値に漏れない", async () => {
+    const first = renderWith(makeIntent(), undefined);
+    await waitReady(first.result);
+    act(() => {
+      first.result.current.setFrameRate(30);
+      first.result.current.setRegenerateAudio(false);
+    });
+    act(() => first.result.current.resetSource());
+    first.unmount();
+
+    const second = renderWith(makeIntent(), H3);
+    await waitReady(second.result);
+    const body = second.result.current.buildRequest();
+    expect(body.frame_rate).toBe(24);
+    expect(body.retake).not.toHaveProperty("regenerate_audio");
+    expect(body.retake?.audio_strength).toBe(0.5); // LTX には Strength が無いので配信の既定
+  });
+
+  it("loraAudioHidden なら loras[].audio_strength を落とす（Chained と同じ）", async () => {
+    const { result } = renderWith(makeIntent(), H3, {
+      prompt: "a cat <lora:Pixar_Toon:1.0:0.3>",
+      loraAudioHidden: true,
+    });
+    await waitReady(result);
+    const body = result.current.buildRequest();
+    expect(body.loras).toHaveLength(1);
+    expect(body.loras?.[0]).not.toHaveProperty("audio_strength");
+  });
+
+  it("マウント中にベースモデルが LTX から H3 へ変わると、Strength とサンプリングが配信の既定になる", async () => {
+    let constraints: GenerationConstraints | undefined = undefined;
+    const nativeBridge = createBridge();
+    const { result, rerender } = renderHook(() =>
+      useRetakeForm({ prompt: "a cat", nativeBridge, initialIntent: makeIntent(), constraints }),
+    );
+    await waitReady(result);
+    expect(result.current.audioStrength).toBeNull();
+    expect(result.current.sampling).toBeNull();
+    constraints = H3;
+    rerender();
+    await waitFor(() => expect(result.current.audioStrength).toBe(0.5));
+    expect(result.current.sampling).toEqual({ numInferenceSteps: 20, shiftVideo: 12, shiftAudio: 3 });
+    expect(result.current.buildRequest()).not.toHaveProperty("overlap_frames");
+  });
+
+  it("マウント中にベースモデルが H3 から LTX へ変わると、Strength とサンプリングが消え、触った幅は 64 の倍数へ丸め直される", async () => {
+    let constraints: GenerationConstraints | undefined = H3;
+    const nativeBridge = createBridge();
+    const { result, rerender } = renderHook(() =>
+      useRetakeForm({ prompt: "a cat", nativeBridge, initialIntent: makeIntent(), constraints }),
+    );
+    await waitReady(result);
+    act(() => {
+      result.current.setAudioStrength(0.5);
+      result.current.setSamplingValue("numInferenceSteps", 30);
+      result.current.setWidth(1312, false); // 32 の倍数・64 の倍数ではない
+    });
+    expect(result.current.width).toBe(1312);
+    expect(result.current.buildRequest().num_inference_steps).toBe(30);
+
+    constraints = undefined; // LTX の規則（retake・sampling なし・倍数 64・fps 固定なし）
+    rerender();
+    await waitFor(() => expect(result.current.sampling).toBeNull());
+    expect(result.current.audioStrength).toBeNull();
+    expect(result.current.dimensionMultiple).toBe(64);
+    expect(result.current.width % 64).toBe(0);
+    expect([1280, 1344]).toContain(result.current.width);
+    expect(result.current.validityReasons).not.toContain("dimensionsOffGrid");
+
+    const body = result.current.buildRequest();
+    expect(body).not.toHaveProperty("num_inference_steps");
+    expect(body).not.toHaveProperty("shift_video");
+    expect(body).not.toHaveProperty("shift_audio");
+    expect(body.retake).not.toHaveProperty("audio_strength");
+    expect(body.retake).toHaveProperty("regenerate_audio");
+    expect(body.width).toBe(result.current.width);
   });
 });

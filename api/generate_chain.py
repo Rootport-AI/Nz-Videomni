@@ -107,11 +107,12 @@ def generate_chain(
         )
 
     # Retake: resolve the source video (404) and preflight the window (422 when
-    # it runs past the upload, or when regenerate_audio=False was asked for on a
-    # silent upload) BEFORE reserving a job — same up-front-failure discipline as
-    # source_video/source_audio above. The window's GEOMETRY was already settled
-    # by the schema + chain_math; what is checked here is only whether the
-    # uploaded material actually contains it.
+    # it runs past the upload, or when the window's original audio is asked for
+    # -- regenerate_audio=false on LTX, audio_strength > 0 on MiniMax H3 -- and
+    # the upload is silent) BEFORE reserving a job — same up-front-failure
+    # discipline as source_video/source_audio above. The window's GEOMETRY was
+    # already settled by the family's chain validation; what is checked here is
+    # only whether the uploaded material actually contains it.
     if request.retake is not None:
         try:
             context.video_upload_store.path_for(request.retake.video_id)

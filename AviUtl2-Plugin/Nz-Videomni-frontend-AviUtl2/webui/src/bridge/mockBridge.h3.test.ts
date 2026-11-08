@@ -41,8 +41,12 @@ describe("mockBridge — MiniMax H3", () => {
     });
     expect(h3?.constraints?.sampling?.num_inference_steps.default).toBe(20);
     expect(h3?.unsupported_features).toEqual(
-      expect.arrayContaining(["retake", "reference_video", "nag", "keyframe_strength"]),
+      expect.arrayContaining(["reference_video", "nag", "keyframe_strength"]),
     );
+    // §1-123: H3 runs a Retake now — `retake` left, and `constraints.retake`
+    // carries the middle-audio Strength slider. LTX publishes no `retake` block.
+    expect(h3?.unsupported_features).not.toContain("retake");
+    expect(h3?.constraints?.retake).toEqual({ audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } });
     // §1-106: H3 chains now — `chain` left, and the chain material it cannot
     // take is published instead; `constraints.chain` carries the fixed seam.
     // 台帳 §1-121: V2V and the opening image opened, so `v2v` and
@@ -60,6 +64,7 @@ describe("mockBridge — MiniMax H3", () => {
       keyframes: { step: 8, offset: 1 },
     });
     expect(ltx?.constraints?.chain).toBeUndefined();
+    expect(ltx?.constraints?.retake).toBeUndefined();
     expect(ltx?.unsupported_features).not.toContain("chain_start_image");
     // 台帳 §1-101: VRAM 16GB mode is H3's own — H3 does NOT publish the name,
     // both LTX engines do (which hides the Settings row there).
@@ -149,6 +154,24 @@ describe("mockBridge — MiniMax H3", () => {
       { num_frames: 124 },
     ]);
     expect(res2.status).toBe(202);
+  });
+
+  // §1-123: a one-clip Retake with `audio_strength` (and no seam / Stage-2 /
+  // `regenerate_audio`) is accepted on H3, as an LTX Retake is.
+  it("accepts a Retake chain with `audio_strength` while MiniMax H3 is loaded", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    const res = await chain(
+      bridge,
+      {
+        num_inference_steps: 20,
+        shift_video: 12,
+        shift_audio: 3,
+        retake: { video_id: "vid", window_start_sec: 1.5, audio_strength: 0.5 },
+      },
+      [{ num_frames: 124 }],
+    );
+    expect(res.status).toBe(202);
   });
 
   it("does not refuse an opening image with a strength on LTX 2.3 (the predicate is H3's declared list)", async () => {

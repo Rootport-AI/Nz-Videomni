@@ -111,7 +111,8 @@ describe("hiddenUiTargets / the hidden mappers (台帳 §1-121)", () => {
   });
 
   it("MiniMax H3's list hides the End source and IC-LoRA accordions, the opening-image strength and Create's two parts", () => {
-    const h3 = ["reference_video", "nag", "keyframe_strength", "end_source", "a2v", "retake", "lora_audio_strength"];
+    // §1-123: `retake` left the list (H3 runs a Retake).
+    const h3 = ["reference_video", "nag", "keyframe_strength", "end_source", "a2v", "lora_audio_strength"];
     expect(chainPanelsHiddenFor(h3)).toEqual({ endSource: true, reference: true, startImageStrength: true });
     expect(singleSectionsHiddenFor(h3)).toEqual({ referenceVideo: true, keyframeStrength: true });
     // `a2v` and `nag` grey rather than hide, so they are not in the hidden set.

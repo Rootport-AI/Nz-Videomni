@@ -1,0 +1,20 @@
+{
+  "tool": "submit_chain",
+  "arguments": {
+    "prompt": "A person talking to the camera, natural lip movement, steady shot.",
+    "clips": [
+      {
+        "num_frames": 124
+      }
+    ],
+    "width": 1280,
+    "height": 736,
+    "frame_rate": 24.0,
+    "seed": 1234,
+    "attention_backend": "sdpa",
+    "retake_video_id": "b3189682-e52c-4280-aa32-7db6caa5b19a",
+    "retake_window_start_sec": 1.0,
+    "retake_audio_strength": 0.0
+  },
+  "note": "MCP の道具に渡した引数。サーバーが受けた本文（書き戻し後）は metadata.json の request"
+}

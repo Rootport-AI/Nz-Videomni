@@ -4,7 +4,8 @@ import { latestJobSeed } from "../../jobs/seedUtils";
 import { VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
 import { STAGE2_WINDOW_OPTIONS } from "../../shell/tokenBudget";
 import type { Stage2Window } from "../../shell/tokenBudget";
-import { SizeFields } from "../single/CommonGenerationFields";
+import { SamplingFields, SizeFields } from "../single/CommonGenerationFields";
+import { FloatSliderField } from "../single/FloatSliderField";
 import { FRAME_RATE_MAX, FRAME_RATE_MIN } from "../single/paramUtils";
 import { RangeBand } from "./RangeBand";
 import type { UseRetakeFormResult } from "./useRetakeForm";
@@ -25,6 +26,12 @@ export interface RetakePanelProps {
  * 上から順に: 見出し → 素材カード → 区間バー → 撮り直す対象（音声トグル）→
  * 幅・高さ → フレームレート → シード → Stage-2 のクリップ長 → 生成前の注意 →
  * タイムラインとのずれ注意。
+ *
+ * §1-123: `form.audioStrengthRange` が `null` でない（読み込み中のベースモデルが
+ * `constraints.retake` を配信する。MiniMax H3）とき、撮り直す対象のラジオの代わりに
+ * 真ん中の音声の Strength のスライダーを 1 本出し、Stage-2 のクリップ長の欄を隠し、
+ * サンプリングのスライダーを出す。fps は `form.fixedFrameRate` があれば固定表示。
+ * どれもフックが解決した値を読むだけで、パネルはエンジン名を知らない。
  *
  * ## 3 つの状態
  *
@@ -76,7 +83,7 @@ export function RetakePanel({ form, disabled }: RetakePanelProps) {
       return (
         <section className="edit-panel retake-panel">
           <h2>{t.heading}</h2>
-          <p className="hint">{t.summary}</p>
+          <p className="hint">{t.summary(form.minWindowFrames)}</p>
           <div className="field source-section">
             <span className="field-label">{t.sourceHeading}</span>
             <div className="source-input-actions">{clearButton}</div>
@@ -96,7 +103,7 @@ export function RetakePanel({ form, disabled }: RetakePanelProps) {
     return (
       <section className="edit-panel retake-panel">
         <h2>{t.heading}</h2>
-        <p className="hint">{t.summary}</p>
+        <p className="hint">{t.summary(form.minWindowFrames)}</p>
         <p className="hint">{t.idle}</p>
       </section>
     );
@@ -116,13 +123,18 @@ export function RetakePanel({ form, disabled }: RetakePanelProps) {
   const formatPlacement = (startFrame: number, frames: number): string => {
     const range = form.toProjectRange(startFrame, frames);
     if (!range) return "";
-    return t.rangeBand.placementReadout(range.frameStart + 1, range.frameEnd + 1);
+    return t.rangeBand.placementReadout(
+      range.frameStart + 1,
+      range.frameEnd + 1,
+      form.windowGrid.step,
+      form.windowGrid.offset,
+    );
   };
 
   return (
     <section className="edit-panel retake-panel">
       <h2>{t.heading}</h2>
-      <p className="hint">{t.summary}</p>
+      <p className="hint">{t.summary(form.minWindowFrames)}</p>
 
       {/* 素材カード。差し替えボタンは意図的に無く、あるのは ❌ と 🔁 だけ
           （doc 参照）。位置決めは Chain の SOURCE カードと同じ
@@ -207,7 +219,9 @@ export function RetakePanel({ form, disabled }: RetakePanelProps) {
         <ul className="retake-notices">
           <li className="field-hint">{t.noticeDifferent}</li>
           <li className="field-hint">{t.noticeGlueQuality}</li>
-          <li className="field-hint">{t.noticeSilentAudio}</li>
+          <li className="field-hint">
+            {form.audioStrengthRange !== null ? t.noticeSilentAudioStrength : t.noticeSilentAudio}
+          </li>
         </ul>
       </div>
 
@@ -229,29 +243,48 @@ export function RetakePanel({ form, disabled }: RetakePanelProps) {
 function RetakeSettings({ form, disabled }: RetakePanelProps) {
   const strings = useStrings();
   const t = strings.edit.retake;
+  const strengthRange = form.audioStrengthRange;
   return (
     <>
-      {/* 撮り直す対象。既定は「映像と音声」。 */}
-      <fieldset className="outpaint-align-group">
-        <legend className="field-label">{t.audioHeading}</legend>
-        {(
-          [
-            [true, t.audioBoth],
-            [false, t.audioVideoOnly],
-          ] as Array<[boolean, string]>
-        ).map(([value, label]) => (
-          <label key={String(value)} className="field field-inline">
-            <input
-              type="radio"
-              name="retake-audio"
-              checked={form.regenerateAudio === value}
-              disabled={disabled}
-              onChange={() => form.setRegenerateAudio(value)}
-            />
-            <span className="field-label">{label}</span>
-          </label>
-        ))}
-      </fieldset>
+      {/* 撮り直す対象。LTX は「映像と音声／映像のみ」のラジオ（既定は「映像と音声」）、
+          §1-123 の H3 は真ん中の音声の Strength のスライダー 1 本（範囲・刻み・既定は
+          配信値。Create の A2V の Strength と同じ並び: スライダーの下に説明 1 行）。 */}
+      {strengthRange !== null ? (
+        <div className="field">
+          <FloatSliderField
+            inline
+            label={t.audioStrengthLabel}
+            value={form.audioStrength ?? strengthRange.default}
+            min={strengthRange.min}
+            max={strengthRange.max}
+            step={strengthRange.step}
+            disabled={disabled}
+            onChange={form.setAudioStrength}
+          />
+          <p className="field-hint">{t.audioStrengthHint}</p>
+        </div>
+      ) : (
+        <fieldset className="outpaint-align-group">
+          <legend className="field-label">{t.audioHeading}</legend>
+          {(
+            [
+              [true, t.audioBoth],
+              [false, t.audioVideoOnly],
+            ] as Array<[boolean, string]>
+          ).map(([value, label]) => (
+            <label key={String(value)} className="field field-inline">
+              <input
+                type="radio"
+                name="retake-audio"
+                checked={form.regenerateAudio === value}
+                disabled={disabled}
+                onChange={() => form.setRegenerateAudio(value)}
+              />
+              <span className="field-label">{label}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
 
       {/* 幅・高さ。Create/Chain と同じ `SizeFields` をそのまま借りる（取得ボタンの
           3 props は渡さないので、あのボタンは描かれない）。初期値は素材の実寸から
@@ -266,17 +299,25 @@ function RetakeSettings({ form, disabled }: RetakePanelProps) {
         disabled={disabled}
         onWidthChange={form.setWidth}
         onHeightChange={form.setHeight}
+        step={form.dimensionMultiple}
       />
 
+      {/* fps。エンジンが固定しているとき（§1-123 の H3 は 24）は押せない欄で値だけ
+          見せる（Create の `FrameRateSeedFields` と同じ見せ方）。 */}
       <div className="field-row">
-        <label className="field field-inline">
+        <label
+          className="field field-inline"
+          title={
+            form.fixedFrameRate !== null ? strings.single.duration.fpsFixedTooltip(form.fixedFrameRate) : undefined
+          }
+        >
           <span className="field-label">{strings.single.duration.fps}</span>
           <input
             type="number"
             min={FRAME_RATE_MIN}
             max={FRAME_RATE_MAX}
             value={form.frameRate}
-            disabled={disabled}
+            disabled={disabled || form.fixedFrameRate !== null}
             onChange={(e) => form.setFrameRate(Number(e.target.value))}
           />
         </label>
@@ -284,32 +325,45 @@ function RetakeSettings({ form, disabled }: RetakePanelProps) {
 
       <SeedField seed={form.seed} disabled={disabled} onChange={form.setSeed} />
 
+      {/* §1-123: サンプリングの 3 項目（配信があるときだけ。Chained と同じ部品）。 */}
+      {form.sampling && form.samplingConstraints && (
+        <SamplingFields
+          constraints={form.samplingConstraints}
+          values={form.sampling}
+          disabled={disabled}
+          onChange={form.setSamplingValue}
+        />
+      )}
+
       {/* Stage-2 のクリップ長。**Chained と同じ選択肢・同じ解説**（オーナー指示）
           なので、i18n も `strings.chained.stage2Window` を直接読む —— 同じ文言を
           2 箇所で持つと、片方だけ直る事故になる。JSX は `ChainedScreen` の同じ
           ブロックの写しで、あちらは本作業の立入禁止領域なので触っていない。
           Retake ではこの選択が**窓長の上限**にも効く（`8·vTile − 7`：潜在19
           フレーム = 145・standard = 169・w61 = 481）。§3-165 で選択肢は
-          `STAGE2_WINDOW_OPTIONS` の 15 段、ラベルは Chain と同じ式。 */}
-      <label className="field">
-        <span className="field-label">{strings.chained.stage2Window.label}</span>
-        <select
-          value={form.stage2Window}
-          disabled={disabled}
-          onChange={(e) => form.setStage2Window(e.target.value as Stage2Window)}
-        >
-          {STAGE2_WINDOW_OPTIONS.map((window) => (
-            <option key={window} value={window}>
-              {form.stage2WindowLabel(window, strings.chained.stage2Window.optionTemplate)}
-            </option>
+          `STAGE2_WINDOW_OPTIONS` の 15 段、ラベルは Chain と同じ式。
+          §1-123: H3 には Stage-2 が無いので出さない（Chained の H3 と同じ）。 */}
+      {strengthRange === null && (
+        <label className="field">
+          <span className="field-label">{strings.chained.stage2Window.label}</span>
+          <select
+            value={form.stage2Window}
+            disabled={disabled}
+            onChange={(e) => form.setStage2Window(e.target.value as Stage2Window)}
+          >
+            {STAGE2_WINDOW_OPTIONS.map((window) => (
+              <option key={window} value={window}>
+                {form.stage2WindowLabel(window, strings.chained.stage2Window.optionTemplate)}
+              </option>
+            ))}
+          </select>
+          {strings.chained.stage2Window.hint.split("\n\n").map((paragraph, i) => (
+            <p className="field-hint" key={i}>
+              {paragraph}
+            </p>
           ))}
-        </select>
-        {strings.chained.stage2Window.hint.split("\n\n").map((paragraph, i) => (
-          <p className="field-hint" key={i}>
-            {paragraph}
-          </p>
-        ))}
-      </label>
+        </label>
+      )}
     </>
   );
 }

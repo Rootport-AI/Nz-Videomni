@@ -183,16 +183,31 @@ def retake_video_not_found(video_id: str) -> APIError:
 def retake_window_out_of_range(detail: str | None = None) -> APIError:
     """Retake: the requested window does not fit the uploaded video.
 
-    Either ``window_start_sec + clips[0].num_frames`` runs past the end of the
-    upload (at the request frame rate), or ``regenerate_audio=False`` was asked
-    for on an upload with no audio stream to keep. Rejected up front (422) before
-    any GPU work — mirrors :func:`source_video_too_short`. The window's own
-    geometry (8n+1, the ``chain_math.RETAKE_WINDOW_MIN_PX`` /
+    ``window_start_sec + clips[0].num_frames`` runs past the end of the upload
+    (at the request frame rate). Rejected up front (422) before any GPU work —
+    mirrors :func:`source_video_too_short`. An upload with no audio stream when
+    the window's original audio is needed is :func:`retake_video_no_audio`.
+    The window's own geometry (8n+1, the ``chain_math.RETAKE_WINDOW_MIN_PX`` /
     ``retake_max_window_px`` range, glue grids) is a schema/``chain_math`` 422
     and never reaches here."""
     return APIError(
         "RETAKE_WINDOW_OUT_OF_RANGE",
         "the requested retake window does not fit the uploaded video",
+        422,
+        detail=detail,
+    )
+
+
+def retake_video_no_audio(video_id: str, detail: str | None = None) -> APIError:
+    """Retake: the request asks for the window's ORIGINAL audio
+    (``regenerate_audio=False`` on LTX, ``audio_strength > 0`` on MiniMax H3)
+    but the upload has no audio stream to read. Rejected up front (422) before
+    any GPU work. A window that runs past the upload is
+    :func:`retake_window_out_of_range`; the two are separate codes because the
+    user fixes them differently (move/shorten the window vs. regenerate the audio)."""
+    return APIError(
+        "RETAKE_VIDEO_NO_AUDIO",
+        f"the retake uses the window's original audio, but retake.video_id has no audio stream: {video_id}",
         422,
         detail=detail,
     )

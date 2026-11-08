@@ -22,6 +22,7 @@ from api.errors import (
     inpaint_window_out_of_range,
     pipeline_load_failed,
     pipeline_loading,
+    retake_video_no_audio,
     retake_window_out_of_range,
     source_audio_silent,
     source_audio_too_short,
@@ -1225,16 +1226,17 @@ class PipelineManager:
         """Validate an uploaded retake source BEFORE a job is created.
 
         Two checks, both about the MATERIAL rather than the geometry (the window
-        length, the 8n+1 grid and the glue-band grids were already settled by the
-        schema and ``chain_math.compute_chain_layout``):
+        length, its grid and the glue bands were already settled by the
+        family's chain validation):
 
         1. the window ``[window_start_sec, +window_frames)`` must fit inside the
            upload once resampled to ``request_frame_rate`` — same effective-frame
            estimate :meth:`preflight_source_video` uses, with
            ``video_io.cut_window_mp4``'s measured frame count as the frame-exact
            backstop;
-        2. ``regenerate_audio=False`` asks to keep the window's own audio, which
-           a silent upload cannot supply.
+        2. ``regenerate_audio=False`` (LTX) or ``audio_strength`` > 0 (MiniMax
+           H3) asks for the window's own audio, which a silent upload cannot
+           supply.
 
         The video_id is assumed already resolved (the endpoint 404s first).
         """
@@ -1254,10 +1256,15 @@ class PipelineManager:
                     f"@ {src_fps} fps (~{effective} @ {request_frame_rate} fps)"
                 )
             )
-        if not retake.regenerate_audio and not video_io.has_audio_stream(src_path):
-            raise retake_window_out_of_range(
+        uses_original_audio = (
+            not retake.regenerate_audio or (retake.audio_strength or 0) > 0
+        )
+        if uses_original_audio and not video_io.has_audio_stream(src_path):
+            raise retake_video_no_audio(
+                retake.video_id,
                 detail=(
-                    "regenerate_audio=false keeps the window's ORIGINAL audio, "
+                    "the retake uses the window's ORIGINAL audio "
+                    "(regenerate_audio=false or audio_strength > 0), "
                     f"but upload {retake.video_id} has no audio stream"
                 )
             )
@@ -1926,7 +1933,7 @@ class PipelineManager:
             metadata["a2v"] = {**a2v, **(a2v_provenance or {})}
         # Retake (additive): only present when a retake was requested, so a
         # chain without one carries no ``retake`` key. The engine's (or mock's)
-        # chain.retake sub-dict — geometry + runtime + freeze_proof — plus the
+        # chain.retake sub-dict — geometry + runtime (+ freeze_proof on LTX) — plus the
         # app-side provenance (which upload, which frames, resampled?).
         retake = cm.get("retake")
         if retake is not None:

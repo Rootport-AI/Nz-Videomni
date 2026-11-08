@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GenerateChainRequest } from "../../api/types";
+import type { GenerateChainRequest, SamplingConstraints, SamplingParamConstraint } from "../../api/types";
 import type { AppConfig } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
-import { parseLoraPrompt } from "../../lora/loraTags";
+import { omitLoraAudioStrength, parseLoraPrompt } from "../../lora/loraTags";
 import { ACCELERATION_DEFAULTS, accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { fixedFrameRate as fixedFrameRateOf, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { deriveGenerationParams } from "../../timeline/deriveGenerationParams";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import type { TimelineSelection } from "../../timeline/menuSelection";
@@ -34,12 +36,15 @@ import type { Stage2Window } from "../../shell/tokenBudget";
 import { FALLBACK_APP_CONFIG, MIN_HEIGHT, MIN_WIDTH } from "../single/defaultConfig";
 import { fileNameFromPath } from "../single/keyframeUtils";
 import {
+  clamp,
   FRAME_RATE_FALLBACK,
   FRAME_RATE_MIN,
   isDimensionOnGrid,
   roundToMultiple,
   snapFrameRate,
 } from "../single/paramUtils";
+import { clampSamplingValue, samplingDefaults, samplingRequestFields } from "../single/samplingValues";
+import type { SamplingValues } from "../single/samplingValues";
 // クロスモード import。`useSourceUpload` は `modes/chained/` にあるが動かさない
 // —— `useOutpaintForm` がすでに同じ理由（chained/ は別ワークストリームの占有領域）で
 // ここから直接 import しており、本ファイルはその先例に倣っているだけ。
@@ -56,12 +61,18 @@ import type { UseSourceUploadResult } from "../chained/useSourceUpload";
  * サーバがこの既定を変えたらここも直す必要がある（表示だけが古くなる）。
  * それでも API に載せないのは、「UI から動かせないつまみ」を送ると、送った値が
  * 正であるかのように見えてしまうため。
+ *
+ * §1-123: これは LTX の値。`constraints.retake` を配信するエンジン（MiniMax H3）では
+ * 糊代はサーバーが頭尾とも固定しており、表示には配信の
+ * `constraints.chain.overlap_frames`（22）を使う（やはり送らない）。
  */
 export const RETAKE_GLUE_HEAD_FRAMES = 25;
 export const RETAKE_GLUE_TAIL_FRAMES = 24;
 
 /** Chain の継ぎ目パラメータ。Retake は 1 クリップなので継ぎ目は実際には使われ
- * ないが、`GenerateChainRequest` の必須フィールドなので既定値を送る（契約どおり）。 */
+ * ないが、`GenerateChainRequest` の必須フィールドなので既定値を送る（契約どおり）。
+ * §1-123: `constraints.retake` を配信するエンジン（MiniMax H3）では送らない
+ * （Chained の H3 と同じ。継ぎ目はサーバーが固定している）。 */
 const RETAKE_OVERLAP_FRAMES = 3;
 const RETAKE_OVERLAP_STRENGTH = 0.5;
 
@@ -74,7 +85,8 @@ export type RetakeReasonCode =
   | "sourceTrimFailed"
   | "rangeUnusable"
   | "outOfMaterial"
-  /** 幅か高さが 64 の格子から外れている（数値欄に手打ちした値）。Create/Chain と
+  /** 幅か高さが縦横の倍数（`constraints.dimensionMultiple`。LTX は 64）の格子から
+   * 外れている（数値欄に手打ちした値）。Create/Chain と
    * 同じ理由コード名なので、文言も `single.generateReasons` のものを共有する。 */
   | "dimensionsOffGrid";
 
@@ -136,6 +148,14 @@ export interface UseRetakeFormDeps {
   /** §3-165: 読み込み中のベースモデルの表示名（`/models` の
    * `base_models[].display_name`、例「LTX 2.5」）。ラベルに出すだけ。省略時は `""`。 */
   engineLabel?: string | undefined;
+  /** §1-123: 読み込み中のベースモデルの数値の規則（`useBaseModels().activeConstraints`。
+   * Chained の `useChainForm` と同じ入力）。窓の格子・縦横の倍数・固定 fps・
+   * サンプリングを読み、`retake` の有無で H3 の形（Strength のスライダー・Stage-2
+   * なし）に切り替える。省略時は LTX の規則（`LTX_GENERATION_CONSTRAINTS`）。 */
+  constraints?: GenerationConstraints | undefined;
+  /** §1-123: LoRA の音声の強度を送らないエンジンか（`featureScope.loraAudioStrengthHiddenFor`。
+   * Chained と同じ入力）。`true` なら `loras[].audio_strength` を落として送る。 */
+  loraAudioHidden?: boolean | undefined;
 }
 
 export interface UseRetakeFormResult {
@@ -181,19 +201,40 @@ export interface UseRetakeFormResult {
   setWindow: (next: { startFrame: number; frames: number }) => void;
 
   /** 窓長の下限・上限。下限は config 由来（読めなければ F1 の定数）。上限は
-   * {@link stage2Window} 連動の `8·vTile − 7`（standard 169・潜在19フレーム 145・
-   * w61 481）。 */
+   * LTX では {@link stage2Window} 連動の `8·vTile − 7`（standard 169・潜在19フレーム 145・
+   * w61 481）、§1-123 の H3（`constraints.retake` あり）では `constraints.maxNumFrames`。 */
   minWindowFrames: number;
   maxWindowFrames: number;
+  /** §1-123: 窓長の格子（`constraints.frameGrid`。LTX 8n+1・H3 17n+5）。読み出し行の
+   * 文言に出すだけで、丸めは `resolveRetakeWindow` が持つ。 */
+  windowGrid: { step: number; offset: number };
   glueHeadFrames: number;
   glueTailFrames: number;
 
+  /** 窓を数え・送る fps（固定 fps のエンジンではその値）。 */
   frameRate: number;
   setFrameRate: (value: number) => void;
+  /** §1-123: エンジンが固定している fps（MiniMax H3 は 24）。`null` = 自由に選べる（LTX）。
+   * 固定のときは fps 欄を押せなくし、{@link frameRate} は常にこの値。 */
+  fixedFrameRate: number | null;
   seed: number;
   setSeed: (value: number) => void;
   regenerateAudio: boolean;
   setRegenerateAudio: (value: boolean) => void;
+
+  /** §1-123: 真ん中の音声の Strength のスライダー（範囲・刻み・既定は配信値）。
+   * `null` = LTX（「撮り直す対象」のラジオを出す）。これが `null` でないことが
+   * H3 の形の合図で、パネルはラジオと Stage-2 の欄の代わりにスライダーを出す。 */
+  audioStrengthRange: SamplingParamConstraint | null;
+  /** 真ん中の音声の Strength。{@link audioStrengthRange} が `null` のときは `null`。 */
+  audioStrength: number | null;
+  /** 範囲へ丸めて設定する。{@link audioStrengthRange} が `null` のときは何もしない。 */
+  setAudioStrength: (value: number) => void;
+
+  /** §1-123: サンプリングの 3 項目（Chained と同じ部品）。`null` = 配信が無い（LTX）。 */
+  sampling: SamplingValues | null;
+  samplingConstraints: SamplingConstraints | null;
+  setSamplingValue: (key: keyof SamplingValues, value: number) => void;
 
   /** Stage-2（アップスケール工程）のクリップ長。Chain と同じ選択肢（§3-165 で
    * 15 段）で、既定は `standard`。既定のときは**リクエストに載せない**（サーバ
@@ -212,7 +253,10 @@ export interface UseRetakeFormResult {
    */
   width: number;
   height: number;
-  /** `SizeFields` の `snap` 規約は Create/Chain と同一: `true` = 64 の倍数へ
+  /** 縦横の倍数（`constraints.dimensionMultiple`。LTX 64・H3 32）。`SizeFields` の
+   * `step` に渡す。 */
+  dimensionMultiple: number;
+  /** `SizeFields` の `snap` 規約は Create/Chain と同一: `true` = {@link dimensionMultiple} の倍数へ
    * 丸めて上下限へクランプ、`false` = 手打ちをそのまま通す（格子外れは
    * `dimensionsOffGrid` が送信時に止める）。 */
   setWidth: (value: number, snap?: boolean) => void;
@@ -272,6 +316,14 @@ export interface UseRetakeFormResult {
  */
 export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult {
   const { nativeBridge, initialIntent, acceleration, engineFamily, weightClass } = deps;
+  // §1-123: 読み込み中のベースモデルの規則。分岐は `h3`（`constraints.retake` の有無）の
+  // 1 つに集める。格子・縦横の倍数・固定 fps・サンプリングは分岐せずに読む
+  // （LTX の配信値も 8n+1・64・自由・null なので、読むだけで LTX の挙動のまま）。
+  const rules = deps.constraints ?? LTX_GENERATION_CONSTRAINTS;
+  const h3 = rules.retake !== null;
+  const generalMultiple = rules.dimensionMultiple;
+  const fixedFps = fixedFrameRateOf(rules);
+  const loraAudioHidden = deps.loraAudioHidden ?? false;
   const sageAvailable = deps.sageAvailable ?? null;
   const engineLabel = deps.engineLabel ?? "";
   const config = deps.config ?? FALLBACK_APP_CONFIG;
@@ -305,9 +357,12 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
   // lazy initializer も 🔁 の持ち越し値・config 既定の両方を通す —— 非整数の
   // config 既定が来ても、この欄からは整数しか出ていかない。フォールバックは
   // 定数（`?? config…` と繋ぐと、スナップが弾いたその値がそのまま漏れる）。
-  const [frameRate, setFrameRateState] = useState(
+  const [frameRateState, setFrameRateState] = useState(
     () => snapFrameRate(carried()?.frameRate ?? config.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
   );
+  // §1-123: 固定 fps のエンジンでは状態の値（`clearAll` の config 既定や、LTX で 🔁 した
+  // ときの持ち越し値）を使わず、常に固定値で窓を数え・送る。
+  const frameRate = fixedFps ?? frameRateState;
   /**
    * fps 欄の setter。**名前は `setFrameRate` のまま**にしてある —— 呼び出しは
    * 初期化・`clearAll`・公開値の 3 箇所あり、別名にするとどれかが素の
@@ -321,6 +376,28 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
   const [seed, setSeed] = useState(() => carried()?.seed ?? config.generation_defaults.seed);
   // 既定は「映像と音声」（実装計画 §1 の確定仕様）。
   const [regenerateAudio, setRegenerateAudio] = useState(() => carried()?.regenerateAudio ?? true);
+  // §1-123: 真ん中の音声の Strength（H3 だけ）と、サンプリングの 3 項目（配信があるときだけ）。
+  const audioStrengthRange = rules.retake?.audioStrength ?? null;
+  const [audioStrength, setAudioStrengthState] = useState<number | null>(() =>
+    initialAudioStrength(audioStrengthRange, carried()?.audioStrength ?? null),
+  );
+  const setAudioStrength = useCallback(
+    (raw: number) => {
+      if (!audioStrengthRange || !Number.isFinite(raw)) return;
+      setAudioStrengthState(clamp(raw, audioStrengthRange.min, audioStrengthRange.max));
+    },
+    [audioStrengthRange],
+  );
+  const samplingConstraints = rules.sampling;
+  const [sampling, setSampling] = useState<SamplingValues | null>(() => samplingDefaults(samplingConstraints));
+  const setSamplingValue = useCallback(
+    (key: keyof SamplingValues, raw: number) => {
+      const value = clampSamplingValue(samplingConstraints, key, raw);
+      if (value === null) return;
+      setSampling((prev) => (prev ? { ...prev, [key]: value } : prev));
+    },
+    [samplingConstraints],
+  );
   const [stale, setStale] = useState(false);
   const [stage2Window, setStage2Window] = useState<Stage2Window>(
     () => carried()?.stage2Window ?? STAGE2_WINDOW_DEFAULT,
@@ -375,7 +452,8 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
   // §3-165: 以前は config の `retake_window_max_frames`（standard の値 169）との
   // `min` を取っていたが、窓を広げても 169 で頭打ちになるので外した。配信値は
   // 型と既定値の写しとして残るが、フロントはもう読まない。
-  const maxWindowFrames = retakeMaxWindowPx(STAGE2_WINDOW_PRESETS[stage2Window].vTile);
+  // §1-123: H3 には Stage-2 が無く、窓の上限は配信の `num_frames.max`（481）。
+  const maxWindowFrames = h3 ? rules.maxNumFrames : retakeMaxWindowPx(STAGE2_WINDOW_PRESETS[stage2Window].vTile);
 
   // §3-165: ラベルの目安解像度の予算。`useChainForm` と同じ 2 行（配信テーブルの
   // 行 → 無ければ配信スカラー → 無ければ 40,000）。
@@ -401,8 +479,10 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
       materialDurationSec: mapping.materialDurationSec,
       minFrames: minWindowFrames,
       maxFrames: maxWindowFrames,
+      // §1-123: 格子は常に配信値（LTX 8n+1・H3 17n+5）。
+      grid: rules.frameGrid,
     });
-  }, [mapping, requested, frameRate, minWindowFrames, maxWindowFrames]);
+  }, [mapping, requested, frameRate, minWindowFrames, maxWindowFrames, rules.frameGrid]);
 
   // RangeBand の座標系: 0 = 使える素材の先頭（= `materialStartSec`）。ファイルの
   // 先頭ではない —— 頭がトリムされたリボンでは、画面に出ていない前半を帯に
@@ -452,8 +532,9 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
         projectHeight: config.generation_defaults.height,
         isICLora: false,
         limits,
+        generalMultiple,
       }),
-    [snapshot?.mediaWidth, snapshot?.mediaHeight, config.generation_defaults, limits],
+    [snapshot?.mediaWidth, snapshot?.mediaHeight, config.generation_defaults, limits, generalMultiple],
   );
   const width = widthOverride ?? derived.width;
   const height = heightOverride ?? derived.height;
@@ -464,20 +545,40 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
   // 止める（黙って直さない）。
   const setWidth = useCallback(
     (raw: number, snap = true) => {
-      if (snap) return setWidthOverride(roundToMultiple(raw, 64, limits.minWidth, limits.maxWidth));
+      if (snap) return setWidthOverride(roundToMultiple(raw, generalMultiple, limits.minWidth, limits.maxWidth));
       if (!Number.isFinite(raw)) return;
       setWidthOverride(raw);
     },
-    [limits.minWidth, limits.maxWidth],
+    [limits.minWidth, limits.maxWidth, generalMultiple],
   );
   const setHeight = useCallback(
     (raw: number, snap = true) => {
-      if (snap) return setHeightOverride(roundToMultiple(raw, 64, limits.minHeight, limits.maxHeight));
+      if (snap) return setHeightOverride(roundToMultiple(raw, generalMultiple, limits.minHeight, limits.maxHeight));
       if (!Number.isFinite(raw)) return;
       setHeightOverride(raw);
     },
-    [limits.minHeight, limits.maxHeight],
+    [limits.minHeight, limits.maxHeight, generalMultiple],
   );
+
+  // §1-123: 読み込み中のベースモデルの規則が変わったら追従する（フォームが
+  // マウントされたままベースモデルを切り替えた場合や、`GET /models` が後から届いた
+  // 場合。`useChainForm` の `appliedRulesRef` と同じ形）。初回は飛ばし（上の初期化が
+  // この規則を使っている）、中身が変わったときだけ走る。触った解像度は新しい倍数へ
+  // 丸め直し、Strength とサンプリングは新しい配信の既定へ戻す。fps は送信値が
+  // `fixedFps ?? frameRateState` なので、ここで触らなくても固定値に従う。
+  const appliedRulesRef = useRef(rules);
+  useEffect(() => {
+    if (appliedRulesRef.current === rules) return;
+    appliedRulesRef.current = rules;
+    setWidthOverride((prev) =>
+      prev === null ? null : roundToMultiple(prev, generalMultiple, limits.minWidth, limits.maxWidth),
+    );
+    setHeightOverride((prev) =>
+      prev === null ? null : roundToMultiple(prev, generalMultiple, limits.minHeight, limits.maxHeight),
+    );
+    setAudioStrengthState(initialAudioStrength(audioStrengthRange, null));
+    setSampling(samplingDefaults(samplingConstraints));
+  }, [rules, generalMultiple, limits, audioStrengthRange, samplingConstraints]);
 
   // --- ❌片付け / 🔁別の場所を撮り直す ------------------------------------
   /**
@@ -513,11 +614,20 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     setFrameRate(config.generation_defaults.frame_rate);
     setSeed(config.generation_defaults.seed);
     setRegenerateAudio(true);
+    setAudioStrengthState(initialAudioStrength(audioStrengthRange, null));
+    setSampling(samplingDefaults(samplingConstraints));
     setStage2Window(STAGE2_WINDOW_DEFAULT);
     setWidthOverride(null);
     setHeightOverride(null);
     clearRetakeCarryOver();
-  }, [dropSource, setFrameRate, config.generation_defaults.frame_rate, config.generation_defaults.seed]);
+  }, [
+    dropSource,
+    setFrameRate,
+    config.generation_defaults.frame_rate,
+    config.generation_defaults.seed,
+    audioStrengthRange,
+    samplingConstraints,
+  ]);
 
   /**
    * 🔁: 動画と区間だけを捨てて「素材待ち」へ。
@@ -533,8 +643,9 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     setHeightOverride(height);
     dropSource();
     setAwaitingSource(true);
-    stashRetakeCarryOver({ frameRate, seed, regenerateAudio, stage2Window });
-  }, [dropSource, width, height, frameRate, seed, regenerateAudio, stage2Window]);
+    // fps は状態の値を持ち越す（固定 fps のエンジンでは送信値に使われない）。
+    stashRetakeCarryOver({ frameRate: frameRateState, seed, regenerateAudio, audioStrength, stage2Window });
+  }, [dropSource, width, height, frameRateState, seed, regenerateAudio, audioStrength, stage2Window]);
 
   // --- checkStale ---------------------------------------------------------
   const checkStale = useCallback(async () => {
@@ -561,8 +672,8 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
   // 送信直前の格子ゲート（Create/Chain と同じ流儀）。数値欄への手打ちは
   // 素通しで届くので、外れた値は黙って直さずここで止める。
   if (
-    !isDimensionOnGrid(width, 64, limits.minWidth, limits.maxWidth) ||
-    !isDimensionOnGrid(height, 64, limits.minHeight, limits.maxHeight)
+    !isDimensionOnGrid(width, generalMultiple, limits.minWidth, limits.maxWidth) ||
+    !isDimensionOnGrid(height, generalMultiple, limits.minHeight, limits.maxHeight)
   ) {
     validityReasons.push("dimensionsOffGrid");
   }
@@ -614,7 +725,9 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     // 手打ちされた場合もクライアントでは止めず、バックエンドの既存 422
     // （`LORA_REQUIRES_REFERENCE`）に委ねる —— ここにだけ別のゲートを増やすと、
     // 「どのタブで何が弾かれるか」の規則が増える。
-    const { strippedPrompt, loras } = parseLoraPrompt(prompt);
+    const { strippedPrompt, loras: parsedLoras } = parseLoraPrompt(prompt);
+    // §1-123: LoRA の強度が 1 本だけのエンジンでは音声の強度を落とす（Chained と同じ）。
+    const loras = loraAudioHidden ? omitLoraAudioStrength(parsedLoras) : parsedLoras;
     return {
       prompt: strippedPrompt.trim(),
       // タグが 1 つも無ければキーごと省く（Chain の `buildRequest` と同じ作法）。
@@ -623,13 +736,16 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
       height,
       frame_rate: frameRate,
       seed,
-      overlap_frames: RETAKE_OVERLAP_FRAMES,
-      overlap_strength: RETAKE_OVERLAP_STRENGTH,
+      // §1-123: H3 では継ぎ目の 2 項目を送らない（Chained の H3 と同じ）。
+      ...(h3 ? {} : { overlap_frames: RETAKE_OVERLAP_FRAMES, overlap_strength: RETAKE_OVERLAP_STRENGTH }),
       // 窓長の単一ソース。サーバはこの 1 本の `num_frames` を窓長として読む。
       clips: [{ num_frames: window?.ok ? window.frames : minWindowFrames }],
       // Stage-2 のクリップ長。**既定（standard）のときはキーごと省く** ——
       // サーバ側の既定に追随させるため。それ以外の段を選んだときだけ載せる。
-      ...(stage2Window === STAGE2_WINDOW_DEFAULT ? {} : { stage2_window: stage2Window }),
+      // H3 には Stage-2 が無いので送らない。
+      ...(h3 || stage2Window === STAGE2_WINDOW_DEFAULT ? {} : { stage2_window: stage2Window }),
+      // §1-123: サンプリングの 3 項目。配信があるときだけ 3 つとも送る（LTX は何も送らない）。
+      ...samplingRequestFields(sampling),
       // `chunked_upsample` は**意図的に載せない**。`api/types.ts` の同フィールドは
       // 「WebUI は常に明示送信すること」と書いており Chain 系の他のビルダーは全て
       // そうしているが、Retake の窓はどの段でも stage-2 のタイル 1 枚に収まる長さ
@@ -642,7 +758,11 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
         // **アップロード後ファイルの時間軸**へ直す。トリムしていれば
         // `trimOffsetSec` はその切り出し開始秒、していなければ 0。
         window_start_sec: Math.max(0, windowStartSec),
-        regenerate_audio: regenerateAudio,
+        // §1-123: LTX は「撮り直す対象」のラジオ、H3 は真ん中の音声の Strength。
+        // どちらも相手の系統の項目は送らない（サーバーが 422 にする）。
+        ...(h3
+          ? { audio_strength: audioStrength ?? audioStrengthRange?.default ?? 0 }
+          : { regenerate_audio: regenerateAudio }),
       },
       // §1-27 (2026-09-05): `{}` (no keys) unless the user moved off the
       // server default, keeping this request byte-identical to before.
@@ -661,6 +781,11 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     source.state.id,
     regenerateAudio,
     acceleration,
+    h3,
+    loraAudioHidden,
+    sampling,
+    audioStrength,
+    audioStrengthRange,
   ]);
 
   return {
@@ -678,17 +803,27 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     setWindow,
     minWindowFrames,
     maxWindowFrames,
-    glueHeadFrames: RETAKE_GLUE_HEAD_FRAMES,
-    glueTailFrames: RETAKE_GLUE_TAIL_FRAMES,
+    windowGrid: rules.frameGrid,
+    // §1-123: H3 の糊代は配信の `constraints.chain.overlap_frames`（頭尾とも 22）。
+    glueHeadFrames: h3 && rules.chain ? rules.chain.overlapFrames : RETAKE_GLUE_HEAD_FRAMES,
+    glueTailFrames: h3 && rules.chain ? rules.chain.overlapFrames : RETAKE_GLUE_TAIL_FRAMES,
     frameRate,
     setFrameRate,
+    fixedFrameRate: fixedFps,
     seed,
     setSeed,
     regenerateAudio,
     setRegenerateAudio,
+    audioStrengthRange,
+    audioStrength,
+    setAudioStrength,
+    sampling,
+    samplingConstraints,
+    setSamplingValue,
     stage2Window,
     setStage2Window,
     stage2WindowLabel,
+    dimensionMultiple: generalMultiple,
     width,
     height,
     setWidth,
@@ -782,6 +917,8 @@ interface RetakeCarryOver {
   frameRate: number;
   seed: number;
   regenerateAudio: boolean;
+  /** §1-123: 真ん中の音声の Strength。LTX で 🔁 したときは `null`（配信が無い）。 */
+  audioStrength: number | null;
   stage2Window: Stage2Window;
 }
 
@@ -801,6 +938,14 @@ function peekRetakeCarryOver(): RetakeCarryOver | null {
  * 捨て忘れると次のテストへ漏れる）。 */
 export function clearRetakeCarryOver(): void {
   pendingCarryOver = null;
+}
+
+/** §1-123: Strength の初期値。配信が無ければ `null`、持ち越し値があれば範囲へ丸めた
+ * その値、無ければ配信の既定。 */
+function initialAudioStrength(range: SamplingParamConstraint | null, carried: number | null): number | null {
+  if (!range) return null;
+  if (carried !== null && Number.isFinite(carried)) return clamp(carried, range.min, range.max);
+  return range.default;
 }
 
 /** config の窓長上下限を読む。サーバが古くて欠けている・壊れている場合だけ

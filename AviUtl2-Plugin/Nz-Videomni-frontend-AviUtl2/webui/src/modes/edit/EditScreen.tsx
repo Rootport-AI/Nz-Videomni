@@ -11,6 +11,7 @@ import { RetakePanel } from "./RetakePanel";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { useToasts } from "../../shell/ToastContext";
 import { useStrings } from "../../i18n/LanguageContext";
 import { JobLedger } from "../../jobs/JobLedger";
@@ -93,6 +94,18 @@ export interface EditScreenProps {
    * `refreshKey` (the server's LoRA list follows the base model). Omitted ⇒
    * fetched once on mount, as before. */
   loraRefreshKey?: string | undefined;
+  /** §1-123: the LOADED base model's numeric rules
+   * (`useBaseModels().activeConstraints`), threaded to `useRetakeForm` only —
+   * the Retake form reads its window grid, size multiple, fixed fps, sampling
+   * sliders and (via `constraints.retake`) the H3 shape off it, the way
+   * `ChainedScreen` hands it to `useChainForm`. The other sub-tabs keep their
+   * LTX constants (an engine whose rules differ closes them through
+   * `unsupported_features`). Omitted ⇒ the LTX rules. */
+  constraints?: GenerationConstraints | undefined;
+  /** §1-123: whether the loaded engine's LoRAs take one strength only
+   * (`featureScope.loraAudioStrengthHiddenFor`); Retake then drops
+   * `loras[].audio_strength`, as Chained does. Omitted ⇒ `false`. */
+  loraAudioHidden?: boolean | undefined;
 }
 
 /** The Edit mode screen (2026-08-09). Until this day the Edit tab was a
@@ -177,6 +190,8 @@ export function EditScreen({
   weightClass,
   engineLabel,
   loraRefreshKey,
+  constraints,
+  loraAudioHidden,
 }: EditScreenProps = {}) {
   const strings = useStrings();
   // Consumed EXACTLY ONCE, in the lazy initializer: `AppShell` bumps
@@ -269,6 +284,8 @@ export function EditScreen({
     sageAvailable,
     weightClass,
     engineLabel,
+    constraints,
+    loraAudioHidden,
   });
   const retakeReasonMessages = useMemo(() => buildRetakeReasonMessages(strings), [strings]);
   const tr = strings.edit.retake;
@@ -594,12 +611,18 @@ export function EditScreen({
                 disabled={retakeSubmitting || serverBusy || !retakeForm.isValid}
                 onGenerate={() => void handleRetakeGenerate()}
               />
-              {retakeSubmitState.phase === "error" && (
-                <div className="card card-error">
-                  <p className="error-code">{retakeSubmitState.code}</p>
-                  <p>{retakeSubmitState.message}</p>
-                </div>
-              )}
+              {/* 素材に音声トラックが無い 422 だけは、赤いカードの代わりに直し方の黄色の注意を出す。 */}
+              {retakeSubmitState.phase === "error" &&
+                (retakeSubmitState.code === "RETAKE_VIDEO_NO_AUDIO" ? (
+                  <p className="warning-banner warning-banner-mild" role="status">
+                    {retakeForm.audioStrengthRange !== null ? tr.noAudioStrengthWarning : tr.noAudioWarning}
+                  </p>
+                ) : (
+                  <div className="card card-error">
+                    <p className="error-code">{retakeSubmitState.code}</p>
+                    <p>{retakeSubmitState.message}</p>
+                  </div>
+                ))}
               <GenerateReasonsNote reasons={retakeForm.validityReasons} messages={retakeReasonMessages} />
             </>
           )}

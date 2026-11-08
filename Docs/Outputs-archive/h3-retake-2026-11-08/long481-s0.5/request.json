@@ -1,0 +1,20 @@
+{
+  "tool": "submit_chain",
+  "arguments": {
+    "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+    "clips": [
+      {
+        "num_frames": 481
+      }
+    ],
+    "width": 640,
+    "height": 384,
+    "frame_rate": 24.0,
+    "seed": 1234,
+    "attention_backend": "sdpa",
+    "retake_video_id": "191a30f5-ef36-4980-a779-6d24aee7c840",
+    "retake_window_start_sec": 2.0,
+    "retake_audio_strength": 0.5
+  },
+  "note": "MCP の道具に渡した引数。サーバーが受けた本文（書き戻し後）は metadata.json の request"
+}

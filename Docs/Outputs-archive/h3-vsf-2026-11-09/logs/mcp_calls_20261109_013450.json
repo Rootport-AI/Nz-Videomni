@@ -1,0 +1,643 @@
+[
+  {
+    "at": "2026-11-09T01:34:51+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.16,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:34:51+09:00",
+    "tool": "load_pipeline",
+    "args": {
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default"
+      },
+      "wait_sec": 45
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default",
+        "text_encoder": "default",
+        "video_vae": "default",
+        "audio": "default"
+      },
+      "finished": true
+    }
+  },
+  {
+    "at": "2026-11-09T01:34:51+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:34:51+09:00",
+    "tool": "submit_generate",
+    "args": {
+      "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sage",
+      "vram16_mode": true,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "num_inference_steps": 20
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "job_id": "d53489ac-a861-40c2-9c5d-183715959014",
+      "status": "running",
+      "created_at": "2026-11-08T16:34:51Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T01:34:51+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d53489ac-a861-40c2-9c5d-183715959014",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T01:35:41+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d53489ac-a861-40c2-9c5d-183715959014",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 35.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T01:36:21+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d53489ac-a861-40c2-9c5d-183715959014",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+  },
+  {
+    "at": "2026-11-09T01:37:11+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d53489ac-a861-40c2-9c5d-183715959014",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+  },
+  {
+    "at": "2026-11-09T01:38:01+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d53489ac-a861-40c2-9c5d-183715959014",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 0.03,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:38:01+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "d53489ac-a861-40c2-9c5d-183715959014",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B0",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B0\\d53489ac-a861-40c2-9c5d-183715959014.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\d53489ac-a861-40c2-9c5d-183715959014\\output.mp4",
+      "size_bytes": 1624589,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T01:38:01+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "d53489ac-a861-40c2-9c5d-183715959014"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\d53489ac-a861-40c2-9c5d-183715959014\\output.mp4",
+      "exists": true,
+      "size_bytes": 1624589,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T01:38:01+09:00",
+    "tool": "submit_generate",
+    "args": {
+      "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sage",
+      "vram16_mode": true,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "num_inference_steps": 20,
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "negative_prompt": "black hair, long hair, eyeglasses, cars",
+      "vsf_scale": 1.5
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "job_id": "1ba203a1-03c2-4eee-8dd5-0b06486e4664",
+      "status": "running",
+      "created_at": "2026-11-08T16:38:01Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T01:38:01+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "1ba203a1-03c2-4eee-8dd5-0b06486e4664",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:38:46+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "1ba203a1-03c2-4eee-8dd5-0b06486e4664",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:39:31+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "1ba203a1-03c2-4eee-8dd5-0b06486e4664",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 40.01,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T01:40:16+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "1ba203a1-03c2-4eee-8dd5-0b06486e4664",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 49.99,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:41:06+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "1ba203a1-03c2-4eee-8dd5-0b06486e4664",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 10.01,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:41:16+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "1ba203a1-03c2-4eee-8dd5-0b06486e4664",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B1",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B1\\1ba203a1-03c2-4eee-8dd5-0b06486e4664.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\1ba203a1-03c2-4eee-8dd5-0b06486e4664\\output.mp4",
+      "size_bytes": 1641639,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T01:41:16+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "1ba203a1-03c2-4eee-8dd5-0b06486e4664"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\1ba203a1-03c2-4eee-8dd5-0b06486e4664\\output.mp4",
+      "exists": true,
+      "size_bytes": 1641639,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T01:41:16+09:00",
+    "tool": "submit_generate",
+    "args": {
+      "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sage",
+      "vram16_mode": true,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "num_inference_steps": 20,
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "negative_prompt": "black hair, long hair, eyeglasses, cars",
+      "vsf_scale": 3.0
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "job_id": "90fd1d73-2657-4840-afb6-375c49bfd924",
+      "status": "running",
+      "created_at": "2026-11-08T16:41:16Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T01:41:16+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "90fd1d73-2657-4840-afb6-375c49bfd924",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:42:01+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "90fd1d73-2657-4840-afb6-375c49bfd924",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 10.02,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+  },
+  {
+    "at": "2026-11-09T01:42:16+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "90fd1d73-2657-4840-afb6-375c49bfd924",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:43:01+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "90fd1d73-2657-4840-afb6-375c49bfd924",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 50.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:43:51+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "90fd1d73-2657-4840-afb6-375c49bfd924",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 40.03,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:44:31+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "90fd1d73-2657-4840-afb6-375c49bfd924",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B2",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B2\\90fd1d73-2657-4840-afb6-375c49bfd924.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\90fd1d73-2657-4840-afb6-375c49bfd924\\output.mp4",
+      "size_bytes": 1892998,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T01:44:31+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "90fd1d73-2657-4840-afb6-375c49bfd924"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\90fd1d73-2657-4840-afb6-375c49bfd924\\output.mp4",
+      "exists": true,
+      "size_bytes": 1892998,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T01:44:31+09:00",
+    "tool": "submit_generate",
+    "args": {
+      "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sage",
+      "vram16_mode": true,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "num_inference_steps": 20,
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "negative_prompt": "black hair, long hair, eyeglasses, cars",
+      "vsf_scale": 5.0
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "job_id": "4ee35ae6-d00e-4fee-8946-c97147cc3183",
+      "status": "running",
+      "created_at": "2026-11-08T16:44:31Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T01:44:31+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4ee35ae6-d00e-4fee-8946-c97147cc3183",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 20.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T01:44:56+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4ee35ae6-d00e-4fee-8946-c97147cc3183",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T01:45:46+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4ee35ae6-d00e-4fee-8946-c97147cc3183",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:46:31+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4ee35ae6-d00e-4fee-8946-c97147cc3183",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:47:16+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4ee35ae6-d00e-4fee-8946-c97147cc3183",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 30.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:47:46+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "4ee35ae6-d00e-4fee-8946-c97147cc3183",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B3",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B3\\4ee35ae6-d00e-4fee-8946-c97147cc3183.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\4ee35ae6-d00e-4fee-8946-c97147cc3183\\output.mp4",
+      "size_bytes": 1627627,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T01:47:46+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "4ee35ae6-d00e-4fee-8946-c97147cc3183"
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\4ee35ae6-d00e-4fee-8946-c97147cc3183\\output.mp4",
+      "exists": true,
+      "size_bytes": 1627627,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T01:47:46+09:00",
+    "tool": "submit_generate",
+    "args": {
+      "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sage",
+      "vram16_mode": true,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "num_inference_steps": 20,
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "negative_prompt": "black hair, long hair, eyeglasses, cars",
+      "vsf_scale": 8.0
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "job_id": "f63be9af-f2c1-45dc-9563-2a1145b13a69",
+      "status": "running",
+      "created_at": "2026-11-08T16:47:46Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T01:47:46+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "f63be9af-f2c1-45dc-9563-2a1145b13a69",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 5.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T01:47:56+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "f63be9af-f2c1-45dc-9563-2a1145b13a69",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:48:41+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "f63be9af-f2c1-45dc-9563-2a1145b13a69",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.03,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:49:27+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "f63be9af-f2c1-45dc-9563-2a1145b13a69",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 50.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:50:17+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "f63be9af-f2c1-45dc-9563-2a1145b13a69",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:51:02+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "f63be9af-f2c1-45dc-9563-2a1145b13a69",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B4",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\B4\\f63be9af-f2c1-45dc-9563-2a1145b13a69.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\f63be9af-f2c1-45dc-9563-2a1145b13a69\\output.mp4",
+      "size_bytes": 607051,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T01:51:02+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "f63be9af-f2c1-45dc-9563-2a1145b13a69"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\f63be9af-f2c1-45dc-9563-2a1145b13a69\\output.mp4",
+      "exists": true,
+      "size_bytes": 607051,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T01:51:02+09:00",
+    "tool": "unload_pipeline",
+    "args": {},
+    "seconds": 0.83,
+    "ok": true,
+    "result": {
+      "pipeline_loaded": false,
+      "state": "unloaded"
+    }
+  }
+]

@@ -1,0 +1,302 @@
+{
+  "job_id": "f63be9af-f2c1-45dc-9563-2a1145b13a69",
+  "created_at": "2026-11-08T16:47:46Z",
+  "started_at": "2026-11-08T16:47:46Z",
+  "completed_at": "2026-11-08T16:50:57Z",
+  "status": "completed",
+  "request": {
+    "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+    "negative_prompt": "black hair, long hair, eyeglasses, cars",
+    "nag_enabled": true,
+    "nag_scale": 11.0,
+    "nag_tau": 2.5,
+    "nag_alpha": 0.25,
+    "neg_method": "vsf",
+    "vsf_scale": 8.0,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "keep_resident_embeddings": false,
+    "fused_gguf_dequant_kernel": true,
+    "vae_mode": "default",
+    "embed_mp4_metadata": true,
+    "vram16_mode": true,
+    "width": 1344,
+    "height": 768,
+    "crop_output": null,
+    "num_frames": 56,
+    "frame_rate": 24.0,
+    "num_inference_steps": 20,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "guidance_scale": 1.0,
+    "seed": 42,
+    "pipeline": "distilled",
+    "conditioning_images": [],
+    "loras": [],
+    "reference_video_id": null,
+    "conditioning_attention_strength": null,
+    "reference_video_strength": null,
+    "outpaint": null,
+    "inpaint": null,
+    "alpha_gen": null,
+    "source_audio": null,
+    "references": []
+  },
+  "generation_mode": "t2v",
+  "seed_used": 42,
+  "attention_used": "sage",
+  "block_swap_prefetch_used": "on",
+  "keep_resident_used": "off",
+  "vram16_mode_used": "on",
+  "keep_resident_embeddings_used": null,
+  "fused_gguf_dequant_kernel_used": null,
+  "vae_mode_used": null,
+  "peak_vram_reserved_mb": 7580,
+  "generation_time_seconds": 191.03,
+  "backend": "minimax-h3",
+  "output": {
+    "path": "outputs/f63be9af-f2c1-45dc-9563-2a1145b13a69/output.mp4",
+    "resolution": "1344x768",
+    "duration_seconds": 2.333,
+    "frame_rate": 24.0,
+    "file_size_bytes": 599069
+  },
+  "vram_optimization": {
+    "low_vram_mode": true,
+    "low_vram_profile": "16gb_safe",
+    "fp8_transformer": true,
+    "cpu_offload_text_encoder": true,
+    "vae_tiling": true,
+    "peak_vram_mb": 6375
+  },
+  "models": {
+    "base_model": "MiniMaxH3",
+    "selection": {
+      "transformer": {
+        "name": "default",
+        "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+      },
+      "text_encoder": {
+        "name": "default",
+        "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+      },
+      "video_vae": {
+        "name": "default",
+        "file": "minimax_h3_video_vae_fp16.safetensors"
+      },
+      "audio": {
+        "name": "default",
+        "file": "minimax_h3_audio_vae_fp32.safetensors"
+      }
+    }
+  },
+  "environment": {
+    "python": "3.12.9",
+    "torch": null,
+    "cuda": null,
+    "gpu": null,
+    "platform": "win32"
+  },
+  "h3": {
+    "sampler": "euler",
+    "num_inference_steps": 20,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "images_used": 0,
+    "rss_peak_gib": 29.08,
+    "commit_gib": 4.68,
+    "commit_peak_gib": 41.48,
+    "seconds": 191.03,
+    "phases": {
+      "encode": {
+        "te": {
+          "num_layers_file": 50,
+          "num_layers_built": 50,
+          "int8_linears": 350,
+          "tensors_planned": 901,
+          "vision_tensors_in_file": 351,
+          "rope": {
+            "rope_type": "default",
+            "rope_theta": 5000000.0,
+            "mrope_section": [
+              24,
+              20,
+              20
+            ],
+            "mrope_interleaved": true,
+            "head_dim": 128,
+            "num_attention_heads": 64,
+            "num_key_value_heads": 8,
+            "num_hidden_layers": 50,
+            "attn_implementation": "nz_h3_blocked_math"
+          },
+          "extra_special_tokens": {
+            "ids": {
+              "<d>": 151669,
+              "</d>": 151670,
+              "<|cutoff|>": 151671,
+              "<|lyrics_start|>": 151672,
+              "<|lyrics_end|>": 151673,
+              "<|caption_start|>": 151674,
+              "<|caption_end|>": 151675
+            },
+            "added_here": false
+          },
+          "seconds": 0.29
+        },
+        "rss_after_load_gib": 2.9,
+        "commit_after_load_gib": 4.54,
+        "te_read": {
+          "read_gib": 24.17,
+          "read_seconds": 18.8,
+          "layers_read": 50,
+          "encode_seconds": 18.91,
+          "tokens": 30,
+          "vision_tokens": 0,
+          "vision_tokens_per_image": []
+        },
+        "te_read_negative": {
+          "read_gib": 24.17,
+          "read_seconds": 7.83,
+          "layers_read": 50,
+          "encode_seconds": 7.94,
+          "tokens": 11,
+          "vision_tokens": 0,
+          "vision_tokens_per_image": []
+        },
+        "rss_after_release_gib": 2.91,
+        "commit_after_release_gib": 4.71,
+        "text_tokens": 30,
+        "negative_tokens": 11,
+        "seconds": 27.33,
+        "rss_end_gib": 2.91,
+        "rss_process_peak_gib": 29.08,
+        "commit_end_gib": 4.71,
+        "commit_process_peak_gib": 41.48,
+        "peak_vram_mb": 1493,
+        "peak_vram_reserved_mb": 1514
+      },
+      "denoise": {
+        "dit": {
+          "int8_linears": 200,
+          "loaded_tensors": 732,
+          "loaded_gib": 19.53,
+          "read_seconds": 11.25
+        },
+        "dit_source": "file",
+        "rss_after_load_gib": 22.48,
+        "commit_after_load_gib": 28.25,
+        "rss_after_place_gib": 21.85,
+        "commit_after_place_gib": 31.21,
+        "sequence": {
+          "text": 41,
+          "cond": 0,
+          "audio": 186,
+          "video": 17136,
+          "total": 17363,
+          "latent_frames": 17,
+          "audio_latents": 93,
+          "grid": [
+            24,
+            42
+          ],
+          "negative": 11
+        },
+        "m_per_step": [
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "block_swap_prefetch_used": "on",
+        "vram16": {
+          "cap_fraction": 0.855,
+          "cap_mib": 14001,
+          "blocks_on_gpu": 4,
+          "head_group": 8,
+          "row_chunk": 4096,
+          "qkv_quant_shared": true,
+          "text_modules": "meta",
+          "num_alloc_retries": 0,
+          "num_ooms": 0,
+          "inactive_split_peak_mib": 327
+        },
+        "rss_after_release_gib": 20.98,
+        "commit_after_release_gib": 26.82,
+        "seconds": 145.43,
+        "rss_end_gib": 20.98,
+        "rss_process_peak_gib": 29.08,
+        "commit_end_gib": 26.82,
+        "commit_process_peak_gib": 41.48,
+        "peak_vram_mb": 3776,
+        "peak_vram_reserved_mb": 4140
+      },
+      "decode": {
+        "vae_source": "file",
+        "audio_samples": 74400,
+        "audio_samples_decoded": 74400,
+        "frames": 56,
+        "seconds": 18.14,
+        "rss_end_gib": 2.86,
+        "rss_process_peak_gib": 29.08,
+        "commit_end_gib": 4.75,
+        "commit_process_peak_gib": 41.48,
+        "peak_vram_mb": 6375,
+        "peak_vram_reserved_mb": 7580
+      }
+    },
+    "quant_backends": {
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      }
+    },
+    "vsf": {
+      "rows": [
+        30,
+        41
+      ],
+      "scale": 8.0,
+      "m_neg": 0.0008740526914101972,
+      "m_text": 0.0019251139800279102
+    }
+  }
+}

@@ -1,0 +1,69 @@
+点検: after
+date: 2026-11-09 01:51:03
+
+== git branch --show-current
+dev
+== git rev-parse HEAD
+ad0c1180e4390ebac136bb47837e0f65e8e8be82
+== git log --oneline -1
+ad0c118 H3 VSF: アダプタが neg_method=vsf の nag_enabled を受理（NAG 方式は 422 のまま。台帳 §1-127）
+== git status --short (empty below = clean)
+ M Docs/PENDING_TASKS.md
+ M Docs/VERIFICATION_LOG.md
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/
+== nvidia-smi --query-gpu=memory.used,memory.total --format=csv
+memory.used [MiB], memory.total [MiB]
+773 MiB, 16376 MiB
+== python processes (Get-CimInstance; empty = none)
+pid=60156 ppid=52712 python.exe
+    "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Scripts\python.exe" Docs\Outputs-archive\h3-vsf-2026-11-09\preconditions.py after
+pid=54124 ppid=60156 python.exe  [この点検そのもの]
+    "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.python\cpython-3.12.9-windows-x86_64-none\python.exe" Docs\Outputs-archive\h3-vsf-2026-11-09\preconditions.py after
+== worker processes (engine.worker / engine_h3.worker; empty = none)
+== AviUtl2 (aviutl2.exe; empty = not running)
+== nvidia-smi (full)
+Mon Nov  9 01:51:04 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 610.88                 KMD Version: 610.88        CUDA UMD Version: 13.3     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4070 ...  WDDM  |   00000000:01:00.0  On |                  N/A |
+| 42%   50C    P8             10W /  285W |     773MiB /  16376MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            2452    C+G   ...al\Programs\Notion\Notion.exe      N/A      |
+|    0   N/A  N/A            4456    C+G   ...ms\Microsoft VS Code\Code.exe      N/A      |
+|    0   N/A  N/A            5092    C+G   ...y\StartMenuExperienceHost.exe      N/A      |
+|    0   N/A  N/A            8188    C+G   ...__kzh8wxbdkxb8p\DCv2\DCv2.exe      N/A      |
+|    0   N/A  N/A            9068    C+G   ...ntrolPanel\SystemSettings.exe      N/A      |
+|    0   N/A  N/A           11716    C+G   ...indows\System32\ShellHost.exe      N/A      |
+|    0   N/A  N/A           12880    C+G   ...2txyewy\CrossDeviceResume.exe      N/A      |
+|    0   N/A  N/A           13512    C+G   ..._cw5n1h2txyewy\SearchHost.exe      N/A      |
+|    0   N/A  N/A           13824    C+G   ...cw5n1h2txyewy\WidgetBoard.exe      N/A      |
+|    0   N/A  N/A           14260    C+G   ...lus\logioptionsplus_agent.exe      N/A      |
+|    0   N/A  N/A           17164    C+G   ....0.4314.58\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           18472    C+G   ...IA app\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           19316    C+G   ...App_cw5n1h2txyewy\LockApp.exe      N/A      |
+|    0   N/A  N/A           20284    C+G   ...IA app\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           22792    C+G   ...5n1h2txyewy\TextInputHost.exe      N/A      |
+|    0   N/A  N/A           24644    C+G   ...xyewy\ShellExperienceHost.exe      N/A      |
+|    0   N/A  N/A           25452    C+G   ...se 3 Host\Razer Synapse 3.exe      N/A      |
+|    0   N/A  N/A           26220    C+G   ....0.4314.58\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           26800    C+G   ...4__8wekyb3d8bbwe\ms-teams.exe      N/A      |
+|    0   N/A  N/A           31180    C+G   ...em32\ApplicationFrameHost.exe      N/A      |
+|    0   N/A  N/A           36756    C+G   ...ed_copilot\copilotapphost.exe      N/A      |
+|    0   N/A  N/A           42176    C+G   ...\cef.win64\steamwebhelper.exe      N/A      |
+|    0   N/A  N/A           46516    C+G   ...ot\Application\copilotapp.exe      N/A      |
+|    0   N/A  N/A           51076    C+G   ...8bbwe\PhoneExperienceHost.exe      N/A      |
++-----------------------------------------------------------------------------------------+
+
+判定: 問題なし（終了コード 0）

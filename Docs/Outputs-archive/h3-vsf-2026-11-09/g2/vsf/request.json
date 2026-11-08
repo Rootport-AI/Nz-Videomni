@@ -1,0 +1,20 @@
+{
+  "tool": "submit_generate",
+  "arguments": {
+    "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+    "width": 640,
+    "height": 384,
+    "num_frames": 124,
+    "frame_rate": 24.0,
+    "seed": 42,
+    "nag_enabled": true,
+    "negative_prompt": "blurry",
+    "neg_method": "vsf",
+    "attention_backend": "sdpa",
+    "vram16_mode": true,
+    "vsf_scale": 3.0,
+    "num_inference_steps": 4
+  },
+  "note": "G2 ②: VSF 3.0・4 ステップ（受理されて completed になること）",
+  "remark": "MCP の道具に渡した引数。サーバーが受けた本文は metadata.json の request"
+}

@@ -1,0 +1,92 @@
+{
+  "started_at": "2026-11-09T01:20:04+09:00",
+  "checks": {
+    "3_list_models": {
+      "expected": "MiniMaxH3 の unsupported_features に 'nag' がある",
+      "actual": [
+        "reference_video",
+        "nag",
+        "two_stage_hq",
+        "guidance_scale",
+        "outpaint",
+        "inpaint",
+        "alpha_gen",
+        "prune_vaed",
+        "keep_resident_embeddings",
+        "keyframe_strength",
+        "a2v",
+        "end_source",
+        "fused_gguf_dequant_kernel",
+        "lora_audio_strength"
+      ],
+      "pass": true
+    },
+    "1_generate_nag": {
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "width": 640,
+        "height": 384,
+        "num_frames": 124,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "negative_prompt": "blurry",
+        "neg_method": "nag",
+        "attention_backend": "sdpa",
+        "vram16_mode": true
+      },
+      "error_text": "Error executing tool submit_generate: FEATURE_UNSUPPORTED: 'nag' is not supported by the selected base model (選択中のベースモデルでは使えない機能です) — MiniMax H3 のネガティブプロンプトは VSF 方式だけです（neg_method を \"vsf\" にしてください）。",
+      "has_feature_unsupported": true,
+      "mentions_nag": true,
+      "pass": true,
+      "expected": "ToolCallError・文に FEATURE_UNSUPPORTED と nag"
+    },
+    "4_chain_vsf": {
+      "tool": "submit_chain",
+      "tool_args": {
+        "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "clips": [
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          }
+        ],
+        "width": 640,
+        "height": 384,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "negative_prompt": "blurry",
+        "neg_method": "vsf",
+        "vsf_scale": 3.0,
+        "attention_backend": "sdpa"
+      },
+      "error_text": "Error executing tool submit_chain: FEATURE_UNSUPPORTED: 'nag' is not supported by the selected base model (選択中のベースモデルでは使えない機能です) — MiniMax H3 の連結生成（Chained）は nag に対応していません（リクエストの nag_enabled が既定値ではありません）。",
+      "has_feature_unsupported": true,
+      "mentions_nag": true,
+      "pass": true,
+      "expected": "ToolCallError・文に FEATURE_UNSUPPORTED と nag（Chained は方式に関係なく断る）"
+    },
+    "2_generate_vsf": {
+      "expected": "completed・metadata の h3.vsf に ['rows', 'scale', 'm_neg', 'm_text']",
+      "status": "completed",
+      "error": null,
+      "vsf": {
+        "rows": [
+          41,
+          43
+        ],
+        "scale": 3.0,
+        "m_neg": 0.001271956291022645,
+        "m_text": 0.003671091016518143
+      },
+      "vsf_where": "h3.vsf",
+      "pass": true
+    }
+  },
+  "pass": true,
+  "finished_at": "2026-11-09T01:21:19+09:00"
+}

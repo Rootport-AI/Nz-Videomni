@@ -1,6 +1,7 @@
 /**
  * MiniMax H3's DiT sequence length (S, the total number of rows the denoiser
- * sees) for a Single `/generate`, and the comfort marker derived from it
+ * sees) for a Single `/generate` — and for each clip of a Chained
+ * `/generate/chain` (ledger §1-276) — and the comfort marker derived from it
  * (ledger §1-119, 2026-11-07).
  *
  * H3's comfort boundary is an out-of-VRAM failure, and the recalibration

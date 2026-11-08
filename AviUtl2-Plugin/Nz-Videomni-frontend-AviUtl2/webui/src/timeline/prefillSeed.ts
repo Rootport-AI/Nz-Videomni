@@ -218,11 +218,19 @@ export function selectedRangeFramesForIntent(
 /** Ledger §1-119: the keyframe cards a right-click seed's DURATION counts on
  * the sequence-rows line — 1 for the intents that land an image on frame 0
  * (#4 `image-to-video`, #10 `image-from-frame`; `SingleScreen`'s
- * `prefillMaterial` / `captureFrameToKeyframe`), 0 for every other. A seed
+ * `prefillMaterial` / `captureFrameToKeyframe` — and, ledger §1-276, the Chain
+ * intents that open clip 0 on an image: #6 `image-to-clip-chain`, #12
+ * `current-frame-to-clip-chain`; `ChainedScreen`'s mount loads), 0 for every
+ * other (#1 `extend-video` is V2V: its clip 0 has no opening image). A seed
  * counts no Reference card (on H3 #2 and #7 go to the Reference cards and never
  * reach a seed — `AppShell`). */
 export function seedKeyframeCount(intent: string): number {
-  return intent === "image-to-video" || intent === "image-from-frame" ? 1 : 0;
+  return intent === "image-to-video" ||
+    intent === "image-from-frame" ||
+    intent === "image-to-clip-chain" ||
+    intent === "current-frame-to-clip-chain"
+    ? 1
+    : 0;
 }
 
 export interface ResolvePrefillSeedArgs {
@@ -262,26 +270,33 @@ export interface ResolvePrefillSeedArgs {
    * right-click's seeded length equals the marker the user then sees on the
    * form.
    *
-   * All three are optional and all three must effectively be present for the
-   * smart path to run (the gate is on `acceleration`, which is the only one
-   * with no meaningful default). Omit them — as every pre-existing caller and
-   * test does — and the seed is derived exactly as before, off
-   * `config.limits.spill_free_frames`. */
+   * All three are optional. The LTX token line needs all three effectively
+   * present (the gate is on `acceleration`, which is the only one with no
+   * meaningful default); the sequence-rows line (MiniMax H3, ledger §1-119 /
+   * §1-276) needs `engineFamily` only, has nothing to do with the
+   * acceleration settings, and also serves Chain-targeted seeds. Omit them —
+   * as every pre-existing caller and test does — and the seed is derived
+   * exactly as before, off `config.limits.spill_free_frames`. */
   engineFamily?: string | undefined;
   acceleration?: AccelerationSettings | undefined;
   sageAvailable?: boolean | null | undefined;
   /** The loaded transformer's weight class (`useBaseModels().activeWeightClass`,
    * §1-31), passed straight to `resolveComfortRow` beside
    * {@link engineFamily}. Optional; omitted or `""` = unknown (no
-   * `weight_class` in the match). Both callers (`AppShell` and
-   * `SingleScreen`) must hand in the same value (R-4). */
+   * `weight_class` in the match). Every caller (`AppShell`, `SingleScreen`,
+   * `ChainedScreen`) must hand in the same value (R-4). */
   weightClass?: string | undefined;
   /** The LOADED base model's numeric rules
-   * (`useBaseModels().activeConstraints`). Applied to Single-targeted intents
-   * only — the frame grid and floor, the size multiple, and a fixed frame rate
-   * (which wins over `fpsPolicy`). Chain-targeted intents keep the LTX rules
-   * (an engine with other rules closes Chained). Omitted = the LTX rules.
-   * Both callers (`AppShell` and `SingleScreen`) must hand in the same value. */
+   * (`useBaseModels().activeConstraints`) — the frame grid and floor, the size
+   * multiple, and a fixed frame rate (which wins over `fpsPolicy`). Applied to
+   * Single-targeted intents, and (ledger §1-276) to Chain-targeted ones only
+   * when the rules fix the chain's overlap (`chain` non-null — MiniMax H3,
+   * whose Chained runs on its own 17n+5 grid at 24 fps); a Chain-targeted seed
+   * keeps the LTX rules otherwise (the served LTX rules are not
+   * `LTX_GENERATION_CONSTRAINTS` — their `maxNumFrames` is unbounded — so
+   * reading them would move LTX's Chain seeds). Omitted = the LTX rules. Every
+   * caller (`AppShell`, `SingleScreen`, `ChainedScreen`) must hand in the same
+   * value. */
   constraints?: GenerationConstraints | undefined;
 }
 
@@ -340,10 +355,16 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
     sageAvailable,
     weightClass,
   } = args;
-  // The served rules apply to the Single screen's seeds
-  // only; a Chain-targeted seed keeps LTX's (see the arg's doc comment).
+  // The served rules apply to the Single screen's seeds, and to a
+  // Chain-targeted seed only on an engine that fixes the chain's overlap; any
+  // other seed keeps LTX's (see the arg's doc comment).
   const singleTarget = targetModeForIntent(intent) === "single";
-  const rules = singleTarget ? (args.constraints ?? LTX_GENERATION_CONSTRAINTS) : LTX_GENERATION_CONSTRAINTS;
+  const chainTarget = targetModeForIntent(intent) === "chained";
+  const rules = singleTarget
+    ? (args.constraints ?? LTX_GENERATION_CONSTRAINTS)
+    : chainTarget && args.constraints?.chain != null
+      ? args.constraints
+      : LTX_GENERATION_CONSTRAINTS;
   const frameLimits = frameLimitsFor(rules, config.limits.max_num_frames);
   // Both IC-LoRA intents seed on the 128 grid. 台帳§1-15 W4 (2026-08-11): the
   // Chain-targeted one MUST be here — its material lands in Chain's reference
@@ -451,11 +472,16 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   const projectFps = rawProjectFps;
 
   // Smart comfort marker (2026-08-31): only the SINGLE screen's flows share
-  // Create's per-clip comfort line — a Chain-targeted intent's DURATION is a
-  // per-CLIP length inside a chain, a different quantity, so it keeps the
-  // legacy table. `acceleration` gates the LTX token line because a caller that
-  // does not thread the Settings state cannot say what would effectively run,
-  // and guessing would move seeds for callers that never opted in.
+  // Create's LTX token line — a Chain-targeted intent's DURATION is a
+  // per-CLIP length inside a chain, a different quantity, so on LTX it keeps
+  // the legacy table. `acceleration` gates the LTX token line because a caller
+  // that does not thread the Settings state cannot say what would effectively
+  // run, and guessing would move seeds for callers that never opted in.
+  //
+  // Ledger §1-276: the sequence-rows line (MiniMax H3) is the exception — a
+  // Chained clip's S is Single's formula at the clip's length, so a
+  // Chain-targeted seed takes it too. With no rows line a Chain-targeted seed
+  // keeps exactly the legacy table, as before.
   //
   // Computed against `derived.width/height` — the size this very seed is about
   // to apply — not the form's current size, which is what makes the seeded
@@ -466,10 +492,12 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // ledger §1-119) takes its rows line, independent of the acceleration
   // settings, and never falls to the legacy lookup either
   // (`singleLegacySpillTable`). `acceleration` gates the LTX branch only.
-  const rowsBudget = singleTarget ? resolveSequenceRowsBudget(config.limits, engineFamily) : null;
+  const rowsBudget = singleTarget || chainTarget ? resolveSequenceRowsBudget(config.limits, engineFamily) : null;
   const spillFreeFrames = singleTarget
     ? singleLegacySpillTable(config.limits, engineFamily)
-    : config.limits.spill_free_frames;
+    : rowsBudget !== null
+      ? null
+      : config.limits.spill_free_frames;
   const smartCeiling =
     rowsBudget !== null
       ? h3ComfortFrames(

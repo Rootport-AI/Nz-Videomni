@@ -370,9 +370,10 @@ export interface DurationFieldProps {
   /** Ready-to-render "N frames ≈ X.Xs @ fps" hint (`paramUtils.formatDurationHint`). */
   hint: string;
   /** The comfortable `num_frames` ceiling the caller computed (Create's comfort
-   * marker, and the Edit panels that draw a line of their own), rendered as a
-   * tick on the slider via a `<datalist>`. `null`/omitted hides the tick
-   * entirely — Chain's per-clip duration has no equivalent threshold. */
+   * marker, Chain's per-clip marker on MiniMax H3 — ledger §1-276 — and the
+   * Edit panels that draw a line of their own), rendered as a tick on the
+   * slider via a `<datalist>`. `null`/omitted hides the tick entirely (Chain on
+   * LTX has no per-clip threshold). */
   spillThresholdFrames?: number | null;
   /** `true` once `value` exceeds `spillThresholdFrames` — shows
    * `spillWarningText` as a mild warning banner. Callers that draw their own
@@ -397,8 +398,9 @@ export interface DurationFieldProps {
  * (`GenerationForm.tsx`, one instance for `values.numFrames`), Chain
  * (`ClipCard.tsx`, one instance per clip), Inpainting and Alpha Gen — the
  * optional spill-threshold datalist tick + warning banner are used only by
- * the callers that have a threshold (Chain's per-clip duration has none), so
- * they're plain optional props rather than a second component. */
+ * the callers that have a threshold (Chain's per-clip duration only on an
+ * engine with a sequence-rows line, MiniMax H3), so they're plain optional
+ * props rather than a second component. */
 export function DurationField({
   label,
   value,

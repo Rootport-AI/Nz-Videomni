@@ -98,6 +98,7 @@ H3_CHAIN_MIN_CLIPS_WITH_SOURCE = 1
 #: The shortest retake window: 17 * 4 + 5, the least 17n+5 count that leaves a
 #: free middle of 8 video latents past the fixed head (7) and tail (7). The
 #: LTX retake's minimum is also 73, from its own grid (a different reason).
+#: 操作パネルはこの値を `config.limits.retake_window_min_frames`（LTX の 73）で読んでいるので、変えるときは両方を見る。
 H3_RETAKE_MIN_FRAMES = 73
 #: Audio samples per audio latent at 32 kHz (40 latents per second), and per frame (32000 / 24).
 H3_AUDIO_SAMPLES_PER_LATENT = 800

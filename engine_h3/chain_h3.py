@@ -18,7 +18,7 @@ redrawn, its audio held toward the original by ``audio_strength`` (mask value
 ``1 - s``), and the whole window is decoded (strength 1.0 muxes the original
 waveform). Exclusive with ``source``, key frames and references.
 
-The mechanism is Docs/MINIMAX_H3_DESIGN.md §3.3; the geometry is
+The mechanism is Docs/MINIMAX_H3_DESIGN.md §3.3 (Retake: §3.4); the geometry is
 ``h3_chain_math`` at the repository root, shared with the app. Each clip's
 fixed head is self-checked against the previous tail with ``torch.equal``.
 

@@ -181,7 +181,7 @@ export interface UseRetakeFormResult {
   /** 範囲→素材秒の写像（右クリック時に 1 回だけ作る。以後タイムラインを
    * 追いかけることはなく、変わるのは❌/🔁で捨てるときだけ）。 */
   mapping: RetakeRangeResult | null;
-  /** 確定した窓（8n+1・[下限,上限]・素材端でクランプ済み）。毎描画導出で、
+  /** 確定した窓（格子（LTX 8n+1・H3 17n+5）・[下限,上限]・素材端でクランプ済み）。毎描画導出で、
    * 状態としては持たない —— `useOutpaintForm` の「上限は保存しない」規律と同じ。 */
   window: RetakeWindowResult | null;
 
@@ -196,13 +196,14 @@ export interface UseRetakeFormResult {
   windowStartFrame: number;
   /** 窓の長さ（生成フレーム）。 */
   windowFrames: number;
-  /** RangeBand の `onChange` をそのまま繋ぐ。8n+1 スナップとクランプは
+  /** RangeBand の `onChange` をそのまま繋ぐ。格子（LTX 8n+1・H3 17n+5）へのスナップとクランプは
    * `resolveRetakeWindow` が引き受けるので、ここは要求値を保存するだけ。 */
   setWindow: (next: { startFrame: number; frames: number }) => void;
 
   /** 窓長の下限・上限。下限は config 由来（読めなければ F1 の定数）。上限は
    * LTX では {@link stage2Window} 連動の `8·vTile − 7`（standard 169・潜在19フレーム 145・
-   * w61 481）、§1-123 の H3（`constraints.retake` あり）では `constraints.maxNumFrames`。 */
+   * w61 481）、§1-123 の H3（`constraints.retake` あり）では `constraints.maxNumFrames`。
+   * H3 も同じ値（`h3_chain_math.H3_RETAKE_MIN_FRAMES`＝73）なので config を読む（設計正本 §3.4）。 */
   minWindowFrames: number;
   maxWindowFrames: number;
   /** §1-123: 窓長の格子（`constraints.frameGrid`。LTX 8n+1・H3 17n+5）。読み出し行の
@@ -304,7 +305,7 @@ export interface UseRetakeFormResult {
  *    「捨てる」方向にしか動かない —— 別の素材が横から入ってくることはない。
  * 2. **窓は保存しない、要求値を保存する**。状態が持つのは「ユーザーが要求した
  *    開始秒と長さ」だけで、実際の窓は毎描画 `resolveRetakeWindow` で導出する。
- *    8n+1 の格子も [下限,上限] のクランプも素材端の詰めも、判定は 1 箇所
+ *    格子（LTX 8n+1・H3 17n+5）も [下限,上限] のクランプも素材端の詰めも、判定は 1 箇所
  *    （`timeline/retakeWindow.ts`）にしかない。RangeBand が格子を知らないのも
  *    同じ理由で、あちらは表示と操作だけを担当する controlled な子。
  * 3. **素材はこのパネルの中では差し替えられない**。アップロードは右クリック由来の
@@ -759,7 +760,7 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
         // `trimOffsetSec` はその切り出し開始秒、していなければ 0。
         window_start_sec: Math.max(0, windowStartSec),
         // §1-123: LTX は「撮り直す対象」のラジオ、H3 は真ん中の音声の Strength。
-        // どちらも相手の系統の項目は送らない（サーバーが 422 にする）。
+        // 相手の系統の既定以外の値はサーバーが 422 にする。
         ...(h3
           ? { audio_strength: audioStrength ?? audioStrengthRange?.default ?? 0 }
           : { regenerate_audio: regenerateAudio }),

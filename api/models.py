@@ -1009,7 +1009,7 @@ class RetakeSpec(BaseModel):
     of it (``video_io.cut_window_mp4``, frame-exact, resampled to ``frame_rate``
     if needed) and hands ONLY that window to the engine, which regenerates its
     middle while holding ``head_px`` frames at the front and ``tail_px`` frames at
-    the back frozen through both stages. The delivered mp4 is the WHOLE window,
+    the back frozen through both stages (LTX; H3 has one stage). The delivered mp4 is the WHOLE window,
     untrimmed: the glue bands are the overlap material the timeline lays back
     over the original, which is what puts the quality seam at the window's outer
     edge instead of at the edit point.
@@ -1019,7 +1019,7 @@ class RetakeSpec(BaseModel):
     range and grid are the active family's (LTX: ``chain_math.compute_chain_layout``;
     MiniMax H3: ``h3_chain_math.compute_h3_chain_layout`` and the published
     ``constraints.num_frames``); ``config.limits.retake_window_min_frames`` /
-    ``retake_window_max_frames`` publish the LTX default-window numbers.
+    ``retake_window_max_frames``: the min (73) is shared with H3; the max is LTX's.
 
     The glue-band grids are family rules, checked by the family's chain
     validation, not here. LTX: ``head_px`` 8n+1 and ``tail_px`` a multiple of 8
@@ -1032,7 +1032,8 @@ class RetakeSpec(BaseModel):
     ``regenerate_audio`` (LTX) False keeps the window's ORIGINAL waveform and
     muxes it back verbatim (the vocoder is skipped). ``audio_strength`` (MiniMax
     H3 only, 0..1) pulls the middle's audio towards the original; 1.0 muxes the
-    original waveform back. A request that uses the original audio
+    original waveform back. Omitted on MiniMax H3, the adapter writes back the
+    published default (0.5), so a silent upload needs an explicit 0. A request that uses the original audio
     (``regenerate_audio`` False or ``audio_strength`` > 0) requires the upload
     to actually have an audio stream (422 up front if not). Each family rejects
     the other family's field when it is set to a non-default value.

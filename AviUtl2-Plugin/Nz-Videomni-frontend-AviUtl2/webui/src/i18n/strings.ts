@@ -164,11 +164,10 @@ export const en = {
          * Built by `RetakePanel` (it needs the material-seconds ↔ project-frames
          * mapping that only `useRetakeForm` has) and handed to `RangeBand` as a
          * function, so it keeps updating mid-drag. */
-        /** The trailing note spells out the 8n+1 rule (owner feedback,
+        /** The trailing note spells out the window grid (owner feedback,
          * 2026-08-10): the window snaps to those lengths, so the numbers here
-         * rarely match the range that was selected frame for frame. */
-        /** §1-123: the grid is passed in (`constraints.frameGrid`: LTX 8/1,
-         * MiniMax H3 17/5). */
+         * rarely match the range that was selected frame for frame. §1-123: the
+         * grid is passed in (`constraints.frameGrid`: LTX 8/1, MiniMax H3 17/5). */
         placementReadout: (startFrame: number, endFrame: number, gridStep: number, gridOffset: number): string =>
           `Redoing frames ${startFrame} to ${endFrame} of the timeline. (Window lengths are always a multiple of ${gridStep}, plus ${gridOffset}.)`,
         /** The readout's SUB line, in brackets under the main one. */

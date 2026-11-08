@@ -410,12 +410,11 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``:
 #: the feature names of both reject tables (single, then the chain's new
-#: ones: ``a2v``, ``end_source``, ``retake``),
+#: ones: ``a2v``, ``end_source``),
 #: plus ``fused_gguf_dequant_kernel`` and ``lora_audio_strength``. Derived, so a
-#: refused feature is always published. ``retake`` closes Retake's Edit
-#: sub-tab; with Outpainting, Inpainting and Alpha Gen also refused, all four
-#: Edit sub-tabs close and the operation panel greys the whole Edit tab (裁定
-#: 34). ``a2v`` closes the Chained audio panel and Batch A2V; Single's A2V card
+#: refused feature is always published. Outpainting / Inpainting / Alpha Gen
+#: close; the Edit tab stays open with Retake alive (裁定 34, updated
+#: 2026-11-08). ``a2v`` closes the Chained audio panel and Batch A2V; Single's A2V card
 #: goes to ``/generate`` (``constraints.source_audio``), so it stays open.
 #: ``fused_gguf_dequant_kernel`` is the one name here the server does NOT
 #: refuse: it stays in :data:`IGNORED_FIELDS` (MiniMax H3 has no GGUF weights,
@@ -981,8 +980,8 @@ class _RealBackendH3(_RealBackend):
         also carries ``source`` (``{path, context_frames}``) after ``clips``;
         with a retake it carries ``retake`` (``{path, audio_strength}``; the
         app-cut window, :class:`PipelineManager`'s ``_retake_window.mp4``).
-        Key set and order are pinned by ``GOLDEN_CHAIN_KEYS_H3`` (and its V2V
-        and key-frame variants) in tests/test_engine_h3_adapter.py.
+        Key set and order are pinned by ``GOLDEN_CHAIN_KEYS_H3`` (and its V2V,
+        key-frame and Retake (``GOLDEN_CHAIN_KEYS_H3_RETAKE``) variants) in tests/test_engine_h3_adapter.py.
         """
         chain = chain_request
         reject_chain(chain)

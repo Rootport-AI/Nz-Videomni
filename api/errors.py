@@ -187,9 +187,9 @@ def retake_window_out_of_range(detail: str | None = None) -> APIError:
     (at the request frame rate). Rejected up front (422) before any GPU work —
     mirrors :func:`source_video_too_short`. An upload with no audio stream when
     the window's original audio is needed is :func:`retake_video_no_audio`.
-    The window's own geometry (8n+1, the ``chain_math.RETAKE_WINDOW_MIN_PX`` /
-    ``retake_max_window_px`` range, glue grids) is a schema/``chain_math`` 422
-    and never reaches here."""
+    The window's own geometry is the family's chain validation's 422 (LTX:
+    ``chain_math``; MiniMax H3: ``h3_chain_math`` / the adapter) and never
+    reaches here."""
     return APIError(
         "RETAKE_WINDOW_OUT_OF_RANGE",
         "the requested retake window does not fit the uploaded video",

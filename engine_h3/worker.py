@@ -139,7 +139,9 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             and ``h3``: overlap_frames / inject_clean / decode; with a
             ``source``, also ``v2v``: the LTX chain's sixteen keys, whose
             ``audio_handle_filename`` names the ``<stem>_audio_handle.wav``
-            written next to the mp4); its
+            written next to the mp4; with a ``retake``, also ``retake``: the
+            layout's eight keys plus audio_strength / source_had_audio /
+            audio_frozen / muxed_original_waveform / decoded_frames_px); its
             ``num_frames`` is the timeline's (before the V2V trim), ``h3.phases`` is
             ``{clips: [...], decode}`` and ``h3.loras`` is clip 0's.
   error     {detail}
@@ -261,7 +263,7 @@ _SOURCE_AUDIO_FIELDS = frozenset({"path", "strength"})
 _REFERENCE_FIELDS = frozenset({"kind", "path", "slot", "max_sec"})
 #: The generate_chain payload's keys this engine reads (台帳 §1-106): the single
 #: job's, less what is per clip or unused (the frame count, the key frames and
-#: references are per clip), plus ``clips`` and the input video ``source`` (台帳 §1-121).
+#: references are per clip), plus ``clips``, the input video ``source`` (台帳 §1-121) and ``retake`` (台帳 §1-123).
 _CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}) | {
     "clips", "source", "retake",
 }
@@ -650,7 +652,7 @@ def _chain_retake(msg: dict) -> tuple:
 
 
 def _do_generate_chain(msg: dict) -> None:
-    """Run one chain (台帳 §1-106 / §1-121); the mp4 is written by this process to ``msg['output_path']``."""
+    """Run one chain (台帳 §1-106 / §1-121 / §1-123 retake); the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
         raise RuntimeError("generate before load")
     from engine_h3.chain_h3 import H3ChainSpec, run_chain_h3  # noqa: PLC0415

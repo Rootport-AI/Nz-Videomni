@@ -189,7 +189,7 @@ export function RetakePanel({ form, disabled }: RetakePanelProps) {
         </div>
       </div>
 
-      {/* 区間バー。8n+1 の格子も上下限のクランプも `useRetakeForm` 側
+      {/* 区間バー。格子（LTX 8n+1・H3 17n+5）も上下限のクランプも `useRetakeForm` 側
           （`resolveRetakeWindow`）が持っていて、ここは controlled な子。 */}
       <div className="field">
         <RangeBand

@@ -6176,7 +6176,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - 主なテスト: `useRetakeForm.test.tsx`（H3 の送信本文・縦横 32・fps 24・窓の範囲・持ち越し、LTX→H3 と H3→LTX の切り替えで fps・`regenerateAudio`・サンプリング・幅が漏れないこと）、`EditScreen.retake.test.tsx`（スライダーが出てラジオと Stage-2 が無い・のりしろの表示・文言の数字）、`AppShell.minimaxH3.test.tsx`（Edit タブが生き Retake だけが開く・Outpainting と Inpainting の右クリックは案内で止まる）、`retakeWindow.test.ts`（17n+5 への切り下げ・下限・上限）、`generationConstraints.test.ts`（`retake` の解決と LTX の `null`）、`featureScope.test.ts`、`mockBridge.h3.test.ts`。
 - 操作パネルのモックの橋（`bridge/mockBridge.ts`）は、H3 の `unsupported_features` から `retake` を外し、`constraints.retake` を足しました。
-- 門: `npm run typecheck`・`npx vitest run --exclude "**/backend.integration.test.ts"`・aux2 の再ビルドに合格（件数はバックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §200.5）。オーナーの実機確認はバックエンドの台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の §1-123 です。
+- 門: `npm run typecheck`・`npx vitest run --exclude "**/backend.integration.test.ts"`・aux2 の再ビルドに合格（件数はバックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §200.5）。オーナーの実機確認はバックエンドの [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-123 です（記録は記録簿 §200.10・§200.11）。
 
 > **追記（2026-11-08）**: オーナーの目視・試聴の結果、音声の Strength の既定はサーバー側で 0.5 に変更。操作パネルは配信値を読むので画面側の変更はモックとテストのみ。
 

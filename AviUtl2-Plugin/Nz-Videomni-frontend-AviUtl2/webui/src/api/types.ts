@@ -385,7 +385,7 @@ export interface SourceVideoSpec {
  * 載せると、`clips[0].num_frames` の長さの窓を素材の `window_start_sec` から
  * 切り出し、その**両端を凍結したまま中身だけ**を作り直す。
  *
- * 3 フィールドしか無いのは意図的で、糊代（`head_px`/`tail_px`）は**送らない**
+ * のりしろを持たないのは意図的で、糊代（`head_px`/`tail_px`）は**送らない**
  * —— サーバ既定（頭25/尾24）に自動追随させるため。糊代は実測で較正された値で
  * あり、UI に出す価値のあるつまみではない（RangeBand が「触れない領域」として
  * 見せるだけ）。Stage-2 の窓はこの型ではなく `GenerateChainRequest.stage2_window`

@@ -1,10 +1,10 @@
 # MiniMax H3 の Retake の GPU の門（MCP 経由の台本）
 
-`h3_retake_gate.py` は、MiniMax H3 の Retake（入力動画の指定した区間だけを描き直す機能）の GPU の門を、MCP サーバー経由で回す台本です（台帳 `PENDING_TASKS.md` §1-123。門の設計と結果は記録簿 `Docs/VERIFICATION_LOG.md` §200.7、仕組みは設計正本 `Docs/MINIMAX_H3_DESIGN.md` §3.4）。この保管庫には台本・説明書・各条件の `request.json`／`metadata.json`／`summary` の写しを置き、動画・素材・ログは写しません。この台本は製品コードを import しません。MCP サーバー（`.venv\Scripts\python.exe -m mcp_server`）を stdio の子プロセスとして起こし、実際のプロトコル（`initialize → tools/list → tools/call`）で道具を呼びます。経路は記録簿 `Docs/VERIFICATION_LOG.md` §39.6 と同じです。結果の数値はここには書きません（数値の正本は記録簿 §200）。
+`h3_retake_gate.py` は、MiniMax H3 の Retake（入力動画の指定した区間だけを描き直す機能）の GPU の門を、MCP サーバー経由で回す台本です（台帳 `PENDING_TASKS_CLOSED.md` 1-123。門の設計と結果は記録簿 `Docs/VERIFICATION_LOG.md` §200.7、仕組みは設計正本 `Docs/MINIMAX_H3_DESIGN.md` §3.4）。この保管庫には台本・説明書・各条件の `request.json`／`metadata.json`／`summary` の写しを置き、動画・素材・ログは写しません。この台本は製品コードを import しません。MCP サーバー（`.venv\Scripts\python.exe -m mcp_server`）を stdio の子プロセスとして起こし、実際のプロトコル（`initialize → tools/list → tools/call`）で道具を呼びます。経路は記録簿 `Docs/VERIFICATION_LOG.md` §39.6 と同じです。結果の数値はここには書きません（数値の正本は記録簿 §200）。
 
 ## 前提
 
-- バックエンドが起動済みで、`GET /api/v1/status` が 200 を返すこと（起動の手順と前処理〔AviUtl2 を閉じる・GPU の使用量が約 2,000MiB 未満・孤児の `engine.worker` が無い〕は計画 §7 の 3）。この台本はバックエンドを起動も停止もしません。
+- バックエンドが起動済みで、`GET /api/v1/status` が 200 を返すこと（起動の手順と前処理〔AviUtl2 を閉じる・GPU の使用量が約 2,000MiB 未満・孤児の `engine.worker` が無い〕は記録簿 §200.7 の手順）。この台本はバックエンドを起動も停止もしません。
 - 台本を動かす python は、アプリの仮想環境 `Nz-Videomni\.venv`（`mcp==1.28.1` が入っている）。MCP サーバーも既定でこの仮想環境の python で起こします。
 - 標準出力は UTF-8 です。`PYTHONUTF8=1` を設定して起動してください（台本の中でも標準出力を UTF-8 に直しますが、子プロセスの MCP サーバーにも同じ値を渡すためです）。
 - `--material` のパスと保存先 `--out-dir` は、**MCP サーバーが動くマシン上のパス**です（`upload_video` の `file_path` と `save_job_video` の `dest_dir` は MCP サーバーの側で開かれます）。この台本は MCP サーバーを同じマシンの子プロセスとして起こすので、手元のパスがそのまま使えます。
@@ -26,7 +26,7 @@ $env:PYTHONUTF8 = "1"
 & "...\.venv\Scripts\python.exe" "...\h3-retake-2026-11-08\h3_retake_gate.py" --material "S:\path\to\talking.mp4" --start-sec 2.0 --dry-run
 ```
 
-計画 §7 の追加の 2 本と、長い窓の Strength 0.5 の 1 本の、実際に回した形（`--material` と `--out-dir` は一次資料の置き場の例。`<主条件と同じプロンプト>` は主条件の `s0\request.json` の `prompt`）:
+記録簿 §200.7 の音声なし・長い窓の 2 本と、長い窓の Strength 0.5 の 1 本（§200.9）の、実際に回した形（`--material` と `--out-dir` は一次資料の置き場の例。`<主条件と同じプロンプト>` は主条件の `s0\request.json` の `prompt`）:
 
 ```
 # 音声の無い素材で s=0（audio_fix=None の経路。プロンプトは台本の既定）
@@ -135,7 +135,7 @@ $env:PYTHONUTF8 = "1"
 ## 注意
 
 - **途中で取り消せません。** 台本を Ctrl+C で止めても、送ったジョブはバックエンドで走り続けます（連結のジョブには協調的な停止が無い）。
-- 台本は後片付け（`unload_pipeline`・バックエンドの停止）をしません。計画 §7 の「終了」の手順で別に行います。
+- 台本は後片付け（`unload_pipeline`・バックエンドの停止）をしません。別に `POST /api/v1/pipeline/unload` のあと、バックエンドをプロセスの木ごと止めます。
 - 1 条件の待ちが上限を超えたら、残りの条件は送らずに終わります（同時 1 ジョブのため）。
 - `no_clobber=True` なので、同じ `--out-dir` と `--label` で回し直すと、出力は `<job_id>.mp4` の別名（ジョブ番号が違うので通常は衝突しない）、`metadata.json` と `request.json` は上書きです。回し直すときは `--label` を変えるか、別の `--out-dir` にしてください。
 

@@ -3261,10 +3261,10 @@ export const ja: Strings = {
     // 参照）。
     comfortWarningSmart: "VRAM溢れにより生成が遅くなる可能性があります。",
     // 台帳 §1-119: マーカーが MiniMax H3 の行数の線（`useGenerationForm` の
-    // `isComfortMarkerRowsLine`。選択は `GenerationForm`）のときは上の2つの
-    // 代わりにこちらを出す——H3 の快適上限の境界は遅延ではなく生成の失敗
+    // `isComfortMarkerRowsLine`。選択は `GenerationForm`。Chained の各クリップは
+    // `ClipCard`）のときは上の2つの代わりにこちらを出す——H3 の快適上限の境界は遅延ではなく生成の失敗
     // （VRAM 不足）であるため（バックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §17・§18）。
-    comfortWarningOutOfMemory: "これを超えるとVRAM不足で生成に失敗する見込みです。",
+    comfortWarningOutOfMemory: "VRAM不足で生成に失敗する可能性があります。",
     size: {
       label: "サイズ",
       width: "幅",

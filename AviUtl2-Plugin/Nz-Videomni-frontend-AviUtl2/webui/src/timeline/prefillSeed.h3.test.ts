@@ -3,7 +3,7 @@ import type { ResultOf } from "../bridge";
 import { FALLBACK_APP_CONFIG } from "../modes/single/defaultConfig";
 import { ACCELERATION_DEFAULTS } from "../shell/accelerationSettings";
 import { resolveGenerationConstraints } from "../shell/generationConstraints";
-import { resolvePrefillSeed } from "./prefillSeed";
+import { resolvePrefillSeed, seedKeyframeCount } from "./prefillSeed";
 
 // MiniMax H3 第 2 弾 (2026-10-17): the right-click seeds that land in Create
 // follow the loaded base model's rules — the 17n+5 grid, the 32 multiple, the
@@ -50,6 +50,7 @@ const H3 = resolveGenerationConstraints({
     shift_video: { min: 1, max: 20, step: 0.1, default: 12 },
     shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
   },
+  chain: { overlap_frames: 22 },
 });
 
 function seed(intent: string, sel: Selection, withH3: boolean) {
@@ -66,6 +67,18 @@ function seed(intent: string, sel: Selection, withH3: boolean) {
     ...(withH3 ? { constraints: H3 } : {}),
   });
 }
+
+describe("seedKeyframeCount", () => {
+  it("counts one keyframe for the intents that open on an image (#4, #10, #6, #12), none otherwise", () => {
+    expect(seedKeyframeCount("image-to-video")).toBe(1);
+    expect(seedKeyframeCount("image-from-frame")).toBe(1);
+    expect(seedKeyframeCount("image-to-clip-chain")).toBe(1);
+    expect(seedKeyframeCount("current-frame-to-clip-chain")).toBe(1);
+    expect(seedKeyframeCount("extend-video")).toBe(0);
+    expect(seedKeyframeCount("audio-to-video")).toBe(0);
+    expect(seedKeyframeCount("reference-video")).toBe(0);
+  });
+});
 
 describe("resolvePrefillSeed — MiniMax H3 rules", () => {
   it("#4 image-to-video: size on 32, fps pinned at 24 (no snap toast), DURATION at the rows line", () => {
@@ -104,11 +117,67 @@ describe("resolvePrefillSeed — MiniMax H3 rules", () => {
     expect(seed("audio-to-video", sel, false).numFrames ?? 0).toBeLessThan(464);
   });
 
-  // The seed never reads an engine for a Chain intent; snapping it onto the
-  // loaded rules is the form's job (useChainForm — see its H3 test).
-  it("a Chain-targeted intent ignores the H3 rules", () => {
-    const s = seed("image-to-clip-chain", selection(), true);
+});
+
+// Ledger §1-276: a Chain-targeted seed on an engine that fixes the chain's
+// overlap (H3's served `chain`) follows the served rules, and its DURATION is
+// clip 0's sequence-rows marker — one keyframe for #6/#12 (the opening image),
+// none for #1 (V2V).
+describe("resolvePrefillSeed — MiniMax H3 Chain-targeted intents", () => {
+  it("a Chain-targeted intent follows the served rules (32 multiple, fps pinned at 24)", () => {
+    const s = seed("image-to-clip-chain", selection({ mediaFps: 29.97 }), true);
+    expect(s.derived.width).toBe(1312);
+    expect(s.derived.height).toBe(768);
+    expect(s.frameRate).toBe(24);
+    expect(s.frameRateSnappedFrom).toBeUndefined();
+    // 1312x768 fits the rows line up to the ceiling.
+    expect(s.numFrames).toBe(481);
+  });
+
+  it("#6 and #12 at 1920x1088 seed 345 (one keyframe), #1 seeds 362 (none)", () => {
+    const big = selection({ mediaWidth: 1920, mediaHeight: 1088 });
+    expect(seed("image-to-clip-chain", big, true).numFrames).toBe(345);
+    expect(seed("current-frame-to-clip-chain", big, true).numFrames).toBe(345);
+    expect(seed("extend-video", big, true).numFrames).toBe(362);
+  });
+
+  it("1312x768 seeds 481 for #1 and #12 too", () => {
+    expect(seed("extend-video", selection(), true).numFrames).toBe(481);
+    expect(seed("current-frame-to-clip-chain", selection(), true).numFrames).toBe(481);
+  });
+
+  it("rules that do not fix the overlap keep a Chain seed on LTX's grid", () => {
+    const s = resolvePrefillSeed({
+      intent: "image-to-clip-chain",
+      selection: selection(),
+      config: FALLBACK_APP_CONFIG,
+      sizePolicy: "material",
+      fpsPolicy: "material",
+      engineFamily: "ltx",
+      acceleration: ACCELERATION_DEFAULTS,
+      sageAvailable: null,
+      weightClass: "",
+      constraints: { ...H3, chain: null },
+    });
     expect(s.derived.width % 64).toBe(0);
     expect(s.frameRate).toBe(30);
+    expect(((s.numFrames ?? 0) - 1) % 8).toBe(0);
+  });
+
+  it("the same Chain seeds on LTX keep their old answers (64 grid, material fps, the legacy table)", () => {
+    const big = selection({ mediaWidth: 1920, mediaHeight: 1088 });
+    for (const intent of ["image-to-clip-chain", "current-frame-to-clip-chain", "extend-video"]) {
+      const withEngine = seed(intent, big, false);
+      const bare = resolvePrefillSeed({
+        intent,
+        selection: big,
+        config: FALLBACK_APP_CONFIG,
+        sizePolicy: "material",
+        fpsPolicy: "material",
+      });
+      expect(withEngine).toEqual(bare);
+      expect(withEngine.derived.width % 64).toBe(0);
+      expect(((withEngine.numFrames ?? 0) - 1) % 8).toBe(0);
+    }
   });
 });

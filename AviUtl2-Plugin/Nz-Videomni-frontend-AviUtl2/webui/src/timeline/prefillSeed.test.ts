@@ -625,9 +625,9 @@ describe("resolvePrefillSeed — the panel policy (台帳 §1-114)", () => {
 
 // 2026-08-31: when the caller threads the engine family + acceleration settings
 // (AppShell and SingleScreen both do), a Single-系 prefill's DURATION seeds to
-// the SAME smart ceiling Create's comfort marker will then display. Chain-系
-// intents are a different quantity (a per-clip length inside a chain) and stay
-// on the legacy table.
+// the SAME smart ceiling Create's comfort marker will then display. On LTX,
+// Chain-系 intents are a different quantity (a per-clip length inside a chain)
+// and stay on the legacy table.
 describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
   /** All five toggles on: exactly what the served `ltx` row requires. The sixth
    * (`keepResidentEmbeddings`, 台帳 §3-114) sits at its server default because
@@ -701,7 +701,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
     expect(withDefaults("ltx25")).toBe(377);
   });
 
-  it("Chain-系 intents keep the legacy ceiling even with the trio threaded", () => {
+  it("Chain-系 intents on LTX keep the legacy ceiling even with the trio threaded", () => {
     // `image-to-clip-chain` (#6) targets the Chained screen, so Create's
     // single-shot line must not follow it there.
     const selection = makeSelection({ mediaWidth: 1280, mediaHeight: 768 });

@@ -1054,12 +1054,14 @@ export interface EngineComfortProfile {
    * 数値の正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §9。 */
   outpaint_budget?: number | null;
   /** 台帳 §1-119: 単発（Single）の行数の線——DiT に入る総行数 S の上限
-   * （MiniMax H3。超えると VRAM 不足で失敗する見込み）。`null` でなければ
+   * （MiniMax H3。超えると VRAM 不足で失敗する可能性がある）。連結（Chained）の
+   * 各クリップにも同じ線を当てる（台帳 §1-276）。`null` でなければ
    * 「行数の線で表す系統」で、{@link rows} の照合もレガシー表への落ちも
    * 行わない。サーバは LTX のプロファイルにも `null` で配る。
    *
    * 読む側は必ず `shell/comfortTable.ts` の `resolveSequenceRowsBudget`／
-   * `singleLegacySpillTable` を通すこと。数値の正本はバックエンドの
+   * `singleLegacySpillTable` を通すこと（Chained の各クリップも
+   * `resolveSequenceRowsBudget` を読む）。数値の正本はバックエンドの
    * `Docs/COMFORT_LIMIT_TABLE.md` §17・§18。 */
   single_rows_budget?: number | null;
 }

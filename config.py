@@ -321,13 +321,17 @@ class EngineComfortProfile(BaseModel):
     ``LimitsConfig.comfort_budgets``). Single source of truth for the
     numbers: Docs/COMFORT_LIMIT_TABLE.md §9.
 
-    ``single_rows_budget`` is the Single tab's sequence-rows line S (the total
-    number of rows entering the DiT; MiniMax H3). When it is set (not
+    ``single_rows_budget`` is the sequence-rows line S of the Single tab and
+    of each Chained (chained generation) clip (the total number of rows
+    entering the DiT; MiniMax H3). When it is set (not
     ``None``), the family is a rows-line family: it carries no ``rows``, and
     the client neither matches LTX's rows nor falls back to
     ``spill_free_frames`` for it. Advisory-only — the server never reads it.
+    The per-clip S uses the same formula as Single (the 2026-11-08
+    calibration confirmed the boundary is the same step; VERIFICATION_LOG
+    §199). The key is not renamed.
     Single source of truth for the value and the formula:
-    Docs/COMFORT_LIMIT_TABLE.md §17 / §18.
+    Docs/COMFORT_LIMIT_TABLE.md §17 / §18 / §19 (per-clip inputs).
 
     The profiles are not defined in code: each base-model manifest's
     ``comfort`` block (``scripts/manifests/*.json``) is validated against this

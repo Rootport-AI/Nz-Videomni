@@ -12,13 +12,16 @@ import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
 import { usePromptTokenCounts } from "../../shell/usePromptTokenCounts";
+import { resolveSequenceRowsBudget } from "../../shell/comfortTable";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
+import { frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
+import { H3_NO_CONDITIONING, h3ComfortFrames } from "../../shell/h3SequenceRows";
 import { omitLoraAudioStrength } from "../../lora/loraTags";
 import { isChainStage1OverBudget } from "../../shell/tokenBudget";
 import { STAGE2_WINDOW_OPTIONS } from "../../shell/tokenBudget";
 import type { Stage2Window } from "../../shell/tokenBudget";
 import { computeTargetNumFrames } from "../../timeline/deriveDuration";
-import { resolvePrefillSeed } from "../../timeline/prefillSeed";
+import { resolvePrefillSeed, seedKeyframeCount } from "../../timeline/prefillSeed";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import {
   bindToJob,
@@ -55,6 +58,7 @@ import {
   countUsedReferences,
   referenceNotices,
   referenceSendUploading,
+  sequenceReferences,
   type ReferenceRules,
 } from "../single/referenceRules";
 import { BatchI2vLongSection } from "../batch-i2v-long/BatchI2vLongSection";
@@ -472,18 +476,25 @@ function ChainedScreenBody({
     // no Chain intent is materialClampedToCeiling, including long-a2v,
     // whose track length re-lays the WHOLE clip list through the audio auto-fit
     // instead of clamping clip 0 — so the seed's `numFrames` is that
-    // resolution's comfort ceiling. `defaults` ignores the material's real
-    // size/rate; `material`/`project` seed from it (`project` is overwritten
-    // below off getEditInfo). A `null`/undefined seed value leaves the common
-    // field at the config default.
+    // resolution's comfort ceiling — on MiniMax H3 (ledger §1-276) clip 0's
+    // sequence-rows marker, which is why the engine inputs are handed in: the
+    // same set `AppShell`'s reservation length passes, so the seat and the form
+    // agree. `panel` ignores the material's real size/rate; `material`/`project`
+    // seed from it (`project` is overwritten below off getEditInfo). A
+    // `null`/undefined seed value leaves the common field at the config default.
     return resolvePrefillSeed({
       intent: initialIntent.intent,
       selection: initialIntent.selection,
       config,
       sizePolicy,
       fpsPolicy,
+      engineFamily,
+      acceleration,
+      sageAvailable,
+      weightClass,
+      constraints,
     });
-  }, [initialIntent, config, sizePolicy, fpsPolicy]);
+  }, [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass, constraints]);
 
   const initialCommon = useMemo(() => {
     if (!initialIntent || !seed) return {};
@@ -585,6 +596,55 @@ function ChainedScreenBody({
     }
     return { bodies, uploading, usedCount, anyFilled };
   }, [clipReferences, role, isH3]);
+
+  // Ledger §1-276: each clip's comfort marker on MiniMax H3's sequence-rows
+  // line. A clip's S is Single's formula at the clip's length
+  // (`shell/h3SequenceRows.ts`): the shared size, clip 0's opening image as the
+  // one keyframe (none on a V2V chain; the overlap pins rows, it adds none),
+  // and the clip's own Reference cards only while References is on (exactly
+  // what `buildSubmission` sends). Derived, not stored — no state, no effect.
+  // Empty (no marker) when the engine serves no rows line (LTX).
+  const clipFrameMin = form.clipFrameLimits.min;
+  const clipFrameMax = form.clipFrameLimits.max;
+  const { clips, hasSourceVideo } = form;
+  const { width: commonWidth, height: commonHeight } = form.common;
+  const startFrameItems = form.startFrame.items;
+  const clipComfort = useMemo(() => {
+    const comfort: Record<string, number | null> = {};
+    const openingImage = startFrameItems.some((item) => item.status === "ready" || item.status === "uploading");
+    clips.forEach((clip, index) => {
+      const budget = resolveSequenceRowsBudget(config.limits, engineFamily);
+      if (budget === null) return;
+      const entry = clipReferences[clip.id];
+      comfort[clip.id] = h3ComfortFrames(
+        {
+          width: commonWidth,
+          height: commonHeight,
+          keyframeCount: index === 0 && !hasSourceVideo && openingImage ? 1 : 0,
+          references:
+            isH3 && referencesOn && entry ? sequenceReferences(entry.summary, entry.slots, role, isH3) : [],
+        },
+        budget,
+        clipFrameMin,
+        clipFrameMax,
+      );
+    });
+    return comfort;
+  }, [
+    clips,
+    commonWidth,
+    commonHeight,
+    hasSourceVideo,
+    startFrameItems,
+    referencesOn,
+    clipReferences,
+    role,
+    isH3,
+    config.limits,
+    engineFamily,
+    clipFrameMin,
+    clipFrameMax,
+  ]);
   /** A card that will be sent is still uploading: Generate waits (Create's rule). */
   const referenceUploading = isH3 && referencesOn && referenceView.uploading;
   /** Ruling: the "no references" notice shows only when EVERY clip has no
@@ -695,19 +755,52 @@ function ChainedScreenBody({
         }
         // W1/W8 (② project policy): every Chain intent is `comfortCeiling`, whose
         // DURATION depends on width/height ONLY (fps never enters the ceiling
-        // calc), so clip 0's DURATION is recomputed only when the SIZE axis is
-        // `project` — an fps-only project overwrite leaves the width/height seed
-        // (and therefore the ceiling) untouched. Leaves the seed in place when
-        // the ceiling can't be resolved (null).
+        // calc; on MiniMax H3 the seed's keyframe count does too, and the
+        // intent fixes it), so clip 0's DURATION is recomputed only when the
+        // SIZE axis is `project` — an fps-only project overwrite leaves the
+        // width/height seed (and therefore the ceiling) untouched. Ledger
+        // §1-276: an engine with a sequence-rows line (H3) re-derives clip 0's
+        // marker at the project size on the served grid, exactly as
+        // `resolvePrefillSeed` seeded it; every other engine keeps the legacy
+        // table. Leaves the seed in place when the ceiling can't be resolved
+        // (null).
         if (sizePolicy === "project") {
-          const target = computeTargetNumFrames({
-            policy: "comfortCeiling",
-            width: editInfo.width,
-            height: editInfo.height,
-            spillFreeFrames: config.limits.spill_free_frames,
-            minNumFrames: MIN_NUM_FRAMES,
-            maxNumFrames: config.limits.max_num_frames,
-          });
+          const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily);
+          let target: number | null;
+          if (rowsBudget !== null) {
+            const rules = constraints?.chain != null ? constraints : LTX_GENERATION_CONSTRAINTS;
+            const frameLimits = frameLimitsFor(rules, config.limits.max_num_frames);
+            const comfortCeilingFrames = h3ComfortFrames(
+              {
+                width: editInfo.width,
+                height: editInfo.height,
+                keyframeCount: seedKeyframeCount(initialIntent.intent),
+                references: H3_NO_CONDITIONING.references,
+              },
+              rowsBudget,
+              frameLimits.minNumFrames,
+              frameLimits.maxNumFrames,
+            );
+            target = computeTargetNumFrames({
+              policy: "comfortCeiling",
+              width: editInfo.width,
+              height: editInfo.height,
+              spillFreeFrames: null,
+              minNumFrames: frameLimits.minNumFrames,
+              maxNumFrames: frameLimits.maxNumFrames,
+              frameGrid: rules.frameGrid,
+              ...(comfortCeilingFrames !== null ? { comfortCeilingFrames } : {}),
+            });
+          } else {
+            target = computeTargetNumFrames({
+              policy: "comfortCeiling",
+              width: editInfo.width,
+              height: editInfo.height,
+              spillFreeFrames: config.limits.spill_free_frames,
+              minNumFrames: MIN_NUM_FRAMES,
+              maxNumFrames: config.limits.max_num_frames,
+            });
+          }
           const clip0 = form.clips[0];
           if (target !== null && clip0) form.setClipNumFrames(clip0.id, target);
         }
@@ -1274,6 +1367,7 @@ function ChainedScreenBody({
           disabled={disabled}
           tokenCounts={clipTokens?.clips ?? null}
           tokenLimit={promptTokenLimit}
+          clipComfort={clipComfort}
           references={{
             isH3,
             cardsMounted: referenceCardsMounted,
@@ -1534,12 +1628,15 @@ function ClipsSection({
   disabled,
   tokenCounts,
   tokenLimit,
+  clipComfort,
   references,
 }: {
   form: UseChainFormResult;
   disabled: boolean;
   tokenCounts: readonly number[] | null;
   tokenLimit: number | null | undefined;
+  /** Ledger §1-276: each clip's comfort marker by clip id (empty = none). */
+  clipComfort: Readonly<Record<string, number | null>>;
   references: ClipsSectionReferences;
 }) {
   const strings = useStrings();
@@ -1579,6 +1676,7 @@ function ClipsSection({
             tokenCount={tokenCounts?.[index]}
             tokenLimit={tokenLimit}
             frameLimits={form.clipFrameLimits}
+            comfortThresholdFrames={clipComfort[clip.id] ?? null}
             showAudioDriftNote={form.clipAudioDriftFlags[index] ?? false}
             onPromptChange={(value) => form.setClipPrompt(clip.id, value)}
             onNumFramesChange={(value, snap) => form.setClipNumFrames(clip.id, value, snap)}

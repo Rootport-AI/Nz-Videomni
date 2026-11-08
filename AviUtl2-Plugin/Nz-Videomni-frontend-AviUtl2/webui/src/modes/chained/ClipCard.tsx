@@ -40,6 +40,11 @@ export interface ClipCardProps {
    * (`ClipReferences`), supplied by the caller. The card itself knows nothing
    * about references. Omitted = nothing. */
   referencesSlot?: ReactNode | undefined;
+  /** Ledger §1-276: this clip's comfort marker (MiniMax H3's sequence-rows
+   * line, computed per clip by `ChainedScreen`'s `clipComfort`), drawn as a
+   * tick on the duration slider with the out-of-VRAM warning past it.
+   * `null`/omitted = no marker (LTX, or no line served). */
+  comfortThresholdFrames?: number | null | undefined;
 }
 
 /** One clip's card in Chain mode's clip list: an optional per-clip prompt
@@ -65,8 +70,10 @@ export function ClipCard({
   frameLimits = { min: MIN_CLIP_NUM_FRAMES, max: MAX_CLIP_NUM_FRAMES, step: LTX_FRAME_GRID.step },
   showAudioDriftNote = false,
   referencesSlot,
+  comfortThresholdFrames = null,
 }: ClipCardProps) {
   const strings = useStrings();
+  const overComfort = comfortThresholdFrames !== null && clip.numFrames > comfortThresholdFrames;
   return (
     <li className="clip-card">
       <div className="clip-card-head">
@@ -117,6 +124,12 @@ export function ClipCard({
         disabled={disabled}
         onChange={onNumFramesChange}
         hint={formatDurationHint(clip.numFrames, frameRate)}
+        spillThresholdFrames={comfortThresholdFrames}
+        isOverSpillThreshold={overComfort}
+        spillWarningText={strings.single.comfortWarningOutOfMemory}
+        // Every tab is always mounted: an id of its own per clip, so the slider
+        // never points at Create's `spill-tick` or another clip's tick.
+        tickId={`chain-clip-comfort-tick-${clip.id}`}
       />
       {showAudioDriftNote && <p className="clip-note">{strings.chained.audioDriftNote}</p>}
       {referencesSlot}

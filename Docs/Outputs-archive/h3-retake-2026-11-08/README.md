@@ -26,13 +26,15 @@ $env:PYTHONUTF8 = "1"
 & "...\.venv\Scripts\python.exe" "...\h3-retake-2026-11-08\h3_retake_gate.py" --material "S:\path\to\talking.mp4" --start-sec 2.0 --dry-run
 ```
 
-計画 §7 の追加の 2 本の例:
+計画 §7 の追加の 2 本と、長い窓の Strength 0.5 の 1 本の、実際に回した形（`--material` と `--out-dir` は一次資料の置き場の例。`<主条件と同じプロンプト>` は主条件の `s0\request.json` の `prompt`）:
 
 ```
-# 音声の無い素材で s=0（audio_fix=None の経路）
-... --material "S:\path\to\silent.mp4" --start-sec 1.0 --strengths 0 --label silent-s0 --skip-load
-# 長い窓（481 フレーム・解像度は小さめ）
-... --material "S:\path\to\talking.mp4" --start-sec 0 --frames 481 --width 640 --height 384 --strengths 0 --label long481-s0 --skip-load
+# 音声の無い素材で s=0（audio_fix=None の経路。プロンプトは台本の既定）
+... --material "S:\path\to\silent.mp4" --start-sec 1.0 --strengths 0 --label silent-s0 --out-dir "...\outputs\h3-retake-gates-2026-11-08\extra-silent" --skip-load
+# 長い窓（481 フレーム・解像度は小さめ。素材は主条件の 15 秒を 2 回つないだ 30 秒）
+... --material "...\outputs\h3-retake-gates-2026-11-08\_material\H3-Ref-1080p-30s.mp4" --start-sec 2.0 --frames 481 --width 640 --height 384 --prompt "<主条件と同じプロンプト>" --strengths 0 --label long481-s0 --out-dir "...\outputs\h3-retake-gates-2026-11-08\extra-long" --skip-load
+# 長い窓を Strength 0.5 で（--skip-load は付けず、台本が H3 を読み込んだ）
+... --material "...\outputs\h3-retake-gates-2026-11-08\_material\H3-Ref-1080p-30s.mp4" --start-sec 2.0 --frames 481 --width 640 --height 384 --prompt "<主条件と同じプロンプト>" --strengths 0.5 --label long481-s0.5 --out-dir "...\outputs\h3-retake-gates-2026-11-08\extra-long-s0.5"
 ```
 
 ## 引数
@@ -150,6 +152,8 @@ $env:PYTHONUTF8 = "1"
 | `s1.0\request.json`・`s1.0\metadata.json` | 主条件・Strength 1.0 の同じもの |
 | `silent-s0\request.json`・`silent-s0\metadata.json` | 音声の無い素材・Strength 0 の同じもの |
 | `long481-s0\request.json`・`long481-s0\metadata.json` | 長い窓（481 フレーム）・Strength 0 の同じもの |
+| `long481-s0.5\request.json`・`long481-s0.5\metadata.json` | 長い窓（481 フレーム）・Strength 0.5 の同じもの（追加の門。記録簿 §200.9） |
 | `summary_main.json`・`summary_main.md` | 主条件の 3 本の `summary.json` と `summary.md` |
 | `summary_silent.json`・`summary_silent.md` | 音声の無い素材の 1 本の同じもの |
 | `summary_long.json`・`summary_long.md` | 長い窓の 1 本の同じもの |
+| `summary_long_s0.5.json`・`summary_long_s0.5.md` | 長い窓・Strength 0.5 の 1 本の同じもの |

@@ -1,0 +1,2290 @@
+--- comfort-calib-h3-2026-11-04-te/calib.py	2026-11-04 10:18:53.317606700 +0900
++++ comfort-calib-h3-chain-2026-11-08/calib.py	2026-11-08 00:21:57.623162700 +0900
+@@ -1710,6 +1710,8 @@
+ 
+ 
+ def token_counts(point: dict) -> dict:
++    if is_h3_chain(point):          # 2026-11-08: before the Single H3 branch
++        return token_counts_h3_chain(point)
+     if is_h3(point):
+         return token_counts_h3(point)
+     width, height = int(point["width"]), int(point["height"])
+@@ -1803,6 +1805,8 @@
+ 
+ 
+ def build_request(point: dict, video_id=None, image_id=None):
++    if is_h3_chain(point):          # 2026-11-08: before the Single H3 branch
++        return build_request_h3_chain(point, ids=video_id, image_id=image_id)
+     if is_h3(point):
+         return build_request_h3(point, ref_ids=video_id, image_id=image_id)
+     accel = dict(DEFAULT_ACCEL)
+@@ -2625,8 +2629,868 @@
+     }
+ 
+ 
++# === MiniMax H3 chain (2026-11-08, 台帳 §1-276, plan cozy-gliding-pudding §4.1) ===
++# A chain point is ``{kind: "chain", clips: [{num_frames, references?}], keyframes
++# (clip 0's), source_video? ({source_path}), predict: {clips: [...]}}``.  Every
++# chain path is a SEPARATE function chosen by ``is_h3_chain(point)`` in the
++# shared dispatchers (token_counts / build_request / check_point / analyse /
++# cmd_run / report), BEFORE their ``is_h3`` branch, so the H3 Single functions
++# above (token_counts_h3 / build_request_h3 / check_point_h3 / analyse_h3 /
++# used_check_h3 / h3_report_cells) are unchanged byte for byte and are reused
++# here per clip where the rule is the same.
++H3_CHAIN_ENDPOINT = "/generate/chain"
++# Keys a chain clip may carry (key frames are the point's ``keyframes`` block =
++# clip 0's; a clip has no prompt of its own: text = the shared prompt, plan §4.1).
++H3_CHAIN_CLIP_KEYS = ("num_frames", "references")
++H3_CHAIN_SOURCE_KEYS = ("source_path",)
++# Keys a chain point must not carry: the LTX chain's, the Single shot's
++# ``num_frames`` / point-level ``references`` (a chain's are per clip), and the
++# keys this campaign leaves at the user's default by NOT sending them.
++H3_CHAIN_FORBIDDEN_POINT_KEYS = ("num_frames", "references", "stage2_window", "chunked_upsample",
++                                 "source_audio", "audio_id", "outpaint", "reference",
++                                 "reference_downscale_factor", "keep_resident", "vram16_mode",
++                                 "shift_video", "shift_audio", "overlap_frames", "overlap_strength")
++# The point-level keys check_point_h3 does not know (removed before a clip is
++# handed to it as a Single point).
++H3_CHAIN_ONLY_KEYS = ("clips", "source_video", "predict")
++# worker log (engine_h3/chain_h3.py:248): "chain: clip {i + 1}/{n} ..." -- 1-BASED.
++H3_CHAIN_CLIP_RE = re.compile(r"chain: clip (?P<i>\d+)/(?P<n>\d+)")
++DRY_RUN_SOURCE_ID = "<video_id: POST /upload/video of %s sha256=%s>"
++
++
++def is_h3_chain(point: dict) -> bool:
++    return is_h3(point) and point.get("kind") == "chain"
++
++
++def h3_chain_layout(clip_frames, source_video: bool):
++    """The product's own chain geometry (h3_chain_math.compute_h3_chain_layout at
++    the repository root: torch-free, so the app venv imports it).  Called, never
++    copied (plan §4.1 S2).  Raises ValueError with the product's 422 message."""
++    if str(ROOT) not in sys.path:
++        sys.path.append(str(ROOT))
++    import h3_chain_math  # noqa: PLC0415
++    return h3_chain_math.compute_h3_chain_layout(list(clip_frames), source_video=bool(source_video))
++
++
++def h3_chain_clip_point(point: dict, i: int) -> dict:
++    """Clip ``i`` as the H3 SINGLE point ``token_counts_h3`` / ``check_point_h3``
++    read: the shared fields, the clip's num_frames and references, and the key
++    frames on clip 0 only (none on a V2V clip 0).  The clip's S is the Single
++    formula with F = the clip's length (plan §1: the fixed head adds no row)."""
++    clip = (point.get("clips") or [])[i]
++    p = {k: v for k, v in point.items() if k not in H3_CHAIN_ONLY_KEYS and k != "keyframes"}
++    p["kind"] = "single"
++    p["num_frames"] = int(clip.get("num_frames") or 0)
++    p["references"] = list(clip.get("references") or [])
++    if i == 0 and point.get("keyframes") and not point.get("source_video"):
++        p["keyframes"] = point["keyframes"]
++    return p
++
++
++def token_counts_h3_chain(point: dict) -> dict:
++    """Per-clip H3 token counts: clip i = token_counts_h3 of h3_chain_clip_point
++    (cond only on clip 0's key frames; clips >= 1 and a V2V clip 0 have none;
++    text = the shared prompt + clip 0's key-frame vision tokens / that clip's
++    references).  ``predict.clips[i]`` = {video, cond, ref_video, ref_audio,
++    audio, text, total} -- what the plan file carries and preflight re-derives."""
++    clips = point.get("clips") or []
++    per = [token_counts_h3(h3_chain_clip_point(point, i)) for i in range(len(clips))]
++    layout, layout_error = None, None
++    try:
++        layout = h3_chain_layout([int(c.get("num_frames") or 0) for c in clips],
++                                 bool(point.get("source_video"))).to_dict()
++    except (ValueError, AssertionError) as exc:
++        layout_error = str(exc)
++    pred = []
++    for c in per:
++        p = c["predict"]
++        pred.append({"video": p["video"], "cond": p["cond"], "ref_video": p["ref_video"],
++                     "ref_audio": p["ref_audio"], "audio": p["audio"], "text": p["text_estimate"],
++                     "total": p["S_estimate"]})
++    vcs = [c["video_plus_cond"] for c in per] or [0]
++    return {
++        "engine": "h3", "kind": "chain", "n_clips": len(clips),
++        "clip_frames": [int(c.get("num_frames") or 0) for c in clips],
++        "width_tokens": per[0]["width_tokens"] if per else None,
++        "height_tokens": per[0]["height_tokens"] if per else None,
++        "grid": per[0]["grid"] if per else None,
++        "keyframes": per[0]["keyframes"] if per else 0,
++        "source_video": bool(point.get("source_video")),
++        "clips": per,
++        "layout": layout, "layout_error": layout_error,
++        "total_pixel_frames": (layout or {}).get("total_px"),
++        # the shared printing code reads one key per engine: the LARGEST clip
++        "video_plus_cond": max(vcs), "stage2_tokens": max(vcs),
++        "decode_chunks_expected": None,
++        "prompt_tokens": per[0]["prompt_tokens"] if per else None,
++        "predict": {"clips": pred},
++    }
++
++
++def check_point_h3_chain(point: dict, labels: set) -> dict:
++    """All offline checks for one H3 chain point (plan §4.1 S2).
++    * the rules a chain shares with a single shot (geometry multiples, steps,
++      accel, key frames on clip 0, references and their transformer, LoRA,
++      baseline, prompt, the user-default warnings): check_point_h3 on each clip
++      as a Single point (h3_chain_clip_point) -- reused, not copied; an error
++      every clip shares is reported once;
++    * the chain's own length / clip count / total rules: the PRODUCT's
++      h3_chain_math.compute_h3_chain_layout, called directly (clips[i] >= 1 at
++      least 39 frames, 2..24 clips -- 1..24 with a source video --, 11,544 in all);
++    * refused here: any image on a clip (key frames are the point's
++      ``keyframes`` = clip 0's), ``stage2_window`` / ``chunked_upsample`` /
++      ``source_audio`` and the other keys of H3_CHAIN_FORBIDDEN_POINT_KEYS, a
++      source video with key frames, a source video shorter than 22 frames.
++    * the plan file's ``predict`` must equal token_counts_h3_chain's."""
++    label = point.get("label")
++    width, height = int(point.get("width") or 0), int(point.get("height") or 0)
++    errors, warnings = [], []
++    clips = point.get("clips")
++    if not isinstance(clips, list) or not clips:
++        errors.append("clips must be a non-empty list")
++        clips = []
++    for key in H3_CHAIN_FORBIDDEN_POINT_KEYS:
++        if key in point:
++            errors.append("an H3 chain point must not carry %r" % key)
++    for i, clip in enumerate(clips):
++        if not isinstance(clip, dict):
++            errors.append("clips[%d] is not an object" % i)
++            continue
++        extra = sorted(k for k in clip if k not in H3_CHAIN_CLIP_KEYS)
++        if extra:
++            errors.append("clips[%d] carries %s; a chain clip takes only %s (key frames are the "
++                          "point's keyframes block = clip 0's; no clip prompt)"
++                          % (i, extra, list(H3_CHAIN_CLIP_KEYS)))
++        if not isinstance(clip.get("num_frames"), int) or isinstance(clip.get("num_frames"), bool):
++            errors.append("clips[%d].num_frames %r is not an integer" % (i, clip.get("num_frames")))
++    source = point.get("source_video")
++    if source is not None:
++        if not isinstance(source, dict):
++            errors.append("source_video must be an object {source_path}")
++            source = {}
++        extra = sorted(k for k in source if k not in H3_CHAIN_SOURCE_KEYS)
++        if extra:
++            errors.append("source_video carries %s (only source_path; context_frames is left out = 22)"
++                          % extra)
++        spath = ref_source_path(source)
++        if not source.get("source_path") or not spath.exists():
++            errors.append("source_video.source_path %r does not exist" % source.get("source_path"))
++        else:
++            info = probe_media(spath)
++            if info.get("frames_24") is None or info["frames_24"] < 22:
++                errors.append("source_video has %s frames at 24 fps (< the 22 context frames)"
++                              % info.get("frames_24"))
++        if (point.get("keyframes") or {}).get("frame_idx"):
++            errors.append("source_video and keyframes given together (the engine refuses V2V "
++                          "with clip 0 key frames)")
++    good_frames = [c.get("num_frames") for c in clips if isinstance(c, dict)]
++    layout = None
++    if len(good_frames) == len(clips) and all(isinstance(f, int) and not isinstance(f, bool)
++                                              for f in good_frames):
++        try:
++            layout = h3_chain_layout(good_frames, source is not None)
++        except (ValueError, AssertionError) as exc:
++            errors.append("chain layout (h3_chain_math): %s" % exc)
++
++    # the Single rules, clip by clip; an error every clip shares is said once
++    per_clip = {}
++    clip_rows = []
++    for i, clip in enumerate(clips):
++        if not isinstance(clip, dict) or not isinstance(clip.get("num_frames"), int):
++            continue
++        row = check_point_h3(h3_chain_clip_point(point, i), labels)
++        clip_rows.append(row)
++        for msg in row["errors"]:
++            per_clip.setdefault(msg, []).append(i)
++        if i == 0:
++            warnings.extend(row["warnings"])
++    for msg, where in per_clip.items():
++        errors.append("clips%s: %s" % (where, msg))
++
++    counts = {}
++    if clips and not any("does not exist" in e for e in errors):
++        try:
++            counts = token_counts_h3_chain(point)
++        except Exception as exc:  # noqa: BLE001
++            errors.append("token counts: %s: %s" % (type(exc).__name__, exc))
++        plan_pred = point.get("predict")
++        if counts and plan_pred is not None and plan_pred != counts.get("predict"):
++            errors.append("the plan file's predict %s != the bench's %s"
++                          % (plan_pred, counts.get("predict")))
++        if counts and plan_pred is None:
++            errors.append("the plan file carries no predict (mkplan.py writes it)")
++    image = keyframe_image_path(point)
++    frame_idx = [int(n) for n in ((point.get("keyframes") or {}).get("frame_idx") or [])]
++    return {
++        "label": label, "kind": "chain", "base_model": point.get("base_model"),
++        "transformer": point.get("transformer"),
++        "geometry": "%dx%d clips=%s%s" % (width, height, good_frames,
++                                         " V2V" if source is not None else ""),
++        "clip_frames": good_frames,
++        "layout": layout.to_dict() if layout is not None else None,
++        "predict": counts.get("predict"),
++        "clip_references": [c.get("references") for c in counts.get("clips") or []],
++        "keyframes": len(frame_idx), "frame_idx": frame_idx,
++        "keyframe_image": str(image) if image else None,
++        "keyframe_image_sha256": sha256_of(image) if (image and image.exists()) else None,
++        "source_video": (source or {}).get("source_path") if source is not None else None,
++        "num_inference_steps": point.get("num_inference_steps"),
++        "loras": point.get("loras") or [],
++        "job_timeout_s": job_timeout_for(point, "auto"),
++        "baseline_label": point.get("baseline_label"), "is_baseline": bool(point.get("is_baseline")),
++        "smoke": bool(point.get("smoke")),
++        "accel": h3_accel(point),
++        "ok": not errors, "errors": errors, "warnings": warnings,
++    }
++
++
++def build_request_h3_chain(point: dict, ids=None, image_id=None):
++    """The H3 /generate/chain body (plan §4.1 S3).  Sent keys: prompt, width,
++    height, frame_rate, seed, attention_backend, block_swap_prefetch,
++    num_inference_steps, loras, clips[{num_frames, conditioning_images (clip 0
++    only, when K > 0), references (only on a clip that has some)}] and, for
++    V2V, source_video {video_id} (context_frames left out = 22, written back
++    by the H3 adapter).  ``attention_backend`` and ``num_inference_steps`` are
++    ALWAYS sent: the chain API's own defaults are sdpa / 8, and an omitted
++    steps falls back to the H3 default 20 (services/engines/h3/adapter.py
++    validate_chain).  NOT sent: keep_resident / vram16_mode (= the user's
++    defaults), the LTX chain keys (overlap / stage2_window / chunked_upsample),
++    a clip prompt (text = the shared prompt).
++
++    ``ids``: ``{"references": {(clip, kind, slot): id}, "source_video": id}``
++    from the uploads, or None (--dry-run placeholders naming the endpoint, the
++    file and its sha256).  ``image_id``: clip 0's key-frame image (None = the
++    placeholder)."""
++    accel = h3_accel(point)
++    ref_ids = (ids or {}).get("references") if isinstance(ids, dict) else None
++    clips = []
++    for i, clip in enumerate(point.get("clips") or []):
++        entry = {"num_frames": int(clip["num_frames"])}
++        frame_idx = (point.get("keyframes") or {}).get("frame_idx") or [] if i == 0 else []
++        if frame_idx:
++            iid = image_id
++            if iid is None:
++                path = keyframe_image_path(point)
++                iid = DRY_RUN_IMAGE_ID % (path.name if path else None,
++                                          sha256_of(path) if path and path.exists() else "MISSING")
++            entry["conditioning_images"] = [{"image_id": iid, "frame_idx": int(n)} for n in frame_idx]
++        refs = []
++        for ref in clip.get("references") or []:
++            kind, slot = ref["kind"], int(ref["slot"])
++            if ref_ids is not None:
++                rid = ref_ids.get((i, kind, slot))
++            else:
++                path = ref_source_path(ref)
++                rid = DRY_RUN_REF_ID % (H3_REF_UPLOAD[kind][1], H3_REF_UPLOAD[kind][0], path.name,
++                                        sha256_of(path) if path.exists() else "MISSING")
++            item = {"kind": kind, "id": rid, "slot": slot}
++            if ref.get("max_sec") is not None:
++                item["max_sec"] = float(ref["max_sec"])
++            refs.append(item)
++        if refs:
++            entry["references"] = refs
++        clips.append(entry)
++    body = {
++        "prompt": point.get("prompt") or "",
++        "width": int(point["width"]), "height": int(point["height"]),
++        "frame_rate": float(point.get("frame_rate", FRAME_RATE)),
++        "seed": int(point.get("seed", DEFAULT_SEED)),
++        "attention_backend": accel["attention_backend"],
++        "block_swap_prefetch": bool(accel["block_swap_prefetch"]),
++        "num_inference_steps": int(point["num_inference_steps"]),
++        "loras": [{"name": spec["name"], "strength": float(spec.get("strength", 1.0))}
++                  for spec in (point.get("loras") or [])],
++        "clips": clips,
++    }
++    source = point.get("source_video")
++    if source:
++        sid = (ids or {}).get("source_video") if isinstance(ids, dict) else None
++        if sid is None:
++            path = ref_source_path(source)
++            sid = DRY_RUN_SOURCE_ID % (path.name, sha256_of(path) if path.exists() else "MISSING")
++        body["source_video"] = {"video_id": sid}
++    return H3_CHAIN_ENDPOINT, body
++
++
++def resolve_chain_uploads(point: dict, cache: dict, refresh: bool = False):
++    """``(ids, records, source_record)`` for a chain point (plan §4.1 S5):
++    each clip's references through resolve_reference_uploads (one upload per
++    (kind, sha256), reused), keyed ``(clip, kind, slot)``; the V2V source video
++    uploaded once per sha256 through POST /upload/video (key
++    ``source_video|<sha256>`` in reference_uploads.json).  ``refresh`` drops
++    the remembered ids (a submit answered REFERENCE_NOT_FOUND /
++    SOURCE_VIDEO_NOT_FOUND: the uploads store is temporary)."""
++    ref_ids, records = {}, []
++    for i, clip in enumerate(point.get("clips") or []):
++        ids, recs = resolve_reference_uploads({"references": clip.get("references") or []},
++                                              cache, refresh=refresh)
++        for (kind, slot), rid in ids.items():
++            ref_ids[(i, kind, slot)] = rid
++        records += [dict(r, clip=i) for r in recs]
++    source_id, source_rec = None, None
++    source = point.get("source_video")
++    if source:
++        path = ref_source_path(source)
++        if not path.exists():
++            raise FileNotFoundError("source video not found: %s" % path)
++        digest = sha256_of(path)
++        key = "source_video|%s" % digest
++        if not refresh and key in cache and cache[key].get("video_id"):
++            source_rec = dict(cache[key], source="cache")
++        else:
++            say("  uploading source video %s (sha256 %s) -> /upload/video" % (path.name, digest[:16]))
++            code, resp = api_multipart("/upload/video", "file", path)
++            if code >= 400 or not resp or not resp.get("video_id"):
++                raise RuntimeError("source video upload failed %s: %s"
++                                   % (code, json.dumps(resp, ensure_ascii=False)[:400]))
++            stored = {"video_id": resp["video_id"], "source_path": str(source.get("source_path")),
++                      "sha256": digest, "endpoint": "/upload/video", "uploaded_at": now_iso(),
++                      "response": resp}
++            cache[key] = stored
++            save_upload_cache(cache)
++            say("  source video uploaded: video_id=%s" % stored["video_id"])
++            source_rec = dict(stored, source="uploaded")
++        source_id = source_rec["video_id"]
++    return {"references": ref_ids, "source_video": source_id}, records, source_rec
++
++
++# --- chain analysis (plan §4.1 S4) ---------------------------------------------
++# Window names of a chain point: "clip<i>.encode" (recorded only),
++# "clip<i>.denoise" (judged) for i = 0..n-1, and "decode" (judged, one for the
++# whole chain).  i is the 0-BASED clip index; server.log's "[i/n]" and the
++# worker's "chain: clip i/n" are 1-BASED (engine_h3/chain_h3.py:248 logs i + 1),
++# so log position p is clip p - 1 everywhere below.
++def h3_chain_window_names(n: int) -> tuple:
++    judged = tuple("clip%d.denoise" % i for i in range(n)) + ("decode",)
++    recorded = tuple("clip%d.encode" % i for i in range(n))
++    return judged, recorded
++
++
++def _h3_group_span(name: str, stage: str, grp) -> dict:
++    """h3_stage_window's span dict, for one given stage_groups() group."""
++    if not grp:
++        return {"name": name, "label": H3_STAGE_LABELS[stage], "found": False,
++                "start": None, "end": None}
++    done, total, elapsed = grp.get("last_done"), grp.get("total"), grp.get("log_elapsed")
++    out = {"name": name, "label": H3_STAGE_LABELS[stage], "found": True,
++           "start": grp["start_t"], "end": grp["end_t"],
++           "start_iso": grp["start_iso"], "end_iso": grp["end_iso"],
++           "lines": grp["lines"], "last_done": done, "total": total,
++           "log_elapsed_s": elapsed, "outer": grp.get("outer"),
++           "completed": bool(done is not None and total and done >= total)}
++    if stage == "denoise":
++        # H3: the started line comes before step 1 -> elapsed / last_done (h3_stage_window)
++        out["sec_per_step_log"] = rnd(elapsed / done, 3) if (elapsed is not None and done) else None
++    return out
++
++
++def h3_chain_stage_windows(events: list, n: int) -> dict:
++    """The chain's windows from server.log (plan §4.1 S4; material
++    logs/server.log job e8f0951d, 2026-11-02 22:35-22:56):
++
++    * ``clip<i>.denoise`` = the ``chain stage-1 denoise [i+1/n]`` group
++      (its ``started`` line -> its last line), one group per clip;
++    * ``decode`` = the one ``chain VAE decode`` group (h3_stage_window, reused);
++    * ``clip<i>.encode`` (recorded only): ``chain text encode`` carries no
++      ``[i/n]`` and the 2nd clip's encode continues the 1st one's counter
++      ("chain text encode 1/4 steps (... 553.4s elapsed)"), so the encode is cut
++      at the denoise boundaries: clip 0 = the first ``text encode`` line ->
++      ``denoise [1/n] started``; clip i >= 1 = the last line of denoise [i/n]
++      -> ``denoise [i+1/n] started``.  Without that next start (an OOM in the
++      encode) the window ends on the last ``text encode`` line after its start.
++    """
++    groups = {g["outer"]: g for g in stage_groups(events, H3_STAGE_LABELS["denoise"])}
++    spans = {}
++    den = [_h3_group_span("clip%d.denoise" % i, "denoise", groups.get(str(i + 1))) for i in range(n)]
++    enc_events = [ev for ev in events if ev.get("label") == H3_STAGE_LABELS["encode"]
++                  and ev.get("kind") in ("start", "progress")]
++    for i in range(n):
++        spans["clip%d.denoise" % i] = den[i]
++        name = "clip%d.encode" % i
++        if i == 0:
++            starts = [ev["t"] for ev in enc_events if ev["kind"] == "start"]
++            t0 = starts[0] if starts else (enc_events[0]["t"] if enc_events else None)
++        else:
++            t0 = den[i - 1].get("end") if den[i - 1].get("found") else None
++        if t0 is None:
++            spans[name] = {"name": name, "label": H3_STAGE_LABELS["encode"], "found": False,
++                           "start": None, "end": None}
++            continue
++        t1 = den[i].get("start") if den[i].get("found") else None
++        inside = [ev for ev in enc_events if ev["t"] >= t0 and (t1 is None or ev["t"] <= t1)]
++        if t1 is None:
++            t1 = inside[-1]["t"] if inside else None
++        last = inside[-1] if inside else {}
++        spans[name] = {"name": name, "label": H3_STAGE_LABELS["encode"], "found": t1 is not None,
++                       "start": t0, "end": t1, "start_iso": iso(t0), "end_iso": iso(t1),
++                       "lines": len(inside), "last_done": last.get("done"), "total": last.get("total"),
++                       "end_by": ("denoise [%d/%d] started" % (i + 1, n)) if den[i].get("found")
++                       else "last text encode line"}
++    dec = h3_stage_window(events, "decode")
++    dec["name"] = "decode"
++    spans["decode"] = dec
++    order = []
++    for i in range(n):
++        order += ["clip%d.encode" % i, "clip%d.denoise" % i]
++    order.append("decode")
++    return {k: spans.get(k) or {"name": k, "found": False, "start": None, "end": None} for k in order}
++
++
++def h3_chain_worker_text_tokens(tail: list) -> list:
++    """Every ``encode: N text tokens`` line of the job, in order (clip 0, 1, ...)."""
++    out = []
++    for row in tail:
++        match = H3_TEXT_TOKENS_RE.search(row.get("text") or "")
++        if match:
++            out.append({"text": int(match.group("n")),
++                        "references": int(match.group("k")) if match.group("k") else 0,
++                        "line": row["text"]})
++    return out
++
++
++def h3_chain_oom_clip(tail: list, events: list, error: str):
++    """The clip an OOM happened in (0-based).  The worker's last ``chain: clip
++    i/n`` line (h3_worker.log, 1-based: clip i - 1); without one, server.log's
++    last ``[i/n]`` (also 1-based).  An OOM whose traceback puts it in the decode
++    (one decode for the whole chain) has no clip: ``clip`` None, the last clip
++    started is still given."""
++    found = None
++    for row in tail:
++        match = H3_CHAIN_CLIP_RE.search(row.get("text") or "")
++        if match:
++            found = (int(match.group("i")), int(match.group("n")), "h3_worker.log 'chain: clip i/n'")
++    if found is None:
++        for ev in events:
++            if ev.get("outer"):
++                total = None
++                m = re.search(r"\[(\d+)/(\d+)\]", ev.get("msg") or "")
++                if m:
++                    total = int(m.group(2))
++                found = (int(ev["outer"]), total, "server.log '[i/n]'")
++    loc = h3_oom_location(error) if error else None
++    if found is None:
++        return {"clip": None, "log_position": None, "source": None,
++                "stage": (loc or {}).get("stage")}
++    in_decode = (loc or {}).get("stage") == "decode"
++    return {"clip": None if in_decode else found[0] - 1,
++            "last_clip_started": found[0] - 1,
++            "log_position": "%s/%s" % (found[0], found[1]),
++            "source": found[2], "stage": (loc or {}).get("stage"),
++            "note": "1-based in the logs; clip = log position - 1"}
++
++
++def h3_chain_used_from_meta(meta: dict) -> dict:
++    """h3_used_from_meta (top level: vram16 / attention / keep_resident /
++    prefetch / images_used (the chain's total) / steps / loras / transformer)
++    plus the chain's per-clip facts: ``dit_source`` per clip (clip 0 "file",
++    later ones "resident"), each clip's ``block_swap_prefetch_used``,
++    ``chain.num_clips`` / ``chain.clip_num_frames``; ``references`` is the
++    chain's {"clips": [block | None]} (absent = None when no clip has any)."""
++    used = h3_used_from_meta(meta)
++    clips = (((meta.get("h3") or {}).get("phases") or {}).get("clips")) or []
++    used["dit_source"] = [((c or {}).get("denoise") or {}).get("dit_source") for c in clips] or None
++    used["block_swap_prefetch_used_clips"] = [((c or {}).get("denoise") or {}).get("block_swap_prefetch_used")
++                                              for c in clips] or None
++    chain = meta.get("chain") or {}
++    used["chain_num_clips"] = chain.get("num_clips")
++    used["chain_clip_num_frames"] = chain.get("clip_num_frames")
++    used["kind"] = meta.get("kind")
++    return used
++
++
++def h3_chain_expected_references(point: dict):
++    """metadata.json's ``references`` for this chain: None when no clip has
++    references, else {"clips": [None | {pictures, videos, audios, inputs}]}
++    with the inputs as SENT (_request_sent; the ids from reference_uploads.json)."""
++    sent_clips = (point.get("_request_sent") or {}).get("clips")
++    blocks, any_ref = [], False
++    for i, clip in enumerate(point.get("clips") or []):
++        if sent_clips is not None and i < len(sent_clips):
++            sent = sent_clips[i].get("references") or []
++        else:
++            sent = [{"kind": r["kind"], "slot": int(r["slot"]), "id": None, "max_sec": r.get("max_sec")}
++                    for r in clip.get("references") or []]
++        if not sent:
++            blocks.append(None)
++            continue
++        any_ref = True
++        count = lambda k, s=sent: sum(1 for r in s if r["kind"] == k)
++        blocks.append({"pictures": count("picture"), "videos": count("video"), "audios": count("audio"),
++                       "inputs": [{"kind": r["kind"], "slot": int(r["slot"]), "id": r.get("id"),
++                                   "max_sec": r.get("max_sec")} for r in sent]})
++    return {"clips": blocks} if any_ref else None
++
++
++def used_check_h3_chain(point: dict, used: dict, completed: bool = True) -> dict:
++    """used_check_h3's rules for a chain (None = mismatch; absent loras = []):
++    the Single keys, plus dit_source per clip (["file", "resident", ...]: the
++    chain keeps the DiT between its clips, plan §1), the chain's clip count and
++    lengths, and the per-clip references.  keep_resident_used is "off" (not
++    sent; the request default)."""
++    accel = h3_accel(point)
++    n = len(point.get("clips") or [])
++    want = {
++        "vram16_mode_used": "on",
++        "attention_used": accel["attention_backend"],
++        "keep_resident_used": "off",
++        "images_used": len((point.get("keyframes") or {}).get("frame_idx") or []),
++        "loras": [{"name": s["name"], "strength": float(s.get("strength", 1.0))}
++                  for s in (point.get("loras") or [])],
++        "num_inference_steps": int(point["num_inference_steps"]),
++        "dit_source": ["file"] + ["resident"] * (n - 1),
++        "transformer_used": point.get("transformer") or "default",
++        "chain_num_clips": n,
++        "chain_clip_num_frames": [int(c["num_frames"]) for c in point.get("clips") or []],
++        "references": h3_chain_expected_references(point),
++    }
++    if not completed:
++        return {"expected": want, "mismatches": {}, "ok": None,
++                "not_applicable": "job did not complete: no metadata.json"}
++    mismatches = {}
++    for key, value in want.items():
++        actual = used.get(key)
++        if key == "loras":
++            if actual is None and not used.get("loras_present_in_metadata"):
++                actual = []
++            if ([(e.get("name"), rnd(e.get("strength"), 4)) for e in actual]
++                    != [(e["name"], rnd(e["strength"], 4)) for e in value]):
++                mismatches[key] = {"requested": value, "used": actual}
++            continue
++        if key == "references":
++            a = None if actual is None else [h3_references_cmp(b) for b in actual.get("clips") or []]
++            w = None if value is None else [h3_references_cmp(b) for b in value["clips"]]
++            if a != w:
++                mismatches[key] = {"requested": value, "used": actual}
++            continue
++        if actual is None or actual != value:
++            mismatches[key] = {"requested": value, "used": actual}
++    return {"expected": want, "mismatches": mismatches, "ok": not mismatches}
++
++
++def analyse_h3_chain(point: dict, monitors, job: dict, t_start: float,
++                     t_end: float, calib: dict, server_text: str) -> dict:
++    """v3'' for one H3 chain point (plan §4.1 判定 v3'' の連結版).  The point is
++    comfortable when it completed and NO clip has (1) an OOM, (2) a
++    clip<i>.denoise window -- or the chain's decode window -- with >= 10
++    samples whose shared-memory median sits >= +300 MB over the SAME window of
++    the arm's chain baseline (clip i vs clip i, decode vs decode), (3) a
++    ``block_swap_prefetch_used`` that is not "on".  ``causes`` says which stage
++    made a point not comfortable ("denoise" counts for the line's 2-way choice,
++    plan §3.3; "decode" does not: §4-49 material)."""
++    run_dir = monitors.out_dir
++    counts = token_counts_h3_chain(point)
++    n = counts["n_clips"]
++    wddm = read_wddm(monitors.wddm_csv)
++    dmon = read_dmon(monitors.dmon_txt)
++    tail = [r for r in monitors.tail_rows() if r["log"] == "h3"]
++    events = read_server_events(server_text)
++    job_id, status = job.get("job_id"), job.get("status")
++    error = job.get("error") or ""
++    completed = status == "completed"
++    meta, meta_path = {}, None
++    if job_id:
++        candidate = OUTPUTS / job_id / "metadata.json"
++        if candidate.exists():
++            meta_path = candidate
++            try:
++                meta = json.loads(candidate.read_text(encoding="utf-8"))
++                (run_dir / "metadata.json").write_text(
++                    json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
++            except Exception:
++                meta = {}
++
++    # -- windows -------------------------------------------------------------
++    judged_names, recorded_names = h3_chain_window_names(n)
++    spans = h3_chain_stage_windows(events, n)
++    stats = {name: window_stats(wddm, dmon, span.get("start"), span.get("end"), calib)
++             for name, span in spans.items()}
++    is_baseline = not point.get("baseline_label")
++    base = baseline_v3dprime_from_manifest(point.get("baseline_label"))
++    windows = {}
++    for name in list(spans):
++        win = stats[name]
++        samples = win.get("wddm_samples") or 0
++        median = win.get("shared_median_mb")
++        base_median = (base.get(name) or {}).get("shared_median_mb")
++        judged = name in judged_names
++        enough = bool(win.get("evaluated") and samples >= MIN_WINDOW_SAMPLES and median is not None)
++        decidable = bool(judged and enough and base_median is not None)
++        if not win.get("evaluated"):
++            reason = "window not found"
++        elif samples < MIN_WINDOW_SAMPLES:
++            reason = "fewer than %d WDDM samples" % MIN_WINDOW_SAMPLES
++        elif not judged:
++            reason = "recorded only (plan §4.1)"
++        elif is_baseline:
++            reason = "baseline point"
++        elif base_median is None:
++            reason = "no baseline for this window"
++        else:
++            reason = None
++        windows[name] = {
++            "judged": judged, "shared_median_mb": median,
++            "shared_peak_mb": win.get("shared_peak_mb"),
++            "baseline_shared_median_mb": base_median,
++            "delta_mb": (rnd(median - base_median, 1)
++                         if (median is not None and base_median is not None) else None),
++            "wddm_samples": samples, "enough_samples": enough,
++            "seconds": win.get("seconds"), "decidable": decidable,
++            "reason_undecidable": None if decidable else reason,
++            "plateau": (median > base_median + RELATIVE_PLATEAU_MB) if decidable else None,
++            "start_iso": spans[name].get("start_iso"), "end_iso": spans[name].get("end_iso"),
++        }
++
++    # -- facts from metadata.json, clip by clip --------------------------------
++    used = h3_chain_used_from_meta(meta)
++    check = used_check_h3_chain(point, used, completed=completed and bool(meta))
++    h3 = meta.get("h3") or {}
++    phases = h3.get("phases") or {}
++    meta_clips = phases.get("clips") or []
++    steps = h3.get("num_inference_steps") or point.get("num_inference_steps")
++    worker_texts = h3_chain_worker_text_tokens(tail)
++    clip_facts = []
++    for i in range(n):
++        ph = meta_clips[i] if i < len(meta_clips) else {}
++        den = ph.get("denoise") or {}
++        read_s = (den.get("dit") or {}).get("read_seconds")
++        spm = None
++        if den.get("seconds") is not None and steps:
++            spm = rnd((float(den["seconds"]) - float(read_s or 0.0)) / float(steps), 3)
++        sequence = den.get("sequence")
++        wt = worker_texts[i] if i < len(worker_texts) else None
++        axes = h3_axes(counts["clips"][i], sequence, wt)
++        names = ("encode", "image_encode", "reference_encode", "source_encode", "denoise")
++        clip_facts.append({
++            "clip": i, "num_frames": counts["clip_frames"][i],
++            "phase_seconds": {k: (ph.get(k) or {}).get("seconds") for k in names},
++            "phase_peak_vram_mb": {k: (ph.get(k) or {}).get("peak_vram_mb") for k in names},
++            "phase_peak_vram_reserved_mb": {k: (ph.get(k) or {}).get("peak_vram_reserved_mb") for k in names},
++            "phase_commit_process_peak_gib": {k: (ph.get(k) or {}).get("commit_process_peak_gib")
++                                              for k in names},
++            "sequence": sequence,
++            "sequence_estimate": None if sequence else {
++                "video": axes["video"], "cond": axes["cond"], "audio": axes["audio"],
++                "ref_video": axes["ref_video"], "ref_audio": axes["ref_audio"],
++                "text": axes["text"], "total": axes["S"], "source": axes["S_source"]},
++            "axes": axes, "predict": counts["predict"]["clips"][i],
++            "worker_text_tokens": wt,
++            "vram16": den.get("vram16"),
++            "dit_source": den.get("dit_source"),
++            "dit_read_seconds": read_s,
++            "block_swap_prefetch_used": den.get("block_swap_prefetch_used"),
++            "mask": den.get("mask"),
++            "sec_per_step_meta": spm,
++            "sec_per_step_log": spans["clip%d.denoise" % i].get("sec_per_step_log"),
++            "reference_encode": ({k: (ph.get("reference_encode") or {}).get(k) for k in
++                                  ("seconds", "peak_vram_mb", "peak_vram_reserved_mb",
++                                   "commit_process_peak_gib", "references")}
++                                 if ph.get("reference_encode") else None),
++            "source_encode": ph.get("source_encode"),
++        })
++    dec = phases.get("decode") or {}
++    decode_facts = {k: dec.get(k) for k in ("seconds", "frames", "peak_vram_mb", "peak_vram_reserved_mb",
++                                            "commit_process_peak_gib", "rss_process_peak_gib",
++                                            "audio_samples", "vae_source")} if dec else None
++
++    # -- v3'' (chain) -----------------------------------------------------------
++    oom = error.startswith(H3_OOM_PREFIX)
++    oom_vram16 = bool(oom and H3_VRAM16_OOM_NEEDLE in error)
++    oom_location = h3_oom_location(error) if oom else None
++    oom_clip = h3_chain_oom_clip(tail, events, error) if oom else None
++    prefetch_requested = bool(h3_accel(point)["block_swap_prefetch"])
++    prefetch_degraded = None
++    if completed and meta:
++        per = used.get("block_swap_prefetch_used_clips") or []
++        prefetch_degraded = [i for i in range(n)
++                             if prefetch_requested and (per[i] if i < len(per) else None) != "on"]
++    reasons, causes = [], []
++    if is_baseline:
++        verdict = "smoke" if point.get("smoke") else "baseline"
++    elif not completed:
++        verdict = "oom" if oom else (status or "unknown")
++        if oom:
++            where = (oom_clip or {}).get("clip")
++            reasons.append(("oom_vram16" if oom_vram16 else "oom")
++                           + (":clip%s" % where if where is not None else ""))
++            causes.append((oom_location or {}).get("stage") or "unknown")
++    else:
++        for name in judged_names:
++            if windows[name]["plateau"]:
++                reasons.append("plateau:%s" % name)
++                causes.append("decode" if name == "decode" else "denoise")
++        for i in prefetch_degraded or []:
++            reasons.append("prefetch_degraded:clip%d" % i)
++            causes.append("denoise")
++        if reasons:
++            verdict = "uncomfortable"
++        elif all(windows[nm]["decidable"] for nm in judged_names):
++            verdict = "comfortable"
++        else:
++            verdict = "undecidable"
++    comfortable = True if verdict == "comfortable" else (
++        False if verdict in ("uncomfortable", "oom") else None)
++    causes = list(dict.fromkeys(causes))
++    baseline_health = None
++    if is_baseline:
++        baseline_health = {
++            "windows_have_enough_samples": {nm: windows[nm]["enough_samples"] for nm in judged_names},
++            "note": "a chain baseline: every judged window needs >= 10 samples "
++                    "(no past band for a chain)",
++        }
++    evidence = [r["text"] for r in tail
++                if ("out of memory" in r["text"].lower() or "OutOfMemory" in r["text"]
++                    or "VRAM 16GB" in r["text"])][:30]
++    generate_lines = [r["text"] for r in tail if "] generate_chain:" in r["text"]
++                      or r["text"].startswith("generate_chain:")]
++    clip_lines = [r["text"] for r in tail if H3_CHAIN_CLIP_RE.search(r["text"] or "")]
++    worker_conditions = {
++        "generate_line": generate_lines[-1] if generate_lines else None,
++        "clip_lines": clip_lines,
++        "text_tokens_lines": [w["line"] for w in worker_texts],
++        "load": point.get("_h3_worker_load"),
++        "request_sent": "see request_sent (= runs/<label>/request.json body)",
++    }
++    v3dp = {
++        "protocol": "v3'' chain (2026-11-08, plan cozy-gliding-pudding §4.1)",
++        "min_window_samples": MIN_WINDOW_SAMPLES,
++        "relative_plateau_mb": RELATIVE_PLATEAU_MB,
++        "is_baseline": is_baseline, "baseline_label": point.get("baseline_label"),
++        "oom": oom, "oom_vram16": oom_vram16, "oom_location": oom_location,
++        "oom_clip": oom_clip,
++        "prefetch_degraded": prefetch_degraded,
++        "judged_windows": list(judged_names), "recorded_windows": list(recorded_names),
++        "windows": windows, "reasons": reasons,
++        "causes": causes,
++        "cause": ("denoise" if "denoise" in causes else (causes[0] if causes else None)),
++        "denoise_caused": ("denoise" in causes) if not is_baseline else None,
++        "comfortable": comfortable, "verdict": verdict,
++        "baseline_health": baseline_health,
++    }
++    vram_opt = meta.get("vram_optimization") or {}
++    result = job.get("result") or {}
++    return {
++        "label": point["label"], "kind": "chain",
++        "base_model": point.get("base_model"), "engine": "h3",
++        "status": status, "job_id": job_id, "error": job.get("error"),
++        "geometry": {"width": point["width"], "height": point["height"],
++                     "clips": counts["clip_frames"], "num_frames": None,
++                     "keyframes": point.get("keyframes"),
++                     "source_video": point.get("source_video"),
++                     "clip_references": [c.get("references") or [] for c in point.get("clips") or []],
++                     "loras": point.get("loras"),
++                     "num_inference_steps": point.get("num_inference_steps"),
++                     "attention_backend": h3_accel(point)["attention_backend"],
++                     "seed": point.get("seed", DEFAULT_SEED)},
++        "tokens": counts,
++        "wall": {"start_iso": iso(t_start), "end_iso": iso(t_end),
++                 "start_epoch": rnd(t_start, 3), "end_epoch": rnd(t_end, 3),
++                 "seconds": rnd(t_end - t_start, 2)},
++        "request_sent": point.get("_request_sent"),
++        "keyframe_image_used": point.get("_keyframe_image_used"),
++        "reference_uploads_used": point.get("_reference_uploads_used"),
++        "source_video_used": point.get("_source_video_used"),
++        "predict": counts.get("predict"),
++        "used": used, "used_matches_request": check,
++        "metadata": {
++            "peak_vram_mb": vram_opt.get("peak_vram_mb"),
++            "peak_vram_reserved_mb": meta.get("peak_vram_reserved_mb"),
++            "generation_time_seconds": meta.get("generation_time_seconds"),
++            "seed_used": meta.get("seed_used"), "backend": meta.get("backend"),
++            "base_model": (meta.get("models") or {}).get("base_model"),
++            "models_selection": (meta.get("models") or {}).get("selection"),
++            "chain": meta.get("chain"),
++            "output_path": (meta.get("output") or {}).get("path") or result.get("output_path"),
++            "metadata_path": str(meta_path) if meta_path else None,
++        },
++        "h3": {"clips": clip_facts, "decode": decode_facts,
++               "commit_peak_gib": h3.get("commit_peak_gib"), "rss_peak_gib": h3.get("rss_peak_gib"),
++               "num_inference_steps": h3.get("num_inference_steps"),
++               "images_used": h3.get("images_used"), "loras": h3.get("loras"),
++               "seeds": h3.get("seeds"), "audio_latent_excess": h3.get("audio_latent_excess")},
++        "h3_spans": {name: {k: v for k, v in span.items() if k not in ("start", "end")}
++                     for name, span in spans.items()},
++        "vram": {"job": window_stats(wddm, dmon, t_start, t_end, calib),
++                 "windows": stats,
++                 "wddm_rows": len(wddm), "dmon_rows": len(dmon),
++                 "wddm_interval_ms_median": rnd(med([r["dt_ms"] for r in wddm[1:]]), 1),
++                 "worker_tail_rows": len(tail)},
++        "worker_log_evidence": evidence,
++        "worker_conditions": worker_conditions,
++        "worker_tail_last": [r["text"] for r in tail[-20:]] if not completed else None,
++        "v3dprime": v3dp, "verdict_v3dprime": verdict,
++        "baseline_v3dprime": base,
++        "calibration_used": {k: calib.get(k) for k in
++                             ("shared_p95_mb", "dedicated_p95_mb", "rxpci_p95", "txpci_p95")},
++    }
++
++
++H3_CHAIN_REPORT_COLS = ["label", "clip", "F", "K", "refs", "S", "S src", "text", "cap MiB",
++                        "dit src", "prefetch", "s/step meta", "s/step log", "denoise s",
++                        "den peak MB", "den res MB", "den Δ MB", "den n", "enc med MB", "enc n",
++                        "status", "v3''", "reasons", "causes", "oom clip", "oom stage",
++                        "dec s", "dec frames", "dec res MB", "dec Δ MB", "dec n",
++                        "commit peak GiB", "used ok", "baseline"]
++
++
++def h3_chain_report_cells(label: str, rec: dict) -> list:
++    """One row PER CLIP of a chain point (plan §4.1 S4), the LARGEST clip (by S)
++    first; the point-wide columns (verdict, decode, commit, used-check) are
++    filled on that first row only."""
++    v = rec.get("v3dprime") or {}
++    wins = v.get("windows") or {}
++    facts = rec.get("h3") or {}
++    clips = facts.get("clips") or []
++    tok = rec.get("tokens") or {}
++    w = lambda nm, k: (wins.get(nm) or {}).get(k)
++    order = sorted(range(len(clips)), key=lambda i: -((clips[i].get("axes") or {}).get("S") or 0))
++    dec = facts.get("decode") or {}
++    rows = []
++    for rank, i in enumerate(order):
++        c = clips[i]
++        vr = c.get("vram16") or {}
++        clip_refs = (rec.get("geometry") or {}).get("clip_references") or []
++        refs = ",".join("%s%s" % (str(r.get("kind"))[0], r.get("slot"))
++                        for r in (clip_refs[i] if i < len(clip_refs) else [])) or "-"
++        first = rank == 0
++        rows.append([
++            label if first else "", i, c.get("num_frames"),
++            (tok.get("keyframes") if i == 0 and not tok.get("source_video") else 0),
++            refs, (c.get("axes") or {}).get("S"), (c.get("axes") or {}).get("S_source"),
++            (c.get("axes") or {}).get("text"), vr.get("cap_mib"), c.get("dit_source"),
++            c.get("block_swap_prefetch_used"), c.get("sec_per_step_meta"), c.get("sec_per_step_log"),
++            (c.get("phase_seconds") or {}).get("denoise"),
++            (c.get("phase_peak_vram_mb") or {}).get("denoise"),
++            (c.get("phase_peak_vram_reserved_mb") or {}).get("denoise"),
++            w("clip%d.denoise" % i, "delta_mb"), w("clip%d.denoise" % i, "wddm_samples"),
++            w("clip%d.encode" % i, "shared_median_mb"), w("clip%d.encode" % i, "wddm_samples"),
++            rec.get("status") if first else "", rec.get("verdict_v3dprime") if first else "",
++            (";".join(v.get("reasons") or []) or "-") if first else "",
++            (",".join(v.get("causes") or []) or "-") if first else "",
++            (v.get("oom_clip") or {}).get("clip") if first else "",
++            (v.get("oom_location") or {}).get("stage") if first else "",
++            dec.get("seconds") if first else "", dec.get("frames") if first else "",
++            dec.get("peak_vram_reserved_mb") if first else "",
++            w("decode", "delta_mb") if first else "", w("decode", "wddm_samples") if first else "",
++            facts.get("commit_peak_gib") if first else "",
++            (rec.get("used_matches_request") or {}).get("ok") if first else "",
++            (v.get("baseline_label") or ("(smoke)" if rec.get("verdict_v3dprime") == "smoke"
++                                         else "(baseline)")) if first else ""])
++    return rows
++
++
++def report_h3_chain(rows: dict) -> None:
++    print("| " + " | ".join(H3_CHAIN_REPORT_COLS) + " |")
++    print("|" + "---|" * len(H3_CHAIN_REPORT_COLS))
++    for label, rec in rows.items():
++        for cells in h3_chain_report_cells(label, rec):
++            print("| " + " | ".join("" if c is None else str(c) for c in cells) + " |")
++    print()
++
++
+ def analyse(point: dict, monitors: Monitors, job: dict, t_start: float,
+             t_end: float, calib: dict, server_text: str) -> dict:
++    if is_h3_chain(point):          # 2026-11-08: before the Single H3 branch
++        return analyse_h3_chain(point, monitors, job, t_start, t_end, calib, server_text)
+     if is_h3(point):
+         return analyse_h3(point, monitors, job, t_start, t_end, calib, server_text)
+     run_dir = monitors.out_dir
+@@ -3282,7 +4146,19 @@
+         run_dir = RUNS / label
+         run_dir.mkdir(parents=True, exist_ok=True)
+         counts = token_counts(point)
+-        if is_h3(point):
++        if is_h3_chain(point):          # 2026-11-08
++            say("=== %s (H3 CHAIN %dx%d clips=%s K(clip 0)=%d V2V=%s clip refs=%s steps=%s attn=%s "
++                "prefetch=%s loras=%s) predict S per clip=%s timeout=%.0fs ==="
++                % (label, point["width"], point["height"], counts["clip_frames"], counts["keyframes"],
++                   bool(point.get("source_video")),
++                   [["%s%d" % (r["kind"][0], int(r["slot"])) for r in c.get("references") or []]
++                    for c in point.get("clips") or []],
++                   point.get("num_inference_steps"), h3_accel(point)["attention_backend"],
++                   h3_accel(point)["block_swap_prefetch"],
++                   [s.get("name") for s in point.get("loras") or []],
++                   [c["total"] for c in counts["predict"]["clips"]],
++                   job_timeout_for(point, args.job_timeout)))
++        elif is_h3(point):
+             pr = counts["predict"]
+             say("=== %s (H3 %dx%d/%sf K=%d refs=%s steps=%s attn=%s loras=%s) predict vc=%d "
+                 "vcr=%d S=%s (ref_video %d ref_audio %d text %s) timeout=%.0fs ==="
+@@ -3340,7 +4216,22 @@
+                 append_manifest(record)
+                 continue
+             point["_reference_used"] = upload_rec
+-        if is_h3(point):
++        if is_h3_chain(point):
++            # 2026-11-08: each clip's references + the V2V source video, uploaded
++            # once per sha256 and reused (resolve_chain_uploads).
++            try:
++                video_id, upload_rec, source_rec = resolve_chain_uploads(point, upload_cache)
++            except Exception as exc:
++                say("  CHAIN UPLOAD FAILED: %s: %s" % (type(exc).__name__, exc))
++                record = {"label": label, "status": "reference_upload_failed",
++                          "error": "%s: %s" % (type(exc).__name__, exc)}
++                (run_dir / "run.json").write_text(
++                    json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
++                append_manifest(record)
++                continue
++            point["_reference_uploads_used"] = upload_rec
++            point["_source_video_used"] = source_rec
++        elif is_h3(point):
+             # 2026-11-03: references are uploaded once per (kind, sha256) and
+             # the ids reused (reference_uploads.json); K=0, no keyframe image.
+             try:
+@@ -3387,7 +4278,31 @@
+         monitors.start()
+         t_start = time.time()
+         code, resp = api("POST", path, body, timeout=300)
+-        if (is_h3(point) and code == 404
++        if (is_h3_chain(point) and code == 404
++                and any(c in json.dumps(resp, ensure_ascii=False) for c in
++                        ("REFERENCE_NOT_FOUND", "SOURCE_VIDEO_NOT_FOUND", "IMAGE_NOT_FOUND"))):
++            # 2026-11-08: the uploads store dropped a remembered file -> upload
++            # everything of this chain once more and resubmit ONCE.
++            say("  %s for a cached id -> re-upload and resubmit once"
++                % json.dumps(resp, ensure_ascii=False)[:120])
++            try:
++                video_id, upload_rec, source_rec = resolve_chain_uploads(point, upload_cache, refresh=True)
++                point["_reference_uploads_used"] = upload_rec
++                point["_source_video_used"] = source_rec
++                if image_id is not None:
++                    image_id, upload_rec = resolve_keyframe_image(point, upload_cache, refresh=True)
++                    point["_keyframe_image_used"] = upload_rec
++                path, body = build_request(point, video_id=video_id, image_id=image_id)
++                point["_request_sent"] = body
++                (run_dir / "point.json").write_text(
++                    json.dumps(point, indent=2, ensure_ascii=False), encoding="utf-8")
++                (run_dir / "request.json").write_text(
++                    json.dumps({"endpoint": path, "body": body}, indent=2, ensure_ascii=False),
++                    encoding="utf-8")
++                code, resp = api("POST", path, body, timeout=300)
++            except Exception as exc:
++                code, resp = 599, {"raw": "re-upload failed: %s: %s" % (type(exc).__name__, exc)}
++        elif (is_h3(point) and code == 404
+                 and "REFERENCE_NOT_FOUND" in json.dumps(resp, ensure_ascii=False)):
+             # The uploads store dropped a remembered file (it is a temporary
+             # store): upload once more and resubmit ONCE.
+@@ -3452,6 +4367,30 @@
+         (run_dir / "run.json").write_text(json.dumps(record, indent=2, ensure_ascii=False),
+                                           encoding="utf-8")
+         append_manifest(record)
++        if is_h3_chain(point):          # 2026-11-08: one line per clip, then the verdict
++            v = record.get("v3dprime") or {}
++            for c in (record.get("h3") or {}).get("clips") or []:
++                ax = c.get("axes") or {}
++                w = (v.get("windows") or {}).get("clip%d.denoise" % c.get("clip")) or {}
++                say("  %s clip %s: F=%s S=%s(%s) text=%s cap_mib=%s dit=%s prefetch=%s "
++                    "s/step(meta)=%s denoise d=%s n=%s plat=%s"
++                    % (label, c.get("clip"), c.get("num_frames"), ax.get("S"), ax.get("S_source"),
++                       ax.get("text"), (c.get("vram16") or {}).get("cap_mib"), c.get("dit_source"),
++                       c.get("block_swap_prefetch_used"), c.get("sec_per_step_meta"),
++                       w.get("delta_mb"), w.get("wddm_samples"), w.get("plateau")))
++            say("  %s: %s v3''=%s reasons=%s causes=%s oom=%s(vram16=%s) oom_clip=%s used_ok=%s %s err=%s"
++                % (label, record.get("status"), record.get("verdict_v3dprime"), v.get("reasons"),
++                   v.get("causes"), v.get("oom"), v.get("oom_vram16"),
++                   (v.get("oom_clip") or {}).get("clip"),
++                   (record.get("used_matches_request") or {}).get("ok"),
++                   (record.get("used_matches_request") or {}).get("mismatches") or "",
++                   record.get("error")))
++            say("  windows: %s" % ", ".join(
++                "%s:med=%s base=%s delta=%s n=%s dec=%s plat=%s"
++                % (nm, w.get("shared_median_mb"), w.get("baseline_shared_median_mb"),
++                   w.get("delta_mb"), w.get("wddm_samples"), w.get("decidable"), w.get("plateau"))
++                for nm, w in (v.get("windows") or {}).items()))
++            continue
+         if is_h3(point):
+             v = record.get("v3dprime") or {}
+             facts = record.get("h3") or {}
+@@ -3737,6 +4676,8 @@
+ 
+ def check_point(point: dict, labels: set) -> dict:
+     """All offline checks for one plan point. One flat rule per line."""
++    if is_h3_chain(point):          # 2026-11-08: before the Single H3 branch
++        return check_point_h3_chain(point, labels)
+     if is_h3(point):
+         return check_point_h3(point, labels)
+     kind = point.get("kind", "single")
+@@ -4112,8 +5053,13 @@
+     # the manifest holds LTX rows at all.
+     h3_rows = {k: v for k, v in latest.items() if v.get("base_model") == H3_BASE_MODEL}
+     latest = {k: v for k, v in latest.items() if v.get("base_model") != H3_BASE_MODEL}
++    # 2026-11-08: the chain points get their own per-clip table
++    h3_chain_rows = {k: v for k, v in h3_rows.items() if v.get("kind") == "chain"}
++    h3_rows = {k: v for k, v in h3_rows.items() if v.get("kind") != "chain"}
+     if h3_rows:
+         report_h3(h3_rows)
++    if h3_chain_rows:
++        report_h3_chain(h3_chain_rows)
+     if not latest:
+         return 0
+     # T6d (2026-09-14): "transformer" sits next to "base" -- this campaign's
+--- comfort-calib-h3-2026-11-04-te/mkplan.py	2026-11-03 02:53:49.194672700 +0900
++++ comfort-calib-h3-chain-2026-11-08/mkplan.py	2026-11-08 00:14:36.503373900 +0900
+@@ -51,6 +51,15 @@
+ relative to this folder, e.g. ``--ref picture:materials/large-image.jpg:1``).
+ The point gets ``references`` and the bench's ``predict`` (calib.token_counts_h3).
+ 
++H3 chain (2026-11-08, 台帳 §1-276, plan cozy-gliding-pudding.md §4.1 S1 / S5):
++``--kind chain --base-model MiniMaxH3 --label L --width W --height H --clips F0 F1 ...``
++(mkc.sh is the usual way in).  ``--keyframes K`` is CLIP 0's key frames
++(frame_idx from F0); the clips carry no prompt of their own (text = the shared
++prompt).  ``--clip-ref i:kind:path:slot`` puts a reference on clip i (0-based);
++``--source-video path`` makes it a V2V chain (clip 0's fixed head = the video's
++tail; ``context_frames`` is not written = 22).  The point gets
++``predict.clips[i]`` (calib.token_counts_h3_chain).
++
+ Always run ``calib.py preflight --plan plans\<file>`` afterwards.
+ """
+ from __future__ import annotations
+@@ -176,6 +185,56 @@
+     return p
+ 
+ 
++def parse_clip_ref(text: str):
++    """``i:kind:path:slot`` -> (i, {kind, source_path, slot}) (chain only, 2026-11-08)."""
++    index, rest = text.split(":", 1)
++    return int(index), parse_ref(rest)
++
++
++def make_point_h3_chain(label, args, *, width, height, baseline=None, is_baseline=False):
++    """One H3 chain point (2026-11-08).  The shared fields are make_point_h3's;
++    the chain's own are ``clips`` (num_frames + that clip's references),
++    clip 0's ``keyframes`` and ``source_video``."""
++    frames = [int(n) for n in args.clips]
++    refs = {}
++    for text in args.clip_ref or []:
++        index, ref = parse_clip_ref(text)
++        refs.setdefault(index, []).append(ref)
++    p = OrderedDict()
++    p["label"] = label
++    p["kind"] = "chain"
++    p["base_model"] = H3_BASE_MODEL
++    p["transformer"] = args.transformer
++    p["width"] = width
++    p["height"] = height
++    p["clips"] = [OrderedDict([("num_frames", f)] + ([("references", refs[i])] if i in refs else []))
++                  for i, f in enumerate(frames)]
++    p["frame_rate"] = FRAME_RATE
++    p["seed"] = args.seed
++    p["prompt"] = h3_prompt()
++    p["num_inference_steps"] = int(args.steps)
++    p["accel"] = OrderedDict([("attention_backend", args.attention),
++                              ("block_swap_prefetch", True)])
++    if args.keyframes:
++        p["keyframes"] = OrderedDict([("image_path", H3_KEYFRAME_IMAGE),
++                                      ("frame_idx", h3_frame_idx(frames[0], args.keyframes))])
++    if args.source_video:
++        p["source_video"] = OrderedDict([("source_path", args.source_video)])
++    p["loras"] = ([OrderedDict([("name", H3_TURBO_LORA), ("strength", H3_TURBO_STRENGTH)])]
++                  if args.turbo else [])
++    p["purpose"] = args.purpose
++    p["tier"] = args.tier
++    if args.smoke:
++        p["smoke"] = True
++    elif is_baseline:
++        p["is_baseline"] = True
++    else:
++        p["baseline_label"] = baseline
++    import calib  # noqa: PLC0415  (same folder; stdlib + tokenizers + h3_chain_math)
++    p["predict"] = calib.token_counts_h3_chain(p)["predict"]
++    return p
++
++
+ def taken() -> set:
+     """Every label this campaign has already spent GPU time on."""
+     used = {d.name for d in RUNS.glob("*") if (d / "run.json").exists()}
+@@ -258,6 +317,11 @@
+                     help="H3 only: attach the Turbo LoRA at %.1f" % H3_TURBO_STRENGTH)
+     ap.add_argument("--smoke", action="store_true",
+                     help="H3 only: a smoke / warm-up point (no baseline)")
++    # H3 chain only (2026-11-08)
++    ap.add_argument("--clip-ref", action="append", default=[],
++                    help="H3 chain only: i:kind:path:slot (repeatable) -- a reference on clip i (0-based)")
++    ap.add_argument("--source-video", default=None,
++                    help="H3 chain only: V2V -- the input video (path relative to this folder)")
+     ap.add_argument("--width", type=int, help="single only")
+     ap.add_argument("--height", type=int, help="single only")
+     ap.add_argument("--frames", type=int, nargs="+", help="single only: the rungs")
+@@ -291,10 +355,16 @@
+     ap.add_argument("--purpose", default="")
+     args = ap.parse_args()
+ 
++    h3_chain = args.base_model == H3_BASE_MODEL and args.kind == "chain"
+     if args.kind == "single":
+         if not (args.width and args.height and args.frames):
+             raise SystemExit("single needs --width --height --frames")
+         rungs = [(args.width, args.height, f) for f in args.frames]
++    elif h3_chain:
++        # 2026-11-08: one H3 chain point per call, --width/--height/--clips/--label
++        if not (args.width and args.height and args.label):
++            raise SystemExit("an H3 chain needs --label --width --height --clips")
++        rungs = [(args.width, args.height, None)]
+     else:
+         if not args.sizes:
+             raise SystemExit("chain needs --sizes WxH [WxH ...]")
+@@ -305,8 +375,8 @@
+         raise SystemExit("--label names exactly one rung (got %d)" % len(rungs))
+     if not args.baseline and not args.baseline_first and not args.smoke:
+         raise SystemExit("give --baseline <label> or --baseline-first (or --smoke)")
+-    if args.base_model == H3_BASE_MODEL and args.kind != "single":
+-        raise SystemExit("H3 points are single shots only")
++    if (args.clip_ref or args.source_video) and not h3_chain:
++        raise SystemExit("--clip-ref / --source-video are for an H3 chain only")
+ 
+     busy = taken()
+     points, clashes = [], []
+@@ -327,6 +397,11 @@
+             own_baseline = label
+         if label in busy:
+             clashes.append(label)
++        if h3_chain:
++            points.append(make_point_h3_chain(label, args, width=width, height=height,
++                                              baseline=args.baseline or own_baseline,
++                                              is_baseline=is_baseline))
++            continue
+         if args.base_model == H3_BASE_MODEL:
+             points.append(make_point_h3(label, args, width=width, height=height,
+                                         frames=frames,
+@@ -354,6 +429,19 @@
+                                         [c["num_frames"] for c in p["clips"]])
+                     if p["kind"] == "chain"
+                     else "%dx%d/%df" % (p["width"], p["height"], p["num_frames"]))
++        if p["base_model"] == H3_BASE_MODEL and p["kind"] == "chain":
++            kf = (p.get("keyframes") or {}).get("frame_idx") or []
++            print("  %-26s %-28s transformer=%s attn=%s steps=%d K(clip 0)=%d source_video=%s "
++                  "clip refs=%s loras=%s baseline=%s"
++                  % (p["label"], geometry, p["transformer"], p["accel"]["attention_backend"],
++                     p["num_inference_steps"], len(kf), (p.get("source_video") or {}).get("source_path"),
++                     [[("%s:%s" % (r["kind"], r["slot"])) for r in c.get("references") or []]
++                      for c in p["clips"]],
++                     [l["name"] for l in p["loras"]],
++                     p.get("baseline_label") or ("(smoke)" if p.get("smoke") else "(is_baseline)")))
++            for i, c in enumerate(p["predict"]["clips"]):
++                print("  %-26s predict clip %d %s" % ("", i, json.dumps(c)))
++            continue
+         if p["base_model"] == H3_BASE_MODEL:
+             kf = (p.get("keyframes") or {}).get("frame_idx") or []
+             print("  %-26s %-28s transformer=%s attn=%s steps=%d K=%d refs=%s loras=%s baseline=%s"
+--- comfort-calib-h3-2026-11-04-te/make_results.py	2026-11-03 02:59:37.502204000 +0900
++++ comfort-calib-h3-chain-2026-11-08/make_results.py	2026-11-08 00:27:31.106417200 +0900
+@@ -273,6 +273,46 @@
+         print()
+ 
+ 
++# --- MiniMax H3 chain (2026-11-08, plan cozy-gliding-pudding §4.1 S4) -------
++def section_h3_chain(recs):
++    """Every H3 chain point, one row per clip (the largest S first), from
++    calib's own row builder; then each point's windows (clip i vs the arm's
++    chain baseline clip i, decode vs decode)."""
++    sys.path.insert(0, str(HERE))
++    import calib  # noqa: E402
++    print("### MiniMax H3 の連結（Chained）の全計測点（判定 v3″ の連結版・クリップごと）\n")
++    print("| " + " | ".join(calib.H3_CHAIN_REPORT_COLS) + " |")
++    print("|" + "---|" * len(calib.H3_CHAIN_REPORT_COLS))
++    for L, r in recs.items():
++        for cells in calib.h3_chain_report_cells(L, r):
++            print("| " + " | ".join("—" if c is None else str(c) for c in cells) + " |")
++    print()
++    print("### 連結の窓ごとの判定（基準点の同じ窓との比較・+300MB が線。clip<i>.encode は記録だけ）\n")
++    for L, r in recs.items():
++        v = r.get("v3dprime") or {}
++        wins = v.get("windows") or {}
++        print("**`%s`** — v3″=`%s`（基準 `%s`・理由 %s・原因 %s・OOM のクリップ %s・照合 %s）" % (
++            L, r.get("verdict_v3dprime"), v.get("baseline_label") or "—",
++            ", ".join(v.get("reasons") or []) or "—", ", ".join(v.get("causes") or []) or "—",
++            fmt(g(r, "v3dprime", "oom_clip", "clip")),
++            "ok" if g(r, "used_matches_request", "ok") else
++            "**NG %s**" % json.dumps(g(r, "used_matches_request", "mismatches"), ensure_ascii=False)
++            if g(r, "used_matches_request", "ok") is False else "対象外"))
++        print()
++        if not wins:
++            continue
++        print("| 窓 | 判定に使う | 標本 | 中央値 MB | 基準 MB | 基準比 MB | 判定可 | 天井 |")
++        print("|---|---|---:|---:|---:|---:|---|---|")
++        for name, w in wins.items():
++            print("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
++                name, fmt(w.get("judged")), fmt(w.get("wddm_samples")),
++                fmt(w.get("shared_median_mb")), fmt(w.get("baseline_shared_median_mb")),
++                fmt(w.get("delta_mb")),
++                "○" if w.get("decidable") else "× %s" % (w.get("reason_undecidable") or ""),
++                "**超**" if w.get("plateau") else ("—" if not w.get("decidable") else "下")))
++        print()
++
++
+ SECTIONS = {"points": section_points, "accel": section_accel,
+             "windows": section_windows, "timing": section_timing}
+ 
+@@ -284,8 +324,13 @@
+     want = [a.lstrip("-") for a in sys.argv[1:]] or ["h3"] + list(SECTIONS) + ["wall"]
+     for name in want:
+         if name == "h3":
+-            if h3_recs:
+-                section_h3(h3_recs)
++            # 2026-11-08: the chain points have their own per-clip section
++            chain_recs = {L: r for L, r in h3_recs.items() if r.get("kind") == "chain"}
++            single_recs = {L: r for L, r in h3_recs.items() if r.get("kind") != "chain"}
++            if single_recs:
++                section_h3(single_recs)
++            if chain_recs:
++                section_h3_chain(chain_recs)
+         elif name in SECTIONS:
+             if recs:
+                 SECTIONS[name](recs)
+--- comfort-calib-h3-2026-11-04-te/sum.py	2026-11-03 02:58:32.558619500 +0900
++++ comfort-calib-h3-chain-2026-11-08/sum.py	2026-11-08 00:22:33.793344500 +0900
+@@ -26,8 +26,32 @@
+     for n,w in (v.get('windows') or {}).items():
+         print('   %-10s med=%s base=%s delta=%s n=%s dec=%s plat=%s judged=%s s=%s'%(n,w.get('shared_median_mb'),w.get('baseline_shared_median_mb'),w.get('delta_mb'),w.get('wddm_samples'),w.get('decidable'),w.get('plateau'),w.get('judged'),w.get('seconds')))
+     if v.get('baseline_health'): print('   baseline_health', json.dumps(v['baseline_health'], ensure_ascii=False))
++# 2026-11-08 (chain bench): an H3 CHAIN run.json prints one line per clip (the largest S first), then the windows.
++def h3chain(lab, r):
++    v=r.get('v3dprime') or {}; f=r.get('h3') or {}; g=r.get('geometry') or {}; um=r.get('used_matches_request') or {}
++    print(lab, r.get('status'), "v3''=", r.get('verdict_v3dprime'), 'reasons=', v.get('reasons'), 'causes=', v.get('causes'),
++          'oom=', v.get('oom'), 'oom_vram16=', v.get('oom_vram16'), 'oom_clip=', (v.get('oom_clip') or {}).get('clip'),
++          'oom_stage=', (v.get('oom_location') or {}).get('stage'), 'prefetch_degraded=', v.get('prefetch_degraded'),
++          'wall=%.0fs'%((r.get('wall') or {}).get('seconds') or 0), 'used_ok=', um.get('ok'), um.get('mismatches'), 'err=', r.get('error'))
++    print('   %sx%s clips=%s V2V=%s steps=%s attn=%s commit_peak=%s'%(g.get('width'), g.get('height'), g.get('clips'),
++          bool(g.get('source_video')), g.get('num_inference_steps'), g.get('attention_backend'), f.get('commit_peak_gib')))
++    clips=f.get('clips') or []
++    for c in sorted(clips, key=lambda c: -((c.get('axes') or {}).get('S') or 0)):
++        ax=c.get('axes') or {}; vr=c.get('vram16') or {}; pr=c.get('predict') or {}
++        print('   clip %s F=%s S=%s(%s) predict=%s text=%s cap_mib=%s dit=%s prefetch=%s s/step(meta)=%s s/step(log)=%s den_s=%s den_peak=%s den_res=%s inactive_split=%s retries=%s'%(
++              c.get('clip'), c.get('num_frames'), ax.get('S'), ax.get('S_source'), pr.get('total'), ax.get('text'), vr.get('cap_mib'),
++              c.get('dit_source'), c.get('block_swap_prefetch_used'), c.get('sec_per_step_meta'), c.get('sec_per_step_log'),
++              (c.get('phase_seconds') or {}).get('denoise'), (c.get('phase_peak_vram_mb') or {}).get('denoise'),
++              (c.get('phase_peak_vram_reserved_mb') or {}).get('denoise'), vr.get('inactive_split_peak_mib'), vr.get('num_alloc_retries')))
++    d=f.get('decode') or {}
++    print('   decode s=%s frames=%s peak=%s res=%s commit=%s'%(d.get('seconds'), d.get('frames'), d.get('peak_vram_mb'), d.get('peak_vram_reserved_mb'), d.get('commit_process_peak_gib')))
++    for n,w in (v.get('windows') or {}).items():
++        print('   %-14s med=%s base=%s delta=%s n=%s dec=%s plat=%s judged=%s s=%s'%(n,w.get('shared_median_mb'),w.get('baseline_shared_median_mb'),w.get('delta_mb'),w.get('wddm_samples'),w.get('decidable'),w.get('plateau'),w.get('judged'),w.get('seconds')))
++    if v.get('baseline_health'): print('   baseline_health', json.dumps(v['baseline_health'], ensure_ascii=False))
+ for lab in sys.argv[1:]:
+     r=json.load(open('runs/%s/run.json'%lab,encoding='utf-8'))
++    if r.get('engine')=='h3' and r.get('kind')=='chain':
++        h3chain(lab, r); continue
+     if r.get('engine')=='h3':
+         h3(lab, r); continue
+     v=r.get('v3prime') or {}
+--- comfort-calib-h3-2026-11-04-te/digest.py	2026-11-04 21:46:36.775718700 +0900
++++ comfort-calib-h3-chain-2026-11-08/digest.py	2026-11-08 00:29:19.293920100 +0900
+@@ -2,7 +2,7 @@
+ """Digest for the docs agent: one row per run (manifest order): label, base, transformer used, accel (from used),
+ geometry, stage2 tokens, rule-v3 verdict, stage2/restore deltas, used-check, commit peak (from driver logs). Read-only."""
+ import glob, io, json, os, re
+-D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-04-te"
++D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-chain-2026-11-08"
+ peaks = {}
+ for log in glob.glob(os.path.join(D, "drive*.log")):
+     for line in io.open(log, encoding="utf-8", errors="replace"):
+@@ -39,6 +39,19 @@
+         ax = (m.get("h3") or {}).get("axes") or {}
+         axes = f"{ax.get('vcr')} / {ax.get('S')} ({ax.get('S_source')}) / {ax.get('text')}"
+         if um and um.get("ok") is None: used = "n/a (job did not complete)"
++        if m.get("kind") == "chain":
++            # 2026-11-08 (chain bench): clips / V2V / per-clip refs, the per-clip S, the largest denoise delta
++            geo = (f"{g.get('width')}x{g.get('height')} clips={g.get('clips')}"
++                   + (" V2V" if g.get("source_video") else "")
++                   + f" K(clip 0)={(m.get('tokens') or {}).get('keyframes')} steps={g.get('num_inference_steps')}"
++                   + " refs=" + ";".join(",".join(f"{r.get('kind')}{r.get('slot')}" for r in c) or "-"
++                                         for c in g.get("clip_references") or []))
++            cl = (m.get("h3") or {}).get("clips") or []
++            axes = " / ".join(f"clip{c.get('clip')} S={(c.get('axes') or {}).get('S')} ({(c.get('axes') or {}).get('S_source')})" for c in cl)
++            vw = (m.get("v3dprime") or {}).get("windows") or {}
++            dd = [x.get("delta_mb") for n, x in vw.items() if n.endswith(".denoise") and x.get("delta_mb") is not None]
++            w = {"stage2": {"delta_mb": max(dd) if dd else None}, "restore": vw.get("decode") or {}}
++            t = {"stage2_tokens": (m.get("tokens") or {}).get("video_plus_cond")}
+     i += 1
+     axes = axes if m.get("engine") == "h3" else ""
+     print(f"| {i} | {label} | {m.get('base_model')} | {u.get('transformer_used')} | {accel} | {geo} | {t.get('stage2_tokens')} | {axes} | {v.get('verdict','')} | {f(w.get('stage2',{}).get('delta_mb'))} | {f(w.get('restore',{}).get('delta_mb'))} | {used} | {peaks.get(lab2plan.get(label,''),'')} |")
+--- comfort-calib-h3-2026-11-04-te/commit_table.py	2026-11-04 21:46:36.769624100 +0900
++++ comfort-calib-h3-chain-2026-11-08/commit_table.py	2026-11-08 00:22:13.198451100 +0900
+@@ -7,7 +7,7 @@
+ end_iso, cut from server.log), read from commit_log.csv (2 s samples, second resolution).  A window
+ without an end line (an OOM inside the denoise) is closed at the point's wall end."""
+ import glob, io, json, re, os, sys
+-D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-04-te"
++D = r"S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-chain-2026-11-08"
+ rows = {}
+ for log in sorted(glob.glob(os.path.join(D, "drive*.log"))):
+     for line in io.open(log, encoding="utf-8", errors="replace"):
+@@ -31,15 +31,24 @@
+     return out
+ COMMIT = read_commit_log()
+ def window_commit_peak(label, name):
+-    """Max committed GiB with start <= t <= end of the point's window (string compare, same format)."""
++    """Max committed GiB with start <= t <= end of the point's window (string compare, same format).
++    2026-11-08 (chain bench): a chain point has one window per clip ("clip<i>.encode" /
++    "clip<i>.denoise"); for it the peak is taken over every clip's window of that stage
++    (a Single point's "encode" / "denoise" window is read exactly as before)."""
+     fs = glob.glob(os.path.join(D, "runs", label, "run.json"))
+     if not fs or not COMMIT: return ""
+     r = json.load(io.open(fs[0], encoding="utf-8"))
+-    w = ((r.get("v3dprime") or {}).get("windows") or {}).get(name) or {}
+-    start = (w.get("start_iso") or "")[:19]
+-    end = (w.get("end_iso") or (r.get("wall") or {}).get("end_iso") or "")[:19]
+-    if not start or not end: return ""
+-    vals = [c for t, c in COMMIT if start <= t <= end]
++    wins = (r.get("v3dprime") or {}).get("windows") or {}
++    if r.get("kind") == "chain":
++        picked = [w for n, w in wins.items() if n == name or n.endswith("." + name)]
++    else:
++        picked = [wins.get(name) or {}]
++    vals = []
++    for w in picked:
++        start = (w.get("start_iso") or "")[:19]
++        end = (w.get("end_iso") or (r.get("wall") or {}).get("end_iso") or "")[:19]
++        if not start or not end: continue
++        vals += [c for t, c in COMMIT if start <= t <= end]
+     return "%.2f" % max(vals) if vals else ""
+ def verdict_for(label):
+     fs = glob.glob(os.path.join(D, "runs", label, "run.json"))
+@@ -47,6 +56,12 @@
+     r = json.load(io.open(fs[0], encoding="utf-8")); v = r.get("v3prime", {}); w = v.get("windows") or {}
+     um = r.get("used_matches_request") or {}
+     used = "ok" if um.get("ok") else ("MISMATCH:" + ",".join(um.get("mismatches", {}).keys()) if um else "")
++    if r.get("engine") == "h3" and r.get("kind") == "chain":
++        # 2026-11-08 (chain bench): the largest denoise delta over the clips, the decode delta.
++        v = r.get("v3dprime") or {}; w = v.get("windows") or {}
++        if um.get("ok") is None and um: used = "n/a"
++        dd = [x.get("delta_mb") for n, x in w.items() if n.endswith(".denoise") and x.get("delta_mb") is not None]
++        return (v.get("verdict", ""), max(dd) if dd else None, w.get("decode", {}).get("delta_mb"), used)
+     if r.get("engine") == "h3":
+         # H3 (2026-11-01): v3'' -- the two columns carry the denoise / decode deltas.
+         v = r.get("v3dprime") or {}; w = v.get("windows") or {}
+--- comfort-calib-h3-2026-11-04-te/drive2.sh	2026-11-04 21:46:36.730722200 +0900
++++ comfort-calib-h3-chain-2026-11-08/drive2.sh	2026-11-08 00:08:15.611756200 +0900
+@@ -6,10 +6,10 @@
+ # ($WARM_PLAN, default plans/p_warm.json) under a fresh label suffix.  --job-timeout auto
+ # (7,200 s for <=4 steps, 10,800 s otherwise).
+ # usage: drive2.sh <log> <plan.json> [<plan.json> ...]
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-04-te" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-chain-2026-11-08" || exit 2
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ LOG="$1"; shift
+-CSV="S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-04-te/commit_log.csv"
++CSV="S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-chain-2026-11-08/commit_log.csv"
+ PY="../../.venv/Scripts/python.exe"
+ BASE_MODEL="${BASE_MODEL:-MiniMaxH3}"
+ # 2026-11-03 (Ref2VA bench): the recovery load uses the Ref2VA entry name of GET /models
+--- comfort-calib-h3-2026-11-04-te/mk.sh	2026-11-04 21:46:36.750891600 +0900
++++ comfort-calib-h3-chain-2026-11-08/mk.sh	2026-11-08 00:08:15.620349700 +0900
+@@ -5,7 +5,7 @@
+ # this folder) is passed to mkplan.py, e.g.
+ #   mk.sh i1080_277_p1 MiniMaxH3 minimax_h3_ref2va_pruned_int8_convrot sage 1920 1088 277 4 0 b1080 --ref picture:materials/large-image.jpg:1
+ # FIRST = this point IS its arm's baseline; SMOKE = a smoke / warm-up point (no baseline).
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-04-te" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-chain-2026-11-08" || exit 2
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ PY="../../.venv/Scripts/python.exe"
+ label=$1; base=$2; tr=$3; attn=$4; W=$5; H=$6; F=$7; ST=$8; K=$9; shift 9
+--- comfort-calib-h3-2026-11-04-te/rp.sh	2026-11-04 21:46:36.756473000 +0900
++++ comfort-calib-h3-chain-2026-11-08/rp.sh	2026-11-08 00:08:15.626437200 +0900
+@@ -1,5 +1,5 @@
+ #!/bin/bash
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-04-te" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-chain-2026-11-08" || exit 2
+ [ "$(cat "preflight_$1.rc" 2>/dev/null)" = 0 ] || { echo "ABORT: preflight rc != 0 for $1"; exit 5; }
+ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+ arm=${1%%_*}
+--- comfort-calib-h3-2026-11-04-te/wait.sh	2026-11-04 21:46:36.760504400 +0900
++++ comfort-calib-h3-chain-2026-11-08/wait.sh	2026-11-08 00:08:15.632487200 +0900
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ # wait (max 570 s) for rp_<label>.txt to show the summary line
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-04-te" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-chain-2026-11-08" || exit 2
+ f="rp_$1.txt"; t=$(( $(date +%s) + 570 ))
+ until { grep -q "^$1 \|ABORT\|STOP\|Traceback" "$f" 2>/dev/null; } || [ "$(date +%s)" -ge "$t" ]; do sleep 5; done
+ cat "$f"; tail -1 commit_log.csv
+--- comfort-calib-h3-2026-11-04-te/cool.sh	2026-11-04 21:46:36.764057300 +0900
++++ comfort-calib-h3-chain-2026-11-08/cool.sh	2026-11-08 00:08:15.637047300 +0900
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ # wait until 150 s after the last "done" line of any drive2 log
+-cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-2026-11-04-te" || exit 2
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-chain-2026-11-08" || exit 2
+ last=$(grep -h "\] done " drive2_*.log | sort | tail -1 | sed 's/^\[\([^]]*\)\].*/\1/')
+ t=$(( $(date -d "$last" +%s) + 150 ))
+ until [ "$(date +%s)" -ge "$t" ]; do sleep 3; done
+--- comfort-calib-h3-2026-11-04-te/selftest/analyse_selftest.py	2026-11-03 02:14:43.043793500 +0900
++++ comfort-calib-h3-chain-2026-11-08/selftest/analyse_selftest.py	2026-11-08 00:26:16.731060000 +0900
+@@ -260,6 +260,235 @@
+ finally:
+     calib.MANIFEST = saved_manifest
+ 
++# ===========================================================================
++# CASE 4 -- MiniMax H3 CHAIN (2026-11-08, 台帳 §1-276, plan cozy-gliding-pudding §4.1 S4).
++# analyse() end to end on a chain point with fake instruments: a 2-clip
++# ``phases.clips`` metadata, a server.log slice in the REAL chain format
++# (logs/server.log job e8f0951d: "chain stage-1 denoise [i/n]", one "chain VAE
++# decode", "chain text encode" without [i/n]) and the worker's 1-based
++# "chain: clip i/n" lines.  The arm's chain baseline goes into a fake manifest
++# first; calib.OUTPUTS / MANIFEST point into a temp folder (nothing is written
++# under outputs/ or this bench's manifest).  Four cases (plan §4.1 S4 ②):
++# all good -> comfortable / clip 1 OOM -> oom, clip 1 / clip 1 prefetch off ->
++# uncomfortable / decode plateau -> uncomfortable, cause "decode".
++# ===========================================================================
++print("\nCASE 4: H3 chain (v3'' per clip)")
++import os  # noqa: E402
++import shutil  # noqa: E402
++import tempfile  # noqa: E402
++
++CT0 = calib.parse_local("2026-11-08 01:00:00", "%Y-%m-%d %H:%M:%S")
++CHAIN_SPEC = [
++    (0.0, "ltx.pipeline: Chain job CFAKE start clips=2 1920x1088 steps=4 fps=24 overlap=22f(fixed) seed=12345"),
++    (0.1, "ltx.runner: chain text encode started (4 steps)"),
++    (20.0, "ltx.runner: chain text encode 4/4 steps (5.81 step/s, 19.9s elapsed)"),
++    (22.0, "ltx.runner: chain text encode 5/4 steps (0.43 step/s, 21.9s elapsed)"),
++    (30.0, "ltx.runner: chain stage-1 denoise [1/2] started (4 steps)"),
++    (45.0, "ltx.runner: chain stage-1 denoise [1/2] 1/4 steps (0.07 step/s, 15.0s elapsed)"),
++    (60.0, "ltx.runner: chain stage-1 denoise [1/2] 2/4 steps (0.07 step/s, 30.0s elapsed)"),
++    (75.0, "ltx.runner: chain stage-1 denoise [1/2] 3/4 steps (0.07 step/s, 45.0s elapsed)"),
++    (90.0, "ltx.runner: chain stage-1 denoise [1/2] 4/4 steps (0.07 step/s, 60.0s elapsed)"),
++    (91.0, "ltx.runner: chain text encode 1/4 steps (0.10 step/s, 90.9s elapsed)"),
++    (100.0, "ltx.runner: chain text encode 5/4 steps (0.45 step/s, 99.9s elapsed)"),
++    (110.0, "ltx.runner: chain stage-1 denoise [2/2] started (4 steps)"),
++    (125.0, "ltx.runner: chain stage-1 denoise [2/2] 1/4 steps (0.07 step/s, 15.0s elapsed)"),
++    (140.0, "ltx.runner: chain stage-1 denoise [2/2] 2/4 steps (0.07 step/s, 30.0s elapsed)"),
++    (155.0, "ltx.runner: chain stage-1 denoise [2/2] 3/4 steps (0.07 step/s, 45.0s elapsed)"),
++    (170.0, "ltx.runner: chain stage-1 denoise [2/2] 4/4 steps (0.07 step/s, 60.0s elapsed)"),
++    (171.0, "ltx.runner: chain VAE decode started (3 steps)"),
++    (190.0, "ltx.runner: chain VAE decode 2/3 steps (0.05 step/s, 19.0s elapsed)"),
++    (200.0, "ltx.runner: chain VAE decode 4/3 steps (0.10 step/s, 29.0s elapsed)"),
++    (201.0, "ltx.pipeline: Chain job CFAKE done in 201.0s peak_vram=9000MB -> completed (frames=685)"),
++]
++
++
++def chain_slice(spec):
++    out = []
++    for dt, msg in spec:
++        stamp = CT0 + dt
++        whole = int(stamp)
++        out.append("%s,%03d INFO %s" % (calib.datetime.fromtimestamp(whole).strftime("%Y-%m-%d %H:%M:%S"),
++                                         int(round((stamp - whole) * 1000)) % 1000, msg))
++    return "\n".join(out) + "\n"
++
++
++def chain_profile(den0=1200.0, den1=1200.0, dec=1100.0):
++    def f(dt):
++        if 30.0 <= dt <= 90.0:
++            return den0
++        if 110.0 <= dt <= 170.0:
++            return den1
++        if 171.0 <= dt <= 200.0:
++            return dec
++        return 800.0
++    return f
++
++
++class ChainMon:
++    def __init__(self, d, rows=()):
++        self.out_dir = d
++        self.wddm_csv = d / "wddm.csv"
++        self.dmon_txt = d / "dmon.txt"
++        self._rows = list(rows)
++
++    def tail_rows(self):
++        return self._rows
++
++
++def chain_meta(point, prefetch=("on", "on")):
++    seqs = [{"text": c["text"], "cond": c["cond"], "audio": c["audio"], "video": c["video"],
++             "total": c["total"], "latent_frames": 0, "audio_latents": c["audio"] // 2, "grid": [34, 60]}
++            for c in point["predict"]["clips"]]
++    clips = [{"encode": {"seconds": 22.0, "peak_vram_mb": 1500, "peak_vram_reserved_mb": 1500},
++              "image_encode": {"seconds": 2.0},
++              "denoise": {"seconds": 80.0, "dit": {"read_seconds": 20.0}, "dit_source": "file",
++                          "sequence": seqs[0], "block_swap_prefetch_used": prefetch[0],
++                          "vram16": {"cap_mib": 14025, "num_alloc_retries": 0, "inactive_split_peak_mib": 1500},
++                          "peak_vram_mb": 9000, "peak_vram_reserved_mb": 13800}},
++             {"encode": {"seconds": 10.0, "peak_vram_mb": 1500, "peak_vram_reserved_mb": 2900},
++              "denoise": {"seconds": 60.0, "dit_source": "resident", "sequence": seqs[1],
++                          "block_swap_prefetch_used": prefetch[1],
++                          "mask": {"audio": {"rows": seqs[1]["audio"]}, "video": {"rows": seqs[1]["video"]}},
++                          "vram16": {"cap_mib": 14005, "num_alloc_retries": 0, "inactive_split_peak_mib": 1600},
++                          "peak_vram_mb": 9100, "peak_vram_reserved_mb": 13950}}]
++    return {"kind": "chain", "attention_used": "sage", "block_swap_prefetch_used": "on",
++            "keep_resident_used": "off", "vram16_mode_used": "on", "peak_vram_reserved_mb": 13950,
++            "vram_optimization": {"peak_vram_mb": 9100},
++            "models": {"selection": {"transformer": {"name": calib.H3_REF2VA_TRANSFORMER}}},
++            "chain": {"num_clips": 2, "clip_num_frames": [c["num_frames"] for c in point["clips"]]},
++            "h3": {"num_inference_steps": 4, "images_used": 1, "commit_peak_gib": 41.0,
++                   "phases": {"clips": clips, "decode": {"seconds": 29.0, "frames": 685,
++                                                         "peak_vram_reserved_mb": 7400}}}}
++
++
++def plan_point(label):
++    return json.loads((HERE.parent / "plans" / ("p_%s.json" % label)).read_text(encoding="utf-8"))[0]
++
++
++ctmp = Path(tempfile.mkdtemp(prefix="h3chain_selftest_"))
++csaved = (calib.OUTPUTS, calib.MANIFEST)
++try:
++    calib.OUTPUTS = ctmp / "outputs"
++    calib.MANIFEST = ctmp / "manifest.jsonl"
++
++    def chain_case(name, point, shared, status="completed", error=None, meta=None,
++                   slice_text=None, tail=()):
++        d = ctmp / name
++        d.mkdir(parents=True)
++        lines = ["timestamp,dedicated_mb,shared_mb,dt_ms"]
++        t = CT0 - 2
++        while t <= CT0 + 203:
++            lines.append("%s,9000.0,%.1f,1000.0" % (calib.datetime.fromtimestamp(t).strftime(
++                "%Y-%m-%d %H:%M:%S.%f")[:-3], shared(t - CT0)))
++            t += 1.0
++        (d / "wddm.csv").write_text("\n".join(lines) + "\n", encoding="ascii")
++        (d / "dmon.txt").write_text("", encoding="ascii")
++        job = {"job_id": "job-" + name, "status": status, "error": error}
++        if meta is not None:
++            (calib.OUTPUTS / job["job_id"]).mkdir(parents=True)
++            (calib.OUTPUTS / job["job_id"] / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
++        point = json.loads(json.dumps(point))
++        point["_request_sent"] = calib.build_request(point, video_id={"references": {}, "source_video": None},
++                                                     image_id="IMG-1")[1]
++        rec = calib.analyse(point, ChainMon(d, tail), job, CT0 - 1, CT0 + 202, CALIB,
++                            slice_text if slice_text is not None else chain_slice(CHAIN_SPEC))
++        calib.append_manifest(rec)
++        return rec
++
++    cb = dict(plan_point("cb1080"), label="cbfake")
++    rcb = chain_case("cbfake", cb, chain_profile(), meta=chain_meta(cb))
++    check("4: chain baseline verdict", rcb["verdict_v3dprime"], "baseline")
++    check("4: chain window names (clip i 0-based)", list(rcb["v3dprime"]["windows"]),
++          ["clip0.encode", "clip0.denoise", "clip1.encode", "clip1.denoise", "decode"])
++    check("4: baseline clip1.denoise median / samples",
++          (rcb["v3dprime"]["windows"]["clip1.denoise"]["shared_median_mb"],
++           rcb["v3dprime"]["windows"]["clip1.denoise"]["wddm_samples"]), (1200.0, 61))
++    check("4: baseline health: every judged window has >= 10 samples",
++          rcb["v3dprime"]["baseline_health"]["windows_have_enough_samples"],
++          {"clip0.denoise": True, "clip1.denoise": True, "decode": True})
++
++    a1 = dict(plan_point("A1"), baseline_label="cbfake")
++    ra = chain_case("a_good", dict(a1, label="a_good"), chain_profile(1300.0, 1300.0, 1150.0), meta=chain_meta(a1))
++    check("4a: all good -> comfortable", (ra["verdict_v3dprime"], ra["v3dprime"]["reasons"]), ("comfortable", []))
++    check("4a: used-check ok (dit_source file/resident, images 1, keep_resident off, clips)",
++          (ra["used_matches_request"]["ok"], ra["used_matches_request"]["mismatches"]), (True, {}))
++    check("4a: per-clip S from metadata, cap per clip",
++          [(c["axes"]["S"], c["axes"]["S_source"], c["vram16"]["cap_mib"]) for c in ra["h3"]["clips"]],
++          [(213348, "metadata", 14025), (219516, "metadata", 14005)])
++    check("4a: clip 1 vs the baseline's clip 1 (+100 MB)",
++          (ra["v3dprime"]["windows"]["clip1.denoise"]["delta_mb"],
++           ra["v3dprime"]["windows"]["clip1.denoise"]["decidable"]), (100.0, True))
++    check("4a: encode windows are recorded, never judged",
++          [ra["v3dprime"]["windows"][n]["judged"] for n in ("clip0.encode", "clip1.encode")], [False, False])
++    check("4a: sec/step meta per clip ((80-20)/4, 60/4)",
++          [c["sec_per_step_meta"] for c in ra["h3"]["clips"]], [15.0, 15.0])
++    rows = calib.h3_chain_report_cells("a_good", ra)
++    check("4a: report: one row per clip, the largest S (clip 1) first",
++          [(r[0], r[1], r[5]) for r in rows], [("a_good", 1, 219516), ("", 0, 213348)])
++    check("4a: report rows have every column", {len(r) for r in rows}, {len(calib.H3_CHAIN_REPORT_COLS)})
++
++    oom_err = ("GPU_OOM: CUDA out of memory during generation (%s)\n" % calib.H3_VRAM16_OOM_NEEDLE
++               + "Traceback (most recent call last):\n"
++               '  File "S:\\x\\engine_h3\\chain_h3.py", line 330, in run_chain_h3\n'
++               '  File "S:\\x\\engine_h3\\pipeline_h3.py", line 1503, in _denoise\n'
++               '  File "S:\\x\\engine_h3\\lowvram.py", line 178, in block_forward\n'
++               "torch.OutOfMemoryError: CUDA out of memory.\n")
++    oom_tail = [
++        {"t": CT0 + 0.0, "log": "h3", "text": "[h3_worker] generate_chain: seed=12345 1920x1088 clips=[345, 362] "
++                                             "steps=4 shift=12.0/3.0 attention=sage keep_resident=False prefetch=True "
++                                             "vram16=True loras=[] images=[1, 0] -> x"},
++        {"t": CT0 + 0.1, "log": "h3", "text": "[h3_worker] chain: clip 1/2 seed=12345 frames=345 no fixed head"},
++        {"t": CT0 + 20.0, "log": "h3", "text": "[h3_worker] encode: 2078 text tokens"},
++        {"t": CT0 + 90.5, "log": "h3", "text": "[h3_worker] chain: clip 2/2 seed=12346 frames=362 fixed head k=7 ka=37"},
++        {"t": CT0 + 100.0, "log": "h3", "text": "[h3_worker] encode: 30 text tokens"},
++    ]
++    rb = chain_case("b_oom", dict(a1, label="b_oom"), chain_profile(), status="failed", error=oom_err,
++                    slice_text=chain_slice(CHAIN_SPEC[:14]), tail=oom_tail)
++    check("4b: clip 1 OOM -> oom, not comfortable",
++          (rb["verdict_v3dprime"], rb["v3dprime"]["comfortable"], rb["v3dprime"]["oom_vram16"]), ("oom", False, True))
++    check("4b: OOM clip = 1 (worker 'chain: clip 2/2', 1-based -> 0-based)",
++          (rb["v3dprime"]["oom_clip"]["clip"], rb["v3dprime"]["oom_clip"]["log_position"]), (1, "2/2"))
++    check("4b: reason / cause", (rb["v3dprime"]["reasons"], rb["v3dprime"]["causes"], rb["v3dprime"]["cause"]),
++          (["oom_vram16:clip1"], ["denoise"], "denoise"))
++    check("4b: S per clip from the worker's text lines + geometry",
++          [(c["axes"]["S"], c["axes"]["S_source"]) for c in rb["h3"]["clips"]],
++          [(213348, "worker_log"), (219516, "worker_log")])
++    check("4b: used-check not applicable (no metadata.json)", rb["used_matches_request"]["ok"], None)
++    check("4b: the worker's generate_chain line and clip lines are kept",
++          (rb["worker_conditions"]["generate_line"].startswith("[h3_worker] generate_chain:"),
++           len(rb["worker_conditions"]["clip_lines"])), (True, 2))
++
++    rc = chain_case("c_prefetch", dict(a1, label="c_prefetch"), chain_profile(),
++                    meta=chain_meta(a1, prefetch=("on", "off")))
++    check("4c: clip 1 prefetch off -> uncomfortable",
++          (rc["verdict_v3dprime"], rc["v3dprime"]["reasons"], rc["v3dprime"]["prefetch_degraded"],
++           rc["v3dprime"]["cause"]), ("uncomfortable", ["prefetch_degraded:clip1"], [1], "denoise"))
++
++    rd = chain_case("d_decode", dict(a1, label="d_decode"), chain_profile(1200.0, 1200.0, 1500.0),
++                    meta=chain_meta(a1))
++    check("4d: decode +400 MB -> uncomfortable, cause decode (not counted for the line)",
++          (rd["verdict_v3dprime"], rd["v3dprime"]["reasons"], rd["v3dprime"]["causes"],
++           rd["v3dprime"]["denoise_caused"]), ("uncomfortable", ["plateau:decode"], ["decode"], False))
++
++    re_ = chain_case("e_den1", dict(a1, label="e_den1"), chain_profile(1200.0, 1600.0, 1100.0),
++                     meta=chain_meta(a1))
++    check("4e: clip 1 denoise +400 MB -> plateau:clip1.denoise, cause denoise",
++          (re_["verdict_v3dprime"], re_["v3dprime"]["reasons"], re_["v3dprime"]["cause"]),
++          ("uncomfortable", ["plateau:clip1.denoise"], "denoise"))
++    # optional: H3_SELFTEST_DUMP=<dir> writes these fake run.json files there (to exercise
++    # sum.py / make_results.py / digest.py / commit_table.py offline); never into this bench.
++    if os.environ.get("H3_SELFTEST_DUMP"):
++        droot = Path(os.environ["H3_SELFTEST_DUMP"])
++        for rec_ in (rcb, ra, rb, rc, rd, re_):
++            (droot / "runs" / rec_["label"]).mkdir(parents=True, exist_ok=True)
++            (droot / "runs" / rec_["label"] / "run.json").write_text(json.dumps(rec_, ensure_ascii=False),
++                                                                     encoding="utf-8")
++            with open(droot / "manifest.jsonl", "a", encoding="utf-8") as fh_:
++                fh_.write(json.dumps(rec_, ensure_ascii=False) + chr(10))
++finally:
++    calib.OUTPUTS, calib.MANIFEST = csaved
++    shutil.rmtree(ctmp, ignore_errors=True)
++
+ print("\n%d check(s), %d failure(s)" % (CHECKS, len(FAILURES)))
+ if FAILURES:
+     for name in FAILURES:
+--- comfort-calib-h3-2026-11-04-te/selftest/dryrun_validate.py	2026-11-03 02:54:47.105918600 +0900
++++ comfort-calib-h3-chain-2026-11-08/selftest/dryrun_validate.py	2026-11-08 00:17:42.868115800 +0900
+@@ -19,13 +19,54 @@
+ ROOT = BENCH.parents[1]
+ sys.path.insert(0, str(ROOT))
+ 
+-from api.models import GenerateRequest  # noqa: E402
+-from services.engines import validate_for_family  # noqa: E402
++from api.models import GenerateChainRequest, GenerateRequest  # noqa: E402
++from services.engines import validate_chain_for_family, validate_for_family  # noqa: E402
+ from services.engines.h3 import adapter as h3_adapter  # noqa: E402
+ 
++DUMMY = "00000000-0000-0000-0000-000000000000"
++
++
++def validate_chain(rec):
++    """2026-11-08 (chain bench, plan cozy-gliding-pudding §4.1 S3): a
++    /generate/chain body goes through api/generate_chain.py's order --
++    GenerateChainRequest -> h3 adapter reject_chain -> validate_chain_for_family("h3").
++    The placeholders (clip 0's image_id, each clip's reference ids, the source
++    video_id) are swapped for a dummy id (existence is the endpoint's check)."""
++    body = json.loads(json.dumps(rec["body"]))
++    for clip in body.get("clips") or []:
++        for ci in clip.get("conditioning_images") or []:
++            ci["image_id"] = DUMMY
++        for ref in clip.get("references") or []:
++            ref["id"] = DUMMY
++    if body.get("source_video"):
++        body["source_video"]["video_id"] = DUMMY
++    req = GenerateChainRequest(**body)
++    h3_adapter.reject_chain(req)
++    validate_chain_for_family("h3", req)
++    sv = req.source_video
++    return ("ok   %-14s CHAIN attn=%s steps=%s vram16_mode=%s keep_resident=%s prefetch=%s shifts=%s/%s "
++            "seed=%s fps=%s clips=%d frames=%s images(clip0)=%d refs=%s source_video=%s sent_keys=%s"
++            % (rec["label"], req.attention_backend, req.num_inference_steps, req.vram16_mode,
++               req.keep_resident, req.block_swap_prefetch, req.shift_video, req.shift_audio,
++               req.seed, req.frame_rate, len(req.clips), [c.num_frames for c in req.clips],
++               len(req.clips[0].conditioning_images),
++               [[(r.kind, r.slot, r.max_sec) for r in c.references] for c in req.clips],
++               None if sv is None else "context_frames=%s" % sv.context_frames, sorted(body)))
++
++# 2026-11-08 (chain bench): an optional folder name (default dryrun/), so the
++# 11-04 Single plans' bodies (dryrun_te/, selftest/single_regress.py) are checked too.
++DRYRUN_DIR = BENCH / (sys.argv[1] if len(sys.argv) > 1 else "dryrun")
++
+ fails = 0
+-for f in sorted((BENCH / "dryrun").glob("*.request.json")):
++for f in sorted(DRYRUN_DIR.glob("*.request.json")):
+     rec = json.loads(f.read_text(encoding="utf-8"))
++    if rec.get("endpoint") == "/generate/chain":
++        try:
++            print(validate_chain(rec))
++        except Exception as exc:  # noqa: BLE001
++            fails += 1
++            print("FAIL %-12s %s: %s" % (rec["label"], type(exc).__name__, exc))
++        continue
+     body = json.loads(json.dumps(rec["body"]))
+     for ci in body.get("conditioning_images") or []:
+         ci["image_id"] = "00000000-0000-0000-0000-000000000000"
+--- comfort-calib-h3-2026-11-04-te/selftest/parser_selftest.py	2026-11-04 10:20:06.571428600 +0900
++++ comfort-calib-h3-chain-2026-11-08/selftest/parser_selftest.py	2026-11-08 00:25:01.369881200 +0900
+@@ -459,8 +459,14 @@
+ # (4) request bodies from the bench's own plan files -----------------------
+ # 2026-11-03 (H3 Reference bench, plan delegated-marinating-patterson §2.5):
+ # rewritten for THIS campaign's plans/ (K=0, references, Ref2VA).
++# 2026-11-08 (chain bench): these checks name the 2026-11-03 Reference bench's
++# points, which neither the 11-04 TE bench's plans/ nor this bench's hold (the
++# 11-04 copy already stopped here on KeyError 'r1080_277').  Its plan files are
++# carried as a read-only FIXTURE (selftest/plans_fixture_h3ref/, copied from
++# outputs/comfort-calib-h3-ref-2026-11-03/plans/), as sections G and H's other
++# fixtures are; calib.PLANS_DIR is untouched.
+ SAMPLES = {}
+-for plan_file in sorted(calib.PLANS_DIR.glob("p_*.json")):
++for plan_file in sorted((HERE / "plans_fixture_h3ref").glob("p_*.json")):
+     for p in json.loads(plan_file.read_text(encoding="utf-8")):
+         SAMPLES[p["label"]] = p
+ REF2VA = calib.H3_REF2VA_TRANSFORMER
+@@ -1050,6 +1056,206 @@
+       (True, True))
+ 
+ # ===========================================================================
++# J -- MiniMax H3 CHAIN (2026-11-08, 台帳 §1-276, plan cozy-gliding-pudding.md §4.1 S2-S5).
++# What it pins: the chain's 5 windows on the REAL chain job of logs/server.log
++# (e8f0951d, 2026-11-02 22:35-22:56 -- the material of plan §4.1 S4), the 1-based
++# log positions -> 0-based clips, the per-clip token counts against real chain
++# metadata.json (V2V / key-frame chains), h3_chain_used_from_meta on real chain
++# metadata, the /generate/chain body, check_point_h3_chain's refusals, and that
++# the Single path's functions are what the chain reuses.
++print("\nJ. MiniMax H3 chain (windows, clip numbering, tokens, used, request, preflight)")
++CHAIN_JOB = "e8f0951d-9b11-411f-951c-74d90cdef491"
++c_end = server_text.index("Chain job %s done in" % CHAIN_JOB)
++c_hit = server_text.index("Chain job %s start" % CHAIN_JOB)
++c_slice = server_text[server_text.rindex("\n", 0, c_hit) + 1:c_end]
++cev = calib.read_server_events(c_slice)
++cw = calib.h3_chain_stage_windows(cev, 2)
++span = lambda n: (calib.iso(cw[n]["start"]), calib.iso(cw[n]["end"]))
++check("J(1): window names in order", list(cw),
++      ["clip0.encode", "clip0.denoise", "clip1.encode", "clip1.denoise", "decode"])
++check("J(1): clip0.encode = 'chain text encode started' -> 'denoise [1/2] started'",
++      span("clip0.encode"), ("2026-11-02 22:35:18.593", "2026-11-02 22:35:43.059"))
++check("J(1): clip0.denoise = denoise [1/2] started -> its 4/4 line",
++      span("clip0.denoise"), ("2026-11-02 22:35:43.059", "2026-11-02 22:44:31.299"))
++check("J(1): clip1.encode = denoise [1/2]'s last line -> 'denoise [2/2] started'",
++      span("clip1.encode"), ("2026-11-02 22:44:31.299", "2026-11-02 22:44:55.753"))
++check("J(1): clip1.denoise = denoise [2/2] started -> its 4/4 line",
++      span("clip1.denoise"), ("2026-11-02 22:44:55.753", "2026-11-02 22:52:54.838"))
++check("J(1): decode = the one 'chain VAE decode' group", span("decode"),
++      ("2026-11-02 22:52:55.415", "2026-11-02 22:56:17.258"))
++# 4 lines in the log, but its first ("1/4 steps (-0.01 step/s, ...)") has a NEGATIVE rate,
++# which the shared STAGE_PROG_RE does not parse; the window's bounds come from the
++# denoise lines, so this costs nothing (the encode is recorded only).
++check("J(1): clip1.encode holds the 2nd encode's parsed lines (no [i/n] on 'text encode')",
++      (cw["clip1.encode"]["lines"], cw["clip1.encode"]["last_done"]), (3, 5))
++check("J(1): log [1/2] -> clip 0, [2/2] -> clip 1", (cw["clip0.denoise"]["outer"], cw["clip1.denoise"]["outer"]),
++      ("1", "2"))
++check("J(1): denoise sec/step = elapsed / 4 (H3: started before step 1)",
++      (cw["clip0.denoise"]["sec_per_step_log"], cw["clip1.denoise"]["sec_per_step_log"]), (132.05, 119.775))
++check("J(1): Single h3_stage_window on the same slice sees only the LAST denoise group",
++      calib.iso(calib.h3_stage_window(cev, "denoise")["start"]), "2026-11-02 22:44:55.753")
++# an OOM in clip 1's encode: no denoise [2/2] -> clip1.encode ends on its last encode line
++cut = c_slice.index("chain stage-1 denoise [2/2] started")
++cw_o = calib.h3_chain_stage_windows(calib.read_server_events(c_slice[:c_slice.rindex("\n", 0, cut) + 1]), 2)
++check("J(1): OOM in clip 1's encode -> clip1.encode ends on the last encode line, clip1.denoise not found",
++      (calib.iso(cw_o["clip1.encode"]["end"]), cw_o["clip1.denoise"]["found"], cw_o["decode"]["found"]),
++      ("2026-11-02 22:44:54.437", False, False))
++
++# (2) clip numbering: the logs are 1-based (engine_h3/chain_h3.py:248 logs i + 1)
++CLIP_LINE = "[h3_worker] chain: clip 2/2 seed=760333019 frames=362 fixed head k=7 ka=37"
++check("J(2): the real worker line matches H3_CHAIN_CLIP_RE",
++      calib.H3_CHAIN_CLIP_RE.search(CLIP_LINE).group("i", "n"), ("2", "2"))
++OOM_DEN = ("GPU_OOM: CUDA out of memory\nTraceback (most recent call last):\n"
++           '  File "S:\\x\\engine_h3\\chain_h3.py", line 330, in run_chain_h3\n'
++           '  File "S:\\x\\engine_h3\\pipeline_h3.py", line 1503, in _denoise\n'
++           '  File "S:\\x\\engine_h3\\dit.py", line 643, in forward\n'
++           "torch.OutOfMemoryError: CUDA out of memory.\n")
++oc = calib.h3_chain_oom_clip([{"t": 1, "log": "h3", "text": "[h3_worker] chain: clip 1/2 seed=1 frames=345 no fixed head"},
++                              {"t": 2, "log": "h3", "text": CLIP_LINE}], [], OOM_DEN)
++check("J(2): worker 'chain: clip 2/2' -> clip 1 (0-based), stage denoise",
++      (oc["clip"], oc["log_position"], oc["stage"], oc["source"]),
++      (1, "2/2", "denoise", "h3_worker.log 'chain: clip i/n'"))
++oc2 = calib.h3_chain_oom_clip([], cev, OOM_DEN)
++check("J(2): no worker line -> server.log's last [i/n] (2/2 -> clip 1)", (oc2["clip"], oc2["source"]),
++      (1, "server.log '[i/n]'"))
++OOM_DEC = ("GPU_OOM: x\nTraceback (most recent call last):\n"
++           '  File "S:\\x\\engine_h3\\chain_h3.py", line 400, in run_chain_h3\n'
++           '  File "S:\\x\\engine_h3\\video_vae.py", line 50, in decode\n'
++           "torch.OutOfMemoryError: CUDA out of memory.\n")
++oc3 = calib.h3_chain_oom_clip([{"t": 2, "log": "h3", "text": CLIP_LINE}], [], OOM_DEC)
++check("J(2): an OOM in the (one) decode has no clip", (oc3["clip"], oc3["last_clip_started"], oc3["stage"]),
++      (None, 1, "decode"))
++
++# (3) per-clip token counts against REAL chain metadata (640x384)
++def meta_of(prefix):
++    """A real job's metadata.json by its job id (or the id's first 8 hex digits)."""
++    job = sorted(calib.OUTPUTS.glob(prefix + "*"))[0]
++    return json.loads((job / "metadata.json").read_text(encoding="utf-8"))
++for job, frames, k, src, note in (("31c8a99a-a5d9-43ff-b65f-8d62d673f4e0", [56, 39], 0, True, "V2V"),
++                                  ("63138ec0-9b8a-47ce-9792-f55030b4af32", [56, 39], 2, False, "K=2 on clip 0")):
++    m_ = meta_of(job)
++    pt = {"base_model": "MiniMaxH3", "kind": "chain", "width": 640, "height": 384,
++          "clips": [{"num_frames": f} for f in frames]}
++    if k:
++        pt["keyframes"] = {"frame_idx": calib.h3_frame_idx(frames[0], k)}
++    if src:
++        pt["source_video"] = {"source_path": "materials/H3-Ref-720p-3s.mp4"}
++    tc = calib.token_counts_h3_chain(pt)
++    for i, ph in enumerate(m_["h3"]["phases"]["clips"]):
++        sq = ph["denoise"]["sequence"]
++        cc = tc["clips"][i]
++        check("J(3): %s clip %d video/cond/audio/latent == metadata" % (note, i),
++              (cc["video_tokens"], cc["cond_tokens"], cc["audio_rows"], cc["latent_frames"]),
++              (sq["video"], sq["cond"], sq["audio"], sq["latent_frames"]))
++check("J(3): chain layout from h3_chain_math (V2V [56, 39]: 73 frames, 51 delivered)",
++      (lambda L: (L["total_px"], L["v2v"]["new_frames_px"]))(
++          calib.token_counts_h3_chain({"base_model": "MiniMaxH3", "kind": "chain", "width": 640, "height": 384,
++                                       "clips": [{"num_frames": 56}, {"num_frames": 39}],
++                                       "source_video": {"source_path": "x"}})["layout"]), (73, 51))
++check("J(3): clip 0's K=1 vision text (2078) and clip 1's bare prompt (30), 1920x1088 [345, 362]",
++      [(c["text"], c["total"]) for c in calib.token_counts_h3_chain(
++          {"base_model": "MiniMaxH3", "kind": "chain", "width": 1920, "height": 1088, "prompt": F0_PROMPT,
++           "keyframes": {"frame_idx": [0]}, "clips": [{"num_frames": 345}, {"num_frames": 362}]})["predict"]["clips"]],
++      [(2078, 213348), (30, 219516)])
++
++# (4) the *_used facts of REAL chain metadata
++um = calib.h3_chain_used_from_meta(meta_of("3ab502e9-"))
++check("J(4): real 3-clip chain: dit_source per clip, prefetch per clip, chain facts",
++      (um["dit_source"], um["block_swap_prefetch_used_clips"], um["chain_num_clips"], um["chain_clip_num_frames"],
++       um["keep_resident_used"], um["references"]),
++      (["file", "resident", "resident"], ["on", "on", "on"], 3, [124, 124, 124], "off", None))
++um7 = calib.h3_chain_used_from_meta(meta_of("7eea02e1-"))
++check("J(4): real per-clip references block = {clips: [{pictures, videos, audios, inputs}, ...]}",
++      (len(um7["references"]["clips"]), sorted(um7["references"]["clips"][0])),
++      (3, ["audios", "inputs", "pictures", "videos"]))
++
++# (5) the /generate/chain body (this bench's plans/)
++CP = {}
++for plan_file in sorted(calib.PLANS_DIR.glob("p_*.json")):
++    for p in json.loads(plan_file.read_text(encoding="utf-8")):
++        CP[p["label"]] = p
++CHAIN_BODY_KEYS = sorted(["prompt", "width", "height", "frame_rate", "seed", "attention_backend",
++                          "block_swap_prefetch", "num_inference_steps", "loras", "clips"])
++pa, ba = calib.build_request(CP["A1"], video_id={"references": {}, "source_video": None}, image_id="IMG-K")
++check("J(5): A1 endpoint", pa, "/generate/chain")
++check("J(5): A1 body keys (no keep_resident / vram16_mode / LTX chain keys / num_frames)", sorted(ba), CHAIN_BODY_KEYS)
++check("J(5): sage and 4 steps are SENT (chain API defaults sdpa / 8; omitted steps -> H3 default 20)",
++      (ba["attention_backend"], ba["num_inference_steps"], ba["block_swap_prefetch"]), ("sage", 4, True))
++check("J(5): clips = [{num_frames, conditioning_images (clip 0)}, {num_frames}]", ba["clips"],
++      [{"num_frames": 345, "conditioning_images": [{"image_id": "IMG-K", "frame_idx": 0}]}, {"num_frames": 362}])
++check("J(5): the shared prompt only (no clip prompt)", (ba["prompt"], [sorted(c) for c in ba["clips"]][1]),
++      (F0_PROMPT, ["num_frames"]))
++pe, be = calib.build_request(CP["E"], video_id={"references": {(1, "video", 1): "VID-R"}, "source_video": None},
++                             image_id="IMG-K")
++check("J(5): E: the reference rides on clip 1 only", [c.get("references") for c in be["clips"]],
++      [None, [{"kind": "video", "id": "VID-R", "slot": 1}]])
++pf, bf = calib.build_request(CP["F"], video_id={"references": {}, "source_video": "VID-S"})
++check("J(5): F: source_video {video_id} (context_frames left out = 22), no image",
++      (bf["source_video"], [sorted(c) for c in bf["clips"]]), ({"video_id": "VID-S"}, [["num_frames"], ["num_frames"]]))
++check("J(5): F dry-run placeholder names /upload/video, the file and its sha256",
++      calib.build_request(CP["F"])[1]["source_video"]["video_id"],
++      "<video_id: POST /upload/video of H3-Ref-1080p-15s.mp4 sha256="
++      "3d136a1dafbff1a959b9dfdb52d54177d9b2538767a5056da573d05c3ed3a428>")
++check("J(5): the 4-step chain keeps the auto 7,200 s timeout", calib.job_timeout_for(CP["F"], "auto"), 7200.0)
++
++# (6) check_point_h3_chain: every plan passes; the broken ones are refused
++clabels = set(CP)
++check("J(6): every chain / Single plan of this bench passes preflight",
++      {l: calib.check_point(p, clabels)["errors"] for l, p in CP.items() if calib.check_point(p, clabels)["errors"]}, {})
++
++
++def cerrs(**over):
++    p = json.loads(json.dumps(CP["A1"]))
++    for k, v in over.items():
++        if v is None:
++            p.pop(k, None)
++        else:
++            p[k] = v
++    p["predict"] = calib.token_counts_h3_chain(p)["predict"]
++    return calib.check_point(p, clabels)["errors"]
++
++
++check("J(6): 360 frames (not 17n+5) refused", any("17n+5" in e for e in cerrs(clips=[{"num_frames": 360}, {"num_frames": 362}])), True)
++check("J(6): clip 1 = 22 refused by h3_chain_math (>= 39)",
++      any("at least 39" in e for e in cerrs(clips=[{"num_frames": 345}, {"num_frames": 22}])), True)
++check("J(6): one clip (no source video) refused", any("2..24 clips" in e for e in cerrs(clips=[{"num_frames": 345}])), True)
++check("J(6): one clip WITH a source video accepted",
++      cerrs(clips=[{"num_frames": 362}], keyframes=None,
++            source_video={"source_path": "materials/H3-Ref-1080p-15s.mp4"}), [])
++check("J(6): an image on clip 1 refused",
++      any("clips[1] carries ['keyframes']" in e for e in cerrs(
++          clips=[{"num_frames": 345}, {"num_frames": 362, "keyframes": {"frame_idx": [0]}}])), True)
++check("J(6): stage2_window / chunked_upsample / source_audio refused",
++      [any(k in e for e in cerrs(**{k: v})) for k, v in (("stage2_window", "standard"),
++                                                          ("chunked_upsample", False),
++                                                          ("source_audio", {"audio_id": "x"}))], [True, True, True])
++check("J(6): V2V with clip 0 key frames refused",
++      any("source_video and keyframes" in e for e in cerrs(source_video={"source_path": "materials/H3-Ref-1080p-15s.mp4"})), True)
++check("J(6): point-level references refused (a chain's are per clip)",
++      any("must not carry 'references'" in e for e in cerrs(references=[])), True)
++check("J(6): a clip reference needs the Ref2VA transformer",
++      any("Ref2VA" in e for e in cerrs(transformer="default",
++                                       clips=[{"num_frames": 345}, {"num_frames": 345, "references": [
++                                           {"kind": "video", "source_path": V15, "slot": 1}]}])), True)
++check("J(6): a stale predict is refused",
++      any("predict" in e for e in calib.check_point(dict(CP["A1"], predict={"clips": []}), clabels)["errors"]), True)
++check("J(6): the shared-field errors come once, naming both clips",
++      [e for e in cerrs(width=1000) if "multiple of 32" in e], ["clips[0, 1]: width 1000 is not a positive multiple of 32"])
++cw_w = calib.check_point(CP["A1"], clabels)["warnings"]
++check("J(6): warnings = clip 0's steps / seed only", [w.split("=")[0].split()[0] for w in cw_w], ["num_inference_steps", "seed"])
++
++# (7) the chain's used-check (expected keys)
++exp = calib.used_check_h3_chain(dict(CP["E"], _request_sent=be), {}, completed=False)["expected"]
++check("J(7): expected dit_source / images / keep_resident / clips",
++      (exp["dit_source"], exp["images_used"], exp["keep_resident_used"], exp["chain_clip_num_frames"]),
++      (["file", "resident"], 1, "off", [345, 345]))
++check("J(7): expected references = {clips: [None, {videos 1, inputs [id sent]}]}",
++      exp["references"], {"clips": [None, {"pictures": 0, "videos": 1, "audios": 0,
++                                           "inputs": [{"kind": "video", "slot": 1, "id": "VID-R", "max_sec": None}]}]})
++check("J(7): no clip references -> expected references None",
++      calib.used_check_h3_chain(CP["A1"], {}, completed=False)["expected"]["references"], None)
++
++# ===========================================================================
+ print("\n%d check(s), %d failure(s)" % (CHECKS, len(FAILURES)))
+ if FAILURES:
+     for name in FAILURES:
+--- comfort-calib-h3-2026-11-04-te/mkc.sh (absent)
++++ comfort-calib-h3-chain-2026-11-08/mkc.sh	2026-11-08 00:14:52.195662400 +0900
+@@ -0,0 +1,21 @@
++#!/bin/bash
++# helper (H3 chain, 2026-11-08, 台帳 §1-276, plan cozy-gliding-pudding.md §4.1 S1 / S5):
++#   mkc.sh <label> <transformer> <sage|sdpa> <W> <H> <steps> <K of clip 0> <baseline label|FIRST|SMOKE> <F0> <F1> ...
++#          [--clip-ref i:kind:path:slot ...] [--source-video path] [--purpose "text"]
++# e.g. mkc.sh A1 minimax_h3_ref2va_pruned_int8_convrot sage 1920 1088 4 1 cb1080 345 362 --purpose "H3 chain A1 (arm A)"
++# The clip lengths are every numeric argument after the baseline; the rest goes to mkplan.py as is.
++# mk.sh stays for the Single points (arm D).  FIRST = this point IS its arm's baseline; SMOKE = smoke (no baseline).
++cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-chain-2026-11-08" || exit 2
++export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
++PY="../../.venv/Scripts/python.exe"
++label=$1; tr=$2; attn=$3; W=$4; H=$5; ST=$6; K=$7; bl=$8; shift 8
++CL=()
++while [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; do CL+=("$1"); shift; done
++EXTRA=("$@")
++[ ${#CL[@]} -ge 1 ] || { echo "mkc.sh: no clip lengths"; exit 1; }
++[ -n "$bl" ] || { echo "mkc.sh: missing <baseline label|FIRST|SMOKE>"; exit 1; }
++if [ "$bl" = FIRST ]; then BL=(--baseline-first); elif [ "$bl" = SMOKE ]; then BL=(--smoke); else BL=(--baseline "$bl"); fi
++"$PY" mkplan.py --out "p_${label}.json" --kind chain --label "$label" --base-model MiniMaxH3 --transformer "$tr" --attention $attn --width $W --height $H --clips "${CL[@]}" --steps $ST --keyframes $K "${BL[@]}" --tier H3 --purpose "H3 chain $label" "${EXTRA[@]}" || exit 1
++"$PY" calib.py preflight --plan "plans/p_${label}.json" > "preflight_${label}_output.txt" 2>&1; rc=$?
++tail -3 "preflight_${label}_output.txt"; echo preflight_rc=$rc
++echo $rc > "preflight_${label}.rc"
+--- comfort-calib-h3-2026-11-04-te/selftest/single_regress.py (absent)
++++ comfort-calib-h3-chain-2026-11-08/selftest/single_regress.py	2026-11-08 00:10:03.475001300 +0900
+@@ -0,0 +1,122 @@
++# -*- coding: utf-8 -*-
++r"""The Single path must not move (2026-11-08, plan cozy-gliding-pudding §4.1 方針).
++
++The 12 Single plan files of the 2026-11-04 TE bench live in ``plans_te/``
++(moved out of ``plans/`` because this bench's own Single baseline is also
++called ``b1080`` -- a Ref2VA point, while the 11-04 ``p_b1080.json`` is the
++FL2VA one).  For each of them this script
++
++  1. runs ``calib.py preflight --plan plans_te/<file>`` IN PROCESS, with
++     ``calib.PLANS_DIR`` pointed at ``plans_te/`` (so the 11-04 baselines
++     b1080r / b1440 / b720r resolve as they did there) and ``PREFLIGHT_JSON``
++     pointed at ``selftest/single_regress_preflight.json``, and compares
++       * the return code and the printed lines (timestamps stripped) with the
++         11-04 bench's ``preflight_<label>.rc`` / ``preflight_<label>_output.txt``;
++       * the full preflight row (``keyframe_image`` folder normalised) with the
++         snapshot taken at S0 from the UNMODIFIED copy
++         (``selftest/single_regress_ref_rows.json``, written by ``--save-ref``);
++  2. runs ``calib.py run --dry-run --plan plans_te/<file>`` (the real CLI, a
++     subprocess) and compares ``dryrun/<label>.request.json`` BYTE FOR BYTE
++     with the 11-04 bench's ``dryrun/<label>.request.json``; the file is then
++     moved to ``dryrun_te/`` (a same-named file of this bench is put back), and
++     ``selftest/dryrun_validate.py dryrun_te`` must give 0 failures.
++
++  ..\..\..\.venv\Scripts\python.exe selftest\single_regress.py [--save-ref]
++"""
++from __future__ import annotations
++
++import contextlib
++import io
++import json
++import re
++import shutil
++import subprocess
++import sys
++from pathlib import Path
++
++HERE = Path(__file__).resolve().parent
++BENCH = HERE.parent
++sys.path.insert(0, str(BENCH))
++import calib  # noqa: E402
++
++TE = BENCH.parent / "comfort-calib-h3-2026-11-04-te"
++PLANS_TE = BENCH / "plans_te"
++REF_ROWS = HERE / "single_regress_ref_rows.json"
++PY = sys.executable
++STAMP = re.compile(r"^\[[^\]]*\] ")
++
++
++def norm_lines(text: str) -> list:
++    return [STAMP.sub("", ln.rstrip("\r")) for ln in text.splitlines()]
++
++
++def norm_row(row: dict) -> dict:
++    row = json.loads(json.dumps(row))
++    if row.get("keyframe_image"):
++        row["keyframe_image"] = Path(row["keyframe_image"]).name
++    return row
++
++
++def main() -> int:
++    save_ref = "--save-ref" in sys.argv[1:]
++    fails = []
++    rows_now = {}
++    calib.PLANS_DIR = PLANS_TE
++    calib.PREFLIGHT_JSON = HERE / "single_regress_preflight.json"
++    plan_files = sorted(PLANS_TE.glob("p_*.json"))
++    for plan_file in plan_files:
++        label = plan_file.stem[2:]
++        buf = io.StringIO()
++        with contextlib.redirect_stdout(buf):
++            rc = calib.main(["preflight", "--plan", str(plan_file)])
++        te_rc = int((TE / ("preflight_%s.rc" % label)).read_text(encoding="utf-8").strip())
++        te_lines = norm_lines((TE / ("preflight_%s_output.txt" % label)).read_text(encoding="utf-8"))
++        # the one line naming the report file: this script writes its own copy
++        now_lines = [ln.replace("wrote %s --" % calib.PREFLIGHT_JSON.name, "wrote preflight.json --")
++                     for ln in norm_lines(buf.getvalue())]
++        same_text = now_lines == te_lines
++        rep = json.loads(calib.PREFLIGHT_JSON.read_text(encoding="utf-8"))
++        rows_now[label] = [norm_row(r) for r in rep["plans"][plan_file.name]["rows"]]
++        if rc != te_rc or not same_text:
++            fails.append("preflight %s: rc %s (11-04 %s), text same=%s" % (label, rc, te_rc, same_text))
++        # dry-run through the real CLI
++        out = BENCH / "dryrun" / ("%s.request.json" % label)
++        keep = out.read_bytes() if out.exists() else None
++        proc = subprocess.run([PY, str(BENCH / "calib.py"), "run", "--dry-run", "--plan", str(plan_file)],
++                              capture_output=True, text=True, encoding="utf-8", errors="replace")
++        te_bytes = (TE / "dryrun" / ("%s.request.json" % label)).read_bytes()
++        got = out.read_bytes() if out.exists() else b""
++        (BENCH / "dryrun_te").mkdir(exist_ok=True)
++        if out.exists():
++            shutil.move(str(out), str(BENCH / "dryrun_te" / out.name))
++        if keep is not None:
++            out.write_bytes(keep)
++        if proc.returncode != 0 or got != te_bytes:
++            fails.append("dry-run %s: rc %s, bytes same as 11-04=%s" % (label, proc.returncode, got == te_bytes))
++        print("%-14s preflight rc=%s (11-04 %s) text=%s | dry-run rc=%s bytes=%s"
++              % (label, rc, te_rc, "same" if same_text else "DIFF", proc.returncode,
++                 "same" if got == te_bytes else "DIFF"))
++    if save_ref:
++        REF_ROWS.write_text(json.dumps(rows_now, indent=1, ensure_ascii=False), encoding="utf-8")
++        print("saved the S0 row snapshot -> %s" % REF_ROWS.name)
++    ref = json.loads(REF_ROWS.read_text(encoding="utf-8"))
++    for label in sorted(set(ref) | set(rows_now)):
++        if ref.get(label) != rows_now.get(label):
++            fails.append("preflight row %s differs from the S0 snapshot" % label)
++    print("preflight rows vs S0 snapshot: %s" % ("same" if not any("row" in f for f in fails) else "DIFF"))
++    proc = subprocess.run([PY, str(HERE / "dryrun_validate.py"), "dryrun_te"],
++                          capture_output=True, text=True, encoding="utf-8", errors="replace")
++    last = (proc.stdout.strip().splitlines() or [""])[-1]
++    te_val = (TE / "selftest" / "dryrun_validate_te_output.txt").read_text(encoding="utf-8")
++    same_val = norm_lines(proc.stdout) == norm_lines(te_val)
++    print("dryrun_validate dryrun_te: rc=%s %s (output same as 11-04: %s)" % (proc.returncode, last, same_val))
++    if proc.returncode != 0 or not same_val:
++        fails.append("dryrun_validate dryrun_te rc=%s same=%s" % (proc.returncode, same_val))
++    print("%d plan file(s), %d failure(s)" % (len(plan_files), len(fails)))
++    for f in fails:
++        print("  FAILED: %s" % f)
++    return 1 if fails else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+--- comfort-calib-h3-2026-11-04-te/selftest/run_chain_mock.py (absent)
++++ comfort-calib-h3-chain-2026-11-08/selftest/run_chain_mock.py	2026-11-08 00:28:58.884344500 +0900
+@@ -0,0 +1,170 @@
++# -*- coding: utf-8 -*-
++r"""``calib.py run`` on chain points with NO server (2026-11-08, plan cozy-gliding-pudding §4.1 S5).
++
++cmd_run's chain branches (header line, the per-clip uploads of E / the source
++video of F, the one re-upload + resubmit on a 404 *_NOT_FOUND, the per-clip
++result lines) only run against a live server, so this drives cmd_run itself
++with every server-facing call replaced in process: api / api_multipart /
++port_open / discover_luid / active_transformer / poll_job / Monitors.  Every
++file it writes goes to a temp folder (RUNS / MANIFEST / reference_uploads.json
++/ calibration.json / OUTPUTS are pointed there); this bench's own state is not
++touched.  Checks: the bodies POSTed, the uploads made (each file once), the
++resubmit after REFERENCE_NOT_FOUND / SOURCE_VIDEO_NOT_FOUND, and that a
++run.json with verdict fields comes out.
++
++  ..\..\..\.venv\Scripts\python.exe selftest\run_chain_mock.py
++"""
++from __future__ import annotations
++
++import argparse
++import contextlib
++import io
++import json
++import shutil
++import sys
++import tempfile
++from pathlib import Path
++
++HERE = Path(__file__).resolve().parent
++sys.path.insert(0, str(HERE.parent))
++import calib  # noqa: E402
++
++FAILURES, CHECKS = [], 0
++
++
++def check(name, got, want):
++    global CHECKS
++    CHECKS += 1
++    if got == want:
++        print("  ok   %-60s = %r" % (name, got))
++    else:
++        print("  FAIL %-60s got %r  want %r" % (name, got, want))
++        FAILURES.append(name)
++
++
++class FakeMonitors:
++    def __init__(self, out_dir, luid, tail_logs=True):
++        self.out_dir = Path(out_dir)
++        self.wddm_csv = self.out_dir / "wddm.csv"
++        self.dmon_txt = self.out_dir / "dmon.txt"
++
++    def start(self):
++        self.out_dir.mkdir(parents=True, exist_ok=True)
++        self.wddm_csv.write_text("timestamp,dedicated_mb,shared_mb,dt_ms\n", encoding="ascii")
++        self.dmon_txt.write_text("", encoding="ascii")
++
++    def stop(self, grace=0.0):
++        pass
++
++    def tail_rows(self):
++        return []
++
++    def slice_server_log(self):
++        return ""
++
++
++def run(labels, fail_first=None):
++    """cmd_run on plans/p_<label>.json with the fakes; returns (posts, uploads, records)."""
++    posts, uploads, state = [], [], {"failed": False}
++
++    def fake_api(method, path, body=None, timeout=1800.0):
++        if method == "GET" and path == "/status":
++            return 200, {"base_model": "MiniMaxH3", "pipeline_loaded": True}
++        if method == "POST" and path in ("/generate", "/generate/chain"):
++            posts.append((path, json.loads(json.dumps(body))))
++            if fail_first and not state["failed"]:
++                state["failed"] = True
++                return 404, {"error": {"code": fail_first, "message": "x"}}
++            return 200, {"job_id": "job-%d" % len(posts)}
++        return 500, {"raw": "unexpected %s %s" % (method, path)}
++
++    def fake_multipart(path, field, file_path, content_type=None):
++        uploads.append((path, Path(file_path).name))
++        key = {"/upload/image": "image_id", "/upload/video": "video_id", "/upload/audio": "audio_id"}[path]
++        return 200, {key: "%s-%d" % (key, len(uploads)), "stored_path": "uploads/x"}
++
++    saved = {k: getattr(calib, k) for k in ("api", "api_multipart", "port_open", "discover_luid",
++                                            "active_transformer", "poll_job", "Monitors", "RUNS",
++                                            "MANIFEST", "UPLOADS_JSON", "CALIB_JSON", "OUTPUTS",
++                                            "WORKER_LOGS")}
++    tmp = Path(tempfile.mkdtemp(prefix="h3chain_run_"))
++    try:
++        calib.api, calib.api_multipart = fake_api, fake_multipart
++        calib.port_open = lambda: True
++        calib.discover_luid = lambda refresh=False: {"chosen_luid": "0x0"}
++        calib.active_transformer = lambda: calib.H3_REF2VA_TRANSFORMER
++        calib.poll_job = lambda job_id, timeout=7200.0: {"job_id": job_id, "status": "completed", "error": None}
++        calib.Monitors = FakeMonitors
++        calib.RUNS, calib.MANIFEST = tmp / "runs", tmp / "manifest.jsonl"
++        calib.UPLOADS_JSON, calib.CALIB_JSON, calib.OUTPUTS = (tmp / "reference_uploads.json",
++                                                               tmp / "calibration.json", tmp / "outputs")
++        calib.WORKER_LOGS = dict(calib.WORKER_LOGS, h3=tmp / "no_h3_worker.log")
++        calib.CALIB_JSON.write_text(json.dumps({"shared_p95_mb": 150.0}), encoding="utf-8")
++        records = {}
++        for label in labels:
++            # a fresh plan copy in the temp folder (cmd_run reads the plan path as given)
++            plan = tmp / ("p_%s.json" % label)
++            shutil.copy(HERE.parent / "plans" / ("p_%s.json" % label), plan)
++            args = argparse.Namespace(plan=str(plan), dry_run=False, label_suffix="", refresh_luid=False,
++                                      cooldown=0.0, job_timeout="auto")
++            buf = io.StringIO()
++            with contextlib.redirect_stdout(buf):
++                rc = calib.cmd_run(args)
++            records[label] = {"rc": rc, "out": buf.getvalue(),
++                              "run": json.loads((calib.RUNS / label / "run.json").read_text(encoding="utf-8"))}
++        return posts, uploads, records
++    finally:
++        for k, v in saved.items():
++            setattr(calib, k, v)
++        shutil.rmtree(tmp, ignore_errors=True)
++
++
++print("cmd_run on chain points with fakes (no server)")
++posts, uploads, rec = run(["A1", "E", "F"])
++check("A1/E/F: rc 0", [rec[l]["rc"] for l in ("A1", "E", "F")], [0, 0, 0])
++check("every POST went to /generate/chain", sorted({p for p, _ in posts}), ["/generate/chain"])
++check("uploads: the key frame once (A1, reused by E), E's reference video once, F's source video once",
++      uploads, [("/upload/image", "keyframe_f0.png"), ("/upload/video", "H3-Ref-1080p-15s.mp4"),
++                ("/upload/video", "H3-Ref-1080p-15s.mp4")])
++check("A1 body: clip 0 image = the uploaded id, sage, 4 steps",
++      (posts[0][1]["clips"][0]["conditioning_images"], posts[0][1]["attention_backend"],
++       posts[0][1]["num_inference_steps"]), ([{"image_id": "image_id-1", "frame_idx": 0}], "sage", 4))
++check("E body: clip 1 carries the uploaded reference id, clip 0 none",
++      [c.get("references") for c in posts[1][1]["clips"]], [None, [{"kind": "video", "id": "video_id-2", "slot": 1}]])
++check("F body: source_video = the uploaded id, no image", (posts[2][1]["source_video"],
++                                                          "conditioning_images" in posts[2][1]["clips"][0]),
++      ({"video_id": "video_id-3"}, False))
++check("the header line names the chain", "H3 CHAIN 1920x1088 clips=[345, 362]" in rec["A1"]["out"], True)
++check("the result prints one line per clip", rec["A1"]["out"].count("A1 clip "), 2)
++check("run.json: chain record with per-clip windows",
++      (rec["E"]["run"]["kind"], sorted(rec["E"]["run"]["v3dprime"]["windows"])),
++      ("chain", ["clip0.denoise", "clip0.encode", "clip1.denoise", "clip1.encode", "decode"]))
++check("run.json keeps the uploads used (E: clip 1 video; F: the source video)",
++      ([r["clip"] for r in rec["E"]["run"]["reference_uploads_used"]],
++       rec["F"]["run"]["source_video_used"]["video_id"]), ([1], "video_id-3"))
++check("E: the expected references are the ids SENT",
++      rec["E"]["run"]["used_matches_request"]["expected"]["references"]["clips"][1]["inputs"],
++      [{"kind": "video", "slot": 1, "id": "video_id-2", "max_sec": None}])
++
++for code in ("REFERENCE_NOT_FOUND", "SOURCE_VIDEO_NOT_FOUND"):
++    label = "E" if code == "REFERENCE_NOT_FOUND" else "F"
++    posts2, uploads2, rec2 = run([label], fail_first=code)
++    check("%s on %s: resubmitted once after a re-upload" % (code, label), len(posts2), 2)
++    check("%s on %s: the 2nd body carries the NEW ids" % (code, label),
++          posts2[0][1] != posts2[1][1], True)
++    check("%s on %s: the job ran (rc 0, status completed)" % (code, label),
++          (rec2[label]["rc"], rec2[label]["run"]["status"]), (0, "completed"))
++
++# the Single path through the same cmd_run (arm D): /generate, its own body
++posts3, uploads3, rec3 = run(["D-K3"])
++check("Single D-K3 through cmd_run: /generate, K=3 frame_idx, references [] (Single body unchanged)",
++      (posts3[0][0], [c["frame_idx"] for c in posts3[0][1]["conditioning_images"]], posts3[0][1]["references"],
++       rec3["D-K3"]["run"]["kind"], rec3["D-K3"]["rc"]), ("/generate", [0, 172, 344], [], "single", 0))
++check("Single D-K3: body == the dry-run body with the uploaded image id",
++      posts3[0][1] == calib.build_request(json.loads((HERE.parent / "plans" / "p_D-K3.json").read_text(
++          encoding="utf-8"))[0], video_id={}, image_id="image_id-1")[1], True)
++
++print("\n%d check(s), %d failure(s)" % (CHECKS, len(FAILURES)))
++for name in FAILURES:
++    print("  FAILED: %s" % name)
++sys.exit(1 if FAILURES else 0)
+--- comfort-calib-h3-2026-11-04-te/selftest/plan_table.py (absent)
++++ comfort-calib-h3-chain-2026-11-08/selftest/plan_table.py	2026-11-08 00:16:03.464003300 +0900
+@@ -0,0 +1,33 @@
++# -*- coding: utf-8 -*-
++"""Print every plans/p_*.json point: kind, geometry, K, predicted S per clip, baseline
++(2026-11-08 chain bench, plan cozy-gliding-pudding §4.2), and compare with the plan's table."""
++import json, sys
++from pathlib import Path
++BENCH = Path(__file__).resolve().parent.parent
++# plan §4.2 (S = sequence.total incl. the 30-token prompt).  E clip 1: the bench's tokenizer value.
++TABLE = {"cb1080": [38984, 34896], "A1": [213348, 219516], "A1_r2": [213348, 219516],
++         "A-U": [223604, None], "B1": [217798, 210430], "B1_r2": [217798, 210430],
++         "A0": [213348, 209260], "A0_r2": [213348, 209260], "C1": [139882, 137954],
++         "D-K3": [219476], "D-K3_r2": [219476], "E": [101028, 217167],
++         "F": [219516, 219516], "B-U": [217798, 228886], "D-K4": [221516]}
++bad = 0
++for f in sorted((BENCH / "plans").glob("p_*.json")):
++    for p in json.loads(f.read_text(encoding="utf-8")):
++        if p.get("kind") == "chain":
++            s = [c["total"] for c in p["predict"]["clips"]]
++            geo = "%dx%d %s" % (p["width"], p["height"], [c["num_frames"] for c in p["clips"]])
++            extra = ("V2V " if p.get("source_video") else "") + " ".join(
++                "clip%d refs=%s" % (i, [(r["kind"], r["slot"], Path(r["source_path"]).name) for r in c["references"]])
++                for i, c in enumerate(p["clips"]) if c.get("references"))
++        else:
++            s = [p["predict"]["S_estimate"]]
++            geo = "%dx%d/%d single" % (p["width"], p["height"], p["num_frames"])
++            extra = ""
++        K = len((p.get("keyframes") or {}).get("frame_idx") or [])
++        want = TABLE.get(p["label"])
++        cmp_ = "" if want is None else ("match" if all(w is None or w == g for w, g in zip(want, s)) else "MISMATCH %s" % want)
++        bad += cmp_.startswith("MISMATCH")
++        role = p.get("baseline_label") or ("(smoke)" if p.get("smoke") else "(baseline)")
++        print("%-11s %-24s K=%d %-17s S=%-18s %-16s %s %s" % (p["label"], geo, K, p["transformer"][:17], s, role, cmp_, extra))
++print("%d mismatch(es)" % bad)
++sys.exit(1 if bad else 0)

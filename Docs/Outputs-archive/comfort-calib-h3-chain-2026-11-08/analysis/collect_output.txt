@@ -1,0 +1,71 @@
+> **このファイルは実機の `outputs/comfort-calib-h3-chain-2026-11-08/analysis/collect_output.txt`（git追跡外）のスナップショットである（2026-11-08複写）。** 正本は実機側にあり、実機側が更新された場合はこの複写も更新する。複写の目的は、git cloneした読者が参照を辿れるようにすること。
+
+| ラベル | 形 | クリップ | F | K | 参照 | S 予測／実測 | text | cap MiB | den 山／予約 MiB | retries | inactive_split MiB | s/step（meta／log） | den Δ MB（標本） | DiT の出どころ | 先読み | decode フレーム | decode Δ MB（標本） | decode 予約 MiB | 判定 | 理由 | 原因 | 所要秒 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| warm | 640×384×56・K=0（Single） | — | 56 | 0 | — | 4,296／4,296 | 30 | 14,025 | 3,776／3,788 | 0 | 107 | 1.962／1.725 | —（7） | — | — | 56 | —（9） | 5,370 | smoke | — | — | 66 |
+| smoke_c640 | 640×384 [56 K1, 56] | 0 | 56 | 1 | — | 4,784／4,784 | 278 | 13,999 | 3,816／3,848 | 0 | 92 | 1.84／1.625 | —（7） | file | on | 90 | —（9） | 5,370 | smoke | — | — | 78 |
+|  |  | 1 | 56 | 0 | — | 4,296／4,296 | 30 | 13,999 | 3,776／3,788 | 0 | 157 | 1.715／1.525 | —（6） | resident | on |  |  |  |  |  |  |  |
+| cb1080 | 1920×1088 [56 K1, 56] | 0 | 56 | 1 | — | 38,984／38,984 | 2,078 | 13,999 | 4,340／5,866 | 0 | 616 | 20.125／19.925 | —（79） | file | on | 90 | —（55） | 10,492 | baseline | — | — | 256 |
+|  |  | 1 | 56 | 0 | — | 34,896／34,896 | 30 | 13,999 | 4,168／5,624 | 0 | 600 | 17.797／17.65 | —（71） | resident | on |  |  |  |  |  |  |  |
+| A1 | 1920×1088 [345 K1, 362] | 0 | 345 | 1 | — | 213,348／213,348 | 2,078 | 13,999 | 12,669／13,486 | 9 | 4,778 | 336.168／335.95 | -30.9（1,340） | file | on | 685 | -48.4（401） | 10,694 | comfortable | — | — | 3,162 |
+|  |  | 1 | 362 | 0 | — | 219,516／219,516 | 30 | 13,999 | 13,110／13,876 | 12 | 4,196 | 341.087／340.85 | -82.3（1,360） | resident | on |  |  |  |  |  |  |  |
+| A-U | 1920×1088 [362 K1, 39] | 0 | 362 | 1 | — | 223,604／223,604（worker_log） | 2,078 | — | —／— | — | — | —／352.9 | -74.2（352） | — | — | — | —（0） | — | oom | oom_vram16:clip0 | denoise | 389 |
+|  |  | 1 | 39 | 0 | — | 24,640／24,640（estimate） | 30 | — | —／— | — | — | —／— | —（0） | — | — |  |  |  |  |  |  |  |
+| warm_rec1108030159 | 640×384×56・K=0（Single） | — | 56 | 0 | — | 4,296／4,296 | 30 | 14,025 | 3,776／3,788 | 0 | 107 | 1.835／1.625 | —（6） | — | — | 56 | —（9） | 5,370 | smoke | — | — | 54 |
+| cb1440 | 2560×1472 [56 K1, 56] | 0 | 56 | 1 | — | 70,144／70,144 | 3,718 | 13,999 | 5,709／8,214 | 0 | 1,233 | 48.388／48.175 | —（192） | file | on | 90 | —（92） | 14,822 | baseline | — | — | 506 |
+|  |  | 1 | 56 | 0 | — | 62,776／62,776 | 30 | 13,999 | 5,369／7,834 | 0 | 1,183 | 40.595／40.4 | —（161） | resident | on |  |  |  |  |  |  |  |
+| B1 | 2560×1472 [192 K1, 192] | 0 | 192 | 1 | — | 217,798／217,798 | 3,718 | 13,999 | 12,905／13,762 | 9 | 4,904 | 337.585／337.35 | -38.3（1,345） | file | on | 362 | 5.5（371） | 15,004 | comfortable | — | — | 3,044 |
+|  |  | 1 | 192 | 0 | — | 210,430／210,430 | 30 | 13,999 | 12,662／13,532 | 12 | 4,058 | 316.86／316.675 | -16.0（1,263） | resident | on |  |  |  |  |  |  |  |
+| A1_r2 | 1920×1088 [345 K1, 362] | 0 | 345 | 1 | — | 213,348／213,348 | 2,078 | 13,999 | 12,669／13,486 | 9 | 4,778 | 325.402／325.2 | -65.2（1,296） | file | on | 685 | -64.5（408） | 10,694 | comfortable | — | — | 3,126 |
+|  |  | 1 | 362 | 0 | — | 219,516／219,516 | 30 | 13,999 | 13,110／13,876 | 12 | 4,196 | 341.723／341.5 | -87.6（1,362） | resident | on |  |  |  |  |  |  |  |
+| B1_r2 | 2560×1472 [192 K1, 192] | 0 | 192 | 1 | — | 217,798／217,798 | 3,718 | 13,999 | 12,905／13,762 | 9 | 4,904 | 337.61／337.375 | -55.3（1,345） | file | on | 362 | 9.1（371） | 15,004 | comfortable | — | — | 3,041 |
+|  |  | 1 | 192 | 0 | — | 210,430／210,430 | 30 | 13,999 | 12,662／13,532 | 12 | 4,058 | 316.837／316.625 | -22.6（1,264） | resident | on |  |  |  |  |  |  |  |
+| cb720 | 1280×768 [56 K1, 56] | 0 | 56 | 1 | — | 18,464／18,464 | 998 | 13,999 | 3,932／4,336 | 0 | 512 | 7.375／7.2 | —（29） | file | on | 90 | —（28） | 7,496 | baseline | — | — | 126 |
+|  |  | 1 | 56 | 0 | — | 16,536／16,536 | 30 | 13,999 | 3,776／4,124 | 0 | 315 | 6.455／6.25 | —（25） | resident | on |  |  |  |  |  |  |  |
+| C1 | 1280×768 [481 K1, 481] | 0 | 481 | 1 | — | 139,882／139,882 | 998 | 13,999 | 9,080／11,352 | 4 | 2,450 | 152.92／152.7 | -5.9（609） | file | on | 940 | -16.7（263） | 7,666 | comfortable | — | — | 1,517 |
+|  |  | 1 | 481 | 0 | — | 137,954／137,954 | 30 | 13,999 | 9,076／11,456 | 4 | 2,634 | 149.015／148.85 | -19.7（593） | resident | on |  |  |  |  |  |  |  |
+| b1080 | 1920×1088×56・K=1（Single） | — | 56 | 1 | — | 38,984／38,984 | 2,078 | 13,999 | 4,340／5,866 | 0 | 616 | 19.843／19.675 | —（79） | — | — | 56 | —（34） | 10,486 | baseline | — | — | 140 |
+| D-K3 | 1920×1088×345・K=3（Single） | — | 345 | 3 | — | 219,476／219,476 | 4,126 | 13,999 | 12,990／13,970 | 9 | 5,056 | 341.295／341.075 | -40.5（1,359） | — | — | 345 | -27.1（205） | 10,548 | comfortable | — | — | 1,611 |
+| D-K3_r2 | 1920×1088×345・K=3（Single） | — | 345 | 3 | — | 219,476／219,476 | 4,126 | 13,999 | 12,990／13,970 | 9 | 5,056 | 341.277／341.05 | -40.7（1,360） | — | — | 345 | -35.6（205） | 10,548 | comfortable | — | — | 1,611 |
+| E | 1280×768 [345 K1, 345] | 0 | 345 | 1 | — | 101,028／101,028 | 998 | 13,999 | 7,185／10,872 | 0 | 1,756 | 87.62／87.4 | -5.5（349） | file | on | 668 | -16.3（188） | 7,612 | comfortable | — | — | 2,217 |
+|  |  | 1 | 345 | 0 | video1 | 217,167／217,167 | 15,281 | 13,999 | 13,059／13,516 | 8 | 3,788 | 335.428／335.125 | -20.2（1,336） | resident | on |  |  |  |  |  |  |  |
+| cb1080v | 1920×1088 [56, 56] V2V | 0 | 56 | 0 | — | 34,896／34,896 | 30 | 13,999 | 4,168／5,624 | 0 | 600 | 17.17／16.975 | —（68） | file | on | 68 | —（55） | 10,492 | baseline | — | — | 282 |
+|  |  | 1 | 56 | 0 | — | 34,896／34,896 | 30 | 13,999 | 4,168／5,624 | 0 | 600 | 17.135／16.975 | —（68） | resident | on |  |  |  |  |  |  |  |
+| F | 1920×1088 [362, 362] V2V | 0 | 362 | 0 | — | 219,516／219,516 | 30 | 13,999 | 13,110／13,876 | 12 | 4,196 | 341.522／341.3 | -32.5（1,362） | file | on | 680 | -6.4（417） | 10,698 | comfortable | — | — | 3,251 |
+|  |  | 1 | 362 | 0 | — | 219,516／219,516 | 30 | 13,999 | 13,110／13,876 | 12 | 4,196 | 343.767／343.55 | -29.3（1,371） | resident | on |  |  |  |  |  |  |  |
+
+## 照合
+warm: S 差 0・cap 14025・used_ok True
+smoke_c640 clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+smoke_c640 clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 186, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 4080, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+cb1080 clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+cb1080 clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 186, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 34680, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+A1 clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+A1 clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 1206, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 218280, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+A-U clip0: S 差 0・text 差 0・cap None・prefetch None・mask None・num_ooms None・used_ok None
+A-U clip1: S 差 0・text 差 0・cap None・prefetch None・mask None・num_ooms None・used_ok None
+warm_rec1108030159: S 差 0・cap 14025・used_ok True
+cb1440 clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+cb1440 clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 186, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 62560, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+B1 clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+B1 clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 640, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 209760, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+A1_r2 clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+A1_r2 clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 1206, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 218280, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+B1_r2 clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+B1_r2 clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 640, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 209760, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+cb720 clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+cb720 clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 186, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 16320, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+C1 clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+C1 clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 1604, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 136320, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+b1080: S 差 0・cap 13999・used_ok True
+D-K3: S 差 0・cap 13999・used_ok True
+D-K3_r2: S 差 0・cap 13999・used_ok True
+E clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask None・num_ooms 0・used_ok True
+E clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 1150, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 97920, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+cb1080v clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 186, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 34680, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+cb1080v clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 186, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 34680, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+F clip0: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 1206, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 218280, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+F clip1: S 差 0・text 差 0・cap 13999・prefetch on・mask {'audio': {'rows': 1206, 'min': 0.0, 'max': 1.0}, 'video': {'rows': 218280, 'min': 0.0, 'max': 1.0, 'inject_clean': 1.0}}・num_ooms 0・used_ok True
+cap の値の集合: [13999, 14025]
+所要の合計 24478.9 秒＝408.0 分（18 点。自動復帰の warm を含む）
+最初の開始 2026-11-08 01:41:55.165・最後の終了 2026-11-08 09:15:24.815

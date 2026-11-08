@@ -16,7 +16,7 @@ import { AppShell } from "./AppShell";
 // anywhere on screen (only `GET /models`' `constraints` and
 // `unsupported_features`):
 //  - replace the CFG placeholder with the three sampling sliders,
-//  - grey the Chained and Edit tabs,
+//  - keep the Edit tab live with only its Retake sub-tab open (§1-123),
 //  - hide Create's reference video and the keyframe strength, grey its A2V
 //    card and the Negative Prompt accordion (台帳 §1-97: keyframes at any
 //    frame, so the second keyframe stays open),
@@ -140,11 +140,12 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       expect(numberInLabel("Shift (video)").value).toBe("12");
       expect(numberInLabel("Shift (audio)").value).toBe("3");
 
-      // The Edit tab greys — see the dedicated case below for the four
-      // sub-tabs behind it. §1-106: the Chained tab stays live now (H3
-      // chains; see the Chained block at the end of this file).
+      // §1-123: the Edit tab stays live (H3 runs a Retake) — see the
+      // dedicated case below for the sub-tabs behind it. §1-106: the Chained
+      // tab stays live too (H3 chains; see the Chained block at the end of
+      // this file).
       expect(screen.getByRole("tab", { name: "Chained" })).not.toBeDisabled();
-      expect(screen.getByRole("tab", { name: "Edit" })).toBeDisabled();
+      expect(screen.getByRole("tab", { name: "Edit" })).not.toBeDisabled();
       expect(screen.getByRole("tab", { name: "Single" })).not.toBeDisabled();
 
       // Reference video hidden (台帳 §1-121: by the feature table's `hides`,
@@ -184,22 +185,102 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
   );
 
   it(
-    "MiniMax H3: all four Edit sub-tabs close, so the Edit tab itself greys",
+    "MiniMax H3 (§1-123): the Edit tab stays live with only the Retake sub-tab open",
     async () => {
-      // Supervisor ruling 2026-10-17: the H3 adapter publishes `retake` (a
-      // Retake is a chain request it refuses). With Outpainting / Inpainting / Alpha Gen closed too,
-      // `CONTAINER_TARGETS` closes the whole tab.
+      // The H3 adapter no longer publishes `retake`; Outpainting / Inpainting /
+      // Alpha Gen stay closed, so `CONTAINER_TARGETS` keeps the tab open.
       await renderApp();
-      expect(screen.getByRole("tab", { name: "Edit" })).not.toBeDisabled();
       await switchTo("MiniMaxH3");
-      await waitFor(() => expect(screen.getByRole("tab", { name: "Edit" })).toBeDisabled());
+      await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+      expect(screen.getByRole("tab", { name: "Edit" })).not.toBeDisabled();
       const strip = document.querySelector(".edit-subtabs") as HTMLElement;
-      for (const name of ["Retake", "Outpainting", "Inpainting", "Alpha Gen"]) {
+      expect(within(strip).getByRole("tab", { name: /^Retake/, hidden: true })).not.toBeDisabled();
+      for (const name of ["Outpainting", "Inpainting", "Alpha Gen"]) {
         expect(within(strip).getByRole("tab", { name: new RegExp(`^${name}`), hidden: true })).toBeDisabled();
       }
     },
     15_000,
   );
+
+  // §1-123: with the Edit tab live, the right-click into a closed sub-tab is
+  // refused by the sub-tab gate (`EDIT_INTENT_SUB_TABS`) — a note and nothing
+  // else — while the Retake right-click goes through to the H3-shaped panel.
+  describe("§1-123 Edit right-clicks on MiniMax H3", () => {
+    beforeEach(() => {
+      resetProvisionalReservation();
+    });
+
+    function videoSelection(): ResultOf<"timeline.getSelection"> {
+      return {
+        hasRange: true,
+        rangeStart: 48,
+        rangeEnd: 96,
+        selected: [
+          {
+            layer: 3,
+            frameStart: 10,
+            frameEnd: 130,
+            effectName: "動画ファイル",
+            filePath: "C:\\v\\a.mp4",
+            objectName: "a",
+            textContent: null,
+            mediaWidth: 1920,
+            mediaHeight: 1080,
+            mediaDurationSec: 5,
+          },
+        ],
+        cursorFrame: 0,
+        cursorLayer: 0,
+        rate: 30,
+        scale: 1,
+        sampleRate: 44100,
+      };
+    }
+
+    it.each([
+      ["outpaintVideo", /Outpainting is not available on the selected base model/i],
+      ["inpaintVideo", /Inpainting is not available on the selected base model/i],
+    ] as const)(
+      "H3: %s is refused with the sub-tab's note — no tab switch, no upload, no reservation",
+      async (action, note) => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+        const spy = vi.spyOn(bridge, "request");
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action, selection: videoSelection() });
+        });
+        await screen.findByText(note, undefined, { timeout: 5_000 });
+        expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+        expect(spy.mock.calls.find(([m]) => m === "backend.uploadFile")).toBeUndefined();
+        expect(spy.mock.calls.find(([m]) => m === "timeline.insertProvisional")).toBeUndefined();
+      },
+      20_000,
+    );
+
+    it(
+      "H3: the Retake right-click opens Edit on Retake with the Strength slider and no Stage-2 window",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "retakeRange", selection: videoSelection() });
+        });
+        await waitFor(() => expect(screen.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true"), {
+          timeout: 5_000,
+        });
+        const edit = singlePanel();
+        await waitFor(() => expect(within(edit).getByText("Audio Strength")).toBeInTheDocument());
+        expect(within(edit).queryByText("Picture and sound")).not.toBeInTheDocument();
+        expect(within(edit).queryByText("Stage-2 (upscale pass) clip length")).not.toBeInTheDocument();
+        expect(within(edit).getByText("The join keeps 22 frames at the front and 22 at the back.")).toBeInTheDocument();
+      },
+      20_000,
+    );
+  });
 
   it(
     "LTX 2.3: a keyframe card shows its strength row",

@@ -143,9 +143,10 @@ export const en = {
       heading: "Retake",
       /** Rewritten 2026-08-10 (owner feedback ⑥): now names the 73-frame floor,
        * because a window at (or near) that floor barely differs from the
-       * original — the single most common "why did nothing change?" report. */
-      summary:
-        "Regenerates the selected section of a video. Anything outside the selection is left untouched. (73 frames minimum. Too short a section barely differs from the original.)",
+       * original — the single most common "why did nothing change?" report.
+       * §1-123: the floor is passed in (`useRetakeForm.minWindowFrames`). */
+      summary: (minFrames: number): string =>
+        `Regenerates the selected section of a video. Anything outside the selection is left untouched. (${minFrames} frames minimum. Too short a section barely differs from the original.)`,
       /** §1-17 F2: the range band (`modes/edit/RangeBand.tsx`). Four layers —
        * the whole material, the retake window, the two glue strips inside the
        * window, and the two drag handles — plus the readout line, the
@@ -166,8 +167,10 @@ export const en = {
         /** The trailing note spells out the 8n+1 rule (owner feedback,
          * 2026-08-10): the window snaps to those lengths, so the numbers here
          * rarely match the range that was selected frame for frame. */
-        placementReadout: (startFrame: number, endFrame: number): string =>
-          `Redoing frames ${startFrame} to ${endFrame} of the timeline. (Window lengths are always a multiple of 8, plus 1.)`,
+        /** §1-123: the grid is passed in (`constraints.frameGrid`: LTX 8/1,
+         * MiniMax H3 17/5). */
+        placementReadout: (startFrame: number, endFrame: number, gridStep: number, gridOffset: number): string =>
+          `Redoing frames ${startFrame} to ${endFrame} of the timeline. (Window lengths are always a multiple of ${gridStep}, plus ${gridOffset}.)`,
         /** The readout's SUB line, in brackets under the main one. */
         readout: (frames: number, seconds: string): string => `(a ${frames}-frame window, ${seconds}s)`,
         maxNote: (maxFrames: number): string =>
@@ -226,6 +229,11 @@ export const en = {
       audioHeading: "What to redo",
       audioBoth: "Picture and sound",
       audioVideoOnly: "Picture only (keep the original sound)",
+      /** §1-123: on a base model that publishes `constraints.retake` (MiniMax
+       * H3) one Strength slider for the middle of the window's sound replaces
+       * the two radios above. */
+      audioStrengthLabel: "Audio Strength",
+      audioStrengthHint: "0 regenerates the sound. 1 keeps the original sound.",
       /** のりしろ hint (1 line, plan §2). The "these are calibrated values and
        * cannot be changed" half was dropped 2026-08-10 (owner feedback ⑥) — the
        * absence of a knob already says it, and `rangeBand.glueNote` covers the
@@ -239,6 +247,9 @@ export const en = {
         "The join keeps the original picture, but it is decoded and re-encoded once, so its quality changes very slightly.",
       noticeSilentAudio:
         "If the material has no sound in this section, choosing “Picture and sound” will invent sound for it. Choose “Picture only” to keep it silent.",
+      /** §1-123: {@link noticeSilentAudio}'s twin for the Strength slider. */
+      noticeSilentAudioStrength:
+        "With Strength at 0, sound may be added to parts that were silent.",
       /** checkStale: the timeline moved between the right-click and Generate.
        * A warning only — it never blocks. */
       staleWarning:
@@ -2537,16 +2548,16 @@ export const ja: Strings = {
     },
     retake: {
       heading: "Retake（リテイク：撮り直し）",
-      summary:
-        "動画の選択された区間を再生成する機能です。選択されていない部分はそのまま残ります。（最小73f。短すぎると元動画からほとんど変化しません）",
+      summary: (minFrames: number): string =>
+        `動画の選択された区間を再生成する機能です。選択されていない部分はそのまま残ります。（最小${minFrames}f。短すぎると元動画からほとんど変化しません）`,
       rangeBand: {
         label: "撮り直す区間",
         startHandle: "撮り直しの開始位置",
         endHandle: "撮り直しの終了位置",
         startValueText: (frame: number, seconds: string): string => `開始 ${frame}フレーム（${seconds}秒）`,
         endValueText: (frame: number, seconds: string): string => `終了 ${frame}フレーム（${seconds}秒）`,
-        placementReadout: (startFrame: number, endFrame: number): string =>
-          `タイムラインの ${startFrame}〜${endFrame} フレーム目を撮り直します。（※フレーム数は「8の倍数+1」です）`,
+        placementReadout: (startFrame: number, endFrame: number, gridStep: number, gridOffset: number): string =>
+          `タイムラインの ${startFrame}〜${endFrame} フレーム目を撮り直します。（※フレーム数は「${gridStep}の倍数+${gridOffset}」です）`,
         readout: (frames: number, seconds: string): string => `（窓 ${frames}フレーム・${seconds}秒）`,
         maxNote: (maxFrames: number): string =>
           `撮り直せる長さは最大 ${maxFrames} フレームです。これより長くは伸ばせません。`,
@@ -2579,6 +2590,8 @@ export const ja: Strings = {
       audioHeading: "撮り直す対象",
       audioBoth: "映像と音声",
       audioVideoOnly: "映像のみ（音声は元のまま）",
+      audioStrengthLabel: "音声の Strength",
+      audioStrengthHint: "0 で音声を作り直し、1 で元の音声のままにします。",
       glueHint: (headFrames: number, tailFrames: number): string =>
         `のりしろは前 ${headFrames} フレーム・後ろ ${tailFrames} フレームです。`,
       noticesHeading: "生成する前に",
@@ -2588,6 +2601,7 @@ export const ja: Strings = {
         "のりしろの部分は元の映像を保ちますが、一度だけ再エンコードされるため、画質はごく僅かに変化します。",
       noticeSilentAudio:
         "この区間に音が入っていない素材で「映像と音声」を選ぶと、無音だった部分に音が付きます。無音のままにしたいときは「映像のみ」を選んでください。",
+      noticeSilentAudioStrength: "Strength を 0 にすると、無音だった区間に音が付くことがあります。",
       staleWarning:
         "このパネルを開いてから、タイムラインの選択が変わりました。撮り直されるのは、ここに表示されている範囲です。",
       generateButton: "選択範囲を撮り直す",

@@ -25,10 +25,10 @@ import type { ReferenceRules } from "../modes/single/referenceRules";
  * an engine id. A screen is handed a {@link GenerationConstraints} and reads
  * numbers off it; which engine produced them is the server's fact.
  *
- * The numeric rules are read by Create (Single), Chained (§1-106) and their
- * right-click seeds; Edit and Batch keep their LTX constants on purpose (an
- * engine whose rules differ closes those screens through its
- * `unsupported_features`). {@link GenerationConstraints.promptTokenLimit} is
+ * The numeric rules are read by Create (Single), Chained (§1-106), Edit's
+ * Retake (§1-123) and their right-click seeds; the other Edit sub-tabs and
+ * Batch keep their LTX constants on purpose (an engine whose rules differ
+ * closes those screens through its `unsupported_features`). {@link GenerationConstraints.promptTokenLimit} is
  * the exception: the shell reads it for the prompt token counters of every
  * screen.
  */
@@ -71,6 +71,13 @@ export interface GenerationConstraints {
    * controls. Its presence alone switches Chained into the fixed-overlap mode
    * (no featureScope entry, like {@link reference}). */
   chain: { overlapFrames: number } | null;
+  /** §1-123: the Retake middle-audio Strength slider (range, step, default),
+   * flattened from `constraints.retake`, or `null` when the server publishes
+   * no `retake` block (LTX, fallback). Its presence alone switches the Retake
+   * form into that engine's shape — Strength slider instead of the audio
+   * radio, no Stage-2 window, sampling sliders (no featureScope entry, like
+   * {@link chain}). */
+  retake: { audioStrength: SamplingParamConstraint } | null;
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
@@ -87,6 +94,7 @@ export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Objec
   singleSourceAudio: null,
   reference: null,
   chain: null,
+  retake: null,
 });
 
 /** Flattens a served `constraints` block; `null`/absent → the LTX fallback.
@@ -120,6 +128,7 @@ export function resolveGenerationConstraints(
         }
       : null,
     chain: raw.chain ? { overlapFrames: raw.chain.overlap_frames } : null,
+    retake: raw.retake ? { audioStrength: raw.retake.audio_strength } : null,
   };
 }
 

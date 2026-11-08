@@ -56,11 +56,11 @@ const LTX: BaseModelConstraints = {
 };
 
 /** MiniMax H3's `unsupported_features`, derived the way the plan's §3.4 says
- * the adapter derives it, plus `retake` (supervisor ruling 2026-10-17).
- * §1-106: `chain` left (H3 chains) and the chain material it cannot
- * take joined. 台帳 §1-121: `v2v` and `chain_start_image` left again (its chain
- * continues a source video and starts from an opening image), leaving
- * `end_source` and `a2v`. */
+ * the adapter derives it. §1-106: `chain` left (H3 chains) and the chain
+ * material it cannot take joined. 台帳 §1-121: `v2v` and `chain_start_image`
+ * left again (its chain continues a source video and starts from an opening
+ * image), leaving `end_source` and `a2v`. §1-123: `retake` left (H3 runs a
+ * Retake). */
 const H3_UNSUPPORTED = [
   "loras",
   "reference_video",
@@ -75,7 +75,6 @@ const H3_UNSUPPORTED = [
   "keyframe_strength",
   "end_source",
   "a2v",
-  "retake",
   "fused_gguf_dequant_kernel",
 ];
 
@@ -188,6 +187,17 @@ describe("generationConstraints", () => {
     expect(fixedFrameRate(c)).toBeNull();
     expect(frameLimitsFor(c, 481)).toEqual(frameLimitsFor(LTX_GENERATION_CONSTRAINTS, 481));
     expect(c.sampling).toBeNull();
+    expect(c.retake).toBeNull();
+  });
+
+  it("§1-123: copies the served Retake Strength slider; absent or null (LTX, the fallback) means the LTX Retake", () => {
+    const strength = { min: 0, max: 1, step: 0.05, default: 0 };
+    expect(resolveGenerationConstraints({ ...H3, retake: { audio_strength: strength } }).retake).toEqual({
+      audioStrength: strength,
+    });
+    expect(resolveGenerationConstraints(H3).retake).toBeNull();
+    expect(resolveGenerationConstraints({ ...H3, retake: null }).retake).toBeNull();
+    expect(LTX_GENERATION_CONSTRAINTS.retake).toBeNull();
   });
 
   it("frameLimitsFor takes the engine floor and the smaller ceiling, floored onto the grid", () => {
@@ -226,13 +236,13 @@ describe("comfortProfileMissing", () => {
 });
 
 describe("MiniMax H3's feature names on screen", () => {
-  it("keeps Chained open (§1-106), closes the whole Edit tab and the Create sections H3 cannot use", () => {
-    // Supervisor ruling 2026-10-17: the adapter publishes `retake` too (a
-    // Retake is a chain request it refuses), so all four Edit sub-tabs close.
+  it("keeps Chained (§1-106) and Edit (§1-123, Retake only) open, closes the Create sections H3 cannot use", () => {
+    // §1-123: the adapter no longer publishes `retake`, so the Edit tab stays
+    // open with only its Retake sub-tab live (ruling 34 updated).
     // §1-106: no `chain` any more, so the Chained tab stays open.
-    expect(disabledModesFor(H3_UNSUPPORTED)).toEqual(["edit"]);
+    expect(disabledModesFor(H3_UNSUPPORTED)).toEqual([]);
     expect(editSubTabsDisabledFor(H3_UNSUPPORTED)).toEqual({
-      retake: true,
+      retake: false,
       outpainting: true,
       inpainting: true,
       alphaGen: true,

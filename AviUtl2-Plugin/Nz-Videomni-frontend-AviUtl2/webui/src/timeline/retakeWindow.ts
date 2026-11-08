@@ -17,7 +17,8 @@
  *
  * ## 窓の定義（実装計画 §1）
  *
- * 窓 ＝ 選択範囲を 8n+1 へスナップし [73, 上限] へクランプしたもの。
+ * 窓 ＝ 選択範囲を格子（LTX は 8n+1、MiniMax H3 は 17n+5。§1-123）へスナップし
+ * [73, 上限] へクランプしたもの。
  * 糊代（のりしろ）は**窓の内側**にあり、リボン全長とは無関係。
  * 73 と 169 の出どころは backend の `chain_math` 側の幾何で、169 は
  * 「stage-2 のタイル1枚に収まる最大の画素フレーム数」（`outputs/retake_spike/
@@ -58,6 +59,23 @@ export const RETAKE_WINDOW_MAX_PX = 169;
 
 /** 窓長の格子（8n+1）の刻み幅。 */
 export const RETAKE_WINDOW_GRID = 8;
+
+/**
+ * 窓長の格子 `step·n + offset`。§1-123 で引数になった（MiniMax H3 は 17n+5）。
+ * 呼び出し側（`modes/edit/useRetakeForm.ts`）は配信の `constraints.frameGrid`
+ * を渡す。形は `modes/single/paramUtils.ts` の `FrameGrid` と同じだが、この
+ * モジュールは依存ゼロの判定コアなので型を import せず同じ形をここに書く。
+ */
+export interface RetakeWindowGrid {
+  step: number;
+  offset: number;
+}
+
+/** 既定の格子＝LTX の 8n+1。引数を省いた呼び出しの結果は §1-123 の前と同じ。 */
+export const LTX_RETAKE_WINDOW_GRID: Readonly<RetakeWindowGrid> = Object.freeze({
+  step: RETAKE_WINDOW_GRID,
+  offset: 1,
+});
 
 /**
  * stage-2 のタイル1枚（`vTile` 潜在フレーム）に収まる最大の画素フレーム数
@@ -314,16 +332,19 @@ function fullLengthPlayedSec(item: TrimSelectionItem): number {
 }
 
 /**
- * 窓長を 8n+1 の格子へ**切り下げ**る。
+ * 窓長を格子 `step·n + offset`（既定は LTX の 8n+1）へ**切り下げ**る。
  *
  * 切り上げでなく切り下げなのは、窓が選択範囲からはみ出さないようにするため
  * （足りない側は {@link resolveRetakeWindow} が `padded` として明示的に伸ばす）。
- * 1 未満は 1 に落ちる。
+ * `offset` 未満（と非有限）は `offset` に落ちる（LTX では 1）。
  */
-export function snapRetakeWindowFrames(frames: number): number {
-  if (!Number.isFinite(frames)) return 1;
-  const steps = Math.floor((frames - 1) / RETAKE_WINDOW_GRID);
-  return steps <= 0 ? 1 : steps * RETAKE_WINDOW_GRID + 1;
+export function snapRetakeWindowFrames(
+  frames: number,
+  grid: RetakeWindowGrid = LTX_RETAKE_WINDOW_GRID,
+): number {
+  if (!Number.isFinite(frames)) return grid.offset;
+  const steps = Math.floor((frames - grid.offset) / grid.step);
+  return Math.max(0, steps) * grid.step + grid.offset;
 }
 
 export interface ResolveRetakeWindowArgs {
@@ -354,6 +375,8 @@ export interface ResolveRetakeWindowArgs {
   minFrames?: number;
   /** 窓長の上限。既定 {@link RETAKE_WINDOW_MAX_PX}。 */
   maxFrames?: number;
+  /** 窓長の格子。既定 {@link LTX_RETAKE_WINDOW_GRID}（8n+1）。 */
+  grid?: RetakeWindowGrid;
 }
 
 /** 窓を作れなかった理由。 */
@@ -371,7 +394,7 @@ export type RetakeWindowResult =
       startSec: number;
       /** 確定した窓の長さ（秒）＝ `frames / genFps`。 */
       durationSec: number;
-      /** 確定した窓の長さ（生成フレーム）。必ず 8n+1 かつ `[min, max]`。 */
+      /** 確定した窓の長さ（生成フレーム）。必ず格子の上（既定 8n+1）かつ `[min, max]`。 */
       frames: number;
       /** 上限で切り詰めた（選んだ範囲より窓が**短い**）。 */
       clamped: boolean;
@@ -386,7 +409,7 @@ export type RetakeWindowResult =
  * 選択範囲（秒）から、実際に生成できる窓を決める。
  *
  * 規則（実装計画 §4）:
- *  1. 長さを生成フレームへ直し、8n+1 へ**切り下げ**
+ *  1. 長さを生成フレームへ直し、格子（既定 8n+1）へ**切り下げ**
  *  2. `[minFrames, maxFrames]` へクランプ。上限側は**頭アンカー** ——
  *     開始はそのままで尾だけ切る（`clamped`）
  *  3. 下限に満たなければ下限まで伸ばす（`padded`）
@@ -407,6 +430,7 @@ export function resolveRetakeWindow(args: ResolveRetakeWindowArgs): RetakeWindow
     materialStartSec = 0,
     minFrames = RETAKE_WINDOW_MIN_PX,
     maxFrames = RETAKE_WINDOW_MAX_PX,
+    grid = LTX_RETAKE_WINDOW_GRID,
   } = args;
 
   if (!Number.isFinite(genFps) || genFps <= 0) return { ok: false, reason: "unresolvableFps" };
@@ -415,7 +439,7 @@ export function resolveRetakeWindow(args: ResolveRetakeWindowArgs): RetakeWindow
     return { ok: false, reason: "outOfMaterial" };
   }
 
-  const snapped = snapRetakeWindowFrames(Math.round(durationSec * genFps));
+  const snapped = snapRetakeWindowFrames(Math.round(durationSec * genFps), grid);
   const clamped = snapped > maxFrames;
   const padded = snapped < minFrames;
   const frames = clamped ? maxFrames : padded ? minFrames : snapped;

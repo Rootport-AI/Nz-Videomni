@@ -14,6 +14,7 @@ import {
   reservePlacement,
   rollbackReservedPlacement,
 } from "../../timeline/provisionalReservation";
+import { resolveGenerationConstraints } from "../../shell/generationConstraints";
 import { EditScreen } from "./EditScreen";
 import { clearRetakeCarryOver } from "./useRetakeForm";
 
@@ -538,5 +539,101 @@ describe("EditScreen — Retake の ❌ / 🔁", () => {
       en.chained.stage2Window.label,
       en.edit.retake.noticesHeading,
     ]);
+  });
+});
+
+/**
+ * §1-123 MiniMax H3: 配信の `constraints.retake` があるとき、Retake 画面は
+ * ラジオの代わりに Strength のスライダーを出し、Stage-2 の欄を隠し、サンプリングの
+ * スライダーを出し、fps を固定表示し、のりしろ・窓の格子の数字を配信値で書く。
+ */
+describe("EditScreen — Retake（MiniMax H3・§1-123）", () => {
+  const H3 = resolveGenerationConstraints({
+    num_frames: { step: 17, offset: 5, min: 22, max: 481 },
+    dimension_multiple: 32,
+    frame_rate: { min: 24, max: 24 },
+    sampling: {
+      num_inference_steps: { min: 1, max: 50, step: 1, default: 20 },
+      shift_video: { min: 1, max: 20, step: 0.1, default: 12 },
+      shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
+    },
+    chain: { overlap_frames: 22 },
+    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0 } },
+  });
+
+  function renderH3() {
+    const nativeBridge = createBridge();
+    render(
+      <LanguageProvider>
+        <ToastProvider>
+          <EditScreen
+            initialIntent={RETAKE_INTENT}
+            prompt="a cat"
+            nativeBridge={nativeBridge}
+            onJobSubmitted={vi.fn()}
+            engineLabel="MiniMax H3"
+            constraints={H3}
+            loraAudioHidden
+          />
+        </ToastProvider>
+      </LanguageProvider>,
+    );
+    return { request: nativeBridge.request as ReturnType<typeof vi.fn> };
+  }
+  const panelOf = () => document.querySelector<HTMLElement>(".retake-panel")!;
+
+  it("Strength のスライダーが出て、ラジオと Stage-2 の欄は無い。サンプリングと固定 fps が出る", () => {
+    renderH3();
+    const panel = within(panelOf());
+    expect(panel.getByText(en.edit.retake.audioStrengthLabel)).toBeTruthy();
+    expect(panel.getByText(en.edit.retake.audioStrengthHint)).toBeTruthy();
+    expect(panelOf().querySelector('input[type="radio"][name="retake-audio"]')).toBeNull();
+    expect(panel.queryByText(en.edit.retake.audioBoth)).toBeNull();
+    expect(panel.queryByText(en.chained.stage2Window.label)).toBeNull();
+    expect(panel.getByText(en.single.sampling.steps)).toBeTruthy();
+    const fps = panel.getByRole("spinbutton", { name: en.single.duration.fps }) as HTMLInputElement;
+    expect(fps).toBeDisabled();
+    expect(fps.value).toBe("24");
+    // スライダーの既定は配信の 0。
+    const strength = panelOf().querySelector<HTMLInputElement>('input[type="range"][max="1"]');
+    expect(strength?.value).toBe("0");
+    expect(strength?.step).toBe("0.05");
+    // 音声の注意は H3 版。
+    expect(panel.getByText(en.edit.retake.noticeSilentAudioStrength)).toBeTruthy();
+    expect(panel.queryByText(en.edit.retake.noticeSilentAudio)).toBeNull();
+  });
+
+  it("のりしろは 22／22、文言の数字は下限 73 と格子 17n+5", () => {
+    renderH3();
+    expect(screen.getByText("The join keeps 22 frames at the front and 22 at the back.")).toBeTruthy();
+    expect(screen.getByText(/\(73 frames minimum\./)).toBeTruthy();
+    // 5.0 秒の選択を 24fps で 120 → 17n+5 へ切り下げて 107。
+    expect(screen.getByTestId("range-band-placement").textContent).toMatch(
+      /\(Window lengths are always a multiple of 17, plus 5\.\)$/,
+    );
+    expect(screen.getByTestId("range-band-readout").textContent).toBe("(a 107-frame window, 4.46s)");
+  });
+
+  it("Generate で H3 の形の body が飛ぶ（継ぎ目・Stage-2・regenerate_audio なし、Strength とサンプリングあり）", async () => {
+    const user = userEvent.setup();
+    const { request } = renderH3();
+    const button = await screen.findByRole("button", { name: "Redo the selected range" });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+
+    await waitFor(() => expect(chainBody(request)).toBeDefined());
+    const body = chainBody(request)!;
+    expect(body).toMatchObject({
+      frame_rate: 24,
+      clips: [{ num_frames: 107 }],
+      num_inference_steps: 20,
+      shift_video: 12,
+      shift_audio: 3,
+      retake: { video_id: "vid-1", audio_strength: 0 },
+    });
+    expect(body).not.toHaveProperty("overlap_frames");
+    expect(body).not.toHaveProperty("overlap_strength");
+    expect(body).not.toHaveProperty("stage2_window");
+    expect(body.retake).not.toHaveProperty("regenerate_audio");
   });
 });

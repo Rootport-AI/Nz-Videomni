@@ -579,3 +579,37 @@ describe("mapRangeToMaterialSec -> resolveRetakeWindow の受け渡し", () => {
     expect(window.startSec).toBe(2); // 60/30
   });
 });
+
+/** §1-123: 格子は引数（MiniMax H3 は 17n+5）。省略時は LTX の 8n+1 のまま。 */
+describe("窓の格子（§1-123）", () => {
+  const H3_GRID = { step: 17, offset: 5 };
+
+  it("snapRetakeWindowFrames は渡した格子 17n+5 へ切り下げる", () => {
+    expect(snapRetakeWindowFrames(73, H3_GRID)).toBe(73);
+    expect(snapRetakeWindowFrames(89, H3_GRID)).toBe(73);
+    expect(snapRetakeWindowFrames(90, H3_GRID)).toBe(90);
+    expect(snapRetakeWindowFrames(120, H3_GRID)).toBe(107);
+    expect(snapRetakeWindowFrames(481, H3_GRID)).toBe(481);
+    expect(snapRetakeWindowFrames(497, H3_GRID)).toBe(481);
+    // offset 未満・非有限は offset に落ちる（LTX では 1）。
+    expect(snapRetakeWindowFrames(3, H3_GRID)).toBe(5);
+    expect(snapRetakeWindowFrames(Number.NaN, H3_GRID)).toBe(5);
+  });
+
+  it("格子を省くと LTX の 8n+1（既存の呼び出しと同じ結果）", () => {
+    expect(snapRetakeWindowFrames(80)).toBe(snapRetakeWindowFrames(80, { step: 8, offset: 1 }));
+    expect(snapRetakeWindowFrames(80)).toBe(73);
+  });
+
+  it("resolveRetakeWindow は渡した格子で切り下げ、[73, 481] へ収める", () => {
+    const base = { startSec: 0, genFps: 24, materialDurationSec: 60, minFrames: 73, maxFrames: 481, grid: H3_GRID };
+    const snapped = resolveRetakeWindow({ ...base, durationSec: 120 / 24 });
+    expect(snapped.ok && snapped.frames).toBe(107);
+    const floor = resolveRetakeWindow({ ...base, durationSec: 30 / 24 });
+    expect(floor.ok && floor.frames).toBe(73);
+    expect(floor.ok && floor.padded).toBe(true);
+    const ceiling = resolveRetakeWindow({ ...base, durationSec: 600 / 24 });
+    expect(ceiling.ok && ceiling.frames).toBe(481);
+    expect(ceiling.ok && ceiling.clamped).toBe(true);
+  });
+});

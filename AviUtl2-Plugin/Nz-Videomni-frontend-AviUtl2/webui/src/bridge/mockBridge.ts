@@ -395,6 +395,10 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
     // §1-106: the server-fixed chain seam (22 PIXEL frames), as the real
     // `GET /models` publishes it. LTX publishes no `chain` block.
     chain: { overlap_frames: 22 },
+    // §1-123: the Retake middle-audio Strength slider, as the real
+    // `GET /models` publishes it (`RequestRules.retake_audio_strength`). LTX
+    // publishes no `retake` block.
+    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0 } },
   },
 };
 
@@ -562,10 +566,11 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
-  // name of the single-request reject table, plus `retake` (a Retake is a
-  // chain request, so the adapter publishes the name, which closes the Retake
-  // sub-tab). What each name closes on screen is `shell/featureScope.ts`'s
-  // `FEATURE_UI`.
+  // name of the single-request reject table and of the chain reject table.
+  // What each name closes on screen is `shell/featureScope.ts`'s `FEATURE_UI`.
+  // §1-123: `retake` LEFT (H3 runs a Retake now; the chain handler below
+  // takes `retake` with `audio_strength` and answers 202, as it does for
+  // LTX), so Edit's tab opens with only the Retake sub-tab live.
   // 台帳 §1-104: `loras` left (H3 runs Style / Turbo LoRAs now) and
   // `lora_audio_strength` joined at the end (one strength per LoRA).
   // §1-106: `chain` LEFT (H3 chains now) and the chain material it
@@ -586,7 +591,6 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "keyframe_strength",
     "end_source",
     "a2v",
-    "retake",
     // 台帳 §1-100: no GGUF weights, so the server IGNORES the field (no 422) — hides the Settings row only.
     "fused_gguf_dequant_kernel",
     "lora_audio_strength",

@@ -64,7 +64,7 @@ def _job_count(client) -> int:
 def test_models_publishes_the_retake_strength_on_h3_only(three_family_client):
     h3_entry = _base(three_family_client, "MiniMaxH3")
     assert h3_entry["constraints"]["retake"] == {
-        "audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.0}
+        "audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}
     }
     assert "retake" not in h3_entry["unsupported_features"]
     for ltx in ("LTX23", "LTX25"):
@@ -193,7 +193,7 @@ def test_h3_mock_retake_writes_the_defaults_back_and_the_metadata(three_family_c
     # the omitted fields, as validate_chain wrote them back
     request = meta["request"]["retake"]
     assert (request["head_px"], request["tail_px"]) == (22, 22)
-    assert request["audio_strength"] == 0.0
+    assert request["audio_strength"] == 0.5
     assert request["regenerate_audio"] is True
 
     rt = meta["retake"]
@@ -204,7 +204,7 @@ def test_h3_mock_retake_writes_the_defaults_back_and_the_metadata(three_family_c
     assert (rt["n_head_v"], rt["n_tail_v"], rt["n_head_a"]) == (7, 7, 36)
     assert rt["free_middle_px"] == [22, WINDOW - 22]
     # runtime: the LTX mock's names, audio_strength instead of regenerate_audio
-    assert rt["audio_strength"] == 0.0
+    assert rt["audio_strength"] == 0.5
     assert rt["source_had_audio"] is True
     assert rt["audio_frozen"] is True
     assert rt["muxed_original_waveform"] is False
@@ -238,7 +238,8 @@ def test_h3_mock_retake_full_strength_records_the_original_waveform(three_family
 def test_h3_mock_retake_on_a_silent_upload_at_strength_zero(three_family_client, tmp_path):
     _activate(three_family_client, "MiniMaxH3")
     vid = _upload_window_source(three_family_client, tmp_path, audio=False)
-    r = _post_h3(three_family_client, 73, video_id=vid)
+    # Strength 0 を明示（省略すると既定 0.5 が書き戻されて 422。次のテスト）
+    r = _post_h3(three_family_client, 73, video_id=vid, audio_strength=0.0)
     assert r.status_code == 202, r.text
     meta = _metadata(three_family_client, r.json()["job_id"])
     rt = meta["retake"]
@@ -247,3 +248,15 @@ def test_h3_mock_retake_on_a_silent_upload_at_strength_zero(three_family_client,
     assert rt["audio_frozen"] is False
     assert rt["muxed_original_waveform"] is False
     assert rt["decoded_frames_px"] == 73
+
+
+@needs_ffmpeg
+def test_h3_omitted_strength_on_a_silent_upload_is_422(three_family_client, tmp_path):
+    """The written-back default 0.5 is above zero, so the window's original
+    audio is needed — a silent upload is refused by the preflight."""
+    _activate(three_family_client, "MiniMaxH3")
+    vid = _upload_window_source(three_family_client, tmp_path, audio=False)
+    r = _post_h3(three_family_client, 73, video_id=vid)
+    assert r.status_code == 422, r.text
+    assert "RETAKE_WINDOW_OUT_OF_RANGE" in r.text
+    assert "has no audio stream" in r.json()["error"]["detail"]

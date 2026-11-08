@@ -306,7 +306,7 @@ H3_CONSTRAINTS = {
         "clip_min_sec": 2.0,
     },
     # Retake's middle-audio Strength (台帳 §1-123). H3 only: LTX has no key.
-    "retake": {"audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.0}},
+    "retake": {"audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
 }
 LTX_CONSTRAINTS = {
     "num_frames": {"step": 8, "offset": 1, "min": 9, "max": 481},
@@ -1403,16 +1403,16 @@ def test_generate_chain_payload_retake_golden(tmp_path):
     captured: list[dict] = []
     be = _capturing_backend(captured, CHAIN_DONE_EVENT)
     window = tmp_path / "job" / "_retake_window.mp4"
-    be.generate_chain(_retake_chain(audio_strength=0.5), tmp_path / "job", seed=42,
+    be.generate_chain(_retake_chain(audio_strength=0.25), tmp_path / "job", seed=42,
                       retake_window_path=window)
     payload = captured[0]
     assert list(payload) == GOLDEN_CHAIN_KEYS_H3_RETAKE
-    assert payload["retake"] == {"path": str(window), "audio_strength": 0.5}
+    assert payload["retake"] == {"path": str(window), "audio_strength": 0.25}
     assert payload["clips"] == [{"prompt": PROMPT, "num_frames": 124}]
     # An omitted Strength rides as the published default.
     captured.clear()
     be.generate_chain(_retake_chain(), tmp_path / "job", seed=42, retake_window_path=window)
-    assert captured[0]["retake"] == {"path": str(window), "audio_strength": 0.0}
+    assert captured[0]["retake"] == {"path": str(window), "audio_strength": 0.5}
 
 
 def test_generate_chain_retake_needs_the_cut_window(tmp_path):
@@ -1426,7 +1426,7 @@ def test_generate_chain_retake_needs_the_cut_window(tmp_path):
 def test_validate_chain_retake_writes_the_h3_defaults_back():
     chain = _retake_chain()
     assert (chain.retake.head_px, chain.retake.tail_px) == (22, 22)
-    assert chain.retake.audio_strength == h3.REQUEST_RULES.retake_audio_strength.default == 0.0
+    assert chain.retake.audio_strength == h3.REQUEST_RULES.retake_audio_strength.default == 0.5
     assert _retake_chain(head_px=22, tail_px=22, audio_strength=1.0).retake.audio_strength == 1.0
 
 

@@ -839,7 +839,7 @@ describe("useRetakeForm — MiniMax H3（§1-123）", () => {
       shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
     },
     chain: { overlap_frames: 22 },
-    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0 } },
+    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
   });
 
   function renderWith(
@@ -884,7 +884,7 @@ describe("useRetakeForm — MiniMax H3（§1-123）", () => {
       num_inference_steps: 20,
       shift_video: 12,
       shift_audio: 3,
-      retake: { video_id: "vid-1", audio_strength: 0 },
+      retake: { video_id: "vid-1", audio_strength: 0.5 },
     });
     expect(body).not.toHaveProperty("overlap_frames");
     expect(body).not.toHaveProperty("overlap_strength");
@@ -904,13 +904,13 @@ describe("useRetakeForm — MiniMax H3（§1-123）", () => {
   it("Strength とサンプリングの値が要求に載る（範囲へ丸める）", async () => {
     const { result } = renderWith(makeIntent(), H3);
     await waitReady(result);
-    expect(result.current.audioStrengthRange).toEqual({ min: 0, max: 1, step: 0.05, default: 0 });
+    expect(result.current.audioStrengthRange).toEqual({ min: 0, max: 1, step: 0.05, default: 0.5 });
     act(() => {
-      result.current.setAudioStrength(0.5);
+      result.current.setAudioStrength(0.25);
       result.current.setSamplingValue("numInferenceSteps", 30.4);
     });
     let body = result.current.buildRequest();
-    expect(body.retake?.audio_strength).toBe(0.5);
+    expect(body.retake?.audio_strength).toBe(0.25);
     expect(body.num_inference_steps).toBe(30);
     act(() => result.current.setAudioStrength(3));
     body = result.current.buildRequest();
@@ -970,14 +970,14 @@ describe("useRetakeForm — MiniMax H3（§1-123）", () => {
   it("🔁 の持ち越しに audioStrength が入る", async () => {
     const first = renderWith(makeIntent(), H3);
     await waitReady(first.result);
-    act(() => first.result.current.setAudioStrength(0.5));
+    act(() => first.result.current.setAudioStrength(0.25));
     act(() => first.result.current.resetSource());
     first.unmount();
 
     const second = renderWith(makeIntent(), H3);
-    expect(second.result.current.audioStrength).toBe(0.5);
+    expect(second.result.current.audioStrength).toBe(0.25);
     await waitReady(second.result);
-    expect(second.result.current.buildRequest().retake?.audio_strength).toBe(0.5);
+    expect(second.result.current.buildRequest().retake?.audio_strength).toBe(0.25);
   });
 
   it("LTX で 🔁 したあと H3 で右クリックしても、持ち越しの fps と regenerateAudio=false は送信値に漏れない", async () => {
@@ -995,7 +995,7 @@ describe("useRetakeForm — MiniMax H3（§1-123）", () => {
     const body = second.result.current.buildRequest();
     expect(body.frame_rate).toBe(24);
     expect(body.retake).not.toHaveProperty("regenerate_audio");
-    expect(body.retake?.audio_strength).toBe(0); // LTX には Strength が無いので配信の既定
+    expect(body.retake?.audio_strength).toBe(0.5); // LTX には Strength が無いので配信の既定
   });
 
   it("loraAudioHidden なら loras[].audio_strength を落とす（Chained と同じ）", async () => {
@@ -1020,7 +1020,7 @@ describe("useRetakeForm — MiniMax H3（§1-123）", () => {
     expect(result.current.sampling).toBeNull();
     constraints = H3;
     rerender();
-    await waitFor(() => expect(result.current.audioStrength).toBe(0));
+    await waitFor(() => expect(result.current.audioStrength).toBe(0.5));
     expect(result.current.sampling).toEqual({ numInferenceSteps: 20, shiftVideo: 12, shiftAudio: 3 });
     expect(result.current.buildRequest()).not.toHaveProperty("overlap_frames");
   });

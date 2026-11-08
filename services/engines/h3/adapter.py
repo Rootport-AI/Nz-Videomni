@@ -196,7 +196,7 @@ REQUEST_RULES = RequestRules(
     # value 1 - s on the free middle's audio latents; 1.0 muxes the original
     # waveform back. Published as constraints["retake"]; an omitted value
     # becomes the default (validate_chain).
-    retake_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.0),
+    retake_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 

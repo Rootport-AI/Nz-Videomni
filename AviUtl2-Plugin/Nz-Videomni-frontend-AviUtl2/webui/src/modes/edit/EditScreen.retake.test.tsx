@@ -558,7 +558,7 @@ describe("EditScreen — Retake（MiniMax H3・§1-123）", () => {
       shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
     },
     chain: { overlap_frames: 22 },
-    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0 } },
+    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
   });
 
   function renderH3() {
@@ -594,9 +594,9 @@ describe("EditScreen — Retake（MiniMax H3・§1-123）", () => {
     const fps = panel.getByRole("spinbutton", { name: en.single.duration.fps }) as HTMLInputElement;
     expect(fps).toBeDisabled();
     expect(fps.value).toBe("24");
-    // スライダーの既定は配信の 0。
+    // スライダーの既定は配信の 0.5。
     const strength = panelOf().querySelector<HTMLInputElement>('input[type="range"][max="1"]');
-    expect(strength?.value).toBe("0");
+    expect(strength?.value).toBe("0.5");
     expect(strength?.step).toBe("0.05");
     // 音声の注意は H3 版。
     expect(panel.getByText(en.edit.retake.noticeSilentAudioStrength)).toBeTruthy();
@@ -629,7 +629,7 @@ describe("EditScreen — Retake（MiniMax H3・§1-123）", () => {
       num_inference_steps: 20,
       shift_video: 12,
       shift_audio: 3,
-      retake: { video_id: "vid-1", audio_strength: 0 },
+      retake: { video_id: "vid-1", audio_strength: 0.5 },
     });
     expect(body).not.toHaveProperty("overlap_frames");
     expect(body).not.toHaveProperty("overlap_strength");

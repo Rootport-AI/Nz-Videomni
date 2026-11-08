@@ -907,9 +907,12 @@ async def submit_chain(
         - **MiniMax H3**: 窓長は **17n+5**・[73, 481]（``list_models`` の
           ``constraints.num_frames.max`` が481）。糊しろは **22固定**で、
           ``retake_head_px`` / ``retake_tail_px`` は指定しません（22以外を
-          指定すると422）。音声は ``retake_audio_strength``（0〜1、既定0）で
+          指定すると422）。音声は ``retake_audio_strength``（0〜1、既定0.5）で
           決まります——0で窓の真ん中の音声を作り直し、1.0で元の波形を
           そのまま使い戻します（頭と尾の糊しろは常に元の音声で固定）。
+          音声トラックの無い動画を撮り直すときは ``retake_audio_strength=0``
+          を明示してください（省略すると既定0.5が書き戻され、元の音声が
+          無いので422 ``RETAKE_WINDOW_OUT_OF_RANGE``）。
           ``retake_regenerate_audio=False`` はH3では422です（代わりに
           ``retake_audio_strength=1.0``）。
       * 納品されるmp4は**窓まるごと**で、糊しろはトリムされていません。この
@@ -1040,8 +1043,10 @@ async def submit_chain(
             ``retake_audio_strength=1.0``）。
         retake_audio_strength: **H3 専用**。窓の真ん中の音声の強さ（0〜1）。
             0で作り直し、1.0で元の波形をそのまま戻します。既定はNone（送らず、
-            サーバーの既定0）。範囲の検査はサーバーが行います。LTX で指定
-            すると422です。
+            サーバーの既定0.5）。音声トラックの無い動画では0を明示してください
+            （省略すると既定0.5で元の音声が要ると判定され、422
+            ``RETAKE_WINDOW_OUT_OF_RANGE``）。範囲の検査はサーバーが行います。
+            LTX で指定すると422です。
         embed_mp4_metadata: submit_generate と同じ意味（**既定True**。完成した
             連結動画の ``output.mp4`` に生成条件を書き込みます。既定のままなら
             送信しません）。

@@ -46,7 +46,7 @@ describe("mockBridge — MiniMax H3", () => {
     // §1-123: H3 runs a Retake now — `retake` left, and `constraints.retake`
     // carries the middle-audio Strength slider. LTX publishes no `retake` block.
     expect(h3?.unsupported_features).not.toContain("retake");
-    expect(h3?.constraints?.retake).toEqual({ audio_strength: { min: 0, max: 1, step: 0.05, default: 0 } });
+    expect(h3?.constraints?.retake).toEqual({ audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } });
     // §1-106: H3 chains now — `chain` left, and the chain material it cannot
     // take is published instead; `constraints.chain` carries the fixed seam.
     // 台帳 §1-121: V2V and the opening image opened, so `v2v` and

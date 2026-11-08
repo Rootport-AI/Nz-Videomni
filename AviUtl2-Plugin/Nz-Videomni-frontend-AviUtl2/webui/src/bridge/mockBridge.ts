@@ -398,7 +398,7 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
     // §1-123: the Retake middle-audio Strength slider, as the real
     // `GET /models` publishes it (`RequestRules.retake_audio_strength`). LTX
     // publishes no `retake` block.
-    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0 } },
+    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
   },
 };
 

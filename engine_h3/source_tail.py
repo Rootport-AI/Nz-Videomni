@@ -33,14 +33,14 @@ def read_source_tail(path: str, width: int, height: int, frames: int) -> tuple[n
     width, height, frames = int(width), int(height), int(frames)
     p = Path(path)
     if not p.is_file():
-        raise ValueError(f"入力動画（末尾の切り出し）が見つかりません: {path}")
+        raise ValueError(f"入力動画の切り出しが見つかりません: {path}")
     out: list[np.ndarray] = []
     source_size: list[int] | None = None
     read = 0
     try:
         with av.open(str(p)) as container:
             if not container.streams.video:
-                raise ValueError(f"入力動画（末尾の切り出し）に映像がありません: {path}")
+                raise ValueError(f"入力動画の切り出しに映像がありません: {path}")
             stream = container.streams.video[0]
             for frame in container.decode(stream):
                 read += 1
@@ -51,11 +51,11 @@ def read_source_tail(path: str, width: int, height: int, frames: int) -> tuple[n
                 img = frame.to_image()   # RGB PIL image
                 out.append(np.asarray(cover_crop(img, width, height), dtype=np.uint8))
     except (OSError, av.error.FFmpegError) as exc:   # FFmpeg errors can also be ValueErrors: caught first
-        raise ValueError(f"入力動画（末尾の切り出し）を読めません（{path}）: {exc}") from exc
+        raise ValueError(f"入力動画の切り出しを読めません（{path}）: {exc}") from exc
     if read != frames:
         more = "以上" if read > frames else ""
         raise ValueError(
-            f"入力動画（末尾の切り出し）のフレーム数が合いません（{read} フレーム{more}。"
+            f"入力動画の切り出しのフレーム数が合いません（{read} フレーム{more}。"
             f"ちょうど {frames} フレームが必要です）: {path}"
         )
     return np.stack(out), {"source_size": source_size, "frames_read": read}
@@ -70,4 +70,4 @@ def has_audio_stream(path: str) -> bool:
         with av.open(str(path)) as container:
             return bool(container.streams.audio)
     except (OSError, av.error.FFmpegError) as exc:
-        raise ValueError(f"入力動画（末尾の切り出し）を開けませんでした（{path}）: {exc}") from exc
+        raise ValueError(f"入力動画の切り出しを開けませんでした（{path}）: {exc}") from exc

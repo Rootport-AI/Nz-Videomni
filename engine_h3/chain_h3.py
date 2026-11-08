@@ -11,6 +11,13 @@ and their audio, and the untrimmed audio is kept as the JOIN's handle wav.
 Clip 0 may instead carry key frames (``H3ChainClipSpec.images``), handled as
 in a single I2V job. The two are exclusive.
 
+Retake (台帳 §1-123): one clip that IS a window of an input video
+(``H3ChainSpec.retake``, cut by the app). The whole window is encoded; its
+first and last 22 frames are fixed rows (video and audio), the middle is
+redrawn, its audio held toward the original by ``audio_strength`` (mask value
+``1 - s``), and the whole window is decoded (strength 1.0 muxes the original
+waveform). Exclusive with ``source``, key frames and references.
+
 The mechanism is Docs/MINIMAX_H3_DESIGN.md §3.3; the geometry is
 ``h3_chain_math`` at the repository root, shared with the app. Each clip's
 fixed head is self-checked against the previous tail with ``torch.equal``.
@@ -24,6 +31,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import hashlib
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -32,7 +40,12 @@ from pathlib import Path
 import torch
 
 from engine_h3 import pipeline_h3 as P
-from h3_chain_math import H3_CHAIN_OVERLAP_FRAMES, H3ChainLayout, compute_h3_chain_layout
+from h3_chain_math import (
+    H3_AUDIO_SAMPLES_PER_FRAME,
+    H3_CHAIN_OVERLAP_FRAMES,
+    H3ChainLayout,
+    compute_h3_chain_layout,
+)
 
 #: The video fixed rows' injection coefficient (裁定 84-2: the latents themselves).
 CHAIN_INJECT_CLEAN = 1.0
@@ -59,6 +72,17 @@ class H3ChainSource:
     context_frames: int
 
 
+@dataclass(frozen=True)
+class H3ChainRetake:
+    """The window of a retake (台帳 §1-123): the app's cut of the input video's
+    window at 24 fps (with its audio, if any), exactly the one clip's frames.
+    ``audio_strength`` (0..1): how much the free middle's audio keeps the
+    original (mask value ``1 - s``); 1.0 also muxes the original waveform."""
+
+    path: str
+    audio_strength: float
+
+
 @dataclass
 class H3ChainSpec:
     """``base``: the settings every clip shares; its ``prompt`` / ``num_frames``
@@ -66,12 +90,14 @@ class H3ChainSpec:
     ``base`` carries no images, source audio or references (a clip's key frames
     and references are its own, ``H3ChainClipSpec``). ``source``: the input
     video whose tail is clip 0's fixed head (None = the chain starts from text,
-    or from clip 0's key frames)."""
+    or from clip 0's key frames). ``retake``: the window whose head and tail
+    are fixed and whose middle is redrawn (None = no retake; one clip only)."""
 
     base: P.H3GenerateRequest
     clips: tuple[H3ChainClipSpec, ...]
     seed: int
     source: H3ChainSource | None = None
+    retake: H3ChainRetake | None = None
 
 
 def _sha_text(text: str) -> str:
@@ -109,6 +135,37 @@ def carry_fix(prev_video: torch.Tensor, prev_audio: torch.Tensor | None, t_lat: 
     return (clean_v, per_v), (clean_a, per_a)
 
 
+def retake_fix(clean_v: torch.Tensor, clean_a: torch.Tensor | None, layout: H3ChainLayout, s: float):
+    """``(video_fix, audio_fix)`` for a retake window (台帳 §1-123).
+
+    ``clean_v``: the window's encoded video ``[1, 24, T', lh, lw]``; its first
+    and last ``retake_n_head_v`` / ``retake_n_tail_v`` latents are fixed (value
+    0), the middle generated (1). ``clean_a``: the window's encoded audio
+    ``[2, 32, te_a]`` (``te_a`` = what the encoder returned, at most the
+    clip's ``A``), or None (no audio: ``audio_fix`` None, generated freely).
+    The audio's clean is ``[2, 32, A]``, zero past ``te_a``; its values are 0
+    on the head ``[0, h_a)``, ``1 - s`` on the middle ``[h_a, ts_a)``, 0 on the
+    tail ``[ts_a, te_a)`` and 1 on ``[te_a, A)`` (the latents the encoder did
+    not return: always free). Each range is cut at ``te_a``, so a short audio
+    freezes only what was read. CPU float32.
+    """
+    t_lat = int(layout.clip_latent_frames[0])
+    a_lat = int(layout.clip_audio_latents[0])
+    head_v, tail_v = int(layout.retake_n_head_v), int(layout.retake_n_tail_v)
+    per_v = [0.0] * head_v + [1.0] * (t_lat - head_v - tail_v) + [0.0] * tail_v
+    video_fix = (clean_v.to(torch.float32).contiguous(), per_v)
+    if clean_a is None:
+        return video_fix, None
+    te_a = int(clean_a.shape[2])
+    full_a = torch.zeros(tuple(clean_a.shape[:2]) + (a_lat,), dtype=torch.float32)
+    full_a[:, :, :te_a] = clean_a.to(torch.float32)
+    h_a = min(int(layout.retake_n_head_a), te_a)
+    ts_a = min(int(layout.retake_audio_tail_start), te_a)
+    middle = 1.0 - float(s)
+    per_a = [0.0] * h_a + [middle] * (ts_a - h_a) + [0.0] * (te_a - ts_a) + [1.0] * (a_lat - te_a)
+    return video_fix, (full_a, per_a)
+
+
 def clip_requests(spec: H3ChainSpec) -> list[P.H3GenerateRequest]:
     """Clip i's request: ``base`` with its prompt, frames, references, key frames,
     ``seed + i`` and ``keep_resident=True``."""
@@ -132,6 +189,19 @@ def _check_spec(spec: H3ChainSpec) -> None:
     for i, clip in enumerate(spec.clips):
         if i > 0 and clip.images:
             raise ValueError(f"連結のキーフレーム（冒頭画像）はクリップ 0 にだけ付けられます（clips[{i}]）")
+    retake = spec.retake
+    if retake is not None:
+        if spec.source is not None:
+            raise ValueError("Retake と入力動画の続き（V2V）は同時には使えません")
+        if len(spec.clips) != 1:
+            raise ValueError(f"Retake のクリップは 1 本です（{len(spec.clips)} 本）")
+        if spec.clips[0].images:
+            raise ValueError("Retake とクリップ 0 のキーフレームは同時には使えません")
+        if spec.clips[0].references:
+            raise ValueError("Retake と参照（Ref2VA）は同時には使えません")
+        s = retake.audio_strength
+        if isinstance(s, bool) or not isinstance(s, (int, float)) or not (math.isfinite(s) and 0.0 <= s <= 1.0):
+            raise ValueError(f"Retake の audio_strength は 0〜1 の数値で渡してください（{s!r}）")
     source = spec.source
     if source is None:
         return
@@ -160,6 +230,64 @@ def _load_key_frames(req: P.H3GenerateRequest):
     return canvases, cond_frame_idx, source_size
 
 
+def _read_retake_window(retake: H3ChainRetake, base: P.H3GenerateRequest, layout: H3ChainLayout, log):
+    """The retake window, read on the CPU before any model: ``(frames, wave, info)``.
+
+    ``frames``: exactly the window's F frames on the canvas. ``wave``: its
+    audio, ``[2, N]`` at 32 kHz with ``N`` at most ``round(F * 4000/3)``, or
+    None without an audio track. Below strength 1.0 whatever is read is used
+    (``keep_samples=1``; a track without a single sample is generated freely,
+    as for video-to-video); at 1.0 the original waveform is muxed, so the whole
+    window's audio is required (a shorter one fails). A file without audio and
+    a strength above 0 is refused (the app's preflight should have).
+    """
+    from engine_h3.source_tail import has_audio_stream, read_source_tail  # noqa: PLC0415
+
+    window = int(layout.retake_window_px)
+    s = float(retake.audio_strength)
+    frames, info = read_source_tail(retake.path, int(base.width), int(base.height), window)
+    if not has_audio_stream(retake.path):
+        if s > 0.0:
+            raise RuntimeError(
+                f"Retake: audio_strength={s} には窓の音声が必要ですが、"
+                f"入力動画に音声トラックがありません: {retake.path}"
+            )
+        return frames, None, info
+    from engine_h3.source_audio import load_source_waveform  # noqa: PLC0415
+
+    samples = int(round(window * H3_AUDIO_SAMPLES_PER_FRAME))
+    if s == 1.0:
+        wave, _wave_info = load_source_waveform(retake.path, keep_samples=samples, read_samples=samples)
+        return frames, wave, info
+    try:
+        wave, _wave_info = load_source_waveform(retake.path, keep_samples=1, read_samples=samples)
+    except ValueError as exc:
+        log(f"chain: retake window audio not usable, generating audio freely ({exc})")
+        wave = None
+    return frames, wave, info
+
+
+def _check_retake_fixed(video, audio, video_fix, audio_fix, layout: H3ChainLayout, te_a: int) -> None:
+    """Self-check: the window's fixed head and tail come back as its clean latents
+    bit for bit (denoise_mask.finish puts the m = 0 rows back); a mismatch fails
+    the job (no record key: passing is not stopping). ``te_a``: the encoded
+    audio latents (the audio ranges are cut there, as in :func:`retake_fix`)."""
+    clean_v = video_fix[0]
+    head_v, tail_v = int(layout.retake_n_head_v), int(layout.retake_n_tail_v)
+    ok = bool(torch.equal(video[:, :, :head_v], clean_v[:, :, :head_v])) and bool(
+        torch.equal(video[:, :, -tail_v:], clean_v[:, :, -tail_v:])
+    )
+    if ok and audio_fix is not None:
+        clean_a = audio_fix[0]
+        h_a = min(int(layout.retake_n_head_a), te_a)
+        ts_a = min(int(layout.retake_audio_tail_start), te_a)
+        ok = bool(torch.equal(audio[:, :, :h_a], clean_a[:, :, :h_a]))
+        if ok and te_a > ts_a:
+            ok = bool(torch.equal(audio[:, :, ts_a:te_a], clean_a[:, :, ts_a:te_a]))
+    if not ok:
+        raise RuntimeError("chain: the retake window's fixed head / tail is not the input video's")
+
+
 def run_chain_h3(
     pipe: P.H3Pipeline,
     spec: H3ChainSpec,
@@ -186,6 +314,11 @@ def run_chain_h3(
     ``v2v``. Clip 0's key frames (``images``) run the single I2V job's steps:
     read before its text encoder, the first / last frame to the vision tower
     (none with references; 裁定 59), encoded in an ``image_encode`` phase.
+
+    With ``spec.retake`` the window is read on the CPU before anything else,
+    encoded in clip 0's ``source_encode`` phase, fixed at its head and tail
+    (:func:`retake_fix`, self-checked bit for bit after the denoise) and
+    decoded whole (``trim_head=0``); ``chain`` gains ``retake``.
     """
     if pipe._dit_cfg is None:
         raise RuntimeError("generate before load")
@@ -203,9 +336,13 @@ def run_chain_h3(
     layout: H3ChainLayout | None = None
     source = spec.source
     v2v_runtime: dict = {}
+    retake = spec.retake
+    retake_runtime: dict = {}
     try:
         _check_spec(spec)
-        layout = compute_h3_chain_layout([c.num_frames for c in spec.clips], source_video=source is not None)
+        layout = compute_h3_chain_layout(
+            [c.num_frames for c in spec.clips], source_video=source is not None, retake=retake is not None,
+        )
         requests = clip_requests(spec)
         for req in requests:
             P.validate_request(req)
@@ -234,8 +371,15 @@ def run_chain_h3(
                     src_wave = None
                     log(f"chain: input video audio not usable, generating audio freely ({exc})")
             v2v_runtime["source_had_audio"] = src_wave is not None
+        retake_fixed = None
+        if retake is not None:
+            # The retake window, read on the CPU before any model, as the V2V tail.
+            src_frames, src_wave, src_info = _read_retake_window(retake, base, layout, log)
+            retake_runtime["source_had_audio"] = src_wave is not None
+            retake_runtime["muxed_original_waveform"] = float(retake.audio_strength) == 1.0 and src_wave is not None
         for i, req in enumerate(requests):
             from_source = i == 0 and source is not None
+            from_retake = i == 0 and retake is not None
             ka = layout.audio_overlap_latents[i - 1] if i else 0   # clip 0 with a source: set by its encode
             P._free_cuda()
             phases = P._Phases(cuda=cuda)
@@ -247,7 +391,9 @@ def run_chain_h3(
                 )
             log(f"chain: clip {i + 1}/{n} seed={req.seed} frames={req.num_frames} "
                 + (f"fixed head k={k} ka={ka}" if i else
-                   "fixed head from the input video" if from_source else "no fixed head"))
+                   "fixed head from the input video" if from_source else
+                   f"retake: fixed head and tail from the input video's window "
+                   f"(audio_strength={float(retake.audio_strength)})" if from_retake else "no fixed head"))
             original_progress = pipe._progress
             pipe._progress = functools.partial(progress, outer_index=i, outer_total=n)
             try:
@@ -264,8 +410,8 @@ def run_chain_h3(
                     if media:
                         vision_images = []
                     # The key frames' VAE step (4th of the encode stage) also counts the
-                    # input video's encode; the two never meet in one clip.
-                    has_cond = bool(canvases) or from_source
+                    # input video's encode (V2V or a retake window); they never meet in one clip.
+                    has_cond = bool(canvases) or from_source or from_retake
                     encode_total = P.encode_steps(has_cond=has_cond, has_audio=False, has_refs=bool(media))
                     with phases.phase("encode") as entry:
                         hidden, tags = pipe._encode(
@@ -293,6 +439,19 @@ def run_chain_h3(
                         video_fix, audio_fix = carry_fix(
                             prev_video, audio_cat, layout.clip_latent_frames[0], layout.clip_audio_latents[0], k, ka,
                         )
+                        del src_video, src_audio
+                    if from_retake:
+                        with phases.phase("source_encode") as entry:
+                            entry["source_size"] = src_info["source_size"]
+                            src_video, src_audio = pipe._encode_source_tail(src_frames, src_wave, entry, 4, encode_total)
+                        src_frames = None
+                        if not retake_runtime["muxed_original_waveform"]:
+                            src_wave = None   # kept only to be muxed at strength 1.0
+                        te_a = 0 if src_audio is None else int(src_audio.shape[2])
+                        video_fix, audio_fix = retake_fix(src_video, src_audio, layout, float(retake.audio_strength))
+                        retake_fixed = (video_fix, audio_fix, te_a)
+                        retake_runtime["te_a"] = te_a
+                        retake_runtime["audio_frozen"] = audio_fix is not None and any(v == 0.0 for v in audio_fix[1])
                         del src_video, src_audio
                     ref_rows = None
                     ref_counts = None
@@ -337,6 +496,9 @@ def run_chain_h3(
                 if not head_equal:
                     tail = "the input video's tail" if from_source else "the previous clip's tail"
                     raise RuntimeError(f"chain: clip {i + 1}'s fixed head is not {tail}")
+            if from_retake:
+                _check_retake_fixed(video, audio, retake_fixed[0], retake_fixed[1], layout, retake_fixed[2])
+                retake_fixed = None
             seconds = {"encode": phases.data.get("encode", {}).get("seconds")}
             for name in ("image_encode", "source_encode"):
                 if name in phases.data:   # only for a clip with key frames / the input video
@@ -375,7 +537,15 @@ def run_chain_h3(
         with torch.no_grad():
             with decode_phases.phase("decode") as entry:
                 # The decoders compute on the latents' device: hand them over on the pipeline's.
-                if source is None:
+                if retake is not None:
+                    # A retake: the whole window, no trim, no audio handle or fade; at
+                    # strength 1.0 the original waveform goes into the mp4.
+                    size_bytes = pipe._decode(
+                        out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
+                        source_wave=src_wave if retake_runtime["muxed_original_waveform"] else None, trim_head=0,
+                    )
+                    src_wave = None
+                elif source is None:
                     size_bytes = pipe._decode(
                         out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
                     )
@@ -403,6 +573,7 @@ def run_chain_h3(
         h3["loras"] = lora_report   # clip 0's: every clip attaches the same files
     chain = layout.to_dict()
     v2v_layout = chain.pop("v2v", None)
+    retake_layout = chain.pop("retake", None)
     chain.update({
         "seeds": [int(spec.seed) + i for i in range(len(spec.clips))],
         "clips": clip_records,
@@ -425,6 +596,21 @@ def run_chain_h3(
             "decoded_frames_px": int(dec["decoded_frames"]),
             "audio_handle_filename": dec["audio_handle"],
             "handle_context_seconds": round(int(layout.trim_px) / int(base.frame_rate), 6),
+        }
+    if retake is not None:
+        # Only for a retake, last: the layout's eight keys (n_tail_a the run's,
+        # from the encoded audio) plus the run's, the LTX retake's names with
+        # audio_strength in place of regenerate_audio.
+        dec = decode_phases.data.get("decode", {})
+        te_a = int(retake_runtime["te_a"])
+        chain["retake"] = {
+            **retake_layout,
+            "n_tail_a": max(0, te_a - int(layout.retake_audio_tail_start)),
+            "audio_strength": float(retake.audio_strength),
+            "source_had_audio": bool(retake_runtime["source_had_audio"]),
+            "audio_frozen": bool(retake_runtime["audio_frozen"]),
+            "muxed_original_waveform": bool(retake_runtime["muxed_original_waveform"]),
+            "decoded_frames_px": int(dec["frames"]),
         }
     return {
         "seed_used": int(spec.seed),

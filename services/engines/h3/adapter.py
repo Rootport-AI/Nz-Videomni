@@ -192,6 +192,11 @@ REQUEST_RULES = RequestRules(
     # The chain's fixed overlap (裁定 84-3), published as constraints["chain"].
     # The number's source of truth is h3_chain_math.
     chain_overlap_frames=h3_chain_math.H3_CHAIN_OVERLAP_FRAMES,
+    # Retake's middle-audio Strength (``chain.retake.audio_strength``): mask
+    # value 1 - s on the free middle's audio latents; 1.0 muxes the original
+    # waveform back. Published as constraints["retake"]; an omitted value
+    # becomes the default (validate_chain).
+    retake_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.0),
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -315,7 +320,9 @@ GOVERNED_FIELDS: dict[str, str] = {
 # --------------------------------------------------------------------------- #
 #
 # The chain runs T2V, V2V (an input video's 22-frame tail is clip 0's fixed
-# head) and i2v (clip 0's key frames) clips (裁定 84; 台帳 §1-121); the end /
+# head) and i2v (clip 0's key frames) clips (裁定 84; 台帳 §1-121), and a
+# one-clip Retake (an input window's 22-frame head and tail are fixed; 台帳
+# §1-123); the end /
 # audio sources the chain schema can carry are refused, and so is a key
 # frame's strength (H3 has none; a clip's own references, 裁定 87, ride inside
 # ``clips``). The same four tables as the LTX 2.5 adapter's chain tables, held
@@ -332,7 +339,6 @@ GOVERNED_FIELDS: dict[str, str] = {
 CHAIN_REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateChainRequest], bool]], ...] = (
     ("source_audio", "a2v", lambda r: r.source_audio is not None),
     ("end_source", "end_source", lambda r: r.end_source is not None),
-    ("retake", "retake", lambda r: r.retake is not None),
     ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
     ("nag_enabled", "nag", lambda r: r.nag_enabled),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
@@ -360,8 +366,9 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: :meth:`_RealBackendH3.generate_chain` (``prompt`` and ``clips`` become the
 #: per-clip ``{prompt, num_frames[, images][, references]}`` list, ``prompt``
 #: alone also the top-level ``prompt``; ``source_video`` becomes the top-level
-#: ``source`` with the app-cut tail's path; ``loras`` arrive resolved as
-#: ``lora_paths``), except
+#: ``source`` with the app-cut tail's path; ``retake`` becomes the top-level
+#: ``retake`` with the app-cut window's path and the audio Strength;
+#: ``loras`` arrive resolved as ``lora_paths``), except
 #: ``crop_output`` (the app-side centre-crop) and ``embed_mp4_metadata`` (the
 #: app-side recipe embed).
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
@@ -369,6 +376,7 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "prompt",
         "clips",
         "source_video",
+        "retake",
         "seed",
         "width",
         "height",
@@ -507,8 +515,11 @@ def validate_chain(request: GenerateChainRequest) -> None:
     and ``references`` counts / slots (``clips[i]: ``), then snaps each clip's
     key frames as the single path does (``clips[i]: ``; only clip 0 can carry
     any), then the input video's ``context_frames`` (22 written back when
-    omitted; any other explicit value refused), then the timeline (clips[i],
-    i >= 1 — and clip 0 too with an input video — at least 39 frames).
+    omitted; any other explicit value refused), then a retake's ``head_px`` /
+    ``tail_px`` (the same 22 rule), ``regenerate_audio`` (false refused) and
+    ``audio_strength`` (the published default written back when omitted), then
+    the timeline (clips[i], i >= 1 — and clip 0 too with an input video — at
+    least 39 frames; a retake is exactly one clip of at least 73).
     """
     if "num_inference_steps" not in request.model_fields_set:
         request.num_inference_steps = None
@@ -544,9 +555,32 @@ def validate_chain(request: GenerateChainRequest) -> None:
                 "source_video.context_frames must be 22 on MiniMax H3 "
                 "(the chain's fixed 22-frame overlap); send 22 or omit it"
             )
+    # A retake's glue bands are the same fixed 22 frames, by the same rule
+    # (omitted -> 22 written back, explicit other -> refused). Its audio is the
+    # middle's Strength, not regenerate_audio: an omitted Strength becomes the
+    # published default.
+    retake = request.retake
+    if retake is not None:
+        overlap = h3_chain_math.H3_CHAIN_OVERLAP_FRAMES
+        for name in ("head_px", "tail_px"):
+            if name not in retake.model_fields_set:
+                setattr(retake, name, overlap)
+            elif getattr(retake, name) != overlap:
+                raise ValueError(
+                    f"retake.{name} must be 22 on MiniMax H3 "
+                    "(the chain's fixed 22-frame overlap); send 22 or omit it"
+                )
+        if not retake.regenerate_audio:
+            raise ValueError(
+                "retake.regenerate_audio=false is not accepted by MiniMax H3; "
+                "use retake.audio_strength=1.0 to keep the original audio"
+            )
+        if retake.audio_strength is None:
+            retake.audio_strength = REQUEST_RULES.retake_audio_strength.default
     h3_chain_math.compute_h3_chain_layout(
         [clip.num_frames for clip in request.clips],
         source_video=request.source_video is not None,
+        retake=retake is not None,
     )
     for spec in request.loras:
         spec.audio_strength = None
@@ -915,14 +949,14 @@ class _RealBackendH3(_RealBackend):
         seed: int | None = None,
         clip_reference_paths: list[list[Path]] | None = None,
     ) -> GenerationOutcome:
-        """A T2V / V2V / i2v chain via the worker's ``generate_chain`` op
-        (裁定 84; 台帳 §1-121).
+        """A T2V / V2V / i2v / Retake chain via the worker's ``generate_chain`` op
+        (裁定 84; 台帳 §1-121, §1-123).
 
         THE CALL SHAPE IS LTX's thirteen keywords (``PipelineManager.run_chain_job``
         passes them to every runner) plus the H3-only ``clip_reference_paths``
         (:meth:`H3Runner.generate_chain`). Used: ``clip0_conditioning_paths``,
-        ``source_tail_path``, ``source_context_frames``, ``lora_paths``,
-        ``seed`` and ``clip_reference_paths``; the other material keywords
+        ``source_tail_path``, ``source_context_frames``, ``retake_window_path``,
+        ``lora_paths``, ``seed`` and ``clip_reference_paths``; the other material keywords
         belong to chain shapes :func:`reject_chain` refuses (re-checked here as
         the backstop, before the load).
 
@@ -944,7 +978,9 @@ class _RealBackendH3(_RealBackend):
         ``{path, frame_idx}``); a clip with references also carries
         ``references`` (the single op's ``{kind, path, slot, max_sec?}``); a
         clip without any carries no such key. With an input video the payload
-        also carries ``source`` (``{path, context_frames}``) after ``clips``.
+        also carries ``source`` (``{path, context_frames}``) after ``clips``;
+        with a retake it carries ``retake`` (``{path, audio_strength}``; the
+        app-cut window, :class:`PipelineManager`'s ``_retake_window.mp4``).
         Key set and order are pinned by ``GOLDEN_CHAIN_KEYS_H3`` (and its V2V
         and key-frame variants) in tests/test_engine_h3_adapter.py.
         """
@@ -993,6 +1029,8 @@ class _RealBackendH3(_RealBackend):
                 entry["references"] = references
         if chain.source_video is not None and source_tail_path is None:
             raise RuntimeError("MiniMax H3: source_video requested but no source tail was cut")
+        if chain.retake is not None and retake_window_path is None:
+            raise RuntimeError("MiniMax H3: retake requested but no retake window was cut")
 
         # crop_output: the worker writes the full-size mp4 to a temp file and
         # the app's ffmpeg helper centre-crops it into output.mp4 (as on LTX).
@@ -1028,6 +1066,14 @@ class _RealBackendH3(_RealBackend):
             payload["source"] = {
                 "path": str(source_tail_path),
                 "context_frames": int(source_context_frames),
+            }
+        # retake: the app-cut window and the middle's audio Strength (written
+        # back by validate_chain). The 22-frame bands are the geometry's, not
+        # sent.
+        if chain.retake is not None:
+            payload["retake"] = {
+                "path": str(retake_window_path),
+                "audio_strength": float(chain.retake.audio_strength),
             }
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
@@ -1224,7 +1270,10 @@ class _MockBackendH3(_MockBackend):
         frames, and ``chain.v2v`` carries the LTX mock's sixteen keys with a
         silent ``output_audio_handle.wav``; clip 0's first key frame (if any)
         is drawn as the start image, and ``images_used`` counts clip 0's key
-        frames. The other material keywords are accepted for the shared
+        frames. With a retake the mp4 is the whole window (F frames) and
+        ``chain.retake`` carries the layout's eight keys plus the run's (the
+        LTX mock's names, ``audio_strength`` for ``regenerate_audio``, no
+        ``freeze_proof``). The other material keywords are accepted for the shared
         signature and ignored (the request fields behind them are refused by
         :func:`reject_chain`).
         ``clip_reference_paths`` gets the real backend's resolution check, and
@@ -1238,7 +1287,9 @@ class _MockBackendH3(_MockBackend):
         clip_references = _clip_reference_payloads(chain, clip_reference_paths)
         seed = int(seed) if seed is not None else resolve_seed(chain.seed)
         layout = h3_chain_math.compute_h3_chain_layout(
-            [c.num_frames for c in chain.clips], source_video=chain.source_video is not None
+            [c.num_frames for c in chain.clips],
+            source_video=chain.source_video is not None,
+            retake=chain.retake is not None,
         )
         gpu_info.reset_peak_vram()
         if progress_callback:
@@ -1303,6 +1354,7 @@ class _MockBackendH3(_MockBackend):
             if references:
                 done_chain["clips"][i]["references"] = _reference_counts(chain.clips[i])
         v2v_layout = done_chain.pop("v2v", None)
+        retake_layout = done_chain.pop("retake", None)
         done_chain["h3"] = {
             "overlap_frames": layout.overlap_frames,
             "inject_clean": 1.0,
@@ -1333,6 +1385,27 @@ class _MockBackendH3(_MockBackend):
                 "decoded_frames_px": int(layout.total_frames),
                 "audio_handle_filename": audio_handle_filename,
                 "handle_context_seconds": round(int(layout.trim_px) / int(chain.frame_rate), 6),
+            }
+        if chain.retake is not None:
+            # The worker's done.chain.retake: the layout's eight keys (nominal
+            # n_tail_a) plus the run's, the LTX mock's names with audio_strength
+            # in place of regenerate_audio. No freeze_proof: the mock has no
+            # latents to prove a freeze with (the LTX mock's rule).
+            strength = float(chain.retake.audio_strength)
+            window_has_audio = bool(
+                retake_window_path is not None
+                and video_io.has_audio_stream(retake_window_path)
+            )
+            done_chain["retake"] = {
+                **retake_layout,
+                "audio_strength": strength,
+                "source_had_audio": window_has_audio,
+                "audio_frozen": bool(
+                    window_has_audio
+                    and (retake_layout["n_head_a"] > 0 or retake_layout["n_tail_a"] > 0)
+                ),
+                "muxed_original_waveform": bool(strength == 1.0 and window_has_audio),
+                "decoded_frames_px": int(layout.total_frames),
             }
         images_used = len(chain.clips[0].conditioning_images)
         chain_metadata = _chain_metadata(

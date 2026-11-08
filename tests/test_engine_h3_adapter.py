@@ -191,7 +191,8 @@ def test_unsupported_features_is_both_reject_tables_plus_fused_kernel():
     # the chain shapes H3 does not run are named one by one instead. 台帳
     # §1-121: ``v2v`` and ``chain_start_image`` are no longer among them (the
     # chain runs an input video and clip 0's key frames); the chain's
-    # ``keyframe_strength`` row is the single path's name, listed once.
+    # ``keyframe_strength`` row is the single path's name, listed once. 台帳
+    # §1-123: ``retake`` is no longer among them (the chain runs a Retake).
     assert h3.UNSUPPORTED_FEATURES == (
         "reference_video",
         "nag",
@@ -205,7 +206,6 @@ def test_unsupported_features_is_both_reject_tables_plus_fused_kernel():
         "keyframe_strength",
         "a2v",
         "end_source",
-        "retake",
         "fused_gguf_dequant_kernel",
         "lora_audio_strength",
     )
@@ -305,6 +305,8 @@ H3_CONSTRAINTS = {
         "audio_total_sec": 15.0,
         "clip_min_sec": 2.0,
     },
+    # Retake's middle-audio Strength (台帳 §1-123). H3 only: LTX has no key.
+    "retake": {"audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.0}},
 }
 LTX_CONSTRAINTS = {
     "num_frames": {"step": 8, "offset": 1, "min": 9, "max": 481},
@@ -1155,10 +1157,6 @@ def test_chain_ignored_fields_are_really_not_read_by_generate_chain():
 CHAIN_OVERRIDES_H3: dict[str, dict] = {
     "a2v": {"source_audio": {"audio_id": "aud-1"}},
     "end_source": {"end_source": {"video_id": "vid-1", "context_frames": 72}},
-    "retake": {
-        "clips": [{"num_frames": 124}],
-        "retake": {"video_id": "vid-1", "window_start_sec": 0.0},
-    },
     "reference_video": {"reference_video_id": "vid-1", "loras": _LORAS},
     "nag": {"nag_enabled": True, "negative_prompt": "blurry"},
     "two_stage_hq": {"pipeline": "two_stage_hq"},
@@ -1387,6 +1385,64 @@ def test_generate_chain_v2v_needs_the_cut_tail(tmp_path):
     with pytest.raises(RuntimeError, match="no source tail"):
         be.generate_chain(chain, tmp_path / "job", seed=1, source_context_frames=22)
     assert captured == []
+
+
+#: The Retake payload (台帳 §1-123): the plain golden plus the app-cut window
+#: and the middle's audio Strength after ``clips``; the 22-frame bands are not sent.
+GOLDEN_CHAIN_KEYS_H3_RETAKE = GOLDEN_CHAIN_KEYS_H3 + ["retake"]
+
+
+def _retake_chain(**retake):
+    return _validated_chain(
+        clips=[{"num_frames": 124}],
+        retake={"video_id": "vid-1", "window_start_sec": 0.0, **retake},
+    )
+
+
+def test_generate_chain_payload_retake_golden(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    window = tmp_path / "job" / "_retake_window.mp4"
+    be.generate_chain(_retake_chain(audio_strength=0.5), tmp_path / "job", seed=42,
+                      retake_window_path=window)
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_H3_RETAKE
+    assert payload["retake"] == {"path": str(window), "audio_strength": 0.5}
+    assert payload["clips"] == [{"prompt": PROMPT, "num_frames": 124}]
+    # An omitted Strength rides as the published default.
+    captured.clear()
+    be.generate_chain(_retake_chain(), tmp_path / "job", seed=42, retake_window_path=window)
+    assert captured[0]["retake"] == {"path": str(window), "audio_strength": 0.0}
+
+
+def test_generate_chain_retake_needs_the_cut_window(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    with pytest.raises(RuntimeError, match="no retake window"):
+        be.generate_chain(_retake_chain(), tmp_path / "job", seed=1)
+    assert captured == []
+
+
+def test_validate_chain_retake_writes_the_h3_defaults_back():
+    chain = _retake_chain()
+    assert (chain.retake.head_px, chain.retake.tail_px) == (22, 22)
+    assert chain.retake.audio_strength == h3.REQUEST_RULES.retake_audio_strength.default == 0.0
+    assert _retake_chain(head_px=22, tail_px=22, audio_strength=1.0).retake.audio_strength == 1.0
+
+
+@pytest.mark.parametrize(
+    "retake, message",
+    [
+        ({"head_px": 25}, "retake.head_px must be 22 on MiniMax H3"),
+        ({"tail_px": 24}, "retake.tail_px must be 22 on MiniMax H3"),
+        ({"regenerate_audio": False}, "use retake.audio_strength=1.0 to keep the original audio"),
+    ],
+)
+def test_validate_chain_retake_refusals(retake, message):
+    with pytest.raises(APIError) as ei:
+        _retake_chain(**retake)
+    assert ei.value.status_code == 422
+    assert message in ei.value.detail[0]["msg"]
 
 
 def test_generate_chain_payload_clip0_images_golden(tmp_path):

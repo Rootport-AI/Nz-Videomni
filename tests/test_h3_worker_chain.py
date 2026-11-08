@@ -38,9 +38,10 @@ GOLDEN_CHAIN_CLIP_KEYS = ["prompt_sha256", "seconds", "latents_sha256", "head_eq
 def test_chain_fields():
     assert worker._CHAIN_FIELDS == (
         worker._GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}
-    ) | {"clips", "source"}
+    ) | {"clips", "source", "retake"}
     assert worker._CHAIN_CLIP_FIELDS == frozenset({"prompt", "num_frames", "images", "references"})
     assert worker._SOURCE_FIELDS == frozenset({"path", "context_frames"})
+    assert worker._RETAKE_FIELDS == frozenset({"path", "audio_strength"})
     assert "prompt" in worker._CHAIN_FIELDS and "loras" in worker._CHAIN_FIELDS
 
 
@@ -83,6 +84,30 @@ def test_chain_source():
 def test_chain_source_malformed_is_refused(bad):
     with pytest.raises(ValueError, match="source"):
         worker._chain_source({"source": bad})
+
+
+def test_chain_retake():
+    from engine_h3.chain_h3 import H3ChainRetake
+
+    assert worker._chain_retake({}) == (None, [])
+    assert worker._chain_retake({"retake": None}) == (None, [])
+    retake, ignored = worker._chain_retake({"retake": {"path": "w.mp4", "audio_strength": 1, "head_px": 22,
+                                                       "video_id": "v"}})
+    assert retake == H3ChainRetake("w.mp4", 1.0) and isinstance(retake.audio_strength, float)
+    assert ignored == ["head_px", "video_id"]
+    # The range is the chain's: the worker only checks the shape.
+    assert worker._chain_retake({"retake": {"path": "w.mp4", "audio_strength": 1.5}})[0].audio_strength == 1.5
+
+
+@pytest.mark.parametrize("bad", [
+    "w.mp4", ["w.mp4"], {"audio_strength": 0.5}, {"path": "", "audio_strength": 0.5},
+    {"path": "  ", "audio_strength": 0.5}, {"path": 3, "audio_strength": 0.5}, {"path": "w.mp4"},
+    {"path": "w.mp4", "audio_strength": "0.5"}, {"path": "w.mp4", "audio_strength": True},
+    {"path": "w.mp4", "audio_strength": None},
+])
+def test_chain_retake_malformed_is_refused(bad):
+    with pytest.raises(ValueError, match="retake"):
+        worker._chain_retake({"retake": bad})
 
 
 def test_chain_clips_valid_and_inner_keys_ignored():
@@ -223,9 +248,36 @@ def test_do_generate_chain_passes_source_and_clip_images(monkeypatch):
 def test_do_generate_chain_plain_has_no_source(monkeypatch):
     seen, logs, _events = _capture(monkeypatch)
     worker._do_generate_chain(BASE)
-    assert seen[0][0].source is None
+    assert seen[0][0].source is None and seen[0][0].retake is None
     line = next(line for line in logs if line.startswith("generate_chain:"))
-    assert "source=" not in line and "images=" not in line
+    assert "source=" not in line and "images=" not in line and "retake=" not in line
+
+
+def test_do_generate_chain_passes_retake(monkeypatch):
+    """``retake`` becomes ``H3ChainSpec.retake``; reaching the shared settings through
+    ``base_msg`` it changes nothing there (``_generate_request`` does not read it)."""
+    from engine_h3.chain_h3 import H3ChainRetake
+
+    seen, logs, _events = _capture(monkeypatch)
+    msg = {**BASE, "clips": [CLIPS[0]], "retake": {"path": "in/_retake_window.mp4", "audio_strength": 0.5, "x": 1}}
+    worker._do_generate_chain(msg)
+    spec = seen[0][0]
+    assert spec.retake == H3ChainRetake("in/_retake_window.mp4", 0.5) and spec.source is None
+    seen_plain, _logs, _events = _capture(monkeypatch)
+    worker._do_generate_chain({**BASE, "clips": [CLIPS[0]]})
+    assert spec.base == seen_plain[0][0].base
+    line = next(line for line in logs if line.startswith("generate_chain:"))
+    assert "retake=('_retake_window.mp4', 0.5) " in line
+    assert "ignored keys: retake.x" in line
+
+
+def test_generate_request_ignores_retake():
+    base_msg = {k: v for k, v in BASE.items() if k in worker._CHAIN_FIELDS}
+    base_msg.update(prompt="a", num_frames=124)
+    plain = worker._generate_request(dict(base_msg), images=(), loras=(), source_audio=None, references=())
+    with_retake = worker._generate_request({**base_msg, "retake": {"path": "w.mp4", "audio_strength": 1.0}},
+                                           images=(), loras=(), source_audio=None, references=())
+    assert with_retake == plain
 
 
 def test_do_generate_chain_degraded_attention(monkeypatch):
@@ -263,15 +315,18 @@ def _golden_chain_run(monkeypatch, msg, *, source_audio=True):
         return video, audio, "on"
 
     def decode(req, v, a, entry, **kw):
+        entry["frames"] = req.num_frames - int(kw.get("trim_head") or 0)
         if kw.get("trim_head"):
             entry.update(decoded_frames=req.num_frames, trimmed_frames=kw["trim_head"], trimmed_audio_samples=29333,
                          audio_fade_in_samples=960, audio_handle="o_audio_handle.wav")
         return 1234
 
     def encode_source_tail(frames, wave, entry, index, total):
-        freeze = 0 if wave is None else min(37, int(wave.shape[-1]) // 800)
+        n = int(frames.shape[0])
+        freeze = 0 if wave is None else min(pipeline_h3.audio_latents(n), int(wave.shape[-1]) // 800)
         entry["freeze_ka"] = freeze
-        return torch.zeros(1, 24, 7, 2, 2), (torch.zeros(2, 32, freeze) if freeze else None)
+        return (torch.zeros(1, 24, pipeline_h3.latent_frames(n), 2, 2),
+                (torch.zeros(2, 32, freeze) if freeze else None))
 
     monkeypatch.setattr(pipe, "_encode", lambda prompt, phases, **kw: (torch.zeros(3, 8), torch.ones(3, dtype=torch.long)))
     monkeypatch.setattr(pipe, "_denoise", denoise)
@@ -329,6 +384,33 @@ def test_golden_v2v_chain_done_keys(monkeypatch, audio):
     v2v = done["chain"]["v2v"]
     assert list(v2v) == GOLDEN_V2V_KEYS
     assert (v2v["new_frames_px"], v2v["freeze_ka"], v2v["source_had_audio"]) == (51, 36 if audio else 0, audio)
+    import json
+
+    assert json.loads(json.dumps(done["chain"])) == done["chain"]
+
+
+#: A retake's block: the layout's eight keys (the LTX retake's), then the run's.
+GOLDEN_RETAKE_KEYS = [
+    "window_px", "head_px", "tail_px", "n_head_v", "n_tail_v", "n_head_a", "n_tail_a", "free_middle_px",
+    "audio_strength", "source_had_audio", "audio_frozen", "muxed_original_waveform", "decoded_frames_px",
+]
+
+
+@pytest.mark.parametrize("audio", [True, False])
+def test_golden_retake_done_keys(monkeypatch, audio):
+    """A retake: the same keys, ``chain`` with ``retake`` last (台帳 §1-123)."""
+    from test_h3_engine import GOLDEN_DONE_KEYS
+
+    msg = {**BASE, "clips": [CLIPS[0]], "retake": {"path": "w.mp4", "audio_strength": 0.0}}
+    done = _golden_chain_run(monkeypatch, msg, source_audio=audio)
+    assert list(done)[1:] == GOLDEN_DONE_KEYS + ["chain"]
+    assert list(done["chain"]) == GOLDEN_CHAIN_KEYS + ["retake"]
+    assert done["num_frames"] == 124 and done["chain"]["total_px"] == 124
+    retake = done["chain"]["retake"]
+    assert list(retake) == GOLDEN_RETAKE_KEYS
+    assert (retake["window_px"], retake["free_middle_px"], retake["decoded_frames_px"]) == (124, [22, 102], 124)
+    assert (retake["source_had_audio"], retake["audio_frozen"], retake["muxed_original_waveform"]) == (
+        audio, audio, False)
     import json
 
     assert json.loads(json.dumps(done["chain"])) == done["chain"]

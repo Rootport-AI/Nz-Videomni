@@ -148,6 +148,12 @@ class RequestRules:
     overlap and no blend controls) from the server's word. ``None`` for a
     family without it (LTX: its overlap is a request field), and then the key
     is left out entirely.
+    ``retake_audio_strength`` is the range of ``POST /generate/chain``'s
+    ``retake.audio_strength`` (MiniMax H3), published as
+    ``constraints["retake"]``; its ``default`` is what an omitted value becomes
+    (written back by the family's chain validation). ``None`` for a family that
+    refuses the field (LTX: its retake audio is ``regenerate_audio``), and then
+    the key is left out entirely. The 0..1 bound itself is the schema's.
     """
 
     frames_step: int
@@ -168,6 +174,7 @@ class RequestRules:
     source_audio_strength: SamplingRange | None = None
     reference: ReferenceLimits | None = None
     chain_overlap_frames: int | None = None
+    retake_audio_strength: SamplingRange | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -200,6 +207,10 @@ class RequestRules:
         # LTX publishes the same block as before.
         if self.chain_overlap_frames is not None:
             published["chain"] = {"overlap_frames": self.chain_overlap_frames}
+        # Only a family whose retake takes an audio Strength (MiniMax H3)
+        # publishes the key, so LTX publishes the same block as before.
+        if self.retake_audio_strength is not None:
+            published["retake"] = {"audio_strength": self.retake_audio_strength.as_dict()}
         return published
 
     # ------------------------------------------------------------ enforcing

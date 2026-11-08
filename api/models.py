@@ -1015,26 +1015,32 @@ class RetakeSpec(BaseModel):
     edge instead of at the edit point.
 
     ``clips[0].num_frames`` is the SINGLE source for the window length — there is
-    deliberately no second length field here to disagree with it. Its legal range
-    ([``chain_math.RETAKE_WINDOW_MIN_PX``,
-    ``chain_math.retake_max_window_px(v_tile)``] for the chosen stage-2 window)
-    is enforced by ``chain_math.compute_chain_layout``;
-    ``config.limits.retake_window_min_frames`` / ``retake_window_max_frames``
-    publish the default-window numbers.
+    deliberately no second length field here to disagree with it. Its legal
+    range and grid are the active family's (LTX: ``chain_math.compute_chain_layout``;
+    MiniMax H3: ``h3_chain_math.compute_h3_chain_layout`` and the published
+    ``constraints.num_frames``); ``config.limits.retake_window_min_frames`` /
+    ``retake_window_max_frames`` publish the LTX default-window numbers.
 
-    ``head_px`` must be 8n+1 and ``tail_px`` a multiple of 8 — the two ends sit on
-    DIFFERENT latent grids because the video VAE is causal
-    (``chain_math.v_tail_latents``). The 25/24 defaults are the calibrated
-    recommendation from VERIFICATION_LOG §55.5; wider is not monotonically
-    better (49/48 measurably weakened the audio seam).
+    The glue-band grids are family rules, checked by the family's chain
+    validation, not here. LTX: ``head_px`` 8n+1 and ``tail_px`` a multiple of 8
+    (the causal video VAE puts the two ends on different latent grids; checked
+    by ``chain_math``); the 25/24 defaults are the calibrated recommendation
+    from VERIFICATION_LOG §55.5. MiniMax H3: both bands are fixed at 22 frames
+    (the chain overlap); omit them and the adapter writes 22 back, any other
+    explicit value is a 422.
 
-    ``regenerate_audio`` False keeps the window's ORIGINAL waveform and muxes it
-    back verbatim (the vocoder is skipped); it then requires the upload to
-    actually have an audio stream (422 up front if not).
+    ``regenerate_audio`` (LTX) False keeps the window's ORIGINAL waveform and
+    muxes it back verbatim (the vocoder is skipped). ``audio_strength`` (MiniMax
+    H3 only, 0..1) pulls the middle's audio towards the original; 1.0 muxes the
+    original waveform back. A request that uses the original audio
+    (``regenerate_audio`` False or ``audio_strength`` > 0) requires the upload
+    to actually have an audio stream (422 up front if not). Each family rejects
+    the other family's field when it is set to a non-default value.
 
     Mutually exclusive with ``source_video``, ``source_audio``,
-    ``reference_video_id``, ``clips[0].conditioning_images`` and ``end_source``
-    — all of them want to own the ends of the one clip.
+    ``reference_video_id``, ``clips[0].conditioning_images``,
+    ``clips[0].references`` and ``end_source`` — all of them want to own the
+    ends of the one clip.
     """
 
     video_id: str = Field(..., min_length=1)
@@ -1042,20 +1048,7 @@ class RetakeSpec(BaseModel):
     head_px: int = Field(25, ge=9)
     tail_px: int = Field(24, ge=8)
     regenerate_audio: bool = True
-
-    @model_validator(mode="after")
-    def validate_glue_grids(self) -> "RetakeSpec":
-        if (self.head_px - 1) % 8 != 0:
-            raise ValueError(
-                "retake.head_px must be 8n+1 (the head band starts at the causal "
-                "VAE's lone keyframe latent)"
-            )
-        if self.tail_px % 8 != 0:
-            raise ValueError(
-                "retake.tail_px must be a multiple of 8 (the tail band is whole "
-                "latent groups counted back from the end)"
-            )
-        return self
+    audio_strength: float | None = Field(None, ge=0.0, le=1.0)
 
 
 class EndSourceSpec(BaseModel):
@@ -1515,6 +1508,12 @@ class GenerateChainRequest(BaseModel):
                 raise ValueError(
                     "retake is mutually exclusive with clips[0].conditioning_images "
                     "(the window's own frames already occupy the frozen ends)"
+                )
+            if self.clips[0].references:
+                raise ValueError(
+                    "retake is mutually exclusive with clips[0].references "
+                    "(a Reference's conditioning would compete with the frozen "
+                    "retake glue bands)"
                 )
             # The window IS the clip; clips[0].num_frames is its length.
             if len(self.clips) != 1:

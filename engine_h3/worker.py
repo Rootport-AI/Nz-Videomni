@@ -70,10 +70,10 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
    [keep_resident], [attention_backend], [block_swap_prefetch], [vram16_mode],
-   [loras], [source]}
+   [loras], [source], [retake]}
       One chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
       of ``{"prompt", "num_frames", [references], [images]}`` (2..24 clips, 1..24
-      with a ``source``; each prompt is the clip's whole text, the top-level
+      with a ``source``, exactly 1 with a ``retake``; each prompt is the clip's whole text, the top-level
       ``prompt`` is not used), clip i runs with seed ``seed + i``, and the clips
       are joined on a fixed 22-frame overlap into ONE mp4 at ``output_path``.
       ``clips[i].references`` (台帳 §1-109): that clip's own Ref2VA references,
@@ -85,7 +85,13 @@ Protocol (one JSON object per line; parent -> worker):
       null = none, else ``{"path", "context_frames"}``, the app's cut of an
       input video's last 22 frames, whose latents become clip 0's fixed head
       (video-to-video; the mp4 then lacks those 22 frames; unknown inner keys
-      logged as ``source.<key>``). The other keys mean what they mean for
+      logged as ``source.<key>``). ``retake`` (台帳 §1-123): absent / null =
+      none, else ``{"path", "audio_strength"}``, the app's cut of an input
+      video's window (exactly the one clip's frames) whose first and last 22
+      frames are kept and whose middle is redrawn, its audio held toward the
+      original by ``audio_strength`` (0..1; 1.0 muxes the original waveform);
+      the whole window is the mp4 (unknown inner keys logged as
+      ``retake.<key>``). The other keys mean what they mean for
       ``generate`` and apply to every clip (the LoRA too). The top-level
       ``images`` / ``source_audio`` / ``references`` and any other key are
       logged and ignored, as are unknown keys inside a clip. A failure is
@@ -256,12 +262,16 @@ _REFERENCE_FIELDS = frozenset({"kind", "path", "slot", "max_sec"})
 #: The generate_chain payload's keys this engine reads (台帳 §1-106): the single
 #: job's, less what is per clip or unused (the frame count, the key frames and
 #: references are per clip), plus ``clips`` and the input video ``source`` (台帳 §1-121).
-_CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}) | {"clips", "source"}
+_CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}) | {
+    "clips", "source", "retake",
+}
 #: The keys of one ``clips`` entry this engine reads (``references``: 台帳 §1-109;
 #: ``images``: 台帳 §1-121, clip 0 only).
 _CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames", "images", "references"})
 #: The keys of ``source`` this engine reads (台帳 §1-121).
 _SOURCE_FIELDS = frozenset({"path", "context_frames"})
+#: The keys of ``retake`` this engine reads (台帳 §1-123; the 22-frame head and tail are fixed, not sent).
+_RETAKE_FIELDS = frozenset({"path", "audio_strength"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -616,6 +626,29 @@ def _chain_source(msg: dict) -> tuple:
     return H3ChainSource(path=path, context_frames=frames), ignored
 
 
+def _chain_retake(msg: dict) -> tuple:
+    """``retake`` -> ``(H3ChainRetake | None, ignored inner keys)``.
+
+    Absent / null = no retake. The shape (an object with a non-empty string
+    ``path`` and a number ``audio_strength``) is checked here; the 0..1 range,
+    the clip count and the file itself are the chain's.
+    """
+    from engine_h3.chain_h3 import H3ChainRetake  # noqa: PLC0415
+
+    raw = msg.get("retake")
+    if raw is None:
+        return None, []
+    if not isinstance(raw, dict):
+        raise ValueError(f"retake はオブジェクトで渡してください（{type(raw).__name__}）")
+    path, strength = raw.get("path"), raw.get("audio_strength")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError(f"retake には空でない文字列の path が必要です（{path!r}）")
+    if isinstance(strength, bool) or not isinstance(strength, (int, float)):
+        raise ValueError(f"retake の audio_strength は数値で渡してください（{strength!r}）")
+    ignored = sorted(k for k in raw if k not in _RETAKE_FIELDS)
+    return H3ChainRetake(path=path, audio_strength=float(strength)), ignored
+
+
 def _do_generate_chain(msg: dict) -> None:
     """Run one chain (台帳 §1-106 / §1-121); the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
@@ -625,10 +658,12 @@ def _do_generate_chain(msg: dict) -> None:
     clips, clip_ignored = _chain_clips(msg)
     loras, lora_ignored = _loras(msg)
     source, source_ignored = _chain_source(msg)
+    retake, retake_ignored = _chain_retake(msg)
     ignored = sorted(k for k in msg if k not in _CHAIN_FIELDS)
     ignored += [f"clips[].{k}" for k in clip_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
     ignored += [f"source.{k}" for k in source_ignored]
+    ignored += [f"retake.{k}" for k in retake_ignored]
     # The shared settings, read by the single job's rules. The prompt and the
     # frame count are each clip's; ``clips[0]``'s stand in for them here.
     base_msg = {k: v for k, v in msg.items() if k in _CHAIN_FIELDS}
@@ -640,7 +675,7 @@ def _do_generate_chain(msg: dict) -> None:
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
     base.attention_backend = effective
-    spec = H3ChainSpec(base=base, clips=tuple(clips), seed=base.seed, source=source)
+    spec = H3ChainSpec(base=base, clips=tuple(clips), seed=base.seed, source=source, retake=retake)
     _log(
         f"generate_chain: seed={base.seed} {base.width}x{base.height} clips={[c.num_frames for c in clips]} "
         f"steps={base.num_inference_steps} shift={base.shift_video}/{base.shift_audio} "
@@ -649,6 +684,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"loras={[(Path(item.path).name, item.strength) for item in base.loras]} "
         + (f"images={[len(c.images) for c in clips]} " if any(c.images for c in clips) else "")
         + (f"source={(Path(source.path).name, source.context_frames)} " if source is not None else "")
+        + (f"retake={(Path(retake.path).name, retake.audio_strength)} " if retake is not None else "")
         + f"-> {base.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
     )

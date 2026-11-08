@@ -260,3 +260,105 @@ def test_v2v_refusals(frames, match):
 def test_v2v_clip_0_at_39_is_accepted():
     assert compute_h3_chain_layout([39, 39], source_video=True).total_frames == 56
     assert compute_h3_chain_layout([22, 39]).total_frames == 39   # without a source 22 stays fine
+
+
+# --------------------------------------------------------------------------- #
+# retake: the one clip is an input video's window, its head and tail fixed (台帳 §1-123)
+# --------------------------------------------------------------------------- #
+
+RETAKE_KEYS = ["window_px", "head_px", "tail_px", "n_head_v", "n_tail_v", "n_head_a", "n_tail_a", "free_middle_px"]
+
+
+def test_retake_min_frames_constant():
+    # 17 * 4 + 5: T' = 22 latents, 22 - 7 - 7 = 8 left free.
+    assert M.H3_RETAKE_MIN_FRAMES == 73 == 17 * 4 + 5
+    assert _latent_frames(M.H3_RETAKE_MIN_FRAMES) - 2 * M.H3_CHAIN_OVERLAP_LATENTS == 8
+    assert _latent_frames(M.H3_RETAKE_MIN_FRAMES - 17) - 2 * M.H3_CHAIN_OVERLAP_LATENTS == 3
+
+
+#: (F, T', A, ts_a = ceil((F-22)*5/3), te_a nominal = min(A, round(F*4000/3)//800), the "retake" block)
+RETAKE_EXPECTED = [
+    # T' = 22, A = round(121.67) = 122, ts_a = ceil(51*5/3) = 85,
+    # round(97333.3) = 97333 // 800 = 121 (latent 121 holds the right zero padding)
+    (73, 22, 122, 85, 121, {"window_px": 73, "head_px": 22, "tail_px": 22, "n_head_v": 7, "n_tail_v": 7,
+                            "n_head_a": 36, "n_tail_a": 36, "free_middle_px": [22, 51]}),
+    # T' = 37, A = round(206.67) = 207, ts_a = ceil(102*5/3) = 170, 165333 // 800 = 206
+    (124, 37, 207, 170, 206, {"window_px": 124, "head_px": 22, "tail_px": 22, "n_head_v": 7, "n_tail_v": 7,
+                              "n_head_a": 36, "n_tail_a": 36, "free_middle_px": [22, 102]}),
+    # T' = 142, A = round(801.67) = 802, ts_a = ceil(459*5/3) = 765, 641333 // 800 = 801
+    (481, 142, 802, 765, 801, {"window_px": 481, "head_px": 22, "tail_px": 22, "n_head_v": 7, "n_tail_v": 7,
+                               "n_head_a": 36, "n_tail_a": 36, "free_middle_px": [22, 459]}),
+]
+
+
+@pytest.mark.parametrize("f, t_lat, a_lat, ts_a, te_a, block", RETAKE_EXPECTED)
+def test_retake_expected_rows(f, t_lat, a_lat, ts_a, te_a, block):
+    lay = compute_h3_chain_layout([f], retake=True)
+    assert lay.clip_latent_frames == [t_lat] and lay.clip_audio_latents == [a_lat]
+    assert lay.total_frames == f and lay.to_dict()["total_px"] == f
+    assert (lay.retake_audio_tail_start, lay.retake_audio_tail_start + lay.retake_n_tail_a) == (ts_a, te_a)
+    d = lay.to_dict()
+    assert list(d["retake"]) == RETAKE_KEYS
+    assert d["retake"] == block
+    # the free video middle, in latents: T' - 14
+    assert t_lat - d["retake"]["n_head_v"] - d["retake"]["n_tail_v"] == t_lat - 14
+
+
+def test_retake_audio_tail_end_with_and_without_a_padded_latent():
+    # F = 73: 73 * 5/3 = 121.67, A = 122 but the samples cover only 121 whole
+    # latents, so one latent (121) holds the right zero padding and stays free.
+    # te_a (the tail's exclusive end) is ts_a + n_tail_a.
+    lay = compute_h3_chain_layout([73], retake=True)
+    assert (lay.clip_audio_latents[0], lay.retake_audio_tail_start + lay.retake_n_tail_a) == (122, 121)
+    # F = 90 (17*5+5, a multiple of 3): 90 * 4000/3 = 120,000 = 800 * 150 = 800 * A exactly,
+    # no padded latent, the tail runs to A.
+    assert 90 * 4000 % 3 == 0 and 90 * 4000 // 3 % 800 == 0
+    lay = compute_h3_chain_layout([90], retake=True)
+    assert (lay.clip_audio_latents[0], lay.retake_audio_tail_start + lay.retake_n_tail_a) == (150, 150)
+    assert lay.retake_audio_tail_start == 114 and lay.to_dict()["retake"]["n_tail_a"] == 36
+    # Over the whole grid: te_a is A or A - 1, and A - 1 exactly when 5F/3 has a fraction of 2/3 (F = 1 mod 3).
+    for f in GRID:
+        if f < M.H3_RETAKE_MIN_FRAMES:
+            continue
+        lay = compute_h3_chain_layout([f], retake=True)
+        a = lay.clip_audio_latents[0]
+        te = min(a, round(Fraction(f * 4000, 3)) // 800)
+        assert te == a - (1 if f % 3 == 1 else 0)
+        assert lay.retake_audio_tail_start == -(-(f - 22) * 5 // 3)
+        assert lay.retake_n_tail_a == max(0, te - lay.retake_audio_tail_start)
+
+
+def test_retake_is_a_one_clip_chain_plus_the_retake_block():
+    for f in (73, 124, 481):
+        d = compute_h3_chain_layout([f], retake=True).to_dict()
+        d.pop("retake")
+        # The one-clip geometry is what a single-clip V2V layout carries without its block.
+        ref = compute_h3_chain_layout([f], source_video=True).to_dict()
+        ref.pop("v2v")
+        assert d == ref and list(d) == list(ref)
+        assert d["segment_seam_junctions"] == [] and d["all_junctions"] == []
+
+
+def test_plain_and_v2v_layouts_have_no_retake_block():
+    for frames, sv in (([73, 56], False), ([124, 124, 124], False), ([124], True), ([56, 39], True)):
+        lay = compute_h3_chain_layout(frames, source_video=sv)
+        assert "retake" not in lay.to_dict()
+        assert lay.retake_window_px is None
+        assert (lay.retake_audio_tail_start, lay.retake_n_tail_a) == (0, 0)
+
+
+@pytest.mark.parametrize("frames, match", [
+    ([56], r"^clips\[0\]: retake window \(56\) must be at least 73 frames \(head 22 \+ tail 22 \+ a free middle\)$"),
+    ([22], r"^clips\[0\]: retake window \(22\) must be at least 73 frames "),
+    ([74], r"^clips\[0\]: num_frames must be 17n\+5$"),
+    ([124, 124], r"^retake needs exactly 1 clip \(got 2\)$"),
+    ([], r"^chain needs 1\.\.24 clips \(got 0\)$"),
+])
+def test_retake_refusals(frames, match):
+    with pytest.raises(ValueError, match=match):
+        compute_h3_chain_layout(frames, retake=True)
+
+
+def test_retake_with_source_video_is_refused():
+    with pytest.raises(ValueError, match=r"^retake cannot be combined with an input video \(source_video\)$"):
+        compute_h3_chain_layout([124], source_video=True, retake=True)

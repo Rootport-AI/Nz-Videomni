@@ -78,17 +78,20 @@ def _stub_pipe(monkeypatch, rec: _Recorder, *, device="cpu", fail_at=None, break
         g = torch.Generator().manual_seed(int(req.seed))
         video = torch.randn(1, CH_LAT, t, LH, LW, generator=g)
         audio = torch.randn(2, CH_AUD, a, generator=g)
-        # What denoise_mask.finish does: the m == 0 rows come back as their clean latents.
+        # What denoise_mask.finish does: the m == 0 rows come back as their clean latents
+        # (wherever they are: a retake's tail too).
         for fix, out in ((kw.get("video_fix"), video), (kw.get("audio_fix"), audio)):
             if fix is not None:
-                n = sum(1 for v in fix[1] if v == 0.0)
-                out[:, :, :n] = fix[0][:, :, :n]
+                zero = [j for j, v in enumerate(fix[1]) if v == 0.0]
+                out[:, :, zero] = fix[0][:, :, zero]
         if break_head and kw.get("video_fix") is not None:
             video[:, :, 0] += 1.0
         return video, audio, "on"
 
     def decode(req, video, audio, entry, keep=False, source_wave=None, **kw):
-        rec.calls.append(("decode", req, video, audio, keep, kw))
+        rec.calls.append(("decode", req, video, audio, keep, kw, source_wave))
+        # What the real _decode records: the frames in the mp4.
+        entry["frames"] = int(req.num_frames) - int(kw.get("trim_head") or 0)
         if kw.get("trim_head"):
             # What the real _decode records for a trimmed decode (tests/test_h3_source_tail.py).
             entry.update(decoded_frames=req.num_frames, trimmed_frames=kw["trim_head"], trimmed_audio_samples=29333,
@@ -864,3 +867,375 @@ def test_v2v_and_i2v_refused_before_any_stage(monkeypatch, tmp_path, make, match
     with pytest.raises(ValueError, match=match):
         CH.run_chain_h3(pipe, make(tmp_path), _progress_into(rec), lambda m: None)
     assert rec.calls == [("release",)]                   # nothing read, no stage ran
+
+
+# --------------------------------------------------------------------------- #
+# retake: the window's head and tail fixed, the middle redrawn (台帳 §1-123)
+# --------------------------------------------------------------------------- #
+
+#: A 124-frame window: T' = 37, A = 207, h_a = 36, ts_a = ceil(102 * 5/3) = 170,
+#: N = round(124 * 4000/3) = 165333 samples, te_a (whole audio) = 165333 // 800 = 206.
+RT_F, RT_T, RT_A, RT_HA, RT_TSA, RT_N, RT_TEA = 124, 37, 207, 36, 170, 165333, 206
+
+#: The retake block: the layout's eight keys (the LTX retake's), then the run's.
+GOLDEN_RETAKE_KEYS = [
+    "window_px", "head_px", "tail_px", "n_head_v", "n_tail_v", "n_head_a", "n_tail_a", "free_middle_px",
+    "audio_strength", "source_had_audio", "audio_frozen", "muxed_original_waveform", "decoded_frames_px",
+]
+
+
+def _retake_stubs(monkeypatch, pipe, rec, *, samples=RT_N):
+    """The window's reading (``samples`` of audio; None = a file without audio) and
+    ``_encode_source_tail`` as stubs. ``load_source_waveform`` keeps the real rule
+    for ``keep_samples`` (a shortfall over 32 samples fails); the encode returns
+    T'(F) video latents and ``min(A, N // 800)`` audio ones (the real rule),
+    seeded with SRC_SEED."""
+    import numpy as np
+
+    from engine_h3 import source_audio as SA
+    from engine_h3 import source_tail as ST
+
+    def read_tail(path, width, height, frames):
+        rec.calls.append(("read_source", path, width, height, frames))
+        return np.zeros((frames, height, width, 3), np.uint8), {"source_size": [1920, 1080], "frames_read": frames}
+
+    def load_wave(path, *, keep_samples, read_samples):
+        rec.calls.append(("read_source_audio", path, keep_samples, read_samples))
+        n = min(samples, read_samples)
+        if n < keep_samples - 32:
+            raise ValueError("音声が映像より短いです")
+        rec.wave = torch.randn(2, max(n, keep_samples), generator=torch.Generator().manual_seed(5))
+        return rec.wave, {}
+
+    def encode_source_tail(frames, wave, entry, index, total):
+        n = int(frames.shape[0])
+        rec.calls.append(("source_encode", tuple(frames.shape), None if wave is None else int(wave.shape[-1]),
+                          index, total))
+        g = torch.Generator().manual_seed(SRC_SEED)
+        video = torch.randn(1, CH_LAT, P.latent_frames(n), LH, LW, generator=g)
+        freeze = 0 if wave is None else min(P.audio_latents(n), int(wave.shape[-1]) // 800)
+        audio = torch.randn(2, CH_AUD, freeze, generator=g) if freeze else None
+        rec.source_latents = (video, audio)
+        entry.update(frames_read=n, freeze_ka=freeze, source_had_audio=wave is not None)
+        pipe._progress("encode", index, total)
+        return video, audio
+
+    monkeypatch.setattr(ST, "read_source_tail", read_tail)
+    monkeypatch.setattr(ST, "has_audio_stream", lambda path: samples is not None)
+    monkeypatch.setattr(SA, "load_source_waveform", load_wave)
+    monkeypatch.setattr(pipe, "_encode_source_tail", encode_source_tail)
+
+
+def _retake_spec(frames=(RT_F,), s=0.0, **kw):
+    spec = _spec(frames=frames, **kw)
+    spec.retake = CH.H3ChainRetake(path="in/_retake_window.mp4", audio_strength=s)
+    return spec
+
+
+@pytest.mark.parametrize("s", [0.0, 0.5, 1.0])
+def test_retake_fix_head_and_tail_fixed_middle_at_one_minus_s(s):
+    layout = compute_h3_chain_layout([RT_F], retake=True)
+    cv = torch.randn(1, CH_LAT, RT_T, LH, LW)
+    ca = torch.randn(2, CH_AUD, RT_TEA)
+    (fv, per_v), (fa, per_a) = CH.retake_fix(cv, ca, layout, s)
+    assert torch.equal(fv, cv) and fv.dtype == torch.float32
+    assert per_v == [0.0] * 7 + [1.0] * (RT_T - 14) + [0.0] * 7
+    assert tuple(fa.shape) == (2, CH_AUD, RT_A) and fa.dtype == torch.float32
+    assert torch.equal(fa[:, :, :RT_TEA], ca) and bool((fa[:, :, RT_TEA:] == 0).all())
+    assert per_a == [0.0] * RT_HA + [1.0 - s] * (RT_TSA - RT_HA) + [0.0] * (RT_TEA - RT_TSA) + [1.0] * (RT_A - RT_TEA)
+    assert per_a[-1] == 1.0                           # the latent holding the zero padding stays free
+
+
+def test_retake_fix_without_audio_gives_no_audio_fix():
+    layout = compute_h3_chain_layout([73], retake=True)
+    (fv, per_v), audio_fix = CH.retake_fix(torch.randn(1, CH_LAT, 22, LH, LW), None, layout, 0.5)
+    assert audio_fix is None and per_v == [0.0] * 7 + [1.0] * 8 + [0.0] * 7
+
+
+@pytest.mark.parametrize("te_a", [100, RT_TSA, 20, 0])
+def test_retake_fix_short_audio_freezes_what_was_read(te_a):
+    """te_a <= ts_a: no fixed tail, [h_a, te_a) at 1 - s; te_a < h_a: the head is cut there too."""
+    layout = compute_h3_chain_layout([RT_F], retake=True)
+    _v, (fa, per_a) = CH.retake_fix(torch.randn(1, CH_LAT, RT_T, LH, LW), torch.randn(2, CH_AUD, te_a), layout, 0.5)
+    h = min(RT_HA, te_a)
+    assert per_a == [0.0] * h + [0.5] * (te_a - h) + [1.0] * (RT_A - te_a)
+    assert len(per_a) == RT_A and tuple(fa.shape) == (2, CH_AUD, RT_A)
+
+
+@pytest.mark.parametrize("s, keep_samples", [(0.0, 1), (0.5, 1), (1.0, RT_N)])
+def test_retake_runs_the_window(monkeypatch, s, keep_samples):
+    rec = _Recorder()
+    pipe, original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec)
+    logs: list[str] = []
+    done = CH.run_chain_h3(pipe, _retake_spec(s=s), _progress_into(rec), logs.append)
+    layout = compute_h3_chain_layout([RT_F], retake=True)
+
+    kinds = [c[0] for c in rec.calls]
+    # The window (and its audio) is read before any model; its encode follows the text encoder.
+    assert kinds == ["read_source", "read_source_audio", "encode", "source_encode", "denoise",
+                     "release", "decode", "release"]
+    assert rec.calls[0] == ("read_source", "in/_retake_window.mp4", 96, 64, RT_F)
+    assert rec.calls[1] == ("read_source_audio", "in/_retake_window.mp4", keep_samples, RT_N)
+    enc = [c for c in rec.calls if c[0] == "encode"]
+    assert enc[0][3] is True                                  # has_cond: the VAE step is counted
+    assert rec.calls[3] == ("source_encode", (RT_F, 64, 96, 3), RT_N, 4, 4)
+
+    # The fixed rows: the window's own latents at its head and tail.
+    src_v, src_a = rec.source_latents
+    den = next(c for c in rec.calls if c[0] == "denoise")
+    (cv, per_v), (ca, per_a) = den[2]["video_fix"], den[2]["audio_fix"]
+    assert torch.equal(cv, src_v) and per_v == [0.0] * 7 + [1.0] * (RT_T - 14) + [0.0] * 7
+    assert torch.equal(ca[:, :, :RT_TEA], src_a)
+    assert per_a == [0.0] * RT_HA + [1.0 - s] * (RT_TSA - RT_HA) + [0.0] * (RT_TEA - RT_TSA) + [1.0]
+    assert den[2]["video_inject_clean"] == CH.CHAIN_INJECT_CLEAN == 1.0
+    assert den[2]["cond_clean"] is None and den[2]["refs"] is None
+
+    # Progress: clip 0's encode counts 4 steps, the window's encode being the 4th.
+    # (The stubbed text encoder counts its own 3; the window's step gets encode_steps(has_cond=True).)
+    lines = [p for p in rec.progress if p[0] == "encode"]
+    assert lines[-1][1:3] == (4, 4) and lines[-1][3] == {"outer_index": 0, "outer_total": 1}
+    assert pipe._progress is original
+
+    # The decode: the whole window, untrimmed, the original waveform only at 1.0.
+    dec = next(c for c in rec.calls if c[0] == "decode")
+    assert dec[1].num_frames == RT_F and dec[5] == {"trim_head": 0}
+    if s == 1.0:
+        assert dec[6] is rec.wave
+    else:
+        assert dec[6] is None
+
+    assert done["num_frames"] == RT_F
+    chain = done["chain"]
+    plain = layout.to_dict()
+    retake_layout = plain.pop("retake")
+    assert list(chain) == list(plain) + ["seeds", "clips", "h3", "retake"]
+    assert {k: chain[k] for k in plain} == plain
+    assert list(chain["retake"]) == GOLDEN_RETAKE_KEYS
+    assert chain["retake"] == {
+        **retake_layout, "n_tail_a": RT_TEA - RT_TSA, "audio_strength": s, "source_had_audio": True,
+        "audio_frozen": True, "muxed_original_waveform": s == 1.0, "decoded_frames_px": RT_F,
+    }
+    assert retake_layout == {"window_px": 124, "head_px": 22, "tail_px": 22, "n_head_v": 7, "n_tail_v": 7,
+                             "n_head_a": 36, "n_tail_a": 36, "free_middle_px": [22, 102]}
+    assert "v2v" not in chain
+    assert [c["head_equals_prev_tail"] for c in chain["clips"]] == [None]
+    assert list(chain["clips"][0]["seconds"]) == ["encode", "source_encode", "denoise"]
+    assert any("retake: fixed head and tail" in m for m in logs)
+
+
+def test_retake_decoded_frames_are_the_decode_entrys(monkeypatch):
+    """``decoded_frames_px`` is the decode's ``frames`` (``trim_head=0`` writes no ``decoded_frames``)."""
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec)
+    real_decode = pipe._decode
+
+    def decode(req, video, audio, entry, **kw):
+        size = real_decode(req, video, audio, entry, **kw)
+        entry["frames"] = 123
+        assert "decoded_frames" not in entry
+        return size
+
+    monkeypatch.setattr(pipe, "_decode", decode)
+    done = CH.run_chain_h3(pipe, _retake_spec(), _progress_into(rec), lambda m: None)
+    assert done["chain"]["retake"]["decoded_frames_px"] == 123
+
+
+def test_retake_without_audio_track_at_strength_zero(monkeypatch):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec, samples=None)
+    done = CH.run_chain_h3(pipe, _retake_spec(s=0.0), _progress_into(rec), lambda m: None)
+    assert "read_source_audio" not in [c[0] for c in rec.calls]
+    den = next(c for c in rec.calls if c[0] == "denoise")
+    assert den[2]["audio_fix"] is None and den[2]["video_fix"] is not None
+    dec = next(c for c in rec.calls if c[0] == "decode")
+    assert dec[6] is None
+    retake = done["chain"]["retake"]
+    assert (retake["source_had_audio"], retake["audio_frozen"], retake["muxed_original_waveform"]) == (
+        False, False, False)
+    assert retake["n_tail_a"] == 0
+
+
+@pytest.mark.parametrize("s", [0.5, 1.0])
+def test_retake_without_audio_track_above_zero_is_refused(monkeypatch, s):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec, samples=None)
+    with pytest.raises(RuntimeError, match="音声トラックがありません"):
+        CH.run_chain_h3(pipe, _retake_spec(s=s), _progress_into(rec), lambda m: None)
+    assert [c[0] for c in rec.calls] == ["read_source", "release"]   # no model stage ran
+
+
+def test_retake_short_audio_at_strength_one_fails(monkeypatch):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec, samples=100000)
+    with pytest.raises(ValueError, match="音声が映像より短いです"):
+        CH.run_chain_h3(pipe, _retake_spec(s=1.0), _progress_into(rec), lambda m: None)
+    assert [c[0] for c in rec.calls] == ["read_source", "read_source_audio", "release"]
+
+
+@pytest.mark.parametrize("samples, te_a", [(100000, 125), (150000, 187), (20000, 25)])
+def test_retake_short_audio_below_one_freezes_what_was_read(monkeypatch, samples, te_a):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec, samples=samples)
+    done = CH.run_chain_h3(pipe, _retake_spec(s=0.5), _progress_into(rec), lambda m: None)
+    den = next(c for c in rec.calls if c[0] == "denoise")
+    ca, per_a = den[2]["audio_fix"]
+    h, ts = min(RT_HA, te_a), min(RT_TSA, te_a)
+    assert per_a == [0.0] * h + [0.5] * (ts - h) + [0.0] * (te_a - ts) + [1.0] * (RT_A - te_a)
+    assert torch.equal(ca[:, :, :te_a], rec.source_latents[1])
+    assert done["chain"]["retake"]["n_tail_a"] == max(0, te_a - RT_TSA)
+    assert done["chain"]["retake"]["audio_frozen"] is True
+
+
+def test_retake_audio_track_without_samples_is_generated_freely(monkeypatch):
+    from engine_h3 import source_audio as SA
+
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec)
+
+    def no_samples(path, *, keep_samples, read_samples):
+        raise ValueError("1 サンプルも読めませんでした")
+
+    monkeypatch.setattr(SA, "load_source_waveform", no_samples)
+    logs: list[str] = []
+    done = CH.run_chain_h3(pipe, _retake_spec(s=0.5), _progress_into(rec), logs.append)
+    den = next(c for c in rec.calls if c[0] == "denoise")
+    assert den[2]["audio_fix"] is None
+    assert done["chain"]["retake"]["source_had_audio"] is False
+    assert any("generating audio freely" in m for m in logs)
+
+
+@pytest.mark.parametrize("where", ["video head", "video tail", "audio head", "audio tail"])
+def test_retake_fixed_rows_that_are_not_the_window_are_refused(monkeypatch, where):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec)
+    stub = pipe._denoise
+
+    def broken(*a, **kw):
+        video, audio, used = stub(*a, **kw)
+        {"video head": lambda: video[:, :, 0].add_(1.0), "video tail": lambda: video[:, :, -1].add_(1.0),
+         "audio head": lambda: audio[:, :, 0].add_(1.0), "audio tail": lambda: audio[:, :, RT_TEA - 1].add_(1.0)}[where]()
+        return video, audio, used
+
+    monkeypatch.setattr(pipe, "_denoise", broken)
+    with pytest.raises(RuntimeError, match="retake window's fixed head / tail"):
+        CH.run_chain_h3(pipe, _retake_spec(s=0.5, keep_resident=True), _progress_into(rec), lambda m: None)
+    assert not any(c[0] == "decode" for c in rec.calls) and rec.released == 1
+
+
+def test_retake_middle_changes_pass_the_self_check(monkeypatch):
+    """Only the head and the tail are checked: the redrawn middle (and the audio past te_a) may differ."""
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec)
+    stub = pipe._denoise
+
+    def middle(*a, **kw):
+        video, audio, used = stub(*a, **kw)
+        video[:, :, 7:-7] += 1.0
+        audio[:, :, RT_HA:RT_TSA] += 1.0
+        audio[:, :, RT_TEA:] += 1.0
+        return video, audio, used
+
+    monkeypatch.setattr(pipe, "_denoise", middle)
+    CH.run_chain_h3(pipe, _retake_spec(s=1.0), _progress_into(rec), lambda m: None)
+
+
+@pytest.mark.parametrize("make, match", [
+    (lambda tp: _with_source(_retake_spec()), "V2V"),
+    (lambda tp: _retake_spec(frames=(RT_F, 39)), r"クリップは 1 本です（2 本）"),
+    (lambda tp: _with_images(_retake_spec(), 0, tp), "キーフレーム"),
+    (lambda tp: _with_refs(_retake_spec(), tp), "参照"),
+    (lambda tp: _retake_spec(s=1.5), "0〜1"),
+    (lambda tp: _retake_spec(s=-0.1), "0〜1"),
+    (lambda tp: _retake_spec(s=float("nan")), "0〜1"),
+    (lambda tp: _retake_spec(s=True), "0〜1"),
+    (lambda tp: _retake_spec(frames=(56,)), "at least 73"),
+    (lambda tp: _retake_spec(frames=(125,)), "17n\\+5"),
+])
+def test_retake_refused_before_any_stage(monkeypatch, tmp_path, make, match):
+    rec = _Recorder()
+    pipe, _original = _stub_pipe(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec)
+    with pytest.raises(ValueError, match=match):
+        CH.run_chain_h3(pipe, make(tmp_path), _progress_into(rec), lambda m: None)
+    assert rec.calls == [("release",)]                   # nothing read, no stage ran
+
+
+def _with_source(spec):
+    spec.source = CH.H3ChainSource(path="in/tail.mp4", context_frames=22)
+    return spec
+
+
+def _with_refs(spec, tmp_path):
+    path = tmp_path / "a.wav"
+    path.write_bytes(b"x")
+    spec.clips = (dataclasses_replace(spec.clips[0], references=(P.H3ReferenceInput("audio", str(path), 1),)),)
+    return spec
+
+
+def test_real_denoise_retake_keeps_head_and_tail(monkeypatch, tmp_path):
+    """A 73-frame window through run_chain_h3 with the REAL denoise on the tiny DiT:
+    the masks put the head and the tail back bit for bit (the self-check passes),
+    the middle is redrawn, and the mask record carries the chain's coefficient."""
+    from test_h3_engine import TEXT, _fake_int8, _tiny_pipe_and_dit
+
+    _fake_int8(monkeypatch)
+    pipe, dit = _tiny_pipe_and_dit(tmp_path)
+    pipe._dit_cfg = dit.cfg
+    pipe._resident = {"dit": dit, "cfg": dit.cfg}
+    text = torch.randn(5, TEXT, generator=torch.Generator().manual_seed(3)).to(torch.bfloat16)
+    rec = _Recorder()
+    decoded = []
+
+    def encode(prompt, phases, images=(), *, has_cond, has_audio=False, refs=None):
+        return text, torch.ones(5, dtype=torch.long)
+
+    def decode(req, video, audio, entry, keep=False, source_wave=None, **kw):
+        decoded.append((video.clone(), audio.clone(), kw))
+        entry["frames"] = int(req.num_frames)
+        return 1
+
+    monkeypatch.setattr(pipe, "_encode", encode)
+    monkeypatch.setattr(pipe, "_decode", decode)
+    _retake_stubs(monkeypatch, pipe, rec, samples=97333)
+    # 64 x 64: the encode stub's latents must be the tiny DiT's grid (4 x 4 at 16 px).
+    from engine_h3 import source_tail as ST
+
+    real_encode = pipe._encode_source_tail
+
+    def encode_window(frames, wave, entry, index, total):
+        _v, audio = real_encode(frames, wave, entry, index, total)
+        video = torch.randn(1, 24, P.latent_frames(int(frames.shape[0])), 4, 4,
+                            generator=torch.Generator().manual_seed(SRC_SEED))
+        rec.source_latents = (video, audio)
+        return video, audio
+
+    monkeypatch.setattr(pipe, "_encode_source_tail", encode_window)
+    assert ST.has_audio_stream("x") is True
+    spec = CH.H3ChainSpec(
+        base=P.H3GenerateRequest(prompt="p", seed=0, width=64, height=64, num_frames=73, output_path="o.mp4",
+                                 num_inference_steps=2, keep_resident=True),
+        clips=(CH.H3ChainClipSpec("a", 73),), seed=11,
+        retake=CH.H3ChainRetake(path="w.mp4", audio_strength=0.5),
+    )
+    done = CH.run_chain_h3(pipe, spec, lambda *a, **k: None, lambda m: None)
+    video, audio, kw = decoded[0]
+    src_v, src_a = rec.source_latents
+    assert kw == {"trim_head": 0}
+    assert tuple(video.shape) == (1, 24, 22, 4, 4) and tuple(audio.shape) == (2, 32, 122)
+    assert torch.equal(video[:, :, :7], src_v[:, :, :7]) and torch.equal(video[:, :, -7:], src_v[:, :, -7:])
+    assert not torch.equal(video[:, :, 7:-7], src_v[:, :, 7:-7])
+    # te_a = min(122, 97333 // 800) = 121; h_a = 36, ts_a = ceil(51 * 5/3) = 85.
+    assert int(src_a.shape[2]) == 121
+    assert torch.equal(audio[:, :, :36], src_a[:, :, :36]) and torch.equal(audio[:, :, 85:121], src_a[:, :, 85:121])
+    assert not torch.equal(audio[:, :, 36:85], src_a[:, :, 36:85])
+    assert done["h3"]["phases"]["clips"][0]["denoise"]["mask"]["video"]["inject_clean"] == 1.0
+    assert done["chain"]["retake"]["n_tail_a"] == 36

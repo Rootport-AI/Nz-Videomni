@@ -85,7 +85,7 @@ def test_two_clip_chain_without_any_source_still_requires_two_clips(client):
         # window geometry (delegated to chain_math)
         ([{"num_frames": 65}], {"retake": _retake()}, "[73, 169]"),
         ([{"num_frames": 177}], {"retake": _retake()}, "[73, 169]"),
-        # glue-band grids (schema-level)
+        # glue-band grids (LTX's family rule, checked by chain_math)
         ([{"num_frames": 169}], {"retake": _retake(head_px=24)}, "head_px must be 8n+1"),
         ([{"num_frames": 169}], {"retake": _retake(tail_px=25)}, "tail_px must be a multiple of 8"),
         # glue bands that leave no middle

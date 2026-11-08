@@ -21797,6 +21797,7 @@ GPU の使用はオーナーの了承を得た。台本・自己検査の結果�
 - 作ったもの: H3 の連結（`POST /generate/chain`）が `retake` を受けるようにしました。入力動画から切り出した窓を 1 本のクリップとして符号化し、頭と尾の 22 フレームを固定行（潜在そのまま・時刻 0.999）にして真ん中だけを描き直し、窓まるごとを返します。真ん中の音声は新しい `retake.audio_strength`（H3 だけ）で元の音声へ寄せ、1.0 では元の波形を出します。操作パネルは Edit タブを開いて Retake だけを生かし、MCP の `submit_chain` はのりしろを既定で送らず、Strength の引数を足しました。
 - 仕組みの正本は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.4、裁定は同 裁定 96、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.112 の §6.2 の補足と §6.2b (h)、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §163、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D33 です。
 - **追記（2026-11-08）**: オーナーの目視・試聴を経て、Strength の既定は 0.5 になりました。音声の無い動画は Strength 0 を明示します。長い窓の場面のカットは H3 の性質として既知の限界にしました（200.9）。
+- **追記（2026-11-08 夜）**: 音声の無い素材の 422 を専用コード `RETAKE_VIDEO_NO_AUDIO` に分け、操作パネルは黄色の注意で直し方を案内するようにしました。オーナーの実機確認は 6 項目が合格し、黄色の注意の確認と LTX 切り替えの 1 本が残りです（200.10）。
 - 範囲外: Gradio（Retake の画面がもともと無い）・Retake の窓の快適上限のマーカー・Inpainting と Outpainting と Alpha Gen（台帳 §1-124 以降）・映像の固定行の時刻 1.0 とその計測・のりしろの可変化・頭と尾だけ元の波形にする波形のつなぎ合わせ・MCP の V2V の `source_video_context_frames` の既定 73 の見直し・Ref2VA との併用（今回は排他）。
 
 ### 200.2 計画と計画段階の敵対的レビュー
@@ -22018,3 +22019,79 @@ GPU の使用はオーナーの了承を得た。台本・自己検査の結果�
 | 操作パネル | `npm run typecheck` 合格。`npx vitest run --exclude "**/backend.integration.test.ts"` は 181 ファイル・3,643 件合格。aux2 を再ビルドし（ネイティブの単体テスト 402 件合格・7 件は飛ばす既存の項目）、実機と配布用の 2 箇所へ配置済み（3 つのファイルの SHA-256 が一致） |
 
 **変更の中身**: `services/engines/h3/adapter.py` の配信値 1 行・MCP の説明文 3 箇所（無音の動画は 0 を明示する注意を含む）・テスト 2 ファイル（`tests/test_h3_retake_api.py` に「無音の動画で 0 を明示→202」「省略→422」の 2 本）・操作パネルのモックとテスト 4 ファイルと、フロントエンド `Docs/DEVLOG.md` §163 の追記。
+
+### 200.10 音声の無い素材の 422 に専用コード `RETAKE_VIDEO_NO_AUDIO`・操作パネルの黄色の注意・オーナーの実機確認（2026-11-08）
+
+**結論**: 撮り直しの事前検査で「元の音声を使う指定（LTX は `regenerate_audio=false`、H3 は `audio_strength` > 0）なのに素材に音声トラックが無い」ときの 422 を、新しい専用コード **`RETAKE_VIDEO_NO_AUDIO`** で返すようにしました。窓の超過は従来の `RETAKE_WINDOW_OUT_OF_RANGE` のままです。操作パネルの Retake 画面は、このコードのときだけ赤いエラーカードの代わりに黄色の注意を出し、直し方（H3 は Strength を 0、LTX は「映像と音声」）を案内します。オーナーの実機確認（既定 0.5 の版）は台帳の 6 項目が合格しました。黄色の注意の実機確認と、LTX へ切り替えての Retake 1 本は未了です。API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.114、設計は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.4・裁定 96、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §164、コードの一覧はフロントエンド `Docs/API_REFERENCE.md` のエラー表です。
+
+#### 背景（なぜ変えたか）
+
+Strength の既定を 0.5 にした結果（200.9 の裁定 1・2）、音声トラックの無い動画を既定のまま撮り直すと、事前検査が 422 で断ります。これまでの 422 は窓の超過と同じ `RETAKE_WINDOW_OUT_OF_RANGE` で、`message` も同じ「the requested retake window does not fit the uploaded video」、違いは `detail` の英文（"… has no audio stream"）だけでした。操作パネルの送信の共通の仕組みは `code` と `message` だけを残して `detail` を捨てるので、画面には「窓が素材に収まらない」という誤解を招く英文が赤いカードで出て、「Strength を 0 にすれば送れる」が伝わりませんでした（オーナーの実機確認。2026-11-08）。オーナーの要望は「Strength を 0 にしてください」という黄色い注意を出すことで、パネル側に音声の有無を事前に調べる仕組みは作らないことです。
+
+専用コードに分けた根拠: サーバーには 1 つの事象に専用のコードを割り当てる前例（`REFERENCE_AUDIO_NO_STREAM`・`SOURCE_AUDIO_NOT_FOUND`）と、「利用者の直し方が同じなら分けない」と書いた前例（`END_SOURCE_NOT_FOUND`）があります。今回は直し方が違う（窓の超過＝区間を直す／音声なし＝Strength を 0 にする）ので、分ける側に当たります。`detail` の英文をパネルで見分ける案は、文の変更で壊れやすいので採りませんでした。
+
+#### 計画の要点
+
+- サーバー: 事前検査の「音声なし」の枝だけを `RETAKE_VIDEO_NO_AUDIO`（422）で返す。条件と `detail` の文は変えない。LTX と H3 は同じ関数を通るので、両系統とも新しいコードになる。
+- 操作パネル: 送信失敗の `code` が `RETAKE_VIDEO_NO_AUDIO` のときだけ、赤いカードを黄色の注意（既存の `warning-banner warning-banner-mild`）に置き換える。`detail` は読まない。文言は「この動画には音声トラックがありません。…」で始め、LTX の画面に常時出ている注意 `noticeSilentAudio`（音声トラックはあるが無音の区間の話）と矛盾して見えないようにする。`noticeSilentAudio` は変えない。
+- MCP: 説明文のコード名を直すだけ（コードで分岐する箇所は無い）。
+- 意図して旧コードのまま残す箇所: Inpainting 側が「撮り直しの `RETAKE_WINDOW_OUT_OF_RANGE` の鏡」と書いている箇所（窓の超過の鏡なので正しい）と、過去の履歴（仕様書の v0.5.113 の行、本記録簿の 200.9 まで）。
+- 範囲外: パネル側での音声の有無の事前判定・ブリッジやアップロード応答への欄の追加・`detail` を全エラーで画面に出す変更・Inpainting と Outpainting の同種の 422 の見直し・Gradio。
+
+#### 計画段階の敵対的レビューの採否（Major 1・Minor 6・過剰設計の候補 5・見落とし 3）
+
+指摘の記号は、M が重要、m が軽微、O が過剰設計の候補、K が見落としです。
+
+| 指摘 | 採否 | 反映 |
+|---|---|---|
+| M1 LTX の画面に常時出る `noticeSilentAudio`（「無音のままにしたいときは『映像のみ』」）と、黄色の注意（「『映像と音声』にしてください」）が矛盾して見える | 採用（文言で解消） | 黄色の注意を「この動画には音声トラックがありません。…」とし、音声トラックが無い場合の話だと分かるようにする。`noticeSilentAudio`（トラックはあるが無音の区間の話）は変えない |
+| m1 キー名が既存の規則に合っていない | 採用 | `noAudioWarning`／`noAudioStrengthWarning` |
+| m2 英語と日本語で文の形が違う | 採用 | 英語も項目名と選択肢の両方を書く |
+| m3 仕様書が `detail` の英文を引用している | O1 を採ったので不要 | `detail` は不変 |
+| m4 工場関数の形の説明と message の語（"keep" は H3 の 0.5 に合わない） | 採用 | 署名の手本を正しく書き、message は "uses" に |
+| m5 API_REFERENCE の「最終更新」行 | 採用 | 操作パネル担当が更新 |
+| m6 テストは文言で探す | 採用 | 操作パネルのテスト |
+| O1 `detail` を系統ごとに 2 枝に分ける案 | 採用（削る） | 工場関数の差し替え 1 行だけ。`detail` は現状のまま |
+| O2 API_REFERENCE に 3 行 | 採用（縮める） | 404 は既存の行へ、422 は 2 行 |
+| O3 黄色で赤を置き換える／JSX は三項演算子 1 つ | 採用 | 操作パネルの実装 |
+| O4 `role="status"` | 据え置き | 生成ボタン脇の黄色の注意の前例に合わせる |
+| O5 ラベルの語の重複 | 採用（承知のうえ据え置き） | 関数化しない |
+| K1 MCP のコード名の無い 2 か所 | 採用 | MCP の説明文 |
+| K2 旧コードのまま残す箇所の明記 | 採用 | 上の「計画の要点」 |
+| K3 Gradio・パネル・テストに他の依存無し | 確認 | 変更なし |
+
+レビューがコードで裏付けた前提: 系統の検査が事前検査より先に走り、H3 は `regenerate_audio=false` を、LTX 2.3／2.5 は `audio_strength` を先に断るので、事前検査で真になる条件は系統ごとに片方だけです。事前検査の呼び出し元は 1 か所、送信の共通の仕組みは `detail` を捨てます。
+
+#### 実装の要約
+
+- サーバー: `api/errors.py` に工場関数 `retake_video_no_audio(video_id, detail=None)` を足しました（code `RETAKE_VIDEO_NO_AUDIO`、status 422、message "the retake uses the window's original audio, but retake.video_id has no audio stream: <id>"）。`retake_window_out_of_range` の説明文からは音声の 1 文を外し、窓の超過だけにしました。`services/pipeline_manager.py` の `preflight_retake_window` は、音声なしの枝の送出 1 行を差し替えただけで、条件と `detail` の文は従来のままです。
+- **LTX で変わる点**: `regenerate_audio=false` で音声の無い素材を送ったときの 422 のコードと `message` が変わります。`detail` は変わりません。クライアントでこのコードを分岐している箇所は、操作パネル・MCP とも無かったことを確かめています。
+- MCP: `mcp_server/tools/generate.py`・`mcp_server/server.py` の説明文 3 か所のコード名を新しいものに直し、コード名の無かった 2 か所にも添えました。
+- 操作パネル: `webui/src/modes/edit/EditScreen.tsx` の Retake の送信失敗の表示を、コードで分けました（`RETAKE_VIDEO_NO_AUDIO` だけ黄色の注意、それ以外は従来の赤いカード）。`webui/src/i18n/strings.ts` に文言のキー `noAudioStrengthWarning`（H3。「この動画には音声トラックがありません。「音声の Strength」を 0 にしてください。」／"This video has no audio track. Set “Audio Strength” to 0."）と `noAudioWarning`（LTX。「この動画には音声トラックがありません。「撮り直す対象」を「映像と音声」にしてください。」／"This video has no audio track. Set “What to redo” to “Picture and sound”."）を足しました。音声の有無の事前判定は作らず、`noticeSilentAudio` も変えていません。フロントエンド `Docs/API_REFERENCE.md` のエラー表に Retake の 3 コードを載せ、`Docs/DEVLOG.md` §164 を書きました。
+
+#### テスト
+
+- サーバー: `tests/test_retake_api.py`（LTX・`regenerate_audio=False`・音声の無い素材）と `tests/test_h3_retake_api.py` の 2 本（H3・Strength 0.5 と省略・音声の無い素材）、計 3 本の照合を `RETAKE_VIDEO_NO_AUDIO` に直しました。窓の超過が `RETAKE_WINDOW_OUT_OF_RANGE` のままであることは既存のテストで担保されています。
+- 操作パネル（`webui/src/modes/edit/EditScreen.retake.test.tsx`）: ① LTX で 422 `RETAKE_VIDEO_NO_AUDIO` なら LTX の文の黄色の注意が出て、エラーコードの表示が無い ② H3 で同じコードなら Strength の文の黄色の注意が出る ③ 既存の 422 `VALIDATION_ERROR` は従来の赤いカードのまま、の 3 本です。
+
+#### 機械の門
+
+| 対象 | 結果 |
+|---|---|
+| 操作パネル | `npm run typecheck` 合格。`npx vitest run --exclude "**/backend.integration.test.ts"` は 181 ファイル・3,645 件合格。aux2 を再ビルドし（ネイティブの単体テスト 402 件合格）、実機と配布用の 2 箇所へ配置済み |
+
+アプリの仮想環境の pytest 全件: 3,932 件・失敗 0・飛ばし 76（既存の torch 依存など）。バックエンドのサーバーが起動中のため、`tests/test_mcp_registration.py` の到達性の 1 件は `--deselect` し、`LTX_MCP_BASE_URL=http://127.0.0.1:1` を付けて単独で回して合格（環境依存。§200.9 と同じ扱い）。弾 1 の対象 5 ファイルは 308 件合格。
+
+#### オーナーの実機確認（2026-11-08。既定 0.5 の版。今回の変更の前）
+
+台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-123 の実機の 6 項目は、すべて合格でした。
+
+1. H3 で Edit タブを開くと、Retake のサブタブだけが操作でき、ほかは灰色になる。
+2. タイムラインの右クリックから Retake を送り、完走する。
+3. 音声の Strength のスライダーとラジオがあり、Stage-2 の欄が無い。
+4. 出力をタイムラインで元の動画に重ねて、継ぎ目とずれが無い。
+5. Outpainting と Inpainting の右クリックは案内だけが出る。
+6. 音声の無い動画で Strength 0.5 のまま送ると 422 になり、0 にすると送れた（このときの画面は旧表示の赤いカード。黄色の注意の確認は今回の変更の後に改めて行う）。
+
+- LTX 2.3 か 2.5 へ切り替えての Retake 1 本は、結果が未報告です（オーナーに確認中）。
+- 長い窓の Strength 0.5 の追加の 1 本（200.9）は、オーナーが目視しました。所見は監督の静止画の所見と同じで、余計なカットは入るものの、背景と人物の一貫性は以前（Strength 0）より向上しています。

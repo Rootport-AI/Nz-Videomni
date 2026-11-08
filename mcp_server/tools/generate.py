@@ -335,6 +335,7 @@ async def submit_generate(
             （Value Sign Flip, arXiv:2508.10931）は正負のコンテキストを連結
             し1回のattentionで処理する方式で、NAGより排除力が強い一方、正
             プロンプトへの忠実度はNAGが上（性格が異なるため選択式）。
+            MiniMax H3 では ``"vsf"`` が必須（既定の ``"nag"`` は 422 FEATURE_UNSUPPORTED）。
         vsf_scale: VSFの負側V（value）への乗算係数α（既定1.5、0〜10、
             ``neg_method="vsf"`` のときのみ意味を持つ。0でも無効化にはなら
             ない）。

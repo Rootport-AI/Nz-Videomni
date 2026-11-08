@@ -37,14 +37,15 @@ key would mean "the load value", not "off"), ``vram16_mode`` (always sent: the
 worker's own default is off, the app's is on), ``source_audio``
 (``{path, strength}``; single-generate A2V only — an absent key is "no source
 audio"), ``references`` (``{kind, path, slot, max_sec?}``; Ref2VA only — an
-absent key is "no references") and ``keep_resident`` (only when asked for — an
+absent key is "no references"), ``nag`` (``{negative_prompt, method,
+vsf_scale}``; VSF only) and ``keep_resident`` (only when asked for — an
 absent key is the release request, the LTX contract). The progress stages are LTX's single-stage
 ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``one_stage=True``; the A2V audio encode is a step of ``encode`` (its own name,
 ``audio_encode``, is a phase in ``done.h3.phases`` only), and a stage name the
 reader does not know holds the bar where it is.
 ``generate_chain`` carries the same keys minus ``num_frames`` / ``images`` /
-``source_audio`` / ``references``, plus ``clips`` (``[{prompt, num_frames,
+``source_audio`` / ``references`` / ``nag``, plus ``clips`` (``[{prompt, num_frames,
 images?, references?}]``; clip 0's ``images`` and a clip's ``references``
 are the single op's shapes and ride only on a clip that has some — an
 absent key is "none") and, for a V2V chain, ``source`` (``{path,
@@ -242,15 +243,17 @@ def _keyframe_strength(r: GenerateRequest) -> bool:
 #: The 422 half: ``(field, feature, is_non_default)``, first offender wins. Every
 #: predicate tests "differs from the default" (for ``strength`` the default is
 #: ``None``: the operation panel omits it when the family has none, and any
-#: value is refused), so a plain T2V / keyframe I2V request passes.
+#: value is refused; ``nag_enabled`` is refused only with ``neg_method`` other
+#: than ``"vsf"``), so a plain T2V / keyframe I2V request passes.
 #:
-#: ``conditioning_images`` appears ONCE here and is also HONOURED: the
-#: keyframes (any frame, up to the schema's count cap) are what this engine
-#: does with it, and this row refuses what it cannot (a strength). The audit
-#: test allows exactly this overlap.
+#: ``conditioning_images`` and ``nag_enabled`` each appear ONCE here and are
+#: also HONOURED: the keyframes (any frame, up to the schema's count cap) and
+#: the VSF negative prompt are what this engine does with them, and these rows
+#: refuse what it cannot (a strength; the NAG method). The audit test allows
+#: exactly these overlaps.
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
-    ("nag_enabled", "nag", lambda r: r.nag_enabled),
+    ("nag_enabled", "nag", lambda r: r.nag_enabled and r.neg_method != "vsf"),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("guidance_scale", "guidance_scale", lambda r: r.guidance_scale != 1.0),
     ("outpaint", "outpaint", lambda r: r.outpaint is not None),
@@ -294,20 +297,25 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         # Ref2VA: the uploads' paths + kind / slot / max_sec reach the worker
         # as the ``references`` payload key.
         "references",
+        # The VSF negative prompt: the ``nag`` payload key ({negative_prompt,
+        # method, vsf_scale}); the NAG method is refused above.
+        "nag_enabled",
+        "negative_prompt",
+        "neg_method",
+        "vsf_scale",
         "crop_output",
         "embed_mp4_metadata",
     }
 )
 
 #: ``field -> the field that governs it``: sub-parameters inert unless their
-#: governor is non-default, and every governor here is refused above. The two
+#: governor is non-default, and every governor here is in the reject table
+#: above (``nag_enabled`` only for the NAG method: the NAG strengths are inert
+#: under VSF). The two
 #: IC-LoRA strengths are the REFERENCE VIDEO's (what they scale), so
 #: ``reference_video_id`` governs them: sent with ``loras`` alone they are
 #: inert here.
 GOVERNED_FIELDS: dict[str, str] = {
-    "negative_prompt": "nag_enabled",
-    "neg_method": "nag_enabled",
-    "vsf_scale": "nag_enabled",
     "nag_scale": "nag_enabled",
     "nag_tau": "nag_enabled",
     "nag_alpha": "nag_enabled",
@@ -394,7 +402,9 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
     }
 )
 
-#: ``field -> the field that governs it``: the single path's eight, each
+#: ``field -> the field that governs it``: the single path's five plus the
+#: three negative-prompt fields the single path honours (the chain refuses
+#: ``nag_enabled`` whatever the method), each
 #: inert unless its governor is non-default, and every governor here is in
 #: :data:`CHAIN_REJECT_TABLE`.
 CHAIN_GOVERNED_FIELDS: dict[str, str] = {
@@ -458,6 +468,8 @@ LORA_VERDICT = _h3_lora_verdict
 def _refusal_detail(field: str, feature: str) -> str:
     if feature == "keyframe_strength":
         return "MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。"
+    if feature == "nag":
+        return "MiniMax H3 のネガティブプロンプトは VSF 方式だけです（neg_method を \"vsf\" にしてください）。"
     return (
         f"MiniMax H3 は {feature} に対応していません"
         f"（リクエストの {field} が既定値ではありません）。"
@@ -879,6 +891,14 @@ class _RealBackendH3(_RealBackend):
         # references: only for a Ref2VA job (an absent key = none).
         if references:
             payload["references"] = references
+        # nag: only for a VSF negative-prompt job (an absent key = none);
+        # reject_unsupported has already held neg_method to "vsf".
+        if request.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": request.negative_prompt,
+                "method": request.neg_method,
+                "vsf_scale": float(request.vsf_scale),
+            }
         payload["output_path"] = str(target)
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
@@ -970,7 +990,7 @@ class _RealBackendH3(_RealBackend):
         references.
 
         The payload is the single ``generate`` one minus ``num_frames`` /
-        ``images`` / ``source_audio`` / ``references``, plus ``clips``
+        ``images`` / ``source_audio`` / ``references`` / ``nag``, plus ``clips``
         (``[{prompt, num_frames}]``; each prompt is the shared one with the
         clip's own appended, :meth:`GenerateChainRequest.clip_prompt`). Clip 0
         with key frames also carries ``images`` (the single op's

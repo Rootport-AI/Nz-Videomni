@@ -7,8 +7,9 @@ This one runs in the app venv, like every other adapter test.
 Pinned here, none of it needing a GPU or a weight file:
 
 1. the four-way audit of ``GenerateRequest`` against the adapter's tables
-   (``conditioning_images`` is the one field that is both honoured and refused —
-   key frames on any frame run, a strength does not);
+   (``conditioning_images`` and ``nag_enabled`` are the fields that are both
+   honoured and refused — key frames on any frame run, a strength does not;
+   the VSF negative prompt runs, the NAG method does not);
 2. the refusals and ``UNSUPPORTED_FEATURES`` (both reject tables' names +
    ``fused_gguf_dequant_kernel`` + ``lora_audio_strength``);
 3. the numeric rules and the ``constraints`` block GET /models publishes, for
@@ -65,9 +66,10 @@ _CLASSIFICATIONS = {
     "governed by another field (GOVERNED_FIELDS)": lambda: set(h3.GOVERNED_FIELDS),
 }
 
-#: The one field allowed in two tables: honoured (the key frames) AND refused
-#: (a strength).
-_ALLOWED_OVERLAP = {"conditioning_images"}
+#: The fields allowed in two tables: honoured AND refused in part
+#: (``conditioning_images``: the key frames run, a strength does not;
+#: ``nag_enabled``: the VSF method runs, the NAG method does not).
+_ALLOWED_OVERLAP = {"conditioning_images", "nag_enabled"}
 
 
 def test_the_four_tables_together_are_exactly_the_schema():
@@ -82,7 +84,7 @@ def test_the_four_tables_together_are_exactly_the_schema():
     assert not classified - fields, f"unknown field(s): {sorted(classified - fields)}"
 
 
-def test_the_four_tables_overlap_only_on_conditioning_images():
+def test_the_four_tables_overlap_only_on_the_allowed_fields():
     seen: dict[str, str] = {}
     overlaps: set[str] = set()
     for label, produce in _CLASSIFICATIONS.items():
@@ -175,6 +177,24 @@ def test_keyframe_strength_message_says_h3_has_none():
     with pytest.raises(APIError) as ei:
         h3.reject_unsupported(_request(conditioning_images=[{"image_id": "a", "frame_idx": 17, "strength": 0.5}]))
     assert ei.value.detail == "MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。"
+
+
+def test_vsf_negative_prompt_is_accepted():
+    h3.reject_unsupported(_request(nag_enabled=True, negative_prompt="blurry", neg_method="vsf"))
+
+
+@pytest.mark.parametrize("method", [{"neg_method": "nag"}, {}], ids=["explicit-nag", "default"])
+def test_nag_method_is_refused_as_nag(method):
+    request = _request(nag_enabled=True, negative_prompt="blurry", **method)
+    assert request.neg_method == "nag"
+    with pytest.raises(APIError) as ei:
+        h3.reject_unsupported(request)
+    err = ei.value
+    assert err.code == "FEATURE_UNSUPPORTED" and err.status_code == 422
+    assert "'nag'" in err.message
+    assert err.detail.startswith(
+        "MiniMax H3 のネガティブプロンプトは VSF 方式だけです（neg_method を \"vsf\" にしてください）"
+    )
 
 
 def test_t2v_and_keyframe_i2v_are_accepted():
@@ -698,6 +718,32 @@ def test_generate_refuses_as_the_backstop(tmp_path):
         be.generate(_validated(nag_enabled=True, negative_prompt="x"), tmp_path / "job", seed=1)
 
 
+def test_generate_payload_sends_the_vsf_negative_prompt(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _validated(
+        nag_enabled=True, negative_prompt="black hair, cars", neg_method="vsf", vsf_scale=3,
+        nag_scale=7.0, nag_tau=2.0, nag_alpha=0.5,
+    )
+    be.generate(req, tmp_path / "job", seed=1)
+    (payload,) = captured
+    # Before output_path, like the other optional job keys.
+    keys = list(payload)
+    assert keys.index("nag") == keys.index("output_path") - 1
+    # Only the three VSF keys: the NAG strengths are inert under VSF.
+    assert payload["nag"] == {"negative_prompt": "black hair, cars", "method": "vsf", "vsf_scale": 3.0}
+    assert isinstance(payload["nag"]["vsf_scale"], float)
+
+
+def test_generate_payload_has_no_nag_key_without_nag_enabled(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_validated(negative_prompt="blurry", neg_method="vsf"), tmp_path / "job", seed=1)
+    (payload,) = captured
+    assert "nag" not in payload
+    assert list(payload) == GOLDEN_GENERATE_KEYS_H3
+
+
 # --------------------------------------------------------------------------- #
 # 5) HTTP, three families
 # --------------------------------------------------------------------------- #
@@ -834,6 +880,18 @@ def test_h3_refuses_over_http_before_any_lookup(three_family_client, feature):
     assert error["code"] == "FEATURE_UNSUPPORTED"
     assert error["detail"].startswith("MiniMax H3 ")
     assert len(three_family_client.get("/api/v1/jobs").json()) == before
+
+
+def test_h3_accepts_a_vsf_negative_prompt_over_http(three_family_client):
+    _activate(three_family_client, "MiniMaxH3")
+    body = {
+        "prompt": PROMPT, "width": 640, "height": 384, "num_frames": 124,
+        "nag_enabled": True, "negative_prompt": "blurry", "neg_method": "vsf",
+    }
+    r = three_family_client.post("/api/v1/generate", json=body)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert three_family_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
 
 
 def _write_h3_lora(path: Path, *, foreign: bool = False) -> Path:
@@ -1186,6 +1244,14 @@ def test_every_chain_refusal_raises_feature_unsupported_naming_h3(feature):
     assert ei.value.code == "FEATURE_UNSUPPORTED"
     assert f"'{feature}'" in ei.value.message
     assert "MiniMax H3" in ei.value.detail
+
+
+def test_chain_refuses_nag_enabled_even_with_vsf():
+    chain = _chain(nag_enabled=True, negative_prompt="blurry", neg_method="vsf")
+    with pytest.raises(APIError) as ei:
+        engines.reject_chain("h3", chain)
+    assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
+    assert "'nag'" in ei.value.message
 
 
 def test_every_chain_refusal_is_published():
